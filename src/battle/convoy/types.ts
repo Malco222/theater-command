@@ -143,6 +143,8 @@ export interface ConvoyTally {
   attacks: number; hunts: number; salvoes: number; hits: number;
   /** Boats forced to the surface, and those of them that dived again and got away. */
   forcedUp: number; escaped: number;
+  /** Of those forced up, the boats already on the surface when gunfire left them unable to dive (kept there). */
+  kept: number;
   /** How the boats lost went: these add up to the boats lost. */
   scuttled: number; rammed: number; shelled: number; crushed: number; captured: number;
 }

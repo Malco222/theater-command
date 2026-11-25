@@ -8,17 +8,22 @@
 // search. A boat: right on a ship to attack her. The wheel zooms. Keys: Space pause, 1 2 3 4 speed, arrows look round,
 // F follow the convoy, Tab next piece, Esc put down, K the key, S star shell (escorts), G deck gun (boats).
 //
-// The clock (the playtest's question b, and the rules owner's calls on bugs 7 to 10): the player's chosen speed, held
-// down for a while by a slow-down. Dusk runs at x60 until the first contact, which drops it to x10 whatever speed key
-// was pressed before it: on the escorts' side the first boat an escort finds or the convoy's first attack, on the
-// pack's the first of its boats found or its first salvo. On the escorts' side every new contact (a boat no escort
-// has held for two minutes) drops the clock to x10 and keeps it there while any boat is held, and so does one of the
-// player's escorts on a hunt finding her quarry again or attacking her; the clock goes back a minute after no boat is
-// held. The same escort finding the same boat again within two minutes changes nothing (the rules say nothing of it).
-// On the pack's side a boat of the player's first found or first attacked, forced up or sunk drops it to x10 for a
-// minute. The convoy under attack does on both sides, once. Then the clock goes back to the speed the player last
-// chose. A speed key ends a slow-down at once; pausing does not. While the staff steer his side the player only
-// watches, and nothing slows the clock.
+// The clock (the playtest's question b, and the rules owner's calls on bugs 7 to 10 and round 3's 9 to 19): the
+// player's chosen speed, held down for a while by a slow-down. Dusk runs at x60 until the first contact, which drops it
+// to x10 whatever speed key was pressed before it: on the escorts' side the first boat an escort finds or the convoy's
+// first attack, on the pack's the first of its boats found (the banner names her, and the log says so at once) or its
+// first salvo. On the escorts' side a new contact (a boat no escort has held for two minutes) drops the clock to x10
+// only after a quiet spell, no boat held for QUIET; in a running fight it is a line in the log and a banner. So does
+// one of the player's escorts on a hunt finding her quarry again (never a new contact, however long she was lost), or
+// first attacking her on that hunt. Such a slow-down follows its boat: it lasts while she is held or her last-seen
+// mark is up, and a minute more, but never past SLOW_MOST from its start, and each order the player gives in it adds
+// SLOW_MORE; a new cause on her after that brings a new one. The convoy under attack (the night's first salvo) drops
+// the clock to x10 on both sides until that salvo has run; each later salvo's hits drop it to x60 for a minute, and on
+// the pack's side each later salvo of the player's own boats from the moment she fires until it has run. A boat of the
+// pack's player first found or first attacked, forced up or sunk drops it to x10 for a minute. Then the clock goes back
+// to the speed the player last chose (a cause slows it only where it is slower than his speed). A speed key ends a
+// slow-down at once; pausing does not. While the staff steer his side the player only watches, and nothing slows the
+// clock.
 
 import { againstStaff, foughtOf, ranksOf, restFrom, staffNights, type StaffNights } from '../convoy/calibrate';
 import { CONVOY_BATTLE } from '../../campaign/navy';
@@ -49,12 +54,17 @@ const MOST_A_FRAME = 600;
 const STAFF_NIGHTS = 30;
 /** Battle seconds a slow-down outlasts its cause before the clock goes back to the player's speed. */
 const SLOW_AFTER = 60;
-/** Real milliseconds between refreshes of the orders panel's words from the frame loop: every frame (its words change only when the piece does, and the buttons are kept). */
-const PANEL_EVERY = 0;
+/** Battle seconds with no boat held by any escort before a new contact slows the clock (the rules owner, round 3: a quiet spell). */
+const QUIET = 300;
+/** Battle seconds a slow-down that follows a boat may last at most, from its start, and the more each order the player gives in it adds. */
+const SLOW_MOST = 300, SLOW_MORE = 120;
+/** Real milliseconds between refreshes of the orders panel's words from the frame loop: four times a second (an order or a pick repaints it at once). */
+const PANEL_EVERY = 250;
 /**
- * Battle seconds of the night under the other's command that the after card passes over in saying who commanded it:
+ * Battle seconds of the night under the other's command that the after card passes over in naming whose night it was:
  * five minutes, five real seconds at the dusk's x60 (a player who lets the staff steer at dusk has had it for a second
- * or two of real time, and one who takes it back for a moment has not commanded the night). Said, all the same.
+ * or two of real time, and one who takes it back for a moment has not commanded the night). Who steered when is said
+ * all the same, from the true spans, to the minute.
  */
 const STEERED = 300;
 /** Lines of the night's log on the sea. */
@@ -66,8 +76,13 @@ interface Track { from: [number, number]; to: [number, number]; at: number; run:
 interface Charge { x: number; y: number; r: number; at: number; burst: number; ahead: boolean }
 /** A line of the log, and how it reads for the player: plain, good news, bad news, or a warning (an order refused or overridden). */
 interface Said { t: number; text: string; tone: '' | 'good' | 'bad' | 'warn'; gunners?: string[] }
-/** A slow-down of the clock: the speed it holds to, why, whether it lasts while any boat is held (the escorts' side), and when its cause was last seen. */
-interface Slow { to: number; why: string; held: boolean; at: number }
+/**
+ * A slow-down of the clock: the speed it holds to, the banner's words for why and for how long, the battle second it
+ * ends unless its cause is still in force ('until'), and the second it ends whatever ('most'). One that follows a boat
+ * ('on', the escorts' side) is in force while she is held or her last-seen mark is up, and SLOW_AFTER more. 'key' joins
+ * the causes that are one (the hits of one salvo).
+ */
+interface Slow { to: number; why: string; how: string; until: number; most: number; on?: number; key?: string }
 
 interface State {
   screen: 'choose' | 'night' | 'after';
@@ -90,24 +105,37 @@ interface State {
   /** The speed the player last chose (dusk runs at x60 until he chooses). */
   chosen: number;
   paused: boolean;
-  slow: Slow | null;
+  /** The slow-downs in force: the clock runs at the slowest of them and the player's own speed. */
+  slows: Slow[];
+  /** The battle second any escort last held a boat (the escorts' side): a new contact slows the clock only after QUIET without. */
+  heldAt: number;
+  /** The battle second a new contact last broke a quiet spell: another new contact in that same second broke it too. */
+  spell: number;
+  /** The pack's first contact told in the log by the page, for the found boat's own line to take its place (one line for one event). */
+  foundLine: { on: number; said: Said } | null;
   owed: number;
-  /** The camera: on the convoy, following one piece, or left where the player put it. */
-  cam: { x: number; y: number; scale: number; follow: 'convoy' | number | null };
+  /** The camera: on the convoy, following one piece, or left where the player put it; 'fit' while it still widens to show all the player's pieces (dusk, until he moves it). */
+  cam: { x: number; y: number; scale: number; follow: 'convoy' | number | null; fit: boolean };
   tracks: Track[];
   charges: Charge[];
   said: Said[];
   mode: 'starshell' | 'gun' | null;
-  /** The banner on the sea: its words, until when, and whether it is a held slow-down's (it says so only while a boat is held). */
-  tag: { text: string; until: number; held?: boolean } | null;
+  /** The banner on the sea: its words, and until when; the new contacts of a running fight it names, where it is theirs. */
+  tag: { text: string; until: number; contacts?: string[] } | null;
   staff: StaffNights | null;
   /** The hand-over asked (the question is up), or under way (the staff are fighting out the rest). */
   asking: boolean;
   handing: boolean;
   /** The first contact's slow-down is still to come (a speed key at dusk leaves it armed). */
   rush: boolean;
-  /** What has slowed the clock already this night, once each: 'charge:<boat>' (the pack's boats' first attack). */
+  /** What has slowed the clock already this night, once each: 'charge:<boat>' (the pack's boats' first attack), 'charge:<escort>:<boat>:<hunt>' (an escort's first on a hunt). */
   alarmed: Set<string>;
+  /** The night's first salvo: the boat that fired it and the second its torpedoes are home (its hits are its own slow-down's, not a later salvo's). */
+  firstSalvo: { by: number; lands: number } | null;
+  /** Each escort's hunt that has dropped charges on her quarry, as '<boat>:<the hunt's last second>': 'Running in on' until then, 'Attacking' after. */
+  dropped: Map<number, string>;
+  /** The spans of the night the staff steered the player's side, in battle seconds (the last open while they still do): the after card says who steered when. */
+  reins: [number, number][];
   drag: { x0: number; y0: number; x1: number; y1: number } | null;
   /** The orders panel open beside the sea, and the key to the map shown (null until the first night: shown on it). */
   sideOpen: boolean;
@@ -119,8 +147,8 @@ interface State {
 
 const S: State = {
   screen: 'choose', card: 0, side: 'def', seed: 1, t: null, sim: null, units: [], zones: [], lastSeen: [], pack: 0, names: new Map(), picked: new Set(),
-  speed: 60, chosen: 60, paused: false, slow: null, owed: 0, cam: { x: 0, y: 0, scale: 0.06, follow: 'convoy' }, tracks: [], charges: [], said: [],
-  mode: null, tag: null, staff: null, asking: false, handing: false, rush: true, alarmed: new Set(), drag: null, sideOpen: true, keyOn: null, panelAt: 0, panelKey: '', detailWas: '',
+  speed: 60, chosen: 60, paused: false, slows: [], heldAt: -Infinity, spell: -Infinity, foundLine: null, owed: 0, cam: { x: 0, y: 0, scale: 0.06, follow: 'convoy', fit: true }, tracks: [], charges: [], said: [],
+  mode: null, tag: null, staff: null, asking: false, handing: false, rush: true, alarmed: new Set(), firstSalvo: null, dropped: new Map(), reins: [], drag: null, sideOpen: true, keyOn: null, panelAt: 0, panelKey: '', detailWas: '',
 };
 
 let app: HTMLElement;
@@ -177,7 +205,8 @@ function begin(seed: number): void {
   S.sim = new ConvoySim(S.t);
   S.units = []; S.zones = []; S.lastSeen = []; S.names = new Map(); S.picked = new Set(); S.tracks = []; S.charges = []; S.said = []; S.mode = null; S.staff = null;
   S.asking = false; S.handing = false; S.drag = null;
-  S.chosen = 60; S.paused = false; S.slow = null; S.owed = 0; S.rush = true; S.alarmed = new Set(); S.cam.follow = 'convoy'; S.cam.scale = 0.05;
+  S.chosen = 60; S.paused = false; S.slows = []; S.heldAt = -Infinity; S.spell = -Infinity; S.foundLine = null; S.owed = 0; S.rush = true; S.alarmed = new Set(); S.firstSalvo = null; S.dropped = new Map(); S.reins = [];
+  S.cam.follow = 'convoy'; S.cam.scale = 0.05; S.cam.fit = true;
   S.speed = 60;
   if (S.keyOn === null) S.keyOn = true;
   S.panelKey = ''; S.detailWas = ''; barWas = '';
@@ -219,7 +248,7 @@ function begin(seed: number): void {
     <div class="nask" data-ask hidden>
       <section class="tc-panel askcard" role="dialog" aria-modal="true" aria-labelledby="ask-q">
         <h2 class="tc-title-3" id="ask-q">Hand the rest of the night to the staff?</h2>
-        <p>The staff will fight out the rest of the night for your ${we} at once, and you go straight to the after card. You can't take it back.</p>
+        <p>The staff will fight out the rest of the night for your ${we} at once, and you go straight to how the night went. You can't take it back.</p>
         <div class="abtns"><button class="tc-btn tc-btn--grave" data-askyes>Yes</button><button class="tc-btn tc-btn--primary" data-askno>Keep command</button></div>
       </section>
     </div>
@@ -240,16 +269,17 @@ function begin(seed: number): void {
   app.querySelector('[data-ask]')!.addEventListener('mousedown', (e) => { if (!(e.target as HTMLElement).closest('button')) e.preventDefault(); });
   app.querySelector('[data-staffrun]')!.addEventListener('click', () => {
     const s = S.sim!; if (s.over || S.handing) return;
-    s.command({ do: 'auto', side: S.side, on: !s.ai[S.side] }, S.side);
+    steer(!s.ai[S.side]);
     S.said.push({ t: s.t, text: s.ai[S.side] ? `The staff steer your ${we}. You can take it back at any time.` : `You take back command of your ${we}.`, tone: '' });
     // (watching, the clock keeps the player's speed: a slow-down in force ends, and the banner of what slows it goes)
-    if (s.ai[S.side]) { S.slow = null; S.tag = null; }
+    if (s.ai[S.side]) { S.slows = []; S.tag = null; }
     clock();
     paintOrders(true); paintBar();
   });
   app.querySelector('[data-unfold]')!.addEventListener('click', () => { S.sideOpen = true; paintOrders(true); });
   wireCanvas();
   take();
+  fit();
   paintOrders(true);
   paintKey();
   clock();
@@ -257,82 +287,191 @@ function begin(seed: number): void {
   requestAnimationFrame(frame);
 }
 
+/** The staff take the player's side, or give it back: each span they steer is kept for the after card. */
+function steer(on: boolean): void {
+  const s = S.sim!;
+  s.command({ do: 'auto', side: S.side, on }, S.side);
+  // (from the second worked so far: the next second the sim works is the staff's, or the player's)
+  const open = S.reins[S.reins.length - 1];
+  if (on && !(open && open[1] === Infinity)) S.reins.push([s.worked, Infinity]);
+  else if (!on && open && open[1] === Infinity) open[1] = s.worked;
+}
+
+/**
+ * The view at dusk widens until it shows every piece on the sea, the whole convoy and every piece of the player's that
+ * is up (the rules owner, round 3, 20: nothing starts off the sea), from the camera's own scale outward; never in. It
+ * stops once he moves the camera, zooms or follows a piece, or at the night's first contact.
+ */
+function fit(): void {
+  if (!S.cam.fit || S.cam.follow !== 'convoy' || !canvas) return;
+  const c = canvas, W = c.clientWidth, H = c.clientHeight;
+  const mv = S.units.filter((u) => u.kind === 'mv' && u.state !== 'gone');
+  if (!W || !H || !mv.length) return;
+  const cx = mv.reduce((a, u) => a + u.x, 0) / mv.length, cy = mv.reduce((a, u) => a + u.y, 0) / mv.length;
+  // (the margin keeps a piece and its name clear of the edges, and of the log in the bottom corner)
+  let scale = S.cam.scale;
+  for (const u of S.units.filter(live)) {
+    const dx = Math.abs(u.x - cx), dy = Math.abs(u.y - cy);
+    if (dx > 1) scale = Math.min(scale, (W / 2 - 60) / dx);
+    if (dy > 1) scale = Math.min(scale, (H / 2 - 70) / dy);
+  }
+  S.cam.scale = Math.max(0.008, scale);
+}
+
 // ---- The clock --------------------------------------------------------------------------------------------------------
 
-/** The clock's speed now: paused, or the player's own speed held down by a slow-down while it lasts. */
-const runSpeed = (): number => S.paused ? 0 : S.slow ? Math.min(S.slow.to, S.chosen) : S.chosen;
+/** The clock's speed now: paused, or the player's own speed held down by the slow-downs in force. */
+const runSpeed = (): number => S.paused ? 0 : Math.min(S.chosen, ...S.slows.map((w) => w.to));
 
 function clock(): void { S.speed = runSpeed(); paintClock(); }
 
-/** A speed key: the player's choice from now on. It ends a slow-down in force (a new cause brings a new one); the first contact's at dusk stays armed. */
+/** A speed key: the player's choice from now on. It ends the slow-downs in force (a new cause brings a new one); the first contact's at dusk stays armed. */
 function setSpeed(v: number): void {
-  S.paused = false; S.chosen = v; S.slow = null; S.tag = null;
+  S.paused = false; S.chosen = v; S.slows = []; S.tag = null;
   clock();
 }
 
-/** Pause, or run on: running on keeps any slow-down still in force, and the first contact's at dusk. */
+/** Pause, or run on: running on keeps the slow-downs still in force, and the first contact's at dusk. */
 function togglePause(): void { S.paused = !S.paused; S.tag = null; clock(); }
 
-/** A cause to slow the clock, at a battle second: kept to the slowest cause in force; the banner says why where it slows. 'held': it lasts while any boat is held. */
-function slowDown(to: number, why: string, at: number, held = false, how = 'FOR A MINUTE'): void {
-  const was = runSpeed();
-  if (!S.slow || to < S.slow.to) S.slow = { to, why, held, at };
-  else { S.slow.at = Math.max(S.slow.at, at); S.slow.held ||= held; }
-  if (runSpeed() < was || (held && S.tag && !S.tag.held && S.speed < S.chosen)) {
-    const v = Math.min(S.slow.to, S.chosen);
-    S.tag = { text: `${why} · RUNNING ×${v} ${S.slow.held ? 'WHILE A BOAT IS HELD' : how}, THEN ×${S.chosen}`, until: performance.now() + 4500, held: S.slow.held };
-  }
+/** The banner on the sea, for a few seconds. */
+function banner(text: string, ms = 4500): void { S.tag = { text, until: performance.now() + ms }; }
+
+/**
+ * A new contact in a running fight (the rules owner's (a): a line in the log and a banner, no slow-down). While such a
+ * banner is up the next joins it rather than replacing it, so that at speed none flickers past unread: 'A NEW CONTACT ·
+ * ESCORT 3 HAS BOAT 1', then '2 NEW CONTACTS · ESCORT 3 HAS BOAT 1 · ESCORT 5 HAS BOAT 2' (the last two named, the
+ * rest in the log). A banner of the clock's own (a slow-down, or the clock given back) is never covered by one.
+ */
+function contactBanner(what: string): void {
+  const now = performance.now(), up = S.tag && S.tag.until > now ? S.tag : null;
+  if (up && !up.contacts) return;
+  const all = [...(up?.contacts ?? []).filter((c) => c !== what), what];
+  S.tag = { text: all.length === 1 ? `A NEW CONTACT · ${what}` : `${all.length} NEW CONTACTS · ${all.slice(-2).join(' · ')}`, until: now + 4500, contacts: all };
+}
+
+/**
+ * A cause to slow the clock. One that is the same as a slow-down in force (her boat's, or the same salvo's hits) keeps
+ * that one, to the later end; else it is added. Where the clock runs below the player's speed for it, the banner says
+ * why and for how long; 'news' is said in a banner all the same (a new contact in a running fight, the rules owner's (a)).
+ */
+function slowDown(w: Slow, news = false): void {
+  const same = S.slows.find((o) => (w.on !== undefined && o.on === w.on) || (w.key !== undefined && o.key === w.key));
+  if (same) { same.until = Math.max(same.until, w.until); same.why = w.why; } else S.slows.push(w);
+  const v = runSpeed();
+  if (v < S.chosen && Math.min(w.to, S.chosen) === v) banner(`${w.why} · RUNNING ×${v} ${w.how}, THEN ×${S.chosen}`);
+  else if (news) banner(w.why);
   clock();
 }
 
-/** Whether any of the player's escorts holds a boat now (the escorts' side). */
-function contactHeld(): boolean {
-  return S.side === 'def' && S.units.some((u) => u.side === 'def' && u.kind === 'dd' && u.state !== 'gone' && !!u.extra.echo);
+/**
+ * A slow-down to x10 that follows a boat (the escorts' side, the rules owner's (b)): while she is held or her mark is up,
+ * and a minute more, at most SLOW_MOST from its cause unless orders put that off. Her cause again while it is in force
+ * keeps it as it is; a new cause after it has run to its most brings a new one.
+ */
+function slowBoat(why: string, on: number, t: number, news = true): void {
+  slowDown({ to: 10, why, how: `WHILE ${(nameOf(on) || 'the boat').toUpperCase()} IS HELD OR HER MARK IS UP`, until: t + SLOW_AFTER, most: t + SLOW_MOST, on }, news);
 }
 
-/** Each frame: a slow-down whose cause is over gives the clock back to the player's speed. */
+/** A slow-down for a moment of the night: x10 (or 'to') for a minute. */
+const slowAMinute = (why: string, t: number, to = 10, key?: string): void => slowDown({ to, why, how: 'FOR A MINUTE', until: t + SLOW_AFTER, most: Infinity, key });
+
+/** A slow-down for a salvo: x10 (the night's first) or x60 (a later one of the pack's player) until its torpedoes are home. */
+const slowSalvo = (why: string, to: number, lands: number, how: string): void => slowDown({ to, why, how, until: lands, most: Infinity });
+
+/** An order given: each slow-down that follows a boat may last SLOW_MORE longer (the rules owner, round 3, (b)). */
+function orderGiven(): void { for (const w of S.slows) if (w.on !== undefined) w.most += SLOW_MORE; }
+
+/** Whether an escort holds this boat now. */
+const heldNow = (on: number): boolean => S.units.some((u) => u.side === 'def' && u.kind === 'dd' && u.state !== 'gone' && u.extra.echo?.on === on);
+/** Whether this boat's last-seen mark is up. */
+const markedNow = (on: number): boolean => S.lastSeen.some((p) => p.id === on);
+
+/** Each frame: a slow-down whose cause is over (a boat's a minute over), or that has run to its most, gives the clock back. */
 function easeOff(): void {
-  if (!S.slow || !S.sim) return;
-  const now = S.sim.t;
-  if (S.slow.held && contactHeld()) S.slow.at = now;
-  // (a banner that says the clock runs slow while a boat is held says so only while one is)
-  else if (S.tag?.held && S.tag.until > performance.now()) S.tag = { text: `NO BOAT HELD NOW · BACK TO ×${S.chosen} IN A MINUTE`, until: performance.now() + 3000 };
-  if (now - S.slow.at < SLOW_AFTER) return;
-  const was = runSpeed();
-  S.slow = null;
-  if (!S.paused && runSpeed() > was) S.tag = { text: `BACK TO ×${S.chosen}`, until: performance.now() + 2500 };
+  if (!S.sim || !S.slows.length) return;
+  const now = S.sim.t, was = runSpeed();
+  for (const w of S.slows) if (w.on !== undefined && (heldNow(w.on) || markedNow(w.on))) w.until = Math.max(w.until, now + SLOW_AFTER);
+  S.slows = S.slows.filter((w) => now < Math.min(w.until, w.most));
+  const v = runSpeed();
+  if (!S.paused && v > was) banner(v === S.chosen ? `BACK TO ×${v}` : `NOW ×${v}, THEN ×${S.chosen}`, 2500);
   clock();
 }
 
 /** Once a night for each key: whether this is the first time ('charge:7', a boat's first attack). */
 const firstOf = (key: string): boolean => { if (S.alarmed.has(key)) return false; S.alarmed.add(key); return true; };
 
-/** What slows the clock for this side: the speed, the banner's words, and whether it lasts while any boat is held (the escorts' side). */
-function alarmOf(e: FieldEvent, x: Record<string, unknown>, mine: boolean, u: ConvoyUnit | undefined): [number, string, boolean?] | null {
+/** An escort's doings on a hunt. */
+const HUNTS = new Set(['run', 'search', 'attack', 'open']);
+
+/** Whether a piece is the player's own to command (an ally's, under his side, is the staff's: ruling 241 Q4). */
+const ownPiece = (u: ConvoyUnit | undefined): boolean => !!u && u.side === S.side && (S.t!.place.mine === undefined || u.nat === S.t!.place.mine);
+
+/**
+ * What slows the clock for this side, and the banners of what the player must follow (the rules owner's calls, round
+ * 3, (a) to (f)). 'before' is the piece as the page last saw her, before this event: an escort's quarry as it was.
+ */
+function alarm(e: FieldEvent, x: Record<string, unknown>, mine: boolean, u: ConvoyUnit | undefined, before: ConvoyUnit | undefined): void {
   const name = (id: unknown): string => (nameOf(typeof id === 'number' ? id : undefined) || 'a boat').toUpperCase();
-  const who = (u?.name ?? 'an escort').toUpperCase();
-  if (S.side === 'def') {
-    // A new contact: a boat no escort has held for two minutes (the rules' own), the night's first said so.
-    if (e.what === 'sea:sonar' && x.news === true) {
-      const first = S.rush; S.rush = false;
-      return [10, `${first ? 'FIRST CONTACT' : 'A NEW CONTACT'} · ${who} HAS ${name(x.on)}`, true];
-    }
-    // One of his escorts on a hunt finds her quarry again (not the same contact within two minutes), or attacks her.
-    const hunting = mine && !!u && ['run', 'search', 'attack', 'open'].includes(u.extra.doing as string);
-    if (e.what === 'sea:sonar' && x.fresh === true && hunting && (u!.extra.prey === x.on || u!.extra.chase === x.on)) return [10, `${who} HAS ${name(x.on)} AGAIN`, true];
-    if (e.what === 'sea:depthCharge' && mine && u?.kind === 'dd') return [10, `${who} ATTACKS ${name(x.on)}`, true];
-    // (the convoy attacked before any escort found a boat is the night's first contact all the same: ships are going down)
-    if (e.what === 'sea:attack') { const first = S.rush; S.rush = false; return [10, `${first ? 'FIRST CONTACT · ' : ''}THE CONVOY IS UNDER ATTACK`]; }
-  } else {
-    // (a first contact made by a salvo is told by the salvo's own banner, which holds until its torpedoes are home)
-    if (e.what === 'contact' && S.rush) { S.rush = false; return x.by === 'torpedo' ? null : [10, 'FIRST CONTACT']; }
-    if (e.what === 'sea:found' && x.first === true) return [10, `${name(e.unit)} IS FOUND`];
-    if (e.what === 'sea:depthCharge' && mine && firstOf(`charge:${e.unit}`)) return [10, `${name(e.unit)} IS ATTACKED`];
-    if (e.what === 'sea:sunk' && x.cls === 'ss' && mine) return [10, `${name(e.unit)} IS LOST`];
-    if (e.what === 'sea:dive' && x.why === 'forced' && mine) return [10, `${name(e.unit)} IS FORCED UP`];
-    if (e.what === 'sea:attack') return [10, 'YOUR FIRST SALVO'];
+  const who = (u?.name ?? 'an escort').toUpperCase(), t = e.t;
+  // (d) The convoy under attack, the night's first salvo, on both sides: x10 until it has run (its torpedoes home).
+  if (e.what === 'sea:attack') {
+    const run = Number(x.running ?? 0), first = S.rush;
+    S.rush = false;
+    S.firstSalvo = { by: x.by as number, lands: t + run };
+    slowSalvo(S.side === 'def' ? `${first ? 'FIRST CONTACT · ' : ''}THE CONVOY IS UNDER ATTACK` : 'YOUR FIRST SALVO', 10, t + run, 'UNTIL THE SALVO HAS RUN');
+    return;
   }
-  return null;
+  // (d) Each later salvo's hits: x60 for a minute (a salvo has run when its torpedoes hit, in the first tick they are
+  // home); the first salvo's are its own slow-down's. The hits of one salvo are one slow-down.
+  if (e.what === 'sea:torpedoHit') {
+    const f = S.firstSalvo;
+    if (!(f && f.by === x.from && t >= f.lands && t - f.lands <= CONVOY.tick)) slowAMinute(`A TORPEDO HITS ${(u?.name ?? 'a ship').toUpperCase()}`, t, 60, `hits:${x.from}:${t}`);
+    return;
+  }
+  if (S.side === 'att') {
+    // (d) A later salvo of the player's own boats: x60 from the moment she fires until it has run (the first is the
+    // convoy under attack's, told just before it).
+    if (e.what === 'sea:torpedo' && ownPiece(u) && u) {
+      if (!(S.firstSalvo?.by === u.id && S.firstSalvo.lands === t + Number(x.running ?? 0))) slowSalvo(`${u.name.toUpperCase()} FIRES A SALVO`, 60, t + Number(x.running ?? 0), 'UNTIL IT HAS RUN');
+      return;
+    }
+    // (e) The first contact: told at the found boat's own line, which names her, and in the log at once (she may say it
+    // herself only as she dives, a few seconds later). One made by a salvo is told by the salvo's banner.
+    if (e.what === 'contact') { if (x.by === 'torpedo') S.rush = false; return; }
+    if (e.what === 'sea:found') {
+      if (S.rush) {
+        S.rush = false;
+        if (!e.text && e.unit !== undefined) { const said: Said = { t, text: `An escort has found ${nameOf(e.unit) || 'one of your boats'}.`, tone: 'bad' }; S.said.push(said); S.foundLine = { on: e.unit, said }; }
+        slowAMinute(`FIRST CONTACT · AN ESCORT HAS FOUND ${name(e.unit)}`, t);
+      } else if (x.first === true) slowAMinute(`${name(e.unit)} IS FOUND`, t);
+      return;
+    }
+    if (e.what === 'sea:depthCharge' && mine && firstOf(`charge:${e.unit}`)) slowAMinute(`${name(e.unit)} IS ATTACKED`, t);
+    else if (e.what === 'sea:sunk' && x.cls === 'ss' && mine) slowAMinute(`${name(e.unit)} IS LOST`, t);
+    else if (e.what === 'sea:dive' && x.why === 'forced' && mine) slowAMinute(`${name(e.unit)} IS FORCED UP`, t);
+    return;
+  }
+  if (e.what === 'sea:sonar' && 'fresh' in x) {
+    // A contact gained. (f) A hunting escort finding her own quarry again is never a new contact; (c) on the player's
+    // own hunt it slows the clock as in (b), however long she had lost her.
+    const on = x.on as number, b = before ?? u;
+    if (b && HUNTS.has(b.extra.doing as string) && (b.extra.prey === on || b.extra.chase === on)) {
+      if (ownPiece(b)) slowBoat(`${who} HAS FOUND ${name(on)} AGAIN`, on, t);
+      return;
+    }
+    // (a) A new contact (no escort held her for two minutes): the clock slows for it only after a quiet spell, no boat
+    // held for QUIET; in a running fight the log and a banner tell it.
+    if (x.news !== true) return;
+    const first = S.rush;
+    S.rush = false;
+    const why = `${first ? 'FIRST CONTACT' : 'A NEW CONTACT'} · ${who} HAS ${name(on)}`;
+    // (two new contacts in the second that broke the quiet spell both broke it: each slows the clock for its boat)
+    if (t - S.heldAt >= QUIET || S.spell === t) { S.spell = t; slowBoat(why, on, t); } else contactBanner(`${who} HAS ${name(on)}`);
+    return;
+  }
+  // One of the player's escorts dropping her first charges of a hunt: x10 as in (b), once a hunt.
+  if (e.what === 'sea:depthCharge' && ownPiece(u) && u!.kind === 'dd' && typeof x.on === 'number' && firstOf(`charge:${u!.id}:${x.on}:${u!.extra.huntUntil ?? ''}`)) slowBoat(`${who} ATTACKS ${name(x.on)}`, x.on, t, false);
 }
 
 // ---- What the sim tells -----------------------------------------------------------------------------------------------
@@ -343,13 +482,17 @@ const live = (u: ConvoyUnit): boolean => u.state !== 'gone' && u.state !== 'with
 function take(): void {
   const s = S.sim!;
   const v = s.view(S.side);
+  // (each piece as the page saw her before these events: an escort's quarry as it was before her contact)
+  const before = new Map(S.units.map((u) => [u.id, u]));
   S.units = v.units as ConvoyUnit[];
   S.zones = v.zones;
   S.lastSeen = v.lastSeen;
   S.pack = v.pack;
   for (const u of S.units) S.names.set(u.id, u.name);
   const at = new Map(S.units.map((u) => [u.id, u]));
-  for (const e of v.events) note(e, at);
+  for (const e of v.events) note(e, at, before);
+  // (a boat held now keeps the spell from being quiet: a new contact in it is the fight's, not a fresh one)
+  if (S.side === 'def' && S.units.some((u) => u.side === 'def' && u.kind === 'dd' && u.state !== 'gone' && !!u.extra.echo)) S.heldAt = Math.max(S.heldAt, s.worked);
   if (v.over && S.screen === 'night') after();
 }
 
@@ -367,7 +510,7 @@ function toneOf(e: FieldEvent, x: Record<string, unknown>, unitSide: Side | unde
 }
 
 /** One event: its words in the log, its marks on the sea, and the clock slowed where the player must follow it. */
-function note(e: FieldEvent, at: Map<number, ConvoyUnit>): void {
+function note(e: FieldEvent, at: Map<number, ConvoyUnit>, before: Map<number, ConvoyUnit>): void {
   const x = (e.extra ?? {}) as Record<string, unknown>;
   const u = e.unit !== undefined ? at.get(e.unit) : undefined;
   if (e.what === 'sea:torpedo') {
@@ -376,21 +519,26 @@ function note(e: FieldEvent, at: Map<number, ConvoyUnit>): void {
   if (e.what === 'sea:depthCharge' && typeof x.x === 'number') {
     S.charges.push({ x: x.x, y: x.y as number, r: Math.max(20, Number(x.spread ?? 60) / 2), at: e.t, burst: e.t + Number(x.sinking ?? 20), ahead: x.kind === 'ahead' });
   }
+  const found = S.foundLine;
   if (e.what === 'sea:gun' && x.why === 'defend' && u) {
     // (the armed merchants open fire together: one line for those of one second, never a log full of them)
     const prev = S.said[S.said.length - 1];
     if (prev?.gunners && prev.t === e.t) { prev.gunners.push(u.name); prev.text = `The gunners of ${namesOf(prev.gunners)} open fire.`; }
     else S.said.push({ t: e.t, text: e.text, tone: '', gunners: [u.name] });
+  } else if (e.text && e.what === 'sea:dive' && found && found.on === e.unit && x.reason === 'an escort has found her' && e.t - found.said.t <= 60) {
+    // (the found boat's own line, 'Boat 1 dives: an escort has found her.', takes the place of the page's first-contact
+    // line in the log: one line for one event, the first contact still told at once)
+    found.said.text = e.text; found.said.t = e.t; S.foundLine = null;
   } else if (e.text) S.said.push({ t: e.t, text: e.text, tone: toneOf(e, x, u?.side ?? e.side) });
   if (S.said.length > 40) S.said.splice(0, S.said.length - 40);
+  // (an escort's first charges of a hunt on her quarry: the panel says 'Attacking' from then, 'Running in on' before)
+  if (e.what === 'sea:depthCharge' && u?.kind === 'dd' && typeof x.on === 'number') S.dropped.set(u.id, `${x.on}:${u.extra.huntUntil ?? ''}`);
   const mine = e.side === S.side || u?.side === S.side;
   // (the staff steering, the player only watches: nothing slows the clock, and the first contact passes)
-  if (S.sim!.ai[S.side]) { if (e.what === 'contact' || e.what === 'sea:attack' || (e.what === 'sea:sonar' && x.news === true)) S.rush = false; return; }
-  const a = alarmOf(e, x, mine, u);
-  // (the convoy's first attack holds the clock until a minute after the salvo's torpedoes are home, not only a minute)
-  if (!a) return;
-  if (e.what === 'sea:attack') slowDown(a[0], a[1], e.t + Number(x.running ?? 0), false, 'UNTIL THE SALVO HAS RUN');
-  else slowDown(a[0], a[1], e.t, a[2] ?? false);
+  if (S.sim!.ai[S.side]) { if (e.what === 'contact' || e.what === 'sea:attack' || e.what === 'sea:found' || (e.what === 'sea:sonar' && x.news === true)) S.rush = false; }
+  else alarm(e, x, mine, u, e.unit !== undefined ? before.get(e.unit) : undefined);
+  // (any contact told is a boat held at that second: a later one within QUIET is no fresh contact)
+  if (e.what === 'sea:sonar') S.heldAt = Math.max(S.heldAt, e.t);
 }
 
 function frame(nowMs: number): void {
@@ -399,6 +547,8 @@ function frame(nowMs: number): void {
   last = nowMs;
   const s = S.sim;
   easeOff();
+  // (the dusk view widens to show every piece of the player's as it comes up, until the first contact or until he moves it)
+  if (S.cam.fit) { if (S.rush) fit(); else S.cam.fit = false; }
   if (!s.over && S.speed > 0 && !S.asking && !S.handing) {
     S.owed = Math.min(MOST_A_FRAME, S.owed + real * S.speed);
     const until = s.t + S.owed;
@@ -406,7 +556,9 @@ function frame(nowMs: number): void {
     // (a slow-down met inside the frame takes hold at once: the rest of the frame's seconds are not worked at the old speed)
     const was = S.speed;
     while (!s.over && s.t + 1e-9 < until && guard++ < 20000) { s.step(); if (guard % 20 === 0) { take(); if (S.speed < was || S.screen !== 'night') break; } }
-    S.owed = S.speed < was ? 0 : Math.max(0, until - s.t);
+    // (the seconds worked past what was owed are owed back: the screen steps whole DTs, and at a slow speed a frame owes
+    // less than one, so the clock would otherwise run fast, x1 at about x6)
+    S.owed = S.speed < was ? 0 : until - s.t;
     if (S.screen === 'night') take();
   } else if (s.over && !S.handing) take();
   if (S.screen !== 'night') return;
@@ -425,11 +577,14 @@ const nameOf = (id: number | undefined): string => id === undefined ? '' : S.nam
 function order(c: ConvoyCommand | { do: 'move'; units: number[]; x: number; y: number }, follow = false): void {
   const s = S.sim!;
   if (s.over || S.handing) return;
-  if (s.ai[S.side]) { s.command({ do: 'auto', side: S.side, on: false }, S.side); S.said.push({ t: s.t, text: `You take back command of your ${S.side === 'def' ? 'escorts' : 'pack'}.`, tone: '' }); clock(); }
+  if (s.ai[S.side]) { steer(false); S.said.push({ t: s.t, text: `You take back command of your ${S.side === 'def' ? 'escorts' : 'pack'}.`, tone: '' }); clock(); }
   s.command(c as ConvoyCommand, S.side);
-  // (shown at once, paused or not: the answer in the log, the piece's new look, the panel)
+  orderGiven();
+  // (shown at once, paused or not: the answer in the log, the piece's new look, the panel; or the after card, where the
+  // order sent the last boat home and the night ended with it)
   take();
-  if (follow) { const u = picked().find((p) => c.units.includes(p.id)); if (u) S.cam.follow = u.id; }
+  if (S.screen !== 'night') return;
+  if (follow) { const u = picked().find((p) => c.units.includes(p.id)); if (u) { S.cam.follow = u.id; S.cam.fit = false; } }
   paintOrders(true);
   paintBar();
 }
@@ -455,15 +610,20 @@ function paintOrders(force = false): void {
   if (on) { const w = staff ? `THE STAFF ARE STEERING YOUR ${we.toUpperCase()} · GIVE ANY ORDER OR PRESS TAKE BACK COMMAND` : ''; if (on.textContent !== w) on.textContent = w; on.style.display = w ? 'block' : 'none'; }
   const side = app.querySelector<HTMLElement>('[data-sidebar]');
   side?.classList.toggle('is-folded', !S.sideOpen);
-  const key = `${S.side}|${S.sideOpen}|${ps.map((u) => u.id).join(',')}`;
+  // (boats forced up take only the deck gun, and those their crews have left nothing: the buttons follow what they can take)
+  const up = S.side === 'att' && ps.length > 0 && ps.every(forcedUp), manned = ps.filter((u) => !abandoned(u));
+  const key = `${S.side}|${S.sideOpen}|${ps.map((u) => u.id).join(',')}|${up}|${manned.length}`;
   if (force || key !== S.panelKey) {
     S.panelKey = key; S.detailWas = '';
     const head = ps.length === 0 ? (S.side === 'def' ? 'Your escorts' : 'Your pack') : ps.length === 1 ? esc(ps[0].name) : esc(namesOf(ps.map((u) => u.name)));
     const btn = (k: string, label: string, title = ''): string => `<button class="tc-btn tc-btn--sm" data-o="${k}" title="${esc(title)}">${label}</button>`;
+    const gun = btn('gun', `Deck gun ${cap('G')}`, `Then click a ship within ${metres(CONVOY.surface.gunAt)}`);
     const btns = !ps.length ? '' : S.side === 'def'
       ? `<div class="obtns">${btn('screen', ps.length === 1 ? 'Back to its station' : 'Back to their stations', 'Return to the screen round the convoy')}${btn('starshell', `Star shell ${cap('S')}`, 'Then click where to light the sea')}</div>
         <p class="tc-faint ohint">Right-click a boat, or the faded mark where one was last seen, to hunt her. Right-click a wreck to pick up survivors, or the open sea to steam there and search.</p>`
-      : `<div class="obtns">${btn('attack', 'Attack', 'On the surface')}${btn('under', 'Attack submerged')}${btn('dive', 'Dive', 'To periscope depth')}${btn('deep', 'Go deep')}${btn('surface', 'Surface')}${btn('evade', 'Evade')}${btn('gun', `Deck gun ${cap('G')}`, 'Then click a ship within 2,500 m')}${btn('leave', 'Leave the night')}</div>
+      : up ? (!manned.length ? '' : `<div class="obtns">${gun}</div>
+        <p class="tc-faint ohint">Forced to the surface, ${ps.length === 1 ? 'she can take no order but to fire her deck gun' : 'they can take no order but to fire their deck guns'}. Right-click a ship within ${metres(CONVOY.surface.gunAt)} to fire at her.</p>`)
+      : `<div class="obtns">${btn('attack', 'Attack', 'On the surface')}${btn('under', 'Attack submerged')}${btn('dive', 'Dive', 'To periscope depth')}${btn('deep', 'Go deep')}${btn('surface', 'Surface')}${btn('evade', 'Evade')}${gun}${btn('leave', 'Leave the night')}</div>
         <p class="tc-faint ohint">Right-click a ship to attack her at the depth you last chose.</p>`;
     el.innerHTML = `<div class="ohead"><div class="tc-label">${head}</div><button class="tc-btn tc-btn--quiet ofold" data-fold title="Hide the orders and widen the sea">Hide</button></div>
       <div class="odetail" data-detail></div>${btns}`;
@@ -487,6 +647,11 @@ function paintOrders(force = false): void {
   if (detail && words !== S.detailWas) { S.detailWas = words; detail.innerHTML = words; }
 }
 
+/** A boat forced to the surface (her damage, or her crew giving her up): she takes no order but the deck gun's. */
+const forcedUp = (u: ConvoyUnit): boolean => u.kind === 'ss' && (u.extra.doing === 'up' || u.extra.doing === 'gun');
+/** A boat her crew have left: she takes no order at all. */
+const abandoned = (u: ConvoyUnit): boolean => forcedUp(u) && u.extra.ships === 0;
+
 /** The panel's words: the side's state with nothing picked, a piece's own state, or the pieces picked. */
 function detailOf(ps: ConvoyUnit[], staff: boolean): string {
   if (!ps.length) {
@@ -499,10 +664,12 @@ function detailOf(ps: ConvoyUnit[], staff: boolean): string {
     const first = up === 0 && lost + left === 0;
     const where = up > 0 ? `${nof(up, 'of your boats is', 'of your boats are')} up with the convoy.` : first ? 'None of your boats is up with the convoy yet.' : 'None of your boats is up with the convoy now.';
     const more = !coming ? '' : first ? ` ${coming === 1 ? 'Your boat is' : `All ${coming} are`} on the way and will come up during the night.` : ` ${nof(coming, 'more is', 'more are')} on the way and will come up during the night.`;
-    // (true on every night: against radar a captain left to himself may never get in, and an order makes him press)
+    // (true on every night: what a captain left to himself does when found, and what an Attack order makes of it)
     const radar = !!S.t!.place.kit[S.t!.def.nat]?.radar;
-    const habit = radar ? ' Left to themselves, your captains close the convoy, fire and turn away to reload; but the escorts\' radar finds a boat on the surface far out, and a boat found dives and drops back, so on such a night they may get in seldom or never. An Attack order makes a captain stay up and press in while she is only held.'
-      : ' Left to themselves, your captains close the convoy, fire and turn away to reload; a boat an escort finds dives and drops back for a while. An Attack order makes a captain stay up and press in while she is only held.';
+    // (the sim's own rules, round 3 (ii) and (iii): a boat found and not hunted ducks to periscope depth and keeps on)
+    const pressed = ' An Attack order makes a captain stay up while she is only held; forced down by an escort closing, she keeps at periscope depth to attack submerged if the convoy comes within reach, and comes up to press in as soon as no escort is in her sight.';
+    const habit = (radar ? ' Left to themselves, your captains close the convoy, fire and turn away to reload. The escorts\' radar finds a boat on the surface far out: a boat found dives to periscope depth and keeps closing at her slower dived speed, and comes up again once no escort holds her and none is in her sight (one that cannot get in submerged first draws off out of the escorts\' sight); she goes deep only when an escort hunts her, and then lies quiet a long while.'
+      : ' Left to themselves, your captains close the convoy, fire and turn away to reload; a boat an escort finds dives to periscope depth and keeps closing, and goes deep only when an escort hunts her.') + pressed;
     return `<p class="tc-muted">${where}${more}${habit} Pick one up to give her orders.</p>`;
   }
   if (ps.length > 1) return `<p class="tc-muted">${nof(ps.length, S.side === 'def' ? 'escort' : 'boat', S.side === 'def' ? 'escorts' : 'boats')} picked. An order goes to every one of them.</p>`;
@@ -510,12 +677,13 @@ function detailOf(ps: ConvoyUnit[], staff: boolean): string {
 }
 
 /**
- * A boat's depth as she really is, not as ordered: 'Going deep, now at 4 m'. A boat coming up is on the surface at once
- * by the rules (the escorts see and shell her), so she is said to be there; one going down is said where her keel is.
+ * A boat's depth as she really is, by her keel and where she is going, never as ordered: 'Going deep, now at 4 m',
+ * 'Coming up to the surface, now at 40 m'. She is on the surface only once her keel is (the rules owner, round 3, 6:
+ * only there do radar and lookouts find her and her gun fire), as the log says it.
  */
 function depthWords(u: ConvoyUnit): string {
   const keel = u.extra.keel ?? 0, at = metres(keel);
-  if (u.extra.dive === 'surfaced') return 'On the surface';
+  if (u.extra.dive === 'surfaced') return keel <= 0 ? 'On the surface' : `Coming up to the surface, now at ${at}`;
   if (u.extra.dive === 'periscope') return keel < CONVOY.boat.scope - 1 ? `Diving to periscope depth, now at ${at}` : keel > CONVOY.boat.scope + 1 ? `Coming up to periscope depth, now at ${at}` : `At periscope depth, ${at}`;
   return keel < CONVOY.boat.deep - 2 ? `Going deep${u.extra.doing === 'deep' ? ' to lie quiet' : ''}, now at ${at}` : `Deep, at ${at}`;
 }
@@ -538,14 +706,19 @@ function pieceWords(u: ConvoyUnit): string {
     // (one going deep is said so by her depth: 'Going deep to lie quiet, now at 4 m')
     const goingDeep = x.doing === 'deep' && (x.keel ?? 0) < CONVOY.boat.deep - 2;
     // (forced up too badly hurt to save, her crew will give her up whatever they try first: said so)
-    const doing = x.doing === 'close' ? 'Closing the convoy to attack' : x.doing === 'away' ? 'Turning away to reload' : x.doing === 'evade' ? 'Evading the escorts'
+    const doing = x.doing === 'close' ? (x.off ? 'Drawing off out of the escorts\' sight to come up and run round on the surface, since she cannot get in submerged' : 'Closing the convoy to attack') : x.doing === 'away' ? 'Turning away to reload' : x.doing === 'evade' ? 'Evading the escorts'
       : x.doing === 'deep' ? (goingDeep ? '' : 'Lying deep and quiet')
-      : x.doing === 'up' ? (x.doomed ? 'Forced to the surface too badly hurt to dive again; her crew will have to abandon her' : 'Forced to the surface; her crew are trying to make good the damage')
-      : x.doing === 'gun' ? (x.doomed ? 'Forced to the surface too badly hurt to dive again; her crew fight her deck gun until they must abandon her' : 'Forced to the surface and fighting her deck gun') : '';
+      : abandoned(u) ? 'Her crew have left her, and she is going down'
+      : x.doing === 'up' ? (x.doomed ? 'Forced to the surface too badly hurt to dive again; her crew will have to abandon her' : 'Forced to the surface; her crew are trying to make good the damage, and she may dive again once it is repaired')
+      : x.doing === 'gun' ? (x.doomed ? 'Forced to the surface too badly hurt to dive again; her crew fight her deck gun until they must abandon her' : 'Forced to the surface and fighting her deck gun while her damage is repaired') : '';
     const aim = nameOf(x.aim as number | undefined);
-    const ord = x.order === 'attack' ? `Ordered to attack${aim ? ` ${aim}` : ''} on the surface.` : x.order === 'under' ? `Ordered to attack${aim ? ` ${aim}` : ''} submerged.`
+    // (the rules owner, round 3, (iii): an Attack order forced down by an escort closing keeps her at periscope depth, to
+    // attack dived where the convoy comes within reach, and up again as soon as no escort is in her sight)
+    const kept = (x.order === 'attack' || x.order === 'gun') && x.dive === 'periscope' && (x.doing === 'close' || x.doing === 'away')
+      ? ` An escort closing forced her down: she keeps at periscope depth${x.order === 'attack' ? ', attacks submerged if the convoy comes within her reach,' : ''} and comes up to ${x.order === 'attack' ? 'press in' : 'fire her gun'} as soon as no escort is in her sight.` : '';
+    const ord = (x.order === 'attack' ? `Ordered to attack${aim ? ` ${aim}` : ''} on the surface.` : x.order === 'under' ? `Ordered to attack${aim ? ` ${aim}` : ''} submerged.`
       : x.order === 'gun' ? `Ordered to fire her deck gun${aim ? ` at ${aim}` : ''}.` : x.order === 'dive' ? 'Ordered to periscope depth.' : x.order === 'deep' ? 'Ordered deep.'
-      : x.order === 'surface' ? 'Ordered to stay on the surface.' : x.order === 'evade' ? 'Ordered to evade.' : '';
+      : x.order === 'surface' ? 'Ordered to stay on the surface.' : x.order === 'evade' ? 'Ordered to evade.' : '') + kept;
     const heard = (x.heard ?? []).map((id) => nameOf(id)).filter(Boolean), held = (x.heard ?? []).length;
     const by = !held ? '' : heard.length === held ? ` ${namesOf(heard)} ${held === 1 ? 'holds' : 'hold'} her.` : ` ${nof(held, 'escort holds', 'escorts hold')} her.`;
     // (down of her captain's own accord with an order standing: when she goes back to it, unless an escort hears her first)
@@ -555,19 +728,25 @@ function pieceWords(u: ConvoyUnit): string {
     const up = typeof x.upAt !== 'number' ? '' : surfaceOrder ? ` Her captain keeps her down while the escorts are about: ${held ? `she comes up to carry out the order once no escort has heard her for ${quiet}` : `unless one hears her again, she comes up to carry out the order ${inMinutes(x.upAt)}`}.`
       : x.order === 'dive' ? ` Her captain keeps her deep while the escorts are about: ${held ? `she comes back up to periscope depth once no escort has heard her for ${quiet}` : `unless one hears her again, she comes back up to periscope depth ${inMinutes(x.upAt)}`}.`
       : (x.tubes ?? 0) === 0 ? '' : held ? ` She takes up the attack again once no escort has heard her for ${quiet}.` : ` Unless an escort hears her again, she takes up the attack again ${inMinutes(x.upAt).replace(/^in /, 'within ')}.`;
-    return `${depthWords(u)}.${doing ? ` ${doing}.` : ''}${ord ? ` ${ord}` : ''}${by}${up} ${nof(x.tubes ?? 0, 'torpedo', 'torpedoes')} in the tubes.`;
+    return `${depthWords(u)}.${doing ? ` ${doing}.` : ''}${ord ? ` ${ord}` : ''}${by}${up}${abandoned(u) ? '' : ` ${nof(x.tubes ?? 0, 'torpedo', 'torpedoes')} in the tubes.`}`;
   }
   // (the boat it holds; else the one its hunt is after, kept by name once it has lost her; else the one it was sent after)
   const e = x.echo, held = e ? nameOf(e.on) || 'a boat' : '', prey = nameOf(x.prey as number | undefined), chase = nameOf(x.chase as number | undefined);
   const boat = held || prey || chase;
   const d = x.doing as string | undefined, moved = x.order === 'move';
+  // (the boat it is after, held by another escort and drawn on the map: said so, not 'where she was last known')
+  const quarry = !e ? (x.prey ?? x.chase) as number | undefined : undefined;
+  const others = quarry === undefined || !S.units.some((v) => v.id === quarry && live(v)) ? [] : S.units.filter((v) => v.id !== u.id && v.kind === 'dd' && v.state !== 'gone' && v.extra.echo?.on === quarry).map((v) => v.name);
+  const heldBy = others.length ? `, held by ${namesOf(others)}` : '';
+  // (in on her until its first charges of the hunt are down: attacking her from then)
+  const dropped = !!boat && S.dropped.get(u.id) === `${e?.on ?? quarry}:${x.huntUntil ?? ''}`;
   const phase = d === 'screen' ? 'On station round the convoy' : d === 'back' ? 'Going back to its station round the convoy'
     : d === 'move' ? 'Steaming to the spot you gave it, to search there' : d === 'rescue' ? (u.speed < 0.5 ? 'Picking up survivors' : 'Steaming to pick up survivors')
-    : d === 'run' ? (held ? `Running in on ${held}` : boat ? `Running to where ${boat} was last known` : 'Running in')
-    : d === 'search' ? (held ? `Searching for ${held}` : boat ? `Searching for ${boat} where she was last known` : moved ? 'Searching the sea where you sent it' : 'Searching for a boat')
-    : d === 'attack' ? (x.huntPhase === 'blind' ? `Running over ${boat || 'her'} to drop charges; its sonar can't hear her this close` : `Attacking ${boat || 'a boat'}`)
+    : d === 'run' ? (held ? `Running in on ${held}` : heldBy ? `Running to ${boat}${heldBy}` : boat ? `Running to where ${boat} was last known` : 'Running in')
+    : d === 'search' ? (held ? `Searching for ${held}` : heldBy ? `Searching for ${boat}${heldBy}` : boat ? `Searching for ${boat} where she was last known` : moved ? 'Searching the sea where you sent it' : 'Searching for a boat')
+    : d === 'attack' ? (x.huntPhase === 'blind' ? `Running over ${boat || 'her'} to drop charges; its sonar can't hear her this close` : dropped ? `Attacking ${boat}` : `Running in on ${boat || 'a boat'}`)
     : d === 'open' ? `Opening the range after an attack on ${boat || 'a boat'}, to come round again` : 'On station round the convoy';
-  const holding = e ? ` ${senseWords(e, held)}.` : boat && d !== 'screen' && d !== 'back' ? ` It has no contact on ${boat} now.` : ' It holds no boat.';
+  const holding = e ? ` ${senseWords(e, held)}.` : heldBy ? '' : boat && d !== 'screen' && d !== 'back' ? ` It has no contact on ${boat} now.` : ' It holds no boat.';
   const giveUp = typeof x.giveUp === 'number' ? x.giveUp : undefined;
   const until = giveUp === undefined ? '' : d === 'search' && !held ? ` Unless it finds ${boat ? 'her' : 'a boat'}, it gives up and goes back to its station ${inMinutes(giveUp)}.`
     : ` It must give up the hunt and go back ${inMinutes(giveUp)}.`;
@@ -611,34 +790,58 @@ function handToStaff(): void {
 
 // ---- The after card ---------------------------------------------------------------------------------------------------
 
-/** The night's result in one plain line, from the game's own record: 'A close win for the pack: 10 of 44 ships sunk, no boats lost.' */
+/**
+ * The night's result in one plain line, from the game's own record: its level (levelOfNight, the one source of it) and
+ * its counts. 'A close win for the pack: 10 of 44 ships sunk, no boats lost.' The escorts' close win in which the pack
+ * sank no more than one ship in twenty, which only that twentieth kept from being the pack's, is the convoy getting
+ * through (the rules owner, round 3, 3): 'The convoy got through: 1 of 44 ships sunk, no boats lost.'
+ */
 function winnerWords(over: FieldResult, mv: number, ships: number, lostB: number, lostE: number): string {
   const how = /Heroic|Crushing/.test(over.level) ? 'An overwhelming win' : /Decisive/.test(over.level) ? 'A clear win' : /Pyrrhic/.test(over.level) ? 'A costly win' : 'A close win';
+  const through = over.winner === 'def' && over.level === 'Close defeat' && mv <= ships / 20;
   const bits = [mv === 0 ? `none of the ${ships} ships sunk` : `${mv} of ${ships} ships sunk`, lostB === 0 ? 'no boats lost' : `${nof(lostB, 'boat', 'boats')} lost`];
   if (lostE) bits.push(`${nof(lostE, 'escort', 'escorts')} lost`);
-  return `${how} for the ${over.winner === 'att' ? 'pack' : 'escorts'}: ${bits.length > 2 ? `${bits.slice(0, -1).join(', ')} and ${bits[bits.length - 1]}` : bits.join(', ')}.`;
+  return `${through ? 'The convoy got through' : `${how} for the ${over.winner === 'att' ? 'pack' : 'escorts'}`}: ${bits.length > 2 ? `${bits.slice(0, -1).join(', ')} and ${bits[bits.length - 1]}` : bits.join(', ')}.`;
 }
 
-/** A while of the night in words: '4 minutes', '1 hour and 5 minutes', '9 hours'. */
+/** A while of the night in words, to the nearest minute: '4 minutes', '1 hour and 5 minutes', '9 hours'. */
 const lengthOf = (sec: number): string => {
-  const m = Math.floor(sec / 60), h = Math.floor(m / 60), r = m % 60;
+  const m = Math.round(sec / 60), h = Math.floor(m / 60), r = m % 60;
   return h === 0 ? nof(m, 'minute', 'minutes') : `${nof(h, 'hour', 'hours')}${r ? ` and ${nof(r, 'minute', 'minutes')}` : ''}`;
 };
 
 /**
- * Who commanded the player's side through the night, from the sim's own count of the seconds he steered it: he did
- * (the staff had it for under STEERED), the staff did (he had it for under STEERED: a player who lets the staff steer
- * at dusk has had it a few minutes of the night), or both, said with the hour he handed over (in the sim's own words
- * for it), or how long he had it. After a hand-over the staff's dice fought the rest.
+ * Who commanded the player's side through the night. Whose night it was, for the rank's words, from the sim's own count
+ * of the seconds he steered it: his (the staff had it for under STEERED), the staff's (he had it for under STEERED: a
+ * player who lets the staff steer at dusk has had it a minute or two), or both. Who steered when, from the true spans
+ * (the rules owner, round 3, 4 and 22), to the minute: 'The staff steered your escorts from 0:01 to 11:16; you had the
+ * rest.' A hand-over alone is said with its hour, in the sim's own words for it; after it the staff's dice fought the rest.
  */
 function commandOf(x: ConvoyOverExtra, night: number): { who: 'mine' | 'staff' | 'both'; words: string } {
   const we = S.side === 'def' ? 'escorts' : 'boats', had = x.steered[S.side];
-  if (had < STEERED) return { who: 'staff', words: had < 60 ? `The staff steered your ${we} all night.` : `The staff steered your ${we} all night except the first ${lengthOf(had)}.` };
-  if (night - had < STEERED) return { who: 'mine', words: '' };
-  if (x.handed && x.handedAt !== undefined && Math.abs(had - x.handedAt) <= STEERED) {
-    return { who: 'both', words: `You commanded your ${we} until ${afterDusk(x.handedAt)}, and the staff from then to dawn.` };
+  const who = had < STEERED ? 'staff' : night - had < STEERED ? 'mine' : 'both';
+  // The staff's spans, in minutes of the night: those the player let them steer and a hand-over's rest, joined.
+  const end = Math.round(night / 60), min = (sec: number): number => Math.min(end, Math.round(Math.min(sec, night) / 60));
+  const handed = x.handed && x.handedAt !== undefined ? x.handedAt : undefined;
+  const spans: [number, number][] = [];
+  for (const [a, b] of [...S.reins, ...(handed !== undefined ? [[handed, night]] : [])].map(([a, b]) => [min(a), min(b)]).filter(([a, b]) => b > a).sort((p, q) => p[0] - q[0])) {
+    const l = spans[spans.length - 1];
+    if (l && a <= l[1]) l[1] = Math.max(l[1], b); else spans.push([a, b]);
   }
-  return { who: 'both', words: `You commanded your ${we} for ${lengthOf(had)} of the night's ${lengthOf(night)}, and the staff for the rest.` };
+  if (!spans.length) return { who, words: '' };
+  // His spans: the rest of the night.
+  const his: [number, number][] = [];
+  let at = 0;
+  for (const [a, b] of spans) { if (a > at) his.push([at, a]); at = b; }
+  if (at < end) his.push([at, end]);
+  // (handed over within the first minute: the staff fought the night from dusk, as the sim's own line says)
+  if (!his.length || (handed !== undefined && afterDusk(handed) === 'dusk')) return { who, words: `The staff steered your ${we} all night.` };
+  if (handed !== undefined && spans.length === 1 && spans[0][0] === min(handed)) return { who, words: `You commanded your ${we} until ${afterDusk(handed)}, and the staff from then to dawn.` };
+  const when = (m: number): string => m === 0 ? 'dusk' : m === end && night >= S.sim!.limit - 60 ? 'dawn' : hhmm(m * 60);
+  // ('the first minute', 'the last 3 minutes', 'the first hour and 5 minutes')
+  const span = (m: number): string => lengthOf(m * 60).replace(/^1 /, '');
+  const yours = his.length > 1 ? 'the rest' : his[0][0] === 0 ? `the first ${span(his[0][1])}` : his[0][1] === end ? `the last ${span(his[0][1] - his[0][0])}` : 'the rest';
+  return { who, words: `The staff steered your ${we} ${andOf(spans.map(([a, b]) => `from ${when(a)} to ${when(b)}`))}; you had ${yours}.` };
 }
 
 function after(): void {
@@ -688,7 +891,7 @@ function after(): void {
     if (S.screen !== 'after' || S.sim !== s) return;
     const staff = S.staff ?? staffNights(t, STAFF_NIGHTS);
     const el = app.querySelector('[data-verdict]'), camp = app.querySelector('[data-camp]');
-    if (el) el.innerHTML = `<b>${esc(rankWords(t, x, staff, cmd))}</b>`;
+    if (el) el.innerHTML = `<b>${esc(rankWords(t, x, staff, cmd, leanOf(placeOf(t, x, staff)), over.winner))}</b>`;
     if (camp) camp.textContent = campaignWords(t, x, staff);
   }, 30));
 }
@@ -698,8 +901,9 @@ const andOf = (xs: string[]): string => xs.length > 1 ? `${xs.slice(0, -1).join(
 
 /**
  * One of the night's totals against the staff's nights, in true counts, the parts that are nought left out: the first
- * part in full ('more ships than the staff's pack did in 21 of its 30 nights on this card'), the rest short ('as many as
- * in 3 and fewer than in 6'). 'lead' is how the first part names the staff's nights; a part that covers them all says so.
+ * part in full ('more ships than the staff's pack did in 21 of the 30 times it fought this night'), the rest short ('as
+ * many as in 3 and fewer than in 6'). 'lead' is how the first part names the staff's nights; a part that covers them
+ * all says so.
  */
 function versus(parts: [number, string, string][], n: number, lead: (k: number) => string): string {
   const nz = parts.filter(([k]) => k > 0);
@@ -708,32 +912,51 @@ function versus(parts: [number, string, string][], n: number, lead: (k: number) 
   return andOf([`${full} ${lead(k0)}`, ...rest.map(([k, , short]) => `${short} in ${k}`)]);
 }
 
-/** The night against the staff's own nights on the card, in true counts: 'Your pack sank more ships than the staff's pack did in 21 of its 30 nights…'. */
-function rankWords(t: ConvoyTicket, x: ConvoyOverExtra, staff: StaffNights, cmd: { who: 'mine' | 'staff' | 'both'; words: string }): string {
+/** The night's place among the staff's nights by the ships sunk, 0 to 1 as the pack reads it: the booked swing's own (calibrate.ts foughtOf on the night's ranks). */
+function placeOf(t: ConvoyTicket, x: ConvoyOverExtra, staff: StaffNights): number {
+  const { low, high } = CONVOY_BATTLE.swing;
+  return (foughtOf(t, ranksOf(t, x.counts, staff)).swing - low) / Math.max(1e-6, high - low);
+}
+
+/** The side a place favours: the pack's at 0.6 or more, the escorts' at 0.4 or less (the campaign line's better and worse nights), else neither. */
+const leanOf = (place: number): Side | null => place >= 0.6 ? 'att' : place <= 0.4 ? 'def' : null;
+
+/**
+ * The night against the staff's own nights at it, in true counts: 'Your pack sank more ships than the staff's pack did
+ * in 21 of the 30 times it fought this night…'. Where it points the other way from the headline (a win for one side on
+ * a night that was one of the better ones for the other, by the ships sunk), it starts 'Even so,' with the count that
+ * points that way, so the two never read as one against the other (the rules owner, round 3, 3); who steered when
+ * follows it.
+ */
+function rankWords(t: ConvoyTicket, x: ConvoyOverExtra, staff: StaffNights, cmd: { who: 'mine' | 'staff' | 'both'; words: string }, lean: Side | null, winner: Side): string {
   const a = againstStaff(t, x.counts, staff), n = a.n;
   const lostE = Object.values(x.counts.dd).reduce((s, k) => s + k, 0);
   const escortsCount = lostE > 0 || a.dd.same < n;
   const mine = cmd.who === 'mine', pack = S.side === 'att';
   // (the first count names the staff's nights; the later ones say only how many)
-  const first = (k: number): string => mine ? `the staff's ${pack ? 'pack' : 'escorts'} did in ${k === n ? `every one of ${pack ? 'its' : 'their'} ${n} nights` : `${k} of ${pack ? 'its' : 'their'} ${n} nights`} on this card`
-    : `in ${k === n ? `every one of the staff's own ${n} nights` : `${k} of the staff's own ${n} nights`} on this card`;
+  const first = (k: number): string => mine ? `the staff's ${pack ? 'pack' : 'escorts'} did in ${k === n ? 'every one' : k} of the ${n} times ${pack ? 'it' : 'they'} fought this night`
+    : `in ${k === n ? 'every one' : k} of the ${n} times the staff fought this night`;
   const later = (k: number): string => k === n ? `in all ${n}` : `in ${k}`;
-  const subject = mine ? (pack ? 'Your pack' : 'Your escorts') : cmd.who === 'staff' ? 'They' : pack ? 'Between you, the pack' : 'Between you, the escorts';
-  // (one subject through the sentence: 'They sank …; they lost …', 'Your pack sank …; it lost …')
-  const it = pack && cmd.who !== 'staff' ? 'it' : 'they';
+  const subject = pack ? (mine ? 'Your pack' : 'Your boats') : 'Your escorts';
+  // (one subject through the sentence: 'Your boats sank …; they lost …', 'Your pack sank …; it lost …')
+  const it = pack && mine ? 'it' : 'they';
+  // (the staff's nights that sank fewer ships than this one lean it the pack's way, those that sank more the escorts')
+  const even = lean !== null && lean !== winner && (lean === 'att' ? a.mv.less : a.mv.more) > 0;
+  const lead = (parts: [number, string, string][], way: Side): [number, string, string][] => even && lean !== way ? [...parts].reverse() : parts;
   let body: string;
   if (pack) {
-    const ships = versus([[a.mv.less, 'sank more ships than', 'more than'], [a.mv.same, 'sank as many ships as', 'as many as'], [a.mv.more, 'sank fewer ships than', 'fewer than']], n, first);
+    const ships = versus(lead([[a.mv.less, 'sank more ships than', 'more than'], [a.mv.same, 'sank as many ships as', 'as many as'], [a.mv.more, 'sank fewer ships than', 'fewer than']], 'att'), n, first);
     const boats = versus([[a.ss.more, 'lost fewer boats than', 'fewer than'], [a.ss.same, 'lost as many boats as', 'as many as'], [a.ss.less, 'lost more boats than', 'more than']], n, later);
     const escortsSunk = escortsCount ? versus([[a.dd.less, 'sank more escorts than', 'more than'], [a.dd.same, 'sank as many escorts as', 'as many as'], [a.dd.more, 'sank fewer escorts than', 'fewer than']], n, later) : '';
     body = `${subject} ${ships}; ${it} ${boats}${escortsSunk ? `, and ${it} ${escortsSunk}` : ''}.`;
   } else {
-    const ships = versus([[a.mv.more, 'lost fewer ships than', 'fewer than'], [a.mv.same, 'lost as many ships as', 'as many as'], [a.mv.less, 'lost more ships than', 'more than']], n, first);
+    const ships = versus(lead([[a.mv.more, 'lost fewer ships than', 'fewer than'], [a.mv.same, 'lost as many ships as', 'as many as'], [a.mv.less, 'lost more ships than', 'more than']], 'def'), n, first);
     const boats = versus([[a.ss.less, 'sank more boats than', 'more than'], [a.ss.same, 'sank as many boats as', 'as many as'], [a.ss.more, 'sank fewer boats than', 'fewer than']], n, later);
     const escortsLost = escortsCount ? versus([[a.dd.more, 'lost fewer escorts than', 'fewer than'], [a.dd.same, 'lost as many escorts as', 'as many as'], [a.dd.less, 'lost more escorts than', 'more than']], n, later) : '';
     body = `${subject} ${ships}; ${it} ${boats}${escortsLost ? `, and ${it} ${escortsLost}` : ''}.`;
   }
-  return cmd.words ? `${cmd.words} ${body}` : body;
+  const said = even ? `Even so, ${body[0].toLowerCase()}${body.slice(1)}` : body;
+  return cmd.words ? `${said} ${cmd.words}` : said;
 }
 
 /**
@@ -802,6 +1025,7 @@ function wireCanvas(): void {
   });
   c.addEventListener('wheel', (e) => {
     e.preventDefault();
+    S.cam.fit = false;
     const k = e.deltaY > 0 ? 0.85 : 1.18, to = Math.max(0.008, Math.min(1.2, S.cam.scale * k));
     // (on the pointer while the camera is free; on the middle while it follows something)
     if (S.cam.follow === null) { const [sx, sy] = local(e), [wx, wy] = toSea(sx, sy); S.cam.scale = to; const [nx, ny] = toSea(sx, sy); S.cam.x += wx - nx; S.cam.y += wy - ny; }
@@ -843,9 +1067,10 @@ function rightAt(sx: number, sy: number): void {
     const [x, y] = toSea(sx, sy);
     order({ do: 'move', units: ids, x, y }, true);
   } else {
-    // (no depth sent: the boat keeps the one her commander last chose, Attack submerged staying submerged)
+    // (no depth sent: the boat keeps the one her commander last chose, Attack submerged staying submerged; boats forced
+    // up, whose only order is the deck gun, turn it on the ship)
     const ship = nearest(sx, sy, S.units.filter((u) => u.side === 'def' && live(u)), 18);
-    if (ship) order({ do: 'convoy:attack', units: ids, target: ship.id });
+    if (ship) order(ps.every(forcedUp) ? { do: 'convoy:gun', units: ids, target: ship.id } : { do: 'convoy:attack', units: ids, target: ship.id });
   }
 }
 
@@ -861,8 +1086,8 @@ function modeAt(sx: number, sy: number): void {
   }
 }
 
-/** A boat's look by her real depth: on the surface (at once, coming up, as the rules have it), diving or at periscope depth, deep (her keel past it). */
-const lookOf = (u: ConvoyUnit): 'surfaced' | 'periscope' | 'deep' => u.extra.dive === 'surfaced' ? 'surfaced' : (u.extra.keel ?? 0) < AT_DEEP ? 'periscope' : 'deep';
+/** A boat's look by her real depth, by her keel: on the surface (keel and all), diving, rising or at periscope depth, deep (her keel past it). */
+const lookOf = (u: ConvoyUnit): 'surfaced' | 'periscope' | 'deep' => u.extra.dive === 'surfaced' && (u.extra.keel ?? 0) <= 0 ? 'surfaced' : (u.extra.keel ?? 0) < AT_DEEP ? 'periscope' : 'deep';
 
 function draw(): void {
   const c = canvas!, s = S.sim!, t = S.t!;
@@ -1081,7 +1306,7 @@ function paintKey(): void {
   const rows = [
     [line(LINE.radar), `An escort holds ${S.side === 'att' ? 'your' : 'a'} boat by radar`], [line(LINE.asdic, '2 3'), '… by sonar'], [line(LINE.sight), '… by sight'],
     [line('rgba(224,184,114,0.8)', '5 4'), 'Where an order sends a ship'],
-    [tri(boat, true), `${boats} on the surface`], [tri(boat, false), `${boats} at periscope depth, or diving`], [ring(boat), `${boats} deep`],
+    [tri(boat, true), `${boats} on the surface`], [tri(boat, false), `${boats} at periscope depth, diving or coming up`], [ring(boat), `${boats} deep`],
     [seen(S.side === 'att' ? '#8fb0c8' : boat), S.side === 'att' ? 'Where an escort was last seen' : 'Where a boat was last seen: right-click it to hunt there'],
     [tri('#8fb0c8', true), 'An escort'], ['<svg width="28" height="14" aria-hidden="true"><rect x="12" y="2" width="4" height="10" fill="#b7ad98"/></svg>', 'A merchant ship'],
     ['<svg width="28" height="14" aria-hidden="true"><path d="M10 3 L18 11 M18 3 L10 11" stroke="rgba(224,110,90,0.9)" stroke-width="2"/></svg>', 'A wreck'],
@@ -1102,10 +1327,15 @@ function paintClock(): void {
   if (note) {
     const watching = !!S.sim?.ai[S.side];
     // (two lines at most: the box beside the speeds is one size, so the bar never moves as the note changes)
+    // (of the slow-downs holding it, the one that may last longest: one that follows a boat says the latest it gives the
+    // clock back, and that an order puts that off; one for a moment of the night, for how long)
+    const end = (w: Slow): number => w.on !== undefined ? w.most : w.until;
+    // (paused, the same: the clock runs on at it)
+    const v = Math.min(S.chosen, ...S.slows.map((o) => o.to)), held = S.slows.filter((o) => o.to === v).sort((p, q) => end(q) - end(p))[0];
     const w = watching ? 'The staff are steering: the clock keeps your speed.'
-      : S.slow && Math.min(S.slow.to, S.chosen) < S.chosen ? `Slowed to ×${Math.min(S.slow.to, S.chosen)} for now, then back to ×${S.chosen}.`
+      : v < S.chosen && held ? (held.on !== undefined ? `Slowed to ×${v} for ${nameOf(held.on)}, until ${hhmm(held.most)} at most; orders add time.` : `Slowed to ×${v} ${held.how.toLowerCase()}, then back to ×${S.chosen}.`)
       : S.chosen <= 10 ? '' : S.rush ? 'Slows to ×10 at the first contact.'
-      : S.side === 'def' ? 'Slows to ×10 for each new contact, while a boat is held.' : 'Slows to ×10 when one of your boats is found, attacked or lost.';
+      : S.side === 'def' ? 'Slows for new contacts after a quiet spell, your hunts and hits.' : 'Slows when your boats fire, or are found, attacked or lost.';
     if (note.textContent !== w) note.textContent = w;
   }
 }
@@ -1165,13 +1395,13 @@ function keys(e: KeyboardEvent): void {
     if (!us.length) return;
     const i = us.findIndex((u) => S.picked.has(u.id));
     const u = us[(i + 1) % us.length];
-    S.picked = new Set([u.id]); S.cam.follow = u.id;
+    S.picked = new Set([u.id]); S.cam.follow = u.id; S.cam.fit = false;
     paintOrders();
   } else if ((e.key === 's' || e.key === 'S') && S.side === 'def' && picked().length) S.mode = 'starshell';
   else if ((e.key === 'g' || e.key === 'G') && S.side === 'att' && picked().length) S.mode = 'gun';
   else if (e.key.startsWith('Arrow')) {
     e.preventDefault();
-    S.cam.follow = null;
+    S.cam.follow = null; S.cam.fit = false;
     const d = 120 / S.cam.scale;
     if (e.key === 'ArrowLeft') S.cam.x -= d; if (e.key === 'ArrowRight') S.cam.x += d; if (e.key === 'ArrowUp') S.cam.y += d; if (e.key === 'ArrowDown') S.cam.y -= d;
   }

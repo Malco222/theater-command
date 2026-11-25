@@ -35,17 +35,17 @@ const LAST_SEEN = 180;
 /** The page's own notes, never the scene's: an order answered, a boat of the pack found, the first salvo, a contact sure lost. Left out of the whole picture. */
 const PAGE_ONLY = new Set(['sea:order', 'sea:found', 'sea:attack', 'sea:lost']);
 /**
- * A boat sent under by radar or lookouts and hunted by no one goes back in once she has been unheard this long: under
- * water where she is within PRESS_AT of her firing station and can get within firing reach of a ship dived within
- * DIVED_IN (acrossTrack), else on the surface after the longer quiet (E.lostFor). A boat closing dived of her own
- * accord, or to attack submerged, comes up to run on the surface once she is farther than SURFACE_RUN from it, or
- * once she cannot get in dived within DIVED_IN and no escort is near, or she has been down that long. (M, a stand-in
- * for the rules owner: without it a radar night's boats only dive, wait and come back to be found. PRESS_AT was 4,000
- * while a dived boat chased her station and crept in over hours; pressing only where she can get in, from a little
- * wider, keeps the radar nights' salvoes about where they were: the staff's nights 1 to 3, seeds 1 to 10, 7.8, 7.9
- * and 8.3 against 6.7, 7.4 and 7.9.)
+ * A boat her commander ordered to evade goes back in once she has been unheard PRESS: under water where she is within
+ * PRESS_AT of her firing station and can get within firing reach of a ship dived within DIVED_IN (acrossTrack). A boat
+ * ordered to attack submerged comes up to run on the surface once she is farther than SURFACE_RUN from her station, or
+ * once she cannot get in dived within DIVED_IN and no escort is near, or she has been down that long. (M.) Her captain's
+ * own dives are the rules owner's (round 3, the radar nights' dive loop): found while no escort runs in on her, she
+ * dives only to periscope depth, keeps closing and comes up again once free (boatHelm); hunted, she goes deep and waits
+ * out the long quiet (E.lostFor).
  */
 const PRESS = 600, PRESS_AT = 4750, SURFACE_RUN = 7000;
+/** Metres a second a boat's keel rises (boatHelm), so the seconds a boat forced up takes to reach the surface. */
+const RISE = 2;
 /** Metres ahead of the ship she makes for that a boat ordered to attack submerged takes her place on the surface, to dive there (M). */
 const UNDER_AHEAD = 1500;
 /** Battle seconds a dived boat may take to get within firing reach of a ship, at her best heading, before she runs round on the surface instead (M). */
@@ -68,37 +68,57 @@ export function namesOf(names: string[]): string {
   return `${same ? `${head}s ` : ''}${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 
-/** How the night's boats lost went, and those forced up, in plain words (the after card's fate line): '3 boats lost: 2 sunk by depth charges and 1 rammed.' */
+/**
+ * How the night's boats lost went, and those forced up, in plain words (the after card's fate lines): 'None of the 6
+ * boats was lost.', '3 of the 15 boats were lost: 2 sunk by depth charges and 1 after she was forced to the surface.',
+ * '1 of the 6 boats was lost, sunk by depth charges.' A boat forced up is told once, on the line of those forced up,
+ * with what became of her: '1 boat was forced to the surface and scuttled by her crew.' Every way but depth charges
+ * below is a boat's forced up first (rammed, shelled, scuttled, taken): the rest of those forced up dived again and got
+ * away, or were still up at dawn. One already on the surface when gunfire left her unable to dive was kept there, not
+ * forced up ('kept'), and is said so.
+ */
 export function fateWords(tally: ConvoyTally, lost: number, of: number): string[] {
   const n = (k: number, one: string, many: string): string => `${k} ${k === 1 ? one : many}`;
-  const how: string[] = [];
-  if (tally.crushed) how.push(`${tally.crushed} sunk by depth charges`);
-  if (tally.rammed) how.push(`${tally.rammed} rammed`);
-  if (tally.shelled) how.push(`${tally.shelled} sunk by gunfire`);
-  if (tally.scuttled) how.push(`${tally.scuttled} scuttled by ${tally.scuttled === 1 ? 'her crew' : 'their crews'}`);
-  if (tally.captured) how.push(`${tally.captured} taken by an escort`);
-  const list = how.length > 1 ? `${how.slice(0, -1).join(', ')} and ${how[how.length - 1]}` : how[0] ?? '';
-  const lines = [lost === 0 ? `No boats lost of ${of}.` : `${n(lost, 'boat', 'boats')} lost of ${of}${list ? `: ${list}` : ''}.`];
-  if (tally.forcedUp) {
-    const up = `${n(tally.forcedUp, 'boat was', 'boats were')} forced to the surface`;
-    const away = tally.escaped === 0 ? '' : tally.escaped < tally.forcedUp ? `; ${tally.escaped} of them dived again and got away` : tally.forcedUp === 1 ? ' and dived again to get away' : '; all dived again and got away';
-    lines.push(`${up}${away}.`);
-  }
+  const and = (xs: string[]): string => xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : xs[0] ?? '';
+  const surfaced = tally.rammed + tally.shelled + tally.scuttled + tally.captured;
+  const below = Math.max(0, lost - surfaced), after = Math.min(lost, surfaced);
+  // (one way only: said without its count, 'was lost, sunk by depth charges')
+  const how = below && after ? `: ${below} sunk by depth charges and ${after} after ${after === 1 ? 'she was' : 'they were'} forced to the surface`
+    : below ? `, ${below === 1 ? '' : lost === of ? 'each ' : 'all '}sunk by depth charges` : '';
+  const lines = [of === 1 ? (lost ? `The boat was lost${how}.` : 'The boat was not lost.')
+    : lost === 0 ? `None of the ${of} boats was lost.` : `${lost === of ? `All ${of} boats were` : `${lost} of the ${of} boats ${lost === 1 ? 'was' : 'were'}`} lost${how}.`];
+  const up = Math.max(tally.forcedUp, surfaced + tally.escaped);
+  if (!up) return lines;
+  // What became of those forced up, each way said after 'forced to the surface and' where all went one way, else counted.
+  const was = (k: number): string => k === 1 ? 'was' : 'were';
+  const fates: [number, (k: number) => string, (k: number) => string][] = [
+    [tally.scuttled, (k) => `scuttled by ${k === 1 ? 'her crew' : 'their crews'}`, (k) => `${was(k)} scuttled by ${k === 1 ? 'her crew' : 'their crews'}`],
+    [tally.captured, (k) => `taken by ${k === 1 ? 'an escort' : 'escorts'}`, (k) => `${was(k)} taken by ${k === 1 ? 'an escort' : 'escorts'}`],
+    [tally.rammed, () => 'rammed', (k) => `${was(k)} rammed`],
+    [tally.shelled, () => 'sunk by gunfire', (k) => `${was(k)} sunk by gunfire`],
+    [tally.escaped, () => 'dived again to get away', () => 'dived again and got away'],
+    [up - surfaced - tally.escaped, (k) => `${was(k)} still there at dawn`, (k) => `${was(k)} still on the surface at dawn`],
+  ];
+  const had = fates.filter(([k]) => k > 0);
+  const kept = Math.min(up, tally.kept);
+  const head = `${n(up, 'boat was', 'boats were')} ${kept === 0 ? 'forced to the surface' : kept === up ? 'kept on the surface by gunfire' : 'forced to the surface or kept there by gunfire'}`;
+  lines.push(had.length === 1 ? `${head} and ${had[0][1](up)}.` : `${head}: ${and(had.map(([k, , list]) => `${k} ${list(k)}`))}.`);
   return lines;
 }
 
 /**
  * How far the night went the winner's way, as the pack reads it (words only, as the winner is: the campaign books the
  * night by its ranks). The pack's score is the ships it sank, the escorts' three for each boat sunk and two for each
- * escort; the pack wins where its score is the higher. Its win is overwhelming where it sank three tenths of the convoy
- * and three times the escorts' score, clear at three twentieths and twice, costly where it lost half its boats or
- * more, else close. The escorts' win is overwhelming where the convoy came through untouched, or nearly (a twentieth),
- * and two boats or more were sunk; clear where the convoy came through untouched, or the escorts' score is twice the
- * pack's; else close.
+ * escort; the pack wins where its score is the higher and it sank more than a twentieth of the convoy (the rules owner,
+ * round 3: a night that sinks fewer is the convoy getting through, the escorts' night). Its win is overwhelming where
+ * it sank three tenths of the convoy and three times the escorts' score, clear at three twentieths and twice, costly
+ * where it lost half its boats or more, else close. The escorts' win is overwhelming where the convoy came through
+ * untouched, or nearly (a twentieth), and two boats or more were sunk; clear where the convoy came through untouched,
+ * or the escorts' score is twice the pack's; else close.
  */
 export function levelOfNight(sunk: number, ships: number, lostB: number, pack: number, lostE: number): VictoryLevel {
   const p = sunk, q = 3 * lostB + 2 * lostE;
-  if (p > q) return sunk >= 0.3 * ships && p >= 3 * q ? 'Heroic victory' : sunk >= 0.15 * ships && p >= 2 * q ? 'Decisive victory' : lostB * 2 >= pack ? 'Pyrrhic victory' : 'Close victory';
+  if (p > q && sunk > 0.05 * ships) return sunk >= 0.3 * ships && p >= 3 * q ? 'Heroic victory' : sunk >= 0.15 * ships && p >= 2 * q ? 'Decisive victory' : lostB * 2 >= pack ? 'Pyrrhic victory' : 'Close victory';
   if (sunk <= 0.05 * ships && lostB >= 2) return 'Crushing defeat';
   return sunk === 0 || q >= 2 * p ? 'Decisive defeat' : 'Close defeat';
 }
@@ -113,6 +133,16 @@ interface Boat {
   sees: Set<number>; order: 'attack' | 'under' | 'dive' | 'deep' | 'surface' | 'evade' | 'gun' | 'leave' | null; target: number;
   /** The depth her commander last chose to attack at (Attack, Attack submerged, Dive, Surface), or none yet. */
   depth: 'surface' | 'under' | null;
+  /** Her crew have left her (abandoned or given up): she fights no more and is no gun's target. */
+  abandoned: boolean;
+  /** Her change of depth still to be said: a boat coming up is said to be there only once her keel is (setDive). */
+  saying: { dive: Dive; why: string; reason?: string; override: boolean; rising: boolean; quiet: boolean } | null;
+  /** Whether she is down on a duck (her captain's own, to periscope depth, for an escort that found her or is closing), and whether its line went unsaid. */
+  ducking: boolean; duckQuiet: boolean;
+  /** The battle second she last came back up to the surface from a duck. */
+  duckUp: number;
+  /** Kept down by an escort in her sight where she cannot get in dived: drawing off out of its sight (boatHelm). */
+  off: boolean;
 }
 interface Escort {
   u: ConvoyUnit; fleet: number; nat: string; kit: ConvoyKit;
@@ -125,8 +155,8 @@ interface Escort {
   chase: number;
   /** The boat her hunt is after (-1 none): the one she was sent after or began on, kept while she searches for her after losing her. */
   prey: number;
-  /** When she last lost each boat; the boats whose contact she has reported and not yet reported lost; since when she holds the one she holds. */
-  lostAt: Map<number, number>; told: Set<number>; heldFrom: number;
+  /** When she last lost each boat (found again within AGAIN, it is the same contact). */
+  lostAt: Map<number, number>;
 }
 /** An order's answer for the page's log: taken, in words said of one piece and of several ('hunts', 'hunt'); or a whole sentence (a refusal and why). */
 interface Reply { ok: boolean; u: ConvoyUnit; does?: [string, string]; says?: string }
@@ -152,7 +182,7 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
   /** What the night has cost each side so far, by fleet: what the campaign books (calibrate.ts). */
   readonly counts: ConvoyCounts = { ss: {}, dd: {}, mv: 0 };
   /** Measured only, for the tables (nothing reads them back): attacks made on boats, incidents begun, salvoes fired, torpedoes that hit. */
-  readonly tally: ConvoyTally = { attacks: 0, hunts: 0, salvoes: 0, hits: 0, forcedUp: 0, escaped: 0, scuttled: 0, rammed: 0, shelled: 0, crushed: 0, captured: 0 };
+  readonly tally: ConvoyTally = { attacks: 0, hunts: 0, salvoes: 0, hits: 0, forcedUp: 0, kept: 0, escaped: 0, scuttled: 0, rammed: 0, shelled: 0, crushed: 0, captured: 0 };
   /** Battle seconds each side was commanded by its player rather than the staff (0: the staff had it all night). */
   readonly steered: Record<Side, number> = { att: 0, def: 0 };
 
@@ -183,6 +213,12 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
   private readonly spots: Record<Side, Map<number, ConvoySpot>> = { att: new Map(), def: new Map() };
   /** The battle second any escort last held each boat: a contact on a boat none held for AGAIN is news to the side. */
   private readonly heldAt = new Map<number, number>();
+  /** The boats whose contact the side was told of and not yet told lost; the second the side last lost each (no escort holding her), and the line of it still to be told. */
+  private readonly reported = new Set<number>();
+  private readonly goneAt = new Map<number, number>();
+  private readonly losing = new Map<number, () => void>();
+  /** The battle second each gun last fired at each piece ('<gun>:<target>'): one that opens fire again within AGAIN says nothing new. */
+  private readonly firedAt = new Map<string, number>();
   /** The live merchants of the outermost column on each side (-1 west, 1 east), kept until a merchant is lost. */
   private outerCols: Map<number, Merchant[]> | null = null;
   private handed = false;
@@ -224,7 +260,7 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
         const u = this.unit(id++, 'def', 'dd', `Escort ${k + 1}`, f.nat, f.id, f.name, count[j], this.cx + sx, this.cy + sy);
         const e: Escort = { u, fleet: f.id, nat: f.nat, kit: p.kit[f.nat] ?? { asdic: true, radar: false, hedgehog: false, groups: false }, doing: 'screen', sx, sy,
           holds: -1, echo: null, seenAt: -1, huntFrom: -1, dx: 0, dy: 0, openTo: 0, nextGun: 0, nextShell: 0, harm: 0, order: null, target: -1, tx: 0, ty: 0, until: 0, attacks: 0,
-          chase: -1, prey: -1, lostAt: new Map(), told: new Set(), heldFrom: 0 };
+          chase: -1, prey: -1, lostAt: new Map() };
         this.escorts.push(e);
         this.escortOf.set(u.id, e);
         k++;
@@ -247,7 +283,8 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
         const boat: Boat = { u, fleet: f.id, nat: f.nat, doing: 'out', arrive, from, homed,
           dive: 'surfaced', keel: 0, keelTo: 0, under: 0, tubes: B.tubes, load: B.load, reloadAt: Infinity,
           harm: 0, doomed: false, repairAt: Infinity, scuttleAt: Infinity, struck: -1, nextGun: 0, gunOn: -1,
-          side: Math.sin(from) >= 0 ? 1 : -1, ahead: this.rng.range(-0.3, 0.7), until: 0, lastHeard: -Infinity, sees: new Set(), order: null, target: -1, depth: null };
+          side: Math.sin(from) >= 0 ? 1 : -1, ahead: this.rng.range(-0.3, 0.7), until: 0, lastHeard: -Infinity, sees: new Set(), order: null, target: -1, depth: null,
+          abandoned: false, saying: null, ducking: false, duckQuiet: false, duckUp: -Infinity, off: false };
         u.extra.dive = 'surfaced'; u.extra.keel = 0; u.extra.scope = false; u.extra.tubes = B.tubes; u.extra.heard = []; u.extra.gunMm = gunMmOf(f.nat);
         this.boats.push(boat);
         this.boatOf.set(u.id, boat);
@@ -324,16 +361,23 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
       if (due.length) { this.later = this.later.filter((l) => l.at > now); for (const l of due) l.run(); }
     }
     if (this.zones.length && this.zones[0].until <= now) this.zones = this.zones.filter((z) => z.until > now);
-    const pack = this.boats.some((b) => b.doing !== 'left' && b.doing !== 'lost' && b.arrive !== Infinity);
+    const pack = this.packLeft();
     if (now >= this.limit || !pack) this.finish(now >= this.limit ? 'time' : 'withdrew');
   }
+
+  /** Whether any boat of the pack is still in the night or still to come up: with none, the night is over. */
+  private packLeft(): boolean { return this.boats.some((b) => b.doing !== 'left' && b.doing !== 'lost' && b.arrive !== Infinity); }
+
+  /** Whether the pack came and is gone: every boat that came up has left or been lost, and none is still to come. */
+  private packGone(): boolean { return !this.packLeft() && this.boats.some((b) => b.doing !== 'out'); }
 
   /**
    * While no boat is up with the convoy and nothing is in the water, the convoy and its screen only steam on: the clock
    * runs on to a second before the next boat comes up (no roll is thrown in such seconds, so nothing moves but time).
    */
   private quiet(): void {
-    if (this.torps.length || this.bursts.length || this.later.length) return;
+    // (nor once the pack is gone: the night ends at the tick, not at dawn)
+    if (this.torps.length || this.bursts.length || this.later.length || this.packGone()) return;
     let next = Infinity;
     for (const b of this.boats) {
       if (b.doing === 'out') { if (b.arrive < next) next = b.arrive; } else if (b.doing !== 'left' && b.doing !== 'lost') return;
@@ -368,35 +412,107 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
   /**
    * A boat's depth changed. 'reason' is her captain's, in plain words, where he took her down himself; where that goes
    * against what her commander ordered her to do (attack on the surface, fire her deck gun, keep at periscope depth),
-   * the event says so ('override'), and the order stands for when the danger has passed.
+   * the event says so ('override'), and the order stands for when the danger has passed. It is said by her keel and
+   * where she is going: going down ('dives', 'goes deep') at once, coming up ('surfaces', 'comes up to periscope
+   * depth') once her keel is there (boatHelm), so that no line has her up before she is.
+   *
+   * A duck ('duck': her captain takes her to periscope depth from the surface for an escort that found her or is
+   * closing, and up again once free) is told in words only where it is news: not within AGAIN of her coming back up from
+   * her last duck (on a radar night she may duck every minute while the escorts' radar keeps finding her). Its coming
+   * up is told where its going down was, and a turn back down before she was up is no line at all: the log never has
+   * her up when it said nothing of it. The scene's 'sea:dive' goes out all the same.
    */
-  private setDive(b: Boat, dive: Dive, why: string, reason?: string): boolean {
-    if (b.dive === dive) return false;
-    const was = b.dive;
+  private setDive(b: Boat, dive: Dive, why: string, reason?: string, duck = false): boolean {
+    if (b.dive === dive) {
+      // (forced up while already coming up to the surface: the line she will say there is the forced one)
+      if (why === 'forced' && b.saying) b.saying = { ...b.saying, why, reason: undefined, override: false, quiet: false };
+      return false;
+    }
+    // (a duck that turns her back down before her rise to the surface was said: she is still down as far as the log goes)
+    const back = duck && !!b.saying?.rising && b.saying.dive === 'surfaced' && b.keel < B.scope;
     b.dive = dive;
     b.keelTo = dive === 'surfaced' ? 0 : dive === 'periscope' ? B.scope : B.deep;
     if (dive !== 'surfaced' && b.under === 0) b.under = this.sec;
     if (dive === 'surfaced') b.under = 0;
-    const n = b.u.name;
-    const words = dive === 'surfaced' ? (why === 'forced' ? `${n} is forced to the surface` : `${n} surfaces`)
-      : dive === 'deep' ? `${n} goes deep` : was === 'deep' ? `${n} comes up to periscope depth` : `${n} dives`;
     const override = !!reason && (b.order === 'attack' || b.order === 'gun' || (b.order === 'dive' && dive === 'deep'));
-    this.say('sea:dive', b.u, `${words}${reason ? `: ${reason}` : ''}.`, { dive, keel: b.keelTo, why, ...(reason ? { reason } : {}), ...(override ? { override: true } : {}) });
+    const rising = b.keelTo < b.keel;
+    let quiet = false;
+    if (back) { quiet = true; b.ducking = true; }
+    else if (duck && !rising) { b.ducking = true; quiet = b.duckQuiet = this.sec - b.duckUp < AGAIN; }
+    else if (dive === 'surfaced') quiet = why === 'attack' && b.ducking && b.duckQuiet;
+    else b.ducking = b.duckQuiet = false;
+    b.saying = { dive, why, reason, override, rising, quiet };
+    if (!rising) this.sayDive(b);
     return true;
   }
 
-  /** Whether she is under far enough that radar and lookouts no longer find her: half her crash dive. */
-  private under(b: Boat): boolean { return b.dive !== 'surfaced' && this.sec - b.under >= B.diveTime / 2; }
+  /** The line of a boat's change of depth (the scene's 'sea:dive'), said when it is true: at once going down, once there coming up. */
+  private sayDive(b: Boat): void {
+    const s = b.saying;
+    if (!s) return;
+    b.saying = null;
+    const n = b.u.name;
+    const words = s.dive === 'surfaced' ? (s.why === 'forced' ? `${n} is forced to the surface` : `${n} surfaces`)
+      : s.dive === 'deep' ? `${n} goes deep` : s.rising ? `${n} comes up to periscope depth` : b.keel < b.keelTo ? `${n} dives` : `${n} stays at periscope depth`;
+    // (up from a duck: the second it ended, from which the next is no news for AGAIN)
+    if (s.dive === 'surfaced') { if (b.ducking) b.duckUp = this.sec; b.ducking = b.duckQuiet = false; }
+    this.say('sea:dive', b.u, s.quiet ? '' : `${words}${s.reason ? `: ${s.reason}` : ''}.`, { dive: s.dive, keel: b.keelTo, why: s.why, ...(s.reason ? { reason: s.reason } : {}), ...(s.override ? { override: true } : {}) });
+  }
+
+  /** Whether she is on the surface, keel and all: only there do radar and lookouts find her, her deck gun fire, or a gun hit her. */
+  private atSurface(b: Boat): boolean { return b.dive === 'surfaced' && b.keel <= 0; }
+
+  /** Whether her lookouts (or her periscope) have an escort in sight now. */
+  private seesEscort(b: Boat): boolean { return !!this.seenEscort(b); }
+
+  /** The nearest escort her lookouts (or her periscope) have in sight now, or none. */
+  private seenEscort(b: Boat): Escort | null {
+    let best: Escort | null = null, bd = Infinity;
+    for (const id of b.sees) { const e = this.escortOf.get(id); if (!e || e.doing === 'lost') continue; const d = dist(e.u.x, e.u.y, b.u.x, b.u.y); if (d < bd) { bd = d; best = e; } }
+    return best;
+  }
+
+  /**
+   * Whether she is hunted, and so why her captain takes her deep (the rules owner, round 3, (ii)): an escort holds her
+   * by sonar, depth charges are falling round her, or an escort after her is running in on her within its attack run
+   * (closing within its sonar's reach, E.asdic). Found by radar or lookouts with none of these, she is not hunted.
+   */
+  private hunted(b: Boat): string | null {
+    const id = b.u.id;
+    if (this.bursts.some((x) => x.on === id)) return 'depth charges are falling round her';
+    for (const e of this.escorts) if (e.doing !== 'lost' && e.holds === id && e.echo?.kind === 'asdic') return 'an escort has found her';
+    for (const e of this.escorts) {
+      if ((e.doing !== 'run' && e.doing !== 'attack') || (e.holds !== id && e.prey !== id && e.chase !== id)) continue;
+      if (dist(e.u.x, e.u.y, b.u.x, b.u.y) <= E.asdic && Math.abs(turn(e.u.face, bearing(e.u.x, e.u.y, b.u.x, b.u.y))) < 0.6) return 'an escort is running in on her';
+    }
+    return null;
+  }
+
+  /** Her captain takes her deep because she is hunted: she lies deep and quiet until the long quiet has passed (E.lostFor). */
+  private goDeep(b: Boat, reason: string): void {
+    b.doing = 'deep';
+    b.until = this.sec + 300;
+    // (the hunt is what she hears: the quiet she waits out runs from now)
+    b.lastHeard = this.sec;
+    this.setDive(b, 'deep', 'evade', reason);
+  }
+
+  /** At periscope depth with no escort holding her and none in her sight: free to come up again. */
+  private free(b: Boat, heard: number): boolean { return b.keel >= B.scope - 0.5 && heard < 0 && !this.seesEscort(b); }
 
   private boatHelm(b: Boat, dt: number, checking: boolean): void {
     const u = b.u, now = this.sec;
-    // Keel toward her depth (a look: a crash dive to periscope depth in diveTime, deeper at a metre a second).
-    const rate = b.keelTo > b.keel ? (b.keel < B.scope ? B.scope / B.diveTime : 1) : 2;
+    // Keel toward her depth (a look: a crash dive to periscope depth in diveTime, deeper at a metre a second, up at RISE).
+    const rate = b.keelTo > b.keel ? (b.keel < B.scope ? B.scope / B.diveTime : 1) : RISE;
     b.keel = b.keel < b.keelTo ? Math.min(b.keelTo, b.keel + rate * dt) : Math.max(b.keelTo, b.keel - rate * dt);
+    if (b.saying && b.keel === b.keelTo) this.sayDive(b);
     if (b.tubes < B.tubes && b.load > 0 && now >= b.reloadAt) { const k = Math.min(B.tubes - b.tubes, b.load); b.tubes += k; b.load -= k; b.reloadAt = b.load > 0 && b.tubes < B.tubes ? now + B.reload : Infinity; }
     const heard = this.firstHeard(b);
     if (heard >= 0) b.lastHeard = now;
+    // (on the surface's speeds only once she is there: a boat coming up makes her dived speed until her keel is out)
+    const up = b.dive === 'surfaced' && b.keel <= 1;
     let goX = u.x, goY = u.y, speed = 0;
+    b.off = false;
     switch (b.doing) {
       case 'close': {
         if (this.boatWantsDown(b, heard)) break;
@@ -406,13 +522,32 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
         const across = this.acrossTrack(b);
         if (under && far < 5000 && b.dive === 'surfaced' && across.reach) this.setDive(b, 'periscope', 'attack');
         goX = gx; goY = gy;
-        // (dived and unheard, she comes up to run on the surface: far off, or where she cannot get in dived within DIVED_IN
-        // and no escort is near enough to find her on the surface, or she has been down DIVED_IN already)
-        if (b.dive !== 'surfaced' && (b.order === null || under) && heard < 0 && now - b.lastHeard > CONVOY.check * 20
-          && (far > SURFACE_RUN || (!across.reach && (now - b.under > DIVED_IN || !this.escorts.some((e) => e.doing !== 'lost' && dist(e.u.x, e.u.y, u.x, u.y) < E.radar))))) this.setDive(b, 'surfaced', 'attack');
+        let off: Escort | null = null;
+        if (b.dive !== 'surfaced' && b.order === null) {
+          // (her captain's own: down for being found, she keeps closing at periscope depth; hunted, she goes deep; free
+          // again, at periscope depth with no escort holding her and none in her sight, she comes up. Unheard but kept
+          // down by an escort in her sight where she cannot close dived, far off her station or unable to get within reach
+          // of a ship dived within DIVED_IN, she draws off out of its sight, to come up and run round on the surface: she
+          // never comes up in an escort's sight, and never creeps in astern)
+          const hunt = this.hunted(b);
+          if (hunt) { this.goDeep(b, hunt); break; }
+          if (this.free(b, heard)) this.setDive(b, 'surfaced', 'attack');
+          else if (heard < 0 && now - b.lastHeard > CONVOY.check * 20 && (far > SURFACE_RUN || !across.reach)) off = this.seenEscort(b);
+        } else if (b.dive !== 'surfaced' && (b.order === 'attack' || b.order === 'gun')) {
+          // (forced down against an order to attack: she keeps at periscope depth, attacks dived if the columns come
+          // within her reach, and comes up to press in on the surface once no escort is in her sight)
+          if (b.keel >= B.scope - 0.5 && !this.seesEscort(b)) this.setDive(b, 'surfaced', 'attack');
+        } else if (b.dive !== 'surfaced' && under && heard < 0 && now - b.lastHeard > CONVOY.check * 20
+          && (far > SURFACE_RUN || (!across.reach && (now - b.under > DIVED_IN || !this.escorts.some((e) => e.doing !== 'lost' && dist(e.u.x, e.u.y, u.x, u.y) < E.radar))))) {
+          // (ordered to attack submerged, dived and unheard: she comes up to run on the surface far off, or where she cannot
+          // get in dived within DIVED_IN and no escort is near enough to find her there, or she has been down DIVED_IN
+          // already; said why, since the order was to go in submerged)
+          this.setDive(b, 'surfaced', 'attack', far > SURFACE_RUN ? 'too far off to get in submerged, she runs in on the surface' : 'unable to get within reach submerged, she runs round on the surface');
+        }
         // (dived she is barely faster than the convoy: she closes across its track, and the columns come to her)
-        if (b.dive !== 'surfaced') { goX = across.x; goY = across.y; }
-        speed = b.dive !== 'surfaced' ? B.dived : far > 4000 ? B.surfaced : B.cruise;
+        if (off) { const a = bearing(off.u.x, off.u.y, u.x, u.y); goX = u.x + Math.sin(a) * 1000; goY = u.y + Math.cos(a) * 1000; b.off = true; }
+        else if (b.dive !== 'surfaced') { goX = across.x; goY = across.y; }
+        speed = !up ? B.dived : far > 4000 ? B.surfaced : B.cruise;
         // (The nearest ship is sought only once she is within firing reach of the convoy's box: the night's own cost.)
         const bx = Math.max(0, Math.abs(u.x - this.cx) - this.halfW), by = Math.max(0, Math.abs(u.y - this.cy) - this.halfL);
         const m = bx * bx + by * by <= (B.fireAt + 300) * (B.fireAt + 300) || b.order === 'attack' || b.order === 'under' || this.ticket.place.habits[b.nat]?.warships ? this.targetFor(b) : null;
@@ -423,8 +558,14 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
       case 'away': {
         const a = bearing(this.cx, this.cy, u.x, u.y);
         goX = u.x + Math.sin(a) * 1000; goY = u.y + Math.cos(a) * 1000 + 500;
-        speed = b.dive === 'surfaced' ? B.surfaced : B.dived;
+        speed = up ? B.surfaced : B.dived;
         if (this.boatWantsDown(b, heard)) break;
+        // (down on her way out, as closing: hunted she goes deep, free she comes up)
+        if (b.dive !== 'surfaced' && b.order === null) {
+          const hunt = this.hunted(b);
+          if (hunt) { this.goDeep(b, hunt); break; }
+          if (this.free(b, heard)) this.setDive(b, 'surfaced', 'attack');
+        } else if (b.dive !== 'surfaced' && b.order === 'gun' && b.keel >= B.scope - 0.5 && !this.seesEscort(b)) this.setDive(b, 'surfaced', 'attack');
         if (now >= b.until) {
           if (b.tubes === 0 && b.load === 0) this.leave(b, 'spent');
           else if (b.tubes > 0) b.doing = 'close';
@@ -436,8 +577,10 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
         const near = this.nearestEscort(u.x, u.y);
         if (near) { const a = bearing(near.u.x, near.u.y, u.x, u.y); goX = u.x + Math.sin(a) * 500; goY = u.y + Math.cos(a) * 500; }
         speed = b.doing === 'deep' ? B.creep : B.dived;
-        // (found again below, by sonar: the radar or lookouts' contact that sent her down fades as she goes under, and is no reason to go deep)
+        // (found again below, by sonar: the radar or lookouts' contact that sent her down ended as she went under, and is no reason to go deep)
         if (b.doing === 'evade' && this.escorts.some((e) => e.holds === b.u.id && e.echo?.kind === 'asdic' && e.doing !== 'lost')) { b.doing = 'deep'; this.setDive(b, 'deep', 'evade', 'an escort has found her'); }
+        // (deep and still hunted, though no escort holds her: the charges falling or an escort running in restart her wait)
+        if (b.doing === 'deep' && heard < 0 && this.hunted(b)) b.lastHeard = now;
         const quiet = now - b.lastHeard;
         // (ordered to periscope depth and taken deep by her captain: she comes back up to it once the danger has passed,
         // after the same quiet as a boat whose captain took her down against an order to attack)
@@ -483,9 +626,12 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
   }
 
   /**
-   * A boat on the surface that sees an escort closing on her, or is held, goes under (her captain's call). One her
-   * commander ordered to attack on the surface or to fire her deck gun stays up while she is only held, and goes under
-   * only for an escort she sees closing on her: forced down, with the reason said, and the order stands for after.
+   * A boat on the surface (or coming up to it) that sees an escort closing on her, or is held, goes under (her captain's
+   * call). Hunted (the rules owner, round 3, (ii): hunted), she goes deep; else she dives only to periscope depth and
+   * keeps on as she was, closing or turning away, to come up again once free (boatHelm). One her commander ordered to
+   * attack on the surface or to fire her deck gun stays up while she is only held, and goes under only for an escort
+   * she sees closing on her: forced down, with the reason said, she keeps at periscope depth and the order stands. One
+   * ordered to dive or evade does as ordered.
    */
   private boatWantsDown(b: Boat, heard: number): boolean {
     if (b.dive !== 'surfaced') return false;
@@ -505,9 +651,16 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     }
     if (b.order === 'dive' || b.order === 'deep') { why = 'ordered'; reason = undefined; }
     if (!why) return false;
-    this.setDive(b, b.order === 'deep' ? 'deep' : 'periscope', why, reason);
-    b.doing = 'evade';
-    b.until = this.sec + 300;
+    if (why === 'ordered' || b.order === 'evade') {
+      this.setDive(b, b.order === 'deep' ? 'deep' : 'periscope', why, reason);
+      b.doing = 'evade';
+      b.until = this.sec + 300;
+      return true;
+    }
+    const hunt = b.order === null ? this.hunted(b) : null;
+    if (hunt) { this.goDeep(b, hunt); return true; }
+    this.setDive(b, 'periscope', why, reason, true);
+    if (b.doing !== 'close' && b.doing !== 'away') b.doing = 'close';
     return true;
   }
 
@@ -516,6 +669,7 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     b.doing = 'left';
     b.u.state = 'withdrawn';
     b.u.act = 'idle';
+    b.u.extra.gun = undefined;
     this.dropContacts(b.u.id);
     this.say('withdrawn', b.u, why === 'spent' ? `${b.u.name} has fired her last torpedo and turns for home.` : why === 'hurt' ? `${b.u.name} slips away, damaged.` : `${b.u.name} breaks off.`, { why });
   }
@@ -653,11 +807,13 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     this.outerCols = null;
     this.counts.mv++;
     this.say('sea:torpedoHit', m.u, `A torpedo hits ${m.u.name}.`, { from: by }, 'torpedo_hit', 'att');
+    // (her crew leave her at once, as the scene reads it: out of the fight from the hit, her wreck there for her men)
+    this.say('sea:abandon', m.u, '', { ship: 1 }, undefined, 'def');
     const how = ['settle', 'break', 'burn', 'capsize'][Math.floor(mix(this.ticket.seed ^ (m.u.id * 104729)) * 4)];
     const u = m.u;
     u.state = 'gone';
     u.figures = 0; u.str = 0;
-    u.extra.ships = 0; u.extra.sunk = 1;
+    u.extra.ships = 0; u.extra.sunk = 1; u.extra.gun = undefined;
     u.speed = 0;
     const at = this.sec + 60 + Math.round(mix(m.u.id * 31 + this.ticket.seed) * 240);
     this.later.push({ at, run: () => this.say('sea:sunk', u, `${u.name} goes down.`, { cls: 'mv', how, ship: 1 }, 'ship_sinking', 'def') });
@@ -701,7 +857,7 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
         goX = e.echo && e.echo.kind !== 'asdic' && b.dive === 'surfaced' ? b.u.x : e.dx; goY = e.echo && e.echo.kind !== 'asdic' && b.dive === 'surfaced' ? b.u.y : e.dy;
         speed = E.top;
         const d = dist(u.x, u.y, goX, goY);
-        if ((b.doing === 'up' || b.doing === 'gun') && d <= E.ram && checking && this.staffRuns(u) && b.struck < 0 && this.rng.chance(S.ramShare)) { this.ram(e, b); break; }
+        if ((b.doing === 'up' || b.doing === 'gun') && this.atSurface(b) && !b.abandoned && d <= E.ram && checking && this.staffRuns(u) && b.struck < 0 && this.rng.chance(S.ramShare)) { this.ram(e, b); break; }
         if (b.dive !== 'surfaced' && d < 600) { e.doing = 'search'; e.seenAt = now; }
         if (now - e.huntFrom > huntCap) this.goBack(e);
         break;
@@ -772,7 +928,7 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
       const mate = this.escorts.filter((o) => o !== e && o.doing === 'screen' && o.kit.groups && o.holds < 0)
         .sort((a, c) => dist(a.u.x, a.u.y, b.u.x, b.u.y) - dist(c.u.x, c.u.y, b.u.x, b.u.y) || a.u.id - c.u.id)[0];
       if (mate && this.awayCount() < Math.ceil(E.keepAway * this.escorts.length)) {
-        mate.holds = b.u.id; mate.echo = e.echo ? { ...e.echo } : null; mate.prey = b.u.id; mate.heldFrom = this.sec; mate.doing = 'search'; mate.huntFrom = this.sec; mate.seenAt = this.sec; mate.dx = b.u.x; mate.dy = b.u.y; mate.attacks = 0;
+        mate.holds = b.u.id; mate.echo = e.echo ? { ...e.echo } : null; mate.prey = b.u.id; mate.doing = 'search'; mate.huntFrom = this.sec; mate.seenAt = this.sec; mate.dx = b.u.x; mate.dy = b.u.y; mate.attacks = 0;
       }
     }
   }
@@ -825,6 +981,8 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     for (const x of due) {
       const b = this.boatOf.get(x.on);
       if (!b || b.doing === 'lost' || b.doing === 'left') continue;
+      // (a boat already blown to the surface is out of the pattern set for her below: one boat is forced up once)
+      if (b.doing === 'up' || b.doing === 'gun') continue;
       // A boat that has run out of the pattern's reach since it was laid is missed.
       if (dist(b.u.x, b.u.y, x.x, x.y) > E.spread + 60) continue;
       const kit: ConvoyKit = x.ahead ? x.kit : { ...x.kit, hedgehog: false };
@@ -842,8 +1000,12 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     }
   }
 
-  /** Forced to the surface: doomed (her crew will give her up), or hurt and trying to make good her damage. */
+  /**
+   * Forced to the surface: doomed (her crew will give her up), or hurt and trying to make good her damage. Her keel
+   * takes a while to come up (RISE): her crew give her up, abandon her and take to the water only once she is there.
+   */
   private forcedUp(b: Boat, doomed: boolean, by: number): void {
+    if (b.doing === 'up' || b.doing === 'gun') return;
     this.tally.forcedUp++;
     b.doing = 'up';
     b.doomed = doomed;
@@ -853,19 +1015,33 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     const near = this.nearestEscort(b.u.x, b.u.y);
     const close = near ? dist(near.u.x, near.u.y, b.u.x, b.u.y) : Infinity;
     if (!doomed) return;
+    const rise = Math.ceil(b.keel / RISE);
     // Her crew's call: fight with the deck gun while she floats, strike to an escort (subSurrender), or abandon her.
     if (this.ticket.place.surrender && near && close <= 1500 && this.rng.chance(S.strike)) {
       b.struck = near.u.id;
-      this.say('sea:surrender', b.u, `${b.u.name}'s crew give her up.`, { ship: 1, how: 'scuttle', by: near.u.id }, undefined, 'att');
+      const to = near.u.id;
+      this.later.push({ at: this.sec + rise, run: () => { if (b.doing === 'lost' || b.doing === 'left') return; this.crewLeave(b); this.say('sea:surrender', b.u, `${b.u.name}'s crew give her up.`, { ship: 1, how: 'scuttle', by: to }, undefined, 'att'); } });
     } else if (near && close <= S.gunAt && this.rng.chance(S.fight)) {
       b.doing = 'gun'; b.gunOn = near.u.id;
     }
     const [lo, hi] = S.scuttleIn;
-    b.scuttleAt = this.sec + lo + Math.round(this.rng.range(0, hi - lo));
+    b.scuttleAt = this.sec + rise + lo + Math.round(this.rng.range(0, hi - lo));
     const at = b.scuttleAt;
-    this.later.push({ at: at - 50, run: () => { if (b.doing === 'lost' || b.doing === 'left') return; this.say('sea:abandon', b.u, `${b.u.name}'s crew abandon her.`, { ship: 1 }, undefined, 'att'); b.gunOn = -1; b.doing = 'up'; } });
+    this.later.push({ at: at - 50, run: () => { if (b.doing === 'lost' || b.doing === 'left') return; this.say('sea:abandon', b.u, `${b.u.name}'s crew abandon her.`, { ship: 1 }, undefined, 'att'); this.crewLeave(b); } });
     this.later.push({ at: at - 45, run: () => { if (b.doing === 'lost' || b.doing === 'left') return; this.say('sea:men', b.u, '', { ship: 1, men: CONVOY.crew.ss, dead: Math.round(CONVOY.crew.ss * mix(b.u.id * 17 + this.ticket.seed) * 0.4) }, undefined, 'att'); } });
     this.later.push({ at, run: () => { if (b.doing === 'lost' || b.doing === 'left') return; this.boatLost(b, b.struck >= 0 && this.boarded(b) && this.rng.chance(S.taken) ? 'captured' : 'scuttled', by); } });
+  }
+
+  /**
+   * Her crew leave her (abandoned, or given up): she is out of the fight from that moment, as the scene reads it: no
+   * ship of her fighting, her gun silent and no one's target. She is sunk (sunk 1) only when she goes down (boatLost).
+   */
+  private crewLeave(b: Boat): void {
+    b.abandoned = true;
+    b.gunOn = -1;
+    b.doing = 'up';
+    const u = b.u;
+    u.extra.ships = 0; u.figures = 0; u.str = 0; u.extra.gun = undefined;
   }
 
   /** A struck boat is taken where an escort lies within boarding distance of her as she would have gone down. */
@@ -920,14 +1096,16 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
   // ---- Guns ---------------------------------------------------------------------------------------------------------
 
   private guns(): void {
-    // A boat on the surface fighting with her deck gun, or ordered to.
+    // A boat on the surface fighting with her deck gun, or ordered to: on the surface, keel and all, and her crew aboard.
     for (const b of this.boats) {
-      if (b.doing === 'lost' || b.doing === 'left' || b.doing === 'out' || b.dive !== 'surfaced') continue;
+      if (b.doing === 'lost' || b.doing === 'left' || b.doing === 'out') continue;
+      if (!this.atSurface(b) || b.abandoned) { b.u.extra.gun = undefined; continue; }
       let on = b.doing === 'gun' ? b.gunOn : b.order === 'gun' ? b.target : -1;
       const t = on >= 0 ? this.byId.get(on) : undefined;
       if (!t || !live(t) || dist(b.u.x, b.u.y, t.x, t.y) > S.gunAt) { b.u.extra.gun = undefined; continue; }
-      if (b.u.extra.gun !== t.id) this.say('sea:gun', b.u, `${b.u.name} opens fire on ${t.name} with her deck gun.`, { on: t.id, why: b.doing === 'gun' ? 'fight' : 'attack' }, 'deck_gun', 'att');
+      if (b.u.extra.gun !== t.id) this.say('sea:gun', b.u, this.opens(b.u, t) ? `${b.u.name} opens fire on ${t.name} with her deck gun.` : '', { on: t.id, why: b.doing === 'gun' ? 'fight' : 'attack' }, 'deck_gun', 'att');
       b.u.extra.gun = t.id;
+      this.firedAt.set(`${b.u.id}:${t.id}`, this.sec);
       on = t.id;
       if (!this.rng.chance(S.boatHits)) continue;
       this.say('sea:gunHit', t, `A shell from ${b.u.name}'s deck gun hits ${t.name}.`, { n: 1, from: b.u.id }, undefined, 'att');
@@ -946,27 +1124,34 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     for (const e of this.escorts) {
       if (e.doing === 'lost' || e.holds < 0) { e.u.extra.gun = undefined; continue; }
       const b = this.boatOf.get(e.holds)!;
-      if (b.dive !== 'surfaced' || dist(e.u.x, e.u.y, b.u.x, b.u.y) > S.gunAt || b.struck >= 0) { e.u.extra.gun = undefined; continue; }
-      if (e.u.extra.gun !== b.u.id) this.say('sea:gun', e.u, `${e.u.name} opens fire on ${b.u.name}.`, { on: b.u.id, why: 'attack' }, 'naval_gun', 'def');
+      if (!this.atSurface(b) || b.abandoned || dist(e.u.x, e.u.y, b.u.x, b.u.y) > S.gunAt || b.struck >= 0) { e.u.extra.gun = undefined; continue; }
+      if (e.u.extra.gun !== b.u.id) this.say('sea:gun', e.u, this.opens(e.u, b.u) ? `${e.u.name} opens fire on ${b.u.name}.` : '', { on: b.u.id, why: 'attack' }, 'naval_gun', 'def');
       e.u.extra.gun = b.u.id;
+      this.firedAt.set(`${e.u.id}:${b.u.id}`, this.sec);
       if (this.rng.chance(S.escortHits)) this.shellBoat(b, e.u.id);
     }
     for (const m of this.merchants) {
       if (m.lost || !m.armed) continue;
       let best: Boat | null = null, bd = 2000;
-      for (const id of this.known.def) { const b = this.boatOf.get(id); if (!b || b.dive !== 'surfaced' || b.doing === 'lost' || b.doing === 'left') continue; const d = dist(m.u.x, m.u.y, b.u.x, b.u.y); if (d < bd) { bd = d; best = b; } }
+      for (const id of this.known.def) { const b = this.boatOf.get(id); if (!b || !this.atSurface(b) || b.abandoned || b.doing === 'lost' || b.doing === 'left') continue; const d = dist(m.u.x, m.u.y, b.u.x, b.u.y); if (d < bd) { bd = d; best = b; } }
       if (!best) { m.u.extra.gun = undefined; continue; }
-      if (m.u.extra.gun !== best.u.id) this.say('sea:gun', m.u, `${m.u.name}'s gunners open fire.`, { on: best.u.id, why: 'defend' }, 'deck_gun', 'def');
+      if (m.u.extra.gun !== best.u.id) this.say('sea:gun', m.u, this.opens(m.u, best.u) ? `${m.u.name}'s gunners open fire.` : '', { on: best.u.id, why: 'defend' }, 'deck_gun', 'def');
       m.u.extra.gun = best.u.id;
+      this.firedAt.set(`${m.u.id}:${best.u.id}`, this.sec);
       if (this.rng.chance(S.merchantHits)) this.shellBoat(best, m.u.id);
     }
   }
 
+  /** Whether a gun opening fire on a piece is news: not where it fired at her within AGAIN (a boat ducking under its fire and up again). */
+  private opens(gun: ConvoyUnit, on: ConvoyUnit): boolean { return this.sec - (this.firedAt.get(`${gun.id}:${on.id}`) ?? -Infinity) > AGAIN; }
+
   private shellBoat(b: Boat, by: number): void {
     b.harm += S.escortHarm;
-    this.say('sea:gunHit', b.u, `A shell hits ${b.u.name}.`, { n: 1, from: by }, undefined, 'def');
+    // (a boat on the surface hurt past diving is kept there: no change of depth to say, so the hit says it)
+    const kept = b.harm >= 1 && b.harm < 2 && b.doing !== 'up' && b.doing !== 'gun';
+    this.say('sea:gunHit', b.u, `A shell hits ${b.u.name}${kept ? ': she can no longer dive' : ''}.`, { n: 1, from: by }, undefined, 'def');
     if (b.harm >= 2) { this.boatLost(b, 'shelled', by); return; }
-    if (b.harm >= 1 && b.doing !== 'up' && b.doing !== 'gun') this.forcedUp(b, false, by);
+    if (kept) { this.tally.kept++; this.forcedUp(b, false, by); }
   }
 
   private merchantShelled(m: Merchant, by: number): void {
@@ -974,7 +1159,8 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     this.outerCols = null;
     this.counts.mv++;
     const u = m.u;
-    u.state = 'gone'; u.figures = 0; u.str = 0; u.extra.ships = 0; u.extra.sunk = 1; u.speed = 0;
+    this.say('sea:abandon', u, '', { ship: 1 }, undefined, 'def');
+    u.state = 'gone'; u.figures = 0; u.str = 0; u.extra.ships = 0; u.extra.sunk = 1; u.speed = 0; u.extra.gun = undefined;
     this.later.push({ at: this.sec + 120, run: () => this.say('sea:sunk', u, `${u.name} goes down under the boat's gunfire.`, { cls: 'mv', how: 'shelled', ship: 1, from: by }, 'ship_sinking', 'att') });
   }
 
@@ -997,7 +1183,7 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
         const b = this.boatOf.get(e.holds)!;
         const d = dist(u.x, u.y, b.u.x, b.u.y);
         const kind = this.senses(e, b, d, vis);
-        if (!kind) { this.drop(e, b.dive !== 'surfaced' && e.echo?.kind !== 'asdic' ? 'deep' : 'faded'); continue; }
+        if (!kind) { this.drop(e, !this.atSurface(b) && e.echo?.kind !== 'asdic' ? 'deep' : 'faded'); continue; }
         if (this.rng.chance(D.slip * (b.dive === 'deep' ? 1.5 : 1))) { this.drop(e, 'faded'); continue; }
         this.hold(e, b, kind, d, false);
         continue;
@@ -1018,9 +1204,13 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     }
   }
 
-  /** The sense an escort could hold this boat by, now: radar or lookouts on the surface, sonar below. */
+  /**
+   * The sense an escort could hold this boat by, now: radar or lookouts while she is on the surface, keel and all; sonar
+   * once she is under, from the moment she dives (the rules owner, round 3, (i)): a contact by radar or lookouts passes
+   * to sonar only where the sonar itself can hold her, and ends where it cannot.
+   */
   private senses(e: Escort, b: Boat, d: number, vis: number): Echo['kind'] | null {
-    if (!this.under(b)) {
+    if (this.atSurface(b)) {
       if (e.kit.radar && d <= E.radar) return 'radar';
       const lit = this.zones.some((z) => z.kind === 'starshell' && dist(z.x, z.y, b.u.x, b.u.y) <= z.r);
       if (d <= vis * (lit ? 2 : 1)) return 'sight';
@@ -1032,11 +1222,13 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
   }
 
   /**
-   * An escort holds a boat, by a sense, now. A contact gained is reported unless the same escort lost the same boat less
-   * than AGAIN ago (found again: the same contact, said nothing, 'fresh' false); it is news to the side ('news') where no
-   * escort held the boat for AGAIN, with whether any escort ever held her before ('first') and how long since ('since').
-   * The boat's own side learns of it ('sea:found') where it is news and no escort is hunting her already: a boat found
-   * again in the middle of a hunt is no news to her pack. It is said in words unless she says it herself as she dives.
+   * An escort holds a boat, by a sense, now. A contact gained is the same contact where the same escort lost the same
+   * boat less than AGAIN ago ('fresh' false); it is news to the side ('news') where no escort held the boat for AGAIN,
+   * with whether any escort ever held her before ('first') and how long since ('since'). Only news is reported in words:
+   * a boat the side held a moment ago, picked up again by another escort or found again as she comes up from a duck, is
+   * the same fight (on a radar night she may duck every minute or two). The boat's own side learns of it ('sea:found')
+   * where it is news and no escort is hunting her already: a boat found again in the middle of a hunt is no news to her
+   * pack. It is said in words unless she says it herself as she dives.
    */
   private hold(e: Escort, b: Boat, kind: Echo['kind'], d: number, gained: boolean): void {
     const now = this.sec;
@@ -1049,7 +1241,8 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     const news = gained && now - (last ?? -Infinity) >= AGAIN;
     const ago = last === undefined ? { first: true } : { first: false, since: now - last };
     const hunted = this.escorts.some((o) => o.prey === b.u.id && HUNTING.has(o.doing));
-    if (gained) { e.heldFrom = now; if (fresh) e.told.add(b.u.id); }
+    // (news in the second her loss is to be told: the loss first, then the contact)
+    if (news) { this.losing.get(b.u.id)?.(); this.reported.add(b.u.id); }
     if (HUNTING.has(e.doing)) e.prey = b.u.id;
     e.holds = b.u.id;
     e.echo = { on: b.u.id, kind, range: Math.round(d), bearing: br, err };
@@ -1062,9 +1255,9 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     if (gained || was !== kind) {
       this.noteContact('escort');
       const words = kind === 'asdic' ? `${e.u.name} has ${b.u.name} on sonar.` : kind === 'radar' ? `${e.u.name} has ${b.u.name} on radar.` : `${e.u.name} sights ${b.u.name}.`;
-      this.say('sea:sonar', e.u, fresh ? words : '', { on: b.u.id, kind, range: Math.round(d), bearing: br, err, ...(gained ? { fresh, news, ...(news ? ago : {}) } : {}) }, undefined, 'def');
+      this.say('sea:sonar', e.u, news ? words : '', { on: b.u.id, kind, range: Math.round(d), bearing: br, err, ...(gained ? { fresh, news, ...(news ? ago : {}) } : {}) }, undefined, 'def');
       // (a boat on the surface that will dive for it says so herself, 'dives: an escort has found her': no second line)
-      const says = b.dive === 'surfaced' && (b.doing === 'close' || b.doing === 'away') && b.order !== 'attack' && b.order !== 'gun' && b.order !== 'surface';
+      const says = b.dive === 'surfaced' && (b.doing === 'close' || b.doing === 'away') && b.order !== 'attack' && b.order !== 'gun' && b.order !== 'surface' && now - b.duckUp >= AGAIN;
       if (news && !hunted) this.say('sea:found', b.u, says ? '' : `An escort has found ${b.u.name}.`, { by: kind, ...ago }, undefined, 'att');
       // Star shell over a boat seen by eye where the night is dark: a look, and it lights her for the other lookouts.
       if (kind === 'sight' && this.ticket.place.light.moon.lit < 0.6 && now >= e.nextShell) {
@@ -1078,11 +1271,11 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
 
   /**
    * An escort's contact ends (the scene's 'sea:sonar' with 'lost', at once; 'gone': no escort of the side holds her now,
-   * and her last known spot stays a while, LAST_SEEN). Lost ('close', 'deep', 'wake', 'faded'), the loss is told to the
-   * side once it is sure: if the same escort has not found her again within AGAIN ('sea:lost'). Found again sooner, it
-   * was the same contact all along, and nothing is said either way (a flicker). A contact she never reported (taken over
-   * from a group mate) is told lost only if she held it for AGAIN. Let go ('left', for an order or the screen) or ended
-   * with the boat's night ('ended', sunk or gone home), it says nothing.
+   * and her last known spot stays a while, LAST_SEEN). Lost ('close', 'deep', 'wake', 'faded') by the last escort that
+   * held her, the loss of a contact the side was told of is told once it is sure: if no escort has found her again within
+   * AGAIN ('sea:lost'). Found again sooner, by her or another, it was the same fight all along, and nothing is said either
+   * way. Let go ('left', for an order or the screen) or ended with the boat's night ('ended', sunk or gone home), it
+   * says nothing.
    */
   private drop(e: Escort, why: 'close' | 'deep' | 'wake' | 'faded' | 'left' | 'ended'): void {
     if (e.holds < 0) return;
@@ -1093,16 +1286,25 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     const real = why !== 'left' && why !== 'ended';
     const gone = !this.escorts.some((o) => o.holds === on);
     this.say('sea:sonar', e.u, '', { on, kind, lost: why, gone, ...(b ? { x: Math.round(b.u.x), y: Math.round(b.u.y) } : {}) }, undefined, 'def');
-    if (real && b && (e.told.has(on) || at - e.heldFrom >= AGAIN)) {
-      e.lostAt.set(on, at);
-      this.later.push({ at: at + AGAIN, run: () => {
-        if (e.holds === on || e.lostAt.get(on) !== at || e.doing === 'lost' || b.doing === 'lost' || b.doing === 'left') return;
-        e.told.delete(on);
-        // (told two minutes on, once sure: said with the hour she was lost, which is when the map's mark of her began)
-        this.say('sea:lost', e.u, `${e.u.name} lost ${b.u.name}${why === 'deep' ? ' when she dived,' : ''} at ${clockOf(at)}, and has not found her again.`, { on, why, at }, undefined, 'def');
-      } });
-    } else if (real) e.lostAt.set(on, at);
-    else e.told.delete(on);
+    // (the side had her until now: a contact on her is news only AGAIN from here, when her loss is told)
+    if (real) { e.lostAt.set(on, at); this.heldAt.set(on, at); }
+    if (gone && b) {
+      this.goneAt.set(on, at);
+      if (!real) { this.reported.delete(on); this.losing.delete(on); }
+      else if (this.reported.has(on)) {
+        const tell = (): void => {
+          // (found again since, and held still or lost again later: the fight went on, and its own end is told)
+          if (this.losing.get(on) !== tell || this.goneAt.get(on) !== at || this.escorts.some((o) => o.holds === on)) return;
+          this.losing.delete(on);
+          this.reported.delete(on);
+          if (e.doing === 'lost' || b.doing === 'lost' || b.doing === 'left') return;
+          // (told two minutes on, once sure: said with the hour she was lost, which is when the map's mark of her began)
+          this.say('sea:lost', e.u, `${e.u.name} lost ${b.u.name}${why === 'deep' ? ' when she dived,' : ''} at ${clockOf(at)}, and no escort has found her again.`, { on, why, at }, undefined, 'def');
+        };
+        this.losing.set(on, tell);
+        this.later.push({ at: at + AGAIN, run: tell });
+      }
+    }
     if (gone) this.known.def.delete(on);
     if (e.doing === 'attack' || e.doing === 'open' || e.doing === 'run') e.doing = 'search';
   }
@@ -1122,7 +1324,7 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
       if (b.doing === 'out' || b.doing === 'left' || b.doing === 'lost') continue;
       const up = b.dive !== 'deep';
       for (const e of this.escorts) {
-        if (e.doing === 'lost') continue;
+        if (e.doing === 'lost') { b.sees.delete(e.u.id); continue; }
         const d = dist(b.u.x, b.u.y, e.u.x, e.u.y);
         if (!up || d > reach * 1.2) { b.sees.delete(e.u.id); continue; }
         if (b.sees.has(e.u.id) || d > reach) continue;
@@ -1178,7 +1380,7 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
       const x = b.u.extra;
       x.dive = b.dive; x.keel = Math.round(b.keel * 10) / 10; x.scope = b.dive === 'periscope' && b.keel <= B.scope + 0.5; x.tubes = b.tubes;
       x.heard = this.heardBy(b);
-      x.doing = b.doing; x.order = b.order ?? undefined;
+      x.doing = b.doing; x.order = b.order ?? undefined; x.off = b.off || undefined;
       // (the ship her order names, for the page to draw the order: an attack's or the deck gun's)
       x.aim = (b.order === 'attack' || b.order === 'under' || b.order === 'gun') && b.target >= 0 ? b.target : undefined;
       // (down of her captain's own accord: the second she comes back up if nothing hears her before it, boatHelm's quiet)
@@ -1230,6 +1432,8 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
       replies.push(u.kind === 'dd' ? this.orderEscort(this.escortOf.get(id)!, c) : this.orderBoat(this.boatOf.get(id)!, c));
     }
     this.answer(by, c.do, replies);
+    // (the last boat sent home: the night ends there and then, as it does when she goes home by herself)
+    if (this.packGone()) this.finish('withdrew');
     return replies.some((r) => r.ok);
   }
 
@@ -1295,13 +1499,17 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
 
   private orderBoat(b: Boat, c: Command | ConvoyCommand): Reply {
     const u = b.u, no = (why: string): Reply => ({ ok: false, u, says: `${u.name} can't ${why}.` });
-    const up = b.doing === 'up' || b.doing === 'gun', hurt = 'she was forced to the surface and is too badly damaged';
+    // (forced up: too badly damaged to dive only when she is doomed; else she may dive again once repaired, and says so)
+    const up = b.doing === 'up' || b.doing === 'gun';
+    // (an order's change of depth is always said, though she was on a duck left unsaid: it is the order's answer)
+    b.duckQuiet = false;
+    const hurt = (what: string): Reply => no(b.doomed ? `${what}: she was forced to the surface and is too badly damaged to dive` : `${what} while she is being repaired`);
     switch (c.do) {
       case 'convoy:attack': case 'attack': {
         const target = 'target' in c && c.target !== undefined ? this.byId.get(c.target) : undefined;
         if (target && target.side !== 'def') return no(`attack ${target.name}: she is one of the pack`);
         if (target && !live(target)) return no(`attack ${target.name}: she has already gone down`);
-        if (up) return no(`attack: ${hurt}`);
+        if (up) return hurt('attack');
         if (b.tubes === 0 && b.load === 0) return no('attack: she has no torpedoes left');
         // The depth: as ordered; else the one her commander chose last; else the one she is at.
         const asked = 'under' in c && typeof c.under === 'boolean' ? c.under : undefined;
@@ -1314,21 +1522,21 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
         return { ok: true, u, does: b.tubes > 0 ? [`attacks${at}`, `attack${at}`] : [`closes to attack${at} once her tubes are reloaded`, `close to attack${at} once their tubes are reloaded`] };
       }
       case 'convoy:dive': {
-        if (up) return no(`dive: ${hurt}`);
+        if (up) return hurt('dive');
         b.order = c.deep ? 'deep' : 'dive'; b.depth = 'under';
         const moved = this.setDive(b, c.deep ? 'deep' : 'periscope', 'ordered');
         b.doing = c.deep ? 'deep' : 'evade'; b.until = this.sec + 300;
         return moved ? { ok: true, u } : { ok: true, u, says: `${u.name} is already ${c.deep ? 'deep' : 'at periscope depth'}.` };
       }
       case 'convoy:surface': {
-        if (up) return { ok: false, u, says: `${u.name} is on the surface already: she was forced up.` };
+        if (up) return { ok: false, u, says: this.atSurface(b) ? `${u.name} is on the surface already: she was forced up.` : `${u.name} is coming up to the surface already: she was forced up.` };
         b.order = 'surface'; b.depth = 'surface';
         const moved = this.setDive(b, 'surfaced', 'ordered');
         b.doing = b.tubes > 0 ? 'close' : 'away';
         return moved ? { ok: true, u } : { ok: true, u, says: `${u.name} stays on the surface.` };
       }
       case 'convoy:evade': {
-        if (up) return no(`evade: ${hurt}`);
+        if (up) return hurt('evade');
         b.order = 'evade';
         if (b.dive === 'surfaced') this.setDive(b, 'periscope', 'ordered');
         b.doing = 'evade'; b.until = this.sec + 600;
@@ -1338,6 +1546,7 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
         const t = this.byId.get(c.target);
         if (!t || t.side !== 'def') return no('fire her deck gun at that');
         if (!live(t)) return no(`fire her deck gun at ${t.name}: she has already gone down`);
+        if (b.abandoned) return no('fire her deck gun: her crew have left her');
         if (b.dive !== 'surfaced') return no('fire her deck gun while she is dived: surface her first');
         const d = dist(u.x, u.y, t.x, t.y);
         if (d > S.gunAt) return no(`fire her deck gun at ${t.name}: the ship is ${metres(Math.round(d / 50) * 50)} away, and the gun reaches ${metres(S.gunAt)}`);
@@ -1345,7 +1554,7 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
         return { ok: true, u, does: [`turns her deck gun on ${t.name}`, `turn their deck guns on ${t.name}`] };
       }
       case 'convoy:leave': case 'withdraw': {
-        if (up) return no(`leave the night: ${hurt}`);
+        if (up) return hurt('leave the night');
         this.leave(b, 'ordered');
         return { ok: true, u };
       }
@@ -1380,7 +1589,7 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
    * those losses need. Rolled on the battle's stream after the counts, so it moves nothing booked.
    */
   private splitRest(got: ConvoyCounts, mean: Partial<ConvoyTally>): ConvoyTally {
-    const add: ConvoyTally = { attacks: 0, hunts: 0, salvoes: 0, hits: 0, forcedUp: 0, escaped: 0, scuttled: 0, rammed: 0, shelled: 0, crushed: 0, captured: 0 };
+    const add: ConvoyTally = { attacks: 0, hunts: 0, salvoes: 0, hits: 0, forcedUp: 0, kept: 0, escaped: 0, scuttled: 0, rammed: 0, shelled: 0, crushed: 0, captured: 0 };
     const ways = ['crushed', 'scuttled', 'rammed', 'shelled', 'captured'] as const;
     const weight = ways.map((k) => Math.max(0, mean[k] ?? 0)), all = weight.reduce((s, w) => s + w, 0);
     const boats = Object.values(got.ss).reduce((s, n) => s + n, 0), escorts = Object.values(got.dd).reduce((s, n) => s + n, 0);
@@ -1399,22 +1608,29 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     return add;
   }
 
-  /** Dawn, or no boat left in it: the night ends. A hunt still alive at dawn ends in one last attack's roll. */
+  /**
+   * Dawn, or no boat left in it: the night ends. A hunt still alive at dawn ends in one last attack's roll; a boat it
+   * sinks is told on the after card, since the night's screen gives way to it at that second.
+   */
   private finish(how: 'time' | 'withdrew'): void {
     if (this.over) return;
+    const dawn: string[] = [];
     if (how === 'time' && !this.handed) {
       for (const b of this.boats) {
-        if (b.doing === 'lost' || b.doing === 'left' || b.doing === 'out') continue;
+        if (b.doing === 'lost' || b.doing === 'left' || b.doing === 'out' || b.doing === 'up' || b.doing === 'gun') continue;
         const hunters = this.huntersOf(b).filter((e) => e.echo?.kind === 'asdic');
         if (!hunters.length) continue;
         const e = hunters[0];
-        if (this.rng.chance(attackKills({ ...e.kit, hedgehog: false }, hunters.length >= 2 || e.u.extra.ships > 1))) this.boatLost(b, 'crushed', e.u.id);
+        if (this.rng.chance(attackKills({ ...e.kit, hedgehog: false }, hunters.length >= 2 || e.u.extra.ships > 1))) {
+          this.boatLost(b, 'crushed', e.u.id);
+          dawn.push(`At dawn ${e.u.name}'s last attack destroyed ${b.u.name}.`);
+        }
       }
     }
     const lostB = Object.values(this.counts.ss).reduce((s, n) => s + n, 0), lostE = Object.values(this.counts.dd).reduce((s, n) => s + n, 0);
-    // A plain verdict for the screens; what the campaign books is the night's rank (calibrate.ts).
-    const winner: Side = this.counts.mv > 3 * lostB + 2 * lostE ? 'att' : 'def';
+    // A plain verdict for the screens, the level's own (levelOfNight); what the campaign books is the night's rank (calibrate.ts).
     const level = levelOfNight(this.counts.mv, this.merchants.length, lostB, this.boats.length, lostE);
+    const winner: Side = /victory/.test(level) ? 'att' : 'def';
     const extra: ConvoyOverExtra = { counts: this.counts, tally: this.tally, handed: this.handed, steered: { ...this.steered }, ...(this.handed ? { handedAt: this.handedAt, staff: this.staffPart } : {}) };
     this.over = {
       // (a night handed over runs to dawn: the staff fought the rest of it)
@@ -1422,7 +1638,7 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
       lost: { att: lostB / Math.max(1, this.boats.length), def: (this.counts.mv + lostE) / Math.max(1, this.merchants.length + this.escorts.length) },
       men: { att: lostB * CONVOY.crew.ss, def: this.counts.mv * CONVOY.crew.mv },
       level,
-      lines: this.closing(lostB, lostE),
+      lines: this.closing(lostB, lostE, dawn),
       forces: this.ticket.place.fleets.map((f) => ({ corps: f.id, side: f.side, lost: f.side === 'att' ? this.counts.ss[f.id] ?? 0 : this.counts.dd[f.id] ?? 0 })),
       extra: extra as unknown as Record<string, unknown>,
     };
@@ -1430,10 +1646,10 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
   }
 
   /** The after card's words: what the night cost each side, and how the boats lost went (words only). */
-  private closing(lostB: number, lostE: number): string[] {
+  private closing(lostB: number, lostE: number, dawn: string[] = []): string[] {
     const sunk = this.counts.mv, ships = this.merchants.length;
     const lines = [sunk === 0 ? 'The convoy comes through the night without loss.' : `${sunk} ${sunk === 1 ? 'merchant' : 'merchants'} of ${ships} sunk.`];
-    lines.push(...fateWords(this.tally, lostB, this.boats.length));
+    lines.push(...fateWords(this.tally, lostB, this.boats.length), ...dawn);
     if (lostE) lines.push(`${lostE} ${lostE === 1 ? 'escort' : 'escorts'} lost.`);
     if (this.handed) lines.push(`The staff fought the night from ${afterDusk(this.handedAt)} to dawn; these lines count the whole night.`);
     return lines;
