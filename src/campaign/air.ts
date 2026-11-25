@@ -2900,6 +2900,36 @@ function fieldBlow(g: Game, a: AirAssess, nat: string, target: number, through: 
   return { through, strafe, radar: a.radar ? a.radar.ground : 1, surprise: warOpens(g, nat, holder), foe: (n) => atWar(g, nat, n), up };
 }
 
+/**
+ * The sky's figure (air.json sky.win): the attacker's fighting weight over what the defender can put up, with the
+ * fight's own type edge (fighters.ts; absent when its switch is off) and, under Units decide, its height; 99 with no
+ * defender. The fight for the sky reads it on the defender's losses made good for the month; a raid on troops on the
+ * defenders still in the air over the target (skyWon).
+ */
+function skyHold(a: AirAssess, Epow: number, Dpow: number): number {
+  const te = a.typeEdge;
+  let hold = Dpow > 0 ? (te ? (Epow * Math.exp(te / 2)) / (Dpow * Math.exp(-te / 2)) : Epow / Dpow) : 99;
+  if (a.height && Dpow > 0) hold *= Math.pow(a.height.h, 2 * a.height.x);
+  return hold;
+}
+
+/**
+ * A raid on troops with the strafers' rule on (strafers.ts): whether the raid's side won the sky in the air fight just
+ * flown, read on the fighters of both sides as the fight left them (the design director, 16:04Z: "a group goes down only
+ * when it is free of the air fight. Settled: its side won the sky (the enemy's fighters beaten or gone)"). The rules'
+ * own test of a won sky is the fight for the sky's (fly(), superiority): at least sky.least fighters still over the
+ * target and sky.win (1.65) times what the defender can put up, by the same weights, type edge and height. That test
+ * reads the defender with his losses made good for the month; over the target, in the raid, nothing is made good, so
+ * here it reads the defenders still in the air (their losses not made good). With none left, none having risen or
+ * every one that rose lost, the sky is won.
+ */
+export function skyWon(g: Game, a: AirAssess): boolean {
+  let E = 0, Epow = 0, D = 0;
+  for (const x of a.att) { const n = x.f.ftr * x.esc * x.crowd; E += n; Epow += n * worth(g, x.f); }
+  for (const x of a.def) D += Math.min(x.f.est.ftr, x.f.ftr) * x.w * worth(g, x.f) * (a.height ? 1 : techMul(g, x.f.nat, 'radar'));
+  return D <= 0 || (E >= AIR.sky.least && skyHold(a, Epow, D) >= AIR.sky.win);
+}
+
 export function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFleet[], salt = '', battle?: FoughtAir, transit?: Transit): AirReport | null {
   const a = assessAir(g, fleets, m, target, undefined, transit);
   if (a.why) return null;
@@ -3186,6 +3216,10 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     // (The strafers' rule, strafers.ts: only the groups with the reach to strafe go down, those of their fighters the air
     // fight left, and only they pay the ground fire; fought out, the field's strafers paid it there.)
     const strafers: number[] = [];
+    // (The sky gate, the design director 16:04Z: settled, a group goes down only when its side won the sky in the air
+    // fight just flown, skyWon. Fought out, the field decides it group by group. Read before the ground fire, and no die
+    // is thrown for it, so every throw of the raid stays where it was.)
+    const won = rule && (!battle || staff) ? skyWon(g, a) : true;
     let fired = 0;
     if (rule) a.att.forEach((x, i) => {
       // (The same-key rule, the design director 12:59Z question 4: the raid's own stream is thrown exactly as with the
@@ -3197,7 +3231,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
         if (k0) rng.roll(k0 * saved(false));
       }
       const left = x.f.ftr * x.esc * x.crowd;
-      if (!(x.ftr > 0 && canStrafe(g, x)) || left <= 0) return;
+      if (!(won && x.ftr > 0 && canStrafe(g, x)) || left <= 0) return;
       strafers.push(x.f.id);
       if (battle && !staff) return;
       const own = airRng(g, `${m}:${target}:${nat}${salt}:low:${x.f.id}`);
@@ -3287,11 +3321,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       const back = fedNow[i] && lost > 0 ? Math.min(lost, can) * (def[i].lostFtr / lost) : 0;
       Dnext += Math.min(x.f.est.ftr, x.f.ftr + back) * x.w * worth(g, x.f) * (a.height ? 1 : techMul(g, x.f.nat, 'radar'));
     });
-    // The same type edge as the fight (fighters.ts), not a new reading; absent when the switch is off.
-    const te = a.typeEdge;
-    hold = Dnext > 0 ? (te ? (EpowAfter * Math.exp(te / 2)) / (Dnext * Math.exp(-te / 2)) : EpowAfter / Dnext) : 99;
-    // (And the same height as the fight, under Units decide.)
-    if (a.height && Dnext > 0) hold *= Math.pow(a.height.h, 2 * a.height.x);
+    hold = skyHold(a, EpowAfter, Dnext);
     sky = Eafter >= AIR.sky.least && hold >= AIR.sky.win;
     if (sky) g.sky[target] = { nat, turn: g.turn };
     // Air campaigns (ruling 236.2): the battle for the sky over a province carries over from month to month.

@@ -13,7 +13,7 @@
 // reach, and the first test says so.)
 import { afterEach, describe, expect, it } from 'vitest';
 import { launchRaid, raidTargets } from '../src/campaign/airwar';
-import { AIR, AIRWAR, airRange, assessAir, canStrafe, forecastAir, kmTo, strafersExpected } from '../src/campaign/air';
+import { AIR, AIRWAR, airRange, assessAir, canStrafe, forecastAir, kmTo, skyWon, strafersExpected } from '../src/campaign/air';
 import { createGame, setWar } from '../src/campaign/game';
 import { saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -137,9 +137,14 @@ describe('the strafers: card, settled raid and fought raid charge the ground fir
     expect(AIRWAR.ground.reach).toBe(0.9);
     // Groupement de Chasse 1 (fighter range 220 km): at Belfort, 190 km off (0.86 of its range), inside 0.9 and beyond
     // the old 0.6; at Namur, 216 km off (0.98), beyond 0.9 though still within its range, so it flies the escort.
-    for (const [field, strafes] of [['Belfort', true], [FAR_FIELD, false]] as const) {
+    // (Changed on the sky gate, the design director 16:04Z: Groupement de Chasse 1 alone, 150 fighters, cannot win the sky
+    // from the German group over the Saar, so as the raid stands the settled raid sends nobody down from either field.
+    // The reach is read again with the German fighters grounded in setup (none rose: the sky is won), where it alone
+    // decides.)
+    for (const [field, strafes, clear] of [['Belfort', true, false], [FAR_FIELD, false, false], ['Belfort', true, true], [FAR_FIELD, false, true]] as const) {
       const c = saar(0, 'far');
       c.g.airFleets.find((f) => f.id === FAR_GROUP)!.base = c.g.regions.find((r) => r.name === field)!.id;
+      if (clear) c.g.airFleets.find((f) => f.id === 3)!.ftr = 0;
       on();
       heard = [];
       const f9 = c.g.airFleets.find((f) => f.id === FAR_GROUP)!;
@@ -152,14 +157,16 @@ describe('the strafers: card, settled raid and fought raid charge the ground fir
       expect(a.att.some((x) => x.f.id === FAR_GROUP && x.ftr > 0)).toBe(true);
       expect(a.att.filter((x) => x.ftr > 0 && canStrafe(c.g, x)).map((x) => x.f.id)).toEqual(strafes ? [FAR_GROUP] : []);
       const fc = forecastAir(c.g, a, 'ground', c.target);
+      expect(skyWon(c.g, a)).toBe(clear);
       expect(fc.strafers).toEqual(strafes ? [FAR_GROUP] : []);
       expect(fc.fire! > 0).toBe(strafes);
       const s = saar(0, 'far');
       s.g.airFleets.find((f) => f.id === FAR_GROUP)!.base = s.g.regions.find((r) => r.name === field)!.id;
+      if (clear) s.g.airFleets.find((f) => f.id === 3)!.ftr = 0;
       heard = [];
       launchRaid(s.g, 'ground', s.target, s.ids, s.nat);
       const settled = heard.find((x) => x.route === 'settled')!;
-      expect(settled.strafers).toEqual(strafes ? [FAR_GROUP] : []);
+      expect(settled.strafers).toEqual(strafes && clear ? [FAR_GROUP] : []);
     }
   });
 
@@ -442,5 +449,68 @@ describe('the card\'s cut on the troops is the expectation of the settled raid\'
       // And nearer the settled mean than the cut at the expected weight is.
       expect(Math.abs(r.card - r.mean)).toBeLessThan(Math.abs(free * cover() - r.mean));
     }
+  });
+});
+
+// The sky gate (the design director, 16:04Z): "A group goes down only when it is free of the air fight. Settled: its side
+// won the sky (the enemy's fighters beaten or gone)." The settled raid reads it on the rules' own test of a won sky
+// (air.ts skyWon: sky.least fighters left over the target and sky.win, 1.65, times what the defenders still in the air can
+// put up; none left, the sky is won), and the card is the settled raid's expectation with the gate in: a group is named
+// when it is more likely than not to win the sky and have a fighter left. The review's raid again, the German group over
+// the Saar (Jagdgeschwader 3's 200 fighters, id 3) given more fighters in setup only, so that the sky is surely won (as
+// built), near the edge, or surely lost.
+const JG = 3;
+const gateBase: Record<number, string> = {};
+function gateRaid(k: number, defenders: number) {
+  if (!gateBase[defenders]) {
+    reviewRaid(0);
+    const g = loadGame(reviewBase!)!;
+    const d = g.airFleets.find((f) => f.id === JG)!;
+    d.ftr = defenders; d.est.ftr = Math.max(d.est.ftr, defenders);
+    gateBase[defenders] = saveGame(g);
+  }
+  const g = loadGame(gateBase[defenders])!;
+  g.seed = (7 + 7919 * k) >>> 0;
+  g.flags.airBattles = k;
+  const target = raidTargets(g, 'ground', 'FRA').find((x) => g.regions[x.id].name === 'Saar')!.id;
+  return { g, target };
+}
+
+describe('the sky gate (the design director, 16:04Z): a group goes down only where its side won the sky', () => {
+  it('the rules\' own test, read over the target: no defender, or every one lost, wins it; 1.65 to 1 of those left and sky.least of the raid\'s own', () => {
+    expect(AIR.sky.win).toBe(1.65);
+    expect(AIR.sky.least).toBe(50);
+    const c = gateRaid(0, 200);
+    const a = assessAir(c.g, fleetsOf(c.g, REVIEW_IDS), 'ground', c.target);
+    expect(a.def.length).toBe(1);
+    // As the review's raid stands (200 German fighters): won.
+    expect(skyWon(c.g, a)).toBe(true);
+    // Every defender that rose lost: won, however few of the raid's fighters are left.
+    const d = a.def[0].f, was = d.ftr;
+    d.ftr = 0;
+    for (const x of a.att) x.f.ftr = Math.min(x.f.ftr, 10);
+    expect(skyWon(c.g, a)).toBe(true);
+    // One defender left against fewer than sky.least of the raid's fighters: not won.
+    d.ftr = 1;
+    expect(skyWon(c.g, a)).toBe(false);
+    d.ftr = was;
+    // No defender rose at all: won.
+    const none = gateRaid(0, 200);
+    const b = assessAir(none.g, fleetsOf(none.g, REVIEW_IDS), 'ground', none.target);
+    b.def.length = 0;
+    expect(skyWon(none.g, b)).toBe(true);
+    // A strong defence (800): lost.
+    const s = gateRaid(0, 800);
+    expect(skyWon(s.g, assessAir(s.g, fleetsOf(s.g, REVIEW_IDS), 'ground', s.target))).toBe(false);
+  });
+
+  it('switched off: the sky is not read, and every figure is as on the lane\'s switch off', () => {
+    flyKinds([]);
+    expect(strafeOn()).toBe(false);
+    const c = gateRaid(3, 800);
+    const a = assessAir(c.g, fleetsOf(c.g, REVIEW_IDS), 'ground', c.target);
+    const fc = forecastAir(c.g, a, 'ground', c.target);
+    expect(fc.strafers).toBeUndefined();
+    expect(fc.fire).toBeUndefined();
   });
 });

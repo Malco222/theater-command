@@ -248,7 +248,10 @@ describe('the raid report: who went down', () => {
     TC.load(saveGame(c.g));
     const r = TC.act(`raid:ground:${c.target}:${c.ids.join('.')}`);
     expect(r.ok).toBe(true);
-    expect(r.note.endsWith(' Groupement de Chasse 3 went down and strafed.')).toBe(true);
+    // (Changed on the sky gate, the design director 16:04Z: loaded through the bridge the month's other moves are made,
+    // and 1. Jagddivision, about 151 fighters able to meet it, faces Groupement de Chasse 3 alone, short of the 1.65 to 1
+    // that wins the sky: the report says nobody went down.)
+    expect(r.note.endsWith(` ${NOBODY}`)).toBe(true);
     flyKinds([]);
     TC.load(saveGame(saar(0).g));
     const off = TC.act(`raid:ground:${c.target}:${c.ids.join('.')}`);
