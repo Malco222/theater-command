@@ -95,12 +95,12 @@ describe("Japan's place in the technology tree", () => {
     expect(hasTech(g, 'GER', 'carriers')).toBe(false);
   }, 300000);
 
-  it('has two research teams, as each of the other six great powers has, and a staff that reads the sea and the air first', () => {
+  it('has two research teams, as each of the other six great powers has, and a staff whose order on the first day is the read of the equipment money', () => {
     const g = seat('JAP');
     for (const nat of ['GER', 'UK', 'FRA', 'SOV', 'ITA', 'USA', 'JAP']) expect(teamsOf(g, nat), nat).toBe(2);
     expect(teamsOf(g, 'CHN')).toBe(1);
-    // (The historian's read of 25 November, marked memory: industry ahead of the army's arms.)
-    expect(TECH.ai.order.JAP).toEqual(['naval', 'air', 'industry', 'land', 'doctrine']);
+    // (The historian's read of the 1936 to 1940 equipment money, ruled 25 November 03:22Z: the army's arms first; the air's place is flagged.)
+    expect(TECH.ai.order.JAP).toEqual(['land', 'naval', 'air', 'industry', 'doctrine']);
   }, 300000);
 
   it('leaves every older row of the tree as it was', () => {
