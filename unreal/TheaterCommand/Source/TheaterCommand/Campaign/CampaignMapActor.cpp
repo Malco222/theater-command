@@ -17886,7 +17886,9 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 				{
 					Piece->LookFrom(CameraFocus.Y, bOverSeam);
 				}
-				Piece->SetShadows(bAny && FVector::DistSquared2D(Piece->GetActorLocation(), CameraFocus) < ShadowReach * ShadowReach);
+				const bool bByFocus = FVector::DistSquared2D(Piece->GetActorLocation(), CameraFocus) < ShadowReach * ShadowReach;
+				Piece->SetShadows(bAny && bByFocus);
+				Piece->SetEye(CameraDistance, bByFocus); // (release 2, a fleet under way, second part: near the eye a fleet's ships heel and ride the swell; tc.Map.ShipRide)
 			}
 		};
 		for (AArmyPiece* Piece : Pieces)
