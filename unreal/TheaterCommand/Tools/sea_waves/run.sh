@@ -27,7 +27,10 @@
 #     snap, the weights, the clipmap watertight, the patch, over a sweep of cuts and on held walks, the chord bound, the
 #     references, SeaNear at rest and at world points against DrawnSurfaceZ, the .inl in float against the double core,
 #     the whitecaps at every depth, the MPC's numbers for material_check, the lanes) and the ride's cost on the battles'
-#     own recordings, played through the show (about a minute), its log in OUT/waves.
+#     own recordings, played through the show (about a minute), its log in OUT/waves;
+#   - step 14(c), the gale (-TheaterSeaGale, off): gale_pin holds the wave core below 13.8 m/s to 942d9295's own bytes,
+#     gale_decks the ship models' decks, and gale_test the gale itself (its spectrum to 24.4 m/s, WMO's Beaufort 7-9, the
+#     whitecaps at gale winds, the wind's streaks, FleetRideGale's limits and the freeboard tests), its log in OUT/gale.
 # Usage: Tools/sea_waves/run.sh   (SEA_WAVES_OUT: where the test writes; default $TMPDIR/sea_waves)
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -131,6 +134,34 @@ if [ -x "$OUT/sea_waves_test" ]; then
   }
   step "sea_waves_test (${#BATTLES[@]} recorded battles)" waves_test
 fi
+# Step 14(c), the gale (the release 2 ocean plan; -TheaterSeaGale, off by default, Brian's and the art director's decision):
+# FleetWaves' gale (the cap to 24.4 m/s, GaleFetchOf, StreakShareOf, PaintLanesGale), Battle/FleetRideGale.h (the ride's
+# Beaufort 7-to-9 limits as data, the step 5 ride not being built), Battle/SeaFace.h's MakeStreaks, and the freeboard tests.
+#   - gale_pin: everything the wave core gives below today's 13.8 m/s cap, and SeaFace's whitecaps and shore, against
+#     gale.sha, which gale_pin itself wrote against 942d9295 (ocean-r2's head, before the gale): byte for byte, so the gale
+#     acts only behind its switch;
+#   - gale_decks: the deck heights the freeboard tests use, measured again from the ship models (Content/Models/Ships);
+#   - gale_test: the gale's spectrum to 24.4 m/s with J above 0.15, WMO's Beaufort 7, 8 and 9 (heights and periods, fetch-
+#     limited and fully raised), the whitecaps at gale winds, the wind's streaks, the ride's limits against the art
+#     director's own table read from SeaShow.cpp, the freeboard tests at Beaufort 7-9 (its report in OUT/gale/
+#     gale_freeboard.txt), the lane's blue as each hull's footprint, and the source scan (look only).
+GALE="$OUT/gale"
+rm -rf "$GALE" "$OUT/gale_pin" "$OUT/gale_test"
+mkdir -p "$GALE"
+step "gale_pin (build)" $CXX ${SEA_WAVES_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" "$HERE/gale_pin.cpp" "$SRC/Battle/FleetWaves.cpp" "$SRC/Battle/SeaFace.cpp" -o "$OUT/gale_pin"
+if [ -x "$OUT/gale_pin" ]; then
+  step "gale_pin (the wave core below 13.8 m/s, byte for byte 942d9295's)" "$OUT/gale_pin" "$HERE/gale.sha"
+fi
+step "gale_decks (the ship models' own decks)" python3 -I -B "$HERE/gale_decks.py"
+step "gale_test (build)" $CXX ${SEA_WAVES_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" "$HERE/gale_test.cpp" "$SRC/Battle/FleetWaves.cpp" "$SRC/Battle/SeaFace.cpp" -o "$OUT/gale_test"
+if [ -x "$OUT/gale_test" ]; then
+  gale_every() {
+    "$OUT/gale_test" "$SRC" "$GALE" 2>&1 | tee "$GALE/gale_test.log"
+    return "${PIPESTATUS[0]}"
+  }
+  step "gale_test (the gale to 24.4 m/s, and the freeboard tests at Beaufort 7-9)" gale_every
+fi
+
 echo "written in $OUT"
 if [ "$STATUS" -eq 0 ]; then
   echo "SEA WAVES: ALL PASSED"

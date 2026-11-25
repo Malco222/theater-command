@@ -186,6 +186,76 @@ the counts of step 0's and step 1(a)'s steps above unchanged)
   Not in it yet, with their steps: the hull's own waves (step 9a's checks) and the predicted eye against AimEye's mirror
   (step 9's).
 
+Tools/sea_waves/run.sh, step 14(c)'s (the gale: storms at Beaufort 7, 8 and 9 behind -TheaterSeaGale, off by default,
+Brian's and the art director's decision; FleetWaves' gale (the cap to 24.4 m/s, GaleFetchOf, StreakShareOf,
+PaintLanesGale), Battle/FleetRideGale.h (the ride's own limits at 7 to 9 as data, no ride code: step 5 is not built) and
+SeaFace::MakeStreaks; run ocean-gale-r1, 25 November 2026, on 942d9295 and step 14(c)'s files, beside three other
+sessions, load about 3; the counts of step 0's, step 1(a)'s and step 2's steps above unchanged, and nothing on screen
+changes: the switch is in the table, off, and not built, because the game does not draw the fleet's sea yet)
+  gale_pin: 9 digests below today's 13.8 m/s cap, 0 changed since 942d9295 (make, drawn, stage, near, sum, ride, grid,
+    lanes, seaface, in gale.sha; every field Make gives at every tenth of a metre a second to 13.8, three seeds, with a
+    swell and without, with a fetch and without, under the show's cap and under the gale's; the drawn frame, the stage's
+    pixel reads, the near grid and its samples, the ride on 40 hulls, the whitecaps' picture (MakeFoam(512, 160)) and a
+    shore). The one per-compiler pin: grid, whose sum of 44,414,080 bytes differs between g++ and clang at 942d9295 as
+    it stands (g++ 5e289af863c28f3b, clang adbe1dced9a0edf3: gale.sha holds both, "grid@clang"); base and tree agree
+    under each compiler, which is what the pin is for
+  gale_decks: 7 models measured, 2 skipped (no model of her own: the corvette's and the frigate's rows are estimates),
+    0 moved (each row's bow, waist and stern deck read again out of Content/Models/Ships/<Model>.json within 5 cm, and
+    the model's length and beam within 10 cm)
+  gale_test: 33 checks, 0 failed (spectrum to 24.4 m/s 2, WMO's heights and periods 5, whitecaps at gale winds 2, the
+    wind's streaks 6, the ride's limits 5, freeboard 4, the lane's footprint 4, the source scan 4); its report in
+    OUT/gale/gale_freeboard.txt and the streaks' picture in OUT/gale/streaks.rgba
+  the sea by Beaufort as built (WMO-No. 558's rows; the gale's own sea is duration-limited, a gale of 17.5 hours, CERC
+  1984 eq. 3-35, and the fully raised one Pierson-Moskowitz as the show lays it):
+    B7 (13.9-17.1 m/s; WMO probable 4.0 m, most 5.5 m)   the gale's 4.04 m Tp 10.0 s at the row's foot (fetch 324 km)
+                                                         to 5.23 m Tp 11.1 s at its head; fully raised at its middle
+                                                         5.05 m Tp 11.3 s
+    B8 (17.2-20.7 m/s; probable 5.5 m, most 7.5 m)       5.27 m Tp 11.1 s (360 km) to 6.64 m Tp 12.2 s; fully raised
+                                                         7.54 m Tp 13.8 s
+    B9 (20.8-24.4 m/s; probable 7.0 m, most 10.0 m)      6.68 m Tp 12.2 s (396 km) to 8.16 m Tp 13.2 s; fully raised
+                                                         10.73 m Tp 16.5 s
+    at the cap itself the gale's sea is the show's own, 3.9992 m against 0.021 x 13.8^2 = 3.9992 m, so nothing jumps
+    when the switch raises the cap; the peak period steps down by 1.14% there and rises above it
+    the least J over a 1 km square at 2 m, over 144 gale seas: 0.5428 (the plan's "J above 0.15" for this step)
+    the whitecaps' drawn cover within 1.6% of Monahan: B8 8.54% against 8.68%, B9 15.62% against 15.85%
+    the wind's streaks drawn (StreakShareOf x the picture): 12 m/s 0.37%, 13.9 1.36%, 17.2 4.15%, 20.8 6.38%,
+    24.4 7.64% of the sea
+  the freeboard tests (green water over each deck: the share of 400 s at 4 Hz, the most of four headings, both speeds
+  (her class's and hove to, 3 m/s) and both seas, the ride held to FleetRideGale's limits; bow / waist / stern, % of the
+  time, at Beaufort 7, 8 and 9; at Beaufort 6 and under every deck of every class stays dry):
+                               Beaufort 7            Beaufort 8              Beaufort 9
+    destroyer                  0 / 0.38 / 0          0 / 5.25 / 3.12         0 / 13.00 / 13.06
+    destroyer (USA)            0 / 0 / 0             0 / 2.00 / 0            0 / 6.12 / 5.25
+    destroyer (JAP)            0 / 0.44 / 0          0 / 5.50 / 2.19         0 / 14.62 / 10.88
+    destroyer (GER)            0 / 0.31 / 0          0 / 4.31 / 0.81         0 / 10.31 / 9.12
+    frigate (River) [EST]      0 / 0 / 0.25          0 / 1.12 / 6.94         0 / 9.62 / 27.31
+    corvette (Flower) [EST]    0 / 6.81 / 3.94       0 / 20.19 / 20.19       0.50 / 35.06 / 37.62
+    U-boat (Type VIIC)         4.19 / 11.00 / 8.00   12.81 / 38.69 / 39.50   14.25 / 42.44 / 44.25
+    submarine (USA)            0.81 / 1.75 / 0.56    2.69 / 10.25 / 6.69     3.50 / 18.25 / 18.38
+    submarine (any other navy) 3.38 / 6.56 / 2.25    9.19 / 27.19 / 23.75    10.94 / 32.56 / 33.88
+    (the pattern: every destroyer's forecastle stays dry at every force; her weather deck and her quarterdeck are
+    what ship green water. FleetRideGale::GreenMost holds each of these 81 rows at its measured share
+    times 1.25, and 0.005 more, and gale_test fails if one is passed. Raw look heave reached 1.62 times 0.5 Hs on a
+    destroyer at Beaufort 9 (8.67 m against 5.37 m), so the gale's rows give heave step 5's own soft limit, HeaveMax
+    tanh(Heave / HeaveMax) with HeaveMax = 0.5 Hs; under Beaufort 7 the art director's heave never reaches it, so the
+    show does not move.)
+  its costs on the cloud Xeon (least of a few rounds, beside three other sessions, load about 3):
+                          942d9295        the gale
+    the lane, 512 x 512 over 2.5 km, 40 ships' wakes (2,400 points), 4 oil discs, 40 hulls:
+                          17.072 ms       18.624 ms (PaintLanesGale: PaintLanes' own red and green, plus the blue
+                                          footprint; +1.552 ms, +9.1%, and 1.00 MB of picture against 0.50 MB, RGBA8
+                                          against RG8). The lane is laid when the wake has moved, not every frame.
+    MakeStreaks(512, 160) -               81.780 ms once as the look opens (MakeFoam(512, 160) beside it: 72.957 ms)
+    Make (the sea itself)  0.002 ms       0.002 ms at 22.6 and at 24.4 m/s: the same 10 displaced and 12 pixel trains
+    GaleFetchOf                           23 ns a call, StreakShareOf 3 ns (both read once a look, not a frame)
+    DrawnFor + BuildNear (96, with shifts), 8 rings, an 18 m eye and a subject 2.5 km out:
+                          0.308 ms        0.315 ms at 22.6 m/s (Hs 7.42 m), 0.322 ms at 24.4 m/s (Hs 8.16 m): the gale
+                                          adds no ring and no train, so the near grid costs what the ledger booked
+  (this run's one failure is step 2's own timing line, not the gale's: "SampleNear at a world point costs 35 ns or
+  less" read 35.44 ns in the runner and 35.49 ns run again alone, against r3's 29.99 ns on a quieter host. The same
+  binary built from 942d9295 with none of the gale's files read 35.48 ns on this host, so the line is the host's load,
+  not a change: every other check of every step passed with the counts above.)
+
 Tools/air_show/run.sh (Pearl's guard beside pearl_pin): 3 recordings ALL CHECKS PASSED; airscrews 18 aircraft, 0 failed; sea face all checks pass
 
 The Mac, release 1.5 (22 November 05:23-05:32Z, the production lead's frame-time lines,
