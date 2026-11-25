@@ -837,8 +837,9 @@ const waitsToGo = (g: Game, c: Corps): boolean => planWaits(c) || g.flags[`st:ho
  * landing that wins its shore leaves the month on it (navy.ts `landCorps`, `shoreWon`), and that month is the month
  * the ground changed hands or the siege was laid. A town that falls later falls to an army already ashore: by land.
  * A landing thrown back marks nothing, so the province is no beach if it falls to a march in that same month; and a
- * later wave put ashore on ground already won leaves the first wave's month standing. Nothing marks ground taken
- * from the air, so an airborne descent reads as an entry by land. (A war saved before the mark was kept has none:
+ * later wave put ashore on ground already won leaves the first wave's month standing. Ground taken by a drop from
+ * the air is marked the same way and is a beach too (the design director's ruling of 13:39Z, 25 November 2026, on
+ * B11's eighth point: "mark it like a beach"). (A war saved before the mark was kept has none:
  * its beaches read as entered by land, and their rows answer.)
  */
 function beach(g: Game, nat: string, r: Region): boolean {

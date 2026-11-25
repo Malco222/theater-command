@@ -1760,8 +1760,12 @@ export function landCorps(g: Game, cs: Corps[], to: Region, fight?: (cs: Corps[]
   // marched into: ai.ts `beach`, the design director's B11 of 25 November 2026. The mark above, `landedAt`, is
   // written as the landing sails, whatever becomes of it: a landing thrown back in the month the province then
   // fell to a march read as a beach by it, and a second wave put ashore round a town still holding wiped the first
-  // wave's month. The skeptic's finding. Nothing is marked from the air, nor with the far side off.)
-  if (field !== null && !air && taken && (to.ctrl !== held || fieldCtrl(g, to) !== field)) g.flags[`shoreWon:${to.id}`] = g.turn;
+  // wave's month. The skeptic's finding. Ground won by a drop from the air is marked the same way, on the same
+  // condition: the design director's ruling of 13:39Z, 25 November 2026, on B11's eighth point, "a drop from the air
+  // is answered as a landing: mark it like a beach, so b641's landing answer governs it, not B11's march overland".
+  // As built a drop left no mark, and the held rows on its front answered it as if the enemy had marched in.
+  // Nothing is marked with the far side off.)
+  if (field !== null && taken && (to.ctrl !== held || fieldCtrl(g, to) !== field)) g.flags[`shoreWon:${to.id}`] = g.turn;
   const adj = g.nations[nat].adj;
   if (air) headline(g, 'battle', taken ? `${adj} airborne troops take ${to.name} from the air.` : `A ${adj} airborne assault on ${to.name} is beaten off with heavy loss.`, nat, to.id, { arm: 'land', won: taken ? nat : held, lost: taken ? held : nat });
   else headline(g, 'battle', taken ? `${adj} troops land at ${to.name} from the sea.` : `A ${adj} landing at ${to.name} is thrown back into the sea.`, nat, to.id, { arm: 'land', won: taken ? nat : held, lost: taken ? held : nat });
