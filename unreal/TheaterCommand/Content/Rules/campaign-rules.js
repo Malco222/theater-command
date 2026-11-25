@@ -73335,7 +73335,8 @@
     for (const [was, now] of FLEETS_RENAMED) t = t.replace(was, now);
     return t;
   };
-  function loadGame(text) {
+  var loadGame = (text) => readSave(text, false);
+  function readSave(text, promote2) {
     if (text.includes(" Army (")) text = armyWords(text);
     let d;
     const today = text.startsWith(`{"v":${SAVE_VERSION},"words":1,`);
@@ -73346,6 +73347,7 @@
     }
     if (!d || d.v !== SAVE_VERSION || !Array.isArray(d.regions)) return null;
     if (!fits(d.regions.length, wide2(d))) return null;
+    if (!promote2 && CHART_NOW === "whole" && wide2(d) && d.regions.length - MAP_REGIONS !== CHART_REGIONS.whole) return null;
     const g2 = createGame(d.seed, d.human ?? null);
     if (wide2(d)) attachWorld(g2, false);
     const saved = d.regions.length;

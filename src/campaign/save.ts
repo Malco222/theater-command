@@ -142,10 +142,9 @@ export function saveChart(text: string): SaveChart | null {
 }
 
 /**
- * True for a campaign saved on Europe and the Americas, in a game that is on the whole world. The rules can lay the
- * far side over such a save as it stood on its first day (world.ts settleNewGround, far.ts farSettle), which is right
- * for a campaign's first month and wrong for any later one, and the next save then keeps it on the whole world for
- * good. So a caller that continues the player's own wars asks this first (the 3D game's bridge does).
+ * True for a campaign saved on Europe and the Americas, in a game that is on the whole world: another map's war,
+ * which loadGame does not read (form A4, 25 November 2026). A caller that offers the player his saved wars asks this
+ * to say why (the 3D game's bridge does, TC.peekChart).
  */
 export const crossesToWhole = (text: string): boolean => CHART_NOW === 'whole' && saveChart(text) === 'americas';
 
@@ -178,13 +177,31 @@ export const fleetWords = (text: string, today = false): string => {
   return t;
 };
 
-export function loadGame(text: string): Game | null {
+/**
+ * A saved campaign read back, to be continued. A war is continued only on the map it was saved on (the design
+ * director, 25 November 2026, form A4): a campaign saved on Europe and the Americas is not read in a game that is on
+ * the whole world. Laying the far side over a war already under way would invent a history nobody played (a 1943 war
+ * with a Far East of September 1939), and it drops America's Pacific fleets, whose base is old ground.
+ */
+export const loadGame = (text: string): Game | null => readSave(text, false);
+
+/**
+ * The test kitchen's own call, never reached from a player's load: a campaign saved on Europe and the Americas laid
+ * over the whole world, the far side as it stood on its first day (world.ts settleNewGround, far.ts farSettle). Right
+ * for a save of a campaign's first month; for any later one it is a history nobody played. Any other save reads as
+ * loadGame reads it.
+ */
+export const promoteSave = (text: string): Game | null => readSave(text, true);
+
+function readSave(text: string, promote: boolean): Game | null {
   if (text.includes(' Army (')) text = armyWords(text);
   let d: any;
   const today = text.startsWith(`{"v":${SAVE_VERSION},"words":1,`);
   try { d = JSON.parse(OLD_FLEET_WORDS.test(text) ? fleetWords(text, today) : text); } catch { return null; }
   if (!d || d.v !== SAVE_VERSION || !Array.isArray(d.regions)) return null;
   if (!fits(d.regions.length, wide(d))) return null; // saved on a different map
+  // (Form A4.) On the whole world, a save of Europe and the Americas is another map's war.
+  if (!promote && CHART_NOW === 'whole' && wide(d) && d.regions.length - MAP_REGIONS !== CHART_REGIONS.whole) return null;
   const g = createGame(d.seed, d.human ?? null);
   // A campaign saved on the wider world is laid over that world: its provinces, seas and countries, and nothing
   // of its first day, which the save brings itself.

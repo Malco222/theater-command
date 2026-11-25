@@ -2,13 +2,14 @@
 // a save's map only by its province count. With the whole world on, a war saved on Europe and the Americas loaded
 // with the far side laid over it as of September 1939, whatever its month, and the next autosave kept it on the whole
 // world for good: a 1943 war with a 1939 Far East, and no way back. The 3D game's bridge now says which map a save is
-// of, gives the sentence to show, and neither offers nor loads a war of the other map. The rules' own loadGame is as
-// it was (the first-day laying is right for a first-month save, and the test kitchen's saves use it).
+// of, gives the sentence to show, and neither offers nor loads a war of the other map. The rules' own loadGame
+// refuses it too (the design director's ruling of 25 November, form A4); the laying survives only as promoteSave, a
+// named call for the test kitchen.
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
-import { crossesToWhole, loadGame, saveChart, saveGame } from '../src/campaign/save';
+import { crossesToWhole, loadGame, promoteSave, saveChart, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { CHART_NOW, CHART_REGIONS, WORLD_FIRST } from '../src/campaign/world';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
@@ -55,9 +56,13 @@ describe('a saved war knows its map, with the whole world on', () => {
     expect(TC().peek(europe)).toMatchObject({ human: 'GER' });
   }, 300000);
 
-  it("the rules' own loadGame still lays the far side over an earlier chart's save, as it always has", () => {
-    const g = loadGame(americas);
+  it("the rules' own loadGame refuses it too (the design director, form A4); only the test kitchen's named call lays the far side over it", () => {
+    expect(loadGame(americas)).toBeNull();
+    const g = promoteSave(americas);
     expect(g).not.toBeNull();
     expect(g!.regions.length).toBe(WORLD_FIRST + CHART_REGIONS.whole);
+    // A whole-world war and a war of Europe alone read by either call.
+    expect(loadGame(whole)).not.toBeNull();
+    expect(promoteSave(europe)).not.toBeNull();
   }, 300000);
 });
