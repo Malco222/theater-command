@@ -12,7 +12,7 @@ import { turnToDate, type TicketLine } from '../core/ticket';
 import fleetData from '../../data/campaign/fleets.json';
 import { AIRWAR, carrierRules, raid as stopOutput } from './air';
 import { bareBrief, bareLine, bareOf, deckWorth, fleetKnown, moveWings, seaPicture, wingCards, wingShare, wingsAshore, type WingCard } from './carriers';
-import { allied, atWar, headline, routineNews, worksFor } from './game';
+import { allied, atWar, headline, placeName, routineNews, worksFor } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
   laneCounts,
@@ -324,7 +324,9 @@ export function whyNotBombard(g: Game, f: Fleet, r: Region, what?: ShoreTarget, 
   if (f.stance === 'passage') return passageWhy(g, f);
   if (!atSea(f)) return `The ${f.name} is in harbour. Send it to sea off the coast first.`;
   if (!r.seas.includes(f.zone)) return `The ${f.name} is ${seaWhere(g.seas[f.zone].name)}, and ${r.name} is not on that sea.`;
-  if (!atWar(g, f.nat, r.ctrl)) return `${r.name} is not in enemy hands.`;
+  // (Release 2: the UI director's wording mark of 17:23Z, 25 November 2026. The place keeps its article, and no verb
+  // agrees with a plural name: "The enemy does not hold the Midlands.")
+  if (!atWar(g, f.nat, r.ctrl)) return `The enemy does not hold ${placeName(r.name)}.`;
   if (gunsRaw(f.ships) < B.least) return `The ${f.name} has too few heavy guns to shell a coast: that is work for battleships and cruisers.`;
   if (f.shelled === g.turn) return `The ${f.name} has already shelled a coast this month.`;
   if (g.flags[`shell:${r.id}`] === g.turn) return `${r.name} has already been shelled this month.`;

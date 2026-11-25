@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import fleets from '../data/campaign/fleets.json';
 import { airIncomeLoss } from '../src/campaign/air';
-import { createGame, relocate } from '../src/campaign/game';
+import { createGame, placeName, relocate } from '../src/campaign/game';
 import { setFog, sightOf, SIGHT } from '../src/campaign/intel';
 import {
   FLEETS, NAVY, atSea, escort, escortWorth, fit, fleetReach, huntShareSunk, huntSubs, huntersIn, laneLoss, navalUpkeep, quality, rebase, sail,
@@ -280,7 +280,7 @@ describe('shelling a coast', () => {
     // Where the fleet is comes first, as the UI director's sea words say it (13:29Z): "in the X", "off the Y".
     expect(whyNotBombard(g, med, r, 'troops')).toBe(`The ${med.name} is in the ${g.seas[med.zone].name}, and ${r.name} is not on that sea.`);
     const own = g.seas[z].coast.map((id) => g.regions[id]).find((x) => x.ctrl === 'UK')!;
-    expect(whyNotBombard(g, home, own)).toMatch(/not in enemy hands/);
+    expect(whyNotBombard(g, home, own)).toBe(`The enemy does not hold ${placeName(own.name)}.`);
     home.ready = 0.3;
     expect(whyNotBombard(g, home, r, 'troops')).toMatch(/too worn/);
     home.ready = 1;
