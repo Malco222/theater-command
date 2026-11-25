@@ -2054,6 +2054,9 @@ bool ALandBattle::Open()
 	// star and subsoil (LandCrater::Field::bVariety). Off: every hole as before.
 	S.Holes.bVariety = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandCraterVariety"));
 	UE_LOG(LogTheater, Log, TEXT("Land battle: shell holes %s"), S.Holes.bVariety ? TEXT("each their own (-TheaterLandCraterVariety, release 2)") : TEXT("as before"));
+	// (release 2: scorched ground round the burning vehicles, -TheaterLandTrial=scorch; off: no scorch laid, the holes as before)
+	bScorch = LandParts::OnTrial("scorch");
+	UE_LOG(LogTheater, Log, TEXT("Land battle: scorched ground round the wrecks %s"), bScorch ? TEXT("ON (-TheaterLandTrial=scorch, release 2)") : TEXT("off"));
 	// (Brian, 22 November: "explosions should create craters": a mortar bomb's or a shell's hole dug into open ground,
 	// the ground drawn cut away over its bowl; "-TheaterLandShallowHoles" lays them all over the ground as before)
 	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterLandShallowHoles")))
@@ -8394,6 +8397,47 @@ void ALandBattle::MakeCraters()
 		{
 			const LandCrater::Field::Hole& Torn = S.Holes.All().back();
 			Carpet->Mark(E.At.X, E.At.Y, FMath::Max(Torn.Out, 1.2 * Torn.R) + 0.5); // (its bare earth: 1.2 of its radius, Field::Bare)
+		}
+	}
+	// Scorched ground (release 2, the "scorch" look on trial): round a burning vehicle her grass browned and burnt off as
+	// her fire takes hold, her soot core laid over it once she has burnt 40 s; each a record of the holes, laid as a
+	// hole is in its patch's section and sent below with them (LandCrater::Field::AddScorch). Her soot carried on the
+	// effects kit's wind. Off: none laid, the holes as before.
+	if (bScorch && S.Armour)
+	{
+		constexpr double CoreAfter = 40.0; // (battle seconds of burning: her own blackening takes 30, LandKit::Vehicle::Soot)
+		const double WindX = S.Rec.Weather.bWind ? S.Rec.Weather.WindX : 2.6, WindY = S.Rec.Weather.bWind ? S.Rec.Weather.WindY : 1.2;
+		const std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
+		for (size_t I = 0; I < All.size(); ++I)
+		{
+			const LandKit::Vehicle& V = All[I];
+			if (!V.bDead || V.BurnFrom < 0.0 || S.Battle < V.BurnFrom)
+			{
+				continue;
+			}
+			const int32 Of = static_cast<int32>(I);
+			const double Want = S.Battle - V.BurnFrom >= CoreAfter ? 1.0 : 0.35, Has = S.Holes.Scorched(Of);
+			if (Has >= Want)
+			{
+				continue;
+			}
+			const double X = V.Root.At.X, Y = V.Root.At.Y;
+			const LandField::Surface Under = G.At(X, Y);
+			if (Under.What == LandField::Drawn::Water)
+			{
+				continue;
+			}
+			for (const double Burnt : { 0.35, 1.0 })
+			{
+				if (Burnt > Has && Burnt <= Want
+					&& S.Holes.AddScorch(Of, X, Y, std::sin(V.Heading), std::cos(V.Heading), V.Look().Long, V.Look().Wide, WindX, WindY, Burnt, std::string(Under.Fx))
+					&& Burnt < 1.0 && Carpet.IsValid())
+				{
+					// (her browned grass: the grass and corn round her laid again without what burnt, Field::Bare; her
+					// soot core bares nothing more)
+					Carpet->Mark(X, Y, S.Holes.All().back().Out + 0.5);
+				}
+			}
 		}
 	}
 	// Each section with a new hole in it sent again whole, on the ground's own paint. One mesh a 64 m square of the field
