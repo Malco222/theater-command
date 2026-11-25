@@ -1660,7 +1660,7 @@ const goOut = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R => co
 
 
 /** One formation seen to fly a raid: where from, where to, whose, what flies, and what it meets. */
-interface Flight { from: number; x: number; y: number; nat: string; bombers: boolean; escort: boolean; region: number; aa: number; meet: string; meetFrom: number; loss: number; fromX?: number; fromY?: number; fleet?: number; /** (Ruling 107.) Flown by night: the place raided shows its searchlights. */ night?: boolean }
+interface Flight { from: number; x: number; y: number; nat: string; bombers: boolean; escort: boolean; region: number; aa: number; meet: string; meetFrom: number; loss: number; fromX?: number; fromY?: number; fleet?: number; /** (Ruling 107.) Flown by night: the place raided shows its searchlights. */ night?: boolean; /** (The art director's flak brief, 2c.) Bombers over a target on land with no guns built: the light guns any target puts up, as a count above 0. Never on a row over built guns (aa above 0), and on no fighters' row. */ light?: number }
 
 const lastAirReport = (s: Game): number => s.airReports.reduce((m, r) => Math.max(m, r.id), -1);
 
@@ -1675,6 +1675,14 @@ function raidsSince(s: Game, since: number, turns: number[], skipNat: string | n
       seenIds.add(r.id);
       const riser = r.defenders.find((d) => d.ftr >= 1 && d.base >= 0);
       let first = true;
+      // (The art director's flak brief, 2c.) Light flak: bombers over a target on land with no guns built still lose
+      // some of their number to the light guns any target puts up (air.ts assessAir: the plain flak share, by day or
+      // by night, beside the guns of each level built). Each bomber flight of such a raid says so, with the count of
+      // those guns; a raid over built guns says nothing here, for the ring round the target is those guns' own.
+      // (The kind of raid is the replay's `kind`. The row read a `mission` the replay does not carry, so no flight
+      // ever said night and the searchlights of ruling 107 were never lit on the map in play: mended 25 November 2026.)
+      const byNight = r.kind === 'night';
+      const lightGuns = r.region >= 0 && workLevel(s, 'aa', r.region) === 0 && (byNight ? AIR.combat.night.flak : AIR.combat.flak) > 0 ? Math.max(1, flakGuns(0).light) : 0;
       // (a carrier wing has no airfield: it takes off from where its fleet was, which the report gives as a point)
       const deck = (x: { base: number; x: number; y: number }): boolean => x.base < 0 && (x.x > 0 || x.y > 0);
       for (const a of r.attackers.filter((x) => (x.base >= 0 || deck(x)) && x.ftr + x.bmr >= 1).slice(0, 4)) {
@@ -1682,7 +1690,8 @@ function raidsSince(s: Game, since: number, turns: number[], skipNat: string | n
           from: a.base, ...(deck(a) ? { fromX: a.x, fromY: a.y, fleet: (s.airFleets.find((g) => g.id === a.id) as { ship?: number } | undefined)?.ship ?? -1 } : {}), x: r.x, y: r.y, nat: a.nat, bombers: a.bmr >= 1, escort: a.bmr >= 1 && a.ftr >= 1, region: r.region,
           aa: first && r.region >= 0 ? workLevel(s, 'aa', r.region) : 0, meet: first && riser ? riser.nat : '', meetFrom: first && riser ? riser.base : -1,
           loss: a.bmr >= 1 ? a.lostBmr / a.bmr : a.ftr >= 1 ? a.lostFtr / a.ftr : 0,
-          night: (r as { mission?: string }).mission === 'night',
+          night: byNight,
+          ...(lightGuns && a.bmr >= 1 ? { light: lightGuns } : {}),
         });
         first = false;
       }

@@ -91554,6 +91554,8 @@
         seenIds.add(r.id);
         const riser = r.defenders.find((d) => d.ftr >= 1 && d.base >= 0);
         let first2 = true;
+        const byNight = r.kind === "night";
+        const lightGuns = r.region >= 0 && workLevel(s, "aa", r.region) === 0 && (byNight ? AIR.combat.night.flak : AIR.combat.flak) > 0 ? Math.max(1, flakGuns(0).light) : 0;
         const deck = (x) => x.base < 0 && (x.x > 0 || x.y > 0);
         for (const a of r.attackers.filter((x) => (x.base >= 0 || deck(x)) && x.ftr + x.bmr >= 1).slice(0, 4)) {
           flights.push({
@@ -91569,7 +91571,8 @@
             meet: first2 && riser ? riser.nat : "",
             meetFrom: first2 && riser ? riser.base : -1,
             loss: a.bmr >= 1 ? a.lostBmr / a.bmr : a.ftr >= 1 ? a.lostFtr / a.ftr : 0,
-            night: r.mission === "night"
+            night: byNight,
+            ...lightGuns && a.bmr >= 1 ? { light: lightGuns } : {}
           });
           first2 = false;
         }
