@@ -228,6 +228,16 @@ namespace
 			Variable->Set(1, ECVF_SetByCode);
 		}
 	}
+
+	/** "-TheaterLookBounceStrength=1.6" and the like: a look's tuning set from the launch line, for the Mac's sweeps. */
+	void Tuned(const TCHAR* Word, TAutoConsoleVariable<float>& Variable)
+	{
+		float Value = 0.0f;
+		if (FParse::Value(FCommandLine::Get(), Word, Value))
+		{
+			Variable->Set(Value, ECVF_SetByCode);
+		}
+	}
 }
 
 void WholeLook::Start()
@@ -235,6 +245,11 @@ void WholeLook::Start()
 	Asked(TEXT("TheaterLookCrisp"), CVarCrisp);
 	Asked(TEXT("TheaterLookDepth"), CVarDepth);
 	Asked(TEXT("TheaterLookBounce"), CVarBounce);
+	Tuned(TEXT("TheaterLookCrispSharpen="), CVarCrispSharpen);
+	Tuned(TEXT("TheaterLookDepthStrength="), CVarDepthStrength);
+	Tuned(TEXT("TheaterLookDepthReach="), CVarDepthReach);
+	Tuned(TEXT("TheaterLookDepthQuality="), CVarDepthQuality);
+	Tuned(TEXT("TheaterLookBounceStrength="), CVarBounceStrength);
 	// (the sharpening and the filtering at once, before the game's own pictures are made, so that every one of them is read
 	// with the filtering asked; the far shade waits for a world to lay its volume in)
 	KeepCrisp();
