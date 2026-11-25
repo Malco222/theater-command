@@ -910,7 +910,7 @@ export function whyNotSally(g: Game, r: Region, nat: string): string | null {
   if (!garrisonOf(r).some((c) => armyOf(c) === nat)) return `You have no garrison in ${townName(r)}.`;
   if (g.flags[`sally:${r.id}`] === g.turn) return `The garrison of ${townName(r)} has made its sortie this month.`;
   const out = salliers(g, r, nat);
-  if (!out.length) return garrisonOf(r).some((c) => !c.dead && armyOf(c) === nat && withered(g, c)) ? 'The garrison is cut off and out of stores: it holds the town, and makes no sortie.' : 'The garrison is too shaken to come out.';
+  if (!out.length) return garrisonOf(r).some((c) => !c.dead && armyOf(c) === nat && withered(g, c)) ? 'The garrison is cut off and out of stores. It holds the town and makes no sortie.' : 'The garrison is too shaken to come out.';
   // A garrison of guns alone makes no sortie (ruling 211(a)).
   if (!out.some(fights)) return aloneLine(out);
   return null;

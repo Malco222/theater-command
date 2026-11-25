@@ -21,7 +21,7 @@ import type { Corps, Game, Region } from '../src/campaign/types';
 import { witherAt, witherStores, withered } from '../src/campaign/wither';
 
 const LONG = 600000;
-const WITHERED = 'Cut off and out of stores, it holds where it stands: it cannot attack, march or sail until a ship of its side can reach it.';
+const WITHERED = 'Cut off and out of stores, it holds where it stands. It cannot attack, march or sail until stores reach it by sea.';
 
 /** The whole world in January 1942, Japan at war with the western powers. `human` plays one of them, or nobody does. */
 function war(human: string | null = null): Game {
@@ -70,7 +70,7 @@ describe('a cut-off island garrison withers and is never a free prize (ruling 17
     expect(closedTo(g, r.seas[0], 'JAP')).toBe(true);
     expect(c.supplied).toBe(false);
     // Its card counts its stores, the three months the game has always given a fresh corps, and says what follows.
-    expect(corpsMood(g, c).restLine).toBe('Cut off from supply: it gets no rest at all, and its stores last 3 months more. After that it withers to a quarter of its strength: it holds on, but cannot attack.');
+    expect(corpsMood(g, c).restLine).toBe('Cut off from supply. It gets no rest, and its stores last 3 months more. After that it withers to a quarter of its strength: it holds on but cannot attack.');
     // The first hungry month is the one it always was. It keeps its moves while its stores last.
     month(g);
     expect(state(c)).toEqual([0.6, 0.85]);
@@ -80,7 +80,7 @@ describe('a cut-off island garrison withers and is never a free prize (ruling 17
     month(g);
     expect(state(c)).toEqual([0.25, 0.7225]);
     expect([withered(g, c), witherStores(g, c), c.ap]).toEqual([false, 1, 4]);
-    expect(corpsMood(g, c).restLine).toBe('Cut off from supply: it gets no rest at all, and its stores last one month more. After that it withers to a quarter of its strength: it holds on, but cannot attack.');
+    expect(corpsMood(g, c).restLine).toBe('Cut off from supply. It gets no rest, and its stores run out this month. Then it withers to a quarter of its strength: it holds on but cannot attack.');
     expect(withers(g)).toEqual([]);
     // The third, the month it used to lay down its arms: its stores are gone, and it stands at the floor.
     month(g);
@@ -88,7 +88,7 @@ describe('a cut-off island garrison withers and is never a free prize (ruling 17
     expect(state(c)).toEqual([0.25, 0.25]);
     expect([withered(g, c), witherStores(g, c), c.ap]).toEqual([true, 0, 0]);
     expect(g.flags[`wither:${c.id}`]).toBe(0);
-    expect(withers(g)).toContain('Cut off and out of stores, Kwajalein garrison (a test row) withers on Kwajalein: it holds on at a quarter of its strength and will not lay down its arms, but it can no longer attack. It mends when a ship of ours can reach it again.');
+    expect(withers(g)).toContain('Cut off and out of stores, Kwajalein garrison (a test row) withers on Kwajalein. It holds on at a quarter of its strength and will not lay down its arms, but it can no longer attack. It recovers once stores reach it by sea.');
     const told = withers(g).length;
     // And so it stays, month after month: eight months cut off, and the island is still Japan's and still held.
     for (let m = 4; m <= 8; m++) {
@@ -105,10 +105,10 @@ describe('a cut-off island garrison withers and is never a free prize (ruling 17
     expect(g.headlines.some((h) => /lays down its arms/.test(h.text) && h.region === r.id)).toBe(false);
     // It cannot attack, march or sail, and no ship lifts it off: the card and the refused order say why.
     expect(whyNotOrder(g, c)).toBe(WITHERED);
-    expect(corpsMood(g, c).restLine).toBe('Cut off and out of stores: it has withered to a quarter of its strength and holds on there. It gets no rest and no drafts, and it cannot attack, until a ship of its side can reach it.');
+    expect(corpsMood(g, c).restLine).toBe('Cut off and out of stores. It has withered to a quarter of its strength and holds on there. It gets no rest and no drafts, and cannot attack, until stores reach it by sea.');
     expect(whyNotShip(g, c, g.byName['Truk'])).toBe('Only a corps that has not moved this month can embark.');
     expect(evacuate(g, c)).toBe(false);
-    expect(whyNotEvacuate(g, c)).toBe('Kwajalein garrison (a test row) is cut off and out of stores on Kwajalein: it cannot be lifted off until Japanese ships have reached it with stores.');
+    expect(whyNotEvacuate(g, c)).toBe('Kwajalein garrison (a test row) is cut off and out of stores on Kwajalein: it cannot be lifted off until stores have reached it by sea.');
     // It stood where it was, and its works are its own still: a garrison with no moves left is not one that marched.
     // They are the two months' works it dug while its stores lasted, and no more: starving men dig nothing new.
     expect([c.dug, c.dugFor]).toEqual([true, 2]);
@@ -175,7 +175,7 @@ describe('a cut-off island garrison withers and is never a free prize (ruling 17
       expect([withered(g, c), witherStores(g, c), c.ap, r.ctrl, besieged(g, r)], `month ${m}`).toEqual([true, 0, 0, 'JAP', true]);
     }
     expect(fed).toEqual([true, false, false, false, false, false]);
-    expect(corpsMood(g, c).restLine).toBe('Cut off and out of stores: it has withered to a quarter of its strength and holds on there. It gets no rest and no drafts, and it cannot attack, until a ship of its side can reach it.');
+    expect(corpsMood(g, c).restLine).toBe('Cut off and out of stores. It has withered to a quarter of its strength and holds on there. It gets no rest and no drafts, and cannot attack, until stores reach it by sea.');
     expect(salliers(g, r, 'JAP')).toEqual([]);
     expect(g.headlines.some((h) => h.region === r.id && /lays down its arms|Starved out/.test(h.text))).toBe(false);
     // It gives in under assault, as any garrison with no stores does: the division round the town storms it.
@@ -342,7 +342,7 @@ describe('a cut-off island garrison withers and is never a free prize (ruling 17
     // Withered, it holds the town and makes no sortie.
     expect(salliers(large.g, large.r, 'JAP')).toEqual([]);
     large.g.human = 'JAP';
-    expect(whyNotSally(large.g, large.r, 'JAP')).toBe('The garrison is cut off and out of stores: it holds the town, and makes no sortie.');
+    expect(whyNotSally(large.g, large.r, 'JAP')).toBe('The garrison is cut off and out of stores. It holds the town and makes no sortie.');
   }, LONG);
 
   it('ground that is no island of the table starves as it always did: an Italian garrison cut off on Rhodes lays down its arms in its third month', () => {
@@ -375,7 +375,7 @@ describe('a cut-off island garrison withers and is never a free prize (ruling 17
     month(g);
     expect(f.unfed).toBe(1);
     expect(wrecked(g, f)).toBe(true);
-    expect(whyNotField(g, f)).toBe('Grounded: Kwajalein is cut off, and no fuel or bombs reach its field. It flies again when a ship of its side can reach the island.');
+    expect(whyNotField(g, f)).toBe('Grounded. Kwajalein is cut off, and no fuel or bombs reach its field. It flies again once they reach the island by sea.');
     expect(fightersOver(g, r.id, 'USA')).toBe(0);
     // The men have their stores yet.
     expect([withered(g, c), witherStores(g, c)]).toEqual([false, 2]);

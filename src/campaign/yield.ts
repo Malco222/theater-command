@@ -26,7 +26,7 @@ import data from '../../data/campaign/capitulations.json';
 import { reliefBar } from './ai';
 import { skyDenies } from './air';
 import { allied, annexMonth, assess, atWar, capitulate, corpsBase, ensureSupply, fights, friendlyUnits, gunsRule, headline, homeOf, hostileUnits, limitAttackers, overseasRead, railReachFor, shoreRoom, theName, thornGround, victorOf } from './game';
-import { roomAt } from './islands';
+import { engRoom, roomAt } from './islands';
 import { FIT_ORG } from './staff';
 import { stopDef, stopOf } from './history';
 import { whyBarred } from './ground';
@@ -187,7 +187,7 @@ function standThem(g: Game, ally: string, cs: Stand[]): Corps[] {
     }
     return l;
   };
-  const fits = (c: Corps, id: number): boolean => (c.kind === 'eng' ? at(id).eng < 2 : at(id).line < roomAt(g, g.regions[id], ally));
+  const fits = (c: Corps, id: number): boolean => (c.kind === 'eng' ? at(id).eng < engRoom(g, g.regions[id]) : at(id).line < roomAt(g, g.regions[id], ally));
   const out: Corps[] = cs.filter(stays).map((x) => x.c);
   for (const { c, from } of cs.filter((x) => !stays(x)).sort((a, b) => weight(g, b.c) - weight(g, a.c) || a.c.id - b.c.id)) {
     const open = from.filter((id) => fits(c, id)).sort((a, b) => at(a).line - at(b).line || a - b);

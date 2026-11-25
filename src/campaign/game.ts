@@ -72,7 +72,7 @@ import { chargeDelay, isRearguard, rearguardWeeks, rearguardsAt, rearguardsLapse
 import { clientWar, tiedPair } from './far';
 import { atomFallen, atomMonth, atomPress } from './atom';
 import { demandInstead, keepersOf, keptForces, pacificWar } from './pacific';
-import { islandOf, roomAt, roomSays } from './islands';
+import { engRoom, islandOf, roomAt, roomRefusal, roomSays } from './islands';
 import { frontOfRow, onLiveFront } from './planfronts';
 import { bookKept } from './stations';
 import { floorWords, witherAt, witherDrop, witherFed, witherMonth, withered } from './wither';
@@ -3356,7 +3356,7 @@ function ownNearest(g: Game, c: Corps): Region | null {
 export function hasRoom(g: Game, to: Region, c: Corps): boolean {
   const here = placed(g, to, c.nat);
   const eng = here.filter((u) => u.kind === 'eng').length;
-  return c.kind === 'eng' ? eng < 2 : here.length - eng < roomAt(g, to, c.nat);
+  return c.kind === 'eng' ? eng < engRoom(g, to) : here.length - eng < roomAt(g, to, c.nat);
 }
 
 /**
@@ -3375,7 +3375,7 @@ export function shoreRoom(g: Game, to: Region, nat: string): number {
  * ground that is full says nothing here, as before, and the two corps may change places.
  */
 export function whyNoRoom(g: Game, c: Corps, to: Region): string | null {
-  return to.id !== c.reg && allied(g, c.nat, to.ctrl) && !hostileUnits(g, to, c.nat).length && !hasRoom(g, to, c) ? roomSays(g, to) : null;
+  return to.id !== c.reg && allied(g, c.nat, to.ctrl) && !hostileUnits(g, to, c.nat).length && !hasRoom(g, to, c) ? roomRefusal(g, to, [c]) ?? roomSays(g, to) : null;
 }
 
 /** Moves one corps one region. Returns false if the move is not allowed. */
@@ -3573,7 +3573,7 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
   if (besieged(g, dest) && !junctionOpenTo(g, c.nat, dest)) return news('siege', `${dest.name} is under siege.`, 'No train runs into it.', to);
   if (net && !onNet(to)) return { code: 'noline', line: `No railway runs to ${dest.name}.`, at: to };
   if (barred(g, c, dest)) return { code: 'steep', line: whyBarred(g, c, dest)!, at: to };
-  if (railReach(g, c).has(to)) return hasRoom(g, dest, c) ? null : { code: 'room', line: roomSays(g, dest) ?? `${dest.name} has no room for another corps.`, at: to };
+  if (railReach(g, c).has(to)) return hasRoom(g, dest, c) ? null : { code: 'room', line: roomRefusal(g, dest, [c]) ?? roomSays(g, dest) ?? `${dest.name} has no room for another corps.`, at: to };
   if (net && railCut(g, to)) return news('cut', `The railway at ${dest.name} is cut${cutAside(g, to)}.`, `No train runs into it until ${mended(to)}.`, to);
   // Where the line is broken: the way there over the map's lines that meets the fewest breaks, and the first of them.
   // A break on his own side's ground (a cut, a siege, bridges down) is a smaller thing than ground he does not hold,
@@ -3614,7 +3614,9 @@ export function roomForAll(g: Game, to: Region, corps: Corps[]): boolean {
   if (!corps.length) return true;
   const here = placed(g, to, corps[0].nat).filter((u) => !corps.includes(u));
   const eng = here.filter((u) => u.kind === 'eng').length, riding = corps.filter((c) => c.kind === 'eng').length;
-  return eng + riding <= 2 && here.length - eng + (corps.length - riding) <= roomAt(g, to, corps[0].nat);
+  // (Engineers apart: two, or on an island of the Pacific the lesser of two and its room. Engineers already there over
+  // that, the record's or a beaten army's, bar more engineers and nobody else. islands.ts engRoom.)
+  return (riding === 0 ? eng <= Math.max(2, engRoom(g, to)) : eng + riding <= engRoom(g, to)) && here.length - eng + (corps.length - riding) <= roomAt(g, to, corps[0].nat);
 }
 
 /**
@@ -3643,7 +3645,7 @@ export function whyNoTrainFor(g: Game, corps: Corps[], to?: number): NoTrain | n
   const first = whys.findIndex(Boolean);
   if (first < 0) {
     const dest = to === undefined ? undefined : g.regions[to];
-    return dest && !roomForAll(g, dest, corps) ? { code: 'room', line: roomSays(g, dest) ?? `${dest.name} has no room for ${corps.length === 1 ? 'another corps' : `${corps.length} more corps`}.`, at: dest.id } : null;
+    return dest && !roomForAll(g, dest, corps) ? { code: 'room', line: roomRefusal(g, dest, corps) ?? roomSays(g, dest) ?? `${dest.name} has no room for ${corps.length === 1 ? 'another corps' : `${corps.length} more corps`}.`, at: dest.id } : null;
   }
   const no = whys[first]!;
   if (whys.every(Boolean)) {
@@ -4153,7 +4155,7 @@ export function evacuate(g: Game, c: Corps): boolean {
 export function whyNotEvacuate(g: Game, c: Corps): string | null {
   const r = g.regions[c.reg];
   const N = g.nations[c.nat];
-  if (withered(g, c)) return `${c.name} is cut off and out of stores on ${placeName(r.name)}: it cannot be lifted off until ${N.adj} ships have reached it with stores.`;
+  if (withered(g, c)) return `${c.name} is cut off and out of stores on ${placeName(r.name)}: it cannot be lifted off until stores have reached it by sea.`;
   if (!N.seaSupply) return `${N.name} has no ships to lift an army off a beach.`;
   if (!r.port) return `${r.name} has no port to lift an army from.`;
   if (r.owner === c.nat) return `${r.name} is home ground: there is nowhere to be lifted off to.`;
@@ -5665,7 +5667,8 @@ export function startPhase(g: Game, nat: string): void {
       if (isle && was) {
         // Hunger takes it to the island's floor and no further; the month its stores are gone, its own player is told.
         if (witherMonth(g, c, isle, was, crew === 'fed' ? monthsUnfed(was.org) : crew) === 'withers' && nat === g.human) {
-          headline(g, 'info', `Cut off and out of stores, ${c.name} withers on ${placeName(g.regions[c.reg].name)}: it holds on at ${floorWords(isle)} of its strength and will not lay down its arms, but it can no longer attack. It mends when a ship of ours can reach it again.`, nat, c.reg);
+          // (The UI director's words, 14:00Z 25 November 2026. Bad news to its own player, `lost`, in the month it withers only.)
+          headline(g, 'info', `Cut off and out of stores, ${c.name} withers on ${placeName(g.regions[c.reg].name)}. It holds on at ${floorWords(isle)} of its strength and will not lay down its arms, but it can no longer attack. It recovers once stores reach it by sea.`, nat, c.reg, { lost: nat });
         }
       } else if (crew === 'fed' ? c.org <= 0 : crew === 'starved') {
         const lost = starved.get(c.reg) ?? { names: [], men: 0 };

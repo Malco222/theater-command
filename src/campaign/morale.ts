@@ -210,9 +210,11 @@ export function corpsMood(g: Game, c: Corps): Mood {
   const isle = !c.supplied || stores || withered(g, c) ? witherAt(g, c, enemyAshore(g, c)) : null;
   const kept = isle ? witherStores(g, c) : undefined;
   const months = (n: number): string => (n === 1 ? 'one month' : `${n} months`);
-  const restLine = isle && kept === 0 ? `Cut off and out of stores: it has withered to ${floorWords(isle)} of its strength and holds on there. It gets no rest and no drafts, and it cannot attack, until a ship of its side can reach it.`
+  // (The UI director's words, 14:00Z 25 November 2026: in the last month of its stores the line says so.)
+  const last = kept ?? monthsUnfed(c.org);
+  const restLine = isle && kept === 0 ? `Cut off and out of stores. It has withered to ${floorWords(isle)} of its strength and holds on there. It gets no rest and no drafts, and cannot attack, until stores reach it by sea.`
     : stores ? `${restWord(rest)}: living on its works' own stores, ${stores.left === 1 ? 'one month' : `${stores.left} months`} of them left. It holds its rest while they last, but gets no more; when they run out it ${isle ? `withers to ${floorWords(isle)} of its strength and holds on` : 'is starved into surrender'}.`
-    : isle ? `Cut off from supply: it gets no rest at all, and its stores last ${months(kept ?? monthsUnfed(c.org))} more. After that it withers to ${floorWords(isle)} of its strength: it holds on, but cannot attack.`
+    : isle ? `Cut off from supply. It gets no rest, and its stores ${last === 1 ? 'run out this month. Then' : `last ${months(last)} more. After that`} it withers to ${floorWords(isle)} of its strength: it holds on but cannot attack.`
     : !c.supplied ? 'Cut off from supply: it gets no rest at all.'
     : c.fought ? `${restWord(rest)}: it has fought this month, and will get back less of its rest for it.`
     : quiet ? `${restWord(rest)}: left where it stands for the month, it rests, takes in drafts half as fast again and recovers its spirits.`

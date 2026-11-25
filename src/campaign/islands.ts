@@ -7,8 +7,8 @@
 // (This file and game.ts read each other's functions, as world.ts and game.ts do: nothing of either runs as they load.)
 import data from '../../data/campaign/far-islands.json';
 import { FAR_STAGE } from './stage';
-import { allied, roomless } from './game';
-import { STACK, type Game, type Region } from './types';
+import { allied, placed, roomless } from './game';
+import { STACK, type Corps, type Game, type Region } from './types';
 import { farOn } from './world';
 
 /** An island's row: its room in corps, the floor a cut-off garrison withers to, and whether it is an islet. */
@@ -69,6 +69,42 @@ const corpsWord = (n: number): string => (n === 1 ? 'one corps' : `${n} corps`);
 export function roomSays(g: Game, r: Region | undefined | null): string | null {
   const isle = islandOf(g, r);
   return isle && r ? `${r.name} has room for ${corpsWord(isle.room)}.` : null;
+}
+
+/**
+ * How many engineer corps a province takes apart from its fighting corps: two, or on an island of the table the
+ * lesser of two and the island's room (the design director, 13:58Z 25 November 2026: "Wake, a room of one, takes one
+ * engineer corps apart; a room of two or more takes two, as anywhere"). Two with the far side off.
+ */
+export const engRoom = (g: Game, r: Region | undefined | null): number => Math.min(2, islandOf(g, r)?.room ?? 2);
+
+/**
+ * What an island tells the player whose order it has no room for: how many more can go, since that is the number he
+ * must change his order to (the UI director's words of 14:00Z 25 November 2026; the head of the swap card keeps the
+ * whole room, `roomSays`). `corps` are the corps ordered there; those of them already on the island are not counted
+ * as there, and the corps in its town are. "Of yours" is dropped where an ally's corps fill the room too. Engineers
+ * are told their own count in the same words (the builder's, for the UI director to mark). Null for ground that is no
+ * island of the table, with the far side off, and where room is not what stops the order.
+ */
+export function roomRefusal(g: Game, r: Region | undefined | null, corps: Corps[]): string | null {
+  const isle = islandOf(g, r);
+  if (!isle || !r || !corps.length) return null;
+  const nat = corps[0].nat;
+  const here = placed(g, r, nat).filter((u) => !corps.includes(u));
+  const town = (r.garr ?? []).filter((c) => allied(g, nat, c.nat) && !roomless(g, c) && !corps.includes(c));
+  const count = (k: number): string => (k === 1 ? 'one' : `${k}`);
+  const say = (room: number, there: Corps[], what: string, asked: number): string | null => {
+    const n = there.length, left = Math.max(0, room - n);
+    if (asked <= left) return null;
+    const has = `has room for ${count(room)} ${what}`, mine = there.every((u) => u.nat === nat);
+    if (n === 0) return `${r.name} ${has}: only ${count(room)} can go.`;
+    const are = n === 1 ? (mine ? 'one of yours is there' : 'one is there') : `${n}${mine ? ' of yours' : ''} are there`;
+    if (left > 0) return `${r.name} ${has} and ${are}: only ${count(left)} more can go.`;
+    return `${r.name} is full: it ${has} and ${room === 1 && n === 1 && mine ? 'yours is there' : are}.`;
+  };
+  const line = corps.filter((c) => c.kind !== 'eng').length;
+  return (line ? say(isle.room, [...here.filter((u) => u.kind !== 'eng'), ...town], 'corps', line) : null)
+    ?? (corps.length > line ? say(engRoom(g, r), here.filter((u) => u.kind === 'eng'), 'engineer corps beside its troops', corps.length - line) : null);
 }
 
 /** Every island of the table, by its province's name (for the lists an interface or a test draws). */

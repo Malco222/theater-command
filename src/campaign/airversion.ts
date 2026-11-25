@@ -114,7 +114,7 @@ export const wrecked = (g: Game, f: AirFleet): boolean => f.ship === undefined &
 export function whyNotField(g: Game, f: AirFleet): string | null {
   if (!wrecked(g, f)) return null;
   if (f.way !== undefined) return `On its way to ${g.regions[f.way.to]?.name ?? 'another airfield'}: out of the fight until it gets there.`;
-  if (!fieldShut(g, f.base)) return `Grounded: ${g.regions[f.base].name} is cut off, and no fuel or bombs reach its field. It flies again when a ship of its side can reach the island.`;
+  if (!fieldShut(g, f.base)) return `Grounded. ${g.regions[f.base].name} is cut off, and no fuel or bombs reach its field. It flies again once they reach the island by sea.`;
   return g.flags.fields === 1 && fieldRules(g) ? `Grounded: the runway at ${g.regions[f.base].name} is cratered until it is repaired.` : `Grounded this month: saboteurs wrecked the field at ${g.regions[f.base].name}.`;
 }
 

@@ -11,8 +11,8 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { addCorps, createGame, declareWar, hasRoom, moveCorps, placed, relocate, removeCorps, resolveBattle, roomForAll, setWar, shoreRoom, startPhase, whyNoRoom, whyNoTrainFor } from '../src/campaign/game';
-import { islandOf, roomAt, roomSays } from '../src/campaign/islands';
+import { addCorps, allied, createGame, declareWar, hasRoom, moveCorps, placed, relocate, removeCorps, resolveBattle, roomForAll, setWar, shoreRoom, startPhase, whyNoRoom, whyNoTrainFor } from '../src/campaign/game';
+import { engRoom, islandOf, roomAt, roomRefusal, roomSays } from '../src/campaign/islands';
 import { landingTargets, whyNotLand, whyNotShip } from '../src/campaign/navy';
 import { followUp } from '../src/campaign/ashore';
 import { saveGame } from '../src/campaign/save';
@@ -66,12 +66,12 @@ describe('the player and Wake', () => {
     expect(whyNotShip(g, first, wake)).toBeNull();
     expect(orderShip(g, first, wake.id)).toBe(true);
     expect(first.reg).toBe(wake.id);
-    expect(whyNotShip(g, second, wake)).toBe('Wake has room for one corps.');
+    expect(whyNotShip(g, second, wake)).toBe('Wake is full: it has room for one corps and yours is there.');
     expect(orderShip(g, second, wake.id)).toBe(false);
     expect(second.reg).toBe(honolulu.id);
     // The 3D game asks the same question through its doorway, and shows the island's own sentence.
     TC().load(saveGame(g));
-    expect(TC().bySeaWhy([second.id], wake.id)).toEqual({ why: 'Wake has room for one corps.' });
+    expect(TC().bySeaWhy([second.id], wake.id)).toEqual({ why: 'Wake is full: it has room for one corps and yours is there.' });
     expect((TC().seaReach([second.id]) as { ports: number[] }).ports).not.toContain(wake.id);
     expect(TC().ship([second.id], wake.id).moved).toEqual([]);
     expect(TC().province(wake.id).island).toEqual({ room: 1, line: 'Wake has room for one corps.' });
@@ -85,14 +85,14 @@ describe('the player and Wake', () => {
     const a = corps(g, 'JAP', 'First', quay), b = corps(g, 'JAP', 'Second', quay);
     expect(placed(g, quay, 'JAP')).toHaveLength(2);
     declareWar(g, 'JAP', 'USA');
-    expect(whyNotLand(g, [a, b], wake)).toBe('Wake has room for one corps.');
-    expect(orderLand(g, [a, b], wake.id)).toMatchObject({ ok: false, why: 'Wake has room for one corps.' });
+    expect(whyNotLand(g, [a, b], wake)).toBe('Wake has room for one corps: only one can go.');
+    expect(orderLand(g, [a, b], wake.id)).toMatchObject({ ok: false, why: 'Wake has room for one corps: only one can go.' });
     expect(landingTargets(g, [a, b]).map((r) => r.name)).not.toContain('Wake');
     // One corps is the force, and it goes ashore.
     expect(whyNotLand(g, [a], wake)).toBeNull();
     expect(landingTargets(g, [a]).map((r) => r.name)).toContain('Wake');
     TC().load(saveGame(g));
-    expect(TC().bySeaWhy([a.id, b.id], wake.id)).toEqual({ why: 'Wake has room for one corps.' });
+    expect(TC().bySeaWhy([a.id, b.id], wake.id)).toEqual({ why: 'Wake has room for one corps: only one can go.' });
     expect(TC().bySeaWhy([a.id], wake.id)).toEqual({ why: '' });
     const res = orderLand(g, [a], wake.id);
     expect(res).toMatchObject({ ok: true, taken: true });
@@ -100,7 +100,7 @@ describe('the player and Wake', () => {
     // The second cannot follow it: not as a second landing, not by ship to the island now his own.
     b.ap = b.apMax;
     expect(whyNotLand(g, [b], wake)).toBe('Wake is not enemy ground.');
-    expect(whyNotShip(g, b, wake)).toBe('Wake has room for one corps.');
+    expect(whyNotShip(g, b, wake)).toBe('Wake is full: it has room for one corps and yours is there.');
     expect(orderShip(g, b, wake.id)).toBe(false);
     // Nor are more ships counted on to follow a wave than the island has room for.
     expect(followUp(g, 'JAP', quay, [], wake)).toBe(0);
@@ -118,7 +118,8 @@ describe('the player and Wake', () => {
     expect(placed(g, wake, 'JAP')).toHaveLength(0);
     expect(roomAt(g, wake, 'JAP')).toBe(0);
     b.ap = b.apMax;
-    expect(whyNotShip(g, b, wake)).toBe('Wake has room for one corps.');
+    // (The corps in the town is counted as there: the island is full.)
+    expect(whyNotShip(g, b, wake)).toBe('Wake is full: it has room for one corps and yours is there.');
     // It may come out again: it asks no new place. And the enemy who would land counts only his own.
     expect(whyNotTakeField(g, a)).toBeNull();
     expect(roomAt(g, wake, 'USA')).toBe(1);
@@ -139,6 +140,10 @@ describe('the player and Wake', () => {
     const sappers = addCorps(g, 'USA', 'Sappers', 'eng', 1, honolulu.id, {}), bridgers = addCorps(g, 'USA', 'Bridgers', 'eng', 1, honolulu.id, {});
     for (const e of [sappers, bridgers]) e.ap = e.apMax;
     const first = corps(g, 'USA', 'First', honolulu), second = corps(g, 'USA', 'Second', honolulu);
+    // One fighting corps and one engineer corps are what an atoll takes; two engineer corps beside it are one too many.
+    expect(roomForAll(g, wake, [first, sappers])).toBe(true);
+    expect(roomForAll(g, wake, [first, sappers, bridgers])).toBe(false);
+    expect(roomRefusal(g, wake, [first, sappers, bridgers])).toBe('Wake has room for one engineer corps beside its troops: only one can go.');
     // Engineers alone hold the atoll: they work among the troops and take none of its room of one corps.
     expect(whyNotShip(g, sappers, wake)).toBeNull();
     relocate(g, sappers, wake);
@@ -150,13 +155,20 @@ describe('the player and Wake', () => {
     // The one corps is there: a second is refused by ship as it would be by march or by landing, and told why.
     expect(hasRoom(g, wake, second)).toBe(false);
     expect(roomForAll(g, wake, [second])).toBe(false);
-    expect(whyNotShip(g, second, wake)).toBe('Wake has room for one corps.');
-    // A second engineer corps may still join the first, as on any ground.
-    expect(hasRoom(g, wake, bridgers)).toBe(true);
-    expect(whyNotShip(g, bridgers, wake)).toBeNull();
+    expect(whyNotShip(g, second, wake)).toBe('Wake is full: it has room for one corps and yours is there.');
+    // A second engineer corps does not join the first on an atoll: engineers are counted apart up to the lesser of two
+    // and the island's room, and Wake's room is one (the design director, 13:58Z 25 November 2026).
+    expect(engRoom(g, wake)).toBe(1);
+    expect(hasRoom(g, wake, bridgers)).toBe(false);
+    expect(roomForAll(g, wake, [bridgers])).toBe(false);
+    expect(whyNotShip(g, bridgers, wake)).toBe('Wake is full: it has room for one engineer corps beside its troops and yours is there.');
+    // An island with room for two or more takes two, as any ground does.
+    const okinawa = at(g, 'Okinawa');
+    expect([engRoom(g, okinawa), engRoom(g, at(g, 'Singapore')), engRoom(g, honolulu)]).toEqual([2, 2, 2]);
     // (A harbour that is no island of the table counts every corps on its quay, as it always did.)
     const osaka = at(g, 'Osaka');
     expect(islandOf(g, osaka)).toBeNull();
+    expect(engRoom(g, osaka)).toBe(2);
   }, 300000);
 
   it('cannot march a third corps onto Singapore, and is told why; the two may still change places', () => {
@@ -167,11 +179,11 @@ describe('the player and Wake', () => {
     const c = corps(g, 'UK', 'Third', johore);
     expect(hasRoom(g, singapore, c)).toBe(false);
     expect(reach(g, c).has(singapore.id)).toBe(false);
-    expect(whyNoRoom(g, c, singapore)).toBe('Singapore has room for 2 corps.');
+    expect(whyNoRoom(g, c, singapore)).toBe('Singapore is full: it has room for 2 corps and 2 of yours are there.');
     expect(orderMove(g, c, singapore.id)).toBe(0);
     expect(moveCorps(g, c, singapore)).toBe(false);
     // (Nor by rail, with the island's own sentence.)
-    expect(whyNoTrainFor(g, [c], singapore.id)).toMatchObject({ code: 'room', line: 'Singapore has room for 2 corps.', at: singapore.id });
+    expect(whyNoTrainFor(g, [c], singapore.id)).toMatchObject({ code: 'room', line: 'Singapore is full: it has room for 2 corps and 2 of yours are there.', at: singapore.id });
     // Ground that is no island says nothing of room here.
     expect(whyNoRoom(g, c, at(g, 'Kuala Lumpur'))).toBeNull();
     // The 3D game's march: the island's sentence, and the offer to change places with the corps that stands there.
@@ -197,9 +209,23 @@ describe('Okinawa takes four, and other ground five', () => {
       relocate(g, c, okinawa);
     }
     expect(placed(g, okinawa, 'JAP')).toHaveLength(4);
-    expect(whyNotShip(g, cs[4], okinawa)).toBe('Okinawa has room for 4 corps.');
+    expect(whyNotShip(g, cs[4], okinawa)).toBe('Okinawa is full: it has room for 4 corps and 4 of yours are there.');
     expect(hasRoom(g, okinawa, cs[4])).toBe(false);
     expect(roomForAll(g, okinawa, [cs[4]])).toBe(false);
+    // A refusal says how many more can go: the number the order must be changed to (the UI director, 14:00Z 25 November 2026).
+    relocate(g, cs[3], tokyo);
+    const sixth = corps(g, 'JAP', 'Corps 6', tokyo);
+    expect(roomRefusal(g, okinawa, [cs[3]])).toBeNull();
+    expect(roomRefusal(g, okinawa, [cs[3], cs[4]])).toBe('Okinawa has room for 4 corps and 3 of yours are there: only one more can go.');
+    for (const c of cs.slice(0, 3)) relocate(g, c, tokyo);
+    expect(roomRefusal(g, okinawa, [...cs, sixth])).toBe('Okinawa has room for 4 corps: only 4 can go.');
+    relocate(g, cs[0], okinawa);
+    expect(roomRefusal(g, okinawa, cs.slice(1))).toBe('Okinawa has room for 4 corps and one of yours is there: only 3 more can go.');
+    // Where an ally's corps fill the room too, "of yours" is dropped.
+    const ally = g.corps.find((c) => !c.dead && c.nat !== 'JAP' && c.kind === 'inf' && allied(g, c.nat, 'JAP'))!;
+    expect(ally).toBeDefined();
+    relocate(g, ally, okinawa);
+    expect(roomRefusal(g, okinawa, cs.slice(1))).toBe('Okinawa has room for 4 corps and 2 are there: only 2 more can go.');
   }, 300000);
 
   it('a province that is no island of the table still takes five, and says what it always said', () => {
@@ -258,7 +284,7 @@ describe("the record's rows and an island's room, as built", () => {
     // The island is over its room by the record's hand alone: the player's own corps is still refused, and told why.
     const more = corps(g, 'USA', 'Test Corps', honolulu);
     expect(hasRoom(g, pearl, more)).toBe(false);
-    expect(whyNoRoom(g, more, pearl)).toBe('Pearl Harbor has room for 2 corps.');
+    expect(whyNoRoom(g, more, pearl)).toBe('Pearl Harbor is full: it has room for 2 corps and 3 of yours are there.');
     expect(shoreRoom(g, pearl, 'USA')).toBe(0);
   }, 300000);
 
