@@ -4015,12 +4015,15 @@ namespace LandEye
 		}
 		// The picture drawn too dark (the art director's rule, cut 4 fix 6): over DarkLeave under L 25 for DarkHold seconds
 		// past its first quarter second, the shot is left, and the next stands clear of where it stood (a hedge's shaded
-		// face, a crown's shade). After DarkRunMost such cuts running, the light is to blame, not the place: it rests.
+		// face, a crown's shade). After DarkRunMost such cuts running, the light is to blame, not the place: it rests,
+		// until a picture is read no darker than DarkLight, which shows that the light is not.
 		if (!bChoosing && Here.DarkNow && Shot != Kind::Open && Shot != Kind::Wide)
 		{
 			const double Dark = Here.DarkNow();
 			if (Dark <= Set.DarkLeave || Held < 0.25) DarkSince = -1.0;
 			else if (DarkSince < 0.0) DarkSince = Real;
+			// (a reading there is, of this shot and not the last, and light: the run of dark cuts starts again)
+			if (Dark >= 0.0 && Dark <= Set.DarkLight && Held >= 0.25) DarkRunNow = 0;
 			if (!bCut && !bHeld && DarkSince >= 0.0 && Real - DarkSince >= Set.DarkHold && DarkRunNow < Set.DarkRunMost)
 			{
 				bCut = true;
@@ -4079,8 +4082,6 @@ namespace LandEye
 					BailLog.back().Left = Real;
 					BailLog.back().LeftWhy = Reason;
 				}
-				// (a shot left for anything but a dark picture held its light: the dark rule's run starts again)
-				if (Reason != Why::Dark) DarkRunNow = 0;
 				BeginChoice(Battle, Real);
 			}
 			// (the film opening on the whistle: at once, so the opening aerial is never seen for a frame or two first)
