@@ -18808,10 +18808,19 @@ void ACampaignMapActor::UpdateSky(float CameraDistance, const FVector& CameraFoc
 		// (Tuned by measure over Germany from playing height, 17 November 2026. Closed at rest: the ground (108, 106, 79)
 		// stands at (84, 81, 67), 78 parts in 100 as bright, and the sea (59, 154, 169) at (66, 108, 126). In the sky
 		// view the sheet brings the sea to (109, 133, 146). Cloud at rest takes the ground down a twentieth all told.)
-		const FLinearColor Sheet = FMath::Lerp(FLinearColor(0.6f, 0.66f, 0.76f), FLinearColor(0.107f, 0.138f, 0.223f), Moon);
-		const FLinearColor Puff = FMath::Lerp(FLinearColor(0.871f, 0.896f, 0.93f), FLinearColor(0.202f, 0.246f, 0.352f), Moon);
-		const FLinearColor Mist = FMath::Lerp(FLinearColor(0.617f, 0.658f, 0.701f), FLinearColor(0.15f, 0.17f, 0.21f), Moon);
-		const FLinearColor RainInk = FMath::Lerp(FLinearColor(0.776f, 0.823f, 0.888f), FLinearColor(0.24f, 0.26f, 0.31f), Moon);
+		// (The art director's ruling of 25 November 2026 04:54Z, art-director/reviews/map-winter-sky-ruling.md, on a 1.5
+		// still of France in January 1940: by day the lid was a cyan DYE over the land, not a pearl wash. She measured
+		// France inside the zone at red/green 0.67 to 0.76 with blue/green 1.19 to 1.30, against Belgium a step outside
+		// at 1.14 / 0.76, and ruled that washed land must keep its own hue direction and only be pulled toward neutral:
+		// red/green 0.88 to 1.02, blue/green 1.00 to 1.08. The old sheet stood at blue/green 1.15, which over
+		// green-olive land multiplies into water. These are her starting numbers at the same brightness, hers to judge
+		// again on the next pictures. By night the lerp is untouched: a cold blue lid by moonlight is right.)
+		const FLinearColor Sheet = FMath::Lerp(FLinearColor(0.66f, 0.665f, 0.70f), FLinearColor(0.107f, 0.138f, 0.223f), Moon);
+		const FLinearColor Puff = FMath::Lerp(FLinearColor(0.902f, 0.906f, 0.916f), FLinearColor(0.202f, 0.246f, 0.352f), Moon);
+		const FLinearColor Mist = FMath::Lerp(FLinearColor(0.645f, 0.658f, 0.680f), FLinearColor(0.15f, 0.17f, 0.21f), Moon);
+		// (snow lying under the lid is to read L150 to 175 at blue/green 1.02 to 1.05; for rain her word is that the
+		// present ink is near enough, so each weather keeps its own)
+		const FLinearColor RainInk = FMath::Lerp(bSnow ? FLinearColor(0.86f, 0.865f, 0.875f) : FLinearColor(0.776f, 0.823f, 0.888f), FLinearColor(0.24f, 0.26f, 0.31f), Moon);
 		const float Dim = FMath::Lerp(0.57f, 0.71f, Moon);
 		for (UMaterialInstanceDynamic* Each : Wearing)
 		{
@@ -18828,7 +18837,11 @@ void ACampaignMapActor::UpdateSky(float CameraDistance, const FVector& CameraFoc
 			Each->SetScalarParameterValue(TEXT("SkyView"), SkyViewNow);
 			Each->SetScalarParameterValue(TEXT("SkyTravel"), Travel);
 			Each->SetScalarParameterValue(TEXT("SkyDim"), Dim);
-			Each->SetScalarParameterValue(TEXT("SkyRain"), bSnow ? 0.5f : 0.32f);
+			// (Her fault 2, the same ruling: inside a 100 by 100 patch of washed land the spread of brightness is to be
+			// no more than a quarter of the patch's mean, where Touraine stood at 0.45. The falling weather is the loud
+			// part of that spread, so it is laid on at about three fifths of its old weight; its marks are softened and
+			// turned every way in MakeWeather. Hers to measure again.)
+			Each->SetScalarParameterValue(TEXT("SkyRain"), bSnow ? 0.3f : 0.2f);
 			// (the mist's bands are for where he plays: from high up they are gone before they can read as ruled lines)
 			Each->SetScalarParameterValue(TEXT("SkyMists"), 0.02f * (1.0f - FMath::SmoothStep(5000.0f, 9000.0f, CameraDistance)));
 			Each->SetVectorParameterValue(TEXT("RainFall"), RainFall);
