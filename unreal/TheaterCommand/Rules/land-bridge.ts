@@ -55,6 +55,7 @@ import type { Command, FieldTicket, Side } from '../../../src/battle/core/types'
 import { LiveBattle, livePiece, liveTicket, ticketSky, type LiveDelta, type LiveOpts, type LiveSky } from '../../../src/battle/land/live';
 import type { LandPlace } from '../../../src/battle/land/field';
 import { PIECES } from '../../../src/battle/land/pieces';
+import { ownTeamsLook } from '../../../src/battle/land/own-teams';
 import type { Gate, Hedge } from '../../../src/battle/land/sim';
 
 let live: LiveBattle | null = null;
@@ -94,6 +95,9 @@ function need(): LiveBattle {
     ticketOrLook: FieldTicket<LandPlace> | { ticket: FieldTicket<LandPlace>; live?: Partial<LiveOpts> & { latLon?: [number, number] } },
     opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean; phones?: boolean; bearers?: boolean; patrol?: boolean; captured?: boolean; worn?: boolean; mud?: boolean; scars?: boolean; wrecks?: boolean; wet?: boolean; blast?: boolean; escort?: boolean; trucks?: boolean; mech?: boolean; spg?: boolean; td?: boolean; cars?: boolean; aa?: boolean; light?: boolean; life?: boolean; hatches?: boolean; japan?: boolean; island?: boolean; fog?: boolean; seen?: number[]; designYears?: Record<string, number>; sky?: LiveSky; latLon?: [number, number] } | null,
   ) {
+    // (release 2, the Battle rules card's "teams", off unless true: every infantry force of a campaign battle with its
+    // own machine-gun and mortar battalions, cut from its own share and its own men: src/battle/land/own-teams.ts)
+    if ((opts as { teams?: boolean } | null | undefined)?.teams === true) ticketOrLook = ownTeamsLook(ticketOrLook);
     // The campaign's TC.battleLook answer as it stands ({ ticket, live: { fog, seen, designYears, sky } }), or a bare ticket.
     const look = 'ticket' in ticketOrLook && ticketOrLook.ticket ? ticketOrLook : null;
     const ticket = look ? look.ticket : (ticketOrLook as FieldTicket<LandPlace>);
