@@ -12780,8 +12780,11 @@ void ACampaignPlayerController::MonthPlayed(bool bWatchAsked)
 	static const bool bScrambleDemo = FParse::Param(FCommandLine::Get(), TEXT("TheaterAirScrambleDemo"));
 	if (bScrambleDemo && !Month.Scramble.bValid && Month.Steps.Num() > 0 && Month.Fallen.IsEmpty() && AAirBattle::DefendOn() && !bScripted)
 	{
+		// (the join's review mend: this runs from EndMonthAside's callback, where EndMonth's Session is not in scope, and
+		// perhaps frames after it; the session is fetched again here, and asked nothing where the war is no longer running)
+		FCampaignSession* Session = GetSession();
 		FScrambleOffer Demo;
-		if (Session->ScrambleDemo(Demo))
+		if (Session && Session->ScrambleDemo(Demo))
 		{
 			Month.Scramble = Demo;
 			UE_LOG(LogTheater, Display, TEXT("Scramble (demonstration): TC.scrambleDemo offers %s, a %s raid on %s (%d)"), *Demo.Id, *Demo.Adjective, *Demo.Name, Demo.Target);
