@@ -1677,8 +1677,10 @@ int main(int Argc, char** Argv)
 							}
 						}
 					}
-					// (the burst under him, his gun 25 or 400 m off all round him, or not known: every fall from under he may
-					// take, none measured, and from a field gun's or a howitzer's shell the throw from his gun's side where its
+					// (the burst under him, his gun 25 or 400 m off all round him, or not known: of the falls from under he may
+					// take, with his gun known those that do not move the limb toward it, or where every one does those that
+					// move it least (UnderFloor), with it not known every one; and from a field gun's or a howitzer's shell the
+					// throw from his gun's side where its
 					// limbs move as far from the gun as that side's falls set (FloorRead); where none from under he may take,
 					// as his gun's side gives him (the cells above), or where it is not known all he may take)
 					for (const double Far : { 25.0, 400.0, -1.0 })
