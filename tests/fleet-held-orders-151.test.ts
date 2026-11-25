@@ -8,7 +8,7 @@ import '../unreal/TheaterCommand/Rules/campaign-bridge';
 
 type Call = (...a: unknown[]) => unknown;
 const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
-type Fleet = { id: number; name: string; nat: string; zone: number; home: number; stance: string; reach: number[] };
+type Fleet = { id: number; name: string; nat: string; zone: number; home: number; stance: string; reach: number[]; bases: number[] };
 type Option = { key: string; label: string; ok: boolean; why: string };
 type Button = { label: string; act: string; ok: boolean; tip: string };
 const HELD = /was sent at the enemy this month: it stays where the battle left it until next month/;
@@ -45,6 +45,27 @@ describe('a fleet that attacked this month is not offered what the rules refuse 
       expect(o.why).toMatch(o.key.endsWith(':port') || o.why === 'It is doing so now.' ? /./ : HELD);
     }
     expect(sailing.find((o) => o.key.endsWith(':port'))!.why).toMatch(HELD);
+  });
+
+  it('the map tints no port to offer a held fleet a new home, and a new base sent anyway is answered with the reason', () => {
+    britain();
+    const home = fleet('Home Fleet');
+    const battle = (TC().view() as { fleets: Fleet[] }).fleets.find((f) => f.name === 'Battle Fleet')!;
+    const offered = home.bases;
+    expect(offered.length).toBeGreaterThan(0);
+    expect((TC().act(`fleetattack:${home.id}:${battle.id}`) as { ok: boolean }).ok).toBe(true);
+    expect(fleet('Home Fleet').bases).toEqual([]);
+    const out = TC().forceOrder(`fleetbase:${home.id}:${offered[0]}`) as { ok: boolean; note: string };
+    expect(out.ok).toBe(false);
+    expect(out.note).toMatch(HELD);
+    // The hand-back is not a sailing order: a refused one keeps its own words.
+    expect((TC().forceOrder(`fleet:${home.id}:staff`) as { ok: boolean }).ok).toBe(true);
+    const again = TC().forceOrder(`fleet:${home.id}:staff`) as { ok: boolean; note: string };
+    expect(again.ok).toBe(false);
+    expect(again.note).toBe('That order cannot be given now.');
+    // Next month its ports are offered again.
+    TC().endMonth();
+    expect(fleet('Home Fleet').bases.length).toBeGreaterThan(0);
   });
 
   it('an order sent anyway, from the map or the page, is answered with the reason', () => {

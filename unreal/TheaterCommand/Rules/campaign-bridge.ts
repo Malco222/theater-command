@@ -664,8 +664,9 @@ function drawView() {
       reach: f.nat === s.human && up ? fleetReach(s, f) : [],
       // (Ruling 86.) And the seas it would reach but for a gate shut to it, each with that gate: sea, gate, sea, gate.
       barred: f.nat === s.human && up ? barredSeas(s, f) : [],
-      // And the friendly ports it could make its new home.
-      bases: f.nat === s.human && up ? baseTargets(s, f).map((r) => r.id) : [],
+      // And the friendly ports it could make its new home. (1.5.1) None for a fleet held where its battle left it this
+      // month: the rules refuse it a new base, so no port is tinted to offer one (its seas still say why when hovered).
+      bases: f.nat === s.human && up && !heldWhy(s, f) ? baseTargets(s, f).map((r) => r.id) : [],
       };
     }),
     // (Ruling 86.) The sea gates: where each mark stands, who holds it, and whether the player's ships may pass.
@@ -3801,7 +3802,7 @@ function forceOrder(key: string) {
   else if (what === 'fleetbase') ok = orderRebase(s, Number(id), Number(a));
   else if (what === 'air') ok = orderAir(s, Number(id), a as AirMission, Number(b));
   else if (what === 'airbase') ok = orderAirBase(s, Number(id), Number(a));
-  return { ok, note: ok ? 'The order is given.' : ((what === 'fleet' || what === 'fleetbase') && heldWhyId(s, Number(id))) || 'That order cannot be given now.', view: view() };
+  return { ok, note: ok ? 'The order is given.' : (((what === 'fleet' && a !== 'staff') || what === 'fleetbase') && heldWhyId(s, Number(id))) || 'That order cannot be given now.', view: view() };
 }
 
 /** Every province's chief town with what the province pays a month and how that ranks (0 to 5), for the map's labels and its wealth view. */
