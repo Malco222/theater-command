@@ -364,6 +364,8 @@ struct FRaidSeat
 	FString Act; // what to pass back to add it or leave it out
 	int32 Aircraft = 0;
 	int32 Km = 0;
+	FString Far; // (1.5.2) how far it has to fly, in the bridge's words: "1,240 km", or "Out of reach" for a carrier wing whose fleet's station is beyond the target
+	bool bOutOfReach = false; // (1.5.2) the bridge sent no km: it cannot reach the target at all
 	float Ready = 0.0f; // 0 to 1
 	bool bPicked = false;
 	bool bLocked = false; // it goes because it is ordered to stick with its bombers

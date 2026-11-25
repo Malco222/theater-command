@@ -3951,6 +3951,9 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 				Entry->TryGetStringField(TEXT("act"), Seat.Act);
 				Entry->TryGetNumberField(TEXT("aircraft"), Seat.Aircraft);
 				Entry->TryGetNumberField(TEXT("km"), Seat.Km);
+				// (1.5.2: a carrier wing out of reach comes with no km and its distance in words, "Out of reach")
+				Entry->TryGetStringField(TEXT("far"), Seat.Far);
+				Seat.bOutOfReach = !Entry->HasField(TEXT("km")) && !Seat.Far.IsEmpty();
 				Entry->TryGetNumberField(TEXT("ready"), Seat.Ready);
 				Entry->TryGetBoolField(TEXT("picked"), Seat.bPicked);
 				Entry->TryGetBoolField(TEXT("locked"), Seat.bLocked);

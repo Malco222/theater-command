@@ -10947,8 +10947,10 @@ namespace
 			const TSharedPtr<FSlateBrush> Plate = Model.IsEmpty() ? nullptr : CutOutOf(Model);
 			const FString Craft = Seat.Kind == TEXT("ftr") ? TEXT("fighters") : Seat.Kind == TEXT("bmr") ? TEXT("bombers") : TEXT("aircraft");
 			// (its airfield and how far it has to fly; a fighter group goes as escort)
-			const FString Where = Seat.Kind == TEXT("ftr") ? FString::Printf(TEXT("%s \u00B7 escort, %s km"), *Seat.Base, *FText::AsNumber(Seat.Km).ToString())
-				: FString::Printf(TEXT("%s \u00B7 %s km"), *Seat.Base, *FText::AsNumber(Seat.Km).ToString());
+			// (1.5.2: the distance in the bridge's own words where it sends them; a wing out of reach has no distance, and goes as nobody's escort)
+			const FString Dist = Seat.Far.IsEmpty() ? FString::Printf(TEXT("%s km"), *FText::AsNumber(Seat.Km).ToString()) : Seat.Far;
+			const FString Where = Seat.Kind == TEXT("ftr") && !Seat.bOutOfReach ? FString::Printf(TEXT("%s \u00B7 escort, %s"), *Seat.Base, *Dist)
+				: FString::Printf(TEXT("%s \u00B7 %s"), *Seat.Base, *Dist);
 			TSharedRef<SHorizontalBox> Head = SNew(SHorizontalBox);
 			if (Plate.IsValid())
 			{
@@ -10967,7 +10969,8 @@ namespace
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
 				[
 					SNew(SPhraseText).Text(FText::FromString(Where)).Face(Font(TEXT("Regular"), 10)).Ink(bCan ? Muted : Faint).Guess(226.0f)
-					.ToolTipText(FText::FromString(FString::Printf(TEXT("%s%s. %s km to fly to the target."), Seat.bAfloat ? TEXT("Aboard the ") : TEXT("Based at "), *Seat.Base, *FText::AsNumber(Seat.Km).ToString())))
+					.ToolTipText(FText::FromString(Seat.bOutOfReach ? FString::Printf(TEXT("%s%s."), Seat.bAfloat ? TEXT("Aboard the ") : TEXT("Based at "), *Seat.Base)
+						: FString::Printf(TEXT("%s%s. %s to fly to the target."), Seat.bAfloat ? TEXT("Aboard the ") : TEXT("Based at "), *Seat.Base, *Dist)))
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
 				[
