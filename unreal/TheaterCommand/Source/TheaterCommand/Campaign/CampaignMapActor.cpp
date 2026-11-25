@@ -4422,7 +4422,7 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 	FMiniatureMesh Model;
 	const double Unit = UnitScale * 2.1; // the size the towns are built to
 	int32 Count = 0;
-	int32 RingTowns = 0, RingAsked = 0, RingSeated = 0, RingRows = 0; // (release 2, the flak brief: what the ring came to, for the log)
+	int32 RingTowns = 0, RingAsked = 0, RingSeated = 0, RingRows = 0, RingTwos = 0, RingNone = 0; // (release 2, the flak brief: what the ring came to, for the log)
 	for (int32 Id = 0; Id < Works.Num() && Id < Data.Regions.Num(); ++Id)
 	{
 		const FIntVector4& Built = Works[Id];
@@ -4698,9 +4698,12 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 				// is: 3, 6, 9. The first pit keeps today's place by the track; the rest stand at even bearings from it,
 				// at the radius today's row starts at (the roofs, plus 0.9, plus a ring). A stand is refused by today's
 				// own tests (off the province, in water, on the army's base, on the airfield) and where it would lie on
-				// a railway, on the road down to a river crossing, on a river, on another pit or on the town's other
-				// works; a refused stand slides up to twenty degrees either way and is then dropped. A town that
-				// cannot seat three (an islet, a harbour spit) keeps today's row. The pit itself is as it was.
+				// a railway, on the road down to a river crossing, on a river, on another pit, on the town's other
+				// works or on the ground of its public buildings; a refused stand slides a little either way and is
+				// then dropped. The pit itself is as it was.
+				// (The art director's ruling of 25 November 2026, 03:06Z, on a town that cannot seat its ring. Brian saw
+				// no guns round his cities, and one pit by the track is the picture he did not see: so a town falls back
+				// to today's row only when it has nowhere else to stand a gun. See THE LIGHTER RING below.)
 				if (bFlakRing && Feet.Num() > 0)
 				{
 					const FVector2D FirstStand = Row.Num() > 0 ? Row[0] : WorldToMap(Feet[0]);
@@ -4714,7 +4717,7 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 						double Off;
 					};
 					TArray<FKeptLine, TInlineAllocator<24>> KeptLines;
-					TArray<TPair<FVector2D, double>, TInlineAllocator<8>> KeptPlaces;
+					TArray<TPair<FVector2D, double>, TInlineAllocator<16>> KeptPlaces;
 					for (const FLandRail& Track : Land.Rails)
 					{
 						if (Track.A == Id || Track.B == Id)
@@ -4729,14 +4732,39 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 							KeptLines.Add(FKeptLine{ Middle, Bridge.At, Ring + 0.5 });
 						}
 					}
-					for (const FLandRiver& River : Land.Rivers)
+					if (RiverPaths.Num() > 0)
 					{
-						for (int32 Bend = 0; Bend + 1 < River.Course.Num(); ++Bend)
+						// (The mend of 25 November 2026.) The rivers AS THEY ARE DRAWN: the smooth curve the ribbon is laid
+						// along, which leaves the straight line between two points of a course by a unit or more at a bend,
+						// so that a pit kept off the straight line could still stand in the water. A pit keeps off the
+						// curve by its own ring, the river's half breadth at its broadest wander and a bank's width.
+						for (int32 RiverNo = 0; RiverNo < RiverPaths.Num(); ++RiverNo)
 						{
-							// (a river is a map unit and a quarter across at its broadest, and it wanders about its course)
-							if (FMath::PointDistToSegment(FVector(Middle, 0.0), FVector(River.Course[Bend], 0.0), FVector(River.Course[Bend + 1], 0.0)) < RingOut + Ring + 1.5)
+							const TArray<FVector2D>& Drawn = RiverPaths[RiverNo];
+							const double Banks = Ring + 1.4 * (RiverBroad.IsValidIndex(RiverNo) ? RiverBroad[RiverNo] : 0.425) + 0.2;
+							const double Near = RingOut + Banks;
+							for (int32 Bend = 0; Bend + 1 < Drawn.Num(); ++Bend)
 							{
-								KeptLines.Add(FKeptLine{ River.Course[Bend], River.Course[Bend + 1], Ring + 1.5 });
+								// (a step of the curve is two units or so: one nowhere near the town is passed by cheaply)
+								if (FVector2D::DistSquared(Drawn[Bend], Middle) < FMath::Square(Near + 8.0)
+									&& FMath::PointDistToSegment(FVector(Middle, 0.0), FVector(Drawn[Bend], 0.0), FVector(Drawn[Bend + 1], 0.0)) < Near)
+								{
+									KeptLines.Add(FKeptLine{ Drawn[Bend], Drawn[Bend + 1], Banks });
+								}
+							}
+						}
+					}
+					else
+					{
+						for (const FLandRiver& River : Land.Rivers)
+						{
+							for (int32 Bend = 0; Bend + 1 < River.Course.Num(); ++Bend)
+							{
+								// (no ribbons laid yet: a river is a map unit and a quarter across at its broadest, and it wanders about its course)
+								if (FMath::PointDistToSegment(FVector(Middle, 0.0), FVector(River.Course[Bend], 0.0), FVector(River.Course[Bend + 1], 0.0)) < RingOut + Ring + 1.5)
+								{
+									KeptLines.Add(FKeptLine{ River.Course[Bend], River.Course[Bend + 1], Ring + 1.5 });
+								}
 							}
 						}
 					}
@@ -4756,50 +4784,136 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 						{
 							KeptPlaces.Emplace(WorksAt, 3.0 + Ring);
 						}
-						if (Built.Y > 0 && PlaceOnCoast(WorksAt))
+						// (the mend: a shipyard with no coast of its own to stand on is built east of the town, and is kept off there too)
+						if (Built.Y > 0 && (PlaceOnCoast(WorksAt) || Place(FVector2D(10.0, 1.0), WorksAt)))
 						{
 							KeptPlaces.Emplace(WorksAt, 4.0 + Ring);
 						}
 					}
-					TArray<FVector2D, TInlineAllocator<9>> Seated;
-					Seated.Add(FirstStand);
-					for (int32 Next = 1; Next < Asked; ++Next)
 					{
-						for (const double Slid : { 0.0, 5.0, -5.0, 10.0, -10.0, 15.0, -15.0, 20.0, -20.0 })
+						// (The mend.) THE TOWN'S PUBLIC BUILDINGS: the market, the hall, the school and the rest stand on six
+						// plots of a quarter of their own (ShowCivic's, the same numbers), the nearest of them against the
+						// town's last roofs, where the ring runs. A pit keeps off all six, built on yet or not: the ground is
+						// kept for them, and a gun that had to move when a school was built would read as a fault. A plot's
+						// paving reaches about a size and a half from its middle at its corners.
+						static const FVector2D QuarterPlots[] = { FVector2D(1.0, 0.0), FVector2D(16.0, 7.2), FVector2D(16.0, 0.0), FVector2D(8.5, 7.2), FVector2D(1.0, 7.2), FVector2D(8.5, 0.0) };
+						const double QuarterNear = CivicNear(Id), QuarterTurn = FMath::DegreesToRadians(CivicTurn(Id));
+						const double PlotSize = Region.bCapital ? 2.9 : (Region.Terrain == TEXT("urban") ? 2.7 : 2.4);
+						for (const FVector2D& Plot : QuarterPlots)
 						{
-							const double Bears = FirstBearing + 2.0 * PI * Next / Asked + FMath::DegreesToRadians(Slid);
-							const FVector2D Try = Middle + FVector2D(FMath::Cos(Bears), FMath::Sin(Bears)) * RingOut;
-							bool bOpen = Data.FindRegionAt(Try.X, Try.Y) == Id && GroundAt(Try.X, Try.Y) > 0.0f;
-							for (int32 K = 0; bOpen && K < KeptPlaces.Num(); ++K)
+							const FVector2D PlotOut(Plot.X, QuarterNear + Plot.Y);
+							KeptPlaces.Emplace(Middle + FVector2D(PlotOut.X * FMath::Cos(QuarterTurn) - PlotOut.Y * FMath::Sin(QuarterTurn), PlotOut.X * FMath::Sin(QuarterTurn) + PlotOut.Y * FMath::Cos(QuarterTurn)), 1.5 * PlotSize + Ring);
+						}
+					}
+					// (whether a pit may stand at a place on the ring, by everything but the other pits)
+					auto StandOpen = [&](const FVector2D& Asking) -> bool
+					{
+						bool bFree = Data.FindRegionAt(Asking.X, Asking.Y) == Id && GroundAt(Asking.X, Asking.Y) > 0.0f;
+						for (int32 KeptNo = 0; bFree && KeptNo < KeptPlaces.Num(); ++KeptNo)
+						{
+							bFree = FVector2D::Distance(Asking, KeptPlaces[KeptNo].Key) >= KeptPlaces[KeptNo].Value;
+						}
+						for (int32 KeptNo = 0; bFree && KeptNo < KeptLines.Num(); ++KeptNo)
+						{
+							bFree = FMath::PointDistToSegment(FVector(Asking, 0.0), FVector(KeptLines[KeptNo].From, 0.0), FVector(KeptLines[KeptNo].To, 0.0)) >= KeptLines[KeptNo].Off;
+						}
+						return bFree;
+					};
+					TArray<FVector2D, TInlineAllocator<9>> Seated;
+					TArray<double, TInlineAllocator<9>> SeatedBears; // (the bearing each was seated at, from the town's middle)
+					Seated.Add(FirstStand);
+					SeatedBears.Add(FirstBearing);
+					// (seats a pit at a bearing if it may stand there, no nearer than today's least to another pit and no
+					// nearer in bearing to one than is asked)
+					auto SeatAt = [&](double Bears, double LeastApart) -> bool
+					{
+						const FVector2D Try = Middle + FVector2D(FMath::Cos(Bears), FMath::Sin(Bears)) * RingOut;
+						bool bOpen = StandOpen(Try);
+						for (int32 K = 0; bOpen && K < Seated.Num(); ++K)
+						{
+							// (never touching, today's least; and the two bearings' difference the short way round)
+							const double Between = Bears - SeatedBears[K];
+							bOpen = FVector2D::Distance(Try, Seated[K]) >= 2.3 * Ring
+								&& FMath::Abs(FMath::Atan2(FMath::Sin(Between), FMath::Cos(Between))) >= LeastApart - 1.0e-6;
+						}
+						if (bOpen)
+						{
+							Seated.Add(Try);
+							SeatedBears.Add(Bears);
+						}
+						return bOpen;
+					};
+					// (a slide either way of a bearing, the nearest first: 0, 5, -5, 10, -10 degrees and so on)
+					auto SlideOf = [](int32 Fifth) -> double
+					{
+						return FMath::DegreesToRadians(((Fifth + 1) / 2) * 5.0 * (Fifth % 2 == 1 ? 1.0 : -1.0));
+					};
+					// (levels 2 and 3 as they were built: six or nine stands, each sliding up to twenty degrees; their pits
+					// are sixty and forty degrees apart, and a wider slide would run them into their neighbours)
+					bool bLighter = Guns == 1;
+					if (!bLighter)
+					{
+						for (int32 Next = 1; Next < Asked; ++Next)
+						{
+							for (int32 Slid = 0; Slid <= 8; ++Slid)
 							{
-								bOpen = FVector2D::Distance(Try, KeptPlaces[K].Key) >= KeptPlaces[K].Value;
+								if (SeatAt(FirstBearing + 2.0 * PI * Next / Asked + SlideOf(Slid), 0.0))
+								{
+									break;
+								}
 							}
-							for (int32 K = 0; bOpen && K < Seated.Num(); ++K)
+						}
+						bLighter = Seated.Num() < 3; // (it cannot seat three: it follows level 1's rule for three)
+					}
+					if (bLighter)
+					{
+						// THE LIGHTER RING (the ruling of 03:06Z). Three stands, 120 degrees apart. A stand may slide up to
+						// forty degrees either way, the nearest bearing first, but must end at least sixty degrees of bearing
+						// from every other seated pit: three pits may sit unevenly, they may never bunch on one side as a
+						// battery.
+						Seated.SetNum(1);
+						SeatedBears.SetNum(1);
+						for (int32 Next = 1; Next < 3; ++Next)
+						{
+							for (int32 Slid = 0; Slid <= 16; ++Slid)
 							{
-								bOpen = FVector2D::Distance(Try, Seated[K]) >= 2.3 * Ring; // (never touching: today's least)
+								if (SeatAt(FirstBearing + 2.0 * PI * Next / 3.0 + SlideOf(Slid), FMath::DegreesToRadians(60.0)))
+								{
+									break;
+								}
 							}
-							for (int32 K = 0; bOpen && K < KeptLines.Num(); ++K)
+						}
+						if (Seated.Num() < 3)
+						{
+							// If one of the three cannot be seated, TWO: the first pit by the track and one more, as nearly
+							// opposite it as there is room and never under ninety degrees from it. Guns on two sides of a
+							// town still read as a defence round it.
+							Seated.SetNum(1);
+							SeatedBears.SetNum(1);
+							for (int32 Slid = 0; Slid <= 36; ++Slid)
 							{
-								bOpen = FMath::PointDistToSegment(FVector(Try, 0.0), FVector(KeptLines[K].From, 0.0), FVector(KeptLines[K].To, 0.0)) >= KeptLines[K].Off;
-							}
-							if (bOpen)
-							{
-								Seated.Add(Try);
-								break;
+								if (SeatAt(FirstBearing + PI + SlideOf(Slid), FMath::DegreesToRadians(90.0)))
+								{
+									break;
+								}
 							}
 						}
 					}
+					// (a ring of three or more; of the lighter ring, two; with only its first pit, today's row)
+					const bool bRinged = Seated.Num() >= (bLighter ? 2 : 3);
 					++RingTowns;
 					RingAsked += Asked;
-					if (3 * Seated.Num() < 2 * Asked)
+					if (Seated.Num() < 3 || 3 * Seated.Num() < 2 * Asked)
 					{
-						// (the art director, 25 November 2026: the log names any town that seats under two thirds of its pits)
+						// (the art director, 25 November 2026: the log names any town that seats under two thirds of its pits,
+						// one that seats only two, and one that falls back, in those words, so that they can be counted)
 						UE_LOG(LogTheater, Display, TEXT("Flak ring: %s (level %d) seats %d of the %d pits it asks%s"), *Region.Name, Guns, Seated.Num(), Asked,
-							Seated.Num() >= 3 ? TEXT("") : TEXT(" and keeps today's row"));
+							!bRinged ? TEXT(" and falls back to the row") : Seated.Num() == 2 ? TEXT(", on two sides of the town") : TEXT(""));
 					}
-					if (Seated.Num() >= 3)
+					if (bRinged)
 					{
 						RingSeated += Seated.Num();
+						RingTwos += Seated.Num() == 2 ? 1 : 0;
 						Feet.Reset();
 						for (const FVector2D& Seat : Seated)
 						{
@@ -4810,6 +4924,12 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 					{
 						++RingRows; // (it keeps today's row)
 					}
+				}
+				else if (bFlakRing)
+				{
+					// (the mend: a town with guns built and no ground for even one pit shows none, and the log says so)
+					++RingNone;
+					UE_LOG(LogTheater, Display, TEXT("Flak ring: %s (level %d) has nowhere to stand a gun, and none is drawn"), *Region.Name, Guns);
 				}
 			}
 			const double Rim = Ring * UnitScale; // (the ring's radius on the table)
@@ -4916,7 +5036,9 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 	if (bFlakRing)
 	{
 		// (for the reader of a picture run: how many towns have guns, how many pits their levels ask and how many found a seat)
-		UE_LOG(LogTheater, Display, TEXT("Flak ring (tc.Look.FlakRing): %d towns with guns, %d pits asked, %d seated in rings, %d towns kept the row"), RingTowns, RingAsked, RingSeated, RingRows);
+		// (the mend of 25 November 2026: and how many seat only two, fall back to the row, or have no ground for a gun at all)
+		UE_LOG(LogTheater, Display, TEXT("Flak ring (tc.Look.FlakRing): %d towns with guns, %d pits asked, %d seated in rings, %d towns seat only two, %d towns fall back to the row, %d towns have nowhere to stand a gun"),
+			RingTowns, RingAsked, RingSeated, RingTwos, RingRows, RingNone);
 	}
 }
 
@@ -14260,8 +14382,12 @@ void ACampaignMapActor::FlySortie(const FSortie& Sortie)
 	{
 		// ("-TheaterFlakLight" gives every raid on a target with no guns built its light flak, for a picture of the pale
 		// puffs: release 2, the flak brief, 2c. They are drawn only with tc.Look.FlakRing on.)
+		// (The mend of 25 November 2026: a raid is up to four flights and the rules name the guns on the first alone, so
+		// "no guns on this flight" is not "no guns built there". It is asked of the province's own works; and a strike
+		// at sea has no town under it to fire.)
 		static const bool bLightAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterFlakLight"));
-		if (bLightAsked && Sortie.bBombers && Flight.Sortie.Flak <= 0)
+		if (bLightAsked && Sortie.bBombers && Flight.Sortie.Flak <= 0 && Data.Regions.IsValidIndex(Sortie.Region)
+			&& !(ShownBuildings.IsValidIndex(Sortie.Region) && ShownBuildings[Sortie.Region].Z > 0))
 		{
 			Flight.Sortie.bLightFlak = true;
 		}
@@ -15894,6 +16020,26 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	// (release 2, the art director's flak brief of 24 November 2026; tc.Look.FlakRing, off as it comes)
 	const bool bFlakRing = FlakRingAsked();
 	TArray<int32, TInlineAllocator<8>> TownsFiring; // (a town's guns are drawn firing once, however many raids are over it)
+	// (The mend of 25 November 2026. A raid is up to four flights, and each was puffing for itself: three times the
+	// puffs, and pale puffs over a gunned town beside its heavy bursts, since the rules name the guns on the first
+	// flight alone. Light flak is fired by one flight a town at a time, over a province of the map, and never over
+	// a town with guns built or with a flight under its heavy guns.)
+	TArray<int32, TInlineAllocator<8>> TownsPuffing;
+	auto TownGunned = [this](int32 Town) -> bool
+	{
+		if (ShownBuildings.IsValidIndex(Town) && ShownBuildings[Town].Z > 0)
+		{
+			return true;
+		}
+		for (const FFlight& Raiding : Flights)
+		{
+			if (Raiding.Sortie.Region == Town && Raiding.Sortie.Flak > 0)
+			{
+				return true;
+			}
+		}
+		return false;
+	};
 	for (int32 F = 0; F < Flights.Num(); ++F)
 	{
 		FFlight& Flight = Flights[F];
@@ -15980,13 +16126,29 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				const double FlashOut = FMath::Max(0.2 * GunUnit, 0.0015 * CameraDistance);
 				const FLinearColor MuzzleBody(FColor(214, 128, 52)), MuzzleHeart(FColor(238, 176, 96)), GunSmoke(0.46f, 0.46f, 0.47f);
 				const FVector DownTheWind = Wind.GetSafeNormal();
+				// (The mend of 25 November 2026. Each gun had a reload of its own, 1.7 to 2.4 seconds: guns on different
+				// clocks drift through one another, and every so often several fired within a frame or two, as one. A
+				// town's guns now load to ONE time, the town's own, and each fires at its turn round the ring and a
+				// little late of it, by up to four tenths of the gap to the next: so the fire runs round the ring and
+				// no two guns ever fire together.)
+				const double Reload = FRandomStream(Flight.Sortie.Region * 613 + 11).FRandRange(1.7f, 2.4f);
+				// (And the smoke at the barrels came and went at a step as the raid crossed into and out of its firing
+				// window. It comes in over the window's first tenth and goes out over its last, with the raid that is
+				// deepest in its window over this town.)
+				float InWindow = 0.0f;
+				for (const FFlight& RaidOver : Flights)
+				{
+					if (RaidOver.Sortie.Region == Flight.Sortie.Region && RaidOver.Sortie.Flak > 0 && !RaidOver.At.IsZero())
+					{
+						InWindow = FMath::Max(InWindow, static_cast<float>(FMath::SmoothStep(0.30, 0.33, RaidOver.Share) * (1.0 - FMath::SmoothStep(0.60, 0.64, RaidOver.Share))));
+					}
+				}
 				for (int32 GunNo = 0; GunNo < TownGuns->Num(); ++GunNo)
 				{
 					const FFlakGun& Barrel = (*TownGuns)[GunNo];
 					FRandomStream Own(Flight.Sortie.Region * 613 + GunNo * 97 + 11);
-					// (a round every two seconds or so, each gun's time its own; its turn in the ring, and a little out of it)
-					const double Reload = Own.FRandRange(1.7f, 2.4f);
-					const double SinceShot = FMath::Fmod(Now + Reload * (static_cast<double>(GunNo) / TownGuns->Num() + Own.FRandRange(0.0f, 0.3f)), Reload);
+					// (a round every two seconds or so: its turn in the ring, and a little late of it)
+					const double SinceShot = FMath::Fmod(Now + Reload * ((GunNo + Own.FRandRange(0.0f, 0.4f)) / TownGuns->Num()), Reload);
 					if (SinceShot < (bMuzzleHeld ? 0.6 : 0.09))
 					{
 						bDrawingLight = true;
@@ -15999,13 +16161,15 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 						// (its smoke: thrown up the barrel's line and slowing, then taken by the wind; thin within a second)
 						const double SmokeAged = SinceShot / 1.3;
 						const FVector SmokeAt = Barrel.Muzzle + Barrel.Bore * ((0.25 + 0.7 * FMath::Sqrt(SmokeAged)) * GunUnit) + DownTheWind * (0.3 * SmokeAged * GunUnit);
-						Draw(SmokeAt, FMath::Max((0.16 + 0.34 * SmokeAged) * GunUnit, 0.6 * FlashOut), GunSmoke, static_cast<float>(0.55 * (1.0 - SmokeAged) * FMath::SmoothStep(0.04, 0.12, SinceShot)));
+						Draw(SmokeAt, FMath::Max((0.16 + 0.34 * SmokeAged) * GunUnit, 0.6 * FlashOut), GunSmoke, InWindow * static_cast<float>(0.55 * (1.0 - SmokeAged) * FMath::SmoothStep(0.04, 0.12, SinceShot)));
 					}
 				}
 			}
 		}
-		else if (bFlakRing && Flight.Sortie.bLightFlak && Flight.Sortie.bBombers && Flight.Share > 0.3 && Flight.Share < 0.64)
+		else if (bFlakRing && Flight.Sortie.bLightFlak && Flight.Sortie.bBombers && Flight.Share > 0.3 && Flight.Share < 0.64
+			&& Data.Regions.IsValidIndex(Flight.Sortie.Region) && !TownsPuffing.Contains(Flight.Sortie.Region) && !TownGunned(Flight.Sortie.Region))
 		{
+			TownsPuffing.Add(Flight.Sortie.Region); // (one flight fires a town's light flak at a time: the mend above)
 			// (Release 2, the flak brief, section 2c; the air thread sends "light" on a bomber flight over a target with
 			// no built guns.) LIGHT FLAK. No guns are built here, and the rules still cost the raid bombers there. It is
 			// seen only by its fire: a pale grey puff, half the size of a heavy burst, at two thirds of the bombers'
@@ -16357,6 +16521,11 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			// (Release 2, the flak brief, 2c, with the ring on: by night a burst is an orange flash for a fifth of a
 			// second and then a smoke that is barely there.)
 			const bool bNightBurst = bFlakRing && Moonlit > 0.5f;
+			// (The mend of 25 November 2026: the smoke was let down to three tenths at a step as the moonlight passed
+			// the half, and every burst in the air thinned in one frame at dusk and thickened in one at dawn. It
+			// thins between three and seven tenths of the moonlight; the flash keeps its day and night rules. The
+			// burst's shadow on the ground thins with its smoke.)
+			const float NightThin = bFlakRing ? FMath::Lerp(1.0f, 0.3f, FMath::SmoothStep(0.3f, 0.7f, Moonlit)) : 1.0f;
 			if (bTop && ++Shown > 5)
 			{
 				continue; // (from the top: three to five, the newest)
@@ -16431,7 +16600,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				for (int32 Row = 0; Row < 3; ++Row)
 				{
 					const double Square = 0.5 * SmokeLong * SheetSquare[Row] / SheetSmoke[Row];
-					DrawShape(OnGround, Downwind * Square, Level * (Square * 0.9), FirstShape, Row, FLinearColor(0.0f, 0.0f, 0.0f), 0.3f * Remains * AgeShare[Row], bTurned);
+					DrawShape(OnGround, Downwind * Square, Level * (Square * 0.9), FirstShape, Row, FLinearColor(0.0f, 0.0f, 0.0f), 0.3f * NightThin * Remains * AgeShare[Row], bTurned);
 				}
 			}
 			// (Ruling 107; the art director's brief.) Smoke inside a searchlight's beam is lit by it, about 1.7 times as
@@ -16460,7 +16629,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			// ("-TheaterFlakFlashHeld" holds every flash for six tenths of a second, so that a still catches some: a
 			// flash of two frames is in one still in ten. Its smoke is held as thin as it is in those two frames.)
 			static const bool bFlashHeld = FParse::Param(FCommandLine::Get(), TEXT("TheaterFlakFlashHeld"));
-			const float Thinned = Remains * (1.0f - 0.3f * Hazed) * (bFlashHeld && Age < 0.6 && Burst.Born >= 0.0 ? 0.15f : 1.0f) * (bNightBurst ? 0.3f : 1.0f);
+			const float Thinned = Remains * (1.0f - 0.3f * Hazed) * (bFlashHeld && Age < 0.6 && Burst.Born >= 0.0 ? 0.15f : 1.0f) * NightThin;
 			if (Burst.bLight)
 			{
 				// (The art director's mend of the flak brief's 2c, 25 November 2026: light flak is drawn with the soft puffs
@@ -16469,7 +16638,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				// a half seconds: one soft puff, and a smaller one a little down the wind of it. By night it takes the
 				// hour's light as all smoke does, and is barely there.)
 				const FLinearColor PaleGrey(FColor(200, 198, 190));
-				const float PaleStrong = static_cast<float>(0.6 * (1.0 - FMath::Clamp(Age / 2.5, 0.0, 1.0)) * FMath::SmoothStep(0.0, 0.06, Age)) * (bNightBurst ? 0.3f : 1.0f);
+				const float PaleStrong = static_cast<float>(0.6 * (1.0 - FMath::Clamp(Age / 2.5, 0.0, 1.0)) * FMath::SmoothStep(0.0, 0.06, Age)) * NightThin;
 				const double PaleOut = 0.55 * SmokeLong;
 				Draw(Heartland, PaleOut, PaleGrey, PaleStrong);
 				if (!bTop)
