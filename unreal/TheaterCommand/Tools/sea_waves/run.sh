@@ -137,14 +137,17 @@ fi
 # Step 14(c), the gale (the release 2 ocean plan; -TheaterSeaGale, off by default, Brian's and the art director's decision):
 # FleetWaves' gale (the cap to 24.4 m/s, GaleFetchOf, StreakShareOf, PaintLanesGale), Battle/FleetRideGale.h (the ride's
 # Beaufort 7-to-9 limits as data, the step 5 ride not being built), Battle/SeaFace.h's MakeStreaks, and the freeboard tests.
-#   - gale_pin: everything the wave core gives below today's 13.8 m/s cap, and SeaFace's whitecaps and shore, against
-#     gale.sha, which gale_pin itself wrote against 942d9295 (ocean-r2's head, before the gale): byte for byte, so the gale
-#     acts only behind its switch;
+#   - gale_pin: everything the wave core gives below today's 13.8 m/s cap (the sea, its edges and bearings, the mesh, the
+#     placing, the chip's stages), and SeaFace's whitecaps and shore, against gale.sha, which gale_pin itself wrote against
+#     942d9295 (ocean-r2's head, before the gale): byte for byte, so the gale acts only behind its switch;
 #   - gale_decks: the deck heights the freeboard tests use, measured again from the ship models (Content/Models/Ships);
 #   - gale_test: the gale's spectrum to 24.4 m/s with J above 0.15, WMO's Beaufort 7, 8 and 9 (heights and periods, fetch-
-#     limited and fully raised), the whitecaps at gale winds, the wind's streaks, the ride's limits against the art
-#     director's own table read from SeaShow.cpp, the freeboard tests at Beaufort 7-9 (its report in OUT/gale/
-#     gale_freeboard.txt), the lane's blue as each hull's footprint, and the source scan (look only).
+#     limited and fully raised, and the cap meeting the fully raised sea), the whitecaps at gale winds, the wind's streaks,
+#     the ride's limits (equal to the art director's own table, read from SeaShow.cpp, at every wind to 13.8 m/s, climbing
+#     only above it), the freeboard tests at Beaufort 7-9 in the sea the scene draws (each instant of green water counted
+#     once, the boats at their drawn trim awash, the look's heave against its transfer function, the shares pinned as
+#     measured, its report in OUT/gale/gale_freeboard.txt), the lane's blue as each hull's footprint, and the source scan
+#     (look only).
 GALE="$OUT/gale"
 rm -rf "$GALE" "$OUT/gale_pin" "$OUT/gale_test"
 mkdir -p "$GALE"
@@ -153,7 +156,7 @@ if [ -x "$OUT/gale_pin" ]; then
   step "gale_pin (the wave core below 13.8 m/s, byte for byte 942d9295's)" "$OUT/gale_pin" "$HERE/gale.sha"
 fi
 step "gale_decks (the ship models' own decks)" python3 -I -B "$HERE/gale_decks.py"
-step "gale_test (build)" $CXX ${SEA_WAVES_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" "$HERE/gale_test.cpp" "$SRC/Battle/FleetWaves.cpp" "$SRC/Battle/SeaFace.cpp" -o "$OUT/gale_test"
+step "gale_test (build)" $CXX ${SEA_WAVES_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" "$HERE/gale_test.cpp" "$SRC/Battle/FleetWaves.cpp" "$SRC/Battle/SeaFace.cpp" "$SRC/Battle/ConvoyLooksCore.cpp" -o "$OUT/gale_test"
 if [ -x "$OUT/gale_test" ]; then
   gale_every() {
     "$OUT/gale_test" "$SRC" "$GALE" 2>&1 | tee "$GALE/gale_test.log"
