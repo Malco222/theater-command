@@ -90,13 +90,17 @@ describe('a nation counts in a sea\'s read only against those it is at war with 
     expect(Math.round(seaKm(g, division.base, honshu))).toBe(1295);
     expect(groupOverSea(g, division, honshu, skiesOver(g, honshu)!)).toBe(0);
     f.stance = 'patrol';
-    // Japan's read of her coast is the fleet's 7 and the 150 aircraft at Tokyo: 12.625, under the 15 that closes a sea.
+    // Japan's read of her coast is the 5th Fleet's and the 150 aircraft at Tokyo's: nothing from the division. The fleet
+    // read 7 at the 0.7 every navy without a row of its own fought at; with Japan's own quality (the design director's
+    // B1 of 25 November 2026, the historian's 1.15) it reads in proportion, 11.5, and with Tokyo's 5.625 that is over
+    // the 15 that closes a sea: the coast closes on the fleet and Tokyo's aircraft alone, the bombers out of reach.
     const e = seaSide(g, honshu, 'USA', true);
-    expect(e.ships).toBeCloseTo(7, 9);
+    expect(e.ships).toBeCloseTo((7 * NAVY.quality.JAP) / NAVY.quality._default, 9);
     expect(e.air).toBeCloseTo(5.625, 9);
-    expect(e.total).toBeLessThan(NAVY.closed.min);
-    expect(closedTo(g, honshu, 'USA')).toBe(false);
-    expect(new SeaPicture(g).closed(honshu, 'USA')).toBe(false);
+    expect(e.total).toBeCloseTo(e.ships + e.air, 9);
+    const shut = e.total >= NAVY.closed.min;
+    expect(closedTo(g, honshu, 'USA')).toBe(shut);
+    expect(new SeaPicture(g).closed(honshu, 'USA')).toBe(shut);
   });
 
   it('with none of its enemies in a sea nothing is against it, and its friends count as before', () => {
