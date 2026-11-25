@@ -69,7 +69,7 @@ import { WEATHER, skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } fr
 import desertData from '../../data/campaign/desert.json';
 import farSandData from '../../data/campaign/far-sand.json';
 import theatreData from '../../data/campaign/theatres.json';
-import { raisedQuality, stopDef, stopOf } from './history';
+import { contactRuleActs, raisedQuality, stopDef, stopOf } from './history';
 import { chargeDelay, isRearguard, rearguardWeeks, rearguardsAt, rearguardsLapse, screenWeeks, weeksWords } from './rearguard';
 import { clientWar, tiedPair } from './far';
 import { atomFallen, atomMonth, atomPress } from './atom';
@@ -5705,7 +5705,9 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // second 18th Division beside it. `fromWaits`.)
     // (At a stop that keeps a book, stops 1 and 2, the book's rows keep their book as every other piece does, and
     // neither of the two is read: the contact rule acts at stops 3 to 5. Her ruling of 21:25Z, 25 November 2026.)
-    const inFight = g.flags.fromWait === 1 && !stopDef(g).book && !hisOffers(g, nat);
+    // (And where the book of the row's own place is closed it acts there too, at every stop: "a closed book brings the
+    // contact rule in", her 22:05Z; history.ts `contactRuleActs`.)
+    const inFight = g.flags.fromWait === 1 && contactRuleActs(g, g.byName[row[5]]) && !hisOffers(g, nat);
     let own = false;
     if (Array.isArray(o.from) && !ashore && row[1] === nat && farOn(g) && (g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name)
       && (onLiveFront(g, nat, x) || (inFight && x.reg !== reg?.id && corpsInContact(g, nat, x))))
@@ -5720,8 +5722,10 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // door too (pacific-japan/dd-form-from-rows-contact-1125.md). Its own switch, 'fromWait' (stage.json), off until its
     // gate passes. drawn.ts, `corpsInContact`. As on the far side it acts at stops 3 to 5 only: at the book's stops the
     // book's rows keep their book, her ruling of 21:25Z.)
+    // (Where the west's book is closed it acts at those stops too: "a closed book brings the contact rule in", her
+    // 22:05Z; history.ts `contactRuleActs`.)
     const formsAt = reg?.id;
-    if (g.flags.fromWait === 1 && g.flags.open === 1 && !farOn(g) && !stopDef(g).book && Array.isArray(o.from) && !ashore && row[1] === nat && formsAt !== undefined
+    if (g.flags.fromWait === 1 && g.flags.open === 1 && !farOn(g) && contactRuleActs(g, g.byName[row[5]]) && Array.isArray(o.from) && !ashore && row[1] === nat && formsAt !== undefined
       && g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && x.reg !== formsAt && corpsInContact(g, nat, x))) { g.flags[`wait:${i}`] = g.turn; return; }
     // (The far side: a row that waits on a formation the player has been offered and has not answered, the one that
     // makes its cut or the one it is itself made from, waits on his answer and has its half year from the month he
