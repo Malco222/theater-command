@@ -6027,9 +6027,15 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		Afterwards.RemoveAt(0);
 		Step();
 	}
-	else if (FCampaignSession* Answering = GetSession())
+	else if (ACampaignGameMode* AnsweringMode = GetMode())
 	{
-		Answering->Deliver();
+		// (Release 2, tc.Speed.NationsAside; the R2 Mac pass of 25 November 2026.) The rules' own session, not
+		// GetSession(), which is null until a war runs: the opening screen's countries are asked before any war, and
+		// with no war their answer sat unread until the next order (50 s on a warm launch, 576 s on the first).
+		if (FCampaignSession* Answering = AnsweringMode->GetSession())
+		{
+			Answering->Deliver();
+		}
 	}
 	// (Rules 84.3.3, trap 1.) The card lesson 1 lies on, once the opening flight is over and nothing else has the screen.
 	if (bOpeningCardOwed && BriefingAt <= 0.0 && !bWatching && !Newsreel.bOn && Announcements.Num() == 0 && !FaceOff.bVisible && !WarPrompt.bVisible && !Opening.bVisible && !IsAnswering())
