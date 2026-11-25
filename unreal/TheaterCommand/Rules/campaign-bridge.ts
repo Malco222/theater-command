@@ -149,6 +149,7 @@ import { FIGHTERS } from '../../../src/campaign/fighters';
 import { whyNotCash, drillTo, whyNoSchool, wearOf } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
+import { LANE_NO_STAFF, LANE_UNCOUNTED, laneCarries } from '../../../src/campaign/navy';
 import { NAVY, subScene } from '../../../src/campaign/navy';
 import { chanceOn, headline } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
@@ -5464,9 +5465,13 @@ function fleetPage(s: Game, id: number): Page | null {
       ],
     };
   });
+  // (Release 2: a lane whose shipping is not counted in the game says so in place of its losses, and that no staff
+  // guards or raids it: the design director's 12:39Z, Pacific batch 3, A(2); the UI director's words.)
   const lanes: PageRow[] = (o?.lanes ?? []).map((l) => ({
     nat: l.to, title: l.name,
-    lines: [l.why ?? `Cargoes lost on it now: ${share(l.now)}. With this fleet as its escort: ${share(l.then)}.`, l.bound ? 'This fleet is its escort now.' : ''].filter(Boolean),
+    lines: (laneCarries(s, l.lane)
+      ? [l.why ?? `Cargoes lost on it now: ${share(l.now)}. With this fleet as its escort: ${share(l.then)}.`, l.bound ? 'This fleet is its escort now.' : '']
+      : [l.why ?? '', LANE_UNCOUNTED, LANE_NO_STAFF, l.bound ? 'This fleet is its escort now.' : '']).filter(Boolean),
     buttons: [{ label: l.bound ? 'ITS ESCORT NOW' : 'ESCORT THIS LANE', act: `fleetescort:${id}:${l.lane}`, ok: up && !l.why && !l.bound, tip: l.why ?? 'The fleet is bound to the lane and sails with its convoys: fewer cargoes are sunk, and it fights only for them.' }],
   }));
   const coasts: PageRow[] = (o?.coasts ?? []).map((r) => {

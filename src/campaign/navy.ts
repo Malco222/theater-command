@@ -284,6 +284,14 @@ export const laneCounts = (rt: SeaRoute): boolean => rt.carries !== false;
 /** Whether the sea lane or convoy route of this id carries something laid, as every staff counts it (cargoLaid). */
 export const laneCarries = (g: Game, id: string): boolean => { const rt = seaRoutes(g).find((r) => r.id === id); return !!rt && laneCounts(rt); };
 
+/**
+ * A fleet's page on a lane whose shipping is not counted in the game (cargoLaid false), word for word (the UI director's
+ * words of 12:57Z, 25 November 2026, for the design director's ruling of 12:39Z, Pacific batch 3, A(2) and A(7)): the
+ * first in place of the tons and the sunk line, the second after it, on the fleet page and nowhere else.
+ */
+export const LANE_UNCOUNTED = 'Its shipping is not counted in the game: an escort saves no cargo here, and raiders sink none.';
+export const LANE_NO_STAFF = 'So no staff on either side, yours included, sends ships to guard or raid it.';
+
 /** Every route cargoes travel by sea, once each: what an escort can be bound to. */
 export function seaRoutes(g: Game): SeaRoute[] {
   let rows = routeCache.get(g.seas);

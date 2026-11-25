@@ -98,6 +98,7 @@ import {
   FLEETS, NAVY, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedLine, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, numberWord, oreRoute, ownBoatsReach, faultyRaiders, torpedoWords, seaAt, seaBorders, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips, whyNotShip, zoneOf,
   type CrossingAccount, type CrossingOutlook, type SeaHold,
 } from '../navy';
+import { LANE_NO_STAFF, LANE_UNCOUNTED, laneCarries } from '../navy';
 import { bombard, fleetDoing, squadronName, type FleetCard, type ShipCard } from '../fleets';
 import { phaseFor, theatrePhases } from '../ai';
 import { SIDE_NAME, shareWords } from '../domination';
@@ -5819,7 +5820,10 @@ function fleetOrders(f: Fleet): string {
     out += `<h3>Its aircraft</h3><p class="sub" style="margin:0 0 6px">A carrier is a floating airfield. At sea its aircraft reach every coast of the sea they are in, inland as far as their range allows, and the seas next door. Fighters keep enemy bombers off the fleet; strike aircraft go for ships, harbours and targets ashore. They are made up to strength only in harbour.</p>${wings.map((w) => `<button class="pickrow" data-act="wing" data-id="${w.id}">${groupIcon(w.kind, f.nat)}<span class="grow"><b>${esc(w.label)}</b> · ${num(w.aircraft)} of ${num(w.est)}<br>${small(esc(`${w.doing}. Reach ${num(w.range)} km.${w.aircraft < w.est ? ` ${w.note}` : ''}`))}</span><span class="tag${w.flew ? '' : ' good'}">${w.flew ? 'Flew' : w.kind === 'bmr' ? 'Plan a strike' : 'Orders'}</span></button>`).join('')}`;
   }
   if (pieces && o.lanes.length) {
-    out += `<h3 id="flanes">Escort a shipping lane</h3><p class="sub" style="margin:0 0 6px">An escort sails with the convoys the whole length of the lane. Destroyers count most, carriers and cruisers help, and battleships guard nothing.</p>${o.lanes.map((p) => `<div class="pickrow${p.bound ? ' pick' : ''}">${flagIcon(p.to, g.nations[p.to].color, 18, 'inh')}<span class="grow"><b>${esc(upFirst(p.name))}</b><br>${small(p.bound ? `This fleet is its escort. ${pc100(p.now)} of the cargoes are being sunk.` : p.why ? esc(p.why) : p.raid <= 0 ? 'No raiders are on it now.' : `Cargoes sunk: ${pc100(p.now)} now, ${pc100(p.then)} with this fleet as its escort.`)}</span>${p.bound ? '<span class="tag good">Escorting</span>' : `<button class="btn small go" data-act="escort" data-lane="${p.lane}" ${p.why ? `disabled title="${esc(p.why)}"` : ''}>Escort</button>`}</div>`).join('')}`;
+    // (Release 2: a lane whose shipping is not counted in the game says so in place of its losses, and that no staff
+    // guards or raids it: the design director's 12:39Z, Pacific batch 3, A(2); the UI director's words.)
+    const uncounted = (p: { lane: string; bound: boolean; why: string | null }): string => [p.bound ? 'This fleet is its escort.' : '', p.why ?? '', LANE_UNCOUNTED, LANE_NO_STAFF].filter(Boolean).map(esc).join(' ');
+    out += `<h3 id="flanes">Escort a shipping lane</h3><p class="sub" style="margin:0 0 6px">An escort sails with the convoys the whole length of the lane. Destroyers count most, carriers and cruisers help, and battleships guard nothing.</p>${o.lanes.map((p) => `<div class="pickrow${p.bound ? ' pick' : ''}">${flagIcon(p.to, g.nations[p.to].color, 18, 'inh')}<span class="grow"><b>${esc(upFirst(p.name))}</b><br>${small(!laneCarries(g, p.lane) ? uncounted(p) : p.bound ? `This fleet is its escort. ${pc100(p.now)} of the cargoes are being sunk.` : p.why ? esc(p.why) : p.raid <= 0 ? 'No raiders are on it now.' : `Cargoes sunk: ${pc100(p.now)} now, ${pc100(p.then)} with this fleet as its escort.`)}</span>${p.bound ? '<span class="tag good">Escorting</span>' : `<button class="btn small go" data-act="escort" data-lane="${p.lane}" ${p.why ? `disabled title="${esc(p.why)}"` : ''}>Escort</button>`}</div>`).join('')}`;
   }
   if (pieces) {
     const card = fleetView(g, f.id)!;
