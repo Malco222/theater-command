@@ -1120,13 +1120,15 @@ export class AirSim implements BattleSim<AirUnit> {
    * defenders, and the card counts the escort over its bombers for the whole raid (L.escort, 227), so the box it leaves
    * is not priced as one never escorted.
    *
-   * M1 (the design director, 25 November 2026 16:24Z): such an escort, held off or fought out, counts not only over
-   * its own box but over every bomber box of its side flying with that box (flies): within SKY.escort.near of it on
-   * the map and within one height band of it, as cover() already lets the boxes of a stream share the escort near
-   * them. One escort group sent with two boxes no longer leaves the second priced as never escorted (the 2.5 times
-   * cap) once the hunters drag it away (the Hampshire trace, 25 November 2026: 64.2 bombers a raid against a card of
-   * 54.9). REUSED G: SKY.escort.near (4 km) and the one band are cover()'s own reach, made for another purpose (the
-   * escort near a box) and reused here for "flying with"; they were not measured for this.
+   * M1 (the design director, 25 November 2026 16:24Z: "a held-off escort counts over every box within
+   * SKY.escort.near"): an escort HELD OFF counts not only over its own box but over every bomber box of its side
+   * flying with that box (flies): within SKY.escort.near of it on the map and within one height band of it, as cover()
+   * already lets the boxes of a stream share the escort near them. One escort group sent with two boxes no longer
+   * leaves the second priced as never escorted (the 2.5 times cap) once the hunters drag it away (the Hampshire trace,
+   * 25 November 2026: 64.2 bombers a raid against a card of 54.9). It moves only that shape: an escort fought out and
+   * flying home counts over its own box alone, as before the ruling. REUSED G: SKY.escort.near (4 km) and the one band
+   * are cover()'s own reach, made for another purpose (the escort near a box) and reused here for "flying with"; they
+   * were not measured for this.
    */
   private tied(f: AirUnit, b: AirUnit): boolean {
     if (f.air !== 'ftr' || f.side !== 'att') return false;
@@ -1136,7 +1138,7 @@ export class AirSim implements BattleSim<AirUnit> {
     const s = this.strafing.get(f.id);
     if (s && s.box === b.id && (f.job.do === 'strafe' || (s.over && f.job.do === 'home'))) return true;
     if (f.job.do === 'escort') return this.flies(f.job.on, b) && f.contacts.some((i) => this.unit(i)?.def === 'escort');
-    return f.job.do === 'home' && f.vig < SKY.spent && this.flies(this.foughtFor.get(f.id), b);
+    return f.job.do === 'home' && f.vig < SKY.spent && this.foughtFor.get(f.id) === b.id;
   }
 
   /**
