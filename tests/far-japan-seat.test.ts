@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
 import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, judgeGoals, openGoals } from '../src/campaign/goals';
 import { startOpen } from '../src/campaign/staff';
+import { TECH, gateOf, hasTech, teamsOf, techOf } from '../src/campaign/tech';
 import type { Game } from '../src/campaign/types';
 
 const MAY_42 = 33, DEC_45 = 76;
@@ -75,4 +76,33 @@ describe("America's long goal once Japan is on the chart", () => {
     const g = seat('USA');
     expect(goalChecks(g, 'USA', long).map((c) => c.label)).toEqual(['Washington', 'Germany beaten', 'Japan beaten', 'An American army on the continent']);
   }, 300000);
+});
+
+// Ruling 68(a), the standing rule (16 November): nothing is reserved to one country, and "Japan and America get
+// starting lists, not private technologies". America had its list; Japan opened with none, with one research team
+// where every other great power has two, and with the carrier's own technology unresearched (a year's work before
+// its national ability, cheaper carriers, meant anything).
+describe("Japan's place in the technology tree", () => {
+  it('opens September 1939 with its five rows, every one of them a row of the common tree', () => {
+    const g = seat('JAP');
+    expect(techOf(g, 'JAP')!.done).toEqual(['tanks', 'monoplanes', 'mediumbombers', 'carriers', 'fleetsubs']);
+    for (const id of TECH.start.JAP) expect(TECH.techs.some((t) => t.id === id), id).toBe(true);
+    // The carrier's gate is the common one, and Japan is past it on the first day; Britain and America as before.
+    expect(gateOf('ship:cv')?.id).toBe('carriers');
+    for (const nat of ['JAP', 'UK', 'USA']) expect(hasTech(g, nat, 'carriers'), nat).toBe(true);
+    expect(hasTech(g, 'GER', 'carriers')).toBe(false);
+  }, 300000);
+
+  it('has two research teams, as each of the other six great powers has, and a staff that reads the sea and the air first', () => {
+    const g = seat('JAP');
+    for (const nat of ['GER', 'UK', 'FRA', 'SOV', 'ITA', 'USA', 'JAP']) expect(teamsOf(g, nat), nat).toBe(2);
+    expect(teamsOf(g, 'CHN')).toBe(1);
+    expect(TECH.ai.order.JAP).toEqual(['naval', 'air', 'land', 'industry', 'doctrine']);
+  }, 300000);
+
+  it('leaves every older row of the tree as it was', () => {
+    expect(TECH.start.USA).toEqual(['tanks', 'motor', 'monoplanes', 'mediumbombers', 'carriers', 'machinetools', 'assembly']);
+    expect(TECH.start.GER).toHaveLength(8);
+    expect(TECH.slots).toMatchObject({ _default: 1, GER: 2, UK: 2, FRA: 2, SOV: 2, ITA: 2, USA: 2 });
+  });
 });

@@ -84,6 +84,7 @@ import farAfrica from '../../data/campaign/far-africa.json';
 import farBooks from '../../data/campaign/far-books.json';
 import japanSeat from '../../data/campaign/far-japan-seat.json';
 import goals from '../../data/campaign/goals.json';
+import tech from '../../data/campaign/tech.json';
 
 type Obj = Record<string, any>;
 
@@ -92,6 +93,8 @@ const TARGETS: Record<string, Obj> = {
   grand, world, traits, eve, relations, diplomacy, government, commanders, open, 'setup-1939': setup1939, history, east, rivals, manpower, league, navy, arsenal, towns, resources, air, siege,
   // (What a player of a far seat plays for, and what the far side adds to an old seat's goals: ruling 196, points 6 and 7.)
   goals,
+  // (What a far great power opens with in the tree: ruling 68(a), starting lists and never private technologies.)
+  tech,
 };
 
 /** The seats files, in the order they are laid. */

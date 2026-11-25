@@ -1,5 +1,6 @@
 {
-  "_about": "Japan's seat (a seats file, laid by src/campaign/far-rows.ts while the far side's switch is on; kept by hand by the Japan and Pacific thread of 24 November 2026). What a player who takes Japan plays for, and what the Pacific adds to America's own goals. Ruling 196, points 6 and 7 (the design director, 17 November 2026, on the Pacific planner's paper 06): Japan's short campaign is 'Oil for the fleet' (Singapore, Manila, Batavia and Palembang by the end of May 1942, month 33), its long one 'The ring holds' (Tokyo, Okinawa, Saipan and Palembang still Japan's when 1946 opens); America's long campaign gains Japan and the title 'Victory on two oceans'. Goals judge a war and never change it (goals.ts): no computer country reads them. 'USA+' lays its lines over America's long goal as goals.json has it: Germany stays in 'beaten' and Japan joins it.",
+  "_about": "Japan's seat (a seats file, laid by src/campaign/far-rows.ts while the far side's switch is on; kept by hand by the Japan and Pacific thread of 24 November 2026). What a player who takes Japan plays for, and what the Pacific adds to America's own goals. Ruling 196, points 6 and 7 (the design director, 17 November 2026, on the Pacific planner's paper 06): Japan's short campaign is 'Oil for the fleet' (Singapore, Manila, Batavia and Palembang by the end of May 1942, month 33), its long one 'The ring holds' (Tokyo, Okinawa, Saipan and Palembang still Japan's when 1946 opens); America's long campaign gains Japan and the title 'Victory on two oceans'. Goals judge a war and never change it (goals.ts): no computer country reads them. 'USA+' lays its lines over America's long goal as goals.json has it: Germany stays in 'beaten' and Japan joins it. 'tech' (ruling 68(a), the standing rule that nothing is reserved to one country: 'Japan and America get starting lists, not private technologies'): Japan opens September 1939 holding the five rows in 'start' and, as every other great power does, with two research teams; its staff's order of branches puts the sea and the air first. See '_draft'.",
+  "_draft": "Builder's draft of 25 November 2026, for the historian's check: Japan's starting list. Held in 1939 on the record: a tank arm (tank regiments since 1933, the Type 89, 95 and 97), monoplane fighters (the A5M of 1937, the Ki-27 of 1938), medium bombers (the G3M and the Ki-21), carrier aviation (six carriers in commission, the 1st Air Fleet's method growing from the China war) and ocean-going submarines (the I-boats of the cruiser and fleet types). Left out on purpose: motorised infantry (the army marched and rode the rails), landing craft (already given from the first month by the dated row in far-pacific-war.json and the national ability, so the row here would count it twice), staff colleges and airborne forces (the raiding regiments form in 1941). The two research teams are the tree's rule for a great power, not a draft.",
   "goals": {
     "nations": {
       "JAP": {
@@ -24,5 +25,10 @@
         }
       }
     }
+  },
+  "tech": {
+    "start": { "JAP": ["tanks", "monoplanes", "mediumbombers", "carriers", "fleetsubs"] },
+    "slots": { "JAP": 2 },
+    "ai": { "order": { "JAP": ["naval", "air", "land", "industry", "doctrine"] } }
   }
 }

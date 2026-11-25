@@ -4,6 +4,7 @@
 // Everything lives in data/campaign/tech.json, so every version of the game reads the same tree. A historical
 // scenario never sees it: there, research runs on history's clock (research.ts).
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import { staffRuns } from './depth';
 import data from '../../data/campaign/tech.json';
 import supportData from '../../data/campaign/support.json';

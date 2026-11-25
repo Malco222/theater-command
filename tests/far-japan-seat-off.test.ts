@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { FAR_LAID } from '../src/campaign/far-rows';
 import { GOALS } from '../src/campaign/goals';
+import { TECH } from '../src/campaign/tech';
 
 describe("Japan's seat file with the switch off", () => {
   it('is not laid: no goals for Japan, and America keeps Victory in Europe', () => {
@@ -10,5 +11,12 @@ describe("Japan's seat file with the switch off", () => {
     expect(GOALS.JAP).toBeUndefined();
     expect(GOALS.USA.long).toMatchObject({ title: 'Victory in Europe', beaten: ['GER'], by: 76 });
     expect(Object.keys(GOALS).sort()).toEqual(['FRA', 'GER', 'ITA', 'POL', 'SOV', 'UK', 'USA']);
+  });
+
+  it('and the technology tree has no row for Japan', () => {
+    expect(TECH.start.JAP).toBeUndefined();
+    expect(TECH.slots.JAP).toBeUndefined();
+    expect(TECH.ai.order.JAP).toBeUndefined();
+    expect(Object.keys(TECH.start)).toHaveLength(17);
   });
 });
