@@ -15,8 +15,9 @@ The hash is of a canonical graph, not of the order the script happened to lay it
 So a pure refactor (helpers moved, nodes laid in another order) keeps every hash; any change to what a material
 computes or how it is set (a constant, a wire, a picture, a blend mode) changes it.
 
-Also checked on every run: the build loop's tuple keeps the 15 pinned names and builders, in order, at its head; the
-materials are built in that order; two runs give the same hashes; the hash does not move when the nodes are laid in
+Also checked on every run: the build loop's tuple keeps the 15 pinned names and builders, in order (release 2's own
+materials may stand between them: the ground's after M_MapSurface, M_HitMark before M_UnderSea); the loop's materials
+are built in its order, and any made outside it by blocks of their own are named; two runs give the same hashes; the hash does not move when the nodes are laid in
 another order, and does move for a changed setting, a dropped wire, a re-pinned output or a changed material setting;
 the stand-in pictures are read as the engine would read them (numbers as masks, colours as colour); no engine asset the
 stand-in does not know was asked for; and the run logs no warning or error.
@@ -41,7 +42,8 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 BUILD = os.path.join(ROOT, "Tools", "build_content.py")
 PINS = os.path.join(HERE, "graphs.sha")
 
-# The build loop's head as at 10f85ffb: (material, its builder), in order. Fleet entries may only follow M_UnderSea.
+# The build loop's pinned entries as at 10f85ffb: (material, its builder), in order. Fleet entries may only follow
+# M_UnderSea; release 2's other lanes put theirs between these, which leaves each of the 15 graphs as it is.
 PINNED = [
     ("M_MapSurface", "build_map_surface"), ("M_Solid", "build_solid"), ("M_Highlight", "build_highlight"),
     ("M_Flag", "build_flag"), ("M_Land", "build_land"), ("M_Sea", "build_sea"), ("M_Wake", "build_wake"),
@@ -181,6 +183,9 @@ def canonical(fake, asset):
             "properties": {k: ser(fake, v) for k, v in asset._props.items()}, "done": list(asset._done)}
     if asset._kind == "MaterialParameterCollection":
         data["parameters"] = parameters_of(fake, asset)
+    source = getattr(asset, "_source", None)
+    if source is not None:  # (a picture brought in: the file, as a path in the project, and its SHA-256)
+        data["imported"] = {"file": source[0], "sha256": source[1]}
     return data
 
 
@@ -394,16 +399,21 @@ def main(argv):
 
     # The build loop's head, from the source.
     entries = loop_entries()
-    checks.check(entries[:len(PINNED)] == PINNED,
-                 "the build loop's tuple begins with the 15 pinned (name, builder) pairs, in order: " + ", ".join(n for n, _ in entries[:len(PINNED)]))
+    kept = [e for e in entries if e[0] in PINNED_NAMES]
+    checks.check(kept == PINNED,
+                 "the build loop's tuple keeps the 15 pinned (name, builder) pairs, in order: " + ", ".join(f"{n} ({b})" for n, b in kept))
     checks.check(len({n for n, _ in entries}) == len(entries), "no material is named twice in the build loop")
 
     first = run_build("first")
     second = run_build("second")
     built = [a._asset[0] for a in first.materials()]
-    checks.check(built[:len(PINNED)] == PINNED_NAMES, "the run builds the 15 pinned materials first, in the loop's order")
-    checks.check(built == [n for n, _ in entries if n in built] and len(built) == len(entries),
-                 f"the run builds every material of the loop, in its order ({len(built)} of {len(entries)})")
+    looped = [n for n, _ in entries]
+    outside = [n for n in built if n not in looped]
+    checks.check([n for n in built if n in PINNED_NAMES] == PINNED_NAMES, "the run builds the 15 pinned materials, in the loop's order")
+    checks.check([n for n in built if n in looped] == looped,
+                 f"the run builds every material of the loop, in its order ({len(built) - len(outside)} of {len(looped)})")
+    checks.check(len(set(built)) == len(built), f"the run makes each material once ({len(built)}; outside the loop, by blocks "
+                 f"of their own: {', '.join(outside) if outside else 'none'})")
     unknown = sorted({p for p, found in first.LOADS if not found})
     checks.check(not unknown, "every engine asset the build loads is one the stand-in knows" + ("" if not unknown else ": " + ", ".join(unknown)))
     bad_logs = [t for level, t in first.LOGS if level != "log"]

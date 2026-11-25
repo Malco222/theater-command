@@ -4,7 +4,10 @@
 # (The graphs as fake_unreal.py stands in for the engine, its pictures included: a change to that model re-pins
 # here, in the same commit.)
 # (pinned from build_content.py 3a17021999a5cb7b...)
-eefc33d900843fb7e2a057cb1ab2b8c0430847d7a32fdd51c47c77a13698609f  M_MapSurface
+# (Release 2, 25 November: M_MapSurface re-pinned on the release 2 build list, its one change release 2's own, made
+# before this pin came to it: used_with_instanced_static_meshes, for the air battle's far aircraft and the ground's
+# instanced pieces (AS1). Its graph is node for node as before. The other 14 unmoved.)
+8b433f8eb9518cb97b0d787edfe1563d3edc5c12c9c9826d352bd06ef8f4a8a0  M_MapSurface
 8ed9058add55531fa691e636ee80e1176d864f2cae63f29b46490278c2389fd2  M_Solid
 ccdae1791cd80d869beaa28f8e06a6f2b2de80b007de3a4093738a6935b1b7f6  M_Highlight
 54c8141339a877465083610609321c04fa0cff2f6297efbd1e3c2c99d4ad2a53  M_Flag
