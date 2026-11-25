@@ -18,8 +18,9 @@
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/manpower.json';
 import { turnToDate } from '../core/ticket';
-import { MEN_PER_DIV, type Game } from './types';
+import { MEN_PER_DIV, type Corps, type Game } from './types';
 import { farShare } from './economy';
+import { binds, levelOf } from './rifles';
 
 export const MANPOWER = data as unknown as {
   /** The reserve a great power opens a campaign of September 1939 with, in divisions' worth. */
@@ -116,13 +117,15 @@ export const ownMen = (g: Game, nat: string): boolean => menRules(g) && !!MANPOW
 
 /**
  * What the reserve holds beyond what the armies in the field are short of: the men a staff can put into new corps
- * without starving the old ones of their drafts.
+ * without starving the old ones of their drafts. (Where a nation's rifles row binds, a corps is short only up to its
+ * armed level, which its drafts refill to and no further: rifles.ts, the design director's 05:37Z, the form's section 8.)
  */
 export function menSpare(g: Game, nat: string): number {
   if (!menRules(g)) return Infinity;
+  const lvl = binds(g, nat) ? (c: Corps): number => Math.min(levelOf(g, c), 1) : (): number => 1;
   let short = 0;
-  for (const c of g.corps) if (c.nat === nat && !c.dead) short += (1 - c.str) * c.divs;
-  for (const v of g.atSea ?? []) if (v.nat === nat) short += (1 - v.corps.str) * v.corps.divs;
+  for (const c of g.corps) if (c.nat === nat && !c.dead) short += (lvl(c) - c.str) * c.divs;
+  for (const v of g.atSea ?? []) if (v.nat === nat) short += (lvl(v.corps) - v.corps.str) * v.corps.divs;
   return menLeft(g, nat) - short;
 }
 

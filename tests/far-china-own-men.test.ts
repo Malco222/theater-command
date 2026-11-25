@@ -70,7 +70,9 @@ describe('China forms corps from its own men (rider B to ruling 234)', () => {
     g.flags['sa:CHN'] = 10; // (stage B2: the store opens at 0 and would refuse the corps; seeded as B1's tests seed sa:SOV)
     levyMen(g, 'CHN', levy().men);
     const had = menLeft(g, 'CHN');
-    expect(menSpare(g, 'CHN')).toBeLessThan(0);
+    // (Stage B2: a binding China's corps are short only up to their armed level, their strength on the first day, so
+    // the men its armies wait for are about none and menSpare is about the reserve itself.)
+    expect(Math.abs(menSpare(g, 'CHN') - had)).toBeLessThan(0.01);
     aiProduction(g, 'CHN');
     const q = forming(g);
     // Two forming at once is the staff's programme; the levy and the pool hold the men for two.
