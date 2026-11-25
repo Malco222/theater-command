@@ -404,13 +404,16 @@ describe("support teams in battle: a team is its own division's, never a gun (th
     }
   });
 
-  it('reads only a machine-gun or a mortar team: a team of another arm (a sniper pair) is tallied, counted and aimed as with the rule off', () => {
+  it('reads only a machine-gun or a mortar team: a team of another arm is tallied, counted and aimed as with the rule off', () => {
     type T = U & { x: number; y: number; hid?: boolean; aim?: number; order?: unknown };
     type Hurt = { dmg: number; nerve: number; team: number; teamNerve: number };
     const t = ownTeams(campaign('normandy-1944')).ticket;
-    // (a branch with no sniper pair has no figures for one: a stand-in for this test only, taken away after it)
-    const teams = LAND.teams as unknown as Record<string, unknown>, lent = !('snp' in teams);
-    if (lent) teams.snp = { ...LAND.teams.mg };
+    // The other arm is a made-up one that no branch has, lent a machine gun's figures for this test only: it tests ownArm
+    // and nothing else. A sniper pair ('snp', release 2) is such an arm, but where its own rules are joined a stand-in of
+    // that name would test them, not this rule (the assembler, 25 November 21:14Z).
+    const OTHER = 'xx', teams = LAND.teams as unknown as Record<string, unknown>;
+    expect(OTHER in teams).toBe(false);
+    teams[OTHER] = { ...LAND.teams.mg };
     try {
       const made = (rule: boolean, arm: string): { sums: Sums; g: T; line: U[]; tally: Hurt; target: string } => {
         const { sim, units, sums } = field(t, rule);
@@ -439,13 +442,13 @@ describe("support teams in battle: a team is its own division's, never a gun (th
       expect(sumsOf(mgOn)[1]).toBeGreaterThan(sumsOf(mgOff)[1] + 1e-6);
       expect(mgOn.target).toBe('foot');
       expect(mgOn.sums.ownTeamsPower(mgOn.line[0])).toBeGreaterThan(0);
-      // The same blocks as sniper pairs: nothing of the rule touches them, and they are no part of their division's teams' weight.
-      const snOn = made(true, 'snp'), snOff = made(false, 'snp');
+      // The same blocks of the other arm: nothing of the rule touches them, and they are no part of their division's teams' weight.
+      const snOn = made(true, OTHER), snOff = made(false, OTHER);
       expect(snOn.tally).toEqual({ dmg: 2, nerve: 3, team: 0, teamNerve: 0 });
       expect(snOn.sums.ownLine(snOn.g)).toEqual([]);
       expect(sumsOf(snOn)).toEqual(sumsOf(snOff));
       expect(snOn.target).toBe(snOff.target);
       expect(snOn.sums.ownTeamsPower(snOn.line[0])).toBe(0);
-    } finally { if (lent) delete teams.snp; }
+    } finally { delete teams[OTHER]; }
   });
 });
