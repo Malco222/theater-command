@@ -8,17 +8,20 @@
 // computeSupply and portKeep). When the enemy then closes round the town, the siege used to open a full new larder.
 // Under true reach it opens with the months the kept stores ran before this month already eaten: never more than they
 // last (portKeep), never more than the town holds (storesOf), the larger of that and a pocket's eating (never the sum),
-// and nothing for stores filled before the present holder took the port. A country that falls to the holder changes
-// nothing in a port its owner holds. Off, the siege opens as it always did.
+// and only for stores the present holder filled: under true reach the fill records whose stores they are (the
+// holder's, `stores:by:<id>`, whoever's ships carried them), as a pocket's town records whose pocket it was, and a
+// record that names another nation, or no record, charges nothing. Off, the siege opens as it always did, and no record
+// is written.
 //
 // Every picture in this file is drawn under TC_SUPPLY_CHECK, which asks every kept answer afresh and throws on a difference.
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_SUPPLY_CHECK = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { addCorps, capitulate, capture, computeSupply, createGame, declareWar, keptStoresRun, portKeep, trueReach } from '../src/campaign/game';
+import { addCorps, allied, capitulate, capture, computeSupply, createGame, declareWar, keptStoresRun, natIndex, portKeep, setTrueReach, trueReach } from '../src/campaign/game';
 import { finishMonthEnd } from '../src/campaign/finish';
 import { liberate } from '../src/campaign/liberation';
+import { loadGame, saveGame } from '../src/campaign/save';
 import { zoneOf } from '../src/campaign/navy';
 import { arrive, besieged, garrison, garrisonFed, invest, monthsShut, ringClosed, siegeMonth, siegeView, storesOf } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
@@ -46,11 +49,22 @@ const round = (g: Game, nat: string, r: Region, divs = 1): void => {
 const britain = (g: Game): void => { g.phase = g.order.indexOf('UK'); siegeMonth(g, 'UK'); computeSupply(g); };
 /** A siege opened round the town by the nation in this month: the months it begins with already eaten. */
 const opened = (g: Game, r: Region, by: string): number => { invest(g, r, by); return monthsShut(g, r); };
-/** The game at the month, the stores of the port last filled in month `last` (staged: the flag the supply picture keeps). */
-const at = (g: Game, r: Region, turn: number, last: number | undefined): void => {
+/**
+ * The game at the month, the stores of the port last filled in month `last` by nation `by` (staged: the month mark and
+ * the record of whose stores they are, as the supply picture writes them under true reach; by default the present
+ * holder's, and none when `by` is null).
+ */
+const at = (g: Game, r: Region, turn: number, last: number | undefined, by: string | null = r.ctrl): void => {
   g.turn = turn;
   if (last === undefined) delete g.flags[`stores:${r.id}`];
   else g.flags[`stores:${r.id}`] = last;
+  if (last === undefined || by === null) delete g.flags[`stores:by:${r.id}`];
+  else g.flags[`stores:by:${r.id}`] = natIndex(g, by);
+};
+/** Whose stores the port's are by the record the supply picture wrote, or undefined where there is none. */
+const filler = (g: Game, r: Region): string | undefined => {
+  const i = g.flags[`stores:by:${r.id}`];
+  return i === undefined ? undefined : Object.keys(g.nations)[i];
 };
 
 describe('a besieged port begins its siege with its kept stores\' months eaten (one larder, true reach)', () => {
@@ -61,6 +75,8 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
       const r = g.byName['Malta'];
       const c = addCorps(g, 'UK', 'Malta test', 'inf', 1, 'Malta', {});
       expect(garrison(g, c)).toBe(true);
+      // Month 1, at peace: Britain's ships fill Malta's stores, and on, the draw writes her record with the month.
+      computeSupply(g);
       // Italy at war with Britain, her fleet across the central Mediterranean, the one sea off Malta's harbour.
       declareWar(g, 'ITA', 'UK');
       patrol(g, 'ITA', 'central');
@@ -148,6 +164,8 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
       const r = g.byName['Malta'];
       const c = addCorps(g, 'UK', 'Malta test', 'inf', 1, 'Malta', {});
       expect(garrison(g, c)).toBe(true);
+      // Month 1, at peace: Britain's ships fill Malta's stores, and on, the draw writes her record with the month.
+      computeSupply(g);
       declareWar(g, 'ITA', 'UK');
       patrol(g, 'ITA', 'central');
       g.supplyDirty = true;
@@ -262,7 +280,7 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
       // The flag is the month Italy's ships last filled it. Kept by Italy, the stores have run two months; taken by
       // Britain, they were never Britain's.
       const holder = taken ? 'UK' : 'ITA', foe = taken ? 'ITA' : 'UK';
-      expect([taken, r.ctrl, r.since, g.flags[`stores:${r.id}`]]).toEqual([taken, holder, taken ? 2 : 0, 1]);
+      expect([taken, r.ctrl, r.since, g.flags[`stores:${r.id}`], filler(g, r)]).toEqual([taken, holder, taken ? 2 : 0, 1, 'ITA']);
       expect([taken, keptStoresRun(g, r), opened(g, r, foe)]).toEqual([taken, taken ? 0 : 2, taken ? 0 : 2]);
     }
   });
@@ -282,7 +300,7 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
       g.turn = 2;
       if (falls) capitulate(g, 'ITA', 'UK');
       g.turn = 4;
-      expect([falls, r.ctrl, r.owner, r.since, g.flags[`stores:${r.id}`]]).toEqual([falls, falls ? 'GER' : 'ITA', 'ITA', 0, 1]);
+      expect([falls, r.ctrl, r.owner, r.since, g.flags[`stores:${r.id}`], filler(g, r)]).toEqual([falls, falls ? 'GER' : 'ITA', 'ITA', 0, 1, 'ITA']);
       // Kept by Italy, the stores have run two months; handed to Germany, they were never Germany's.
       expect([falls, keptStoresRun(g, r), opened(g, r, 'UK')]).toEqual([falls, falls ? 0 : 2, falls ? 0 : 2]);
     }
@@ -294,6 +312,8 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
       const r = g.byName['Malta'];
       const c = addCorps(g, 'UK', 'Malta test', 'inf', 1, 'Malta', {});
       expect(garrison(g, c)).toBe(true);
+      // Month 1, at peace: Britain's ships fill Malta's stores, and on, the draw writes her record with the month.
+      computeSupply(g);
       // The sea shut by Italy's fleet from the first month: the stores were last filled in month 1.
       declareWar(g, 'ITA', 'UK');
       patrol(g, 'ITA', 'central');
@@ -301,7 +321,7 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
       computeSupply(g);
       g.turn = 2;
       britain(g);
-      expect(g.flags[`stores:${r.id}`]).toBe(1);
+      expect([g.flags[`stores:${r.id}`], filler(g, r)]).toEqual([1, 'UK']);
       // Month 3: Iran gives in to Britain, after the stores' month. Nothing of Malta changes hands.
       g.turn = 3;
       if (falls) capitulate(g, 'IRN', 'UK');
@@ -314,7 +334,7 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
     }
   });
 
-  it('L10: charges nothing for stores filled before a liberated owner had its port back: Italy\'s Tobruk held by Germany, then handed back to a freed Italy', () => {
+  it('L10: charges nothing for stores Germany filled once Tobruk is handed back to a freed Italy, and charges Italy\'s own stores again once she fills them', () => {
     for (const freed of [false, true]) {
       const g = war(true);
       const r = g.byName['Tobruk'];
@@ -325,18 +345,22 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
       g.turn = 2;
       capitulate(g, 'ITA', 'UK');
       expect([r.ctrl, r.owner, r.since]).toEqual(['GER', 'ITA', 0]);
-      // Month 3: Germany's ships fill the stores (staged). Month 4: Germany frees Italy, and Tobruk is Italy's again.
-      at(g, r, 3, 3);
+      // Month 3: Germany's ships fill the stores, Germany's record (staged). Month 4: Germany frees Italy, and Tobruk is
+      // Italy's again.
+      at(g, r, 3, 3, 'GER');
       g.turn = 4;
       if (freed) expect(liberate(g, 'ITA', 'GER')).toBe(true);
       expect([freed, r.ctrl, r.owner, r.since, g.nations.ITA.freedOn?.turn]).toEqual([freed, freed ? 'ITA' : 'GER', 'ITA', 0, freed ? 4 : undefined]);
       // Month 6, Britain closes round the town: Germany's stores are Germany's two months; handed back, never Italy's.
       g.turn = 6;
       expect([freed, keptStoresRun(g, r), opened(g, r, 'UK')]).toEqual([freed, freed ? 0 : 2, freed ? 0 : 2]);
+      // The holder's own fill in month 6 (his record), the sea shut after it: in month 9 his stores have run two months.
+      at(g, r, 9, 6);
+      expect([freed, 'refilled', keptStoresRun(g, r)]).toEqual([freed, 'refilled', 2]);
     }
   });
 
-  it('L11, Vichy\'s ground: the stores France filled are not Vichy\'s after the armistice, nor are Vichy\'s France\'s after Vichy\'s end (staged works: no fortified port overseas lies on Vichy\'s ground on the old chart)', () => {
+  it('L11, Vichy\'s ground: the stores France filled are not Vichy\'s after the armistice, nor are Vichy\'s France\'s after Vichy\'s end, until the new holder fills them (staged works: no fortified port overseas lies on Vichy\'s ground on the old chart)', () => {
     // Tunis, a port overseas on Vichy's ground, given works by hand so that it keeps stores.
     const tunis = (g: Game): Region => {
       const r = g.byName['Tunis'];
@@ -348,12 +372,14 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
       // The armistice: France's ships fill the stores in month 2; France falls to Germany in month 3 and Tunis is Vichy's.
       const g = war(true);
       const r = tunis(g);
-      at(g, r, 2, 2);
+      at(g, r, 2, 2, 'FRA');
       g.turn = 3;
       if (falls) capitulate(g, 'FRA', 'GER');
       expect([falls, r.ctrl, r.owner, r.since]).toEqual([falls, falls ? 'VIC' : 'FRA', falls ? 'VIC' : 'FRA', 0]);
       g.turn = 5;
       expect([falls, 'armistice', keptStoresRun(g, r), opened(g, r, 'UK')]).toEqual([falls, 'armistice', falls ? 0 : 2, falls ? 0 : 2]);
+      at(g, r, 9, 6);
+      expect([falls, 'armistice refilled', filler(g, r), keptStoresRun(g, r)]).toEqual([falls, 'armistice refilled', falls ? 'VIC' : 'FRA', 2]);
     }
     for (const ends of [false, true]) {
       // Vichy's end: France falls in month 2 and is freed by Britain in month 3; Vichy's ships fill Tunis's stores in
@@ -366,15 +392,17 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
       g.turn = 3;
       expect(liberate(g, 'FRA', 'UK')).toBe(true);
       capture(g, g.regions[g.nations.FRA.capital], 'FRA');
-      at(g, r, 5, 4);
+      at(g, r, 5, 4, 'VIC');
       if (ends) finishMonthEnd(g);
       expect([ends, r.ctrl, r.owner, r.since, g.nations.FRA.freedOn?.turn, g.nations.VIC.fellOn?.turn]).toEqual([ends, ends ? 'FRA' : 'VIC', ends ? 'FRA' : 'VIC', 0, 3, ends ? 5 : undefined]);
       g.turn = 7;
       expect([ends, 'end', keptStoresRun(g, r), opened(g, r, 'GER')]).toEqual([ends, 'end', ends ? 0 : 2, ends ? 0 : 2]);
+      at(g, r, 10, 7);
+      expect([ends, 'end refilled', filler(g, r), keptStoresRun(g, r)]).toEqual([ends, 'end refilled', ends ? 'FRA' : 'VIC', 2]);
     }
   });
 
-  it('L12: charges nothing for stores filled before a fall handed the port to a holder who is not its owner: Germany\'s Tobruk falls to Britain with Germany', () => {
+  it('L12, a victor\'s taking: charges nothing for Germany\'s stores once Germany\'s fall hands Italy\'s Tobruk to Britain, and charges Britain\'s own once she fills them', () => {
     for (const falls of [false, true]) {
       const g = war(true);
       const r = g.byName['Tobruk'];
@@ -383,32 +411,36 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
       addCorps(g, 'GER', 'Afrika test', 'inf', 1, 'Tobruk', {});
       g.turn = 2;
       capitulate(g, 'ITA', 'UK');
-      // Month 3: Germany's ships fill the stores (staged). Month 4: Germany gives in to Britain, and Italy's Tobruk,
-      // its owner fallen, goes to Britain.
-      at(g, r, 3, 3);
+      // Month 3: Germany's ships fill the stores, Germany's record (staged). Month 4: Germany gives in to Britain, and
+      // Italy's Tobruk, its owner fallen, goes to Britain.
+      at(g, r, 3, 3, 'GER');
       g.turn = 4;
       if (falls) capitulate(g, 'GER', 'UK');
       expect([falls, r.ctrl, r.owner, r.since]).toEqual([falls, falls ? 'UK' : 'GER', 'ITA', 0]);
       g.turn = 6;
       expect([falls, keptStoresRun(g, r), opened(g, r, 'SOV')]).toEqual([falls, falls ? 0 : 2, falls ? 0 : 2]);
+      at(g, r, 9, 6);
+      expect([falls, 'refilled', filler(g, r), keptStoresRun(g, r)]).toEqual([falls, 'refilled', falls ? 'UK' : 'GER', 2]);
     }
   });
 
-  it('L13: charges nothing for stores filled before a port came back to its owner without a battle: Britain\'s Malta taken by Italy, then Britain\'s again at Italy\'s fall', () => {
+  it('L13, a hand back: charges nothing for Italy\'s stores once Britain\'s Malta comes back to Britain at Italy\'s fall, and charges Britain\'s own once she fills them', () => {
     for (const falls of [false, true]) {
       const g = war(true);
       const r = g.byName['Malta'];
       declareWar(g, 'ITA', 'UK');
-      // Month 2: Italy takes Malta. Month 3: Italy's ships fill its stores (staged). Month 4: Italy gives in to
-      // Britain, and the foreign ground she held goes back to its owner.
+      // Month 2: Italy takes Malta. Month 3: Italy's ships fill its stores, Italy's record (staged). Month 4: Italy
+      // gives in to Britain, and the foreign ground she held goes back to its owner.
       g.turn = 2;
       capture(g, r, 'ITA');
-      at(g, r, 3, 3);
+      at(g, r, 3, 3, 'ITA');
       g.turn = 4;
       if (falls) capitulate(g, 'ITA', 'UK');
       expect([falls, r.ctrl, r.owner, r.since, r.prev]).toEqual([falls, falls ? 'UK' : 'ITA', 'UK', 2, 'UK']);
       g.turn = 6;
       expect([falls, keptStoresRun(g, r), opened(g, r, 'GER')]).toEqual([falls, falls ? 0 : 2, falls ? 0 : 2]);
+      at(g, r, 9, 6);
+      expect([falls, 'refilled', filler(g, r), keptStoresRun(g, r)]).toEqual([falls, 'refilled', falls ? 'UK' : 'ITA', 2]);
     }
   });
 
@@ -418,6 +450,8 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
       const r = g.byName['Malta'];
       const c = addCorps(g, 'UK', 'Malta test', 'inf', 1, 'Malta', {});
       expect(garrison(g, c)).toBe(true);
+      // Month 1, at peace: Britain's ships fill Malta's stores, and on, the draw writes her record with the month.
+      computeSupply(g);
       declareWar(g, 'ITA', 'UK');
       patrol(g, 'ITA', 'central');
       g.supplyDirty = true;
@@ -435,14 +469,14 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
     }
   });
 
-  it('L15: charges nothing for stores filled before the last act opened and a leaving nation handed its port on with no fall recorded (staged: domination.ts leave hands Malta, Italy\'s since month 2, back to Britain)', () => {
+  it('L15, the last act: charges nothing for Italy\'s stores once a leaving Italy hands Malta back to Britain with no fall recorded, and charges Britain\'s own once she fills them (staged: domination.ts leave hands Malta, Italy\'s since month 2, back to Britain)', () => {
     for (const opens of [false, true]) {
       const g = war(true);
       const r = g.byName['Malta'];
       declareWar(g, 'ITA', 'UK');
       g.turn = 2;
       capture(g, r, 'ITA');
-      at(g, r, 3, 3);
+      at(g, r, 3, 3, 'ITA');
       // Month 4: the last act opens, and a nation that leaves the war hands what it held to its owner, as leave does:
       // the flag over the ground changes and nothing else (no fall, no Region.since).
       g.turn = 4;
@@ -450,6 +484,148 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
       expect([opens, r.ctrl, r.owner, r.since, r.prev, g.nations.ITA.fellOn]).toEqual([opens, opens ? 'UK' : 'ITA', 'UK', 2, 'UK', undefined]);
       g.turn = 6;
       expect([opens, keptStoresRun(g, r), opened(g, r, 'GER')]).toEqual([opens, opens ? 0 : 2, opens ? 0 : 2]);
+      at(g, r, 9, 6);
+      expect([opens, 'refilled', filler(g, r), keptStoresRun(g, r)]).toEqual([opens, 'refilled', opens ? 'UK' : 'ITA', 2]);
+    }
+  });
+
+  it('L16: a real fill writes whose stores they are, the holder\'s, and only under true reach (off: no record, and every other flag of the save the same)', () => {
+    const flags: Record<string, Record<string, number>> = {};
+    for (const on of [false, true]) {
+      // Malta at peace in month 3: Britain's own ships fill its stores in the draw of the picture (nothing staged).
+      const g = war(on);
+      const r = g.byName['Malta'];
+      g.turn = 3;
+      computeSupply(g);
+      expect([on, g.flags[`stores:${r.id}`], filler(g, r)]).toEqual([on, 3, on ? 'UK' : undefined]);
+      flags[String(on)] = JSON.parse(saveGame(g)).flags;
+    }
+    // On, a record beside every month mark, and nothing else written; off, none.
+    const on = { ...flags.true }, marks = Object.keys(on).filter((k) => k.startsWith('stores:by:'));
+    expect(marks.length).toBeGreaterThan(0);
+    expect(marks.map((k) => on[`stores:${k.slice('stores:by:'.length)}`] !== undefined)).toEqual(marks.map(() => true));
+    for (const k of marks) delete on[k];
+    delete on.trueReach;
+    expect(Object.keys(flags.false).filter((k) => k.startsWith('stores:by:'))).toEqual([]);
+    expect(on).toEqual(flags.false);
+  });
+
+  it('L17: an ally\'s ships fill the holder\'s stores: Britain\'s Malta, Britain with no ships of her own, filled by Canada\'s: the record names Britain, the holder, not Canada', () => {
+    for (const on of [false, true]) {
+      const g = war(on);
+      const r = g.byName['Malta'];
+      g.nations.UK.seaSupply = false;
+      g.nations.UK.sealift = 0;
+      g.supplyDirty = true;
+      g.turn = 3;
+      computeSupply(g);
+      // The stores are filled this month, by an ally's ships alone (Canada's, the one ally of Britain's with any).
+      const ships = Object.values(g.nations).filter((n) => n.alive && (n.seaSupply || n.sealift > 0) && allied(g, 'UK', n.id)).map((n) => n.id);
+      expect([on, ships, g.flags[`stores:${r.id}`], filler(g, r)]).toEqual([on, ['CAN'], 3, on ? 'UK' : undefined]);
+      // The siege that would open in month 6, the sea shut since: Britain's stores, two months run.
+      at(g, r, 6, 3, on ? 'UK' : null);
+      expect([on, keptStoresRun(g, r)]).toEqual([on, on ? 2 : 0]);
+    }
+  });
+
+  it('L18, the rechecker\'s over-charge: Italy\'s stores in Malta, a German corps standing there when Italy gives in to Britain: Malta is Germany\'s with no battle, and Italy\'s stores are not Germany\'s to have eaten', () => {
+    for (const falls of [false, true]) {
+      const g = war(true);
+      const r = g.byName['Malta'];
+      declareWar(g, 'ITA', 'UK');
+      declareWar(g, 'GER', 'UK');
+      // Month 2: Italy takes Malta, and a German corps comes to stand in it. Month 3: Italy's ships fill its stores.
+      g.turn = 2;
+      capture(g, r, 'ITA');
+      addCorps(g, 'GER', 'Stay test', 'inf', 1, 'Malta', {});
+      at(g, r, 3, 3, 'ITA');
+      // Month 4: Italy gives in to Britain; the ground the German corps stands on stays on the fallen side, Germany's.
+      g.turn = 4;
+      if (falls) capitulate(g, 'ITA', 'UK');
+      expect([falls, r.ctrl, r.owner, r.since, filler(g, r)]).toEqual([falls, falls ? 'GER' : 'ITA', 'UK', 2, 'ITA']);
+      g.turn = 6;
+      expect([falls, keptStoresRun(g, r)]).toEqual([falls, falls ? 0 : 2]);
+      // Germany's own fill in month 6, the sea shut after it: charged again in month 9.
+      at(g, r, 9, 6);
+      expect([falls, 'refilled', keptStoresRun(g, r)]).toEqual([falls, 'refilled', 2]);
+    }
+  });
+
+  it('L19, the rechecker\'s under-charge: Malta back with Britain at Italy\'s fall, Britain\'s own stores of month 6, and Iran falling to Britain in month 7: still charged in month 9', () => {
+    for (const falls of [false, true]) {
+      const g = war(true);
+      const r = g.byName['Malta'];
+      declareWar(g, 'ITA', 'UK');
+      g.turn = 2;
+      capture(g, r, 'ITA');
+      g.turn = 4;
+      capitulate(g, 'ITA', 'UK');
+      expect([r.ctrl, r.owner, r.since, r.prev]).toEqual(['UK', 'UK', 2, 'UK']);
+      // Month 6: Britain fills the stores, her record. Month 7: Iran gives in to Britain. Nothing of Malta changes hands.
+      at(g, r, 6, 6);
+      g.turn = 7;
+      if (falls) capitulate(g, 'IRN', 'UK');
+      g.turn = 9;
+      expect([falls, g.nations.IRN.fellOn?.to, r.ctrl, filler(g, r), keptStoresRun(g, r)]).toEqual([falls, falls ? 'UK' : undefined, 'UK', 'UK', 2]);
+    }
+  });
+
+  it('L20: lost and retaken by battle: Britain fills Malta\'s stores in month 3, Italy takes it in month 4, Britain takes it back in month 5: the record names Britain, yet nothing is charged in month 7', () => {
+    for (const retaken of [false, true]) {
+      const g = war(true);
+      const r = g.byName['Malta'];
+      declareWar(g, 'ITA', 'UK');
+      at(g, r, 3, 3);
+      if (retaken) {
+        g.turn = 4;
+        capture(g, r, 'ITA');
+        g.turn = 5;
+        capture(g, r, 'UK');
+      }
+      g.turn = 7;
+      expect([retaken, r.ctrl, r.since, filler(g, r), keptStoresRun(g, r)]).toEqual([retaken, 'UK', retaken ? 5 : 0, 'UK', retaken ? 0 : 2]);
+    }
+  });
+
+  it('L21: no record, as in a war or a save from before it: a month mark with no record of whose stores they are charges nothing', () => {
+    for (const recorded of [false, true]) {
+      const g = war(true);
+      const r = g.byName['Malta'];
+      at(g, r, 6, 3, recorded ? 'UK' : null);
+      expect([recorded, g.flags[`stores:by:${r.id}`] !== undefined, keptStoresRun(g, r), opened(g, r, 'ITA')]).toEqual([recorded, recorded, recorded ? 2 : 0, recorded ? 2 : 0]);
+    }
+  });
+
+  it('L22: a load keeps the record as saved: Malta\'s stores Britain\'s of month 1 while Malta is Italy\'s, Italy\'s sea open, in month 3', () => {
+    const g = war(true);
+    const r = g.byName['Malta'];
+    // Month 1: Britain's ships fill Malta's stores, her record written by the draw of the picture.
+    computeSupply(g);
+    // Month 3: Italy holds Malta, and no picture has been drawn since.
+    g.turn = 3;
+    capture(g, r, 'ITA');
+    const text = saveGame(g);
+    const back = loadGame(text)!;
+    // The load drew the picture, in which Italy's ships fill the stores, and then put the save's marks back: every flag
+    // is the save's.
+    expect(back.flags).toEqual(JSON.parse(text).flags);
+    expect([back.flags[`stores:${r.id}`], filler(back, back.regions[r.id]), filler(g, r)]).toEqual([1, 'UK', 'UK']);
+    // (Drawn afresh, the picture would have written Italy's record of month 3.)
+    back.supplyDirty = true;
+    computeSupply(back);
+    expect([back.flags[`stores:${r.id}`], filler(back, back.regions[r.id])]).toEqual([3, 'ITA']);
+  });
+
+  it('L23: a record left from a war fought under true reach, true reach then switched off: off charges nothing, neither on the card nor in the siege', () => {
+    for (const on of [true, false]) {
+      const g = war(true);
+      const r = g.byName['Malta'];
+      // Britain's stores of month 3, her record, the sea shut since; in month 6 they have run two months.
+      at(g, r, 6, 3);
+      if (!on) expect(setTrueReach(g, false)).toBe(true);
+      expect([on, trueReach(g), filler(g, r), keptStoresRun(g, r)]).toEqual([on, on, 'UK', 2]);
+      expect([on, siegeView(g, r.id)!.lines.at(-1), opened(g, r, 'ITA')]).toEqual([on,
+        `Closely invested, its stores would feed the defenders for ${on ? '2 months' : '4 months'}, and for as long as ships can reach its harbour.`, on ? 2 : 0]);
     }
   });
 });
