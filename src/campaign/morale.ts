@@ -19,7 +19,7 @@ import type { Corps, Game, Region } from './types';
 import { allied, atWar, enemyAshore, fortRow, monthsUnfed, onPortStores } from './game';
 import { crewStores, storesLeft } from './fortrows';
 import { cmdRally } from './commanders';
-import { floorWords, witherAt, witherStores } from './wither';
+import { floorWords, witherAt, witherStores, withered } from './wither';
 
 export const MORALE = data as unknown as {
   start: number;
@@ -205,8 +205,9 @@ export function corpsMood(g: Game, c: Corps): Mood {
   const left = fortRow(g, c) && (!c.supplied || onPortStores(g, c)) ? storesLeft(g, c) : null;
   const stores = left !== null ? { left, months: crewStores(c)! } : undefined;
   // (Ruling 173(e), the whole-world chart: cut off on an island of the historian's table, a garrison withers to the
-  // island's floor and does not lay down its arms from hunger. Its card says where it stands. wither.ts.)
-  const isle = !c.supplied || stores ? witherAt(g, c, enemyAshore(g, c)) : null;
+  // island's floor and does not lay down its arms from hunger. Its card says where it stands. wither.ts. A withered
+  // garrison eating a besieged town's stores, or not yet reached by the ships now able to, is withered still.)
+  const isle = !c.supplied || stores || withered(g, c) ? witherAt(g, c, enemyAshore(g, c)) : null;
   const kept = isle ? witherStores(g, c) : undefined;
   const months = (n: number): string => (n === 1 ? 'one month' : `${n} months`);
   const restLine = isle && kept === 0 ? `Cut off and out of stores: it has withered to ${floorWords(isle)} of its strength and holds on there. It gets no rest and no drafts, and it cannot attack, until a ship of its side can reach it.`
@@ -217,7 +218,7 @@ export function corpsMood(g: Game, c: Corps): Mood {
     : quiet ? `${restWord(rest)}: left where it stands for the month, it rests, takes in drafts half as fast again and recovers its spirits.`
     : `${restWord(rest)}: it has marched this month. A month where it neither marches nor fights would rest it properly.`;
   if (c.mor === undefined) {
-    return { morale: null, moraleWord: '', trend: 'steady', rest, restWord: restWord(rest), line: '', restLine: !c.supplied || stores ? restLine : `${restWord(rest)}.`, why: [], resting: false, ...(stores ? { stores } : {}) };
+    return { morale: null, moraleWord: '', trend: 'steady', rest, restWord: restWord(rest), line: '', restLine: !c.supplied || stores || isle ? restLine : `${restWord(rest)}.`, why: [], resting: false, ...(stores ? { stores } : {}) };
   }
   const why: MoodReason[] = (c.mw ?? [])
     .filter((e) => Math.abs(e[1]) >= 0.005)

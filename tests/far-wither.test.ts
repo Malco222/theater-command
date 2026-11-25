@@ -15,7 +15,7 @@ import { islandOf } from '../src/campaign/islands';
 import { corpsMood } from '../src/campaign/morale';
 import { closedTo, landCorps, whyNotLand, whyNotShip } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
-import { besieged, garrison, invest, salliers, whyNotSally } from '../src/campaign/siege';
+import { besieged, garrison, invest, salliers, storm, whyNotSally, whyNotStorm } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
 import { witherAt, witherStores, withered } from '../src/campaign/wither';
@@ -108,10 +108,10 @@ describe('a cut-off island garrison withers and is never a free prize (ruling 17
     expect(corpsMood(g, c).restLine).toBe('Cut off and out of stores: it has withered to a quarter of its strength and holds on there. It gets no rest and no drafts, and it cannot attack, until a ship of its side can reach it.');
     expect(whyNotShip(g, c, g.byName['Truk'])).toBe('Only a corps that has not moved this month can embark.');
     expect(evacuate(g, c)).toBe(false);
-    expect(whyNotEvacuate(g, c)).toBe("Kwajalein garrison (a test row) is cut off and out of stores on Kwajalein: no ship of Japan's can reach it to lift it off.");
+    expect(whyNotEvacuate(g, c)).toBe('Kwajalein garrison (a test row) is cut off and out of stores on Kwajalein: it cannot be lifted off until Japanese ships have reached it with stores.');
     // It stood where it was, and its works are its own still: a garrison with no moves left is not one that marched.
-    expect(c.dug).toBe(true);
-    expect(c.dugFor).toBeGreaterThanOrEqual(8);
+    // They are the two months' works it dug while its stores lasted, and no more: starving men dig nothing new.
+    expect([c.dug, c.dugFor]).toEqual([true, 2]);
     // The count is a number in the game's flags, and a saved game keeps it.
     const back = loadGame(saveGame(g))!;
     const same = back.corps.find((x) => x.id === c.id)!;
@@ -140,6 +140,52 @@ describe('a cut-off island garrison withers and is never a free prize (ruling 17
     expect(r.ctrl).toBe('USA');
     expect(c.dead).toBe(true);
     expect(g.headlines.some((h) => h.text === 'Kwajalein falls to American forces.')).toBe(true);
+    // Its count goes with it: nothing of a dead garrison is left in the game's flags.
+    expect(g.flags[`wither:${c.id}`]).toBeUndefined();
+  }, LONG);
+
+  it('an enemy who steps ashore beside a withered atoll garrison does not starve it out: it holds at the floor, the town\'s stores do not rest it, and it falls only to an assault', () => {
+    const g = war();
+    g.turn = 36;
+    const r = g.byName['Kwajalein'];
+    const c = addCorps(g, 'JAP', 'Kwajalein garrison (a test row)', 'inf', 1, 'Kwajalein', {});
+    // The garrison keeps to the atoll's town, so a landing finds the beach empty and has no battle to fight for it.
+    expect(garrison(g, c)).toBe(true);
+    hold(g, 'Eniwetok', 'USA');
+    const marines = [addCorps(g, 'USA', 'I Marine Corps (a test row)', 'inf', 1, 'Eniwetok', { xp: 0.4 })];
+    close(g, r);
+    for (let m = 1; m <= 5; m++) month(g);
+    expect([c.dead, withered(g, c), state(c)]).toEqual([false, true, [0.25, 0.25]]);
+    // The Americans land on the empty beach: no battle, the town under siege, an enemy ashore beside the garrison.
+    startPhase(g, 'USA');
+    const landing = landCorps(g, marines, r);
+    expect([landing.ok, landing.report ?? null, besieged(g, r), enemyAshore(g, c), r.ctrl]).toEqual([true, null, true, true, 'JAP']);
+    endPhase(g, 'USA');
+    close(g, r);
+    // The rule still answers for it: it has no stores left for a siege to eat.
+    expect(witherAt(g, c, true)).toMatchObject({ floor: 0.25 });
+    // Six months of siege. The first is the month a town's own stores feed its garrison: they are no ship, and neither
+    // mend it nor rest it. In the rest it used to lay down its arms unfought. It stands at the floor throughout.
+    const fed: boolean[] = [];
+    for (let m = 1; m <= 6; m++) {
+      month(g);
+      fed.push(c.supplied);
+      expect(c.dead, `month ${m}`).toBe(false);
+      expect(state(c), `month ${m}`).toEqual([0.25, 0.25]);
+      expect([withered(g, c), witherStores(g, c), c.ap, r.ctrl, besieged(g, r)], `month ${m}`).toEqual([true, 0, 0, 'JAP', true]);
+    }
+    expect(fed).toEqual([true, false, false, false, false, false]);
+    expect(corpsMood(g, c).restLine).toBe('Cut off and out of stores: it has withered to a quarter of its strength and holds on there. It gets no rest and no drafts, and it cannot attack, until a ship of its side can reach it.');
+    expect(salliers(g, r, 'JAP')).toEqual([]);
+    expect(g.headlines.some((h) => h.region === r.id && /lays down its arms|Starved out/.test(h.text))).toBe(false);
+    // It gives in under assault, as any garrison with no stores does: the division round the town storms it.
+    g.turn++;
+    startPhase(g, 'USA');
+    expect(whyNotStorm(g, r, 'USA')).toBeNull();
+    const assault = storm(g, marines, r);
+    expect(assault?.taken).toBe(true);
+    expect([r.ctrl, c.dead]).toEqual(['USA', true]);
+    expect(g.flags[`wither:${c.id}`]).toBeUndefined();
   }, LONG);
 
   it('on a large island the floor is a half: still there after eight months, and it falls to a landing', () => {
@@ -202,6 +248,19 @@ describe('a cut-off island garrison withers and is never a free prize (ruling 17
       expect(whyNotOrder(g, c)).toBe(WITHERED);
       expect(moveCorps(g, c, gloucester)).toBe(false);
     }
+    // A count does not travel. Set down by hand on ground of the same land mass that the table does not carry, still
+    // cut off, the corps has its count struck off as its month opens and starves there as a corps always did.
+    for (const u of [...gloucester.units]) removeCorps(g, u);
+    capture(g, gloucester, 'JAP');
+    r.units.splice(r.units.indexOf(b), 1);
+    b.reg = gloucester.id;
+    gloucester.units.push(b);
+    computeSupply(g);
+    expect([islandOf(g, gloucester), b.supplied, withered(g, b)]).toEqual([null, false, false]);
+    month(g);
+    expect([b.dead, witherStores(g, b), state(b), b.ap]).toEqual([false, undefined, [0.1, 0.425], 4]);
+    month(g);
+    expect(b.dead).toBe(true);
   }, LONG);
 
   it("a fortified port's stores come first: Truk feeds its garrison two months, and then it withers to a half as any other", () => {

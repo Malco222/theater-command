@@ -75,7 +75,7 @@ import { demandInstead, keepersOf, keptForces, pacificWar } from './pacific';
 import { islandOf, roomAt, roomSays } from './islands';
 import { frontOfRow, onLiveFront } from './planfronts';
 import { bookKept } from './stations';
-import { floorWords, witherAt, witherFed, witherMonth, withered } from './wither';
+import { floorWords, witherAt, witherDrop, witherFed, witherMonth, withered } from './wither';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
@@ -2314,6 +2314,8 @@ function reportUnit(c: Corps): ReportUnit {
 
 export function removeCorps(g: Game, c: Corps): void {
   c.dead = true;
+  // (The whole-world chart: a withered island garrison's count goes with it. Ruling 173(e), wither.ts.)
+  if (farOn(g)) witherDrop(g, c, true);
   const gen = generalOf(g, c);
   if (gen) { gen.corps = -1; c.general = null; }
   const r = g.regions[c.reg];
@@ -4129,7 +4131,7 @@ export function sailOn(g: Game, nat: string): void {
 export function evacuate(g: Game, c: Corps): boolean {
   const r = g.regions[c.reg];
   const N = g.nations[c.nat];
-  // (Ruling 173(e), the whole-world chart: a withered island garrison does not sail. No ship of its side reaches it.)
+  // (Ruling 173(e), the whole-world chart: a withered island garrison does not sail. It waits for a ship of its side.)
   if (withered(g, c)) return false;
   if (!N.seaSupply || !r.port || r.owner === c.nat || N.capital < 0 || !seaOpenAt(g, c.nat, r)) return false;
   const dest = refugeHeld(g, c, r);
@@ -4151,7 +4153,7 @@ export function evacuate(g: Game, c: Corps): boolean {
 export function whyNotEvacuate(g: Game, c: Corps): string | null {
   const r = g.regions[c.reg];
   const N = g.nations[c.nat];
-  if (withered(g, c)) return `${c.name} is cut off and out of stores on ${placeName(r.name)}: no ship of ${N.name}'s can reach it to lift it off.`;
+  if (withered(g, c)) return `${c.name} is cut off and out of stores on ${placeName(r.name)}: it cannot be lifted off until ${N.adj} ships have reached it with stores.`;
   if (!N.seaSupply) return `${N.name} has no ships to lift an army off a beach.`;
   if (!r.port) return `${r.name} has no port to lift an army from.`;
   if (r.owner === c.nat) return `${r.name} is home ground: there is nowhere to be lifted off to.`;
@@ -5433,8 +5435,10 @@ function digIn(g: Game, nat: string): void {
       delete c.relief;
       if (c.dug && c.town === undefined && !c.yields && !c.fought) { if (c.pressed) delete c.pressed; continue; }
     }
-    // (A withered island garrison has no moves to spend and marched nowhere: it keeps its works. Ruling 173(e).)
-    if (c.town === undefined && !c.yields && (c.ap >= c.apMax || withered(g, c)) && !c.fought) {
+    // (A withered island garrison has no moves to spend and marched nowhere: it keeps the works it stood in as they
+    // are. It digs no more of them, and none where it had none. Ruling 173(e), the whole-world chart.)
+    if (c.town === undefined && !c.yields && !c.fought && withered(g, c)) { if (c.pressed) delete c.pressed; continue; }
+    if (c.town === undefined && !c.yields && c.ap >= c.apMax && !c.fought) {
       // A month in which the line was attacked is a month's digging lost: the works are what the attack left of them.
       const gain = c.pressed ? DEFENCE.wear.regrow : 1;
       const late = digsLate(g.regions[c.reg]) ? DESERT.digLate : 0;
@@ -5621,6 +5625,8 @@ export function startPhase(g: Game, nat: string): void {
     const knew = c.xp, had = c.str;
     // Its morale for the month: where it stands, who stands with it, whether it has had any rest (the grand campaign).
     moraleMonth(g, c, { owed, cold: c.supplied && frozen(g, nat, g.regions[c.reg]) });
+    // (A count carried off every island of the table is struck off: the rule does not answer there.)
+    if (far) witherDrop(g, c);
     if (c.supplied && !stored.has(c)) {
       // (A fortress crew fed all month is restocked: its own stores' count starts again, 09:06Z (b).)
       if (fortRow(g, c)) crewFed(g, c);
@@ -5642,7 +5648,9 @@ export function startPhase(g: Game, nat: string): void {
       const bite = cold ? cmdWinter(g, c) : 0;
       if (cold) c.str *= 1 - EASTERN.winter.attrition * bite;
       const rest = ((c.fought ? 0.25 : 0.45) + restedOrg(g, c) + ward(c).org) * lineStrength(g, c).mul * columnShare(g, c) * (1 - (1 - EASTERN.winter.rest) * bite) * cmdRally(g, c);
-      c.org = Math.min(1, c.org + (owed ? rest * (1 - BUDGET.debt.rest * owed) : rest));
+      // (A garrison still withered here eats a besieged town's stores or a pocket's, which are no ship: it gets no
+      // rest from them, and stays at its floor. An enemy who lands beside it does not mend it.)
+      if (!(far && withered(g, c))) c.org = Math.min(1, c.org + (owed ? rest * (1 - BUDGET.debt.rest * owed) : rest));
       if (owed) c.str *= 1 - BUDGET.debt.desert * owed;
     } else {
       // (A fortress crew under the fortress rows lives on its works' own stores, counted apart from its organisation
