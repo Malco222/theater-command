@@ -1394,6 +1394,12 @@ export interface AirReport {
   city?: { region: number; added: number; now: number };
   /** Airfields as targets (behind its switch): what the bombs did to the field: whether its runway is shut, the levels burned now, the aircraft destroyed on the ground. */
   field?: { region: number; shut: boolean; levels: number; ground: number };
+  /**
+   * City defences (the design director's ruling of 25 Nov 2026 02:23Z), a night raid flown with the switch on: the
+   * searchlights at the target, their level, whether cloud blinded them, and the share (0 to 1) of the guns' levels
+   * that fired by searchlight. Absent otherwise.
+   */
+  lights?: { level: number; cloud: boolean; lit: number };
 }
 
 /** Ruling 236.2: how a battle for the sky over one province stands, for the side fighting for it. */

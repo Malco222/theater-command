@@ -38,6 +38,7 @@ import { townName } from './towns';
 import { shipRule } from './tech';
 import { forecastLine, grounded, skyOf, skyRaidLine, weatherOn, whyNotSky, zoneName, zoneOfGroup, zoneOfRegion } from './weather';
 import { whyNotField, wrecked } from './airversion';
+import { lightsAt } from './citydefences';
 import { fieldKnown, fieldRules, fieldView } from './fieldstate';
 
 export type RaidKind = 'bomb' | 'night' | 'ground' | 'line' | 'town' | 'superiority' | 'strike' | 'fleet' | 'harbour' | 'recon' | 'airfield';
@@ -599,6 +600,8 @@ function whatIsThere(g: Game, nat: string, kind: RaidKind, t: number, sight: Uin
   }
   if (kind === 'bomb' || kind === 'night') {
     const bits = [r.fac > 0 ? plural(r.fac, 'factory', 'factories') : '', onNet(t) && !railCut(g, t) ? (railsAt(t).length >= 3 ? 'a railway junction' : 'a railway') : '', gunsAt(g, t) ? `level ${gunsAt(g, t)} guns` : ''];
+    // City defences: the searchlights after the guns, with the switch on (lightsAt reads none with it off).
+    if (lightsAt(g, t)) bits.push(`level ${lightsAt(g, t)} searchlights`);
     return bits.filter(Boolean).join(', ');
   }
   if (kind === 'line') {
