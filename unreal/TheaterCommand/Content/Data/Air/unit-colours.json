@@ -1,5 +1,5 @@
 {
- "about": "Earned colours for air units, release 2. The art director's palette, 25 November 2026. Our own schemes: none is meant to match a real unit's. Third issue, 04:05Z: the historian's check of 03:51Z and 03:54Z and second pass of 04:01Z are applied (twelve schemes struck and replaced, and the rules that follow from them). A scheme's number never changes; a struck scheme's row is replaced in place. Copied into the game unchanged in substance from art-director/air-colours/unit-colours-palette.json (third issue, 04:05Z); read by Battle/AirUnitColours. The historian's check is owed before it ships on: the rows the brief keeps as near (its section 6) are judged in the stills of the one review round, and the Battle rules card's Earned colours stays off until the art director and the historian pass them.",
+ "about": "Earned colours for air units, release 2. The art director's palette, 25 November 2026. Our own schemes: none is meant to match a real unit's. Fourth issue, 12:27Z: the third issue (04:05Z, the historian's check of 03:51Z and 03:54Z and second pass of 04:01Z: twelve schemes struck and replaced) with one more rule from the art director's read of the first pictures on the game's own aircraft: wine red and orange never share a tail in any nation, because the two blur into one red at a distance (three rows replaced: Britain 7, Italy 4, Italy 8). Fifth issue, 12:34Z: the historian's read of the fourth (12:32Z) struck the tails that put Italy's white cross on wine red, so wine red never leads an Italian tail (three rows replaced: Italy 3, 4, 5). A scheme's number never changes; a struck scheme's row is replaced in place. Copied into the game unchanged in substance from art-director/air-colours/unit-colours-palette.json (fifth issue, 12:34Z); read by Battle/AirUnitColours. The historian's check is owed before it ships on: the rows the brief keeps as near (its section 6) are judged in the stills of the one review round, and the Battle rules card's Earned colours stays off until the art director and the historian pass them.",
  "tiers": {
   "1": "spinner",
   "2": "spinner and nose ring",
@@ -323,14 +323,14 @@
    },
    {
     "scheme": 6,
-    "spinner": "wine",
-    "ring": "orange",
-    "pattern": "halved",
+    "spinner": "turquoise",
+    "ring": "wine",
+    "pattern": "bands",
     "tail": [
-     "wine",
-     "orange"
+     "turquoise",
+     "wine"
     ],
-    "words": "Wine red spinner, orange nose band, tail halved, wine red over orange"
+    "words": "Turquoise spinner, wine red nose band, tail banded in turquoise and wine red"
    },
    {
     "scheme": 7,
@@ -991,36 +991,36 @@
    },
    {
     "scheme": 2,
-    "spinner": "wine",
-    "ring": "paleblue",
-    "pattern": "bands",
+    "spinner": "moss",
+    "ring": "turquoise",
+    "pattern": "checks",
     "tail": [
-     "wine",
-     "paleblue"
+     "moss",
+     "turquoise"
     ],
-    "words": "Wine red spinner, pale blue nose band, tail banded in wine red and pale blue"
+    "words": "Moss green spinner, turquoise nose band, moss green and turquoise checked tail"
    },
    {
     "scheme": 3,
-    "spinner": "wine",
-    "ring": "orange",
-    "pattern": "checks",
+    "spinner": "turquoise",
+    "ring": "azure",
+    "pattern": "bands",
     "tail": [
-     "wine",
-     "orange"
+     "turquoise",
+     "azure"
     ],
-    "words": "Wine red spinner, orange nose band, wine red and orange checked tail"
+    "words": "Turquoise spinner, azure blue nose band, tail banded in turquoise and azure blue"
    },
    {
     "scheme": 4,
-    "spinner": "wine",
-    "ring": "azure",
+    "spinner": "turquoise",
+    "ring": "slate",
     "pattern": "stripes",
     "tail": [
-     "wine",
-     "azure"
+     "turquoise",
+     "slate"
     ],
-    "words": "Wine red spinner, azure blue nose band, wine red and azure blue striped tail"
+    "words": "Turquoise spinner, slate blue nose band, turquoise and slate blue striped tail"
    },
    {
     "scheme": 5,
@@ -1046,14 +1046,14 @@
    },
    {
     "scheme": 7,
-    "spinner": "orange",
+    "spinner": "paleblue",
     "ring": "wine",
-    "pattern": "tipped",
+    "pattern": "halved",
     "tail": [
-     "orange",
+     "paleblue",
      "wine"
     ],
-    "words": "Orange spinner, wine red nose band, orange tail with a wine red tip"
+    "words": "Pale blue spinner, wine red nose band, tail halved, pale blue over wine red"
    },
    {
     "scheme": 8,
