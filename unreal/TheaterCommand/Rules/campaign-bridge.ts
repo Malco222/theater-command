@@ -7925,6 +7925,8 @@ const R2_SHIP: Record<string, (s: Game) => boolean> = {
   'logistics:lorryShift': (s) => setLogistics(s, 'lorryShift', true),
   'logistics:wagons': (s) => setLogistics(s, 'wagons', true),
   'logistics:dumps': (s) => setLogistics(s, 'dumps', true),
+  // (Release 2, atom.ts: the atomic project, switched in any month, so an older war takes it too.)
+  atomrule: (s) => setAtom(s, true) && atomOn(s),
 };
 function r2Ship(ids: string[]) {
   const s = game();
