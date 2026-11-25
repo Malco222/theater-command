@@ -1189,6 +1189,35 @@ void ALandBattle::GeneralDo(const FString& Word)
 			S.GeneralIn.bFollow = false;
 		}
 	}
+	// (ALL FALL BACK is for his whole army, so it is answered before "pick up a unit first": with nothing in hand it was
+	// refused, and the button for the whole army did nothing until a unit was picked up. The R2 Mac pass of 25 November 2026.)
+	else if (Word == TEXT("allback"))
+	{
+		// ALL FALL BACK (release 1.5; Brian, 23 November 14:47Z): asked once, on the screen, before it is given.
+		if (!G.bAllBack && !Clip.Deploying())
+		{
+			G.bAllBackAsk = true;
+		}
+	}
+	else if (Word == TEXT("allback:no"))
+	{
+		G.bAllBackAsk = false;
+	}
+	else if (Word == TEXT("allback:yes"))
+	{
+		// His whole army goes back behind the ground it started from; the rules end the battle as his retreat when the last
+		// unit is out. Nothing is left in his hand: the army takes no new orders after it (a refusal gives the button back).
+		G.bAllBackAsk = false;
+		if (!G.bAllBack && !Clip.Deploying())
+		{
+			G.bAllBack = true;
+			G.Armed.clear();
+			Clip.Clear();
+			G.bBox = G.bLine = G.bCarry = G.bSmoke = G.bGapAt = false;
+			OrderLive(TEXT("{\"do\":\"land:fallBack\"}"));
+			Say("YOUR WHOLE ARMY FALLS BACK: THE BATTLE ENDS WHEN THE LAST UNIT IS BEHIND THE GROUND IT STARTED FROM");
+		}
+	}
 	else if (!bHand)
 	{
 		Say("PICK UP A UNIT FIRST: CLICK ONE OF YOURS");
@@ -1274,33 +1303,6 @@ void ALandBattle::GeneralDo(const FString& Word)
 		}
 		GiveGeneral(WideOf(Clip.FallBack()), TEXT("withdraw"), -1, Points, 0.0, 0.0);
 		G.PingAt = -10.0;
-	}
-	else if (Word == TEXT("allback"))
-	{
-		// ALL FALL BACK (release 1.5; Brian, 23 November 14:47Z): asked once, on the screen, before it is given.
-		if (!G.bAllBack && !Clip.Deploying())
-		{
-			G.bAllBackAsk = true;
-		}
-	}
-	else if (Word == TEXT("allback:no"))
-	{
-		G.bAllBackAsk = false;
-	}
-	else if (Word == TEXT("allback:yes"))
-	{
-		// His whole army goes back behind the ground it started from; the rules end the battle as his retreat when the last
-		// unit is out. Nothing is left in his hand: the army takes no new orders after it (a refusal gives the button back).
-		G.bAllBackAsk = false;
-		if (!G.bAllBack && !Clip.Deploying())
-		{
-			G.bAllBack = true;
-			G.Armed.clear();
-			Clip.Clear();
-			G.bBox = G.bLine = G.bCarry = G.bSmoke = G.bGapAt = false;
-			OrderLive(TEXT("{\"do\":\"land:fallBack\"}"));
-			Say("YOUR WHOLE ARMY FALLS BACK: THE BATTLE ENDS WHEN THE LAST UNIT IS BEHIND THE GROUND IT STARTED FROM");
-		}
 	}
 	else if (Word == TEXT("ride"))
 	{
