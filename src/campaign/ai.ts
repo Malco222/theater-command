@@ -22,7 +22,7 @@ import { plannedStrike } from './carriers';
 import { readinessMonth } from './readiness';
 import { shoreOpen, stopDef, stopOf, stormHeldBy } from './history';
 import { unitsDecide } from './units';
-import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, fronts, heedsCard, holdsAshore, isOpen, keepsDoor, joinsOn, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, onTheAttack, onTheDay, opensNow, opensOn, opensSoon, probed, probing, quayGuests, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, temper, theatreStaff, descentAsks, freed, garrisonMonth, attackMembers, rearMonth } from './staff';
+import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, fronts, heedsCard, holdsAshore, isOpen, keepsDoor, joinsOn, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, onTheAttack, onTheDay, opensNow, opensOn, opensSoon, ownFront, probed, probing, quayGuests, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, temper, theatreStaff, descentAsks, freed, garrisonMonth, attackMembers, rearMonth } from './staff';
 import { STRENGTH, followUp } from './ashore';
 import { HOP_AIMS, firstOnRun, hopAims, hopShores, laneOn, pacificGround } from './pacific';
 import { beyondEurope, enemyAtTheDoor, farOn, oceanShares, overseasOf, shoreOf, type OverseasRules } from './world';
@@ -776,8 +776,9 @@ function seaAnswers(g: Game, nat: string): { c: Corps; on: Set<number> }[] {
  * The front is a front as the staff reads its own (staff.ts `fronts`), every province of its edge on ground the rule
  * reads (`answersHere`): the far side of the chart with the far switch on; and with Units decide on, at a stop that
  * keeps no book, the old chart's and the Americas' too (the design director's ruling of 14:15Z of 25 November 2026,
- * audit item 38: "B11's one rule on both charts"). Otherwise the old chart's fronts and the Americas' stand as they
- * did. A staff has a front from the month it is at
+ * audit item 38: "B11's one rule on both charts"). Its edge lies on one chart, and its rows and its ground are of
+ * that chart: a front with a foot on each is read by neither, as before. Otherwise the old chart's fronts and the
+ * Americas' stand as they did. A staff has a front from the month it is at
  * war with the country across it, so the war itself frees the holds on the front that faces that enemy, before he
  * has crossed.
  *
@@ -882,22 +883,29 @@ function landAnswers(g: Game, nat: string): { c: Corps; on: Set<number> }[] {
   const ours = (r: Region): boolean => answersHere(g, r) && (allied(g, nat, r.owner) || allied(g, nat, heldFirst(r)));
   const grounds = new Map<Corps, Set<number>>();
   for (const f of fronts(g, nat, { skip: (r) => aside(g, r, nat) })) {
-    // (A front the rule reads whole: as the staff reads its own on the far side, `ownFront`, and under Units decide
-    // at a stop that keeps no book a front of the old chart too. `answersHere`.)
-    if (!f.edge.length || !f.edge.every((id) => answersHere(g, id))) continue;
+    // (A front the rule reads whole, on one chart: as the staff reads its own on the far side, `ownFront`, and under
+    // Units decide at a stop that keeps no book a front of the old chart too, `answersHere`. A front with a foot on
+    // each chart is read by neither, as it was before, and a row answers and is tied only on its front's own chart:
+    // so the far side is as it was in every state of the two switches. The skeptic's finding of 25 November 2026:
+    // with both switches on, the Saharan front read whole tied France's Tunisia Command at Mareth to far-side ground
+    // as far as El Fasher, and the Sudan Defence Force to Ouargla. Whether such a front is one front to both charts
+    // is put to the design director.)
+    const far = ownFront(g, f);
+    if (!far && !(f.edge.length && f.edge.every((id) => shoreOf(id) !== 2 && answersHere(g, id)))) continue;
+    const chart = (id: number): boolean => (shoreOf(id) === 2) === far;
     const his: Region[] = [];
     for (let id = 0; id < f.depth.length; id++) if (f.depth[id] >= 1) his.push(g.regions[id]);
     if (his.every((r) => beach(g, nat, r))) continue;
     // (The front itself: its own provinces and the friendly ground next behind them.)
     const line = new Set<number>(f.ours);
     for (const id of f.ours) for (const j of g.regions[id].nb) if (friendly(g.regions[j])) line.add(j);
-    const here = rows.filter((c) => line.has(c.reg));
+    const here = rows.filter((c) => line.has(c.reg) && chart(c.reg));
     if (!here.length) continue;
     // (Its ground: of the front itself, what is its side's own; and what the enemy has taken of its side's own
     // ground there, or stands round, which is the front's to win back. Never what its side took in his country.)
     const on = new Set<number>();
-    for (const id of line) if (ours(g.regions[id])) on.add(id);
-    for (const r of his) if (ours(r) && (allied(g, nat, r.ctrl) || (r.prev !== null && allied(g, nat, r.prev)))) on.add(r.id);
+    for (const id of line) if (chart(id) && ours(g.regions[id])) on.add(id);
+    for (const r of his) if (chart(r.id) && ours(r) && (allied(g, nat, r.ctrl) || (r.prev !== null && allied(g, nat, r.prev)))) on.add(r.id);
     for (const c of here) {
       // (Where it stands is its ground whatever that ground is: a row is never barred from its own post.)
       let was = grounds.get(c);

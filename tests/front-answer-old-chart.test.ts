@@ -94,6 +94,24 @@ describe('held armies answer an attack by land on the old chart, under Units dec
     }
   }, 300000);
 
+  it('the tie holds an answering row to its ground against its own staff\'s moves: Germany\'s first month, the Vienna garrison is not sent to Lodz', () => {
+    // (The skeptic's finding of 25 November 2026: the month above never shows the tie stopping a move, since nothing
+    // tries to move those French rows off their ground. In Germany's first month the staff would send the Vienna
+    // garrison, a held row answering on the front with Poland, to Lodz in Poland's own ground, beyond its side's.)
+    const g = war(true);
+    upTo(g, 'GER');
+    const vienna = called(g, 'Vienna garrison');
+    const seen: { corps: Corps; on: Set<number> }[] = [];
+    answerWatch.tell = (e) => { if (e.nat === 'GER') seen.push(...e.rows); };
+    try { stepAI(g); } finally { answerWatch.tell = null; }
+    expect(seen.map((x) => x.corps)).toContain(vienna);
+    expect(seen.find((x) => x.corps === vienna)!.on.has(g.byName['Lodz'].id)).toBe(false);
+    for (const { corps: c, on } of seen) {
+      if (c.dead) continue;
+      expect([c.name, g.regions[c.reg].name, on.has(c.reg), c.hold]).toEqual([c.name, g.regions[c.reg].name, true, true]);
+    }
+  }, 300000);
+
   it('the Metz and Lauter fortified regions do not answer; engineers do not; a row marked to stay does not', () => {
     const g = war(true);
     champagne(g);
