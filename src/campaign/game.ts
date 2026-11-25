@@ -24,6 +24,7 @@ import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { locked, techTick, winterReady } from './tech';
 import { liftDates } from './lift';
 import { RES, fuelAir, fuelMet, fuelSlows, hungerLost, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
+import { riflesMonth } from './rifles';
 import { crown, warGoesOn } from './domination';
 import { afterFall, recordFall, rememberWars, retaken, standsFreed } from './liberation';
 import { honour } from './guarantees';
@@ -5969,6 +5970,7 @@ export function startPhase(g: Game, nat: string): void {
   techTick(g, nat);
   // Oil and supplies come in and go out before the month's money is counted: idle factories earn less (the grand campaign).
   resourcesTick(g, nat);
+  riflesMonth(g, nat);
   // The secret war: the player's agents report, strike or are caught, and the other side's saboteurs come calling (the grand campaign).
   intelTick(g, nat);
   // What the player can see of cut railways is noted as his month opens (the fog on a cut line, rulings 113 and 114).
