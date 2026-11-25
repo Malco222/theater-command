@@ -3,9 +3,10 @@
 // Tools/pack_nose_art.py into Content/Data/NoseArt, a quarter of the modeller's size and never otherwise altered), laid on
 // the panel the tool lays on her model's own skin (panels.json: the B-17's, port, and starboard too for the few worn on
 // both sides), drawn with M_TallyMark over the paint under it as an ace's victories are (AirBattleTally.cpp), while she is
-// near the eye on her own mesh. Which painting each aircraft wears is Battle/AirNoseArt's: her seat's, where the board's
-// place.bombers says who flies her; else dealt from the battle's seed, about one in five a bare nose. Shown, never
-// counted: nothing in the battle reads it back.
+// near the eye on her own mesh. Which painting each aircraft wears is Battle/AirNoseArt's: her seat's, where the battle
+// names her group's corps and the board's place.bombers its seats; else dealt from the battle's seed, about one in five a
+// bare nose; and once the battle names her as she falls or falls out of her box, that bomber's (painted again here).
+// Shown, never counted: nothing in the battle reads it back.
 //
 // Off unless the Battle rules card's "Bomber nose art" is on (FLandLive's rule "noseArt", off until the Mac holds 45 fps
 // with it and the art director has passed it): read once a battle, at its first frame drawn; off, DrawNoseArt returns
@@ -263,14 +264,36 @@ void AAirBattle::DrawNoseArt(const FVector& EyeAt)
 	if (!S.bNoseArtRead)
 	{
 		S.bNoseArtRead = true;
+		// (no M_TallyMark: NoseArtReady has said so in the log, and every bomber flies bare)
+		if (!NoseArtReady())
+		{
+			S.NoseArtOn = 0;
+			return;
+		}
+		// Each file its own step, so that the log names the one at fault (the review's UE-1, 25 November).
 		const FString Folder = FPaths::ProjectContentDir() / TEXT("Data") / TEXT("NoseArt");
 		TArray<uint8> Index, Panels;
 		std::string Why;
-		if (!NoseArtReady() || !FFileHelper::LoadFileToArray(Index, *(Folder / TEXT("index.json")))
-			|| !AirNoseArt::ReadIndex(std::string(reinterpret_cast<const char*>(Index.GetData()), static_cast<size_t>(Index.Num())), S.NoseArtList, Why)
-			|| !FFileHelper::LoadFileToArray(Panels, *(Folder / TEXT("panels.json"))))
+		bool bRead = false;
+		if (!FFileHelper::LoadFileToArray(Index, *(Folder / TEXT("index.json"))))
 		{
-			UE_LOG(LogTheater, Warning, TEXT("Air battle: nose art: its list or panels are missing (Content/Data/NoseArt, %s), so every bomber flies bare."), UTF8_TO_TCHAR(Why.c_str()));
+			Why = "index.json not read";
+		}
+		else if (!AirNoseArt::ReadIndex(std::string(reinterpret_cast<const char*>(Index.GetData()), static_cast<size_t>(Index.Num())), S.NoseArtList, Why))
+		{
+			Why = "index.json: " + Why;
+		}
+		else if (!FFileHelper::LoadFileToArray(Panels, *(Folder / TEXT("panels.json"))))
+		{
+			Why = "panels.json not read";
+		}
+		else
+		{
+			bRead = true;
+		}
+		if (!bRead)
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Air battle: nose art: its list or panels could not be read (Content/Data/NoseArt: %s), so every bomber flies bare."), UTF8_TO_TCHAR(Why.c_str()));
 			S.NoseArtOn = 0;
 			return;
 		}
@@ -303,10 +326,35 @@ void AAirBattle::DrawNoseArt(const FVector& EyeAt)
 			const AirShow::Group& G = Pair.second;
 			if (AirNoseArt::Wears(G.Nation, G.bFighter, G.Model, HasPanel))
 			{
-				const AirNoseArt::Told How = S.NoseArt.HowTold(G.Id);
 				UE_LOG(LogTheater, Display, TEXT("Air battle: nose art: %s's paintings %s."), UTF8_TO_TCHAR(G.Name.c_str()),
-					How == AirNoseArt::Told::ByCorps ? TEXT("from its seats (its corps named)") : How == AirNoseArt::Told::InOrder ? TEXT("from its seats (paired in order)") : TEXT("dealt from the battle's seed"));
+					S.NoseArt.HowTold(G.Id) == AirNoseArt::Told::ByCorps ? TEXT("from its seats (its corps named)") : TEXT("dealt from the battle's seed"));
 			}
+		}
+	}
+	// A bomber the battle named as she fell, or fell out of her box, wears that bomber's painting from then, and the one
+	// that wore it hers (Battle/AirNoseArt): each painted again, her old nose art taken down and made afresh below when
+	// she is next shown (none where she is now bare).
+	for (const int32 Key : S.NoseArt.Repainted())
+	{
+		FPlaneMade* Made = PlaneMade.Find(Key);
+		if (!Made)
+		{
+			continue;
+		}
+		if (Made->NoseArt.IsValid())
+		{
+			Made->NoseArt->DestroyComponent();
+		}
+		Made->NoseArt.Reset();
+		Made->bNoseArtTried = false;
+		if (NoseArtLogged < NoseArtMostLogged)
+		{
+			++NoseArtLogged;
+			const int32 Number = S.NoseArt.ArtOf(Key);
+			const AirNoseArt::Entry* Entry = Number > 0 ? S.NoseArtList.Of(Number) : nullptr;
+			const FString Called = Entry ? FString(UTF8_TO_TCHAR(Entry->Name.c_str())) : FString(TEXT("a bare nose"));
+			UE_LOG(LogTheater, Display, TEXT("Air battle: nose art: key %d now wears \"%s\" (painting %d): the battle named a bomber as one fell, or fell out of her box."),
+				Key, *Called, Number);
 		}
 	}
 	const int32 Ridden = S.bClose ? S.Subject.Plane : INDEX_NONE;

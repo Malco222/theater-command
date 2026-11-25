@@ -14,11 +14,14 @@
  * The bombers' nose art (release 2; Brian, 25 November 2026 01:30Z: "american only"): each American bomber's painting
  * on her nose, one of the modeller's 200 (the air thread's list, names.json; Content/Data/NoseArt, packed by
  * Tools/pack_nose_art.py), on the panel laid on her model's skin (panels.json). Which painting each aircraft wears: where
- * the battle says who flies her (the airStart board's place.bombers, campaign/bombers.ts's seats, old hands first), her
- * seat's; where it does not (the Bremen film, the test battles), the list's own rule (names.json's assign): each group's
- * paintings shuffled from the battle's seed and its id, given in turn, none shared in the battle while any is unused, and
- * about one in five a bare nose (a new replacement). An aircraft keeps hers for the whole battle; a loss reshuffles
- * nothing.
+ * the battle names her group's corps (its view's extra.corps) and the airStart board's place.bombers gives that corps'
+ * seats (campaign/bombers.ts, old hands first), her seat's, the first of the seats her model stands for (the model in
+ * slot k seats k * Per on, as the show's gunners name a bomber's slot); everywhere else (the rules do not name the corps
+ * yet; the Bremen film, the test battles), the list's own rule (names.json's assign): each group's paintings shuffled
+ * from the battle's seed and its id, given in turn, none shared in the battle while any is unused, and about one in five
+ * a bare nose (a new replacement). An aircraft keeps hers for the whole battle, but for this: a bomber the battle names
+ * as she falls, or falls out of her box (the loss's extra.bomber, the dispatch's "That was <name>"), wears that bomber's
+ * painting from then, whichever model the show took for her, and the one of her group that wore it takes hers in turn.
  *
  * Engine-free, so the cloud test reads exactly what the game reads (Tools/air_show/air_nose_art_test.cpp). Nothing here
  * decides anything: the rules say who flies each bomber, and nothing drawn reads back.
@@ -92,9 +95,10 @@ namespace AirNoseArt
 	/** Whether an aircraft may wear nose art: an American bomber (Brian: "american only") whose model has a panel. */
 	bool Wears(const std::string& Nation, bool bFighter, const std::string& Model, const std::function<bool(const std::string&)>& HasPanel);
 
-	/** How a group's paintings are told: from its seats, its corps named by the battle (extra.corps) or its bomber groups
-	 * paired in order with place.bombers' nose groups; else dealt from the battle's seed. */
-	enum class Told { Dealt, ByCorps, InOrder };
+	/** How a group's paintings are told: from its seats, its corps named by the battle (extra.corps); else dealt from the
+	 * battle's seed. Never by the order of its groups: the battle numbers them in its ticket's order, the campaign's own
+	 * order of its air groups (a newer one can stand ahead of older ones), and place.bombers is keyed by corps. */
+	enum class Told { Dealt, ByCorps };
 
 	/** Each bomber's painting in one battle. */
 	class Book
@@ -103,7 +107,8 @@ namespace AirNoseArt
 		/** A battle's start: the list, the battle's seed (AirSky::Placing's), and the board's seats (AirFeed::Sky::Bombers). */
 		void Begin(const Index& List, uint64_t Seed, const std::map<int, AirFeed::Sky::BomberGroup>& Bombers);
 		/** A frame's aircraft, in the show's order (keys rising, as Show::Planes gives them): each new one that may wear
-		 * nose art is given her painting, the next of her group's. Groups are the show's (Show::Groups). */
+		 * nose art is given her painting, the next of her group's (Per from her group, extra.per); then each the battle
+		 * has newly named (PlaneOut::NamedArt) wears that bomber's painting. Groups are the show's (Show::Groups). */
 		void Take(const std::map<int, AirShow::Group>& Groups, const std::vector<AirShow::PlaneOut>& Planes, const std::function<bool(const std::string&)>& HasPanel);
 		/** An aircraft's painting: its number, 0 a bare nose, -1 none (she wears none, or has not been seen). */
 		int ArtOf(int Key) const;
@@ -113,6 +118,9 @@ namespace AirNoseArt
 		int Given() const { return static_cast<int>(Art.size()); }
 		int Bare() const;
 		bool Begun() const { return bBegun; }
+		/** The aircraft whose painting the last Take changed after she was first given one: a bomber the battle named as
+		 * she fell or fell out of her box, and the one that handed that painting over to her. The scene paints them again. */
+		const std::vector<int>& Repainted() const { return Changed; }
 
 	private:
 		struct Turn
@@ -122,7 +130,11 @@ namespace AirNoseArt
 			std::set<int> Own;        // the numbers its aircraft have had (cleared when its list runs out)
 		};
 		void Pair(const std::map<int, AirShow::Group>& Groups, const std::function<bool(const std::string&)>& HasPanel);
-		int Deal(int Group, int Ordinal);
+		int Deal(int Group, int Ordinal, int Per);
+		/** A number as worn: itself where the list has it painted, else 0 (a bare nose). */
+		int Usable(int Number) const;
+		/** She wears the painting the battle named her by (P.NamedArt), the one that wore it taking hers. */
+		void Rename(const AirShow::PlaneOut& P, const std::vector<AirShow::PlaneOut>& Planes);
 
 		Index List;
 		std::vector<int> Painted;
@@ -136,5 +148,7 @@ namespace AirNoseArt
 		std::map<int, int> Made;   // each group's aircraft given so far
 		std::map<int, int> Art;    // each aircraft's painting (0 bare)
 		std::set<int> Used;        // the numbers given in this battle
+		std::map<int, int> Named;  // each aircraft's PlaneOut::NamedArt as last taken
+		std::vector<int> Changed;  // the aircraft the last Take painted again
 	};
 }

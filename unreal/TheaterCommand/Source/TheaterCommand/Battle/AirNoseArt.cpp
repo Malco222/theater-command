@@ -211,57 +211,47 @@ namespace AirNoseArt
 	void Book::Pair(const std::map<int, AirShow::Group>& Groups, const std::function<bool(const std::string&)>& HasPanel)
 	{
 		bPaired = true;
-		// The groups that wear nose art, in the battle's order (its ids: its forces in the ticket's order), and
-		// place.bombers' nose groups by corps.
-		std::vector<const AirShow::Group*> Wearing;
+		// A group the battle names the corps of (its view's extra.corps) flies with that corps' seats, where place.bombers
+		// gives them (a nose group's) and it is that corps' only box: a carrier group's bombers split by kind fly as several
+		// boxes of one corps, which the rules do not know one by one either (sim.ts, its seated boxes).
+		std::map<int, int> Boxes;
 		for (const auto& [Id, G] : Groups)
-			if (Wears(G.Nation, G.bFighter, G.Model, HasPanel)) Wearing.push_back(&G);
-		std::vector<int> Nose;
-		for (const auto& [Corps, B] : Bombers)
-			if (B.Style == "nose" && !B.Seats.empty()) Nose.push_back(Corps);
-		// A group the battle names the corps of flies with that corps' seats.
-		bool bNamed = false;
-		for (const AirShow::Group* G : Wearing)
+			if (!G.bFighter && G.Corps >= 0) ++Boxes[G.Corps];
+		for (const auto& [Id, G] : Groups)
 		{
-			if (G->Corps < 0) continue;
-			bNamed = true;
-			const auto Found = Bombers.find(G->Corps);
-			if (Found != Bombers.end() && Found->second.Style == "nose" && !Found->second.Seats.empty())
-			{
-				CorpsOf[G->Id] = G->Corps;
-				How[G->Id] = Told::ByCorps;
-			}
+			if (G.Corps < 0 || Boxes[G.Corps] != 1 || !Wears(G.Nation, G.bFighter, G.Model, HasPanel)) continue;
+			const auto Found = Bombers.find(G.Corps);
+			if (Found == Bombers.end() || Found->second.Style != "nose" || Found->second.Seats.empty()) continue;
+			CorpsOf[Id] = G.Corps;
+			How[Id] = Told::ByCorps;
 		}
-		if (bNamed || Nose.empty()) return;
-		// Else (the views name no corps): the rules number a battle's groups in its ticket's order and key place.bombers by
-		// corps, so each is paired in order with a nose group only where the counts agree, group for group, and each
-		// group has as many seats as aircraft as it began; any doubt, and every group's paintings are dealt.
-		if (Nose.size() != Wearing.size()) return;
-		for (size_t K = 0; K < Wearing.size(); ++K)
-		{
-			const AirShow::Group& G = *Wearing[K];
-			const size_t Seats = Bombers[Nose[K]].Seats.size();
-			if (Seats != static_cast<size_t>(std::max(G.N0, G.N))) return;
-		}
-		for (size_t K = 0; K < Wearing.size(); ++K)
-		{
-			CorpsOf[Wearing[K]->Id] = Nose[K];
-			How[Wearing[K]->Id] = Told::InOrder;
-		}
+		// Every other group's paintings are dealt from the battle's seed. Never paired by their order, whatever the counts:
+		// the battle numbers its groups in its ticket's order, which is the campaign's own order of its air groups, where a
+		// newer group can stand ahead of older ones (air.ts growCommands and splitOff splice one in after its parent), while
+		// place.bombers is keyed by corps; and full groups, all of a size, leave no count on the board to tell them apart (the
+		// review's R1, 25 November: two groups of 80 would wear each other's crews). The rules naming each box's corps, for
+		// looks only, pairs them exactly.
 	}
 
-	int Book::Deal(int Group, int Ordinal)
+	int Book::Usable(int Number) const
 	{
-		// From her seat, where the battle says who flies her: her group's aircraft in turn wear its seats, old hands first
-		// (a seat with art 0 has a bare nose, the air thread's tallies.md; a number not yet painted, too). One past its
-		// seats is a new replacement, bare.
+		// (a seat with art 0 has a bare nose, the air thread's tallies.md; a number not yet painted, too)
+		const Entry* E = Number > 0 ? List.Of(Number) : nullptr;
+		return E && E->bPainted && !E->File.empty() ? Number : 0;
+	}
+
+	int Book::Deal(int Group, int Ordinal, int Per)
+	{
+		// From her seat, where the battle names her group's corps: her group's models in turn, as the show first lays them
+		// slot by slot, each wear the first of the seats it stands for (Per aircraft a model, extra.per: the model in slot k
+		// seats k * Per on, as the show's gunners name a bomber's slot, seat / Per), old hands first. A model the show lays
+		// later, closing a gap in the box, falls past its seats and is bare: which of its crews it stands for, nothing says.
 		if (const auto Corps = CorpsOf.find(Group); Corps != CorpsOf.end())
 		{
 			const std::vector<AirFeed::Sky::BomberSeat>& Seats = Bombers[Corps->second].Seats;
-			const int Number = Ordinal >= 0 && static_cast<size_t>(Ordinal) < Seats.size() ? Seats[static_cast<size_t>(Ordinal)].Art : 0;
-			const Entry* E = Number > 0 ? List.Of(Number) : nullptr;
-			if (!E || !E->bPainted || E->File.empty()) return 0;
-			Used.insert(Number);
+			const size_t Seat = static_cast<size_t>(std::max(0, Ordinal)) * static_cast<size_t>(std::max(1, Per));
+			const int Number = Usable(Ordinal >= 0 && Seat < Seats.size() ? Seats[Seat].Art : 0);
+			if (Number > 0) Used.insert(Number);
 			return Number;
 		}
 		// Else dealt (names.json's assign): about one in five a bare nose, each aircraft's own throw ...
@@ -300,16 +290,56 @@ namespace AirNoseArt
 		return TakeAt(0);
 	}
 
+	void Book::Rename(const AirShow::PlaneOut& P, const std::vector<AirShow::PlaneOut>& Planes)
+	{
+		const int Want = Usable(P.NamedArt);
+		const int Was = Art[P.Key];
+		if (Want == Was) return;
+		// The one that wore it hands it over and takes hers: one of her own group (another group's may wear the same
+		// painting for a crew of its own), or, where both groups' paintings are dealt, of any (none is shared while any is
+		// unused); never one falling already (she fell as the bomber she was named for).
+		if (Want > 0)
+		{
+			for (const AirShow::PlaneOut& Q : Planes)
+			{
+				if (Q.Key == P.Key || Q.bFalling) continue;
+				const auto Wore = Art.find(Q.Key);
+				if (Wore == Art.end() || Wore->second != Want) continue;
+				if (Q.Group != P.Group && (HowTold(Q.Group) != Told::Dealt || HowTold(P.Group) != Told::Dealt)) continue;
+				Wore->second = Was;
+				Changed.push_back(Q.Key);
+				break;
+			}
+			Used.insert(Want);
+		}
+		Art[P.Key] = Want;
+		Changed.push_back(P.Key);
+	}
+
 	void Book::Take(const std::map<int, AirShow::Group>& Groups, const std::vector<AirShow::PlaneOut>& Planes, const std::function<bool(const std::string&)>& HasPanel)
 	{
+		Changed.clear();
 		if (!bBegun || Groups.empty()) return;
 		if (!bPaired) Pair(Groups, HasPanel);
 		for (const AirShow::PlaneOut& P : Planes)
 		{
 			if (Art.count(P.Key) || !Wears(P.Nation, P.bFighter, P.Model, HasPanel)) continue;
+			const auto Its = Groups.find(P.Group);
 			int& Ordinal = Made[P.Group];
-			Art[P.Key] = Deal(P.Group, Ordinal);
+			Art[P.Key] = Deal(P.Group, Ordinal, Its != Groups.end() ? Its->second.Per : 1);
 			++Ordinal;
+		}
+		// A bomber the battle names as she falls, or falls out of her box (the loss's extra.bomber; the dispatch "That was
+		// <name>" names her): she wears that bomber's painting from then, whichever model the show took for her, so that the
+		// painting seen to go down is the crew's the campaign strikes off, and none flies on wearing it (the review's R2, 25
+		// November). The show's choice of model is its own, the same with the nose art off as on.
+		for (const AirShow::PlaneOut& P : Planes)
+		{
+			if (P.NamedArt < 0 || !Art.count(P.Key)) continue;
+			const auto Before = Named.find(P.Key);
+			if (Before != Named.end() && Before->second == P.NamedArt) continue;
+			Named[P.Key] = P.NamedArt;
+			Rename(P, Planes);
 		}
 	}
 

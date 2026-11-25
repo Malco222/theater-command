@@ -7,8 +7,12 @@
 // file's frame and in the game's (her nose toward -X, her right hand at -Y). Then which aircraft wears which painting:
 // the Bremen film played through the game's own show, where the battle does not say who flies them (each mission a
 // different set from its seed, about one in five bare, none shared, Americans' bombers alone, an aircraft's for the whole
-// battle); and a raid the rules made, whose bombers wear their seats' paintings (the board's place.bombers), old hands
-// first, the rules' names matching the list's.
+// battle); and two raids the rules made (nose_art_raid.json, tools/air-record/nose-art-raid.ts), the rules' names
+// matching the list's: as the rules send them now, naming no box's corps, every group's paintings dealt and never paired
+// by its order, also where the ticket's order is not by corps; each box's corps named (extra.corps, as the rules would
+// send it), each group's models wearing its own corps' seats, the model in slot k seat k times per, old hands first; and
+// played through its first named losses, each model that falls for one wearing the painting the loss names
+// (extra.bomber), a painting changed only at such a naming, none worn twice in a group at once.
 // Usage: air_nose_art_test <Content/Data/NoseArt> <Content/Models> <nose_art_raid.json> [recording.json ...]
 #include "Battle/AirFeed.h"
 #include "Battle/AirNoseArt.h"
@@ -262,14 +266,28 @@ namespace
 		return static_cast<int>(Be(16)) == W && static_cast<int>(Be(20)) == H && Data[24] == 8 && Data[25] == 6;
 	}
 
+	/** An aircraft that wears nose art, as she began to fall: the bomber by name the battle said she was (PlaneOut's
+	 * NamedArt, -1 none) and the painting she wore then. */
+	struct Fell
+	{
+		int Key = 0, Group = 0;
+		int Named = -1;
+		int Art = -1;
+	};
+
 	/** A battle played through the game's own show at four frames a battle second, each frame's aircraft handed to the
-	 * book as the scene hands them; whether any aircraft's painting ever changed, and the groups' aircraft in turn. */
+	 * book as the scene hands them: whether any aircraft's painting changed but where the battle named a bomber, the
+	 * groups' aircraft in turn as each was first given hers, each that fell, and whether two flying in one group ever
+	 * wore the same painting at once. */
 	struct Played
 	{
-		bool bSteady = true;
-		std::map<int, std::vector<int>> ByGroup; // each group's paintings, its aircraft in turn
+		bool bSteady = true;                     // no painting changed but at a bomber's naming (Book::Repainted)
+		std::map<int, std::vector<int>> ByGroup; // each group's paintings, its aircraft in turn, as first given
 		int Others = 0;                          // aircraft that wear none
 		int OthersGiven = 0;                     // ... given one all the same (none should be)
+		std::vector<Fell> Falls;                 // each that wears nose art, as she began to fall
+		int Repainted = 0;                       // paintings changed at a bomber's naming: hers, and the one she took it from
+		int Shared = 0;                          // frames in which two flying in one group wore the same painting
 	};
 
 	Played Play(const AirFeed::Sky& Board, const std::vector<AirFeed::Frame>& Views, AirNoseArt::Book& Book, uint64_t ShowSeed, double MostT)
@@ -278,7 +296,8 @@ namespace
 		AirShow::Show Show(ShowSeed);
 		AirFeed::Apply(Board, Show);
 		size_t Taken = 0;
-		std::map<int, int> Seen;
+		std::map<int, int> Seen, NamedWas;
+		std::set<int> Fallen;
 		auto TakeNext = [&]()
 		{
 			const AirFeed::Frame& F = Views[Taken++];
@@ -295,6 +314,10 @@ namespace
 			Show.Advance(T);
 			Show.Effects.clear();
 			Book.Take(Show.Groups(), Show.Planes(), HasPanel);
+			const std::vector<int>& Changed = Book.Repainted();
+			int NamedNow = 0;
+			std::map<int, std::set<int>> Worn;
+			bool bShared = false;
 			for (const AirShow::PlaneOut& P : Show.Planes())
 			{
 				const int Art = Book.ArtOf(P.Key);
@@ -304,6 +327,9 @@ namespace
 					Out.OthersGiven += Art != -1 ? 1 : 0;
 					continue;
 				}
+				const auto Before = NamedWas.find(P.Key);
+				if (P.NamedArt >= 0 && (Before == NamedWas.end() || Before->second != P.NamedArt)) ++NamedNow;
+				NamedWas[P.Key] = P.NamedArt;
 				const auto Was = Seen.find(P.Key);
 				if (Was == Seen.end())
 				{
@@ -312,12 +338,88 @@ namespace
 				}
 				else if (Was->second != Art)
 				{
-					Out.bSteady = false;
+					const bool bAsked = std::find(Changed.begin(), Changed.end(), P.Key) != Changed.end();
+					Out.Repainted += bAsked ? 1 : 0;
+					Out.bSteady = Out.bSteady && bAsked;
+					Was->second = Art;
 				}
+				if (P.bFalling && Fallen.insert(P.Key).second) Out.Falls.push_back({ P.Key, P.Group, P.NamedArt, Art });
+				if (!P.bFalling && Art > 0 && !Worn[P.Group].insert(Art).second) bShared = true;
 			}
+			// (a painting is changed only in a frame in which the battle named a bomber)
+			if (!Changed.empty() && NamedNow == 0) Out.bSteady = false;
+			Out.Shared += bShared ? 1 : 0;
 		}
 		Out.Others = static_cast<int>(Others.size());
 		return Out;
+	}
+
+	/** A number as an aircraft wears it: itself where the list has it painted, else 0 (a bare nose). */
+	int Usable(const AirNoseArt::Index& List, int Number)
+	{
+		const AirNoseArt::Entry* E = Number > 0 ? List.Of(Number) : nullptr;
+		return E && E->bPainted && !E->File.empty() ? Number : 0;
+	}
+
+	/** A raid the rules made (nose_art_raid.json's "seats" or "spliced", tools/air-record/nose-art-raid.ts): its board,
+	 * its views, and the rules' own corps of each bomber box (its "forces", in the order the rules number them). */
+	struct Raided
+	{
+		AirFeed::Sky Board;
+		std::vector<AirFeed::Frame> Views;
+		std::vector<std::pair<int, int>> Forces; // (the box's id, its corps)
+	};
+
+	/** An object's field, to be written. */
+	AirFeed::Json* FieldOf(AirFeed::Json& Object, const char* Name)
+	{
+		for (size_t K = 0; K < Object.Keys.size() && K < Object.Values.size(); ++K)
+			if (Object.Keys[K] == Name) return &Object.Values[K];
+		return nullptr;
+	}
+
+	/** Reads a raid; with Corps, each bomber box's view names its corps (extra.corps) from its forces, as the rules would
+	 * send it for looks only, or as Corps gives it (an id missing from it named none). */
+	bool ReadRaid(const AirFeed::Json& R, const std::map<int, int>* Corps, Raided& Out, std::string& Why)
+	{
+		Out = Raided();
+		if (!R.IsObject() || !AirFeed::ReadSky(R["sky"], Out.Board))
+		{
+			Why = "no board";
+			return false;
+		}
+		for (const AirFeed::Json& F : R["forces"].Items) Out.Forces.emplace_back(F["id"].Int(-1), F["corps"].Int(-1));
+		for (const AirFeed::Json& V : R["views"].Items)
+		{
+			AirFeed::Json Named = V;
+			if (AirFeed::Json* Units = Corps ? FieldOf(Named, "units") : nullptr)
+			{
+				for (AirFeed::Json& U : Units->Items)
+				{
+					const auto Found = Corps->find(U["id"].Int(-1));
+					AirFeed::Json* X = FieldOf(U, "extra");
+					if (Found == Corps->end() || !X || !X->IsObject()) continue;
+					AirFeed::Json Number;
+					Number.Kind = AirFeed::Json::Type::Number;
+					Number.Value = Found->second;
+					X->Keys.push_back("corps");
+					X->Values.push_back(Number);
+				}
+			}
+			AirFeed::Frame F;
+			if (!AirFeed::ReadView(Named, Out.Board, F))
+			{
+				Why = "a view not read";
+				return false;
+			}
+			Out.Views.push_back(std::move(F));
+		}
+		if (Out.Views.empty() || Out.Forces.empty())
+		{
+			Why = "no views or no forces";
+			return false;
+		}
+		return true;
 	}
 
 	std::string ListOf(const std::vector<int>& Art, const AirNoseArt::Index& List, size_t Most)
@@ -349,7 +451,7 @@ namespace
 			G.bFighter = false;
 			G.Nation = "USA";
 			G.Model = "B17";
-			G.N = G.N0 = 48;
+			G.N = 48;
 			Groups[G.Id] = G;
 			std::vector<AirShow::PlaneOut> Planes;
 			for (int K = 0; K < 12; ++K)
@@ -528,16 +630,16 @@ int main(int Argc, char** Argv)
 		Check(std::fabs(Share - List.BareChance) < 0.03 && Overlap < 0.15, "about one in five bare, each mission's own set", Line);
 	}
 
-	// A raid the rules made: each bomber wears her seat's painting.
-	std::printf("A raid the rules made (%s)\n", Raid.c_str());
+	// Raids the rules made (tools/air-record/nose-art-raid.ts): who wears what where the board gives the seats.
+	std::printf("Raids the rules made (%s)\n", Raid.c_str());
 	AirFeed::Json J;
-	AirFeed::Sky Board;
-	AirFeed::Frame First;
+	Raided Seated, Spliced;
 	Why.clear();
-	const bool bRaid = ReadText(Raid, Text) && AirFeed::Parse(Text, J, Why) && AirFeed::ReadSky(J["sky"], Board) && AirFeed::ReadView(J["view"], Board, First);
-	Check(bRaid, "its board and first view read", Why);
+	const bool bRaid = ReadText(Raid, Text) && AirFeed::Parse(Text, J, Why) && ReadRaid(J["seats"], nullptr, Seated, Why) && ReadRaid(J["spliced"], nullptr, Spliced, Why);
+	Check(bRaid, "its two raids read: their boards, views and the rules' own corps of each box", Why);
 	if (bRaid)
 	{
+		const AirFeed::Sky& Board = Seated.Board;
 		size_t Seats = 0;
 		int Named = 0, NamedRight = 0, Bare = 0;
 		for (const auto& [Corps, B] : Board.Bombers)
@@ -557,79 +659,160 @@ int main(int Argc, char** Argv)
 		}
 		std::snprintf(Line, sizeof Line, "%zu groups, %zu seats, %d bare; %d of %d named as the list names their paintings", Board.Bombers.size(), Seats, Bare, NamedRight, Named);
 		Check(Board.Bombers.size() == 3 && Seats == 240 && Named > 0 && NamedRight == Named, "the seats read from place.bombers, the rules' names the list's", Line);
-		AirNoseArt::Book Book;
-		Book.Begin(List, 77, Board.Bombers);
-		AirFeed::Recording Rec;
-		Rec.Board = Board;
-		Rec.Views.push_back(First);
-		const Played Run = Play(Board, Rec.Views, Book, 238, 20.0);
-		// Paired in order (the views name no corps): each group's aircraft in turn wear its seats, old hands first.
-		std::vector<int> Corps;
-		for (const auto& [Id, B] : Board.Bombers) Corps.push_back(Id);
-		int Right = 0, All = 0;
-		size_t Index = 0;
-		for (const auto& [Group, Art] : Run.ByGroup)
-		{
-			const std::vector<AirFeed::Sky::BomberSeat>& Own = Board.Bombers[Corps[std::min(Index, Corps.size() - 1)]].Seats;
-			for (size_t K = 0; K < Art.size(); ++K)
-			{
-				const int Want = K < Own.size() && Own[K].Art > 0 && List.Of(Own[K].Art) && List.Of(Own[K].Art)->bPainted ? Own[K].Art : 0;
-				Right += Art[K] == Want ? 1 : 0;
-				++All;
-			}
-			std::printf("    group %d (%s): %s\n", Group, Book.HowTold(Group) == AirNoseArt::Told::InOrder ? "its seats, paired in order" : "dealt", ListOf(Art, List, 8).c_str());
-			Check(Book.HowTold(Group) == AirNoseArt::Told::InOrder, "a group paired in order with its corps' seats");
-			++Index;
-		}
-		std::snprintf(Line, sizeof Line, "%d of %d aircraft", Right, All);
-		Check(All > 0 && Right == All, "each aircraft wears her seat's painting, old hands first", Line);
 
-		// Named by the battle (extra.corps): paired exactly, whatever the order.
+		// The rules' own corps of each box (their forces, in the order the rules number them), and each group's aircraft a
+		// model (extra.per).
+		auto CorpsOf = [](const Raided& R)
+		{
+			std::map<int, int> Out;
+			for (const auto& [Id, Corps] : R.Forces) Out[Id] = Corps;
+			return Out;
+		};
+		auto GroupOf = [](const Raided& R, int Id)
+		{
+			for (const AirShow::Group& G : R.Views.front().Groups)
+				if (G.Id == Id) return G;
+			return AirShow::Group();
+		};
+		// The named losses that bring a model down (air:lost with extra.bomber and models 1 or more), as the fixture's own
+		// text has them: each group's paintings named.
+		std::map<int, std::multiset<int>> Asked;
+		for (const AirFeed::Json& V : J["seats"]["views"].Items)
+		{
+			for (const AirFeed::Json& E : V["events"].Items)
+			{
+				const AirFeed::Json& X = E["extra"];
+				if (E["what"].Str("") == "air:lost" && X["bomber"].IsObject() && X["models"].Int(1) >= 1) Asked[E["unit"].Int(-1)].insert(Usable(List, X["bomber"]["art"].Int(0)));
+			}
+		}
+		// Each bomber that falls in the picture for a named loss wears that bomber's painting, whichever model the show
+		// took; every such loss is seen; and no painting changes but at a naming, none worn twice in a group at once.
+		auto NamedFalls = [&](const Played& Run)
+		{
+			int Right = 0, All = 0;
+			std::map<int, std::multiset<int>> Down;
+			for (const Fell& F : Run.Falls)
+			{
+				if (F.Named < 0) continue;
+				++All;
+				Right += F.Art == Usable(List, F.Named) ? 1 : 0;
+				Down[F.Group].insert(Usable(List, F.Named));
+			}
+			size_t Losses = 0;
+			for (const auto& [Group, Arts] : Asked) Losses += Arts.size();
+			// (the show's clock stops at the last view, so the losses of its last few seconds are still held for the guns;
+			// and one blown apart at once is never drawn falling)
+			bool bOwn = true;
+			for (const auto& [Group, Arts] : Down)
+			{
+				const auto Mine = Asked.find(Group);
+				bOwn = bOwn && Mine != Asked.end() && std::includes(Mine->second.begin(), Mine->second.end(), Arts.begin(), Arts.end());
+			}
+			std::snprintf(Line, sizeof Line, "%d of %d falling as the bombers their losses name; %zu such losses in the raid's views", Right, All, Losses);
+			Check(All >= 5 && Right == All, "each bomber that falls for a named loss wears the painting the loss names (extra.bomber)", Line);
+			Check(bOwn, "each named one seen falling one of her own group's named losses that bring a model down", Line);
+			std::snprintf(Line, sizeof Line, "%d paintings changed at a naming; %d frames with one worn twice in a group", Run.Repainted, Run.Shared);
+			Check(Run.bSteady && Run.Repainted > 0 && Run.Shared == 0, "a painting changes only at a naming (hers, and the one she took it from), none worn twice in a group", Line);
+		};
+
+		// As the rules send it now (no view names its box's corps): every group's paintings dealt, never paired by order.
+		{
+			AirNoseArt::Book Book;
+			Book.Begin(List, 77, Board.Bombers);
+			const Played Run = Play(Board, Seated.Views, Book, 238, 1000.0);
+			bool bDealt = !Run.ByGroup.empty();
+			for (const auto& [Group, Art] : Run.ByGroup)
+			{
+				bDealt = bDealt && Book.HowTold(Group) == AirNoseArt::Told::Dealt;
+				std::printf("    group %d (%s): %s\n", Group, Book.HowTold(Group) == AirNoseArt::Told::Dealt ? "dealt" : "its seats", ListOf(Art, List, 8).c_str());
+			}
+			Check(bDealt, "no corps named (as the rules send it now): every group's paintings dealt, none paired by its order");
+			NamedFalls(Run);
+		}
+		// Each view naming its box's corps (extra.corps), as the rules would send it for looks only: each group wears its
+		// own corps' seats, the model in slot k the first of those it stands for (seat k times per), old hands first.
+		auto OwnSeats = [&](const Raided& R, const AirNoseArt::Book& Book, const Played& Run, const char* What)
+		{
+			int Right = 0, All = 0;
+			bool bByCorps = !Run.ByGroup.empty();
+			const std::map<int, int> Of = CorpsOf(R);
+			for (const auto& [Group, Art] : Run.ByGroup)
+			{
+				const AirShow::Group G = GroupOf(R, Group);
+				const auto Corps = Of.find(Group);
+				const auto Own = Corps != Of.end() ? R.Board.Bombers.find(Corps->second) : R.Board.Bombers.end();
+				bByCorps = bByCorps && Book.HowTold(Group) == AirNoseArt::Told::ByCorps && Own != R.Board.Bombers.end();
+				if (Own == R.Board.Bombers.end()) continue;
+				const size_t Per = static_cast<size_t>(std::max(1, G.Per));
+				for (size_t K = 0; K < Art.size() && K < static_cast<size_t>(G.Figures0); ++K)
+				{
+					const int Want = K * Per < Own->second.Seats.size() ? Usable(List, Own->second.Seats[K * Per].Art) : 0;
+					Right += Art[K] == Want ? 1 : 0;
+					++All;
+				}
+				std::printf("    group %d (corps %d, %s): %s\n", Group, Corps->second, Book.HowTold(Group) == AirNoseArt::Told::ByCorps ? "its seats" : "dealt", ListOf(Art, List, 8).c_str());
+			}
+			Check(bByCorps, What);
+			std::snprintf(Line, sizeof Line, "%d of %d models as the battle began", Right, All);
+			Check(All > 0 && Right == All, "each model wears the first seat it stands for (seat slot times per), old hands first", Line);
+		};
+		{
+			Raided Corpsed;
+			const std::map<int, int> Corps = CorpsOf(Seated);
+			Check(ReadRaid(J["seats"], &Corps, Corpsed, Why), "the raid read with each box's corps named", Why);
+			AirNoseArt::Book Book;
+			Book.Begin(List, 77, Corpsed.Board.Bombers);
+			const Played Run = Play(Corpsed.Board, Corpsed.Views, Book, 238, 1000.0);
+			OwnSeats(Corpsed, Book, Run, "each box's corps named (extra.corps): each group flies with its own corps' seats");
+			NamedFalls(Run);
+		}
+		// A ticket whose order is not by corps (the campaign's growCommands and splitOff leave a newer group ahead of older
+		// ones), its groups all of 80, as the board's three nose groups: with no corps named every group is dealt (paired by
+		// order, the first group would wear the lowest corps' crews); named, each wears its own, by the rules' forces.
+		{
+			bool bAscending = true;
+			for (size_t K = 1; K < Spliced.Forces.size(); ++K) bAscending = bAscending && Spliced.Forces[K - 1].second < Spliced.Forces[K].second;
+			std::string Order;
+			for (const auto& [Id, Corps] : Spliced.Forces) Order += (Order.empty() ? "" : ", ") + std::to_string(Id) + " corps " + std::to_string(Corps);
+			Check(Spliced.Forces.size() == 3 && !bAscending, "the spliced raid's ticket not in corps order", Order);
+			AirNoseArt::Book Book;
+			Book.Begin(List, 77, Spliced.Board.Bombers);
+			const Played Run = Play(Spliced.Board, Spliced.Views, Book, 238, 5.0);
+			bool bDealt = !Run.ByGroup.empty();
+			for (const auto& [Group, Art] : Run.ByGroup) bDealt = bDealt && Book.HowTold(Group) == AirNoseArt::Told::Dealt && !Art.empty();
+			Check(bDealt, "no corps named: every group dealt, none given another group's crews");
+			Raided Corpsed;
+			const std::map<int, int> Corps = CorpsOf(Spliced);
+			Check(ReadRaid(J["spliced"], &Corps, Corpsed, Why), "the spliced raid read with each box's corps named", Why);
+			AirNoseArt::Book Exact;
+			Exact.Begin(List, 77, Corpsed.Board.Bombers);
+			const Played Named2 = Play(Corpsed.Board, Corpsed.Views, Exact, 238, 5.0);
+			OwnSeats(Corpsed, Exact, Named2, "each box's corps named: each group flies with its own corps' seats, whatever the ticket's order");
+		}
+		// A corps named on two boxes (a carrier group's bombers split by kind, not known one by one), or one the board has
+		// no seats for: dealt.
 		{
 			std::map<int, AirShow::Group> Groups;
-			for (const AirShow::Group& G : First.Groups) Groups[G.Id] = G;
-			size_t K = 0;
-			for (auto& [Id, G] : Groups)
-			{
-				if (!AirNoseArt::Wears(G.Nation, G.bFighter, G.Model, HasPanel)) continue;
-				G.Corps = Corps[Corps.size() - 1 - std::min(K, Corps.size() - 1)];
-				++K;
-			}
-			AirNoseArt::Book Named2;
-			Named2.Begin(List, 77, Board.Bombers);
+			for (const AirShow::Group& G : Spliced.Views.front().Groups) Groups[G.Id] = G;
+			Groups[1].Corps = 22;
+			Groups[2].Corps = 22;
+			Groups[3].Corps = 999;
+			AirNoseArt::Book Doubt;
+			Doubt.Begin(List, 77, Spliced.Board.Bombers);
 			std::vector<AirShow::PlaneOut> Planes;
-			int Key = 1;
 			for (const auto& [Id, G] : Groups)
 			{
 				AirShow::PlaneOut P;
-				P.Key = Key++;
+				P.Key = Id;
 				P.Group = Id;
 				P.bFighter = G.bFighter;
 				P.Nation = G.Nation;
 				P.Model = G.Model;
 				Planes.push_back(P);
 			}
-			Named2.Take(Groups, Planes, HasPanel);
-			bool bExact = true;
-			for (const AirShow::PlaneOut& P : Planes)
-			{
-				const AirShow::Group& G = Groups[P.Group];
-				if (!AirNoseArt::Wears(G.Nation, G.bFighter, G.Model, HasPanel)) continue;
-				const int Want = Board.Bombers[G.Corps].Seats.front().Art;
-				bExact = bExact && Named2.HowTold(P.Group) == AirNoseArt::Told::ByCorps && Named2.ArtOf(P.Key) == Want;
-			}
-			Check(bExact, "a group the battle names the corps of wears that corps' seats");
-		}
-		// The counts in doubt (one nose group short): every group dealt, none paired wrongly.
-		{
-			std::map<int, AirFeed::Sky::BomberGroup> Short = Board.Bombers;
-			Short.erase(Short.begin());
-			AirNoseArt::Book Doubt;
-			Doubt.Begin(List, 77, Short);
-			const Played Dealt = Play(Board, Rec.Views, Doubt, 238, 5.0);
-			bool bDealt = !Dealt.ByGroup.empty();
-			for (const auto& [Group, Art] : Dealt.ByGroup) bDealt = bDealt && Doubt.HowTold(Group) == AirNoseArt::Told::Dealt && !Art.empty();
-			Check(bDealt, "with the counts in doubt every group is dealt, none paired wrongly");
+			Doubt.Take(Groups, Planes, HasPanel);
+			Check(Doubt.HowTold(1) == AirNoseArt::Told::Dealt && Doubt.HowTold(2) == AirNoseArt::Told::Dealt && Doubt.HowTold(3) == AirNoseArt::Told::Dealt && Doubt.ArtOf(1) >= 0,
+				"a corps named on two boxes, or one the board has no seats for: dealt");
 		}
 		// Americans only: the same group flown by Germany wears none, nor does a fighter.
 		{

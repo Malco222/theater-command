@@ -32,7 +32,9 @@ $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" 
 "$OUT/air_tally_test" "$ROOT/Content/Data/Tally/name-letters.json" || STATUS=1
 # The bombers' nose art (Battle/AirNoseArt, release 2): the pack (Tools/pack_nose_art.py), the panel on the B-17 against
 # her near shape (on her skin on both sides, facing out, reading from left to right), and which aircraft wears which
-# painting: the recordings given played through the show, and a raid the rules made with its seats (nose_art_raid.json).
+# painting: the recordings given played through the show, and two raids the rules made with their seats
+# (nose_art_raid.json, tools/air-record/nose-art-raid.ts): one played through its first named losses, one whose
+# ticket's order is not by corps.
 $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
   "$HERE/air_nose_art_test.cpp" "$SRC/Battle/AirNoseArt.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirDesk.cpp" "$SRC/Battle/AirGround.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
   -o "$OUT/air_nose_art_test"

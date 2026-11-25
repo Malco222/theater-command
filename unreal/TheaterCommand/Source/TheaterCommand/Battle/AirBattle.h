@@ -360,8 +360,9 @@ private:
 	 * The bombers' nose art (release 2; Brian, 25 November 2026 01:30Z: "american only"): each American bomber's painting
 	 * on her nose, one of the modeller's 200 (Content/Data/NoseArt, Tools/pack_nose_art.py), on the panels laid on her
 	 * model's skin (panels.json; only the B-17 has them), with M_TallyMark over the paint under it, while she is near the
-	 * eye on her own mesh. Which painting each wears is Battle/AirNoseArt's (her seat's, where the board's place.bombers
-	 * says who flies her; else dealt from the battle's seed, about one in five bare). Shown, never counted.
+	 * eye on her own mesh. Which painting each wears is Battle/AirNoseArt's (her seat's, where the battle names her group's
+	 * corps and the board's place.bombers its seats; else dealt from the battle's seed, about one in five bare; and the
+	 * named bomber's, once the battle names her as she falls or falls out of her box). Shown, never counted.
 	 * Off unless the Battle rules card's "Bomber nose art" is on (FLandLive's rule "noseArt", off until the Mac and the art
 	 * director pass it): "-TheaterAirNoseArt" turns it on for a run, "-TheaterAirNoNoseArt" off, and
 	 * "-TheaterRulesFlip=noseArt" clicks the card's switch. Off, nothing past the switch is called.
