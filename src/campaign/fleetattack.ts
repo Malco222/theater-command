@@ -109,6 +109,9 @@ function oursIn(g: Game, f: Fleet, zone: number, foe: string): Fleet[] {
 /** Every fleet of ours that fought in the attack has attacked this month: it stays where the battle left it until the next. */
 function foughtIn(g: Game, mine: Fleet[]): void {
   for (const x of mine) x.attacked = g.turn;
+  // (One battle sought a month: every fleet that fought on the attacking side has sought battle this month too, so a
+  // fleet that joined the attack does not seek again at the month's meeting. Off, nothing is written.)
+  markSought(g, mine);
 }
 
 /** His: the target, and every fleet of his side that stands with it (patrolling that sea, or lying in that harbour). */
