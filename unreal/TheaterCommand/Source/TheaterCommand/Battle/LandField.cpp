@@ -605,6 +605,8 @@ namespace LandField
 		uint8_t PlainFx = 0;
 		/** The thaw's wet ground drawn (on trial, "wet", where Field::Weather lays the mud): Wetted. */
 		bool bWet = false;
+		/** Each field's own tone and state over its crop's paint (on trial, "fieldtone"): Toned. */
+		bool bTone = false;
 		struct RegionHost;
 		/** A place as a region sees it (the parcel, its edges, the lanes and ways; with LandField's noises if bNoise). */
 		LandScape::Spot SpotAt(double X, double Y, bool bNoise) const;
@@ -716,6 +718,8 @@ namespace LandField
 			return Mixed(Varied(C, 0.8, 0.0), Rgb(66, 58, 44), 0.35 * Puddle);
 		}
 		Col GroundBare(double X, double Y, const LandScape::Spot* Pre = nullptr) const;
+		/** A parcel's own tone and state over its plants' paint where bTone (C as it is everywhere else). */
+		Col Toned(Col C, double X, double Y) const;
 		Col SteppeColour(double X, double Y, const LandScape::Spot* Pre = nullptr) const;
 		Col FarColour(double X, double Y) const;
 		Col FarBare(double X, double Y) const;
@@ -1172,6 +1176,7 @@ namespace LandField
 		if (SnowIs >= 0.5) PlainFx = 6;
 		if (Fd.Weather == "mud" && PlainFx == 0) PlainFx = 4; // (the thaw's mud over open earth: Field::Weather)
 		bWet = PlainFx == 4 && Fd.Weather == "mud" && !Fd.Trial.empty() && Fd.Tried("wet"); // (its look, on trial)
+		bTone = !Fd.Trial.empty() && Fd.Tried("fieldtone"); // (each field its own tone: on trial)
 		std::vector<uint8_t> RgOf(Fd.Grounds.size(), RgOpen), RoadOf(Fd.Grounds.size(), 0);
 		FxOfCell.assign(Fd.Grounds.size(), 0);
 		for (size_t K = 0; K < Fd.Grounds.size(); ++K)
@@ -4438,14 +4443,69 @@ namespace LandField
 	 */
 	Col Ground::Impl::GroundColour(double X, double Y) const
 	{
-		if (!SnowLay) return Wetted(GroundBare(X, Y), X, Y);
-		if (!InRaster(X, Y)) return Snowed(Wetted(GroundBare(X, Y), X, Y), X, Y, false);
+		if (!SnowLay) return Wetted(bTone ? Toned(GroundBare(X, Y), X, Y) : GroundBare(X, Y), X, Y);
+		if (!InRaster(X, Y)) return Snowed(Wetted(bTone ? Toned(GroundBare(X, Y), X, Y) : GroundBare(X, Y), X, Y), X, Y, false);
 		// (under snow the place read once, for the ground's colour and the snow's both: read twice, the snow cost as much
 		// as the ground under it, and the track marks ask this colour at every step of every tank)
 		const LandScape::Spot S = SpotAt(X, Y, true);
-		const Col C = Wetted(GroundBare(X, Y, &S), X, Y);
+		const Col C = Wetted(bTone ? Toned(GroundBare(X, Y, &S), X, Y) : GroundBare(X, Y, &S), X, Y);
 		const LandScape::Tone T = SnowLay->Over(LandScape::Tone{ C.R, C.G, C.B }, S);
 		return Col{ T.R, T.G, T.B };
+	}
+
+	/**
+	 * Each field its own (on trial, "fieldtone"): its farmer grazed it or cut it on his own day, on his own soil and his
+	 * own drainage, so no two fields of one crop are quite one green. A pasture a little lighter or darker (8% either
+	 * way) and a little warmer, one in four fresh bitten (paler, warmer), one in five rank and ungrazed (darker, a deeper
+	 * green, never bluer); corn 6% either way and a little warmer or cooler, one in three a week behind (greener), one in
+	 * four over-ripe (paler). The whole parcel the one tone, so no new mottle; on a plant's paint only (a sward's green
+	 * well over its blue, or ripe corn's red over its blue), never earth, dust or water. The ground the men stand on is
+	 * never under nine tenths of its value, and a sward never bluer: the men read against it as before.
+	 * (Not a region's ground: its looks are its own.)
+	 */
+	Col Ground::Impl::Toned(Col C, double X, double Y) const
+	{
+		if (Rg || !InRaster(X, Y)) return C;
+		const size_t P = Pix(X, Y);
+		if (Pid[P] < 0) return C;
+		const uint8_t Kind = Rgn[P];
+		if (Kind != RgOpen && Kind != RgField && Kind != RgRough) return C;
+		const ParcelInfo& Q = Parcels[static_cast<size_t>(Pid[P])];
+		if (Q.Key == 0) return C;
+		const double Green = Smooth(0.04, 0.16, (C.G - C.B) / std::max(1.0, C.G)) * Smooth(0.82, 0.95, C.G / std::max(1.0, C.R));
+		const double Ripe = Smooth(0.25, 0.4, (C.R - C.B) / std::max(1.0, C.R)) * Smooth(1.15, 0.95, C.G / std::max(1.0, C.R)) * (1.0 - Green);
+		if (Green + Ripe < 0.02) return C;
+		// (the parcel's three draws, each its own: the same on every compiler)
+		const double U1 = Unit(Hash(Q.Key, 0x70E1));
+		const double U2 = Unit(Hash(Q.Key, 0x70E2));
+		const double U3 = Unit(Hash(Q.Key, 0x70E3));
+		const bool bGrass = !(Q.Kind == RgField && Q.Crop != CpRoots);
+		const auto Luma = [](const Col& A) { return 0.2126 * A.R + 0.7152 * A.G + 0.0722 * A.B; };
+		const double Was = Luma(C);
+		Col T;
+		if (bGrass)
+		{
+			T = Varied(C, 1.0 + 0.16 * (U1 - 0.5), 0.06 * U2);
+			if (U3 < 0.25) T = Varied(T, 1.06, 0.04);                                  // fresh bitten
+			else if (U3 > 0.8) T = Varied(Mixed(T, Rgb(60, 88, 44), 0.12), 0.93, 0.0); // rank, left ungrazed
+			// Never bluer than the crop's own paint: a sward gone blue reads as a photograph's cast, not a field. And a
+			// darker field seen across the haze reads bluer by itself (the air's blue the same, the field's own green less),
+			// so the darker a sward is made, the less blue its paint: its blue/green down by its darkening (measured from
+			// the general's height, 170 and 400 m up; the field close by only a deeper green).
+			const double Dark = 1.0 - std::clamp(Luma(T) / std::max(1.0, Was), 0.9, 1.0);
+			const double Most = C.B / std::max(1.0, C.G) * (1.0 - 1.2 * Dark) + 0.005;
+			if (T.B > Most * T.G) T.B = Most * T.G;
+		}
+		else
+		{
+			T = Varied(C, 1.0 + 0.12 * (U1 - 0.5), 0.06 * (U2 - 0.5));
+			if (U3 < 0.33) T = Mixed(T, Rgb(150, 146, 62), 0.18); // a week behind, still greenish
+			else if (U3 > 0.75) T = Varied(T, 1.05, 0.03);       // over-ripe, bleached
+		}
+		// (the men read against the ground: never under nine tenths of its value; the whole colour lifted, its hue kept)
+		const double Now = Luma(T);
+		if (Now < 0.9 * Was && Now > 0.0) T = Scaled(T, 0.9 * Was / Now);
+		return Mixed(C, T, std::max(Green, Ripe));
 	}
 
 	Col Ground::Impl::GroundBare(double X, double Y, const LandScape::Spot* Pre) const
