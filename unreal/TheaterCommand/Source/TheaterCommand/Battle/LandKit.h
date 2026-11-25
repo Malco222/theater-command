@@ -310,7 +310,7 @@ namespace LandKit
 		 * of her file's mark places (Model::Marks). Off: none, as before. */
 		bool bMarks = false;
 		/** The field's own ground (release 2, the whole picture's worn paint, tc.Look.Worn; linear light, the field's mean
-		 * paint with its hue held inside the art director's box): a third layer of dirt over her file's dust and haze or
+		 * paint with its hue held inside an earth box, WholeLook::FieldDust): a third layer of dirt over her file's dust and haze or
 		 * the game's own road dust, on her lower third and her running gear (the art director: 30 to 50 in 100 of the
 		 * field's colour there). A negative red: none, as before. */
 		double FieldDust[3] = { -1.0, -1.0, -1.0 };

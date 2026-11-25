@@ -354,14 +354,14 @@ namespace
 	/** The art director's box (25 Nov 04:46Z): the hue pulled inside red/green 0.90 to 1.15 and blue/green 0.80 to 1.05,
 	 * read as a picture keeps it (her swatches), and the value kept: Normandy's 110,135,96 becomes about 118,132,105, the
 	 * Mediterranean's 108,88,63 about 102,89,71; the desert, the steppe and the Russian summer are inside already. */
-	FLinearColor Boxed(const FLinearColor& Light)
+	FLinearColor Boxed(const FLinearColor& Light, float RedLeast = 0.90f, float RedMost = 1.15f, float BlueLeast = 0.80f, float BlueMost = 1.05f)
 	{
 		const float R = ToPicture(Light.R), G = ToPicture(Light.G), B = ToPicture(Light.B);
 		if (G <= UE_KINDA_SMALL_NUMBER)
 		{
 			return Light; // (a black ground gives nothing back to pull)
 		}
-		FLinearColor Out(ToLight(G * FMath::Clamp(R / G, 0.90f, 1.15f)), ToLight(G), ToLight(G * FMath::Clamp(B / G, 0.80f, 1.05f)), 1.0f);
+		FLinearColor Out(ToLight(G * FMath::Clamp(R / G, RedLeast, RedMost)), ToLight(G), ToLight(G * FMath::Clamp(B / G, BlueLeast, BlueMost)), 1.0f);
 		const float Was = ValueOf(Light), Now = ValueOf(Out);
 		if (Now > UE_KINDA_SMALL_NUMBER)
 		{
@@ -567,7 +567,9 @@ bool WholeLook::WornOn()
 
 FLinearColor WholeLook::FieldDust(const FLinearColor& Mean)
 {
-	FLinearColor Out = Boxed(Mean);
+	// (dirt is earth, never grass: red over green 1.00 to 1.25, blue over green 0.70 to 0.90, the soldiers' earth box of
+	// 25 Nov 12:22Z, one box for the hulls' lower third and the men's boots and knees)
+	FLinearColor Out = Boxed(Mean, 1.00f, 1.25f, 0.70f, 0.90f);
 	Out.A = 1.0f;
 	return Out;
 }

@@ -112,8 +112,8 @@ namespace WholeLook
 	bool WornOn();
 
 	/** The field's own ground as dirt (release 2, tc.Look.Worn): its mean paint (GroundMean, linear) with the hue pulled
-	 * inside the art director's box and the value kept, as the bounce's, so Normandy's grass does not paint a hull's lower
-	 * third or a man's boots green. Alpha 1. */
+	 * inside an earth box (red over green 1.00 to 1.25, blue over green 0.70 to 0.90) and the value kept, so Normandy's
+	 * grass does not paint a hull's lower third or a man's boots green: one colour for both. Alpha 1. */
 	FLinearColor FieldDust(const FLinearColor& Mean);
 
 	/** A ground battle loads its inks (Steel its vehicles' plain ink, all its settings laid): whether this battle's

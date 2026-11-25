@@ -4284,7 +4284,7 @@ void ALandBattle::MakeArmour()
 	UE_LOG(LogTheater, Log, TEXT("Land battle: national marks %s"), Armour->bMarks ? TEXT("painted on (-TheaterLandMarks, release 2)") : TEXT("off"));
 	// (release 2, the whole picture's worn paint, tc.Look.Worn: the field's own ground on every vehicle's lower third and
 	// running gear, a third layer over her dust (LandKit's Dress::FieldDust), its mean paint read as the bounce reads it
-	// and its hue held inside the art director's box. Off: none, as before. Look/WholeLook.h)
+	// and its hue held inside an earth box, so grass never greens a hull. Off: none, as before. Look/WholeLook.h)
 	if (WholeLook::WornOn())
 	{
 		const FLinearColor Dust = WholeLook::FieldDust(FieldMeanPaint(*FieldPtr, S.Rec.Ground));
