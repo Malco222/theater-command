@@ -49,7 +49,7 @@ import { strafeOn, strafeWatch } from './strafers';
 import { cityForecast, cityHit, cityWorthOf, type CityHit } from './repairs';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
 import { airPiece, nightGunShare, whyNotField, wrecked } from './airversion';
-import { cityDefences, cityNight, lightsFloor, markNightRaid } from './citydefences';
+import { cityDefences, cityNight, lightsAt, lightsFloor, markNightRaid } from './citydefences';
 import { FIELD, burnedRoom, damageField, fieldKnown, fieldRules, fieldShut, fieldTier, planFieldHit, type FieldBlow, type FieldHit } from './fieldstate';
 import { sightOf } from './intel';
 import { raidFogOn, rememberSkies, staffScouts, staffWeigh } from './airfog';
@@ -2581,9 +2581,10 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   const amb = !sea && !transit && ambushAt(g, target);
   // City defences (the ruling of 25 Nov 2026 02:23Z, choice 4): searchlights give the night fighters a floor under a
   // clear sky. 0 by day, under cloud, with no lights or with the switch off, and then the line below is as it was.
-  // (Not over a group on its way between fields, which is no raid on a town: ferry.ts. Nor in a forecast under fog on
-  // raids, which knows no searchlights: the fog's memory of a place keeps its guns and its ruins, and no lights.)
-  const floor = night && !transit && !known ? lightsFloor(g, target, sky) : 0;
+  // A forecast under fog on raids counts the floor as any forecast does: the design director, 25 Nov 2026 19:44Z, ruled
+  // radar and searchlights known truth reads for the joint sight form (audit 28), read as they truly are, never one true
+  // and one none. (Not over a group on its way between fields: see the guns by night below.)
+  const floor = night && !transit ? lightsFloor(g, target, sky) : 0;
   for (const f of g.airFleets) {
     if (f.ftr <= 0 || f.mission !== 'support' || f.close || !atWar(g, f.nat, nat)) continue;
     // A group on its way to another field is met, as troops are, by any enemy fighter whose reach covers its leg (ferry.ts).
@@ -2665,11 +2666,16 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   // By night the guns round a target bring down half as many (ruling 107(b), behind its switch): 1 by day, or off.
   // City defences (the design director's ruling of 25 Nov 2026 02:23Z, choices 1, 2 and 5): with the switch on, by
   // night the guns count by what they can see, radar and searchlights, in place of 107(b)'s half (one cause, one price).
-  // (Never over a ferry leg. Under fog on raids the forecast counts the guns the side counts and no searchlights, with
-  // Fighter control's radar as it truly is, as the fog reads the enemy's research: the guns fire blind or by radar.)
-  const cn = night && !transit && cityDefences(g) ? cityNight(g, target, out.B, sky, false, known ? { guns: known.aa, lights: 0 } : undefined) : null;
+  // Under fog on raids the forecast counts the guns the side counts (known.aa), and Fighter control's radar and the
+  // searchlights as they truly are: the design director, 25 Nov 2026 19:44Z, ruled both known truth reads for the joint
+  // sight form (audit 28), never one true and one none. One level of lights lights one level of the guns so counted.
+  // Never over a ferry leg, and rightly so in the design director's terms of 19:44Z: a group on its way between fields
+  // meets no city defences "provided a ferry leg never crosses an enemy city's guns. Where it can, those guns reach it."
+  // In these rules it cannot: ferry.ts meets it as a fight for the sky by day ('superiority', so `night` is false), and
+  // no province's built guns count on that mission (out.aa below), with the switch on or off.
+  const cn = night && !transit && cityDefences(g) ? cityNight(g, target, out.B, sky, false, known ? { guns: known.aa, lights: lightsAt(g, target) } : undefined) : null;
   const aaGun = gun * (cn ? cn.share : nightGunShare(g, night));
-  if (cn && !known) out.lights = { level: cn.lights, cloud: cn.cloud, lit: cn.litShare };
+  if (cn) out.lights = { level: cn.lights, cloud: cn.cloud, lit: cn.litShare };
   // Crews the player's instructors trained keep their formation: the fighters bring down fewer of them (bombers.ts).
   // The guns' share is as it was. 0 until the player has sent a crew to the schools, and always for everyone else.
   out.drilled = out.B > 0 ? out.att.reduce((t, x) => t + x.bmr * trainedEdge(g, x.f), 0) / out.B : 0;

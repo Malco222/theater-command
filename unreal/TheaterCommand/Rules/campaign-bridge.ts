@@ -1590,7 +1590,7 @@ function glanceAir(s: Game, id: number, see: GlanceSight, up: boolean) {
       sky: !sky ? '' : sky === me || allied(s, sky, me) ? 'ours' : 'theirs', skyBy: sky ? s.nations[sky]?.adj ?? sky : '',
       add: o ? { key: o.key, size: o.size, cost: shown(o.cost), months: o.months, why: !up ? 'It is not your month.' : short || (o.why ?? '') } : null,
       // (City defences, the switch on only) The searchlights beside the guns, seen as the guns are.
-      ...(cityDefences(s) ? { lights: glanceLights(s, id, level, see.own, up) } : {}),
+      ...(cityDefences(s) ? { lights: glanceLights(s, id, level) } : {}),
     };
   } catch { return null; }
 }
@@ -1598,16 +1598,14 @@ function glanceAir(s: Game, id: number, see: GlanceSight, up: boolean) {
 /**
  * (City defences, the switch on) The AIR DEFENCE shelf's searchlights, beside the guns: their level, the levels of the
  * guns they light by night under a clear sky (one level of guns a level of lights), whether the holder has Fighter
- * control's radar to lay the guns (without it the lights help only the night fighters), the levels going up, and on
- * his own town the next level with its price (the UI director's words, "For the map thread": "level {2}: {2} of the
- * {3} levels of guns are lit by night, under a clear sky").
+ * control's radar to lay the guns (without it the lights help only the night fighters) and the levels going up (the
+ * UI director's words, "For the map thread": "level {2}: {2} of the {3} levels of guns are lit by night, under a clear
+ * sky"). The next level's offer lives in one place, `work:lights` in `glance.can`, and not here (the UI director).
  */
-function glanceLights(s: Game, id: number, guns: number, own: boolean, up: boolean) {
-  const me = s.human!, r = s.regions[id];
+function glanceLights(s: Game, id: number, guns: number) {
+  const r = s.regions[id];
   const level = lightsAt(s, id);
   const going = s.nations[r.ctrl]?.queue.filter((b) => b.what === 'work' && b.item === 'lights' && b.region === id).length ?? 0;
-  const o = own ? arsenalOffers(s, id).find((x) => x.key === 'work:lights' && x.at === id) : undefined;
-  const short = o && up && o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString('en')} short: the treasury holds ${inHand(s.nations[me].pp).toLocaleString('en')}.` : '';
   // With lights and no guns there is nothing to count: the raid card's own words for that case (the UI director's
   // section 2, "No guns built"), after the level, rather than "0 of the 0 levels of guns".
   const line = level <= 0 ? ''
@@ -1616,7 +1614,6 @@ function glanceLights(s: Game, id: number, guns: number, own: boolean, up: boole
   return {
     level, lit: Math.min(level, guns), guns, radar: radarLays(s, id), going,
     line,
-    add: o ? { key: o.key, size: o.size, cost: shown(o.cost), months: o.months, why: !up ? 'It is not your month.' : short || (o.why ?? '') } : null,
   };
 }
 
