@@ -42,7 +42,7 @@
 //                                          and wear, how worn its uniforms look, 0.1 fresh to 1 after six weeks in the line (its battles' blocks carry the same)
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
-import { setTeams, TEAMS_RELEASE } from '../../../src/campaign/teams';
+import { setTeams, teamsOn, TEAMS_RELEASE } from '../../../src/campaign/teams';
 import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, ensureSupply, fieldArmy, frontage, hostileUnits, keepSupply, limitAttackers, men, moveCost, railReach as railReachOf, litTracks, railReachFor, railSays, rideLines, whyNoTrain, whyNoTrainFor, weather as weatherNow, worksOf } from '../../../src/campaign/game';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
@@ -1053,6 +1053,8 @@ function drawView(step = false) {
     taskForce: taskForceOn(s),
     // (Release 2, fleetwhy.ts) Whether the admirals give a reason for each fleet they order.
     fleetWhy: fleetWhyOn(s),
+    // (Release 2, teams.ts) Whether machine-gun and mortar brigades can be raised in this war (every power's, the computer's too).
+    supportTeams: teamsOn(s),
     // (Release 2, rearguard.ts) Whether the player can order a small corps to hold as a rearguard.
     rearguard: rearguardOn(s),
     // (Release 2, rearguard.ts) Whether a rearguard's engineers lay charges on the bridges behind it (the switch as set: it works only with rearguards on).
@@ -7409,6 +7411,16 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     }
     return { ok, note, fly, flies, open: `fleet:${part[1]}`, view: view() };
   }
+  if (part[0] === 'teamsrule') {
+    // (Release 2, teams.ts) Machine-gun and mortar brigades, switched by the player in any month. Off stops new ones being
+    // ordered, his and the computer's; brigades already raised stay with their armies.
+    setTeams(s, part[1] === 'on');
+    ok = true;
+    note = teamsOn(s)
+      ? 'Support teams are on: machine-gun and mortar brigades can be raised like artillery, by you and by every other power. The machine guns stiffen a defence against men on foot; the mortars break up the works an attack goes in against.'
+      : 'Support teams are off: no new machine-gun or mortar brigades can be raised. Brigades already raised stay with their armies.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'fleetwhyrule') {
     // (Release 2, fleetwhy.ts) The admirals' reasons, switched by the player in any month.
     setFleetWhy(s, part[1] === 'on');
@@ -8652,6 +8664,8 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, scrambleCall
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).carrierStrike = (on: boolean) => { const s = game(); setCarrierStrike(s, !!on); return { on: carrierStrikeOn(s) }; };
 // (Release 2, fleetwhy.ts) The admirals' reasons: TC.fleetWhy(on) at any time; the options page uses act('fleetwhyrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fleetWhy = (on: boolean) => { const s = game(); setFleetWhy(s, !!on); return { on: fleetWhyOn(s) }; };
+// (Release 2, teams.ts) Machine-gun and mortar brigades: TC.supportTeams(on) at any time; the options page uses act('teamsrule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).supportTeams = (on: boolean) => { const s = game(); setTeams(s, !!on); return { on: teamsOn(s) }; };
 // (Release 2, taskforce.ts) Task forces: TC.taskForce(on) at any time; the options page uses act('taskforcerule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).taskForce = (on: boolean) => { const s = game(); setTaskForce(s, !!on); return { on: taskForceOn(s) }; };
 // (Release 2, breakup.ts) Breaking corps up: TC.breakUp(on) at any time; the options page uses act('breakuprule:on' / ':off').
@@ -8687,6 +8701,7 @@ const R2_SHIP: Record<string, (s: Game) => boolean> = {
   shadowrelayrule: (s) => { setShadowRelay(s, true); return shadowRelayOn(s); },
   seekoncerule: (s) => { setSeekOnce(s, true); return seekOnceOn(s); },
   fleetwhyrule: (s) => { setFleetWhy(s, true); return fleetWhyOn(s); },
+  teamsrule: (s) => { setTeams(s, true); return teamsOn(s); },
   settledtownsrule: (s) => { setSettledTowns(s, true); return settledTownsOn(s); },
   columns: (s) => setColumns(s, true),
   'logistics:lorryShift': (s) => setLogistics(s, 'lorryShift', true),
