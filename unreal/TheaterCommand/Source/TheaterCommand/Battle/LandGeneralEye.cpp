@@ -239,7 +239,9 @@ namespace LandGeneralEye
 		// picture was handed back where the zoom coasted out and a notch in took the flight. So too a tilt of his
 		// own that the picture did not have as he took the flight (swallowed farther out, or hidden by a man's
 		// shoulder, at the call or on the flight's way) is handed back whatever the taking notch would have bared:
-		// from the call the flight has it in hand, and he keeps of it what he has seen.
+		// from the call the flight has the turning of it, and it is his again only once the picture has shown it.
+		// (Whether, not how much: what he then keeps is its rest, below, and a tilt still swinging up comes to rest
+		// past what the picture showed by its stopping way, several degrees at a flight's speed.)
 		// Will have it: TiltShows of the tilt's own rest from the swing it has, at the zoom's own rest (WantS
 		// above) less ZoomIn, the notch he took the flight with, which this same frame still has to take off the
 		// zoom's wish, and no nearer than ZoomLeast (a unit's card pressed follows the unit, never nearer than

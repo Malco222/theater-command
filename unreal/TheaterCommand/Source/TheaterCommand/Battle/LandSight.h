@@ -117,8 +117,9 @@ namespace LandSight
 	 * The numbers are the rules' own, kept here because the scene has no word from the rules for them;
 	 * Tools/land_play/run.sh fails where they, or the rules' lines the mark's words stand on, differ from rules.ts,
 	 * sim.ts and units.ts (which lines: the list at the head of its guard; those on who holds his fire are held
-	 * whole: ambushAt and targetOf line for line, and each holding kind's reach against its hold. A hold written
-	 * into whatever calls targetOf would not be seen there).
+	 * whole: ambushAt and targetOf line for line, gap() and inWoods() which they measure with, and each holding
+	 * kind's reach against its hold. A hold written into whatever calls targetOf, or into live() or onHedge(),
+	 * which those lines call, would not be seen there).
 	 */
 	struct Finds
 	{

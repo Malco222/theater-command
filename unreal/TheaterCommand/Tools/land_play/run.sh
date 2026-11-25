@@ -20,7 +20,7 @@ if [ "$#" -eq 0 ]; then set -- "$ROOT"/Content/Data/LandBattles/*.json; fi
 STATUS=0
 # The spotter's mark's distances (Battle/LandSight.h, Finds) are the rules' own (src/battle/land/rules.ts, LAND.hide's sight,
 # heard, ambush and forest), and its rings and words stand on the rules' own lines (how the gap between two blocks is
-# measured; which kinds go on foot, on wheels, on tracks and as guns, and that a team is a gun block; whose kind sets the
+# measured, and what standing in woods is, each held whole; which kinds go on foot, on wheels, on tracks and as guns, and that a team is a gun block; whose kind sets the
 # distance at which a hidden block is seen, and by whom; that tracks alone are heard; who holds his fire in hiding, and
 # that guns, mortar teams, tanks and blocks sent to attack or told to fire on a target do not, the last at their whole
 # reach; that none fires on a block itself hidden; that each kind which holds reaches as far as its hold (cavalry and
@@ -57,7 +57,6 @@ else
   else
     echo "spotter's mark: its distances are the rules' (seen: foot guns wheels tracks $RULE_SIGHT m; a moving tank heard at $RULE_HEARD m; men in hiding hold their fire to foot wheels mg $RULE_AMBUSH m, $RULE_FOREST m in forest)"
   fi
-  grep -qF "(Math.max(a.w, a.d) + Math.max(b.w, b.d)) / 4" "$SIM" || { echo "FAULT: sim.ts gap() no longer takes a quarter of each block's longer side (LandSight.h FindsWithin, the rings' reach)"; STATUS=1; }
   grep -qF "inf: 'foot', mtn: 'foot', cav: 'foot', eng: 'foot', mot: 'wheels', arm: 'tracks', art: 'guns'" "$RULES" || { echo "FAULT: rules.ts MOTION no longer sorts the kinds as the spotter's rings name them (on foot; guns and teams; tanks and motorised)"; STATUS=1; }
   grep -qF "this.gap(u, e) <= sight))) delete u.unloc" "$SIM" || { echo "FAULT: sim.ts spotHidden() no longer locates a block found by its fire once an enemy is within its sight (the spotter's mark's line on one that has fired)"; STATUS=1; }
   grep -qF "if (vague) p *= LAND.hide.locate.fire;" "$SIM" || { echo "FAULT: sim.ts no longer strikes a block found by its fire, not yet located, at the locate share (the spotter's mark's line on one that has fired)"; STATUS=1; }
@@ -78,12 +77,23 @@ if (a <= 0) return Infinity;
 return !this.onHedge(u.x, u.y) && this.inWoods(u) ? Math.min(a, H.forest) : a;
 }"
   [ "$(body_of 'private ambushAt(u: LandUnit): number {')" = "$AMBUSH_WANT" ] || { echo "FAULT: sim.ts ambushAt() is no longer, line for line, the hold the spotter's mark gives (by how the block moves, machine gun teams apart, none for guns, mortar teams and tanks, forest the least), or the file's indent has changed. If the rule itself is unchanged bring this pin up to date; if it has changed, the mark's legend (LandBattleScreen.cpp) and LandSight.h must change with it"; STATUS=1; }
+  # (and the two helpers that ambushAt and targetOf measure with, whole: gap(), the metres between two blocks' edges
+  # that every hold, reach and ring is measured in, and inWoods(), which is what "in forest" means. A factor on
+  # gap() for a hidden block, or forest taken to mean more ground, would change the distances the mark gives and
+  # leave ambushAt's and targetOf's own lines as they are.)
+  GAP_WANT="gap(a: LandUnit, b: LandUnit): number {
+return Math.max(0, dist(a.x, a.y, b.x, b.y) - (Math.max(a.w, a.d) + Math.max(b.w, b.d)) / 4);
+}"
+  [ "$(body_of 'gap(a: LandUnit, b: LandUnit): number {')" = "$GAP_WANT" ] || { echo "FAULT: sim.ts gap() is no longer, line for line, the metres between two blocks' edges less a quarter of each one's longer side (every hold, reach and ring of the spotter's mark is measured in it; LandSight.h FindsWithin), or the file's indent has changed. If the rule itself is unchanged bring this pin up to date; if it has changed, LandSight.h and the mark's legend must change with it"; STATUS=1; }
+  WOODS_WANT="private inWoods(u: LandUnit): boolean { return coverAt(this.field, u.x, u.y) === 'woods'; }"
+  [ "$(tr -d '\r' < "$SIM" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -cxF "$WOODS_WANT" || true)" = "1" ] || { echo "FAULT: sim.ts inWoods() is no longer standing in woods and nothing else (the spotter's mark's IN FOREST, where the hold is the least). If the rule itself is unchanged bring this pin up to date; if it has changed, the mark's legend (LandBattleScreen.cpp) and LandSight.h must change with it"; STATUS=1; }
   # (targetOf, all of it, line for line as ambushAt is held: the block's whole reach; straight after it a given target
   # tested against that reach; only then a hidden block's hold, unless it is sent to attack; none struck that is
   # itself hidden; and the two lines that put the held reach to use, in the search for a target and in firing on
   # cover. So a hidden block sent to attack or given a target fires at its whole reach, and no other hold can stand
-  # in targetOf beside the one the mark's words give. What is held is this function and no more: a hold written
-  # into whatever calls it would not be seen here.)
+  # in targetOf beside the one the mark's words give. What is held is these functions' own lines, gap() and
+  # inWoods(), and no more: a hold written into whatever calls targetOf, or into live() or onHedge(), which the
+  # held lines call, would not be seen here.)
   TARGET_WANT="targetOf(u: LandUnit): LandUnit | null {
 const marching = u.order && u.order.kind !== 'attack' && u.path.length > 0;
 if (u.kind === 'art' && marching) return null;
@@ -118,16 +128,22 @@ return best;
   # motorised, and the machine gun team, against their holds. Cavalry and engineers reach ten metres short of
   # theirs as the rules stand, 140 m against 150, so hidden they open fire at 140: LandSight.h says so, and no
   # more than those ten metres is let by here.)
-  REACH_ROW="$(tr -d '\r' < "$RULES" | sed -n 's/^ *reach: { inf: \([0-9]*\), mtn: \([0-9]*\), cav: \([0-9]*\), eng: \([0-9]*\), mot: \([0-9]*\), arm: [0-9]*, art: [0-9]*, fort: [0-9]* }.*/\1 \2 \3 \4 \5/p' | head -n 1)"
-  REACH_MG="$(tr -d '\r' < "$RULES" | sed -n 's/^ *mg: { reach: \([0-9]*\),.*/\1/p' | head -n 1)"
-  REACH_OK=0
-  if [ -n "$REACH_ROW" ] && [ -n "$REACH_MG" ] && [ -n "$RULE_AMBUSH" ]; then
+  # (each read from its own table and nowhere else: LAND.reach's row by its "as Record<Kind, number>" end, the
+  # machine gun team's inside LAND.teams; and exactly one of each, so that no other table that reads alike is
+  # measured in its place)
+  REACH_ROW="$(tr -d '\r' < "$RULES" | sed -n 's/^ *reach: { inf: \([0-9]*\), mtn: \([0-9]*\), cav: \([0-9]*\), eng: \([0-9]*\), mot: \([0-9]*\), arm: [0-9]*, art: [0-9]*, fort: [0-9]* } as Record<Kind, number>,.*/\1 \2 \3 \4 \5/p')"
+  REACH_MG="$(tr -d '\r' < "$RULES" | sed -n '/^  teams: {/,/^  }/s/^ *mg: { reach: \([0-9]*\),.*/\1/p')"
+  if [ "$(printf '%s\n' "$REACH_ROW" | grep -c . || true)" != "1" ] || [ "$(printf '%s\n' "$REACH_MG" | grep -c . || true)" != "1" ] || [ -z "$RULE_AMBUSH" ]; then
+    echo "FAULT: rules.ts LAND.reach's row, LAND.teams' machine gun row or LAND.hide.ambush is no longer in the form this check reads, or there is more than one of it (LAND.reach on one line, its kinds in the order inf mtn cav eng mot arm art fort; LAND.teams.mg on one line beginning with its reach): whether each kind that holds its fire in hiding still reaches as far as its hold is NOT checked. Read the holds against the reaches again and bring this pin up to date"
+    STATUS=1
+  else
+    REACH_OK=0
     read -r R_INF R_MTN R_CAV R_ENG R_MOT <<<"$REACH_ROW"
     read -r A_FOOT A_WHEELS A_MG <<<"$RULE_AMBUSH"
     if [ "$R_INF" -ge "$A_FOOT" ] && [ "$R_MTN" -ge "$A_FOOT" ] && [ "$R_MOT" -ge "$A_WHEELS" ] && [ "$REACH_MG" -ge "$A_MG" ] \
       && [ "$R_CAV" -ge "$((A_FOOT - 10))" ] && [ "$R_ENG" -ge "$((A_FOOT - 10))" ]; then REACH_OK=1; fi
+    [ "$REACH_OK" = "1" ] || { echo "FAULT: a kind that holds its fire in hiding now reaches less far than its hold (rules.ts LAND.reach foot and motorised kinds '$REACH_ROW', the machine gun team '$REACH_MG', against LAND.hide.ambush '$RULE_AMBUSH'; cavalry and engineers are let ten metres short), so the spotter's mark's distances are no longer where it opens fire: the mark's legend (LandBattleScreen.cpp) and LandSight.h must change with it"; STATUS=1; }
   fi
-  [ "$REACH_OK" = "1" ] || { echo "FAULT: a kind that holds its fire in hiding now reaches less far than its hold (rules.ts LAND.reach foot and motorised kinds '$REACH_ROW', the machine gun team '$REACH_MG', against LAND.hide.ambush '$RULE_AMBUSH'; cavalry and engineers are let ten metres short), so the spotter's mark's distances are no longer where it opens fire: the mark's legend (LandBattleScreen.cpp) and LandSight.h must change with it"; STATUS=1; }
   [ "$(sed -n '/^export function makeBlocks(/,/^}/p' "$UNITS" | grep -cF "const k = (team ? 'art' :" || true)" -ge 1 ] || { echo "FAULT: units.ts makeBlocks(), which makes each side's blocks, no longer makes a machine gun or mortar team a gun block (the spotter's ring GUNS AND TEAMS)"; STATUS=1; }
   grep -qF "return Sight + 0.25 * (W > D ? W : D);" "$SRC/Battle/LandSight.h" || { echo "FAULT: LandSight.h FindsWithin no longer adds a quarter of the block's longer side, as sim.ts gap() takes it (the rings' reach)"; STATUS=1; }
 fi

@@ -6979,6 +6979,26 @@ void ALandBattle::Tick(float DeltaSeconds)
 	}
 	LandFell::Phase("tick: the pictures taken");
 	TakeShots();
+	// (the film's log, 25 November: at every cut of the film, on every frame a still is waiting to be taken, and with
+	// "-TheaterLandPoseLog" four times a real second: the shot, why the last was left, where the lens stands, what it
+	// looks at through how wide a lens, and how dark the picture last read (-1: no reading). The art director's black
+	// still of the Mac's first pass could not be laid against the field again, because nothing told where the lens had
+	// stood; the log's own frame number heads each line. Here, after the tick's own stills are asked for, so that a
+	// still asked for anywhere in this tick or before it in the frame is seen; one asked for after it, by another
+	// actor, is taken with this frame's picture too, and the switch's lines either side of it tell that one.)
+	{
+		static const bool bPoseLog = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandPoseLog"));
+		const bool bStillAsked = FScreenshotRequest::IsScreenshotRequested();
+		const bool bFilmCut = S.FilmPose.bCut && !S.bGeneralEye;
+		if (bFilmCut || bStillAsked || (bPoseLog && FMath::Abs(RealT - PoseLogAt) >= 0.25))
+		{
+			PoseLogAt = RealT;
+			UE_LOG(LogTheater, Display, TEXT("Land battle: %s %s at %.2f s of battle: a %s shot of %d, the film's last left for %s; the lens at %.2f %.2f %.2f looks at %.2f %.2f %.2f through %.1f degrees; the picture last read %.2f dark"),
+				S.bGeneralEye ? TEXT("the general's view") : TEXT("the film"), bFilmCut ? TEXT("cuts") : bStillAsked ? TEXT("has a still asked of it") : TEXT("stands"),
+				S.Battle, ANSI_TO_TCHAR(LandEye::NameOf(S.Pose.Shot)), S.Pose.Subject, ANSI_TO_TCHAR(LandEye::NameOf(S.Eye.LastWhy())),
+				S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z, S.Pose.Look.X, S.Pose.Look.Y, S.Pose.Look.Z, S.Pose.Fov, DarkShare);
+		}
+	}
 	LandFell::Phase("tick: the 10 s log");
 
 	// The log, every 10 s: the frames, the slowest, and what each part cost.

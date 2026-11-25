@@ -75,8 +75,9 @@ namespace LandGeneralEye
 		 * flight: none of them takes the view from the call. Any move begun after it does: the flight is let go and
 		 * the view comes to rest where it is, under his hand. Its tilt, where the call had the turning of it, stays
 		 * his own if the picture has it as his hand takes the flight and still will where it comes to rest; and else
-		 * it goes on back to the automatic one, so no tilt of his own is left on unseen and none comes on that the
-		 * picture did not have as he took it. (A tilt his own hand was already turning back goes on back.)
+		 * it goes on back to the automatic one, so no tilt of his own is left on unseen and none comes on where the
+		 * picture had none as he took it. (What he keeps is where the tilt's own swing brings it to rest, which may
+		 * be more than the picture yet showed. A tilt his own hand was already turning back goes on back.)
 		 * The flight lasts until the tilt is there too, so a move in the last of the tilt's swing takes it as well. */
 		int CallView = -1;
 		/** Glide to a field point (a double click on the map). */

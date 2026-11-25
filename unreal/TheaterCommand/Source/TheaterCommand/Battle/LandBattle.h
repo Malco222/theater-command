@@ -695,6 +695,9 @@ private:
 	TSharedPtr<FFrameGrabber> DarkGrab;
 	double DarkShare = -1.0, DarkClock = 0.0, DarkAskAt = 0.0, DarkGotAt = 0.0;
 	int32 DarkReads = 0, DarkAsks = 0, DarkBacks = 0;
+	/** The film's log (the tick's, after its stills are asked for): when its last line was written, on the tick's real
+	 * clock, for the four a second of "-TheaterLandPoseLog". */
+	double PoseLogAt = 0.0;
 	void StartDarkRead();
 	void ReadDark(double Real);
 	void StopDarkRead();
