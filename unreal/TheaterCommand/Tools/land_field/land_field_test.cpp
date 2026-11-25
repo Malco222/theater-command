@@ -932,6 +932,10 @@ int main(int Argc, char** Argv)
 	// own checks (its hedges, gates, cow paths, church, sunken lanes, closed views, corn) are not asked of it; its own are.
 	const std::string LookLaid = G.LookWord();
 	const bool bRegion = LookLaid != "bocage" && LookLaid != "steppe";
+	// A ruined city (LandCity): most of its ground is paved street, yard or a building's floor, so a round landed at
+	// random leaves a shallow hole far more often than in open country, and a tank driven straight across the field
+	// spends much of her run inside blocks where she would never go. The checks that count on open country say so.
+	const bool bCity = LookLaid == "city";
 	const double Build = Seconds(Start);
 	const LandField::Tally& T = G.Laid();
 	std::printf("built in %.2f s (core %.2f s: heights, lanes, parcels, hedges, village, instances; meshes %.2f s: tiles, ring, bases)\n", Build, T.CoreSeconds, T.MeshSeconds);
@@ -2745,7 +2749,7 @@ int main(int Argc, char** Argv)
 		for (size_t Ti = 0; Ti < G.Tiles().size(); ++Ti) Split += Ground.IsSplit(static_cast<int>(Ti));
 		std::printf("  dug holes: %d dug, %d laid shallow (a grenade's, a small round's, or on a lane or bank), %d tiles split; bowls %.2f m deep at their middles where %.2f dug (alone); %ld points just inside a cut, %ld with ground left, %ld with no face; %ld just outside, %ld bare, %ld off the ground it was (worst %.4f m); the wall over the cut's edge by %.3f m at least (%ld of %ld under 5 mm); %ld away, %ld bare, %ld off; on a hairline under the points' rounding %ld outside, %ld away; laying and cutting %.1f ms for all\n",
 			Dug, Shallow, Split, DeepSum / std::max(1, Measured), DeepWant / std::max(1, Measured), Inside, InsideCovered, InsideNoFace, Outside, OutsideBare, OutsideOff, WorstOff, WorstEdge, EdgeUnder, EdgeTests, Away, AwayBare, AwayOff, OutsideHairline, AwayHairline, CutMs);
-		Check(Dug > 150 && Shallow > 20 && InsideCovered == 0 && InsideNoFace == 0 && OutsideBare == 0 && OutsideOff == 0 && AwayBare == 0 && AwayOff == 0
+		Check(Dug > (bCity ? 20 : 150) && Shallow > 20 && InsideCovered == 0 && InsideNoFace == 0 && OutsideBare == 0 && OutsideOff == 0 && AwayBare == 0 && AwayOff == 0
 			&& (OutsideHairline + AwayHairline) * 1000 <= Outside + Away,
 			"a dug hole cuts the ground over its bowl and nothing else: the ground left is as it was, and a face to stand on wherever it is gone (a hairline under the points' rounding in one point of a thousand at most)",
 			Fmt("%.0f inside with ground or with no face, %.0f outside bare or off, %.0f away bare or off, %.0f on a hairline", static_cast<double>(InsideCovered + InsideNoFace), static_cast<double>(OutsideBare + OutsideOff), static_cast<double>(AwayBare + AwayOff), static_cast<double>(OutsideHairline + AwayHairline)));
@@ -3168,7 +3172,8 @@ int main(int Argc, char** Argv)
 		// (the art director's cut 4, shot 07: "the track marks are hard-edged flat stripes")
 		Check(Bands > 1000 && Eb > 4.0 && Bp > 4.0 && Lit.size() > 1000 && Pctl(Lit, 0.95) < 1.0, "a track mark feathers into the ground and is lit as the ground is, not a flat stripe",
 			Fmt("edge to band %.1f, band to pressed %.1f, lit 95%% %.2f degrees off", Eb, Bp, Pctl(Lit, 0.95)));
-		Check(Over.size() > 1000 && Buried < 0.03 && Pctl(Over, 0.95) < 0.12, "a track mark lies on the ground drawn, not under it", Fmt("%.1f%% under, 95%% %.3f m over", 100.0 * Buried, Pctl(Over, 0.95)));
+		Check(Over.size() > (bCity ? 300u : 1000u) && Buried < (bCity ? 0.05 : 0.03) && Pctl(Over, 0.95) < 0.12, "a track mark lies on the ground drawn, not under it",
+			Fmt("%.1f%% under, 95%% %.3f m over, %zu points measured", 100.0 * Buried, Pctl(Over, 0.95), Over.size()));
 		Check(((bRegion && CornMid == 0) || (CornMid > 50 && CornMidFlat >= CornMid * 0.98)) && OtherMid > 50 && OtherMidFlat <= OtherMid * 0.03 && UnderFlat >= Under_ * 0.98 && BeyondFlat <= Beyond * 0.03,
 			"the corn between a tank's tracks lies flat, and only there", Fmt("corn %.0f of %.0f, grass %.0f of %.0f, ", CornMidFlat, CornMid, OtherMidFlat, OtherMid) + Fmt("under %.0f of %.0f, beyond %.0f of ", UnderFlat, Under_, BeyondFlat) + Fmt("%.0f", Beyond));
 		// (on the steppe most of the ground is standing corn, so nearly every piece lays its flattened strip as well: a

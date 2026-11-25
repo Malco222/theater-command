@@ -174,6 +174,7 @@ namespace LandScape
 		case Look::Rice: return "rice";
 		case Look::America: return "america";
 		case Look::Plain: return "plain";
+		case Look::City: return "city";
 		default: return "";
 		}
 	}
@@ -188,6 +189,7 @@ namespace LandScape
 		if (Word == "paddy" || Word == "paddies" || Word == "china" || Word == "monsoon") return Look::Rice;
 		if (Word == "usa" || Word == "midwest" || Word == "cornbelt" || Word == "northamerica") return Look::America;
 		if (Word == "dryplain" || Word == "manchuria" || Word == "northchina" || Word == "india") return Look::Plain;
+		if (Word == "ruins" || Word == "urban" || Word == "town") return Look::City;
 		return Look::Count;
 	}
 
@@ -205,14 +207,9 @@ namespace LandScape
 		return Out;
 	}
 
-	Look Pick(const LandField::Field& F)
+	/** The country's look at a place from the climate (Pick's, without a recording's word or the city's). */
+	static Look CountryOf(const LandField::Field& F)
 	{
-		if (!F.Look.empty())
-		{
-			const Look L = LookOf(F.Look);
-			if (L != Look::Count) return L;
-		}
-		if (F.Steppe.bOn) return Look::Steppe;
 		const char* C = ClimateAt(F.Lat, F.Lon);
 		if (F.Terrain == "desert" || Is(C, "desert")) return Look::Desert;
 		// Rice country (release 2, on trial "rice" until the art director passes it and the Mac holds its frame rate):
@@ -257,8 +254,23 @@ namespace LandScape
 		return Look::Farmland;
 	}
 
+	Look Pick(const LandField::Field& F)
+	{
+		if (!F.Look.empty())
+		{
+			const Look L = LookOf(F.Look);
+			if (L != Look::Count) return L;
+		}
+		if (F.Steppe.bOn) return Look::Steppe;
+		// A town or a city the rules laid with streets (release 2, on trial "city" until the art director passes it and
+		// the Mac holds its frame rate): its ruined blocks over whatever country lies round it.
+		if (F.Tried("city") && IsCityField(F)) return Look::City;
+		return CountryOf(F);
+	}
+
 	bool LeaflessOf(const LandField::Field& F, Look L)
 	{
+		if (L == Look::City) L = CountryOf(F); // (a city's parks and gardens bare as the country's woods round it)
 		if (L != Look::Bocage && L != Look::Steppe && L != Look::Farmland && L != Look::Rice && L != Look::America && L != Look::Plain) return false;
 		if (F.Month < 1 || F.Month > 12) return false;
 		const double Lat = std::fabs(F.Lat);
@@ -272,6 +284,7 @@ namespace LandScape
 	double SnowOf(const LandField::Field& F, Look L)
 	{
 		if (F.Snow >= 0.0) return Clamp01(F.Snow);
+		if (L == Look::City) L = CountryOf(F); // (a city's winter the country's round it)
 		if (L == Look::Desert || L == Look::Jungle || L == Look::Island) return 0.0;
 		const double Lat = F.Lat, Lon = F.Lon;
 		// How hard the winter is here (0 the Atlantic's mild lowlands, 1 Russia's): north and east harder; the Ardennes'
@@ -393,6 +406,17 @@ namespace LandScape
 			A.HazeDensity = 0.006;
 			A.SkyDust = 1.0;
 			Grade(0.53, 0.62, 1.28, -0.5, 0.55, 1.02, 0.97);
+			break;
+		case Look::City:
+			// (a city fought over: smoke from its fires and brick dust hanging in the streets, a grey-brown haze that
+			// takes the far blocks down to shapes within a kilometre and a half; the grade dark and hard, the colour held
+			// down, the gain a touch warm, the art director's T4 burnt shells)
+			A.bSet = true;
+			Ink(A.HazeInk, 0.62, 0.60, 0.56);
+			Ink(A.HazeOvercast, 0.52, 0.51, 0.49);
+			A.HazeDensity = 0.0072; // (some 3,300 m: the smoke and the brick dust take the far blocks down to shapes, the landmark still read)
+			A.SkyDust = 0.9;
+			Grade(0.50, 0.55, 1.35, -0.55, 0.55, 1.02, 0.97);
 			break;
 		case Look::Dry:
 			// (the high continental air of Mongolia in summer: clear and dry, a pale blue-grey haze and a little dust, the
@@ -534,6 +558,7 @@ namespace LandScape
 		case Look::Rice: return MakeAsia(F, S);
 		case Look::America: return MakeAmerica(F, S);
 		case Look::Plain: return MakePlain(F, S);
+		case Look::City: return MakeCity(F, S);
 		default: return nullptr;
 		}
 	}
