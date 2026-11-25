@@ -631,7 +631,13 @@ function whatIsThere(g: Game, nat: string, kind: RaidKind, t: number, sight: Uin
   // Fog on raids (airfog.ts, its switch on): out of the side's sight its guns and the fighters in reach are as last seen.
   const k = raidFogOn(g) && g.regions[t] ? skyKnown(g, nat, t, sight) : null;
   const hide = k && !k.live ? fogBits(k) : null;
-  const gunsBit = (): string => (hide ? hide.guns : gunsAt(g, t) ? `level ${gunsAt(g, t)} guns` : '');
+  // (The raid row, the UI director's section B of 25 Nov 2026 19:10Z: the built guns first, the standing light guns every
+  // target has named apart; out of sight the built guns as last seen, and the standing ones never hidden.)
+  const gunsBit = (): string => {
+    const S = num(standingGuns()), built = flakGuns(gunsAt(g, t));
+    if (hide) return `${hide.guns} and ${S} light`;
+    return built.all ? `${num(built.all)} guns built (${num(built.heavy)} heavy) and ${S} light` : `${S} light guns`;
+  };
   if (kind === 'harbour') {
     const there = shipsInPort(g, t, nat);
     const seen = there.filter((f) => fleetKnown(g, f, nat) === 'exact');
