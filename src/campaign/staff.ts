@@ -1738,9 +1738,9 @@ function cond(g: Game, nat: string, c: string, real: Front[]): boolean {
 
 /**
  * A great choice as it goes in this war. Where its enemies are those that stand in the way rather than history's list
- * (pacific.ts inTheWay: the strike south at stops 4 and 5), it declares on them, and its strikes and landings are cut
+ * (pacific.ts inTheWay: the strike south at stops 3 to 5), it declares on them, and its strikes and landings are cut
  * to ground held by countries it is at war with or declares on (`declaring`, this month's declarations; left out, all
- * those in the way). Every other choice, and this one at stops 1 to 3, goes exactly as written.
+ * those in the way). Every other choice, and this one at stops 1 and 2, goes exactly as written.
  */
 export function asGoes(g: Game, nat: string, op: Op, declaring?: string[]): Op {
   const way = inTheWay(g, nat, op);
@@ -1978,7 +1978,7 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
   // The operation launched this month or last: its landings may take two months to get ashore.
   const wentAs = g.turn - flag(g, `st:go:${nat}`) <= 1 && flag(g, `st:go:${nat}`) ? list[flag(g, `st:goOp:${nat}`) - 1] ?? null : null;
   const declare = wentAs && flag(g, `st:go:${nat}`) === g.turn ? targets(g, nat, wentAs) : [];
-  // (Its strikes and landings as it goes: at stops 4 and 5 the strike south's are cut to those it fights. asGoes.)
+  // (Its strikes and landings as it goes: at stops 3 to 5 the strike south's are cut to those it fights. asGoes.)
   const went = wentAs ? asGoes(g, nat, wentAs, declare) : null;
   // The fronts as they will stand once this month's declarations are made.
   const real = fronts(g, nat, { extra: new Set(declare), skip });

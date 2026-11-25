@@ -8,7 +8,7 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { atWar, createGame, declareWar } from '../src/campaign/game';
+import { allied, atWar, createGame, declareWar } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { NAVY, baseInForce, fleetBeat, fleetReach, navalUpkeep, placeBoats, zoneOf } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
@@ -156,7 +156,7 @@ describe("the far side: Japan's boats from 1943", () => {
     expect(named(p, 'JAP', '6th Fleet').ships.ss).toBe(100);
   });
 
-  it('a lost base: at stops 1 and 2 the record\'s dates stand; at stops 3 to 5 the date of the next base its side holds gives way', () => {
+  it('a lost base: at stops 1 and 2 the record\'s dates stand; at stops 3 to 5 the date of the next base its side holds gives way, and the fallen-base rule moves it', () => {
     // (The design director's ruling of 21:00Z and 21:04Z, 22 November 2026: at stop 3 the group stood down from
     // January to July 1943, with Kwajalein lost and Saipan dated February 1944.)
     const G = JAP().groups[0];
@@ -179,10 +179,15 @@ describe("the far side: Japan's boats from 1943", () => {
         expect(named(g, 'JAP', '6th Fleet').ships.ss, `stop ${stop}`).toBe(boats);
         continue;
       }
-      // The group sails from Saipan, eleven months before its date, with every boat.
+      // The group keeps every boat. The record's dates move no base at stops 3 to 5 (Units decide audit item 43, the
+      // design director's ruling of 16:19Z, 25 November 2026, 3a): it lies at Kwajalein until the one rule for a fallen
+      // base moves it, in the same month (navalUpkeep), to a harbour its side holds.
       expect(f!.ships.ss, `stop ${stop}`).toBe(boats);
-      expect(g.regions[f!.base].name, `stop ${stop}`).toBe('Saipan');
-      // Saipan lost too: the next on the list, home.
+      expect(g.regions[f!.base].name, `stop ${stop}`).toBe('Kwajalein');
+      navalUpkeep(g, 'JAP');
+      const moved = g.fleets.find((x) => x.nat === 'JAP' && x.name === 'Advance Submarine Fleet');
+      expect(moved && allied(g, 'JAP', g.regions[moved.base].ctrl), `stop ${stop}`).toBe(true);
+      // The record's base of the day, where a group forms: Saipan lost too, the next on the list, home.
       g.byName.Saipan.ctrl = 'USA';
       expect(port(g), `stop ${stop}`).toBe('Kure');
       // Kwajalein retaken, its date long come: it takes the group back.

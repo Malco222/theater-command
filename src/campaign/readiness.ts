@@ -39,8 +39,8 @@
 import type { Corps, Game, Region } from './types';
 import { PACIFIC, freezeAt, readyRules, type ReadyRules } from './pacific';
 import { RIVALS, asGoes, characterOf, monthly, ops, strengthAsked, type Op } from './staff';
-import { leash, stopDef } from './history';
-import { FLEETS, NAVY, fleetReach, fleetsOf, inPassage, orderedTo, seaPath, shipCount } from './navy';
+import { leash, stopDef, stopOf } from './history';
+import { FLEETS, NAVY, fleetReach, fleetsOf, inPassage, orderedTo, plannedCrossing, seaPath, shipCount } from './navy';
 import { followUp, reckon } from './ashore';
 import { WORLD } from './world';
 import { allied, atWar } from './game';
@@ -117,6 +117,13 @@ function sailing(g: Game, nat: string, op: Op, named: Corps[]): Corps[] {
   return out;
 }
 
+/** True where the plan's landing corps stand on their quays, as many as its sealift can carry (the readiness test's 'forces' at or above 'asked'). */
+function armyOnQuays(g: Game, nat: string, op: Op): boolean {
+  const also = meant(op);
+  const onQuays = forces(g, nat, op, (id) => atWar(g, nat, id) || also.has(id)).filter((x) => x.quay).length;
+  return onQuays >= Math.min(g.nations[nat].sealift, (op.landings ?? []).length);
+}
+
 /** What the readiness test reads this month for a staff whose month it is to choose; null for every other. */
 export function readiness(g: Game, nat: string): Readiness | null {
   const X = testFor(g, nat), freeze = freezeAt(g);
@@ -172,9 +179,12 @@ export function readinessMonth(g: Game, nat: string): void {
   if (!X || !freeze) return;
   const { R, op } = X;
   const m = g.turn - freeze;
-  // The gathering: the striking fleet to the anchorage its strike is flown from. (At stops 4 and 5 only while a strike
-  // it flies is still meant: one that leaves America out flies none.)
-  if (m >= R.gather.after && (!stopDef(g).ambitions || (op.strikes ?? []).some((s) => s.fleet === R.gather.fleet))) {
+  // The gathering: the striking fleet to the anchorage its strike is flown from. At stops 1 and 2 from its month. At
+  // stops 3 to 5 by cause, not by the calendar: while a strike it flies is still meant (one that leaves America out
+  // flies none), from the month the plan's landing corps stand on their quays (Units decide audit item 44, the design
+  // director's rulings of 16:19Z and 16:30Z, 25 November 2026).
+  const byCause = (): boolean => (op.strikes ?? []).some((s) => s.fleet === R.gather.fleet) && armyOnQuays(g, nat, op);
+  if (stopOf(g) <= 2 ? m >= R.gather.after : byCause()) {
     const f = fleetsOf(g, nat).find((x) => x.name === R.gather.fleet);
     // (Beyond a month's steaming the gathering is a voyage: release 2, the far chart, the ruling of 15:48Z, 3.)
     if (f) orderedTo(g, f, R.gather, undefined, true);
@@ -194,13 +204,24 @@ export function readinessMonth(g: Game, nat: string): void {
   readyWatch.tell?.({ ...now, nat, turn: g.turn, struck, why });
 }
 
+/**
+ * (Stops 3 to 5) Whether the crossing the player has named as his plan (navy.ts plannedCrossing, which his troopships
+ * read) has corps of his standing on its quay: the cause his admirals gather on. False with no crossing named.
+ */
+function hisCrossingReady(g: Game, nat: string): boolean {
+  const plan = plannedCrossing(g, nat);
+  return !!plan && plan.from.units.some((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne);
+}
+
 /** The month a player's admirals gathered his striking fleet (below), or -1 once that gathering is over. */
 const GATHERED = 'pac:gathered';
 
 /**
  * The gathering for a player's Japan whose staff runs his navy, where no book dates the strike (rider b641 (b) to
- * ruling 234; the director, 15:58Z of 19 November 2026). His admirals read the freeze as the computer's do: from
- * the second month after it the striking fleet lies at the anchorage its strike is flown from. They gather no longer
+ * ruling 234; the director, 15:58Z of 19 November 2026). At stops 1 and 2 his admirals read the freeze as the
+ * computer's do: from the second month after it the striking fleet lies at the anchorage its strike is flown from. At
+ * stops 3 to 5 they gather by cause: for the crossing he has named, from the month his corps stand on its quay
+ * (hisCrossingReady; the ruling of 17:09Z, 25 November 2026). They gather no longer
  * than the computer's would: once the window's last month has passed with no war on the country whose harbour the
  * plan names, they stand down, and the fleet comes home as it would from the strike. His own hand on the navy's desk
  * ends it at once and the fleet is his where it lies; so does the war come. A later declaration gets the strike only
@@ -226,5 +247,9 @@ export function gatherMonth(g: Game, nat: string): void {
     if (began) { if (f && s.home && bound()) orderedTo(g, f, s.home, undefined, true); g.flags[GATHERED] = -1; }
     return;
   }
-  if (m >= R.gather.after && f && (orderedTo(g, f, R.gather, undefined, true) || there())) g.flags[GATHERED] ??= g.turn;
+  // (At stops 3 to 5 by cause, not by the calendar: for the crossing he has named, from the month his corps stand on its
+  // quay; with none named they gather nothing, and his navy waits on his plan. Stops 1 and 2 keep the calendar. The
+  // design director's ruling of 17:09Z, 25 November 2026, on Units decide audit item 44.)
+  const due = stopOf(g) <= 2 ? m >= R.gather.after : hisCrossingReady(g, nat);
+  if (due && f && (orderedTo(g, f, R.gather, undefined, true) || there())) g.flags[GATHERED] ??= g.turn;
 }

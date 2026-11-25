@@ -46,6 +46,10 @@ const december = (stop: number, human: string | null = null): Game => {
   g.turn = 28;
   bookMonth(g);
   monthlyDiplomacy(g);
+  // (At stops 3 to 5 the strike reads who stands in Japan's way, not history's list: Units decide audit item 45, the
+  // design director's ruling of 16:30Z, 25 November 2026. Here America stands beside Britain at war with Germany, so the
+  // three are in its way whatever the staff's draw, and the plan is the whole of history's.)
+  if (stop >= 3) { g.nations.USA.align = 'allies'; if (!atWar(g, 'USA', 'GER')) declareWar(g, 'USA', 'GER'); }
   navalUpkeep(g, 'USA');
   return g;
 };
@@ -100,14 +104,20 @@ describe('the readiness test (ruling 200(m)): whose month it is', () => {
 });
 
 describe('the readiness test: the gathering and the three things', () => {
-  it('the month after the freeze nothing moves; the second month the carrier striking force goes to Etorofu, and no flag is raised before the window', () => {
+  it('the gathering waits on the army: with too few of the plan\'s corps on their quays nothing moves; the month they stand on them the carrier striking force goes to Etorofu, and no flag is raised before the window', () => {
+    // (At stops 3 to 5 by cause, not by the calendar: Units decide audit item 44, the design director's 16:19Z and 16:30Z.)
     const g = december(3);
     let told = 0;
     readyWatch.tell = () => { told++; };
+    const gone = SOUTH().landings!.map((l) => corps(g, l.corps)).filter((c): c is Corps => !!c).slice(0, 6);
+    for (const c of gone) c.dead = true;
+    for (const m of [1, 2]) {
+      g.flags['pac:freeze'] = g.turn - m;
+      readinessMonth(g, 'JAP');
+      expect(g.regions[striking(g).base].name, `month ${m}`).toBe('Hiroshima');
+    }
+    for (const c of gone) c.dead = false;
     g.flags['pac:freeze'] = g.turn - 1;
-    readinessMonth(g, 'JAP');
-    expect(g.regions[striking(g).base].name).toBe('Hiroshima');
-    g.flags['pac:freeze'] = g.turn - 2;
     readinessMonth(g, 'JAP');
     expect(g.regions[striking(g).base].name).toBe('Etorofu');
     expect(g.seas[striking(g).home].key).toBe('kurile');

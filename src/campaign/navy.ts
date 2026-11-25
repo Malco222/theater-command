@@ -3048,12 +3048,14 @@ export function navalUpkeep(g: Game, nat: string): void {
   // still find the carriers out or in. At war with anybody a player's fleets are his own to send out, and nothing is
   // done with them. Rider b593 to ruling 234. A row that names nobody reads as it did: at war with nobody.)
   const peace = (whose?: string): boolean => !n.atWar.length || (whose !== undefined && !atWar(g, nat, whose) && !byHand(g, nat, 'navy'));
-  // (A base move that waited for him is made once the fleet is his admirals' again: handed back, or the navy handed them.)
+  // (A base move that waited for him is made once the fleet is his admirals' again: handed back, or the navy handed them.
+  // It is the book's, so only at stops 1 and 2: with the dial turned past them since, it is dropped. The design
+  // director's ruling of 16:05Z, 25 November 2026, 3a, and the fourth review's 6.)
   for (const f of fleetsOf(g, nat)) {
     if (!f.planBase || keptByHand(g, f) || byHand(g, nat, 'navy')) continue;
     const b = f.planBase;
     delete f.planBase;
-    orderedTo(g, f, b);
+    if (stopOf(g) <= 2) orderedTo(g, f, b);
   }
   const out = new Map<number, number>();
   for (const m of NAVY.moves ?? []) {
@@ -3861,8 +3863,10 @@ export function ownBoatsReach(g: Game, f: Sailing): number {
  * war with a nation its groups hunt, and at no other time: with that war over, or not begun, every boat is with its
  * pool. A war that comes before the record's ('far.war') is read as the record's first month.
  *
- * A group sails from the record's base of the day ('bases'), the latest its side holds, at every stop: it moves there
- * with a line of news, and a group with no such base left sends its boats home. Its boats raid as far from that base
+ * At stops 1 and 2 a group sails from the record's base of the day ('bases'), the latest its side holds: it moves there
+ * with a line of news, and a group with no such base left sends its boats home. At stops 3 to 5 it keeps the base it
+ * holds, as any fleet does, and forms first at the record's (Units decide audit item 43, the design director's ruling
+ * of 16:19Z, 25 November 2026, 3a); a base it loses is moved by the one rule for a fallen base (newBase). Its boats raid as far from that base
  * as the record's boats patrolled in that half-year (boatsReach), so the forward bases shorten nothing by a number of
  * ours: they move the place the reach is counted from. Within that reach its beat is, at stops 1 and 2, the sea of the record's list
  * for the half-year that carries the most of the hunted nation's lanes, or the nearest to the list that carries one
@@ -3879,7 +3883,9 @@ function placeFarBoats(g: Game, nat: string, B: Beats): void {
   let row: number[] | undefined;
   for (const r of B.rows) if (r[0] <= month) row = r;
   const bases = B.groups.map((G) => baseInForce(g, nat, G));
-  const want = B.groups.map((_, i) => (quarry && row && bases[i] ? row[i + 1] : 0));
+  // (At stops 3 to 5 a group that is formed sails from the base it holds while its side holds it.)
+  const holds = (i: number): boolean => stop > 2 && !!fleets[i] && fleets[i]!.base >= 0 && allied(g, nat, g.regions[fleets[i]!.base].ctrl);
+  const want = B.groups.map((_, i) => (quarry && row && (bases[i] || holds(i)) ? row[i + 1] : 0));
   const held = fleets.map((f) => f?.ships.ss ?? 0);
   const out = held.reduce((a, b) => a + b, 0);
   // (With no pool left to go home to, the boats stay with the groups: shared by the row, or where they are.)
@@ -3906,8 +3912,8 @@ function placeFarBoats(g: Game, nat: string, B: Beats): void {
     f.ships.ss = parts[i];
     // A group with no boats left stands down, and forms again, with its line of news, when it has some.
     if (shipCount(f.ships) === 0) { g.fleets.splice(g.fleets.indexOf(f), 1); return; }
-    // The record's base of the day, while its side holds it.
-    if (at && g.regions[f.base]?.name !== at.base) orderedTo(g, f, { ...at, words: `${cap(fleetName(f))} moves its base to ${at.port}` }, (holder) => allied(g, nat, holder));
+    // The record's base of the day, while its side holds it (at stops 1 and 2).
+    if (stop <= 2 && at && g.regions[f.base]?.name !== at.base) orderedTo(g, f, { ...at, words: `${cap(fleetName(f))} moves its base to ${at.port}` }, (holder) => allied(g, nat, holder));
     f.reach = boatsReach(g, f, G, month);
     if (!G.hunts) return;
     const reach = fleetReach(g, f, false, true);

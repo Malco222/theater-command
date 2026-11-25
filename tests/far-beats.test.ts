@@ -122,6 +122,21 @@ describe("the far side's submarine beats (the design director, 13:45Z to 14:06Z 
     expect([boats(g, 'USA', 'Pacific Submarine Fleet'), all(g, 'USA')]).toEqual([60, 168]);
   });
 
+  it("at stops 3 to 5 a group keeps the base it holds, as any fleet does (Units decide audit item 43)", () => {
+    for (const stop of [3, 5]) {
+      const g = war(grand(stop));
+      place(g);
+      const pearl = (): Fleet => fleet(g, 'USA', 'Central Pacific Submarine Fleet')!;
+      place(g, 34);
+      expect(pearl().port, `stop ${stop}`).toBe('Pearl Harbor');
+      place(g, 35);
+      expect(pearl().port, `stop ${stop}`).toBe('Pearl Harbor');
+      expect(news(g, /Central Pacific Submarine Fleet moves its base/), `stop ${stop}`).toEqual([]);
+      // Its boats still go out from it in the record's shares.
+      expect(boats(g, 'USA', 'Central Pacific Submarine Fleet'), `stop ${stop}`).toBeGreaterThan(0);
+    }
+  });
+
   it("a group sails from the record's base of the day, while its side holds it", () => {
     const g = war(grand());
     place(g);
