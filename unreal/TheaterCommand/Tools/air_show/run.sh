@@ -71,6 +71,13 @@ if [ -d "$RULES_AIR" ]; then
 else
   "$OUT/air_perf_test" "$ROOT/Content/Data/Air/performance.json" "$ROOT/Content/Models" "$@" || STATUS=1
 fi
+# The groups' earned colours (Battle/AirUnitColours, release 2): the art director's palette as the game carries it, every
+# aircraft model's spinner, nose band and tail found and coloured at every step, and a hand-made raid's board read
+# (unit_colours_raid.json: place.corpsMarks and its groups' corps).
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_unit_colours_test.cpp" "$SRC/Battle/AirUnitColours.cpp" "$SRC/Battle/AirScrew.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirDesk.cpp" "$SRC/Battle/AirGround.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
+  -o "$OUT/air_unit_colours_test"
+"$OUT/air_unit_colours_test" "$ROOT/Content/Data/Air/unit-colours.json" "$ROOT/Content/Models" "$HERE/unit_colours_raid.json" || STATUS=1
 # The clouds turned on the graphics chip (Battle/AirSky's Chip and Battle/AirSkyChip.inl, the text the chip runs):
 # every point the chip draws against the painter's, on the ground's two skies and every recording given.
 $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
