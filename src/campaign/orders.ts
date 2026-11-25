@@ -98,7 +98,7 @@ export interface CityOrders {
 }
 
 const low = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1);
-const several = (s: string): string => (/(corps|ships|guns|airfields|fortifications|troops)$/.test(s) ? s : /y$/.test(s) ? `${s.slice(0, -1)}ies` : `${s}s`);
+const several = (s: string): string => (/(corps|ships|guns|airfields|searchlights|fortifications|troops)$/.test(s) ? s : /y$/.test(s) ? `${s.slice(0, -1)}ies` : `${s}s`);
 /** "in 3 months", "in 1 month", "this month". */
 export const inMonths = (m: number): string => (m <= 0 ? 'this month' : `in ${m} month${m === 1 ? '' : 's'}`);
 

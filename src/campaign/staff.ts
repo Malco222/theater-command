@@ -39,13 +39,14 @@ import { openGovernment } from './government';
 import { openFooting } from './footing';
 import { openWeather } from './weather';
 import { openAirVersion } from './airversion';
+import { openCityDefences } from './citydefences';
 import { openSecretWar } from './secretwar';
 import { openManpower } from './manpower';
 import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, overseasOf, shoreOf } from './world';
 import { tieWar } from './far';
 import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
-import { BREAKUP_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SHADOW_STAGE, SHADOWRELAY_STAGE, SETTLEDTOWNS_STAGE, VOYAGELOG_STAGE, TASKFORCE_STAGE, UNITS_STAGE, WAGONS_STAGE, WINCHANCE_STAGE } from './stage';
+import { BREAKUP_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SHADOW_STAGE, SHADOWRELAY_STAGE, SETTLEDTOWNS_STAGE, CITYDEFENCES_STAGE, VOYAGELOG_STAGE, TASKFORCE_STAGE, UNITS_STAGE, WAGONS_STAGE, WINCHANCE_STAGE } from './stage';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
 import { openLegions } from './legions';
@@ -167,6 +168,8 @@ export function startOpen(g: Game, wide = true): Game {
   if (SEAMINES_STAGE) g.flags.seaMines = 1;
   if (HEAVYSEAS_STAGE) g.flags.heavySeas = 1;
   if (SHADOWRELAY_STAGE) g.flags.shadowRelay = 1;
+  // City defences: searchlights, guns by night by what they see, towns their garrisons fortify (release 2, citydefences.ts).
+  if (CITYDEFENCES_STAGE) g.flags.cityDefences = 1;
   // The grand campaign is played on the wider world: it is attached before anything else is set up for it. (One
   // kept to the map of Europe is what a campaign saved before the world was drawn plays on as.)
   if (wide) attachWorld(g);
@@ -213,6 +216,8 @@ export function startOpen(g: Game, wide = true): Game {
   openFooting(g);
   openWeather(g);
   openAirVersion(g, majorsOf(g));
+  // (City defences: the searchlights the historian reads at this date, beside the start guns. Off, nothing.)
+  openCityDefences(g);
   openSecretWar(g);
   openManpower(g);
   numberDivisions(g);

@@ -153,3 +153,9 @@ export const SEAMINES_STAGE: boolean = staged('TC_SEAMINES', 'seaMines');
 export const HEAVYSEAS_STAGE: boolean = staged('TC_HEAVYSEAS', 'heavySeas');
 /** True where new grand campaigns open with the shadow relay (stage.json 'shadowRelay'). */
 export const SHADOWRELAY_STAGE: boolean = staged('TC_SHADOWRELAY', 'shadowRelay');
+
+// City defences (release 2; Brian 24 November 2026 22:08Z; city defences, the design director's ruling of 25 Nov 2026
+// 02:23Z; citydefences.ts): the grand campaigns opened while this is true carry the flag 'cityDefences'. Forced by
+// TC_CITYDEFENCES.
+/** True where new grand campaigns open with searchlights, guns by night by what they see, and towns their garrisons fortify (stage.json 'cityDefences'). */
+export const CITYDEFENCES_STAGE: boolean = staged('TC_CITYDEFENCES', 'cityDefences');

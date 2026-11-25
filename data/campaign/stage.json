@@ -50,5 +50,7 @@
   "_heavySeas": "Heavy seas (release 2; Brian 24 November 2026 20:38Z, 'yes to all'; src/campaign/heavyseas.ts, data/campaign/heavyseas.json). Gales blow under a closed sky at sea, mostly in winter: ships can sail into a sea in a gale but not on through it that month, convoys through one are late, and a shadow may lose its quarry in one. The same for every country. Switchable in any month from OPTIONS.",
   "heavySeas": false,
   "_shadowRelay": "The shadow relay (release 2; Brian 24 November 2026 20:38Z, 'yes to all'; src/campaign/shadow.ts, data/campaign/shadow.json 'relay'). Read only with shadowing on: a shadow's fuel lasts three months on station, and then a fresh cruiser fleet from harbour takes over without losing contact. Switchable in any month from OPTIONS.",
-  "shadowRelay": false
+  "shadowRelay": false,
+  "_cityDefences": "City defences (release 2; Brian 24 November 2026 22:08Z, card 22:11Z 'Both'; the design director's ruling of 25 November 2026 02:23Z; src/campaign/citydefences.ts, data/campaign/citydefences.json, arsenal.json works.lights). Searchlights to build beside the anti-aircraft guns; by night the guns fire by what they can see (dark, laid by Fighter control's radar, or lit as well), and the lights help the night fighters a little, under a clear sky only; a garrison fortifies the town it holds, a month at a time; and the town's heavy guns fire on attacking tanks. One rule for every country. Off: nothing of it is read and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'cityDefences' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_CITYDEFENCES=1 or TC_CITYDEFENCES=0.",
+  "cityDefences": false
 }

@@ -342,7 +342,7 @@ export interface Build {
   /** A corps' kind. (Airfields as targets: a 'field' work carries 'strip' here where the level is a field strip, not concrete; read it as a string, isStripBuild.) */
   kind?: Kind;
   divs?: number;
-  /** For the arsenal: which aircraft ('ftr', 'bmr'), ship class ('dd', 'tp' and so on) or work ('factory', 'yard', 'aa', 'field'), and how many. */
+  /** For the arsenal: which aircraft ('ftr', 'bmr'), ship class ('dd', 'tp' and so on) or work ('factory', 'yard', 'aa', 'field', 'lights' with city defences), and how many. */
   item?: string;
   count?: number;
   name: string;
