@@ -30,6 +30,19 @@ $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" 
 $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
   "$HERE/air_tally_test.cpp" "$SRC/Battle/AirTally.cpp" -o "$OUT/air_tally_test"
 "$OUT/air_tally_test" "$ROOT/Content/Data/Tally/name-letters.json" || STATUS=1
+# Each aircraft's own figures (Battle/AirPerf and Content/Data/Air/performance.json; Brian, 24 November: "i want the
+# planes flying with realistic capabilities and tactics"): every figure's source and mark, every model the files, the
+# scene, the recordings and the rules (doctrine.ts, ships.ts, when the rules sit two folders up) name found, each type's
+# limits inside their bounds, and the orderings the record is sure of.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_perf_test.cpp" "$SRC/Battle/AirPerf.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirDesk.cpp" "$SRC/Battle/AirGround.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
+  -o "$OUT/air_perf_test"
+RULES_AIR="$ROOT/../../src/battle/air"
+if [ -d "$RULES_AIR" ]; then
+  "$OUT/air_perf_test" "$ROOT/Content/Data/Air/performance.json" "$ROOT/Content/Models" "$RULES_AIR" "$@" || STATUS=1
+else
+  "$OUT/air_perf_test" "$ROOT/Content/Data/Air/performance.json" "$ROOT/Content/Models" "$@" || STATUS=1
+fi
 # The clouds turned on the graphics chip (Battle/AirSky's Chip and Battle/AirSkyChip.inl, the text the chip runs):
 # every point the chip draws against the painter's, on the ground's two skies and every recording given.
 $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
