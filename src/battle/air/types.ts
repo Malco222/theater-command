@@ -252,6 +252,16 @@ export interface AirPlace {
  */
 export interface BomberTold { seat: number; name: string; mark: string; art: number; missions: number; kills: number }
 
+/**
+ * What an 'air:hit' event's extra carries beside the look of the hit (fates.ts hitOf): shown, never counted (the
+ * design director, pilot-ai 25 November: R2). 'by' is the enemy group whose fire the rules held owed for that hit at
+ * that moment, by the id the view gives that group, or 'flak' for the guns (and for the ground fire on a raid on
+ * troops); where several owed on the group that tick, one of them by its share of what was owed, never from the
+ * rules' main stream. 'gun' is the gun's name as guns.ts gives it ('Browning .303'), only where every gun that group
+ * carries is of that one name; left out otherwise, and always for the guns on the ground.
+ */
+export interface AirHitWho { by: number | 'flak'; gun?: string }
+
 /** The exact result the rules apply (FieldResult.extra.air): each campaign group's losses, and the bombs dropped. */
 export interface AirOutcome {
   /** Each campaign group: what it lost, its downed fighter pilots who fly again, and the aircraft it sent up. */

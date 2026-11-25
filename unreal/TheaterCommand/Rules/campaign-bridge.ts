@@ -49,7 +49,7 @@
 //   TC.offerTake(ids | 'all')           -> { ok, taken, left, said, offers, view }: he takes those offers; TC.offerDecline(ids | 'all') -> { ok, declined, said, offers, view }
 
 import { setTeams, TEAMS_RELEASE } from '../../../src/campaign/teams';
-import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, hostileUnits, limitAttackers, men, moveCost, railReach as railReachOf, litTracks, railReachFor, railSays, rideLines, whyNoRoom, whyNoTrain, whyNoTrainFor, weather as weatherNow, worksOf } from '../../../src/campaign/game';
+import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, ensureSupply, fieldArmy, frontage, hostileUnits, keepSupply, limitAttackers, men, moveCost, railReach as railReachOf, litTracks, railReachFor, railSays, rideLines, whyNoRoom, whyNoTrain, whyNoTrainFor, weather as weatherNow, worksOf } from '../../../src/campaign/game';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
 import { ARSENAL as arsenalBook, airJoinsPlan, factoriesBuilt, joinsFleet, workLevel, yardLevel } from '../../../src/campaign/arsenal';
@@ -60,7 +60,7 @@ import * as everyRule from '../../../src/campaign/turn';
 // (the air war's rules by name too: a rule a later version adds is used when the rules have it, and not missed when they have not)
 import * as everyAirRule from '../../../src/campaign/air';
 import { gunsAlone, homeAlarms, type HomeAlarm } from '../../../src/campaign/danger';
-import { DEPTH, deskDef, type DeskId } from '../../../src/campaign/depth';
+import { DEPTH, deskDef, deskRan, type DeskId } from '../../../src/campaign/depth';
 import { deskRuns } from '../../../src/campaign/desks';
 import { LEAGUE, leagueFounded, leagueMembers, type PathId } from '../../../src/campaign/league';
 import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, majorsOf, momentum, pcIncome, receptive, step, tradePartners } from '../../../src/campaign/diplomacy';
@@ -112,6 +112,7 @@ import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { airAct, airPage } from '../../../src/campaign/airpages';
 import type { FoughtAir } from '../../../src/campaign/airfought';
+import { strafedLine } from '../../../src/campaign/strafers';
 import type { FieldBill } from '../../../src/campaign/game';
 import { battleCalls } from './battle-bridge';
 import { nearMoves, type NearArrow } from './near-moves'; // (release 2, the enemy's month near you)
@@ -540,10 +541,14 @@ const pictureOffers = (s: Game): ReturnType<typeof arsenalOffers> => inPicture(s
 const pictureDamaged = (s: Game): RepairLike[] => inPicture(s, 'damaged', () => damagedOfMine(s));
 const pictureGunsAlone = (s: Game): ReturnType<typeof gunsAloneOf> => inPicture(s, 'alone', () => gunsAloneOf(s));
 
-function view() {
+function view(step = false) {
+  // (The supply window, turn.ts stepAI: an order that answers with the picture hands it a fresh supply picture, as part
+  // of the order itself. Every other call ends fresh by the wrapper at this file's foot, so a picture never finds
+  // supply stale, and when a picture is drawn decides nothing.)
+  if (pictureDepth === 0 && g) ensureSupply(g);
   pictureDepth++;
   try {
-    return drawView();
+    return drawView(step);
   } finally {
     if (--pictureDepth === 0) { pictureTradeKept = null; pictureCommandKept = null; pictureBriefKept = null; pictureKept = null; }
   }
@@ -582,9 +587,17 @@ function readyOf(s: Game, from: number): { what: string; text: string; region: n
   return out;
 }
 
-function drawView() {
+/**
+ * The war as the player sees it: the table, and everything the panels, cards and plates read. (Speed, the far map, 25
+ * November 2026.) A month's step (step: true) is only ever laid on the table while the month is watched (the 3D game's
+ * ShowWar: the holders, the armies, the fleets, the agents and the table's marks); the panels and cards read the month's
+ * own picture, which is drawn after the last step. So a step's picture leaves out what only they read (panel()), and is
+ * the same as before in everything the table reads.
+ */
+function drawView(step = false) {
   const s = game();
   const up = humanUp(s);
+  const panel = <T>(f: () => T): T | undefined => (step ? undefined : f());
   const seen = sight(s);
   // Where air groups are based: each such place is an airfield on the table.
   const based = new Set(s.airFleets.filter((f) => f.ftr + f.bmr > 0).map((f) => f.base));
@@ -612,16 +625,16 @@ function drawView() {
     current: current(s),
     humanUp: up,
     // Where an ally's corps stand beside the player's own and could be asked to march with them: the province, how many, and whose.
-    joins: s.human && up ? [...new Set(s.corps.filter((c) => !c.dead && c.nat === s.human && c.kind !== 'fort').map((c) => c.reg))].map((reg) => {
+    joins: panel(() => s.human && up ? [...new Set(s.corps.filter((c) => !c.dead && c.nat === s.human && c.kind !== 'fort').map((c) => c.reg))].map((reg) => {
       const can = joinOffers(s, reg).filter((o) => !o.why);
       return { region: reg, n: can.length, nats: [...new Set(can.map((o) => s.nations[o.nat]?.adj ?? o.nat))] };
-    }).filter((x) => x.n > 0) : [],
+    }).filter((x) => x.n > 0) : []),
     // (Version 64) Where two of the player's corps standing together are worn thin and could be folded into one: the province, and their names.
-    folds: s.human && up ? [...new Set(s.corps.filter((c) => !c.dead && c.nat === s.human && c.kind !== 'fort').map((c) => c.reg))].map((reg) => {
+    folds: panel(() => s.human && up ? [...new Set(s.corps.filter((c) => !c.dead && c.nat === s.human && c.kind !== 'fort').map((c) => c.reg))].map((reg) => {
       let vs: ReturnType<typeof foldChoicesAt> = [];
       try { vs = foldChoicesAt(s, reg).filter((v) => !v.why); } catch { vs = []; }
       return { region: reg, names: [...new Set(vs.map((v) => v.keepName))] };
-    }).filter((x) => x.names.length > 0) : [],
+    }).filter((x) => x.names.length > 0) : []),
     // (Version 64) Fieldworks standing empty on ground of the player's side: the province, tenths of a month of work, and room for how many corps.
     worksLeft: (() => {
       const out: number[] = [];
@@ -632,9 +645,9 @@ function drawView() {
     // Works going up from the arsenal, for the table to show as a builder's yard in scaffolding: the province, and
     // what is being built there as bits (1 a factory, 2 a shipyard, 4 anti-aircraft guns, 8 an airfield, 16
     // fortifications, 32 a field strip, release 2's airfields). Only where the player can know it.
-    cityOrders: (() => { try { return cityOrdersOf(s); } catch { return []; } })(),
+    cityOrders: panel(() => { try { return cityOrdersOf(s); } catch { return []; } }),
     // (Release 2: the city at a glance.) Every town the player may know something of, with its plate's marks and their words.
-    glance: (() => { try { return glanceMarks(s, seen); } catch { return []; } })(),
+    glance: panel(() => { try { return glanceMarks(s, seen); } catch { return []; } }),
     going: (() => {
       const at = new Map<number, number>();
       try {
@@ -712,12 +725,12 @@ function drawView() {
     level: isOpen(s) && s.human ? levelNow(s).name : '',
     // (Version 66) How deep the player plays: the depth's name, and each desk with who runs it and a line for a bar on
     // its own screen (the staff's news of the month where it runs the desk, an offer to hand it over where it does not).
-    command: commandBrief(s),
+    command: panel(() => commandBrief(s)),
     fallen: fallenNation,
     // The player's treasury: production points in hand, what the factories earn a month, and what is on order.
-    treasury: s.human ? treasuryOf(s, s.human) : null,
+    treasury: panel(() => s.human ? treasuryOf(s, s.human) : null),
     // The countries the player could declare war on this month: those at peace with him that he borders or can reach by sea.
-    declare: up ? declarable(s) : [],
+    declare: panel(() => up ? declarable(s) : []),
     // Bridges that are down (by their place in the list of crossings) and provinces whose railway is cut.
     down: groundRules(s) ? crossingsOf(s).map((c, i) => (bridgeDown(s, c) ? i : -1)).filter((i) => i >= 0) : [],
     // (Rulings 113 and 114: the cuts drawn are the cuts he knows of, with how he knows each and the rules' words for it.)
@@ -831,9 +844,9 @@ function drawView() {
       };
     }),
     // (Ruling 86.) The sea gates: where each mark stands, who holds it, and whether the player's ships may pass.
-    gates: gatesOf(s),
+    gates: panel(() => gatesOf(s)),
     // (Rulings 88, 101 and 102.) The round of armies, counted by the rules for both builds.
-    round: roundOf(s),
+    round: panel(() => roundOf(s)),
     // The airfields as the player knows them (the grand campaign): where each is, whose, how big (1 to 4), and how
     // many groups and aircraft stand on it, or -1 where the fog hides that.
     // (Release 2; the art director's airfield spec of 24 November, item 2: the card says a shut runway, a repair in
@@ -870,22 +883,24 @@ function drawView() {
     // Things the player should be told as his month opens, and the rooms beyond the main screens that are open to him.
     // Capitals of fallen countries the player would set free by taking them (or holds already): ringed in gold.
     free: nationsFallen(s).filter((f) => f.canReturn && f.yours && f.capital >= 0).map((f) => ({ region: f.capital, nat: f.nat })),
-    alerts: alertsOf(s),
-    todo: todoOf(s),
+    alerts: panel(() => alertsOf(s)),
+    todo: panel(() => todoOf(s)),
     // (Rules 84.2.6; ruling 211(c).) The alarm that names the cure: the red row first in the tray. Empty until the rules have it.
-    alarms: alarmsOf(s),
+    alarms: panel(() => alarmsOf(s)),
     // (Rules 84.2.6.) His own guns left alone round an enemy town: the siege's row in the rules' words. Empty until the rules have it.
-    alone: pictureGunsAlone(s),
+    alone: panel(() => pictureGunsAlone(s)),
     // For the night: the nations at war, whose towns are blacked out; and the fronts, where armies at war stand in
     // provinces side by side, as far as the player sees them (pairs of regions), for the guns that flicker there.
     // (release 1) What each arm is, for the bigger unit card.
-    arms: armsTable(s),
+    arms: panel(() => armsTable(s)),
     // (Version 70) The history dial as it stands: null outside the grand campaign, and where the rules have none.
-    dial: (() => { const d = dialNow(s); return d ? { stop: d.stop, name: d.name, under: d.under } : null; })(),
+    dial: panel(() => { const d = dialNow(s); return d ? { stop: d.stop, name: d.name, under: d.under } : null; }),
     // (Version 72) The sea lift in a few words, for the heading of the fleet card: empty where the rules have none.
-    lift: (() => { try { const l = seaCalls.lift ? seaCalls.lift(s) : null; return l ? (l.lift > 0 ? `sea lift for ${l.lift} corps a month, ${l.left} left` : 'no sea lift') : ''; } catch { return ''; } })(),
+    lift: panel(() => { try { const l = seaCalls.lift ? seaCalls.lift(s) : null; return l ? (l.lift > 0 ? `sea lift for ${l.lift} corps a month, ${l.left} left` : 'no sea lift') : ''; } catch { return ''; } }),
     // (release 1) The admiral's chart: each sea by how well it is searched, and old sightings.
-    chart: chartOf(s),
+    // (A step's picture leaves the chart out but still draws it: drawing it writes the admiral's sightings, the
+    // 'sight:' flags kept with the game, and a fleet seen only in the middle of a month is remembered by them.)
+    chart: step ? void chartOf(s) : chartOf(s),
     // (release 1) Wrecks on the chart: where the big ships went down.
     wrecks: wrecksOf(s),
     dark: Object.values(s.nations).filter((n) => n.alive && n.atWar.length > 0).map((n) => n.id),
@@ -994,12 +1009,15 @@ function drawView() {
       }
       return [...seen.values()].flat();
     })(),
-    pages: pagesOf(s),
+    // (A step's picture carries only the towns page, where it is open: the table reads a step's page list for that
+    // alone, to keep ground open for a town's buildings (ShowWar's SetTownPlots); the page list the screens show is the
+    // month's own picture's.)
+    pages: step ? townsPageOnly(s) : pagesOf(s),
     // Oil and supplies in the player's depots (the grand campaign; null for a small country or a scenario), each with
     // the months it will last and its books in words, and every shipping lane to draw over the sea.
-    stores: storesOf(s),
+    stores: panel(() => storesOf(s)),
     // (Version 59) The reserve of men: how much of what the war opened with is left, in a word and in a sentence.
-    men: (() => {
+    men: panel(() => {
       try {
         const m = pictureMen(s);
         if (!m) return null;
@@ -1011,7 +1029,7 @@ function drawView() {
             `Drawn since the campaign opened: ${words(m.drawn)}.`, 'Every new corps and every replacement comes out of this reserve. When it is spent, nothing new can be raised.', 'Click for the count, and your say over the call-up.'].join('\n'),
         };
       } catch { return null; }
-    })(),
+    }),
     // (Version 59) The war cabinet can be switched off by a player who wants the war without the politics.
     // The countries whose armies fight beside the player's: a province crowded with friendly flags shows one, with a count.
     allied: s.human ? Object.keys(s.nations).filter((n) => n !== s.human && s.nations[n].alive && allied(s, n, s.human!)) : [],
@@ -1088,7 +1106,7 @@ function drawView() {
     secretWar: (() => { try { return secretWarOn(s); } catch { return false; } })(),
     secretWarCan: (() => { try { return secretWarSettable(s); } catch { return false; } })(),
     // Research teams of the player's with nothing to do: they never choose their own work, so the game says so.
-    idle: s.human ? pictureIdle(s, s.human) : 0,
+    idle: panel(() => s.human ? pictureIdle(s, s.human) : 0),
     // The members of the League, the third alliance: their ground is shown in its own colour.
     league: leagueMembers(s).map((n) => n.id),
     nations: Object.fromEntries(Object.values(s.nations).map((n) => [n.id, {
@@ -1256,17 +1274,16 @@ const guardLeft = (s: Game, id: number): number => 1 - Math.max(0, Math.min(100,
 // (Release 2, the art director's read of run 2, 22 November: a town held by its own guard alone says nothing new, and
 // 70 such plates buried the ones that matter. It wears its "guard" plate only inside the enemy's reach this month,
 // where it is news; elsewhere the plate is quiet, and "guard" stays in the hover card and the panel. The enemy's
-// reach is the release 1 reach of the armies the player can see; asked once while nothing that moves it has changed.)
-let guardReachKey = '';
-let guardReachWas = new Set<number>();
+// reach is the release 1 reach of the armies the player can see.)
+// (The rules builder, 25 November 2026: the answer is kept only inside one picture. It was kept between pictures while
+// the enemy's corps and the provinces' holders were the same, but the reach also turns on the player's own corps, the
+// friends, supply, bridges, mines and the enemy's full moves, so a plate could stay quiet beside an enemy who had just
+// come up. A picture is drawn from one state of the war, so inside one the answer cannot go stale; outside a picture it
+// is worked out afresh. It is asked once a picture today, by the town plates.)
 function guardReach(s: Game, me: string): Set<number> {
-  const key = `${s.turn}:${me}:${s.corps.filter((c) => !c.dead && c.nat !== me).map((c) => `${c.id}.${c.reg}.${c.ap}`).join(',')}:${s.regions.map((r) => r.ctrl).join(',')}`;
-  if (key === guardReachKey) return guardReachWas;
-  let danger = new Set<number>();
-  try { danger = enemyReach(s, (id) => s.regions[id]?.ctrl === me); } catch { danger = new Set<number>(); }
-  guardReachKey = key;
-  guardReachWas = danger;
-  return danger;
+  return inPicture(s, `guard:${me}`, () => {
+    try { return enemyReach(s, (id) => s.regions[id]?.ctrl === me); } catch { return new Set<number>(); }
+  });
 }
 
 /** Every town the player may know something of, with its plate's marks and a line of words for each mark. */
@@ -1883,9 +1900,9 @@ function stepOne(s: Game, steps: unknown[] | null): void {
     if (!taken.length && !reps.length) {
       // Nothing was fought for or taken, but armies the player can see may have marched: that is shown too.
       const to = [...new Set(s.corps.filter((c) => !c.dead && c.nat === nat && stood.has(c.id) && stood.get(c.id) !== c.reg && (look()[c.reg] > 0 || look()[stood.get(c.id)!] > 0)).map((c) => c.reg))];
-      if (air.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: air.mine || sea.mine || shore.mine, raids: air.flights, seas: sea.zones, sunk, shelled: shore.regions, ...nearOf(air.mine || sea.mine || shore.mine), view: view() });
-      else if (sea.zones.length || shore.regions.length) steps.push({ nat, note: seaNote, taken: [], battles: [], focus: shore.regions, mine: sea.mine || shore.mine, seas: sea.zones, sunk: sea.sunk, shelled: shore.regions, ...nearOf(sea.mine || shore.mine), view: view() });
-      else if (to.length || close.near || close.nearAllies) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.length ? to.slice(0, 6) : close.arrows.map((a) => a.to).slice(0, 6), mine: false, moved: true, ...nearOf(false), view: view() });
+      if (air.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: air.mine || sea.mine || shore.mine, raids: air.flights, seas: sea.zones, sunk, shelled: shore.regions, ...nearOf(air.mine || sea.mine || shore.mine), view: view(true) });
+      else if (sea.zones.length || shore.regions.length) steps.push({ nat, note: seaNote, taken: [], battles: [], focus: shore.regions, mine: sea.mine || shore.mine, seas: sea.zones, sunk: sea.sunk, shelled: shore.regions, ...nearOf(sea.mine || shore.mine), view: view(true) });
+      else if (to.length || close.near || close.nearAllies) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.length ? to.slice(0, 6) : close.arrows.map((a) => a.to).slice(0, 6), mine: false, moved: true, ...nearOf(false), view: view(true) });
       return;
     }
     const some = (names: string[]): string => (names.length <= 3 ? names.join(', ') : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`);
@@ -1914,7 +1931,7 @@ function stepOne(s: Game, steps: unknown[] | null): void {
       // The player's own ground or troops were involved.
       mine: reps.some((r) => r.defNat === s.human || r.defenders.some((u) => u.nat === s.human)) || taken.some((id) => ctrl[id] === s.human),
       ...nearOf(reps.some((r) => r.defNat === s.human || r.defenders.some((u) => u.nat === s.human)) || taken.some((id) => ctrl[id] === s.human) || air.mine || sea.mine || shore.mine),
-      view: view(),
+      view: view(true),
     });
   }
 }
@@ -3655,7 +3672,8 @@ function shownCard(s: Game, c: RuleCard): MonthCard {
     rows: c.rows.map((x) => ({ picture: x.picture ?? '', sign: x.sign, place: x.place, tag: x.tag, tone: tone(x.tone), a: x.ours ?? '', b: x.theirs ?? '', join: x.join?.word ?? '', joinName: x.join?.name ?? '', text: x.line, figures: figures(x.figures), region: x.region ?? -1, sea: x.sea ?? -1 })),
     none: c.quiet, foot: c.foot, count: c.count,
     home: home.map((x) => ({ sign: x.sign, count: x.count, text: x.text, where: x.where, grey: x.grey, tip: x.tip })),
-    staff: staffAll.slice(0, lines).map((x) => ({ text: x.short || x.text, tip: x.text, desk: String(x.desk), act: firsts.includes(x) ? `desk:${x.desk}:own` : '' })),
+    // (Release 2, the desk split: recruitment's line that told towns and trade's month too, as the one desk did, takes both back.)
+    staff: staffAll.slice(0, lines).map((x) => ({ text: x.short || x.text, tip: x.text, desk: String(x.desk), act: !firsts.includes(x) ? '' : x.desk === 'build' && bothTold(s) ? 'desk:build+towns:own' : `desk:${x.desk}:own` })),
     elsewhere: c.elsewhere.slice(0, lines).map((x) => ({ nat: x.nat, text: x.text, tip: x.full ?? x.text })),
     rest: over > 0 ? `${over} more ${over === 1 ? 'line' : 'lines'} of news ${over === 1 ? 'is' : 'are'} in the Newsreel.` : "Every figure comes from the month's own battle reports.",
     // (Ruling B8) What is offered him this month and still open from earlier ones: one list, never a card each.
@@ -3699,9 +3717,9 @@ function endMonth() {
       endHuman(s);
     }
     const air = raidsSince(s, air0, [month, s.turn]);
-    if (air.flights.length) steps.push({ nat: me, note: air.notes.slice(0, 2).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: true, raids: air.flights, sunk: strikeLossesSince(s, air0), view: view() });
+    if (air.flights.length) steps.push({ nat: me, note: air.notes.slice(0, 2).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: true, raids: air.flights, sunk: strikeLossesSince(s, air0), view: view(true) });
     const sea = seaFightsSince(s, sea00);
-    if (sea.zones.length) steps.push({ nat: me, note: sea.notes.slice(0, 2).join(' '), taken: [], battles: [], focus: [], mine: true, seas: sea.zones, sunk: sea.sunk, view: view() });
+    if (sea.zones.length) steps.push({ nat: me, note: sea.notes.slice(0, 2).join(' '), taken: [], battles: [], focus: [], mine: true, seas: sea.zones, sunk: sea.sunk, view: view(true) });
     runOthers(s, steps);
     fallen = arrive(s);
     // (release 1) The player's armies on a standing march go on as his month opens: shown as the month's last move.
@@ -3711,7 +3729,7 @@ function endMonth() {
       const out = advanceMarches(s);
       marched = out.ended;
       const said = [out.went.length ? `${out.went.length === 1 ? 'One of your corps is' : `${out.went.length} of your corps are`} on the march.` : '', ...out.ended.slice(0, 2).map((x) => x.note)].filter(Boolean).join(' ');
-      if (said) steps.push({ nat: s.human, note: said, taken: [], battles: [], focus: [...out.ended.map((x) => x.region), ...out.went].slice(0, 6), mine: false, moved: true, view: view() });
+      if (said) steps.push({ nat: s.human, note: said, taken: [], battles: [], focus: [...out.ended.map((x) => x.region), ...out.went].slice(0, 6), mine: false, moved: true, view: view(true) });
     }
   }
   // Fights at sea that no nation's own move accounts for (they are settled as a month opens): shown last.
@@ -3725,7 +3743,7 @@ function endMonth() {
       steps.push({
         nat: late[0].attNat, taken: [], battles: [], focus: [], seas: zones, sunk: all.sunk.filter((x) => zones.includes(x.zone)), mine: late.some((r) => r.attNat === s.human || r.defNat === s.human),
         note: late.slice(0, 2).map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight ${seaWhere(r.zoneName)}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.`).join(' ') || all.notes[0] || '',
-        view: view(),
+        view: view(true),
       });
     }
   }
@@ -4860,6 +4878,11 @@ interface Page { id: string; title: string; headline: string; note: string; top:
 /** A question about World Domination waiting for its second and third yes. */
 let domAsked = 0;
 
+/** pagesOf's towns page alone, where it is open. */
+function townsPageOnly(s: Game): { id: string; label: string }[] {
+  return s.human && s.nations[s.human] && townBuildings(s, s.nations[s.human].capital) ? [{ id: 'towns', label: 'TOWNS TO BUILD UP' }] : [];
+}
+
 function pagesOf(s: Game): { id: string; label: string }[] {
   const out: { id: string; label: string }[] = [];
   if (!s.human) return out;
@@ -5026,7 +5049,8 @@ function todoOf(s: Game): { k: string; t: string; tip: string; tone?: number }[]
     }
   }
   // (Version 66) What belongs to a desk the staff runs is the staff's to deal with: it does not ask for the player's attention.
-  const theirs: Record<string, DeskId> = { research: 'research', arsenal: 'build', 'page:trade': 'build', 'page:spies': 'spies', 'page:repairs': 'build', 'page:home': 'build' };
+  // (Release 2, the desk split: trade, repairs and the towns' building are towns and trade's.)
+  const theirs: Record<string, DeskId> = { research: 'research', arsenal: 'build', 'page:trade': 'towns', 'page:spies': 'spies', 'page:repairs': 'towns', 'page:home': 'towns' };
   // (a crowded field is the air desk's, as in the browser: its row is not shown while the staff runs the air war)
   return out.filter((t) => { const desk = t.k.startsWith('field:') ? ('air' as DeskId) : theirs[t.k]; try { return !(desk && staffRunsDesk(s, desk)); } catch { return true; } });
 }
@@ -6342,7 +6366,11 @@ interface HomeBoard {
   tiles: { k: string; label: string; figure: string; sub: string }[];
   counts: { ready: number; going: number; all: number };
   towns: HomeTown[]; raise: HomeRaise[]; again: HomeAgain | null; orders: HomeOrder[];
-  staff: { on: boolean; line: string; label: string; act: string; tip: string; cap: number; caps: { n: number; now: boolean; act: string }[] } | null;
+  staff: {
+    on: boolean; line: string; label: string; act: string; tip: string; cap: number; caps: { n: number; now: boolean; act: string }[];
+    /** (Release 2, the desk split) The strip's heading, and recruitment and towns and trade, each with its own switch. */
+    head: string; desks: { name: string; on: boolean; act: string; tip: string }[];
+  } | null;
 }
 
 // What the player ordered from the arsenal by his own press, this month and the last month he ordered in (works are
@@ -6376,7 +6404,7 @@ function ownOrdersBefore(s: Game): { turn: number; list: { key: string; region: 
   if (ordersNow || ordersBefore) return null;
   const me = s.human ? s.nations[s.human] : null;
   let staffed = true;
-  try { staffed = !!pictureCommand(s)?.desks.find((d) => d.id === 'build')?.staff; } catch { staffed = true; }
+  try { staffed = !!pictureCommand(s)?.desks.some((d) => (d.id === 'build' || d.id === 'towns') && d.staff); } catch { staffed = true; }
   if (!me || staffed) return null;
   const offers = arsenalOffers(s, -1);
   const list = me.queue.filter((b) => b.ordered === s.turn - 1 && keyOfBuild(b)).map((b) => ({ key: keyOfBuild(b), region: -1, label: offers.find((o) => o.key === keyOfBuild(b))?.label ?? b.name }));
@@ -6476,7 +6504,22 @@ function homeBoard(s: Game): HomeBoard | null {
   let staff: HomeBoard['staff'] = null;
   try {
     const v = commandOf(s), bar = deskBar(s, 'build');
-    if (v && bar) staff = { on: bar.staff, line: bar.staff ? bar.line : deskRuns(s, 'build'), label: bar.label, act: bar.act, tip: bar.tip, cap: v.cap, caps: v.caps.map((c) => ({ n: c, now: c === v.cap, act: `cap:${c}` })) };
+    const forces = v?.desks.find((d) => d.id === 'build'), works = v?.desks.find((d) => d.id === 'towns');
+    if (v && bar && forces && works) {
+      const told = [forces.news, works.news].filter((x, i, all): x is string => !!x && all.indexOf(x) === i).join(' ') || 'Nothing to report this month.';
+      const line = forces.staff && works.staff ? `Your staff raises the forces and your ministers run the towns and trade. ${told} What you order here by hand still goes out.`
+        : forces.staff ? `Your staff raises the forces; the towns and trade are yours. ${told} What you order here by hand still goes out.`
+        : works.staff ? `Your ministers run the towns and trade; raising the forces is yours. ${told} What you order here by hand still goes out.`
+        : 'You raise the forces and run the towns and trade yourself. Either can go to your staff, which spends only the share of the treasury you allow it.';
+      staff = {
+        on: forces.staff || works.staff, line, label: bar.label, act: bar.act, tip: bar.tip, cap: v.cap, caps: v.caps.map((c) => ({ n: c, now: c === v.cap, act: `cap:${c}` })),
+        head: forces.staff && works.staff ? 'YOUR STAFF GIVES THESE ORDERS' : forces.staff || works.staff ? 'YOU AND YOUR STAFF SHARE THESE ORDERS' : 'YOU GIVE THESE ORDERS YOURSELF',
+        desks: [forces, works].map((d) => ({
+          name: d.name.toUpperCase(), on: d.staff, act: `desk:${d.id}:${d.staff ? 'own' : 'staff'}`,
+          tip: d.staff ? `${deskDef(d.id)?.hand ?? ''} What your staff ordered this month stands.` : `${deskRuns(s, d.id)} Handed over in your own month, the staff goes to work at once.`,
+        })),
+      };
+    }
   } catch { staff = null; }
   return { nation: me.name, date: turnToDate(s.turn).label, up, money, net, tiles, counts: { ready, going: goingUp, all: towns.length }, towns, raise, again, orders, staff };
 }
@@ -6522,6 +6565,11 @@ function homePage(s: Game): (Page & { home: HomeBoard }) | null {
       ...(goingRows.length ? [{ heading: 'GOING UP IN YOUR TOWNS', text: '', rows: goingRows }] : []),
       { heading: 'RAISE FORCES', text: h.up ? '' : 'It is not your month.', rows: raiseRows },
       { heading: 'ON ORDER', text: orderRows.length ? '' : 'Nothing is being raised.', rows: orderRows },
+      // (Release 2, the desk split) Recruitment and towns and trade, each with its own switch: the board draws them on its staff strip.
+      ...(h.staff ? [{ heading: 'WHO GIVES THESE ORDERS', text: h.staff.line, rows: h.staff.desks.map((d) => ({
+        nat: '', title: `${d.name}  ·  ${d.on ? 'YOUR STAFF' : 'YOU'}`, lines: [],
+        buttons: [{ label: d.on ? 'TAKE IT BACK' : 'LET MY STAFF RUN IT', act: d.act, ok: true, tip: d.tip }],
+      })) }] : []),
     ],
     home: h,
   };
@@ -6937,6 +6985,10 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
       // (any raid: the guns' part of the bombers lost, for the one line under them on the single forecast; a strike on ships
       // names the ships' guns, each share by its own name: airwar.ts gunsOfThem)
       gunsWords: p.why || p.bombers <= 0 ? '' : gunsOfThem(p.guns), toGuns: p.why || p.bombers <= 0 ? '' : `about ${Math.round(p.guns.lossN).toLocaleString('en-US')}`,
+      // (Release 2, a raid on troops with the strafers' rule on; the UI director's words of 15:04Z. New for the 3D card to
+      // draw, where it will, at the foot of the raid's forces: the heading, the muted line once and the groups a row each,
+      // or the line for none in place of both ('' in note). No colour. Absent with the switch off, and on any other raid.)
+      ...(p.strafe && !p.why ? { strafe: { heading: p.strafe.heading, note: p.strafe.note, names: [...p.strafe.names], none: p.strafe.none } } : {}),
       fly: { label: dn ? (kind === 'night' ? 'FLY THE RAID BY NIGHT' : 'FLY THE RAID BY DAY') : 'FLY THE RAID', act: `raid:${kind}:${target}:${p.picked.join('.')}`, ok: humanUp(s) && !onEve(s) && !p.why, tip: p.why ?? 'Flown at once. Every group that goes is away for the rest of the month.' },
     };
     // (the same round: the one line of prose is dropped when it only repeats a lone box)
@@ -7006,7 +7058,13 @@ const runsLine = (lead: string, desk: string): string => (lead.toLowerCase().end
 /** The desk a room belongs to, or null: the secret service's room, trade and the towns, the airfield's, a fleet's. (The rooms that only ask a question, such as where a raid is to go, carry no bar.) */
 function deskOfPage(id: string): DeskId | null {
   const head = id.split(':')[0];
-  return head === 'spies' ? 'spies' : head === 'trade' || head === 'towns' || head === 'home' ? 'build' : head === 'airfield' ? 'air' : head === 'fleet' ? 'navy' : null;
+  // (Release 2, the desk split: trade and the towns are towns and trade's; THE HOME FRONT carries both halves on its own strip.)
+  return head === 'spies' ? 'spies' : head === 'trade' || head === 'towns' ? 'towns' : head === 'airfield' ? 'air' : head === 'fleet' ? 'navy' : null;
+}
+
+/** (Release 2, the desk split) True where recruitment's staff told towns and trade's month in its own line this month, as the one desk did. */
+function bothTold(s: Game): boolean {
+  try { return staffRunsDesk(s, 'towns') && deskRan(s, 'towns') && s.flags['dk:ran:towns'] !== s.turn; } catch { return false; }
 }
 
 /** For a bar on a desk's own screen: who runs it, a line to read, and the button that changes hands. Null outside the grand campaign. */
@@ -7015,8 +7073,10 @@ function deskBar(s: Game, desk: DeskId): { staff: boolean; line: string; label: 
   try { v = pictureCommand(s); } catch { v = null; }
   const d = v?.desks.find((x) => x.id === desk), def = deskDef(desk);
   if (!v || !d || !def || !s.human || !s.nations[s.human]?.alive) return null;
+  // (Release 2, the desk split: where the two halves worked as one, towns and trade's month is in recruitment's line.)
+  const news = d.news ?? (desk === 'towns' && bothTold(s) ? v.desks.find((x) => x.id === 'build')?.news ?? null : null);
   return d.staff
-    ? { staff: true, line: `${runsLine(def.lead, d.name)} ${d.news ?? 'Nothing to report this month.'} What you order here by hand still goes out.`, label: 'TAKE IT BACK', act: `desk:${desk}:own`, tip: `${def.hand} You can hand it back to your staff in any month.` }
+    ? { staff: true, line: `${runsLine(def.lead, d.name)} ${news ?? 'Nothing to report this month.'} What you order here by hand still goes out.`, label: 'TAKE IT BACK', act: `desk:${desk}:own`, tip: `${def.hand} You can hand it back to your staff in any month.` }
     : { staff: false, line: '', label: `LET MY STAFF RUN ${d.name.toUpperCase()}`, act: `desk:${desk}:staff`, tip: `${deskRuns(s, desk)} You can take it back in any month.` };
 }
 
@@ -7106,6 +7166,12 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       // What came of it, in the report's own words first, kept short enough to read while the raid is flown.
       const told = flown.notes.join(' ') || note;
       note = told.length > 190 ? `${told.slice(0, told.lastIndexOf('.', 190) + 1) || told.slice(0, 190)}` : told;
+      // (Release 2, a raid on troops with the strafers' rule on; the UI director's words of 15:04Z: the report then says
+      // who went down, to the side that flew it. Added whole after the cut, so the line is never cut. Nothing with the
+      // switch off: no report carries the field then. A raid fought out carries the line on its after card, so the note
+      // leaves it there and the line is said once: the fourth round's check.)
+      const strafe = air.after ? '' : s.airReports.filter((r) => r.id > air0).map((r) => strafedLine(r, s.human)).filter(Boolean).join(' ');
+      if (strafe) note = note ? `${note} ${strafe}` : strafe;
     }
     // A search of a sea is seen to go out too: a few aircraft from the group's airfield, or from the ships.
     if (air.ok && part[0] === 'search') {
@@ -7270,6 +7336,12 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       try { stands = commandOf(s)?.depth === part[1]; } catch { stands = false; }
       ok = !stands && orderDepth(s, part[1]);
       note = ok ? `You play at ${to?.name ?? 'that depth'} now.${to && to.staff.length ? ` Your staff runs ${to.staff.map((k) => lowFirst(deskDef(k)?.name ?? k)).join(', ')}.` : ' Everything is on your own desk.'}` : 'The campaign stands at that depth already.';
+    } else if (part[0] === 'desk' && part[1] === 'build+towns') {
+      // (Release 2, the desk split) Taken back from the month card's line that told both halves' month: both come back.
+      const both = (['build', 'towns'] as DeskId[]).filter((k) => staffRunsDesk(s, k));
+      ok = part[2] === 'own' && both.map((k) => orderDesk(s, k, false)).some(Boolean);
+      const named = both.length > 1 ? 'Recruitment, and towns and trade, are' : `${deskDef(both[0] ?? 'build')?.name ?? ''} is`;
+      note = ok ? `${named} on your own desk again. What your staff ordered this month stands.` : 'Recruitment, and towns and trade, are on your own desk already.';
     } else if (part[0] === 'desk') {
       const def = deskDef(part[1]), staff = part[2] === 'staff';
       ok = !!def && orderDesk(s, part[1] as DeskId, staff);
@@ -8770,3 +8842,21 @@ function r2Ship(ids: string[]) {
   return took > 0 ? view() : null;
 }
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).r2Ship = r2Ship;
+
+// The supply window (release 2; the map-speed lane's finding of 24 November 2026: a picture could refresh the supply
+// picture, so when one was drawn decided when supply was refreshed, and two tables playing the same orders could part).
+// Every call into the rules from the table now ends with supply made fresh, the looks as well as the orders. With the
+// rules' own step ends (turn.ts stepAI, beginHuman, endHuman; marches.ts advanceMarches) and view() above, supply is
+// clean whenever the rules hand control back: the moment it is refreshed is fixed by the rules and the player's
+// orders alone. A call that finds it clean pays two tests of a flag.
+// KEEP THIS BLOCK LAST IN THE FILE: it wraps the calls TC holds as it runs, so a call added below it is not wrapped
+// (tests/supply-window-r2 'every call on the table is wrapped' fails if one is).
+{
+  const table = (globalThis as Record<string, unknown>).TC as Record<string, unknown>;
+  for (const name of Object.keys(table)) {
+    const fn = table[name];
+    if (typeof fn !== 'function') continue;
+    // (game.ts keepSupply: fresh as the call opens and as it hands back, and after a call that fails as well.)
+    table[name] = keepSupply(fn as (...x: unknown[]) => unknown, () => g);
+  }
+}

@@ -214,17 +214,20 @@ describe('the home front board', () => {
     expect(p.ok).toBe(true);
     expect(p.title).toBe('THE HOME FRONT  ·  GERMANY  ·  SEPTEMBER 1939');
     expect(p.headline).toMatch(/^[\d,]+ to spend, and \d+ towns can take a building$/);
-    expect(p.sections.map((s) => s.heading)).toEqual(['TOWNS THAT CAN TAKE A BUILDING', 'RAISE FORCES', 'ON ORDER']);
+    expect(p.sections.map((s) => s.heading)).toEqual(['TOWNS THAT CAN TAKE A BUILDING', 'RAISE FORCES', 'ON ORDER', 'WHO GIVES THESE ORDERS']);
     const first = p.sections[0].rows[0], t = p.home.towns.find((x) => x.state === 'ready' || x.state === 'short')!;
     expect(first.buttons.map((b) => b.label)).toEqual(['BUILD', 'TOWN PLAN', 'SHOW ON THE MAP']);
     expect(first.buttons[0].act).toBe(t.best!.act);
-    // The room belongs to the building desk: it offers to hand it over at its head.
-    expect(p.top.some((b) => b.act === 'desk:build:staff')).toBe(true);
+    // The room offers to hand over either half of the building desk (release 2, the desk split): recruitment, and towns and trade.
+    const who = p.sections.find((s) => s.heading === 'WHO GIVES THESE ORDERS')!;
+    expect(who.rows.map((r) => r.title)).toEqual(['RECRUITMENT  ·  YOU', 'TOWNS AND TRADE  ·  YOU']);
+    expect(who.rows.flatMap((r) => r.buttons.map((b) => b.act))).toEqual(['desk:build:staff', 'desk:towns:staff']);
+    expect(p.top.some((b) => b.act.startsWith('desk:'))).toBe(false);
     expect(p.home.staff!.on).toBe(false);
     expect(p.home.staff!.caps.map((c) => c.n)).toEqual([25, 50, 75, 100]);
   });
 
-  it('its door and its chip show only where the game shows the board, and not while the staff runs building', () => {
+  it('its door and its chip show only where the game shows the board, and not while the staff runs the towns', () => {
     const off = start();
     expect(off.pages.some((p) => p.id === 'home')).toBe(false);
     expect(off.todo.some((t) => t.k === 'page:home')).toBe(false);
@@ -237,7 +240,7 @@ describe('the home front board', () => {
     const can = civicReady(g, 'GER');
     expect(chip.t).toBe(`${can} TOWNS CAN BUILD`);
     expect(can).toBe(board().towns.filter((t) => t.state === 'ready').length);
-    const handed = act('desk:build:staff');
+    const handed = act('desk:towns:staff');
     expect(handed.ok).toBe(true);
     expect(handed.view.todo.some((t) => t.k === 'page:home')).toBe(false);
   });

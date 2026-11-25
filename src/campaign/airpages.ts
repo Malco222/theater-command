@@ -215,6 +215,10 @@ function planPage(g: Game, kind: RaidKind, target: number, picked: number[]): Pa
     ],
     sections: [
       { heading: 'FLYING THE RAID', text: going.length ? '' : 'No group is picked.', rows: going.map(seat) },
+      // (Release 2, a raid on troops with the strafers' rule on, the UI director's words of 15:04Z: at the foot of the
+      // raid's forces, the groups likely to go down, a row each under the muted line; or the line for none. No colour:
+      // the rows carry no nation, so no flag or picture is set on them.)
+      ...(p.strafe && !p.why ? [{ heading: p.strafe.heading, text: p.strafe.names.length ? p.strafe.note : p.strafe.none, rows: p.strafe.names.map((n): PageRow => ({ nat: '', title: n, lines: [], buttons: [] })) }] : []),
       { heading: 'COULD JOIN IT', text: could.length ? '' : 'No other group can reach it this month.', rows: could.map(seat) },
       // (Fog on raids: what the side knows of the target's defences, and the forecast's band.)
       ...(p.fog && !p.why ? [{ heading: 'WHAT IS KNOWN OF ITS DEFENCES', text: [p.fog.fighters, p.fog.guns, p.fog.damage, p.fog.band].filter(Boolean).join('\n'), rows: [] as PageRow[] }] : []),

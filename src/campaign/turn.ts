@@ -184,6 +184,12 @@ export function stepAI(g: Game): string {
     aiMines(g, nat);
   }
   closePhase(g, nat);
+  // Supply is clean whenever the rules hand the month on (release 2, the supply window): a step that ends with a
+  // province taken, a fleet sailed or a bridge blown leaves the supply picture stale, and until now it stayed stale
+  // until whoever read it next drew it afresh. On the 3D table that could be a picture, so when a picture was drawn
+  // decided when supply was refreshed. Now the step itself ends by making it fresh, the same in a war nobody plays,
+  // on the table and in the browser.
+  ensureSupply(g);
   return nat;
 }
 
@@ -216,11 +222,15 @@ export function beginHuman(g: Game): void {
   taskForcesMonth(g, current(g));
   // Last, the desks he has handed to his staff do their month's work, each with one line of news (the grand campaign).
   staffMonth(g);
+  // (The supply window: his month opens on a fresh supply picture, whatever his desks did.)
+  ensureSupply(g);
 }
 
 export function endHuman(g: Game): void {
   entrench(g, current(g));
   closePhase(g, current(g));
+  // (The supply window, as stepAI: the player's month hands on a fresh supply picture.)
+  ensureSupply(g);
 }
 
 /**

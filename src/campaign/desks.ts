@@ -84,7 +84,7 @@ function research(g: Game, nat: string): string | null {
   return `put ${begun.length === 1 ? 'a research team' : `${begun.length} research teams`} to work on ${listAnd(names)}.`;
 }
 
-// ---- Building and trade -------------------------------------------------------------------------------
+// ---- Recruitment, and towns and trade ------------------------------------------------------------------
 
 const orderWords = (g: Game, b: Build): string =>
   b.what === 'civic' ? `the ${b.name[0].toLowerCase()}${b.name.slice(1)}`
@@ -205,11 +205,16 @@ function crossingReport(g: Game, nat: string): void {
   if (w && w.state !== 'waiting') headline(g, 'info', w.text, nat, w.to.id);
 }
 
-function build(g: Game, nat: string): string | null {
+/**
+ * The building staff's month: recruitment ('forces') and towns and trade ('towns'), the two halves of what was one
+ * desk (release 2). Each step is done by the half it belongs to, in the order the one desk worked in, out of the one
+ * allowance, so that with both halves handed over the month is the one desk's to the byte.
+ */
+function building(g: Game, nat: string, towns: boolean, forces: boolean): string | null {
   const n = g.nations[nat];
   const did: string[] = [];
   // Trade first: an agreement pays every month from now on. One that nothing gets through is given up for a better.
-  if (tradeRules(g) && n.capital >= 0) {
+  if (towns && tradeRules(g) && n.capital >= 0) {
     const ctx = new Map();
     for (const d of dealsOf(g, nat)) {
       if (d.state !== 'cut') continue;
@@ -225,27 +230,43 @@ function build(g: Game, nat: string): string | null {
     if (signed.length) did.push(`signed ${signed.length === 1 ? 'a trade agreement' : 'trade agreements'} with ${listAnd(signed)}`);
   }
   // Then the month's orders: troopships for the crossing the player has named, and then as a computer nation's
-  // staff places them: new corps, guns round bombed industry, building in the towns.
+  // staff places them: new corps, guns round bombed industry, building in the towns. (Each routine also asks its own
+  // half's switch, depth.ts byHand, as it does for a computer nation's month.)
   const had = new Set(n.queue.map((b) => b.id));
+  // (A half handed over later in a month adds what it spends to what the other half spent.)
+  const before = deskRan(g, 'build') || deskRan(g, 'towns') ? g.flags['dk:spent'] ?? 0 : 0;
   let repaired: string[] = [];
   const spent = fromPurse(g, nat, () => {
-    shipping(g, nat);
+    if (forces) shipping(g, nat);
     // Damaged towns first: a repair pays for itself in a few months (repairs.ts).
-    repaired = aiRepair(g, nat);
-    repaired.push(...aiFieldRepair(g, nat, (x) => allied(g, nat, x)).map((x) => `the airfield at ${x}`));
-    aiProduction(g, nat);
-    aiTeams(g, nat);
-    aiArsenal(g, nat);
-    civicAI(g, nat, income(g, nat), keepsStores(g, nat), gunsWanted(g, nat) || armyWorn(g, nat));
-    machines(g, nat);
+    if (towns) {
+      repaired = aiRepair(g, nat);
+      repaired.push(...aiFieldRepair(g, nat, (x) => allied(g, nat, x)).map((x) => `the airfield at ${x}`));
+    }
+    if (forces) { aiProduction(g, nat); aiTeams(g, nat); }
+    aiArsenal(g, nat, towns, forces);
+    // Guns before town halls while the staff holds recruitment too; while the player raises the forces himself the
+    // towns staff cannot know his plan and does not wait (the share is his guard).
+    if (towns) civicAI(g, nat, income(g, nat), keepsStores(g, nat), staffRuns(g, nat, 'build') && (gunsWanted(g, nat) || armyWorn(g, nat)));
+    if (forces) machines(g, nat);
   });
   const fresh = n.queue.filter((b) => !had.has(b.id));
   if (fresh.length) did.unshift(`ordered ${some(fresh.map((b) => orderWords(g, b)), 4)}`);
   if (repaired.length) did.unshift(`repaired ${some(repaired, 4)}`);
-  g.flags['dk:spent'] = spent;
+  g.flags['dk:spent'] = before ? before + spent : spent;
   if (!did.length) return null;
   return `${listAnd(did)}.`;
 }
+
+/** Recruitment's month, with towns and trade's in it, as the one desk's was, where the staff holds that half too and it has not yet worked. */
+function build(g: Game, nat: string): string | null {
+  const towns = staffRuns(g, nat, 'towns') && !deskRan(g, 'towns');
+  if (!towns) g.flags['dk:ran:only'] = g.turn;
+  return building(g, nat, towns, true);
+}
+
+/** Towns and trade's month, alone: recruitment is the player's, or its staff has already worked this month. */
+const townsDesk = (g: Game, nat: string): string | null => building(g, nat, true, false);
 
 // ---- Diplomacy ----------------------------------------------------------------------------------------
 
@@ -484,9 +505,9 @@ function navy(g: Game, nat: string): string | null {
 
 // ---- The staff's month --------------------------------------------------------------------------------
 
-const WORK: Record<DeskId, (g: Game, nat: string) => string | null> = { research, build, diplomacy, spies, air, navy };
+const WORK: Record<DeskId, (g: Game, nat: string) => string | null> = { research, build, towns: townsDesk, diplomacy, spies, air, navy };
 /** The order the desks are worked in: money before the service that spends it, the fleets before the aircraft that fly from them. */
-const ORDER: DeskId[] = ['research', 'build', 'diplomacy', 'spies', 'navy', 'air'];
+const ORDER: DeskId[] = ['research', 'build', 'towns', 'diplomacy', 'spies', 'navy', 'air'];
 
 /**
  * True when this is word for word the line the desk gave the month before, and notes the line for the month to come.
@@ -617,15 +638,21 @@ function stateOf(g: Game, nat: string, desk: DeskId): string {
       return at.length ? `${at.length} of ${teams} team${teams === 1 ? '' : 's'} at work: ${some(at, 4)}.` : `No research team has work.`;
     }
     case 'build': {
-      const corps = n.queue.filter((b) => b.what === 'corps').length, other = n.queue.length - corps;
-      const deals = dealsOf(g, nat).length, houses = housesOf(g, nat);
+      // (A town's building and the guns round its industry are towns and trade's: release 2.)
+      const corps = n.queue.filter((b) => b.what === 'corps').length;
+      const other = n.queue.filter((b) => b.what !== 'corps' && b.what !== 'civic' && !(b.what === 'work' && b.item === 'aa')).length;
       // A staff raises no corps with men the armies in the field are waiting for: say so, or a full treasury looks like idleness.
       const noMen = staffRuns(g, nat, 'build') && noMenFor(g, nat);
       // With no men to raise, the money goes into aircraft, as far as the air force can use them; what is left is a reserve.
       const air = !noMen || !DEPTH.build?.machines || !n.atWar.length ? '' : wingsWanted(g, nat).length || n.queue.some((b) => b.what === 'air')
         ? ' Your staff is putting the money into aircraft instead, which need pilots and not divisions.'
         : ' The air force has all the aircraft its pilots can fly, so what is left in the treasury is your reserve.';
-      return `${corps ? `${corps} corps forming` : 'No corps forming'}${other ? `, ${other} other order${other === 1 ? '' : 's'} in hand` : ''}. ${deals} of ${houses} trading house${houses === 1 ? '' : 's'} in use.${noMen ? ` There are no men to spare for new corps: the armies in the field are waiting for theirs.${air || ' Aircraft, ships and factories need few, and can be ordered by hand.'}` : ''}`;
+      return `${corps ? `${corps} corps forming` : 'No corps forming'}${other ? `, ${other} other order${other === 1 ? '' : 's'} in hand` : ''}.${noMen ? ` There are no men to spare for new corps: the armies in the field are waiting for theirs.${air || ' Aircraft, ships and factories need few, and can be ordered by hand.'}` : ''}`;
+    }
+    case 'towns': {
+      const up = n.queue.filter((b) => b.what === 'civic' || (b.what === 'work' && b.item === 'aa')).length;
+      const deals = dealsOf(g, nat).length, houses = housesOf(g, nat);
+      return `${up ? `${up} building${up === 1 ? '' : 's'} going up in your towns` : 'Nothing going up in your towns'}. ${deals} of ${houses} trading house${houses === 1 ? '' : 's'} in use.`;
     }
     case 'diplomacy': {
       const b = bloc(n);
@@ -685,7 +712,7 @@ export function commandView(g: Game): CommandView | null {
     }),
     cap: capPct(g), caps: DEPTH.cap.steps,
     left: g.flags['dk:alwt'] === g.turn ? g.flags['dk:alw'] ?? 0 : Math.max(0, g.nations[nat].pp) * capOf(g),
-    spent: g.flags['dk:ran:build'] === g.turn ? g.flags['dk:spent'] ?? 0 : 0,
+    spent: deskRan(g, 'build') || deskRan(g, 'towns') ? g.flags['dk:spent'] ?? 0 : 0,
     capNext: g.flags['dk:alwt'] === g.turn && g.flags['dk:alwc'] !== undefined && g.flags['dk:alwc'] !== capPct(g),
     cabinet: !cabinetOff(g), canFall: !officeSecure(g), fog: g.flags.nofog !== 1,
   };

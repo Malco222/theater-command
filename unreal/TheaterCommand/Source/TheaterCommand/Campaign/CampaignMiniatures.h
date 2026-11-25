@@ -42,6 +42,23 @@ struct FMiniatureMesh
 	/** Two wakes for a fleet at sea: on patrol, and on passage between seas (half as long again). */
 	FWakeMesh Wake[2];
 
+	/**
+	 * (fleets; release 2, a fleet under way) Which part of the mesh each ship of a fleet is: her points and her
+	 * triangles' corners, each a run of the arrays above; her middle on the water; the way her bows point (flat, a
+	 * unit); her length and beam; and her class as Campaign/ShipRide.h counts them (0 battleship, 1 carrier,
+	 * 2 cruiser, 3 destroyer, 4 submarine). So that a piece can give each ship a small mesh of her own, to heel in
+	 * her turn and ride the swell. Filled by Fleet, empty for everything else.
+	 */
+	struct FShip
+	{
+		int32 FirstVertex = 0, VertexCount = 0, FirstIndex = 0, IndexCount = 0;
+		FVector Middle = FVector::ZeroVector;
+		FVector Ahead = FVector(0.0, 1.0, 0.0);
+		double Long = 0.0, Beam = 0.0;
+		int32 Class = 2;
+	};
+	TArray<FShip> Ships;
+
 	/** A box, given its middle, its size, and how far it is turned about the upright axis (degrees). */
 	void Box(const FVector& Center, const FVector& Size, const FLinearColor& Colour, double Turn = 0.0, double Tip = 0.0);
 

@@ -30,6 +30,46 @@ export function strafeOn(): boolean {
   return flown || String(G.TC_FLY ?? env?.TC_FLY ?? '').split(',').map((x) => x.trim()).includes('ground');
 }
 
+// The words (release 2, behind the same switch). The design director, 25 November 2026 14:59Z, accepted the card's
+// "more likely than not" list and asked the UI director "for words that say the list is the likely one, so a strafer
+// who never arrives isn't a broken promise"; her words of 15:04Z, to the letter, no colour on any of them: the card's
+// section (a heading, a muted line once, the groups a row each, or the line for none) and the report's line, so the
+// plan and the result read as a pair. Nothing here is shown with the switch off: the card's section is built only
+// where forecastAir gave the card its strafers, and the report's line only from AirReport.strafed, written only then.
+
+/** The UI director's words, 15:04Z; the line for none as she softened it at 16:04Z. */
+export const STRAFE_WORDS = {
+  heading: 'LIKELY TO GO DOWN AND STRAFE',
+  note: 'The fighter groups most likely to go down and strafe if the sky is won. Which of them do is settled over the target.',
+  none: 'No fighter group is likely to go down and strafe, though one still may.',
+  nobody: 'No fighter group went down to strafe.',
+} as const;
+
+/**
+ * The raid card's section: the heading; the muted line once, and the groups' names a row each; or, where it names
+ * none, the line for none in place of both ('' in `note`, no names).
+ */
+export interface StrafeSection { heading: string; note: string; names: string[]; none: string }
+
+export function strafeSection(names: string[]): StrafeSection {
+  return names.length
+    ? { heading: STRAFE_WORDS.heading, note: STRAFE_WORDS.note, names: [...names], none: '' }
+    : { heading: STRAFE_WORDS.heading, note: '', names: [], none: STRAFE_WORDS.none };
+}
+
+// (Names joined as the report's other sentences join them: air.ts `list`, "A, B and C", the same line every module keeps.)
+const list = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+
+/**
+ * The raid report's line on who went down, as `reader` reads it: only a raid on troops whose report kept its strafers
+ * (the switch on when it was flown), and only for the side that flew it. '' otherwise: for the defender, whom her words
+ * do not cover, for any other raid, and for a report saved without the field (an older save, or the switch off).
+ */
+export function strafedLine(rep: { mission: string; attNat: string; strafed?: string[] }, reader: string | null): string {
+  if (rep.mission !== 'ground' || !rep.strafed || reader === null || reader !== rep.attNat) return '';
+  return rep.strafed.length ? `${list(rep.strafed)} went down and strafed.` : STRAFE_WORDS.nobody;
+}
+
 /**
  * Who heard what each raid on troops charged the ground fire on: the tests (the card, the settled raid, the fought
  * raid's booking say whom, by the one rule). Never set in play; read only with the rule on.

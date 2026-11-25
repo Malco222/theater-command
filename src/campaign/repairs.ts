@@ -293,7 +293,7 @@ export function repairAll(g: Game, nat: string): string[] {
 export const repairPays = (cost: number, lost: number): boolean => cost <= tenth(lost * DAMAGE.repair.months);
 
 /**
- * A computer nation's repairs for the month (and the player's staff, when he has handed it the building desk). It
+ * A computer nation's repairs for the month (and the player's staff, when he has handed it towns and trade). It
  * puts a share of its income by in a purse while it has damaged towns, and pays out of it for the towns whose damage
  * costs it most, keeping a reserve in hand. It buys only a repair that pays for itself within the price's own horizon
  * (repairPays). It does not rebuild on the front line: it leaves alone a town under siege, one beside ground its enemies
@@ -304,7 +304,7 @@ export function aiRepair(g: Game, nat: string): string[] {
   if (!damageRules(g) || !g.flags['dmg:any']) return [];
   const n = g.nations[nat];
   if (!n?.alive) return [];
-  if (nat === g.human && byHand(g, nat, 'build')) return [];
+  if (nat === g.human && byHand(g, nat, 'towns')) return [];
   const P = `rpp:${nat}`;
   const towns: { r: Region; cost: number; lost: number }[] = [];
   for (const r of g.regions) {

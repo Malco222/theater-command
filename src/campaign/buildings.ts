@@ -451,7 +451,7 @@ export function civicReady(g: Game, nat: string): number {
  */
 export function civicAI(g: Game, nat: string, earned: number, keeps = false, wait = false): void {
   const n = g.nations[nat];
-  if (!civicRules(g) || byHand(g, nat, 'build') || !n?.alive || n.capital < 0) return;
+  if (!civicRules(g) || byHand(g, nat, 'towns') || !n?.alive || n.capital < 0) return;
   const A = CIVIC.ai, purse = `cvb:${nat}`;
   g.flags[purse] = (g.flags[purse] ?? 0) + Math.max(0, earned) * A.share;
   // Guns before town halls: while the staff is saving for the artillery its front is asking for, the builders wait.

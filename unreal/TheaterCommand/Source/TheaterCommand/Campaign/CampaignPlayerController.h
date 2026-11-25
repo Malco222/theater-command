@@ -806,6 +806,8 @@ public:
 	 * run). It is the rules' own room "home", laid out as a board. Off, no door leads to it and the game is as it was.
 	 */
 	static bool IsHomeFrontStyle();
+	/** (Release 2, tc.UI.Ease) The rooms and the province panel ease in and out instead of appearing and vanishing at once. */
+	static bool IsEaseStyle();
 	void OpenHomeFront();
 	bool IsHomeFrontOpen() const { return bPageOpen && Page.Home.bValid && IsHomeFrontStyle(); }
 	/** Which towns the board lists: 0 those that can take a building, 1 those building, 2 every town. */
@@ -1074,6 +1076,15 @@ public:
 	void ShowShipModel(const FString& Model, const FText& Name);
 	/** Picks up the next of the player's armies that can still move this month, and goes to it. */
 	void NextArmy();
+	/**
+	 * (Release 2, tc.UI.NextAll; the UI director's seamless plan, fix 4: one NEXT.) Once every army has its orders, Tab
+	 * goes on round the month's list, the rows under END THE MONTH, opening each one's screen in turn, each once, and
+	 * then says the month is done. The list never holds the month, as the rear never does. Off: Tab as before.
+	 * -TheaterNextAll turns it on for a run.
+	 */
+	static bool IsNextAllStyle();
+	/** (tc.UI.NextAll) The row of the month's list Tab opens next, or INDEX_NONE where it has been round them all or there are none. */
+	int32 NextToDoIndex() const;
 	/** How many of the player's armies still wait for an order this month: the count on the NEXT ARMY button. */
 	int32 ArmiesYetToMove() const;
 	/**
@@ -1572,6 +1583,14 @@ private:
 	// towns built in since it was opened.
 	int32 HomeFilter = 0, HomeUnfolded = INDEX_NONE, HomeRows = 40, HomeOpenings = 0;
 	TSet<int32> HomeKept;
+	// (Release 2, tc.UI.Ease: Esc steps back one screen at a time.) The pages this one was reached from by their own
+	// doors, the nearest last; and the town whose card was opened from THE HOME FRONT, whose Esc goes back to the board.
+	TArray<FString> PageTrail;
+	int32 TownFromHomeRegion = INDEX_NONE;
+	/** (tc.UI.Ease) Esc on a page: the page it was reached from, if there is one. */
+	bool StepBackPage();
+	/** (tc.UI.Ease) THE HOME FRONT again as it was left: the same towns listed, the same rows unfolded and kept. */
+	void ReturnToHomeFront();
 	void RefreshGenerals(bool bArmiesChanged);
 	FString PathAsked; // the path waiting for the player's yes, with its partner: "found:DEN"
 	FArsenal Arsenal;
@@ -1660,6 +1679,9 @@ private:
 	bool bRewatching = false; // the month is being watched again from its card
 	bool bHandStands = false; // (ruling 88) the army in hand has been told to stand this month: the rules keep the order, with the saved game
 	TArray<int32> RoundSeen; // the provinces the round of armies has been to since it last began
+	TArray<FString> ToDoSeen; // (release 2, tc.UI.NextAll) the screens of the month's list Tab has opened since its round last began
+	/** (tc.UI.NextAll) Tab past the armies: opens the next row of the month's list, or says the round is done. False where it did nothing. */
+	bool StepToDo();
 	FEndAsk EndAsk;
 	int32 EndAskedTurn = -1; // the month the question was last put: it is put once a month
 	bool bAskAtMonthsEnd = true; // (kept with the options)

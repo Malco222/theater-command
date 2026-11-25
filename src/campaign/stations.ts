@@ -93,6 +93,7 @@
 // rule, line.ts: computer against computer). Nor is a dated attack made on ground he holds. Stops 3 to 5 as before.
 // The data is history.json, 'stations' (the far side's rows: far-pacific-war.json); with none, nothing here happens.
 
+import { divisionsOf } from './armies';
 import { DEFENCE, allied, atWar, friendlyUnits, hasRoom, hostileUnits, limitAttackers, men, moveCorps, moveCost, relocate, removeCorps, resolveBattle, withWorksAside, type AttackOpts } from './game';
 import { HISTORY, bookDate, onBook, stopDef, theatreOf } from './history';
 import { lineShut } from './line';
@@ -331,8 +332,11 @@ function join(g: Game, c: Corps, into: Corps): void {
   }
   // (What each may fill to goes with it: two brigades of an establishment make a corps of the two establishments.)
   const full = ((into.full ?? 1) * into.divs + (c.full ?? 1) * c.divs) / divs;
+  // (Where either carries its divisions' own names, the one command carries them all: a division is laid once, drawn.ts.)
+  const names = into.names || c.names ? [...divisionsOf(g, into), ...divisionsOf(g, c)].map((d) => [d.name, d.short] as [string, string]) : null;
   into.str = men / divs;
   into.divs = divs;
+  if (names) into.names = names;
   if (full < 1) into.full = full; else delete into.full;
   const gen = generalOf(g, c);
   if (gen) appoint(g, gen, into.general === null ? into : null);

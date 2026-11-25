@@ -15,9 +15,15 @@
       "hand": "You choose every project."
     },
     {
-      "id": "build", "name": "Building and trade", "tab": "build", "lead": "Your staff",
-      "runs": "Your staff raises new corps, puts guns round industry that has been bombed, builds in your towns and signs trade agreements, inside the share of the treasury you allow it.",
-      "hand": "You place every order and sign every agreement."
+      "id": "build", "name": "Recruitment", "tab": "build", "lead": "Your staff",
+      "_split": "Release 2 (the design director's ruling on seamless play, part A): what was one desk, building and trade, is two. Recruitment keeps the old id and flag; towns and trade goes with it in a save that has no flag of its own for it (depth.ts). The staff works both out of the one share of the treasury, in the order the one desk worked in.",
+      "runs": "Your staff raises new corps and support teams, lays down troopships for the crossing you have named and, when there are no men to spare, orders aircraft, inside the share of the treasury you allow it.",
+      "hand": "You place every order for new forces."
+    },
+    {
+      "id": "towns", "name": "Towns and trade", "lead": "Your ministers",
+      "runs": "Your ministers sign trade agreements and give up those nothing gets through, repair bombed towns and airfields, put guns round industry that has been bombed and build in your towns, inside the same share of the treasury.",
+      "hand": "You sign every agreement and order every building in your towns."
     },
     {
       "id": "diplomacy", "name": "Diplomacy", "lead": "Your envoys",
@@ -45,7 +51,7 @@
     {
       "id": "field", "name": "Field command", "under": "Simple",
       "blurb": "You command the armies. Your staff runs everything behind them, there is no cabinet to answer to, and the map hides nothing.",
-      "staff": ["research", "build", "diplomacy", "spies", "air", "navy"], "cabinet": false, "canFall": false, "fog": false
+      "staff": ["research", "build", "towns", "diplomacy", "spies", "air", "navy"], "cabinet": false, "canFall": false, "fog": false
     },
     {
       "id": "theatre", "name": "Theatre command", "under": "Standard",

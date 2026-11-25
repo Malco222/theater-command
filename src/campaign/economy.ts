@@ -12,6 +12,7 @@ import rivalsData from '../../data/campaign/rivals.json';
 import { roomAt } from './islands';
 import type { Build, Corps, Game, Kind, Region, ShipClass, Terrain } from './types';
 import { addCorps, allied, armySize, fights, headline, roomless } from './game';
+import { reformNames } from './drawn';
 import { DIPLOMACY, tradePartners } from './diplomacy';
 import { campXp, civicSum, deliverCivic, hallShare, settledFor, settledTownsOn } from './buildings';
 import { dealsOf, tradeIncome } from './trade';
@@ -613,6 +614,8 @@ function reform(g: Game, c: Corps, at: Region): void {
   c.xp = Math.max((c.nat === g.human ? raisedXp(g, c.nat) : 0.05) + campXp(g, at.id), c.xp * MANPOWER.fold.xp);
   for (const k of ['dug', 'dugFor', 'digging', 'pressed', 'blows', 'relief', 'yields', 'gaveWay', 'digs', 'joint', 'leave', 'town', 'job', 'rival'] as const) delete c[k];
   raiseMorale(g, c);
+  // (A division of its name that a dated row has laid while it was off the map is that row's now: drawn.ts.)
+  reformNames(g, c);
   g.corps.push(c);
   at.units.push(c);
   noteCorps(g, c, 'rebuilt', at.id);
