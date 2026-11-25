@@ -1029,6 +1029,23 @@ describe('his corps on a passage at sea: the line says where it is bound, never 
     expect(corps(g, PANZERS)).toBeUndefined();
     expect(heldTwice(g)).toEqual([]);
   });
+  it('some on their way there and some not: the promise is only of those not on their way (the UI director, 21:59Z)', () => {
+    const { g } = balkans('GER');
+    const xxii = corps(g, 'XXII Corps')!;
+    setBreakUp(g, true);
+    g.phase = g.order.indexOf('GER');
+    const part = breakUp(g, xxii, [0])!;
+    expect(part).not.toBeNull();
+    const ashore = place(g, xxii);
+    g.turn = MARCH_41 - 1;
+    putToSea(g, part, g.byName['Sofia'], 2);
+    month(g, MARCH_41);
+    const line = g.headlines.find((h) => h.nat === 'GER' && / are due in Sofia /.test(h.text))!;
+    expect(line.text).toMatch(said(DRAWN.manyPart));
+    expect(line.text).toBe(`The 2nd and 9th Panzer Divisions are due in Sofia this month, but you hold them already, in ${ashore} and at sea, bound for Sofia. No division is raised twice: those not on their way there go to Sofia only if you send them.`);
+    expect(corps(g, PANZERS)).toBeUndefined();
+    expect(heldTwice(g)).toEqual([]);
+  });
   it('ashore the words are as they were: in the place where his corps stands', () => {
     expect(DRAWN.ashore).toBe('in {where}');
     expect(DRAWN.one.replace('{at}', DRAWN.ashore)).toBe('{names} is due in {place} this month, but you hold it already, in {where}. No division is raised twice: it goes to {place} only if you send it.');

@@ -63,7 +63,7 @@ import { seat } from './commanders';
 import { stopDef } from './history';
 import type { Corps, Game, Kind, Region } from './types';
 
-export const DRAWN = words as unknown as { one: string; many: string; here: string; hereMany: string; hereSea: string; hereSeaMany: string; ashore: string; afloat: string; conv: string; stood: string; from: string; fromMany: string };
+export const DRAWN = words as unknown as { one: string; many: string; here: string; hereMany: string; hereSea: string; hereSeaMany: string; manyPart: string; ashore: string; afloat: string; conv: string; stood: string; from: string; fromMany: string };
 
 /** A stood war row's line of the table (counting.json): the war it waits for, the board corps it draws on in order, a share it takes where it stands. */
 export interface Counted {
@@ -597,8 +597,10 @@ export function heldLine(g: Game, row: any[], claims: Claim[]): string | null {
   const there = mine.length > 0 && mine.every((q) => bound(q.from!) === undefined && g.regions[q.from!.reg].name === row[5]);
   // (Every one of them on a passage bound for the row's own place: he has sent them already. The UI director's 21:52Z.)
   const sailing = mine.length > 0 && mine.every((q) => bound(q.from!) === row[5]);
+  // (Some on their way there and some not: the promise is only of those not. The UI director's 21:59Z.)
+  const partly = !sailing && mine.some((q) => bound(q.from!) === row[5]);
   const one = mine.length === 1;
-  if (mine.length) lines.push(fill(there ? (one ? DRAWN.here : DRAWN.hereMany) : sailing ? (one ? DRAWN.hereSea : DRAWN.hereSeaMany) : one ? DRAWN.one : DRAWN.many, { names: said(mine), place: row[5], at: where(mine) }));
+  if (mine.length) lines.push(fill(there ? (one ? DRAWN.here : DRAWN.hereMany) : sailing ? (one ? DRAWN.hereSea : DRAWN.hereSeaMany) : one ? DRAWN.one : partly ? DRAWN.manyPart : DRAWN.many, { names: said(mine), place: row[5], at: where(mine) }));
   for (const q of made) lines.push(fill(DRAWN.conv, { names: cap(the(q.name[0])), place: row[5], was: q.conv!, at: where([q]) }));
   // One line for each corps the row was to draw on: a division the row names by itself, or so many to make up the row.
   for (const h of [...new Set(drawn.map((q) => q.from!))]) {
