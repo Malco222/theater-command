@@ -327,6 +327,7 @@ export function bloc(n: Nation): Bloc | null {
   return null;
 }
 
+/** (Supply keeps its friend tables while friendsKeyOf is the same: anything new read here must be named there too.) */
 export function allied(g: Game, a: string, b: string): boolean {
   return sameSide(g, a, b) || tiedPair(g, a, b);
 }
