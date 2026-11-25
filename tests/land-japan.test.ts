@@ -63,7 +63,9 @@ describe("Japan's own tank and field gun (looks only)", () => {
     const fight = (japan: boolean): string => {
       const L = liveTicket(t as never, { me: 'att', japan });
       let over = '';
-      for (let s = 10; s <= 60; s += 10) over = JSON.stringify(L.to(s, 400).men.map((d) => [d.n, d.r, d.x, d.y]));
+      // every step's whole delta, kept end to end: the men's places live in `at` and leaving the list in `out`, so a
+      // hand-picked few fields would let a move through unseen (the pre-check, 25 November).
+      for (let s = 10; s <= 60; s += 10) over += JSON.stringify(L.to(s, 400).men);
       return over;
     };
     expect(fight(true)).toBe(fight(false));
