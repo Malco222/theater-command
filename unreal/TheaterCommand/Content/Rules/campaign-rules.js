@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c1b935db 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 92bc0844 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -59009,6 +59009,8 @@
     // (Tibet, governed from Lhasa and neutral throughout: rider b632 to ruling 234.)
     TIB: ["Tibet", "Tibetan", "#8f6f5a"]
   };
+  var CLOSED_GROUND = { TIB: "Tibet: neutral. No army can cross the high plateau." };
+  var closedCountry = (id) => id in CLOSED_GROUND;
   function standInCountries(g2) {
     if (!farOn(g2)) return;
     for (const r of g2.regions) {
@@ -103924,13 +103926,14 @@
     if (from2 <= 1) return startOpen(createGame(seed, human), wideWorld);
     return startOpen(historyTo(from2, seed), wideWorld);
   }
+  var BEYOND_THE_CHART = "Japan, China and the Pacific are on the whole-world map. Switch the whole world on under OPTIONS to lead them.";
   function grand(from2 = 1, seed = 1939, world = false) {
     wideWorld = world === true;
     const h = grandGame(from2, seed, null);
     const year = String(GRAND.years.find((y) => y.turn === from2)?.year ?? "");
     const order2 = GRAND.nations.map((n) => n.id);
     const smallOnes = new Set(GRAND.nations.filter((n) => n.small).map((n) => n.id));
-    const nations = Object.entries(h.nations).filter(([nat, n]) => n.alive && (!order2.includes(nat) || smallOnes.has(nat) || GRAND.nations.find((x) => x.id === nat).years[year] !== void 0)).map(([nat, n]) => {
+    const nations = Object.entries(h.nations).filter(([nat, n]) => n.alive && !closedCountry(nat) && (!order2.includes(nat) || smallOnes.has(nat) || GRAND.nations.find((x) => x.id === nat).years[year] !== void 0)).map(([nat, n]) => {
       const foes = Object.keys(h.nations).filter((other4) => other4 !== nat && h.nations[other4].alive && atWar(h, nat, other4));
       return {
         nat,
@@ -103940,12 +103943,18 @@
         // What makes the country fight, build and earn in its own way, and its special formation, in words.
         abilities: abilityLines(nat),
         blurb: GRAND.nations.find((x) => x.id === nat)?.years[year] ?? "",
+        // A far seat's own words for the door (a client's tie, a dominion's place): the browser shows them after the blurb.
+        door: FAR_PATHS[nat] ?? "",
         standing: foes.length ? theWords(`At war with ${listNames2(foes.map((f) => h.nations[f].name))}`) : "At peace",
         corps: h.corps.filter((c) => c.nat === nat).length,
         regions: h.regions.filter((r) => r.ctrl === nat).length
       };
     }).filter((n) => n.corps > 0 || n.regions > 0).sort((a, b) => a.major === b.major ? a.major ? order2.indexOf(a.nat) - order2.indexOf(b.nat) : a.small === b.small ? a.name.localeCompare(b.name) : a.small ? -1 : 1 : a.major ? -1 : 1);
-    return { from: from2, nations };
+    const absent = GRAND.nations.filter((n) => !n.small && n.years[year] === void 0 && Object.keys(n.years).length > 0 && h.nations[n.id] && !nations.some((x) => x.nat === n.id)).map((n) => {
+      const years = Object.keys(n.years).map(Number).sort((a, b) => a - b);
+      return { nat: n.id, name: h.nations[n.id].name, years, line: `${h.nations[n.id].name} can be led from ${listNames2(years.map(String)).replace(/ and /, " or ")}.` };
+    });
+    return { from: from2, chart: wideWorld ? CHART_NOW : "europe", beyond: wideWorld && CHART_NOW !== "whole" ? BEYOND_THE_CHART : "", nations, absent };
   }
   var bookDays = /* @__PURE__ */ new Map();
   function bookDay(wide3) {

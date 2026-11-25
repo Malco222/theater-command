@@ -8,7 +8,7 @@
 // The Unreal side calls these by name through a global object, TC:
 //
 //   TC.starts()                         -> { years: [{ year, title, from, note }], groups: [{ title, from, view, sides: [{ nat, name, blurb, aims }] }] }
-//   TC.grand(from, seed)                -> { from, nations: [{ nat, name, major, blurb, standing, corps, regions }] }: who can be led in the grand campaign from that month
+//   TC.grand(from, seed, world)         -> { from, chart, beyond, nations: [{ nat, name, major, small, blurb, door, standing, corps, regions }], absent: [{ nat, name, years, line }] }: who can be led in the grand campaign from that month; 'door' is a far seat's own words under its blurb, 'absent' the seats of other years, 'beyond' the line about the map this game is not on
 //   TC.nationsBook(world)               -> [{ tag, name, adjective, colour, alignment }]: every country the rules know (the running campaign's, else a first day's on that chart)
 //   TC.start({ human, from, view, seed }) -> view. view 'grand' is the grand campaign: history up to `from`, and free play after it
 //   TC.save()                           -> { text }: the whole campaign as text
@@ -138,7 +138,8 @@ import { NAVY, subScene } from '../../../src/campaign/navy';
 import { chanceOn, headline } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
-import { CHART_NOW, answersOf, attachWorld, motherLine, patronOf } from '../../../src/campaign/world';
+import { CHART_NOW, answersOf, attachWorld, closedCountry, motherLine, patronOf } from '../../../src/campaign/world';
+import { FAR_PATHS } from '../../../src/campaign/far-rows';
 // (Release 2, Japan and the Pacific: ruling 201's two lines, read where the war between the alliances goes on after a great power's fall.)
 import { warGoesOn } from '../../../src/campaign/domination';
 import { atSea as fleetAtSea, shipCount as shipsIn } from '../../../src/campaign/navy';
@@ -1919,6 +1920,8 @@ function grandGame(from: number, seed: number, human: string | null): Game {
  * the shared data come first, each with the data's word about what the player is taking on that year, and
  * are offered only in the years the data gives them. Every other country is offered whenever it is still there.
  */
+/** With the whole world off: where Japan is. The door shows it under the countries (the owner's question of 24 November 2026, "why can't you play as Japan?"). */
+const BEYOND_THE_CHART = 'Japan, China and the Pacific are on the whole-world map. Switch the whole world on under OPTIONS to lead them.';
 function grand(from = 1, seed = 1939, world = false) {
   wideWorld = world === true;
   const h = grandGame(from, seed, null);
@@ -1926,8 +1929,10 @@ function grand(from = 1, seed = 1939, world = false) {
   const order = GRAND.nations.map((n) => n.id);
   // The small countries whose path is their own to choose: led like any other, with a word about each in 1939.
   const smallOnes = new Set(GRAND.nations.filter((n) => n.small).map((n) => n.id));
+  // (Release 2, Japan and the Pacific.) A country of closed ground is nobody's seat: Tibet has no army and no army
+  // enters it, and it stood among the other countries on the door.
   const nations = Object.entries(h.nations)
-    .filter(([nat, n]) => n.alive && (!order.includes(nat) || smallOnes.has(nat) || GRAND.nations.find((x) => x.id === nat)!.years[year] !== undefined))
+    .filter(([nat, n]) => n.alive && !closedCountry(nat) && (!order.includes(nat) || smallOnes.has(nat) || GRAND.nations.find((x) => x.id === nat)!.years[year] !== undefined))
     .map(([nat, n]) => {
       const foes = Object.keys(h.nations).filter((other) => other !== nat && h.nations[other].alive && atWar(h, nat, other));
       return {
@@ -1938,6 +1943,8 @@ function grand(from = 1, seed = 1939, world = false) {
         // What makes the country fight, build and earn in its own way, and its special formation, in words.
         abilities: abilityLines(nat),
         blurb: GRAND.nations.find((x) => x.id === nat)?.years[year] ?? '',
+        // A far seat's own words for the door (a client's tie, a dominion's place): the browser shows them after the blurb.
+        door: FAR_PATHS[nat] ?? '',
         standing: foes.length ? theWords(`At war with ${listNames(foes.map((f) => h.nations[f].name))}`) : 'At peace',
         corps: h.corps.filter((c) => c.nat === nat).length,
         regions: h.regions.filter((r) => r.ctrl === nat).length,
@@ -1945,7 +1952,15 @@ function grand(from = 1, seed = 1939, world = false) {
     })
     .filter((n) => n.corps > 0 || n.regions > 0)
     .sort((a, b) => (a.major === b.major ? (a.major ? order.indexOf(a.nat) - order.indexOf(b.nat) : a.small === b.small ? a.name.localeCompare(b.name) : a.small ? -1 : 1) : a.major ? -1 : 1));
-  return { from, nations };
+  // The great powers that can be led, but not from this year: the door greys them and says when (Japan is led from
+  // September 1939 for now; France not after 1940). A seat with no year at all is not listed.
+  const absent = GRAND.nations
+    .filter((n) => !n.small && n.years[year] === undefined && Object.keys(n.years).length > 0 && h.nations[n.id] && !nations.some((x) => x.nat === n.id))
+    .map((n) => {
+      const years = Object.keys(n.years).map(Number).sort((a, b) => a - b);
+      return { nat: n.id, name: h.nations[n.id].name, years, line: `${h.nations[n.id].name} can be led from ${listNames(years.map(String)).replace(/ and /, ' or ')}.` };
+    });
+  return { from, chart: wideWorld ? CHART_NOW : 'europe', beyond: wideWorld && CHART_NOW !== 'whole' ? BEYOND_THE_CHART : '', nations, absent };
 }
 
 /**

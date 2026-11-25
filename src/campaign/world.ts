@@ -270,6 +270,8 @@ const STAND_IN: Record<string, [string, string, string]> = {
  * UI director's review.)
  */
 const CLOSED_GROUND: Record<string, string> = { TIB: 'Tibet: neutral. No army can cross the high plateau.' };
+/** True for a country whose ground is closed: it has no army and no army enters it, so it is nobody's seat (Tibet). */
+export const closedCountry = (id: string): boolean => id in CLOSED_GROUND;
 /** The line a province of closed ground carries on its page, or null: its owner's while it is still in its owner's hands. */
 export const closedGround = (g: Game, r: Region): string | null => (farOn(g) && r.ctrl === r.owner ? CLOSED_GROUND[r.owner] ?? null : null);
 
