@@ -67,6 +67,7 @@ import theatreData from '../../data/campaign/theatres.json';
 import { stopOf } from './history';
 import { chargeDelay, isRearguard, rearguardWeeks, rearguardsAt, rearguardsLapse, screenWeeks, weeksWords } from './rearguard';
 import { clientWar, tiedPair } from './far';
+import { atomFallen, atomMonth, atomPress } from './atom';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
@@ -3524,9 +3525,12 @@ export function checkCollapse(g: Game, nat: string, by: string): void {
   if (g.flags.open === 1) {
     // Nor does it give in while its capital stands free and most of the country is still its own: hunger, a beaten
     // army and a lost province or two do not bring a government to the table by themselves.
+    // (The atomic project, release 2, atom.ts: for some months after an atomic strike a computer-run country may ask for
+    // terms all the same, to the enemy at its throat or else to the one that struck it. The will test above is unchanged.)
     const seat = g.regions[n.capital];
-    if (siegeRules(g) && allied(g, nat, seat.ctrl) && !besieged(g, seat) && homeLost(g, nat) < SIEGE.stand) return;
-    const to = victorOf(g, nat);
+    const press = atomPress(g, nat);
+    if (!press && siegeRules(g) && allied(g, nat, seat.ctrl) && !besieged(g, seat) && homeLost(g, nat) < SIEGE.stand) return;
+    const to = victorOf(g, nat) ?? press;
     if (!to) return;
     by = to;
   }
@@ -3654,6 +3658,8 @@ export function capitulate(g: Game, nat: string, by: string): void {
     }
   }
   handedOver(g, was);
+  // (Release 2, atom.ts) Its atomic project ends with it, and whoever holds the plants' ground takes the papers.
+  atomFallen(g, nat, by);
   // The fall of one nation can bring down another.
   for (const n of Object.values(g.nations)) if (n.alive && n.atWar.includes(by)) checkCollapse(g, n.id, by);
   // The grand campaign: this fall may have put another country's capital into the hands of that country's friends.
@@ -4442,6 +4448,8 @@ export function startPhase(g: Game, nat: string): void {
   tradeTick(g, nat);
   // The player's war cabinet reads the month's news, and sets or judges its directive (the grand campaign).
   govMonth(g, nat);
+  // The atomic project (release 2, atom.ts): the plants draw their share of this month's earnings, and the bombs are made.
+  atomMonth(g, nat);
   const earned = income(g, nat);
   n.pp += earned - upkeepTotal(g, nat);
   const credit = BUDGET.debt.floor * Math.max(1, earned);

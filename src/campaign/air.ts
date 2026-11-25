@@ -50,6 +50,7 @@ import { FIELD, burnedRoom, damageField, fieldKnown, fieldRules, fieldShut, fiel
 import { sightOf } from './intel';
 import { RESEARCH } from './research';
 import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretwar';
+import { armedAt, atomRaidWorth, strikeFlown } from './atom';
 import { acOn, aimOf, bombLands, campaignOrders, campaignResults, chainAt, gunnerRatio, inCampaign, nightFighters, recordField, skyFought, stockLoss } from './aircampaigns';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
 import { mapDist } from './wrap';
@@ -2124,6 +2125,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   let result = '', value = 0, ground = 0, shipsSunk = 0, notable = false;
   // Damaged cities (citydamage.ts): what the bombs did to the town itself, where they did anything.
   let city: CityHit | null = null;
+  // (Release 2, atom.ts) The strike's own line, where this raid carried the atomic bomb.
+  let atomLine: { text: string; hit: boolean; tell: boolean } | null = null;
   // Airfields as targets (fieldstate.ts): what the bombs did to a field, where they hit one.
   let fh: FieldHit | null = null;
   const bookGround = (hit: FieldHit): void => {
@@ -2230,6 +2233,17 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     fh = damageField(g, target, 'raid', fieldBlow(g, a, nat, target, through, strafe));
     if (fh) { ground = fh.ground; value += fh.worth; bookGround(fh); notable = fh.closed || fh.levels > 0; result = fh.words; }
     else result = through > 0 ? 'The bombs found no airfield in use.' : 'No bombers got through.';
+  } else if ((m === 'bomb' || night) && armedAt(g, nat) === target) {
+    // The atomic project (release 2, atom.ts; the design director, 25 November): this raid carries the bomb. The air
+    // rules above decided how many bombers reached the release; the bomb is with one of them or lost. Nothing else is
+    // done to the city: no ordinary bombing, no raid on its output, no air campaign's count (priced once).
+    const hit = strikeFlown(g, nat, target, a.B, bombed);
+    atomLine = { text: hit.text, hit: hit.hit, tell: hit.tell };
+    // (the raid's after card says it where the line is told; the raid's own line of news reads as any raid, below)
+    result = hit.tell ? hit.text : '';
+    notable = true;
+    city = hit.city;
+    if (city) value += city.worth;
   } else if (m === 'bomb' || night) {
     const N = AIR.damage.industry;
     const r = g.regions[target];
@@ -2243,6 +2257,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     // The air war: output is weighed by the province's own factories (ruling 227), so one with no industry has none to
     // stop, and the raid is judged on its railway alone.
     value += outputWorth(g, r, cut);
+    // (The atomic project, release 2: what the forecast weighed for an enemy's unfinished atomic plants there, where the
+    // raiders' side had seen them, is booked as the raid's worth too, so that the card and the result describe one raid.)
+    value += atomRaidWorth(g, nat, r, cut);
     // (No line where no bombs fell.)
     result = r.fac > 0 && cut > 0 ? `The bombing stopped ${Math.round(cut * 100)}% of ${r.name}'s output for a month: ${tenthPct(nation)} of ${g.nations[r.ctrl].adj} production.` : '';
     // The grand campaign: a heavy raid wrecks a factory outright, and the bombs that fall on the yards and
@@ -2389,6 +2406,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   g.airReports.push(rep);
   storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' || m === 'airfield' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, guns, ...(battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {}) });
 
+  // (Release 2, atom.ts; the UI director under ruling 230 4e) A raid that carried the atomic bomb reads as any raid in
+  // its own line; the strike is told in a line of its own, plain, the same whoever struck whom.
+  if (atomLine) result = '';
   // Groups of one fleet name the fleet once: "The Mobile Fleet's strike wing and carrier fighters" (the UI director, mend 6).
   const flying = fleets.filter((f) => a.att.some((x) => x.f === f));
   const deck = flying.length > 1 ? carrierOf(g, flying[0]) : null;
@@ -2422,9 +2442,11 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     : m === 'ground' ? `the ${adj} troops at ${a.place} raided`
     : `${a.place} bombed${night ? ' by night' : ''}`;
   // Who had the better of it, for an interface that sets the news out as won and lost (Version 80, display only).
-  const fought = { arm: 'air' as const, ...(defNat ? (won ? { won: nat, lost: defNat } : { won: defNat, lost: nat }) : {}) };
+  const fought = { arm: 'air' as const, ...(defNat && !atomLine?.hit ? (won ? { won: nat, lost: defNat } : { won: defNat, lost: nat }) : {}) };
+  if (atomLine) text = text.replace('.  ', '. ');
   if (full) headline(g, 'battle', text, nat, sea ? undefined : target, fought);
   else routineNews(g, `air:${nat}:${m}:${sea ? `z${zone}` : target}`, 'battle', text, `${brief}${aLost ? ` (${aLost} aircraft lost)` : ''}`, nat, sea ? undefined : target, fought);
+  if (atomLine?.tell) headline(g, 'event', atomLine.text, nat, target);
   return rep;
 }
 
@@ -3190,6 +3212,7 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
   const foeGuns = gunsDown(g, a, m === 'night', bmrLoss, m, target);
   const foeLoss = C.fighters * I * clash * 2 * share + foeGuns;
   let cut = 0, nation = 0, value = 0;
+  let atomReach: number | null = null;
   let rail: number | undefined, ruin: number | undefined;
   let ships: Ships | undefined, hits: number | undefined;
   let lumps: [number, number][] | undefined, expected = 0;
@@ -3206,6 +3229,10 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
     field = planFieldHit(g, target, 'raid', fieldBlow(g, a, nat, target, through, Math.max(0, a.E - ftrLoss)));
     cut = field?.closed ? 1 : 0;
     value = field?.worth ?? 0;
+  } else if ((m === 'bomb' || m === 'night') && armedAt(g, nat) === target) {
+    // (The atomic project, release 2, atom.ts) A raid that carries the bomb does nothing else to the city (priced once):
+    // its one chance is that the bomber with the bomb reaches the release, as often as the raid's bombers do (fly).
+    atomReach = Math.max(0, Math.min(1, 1 - a.bomberLoss));
   } else if (m === 'bomb' || m === 'night') {
     const r = g.regions[target];
     const total = g.regions.reduce((s, x) => s + (x.ctrl === r.ctrl ? x.fac : 0), 0);
@@ -3213,6 +3240,8 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
     if (a.aa) cut *= 1 - a.aa * WORKS.aa.cut;
     nation = total > 0 ? cut * (r.fac / total) : 0;
     value = outputWorth(g, r, cut);
+    // (The atomic project, release 2: an enemy's unfinished atomic plants there, where the raiders' side has seen them, atom.ts.)
+    value += atomRaidWorth(g, nat, r, cut);
     // The grand campaign: the chance of cutting the province's railway, and of wrecking a factory outright.
     if (groundRules(g)) {
       rail = railBombChance(g, target, through, a.aa ? a.aa * WORKS.aa.cut : 0);
@@ -3285,6 +3314,7 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
     }
     value = expected;
   }
+  if (atomReach !== null) success = atomReach;
   const fc: AirForecast = { odds, bomberLoss: a.bomberLoss, cut, nation, rail, ruin, ftrLoss, bmrLoss, foeLoss, foeGuns, success, worth: value + 300 * (pr + pf), ships, hits, town };
   if (city !== undefined) fc.city = city;
   if (field) fc.field = { shut: field.closed, levels: field.levels, ground: field.ground, grounded: field.grounded, room: field.room, built: field.built };

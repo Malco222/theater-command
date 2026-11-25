@@ -15,6 +15,7 @@
 // standing orders; raidKinds(), raidTargets() and planRaid() are the planner; launchRaid() flies it; scout()
 // is a reconnaissance flight; groupBases() says where a group could move. The engine is air.ts.
 
+import { armedAt, strikeWords } from './atom';
 import { tenthPct } from '../core/math';
 import { Rng, hashString } from '../core/rng';
 import { turnToDate, type TicketLine } from '../core/ticket';
@@ -798,6 +799,11 @@ const cityLine = (g: Game, target: number, pts: number): string =>
 function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeof forecastAir>, nat: string): string[] {
   const out: string[] = [];
   const place = placeOf(g, kind, target);
+  // The atomic project (release 2, atom.ts): a raid on the armed city carries the bomb, and does nothing else there.
+  if ((kind === 'bomb' || kind === 'night') && armedAt(g, nat) === target) {
+    out.push(strikeWords(g, nat, target));
+    return out;
+  }
   if (kind === 'bomb' || kind === 'night') {
     const r = g.regions[target];
     out.push(r.fac > 0 ? `Should stop about ${pct(fc.cut)} of ${place}'s output for a month: ${tenthPct(fc.nation)} of ${g.nations[r.ctrl].adj} production.` : `There is no industry at ${place}: the bombers go for its rail yards.`);
@@ -850,6 +856,8 @@ function fieldLines(x: NonNullable<ReturnType<typeof forecastAir>['field']>): st
 /** The numbers `effectsOf` puts into words, read off the same forecast. */
 function figuresOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeof forecastAir>, nat: string): RaidFigures {
   const f: RaidFigures = {};
+  // (The atomic project, release 2: a raid that carries the bomb does nothing else to the city, so it has no figures.)
+  if ((kind === 'bomb' || kind === 'night') && armedAt(g, nat) === target) return f;
   if (kind === 'bomb' || kind === 'night') {
     if (g.regions[target].fac > 0) { f.output = fc.cut; f.national = fc.nation; }
     if (fc.rail) f.rail = fc.rail;
@@ -1097,12 +1105,14 @@ export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number
     const p = plans[k];
     const f = p.figures;
     const flown = !p.why;
+    // (The atomic project, release 2: a raid that carries the bomb has no hits to list and no bombing for guns to stop.)
+    const bomb = !!nat && armedAt(g, nat) === target;
     const hits: HitLine[] = [];
     // A share that rounds to nothing is still something: "<1%", never "−0%".
     if (flown && f.output !== undefined) hits.push({ n: f.output <= 0 ? '0%' : f.output < 0.005 ? '<1%' : `−${pct(f.output)}`, words: 'output, for a month' });
     if (flown && f.rail) hits.push({ n: pct(f.rail), words: 'chance the railway is cut' });
     if (flown && f.factory) hits.push({ n: pct(f.factory), words: 'chance a factory is wrecked' });
-    if (flown && !hits.length) hits.push({ n: '', words: 'No industry there, and too few bombers to cut the railway.' });
+    if (flown && !bomb && !hits.length) hits.push({ n: '', words: 'No industry there, and too few bombers to cut the railway.' });
     const fighterLoss = p.fighters > 0 ? p.fighterLossN / p.fighters : 0;
     return {
       kind: k, label: k === 'bomb' ? 'BY DAY' : 'BY NIGHT', why: p.why, picked: p.picked, bombers: p.bombers, fighters: p.fighters,
@@ -1112,7 +1122,7 @@ export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number
       fightersLost: flown && p.fighters > 0 ? `${pct(fighterLoss)} · about ${num(p.fighterLossN)}` : '',
       gunLoss: flown ? p.guns.loss : 0, gunLossN: flown ? p.guns.lossN : 0, toGuns: flown ? `about ${num(p.guns.lossN)}` : '', gunsStop: flown ? p.guns.stop : 0,
       gunsWords: !flown ? '' : p.guns.level ? 'of them to flak and guns' : 'of them to light flak',
-      stopNote: flown && p.guns.stop > 0 ? `after the guns stop ${pct(p.guns.stop)} of the bombing` : '',
+      stopNote: flown && !bomb && p.guns.stop > 0 ? `after the guns stop ${pct(p.guns.stop)} of the bombing` : '',
       figures: f, hits,
       foot: k === 'bomb' ? 'Escorts can fly with them.' : 'No escorts. Fewer lost, fewer hits.',
       prose: flown ? p.effects[0] ?? '' : '',

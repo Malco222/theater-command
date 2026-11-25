@@ -153,3 +153,9 @@ export const SEAMINES_STAGE: boolean = staged('TC_SEAMINES', 'seaMines');
 export const HEAVYSEAS_STAGE: boolean = staged('TC_HEAVYSEAS', 'heavySeas');
 /** True where new grand campaigns open with the shadow relay (stage.json 'shadowRelay'). */
 export const SHADOWRELAY_STAGE: boolean = staged('TC_SHADOWRELAY', 'shadowRelay');
+
+// The atomic project (release 2; Brian 25 November 2026 01:14Z, "lets do number 1"; the design director's ruling of
+// 01:27Z, design-director/atom-1125.md; atom.ts, data/campaign/atom.json): the grand campaigns opened while it is true
+// carry the flag 'atom'. Forced by TC_ATOM.
+/** True where new grand campaigns open with the atomic project (stage.json 'atomBomb'). */
+export const ATOM_STAGE: boolean = staged('TC_ATOM', 'atomBomb');

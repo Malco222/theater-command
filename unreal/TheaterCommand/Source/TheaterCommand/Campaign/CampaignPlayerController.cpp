@@ -412,6 +412,9 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 					? TEXT("A shadow's fuel lasts three months on station. Then it makes for harbour, and a fresh cruiser fleet of yours lying in harbour takes over the shadow without losing contact, like a relay runner handing on the baton. With none in harbour, contact is lost. The computer's admirals work the same way. It can be switched in any month.")
 					: TEXT("A shadow's fuel lasts three months on station, and then a fresh cruiser fleet from harbour takes over without losing contact. It works only with Shadowing on. It can be switched in any month."),
 				Now.bShadowRelay ? TEXT("ON") : TEXT("OFF"), Now.bShadowRelay);
+			// (Release 2, atom.ts; Brian 25 November 2026 01:14Z) The atomic project, a moonshot any large industry can attempt.
+			Add(TEXT("atomrule"), TEXT("The atomic project"), TEXT("Three steps of the Industry branch, then atomic plants that take a share of your earnings every month for years: a large industry finishes them in about two years, a small one never. Then a bomb or two, each carried by an ordinary raid of four-engined bombers on an enemy city that is not a capital. The city is left in ruins and the country loses much of its will to fight. Spies, bombing and capture set the plants back. Every country plays by the same rules. Off, the atomic rows leave the research tree and nobody builds the bomb. It can be switched in any month."),
+				Now.bAtomBomb ? TEXT("ON") : TEXT("OFF"), Now.bAtomBomb);
 			Add(TEXT("fleetwhyrule"), TEXT("Admirals' reasons"), TEXT("Where your admirals run the navy for you, each fleet they order says on its page and its card why it is where it is: the enemy fleet it is after, the convoys it guards, the landing it covers, or why it waits in harbour. It changes nothing in the war. It can be switched in any month."),
 				Now.bFleetWhy ? TEXT("ON") : TEXT("OFF"), Now.bFleetWhy);
 			// (Release 2, buildings.ts; Brian 24 November 2026 18:12Z and 18:13Z) Conquered towns settle, after a short wait.
@@ -652,7 +655,7 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		++Opening.Revision;
 		return; // (kept by the campaign, not with the options)
 	}
-	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("settledtownsrule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule"))
+	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("settledtownsrule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule") || Id == TEXT("atomrule"))
 	{
 		// (Release 2) Earned names, fleet attacks and breaking corps up, in any month; supply columns, in the campaign's first month only (the rules say so if not).
 		if (FCampaignSession* Session = GetSession())
@@ -661,7 +664,7 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 			const FCampaignView& Now = Session->GetView();
 			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Id == TEXT("settledtownsrule") ? Now.bSettledTowns
 				: Id == TEXT("rearbridgesrule") ? Now.bRearBridges : Id == TEXT("shadowrule") ? Now.bShadowRule : Id == TEXT("voyagelogrule") ? Now.bVoyageLog
-				: Id == TEXT("seaminesrule") ? Now.bSeaMines : Id == TEXT("heavyseasrule") ? Now.bHeavySeas : Id == TEXT("shadowrelayrule") ? Now.bShadowRelay : Now.bColumnsOn;
+				: Id == TEXT("seaminesrule") ? Now.bSeaMines : Id == TEXT("heavyseasrule") ? Now.bHeavySeas : Id == TEXT("shadowrelayrule") ? Now.bShadowRelay : Id == TEXT("atomrule") ? Now.bAtomBomb : Now.bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
 				ShowWar(Session->GetView(), TArray<FCorpsMove>());
@@ -1865,6 +1868,13 @@ void ACampaignPlayerController::OpenPage(const FString& Id)
 	Page = Session->Page(Id, SelectedRegion);
 	Page.Revision = Revision;
 	bPageOpen = Page.bValid;
+	if (bPageOpen && Id == TEXT("atom"))
+	{
+		// (Release 2, atom.ts; the UI director's marks.) THE ATOMIC PROJECT opened with a bomb in hand: the chip under END
+		// THE MONTH has done its work, and the view is taken again at once so that it goes now, not at the next order.
+		FString SeenNote;
+		Session->Act(TEXT("atom:seen"), SelectedRegion, SeenNote);
+	}
 	if (bPageOpen && Id == TEXT("airfield"))
 	{
 		AdviserSaw(3);
@@ -5855,7 +5865,15 @@ void ACampaignPlayerController::Escape()
 	}
 	else if (bPageOpen)
 	{
-		ClosePage();
+		if (Page.Card.bValid && Page.Card.bBomb)
+		{
+			AtomBackAt = FPlatformTime::Seconds();
+			PressPage(Page.Card.Back.Act); // (release 2, atom.ts: Esc, as Enter, is BACK on a bomb raid's card: the bomb is kept)
+		}
+		else
+		{
+			ClosePage();
+		}
 	}
 	else if (WarPrompt.bVisible)
 	{
@@ -12281,6 +12299,20 @@ void ACampaignPlayerController::EndMonth()
 	if (!bScripted && bPageOpen && Page.Month.bValid)
 	{
 		ClosePage();
+		return;
+	}
+	// (Release 2, atom.ts; the UI director under ruling 134(f).) On the raid card of a raid that carries the atomic bomb,
+	// Enter is BACK, the lit answer: the bomb is kept, and the raid takes a click. (END THE MONTH clicked goes on as ever.)
+	if (bEnterByKey && !bScripted && bPageOpen && Page.Card.bValid && Page.Card.bBomb)
+	{
+		AtomBackAt = FPlatformTime::Seconds();
+		PressPage(Page.Card.Back.Act);
+		return;
+	}
+	// (BACK opens THE ATOMIC PROJECT again: a held or doubled Enter takes no key for its first half second, so that it
+	// cannot end the month the bomb was kept in before he has seen the page.)
+	if (bEnterByKey && !bScripted && FPlatformTime::Seconds() - AtomBackAt < 0.5)
+	{
 		return;
 	}
 	// (Rulings 88 and 90.) Armies at the front that have not been touched and have no orders: the month is never

@@ -48,5 +48,7 @@
   "_heavySeas": "Heavy seas (release 2; Brian 24 November 2026 20:38Z, 'yes to all'; src/campaign/heavyseas.ts, data/campaign/heavyseas.json). Gales blow under a closed sky at sea, mostly in winter: ships can sail into a sea in a gale but not on through it that month, convoys through one are late, and a shadow may lose its quarry in one. The same for every country. Switchable in any month from OPTIONS.",
   "heavySeas": false,
   "_shadowRelay": "The shadow relay (release 2; Brian 24 November 2026 20:38Z, 'yes to all'; src/campaign/shadow.ts, data/campaign/shadow.json 'relay'). Read only with shadowing on: a shadow's fuel lasts three months on station, and then a fresh cruiser fleet from harbour takes over without losing contact. Switchable in any month from OPTIONS.",
-  "shadowRelay": false
+  "shadowRelay": false,
+  "_atomBomb": "The atomic project (release 2; Brian 25 November 2026 01:14Z, 'lets do number 1'; the design director's ruling of 01:27Z; src/campaign/atom.ts, data/campaign/atom.json). Three rows of the Industry branch, then atomic plants that draw a share of a nation's earnings every month for years toward one fixed bill: a large industry finishes them, a small one never. Then a bomb or two, carried by an ordinary bombing raid on an enemy city that is not a capital: the city in ruins and a weight on that country's will to fight through the surrender rules. Spies, bombing and capture set the plants back. The same rules for every country; the book's stops hold the computer to the record's clock. Off: the rows leave the tree and nothing is drawn. On: the grand campaigns opened from now on carry the flag 'atom' (switchable in any month from OPTIONS). Forced by TC_ATOM=1 or 0.",
+  "atomBomb": false
 }

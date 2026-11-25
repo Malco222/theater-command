@@ -8,6 +8,7 @@
 import { AIR, AIRWAR, UD_ROLES, airWar, udRole, assessAir, bombLaw, carrierOf, forecastAir, fxpOf, groupAt, levelOf } from '../../campaign/air';
 import { unitsDecide } from '../../campaign/units';
 import { planRaid, type RaidKind } from '../../campaign/airwar';
+import { armedAt } from '../../campaign/atom';
 import { seatsOf } from '../../campaign/bombers';
 import { orderRaid } from '../../campaign/turn';
 import { weatherOn } from '../../campaign/weather';
@@ -57,6 +58,10 @@ export interface AirTicketResult {
 export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[], nat: string | null = g.human, opts: { ships?: boolean } = {}): AirTicketResult {
   if (!FOUGHT_KINDS.includes(kind) && !(opts.ships && SHIP_KINDS.includes(kind))) return { ticket: null, why: 'Only day raids and fights for the sky can be fought out so far: the staff settles a night raid.' };
   if (nat === null) return { ticket: null, why: 'Nobody is at the controls.' };
+  // (Release 2, atom.ts; the design director's ruling of 25 November.) A raid that carries the atomic bomb is not fought
+  // out until its own scene, which ends at the release point, is built and passed (the 3D air thread's flyAtom): until
+  // then the staff flies it, through the same air rules.
+  if ((kind === 'bomb' || kind === 'night') && armedAt(g, nat) === target) return { ticket: null, why: 'A raid that carries the atomic bomb is flown by the staff.' };
   const plan = planRaid(g, kind, target, ids, nat);
   if (plan.why) return { ticket: null, why: plan.why };
   const fleets = plan.picked.map((id) => g.airFleets.find((f) => f.id === id)!).filter(Boolean);
