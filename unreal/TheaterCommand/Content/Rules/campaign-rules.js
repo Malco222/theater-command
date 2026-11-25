@@ -115059,7 +115059,7 @@
     const r = s.regions[id];
     const level = lightsAt(s, id);
     const going = s.nations[r.ctrl]?.queue.filter((b) => b.what === "work" && b.item === "lights" && b.region === id).length ?? 0;
-    const line = level <= 0 ? "" : guns2 <= 0 ? `level ${level}: there are no guns built here for them to light. They help the night fighters a little.` : `level ${level}: ${Math.min(level, guns2)} of the ${guns2} levels of guns are lit by night, under a clear sky`;
+    const line = level <= 0 ? "" : guns2 <= 0 ? `level ${level}: there are no guns built here for them to light. They help the night fighters a little.` : `level ${level}: ${inWords(Math.min(level, guns2))} of the ${inWords(guns2)} levels of guns are lit by night, under a clear sky`;
     return {
       level,
       lit: Math.min(level, guns2),
