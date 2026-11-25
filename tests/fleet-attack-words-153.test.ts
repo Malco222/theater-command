@@ -5,17 +5,18 @@
 //   26  "1 ship", not "1 ships"; the losses listed with "and" before the last, and their range said plainly; a battleship
 //       or carrier the likely count rounds away, though it may well go down, named on that line; and in the sea report,
 //       "The Battle Fleet was caught at anchor" (not "The the"), and each side's strength summed before the sinkings;
+//       and the fleet's own name in the refusals, "Force H", not "The Force H";
 //   33  odds whose two ends read the same are said once: "More than 10 to 1 all day".
 import { describe, expect, it } from 'vitest';
 import { fleetKnown } from '../src/campaign/carriers';
-import { createGame } from '../src/campaign/game';
+import { atWar, createGame, declareWar } from '../src/campaign/game';
 import { detach } from '../src/campaign/fleets';
 import { HEAVY_RISK, orderFleetAttack, planFleetAttack, whyNotFleetAttack, type FleetAttackPlan } from '../src/campaign/fleetattack';
 import { setFog } from '../src/campaign/intel';
 import { loadGame, saveGame } from '../src/campaign/save';
-import { NAVY, fleetName, sail, zoneOf } from '../src/campaign/navy';
+import { NAVY, cutOff, fleetName, sail, zoneOf } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
-import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
+import { beginHuman, fleetOptions, humanUp, stepAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 
@@ -403,5 +404,43 @@ describe('33: the odds said once where both ends read the same', () => {
     expect(plan.odds!.low.toFixed(1)).toBe(plan.odds!.high.toFixed(1));
     expect(odds.value).toBe(`${plan.odds!.mid.toFixed(1)} to 1`);
     expect(odds.effect).toBe(`About ${plan.odds!.mid.toFixed(1)} to 1 all day`);
+  });
+});
+
+describe('26: the fleet\'s own name in the refusals', () => {
+  it('"Force H has already been sent", "The Home Fleet has already been sent": each as the rest of the card names it', () => {
+    // UK from 17, seed 5: Force H at Gibraltar, a name with no article of its own.
+    TC.start({ human: 'UK', view: 'grand', from: 17, seed: 5 });
+    const g = loadGame(TC.save().text)!;
+    const h = fleet(g, 'Force H'), home = fleet(g, 'Home Fleet');
+    const t = g.fleets.find((x) => x.nat === 'GER')!;
+    h.attacked = g.turn;
+    home.attacked = g.turn;
+    expect(whyNotFleetAttack(g, h.id, t.id)).toBe('Force H has already been sent at the enemy this month.');
+    expect(whyNotFleetAttack(g, home.id, t.id)).toBe('The Home Fleet has already been sent at the enemy this month.');
+    expect(fleetOptions(g, h.id)!.held).toBe('Force H was sent at the enemy this month: it stays where the battle left it until next month.');
+    expect(fleetOptions(g, home.id)!.held).toBe('The Home Fleet was sent at the enemy this month: it stays where the battle left it until next month.');
+    TC.load(saveGame(g));
+    const p = TC.page(`fleetattack:${h.id}:${t.id}`) as Page;
+    expect(p.headline).toBe('Force H has already been sent at the enemy this month.');
+    expect(p.top[0]).toMatchObject({ ok: false, tip: p.headline });
+    // A fleet with no ships left.
+    for (const c of ['bb', 'cv', 'ca', 'dd', 'ss'] as const) h.ships[c] = 0;
+    expect(whyNotFleetAttack(g, h.id, t.id)).toBe('Force H has no ships.');
+    for (const w of [...words(p), whyNotFleetAttack(g, h.id, t.id)!]) expect(w).not.toMatch(/\bThe Force H\b/i);
+  });
+
+  it('"The 2nd Fleet is cut off", and under a name of its own, "Force H is cut off"', () => {
+    // Italy's 2nd Fleet past Gibraltar when Italy goes to war with Britain (the 1.5.2 case, tests/fleet-cut-off-152).
+    const g = startOpen(createGame(3, 'ITA'));
+    for (let k = 0; !humanUp(g) && k < 60; k++) stepAI(g);
+    const f = g.fleets.find((x) => x.nat === 'ITA' && x.name === '2nd Fleet')!;
+    expect(sail(g, f, zoneOf(g, 'iberia'), 'patrol')).toBe(true);
+    if (!atWar(g, 'ITA', 'UK')) declareWar(g, 'ITA', 'UK');
+    expect(cutOff(g, f)).toBe(true);
+    const t = fleet(g, 'Home Fleet');
+    expect(whyNotFleetAttack(g, f.id, t.id)).toBe('The 2nd Fleet is cut off beyond a shut strait: send it to harbour on its side first.');
+    f.name = 'Force H';
+    expect(whyNotFleetAttack(g, f.id, t.id)).toBe('Force H is cut off beyond a shut strait: send it to harbour on its side first.');
   });
 });

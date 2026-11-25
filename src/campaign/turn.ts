@@ -12,7 +12,7 @@ import {
   airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupDecks, groupJobs, launchRaid, planRaid, raidKinds, raidKindsOne, raidReplays, raidTargets, scout, setGroupJob,
   type AirfieldCard, type AirfieldRow, type BaseOption, type DayNight, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
 } from './airwar';
-import { NAVY, baseTargets, canPass, crossingsOf, cutOff, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, whyNotShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
+import { NAVY, baseTargets, canPass, crossingsOf, cutOff, fleetName, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, whyNotShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
@@ -1592,7 +1592,11 @@ export function fleetOptions(g: Game, id: number): FleetOptions | null {
     split: g.flags.open === 1 && Object.values(f.ships).reduce((s, n) => s + n, 0) > 1,
   };
   if (fleetAttackOn(g)) out.attack = war ? attackTargets(g, f.id) : [];
-  if (held) out.held = `The ${f.name} was sent at the enemy this month: it stays where the battle left it until next month.`;
+  if (held) {
+    // (1.5.3) "The Home Fleet was sent", "Force H was sent": the fleet named as the attack card names it.
+    const named = fleetName(f);
+    out.held = `${named[0].toUpperCase()}${named.slice(1)} was sent at the enemy this month: it stays where the battle left it until next month.`;
+  }
   return out;
 }
 

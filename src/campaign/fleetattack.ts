@@ -98,11 +98,12 @@ export function whyNotFleetAttack(g: Game, id: number, target: number): string |
   if (!fleetAttackOn(g)) return 'Fleets are sent straight at the enemy only where that is switched on.';
   const f = ownFleet(g, id);
   if (!f) return 'Only your own fleet can be given the order, in your own month.';
-  if (!shipCount(f.ships)) return `The ${f.name} has no ships.`;
+  // (1.5.3) The fleet named as every other sentence here names it: "The Home Fleet", "Force H", not "The Force H".
+  if (!shipCount(f.ships)) return `${cap(fleetName(f))} has no ships.`;
   if (surfaceShips(f) <= 0) return 'Submarines fight no fleet action: they raid shipping, and escorts hunt them.';
-  if (f.attacked === g.turn) return `The ${f.name} has already been sent at the enemy this month.`;
+  if (f.attacked === g.turn) return `${cap(fleetName(f))} has already been sent at the enemy this month.`;
   // (1.5.2) Cut off at sea beyond a strait shut to it, it reaches nothing until it has a harbour on its side.
-  if (cutOff(g, f)) return `The ${f.name} is cut off beyond a shut strait: send it to harbour on its side first.`;
+  if (cutOff(g, f)) return `${cap(fleetName(f))} is cut off beyond a shut strait: send it to harbour on its side first.`;
   const t = g.fleets.find((x) => x.id === target);
   if (!t || !shipCount(t.ships) || fleetKnown(g, t, f.nat) === 'none') return 'No such enemy fleet is known.';
   if (!atWar(g, f.nat, t.nat)) return `${g.nations[t.nat]?.name ?? t.nat} is not at war with ${g.nations[f.nat].name}.`;
