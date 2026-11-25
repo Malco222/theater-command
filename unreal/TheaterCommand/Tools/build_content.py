@@ -235,8 +235,19 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False, 
     connect(posed_facing if crowd else node(m, unreal.MaterialExpressionVertexNormalWS, -1100, -2100), "", skyward, "")
     lit_top = plus(m, 1.0, times(m, times(m, one_in(m, unreal.MaterialExpressionSaturate, skyward, -750, -2100), scalar(m, "TopLight", 0.26, -750, -2000), -600, -2050),
                                  times(m, metal, wear, -600, -2150), -450, -2100), -300, -2100)
+    # (worn's patches have their own depth, "Patches", so the vehicles' mottle can be made deeper without the chips and
+    # the paler top that "Wear" also drives: the art director, 25 Nov 19:24Z, wanted 14 to 20 of 255 between dark and
+    # pale on a sunlit panel, about 0.80 to 1.20 of the paint, never over 24; held inside "PatchLeast" to "PatchMost")
+    patches = scalar(m, "Patches", 0.0, 150, -1400) if worn else wear
     mottle = lerp(m, 1.0, plus(m, times(m, mottle_n, 0.42, -350, -1500), 0.8, -200, -1500),
-                  times(m, wear, plus(m, times(m, metal, 0.5, 100, -1450), 0.5, 200, -1450), 300, -1450), 450, -1500)
+                  times(m, patches, plus(m, times(m, metal, 0.5, 100, -1450), 0.5, 200, -1450), 300, -1450), 450, -1500)
+    if worn:
+        least = node(m, unreal.MaterialExpressionMax, 520, -1560)
+        connect(mottle, "", least, "A")
+        connect(scalar(m, "PatchLeast", 0.78, 380, -1620), "", least, "B")
+        mottle = node(m, unreal.MaterialExpressionMin, 600, -1560)
+        connect(least, "", mottle, "A")
+        connect(scalar(m, "PatchMost", 1.22, 460, -1660), "", mottle, "B")
     weathered = times(m, times(m, tinted, mottle, 600, -900), lit_top, 700, -1000)
     tinted = lerp(m, weathered, vector(m, "ChipColour", (0.13, 0.125, 0.12, 1.0), 450, -1300), chipped, 750, -900)
     tinted = times(m, tinted, lerp(m, 1.0, vector(m, "WakeTone", (1.0, 1.0, 1.0, 1.0), 600, -1250), on_water, 800, -1200), 900, -950)
