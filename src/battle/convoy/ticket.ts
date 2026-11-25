@@ -23,7 +23,8 @@ export function seaAt(key: string): [number, number] { return SEAS.find((z) => z
 /**
  * The night's light (form §5; ruling 241 Q6): the day of the month and the weather are drawn on the ticket's own stream,
  * the moon's phase follows from the date, the night's length from the latitude and the day. How far a surfaced boat is
- * seen moves the odds; the sun's and moon's heights and the moon's bearing are looks.
+ * seen moves the odds; the sun's and moon's heights and the moon's bearing are looks. 'month' counts from 0 for January,
+ * as the sky's sums (numbers.ts) and the campaign's dates (turnToDate) count it.
  */
 export function lightOf(seed: number, lat: number, year: number, month: number): ConvoyLight {
   const r = new Rng(hashString(`convoylight:${seed}`));
@@ -117,7 +118,9 @@ const CONVOY_SWING: [number, number] = [0.8, 1.2];
 
 /** A plain night with no game behind it (practice and tests): fleets as given, kit and habits by navy. */
 export interface PlainConvoy {
-  title: string; sea: string; route?: string; year: number; month: number; ships?: number;
+  title: string; sea: string; route?: string; year: number; ships?: number;
+  /** The month as a card writes it: 1 for January to 12 for December. */
+  month: number;
   boats: { name: string; nat: string; n: number; all?: number; expect?: number }[];
   escorts: { name: string; nat: string; n: number; expect?: number }[];
   kit: Record<string, ConvoyKit>; habits?: Record<string, ConvoyHabits>;
@@ -132,12 +135,14 @@ export function plainConvoyTicket(p: PlainConvoy, seed: number, human: Side | nu
   ];
   const habits: Record<string, ConvoyHabits> = {};
   for (const f of fleets) habits[f.nat] = p.habits?.[f.nat] ?? habitsOf(f.nat);
-  const light = lightOf(seed, lat, p.year, p.month);
+  // (the card's month counts from 1; the ticket's, like the campaign's, and the sky's sums count from 0)
+  const month = p.month - 1;
+  const light = lightOf(seed, lat, p.year, month);
   const att = fleets.filter((f) => f.side === 'att'), def = fleets.filter((f) => f.side === 'def');
   return {
     domain: 'sea', kind: 'field', seed, turn: 0, date: 'Practice', title: p.title,
     place: {
-      route: p.route ?? 'atlantic', sea: p.sea, seaName: SEAS.find((z) => z.id === p.sea)?.name ?? p.sea, lat, lon, when: { year: p.year, month: p.month }, light,
+      route: p.route ?? 'atlantic', sea: p.sea, seaName: SEAS.find((z) => z.id === p.sea)?.name ?? p.sea, lat, lon, when: { year: p.year, month }, light,
       ships: p.ships ?? CONVOY.convoy.ships[p.route ?? 'atlantic'] ?? 40, fleets, kit: p.kit, habits,
       card: { raid: 0, guard: 0, G: 0, L: 0, tons: 0 }, surrender: SUB_SURRENDER.on,
     },
