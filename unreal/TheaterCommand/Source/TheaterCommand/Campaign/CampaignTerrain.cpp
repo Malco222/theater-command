@@ -427,8 +427,10 @@ void FCampaignTerrain::BuildOver(const FCampaignMapData& Data, double MinX, doub
 	// raised for any province of a small island (itself and the provinces it borders by land, taken together, too
 	// small for the sheet) whose chief town would not stand on land once the shore is smoothed: under its town, where
 	// the plate and the pieces are laid. Which provinces were raised is kept (Raised), for the click on the speck.
+	// (Only with the far side on: with it off the wider chart's own three, the Azores, Curacao and Martinique, stay as
+	// they were, and nothing on the table changes.)
 	Raised.Reset();
-	const bool bCoarseSheet = Cell >= 3.0;
+	const bool bCoarseSheet = Data.bFar && Cell >= 3.0;
 	TArray<double> IslandArea; // the land a province stands on: its own and its neighbours' by land, right through
 	if (bCoarseSheet)
 	{
