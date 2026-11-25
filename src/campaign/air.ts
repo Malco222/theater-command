@@ -3630,7 +3630,8 @@ function baseByThreat(g: Game, nat: string, mine: AirFleet[], beaches: number[],
   // (A group on its way by stages, ferry.ts, counts where it is going.)
   for (const f of fighters) if (stays(f)) meets(f, f.way?.to ?? f.base, true);
   // The airfields open to this nation's groups (whyNotBase, leaving out each group's own base and how far it can fly in a month).
-  const open = g.regions.filter((r) => whyNotBase(g, free[0], r, true) === null || r.id === free[0].base);
+  // (A province with no airfield is passed by before the longer question: whyNotBase is never null there.)
+  const open = g.regions.filter((r) => (hasAirfield(g, r.id) && whyNotBase(g, free[0], r, true) === null) || r.id === free[0].base);
   // Ruling 52(a), its second part: a move behind the army never takes a group out of reach of the enemy. A group
   // that can reach ground an enemy holds from where it stands goes only to a field from which it still can.
   const foes = P > 0 ? g.regions.filter((r) => atWar(g, nat, r.ctrl)).map((r) => r.id) : [];
@@ -3746,7 +3747,18 @@ function closeStaff(g: Game, mine: AirFleet[], battles: number[], back = false):
       if (left <= 0) break;
       if (f.ftr > left || f.close || f.mission !== 'support' || f.flew === g.turn || f.moved === g.turn || f.ready < CLOSE.least || can.some((x) => x.f === f)) continue;
       let to: Region | null = null, bv = 0;
-      for (const r of airBases(g, f)) { if (overOcean(g, f, r) || !fieldRoom(g, r.id, f)) continue; const v = over(f, r.id).length; if (v > bv) { bv = v; to = r; } }
+      // (The first field, in the chart's order, of those it could go to (airBases, less those across an ocean and the
+      // full ones) that covers the most battles. Asked in the cheapest order for the same field: a field beyond a
+      // month's flight is none of them (whyNotBase's last word, and one across an ocean is passed by anyway), and a
+      // field is asked whether the group could go there only when it would cover more battles than the best so far.)
+      const R = ftrR(f);
+      for (const r of g.regions) {
+        if (f.base >= 0 && km(g, f.base, r.id) > AIR.ferry) continue;
+        let v = 0;
+        for (const b of battles) if (cover(km(g, r.id, b), R) > 0) v++;
+        if (v <= bv || overOcean(g, f, r) || whyNotBase(g, f, r) !== null || !fieldRoom(g, r.id, f)) continue;
+        bv = v; to = r;
+      }
       if (to) far.push({ f, to, d: near(f) });
     }
     far.sort((a, b) => a.d - b.d || a.f.id - b.f.id);
@@ -3778,7 +3790,8 @@ function baseBombers(g: Game, nat: string, mine: AirFleet[], battles: number[]):
     for (const t of battles) v += cover(km(g, base, t), R);
     return v * f.bmr;
   };
-  const open = g.regions.filter((r) => whyNotBase(g, bombers[0], r, true) === null || r.id === bombers[0].base);
+  // (A province with no airfield is passed by before the longer question: whyNotBase is never null there.)
+  const open = g.regions.filter((r) => (hasAirfield(g, r.id) && whyNotBase(g, bombers[0], r, true) === null) || r.id === bombers[0].base);
   for (const f of bombers.sort((a, b) => b.bmr - a.bmr || a.id - b.id)) {
     const here = worth(f, f.base);
     const fields: { r: Region; v: number }[] = [];
