@@ -8226,7 +8226,7 @@ function laneRow(l: Lane, me: string | null): string {
   const carries = [l.full.oil > 0.05 ? `oil ${amt(l.oil)} of ${amt(l.full.oil)}` : '', l.full.sup > 0.05 ? `supplies ${amt(l.sup)} of ${amt(l.full.sup)}` : ''].filter(Boolean).join(' · ');
   // A lane whose shipping the game does not count (the UI director's words, 12:57Z of 25 November 2026, 2(b)): "Not
   // counted" in place of the share, its line in place of what is sunk, no bar and no colour of its own. A cut or idle
-  // lane keeps its state and the reason, which are no share of a cargo.
+  // one keeps the reason it stopped, which is no share of a cargo.
   const uncounted = laneNotCounted(g, l);
   const status = l.state === 'cut' ? 'Cut' : l.state === 'idle' ? 'Not running' : `${pct}% getting through`;
   // What the lane runs on, the last sentence of its row; for a stopped lane, what stopped it and what would start it again (the Pacific's lanes alone: ruling 195(c), sheet 25 box 1).
@@ -8238,20 +8238,24 @@ function laneRow(l: Lane, me: string | null): string {
   const advice = l.kind !== 'sea' || !l.zones.length || l.state === 'idle' ? ''
     : mine && l.state !== 'cut' ? (seaWar(g) ? laneGuards(l.id, l.to === me) : ` Fleets on patrol in those seas, and aircraft on the coasts, keep it open.`)
     : foe && l.state !== 'cut' ? ` Submarines and raiders sent into those seas bleed it.` : '';
-  if (uncounted && !halted) {
+  if (uncounted) {
     // No urging here: the line above says its loss takes nothing from the stores, so telling the player to escort it or
     // to send raiders into it would ask for work the game says is worth nothing (the review of 25 November 2026). Only
-    // the fact of who is escorting it, if anyone is, stays.
-    const escorted = l.zones.length && seaWar(g) && mine ? laneEscorts(l.id) : '';
+    // the fact of who is escorting it, if anyone is, stays. Stopped or running, it wears no colour and no bar (the UI
+    // director's 2(b): "None of these wears a colour"; an empty bar would read as a read zero): a lane that is cut or
+    // not running says why in its own sentence, as every stopped lane does.
+    const escorted = !halted && l.zones.length && seaWar(g) && mine ? laneEscorts(l.id) : '';
+    const stopped = !halted ? '' : key ? ` <b>${esc(key)}</b>` : l.why ? ` <b>${esc(l.why)}</b>` : '';
     return `<div class="lane">
     <div class="lhead">${flagIcon(l.to, g.nations[l.to].color, 18, 'inh')}<b>${esc(upFirst(l.name))}</b><span class="tag">By sea</span><span class="lflow">${esc(uncounted.value)}</span></div>
-    <small>${esc(l.text)} ${esc(uncounted.line)}${esc(fight)}${escorted}${key ? ` ${esc(key)}` : ''}${faulty ? `<br><span style="color:var(--paper-100, #f3ead7)">${esc(faulty)}</span>` : ''}</small>
+    <small>${esc(l.text)} ${esc(uncounted.line)}${stopped}${esc(fight)}${escorted}${key && !halted ? ` ${esc(key)}` : ''}${faulty ? `<br><span style="color:var(--paper-100, #f3ead7)">${esc(faulty)}</span>` : ''}</small>
+    ${l.path.length ? `<div class="acts"><button class="btn small" data-act="lanego" data-id="${l.id}">Show on the map</button></div>` : ''}
   </div>`;
   }
   return `<div class="lane ${l.state}">
     <div class="lhead">${flagIcon(l.to, g.nations[l.to].color, 18, 'inh')}<b>${esc(upFirst(l.name))}</b><span class="tag">${l.kind === 'sea' ? 'By sea' : 'Overland'}</span><span class="lflow">${status}</span></div>
     <div class="oddsbar" title="${status}"><i style="width:${pct}%"></i></div>
-    <small>${esc(l.text)}${carries ? ` This month: ${carries}.` : ''}${uncounted ? ` ${esc(uncounted.line)}` : ''}${key && halted ? ` <b>${esc(key)}</b>` : l.why ? ` <b>${esc(l.why)}</b>` : ''}${esc(fight)}${advice}${key && !halted ? ` ${esc(key)}` : ''}${faulty ? `<br><span style="color:var(--paper-100, #f3ead7)">${esc(faulty)}</span>` : ''}</small>
+    <small>${esc(l.text)}${carries ? ` This month: ${carries}.` : ''}${key && halted ? ` <b>${esc(key)}</b>` : l.why ? ` <b>${esc(l.why)}</b>` : ''}${esc(fight)}${advice}${key && !halted ? ` ${esc(key)}` : ''}${faulty ? `<br><span style="color:var(--paper-100, #f3ead7)">${esc(faulty)}</span>` : ''}</small>
     ${l.path.length ? `<div class="acts"><button class="btn small" data-act="lanego" data-id="${l.id}">Show on the map</button></div>` : ''}
   </div>`;
 }
