@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0fc6ba25 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 2462d1da 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -68616,6 +68616,43 @@
       pace: 3.5,
       sep: 8
     },
+    teamwork: {
+      _about: [
+        "Support teams at work (release 2; Brian, 25 November 2026, 14:15Z: 'There should be a machine gun teens that lay down suppressing fire, such as the German MG 42 and the US machine gun'; 15:36Z 'yes to all'). Looks only (ruling 217), the drill's own dice; on only where asked (Drill teamwork: the 3D game's 'Machine gun and mortar teams at work' switch). Each weapon of a machine-gun or mortar team (role hmg or mortar) works with its crew as a crew: its gunner, its number two, the man with the glasses and its ammunition bearers, each doing his own part, and the team's guns each in their own time.",
+        "seat: where a weapon's number two is, metres [across to the feed side, ahead] of its gunner along his facing (the ground thread's numbers, 25 November 14:56Z and 15:12Z, from the gun models): a machine gun's 0.6 to the feed side and 0.9 ahead, the feed side the gun's right for the armies in 'right' (the Vickers and the Maxim), its left for the rest; a mortar's 0.95 to the gunner's right and 0.25 ahead (the tube stands between them). near: metres a number two may stand from his own gunner (the room kept between other men is more). nco, ammo: the man with the glasses and the bearers, [across, along] of the gunner (the nco's across away from the feed side; the bearers either side behind, rows 'ammo[2]' apart).",
+        "setup: battle seconds [least, most] a weapon takes to set up once its crew is at its place (each its own); its gunner kneels by it meanwhile. open: seconds [least, most] after it is set up before it first fires (each gun its own). pack: when the team is ordered on, each weapon is picked up at its own moment over these seconds; cover: a machine gun firing then, the last of them stays firing this long [least, most] to cover the rest (while its block is within 'lag' metres); pick: seconds a crew takes to pick its weapon up; flee: seconds over which they snatch them up in a rout. resite: a weapon set up whose place in the line moves goes within this many seconds (each its own).",
+        "spell: a machine gun's fire in spells, each its own: firing 'on' seconds then a pause 'off' to re-lay (rapidOn, rapidOff while its own foot go in on the target); one gun firing keeps on rather than all fall silent at once. burst: seconds [least, most] between its bursts, slow fire and rapid (the 3D game draws each burst: an MG 42 18 rounds at 20 a second). switch: seconds over which each gun takes up a new target. barrel: seconds of firing [least, most] before an air-cooled gun's barrel is changed (the armies in 'quick': the MG 34 and 42) or it must pause to cool (the rest but 'water': the Vickers and the Maxim), and the seconds [least, most] that takes.",
+        "sweep: each machine gun sweeps its own share of the target's front, the guns' shares crossing (the left gun on the right of it), 'share' of the target's frontage among them and each share 'over' wider to overlap; a sweep across and back in [least, most] seconds of its own. Its gunner's facing stays on the middle of his share (the tripod planted; the gun traverses on its mount), and the fire never swings more than 'arc' radians either side of it (about 9 degrees: the 3D game's belt runs into its box only within about 10 degrees of the mount, ground, 25 November 16:30Z); a gun fires only once its gunner's facing has come round within 'laid' of the middle of his share, and he turns his gun round at 'turn' radians a second (the 3D game's mount follows his facing at 40 degrees a second). lift: own foot within 'rapid' metres of the target: rapid fire; within 'shift': the guns' fire pulled in and shifted to the target's side away from them; within 'lift': lifted 'beyond' metres past its far side. A mortar's bombs go 'deep' past it once own foot are within 'mortar' metres.",
+        "drop: seconds a mortar's number two is at the muzzle as each bomb goes (pose fire), and its gunner on the tube. duck: under a shell burst near the team each man goes down after his own 'lag' and stays down his own time 'for' (raw men 'raw' times as long, veterans 'vet'); a machine gun's gunner firing goes down only a share 'gunner' of the time [raw, regular, veteran]. move: a weapon that has fired from one place 'after' seconds [least, most] while shelled within 'shelled' seconds or under fire goes to another place 'far' [least, most] metres off (at least 'site.shift'), one weapon of the team at a time while another fires; a machine gun moves in any case after 'most' seconds; it sets up again in 'setup' of its usual time.",
+        "site: where a weapon is set up near its place in the line (within 'reach' metres, 'apart' from the team's others): a machine gun where it sees and is hidden (the shelter of a bank, a wood's or houses' edge, ground 'height' a metre higher than 60 m ahead; 'blind' where woods or houses close in its view); a mortar behind a rise ('crest'), lower than the ground ahead, under open sky ('open'; 'trees' among trees or roofs that would burst its bombs). 'near' a metre from its place. A place within 'hop' metres of where its gunner stands is where he stands (he never picks his gun up to go a few metres); a new place it moves to is at least 'shift' metres off.",
+        "run: a bearer brings ammunition up to the gun after 'every' seconds [least, most] of its fire (a mortar: after 'rounds' [least, most] of its bombs), each bearer in turn, kneeling at the gun 'at' seconds; under fire he goes bent low and crawls back. watch: one bearer of each crew watches a flank 'keep' seconds [least, most] before another takes it, looking 'arc' radians [least, most] off the front. glasses: the crew's second man watches the fall of its fire through his glasses 'for' seconds [least, most] of each 'every'. posts: between its bombs a mortar's gunner is up on his knees checking his aiming posts 'for' seconds [least, most] of each 'every' (each his own)."
+      ],
+      seat: { mg: [0.6, 0.9], mortar: [0.95, 0.25], right: ["UK", "SOV", "FIN"], near: 0.7 },
+      nco: { mg: [2.3, -2], mortar: [-2.4, -2.2] },
+      ammo: { mg: [1.9, -5, 1.8], mortar: [2.2, -3.4, 1.6] },
+      setup: { mg: [3, 7], mortar: [4, 8] },
+      open: [0.5, 3],
+      pack: [0.5, 3.5],
+      cover: [3, 6],
+      lag: 30,
+      pick: [0.8, 1.8],
+      flee: 1.2,
+      resite: 4,
+      spell: { on: [3, 7], off: [1.5, 4], rapidOn: [6, 12], rapidOff: [0.4, 1.2] },
+      burst: { slow: [1.6, 3.2], rapid: [0.9, 1.6] },
+      switch: [0.5, 2.5],
+      barrel: { quick: ["GER"], water: ["UK", "SOV", "FIN"], change: [35, 60, 2.5, 4], cool: [45, 80, 3, 6] },
+      sweep: { share: 0.8, over: 0.3, every: [5, 9], arc: 0.15, laid: 0.1, turn: 0.7 },
+      lift: { rapid: 250, shift: 90, lift: 30, beyond: 35, mortar: 100, deep: 40 },
+      drop: 1.2,
+      duck: { lag: 0.6, for: [0.8, 2.2], raw: 1.4, vet: 0.7, gunner: [0.8, 0.45, 0.2] },
+      move: { after: [60, 120], most: [150, 260], shelled: 8, far: [8, 20], setup: 0.7 },
+      site: { reach: 22, apart: 12, shift: 6, hop: 6, height: 0.12, blind: -0.6, crest: 0.6, open: 0.3, trees: -0.8, near: 0.012 },
+      run: { every: [14, 28], rounds: [3, 5], at: [1.4, 2.4] },
+      watch: { keep: [16, 36], arc: [1, 1.8] },
+      glasses: { every: [7, 13], for: [3.5, 7] },
+      posts: { every: [9, 16], for: [2, 4] }
+    },
     sections: {
       _about: "Each model drawn as its section (release 2; the 3D ground battle scene for Brian, 21 November 2026, 18:29Z: 'the ground battle needs a lot more soldiers in it'). Looks only (ruling 217): the model stays the rules' one, its key man; the rest of his section stand round him and fall one by one as the block loses strength, the last of them when the rules lift the model. rifle: a rifle section by army (the default for the rest): men in all, its leader the key man, one automatic weapon (US the BAR, Germany the MG 42, Britain the Bren), its number twos and ammunition bearers (loaders), and its scouts out ahead on the move. officer: the headquarters (the officer and his runners); mg: a machine-gun section (the gun, two loaders, its leader); at: an anti-tank team (the launcher and its loader); sapper: an assault pioneer section; holder: a horse holder and the two with him; gun: a field gun's crew (beside the gun); hmg and mortar: a support team's ammunition bearers (beside the three the 3D game draws with each weapon). Each number counts the key man: a gun's counts the gun itself (8: the gun and seven crew), hmg's and mortar's the three drawn with the weapon (7: four bearers; 8: five). space: metres between the men of a section in its line; rows: metres between a block's front and second row of sections; files: men to a file on the march (more files for more men); ahead: metres a section's scouts go before it.",
       rifle: {
@@ -69126,6 +69163,15 @@
        * one with the enemy inside 120 m, as before.
        */
       __publicField(this, "hatches");
+      /**
+       * Support teams at work (release 2; Brian, 25 November 2026, 14:15Z: "There should be a machine gun teens that lay down
+       * suppressing fire, such as the German MG 42 and the US machine gun"; 15:36Z "yes to all"): each machine gun and mortar
+       * of a support team works as a crew, its gunner, number two, glasses and bearers each at his own part, and the team's
+       * weapons each in their own time: set up one by one where they see (or, mortars, where they are hidden), each machine
+       * gun sweeping its own share of the target in spells, faster as its own foot go in, shifting and lifting as they close;
+       * picked up in turn with the last covering, and moved one at a time when shelled. Looks only (DR.teamwork). Off unless asked.
+       */
+      __publicField(this, "teamwork");
       /** Squad life: the men taking up their block's phase this think (their lag just over), as on a fresh phase. */
       __publicField(this, "freshNow", /* @__PURE__ */ new Set());
       __publicField(this, "sup", new Suppression());
@@ -69138,6 +69184,7 @@
       this.platoons = !!opts.platoons;
       this.life = !!opts.life;
       this.hatches = !!opts.hatches;
+      this.teamwork = !!opts.teamwork;
       this.byBook = opts.book ?? (this.platoons || this.life);
       this.scale = opts.scale !== void 0 && Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : null;
       for (const u of b.units) {
@@ -70912,9 +70959,10 @@
           if (m.pose === "towed" && sq.phase === "battery") m.pose = "deployed";
           return;
         // A support team's crew sets its weapon up in the line, or down a moment on the march; a routing one crouches.
+        // (support teams at work: its gunner kneels by it while it is set up, then lies behind it: atWork)
         case "hmg":
         case "mortar":
-          m.pose = routed ? "cower" : sq.phase === "battery" ? "deployed" : "wait";
+          m.pose = routed ? "cower" : sq.phase === "battery" && !this.teamwork ? "deployed" : "wait";
           return;
         default: {
           m.until = Math.max(m.until, this.b.t + 1.5);
@@ -71051,6 +71099,11 @@
         }
         const i = count4.get(L3) ?? 0;
         count4.set(L3, i + 1);
+        if (this.teamwork && CREWED.has(L3.role) && this.crewMan(sq, m, L3, i, room2)) continue;
+        if (m.cj !== void 0 || m.lay !== void 0) {
+          m.cj = void 0;
+          m.lay = void 0;
+        }
         const [oa, ol] = L3.role === "gun" ? GUN_CREW[i % GUN_CREW.length] : L3.role === "officer" ? [[-2.5, -1.2], [2.2, -2.2], [0.6, -4]][i % 3] : L3.role === "holder" ? [i % 2 ? 3 : -3, -1] : CREWED.has(L3.role) ? [i % 2 ? 2 : -2, -4 - 2.5 * Math.floor(i / 2)] : L3.role === "at" ? i ? [-1.5, -3] : [1.3, -0.6] : ((o) => [o[0], o[1] - 3 * Math.floor(i / 3)])([[-1.6, -0.6], [1.5, -3.5], [-2, -5.5]][i % 3]);
         const moving = MOVING.has(L3.pose) && L3.v > 0;
         const lw = Math.hypot(L3.spot[0] - L3.x, L3.spot[1] - L3.y), la = moving && lw > 0 ? Math.min(lw, L3.v * 0.75) / lw : 0;
@@ -71142,7 +71195,7 @@
       const free2 = (x, y) => {
         const cx = Math.floor(x / SPACE.cell), cy = Math.floor(y / SPACE.cell);
         for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const q of room2.get((cx + i) * 65536 + cy + j) ?? []) {
-          const min = m.role === "crew" && q.m.role === "crew" && (m.sec ?? m.k) === (q.m.sec ?? q.m.k) ? SPACE.crew : SPACE.men;
+          const min = m.role === "crew" && q.m.role === "crew" && (m.sec ?? m.k) === (q.m.sec ?? q.m.k) ? SPACE.crew : m.cj === "two" && CREWED.has(q.m.role) && (m.sec ?? m.k) === q.m.k ? DR.teamwork.seat.near : SPACE.men;
           if (Math.hypot(q.x - x, q.y - y) < min) return false;
         }
         return true;
@@ -72953,6 +73006,10 @@
      * with the foot when they fire far. Shelled, the crews go down a moment.
      */
     teams(sq) {
+      if (this.teamwork) {
+        this.atWork(sq);
+        return;
+      }
       const u = sq.u, b = this.b, t = b.t, N = this.nums(u), dir = this.threatDir(sq), h = sq.heading, T = DR.teams, mg = u.team === "mg";
       const e = u.aim !== void 0 ? b.unit(u.aim) ?? null : u.engaged !== void 0 ? b.unit(u.engaged) ?? null : null;
       const crews = this.up(sq).filter((m) => CREWED.has(m.role));
@@ -73005,6 +73062,525 @@
         g2.aim = !e ? void 0 : ranging?.[0] === g2 ? ranging[1] : this.liftAim(sq, g2, e, mg ? "mg" : "mortar");
       });
       this.spotter(sq, e, !mg && firing && !!e && b.gap(u, e) > DR.ranges.fo);
+    }
+    // ---- Support teams at work (release 2, Drill.teamwork) --------------------------------------------------------------
+    /**
+     * Support teams at work (Drill.teamwork; DR.teamwork). Each weapon of a machine-gun or mortar team works with its crew.
+     * Standing, each is set up at a place of its own near its place in the line, a machine gun where it sees the enemy from
+     * cover (a bank, a wood's or the houses' edge, higher ground), a mortar behind a rise under open sky; its crew reach it
+     * and set it up in their own time, and it opens fire in its own moment. A machine gun fires in spells, each gun its own,
+     * one keeping on while another pauses to re-lay, changes its barrel or lets it cool; each sweeps its own share of the
+     * target, the shares crossing, faster as its own foot go in, pulled over to the target's far side as they close and
+     * lifted beyond it as they reach it (mgFire). A mortar's tubes fire their mission (ranging, the bracket, the salvos), each
+     * as its bomb goes down, lifting into the depth as its own foot close. Under fire one weapon at a time goes to another
+     * place while the others fire on (displace). Ordered on, each is picked up in its own moment, a machine gun firing on to
+     * cover the rest; in a rout they snatch them up and run (carry). Each of its crew at his own part: crewMan.
+     */
+    atWork(sq) {
+      const u = sq.u, b = this.b, t = b.t, C4 = DR.teamwork, mg = u.team === "mg";
+      const e = u.aim !== void 0 ? b.unit(u.aim) ?? null : u.engaged !== void 0 ? b.unit(u.engaged) ?? null : null;
+      const tw = sq.tw ?? (sq.tw = { guns: /* @__PURE__ */ new Map(), runs: 0 });
+      const guns2 = this.up(sq).filter((m) => CREWED.has(m.role));
+      for (const g2 of guns2) if (!tw.guns.has(g2)) tw.guns.set(g2, this.work(sq, g2));
+      const firing = u.engaged !== void 0 && !!e;
+      if (sq.phase === "limbered" || sq.phase === "flee" || sq.phase === "fallback") {
+        this.carry(sq, guns2, tw, e, firing);
+        this.spotter(sq, null, false);
+        return;
+      }
+      tw.go = void 0;
+      const dir = this.threatDir(sq), N = this.nums(u);
+      const W2 = (g2) => tw.guns.get(g2);
+      const seats = (g2) => guns2.filter((o) => o !== g2 && W2(o).at).map((o) => W2(o).at);
+      for (const g2 of guns2) {
+        const w = W2(g2);
+        w.pack = void 0;
+        w.pick = void 0;
+        const [a, l] = this.slot(sq, g2, "line"), s = toWorld(u, u.face, a, l);
+        const moved = !w.slot || Math.hypot(s[0] - w.slot[0], s[1] - w.slot[1]) > 12;
+        if (w.at && !moved) continue;
+        if (w.at && w.set <= t) {
+          if (w.resite === void 0) w.resite = t + C4.resite * roll(this.seed, u.id, g2.n, Math.floor(t), 241);
+          if (t < w.resite) continue;
+        }
+        w.resite = void 0;
+        w.slot = s;
+        const seat5 = this.siteOf(sq, g2, s, dir, seats(g2)) ?? s, here = [g2.x, g2.y];
+        const stay = Math.hypot(seat5[0] - g2.x, seat5[1] - g2.y) < C4.site.hop && !MOVING.has(g2.pose) && !seats(g2).some((q) => Math.hypot(q[0] - g2.x, q[1] - g2.y) < C4.site.apart);
+        if (stay && w.at && w.set <= t) {
+          w.at = here;
+          continue;
+        }
+        w.at = stay ? here : seat5;
+        w.set = Infinity;
+        w.shift = void 0;
+        w.run = void 0;
+      }
+      const ready = (g2) => {
+        const w = W2(g2);
+        return !!w.at && w.set <= t && !w.shift && Math.hypot(g2.x - w.at[0], g2.y - w.at[1]) <= 1.5;
+      };
+      const inSpell = (g2) => {
+        const w = W2(g2);
+        return ready(g2) && w.on && !(w.cool !== void 0 && t < w.cool);
+      };
+      const down = /* @__PURE__ */ new Map();
+      for (const g2 of guns2) down.set(g2, ready(g2) && this.crewDown(sq, g2, mg && inSpell(g2)));
+      const talking = (g2) => inSpell(g2) && !down.get(g2);
+      const f0 = e ? bearing2(u.x, u.y, e.x, e.y) : Math.atan2(dir[0], dir[1]), [rx, ry] = right(f0);
+      const order2 = [...guns2].sort((p, q) => (p.x - u.x) * rx + (p.y - u.y) * ry - ((q.x - u.x) * rx + (q.y - u.y) * ry) || p.k - q.k);
+      const near2 = e ? this.friendsAt(u, e) : null;
+      const up = guns2.filter((g2) => ready(g2) && !down.get(g2));
+      const ranging = !mg && firing && e ? this.mission(sq, up, e, BOOK2.mission.mortar, N) : void 0;
+      for (const g2 of guns2) {
+        const w = W2(g2), at4 = w.at;
+        g2.hidden = void 0;
+        if (Math.hypot(g2.x - at4[0], g2.y - at4[1]) > 1.5) {
+          if (g2.v === 0 || Math.hypot(g2.spot[0] - at4[0], g2.spot[1] - at4[1]) > 0.5) {
+            g2.spot = at4;
+            g2.slotAt = w.slot ?? at4;
+            g2.pose = "run";
+            g2.v = DR.teams.pace;
+            g2.until = t + 4;
+          }
+          g2.aim = void 0;
+          g2.lay = void 0;
+          g2.rapid = void 0;
+          continue;
+        }
+        g2.v = 0;
+        if (w.set === Infinity) {
+          const S3 = mg ? C4.setup.mg : C4.setup.mortar;
+          w.set = t + (S3[0] + (S3[1] - S3[0]) * roll(this.seed, u.id, g2.n, w.moves, 242)) * (w.shift ? C4.move.setup : 1);
+          w.shift = void 0;
+          w.from = w.set;
+          w.on = false;
+          w.spell = w.set + C4.open[0] + (C4.open[1] - C4.open[0]) * roll(this.seed, u.id, g2.n, w.moves, 243);
+        }
+        const lay3 = e ? bearing2(g2.x, g2.y, e.x, e.y) : Math.atan2(dir[0], dir[1]);
+        if (t < w.set) {
+          g2.pose = "wait";
+          g2.aim = void 0;
+          g2.lay = lay3;
+          g2.rapid = void 0;
+          continue;
+        }
+        if (mg) this.mgFire(sq, g2, w, e, firing, !!down.get(g2), order2, near2, guns2, talking, lay3);
+        else {
+          if (firing && e && g2.due !== void 0 && t >= g2.due && up.includes(g2)) {
+            g2.shot = t;
+            g2.pose = "fire";
+            g2.due = void 0;
+            w.fired++;
+            g2.aim = ranging?.[0] === g2 ? ranging[1] : this.bombAim(sq, g2, e, near2);
+          } else if (g2.pose !== "fire" || g2.shot === void 0 || t - g2.shot > C4.drop) {
+            const P = C4.posts, every = P.every[0] + (P.every[1] - P.every[0]) * roll(this.seed, u.id, g2.n, 287), at22 = t + every * roll(this.seed, u.id, g2.n, 288);
+            const win = Math.floor(at22 / every), len = P.for[0] + (P.for[1] - P.for[0]) * roll(this.seed, u.id, g2.n, win, 289);
+            g2.pose = firing && g2.due === void 0 && at22 - win * every < len ? "wait" : "deployed";
+          }
+          if (!firing) g2.aim = void 0;
+          g2.lay = lay3;
+        }
+        this.displace(sq, g2, w, guns2, dir, seats(g2), talking, firing);
+        if (w.run && (w.run.m.fell !== void 0 || !w.run.m.pr || w.run.m.cj !== "ammo")) w.run = void 0;
+        if (!w.run && !w.shift && w.fired >= w.next) {
+          const bearers = sq.men.filter((m) => m.cj === "ammo" && m.pr && this.stands(sq, m) && this.leadOf(sq, m) === g2);
+          if (bearers.length) {
+            const R2 = mg ? C4.run.every : C4.run.rounds;
+            w.run = { m: bearers[tw.runs++ % bearers.length], stage: "up", t1: t + 20 };
+            w.fired = 0;
+            w.next = R2[0] + (R2[1] - R2[0]) * roll(this.seed, u.id, g2.n, tw.runs, 244);
+          }
+        }
+      }
+      this.spotter(sq, e, !mg && firing && !!e && b.gap(u, e) > DR.ranges.fo);
+    }
+    /** A team's weapon's work as it is first seen (atWork): set up where it stands if its team stands, its own dice drawn. */
+    work(sq, g2) {
+      const u = sq.u, t = this.b.t, C4 = DR.teamwork, r = (i) => roll(this.seed, u.id, g2.n, i);
+      const lerp = (p, x) => p[0] + (p[1] - p[0]) * x;
+      const B3 = C4.barrel.quick.includes(this.armyKey(u.nat)) ? C4.barrel.change : C4.barrel.cool;
+      const still = sq.phase !== "flee" && g2.v === 0 && !MOVING.has(g2.pose);
+      const [a, l] = this.slot(sq, g2, "line");
+      return {
+        at: still ? [g2.x, g2.y] : void 0,
+        slot: still ? toWorld(u, u.face, a, l) : void 0,
+        set: still ? t : Infinity,
+        per: lerp(C4.sweep.every, r(260)),
+        ph: r(261),
+        on: false,
+        spell: t + lerp(C4.open, r(262)),
+        hot: 0,
+        limit: lerp(B3, r(263)),
+        from: t,
+        stay: lerp(C4.move.after, r(264)),
+        most: lerp(C4.move.most, r(265)),
+        moves: 0,
+        fired: 0,
+        next: lerp(g2.role === "hmg" ? C4.run.every : C4.run.rounds, r(266))
+      };
+    }
+    /** The army whose drawn weapons a block's are (DR.teamwork.seat.right): its nation's (the Commonwealth's Britain's), letters only. */
+    armyKey(nat) {
+      return this.armyOf(nat).replace(/[^A-Za-z].*$/, "");
+    }
+    /** The friendly foot block nearest block e within the teams' lift reach (DR.teamwork.lift), and how far it is from it. */
+    friendsAt(u, e) {
+      const L3 = DR.teamwork.lift;
+      let best = null, gap = Math.max(L3.rapid, L3.mortar);
+      for (const f of this.b.units) if (f.side === u.side && fighting(f) && FOOT_KINDS.includes(f.kind)) {
+        const d = this.b.gap(f, e);
+        if (d < gap) {
+          gap = d;
+          best = f;
+        }
+      }
+      return best ? { u: best, gap } : null;
+    }
+    /**
+     * A team's machine gun set up, this think (atWork): its spells of fire and pauses, one gun keeping on while another
+     * pauses; a new target taken up in its own moment; its barrel changed (the MG 34 and 42, its gunner up on his knees to
+     * help) or let cool (the other air-cooled guns; the Vickers and the Maxim never), never two of the team's at once; its
+     * sweep over its own share of the target, and its gunner's lay on the middle of it.
+     */
+    mgFire(sq, g2, w, e, firing, down, order2, near2, guns2, talking, lay3) {
+      const u = sq.u, t = this.b.t, C4 = DR.teamwork, army2 = this.armyKey(u.nat), quick = C4.barrel.quick.includes(army2);
+      if (!firing || !e) {
+        w.on = false;
+        w.spell = Math.max(w.spell, t + C4.open[0]);
+        g2.pose = "deployed";
+        g2.aim = void 0;
+        g2.lay = lay3;
+        g2.rapid = void 0;
+        return;
+      }
+      const rapid = !!near2 && near2.gap < C4.lift.rapid;
+      if (w.tgt !== e.id) {
+        if (w.tgt !== void 0) {
+          w.on = false;
+          w.spell = t + C4.switch[0] + (C4.switch[1] - C4.switch[0]) * roll(this.seed, u.id, g2.n, e.id, 245);
+        }
+        w.tgt = e.id;
+      }
+      if (w.cool !== void 0 && t >= w.cool) {
+        w.cool = void 0;
+        w.hot = 0;
+        const B3 = quick ? C4.barrel.change : C4.barrel.cool;
+        w.limit = B3[0] + (B3[1] - B3[0]) * roll(this.seed, u.id, g2.n, Math.floor(t), 263);
+      }
+      if (w.cool === void 0 && w.hot >= w.limit && !C4.barrel.water.includes(army2) && !guns2.some((o) => o !== g2 && sq.tw.guns.get(o).cool !== void 0)) {
+        const B3 = quick ? C4.barrel.change : C4.barrel.cool;
+        w.cool = t + B3[2] + (B3[3] - B3[2]) * roll(this.seed, u.id, g2.n, Math.floor(t), 246);
+        w.on = false;
+        w.spell = w.cool;
+      }
+      const cooling = w.cool !== void 0 && t < w.cool;
+      if (t >= w.spell && !cooling) {
+        const r = roll(this.seed, u.id, g2.n, Math.floor(t * 2), 247);
+        const [a0, a1] = rapid ? C4.spell.rapidOn : C4.spell.on, [b0, b1] = rapid ? C4.spell.rapidOff : C4.spell.off;
+        if (!w.on) {
+          w.on = true;
+          w.spell = t + a0 + (a1 - a0) * r;
+        } else if (guns2.length < 2 || guns2.some((o) => o !== g2 && talking(o))) {
+          w.on = false;
+          w.spell = t + b0 + (b1 - b0) * r;
+        } else w.spell = t + 1 + r;
+      }
+      const sw = this.sweepAim(sq, g2, w, e, Math.max(0, order2.indexOf(g2)), order2.length, near2);
+      const on = w.on && !cooling && !down && Math.abs(wrap(g2.face - sw.lay)) < DR.teamwork.sweep.laid;
+      if (on) {
+        w.hot += 0.5;
+        w.fired += 0.5;
+      }
+      g2.pose = on ? "fire" : cooling && quick ? "wait" : "deployed";
+      g2.aim = sw.aim;
+      g2.lay = sw.lay;
+      g2.rapid = on && rapid ? t + 1 : void 0;
+    }
+    /**
+     * Where a team's machine gun's fire falls on block e now, and the facing its gunner keeps (atWork): each gun its own
+     * share of the target's front, the shares crossing (the gun on the team's left, as it faces the enemy, on the target's
+     * right), the gun sweeping across its share and back in its own time, a little deeper or shallower each sweep; its
+     * gunner laid on the middle of its share (the tripod planted: the gun traverses on its mount). Its own foot within
+     * lift.shift of the target: the fire pulled in to half its width and over to its far side from them; within lift.lift,
+     * beyond its far side.
+     */
+    sweepAim(sq, g2, w, e, i, n, near2) {
+      const b = this.b, u = sq.u, t = b.t, S3 = DR.teamwork.sweep, L3 = DR.teamwork.lift, f = b.field;
+      const f0 = bearing2(u.x, u.y, e.x, e.y), [fx, fy] = fwd(f0), [rx, ry] = right(f0);
+      const span2 = Math.max(20, e.w) * S3.share, share = span2 / Math.max(1, n), s = Math.max(0, n - 1 - i);
+      const mid = ((s + 0.5) / Math.max(1, n) - 0.5) * span2, half = share * (0.5 + S3.over);
+      const cyc = t / w.per + w.ph, ph = cyc - Math.floor(cyc), tri = ph < 0.5 ? ph * 4 - 1 : 3 - ph * 4;
+      const deep = (roll(this.seed, u.id, g2.n, Math.floor(cyc), 248) - 0.5) * e.d * 0.4;
+      let ax = e.x + rx * (mid + half * tri) + fx * deep, ay = e.y + ry * (mid + half * tri) + fy * deep;
+      let mx = e.x + rx * mid, my = e.y + ry * mid;
+      if (near2 && near2.gap < L3.shift) {
+        const vx = e.x - near2.u.x, vy = e.y - near2.u.y, vl = Math.hypot(vx, vy) || 1, ux = vx / vl, uy = vy / vl;
+        const off3 = near2.gap < L3.lift ? Math.max(e.w, e.d) / 2 + L3.beyond : Math.max(e.w, e.d) * 0.3;
+        ax = e.x + (ax - e.x) * 0.5 + ux * off3;
+        ay = e.y + (ay - e.y) * 0.5 + uy * off3;
+        mx = e.x + (mx - e.x) * 0.5 + ux * off3;
+        my = e.y + (my - e.y) * 0.5 + uy * off3;
+      }
+      const lay3 = bearing2(g2.x, g2.y, mx, my), off2 = wrap(bearing2(g2.x, g2.y, ax, ay) - lay3);
+      if (Math.abs(off2) > S3.arc) {
+        const r = Math.hypot(ax - g2.x, ay - g2.y), [dx, dy] = fwd(lay3 + Math.sign(off2) * S3.arc);
+        ax = g2.x + dx * r;
+        ay = g2.y + dy * r;
+      }
+      return { aim: [clamp6(ax, 1, f.w - 1), clamp6(ay, 1, f.h - 1)], lay: lay3 };
+    }
+    /** Where a team's mortar's next bomb is laid on block e (atWork): anywhere in it, or past its far side from its own foot once they are within lift.mortar of it. */
+    bombAim(sq, g2, e, near2) {
+      const u = sq.u, t = this.b.t, L3 = DR.teamwork.lift, f = this.b.field;
+      let x = e.x + (roll(this.seed, u.id, g2.n, t * 10, 249) - 0.5) * e.w * 0.6, y = e.y + (roll(this.seed, u.id, g2.n, t * 10, 250) - 0.5) * e.d * 0.6;
+      if (near2 && near2.gap < L3.mortar) {
+        const vx = e.x - near2.u.x, vy = e.y - near2.u.y, vl = Math.hypot(vx, vy) || 1, deep = Math.max(e.w, e.d) / 2 + L3.deep;
+        x += vx / vl * deep;
+        y += vy / vl * deep;
+      }
+      return [clamp6(x, 1, f.w - 1), clamp6(y, 1, f.h - 1)];
+    }
+    /**
+     * The best place near p for a team's weapon (atWork): within reach of p inside its block's box, apart from the team's
+     * others ('taken'), on ground a man can lie on. A machine gun where it sees and is hidden: the shelter of a bank or a
+     * wood's or the houses' edge toward the enemy, ground higher than 60 m ahead, not deep in a wood or behind one. A mortar
+     * behind a rise, lower than the ground ahead, under open sky (never among trees or roofs that would burst its bombs).
+     * From: moving off a place it fired from, a new one between move.far metres off it (never a hop), or none where there is none.
+     */
+    siteOf(sq, g2, p, dir, taken2, from2) {
+      const f = this.b.field, u = sq.u, S3 = DR.teamwork.site, F = DR.teamwork.move.far, mg = g2.role === "hmg";
+      const rings = from2 ? [F[0], (F[0] + F[1]) / 2, F[1]] : [S3.reach * 0.5, S3.reach];
+      const cand = from2 ? [] : [p];
+      const a0 = roll(this.seed, u.id, g2.n, from2 ? Math.floor(this.b.t) : 0, 239) * Math.PI * 2;
+      rings.forEach((r, j) => {
+        for (let i = 0; i < 8; i++) {
+          const a = a0 + i * Math.PI / 4 + (j % 2 ? Math.PI / 8 : 0);
+          cand.push([p[0] + Math.sin(a) * r, p[1] + Math.cos(a) * r]);
+        }
+      });
+      let best = null, score = -Infinity;
+      for (const [x0, y0] of cand) {
+        const x = clamp6(x0, 3, f.w - 3), y = clamp6(y0, 3, f.h - 3);
+        const [qx, qy] = this.leash(sq, [x, y], -2);
+        if (qx !== x || qy !== y) continue;
+        const gr = groundOf3(f, x, y);
+        if (LAND2.pace.foot[gr] <= 0 || gr === "water" || gr === "blown" || gr === "marsh") continue;
+        if (taken2.some(([tx, ty]) => Math.hypot(tx - x, ty - y) < S3.apart)) continue;
+        if (from2 && Math.hypot(from2[0] - x, from2[1] - y) < S3.shift) continue;
+        const h0 = heightOf(f, x, y), ahead2 = heightOf(f, x + dir[0] * 60, y + dir[1] * 60), fore = groundOf3(f, x + dir[0] * 15, y + dir[1] * 15);
+        const c = this.shelter(x, y, gr, dir, true, false);
+        let s = mg ? c.v + S3.height * clamp6(h0 - ahead2, -5, 5) + (CLOSE3.includes(fore) ? S3.blind : 0) : (c.kind === "crest" ? S3.crest : 0) + S3.height * clamp6(ahead2 - h0, -5, 5) + (CLOSE3.includes(gr) ? S3.trees : 0) + (gr === "open" || gr === "field" || gr === "park" ? S3.open : 0);
+        s -= S3.near * Math.hypot(x - p[0], y - p[1]);
+        if (s > score) {
+          score = s;
+          best = [x, y];
+        }
+      }
+      return best;
+    }
+    /**
+     * A team's weapon set up and firing (atWork) moves to another place: after it has fired from one place its own spell
+     * while shelled lately or under fire (a machine gun after its own longer spell in any case), one weapon of the team at
+     * a time, and a machine gun only while another of the team fires on. Its crew carry it there at a run and set it up
+     * again (a little quicker).
+     */
+    displace(sq, g2, w, guns2, dir, taken2, talking, firing) {
+      const u = sq.u, t = this.b.t, C4 = DR.teamwork, mg = g2.role === "hmg", W2 = sq.tw.guns;
+      if (!firing || !w.at || w.set > t || w.shift) return;
+      const shelled = t - sq.shelledAt < C4.move.shelled, hurt2 = sq.harm > DR.pin.harm;
+      if (!(t - w.from > w.stay && (shelled || hurt2) || mg && t - w.from > w.most)) return;
+      if (guns2.some((o) => o !== g2 && (W2.get(o).shift || W2.get(o).set > t))) return;
+      if (mg && guns2.length > 1 && !guns2.some((o) => o !== g2 && talking(o))) return;
+      w.moves++;
+      const r = (i) => roll(this.seed, u.id, g2.n, w.moves, i);
+      w.stay = C4.move.after[0] + (C4.move.after[1] - C4.move.after[0]) * r(251);
+      w.most = C4.move.most[0] + (C4.move.most[1] - C4.move.most[0]) * r(252);
+      w.from = t;
+      const seat5 = this.siteOf(sq, g2, w.at, dir, taken2, w.at);
+      if (!seat5) return;
+      w.at = seat5;
+      w.set = Infinity;
+      w.shift = true;
+      w.on = false;
+      w.run = void 0;
+      g2.spot = seat5;
+      g2.pose = "run";
+      g2.v = DR.teams.pace;
+      g2.aim = void 0;
+      g2.lay = void 0;
+      g2.rapid = void 0;
+      g2.until = t + 4;
+    }
+    /**
+     * A support team ordered on (atWork): each weapon picked up in its own moment over the first seconds (its gunner kneeling
+     * by it to take it down), a machine gun firing then the last of the team, covering the rest a few seconds more while its
+     * block is near; then carried in file behind the block's middle, each crew a little to one side or the other. In a rout
+     * they snatch them up and run.
+     */
+    carry(sq, guns2, tw, e, firing) {
+      const u = sq.u, t = this.b.t, C4 = DR.teamwork, T = DR.teams, h = sq.heading, flee = sq.phase === "flee", mg = u.team === "mg";
+      if (tw.go === void 0) {
+        tw.go = t;
+        const order2 = [...guns2].sort((p, q) => roll(this.seed, u.id, p.n, Math.floor(t), 253) - roll(this.seed, u.id, q.n, Math.floor(t), 253));
+        order2.forEach((g2, i) => {
+          const w = tw.guns.get(g2), r = roll(this.seed, u.id, g2.n, Math.floor(t), 254);
+          const covers2 = !flee && mg && firing && order2.length > 1 && i === order2.length - 1 && w.set <= t;
+          w.pack = t + (flee ? C4.flee * r : covers2 ? C4.cover[0] + (C4.cover[1] - C4.cover[0]) * r : C4.pack[0] + (C4.pack[1] - C4.pack[0]) * (i + r) / order2.length);
+          w.pick = void 0;
+        });
+      }
+      guns2.forEach((g2, i) => {
+        const w = tw.guns.get(g2);
+        const s = toWorld(u, h, (i % 2 ? 1 : -1) * (1.5 + 1.5 * roll(this.seed, u.id, g2.n, 255)), -4 - i * T.file);
+        const setUp = !!w.at && w.set <= t && Math.hypot(g2.x - w.at[0], g2.y - w.at[1]) <= 1.5 && g2.v === 0;
+        const [la, ll] = this.slot(sq, g2, "line"), ls = toWorld(u, u.face, la, ll), close3 = Math.hypot(ls[0] - g2.x, ls[1] - g2.y) < C4.lag;
+        if (setUp && close3 && w.pack !== void 0 && t < w.pack) {
+          if (mg && firing && e && !flee) {
+            const sw = this.sweepAim(sq, g2, w, e, 0, 1, null);
+            g2.pose = "fire";
+            g2.aim = sw.aim;
+            g2.lay = sw.lay;
+          } else {
+            g2.pose = "deployed";
+            g2.aim = void 0;
+          }
+          g2.rapid = void 0;
+          return;
+        }
+        if (setUp && close3 && !flee) {
+          w.pick ?? (w.pick = t + C4.pick[0] + (C4.pick[1] - C4.pick[0]) * roll(this.seed, u.id, g2.n, Math.floor(tw.go), 256));
+          if (t < w.pick) {
+            g2.pose = "wait";
+            g2.aim = void 0;
+            g2.rapid = void 0;
+            return;
+          }
+        }
+        w.at = void 0;
+        w.slot = void 0;
+        w.set = Infinity;
+        w.shift = void 0;
+        w.resite = void 0;
+        w.run = void 0;
+        w.on = false;
+        g2.aim = void 0;
+        g2.lay = void 0;
+        g2.hidden = void 0;
+        g2.rapid = void 0;
+        this.follow(sq, g2, s, flee ? "flee" : "walk");
+      });
+    }
+    /**
+     * Whether a man of a team at work is down under a burst near it now (atWork, crewMan): at each new burst (the block's
+     * shelledAt) he goes down after his own moment for his own time (raw men longer, veterans less); a machine gun's gunner
+     * firing goes down only a share of the time by his team's experience (he keeps the gun going).
+     */
+    crewDown(sq, m, gunner) {
+      const u = sq.u, t = this.b.t, D2 = DR.teamwork.duck, at4 = sq.shelledAt;
+      if (t - at4 < DR.pin.shelled && m.dk !== at4) {
+        m.dk = at4;
+        const band = this.band(u), z = Math.round(at4 * 10);
+        if (!gunner || roll(this.seed, u.id, m.n, z, 271) < D2.gunner[band]) {
+          const lag = D2.lag * roll(this.seed, u.id, m.n, z, 272), len = (D2.for[0] + (D2.for[1] - D2.for[0]) * roll(this.seed, u.id, m.n, z, 273)) * (band === 0 ? D2.raw : band === 2 ? D2.vet : 1);
+          const still = !!m.dn && t < m.dn[1];
+          m.dn = [still ? Math.min(m.dn[0], at4 + lag) : at4 + lag, Math.max(still ? m.dn[1] : 0, at4 + lag + len)];
+        }
+      }
+      return !!m.dn && t >= m.dn[0] && t < m.dn[1];
+    }
+    /**
+     * A man of a team's weapon at work, its gunner L set up at its place (pairs, Drill.teamwork): each at his own part. Its
+     * number two (the first of them) at the belt or the tube (DR.teamwork.seat, by army: the feed side), serving it, a
+     * mortar's at its muzzle as each bomb goes; its second man lying off its other side, watching the fall of its fire
+     * through his glasses in spells of his own; its bearers lying in cover behind (a mortar's kneeling at the bombs), one
+     * of them watching a flank in turn, and each in turn bringing ammunition up to the gun (bent low under fire) and
+     * crawling back. Under a burst each goes down in his own moment for his own time. False where L is not set up there
+     * (on the move pairs keeps them by it).
+     */
+    crewMan(sq, m, L3, i, room2) {
+      const w = sq.tw?.guns.get(L3);
+      if (!w || !w.at || sq.phase !== "battery" || L3.v > 0 || MOVING.has(L3.pose) || Math.hypot(L3.x - w.at[0], L3.y - w.at[1]) > 1.5) return false;
+      const u = sq.u, t = this.b.t, C4 = DR.teamwork, mg = L3.role === "hmg";
+      const e = u.engaged !== void 0 ? this.b.unit(u.engaged) ?? null : null, fight2 = !!e;
+      const feed = C4.seat.right.includes(this.armyKey(u.nat)) ? 1 : -1, face = L3.lay ?? L3.face;
+      m.cj = i === 0 ? "two" : i === 1 ? "nco" : "ammo";
+      const k = i - 2, A = mg ? C4.ammo.mg : C4.ammo.mortar;
+      const two = mg ? [feed * C4.seat.mg[0], C4.seat.mg[1]] : [C4.seat.mortar[0], C4.seat.mortar[1]];
+      const own = m.cj === "two" ? two : m.cj === "nco" ? mg ? [-feed * C4.nco.mg[0], C4.nco.mg[1]] : [C4.nco.mortar[0], C4.nco.mortar[1]] : [(k % 2 ? feed : -feed) * A[0] * (1 + 0.3 * Math.floor(k / 2)) + m.jx * 0.15, A[1] - Math.floor(k / 2) * A[2] + m.jy * 0.15];
+      const run = w.run?.m === m ? w.run : void 0;
+      if (run && run.stage === "up" && t > run.t1) run.stage = "back";
+      const o = run && run.stage !== "back" ? [two[0] + (mg ? feed : 1) * 0.8, two[1] - 0.9] : own;
+      let p = this.leash(sq, toWorld(L3, face, o[0], o[1]), -4);
+      if (room2) {
+        p = this.leash(sq, this.clear(room2, sq, m, p), -4);
+        this.bookRoom(room2, m, p);
+      }
+      m.spot = p;
+      m.cover = L3.cover;
+      m.until = t + 0.5;
+      m.hidden = void 0;
+      m.aim = void 0;
+      const d = Math.hypot(p[0] - m.x, p[1] - m.y);
+      const under = t - sq.shelledAt < C4.move.shelled || sq.harm > DR.pin.harm, down = this.crewDown(sq, m, false);
+      if (run) {
+        if (run.stage === "up") {
+          if (d > 0.45) {
+            m.pose = under ? "creep" : "run";
+            m.v = under ? 2.5 : 4.5;
+            m.lay = void 0;
+            return true;
+          }
+          run.stage = "at";
+          run.t1 = t + C4.run.at[0] + (C4.run.at[1] - C4.run.at[0]) * roll(this.seed, u.id, m.n, Math.floor(t), 281);
+        }
+        if (run.stage === "at") {
+          m.v = 0;
+          m.pose = "wait";
+          m.lay = face;
+          if (t >= run.t1) run.stage = "back";
+          return true;
+        }
+        if (d > 0.45) {
+          m.pose = under ? "crawl" : "creep";
+          m.v = under ? 1.4 : 2.5;
+          m.lay = void 0;
+          return true;
+        }
+        w.run = void 0;
+      }
+      if (d > 0.45) {
+        const far = d > 8;
+        m.pose = far ? "run" : down || under ? "crawl" : "creep";
+        m.v = far ? 4.5 : m.pose === "crawl" ? 1.4 : 2.5;
+        m.lay = void 0;
+        return true;
+      }
+      m.v = 0;
+      let pose, lay3 = face + (roll(this.seed, u.id, m.n, 283) - 0.5) * 0.6;
+      if (m.cj === "two") {
+        pose = down ? "hide" : !mg && L3.shot !== void 0 && t - L3.shot < C4.drop ? "fire" : "deployed";
+        lay3 = face;
+      } else if (m.cj === "nco") {
+        const G5 = C4.glasses, every = G5.every[0] + (G5.every[1] - G5.every[0]) * roll(this.seed, u.id, m.n, 284), at4 = t + every * roll(this.seed, u.id, m.n, 285);
+        const win = Math.floor(at4 / every), len = G5.for[0] + (G5.for[1] - G5.for[0]) * roll(this.seed, u.id, m.n, win, 286);
+        pose = down ? "cower" : fight2 && at4 - win * every < len ? "observe" : under ? "hide" : "wait";
+        if (pose === "observe" && e) {
+          m.aim = [e.x, e.y];
+          lay3 = void 0;
+        }
+      } else {
+        const nb = sq.men.filter((x) => x.pr && x.cj === "ammo" && this.stands(sq, x) && this.leadOf(sq, x) === L3).length;
+        const K2 = C4.watch.keep, keep2 = K2[0] + (K2[1] - K2[0]) * roll(this.seed, u.id, L3.n, 291), win = Math.floor((t + keep2 * roll(this.seed, u.id, L3.n, 292)) / keep2);
+        const watch2 = nb > 0 && k === win % Math.max(1, nb) && !down && !under;
+        const bombs = !mg && nb > 1 && k === (win + 1) % nb;
+        pose = down ? "cower" : watch2 || bombs && !under ? "wait" : "hide";
+        if (watch2) lay3 = face + (win % 2 ? 1 : -1) * (C4.watch.arc[0] + (C4.watch.arc[1] - C4.watch.arc[0]) * roll(this.seed, u.id, L3.n, win, 293));
+        else if (bombs) lay3 = bearing2(m.x, m.y, L3.x, L3.y);
+      }
+      m.pose = pose;
+      m.lay = lay3;
+      return true;
     }
     /**
      * A battery's or a mortar team's mission at block e (the drill book, tactics.ts missionStep): steps it, sets each
@@ -73088,7 +73664,7 @@
         sq.foOn = e.id;
         sq.foAt = [base.x, base.y];
       }
-      if (this.byBook && sq.ms && sq.ms.on === e.id && sq.fo[1].call !== sq.ms.call) {
+      if ((this.byBook || this.teamwork && !!sq.u.team) && sq.ms && sq.ms.on === e.id && sq.fo[1].call !== sq.ms.call) {
         sq.fo[1].call = sq.ms.call;
         sq.fo[1].callAt = [e.x, e.y];
       }
@@ -73211,7 +73787,10 @@
         } else {
           let want;
           let turn2 = rate2;
-          if (m.aim) want = bearing2(m.x, m.y, m.aim[0], m.aim[1]);
+          if (m.lay !== void 0) {
+            want = m.lay;
+            if (CREWED.has(m.role)) turn2 = Math.min(rate2, DR.teamwork.sweep.turn * DT);
+          } else if (m.aim) want = bearing2(m.x, m.y, m.aim[0], m.aim[1]);
           else if (m.v === 0 && fighting(u)) {
             if (e === void 0) e = this.threat(u);
             if (e) want = bearing2(m.x, m.y, e.x, e.y);
@@ -73366,8 +73945,9 @@
         }
         const hmg = m.role === "hmg" && m.pose === "fire", coax = m.role === "tank" && !!m.coax && m.pose !== "fire";
         if (m.aim && (hmg || coax || SMALL_ARMS.has(m.pose) && m.role !== "at" && !VEHICLE.has(m.role))) {
-          const w = m.role === "mg" || hmg || coax ? "mg" : "rifle", [lo, hi] = hmg ? DR.teams.hmg.burst : R2.smallArms[w];
-          const k = (coax ? 2 : 1) * (m.rapid !== void 0 && t < m.rapid ? BOOK2.rapid : 1);
+          const tw = hmg && this.teamwork, quick = m.rapid !== void 0 && t < m.rapid;
+          const w = m.role === "mg" || hmg || coax ? "mg" : "rifle", [lo, hi] = tw ? DR.teamwork.burst[quick ? "rapid" : "slow"] : hmg ? DR.teams.hmg.burst : R2.smallArms[w];
+          const k = tw ? 1 : (coax ? 2 : 1) * (quick ? BOOK2.rapid : 1);
           if (m.burst === void 0) m.burst = t + k * hi * roll(this.seed, u.id, m.n, t * 10, 41);
           else if (t >= m.burst) {
             m.burst = t + k * (lo + (hi - lo) * roll(this.seed, u.id, m.n, t * 10, 42));
