@@ -13624,6 +13624,24 @@ void ACampaignPlayerController::OrderTownBuilding(const FString& Line)
 	Notify(Note.IsEmpty() ? FString(TEXT("That cannot be built now.")) : Note, 5.0);
 }
 
+void ACampaignPlayerController::ActOnTown(const FString& Act)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || TownBar.Region == INDEX_NONE)
+	{
+		return;
+	}
+	FString Note;
+	const int32 Where = TownBar.Region;
+	if (Session->Act(Act, Where, Note))
+	{
+		CampaignSounds::Play(this, TEXT("stamp"), 0.5f);
+		TownBar.Picked = INDEX_NONE;
+	}
+	RefreshRegionPanel(Where);
+	Notify(Note.IsEmpty() ? FString(TEXT("That cannot be queued now.")) : Note, 5.0);
+}
+
 void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 {
 	THEATER_SPEED_SCOPE(RefreshRegionPanel);
@@ -13831,6 +13849,8 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 				TownBar.bMine = Province.bPlotsMine;
 				TownBar.Plots = Province.TownPlots;
 				TownBar.Offers = Province.TownOffers;
+				TownBar.Best = Province.TownBest;
+				TownBar.Queued = Province.TownQueued;
 				TownBar.Title = FText::FromString(Province.Town.IsEmpty() ? Region.Name : Province.Town);
 				TownBar.Sub = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d building plot%s, %s"),
 					Province.TownKind == TEXT("capital") ? TEXT("The capital") : Province.TownKind == TEXT("city") ? TEXT("A city") : Province.TownKind == TEXT("town") ? TEXT("A town") : TEXT("A village"),

@@ -3420,8 +3420,12 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 					Entry->TryGetNumberField(TEXT("has"), Offer.Has);
 					Entry->TryGetNumberField(TEXT("cost"), Offer.Cost);
 					Entry->TryGetNumberField(TEXT("months"), Offer.Months);
+					Entry->TryGetStringField(TEXT("queue"), Offer.QueueAct); // (release 2, a queue for a town)
+					Entry->TryGetStringField(TEXT("queueLabel"), Offer.QueueLabel);
 				}
 			}
+			(*Plots)->TryGetStringField(TEXT("best"), Info.TownBest); // (release 2, build from the map)
+			(*Plots)->TryGetStringField(TEXT("queued"), Info.TownQueued);
 		}
 	}
 	Object->TryGetStringField(TEXT("raiseNote"), Info.Note);

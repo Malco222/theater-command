@@ -344,3 +344,29 @@ describe('the board and the town plan', () => {
     expect(chip!.tip).toMatch(/waits for [\d,]+ more\./);
   });
 });
+
+describe('build from the map (the province panel)', () => {
+  interface Plots { best: string; queued: string; offers: { line: string; why: string; queue: string; queueLabel: string }[] }
+  const plotsOf = (region: number): Plots => (TC().province(region) as { plots: Plots }).plots;
+
+  it('names the staff\'s pick for the town, and QUEUE presses only with the queue on and BUILD shut', () => {
+    TC().start({ human: 'GER', seed: 3, view: 'grand' });
+    const t = board().towns.find((x) => x.state === 'ready')!;
+    let p = plotsOf(t.region);
+    expect(p.best).not.toBe('');
+    expect(p.offers.find((o) => o.line === p.best)!.why).toBe('');
+    expect(p.offers.every((o) => o.queue === '' && o.queueLabel === '')).toBe(true);
+    expect(p.queued).toBe('');
+    expect(act(`civic:${t.region}:${p.best}`).ok).toBe(true);
+    // Off: nothing to queue, and the pick is gone with the builders busy.
+    p = plotsOf(t.region);
+    expect(p.offers.every((o) => o.queue === '')).toBe(true);
+    act('townqueuerule:on');
+    p = plotsOf(t.region);
+    const next = p.offers.find((o) => o.line === p.best)!;
+    expect(next.queue).toBe(`queue:${t.region}:${p.best}`);
+    expect(next.queueLabel).not.toBe('');
+    expect(act(next.queue).ok).toBe(true);
+    expect(plotsOf(t.region).queued).toMatch(/^Queued: .+\. Goes up after the .+\.$/);
+  });
+});

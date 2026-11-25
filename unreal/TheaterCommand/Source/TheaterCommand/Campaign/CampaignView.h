@@ -2103,6 +2103,9 @@ struct FTownOffer
 	int32 No = INDEX_NONE;
 	FString Name, Label, Effect, Blurb, Why;
 	int32 Level = 0, Has = 0, Cost = 0, Months = 0;
+	// (Release 2, a queue for a town) Where BUILD cannot be pressed for the builders or the money: the press that queues
+	// the line's next level, and that level's name. Empty with the queue switched off, or where nothing can be queued.
+	FString QueueAct, QueueLabel;
 };
 
 struct FProvinceInfo
@@ -2130,6 +2133,8 @@ struct FProvinceInfo
 	// The same as things to draw.
 	TArray<FTownPlot> TownPlots;
 	TArray<FTownOffer> TownOffers;
+	// (Release 2, build from the map) The line the staff would put up here next, and what is queued here, in a line.
+	FString TownBest, TownQueued;
 	// The town as a fortress, and how its siege stands (the grand campaign): who stands round it, and plain lines.
 	FString SiegeBy;
 	bool bSiegeOwn = false; // the town is the player's own (a town of his besieged: its head is the one in red)

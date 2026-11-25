@@ -4124,13 +4124,35 @@ function province(id: number) {
       const t = townBuildings(s, r.id);
       if (!t) return null;
       const lineNo = (id: string | null): number => (id ? ['market', 'farm', 'school', 'camp', 'hospital', 'hall'].indexOf(id) : -1);
+      // (Release 2, townqueue.ts) Where BUILD cannot be pressed for the builders or the money, the press that queues the
+      // line's next level instead, and that level's name; nothing with the switch off or outside his month.
+      const queueOf_ = (line: string): { queue: string; queueLabel: string } => {
+        const me = t.mine ? s.human : null;
+        if (!me || !humanUp(s) || onEve(s) || whyNotQueue(s, me, r.id, line) !== null) return { queue: '', queueLabel: '' };
+        return { queue: `queue:${r.id}:${line}`, queueLabel: civicLine(line)?.levels[nextQueued(s, me, r.id, line) - 1] ?? '' };
+      };
       return {
         town: t.town, mine: t.mine, free: t.free, can: t.offers.filter((o) => o.why === null).length,
         list: t.plots.map((p) => (p.line ? `${p.name}: ${p.level > 0 ? p.label : 'going up'}${p.building && p.level > 0 ? ' (next level going up)' : ''}` : 'Free plot')),
         // The same as things to draw: every plot with what stands on it, and every line that could be built or raised.
         size: t.size,
         plots: t.plots.map((p) => ({ line: p.line ?? '', no: lineNo(p.line), name: p.line ? p.name : 'Free plot', label: p.line ? p.label : '', level: p.level, building: p.building, due: p.building && p.due >= 0 ? turnToDate(p.due).label : '', does: p.does })),
-        offers: t.offers.map((o) => ({ line: o.line, no: lineNo(o.line), name: o.name, label: o.label, level: o.level, has: o.has, cost: shown(o.cost), months: o.months, effect: o.effect, blurb: o.blurb, why: !humanUp(s) || onEve(s) ? 'It is not your month.' : o.why ?? '' })),
+        offers: t.offers.map((o) => ({ line: o.line, no: lineNo(o.line), name: o.name, label: o.label, level: o.level, has: o.has, cost: shown(o.cost), months: o.months, effect: o.effect, blurb: o.blurb, why: !humanUp(s) || onEve(s) ? 'It is not your month.' : o.why ?? '', ...queueOf_(o.line) })),
+        // (Release 2, build from the map: the UI director's fix 5) The building the staff would put up here next (the
+        // board's pick, civicAdvice), so the province panel can offer it in one press; and what is queued here, in a line.
+        best: (() => {
+          if (!t.mine || !s.human) return '';
+          const rank = civicAdvice(s, s.human).lines;
+          const open = t.offers.filter((o) => o.why === null || o.poor || queueOf_(o.line).queue).sort((a, b) => rank.indexOf(a.line) - rank.indexOf(b.line));
+          return open[0]?.line ?? '';
+        })(),
+        queued: (() => {
+          const q = t.mine && s.human && townQueueOn(s) ? queuedAt(s, s.human, r.id) : [];
+          if (!q.length) return '';
+          const head = queueHeads(s, s.human!).find((x) => x.q.region === r.id);
+          const wait = !head ? '' : head.after ? ` Goes up after the ${head.after}.` : head.short > 0 ? ` Waits for ${head.short.toLocaleString('en-US')} more.` : ' Goes up at the opening of your next month.';
+          return `Queued: ${q.map((x) => (civicLine(x.line)?.levels[x.level - 1] ?? x.line).toLowerCase()).join(', then ')}.${wait}`;
+        })(),
       };
     })(),
     // A fallen country's capital: whether it can come back, and whether the player taking this place would free it.

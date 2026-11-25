@@ -17567,7 +17567,7 @@ namespace
 				Spots = &Street->Spots;
 			}
 			const float CentreX = Spots && Spots->Num() > 0 ? static_cast<float>((*Spots)[0].Foot.X) : 912.0f;
-			return SNew(SBox).HeightOverride(64.0f)
+			TSharedRef<SWidget> Way = SNew(SBox).HeightOverride(64.0f)
 				[
 					SNew(SButton).ButtonStyle(&Look.Town).ContentPadding(FMargin(1.0f, 1.0f, 12.0f, 1.0f)).IsFocusable(false)
 					.ToolTipText(FText::FromString(TEXT("The town: its street and its building plots, what stands on each and what could go up on it.")))
@@ -17584,6 +17584,62 @@ namespace
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(TEXT("OPEN"))).Font(SmallCaps()).ColorAndOpacity(BrightBrass)]
 					]
 				];
+			// (Release 2, build from the map: the UI director's fix 5) For the player already looking at his town, the
+			// building his staff would put up there next, in one press under the way in: BUILD where it can go up now,
+			// QUEUE where the builders are at work or the money is short (with the queue switched on), and the reason
+			// where neither can be pressed. What is queued there reads under it.
+			const FTownOffer* Pick = Bar.bMine && !Bar.Best.IsEmpty() ? Bar.Offers.FindByPredicate([&Bar](const FTownOffer& Offer) { return Offer.Line == Bar.Best; }) : nullptr;
+			if (!Pick && Bar.Queued.IsEmpty())
+			{
+				return Way;
+			}
+			TSharedRef<SVerticalBox> Whole = SNew(SVerticalBox) + SVerticalBox::Slot().AutoHeight()[Way];
+			if (Pick)
+			{
+				const bool bBuild = Pick->Why.IsEmpty(), bQueue = !bBuild && !Pick->QueueAct.IsEmpty();
+				const FString Label = bQueue && !Pick->QueueLabel.IsEmpty() ? Pick->QueueLabel : Pick->Label;
+				const FString Tip = bBuild ? FString::Printf(TEXT("%s: %s, ready in %d month%s. %s"), *Label, *FText::AsNumber(Pick->Cost).ToString(), Pick->Months, Pick->Months == 1 ? TEXT("") : TEXT("s"), *Pick->Effect)
+					: bQueue ? FString::Printf(TEXT("%s, queued here: ordered for you at the opening of a month once the builders are free and the treasury can pay, at that day's price."), *Label)
+					: Pick->Why;
+				Whole->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+					[
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()[SNew(STextBlock).Text(FText::FromString(TEXT("YOUR STAFF WOULD BUILD"))).Font(SmallCaps()).ColorAndOpacity(Brass)]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s"), *Label, *FText::AsNumber(Pick->Cost).ToString()))).Font(Serif(TEXT("Regular"), 12.0f)).ColorAndOpacity(bBuild || bQueue ? Cream : Muted)
+						]
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(SButton).ButtonStyle(bBuild || bQueue ? &Look.Build : &Look.Quiet).ContentPadding(FMargin(14.0f, 6.0f)).IsFocusable(false)
+						.ToolTipText(FText::FromString(Tip))
+						.OnClicked_Lambda([this, Line = Pick->Line, Act = Pick->QueueAct, bBuild, bQueue, Why = Pick->Why]()
+						{
+							if (Controller.IsValid())
+							{
+								// (one that cannot be ordered or queued can still be pressed, and says why)
+								if (bBuild) { Controller->OrderTownBuilding(Line); } else if (bQueue) { Controller->ActOnTown(Act); } else { Controller->SayWhy(Why); }
+							}
+							return FReply::Handled();
+						})
+						[
+							SNew(STextBlock).Text(FText::FromString(bBuild || !bQueue ? TEXT("BUILD") : TEXT("QUEUE"))).Font(Typed(9.75f, true, 40)).ColorAndOpacity(bBuild || bQueue ? FLinearColor(FColor::FromHex(TEXT("1E1608"))) : Faint)
+						]
+					]
+				];
+			}
+			if (!Bar.Queued.IsEmpty())
+			{
+				Whole->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Bar.Queued)).Font(Serif(TEXT("Italic"), 10.5f)).ColorAndOpacity(Muted).AutoWrapText(true)
+				];
+			}
+			return Whole;
 		}
 
 		/**
@@ -18015,7 +18071,10 @@ namespace
 						+ SHorizontalBox::Slot().FillWidth(1.0f)[SNew(STextBlock).Text(FText::FromString(Chosen->Why)).Font(Typed(10.5f)).ColorAndOpacity(Muted).AutoWrapText(true)]
 					];
 				}
-				const FString Verb = (Chosen->Level <= 1 ? FString(TEXT("BUILD THE ")) : FString(TEXT("RAISE TO "))) + Chosen->Label.ToUpper();
+				// (Release 2, a queue for a town) Where BUILD is shut for the builders or the money, the button queues it instead.
+				const bool bQueue = !bCan && !Chosen->QueueAct.IsEmpty();
+				const FString Verb = bQueue ? TEXT("QUEUE THE ") + (Chosen->QueueLabel.IsEmpty() ? Chosen->Label : Chosen->QueueLabel).ToUpper()
+					: (Chosen->Level <= 1 ? FString(TEXT("BUILD THE ")) : FString(TEXT("RAISE TO "))) + Chosen->Label.ToUpper();
 				Detail->AddSlot().FillHeight(1.0f)[SNew(SSpacer)];
 				Detail->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
 				[
@@ -18025,19 +18084,21 @@ namespace
 					[
 						SNew(SBox).HeightOverride(40.0f)
 						[
-							SNew(SButton).ButtonStyle(bCan ? &Look.Build : &Look.Quiet).ContentPadding(FMargin(18.0f, 0.0f)).VAlign(VAlign_Center).IsFocusable(false)
-							.ToolTipText(FText::FromString(bCan ? FString::Printf(TEXT("Order it: %s, ready in %d month%s."), *FText::AsNumber(Chosen->Cost).ToString(), Chosen->Months, Chosen->Months == 1 ? TEXT("") : TEXT("s")) : Chosen->Why))
-							.OnClicked_Lambda([this, Line = Chosen->Line, bCan, Why = Chosen->Why]()
+							SNew(SButton).ButtonStyle(bCan || bQueue ? &Look.Build : &Look.Quiet).ContentPadding(FMargin(18.0f, 0.0f)).VAlign(VAlign_Center).IsFocusable(false)
+							.ToolTipText(FText::FromString(bCan ? FString::Printf(TEXT("Order it: %s, ready in %d month%s."), *FText::AsNumber(Chosen->Cost).ToString(), Chosen->Months, Chosen->Months == 1 ? TEXT("") : TEXT("s"))
+								: bQueue ? FString::Printf(TEXT("%s Queue it, and it is ordered for you at the opening of a month once the builders are free and the treasury can pay, at that day's price."), *Chosen->Why)
+								: Chosen->Why))
+							.OnClicked_Lambda([this, Line = Chosen->Line, bCan, bQueue, Act = Chosen->QueueAct, Why = Chosen->Why]()
 							{
 								if (Controller.IsValid())
 								{
 									// (one that cannot be ordered can still be pressed, and says why)
-									if (bCan) { Controller->OrderTownBuilding(Line); } else { Controller->SayWhy(Why); }
+									if (bCan) { Controller->OrderTownBuilding(Line); } else if (bQueue) { Controller->ActOnTown(Act); } else { Controller->SayWhy(Why); }
 								}
 								return FReply::Handled();
 							})
 							[
-								SNew(STextBlock).Text(FText::FromString(Verb)).Font(Typed(9.75f, true, 40)).ColorAndOpacity(bCan ? OnBrass : Faint)
+								SNew(STextBlock).Text(FText::FromString(Verb)).Font(Typed(9.75f, true, 40)).ColorAndOpacity(bCan || bQueue ? OnBrass : Faint)
 							]
 						]
 					]
@@ -18130,19 +18191,20 @@ namespace
 					{
 						const FTownOffer& Offer = *Each;
 						const bool bCan = Offer.Why.IsEmpty();
-						const FString Tip = FString::Printf(TEXT("%s: %s\n%s\n%s%s"), *Offer.Name, *Offer.Label, *Offer.Effect, *Offer.Blurb, bCan ? TEXT("") : *(TEXT("\n") + Offer.Why));
+						const FString Tip = FString::Printf(TEXT("%s: %s\n%s\n%s%s%s"), *Offer.Name, *Offer.Label, *Offer.Effect, *Offer.Blurb, bCan ? TEXT("") : *(TEXT("\n") + Offer.Why),
+							bCan || Offer.QueueAct.IsEmpty() ? TEXT("") : TEXT("\nPress to queue it: it is ordered for you once the builders are free and the treasury can pay."));
 						Row->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 6.0f, 0.0f)
 						[
 							SNew(SBox).WidthOverride(130.0f)
 							[
 								SNew(SButton).ButtonStyle(bCan ? &PlainButton : &LeftCard).ContentPadding(FMargin(5.0f, 5.0f)).IsFocusable(false)
 								.ToolTipText(FText::FromString(Tip))
-								.OnClicked_Lambda([this, Line = Offer.Line, bCan, Why = Offer.Why]()
+								.OnClicked_Lambda([this, Line = Offer.Line, bCan, Act = Offer.QueueAct, Why = Offer.Why]()
 								{
 									if (Controller.IsValid())
 									{
-										// (one that cannot be ordered can still be pressed, and says why)
-										if (bCan) { Controller->OrderTownBuilding(Line); } else { Controller->SayWhy(Why); }
+										// (one that cannot be ordered can still be pressed, and says why; with the queue on, it is queued)
+										if (bCan) { Controller->OrderTownBuilding(Line); } else if (!Act.IsEmpty()) { Controller->ActOnTown(Act); } else { Controller->SayWhy(Why); }
 									}
 									return FReply::Handled();
 								})
