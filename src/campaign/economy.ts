@@ -26,6 +26,8 @@ import { damageOf } from './citydamage';
 import { incomeMul, levelOf } from './difficulty';
 import { eliteOf, priceOf, traitMoney, whyNoElite } from './traits';
 import { isTeam, TEAM_KINDS, TEAMS, teamName, teamsOn, type TeamKind } from './teams';
+import { orderWorth, type Role } from './orderworth';
+import { sightOf } from './intel';
 import { TECH, locked, whyNoPara } from './tech';
 import { fieldOut, keepsStores, shortOfOil, supIncome } from './resources';
 import { SIEGE, besieged } from './siege';
@@ -53,6 +55,9 @@ export const PRODUCTION = data as unknown as {
  * What a corps of this kind costs to raise, or undefined if it cannot be ordered. The four classic corps can be
  * raised in any game; the kinds the arsenal adds, such as artillery, only in the grand campaign.
  */
+/** A new corps' training and readiness when it finishes forming (a computer staff's; the player's training is his own). */
+export const FRESH = { xp: 0.05, org: 0.7 } as const;
+
 export function specOf(g: Game, kind: string): BuildSpec | undefined {
   // The support teams (release 2) only where they are switched on (src/campaign/teams.ts).
   if (isTeam({ kind })) return teamsOn(g) ? TEAMS[kind as TeamKind] : undefined;
@@ -697,8 +702,8 @@ export function deliver(g: Game, nat: string): void {
       continue;
     }
     // The player's new corps are as well trained as the instructors he has sent home can make them.
-    const c = addCorps(g, nat, b.name, b.kind!, b.divs!, at.id, { xp: (nat === g.human ? raisedXp(g, nat) : 0.05) + campXp(g, at.id), airborne: b.airborne });
-    c.org = 0.7;
+    const c = addCorps(g, nat, b.name, b.kind!, b.divs!, at.id, { xp: (nat === g.human ? raisedXp(g, nat) : FRESH.xp) + campXp(g, at.id), airborne: b.airborne });
+    c.org = FRESH.org;
     if (b.elite) c.elite = b.elite;
     const old = b.revive !== undefined ? fallenOf(g, b.revive) : undefined;
     if (old && old.heir === undefined) inherit(g, c, old.id);
@@ -752,6 +757,21 @@ export function lineFactories(g: Game, nat: string): number {
   return home;
 }
 
+/**
+ * The build pick: the kind of corps the computer's factory policy raises next, and where. The grand campaign: a staff
+ * whose line has met dug-in troops orders massed guns to break them, one corps of guns to every few of the rest, and
+ * brings them up where the works are; a great industry raises every third corps as tanks; else infantry.
+ */
+export function buildPick(g: Game, nat: string, home: number, capital: number): { kind: Kind; at: number } {
+  let kind: Kind = gunsWanted(g, nat) ? 'art' : home >= 20 && g.nations[nat].corpsNo % 3 === 2 ? 'arm' : 'inf';
+  // In the grand campaign tanks are built where the factories are: at the capital if it has them, else in the
+  // nation's greatest industrial province; a nation with no such province raises infantry instead.
+  let at = budgeted(g) ? raiseSite(g, nat, kind, capital) : capital;
+  // A nation that has not researched the tank arm raises infantry instead, and so does one with no fuel to run more tanks.
+  if (at < 0 || locked(g, nat, `corps:${kind}`) || (kind === 'arm' && shortOfOil(g, nat))) { kind = 'inf'; at = capital; }
+  return { kind, at };
+}
+
 /** The computer's factory policy: keep a reserve for replacements, spend the rest on new corps. */
 export function aiProduction(g: Game, nat: string): void {
   const n = g.nations[nat];
@@ -781,9 +801,6 @@ export function aiProduction(g: Game, nat: string): void {
     const need = Math.min(u.cost + PRODUCTION.aiReserve, PRODUCTION.aiBank[1]);
     if (at >= 0 && n.pp >= need && spare >= cost * BUDGET.debt.aiMargin && menSpare(g, nat) >= u.divs && orderElite(g, nat, at)) spare -= cost;
   }
-  // The grand campaign: a staff whose line has met dug-in troops orders massed guns to break them, one corps of guns
-  // to every few of the rest, and brings them up where the works are.
-  const wantsGuns = (): boolean => gunsWanted(g, nat);
   // A corps paid for in men asks nothing of the bank (rider B of 20:45Z to ruling 234; paidInMen, above), and its
   // men are counted in the reserve itself. Such a nation's thin corps are its standing shape, not a want its
   // drafts will ever meet, so by the other test it would never have a man to spare. Nobody with the far side off.
@@ -800,12 +817,7 @@ export function aiProduction(g: Game, nat: string): void {
       const site = budgeted(g) ? raiseSite(g, nat, old.kind, cap.id) : cap.id;
       if (bank(old.kind, t.cost) && spare >= up * BUDGET.debt.aiMargin && men(old.kind, t.divs) && orderCadre(g, nat, old.id, site >= 0 ? site : cap.id)) { spare -= up; continue; }
     }
-    let kind: Kind = wantsGuns() ? 'art' : home >= 20 && n.corpsNo % 3 === 2 ? 'arm' : 'inf';
-    // In the grand campaign tanks are built where the factories are: at the capital if it has them, else in the
-    // nation's greatest industrial province; a nation with no such province raises infantry instead.
-    let at = budgeted(g) ? raiseSite(g, nat, kind, cap.id) : cap.id;
-    // A nation that has not researched the tank arm raises infantry instead, and so does one with no fuel to run more tanks.
-    if (at < 0 || locked(g, nat, `corps:${kind}`) || (kind === 'arm' && shortOfOil(g, nat))) { kind = 'inf'; at = cap.id; }
+    const { kind, at } = buildPick(g, nat, home, cap.id);
     if (!bank(kind, corpsCost(g, nat, kind))) break;
     const cost = corpsUpkeep(kind, specOf(g, kind)!.divs);
     if (spare < cost * BUDGET.debt.aiMargin) break;
@@ -817,25 +829,33 @@ export function aiProduction(g: Game, nat: string): void {
 }
 
 /**
- * The support teams (release 2, src/campaign/teams.ts): a staff at war keeps one machine-gun or mortar brigade for
- * every few corps of its line, the two in turn, mortars first where its line faces dug-in troops. One ordered a month at
- * most, outside the army's programme (as engineers are), and only with the money, the upkeep and the men to spare.
- * Nothing while the teams are off, or while the army is being worn away and wants men in the line first.
+ * The support teams (release 2, src/campaign/teams.ts): a staff at war orders a machine-gun or mortar brigade only
+ * when, at its own sight, it buys more on the card for its price than the corps its build pick would raise or the refit
+ * the same money would pay for (the design director's ruling of 25 November 2026, 19:48Z; orderworth.ts, one value test
+ * for every order): the machine guns weighed in defence, the mortars in attack. Of the two, the one that leads the
+ * other orders by most; one order a month at most, outside the army's programme (as engineers are), and only with the
+ * money, the upkeep and the men to spare. Nothing while the teams are off, or while the army is being worn away and
+ * wants men in the line first.
  */
 export function aiTeams(g: Game, nat: string): void {
   if (!teamsOn(g)) return;
   const n = g.nations[nat];
   if (byHand(g, nat, 'build') || !n?.alive || n.capital < 0 || !n.atWar.length || armyWorn(g, nat) || armyIdle(g, nat)) return;
-  if (n.queue.some((b) => b.what === 'corps' && isTeam({ kind: b.kind ?? '' }) && b.ordered === g.turn)) return;
-  const have: Record<TeamKind, number> = { mg: 0, mor: 0 };
-  let line = 0;
-  for (const c of g.corps) if (c.nat === nat && !c.dead) { if (isTeam(c)) have[c.kind as TeamKind]++; else if (fights(c)) line++; }
-  for (const b of n.queue) if (b.what === 'corps' && isTeam({ kind: b.kind ?? '' })) have[b.kind as TeamKind]++;
-  const want = Math.min(TEAMS.ai.most, Math.floor(line / TEAMS.ai.per));
-  if (have.mg + have.mor >= want) return;
-  const kind: TeamKind = have.mor < have.mg || (have.mor === have.mg && gunsWanted(g, nat)) ? 'mor' : 'mg';
+  const sight = sightOf(g, nat);
+  const pick = buildPick(g, nat, lineFactories(g, nat), n.capital).kind;
+  let kind: TeamKind | null = null, lead = 1;
+  for (const k of TEAM_KINDS) {
+    const price = corpsCost(g, nat, k);
+    if (price <= 0 || n.pp < price + PRODUCTION.aiReserve) continue;
+    const role: Role = k === 'mg' ? 'def' : 'atk';
+    const mine = orderWorth(g, nat, k, role, sight);
+    const other = Math.max(orderWorth(g, nat, pick, role, sight), orderWorth(g, nat, 'refit', role, sight, price));
+    const by = other > 0 ? mine / other : mine > 0 ? Infinity : 0;
+    if (by > lead) { kind = k; lead = by; }
+  }
+  if (!kind) return;
   const at = raiseSite(g, nat, kind, n.capital);
-  if (at < 0 || n.pp < corpsCost(g, nat, kind) + PRODUCTION.aiReserve) return;
+  if (at < 0) return;
   const up = corpsUpkeep(kind, TEAMS[kind].divs);
   const spare = income(g, nat) - upkeepTotal(g, nat) - n.queue.reduce((t, b) => t + (b.what === 'corps' ? corpsUpkeep(b.kind!, b.divs!) : 0), 0);
   if (spare < up * BUDGET.debt.aiMargin || menSpare(g, nat) < TEAMS[kind].divs) return;
