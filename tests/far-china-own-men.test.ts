@@ -41,9 +41,12 @@ describe('China forms corps from its own men (rider B to ruling 234)', () => {
     const g = war();
     expect(corpsList(g, 'CHN', 'inf')).toBeGreaterThan(0);
     for (const kind of ['inf', 'mtn']) { expect(paidInMen(g, 'CHN', kind)).toBe(true); expect(corpsCost(g, 'CHN', kind)).toBe(0); }
+    // (Stage B2 S1: where China's store of rifles binds, the rest are priced less the rifles the store now charges,
+    // 16 points a division: the form's section 9 table. Rider B still wins for infantry and mountain until S3.)
+    const carved: Record<string, number> = { mot: 18, arm: 34, art: 34, eng: 2 };
     for (const kind of ['mot', 'arm', 'art', 'eng']) {
       expect(paidInMen(g, 'CHN', kind)).toBe(false);
-      expect(corpsCost(g, 'CHN', kind)).toBe(corpsList(g, 'CHN', kind));
+      expect(corpsCost(g, 'CHN', kind)).toBe(carved[kind]);
       expect(corpsCost(g, 'CHN', kind)).toBeGreaterThan(0);
     }
     // Everyone else pays as before.
@@ -64,6 +67,7 @@ describe('China forms corps from its own men (rider B to ruling 234)', () => {
     const n = g.nations.CHN, divs = specOf(g, 'inf')!.divs;
     n.pp = 0;
     // The staff's usual test of men never passes for China: its thin corps are short of far more than a levy brings.
+    g.flags['sa:CHN'] = 10; // (stage B2: the store opens at 0 and would refuse the corps; seeded as B1's tests seed sa:SOV)
     levyMen(g, 'CHN', levy().men);
     const had = menLeft(g, 'CHN');
     expect(menSpare(g, 'CHN')).toBeLessThan(0);
@@ -86,6 +90,7 @@ describe('China forms corps from its own men (rider B to ruling 234)', () => {
     const g = war();
     const n = g.nations.CHN;
     n.pp = 0;
+    g.flags['sa:CHN'] = 10; // (stage B2: the store opens at 0 and would refuse the corps; seeded as B1's tests seed sa:SOV)
     levyMen(g, 'CHN', levy().men);
     aiProduction(g, 'CHN');
     const names = forming(g).map((b) => b.name);
@@ -108,6 +113,7 @@ describe('China forms corps from its own men (rider B to ruling 234)', () => {
     expect(t.cost).toBe(0);
     expect(t.divs).toBe(2);
     n.pp = 0;
+    g.flags['sa:CHN'] = 10; // (stage B2: the store opens at 0 and would refuse the corps; seeded as B1's tests seed sa:SOV)
     levyMen(g, 'CHN', levy().men);
     const had = menLeft(g, 'CHN');
     aiProduction(g, 'CHN');

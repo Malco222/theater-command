@@ -42,6 +42,7 @@ import { openWeather } from './weather';
 import { openAirVersion } from './airversion';
 import { openSecretWar } from './secretwar';
 import { drawMen, menLeft, menRules, openManpower } from './manpower';
+import { armOrder, canArm } from './rifles';
 import { WORLD_FIRST, WORLD_MAP, acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oceanShares, overseasOf, shoreOf } from './world';
 import { patronOfClient, stationed, tieWar } from './far';
 import { inTheWay, pacificGround, runQuays } from './pacific';
@@ -908,7 +909,9 @@ export function rearMonth(g: Game, nat: string): void {
     const row = T.towns[r.name], worth = row?.[0] ?? T.each;
     if (!(worth > 0)) { g.flags[`rear:${r.id}`] = since; continue; }
     if (menRules(g) && menLeft(g, nat) + 1e-9 < worth) continue;
+    if (!canArm(g, nat, worth)) continue;
     drawMen(g, nat, worth);
+    armOrder(g, nat, worth);
     const c = addCorps(g, nat, row?.[1] ?? T.name.replace('{place}', r.name), 'inf', 1, r.id, { xp: C.xp ?? 0.1, est: worth, hold: 1, stay: 1 });
     c.str = worth;
     g.flags[`rear:${r.id}`] = since;

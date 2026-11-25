@@ -3,8 +3,10 @@
 // The design director's rulings of 05:37Z and 05:44Z of 25 November 2026 (pacific-japan/dd-form-arms-1125.md,
 // sections 3, 4, 7, 14 and 15): a nation's new corps and drafts are armed from ONE stock of rifles. This module makes
 // the stock FILL: the arsenals' month (arms.ts puts each works' gain while the nation holds its place), the roads that
-// bring rifles and the ground that cuts them, a seller's spare, the news of a cut, and the views a page reads. Nothing
-// here draws from the store for a corps or a draft: that is the next stage's.
+// bring rifles and the ground that cuts them, a seller's spare, the news of a cut, and the views a page reads. And the
+// taps (stage B2): a new corps takes its rifles from the store when it is ordered, and is refused where the store is
+// short and the nation's row binds; an order taken back gives them back; the price of a corps no longer charges points
+// for the rifles the store now charges (the carve).
 //
 // No country is named here: the rows decide (data/campaign/rifles.json, and the far side's data/campaign/far-arms.json
 // laid over it by far-rows.ts). A nation with no rifles row, no shelf and no road is never read, written or told
@@ -16,15 +18,17 @@
 //                minus the month it was found running dry (its seller sent nothing), which is no news; else the month
 //                it was found cut, kept while a cut road comes back dry, so that "runs again" is told only when
 //                its rifles can come
-// and the shelves' own flags (arms.ts: sa:<nat>, sam:<nat>).
+// and the shelves' own flags (arms.ts: sa:<nat>, sam:<nat>). A corps on order that drew rifles carries what it drew in
+// its Build's 'rifles' (divisions' worth), so the save keeps it and a cancel can give it back.
 
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/rifles.json';
 import production from '../../data/campaign/production.json';
-import { SHELVES, armsMonth, armsView, draw, gainOf, has, put, stockOf } from './arms';
+import { SHELVES, armsMonth, armsView, draw, gainOf, giveBack, has, put, stockOf } from './arms';
 import { atWar, headline, industryHeld, theName } from './game';
 import { majorsOf } from './diplomacy';
-import type { Game } from './types';
+import { corpsList } from './economy';
+import type { Build, Game } from './types';
 
 /** A nation's rifles row: rifles to its division's worth, the share a draft draws, and whether an empty store refuses anything (the next stage reads the last two). */
 export interface RiflesRow { perDiv: number; refit?: number; binds?: boolean }
@@ -51,6 +55,90 @@ export const rifleRoads = (_g: Game, nat: string): RoadRow[] => RIFLES.roads.fil
 
 /** Rifles to a division's worth of this nation, as a seller reads them: its own row, else the sellers' figure (G). */
 const perDivOf = (g: Game, nat: string): number => riflesRow(g, nat)?.perDiv ?? (num(RIFLES.sellerPerDiv) > 0 ? RIFLES.sellerPerDiv : 0);
+
+/** True where the nation has a rifles row and a rifles shelf: its new corps draw from the store. */
+export const carries = (g: Game, nat: string): boolean => !!riflesRow(g, nat) && has(g, nat, 'rifles');
+
+/** True where the store also refuses: the nation carries and its row is not marked binds: false (only false frees it). */
+export const binds = (g: Game, nat: string): boolean => carries(g, nat) && riflesRow(g, nat)!.binds !== false;
+
+// ---- The draw at the orders (stage B2) --------------------------------------------------------------------------------
+// The design director's 05:37Z of 25 November 2026 (pacific-japan/dd-form-arms-1125.md, clause 3.4, sections 8 and 9):
+// a new corps takes its rifles when it is ordered, by player and computer, in every order of the arsenal; a store short
+// of them refuses the order; an order taken back returns its rifles and its men. A row marked binds: false counts its
+// draws and refuses nothing (clause 8).
+
+/** For a probe or a test: told what each order drew, in the nation's divisions' worth. Kept in no save. */
+export const riflesWatch: { tell: ((e: { nat: string; what: 'order' | 'draft'; rifles: number }) => void) | null } = { tell: null };
+
+/** True unless the nation binds and its store holds less than this many divisions' worth of rifles. */
+export function canArm(g: Game, nat: string, divs: number): boolean {
+  if (binds(g, nat) && stockOf(g, nat, 'rifles') + 1e-9 < divs) return false;
+  return true;
+}
+
+/** Draws a new corps' rifles from the store where the nation carries, and gives what was drawn (0 where it does not). */
+export function armOrder(g: Game, nat: string, divs: number): number {
+  if (!carries(g, nat)) return 0;
+  const got = draw(g, nat, 'rifles', divs);
+  riflesWatch.tell?.({ nat, what: 'order', rifles: got });
+  return got;
+}
+
+/** Gives back the rifles an order taken back had drawn. */
+export function unarmOrder(g: Game, nat: string, b: Build): void {
+  if (b.rifles && b.rifles > 0) giveBack(g, nat, 'rifles', b.rifles);
+}
+
+const kLevel = keys('rfa');
+
+/** A cadre ordered raised again comes back with new men at its full level: its old armed level is struck. */
+export function riflesRaised(g: Game, id: number): void {
+  const k = kLevel(String(id));
+  if (k in g.flags) delete g.flags[k];
+}
+
+// ---- The carve (stage B2) ---------------------------------------------------------------------------------------------
+// The design director's 05:37Z, point 2 (clause 6, the form's section 9): a corps is priced once. Where the store
+// charges the rifles, the price stops charging points for them: an infantry division's worth at the nation's own price
+// of infantry comes off every kind, by its divisions (16 points a division at list price).
+
+/** The points a corps of this many divisions no longer pays for its rifles: 0 unless the nation binds. */
+export function carve(g: Game, nat: string, divs: number): number {
+  if (!binds(g, nat)) return 0;
+  const inf = (production as any).builds.inf.divs;
+  return inf > 0 ? (pos(divs) * corpsList(g, nat, 'inf')) / inf : 0;
+}
+
+/** A list price less the carve, to a tenth and never below 0; the list price itself, untouched, where nothing is carved. */
+export function carved(g: Game, nat: string, list: number, divs: number): number {
+  const c = carve(g, nat, divs);
+  return c > 0 ? Math.max(0, Math.round((list - c) * 10) / 10) : list;
+}
+
+// ---- The offer (stage B2) ---------------------------------------------------------------------------------------------
+
+/**
+ * The rifles an order of this many divisions takes, for the offer a page reads: set only where the nation carries.
+ * Words to the UI director, not wired (the offer's note is made in campaign-bridge.ts for the 3D game and in ui/main.ts
+ * for the page, from Offer.men): "Takes 3 divisions' worth of men and 64,000 rifles." in place of "Takes 45,000 men
+ * from the reserve.", the rifles to the thousand.
+ */
+export const riflesFor = (g: Game, nat: string, divs: number): { rifles?: number } => (carries(g, nat) ? { rifles: Math.round(divs * riflesRow(g, nat)!.perDiv) } : {});
+
+/**
+ * Why the store refuses an order of this many divisions, or null where it does not. Words to the UI director (the
+ * form's section 7): "Not rifles enough: this corps takes 64,000 and 21,000 are in store. 8,300 come in each month, so
+ * it can be ordered in 6 months." The corps' rifles to the thousand, the store and the inflow to the hundred, the
+ * months from the live inflow; with nothing coming in, the clause after "store." is left out (words owed).
+ */
+export function noRifles(g: Game, nat: string, divs: number): string | null {
+  if (canArm(g, nat, divs)) return null;
+  const per = riflesRow(g, nat)!.perDiv, need = divs * per, stock = stockOf(g, nat, 'rifles') * per, inflow = inflowOf(g, nat).total;
+  const months = inflow > 0 ? Math.ceil((need - stock) / inflow) : 0;
+  const when = inflow > 0 ? ` ${n100(inflow)} come in each month, so it can be ordered in ${months} month${months === 1 ? '' : 's'}.` : '';
+  return `Not rifles enough: this corps takes ${n0(Math.round(need / 1000) * 1000)} and ${n100(stock)} are in store.${when}`;
+}
 
 // ---- What a seller's own arming asks ----------------------------------------------------------------------------------
 
@@ -283,9 +371,8 @@ export interface RiflesSeen { nat: string; inflow: Inflow; line: string; card: s
  *
  * (Two things another seat can still work out, for the UI director to rule on. A road whose seller has a rifles shelf
  * and less to spare than the road's load shows rifles equal to the seller's spare: a third nation's stock, read off
- * the road. No seller has a shelf on this line, so it is not live yet. And while nothing draws from the store, the
- * inflows another seat has read since the first day add up to the stock exactly; that ends when the next stage's
- * corps and drafts draw from it.)
+ * the road. No seller has a shelf on this line, so it is not live yet. The inflows another seat has read since the
+ * first day no longer add up to the stock: the nation's new corps draw from it, and what they drew is never shown.)
  */
 export function riflesSeen(g: Game, nat: string, by: string | null): RiflesSeen | null {
   const row = riflesRow(g, nat);
