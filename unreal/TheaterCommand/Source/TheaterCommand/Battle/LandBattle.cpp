@@ -6823,9 +6823,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 		GeneralViewMs += GenFrameMs;
 	}
 	WalkPan(Real);
-	// (the running clock, not this frame's length: handed the frame's length, as it was until 25 November, the reading
-	// asked for one frame as the battle began and never again, and the camera's dark rule saw nothing all battle)
-	ReadDark(RealT);
+	ReadDark(Real);
 	LandFell::Phase("tick: the dispatches");
 	if (!bNight)
 	{
@@ -7145,18 +7143,24 @@ void ALandBattle::StartDarkRead()
 	}
 	DarkGrab = MakeShared<FFrameGrabber>(Game->SceneViewport.ToSharedRef(), FIntPoint(64, 36), PF_B8G8R8A8, 3);
 	DarkGrab->StartCapturingFrames();
+	DarkClock = 0.0;
 	DarkAskAt = 0.0;
 	DarkGotAt = 0.0;
 	UE_LOG(LogTheater, Display, TEXT("Land battle: the dark reading on: the drawn frame at 64 x 36 four times a second, its share under L 25 for the camera's dark rule"));
 }
 
-void ALandBattle::ReadDark(double Now)
+void ALandBattle::ReadDark(double Real)
 {
 	LAND_SCOPE(ReadDark);
 	if (!DarkGrab.IsValid())
 	{
 		return;
 	}
+	// (the reading's own clock, from this frame's length. Until 25 November the asks and the staleness below were
+	// measured against the frame's length itself, at most a tenth of a second: one frame was asked for as the battle
+	// began, the next ask's time was never reached, and the camera's dark rule saw nothing all battle.)
+	DarkClock += Real;
+	const double Now = DarkClock;
 	// Ask for a copy of the frame now and then; take what has come back (a frame or two later), the newest.
 	if (Now >= DarkAskAt && DarkGrab->IsCapturingFrames())
 	{
