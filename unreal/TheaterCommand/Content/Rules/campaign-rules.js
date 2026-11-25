@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 341a3aaa 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ffc2cc36 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -84372,6 +84372,10 @@
     return has("att", "cv") && has("def", "cv") && !has("att", "bb") && !has("def", "bb");
   }
   var sailorsOn = (g2) => g2.flags.open === 1 && g2.flags.sailors === 1;
+  function setSailors(g2, on) {
+    if (on) g2.flags.sailors = 1;
+    else delete g2.flags.sailors;
+  }
   function sailorsOf(g2, zone) {
     if (!sailorsOn(g2)) return null;
     const water = waterOf(g2.seas[zone].key, turnToDate(g2.turn).month);
@@ -90705,6 +90709,8 @@
       shadow: shadowOn(s),
       // (Release 2, voyage.ts) Whether each fleet keeps a voyage log on its page.
       voyageLog: voyageOn(s),
+      // (Release 2, the sea field's sailor rules: battle/sea/ticket.ts) Whether men go into the water when a ship goes down.
+      sailors: sailorsOn(s),
       // (Release 2, mines.ts) Whether fleets can lay mines at sea, and the fields the player knows of: his side's and the enemy's he has found.
       seaMines: seaMinesOn(s),
       mines: minesSeen(s),
@@ -96184,6 +96190,13 @@ ${standing5}`,
       note4 = part[0] === "shadowrule" ? shadowOn(s) ? "Shadowing is on: a fleet of cruisers can be set on an enemy fleet from its page. It follows it, keeps it identified for you and reports where it goes each month." : "Shadowing is off: every shadow ends where it stands." : part[0] === "voyagelogrule" ? voyageOn(s) ? "The voyage log is on: each fleet writes where it was and what it fought at every month's end, on its page." : "The voyage log is off: nothing more is written, and the logs are kept for when it is back on." : rearBridgesOn(s) ? "Rearguards blow the bridges: a rearguard lays charges on the bridges behind it, and if its province is lost they go up almost every time." : on ? "Rearguards will blow the bridges once rearguards are on." : "Rearguards no longer lay charges: bridges behind them go up on the usual chance.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
     }
+    if (part[0] === "sailorsrule") {
+      const on = part[1] === "on";
+      setSailors(s, on);
+      ok2 = true;
+      note4 = sailorsOn(s) ? "Sailor rules are on: in fleet actions fought live on the sea field, men go into the water when a ship goes down, and the side left holding the water picks up who it can." : on ? "Sailor rules work in the grand campaign only." : "Sailor rules are off.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
+    }
     if (part[0] === "fleetshadow") {
       const id = Number(part[1]);
       const name = s.fleets.find((x) => x.id === id)?.name ?? "The fleet";
@@ -97467,6 +97480,11 @@ ${standing5}`,
     const s = game();
     setRearBridges(s, !!on);
     return { on: rearBridgesOn(s) };
+  };
+  globalThis.TC.sailors = (on) => {
+    const s = game();
+    setSailors(s, !!on);
+    return { on: sailorsOn(s) };
   };
   globalThis.TC.seaMines = (on) => {
     const s = game();
