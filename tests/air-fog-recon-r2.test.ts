@@ -249,6 +249,23 @@ describe('fog on raids: the switch on', () => {
     expect(q.lines.some((l) => /may ring|may stand|last seen near it|known for sure/.test(`${l.value} ${l.effect ?? ''}`))).toBe(false);
   });
 
+  it('out of sight the plan page heads with the chance of success as a band, the same band its note gives', () => {
+    const g = britain(true);
+    const t = id(g, 'Rhineland');
+    const p = previewRaid(g, 'bomb', t);
+    expect(p.fog!.live).toBe(false);
+    const page = airPage(g, `plan:bomb:${t}:${p.picked.join('.')}`)!;
+    const lo = Math.round(p.fog!.success[0] * 100), hi = Math.round(p.fog!.success[1] * 100);
+    expect(lo).not.toBe(hi);
+    expect(page.note).toContain(`Chance of success ${lo} to ${hi}%`);
+    expect(page.headline).toContain(`${lo} to ${hi}%`);
+    // Scouted, it is one figure again, the verdict's.
+    expect(orderScout(g, grp(g, 'No. 1 Group').id, t).ok).toBe(true);
+    const q = previewRaid(g, 'bomb', t);
+    expect(q.fog!.live).toBe(true);
+    expect(airPage(g, `plan:bomb:${t}:${q.picked.join('.')}`)!.headline).toBe(`${q.verdict}: ${Math.round(q.success * 100)}%`);
+  });
+
   it('a saved war keeps what each side has seen and photographed, and its card reads the same', () => {
     const g = britain(true);
     const t = id(g, 'Ruhr');

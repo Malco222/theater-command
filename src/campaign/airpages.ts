@@ -201,7 +201,8 @@ function planPage(g: Game, kind: RaidKind, target: number, picked: number[]): Pa
   const going = p.seats.filter((s) => s.picked), could = p.seats.filter((s) => !s.picked && !s.why), cannot = p.seats.filter((s) => s.why);
   return {
     id: `plan:${kind}:${target}:${p.picked.join('.')}`, title: p.title.toUpperCase(),
-    headline: p.why ?? `${p.verdict}: ${pct(p.success)}`,
+    // (Fog on raids: out of sight the forecast is a band, so the headline gives the band its note gives, not the high end alone.)
+    headline: p.why ?? (p.fog && !p.fog.live ? `Chance of success ${band(p.fog.success[0], p.fog.success[1])}: not scouted` : `${p.verdict}: ${pct(p.success)}`),
     note: p.why ? '' : [lossLine(p), ...p.effects, p.massed, p.offPatrol].filter(Boolean).join(' '),
     top: [
       { label: 'FLY THE RAID', act: `raid:${kind}:${target}:${p.picked.join('.')}`, ok: up && !p.why, tip: p.why ?? 'Flown at once. Every group that goes is away for the rest of the month.' },
