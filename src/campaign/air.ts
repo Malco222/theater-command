@@ -2016,7 +2016,9 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   const df = out.def.reduce((s, x) => s + x.f.ftr, 0);
   out.lines.push({
     label: 'Forces',
-    value: `${[af ? planes(af, 'fighter') : '', ab ? planes(ab, 'bomber') : ''].filter(Boolean).join(' and ')} against ${df ? planes(df, 'fighter') : 'no fighters'}`,
+    // (Fog on raids: weighed on one side's knowledge, only the groups it knows of for sure are named, and the fighters
+    // last seen near the place are said as last seen, not as there.)
+    value: `${[af ? planes(af, 'fighter') : '', ab ? planes(ab, 'bomber') : ''].filter(Boolean).join(' and ')} against ${known ? `${df ? planes(df, 'fighter') : 'no fighters'} known for sure${unseenUp > 0 ? `; about ${Math.round(known.extra).toLocaleString('en-US')} ${df ? 'more ' : ''}were last seen near it` : ''}` : df ? planes(df, 'fighter') : 'no fighters'}`,
     effect: out.D < df ? `About ${Math.round(out.D).toLocaleString('en-US')} of the defending fighters can meet the raids` : undefined,
   });
   // (A raid flown on an order the defender's agent read: the report says so, ruling 135(c).)
@@ -2037,9 +2039,14 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     out.lines.push({
       label: 'In range to intercept',
       value: `About ${planes(out.squadrons, 'fighter squadron')}`,
-      effect: `From ${list(out.def.map((x) => theUnit(x.f.name)))}: about ${Math.round(out.D).toLocaleString('en-US')} fighters can meet the raid.`,
+      effect: unseenUp > 0
+        ? `From ${list(out.def.map((x) => theUnit(x.f.name)))}, and the others last seen near it: about ${Math.round(out.D).toLocaleString('en-US')} fighters may meet the raid.`
+        : `From ${list(out.def.map((x) => theUnit(x.f.name)))}: about ${Math.round(out.D).toLocaleString('en-US')} fighters can meet the raid.`,
     });
-  } else out.lines.push({ label: 'In range to intercept', value: 'No enemy fighters' });
+  } else if (unseenUp > 0) {
+    // (Fog on raids: no group known for sure, but the forecast counts the fighters last seen near the place, all rising.)
+    out.lines.push({ label: 'In range to intercept', value: `About ${planes(out.squadrons, 'fighter squadron')}, not seen now`, effect: `Reckoned from the fighters last seen near it, all of them rising: about ${Math.round(out.D).toLocaleString('en-US')} fighters may meet the raid.` });
+  } else out.lines.push({ label: 'In range to intercept', value: known ? 'No enemy fighters known for sure' : 'No enemy fighters' });
   if (out.height && out.B > 0) {
     // An escorted raid: where the warning puts the defenders against the bombers, and where the escort's roles put it.
     const { W, x } = out.height, hx = Math.pow(out.height.h, Math.abs(x)).toFixed(1);
@@ -2063,7 +2070,8 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   if (out.guns.all) {
     out.lines.push({
       label: 'Flak',
-      value: `About ${out.guns.all.toLocaleString('en-US')} guns round ${place}`,
+      // (Fog on raids: weighed on one side's knowledge, the guns are its reckoning, not a sight of them.)
+      value: known ? `About ${out.guns.all.toLocaleString('en-US')} guns may stand round ${place}` : `About ${out.guns.all.toLocaleString('en-US')} guns round ${place}`,
       effect: `${out.guns.heavy ? `${out.guns.heavy.toLocaleString('en-US')} heavy and ${out.guns.light.toLocaleString('en-US')} light` : 'Light guns only'}. They may bring down ${Math.round(out.gunLoss * 100) >= 1 ? `about ${Math.round(out.gunLoss * 100)}%` : 'almost none'} of the bombers.`,
     });
   }
@@ -2077,13 +2085,14 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
       effect: `${list(packed.map((f) => f.name))} can fly only ${Math.round(least * 100)}% of ${packed.length === 1 ? 'its' : 'their'} aircraft from there`,
     });
   }
-  if (out.aa && m === 'harbour') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ring ${harbourOf(place)}`, effect: 'They bring down more of the bombers' });
+  const ring = known ? 'may ring' : 'ring';
+  if (out.aa && m === 'harbour') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ${ring} ${harbourOf(place)}`, effect: 'They bring down more of the bombers' });
   if (m === 'town') {
     const r = g.regions[target], gone = breachOf(g, r);
     out.lines.push({ label: 'The town', value: `Troops inside ${townName(r)} fight ${Math.round((townBonus(g, r) - 1) * 100)}% stronger${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ''}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling('raid')}% in all` });
   }
-  if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ring ${place}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
-  else if (out.aa) out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ring the factories of ${place}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+  if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ${ring} ${place}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+  else if (out.aa) out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ${ring} the factories of ${place}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
   if (out.ships.length) {
     const pc = (x: number): string => `${Math.round(x * 100)}%`;
     if (out.surprise) out.lines.push({ label: 'Surprise', value: 'War was declared this month', effect: `The harbour is caught unready: its fighters and guns count ${pc(CARRIERS.harbour.unready)}, and the hits are multiplied by ${CARRIERS.harbour.surprise}` });

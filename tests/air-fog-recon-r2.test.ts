@@ -227,6 +227,28 @@ describe('fog on raids: the switch on', () => {
     expect(Object.keys(g.intel.scout ?? {}).filter((t) => scouted.includes(+t))).toEqual([]);
   });
 
+  it('out of sight the battle ticket says what is reckoned, not what is there: no guns stated as fact, no "no fighters" while unseen fighters are counted', () => {
+    const g = britain(true);
+    const t = id(g, 'Rhineland');
+    const p = previewRaid(g, 'bomb', t);
+    expect(p.fog!.guns).toBe('Guns: unknown');
+    expect(p.fog!.squadrons[1]).toBeGreaterThan(0);
+    const line = (label: string) => p.lines.find((l) => l.label === label);
+    // The guns are the high end's reckoning: the ticket may not say they ring the factories.
+    for (const l of p.lines) expect(l.value).not.toMatch(/^Level \d guns ring /);
+    expect(line('Anti-aircraft guns')!.value).toMatch(/may ring/);
+    expect(line('Flak')!.value).toMatch(/may stand/);
+    // The forecast counts the fighters last seen near it: the ticket may not say none are in range.
+    expect(line('In range to intercept')!.value).not.toBe('No enemy fighters');
+    expect(line('Forces')!.value).not.toMatch(/against no fighters$/);
+    expect(line('Forces')!.value).toMatch(/last seen near it/);
+    // With the switch off the ticket is the old one, word for word.
+    const h = britain(false);
+    const q = previewRaid(h, 'bomb', t);
+    expect(q.lines).toEqual(assessAir(h, going(h, q.picked), 'bomb', t).lines);
+    expect(q.lines.some((l) => /may ring|may stand|last seen near it|known for sure/.test(`${l.value} ${l.effect ?? ''}`))).toBe(false);
+  });
+
   it('a saved war keeps what each side has seen and photographed, and its card reads the same', () => {
     const g = britain(true);
     const t = id(g, 'Ruhr');
