@@ -1076,6 +1076,15 @@ public:
 	void ShowShipModel(const FString& Model, const FText& Name);
 	/** Picks up the next of the player's armies that can still move this month, and goes to it. */
 	void NextArmy();
+	/**
+	 * (Release 2, tc.UI.NextAll; the UI director's seamless plan, fix 4: one NEXT.) Once every army has its orders, Tab
+	 * goes on round the month's list, the rows under END THE MONTH, opening each one's screen in turn, each once, and
+	 * then says the month is done. The list never holds the month, as the rear never does. Off: Tab as before.
+	 * -TheaterNextAll turns it on for a run.
+	 */
+	static bool IsNextAllStyle();
+	/** (tc.UI.NextAll) The row of the month's list Tab opens next, or INDEX_NONE where it has been round them all or there are none. */
+	int32 NextToDoIndex() const;
 	/** How many of the player's armies still wait for an order this month: the count on the NEXT ARMY button. */
 	int32 ArmiesYetToMove() const;
 	/**
@@ -1670,6 +1679,9 @@ private:
 	bool bRewatching = false; // the month is being watched again from its card
 	bool bHandStands = false; // (ruling 88) the army in hand has been told to stand this month: the rules keep the order, with the saved game
 	TArray<int32> RoundSeen; // the provinces the round of armies has been to since it last began
+	TArray<FString> ToDoSeen; // (release 2, tc.UI.NextAll) the screens of the month's list Tab has opened since its round last began
+	/** (tc.UI.NextAll) Tab past the armies: opens the next row of the month's list, or says the round is done. False where it did nothing. */
+	bool StepToDo();
 	FEndAsk EndAsk;
 	int32 EndAskedTurn = -1; // the month the question was last put: it is put once a month
 	bool bAskAtMonthsEnd = true; // (kept with the options)
