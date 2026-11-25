@@ -7,16 +7,25 @@
 # - SeaFace::MakeFoam and MakeShore;
 # - BattleLook::AirHaze, AirSkyBegin, AirSkyEnd and Grade, and BattleLook's shared defaults (CampaignBattleLook.h whole);
 # - ConvoyLooksCore.{h,cpp} whole; ShipGuns.* and LandMen.* whole (byte copies, never edited);
-# - Pearl Harbor's and Midway's stages (Content/Data/Stages/oahu.json and midway.json) whole.
-# And against 10f85ffb (PEARL_BASE to name another): TheaterCommand.Build.cs still says "bUseUnity = false;", and
-# CampaignMapActor.*, CampaignHUD.* and CampaignPlayerController.* have no change at all.
+# - Pearl Harbor's and Midway's stages (Content/Data/Stages/oahu.json and midway.json) whole;
+# - the air battle's haze over a stage's sea (AirBattle.cpp): the two inks, the fog's colour and AirHaze's call (30 km,
+#   1.2 times), and the haze band's tint (pinned from the release 2 join, 2f89c8e5: AirHaze's body holds the fade, these
+#   lines hold the colour and where it starts).
+# And against 2f89c8e5 (PEARL_BASE to name another): TheaterCommand.Build.cs still says "bUseUnity = false;", and
+# CampaignMapActor.*, CampaignHUD.* and CampaignPlayerController.* have no change at all. (The base moved from 10f85ffb
+# with the release 2 join 2f89c8e5: release 2's campaign lanes changed all three outside the ocean lane's history, from
+# 23 November on (release 1.5's air campaign d0266a02, 1.5.1, the map branch sgfei1, lku6by, the ship list 485bb365, and
+# the sea scene's own "The month at sea" row 5286a1fd), and the air scene only hides the map, its pieces and the HUD's
+# frame while a stage stands, so Pearl's and Midway's sea draw nothing from them. A base is a fixed commit: the next
+# campaign-lane change to release 2 fails this again, and gets its own ruling.)
 # A body is found by its definition at the head of a line and runs to its closing brace (strings, characters and
 # comments skipped). Usage: Tools/sea_waves/pearl_pin.sh [--write]  (--write re-pins pearl.sha from this tree: only with
-# the change it pins, in the same commit; the wolf-pack nights' merge is one such, ConvoyLooksCore being theirs).
+# the change it pins, in the same commit where that commit's tree has this pin; the deck crews' 5ff6b021, which the
+# wolf-pack nights' merge 55419eb6 brought, moved ConvoyLooksCore.cpp, and its re-pin came at the release 2 join).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
-BASE="${PEARL_BASE:-10f85ffb}"
+BASE="${PEARL_BASE:-2f89c8e5}"
 STATUS=0
 python3 -I - "$ROOT" "$HERE/pearl.sha" "${1:-}" <<'PY' || STATUS=1
 import hashlib, os, re, sys
@@ -50,6 +59,12 @@ LINES = [
     (S + "Battle/AirStage.h", "UMaterialInstanceDynamic* MovingSea(bool bShore);"),
     (S + "Battle/AirStage.h", "FVector2D ShoreAt(double East, double North) const;"),
     (S + "Battle/AirStage.h", "void MoveShip(FShip& Ship, double Now);"),
+    # the haze over a stage's sea: its ink, the land's, the fog's colour, AirHaze's call and the haze band's tint
+    (S + "Battle/AirBattle.cpp", "static const FLinearColor AirHazeInk(0.55f, 0.66f, 0.78f);"),
+    (S + "Battle/AirBattle.cpp", "double R = 0.42, G = 0.60, B = 0.88;", "SeaHazeInk"),
+    (S + "Battle/AirBattle.cpp", "Fog->SetFogInscatteringColor(bOverLand ? AirParts::AirHazeInk : AirParts::SeaHazeInk());"),
+    (S + "Battle/AirBattle.cpp", "BattleLook::AirHaze(*Fog, UnitsPerMetre, bOverLand ? 7500.0 : 30000.0, bOverLand ? 2.6 : 1.2);"),
+    (S + "Battle/AirBattle.cpp", "HazeBandInk->SetVectorParameterValue(TEXT(\"Tint\"), (bBandOverLand ? AirParts::AirHazeInk : AirParts::SeaHazeInk()) * static_cast<float>(HazeBandStrength));"),
 ]
 FILES = [
     S + "Campaign/CampaignBattleLook.h",
@@ -111,10 +126,10 @@ items = []
 for path, name in BODIES:
     text = read(path).decode("utf-8")
     items.append((f"body {path} {name}", hashlib.sha256(body(text, name).encode("utf-8")).hexdigest()))
-for path, line in LINES:
+for path, line, *named in LINES:
     text = read(path).decode("utf-8")
     found = sum(1 for l in text.split("\n") if l.strip() == line)
-    items.append((f"line {path} {line.split('(')[0].split()[-1]}", hashlib.sha256(line.encode("utf-8")).hexdigest() if found == 1 else f"missing-or-twice-{found}"))
+    items.append((f"line {path} {named[0] if named else line.split('(')[0].split()[-1]}", hashlib.sha256(line.encode("utf-8")).hexdigest() if found == 1 else f"missing-or-twice-{found}"))
 for path in FILES:
     items.append((f"file {path}", hashlib.sha256(read(path)).hexdigest()))
 

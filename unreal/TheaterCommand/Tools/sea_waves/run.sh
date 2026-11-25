@@ -7,7 +7,7 @@
 #   - graph_pin: the 15 materials Tools/build_content.py builds today, graph for graph, against graphs.sha, through the
 #     stand-in Unreal module (fake_unreal.py);
 #   - pearl_pin: Pearl Harbor's and Midway's sea, the battle look, the convoy looks' core and the byte copies, against
-#     pearl.sha; and bUseUnity, and the campaign's three that take no new line, against 10f85ffb;
+#     pearl.sha; and bUseUnity, and the campaign's three that take no new line, against 2f89c8e5 (the release 2 join);
 #   - room_scan: every lamp, sky light, fog and air setter the sea's code calls, given back when the scene ends;
 #   - switches_scan: the plan's switch table, against the "Sea look:" line's and every switch the game reads;
 #   - bench_table's self-test: the Mac bench's reader (Tools/sea_bench.sh) held to the game's own lines;
