@@ -17,7 +17,8 @@ import { startOpen } from '../src/campaign/staff';
 import { STACK, type Game } from '../src/campaign/types';
 import setup from '../data/campaign/setup-1939.json';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
-import { cardRowOf } from '../unreal/TheaterCommand/Rules/offers-look';
+import { askForm, cardRowOf, offersLook } from '../unreal/TheaterCommand/Rules/offers-look';
+import { orderDeclineFormation, orderTakeFormation } from '../src/campaign/turn';
 
 type Call = (...a: unknown[]) => any;
 const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
@@ -133,7 +134,7 @@ describe('the offers page', () => {
       ...NOV41.map((nm) => [nm, 'Offered in November 1941. This is its last month.', 'amber']),
       [GARRISON, 'Offered in February 1942, open until August 1942.', 'muted'],
     ]);
-    expect(cardRowOf(g, rowOffers(g))).toEqual({ text: '6 formations offered, 5 in its last month.', amber: true, act: 'open:offers' });
+    expect(cardRowOf(g, rowOffers(g))).toEqual({ text: '6 formations offered, 5 in their last month.', amber: true, act: 'open:offers' });
     // One offer: the card's row in the singular.
     const one = war();
     months(one, 1, 2);
@@ -214,6 +215,44 @@ describe('the offers page', () => {
     // Asked from out of his month, the head does not ask.
     TC().act('offers:ask:take');
     expect(TC().page('offers').top.map((b: any) => b.label)).toEqual(['ACCEPT ALL', 'DECLINE ALL']);
+  }, 600000);
+});
+
+// (The skeptic's review of 25 November 2026: the cases the first build left out or said wrongly. Words the marks do
+// not give are marked in offers-look.ts for the UI director.)
+describe('the offers page, mended after the review', () => {
+  it('not his month in the plain case: another country\'s phase. Nothing can be answered, and nothing changes', () => {
+    const g = war();
+    months(g, 1, 30);
+    g.phase = g.order.indexOf('USA');
+    expect(g.order[g.phase]).not.toBe('JAP');
+    const look = offersLook(g);
+    expect([look.count, look.can, look.why, look.rows.every((r) => r.can === false && r.why === 'It is not your month.')]).toEqual([6, false, 'It is not your month.', true]);
+    const before = saveGame(g);
+    for (const o of rowOffers(g)) { expect(orderTakeFormation(g, o.id)).toBe('It is not your month.'); expect(orderDeclineFormation(g, o.id)).toBe(false); }
+    expect(saveGame(g)).toBe(before);
+  }, 600000);
+
+  it('ACCEPT ALL with one offer asks in the singular', () => {
+    const g = war();
+    months(g, 1, 2);
+    expect(askForm(g, rowOffers(g))).toBe('Form all 1? 1 of your corps leaves the map, 14,000 men, and 1 formation forms. It cannot be undone.');
+  }, 600000);
+
+  it('ACCEPT ALL with loans: the lent regiments go home, and are not counted among the corps that leave the map', () => {
+    const g = singapore();
+    g.phase = g.order.indexOf('JAP');
+    const list = rowOffers(g), go = list.filter((o) => !o.why && !o.lent);
+    const men = go.reduce((n, o) => n + o.takes.reduce((m, t) => m + t.men, 0), 0), corps = go.reduce((n, o) => n + o.takes.length, 0);
+    expect(list.filter((o) => o.lent).length).toBe(2);
+    expect(askForm(g, list)).toBe(`Form all ${go.length + 2}? ${corps} of your corps leave the map, ${(Math.round(men / 1000) * 1000).toLocaleString('en-US')} men, ${go.length} formations form, and 2 lent regiments go home. It cannot be undone.`);
+  }, 600000);
+
+  it("the card's row counts a loan's end beside the formations", () => {
+    const g = singapore();
+    const list = rowOffers(g), forms = list.filter((o) => !o.lent).length;
+    expect(list.some((o) => o.last !== null && o.last <= g.turn)).toBe(false);
+    expect(cardRowOf(g, list)).toEqual({ text: `${forms} formations offered, 2 loans ending: they wait for your answer.`, amber: false, act: 'open:offers' });
   }, 600000);
 });
 

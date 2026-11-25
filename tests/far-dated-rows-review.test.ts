@@ -439,7 +439,8 @@ describe("the 3D game's calls: a loan's end in the one list", () => {
     expect(list).toMatchObject({ count: 2, head: '2 loans ending', can: true });
     expect(list.note).toBe("A loan's end: send the regiment home into its division, or keep it for good.");
     expect(list.rows.map((r) => [r.id, r.name, r.loan])).toEqual([[index(T1), T1, true], [index(T6), T6, true]]);
-    expect(list.rows[0]).toMatchObject({ what: `Armor, ${men(t1).toLocaleString('en-US')} men`, where: 'Hainan', since: 'Its loan ended in December 1941', can: true });
+    // (The kind in the division words, "Armoured": the UI director's marks, section 2, read by the skeptic's review of 25 November 2026 for TC.offers() too.)
+    expect(list.rows[0]).toMatchObject({ what: `Armoured, ${men(t1).toLocaleString('en-US')} men`, where: 'Hainan', since: 'Its loan ended in December 1941', can: true });
     expect(list.rows[0].takes.map((t) => [t.name, t.where])).toEqual([[T1, 'Hainan']]);
     expect(list.rows[0].line).toBe(`It was lent to take Singapore, and its loan is over. Let go, it goes home, and joins its division, ${D1}, when that is formed; kept, it stays under your command, and its division stays short of it.`);
 
@@ -467,7 +468,8 @@ describe("the 3D game's calls: a loan's end in the one list", () => {
     const g = war();
     months(g, 1, 27);
     const list = offerCalls(() => g, () => null).offers();
-    expect(list.rows.find((r) => r.name === '25th Army (18th Division)')!.after).toBe('Declining it also gives up 18th Division, which is made out of it.');
+    // (The UI director's marks, section 2.3: "which would later be formed out of it", for TC.offers() as for the page.)
+    expect(list.rows.find((r) => r.name === '25th Army (18th Division)')!.after).toBe('Declining it also gives up 18th Division, which would later be formed out of it.');
     expect(list.rows.find((r) => r.name === '14th Army (48th Division)')!.after).toBe('');
   });
 

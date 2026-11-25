@@ -59,14 +59,16 @@ function rowLook(s: Game, o: RowOffer, shut: string | null): OfferLook {
   const place = (id: number): string => s.regions[id]?.name ?? '';
   const takes = o.takes.map((t) => ({ corps: t.id, name: t.name, where: place(t.region), region: t.region, men: t.men, size: `${num(t.men)} men` }));
   const where = o.region >= 0 ? place(o.region) : '';
-  const what = `${KIND[o.kind]?.label ?? 'Corps'}, ${num(o.men)} men`;
+  // (The kind in the division words, "Armoured", not "Armor": the UI director's marks, section 2.)
+  const what = `${kindWord(o.kind)}, ${num(o.men)} men`;
   const forms = o.joins ? `Joins ${o.joins}${where ? ` at ${where}` : ''}` : where ? `Forms at ${where}` : 'Has nowhere to form this month';
   const taking = takes.length ? `, taking ${listed(takes.map((t) => `${t.name} at ${t.where} (${t.size})`))}` : '';
   const why = o.why ?? shut ?? '';
   // (The end of a loan says its own sentence: what it was lent for, and what letting it go and keeping it do.)
   const line = o.loan ?? `${forms} (${what.toLowerCase()})${taking}.`;
   const since = `${o.loan === null ? 'Offered in' : 'Its loan ended in'} ${turnToDate(o.since).label}`;
-  const after = o.then.length ? `Declining it also gives up ${listed(o.then)}, which ${o.then.length === 1 ? 'is' : 'are'} made out of it.` : '';
+  // (The marks, section 2.3: "which would later be formed out of it"; "which is made out of it" read as though it already existed.)
+  const after = o.then.length ? `Declining it also gives up ${listed(o.then)}, which would later be formed out of it.` : '';
   return { id: o.id, name: o.name, what, where, region: o.region, since, takes, line, after, can: !why, why, loan: o.loan !== null };
 }
 
@@ -135,13 +137,50 @@ export function offerLines(s: Game, o: RowOffer): OfferLine[] {
   return out;
 }
 
-/** The question ACCEPT ALL asks on the head row (the marks, section 4), or null where nothing can be answered. `rows` are the offers that would be answered. */
+/**
+ * The corps the offers taken in this order strike off the map whole, as the rule does it, each once, with the men it
+ * holds when it goes: every corps a dated row takes (`rest` 'lost'), and of a row of the formations list (`rest`
+ * 'stay') only those it empties, drawing on them in their order and on what earlier rows of the list left in them
+ * (Oahu's 25th Infantry Division takes the 298th whole and part of the Hawaiian Division, and the 24th then empties
+ * the division). A corps that gives only part of its men stays on the map. None for a loan's end: the regiment goes
+ * into its division.
+ */
+function struckWhole(go: RowOffer[]): { id: number; men: number }[] {
+  const left = new Map<number, number>(), out: { id: number; men: number }[] = [];
+  for (const o of go) {
+    if (o.lent) continue;
+    let got = 0;
+    for (const t of o.takes) {
+      const has = left.get(t.id) ?? t.men;
+      if (has <= 0) continue;
+      const part = o.rest === 'stay' ? Math.min(has, Math.max(o.men - got, 0)) : has;
+      got += part;
+      left.set(t.id, has - part);
+      if (part >= has) out.push({ id: t.id, men: has });
+    }
+  }
+  return out;
+}
+
+/**
+ * The question ACCEPT ALL asks on the head row (the marks, section 4), or null where nothing can be answered. `rows`
+ * are the offers that would be answered. (The marks' sentence is for many: with one corps or one formation it is
+ * said in the singular, "1 of your corps leaves the map", "1 formation forms"; only the corps struck off whole are
+ * counted as leaving, with their men (`struckWhole`); and a loan's end is its own clause, the regiments going home,
+ * not a corps leaving the map. The singular and the loans' clause: UI director to mark.)
+ */
 export function askForm(s: Game, open: RowOffer[]): string | null {
   const go = open.filter((o) => !o.why), passed = open.filter((o) => o.why && !o.lent);
   if (!go.length) return null;
-  const corps = go.reduce((n, o) => n + o.takes.length, 0), men = go.reduce((n, o) => n + o.takes.reduce((m, t) => m + t.men, 0), 0);
-  const forms = go.filter((o) => !o.lent).length;
-  return `Form all ${go.length}? ${corps} of your corps leave the map, ${menWords(men)} men, and ${forms} formations form. It cannot be undone.${passed.length ? ` ${passed.length} cannot be formed this month and ${passed.length === 1 ? 'stays' : 'stay'} open.` : ''}`;
+  const struck = struckWhole(go), corps = struck.length, men = struck.reduce((n, t) => n + t.men, 0);
+  const forms = go.filter((o) => !o.lent).length, loans = go.length - forms;
+  const said = [
+    corps ? `${corps} of your corps ${corps === 1 ? 'leaves' : 'leave'} the map, ${menWords(men)} men` : '',
+    forms ? `${forms} formation${forms === 1 ? '' : 's'} form${forms === 1 ? 's' : ''}` : '',
+    loans ? `${loans} lent regiment${loans === 1 ? '' : 's'} ${loans === 1 ? 'goes' : 'go'} home` : '', // UI director to mark
+  ].filter(Boolean);
+  const all = said.length <= 1 ? said.join('') : `${said.slice(0, -1).join(', ')}, and ${said[said.length - 1]}`;
+  return `Form all ${go.length}? ${all.charAt(0).toUpperCase()}${all.slice(1)}. It cannot be undone.${passed.length ? ` ${passed.length} cannot be formed this month and ${passed.length === 1 ? 'stays' : 'stay'} open.` : ''}`;
 }
 
 /** The question DECLINE ALL asks on the head row (the marks, section 4). */
@@ -157,11 +196,13 @@ export function askDecline(open: RowOffer[]): string {
  */
 export function cardRowOf(s: Game, open: RowOffer[]): { text: string; amber: boolean; act: string } {
   if (!open.length) return { text: '', amber: false, act: '' };
-  const forms = open.filter((o) => !o.lent), loans = open.length - forms.length;
+  const forms = open.filter((o) => !o.lent).length, loans = open.length - forms;
   const due = open.filter((o) => o.last !== null && o.last <= s.turn).length;
-  const n = forms.length || loans, word = forms.length ? 'formation' : 'loan';
-  const said = forms.length ? `${n} ${word}${n === 1 ? '' : 's'} offered` : `${n} ${word}${n === 1 ? '' : 's'} ending`;
-  const text = due ? `${said}, ${due} in its last month.` : n === 1 ? `${said}: it waits for your answer.` : `${said}: they wait for your answer.`;
+  // (The count in the head's own words (`headOf`), so that a loan's end waiting for his answer is counted on the card
+  // too, beside the formations: "6 formations offered, 1 loan ending: they wait for your answer." And more than one in
+  // its last month is "in their last month". Both are words the marks do not give: UI director to mark.)
+  const said = headOf(forms, loans);
+  const text = due ? `${said}, ${due} in ${due === 1 ? 'its' : 'their'} last month.` : open.length === 1 ? `${said}: it waits for your answer.` : `${said}: they wait for your answer.`;
   return { text, amber: due > 0, act: 'open:offers' };
 }
 
