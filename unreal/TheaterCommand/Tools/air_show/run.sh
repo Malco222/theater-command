@@ -16,6 +16,14 @@ STATUS=0
 for F in "$@"; do
   "$OUT/air_show_test" "$F" "$OUT" || STATUS=1
 done
+# Smooth flying (Battle/AirShow's SetSmooth; Brian, 24 November: "why is the plane shaking in the test video?"): a
+# minute of a campaign raid with a view at every step of the rules, as the game feeds a live raid, played at 60 frames
+# a second. No aircraft's tremor may be what a chase camera shows (air_smooth_probe.cpp; AIR_SMOOTH_OLD=1 reports how
+# release 1.5 flew it: 74 of its 143 aircraft trembled).
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_smooth_probe.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirDesk.cpp" "$SRC/Battle/AirGround.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
+  -o "$OUT/air_smooth_probe"
+"$OUT/air_smooth_probe" "$HERE/data/raid-steps.json" 60 200 260 || STATUS=1
 # The airscrews (Battle/AirScrew): every sculpted aircraft's found where its maker put them, each blade in one.
 $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
   "$HERE/air_screw_test.cpp" "$SRC/Battle/AirScrew.cpp" -o "$OUT/air_screw_test"

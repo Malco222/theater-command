@@ -9,6 +9,12 @@
 // Usage: air_smooth_probe <recording.json> [frames a second, 60] [from battle s] [to battle s] [x speed, 1] [track.csv key]
 // A recording made by tools/air-record/live-steps.ts carries a view at every step of the rules (ten a battle second),
 // as AAirBattle::Feed takes them in a live raid; the set pieces and r16-live carry one a battle second.
+//
+// It is a check as well (Tools/air_show/run.sh runs it on Tools/air_show/data/raid-steps.json, a minute of a campaign
+// raid about its first contact, a view every rules step): it fails where any aircraft's tremor is what a chase camera
+// would show (3 cm of place or a quarter of a degree of an angle, rms), or where a fighter flying in formation kicks
+// its wings half a degree. AIR_SMOOTH_OLD=1 flies it as release 1.5 flew it (AirShow::Show::SetSmooth off) and only
+// reports: 78 of the 143 aircraft of that minute trembled then, the formations' wings kicking 2.5 degrees.
 
 #include "Battle/AirFeed.h"
 #include "Battle/AirGround.h"
@@ -96,6 +102,8 @@ int main(int Argc, char** Argv)
 
 	AirShow::Show Show(Rec.Seed ? Rec.Seed : 238);
 	AirFeed::Apply(Rec.Board, Show);
+	const bool bOld = std::getenv("AIR_SMOOTH_OLD") != nullptr;
+	Show.SetSmooth(!bOld);
 	Show.Eye = AirShow::Vec(Rec.Board.TargetX, Rec.Board.TargetY - 6000.0, 5000.0);
 	const std::shared_ptr<const AirGround::BoardLand> BoardGround =
 		Rec.Board.StageKey.empty() ? std::make_shared<const AirGround::BoardLand>(Rec.Board.Land) : std::shared_ptr<const AirGround::BoardLand>();
@@ -233,5 +241,14 @@ int main(int Argc, char** Argv)
 	int Seen = 0;
 	for (const Row& R : Rows) Seen += (R.Place.Rms() > 0.03 || R.Bank.Rms() > 0.25 || R.Pitch.Rms() > 0.25 || R.Head.Rms() > 0.25) ? 1 : 0;
 	std::printf("  aircraft whose tremor a chase camera would show (place over 3 cm rms, or an angle over 0.25 deg rms): %d of %zu\n", Seen, Rows.size());
-	return 0;
+	const double FormationKick = ByDoingBank.count("") ? ByDoingBank[""].Peak : 0.0;
+	if (bOld)
+	{
+		std::printf("  (flown as release 1.5 flew it, AIR_SMOOTH_OLD: reported, not judged)\n");
+		return 0;
+	}
+	const bool bPass = !Rows.empty() && Seen == 0 && FormationKick <= 0.5;
+	std::printf("  %s: smooth flying (no aircraft's tremor seen from a chase camera, and no fighter in formation kicking its wings over half a degree: %d seen, %.3f deg)\n",
+		bPass ? "pass" : "FAIL", Seen, FormationKick);
+	return bPass ? 0 : 1;
 }
