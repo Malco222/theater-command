@@ -12,6 +12,8 @@ namespace AirShow
 	{
 		constexpr double Pi = 3.14159265358979323846;
 		constexpr double Gee = 9.81;
+		// (the pull a fighter's floor guard plans his pull-out at, low down: four g, wings level)
+		constexpr double PullOutG = 4.0;
 		constexpr double Deg = Pi / 180.0;
 
 		double Wrap(double A)
@@ -992,7 +994,7 @@ namespace AirShow
 			// (and, flying smooth, the time her roll takes to pick up and to ease off as her wings come level: about four
 			// of her roll times, SetSmooth)
 			const double Rolling = std::fabs(C.Bank) / std::max(C.RollMax, 0.5) + (bSmooth ? 4.0 * C.RollTime : 0.0);
-			if (Over < Least + SinkNow * SinkNow / (2.0 * Gee * 3.0) + SinkNow * (0.5 + Rolling))
+			if (Over < Least + SinkNow * SinkNow / (2.0 * Gee * (PullOutG - 1.0)) + SinkNow * (0.5 + Rolling))
 			{
 				K.Gam = std::max(K.Gam, Over < Least ? 10.0 * Deg : 0.0);
 				if (SinkNow > 5.0 || Over < Least)
@@ -1147,8 +1149,25 @@ namespace AirShow
 					// (one who followed a torpedo plane down to wave-top is counted with those chases until he has climbed
 					// back over 60 m: her loss leaves him low over the sea, as it found him, not diving at it)
 					const double Over = C.P.Z - GroundAt(C.P.X, C.P.Y);
-					if (Chasing(C) > 0.0) C.bLowChase = true;
-					else if (Over >= 60.0) C.bLowChase = false;
+					if (Chasing(C) > 0.0)
+					{
+						// (where the chase leaves him, and the sink he carries out of it: read from his flight as she goes,
+						// stopped by his floor guard's own pull-out, PullOutG)
+						const double Sink = std::max(0.0, -std::sin(C.Gam)) * C.Spd;
+						C.bLowChase = true;
+						C.bLowChaseUp = false;
+						C.LowChaseFrom = Over;
+						C.LowChaseGive = Sink * Sink / (2.0 * Gee * (PullOutG - 1.0));
+					}
+					else if (C.bLowChase)
+					{
+						// The climb back covers only the climb back (the design director, 25 November: by cause, never a
+						// timer): it ends as he passes 60 m; and deeper than the chase left him, past the sink he carried
+						// out of it, or any descent once he has begun to climb, is a dive like any other, counted against
+						// the 60 m at once, a new fight or not.
+						if (Over >= 60.0 || Over < C.LowChaseFrom - C.LowChaseGive || (C.bLowChaseUp && C.Gam < 0.0)) C.bLowChase = false;
+						else if (C.Gam > 0.0) C.bLowChaseUp = true;
+					}
 					double& Lowest = C.bLowChase ? Check.LowestChase : Check.LowestFight;
 					Lowest = std::min(Lowest, Over);
 				}

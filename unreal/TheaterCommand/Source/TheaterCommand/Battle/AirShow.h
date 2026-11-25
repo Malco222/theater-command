@@ -789,6 +789,8 @@ namespace AirShow
 			bool bScissIn = false;   // the attacker, still coming through fast: the overshoot that begins it
 			bool bStrafing = false;  // his pass is at an aircraft on the ground
 			bool bLowChase = false;  // (the checks: he followed a torpedo plane down to wave-top and has not yet climbed back over 60 m)
+			bool bLowChaseUp = false;  // (and has begun to climb back)
+			double LowChaseFrom = 0.0, LowChaseGive = 0.0;  // (the height the chase left him at, and the sink he carried out of it, m)
 			bool bFleeing = false;   // half-rolled and diving away from an enemy on his tail
 			bool bOpened = false;    // has made his first pass of this fight
 			bool bAnywhere = false;  // waiting to go in from where he is (the fight's opening), not from his perch
