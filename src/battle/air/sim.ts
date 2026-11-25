@@ -1119,6 +1119,14 @@ export class AirSim implements BattleSim<AirUnit> {
    * an escort the defence has fought out, while it flies home, whatever the defence: its weight was spent on the
    * defenders, and the card counts the escort over its bombers for the whole raid (L.escort, 227), so the box it leaves
    * is not priced as one never escorted.
+   *
+   * M1 (the design director, 25 November 2026 16:24Z): such an escort, held off or fought out, counts not only over
+   * its own box but over every bomber box of its side flying with that box (flies): within SKY.escort.near of it on
+   * the map and within one height band of it, as cover() already lets the boxes of a stream share the escort near
+   * them. One escort group sent with two boxes no longer leaves the second priced as never escorted (the 2.5 times
+   * cap) once the hunters drag it away (the Hampshire trace, 25 November 2026: 64.2 bombers a raid against a card of
+   * 54.9). REUSED G: SKY.escort.near (4 km) and the one band are cover()'s own reach, made for another purpose (the
+   * escort near a box) and reused here for "flying with"; they were not measured for this.
    */
   private tied(f: AirUnit, b: AirUnit): boolean {
     if (f.air !== 'ftr' || f.side !== 'att') return false;
@@ -1127,8 +1135,19 @@ export class AirSim implements BattleSim<AirUnit> {
     // price the passes a second time in bombers.
     const s = this.strafing.get(f.id);
     if (s && s.box === b.id && (f.job.do === 'strafe' || (s.over && f.job.do === 'home'))) return true;
-    if (f.job.do === 'escort') return f.job.on === b.id && f.contacts.some((i) => this.unit(i)?.def === 'escort');
-    return f.job.do === 'home' && f.vig < SKY.spent && this.foughtFor.get(f.id) === b.id;
+    if (f.job.do === 'escort') return this.flies(f.job.on, b) && f.contacts.some((i) => this.unit(i)?.def === 'escort');
+    return f.job.do === 'home' && f.vig < SKY.spent && this.flies(this.foughtFor.get(f.id), b);
+  }
+
+  /**
+   * Whether box b is the escort's own box (id 'own'), or a box of its side flying with it: the own box still flying,
+   * within SKY.escort.near (a REUSED G, see tied) of b on the map and within one height band of it (M1).
+   */
+  private flies(own: number | undefined, b: AirUnit): boolean {
+    if (own === undefined) return false;
+    if (own === b.id) return true;
+    const o = this.unit(own);
+    return !!o && o.air === 'bmr' && o.side === b.side && flying(o) && Math.abs(o.band - b.band) <= 1 && dist(o.x, o.y, b.x, b.y) <= SKY.escort.near;
   }
 
   /** A fighter group's fight left, and home once all but SKY.spent of it is gone. */

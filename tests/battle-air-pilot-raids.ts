@@ -4,10 +4,13 @@
 // bombers), and Kent with the defender's player sending a group at another box once the first contact is made. The
 // computer flies both sides.
 //
-// BASELINE holds what release 2's head a14434e3 gave for each battle, from the very same code below run against that
-// head: each side's aircraft lost, the ordered (time, victim) list of every loss, the rules' main stream where the
-// battle ended, and the 'air:hit' events with their 'by' and 'gun' taken out. These are shown and credit changes only:
-// none of them may move.
+// BASELINE holds, for each battle, M1's figures from the commit that laid it (the design director, 25 November 2026
+// 16:24Z: a held-off or fought-out escort counts over every box flying with its own box), from the very same code below
+// run against that commit: each side's aircraft lost, the ordered (time, victim) list of every loss, the rules' main
+// stream where the battle ended, and the 'air:hit' events with their 'by' and 'gun' taken out. M1 moved two battles,
+// alsace:1 and alsace:3 (two boxes, one escort group, the escort fought out and flying home), and they were re-pinned;
+// every other battle's pin is what release 2's head a14434e3 gave, unchanged by M1. The pilot's changes are shown and
+// credit changes only: none of them may move.
 import { planRaid, raidTargets, type RaidKind } from '../src/campaign/airwar';
 import { createGame, setWar } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
@@ -110,7 +113,7 @@ export function digest(s: AirSim): string {
   return `${lost('att', 'ftr')}/${lost('att', 'bmr')}/${lost('def', 'ftr')} ${hashString(losses)} ${main} ${hashString(hits)}`;
 }
 
-/** Release 2's head a14434e3, flown by runs() and digest() above. */
+/** M1's commit, flown by runs() and digest() above (all but alsace:1 and alsace:3 as release 2's head a14434e3 gave them). */
 export const BASELINE: Record<string, string> = {
   'kent:0': '0/261/38 2319427410 1340967069 3510661325',
   'alsace:0': '19/18/29 1826434046 3408063933 1802457500',
@@ -118,7 +121,7 @@ export const BASELINE: Record<string, string> = {
   'order:0': '0/244/35 3886541873 1340967069 1143825160',
   'sky:0': '31/0/45 3687527599 2199490110 1368465708',
   'kent:1': '0/223/40 2270006118 1340967070 260639464',
-  'alsace:1': '22/21/32 1221648462 3408063934 3503774005',
+  'alsace:1': '22/21/32 1221648462 3408063934 2149268803',
   'twins:1': '0/238/41 886520845 2540697213 3684891373',
   'order:1': '0/228/39 2975366465 1340967070 3467667472',
   'sky:1': '34/0/47 3657701537 960887090 1345823437',
@@ -128,7 +131,7 @@ export const BASELINE: Record<string, string> = {
   'order:2': '0/239/30 176676299 1340967071 184656339',
   'sky:2': '37/0/46 785332300 1957492596 1653172251',
   'kent:3': '0/267/40 811367203 1340967072 2300237840',
-  'alsace:3': '13/16/29 4093758041 3408063936 2408365587',
+  'alsace:3': '13/15/29 3978983334 3408063936 1238313402',
   'twins:3': '0/238/39 1884505583 2540697215 3674308269',
   'order:3': '0/237/35 31330389 1340967072 1046530882',
   'sky:3': '50/0/46 2052210549 411353920 3475021993',
