@@ -1789,6 +1789,21 @@ bool ACampaignPlayerController::IsHomeFrontStyle()
 	return bAsked || CVarHomeFront.GetValueOnGameThread() != 0;
 }
 
+namespace
+{
+	// (Release 2; Brian, 25 November 2026: "lets make the campaign map and playing of that feel less choppy".) Screens
+	// that ease in and out, off until the art director has passed the Mac's stills of them; -TheaterEase turns it on.
+	TAutoConsoleVariable<int32> CVarEase(
+		TEXT("tc.UI.Ease"), 0,
+		TEXT("1 eases the rooms (the arsenal, the ledger, the generals, research, diplomacy, the guide and every page) in and out over about an eighth of a second, and fades and slides the province panel in; 0 they appear and vanish at once, as before (as -TheaterEase)."));
+}
+
+bool ACampaignPlayerController::IsEaseStyle()
+{
+	static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterEase"));
+	return bAsked || CVarEase.GetValueOnGameThread() != 0;
+}
+
 void ACampaignPlayerController::OpenHomeFront()
 {
 	if (IsHomeFrontStyle())

@@ -7132,7 +7132,7 @@ namespace
 
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom).Padding(0.0f, 0.0f, 16.0f, 0.0f)
 						[
-							Piece(SNew(SBox).WidthOverride(390.0f)
+							Piece(SAssignNew(EaseWidget[EasePanel][0], SBox).WidthOverride(390.0f) // (release 2, tc.UI.Ease: it fades and slides in)
 							.Visibility_Lambda([Region]()
 							{
 								const FRegionPanelInfo* Info = Region();
@@ -8000,8 +8000,8 @@ namespace
 					// The arsenal: everything that can be ordered.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
-						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
-						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsArsenalOpen() ? EVisibility::Visible : EVisibility::Collapsed; })
+						SAssignNew(EaseWidget[EaseArsenal][0], SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return EaseVisibility(EaseArsenal, Controller.IsValid() && Controller->IsArsenalOpen()); }) // (release 2, tc.UI.Ease: it fades in and out)
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
 							SNew(SBox).WidthOverride(1320.0f).HeightOverride(800.0f)
@@ -8100,8 +8100,8 @@ namespace
 					// The ledger: the country's books.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
-						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
-						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsLedgerOpen() ? EVisibility::Visible : EVisibility::Collapsed; })
+						SAssignNew(EaseWidget[EaseLedger][0], SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return EaseVisibility(EaseLedger, Controller.IsValid() && Controller->IsLedgerOpen()); }) // (release 2, tc.UI.Ease: it fades in and out)
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
 							SNew(SBox).WidthOverride(1120.0f).HeightOverride(760.0f)
@@ -8180,8 +8180,8 @@ namespace
 					// A room the rules set out themselves: the secret service, the last act.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
-						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(0.0f, 10.0f))
-						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsPageOpen() ? EVisibility::Visible : EVisibility::Collapsed; })
+						SAssignNew(EaseWidget[EasePage][0], SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(0.0f, 10.0f))
+						.Visibility_Lambda([this]() { return EaseVisibility(EasePage, Controller.IsValid() && Controller->IsPageOpen()); }) // (release 2, tc.UI.Ease: it fades in and out)
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
 							// (the raid card is laid out to the art director's sheet, about 1176 by 932: the room is larger for it,
@@ -8271,8 +8271,8 @@ namespace
 					// The generals: who commands what, who waits, and the corps that have nobody.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
-						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
-						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsGeneralsOpen() ? EVisibility::Visible : EVisibility::Collapsed; })
+						SAssignNew(EaseWidget[EaseGenerals][0], SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return EaseVisibility(EaseGenerals, Controller.IsValid() && Controller->IsGeneralsOpen()); }) // (release 2, tc.UI.Ease: it fades in and out)
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
 							SNew(SBox).WidthOverride(1220.0f).HeightOverride(800.0f)
@@ -8350,8 +8350,8 @@ namespace
 					// The research tree as a wall chart (the grand campaign): the whole screen, with the map dimmed behind.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
-						SNew(SBorder).BorderImage(&DeepScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(0.0f))
-						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsResearchOpen() && Controller->GetResearch().bTree && ChartLayout().bGood ? EVisibility::Visible : EVisibility::Collapsed; })
+						SAssignNew(EaseWidget[EaseResearch][0], SBorder).BorderImage(&DeepScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(0.0f))
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetResearch().bTree && ChartLayout().bGood ? EaseVisibility(EaseResearch, Controller->IsResearchOpen()) : EVisibility::Collapsed; }) // (release 2, tc.UI.Ease: it fades in and out)
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
 							// (fitted to the screen whatever its size: the chart is never cut and never scrolls)
@@ -8368,8 +8368,8 @@ namespace
 					// The design offices: every branch of the armed forces, and the teams at work on it.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
-						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
-						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsResearchOpen() && !(Controller->GetResearch().bTree && ChartLayout().bGood) ? EVisibility::Visible : EVisibility::Collapsed; })
+						SAssignNew(EaseWidget[EaseResearch][1], SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return Controller.IsValid() && !(Controller->GetResearch().bTree && ChartLayout().bGood) ? EaseVisibility(EaseResearch, Controller->IsResearchOpen()) : EVisibility::Collapsed; }) // (release 2, tc.UI.Ease: it fades in and out)
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
 							SNew(SBox).WidthOverride(1220.0f).HeightOverride(800.0f)
@@ -8463,8 +8463,8 @@ namespace
 					// The foreign office: the powers at war, and every country at peace on the track between the blocs.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
-						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
-						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsDiplomacyOpen() ? EVisibility::Visible : EVisibility::Collapsed; })
+						SAssignNew(EaseWidget[EaseDiplomacy][0], SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return EaseVisibility(EaseDiplomacy, Controller.IsValid() && Controller->IsDiplomacyOpen()); }) // (release 2, tc.UI.Ease: it fades in and out)
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
 							SNew(SBox).WidthOverride(1180.0f).HeightOverride(780.0f)
@@ -8550,8 +8550,8 @@ namespace
 					// puts it away.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
-						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
-						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsLessonGuideOpen() ? EVisibility::Visible : EVisibility::Collapsed; })
+						SAssignNew(EaseWidget[EaseGuide][0], SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return EaseVisibility(EaseGuide, Controller.IsValid() && Controller->IsLessonGuideOpen()); }) // (release 2, tc.UI.Ease: it fades in and out)
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
 							SNew(SLessonGuide).Controller(Controller)
@@ -9410,6 +9410,7 @@ namespace
 			TakeOwedPortrait(); // (release 2, tc.Speed.PicturesAside: one picture a frame, owed by a card laid before this frame)
 			UpdateBigCard();
 			UpdateFold(InDeltaTime); // (release 2: before the staff's note, which stands under the date card)
+			UpdateEase(InDeltaTime); // (release 2, tc.UI.Ease: the rooms and the province panel ease in and out)
 			PlaceLessonNote();
 			PlaceLessonPointer();
 			LookAtList();
@@ -12024,7 +12025,7 @@ namespace
 
 		/** A room of the rules' own: its buttons, then each section with its words and its rows. */
 		/** Whether the room open is a raid being planned, which is set out as a card of its own. */
-		bool IsRaidCard() const { return Controller.IsValid() && Controller->IsPageOpen() && Controller->GetPage().Card.bValid; }
+		bool IsRaidCard() const { return Controller.IsValid() && (Controller->IsPageOpen() || EaseFading(EasePage)) && Controller->GetPage().Card.bValid; } // (release 2, tc.UI.Ease: and while it fades out)
 
 		/** A key's name on a small cap, as on a keyboard: beside the button it works. */
 		/**
@@ -13644,7 +13645,7 @@ namespace
 					]
 				];
 		}
-		bool IsMonthCard() const { return Controller.IsValid() && Controller->IsPageOpen() && Controller->GetPage().Month.bValid; }
+		bool IsMonthCard() const { return Controller.IsValid() && (Controller->IsPageOpen() || EaseFading(EasePage)) && Controller->GetPage().Month.bValid; } // (release 2, tc.UI.Ease: and while it fades out)
 
 		/**
 		 * (Ruling 64.) The art director's picture for the month's card, by its file's own name ("troops", "town",
@@ -15267,7 +15268,11 @@ namespace
 		}
 
 		/** (Release 2, THE HOME FRONT) Whether the room open is the home front, set out as a board of its own. */
-		bool IsHomeBoard() const { return Controller.IsValid() && Controller->IsHomeFrontOpen(); }
+		bool IsHomeBoard() const
+		{
+			// (and, release 2, tc.UI.Ease, while the board fades out: the card keeps its size and its head)
+			return Controller.IsValid() && (Controller->IsHomeFrontOpen() || (EaseFading(EasePage) && Controller->GetPage().Home.bValid && ACampaignPlayerController::IsHomeFrontStyle()));
+		}
 
 		/** (Release 2, THE HOME FRONT) Months in words: "1 month", "3 months". */
 		static FString HomeMonths(int32 Count)
@@ -20633,6 +20638,113 @@ namespace
 		FEdgeNewsCardMarks EdgeMarks; // (Release 2, news at the map's edge: merge by hand)
 		TSharedPtr<SVerticalBox> PageFoot;
 		int32 ShownRoom = -1;
+
+		/**
+		 * (Release 2, tc.UI.Ease; Brian, 25 November 2026: "lets make the campaign map and playing of that feel less choppy".)
+		 * The rooms and the province panel ease in and out over about an eighth of a second, instead of appearing and
+		 * vanishing between one frame and the next. A room that is closing fades under the pointer, which the map has back
+		 * at once; the province panel only fades and slides in, since what it shows goes with it. A room opens at nought on
+		 * its first frame, so whatever is laid out in that frame (before Slate has measured it) is never seen: the one-frame
+		 * jump the art director saw at step 027. Off, nothing is touched.
+		 */
+		enum ERoomEase : int32 { EaseArsenal, EaseLedger, EasePage, EaseGenerals, EaseResearch, EaseDiplomacy, EaseGuide, EasePanel, EaseRooms };
+		float EaseShown[EaseRooms] = {};
+		bool bEaseWasOpen[EaseRooms] = {};
+		TSharedPtr<SWidget> EaseWidget[EaseRooms][2];
+
+		/** (Release 2, tc.UI.Ease) Whether the room stands open now, as the game has it. */
+		bool EaseOpenNow(int32 Room) const
+		{
+			if (!Controller.IsValid())
+			{
+				return false;
+			}
+			switch (Room)
+			{
+			case EaseArsenal: return Controller->IsArsenalOpen();
+			case EaseLedger: return Controller->IsLedgerOpen();
+			case EasePage: return Controller->IsPageOpen();
+			case EaseGenerals: return Controller->IsGeneralsOpen();
+			case EaseResearch: return Controller->IsResearchOpen();
+			case EaseDiplomacy: return Controller->IsDiplomacyOpen();
+			case EaseGuide: return Controller->IsLessonGuideOpen();
+			case EasePanel: return Controller->GetRegionPanel().bVisible;
+			default: return false;
+			}
+		}
+
+		/** (Release 2, tc.UI.Ease) A room's visibility: open, it takes the pointer; closing, it fades under the pointer. */
+		EVisibility EaseVisibility(int32 Room, bool bOpen) const
+		{
+			if (bOpen)
+			{
+				return EVisibility::Visible;
+			}
+			return ACampaignPlayerController::IsEaseStyle() && Room != EasePanel && EaseShown[Room] > 0.0f ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+		}
+
+		/** (Release 2, tc.UI.Ease) Whether a room that has been closed is still fading out. */
+		bool EaseFading(int32 Room) const
+		{
+			return ACampaignPlayerController::IsEaseStyle() && !bEaseWasOpen[Room] && EaseShown[Room] > 0.0f;
+		}
+
+		/** (Release 2, tc.UI.Ease) Each frame: how far each room is shown, and its widgets' opacity (and the panel's slide). */
+		void UpdateEase(float DeltaTime)
+		{
+			const bool bOn = ACampaignPlayerController::IsEaseStyle();
+			for (int32 Room = 0; Room < EaseRooms; ++Room)
+			{
+				const bool bOpen = EaseOpenNow(Room);
+				if (!bOn)
+				{
+					EaseShown[Room] = bOpen ? 1.0f : 0.0f;
+					bEaseWasOpen[Room] = bOpen;
+					for (const TSharedPtr<SWidget>& Widget : EaseWidget[Room])
+					{
+						// (off: left as Slate makes them, or put back so if the switch was on a moment ago)
+						if (Widget.IsValid() && Widget->GetRenderOpacity() != 1.0f)
+						{
+							Widget->SetRenderOpacity(1.0f);
+						}
+						if (Widget.IsValid() && Widget->GetRenderTransform().IsSet())
+						{
+							Widget->SetRenderTransform(TOptional<FSlateRenderTransform>());
+						}
+					}
+					continue;
+				}
+				if (bOpen && !bEaseWasOpen[Room])
+				{
+					// (the frame it opens: as it was, or at nought for the panel, which never fades out)
+					if (Room == EasePanel)
+					{
+						EaseShown[Room] = 0.0f;
+					}
+				}
+				else
+				{
+					const float Step = FMath::Min(DeltaTime, 0.1f) / 0.13f;
+					EaseShown[Room] = bOpen ? FMath::Min(1.0f, EaseShown[Room] + Step) : Room == EasePanel ? 0.0f : FMath::Max(0.0f, EaseShown[Room] - Step);
+				}
+				bEaseWasOpen[Room] = bOpen;
+				const float Shown = EaseShown[Room];
+				const float Eased = Shown * Shown * (3.0f - 2.0f * Shown);
+				for (const TSharedPtr<SWidget>& Widget : EaseWidget[Room])
+				{
+					if (!Widget.IsValid())
+					{
+						continue;
+					}
+					Widget->SetRenderOpacity(Eased);
+					if (Room == EasePanel)
+					{
+						// (in from 14 points to the left, as if slid out from the map's edge)
+						Widget->SetRenderTransform(Eased < 1.0f ? TOptional<FSlateRenderTransform>(FSlateRenderTransform(FVector2f(-14.0f * (1.0f - Eased), 0.0f))) : TOptional<FSlateRenderTransform>());
+					}
+				}
+			}
+		}
 		// (Release 2, THE HOME FRONT) The board in the room's card; its buttons at the card's head; and its three lists,
 		// kept so that each stays where it was scrolled to when the board is laid out again after a press.
 		TSharedPtr<SBox> HomeBody;

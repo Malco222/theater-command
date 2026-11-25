@@ -806,6 +806,8 @@ public:
 	 * run). It is the rules' own room "home", laid out as a board. Off, no door leads to it and the game is as it was.
 	 */
 	static bool IsHomeFrontStyle();
+	/** (Release 2, tc.UI.Ease) The rooms and the province panel ease in and out instead of appearing and vanishing at once. */
+	static bool IsEaseStyle();
 	void OpenHomeFront();
 	bool IsHomeFrontOpen() const { return bPageOpen && Page.Home.bValid && IsHomeFrontStyle(); }
 	/** Which towns the board lists: 0 those that can take a building, 1 those building, 2 every town. */
