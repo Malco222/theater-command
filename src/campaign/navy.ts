@@ -43,7 +43,7 @@ import { whyBarred } from './ground';
 import { lineShut } from './line';
 import { alongside, riding } from './stations';
 import { stationBars, whyStationBars } from './far';
-import { FAR_SEAS_FIRST, farOn } from './world';
+import { FAR_SEAS_FIRST, WORLD, farOn } from './world';
 import { PACIFIC, coversBeaches, hopAims, pacificGround, ringDrawn, shoreLift, skiesOver, useShoreLift, type ShoreLift } from './pacific';
 import { HISTORY, bookDate, dialDraw, onBook, stopDef, stopOf, theatreOf } from './history';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, placed, type Assessment } from './game';
@@ -2724,12 +2724,31 @@ export const enemyInReach = (g: Game, f: Fleet, r: Region): { seas: number; out:
  */
 const FORWARD_MONTHS = 1;
 
+/**
+ * A fleet its staff holds to a named harbour this month: the striking force's gathering while it stands, until its
+ * strike sails or is called off (readiness.ts, the computer's and a player's admirals'). Standing forward leaves it there
+ * while the order stands, never for good (the design director, 19:13Z, 2: else the force gathered at its anchorage
+ * stands forward the same month, is ordered back the next, and its strike never comes ready).
+ * Written only while standing forward can act, so nothing is saved while it is held.
+ */
+export const holdTo = (g: Game, f: Fleet): void => { if (STAND_TO.on(g)) g.flags[`held:${f.id}`] = g.turn; };
+const heldTo = (g: Game, f: Fleet): boolean => g.flags[`held:${f.id}`] === g.turn;
+
+/**
+ * At stops 1 and 2 the book's stations and moves are the leash: a fleet the book stations (a row of its own, its start
+ * included, and wherever the book's dated moves have sent it since) stays at the book's harbour, and the rule acts
+ * there only on a fleet the book stations nowhere. By cause, not a stop line (the design director, 19:13Z, 1).
+ */
+const bookLeash = (g: Game, f: Fleet): boolean => stopOf(g) <= 2 && [NAVY.fleets, WORLD.fleets].some((rows) => rows.some((r) => r.nat === f.nat && r.name === f.name && !!r.base));
+
 /** Whether an enemy sea, coast or lane of a fleet's country lies within its reach from a harbour. */
 export const foeInReach = (g: Game, f: Fleet, r: Region): boolean => foeReach(g, f.nat, r, foeSeaSet(g, f)).seas > 0;
 
 /**
  * Where a fleet with no enemy in its reach stands forward to (the rulings of 18:14Z, 18:23Z and 18:26Z above), or
- * null: balance's stand-to has not joined or is switched off (joinStandTo), it has an enemy in its reach, its country
+ * null: balance's stand-to has not joined or is switched off (joinStandTo), its staff or the book holds it to a named
+ * harbour (holdTo, a cover base it is asked for, the book's station at stops 1 and 2), it has an enemy in its reach, its
+ * country
  * has none, or no friendly harbour open to it, at most a month's voyage away, has one in reach and lies beyond where the
  * enemy could strike from next month. Of those, the fewest months of
  * voyage; of harbours an equal voyage away, the one with the most of the enemy in reach (a fleet stands forward to
@@ -2737,7 +2756,7 @@ export const foeInReach = (g: Game, f: Fleet, r: Region): boolean => foeReach(g,
  * chart.
  */
 export function forwardHarbour(g: Game, f: Fleet): Region | null {
-  if (!farOn(g) || !STAND_TO.on(g) || f.base < 0 || inPassage(f)) return null;
+  if (!farOn(g) || !STAND_TO.on(g) || f.base < 0 || inPassage(f) || heldTo(g, f) || bookLeash(g, f)) return null;
   const at = foeSeaSet(g, f);
   if (!at.size || foeReach(g, f.nat, g.regions[f.base], at).seas > 0) return null;
   const here = g.regions[f.base];
@@ -6082,6 +6101,10 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
     // or by the chance, and Japan's blow must find it out, ruling 234(d). Nor is it given any other order that month,
     // where its country is at war with somebody else: rider b593. No fleet has such a month with the far side off.)
     if (f.cruised === g.turn) continue;
+    // (Release 2, the far chart, at the join with balance: a country at peace standing to against a power stands a fleet
+    // forward against it, the cause of the record's May 1940 move, and that is its one order of the month; the month
+    // after, at peace, it lies in harbour there, at its new base. The design director, 18:14Z and 19:13Z, 4.)
+    if (!n.atWar.length && shipCount(f.ships) && f.duty !== 'raid' && !f.tied && !bases.covers.has(f.id) && standsForward(g, f)) { say(`Standing to against a danger with none in its reach, it moves its base to ${f.port}.`); continue; }
     if (!n.atWar.length || !shipCount(f.ships) || (f.duty !== 'raid' && keepsHarbour(g, nat))) { home(n.atWar.length ? undefined : 'The country is at peace, so it lies in harbour.'); continue; }
     const o = orders?.find((x) => x.fleet === f.name);
     if (o) { if (!sail(g, f, zoneOf(g, o.zone), o.stance)) home(); continue; }
@@ -6098,7 +6121,8 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
     }
     // (Release 2, the far chart: with no enemy sea, coast or lane in its reach, a fleet on patrol duty and tied to no
     // station stands forward to the nearest friendly harbour from which one is: the design director's ruling of 18:14Z.)
-    if (f.duty !== 'raid' && !f.tied && standsForward(g, f)) { say(`No enemy lay within its reach, so it moves its base to ${f.port}.`); continue; }
+    // (Nor a fleet its cover base is asked of, while it is asked: the design director, 19:13Z, 2.)
+    if (f.duty !== 'raid' && !f.tied && !bases.covers.has(f.id) && standsForward(g, f)) { say(`No enemy lay within its reach, so it moves its base to ${f.port}.`); continue; }
     if (f.duty === 'raid') {
       // (Release 2, the sea patrol, once live (Q5 (a)): the staff moves its boats to the sea of their routes, within
       // reach, where they spend most of the month up on station, out of waters aircraft without kit keep them down in

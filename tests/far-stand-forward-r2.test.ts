@@ -5,14 +5,20 @@
 // month after. One rule for every nation; none off the far chart. Bounded at 18:23Z and 18:28Z, by cause: no farther
 // than one month's voyage; the fewest months first, then the most of the enemy in reach, then the fewer seas out. Held
 // at 18:35Z behind the balance work's stand-to (joinStandTo): it acts only where that has joined and is switched on,
-// and reads a power stood to against as an enemy. These tests join a stand-in for it.
+// and reads a power stood to against as an enemy. These tests join a stand-in for it. For the join (19:13Z): never a
+// fleet its staff or the book holds to a named harbour while that order stands (the striking force's gathering, a cover
+// base, the book's station at stops 1 and 2); at peace a stand-to stands a fleet forward, its one order of the month;
+// a player's fleets only where his navy desk is handed to his admirals.
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { atWar, createGame, declareWar } from '../src/campaign/game';
+import { setDesk } from '../src/campaign/depth';
+import { addCorps, atWar, createGame, declareWar } from '../src/campaign/game';
+import { beginHuman, endHuman, humanUp, stepAI } from '../src/campaign/turn';
 import { setStop } from '../src/campaign/history';
 import { km } from '../src/campaign/air';
-import { enemyInReach, foeInReach, foesOf, forwardHarbour, joinStandTo, navalAI, outOfStrikes, rebase, strikeThreat, voyageMonths } from '../src/campaign/navy';
+import { enemyInReach, foeInReach, foesOf, forwardHarbour, foundFleet, holdTo, inPassage, joinStandTo, navalAI, outOfStrikes, planCrossing, rebase, strikeThreat, voyageMonths } from '../src/campaign/navy';
+import { gatherMonth } from '../src/campaign/readiness';
 import { startOpen } from '../src/campaign/staff';
 import type { Fleet, Game } from '../src/campaign/types';
 
@@ -67,6 +73,26 @@ describe('held behind the stand-to join', () => {
 });
 
 describe('a fleet with no enemy in its reach stands forward', () => {
+  it('at peace, standing to against Japan, the Pacific Fleet stands forward: its one order of the month, and the next month it lies in harbour there', () => {
+    const { g, pf } = opening();
+    expect(g.nations.USA.atWar.length).toBe(0);
+    standTo.against = { USA: ['JAP'] };
+    try {
+      const from = g.headlines.length;
+      navalAI(g, 'USA');
+      expect(pf.port).toBe('Bristol Bay');
+      expect(g.headlines.slice(from).some((h) => h.text === 'The Pacific Fleet moves its base from San Diego to Bristol Bay: no enemy lies within its reach from San Diego.')).toBe(true);
+      g.turn++;
+      navalAI(g, 'USA');
+      expect([pf.port, pf.stance]).toEqual(['Bristol Bay', 'port']);
+      // (With the stand-to ended, at peace it lies in harbour where it is: never sent back by this rule.)
+      standTo.against = {};
+      g.turn++;
+      navalAI(g, 'USA');
+      expect(pf.port).toBe('Bristol Bay');
+    } finally { standTo.against = {}; }
+  }, 300000);
+
   it('at peace, a fleet stays where it is', () => {
     const { g, pf } = opening();
     expect(atWar(g, 'USA', 'JAP')).toBe(false);
@@ -105,6 +131,10 @@ describe('a fleet with no enemy in its reach stands forward', () => {
     expect(at(g, au)).toBe('Sydney');
     expect(g.nations.AUS.atWar).toContain('GER');
     expect(foeInReach(g, au, g.byName['Sydney'])).toBe(false);
+    // (A harbour with Germans in reach there is, two months' voyage away and more: beyond the bound.)
+    const gib = g.byName['Gibraltar'];
+    expect(enemyInReach(g, au, gib).seas).toBeGreaterThan(0);
+    expect(voyageMonths(g, au, gib)).toBeGreaterThan(1);
     expect(forwardHarbour(g, au)).toBeNull();
   }, 300000);
 
@@ -153,11 +183,128 @@ describe('a fleet with no enemy in its reach stands forward', () => {
     expect(nations.size).toBeGreaterThan(1);
   }, 300000);
 
+  it("a month's passage is paid where nothing nearer reaches the war: from New Orleans the Pacific Fleet sails for Hawaii", () => {
+    const { g, pf } = opening();
+    declareWar(g, 'JAP', 'USA');
+    expect(rebase(g, pf, g.byName['New Orleans'], true)).toBe(true);
+    const to = forwardHarbour(g, pf)!;
+    expect(to.name).toBe('Hawaii');
+    expect(voyageMonths(g, pf, to)).toBe(1);
+    const from = g.headlines.length;
+    navalAI(g, 'USA');
+    expect([pf.port, inPassage(pf)]).toEqual(['Hawaii', true]);
+    expect(g.headlines.slice(from).some((h) => h.text === 'The Pacific Fleet moves its base from New Orleans to Hawaii: no enemy lies within its reach from New Orleans.')).toBe(true);
+    // (In passage it stands forward no further.)
+    g.turn++;
+    expect(forwardHarbour(g, pf)).toBeNull();
+  }, 300000);
+
+  it('of harbours as near with as much of the enemy in reach, the one fewer seas out: Italy, standing to against the Soviet Union', () => {
+    const { g } = opening();
+    const it2 = fleet(g, 'ITA', '2nd Fleet');
+    expect(at(g, it2)).toBe('Naples');
+    standTo.against = { ITA: ['SOV'] };
+    try {
+      const rhodes = g.byName['Rhodes'], apulia = g.byName['Apulia'];
+      expect(voyageMonths(g, it2, rhodes)).toBe(voyageMonths(g, it2, apulia));
+      expect(enemyInReach(g, it2, rhodes).seas).toBe(enemyInReach(g, it2, apulia).seas);
+      expect([enemyInReach(g, it2, rhodes).out, enemyInReach(g, it2, apulia).out]).toEqual([2, 3]);
+      expect(forwardHarbour(g, it2)?.name).toBe('Rhodes');
+    } finally { standTo.against = {}; }
+  }, 300000);
+
+  it('an enemy fleet its side knows of is the enemy in reach: the French Mediterranean Fleet at Marseille, and the German fleets gone', () => {
+    const { g } = opening();
+    const fr = fleet(g, 'FRA', 'Mediterranean Fleet'), home = g.regions[fr.base];
+    expect(home.name).toBe('Marseille');
+    expect(foeInReach(g, fr, home)).toBe(true);
+    expect(forwardHarbour(g, fr)).toBeNull();
+    for (const x of g.fleets) if (x.nat === 'GER') x.zone = -1;
+    expect(foeInReach(g, fr, home)).toBe(false);
+    expect(forwardHarbour(g, fr)).not.toBeNull();
+  }, 300000);
+
+  it("at stops 1 and 2 the book's station is the leash: a fleet the book stations stays, one it stations nowhere stands forward", () => {
+    const { g, pf } = opening();
+    declareWar(g, 'JAP', 'USA');
+    const sq = foundFleet(g, 'USA', g.byName['San Diego'], 'Test Squadron');
+    expect(forwardHarbour(g, pf)?.name).toBe('Bristol Bay');
+    for (const stop of [1, 2]) {
+      setStop(g, stop, true);
+      expect(forwardHarbour(g, pf), `stop ${stop}`).toBeNull();
+      expect(forwardHarbour(g, sq)?.name, `stop ${stop}`).toBe('Bristol Bay');
+    }
+  }, 300000);
+
   it('off the far chart, no fleet stands forward', () => {
     const { g, pf } = opening();
     declareWar(g, 'JAP', 'USA');
     expect(forwardHarbour(g, pf)).not.toBeNull();
     g.flags.world = 0;
     expect(forwardHarbour(g, pf)).toBeNull();
+  }, 300000);
+});
+
+describe('a fleet its staff holds to a named harbour stays there', () => {
+  it('held this month, the Pacific Fleet does not stand forward; the next month it does', () => {
+    const { g, pf } = opening();
+    declareWar(g, 'JAP', 'USA');
+    holdTo(g, pf);
+    expect(forwardHarbour(g, pf)).toBeNull();
+    g.turn++;
+    expect(forwardHarbour(g, pf)?.name).toBe('Bristol Bay');
+  }, 300000);
+
+  it("the striking force his admirals gather at its anchorage is not taken away by standing forward (Units decide audit item 44)", () => {
+    const g = startOpen(createGame(17, 'JAP'));
+    setDesk(g, 'navy', true);
+    g.turn = 25;
+    g.flags['pac:freeze'] = 23;
+    // (The crossing he has named, and a corps of his on its quay: his admirals gather the striking force.)
+    let named = false;
+    for (const from of g.regions.filter((r) => r.port && r.ctrl === 'JAP' && r.owner === 'JAP')) {
+      for (const to of g.regions.filter((r) => r.seas.length > 0 && atWar(g, 'JAP', r.ctrl))) {
+        if (!planCrossing(g, 'JAP', from, to)) continue;
+        addCorps(g, 'JAP', 'Quay Corps', 'inf', 1, from.id, {});
+        named = true;
+        break;
+      }
+      if (named) break;
+    }
+    expect(named).toBe(true);
+    const mf = fleet(g, 'JAP', 'Mobile Fleet');
+    gatherMonth(g, 'JAP');
+    const anchorage = g.regions[mf.base].name;
+    expect(anchorage).toBe('Etorofu');
+    // (Japan at war with China alone: no enemy lies in its reach at the anchorage, and unheld it would stand forward.)
+    expect(foeInReach(g, mf, g.regions[mf.base])).toBe(false);
+    expect(forwardHarbour(g, mf)).toBeNull();
+    navalAI(g, 'JAP');
+    expect(g.regions[mf.base].name).toBe('Etorofu');
+    g.flags[`held:${mf.id}`] = g.turn - 1;
+    expect(forwardHarbour(g, mf)).not.toBeNull();
+  }, 300000);
+});
+
+describe("a player's fleets", () => {
+  /** Japan's seat at the opening, at war with China, the 4th Fleet at Truk; his navy desk handed to his admirals or his own. */
+  function japan(handed: boolean): Game {
+    const g = startOpen(createGame(3, 'JAP'));
+    setStop(g, 3, true);
+    for (let k = 0; !humanUp(g) && k < 400; k++) stepAI(g);
+    setDesk(g, 'navy', handed);
+    beginHuman(g);
+    return g;
+  }
+  const month = (g: Game): void => { endHuman(g); for (let k = 0; !humanUp(g) && k < 400; k++) stepAI(g); beginHuman(g); };
+  it('stand forward only where his navy desk is handed to his admirals', () => {
+    const own = japan(false), f = fleet(own, 'JAP', '4th Fleet');
+    expect(at(own, f)).toBe('Truk');
+    expect(forwardHarbour(own, f)?.name).toBe('Iwo Jima');
+    month(own);
+    expect(at(own, f)).toBe('Truk');
+    const handed = japan(true), h = fleet(handed, 'JAP', '4th Fleet');
+    month(handed);
+    expect(at(handed, h)).toBe('Iwo Jima');
   }, 300000);
 });

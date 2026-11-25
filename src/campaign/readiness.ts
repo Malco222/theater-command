@@ -40,7 +40,7 @@ import type { Corps, Game, Region } from './types';
 import { PACIFIC, freezeAt, readyRules, type ReadyRules } from './pacific';
 import { RIVALS, asGoes, characterOf, monthly, ops, strengthAsked, type Op } from './staff';
 import { leash, stopDef, stopOf } from './history';
-import { FLEETS, NAVY, fleetReach, fleetsOf, inPassage, orderedTo, plannedCrossing, seaPath, shipCount } from './navy';
+import { FLEETS, NAVY, fleetReach, fleetsOf, holdTo, inPassage, orderedTo, plannedCrossing, seaPath, shipCount } from './navy';
 import { followUp, reckon } from './ashore';
 import { WORLD } from './world';
 import { allied, atWar } from './game';
@@ -186,8 +186,9 @@ export function readinessMonth(g: Game, nat: string): void {
   const byCause = (): boolean => (op.strikes ?? []).some((s) => s.fleet === R.gather.fleet) && armyOnQuays(g, nat, op);
   if (stopOf(g) <= 2 ? m >= R.gather.after : byCause()) {
     const f = fleetsOf(g, nat).find((x) => x.name === R.gather.fleet);
-    // (Beyond a month's steaming the gathering is a voyage: release 2, the far chart, the ruling of 15:48Z, 3.)
-    if (f) orderedTo(g, f, R.gather, undefined, true);
+    // (Beyond a month's steaming the gathering is a voyage: release 2, the far chart, the ruling of 15:48Z, 3. Held there
+    // while the gathering stands, so no fleet's standing forward takes it away: navy.ts holdTo.)
+    if (f) { orderedTo(g, f, R.gather, undefined, true); holdTo(g, f); }
   }
   if (m < R.window[0]) return;
   const now = readiness(g, nat);
@@ -252,4 +253,6 @@ export function gatherMonth(g: Game, nat: string): void {
   // design director's ruling of 17:09Z, 25 November 2026, on Units decide audit item 44.)
   const due = stopOf(g) <= 2 ? m >= R.gather.after : hisCrossingReady(g, nat);
   if (due && f && (orderedTo(g, f, R.gather, undefined, true) || there())) g.flags[GATHERED] ??= g.turn;
+  // (Held to its anchorage while the gathering stands, until its strike sails or it is called off: navy.ts holdTo.)
+  if (f && (due || (g.flags[GATHERED] ?? -1) >= 0) && bound()) holdTo(g, f);
 }
