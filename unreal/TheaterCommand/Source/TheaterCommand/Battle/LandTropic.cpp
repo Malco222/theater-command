@@ -210,6 +210,7 @@ namespace LandScape
 				// Solomons' and Burma's laterite red)
 				bMainland = F.Lon < 106.0 && F.Lat > 4.0;
 				bPlumeTrial = F.Tried("kunai");
+				bSand = bIsland && F.Tried("islandsand");
 				bClay = F.Lon > 140.0 && F.Lon < 151.5 && F.Lat < -2.0 && F.Lat > -11.0;
 				// The dry season (the kunai straw, the tracks hard): south of the line May to October, north of it
 				// November to April (Burma's monsoon from late May).
@@ -530,7 +531,7 @@ namespace LandScape
 				// In bands out from the beach: wet sand under a skin of water, pale sandy shallows, the reef flat mottled with
 				// sand channels, weed and dark coral heads, the white surf line at its edge, the drop to deep blue.
 				const double Out = -W;
-				const Tone Wash = Rgb(196, 196, 174), Pale = Rgb(172, 194, 176), Flat = Rgb(124, 148, 122), Drop = Rgb(44, 100, 132), Deep = Rgb(26, 60, 106);
+				const Tone Wash = bSand ? Rgb(146, 138, 110) : Rgb(196, 196, 174), Pale = Rgb(172, 194, 176), Flat = Rgb(124, 148, 122), Drop = Rgb(44, 100, 132), Deep = Rgb(26, 60, 106);
 				Tone T = Mixed(Wash, Pale, Smooth(0.0, 12.0, Out));
 				T = Mixed(T, Flat, Smooth(22.0, 20.0 + 0.45 * Rf, Out));
 				const double Reefy = Smooth(18.0, 50.0, Out) * Smooth(Rf + 4.0, Rf - 10.0, Out);
@@ -550,11 +551,15 @@ namespace LandScape
 				const double W = Shore(S.X, S.Y);
 				if (W < 0.0) return Sea(W, Reef(S.X, S.Y), S.N1, S.N2);
 				const double Crest = Read(S.X, S.Y, 2);
-				const Tone Dry_ = Mixed(Rgb(232, 226, 206), Rgb(246, 242, 228), Smooth(-0.1, 0.35, Crest)), Wet = Rgb(186, 180, 160), Wrack = Rgb(150, 134, 104);
+				// (on trial "islandsand": warm coral sand, not the white that reads as snow under palms, and its wet band at the
+				// water darker, as sand is where the wash has just left it)
+				const Tone Dry_ = bSand ? Mixed(Rgb(202, 178, 130), Rgb(218, 194, 148), Smooth(-0.1, 0.35, Crest))
+										: Mixed(Rgb(232, 226, 206), Rgb(246, 242, 228), Smooth(-0.1, 0.35, Crest));
+				const Tone Wet = bSand ? Rgb(134, 116, 86) : Rgb(186, 180, 160), Wrack = bSand ? Rgb(114, 96, 68) : Rgb(150, 134, 104);
 				if (W < 32.0)
 				{
 					// the beach: the wet band at the water greyer, the tide's wrack of weed and husks, dry sand whiter to the crest
-					Tone T = Mixed(Wet, Dry_, Smooth(2.5, 7.0 + 3.0 * S.N1, W));
+					Tone T = bSand ? Mixed(Wet, Dry_, Smooth(4.0, 10.0 + 3.0 * S.N1, W)) : Mixed(Wet, Dry_, Smooth(2.5, 7.0 + 3.0 * S.N1, W));
 					T = Mixed(T, Wrack, 0.7 * Smooth(1.6, 0.0, std::fabs(W - 7.5 - 1.5 * S.N1)) * (0.5 + 0.5 * Smooth(-0.4, 0.4, S.N2)));
 					if (S.Kind != KLane) return Breakup(T, S.X, S.Y, 0.5);
 				}
@@ -565,15 +570,15 @@ namespace LandScape
 					// crushed coral: white, the ruts a little greyer
 					const double Off = std::fabs(S.Lane + S.LaneHalf);
 					const double Rut = Smooth(0.45, 0.12, std::fabs(Off - 0.9));
-					Tone T = Mixed(Rgb(226, 220, 202), Rgb(196, 188, 168), 0.6 * Rut);
-					if (S.Lane > 0.0) T = Mixed(T, Rgb(214, 206, 180), Smooth(0.2, 1.6, S.Lane));
+					Tone T = bSand ? Mixed(Rgb(218, 202, 168), Rgb(184, 166, 134), 0.6 * Rut) : Mixed(Rgb(226, 220, 202), Rgb(196, 188, 168), 0.6 * Rut);
+					if (S.Lane > 0.0) T = Mixed(T, bSand ? Rgb(204, 182, 138) : Rgb(214, 206, 180), Smooth(0.2, 1.6, S.Lane));
 					return Varied(T, 1.0 + 0.03 * S.N2, 0.0);
 				}
 				case KVillage:
-				case KYard: return Varied(Mixed(Rgb(214, 204, 178), Rgb(150, 160, 92), S.bNear ? 0.05 : 0.35 * Smooth(0.0, 0.6, S.N1)), 1.0 + 0.04 * S.N2, 0.0);
+				case KYard: return Varied(Mixed(bSand ? Rgb(200, 176, 134) : Rgb(214, 204, 178), Rgb(150, 160, 92), S.bNear ? 0.05 : 0.35 * Smooth(0.0, 0.6, S.N1)), 1.0 + 0.04 * S.N2, 0.0);
 				case KWater: return Sea(-60.0 - 80.0 * (0.5 + 0.5 * S.N1), 1000.0, S.N1, S.N2);
 				case KMarsh: return Varied(Mixed(Rgb(150, 146, 108), Rgb(96, 112, 62), 0.4 + 0.3 * S.N1), 1.0, 0.0);
-				case KWorks: return Varied(Mixed(Rgb(212, 202, 176), Rgb(176, 166, 140), 0.4 + 0.3 * S.N2), 1.0, 0.0);
+				case KWorks: return Varied(bSand ? Mixed(Rgb(196, 172, 132), Rgb(164, 144, 110), 0.4 + 0.3 * S.N2) : Mixed(Rgb(212, 202, 176), Rgb(176, 166, 140), 0.4 + 0.3 * S.N2), 1.0, 0.0);
 				case KWoods: return Floor(S, 1.0, 1.5, 1.2);
 				default: break;
 				}
@@ -589,8 +594,9 @@ namespace LandScape
 				Tone Floor(const Spot& S, double Cover, double Litter, double Bare) const
 				{
 					const double Crest = Read(S.X, S.Y, 2), Drift = Read(S.X, S.Y, 1), Lit_ = Read(S.X, S.Y, 3);
-					Tone T = Mixed(Rgb(212, 202, 174), Rgb(238, 232, 212), Clamp01(Bare * Smooth(-0.1, 0.4, Crest)));
-					T = Mixed(T, Rgb(178, 172, 150), 0.6 * Smooth(-0.1, -0.4, Crest));
+					Tone T = bSand ? Mixed(Rgb(190, 166, 120), Rgb(212, 188, 142), Clamp01(Bare * Smooth(-0.1, 0.4, Crest)))
+								   : Mixed(Rgb(212, 202, 174), Rgb(238, 232, 212), Clamp01(Bare * Smooth(-0.1, 0.4, Crest)));
+					T = Mixed(T, bSand ? Rgb(164, 144, 106) : Rgb(178, 172, 150), 0.6 * Smooth(-0.1, -0.4, Crest));
 					T = Breakup(T, S.X, S.Y, 0.6);
 					const double Fine = Read(S.X, S.Y, 5);
 					T = Mixed(T, Mixed(Rgb(158, 140, 108), Rgb(132, 116, 90), Clamp01(0.5 + 0.8 * Fine)), Clamp01(0.6 * Litter * Smooth(-0.35, 0.4, Lit_)));
@@ -2039,6 +2045,8 @@ namespace LandScape
 			bool bIsland = false;
 			/** The plumed kunai on trial (Field::Tried("kunai")): one clump in six with its plume, the rest without (KunaiClump). */
 			bool bPlumeTrial = false;
+			/** Warm coral sand and a dark wet band at the water on trial (Field::Tried("islandsand")), the islands only. */
+			bool bSand = false;
 			bool bMainland = false, bClay = false;
 			double Dry = 0.5;
 			double SeaZ = 0.0;
