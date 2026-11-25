@@ -35,7 +35,8 @@ struct FKey;
  * fighters" on, -TheaterAirRuleDefend; -TheaterAirScrambleDemo for the bridge's stand-in), END THE MONTH's step ends with
  * the card up, and the file answers it with "press SCRAMBLE" or "press LEAVE IT TO THE STAFF" (its tick: "press Settle
  * the rest of this month's raids"). SCRAMBLE opens the battle as FLY IT YOURSELF does: an air step. Its "air-key
- * continue" hands the month back, and that step waits for the month's end and answers its screens as END THE MONTH's does.
+ * continue" hands the month back, and that step waits for the month's end and answers its screens as END THE MONTH's does;
+ * so does the step that presses LEAVE IT TO THE STAFF.
  *
  * A land battle he fights himself (FIGHT IT YOURSELF) covers the map too. Three verbs play it with his own keys and
  * clicks, sent through Slate (FSlateApplication's key and mouse events), so the battle screen's own handlers take them
