@@ -363,7 +363,7 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	{
 		if (Session->IsRunning() && !Session->GetView().CommandName.IsEmpty() && !Session->GetView().Human.IsEmpty())
 		{
-			Add(TEXT("depth"), TEXT("How deep you play"), TEXT("Which parts of the war are on your own desk and which your staff runs for you: research, building and trade, diplomacy, the secret service, the air war and the navy. The armies are always yours. Press to open YOUR STAFF and change the depth, or any one desk, in any month."), *Session->GetView().CommandName.ToUpper(), true);
+			Add(TEXT("depth"), TEXT("How deep you play"), TEXT("Which parts of the war are on your own desk and which your staff runs for you: research, recruitment, towns and trade, diplomacy, the secret service, the air war and the navy. The armies are always yours. Press to open YOUR STAFF and change the depth, or any one desk, in any month."), *Session->GetView().CommandName.ToUpper(), true);
 		}
 	}
 	// (Release 2) Earned nicknames and supply columns, each its own switch, kept by the campaign (nicknames.ts, columns.ts).

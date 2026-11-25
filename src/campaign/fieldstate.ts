@@ -298,7 +298,7 @@ export function fieldsMonth(g: Game): void {
 }
 
 /**
- * A computer staff's repairs (and a player's staff with the building desk), before new builds: a damaged field with
+ * A computer staff's repairs (and a player's staff with towns and trade), before new builds: a damaged field with
  * any of its own or its allies' groups based there at once, front line included; an empty one when it has not been hit
  * in the last 'ai.quiet' months and lies within its fighters' reach of a front. Paid from the treasury, keeping the
  * computer's reserve in hand. Returns the fields repaired, by name.
