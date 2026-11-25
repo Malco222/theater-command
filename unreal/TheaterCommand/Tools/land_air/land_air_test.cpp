@@ -2133,7 +2133,7 @@ int main(int Argc, char** Argv)
 			const double GrassMost[SweptFields] = { 0.33, 0.33, 0.33, 0.33, 0.44, 1.58, 0.33, 0.97, 0.56, 0.67, 1.33, 1.47, 1.94, 2.22, 1.03, 1.34 };
 			const double SilkMost[SweptFields] = { 0.74, 0.74, 0.74, 0.74, 0.75, 1.35, 0.98, 0.90, 0.74, 0.92, 1.47, 1.49, 1.46, 1.46, 1.33, 1.42 };
 			const double TipMost[SweptFields] = { 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05 };
-			const double AloftMost[SweptFields] = { -0.12, -0.12, -0.12, -0.12, 0.09, 0.59, 0.33, 0.29, 0.19, 0.32, 0.84, 0.93, 0.86, 0.93, 0.51, 0.57 };
+			const double AloftMost[SweptFields] = { -0.13, -0.13, -0.13, -0.13, 0.07, 0.59, 0.33, 0.29, 0.19, 0.32, 0.84, 0.93, 0.86, 0.93, 0.51, 0.57 };
 			int FlungOff = 0, TipOff = 0, AloftOff = 0;
 			std::string FlungEach;
 			{
