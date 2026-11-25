@@ -31,7 +31,7 @@ import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, m
 import { civicDrafts, civicSum, handedOver, holdersNow, hospitalNear, hospitalWorth } from './buildings';
 import { tradeTick } from './trade';
 import { divisionsOf, growCorps, numberCorps, numbersUnderFlag } from './armies';
-import { DRAWN, countingFor, formsAny, heldAlready, heldLine, joinNames, joinsAlone, keepCounted, layOnce, namesNow, ownShare, rowOver } from './drawn';
+import { DRAWN, corpsInContact, countingFor, formsAny, heldAlready, heldLine, joinNames, joinsAlone, keepCounted, layOnce, namesNow, ownShare, rowOver } from './drawn';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { plansOnCapture } from './plans';
 import { armyOf, jointHold, jointMonth } from './joint';
@@ -5013,6 +5013,15 @@ function expeditions(g: Game, nat: string): void {
       if (o.adds > 0) own = true;
       else { g.flags[`wait:${i}`] = g.turn; return; }
     }
+    // (The old chart, the grand campaign: a row that takes a named corps whole waits while that corps is in contact, an
+    // enemy at war on its province or beside it, as the far side's waits for a live front, and its half year is counted
+    // from the month the corps comes free. Where the corps already stands at the place the row forms the row goes ahead:
+    // a new name, nothing lifted. The design director's ruling of 19:47Z, 25 November 2026, the 18:47Z test on this
+    // door too (pacific-japan/dd-form-from-rows-contact-1125.md). Its own switch, 'fromWait' (stage.json), off until its
+    // gate passes. drawn.ts, `corpsInContact`.)
+    const formsAt = reg?.id;
+    if (g.flags.fromWait === 1 && g.flags.open === 1 && !farOn(g) && Array.isArray(o.from) && !ashore && row[1] === nat && formsAt !== undefined
+      && g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && x.reg !== formsAt && corpsInContact(g, nat, x))) { g.flags[`wait:${i}`] = g.turn; return; }
     const waited = g.flags[`wait:${i}`];
     if (waited !== undefined) due = Math.max(due, waited + 1);
     if (g.turn - due > 6 || (o.war && !warOn(g, o.war)) || (o.until && g.turn >= o.until)) {
