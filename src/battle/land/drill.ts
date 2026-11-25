@@ -56,7 +56,7 @@ import type { Calibre } from '../core/types';
  * round him: 'leader' a rifle section's leader (its key man; his weapon the 3D game's by nation), 'loader' an automatic
  * weapon's number two or an ammunition bearer (an anti-tank launcher's, a support team's), 'crew' a field gun's crew.
  */
-export type Role = 'officer' | 'rifle' | 'mg' | 'at' | 'sapper' | 'holder' | 'tank' | 'gun' | 'lorry' | 'fo' | 'hmg' | 'mortar' | 'leader' | 'loader' | 'crew';
+export type Role = 'officer' | 'rifle' | 'mg' | 'at' | 'sapper' | 'holder' | 'tank' | 'gun' | 'lorry' | 'fo' | 'hmg' | 'mortar' | 'leader' | 'loader' | 'crew' | 'sniper' | 'spotter';
 /**
  * What he is doing, as the 3D game plays it. The men's are the soldier's own clips (battle-models/land/soldier/README.md)
  * and four held poses: 'wait' (kneeling, rifle up, watching: fire_kneel's aim held without a shot), 'hide' (lying
@@ -272,6 +272,13 @@ export interface Round {
   fc?: Face; u?: number; h?: number;
   /** A tank's machine-gun round: which gun fired it, the coaxial beside the main gun, the hull gunner's, or the commander's on the roof (BOOK.tankMg). */
   g?: 'coax' | 'hull' | 'roof';
+  /** A sniper's aimed round (sniper teams, release 2): one sharp crack, a small flash from his cover. */
+  sn?: 1;
+  /**
+   * Its shooter's team hidden from the other side as it fired (a sniper team not yet found, release 2): the crack only,
+   * no flash and no tracer where he lies; nothing places him (the design director's sniper ruling Q7, guard 3; b464(2)).
+   */
+  hd?: 1;
   /** It struck the tank's commander, up in his hatch: he drops inside, and she fights buttoned up from then. */
   cm?: 1;
   /**
@@ -312,6 +319,11 @@ export interface MenOut {
    * man's call_support clip plays once from it), with cs the spot that call brings the fire on (the middle of the block
    * called on as he began it: the ranging rounds fall about half its depth beyond, then short, then the salvos on it). */
   e?: 1 | 2; cl?: number; cs?: [number, number];
+  /**
+   * Sniper teams (release 2): 1 a sniper (his scoped rifle; his single rounds are Round.sn), 2 his spotter with his
+   * glasses. Both read 'rifle' in r, so a 3D game that has no sniper yet draws a rifleman.
+   */
+  sn?: 1 | 2;
   /** Platoon cam (release 2): one of the squad leading his side's assault (Drill.leads). The camera's button drops onto these men. */
   ld?: 1;
   /** Field telephone lines (release 2): a lineman, outside the block's squads (MenBlock.ln). */
@@ -421,6 +433,11 @@ const SMALL_ARMS: ReadonlySet<Pose> = new Set<Pose>(['fire_stand', 'fire_kneel',
 const VEHICLE: ReadonlySet<Role> = new Set<Role>(['tank', 'gun', 'lorry']);
 /** A support team's weapons, each with its crew (release 2): carried by hand, set up in a line, fired from the rear. */
 const CREWED: ReadonlySet<Role> = new Set<Role>(['hmg', 'mortar']);
+/**
+ * A sniper's drill (sniper teams, release 2; Drill.snipers): seconds to his first round (up to 'first', his own), between
+ * his rounds [least, most] (each his own), on his sights after a round ('hold'), and metres he picks a man within ('range').
+ */
+const SNIPER_DRILL = { first: 15, every: [20, 45] as [number, number], hold: 1.5, range: 800 };
 /** A normal draw from two of the drill's dice (Box and Muller). */
 const gauss = (a: number, b: number): number => Math.sqrt(-2 * Math.log(Math.max(1e-9, a))) * Math.cos(2 * Math.PI * b);
 /**
@@ -638,7 +655,7 @@ interface Memo {
 }
 
 /** Whom each kind of man who keeps by another keeps by (Drill.leadOf). */
-const LEADS: Partial<Record<Role, Role[]>> = { loader: ['mg', 'at', 'hmg', 'mortar'], crew: ['gun'], rifle: ['officer'], holder: ['holder'] };
+const LEADS: Partial<Record<Role, Role[]>> = { loader: ['mg', 'at', 'hmg', 'mortar'], crew: ['gun'], rifle: ['officer'], holder: ['holder'], spotter: ['sniper'] };
 /** A field gun's crew at their places round it, metres across and along from the gun, facing as it faces (Drill.pairs). */
 /**
  * Room between men (drawn as sections): no man's place within SPACE.men metres of a mate's, a gun's crew SPACE.crew of
@@ -1316,7 +1333,9 @@ export class Drill {
   /** Hatches: each tank closed up or not this step, by her own commander's times (alarm); one struck in his hatch stays down. */
   private hatchNow(sq: Squad): void {
     const t = this.b.t;
-    for (const m of sq.men) if (m.role === 'tank' && m.fell === undefined) m.buttoned = m.cmdDown !== undefined || (m.shutAt !== undefined && t >= m.shutAt && t < m.shutTo!) || undefined;
+    // (closed up by the rules, LAND.closed: a sniper team firing on her)
+    const shut = this.b.closed(sq.u);
+    for (const m of sq.men) if (m.role === 'tank' && m.fell === undefined) m.buttoned = m.cmdDown !== undefined || shut || (m.shutAt !== undefined && t >= m.shutAt && t < m.shutTo!) || undefined;
   }
 
   /** Where model k of block id stands now (alive, or the moment he falls): the shell that cost him lands there. */
@@ -1357,7 +1376,7 @@ export class Drill {
       // rules took before the drill was turned on falls with no round.
       if (!shell && by !== undefined) this.killRound(this.b.unit(by), sq, m);
       // (a block's armoured car or AA vehicle: to the enemy owed most for its harm, a shell from tanks or guns)
-      else if (!shell && sq.esc) { const st = this.strikerOf(u); if (st) this.killRound(st, sq, m, st.kind === 'arm' || (st.kind === 'art' && st.team !== 'mg') ? [m.x, m.y] : undefined); }
+      else if (!shell && sq.esc) { const st = this.strikerOf(u); if (st) this.killRound(st, sq, m, st.kind === 'arm' || (st.kind === 'art' && st.team !== 'mg' && st.team !== 'snp') ? [m.x, m.y] : undefined); }
       m.pose = 'down';
       m.spot = [m.x, m.y];
       if (this.b.bearers && !sq.esc) this.hurt(sq, m);
@@ -1561,7 +1580,7 @@ export class Drill {
     if (!cand.length) return;
     // Who struck: the enemy block owed most for the harm, else the one it faces.
     const by = this.strikerOf(u);
-    const shell = !!by && ((by.kind === 'arm' && !this.mgKill(by, u, sq.lost)) || (by.kind === 'art' && by.team !== 'mg'));
+    const shell = !!by && ((by.kind === 'arm' && !this.mgKill(by, u, sq.lost)) || (by.kind === 'art' && by.team !== 'mg' && by.team !== 'snp'));
     // Armoured infantry aboard an armoured carrier (DR.mech.armoured; the design director, 23 November 07:06Z(2): struck
     // through her armour, which a bullet does not pierce): small arms take none of them. They fall to a shell, or once
     // they are down; till then the block's count of men waits for them (it is never changed).
@@ -2237,7 +2256,7 @@ export class Drill {
     sq.ran = u.state === 'routing' || (sq.ran && u.state === 'wavering' && t - sq.since < 8);
     if (ph === 'gone') return;
     if (u.kind === 'arm') { this.tanks(sq); return; }
-    if (u.kind === 'art') { if (u.team) this.teams(sq); else this.guns(sq); return; }
+    if (u.kind === 'art') { if (u.team === 'snp') this.snipers(sq); else if (u.team) this.teams(sq); else this.guns(sq); return; }
     if (sq.boarding !== undefined) { this.board(sq); return; }
     // Men in lorries: getting down, a man at a time over each tailboard; the block's phase takes them once the last is
     // down, as on a fresh phase.
@@ -2437,6 +2456,7 @@ export class Drill {
       }
       const still: Pose = (L.hidden && (L.role === 'gun' || CREWED.has(L.role))) || L.pose === 'cower' ? 'cower'
         : L.role === 'gun' ? (L.pose === 'fire' ? 'fire' : i === 0 && u.engaged === undefined ? 'idle' : 'wait')
+        : L.role === 'sniper' ? 'observe'
         : L.pose === 'lmg_burst' || L.pose === 'fire_prone' || L.pose === 'hide' ? 'hide'
         : L.pose === 'idle' && L.role === 'officer' ? 'wait'
         : L.pose === 'idle' ? 'idle' : 'wait';
@@ -3740,7 +3760,7 @@ export class Drill {
     if (close && foot.length) for (const f of foot) behind = Math.min(behind, (f.x - u.x) * fx + (f.y - u.y) * fy + f.d / 2 - 15);
     tanks.forEach((m, i) => {
       // (hatches: each commander by his own nerve, alarm and hatchNow; else the block's as one, the enemy inside 120 m)
-      if (!this.hatches) m.buttoned = lone || (e !== null && b.gap(u, e) < 120) || m.cmdDown !== undefined || undefined;
+      if (!this.hatches) m.buttoned = lone || (e !== null && b.gap(u, e) < 120) || m.cmdDown !== undefined || b.closed(u) || undefined;
       else if (lone || (e !== null && b.gap(u, e) < DR.hatch.near[this.band(u)] * (DR.hatch.own[0] + (DR.hatch.own[1] - DR.hatch.own[0]) * roll(this.seed, u.id, m.n, 173)))) this.alarm(sq, m, t);
       // The drill book: her machine guns on the enemy's foot while her block fights it.
       m.coax = (this.byBook && !!e && FOOT_KINDS.includes(e.kind) && u.engaged !== undefined && b.gap(u, e) < 600) || undefined;
@@ -4325,7 +4345,8 @@ export class Drill {
 
   /** Puts a round in the list, and its scar on what it struck (kept to the end, the first DR.rounds.marks of them). */
   private book(r: Round, v?: Man, mark?: Mark[3]): void {
-    this.shots.push({ ...r, n: ++this.fired });
+    const snp = r.by !== undefined ? this.b.unit(r.by) : undefined;
+    this.shots.push({ ...r, n: ++this.fired, ...(snp?.team === 'snp' ? { sn: 1 as const, ...(snp.hid ? { hd: 1 as const } : {}) } : {}) });
     if (v && mark && r.fc && r.u !== undefined && r.h !== undefined) {
       const mk = (v.marks ??= []);
       if (mk.length < DR.rounds.marks) mk.push([r.fc, r.u, r.h, mark, Math.round(r.l * 10) / 10]);
@@ -4386,7 +4407,9 @@ export class Drill {
     const isV = VEHICLE.has(v.role);
     const small = w === 'mg' || w === 'rifle';
     // A tank's, a launcher's or a gun's round at a lorry or a gun would wreck it, which the rules never do: those miss.
-    const may = isV && (v.role === 'tank' || small);
+    // A sniper's round never strikes a vehicle: at a tank it is at her commander's head, and it misses (he drops inside:
+    // the rules close her up, LAND.closed, and her hatch reads closed(u)).
+    const may = isV && (v.role === 'tank' || small) && u.team !== 'snp';
     let p = 0;
     if (may) {
       const [best, half] = R.odds[w];
@@ -4417,7 +4440,8 @@ export class Drill {
     // Nor on another vehicle (of any block) or a wreck: a round landing there would have struck it. It goes on over,
     // past them all.
     for (let i = 0; i < 6 && this.onVehicle(x, y, 2.5, fly); i++) { x = clamp(x + lx * 3, 1, this.b.field.w - 1); y = clamp(y + ly * 3, 1, this.b.field.h - 1); }
-    if (heavy) this.duck(x, y);
+    // (a sniper's miss: the man ducks and his mates go to ground, as under a shell)
+    if (heavy || u.team === 'snp') this.duck(x, y);
     this.book({ ...base, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 });
   }
 
@@ -4465,7 +4489,7 @@ export class Drill {
       const shells = (x: Man): boolean => x.role === 'tank' || x.role === 'gun' || x.role === 'mortar';
       // A tank block's man taken by no shell went to her machine guns (BOOK.tankMg).
       const mg = !p && by?.kind === 'arm';
-      const can = this.standing(tq).filter((x) => x.role !== 'lorry' && x.role !== 'holder' && (mg ? x.role === 'tank' : p ? shells(x) : !shells(x)));
+      const can = this.standing(tq).filter((x) => x.role !== 'lorry' && x.role !== 'holder' && x.role !== 'spotter' && (mg ? x.role === 'tank' : p ? shells(x) : !shells(x)));
       const pref = v.role === 'tank' && !p && by?.team !== 'mg' ? can.filter((x) => x.role === 'at') : can.filter((x) => SMALL_ARMS.has(x.pose) || shells(x) || x.role === 'hmg');
       const from = pref.length ? pref : can;
       let dd = Infinity;
@@ -4483,7 +4507,7 @@ export class Drill {
       if (s.j !== undefined) r.j = s.j;
       if (w === 'mg' && s.role === 'tank' && by) r.g = this.tankGun(by, s, at, Math.round(t * 10));
       // Its shot is seen: a tank's, a gun's, a launcher's or a grenade's stamp (small arms are in the firing already).
-      if (w !== 'rifle' && w !== 'mg' && w !== 'track' && !mate) { s.shot = t; s.fired = t; s.aim = [v.x, v.y]; if (s.role === 'gun' || s.role === 'mortar') s.pose = 'fire'; }
+      if (((w !== 'rifle' && w !== 'mg') || by?.team === 'snp') && w !== 'track' && !mate) { s.shot = t; s.fired = t; s.aim = [v.x, v.y]; if (s.role === 'gun' || s.role === 'mortar') s.pose = 'fire'; }
     }
     if (VEHICLE.has(v.role)) {
       const fc: Face = w === 'gun' || w === 'mortar' ? 'top' : s ? this.faceOf(v, s.x, s.y) : 'front', [a, h] = this.spotOn(v, vq.u.id, v.n, Math.round(t * 10), 9);
@@ -4515,6 +4539,7 @@ export class Drill {
       if (m.br) o.br = 1;
       if (m.call !== undefined && m.callAt) o.cs = [r1(m.callAt[0]), r1(m.callAt[1])];
       if (m.sw) o.sw = { ...m.sw };
+      if (m.role === 'sniper' || m.role === 'spotter') { o.r = 'rifle'; o.sn = m.role === 'sniper' ? 1 : 2; }
       if (m.ml) {
         o.ml = m.ml;
         // (a self-propelled gun is drawn as a tank: driving where the battery's guns are towed, halted where they stand)
@@ -4574,6 +4599,62 @@ export class Drill {
     return out;
   }
 
+  // ---- Sniper teams (release 2; Brian, 25 November 2026, 16:07Z; LAND.snipers) ---------------------------------
+
+  /**
+   * A sniper team's men (looks only; ruling 217): each sniper lies in his cover with his spotter beside him on his glasses
+   * (pairs: 'observe'), still ('hide'), and fires one aimed round on his own rhythm (SNIPER_DRILL.every, each his own) at
+   * the man who matters most in the block his team fires on (sniperMark). A round never kills (round): most land near him,
+   * he ducks, a tank's commander drops inside (hatches' alarm, in round); the rules take a man (killRound: the sniper's
+   * round). Going to a new place: crawling while the team is hidden, running once it is found.
+   */
+  private snipers(sq: Squad): void {
+    const u = sq.u, b = this.b, t = b.t, D = SNIPER_DRILL;
+    const e = u.engaged !== undefined ? b.unit(u.engaged) ?? null : null;
+    const away = sq.phase === 'flee' || sq.phase === 'fallback' || sq.phase === 'limbered';
+    // Never two of a team on one tick (the firm rule of 25 November): one due while a mate fires waits his next tick.
+    let fired = this.up(sq).some((m) => m.role === 'sniper' && m.shot === t);
+    this.up(sq).filter((m) => m.role === 'sniper').forEach((m, i) => {
+      if (away) { m.aim = undefined; m.burst = undefined; this.follow(sq, m, toWorld(u, sq.heading, i % 2 ? 4 : -4, -4 - i * 8), sq.phase === 'flee' ? 'flee' : 'walk'); return; }
+      const s = toWorld(u, u.face, ...this.slot(sq, m, 'line'));
+      if (Math.hypot(s[0] - m.slotAt[0], s[1] - m.slotAt[1]) > 12) { this.go(sq, m, s, u.hid ? 'crawl' : 'run', u.hid ? 1.4 : 4.5, t + 4); m.aim = undefined; m.burst = undefined; return; }
+      if (Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) > 1.5) return;
+      m.v = 0;
+      m.due ??= t + D.first * roll(this.seed, u.id, m.n, 341);
+      if (e && t >= m.due && !fired) {
+        fired = true;
+        m.due = t + D.every[0] + (D.every[1] - D.every[0]) * roll(this.seed, u.id, m.n, Math.floor(t), 342);
+        const v = this.sniperMark(e, m);
+        // (his own shot only: the small arms' bursts (fire) never take his rifle up)
+        if (v) { m.shot = t; m.fired = t; m.aim = [v.x, v.y]; m.pose = this.firePose(m); m.burst = t + 1e6; this.round(sq, m, 'rifle', [v.x, v.y]); return; }
+      }
+      // A moment on his sights after the shot; then lying still on his rifle, no shot (hide).
+      if (m.shot !== undefined && t - m.shot < D.hold) return;
+      m.pose = 'hide'; m.aim = undefined; m.burst = undefined;
+    });
+  }
+
+  /**
+   * The man a sniper picks in block e (looks only): a tank's commander up in his hatch first, then an officer, a leader,
+   * a machine gunner or another sniper, then the rest, and a tank closed up or a lorry last; nearer first within each,
+   * each sniper his own way of weighing them (his roll, changed every half minute). None beyond SNIPER_DRILL.range.
+   */
+  private sniperMark(e: LandUnit, m: Man): Man | undefined {
+    const tq = this.squads.get(e.id), t = this.b.t;
+    if (!tq) return undefined;
+    const rank = (x: Man): number => x.role === 'tank' ? (x.buttoned || x.cmdDown !== undefined ? 5 : 0)
+      : x.role === 'officer' ? 1 : x.lead || (x.hasSec && x.role === 'rifle') ? 2
+      : x.role === 'mg' || x.role === 'hmg' || x.role === 'sniper' ? 3 : VEHICLE.has(x.role) ? 6 : 4;
+    let best: Man | undefined, bs = Infinity;
+    for (const x of this.standing(tq)) {
+      const d = Math.hypot(x.x - m.x, x.y - m.y);
+      if (d > SNIPER_DRILL.range) continue;
+      const sc = rank(x) * 1e4 + d * (0.6 + 0.8 * roll(this.seed, m.n, x.n, Math.floor(t / 30), 343));
+      if (sc < bs) { bs = sc; best = x; }
+    }
+    return best;
+  }
+
   /** The block's men, for tests and the browser page. */
   squad(id: number): { phase: Phase; men: Man[]; veh: Man[]; fo: Man[] | null } | undefined {
     const sq = this.squads.get(id);
@@ -4592,7 +4673,7 @@ export function rolesFor(kind: Kind, tray: number, n: number, team?: Team): [Rol
   const out: [Role, 0 | 1 | 2][] = [];
   for (let k = 0; k < n; k++) {
     if (kind === 'arm') { out.push(['tank', (k % 2 ? 2 : 1)]); continue; }
-    if (kind === 'art') { out.push([team === 'mg' ? 'hmg' : team === 'mor' ? 'mortar' : 'gun', 0]); continue; }
+    if (kind === 'art') { out.push([team === 'mg' ? 'hmg' : team === 'mor' ? 'mortar' : team === 'snp' ? 'sniper' : 'gun', 0]); continue; }
     if (tray >= 8) {
       if (k === 0) out.push(['officer', 0]);
       else if (k === 1) out.push(['mg', 1]);
@@ -4656,6 +4737,7 @@ export function sectionOf(nat: string, key: Role): [Role, boolean, boolean][] {
     case 'gun': add('crew', S.gun - 1, true); break;
     case 'hmg': add('loader', S.hmg - 3, true); break;
     case 'mortar': add('loader', S.mortar - 3, true); break;
+    case 'sniper': add('spotter', 1, true); break;
     case 'rifle': {
       const R = S.rifle[nat] ?? S.rifle.default;
       add('mg', 1); add('loader', R.loaders, true); add('rifle', R.scouts, false, true); add('rifle', R.men - 2 - R.loaders - R.scouts);

@@ -87,9 +87,11 @@ export function thinkFor(b: LandBattle, side: Side): void {
     if (b.measured) seekFlanks(b, side, mine);
     if (b.hide && b.ambushed.has(side)) searchCover(b, side, mine);
     if (b.smoke) smokeIn(b, side, mine, foes);
+    if (b.hide) counterSnipers(b, mine, foes);
     return;
   }
   defend(b, side, style, mine, foes, stand);
+  if (b.hide) counterSnipers(b, mine, foes);
   // A reserve sent in at a tank block goes round her too; the line's own tanks hold where they stand.
   if (b.measured) seekFlanks(b, side, mine.filter((u) => u.reserve === 'sent'));
   if (b.smoke) smokeIn(b, side, mine, foes);
@@ -134,7 +136,7 @@ function searchCover(b: LandBattle, side: Side, mine: LandUnit[]): void {
   for (const u of mine) {
     // A block waiting for help (hold until relieved) is never its staff's to order, its fire no more than its feet.
     if (u.waits && !u.waits.free) continue;
-    if ((u.kind === 'art' && !u.team) || u.engaged !== undefined || u.order?.kind === 'withdraw') { if (u.engaged === undefined) { delete u.search; delete u.searchR; } continue; }
+    if ((u.kind === 'art' && !u.team) || u.team === 'snp' || u.engaged !== undefined || u.order?.kind === 'withdraw') { if (u.engaged === undefined) { delete u.search; delete u.searchR; } continue; }
     const ahead = Math.min(F.ahead, reachOf(u)), r = ahead / 2;
     const x = u.x, y = u.y + dir * (u.d / 2 + r);
     let cover = false;
@@ -219,6 +221,65 @@ function gunsUp(b: LandBattle, side: Side, u: LandUnit, foes: LandUnit[]): void 
 }
 
 /**
+ * A sniper team of the computer's (release 2, LAND.snipers; the design director's ruling of 25 November 16:30Z, Q6(3)),
+ * never as a gun: slipping away, it goes to other hiding ground near by (sim slipSpot). It keeps LAND.snipers.keep metres
+ * from every found enemy block, falling back toward its own line when one comes nearer. With nothing in its reach it
+ * goes one bound to the next hiding ground toward the enemy, never ahead of its own leading foot; with anything in its
+ * reach it stays where it is.
+ */
+function snipersUp(b: LandBattle, side: Side, u: LandUnit, mine: LandUnit[], foes: LandUnit[]): void {
+  if (u.order?.kind === 'withdraw' || (u.waits && !u.waits.free)) return;
+  const K = LAND.snipers.keep, dir = side === 'att' ? 1 : -1, near = foes.filter((f) => f.kind !== 'fort' && b.gap(u, f) < K);
+  if (u.slipTo !== undefined) {
+    if (u.order) return;
+    const spot = b.slipSpot(u);
+    if (spot) b.command({ do: 'move', units: [u.id], x: spot[0], y: spot[1] }, side);
+    return;
+  }
+  if (near.length) {
+    // Already going somewhere far enough from them: on its way.
+    if (u.order?.kind === 'move' && !near.some((f) => dist(f.x, f.y, u.order!.x, u.order!.y) < K)) return;
+    const spot = b.sniperSpot(u, [u.x, u.y - dir * 400], u.y);
+    const gap = near.reduce((m, f) => Math.min(m, b.gap(u, f)), Infinity);
+    const [x, y] = spot ?? [u.x, u.y - dir * (K - gap + 50)];
+    b.command({ do: 'move', units: [u.id], x, y }, side);
+    return;
+  }
+  if (u.order || foes.some((f) => b.gap(u, f) <= reachOf(u))) return;
+  const foot = mine.filter((m) => !m.team && m.kind !== 'art' && m.kind !== 'fort');
+  if (!foot.length || !foes.length) return;
+  const front = dir > 0 ? Math.max(...foot.map((m) => m.y)) : Math.min(...foot.map((m) => m.y));
+  const to = foes.reduce((m, f) => (b.gap(u, f) < b.gap(u, m) ? f : m), foes[0]);
+  const spot = b.sniperSpot(u, [to.x, to.y], front);
+  if (spot && dir * (spot[1] - u.y) > 20) b.command({ do: 'move', units: [u.id], x: spot[0], y: spot[1] }, side);
+}
+
+/**
+ * The counter to a sniper team (Q6(4)): a found enemy sniper team, vague or located, within the reach of one of its
+ * machine-gun or mortar teams gets one such team aimed at it, the one already on it or the nearest free. The aim holds
+ * until the sniper team is hidden again, out of reach, falling back or broken, and wins over the main effort's for that
+ * team (planned() aims first). Guns never leave the main effort for it.
+ */
+function counterSnipers(b: LandBattle, mine: LandUnit[], foes: LandUnit[]): void {
+  const theirs = foes.filter((f) => f.team === 'snp' && f.order?.kind !== 'withdraw');
+  for (const g of mine) {
+    if (g.hunts === undefined) continue;
+    const f = theirs.find((x) => x.id === g.hunts);
+    if (f && g.order?.kind !== 'withdraw' && b.gap(g, f) <= reachOf(g)) continue;
+    if (g.aim === g.hunts) delete g.aim;
+    delete g.hunts;
+  }
+  for (const f of theirs) {
+    let h = mine.find((g) => g.hunts === f.id);
+    if (!h) {
+      const can = mine.filter((g) => (g.team === 'mg' || g.team === 'mor') && g.hunts === undefined && g.order?.kind !== 'withdraw' && b.gap(g, f) <= reachOf(g));
+      h = can.reduce<LandUnit | undefined>((m, g) => (!m || b.gap(g, f) < b.gap(m, f) ? g : m), undefined);
+    }
+    if (h) { h.hunts = f.id; h.aim = f.id; }
+  }
+}
+
+/**
  * The plain general, as it always was: every block takes an enemy block in its own lane and goes for it; tanks and
  * lorries go for the ends of the enemy line; guns come up until the enemy is in reach and stand. A side the player
  * commands, handed to the computer, fights so.
@@ -227,6 +288,7 @@ function plain(b: LandBattle, side: Side, mine: LandUnit[], foes: LandUnit[]): v
   const sorted = [...foes].sort((a, c) => a.x - c.x);
   for (const u of mine) {
     if (u.order?.kind === 'withdraw') continue;
+    if (u.team === 'snp') { snipersUp(b, side, u, mine, foes); continue; }
     if (u.kind === 'art') { gunsUp(b, side, u, foes); continue; }
     if (hasTarget(u, foes)) continue;
     let t: LandUnit;
@@ -385,7 +447,9 @@ function mainTarget(b: LandBattle, P: AttackPlan, u: LandUnit, foes: LandUnit[])
 function planned(b: LandBattle, side: Side, s: Style, mine: LandUnit[], foes: LandUnit[]): void {
   const P = (b.plan[side] ??= makePlan(b, side, s, mine, foes));
   const limit = b.ticket.limit;
-  const guns = mine.filter((u) => u.kind === 'art'), rest = mine.filter((u) => u.kind !== 'art');
+  // (a sniper team is never a gun: never aimed, never waited under: snipersUp)
+  const guns = mine.filter((u) => u.kind === 'art' && u.team !== 'snp'), rest = mine.filter((u) => u.kind !== 'art');
+  for (const u of mine) if (u.team === 'snp') snipersUp(b, side, u, mine, foes);
   const role = (u: LandUnit): 'main' | 'pin' => P.role[u.id] ?? 'pin';
   // Guns: fire on the main effort, the next block of its stretch when one breaks, then on whatever is nearest; they stay
   // where they stand unless nothing is in reach (a deep city).
@@ -539,6 +603,7 @@ function defend(b: LandBattle, side: Side, style: Style | null, mine: LandUnit[]
   const shift = b.alertedStaff(side) ? Infinity : style?.defShift;
   const near = !struck.length && shift ? coming(b, mine, foes, shift) : null;
   for (const u of mine) {
+    if (u.team === 'snp' && !skip?.has(u.id)) { snipersUp(b, side, u, mine, foes); continue; }
     if (u.kind === 'art' || u.order?.kind === 'withdraw' || skip?.has(u.id)) continue;
     // Hidden in the woods (release 2): its line keeps there, holding its fire, until the enemy finds it.
     if (u.hid && u.reserve !== 'held') continue;

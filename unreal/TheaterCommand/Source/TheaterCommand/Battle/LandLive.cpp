@@ -147,6 +147,11 @@ namespace
 		// art director and 45 fps; -TheaterLandRuleOldWrecks turns it on for a run. The 3D's -TheaterLandOldWrecks=N and
 		// -TheaterLandOldWreckMonths=M stand-ins are other flags.)
 		{ TEXT("wrecks"), TEXT("Old wrecks"), TEXT("A field fought over before keeps the burnt-out tanks and armoured vehicles those battles left on it. Off: the field is cleared between battles."), TEXT("TheaterLandNoOldWrecks"), false, TEXT("TheaterLandRuleOldWrecks") },
+		// (Sniper teams, release 2: Brian, 25 November 16:07Z, "should we add snipers? how would that impact the battle?",
+		// then "yes". The rules' LAND.snipers: each side's foot gives its army's share of its power to a few sniper teams,
+		// so the card's odds stand; they change how a battle goes, so this row waits for the design director's ruling and
+		// its paired measure, then the Mac and the art director. Off; -TheaterLandRuleSnipers turns it on for a run.)
+		{ TEXT("snipers"), TEXT("Sniper teams"), TEXT("Each army brings a few sniper pairs, hidden in houses, woods and hedges. They kill few, but they shoot officers, machine gunners and tank commanders, slow an advance and shake men's nerve; once found they are easily driven off. Needs Forest ambushes. Off: no snipers on the field."), TEXT("TheaterLandNoSnipers"), false, TEXT("TheaterLandRuleSnipers") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }
