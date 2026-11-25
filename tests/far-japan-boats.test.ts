@@ -47,8 +47,9 @@ const built = (from: number, to: number): number => {
 
 describe("the far side: Japan's submarines built", () => {
   it('the rows are the record\'s boats announced by half-year, I and RO boats only, in whole boats a month', () => {
-    const rows = NAVY.building.filter((b) => b.nat === 'JAP');
-    expect(rows.every((b) => b.cls === 'ss' && b.fleet === '6th Fleet' && Number.isInteger(b.perMonth) && b.perMonth > 0)).toBe(true);
+    // (Japan's destroyers are rows of their own, far-world.json's: the navy thread, 25 November 2026.)
+    const rows = NAVY.building.filter((b) => b.nat === 'JAP' && b.cls === 'ss');
+    expect(rows.every((b) => b.fleet === '6th Fleet' && Number.isInteger(b.perMonth) && b.perMonth > 0)).toBe(true);
     // January 1942 is month 29, and a half-year is six months.
     const half = (i: number): number => built(29 + 6 * i, 34 + 6 * i);
     expect([0, 1, 2, 3, 4, 5].map(half)).toEqual([16, 18, 15, 20, 10, 8]);

@@ -15,7 +15,8 @@ import { blocked as groundBars, blowBridges } from './rivers';
 import { groundRules, isFoot } from './ground';
 import { SUPPORT } from './support';
 import { aiBridges, aiEngineers } from './engineers';
-import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, onOwnShipping, planLanding, rebase, seaPath, shipCount, shipsFor, useLift } from './navy';
+import { byHand } from './depth';
+import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, keptByHand, landCorps, landingOpts, landingTargets, liftLeft, navalAI, onOwnShipping, planLanding, rebase, seaPath, shipCount, shipsFor, useLift } from './navy';
 import { shoreAI } from './fleets';
 import { plannedStrike } from './carriers';
 import { readinessMonth } from './readiness';
@@ -2693,7 +2694,8 @@ function follow(g: Game, nat: string, O: OverseasRules): void {
   const n = g.nations[nat];
   const far = (r: Region): number => chartDist(g, r, base);
   for (const f of fleetsOf(g, nat)) {
-    if (!O.fleet?.includes(f.name) || f.base < 0 || !beyondEurope(f.base) || !shipCount(f.ships)) continue;
+    // (A fleet of the player's that is his, by hand or with the navy his own, goes where he sends it: the audit, 25 November 2026.)
+    if (!O.fleet?.includes(f.name) || f.base < 0 || !beyondEurope(f.base) || !shipCount(f.ships) || keptByHand(g, f) || byHand(g, nat, 'navy')) continue;
     let to: Region | null = null;
     for (const r of g.regions) {
       if (beyondEurope(r) || !r.port || !r.seas.length || !allied(g, nat, r.ctrl) || hostileUnits(g, r, nat).length || !canSailTo(g, f, r)) continue;

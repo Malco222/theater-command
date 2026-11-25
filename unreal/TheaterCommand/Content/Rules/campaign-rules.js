@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 77fb8bcc 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ad3fcf94 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -919,7 +919,9 @@
     _shadowRelay: "The shadow relay (release 2; Brian 24 November 2026 20:38Z, 'yes to all'; src/campaign/shadow.ts, data/campaign/shadow.json 'relay'). Read only with shadowing on: a shadow's fuel lasts three months on station, and then a fresh cruiser fleet from harbour takes over without losing contact. Switchable in any month from OPTIONS.",
     shadowRelay: false,
     _carrierStrike: "Carrier strikes on harbours by the player's own hand (release 2; Brian 24 November 2026 21:45Z, 'Resume the Pacific for release 2', and the 19 November Pacific playtest's first finding: a player who runs his navy himself had no order to gather a striking force and fly it, and nothing told him why a strike did not fly; src/campaign/harbourstrike.ts). A carrier fleet's page lists the enemy harbours with warships at anchor that its strike aircraft can reach from a sea in its reach, and one order sails it there and sends its wings in. A harbour beyond them names a base from which they reach it; a harbour of a country at peace says to declare war first. The player's order only: no staff reads it, so every computer war is the war without it.",
-    carrierStrike: false
+    carrierStrike: false,
+    _wingByDate: "Carrier wings by date (release 2; the design director's riders of 17 November 2026 to rulings 189 and 202, built by the navy thread 25 November 2026 on the far side's audit; src/campaign/carriers.ts, carriers.json 'wingByDate'). A navy's wing a deck changes on the dates its row gives: Britain's from 12 fighters and 24 strike aircraft to 24 and 12 in August 1942, 28 and 20 in January 1944 and 37 and 17 in January 1945, on every British carrier, Europe's too. Room taken away sends what is over to the reserve; room added fills as losses are made good, in harbour: nothing is given. A player who is Britain is told in the month's news. Off: every navy's wing stands as it was for the whole war.",
+    wingByDate: false
   };
 
   // ../../src/campaign/stage.ts
@@ -970,6 +972,7 @@
   var HEAVYSEAS_STAGE = staged("TC_HEAVYSEAS", "heavySeas");
   var SHADOWRELAY_STAGE = staged("TC_SHADOWRELAY", "shadowRelay");
   var CARRIERSTRIKE_STAGE = staged("TC_CARRIERSTRIKE", "carrierStrike");
+  var WINGBYDATE_STAGE = staged("TC_WINGBYDATE", "wingByDate");
 
   // ../../data/campaign/grand.json
   var grand_default = {
@@ -7418,7 +7421,8 @@
             dd: 12,
             ss: 0
           },
-          admiral: "Ibo Takahashi"
+          admiral: "Ibo Takahashi",
+          deck: 0.33
         },
         {
           nat: "JAP",
@@ -7435,7 +7439,8 @@
             dd: 10,
             ss: 9
           },
-          admiral: "Shigeyoshi Inoue"
+          admiral: "Shigeyoshi Inoue",
+          deck: 0.33
         },
         {
           nat: "JAP",
@@ -7821,6 +7826,15 @@
         ],
         [
           29,
+          "JAP",
+          "4th Fleet",
+          {
+            cv: 1
+          },
+          "the light carrier Shoho"
+        ],
+        [
+          29,
           "USA",
           "Atlantic Fleet",
           {
@@ -7846,6 +7860,15 @@
             bb: 2
           },
           "the battleships Mississippi and New Mexico, back from the Atlantic"
+        ],
+        [
+          30,
+          "JAP",
+          "Combined Fleet",
+          {
+            bb: 1
+          },
+          "the new battleship Yamato"
         ],
         [
           30,
@@ -7875,6 +7898,24 @@
           "the new carrier Hornet"
         ],
         [
+          33,
+          "JAP",
+          "Mobile Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Junyo, converted from a liner"
+        ],
+        [
+          35,
+          "JAP",
+          "Mobile Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Hiyo, converted from a liner"
+        ],
+        [
           35,
           "USA",
           "Pacific Carrier Fleet",
@@ -7902,6 +7943,24 @@
           "the new battleships Washington and South Dakota"
         ],
         [
+          38,
+          "JAP",
+          "2nd Fleet",
+          {
+            ca: 1
+          },
+          "the new light cruiser Agano"
+        ],
+        [
+          41,
+          "JAP",
+          "Combined Fleet",
+          {
+            bb: 1
+          },
+          "the new battleship Musashi"
+        ],
+        [
           41,
           "USA",
           "Pacific Fleet",
@@ -7909,6 +7968,15 @@
             bb: 1
           },
           "the new battleship Indiana"
+        ],
+        [
+          42,
+          "JAP",
+          "Combined Fleet",
+          {
+            ca: 1
+          },
+          "the new light cruiser Oyodo"
         ],
         [
           43,
@@ -7927,6 +7995,15 @@
             cv: 1
           },
           "the new carrier Essex"
+        ],
+        [
+          46,
+          "JAP",
+          "2nd Fleet",
+          {
+            ca: 1
+          },
+          "the new light cruiser Noshiro"
         ],
         [
           47,
@@ -7984,12 +8061,30 @@
         ],
         [
           52,
+          "JAP",
+          "2nd Fleet",
+          {
+            ca: 1
+          },
+          "the new light cruiser Yahagi"
+        ],
+        [
+          52,
           "USA",
           "Pacific Carrier Fleet",
           {
             cv: 1
           },
           "the light carrier Monterey"
+        ],
+        [
+          53,
+          "JAP",
+          "Mobile Fleet",
+          {
+            cv: 1
+          },
+          "the light carriers Chiyoda and Chitose, converted from seaplane carriers"
         ],
         [
           53,
@@ -8017,6 +8112,15 @@
             bb: 2
           },
           "the new battleships Iowa and New Jersey"
+        ],
+        [
+          55,
+          "JAP",
+          "Mobile Fleet",
+          {
+            cv: 1
+          },
+          "the new carrier Taiho"
         ],
         [
           55,
@@ -8064,6 +8168,15 @@
           "the new carrier Franklin"
         ],
         [
+          60,
+          "JAP",
+          "Mobile Fleet",
+          {
+            cv: 1
+          },
+          "the new carriers Unryu and Amagi, short of aircraft to fly from them"
+        ],
+        [
           62,
           "USA",
           "Pacific Carrier Fleet",
@@ -8080,6 +8193,15 @@
             cv: 2
           },
           "more escort carriers"
+        ],
+        [
+          63,
+          "JAP",
+          "Combined Fleet",
+          {
+            ca: 1
+          },
+          "the new light cruiser Sakawa"
         ],
         [
           63,
@@ -8186,6 +8308,30 @@
           from: 41,
           to: 70,
           perMonth: 1
+        },
+        {
+          nat: "JAP",
+          fleet: "Mobile Fleet",
+          cls: "dd",
+          from: 29,
+          to: 52,
+          perMonth: 1
+        },
+        {
+          nat: "JAP",
+          fleet: "Combined Fleet",
+          cls: "dd",
+          from: 53,
+          to: 59,
+          perMonth: 3
+        },
+        {
+          nat: "JAP",
+          fleet: "Combined Fleet",
+          cls: "dd",
+          from: 60,
+          to: 64,
+          perMonth: 2
         }
       ],
       moves: [
@@ -8375,7 +8521,11 @@
             2
           ]
         }
-      ]
+      ],
+      quality: {
+        USA: 1,
+        JAP: 1.1
+      }
     },
     rivals: {
       lean: {
@@ -20901,6 +21051,13 @@
       ITA: { ftr: 16, bmr: 24 },
       USA: { ftr: 30, bmr: 48 },
       JAP: { ftr: 24, bmr: 42 }
+    },
+    _wingByDate: "A carrier's wing by navy and by date (release 2, the switch 'Carrier wings by date', stage.json wingByDate; the design director's riders of 17 November 2026, 12:01Z and 12:12Z, to rulings 189 and 202; the historian's british-carrier-wing-check.md). Rows of [from month, fighters, strike aircraft] a deck, each read from its month on; before the first row the navy's own 'wing' stands. Britain's is the one dated navy: 12 and 24 from September 1939, 24 and 12 from August 1942 (month 36), 28 and 20 from January 1944 (53), 37 and 17 from January 1945 (65). Where a step lowers a kind, what is over goes to the reserve; where it raises one, the room fills as losses are made good, in harbour, from the reserve: nothing is given (carriers.ts syncWings). Every stop of the dial and every British carrier, Europe's too. 'words': the UI director's line for a player who is Britain (passed 16 November, 12:16Z), an ordinary news line shown only while he has a carrier afloat or building. Apart from the switch, a fleet whose row gives 'deck' below one (ruling 189(b): a light carrier that sailed alone) brings that share of its navy's wing a carrier.",
+    wingByDate: {
+      UK: {
+        words: "The Fleet Air Arm re-equips: each of your carriers now has deck room for {ftr} fighters and {bmr} strike aircraft, where it had room for {wasFtr} and {wasBmr}.",
+        rows: [[36, 24, 12], [53, 28, 20], [65, 37, 17]]
+      }
     },
     names: { ftr: "{fleet} carrier fighters", bmr: "{fleet} strike wing" },
     range: { ftr: 350, bmr: 450, next: 300 },
@@ -40556,7 +40713,38 @@
   var KINDS2 = ["ftr", "bmr"];
   var num = (n) => Math.round(n).toLocaleString("en-US");
   var plural = (n, one2, many = `${one2}s`) => `${num(n)} ${Math.round(n) === 1 ? one2 : many}`;
-  var wingSize = (nat) => CARRIERS.wing[nat] ?? CARRIERS.wing._default;
+  var wingByDateOn = (g2) => g2.flags.open === 1 && g2.flags.wingByDate === 1;
+  function setWingByDate(g2, on) {
+    if (on) g2.flags.wingByDate = 1;
+    else delete g2.flags.wingByDate;
+  }
+  var navyWing = (nat) => CARRIERS.wing[nat] ?? CARRIERS.wing._default;
+  function datedWing(g2, nat) {
+    let w = navyWing(nat);
+    if (g2 && wingByDateOn(g2)) {
+      for (const [t, ftr, bmr] of CARRIERS.wingByDate?.[nat]?.rows ?? []) if (t <= g2.turn) w = { ftr, bmr };
+    }
+    return w;
+  }
+  var wingSize = (nat, g2, c) => {
+    const w = datedWing(g2, nat), d = c?.deck;
+    return d !== void 0 && d < 1 ? { ftr: w.ftr * d, bmr: w.bmr * d } : w;
+  };
+  var roomOf = (cv, per) => Math.round(cv * per);
+  var noteSize = (w, nat, kind, per) => {
+    if (per !== navyWing(nat)[kind]) w.size = per;
+    else delete w.size;
+  };
+  function wingStep(g2, nat) {
+    const D2 = CARRIERS.wingByDate?.[nat];
+    if (!D2 || !wingByDateOn(g2) || nat !== g2.human || !g2.nations[nat]?.alive) return;
+    const k = D2.rows.findIndex((r) => r[0] === g2.turn);
+    if (k < 0) return;
+    const was = k > 0 ? { ftr: D2.rows[k - 1][1], bmr: D2.rows[k - 1][2] } : navyWing(nat), now = { ftr: D2.rows[k][1], bmr: D2.rows[k][2] };
+    const decks = g2.fleets.some((f) => f.nat === nat && f.ships.cv > 0) || g2.nations[nat].queue.some((b) => b.what === "ship" && b.item === "cv");
+    if (!decks || was.ftr === now.ftr && was.bmr === now.bmr) return;
+    headline(g2, "info", D2.words.replace("{ftr}", String(now.ftr)).replace("{bmr}", String(now.bmr)).replace("{wasFtr}", String(was.ftr)).replace("{wasBmr}", String(was.bmr)), nat);
+  }
   var wingsOf = (g2, fleet) => g2.airFleets.filter((f) => f.ship === fleet).sort((a, b) => (a.kind === "ftr" ? 0 : 1) - (b.kind === "ftr" ? 0 : 1));
   var wingOf = (g2, fleet, kind) => g2.airFleets.find((f) => f.ship === fleet && f.kind === kind);
   var wingName = (c, kind) => CARRIERS.names[kind].replace("{fleet}", c.name);
@@ -40600,11 +40788,12 @@
     const before = new Map(navies.map((nat) => [nat, need(nat)]));
     for (const c of g2.fleets) {
       if (c.ships.cv <= 0) continue;
-      const size = wingSize(c.nat);
+      const size = wingSize(c.nat, g2, c);
       for (const kind of KINDS2) {
         if (size[kind] <= 0) continue;
         const w = newWing(g2, c, kind);
-        w.est[kind] = w[kind] = c.ships.cv * size[kind];
+        w.est[kind] = w[kind] = roomOf(c.ships.cv, size[kind]);
+        noteSize(w, c.nat, kind, size[kind]);
       }
     }
     for (const nat of navies) {
@@ -40636,17 +40825,35 @@
         if (c.bare) delete c.bare;
         continue;
       }
-      const size = wingSize(c.nat);
+      const size = wingSize(c.nat, g2, c);
       for (const kind of KINDS2) {
-        const full = c.ships.cv * size[kind];
+        let w = wingOf(g2, c.id, kind);
+        const per = size[kind], perWas = w ? w.size ?? navyWing(c.nat)[kind] : per;
+        if (w && per !== perWas && perWas > 0) {
+          const ratio = per / perWas;
+          if (c.bare?.[kind]) c.bare[kind] = Math.round(c.bare[kind] * ratio);
+          const now = Math.max(0, Math.round(w.est[kind] * ratio));
+          const over = Math.max(0, w[kind] - now);
+          if (over > 0) {
+            const p = airPool(g2, w.nat);
+            w[kind] -= over;
+            if (kind === "ftr") {
+              p.ftr += over;
+              poolIn(g2, w.nat, over, w);
+            } else p.bmr += over;
+          }
+          w.est[kind] = now;
+        }
+        if (w) noteSize(w, c.nat, kind, per);
+        const full = roomOf(c.ships.cv, size[kind]);
         if (c.bare && c.bare[kind] > full) c.bare[kind] = full;
         const est = full - bareOf(c, kind);
-        let w = wingOf(g2, c.id, kind);
         if (!w) {
           if (est > 0) {
             w = newWing(g2, c, kind);
             joinPilots(g2, w, est, kind, "school");
             w.est[kind] = w[kind] = est;
+            noteSize(w, c.nat, kind, per);
           }
           continue;
         }
@@ -40677,7 +40884,11 @@
   }
   function moveWings(g2, from2, to, carriers, had) {
     if (!carrierRules(g2) || carriers <= 0 || had <= 0) return;
-    const size = wingSize(from2.nat);
+    const size = wingSize(from2.nat, g2, from2);
+    const before = to.ships.cv - carriers, mean = to.ships.cv > 0 ? (Math.max(0, before) * (to.deck ?? 1) + carriers * (from2.deck ?? 1)) / Math.max(1, Math.max(0, before) + carriers) : 1;
+    if (mean < 1 && (to.deck !== void 0 || from2.deck !== void 0)) to.deck = mean;
+    else delete to.deck;
+    const sizeTo = wingSize(to.nat, g2, to);
     for (const kind of KINDS2) {
       const bare = bareOf(from2, kind);
       const decks = size[kind] > 0 ? bare / size[kind] : 0;
@@ -40699,8 +40910,10 @@
       a[kind] -= n;
       if (a.flew !== void 0 && (b.flew ?? -1) < a.flew) b.flew = a.flew;
       if (a.scouted !== void 0 && (b.scouted ?? -1) < a.scouted) b.scouted = a.scouted;
-      b.est[kind] = Math.max(0, to.ships.cv * size[kind] - bareOf(to, kind));
-      a.est[kind] = Math.max(0, from2.ships.cv * size[kind] - bareOf(from2, kind));
+      b.est[kind] = Math.max(0, roomOf(to.ships.cv, sizeTo[kind]) - bareOf(to, kind));
+      a.est[kind] = Math.max(0, roomOf(from2.ships.cv, size[kind]) - bareOf(from2, kind));
+      noteSize(b, to.nat, kind, sizeTo[kind]);
+      noteSize(a, from2.nat, kind, size[kind]);
       if (share >= 1) g2.airFleets.splice(g2.airFleets.indexOf(a), 1);
     }
     trimBare(from2);
@@ -41141,6 +41354,10 @@
     if (!carrierRules(g2) || byHand(g2, nat, "navy")) return false;
     const c = fleetsOf(g2, nat).find((f) => f.name === fleet), r = g2.byName[harbour2];
     if (!c || !r || c.ships.cv <= 0 || !atWar(g2, nat, r.ctrl) || !shipsInPort(g2, r.id, nat).length) return false;
+    if (keptByHand(g2, c)) {
+      headline(g2, "info", `The staff's plan has ${fleetName(c)} strike ${r.name} from the air as war comes. You keep it under your own orders, so the plan's strike is not flown.`, nat);
+      return false;
+    }
     const lead2 = wingOf(g2, c.id, "bmr"), cap17 = wingOf(g2, c.id, "ftr");
     if (!lead2 || lead2.bmr <= 0 || lead2.flew === g2.turn || lead2.mission !== "support") return false;
     const can2 = () => whyNotMission2(g2, lead2, "harbour", r.id) === null && !assessAir(g2, [lead2], "harbour", r.id).why;
@@ -42703,6 +42920,7 @@
     if (HEAVYSEAS_STAGE) g2.flags.heavySeas = 1;
     if (SHADOWRELAY_STAGE) g2.flags.shadowRelay = 1;
     if (CARRIERSTRIKE_STAGE) g2.flags.carrierStrike = 1;
+    if (WINGBYDATE_STAGE) g2.flags.wingByDate = 1;
     if (wide3) attachWorld(g2);
     openWinter(g2);
     if (g2.turn === 1) {
@@ -55860,6 +56078,7 @@
       fought: 0
     };
     if (row2.cruise) f.cruise = row2.cruise[2] === void 0 ? [row2.cruise[0], row2.cruise[1]] : [row2.cruise[0], row2.cruise[1], row2.cruise[2]];
+    if (row2.deck !== void 0 && row2.deck < 1) f.deck = row2.deck;
     g2.fleets.push(f);
     return f;
   }
@@ -57046,6 +57265,20 @@
     headline(g2, "info", `${m.words}.`, f.nat);
     return true;
   }
+  function bookWaits(g2, f, m) {
+    const r = g2.byName[m.base];
+    if (!r || r.id === f.base || f.nat !== g2.human) {
+      delete f.planBase;
+      return;
+    }
+    f.planBase = { ...m, turn: g2.turn };
+    const name = fleetName(f), at4 = f.base >= 0 ? g2.regions[f.base].name : f.port;
+    headline(g2, "info", byHand(g2, f.nat, "navy") ? `${m.words}, by the staff's plan. You run the navy yourself: ${name} stays at ${at4} until you move its base to ${r.name} (its page offers the move).` : `${m.words}, by the staff's plan. You keep ${name} under your own orders, so it stays at ${at4}: hand it back to your admirals and it goes to ${r.name}, or move its base there yourself.`, f.nat);
+  }
+  function bookBaseOf(g2, f) {
+    const b = f.planBase, r = b ? g2.byName[b.base] : void 0;
+    return b && r && r.id !== f.base && f.nat === g2.human ? { region: r, words: b.words, turn: b.turn } : null;
+  }
   function baseTargets(g2, f) {
     return g2.regions.filter((r) => r.port && r.seas.length > 0 && r.id !== f.base && allied(g2, f.nat, r.ctrl) && canSailTo(g2, f, r));
   }
@@ -57132,6 +57365,7 @@
   var offChartFor = (g2, nat, fleet, ships, dial) => nat === g2.human && !dialRuns(g2, nat) && !dial.from && dial.instead === void 0 && CLASSES.every((c) => (ships[c] ?? 0) >= 0) && !(dial.fromIf && g2.fleets.some((f) => f.nat === nat && f.name === dial.fromIf)) && (!dial.back || !!g2.flags[`arr:${dial.back[0]}:${nat}:${dial.back[1]}`]) && (dial.most === void 0 || !!g2.flags[`bk:${nat}:${fleet}`]);
   function navalUpkeep(g2, nat) {
     const n = g2.nations[nat];
+    wingStep(g2, nat);
     for (const given3 of NAVY.fleets) {
       const b = given3.book;
       const booked2 = !!b && g2.flags.open === 1 && b.stops.includes(stopOf(g2)) && dialRuns(g2, nat);
@@ -57193,6 +57427,12 @@
       headline(g2, "info", words, nat);
     }
     const peace = (whose) => !n.atWar.length || whose !== void 0 && !atWar(g2, nat, whose) && !byHand(g2, nat, "navy");
+    for (const f of fleetsOf(g2, nat)) {
+      if (!f.planBase || keptByHand(g2, f) || byHand(g2, nat, "navy")) continue;
+      const b = f.planBase;
+      delete f.planBase;
+      orderedTo(g2, f, b);
+    }
     const out = /* @__PURE__ */ new Map();
     for (const m of NAVY.moves ?? []) {
       if (m.nat !== nat || m.stops && !m.stops.includes(stopOf(g2))) continue;
@@ -57206,11 +57446,14 @@
         continue;
       }
       const foe = m.with?.split(":")[0];
-      if (m.turn + moveSlide(g2, m) !== g2.turn || byHand(g2, nat, "navy")) continue;
+      if (m.turn + moveSlide(g2, m) !== g2.turn) continue;
       if (foe !== void 0 && (m.eve ? atWar(g2, nat, foe) || !bookLays(g2, m.with) : !atWar(g2, nat, foe))) continue;
       const f = named5(m.fleet);
       const friend2 = m.ally ? (holder) => allied(g2, nat, holder) && (foe === void 0 || atWar(g2, holder, foe)) : void 0;
-      if (f && m.base !== void 0 && m.port !== void 0 && m.home !== void 0) orderedTo(g2, f, { base: m.base, port: m.port, home: m.home, words: m.words }, friend2);
+      if (!f || m.base === void 0 || m.port === void 0 || m.home === void 0) continue;
+      const row2 = { base: m.base, port: m.port, home: m.home, words: m.words };
+      if (byHand(g2, nat, "navy") || keptByHand(g2, f)) bookWaits(g2, f, row2);
+      else orderedTo(g2, f, row2, friend2);
     }
     if (!stopDef(g2).book) {
       for (const f of fleetsOf(g2, nat)) {
@@ -66969,7 +67212,7 @@
   function bookRow(g2, nat, reg) {
     return !!BOOK && !!reg && nat !== g2.human && BOOK.stops.includes(stopOf(g2)) && BOOK.scripted.some(([n, owner]) => n === nat && owner === reg.owner);
   }
-  function bookWaits(g2, owner) {
+  function bookWaits2(g2, owner) {
     const key7 = `book:${owner}`;
     if (g2.flags[key7] === void 0 && leavingThreat(g2, owner)) g2.flags[key7] = g2.turn;
     return g2.flags[key7] === void 0;
@@ -67103,7 +67346,7 @@
       if (shipsItsOwn(g2, nat)) return;
       if (g2.flags.open === 1) {
         const k = reg ? THEATRE_OF.get(reg.name) ?? -1 : -1;
-        if (k >= 0 && THEATRE_LIST[k].scripted && row2[0] >= (THEATRE_LIST[k].opens ?? 0) && (!booked2 || bookWaits(g2, reg.owner))) return;
+        if (k >= 0 && THEATRE_LIST[k].scripted && row2[0] >= (THEATRE_LIST[k].opens ?? 0) && (!booked2 || bookWaits2(g2, reg.owner))) return;
         if (o.war) {
           if (!warOn(g2, o.war)) return;
           if (!o.war.includes(nat) && !atWar(g2, nat, o.war[0]) && !atWar(g2, nat, o.war[1])) return;
@@ -71714,7 +71957,7 @@
     const n = g2.nations[nat];
     const far = (r) => chartDist(g2, r, base);
     for (const f of fleetsOf(g2, nat)) {
-      if (!O.fleet?.includes(f.name) || f.base < 0 || !beyondEurope(f.base) || !shipCount(f.ships)) continue;
+      if (!O.fleet?.includes(f.name) || f.base < 0 || !beyondEurope(f.base) || !shipCount(f.ships) || keptByHand(g2, f) || byHand(g2, nat, "navy")) continue;
       let to = null;
       for (const r of g2.regions) {
         if (beyondEurope(r) || !r.port || !r.seas.length || !allied(g2, nat, r.ctrl) || hostileUnits(g2, r, nat).length || !canSailTo(g2, f, r)) continue;
@@ -75422,6 +75665,7 @@
     const f = myFleet(g2, id);
     const ok2 = !!f && !heldAfterAttack(g2, f) && hisOrder(f, rebase(g2, f, g2.regions[region]));
     if (ok2) stopShadow(f);
+    if (ok2 && f.planBase?.base === g2.regions[region].name) delete f.planBase;
     return ok2;
   }
   var fleetKeptByHand = (g2, id) => g2.fleets.some((f) => f.id === id && f.nat === g2.human && f.ordered === true);
@@ -103049,6 +103293,7 @@
       gales: [...galeSeas(s)],
       // (Release 2, harbourstrike.ts) Whether a carrier fleet's page offers a strike on an enemy harbour from the air.
       carrierStrike: carrierStrikeOn(s),
+      wingByDate: wingByDateOn(s),
       // (Release 2, shadow.ts) Whether a shadow's fuel runs out and a fresh squadron takes over (the switch as set: it works only with shadowing on).
       shadowRelay: s.flags.open === 1 && s.flags.shadowRelay === 1,
       // (Release 2, buildings.ts) Whether a conquered town can put up every kind of building once it has settled.
@@ -107198,6 +107443,17 @@ ${next.text}` : ""}` : next ? next.also : "";
       const buttons = h.launch >= 0 ? [{ label: "STRIKE FROM THE AIR", act: `fleetstrike:${id}:${h.region}`, ok: up && !h.why, tip: h.why ?? "It sails to the nearest sea from which its aircraft reach the harbour, and its wings go in with this month's air war. Ships at anchor cannot manoeuvre." }] : base ? [{ label: `MOVE BASE TO ${base.name.toUpperCase()}`, act: `fleetstrikebase:${id}:${base.id}`, ok: up, tip: `Its new home port: from there its aircraft reach ${h.name}.` }] : [];
       return { nat: h.holder, title: `${h.name}${who2 ? ` (${who2.adj ?? who2.name})` : ""}`, lines: lines2, buttons };
     });
+    const fb = s.fleets.find((x) => x.id === id);
+    const waits2 = fb ? bookBaseOf(s, fb) : null;
+    const plan = waits2 ? [{
+      nat: card.nat,
+      title: waits2.region.name,
+      lines: [
+        `${waits2.words} (${turnToDate(waits2.turn).label}).`,
+        staffRunsDesk(s, "navy") ? "You keep it under your own orders: hand it back to your admirals and it goes there with their next month." : "You run the navy yourself: the move is yours to make."
+      ],
+      buttons: [{ label: `MOVE BASE TO ${waits2.region.name.toUpperCase()}`, act: `fleetbookbase:${id}`, ok: up, tip: "Its new home port, where the staff's plan has it. It spends the month in harbour there." }]
+    }] : [];
     const joins = (o?.merge ?? []).map((other4) => {
       const f = fleetView(s, other4);
       return { nat: card.nat, title: f?.name ?? "A fleet", lines: [f ? `${f.ships} ships. ${f.doing}.` : ""], buttons: [{ label: "JOIN IT", act: `fleetmerge:${id}:${other4}`, ok: up, tip: "The two become one fleet under the other's flag and orders." }] };
@@ -107229,6 +107485,7 @@ ${next.text}` : ""}` : next ? next.also : "";
         { heading: "ENEMY FLEETS TO SHADOW", text: "", rows: shadows },
         { heading: "SEAS TO MINE", text: "", rows: minable },
         { heading: "ENEMY HARBOURS TO STRIKE", text: "", rows: harbours2 },
+        { heading: "THE STAFF'S PLAN", text: "", rows: plan },
         { heading: "SEAS IN ITS REACH", text: seas.length ? "" : o?.held ? o.held : up ? "The country is at peace: the fleet keeps its station." : "It is not your month.", rows: seas },
         { heading: "LANES TO ESCORT", text: "", rows: lanes2 },
         { heading: "COASTS TO SHELL", text: "", rows: coasts },
@@ -108558,12 +108815,25 @@ ${standing5}`,
       note4 = carrierStrikeOn(s) ? "Carrier strikes on harbours are on: a carrier fleet's page lists the enemy harbours its aircraft reach, and one order sails it there and sends its wings in." : "Carrier strikes on harbours are off.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
     }
+    if (part[0] === "wingbydaterule") {
+      setWingByDate(s, part[1] === "on");
+      ok2 = true;
+      note4 = wingByDateOn(s) ? "Carrier wings by date are on: a navy's carriers change their mix of aircraft on the dates the record gives (Britain's from August 1942). New room fills as losses are made good, in harbour." : "Carrier wings by date are off: every navy's carriers keep one mix of aircraft for the whole war.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
+    }
     if (part[0] === "fleetstrike") {
       const id = Number(part[1]), r = Number(part[2]);
       const name = s.fleets.find((x) => x.id === id)?.name ?? "The fleet";
       const done = orderCarrierStrikeFleet(s, id, r);
       ok2 = !!done;
       note4 = done ? `The ${name} sails ${seaWhere(s.seas[done.zone]?.name ?? "sea")}, and its aircraft will strike ${s.regions[r]?.name ?? "the harbour"} with this month's air war.` : strikeHarbours(s, id, () => true).find((h) => h.region === r)?.why ?? "It cannot strike that harbour now.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: `fleet:${part[1]}`, view: view2() };
+    }
+    if (part[0] === "fleetbookbase") {
+      const id = Number(part[1]), f = s.fleets.find((x) => x.id === id);
+      const to = f ? bookBaseOf(s, f) : null;
+      ok2 = !!to && orderRebase(s, id, to.region.id);
+      note4 = ok2 ? `Its new home port is ${to.region.name}.` : "It cannot move its base there now.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: `fleet:${part[1]}`, view: view2() };
     }
     if (part[0] === "fleetstrikebase") {
@@ -108841,7 +109111,8 @@ ${standing5}`,
       return { ok: ok2, note: note4, fly: fly2, flies: [], open: `fleet:${part[1]}`, view: view2() };
     } else if (part[0] === "fleetstaff") {
       ok2 = handBackFleet(s, Number(part[1]));
-      note4 = ok2 ? `${fleetView(s, Number(part[1]))?.name ?? "The fleet"} is your admirals' to sail again from next month.` : "It cannot be handed back now.";
+      const fw = s.fleets.find((x) => x.id === Number(part[1])), plan = fw ? bookBaseOf(s, fw) : null;
+      note4 = ok2 ? `${fleetView(s, Number(part[1]))?.name ?? "The fleet"} is your admirals' to sail again from next month${plan ? `, and goes to ${plan.region.name} as the staff's plan has it` : ""}.` : "It cannot be handed back now.";
       return { ok: ok2, note: note4, fly: fly2, flies: [], open: `fleet:${part[1]}`, view: view2() };
     } else if (part[0] === "fleetescort") {
       ok2 = orderEscort(s, Number(part[1]), part.slice(2).join(":"));
@@ -109887,6 +110158,11 @@ ${standing5}`,
     const s = game();
     setShadowRelay(s, !!on);
     return { on: shadowRelayOn(s) };
+  };
+  globalThis.TC.wingByDate = (on) => {
+    const s = game();
+    setWingByDate(s, !!on);
+    return { on: wingByDateOn(s) };
   };
   globalThis.TC.carrierStrike = (on) => {
     const s = game();

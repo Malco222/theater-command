@@ -172,6 +172,8 @@ export const airWar = (g: Game): boolean => g.flags.airwar === 1;
 /** Carriers and the air war at sea (the grand campaign): see carriers.json, and carriers.ts for the wings themselves. */
 export const CARRIERS = carrierData as unknown as {
   wing: Record<string, { ftr: number; bmr: number }>;
+  /** A navy's wing a deck by date where the switch 'Carrier wings by date' is on: rows of [from month, fighters, strike aircraft], and the news line for its player. */
+  wingByDate?: Record<string, { words: string; rows: [number, number, number][] }>;
   names: { ftr: string; bmr: string };
   range: { ftr: number; bmr: number; next: number };
   quality: Record<string, number>;

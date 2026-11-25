@@ -22,7 +22,7 @@ import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { AIR, CARRIERS, carrierRules, groupOverSea, groupsOver, skyDenies, skyOver, skyReach } from './air';
 import { oddsOf, skyAtSea, skySupport, weatherOn, zoneOfSea } from './weather';
 import { galeConvoyLoss, galeLaneLoss, galeSeas } from './heavyseas';
-import { capOver, deckWorth, fleetKnown, syncWings, wingShare } from './carriers';
+import { capOver, deckWorth, fleetKnown, syncWings, wingShare, wingStep } from './carriers';
 import { COMMAND } from './commanders';
 import { nameLosses, nameSide } from './hulls';
 import { storyConvoy, storyEdge, storySea } from './stories';
@@ -57,6 +57,8 @@ import {
 interface ClassSpec { label: string; one: string; many: string; power: number; tough: number; escort: number; raid: number }
 export interface FleetRow {
   nat: string; name: string; from?: number; base: string | null; port: string; home: string; zone: string; duty: Stance; tied?: boolean; admiral?: string; ships: Partial<Ships>;
+  /** The share of its navy's wing each of its carriers brings, where less than one (Fleet.deck; ruling 189(b)). */
+  deck?: number;
   /** What the row says instead in the grand campaign (Force H's beat, ruling 233 rider b564). The history campaigns read the row as it stands. */
   open?: Partial<Pick<FleetRow, 'home' | 'zone' | 'tied'>>;
   /**
@@ -339,6 +341,7 @@ export function addFleet(g: Game, given: FleetRow): Fleet {
     admiral: row.admiral ? { name: row.admiral, level: 1, xp: 0 } : null, fought: 0,
   };
   if (row.cruise) f.cruise = row.cruise[2] === undefined ? [row.cruise[0], row.cruise[1]] : [row.cruise[0], row.cruise[1], row.cruise[2]];
+  if (row.deck !== undefined && row.deck < 1) f.deck = row.deck;
   g.fleets.push(f);
   return f;
 }
@@ -1938,6 +1941,28 @@ export function orderedTo(g: Game, f: Fleet, m: { base: string; port: string; ho
   return true;
 }
 
+/**
+ * A base move of the staff's book for a fleet of the player's that is his (the audit's re-check of 25 November 2026:
+ * one patrol ordered by hand before May 1940 kept the Pacific Fleet off Pearl Harbor for good, and nothing said so).
+ * The move waits on the fleet (Fleet.planBase) and the news tells him: kept by hand under the admirals, it goes there
+ * once he hands it back; with the navy his own, the move is his to make, and its page offers it. Nothing is moved here.
+ */
+export function bookWaits(g: Game, f: Fleet, m: { base: string; port: string; home: string; words: string }): void {
+  const r = g.byName[m.base];
+  if (!r || r.id === f.base || f.nat !== g.human) { delete f.planBase; return; }
+  f.planBase = { ...m, turn: g.turn };
+  const name = fleetName(f), at = f.base >= 0 ? g.regions[f.base].name : f.port;
+  headline(g, 'info', byHand(g, f.nat, 'navy')
+    ? `${m.words}, by the staff's plan. You run the navy yourself: ${name} stays at ${at} until you move its base to ${r.name} (its page offers the move).`
+    : `${m.words}, by the staff's plan. You keep ${name} under your own orders, so it stays at ${at}: hand it back to your admirals and it goes to ${r.name}, or move its base there yourself.`, f.nat);
+}
+
+/** A base move of the staff's book that waits on one of the player's fleets (bookWaits), or null: none, or it is there. */
+export function bookBaseOf(g: Game, f: Fleet): { region: Region; words: string; turn: number } | null {
+  const b = f.planBase, r = b ? g.byName[b.base] : undefined;
+  return b && r && r.id !== f.base && f.nat === g.human ? { region: r, words: b.words, turn: b.turn } : null;
+}
+
 /** Friendly ports a fleet could move its base to. */
 export function baseTargets(g: Game, f: Fleet): Region[] {
   return g.regions.filter((r) => r.port && r.seas.length > 0 && r.id !== f.base && allied(g, f.nat, r.ctrl) && canSailTo(g, f, r));
@@ -2153,6 +2178,8 @@ const offChartFor = (g: Game, nat: string, fleet: string, ships: Partial<Ships>,
 
 export function navalUpkeep(g: Game, nat: string): void {
   const n = g.nations[nat];
+  // (Release 2, carrier wings by date: the month a navy's room a deck changes, its player is told. The wings follow in syncWings.)
+  wingStep(g, nat);
   for (const given of NAVY.fleets) {
     // A row with a book of its own forms by it at the book's stops, for the computer's navy (Force H in June 1940),
     // and for a player's in the start month of a campaign begun later (rider b639).
@@ -2238,6 +2265,13 @@ export function navalUpkeep(g: Game, nat: string): void {
   // still find the carriers out or in. At war with anybody a player's fleets are his own to send out, and nothing is
   // done with them. Rider b593 to ruling 234. A row that names nobody reads as it did: at war with nobody.)
   const peace = (whose?: string): boolean => !n.atWar.length || (whose !== undefined && !atWar(g, nat, whose) && !byHand(g, nat, 'navy'));
+  // (A base move that waited for him is made once the fleet is his admirals' again: handed back, or the navy handed them.)
+  for (const f of fleetsOf(g, nat)) {
+    if (!f.planBase || keptByHand(g, f) || byHand(g, nat, 'navy')) continue;
+    const b = f.planBase;
+    delete f.planBase;
+    orderedTo(g, f, b);
+  }
   const out = new Map<number, number>();
   for (const m of NAVY.moves ?? []) {
     if (m.nat !== nat || (m.stops && !m.stops.includes(stopOf(g)))) continue;
@@ -2251,12 +2285,16 @@ export function navalUpkeep(g: Game, nat: string): void {
     // (A player who runs his navy himself moves his own fleets; where his staff runs it, the staff keeps the dates.)
     // (A move named with a great choice keeps that choice's month and is read at war with the nation whose it is; one
     // marked 'eve' before that war, on the book's word that the blow falls this month.)
+    // (A move of a fleet that is his, his by hand or with the navy his own, waits for him and the news says so: bookWaits.)
     const foe = m.with?.split(':')[0];
-    if (m.turn + moveSlide(g, m) !== g.turn || byHand(g, nat, 'navy')) continue;
+    if (m.turn + moveSlide(g, m) !== g.turn) continue;
     if (foe !== undefined && (m.eve ? atWar(g, nat, foe) || !bookLays(g, m.with!) : !atWar(g, nat, foe))) continue;
     const f = named(m.fleet);
     const friend = m.ally ? (holder: string): boolean => allied(g, nat, holder) && (foe === undefined || atWar(g, holder, foe)) : undefined;
-    if (f && m.base !== undefined && m.port !== undefined && m.home !== undefined) orderedTo(g, f, { base: m.base, port: m.port, home: m.home, words: m.words }, friend);
+    if (!f || m.base === undefined || m.port === undefined || m.home === undefined) continue;
+    const row = { base: m.base, port: m.port, home: m.home, words: m.words };
+    if (byHand(g, nat, 'navy') || keptByHand(g, f)) bookWaits(g, f, row);
+    else orderedTo(g, f, row, friend);
   }
   if (!stopDef(g).book) {
     for (const f of fleetsOf(g, nat)) {

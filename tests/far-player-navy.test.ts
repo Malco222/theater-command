@@ -76,7 +76,9 @@ describe("a player's America: the Pacific Fleet's base by date", () => {
     const was = base(g, fleet(g, 'USA', 'Pacific Fleet'));
     navalUpkeep(g, 'USA');
     expect(base(g, fleet(g, 'USA', 'Pacific Fleet'))).toBe(was);
-    expect(news(g, 9, 'The Pacific Fleet is ordered to stay at Pearl Harbor')).toBe(false);
+    expect(g.headlines.some((h) => h.turn === 9 && h.text === 'The Pacific Fleet is ordered to stay at Pearl Harbor.')).toBe(false);
+    // (The move waits for him, and the news tells him so: the navy thread, on the audit's re-check of 25 November 2026.)
+    expect(news(g, 9, `by the staff's plan. You run the navy yourself: the Pacific Fleet stays at ${was} until you move its base to Pearl Harbor`)).toBe(true);
   });
 
   it("and the computer's America moves it as before", () => {

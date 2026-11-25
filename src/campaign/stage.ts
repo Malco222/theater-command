@@ -158,3 +158,8 @@ export const SHADOWRELAY_STAGE: boolean = staged('TC_SHADOWRELAY', 'shadowRelay'
 // for release 2"; harbourstrike.ts): the grand campaigns opened while it is true carry its flag. Forced by TC_CARRIERSTRIKE.
 /** True where new grand campaigns open with the carrier strike on a harbour on a carrier fleet's page (stage.json 'carrierStrike'). */
 export const CARRIERSTRIKE_STAGE: boolean = staged('TC_CARRIERSTRIKE', 'carrierStrike');
+
+// Carrier wings by date (release 2; the rider to rulings 189 and 202; carriers.ts): the grand campaigns opened while it
+// is true carry its flag. Forced by TC_WINGBYDATE.
+/** True where new grand campaigns open with a navy's carrier wing by date (stage.json 'wingByDate'). */
+export const WINGBYDATE_STAGE: boolean = staged('TC_WINGBYDATE', 'wingByDate');

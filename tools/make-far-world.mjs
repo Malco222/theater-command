@@ -164,6 +164,10 @@ const fleets = [
   fleet('UK', 'China Fleet', 'Singapore', 'Singapore', 0, 'patrol', { cv: 1, ca: 8, dd: 9, ss: 15 }, 'Percy Noble'),
   fleet('NED', 'Dutch East Indies Fleet', 'Soerabaja', 'Soerabaja', 'java', 'patrol', { ca: 3, dd: 7, ss: 15 }, 'Conrad Helfrich'),
 ];
+// Ruling 189(b): a light carrier that sailed alone has a row of its own and, where a row can carry one, its own wing.
+// The historian's figure (pacific-fleets-check.md, section 4): a third of a wing. Ryujo with the 3rd Fleet; Shoho, who
+// joins the 4th Fleet in January 1942. 'deck' is the share of its navy's wing each of the fleet's carriers brings.
+for (const name of ['3rd Fleet', '4th Fleet']) fleets.find((f) => f.nat === 'JAP' && f.name === name).deck = 0.33;
 // Japan's ships that joined between September 1939 and Pearl Harbor, in navy.json's form (the historian's table of
 // destroyers; the planner's of carriers and battleships). Later arrivals and the building rows come with the hunt.
 const arrivals = [
@@ -185,6 +189,36 @@ const arrivals = [
   [23, 'JAP', '2nd Fleet', { dd: 1 }, 'a new destroyer'],
   [25, 'JAP', 'Mobile Fleet', { dd: 1, cv: 2 }, 'two new fleet carriers'],
   [28, 'JAP', 'Combined Fleet', { dd: 1 }, 'a new destroyer'],
+  // Japan's ships from January 1942 (ruling 189(f): the historian's rows stand; pacific-fleets-check.md, section 2, and
+  // the planner's table it corrects). Light carriers count two to one (189(2)): Chiyoda and Chitose are one carrier, the
+  // last class's three decks with no air groups are one, and Ryuho (November 1942) is counted with the two converted
+  // liners, three decks of about 130 aircraft, so she brings no row. Shoho sailed alone, with the 4th Fleet, and has a
+  // row of her own as one carrier (189(b)). The fleet each ship joins is the navy thread's reading where the historian
+  // names none (25 November 2026): battleships and later flagships to the Combined Fleet, carriers to the Mobile Fleet,
+  // the light cruisers that led destroyer squadrons to the 2nd Fleet.
+  [29, 'JAP', '4th Fleet', { cv: 1 }, 'the light carrier Shoho'],
+  [30, 'JAP', 'Combined Fleet', { bb: 1 }, 'the new battleship Yamato'],
+  [33, 'JAP', 'Mobile Fleet', { cv: 1 }, 'the carrier Junyo, converted from a liner'],
+  [35, 'JAP', 'Mobile Fleet', { cv: 1 }, 'the carrier Hiyo, converted from a liner'],
+  [38, 'JAP', '2nd Fleet', { ca: 1 }, 'the new light cruiser Agano'],
+  [41, 'JAP', 'Combined Fleet', { bb: 1 }, 'the new battleship Musashi'],
+  [42, 'JAP', 'Combined Fleet', { ca: 1 }, 'the new light cruiser Oyodo'],
+  [46, 'JAP', '2nd Fleet', { ca: 1 }, 'the new light cruiser Noshiro'],
+  [52, 'JAP', '2nd Fleet', { ca: 1 }, 'the new light cruiser Yahagi'],
+  [53, 'JAP', 'Mobile Fleet', { cv: 1 }, 'the light carriers Chiyoda and Chitose, converted from seaplane carriers'],
+  [55, 'JAP', 'Mobile Fleet', { cv: 1 }, 'the new carrier Taiho'],
+  [60, 'JAP', 'Mobile Fleet', { cv: 1 }, 'the new carriers Unryu and Amagi, short of aircraft to fly from them'],
+  [63, 'JAP', 'Combined Fleet', { ca: 1 }, 'the new light cruiser Sakawa'],
+];
+// Japan's building (189(f)): destroyers about 1.5 a month from 1942 to 1944 (the historian: about 10 in 1942, 13 in 1943
+// and 31 in 1944, most of them the small class of 1944), laid in whole ships as one a month in 1942 and 1943 to the
+// carriers' screen and three a month for seven months of 1944 and two for five to the battle line (55 in all). Japan's
+// submarines are far-books.json's (the director's rulings of 22 November). The convoy escorts of 1943 to 1945 are not
+// laid: they want a fleet whose duty is the lanes, which no row has yet.
+const japanBuilding = [
+  { nat: 'JAP', fleet: 'Mobile Fleet', cls: 'dd', from: 29, to: 52, perMonth: 1 },
+  { nat: 'JAP', fleet: 'Combined Fleet', cls: 'dd', from: 53, to: 59, perMonth: 3 },
+  { nat: 'JAP', fleet: 'Combined Fleet', cls: 'dd', from: 60, to: 64, perMonth: 2 },
 ];
 
 // America's fleets in the Pacific (the planner's pacific-fleets.json, in navy.json's own forms). A fleet that forms
@@ -197,6 +231,8 @@ for (const f of usFleets) {
   need(seas.has(f.home) && seas.has(f.zone), `fleet "${f.name}": no sea "${f.home}" or "${f.zone}"`);
 }
 const fleetNames = new Set([...fleets, ...usFleets].map((f) => `${f.nat}|${f.name}`));
+for (const a of arrivals) need(fleetNames.has(`${a[1]}|${a[2]}`), `arrival "${a[4]}": no fleet "${a[2]}"`);
+for (const b of japanBuilding) need(fleetNames.has(`${b.nat}|${b.fleet}`), `building row: no fleet "${b.fleet}"`);
 // The Atlantic Fleet is world.json's own row: three battleships and a carrier cross to it in May 1941 and come back (ruling 189(1)).
 fleetNames.add('USA|Atlantic Fleet');
 for (const a of pacific.arrivals) need(fleetNames.has(`${a[1]}|${a[2]}`), `arrival "${a[4]}": no fleet "${a[2]}"`);
@@ -356,8 +392,12 @@ const out = {
   navy: {
     fleets: usFleets.filter((f) => f.from !== undefined),
     arrivals: [...arrivals, ...pacific.arrivals].sort((a, b) => a[0] - b[0]),
-    building: pacific.building,
+    building: [...pacific.building, ...japanBuilding],
     moves: usMoves,
+    // The design director's B1 of 25 November 2026, 02:35Z (pacific-japan-1125.md): ship quality for the two Pacific
+    // navies, which had none and fought at navy.json's 0.7 default. USA 1.0 and JAP 1.1, laid as G and flagged until the
+    // historian's 1939 middles replace them; whole world only, so the old chart's wars do not move.
+    quality: { USA: 1, JAP: 1.1 },
   },
   // Japan's character as a staff (paper 14, section 8, item 13; ruled with 181 to 202): where its budget leans. Its temper
   // (ruling 202(l)) is laid by china-line.json already; the two files must say the same thing.
