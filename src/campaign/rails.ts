@@ -201,7 +201,7 @@ export function wreckChance(g: Game, taken: Region, by: string): number {
  */
 export function railOnCapture(g: Game, taken: Region, by: string, from: string, again = false): void {
   if (!groundRules(g) || !onNet(taken.id) || railCut(g, taken.id)) return;
-  // (`again`: the province has already changed hands this month, game.ts changedThisMonth: the side driven out's own dice.)
+  // (`again`: the province was taken in war already this month, game.ts takenInWarThisMonth: the side driven out's own dice.)
   const roll = new Rng(hashString(again ? `rail:${g.seed}:${g.turn}:${taken.id}:${from}` : `rail:${g.seed}:${g.turn}:${taken.id}`)).next();
   if (roll >= wreckChance(g, taken, by) || !cutRail(g, taken.id, 'retreat', from)) return;
   if (concerns(g, by, from)) headline(g, 'battle', `${g.nations[from].adj} troops tear up the railway at ${taken.name} as they fall back.`, from, taken.id, { arm: 'land', won: by, lost: from });

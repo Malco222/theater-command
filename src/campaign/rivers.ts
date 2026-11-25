@@ -185,16 +185,17 @@ function firstTelling(g: Game, key: string): boolean {
  * When a region changes hands, the side that still holds the far bank of each of its rivers blows the bridges,
  * unless the captors are on them first. The dice are the bridge's own, so nothing else in the war shifts.
  */
-export function bridgesOnCapture(g: Game, taken: Region, by: string, again = false, farAgain?: (far: Region) => boolean): void {
+export function bridgesOnCapture(g: Game, taken: Region, by: string, again?: (far: Region) => boolean): void {
   if (!groundRules(g)) return;
   for (const c of crossingsAt(taken.id)) {
     if (bridgeDown(g, c)) continue;
     const far = g.regions[farBank(c, taken.id)];
     if (!atWar(g, by, far.ctrl)) continue;
-    // A crossing's dice are thrown by a capture of either bank: after a change of hands this month on either, the
-    // captor's own (game.ts changedThisMonth; the design director's ruling, 25 November 04:55Z). The first keeps its key.
+    // A crossing's dice are thrown by a capture of either bank: once thrown for this month by an earlier taking of
+    // either (`again`, from capture()), the captor's own (the design director's ruling, 25 November 04:55Z). The first
+    // keeps its key.
     const key = `bridge:${g.seed}:${g.turn}:${c.a}:${c.b}`;
-    const roll = new Rng(hashString(again || farAgain?.(far) ? `${key}:${by}` : key)).next();
+    const roll = new Rng(hashString(again?.(far) ? `${key}:${by}` : key)).next();
     const name = riverName(c), holder = g.nations[far.ctrl].adj, captor = g.nations[by].adj;
     // (Release 2, rearguard.ts) A rearguard of the far bank's side held this province: its charges were laid already.
     const laid = chargesLaid(g, taken.id, (nat) => nat === far.ctrl || allied(g, nat, far.ctrl));

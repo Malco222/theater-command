@@ -21,7 +21,7 @@
 
 import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
-import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, changedThisMonth, corpsBase, fights, headline, men, onPortStores, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, worksFor, fortRow, fortRows, roomless, type Assessment } from './game';
+import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, takenInWarThisMonth, fights, headline, men, onPortStores, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, worksFor, fortRow, fortRows, roomless, type Assessment } from './game';
 import { crewStores, storesLeft } from './fortrows';
 import { seat } from './commanders';
 import { bookFed } from './history';
@@ -30,7 +30,7 @@ import { armyOf } from './joint';
 import { closedTo, seaOpenAt } from './navy';
 import { storyFallen } from './stories';
 import { TOWNS, townName, townSize, type TownSize } from './towns';
-import { PRIZES, harbourOpen, prizesOnLoss } from './prizes';
+import { PRIZES, harbourOpen, prizesOnLoss, willBurn } from './prizes';
 import { cityHit } from './repairs';
 import { KIND, MEN_PER_DIV, STACK, type BattleReport, type Corps, type Game, type Region } from './types';
 import { seaWhatList } from './sea-words';
@@ -693,9 +693,9 @@ export function invest(g: Game, r: Region, by: string): void {
   tell(g, r, `${g.nations[by].adj} troops close round ${townName(r)}: ${placeWords(g, r)} is under siege, with ${who}.`, r.ctrl, [by, r.ctrl, ...inside.map((c) => c.nat)], { won: by, lost: r.ctrl });
   // What lies outside the walls goes with the field: the side driven off it burns what it was ordered to. What
   // changed hands whole is news in the month it starts to work for its new holder (prizes.ts).
-  // (Lost already this month: the province changed hands, or its town was relieved and the relieving army's foes threw
-  // for the same ground. Its own dice then; game.ts changedThisMonth.)
-  prizesOnLoss(g, r, by, r.ctrl, 'outside', changedThisMonth(g, r) || g.flags[`relieved:${r.id}`] === g.turn);
+  // (Thrown for already this month: its town was relieved and the relieving army's foes threw for the same ground, or
+  // the province was taken in war, whole, from a side that burns. Its own dice then; game.ts takenInWarThisMonth.)
+  prizesOnLoss(g, r, by, r.ctrl, 'outside', g.flags[`relieved:${r.id}`] === g.turn || (takenInWarThisMonth(g, r) && willBurn(g, r.prev!, r)));
 }
 
 /** The besiegers are gone: the siege is raised. What was broken is mended month by month. */
@@ -726,10 +726,11 @@ export function fall(g: Game, r: Region, by: string, how: Fell): void {
   const since = g.flags[`siege:${r.id}`];
   const lasted = since === undefined ? 0 : g.turn - since;
   const old = r.ctrl;
-  // (Read before this fall's capture: the town lost already this month throws its own dice. Where the town was relieved
+  // (Read before this fall's capture: a town taken in war already this month from a side that burns was thrown for,
+  // so it throws its own dice (game.ts takenInWarThisMonth). Where the town was relieved
   // this month and the place is lost whole, what lay outside was thrown for by the besiegers driven off: those kinds
   // only take the side, and what lies inside keeps its key.)
-  const again = changedThisMonth(g, r) || (since === undefined && g.flags[`relieved:${r.id}`] === g.turn ? 'outside' : false);
+  const again = (takenInWarThisMonth(g, r) && (willBurn(g, r.prev!, r) || willBurn(g, old, r))) || (since === undefined && g.flags[`relieved:${r.id}`] === g.turn ? 'outside' : false);
   tallySiege(g, how);
   if (how !== 'empty') tallySiege(g, 'months', lasted);
   tallySiege(g, 'taken', garrisonOf(r).length);

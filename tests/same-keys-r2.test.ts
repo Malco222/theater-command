@@ -14,7 +14,7 @@ vi.mock('../src/core/rng', async (orig) => {
 
 import { Rng, hashString } from '../src/core/rng';
 import { LandBattle, sampleTicket } from '../src/battle/land';
-import { capture, createGame, setWar } from '../src/campaign/game';
+import { atWar, capture, createGame, setWar } from '../src/campaign/game';
 import { PRIZE_KINDS, hasPrize, prizeInside, prizeOut, setScorchPolicy } from '../src/campaign/prizes';
 import { onNet, railCut } from '../src/campaign/rails';
 import { blowChance, bridgeDown, crossingsAt, farBank } from '../src/campaign/rivers';
@@ -279,6 +279,62 @@ describe('the four low keys take the missing side on a second change of hands in
         for (const k of inside) expect(second).toContain(`${pre}${k}`);
         for (const k of inside) expect(second).not.toContain(`${pre}${k}:${holder}`);
         met++;
+      }
+    }
+    expect(met).toBeGreaterThan(0);
+  });
+
+  // A change of hands that threw nothing leaves the month's first throw to come: it keeps its key (the checkers' gate
+  // runs, seed 2 month 49 and seeds 1 and 2's first bridge differences: a first throw salted after such a change).
+  it('a province taken by a side at peace with its holder, then taken in war (row 4): the track\'s throw is the month\'s first, today\'s key', () => {
+    const g = free(1);
+    expect(atWar(g, 'SOV', 'POL')).toBe(false);
+    setWar(g, 'GER', 'SOV');
+    let met = 0;
+    for (const r of g.regions) {
+      if (met >= 3) break;
+      if (r.ctrl !== 'POL' || !onNet(r.id) || railCut(g, r.id)) continue;
+      expect(keysOf(`rail:${g.seed}:`, () => capture(g, r, 'SOV'))).toEqual([]);
+      expect(keysOf(`rail:${g.seed}:`, () => capture(g, r, 'GER'))).toEqual([`rail:${g.seed}:${g.turn}:${r.id}`]);
+      met++;
+    }
+    expect(met).toBeGreaterThan(0);
+  });
+
+  it('taken whole from a side that burns nothing, then besieged by a third side (row 6a): what lies outside is thrown for the first time, today\'s key', () => {
+    const g = scorching(1);
+    setScorchPolicy(g, 'POL', 'never');
+    setWar(g, 'FRA', 'GER');
+    let met = 0;
+    for (const r of g.regions) {
+      if (met >= 2) break;
+      if (r.ctrl !== 'POL' || !standing(g, r, true).length || g.flags[`siege:${r.id}`] !== undefined) continue;
+      const pre = `prize:${g.seed}:${g.turn}:${r.id}:`;
+      expect(keysOf(pre, () => fall(g, r, 'GER', 'empty'))).toEqual([]);
+      const second = keysOf(pre, () => invest(g, r, 'FRA'));
+      expect(second.length).toBeGreaterThan(0);
+      for (const k of standing(g, r, true)) expect(second).toContain(`${pre}${k}`);
+      for (const k of second) expect(k.split(':').length).toBe(5);
+      met++;
+    }
+    expect(met).toBeGreaterThan(0);
+  });
+
+  it('a bridge whose bank was taken by a side at peace with the far bank (row 5): its first throw of the month keeps today\'s key', () => {
+    const g = free(1);
+    setWar(g, 'GER', 'SOV');
+    let met = 0;
+    for (const r of g.regions) {
+      if (met >= 2 || r.ctrl !== 'POL') continue;
+      for (const c of crossingsAt(r.id)) {
+        const b = g.regions[farBank(c, r.id)], old = `bridge:${g.seed}:${g.turn}:${c.a}:${c.b}`;
+        if (b.ctrl !== 'POL' || bridgeDown(g, c) || met >= 2) continue;
+        // The Red Army takes this bank (at peace with Poland: no throw); then Germany takes it from the Red Army, at
+        // war with Poland across the river: the crossing's first throw of the month.
+        expect(keysOf(old, () => capture(g, r, 'SOV'))).toEqual([]);
+        expect(keysOf(old, () => capture(g, r, 'GER'))).toEqual([old]);
+        met++;
+        break;
       }
     }
     expect(met).toBeGreaterThan(0);
