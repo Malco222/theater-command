@@ -86,7 +86,7 @@ describe('fog on raids: the switch on', () => {
     // The card's figures are the high end's: the defence the side must allow for.
     expect(p.bomberLoss).toBe(p.fog!.loss[1]);
     // The list of targets and the pages say the same.
-    expect(raidTargetsFor(g, 'bomb').find((x) => x.id === t)!.what).toMatch(/guns not known, fighters not known/);
+    expect(raidTargetsFor(g, 'bomb').find((x) => x.id === t)!.what).toMatch(/guns not known and 60 light, fighters not known/);
     const page = JSON.stringify(airPage(g, `plan:bomb:${t}:${p.picked.join('.')}`));
     expect(page).toContain('Fighters: unknown');
     expect(page).toContain('(not scouted)');

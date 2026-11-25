@@ -4,7 +4,7 @@
 // ticket now say how many there are. A count only: no loss and no chance moves by it. The numbers are the historian's
 // (historian/raid-card-defence-count.md) and the words the UI director's (ui-director/words-bombers-flak-valour.md).
 import { afterEach, describe, expect, it } from 'vitest';
-import { AIRWAR, assessAir, flakGuns, gunsAt, squadronSize, squadronsOf } from '../src/campaign/air';
+import { AIRWAR, assessAir, flakGuns, gunsAt, squadronSize, squadronsOf, standingGuns } from '../src/campaign/air';
 import { theUnit } from '../src/campaign/bombers';
 import { turnToDate } from '../src/core/ticket';
 import { dayOrNight, planRaid } from '../src/campaign/airwar';
@@ -35,7 +35,7 @@ const line = (a: { lines: { label: string; value: string; effect?: string }[] },
 
 describe('the guns and the squadrons, counted', () => {
   it('every target puts up light flak, and each level of guns built is heavy guns with two light ones to each', () => {
-    expect(flakGuns(0)).toEqual({ light: 60, heavy: 0, all: 60 });
+    expect([flakGuns(0), standingGuns()]).toEqual([{ light: 0, heavy: 0, all: 0 }, 60]);
     expect(flakGuns(1)).toEqual({ light: 240, heavy: 120, all: 360 });
     expect(flakGuns(3)).toEqual({ light: 720, heavy: 360, all: 1080 });
     // More light guns than heavy wherever guns are built, as the record had it.
@@ -89,16 +89,16 @@ describe('the guns and the squadrons, counted', () => {
     const ids = going(g, t);
     delete g.flags[`wk:aa:${t}`];
     const bare = assessAir(g, fleetsOf(g, ids), 'bomb', t);
-    expect(bare.guns).toEqual({ light: 60, heavy: 0, all: 60 });
-    expect(line(bare, 'Flak')!.value).toBe(`About 60 guns round ${g.regions[t].name}`);
+    expect([bare.guns, bare.standing]).toEqual([{ light: 0, heavy: 0, all: 0 }, 60]);
+    expect(line(bare, 'Flak')!.value).toBe('Only the 60 light guns every target has.');
     const share = (x: number) => (Math.round(x * 100) >= 1 ? `about ${Math.round(x * 100)}%` : 'almost none');
-    expect(line(bare, 'Flak')!.effect).toBe(`Light guns only. They may bring down ${share(bare.gunLoss)} of the bombers.`);
+    expect(line(bare, 'Flak')!.effect).toBe(`They may bring down ${share(bare.gunLoss)} of the bombers.`);
     g.flags[`wk:aa:${t}`] = 2;
     expect(gunsAt(g, t)).toBe(2);
     const built = assessAir(g, fleetsOf(g, ids), 'bomb', t);
     expect(built.guns).toEqual({ light: 480, heavy: 240, all: 720 });
-    expect(line(built, 'Flak')!.value).toBe(`About 720 guns round ${g.regions[t].name}`);
-    expect(line(built, 'Flak')!.effect).toBe(`240 heavy and 480 light. They may bring down ${share(built.gunLoss)} of the bombers.`);
+    expect(line(built, 'Flak')!.value).toBe('About 720 guns built here, 480 light and 240 heavy, and the 60 light guns every target has.');
+    expect(line(built, 'Flak')!.effect).toBe(`They may bring down ${share(built.gunLoss)} of the bombers.`);
     expect(built.gunLoss).toBeGreaterThan(bare.gunLoss);
     // By night the same guns; a fight for the sky sends no bombers over them, so none are counted.
     expect(assessAir(g, fleetsOf(g, ids), 'night', t).guns.all).toBe(720);
@@ -126,7 +126,7 @@ describe('the guns and the squadrons, counted', () => {
       const dn = dayOrNight(g, 'bomb', t, ids)!, p = planRaid(g, 'bomb', t, ids);
       const guns = flakGuns(gunsAt(g, t));
       expect([dn.gunCount, dn.gunHeavy]).toEqual([guns.all, guns.heavy]);
-      expect(dn.gunsCount).toBe(guns.heavy ? `about ${guns.all.toLocaleString('en-US')} guns, ${guns.heavy} of them heavy` : `about ${guns.all} light guns`);
+      expect(dn.gunsCount).toBe(guns.all ? `About ${guns.all.toLocaleString('en-US')} guns built here, ${guns.heavy.toLocaleString('en-US')} of them heavy, and the 60 light guns every target has.` : 'Only the 60 light guns every target has.');
       expect(dn.foeGroups).toBe(p.meets.length);
       expect(dn.foesAble).toBe(p.meets.reduce((n, x) => n + x.able, 0));
       expect(dn.foeSquadrons).toBe(p.meets.reduce((n, x) => n + squadronsOf(x.nat, x.able, turnToDate(g.turn).year), 0));
@@ -142,6 +142,6 @@ describe('the guns and the squadrons, counted', () => {
     g.flags[`wk:aa:${t}`] = 1;
     const tk = airTicket(g, 'bomb', t, going(g, t), 'GER').ticket!;
     expect(tk.place.flakGuns).toEqual({ light: 240, heavy: 120 });
-    expect(tk.lines.some((l) => l.label === 'Flak' && l.value.startsWith('About 360 guns round'))).toBe(true);
+    expect(tk.lines.some((l) => l.label === 'Flak' && l.value.startsWith('About 360 guns built here'))).toBe(true);
   });
 });

@@ -163,7 +163,7 @@ describe('a bombing raid by day and by night, side by side (ruling 107(d))', () 
       if (dn.day.why || dn.night.why) continue;
       seen++;
       expect(dn.guns).toBe(gunsAt(g, t));
-      expect(dn.gunsLabel).toBe(dn.guns ? `Level ${dn.guns} anti-aircraft guns` : 'No anti-aircraft guns');
+      expect(dn.gunsLabel).toBe(dn.guns ? `Level ${dn.guns} anti-aircraft guns` : 'Only the 60 light guns every target has.');
       for (const [w, p] of [[dn.day, planRaid(g, 'bomb', t)], [dn.night, planRaid(g, 'night', t)]] as const) {
         expect(w.gunLossN).toBe(p.guns.lossN);
         expect(w.gunLoss).toBe(p.guns.loss);
@@ -186,10 +186,10 @@ describe('a bombing raid by day and by night, side by side (ruling 107(d))', () 
       const armed = dayOrNight(g, 'bomb', t)!;
       if (was === undefined) delete g.flags[key]; else g.flags[key] = was;
       expect(none.guns).toBe(0);
-      expect(none.gunsLabel).toBe('No anti-aircraft guns');
+      expect(none.gunsLabel).toBe('Only the 60 light guns every target has.');
       expect(none.day.gunsStop).toBe(0);
       expect(none.day.gunsWords).toBe('of them to light flak');
-      expect(none.gunsTail).toBe('light flak only');
+      expect(none.gunsTail).toBe('');
       expect(none.day.stopNote).toBe('');
       expect(armed.guns).toBe(2);
       expect(armed.gunsLabel).toBe('Level 2 anti-aircraft guns');
