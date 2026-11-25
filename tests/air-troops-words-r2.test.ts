@@ -2,10 +2,10 @@
 // The design director, 25 November 2026 14:59Z, accepted the card's "more likely than not" list of strafers, the fire
 // and the weight staying the exact expectation, and asked the UI director "for words that say the list is the likely
 // one, so a strafer who never arrives isn't a broken promise". Her words of 15:04Z, to the letter, no colour on any:
-//   the card: LIKELY TO GO DOWN AND STRAFE; under it, once, muted, "The fighter groups most likely to go down and strafe
-//   if the sky is won. Which of them do is settled over the target."; the groups a row each; with none, "No fighter
-//   group is likely to go down and strafe, though one still may." (her line for none as softened at 16:04Z; muted, the
-//   muted line left out above it);
+//   the card: LIKELY TO GO DOWN AND STRAFE; under it, once, muted, "The fighter groups most likely to go down and strafe.
+//   Which of them do is settled over the target." (as she mended it at 19:17Z: it lost "if the sky is won"); the groups a
+//   row each; with none, the line for none of its cause (her marks of 19:10Z, section A, in the order she confirmed at
+//   19:17Z: no fighters; else no reach; else the odds; else the fought-out line; muted, the muted line left out above it);
 //   the report: "{No. 11 Group} went down and strafed." / "No fighter group went down to strafe."
 // The card's list is the ids strafersExpected gives the card's own forecast (the same call); the report's names are the
 // groups that really went down, the settled raid's (fly()) or the fought raid's (the battle's). With the switch off
@@ -19,7 +19,7 @@ vi.hoisted(() => { delete (globalThis as { TC_FLY?: string }).TC_FLY; });
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { launchRaid, planRaid, raidTargets } from '../src/campaign/airwar';
-import { AIR, assessAir, forecastAir, strafersExpected } from '../src/campaign/air';
+import { AIR, assessAir, forecastAir, strafeCarry, strafersExpected } from '../src/campaign/air';
 import { airPage } from '../src/campaign/airpages';
 import { afterCard } from '../src/campaign/airfought';
 import { createGame, setWar } from '../src/campaign/game';
@@ -40,8 +40,14 @@ const WAS = AIR.combat.fighters;
 afterEach(() => { flyKinds([]); strafeWatch.tell = undefined; heard = []; AIR.combat.fighters = WAS; });
 
 const HEADING = 'LIKELY TO GO DOWN AND STRAFE';
-const NOTE = 'The fighter groups most likely to go down and strafe if the sky is won. Which of them do is settled over the target.';
-const NONE = 'No fighter group is likely to go down and strafe, though one still may.';
+const NOTE = 'The fighter groups most likely to go down and strafe. Which of them do is settled over the target.';
+// The line for none, by its cause (the UI director, 19:10Z section A; the order, 19:17Z).
+const NONE = {
+  alone: 'No fighters fly with this raid.',
+  reach: 'No fighter group has the range to go down and strafe there.',
+  odds: 'No fighter group is likely to go down and strafe: the defenders\' fighters are stronger than yours. One you send down before it meets them still may.',
+  fought: 'No fighter group is likely to go down and strafe: the air fight is likely to leave them with no fight left. One you send down before it meets the defence still may.',
+};
 const NOBODY = 'No fighter group went down to strafe.';
 const GC1 = 9, GC3 = 10, GC2 = 36, BOMBERS = 38;
 const NAME: Record<number, string> = { [GC1]: 'Groupement de Chasse 1', [GC2]: 'Groupement de Chasse 2', [GC3]: 'Groupement de Chasse 3' };
@@ -104,18 +110,39 @@ describe('the raid card: LIKELY TO GO DOWN AND STRAFE', () => {
     expect([...q.strafe!.names].sort()).toEqual(names([GC1, GC2, GC3]));
   });
 
-  it('with none: the line for none under the heading, in place of the muted line and the list; a raid of bombers alone says so too', () => {
+  it('with none: the line for none of its cause under the heading, in place of the muted line and the list, on the browser\'s plan, the air page and the 3D card', () => {
     on();
-    for (const groups of ['far', 'alone'] as const) {
-      const c = saar(0, groups);
+    // Bombers alone: no fighters; Groupement de Chasse 1 at Namur alone: no reach; the escort against 2. Jagddivision at
+    // 800 (setup): the odds; the combat rate x60 (setup): the air fight is likely to leave none a fighter.
+    // (The 3D card is read through the bridge, where the month's other moves are made on loading: Groupement de Chasse 1
+    // goes back to Lille, out of range, so the raid there is the bombers alone, and its card says so; and 2. Jagddivision
+    // is the month's again, so the third raid's 3D card is not read here.)
+    const cases: [ReturnType<typeof saar>, keyof typeof NONE, keyof typeof NONE | null][] = [];
+    cases.push([saar(0, 'alone'), 'alone', 'alone']);
+    cases.push([saar(0, 'far'), 'reach', 'alone']);
+    const many = saar(0);
+    const jd = many.g.airFleets.find((f) => f.id === 3)!;
+    jd.ftr = 800; jd.est.ftr = Math.max(jd.est.ftr, 800);
+    cases.push([many, 'odds', null]);
+    for (const [c, why, why3d] of cases) {
       const p = planRaid(c.g, 'ground', c.target, c.ids, 'FRA');
       expect(p.why).toBeNull();
-      expect(p.strafe).toEqual({ heading: HEADING, note: '', names: [], none: NONE });
+      expect(p.strafe).toEqual({ heading: HEADING, note: '', names: [], none: NONE[why] });
       const page = airPage(c.g, `plan:ground:${c.target}:${p.picked.join('.')}`)!;
-      expect(page.sections.find((s) => s.heading === HEADING)).toEqual({ heading: HEADING, text: NONE, rows: [] });
+      expect(page.sections.find((s) => s.heading === HEADING)).toEqual({ heading: HEADING, text: NONE[why], rows: [] });
+      if (!why3d) continue;
       TC.load(saveGame(c.g));
-      expect(TC.page(`plan:ground:${c.target}:${p.picked.join('.')}`).card.strafe).toEqual({ heading: HEADING, note: '', names: [], none: NONE });
+      expect(TC.page(`plan:ground:${c.target}:${p.picked.join('.')}`).card.strafe).toEqual({ heading: HEADING, note: '', names: [], none: NONE[why3d] });
     }
+    // The odds: the fight each group carries is 0 (the defenders' weight above the raid's fighters').
+    expect(strafeCarry(assessAir(many.g, many.g.airFleets.filter((f) => many.ids.includes(f.id)), 'ground', many.target))).toBe(0);
+    // The fought-out line: Groupement de Chasse 3 has the reach and carries some of its fight, but the air fight the
+    // card expects is likely to leave it no fighter.
+    AIR.combat.fighters = WAS * 60;
+    const hard = saar(0);
+    const p = planRaid(hard.g, 'ground', hard.target, hard.ids, 'FRA');
+    expect(strafeCarry(assessAir(hard.g, hard.g.airFleets.filter((f) => hard.ids.includes(f.id)), 'ground', hard.target))).toBeGreaterThan(0);
+    expect(p.strafe).toEqual({ heading: HEADING, note: '', names: [], none: NONE.fought });
   });
 
   it('absent with the switch off, on any other kind of raid, and on a raid that is not the player\'s own', () => {
@@ -166,7 +193,10 @@ describe('the raid card: LIKELY TO GO DOWN AND STRAFE', () => {
         const a = assessAir(c.g, c.g.airFleets.filter((f) => c.ids.includes(f.id)), 'ground', c.target);
         const fc = forecastAir(c.g, a, 'ground', c.target);
         expect(strafersExpected(c.g, a, fc.ftrLoss - fc.fire!).ids).toEqual(card[0].strafers);
-        expect(p.strafe!.none).toBe(card[0].strafers.length ? '' : NONE);
+        // Naming none, the line of the first cause that is true (19:17Z): bombers alone; no reach (Groupement de Chasse 1
+        // at Namur alone); the odds (no carry); else the air fight.
+        const why = groups === 'alone' ? 'alone' : groups === 'far' ? 'reach' : strafeCarry(a) > 0 ? 'fought' : 'odds';
+        expect(p.strafe!.none).toBe(card[0].strafers.length ? '' : NONE[why]);
         expect(p.strafe!.note).toBe(card[0].strafers.length ? NOTE : '');
         if (card[0].strafers.length) named++; else none++;
       }

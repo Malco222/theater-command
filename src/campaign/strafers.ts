@@ -37,24 +37,42 @@ export function strafeOn(): boolean {
 // plan and the result read as a pair. Nothing here is shown with the switch off: the card's section is built only
 // where forecastAir gave the card its strafers, and the report's line only from AirReport.strafed, written only then.
 
-/** The UI director's words, 15:04Z; the line for none as she softened it at 16:04Z. */
+/**
+ * The UI director's words, 15:04Z; the muted note as she mended it at 19:17Z (it loses "if the sky is won", which
+ * pointed at a verdict a raid on troops' card does not show); the line for none by its cause, 19:10Z (her marks,
+ * section A), one line a cause, in the order she confirmed at 19:17Z (WhyNone).
+ */
 export const STRAFE_WORDS = {
   heading: 'LIKELY TO GO DOWN AND STRAFE',
-  note: 'The fighter groups most likely to go down and strafe if the sky is won. Which of them do is settled over the target.',
-  none: 'No fighter group is likely to go down and strafe, though one still may.',
+  note: 'The fighter groups most likely to go down and strafe. Which of them do is settled over the target.',
+  none: {
+    alone: 'No fighters fly with this raid.',
+    reach: 'No fighter group has the range to go down and strafe there.',
+    odds: 'No fighter group is likely to go down and strafe: the defenders\' fighters are stronger than yours. One you send down before it meets them still may.',
+    fought: 'No fighter group is likely to go down and strafe: the air fight is likely to leave them with no fight left. One you send down before it meets the defence still may.',
+  },
   nobody: 'No fighter group went down to strafe.',
 } as const;
 
 /**
+ * Why the card names no group, the first cause that is true (the UI director, 19:17Z: "No fighters; else no reach; else
+ * the odds; else the fought-out line. The first cause that is true is the only one printed"): no fighter group flies
+ * with the raid ('alone'); else none has the reach to strafe ('reach', canStrafe false for every one); else the fight
+ * each carries is 0 ('odds': the defenders' weight at or above the raid's fighters', strafeCarry); else the air fight
+ * is expected to leave none of them a fighter more likely than not ('fought').
+ */
+export type WhyNone = keyof typeof STRAFE_WORDS.none;
+
+/**
  * The raid card's section: the heading; the muted line once, and the groups' names a row each; or, where it names
- * none, the line for none in place of both ('' in `note`, no names).
+ * none, the line for none of its cause in place of both ('' in `note`, no names).
  */
 export interface StrafeSection { heading: string; note: string; names: string[]; none: string }
 
-export function strafeSection(names: string[]): StrafeSection {
+export function strafeSection(names: string[], why: WhyNone): StrafeSection {
   return names.length
     ? { heading: STRAFE_WORDS.heading, note: STRAFE_WORDS.note, names: [...names], none: '' }
-    : { heading: STRAFE_WORDS.heading, note: '', names: [], none: STRAFE_WORDS.none };
+    : { heading: STRAFE_WORDS.heading, note: '', names: [], none: STRAFE_WORDS.none[why] };
 }
 
 // (Names joined as the report's other sentences join them: air.ts `list`, "A, B and C", the same line every module keeps.)

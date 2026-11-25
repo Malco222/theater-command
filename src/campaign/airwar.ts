@@ -25,7 +25,7 @@ import { turnToDate, type TicketLine } from '../core/ticket';
 import type { AirFleet, AirMission, AirReport, Game } from './types';
 import type { FoughtAir } from './airfought';
 import {
-  AIR, AIRWAR, CLOSE, afloat, pilotWords, schoolWords, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding, fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, whyNotBase, whyNotMission, whyNotShipAir, flakGuns, squadronsOf, type AirForecast,
+  AIR, AIRWAR, CLOSE, afloat, pilotWords, schoolWords, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding, fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, whyNotBase, whyNotMission, whyNotShipAir, flakGuns, squadronsOf, strafeNone, type AirForecast,
 } from './air';
 import { damageRules } from './citydamage';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
@@ -1095,7 +1095,8 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   // player's own card; a staff's plan, and so any raid on the player, carries none.)
   if (kind === 'ground' && fc.strafers && nat === g.human) {
     const ids = fc.strafers;
-    plan.strafe = strafeSection(a.att.filter((x) => ids.includes(x.f.id)).map((x) => x.f.name));
+    // (Naming none, its line says why: the first cause that is true, strafeNone.)
+    plan.strafe = strafeSection(a.att.filter((x) => ids.includes(x.f.id)).map((x) => x.f.name), ids.length ? 'fought' : strafeNone(g, a));
   }
   // (The guns stop part of the bombing of industry and of a town; over a harbour they only bring bombers down.)
   plan.guns = { level: a.aa, loss: a.gunLoss, lossN: Math.min(plan.bomberLossN, Math.round(a.B * a.gunLoss)), stop: a.aa && kind !== 'harbour' ? gunsStop(a.aa) : 0 };

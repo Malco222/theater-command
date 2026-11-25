@@ -45,7 +45,7 @@ import { beyondEurope, farOn } from './world';
 import { hopAims, hopsBind, skiesOn } from './pacific';
 import { stopDef } from './history';
 import { settleFought, type BombLaw, type FoughtAir, type TroopLaw } from './airfought';
-import { strafeOn, strafeWatch } from './strafers';
+import { strafeOn, strafeWatch, type WhyNone } from './strafers';
 import { cityForecast, cityHit, cityWorthOf, type CityHit } from './repairs';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
 import { airPiece, nightGunShare, whyNotField, wrecked } from './airversion';
@@ -4369,6 +4369,20 @@ export function strafersExpected(g: Game, a: AirAssess, air: number): { ids: num
     weight += l * keep;
   }
   return { ids, left, fire: left * carry * fire, weight, parts };
+}
+
+/**
+ * Why the card names no likely strafer, the first cause that is true (the UI director, 19:10Z and 19:17Z; strafers.ts
+ * WhyNone): no fighter group with the raid; else none with the reach to strafe (canStrafe); else none carries any of
+ * its fight (strafeCarry 0: the defenders' weight at or above the raid's fighters'); else the air fight the card expects
+ * leaves none of them more likely than not a fighter (strafersExpected).
+ */
+export function strafeNone(g: Game, a: AirAssess): WhyNone {
+  const ftr = a.att.filter((x) => x.ftr > 0);
+  if (!ftr.length) return 'alone';
+  if (!ftr.some((x) => canStrafe(g, x))) return 'reach';
+  if (!(strafeCarry(a) > 0)) return 'odds';
+  return 'fought';
 }
 
 /**
