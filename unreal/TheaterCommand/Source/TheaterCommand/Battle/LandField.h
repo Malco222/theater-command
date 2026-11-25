@@ -572,6 +572,15 @@ namespace LandField
 		 * the eye (some 40 to 80 m): about one thing a square metre in grass, two in standing corn.
 		 */
 		void Clutter(double X0, double Y0, double X1, double Y1, std::vector<Placed>& Out) const;
+		/**
+		 * Burnt ground for the clutter (the scorch layer's, LandScorch): a round at X, Y in which the near clutter thins
+		 * and dries. Within Core metres 3 things in 10 stay (the same ones each time, by each thing's own number); from
+		 * there out to Outer metres more and more, all of them at Outer; the flowers go first; what stays is brought
+		 * toward straw (about 150, 125, 80). Where rounds overlap the strongest counts, they do not multiply. With no
+		 * round given the clutter is as it always was. Call it after the ground is built and before the clutter is first
+		 * asked for, from one thread; a square already laid by its caller is not laid again by this.
+		 */
+		void AddBurn(double X, double Y, double Core, double Outer);
 
 		/** The hedgerows' and walls' lines (tests, maps). */
 		const std::vector<HedgeLine>& Hedges() const;

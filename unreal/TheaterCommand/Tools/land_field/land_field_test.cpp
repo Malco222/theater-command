@@ -21,6 +21,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -948,7 +949,17 @@ int main(int Argc, char** Argv)
 	            F.bTown ? Fmt("at %.0f, %.0f r %.0f m", F.TownX, F.TownY, F.TownR).c_str() : "none");
 
 	const auto Start = std::chrono::steady_clock::now();
-	const LandField::Ground G(F);
+	LandField::Ground GroundMade(F);
+	// (burnt ground without the scorch layer, for a picture or a count: LAND_FIELD_BURN="x y core outer; x y core outer")
+	if (const char* Burns = std::getenv("LAND_FIELD_BURN"))
+		for (const char* At = Burns; At && *At;)
+		{
+			double BX = 0.0, BY = 0.0, BCore = 0.0, BOuter = 0.0;
+			if (std::sscanf(At, "%lf %lf %lf %lf", &BX, &BY, &BCore, &BOuter) == 4) GroundMade.AddBurn(BX, BY, BCore, BOuter);
+			At = std::strchr(At, ';');
+			if (At) ++At;
+		}
+	const LandField::Ground& G = GroundMade;
 	// A region's ground (LandScape: the desert, the Mediterranean, the jungle, the islands, the farmland): the bocage's
 	// own checks (its hedges, gates, cow paths, church, sunken lanes, closed views, corn) are not asked of it; its own are.
 	const std::string LookLaid = G.LookWord();
