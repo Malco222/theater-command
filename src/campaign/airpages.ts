@@ -462,7 +462,15 @@ function raidSide(g: Game, r: AirReport): 'att' | 'def' | null {
  * was flown for (it takes fighters enough left over it), the verdict says both, the fight and the sky.
  */
 function raidVerdict(r: AirReport, side: 'att' | 'def'): string {
-  if (r.mission === 'superiority') return `${side === 'def' ? FLIP[r.level] ?? r.level : r.level}, sky ${side === 'def' ? (r.sky ? 'lost' : 'held') : r.sky ? 'won' : 'not won'}`;
+  if (r.mission === 'superiority') {
+    // (The fight and the sky can disagree: a sweep can win its fight and not the sky. Then the verdict says "but",
+    // so the two halves do not read as a contradiction; where they agree a comma is enough.)
+    const fight = side === 'def' ? FLIP[r.level] ?? r.level : r.level;
+    const good = side === 'def' ? !r.sky : r.sky;
+    const agree = /victory/i.test(fight) === good;
+    const skyWord = side === 'def' ? (r.sky ? 'lost' : 'held') : r.sky ? 'won' : 'not won';
+    return agree ? `${fight}, sky ${skyWord}` : `${fight}, but the sky ${skyWord}`;
+  }
   if (!r.def.length) return side === 'def' ? 'Not intercepted' : 'Unopposed';
   return r.won ? (side === 'def' ? 'Raid got through' : 'Raid succeeded') : side === 'def' ? 'Raid made to pay' : 'Raid cost too much';
 }
@@ -533,11 +541,14 @@ function raidReportPage(g: Game, id: number): Page | null {
   // without fighters enough still over it at the end, however few the defence has left: a sweep flown by bombers
   // alone, or by a handful of fighters, is told that and not a ratio (which the rules write as 99 where nothing
   // defends).
-  const left = r.att.reduce((n, x) => n + x.ftr - x.lostFtr, 0);
+  const sent = r.att.reduce((n, x) => n + x.ftr, 0), left = r.att.reduce((n, x) => n + x.ftr - x.lostFtr, 0);
+  // (Ratios in the game's "to 1" form, as the height line has them. Where too few fighters were left the count is
+  // given, so the player sees how far short he was.)
+  const few = sent < 1 ? ', and none flew' : left < 1 ? ', and none were left' : left < AIR.sky.least ? `, and only ${num(left)} ${Math.round(left) === 1 ? 'was' : 'were'} left` : '';
   const sky = r.mission !== 'superiority' ? ''
-    : r.sky ? ` The ${adj(r.attNat)} air force won the sky over ${r.place}: its fighters ended with ${r.hold >= 9 ? 'no opposition left' : `${r.hold.toFixed(2)} times what the defenders could still put up`}.`
-      : left < AIR.sky.least || r.hold >= AIR.sky.win ? ` The sky was not won: it takes at least ${AIR.sky.least} fighters still over it at the end${left < 1 ? ', and none flew' : ''}.`
-        : ` The sky was not won: the attackers ended with ${r.hold.toFixed(2)} times the fighters the defenders could still put up, and it takes ${AIR.sky.win}.`;
+    : r.sky ? ` The ${adj(r.attNat)} air force won the sky over ${r.place}: at the end ${r.hold >= 9 ? 'no opposition was left' : `its fighters stood about ${r.hold.toFixed(2)} to 1 against those the defenders could still put up`}.`
+      : left < AIR.sky.least || r.hold >= AIR.sky.win ? ` The sky was not won: it takes at least ${AIR.sky.least} fighters still over it at the end${few}.`
+        : ` The sky was not won: at the end the ${adj(r.attNat)} fighters stood about ${r.hold.toFixed(2)} to 1 against those the defenders could still put up, and it takes ${AIR.sky.win} to 1.`;
   const unready = r.surprise ? ' Caught unready: war was declared this month, so the harbour had no warning, its fighters and guns were not manned, and the ships lay at their moorings.' : '';
   const where: PageButton[] = r.zone >= 0 ? [{ label: `GO TO ${r.place.replace(/^the /i, 'THE ').toUpperCase()}`, act: `goto:sea:${r.zone}`, ok: true, tip: 'Looks at the place on the map.' }]
     : r.region >= 0 ? [{ label: `GO TO ${r.place.toUpperCase()}`, act: `goto:region:${r.region}`, ok: true, tip: 'Looks at the place on the map.' }] : [];
@@ -569,12 +580,13 @@ function raidReportsPage(g: Game): Page | null {
   const up = humanUp(g);
   return {
     id: 'airreports', title: "THE MONTH'S RAIDS",
-    headline: all.length ? `${flown.length} flown by your side, ${met.length} flown against it` : 'No raid to read',
+    // (Never a bare 0: "none" reads better beside a count.)
+    headline: !all.length ? 'No raid to read' : flown.length ? `${flown.length} flown by your side, ${met.length || 'none'} against it` : `None flown by your side, ${met.length} against it`,
     note: 'Every raid flown by your side, and every raid flown against it, since you last ended a month. Each has its report: who flew, who rose to meet them, and what each lost.',
     top: [{ label: 'PLAN A RAID', act: 'open:raids', ok: up, tip: up ? '' : 'It is not your month.' }],
     sections: [
       { heading: 'FLOWN BY YOUR SIDE', text: flown.length ? '' : 'None yet.', rows: flown.map(row) },
-      { heading: 'FLOWN AGAINST YOUR SIDE', text: met.length ? '' : 'None.', rows: met.map(row) },
+      { heading: 'FLOWN AGAINST YOUR SIDE', text: met.length ? '' : 'None yet.', rows: met.map(row) },
     ],
   };
 }

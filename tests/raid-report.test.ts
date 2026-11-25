@@ -115,21 +115,43 @@ describe('a raid that has been flown has its report (the patch after 1.5.1)', ()
     const r = flown(g, 'GER', 'superiority', true);
     const p = page(g, `airreport:${r.id}`);
     // The fight's own level, and beside it what it was flown for: a sweep can win its fight and not win the sky.
-    expect(p.headline).toBe(`The sky over ${r.place}: ${r.level.toLowerCase()}, sky ${r.sky ? 'won' : 'not won'}`);
+    expect(p.headline.startsWith(`The sky over ${r.place}: ${r.level.toLowerCase()}, `)).toBe(true);
+    expect(p.headline).toMatch(r.sky ? /sky won$/ : /sky not won$/);
     if (r.sky) expect(p.note).toContain(`The German air force won the sky over ${r.place}`);
-    else expect(p.note).toMatch(/The sky was not won: (the attackers ended with [\d.]+ times the fighters the defenders could still put up, and it takes 1\.65\.|it takes at least 50 fighters still over it at the end)/);
+    else expect(p.note).toMatch(/The sky was not won: (at the end the German fighters stood about [\d.]+ to 1 against those the defenders could still put up, and it takes 1\.65 to 1\.|it takes at least 50 fighters still over it at the end)/);
     // Either way round, on figures of its own: fighters enough left, and short of what it takes.
     const left = r.att.reduce((n, x) => n + x.ftr - x.lostFtr, 0);
     expect(left).toBeGreaterThanOrEqual(AIR.sky.least);
     r.sky = false; r.hold = 0.67;
-    expect(page(g, `airreport:${r.id}`).note).toContain(`The sky was not won: the attackers ended with 0.67 times the fighters the defenders could still put up, and it takes ${AIR.sky.win}.`);
-    expect(page(g, `airreport:${r.id}`).headline.endsWith(', sky not won')).toBe(true);
+    expect(page(g, `airreport:${r.id}`).note).toContain(`The sky was not won: at the end the German fighters stood about 0.67 to 1 against those the defenders could still put up, and it takes ${AIR.sky.win} to 1.`);
     r.sky = true; r.hold = 2.5;
-    expect(page(g, `airreport:${r.id}`).note).toContain(`The German air force won the sky over ${r.place}: its fighters ended with 2.50 times what the defenders could still put up.`);
-    expect(page(g, `airreport:${r.id}`).headline.endsWith(', sky won')).toBe(true);
+    expect(page(g, `airreport:${r.id}`).note).toContain(`The German air force won the sky over ${r.place}: at the end its fighters stood about 2.50 to 1 against those the defenders could still put up.`);
     // Nothing left to oppose them (the rules write 99 where the defence can put nothing up).
     r.hold = 99;
-    expect(page(g, `airreport:${r.id}`).note).toContain(`won the sky over ${r.place}: its fighters ended with no opposition left.`);
+    expect(page(g, `airreport:${r.id}`).note).toContain(`won the sky over ${r.place}: at the end no opposition was left.`);
+    expect(page(g, `airreport:${r.id}`).note).not.toContain('times');
+  });
+
+  it('says "but" where the fight and the sky disagree, and a comma where they agree, for the side that reads it', () => {
+    const g = grand('GER');
+    g.turn = 2;
+    const r = flown(g, 'GER', 'superiority', true, 'FRA');
+    const mine = (level: AirReport['level'], sky: boolean): string => { r.level = level; r.sky = sky; return page(g, `airreport:${r.id}`).headline.replace(`The sky over ${r.place}: `, ''); };
+    expect(mine('Close victory', false)).toBe('close victory, but the sky not won');
+    expect(mine('Close victory', true)).toBe('close victory, sky won');
+    expect(mine('Close defeat', false)).toBe('close defeat, sky not won');
+    expect(mine('Decisive defeat', true)).toBe('decisive defeat, but the sky won');
+    // The list's row says the same, as a sentence.
+    r.level = 'Close victory'; r.sky = false;
+    expect(section(page(g, 'airreports'), 'FLOWN BY YOUR SIDE')!.rows[0].lines[0].startsWith('Close victory, but the sky not won. The raid lost ')).toBe(true);
+    // Flown against him: the fight is read from his side, and the sky is his to hold or lose.
+    const on: AirReport = { ...r, id: 9001, attNat: 'FRA', defNat: 'GER', att: r.def, def: r.att };
+    g.airReports.push(on);
+    const his = (level: AirReport['level'], sky: boolean): string => { on.level = level; on.sky = sky; return page(g, 'airreport:9001').headline.replace(`The sky over ${on.place}: `, ''); };
+    expect(his('Close victory', false)).toBe('close defeat, but the sky held');
+    expect(his('Close defeat', false)).toBe('close victory, sky held');
+    expect(his('Decisive victory', true)).toBe('decisive defeat, sky lost');
+    expect(his('Close defeat', true)).toBe('close victory, but the sky lost');
   });
 
   it('a sweep that could not win the sky for want of fighters is told so, never a ratio of 99 or 0', () => {
@@ -141,19 +163,28 @@ describe('a raid that has been flown has its report (the patch after 1.5.1)', ()
     let note = page(g, `airreport:${r.id}`).note;
     expect(note).toContain(`The sky was not won: it takes at least ${AIR.sky.least} fighters still over it at the end, and none flew.`);
     expect(note).not.toContain('99');
-    expect(note).not.toContain('times the fighters');
+    expect(note).not.toContain(' to 1');
     // Bombers alone against a defence that rose: the ratio is 0, and is not quoted either.
     r.hold = 0;
     note = page(g, `airreport:${r.id}`).note;
     expect(note).toContain('and none flew.');
-    expect(note).not.toContain('0.00 times');
+    expect(note).not.toContain('0.00');
     // A handful of fighters left, far more than the defence: still too few to hold a sky.
     r.att = r.att.map((x, i) => ({ ...x, ftr: i ? 0 : 30, lostFtr: 0 }));
     r.hold = 4;
     note = page(g, `airreport:${r.id}`).note;
-    expect(note).toContain(`The sky was not won: it takes at least ${AIR.sky.least} fighters still over it at the end.`);
+    expect(note).toContain(`The sky was not won: it takes at least ${AIR.sky.least} fighters still over it at the end, and only 30 were left.`);
     expect(note).not.toContain('none flew');
     expect(note).not.toContain('4.00');
+    // Some flew and every one was lost: none were left, which is not "none flew".
+    r.att = r.att.map((x, i) => ({ ...x, ftr: i ? 0 : 30, lostFtr: i ? 0 : 30 }));
+    expect(page(g, `airreport:${r.id}`).note).toContain('fighters still over it at the end, and none were left.');
+    // One left reads as one.
+    r.att = r.att.map((x, i) => ({ ...x, ftr: i ? 0 : 30, lostFtr: i ? 0 : 29 }));
+    expect(page(g, `airreport:${r.id}`).note).toContain('fighters still over it at the end, and only 1 was left.');
+    // Fighters enough left and the sky still not won (the raid turned for home, or its groups crowded the sky): no count is quoted against the 50.
+    r.att = r.att.map((x, i) => ({ ...x, ftr: i ? 0 : 80, lostFtr: 0 }));
+    expect(page(g, `airreport:${r.id}`).note).toContain(`The sky was not won: it takes at least ${AIR.sky.least} fighters still over it at the end.`);
   });
 
   it('a raid that did not pay is never said to have been beaten off: its bombs may have landed', () => {
@@ -236,13 +267,15 @@ describe('a raid that has been flown has its report (the patch after 1.5.1)', ()
     const quiet = flown(g, 'GER', 'bomb', false, 'FRA');
     expect(page(g, `airreport:${quiet.id}`).headline).toBe(`Bombing of ${quiet.place}: not intercepted`);
     const sky = flown(g, 'GER', 'superiority', true, 'FRA');
-    expect(page(g, `airreport:${sky.id}`).headline).toBe(`The sky over ${sky.place}: ${FLIP[sky.level].toLowerCase()}, sky ${sky.sky ? 'lost' : 'held'}`);
-    sky.level = 'Decisive defeat';
-    expect(page(g, `airreport:${sky.id}`).headline).toBe(`The sky over ${sky.place}: decisive victory, sky ${sky.sky ? 'lost' : 'held'}`);
+    // (Where the fight and the sky disagree the verdict says "but"; where they agree, a comma.)
+    const head = (): string => page(g, `airreport:${sky.id}`).headline;
+    expect(head().startsWith(`The sky over ${sky.place}: ${FLIP[sky.level].toLowerCase()}, `)).toBe(true);
+    sky.level = 'Decisive defeat'; sky.sky = false;
+    expect(head()).toBe(`The sky over ${sky.place}: decisive victory, sky held`);
     sky.level = 'Heroic victory';
-    expect(page(g, `airreport:${sky.id}`).headline).toBe(`The sky over ${sky.place}: crushing defeat, sky ${sky.sky ? 'lost' : 'held'}`);
-    sky.sky = !sky.sky;
-    expect(page(g, `airreport:${sky.id}`).headline).toBe(`The sky over ${sky.place}: crushing defeat, sky ${sky.sky ? 'lost' : 'held'}`);
+    expect(head()).toBe(`The sky over ${sky.place}: crushing defeat, but the sky held`);
+    sky.sky = true;
+    expect(head()).toBe(`The sky over ${sky.place}: crushing defeat, sky lost`);
   });
 
   it('an ally\'s raid is his side\'s to read; a raid between others is not, and neither is a report that does not exist', () => {
@@ -265,7 +298,7 @@ describe('a raid that has been flown has its report (the patch after 1.5.1)', ()
     expect(door).toEqual({ label: "THE MONTH'S RAIDS", act: 'open:airreports', ok: false, tip: 'No raid has been flown by your side or against it since you last ended a month.' });
     const list = page(g, 'airreports');
     expect(list.headline).toBe('No raid to read');
-    expect(list.sections.map((s) => [s.heading, s.text, s.rows.length])).toEqual([['FLOWN BY YOUR SIDE', 'None yet.', 0], ['FLOWN AGAINST YOUR SIDE', 'None.', 0]]);
+    expect(list.sections.map((s) => [s.heading, s.text, s.rows.length])).toEqual([['FLOWN BY YOUR SIDE', 'None yet.', 0], ['FLOWN AGAINST YOUR SIDE', 'None yet.', 0]]);
   });
 });
 
@@ -278,7 +311,7 @@ describe('the month\'s raids, each with its report', () => {
     expect(raidsToRead(g).map((x) => [x.r.id, x.side])).toEqual([[c.id, 'att'], [b.id, 'att'], [a.id, 'att']]);
     const list = page(g, 'airreports');
     expect(list.title).toBe("THE MONTH'S RAIDS");
-    expect(list.headline).toBe('3 flown by your side, 0 flown against it');
+    expect(list.headline).toBe('3 flown by your side, none against it');
     expect(list.top).toEqual([{ label: 'PLAN A RAID', act: 'open:raids', ok: true, tip: '' }]);
     const rows = section(list, 'FLOWN BY YOUR SIDE')!.rows;
     expect(rows.map((x) => x.title)).toEqual([`Bombing of ${c.place}`, `The sky over ${b.place}`, `Bombing of ${a.place}`]);
@@ -286,7 +319,7 @@ describe('the month\'s raids, each with its report', () => {
     expect(rows[2].lines[0].startsWith(`${a.won ? 'Raid succeeded' : 'Raid cost too much'}. The raid lost `)).toBe(true);
     expect(rows.map((x) => x.buttons.map((k) => [k.label, k.act, k.ok]))).toEqual([c, b, a].map((r) => [['READ THE REPORT', `open:airreport:${r.id}`, true]]));
     for (const row of rows) expect(page(g, row.buttons[0].act.replace(/^open:/, '')).id).toBe(row.buttons[0].act.replace(/^open:/, ''));
-    expect(section(list, 'FLOWN AGAINST YOUR SIDE')).toEqual({ heading: 'FLOWN AGAINST YOUR SIDE', text: 'None.', rows: [] });
+    expect(section(list, 'FLOWN AGAINST YOUR SIDE')).toEqual({ heading: 'FLOWN AGAINST YOUR SIDE', text: 'None yet.', rows: [] });
     // The door stands on the airfield and on the page a raid is planned from, lit now there is something to read.
     const base = g.airFleets.find((f) => f.id === a.att[0].id)!.base;
     for (const top of [airPage(g, 'airfield', base)!.top, page(g, 'raids').top]) expect(top.find((k) => k.act === 'open:airreports')).toEqual({ label: "THE MONTH'S RAIDS", act: 'open:airreports', ok: true, tip: 'Every raid flown by your side or against it since you last ended a month, each with its report.' });
@@ -307,7 +340,7 @@ describe('the month\'s raids, each with its report', () => {
       as(9004, 2, true),   // this month
     );
     expect(raidsToRead(g).map((x) => [x.r.id, x.side])).toEqual([[9004, 'def'], [9001, 'def'], [real.id, 'att']]);
-    expect(page(g, 'airreports').headline).toBe('1 flown by your side, 2 flown against it');
+    expect(page(g, 'airreports').headline).toBe('1 flown by your side, 2 against it');
     // A nation that moves before him flew last month's raid before he closed his own month.
     const f = grand('FRA');
     f.turn = 2;
@@ -336,7 +369,14 @@ describe('the month\'s raids, each with its report', () => {
     // The mark the 3D game makes as he ends his month: the last report filed before it closed.
     g.flags.raidsFrom = 11;
     expect(raidsToRead(g).map((x) => [x.r.id, x.side])).toEqual([[14, 'att'], [13, 'def'], [12, 'att']]);
-    expect(page(g, 'airreports').headline).toBe('2 flown by your side, 1 flown against it');
+    expect(page(g, 'airreports').headline).toBe('2 flown by your side, 1 against it');
+    // Only raids against him: never a bare 0.
+    g.flags.raidsFrom = 12;
+    g.airReports.pop();
+    expect(raidsToRead(g).map((x) => [x.r.id, x.side])).toEqual([[13, 'def']]);
+    expect(page(g, 'airreports').headline).toBe('None flown by your side, 1 against it');
+    g.airReports.push(as(14, 2, false));
+    g.flags.raidsFrom = 11;
     // It is kept in a saved game.
     expect(raidsToRead(loadGame(saveGame(g))!).map((x) => x.r.id)).toEqual([14, 13, 12]);
     // Nothing filed since: nothing to read, whatever the month.
