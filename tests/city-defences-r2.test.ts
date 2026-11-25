@@ -280,6 +280,27 @@ describe('city defences: the guns by night (slice 2)', () => {
     expect(a.bomberLoss).toBeCloseTo(a.gunLoss, 12);
   });
 
+  it('a blind radar lays no gun: the guns fire as in a town with none, by the dark alone (the last parameter, off unless asked)', () => {
+    const r = ruhrByNight({ guns: 3, lights: 2, radar: true });
+    const seen = cityNight(r.g, r.t, 200, 'clear'), blind = cityNight(r.g, r.t, 200, 'clear', true);
+    expect(seen.radar).toBe(true);
+    expect(seen.litShare).toBeGreaterThan(0);
+    expect(blind.radar).toBe(false);
+    expect(blind.litShare).toBe(0);
+    // No radar: the dark cell and the lit cell with no radar are both 0.20, so the lights add nothing to the guns.
+    expect(blind.share).toBeCloseTo(0.2, 12);
+    expect(blind.share).toBeLessThan(seen.share);
+    expect(cityNightShare(r.g, r.t, 200, 'clear', true)).toBe(blind.share);
+    // The very figures of the same town with no radar built.
+    const none = ruhrByNight({ guns: 3, lights: 2 });
+    expect(blind).toEqual(cityNight(none.g, none.t, 200, 'clear'));
+    // The guns, the lights and the sky are read as they stand, and nothing changes for a caller who does not ask.
+    expect([blind.guns, blind.lights, blind.lit, blind.sat]).toEqual([seen.guns, seen.lights, seen.lit, seen.sat]);
+    expect(cityNight(r.g, r.t, 200, 'clear', false)).toEqual(seen);
+    expect(cityNightShare(r.g, r.t, 200, 'clear')).toBe(seen.share);
+    expect(cityNightShare(r.g, r.t, 200, 'cloud', true)).toBeCloseTo(0.2, 12);
+  });
+
   it('lets the lights do less of their work against more bombers than they can hold', () => {
     const r = ruhrByNight({ guns: 3, lights: 2, radar: true });
     expect(cityNight(r.g, r.t, 200, 'clear').sat).toBe(1);
@@ -858,7 +879,9 @@ describe('city defences: the history start\'s rows (slice 5)', () => {
     expect(lightsIn(g, 'Ruhr')).toBe(1);
     expect(lightsIn(g, 'Kent')).toBe(2);
     expect(lightsIn(g, 'Ulster')).toBe(1);
-    for (const none of ['Paris', 'Rome', 'Washington', 'Moscow', 'Hamburg', 'Bohemia', 'Cornwall', 'Liege']) expect(lightsIn(g, none), none).toBe(0);
+    // Hamburg gains guns by the record, so its lights follow by the same ratio (the design director, 25 Nov 13:06Z).
+    expect(lightsIn(g, 'Hamburg')).toBe(1);
+    for (const none of ['Paris', 'Rome', 'Washington', 'Moscow', 'Bohemia', 'Cornwall', 'Liege']) expect(lightsIn(g, none), none).toBe(0);
   });
 
   it('with the switch off no searchlights mark exists at the start', () => {
@@ -875,7 +898,7 @@ describe('city defences: the history start\'s rows (slice 5)', () => {
     expect(lightsIn(j42, 'Leningrad')).toBe(3);
     expect(lightsIn(j42, 'Liege')).toBe(1);
     expect(lightsIn(j42, 'Berlin')).toBe(2);
-    expect(lightsIn(j42, 'Hamburg')).toBe(0);
+    expect(lightsIn(j42, 'Hamburg')).toBe(2);
     const between = opened(true, 31);
     expect(lightsFlags(between).sort()).toEqual(lightsFlags(j42).sort());
     const m44 = opened(true, 57);
@@ -1135,14 +1158,15 @@ describe('city defences: start guns from the record (slice 6)', () => {
     expect(gunsIn(off, 'Bohemia')).toBe(1);
     expect(`wk:aa:${g.byName.Bohemia.id}` in g.flags).toBe(false);
     expect(gunsIn(g, 'London')).toBe(1);
-    for (const n of ['Midlands', 'Lancashire', 'Washington', 'Detroit', 'Philadelphia']) expect(`wk:aa:${g.byName[n].id}` in g.flags, n).toBe(false);
+    for (const n of ['Midlands', 'Lancashire', 'Washington', 'New York', 'Detroit', 'Philadelphia']) expect(`wk:aa:${g.byName[n].id}` in g.flags, n).toBe(false);
     expect(gunsIn(g, 'Moscow')).toBe(3);
     for (const n of ['Rome', 'Lombardy', 'Piedmont']) expect(gunsIn(g, n), n).toBe(1);
     for (const n of STAND_INS) { expect(gunsIn(off, n), n).toBe(1); expect(gunsIn(g, n), n).toBe(gunsIn(off, n)); }
-    // (New York, a place of 124 that no row names, keeps 124's level.)
-    expect(gunsIn(g, 'New York')).toBe(gunsIn(off, 'New York'));
+    // New York is read with Washington and Philadelphia (the design director, 25 Nov 13:06Z): 124 laid it, the record bares it.
+    expect(gunsIn(off, 'New York')).toBe(1);
+    expect(gunsIn(g, 'New York')).toBe(0);
     // The new lights rows are laid; London's and Berlin's stand as slice 5 laid them; none in Paris, Rome or Washington.
-    for (const n of ['Saxony', 'Frankfurt', 'Hanover']) expect(lightsIn(g, n), n).toBe(1);
+    for (const n of ['Saxony', 'Frankfurt', 'Hanover', 'Hamburg']) expect(lightsIn(g, n), n).toBe(1);
     expect(lightsIn(g, 'Rhineland')).toBe(0);
     expect(lightsIn(g, 'London')).toBe(2);
     expect(lightsIn(g, 'Berlin')).toBe(1);
@@ -1172,13 +1196,17 @@ describe('city defences: start guns from the record (slice 6)', () => {
     expect(gunsIn(g, 'Midlands')).toBe(1);
     expect(gunsIn(g, 'Lancashire')).toBe(1);
     expect(lightsIn(g, 'Rhineland')).toBe(1);
+    // Hamburg's lights follow its guns, and the American three stand bare in a June 1941 start (the design director, 25 Nov 13:06Z).
+    expect(lightsIn(g, 'Hamburg')).toBe(2);
+    for (const n of ['Washington', 'New York', 'Philadelphia']) expect(`wk:aa:${g.byName[n].id}` in g.flags, n).toBe(false);
   }, 240_000);
 
   it('the turn 29 start (December 1941): Leningrad 3, and the American three at ruling 124\'s level', () => {
     const off = begun(29, false), g = begun(29, true);
     expect(gunsIn(g, 'Leningrad')).toBe(3);
-    for (const n of ['Washington', 'Detroit', 'Philadelphia']) expect(gunsIn(g, n), n).toBe(gunsIn(off, n));
+    for (const n of ['Washington', 'New York', 'Detroit', 'Philadelphia']) expect(gunsIn(g, n), n).toBe(gunsIn(off, n));
     expect(gunsIn(off, 'Washington')).toBe(2);
+    expect(gunsIn(off, 'New York')).toBeGreaterThan(0);
   }, 240_000);
 
   it('turned on in a later month: only raised, and once', () => {

@@ -59,6 +59,8 @@
     {"region": "Ruhr", "turns": [1, 5, 11, 13, 14], "level": 1, "mark": "D", "lay": true, "why": "as Berlin: by the ratio on the start guns' level 1 (D)"},
     {"region": "Ruhr", "turns": [17, 22, 29, 33, 34, 39], "level": 2, "mark": "D", "lay": true, "why": "as Berlin: by the ratio on the start guns' level 2 (D)"},
     {"region": "Ruhr", "turns": [47, 53, 57, 58], "level": 3, "mark": "D", "lay": true, "why": "over 1,000 heavy guns by mid-1943 (L) at 0.55-0.85 lights a gun, 550-850 lights, capped at 3 (D)"},
+    {"region": "Hamburg", "turns": [1, 5, 11, 13, 14], "level": 1, "mark": "D", "lay": true, "why": "as Berlin: by the ratio on the start guns' level 1 / level 2 (the design director, 25 Nov 13:06Z)"},
+    {"region": "Hamburg", "turns": [17, 22, 29, 33, 34, 39], "level": 2, "mark": "D", "lay": true, "why": "as Berlin: by the ratio on the start guns' level 1 / level 2 (the design director, 25 Nov 13:06Z)"},
     {"region": "Hamburg", "turns": [47, 53, 57, 58], "level": 2, "mark": "D", "lay": true, "why": "56 heavy batteries in July 1943 (L), about 220-340 guns, at 0.55-0.85 a gun: about 120-290 lights (D)"},
     {"region": "Schleswig-Holstein", "turns": [14, 17, 22, 29], "level": 1, "mark": "D", "lay": true, "why": "the night-fighter belt, 'solid light ... 10 to 20 miles in depth' from the Danish border to near Maubeuge (L, a 1943 US report), October 1940 to May 1942: about 70-200 lights a region on its course (D, U)"},
     {"region": "Bremen", "turns": [14, 17, 22, 29], "level": 1, "mark": "D", "lay": true, "why": "the night-fighter belt, 'solid light ... 10 to 20 miles in depth' from the Danish border to near Maubeuge (L, a 1943 US report), October 1940 to May 1942: about 70-200 lights a region on its course (D, U)"},
@@ -107,6 +109,7 @@
     {"region": "Lombardy", "turns": [1, 5, 11, 13, 14, 17, 22, 29], "level": 1, "mark": "D, U", "lay": true, "why": "Milan's region: 1,700 guns over 32 first-degree places (L), about 53 a place (D); the great industrial cities likely twice that (U)"},
     {"region": "Piedmont", "turns": [1, 5, 11, 13, 14, 17, 22, 29], "level": 1, "mark": "D, U", "lay": true, "why": "Turin's region: 1,700 guns over 32 first-degree places (L), about 53 a place (D); the great industrial cities likely twice that (U)"},
     {"region": "Washington", "turns": [1, 5, 11, 13, 14, 17, 22], "level": 0, "mark": "D", "lay": true, "why": "none: at peace, coast-defence guns only; no city belt read before December 1941"},
+    {"region": "New York", "turns": [1, 5, 11, 13, 14, 17, 22], "level": 0, "mark": "D", "lay": true, "why": "read with Washington and Philadelphia (the design director, 25 Nov)"},
     {"region": "Detroit", "turns": [1, 5, 11, 13, 14, 17, 22], "level": 0, "mark": "D", "lay": true, "why": "none: at peace, coast-defence guns only; no city belt read before December 1941"},
     {"region": "Philadelphia", "turns": [1, 5, 11, 13, 14, 17, 22], "level": 0, "mark": "D", "lay": true, "why": "none: at peace, coast-defence guns only; no city belt read before December 1941"},
     {"region": "Paris", "turns": [1, 5, 11], "mark": "G", "lay": false, "why": "not read: ruling 124's level stands there as a stand-in until read (the design director, 25 Nov 04:10Z)"},
@@ -115,6 +118,7 @@
     {"region": "Gorky", "turns": [1, 5, 11, 13, 14, 17, 22, 29], "mark": "G", "lay": false, "why": "not read: ruling 124's level stands there as a stand-in until read (the design director, 25 Nov 04:10Z)"},
     {"region": "Kharkov", "turns": [1, 5, 11, 13, 14, 17, 22, 29], "mark": "G", "lay": false, "why": "not read: ruling 124's level stands there as a stand-in until read (the design director, 25 Nov 04:10Z)"},
     {"region": "Washington", "turns": [29], "mark": "G", "lay": false, "why": "not read: ruling 124's level stands there as a stand-in until read (the design director, 25 Nov 04:10Z)"},
+    {"region": "New York", "turns": [29], "mark": "G", "lay": false, "why": "not read: ruling 124's level stands there as a stand-in until read (the design director, 25 Nov 04:10Z)"},
     {"region": "Detroit", "turns": [29], "mark": "G", "lay": false, "why": "not read: ruling 124's level stands there as a stand-in until read (the design director, 25 Nov 04:10Z)"},
     {"region": "Philadelphia", "turns": [29], "mark": "G", "lay": false, "why": "not read: ruling 124's level stands there as a stand-in until read (the design director, 25 Nov 04:10Z)"}
   ]
