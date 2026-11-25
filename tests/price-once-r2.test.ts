@@ -15,7 +15,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import setup from '../data/campaign/setup-1939.json';
 import { divisionsOf, keepNumbers } from '../src/campaign/armies';
 import { DRAWN, drawnWatch, formationName, rowOver } from '../src/campaign/drawn';
-import { createGame, declareWar, relocate, removeCorps, startPhase } from '../src/campaign/game';
+import { breakUp, rejoin, setBreakUp } from '../src/campaign/breakup';
+import { createGame, declareWar, putToSea, relocate, removeCorps, startPhase } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game } from '../src/campaign/types';
@@ -441,6 +442,196 @@ describe('what four independent reviews of the rule found (25 November 2026)', (
     expect(names(g, c)).toEqual(['72nd Infantry Division', '164th Infantry Division', '199th Infantry Division']);
     expect(holders(g, '50th Infantry Division')).toEqual([iii]);
     expect(heldTwice(g)).toEqual([]);
+  });
+});
+
+describe('what a second review, of the mends themselves, found (25 November 2026)', () => {
+  const left = (g: Game): string[] => g.headlines.filter((h) => /leave for other fronts/.test(h.text)).map((h) => h.text);
+
+  it('a corps on a long passage lives and holds its divisions: the row raises nothing for one that is at sea', () => {
+    const { g, told, laid } = balkans();
+    const xxii = corps(g, 'XXII Corps')!;
+    putToSea(g, xxii, g.byName['Hamburg'], 2);
+    expect(g.corps.includes(xxii)).toBe(false);
+    g.atSea![0].due = APRIL_41;
+    month(g, MARCH_41);
+    expect(told.find((t) => t.row === PANZERS)!.claims.map((q) => [q.name, q.id, q.stays])).toEqual([['2nd Panzer Division', xxii.id, true], ['9th Panzer Division', xxii.id, true]]);
+    expect(laid.find((t) => t.row === PANZERS)).toBeUndefined();
+    expect(corps(g, PANZERS)).toBeUndefined();
+    expect(g.flags[`sent:${rowAt(PANZERS)}`]).toBe(1);
+    month(g, APRIL_41);
+    // Landed: it is the one corps that holds them, as it stood, and nothing was raised under their names.
+    expect(g.corps.includes(xxii)).toBe(true);
+    expect(xxii.divs).toBe(2);
+    expect(holders(g, '2nd Panzer Division')).toEqual([xxii]);
+    expect(holders(g, '9th Panzer Division')).toEqual([xxii]);
+    expect(laid.find((t) => t.row === PANZERS)).toBeUndefined();
+    expect(heldTwice(g)).toEqual([]);
+  });
+
+  it('the player breaks a row\'s corps up and joins it again: it keeps the divisions it holds, not the ones its name lists', () => {
+    const { g } = balkans('GER');
+    month(g, MARCH_41);
+    const c = corps(g, INFANTRY)!, iii = corps(g, 'III Corps')!;
+    expect(names(g, c)).toEqual(['72nd Infantry Division', '164th Infantry Division']);
+    setBreakUp(g, true);
+    g.phase = g.order.indexOf('GER');
+    const part = breakUp(g, c, [1])!;
+    expect(part).not.toBeNull();
+    expect(names(g, part)).toEqual(['164th Infantry Division']);
+    expect(rejoin(g, part, c)).toBe(true);
+    expect(c.divs).toBe(2);
+    expect(names(g, c)).toEqual(['72nd Infantry Division', '164th Infantry Division']);
+    expect(holders(g, '50th Infantry Division')).toEqual([iii]);
+    expect(heldTwice(g)).toEqual([]);
+    // (A corps whose name gives its divisions needs none written out once it is whole again, as before.)
+    const xv = corps(g, 'XV Corps')!;
+    const off = breakUp(g, xv, [1])!;
+    expect(rejoin(g, off, xv)).toBe(true);
+    expect(xv.names).toBeUndefined();
+    expect(names(g, xv)).toEqual(['7th Panzer Division', '8th Panzer Division']);
+  });
+
+  it('a division that goes back to a corps which is itself on loan stays with that corps when its own loan ends, whichever row is read first', () => {
+    for (const first of [true, false]) {
+      const { g } = balkans();
+      const xxii = corps(g, 'XXII Corps')!;
+      // A lent row draws the 2nd Panzer out of XXII Corps for Sofia the month before the Balkans' row takes the corps itself.
+      const A = [MARCH_41 - 1, 'GER', '2nd Panzer Division', 'arm', 1, 'Sofia', { hold: 1, until: first ? JUNE_41 - 1 : JUNE_41 }];
+      const i = addRow(A);
+      month(g, MARCH_41 - 1);
+      const a = g.corps.find((c) => c.id === g.flags[`lent:${i}`])!;
+      expect(names(g, a)).toEqual(['2nd Panzer Division']);
+      expect(names(g, xxii)).toEqual(['9th Panzer Division']);
+      const men = a.str + xxii.str;
+      month(g, MARCH_41);
+      // The 2nd stands at Sofia already and stays with its corps; XXII Corps comes itself with the 9th.
+      expect(xxii.name).toBe(PANZERS);
+      expect(names(g, xxii)).toEqual(['9th Panzer Division']);
+      expect(a.dead).toBe(false);
+      for (let t = APRIL_41; t <= JUNE_41; t++) month(g, t);
+      expect(a.dead, `first ${first}`).toBe(true);
+      expect(xxii.dead).toBe(false);
+      expect(xxii.name).toBe('XXII Corps');
+      expect(names(g, xxii).sort(), `first ${first}`).toEqual(['2nd Panzer Division', '9th Panzer Division']);
+      expect(xxii.drew).toBeUndefined();
+      expect(xxii.divs * xxii.str, `first ${first}`).toBeGreaterThan(men - 0.5);
+      // Its men are with their corps: nothing of it left for other fronts, and no line says it did.
+      expect(left(g).some((t) => /(: |; )2nd Panzer Division(;|\.)/.test(t)), `first ${first}`).toBe(false);
+      expect(heldTwice(g)).toEqual([]);
+      while (added > 0) { ROWS.pop(); added--; }
+    }
+  });
+
+  it('a corps ends its loan once: a lent row that added to it has nothing left to end, and the corps that stood on stands', () => {
+    const { g } = balkans();
+    const xxii = corps(g, 'XXII Corps')!;
+    month(g, MARCH_41);
+    const NAME = '2nd, 9th and 903rd Panzer Divisions';
+    const i = addRow([APRIL_41, 'GER', NAME, 'arm', 1, 'Sofia', { joins: PANZERS, until: JUNE_41 + 2 }]);
+    month(g, APRIL_41);
+    expect(xxii.name).toBe(NAME);
+    expect(names(g, xxii)).toEqual(['2nd Panzer Division', '9th Panzer Division', '903rd Panzer Division']);
+    expect(g.flags[`lent:${i}`]).toBe(xxii.id);
+    month(g, JUNE_41);
+    // The first loan's end: its own two divisions stand on under its own name; the one the second row raised leaves.
+    expect(xxii.name).toBe('XXII Corps');
+    expect(names(g, xxii)).toEqual(['2nd Panzer Division', '9th Panzer Division']);
+    expect(g.flags[`lent:${i}`]).toBe(-1);
+    month(g, JUNE_41 + 1);
+    month(g, JUNE_41 + 2);
+    expect(xxii.dead).toBe(false);
+    expect(xxii.divs).toBe(2);
+  });
+
+  it('a second loan that takes a lent corps whole remembers the corps each division first came out of', () => {
+    const { g } = balkans();
+    const xv = corps(g, 'XV Corps')!;
+    const home = xv.reg;
+    const iA = addRow([10, 'GER', '8th Panzer Division', 'arm', 1, 'Sofia', { hold: 1, until: 40 }]);
+    const iB = addRow([12, 'GER', '8th Panzer Division', 'arm', 1, g.regions[home].name, { until: 14 }]);
+    month(g, 10);
+    const c = g.corps.find((x) => x.id === g.flags[`lent:${iA}`])!;
+    expect(names(g, c)).toEqual(['8th Panzer Division']);
+    expect(names(g, xv)).toEqual(['7th Panzer Division']);
+    month(g, 11);
+    month(g, 12);
+    // The second row is for XV Corps' own ground, where the division's corps came from: the lent corps comes itself.
+    expect(g.flags[`lent:${iA}`]).toBe(-1);
+    expect(g.flags[`lent:${iB}`]).toBe(c.id);
+    expect(c.reg).toBe(home);
+    expect(c.drew).toEqual([{ name: ['8th Panzer Division', '8th Panzer'], no: c.drew![0].no, from: xv.id }]);
+    month(g, 13);
+    month(g, 14);
+    // Its time up, the 8th is XV Corps' again, and nothing left for other fronts.
+    expect(names(g, xv).sort()).toEqual(['7th Panzer Division', '8th Panzer Division']);
+    expect(c.dead).toBe(true);
+    expect(left(g)).toEqual([]);
+    expect(heldTwice(g)).toEqual([]);
+  });
+
+  it('a row that adds to a corps takes no name another living corps holds, and a division its name has dropped keeps a name of its own', () => {
+    const { g } = balkans();
+    const iii = corps(g, 'III Corps')!;
+    relocate(g, iii, g.byName['Sofia']);
+    month(g, MARCH_41);
+    const c = corps(g, INFANTRY)!;
+    expect(names(g, c)).toEqual(['72nd Infantry Division', '164th Infantry Division']);
+    // Its new name drops the 72nd and the 164th, and lists the 50th, which III Corps holds.
+    const NAME = '50th, 902nd and 903rd Infantry Divisions';
+    addRow([APRIL_41, 'GER', NAME, 'inf', 1, 'Plovdiv', { joins: INFANTRY }]);
+    month(g, APRIL_41);
+    expect(c.name).toBe(NAME);
+    expect(names(g, c)).toEqual(['902nd Infantry Division', '164th Infantry Division', '903rd Infantry Division']);
+    expect(holders(g, '50th Infantry Division')).toEqual([iii]);
+    expect(heldTwice(g)).toEqual([]);
+  });
+
+  it('a row that adds to a corps laid the old way writes its names out too: the one it brings is never one another corps holds', () => {
+    const { g } = balkans();
+    const iii = corps(g, 'III Corps')!;
+    // A corps with no names written, read by its own name; the row that adds to it lists the 50th, III Corps' own.
+    const one = addRow([MARCH_41 - 2, 'GER', '901st and 902nd Infantry Divisions', 'inf', 2, 'Berlin', {}]);
+    month(g, MARCH_41 - 2);
+    const c = corps(g, '901st and 902nd Infantry Divisions')!;
+    expect(g.flags[`sent:${one}`]).toBe(1);
+    expect(c.names).toBeUndefined();
+    const NAME = '901st, 902nd and 50th Infantry Divisions';
+    addRow([MARCH_41 - 1, 'GER', NAME, 'inf', 1, 'Berlin', { joins: '901st and 902nd Infantry Divisions' }]);
+    month(g, MARCH_41 - 1);
+    expect(c.name).toBe(NAME);
+    expect(c.divs).toBe(3);
+    expect(names(g, c).slice(0, 2)).toEqual(['901st Infantry Division', '902nd Infantry Division']);
+    expect(names(g, c)[2]).not.toBe('50th Infantry Division');
+    expect(holders(g, '50th Infantry Division')).toEqual([iii]);
+    expect(heldTwice(g)).toEqual([]);
+  });
+
+  it('laid by itself, a row that adds to a corps reads the divisions it brings, not the gone corps\' own that another corps holds', () => {
+    const { g } = balkans();
+    const xxii = corps(g, 'XXII Corps')!;
+    const NAME = '2nd, 9th and 16th Panzer Divisions';
+    addRow([MARCH_41 - 1, 'GER', NAME, 'arm', 1, 'Berlin', { joins: 'A corps that never landed' }]);
+    month(g, MARCH_41 - 1);
+    expect(names(g, corps(g, NAME)!)).toEqual(['16th Panzer Division']);
+    expect(names(g, xxii)).toEqual(['2nd Panzer Division', '9th Panzer Division']);
+    expect(heldTwice(g)).toEqual([]);
+  });
+
+  it('two divisions formed out of others in one row never ask the same corps for the same place', () => {
+    const { g, told, laid } = balkans();
+    const NAME = '901st and 902nd Panzer Divisions';
+    addRow([MARCH_41 - 1, 'GER', NAME, 'arm', 2, 'Berlin', { was: { '901st Panzer Division': '801st Infantry Division', '902nd Panzer Division': '802nd Infantry Division' } }]);
+    month(g, MARCH_41 - 1);
+    const t = told.find((x) => x.row === NAME)!;
+    expect(t.claims).toHaveLength(2);
+    expect(t.claims[0].id).not.toBeNull();
+    expect(t.claims[1].id).not.toBeNull();
+    expect(t.claims[0].id).not.toBe(t.claims[1].id);
+    const l = laid.find((x) => x.row === NAME)!;
+    expect(l.fresh).toBe(0);
+    expect(l.after).toBeCloseTo(l.before, 9);
+    expect(names(g, corps(g, NAME)!)).toEqual(['901st Panzer Division', '902nd Panzer Division']);
   });
 });
 

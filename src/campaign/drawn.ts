@@ -136,16 +136,19 @@ export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number,
   if (!names.length) return [];
   const whole = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && !(c.full !== undefined && c.full < 1) && !skip(c);
   let held: Map<string, { c: Corps; at: number }> | null = null;
+  // (A corps on a long passage is off the map and lives all the same: it holds its divisions, and stays with them.)
+  const afloat = new Set<Corps>();
   const holder = (name: string): { c: Corps; at: number } | undefined => {
     if (!held) {
       held = new Map();
       for (const c of g.corps) if (whole(c)) for (const d of divisionsOf(g, c)) if (!held.has(d.name)) held.set(d.name, { c, at: d.slot });
+      for (const v of g.atSea ?? []) if (whole(v.corps)) { afloat.add(v.corps); for (const d of divisionsOf(g, v.corps)) if (!held.has(d.name)) held.set(d.name, { c: v.corps, at: d.slot }); }
     }
     return held.get(name);
   };
   // The side theatre the row is for: its own place's, wherever it lands.
   const k = g.byName[row[5]]?.theatre ?? -1;
-  const stays = (c: Corps): boolean => home || nat === g.human || c.reg === reg.id || (k >= 0 && g.regions[c.reg].theatre === k) || busy(c);
+  const stays = (c: Corps): boolean => home || nat === g.human || afloat.has(c) || c.reg === reg.id || (k >= 0 && g.regions[c.reg].theatre === k) || busy(c);
   const was = o.was as Record<string, string> | undefined;
   const out: Claim[] = [];
   names.forEach((name, slot) => {
@@ -153,10 +156,12 @@ export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number,
     const old = !h ? was?.[name[0]] : undefined;
     if (old) {
       // Formed out of another division: from the corps that holds that one, or else out of the home army (never the
-      // player's, unasked; never a corps that holds a division the row names, so that no place is asked for twice).
+      // player's, unasked; never a corps that holds a division the row names or that an earlier division of the row
+      // is formed out of, so that no place is asked for twice).
       h = holder(old);
+      if (h && out.some((q) => q.from === h!.c && q.at === h!.at)) h = undefined;
       if (!h && nat !== g.human) {
-        const named = new Set(names.map((nm) => holder(nm[0])?.c).filter((x) => !!x));
+        const named = new Set<Corps | null | undefined>([...names.map((nm) => holder(nm[0])?.c), ...out.map((q) => q.from)]);
         const c = g.corps.filter((x) => whole(x) && x.kind === 'inf' && !x.hold && x.town === undefined && x.divs >= 2 && g.regions[x.reg].owner === nat && !busy(x) && !named.has(x)).sort((a, b) => b.divs - a.divs || a.id - b.id)[0];
         if (c) h = { c, at: c.divs - 1 };
       }
@@ -177,9 +182,9 @@ export const formsAny = (claims: Claim[], n: number): boolean => n - claims.leng
  * stands for the row, and whether it is a living corps come itself (`took`). `as` the row's options as they apply
  * where it lands, `str` the strength of a division it raises new, `lent` true for a row whose time with its campaign
  * ends (`until`: only then is it remembered where each division came from), `add` raises its corps (game.ts addCorps,
- * by the row's own words).
+ * by the row's own words), `cut` the share of the row that another row took before it landed (game.ts, o.takes).
  */
-export function layOnce(g: Game, nat: string, row: any[], n: number, reg: Region, as: any, claims: Claim[], str: number, lent: boolean, add: (divs: number) => Corps): { c: Corps; took: boolean } {
+export function layOnce(g: Game, nat: string, row: any[], n: number, reg: Region, as: any, claims: Claim[], str: number, lent: boolean, add: (divs: number) => Corps, cut = 0): { c: Corps; took: boolean } {
   const kind = row[3] as Kind;
   const names = divisionsNamed(row[2], nat, kind);
   const all = (): number => g.corps.reduce((s, x) => s + (x.nat === nat && !x.dead ? x.divs * x.str : 0), 0);
@@ -191,15 +196,18 @@ export function layOnce(g: Game, nat: string, row: any[], n: number, reg: Region
   const base = come.map((q) => q.from!).find((c) => c.kind === kind && come.filter((q) => q.from === c).length >= c.divs && !come.some((q) => q.from === c && q.conv)) ?? null;
   const got = new Map<Claim, Part>();
   const drew: NonNullable<Corps['drew']> = [];
-  const take = (q: Claim, p: Part, from: number): void => {
+  const take = (q: Claim, p: Part, from: number, formed = false): void => {
     const no = q.conv ? numberIn(q.name[0]) ?? p.no : p.no;
-    got.set(q, { ...p, name: q.name, no });
-    drew.push({ name: q.name, no, from, ...(q.conv ? { conv: true as const } : {}) });
+    // (`cut`: the share of the row another row took before it landed, o.takes: a division that comes is the weaker by it, as one raised new is.)
+    got.set(q, { ...p, name: q.name, no, str: p.str * (1 - cut) });
+    drew.push({ name: q.name, no, from, ...(q.conv || formed ? { conv: true as const } : {}) });
   };
   for (const h of [...new Set(come.map((q) => q.from!))]) {
     const mine = come.filter((q) => q.from === h);
     if (h === base) {
-      for (const p of partsOf(g, h)) { const q = mine.find((x) => x.at === p.slot); if (q) take(q, p, h.id); }
+      // (A division an earlier loan drew for this corps is remembered by the corps it first came out of: it goes back
+      // there when this row's time is up, not to the corps that only carried it between two loans.)
+      for (const p of partsOf(g, h)) { const q = mine.find((x) => x.at === p.slot); const old = h.drew?.find((r) => r.name[0] === p.name[0]); if (q) take(q, p, old?.from ?? h.id, !!old?.conv); }
     } else if (mine.length >= h.divs) {
       // Another corps the row names whole: its divisions come over, and it is no more.
       for (const p of partsOf(g, h)) { const q = mine.find((x) => x.at === p.slot); if (q) take(q, p, h.id); }
@@ -220,6 +228,7 @@ export function layOnce(g: Game, nat: string, row: any[], n: number, reg: Region
     if (c.reg !== reg.id) relocate(g, c, reg);
     c.hold = !!as.hold;
     if (as.stay) c.stay = true;
+    if (as.airborne) c.airborne = true;
     if (as.gen && c.general === null) seat(g, c, as.gen, as.trait);
     nos = standInNumbers(g, nat, c.kind, fresh);
     raw = { str, xp: as.xp ?? 0.15, org: 1, ...(c.mor !== undefined ? { mor: c.mor } : {}) };
@@ -268,7 +277,12 @@ export function rowOver(g: Game, c: Corps, leaving: (x: Corps) => boolean = () =
     if (parent && g.regions[parent.reg].theatre === g.regions[c.reg].theatre) back.set(parent, [...(back.get(parent) ?? []), p]);
     else keep.push(p);
   }
-  for (const [parent, ps] of back) assemble(g, parent, [...partsOf(g, parent), ...ps]);
+  for (const [parent, ps] of back) {
+    assemble(g, parent, [...partsOf(g, parent), ...ps]);
+    // (A parent that is itself on loan holds them as its own from here: when its own row's time is up they stand on
+    // with it, whichever of the two rows is read first, and do not leave as divisions that row raised new.)
+    if (parent.drew || parent.rowed) parent.drew = [...(parent.drew ?? []).filter((r) => !ps.some((p) => p.name[0] === r.name[0])), ...ps.map((p) => ({ name: p.name, no: p.no, from: parent.id }))];
+  }
   if (!keep.length) return false;
   assemble(g, c, keep);
   if (c.rowed) {
@@ -285,20 +299,79 @@ export function rowOver(g: Game, c: Corps, leaving: (x: Corps) => boolean = () =
   return true;
 }
 
+/** Every division name the living corps of a country hold, a corps on a long passage among them, but for one corps. Forts hold none. */
+function heldBut(g: Game, c: Corps): Set<string> {
+  const out = new Set<string>();
+  for (const x of g.corps) if (x !== c && x.nat === c.nat && !x.dead && x.kind !== 'fort') for (const d of divisionsOf(g, x)) out.add(d.name);
+  for (const v of g.atSea ?? []) if (v.corps !== c && v.nat === c.nat && !v.corps.dead && v.corps.kind !== 'fort') for (const d of divisionsOf(g, v.corps)) out.add(d.name);
+  return out;
+}
+
 /**
- * A corps that carries its divisions' own names (one the rule has laid, or drawn a division out of) takes more
- * divisions in from a dated row (`joins`): the new ones are named as the row's name gives them. That name lists the
- * whole corps after the join, so the ones it brings are those no living corps of the country holds; where the name
- * gives too few, the rest read by their numbers. Without this they would all read by numbers, and a later row that
- * names one of them would not find it held. `added` the divisions the row brought, already counted in the corps.
+ * A corps takes more divisions in from a dated row (`joins`), and the row's name with them. That name lists the whole
+ * corps after the join, the old divisions first, and before the rule the corps simply read it: so a name on that
+ * list that another living corps held was read twice. Now the corps carries its divisions' names written out:
+ * `before` what it read as it stood, taken before it grew (game.ts). A division the row's name still lists keeps its
+ * place, and so does one a loan must give back by its name; the new places take the last of the row's names that no
+ * living corps holds, and read by their numbers where there is none; a division the name has dropped (the record
+ * exchanged it: the VI Corps of Salerno is not the VI Corps of Anzio) takes a name that is left and that nobody
+ * holds, and keeps its own where there is none. Where the name gives fewer divisions than the corps has, the old
+ * ones keep their names. No name another living corps holds is ever taken. `added` the divisions the row brought,
+ * already counted in the corps.
  */
-export function joinNames(g: Game, c: Corps, row: any[], added: number): void {
-  if (!c.names || added <= 0) return;
-  const kept = c.names.slice(0, c.divs - added);
-  const held = new Set<string>(kept.map(([full]) => full));
-  for (const x of g.corps) if (x !== c && x.nat === c.nat && !x.dead && x.kind !== 'fort') for (const d of divisionsOf(g, x)) held.add(d.name);
-  const fresh = divisionsNamed(row[2], c.nat, row[3] as Kind).filter(([full]) => !held.has(full)).slice(0, added);
-  c.names = [...kept, ...fresh];
+export function joinNames(g: Game, c: Corps, row: any[], added: number, before: [string, string][]): void {
+  if (added <= 0) return;
+  const was = before.slice(0, c.divs - added);
+  const gives = divisionsNamed(row[2], c.nat, row[3] as Kind);
+  const whole = gives.length >= c.divs;
+  const owed = new Set<string>((c.drew ?? []).map((r) => r.name[0]));
+  const elsewhere = heldBut(g, c);
+  const out: ([string, string] | undefined)[] = was.map((nm) => (!whole || owed.has(nm[0]) || gives.some(([full]) => full === nm[0]) ? nm : undefined));
+  const mine = new Set<string>(out.filter((nm) => !!nm).map((nm) => nm![0]));
+  const free = gives.filter(([full]) => !mine.has(full) && !elsewhere.has(full));
+  const fresh = free.splice(Math.max(0, free.length - added), added);
+  was.forEach((nm, i) => { if (!out[i]) out[i] = free.shift() ?? nm; });
+  c.names = [...(out as [string, string][]), ...fresh];
+}
+
+/** A corps' divisions' names as it reads them now, to be written out. */
+export const namesNow = (g: Game, c: Corps): [string, string][] => divisionsOf(g, c).map((d) => [d.name, d.short] as [string, string]);
+
+/**
+ * A row that adds divisions to a corps already landed (`joins`), laid by itself because that corps is gone: its name
+ * lists the whole corps after the join, the old divisions first, so the ones it brings are the last of its names that
+ * no living corps holds; with too few of those the rest read by their numbers. Before the rule it read the first
+ * names of its list, the old corps' own, whoever held them.
+ */
+export function joinsAlone(g: Game, c: Corps, row: any[]): void {
+  const gives = divisionsNamed(row[2], c.nat, row[3] as Kind);
+  if (!gives.length) return;
+  const elsewhere = heldBut(g, c);
+  const free = gives.filter(([full]) => !elsewhere.has(full));
+  const word = divisionWords(c.nat, c.kind);
+  const fresh = free.slice(Math.max(0, free.length - c.divs));
+  const cards = divisionsOf(g, c);
+  // (Named from the first place on; a place left over reads by its number, written out so that it never reads the row's list.)
+  c.names = cards.map((d, i) => fresh[i] ?? [`${ordinal(d.no)} ${word.name}`, `${ordinal(d.no)} ${word.short}`]);
+}
+
+/**
+ * A cadre takes the field again under the names its divisions had (economy.ts, reform). One whose name a living corps
+ * has come to hold meanwhile, laid by a dated row while the cadre was off the map, reads by a new number of its
+ * nation's: the row's division is the one of that name. The grand campaign only.
+ */
+export function reformNames(g: Game, c: Corps): void {
+  if (g.flags.open !== 1 || c.kind === 'fort') return;
+  const cards = divisionsOf(g, c);
+  const elsewhere = heldBut(g, c);
+  const hit = cards.filter((d) => elsewhere.has(d.name));
+  if (!hit.length) return;
+  const nos = standInNumbers(g, c.nat, c.kind, hit.length);
+  const word = divisionWords(c.nat, c.kind);
+  let k = 0;
+  const now = cards.map((d) => { if (!elsewhere.has(d.name)) return { no: d.no, name: [d.name, d.short] as [string, string] }; const no = nos[k++]; return { no, name: [`${ordinal(no)} ${word.name}`, `${ordinal(no)} ${word.short}`] as [string, string] }; });
+  c.names = now.map((p) => p.name);
+  keepNumbers(c, now.map((p) => p.no));
 }
 
 /** The line the player reads when a dated arrival names divisions he already holds, or null where it names none of his. */
