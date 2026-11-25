@@ -795,6 +795,19 @@ public:
 	void ShowReady();
 	bool CanShowReady() const { return bReadyNotice && !bWatching && !IsFightingLive() && ReadyUnits.Num() > 0 && ReadySaid >= 0 && ReadySaid == NoticesSaid && FPlatformTime::Seconds() < NoticeUntil; }
 	const TArray<FReadyUnit>& GetReadyUnits() const { return ReadyUnits; }
+	/**
+	 * (Release 2, tc.UI.SeaWaits; Brian's card, 25 November 2026: "waits behind a button".) In a month whose enemy's moves
+	 * near him were shown, the month's scene at sea (AMonthSeaScene) does not follow the tour by itself: it waits behind
+	 * THE MONTH AT SEA, a press away, until the month ends. Other months play it as before.
+	 */
+	static bool IsSeaWaitsStyle();
+	bool HoldsMonthSea() const { return IsSeaWaitsStyle() && bNearShownThisMonth; }
+	/** The scene at sea is held and waiting (set by AMonthSeaScene; false once it has played or its month has gone). */
+	void OfferMonthSea(bool bOffer) { bSeaOffered = bOffer; if (!bOffer) { bSeaAsked = false; } }
+	bool IsMonthSeaOffered() const { return bSeaOffered && !bWatching; }
+	/** THE MONTH AT SEA pressed: the held scene plays once the table is free. */
+	void AskMonthSea() { if (bSeaOffered) { bSeaAsked = true; } }
+	bool TakeMonthSeaAsk() { const bool bWas = bSeaAsked; bSeaAsked = false; return bWas; }
 	/** Says the READY plate now (the month's end does, once the screen is free; a picture asks for it at once). */
 	void SayReady();
 	/** G: TAKE ME THERE while the watch offers it, else SHOW ME while the READY plate is up. */
@@ -1802,6 +1815,8 @@ private:
 	TArray<FColor> NearStopInks;
 	bool bWatchNear = false;
 	int32 NearCount = 0, NearShown = 0;
+	bool bNearShownThisMonth = false; // (release 2, tc.UI.SeaWaits) this month opened with the enemy's moves near him shown
+	bool bSeaOffered = false, bSeaAsked = false; // (release 2, tc.UI.SeaWaits) the month's scene at sea held, and asked for
 	FString WatchNation;
 	TArray<FStepArrow> ArrowsShown;
 	double ArrowsSince = 0.0;

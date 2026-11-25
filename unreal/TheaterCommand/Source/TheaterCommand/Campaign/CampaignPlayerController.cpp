@@ -1451,6 +1451,9 @@ void ACampaignPlayerController::EnterCampaign()
 	// ---- (release 2, the enemy's month near you; the 3D pre-check's tidy, 24 Nov 18:14Z) nor a watch's arrows
 	ClearStepArrows();
 	bWatchNear = false;
+	bNearShownThisMonth = false; // (release 2, tc.UI.SeaWaits: a war begun or read in opens with no tour behind it)
+	bSeaOffered = false;
+	bSeaAsked = false;
 	TakeRegion = INDEX_NONE;
 	NearStopPlaces.Reset();
 	NearStopInks.Reset();
@@ -1815,6 +1818,22 @@ namespace
 	TAutoConsoleVariable<int32> CVarTownCard(
 		TEXT("tc.UI.TownCard"), 0,
 		TEXT("1 shows the new province panel (the town's street at its head, its figures as tiles) and the town card (the street with its plots, what can go up on each, a picture of each building); 0 the panel and the bar of plots as before (as -TheaterTownCard)."));
+}
+
+namespace
+{
+	// (Release 2; Brian's card, 25 November 2026, on the month's opening: "waits behind a button".) The month's scene at
+	// sea waits behind a button in a month whose enemy's moves near him were shown, off until the art director has passed
+	// the Mac's stills; -TheaterSeaWaits turns it on for a run.
+	TAutoConsoleVariable<int32> CVarSeaWaits(
+		TEXT("tc.UI.SeaWaits"), 0,
+		TEXT("1: in a month that opened with the enemy's moves near you, the month's scene at sea waits behind THE MONTH AT SEA, a press away, instead of following the moves by itself; 0 it plays by itself as before (as -TheaterSeaWaits)."));
+}
+
+bool ACampaignPlayerController::IsSeaWaitsStyle()
+{
+	static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterSeaWaits"));
+	return bAsked || CVarSeaWaits.GetValueOnGameThread() != 0;
 }
 
 bool ACampaignPlayerController::IsTownCardStyle()
@@ -13057,6 +13076,7 @@ void ACampaignPlayerController::MonthAnswered()
 		}
 	}
 	bWatchNear = NearCount > 0;
+	bNearShownThisMonth = bWatchNear && Month.Steps.Num() > 0; // (release 2, tc.UI.SeaWaits: kept until the next month's end)
 	if (Month.Steps.Num() > 0 && (bWatchEvery || bWatchNear))
 	// ---- (end release 2)
 	{

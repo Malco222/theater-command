@@ -62,12 +62,17 @@ void AMonthSeaScene::Tick(float DeltaSeconds)
 		Mark = -1;
 		Waiting.Reset();
 		WaitingTurn = INDEX_NONE;
+		Player->OfferMonthSea(false); // (release 2, tc.UI.SeaWaits)
 	}
 	// (a month gone by before its scene could play: only the month in hand is shown)
 	if (!Waiting.IsEmpty() && WaitingTurn != View.Turn)
 	{
 		Waiting.Reset();
 		WaitingTurn = INDEX_NONE;
+	}
+	if (Waiting.IsEmpty())
+	{
+		Player->OfferMonthSea(false); // (release 2, tc.UI.SeaWaits: nothing held, nothing offered)
 	}
 	// The table free: no card, page, newsreel or question over it, no month being played through, no order being answered,
 	// and no button held (a flag or an agent being carried: the scene's taking the keys would let go of it as an order).
@@ -111,9 +116,18 @@ void AMonthSeaScene::Tick(float DeltaSeconds)
 		return;
 	}
 
-	// The scene, once the table has stood free a second.
-	if (!Waiting.IsEmpty() && bFreeAWhile)
+	// The scene, once the table has stood free a second. (Release 2, tc.UI.SeaWaits; Brian's card, 25 November 2026:
+	// "waits behind a button".) In a month that opened with the enemy's moves near him, it does not follow them by
+	// itself: it waits behind THE MONTH AT SEA until he presses it, or the month ends.
+	const bool bHeldBack = !Waiting.IsEmpty() && Player->HoldsMonthSea();
+	if (bHeldBack)
 	{
+		Player->OfferMonthSea(true);
+	}
+	const bool bAskedFor = bHeldBack && bFree && Player->TakeMonthSeaAsk();
+	if (!Waiting.IsEmpty() && ((!bHeldBack && bFreeAWhile) || bAskedFor))
+	{
+		Player->OfferMonthSea(false);
 		const FString Text = MoveTemp(Waiting);
 		Waiting.Reset();
 		const FString Name = FString::Printf(TEXT("%s, %s"), *View.Human, *View.Date);
