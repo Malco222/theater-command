@@ -1600,7 +1600,9 @@ function glanceAir(s: Game, id: number, see: GlanceSight, up: boolean) {
  * guns they light by night under a clear sky (one level of guns a level of lights), whether the holder has Fighter
  * control's radar to lay the guns (without it the lights help only the night fighters) and the levels going up (the
  * UI director's words, "For the map thread": "level {2}: {2} of the {3} levels of guns are lit by night, under a clear
- * sky"). The next level's offer lives in one place, `work:lights` in `glance.can`, and not here (the UI director).
+ * sky"). The counts after the level are in words, "level 2: two of the three levels of guns are lit by night, under a
+ * clear sky" (the UI director, 25 Nov 2026 20:36Z); the level itself stays a digit. The next level's offer lives in one
+ * place, `work:lights` in `glance.can`, and not here (the UI director).
  */
 function glanceLights(s: Game, id: number, guns: number) {
   const r = s.regions[id];
@@ -1611,7 +1613,7 @@ function glanceLights(s: Game, id: number, guns: number) {
   // sees, so it takes the known form, with the small letter after the colon (the UI director, 25 Nov 2026 20:33Z).
   const line = level <= 0 ? ''
     : guns <= 0 ? `level ${level}: there are no guns built here for them to light. They help the night fighters a little.`
-    : `level ${level}: ${Math.min(level, guns)} of the ${guns} levels of guns are lit by night, under a clear sky`;
+    : `level ${level}: ${inWords(Math.min(level, guns))} of the ${inWords(guns)} levels of guns are lit by night, under a clear sky`;
   return {
     level, lit: Math.min(level, guns), guns, radar: radarLays(s, id), going,
     line,

@@ -1091,7 +1091,8 @@ describe('city defences in the bridge (slice 5)', () => {
       expect(l.level).toBe(2);
       expect(l.lit).toBe(2);
       expect(l.guns).toBe(3);
-      expect(l.line).toBe('level 2: 2 of the 3 levels of guns are lit by night, under a clear sky');
+      // The counts in words, the level a digit (the UI director, 25 Nov 2026 20:36Z).
+      expect(l.line).toBe('level 2: two of the three levels of guns are lit by night, under a clear sky');
       // The next level's offer lives in one place, `work:lights` in `glance.can`, and not on the air shelf (the UI director).
       expect('add' in l).toBe(false);
       expect(glance.can.filter((c) => c.key === 'work:lights')).toHaveLength(1);
@@ -1380,7 +1381,8 @@ describe('city defences under fog on raids (the design director, 19:44Z: radar a
 
   // The design director, 25 Nov 2026 20:32Z: one footing on one card. The clauses that rest on the guns' count carry the
   // guns' hedge under fog on raids, in the UI director's words of 20:33Z (counts in words, the guns "built here"). The
-  // every-level fog form is the land rules builder's by the UI director's pattern, sent for a yes at 20:34Z.
+  // every-level forms, known and under fog, were confirmed by the UI director at 20:36Z ("Yes to all three, as you
+  // wrote them"); none of the three rows is provisional.
   it('words the searchlights\' guns clauses with the guns\' hedge under fog, and plainly on the truth and on a raid flown', () => {
     const say = {
       none: 'There are no guns built here for them to light. They help the night fighters a little.',
