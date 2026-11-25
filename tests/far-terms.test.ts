@@ -104,7 +104,8 @@ describe('Japan asks for terms (ruling 196)', () => {
     const J = g.nations.JAP;
     expect(J.alive).toBe(false);
     expect(J.fellOn).toMatchObject({ turn: g.turn, to: 'USA', how: 'beaten' });
-    expect(g.headlines.slice(news).filter((h) => h.kind === 'fall').map((h) => h.text)).toEqual(['Japan accepts terms and is out of the war.']);
+    // (Ruling 201, point 4: Europe is still at war, so the fall's band carries its second line.)
+    expect(g.headlines.slice(news).filter((h) => h.kind === 'fall').map((h) => h.text)).toEqual(['Japan accepts terms and is out of the war. Japan is beaten. The war goes on in Europe: Britain, France and Germany are still at war.']);
     expect(g.headlines.slice(news).some((h) => /capitulates/.test(h.text))).toBe(false);
     // Its armies lay down their arms, and its wars are over.
     expect(g.corps.filter((c) => c.nat === 'JAP' && !c.dead).length).toBe(0);

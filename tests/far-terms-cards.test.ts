@@ -108,7 +108,8 @@ describe('the news of the month each condition first holds (the planner\'s two l
     starve(g);
     expect(checkTerms(g, 'JAP')).toBe(true);
     expect(news(g, from)).toEqual([GROUND]);
-    expect(g.headlines.slice(from).filter((x) => x.kind === 'fall').map((x) => x.text)).toEqual(['Japan accepts terms and is out of the war.']);
+    // (Ruling 201, point 4: Europe is still at war, so the fall's band carries its second line.)
+    expect(g.headlines.slice(from).filter((x) => x.kind === 'fall').map((x) => x.text)).toEqual(['Japan accepts terms and is out of the war. Japan is beaten. The war goes on in Europe: Britain, France and Germany are still at war.']);
   });
 
   it('its people can bear no more first: the other line, said once', () => {
