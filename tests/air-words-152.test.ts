@@ -152,7 +152,8 @@ describe('findings 9 and 34: a carrier wing out of reach has no distance on the 
       expect(s.why).toBe("Its aircraft cannot reach it from the fleet's station.");
     }
     // (a group in reach keeps its distance, in figures and in words)
-    const near = p.card.seats.find((s: { name: string }) => s.name === 'No. 1 Group');
+    // (No. 11 Group's first group, at Kent)
+    const near = p.card.seats.find((s: { id: number }) => s.id === 5);
     expect([near.km, near.far]).toEqual([145, '145 km']);
     // Nothing on the card is a number that JSON cannot carry.
     expect(JSON.stringify(p.card)).not.toMatch(/"km":null/);

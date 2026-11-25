@@ -740,7 +740,7 @@ export function foundAirFleet(g: Game, nat: string, r: Region, name: string, kin
 const ordinal = (k: number): string => `${k}${k % 100 >= 11 && k % 100 <= 13 ? 'th' : k % 10 === 1 ? 'st' : k % 10 === 2 ? 'nd' : k % 10 === 3 ? 'rd' : 'th'}`;
 
 /** A rung of a country's ladder of air formation names (ruling 220, the historian's data/campaign/air-names.json). */
-export interface Rung { rung: string; ftr: number; bmr: number; form: { ftr: string; bmr: string }; from?: number; until?: number }
+export interface Rung { rung: string; ftr: number; bmr: number; form: { ftr: string; bmr: string }; from?: number; until?: number; numbers?: { ftr?: number[]; bmr?: number[] } }
 const NAMES = namesData as unknown as { near: [number, number]; navyBases: string[]; ladders: Record<string, Rung[]> };
 
 /** A country's homeland is lost while it does not hold its own capital. */
@@ -787,7 +787,10 @@ export function formName(form: string, n: number): string {
  * form ("3rd Fighter Group"), never another country's word. No two of a country's groups share a name.
  */
 function groupName(g: Game, nat: string, kind: 'ftr' | 'bmr', strength: number, base: Region | null): string {
-  const taken = (x: string): boolean => g.airFleets.some((f) => f.nat === nat && f.name === x);
+  // (A name a dated row of air.json will bring for the nation, a command not formed yet, is taken too: No. 10 Group
+  // arrives in October 1940, and no new group may take its name before it.)
+  const taken = (x: string): boolean => g.airFleets.some((f) => f.nat === nat && f.name === x)
+    || AIR.fleets.some((r) => r.nat === nat && r.name === x && (r.from ?? 1) > 1 && !g.flags[`air:${r.name}`]);
   const rungs = rungsOf(g, nat, base);
   for (let left = rungs; left.length;) {
     const r = nearestRung(left, kind, strength);
@@ -795,6 +798,10 @@ function groupName(g: Game, nat: string, kind: 'ftr' | 'bmr', strength: number, 
     const form = r.form[kind];
     // A rung with no number in its name (Poland's Brygada Pościgowa) is one formation: once it is taken, the next rung.
     if (!/\{n/.test(form)) { if (!taken(form)) return form; left = left.filter((x) => x !== r); continue; }
+    // A rung whose numbers went by role in the record lists them (Britain's groups: the historian's read row of 25
+    // November 2026, L): the first of the list for its kind that is free. Where the list runs out, the rung counts on.
+    const nums = r.numbers?.[kind];
+    if (nums) for (const k of nums) { const x = formName(form, k); if (!taken(x)) return x; }
     const key = `agn:${nat}:${kind}:${r.rung}`;
     let name: string;
     do { g.flags[key] = (g.flags[key] ?? 0) + 1; name = formName(form, g.flags[key]); } while (taken(name));
