@@ -391,6 +391,22 @@ real wolf-pack nights, convoy-first-pack, convoy-hunted and convoy-hunters), bes
     plays it (convoy-hunters 0.505 ms; the three 0.078, 0.073 and 0.359 ms). Nothing the show builds changed
   Tools/convoy_looks/run.sh: convoy looks 3,991 checks, 0 failed; against the show 741 checks, 0 failed
 
+Step 11 wired (the storms' thread, 25 November 2026, on 7df10413: the light core hung on the sea battle under
+-TheaterSeaDay=field, off by default; seed mode is today's, every pinned line byte-equal). Changed counts only:
+  Tools/sea_waves/run.sh: measure_test 38 checks ("12 of the release 2 sea's 34 switches built", -TheaterSeaDay=seed,
+    -TheaterSeaVisContrast=0.05 and -TheaterSeaStars=0 after -TheaterSeaMarksPool=0); room_scan 34 setters, every one
+    given back (the scan now reads a field written with a small b first, bPerPixelAtmosphereTransmittance among them);
+    switches_scan 10 checks, 34 switches, 12 built; day_extract the same 24 pieces; sea_day_test 82 checks, 0 failed
+    (g++ and clang++): "nothing is wired yet" became "wired only where step 11 wires it" (SeaBattle.cpp and SeaBattle.h
+    name the core in code, every other game file none), and the smoke hour's pin reads the one Tick line given
+    HourShade, FLinearColor::White unless field mode. Every other count as above
+  Tools/sea_waves/run_night_sky.sh: night_sky_test 72 checks (69 and 3 new: with the core's StarShare given, a full moon
+    high moves neither the limit nor the Milky Way and takes only the stars behind her disc; without it the dome
+    still washes them itself)
+  Tools/sea_waves/run_sea_field.sh, run_night.sh, run_storm.sh and run_weather.sh: each ALL PASSED
+  Tools/sea_show/run.sh: the 12 each ALL CHECKS PASSED, the frame budget among them (load 1 to 3); sea_under_test 590
+    checks, 0 failed. Tools/convoy_looks/run.sh: passed; against the show 741 checks, 0 failed
+
 Tools/air_show/run.sh (Pearl's guard beside pearl_pin): 3 recordings ALL CHECKS PASSED; airscrews 18 aircraft, 0 failed; sea face all checks pass
 
 The Mac, release 1.5 (22 November 05:23-05:32Z, the production lead's frame-time lines,

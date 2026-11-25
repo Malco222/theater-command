@@ -537,14 +537,19 @@ namespace
 		const std::string Sea = ReadAll(Src + "/Battle/SeaBattle.cpp");
 		const std::regex TickLine("Effects->Tick\\([^\\n]*\\);");
 		std::string Ticks;
-		int TickN = 0, White = 0;
+		int TickN = 0, Shaded = 0;
 		for (std::sregex_iterator It(Sea.begin(), Sea.end(), TickLine), End; It != End; ++It)
 		{
 			++TickN;
-			White += It->str().find("FLinearColor::White") != std::string::npos;
+			Shaded += It->str().find(", HourShade, ViewH);") != std::string::npos;
 		}
-		Check("pins: today's smoke hour is white (the kit's Tick given FLinearColor::White; step 11 passes Day.HourLight there)", TickN == 1 && White == 1,
-			std::to_string(TickN) + " Tick line(s)");
+		// (step 11: the one Tick line takes HourShade, which is white unless field mode is on, and the day's HourLight in
+		// field mode; seed mode's smoke is today's white, as before the wiring)
+		const std::string ShadeLine = "const FLinearColor HourShade = bFieldDay ? FLinearColor(static_cast<float>(Day.HourLight.R), "
+			"static_cast<float>(Day.HourLight.G), static_cast<float>(Day.HourLight.B), 1.0f) : FLinearColor::White;";
+		Check("pins: today's smoke hour is white (the kit's one Tick given HourShade: FLinearColor::White in seed mode, Day.HourLight in field mode)",
+			TickN == 1 && Shaded == 1 && CountOf(Sea, ShadeLine) == 1 && CountOf(Sea, "HourShade") == 2,
+			std::to_string(TickN) + " Tick line(s), " + std::to_string(CountOf(Sea, "HourShade")) + " HourShade");
 		// (every eye height the shots name, against PlannedEyes)
 		std::set<double> Named;
 		// (release 2's overview, step 13: "SkyWeather ? SkyWeather->OverviewHeight() : 1300.0", its fallback read here and
@@ -585,11 +590,13 @@ namespace
 		const bool bMaterial = CountOf(Build, "reach_sq = times(m, reach, reach,") == 1 && CountOf(Build, "connect(plus(m, reach_sq, 1.0,") == 1 &&
 			CountOf(Build, "lit = lerp(m, seen, times(m, sky_colour, scalar(m, \"HazeTop\"") == 1;
 		Check("pins: the sea material's own haze is lerp(seen, HazeTop x sky, (d/reach)^2 / (1 + (d/reach)^2)), as MaterialHazed works it", bMaterial, "Tools/build_content.py");
-		// (nothing wired: no game file's code but the core's own names it, its header or its namespace. On the release 2
-		// join the storms' Battle/SeaNightCore.h names SeaDayCore in two comments, the hand-off step 11 will make; a
-		// comment wires nothing, so the code is read with its comments blanked, and the namespace's own name, SeaDay::,
-		// is caught as well as the header's. The comments that name it are said)
-		std::string Readers, Told;
+		// (wired only where step 11 wires it: the sea battle's own two files name the core, its header or its namespace,
+		// and no other game file's code does. As strict as the check before the wiring, which held every file to none: a
+		// comment wires nothing, so the code is read with its comments blanked, and the namespace's own name, SeaDay::, is
+		// caught as well as the header's; the comments that name it are said)
+		const std::set<std::string> Wiring = { "SeaBattle.cpp", "SeaBattle.h" };
+		std::set<std::string> Readers;
+		std::string Told;
 		const std::regex Wired("SeaDayCore|\\bSeaDay::");
 		for (const auto& E : std::filesystem::recursive_directory_iterator(Src))
 		{
@@ -599,11 +606,13 @@ namespace
 			const std::string Ext = E.path().extension().string();
 			if (Ext != ".h" && Ext != ".cpp" && Ext != ".inl") continue;
 			const std::string Text = ReadAll(Path);
-			if (std::regex_search(CodeOf(Text), Wired)) Readers += E.path().filename().string() + " ";
+			if (std::regex_search(CodeOf(Text), Wired)) Readers.insert(E.path().filename().string());
 			else if (std::regex_search(Text, Wired)) Told += E.path().filename().string() + " ";
 		}
-		Check("pins: nothing is wired yet (no game file's code but the core's own names SeaDayCore or SeaDay::)", Readers.empty(),
-			(Readers.empty() ? std::string("none") : Readers) + (Told.empty() ? "" : "; named in comments only: " + Told));
+		std::string ReaderNames;
+		for (const std::string& R : Readers) ReaderNames += R + " ";
+		Check("pins: the core is wired only where step 11 wires it (SeaBattle.cpp and SeaBattle.h name SeaDayCore or SeaDay:: in their code, no other game file does)",
+			Readers == Wiring, (ReaderNames.empty() ? std::string("none") : ReaderNames) + (Told.empty() ? "" : "; named in comments only: " + Told));
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------

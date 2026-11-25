@@ -211,6 +211,17 @@ void FSeaNightDome::Follow(const FVector& Eye)
 	}
 }
 
+void FSeaNightDome::SetHidden(bool bHide)
+{
+	UProceduralMeshComponent* Mesh = Dome.Get();
+	if (!bOn || !Mesh || bHide == bHidden)
+	{
+		return;
+	}
+	bHidden = bHide;
+	Mesh->SetHiddenInGame(bHide);
+}
+
 void FSeaNightDome::Close()
 {
 	if (UProceduralMeshComponent* Mesh = Dome.Get())
@@ -222,4 +233,5 @@ void FSeaNightDome::Close()
 	MoonPaint.Reset();
 	Sky = SeaNightSky::Sky();
 	bOn = false;
+	bHidden = false;
 }

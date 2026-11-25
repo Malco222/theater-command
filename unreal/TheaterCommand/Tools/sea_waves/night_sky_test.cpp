@@ -298,6 +298,19 @@ int main()
 			bSame = Dark.Stars[I].Index == Again.Stars[I].Index && Dark.Stars[I].R == Again.Stars[I].R && Dark.Stars[I].Way.X == Again.Stars[I].Way.X;
 		}
 		Check(bSame, "the same inputs lay the same sky");
+
+		// (the light core's own share given: it has already dimmed the stars for the moon, so the dome does not wash
+		// them again; a full moon high then takes only the stars behind her disc)
+		Seeing Core;
+		Core.StarShare = 0.8;
+		const Sky CoreDark = Lay(Night(-24.0, false, -90.0, 0.0), Lens{}, Core);
+		const Sky CoreMoon = Lay(Night(-24.0, true, 50.0, 1.0), Lens{}, Core);
+		Check(CoreDark.LimitMag == CoreMoon.LimitMag && CoreDark.MilkyShare == CoreMoon.MilkyShare,
+			"with the core's share given, the moon is counted once: the limit " + F(CoreDark.LimitMag, 3) + " and " + F(CoreMoon.LimitMag, 3));
+		Check(CoreMoon.Stars.size() + static_cast<size_t>(CoreMoon.HiddenByMoon) == CoreDark.Stars.size() && CoreMoon.HiddenByMoon <= 3,
+			"with the core's share given, a full moon takes only the stars behind her (" + std::to_string(CoreMoon.HiddenByMoon) + ")");
+		Check(Lay(Night(-24.0, false, -90.0, 0.0), Lens{}, Seeing{}).LimitMag > Lay(Night(-24.0, true, 50.0, 1.0), Lens{}, Seeing{}).LimitMag,
+			"without it the dome still washes the stars for the moon itself");
 	}
 
 	// ---- The Milky Way

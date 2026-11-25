@@ -156,7 +156,8 @@ def members(header_text):
 
 
 SETTER = re.compile(r"\b(\w+)\s*(?:\.\s*Get\s*\(\s*\))?\s*(->|\.)\s*(Set\w+)\s*\(")
-WRITE = re.compile(r"\b(\w+)\s*(->|\.)\s*([A-Z]\w*)\s*=(?!=)")
+# (a field written: its name capitalised, or a flag's b and a capital, as bPerPixelAtmosphereTransmittance, step 11's)
+WRITE = re.compile(r"\b(\w+)\s*(->|\.)\s*(b?[A-Z]\w*)\s*=(?!=)")
 
 
 def setters_in(code, names):

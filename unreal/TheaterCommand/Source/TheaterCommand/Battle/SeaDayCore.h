@@ -23,7 +23,7 @@
  * no clamp, down to astronomical night: the sun keys the scene while she is above -4 degrees, then the moon if she is up
  * and lit, else a faint glow overhead; vis is a haze from the horizon up (beta = -ln(Cmin)/vis, so a ship at the rules'
  * vis keeps Cmin of her contrast), coming in over the twilight from -6 degrees, and at night it is met through light,
- * not fog (NightSight). Nothing is wired yet: step 11 hangs it on the scene (LightTheBattle, TakeTheRoom).
+ * not fog (NightSight). Step 11 hangs it on the scene (ASeaBattle::OpenTheDay, TakeTheRoom, LightTheBattle, DressTheDay).
  *
  * LOOKS ONLY. Nothing the show decides reads any of this, and it draws on no luck: the same field and switches give the
  * same day. Plain C++20, no engine. Places are SeaShow's board frame (X east, Y north, Z up); bearings are degrees
