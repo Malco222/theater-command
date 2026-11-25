@@ -388,6 +388,31 @@ int main()
 			static_cast<int>(S.Stars.size()), S.SolarHour, S.LimitMag, static_cast<int>(M.Triangles.size() / 3), Times[Times.size() / 2]);
 		Check(Times[Times.size() / 2] < 4.0, "the sky is laid and meshed in under 4 ms, once a cut");
 		Check(M.Triangles.size() / 3 < 4000, "under 4,000 triangles on the dome");
+		// (in a twilight sky her dark side is left out, so the sky shows through it; on a dark night her whole disc is
+		// laid, earthshine on her dark side; the stars always all drawn)
+		const Mesh Twilight = BuildMesh(S, Radius, 64, 8, 0.08);
+		int MoonIn = 0, MoonOut = 0, StarsOut = 0;
+		for (size_t P = 0; P < Twilight.C.size() / 4; ++P)
+		{
+			const bool bStar = P < static_cast<size_t>(Twilight.StarQuads) * 4;
+			const float A = Twilight.C[P * 4 + 3];
+			if (bStar)
+			{
+				StarsOut += A < 0.5f ? 1 : 0;
+			}
+			else
+			{
+				(A > 0.5f ? MoonIn : MoonOut) += 1;
+			}
+		}
+		Check(StarsOut == 0, "the cut leaves every star drawn");
+		Check(MoonIn > 0 && MoonOut > 0, "a 0.34-lit moon in twilight: her lit side drawn (" + std::to_string(MoonIn) + " points), her dark side left out (" + std::to_string(MoonOut) + ")");
+		int WholeOut = 0;
+		for (size_t P = 0; P < M.C.size() / 4; ++P)
+		{
+			WholeOut += M.C[P * 4 + 3] < 0.5f ? 1 : 0;
+		}
+		Check(WholeOut == 0, "on a dark night her whole disc is laid");
 	}
 
 	std::printf("night_sky_test: %d checks, %d failed\n", Checks, Failed);

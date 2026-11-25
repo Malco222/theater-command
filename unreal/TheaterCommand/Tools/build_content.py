@@ -1939,11 +1939,38 @@ def build_flak_lit():
     finish(m)
 
 
+def build_night_sky():
+    """The night sky over the sea (the release 2 ocean plan, step 11(f); look bible S7): the real stars and the moon with
+    her phase on one dome 400 km round the eye (Battle/SeaNightDome, from SeaNightSky). Unlit and masked, with "Is Sky"
+    set, so neither the height fog nor the air's own haze greys it; two-sided. Its paint is the vertex colour, sRGB as
+    M_UnderSea's is (raised to 2.2 here, so the faint stars keep their steps), times Strength; its alpha marks what is
+    drawn (each star's square, the moon's lit face, her whole disc on a dark night). A fleet material: built in its own
+    try, so a failure here never stops Pearl's sea, the view under water or the level."""
+    try:
+        m = new_material("M_NightSky")
+        m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+        m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+        m.set_editor_property("two_sided", True)
+        m.set_editor_property("is_sky", True)
+        m.set_editor_property("opacity_mask_clip_value", 0.5)
+        colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
+        to_linear = node(m, unreal.MaterialExpressionPower, -700, 0, const_exponent=2.2)
+        connect(colour, "", to_linear, "Base")
+        strong = node(m, unreal.MaterialExpressionMultiply, -450, 0)
+        connect(to_linear, "", strong, "A")
+        connect(scalar(m, "Strength", 1.0, -700, 200), "", strong, "B")
+        to_property(strong, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+        to_property(colour, "A", unreal.MaterialProperty.MP_OPACITY_MASK)
+        finish(m)
+    except Exception as failed:  # (a fleet builder logs and carries on: the plan, step 7(f))
+        unreal.log_warning(f"Theater Command: M_NightSky was not built ({failed}): the sea's night sky stays empty")
+
+
 # Each asset is left alone if it is already there, so adding one does not rewrite the others.
 # Set TC_REBUILD=all to remake everything, or to a material's name (or several, with commas between) to remake those.
 import os
 REBUILD = os.environ.get("TC_REBUILD", "")
-for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_UnderSea", build_under_sea)):
+for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_UnderSea", build_under_sea), ("M_NightSky", build_night_sky)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:

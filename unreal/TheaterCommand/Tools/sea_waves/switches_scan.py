@@ -44,6 +44,7 @@ TABLE = [
     ("TheaterSeaDay=", "seed, field", "seed", "2", "11", False),
     ("TheaterSeaVisContrast=", "0.05", "0.05", "with Day", "3", False),
     ("TheaterSeaSkyCapture=", "0, 1", "0", "2", "11", False),
+    ("TheaterSeaStars=", "0, or the stars' light x (1 with Day)", "0", "with Day", "11", False),
     ("TheaterSeaWakeLane=", "0, 1", "0", "2", "12", False),
     ("TheaterSeaSpray=", "0, 1", "0", "2", "6, 12", False),
     ("TheaterSeaClouds=", "0, dome, puffs", "0", "3", "13", False),

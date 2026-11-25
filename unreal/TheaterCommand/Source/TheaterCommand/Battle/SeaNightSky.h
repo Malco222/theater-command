@@ -139,7 +139,10 @@ namespace SeaNightSky
 	double MoonLightAt(const Sky& S, const Dir& Right, const Dir& Up, double X, double Y);
 
 	/** The dome's mesh, in units round the eye (the engine adds the eye): each star a square facing the eye at Radius,
-	 * then the moon's face, vertex colours linear with alpha 1 (masked: alpha marks what is drawn). */
+	 * then the moon's face, vertex colours linear (masked: alpha marks what is drawn). Every star's alpha is 1; the moon's
+	 * is 1 where her light (of her full face's, before the air's tint) is MoonDarkCut or more, else 0: 0 lays her whole
+	 * disc, her dark side by earthshine (a dark night); above it her dark side is left out, so a twilight sky shows
+	 * through it as it does through the real moon's. The stars behind her are left out either way. */
 	struct Mesh
 	{
 		std::vector<double> V;       // x, y, z each, in the board's frame (east, north, up), units
@@ -147,5 +150,5 @@ namespace SeaNightSky
 		std::vector<int> Triangles;
 		int StarQuads = 0, MoonTriangles = 0;
 	};
-	Mesh BuildMesh(const Sky& S, double Radius, int MoonSegments = 64, int MoonRings = 8);
+	Mesh BuildMesh(const Sky& S, double Radius, int MoonSegments = 64, int MoonRings = 8, double MoonDarkCut = 0.0);
 }

@@ -262,7 +262,7 @@ int main(int Argc, char** Argv)
 	std::printf("The sea's switches and the \"Sea look:\" line (Battle/SeaLookSwitches)\n");
 	{
 		using namespace SeaLookSwitches;
-		Check("the plan's section 3: 31 switches of the release 2 sea", Count == 31, std::to_string(Count));
+		Check("the plan's section 3: 32 switches of the release 2 sea (step 11 adds -TheaterSeaStars=)", Count == 32, std::to_string(Count));
 		std::set<std::string> Names;
 		bool bNamed = true, bFilled = true, bOnAt = true;
 		const std::set<std::string> OnAts = { "1", "2", "3", "tier", "own", "with Swell", "with Day", "review", "extra", "none" };
@@ -301,7 +301,7 @@ int main(int Argc, char** Argv)
 
 		const std::string Plain = Line(0, {});
 		Check("the line with nothing asked: tier 0, release 1.5's sea as made, every switch at today's value",
-			Plain == "Sea look: tier 0 (release 1.5's sea, as made); 1 of the release 2 sea's 31 switches built, in force: -TheaterSeaMarksPool=0.", Plain);
+			Plain == "Sea look: tier 0 (release 1.5's sea, as made); 1 of the release 2 sea's 32 switches built, in force: -TheaterSeaMarksPool=0.", Plain);
 		Lines << "look\t0||\t" << Plain << '\n';
 		Said.push_back(Plain);
 
@@ -315,7 +315,7 @@ int main(int Argc, char** Argv)
 		Given[1].Value = "2";
 		const std::string AskedLine = Line(0, Given);
 		Check("switches asked for before their step lands: said, in the table's order, to change nothing",
-			AskedLine == "Sea look: tier 0 (release 1.5's sea, as made); 1 of the release 2 sea's 31 switches built, in force: -TheaterSeaMarksPool=0; "
+			AskedLine == "Sea look: tier 0 (release 1.5's sea, as made); 1 of the release 2 sea's 32 switches built, in force: -TheaterSeaMarksPool=0; "
 						 "asked for but not built yet, so nothing changes: -TheaterSeaLook=2, -TheaterSeaProbe.", AskedLine);
 		Lines << "look\t0|-TheaterSeaLook=2, -TheaterSeaProbe|\t" << AskedLine << '\n';
 		Said.push_back(AskedLine);
@@ -347,8 +347,8 @@ int main(int Argc, char** Argv)
 		const bool bOn = TakeOnOff(On, "TheaterSeaMarksPool="), bJunk = TakeOnOff(Junk, "TheaterSeaMarksPool="), bNone = TakeOnOff(None, "TheaterSeaMarksPool=");
 		const std::string PoolLine = Line(On), JunkLine = Line(Junk);
 		Check("-TheaterSeaMarksPool=1 keeps the marks' meshes and says so; anything else asked is today's, said as 0; not asked, today's and said as today's",
-			bOn && !bJunk && !bNone && PoolLine == "Sea look: tier 0 (release 1.5's sea, as made); 1 of the release 2 sea's 31 switches built, in force: -TheaterSeaMarksPool=1 (asked)." &&
-				JunkLine == "Sea look: tier 0 (release 1.5's sea, as made); 1 of the release 2 sea's 31 switches built, in force: -TheaterSeaMarksPool=0 (asked)." && Line(None) == Plain,
+			bOn && !bJunk && !bNone && PoolLine == "Sea look: tier 0 (release 1.5's sea, as made); 1 of the release 2 sea's 32 switches built, in force: -TheaterSeaMarksPool=1 (asked)." &&
+				JunkLine == "Sea look: tier 0 (release 1.5's sea, as made); 1 of the release 2 sea's 32 switches built, in force: -TheaterSeaMarksPool=0 (asked)." && Line(None) == Plain,
 			PoolLine);
 		Lines << "look\t0||-TheaterSeaMarksPool=1 (asked)\t" << PoolLine << '\n';
 		Said.push_back(PoolLine);

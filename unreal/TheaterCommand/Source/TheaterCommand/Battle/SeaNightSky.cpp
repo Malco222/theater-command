@@ -444,7 +444,7 @@ namespace SeaNightSky
 		return Out;
 	}
 
-	Mesh BuildMesh(const Sky& S, double Radius, int MoonSegments, int MoonRings)
+	Mesh BuildMesh(const Sky& S, double Radius, int MoonSegments, int MoonRings, double MoonDarkCut)
 	{
 		Mesh Out;
 		Out.V.reserve((S.Stars.size() * 4 + 600) * 3);
@@ -492,7 +492,7 @@ namespace SeaNightSky
 				Out.V.push_back(S.MoonWay.Y * Radius + Oy);
 				Out.V.push_back(S.MoonWay.Z * Radius + Oz);
 				const float L = F.Light[P];
-				Out.C.insert(Out.C.end(), { L * Tr, L * Tg, L * Tb, 1.0f });
+				Out.C.insert(Out.C.end(), { L * Tr, L * Tg, L * Tb, MoonDarkCut <= 0.0 || L >= MoonDarkCut ? 1.0f : 0.0f });
 			}
 			for (int T : F.Triangles)
 			{

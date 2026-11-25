@@ -46,6 +46,7 @@ namespace SeaLookSwitches
 		{ "TheaterSeaDay=", "seed", "2", "11", false },
 		{ "TheaterSeaVisContrast=", "0.05", "with Day", "3", false },
 		{ "TheaterSeaSkyCapture=", "0", "2", "11", false },
+		{ "TheaterSeaStars=", "0", "with Day", "11", false },
 		{ "TheaterSeaWakeLane=", "0", "2", "12", false },
 		{ "TheaterSeaSpray=", "0", "2", "6, 12", false },
 		{ "TheaterSeaClouds=", "0", "3", "13", false },
