@@ -7,7 +7,7 @@
 //       down, named on that line; and in the sea report, "The Battle Fleet was caught at anchor" (not "The the"), and each
 //       side's strength summed before the sinkings; and the fleet's own name in the refusals, "Force H", not "The Force H";
 //   33  odds whose two ends read the same are said once: "More than 10 to 1 all day", on the card and in the month's sea
-//       forecast.
+//       forecast; and odds that round to nothing are "less than 0.1", not "0.0".
 import { describe, expect, it } from 'vitest';
 import { fleetKnown } from '../src/campaign/carriers';
 import { atWar, createGame, declareWar } from '../src/campaign/game';
@@ -16,7 +16,7 @@ import { HEAVY_RISK, orderFleetAttack, planFleetAttack, whyNotFleetAttack, type 
 import { setFog } from '../src/campaign/intel';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { NAVY, cutOff, fleetName, sail, zoneOf } from '../src/campaign/navy';
-import { planSeaBattle } from '../src/campaign/seaplan';
+import { oddsSwing, oddsWord, planSeaBattle } from '../src/campaign/seaplan';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, fleetOptions, humanUp, stepAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
@@ -483,5 +483,70 @@ describe('33: the month\'s sea forecast says its odds once, as the card does', (
     sail(g, sq, z, 'patrol');
     expect(planSeaBattle(g, home.id, z, null)!.odds!.low).toBeGreaterThanOrEqual(9.95);
     expect(odds()).toEqual({ label: 'Odds', value: 'more than 10 to 1', effect: 'More than 10 to 1 all day' });
+  });
+});
+
+describe('33: odds that round to nothing read "less than 0.1", not "0.0"', () => {
+  /** One British destroyer, alone, against the Battle Fleet made `times` its size and patrolling the North Sea. */
+  function hopeless(times: number): { g: Game; sq: Fleet; battle: Fleet; z: number } {
+    const g = startOpen(createGame(3, 'UK'));
+    let guard = 0;
+    while (!humanUp(g) && guard++ < 50) stepAI(g);
+    beginHuman(g);
+    setFog(g, false);
+    const home = fleet(g, 'Home Fleet'), battle = fleet(g, 'Battle Fleet');
+    const sq = detach(g, home, { dd: 1 })!;
+    for (const f of g.fleets.filter((x) => x.nat === 'UK' && x.id !== sq.id)) sail(g, f, f.home, 'port');
+    for (const c of ['bb', 'ca', 'dd'] as const) battle.ships[c] *= times;
+    const z = zoneOf(g, 'nsea');
+    sail(g, battle, z, 'patrol');
+    return { g, sq, battle, z };
+  }
+  const odds = (lines: { label: string; value: string; effect?: string }[]): { value: string; effect?: string } => lines.find((l) => l.label === 'Odds')!;
+
+  it('the card, its headline, the fleet\'s room and the month\'s sea forecast: "Less than 0.1 to 1 all day"', () => {
+    const { g, sq, battle, z } = hopeless(10);
+    const plan = planFleetAttack(g, sq.id, battle.id)!;
+    expect(plan.why).toBeNull();
+    expect(plan.odds!.high).toBeLessThan(0.05);
+    expect(odds(plan.lines)).toMatchObject({ value: 'less than 0.1 to 1', effect: 'Less than 0.1 to 1 all day' });
+    expect(plan.notes).toContain(`Your admiral would not offer battle at these odds (he wants ${NAVY.battle.seek} to 1 and has less than 0.1): it is your order, and it will be carried out.`);
+    TC.load(saveGame(g));
+    const p = TC.page(`fleetattack:${sq.id}:${battle.id}`) as Page;
+    expect(p.headline).toMatch(/^Very likely to lose: less than 0\.1 to 1, about \d+% to win$/);
+    expect(oddsRow(p).lines).toEqual(['less than 0.1 to 1', 'Less than 0.1 to 1 all day']);
+    const room = TC.page(`fleet:${sq.id}`) as Page;
+    const row = room.sections.find((s) => s.heading === 'ENEMY FLEETS TO ATTACK')!.rows.find((r) => r.buttons.some((b) => (b as { act?: string }).act === `open:fleetattack:${sq.id}:${battle.id}`))!;
+    expect(row.lines).toEqual(['At sea, in the North Sea.', 'Very likely to lose: less than 0.1 to 1.']);
+    // The month's sea forecast, for the destroyer on patrol there.
+    sail(g, sq, z, 'patrol');
+    const sea = planSeaBattle(g, sq.id, z, null)!;
+    expect(sea.odds!.high).toBeLessThan(0.05);
+    expect(odds(sea.lines)).toMatchObject({ value: 'less than 0.1 to 1', effect: 'Less than 0.1 to 1 all day' });
+    expect(sea.notes[0]).toBe(`At these odds your admiral will not offer battle: he wants ${NAVY.battle.seek} to 1 and has less than 0.1. An enemy who is patrolling and thinks himself strong enough will come to you.`);
+    for (const w of [...words(p), ...words(room), ...[plan, sea].flatMap((x) => [...x.notes, ...x.lines.flatMap((l) => [l.value, l.effect ?? ''])])]) {
+      expect(w).not.toMatch(/\b0\.0\b/);
+      expect(w).not.toMatch(/\b(about|between) less\b/i);
+    }
+  });
+
+  it('where only the worse end rounds to nothing: "No better than 0.1 to 1 all day"', () => {
+    const { g, sq, battle, z } = hopeless(3);
+    const plan = planFleetAttack(g, sq.id, battle.id)!;
+    expect(plan.odds!.low).toBeLessThan(0.05);
+    expect(plan.odds!.high).toBeGreaterThanOrEqual(0.05);
+    expect(odds(plan.lines).effect).toBe('No better than 0.1 to 1 all day');
+    sail(g, sq, z, 'patrol');
+    expect(odds(planSeaBattle(g, sq.id, z, null)!.lines).effect).toBe('No better than 0.1 to 1 all day');
+  });
+
+  it('the words for the odds, at every turn of the scale', () => {
+    expect([0.01, 0.0499, 0.05, 0.24, 9.94, 9.95, 40].map(oddsWord)).toEqual(['less than 0.1', 'less than 0.1', '0.1', '0.2', '9.9', 'more than 10', 'more than 10']);
+    expect(oddsSwing(0.01, 0.02)).toBe('Less than 0.1 to 1 all day');
+    expect(oddsSwing(0.04, 0.06)).toBe('No better than 0.1 to 1 all day');
+    expect(oddsSwing(0.2, 0.24)).toBe('About 0.2 to 1 all day');
+    expect(oddsSwing(0.12, 0.18)).toBe('Between 0.1 and 0.2 to 1 as the day goes');
+    expect(oddsSwing(9, 13)).toBe('Between 9.0 and more than 10 to 1 as the day goes');
+    expect(oddsSwing(12, 18)).toBe('More than 10 to 1 all day');
   });
 });

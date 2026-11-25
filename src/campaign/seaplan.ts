@@ -86,18 +86,20 @@ const zero = (): Ships => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
 
 /**
- * Odds to one decimal place, as a sentence says them: "2.4", "more than 10". The month's sea forecast and the attack
- * card (fleetattack.ts) both say them so.
+ * Odds to one decimal place, as a sentence says them: "2.4", "more than 10", and (1.5.3) "less than 0.1" where they
+ * round to nothing, not "0.0". The month's sea forecast and the attack card (fleetattack.ts) both say them so.
  */
-export const oddsWord = (x: number): string => (x >= 9.95 ? 'more than 10' : x.toFixed(1));
+export const oddsWord = (x: number): string => (x >= 9.95 ? 'more than 10' : x < 0.05 ? 'less than 0.1' : x.toFixed(1));
 
 /**
  * (1.5.3, playtest #33) The swing of the dice on the odds, from the worst to the best, in one sentence; said once where
- * both ends read the same: "More than 10 to 1 all day", "About 0.4 to 1 all day".
+ * both ends read the same: "More than 10 to 1 all day", "About 0.4 to 1 all day", "Less than 0.1 to 1 all day". Where
+ * only the worse end rounds to nothing, the better end is the most there is: "No better than 0.1 to 1 all day".
  */
 export function oddsSwing(low: number, high: number): string {
   const worst = oddsWord(low), best = oddsWord(high);
   if (worst === best) return `${/^\d/.test(worst) ? `About ${worst}` : `${worst[0].toUpperCase()}${worst.slice(1)}`} to 1 all day`;
+  if (worst === 'less than 0.1') return `No better than ${best} to 1 all day`;
   return `Between ${worst} and ${best} to 1 as the day goes`;
 }
 

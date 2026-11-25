@@ -262,8 +262,8 @@ export function planFleetAttack(g: Game, id: number, target: number, viewer: str
     if (at.shore > 0) plan.lines.push({ label: 'Shore batteries', value: port ? `The guns of ${port}` : 'The harbour\'s guns', effect: `Worth ${Math.round(at.shore)} to the defence` });
   }
   if (airA > 0.5 || airD > 0.5) plan.lines.push({ label: 'Air', value: airA > airD ? 'You have the stronger air cover from the coast' : airD > airA ? 'The enemy has the stronger air cover from the coast' : 'Even', effect: `Worth ${Math.round(airA)} against ${Math.round(airD)}` });
-  // (1.5.3, playtest #33) Where both ends of the swing read the same, they are said once: "More than 10 to 1 all day"
-  // (seaplan.ts, shared with the month's sea forecast).
+  // (1.5.3, playtest #33) Where both ends of the swing read the same, they are said once: "More than 10 to 1 all day";
+  // and odds that round to nothing are "less than 0.1", not "0.0" (seaplan.ts, shared with the month's sea forecast).
   plan.lines.push({ label: 'Odds', value: `${oddsWord(mid)} to 1`, effect: oddsSwing(plan.odds.low, plan.odds.high) });
   if (reported) plan.lines.push({ label: 'Not identified', value: unseen, effect: 'Not in these figures' });
   if (!at.harbour) plan.lines.push({ label: 'Search', value: seaPicture(g, at.zone, f.nat).word });

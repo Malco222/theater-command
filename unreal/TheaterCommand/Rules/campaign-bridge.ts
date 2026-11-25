@@ -102,6 +102,7 @@ import { airAct, airPage } from '../../../src/campaign/airpages';
 import { fleetOptions, fleetView, orderBombard, orderEscort, orderFleetAttackNow, orderMerge, orderSplit, previewBombard, previewFleetAttack, whyNotSplit } from '../../../src/campaign/turn';
 import { breakUp as breakCorps, breakUpOn, rejoin as rejoinCorps, rejoinTargets, setBreakUp, whyNotBreakUp, whyNotRejoin } from '../../../src/campaign/breakup';
 import { fleetAttackOn, setFleetAttack } from '../../../src/campaign/fleetattack';
+import { oddsWord } from '../../../src/campaign/seaplan';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
 import { cityOrders as ordersBook, inMonths as readyWhen, type CityOrders as CityBook } from '../../../src/campaign/orders';
 import { townName } from '../../../src/campaign/towns';
@@ -4594,7 +4595,8 @@ function fleetPage(s: Game, id: number): Page | null {
     const where = p ? (p.where === 'harbour' ? `In harbour${them?.known === 'exact' ? ` at ${p.port}` : ''}.` : `At sea, in the ${p.zoneName}.`) : '';
     return {
       nat: them?.nat ?? '', title: them?.name ?? 'An enemy fleet',
-      lines: [where, p?.odds ? `${p.verdict}: ${p.odds.mid >= 9.95 ? 'more than 10' : p.odds.mid.toFixed(1)} to 1.` : 'Its strength is not known.'].filter(Boolean),
+      // (1.5.3) Hopeless odds read "less than 0.1 to 1", not "0.0 to 1", as on the card.
+      lines: [where, p?.odds ? `${p.verdict}: ${oddsWord(p.odds.mid)} to 1.` : 'Its strength is not known.'].filter(Boolean),
       buttons: [{ label: 'ATTACK', act: `open:fleetattack:${id}:${t}`, ok: up, tip: 'Shows the odds first. Or drop the fleet on theirs on the map.' }],
     };
   });
@@ -4643,7 +4645,6 @@ function fleetAttackPage(s: Game, id: number, target: number): Page | null {
   const p = previewFleetAttack(s, id, target);
   if (!p) return null;
   const share = (x: number): string => `${Math.round(x * 100)}%`;
-  const odds = (x: number): string => (x >= 9.95 ? 'more than 10' : x.toFixed(1));
   // (1.5.3, playtest #26) "1 cruiser and 3 destroyers": the last of a list after "and".
   const lost = (x: Record<string, number>): string => {
     const parts = ['bb', 'cv', 'ca', 'dd', 'ss'].filter((c) => (x[c] ?? 0) > 0).map((c) => `${x[c]} ${SHIP_WORD[c][x[c] === 1 ? 0 : 1]}`);
@@ -4682,7 +4683,8 @@ function fleetAttackPage(s: Game, id: number, target: number): Page | null {
   ] : [];
   return {
     id: `fleetattack:${id}:${target}`, title: `ATTACK ${name.toUpperCase()}?`,
-    headline: p.why ? p.why : p.odds ? `${p.verdict}: ${odds(p.odds.mid)} to 1, about ${share(p.win)} to win` : 'Its strength is not known',
+    // (1.5.3) The odds as the card's own lines say them: "more than 10", and "less than 0.1", not "0.0" (seaplan.ts).
+    headline: p.why ? p.why : p.odds ? `${p.verdict}: ${oddsWord(p.odds.mid)} to 1, about ${share(p.win)} to win` : 'Its strength is not known',
     note: `${card.name} against ${name}, ${where}. ${p.where === 'harbour' ? 'Ships at anchor cannot manoeuvre, and the harbour\'s guns fire on the attackers.' : 'Fought at once, on the ships, guns, air cover, training and readiness of both sides.'}`,
     top: [
       { label: 'SEND THEM IN', act: `fleetattack:${id}:${target}`, ok: !p.why, tip: p.why ?? 'The fleet sails at once and the battle is fought now. The side that loses makes for its home port.', danger: !p.why && p.win < 0.4 },
