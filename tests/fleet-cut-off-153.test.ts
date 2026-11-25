@@ -7,7 +7,8 @@
 //     rules want), and a click on a sea, or on its work, is refused with its cut-off line.
 //  3. (The review of 2.) The browser's paper, its hint bar and a right-click on land no longer tell it to click a ringed
 //     sea: they give its cut-off line, as the 3D game's tray does. A fleet also held where this month's battle left it is
-//     refused with that reason first, as the bridge answers it (fleetWhyId).
+//     refused with that reason first, as the bridge answers it (fleetWhyId). (The review of 3.) A right-click on land in the
+//     3D game gives the same lines, from fleetInHand's held and cut (RightClickOn).
 import { describe, expect, it } from 'vitest';
 import { atWar, createGame, declareWar } from '../src/campaign/game';
 import { cutOff, cutOffLine, fleetReach, harbourFor, rebase, sail, zoneOf } from '../src/campaign/navy';
@@ -189,6 +190,10 @@ describe("the browser's paper for a cut-off fleet in hand", () => {
     expect(out.ok).toBe(false);
     expect(out.note).toBe(held);
     expect(page(f.id).sections.find((x) => x.heading === 'SEAS IN ITS REACH')?.text).toBe(held);
+    // The 3D game's tray, and a right-click on land there, give the held reason before the cut-off line: fleetInHand has both.
+    const hand = TC().fleetInHand(f.id) as { held: string; cut: string };
+    expect(hand.held).toBe(held);
+    expect(hand.cut).toBe(cutOffLine(g, f));
     // The browser asks the held reason first (fleetWhy, fleetStuck) and its list of seas gives it in place of the cut-off line.
     expect(browser).toContain('return f.attacked === g.turn ? fleetOptions(g, f.id)?.held ?? \'\' : \'\';');
     expect(browser).toContain('const cut = o.held ? \'\' : cutOffLine(g, f);');

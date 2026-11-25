@@ -6711,8 +6711,9 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 						}
 					}
 				}
-				// (1.5.3, the 1.5.2 review) A fleet cut off beyond a shut strait is not told a sea is too far: its line says why, as
-				// a right-click there answers it.
+				// (1.5.3, the 1.5.2 review) A fleet cut off beyond a shut strait is not told a sea is too far: over a sea no gate
+				// bars, its line says why, as a right-click there answers it. Over a barred sea the gate's red line says why, as the
+				// browser's tip does, and a right-click there gives its cut-off line, as the browser's click does.
 				HoverTip = FText::FromString(!FleetHand.Held.IsEmpty() ? FString::Printf(TEXT("%s%s\n%s"), *Name, *Known, *FleetHand.Held)
 					: Held->Reach.Contains(Sea)
 					? FString::Printf(TEXT("%s%s\nRight-click: %s sails here to %s.%s"), *Name, *Known, *Held->Name, FleetNext == TEXT("raid") ? TEXT("raid merchant shipping") : FleetNext == TEXT("hunt") ? TEXT("hunt submarines") : TEXT("patrol"), *Attack)
@@ -9485,7 +9486,15 @@ void ACampaignPlayerController::RightClickOn(int32 RegionId, int32 Sea, bool bOn
 		}
 		else
 		{
-			Notify(TEXT("A fleet keeps to the sea: right-click one of the ringed seas, a friendly port tinted blue to make it the fleet's new home, or its own harbour to bring it in."), 6.0);
+			// (1.5.3, the 1.5.2 review) Held where this month's battle left it, or cut off beyond a shut strait (no sea is ringed
+			// for it), it is not told to right-click a ringed sea: its line says why, held first, as the tray's hint and the
+			// browser say it, with the way home where a harbour on its side can take it, and the coasts its guns can still shell.
+			const TCHAR* ShellsStill = FleetHand.Coasts.Num() > 0 ? TEXT(" A coast in red can still be shelled.") : TEXT("");
+			const FString HeldOrCutLand = !FleetHand.Held.IsEmpty() ? FString::Printf(TEXT("%s%s"), *FleetHand.Held, ShellsStill)
+				: !FleetHand.Cut.IsEmpty() ? FString::Printf(TEXT("%s%s%s"), *FleetHand.Cut, FleetHand.HomeTip.IsEmpty() ? TEXT("") : TEXT(" RETURN TO HARBOUR takes it to a harbour on its side."), ShellsStill)
+				: FString();
+			Notify(!HeldOrCutLand.IsEmpty() ? HeldOrCutLand
+				: FString(TEXT("A fleet keeps to the sea: right-click one of the ringed seas, a friendly port tinted blue to make it the fleet's new home, or its own harbour to bring it in.")), 6.0);
 		}
 	}
 }
