@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f59f5c0c 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 9d69d65d 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -12708,6 +12708,7 @@
     openPilots: () => openPilots,
     openWorldAir: () => openWorldAir,
     overOcean: () => overOcean,
+    pilotWords: () => pilotWords,
     poolIn: () => poolIn,
     previewAir: () => previewAir,
     raid: () => raid,
@@ -12715,6 +12716,7 @@
     ratedAir: () => ratedAir,
     rebaseAir: () => rebaseAir,
     rungsOf: () => rungsOf,
+    schoolWords: () => schoolWords,
     seaKm: () => seaKm,
     seedClass: () => seedClass,
     seedFields: () => seedFields,
@@ -25018,7 +25020,7 @@
     if (!esc.length) return { types: `Defending fighters at ${height(band)} m: ${namesOf(def)}.`, edge: null };
     const E = a.typeEdge ?? 0, x = Math.exp(Math.abs(E) / 2) - 1;
     const edge4 = x < 0.02 ? "The aircraft are about even." : `The ${E > 0 ? "escort's" : "defenders'"} aircraft are about ${Math.round(x * 100)}% stronger.`;
-    return { types: `Fighters at ${height(band)} m: ${namesOf(esc)} against ${namesOf(def)}.`, edge: edge4 };
+    return { types: `Fighters at ${height(band)} m: ${namesOf(esc)} against ${namesOf(def)}.`, edge: edge4, ...a.pilotsLine ? { pilots: a.pilotsLine } : {} };
   }
 
   // ../../data/campaign/intel.json
@@ -43155,7 +43157,27 @@
     const h = kind === "ftr" ? blend(hoursOf(g2, f), f.ftr, inHours, n) : hoursOf(g2, f);
     if (h === null) delete f.hours;
     else f.hours = h;
-    f.fxp = blend(fxpOf(g2, f), had, inXp, n) ?? 0;
+    const was = fxpOf(g2, f);
+    f.fxp = blend(was, had, inXp, n) ?? 0;
+    f.joined = f.joined?.on === g2.turn ? { ...f.joined, n: f.joined.n + n } : { on: g2.turn, n, was };
+  }
+  var FIGHTER_WAY = { turn: "turning fight", "dive-zoom": "dive and climb" };
+  function pilotWords(g2, f) {
+    if (!unitsDecide(g2)) return { pilots: "", joined: "" };
+    const xp = fxpOf(g2, f), h = hoursOf(g2, f), j = f.joined;
+    const pilots = `${grade(xp)} pilots${h !== null ? `, ${Math.round(h)} hours' training` : ""}.`;
+    const joined3 = j && j.on === g2.turn && j.n >= 1 && xp < j.was && grade(xp) !== grade(j.was) ? `${Math.round(j.n)} new pilot${Math.round(j.n) === 1 ? "" : "s"} joined this month.` : "";
+    return { pilots, joined: joined3 };
+  }
+  function schoolWords(g2, f) {
+    const A = unitsDecide(g2) ? armsOf(g2, f.nat)?.air : void 0;
+    if (!A) return "";
+    const deck = deckBred2(f), h = deck ? A.deck : A.school;
+    const school = h === null ? "" : deck ? `Your carrier school gives ${Math.round(h)} hours before combat.` : `Your flying schools give ${Math.round(h)} hours before combat.`;
+    const w = A.fighter;
+    const training2 = w && w.next !== void 0 && w.ready !== void 0 && g2.turn < w.ready;
+    const doctrine = !w ? "" : training2 ? `Fighter doctrine: ${FIGHTER_WAY[w.id]}; ${FIGHTER_WAY[w.next]} ready in ${turnToDate(w.ready).label}.` : `Fighter doctrine: ${FIGHTER_WAY[wayNow(g2, w)]}.`;
+    return [school, doctrine].filter(Boolean).join(" ");
   }
   function openPilots(g2) {
     if (!unitsDecide(g2)) return;
@@ -44322,6 +44344,21 @@
       const pilots = (f) => unitsDecide(g2) ? { h: hoursOf(g2, f), q: heldOf(g2, f) } : {};
       const E = typeEdge(g2, out.att.map((x) => ({ f: x.f, w: x.ftr * worth2(g2, x.f), ...pilots(x.f) })), out.def.map((x) => ({ f: x.f, w: x.f.ftr * x.w * worth2(g2, x.f), ...pilots(x.f) })), m);
       out.typeEdge = E;
+      if (lawK(g2) > 0) {
+        const mean = (xs) => {
+          let s = 0, n = 0;
+          for (const x of xs) {
+            if (x.w <= 0) continue;
+            const h = hoursOf(g2, x.f);
+            if (h === null) return null;
+            s += x.w * h;
+            n += x.w;
+          }
+          return n > 0 ? s / n : null;
+        };
+        const ours = mean(out.att.map((x) => ({ f: x.f, w: x.ftr }))), theirs = mean(out.def.map((x) => ({ f: x.f, w: x.f.ftr * x.w })));
+        if (ours !== null && theirs !== null) out.pilotsLine = `Pilots' training: ours ${Math.round(ours)} hours, theirs ${Math.round(theirs)}.`;
+      }
       out.Epow *= Math.exp(E / 2);
       out.Dpow *= Math.exp(-E / 2);
       dPlain *= Math.exp(-E / 2);
@@ -57930,6 +57967,8 @@
       range: kind === "bmr" ? R2.bmr : kind === "ftr" ? R2.ftr : Math.max(R2.ftr, R2.bmr),
       crowd: crowding(g2, f),
       mine: f.nat === viewer,
+      ...pilotWords(g2, f),
+      schools: own ? schoolWords(g2, f) : "",
       // Weather (ruling 127, 143): a grounded group's card says why, and next month's chances.
       ...grounded(g2, f) ? { sky: [whyNotSky(g2, f, -1), forecastLine(g2, zoneOfGroup(g2, f), g2.turn + 1, "Next month")] } : wrecked(g2, f) ? { sky: [whyNotField(g2, f)] } : {}
     };
@@ -65414,7 +65453,7 @@
   var BACK = { label: "BACK TO THE AIRFIELD", act: "open:airfield", ok: true, tip: "" };
   function groupLines(x, crowd = true) {
     return [
-      `${craft(x)}${x.command ? `, of ${x.command}` : ""}${x.leader ? `. ${x.leader} commands` : ""}. Reaches ${num4(x.range)} km. Readiness ${pct12(x.ready)}.`,
+      `${craft(x)}${x.command ? `, of ${x.command}` : ""}${x.leader ? `. ${x.leader} commands` : ""}. Reaches ${num4(x.range)} km. Readiness ${pct12(x.ready)}.${x.pilots ? ` ${x.pilots}` : ""}${x.joined ? ` ${x.joined}` : ""}`,
       `${x.doing}.${crowd && x.crowd < 1 ? ` The airfield is crowded: only ${pct12(x.crowd)} of it can fly.` : ""}`
     ];
   }
@@ -65474,7 +65513,7 @@
       id: `group:${id}`,
       title: x.name.toUpperCase(),
       headline: `${craft(x)} ${deck ? "aboard the" : x.ashore >= 0 ? "ashore at" : "at"} ${x.baseName}`,
-      note: `${groupLines(x).join(" ")}${x.ashore >= 0 ? ` A carrier wing${x.fleetName ? ` of the ${x.fleetName}` : ""}, ordered ashore: while it is here its carriers fight as empty carriers.` : ""}`,
+      note: `${x.schools ? `${x.schools} ` : ""}${groupLines(x).join(" ")}${x.ashore >= 0 ? ` A carrier wing${x.fleetName ? ` of the ${x.fleetName}` : ""}, ordered ashore: while it is here its carriers fight as empty carriers.` : ""}`,
       top,
       sections: [{ heading: "STANDING ORDERS", text: "What it does between raids.", rows: jobs }, { heading: "RAIDS", text: "One raid a month. A raid is flown the moment you order it, and the group is away until next month.", rows: raids }]
     };
