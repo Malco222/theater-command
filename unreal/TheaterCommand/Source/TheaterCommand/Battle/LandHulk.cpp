@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <unordered_map>
@@ -137,6 +138,79 @@ namespace LandHulk
 			Ways(H.Heading, Fx, Fy, Rx, Ry);
 			const double A = (X - H.X) * Fx + (Y - H.Y) * Fy, B = (X - H.X) * Rx + (Y - H.Y) * Ry;
 			return std::hypot(std::max({ H.FootLoX - A, 0.0, A - H.FootHiX }), std::max({ H.FootLoY - B, 0.0, B - H.FootHiY }));
+		}
+
+		/** How far a place lies from a straight piece of line (A to B; a point where they are one). */
+		double FromSegment(double Ax, double Ay, double Bx, double By, double X, double Y)
+		{
+			const double Dx = Bx - Ax, Dy = By - Ay, Long2 = Dx * Dx + Dy * Dy;
+			const double T = Long2 > 0.0 ? std::clamp(((X - Ax) * Dx + (Y - Ay) * Dy) / Long2, 0.0, 1.0) : 0.0;
+			return std::hypot(X - Ax - T * Dx, Y - Ay - T * Dy);
+		}
+
+		/** Where a track is drawn at battle time T, as LandKit's Vehicle::PlaceAt draws a machine: her kept points joined
+		 * straight, her first before it and her last after it, and a step faster than 25 m/s (the recording putting her
+		 * somewhere, not her driving there) held at its start. False where none of her points there is a number. */
+		bool PlaceOf(const LandFeed::Track& Tr, double T, double& X, double& Y)
+		{
+			const auto Ok = [](const LandFeed::Point& P) { return P.X == P.X && P.Y == P.Y && P.T == P.T; };
+			const std::vector<LandFeed::Point>& A = Tr.At;
+			if (A.empty()) return false;
+			size_t Hi = 0;
+			while (Hi < A.size() && A[Hi].T <= T) ++Hi;
+			if (Hi == 0 || Hi == A.size())
+			{
+				const LandFeed::Point& P = A[Hi == 0 ? 0 : A.size() - 1];
+				if (!Ok(P)) return false;
+				X = P.X;
+				Y = P.Y;
+				return true;
+			}
+			const LandFeed::Point& L = A[Hi - 1];
+			const LandFeed::Point& H = A[Hi];
+			if (!Ok(L) || !Ok(H))
+			{
+				if (!Ok(L) && !Ok(H)) return false;
+				X = Ok(L) ? L.X : H.X;
+				Y = Ok(L) ? L.Y : H.Y;
+				return true;
+			}
+			const double Span = H.T - L.T;
+			if (Span <= 1e-9 || std::hypot(H.X - L.X, H.Y - L.Y) > 25.0 * Span)
+			{
+				X = L.X;
+				Y = L.Y;
+				return true;
+			}
+			const double U = (T - L.T) / Span;
+			X = L.X + (H.X - L.X) * U;
+			Y = L.Y + (H.Y - L.Y) * U;
+			return true;
+		}
+
+		/** How far a place lies from a convex outline's edge (its corners in order, either way round): under 0 inside. */
+		double FromConvex(const std::vector<std::pair<double, double>>& P, double X, double Y)
+		{
+			double Edge = 1e18;
+			int Left = 0, Right = 0;
+			for (size_t K = 0; K < P.size(); ++K)
+			{
+				const std::pair<double, double>& A = P[K];
+				const std::pair<double, double>& B = P[(K + 1) % P.size()];
+				Edge = std::min(Edge, FromSegment(A.first, A.second, B.first, B.second, X, Y));
+				const double Cross = (B.first - A.first) * (Y - A.second) - (B.second - A.second) * (X - A.first);
+				if (Cross > 1e-9) ++Left;
+				else if (Cross < -1e-9) ++Right;
+			}
+			return Left > 0 && Right > 0 ? Edge : -Edge;
+		}
+
+		/** How far a place lies from a box's edge ([x0, y0, x1, y1]): under 0 inside (1e18 for a box of fewer numbers). */
+		double FromBox(const std::vector<double>& B, double X, double Y)
+		{
+			if (B.size() < 4) return 1e18;
+			const double Ox = std::max({ B[0] - X, 0.0, X - B[2] }), Oy = std::max({ B[1] - Y, 0.0, Y - B[3] });
+			return Ox > 0.0 || Oy > 0.0 ? std::hypot(Ox, Oy) : -std::min({ X - B[0], B[2] - X, Y - B[1], B[3] - Y });
 		}
 
 		/** Places on the field in squares, for asking what lies near. */
@@ -2034,6 +2108,195 @@ namespace LandHulk
 		F.DefY = 0.5 * (D[1] + D[3]);
 		F.AttNat = Rec.Sides[0].Nat;
 		F.DefNat = Rec.Sides[1].Nat;
+		// A live battle (release 2): it opens with nothing fought (no tracks, rounds or events yet), so no ways to keep
+		// off and no ground fought over. Kept off instead: the ground its men and machines are likely to cross (Likely,
+		// FromLikely, FromCore); and the ground between the two zones' back edges off its core stands for the fought-over
+		// (every 25 m; the axis is then the line between the zones' middles, Lay's own where there are no tracks).
+		if (Rec.bLive && F.bSides)
+		{
+			Field::Likely& L = F.Live;
+			L.bOn = true;
+			const double W = Rec.Ground.W > 0.0 ? Rec.Ground.W : std::max(A[2], D[2]) + 300.0;
+			const double H = Rec.Ground.H > 0.0 ? Rec.Ground.H : std::max(A[3], D[3]) + 300.0;
+			L.Inside[0] = EdgeClear;
+			L.Inside[1] = EdgeClear;
+			L.Inside[2] = W - EdgeClear;
+			L.Inside[3] = H - EdgeClear;
+			const auto Grown = [](const double* Box, double By) { return std::vector<double>{ Box[0] - By, Box[1] - By, Box[2] + By, Box[3] + By }; };
+			// Where the rules draw each side up (units.ts deploy, its plain drawUp: the foot in the front line across its
+			// zone 40 m in from the side facing the enemy, the tanks and lorries 110 m behind it on its wings, a defence of
+			// four or more keeping a quarter back as a reserve, the guns 230 m behind; GAP between blocks in a row; the
+			// attacker's about its zone's middle, the defender's about its town kept 300 m inside its zone's ends). A
+			// river or a city's streets on the field draw a side up otherwise (the bend's and the river's lanes, the
+			// second river, the street edge): there each whole zone is kept, as the rules' blocks may stand anywhere in it.
+			bool bPlain = Rec.Ground.TownSize != "city" && Rec.Ground.TownSize != "capital" && Rec.Ground.Terrain != "urban";
+			{
+				std::vector<uint8_t> Used(Rec.Ground.Grounds.size(), 0);
+				for (const uint8_t Cell : Rec.Ground.Ground)
+				{
+					if (Cell < Used.size()) Used[Cell] = 1;
+				}
+				for (size_t K = 0; bPlain && K < Rec.Ground.Grounds.size(); ++K)
+				{
+					const std::string& Gw = Rec.Ground.Grounds[K];
+					if (Used[K] != 0 && (Gw == "water" || Gw == "bridge" || Gw == "blown" || Gw == "suburb" || Gw == "industry" || Gw == "park")) bPlain = false;
+				}
+			}
+			constexpr double Gap = 40.0;
+			double Widest = 0.0;
+			for (const LandFeed::Block& B : Rec.Blocks) Widest = std::max({ Widest, B.W, B.D });
+			double FrontY[2] = { A[3] - 40.0, D[1] + 40.0 };
+			double FrontLo[2] = { 1e18, 1e18 }, FrontHi[2] = { -1e18, -1e18 };
+			for (int Side = 0; Side < 2; ++Side)
+			{
+				const double* Z = Side == 0 ? A : D;
+				const double Dir = Side == 0 ? 1.0 : -1.0;
+				const double Front = FrontY[Side];
+				const double Cx = Side == 1 && Rec.Ground.TownR > 0.0 ? std::min(Z[2] - 300.0, std::max(Z[0] + 300.0, Rec.Ground.TownX)) : 0.5 * (Z[0] + Z[2]);
+				// (rowsOf: the foot, the tanks and lorries, the guns; half the tanks in front where there is no foot; a corps
+				// from next door left out, it walks on later)
+				std::vector<const LandFeed::Block*> Line[3];
+				for (const LandFeed::Block& B : Rec.Blocks)
+				{
+					if (B.Side != Side || B.bJoins) continue;
+					if (B.Kind == "inf" || B.Kind == "mtn" || B.Kind == "eng" || B.Kind == "fort" || B.Kind == "cav") Line[0].push_back(&B);
+					else if (B.Kind == "arm" || B.Kind == "mot") Line[1].push_back(&B);
+					else if (B.Kind == "art") Line[2].push_back(&B);
+				}
+				if (Line[0].empty() && !Line[1].empty())
+				{
+					const size_t Half = (Line[1].size() + 1) / 2;
+					Line[0].assign(Line[1].begin(), Line[1].begin() + static_cast<std::ptrdiff_t>(Half));
+					Line[1].erase(Line[1].begin(), Line[1].begin() + static_cast<std::ptrdiff_t>(Half));
+				}
+				// (a defence's reserve: the last division of whichever corps has most in the line, a quarter of it)
+				std::vector<const LandFeed::Block*> Held;
+				if (Side == 1 && Line[0].size() >= 4)
+				{
+					for (size_t N = std::max<size_t>(1, Line[0].size() / 4); N > 0; --N)
+					{
+						const auto Count = [&](int Corps)
+						{
+							size_t C = 0;
+							for (const LandFeed::Block* B : Line[0]) C += B->Corps == Corps ? 1 : 0;
+							return C;
+						};
+						size_t At = Line[0].size() - 1;
+						for (size_t I = Line[0].size(); I-- > 0;)
+						{
+							if (Count(Line[0][I]->Corps) > Count(Line[0][At]->Corps)) At = I;
+						}
+						Held.insert(Held.begin(), Line[0][At]);
+						Line[0].erase(Line[0].begin() + static_cast<std::ptrdiff_t>(At));
+					}
+				}
+				const auto Put = [&](const LandFeed::Block* B, double X, double Y)
+				{
+					X = std::min(W - 0.5 * B->W - 10.0, std::max(0.5 * B->W + 10.0, X));
+					Y = std::min(H - 40.0, std::max(40.0, Y));
+					L.Stands.push_back({ X - 0.5 * B->W, Y - 0.5 * B->D, X + 0.5 * B->W, Y + 0.5 * B->D, static_cast<double>(Side) });
+				};
+				const auto Place = [&](const std::vector<const LandFeed::Block*>& Row, double Y, bool bWings) -> bool
+				{
+					if (bWings)
+					{
+						// (half on each wing beyond the front line's ends; none where a wing would run off the field)
+						const double Span = static_cast<double>(Line[0].size()) * (150.0 + Gap) / 2.0;
+						std::vector<double> At;
+						bool bFits = true;
+						for (size_t I = 0; I < Row.size(); ++I)
+						{
+							const double Way = I % 2 == 0 ? -1.0 : 1.0;
+							At.push_back(Cx + Way * (Span + 60.0 + static_cast<double>(I / 2) * (Row[I]->W + Gap)));
+							bFits = bFits && At[I] - 0.5 * Row[I]->W >= 10.0 && At[I] + 0.5 * Row[I]->W <= W - 10.0;
+						}
+						if (bFits)
+						{
+							for (size_t I = 0; I < Row.size(); ++I) Put(Row[I], At[I], Y);
+							return true;
+						}
+					}
+					double Width = -Gap;
+					for (const LandFeed::Block* B : Row) Width += B->W + Gap;
+					double X = Cx - 0.5 * Width;
+					for (const LandFeed::Block* B : Row)
+					{
+						Put(B, X + 0.5 * B->W, Y);
+						X += B->W + Gap;
+					}
+					return false;
+				};
+				const size_t First = L.Stands.size();
+				Place(Line[0], Front, false);
+				const bool bWide = Place(Line[1], Front - Dir * 110.0, true);
+				if (!Held.empty()) Place(Held, Front - Dir * (bWide || Line[1].empty() ? 110.0 : 170.0), false);
+				Place(Line[2], Front - Dir * 230.0, false);
+				L.bDrawnUp[Side] = bPlain;
+				for (size_t K = First; K < L.Stands.size(); ++K)
+				{
+					FrontLo[Side] = std::min(FrontLo[Side], L.Stands[K][0]);
+					FrontHi[Side] = std::max(FrontHi[Side], L.Stands[K][2]);
+					if (bPlain) L.Core.push_back(Grown(L.Stands[K].data(), StartClear));
+				}
+				if (!bPlain) L.Core.push_back(Grown(Z, StartClear));
+				if (FrontLo[Side] > FrontHi[Side])
+				{
+					FrontLo[Side] = FrontHi[Side] = 0.5 * (Z[0] + Z[2]);
+				}
+			}
+			L.FrontAtt = FrontHi[0] - FrontLo[0];
+			L.FrontDef = FrontHi[1] - FrontLo[1];
+			// (the setup step's room, where the player stands his blocks before the clock runs, read as the header gives
+			// it: grown as the rest, and by its widest block's half more, which may stand over its edge)
+			if (Rec.bSetup && (Rec.Room[2] - Rec.Room[0]) * (Rec.Room[3] - Rec.Room[1]) > 0.0) L.Core.push_back(Grown(Rec.Room, StartClear + 0.5 * Widest));
+			for (const LandFeed::Block& B : Rec.Blocks) L.bJoins = L.bJoins || B.bJoins;
+			// (a corps from next door walks on by the edge facing where it comes from, or its own back edge, some 200 m in:
+			// sim.ts joinEdge and walkOn, LAND.join; any edge but the enemy's back one, so every edge kept)
+			if (L.bJoins)
+			{
+				L.Core.push_back({ -1e6, -1e6, JoinClear, 1e6 });
+				L.Core.push_back({ W - JoinClear, -1e6, 1e6, 1e6 });
+				L.Core.push_back({ -1e6, -1e6, 1e6, JoinClear });
+				L.Core.push_back({ -1e6, H - JoinClear, 1e6, 1e6 });
+			}
+			// (the advance: between the two fronts as drawn up, each from its westmost block to its eastmost, wings and all)
+			L.Advance = { { FrontLo[0], FrontY[0] }, { FrontHi[0], FrontY[0] }, { FrontHi[1], FrontY[1] }, { FrontLo[1], FrontY[1] } };
+			// Round the core: each side's whole zone (its blocks shift in it), and behind its blocks and its advance to its
+			// own back edge (a block falls back, or runs, straight back: sim.ts withdraw and rout).
+			const double AdvLo = std::min(FrontLo[0], FrontLo[1]) - AdvanceMargin, AdvHi = std::max(FrontHi[0], FrontHi[1]) + AdvanceMargin;
+			L.Areas.push_back(Grown(A, StartClear));
+			L.Areas.push_back(Grown(D, StartClear));
+			L.Areas.push_back({ std::min(AdvLo, FrontLo[0] - StartClear), -1e6, std::max(AdvHi, FrontHi[0] + StartClear), FrontY[0] + StartClear });
+			L.Areas.push_back({ std::min(AdvLo, FrontLo[1] - StartClear), FrontY[1] - StartClear, std::max(AdvHi, FrontHi[1] + StartClear), 1e6 });
+			// The stand-in for the fought-over ground: between the zones' back edges along the line between their middles,
+			// off the core (the groups along the old lines and at the junctions and the village's edge may lie round it).
+			double Ux = F.DefX - F.AttX, Uy = F.DefY - F.AttY;
+			const double Apart2 = std::hypot(Ux, Uy);
+			if (Apart2 > 1.0)
+			{
+				Ux /= Apart2;
+				Uy /= Apart2;
+				double After = 1e18, Before = -1e18;
+				for (int C = 0; C < 4; ++C)
+				{
+					const double Cx = C % 2 == 0 ? A[0] : A[2], Cy = C < 2 ? A[1] : A[3];
+					After = std::min(After, (Cx - F.AttX) * Ux + (Cy - F.AttY) * Uy);
+					const double Ex = C % 2 == 0 ? D[0] : D[2], Ey = C < 2 ? D[1] : D[3];
+					Before = std::max(Before, (Ex - F.AttX) * Ux + (Ey - F.AttY) * Uy);
+				}
+				for (double Y = L.Inside[1]; Y <= L.Inside[3]; Y += 25.0)
+				{
+					for (double X = L.Inside[0]; X <= L.Inside[2]; X += 25.0)
+					{
+						const double T = (X - F.AttX) * Ux + (Y - F.AttY) * Uy;
+						if (T >= After && T <= Before && FromCore(F, X, Y) > 0.0)
+						{
+							F.Fought.emplace_back(X, Y);
+						}
+					}
+				}
+			}
+		}
 		const LandField::Ground* Gp = &G;
 		F.Open = [Gp, Holes](double X, double Y)
 		{
@@ -2067,6 +2330,26 @@ namespace LandHulk
 		return F;
 	}
 
+	double FromCore(const Field& F, double X, double Y)
+	{
+		const Field::Likely& L = F.Live;
+		if (!L.bOn) return 1e9;
+		// (the field's edges, each block's box and the room and side strips, the advance and its margin: the nearest)
+		double Most2 = std::min({ X - L.Inside[0], L.Inside[2] - X, Y - L.Inside[1], L.Inside[3] - Y });
+		for (const std::vector<double>& B : L.Core) Most2 = std::min(Most2, FromBox(B, X, Y));
+		if (L.Advance.size() >= 3) Most2 = std::min(Most2, FromConvex(L.Advance, X, Y) - AdvanceMargin);
+		return Most2;
+	}
+
+	double FromLikely(const Field& F, double X, double Y)
+	{
+		const Field::Likely& L = F.Live;
+		if (!L.bOn) return 1e9;
+		double Most2 = FromCore(F, X, Y);
+		for (const std::vector<double>& B : L.Areas) Most2 = std::min(Most2, FromBox(B, X, Y));
+		return Most2;
+	}
+
 	const LandKit::Model* Yard::ModelOf(size_t K) const
 	{
 		if (K >= KeyOf.size()) return nullptr;
@@ -2080,7 +2363,11 @@ namespace LandHulk
 		KeyOf.clear();
 		Cover.clear();
 		StandIns.clear();
-		Wanted = NoRoom = Read = 0;
+		Wanted = NoRoom = Read = OnLikely = 0;
+		Swept.clear();
+		DueAt.clear();
+		SoonAt.clear();
+		bLive = F.Live.bOn;
 		std::fill(std::begin(ByWhere), std::end(ByWhere), 0);
 		Asked = A;
 		Ground = F.Ground;
@@ -2235,7 +2522,9 @@ namespace LandHulk
 			{
 				const double AX = Line[K].first, AY = Line[K].second, BX = Line[K + 1].first, BY = Line[K + 1].second;
 				const double Long = std::hypot(BX - AX, BY - AY);
-				if (Long >= 4.0 && Long < 1e5 && InBox(0.5 * (AX + BX), 0.5 * (AY + BY)))
+				// (a live battle's: none over its core, where its blocks are drawn up and between its fronts; round it, where
+				// the rest of its start areas lie and its blocks fall back over, they may)
+				if (Long >= 4.0 && Long < 1e5 && InBox(0.5 * (AX + BX), 0.5 * (AY + BY)) && (!F.Live.bOn || FromCore(F, 0.5 * (AX + BX), 0.5 * (AY + BY)) > 0.0))
 				{
 					Pieces.push_back({ AX, AY, BX, BY, Long, (BX - AX) / Long, (BY - AY) / Long });
 				}
@@ -2275,7 +2564,7 @@ namespace LandHulk
 		std::vector<std::pair<double, double>> Spots;
 		for (const auto& P : F.Lines.Spots)
 		{
-			if (InBox(P.first, P.second)) Spots.push_back(P);
+			if (InBox(P.first, P.second) && (!F.Live.bOn || FromCore(F, P.first, P.second) > 0.0)) Spots.push_back(P);
 		}
 		// The battle's axis: through the middle of where its machines went, along the way they went.
 		double AxisX = 0.5 * (X0 + X1), AxisY = 0.5 * (Y0 + Y1), AxisUx = 1.0, AxisUy = 0.0;
@@ -2342,6 +2631,9 @@ namespace LandHulk
 		// (her scorched patch reaches about two metres past her outline: it is kept off the old ruts too, whose drawn
 		// ruts would show through it)
 		constexpr double PatchReach = 2.0;
+		// (a live battle's group along an old line or at a junction or the village's edge, laid now: off the likely
+		// ground's core only; any other, off all of it)
+		bool bStoryNow = false;
 		std::vector<std::pair<double, double>> Paths;
 		// Whether a wreck's outline lies clear: on open ground all round each ring, off the lanes and hedges, the
 		// recorded ways, this battle's blasts, what stands in the open, the old ruts, the field telephones' wires and the
@@ -2359,7 +2651,7 @@ namespace LandHulk
 						if (!F.Open(R.X + std::cos(Ang) * R.R * Share, R.Y + std::sin(Ang) * R.R * Share)) return false;
 					}
 				}
-				if (LaneAt.Near(R.X, R.Y, LaneClear + R.R + 0.5)) return false;
+				if (LaneAt.Near(R.X, R.Y, (F.Live.bOn ? LiveLaneClear : LaneClear) + R.R + 0.5)) return false;
 				if (HedgeAt.Near(R.X, R.Y, HedgeClear + R.R + 0.5)) return false;
 				if (VehicleAt.Near(R.X, R.Y, VehicleClear + R.R + 0.5)) return false;
 				if (ManAt.Near(R.X, R.Y, ManClear + R.R + 0.4)) return false;
@@ -2368,6 +2660,9 @@ namespace LandHulk
 				if (WayAt.Near(R.X, R.Y, WayClear + R.R + PatchMargin + 0.5)) return false;
 				if (WireAt.Near(R.X, R.Y, WireClear + R.R + 0.5)) return false;
 				if (HulkAt.Near(R.X, R.Y, R.R + Apart)) return false;
+				// (a live battle's: off the ground its men and machines are likely to cross, every ring of her; along an old
+				// line or at a junction or the village's edge, off its core)
+				if (F.Live.bOn && (bStoryNow ? FromCore(F, R.X, R.Y) : FromLikely(F, R.X, R.Y)) < R.R + 0.5) return false;
 			}
 			// (the cattle's paths last: their pieces are laid as the grass is, dearer to ask than all the rest)
 			if (F.Trodden && !Rings.empty())
@@ -2649,6 +2944,8 @@ namespace LandHulk
 		int Tries = 0;
 		const int MostTries = 40 * Target + 60;
 		std::vector<uint8_t> Used(static_cast<size_t>(Target), 0);
+		// (a live battle's groups' middles, kept LiveGroupApart apart)
+		std::vector<std::pair<double, double>> Middles;
 		while (Next < Order.size() && Tries < MostTries)
 		{
 			++Tries;
@@ -2696,11 +2993,30 @@ namespace LandHulk
 			}
 			else if (W == Where::Axis)
 			{
-				const double T = D.U(-1.0, 1.0) * AxisHalf * 0.85, Across = D.Bell() * 45.0;
+				const double T = D.U(-1.0, 1.0) * AxisHalf * 0.85;
+				double Across = D.Bell() * 45.0;
+				if (F.Live.bOn)
+				{
+					// (a live battle's axis runs through the middle of its advance, which is kept clear: the group lies
+					// beside it instead, out on one flank, 15 to 250 m past the likely ground, as an earlier battle's
+					// advance over the same field)
+					const double Flank = D.U() < 0.5 ? -1.0 : 1.0;
+					const double Past = D.U(15.0, 250.0);
+					double Out = 0.0;
+					for (int Step = 0; Step < 400 && FromLikely(F, AxisX + AxisUx * T - AxisUy * Flank * Out, AxisY + AxisUy * T + AxisUx * Flank * Out) <= 0.0; ++Step) Out += 10.0;
+					Across = Flank * (Out + Past);
+				}
 				Cx = AxisX + AxisUx * T - AxisUy * Across;
 				Cy = AxisY + AxisUy * T + AxisUx * Across;
 			}
 			if (!InBox(Cx, Cy)) continue;
+			bStoryNow = F.Live.bOn && (W == Where::OldLine || W == Where::Spot);
+			if (F.Live.bOn)
+			{
+				bool bCrowded = false;
+				for (const auto& M : Middles) bCrowded = bCrowded || std::hypot(M.first - Cx, M.second - Cy) < LiveGroupApart;
+				if (bCrowded) continue;
+			}
 			// (a platoon's few, a lone one now and then)
 			const int Size = std::min(static_cast<int>(Order.size() - Next), 1 + static_cast<int>(std::pow(D.U(), 1.4) * 3.6));
 			const double Spacing = D.U(13.0, 28.0);
@@ -2849,9 +3165,23 @@ namespace LandHulk
 			{
 				++ByWhere[static_cast<int>(W)];
 				++Group;
+				if (F.Live.bOn) Middles.emplace_back(Cx, Cy);
+				if (bStoryNow)
+				{
+					// (a group along an old line or at a junction or the village's edge on the likely ground round its core)
+					bool bOn = false;
+					for (size_t K = List.size() - static_cast<size_t>(Laid); K < List.size() && !bOn; ++K)
+					{
+						for (const Ring& R : List[K].Rings) bOn = bOn || FromLikely(F, R.X, R.Y) < R.R + 0.5;
+					}
+					OnLikely += bOn ? 1 : 0;
+				}
 			}
 		}
 		NoRoom = Target - static_cast<int>(List.size());
+		Swept.assign(List.size(), 0);
+		DueAt.assign(List.size(), 1e18);
+		SoonAt.assign(List.size(), 1e18);
 
 		// The squares Covers reads: each wreck's rings, her hull's footprint (her rings leave its corners: the grass stood
 		// through 2 to 4 in a hundred of each footprint), and her patch while it is fresh (the grass burnt there).
@@ -2883,6 +3213,8 @@ namespace LandHulk
 		if (Found == Cover.end()) return false;
 		for (const auto& [K, What] : Found->second)
 		{
+			// (a wreck the live battle's guard cleared away: the grass stands where she lay)
+			if (K < Swept.size() && Swept[K] != 0) continue;
 			const Hulk& H = List[K];
 			if (What >= 0)
 			{
@@ -2900,6 +3232,266 @@ namespace LandHulk
 				const double A = ((X - H.X) * Fx + (Y - H.Y) * Fy) / H.PatchLong, B = ((X - H.X) * Rx + (Y - H.Y) * Ry) / H.PatchWide;
 				if (A * A + B * B <= 0.85 * 0.85) return true;
 			}
+		}
+		return false;
+	}
+
+	std::vector<size_t> Yard::Reached(const LandFeed::Recording& Rec, std::vector<size_t>& Seen, double Crews, double Blend)
+	{
+		std::vector<size_t> Out;
+		if (List.empty()) return Out;
+		if (Swept.size() != List.size()) Swept.assign(List.size(), 0);
+		if (DueAt.size() != List.size()) DueAt.assign(List.size(), 1e18);
+		SoonAt.assign(List.size(), 1e18);
+		// (each wreck's reach round her anchor: her rings' farthest, for a quick look before her rings are read)
+		std::vector<double> Round(List.size(), 0.0);
+		for (size_t K = 0; K < List.size(); ++K)
+		{
+			for (const Ring& R : List[K].Rings) Round[K] = std::max(Round[K], std::hypot(R.X - List[K].X, R.Y - List[K].Y) + R.R);
+		}
+		// (a piece of a way, A at battle time Ta to B at Tb, as it is drawn between two kept points: when it first comes
+		// within Far of wreck K's outline, 1e18 never)
+		const auto When = [&](size_t K, double Ax, double Ay, double Ta, double Bx, double By, double Tb, double Far) -> double
+		{
+			const Hulk& H = List[K];
+			if (FromSegment(Ax, Ay, Bx, By, H.X, H.Y) >= Round[K] + Far) return 1e18;
+			const double Dx = Bx - Ax, Dy = By - Ay, Long2 = Dx * Dx + Dy * Dy;
+			double First = 1e18;
+			for (const Ring& R : H.Rings)
+			{
+				const double Reach = R.R + Far;
+				if (FromSegment(Ax, Ay, Bx, By, R.X, R.Y) >= Reach) continue;
+				const double Fx = Ax - R.X, Fy = Ay - R.Y, C = Fx * Fx + Fy * Fy - Reach * Reach;
+				double U = 0.0;
+				if (C > 0.0 && Long2 > 0.0)
+				{
+					// (where the line first crosses her ring's reach, the nearer of its two crossings)
+					const double B = Fx * Dx + Fy * Dy, Disc = std::max(0.0, B * B - Long2 * C);
+					U = std::clamp((-B - std::sqrt(Disc)) / Long2, 0.0, 1.0);
+				}
+				First = std::min(First, Ta + U * (Tb - Ta));
+			}
+			return First;
+		};
+		const auto Mark = [&](size_t K, double T)
+		{
+			if (Swept[K] != 0 || T >= 1e17) return;
+			if (DueAt[K] >= 1e17) Out.push_back(K);
+			DueAt[K] = std::min(DueAt[K], T);
+		};
+		const auto Touch = [&](double Ax, double Ay, double Ta, double Bx, double By, double Tb, double Far)
+		{
+			for (size_t K = 0; K < List.size(); ++K)
+			{
+				if (Swept[K] == 0) Mark(K, When(K, Ax, Ay, Ta, Bx, By, Tb, Far));
+			}
+		};
+		if (Seen.size() > Rec.Tracks.size()) Seen.clear();
+		Seen.resize(Rec.Tracks.size(), 0);
+		double Latest = -1e18;
+		for (const LandFeed::Track& Tr : Rec.Tracks)
+		{
+			if (!Tr.At.empty()) Latest = std::max(Latest, Tr.At.back().T);
+		}
+		for (size_t T = 0; T < Rec.Tracks.size(); ++T)
+		{
+			const LandFeed::Track& Tr = Rec.Tracks[T];
+			const double Far = Tr.IsVehicle() ? VehicleReach : ManReach;
+			const size_t N = Tr.At.size();
+			const auto Ok = [](const LandFeed::Point& P) { return P.X == P.X && P.Y == P.Y && P.T == P.T; };
+			// (a tank drawn rolling smoothly, Blend: her reach along a piece of her way BlendLead Blend her fastest more,
+			// over the kept points within the bell's reach of it and a step, 2.5 Blend and 0.1 s; a step faster than 25 m/s
+			// not counted, the screen putting her there unblended)
+			const bool bBlend = Blend > 0.0 && Blend == Blend && Tr.Role == "tank";
+			const double Bell = bBlend ? 2.5 * Blend + 0.1 : 0.0;
+			const auto Wide = [&](size_t I) -> double
+			{
+				if (!bBlend || I == 0 || I >= N) return Far;
+				const double Lo = Tr.At[I - 1].T - Bell, Hi = Tr.At[I].T + Bell;
+				size_t A = I, B = I;
+				while (A > 1 && Tr.At[A - 1].T > Lo) --A;
+				while (B + 1 < N && Tr.At[B].T < Hi) ++B;
+				double Fastest = 0.0;
+				for (size_t J = A; J <= B; ++J)
+				{
+					const LandFeed::Point& P = Tr.At[J - 1];
+					const LandFeed::Point& Q = Tr.At[J];
+					const double Dt = Q.T - P.T;
+					if (!Ok(P) || !Ok(Q) || Dt <= 1e-9) continue;
+					const double Speed = std::hypot(Q.X - P.X, Q.Y - P.Y) / Dt;
+					if (Speed <= 25.0) Fastest = std::max(Fastest, Speed);
+				}
+				return Far + BlendLead * Blend * Fastest;
+			};
+			// (a track shorter than read before was made again: read it whole; a smoothly rolling tank's way read again back
+			// over the bell's reach of her new points, as they widen it)
+			size_t From = Seen[T] <= N ? Seen[T] : 0;
+			if (bBlend && From > 1 && From < N)
+			{
+				const double Back = Tr.At[From - 1].T - Bell;
+				while (From > 1 && Tr.At[From - 1].T > Back) --From;
+			}
+			for (size_t I = From; I < N; ++I)
+			{
+				const LandFeed::Point& P = Tr.At[I];
+				const LandFeed::Point& Was = Tr.At[I > 0 ? I - 1 : 0];
+				if (Ok(P) && Ok(Was)) Touch(Was.X, Was.Y, Was.T, P.X, P.Y, P.T, Wide(I));
+			}
+			// (a knocked-out machine is drawn where she was at her fall from then on: LandKit's PlaceAt holds her a hair
+			// before it, on her kept points joined straight, and a live battle's machine is never pinned, the live drill
+			// stopping her where she is hit; and at her pin from its time where the reading pinned her (a recorded battle's
+			// jump to her formation place). Where the scene's crews bail out, a tank's run from her as far as Crews from her
+			// kill on.)
+			const bool bFell = Tr.IsVehicle() && Tr.Fell >= 0.0 && Tr.Fell == Tr.Fell;
+			const bool bPin = Tr.bPinned && Tr.PinX == Tr.PinX && Tr.PinY == Tr.PinY && Tr.PinFrom == Tr.PinFrom;
+			if (bFell || bPin)
+			{
+				const double Dead = Crews > 0.0 && Tr.Role == "tank" ? std::max(Far, Crews) : Far;
+				const double Since = bFell && bPin ? std::min(Tr.Fell, Tr.PinFrom) : bFell ? Tr.Fell : Tr.PinFrom;
+				if (bPin) Touch(Tr.PinX, Tr.PinY, Since, Tr.PinX, Tr.PinY, Since, Dead);
+				double Sx = 0.0, Sy = 0.0;
+				if (bFell && PlaceOf(Tr, Tr.Fell - 1e-3, Sx, Sy)) Touch(Sx, Sy, Since, Sx, Sy, Since, Dead);
+			}
+			// (a man who left the field with his block is drawn on at his last speed and facing for a second as he fades:
+			// read as reaching LeaveDrift more from where he left, whichever way he faced)
+			if (Tr.IsMan() && Tr.Out >= 0.0 && Tr.Out == Tr.Out && N > 0)
+			{
+				size_t I = N - 1;
+				while (I > 0 && Tr.At[I].T > Tr.Out) --I;
+				const LandFeed::Point& P = Tr.At[I];
+				const LandFeed::Point& Q = Tr.At[I + 1 < N ? I + 1 : I];
+				const double U = Q.T > P.T ? std::clamp((Tr.Out - P.T) / (Q.T - P.T), 0.0, 1.0) : 0.0;
+				const double Lx = P.X + (Q.X - P.X) * U, Ly = P.Y + (Q.Y - P.Y) * U;
+				if (Ok(P) && Ok(Q)) Touch(Lx, Ly, Tr.Out, Lx, Ly, Tr.Out, Far + LeaveDrift);
+			}
+			// (his provisional last point, where he stands now, is replaced with the next piece: read from it again)
+			Seen[T] = Tr.bTail && N > 0 ? N - 1 : N;
+			// Heading for one: a man or machine moving as the piece ends (his last kept point the latest), his last way
+			// straight on SoonAhead of battle (SoonFar at most), his reach and SoonWiden round it.
+			if (N >= 2 && Tr.At[N - 1].T >= Latest - 2.0 && !(Tr.bPinned && Tr.PinFrom <= Tr.At[N - 1].T) && !(Tr.Fell >= 0.0 && Tr.Fell <= Tr.At[N - 1].T)
+				&& !(Tr.Out >= 0.0 && Tr.Out <= Tr.At[N - 1].T))
+			{
+				const LandFeed::Point& A = Tr.At[N - 2];
+				const LandFeed::Point& B = Tr.At[N - 1];
+				const double Dt = B.T - A.T;
+				if (Ok(A) && Ok(B) && Dt > 1e-3)
+				{
+					const double Vx = (B.X - A.X) / Dt, Vy = (B.Y - A.Y) / Dt, Speed = std::hypot(Vx, Vy);
+					if (Speed > 0.5)
+					{
+						const double Ahead = std::min(SoonAhead, SoonFar / Speed);
+						for (size_t K = 0; K < List.size(); ++K)
+						{
+							if (Swept[K] != 0) continue;
+							SoonAt[K] = std::min(SoonAt[K], When(K, B.X, B.Y, B.T, B.X + Vx * Ahead, B.Y + Vy * Ahead, B.T + Ahead, Wide(N - 1) + SoonWiden));
+						}
+					}
+				}
+			}
+		}
+		return Out;
+	}
+
+	Sight SightAlong(double EyeX, double EyeY, double EyeZ, double AheadX, double AheadY, double AheadZ, double WideFov, double Aspect, double Lines, bool bCut)
+	{
+		Sight Out;
+		Out.EyeX = EyeX;
+		Out.EyeY = EyeY;
+		Out.EyeZ = EyeZ;
+		const double Long = std::sqrt(AheadX * AheadX + AheadY * AheadY + AheadZ * AheadZ);
+		const double Scale = Long > 1e-9 && Long == Long ? 100.0 / Long : 0.0;
+		Out.LookX = EyeX + AheadX * Scale;
+		Out.LookY = EyeY + AheadY * Scale;
+		Out.LookZ = EyeZ + AheadZ * Scale;
+		if (Aspect > 0.0 && Aspect == Aspect) Out.Aspect = Aspect;
+		if (Lines > 0.0 && Lines == Lines) Out.Lines = Lines;
+		// (the lens across the picture to the lens from its top to its bottom, by the picture's shape)
+		if (WideFov > 0.0 && WideFov < 180.0)
+		{
+			const double HalfWide = 0.5 * WideFov * Pi / 180.0;
+			Out.Fov = 2.0 * std::atan(std::tan(HalfWide) / std::max(0.1, Out.Aspect)) * 180.0 / Pi;
+		}
+		Out.bCut = bCut;
+		return Out;
+	}
+
+	bool Yard::InSight(size_t K, const Sight& Eye) const
+	{
+		if (K >= List.size()) return false;
+		const Hulk& H = List[K];
+		// (her reach: her rings and her scorched patch at its ragged edge's widest, about her anchor a metre up)
+		double Reach = 1.12 * std::max(H.PatchLong, H.PatchWide);
+		for (const Ring& R : H.Rings) Reach = std::max(Reach, std::hypot(R.X - H.X, R.Y - H.Y) + R.R);
+		const double Wx = Eye.LookX - Eye.EyeX, Wy = Eye.LookY - Eye.EyeY, Wz = Eye.LookZ - Eye.EyeZ, Wl = std::sqrt(Wx * Wx + Wy * Wy + Wz * Wz);
+		const double Tx = H.X - Eye.EyeX, Ty = H.Y - Eye.EyeY, Tz = H.Z + 1.0 - Eye.EyeZ;
+		if (std::sqrt(Tx * Tx + Ty * Ty + Tz * Tz) <= Reach + 0.5) return true;
+		if (Wl < 1e-9) return true;
+		const double Fx = Wx / Wl, Fy = Wy / Wl, Fz = Wz / Wl;
+		double Rx = Fy, Ry = -Fx;
+		const double Rl = std::hypot(Rx, Ry);
+		if (Rl < 1e-9)
+		{
+			Rx = 1.0;
+			Ry = 0.0;
+		}
+		else
+		{
+			Rx /= Rl;
+			Ry /= Rl;
+		}
+		// (up: her right crossed with forward, as LandEye's InPicture)
+		const double Upx = Ry * Fz, Upy = -Rx * Fz, Upz = Rx * Fy - Ry * Fx;
+		const double Depth = Tx * Fx + Ty * Fy + Tz * Fz, Across = Tx * Rx + Ty * Ry, Up = Tx * Upx + Ty * Upy + Tz * Upz;
+		if (Depth <= -Reach) return false;
+		// (the picture's edges a tenth wider, for an eye that turns; her reach a sphere against each edge's plane)
+		const double TanV = std::tan(std::clamp(Eye.Fov, 1.0, 170.0) * 0.5 * Pi / 180.0) * 1.1, TanH = TanV * std::max(0.1, Eye.Aspect);
+		if (std::fabs(Across) > TanH * Depth + Reach * std::sqrt(1.0 + TanH * TanH)) return false;
+		if (std::fabs(Up) > TanV * Depth + Reach * std::sqrt(1.0 + TanV * TanV)) return false;
+		// (and big enough to be seen go: her reach SightPx of the picture's lines or more)
+		const double Px = Reach / (std::max(Depth, 0.1) * TanV / 1.1) * 0.5 * Eye.Lines;
+		return Px >= SightPx;
+	}
+
+	std::vector<size_t> Yard::Clear(double Now, const Sight& Eye, std::vector<int>* How)
+	{
+		std::vector<size_t> Out;
+		for (size_t K = 0; K < List.size() && K < Swept.size(); ++K)
+		{
+			if (Swept[K] != 0) continue;
+			const double Due = DueOf(K);
+			if (Due >= 1e17 && SoonOf(K) >= 1e17) continue;
+			int Why = -1;
+			if (Eye.bCut) Why = 1;
+			else if (!InSight(K, Eye)) Why = 0;
+			else if (Due < 1e17 && Now >= Due - ClearLead) Why = 2;
+			if (Why < 0) continue;
+			Swept[K] = 1;
+			Out.push_back(K);
+			if (How) How->push_back(Why);
+		}
+		return Out;
+	}
+
+	bool Yard::Over(double X, double Y, double Margin) const
+	{
+		for (size_t K = 0; K < List.size(); ++K)
+		{
+			if (K < Swept.size() && Swept[K] != 0) continue;
+			const Hulk& H = List[K];
+			// (her patch's ragged edge reaches 1.12 of its size at its widest, SpokeReach)
+			const double PatchLong = 1.12 * H.PatchLong + Margin, PatchWide = 1.12 * H.PatchWide + Margin;
+			double Reach = std::max(PatchLong, PatchWide);
+			for (const Ring& R : H.Rings) Reach = std::max(Reach, std::hypot(R.X - H.X, R.Y - H.Y) + R.R + Margin);
+			if (std::hypot(X - H.X, Y - H.Y) > Reach) continue;
+			for (const Ring& R : H.Rings)
+			{
+				if (std::hypot(X - R.X, Y - R.Y) < R.R + Margin) return true;
+			}
+			if (FromFoot(H, X, Y) <= Margin) return true;
+			double Fx, Fy, Rx, Ry;
+			Ways(H.Heading, Fx, Fy, Rx, Ry);
+			const double A = ((X - H.X) * Fx + (Y - H.Y) * Fy) / PatchLong, B = ((X - H.X) * Rx + (Y - H.Y) * Ry) / PatchWide;
+			if (A * A + B * B <= 1.0) return true;
 		}
 		return false;
 	}
@@ -3465,7 +4057,17 @@ namespace LandHulk
 			Thrown, Thrown == 1 ? "turret" : "turrets", Tracks, Tracks == 1 ? "track" : "tracks", ByWhere[0], ByWhere[0] == 1 ? "group" : "groups",
 			ByWhere[1], ByWhere[2], ByWhere[3]);
 		Out += Tail;
-		if (NoRoom > 0) Out += "; " + std::to_string(NoRoom) + " found no room clear of the lanes, hedges and the battle's own ways";
+		if (NoRoom > 0) Out += "; " + std::to_string(NoRoom) + (bLive ? " found no room clear of the lanes, hedges and the ground the live battle is likely to cross" : " found no room clear of the lanes, hedges and the battle's own ways");
+		if (bLive)
+		{
+			// (a live battle's: laid off the ground its men and machines are likely to cross, and cleared away by the scene's
+			// guard should one come near her all the same)
+			Out += "; laid for a live battle, clear of where its blocks draw up, the ground between its fronts and its lanes";
+			if (OnLikely > 0)
+			{
+				Out += " (" + std::to_string(OnLikely) + (OnLikely == 1 ? " group" : " groups") + " along the old lines or at the village's edge or a junction on the rest of its start areas or the ground it may fall back over)";
+			}
+		}
 		return Out;
 	}
 }

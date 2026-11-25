@@ -386,6 +386,9 @@ void ALandBattle::PumpLive()
 		}
 		LandFell::Phase("live: mapped to the drawn", bVehiclesKept ? 0 : 1);
 		MapLive(static_cast<int32>(G.NewTracksFrom), VehiclesBefore, G.bReset, bVehiclesKept);
+		// (the old wrecks, release 2: any one this piece's men or machines are to come near cleared away before they are
+		// drawn there; nothing where none was laid)
+		GuardOldWrecks(G.bReset);
 		if (G.bBegun)
 		{
 			UE_LOG(LogTheater, Display, TEXT("Land battle (live): the setup step closed; the clock runs"));
