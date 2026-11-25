@@ -797,6 +797,12 @@ export interface Fleet extends Storied {
    */
   planBase?: { base: string; port: string; home: string; words: string; turn: number };
   /**
+   * The share of its navy's wing each of its carriers brings, where its row says less than a whole one (ruling 189(b):
+   * a light carrier that sailed alone, Ryujo with the 3rd Fleet and Shoho with the 4th, a third of a wing). Carriers
+   * joined from another fleet bring theirs, and the fleet's share is the mean a deck (carriers.ts `moveWings`).
+   */
+  deck?: number;
+  /**
    * A task force's standing job (release 2, taskforce.ts): the sea and what it does there, or the lane it escorts. It
    * comes in to refit when worn and goes back to the job when fit, every month, until he changes or ends it.
    */
@@ -1383,6 +1389,12 @@ export interface AirFleet extends Storied {
   camp?: number;
   /** A carrier wing: the id of the fleet whose carriers it flies from. It goes where that fleet goes and has no airfield (the grand campaign). */
   ship?: number;
+  /**
+   * A carrier wing's room a deck, where it is not its navy's (carriers.ts `wingSize`): a lone light carrier's share
+   * (ruling 189(b)), or the navy's wing by date (the rider to rulings 189 and 202). Kept so that a change of room is
+   * known for what it is: nothing is given and nothing lost by it. Absent while the room is the navy's own.
+   */
+  size?: number;
   /**
    * A carrier wing ordered ashore: the id of the fleet whose decks it left. It is based on an airfield like any air
    * group, with its own aircraft, pilots and fitness, and keeps a carrier wing's reach and its crews' training.

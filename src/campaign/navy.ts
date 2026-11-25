@@ -22,7 +22,7 @@ import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { AIR, CARRIERS, carrierRules, groupOverSea, groupsOver, skyDenies, skyOver, skyReach } from './air';
 import { oddsOf, skyAtSea, skySupport, weatherOn, zoneOfSea } from './weather';
 import { galeConvoyLoss, galeLaneLoss, galeSeas } from './heavyseas';
-import { capOver, deckWorth, fleetKnown, syncWings, wingShare } from './carriers';
+import { capOver, deckWorth, fleetKnown, syncWings, wingShare, wingStep } from './carriers';
 import { COMMAND } from './commanders';
 import { nameLosses, nameSide } from './hulls';
 import { storyConvoy, storyEdge, storySea } from './stories';
@@ -57,6 +57,8 @@ import {
 interface ClassSpec { label: string; one: string; many: string; power: number; tough: number; escort: number; raid: number }
 export interface FleetRow {
   nat: string; name: string; from?: number; base: string | null; port: string; home: string; zone: string; duty: Stance; tied?: boolean; admiral?: string; ships: Partial<Ships>;
+  /** The share of its navy's wing each of its carriers brings, where less than one (Fleet.deck; ruling 189(b)). */
+  deck?: number;
   /** What the row says instead in the grand campaign (Force H's beat, ruling 233 rider b564). The history campaigns read the row as it stands. */
   open?: Partial<Pick<FleetRow, 'home' | 'zone' | 'tied'>>;
   /**
@@ -333,6 +335,7 @@ export function addFleet(g: Game, given: FleetRow): Fleet {
     admiral: row.admiral ? { name: row.admiral, level: 1, xp: 0 } : null, fought: 0,
   };
   if (row.cruise) f.cruise = row.cruise[2] === undefined ? [row.cruise[0], row.cruise[1]] : [row.cruise[0], row.cruise[1], row.cruise[2]];
+  if (row.deck !== undefined && row.deck < 1) f.deck = row.deck;
   g.fleets.push(f);
   return f;
 }
@@ -2169,6 +2172,8 @@ const offChartFor = (g: Game, nat: string, fleet: string, ships: Partial<Ships>,
 
 export function navalUpkeep(g: Game, nat: string): void {
   const n = g.nations[nat];
+  // (Release 2, carrier wings by date: the month a navy's room a deck changes, its player is told. The wings follow in syncWings.)
+  wingStep(g, nat);
   for (const given of NAVY.fleets) {
     // A row with a book of its own forms by it at the book's stops, for the computer's navy (Force H in June 1940),
     // and for a player's in the start month of a campaign begun later (rider b639).

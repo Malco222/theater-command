@@ -114,6 +114,7 @@ import { REARGUARD, isRearguard, rearBridgesOn, rearguardOn, setRearBridges, set
 import { setShadow, setShadowRelay, shadowLine, shadowOn, shadowRelayOn } from '../../../src/campaign/shadow';
 import { mineLine, minesSeen, seaMinesOn, setSeaMines } from '../../../src/campaign/mines';
 import { anchorLine, carrierStrikeOn, setCarrierStrike, strikeHarbours } from '../../../src/campaign/harbourstrike';
+import { setWingByDate, wingByDateOn } from '../../../src/campaign/carriers';
 import { orderCarrierStrikeFleet } from '../../../src/campaign/turn';
 import { galeLine, galeSeas, heavySeasOn, setHeavySeas } from '../../../src/campaign/heavyseas';
 import { setVoyageLog, voyageLines, voyageOn } from '../../../src/campaign/voyage';
@@ -985,6 +986,7 @@ function drawView() {
     gales: [...galeSeas(s)],
     // (Release 2, harbourstrike.ts) Whether a carrier fleet's page offers a strike on an enemy harbour from the air.
     carrierStrike: carrierStrikeOn(s),
+    wingByDate: wingByDateOn(s),
     // (Release 2, shadow.ts) Whether a shadow's fuel runs out and a fresh squadron takes over (the switch as set: it works only with shadowing on).
     shadowRelay: s.flags.open === 1 && s.flags.shadowRelay === 1,
     // (Release 2, buildings.ts) Whether a conquered town can put up every kind of building once it has settled.
@@ -6537,6 +6539,13 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     note = carrierStrikeOn(s) ? 'Carrier strikes on harbours are on: a carrier fleet\'s page lists the enemy harbours its aircraft reach, and one order sails it there and sends its wings in.' : 'Carrier strikes on harbours are off.';
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'wingbydaterule') {
+    // (Release 2, carriers.ts) Carrier wings by date (the rider to rulings 189 and 202), switched in any month.
+    setWingByDate(s, part[1] === 'on');
+    ok = true;
+    note = wingByDateOn(s) ? 'Carrier wings by date are on: a navy\'s carriers change their mix of aircraft on the dates the record gives (Britain\'s from August 1942). New room fills as losses are made good, in harbour.' : 'Carrier wings by date are off: every navy\'s carriers keep one mix of aircraft for the whole war.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'fleetstrike') {
     // (Release 2, harbourstrike.ts) 'fleetstrike:<fleet>:<harbour>' sails it into reach and sends its wings at the harbour.
     const id = Number(part[1]), r = Number(part[2]);
@@ -7779,6 +7788,8 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).seaMines = (on: boolean) => { const s = game(); setSeaMines(s, !!on); return { on: seaMinesOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).heavySeas = (on: boolean) => { const s = game(); setHeavySeas(s, !!on); return { on: heavySeasOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).shadowRelay = (on: boolean) => { const s = game(); setShadowRelay(s, !!on); return { on: shadowRelayOn(s) }; };
+// (Release 2, carriers.ts) TC.wingByDate(on) at any time; the options page uses act('wingbydaterule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).wingByDate = (on: boolean) => { const s = game(); setWingByDate(s, !!on); return { on: wingByDateOn(s) }; };
 // (Release 2, harbourstrike.ts) TC.carrierStrike(on) at any time; the options page uses act('carrierstrikerule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).carrierStrike = (on: boolean) => { const s = game(); setCarrierStrike(s, !!on); return { on: carrierStrikeOn(s) }; };
 // (Release 2, fleetwhy.ts) The admirals' reasons: TC.fleetWhy(on) at any time; the options page uses act('fleetwhyrule:on' / ':off').

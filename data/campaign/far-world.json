@@ -1273,7 +1273,8 @@
      "dd": 12,
      "ss": 0
     },
-    "admiral": "Ibo Takahashi"
+    "admiral": "Ibo Takahashi",
+    "deck": 0.33
    },
    {
     "nat": "JAP",
@@ -1290,7 +1291,8 @@
      "dd": 10,
      "ss": 9
     },
-    "admiral": "Shigeyoshi Inoue"
+    "admiral": "Shigeyoshi Inoue",
+    "deck": 0.33
    },
    {
     "nat": "JAP",
@@ -1676,6 +1678,15 @@
    ],
    [
     29,
+    "JAP",
+    "4th Fleet",
+    {
+     "cv": 1
+    },
+    "the light carrier Shoho"
+   ],
+   [
+    29,
     "USA",
     "Atlantic Fleet",
     {
@@ -1701,6 +1712,15 @@
      "bb": 2
     },
     "the battleships Mississippi and New Mexico, back from the Atlantic"
+   ],
+   [
+    30,
+    "JAP",
+    "Combined Fleet",
+    {
+     "bb": 1
+    },
+    "the new battleship Yamato"
    ],
    [
     30,
@@ -1730,6 +1750,24 @@
     "the new carrier Hornet"
    ],
    [
+    33,
+    "JAP",
+    "Mobile Fleet",
+    {
+     "cv": 1
+    },
+    "the carrier Junyo, converted from a liner"
+   ],
+   [
+    35,
+    "JAP",
+    "Mobile Fleet",
+    {
+     "cv": 1
+    },
+    "the carrier Hiyo, converted from a liner"
+   ],
+   [
     35,
     "USA",
     "Pacific Carrier Fleet",
@@ -1757,6 +1795,24 @@
     "the new battleships Washington and South Dakota"
    ],
    [
+    38,
+    "JAP",
+    "2nd Fleet",
+    {
+     "ca": 1
+    },
+    "the new light cruiser Agano"
+   ],
+   [
+    41,
+    "JAP",
+    "Combined Fleet",
+    {
+     "bb": 1
+    },
+    "the new battleship Musashi"
+   ],
+   [
     41,
     "USA",
     "Pacific Fleet",
@@ -1764,6 +1820,15 @@
      "bb": 1
     },
     "the new battleship Indiana"
+   ],
+   [
+    42,
+    "JAP",
+    "Combined Fleet",
+    {
+     "ca": 1
+    },
+    "the new light cruiser Oyodo"
    ],
    [
     43,
@@ -1782,6 +1847,15 @@
      "cv": 1
     },
     "the new carrier Essex"
+   ],
+   [
+    46,
+    "JAP",
+    "2nd Fleet",
+    {
+     "ca": 1
+    },
+    "the new light cruiser Noshiro"
    ],
    [
     47,
@@ -1839,12 +1913,30 @@
    ],
    [
     52,
+    "JAP",
+    "2nd Fleet",
+    {
+     "ca": 1
+    },
+    "the new light cruiser Yahagi"
+   ],
+   [
+    52,
     "USA",
     "Pacific Carrier Fleet",
     {
      "cv": 1
     },
     "the light carrier Monterey"
+   ],
+   [
+    53,
+    "JAP",
+    "Mobile Fleet",
+    {
+     "cv": 1
+    },
+    "the light carriers Chiyoda and Chitose, converted from seaplane carriers"
    ],
    [
     53,
@@ -1872,6 +1964,15 @@
      "bb": 2
     },
     "the new battleships Iowa and New Jersey"
+   ],
+   [
+    55,
+    "JAP",
+    "Mobile Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Taiho"
    ],
    [
     55,
@@ -1919,6 +2020,15 @@
     "the new carrier Franklin"
    ],
    [
+    60,
+    "JAP",
+    "Mobile Fleet",
+    {
+     "cv": 1
+    },
+    "the new carriers Unryu and Amagi, short of aircraft to fly from them"
+   ],
+   [
     62,
     "USA",
     "Pacific Carrier Fleet",
@@ -1935,6 +2045,15 @@
      "cv": 2
     },
     "more escort carriers"
+   ],
+   [
+    63,
+    "JAP",
+    "Combined Fleet",
+    {
+     "ca": 1
+    },
+    "the new light cruiser Sakawa"
    ],
    [
     63,
@@ -2041,6 +2160,30 @@
     "from": 41,
     "to": 70,
     "perMonth": 1
+   },
+   {
+    "nat": "JAP",
+    "fleet": "Mobile Fleet",
+    "cls": "dd",
+    "from": 29,
+    "to": 52,
+    "perMonth": 1
+   },
+   {
+    "nat": "JAP",
+    "fleet": "Combined Fleet",
+    "cls": "dd",
+    "from": 53,
+    "to": 59,
+    "perMonth": 3
+   },
+   {
+    "nat": "JAP",
+    "fleet": "Combined Fleet",
+    "cls": "dd",
+    "from": 60,
+    "to": 64,
+    "perMonth": 2
    }
   ],
   "moves": [

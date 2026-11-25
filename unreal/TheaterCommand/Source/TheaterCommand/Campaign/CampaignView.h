@@ -1224,6 +1224,7 @@ struct FCampaignView
 	bool bHeavySeas = false; // (release 2, heavyseas.ts) gales blow at sea: fleets slowed, convoys late, shadows lost
 	bool bShadowRelay = false; // (release 2, shadow.ts) a fresh squadron takes over a shadow whose fuel has run out (the switch as set)
 	bool bCarrierStrike = false; // (release 2, harbourstrike.ts) a carrier fleet's page offers a strike on an enemy harbour (the switch as set)
+	bool bWingByDate = false; // (release 2, carriers.ts) a navy's carrier wing changes by date (the switch as set)
 	bool bSettledTowns = false; // (release 2, buildings.ts) a conquered town held three months can put up every building
 	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
 	// opening month only.
