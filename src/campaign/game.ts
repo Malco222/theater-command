@@ -646,6 +646,19 @@ export function portKeep(g: Game, r: Region): number {
   return (fortRows(g) ? portStores(g, r) : null) ?? DESERT.stores;
 }
 /**
+ * The months a fortified port overseas has already lived on its kept stores before this month (the design director's
+ * ruling of 19:01Z, 25 November 2026: "one town, one larder, priced once"). Under true reach a siege that opens round
+ * such a port begins with these months eaten (siege.ts invest). The stores were last filled in the month the flag
+ * holds, so the first month on them is the month after; the present month is the siege's own to charge. They cannot
+ * have run longer than they last (portKeep). Stores filled before the present holder took the port were never his: a
+ * flag from the month the port changed hands, or earlier, charges nothing, since the flag cannot tell who filled it.
+ */
+export function keptStoresRun(g: Game, r: Region): number {
+  const last = g.flags[storesKey(r.id)];
+  if (!r.overseas || !r.port || !worksKept(r) || last === undefined || last <= r.since) return 0;
+  return Math.min(portKeep(g, r), Math.max(0, g.turn - 1 - last));
+}
+/**
  * A fortress crew in a fortified port overseas living on the port's stores this month (07:12Z): the sea behind it is
  * shut and the port still feeds it from what it holds. Its own clock runs from the month the sea closed: it eats a
  * month of its stores as a crew cut off does (09:06Z: counted apart from its organisation, which it holds), it neither rests

@@ -22,7 +22,7 @@
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
-import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, estAt, fights, headline, men, onPortStores, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, trueReach, worksFor, worksKept, fortRow, fortRows, roomless, type Assessment } from './game';
+import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, estAt, fights, headline, keptStoresRun, men, onPortStores, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, trueReach, worksFor, worksKept, fortRow, fortRows, roomless, type Assessment } from './game';
 import { farGuard, farGuardRow, type FarGuardRow } from './economy';
 import { crewStores, storesLeft } from './fortrows';
 import { seat } from './commanders';
@@ -747,11 +747,17 @@ export function invest(g: Game, r: Region, by: string): void {
   g.flags[`sgby:${r.id}`] = Object.keys(g.nations).indexOf(by);
   delete g.flags[`sgm:${r.id}`];
   // A town that has been feeding an army cut off round it starts its siege with those stores already eaten.
+  let eaten = 0;
   if (g.flags[`pkt:${r.id}`] !== undefined) {
-    const eaten = Math.min(storesOf(g, r), Math.floor((g.flags[`pkte:${r.id}`] ?? 0) / 10));
-    if (eaten > 0 && pocketNat(g, r) === r.ctrl) g.flags[`sgm:${r.id}`] = eaten;
+    const pocket = Math.min(storesOf(g, r), Math.floor((g.flags[`pkte:${r.id}`] ?? 0) / 10));
+    if (pocket > 0 && pocketNat(g, r) === r.ctrl) eaten = pocket;
     clearPocket(g, r);
   }
+  // Under true reach a fortified port overseas that has been living on its kept stores starts its siege with those
+  // months eaten too (the design director's ruling of 19:01Z, 25 November 2026): one larder, so the larger of the two
+  // clocks, never their sum, as both count the same eating, and never more than the town holds.
+  if (trueReach(g)) eaten = Math.min(storesOf(g, r), Math.max(eaten, keptStoresRun(g, r)));
+  if (eaten > 0) g.flags[`sgm:${r.id}`] = eaten;
   g.supplyDirty = true;
   tallySiege(g, 'begun');
   const inside = garrisonOf(r);
