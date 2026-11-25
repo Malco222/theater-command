@@ -76,7 +76,9 @@ namespace LandScape
 			KLorry = 44,    // a burnt-out lorry
 			KTram = 45,     // a burnt-out tram
 			KStrike = 46,   // a shell's strike in a paved street: the setts torn up round a shallow hole and thrown about
-			KSlots = 47
+			KVillaB0 = 47,  // the suburbs' second house, square under a pyramid roof: holed, burnt, half fallen, whole (no two
+			                // neighbours the same house)
+			KSlots = 51
 		};
 
 		enum Clut : int
@@ -415,6 +417,14 @@ namespace LandScape
 					const double Bare = Smooth(0.15, -0.25, Noise(S / 1.6, Z / 1.1, L.Key ^ 0xFA3) + 0.55 - 0.42 * Smooth(0.0, 2.6, Edge));
 					C = Mixed(C, Varied(P.Core, 0.95 + 0.06 * N2, 0.0), 0.75 * Bare);
 				}
+				// (round a shell's hole: the plaster or the face blown off to the brick in a ragged ring, scorched at its lip)
+				for (const Hole& H : L.Holes)
+				{
+					const double D = std::hypot((S - H.S) / H.RS, (Z - H.Z) / H.RZ) + 0.3 * Noise(S / 0.45, Z / 0.45, L.Key ^ 0x401F);
+					if (D > 2.4) continue;
+					C = Mixed(C, Varied(P.Core, 0.92, 0.0), 0.85 * Smooth(2.3, 1.3, D));
+					C = Mixed(C, P.Soot, 0.5 * Smooth(1.7, 1.0, D));
+				}
 				// (soot over each burnt room's windows: a dark plume from its head up a storey and more, widest at its root)
 				if (!L.Burnt.empty() && L.Bays > 0)
 				{
@@ -596,7 +606,8 @@ namespace LandScape
 						continue;
 					}
 					// through the hole: rows of some 0.45 m, kept where outside it, run together up the column
-					const double RowStep = L.Lod == 0 ? 0.3 : 1.0;
+					// (a course at a time near, so the hole's edge is toothed brick by brick, not stepped in big squares)
+					const double RowStep = L.Lod == 0 ? 0.075 : 0.5;
 					const int Rows = std::max(1, static_cast<int>(std::ceil((Hi - Z0) / RowStep)));
 					double RunFrom = -1.0;
 					for (int R = 0; R <= Rows; ++R)
@@ -859,6 +870,12 @@ namespace LandScape
 			B.Key = Key ^ 0xB0;
 			B.bCornice = false;
 			M.Build(B);
+			// (what a shell blew out of a wall, spilt at its foot below the hole: in the street, or in the courtyard)
+			if (Lod <= 1)
+			{
+				for (const Hole& Hh : HolesFront) Heap(W, -HL + Hh.S, -HD - 0.8, 1.3, 0.8, 0.35 + 0.05 * Hh.Z, Key ^ 0x5B2, P, Lod, 12, 1);
+				for (const Hole& Hh : HolesBack) Heap(W, -HL + Hh.S, HD + 0.8, 1.3, 0.8, 0.35 + 0.05 * Hh.Z, Key ^ 0x5B3, P, Lod, 12, 1);
+			}
 			// the ends: party walls, blank (a neighbour stood against them), along y
 			WallLay E;
 			E.A = { -HL, HD, 0.0 };
@@ -893,30 +910,67 @@ namespace LandScape
 					double X0 = -HL + In, X1 = HL - In;
 					if (St == SHalf)
 					{
-						// (only as far as both long walls still stand a storey over it; its broken end hangs down)
+						// (only as far as both long walls still stand a storey over it, the front's and the back's)
 						const int N = 24;
 						double Lo = 1e9, Hi = -1e9;
 						for (int I = 0; I <= N; ++I)
 						{
 							const double S = Long * I / N;
-							if (M.TopAt(F, S) > Z + 1.8) { Lo = std::min(Lo, S); Hi = std::max(Hi, S); }
+							if (std::min(M.TopAt(F, S), M.TopAt(B, Long - S)) > Z + 1.8) { Lo = std::min(Lo, S); Hi = std::max(Hi, S); }
 						}
 						if (Hi < Lo) continue;
 						X0 = std::max(X0, -HL + Lo);
 						X1 = std::min(X1, -HL + Hi);
+						// (each floor broken back its own way from where the walls fell: no two floors the same depth)
+						const double Back = R.Range(0.2, 2.4);
+						if (Fall > 0.0) X1 -= Back;
+						else X0 += Back;
 						if (X1 - X0 < 1.0) continue;
-						// the hanging end: a slab tipped down from the broken edge
-						const double Edge = Fall > 0.0 ? X1 : X0, Dir = Fall > 0.0 ? 1.0 : -1.0;
-						const double Drop = R.Range(0.45, 0.85), Reach = R.Range(1.2, 2.4);
-						// (from the front wall's inside to the back's, whichever end fell: across +y always, never out through the
-						// front into the street)
-						const V3d A0{ Edge, -HD + In, Z };
-						const V3d U = Norm3(V3d{ Dir * std::cos(Drop), 0.0, -std::sin(Drop) });
-						const V3d Across{ 0.0, 1.0, 0.0 };
-						const V3d Up = Cross3(U, Across);
-						Block(W, A0, U, Across, Up, 0.0, Reach, 0.0, Deep - 2.0 * In, 0.0, 0.22, true, [&](const V3d&, const V3d& Nn) {
-							return Nn.Z > 0.3 ? Mixed(P.Timber, P.Dust, 0.4) : Varied(P.Inner, 0.7, 0.0);
-						});
+						const double Dir = Fall > 0.0 ? 1.0 : -1.0;
+						auto FloorInk = [&](const V3d& Q, const V3d& Nn) {
+							if (Nn.Z > 0.3) return Mixed(Mixed(P.Timber, P.Dust, 0.35 + 0.2 * Noise(Q.X / 2.0, Q.Y / 2.0, Key ^ 0x77)), P.Char, 0.25 * Burnt[static_cast<size_t>(K)]);
+							return Nn.Z < -0.3 ? Varied(P.Inner, 0.72, 0.0) : Varied(P.Core, 0.85, 0.0);
+						};
+						// The floor in strips from front to back, each broken off at its own reach: the flat run, then its
+						// broken end sagging or snapped and hanging at its own angle (some gone), so its edge is ragged.
+						const int Strips = Lod == 0 ? 5 : 3;
+						const double Wd = (Deep - 2.0 * In) / Strips;
+						for (int J = 0; J < Strips; ++J)
+						{
+							const double Y0 = -HD + In + J * Wd, Y1 = Y0 + Wd;
+							const double Short = R.Range(0.0, 1.4);
+							const double F0 = Fall > 0.0 ? X0 : X0 + Short, F1 = Fall > 0.0 ? X1 - Short : X1;
+							Block(W, V3d{}, V3d{ 1, 0, 0 }, V3d{ 0, 1, 0 }, V3d{ 0, 0, 1 }, F0, F1, Y0, Y1, Z - 0.24, Z, true, FloorInk);
+							const double Hang = R.Next();
+							const double Drop = R.Range(0.12, 1.15);
+							const double Reach = R.Range(0.7, 2.6);
+							if (Hang > 0.82) continue; // (this strip gone with the rest)
+							const V3d A0{ Fall > 0.0 ? F1 : F0, 0.0, Z };
+							const V3d U = Norm3(V3d{ Dir * std::cos(Drop), 0.0, -std::sin(Drop) });
+							const V3d Across{ 0.0, 1.0, 0.0 };
+							const V3d Up = Cross3(U, Across);
+							// (its thickness below the floor's top line whichever way it fell: Up points down when Dir < 0)
+							const double W0 = Dir > 0.0 ? -0.22 : 0.0, W1 = Dir > 0.0 ? 0.0 : 0.22;
+							Block(W, A0, U, Across, Up, 0.0, Reach, Y0 + 0.03, Y1 - 0.03, W0, W1, true, FloorInk);
+						}
+						// what fell on it: rubble lying along the broken edge, a beam or two
+						if (Lod == 0)
+						{
+							const double Edge = Fall > 0.0 ? X1 : X0;
+							for (int L = 0; L < 9; ++L)
+							{
+								const double In2 = R.Range(0.2, 3.2);
+								const double Y = R.Range(-HD + In + 0.3, HD - In - 0.3);
+								const double Size = R.Range(0.14, 0.42);
+								const double Pick = R.Next();
+								const Tone C = Pick < 0.45 ? P.Rubble[0] : Pick < 0.8 ? P.Rubble[1] : P.Rubble[2];
+								Lump(W, Edge - Dir * In2, Y, Z, Size, Size * 0.6, Hash(Key ^ 0x9F1, static_cast<uint64_t>(K * 16 + L)), Varied(C, 1.06, 0.0), Varied(C, 0.62, 0.0));
+							}
+							const double By = R.Range(-HD + In + 1.0, HD - In - 1.0);
+							const double Lift = R.Range(0.1, 0.6);
+							Beam(W, V3d{ Edge - Dir * 2.6, By, Z + 0.1 }, V3d{ Edge + Dir * 0.4, By + 0.8, Z + Lift }, 0.16, P.Char);
+						}
+						continue;
 					}
 					Block(W, V3d{}, V3d{ 1, 0, 0 }, V3d{ 0, 1, 0 }, V3d{ 0, 0, 1 }, X0, X1, -HD + In, HD - In, Z - 0.24, Z, true, [&](const V3d& Q, const V3d& Nn) {
 						if (Nn.Z > 0.5) return Mixed(P.Timber, P.Dust, 0.3 + 0.2 * Noise(Q.X / 2.0, Q.Y / 2.0, Key ^ 0x77));
@@ -1152,6 +1206,8 @@ namespace LandScape
 				else L.Top = { { 0.0, Eaves }, { Len, Eaves } };
 				if (St == 0 && Side == 0) L.Holes.push_back({ R.Range(0.3, 0.7) * Len, R.Range(1.4, 4.2), 1.0, 1.0 });
 				M.Build(L);
+				// (what the shell blew out of it, spilt at the wall's foot below the hole)
+				for (const Hole& Hh : L.Holes) Heap(W, -HL + Hh.S, -HD - 0.75, 1.1, 0.7, 0.32 + 0.06 * Hh.Z, Key ^ 0x5B1, P, Lod, 10, 1);
 			}
 			Block(W, V3d{}, V3d{ 1, 0, 0 }, V3d{ 0, 1, 0 }, V3d{ 0, 0, 1 }, -HL + 0.2, HL - 0.2, -HD + 0.2, HD - 0.2, -0.3, 0.04, false,
 			      [&](const V3d&, const V3d& Nn) { return Nn.Z > 0.5 ? Mixed(P.Dust, P.Char, bOpen ? 0.5 : 0.1) : P.Inner; });
@@ -2551,6 +2607,10 @@ namespace LandScape
 				case KLorry: return "CityLorryWreck";
 				case KTram: return "CityTramWreck";
 				case KStrike: return "CityShellStrike";
+				case KVillaB0: return "CityVillaSquareHoled";
+				case KVillaB0 + 1: return "CityVillaSquareBurnt";
+				case KVillaB0 + 2: return "CityVillaSquareHalf";
+				case KVillaB0 + 3: return "CityVillaSquareWhole";
 				default: return nullptr;
 				}
 			}
@@ -2558,7 +2618,25 @@ namespace LandScape
 			bool KitLow(int K) const override { return K == KScatter || K == KStrike; }
 
 			/** Whether a slot is a building (three levels, drawn as a house). */
-			static bool IsBuilding(int K) { return (K >= KRow0 && K < KVilla0 + 4) || (K >= KShed && K <= KStation) || K == KLoneWall || (K >= KRowWhole0 && K < KRowWhole0 + 4); }
+			static bool IsBuilding(int K) { return (K >= KRow0 && K < KVilla0 + 4) || (K >= KShed && K <= KStation) || K == KLoneWall || (K >= KRowWhole0 && K < KRowWhole0 + 4) || (K >= KVillaB0 && K < KVillaB0 + 4); }
+
+			/** A terrace building's own paints: a third of them brick-faced (in a plaster style, the plaster never put on),
+			 * a fifth a darker, older plaster; the rest the street's own. Each slot one building, so the street mixes them. */
+			Paints RowPaints(uint64_t Key) const
+			{
+				Paints Q = Pt;
+				const double U = Unit(Hash(Key, 0xB21C));
+				if (U < 0.33)
+				{
+					for (int I = 0; I < 3; ++I) Q.Face[I] = Varied(Mixed(Pt.Core, Pt.Rubble[0], 0.3), 0.9 + 0.09 * I, 0.0);
+					Q.bPlaster = false;
+				}
+				else if (U < 0.53)
+				{
+					for (int I = 0; I < 3; ++I) Q.Face[I] = Varied(Mixed(Pt.Face[I], Rgb(96, 88, 78), 0.4), 1.0, 0.0);
+				}
+				return Q;
+			}
 
 			/** A slot's three levels, built: near, the middle and plain. */
 			void Make(int K, int Lod, LandField::Mesh& Out) const
@@ -2569,8 +2647,9 @@ namespace LandScape
 				{
 					const int Storeys = 2 + (K - KRow0) / 4, St = (K - KRow0) % 4;
 					const bool bShops = Storeys >= 4 && Unit(Hash(Key, 0x5409)) < 0.6;
-					if (Lod == 2) RowFar(W, Pt, Storeys, St, Key, FrontOf(Storeys), DeepOf(Storeys));
-					else RowHouse(W, Pt, Storeys, St, Key, Lod, bShops, FrontOf(Storeys), DeepOf(Storeys));
+					const Paints Own = RowPaints(Key);
+					if (Lod == 2) RowFar(W, Own, Storeys, St, Key, FrontOf(Storeys), DeepOf(Storeys));
+					else RowHouse(W, Own, Storeys, St, Key, Lod, bShops, FrontOf(Storeys), DeepOf(Storeys));
 					return;
 				}
 				if (K >= KVilla0 && K < KVilla0 + 4)
@@ -2578,12 +2657,18 @@ namespace LandScape
 					Villa(W, Pt, K - KVilla0, Key, Lod, 10.4, 8.8);
 					return;
 				}
+				if (K >= KVillaB0 && K < KVillaB0 + 4)
+				{
+					Villa(W, Pt, K - KVillaB0, Key, Lod, 9.0, 9.0);
+					return;
+				}
 				if (K >= KRowWhole0 && K < KRowWhole0 + 4)
 				{
 					const int Storeys = 2 + (K - KRowWhole0);
 					const bool bShops = Storeys >= 4 && Unit(Hash(Key, 0x5409)) < 0.6;
-					if (Lod == 2) RowFar(W, Pt, Storeys, SWhole, Key, FrontOf(Storeys), DeepOf(Storeys));
-					else RowHouse(W, Pt, Storeys, SWhole, Key, Lod, bShops, FrontOf(Storeys), DeepOf(Storeys));
+					const Paints Own = RowPaints(Key);
+					if (Lod == 2) RowFar(W, Own, Storeys, SWhole, Key, FrontOf(Storeys), DeepOf(Storeys));
+					else RowHouse(W, Own, Storeys, SWhole, Key, Lod, bShops, FrontOf(Storeys), DeepOf(Storeys));
 					return;
 				}
 				switch (K)
@@ -2740,7 +2825,7 @@ namespace LandScape
 				// to wall along it; a suburb's houses each in its garden; the industry's sheds, a chimney, a water tower.
 				const double Reach = std::max(Fd.Width(), Fd.Depth()) + 2.0 * H.Band();
 				const Grid* Grids[3] = { &Old, &Main, &Suburb };
-				int LastSlot = -1;
+				int LastSlot = -1, LastVilla = -1;
 				for (int Gi = 0; Gi < 3; ++Gi)
 				{
 					const Grid& G = *Grids[Gi];
@@ -2786,15 +2871,20 @@ namespace LandScape
 									const double U = R.Next(), U2 = R.Next(), U3 = R.Next();
 									if (Q == 1)
 									{
-										// a suburb's house in its garden: set back, every 20 to 30 m
-										const double Long = 10.4, Deep = 8.8, Back = 4.0 + 3.0 * U2;
+										// a suburb's house in its garden: set back, every 20 to 30 m; the long house or the square one,
+										// never the same house as the last (its look and its state both)
+										const int St = U < 0.32 - 0.12 * Ru ? 3 : U < 0.62 ? 0 : U < 0.85 ? 1 : 2;
+										int VillaK = (U3 < 0.5 ? KVilla0 : KVillaB0) + St;
+										if (VillaK == LastVilla) VillaK = (VillaK >= KVillaB0 ? KVilla0 : KVillaB0) + St;
+										const bool bSquare = VillaK >= KVillaB0;
+										const double Long = bSquare ? 9.0 : 10.4, Deep = bSquare ? 9.0 : 8.8, Back = 4.0 + 3.0 * U2;
 										if (S + Long > Len - 2.0) break;
 										const double CXh = AX + TX * (S + 0.5 * Long) - NX * (Back + 0.5 * Deep), CYh = AY + TY * (S + 0.5 * Long) - NY * (Back + 0.5 * Deep);
-										const int St = U < 0.32 - 0.12 * Ru ? 3 : U < 0.62 ? 0 : U < 0.85 ? 1 : 2;
 										const double Yaw = std::atan2(TY, TX) + (U3 - 0.5) * 0.08;
-										if (H.House(KitOf(KVilla0 + St), CXh, CYh, Yaw, Long, Deep))
+										if (H.House(KitOf(VillaK), CXh, CYh, Yaw, Long, Deep))
 										{
 											++Built;
+											LastVilla = VillaK;
 											if (St != 3) ++Damaged;
 											S += Long + 9.0 + 12.0 * U3;
 										}
