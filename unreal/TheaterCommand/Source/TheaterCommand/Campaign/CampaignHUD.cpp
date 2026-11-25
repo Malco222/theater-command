@@ -9641,6 +9641,15 @@ namespace
 							SNew(STextBlock).Text(Info.OptionsTitle).Font(SmallCaps()).ColorAndOpacity(Brass)
 						];
 					}
+					// (Release 2, tc.UI.TownCard; the release 2 assembler's stills at Brian's 1441 by 878 window, 25 November: the
+					// row sat under WHAT IT PAYS and THE TOWN AS A FORTRESS, below the fold, and it is the one way into the town
+					// card from this tab.) The town comes first on the PROVINCE tab, under the tabs.
+					const bool bTownRowFirst = ProvinceTab == 0 && bProvince && Info.Plots.Num() > 0 && ACampaignPlayerController::IsTownCardStyle()
+						&& Controller->GetMap() && Controller->GetTownBar().Region == Controller->GetMap()->GetSelectedRegion() && Controller->GetTownBar().Plots.Num() > 0;
+					if (bTownRowFirst)
+					{
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)[TownRow(Controller->GetTownBar())];
+					}
 					// (Release 2, the art director's read of run 2, 22 November: mend 3.) The forces of a place whose list runs past
 					// a line, moved here from over the tabs: each army, and each corps under it, an entry with a hanging indent.
 					if (ProvinceTab == 0 && ForcesInProvinceTab(Info))
@@ -9816,10 +9825,9 @@ namespace
 							SNew(STextBlock).Text(Info.PlacesText).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.12f)
 						];
 					}
-					if (ProvinceTab == 0 && bProvince && Info.Plots.Num() > 0 && ACampaignPlayerController::IsTownCardStyle() && Controller->GetMap() && Controller->GetTownBar().Region == Controller->GetMap()->GetSelectedRegion() && Controller->GetTownBar().Plots.Num() > 0)
+					if (bTownRowFirst)
 					{
-						// (Release 2, tc.UI.TownCard) The town, as one row that opens its card.
-						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)[TownRow(Controller->GetTownBar())];
+						// (Release 2, tc.UI.TownCard) The town's row is laid out under the tabs, above.
 					}
 					else if (ProvinceTab == 0 && bProvince && Info.Plots.Num() > 0)
 					{
@@ -17310,12 +17318,20 @@ namespace
 			if (!ACampaignPlayerController::IsTownCardStyle() || Bar.Plots.Num() == 0)
 			{
 				TownHeroBox->SetContent(SNew(SSpacer));
+				TownHeroDoor.Reset();
 				return;
 			}
 			const FString Province = Controller.IsValid() ? Controller->GetRegionPanel().Name.ToString() : FString();
 			// (387 of the panel's 390 between its brass edges; the street at 208 high, its church in the middle)
 			const float High = 208.0f, Scale = High / 568.0f;
+			// (Release 2; the assembler's stills at Brian's window, 25 November: the way into the town card sat below the
+			// fold. The street at the panel's head is the town, so a press on it opens the card, from every tab, and a tag
+			// in its corner says so. The tag lights while the street is under the pointer.)
 			TownHeroBox->SetContent(
+				SAssignNew(TownHeroDoor, SButton).ButtonStyle(&FCoreStyle::Get().GetWidgetStyle<FButtonStyle>("NoBorder")).ContentPadding(FMargin(0.0f)).IsFocusable(false)
+				.ToolTipText(FText::FromString(TEXT("The town: its street and its building plots, what stands on each and what could go up on it.")))
+				.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenTownCard(); } return FReply::Handled(); })
+				[
 				SNew(SBox).WidthOverride(387.0f).HeightOverride(High)
 				[
 					SNew(SOverlay)
@@ -17331,6 +17347,15 @@ namespace
 							.ShadowOffset(FVector2D(0.0, 2.0)).ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.6f))
 						]
 					]
+					+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(0.0f, 12.0f, 14.0f, 0.0f)
+					[
+						SNew(SBorder).BorderImage(&TownLook().Tag).Padding(FMargin(9.0f, 3.0f, 9.0f, 4.0f)).Visibility(EVisibility::HitTestInvisible)
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("OPEN THE TOWN"))).Font(SmallCaps())
+							.ColorAndOpacity_Lambda([this]() { return FSlateColor(TownHeroDoor.IsValid() && TownHeroDoor->IsHovered() ? BrightBrass : Cream); })
+						]
+					]
+				]
 				]);
 		}
 
@@ -20640,6 +20665,7 @@ namespace
 		FString TownPickLine;
 		int32 TownPickPlot = INDEX_NONE, TownPickRegion = INDEX_NONE;
 		TSharedPtr<SBox> TownHeroBox; // (tc.UI.TownCard) the province panel's head: the town's street
+		TSharedPtr<SButton> TownHeroDoor; // (tc.UI.TownCard) the head's street as a button: a press opens the town card
 		int32 TownHeroRegion = INDEX_NONE; // the town it was last laid out for
 		int32 ShownProvince = -1;
 		TSharedPtr<SVerticalBox> AdviserSteps;
