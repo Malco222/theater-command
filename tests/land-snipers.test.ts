@@ -69,6 +69,30 @@ describe('sniper teams: the ticket', () => {
   });
 });
 
+describe('sniper teams: the player\'s orders', () => {
+  it('in a group attack a team takes no lane and aims at the target from its cover; sent alone it goes', () => {
+    const t = withSnipers(ticket('plains', 5));
+    const b = new LandBattle({ ...t, att: { ...t.att, human: true } });
+    const mine = b.units.filter((u) => u.side === 'att' && u.kind !== 'fort');
+    const team = mine.find((u) => u.team === 'snp')!;
+    const foe = b.units.find((u) => u.side === 'def' && u.team !== 'snp')!;
+    const at = [team.x, team.y];
+    expect(b.command({ do: 'attack', units: mine.map((u) => u.id), target: foe.id }, 'att')).toBe(true);
+    expect(team.aim).toBe(foe.id);
+    expect(team.order).toBeNull();
+    expect(mine.filter((u) => u.team !== 'snp').every((u) => u.order?.kind === 'attack')).toBe(true);
+    for (let k = 0; k < 50; k++) b.step();
+    expect(Math.hypot(team.x - at[0], team.y - at[1])).toBeLessThan(1);
+    expect(b.command({ do: 'attack', units: [team.id], target: foe.id }, 'att')).toBe(true);
+    expect(team.order?.kind).toBe('attack');
+    // Sniper teams sent on their own, together, go as ordered too.
+    const teams = mine.filter((u) => u.team === 'snp');
+    expect(teams.length).toBeGreaterThan(1);
+    expect(b.command({ do: 'attack', units: teams.map((u) => u.id), target: foe.id }, 'att')).toBe(true);
+    expect(teams.every((u) => u.order?.kind === 'attack')).toBe(true);
+  });
+});
+
 describe('sniper teams: the switch off', () => {
   it('sets nothing of theirs on any block when the field has none', () => {
     const b = new LandBattle(ticket('urban', 4));

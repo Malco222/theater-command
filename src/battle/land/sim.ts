@@ -1591,10 +1591,19 @@ export class LandBattle implements BattleSim<LandUnit> {
       }
       case 'attack': {
         const t = this.unit(c.target);
-        const us = mine(c.units);
+        const all = mine(c.units);
         // Never at a block hidden from his side (release 2): nobody there knows it is there.
-        if (!t || t.side === by || !live(t) || t.hid || !us.length) return false;
-        hands(us);
+        if (!t || t.side === by || !live(t) || t.hid || !all.length) return false;
+        hands(all);
+        // A sniper team sent in with others (the plain attack: every block at the nearest enemy) takes no lane in the
+        // line abreast: it stays in its cover and takes the target as its aim, as a fire order gives it (land:fire). In
+        // a lane of its own it pushed the line's real blocks out past the target's flanks and cost the plain attack 6
+        // battles in 100 (the sniper gate's G7, 25 Nov; the design director's ruling of 18:55Z). Sent alone, or with
+        // only other sniper teams, it goes as ordered.
+        const lone = all.some((u) => u.team !== 'snp') ? all.filter((u) => u.team === 'snp') : [];
+        for (const u of lone) give(u, () => { u.order = null; u.path = []; u.keepFace = null; u.aim = t.id; delete u.cut; });
+        const us = lone.length ? all.filter((u) => u.team !== 'snp') : all;
+        if (!us.length) return true;
         // Several blocks sent at one: they come on abreast, each in its own lane, the outer ones round the target's
         // flanks, instead of all making for its middle. One block alone goes straight for it (the computer general's way).
         const cx = us.reduce((s, u) => s + u.x, 0) / us.length, cy = us.reduce((s, u) => s + u.y, 0) / us.length;
