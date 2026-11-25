@@ -4643,16 +4643,23 @@ function fleetAttackPage(s: Game, id: number, target: number): Page | null {
   if (!p) return null;
   const share = (x: number): string => `${Math.round(x * 100)}%`;
   const odds = (x: number): string => (x >= 9.95 ? 'more than 10' : x.toFixed(1));
+  // (1.5.3, playtest #26) "1 cruiser and 3 destroyers": the last of a list after "and".
   const lost = (x: Record<string, number>): string => {
     const parts = ['bb', 'cv', 'ca', 'dd', 'ss'].filter((c) => (x[c] ?? 0) > 0).map((c) => `${x[c]} ${SHIP_WORD[c][x[c] === 1 ? 0 : 1]}`);
-    return parts.length ? parts.join(', ') : 'nothing';
+    return parts.length ? listOf(parts) : 'nothing';
+  };
+  // (1.5.3, playtest #26) The fewest and the most each side loses as the dice fall, said plainly, and once where they are the same.
+  const range = (r: Record<string, number>[], own: boolean): string => {
+    const few = lost(r[0]), most = lost(r[1]);
+    if (few === most) return `${own ? 'You lose' : 'He loses'} ${few} however the day goes.`;
+    return own ? `At best you lose ${few}; at worst ${most}.` : `At the least he loses ${few}; at the most ${most}.`;
   };
   const them = p.theirs.fleets.find((x) => x.id === target);
   const name = them?.name ?? 'the enemy fleet';
   // (1.5.3, playtest #25) A fleet only reported is in harbour, and no more: the map gives it no port.
   const where = p.where === 'harbour' ? `in harbour${them?.known === 'exact' ? ` at ${p.port}` : ''}` : `in the ${p.zoneName}`;
   const side = (fs: typeof p.ours.fleets, own: boolean): PageRow[] => fs.map((x) => ({
-    nat: x.nat, title: `${x.name}${x.count >= 0 ? `  \u00B7  ${x.count} ships` : x.size ? `  \u00B7  ${x.size.toLowerCase()}` : ''}`,
+    nat: x.nat, title: `${x.name}${x.count >= 0 ? `  \u00B7  ${x.count} ${x.count === 1 ? 'ship' : 'ships'}` : x.size ? `  \u00B7  ${x.size.toLowerCase()}` : ''}`,
     lines: [
       x.ships ? ['bb', 'cv', 'ca', 'dd', 'ss'].filter((c) => (x.ships as unknown as Record<string, number>)[c] > 0).map((c) => `${(x.ships as unknown as Record<string, number>)[c]} ${SHIP_WORD[c][(x.ships as unknown as Record<string, number>)[c] === 1 ? 0 : 1]}`).join(', ') : 'Reported, not identified: its ships and strength are not known.',
       own ? `${x.admiral ? `${x.admiral} commands. ` : ''}Readiness ${share(x.ready ?? 1)}.` : '',
@@ -4662,8 +4669,8 @@ function fleetAttackPage(s: Game, id: number, target: number): Page | null {
   }));
   const ticket: PageRow[] = p.lines.map((l) => ({ nat: '', title: l.label, lines: [l.value, l.effect ?? ''].filter(Boolean), buttons: [] }));
   const losses: PageRow[] = p.odds ? [
-    { nat: card.nat, title: 'You are likely to lose', lines: [lost(p.likely.ours as unknown as Record<string, number>), `Between ${lost(p.range.ours[0] as unknown as Record<string, number>)} and ${lost(p.range.ours[1] as unknown as Record<string, number>)} as the day goes.`], buttons: [] },
-    { nat: them?.nat ?? '', title: 'He is likely to lose', lines: [lost(p.likely.theirs as unknown as Record<string, number>), `Between ${lost(p.range.theirs[0] as unknown as Record<string, number>)} and ${lost(p.range.theirs[1] as unknown as Record<string, number>)} as the day goes.`], buttons: [] },
+    { nat: card.nat, title: 'You are likely to lose', lines: [lost(p.likely.ours as unknown as Record<string, number>), range(p.range.ours as unknown as Record<string, number>[], true)], buttons: [] },
+    { nat: them?.nat ?? '', title: 'He is likely to lose', lines: [lost(p.likely.theirs as unknown as Record<string, number>), range(p.range.theirs as unknown as Record<string, number>[], false)], buttons: [] },
   ] : [];
   return {
     id: `fleetattack:${id}:${target}`, title: `ATTACK ${name.toUpperCase()}?`,

@@ -239,13 +239,17 @@ export function planFleetAttack(g: Game, id: number, target: number, viewer: str
     theirs: [lossAt(met, worst.theirs, Math.floor), lossAt(met, best.theirs, Math.ceil)],
   };
 
-  plan.lines.push({ label: 'Forces', value: `${shipsIn(mine)} ships against ${shipsIn(met)}`, effect: `Fleet strength ${Math.round(ours.ships)} against ${Math.round(theirs.ships)}` });
+  // (1.5.3, playtest #26) "1 ship against 30", not "1 ships".
+  const ourShips = shipsIn(mine);
+  plan.lines.push({ label: 'Forces', value: `${ourShips} ${ourShips === 1 ? 'ship' : 'ships'} against ${shipsIn(met)}`, effect: `Fleet strength ${Math.round(ours.ships)} against ${Math.round(theirs.ships)}` });
   if (at.harbour) {
     plan.lines.push({ label: 'In harbour', value: `${cap(listNames(met))} at anchor at ${at.port}`, effect: `Ships at anchor fight at ${pct(at.anchor)} of their weight` });
     if (at.shore > 0) plan.lines.push({ label: 'Shore batteries', value: `The guns of ${at.port}`, effect: `Worth ${Math.round(at.shore)} to the defence` });
   }
   if (airA > 0.5 || airD > 0.5) plan.lines.push({ label: 'Air', value: airA > airD ? 'You have the stronger air cover from the coast' : airD > airA ? 'The enemy has the stronger air cover from the coast' : 'Even', effect: `Worth ${Math.round(airA)} against ${Math.round(airD)}` });
-  plan.lines.push({ label: 'Odds', value: `${oneDp(mid)} to 1`, effect: `Between ${oneDp(plan.odds.low)} and ${oneDp(plan.odds.high)} to 1 as the day goes` });
+  // (1.5.3, playtest #33) Where both ends of the swing read the same, they are said once: "More than 10 to 1 all day".
+  const worstOdds = oneDp(plan.odds.low), bestOdds = oneDp(plan.odds.high);
+  plan.lines.push({ label: 'Odds', value: `${oneDp(mid)} to 1`, effect: worstOdds === bestOdds ? `${cap(worstOdds === 'more than 10' ? worstOdds : `about ${worstOdds}`)} to 1 all day` : `Between ${worstOdds} and ${bestOdds} to 1 as the day goes` });
   if (reported) plan.lines.push({ label: 'Not identified', value: unseen, effect: 'Not in these figures' });
   if (!at.harbour) plan.lines.push({ label: 'Search', value: seaPicture(g, at.zone, f.nat).word });
   const worn = mine.filter((x) => x.ready < 0.8);

@@ -1,11 +1,14 @@
 // Release 1.5.3: the fleet attack card's words (the 1.5.1 playtest, findings 25, 26 and 33). Words only, and the sea
 // report's strength line: no rule reads any of them, and the card stays a forecast that throws no die.
 //   25  a fleet the player's side has only reported keeps its name and its port to itself, in every refusal and on the card;
+//   26  "1 ship", not "1 ships"; the losses listed with "and" before the last, and their range said plainly;
+//   33  odds whose two ends read the same are said once: "More than 10 to 1 all day".
 import { describe, expect, it } from 'vitest';
 import { fleetKnown } from '../src/campaign/carriers';
 import { createGame } from '../src/campaign/game';
 import { detach } from '../src/campaign/fleets';
 import { orderFleetAttack, planFleetAttack, whyNotFleetAttack } from '../src/campaign/fleetattack';
+import { setFog } from '../src/campaign/intel';
 import { loadGame } from '../src/campaign/save';
 import { sail, zoneOf } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
@@ -138,5 +141,87 @@ describe('25: a fleet only reported stays unnamed', () => {
     sail(g, home, zoneOf(g, 'wapp'), 'patrol');
     home.seen = { GER: g.turn };
     expect(whyNotFleetAttack(g, swine.id, home.id)).toBe('The Home Fleet is in the Western Approaches, out of reach of the Swinemunde Fleet from Swinemunde.');
+  });
+});
+
+/** A list of ships as the card says it: "nothing", "1 destroyer", or "1 battleship, 2 cruisers and 3 destroyers". */
+const LIST = String.raw`(?:nothing|\d+ [a-z]+(?:(?:, \d+ [a-z]+)* and \d+ [a-z]+)?)`;
+const lossRows = (p: Page): Row[] => p.sections.find((s) => s.heading === 'IF IT IS FOUGHT')!.rows;
+const oddsRow = (p: Page): Row => p.sections.find((s) => s.heading === 'THE ODDS')!.rows.find((r) => r.title === 'Odds')!;
+/** The page of one of the player's fleets sent at an enemy fleet, both found by name in the view. */
+const cardFor = (mine: string, theirs: string): Page => {
+  const v = TC.view() as { human: string; fleets: { id: number; nat: string; name: string }[] };
+  const a = v.fleets.find((f) => f.nat === v.human && f.name === mine)!, b = v.fleets.find((f) => f.nat !== v.human && f.name === theirs)!;
+  return TC.page(`fleetattack:${a.id}:${b.id}`) as Page;
+};
+
+describe('26: the card counts and lists its ships in plain words', () => {
+  it('a fleet of one ship is "1 ship", on its row and in the forces line', () => {
+    // The playtest's case: UK from 17, seed 5, one destroyer split off the Home Fleet.
+    TC.start({ human: 'UK', view: 'grand', from: 17, seed: 5 });
+    const v = TC.view() as { fleets: { id: number; nat: string; name: string }[] };
+    const home = v.fleets.find((f) => f.name === 'Home Fleet' && f.nat === 'UK')!;
+    const made = TC.act(`fleetsplit:${home.id}:dd:1`) as { ok: boolean; made: number };
+    expect(made.ok).toBe(true);
+    const foe = v.fleets.find((f) => f.nat === 'GER')!;
+    const p = TC.page(`fleetattack:${made.made}:${foe.id}`) as Page;
+    const titles = p.sections.find((s) => s.heading === 'YOUR SHIPS')!.rows.map((r) => r.title);
+    expect(titles).toContain('1st Escort Fleet  \u00B7  1 ship');
+    expect(titles.some((t) => /^Home Fleet  \u00B7  \d+ ships$/.test(t))).toBe(true);
+    for (const t of titles) expect(t).not.toMatch(/\b1 ships\b/);
+    // The forces line, where one ship goes in alone.
+    const g = germany(3);
+    setFog(g, false);
+    const sq = detach(g, fleet(g, 'Battle Fleet'), { dd: 1 })!;
+    const plan = planFleetAttack(g, sq.id, fleet(g, 'Home Fleet').id)!;
+    expect(plan.lines.find((l) => l.label === 'Forces')!.value).toMatch(/^1 ship against \d+$/);
+  });
+
+  it('the losses read as a list, and their range as "at best ... at worst ..."', () => {
+    // The playtest's case: UK from 1, seed 11, the Home Fleet sent at the Battle Fleet.
+    TC.start({ human: 'UK', view: 'grand', from: 1, seed: 11, depth: 'theatre' });
+    const p = cardFor('Home Fleet', 'Battle Fleet');
+    const [ours, theirs] = lossRows(p);
+    expect(ours.title).toBe('You are likely to lose');
+    expect(theirs.title).toBe('He is likely to lose');
+    expect(ours.lines[0]).toMatch(new RegExp(`^${LIST}$`));
+    expect(theirs.lines[0]).toMatch(new RegExp(`^${LIST}$`));
+    expect(ours.lines[1]).toMatch(new RegExp(`^(At best you lose ${LIST}; at worst ${LIST}|You lose ${LIST} however the day goes)\\.$`));
+    expect(theirs.lines[1]).toMatch(new RegExp(`^(At the least he loses ${LIST}; at the most ${LIST}|He loses ${LIST} however the day goes)\\.$`));
+    for (const w of words(p)) {
+      expect(w).not.toMatch(/as the day goes\.$/);
+      expect(w).not.toMatch(/^Between .* and .* as the day goes\.$/);
+    }
+    // At more than 10 to 1 the best is nothing, and the line says so.
+    TC.start({ human: 'GER', view: 'grand', from: 1, seed: 3, world: true });
+    const q = cardFor('Battle Fleet', 'Polish Navy');
+    expect(lossRows(q)[0].lines[1]).toMatch(new RegExp(`^At best you lose nothing; at worst ${LIST}\\.$`));
+  });
+});
+
+describe('33: the odds said once where both ends read the same', () => {
+  it('"More than 10 to 1 all day", and the two ends where they differ', () => {
+    // The playtest's case: GER from 1, seed 3, the world: the Battle Fleet sent at the Polish Navy.
+    TC.start({ human: 'GER', view: 'grand', from: 1, seed: 3, world: true });
+    const q = cardFor('Battle Fleet', 'Polish Navy');
+    expect(q.headline).toMatch(/: more than 10 to 1, about \d+% to win$/);
+    expect(oddsRow(q).lines).toEqual(['more than 10 to 1', 'More than 10 to 1 all day']);
+    TC.start({ human: 'UK', view: 'grand', from: 1, seed: 11, depth: 'theatre' });
+    expect(oddsRow(cardFor('Home Fleet', 'Battle Fleet')).lines[1]).toMatch(/^Between \d+\.\d and \d+\.\d to 1 as the day goes$/);
+    // Hopeless odds read the same at both ends too: one British destroyer sent at the Battle Fleet in its harbour.
+    const g = startOpen(createGame(3, 'UK'));
+    let guard = 0;
+    while (!humanUp(g) && guard++ < 50) stepAI(g);
+    setFog(g, false);
+    const home = fleet(g, 'Home Fleet'), battle = fleet(g, 'Battle Fleet');
+    const sq = detach(g, home, { dd: 1 })!;
+    // (no other British fleet joins it: every one of them is sent to harbour)
+    for (const f of g.fleets.filter((x) => x.nat === 'UK' && x.id !== sq.id)) sail(g, f, f.home, 'port');
+    sail(g, battle, battle.home, 'port');
+    const plan = planFleetAttack(g, sq.id, battle.id)!;
+    const odds = plan.lines.find((l) => l.label === 'Odds')!;
+    expect(plan.odds!.low.toFixed(1)).toBe(plan.odds!.high.toFixed(1));
+    expect(odds.value).toBe(`${plan.odds!.mid.toFixed(1)} to 1`);
+    expect(odds.effect).toBe(`About ${plan.odds!.mid.toFixed(1)} to 1 all day`);
   });
 });
