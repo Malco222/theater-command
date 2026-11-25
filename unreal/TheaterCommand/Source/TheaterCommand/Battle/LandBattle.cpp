@@ -1662,6 +1662,36 @@ bool ALandBattle::Open()
 			OutNormal = LandPlay::Vec(Normal.X, Normal.Y, Normal.Z);
 			return true;
 		};
+		// Effects (R2), small arms off armour (LandPlay::World::bRicochet): the plate a rifle's or machine gun's round
+		// struck, as she is posed now: the tank core's strike (her road wheels and tracks before her hull included), how
+		// far it runs flat about it and her floor under it, so the kit's strikes are all on her
+		PlayWorld.Plate = [Weak](int Track, int Round, LandPlay::PlateSpot& Out)
+		{
+			const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
+			if (!Pinned.IsValid() || Track < 0 || !Pinned->Armour)
+			{
+				return false;
+			}
+			FLandBattleState& St = *Pinned;
+			const size_t K = static_cast<size_t>(Track);
+			if (K >= St.VehicleOf.size() || St.VehicleOf[K] < 0)
+			{
+				return false;
+			}
+			const LandKit::Vehicle& V = St.Armour->Vehicles()[static_cast<size_t>(St.VehicleOf[K])];
+			LandKit::Vehicle::PlateSpot P;
+			if (!V.PlateNow(Round, P))
+			{
+				return false;
+			}
+			Out.At = LandPlay::Vec(P.At.X, P.At.Y, P.At.Z);
+			Out.Normal = LandPlay::Vec(P.Normal.X, P.Normal.Y, P.Normal.Z);
+			Out.RoomMid = LandPlay::Vec(P.Mid.X, P.Mid.Y, P.Mid.Z);
+			Out.RoomA = LandPlay::Vec(P.A.X, P.A.Y, P.A.Z);
+			Out.RoomB = LandPlay::Vec(P.B.X, P.B.Y, P.B.Z);
+			Out.Floor = P.Floor;
+			return true;
+		};
 		// Effects (R2): each gun's own flash (-TheaterLandGunFlash; Brian, 23 November: "how does the gun fire look when
 		// they shoot? can we make the mussel flash realistic?"). The kit's looks are muzzle.look.<look> in
 		// battle-fx-guns.json, laid over the recipe in Open: star, the MG 42's spikes; cone, a flash hider's narrow cone
@@ -7423,8 +7453,14 @@ void ALandBattle::PlayEffects()
 		case LandPlay::FxKind::Shots:
 			if (E.bArmour)
 			{
-				// (Effects (R2): small arms off armour, LandPlay::World::bRicochet: its rounds bounce off her plate at To)
-				Effects->ShotsOnArmour(E.Gun, At, World(E.To.X, E.To.Y, E.To.Z), WorldWay(E.Normal.X, E.Normal.Y, E.Normal.Z).GetSafeNormal(), Name, E.Rounds, static_cast<float>(E.PerSecond), Ground);
+				// (Effects (R2): small arms off armour, LandPlay::World::bRicochet: its rounds bounce off her plate at To,
+				// inside the room it has (RoomMid, RoomA, RoomB), over her floor, riding with her: the kit runs on life's
+				// clock, a battle second's metres are Life life seconds', as her dust's)
+				// (her turn: + as her heading grows, north toward east, which is the world's x toward its y)
+				const FVector Carry = WorldWay(E.Carry.X, E.Carry.Y, E.Carry.Z) * (UnitsPerMetre / S.Life);
+				Effects->ShotsOnArmour(E.Gun, At, World(E.To.X, E.To.Y, E.To.Z), WorldWay(E.Normal.X, E.Normal.Y, E.Normal.Z).GetSafeNormal(),
+					World(E.RoomMid.X, E.RoomMid.Y, E.RoomMid.Z), WorldWay(E.RoomA.X, E.RoomA.Y, E.RoomA.Z) * UnitsPerMetre, WorldWay(E.RoomB.X, E.RoomB.Y, E.RoomB.Z) * UnitsPerMetre,
+					Carry, World(E.Pivot.X, E.Pivot.Y, E.Pivot.Z), E.Turn / S.Life, E.Floor > -1.0e29 ? E.Floor * UnitsPerMetre : -1.0e30, Name, E.Rounds, static_cast<float>(E.PerSecond), Ground);
 				break;
 			}
 			Effects->Shots(E.Gun, At, World(E.To.X, E.To.Y, E.To.Z), Name, E.Rounds, static_cast<float>(E.PerSecond), Ground); // (rounds a life second, on the kit's life clock: the mix cuts the burst alike)

@@ -16,8 +16,11 @@
 //   ./fxpreview /tmp/recipe.txt <out folder> seafx <screen...|splash...> <frames> [WxH]
 //   ./fxpreview /tmp/recipe.txt <out folder> ricochet <eye metres: 30, 150, 600> <frames> [WxH]
 //     (Effects (R2), small arms off armour: a machine gun 120 m off rakes a tank's side, 45 degrees off square, its
-//     rounds laid by ShotsOnArmour and bouncing off her; the eye that far off. FX_RICO_BEFORE=1: the same burst as
-//     Shots, into her middle, as before; FX_FPS=60: frames a 60th of a second apart. ricochet_test.cpp checks it)
+//     rounds laid by ShotsOnArmour and bouncing off her; the eye that far off. FX_RICO_CASE: side (the default), edge
+//     (her front plate aimed 3 cm under its top edge, 0.8 of the way to its side), turret (her turret's side 0.42 m
+//     over her deck, the deck handed over as her floor), driving (her front plate as she drives at the gun at 5 m/s,
+//     drawn where she is each frame). FX_RICO_BEFORE=1: the same burst as Shots, into her middle, as before;
+//     FX_FPS=60: frames a 60th of a second apart. ricochet_test.cpp checks it)
 //
 // The sea shot (the sea battle's range): three ships in line ahead, FX_GAP m (500) apart and FX_SHIP_LONG m (200)
 // long, steaming along +X at FX_KNOTS (25), seen broadside on from FX_DIST m (15000) by an eye FX_EYE_H m (24) up with
@@ -1550,10 +1553,43 @@ namespace
 		Fx.SetGroundColour(&GroundPaint, nullptr);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0));
 		// (the tank at the middle facing +X, her side one flat face over her tracks as a Tiger's; the burst strikes her
-		// left side at the aim, from a machine gun FX_MG_AWAY m (120) off, 45 degrees off square, its muzzle 0.6 m up)
+		// left side at the aim, from a machine gun FX_MG_AWAY m (120) off, 45 degrees off square, its muzzle 0.6 m up.
+		// The plate handed over as the battle does: the face struck as her room, her floor under it, her way)
 		const double G = Swell(nullptr, 0.0, 0.0);
-		const Vec Aim(-0.6, -1.6, G + 1.5), Out(0.0, -1.0, 0.0);
-		Vec Gun = Aim + Vec(-1.0, -1.0, 0.0).Unit() * EnvNum("FX_MG_AWAY", 120.0);
+		const char* CaseIs = std::getenv("FX_RICO_CASE");
+		const std::string Case = CaseIs ? CaseIs : "side";
+		const bool bFront = Case == "edge" || Case == "driving";
+		Battle::ArmourPlate Plate;
+		Plate.Pivot = Vec(0.0, 0.0, G);
+		if (bFront)
+		{
+			Plate.At = Case == "edge" ? Vec(2.2, 1.28, G + 1.2 + 0.95 * 0.63) : Vec(2.2, -0.9, G + 1.5);
+			Plate.Normal = Vec(1.0, 0.0, 0.0);
+			Plate.RoomMid = Vec(2.2, 0.0, G + 1.515);
+			Plate.RoomA = Vec(0.0, 1.6, 0.0);
+			Plate.RoomB = Vec(0.0, 0.0, 0.315);
+			Plate.Floor = G + 1.2; // (her track guards and lower hull under her front plate)
+			Plate.Carry = Case == "driving" ? Vec(5.0, 0.0, 0.0) : Vec();
+		}
+		else if (Case == "turret")
+		{
+			Plate.At = Vec(-0.2, -1.2, G + 2.25);
+			Plate.Normal = Vec(0.0, -1.0, 0.0);
+			Plate.RoomMid = Vec(-0.2, -1.2, G + 2.34);
+			Plate.RoomA = Vec(1.4, 0.0, 0.0);
+			Plate.RoomB = Vec(0.0, 0.0, 0.51);
+			Plate.Floor = G + 1.83; // (her deck under her turret)
+		}
+		else
+		{
+			Plate.At = Vec(-0.6, -1.6, G + 1.5);
+			Plate.Normal = Vec(0.0, -1.0, 0.0);
+			Plate.RoomMid = Vec(-0.5, -1.6, G + 1.515);
+			Plate.RoomA = Vec(2.7, 0.0, 0.0);
+			Plate.RoomB = Vec(0.0, 0.0, 0.315);
+		}
+		const Vec Aim = Plate.At;
+		Vec Gun = Aim + (Case == "driving" ? Vec(1.0, 0.0, 0.0) : bFront ? Vec(1.0, 0.3, 0.0).Unit() : Vec(-1.0, -1.0, 0.0).Unit()) * EnvNum("FX_MG_AWAY", 120.0);
 		Gun.Z = Swell(nullptr, Gun.X, Gun.Y) + 0.6;
 		// (the eye: Shot metres (30, 150 or 600) off the aim, from ahead of her side, as a man's eye close in and higher far
 		// off; FX_EYE_H to set its height, FX_LENS its angle across, 42 degrees)
@@ -1563,7 +1599,7 @@ namespace
 		Cam.W = W;
 		Cam.H = H;
 		Cam.Ppr = W / (2.0 * std::tan(std::clamp(EnvNum("FX_LENS", 42.0), 5.0, 170.0) * 3.14159265358979 / 360.0));
-		Cam.Eye = Aim + Vec(0.35, -1.0, 0.0).Unit() * Away;
+		Cam.Eye = Aim + (bFront ? Vec(1.0, -0.35, 0.0) : Vec(0.35, -1.0, 0.0)).Unit() * Away;
 		Cam.Eye.Z = Swell(nullptr, Cam.Eye.X, Cam.Eye.Y) + EyeH;
 		Cam.Forward = (Aim + Vec(0.0, 0.0, 0.2) - Cam.Eye).Unit();
 		Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
@@ -1597,7 +1633,7 @@ namespace
 		}
 		else
 		{
-			Fx.ShotsOnArmour(0.0, 13, Gun, Aim, Out, "mg", Rounds, Rate, "earth");
+			Fx.ShotsOnArmour(0.0, 13, Gun, Plate, "mg", Rounds, Rate, "earth");
 		}
 		std::sort(Frames.begin(), Frames.end());
 		int Drawn = 0;
@@ -1618,12 +1654,13 @@ namespace
 			Paint(C, Cam, Lamps, NL, Men, false);
 			const Vec Sun = View.Sun.Unit();
 			const double SunShare = bDusk ? 0.0 : 0.6;
-			LitBox(C, Cam, Vec(-3.2, -1.6, G), Vec(3.2, -1.15, G + 1.2), Track3, Lamps, NL, Sun, SunShare);
-			LitBox(C, Cam, Vec(-3.2, 1.15, G), Vec(3.2, 1.6, G + 1.2), Track3, Lamps, NL, Sun, SunShare);
-			LitBox(C, Cam, Vec(-3.0, -1.15, G + 0.4), Vec(2.6, 1.15, G + 1.2), Paint3, Lamps, NL, Sun, SunShare);
-			LitBox(C, Cam, Vec(-3.2, -1.6, G + 1.2), Vec(2.2, 1.6, G + 1.83), Paint3, Lamps, NL, Sun, SunShare);
-			LitBox(C, Cam, Vec(-1.6, -1.2, G + 1.83), Vec(1.2, 1.2, G + 2.85), Paint3, Lamps, NL, Sun, SunShare);
-			LitBox(C, Cam, Vec(1.2, -0.12, G + 2.1), Vec(5.2, 0.12, G + 2.34), Paint3, Lamps, NL, Sun, SunShare, 0.4);
+			const Vec By = Plate.Carry * Now; // (where she has driven to by this frame)
+			LitBox(C, Cam, By + Vec(-3.2, -1.6, G), By + Vec(3.2, -1.15, G + 1.2), Track3, Lamps, NL, Sun, SunShare);
+			LitBox(C, Cam, By + Vec(-3.2, 1.15, G), By + Vec(3.2, 1.6, G + 1.2), Track3, Lamps, NL, Sun, SunShare);
+			LitBox(C, Cam, By + Vec(-3.0, -1.15, G + 0.4), By + Vec(2.6, 1.15, G + 1.2), Paint3, Lamps, NL, Sun, SunShare);
+			LitBox(C, Cam, By + Vec(-3.2, -1.6, G + 1.2), By + Vec(2.2, 1.6, G + 1.83), Paint3, Lamps, NL, Sun, SunShare);
+			LitBox(C, Cam, By + Vec(-1.6, -1.2, G + 1.83), By + Vec(1.2, 1.2, G + 2.85), Paint3, Lamps, NL, Sun, SunShare);
+			LitBox(C, Cam, By + Vec(1.2, -0.12, G + 2.1), By + Vec(5.2, 0.12, G + 2.34), Paint3, Lamps, NL, Sun, SunShare, 0.4);
 			if (bDusk)
 			{
 				for (size_t I = 0; I < C.R.size(); ++I)
@@ -1635,7 +1672,7 @@ namespace
 			}
 			Puffs(C, Cam, Fx, N);
 			char Name[256];
-			std::snprintf(Name, sizeof(Name), "%s/ricochet-%s-f%03d.ppm", OutDir.c_str(), Shot.c_str(), Frame);
+			std::snprintf(Name, sizeof(Name), "%s/ricochet-%s%s%s-f%03d.ppm", OutDir.c_str(), CaseIs ? Case.c_str() : "", CaseIs ? "-" : "", Shot.c_str(), Frame);
 			C.Save(Name);
 			std::printf("frame %d: %d puffs, %d lamps; the burst laid %d strikes on her plate, %d sparks, %d ricochets\n", Frame, N, NL, Fx.RicochetStrikes(), Fx.RicochetSparks(), Fx.RicochetTracers());
 		}

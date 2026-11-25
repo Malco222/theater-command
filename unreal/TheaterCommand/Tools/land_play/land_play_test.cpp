@@ -37,6 +37,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <set>
@@ -367,6 +368,81 @@ namespace
 	};
 }
 
+namespace
+{
+	/**
+	 * Effects (R2), small arms off armour: armoured or soft, every vehicle model the game draws (Content/Models/Battle)
+	 * under each role the rules give it (land-rules.js: a block's tanks and its tank destroyers, "tank"; its armoured
+	 * cars, AA vehicles, jeeps and motorcycles, "tank" with their own model, ml; a battery's guns, "gun", its
+	 * self-propelled ones with their own model; armoured infantry's carriers, "lorry" with their own model, and a
+	 * block's lorries, "lorry"), written out by hand from what each is (not from ArmouredVehicle): a rifle's or a machine
+	 * gun's round bounces off armour and goes into a soft one. Every model file must have its rows, so a new model is
+	 * decided here before it is drawn. Returns the faults; prints what it checked.
+	 */
+	int RicochetClasses(const std::string& Content)
+	{
+		struct Row { const char* Model; const char* Role; bool bOwn; bool bArmour; };
+		static const Row Rows[] = {
+			// a block's tanks (her block's model) and the same drawn as escorts' stand-ins (her own)
+			{ "Sherman", "tank", false, true }, { "Tiger", "tank", false, true }, { "PanzerIV", "tank", false, true }, { "Panther", "tank", false, true },
+			{ "T34", "tank", false, true }, { "LightTank", "tank", false, true }, { "Sherman", "tank", true, true },
+			// tank destroyers and assault guns (a tank block's, their own model; or a block of them)
+			{ "StuG3", "tank", true, true }, { "M10", "tank", true, true }, { "SU85", "tank", true, true }, { "Semovente", "tank", true, true },
+			{ "StuG3", "tank", false, true },
+			// armoured cars, AA half-tracks (drawn as tanks of their own model)
+			{ "ArmouredCar", "tank", true, true }, { "SdKfz222", "tank", true, true }, { "M8", "tank", true, true },
+			{ "FlakHalftrack", "tank", true, true }, { "M16", "tank", true, true },
+			// the soft escorts: the flak lorry, jeeps, field and staff cars, motorcycles
+			{ "FlakTruck", "tank", true, false }, { "Jeep", "tank", true, false }, { "Kubelwagen", "tank", true, false }, { "FieldCar", "tank", true, false },
+			{ "GAZ67", "tank", true, false }, { "Fiat508", "tank", true, false }, { "Kurogane", "tank", true, false }, { "Motorcycle", "tank", true, false },
+			{ "R75", "tank", true, false }, { "M72", "tank", true, false }, { "WLA", "tank", true, false }, { "M20", "tank", true, false },
+			{ "Alce", "tank", true, false }, { "Rikuo", "tank", true, false },
+			// a battery's self-propelled guns (their own model) and its towed guns (the battery's)
+			{ "M7", "gun", true, true }, { "Hummel", "gun", true, true }, { "Sexton", "gun", true, true }, { "SU76", "gun", true, true },
+			{ "Howitzer105", "gun", false, false }, { "leFH18", "gun", false, false }, { "ZiS3", "gun", false, false },
+			// armoured infantry's half-tracks and the lorries (a lorry of a tank block: her block's model is no lorry's)
+			{ "Hanomag", "lorry", true, true }, { "M3Halftrack", "lorry", true, true }, { "Truck", "lorry", true, false }, { "Truck", "lorry", false, false },
+			{ "Sherman", "lorry", false, false },
+		};
+		// (models the game draws that are no vehicle: a field telephone, a cable reel, a stretcher)
+		static const char* NotVehicles[] = { "CableReel", "FieldPhone", "Stretcher" };
+		int Wrong = 0, Missing = 0, Armour = 0, Soft = 0, Files = 0;
+		std::error_code Ec;
+		for (const auto& Entry : std::filesystem::directory_iterator(Content + "/Models/Battle", Ec))
+		{
+			if (Entry.path().extension() != ".json") continue;
+			++Files;
+			const std::string Stem = Entry.path().stem().string();
+			bool bFound = std::find_if(std::begin(NotVehicles), std::end(NotVehicles), [&Stem](const char* N) { return Stem == N; }) != std::end(NotVehicles);
+			for (const Row& R : Rows) bFound = bFound || Stem == R.Model;
+			if (!bFound)
+			{
+				++Missing;
+				std::printf("  ricochet classes: %s has no row (armoured or soft?)\n", Stem.c_str());
+			}
+		}
+		for (const Row& R : Rows)
+		{
+			LandFeed::Track Tr;
+			Tr.Role = R.Role;
+			LandFeed::Block B;
+			if (R.bOwn) Tr.Model = R.Model;
+			else B.Model = R.Model;
+			const bool bGot = LandPlay::ArmouredVehicle(Tr, &B);
+			(R.bArmour ? Armour : Soft) += 1;
+			if (bGot != R.bArmour)
+			{
+				++Wrong;
+				std::printf("  ricochet classes: %s as %s (%s) is drawn %s, should be %s\n", R.Model, R.Role, R.bOwn ? "her own model" : "her block's", bGot ? "armoured" : "soft", R.bArmour ? "armoured" : "soft");
+			}
+		}
+		std::printf("ricochet classes: %d model files (%zu no vehicle), %zu rows (%d armoured, %d soft): %d wrong, %d models with no row\n",
+			Files, sizeof(NotVehicles) / sizeof(NotVehicles[0]), sizeof(Rows) / sizeof(Rows[0]), Armour, Soft, Wrong, Missing);
+		if (Files == 0) std::printf("  ricochet classes: no model files read under %s/Models/Battle\n", Content.c_str());
+		return Wrong + Missing + (Files == 0 ? 1 : 0);
+	}
+}
+
 int main(int argc, char** argv)
 {
 	if (argc < 3)
@@ -401,6 +477,13 @@ int main(int argc, char** argv)
 	// Effects (R2), small arms off armour: on as the game has it (-TheaterLandNoRicochet off); LAND_PLAY_NO_RICOCHET as
 	// before, every output as it was
 	PW.bRicochet = std::getenv("LAND_PLAY_NO_RICOCHET") == nullptr;
+	if (PW.bRicochet)
+	{
+		// (armoured or soft by the game's models, the recording's folder's Content: Content/Data/LandBattles/x.json)
+		const std::filesystem::path RecPath(argv[1]);
+		const std::string Content = RecPath.parent_path().parent_path().parent_path().string();
+		if (RicochetClasses(Content.empty() ? std::string(".") : Content) > 0) Fault("a vehicle model drawn armoured where it is soft, or soft where armoured, or with no row");
+	}
 	LandPlay::Replay Play;
 	Play.Begin(Rec, PW);
 	{
@@ -1277,6 +1360,12 @@ int main(int argc, char** argv)
 	std::map<std::string, int> RicochetBy;
 	double RicochetNormalWorst = 0.0, RicochetPlateFarthest = 0.0;
 	int RicochetWrong = 0, RicochetOffPlate = 0;
+	// (each strike of such a burst, where the kit lays it (her plate as handed over, carried on at her way to its moment:
+	// the tracer's 760 m a second, then the burst's rate) against her plain box's face at that moment; and where it would
+	// have been left standing at her landing, as before this followed her)
+	std::vector<double> RicochetStrikeOff, RicochetStillOff;
+	double RicochetInside = 0.0, RicochetStillInside = 0.0, RicochetMovingMost = 0.0;
+	int RicochetOutOfRoom = 0, RicochetStrikesMoving = 0;
 
 	// The picture run (LAND_PLAY_STILLS; LAND_PLAY_ONLY_STILLS runs it alone): the scene's ten stills as LandBattle asks
 	// them (each asked two battle seconds before it is taken, one film from the start), and for each what the camera made
@@ -1770,10 +1859,40 @@ int main(int argc, char** argv)
 				{
 					++RicochetBy[HitTr->Role];
 					RicochetNormalWorst = std::max(RicochetNormalWorst, std::abs(E.Normal.Length() - 1.0));
-					const LandFeed::Spot Sp = LandFeed::SpotAt(*HitTr, Rr.L);
-					const double Off = std::hypot(E.To.X - Sp.X, E.To.Y - Sp.Y), Up = E.To.Z - Rec.Ground.HeightAt(Sp.X, Sp.Y);
-					RicochetPlateFarthest = std::max(RicochetPlateFarthest, Off);
-					if (Off > 4.0 || Up < -0.2 || Up > 3.2 || std::isnan(Up)) ++RicochetOffPlate;
+					bool bOffHer = std::isnan(E.To.X) || std::isnan(E.To.Y) || std::isnan(E.To.Z);
+					// (the aim inside the room it is given, on the plate's plane)
+					auto Along = [](const LandPlay::Vec& V, const LandPlay::Vec& Way) { const double L = Way.Length(); return L > 1e-9 ? V.Dot(Way) / L : 0.0; };
+					const LandPlay::Vec Rel = E.To - E.RoomMid;
+					if (std::abs(Along(Rel, E.RoomA)) > E.RoomA.Length() + 1e-6 || std::abs(Along(Rel, E.RoomB)) > E.RoomB.Length() + 1e-6 || std::abs(Rel.Dot(E.Normal)) > 1e-6) ++RicochetOutOfRoom;
+					// (each strike at its moment: Battle is the kit's Now)
+					const std::string Face = Rr.Fc.empty() ? std::string("front") : Rr.Fc;
+					const LandFeed::Block* HitBlock = Rec.BlockOf(HitTr->Block);
+					const LandFeed::Spot SpL = LandFeed::SpotAt(*HitTr, Rr.L);
+					const LandPlay::PlateSpot Still = LandPlay::PlainPlate(*HitTr, HitBlock, SpL, Rec.Ground.HeightAt(SpL.X, SpL.Y), Face, Rr.U, Rr.H);
+					const double Fly = (E.To - E.At).Length() / 760.0;
+					for (int K = 0; K < E.Rounds; ++K)
+					{
+						const double Ts = Battle + Fly + K / std::max(E.PerSecond, 0.1);
+						const LandFeed::Spot SpT = LandFeed::SpotAt(*HitTr, Ts);
+						const LandPlay::PlateSpot True = LandPlay::PlainPlate(*HitTr, HitBlock, SpT, Rec.Ground.HeightAt(SpT.X, SpT.Y), Face, Rr.U, Rr.H);
+						// (as the kit carries it: along her way and turned about her middle as her heading turns, clockwise from above)
+						const double Since = Ts - Battle, Tn = E.Turn * Since;
+						const LandPlay::Vec Arm = E.To - E.Pivot;
+						const LandPlay::Vec Laid = E.Pivot + E.Carry * Since + LandPlay::Vec(Arm.X * std::cos(Tn) + Arm.Y * std::sin(Tn), -Arm.X * std::sin(Tn) + Arm.Y * std::cos(Tn), Arm.Z);
+						// (each strike on her at its moment: within 4 m of her middle then, and up her side, not over her)
+						const double Off = std::hypot(Laid.X - SpT.X, Laid.Y - SpT.Y), Up = Laid.Z - Rec.Ground.HeightAt(SpT.X, SpT.Y);
+						RicochetPlateFarthest = std::max(RicochetPlateFarthest, Off);
+						if (Off > 4.0 || Up < -0.2 || Up > 3.2 || std::isnan(Up)) bOffHer = true;
+						RicochetStrikeOff.push_back((Laid - True.At).Length());
+						if (std::getenv("LAND_PLAY_RICOCHET_SHOW") && (Laid - True.At).Length() > 0.1) std::printf("  strike off %.3f m: round %d face %s u %.2f h %.2f battle %.3f T %.3f L %.3f fly %.3f k %d ts %.3f; heading %.1f at L, %.1f at ts; moved %.2f m; carry %.2f m/s\n", (Laid - True.At).Length(), Rr.N, Face.c_str(), Rr.U, Rr.H, Battle, Rr.T, Rr.L, Fly, K, Ts, SpL.F * 57.2958, SpT.F * 57.2958, std::hypot(SpT.X - SpL.X, SpT.Y - SpL.Y), E.Carry.Length());
+						RicochetStillOff.push_back((Still.At - True.At).Length());
+						RicochetInside = std::max(RicochetInside, -(Laid - True.At).Dot(True.Normal));
+						RicochetStillInside = std::max(RicochetStillInside, -(Still.At - True.At).Dot(True.Normal));
+						const double Moved = std::hypot(SpT.X - SpL.X, SpT.Y - SpL.Y);
+						RicochetMovingMost = std::max(RicochetMovingMost, Moved);
+						if (Moved > 0.03) ++RicochetStrikesMoving;
+					}
+					if (bOffHer) ++RicochetOffPlate;
 				}
 			}
 			if (!bSections || !RoundIx.count(E.Round)) continue;
@@ -2015,10 +2134,22 @@ int main(int argc, char** argv)
 		for (auto& P : RicochetBy) OffPlates += P.second;
 		std::printf("ricochets: %d small-arms bursts struck armour and were drawn off her plate (", OffPlates);
 		for (auto& P : RicochetBy) std::printf("%s%s %d", P.first == RicochetBy.begin()->first ? "" : ", ", P.first.c_str(), P.second);
-		std::printf("); outward ways unit within %.1e, the farthest plate %.2f m from her middle; %d off her, %d drawn the wrong way\n", RicochetNormalWorst, RicochetPlateFarthest, RicochetOffPlate, RicochetWrong);
+		std::printf("); outward ways unit within %.1e, the farthest plate %.2f m from her middle; %d off her, %d drawn the wrong way, %d aimed outside the room given\n", RicochetNormalWorst, RicochetPlateFarthest, RicochetOffPlate, RicochetWrong, RicochetOutOfRoom);
+		auto Pct = [](std::vector<double> L, double P) { if (L.empty()) return 0.0; std::sort(L.begin(), L.end()); return L[std::min(L.size() - 1, static_cast<size_t>(P * static_cast<double>(L.size() - 1) + 0.5))]; };
+		const size_t Near3 = static_cast<size_t>(std::count_if(RicochetStrikeOff.begin(), RicochetStrikeOff.end(), [](double D) { return D <= 0.03; }));
+		const size_t StillNear3 = static_cast<size_t>(std::count_if(RicochetStillOff.begin(), RicochetStillOff.end(), [](double D) { return D <= 0.03; }));
+		std::printf("ricochets followed: %zu strikes (%d of them on a plate that had moved on, as far as %.2f m), each where the kit lays it against her box's plate at its moment: %zu within 3 cm, median %.3f m, 99th %.3f m, the most %.3f m, at most %.3f m inside her; left standing at her landing, as before: %zu within 3 cm, 99th %.3f m, the most %.3f m, %.3f m inside her\n",
+			RicochetStrikeOff.size(), RicochetStrikesMoving, RicochetMovingMost, Near3, Pct(RicochetStrikeOff, 0.5), Pct(RicochetStrikeOff, 0.99), Pct(RicochetStrikeOff, 1.0), RicochetInside,
+			StillNear3, Pct(RicochetStillOff, 0.99), Pct(RicochetStillOff, 1.0), RicochetStillInside);
 		if (RicochetWrong) Fault("a small-arms burst at armour was not drawn off her plate, or one at a soft thing or a man was");
 		if (RicochetOffPlate) Fault("a burst off armour was drawn off her plate (more than 4 m from her middle or above her)");
 		if (RicochetNormalWorst > 1e-6) Fault("a burst off armour has no unit outward way");
+		if (RicochetOutOfRoom) Fault("a burst off armour was aimed outside the room on the plate it was given");
+		// (a steady way and turn through a burst follow her as she drives and turns: what is left is her changing speed
+		// or turn within the burst, a tenth of a second or so. The two recordings: 990 of 1,036 and 1,577 of 1,781 within
+		// 3 cm, 99th 0.12 and 0.17 m, the most 0.27 and 0.58 m; left at her landing, 1.22 and 1.73 m, the most 2.5 m)
+		if (!RicochetStrikeOff.empty() && (Near3 < 0.85 * static_cast<double>(RicochetStrikeOff.size()) || Pct(RicochetStrikeOff, 0.99) > 0.25 || Pct(RicochetStrikeOff, 1.0) > 1.0))
+			Fault("strikes off armour did not follow her (fewer than 85 in 100 within 3 cm of her plate at their moment, the 99th over 0.25 m, or one over 1 m)");
 	}
 	std::printf("effects:");
 	for (auto& P : FxCount) std::printf(" %s %d", P.first.c_str(), P.second);

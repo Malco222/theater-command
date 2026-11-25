@@ -544,6 +544,26 @@ namespace LandKit
 		void ScarNow(size_t I, V3& OutAt, V3& OutNormal) const;
 		/** Where round N struck her (a glance, worn or kill with a face), at the pose now; false if it did not. */
 		bool StruckNow(int RoundN, V3& OutAt, V3& OutNormal) const;
+		/** Effects (R2), small arms off armour (LandPlay::World::Plate): the plate a rifle's or machine gun's round struck,
+		 * at the pose now (field), for the effects kit's ricochets. At, the strike, and Normal its outward way; Mid, A and
+		 * B how far it runs flat about it (two half-widths along it, A level where it stands up, along her where it lies
+		 * flat, each as far as it runs from Mid that way and as far the other: within 3 cm of its plane, facing within 25
+		 * degrees, nothing of her standing out in front of it), so every strike the kit spreads over it is on her; Floor
+		 * her own height under it where a spark thrown down lands on her (her deck under her turret's side, a track guard
+		 * or her running gear under her hull's side), under -1e29 none. */
+		struct PlateSpot
+		{
+			V3 At, Normal, Mid, A, B;
+			double Floor = -1.0e30;
+		};
+		/** Round N's plate (StruckNow's strike; where the scar's cast passed through a road wheel, a sprocket, an idler or
+		 * a track standing in front of her hull, the round strikes that, as it would have). False if it did not strike. */
+		bool PlateNow(int RoundN, PlateSpot& Out) const;
+		/** The same about any strike on her at the pose now (field), its round coming in along In: the checks' way in. */
+		bool PlateAbout(const V3& At, const V3& Normal, const V3& In, PlateSpot& Out) const;
+		/** A ray across her as posed now (field, Way a unit way): the nearest of her drawn surfaces (her tracks and running
+		 * wheels too, not the aerial) within Most metres, how far, and its outward way there (toward From). */
+		bool RayNow(const V3& From, const V3& Way, double Most, double& OutT, V3& OutNormal) const;
 		/** The national marks at the pose now. */
 		void MarksNow(std::vector<MarkPlace>& Out) const;
 		/** The near track links of a side posed for her run now (see Model::PoseLinks). */

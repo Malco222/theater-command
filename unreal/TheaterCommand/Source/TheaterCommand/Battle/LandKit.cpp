@@ -4585,6 +4585,457 @@ namespace LandKit
 		return false;
 	}
 
+	namespace
+	{
+		/** Effects (R2): her shown bodies' boxes on the field as posed now (lo x, y, z, hi x, y, z each, from their runs'
+		 * boxes, a centimetre wider all round), so the many short rays a plate takes try only the bodies they pass. A body
+		 * not shown or the aerial: an empty box; one with no runs' boxes: a box round the whole field (always tried). */
+		void BodyBoxes(const Model& M, const std::vector<Place>& Places, std::vector<double>& Out)
+		{
+			Out.assign(M.Bodies.size() * 6, 0.0);
+			for (size_t B = 0; B < M.Bodies.size(); ++B)
+			{
+				double* Box = &Out[B * 6];
+				Box[0] = Box[1] = Box[2] = 1e300;
+				Box[3] = Box[4] = Box[5] = -1e300;
+				const Body& Bo = M.Bodies[B];
+				if (B >= Places.size() || Bo.Name == "aerial" || Bo.Part < 0 || !M.Parts[static_cast<size_t>(Bo.Part)].bShown || Bo.Near.Triangles.empty())
+				{
+					continue;
+				}
+				if (Bo.Runs.size() < 6)
+				{
+					Box[0] = Box[1] = Box[2] = -1e300;
+					Box[3] = Box[4] = Box[5] = 1e300;
+					continue;
+				}
+				double Lo[3] = { 1e300, 1e300, 1e300 }, Hi[3] = { -1e300, -1e300, -1e300 };
+				for (size_t R = 0; R + 5 < Bo.Runs.size(); R += 6)
+				{
+					for (int A = 0; A < 3; ++A)
+					{
+						Lo[A] = std::min(Lo[A], static_cast<double>(Bo.Runs[R + static_cast<size_t>(A)]));
+						Hi[A] = std::max(Hi[A], static_cast<double>(Bo.Runs[R + 3 + static_cast<size_t>(A)]));
+					}
+				}
+				for (int K = 0; K < 8; ++K)
+				{
+					const V3 Corner = Places[B].Point(V3((K & 1) ? Hi[0] : Lo[0], (K & 2) ? Hi[1] : Lo[1], (K & 4) ? Hi[2] : Lo[2]));
+					const double C[3] = { Corner.X, Corner.Y, Corner.Z };
+					for (int A = 0; A < 3; ++A)
+					{
+						Box[A] = std::min(Box[A], C[A] - 0.01);
+						Box[A + 3] = std::max(Box[A + 3], C[A] + 0.01);
+					}
+				}
+			}
+		}
+
+		/** Whether a ray from From along Way, within Most, meets a box on the field (lo x, y, z, hi x, y, z). */
+		bool RayMeetsBox(const V3& From, const V3& Way, double Most, const double* Box)
+		{
+			const double O[3] = { From.X, From.Y, From.Z };
+			const double D[3] = { Way.X, Way.Y, Way.Z };
+			double Near = 0.0, Far = Most;
+			for (int A = 0; A < 3; ++A)
+			{
+				if (std::fabs(D[A]) < 1e-12)
+				{
+					if (O[A] < Box[A] || O[A] > Box[A + 3])
+					{
+						return false;
+					}
+					continue;
+				}
+				double T0 = (Box[A] - O[A]) / D[A], T1 = (Box[A + 3] - O[A]) / D[A];
+				if (T0 > T1)
+				{
+					std::swap(T0, T1);
+				}
+				Near = std::max(Near, T0);
+				Far = std::min(Far, T1);
+				if (Near > Far)
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
+		/** A ray across her bodies as placed (Vehicle::RayNow), trying only the bodies whose boxes it meets when Boxes are
+		 * given (BodyBoxes). */
+		bool RayAcross(const Model& M, const std::vector<Place>& Places, const std::vector<double>* Boxes, const V3& From, const V3& Way, double Most, double& OutT, V3& OutNormal)
+		{
+			OutT = Most;
+			bool bHit = false;
+			for (size_t B = 0; B < M.Bodies.size() && B < Places.size(); ++B)
+			{
+				const Body& Bo = M.Bodies[B];
+				if (Bo.Name == "aerial" || Bo.Part < 0 || !M.Parts[static_cast<size_t>(Bo.Part)].bShown)
+				{
+					continue;
+				}
+				if (Boxes && B * 6 + 5 < Boxes->size() && !RayMeetsBox(From, Way, OutT, &(*Boxes)[B * 6]))
+				{
+					continue;
+				}
+				// (the ray in the body's own axes, from its pivot, as its points and its runs' boxes are kept)
+				const Place& P = Places[B];
+				const Quat Back = P.Q.Conj();
+				const V3 O = Back.Rotate(Swap(From - P.At)), W = Back.Rotate(Swap(Way));
+				const Mesh& Me = Bo.Near;
+				const size_t Count = Me.Triangles.size() / 3;
+				for (size_t Run = 0; Run * TriangleRun < Count; ++Run)
+				{
+					if (Run * 6 + 5 < Bo.Runs.size() && !RayBox(O, W, &Bo.Runs[Run * 6], OutT))
+					{
+						continue;
+					}
+					for (size_t K = Run * TriangleRun * 3; K < std::min(Count, (Run + 1) * TriangleRun) * 3; K += 3)
+					{
+						auto Corner = [&Me](uint32_t I)
+						{
+							return V3(Me.Points[I * 3], Me.Points[I * 3 + 1], Me.Points[I * 3 + 2]);
+						};
+						const V3 A = Corner(Me.Triangles[K]), Bv = Corner(Me.Triangles[K + 1]), C = Corner(Me.Triangles[K + 2]);
+						double T = 0.0;
+						if (RayHit(O, W, A, Bv, C, T) && T < OutT)
+						{
+							OutT = T;
+							V3 Normal = (Bv - A).Cross(C - A).Unit(-W);
+							if (Normal.Dot(W) > 0.0)
+							{
+								Normal = -Normal;
+							}
+							OutNormal = P.Way(Normal);
+							bHit = true;
+						}
+					}
+				}
+			}
+			return bHit;
+		}
+	}
+
+	bool Vehicle::RayNow(const V3& From, const V3& Way, double Most, double& OutT, V3& OutNormal) const
+	{
+		OutT = Most;
+		return Shape && RayAcross(*Shape, BodyPlaces, nullptr, From, Way, Most, OutT, OutNormal);
+	}
+
+	bool Vehicle::PlateAbout(const V3& AtIn, const V3& NormalIn, const V3& In, PlateSpot& Out) const
+	{
+		const V3 Up(0.0, 0.0, 1.0);
+		V3 At = AtIn, N = NormalIn.Unit(Up);
+		std::vector<double> Boxes;
+		if (Shape)
+		{
+			BodyBoxes(*Shape, BodyPlaces, Boxes);
+		}
+		auto Ray = [&](const V3& From, const V3& Way, double Most, double& OutT, V3& OutNormal)
+		{
+			OutT = Most;
+			return Shape && RayAcross(*Shape, BodyPlaces, &Boxes, From, Way, Most, OutT, OutNormal);
+		};
+		// What stands in front of where the scar's cast struck her (it passes through her road wheels, sprockets, idlers
+		// and tracks: a scar there would run round with them): the round strikes that.
+		const double Before = 3.0;
+		double T = 0.0;
+		V3 Nh;
+		if (In.Length() > 0.5 && Ray(At - In * Before, In, Before - 0.02, T, Nh))
+		{
+			At = At - In * (Before - T);
+			N = Nh.Unit(N);
+		}
+		Out.At = At;
+		Out.Normal = N;
+		// How far it runs flat about the strike: a 33 by 33 lattice of points 3 cm apart over its plane (out to 0.48 m
+		// each way along it). A point is on it where a round coming in its way (In; or square to it where no way is given)
+		// meets her first within 3 cm of the plane, and so does a ray square into it, each on a face turned within 25
+		// degrees of it (no edge, no curve away, no gap); and nothing of her within Halo of the point (the half diagonal
+		// of its square of the lattice) stands in front of the plane in the round's way (out to Clear: her tracks, wheels,
+		// guards, her gun) or square to it (out to Lift). So every place in the squares of the points on it is clear in
+		// the round's way. Her triangles that may matter are cast onto the plane both ways once each and tried only at the
+		// points under them (or within Halo of them). The room: the biggest rectangle of the lattice about the strike
+		// every point of which is on it; none where the round grazes the plane (within 9 degrees of it) or the middle
+		// point is not on it.
+		const double Facing = 0.9, Spacing = 0.03, Reach = 0.48, Clear = Before, Slack = 0.03, Lift = 0.06;
+		const double Halo = Spacing * 0.7072, Wide = Reach + Spacing + Halo;
+		constexpr int Grid = 33, Middle = 16;
+		const V3 Way = In.Length() > 0.5 ? In.Unit(-N) : -N;
+		const double Square = -Way.Dot(N);
+		const V3 Ahead = Root.Way(V3(1.0, 0.0, 0.0));
+		const V3 A = (std::fabs(N.Z) < 0.9 ? Up.Cross(N) : Ahead - N * Ahead.Dot(N)).Unit(V3(1.0, 0.0, 0.0));
+		const V3 B = N.Cross(A).Unit(Up);
+		const size_t Cells = static_cast<size_t>(Grid * Grid);
+		std::vector<double> HitIn(Cells, 1e300), HitSquare(Cells, 1e300), TurnedIn(Cells, -1.0), TurnedSquare(Cells, -1.0);
+		std::vector<char> Barred(Cells, 0);
+		// (one cast of a triangle onto the plane: its corners there (Pu, Pv) and how far past the plane each lies along
+		// the cast (Ps, less in front); at each point under it, how far past the plane it lies there, the nearest within
+		// the band kept with how it is turned (Turn); each point it comes within Halo of with a part from BarFrom to
+		// BarTo barred)
+		auto Cast = [&](const double (&Pu)[3], const double (&Pv)[3], const double (&Ps)[3], double Turn, double BandLo, double BandHi, double BarFrom, double BarTo, std::vector<double>& Hit, std::vector<double>& TurnOf)
+		{
+			const double SLo = std::min(Ps[0], std::min(Ps[1], Ps[2])), SHi = std::max(Ps[0], std::max(Ps[1], Ps[2]));
+			const bool bExact = SHi >= BandLo && SLo <= BandHi, bBar = SHi >= BarFrom && SLo < BarTo;
+			if (!bExact && !bBar)
+			{
+				return;
+			}
+			const double Pad = (bBar ? Halo : 0.0) + 1e-9;
+			const int I0 = std::max(0, static_cast<int>(std::ceil((std::min(Pu[0], std::min(Pu[1], Pu[2])) - Pad) / Spacing)) + Middle);
+			const int I1 = std::min(Grid - 1, static_cast<int>(std::floor((std::max(Pu[0], std::max(Pu[1], Pu[2])) + Pad) / Spacing)) + Middle);
+			const int J0 = std::max(0, static_cast<int>(std::ceil((std::min(Pv[0], std::min(Pv[1], Pv[2])) - Pad) / Spacing)) + Middle);
+			const int J1 = std::min(Grid - 1, static_cast<int>(std::floor((std::max(Pv[0], std::max(Pv[1], Pv[2])) + Pad) / Spacing)) + Middle);
+			if (I0 > I1 || J0 > J1)
+			{
+				return;
+			}
+			const double E1u = Pu[1] - Pu[0], E1v = Pv[1] - Pv[0], E2u = Pu[2] - Pu[0], E2v = Pv[2] - Pv[0];
+			const double Area = E1u * E2v - E1v * E2u;
+			// (seen edge on it covers no point; only its edges may bar one)
+			const bool bOpen = std::fabs(Area) > 1e-12;
+			const double Gu = bOpen ? ((Ps[1] - Ps[0]) * E2v - (Ps[2] - Ps[0]) * E1v) / Area : 0.0;
+			const double Gv = bOpen ? (E1u * (Ps[2] - Ps[0]) - E2u * (Ps[1] - Ps[0])) / Area : 0.0;
+			const double Steep = std::sqrt(Gu * Gu + Gv * Gv);
+			auto Under = [&](double Qu, double Qv, double& OutS)
+			{
+				if (!bOpen)
+				{
+					return false;
+				}
+				const double Du = Qu - Pu[0], Dv = Qv - Pv[0];
+				const double L1 = (Du * E2v - Dv * E2u) / Area, L2 = (E1u * Dv - E1v * Du) / Area;
+				if (L1 < -1e-9 || L2 < -1e-9 || L1 + L2 > 1.0 + 1e-9)
+				{
+					return false;
+				}
+				OutS = Ps[0] + L1 * (Ps[1] - Ps[0]) + L2 * (Ps[2] - Ps[0]);
+				return true;
+			};
+			for (int I = I0; I <= I1; ++I)
+			{
+				for (int J = J0; J <= J1; ++J)
+				{
+					const double Qu = (I - Middle) * Spacing, Qv = (J - Middle) * Spacing;
+					const size_t Cell = static_cast<size_t>(I * Grid + J);
+					double Sq = 0.0;
+					if (bExact && Under(Qu, Qv, Sq) && Sq >= BandLo && Sq <= BandHi && Sq < Hit[Cell])
+					{
+						Hit[Cell] = Sq;
+						TurnOf[Cell] = Turn;
+					}
+					if (!bBar || Barred[Cell])
+					{
+						continue;
+					}
+					// (how far past the plane the part of it within Halo of the point lies, least and most: at its corners
+					// within Halo, where its edges cross the circle, and the circle's points up and down its slope)
+					double Least = 1e300, Most = -1e300;
+					auto Take = [&](double S)
+					{
+						Least = std::min(Least, S);
+						Most = std::max(Most, S);
+					};
+					for (int K = 0; K < 3; ++K)
+					{
+						const int K1 = (K + 1) % 3;
+						const double Fu = Pu[K] - Qu, Fv = Pv[K] - Qv, Du = Pu[K1] - Pu[K], Dv = Pv[K1] - Pv[K];
+						const double Qa = Du * Du + Dv * Dv, Qb = 2.0 * (Fu * Du + Fv * Dv), Qc = Fu * Fu + Fv * Fv - Halo * Halo;
+						if (Qc <= 0.0)
+						{
+							Take(Ps[K]);
+						}
+						const double Disc = Qb * Qb - 4.0 * Qa * Qc;
+						if (Qa < 1e-18 || Disc < 0.0)
+						{
+							continue;
+						}
+						const double Root2 = std::sqrt(Disc);
+						const double Ta = std::max(0.0, (-Qb - Root2) / (2.0 * Qa)), Tb = std::min(1.0, (-Qb + Root2) / (2.0 * Qa));
+						if (Ta <= Tb)
+						{
+							Take(Ps[K] + Ta * (Ps[K1] - Ps[K]));
+							Take(Ps[K] + Tb * (Ps[K1] - Ps[K]));
+						}
+					}
+					if (Steep > 1e-12)
+					{
+						for (int Sign = -1; Sign <= 1; Sign += 2)
+						{
+							double Sx = 0.0;
+							if (Under(Qu + Sign * Halo * Gu / Steep, Qv + Sign * Halo * Gv / Steep, Sx))
+							{
+								Take(Sx);
+							}
+						}
+					}
+					Barred[Cell] = Most >= BarFrom && Least < BarTo ? 1 : 0;
+				}
+			}
+		};
+		if (Shape && Square > 0.15)
+		{
+			// (each body's triangles are cast in its own axes: the plane, its ways and the two casts turned into them. A
+			// point X there lies Depth = (X - At).N out of the plane; cast in the round's way it is (X - At).AIn and
+			// (X - At).BIn along the plane and -Depth / Square past it; cast square, (X - At).A, (X - At).B and -Depth)
+			const V3 AIn = A + N * (Way.Dot(A) / Square), BIn = B + N * (Way.Dot(B) / Square);
+			const double DepthLo = -std::max(Slack * Square, Slack), DepthHi = std::max(Clear * Square, Lift);
+			for (size_t Bi = 0; Bi < Shape->Bodies.size() && Bi < BodyPlaces.size(); ++Bi)
+			{
+				const Body& Bo = Shape->Bodies[Bi];
+				if (Bo.Name == "aerial" || Bo.Part < 0 || !Shape->Parts[static_cast<size_t>(Bo.Part)].bShown || Bo.Near.Triangles.empty())
+				{
+					continue;
+				}
+				const Place& P = BodyPlaces[Bi];
+				const Quat Back = P.Q.Conj();
+				auto Into = [&Back](const V3& W) { return Back.Rotate(Swap(W)); };
+				const V3 O = Into(At - P.At), Nb = Into(N), Ab = Into(A), Bb = Into(B), AInb = Into(AIn), BInb = Into(BIn), Wb = Into(Way);
+				// (a run's box is passed by when it lies wholly out of the plane's reach, or beside the lattice in either cast)
+				auto Spans = [&O](const float* Box, const V3& Along, double Lo, double Hi)
+				{
+					const V3 Mid((Box[0] + Box[3]) * 0.5, (Box[1] + Box[4]) * 0.5, (Box[2] + Box[5]) * 0.5);
+					const V3 Half((Box[3] - Box[0]) * 0.5, (Box[4] - Box[1]) * 0.5, (Box[5] - Box[2]) * 0.5);
+					const double C = (Mid - O).Dot(Along), R = std::fabs(Half.X * Along.X) + std::fabs(Half.Y * Along.Y) + std::fabs(Half.Z * Along.Z);
+					return C + R >= Lo && C - R <= Hi;
+				};
+				const Mesh& Me = Bo.Near;
+				const size_t Count = Me.Triangles.size() / 3;
+				for (size_t Run = 0; Run * TriangleRun < Count; ++Run)
+				{
+					if (Run * 6 + 5 < Bo.Runs.size())
+					{
+						const float* Box = &Bo.Runs[Run * 6];
+						if (!Spans(Box, Nb, DepthLo, DepthHi) || !((Spans(Box, AInb, -Wide, Wide) && Spans(Box, BInb, -Wide, Wide)) || (Spans(Box, Ab, -Wide, Wide) && Spans(Box, Bb, -Wide, Wide))))
+						{
+							continue;
+						}
+					}
+					for (size_t K = Run * TriangleRun * 3; K < std::min(Count, (Run + 1) * TriangleRun) * 3; K += 3)
+					{
+						V3 X[3];
+						double UIn[3], VIn[3], SIn[3], USq[3], VSq[3], SSq[3];
+						for (int C = 0; C < 3; ++C)
+						{
+							const uint32_t Ix = Me.Triangles[K + static_cast<size_t>(C)];
+							X[C] = V3(Me.Points[Ix * 3], Me.Points[Ix * 3 + 1], Me.Points[Ix * 3 + 2]) - O;
+							const double Depth = X[C].Dot(Nb);
+							UIn[C] = X[C].Dot(AInb);
+							VIn[C] = X[C].Dot(BInb);
+							SIn[C] = -Depth / Square;
+							USq[C] = X[C].Dot(Ab);
+							VSq[C] = X[C].Dot(Bb);
+							SSq[C] = -Depth;
+						}
+						// (how it is turned to the plane, as each cast meets it)
+						const V3 Face = (X[1] - X[0]).Cross(X[2] - X[0]).Unit(Nb);
+						const double TurnIn = (Face.Dot(Wb) > 0.0 ? -Face : Face).Dot(Nb);
+						Cast(UIn, VIn, SIn, TurnIn, -Clear, Slack, -Clear, -Slack, HitIn, TurnedIn);
+						Cast(USq, VSq, SSq, std::fabs(Face.Dot(Nb)), -Lift, Slack, -Lift, -Slack, HitSquare, TurnedSquare);
+					}
+				}
+			}
+		}
+		auto IsOn = [&](int I, int J)
+		{
+			const size_t Cell = static_cast<size_t>(I * Grid + J);
+			return !Barred[Cell] && HitIn[Cell] >= -Slack && HitIn[Cell] <= Slack && TurnedIn[Cell] >= Facing
+				&& HitSquare[Cell] >= -Slack && HitSquare[Cell] <= Slack && TurnedSquare[Cell] >= Facing;
+		};
+		// (the biggest rectangle about the middle with every point on it; of equals, the one nearest the strike: for each
+		// run of rows through the middle, the run of columns through it on in all of them)
+		int Lo[2] = { Middle, Middle }, Hi[2] = { Middle, Middle };
+		const bool bRoom = Shape && Square > 0.15 && IsOn(Middle, Middle);
+		if (bRoom)
+		{
+			int Best = 0, BestOff = 0;
+			bool Column[Grid];
+			for (int I0 = Middle; I0 >= 0; --I0)
+			{
+				for (int J = 0; J < Grid; ++J)
+				{
+					Column[J] = true;
+					for (int I = I0; I <= Middle && Column[J]; ++I)
+					{
+						Column[J] = IsOn(I, J);
+					}
+				}
+				if (!Column[Middle])
+				{
+					break;
+				}
+				for (int I1 = Middle; I1 < Grid; ++I1)
+				{
+					for (int J = 0; J < Grid; ++J)
+					{
+						Column[J] = Column[J] && IsOn(I1, J);
+					}
+					if (!Column[Middle])
+					{
+						break;
+					}
+					int J0 = Middle, J1 = Middle;
+					while (J0 > 0 && Column[J0 - 1])
+					{
+						--J0;
+					}
+					while (J1 < Grid - 1 && Column[J1 + 1])
+					{
+						++J1;
+					}
+					const int Count = (I1 - I0 + 1) * (J1 - J0 + 1), Off = std::abs(I0 + I1 - 2 * Middle) + std::abs(J0 + J1 - 2 * Middle);
+					if (Count > Best || (Count == Best && Off < BestOff))
+					{
+						Best = Count;
+						BestOff = Off;
+						Lo[0] = I0;
+						Hi[0] = I1;
+						Lo[1] = J0;
+						Hi[1] = J1;
+					}
+				}
+			}
+		}
+		const double HA = 0.5 * (Hi[0] - Lo[0]) * Spacing, HB = 0.5 * (Hi[1] - Lo[1]) * Spacing;
+		Out.Mid = At + A * ((0.5 * (Lo[0] + Hi[0]) - Middle) * Spacing) + B * ((0.5 * (Lo[1] + Hi[1]) - Middle) * Spacing);
+		Out.A = A * HA;
+		Out.B = B * HB;
+		// Her floor under it: straight down from a hand's breadth out, the first part of her met that is not this plate
+		// itself (a glacis, a roof) and lies under the strike.
+		Out.Floor = -1.0e30;
+		const V3 Above = At + N * 0.12;
+		double Tf = 0.0;
+		V3 Nf;
+		if (Ray(Above, V3(0.0, 0.0, -1.0), 4.0, Tf, Nf))
+		{
+			const V3 Hit = Above - Up * Tf;
+			const bool bSame = std::fabs((Hit - At).Dot(N)) < 0.03 && Nf.Dot(N) > Facing;
+			if (!bSame && Hit.Z < At.Z - 0.01)
+			{
+				Out.Floor = Hit.Z;
+			}
+		}
+		return true;
+	}
+
+	bool Vehicle::PlateNow(int RoundN, PlateSpot& Out) const
+	{
+		for (const Strike& S : Strikes)
+		{
+			if (S.N == RoundN && S.Body >= 0 && static_cast<size_t>(S.Body) < BodyPlaces.size())
+			{
+				const Place& P = BodyPlaces[static_cast<size_t>(S.Body)];
+				// (the way its round came in: the face's, as the scar's cast took it, in her hull's axes)
+				const std::string& Face = S.Face;
+				const V3 In = Face == "rear" ? V3(1.0, 0.0, 0.0) : Face == "left" ? V3(0.0, 1.0, 0.0) : Face == "right" ? V3(0.0, -1.0, 0.0)
+					: Face == "top" ? V3(0.0, 0.0, -1.0) : V3(-1.0, 0.0, 0.0);
+				return PlateAbout(P.Point(S.Local), P.Way(S.Normal), Root.Way(In).Unit(V3(-1.0, 0.0, 0.0)), Out);
+			}
+		}
+		return false;
+	}
+
 	void Vehicle::MarksNow(std::vector<MarkPlace>& Out) const
 	{
 		Out.clear();

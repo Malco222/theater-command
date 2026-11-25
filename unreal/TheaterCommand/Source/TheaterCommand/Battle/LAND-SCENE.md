@@ -718,28 +718,57 @@ to pass it.
   field cars, staff cars, motorcycles, and a towed gun (its shield still glances: FX4's flash and sparks).
 - **The look.** A rifle's or a machine gun's burst at armour that the rules do not call a miss (glance, worn or kill:
   no harm is shown for any) goes to the kit's `ShotsOnArmour` (`LandPlay::FxKind::Shots` with `bArmour`, its `To` on
-  her plate and `Normal` the plate's outward way). That point comes from her skin (`World::Skin`), or else from a plain
-  box on the face the rules name. Each round that strikes gives a tiny two-frame white-yellow flash on the plate and 3
-  to 8 short sparks thrown the way it glances, falling and gone in under 0.3 s. Now and then it leaves a faint grey
-  puff of paint, and never a dust spurt. Most tracers that strike go off again as ricochets, 10 to 50 degrees off the
-  plate, slower and tumbling. Far off there are fewer, bigger sparks, never beads, and never none. The recipe row is
-  `bullet_ricochet` (tools/battle-fx/README.md, "A burst off armour: ricochets"). The old 8 mm glance (FX4) is not
-  sent for such a round. A miss is as before.
+  her plate and `Normal` the plate's outward way). The plate comes from the first of these that answers:
+  1. Her drawn skin (`World::Plate`: LandKit's `Vehicle::PlateNow`). It gives the strike (her road wheels, sprockets,
+     idlers and tracks before her hull included), how far the plate runs flat about it (`RoomMid`, `RoomA`, `RoomB`:
+     the biggest rectangle of a 3 cm lattice where a round meets her first within 3 cm of the plane, on a face turned
+     within 25 degrees of it, nothing of her in front), and her floor under it (her deck under her turret's side, her
+     track guard under her hull's side).
+  2. Her skin's strike alone (`World::Skin`), with every round at its point.
+  3. A plain box on the face the rules name.
+
+  `LandPlay::Replay::PlateOf` fits her drive and turn over the burst from her track (least squares: `Carry`, `Turn`
+  about `Pivot`). It hands the kit the plate as it will be when the burst lands, carried back to the frame the burst
+  is laid. The kit lays every round where her plate is when it strikes, inside the room, and lets its sparks ride with
+  her.
+
+  Each round that strikes gives a tiny two-frame white-yellow flash on the plate, at least 3 px, so far off each strike
+  still twinkles. It throws 3 to 8 short sparks the way it glances, falling, cooling to orange and gone in under
+  0.3 s; none falls through her deck or track guard. Now and then it leaves a faint grey puff of paint, and never a
+  dust spurt. Most tracers that strike go off again as ricochets, 10 to 50 degrees off the plate, slower, tumbling,
+  and dimmer than the tracer coming in. Far off there are fewer, bigger sparks, never beads, and never none.
+
+  The recipe row is `bullet_ricochet` (tools/battle-fx/README.md, "A burst off armour: ricochets"). The old 8 mm
+  glance (FX4) is not sent for such a round. A miss is as before.
 - **The sound** (`LandSound`, `land.armourStrikes` in mix.json): the burst's glance (`NoiseKind::Glance` with its
   `Rounds` and `PerSecond`) rattles. Up to `burstMost` (4) steel pings, about `burstShare` (half) of its rounds, are
   spread over the burst, each a take of `steel_hit_01..03` (never the same twice running) with its own pitch and level
   (`burstPitchPercent`, `burstDbSpread`), and now and then a whine off it. The mix's limits and same-take rule hold as
   ever. A single rifle round rings once, as before.
-- **The cloud test** (land_play, on unless `LAND_PLAY_NO_RICOCHET`): "ricochets:" checks that every small-arms burst
-  at armour, and no other, goes off her plate, with a unit outward way and within 4 m of her middle (Normandy 370
-  bursts, Prokhorovka 372, all tanks: neither recording names a model of its own). "armour: a burst of 8 off a tank
-  rattles" checks that a probe mix plays 4 pings over the burst, never one take twice running, that 30 rounds give no
-  more, and that a single round rings once. With `LAND_PLAY_NO_RICOCHET=1` every output is byte for byte the run
-  before but for its timings (g++ and clang++). On, the cuts are the same and the mix's dice run on from the first
-  rattle: Normandy rings 369 steel takes where it rang 215, 2060 dropped by the limits where 1950. Its Garand clips (a
-  "body" take, dropped when the world total of 64 is full) went 10 to 5 under g++ and stayed 9 under clang++; with
-  `burstMost` 1 (one ping a burst, as the old ring) g++ gives 7, so that count follows the dice, not the rattle's
-  places. The kit's own check is `tools/battle-fx/preview/ricochet_test.cpp`.
+- **The cloud test** (land_play, on unless `LAND_PLAY_NO_RICOCHET`):
+  - "ricochet classes:" reads every model under Content/Models/Battle and checks the table of what is armour: 42
+    model files (3 of them no vehicle), 43 rows (23 armoured, 20 soft), none drawn the wrong way and none with no row.
+  - "ricochets:" checks that every small-arms burst at armour, and no other, goes off her plate, with a unit outward
+    way, within 4 m of her middle and aimed inside the room it was given (Normandy 370 bursts, Prokhorovka 372, all
+    tanks: neither recording names a model of its own; the farthest plate 3.33 and 3.53 m from her middle).
+  - "ricochets followed:" checks each strike against her plate where `SpotAt` has her at the strike's own moment:
+    Normandy 990 of 1,036 within 3 cm, 99th 0.12 m, the most 0.27 m; Prokhorovka 1,577 of 1,781, 0.17 m, 0.58 m (238
+    and 680 strikes on a plate that had moved on, as far as 1.50 and 2.28 m). Left standing at her landing, as before,
+    the 99th was 1.22 and 1.73 m. It fails under 85 in 100 within 3 cm, a 99th over 0.25 m or one over 1 m.
+  - "armour: a burst of 8 off a tank rattles" checks that a probe mix plays 4 pings over the burst, never one take
+    twice running, that 30 rounds give no more, and that a single round rings once.
+  - With `LAND_PLAY_NO_RICOCHET=1` every output is byte for byte the run before but for its timings (g++ and
+    clang++). On, the cuts are the same and the mix's dice run on from the first rattle. With the real recordings
+    (Sounds/Real) in place, steel takes and drops by the limits went: Normandy g++ 210 to 347 rang, 1,923 to 1,858
+    dropped; clang++ 255 to 412, 1,572 to 1,501; Prokhorovka (both) 237 to 651, 3,129 to 3,175.
+  - The Garand clips (a "body" take, dropped when the world total of 64 is full) went 12 to 11 under g++ (10
+    reloads both times) and 8 to 9 under clang++ (8 and 9 reloads); Prokhorovka has none. With `burstMost` 1 (one
+    ping a burst, as the old ring) they are 12 and 11. That count moves by one to three with the voices and the dice
+    whichever way the rattle goes, so it follows the dice, not the rattle's places.
+  - The kit's own check is `tools/battle-fx/preview/ricochet_test.cpp`; her skin's plates are checked on the real
+    models by `Tools/land_kit` ("her plates as the kit is handed them": the Tiger and the Panzer IV, every place the
+    kit may strike on her drawn surface within 5 cm, nothing of her in front of it, and her side aimed 0.1 m under
+    its top edge never struck over it).
 - **Pictures**: `/mnt/project-files/battle-fx/ricochet/` (the kit's preview, `fxpreview ... ricochet 30|150|600`), with
   notes.
 

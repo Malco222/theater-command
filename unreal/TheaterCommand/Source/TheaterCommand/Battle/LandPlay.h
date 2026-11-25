@@ -33,6 +33,17 @@ namespace LandPlay
 		Vec Unit() const;
 	};
 
+	/** Effects (R2), small arms off armour: a plate a round struck on a vehicle, as the scene has her posed now (World::
+	 * Plate; field metres, x east, y north, z up). At the strike and Normal its outward way; RoomMid, RoomA and RoomB how
+	 * far the plate runs flat about it (two ways along it, square to each other, each as long as it runs from RoomMid
+	 * that way and as far the other way; RoomA level where the plate stands up); Floor her own height under it where a
+	 * spark thrown down would land on her (her deck under her turret), under -1e29 none. */
+	struct PlateSpot
+	{
+		Vec At, Normal, RoomMid, RoomA, RoomB;
+		double Floor = -1.0e30;
+	};
+
 	/** What the scene knows of its world, asked by the replay without engine types. Each may be left empty: the
 	 * replay then uses the rules' own field and plain figures (the cloud test without the other cores). */
 	struct World
@@ -65,11 +76,20 @@ namespace LandPlay
 		 * never dirt) and a Glance noise carrying the burst's rounds (a rattle of steel), and no Glance effect of its own.
 		 * Off (as left): as before. */
 		bool bRicochet = false;
+		/** Effects (R2), small arms off armour: the plate round Round struck on vehicle Track, as the scene has her posed
+		 * now (the tank core's cast on her model, nearer wheels and tracks included, and how far it runs flat about the
+		 * strike: LandKit::Vehicle::PlateNow). False: not known (her Skin, every round at its point; else her plain box). */
+		std::function<bool(int Track, int Round, PlateSpot& Out)> Plate;
 	};
 
 	/** Whether a vehicle's plate turns a rifle or machine-gun round (World::bRicochet): her own model where the
 	 * recording names one (Track::Model), else her block's (Block::Model, may be null). */
 	bool ArmouredVehicle(const LandFeed::Track& Tr, const LandFeed::Block* B);
+	/** Effects (R2), small arms off armour: her plain box (a tank about 6 m long, 3.2 wide and 2.6 high; a half-track or
+	 * an armoured car 5.8, 2.2, 2.2, by her model or her role) standing at S on ground Ground: the face the rules name, the
+	 * point U across it and H up it, its outward way, and the whole face as its room. The replay's plate where the scene
+	 * knows no better, and land_play's check of it. */
+	PlateSpot PlainPlate(const LandFeed::Track& Tr, const LandFeed::Block* B, const LandFeed::Spot& S, double Ground, const std::string& Face, double U, double H);
 
 	/** One thing for the effects kit (BattleEffects), at battle time T. */
 	enum class FxKind : unsigned char
@@ -100,6 +120,13 @@ namespace LandPlay
 		int Round = 0;
 		/** For Screen: how long the rules hold its screen, battle seconds (the round's Hang); -1 the calibre's own. */
 		double Hang = -1.0;
+		/** For Shots with bArmour (Effects (R2), small arms off armour): her plate at the battle time played to (To and
+		 * Normal), how far it runs flat (PlateSpot's RoomMid, RoomA, RoomB) and her floor under it (under -1e29 none),
+		 * as she would be then going as she goes through the burst: her velocity (Carry, field metres a battle second),
+		 * and her turn about the upright through her middle (Pivot, then), Turn radians a battle second, + as her heading
+		 * grows (clockwise seen from above). The kit lays each strike where the plate is when it strikes. */
+		Vec RoomMid, RoomA, RoomB, Carry, Pivot;
+		double Floor = -1.0e30, Turn = 0.0;
 	};
 
 	/** One thing for the sound (LandSound), at battle time T. */
@@ -232,9 +259,10 @@ namespace LandPlay
 		Vec LandingOf(const LandFeed::Round& R, int Target, Vec& OutNormal) const;
 		/** World::bRicochet: a rifle's or machine gun's round, not a miss, on an armoured vehicle. */
 		bool Ricochets(const LandFeed::Round& R, int Target) const;
-		/** Where such a round strikes her plate and its outward way: her skin (World::Skin) where it is known, else her
-		 * plain box's face that the rules name, never her middle. */
-		Vec PlateOf(const LandFeed::Round& R, int Target, Vec& OutNormal) const;
+		/** Where such a round's burst strikes her plate, for its Shots (To, Normal, the room, her floor and her velocity
+		 * through the burst; its Rounds and PerSecond already set): the scene's cast (World::Plate) where it is known, her
+		 * skin (World::Skin) at its point, else her plain box's face that the rules name, never her middle. */
+		void PlateOf(const LandFeed::Round& R, int Target, Effect& Sh) const;
 		void Fire(const LandFeed::Round& R, int Index, std::vector<Effect>& OutFx, std::vector<Noise>& OutNoise);
 		void Land(const LandFeed::Round& R, int Index, std::vector<Effect>& OutFx, std::vector<Noise>& OutNoise);
 		void Blast(const LandFeed::Event& E, int Round, std::vector<Effect>& OutFx, std::vector<Noise>& OutNoise);

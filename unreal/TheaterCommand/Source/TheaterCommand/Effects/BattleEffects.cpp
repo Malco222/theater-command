@@ -424,11 +424,21 @@ void FBattleEffects::Shots(int32 Gun, const FVector& From, const FVector& To, co
 	});
 }
 
-void FBattleEffects::ShotsOnArmour(int32 Gun, const FVector& From, const FVector& To, const FVector& Normal, const FString& Weapon, int32 Rounds, float PerSecond, const FString& Ground)
+void FBattleEffects::ShotsOnArmour(int32 Gun, const FVector& From, const FVector& To, const FVector& Normal, const FVector& RoomMid, const FVector& RoomA, const FVector& RoomB, const FVector& Carry, const FVector& Pivot, double Spin, double FloorZ, const FString& Weapon, int32 Rounds, float PerSecond, const FString& Ground)
 {
 	Do([=, this]()
 	{
-		Core.ShotsOnArmour(Time(), Gun, ToFx(From), ToFx(To), ToFxWay(Normal), Named(Weapon).c_str(), Rounds, PerSecond, Named(Ground).c_str());
+		TheaterFx::Battle::ArmourPlate Plate;
+		Plate.At = ToFx(To);
+		Plate.Normal = ToFxWay(Normal);
+		Plate.RoomMid = ToFx(RoomMid);
+		Plate.RoomA = ToFx(RoomA);
+		Plate.RoomB = ToFx(RoomB);
+		Plate.Carry = ToFx(Carry);
+		Plate.Pivot = ToFx(Pivot);
+		Plate.Spin = Spin;
+		Plate.Floor = FloorZ > -1.0e29 ? FloorZ / UnitsPerMetre : -1.0e30;
+		Core.ShotsOnArmour(Time(), Gun, ToFx(From), Plate, Named(Weapon).c_str(), Rounds, PerSecond, Named(Ground).c_str());
 	});
 }
 

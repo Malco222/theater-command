@@ -431,6 +431,7 @@ namespace TheaterFx
 		FewAlphaPow = 0.0;
 		LandHits = LandHitsFew = 0;
 		RicoStrikes = RicoSparks = RicoTracers = 0; // (Effects (R2): ShotsOnArmour since Setup)
+		ShotSpurts = 0;
 		LandFewSum = 0.0;
 		CaseDetailPx = std::max(0.0, Num("ground_cases.detail_px", 3.0));
 		CaseHoldPx = std::max(0.0, Num("ground_cases.hold_px", 0.0));
@@ -5387,14 +5388,26 @@ namespace TheaterFx
 		ShotsLaid(Now, Gun, From, To, Weapon, Rounds, PerSecond, GroundIn, nullptr);
 	}
 
-	void Battle::ShotsOnArmour(double Now, int Gun, const Vec& From, const Vec& To, const Vec& Normal, const char* Weapon, int Rounds, double PerSecond, const char* GroundIn)
+	void Battle::ShotsOnArmour(double Now, int Gun, const Vec& From, const ArmourPlate& PlateIn, const char* Weapon, int Rounds, double PerSecond, const char* GroundIn)
 	{
-		// (a plate's way that is no number, or none, is taken as facing up: a roof)
-		const Vec Plate = RealPlace(Normal) && Normal.Length() > 1e-6 ? Normal.Unit(ZUp) : ZUp;
-		ShotsLaid(Now, Gun, From, To, Weapon, Rounds, PerSecond, GroundIn, &Plate);
+		// (a plate's way that is no number, or none, is taken as facing up: a roof; a room or a velocity that is no number
+		// is none, a floor that is none the ground)
+		ArmourPlate Plate = PlateIn;
+		Plate.Normal = RealPlace(PlateIn.Normal) && PlateIn.Normal.Length() > 1e-6 ? PlateIn.Normal.Unit(ZUp) : ZUp;
+		if (!RealPlace(PlateIn.RoomMid) || !RealPlace(PlateIn.RoomA) || !RealPlace(PlateIn.RoomB))
+		{
+			Plate.RoomMid = PlateIn.At;
+			Plate.RoomA = Plate.RoomB = Vec();
+		}
+		Plate.Carry = RealPlace(PlateIn.Carry) && PlateIn.Carry.Length() < 60.0 ? PlateIn.Carry : Vec();
+		const bool bSpin = RealPlace(PlateIn.Pivot) && PlateIn.Spin == PlateIn.Spin && std::fabs(PlateIn.Spin) < 10.0;
+		Plate.Spin = bSpin ? PlateIn.Spin : 0.0; // (a turn that is no number, about no place, or faster than any vehicle turns: none)
+		Plate.Pivot = bSpin ? PlateIn.Pivot : PlateIn.At;
+		Plate.Floor = PlateIn.Floor == PlateIn.Floor && PlateIn.Floor > -1.0e29 && PlateIn.Floor < 1.0e6 ? PlateIn.Floor : -1.0e30;
+		ShotsLaid(Now, Gun, From, PlateIn.At, Weapon, Rounds, PerSecond, GroundIn, &Plate);
 	}
 
-	void Battle::ShotsLaid(double Now, int Gun, const Vec& From, const Vec& To, const char* Weapon, int Rounds, double PerSecond, const char* GroundIn, const Vec* Plate)
+	void Battle::ShotsLaid(double Now, int Gun, const Vec& From, const Vec& To, const char* Weapon, int Rounds, double PerSecond, const char* GroundIn, const ArmourPlate* Plate)
 	{
 		GroundIn = GroundOn(GroundIn); // (a ground whose own switch is off is drawn as earth)
 		// (Effects (R2): "mg:star", the row mg with its own look; a name with no colon as ever)
@@ -5491,11 +5504,15 @@ namespace TheaterFx
 			Vec N = Vec(0.0, 0.0, 1.0), Ta = Vec(1.0, 0.0, 0.0), Tb = Vec(0.0, 1.0, 0.0); // (its outward way, and two along it: level, and up it)
 			Span Sparks{ 3.0, 8.0 }, Fast{ 3.0, 26.0 }, SparkLife{ 0.08, 0.24 }, Cone{ 40.0, 70.0 }, Lift{ 10.0, 50.0 }, RicoLife{ 0.2, 0.45 }, Kink{ 8.0, 25.0 };
 			double Uneven = 2.5, Open = 60.0, SparkWide = 0.012, SparkLeastPx = 1.3, LongPx = 5.0, MinOut = 0.1, SparkOver = 1.4;
-			double FlashM = 0.05, FlashS = 0.034, FlashLeastPx = 2.0, FlashOver = 1.6, HaloM = 0.14, HaloAlpha = 0.3;
-			double SpreadA = 0.45, SpreadB = 0.25, ChipChance = 0.06, ChipAlpha = 0.22, TracerChance = 0.8, Slower = 0.5, Yaw = 25.0, KinkSlow = 0.75, RicoAlpha = 0.85, StreakS = 1.0 / 30.0, Drop = 9.8;
+			double FlashM = 0.05, FlashS = 0.034, FlashLeastPx = 3.0, FlashOver = 2.0, HaloM = 0.2, HaloAlpha = 0.35;
+			double SpreadA = 0.45, SpreadB = 0.25, ChipChance = 0.06, ChipAlpha = 0.22, TracerChance = 0.8, Slower = 0.5, Yaw = 25.0, KinkSlow = 0.75, RicoAlpha = 0.7, StreakS = 1.0 / 30.0, Drop = 9.8;
 			int Kinks = 2;
 			Rgb Hot, Cooled, FlashCol, HaloCol, ChipCol;
 			double Many = 1.0, Coarse = 1.0, MPerPx = 0.0; // (far off and on a busy screen: the share of sparks thrown, how much bigger each, a metre's pixels)
+			// (where on the plate the rounds strike: about Base, each way along it up to Reach off (spread Sig, a bell's
+			// width), so never past the room the caller knows of less edge_m; Carry her velocity, Floor her own floor at Now)
+			Vec Base, Carry, Pivot;
+			double ReachA = 0.0, ReachB = 0.0, SigA = 0.0, SigB = 0.0, Floor = -1.0e30, Spin = 0.0;
 		} Pl;
 		if (bPlate)
 		{
@@ -5508,9 +5525,17 @@ namespace TheaterFx
 				S_.B = std::max(S_.A, SafeNum(S_.B, Least, Most, High));
 				return S_;
 			};
-			Pl.N = *Plate;
-			Pl.Ta = std::fabs(Pl.N.Z) < 0.9 ? ZUp.Cross(Pl.N).Unit(Vec(1.0, 0.0, 0.0)) : (Dir - Pl.N * Dir.Dot(Pl.N)).Unit(Vec(1.0, 0.0, 0.0));
+			Pl.N = Plate->Normal;
+			// (along the plate: the room's own ways where the caller knows its room, else level and up it, or along the
+			// shot's way on a roof)
+			const Vec RoomA = Plate->RoomA - Pl.N * Plate->RoomA.Dot(Pl.N);
+			const bool bRoomA = RoomA.Length() > 1e-6;
+			Pl.Ta = bRoomA ? RoomA.Unit(Vec(1.0, 0.0, 0.0)) : std::fabs(Pl.N.Z) < 0.9 ? ZUp.Cross(Pl.N).Unit(Vec(1.0, 0.0, 0.0)) : (Dir - Pl.N * Dir.Dot(Pl.N)).Unit(Vec(1.0, 0.0, 0.0));
 			Pl.Tb = Pl.N.Cross(Pl.Ta).Unit(ZUp);
+			Pl.Carry = Plate->Carry;
+			Pl.Pivot = Plate->Pivot;
+			Pl.Spin = Plate->Spin;
+			Pl.Floor = Plate->Floor;
 			Pl.Sparks = SpanOf(RP + "sparks", 3.0, 8.0, 0.0, 40.0);
 			Pl.Fast = SpanOf(RP + "spark_mps", 3.0, 26.0, 0.1, 200.0);
 			Pl.SparkLife = SpanOf(RP + "spark_life_s", 0.08, 0.24, 0.01, 2.0);
@@ -5527,12 +5552,29 @@ namespace TheaterFx
 			Pl.MinOut = std::sin(Radians(NumOf("least_off_deg", 6.0, 1.0, 60.0)));
 			Pl.FlashM = NumOf("flash_m", 0.05, 0.0, 1.0);
 			Pl.FlashS = NumOf("flash_s", 0.034, 0.005, 0.5);
-			Pl.FlashLeastPx = NumOf("flash_least_px", 2.0, 0.0, 16.0);
-			Pl.FlashOver = NumOf("flash_over", 1.6, 1.0, 4.0);
-			Pl.HaloM = NumOf("halo_m", 0.14, 0.0, 2.0);
-			Pl.HaloAlpha = NumOf("halo_alpha", 0.3, 0.0, 1.0);
+			Pl.FlashLeastPx = NumOf("flash_least_px", 3.0, 0.0, 16.0);
+			Pl.FlashOver = NumOf("flash_over", 2.0, 1.0, 4.0);
+			Pl.HaloM = NumOf("halo_m", 0.2, 0.0, 2.0);
+			Pl.HaloAlpha = NumOf("halo_alpha", 0.35, 0.0, 1.0);
 			Pl.SpreadA = NumOf("spread_m.0", 0.45, 0.0, 5.0);
 			Pl.SpreadB = NumOf("spread_m.1", 0.25, 0.0, 5.0);
+			{
+				// (the room: as far as the plate runs each way from its middle, less edge_m (a flash's width, so none hangs
+				// over her edge); the burst's middle moved in from the aim as far as it must for its spread to stay inside,
+				// and its spread made no wider than the room. No room known: every round at the aim)
+				const double Edge = NumOf("edge_m", 0.03, 0.0, 0.5);
+				const double HalfA = bRoomA ? RoomA.Length() : 0.0, HalfB = std::fabs(Plate->RoomB.Dot(Pl.Tb));
+				const double HA = std::max(0.0, HalfA - Edge), HB = std::max(0.0, HalfB - Edge);
+				Pl.ReachA = std::min(Pl.SpreadA, HA);
+				Pl.ReachB = std::min(Pl.SpreadB, HB);
+				const Vec Off = To - Plate->RoomMid;
+				const double AimA = std::clamp(Off.Dot(Pl.Ta), -HA + Pl.ReachA, HA - Pl.ReachA);
+				const double AimB = std::clamp(Off.Dot(Pl.Tb), -HB + Pl.ReachB, HB - Pl.ReachB);
+				Pl.Base = Plate->RoomMid + Pl.Ta * AimA + Pl.Tb * AimB;
+				Pl.Base = Pl.Base + Pl.N * (To - Pl.Base).Dot(Pl.N); // (on the plate's own plane through the aim)
+				Pl.SigA = std::min(0.5 * Scatter, 0.5 * Pl.ReachA);
+				Pl.SigB = std::min(0.35 * Scatter, 0.5 * Pl.ReachB);
+			}
 			Pl.ChipChance = NumOf("chip_chance", 0.06, 0.0, 1.0);
 			Pl.ChipAlpha = NumOf("chip_alpha", 0.22, 0.0, 1.0);
 			Pl.TracerChance = NumOf("tracer_chance", 0.8, 0.0, 1.0);
@@ -5540,11 +5582,11 @@ namespace TheaterFx
 			Pl.Yaw = NumOf("tracer_yaw_deg", 25.0, 0.0, 90.0);
 			Pl.Kinks = static_cast<int>(NumOf("kinks", 2.0, 0.0, 6.0));
 			Pl.KinkSlow = NumOf("kink_slow", 0.75, 0.1, 1.0);
-			Pl.RicoAlpha = NumOf("tracer_alpha", 0.85, 0.0, 1.0);
+			Pl.RicoAlpha = NumOf("tracer_alpha", 0.7, 0.0, 1.0);
 			Pl.StreakS = NumOf("tracer_streak_s", 1.0 / 30.0, 0.002, 0.2);
 			Pl.Drop = NumOf("tracer_drop", 9.8, 0.0, 50.0);
 			Pl.Hot = Picture(RP + "spark", Rgb::FromPicture(255, 240, 190));
-			Pl.Cooled = Picture(RP + "spark_old", Rgb::FromPicture(255, 146, 52));
+			Pl.Cooled = Picture(RP + "spark_old", Rgb::FromPicture(255, 180, 80));
 			Pl.FlashCol = Picture(RP + "flash", Rgb::FromPicture(255, 250, 226));
 			Pl.HaloCol = Picture(RP + "halo", Rgb::FromPicture(255, 214, 132));
 			Pl.ChipCol = Picture(RP + "chip", Rgb::FromPicture(138, 136, 130));
@@ -5562,11 +5604,42 @@ namespace TheaterFx
 			Pl.Coarse = 1.0 / std::sqrt(FarK);
 			Pl.MPerPx = bEyeKnown ? Away / Ppr : 0.0;
 		}
-		// (one round striking the plate at At at Ts, flying along In: its flash, its sparks, now and then its paint)
+		// (where her way and her turn have carried a point of her, or turned a way of her, Dt after Now; and the plate as a
+		// round strikes it: its outward way and its two along it then, and how fast the plate goes there)
+		auto TurnedBy = [&](const Vec& W, double Dt)
+		{
+			const double A = Pl.Spin * Dt;
+			return Pl.Spin == 0.0 ? W : Vec(W.X * std::cos(A) - W.Y * std::sin(A), W.X * std::sin(A) + W.Y * std::cos(A), W.Z);
+		};
+		auto Moved = [&](const Vec& P, double Dt)
+		{
+			return Pl.Pivot + TurnedBy(P - Pl.Pivot, Dt) + Pl.Carry * Dt;
+		};
+		struct StruckFrame
+		{
+			Vec N, Ta, Tb, Vel;
+		} Fr;
+		Fr.N = Pl.N;
+		Fr.Ta = Pl.Ta;
+		Fr.Tb = Pl.Tb;
+		Fr.Vel = Pl.Carry;
+		// (a piece laid on a plate that moves rides with her: the plate's way there on it all its life, its own flight on
+		// top)
+		auto Ride = [&](Bit& B)
+		{
+			if (Fr.Vel.X != 0.0 || Fr.Vel.Y != 0.0 || Fr.Vel.Z != 0.0)
+			{
+				B.Carry = Fr.Vel;
+				B.CarryFor = B.Life;
+				B.bCarried = true;
+			}
+		};
+		// (one round striking the plate at At at Ts (where the plate is then), flying along In: its flash, its sparks, now
+		// and then its paint)
 		auto StrikePlate = [&](double Ts, const Vec& At, const Vec& InWay)
 		{
 			++RicoStrikes;
-			const Vec& Nn = Pl.N;
+			const Vec& Nn = Fr.N;
 			Vec In = InWay;
 			double Into = In.Dot(Nn);
 			if (Into > 0.0)
@@ -5598,6 +5671,7 @@ namespace TheaterFx
 				F.Rim = 0.2;
 				F.LeastPx = Pl.FlashLeastPx;
 				F.bLight = true;
+				Ride(F);
 				Bits.push_back(F);
 				if (HaloR > 0.0 && Pl.HaloAlpha > 0.0)
 				{
@@ -5619,11 +5693,14 @@ namespace TheaterFx
 			// plate; most slow and short, a few fast and long; falling, cooling white-yellow to orange, gone in under 0.3 s.
 			// Each laid as the streak of its own flight, its tail at the plate; far off drawn out to spark_long_px)
 			const double HalfCone = Radians(0.5 * Pl.Cone.Pick(DA) + 0.5 * Pl.Open * Square);
-			const Vec SideA = Mirror.Cross(std::fabs(Mirror.Z) < 0.9 ? ZUp : Vec(1.0, 0.0, 0.0)).Unit(Pl.Ta);
-			const Vec SideB = Mirror.Cross(SideA).Unit(Pl.Tb);
+			const Vec SideA = Mirror.Cross(std::fabs(Mirror.Z) < 0.9 ? ZUp : Vec(1.0, 0.0, 0.0)).Unit(Fr.Ta);
+			const Vec SideB = Mirror.Cross(SideA).Unit(Fr.Tb);
 			const double Thrown = Pl.Sparks.Pick(DA);
 			const int NSparks = std::max(1, static_cast<int>(std::lround(Thrown * Pl.Many)));
-			const double Floor = Height(At.X, At.Y); // (the ground under the strike: no spark falls through it)
+			// (the ground under the strike, and her own floor under the plate where she has one there, as she is when it
+			// strikes: no spark falls through either)
+			const double Ground_ = Height(At.X, At.Y), Own = Pl.Floor > -1.0e29 ? Pl.Floor + Pl.Carry.Z * (Ts - Now) : -1.0e30;
+			const double Floor = std::max(Ground_, Own);
 			for (int I = 0; I < NSparks; ++I)
 			{
 				const double Out_ = HalfCone * std::sqrt(DA.U());
@@ -5644,24 +5721,42 @@ namespace TheaterFx
 				B.Drag = DA.U(1.5, 4.0);
 				B.Life = std::min(0.29, Pl.SparkLife.Pick(DA) * (0.7 + 0.6 * Quick));
 				B.R0 = B.R1 = Pl.SparkWide * Pl.Coarse * DA.U(0.7, 1.3);
-				double Half = B.R0 + Mps / 60.0; // (its streak as drawn when born: its width and its flight over a 60th of a second)
-				if (Pl.MPerPx > 0.0 && 0.5 * Pl.LongPx * Pl.MPerPx > Half)
+				// (its streak as drawn when born: its width and its flight over a 60th of a second as seen, its own way and her
+				// way on it; far off a streak a few pixels long, never a bead)
+				auto SeenOf = [&](const Vec& Wy) { return Wy * Mps + Fr.Vel; };
+				const double FarHalf = Pl.MPerPx > 0.0 ? 0.5 * Pl.LongPx * Pl.MPerPx : 0.0;
+				const bool bDrawnOut = FarHalf > B.R0 + SeenOf(Way).Length() / 60.0;
+				double Half = bDrawnOut ? FarHalf : B.R0 + SeenOf(Way).Length() / 60.0;
+				Vec SeenWay = SeenOf(Way).Unit(Way);
+				if (SeenWay.Z < 0.0 && At.Z + 2.0 * Half * SeenWay.Z < Floor + 0.05)
 				{
-					Half = 0.5 * Pl.LongPx * Pl.MPerPx; // (far off: a streak a few pixels long, never a bead)
-					if (Way.Z < 0.0 && At.Z + 2.0 * Half * Way.Z < Floor + 0.05)
+					// (so long a streak thrown down off a low plate, or just over her deck, would be in the ground or her deck
+					// at once: thrown as much up, as off them it would glance)
+					const Vec Up_ = Vec(Way.X, Way.Y, -Way.Z).Unit(Way);
+					if (Up_.Dot(Nn) >= std::min(Pl.MinOut, Way.Dot(Nn)) - 1e-9)
 					{
-						// (so long a streak thrown down off a low plate would be in the ground at once: thrown as much up)
-						const Vec Up_ = Vec(Way.X, Way.Y, -Way.Z).Unit(Way);
-						if (Up_.Dot(Nn) >= Pl.MinOut)
-						{
-							Way = Up_;
-							B.Vel = Way * Mps;
-						}
+						Way = Up_;
+						B.Vel = Way * Mps;
+						SeenWay = SeenOf(Way).Unit(Way);
+						Half = bDrawnOut ? FarHalf : B.R0 + SeenOf(Way).Length() / 60.0;
 					}
-					B.HalfLength = Half;
-					B.Along = Way;
+					else if (SeenWay.Z < -1e-6)
+					{
+						// (off a plate that faces down, where up would be back into it: drawn short enough to keep off them)
+						Half = std::max(B.R0, std::min(Half, (At.Z - Floor - 0.06) / (-2.0 * SeenWay.Z)));
+						B.HalfLength = Half;
+						B.Along = SeenWay;
+					}
 				}
-				B.From = At + Nn * 0.01 + Way * Half;
+				if (bDrawnOut)
+				{
+					B.HalfLength = Half;
+					B.Along = SeenWay;
+				}
+				// (the strike where the plate is when the spark is born, and the streak laid with its end nearer her plate on it:
+				// out from her along its way as seen, or back along it where her going away outruns its own)
+				const Vec AtB = At + Fr.Vel * (B.Born - Ts);
+				B.From = AtB + Nn * 0.01 + SeenWay * (SeenWay.Dot(Nn) >= 0.0 ? Half : -Half);
 				B.Col = Pl.Hot;
 				B.Col2 = Pl.Cooled;
 				B.Cool = 1.0; // (white-yellow, to orange only by its end)
@@ -5673,23 +5768,30 @@ namespace TheaterFx
 				B.Rim = 0.3;
 				B.LeastPx = Pl.SparkLeastPx;
 				B.bLight = true;
-				// (off a roof or a glacis it falls back onto the plate, and thrown down off a low plate it falls to the ground:
-				// it goes out before any of its streak reaches either, never into the hull or the earth. Off a plate that faces
-				// level or down, high enough, it only leaves, and nothing is stepped)
-				const double Fall = std::max(0.0, -B.Vel.Z) * B.Life + 0.5 * B.Gravity * B.Life * B.Life + Half;
+				// (riding with her: its own flight as off a plate standing still, and her way on top, so the plate never
+				// catches it up nor leaves it inside her)
+				Ride(B);
+				// (off a roof or a glacis it falls back onto the plate, thrown down off a turret it falls onto her deck, and off
+				// a low plate to the ground: it goes out before any of its streak reaches any of them, never into the hull or
+				// the earth. Off a plate that faces level or down, high enough, it only leaves, and nothing is stepped. The
+				// plate and her floor are where her way has carried them, as the spark is: its own flight is set against
+				// them, and the ground against where it is)
+				const double Fall = std::max(0.0, -B.Vel.Z) * B.Life + std::max(0.0, -Fr.Vel.Z) * B.Life + 0.5 * B.Gravity * B.Life * B.Life + Half;
 				if (Nn.Z > 0.0 || At.Z - Fall < Floor + 0.05)
 				{
 					const double Step = 1.0 / 120.0;
+					const double OwnAt = Own + Fr.Vel.Z * (B.Born - Ts);
 					for (int K = 1; K * Step < B.Life; ++K)
 					{
 						const double Age = K * Step;
-						const Vec Go_ = Going(B, Age);
+						const Vec Go_ = Going(B, Age); // (its streak drawn along its flight as seen, her way on it)
 						const double HalfNow = B.HalfLength > 0.0 ? B.HalfLength : B.R0 + Go_.Length() / 60.0;
-						const Vec Mid_ = Where(B, Age), Ends = Go_.Unit(Way) * HalfNow;
+						const Vec Mid_ = WhereOwn(B, Age), Ends = Go_.Unit(Way) * HalfNow;
 						const Vec Lo = Mid_ - Ends, Hi = Mid_ + Ends;
-						if (std::min((Lo - At).Dot(Nn), (Hi - At).Dot(Nn)) < 0.003 || std::min(Lo.Z, Hi.Z) < Floor + 0.01)
+						const double Low = std::min(Lo.Z, Hi.Z), Carried = Fr.Vel.Z * Age;
+						if (std::min((Lo - AtB).Dot(Nn), (Hi - AtB).Dot(Nn)) < 0.003 || Low < OwnAt + 0.01 || Low + Carried < Ground_ + 0.01)
 						{
-							B.Life = std::max(Step, Age - Step);
+							B.Life = K == 1 ? 0.5 * Step : Age - Step; // (through at its first step: drawn where it is born only)
 							break;
 						}
 					}
@@ -5703,7 +5805,7 @@ namespace TheaterFx
 				Bit C;
 				C.Born = Ts + 0.01;
 				const double Push = DA.U(0.3, 0.9);
-				C.From = At + Nn * (0.05 * Pl.Coarse + 0.02);
+				C.From = At + Fr.Vel * (C.Born - Ts) + Nn * (0.05 * Pl.Coarse + 0.02);
 				C.Vel = Nn * Push + Mirror * 0.4;
 				C.Drag = 3.0;
 				C.Windage = 0.0; // (no wind: it would carry the puff into the hull)
@@ -5717,6 +5819,7 @@ namespace TheaterFx
 				C.Hold = 0.2;
 				C.Heart = 0.5;
 				C.Rim = 0.0;
+				Ride(C);
 				Bits.push_back(C);
 			}
 		};
@@ -5726,7 +5829,7 @@ namespace TheaterFx
 		auto RicochetTracer = [&](double Ts, const Vec& At, const Vec& InWay)
 		{
 			++RicoTracers;
-			const Vec& Nn = Pl.N;
+			const Vec& Nn = Fr.N;
 			Vec In = InWay;
 			const double Into = In.Dot(Nn);
 			if (Into > 0.0)
@@ -5737,12 +5840,12 @@ namespace TheaterFx
 			Vec Along_;
 			if (Flat.Length() > 0.2)
 			{
-				Along_ = Flat.Unit(Pl.Ta);
+				Along_ = Flat.Unit(Fr.Ta);
 			}
 			else
 			{
 				const double Round_ = DA.U(0.0, 2.0 * Pi); // (struck square: off along the plate any way)
-				Along_ = (Pl.Ta * std::cos(Round_) + Pl.Tb * std::sin(Round_)).Unit(Pl.Ta);
+				Along_ = (Fr.Ta * std::cos(Round_) + Fr.Tb * std::sin(Round_)).Unit(Fr.Ta);
 			}
 			const double Yaw = Radians(DA.U(-Pl.Yaw, Pl.Yaw));
 			Along_ = (Along_ * std::cos(Yaw) + Nn.Cross(Along_) * std::sin(Yaw)).Unit(Along_);
@@ -5758,6 +5861,14 @@ namespace TheaterFx
 				const Vec Up_ = Vec(Wy.X, Wy.Y, -0.5 * Wy.Z).Unit(Wy);
 				return Up_.Dot(Nn) >= Pl.MinOut ? Up_ : Wy;
 			};
+			// (headed down along the plate: turned as far up it, so it leaves at the same angle off the plate, level or
+			// skyward; a roof's every way is up it)
+			const Vec UpPlate = ZUp - Nn * Nn.Z;
+			if (UpPlate.Length() > 1e-6 && Along_.Dot(UpPlate) < 0.0)
+			{
+				const Vec U_ = UpPlate.Unit(ZUp);
+				Along_ = (Along_ - U_ * (2.0 * Along_.Dot(U_))).Unit(Along_);
+			}
 			const double Lift = Radians(Pl.Lift.Pick(DA));
 			Vec Way = Skyward((Along_ * std::cos(Lift) + Nn * std::sin(Lift)).Unit(Nn));
 			double Mps = Speed * Pl.Slower * DA.U(0.7, 1.0);
@@ -5791,8 +5902,8 @@ namespace TheaterFx
 				// (where it is at the kink, and its way then, turned a little about it)
 				P = P + Vel * Each + Vec(0.0, 0.0, -0.5 * Pl.Drop * Each * Each);
 				const Vec Going_ = (Vel + Vec(0.0, 0.0, -Pl.Drop * Each)).Unit(Way);
-				const Vec Ka = Going_.Cross(std::fabs(Going_.Z) < 0.9 ? ZUp : Vec(1.0, 0.0, 0.0)).Unit(Pl.Ta);
-				const Vec Kb = Going_.Cross(Ka).Unit(Pl.Tb);
+				const Vec Ka = Going_.Cross(std::fabs(Going_.Z) < 0.9 ? ZUp : Vec(1.0, 0.0, 0.0)).Unit(Fr.Ta);
+				const Vec Kb = Going_.Cross(Ka).Unit(Fr.Tb);
 				const double Bend = Radians(Pl.Kink.Pick(DA));
 				const double Round_ = DA.U(0.0, 2.0 * Pi);
 				Way = (Going_ * std::cos(Bend) + (Ka * std::cos(Round_) + Kb * std::sin(Round_)) * std::sin(Bend)).Unit(Going_);
@@ -5871,17 +5982,29 @@ namespace TheaterFx
 			double HitDist = Dist, HitReach = Reach;
 			if (bPlate)
 			{
-				const double SpreadA = std::min(0.5 * Scatter, 0.5 * Pl.SpreadA), SpreadB = std::min(0.35 * Scatter, 0.5 * Pl.SpreadB);
 				const double Ua = DA.Bell();
 				const double Ub = DA.Bell();
-				Hit = To + Pl.Ta * std::clamp(Ua * SpreadA, -Pl.SpreadA, Pl.SpreadA) + Pl.Tb * std::clamp(Ub * SpreadB, -Pl.SpreadB, Pl.SpreadB);
+				const Vec OnPlate = Pl.Base + Pl.Ta * std::clamp(Ua * Pl.SigA, -Pl.ReachA, Pl.ReachA) + Pl.Tb * std::clamp(Ub * Pl.SigB, -Pl.ReachB, Pl.ReachB);
+				// (where her way and her turn have carried that place by the time the round gets there: found twice, the
+				// second time to well under a millimetre; standing still, the place itself. The plate there then: turned as
+				// she has turned, going at her way and her turn's there)
+				double Fly = (Moved(OnPlate, T - Now) - From).Length() / std::max(Speed, 1.0);
+				Fly = (Moved(OnPlate, T + Fly - Now) - From).Length() / std::max(Speed, 1.0);
+				const double Since = T + Fly - Now;
+				Hit = Moved(OnPlate, Since);
+				Fr.N = TurnedBy(Pl.N, Since);
+				Fr.Ta = TurnedBy(Pl.Ta, Since);
+				Fr.Tb = TurnedBy(Pl.Tb, Since);
+				const Vec Arm = Hit - (Pl.Pivot + Pl.Carry * Since);
+				Fr.Vel = Pl.Carry + Vec(-Pl.Spin * Arm.Y, Pl.Spin * Arm.X, 0.0);
 				HitDist = (Hit - From).Length();
-				HitWay = Dist > 0.5 ? (Hit - From).Unit(Dir) : -Pl.N; // (a shooter unseen, fired from the strike itself: struck square)
-				HitReach = HitDist / std::max(Speed, 1.0);
+				HitWay = Dist > 0.5 ? (Hit - From).Unit(Dir) : -Fr.N; // (a shooter unseen, fired from the strike itself: struck square)
+				HitReach = Fly;
 				StrikePlate(T + HitReach, Hit, HitWay);
 			}
 			if (!bPlate && D.U() < SpurtChance)
 			{
+				++ShotSpurts;
 				Vec At = To + Vec(D.Bell(), D.Bell(), 0.0) * (Scatter * 0.5);
 				At.Z = Height(At.X, At.Y) + 0.05;
 				for (int K = 0; K < 2; ++K)

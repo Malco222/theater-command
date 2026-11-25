@@ -127,6 +127,45 @@ namespace LandPlay
 		return !IsOneOf(Model, { "Truck", "FlakTruck", "Jeep", "Kubelwagen", "FieldCar", "GAZ67", "Fiat508", "Kurogane", "Motorcycle", "R75", "M72", "WLA", "M20", "Alce", "Rikuo" });
 	}
 
+	PlateSpot PlainPlate(const Track& Tr, const LandFeed::Block* B, const LandFeed::Spot& S, double Ground, const std::string& Face, double UIn, double HIn)
+	{
+		const std::string& Model = !Tr.Model.empty() || !B ? Tr.Model : B->Model;
+		const bool bBig = Tr.Role != "lorry" && !IsOneOf(Model, { "SdKfz222", "M8", "ArmouredCar", "FlakHalftrack", "M16", "Hanomag", "M3Halftrack" });
+		const double HalfLong = bBig ? 3.0 : 2.9, HalfWide = bBig ? 1.6 : 1.1, High = bBig ? 2.6 : 2.2;
+		const Vec Ahead(std::sin(S.F), std::cos(S.F), 0.0), Right(std::cos(S.F), -std::sin(S.F), 0.0), Up(0.0, 0.0, 1.0);
+		const double U = std::clamp(UIn, -1.0, 1.0);
+		const Vec Foot(S.X, S.Y, Ground);
+		const Vec Mid = Foot + Up * (std::clamp(HIn, 0.05, 0.95) * High);
+		PlateSpot P;
+		if (Face == "top")
+		{
+			P.Normal = Up;
+			P.At = Foot + Up * High + Ahead * (U * HalfLong * 0.6);
+			P.RoomMid = Foot + Up * High;
+			P.RoomA = Ahead * HalfLong;
+			P.RoomB = Right * HalfWide;
+		}
+		else if (Face == "left" || Face == "right")
+		{
+			const double Out = Face == "right" ? 1.0 : -1.0;
+			P.Normal = Right * Out;
+			P.At = Mid + Right * (Out * HalfWide) + Ahead * (U * HalfLong * Out);
+			P.RoomMid = Foot + Up * (0.5 * High) + Right * (Out * HalfWide);
+			P.RoomA = Ahead * HalfLong;
+			P.RoomB = Up * (0.5 * High);
+		}
+		else
+		{
+			const double Out = Face == "rear" ? -1.0 : 1.0;
+			P.Normal = Ahead * Out;
+			P.At = Mid + Ahead * (Out * HalfLong) + Right * (U * HalfWide * Out);
+			P.RoomMid = Foot + Up * (0.5 * High) + Ahead * (Out * HalfLong);
+			P.RoomA = Right * HalfWide;
+			P.RoomB = Up * (0.5 * High);
+		}
+		return P;
+	}
+
 	bool Replay::Begin(const Recording& InRecording, const World& InWorld)
 	{
 		Rec = &InRecording;
@@ -384,34 +423,87 @@ namespace LandPlay
 		return Tr.IsVehicle() && ArmouredVehicle(Tr, Rec->BlockOf(Tr.Block));
 	}
 
-	Vec Replay::PlateOf(const Round& R, int Target, Vec& OutNormal) const
+	void Replay::PlateOf(const Round& R, int Target, Effect& Sh) const
 	{
 		const std::string Face = R.Fc.empty() ? std::string("front") : R.Fc;
-		Vec At;
-		if (Here.Skin && Here.Skin(Target, R.N, R.L, Face, R.U, R.H, At, OutNormal) && OutNormal.Length() > 0.5) return At;
-		// Plainly: her box (a tank about 6 m long, 3.2 wide and 2.6 high; a half-track or an armoured car 5.8, 2.2, 2.2),
-		// on the face the rules name, U across it and H up it, the face's own outward way.
 		const Track& Tr = Rec->Tracks[static_cast<size_t>(Target)];
-		const LandFeed::Spot S = LandFeed::SpotAt(Tr, R.L);
-		const bool bBig = Tr.Role != "lorry";
-		const double HalfLong = bBig ? 3.0 : 2.9, HalfWide = bBig ? 1.6 : 1.1, High = bBig ? 2.6 : 2.2;
-		const Vec Ahead(std::sin(S.F), std::cos(S.F), 0.0), Right(std::cos(S.F), -std::sin(S.F), 0.0);
-		const double U = std::clamp(R.U, -1.0, 1.0), Ground = HeightAt(S.X, S.Y);
-		const Vec Mid(S.X, S.Y, Ground + std::clamp(R.H, 0.05, 0.95) * High);
-		if (Face == "top")
+		// A field way turned as her heading turns by DF radians (clockwise seen from above, as LandFeed's heading grows).
+		auto Turned = [](const Vec& W, double DF) { return Vec(W.X * std::cos(DF) + W.Y * std::sin(DF), -W.X * std::sin(DF) + W.Y * std::cos(DF), W.Z); };
+		auto Wrap = [](double A) { return std::remainder(A, 2.0 * 3.14159265358979323846); };
+		// How she goes through the burst's strikes, from when it lands to as its last round strikes (a quarter of a
+		// second at least): the steady way (field metres a battle second) and steady turn (radians a battle second)
+		// about her middle nearest her track at the rounds' moments (least squares, at most 12 of them), and her place
+		// and heading on that line as it lands. The scene's pose and the kit's clock are the battle time played to (Now):
+		// her plate is handed over as it would be then, were she going so, and the kit, carrying each strike on with her
+		// and turning it as she turns, lays it where her plate is when it strikes, never in her nor behind her.
+		// (the burst flies from Now, a frame or so after it was fired: so it strikes as much after its landing)
+		const double Now = PlayedTo, Lands = R.L + std::max(0.0, Now - R.T), Dt = Lands - Now;
+		const double Span = std::clamp((Sh.Rounds - 1) / std::max(Sh.PerSecond, 0.1), 0.25, 3.0);
+		const LandFeed::Spot LS = LandFeed::SpotAt(Tr, Lands);
+		const int Samples = std::clamp(Sh.Rounds, 2, 12);
+		double St = 0.0, Stt = 0.0, Sf = 0.0, Stf = 0.0;
+		Vec Sc, Stc;
+		for (int K = 0; K < Samples; ++K)
 		{
-			OutNormal = Vec(0.0, 0.0, 1.0);
-			return Vec(S.X, S.Y, Ground + High) + Ahead * (U * HalfLong * 0.6);
+			const double Tk = Span * K / (Samples - 1);
+			const LandFeed::Spot Sk = LandFeed::SpotAt(Tr, Lands + Tk);
+			const Vec Ck(Sk.X, Sk.Y, HeightAt(Sk.X, Sk.Y));
+			const double Fk = Wrap(Sk.F - LS.F);
+			St += Tk;
+			Stt += Tk * Tk;
+			Sc = Sc + Ck;
+			Stc = Stc + Ck * Tk;
+			Sf += Fk;
+			Stf += Tk * Fk;
 		}
-		if (Face == "left" || Face == "right")
+		const double Many = Samples, Den = Many * Stt - St * St; // (above naught: two moments a quarter of a second apart at least)
+		Sh.Carry = (Stc * Many - Sc * St) * (1.0 / Den);
+		Sh.Turn = (Many * Stf - St * Sf) / Den;
+		const Vec C0 = (Sc - Sh.Carry * St) * (1.0 / Many);
+		LandFeed::Spot L0 = LS;
+		L0.X = C0.X;
+		L0.Y = C0.Y;
+		L0.F = LS.F + (Sf - Sh.Turn * St) / Many;
+		Sh.Pivot = C0 - Sh.Carry * Dt;
+		// Her plate as it lands: the scene's cast (World::Plate) or her skin's point (World::Skin) at her pose now, carried
+		// on to her landing as she goes (her place and heading then); else her plain box there.
+		PlateSpot P;
+		bool bKnown = false;
+		Vec At, Normal;
+		if (Here.Plate && Here.Plate(Target, R.N, P) && P.Normal.Length() > 0.5)
 		{
-			const double Out = Face == "right" ? 1.0 : -1.0;
-			OutNormal = Right * Out;
-			return Mid + Right * (Out * HalfWide) + Ahead * (U * HalfLong * Out);
+			bKnown = true;
 		}
-		const double Out = Face == "rear" ? -1.0 : 1.0;
-		OutNormal = Ahead * Out;
-		return Mid + Ahead * (Out * HalfLong) + Right * (U * HalfWide * Out);
+		else if (Here.Skin && Here.Skin(Target, R.N, R.L, Face, R.U, R.H, At, Normal) && Normal.Length() > 0.5)
+		{
+			P.At = P.RoomMid = At; // (her skin's point alone, no room known: every round there)
+			P.Normal = Normal;
+			bKnown = true;
+		}
+		if (bKnown)
+		{
+			const LandFeed::Spot N0 = LandFeed::SpotAt(Tr, Now);
+			const Vec CN(N0.X, N0.Y, HeightAt(N0.X, N0.Y));
+			const double DF = Wrap(L0.F - N0.F);
+			P.At = C0 + Turned(P.At - CN, DF);
+			P.RoomMid = C0 + Turned(P.RoomMid - CN, DF);
+			P.Normal = Turned(P.Normal, DF);
+			P.RoomA = Turned(P.RoomA, DF);
+			P.RoomB = Turned(P.RoomB, DF);
+			P.Floor = P.Floor > -1.0e29 ? P.Floor + C0.Z - CN.Z : -1.0e30;
+		}
+		else
+		{
+			P = PlainPlate(Tr, Rec->BlockOf(Tr.Block), L0, C0.Z, Face, R.U, R.H);
+		}
+		// (and back from her landing to Now: about her middle then, turned back, and back along her way)
+		const double Back = -Sh.Turn * Dt;
+		Sh.To = Sh.Pivot + Turned(P.At - C0, Back);
+		Sh.Normal = Turned(P.Normal, Back);
+		Sh.RoomMid = Sh.Pivot + Turned(P.RoomMid - C0, Back);
+		Sh.RoomA = Turned(P.RoomA, Back);
+		Sh.RoomB = Turned(P.RoomB, Back);
+		Sh.Floor = P.Floor > -1.0e29 ? P.Floor - Sh.Carry.Z * Dt : -1.0e30;
 	}
 
 	void Replay::Step(double From, double To, std::vector<Effect>& OutFx, std::vector<Noise>& OutNoise, std::vector<Loss>& OutLoss)
@@ -556,7 +648,7 @@ namespace LandPlay
 			if (Ricochets(R, Target))
 			{
 				Sh.bArmour = true;
-				Sh.To = PlateOf(R, Target, Sh.Normal);
+				PlateOf(R, Target, Sh);
 			}
 			N.Rounds = B.Rounds;
 			N.PerSecond = B.PerSecond;

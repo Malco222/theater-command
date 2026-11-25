@@ -1624,62 +1624,131 @@ towed gun's shield still glances.
 
 Brian, 25 November 15:58Z: "are bullets taking out german tanks? cannon fire or bazookas should be the only thing
 taking them out ... bullets should be bouncing off it". The rules thread settles what a round does. This is how it
-looks: the war film's machine gun raking a tank. `ShotsOnArmour(Now, Gun, From, To, Normal, Weapon, Rounds, PerSecond,
-Ground)` is the same burst as `Shots` (its flicker, its brass, its tracers by the gun's own count), with its rounds
-striking a plate at To whose outward way is Normal (row `bullet_ricochet`; every key is read with its default):
+looks: the war film's machine gun raking a tank. `ShotsOnArmour(Now, Gun, From, Plate, Weapon, Rounds, PerSecond,
+Ground)` is the same burst as `Shots` (its flicker, its brass, its tracers by the gun's own count). Its rounds strike
+her `Battle::ArmourPlate`: At, the aim on her plate, and Normal, its outward way; RoomMid, RoomA and RoomB, how far
+the plate runs flat about the aim; Carry, Pivot and Spin, how she drives and turns; Floor, her own height under the
+plate. The row is `bullet_ricochet`, and every key is read with its default:
 
 - Each round strikes about the aim, spread over the plate (the burst's own spread, held to `spread_m` across and up
-  it). It strikes on the plate, never inside the hull, and never kicks up a dust spurt.
-- Each strike has a two-frame near-white flash (`flash_m`, `flash_s`, `flash_over`) in a faint warm halo, never under
-  `flash_least_px`.
+  it). It lands inside the plate's room, `edge_m` (3 cm) short of its edges, so none is drawn in the air past her
+  edge, on a curve that leaves the plate, or inside her. With no room, every round strikes at the aim. Each strikes
+  where her plate is at that moment, carried and turned as she drives and turns. Its flash, sparks and paint ride with
+  her, so none is left in her or hangs behind her. It never kicks up a dust spurt.
+- Each strike has a two-frame near-white flash (`flash_m`, `flash_s`, `flash_over` 2.0) in a faint warm halo (`halo_m`
+  0.2, `halo_alpha` 0.35). The flash is never under `flash_least_px` (3), so at 150 to 600 m by day each strike still
+  twinkles white.
 - Each strike throws 3 to 8 sparks (`sparks`) in a cone about the mirror of its way in (`cone_deg`), opened more the
   squarer it struck (`square_open_deg`), never nearer the plate than `least_off_deg`. Their speed is skewed slow
   (`spark_mps`, `spark_uneven`): most are short and a few long. They burn `spark_over` past white, fall, cool
-  white-yellow to orange by their end, and are gone in `spark_life_s` (under 0.3 s). Each is laid as its own
-  flight's streak with its tail on the plate. One that would fall back onto a roof or a glacis, or into the ground,
-  goes out first.
+  white-yellow to orange (`spark_old` 255, 180, 80) by their end, and are gone in `spark_life_s` (under 0.3 s). Each
+  is laid as its own streak along the way it is seen to go (its flight plus her drive), with its tail on the plate.
+  - A spark that would fall back onto a roof, a glacis, her floor (her deck under her turret's side, her track guard
+    under her hull's side) or into the ground goes out first.
+  - One whose streak would reach her floor at its birth is thrown as shallowly up instead, or drawn shorter.
 - Now and then (`chip_chance`) a strike leaves a faint grey puff of paint (no wind: the wind would carry it into the
   hull).
-- A tracer that strikes is drawn to the plate and never past it. `tracer_chance` of them go off again as a ricochet,
-  `tracer.ricochet.deflect_deg` off the plate the way the round was going, up to `tracer_yaw_deg` aside, at
-  `tracer.ricochet.slower`, falling (`tracer_drop`), with `kinks` tumbling kinks of `kink_deg` (`kink_slow` slower at
-  each), gone in `tracer_life_s`. A way headed down is turned as shallowly up, as a skip off the ground would be, and
-  a ricochet is drawn only to where it meets the ground.
-- Far off: where a metre on the plate is under `full_px` on the screen, it throws that share of sparks (never under
-  `far_least`, never under one a round), each the root of it bigger and drawn out to `spark_long_px` (never a bead).
-  On a busy screen (the room over `halve_past` full) it throws half as many, and a quarter past four fifths full.
-- Its own dice: `Shots` into the ground throws exactly what it did before, and the kit's every other output is
+- A tracer that strikes is drawn to the plate and never past it. `tracer_chance` of them go off again as a ricochet:
+  - It leaves `tracer.ricochet.deflect_deg` off the plate the way the round was going, up to `tracer_yaw_deg` aside,
+    at `tracer.ricochet.slower`, falling (`tracer_drop`).
+  - It tumbles: `kinks` kinks of `kink_deg`, `kink_slow` slower at each. It is gone in `tracer_life_s`, and is drawn
+    at `tracer_alpha` (0.7), dimmer than the tracer coming in.
+  - A way headed down the plate is turned up it. A way headed down to the ground is turned as shallowly up, as a skip
+    off the ground would be. A ricochet is drawn only to where it meets the ground.
+- Far off, where a metre on the plate is under `full_px` on the screen, it throws that share of sparks (never under
+  `far_least`, never under one a round). Each spark is the root of it bigger and drawn out to `spark_long_px` (never
+  a bead). On a busy screen (the room over `halve_past` full) it throws half as many, and a quarter past four fifths
+  full.
+- It has its own dice: `Shots` into the ground throws exactly what it did before, and the kit's every other output is
   byte-identical (the before/after below).
 
 The game: LandPlay hands a rifle's or machine gun's burst at armour that the rules do not call a miss (glance, worn
-or kill) to `ShotsOnArmour`. The strike point and the plate's way come from her skin, or from a plain box on the face
-the rules name. Armour (`LandPlay::ArmouredVehicle`) is a tank, an assault gun or a tank destroyer, an armoured car, a
-half-track (the Sd.Kfz. 251, the M3, the flak half-tracks and the M16) or a battery's self-propelled gun. A lorry, a
-jeep, a field car, a motorcycle and a towed gun are as before. On by default; `-TheaterLandNoRicochet` gives the game
-as before, and the log says which.
+or kill) to `ShotsOnArmour`. The plate comes from the first of these that answers:
+1. Her drawn skin (`World::Plate`: LandKit's `Vehicle::PlateNow`). It gives the strike (where the scar's cast passes
+   through a road wheel, a sprocket, an idler or a track before her hull, the round strikes that), the room and her
+   floor.
+   - The room comes from a 33 by 33 lattice 3 cm apart about the strike. A point is on it where a round coming in its
+     way, and a ray square into it, each meet her first within 3 cm of the plane, on a face turned within 25 degrees
+     of it, with nothing of her standing in front within the point's square (3 m out along the round's way).
+   - The room is the biggest rectangle of such points about the strike (`Vehicle::PlateAbout`).
+2. Her skin's strike alone (`World::Skin`), with every round at its point.
+3. A plain box on the face the rules name.
 
-Test: `preview/ricochet_test.cpp` (kit only). A machine gun 120 m off fires 25 rounds at 15 a second into a tank's
-side, 45 degrees off square, with the eye 30, 150 and 600 m off, and once from a rise into her turret's roof. All
-checks pass on g++ and clang++, and the two lay the same pieces to the digit (one digest of every piece laid):
+LandPlay fits her drive and turn over the burst from her track (least squares). It hands the kit the plate as it will
+be when the burst lands, carried back to the frame the burst is laid. Armour (`LandPlay::ArmouredVehicle`) is a tank,
+an assault gun or a tank destroyer, an armoured car, a half-track (the Sd.Kfz. 251, the M3, the flak half-tracks and
+the M16) or a battery's self-propelled gun. A lorry, a jeep, a field car, a motorcycle and a towed gun are as before.
+It is on by default. `-TheaterLandNoRicochet` gives the game as before, and the log says which.
 
-| eye | strikes / flashes | sparks a round | widest spark | ricochets of 5 tracers | dust by her | inside her hull or under the ground |
-|---|---|---|---|---|---|---|
-| side, 30 m | 25 / 25 | 5.2 | 0.016 m | 4, 24 to 45 degrees off the plate | 0 | 0 |
-| side, 150 m | 25 / 25 | 2.2 | 0.025 m | 5, 19 to 49 degrees | 0 | 0 |
-| side, 600 m | 25 / 25 | 1.1 | 0.034 m | 5, 24 to 41 degrees | 0 | 0 |
-| roof, 30 m | 25 / 25 | 6.0 | 0.016 m | 4, 13 to 43 degrees | 0 | 0 |
+Test: `preview/ricochet_test.cpp` (kit only). A machine gun 120 m off fires 25 rounds at 15 a second at a stand-in
+tank:
+- into her side, 45 degrees off square, with the eye 30, 150 and 600 m off, and once from a rise into her turret's roof;
+- at her front plate 3 cm under its top edge, 0.8 m to either side;
+- at her side 0.1 m under its top edge;
+- at her turret's foot 5 cm over her deck, and her turret's side 0.42 m over it, with the deck handed over as her floor;
+- at her side low over her tracks, 0.9 m up;
+- at her front as she drives at the gun at 5 m/s, backs away from it at 5 m/s, and pivots at 0.5 rad/s.
+
+All checks pass on g++ and clang++, and the two lay the same pieces to the digit (one digest of every piece laid). In
+every case all 25 rounds strike and flash, and:
+- every flash is on her face, inside its room less `edge_m`;
+- the farthest strike is 0.0000 m off where her plate is at its moment;
+- there are 0 dust spurts and 0 dust by her;
+- nothing is inside her hull or under the ground.
+
+| case | sparks a round | ricochets of 5 tracers | what else |
+|---|---|---|---|
+| side, 30 m | 5.2 | 4, 24 to 45 degrees off the plate | |
+| side, 150 m | 2.2 | 5, 19 to 49 degrees | |
+| side, 600 m | 1.1 | 5, 24 to 41 degrees | |
+| roof, 30 m | 6.0 | 4, 13 to 43 degrees | |
+| front, 3 cm under its top edge, 0.8 m to one side, then the other | 5.4, 5.5 | 4 and 3, 27 to 48 degrees | |
+| side, 0.1 m under its top edge | 5.2 | 4, 24 to 45 degrees | |
+| turret's foot, 5 cm over her deck | 5.9 | 3, 13 to 29 degrees | |
+| turret's side, 0.42 m over her deck | 5.9 | 3, 13 to 29 degrees | handed no floor, 15 pieces go through her deck |
+| side low, 0.9 m up | 5.2 | 4, 24 to 45 degrees | as `Shots` into the same place, 10 dust spurts |
+| front, driving at the gun, 5 m/s | 5.4 | 3, 34 to 43 degrees | her plate moved 8.7 m while it drew |
+| front, backing away, 5 m/s | 5.2 | 4, 22 to 49 degrees | 8.9 m |
+| front, pivoting, 0.5 rad/s | 5.6 | 3, 17 to 42 degrees | 2.1 m |
 
 Every incoming tracer ends on the plate. No spark starts off the plate's face, is thrown into it, lives 0.3 s, or is
-drawn shorter than 1.5 times its width (the shortest is 5 px). The stand-in tank's side is one flat face over her tracks,
-as LandPlay's plain box is. The kit knows only the plate it is told of, so a spark thrown down off a plate may cross a
-track guard standing out below it, but never the plate's own hull.
+drawn shorter than 1.5 times its width (the shortest is 3.9 px, backing away). A ray from a front strike to its spark
+may cross the gun barrel standing out in front of her; the test counts those apart (0 to 4 a case). Each check fails
+with its mend taken out:
+- with no dust counter, the low side's spurts show;
+- with no floor, seven cases show pieces in her hull;
+- with no carry, the moving cases' strikes are left behind;
+- with no room, the edge cases strike past the edge.
 
-Cost: one burst lays 144 to 261 pieces on the plate (57 into the ground) and draws at most 9 to 20 puffs in a frame
-(5 to 15 into the ground). The call takes about 0.25 to 0.5 ms on a shared machine, against 0.1 ms into the ground,
-most of it stepping the sparks that could fall back onto a roof or to the ground.
+Her real plates are checked in `Tools/land_kit` ("SMALL ARMS OFF ARMOUR"). The Tiger's and the Panzer IV's plates,
+at rest and trained on a slope, take rounds over a 7 by 7 grid of each face, and from inside her, behind her running
+gear. 81 places over each room are tried:
 
-Preview: `fxpreview <recipe> <dir> ricochet <30|150|600> <frames> [WxH]` (FX_RICO_BEFORE=1: the same burst as
-`Shots` into her middle; FX_DUSK, FX_FPS). Pictures and notes: battle-fx/ricochet/ in the project files.
+| | plates | with no room | room on average | every place on her (5 cm) | nothing of her in front (5 cm) | a plate costs |
+|---|---|---|---|---|---|---|
+| Tiger | 350 | 23 | 0.33 by 0.16 m | worst 2.8 cm | worst 2.8 cm | 0.8 ms (5 ms at most) |
+| Panzer IV | 359 | 47 | 0.31 by 0.26 m | worst 3.0 cm | worst 2.2 cm | 0.7 ms (5 ms at most) |
+
+The costs are on a shared machine lightly loaded. With it four times over-full they were 1.8 to 3.5 ms on average and
+about 30 ms at most. g++ and clang++ give the same plates to the digit, and the rest of the test is as before but for
+its timings.
+
+A strike cast behind her running gear is moved onto what stands in front (as far as 0.8 m). Her side aimed 0.1 m
+under its top edge is never struck over it. Taking out the lattice's check of what stands in front fails the test (a
+part of her 0.58 m over the Panzer IV's deck stands in front of a room on it). A gap narrower than the lattice's 3 cm
+may still lie inside a room.
+
+Cost: one burst lays 144 to 261 pieces on the plate (45 to 61 into the ground) and draws at most 9 to 24 puffs in a
+frame (5 to 15 into the ground). The call takes about 0.4 to 0.8 ms on a shared machine, against 0.1 to 0.2 ms into
+the ground. Most of that is stepping the sparks that could fall back onto a roof, her floor or the ground. Her plate
+costs the battle about 0.8 ms more per burst at armour (once a burst, not each frame).
+
+Preview: `fxpreview <recipe> <dir> ricochet <30|150|600> <frames> [WxH]`. The options:
+- `FX_RICO_CASE`: side (the default), edge, turret or driving;
+- `FX_RICO_BEFORE=1`: the same burst as `Shots` into her middle;
+- `FX_DUSK`, `FX_FPS`.
+
+Pictures and notes: battle-fx/ricochet/ in the project files.
 
 ## Fire under a scene's grade: the fire's spread (after head 2811047)
 
