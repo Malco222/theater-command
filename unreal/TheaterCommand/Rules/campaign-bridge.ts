@@ -6542,7 +6542,7 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     setSailors(s, on);
     ok = true;
     note = sailorsOn(s)
-      ? 'Sailor rules are on: men go into the water when a ship goes down, and a fleet\'s call after a fight, stop for survivors or leave them, decides who is saved.'
+      ? 'Sailor rules are on: in fleet actions fought live on the sea field, men go into the water when a ship goes down, and the side left holding the water picks up who it can.'
       : on ? 'Sailor rules work in the grand campaign only.' : 'Sailor rules are off.';
     return { ok, note, fly, flies, open, view: view() };
   }

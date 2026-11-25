@@ -91,7 +91,7 @@ describe('the sailor rules\' switch', () => {
     expect((TC.view() as { sailors: boolean }).sailors).toBe(false);
     const on = TC.act('sailorsrule:on') as { ok: boolean; note: string; view: { sailors: boolean } };
     expect(on.ok).toBe(true);
-    expect(on.note).toBe('Sailor rules are on: men go into the water when a ship goes down, and a fleet\'s call after a fight, stop for survivors or leave them, decides who is saved.');
+    expect(on.note).toBe('Sailor rules are on: in fleet actions fought live on the sea field, men go into the water when a ship goes down, and the side left holding the water picks up who it can.');
     expect(on.view.sailors).toBe(true);
     expect((TC.view() as { sailors: boolean }).sailors).toBe(true);
     expect(JSON.parse((TC.save() as { text: string }).text).flags.sailors).toBe(1);
