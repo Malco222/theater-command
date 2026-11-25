@@ -738,8 +738,20 @@ const months = (n: number): string => (n <= 1 ? 'a month' : `${n} months`);
 
 // ---- Investing a town, raising a siege, and the fall --------------------------------------------
 
+/**
+ * The months of its kept stores a fortified port overseas has already eaten, for a siege that opens round it now
+ * (game.ts keptStoresRun; the design director's ruling of 19:01Z, 25 November 2026). Opened at the start of the
+ * holder's own month (siegeMonth, `monthOpen`), or in a nation's month that comes before the holder's, the siege's
+ * clock charges the present month. Opened later in the month, the holder's month has already been fed from the kept
+ * stores, and that month is charged here. Nothing off true reach.
+ */
+export function keptAtOpening(g: Game, r: Region, monthOpen = false): number {
+  if (!trueReach(g)) return 0;
+  return keptStoresRun(g, r, !monthOpen && g.order.indexOf(r.ctrl) <= g.phase);
+}
+
 /** The countryside is lost and the town holds: the siege begins. */
-export function invest(g: Game, r: Region, by: string): void {
+export function invest(g: Game, r: Region, by: string, monthOpen = false): void {
   const key = `siege:${r.id}`;
   if (g.flags[key] !== undefined) return;
   g.flags[key] = g.turn;
@@ -756,7 +768,10 @@ export function invest(g: Game, r: Region, by: string): void {
   // Under true reach a fortified port overseas that has been living on its kept stores starts its siege with those
   // months eaten too (the design director's ruling of 19:01Z, 25 November 2026): one larder, so the larger of the two
   // clocks, never their sum, as both count the same eating, and never more than the town holds.
-  if (trueReach(g)) eaten = Math.min(storesOf(g, r), Math.max(eaten, keptStoresRun(g, r)));
+  // (A siege raised and closed again in one nation's month, with no draw of the supply picture between, reads the
+  // stores' month as the siege left it: the picture is drawn between any two nations' months, so the wars do not
+  // reach that order.)
+  if (trueReach(g)) eaten = Math.min(storesOf(g, r), Math.max(eaten, keptAtOpening(g, r, monthOpen)));
   if (eaten > 0) g.flags[`sgm:${r.id}`] = eaten;
   g.supplyDirty = true;
   tallySiege(g, 'begun');
@@ -1083,7 +1098,7 @@ export function siegeMonth(g: Game, nat: string): void {
       continue;
     }
     const by = armyOf(foes[0]);
-    if (g.flags[`siege:${r.id}`] === undefined) invest(g, r, by);
+    if (g.flags[`siege:${r.id}`] === undefined) invest(g, r, by, true);
     if (!townHeld(g, r)) { fall(g, r, by, 'empty'); continue; }
     const weight = guns(foes);
     if (weight > 0) {
@@ -1294,7 +1309,11 @@ export function siegeView(g: Game, region: number, reach?: SeaReach): SiegeView 
         : `A government shut in its capital loses its hold on the country month by month. After ${months(SIEGE.capitalYear)} of siege the capital counts as lost, whether it has fallen or not.`);
     }
   } else {
-    lines.push(`Closely invested, its stores would feed the defenders for ${months(stores)}${r.port ? ', and for as long as ships can reach its harbour' : ''}.`);
+    // Under true reach a fortified port overseas living on its kept stores has already eaten some of them: the card
+    // promises what a siege opened now would leave (keptAtOpening), as the siege's own line then reads.
+    const would = stores - Math.min(stores, keptAtOpening(g, r));
+    lines.push(would > 0 ? `Closely invested, its stores would feed the defenders for ${months(would)}${r.port ? ', and for as long as ships can reach its harbour' : ''}.`
+      : `Closely invested, its defenders would go hungry at once: its stores have been eaten while no ship came in${r.port ? ', and only ships reaching its harbour could feed them' : ''}.`);
   }
   return {
     region, town: townName(r), size, sizeWord: TOWNS.words[size], holder: r.ctrl, by, since: investedOn(g, r), months: shut,

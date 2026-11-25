@@ -646,17 +646,37 @@ export function portKeep(g: Game, r: Region): number {
   return (fortRows(g) ? portStores(g, r) : null) ?? DESERT.stores;
 }
 /**
- * The months a fortified port overseas has already lived on its kept stores before this month (the design director's
- * ruling of 19:01Z, 25 November 2026: "one town, one larder, priced once"). Under true reach a siege that opens round
- * such a port begins with these months eaten (siege.ts invest). The stores were last filled in the month the flag
- * holds, so the first month on them is the month after; the present month is the siege's own to charge. They cannot
- * have run longer than they last (portKeep). Stores filled before the present holder took the port were never his: a
- * flag from the month the port changed hands, or earlier, charges nothing, since the flag cannot tell who filled it.
+ * The latest month a province may have changed hands, from what the game holds without a new flag: Region.since (a
+ * capture, a treaty's line), the settled towns' record of ground handed over (`hand:<id>`, kept only with that switch
+ * on), the month its holder came back to the war (liberation.ts handBack), and the month of a fall that can have
+ * handed it on without a battle: its owner's (a fallen owner's ground passes to whoever holds it or to the victor), one
+ * whose ground went to its holder (a domination, Vichy's ground to France), or France's for Vichy's own ground (the
+ * armistice). Such a fall counts even where it moved nothing here (a holder another country fell to), since nothing
+ * tells the two apart: the conservative reading, which charges a holder nothing for stores he may not have filled.
  */
-export function keptStoresRun(g: Game, r: Region): number {
+function handsChanged(g: Game, r: Region): number {
+  let at = Math.max(r.since, g.flags[`hand:${r.id}`] ?? -1, g.nations[r.ctrl]?.freedOn?.turn ?? -1);
+  for (const n of Object.values(g.nations)) {
+    if (!n.fellOn) continue;
+    if (n.id === r.owner || n.fellOn.to === r.ctrl || (r.vichy && r.ctrl === 'VIC' && n.id === 'FRA')) at = Math.max(at, n.fellOn.turn);
+  }
+  return at;
+}
+/**
+ * The months a fortified port overseas has already lived on its kept stores (the design director's ruling of 19:01Z,
+ * 25 November 2026: "one town, one larder, priced once"). Under true reach a siege that opens round such a port begins
+ * with these months eaten (siege.ts invest). The stores were last filled in the month the flag holds, so the first
+ * month on them is the month after. The present month counts too once the holder's own month has drawn its supply
+ * from them (`drawn`): the siege's clock then starts with the next month. Otherwise the present month is the siege's
+ * own to charge. They cannot have run longer than they last (portKeep). Stores filled before the present holder had
+ * the port were never his: a flag from the month the port may have changed hands (handsChanged), or earlier, charges
+ * nothing, since the flag cannot tell who filled it. That also leaves uncharged stores a new holder filled in the very
+ * month he took the port.
+ */
+export function keptStoresRun(g: Game, r: Region, drawn = false): number {
   const last = g.flags[storesKey(r.id)];
-  if (!r.overseas || !r.port || !worksKept(r) || last === undefined || last <= r.since) return 0;
-  return Math.min(portKeep(g, r), Math.max(0, g.turn - 1 - last));
+  if (!r.overseas || !r.port || !worksKept(r) || last === undefined || last <= handsChanged(g, r)) return 0;
+  return Math.min(portKeep(g, r), Math.max(0, g.turn - (drawn ? 0 : 1) - last));
 }
 /**
  * A fortress crew in a fortified port overseas living on the port's stores this month (07:12Z): the sea behind it is
