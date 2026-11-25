@@ -25,7 +25,7 @@ import {
   fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, smallOn, whyNotBase, whyNotMission, whyNotShipAir,
 } from './air';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
-import { DEFENCE, allied, atWar, headline, worksOf } from './game';
+import { DEFENCE, allied, atWar, headline, placeName, worksOf } from './game';
 import { SIGHT, corpsKnown, sightOf } from './intel';
 import { CLASSES, NAVY, atSea, shipList, surfaceShips } from './navy';
 import { airfieldOpenTo } from './prizes';
@@ -323,6 +323,20 @@ export function groupJobs(g: Game, id: number, nat: string | null = g.human): Gr
     ? `Stands down: it regains ${pct(R2.rest)} readiness a month in place of ${pct(R2.support)}. It does not fly, and does not meet raids. New aircraft come aboard only while the fleet lies in harbour.`
     : `Stands down: it regains ${pct(R2.rest)} readiness a month in place of ${pct(R2.support)}, and gets replacement aircraft first. It does not fly, and does not meet raids.` });
   return out;
+}
+
+/**
+ * Why a group on a standing bombing campaign has no raid of its own to pick (the playtester's finding 4 of 1.5.1; the UI
+ * director's words, 25 November 2026, 05:10Z): it flies with the campaign by night or by day, and the standing order
+ * that frees it is named by its row and its button as the group's page shows them. Null for any other group.
+ */
+export function campaignWhy(g: Game, id: number, nat: string | null = g.human): string | null {
+  const f = mine(g, id, nat);
+  if (!f || f.flew === g.turn || (f.mission !== 'night' && f.mission !== 'bomb')) return null;
+  const place = placeOf(g, 'bomb', f.target, nat);
+  const free = groupJobs(g, id, nat).find((j) => j.key === 'patrol');
+  if (!place || !free) return null;
+  return `It flies with the ${f.mission === 'night' ? 'night' : 'day'} campaign over ${placeName(place)}: take it out of the campaign (GIVE THIS ORDER on ${free.label}) to give it a raid of its own.`;
 }
 
 /** Gives one of a nation's air groups its standing order: 'patrol', 'escort:<bomber group id>', 'close' (ground support, where its switch is on) or 'rest'. */

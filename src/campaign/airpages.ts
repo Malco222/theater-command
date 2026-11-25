@@ -15,8 +15,10 @@
 // 'harbour' (target: a province) are raids like the rest.
 
 import type { Game } from './types';
-import { SHIP_AIR_TIP, airWar, carrierRules, closeRules, groupAt, overOcean } from './air';
-import type { GroupRow, RaidKind, RaidPlan, RaidTarget } from './airwar';
+import { SHIP_AIR_TIP, airRange, airWar, carrierRules, closeRules, groupAt, hasAirfield, km, overOcean } from './air';
+import { fieldCanBeLaid } from './engineers';
+import { atWar, placeName } from './game';
+import { campaignWhy, type GroupRow, type RaidKind, type RaidPlan, type RaidTarget } from './airwar';
 import {
   airGroupBases, airGroupDecks, airGroupJobs, airfieldAt, fleetView, humanUp, myAirGroups, orderAboard, orderAirBase, orderGroupJob, orderRaid, orderScout, orderSearch, previewRaid, raidMenu,
   raidTargetsFor, searchOptionsFor, wingsOfFleet,
@@ -81,9 +83,11 @@ function groupPage(g: Game, id: number): Page | null {
     buttons: [{ label: j.on ? 'ITS ORDERS NOW' : 'GIVE THIS ORDER', act: `job:${id}:${j.key}`, ok: up && !j.on && !j.why, tip: j.on ? 'This is its standing order now. Give it one of the others to change it.' : j.why ?? (up ? '' : 'It is not your month.') }],
   }));
   const menu = raidMenu(g);
+  // (A group on a standing campaign by night or by day has no raid of its own: its rows say so, and how to free it. Finding 4 of 1.5.1.)
+  const held = campaignWhy(g, id);
   const raids: PageRow[] = menu.filter((k) => k.key !== 'recon').map((k) => {
     const n = raidTargetsFor(g, k.key, id).length;
-    const cannot = x.flew ? 'It has flown its raid this month.' : k.why ?? (n ? null : x.kind === 'ftr' && (k.key === 'night') ? 'Fighters do not fly with the night bombers.' : 'Nothing in its reach.');
+    const cannot = x.flew ? 'It has flown its raid this month.' : k.why ?? (n ? null : x.kind === 'ftr' && (k.key === 'night') ? 'Fighters do not fly with the night bombers.' : held ?? 'Nothing in its reach.');
     return { nat: x.nat, title: k.label, lines: [k.blurb, cannot ?? `${n} target${n === 1 ? '' : 's'} in its reach.`], buttons: [{ label: 'PICK A TARGET', act: `open:raid:${k.key}:${id}`, ok: up && !cannot, tip: cannot ?? '' }] };
   });
   const deck = x.ship >= 0;
@@ -136,22 +140,60 @@ const lossLine = (p: RaidPlan): string => `Chance of success ${pct(p.success)}: 
  */
 function targetSections(g: Game, kind: RaidKind, all: RaidTarget[], row: (t: RaidTarget) => PageRow, none: string, word = 'TARGET'): Page['sections'] {
   if (!all.length) return [{ heading: 'TARGETS', text: none, rows: [] }];
-  const groups: { owner: string; holder: string; list: RaidTarget[] }[] = [];
-  if (all.every((t) => !t.sea && g.regions[t.id])) {
-    for (const t of all) {
-      const owner = g.regions[t.id].owner || t.holder;
-      const at = groups.find((x) => x.owner === owner && x.holder === t.holder);
-      if (at) at.list.push(t); else groups.push({ owner, holder: t.holder, list: [t] });
-    }
+  const by = all.every((t) => !t.sea && g.regions[t.id]) ? countrySections(g, all, (t) => t.id, (t) => t.holder, row, word, kind === 'bomb' || kind === 'night') : null;
+  return by ?? [{ heading: 'TARGETS', text: '', rows: all.map(row) }];
+}
+
+/** Provinces gathered by country and whoever holds it, in the order the list first reaches each, each keeping the list's own order. */
+function countryGroups<T>(g: Game, all: T[], at: (t: T) => number, holderOf: (t: T) => string): { owner: string; holder: string; list: T[] }[] {
+  const groups: { owner: string; holder: string; list: T[] }[] = [];
+  for (const t of all) {
+    const holder = holderOf(t), owner = g.regions[at(t)].owner || holder;
+    const x = groups.find((y) => y.owner === owner && y.holder === holder);
+    if (x) x.list.push(t); else groups.push({ owner, holder, list: [t] });
   }
-  if (groups.length < 2) return [{ heading: 'TARGETS', text: '', rows: all.map(row) }];
+  return groups;
+}
+/** The same list, country by country. */
+const byCountry = <T>(g: Game, all: T[], at: (t: T) => number, holderOf: (t: T) => string): T[] => countryGroups(g, all, at, holderOf).flatMap((x) => x.list);
+
+/**
+ * Provinces as a section for each country and whoever holds it, in the order the list has them, each section keeping
+ * the list's own order (`ownFirst`: a country held by its own nation first). Null where they all lie in one.
+ */
+function countrySections<T>(g: Game, all: T[], at: (t: T) => number, holderOf: (t: T) => string, row: (t: T) => PageRow, word: string, ownFirst: boolean): Page['sections'] | null {
+  const groups = countryGroups(g, all, at, holderOf);
+  if (groups.length < 2) return null;
   // (the sort is stable: among the enemy's own countries, and among the lands he holds, the nearest stays first)
-  if (kind === 'bomb' || kind === 'night') groups.sort((a, b) => Number(b.owner === b.holder) - Number(a.owner === a.holder));
+  if (ownFirst) groups.sort((a, b) => Number(b.owner === b.holder) - Number(a.owner === a.holder));
   const name = (n: string): string => (g.nations[n]?.name ?? n).toUpperCase();
   return groups.map((x) => ({
     heading: `${x.owner === x.holder ? name(x.owner) : `${name(x.owner)}, HELD BY ${name(x.holder)}`}  \u00B7  ${x.list.length} ${word}${x.list.length === 1 ? '' : 'S'}`,
     text: '', rows: x.list.map(row),
   }));
+}
+
+/**
+ * The player's own province, nearest the enemy, where an engineer corps could lay out an airfield (the rule of
+ * engineers.ts) and from which enemy ground would lie within the longest reach of his aircraft (airRange, km): its
+ * name, or null where there is none (finding 13 of 1.5.1; the UI director's words of 25 November 2026, 05:10Z). Only
+ * the groups that could fly a raid this month are weighed, and only `group` where the page is one group's.
+ */
+function fieldToLay(g: Game, group: number): string | null {
+  const me = g.human;
+  if (!me) return null;
+  const fleets = g.airFleets.filter((f) => f.nat === me && f.ftr + f.bmr > 0 && f.flew !== g.turn && f.mission === 'support' && (group < 0 || f.id === group));
+  const reach = fleets.reduce((m, f) => { const R = airRange(f, g); return Math.max(m, f.bmr > 0 ? R.bmr : 0, f.ftr > 0 ? R.ftr : 0); }, 0);
+  const foes = g.regions.filter((r) => atWar(g, me, r.ctrl));
+  if (reach <= 0 || !foes.length) return null;
+  let best = -1, near = Infinity;
+  for (const r of g.regions) {
+    if (r.ctrl !== me || hasAirfield(g, r.id) || !fieldCanBeLaid(g, me, r)) continue;
+    let d = Infinity;
+    for (const e of foes) d = Math.min(d, km(g, r.id, e.id));
+    if (d < near) { near = d; best = r.id; }
+  }
+  return best >= 0 && near <= reach ? g.regions[best].name : null;
 }
 
 function targetsPage(g: Game, kind: RaidKind, group: number): Page | null {
@@ -170,10 +212,15 @@ function targetsPage(g: Game, kind: RaidKind, group: number): Page | null {
     return { nat: t.holder, title: t.name, lines, buttons: [{ label: kind === 'recon' ? 'SEND THE FLIGHT' : 'PLAN THIS RAID', act, ok: up && !p.why, tip: p.why ?? (kind === 'recon' ? '' : 'Choose which groups fly it, and see what meeting up is worth, before you give the order.') }] };
   };
   const none = kind === 'fleet' ? 'No enemy fleet at sea has been found within reach. Search a sea from a group\'s page, or send a fleet to look: a fleet has to be found before it can be struck.' : kind === 'harbour' ? 'No enemy warships lie in a harbour within reach.' : kind === 'town' ? 'No enemy town that your armies stand round or beside is within reach of a bomber group that can still fly.' : 'Move a group to an airfield nearer the enemy, or wait until one that has flown is back.';
-  const sections = targetSections(g, kind, all, row, none);
+  // (A group held by its standing campaign is told why it has none, and how to free it: finding 4 of 1.5.1.)
+  const held = !all.length && group >= 0 ? campaignWhy(g, group) : null;
+  const sections = targetSections(g, kind, all, row, held ?? none);
+  // (With nothing in reach of any group, the province a field would put the enemy in reach from: finding 13 of 1.5.1.)
+  const lay = all.length || held || kind === 'fleet' || kind === 'harbour' || kind === 'town' || kind === 'strike' || kind === 'recon' ? null : fieldToLay(g, group);
   return {
     id: group >= 0 ? `raid:${kind}:${group}` : `raid:${kind}`, title: k.label.toUpperCase(),
-    headline: all.length ? `${all.length} target${all.length === 1 ? '' : 's'} in reach, ${sections.length > 1 ? 'by country' : 'nearest first'}` : 'No target is in reach',
+    headline: all.length ? `${all.length} target${all.length === 1 ? '' : 's'} in reach, ${sections.length > 1 ? 'by country' : 'nearest first'}`
+      : lay ? `No target is in reach. Your aircraft could reach the enemy from ${placeName(lay)} if it had an airfield: an engineer corps can lay one there.` : 'No target is in reach',
     note: k.blurb, top: [{ label: 'BACK', act: group >= 0 ? `open:group:${group}` : 'open:raids', ok: true, tip: '' }],
     sections,
   };
@@ -253,8 +300,12 @@ function rebasePage(g: Game, id: number): Page | null {
     lines: [`${b.word}, ${num(b.km)} km away: serves ${num(b.holds)} aircraft, room for ${num(b.free)} more.${b.free < x.aircraft ? ' It would be crowded: not all of the group could fly.' : ''}${b.why ? ` ${b.why}` : ''}`],
     buttons: [{ label: 'MOVE HERE', act: `airbase:${id}:${b.region}`, ok: up && !b.why, tip: b.why ?? 'Settling in costs it some readiness for a month.' }],
   }));
-  // Across an ocean a group goes by sea (ruling 133(b)): the fields it could be shipped to now first, then the nearest.
-  const over: PageRow[] = all.filter((b) => b.sea).sort((a, b) => (a.why ? 1 : 0) - (b.why ? 1 : 0) || a.km - b.km).slice(0, 8).map((b) => ({
+  // Across an ocean a group goes by sea (ruling 133(b)): every field it could be shipped to (finding 5 of 1.5.1: the
+  // eight nearest left Britain off from the Canal Zone), country by country in the order the list of a raid's targets
+  // keeps them, and within each country the fields it could be shipped to now first, then the nearest. (The countries'
+  // own headings wait on a ruling: tests/america-842.test.ts holds this page to its two sections.)
+  const far = all.filter((b) => b.sea).sort((a, b) => (a.why ? 1 : 0) - (b.why ? 1 : 0) || a.km - b.km);
+  const over: PageRow[] = byCountry(g, far, (b) => b.region, (b) => g.regions[b.region].ctrl).map((b) => ({
     nat: g.regions[b.region].ctrl, title: b.name,
     lines: [`${b.word}, ${num(b.km)} km away across the ocean: serves ${num(b.holds)} aircraft, room for ${num(b.free)} more.${b.why ? ` ${b.why}` : ''}`],
     buttons: [{ label: 'SHIP IT HERE', act: `airbase:${id}:${b.region}`, ok: up && !b.why, tip: b.why ?? SHIP_AIR_TIP }],

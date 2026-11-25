@@ -1078,7 +1078,7 @@ function raidsSince(s: Game, since: number, turns: number[], skipNat: string | n
         first = false;
       }
       if (first) continue;
-      notes.push(r.result);
+      if (r.result) notes.push(r.result);
       if (r.region >= 0) focus.push(r.region);
       if (r.defNat === s.human || (r.region >= 0 && s.regions[r.region].ctrl === s.human)) mine = true;
     }
@@ -5273,9 +5273,14 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
         // (by night: an escort that was picked stays on the card and stays at home; one that could join by day says so)
         const stays = !!dn && kind === 'night' && dn.home.includes(x.id);
         const dayOnly = !!dn && kind === 'night' && !stays && dn.barred.includes(x.id);
+        // (A carrier wing whose fleet's station is out of reach of the target has no distance to fly, which the rules
+        // give as Infinity: it has no km, its distance in words is 'Out of reach', and its reason says why. Findings 9
+        // and 34 of 1.5.1; the UI director's words of 05:10Z.)
+        const out = !Number.isFinite(x.km);
         return {
-          id: x.id, name: x.name, kind: x.kind, aircraft: Math.round(x.aircraft), base: x.baseName, afloat: x.ship >= 0, km: Math.round(x.km), ready: x.ready,
-          picked: x.picked || stays, locked: x.locked, lead: !!lead && x.id === lead.id, why: stays ? '' : dayOnly ? 'No escort by night' : x.why ?? '', note: x.note, nat: me,
+          id: x.id, name: x.name, kind: x.kind, aircraft: Math.round(x.aircraft), base: x.baseName, afloat: x.ship >= 0, ...(out ? {} : { km: Math.round(x.km) }), ready: x.ready,
+          far: out ? 'Out of reach' : `${Math.round(x.km).toLocaleString('en-US')} km`,
+          picked: x.picked || stays, locked: x.locked, lead: !!lead && x.id === lead.id, why: stays ? '' : dayOnly ? 'No escort by night' : out && x.why ? 'Its aircraft cannot reach it from the fleet\'s station.' : x.why ?? '', note: x.note, nat: me,
           stays, dayOnly,
           act: stays ? link(target, carry.filter((id) => id !== x.id)) : x.why ? '' : x.picked ? link(target, carry.filter((id) => id !== x.id)) : link(target, [...carry, x.id]),
         };

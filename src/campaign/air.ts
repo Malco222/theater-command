@@ -1307,6 +1307,7 @@ export function airUpkeep(g: Game, nat: string): void {
   const built = row(AIR.production[nat], g.turn) ?? minor, trained = row(AIR.pilots.perMonth[nat], g.turn) ?? (minor ? [minor[0], minor[1]] : null);
   if (built) { p.ftr += built[1]; p.bmr += built[2]; }
   if (trained) p.pilots += trained[1];
+  const lowered = new Map<string, { est: number; ftr: number; bmr: number; region: number }>();
   for (const f of airFleetsOf(g, nat)) {
     // A carrier wing has no airfield to lose: it goes where its fleet goes.
     if (f.ship !== undefined) continue;
@@ -1320,8 +1321,15 @@ export function airUpkeep(g: Game, nat: string): void {
     const ef = e ? (f.kind === 'bmr' ? 0 : Math.round(e[1] * (f.share ?? 1))) : 0, eb = e ? (f.kind === 'ftr' ? 0 : Math.round(e[2] * (f.share ?? 1))) : 0;
     // Wings bought from the arsenal are kept on top of what the staff allots.
     if (e) f.est = f.extra ? { ftr: ef + f.extra.ftr, bmr: eb + f.extra.bmr } : { ftr: ef, bmr: eb };
+    const sf = Math.max(0, f.ftr - f.est.ftr), sb = Math.max(0, f.bmr - f.est.bmr);
     if (f.ftr > f.est.ftr) { const s = f.ftr - f.est.ftr; f.ftr -= s; p.ftr += s; p.pilots += s; }
     if (f.bmr > f.est.bmr) { const s = f.bmr - f.est.bmr; f.bmr -= s; p.bmr += s; }
+    // (Words only: the player is told when a dated row of his staff's lowers a command's establishment, below.)
+    if (r && e && e[0] === g.turn && nat === g.human && sf + sb > 0) {
+      const c = lowered.get(r.name) ?? { est: e[1] + e[2], ftr: 0, bmr: 0, region: f.base };
+      c.ftr += sf; c.bmr += sb;
+      lowered.set(r.name, c);
+    }
   }
   // Replacements go to resting fleets first.
   const order = airFleetsOf(g, nat).sort((a, b) => (a.mission === 'rest' ? 0 : 1) - (b.mission === 'rest' ? 0 : 1) || a.id - b.id);
@@ -1341,9 +1349,34 @@ export function airUpkeep(g: Game, nat: string): void {
     if (!n.atWar.length || (isOffensive(f.mission) && whyNotMission(g, f, f.mission, f.target))) { f.mission = 'support'; f.target = -1; }
   }
   const most = AIR.reserve[nat] ?? AIR.reserve._default;
+  const over = { ftr: Math.max(0, p.ftr - most.ftr), bmr: Math.max(0, p.bmr - most.bmr) };
   p.ftr = Math.min(p.ftr, most.ftr);
   p.bmr = Math.min(p.bmr, most.bmr);
   p.pilots = Math.min(p.pilots, most.pilots);
+  if (lowered.size) loweredNews(g, nat, lowered, over);
+}
+
+/**
+ * The month card's line when a dated row lowers one of the player's commands' establishment (finding 6 of 1.5.1; the
+ * UI director's words of 25 November 2026, 05:10Z): what it is kept at now, and the aircraft that go. Words only. The
+ * aircraft over the new establishment go to the nation's pool, from which every group under strength is made up as
+ * the month opens; but the pool holds no more than air.json 'reserve', and what it cannot hold is lost, so where the
+ * pool overflowed the line says so in place of saying the other commands draw on them.
+ */
+function loweredNews(g: Game, nat: string, lowered: Map<string, { est: number; ftr: number; bmr: number; region: number }>, over: { ftr: number; bmr: number }): void {
+  const all = { ftr: 0, bmr: 0 };
+  for (const c of lowered.values()) { all.ftr += c.ftr; all.bmr += c.bmr; }
+  // (of the aircraft the rows sent to the pool, those it could not hold: all, some or none of each kind)
+  const lost = { ftr: Math.min(all.ftr, over.ftr), bmr: Math.min(all.bmr, over.bmr) };
+  for (const [name, c] of lowered) {
+    const craft = [c.ftr > 0 ? planes(Math.round(c.ftr), 'fighter') : '', c.bmr > 0 ? planes(Math.round(c.bmr), 'bomber') : ''].filter(Boolean).join(' and ');
+    const kinds = (['ftr', 'bmr'] as const).filter((k) => c[k] > 0);
+    const none = kinds.every((k) => lost[k] === 0), every = kinds.every((k) => lost[k] >= all[k]);
+    const fate = none ? 'go back to the pool, from which the other commands draw'
+      : every ? 'are struck off: the pool, from which the other commands draw, is full'
+      : 'go back to the pool, from which the other commands draw, but it is full: what it cannot hold is struck off';
+    headline(g, 'info', `The air staff has lowered ${name}'s establishment to ${counted(c.est)}: ${craft} ${fate}.`, nat, c.region);
+  }
 }
 
 /**
@@ -1742,6 +1775,8 @@ function gainXp(f: AirFleet, won: boolean): void {
 /** How much a raid of this weight cuts the organisation of the troops in a region: less for every division there, and less in cover. */
 /** The months of work that many bombers getting through take off the fieldworks of a line. */
 export const lineWear = (through: number): number => Math.min(AIRWAR.line.most, Math.round((through / AIRWAR.line.scale) * 10) / 10);
+/** A share in a raid's result: one that is above nought and rounds to nothing is "less than 1%" (finding 12 of 1.5.1, the UI director's words of 05:10Z). */
+const sharePct = (x: number): string => (Math.round(x * 100) === 0 ? 'less than 1%' : `${Math.round(x * 100)}%`);
 const monthsWord = (m: number): string => { const v = Math.round(m * 10) / 10; return v === 1 ? 'a month' : `${v} months`; };
 
 /** What a nation's aircraft weigh against troops this month, beside their numbers: its weight row where it has one (ruling 227, b424), else in full. */
@@ -1888,7 +1923,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       value += cut * 300;
     }
     result = through <= 0 ? '' : hit.length
-      ? `The airfields of ${list(hit.map((f) => f.name))} were bombed: readiness cut by ${Math.round(cut * 100)}%${ground ? ` and ${planes(ground, 'aircraft').replace('aircrafts', 'aircraft')} destroyed on the ground` : ''}.`
+      ? `The airfields of ${list(hit.map((f) => f.name))} were bombed: readiness cut by ${sharePct(cut)}${ground ? ` and ${planes(ground, 'aircraft').replace('aircrafts', 'aircraft')} destroyed on the ground` : ''}.`
       : 'The bombers found no airfields in use.';
   } else if (m === 'bomb' || night) {
     const N = AIR.damage.industry;
@@ -1904,7 +1939,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     // stop, and the raid is judged on its railway alone.
     value += outputWorth(g, r, cut);
     // (No line where no bombs fell.)
-    result = r.fac > 0 && cut > 0 ? `The bombing stopped ${Math.round(cut * 100)}% of ${r.name}'s output for a month: ${tenthPct(nation)} of ${g.nations[r.ctrl].adj} production.` : '';
+    // (A share that rounds to nothing is "less than 1%", and where the bombs fell and stopped nothing it says so: finding 12 of 1.5.1, the UI director's words of 05:10Z.)
+    result = r.fac > 0 && cut > 0 ? `The bombing stopped ${sharePct(cut)} of ${r.name}'s output for a month: ${tenthPct(nation)} of ${g.nations[r.ctrl].adj} production.`
+      : r.fac > 0 && through > 0 ? `The bombing did not stop any of ${r.name}'s output.` : '';
     // The grand campaign: a heavy raid wrecks a factory outright, and the bombs that fall on the yards and
     // junctions may cut the province's railway. Both stay as they are until engineers come.
     // Fought out as an air battle, the field's own throws decide both (b397), so the campaign cuts the line the field showed cut.
@@ -1951,9 +1988,10 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       divs += c.divs;
     }
     value += cut * divs * G.value;
+    const whom = foes.length === 1 ? foes[0].name : `the ${foes.length} corps`;
     result = cut > 0
-      ? `The raids cut the organisation of ${foes.length === 1 ? foes[0].name : `the ${foes.length} corps`} at ${r.name} by ${Math.round(cut * 100)}%${foes.some((c) => c.dug) ? ', less where they are dug in' : ''}. They fight the weaker for it until they have rested.`
-      : 'The aircraft found little to hit.';
+      ? `The raids cut the organisation of ${whom} at ${r.name} by ${sharePct(cut)}${foes.some((c) => c.dug) ? ', less where they are dug in' : ''}. They fight the weaker for it until they have rested.`
+      : foes.length && through + low > 0 ? `The raids did not cut the organisation of ${whom} at ${r.name}.` : 'The aircraft found little to hit.';
   } else {
     const S = AIR.damage.shipping;
     const frac = Math.min(S.maxSink, S.sink * (through / (through + S.scale)));
@@ -2042,7 +2080,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   const who = deck && flying.every((f) => carrierOf(g, f) === deck && f.name.startsWith(`${deck.name} `))
     ? `The ${deck.name}'s ${list([...flying].sort((x, y) => (x.kind === 'bmr' ? 0 : 1) - (y.kind === 'bmr' ? 0 : 1)).map((f) => f.name.slice(deck.name.length + 1)))}`
     : list(flying.map((f) => f.name));
-  const cost = `${planes(aLost, 'aircraft').replace('aircrafts', 'aircraft')} lost`;
+  const cost =`${planes(aLost, 'aircraft').replace('aircrafts', 'aircraft')} lost`;
   const adj = defNat ? g.nations[defNat].adj : 'enemy';
   // Once the British and American air forces fight the same enemy side by side, the sky they win is the Allies'.
   const together = !!defNat && (nat === 'UK' || nat === 'USA') && ['UK', 'USA'].every((x) => g.nations[x]?.alive && g.nations[x].atWar.includes(defNat));
