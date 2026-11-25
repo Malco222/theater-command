@@ -13,10 +13,11 @@ import arsenalData from '../../data/campaign/arsenal.json';
 import { STACK, type Corps, type Game, type Region } from './types';
 import { groundRules } from './ground';
 import { ENGINEERING, bridgeDown, crossingsAt, downBetween, farBank, rebuildAt, riverName, type Crossing } from './rivers';
-import { addCorps, allied, atWar, ensureSupply, friendlyUnits, hasRoom, headline, hostileUnits, moveCorps, railMove, railReach } from './game';
+import { addCorps, allied, atWar, ensureSupply, friendlyUnits, hasRoom, headline, hostileUnits, moveCorps, railMove, railReach, placed } from './game';
 import { orderCorps, raiseSite } from './economy';
 import { mendRail, onNet, railCut, railheads, railsAt, rebuildFactory, ruinedAt } from './rails';
 import { AIRWAR, airWar, airfieldsHold } from './air';
+import { fieldDamaged, fieldRepairing, orderFieldRepair } from './fieldstate';
 
 export type JobKind = 'bridge' | 'rail' | 'plant' | 'works' | 'airfield' | 'mines' | 'demolish';
 export const JOBS: JobKind[] = ['bridge', 'rail', 'plant', 'works', 'airfield', 'mines', 'demolish'];
@@ -55,6 +56,8 @@ function whyNot(g: Game, c: Corps, key: JobKind): string | null {
   if (key === 'works' && (r.fort?.lv ?? 0) >= E.works.most) return `The works here are at level ${r.fort?.lv ?? 0}: as strong as field engineers can make them. Heavier fortifications are ordered from the treasury.`;
   if (key === 'airfield') {
     if (!airWar(g)) return 'Airfields are laid out only in the grand campaign.';
+    // Airfields as targets: on a damaged field the job is its repair, free, as the month's work.
+    if (fieldDamaged(g, r.id)) return fieldRepairing(g, r.id) !== undefined ? `The field at ${r.name} is already being repaired.` : null;
     if (builtField(g, r) >= AIRWAR.fields.engineers) return `The airfield here is as large as field engineers can make it: it serves ${airfieldsHold(g, r.id).toLocaleString('en-US')} aircraft. A larger one is ordered from the treasury.`;
     const laying = r.units.find((u) => u !== c && !u.dead && u.job?.what === 'airfield' && u.job.reg === r.id);
     if (laying) return `${laying.name} is already laying out an airfield here.`;
@@ -127,7 +130,9 @@ export function engineersMonth(g: Game, nat: string): void {
         if (mine) headline(g, 'info', `${c.name} has finished fortifying ${r.name}: fortifications, level ${r.fort.lv}.`, nat, r.id);
       }
     } else if (job.what === 'airfield') {
-      if (airWar(g) && builtField(g, r) < AIRWAR.fields.engineers) {
+      if (fieldDamaged(g, r.id)) {
+        if (orderFieldRepair(g, nat, r.id, true) && mine) headline(g, 'info', `${c.name} is repairing the airfield at ${r.name}: the runway opens next month, and a burned level comes back each month after.`, nat, r.id);
+      } else if (airWar(g) && builtField(g, r) < AIRWAR.fields.engineers) {
         const had = airfieldsHold(g, r.id);
         g.flags[`wk:field:${r.id}`] = builtField(g, r) + 1;
         if (mine) headline(g, 'info', `${c.name} has ${had > 0 ? 'enlarged the airfield' : 'laid out an airfield'} at ${r.name}: it serves ${airfieldsHold(g, r.id).toLocaleString('en-US')} aircraft. Air groups can be based there from next month.`, nat, r.id);
@@ -155,7 +160,7 @@ export function startEngineers(g: Game): void {
     for (let k = 0; k < ENGINEERING.start.corps; k++) {
       const cap = g.regions[n.capital];
       // At the capital if there is room, else the nearest home province with any.
-      const at = [cap, ...cap.nb.map((j) => g.regions[j])].find((r) => r.ctrl === nat && r.owner === nat && friendlyUnits(g, r, nat).length < STACK);
+      const at = [cap, ...cap.nb.map((j) => g.regions[j])].find((r) => r.ctrl === nat && r.owner === nat && placed(g, r, nat).length < STACK);
       if (!at) break;
       addCorps(g, nat, `${ORD[k] ?? `${k + 1}th`} Engineer Corps`, 'eng', (arsenalData.land as Record<string, { divs: number }>).eng.divs, at.id, {});
     }

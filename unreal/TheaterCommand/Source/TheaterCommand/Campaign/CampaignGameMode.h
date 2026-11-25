@@ -2,6 +2,9 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
+#include "Templates/Function.h"
+#include "Async/Future.h"
+#include "Campaign/CampaignView.h"
 #include "CampaignGameMode.generated.h"
 
 class FCampaignSession;
@@ -23,6 +26,8 @@ public:
 
 	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
 	virtual void BeginPlay() override;
+	/** (Release 2, tc.Speed.SaveAside) A save still being written is finished before the game lets the campaign go. */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** Turns the music off, or on again. Returns true if it is now playing. */
 	bool ToggleMusic();
@@ -40,11 +45,33 @@ public:
 	void SetMusicMood(const FString& Mood);
 	/** Plays the music softly under a voice (the newsreel's), and brings it back up afterwards. */
 	void DuckMusic(bool bDown);
+	/** (D1) The same, under the month's sea scene, held whatever the newsreel's duck is (the controller sets that one each
+	 * frame). */
+	void DuckForScene(bool bDown);
 	/**
 	 * (Brian's score.) One of the player's wars has ended: The Long Walk Home is played once, now. When it has ended
 	 * the pieces of the mood take their turns again. Nothing happens where the score has not been brought in.
 	 */
 	void PlayHomecoming();
+	/**
+	 * A battle scene's own score (the sound director's mix.json music; Brian marked Zero Hour, The Field Is Ours and The
+	 * Line Gives Way Good on 19 November 2026). While it runs, the map's moods wait. Zero Hour loops until first contact;
+	 * then the battle's piece (The Advance or Trench Line At Twilight, in turn) at the level the scene asks for, under the
+	 * music setting, as the fight thickens and thins; at the end The Field Is Ours or The Line Gives Way, after which the
+	 * moods take over again. Without Zero Hour the battle's piece plays from the start; without the score the battle
+	 * mood plays as it did.
+	 */
+	void BeginBattleScore();
+	/** First contact: Zero Hour crossfades into the battle's piece over CrossfadeSeconds, at Db. */
+	void BattleScoreContact(float Db, float CrossfadeSeconds);
+	/** The battle's music at Db under the music setting (0: as the setting plays it), reached over FadeSeconds. */
+	void SetBattleScoreLevel(float Db, float FadeSeconds);
+	/** The battle is over: Outcome 1 won, 0 lost, -1 neither. The battle's piece goes, the stinger plays once through,
+	 * and when it has ended the moods take over again. */
+	void EndBattleScore(int32 Outcome);
+	/** The battle scene is closing: the moods take over at once (a stinger still playing is heard out). */
+	void StopBattleScore();
+	bool IsBattleScoreOn() const { return bBattleScore; }
 
 	/** The campaign being played: the rules, and the latest picture of the war. */
 	FCampaignSession* GetSession() const { return Session.Get(); }
@@ -60,15 +87,58 @@ public:
 	/** (The playtester's click-through.) The campaign as it stood when this text was saved, laid on the table again. */
 	bool RestoreCampaign(const FString& SaveText);
 
-	/** Writes the campaign to this computer, so it can be continued another day. */
-	void SaveCampaign();
+	/**
+	 * Writes the campaign to this computer, so it can be continued another day. bAside (release 2, the month's own
+	 * save, tc.Speed.SaveAside): the war is written out on the rules' own thread and onto the disk on a worker thread,
+	 * a frame or a few later, and nothing of it is done in this frame. Otherwise at once, as before.
+	 */
+	void SaveCampaign(bool bAside = false);
 
 	/** A line about the campaign saved on this computer, or empty if there is none. */
 	FString DescribeSavedCampaign();
 
+	/** (Release 2, tc.Speed.WarSpread) The next LayOutWar lays the war a step a frame (LayNextStep), not all at once. */
+	void LayNextWarInSteps(bool bSteps) { bLayInSteps = bSteps; }
+	/** Lays one step of a war being laid; false where none was left (the war is laid). */
+	bool LayNextStep();
+
+	/**
+	 * (Release 1.5.1; Brian, 24 November 2026: "yes add save button so i can save multiple games".) The wars the
+	 * player keeps with SAVE, beside the campaign kept by itself (which CONTINUE picks up, and which is written over
+	 * every month as before). SaveWarAs keeps a copy of the war under way; KeepAutosaveAsWar keeps the campaign kept by
+	 * itself as one (before another war is loaded over it); SavedWars lists them, the newest first; LoadSavedWar lays
+	 * one on the table as CONTINUE does (Why says what stopped it); DeleteSavedWar throws one away; IsAutosaveKept says
+	 * whether the campaign kept by itself is kept as a saved war too, word for word, so that loading another loses nothing.
+	 */
+	bool SaveWarAs(FSavedWar& Out);
+	bool KeepAutosaveAsWar(FSavedWar& Out);
+	TArray<FSavedWar> SavedWars() const;
+	bool LoadSavedWar(const FString& Id, FString& Why);
+	bool DeleteSavedWar(const FString& Id);
+	bool IsAutosaveKept(); // (release 2: waits for a save still being written, tc.Speed.SaveAside, before it reads)
+	/**
+	 * (Release 2; the 1.5.1 pre-check of 24 November 2026: each SAVE is a whole copy, with no cap.) What the saved wars
+	 * take on the disk, and the room left on it where the computer says (below nothing where it does not), for the line
+	 * on the page of saved wars.
+	 */
+	int64 SavedWarsBytes() const;
+	int64 FreeDiskBytes() const;
+
 private:
 	void LayOutWar();
+	bool bLayInSteps = false;
+	TArray<TFunction<void()>> LaySteps;
 	static FString SaveFile();
+	/** (tc.Speed.SaveAside) The text onto the disk on a worker thread, after any written before it: a file beside the save, then put in its place. */
+	void WriteSave(FString&& Text);
+	/** Waits for a save still being written, where there is one: before the save is read, or one is written at once. */
+	void WaitForSave();
+	TFuture<void> SaveWriting;
+	/** Each save asked for, counted: a save given aside is written only where none was asked after it. */
+	int32 SavesAsked = 0;
+	static FString SavedWarsFolder();
+	static bool IsSavedWarId(const FString& Id);
+	bool WriteSavedWar(const FString& Text, FSavedWar& Out);
 
 	TSharedPtr<FCampaignSession> Session;
 
@@ -83,6 +153,7 @@ private:
 	TMap<FString, TObjectPtr<UAudioComponent>> Pieces; // every piece that has been made, by its mood
 	FString MusicMood = TEXT("theme");
 	bool bMusicDucked = false;
+	bool bSceneDucked = false;
 	// The score (Music/Score in the game's folder): its pieces, which of them each mood plays in turn, and whose turn it is.
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UAudioComponent>> ScorePlayers;
@@ -99,4 +170,14 @@ private:
 	float NowVolume() const;
 	float MusicVolume = 0.55f;
 	int32 MusicLevel = 1;
+	// A battle scene's score (BeginBattleScore): its three pieces of the score, where it stands, and its level.
+	int32 ZeroHourPiece = INDEX_NONE, WonPiece = INDEX_NONE, LostPiece = INDEX_NONE, AdvancePiece = INDEX_NONE;
+	bool bBattleScore = false, bBattleContact = false, bBattleEnding = false;
+	bool bBattleSceneUp = false; // a battle scene is on the screen (from BeginBattleScore to StopBattleScore), score or none
+	bool bStingerUp = false;     // the battle's ending is its stinger (not a fade with none)
+	float BattleScoreDb = 0.0f;
+	double BattleScoreEndsAt = 0.0; // the stinger's end, and a moment after: the moods take over then
+	double FadeInUntil = 0.0;       // when the piece last begun has faded all the way in
+	/** How long a change of level should take: at least FadeSeconds, and never cutting short a piece's fade-in. */
+	float FadeLeft(float FadeSeconds) const;
 };

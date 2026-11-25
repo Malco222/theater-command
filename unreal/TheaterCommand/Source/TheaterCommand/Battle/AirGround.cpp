@@ -335,6 +335,163 @@ namespace AirGround
 		return 0.299 * C.R + 0.587 * C.G + 0.114 * C.B;
 	}
 
+	namespace
+	{
+		/**
+		 * The works' flat concrete tops (the quays, the piers, the seawalls' copings) cut into slabs about Cell metres
+		 * square, as the yard's pads are (Paving), each its own shade: Worn at its middle, and up to 3 per cent lighter or
+		 * darker than the next (the Mac's release 2 check: Pearl Harbor's quays and walls were flat tan cards with no
+		 * slabs). Each piece of the works that hangs together is cut on one grid, laid along the way most of its rim runs
+		 * (a quay's length; a pier at right angles to it on the same grid), so the pieces of two triangles meet point for
+		 * point along their edge and no crack opens. The walls, and any triangle not all concrete, stay as they were.
+		 * Returns how many slab pieces were laid.
+		 */
+		int LaySlabs(Drawn& D, const std::vector<int>& Paints, int Concrete, const Rgb8& Base, double Cell)
+		{
+			if (Concrete < 0 || Cell <= 0.0)
+			{
+				return 0;
+			}
+			const size_t Count = D.Tris.size() / 3;
+			auto Ok = [&D](int I) { return I >= 0 && static_cast<size_t>(I) < D.X.size(); };
+			// (the flat concrete triangles)
+			std::vector<char> bFlat(Count, 0);
+			for (size_t K = 0; K < Count; ++K)
+			{
+				const int A = D.Tris[3 * K], B = D.Tris[3 * K + 1], C = D.Tris[3 * K + 2];
+				if (!Ok(A) || !Ok(B) || !Ok(C) || static_cast<size_t>(std::max({ A, B, C })) >= Paints.size() || Paints[A] != Concrete || Paints[B] != Concrete || Paints[C] != Concrete)
+				{
+					continue;
+				}
+				const double UX = D.X[B] - D.X[A], UY = D.Y[B] - D.Y[A], UZ = D.Z[B] - D.Z[A];
+				const double VX = D.X[C] - D.X[A], VY = D.Y[C] - D.Y[A], VZ = D.Z[C] - D.Z[A];
+				const double NX = UY * VZ - UZ * VY, NY = UZ * VX - UX * VZ, NZ = UX * VY - UY * VX;
+				const double Size = std::sqrt(NX * NX + NY * NY + NZ * NZ);
+				bFlat[K] = Size > 1e-9 && std::fabs(NZ) > 0.95 * Size;
+			}
+			// (the pieces that hang together: triangles sharing a place, joined)
+			std::vector<size_t> Root(Count);
+			for (size_t K = 0; K < Count; ++K) Root[K] = K;
+			auto Find = [&Root](size_t K) { while (Root[K] != K) { Root[K] = Root[Root[K]]; K = Root[K]; } return K; };
+			std::unordered_map<int64_t, size_t> FirstAt;
+			for (size_t K = 0; K < Count; ++K)
+			{
+				if (!bFlat[K]) continue;
+				for (int E = 0; E < 3; ++E)
+				{
+					const int I = D.Tris[3 * K + E];
+					const auto Was = FirstAt.emplace(PlaceKey(D.X[I], D.Y[I]), K);
+					if (!Was.second) Root[Find(K)] = Find(Was.first->second);
+				}
+			}
+			// (each piece's rim, by how often an edge is used, and the way most of it runs: degrees 0 to 89, its length)
+			std::unordered_map<uint64_t, int> Used;
+			auto EdgeKey = [&D](int A, int B)
+			{
+				const int64_t KA = PlaceKey(D.X[A], D.Y[A]), KB = PlaceKey(D.X[B], D.Y[B]);
+				return static_cast<uint64_t>(std::min(KA, KB)) * 0x9E3779B97F4A7C15ull ^ static_cast<uint64_t>(std::max(KA, KB));
+			};
+			for (size_t K = 0; K < Count; ++K)
+			{
+				if (!bFlat[K]) continue;
+				for (int E = 0; E < 3; ++E) ++Used[EdgeKey(D.Tris[3 * K + E], D.Tris[3 * K + (E + 1) % 3])];
+			}
+			std::unordered_map<size_t, std::vector<double>> Ways;
+			for (size_t K = 0; K < Count; ++K)
+			{
+				if (!bFlat[K]) continue;
+				std::vector<double>& Way = Ways[Find(K)];
+				Way.resize(90, 0.0);
+				for (int E = 0; E < 3; ++E)
+				{
+					const int A = D.Tris[3 * K + E], B = D.Tris[3 * K + (E + 1) % 3];
+					if (Used[EdgeKey(A, B)] != 1) continue;
+					const double DX = D.X[B] - D.X[A], DY = D.Y[B] - D.Y[A];
+					double Degrees = std::atan2(DY, DX) * 180.0 / 3.14159265358979323846;
+					Degrees = std::fmod(std::fmod(Degrees, 90.0) + 90.0, 90.0);
+					Way[static_cast<size_t>(std::lround(Degrees)) % 90] += std::hypot(DX, DY);
+				}
+			}
+			std::vector<int> Kept;
+			Kept.reserve(D.Tris.size());
+			int Laid = 0;
+			struct FCorner { double U, V, Z; };
+			for (size_t K = 0; K < Count; ++K)
+			{
+				const int A = D.Tris[3 * K], B = D.Tris[3 * K + 1], C = D.Tris[3 * K + 2];
+				const std::vector<double>* Way = bFlat[K] ? &Ways[Find(K)] : nullptr;
+				if (!Way)
+				{
+					Kept.insert(Kept.end(), { A, B, C });
+					continue;
+				}
+				const int Degrees = static_cast<int>(std::max_element(Way->begin(), Way->end()) - Way->begin());
+				const double H = Degrees * 3.14159265358979323846 / 180.0, CosH = std::cos(H), SinH = std::sin(H);
+				std::vector<FCorner> Tri;
+				for (const int I : { A, B, C }) Tri.push_back({ D.X[I] * CosH + D.Y[I] * SinH, -D.X[I] * SinH + D.Y[I] * CosH, D.Z[I] });
+				double U0 = 1e300, U1 = -1e300, V0 = 1e300, V1 = -1e300;
+				for (const FCorner& P : Tri) { U0 = std::min(U0, P.U); U1 = std::max(U1, P.U); V0 = std::min(V0, P.V); V1 = std::max(V1, P.V); }
+				const int64_t I0 = static_cast<int64_t>(std::floor(U0 / Cell)), I1 = static_cast<int64_t>(std::floor(U1 / Cell));
+				const int64_t J0 = static_cast<int64_t>(std::floor(V0 / Cell)), J1 = static_cast<int64_t>(std::floor(V1 / Cell));
+				if ((I1 - I0 + 1) * (J1 - J0 + 1) > 400000)
+				{
+					Kept.insert(Kept.end(), { A, B, C });
+					continue;
+				}
+				for (int64_t I = I0; I <= I1; ++I)
+				{
+					for (int64_t J = J0; J <= J1; ++J)
+					{
+						// (the triangle cut to the cell, side by side: Sutherland and Hodgman)
+						std::vector<FCorner> Piece = Tri;
+						const double Edges[4][3] = { { 1.0, 0.0, I * Cell }, { -1.0, 0.0, -(I + 1) * Cell }, { 0.0, 1.0, J * Cell }, { 0.0, -1.0, -(J + 1) * Cell } };
+						for (const auto& Edge : Edges)
+						{
+							std::vector<FCorner> Cut;
+							for (size_t N = 0; N < Piece.size(); ++N)
+							{
+								const FCorner& P = Piece[N];
+								const FCorner& Q = Piece[(N + 1) % Piece.size()];
+								const double SP = Edge[0] * P.U + Edge[1] * P.V - Edge[2], SQ = Edge[0] * Q.U + Edge[1] * Q.V - Edge[2];
+								if (SP >= 0.0) Cut.push_back(P);
+								if ((SP >= 0.0) != (SQ >= 0.0))
+								{
+									const double T = SP / (SP - SQ);
+									Cut.push_back({ P.U + (Q.U - P.U) * T, P.V + (Q.V - P.V) * T, P.Z + (Q.Z - P.Z) * T });
+								}
+							}
+							Piece.swap(Cut);
+							if (Piece.size() < 3) break;
+						}
+						if (Piece.size() < 3) continue;
+						double Area = 0.0;
+						for (size_t N = 0; N < Piece.size(); ++N) Area += Piece[N].U * Piece[(N + 1) % Piece.size()].V - Piece[(N + 1) % Piece.size()].U * Piece[N].V;
+						if (Area == 0.0) continue;
+						const double MU = (I + 0.5) * Cell, MV = (J + 0.5) * Cell;
+						const double MX = MU * CosH - MV * SinH, MY = MU * SinH + MV * CosH;
+						const double Own = 0.03 * (2.0 * Hashed(I, J, 31 + static_cast<uint64_t>(Degrees)) - 1.0);
+						const Rgb8 Colour = Shaded(Worn(Base, MX, MY), 1.0 + Own);
+						const int First = static_cast<int>(D.X.size());
+						for (const FCorner& P : Piece)
+						{
+							D.X.push_back(P.U * CosH - P.V * SinH);
+							D.Y.push_back(P.U * SinH + P.V * CosH);
+							D.Z.push_back(P.Z);
+							D.Colours.push_back(Colour);
+						}
+						for (size_t N = 1; N + 1 < Piece.size(); ++N)
+						{
+							Kept.insert(Kept.end(), { First, First + static_cast<int>(N), First + static_cast<int>(N) + 1 });
+						}
+						++Laid;
+					}
+				}
+			}
+			D.Tris.swap(Kept);
+			return Laid;
+		}
+	}
+
 	std::vector<Drawn> Paint(const std::vector<Part>& Given, const std::vector<std::string>& Names, const std::vector<Rgb8>& Palette, const Rgb8& Sea, Tally* Out, const Focus& Near)
 	{
 		Tally Count;
@@ -647,6 +804,7 @@ namespace AirGround
 						++Count.Worn;
 					}
 				}
+				Count.Slabs += LaySlabs(D, P.Paints, Concrete, ColourOf(Concrete), 10.0);
 			}
 			All.push_back(std::move(D));
 		}

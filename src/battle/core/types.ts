@@ -46,6 +46,12 @@ export interface Reckoning {
   dice: [number, number];
   even: number;
   /**
+   * With the honest win chance (release 2, the campaign's switch 'winChance'): today's run of luck. The card's throw
+   * lands a share of the way along 'dice' and is billed at the same share of this run (resolveBattle in game.ts); the
+   * field's own fortune is drawn from this run, so a fought field costs what it cost before. Absent, 'dice' is today's.
+   */
+  luck?: [number, number];
+  /**
    * Where the attack card did not know the defence (b453): the odds as the card put them to the player, the middle of
    * the staff's band, where its bar stands. Absent, the card printed 'odds' itself.
    */
@@ -251,6 +257,12 @@ export interface FieldTicket<P = unknown> {
    * none was. Looks only: the field keeps their old ruts.
    */
   oldRuts?: { count: number; months: number };
+  /**
+   * Old wrecks (release 2): the armoured vehicles the land battles fought here before left burnt out or knocked out on
+   * the field (both sides, at most 60), how many of them each nation's, and the months since the last battle that left
+   * any; absent where none was. Looks only: the field lays them, and nothing in the fight reads it.
+   */
+  oldWrecks?: { count: number; months: number; nats: Record<string, number> };
   /**
    * Captured kit (release 2): a side that lately beat an army with tanks fields a few of the loser's own in its paint:
    * whose they were and how many of its tanks in this battle are drawn so. Looks only, as the scars.
@@ -516,6 +528,8 @@ export interface FieldResult {
   forces: { corps: number; side: Side; lost: number; arrived?: number | null }[];
   /** The side whose army broke on the field (routed, or driven from it); absent where it withdrew, held or was handed over. */
   broke?: Side;
+  /** The side that fell back on its general's order (land, all fall back, release 1.5): it withdrew, with 'pulled' after contact. */
+  fellBack?: Side;
   /**
    * Why it broke (land, b496(2)): its bar and what drove it, as it stood at the break, where 'broke' is set. Driven from
    * the field ('destroyed'), none of its blocks was left in the fight, and its bar may stand short of 1 ('none').

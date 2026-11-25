@@ -20,10 +20,32 @@ namespace LandAir
 		// how far they reach (metres), and their tracers' speed (the kit's tracer.speed_mps).
 		constexpr double PostsWithin = 800.0, Reach = 900.0, TracerMps = 760.0;
 		constexpr int PostBlocks = 4, PostGuns = 2;
-		// A downed pilot (-TheaterLandChutes): his army's infantry clips' lengths (go_prone, stand_up) and the run's
-		// stride (metres a loop of run, its loop's seconds), his canopy's blossoming (seconds), and how far his lines hold
-		// it over his harness (metres).
-		constexpr double ProneS = 1.9, StandS = 0.6, RunStride = 2.451, RunLoop = 0.8, BlossomS = 1.0;
+		// A downed pilot (-TheaterLandChutes): his army's infantry clips' lengths (go_prone, stand_up, kneel_down) and the
+		// run's stride (metres a loop of run, its loop's seconds); go_prone's time where, played back, he is up on his
+		// knees.
+		constexpr double ProneS = 1.9, StandS = 0.6, KneelS = 0.5, RunStride = 2.451, RunLoop = 0.8, KneeT = 0.95;
+		// The art director's notes on them (24 November, 02:26Z): out under LowExit (metres over the ground) he pulls
+		// at once and lands before his canopy has filled; else it fills over 45 to 50 m of his fall from his pull. His
+		// way through the air dies away as a falling man's does (BodyDrag, a metre's: g over the square of the 55 m/s a
+		// man falls at), and at once as his canopy fills (its drag as it holds him up, his sink's, and CanopyHolds, a
+		// second's at full, so that its last few metres a second go too). A man 4.1 m under his canopy swings about 4 s
+		// a swing (SwingS), from 14 degrees to a gentle 5, settling over SwingSettle (seconds). A wind over DragWind
+		// (metres a second) drags him on the ground. A heavy man (one in five) comes down at 6 to 7 m/s.
+		constexpr double LowExit = 60.0, FillLeast = 45.0, FillMost = 50.0, BodyDrag = 9.81 / (55.0 * 55.0), CanopyHolds = 2.0;
+		constexpr double SwingS = 4.1, SwingFirst = 14.0, SwingLast = 5.0, SwingSettle = 7.0, DragWind = 4.0, HeavyShare = 0.2;
+		// After a hard landing he limps: his run clip at this share of its pace, hurried off his hurt leg by Hitch (a
+		// share of the loop's pace either way), and only so far as this share of a sound man's run.
+		constexpr double LimpPace = 0.65, Hitch = 0.45, LimpFar = 0.6;
+		// The scene's blend into each of his clips from the one before (real seconds), and into the harness's kneel a
+		// longer one: go_prone on his knees is far from kneel_down's last pose (in the soldier files his pelvis 55
+		// degrees off it, his right thigh 68 to 72, and his pelvis 0.18 m on), and no time of go_prone is much nearer (45
+		// degrees at best, half up). Over 0.5 s he settles into his kneel rather than lurching into it, and is still for
+		// the rest of his 1 to 1.5 s at the harness (a review of 24 November; Mac shot 8 looks for it).
+		constexpr double BlendS = 0.25, KneelBlendS = 0.5;
+		// How long his canopy takes to fall in once he is down (real seconds), on an even clock: each part of its falling
+		// in eases in and out on its own (HeapShape), so that none moves much faster than the rest (a review of 24
+		// November: over 2.5 s on an eased clock its crown had swept down at 17 m/s at its fastest).
+		constexpr double FallInS = 3.2;
 
 		struct Dice
 		{
@@ -228,7 +250,9 @@ namespace LandAir
 				const V3 Wind = Rec.Weather.bWind ? V3{ Rec.Weather.WindX, Rec.Weather.WindY, 0.0 } : V3{ 2.6, 1.2, 0.0 };
 				PlanChute(*P, Slot, Wind);
 				Down& D = P->Falls[static_cast<size_t>(Slot)];
-				// (down, he runs from the nearest enemy block as he lands: the other side's, by the view then)
+				// (down, he runs from the nearest enemy block from where he gets up: the other side's, by the view as he
+				// landed)
+				const V3 UpAt = D.DragTo;
 				const LandFeed::View* V = Rec.ViewAt(P->Tin + D.Landed / Life);
 				double Best = 1e18, Ex = 0.0, Ey = 0.0;
 				if (V)
@@ -236,16 +260,19 @@ namespace LandAir
 					for (const LandFeed::Unit& U : V->Units)
 					{
 						if (U.Side < 0 || U.Side == P->Side || U.Str <= 0.05) continue;
-						const double Dd = std::hypot(U.X - D.LandAt.X, U.Y - D.LandAt.Y);
+						const double Dd = std::hypot(U.X - UpAt.X, U.Y - UpAt.Y);
 						if (Dd < Best) { Best = Dd; Ex = U.X; Ey = U.Y; }
 					}
 				}
-				D.RunHeading = Best < 1e17 && Best > 1.0 ? std::atan2(D.LandAt.X - Ex, D.LandAt.Y - Ey) / Rad : D.Face;
+				D.RunHeading = Best < 1e17 && Best > 1.0 ? std::atan2(UpAt.X - Ex, UpAt.Y - Ey) / Rad : D.Face;
 				Dice Dr(static_cast<uint64_t>(P->Flight) * 92821ull + static_cast<uint64_t>(Slot) * 7193ull + 0xC47E0ull);
 				const double Far = Dr.U(20.0, 40.0), Speed = Dr.U(4.2, 5.0);
-				D.RunTo = Plus(D.LandAt, Times(Ahead(D.RunHeading), Far));
+				// (after a hard landing he limps, on his run clip slowed: not so far, his feet keeping to its stride, and
+				// ending on a half loop, where its hitch has caught up)
+				const double Goes = D.bLimp ? std::max(0.5, std::round(2.0 * Far * LimpFar / RunStride) * 0.5) * RunStride : Far;
+				D.RunTo = Plus(UpAt, Times(Ahead(D.RunHeading), Goes));
 				D.RunTo.Z = GroundZ(D.RunTo.X, D.RunTo.Y);
-				D.RunS = Far / Speed;
+				D.RunS = D.bLimp ? Goes / (D.Pace * RunStride / RunLoop) : Far / Speed;
 			}
 		}
 		// The ground's guns: the other side's blocks nearest the run's middle as the leg comes, two guns a block, each
@@ -527,29 +554,63 @@ namespace LandAir
 		D.bChute = true;
 		D.Out = Leave;
 		D.Drop.clear();
-		// Free a second or so (pulling at once when under 70 m), his way off her dying fast; then his canopy blossoms
-		// over BlossomS and he comes down at 5 to 6.5 m/s, drifting with the wind.
-		const double Delay = Dc.U(1.0, 1.6), Sink = Dc.U(5.0, 6.5), Dt = 1.0 / 30.0;
-		const V3 Drift = Times(Wind, 0.95);
-		double Deploy = -1.0, T = 0.0, Heading = std::atan2(Vel.X, Vel.Y) / Rad;
+		// (the draws as they were and in their order: how long he falls free, how fast he comes down; how long he lies is
+		// drawn after his way down)
+		const double Delay = Dc.U(1.0, 1.6), Sink0 = Dc.U(5.0, 6.5), Dt = 1.0 / 30.0;
+		// The art director's notes (24 November, 02:26Z), on dice of their own so that the rest is drawn as it was: one
+		// man in five heavy (6 to 7 m/s); his silk a little warmer or cooler; his canopy's gores and its size in the air;
+		// how far it takes to fill from his pull (out too low, how far under the ground it would have); how long he works
+		// at his harness; how far a wind drags him, and how fast; which way his swing starts.
+		Dice Dn(static_cast<uint64_t>(P.Flight) * 49157ull + static_cast<uint64_t>(Slot) * 6151ull + 0xC47E3ull);
+		const bool bHeavy = Dn.U() < HeavyShare;
+		const double Warm = Dn.U(-1.0, 1.0);
+		D.Gores = 24 + 2 * std::min(2, static_cast<int>(Dn.U() * 3.0));
+		D.Across = Dn.U(5.0, 5.5);
+		D.Deep = D.Across * Dn.U(0.46, 0.5);
+		const double FillAt = Dn.U(FillLeast, FillMost), Past = Dn.U(6.0, 14.0);
+		D.ReleaseS = Dn.U(1.0, 1.5);
+		const double DragM = Dn.U(1.0, 2.0), DragMps = Dn.U(1.0, 1.5);
+		D.SwingSide = Dn.U() < 0.5 ? -1.0 : 1.0;
+		const double Sink = bHeavy ? 6.0 + (Sink0 - 5.0) / 1.5 : Sink0;
+		// (her off-white for every nation, aircrew's silk: about 4% warmer or cooler a chute)
+		D.Silk[0] = 0.86 * (1.0 + 0.04 * Warm);
+		D.Silk[1] = 0.85;
+		D.Silk[2] = 0.80 * (1.0 - 0.04 * Warm);
+		// He leaves her with her way across but none of her climb: a man never goes up out of a plane unless she is
+		// zooming, and these are going down (her first note). Falling free nothing holds him up (his own drag is a few
+		// per cent at these speeds), so he is at least half g t squared under where he left her. His way through the air
+		// (across: her way, less the wind's) dies away as a falling man's does, toward the wind's, which he is in from the
+		// first (her second: the wind is not a push that builds from rest), and at once as his canopy fills. He pulls
+		// after Delay, or sooner once he has fallen as far as a man from rest falls in it (out of a plane already going
+		// down fast), and his canopy fills over FillAt of his fall from there, its hold growing as its mouth does: his way
+		// spent, he is with the air (within 1 m/s of the wind) within 3 s of his pull, and never falls straight down as
+		// release 1's pilot did ("drops about 50 m straight down before the wind takes him" was her note of that fault).
+		// Out under LowExit he pulls at once, and it would fill only Past metres under the ground: he lands before it has.
+		const double Have = At.Z - GroundZ(At.X, At.Y);
+		const bool bLow = Have < LowExit;
+		const double Pull = bLow ? 0.3 : Delay, Fill = bLow ? Have + Past : FillAt;
+		Vel.Z = std::min(Vel.Z, 0.0);
+		double T = 0.0, Heading = std::atan2(Vel.X, Vel.Y) / Rad, PullZ = 0.0, Open = 0.0;
+		bool bPulled = false;
 		V3 Pos = At;
 		D.Opened = -1.0;
 		while (T < 400.0)
 		{
-			const double G = GroundZ(Pos.X, Pos.Y);
-			if (Deploy < 0.0 && (T >= Delay || Pos.Z - G < 70.0)) Deploy = T;
-			const double Open = Deploy < 0.0 ? 0.0 : std::clamp((T - Deploy) / BlossomS, 0.0, 1.0);
-			if (Open >= 1.0 && D.Opened < 0.0) D.Opened = D.Out + T;
-			if (Open <= 0.0)
+			if (!bPulled && (T >= Pull - 1e-9 || At.Z - Pos.Z >= 4.905 * Pull * Pull))
 			{
-				Vel.X *= std::exp(-Dt / 1.5);
-				Vel.Y *= std::exp(-Dt / 1.5);
-				Vel.Z = std::max(Vel.Z - 9.81 * Dt, -50.0);
+				bPulled = true;
+				PullZ = Pos.Z;
 			}
-			else
+			Open = bPulled ? std::clamp((PullZ - Pos.Z) / Fill, 0.0, 1.0) : 0.0;
+			if (Open >= 1.0 && D.Opened < 0.0) D.Opened = D.Out + T;
+			const double Rx = Vel.X - Wind.X, Ry = Vel.Y - Wind.Y;
+			const double Keep = std::exp(-((BodyDrag + 9.81 * Open * Open / (Sink * Sink)) * std::hypot(Rx, Ry) + CanopyHolds * Open * Open) * Dt);
+			Vel.X = Wind.X + Rx * Keep;
+			Vel.Y = Wind.Y + Ry * Keep;
+			for (int K = 0; K < 4; ++K)
 			{
-				const double K = std::min(1.0, Dt * 3.0 * Open);
-				Vel = Plus(Vel, Times(Plus(V3{ Drift.X, Drift.Y, -Sink }, Times(Vel, -1.0)), K));
+				const double Hold = 9.81 * Vel.Z * Vel.Z * Open * Open / (Sink * Sink);
+				Vel.Z = std::min(0.0, std::max(Vel.Z + (Hold - 9.81) * Dt * 0.25, -55.0));
 			}
 			if (Vel.X * Vel.X + Vel.Y * Vel.Y > 0.04) Heading = std::atan2(Vel.X, Vel.Y) / Rad;
 			D.Drop.push_back({ D.Out + T, Pos, Heading, Open, 0.0 });
@@ -559,6 +620,7 @@ namespace LandAir
 			if (Pos.Z <= Gn)
 			{
 				Pos.Z = Gn;
+				Open = bPulled ? std::clamp((PullZ - Pos.Z) / Fill, 0.0, 1.0) : 0.0;
 				D.Drop.push_back({ D.Out + T, Pos, Heading, Open, 0.0 });
 				break;
 			}
@@ -568,10 +630,33 @@ namespace LandAir
 		D.LandAt = Pos;
 		D.Face = Heading;
 		D.Lie = Dc.U(1.5, 3.5);
-		// (his canopy falls in downwind of him, its lines run out: about 4 m off, the way the wind goes, or his own)
+		D.OpenDown = Open;
+		D.bHard = Open < 1.0;
+		// (his canopy falls in downwind of him, the way the wind goes, or his own, and lies stretched out along it, its
+		// middle HeapOff on: the art director's verdict of 24 November 14:34Z, on dice of its own, so that the rest is
+		// drawn as it was)
 		const double Wh = Wind.X * Wind.X + Wind.Y * Wind.Y > 0.04 ? std::atan2(Wind.X, Wind.Y) / Rad : Heading;
-		D.Heap = Plus(Pos, Times(Ahead(Wh), 4.0));
+		Dice Dl(static_cast<uint64_t>(P.Flight) * 52711ull + static_cast<uint64_t>(Slot) * 7919ull + 0xC47E5ull);
+		D.Folds = static_cast<uint32_t>(Dl.U() * 4294967295.0);
+		D.Wind = std::hypot(Wind.X, Wind.Y);
+		D.Heap = Plus(Pos, Times(Ahead(Wh), HeapOff(D.Folds, D.Across, D.Wind, D.Face, Wh)));
 		D.Heap.Z = GroundZ(D.Heap.X, D.Heap.Y);
+		// Down, real seconds from his landing. He goes over flat (sooner after a hard landing), and the scene swaps him
+		// for the crowd's man as he lies under his falling canopy (her third note: so that nobody sees him pop). In a wind
+		// over DragWind his canopy drags him a metre or two downwind (her fourth). He lies a moment, as he did (after a
+		// hard landing 3 to 5 s: her fifth), gets up onto his knees (go_prone played back, slower after a hard landing)
+		// and works his harness free, kneeling, his hands at his chest, for 1 to 1.5 s before he stands; after a hard
+		// landing he limps.
+		D.FallS = D.bHard ? 0.35 : 0.5;
+		D.SwapS = D.FallS + 0.4;
+		const bool bDrag = std::hypot(Wind.X, Wind.Y) > DragWind;
+		D.DragS = bDrag ? DragM / DragMps : 0.0;
+		D.DragTo = bDrag ? Plus(Pos, Times(Ahead(Wh), DragM)) : Pos;
+		D.DragTo.Z = GroundZ(D.DragTo.X, D.DragTo.Y);
+		D.Rise = D.bHard ? D.Lie + 1.5 : std::max(D.FallS + D.Lie, D.SwapS + D.DragS + 0.4);
+		D.UpS = D.bHard ? 1.4 : 1.0;
+		D.bLimp = D.bHard;
+		D.Pace = D.bLimp ? LimpPace : 1.0;
 	}
 
 	size_t Sky::ChutesPlanned() const
@@ -602,6 +687,13 @@ namespace LandAir
 				C.Landed = D.LandAt;
 				C.Heap = D.Heap;
 				C.HeapHeading = std::atan2(D.Heap.X - D.LandAt.X, D.Heap.Y - D.LandAt.Y) / Rad;
+				for (int K = 0; K < 3; ++K) C.Silk[K] = D.Silk[K];
+				C.Gores = D.Gores;
+				C.Across = D.Across;
+				C.Deep = D.Deep;
+				C.Folds = D.Folds;
+				C.Wind = D.Wind;
+				C.bHard = D.bHard;
 				if (Tau < D.Landed)
 				{
 					auto It = std::upper_bound(D.Drop.begin(), D.Drop.end(), Tau, [](double Tm, const Sample& S) { return Tm < S.T; });
@@ -612,29 +704,66 @@ namespace LandAir
 					C.Vel = Times(Plus(B.At, Times(A.At, -1.0)), 1.0 / std::max(1e-3, B.T - A.T));
 					C.Open = A.Pitch + (B.Pitch - A.Pitch) * K;
 					C.Heading = A.Heading;
-					// (his swing under it once it is full: a long pendulum, about 3.2 s a swing, dying away)
+					// (his swing under it once it is full: a long pendulum, about 4 s a swing for a man 4.1 m under it, from
+					// 14 degrees settling to a gentle 5 that never quite dies, the air moving him: the art director)
 					const double Since = Tau - D.Opened;
-					C.Swing = Since > 0.0 ? 14.0 * std::exp(-Since / 6.0) * std::sin(2.0 * Pi * Since / 3.2) : 0.0;
+					const double Most = SwingLast * (1.0 + 0.2 * std::sin(2.0 * Pi * Since / 17.0)) + (SwingFirst - SwingLast) * std::exp(-Since / SwingSettle);
+					C.Swing = Since > 0.0 ? D.SwingSide * Most * std::sin(2.0 * Pi * Since / SwingS) : 0.0;
 					Out.push_back(C);
 					continue;
 				}
-				// Down: flat as he lands, lying a moment, up, running from the enemy, flat again where he goes to ground.
+				// Down: over flat as he lands, in his chute's mesh, and swapped for the crowd's man as he lies under his
+				// falling canopy; dragged with it in a wind; lying a moment; up onto his knees, his harness worked free,
+				// up, running from the enemy (limping after a hard landing), flat again where he goes to ground.
 				C.bDown = true;
-				C.Open = 1.0;
-				C.Slump = Smooth((Tau - D.Landed) / 2.5);
+				C.Open = D.OpenDown;
+				C.Slump = std::clamp((Tau - D.Landed) / FallInS, 0.0, 1.0);
 				const double S = Tau - D.Landed;
-				const double Up = ProneS + D.Lie, Off = Up + StandS, Gone = Off + D.RunS;
-				C.At = D.LandAt;
+				const double Kneel = D.Rise + D.UpS, Up = Kneel + D.ReleaseS, Off = Up + StandS, Gone = Off + D.RunS;
+				const double Drag = D.DragS > 0.0 ? Smooth((S - D.SwapS) / D.DragS) : 0.0;
+				const V3 Lies = Plus(D.LandAt, Times(Plus(D.DragTo, Times(D.LandAt, -1.0)), Drag));
+				C.Dragged = std::hypot(Lies.X - D.LandAt.X, Lies.Y - D.LandAt.Y);
+				C.Landed = { Lies.X, Lies.Y, GroundAt ? GroundAt(Lies.X, Lies.Y) : Lies.Z };
+				C.Heap = Plus(C.Landed, Plus(D.Heap, Times(D.LandAt, -1.0)));
+				C.Heap.Z = GroundAt ? GroundAt(C.Heap.X, C.Heap.Y) : D.Heap.Z;
+				C.At = C.Landed;
 				C.Heading = D.Face;
-				if (S < Up)
+				C.Face = D.Face;
+				C.Rate = 0.0;
+				C.Blend = BlendS;
+				C.bInMesh = S < D.SwapS;
+				C.Fallen = Smooth(S / D.FallS);
+				if (C.bInMesh)
+				{
+					Out.push_back(C);
+					continue;
+				}
+				const V3 UpAt = D.DragTo;
+				if (S < D.Rise)
 				{
 					C.Clip = "go_prone";
-					C.Time = std::min(S, ProneS);
+					C.Time = ProneS;
+				}
+				else if (S < Kneel)
+				{
+					// (up onto his knees: go_prone played back from lying to where he is on them)
+					C.Clip = "go_prone";
+					C.Rate = -(ProneS - KneeT) / D.UpS;
+					C.Time = ProneS + C.Rate * (S - D.Rise);
+				}
+				else if (S < Up)
+				{
+					// (his harness worked free, kneeling, his hands at his chest: kneel_down's last pose, which is stand_up's
+					// first, so that he rises from it without a slide)
+					C.Clip = "kneel_down";
+					C.Time = KneelS;
+					C.Blend = KneelBlendS;
 				}
 				else if (S < Off)
 				{
 					C.Clip = "stand_up";
 					C.Time = S - Up;
+					C.Rate = 1.0;
 					// (turning to the way he will run as he gets up)
 					double Turn = std::fmod(D.RunHeading - D.Face, 360.0);
 					if (Turn > 180.0) Turn -= 360.0;
@@ -643,25 +772,735 @@ namespace LandAir
 				}
 				else if (S < Gone)
 				{
-					const double K = (S - Off) / std::max(1e-3, D.RunS);
-					const double Far = Length(Plus(D.RunTo, Times(D.LandAt, -1.0)));
+					const V3 Way = Plus(D.RunTo, Times(UpAt, -1.0));
+					const double Far = Length(Way);
+					double Along = 0.0, Speed = 0.0;
 					C.Clip = "run";
-					C.Time = std::fmod(K * Far / RunStride * RunLoop, RunLoop);
-					C.At = Plus(D.LandAt, Times(Plus(D.RunTo, Times(D.LandAt, -1.0)), K));
+					if (D.bLimp)
+					{
+						// (limping: his run clip at a share of its pace, hurried off his hurt leg (the right, whose foot is down
+						// at the loop's start) and lingering on his good one, his feet keeping to its stride)
+						const double Loops = (S - Off) * D.Pace / RunLoop, Whole = std::floor(Loops), F = Loops - Whole;
+						const double Warped = F + Hitch / (2.0 * Pi) * std::sin(2.0 * Pi * F), Ends = std::max(0.5, D.RunS * D.Pace / RunLoop);
+						Along = std::min(1.0, (Whole + Warped) / Ends);
+						C.Rate = D.Pace * (1.0 + Hitch * std::cos(2.0 * Pi * F));
+						C.Time = Warped * RunLoop;
+						Speed = Far / Ends * C.Rate / RunLoop;
+					}
+					else
+					{
+						Along = (S - Off) / std::max(1e-3, D.RunS);
+						C.Time = std::fmod(Along * Far / RunStride * RunLoop, RunLoop);
+						C.Rate = Far / RunStride * RunLoop / std::max(1e-3, D.RunS);
+						Speed = Far / std::max(1e-3, D.RunS);
+					}
+					C.At = Plus(UpAt, Times(Way, Along));
 					C.At.Z = GroundAt ? GroundAt(C.At.X, C.At.Y) : D.RunTo.Z;
 					C.Heading = D.RunHeading;
-					C.Vel = Times(Plus(D.RunTo, Times(D.LandAt, -1.0)), 1.0 / std::max(1e-3, D.RunS));
+					C.Vel = Times(Ahead(D.RunHeading), Speed);
 				}
 				else
 				{
 					C.Clip = "go_prone";
 					C.Time = std::min(S - Gone, ProneS);
+					C.Rate = S - Gone < ProneS ? 1.0 : 0.0;
 					C.At = D.RunTo;
 					C.Heading = D.RunHeading;
 				}
 				Out.push_back(C);
 			}
 		}
+	}
+
+	void SilkMesh::Clear()
+	{
+		Points.clear();
+		Facings.clear();
+		Colours.clear();
+		Triangles.clear();
+		Outward.clear();
+		Seams.clear();
+	}
+
+	namespace
+	{
+		/** A canopy's radius and depth as it fills (Open 0, a streamer of silk 2.6 m long; 1, full), and how far under
+		 * the mesh's origin its skirt is (its lines not yet taut while it is a streamer). */
+		void Filling(const Chute& C, double Open, double& Radius, double& Deep, double& Under)
+		{
+			const double K = Smooth(Open / 0.3), O = std::clamp(Open, 0.0, 1.0);
+			Radius = C.Across * 0.5 * (0.06 + 0.94 * std::pow(O, 1.4));
+			Deep = 2.6 + (C.Deep - 2.6) * K;
+			Under = (LinesLong - 0.8) * (1.0 - K);
+		}
+
+		V3 Minus(const V3& A, const V3& B) { return { A.X - B.X, A.Y - B.Y, A.Z - B.Z }; }
+		V3 Cross(const V3& A, const V3& B) { return { A.Y * B.Z - A.Z * B.Y, A.Z * B.X - A.X * B.Z, A.X * B.Y - A.Y * B.X }; }
+		V3 Unit(const V3& A, const V3& Else)
+		{
+			const double Long = Length(A);
+			return Long > 1e-12 ? Times(A, 1.0 / Long) : Else;
+		}
+
+		/** How far out a canopy's widest is, its gores' billow and all, for a radius of 1 (so that a canopy's across is
+		 * the art director's across at its widest, not its seams'): its ring at its widest, a gore's middle. */
+		double Widest() { return 1.035; }
+
+		/**
+		 * Where its hem is on a gore (Gore's Phi there); how its skirt draws in under its widest (by the Curl-th power of
+		 * the way down it: under 2, so that it curves in from its widest on, no straight drop before it does; a review
+		 * of 24 November: at 2.5 it had dropped straight 0.8 m and bevelled in at the bottom); and how round its crown
+		 * is (Crown: 2 is a quarter-ellipse, flat-topped on a canopy half as deep as it is wide, a drum; less, rounder).
+		 */
+		double HemPhi() { return std::acos(HemIn); }
+		constexpr double Curl = 1.5, Crown = 1.5;
+
+		/**
+		 * A point of a canopy's gore for a widest radius of 1 and a depth of 1 (the art director's verdict of 24 November
+		 * 14:34Z): Phi from -HemPhi at its hem, through 0 at its widest, WidestDown under its crown, to Pi / 2 at its
+		 * crown. Over its widest its crown, a dome rounder than a quarter-ellipse (Crown); under it its skirt, curving in
+		 * all the way down to a hem HemIn as wide, its silk there heading in toward its lines (a round canopy's hem
+		 * pulled in by them, not dropped straight). How far out (R) and how high over its hem (Z), and its outer face's
+		 * facing out and up for a canopy A wide and D deep: (Nr / A, Nz / D).
+		 */
+		void Gore(double Phi, double& R, double& Z, double& Nr, double& Nz)
+		{
+			if (Phi >= 0.0)
+			{
+				const double Cs = std::max(0.0, std::cos(Phi)), Sn = std::sin(Phi);
+				R = std::pow(Cs, 2.0 / Crown);
+				Z = 1.0 - WidestDown + WidestDown * Sn;
+				Nr = WidestDown * Cs;
+				Nz = 2.0 / Crown * std::pow(Cs, 2.0 / Crown - 1.0) * Sn;
+				return;
+			}
+			const double T = std::min(1.0, -Phi / HemPhi()), Low = 1.0 - WidestDown;
+			R = 1.0 - (1.0 - HemIn) * std::pow(T, Curl);
+			Z = Low * (1.0 - T);
+			Nr = Low;
+			Nz = -(1.0 - HemIn) * Curl * std::pow(T, Curl - 1.0);
+		}
+
+		/** A gore's four columns (its seam, beside it, its middle, beside the next): the way round its Col-th point is
+		 * (radians from x), and how far its silk billows out there for a radius of 1 at its widest. */
+		double Round(int Col, int Cols)
+		{
+			const int Q = Col % 4;
+			return 2.0 * Pi * (Col / 4 + (Q == 0 ? 0.0 : Q == 1 ? 0.2 : Q == 2 ? 0.5 : 0.8)) / (Cols / 4);
+		}
+		double Billow(int Col) { return Col % 4 == 2 ? 0.035 : Col % 4 == 0 ? 0.0 : 0.02; }
+		/** Its shade at a point: its seams faint darker lines (the silk doubled there, which is what shows most against
+		 * the sun), its hem a little darker too. */
+		double Hemmed(int Ring, int Col) { return (Col % 4 == 0 ? 0.88 : 1.0) * (Ring == 0 ? 0.93 : 1.0); }
+
+		/**
+		 * The rest of a canopy's silk once its outer face's points are in Out (Ringed rings of Cols points, its hem
+		 * first, then its crown; their facings and colours): its inner face, the same points facing the other way, so
+		 * that it is seen from under it; each face's triangles, each facing out of the silk on its own side; and its
+		 * skirt's seams.
+		 */
+		void Sew(SilkMesh& Out, int Ringed, int Cols)
+		{
+			const int Each = Ringed * Cols + 1;
+			const size_t Half = static_cast<size_t>(Each);
+			Out.Points.reserve(2 * Half);
+			Out.Facings.reserve(2 * Half);
+			Out.Colours.reserve(6 * Half);
+			for (size_t K = 0; K < Half; ++K)
+			{
+				Out.Points.push_back(Out.Points[K]);
+				Out.Facings.push_back(Times(Out.Facings[K], -1.0));
+				for (size_t Ch = 0; Ch < 3; ++Ch) Out.Colours.push_back(Out.Colours[K * 3 + Ch]);
+			}
+			auto Tri = [&Out](int A, int B, int C2)
+			{
+				Out.Triangles.insert(Out.Triangles.end(), { A, B, C2 });
+				const V3 Sum = Plus(Plus(Out.Facings[static_cast<size_t>(A)], Out.Facings[static_cast<size_t>(B)]), Out.Facings[static_cast<size_t>(C2)]);
+				Out.Outward.push_back(Times(Sum, 1.0 / std::max(1e-9, Length(Sum))));
+			};
+			for (int Side = 0; Side < 2; ++Side)
+			{
+				const int First = Side * Each;
+				for (int R = 0; R + 1 < Ringed; ++R)
+				{
+					for (int Col = 0; Col < Cols; ++Col)
+					{
+						const int A = First + R * Cols + Col, B = First + R * Cols + (Col + 1) % Cols;
+						Tri(A, B, B + Cols);
+						Tri(A, B + Cols, A + Cols);
+					}
+				}
+				for (int Col = 0; Col < Cols; ++Col)
+				{
+					Tri(First + (Ringed - 1) * Cols + Col, First + (Ringed - 1) * Cols + (Col + 1) % Cols, First + Ringed * Cols);
+				}
+			}
+			for (int Col = 0; Col < Cols; Col += 4) Out.Seams.push_back(Col);
+		}
+
+		/**
+		 * A canopy in the air (the art director's sixth note, 24 to 28 panels, their seams faint; and her verdict of 24
+		 * November 14:34Z, its hem pulled in): its skirt's middle at Base, Rx along x and Ry across (radii at its widest),
+		 * Deep from its skirt to its crown, on Gore's curve. Each gore billows out a little between its seams. Its nine
+		 * rings: its hem, three as its skirt curves in, its widest, and four up to its crown.
+		 */
+		void Dome(SilkMesh& Out, const V3& Base, double Rx, double Ry, double Deep, int Gores, const double Silk[3])
+		{
+			const double Rings[] = { -HemPhi(), -0.8 * HemPhi(), -0.55 * HemPhi(), -0.3 * HemPhi(), 0.0, 0.4, 0.8, 1.15, 1.42 };
+			constexpr int Ringed = 9;
+			const int Cols = std::max(8, Gores) * 4;
+			const double Dz = std::max(0.05, Deep), Ax = std::max(0.02, Rx), Ay = std::max(0.02, Ry);
+			for (int R = 0; R < Ringed; ++R)
+			{
+				double Gr = 0.0, Gz = 0.0, Nr = 0.0, Nz = 0.0;
+				Gore(Rings[R], Gr, Gz, Nr, Nz);
+				for (int Col = 0; Col < Cols; ++Col)
+				{
+					const double Theta = Round(Col, Cols), Out1 = Gr * (1.0 + Billow(Col) * Gr) / Widest();
+					Out.Points.push_back({ Base.X + Ax * Out1 * std::cos(Theta), Base.Y + Ay * Out1 * std::sin(Theta), Base.Z + Dz * Gz });
+					Out.Facings.push_back(Unit({ Nr * std::cos(Theta) / Ax, Nr * std::sin(Theta) / Ay, Nz / Dz }, { 0.0, 0.0, 1.0 }));
+					for (int K = 0; K < 3; ++K) Out.Colours.push_back(Silk[K] * Hemmed(R, Col));
+				}
+			}
+			Out.Points.push_back({ Base.X, Base.Y, Base.Z + Dz });
+			Out.Facings.push_back({ 0.0, 0.0, 1.0 });
+			for (int K = 0; K < 3; ++K) Out.Colours.push_back(Silk[K]);
+			Sew(Out, Ringed, Cols);
+		}
+
+		/**
+		 * How a pilot's canopy lies once down (the art director's verdict of 24 November 14:34Z: "Stretch it 2-3x
+		 * downwind in loose folds, the far end lifting a little, lines running back to him"), drawn from his own number
+		 * (Chute::Folds) and the wind: its length along the wind (a canopy 5 to 5.5 m across lies 6.3 to 8.5 m long, a
+		 * stronger wind stretching it), its width (2.45 to 2.85 times shorter), how far past his harness its near end is
+		 * gathered (2 to 3.5 m: its 4.1 m lines a little slack, less so in a stronger wind), how high its far end stands on
+		 * the air it still holds (0.3 to 0.62 m, more in a stronger wind) and how much that swells it; its axis's bend and
+		 * where its far end lies across; its four or five long folds, each along it from near its near end to some way
+		 * on, its place across, its drift and wander across as it goes, its width and its height (one big fold and the
+		 * rest smaller, in no order); the gaps between them (graded, the widest three times the narrowest, the wider where
+		 * two folds need more room, and all spread together where need be so that no two run into one: a review of 24
+		 * November found the narrowest gaps held up to a floor alone, which left half of them alike); each edge's waver
+		 * and swell; and two creases across it, where it bunched as it fell.
+		 */
+		struct Lay
+		{
+			double Long = 7.0, Wide = 2.8, Gap = 2.5, Lift = 0.5, Bulb = 0.0, Bend = 0.0, FarSide = 0.0;
+			int Ridges = 4;
+			double At[5] = {}, Drift[5] = {}, Wave[5] = {}, Phase[5] = {}, Width[5] = {}, High[5] = {}, From[5] = {}, To[5] = {};
+			double EdgeWave[2] = {}, EdgePhase[2] = {}, EdgeSwell[2] = {}, Crease[2] = {}, CreaseHigh[2] = {};
+			double Loose = 0.0;
+		};
+		Lay LayOf(uint32_t Folds, double Across, double Wind)
+		{
+			Lay L;
+			Dice D(Folds);
+			const double Blow = std::clamp(Wind / 6.0, 0.0, 1.0);
+			L.Long = Across * (1.25 + 0.15 * Blow + D.U(0.0, 0.15));
+			L.Wide = L.Long / D.U(2.45, 2.85);
+			L.Gap = 2.0 + 0.5 * Blow + D.U(0.0, 1.0);
+			L.Lift = std::min(0.62, 0.3 + 0.25 * Blow + D.U(0.0, 0.12));
+			L.Bulb = D.U(0.0, 0.12);
+			L.Bend = D.U(-0.35, 0.35);
+			L.FarSide = D.U(-0.3, 0.3);
+			L.Ridges = D.U() < 0.5 ? 4 : 5;
+			// (their heights graded and dealt out across it in no order, a big fold broader than a small one; across it, a
+			// share of its half-width, from its middle)
+			int Order[5] = { 0, 1, 2, 3, 4 };
+			constexpr double Heights[5] = { 0.27, 0.18, 0.13, 0.1, 0.085 };
+			for (int K = L.Ridges - 1; K > 0; --K) std::swap(Order[K], Order[std::min(K, static_cast<int>(D.U() * (K + 1)))]);
+			for (int K = 0; K < L.Ridges; ++K)
+			{
+				L.High[K] = Heights[Order[K]] * D.U(0.9, 1.1);
+				L.Width[K] = (0.03 + 0.17 * L.High[K]) * D.U(0.85, 1.15);
+				L.Drift[K] = D.U(-0.1, 0.1);
+				L.Wave[K] = D.U(0.6, 1.6);
+				L.Phase[K] = D.U();
+				L.From[K] = D.U(0.0, 0.08);
+				L.To[K] = D.U(0.55, 1.0);
+			}
+			// (the gaps between them graded, the widest three times the narrowest (2.6 times with five), the wider going
+			// where two folds need more room to stand apart: 1.4 times their widths, and the bigger one's flank half-way
+			// between them under a third of the smaller's height, and a little for their wander. All spread together,
+			// never one alone, to span Wide in all or more until each two stand apart, so that the grading holds: a review
+			// of 24 November found the narrowest held up to a floor alone, which left half of them alike)
+			double Need[4] = {}, Gaps[4] = {}, Span = 0.0;
+			int ByNeed[4] = { 0, 1, 2, 3 };
+			for (int K = 0; K + 1 < L.Ridges; ++K)
+			{
+				const int Big = L.High[K] >= L.High[K + 1] ? K : K + 1, Small = 2 * K + 1 - Big;
+				const double Flank = 2.0 * L.Width[Big] * std::sqrt(std::log(std::max(1.0, L.High[Big] / (0.3 * L.High[Small]))));
+				Need[K] = 0.08 + std::max(1.4 * (L.Width[K] + L.Width[K + 1]), Flank);
+			}
+			std::stable_sort(ByNeed, ByNeed + (L.Ridges - 1), [&Need](int A, int B) { return Need[A] < Need[B]; });
+			const double Most = L.Ridges == 5 ? 1.6 : 2.0;
+			for (int R = 0; R + 1 < L.Ridges; ++R)
+			{
+				const int K = ByNeed[R];
+				Gaps[K] = (1.0 + Most * R / (L.Ridges - 2.0)) * D.U(0.92, 1.08);
+				Span += Gaps[K];
+			}
+			const double Wide = D.U(1.0, 1.25);
+			double Spread = Wide / Span;
+			for (int K = 0; K + 1 < L.Ridges; ++K) Spread = std::max(Spread, Need[K] / Gaps[K]);
+			Spread = std::min(Spread, 1.6 / Span);
+			double Across2 = 0.0;
+			for (int K = 0; K < L.Ridges; ++K)
+			{
+				L.At[K] = Across2;
+				if (K + 1 < L.Ridges) Across2 += Gaps[K] * Spread;
+			}
+			const double Shift = -0.5 * L.At[L.Ridges - 1] + D.U(-0.06, 0.06);
+			for (int K = 0; K < L.Ridges; ++K) L.At[K] += Shift;
+			for (int K = 0; K < 2; ++K)
+			{
+				L.EdgeWave[K] = D.U(0.8, 2.0);
+				L.EdgePhase[K] = D.U();
+				L.EdgeSwell[K] = D.U(-0.08, 0.08);
+				L.Crease[K] = D.U(0.25, 0.75);
+				L.CreaseHigh[K] = D.U(0.03, 0.08);
+			}
+			L.Loose = D.U();
+			return L;
+		}
+
+		/**
+		 * The ground under a canopy lying (a review of 24 November: laid point by point, its triangles had cut through a
+		 * bank, a ditch's sides and a crater's rim between its points), read once a make on a grid Step metres square
+		 * (in the canopy's own space, heights from its origin), not once a point twice: each point is laid on it, and each
+		 * edge kept over it. At is the grid's height there (between its points, as a flat cell would have it), raised by
+		 * how sharply the ground crests about the cell (its points' most bend, the height a crest between two of them
+		 * can stand over the cell's flat face: a step or a bank's shoulder narrower than the cell, which half of it had
+		 * let the silk cut 8 mm into).
+		 */
+		struct UnderGrid
+		{
+			double X0 = 0.0, Y0 = 0.0, Step = 0.25, Most = -1e18;
+			int Nx = 0, Ny = 0;
+			std::vector<double> Z, Crest;
+			template <typename Fn>
+			void Read(double MinX, double MinY, double MaxX, double MaxY, const Fn& Field)
+			{
+				Step = 0.25;
+				const double Wx = MaxX - MinX + 2.0 * Step, Wy = MaxY - MinY + 2.0 * Step;
+				// (no more than some 2,500 heights a make: coarser over a canopy still spread high in the air)
+				while ((Wx / Step + 2.0) * (Wy / Step + 2.0) > 2500.0) Step *= 1.25;
+				X0 = MinX - Step;
+				Y0 = MinY - Step;
+				Nx = static_cast<int>(std::ceil((MaxX + Step - X0) / Step)) + 1;
+				Ny = static_cast<int>(std::ceil((MaxY + Step - Y0) / Step)) + 1;
+				Z.assign(static_cast<size_t>(Nx * Ny), 0.0);
+				Crest.assign(static_cast<size_t>(Nx * Ny), 0.0);
+				for (int J = 0; J < Ny; ++J)
+					for (int I = 0; I < Nx; ++I) Z[static_cast<size_t>(J * Nx + I)] = Field(X0 + I * Step, Y0 + J * Step);
+				for (int J = 0; J < Ny; ++J)
+				{
+					for (int I = 0; I < Nx; ++I)
+					{
+						const double Here = Z[static_cast<size_t>(J * Nx + I)];
+						double Bend = 0.0;
+						if (I > 0 && I + 1 < Nx) Bend = std::max(Bend, 2.0 * Here - Z[static_cast<size_t>(J * Nx + I - 1)] - Z[static_cast<size_t>(J * Nx + I + 1)]);
+						if (J > 0 && J + 1 < Ny) Bend = std::max(Bend, 2.0 * Here - Z[static_cast<size_t>((J - 1) * Nx + I)] - Z[static_cast<size_t>((J + 1) * Nx + I)]);
+						Crest[static_cast<size_t>(J * Nx + I)] = Bend;
+						Most = std::max(Most, Here + Bend);
+					}
+				}
+			}
+			double At(double X, double Y) const
+			{
+				if (Nx < 2 || Ny < 2) return 0.0;
+				const double U = (X - X0) / Step, V = (Y - Y0) / Step;
+				const int I = std::clamp(static_cast<int>(std::floor(U)), 0, Nx - 2), J = std::clamp(static_cast<int>(std::floor(V)), 0, Ny - 2);
+				const double A = std::clamp(U - I, 0.0, 1.0), B = std::clamp(V - J, 0.0, 1.0);
+				const size_t K = static_cast<size_t>(J * Nx + I), Up = static_cast<size_t>(Nx);
+				const double Flat = (Z[K] * (1.0 - A) + Z[K + 1] * A) * (1.0 - B) + (Z[K + Up] * (1.0 - A) + Z[K + Up + 1] * A) * B;
+				return Flat + std::max(std::max(Crest[K], Crest[K + 1]), std::max(Crest[K + Up], Crest[K + Up + 1]));
+			}
+		};
+	}
+
+	void CanopyShape(const Chute& C, double Open, SilkMesh& Out)
+	{
+		Out.Clear();
+		double Radius = 0.0, Deep = 0.0, Under = 0.0;
+		Filling(C, Open, Radius, Deep, Under);
+		Dome(Out, { 0.0, 0.0, -Under }, Radius, Radius, Deep, C.Gores, C.Silk);
+	}
+
+	double HeapOff(uint32_t Folds, double Across, double Wind, double Face, double Way)
+	{
+		const Lay L = LayOf(Folds, Across, Wind);
+		const V3 H = OverHarness(1.0, ProneEndX, ProneEndY);
+		const double Turn = (Face - Way) * Rad;
+		return H.X * std::cos(Turn) - H.Y * std::sin(Turn) + L.Gap + 0.5 * L.Long;
+	}
+
+	void HeapShape(const Chute& C, double Slump, double Off, SilkMesh& Out, const GroundFn& Ground)
+	{
+		Out.Clear();
+		const double K = std::clamp(Slump, 0.0, 1.0);
+		const Lay L = LayOf(C.Folds, C.Across, C.Wind);
+		// As it was as he landed: over him on its lines, its skirt LinesLong over his harness (the air's canopy, on 11
+		// rings: four as its skirt curves in, its widest, six up to its crown; a review of 24 November: on 14 it had been
+		// twice the air's points). Along it as it lies (Along: its hem 0, gathered at its near end; its crown 1, at its
+		// far end), each ring about as far along as it is up its gore, its last two in its far end's round.
+		const double Hem = HemPhi();
+		const double Rings[] = { -Hem, -0.8 * Hem, -0.55 * Hem, -0.3 * Hem, 0.0, 0.4, 0.75, 1.0, 1.2, 1.36, 1.47 };
+		const double Along[] = { 0.0, 0.07, 0.16, 0.25, 0.36, 0.48, 0.62, 0.74, 0.84, 0.92, 0.975 };
+		constexpr int Ringed = 11;
+		const int Cols = std::max(8, C.Gores) * 4;
+		double Radius = 0.0, Deep = 0.0, Under = 0.0;
+		Filling(C, C.Open, Radius, Deep, Under);
+		const double Skirt = LinesLong + HangFeet - Under, Dz = std::max(0.05, Deep), Ax = std::max(0.02, Radius);
+		// (his harness as he lies, where its lines meet him: its near end is gathered Gap past it)
+		const V3 H = OverHarness(1.0, ProneEndX, ProneEndY);
+		const double Turn = (C.Face - C.HeapHeading) * Rad;
+		const double Hx = H.X * std::cos(Turn) - H.Y * std::sin(Turn), Hy = H.X * std::sin(Turn) + H.Y * std::cos(Turn);
+		const double Nx = std::max(Off - 0.5 * L.Long, Hx + 1.5), Ny = 0.6 * Hy;
+		// Falling in: it loses its air over about the first half (Sag), its crown sinking, its side toward him blown in
+		// (Blown: a canopy losing its air in a wind folds in on itself in a crescent, its upwind side over its downwind
+		// one), and tips forward on its lines about his harness (Tip, to a quarter turn), so that it falls in downwind of
+		// him and down; it goes slack (Slack: its far half first, over the first third), its round section flattening,
+		// its side toward him coming down onto the other, and its silk crumpling; it streams out along the wind (Stream),
+		// and each point comes down onto the field in its own time (Settled: its near end and its front first, its far
+		// end not long after), flapping and billowing along it until it is down (a review of 24 November: it had kept its
+		// shape, a smooth torpedo, through the middle of its falling in). Each spread over most of its falling in, so that
+		// no part of it moves much faster than the rest (its slump an even clock: Sky::Chutes). Nothing of it comes
+		// nearer the ground than Clear (metres: its silk's own loft).
+		const double Sag = Smooth(K / 0.5), Tip = 0.5 * Pi * Smooth(K / 0.95), Stream = Smooth(K / 0.65);
+		const double Clear = 0.03, Pivot = HangFeet;
+		const double TipC = std::cos(Tip), TipS = std::sin(Tip);
+		// (what each column round it and each ring along it share, worked out once: a make is 1,233 points a face on 28
+		// gores, and the scene makes it some twenty times as it falls in)
+		struct Column
+		{
+			double Theta, Cs, Sn, Back, Top, Arch, Bil, Late, S3, C3, S5, C5, S7, C7, Loose, Crease[2];
+			int Edge;
+		};
+		struct Ring
+		{
+			double U, Gr, Gz, Blown, Slack, Billow, X, Fore, Axis, Half[2], Bunch, Loose, Pocket, End, Crease[2], A1S, A1C, A2S, A2C, A5S, A5C;
+			double Fold[5], Mid[5];
+		};
+		std::vector<Column> Cl(static_cast<size_t>(Cols));
+		for (int Col = 0; Col < Cols; ++Col)
+		{
+			Column& Q = Cl[static_cast<size_t>(Col)];
+			Q.Theta = Round(Col, Cols);
+			Q.Cs = std::cos(Q.Theta);
+			Q.Sn = std::sin(Q.Theta);
+			Q.Back = std::max(0.0, -Q.Cs);
+			Q.Top = 0.5 * (1.0 - Q.Cs);
+			Q.Arch = std::fabs(Q.Cs);
+			Q.Bil = Billow(Col);
+			Q.Late = 0.06 * (1.0 - Q.Cs);
+			Q.S3 = std::sin(3.0 * Q.Theta);
+			Q.C3 = std::cos(3.0 * Q.Theta);
+			Q.S7 = std::sin(7.0 * Q.Theta);
+			Q.C7 = std::cos(7.0 * Q.Theta);
+			Q.S5 = std::sin(5.0 * Q.Theta);
+			Q.C5 = std::cos(5.0 * Q.Theta);
+			Q.Loose = std::cos(1.5 * Pi * Q.Sn + L.Loose * 5.0);
+			for (int R = 0; R < 2; ++R) Q.Crease[R] = 0.6 + 0.4 * std::sin(5.0 * Q.Sn + R);
+			Q.Edge = Q.Sn >= 0.0 ? 0 : 1;
+		}
+		std::vector<Ring> Rg(static_cast<size_t>(Ringed));
+		for (int R = 0; R < Ringed; ++R)
+		{
+			Ring& G = Rg[static_cast<size_t>(R)];
+			double Nr = 0.0, Nz = 0.0;
+			Gore(Rings[R], G.Gr, G.Gz, Nr, Nz);
+			const double U = Along[R];
+			G.U = U;
+			G.Blown = 0.85 * Sag * std::sin(Pi * std::min(1.0, 0.15 + U));
+			G.Slack = Smooth(K / (0.5 - 0.2 * U));
+			G.Billow = 0.3 * std::sin(2.0 * Pi * (1.6 * U - 1.1 * K + L.Loose));
+			// (as it lies: its far end rounding off, narrower and lower over its last fifth, down to the ground at its
+			// crown; its near end gathered; its edges' waver; its axis's bend; its folds' and creases' share here)
+			G.End = U > 0.78 ? std::sqrt(std::max(0.0, 1.0 - std::pow((U - 0.78) / 0.22, 2.0))) : 1.0;
+			G.Pocket = Smooth((U - 0.5) / 0.3);
+			for (int E = 0; E < 2; ++E)
+			{
+				const double Waver = 1.0 + L.EdgeSwell[E] * std::sin(Pi * U) + 0.08 * std::sin(2.0 * Pi * (L.EdgeWave[E] * U + L.EdgePhase[E]))
+					+ 0.04 * std::sin(2.0 * Pi * (2.7 * L.EdgeWave[E] * U + L.Loose));
+				G.Half[E] = 0.5 * L.Wide * (0.3 + 0.7 * Smooth(U / 0.35)) * (1.0 + L.Bulb * G.Pocket) * G.End * Waver;
+			}
+			G.Axis = Ny * (1.0 - Smooth(U / 0.5)) + L.FarSide * U + L.Bend * std::sin(Pi * U);
+			G.X = Nx + L.Long * U;
+			G.Fore = 0.05 + 0.15 * (1.0 - U);
+			for (int F = 0; F < L.Ridges; ++F)
+			{
+				const double Along2 = Smooth((U - L.From[F]) / 0.08) * (1.0 - Smooth((U - L.To[F]) / 0.15));
+				G.Mid[F] = L.At[F] + L.Drift[F] * (U - 0.5) + 0.035 * std::sin(2.0 * Pi * (L.Wave[F] * U + L.Phase[F]));
+				G.Fold[F] = L.High[F] * Along2 * (0.8 + 0.2 * std::sin(2.0 * Pi * (0.7 * L.Wave[F] * U + 1.3 * L.Phase[F]))) * (1.0 - 0.65 * G.Pocket);
+			}
+			for (int Cr = 0; Cr < 2; ++Cr)
+			{
+				const double Off2 = (U - L.Crease[Cr]) / 0.07;
+				G.Crease[Cr] = L.CreaseHigh[Cr] * std::exp(-Off2 * Off2);
+			}
+			G.Bunch = 0.08 * (1.0 - Smooth(U / 0.15));
+			G.Loose = 0.03 * std::sin(2.0 * Pi * (1.3 * U + L.Loose));
+			const double A1 = 6.0 * L.Loose + 4.0 * U + 9.0 * K, A2 = 11.0 * L.Loose + 9.0 * U - 14.0 * K;
+			G.A1S = std::sin(A1);
+			G.A1C = std::cos(A1);
+			G.A2S = std::sin(A2);
+			G.A2C = std::cos(A2);
+			const double A5 = 7.0 * U + 6.0 * L.Loose;
+			G.A5S = std::sin(A5);
+			G.A5C = std::cos(A5);
+		}
+		// Each point: as it falls (Was, from its skirt's middle as it was, its side toward him blown in, its crown sinking,
+		// tipped over), as it lies (Lies: its two layers of silk, a few long folds in its top one running along it and two
+		// creases across it, its far end standing on the air it holds; over the ground, which is added once read), how far
+		// down it is (Settled), how it flaps (Flap: up and across, until it is down), and where it is now across.
+		const size_t Each = static_cast<size_t>(Ringed * Cols + 1);
+		std::vector<V3> Was(Each), Lies(Each);
+		std::vector<double> Settled(Each), Flap(Each);
+		Out.Points.resize(Each);
+		for (int R = 0; R < Ringed; ++R)
+		{
+			const Ring& G = Rg[static_cast<size_t>(R)];
+			const double Early = 0.06 + 0.14 * G.U;
+			for (int Col = 0; Col < Cols; ++Col)
+			{
+				const Column& Q = Cl[static_cast<size_t>(Col)];
+				const size_t P = static_cast<size_t>(R * Cols + Col);
+				const double Crumple = 1.0 - 0.2 * G.Slack * (0.5 + 0.5 * (Q.S5 * G.A5C + Q.C5 * G.A5S));
+				const double Out1 = Ax * G.Gr * (1.0 + Q.Bil * G.Gr) / Widest() * Crumple, Blown = G.Blown * Q.Back;
+				const double Rx = Out1 * Q.Cs * (1.0 + 0.1 * Sag) + Blown * Ax, Ry = Out1 * Q.Sn * (1.0 + 0.1 * Sag) * (1.0 - 0.25 * Blown);
+				const double Rz = Skirt - Pivot + Dz * G.Gz * (1.0 - 0.6 * Sag) - 0.35 * Blown * Dz;
+				Was[P] = { Rx * TipC + Rz * TipS, Ry, Pivot - Rx * TipS * (1.0 - 0.8 * G.Slack) + Rz * TipC };
+				double F = 0.0;
+				for (int Fd = 0; Fd < L.Ridges; ++Fd)
+				{
+					const double Aside = (Q.Sn - G.Mid[Fd]) / L.Width[Fd];
+					F += G.Fold[Fd] * std::exp(-Aside * Aside);
+				}
+				const double Crease = G.Crease[0] * Q.Crease[0] + G.Crease[1] * Q.Crease[1];
+				const double High = 0.045 + G.Bunch + F * G.End + Crease + std::max(0.0, G.Loose * Q.Loose) + L.Lift * G.Pocket * Q.Arch * G.End;
+				const double Low = Clear + (0.3 * (F + Crease) + 0.05 * G.Pocket * Q.Arch) * G.End;
+				Lies[P] = { G.X + G.Fore * Q.Cs, G.Axis + G.Half[Q.Edge] * Q.Sn, Low + (High - Low) * Q.Top };
+				Settled[P] = Smooth((K - Early - Q.Late) / 0.6);
+				const double Flapping = 0.6 * (Q.S3 * G.A1C + Q.C3 * G.A1S) + 0.4 * (Q.S7 * G.A2C + Q.C7 * G.A2S);
+				Flap[P] = Sag * (1.0 - Settled[P]) * (0.55 * std::min(1.0, 0.3 + G.Gr) * Flapping + G.Billow);
+				Out.Points[P] = { Was[P].X + (Lies[P].X - Was[P].X) * Stream, Was[P].Y + (Lies[P].Y - Was[P].Y) * Stream + 0.5 * Flap[P] * Q.Sn, 0.0 };
+			}
+		}
+		{
+			// (its crown: as it falls, the top of its gores; as it lies, at its far end's tip, on the ground, its round
+			// coming down to it; coming down and billowing as its last ring does on the whole)
+			const size_t P = Each - 1;
+			const double Rz = Skirt - Pivot + Dz * (1.0 - 0.6 * Sag);
+			Was[P] = { Rz * TipS, 0.0, Pivot + Rz * TipC };
+			Lies[P] = { Nx + L.Long, L.FarSide, Clear };
+			Settled[P] = Smooth((K - 0.06 - 0.14 - 0.06) / 0.6);
+			Flap[P] = Sag * (1.0 - Settled[P]) * 0.3 * std::sin(2.0 * Pi * (1.6 - 1.1 * K + L.Loose));
+			Out.Points[P] = { Was[P].X + (Lies[P].X - Was[P].X) * Stream, Was[P].Y + (Lies[P].Y - Was[P].Y) * Stream, 0.0 };
+		}
+		// The ground under it, once (none: a flat field), and each point's height: from as it falls down onto it as it
+		// lies over it, flapping, never nearer it than Clear; then each edge kept over it (both its ends lifted where the
+		// ground between them stands higher than the edge would: a bank's or a rim's crest).
+		const V3 Fw = Ahead(C.HeapHeading), Rt = RightOf(C.HeapHeading);
+		UnderGrid G;
+		if (Ground)
+		{
+			double MinX = 1e18, MinY = 1e18, MaxX = -1e18, MaxY = -1e18;
+			for (size_t P = 0; P < Each; ++P)
+			{
+				for (const V3* Q : { &Out.Points[P], &Lies[P] })
+				{
+					MinX = std::min(MinX, Q->X); MaxX = std::max(MaxX, Q->X);
+					MinY = std::min(MinY, Q->Y); MaxY = std::max(MaxY, Q->Y);
+				}
+			}
+			G.Read(MinX, MinY, MaxX, MaxY, [&](double X, double Y) { return Ground(C.Landed.X + Fw.X * X + Rt.X * Y, C.Landed.Y + Fw.Y * X + Rt.Y * Y) - C.Landed.Z; });
+		}
+		for (size_t P = 0; P < Each; ++P)
+		{
+			V3& At = Out.Points[P];
+			const double LiesZ = Lies[P].Z + G.At(Lies[P].X, Lies[P].Y);
+			At.Z = std::max(Was[P].Z + (LiesZ - Was[P].Z) * Settled[P] + Flap[P], G.At(At.X, At.Y) + Clear);
+		}
+		if (Ground)
+		{
+			// (an edge wholly over the highest the grid reads, as a canopy still high in the air, is left as it is)
+			const double Over = G.Most + Clear;
+			auto Keep = [&Out, &G, Clear, Over](size_t A, size_t B)
+			{
+				V3& Pa = Out.Points[A];
+				V3& Pb = Out.Points[B];
+				if (Pa.Z >= Over && Pb.Z >= Over) return;
+				const int Steps = 2 + static_cast<int>(std::hypot(Pb.X - Pa.X, Pb.Y - Pa.Y) / (0.5 * G.Step));
+				double Short = 0.0;
+				for (int S = 1; S < Steps; ++S)
+				{
+					const double T = static_cast<double>(S) / Steps;
+					Short = std::max(Short, G.At(Pa.X + (Pb.X - Pa.X) * T, Pa.Y + (Pb.Y - Pa.Y) * T) + Clear - (Pa.Z + (Pb.Z - Pa.Z) * T));
+				}
+				Pa.Z += Short;
+				Pb.Z += Short;
+			};
+			for (int R = 0; R < Ringed; ++R)
+			{
+				for (int Col = 0; Col < Cols; ++Col)
+				{
+					const size_t A = static_cast<size_t>(R * Cols + Col), B = static_cast<size_t>(R * Cols + (Col + 1) % Cols);
+					const size_t Ua = R + 1 < Ringed ? A + static_cast<size_t>(Cols) : Each - 1, Ub = R + 1 < Ringed ? B + static_cast<size_t>(Cols) : Each - 1;
+					Keep(A, B);
+					Keep(A, Ua);
+					Keep(A, Ub);
+				}
+			}
+		}
+		Out.Facings.assign(Each, { 0.0, 0.0, 1.0 });
+		Out.Colours.reserve(Each * 3);
+		for (int R = 0; R < Ringed; ++R)
+			for (int Col = 0; Col < Cols; ++Col)
+				for (int Ch = 0; Ch < 3; ++Ch) Out.Colours.push_back(C.Silk[Ch] * Hemmed(R, Col));
+		for (int Ch = 0; Ch < 3; ++Ch) Out.Colours.push_back(C.Silk[Ch]);
+		// (each point's facing from where the points about it are: round its ring by up it toward its crown)
+		const auto Pt = [&Out, Cols](int R, int Col) -> const V3& { return Out.Points[static_cast<size_t>(R * Cols + (Col + Cols) % Cols)]; };
+		const V3 Tip2 = Out.Points[Each - 1];
+		for (int R = 0; R < Ringed; ++R)
+		{
+			for (int Col = 0; Col < Cols; ++Col)
+			{
+				const V3 Way = Minus(Pt(R, Col + 1), Pt(R, Col - 1));
+				const V3 Up = Minus(R + 1 < Ringed ? Pt(R + 1, Col) : Tip2, Pt(R > 0 ? R - 1 : R, Col));
+				Out.Facings[static_cast<size_t>(R * Cols + Col)] = Unit(Cross(Way, Up), { 0.0, 0.0, 1.0 });
+			}
+		}
+		V3 Sum;
+		for (int Col = 0; Col < Cols; ++Col) Sum = Plus(Sum, Cross(Minus(Pt(Ringed - 1, Col), Tip2), Minus(Pt(Ringed - 1, Col + 1), Tip2)));
+		Out.Facings[Each - 1] = Unit(Sum, { 0.0, 0.0, 1.0 });
+		Sew(Out, Ringed, Cols);
+	}
+
+	void SilkStep::Clear()
+	{
+		FromSlump = ToSlump = -1.0;
+		From.Clear();
+		To.Clear();
+	}
+
+	void SilkStep::Make(const Chute& C, double Slump, double Off, const GroundFn& Ground)
+	{
+		// (on whole steps of its slump, so that the step it is now in is the last make's next: made once)
+		const double S = std::clamp(Slump, 0.0, 1.0);
+		const double Key = std::min(1.0, std::floor(S / SlumpStep + 1e-9) * SlumpStep);
+		if (Moving() && std::fabs(ToSlump - Key) < 1e-9)
+		{
+			std::swap(From, To);
+		}
+		else
+		{
+			HeapShape(C, Key, Off, From, Ground);
+		}
+		FromSlump = Key;
+		ToSlump = std::min(1.0, Key + SlumpStep);
+		if (ToSlump > FromSlump + 1e-9)
+		{
+			HeapShape(C, ToSlump, Off, To, Ground);
+		}
+		else
+		{
+			To = SilkMesh();
+			ToSlump = FromSlump;
+		}
+	}
+
+	double SilkStep::Mix(double Slump) const
+	{
+		return Moving() ? std::clamp((Slump - FromSlump) / (ToSlump - FromSlump), 0.0, 1.0) : 0.0;
+	}
+
+	void SilkStep::At(double Slump, SilkMesh& Out) const
+	{
+		const double M = Mix(Slump);
+		const size_t N = From.Points.size();
+		Out.Points.resize(N);
+		Out.Facings.resize(N);
+		const bool bTo = Moving() && To.Points.size() == N;
+		for (size_t K = 0; K < N; ++K)
+		{
+			const V3& A = From.Points[K];
+			const V3& Fa = From.Facings[K];
+			if (!bTo || M <= 0.0)
+			{
+				Out.Points[K] = A;
+				Out.Facings[K] = Fa;
+				continue;
+			}
+			const V3& B = To.Points[K];
+			const V3& Fb = To.Facings[K];
+			Out.Points[K] = { A.X + (B.X - A.X) * M, A.Y + (B.Y - A.Y) * M, A.Z + (B.Z - A.Z) * M };
+			Out.Facings[K] = Unit({ Fa.X + (Fb.X - Fa.X) * M, Fa.Y + (Fb.Y - Fa.Y) * M, Fa.Z + (Fb.Z - Fa.Z) * M }, Fa);
+		}
+		Out.Seams = From.Seams;
+	}
+
+	void SilkStep::Wound(SilkMesh& Out) const
+	{
+		At(0.5 * (FromSlump + ToSlump), Out);
+		Out.Colours = From.Colours;
+		Out.Triangles = From.Triangles;
+		Out.Outward.resize(From.Outward.size());
+		const bool bTo = Moving() && To.Outward.size() == From.Outward.size();
+		for (size_t K = 0; K < From.Outward.size(); ++K)
+		{
+			Out.Outward[K] = bTo ? Unit(Plus(From.Outward[K], To.Outward[K]), From.Outward[K]) : From.Outward[K];
+		}
+	}
+
+	bool LineBack(size_t Seam, size_t Seams)
+	{
+		// (Dome's seams go round from x, the way it falls: those whose place round it is behind its middle, which tip
+		// back toward him as it falls in and lie on top of it, toward him, gathered at its near end; one just abreast
+		// of it is left out)
+		return Seams > 0 && std::cos(2.0 * Pi * static_cast<double>(Seam) / static_cast<double>(Seams)) < -1e-9;
+	}
+
+	V3 OverShift(double Fallen, double EndX, double EndY)
+	{
+		const double F = std::clamp(Fallen, 0.0, 1.0);
+		return { (EndX - OverHip * std::sin(OverPitch * Rad)) * F, EndY * F, (ProneHips - OverHip * std::cos(OverPitch * Rad)) * F };
+	}
+
+	V3 OverHips(double Fallen, double EndX, double EndY)
+	{
+		const double F = std::clamp(Fallen, 0.0, 1.0), Over = OverPitch * F * Rad;
+		return Plus({ OverHip * std::sin(Over), 0.0, OverHip * std::cos(Over) }, OverShift(F, EndX, EndY));
+	}
+
+	V3 OverHarness(double Fallen, double EndX, double EndY)
+	{
+		const double F = std::clamp(Fallen, 0.0, 1.0), Over = OverPitch * F * Rad;
+		return Plus({ std::sin(Over), 0.0, std::cos(Over) }, OverShift(F, EndX, EndY));
+	}
+
+	bool SilkMoved(double Shape, double WasShape)
+	{
+		const bool bDown = Shape >= 2.0;
+		return bDown != (WasShape >= 2.0) || std::abs(Shape - WasShape) > (bDown ? SlumpStep : OpenStep) || (Shape >= 1.0 && WasShape < 1.0) || (Shape >= 3.0 && WasShape < 3.0);
+	}
+
+	bool ManMoved(double Lying, double WasLying)
+	{
+		return std::abs(Lying - WasLying) > LyingStep || (Lying >= 1.0 && WasLying < 1.0) || ((Lying < 0.0) != (WasLying < 0.0));
+	}
+
+	double Glow(const V3& Eye, const V3& Canopy, const V3& TowardSun)
+	{
+		const V3 Look = Plus(Canopy, Times(Eye, -1.0));
+		const double Far = Length(Look), SunLong = Length(TowardSun);
+		if (Far < 1e-9 || SunLong < 1e-9) return 0.0;
+		const V3 Way = Times(Look, 1.0 / Far), Sun = Times(TowardSun, 1.0 / SunLong);
+		if (Sun.Z <= 0.0) return 0.0;
+		// (a low sun's light fades in; looking up into it, a little always; against the sun, most)
+		const double Day = std::clamp(Sun.Z / 0.1, 0.0, 1.0);
+		const double Against = Way.X * Sun.X + Way.Y * Sun.Y + Way.Z * Sun.Z;
+		const double Under = std::clamp(Way.Z * 2.0, 0.0, 1.0);
+		return Day * (0.15 * Under + 0.75 * Smooth((Against - 0.3) / 0.65));
 	}
 
 	void Sky::At(double T, std::vector<Plane>& OutPlanes, std::vector<Gunner>& OutGuns) const

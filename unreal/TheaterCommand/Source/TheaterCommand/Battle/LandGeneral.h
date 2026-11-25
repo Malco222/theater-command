@@ -19,6 +19,10 @@ struct FLandGeneralShown
 	/** His controls are up (a live battle with a side of his own), and whether the film has the camera instead (C; Esc
 	 * brings the map back). */
 	bool bOn = false, bFilm = false;
+	/** ALL FALL BACK (release 1.5; Brian, 23 November 14:47Z): its question is up (asked once: ALL FALL BACK or KEEP
+	 * FIGHTING, and Esc keeps fighting), and his whole army has been ordered back behind the ground it started from (the
+	 * battle ends as his retreat when the last unit is out; no new orders after it). */
+	bool bAllBackAsk = false, bAllBack = false;
 	double ViewW = 0.0, ViewH = 0.0;
 
 	/** A tag on the screen: where its stalk stands on the ground and where its tag hangs over it. */

@@ -1,0 +1,26 @@
+# Release 1.5: the battlefields where the attack card offers FIGHT IT YOURSELF.
+#
+# Brian, 23 November 05:18Z: a battlefield is offered only once it has passed its Mac still, 45 frames a second and the
+# art director. Everywhere else the card offers SEND THEM IN only (no button, no failed press).
+#
+# One look a line, as the land battle picks it from the region's latitude, longitude, terrain and month
+# (LandScape::Pick): bocage, farmland, desert, med, drysteppe, steppe, jungle, island. Snow lying adds "+snow", so
+# "farmland+snow" is its own line. "#" starts a note; "*" offers every look. Read each time an attack card opens;
+# no rebuild needed. Launch with -TheaterFightEveryLook to offer every look whatever this file says (the Mac's runs).
+#
+# The game's log names the look of every card: "FIGHT IT YOURSELF offered at <region> (<look>)" or "... not offered ...".
+
+bocage
+desert
+med
+drysteppe
+farmland
+farmland+snow
+
+# Passed 24 November 07:26Z on 9ebf1fcc: the Mac held 45 through the first minute (reshoot-2: desert 58/58/59,
+# med 56/52/58, dry steppe 58/58/59, bocage at the ladder's rung 2 56/46/48) and the art director passed each still.
+# farmland+snow passed 11:40Z on d40cc95d with the snow's bounce at 2 (the default from 6a595e6c): Valdai 57/58/59,
+# the tank's shaded side 62.
+# farmland passed 11:44Z on d40cc95d with the plough's clods as mixed, half-sunk lumps in the soil's own brown:
+# Voronezh 58/58/58/59 at 20/40/60/120 s.
+# Not in 1.5 (no Mac still or art director pass yet): steppe, jungle, island.

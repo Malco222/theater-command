@@ -28,6 +28,7 @@ import { calFor } from './shells';
 import type { LandUnit } from './units';
 import type { Drill, MenBlock, MenOut, Round } from './drill';
 import { PIECES, openSteppe, ticketOf, type SetPiece, type Steppe } from './pieces';
+import { AFV_PER_DIV } from './wrecks';
 
 /** A kept point may be left out where the straight line from the last kept one misses the man by less than this (the recorder's). */
 export const KEEP_M = 0.10;
@@ -122,7 +123,9 @@ export class LiveKeeper {
     const key = keyOf(b, m, fo);
     const p = [r2(t), r1(m.x), r1(m.y), r3(m.f)];
     const ch: Ch = [r2(t), m.p, m.c, m.a ? r1(m.a[0]) : null, m.a ? r1(m.a[1]) : null, m.h ? 1 : 0, m.b ? 1 : 0];
-    if (m.sv) ch.push(m.sv[0], m.sv[1]);
+    // (aboard a lorry, with Men in lorries on: [..., her k, his seat, 1 while he gets down] (MenOut.sv), which older
+    // readers never read)
+    if (m.sv) ch.push(...m.sv);
     let k = this.men.get(key);
     if (!k) {
       k = {
@@ -349,6 +352,15 @@ export interface LiveOpts {
   blast?: boolean;
   /** Infantry with tanks (release 2, looks only; sim.escort): foot advance behind their tanks, never under them. Off unless true. */
   escort?: boolean;
+  /** Men in lorries (release 1.5, looks only; sim.trucks): seats said, and over the tailboard one at a time. Off unless true. */
+  trucks?: boolean;
+  /**
+   * Wet mud (release 1.5, looks only): the campaign's weather word over the field (thaw mud, snow, rain, clear), for
+   * the 3D game's ground and the battle's sky. Off, the word is not sent and the sky is drawn as if there were none.
+   */
+  wet?: boolean;
+  /** Old wrecks (release 2, looks only): the armour the campaign's earlier battles here left burnt out; off, none are sent. */
+  wrecks?: boolean;
   /** Armoured infantry (release 2, looks only; sim.mech): an armoured block's riflemen ride behind its tanks in their carriers. Off unless true. */
   mech?: boolean;
   /** Self-propelled guns (release 2, looks only; sim.spg): some of a battery's guns drawn self-propelled. A campaign battle's only; off unless true. */
@@ -434,8 +446,13 @@ export class LiveBattle {
   private readonly skyOf: LiveSky;
   private steppe: Steppe | null;
   private blocks: Record<string, unknown>[];
-  /** The player's looks switches the header reads (worn uniforms, mud remembered, scarred ground). */
-  private looks: { worn: boolean; mud: boolean; scars: boolean } = { worn: true, mud: true, scars: true };
+  /**
+   * Old wrecks: the real armoured vehicles one tank model stands for in this battle (both sides' armour together, at
+   * least 1, to a tenth), so the 3D game lays the old wrecks at the battle's own scale; null where no armour is drawn.
+   */
+  private wreckPer: number | null = null;
+  /** The player's looks switches the header reads (worn uniforms, mud remembered, scarred ground, old wrecks). */
+  private looks: { worn: boolean; mud: boolean; scars: boolean; wrecks: boolean; wet: boolean } = { worn: true, mud: true, scars: true, wrecks: true, wet: true };
   private seen = new Set<number>();
   private roundsNew: (Round & { n: number })[] = [];
   private phases = new Map<number, [number, string, number | null, number | null]>();
@@ -450,7 +467,7 @@ export class LiveBattle {
 
   constructor(readonly ticket: FieldTicket<LandPlace>, readonly piece: SetPiece | null, opts: LiveOpts = {}) {
     this.me = opts.me ?? null;
-    this.skyOf = opts.sky ?? ticketSky(ticket);
+    this.skyOf = opts.sky ?? ticketSky(opts.wet === false ? { ...ticket, weather: undefined } : ticket);
     const sim = (this.sim = new LandBattle(ticket));
     this.steppe = piece?.open === 'steppe' ? openSteppe(sim.field, ticket.seed) : null;
     if (this.steppe) for (const u of sim.units) u.cover = groundAt(sim.field, u.x, u.y);
@@ -485,9 +502,16 @@ export class LiveBattle {
     if (opts.bearers !== false) sim.bearers = true;
     if (opts.blast === true) sim.blast = true;
     if (opts.escort === true) sim.escort = true;
+    if (opts.trucks === true) sim.trucks = true;
     if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
     const tanksSeen: Record<string, number> = { att: 0, def: 0 };
-    this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false };
+    this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false, wrecks: opts.wrecks !== false, wet: opts.wet !== false };
+    // (old wrecks: the armour's real vehicles over the tank models it is drawn with; a block's worth is its divisions by
+    // their strength, a regiment a third)
+    const armour = sim.allBlocks().filter((u) => u.kind === 'arm' && u.figures0 > 0);
+    const models = armour.reduce((s, u) => s + u.figures0, 0);
+    const real = armour.reduce((s, u) => s + (AFV_PER_DIV.arm ?? 0) * (u.worth ?? u.figures0 / Math.max(1, u.tray)), 0);
+    this.wreckPer = models > 0 && real > 0 ? Math.max(1, Math.round((real / models) * 10) / 10) : null;
     // (captured kit, a campaign battle's only: the first few tank blocks of a side that lately beat an army with tanks
     // are drawn as the loser's model, marked with whose they were, in their captor's paint; looks only)
     const caught = !piece && opts.captured !== false && ticket.captured ? ticket.captured : null;
@@ -530,10 +554,12 @@ export class LiveBattle {
       what: 'LIVE: a land battle fought as the 3D game shows it (src/battle/land/live.ts). The recording\'s shapes; the men, rounds, events, views and phases come in the deltas.',
       recording: true, live: true, key: p?.key ?? 'field', seed: t.seed, dt: DT, title: t.title, date: t.date, turn: t.turn,
       // (the campaign's weather word, for the ground under it, and scarred ground: looks only, release 2; the 3D game
-      // lays thaw mud from "mud", weathered old craters from the scars, and old ruts from the battles fought in mud)
-      ...(t.weather ? { weather: t.weather } : {}),
+      // lays thaw mud from "mud", weathered old craters from the scars, old ruts from the battles fought in mud, and the
+      // burnt-out armour of the battles here from oldWrecks)
+      ...(t.weather && this.looks.wet ? { weather: t.weather } : {}),
       ...(t.scars && t.scars.count > 0 && this.looks.scars ? { scars: { count: t.scars.count, months: t.scars.months } } : {}),
       ...(t.oldRuts && t.oldRuts.count > 0 && this.looks.mud ? { oldRuts: { count: t.oldRuts.count, months: t.oldRuts.months } } : {}),
+      ...(t.oldWrecks && t.oldWrecks.count > 0 && this.looks.wrecks ? { oldWrecks: { count: t.oldWrecks.count, months: t.oldWrecks.months, nats: { ...t.oldWrecks.nats }, ...(this.wreckPer ? { per: this.wreckPer } : {}) } } : {}),
       ...(p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.skyOf }),
       sides: {
         att: { nat: t.att.nat, adj: t.att.adj, color: t.att.color, ...(p ? { army: p.att.army, ...(p.att.standIn ? { standIn: p.att.standIn } : {}) } : {}), ...(t.att.worn !== undefined && this.looks.worn ? { worn: t.att.worn } : {}) },
@@ -675,6 +701,17 @@ export class LiveBattle {
     if (!u) return 'Nothing to order.';
     if (!this.me || u.side !== this.me) return 'Only your own troops take your orders.';
     return this.sim.smokeWhy(u, x0, y0, x1, y1);
+  }
+
+  /** All fall back (release 1.5): whether his army has been ordered back (it takes no new orders). */
+  fallingBack(): boolean {
+    return !!this.me && this.sim.fallingBack(this.me);
+  }
+
+  /** All fall back (release 1.5): why his army may not fall back now, or null where it may. */
+  fallBackWhy(): string | null {
+    if (!this.me) return 'Only your own troops take your orders.';
+    return this.sim.fallBackWhy(this.me);
   }
 
   /** Night patrol: why one of his blocks may not go out on patrol tonight, or null where it may. */

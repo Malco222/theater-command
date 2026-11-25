@@ -1,5 +1,6 @@
 #include "Campaign/CampaignFlags.h"
 
+#include "Campaign/BargainLook.h" // (release 2: the plain flags' bands)
 #include "Engine/Texture2D.h"
 #include "TextureResource.h"
 
@@ -645,16 +646,28 @@ namespace
 		{
 			P.Rows({ Hex(TEXT("A51931")), White, Hex(TEXT("2D2A4A")), White, Hex(TEXT("A51931")) }, { 1.0, 1.0, 2.0, 1.0, 1.0 });
 		});
+		// (Release 2, the art director's ruling 209: the flags as flown in September 1939. The rules call Mongolia MGL, which
+		// is read as MON below.) Mongolia: the constitution of 1924, red with the Soyombo at the centre, in gold. No star (that came in 1945).
 		Map.Add(TEXT("MON"), [](FFlagPainter& P)
 		{
-			P.Columns({ Hex(TEXT("C4272F")), Hex(TEXT("015197")), Hex(TEXT("C4272F")) });
-			P.Star(Gold, 0.25, 0.2, 0.06);
-			P.Disc(Gold, 0.25, 0.36, 0.05);
-			P.Rect(Gold, 0.17, 0.45, 0.33, 0.49);
-			P.Disc(Gold, 0.25, 0.6, 0.065);
-			P.Rect(Gold, 0.17, 0.7, 0.33, 0.74);
-			P.Rect(Gold, 0.13, 0.42, 0.155, 0.8);
-			P.Rect(Gold, 0.345, 0.42, 0.37, 0.8);
+			const FLinearColor Red = Hex(TEXT("C4272F")), SoyomboGold = Hex(TEXT("D9A520"));
+			P.Field(Red);
+			P.Polygon(SoyomboGold, { { 0.699, 0.236 }, { 0.695, 0.179 }, { 0.723, 0.136 }, { 0.733, 0.175 }, { 0.75, 0.093 }, { 0.767, 0.175 }, { 0.777, 0.136 }, { 0.805, 0.179 }, { 0.801, 0.236 } });
+			P.Disc(SoyomboGold, 0.75, 0.282, 0.042);
+			P.Crescent(SoyomboGold, 0.75, 0.307, 0.077, 0.75, 0.234, 0.105);
+			P.Polygon(SoyomboGold, { { 0.675, 0.421 }, { 0.825, 0.421 }, { 0.75, 0.486 } });
+			P.Rect(SoyomboGold, 0.675, 0.504, 0.825, 0.539);
+			P.Disc(SoyomboGold, 0.75, 0.614, 0.06);
+			P.Fill(Red, 0.69, 0.55, 0.81, 0.68, [](double X, double Y)
+			{
+				const double Upper = FMath::Sqrt((X - 0.75) * (X - 0.75) + (Y - 0.584) * (Y - 0.584));
+				const double Lower = FMath::Sqrt((X - 0.75) * (X - 0.75) + (Y - 0.644) * (Y - 0.644));
+				return (X >= 0.75 && Y < 0.614 && FMath::Abs(Upper - 0.03) < 0.008) || (X < 0.75 && Y >= 0.614 && FMath::Abs(Lower - 0.03) < 0.008);
+			});
+			P.Rect(SoyomboGold, 0.675, 0.689, 0.825, 0.725);
+			P.Polygon(SoyomboGold, { { 0.675, 0.743 }, { 0.825, 0.743 }, { 0.75, 0.807 } });
+			P.Rect(SoyomboGold, 0.603, 0.421, 0.644, 0.807);
+			P.Rect(SoyomboGold, 0.856, 0.421, 0.897, 0.807);
 		});
 		Map.Add(TEXT("PHI"), [](FFlagPainter& P)
 		{
@@ -665,6 +678,50 @@ namespace
 			P.Star(Gold, 0.07, 0.12, 0.045);
 			P.Star(Gold, 0.07, 0.88, 0.045);
 			P.Star(Gold, 0.72, 0.5, 0.045);
+		});
+		// (Release 2, ruling 209: four of the far side's countries that had no flag on the table.)
+		// Liberia: adopted 1847. Eleven stripes, red first and last; a square blue corner five stripes deep; one white star.
+		Map.Add(TEXT("LBR"), [](FFlagPainter& P)
+		{
+			const FLinearColor Red = Hex(TEXT("BF0A30"));
+			P.Rows({ Red, White, Red, White, Red, White, Red, White, Red, White, Red });
+			P.Rect(Hex(TEXT("002868")), 0.0, 0.0, 0.455, 0.455);
+			P.Star(White, 0.227, 0.238, 0.155);
+		});
+
+		// Yemen: the kingdom's flag of 1927. Red, a white sabre lying level, five white stars.
+		Map.Add(TEXT("YEM"), [](FFlagPainter& P)
+		{
+			P.Field(Hex(TEXT("C8102E")));
+			P.Polygon(White, { { 0.382, 0.493 }, { 0.491, 0.514 }, { 0.599, 0.526 }, { 0.707, 0.53 }, { 0.815, 0.525 }, { 0.922, 0.512 }, { 1.029, 0.49 }, { 1.135, 0.46 }, { 1.241, 0.421 }, { 1.135, 0.485 }, { 1.029, 0.535 }, { 0.922, 0.573 }, { 0.815, 0.598 }, { 0.707, 0.611 }, { 0.599, 0.61 }, { 0.491, 0.597 }, { 0.382, 0.571 } });
+			P.Rect(White, 0.348, 0.436, 0.395, 0.629);
+			P.Rect(White, 0.225, 0.504, 0.348, 0.561);
+			P.Disc(White, 0.211, 0.539, 0.042);
+			P.Star(White, 0.273, 0.214, 0.081);
+			P.Star(White, 1.227, 0.214, 0.081);
+			P.Star(White, 0.273, 0.786, 0.081);
+			P.Star(White, 1.227, 0.786, 0.081);
+			P.Star(White, 0.75, 0.243, 0.081);
+		});
+
+		// Nepal: two crimson pennons edged blue, the moon above and the sun below, on paper so that the box works as on every piece.
+		Map.Add(TEXT("NEP"), [](FFlagPainter& P)
+		{
+			P.Field(Hex(TEXT("E9E2CF")));
+			P.Polygon(Hex(TEXT("003893")), { { 0.058, 0.013 }, { 1.035, 0.504 }, { 0.417, 0.504 }, { 0.99, 0.968 }, { 0.058, 0.968 } });
+			P.Polygon(Hex(TEXT("DC143C")), { { 0.119, 0.115 }, { 0.765, 0.439 }, { 0.237, 0.439 }, { 0.81, 0.904 }, { 0.119, 0.904 } });
+			P.Crescent(White, 0.297, 0.307, 0.095, 0.297, 0.212, 0.133);
+			P.Star(White, 0.314, 0.732, 0.112, 12, 0.62);
+		});
+
+		// Saudi Arabia: green with the white sabre alone, its point to the hoist. A ruled exception: the creed is not drawn.
+		Map.Add(TEXT("SAU"), [](FFlagPainter& P)
+		{
+			P.Field(Hex(TEXT("0B6B3A")));
+			P.Polygon(White, { { 1.118, 0.493 }, { 1.009, 0.514 }, { 0.901, 0.526 }, { 0.793, 0.53 }, { 0.685, 0.525 }, { 0.578, 0.512 }, { 0.471, 0.49 }, { 0.365, 0.46 }, { 0.259, 0.421 }, { 0.365, 0.485 }, { 0.471, 0.535 }, { 0.578, 0.573 }, { 0.685, 0.598 }, { 0.793, 0.611 }, { 0.901, 0.61 }, { 1.009, 0.597 }, { 1.118, 0.571 } });
+			P.Rect(White, 1.105, 0.436, 1.152, 0.629);
+			P.Rect(White, 1.152, 0.504, 1.275, 0.561);
+			P.Disc(White, 1.289, 0.539, 0.042);
 		});
 
 		// ---------------------------------------------------------------- the Americas
@@ -864,6 +921,38 @@ namespace
 			P.Star(Sun, 0.32, 0.279, 0.171, 16, 0.62);
 			P.Disc(Sun, 0.32, 0.279, 0.093);
 		});
+
+		// (Release 2: a neutral's bargains and the volunteer legions; contract D.5.) The plain flags of the period, with no
+		// arms: a legion's pennant under its host's flag, the tray's corner flag and the bid card's rows. Their bands are
+		// Bargains::PlainFlagOf's, so the card's tests and the cloth read the same colours. ("~" is no use in an object name.)
+		for (const char* Tag : { "ESP", "POR", "GER" })
+		{
+			const Bargains::FPlainFlag* Plain = Bargains::PlainFlagOf(Tag);
+			if (!Plain)
+			{
+				continue;
+			}
+			TArray<FLinearColor> Colours;
+			TArray<double> Shares;
+			for (int32 Band = 0; Band < Plain->Count; ++Band)
+			{
+				const uint32 Srgb = Plain->Bands[Band].Srgb;
+				Colours.Add(FLinearColor(FColor(static_cast<uint8>((Srgb >> 16) & 0xFF), static_cast<uint8>((Srgb >> 8) & 0xFF), static_cast<uint8>(Srgb & 0xFF))));
+				Shares.Add(static_cast<double>(Plain->Bands[Band].Weight));
+			}
+			const bool bUpright = Plain->bVertical;
+			Map.Add(FString(Plain->Key), [Colours, Shares, bUpright](FFlagPainter& P)
+			{
+				if (bUpright)
+				{
+					P.Columns(Colours, Shares);
+				}
+				else
+				{
+					P.Rows(Colours, Shares);
+				}
+			});
+		}
 
 		return Map;
 	}

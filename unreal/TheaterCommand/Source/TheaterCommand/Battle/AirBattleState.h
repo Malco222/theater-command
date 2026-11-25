@@ -6,6 +6,7 @@
 #include "Battle/AirShow.h"
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -37,6 +38,11 @@ struct FAirBattleState
 	/** The field as laid, the painter's own copy: a turn painted aside reads only this, so it shares nothing with the
 	 * frame (a deck keeps a memo of its tiles' lifts, which the flight core's falls ask every frame). */
 	AirSky::Field SkyAside;
+	/** GS6: the clouds turned on the graphics chip (AAirBattle::LaySky; none when the rooms turn them, as with
+	 * "-TheaterSkyChip=0"): their table, laid on the game's thread from SkyAside, and the painter of their shadows
+	 * alone, which lays them in SkyRooms's Shadows as the far room would. */
+	std::shared_ptr<AirSky::Chip> SkyChip;
+	AirSky::Painter SkyShade;
 
 	/** A recorded battle (Content/Data/AirBattles/<key>.json), played back: no orders are taken. */
 	bool bReplay = true;
@@ -56,6 +62,10 @@ struct FAirBattleState
 	int Question = 0;
 	/** Each tag's place on the screen this frame, in the viewport's pixels; off the screen or behind the eye: absent. */
 	std::map<int, FVector2D> TagAt;
+	/** In the close view, the box the ridden aircraft fills on the screen this frame, in the viewport's pixels (no tag
+	 * and no dispatch covers it); bRiddenOn false when there is none. */
+	FVector2D RiddenMin = FVector2D::ZeroVector, RiddenMax = FVector2D::ZeroVector;
+	bool bRiddenOn = false;
 	/** The tags as the screen last drew them, in the viewport's pixels: a click inside one takes its group. A block of
 	 * tags that touched shows two and a line for the rest; that line is its first tag's. */
 	struct FTagBox
@@ -72,6 +82,19 @@ struct FAirBattleState
 	/** The close view is on (C), and what it rides. */
 	bool bClose = false;
 	AirDesk::Subject Subject;
+	/** The chase view: the squadron he chose to ride (a double click on its tag, a click on one in the close view, or a
+	 * step), which the view keeps to, stepping on to the next of its aircraft as one goes down; -1 while the close view
+	 * picks its own (the group in hand, else the fight). */
+	int RideGroup = -1;
+	/** The squadron of the aircraft ridden now, -1 when none. */
+	int RiddenGroup() const
+	{
+		for (const AirShow::PlaneOut& P : Show.Planes())
+		{
+			if (P.Key == Subject.Plane) return P.Group;
+		}
+		return -1;
+	}
 	/**
 	 * The flyover before the battle (Brian's, approved 19 November 2026): its shots, the real seconds into them, then
 	 * the glide into the strategy view. While it is on the battle runs at x1 and the screen stands in a film's frame,
@@ -85,6 +108,14 @@ struct FAirBattleState
 	double GlideLong = 2.5;     // 0.8 when a click or a key cut the shots short
 	double FlyBars = 0.0;
 	double FlyEndRealT = -1.0;  // the scene's real clock when it ended
+	/**
+	 * (1.5.1, the opening held: the Mac's cold Rhineland raids, 24 November) The raid's first frames, while the draw
+	 * thread takes in the scene just made (about a second a frame for two frames, every raid), are drawn behind a black
+	 * frame with the raid's title, the clock held; it lifts once the frames come quick again (AAirBattle::WarmTick).
+	 * Curtain 1 is all black, easing to 0 as the flyover begins.
+	 */
+	bool bWarming = false;
+	double Curtain = 0.0;
 	int FlyPictures = 0;        // (the picture run: the flyover's shots taken, one bit each)
 	FVector GlideEye = FVector::ZeroVector;
 	FRotator GlideFacing = FRotator::ZeroRotator;

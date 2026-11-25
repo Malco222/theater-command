@@ -288,7 +288,8 @@ describe('the secret service left to itself', () => {
     for (let k = 0; k < 8; k++) {
       month(g);
       sent += lines(g, 'spies').filter((t) => t.includes('sent ')).length;
-      expect(agentsOf(g, 'GER').every((a) => a.mission === 'guard' || a.mission === 'watch' || a.mission === 'books')).toBe(true);
+      // (With spy hunters, release 2, one agent kept at home hunts the other side's agents on the front.)
+      expect(agentsOf(g, 'GER').every((a) => a.mission === 'guard' || a.mission === 'hunt' || a.mission === 'watch' || a.mission === 'books')).toBe(true);
     }
     expect(sent).toBeGreaterThan(0);
     expect(agentsOf(g, 'GER').some((a) => abroad(g, a))).toBe(true);

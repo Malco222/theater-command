@@ -3,12 +3,14 @@
 #include "Battle/AirBattle.h"
 #include "Battle/AirBattleState.h"
 #include "Brushes/SlateColorBrush.h"
+#include "Engine/Texture2D.h"
 #include "Fonts/CompositeFont.h"
 #include "Fonts/FontMeasure.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Misc/Paths.h"
 #include "Rendering/DrawElements.h"
 #include "Styling/CoreStyle.h"
+#include "Styling/SlateBrush.h"
 
 #include <algorithm>
 
@@ -28,6 +30,10 @@ namespace
 	const FLinearColor InkRed = FLinearColor(FColor::FromHex(TEXT("8E2C20")));
 	const FLinearColor Leather = FLinearColor(FColor::FromHex(TEXT("2A1C12")));
 	const FLinearColor Track = FLinearColor(FColor::FromHex(TEXT("5D4C37")));
+	// The tug-of-war bar's two colours, held all battle and never swapped, neither ever red (the UI director, 21 November
+	// 14:47Z, "as in the picture"): his the brass gold, the enemy's slate.
+	const FLinearColor BarGold = FLinearColor(FColor::FromHex(TEXT("C9A24A")));
+	const FLinearColor BarSlate = FLinearColor(FColor::FromHex(TEXT("6F7B88")));
 
 	/** PT Serif from Content/Fonts (SIL OFL 1.1), as the campaign frame's: names and titles. */
 	FSlateFontInfo Serif(const TCHAR* Weight, float Size)
@@ -226,6 +232,21 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 		return X + Wd + 6.0;
 	};
 
+	// ---- (1.5.1) The opening held: all black with the raid's title while the scene just made is taken in behind it
+	// (AAirBattle::WarmTick), then eased off over the flyover's first half second. ----
+	const float CurtainA = static_cast<float>(FMath::Clamp(S.Curtain, 0.0, 1.0));
+	auto Curtain = [&](int32 Layer)
+	{
+		Fill(0.0, 0.0, Size.X, Size.Y, FLinearColor(0.0f, 0.0f, 0.0f, CurtainA), Layer);
+		Centred(Wide(W.AimTarget), Size.X * 0.5, Size.Y * 0.5 - 26.0, Serif(TEXT("Bold"), 20.0f), FLinearColor(Cream.R, Cream.G, Cream.B, Cream.A * CurtainA), Layer + 1);
+		Centred(Wide(S.ClockTag), Size.X * 0.5, Size.Y * 0.5 + 12.0, Typed(13.0f, true, 30), FLinearColor(Muted.R, Muted.G, Muted.B, Muted.A * CurtainA), Layer + 1);
+	};
+	if (CurtainA >= 0.999f || (CurtainA > 0.0f && S.FlyBars <= 0.0))
+	{
+		Curtain(0);
+		return LayerId + 2;
+	}
+
 	// ---- The flyover before the battle (Brian's, approved 19 November 2026): the picture in a film's frame, black above
 	// and below, the raid's aim as its title and how to take command; nothing else until the frame has drawn back. ----
 	if (S.FlyBars > 0.0)
@@ -240,10 +261,15 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 			// pixels at the Mac's 1786; like every word on this screen it grows with the window)
 			Centred(Wide(S.ClockTag), Size.X * 0.5, Size.Y - Band + Band * 0.58, Typed(13.0f, true, 30), Muted, 1);
 		}
+		if (CurtainA > 0.0f)
+		{
+			Curtain(2);
+			return LayerId + 4;
+		}
 		return LayerId + 2;
 	}
 
-	// ---- The top bar (land's form, b384): the sides, the chance, the balance, the bars, the clock. ----
+	// ---- The top bar (land's form, b384): the sides, the chance, the tug-of-war bar, the bars, the clock. ----
 	const double BarH = 66.0;
 	Fill(0.0, 0.0, Size.X, BarH, Leather, 0);
 	Fill(0.0, BarH, Size.X, 1.0, Brass, 1);
@@ -259,11 +285,54 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 		Write(Clock, Size.X - 22.0 - WideOf(Clock, ClockFace), 36.0, ClockFace, Cream, 2);
 	}
 	{
-		// The balance: his from the left, a pale mark where it stood at the start.
+		// THE TUG-OF-WAR BAR (Brian, 21 November 05:55Z: "have each sides flag on either end of the bar and then have it be
+		// like a tug of war in real time so you can see which side is winning"; the UI director's ruling, 14:47Z: "the
+		// battle bar is the release 1 card's bar, moving"). His colour runs from his flag on the left, the enemy's from
+		// theirs on the right, and they meet at the knot with the card's small gap, so the side that is winning holds
+		// more of the bar. A pale mark at the middle; no ticks, no handle, no words. The flags are the card's own, 27 by
+		// 18, 8 clear of the bar.
 		const double Mid = Size.X * 0.5, BW = 380.0, BX = Mid - BW * 0.5, BY = 12.0;
-		Fill(BX, BY, BW, 10.0, Track, 2);
-		Fill(BX, BY, BW * FMath::Clamp(W.Balance, 0.0, 1.0), 10.0, Brass, 3);
-		Fill(BX + BW * FMath::Clamp(W.BalanceStart, 0.0, 1.0) - 1.0, BY - 3.0, 2.0, 16.0, Cream * FLinearColor(1.0f, 1.0f, 1.0f, 0.6f), 4);
+		const double Meet = BX + BW * FMath::Clamp(W.Knot, 0.02, 0.98), Gap = 3.0;
+		Fill(BX, BY, FMath::Max(0.0, Meet - Gap * 0.5 - BX), 10.0, BarGold, 3);
+		Fill(Meet + Gap * 0.5, BY, FMath::Max(0.0, BX + BW - Meet - Gap * 0.5), 10.0, BarSlate, 3);
+		Fill(Mid - 1.0, BY - 3.0, 2.0, 16.0, Cream * FLinearColor(1.0f, 1.0f, 1.0f, 0.6f), 4);
+		auto FlagOf = [this](const std::string& Nat) -> const FSlateBrush*
+		{
+			const FString Tag = Wide(Nat);
+			if (Tag.IsEmpty() || !Battle.IsValid())
+			{
+				return nullptr;
+			}
+			if (const TSharedPtr<FSlateBrush>* Found = FlagBrushes.Find(Tag))
+			{
+				return Found->Get();
+			}
+			UTexture2D* Picture = Battle->FlagPicture(Tag);
+			if (!Picture)
+			{
+				return nullptr; // (no table yet: asked again next frame)
+			}
+			TSharedPtr<FSlateBrush> Brush = MakeShared<FSlateBrush>();
+			Brush->SetResourceObject(Picture);
+			Brush->ImageSize = FVector2D(96.0f, 64.0f);
+			Brush->DrawAs = ESlateBrushDrawType::Image;
+			FlagBrushes.Add(Tag, Brush);
+			return Brush.Get();
+		};
+		auto DrawFlag = [&](const std::string& Nat, double X)
+		{
+			const FVector2D FlagSize(27.0, 18.0), At(X, BY + 5.0 - 9.0);
+			if (const FSlateBrush* Brush = FlagOf(Nat))
+			{
+				FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 3, Geometry.ToPaintGeometry(FlagSize, FSlateLayoutTransform(At)), Brush, ESlateDrawEffect::None, FLinearColor::White);
+			}
+			else
+			{
+				Fill(At.X, At.Y, FlagSize.X, FlagSize.Y, Track, 3); // (a plain chip, as the card's for a side with no flag)
+			}
+		};
+		DrawFlag(W.MyNat, BX - 8.0 - 27.0);
+		DrawFlag(W.TheirNat, BX + BW + 8.0);
 		// HOW NEAR TO BREAKING OFF: one bar a side, no numbers; his own amber past three quarters.
 		const double HY = BY + 22.0, HalfW = 150.0;
 		Centred(TEXT("HOW NEAR TO BREAKING OFF"), Mid, HY + 8.0, SmallCaps(), Muted, 2);
@@ -328,13 +397,171 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 		Y += 24.0;
 	}
 
+	// ---- The chase view (Brian, 21 November 2026 05:52Z: "click on the squadron and then it goes to a view of one of the
+	// planes from behind so you can watch it. you can then move from one plane to the next"): top right, on a plate,
+	// the squadron ridden and which of its aircraft, and the steps to the next aircraft and the next squadron. A view,
+	// not an order: the steps work in a recorded battle too. ----
+	double RideL = 0.0, RideT = 0.0, RideR = 0.0, RideB = 0.0;
+	if (S.bClose)
+	{
+		const int Group = S.RiddenGroup();
+		const AirDesk::Tag* Ridden = Group >= 0 ? S.TagOf(Group) : nullptr;
+		if (Ridden)
+		{
+			const FSlateFontInfo NameFace = Serif(TEXT("Bold"), 13.0f), CountFace = Typed(9.5f), ButtonFace = Typed(10.0f, true, 30);
+			// (his own choice, or the group in hand, is kept to; else the view moves with the fight every ten seconds)
+			const bool bChosen = S.RideGroup >= 0 || !S.Hand.empty();
+			const FString Kicker = bChosen ? FString(TEXT("RIDING WITH")) : FString(TEXT("RIDING WITH \u00B7 THE VIEW FOLLOWS THE FIGHT"));
+			const FString Name = Wide(Ridden->Name);
+			FString Count = Wide(AirDesk::RideCount(S.Show.Planes(), Group, S.Subject.Plane));
+			if (!Ridden->Doing.empty())
+			{
+				Count += (Count.IsEmpty() ? TEXT("") : TEXT(" \u00B7 ")) + Wide(Ridden->Doing);
+			}
+			const FString Hint = TEXT("ARROW KEYS STEP TOO \u00B7 ESC: STRATEGY VIEW");
+			const FString Labels[4] = { TEXT("\u2039 AIRCRAFT"), TEXT("AIRCRAFT \u203A"), TEXT("\u2039 SQUADRON"), TEXT("SQUADRON \u203A") };
+			const FString Actions[4] = { TEXT("ride:prev"), TEXT("ride:next"), TEXT("ride:up"), TEXT("ride:down") };
+			double Pair = 0.0;
+			for (int32 K = 0; K < 4; K += 2)
+			{
+				Pair = FMath::Max(Pair, WideOf(Labels[K], ButtonFace) + 22.0 + 6.0 + WideOf(Labels[K + 1], ButtonFace) + 22.0);
+			}
+			const double Inner = FMath::Max(FMath::Max(WideOf(Kicker, SmallCaps()), WideOf(Hint, SmallCaps())),
+				FMath::Max(FMath::Max(WideOf(Name, NameFace), WideOf(Count, CountFace)), Pair));
+			const double PW = Inner + 24.0, PH = 158.0;
+			RideR = Size.X - 22.0;
+			RideL = RideR - PW;
+			RideT = BarH + 12.0;
+			RideB = RideT + PH;
+			// (the plate near solid and the count line in paper: on the Mac's release 2 check a fighter showed through the
+			// plate in Bremen 05c, and the count line read at 3.4 to 3.8 to 1)
+			Fill(RideL, RideT, PW, PH, FLinearColor(Plate.R, Plate.G, Plate.B, 0.92f), 6);
+			Fill(RideL, RideT, PW, 1.0, Brass, 7);
+			Write(Kicker, RideL + 12.0, RideT + 9.0, SmallCaps(), BrightBrass, 7);
+			Write(Name, RideL + 12.0, RideT + 23.0, NameFace, Ridden->bMine ? Cream : Paper, 7);
+			Write(Count, RideL + 12.0, RideT + 46.0, CountFace, Paper, 7);
+			double BX = RideL + 12.0;
+			BX = Button(Labels[0], Actions[0], BX, RideT + 66.0, false, true, 7);
+			Button(Labels[1], Actions[1], BX, RideT + 66.0, false, true, 7);
+			BX = RideL + 12.0;
+			BX = Button(Labels[2], Actions[2], BX, RideT + 98.0, false, true, 7);
+			Button(Labels[3], Actions[3], BX, RideT + 98.0, false, true, 7);
+			Write(Hint, RideL + 12.0, RideT + 136.0, SmallCaps(), Muted, 7);
+		}
+	}
+
+	// ---- The dispatches' place: bottom left, newest last, fading as they age. In the close view they keep clear of the
+	// ridden aircraft (the Mac's release 2 check: they covered it in Bremen, Midway and Oahu 03 and 05): their lines
+	// broken to the room left of it; else laid on the right of it; else raised over it. ----
+	struct FSentLine
+	{
+		FString Text;
+		float Fade = 1.0f;
+		bool bMine = false;
+		double X = 0.0, Y = 0.0, Wd = 0.0;
+	};
+	TArray<FSentLine> SentLines;
+	double SentL = 0.0, SentT = 0.0, SentR = 0.0, SentB = 0.0;
+	double RiddenL = 0.0, RiddenT = 0.0, RiddenR = 0.0, RiddenB = 0.0;
+	const bool bRidden = S.bClose && S.bRiddenOn && !S.bCard;
+	if (bRidden)
+	{
+		const FVector2D Min = ToLocal(Geometry, S.RiddenMin), Max = ToLocal(Geometry, S.RiddenMax);
+		RiddenL = Min.X - 10.0;
+		RiddenT = Min.Y - 10.0;
+		RiddenR = Max.X + 10.0;
+		RiddenB = Max.Y + 10.0;
+	}
+	{
+		const FSlateFontInfo Face = Typed(10.0f);
+		struct FSaid
+		{
+			FString Text;
+			float Fade = 1.0f;
+			bool bMine = false;
+		};
+		TArray<FSaid> Live;
+		for (const AirDesk::Dispatch& D : W.Dispatches)
+		{
+			const float Fade = static_cast<float>(FMath::Clamp(1.0 - (D.Age - 10.0) / 4.0, 0.0, 1.0));
+			if (Fade > 0.0f)
+			{
+				Live.Add({ Wide(D.Text), Fade, D.bMine });
+			}
+		}
+		// (riding, the last four only, and never narrower than 34 characters of its type: beside the aircraft ridden it
+		// broke into a column of a few words a line, the art director on 2b177386's frames, 22 November 04:16Z)
+		if (bRidden && Live.Num() > 4)
+		{
+			Live.RemoveAt(0, Live.Num() - 4);
+		}
+		const double LeastRoom = WideOf(TEXT("the quick brown fox jumps over a la"), Face) + 12.0;
+		// (the lines broken to a width, the newest's top at Newest, against the left edge or the right; the box they fill)
+		auto LayOut = [&](double Room, double Newest, bool bRight)
+		{
+			SentLines.Reset();
+			for (const FSaid& One : Live)
+			{
+				for (const FString& Piece : Wrap(One.Text, Face, Room - 12.0))
+				{
+					FSentLine Sent;
+					Sent.Text = Piece;
+					Sent.Fade = One.Fade;
+					Sent.bMine = One.bMine;
+					Sent.Wd = WideOf(Piece, Face) + 12.0;
+					Sent.X = bRight ? Size.X - 18.0 - Sent.Wd : 18.0;
+					SentLines.Add(MoveTemp(Sent));
+				}
+			}
+			SentL = Size.X;
+			SentR = 0.0;
+			double Y = Newest - 20.0 * (SentLines.Num() - 1);
+			SentT = Y - 2.0;
+			for (FSentLine& Sent : SentLines)
+			{
+				Sent.Y = Y;
+				Y += 20.0;
+				SentL = FMath::Min(SentL, Sent.X);
+				SentR = FMath::Max(SentR, Sent.X + Sent.Wd);
+			}
+			SentB = Newest + 17.0;
+		};
+		auto Covers = [&]()
+		{
+			return bRidden && SentLines.Num() > 0 && SentL < RiddenR && RiddenL < SentR && SentT < RiddenB && RiddenT < SentB;
+		};
+		const double Newest = Size.Y - 90.0;
+		LayOut(Size.X * 0.5, Newest, false);
+		if (Covers() && RiddenL - 18.0 >= LeastRoom)
+		{
+			LayOut(RiddenL - 18.0, Newest, false);
+		}
+		if (Covers() && Size.X - 18.0 - RiddenR >= LeastRoom)
+		{
+			LayOut(Size.X - 18.0 - RiddenR, Newest, true);
+		}
+		if (Covers())
+		{
+			// (over it, the oldest lines let go until the rest fit under the top bar's panels)
+			const double Over = FMath::Max(Size.X * 0.4, LeastRoom);
+			LayOut(Over, RiddenT - 17.0, false);
+			while (SentLines.Num() > 0 && SentT < BarH + 170.0)
+			{
+				Live.RemoveAt(0);
+				LayOut(Over, RiddenT - 17.0, false);
+			}
+		}
+	}
+
 	// ---- A tag over each formation: his own in cream, the enemy's in muted paper (never red); in hand, brass. Groups
 	// never stack (b384(d)): tags that would touch gather into one block, which shows the two that matter most (his
 	// groups in hand, then his own, then the largest) and a line for the rest. No block covers the top bar, the aim
 	// slip, the dispatches or the orders strip; one moved out of their way keeps a thin line to its formation. ----
 	S.TagBoxes.clear();
+	// (none under the after card: their lines ran through its panels on the Mac's release 2 check)
+	if (!S.bCard)
 	{
-		const FSlateFontInfo NameFace = Typed(10.0f, true), UnderFace = Typed(8.5f), MoreFace = Typed(8.5f, true);
+		const FSlateFontInfo NameFace = Typed(10.0f, true), UnderFace = Typed(9.0f), MoreFace = Typed(8.5f, true);
 		const double TagH = 30.0, TagGap = 3.0, MoreH = 16.0, Margin = 4.0;
 		struct FTagRect
 		{
@@ -347,25 +574,17 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 		// The places no tag may cover: the aim panel and the dispatches (the bar and the strip bound the field).
 		TArray<FTagRect> Kept;
 		Kept.Add({ 16.0, BarH, PanelRight + 2.0, Y });
+		if (RideR > RideL)
 		{
-			double DY = Size.Y - 70.0 - 20.0 * W.Dispatches.size();
-			FTagRect Sent{ 18.0, 0.0, 18.0, 0.0 };
-			bool bAnySent = false;
-			for (const AirDesk::Dispatch& D : W.Dispatches)
-			{
-				if (FMath::Clamp(1.0 - (D.Age - 10.0) / 4.0, 0.0, 1.0) > 0.0)
-				{
-					Sent.T = bAnySent ? Sent.T : DY - 2.0;
-					Sent.B = DY + 17.0;
-					Sent.R = FMath::Max(Sent.R, 18.0 + WideOf(Wide(D.Text), Typed(10.0f)) + 12.0);
-					bAnySent = true;
-				}
-				DY += 20.0;
-			}
-			if (bAnySent)
-			{
-				Kept.Add(Sent);
-			}
+			Kept.Add({ RideL - 4.0, RideT, RideR + 4.0, RideB + 4.0 });
+		}
+		if (SentLines.Num() > 0)
+		{
+			Kept.Add({ SentL, SentT, SentR, SentB });
+		}
+		if (bRidden)
+		{
+			Kept.Add({ RiddenL, RiddenT, RiddenR, RiddenB });
 		}
 		const double FieldT = BarH + 1.0 + Margin, FieldB = Size.Y - 54.0 - Margin;
 
@@ -530,13 +749,13 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 			{
 				const FTagOne& One = Ones[Block.Members[K]];
 				const FLinearColor Ink = One.bHand ? BrightBrass : One.Tag->bMine ? Cream : Paper * FLinearColor(0.85f, 0.85f, 0.85f, 1.0f);
-				Fill(Block.Box.L, Top, Wd, TagH, FLinearColor(0.02f, 0.015f, 0.01f, 0.55f), 4);
+				Fill(Block.Box.L, Top, Wd, TagH, FLinearColor(0.02f, 0.015f, 0.01f, 0.7f), 4);
 				if (One.bHand)
 				{
 					Fill(Block.Box.L, Top + TagH - 1.0, Wd, 2.0, BrightBrass, 5);
 				}
 				Write(One.Name, Block.Box.L + 6.0, Top + 1.0, NameFace, Ink, 5);
-				Write(One.Under, Block.Box.L + 6.0, Top + 15.0, UnderFace, Muted, 5);
+				Write(One.Under, Block.Box.L + 6.0, Top + 15.0, UnderFace, Paper, 5); // (in paper: muted read at 3.4 to 1, the Mac's release 2 check)
 				Publish(One.Tag->Id, Block.Box.L, Top, Block.Box.R, Top + TagH);
 				Top += TagH + TagGap;
 			}
@@ -549,23 +768,15 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 		}
 	}
 
-	// ---- The dispatches: bottom left, newest last, fading as they age. ----
+	// ---- The dispatches, where their place was found (above). Their plates as dark as the tags' (at 0.5 the oldest line
+	// nearly vanished over white cloud in Oahu 04, the Mac's release 2 check). ----
 	{
-		double DY = Size.Y - 70.0 - 20.0 * W.Dispatches.size();
-		for (const AirDesk::Dispatch& D : W.Dispatches)
+		const FSlateFontInfo Face = Typed(10.0f);
+		for (const FSentLine& Sent : SentLines)
 		{
-			const float Fade = static_cast<float>(FMath::Clamp(1.0 - (D.Age - 10.0) / 4.0, 0.0, 1.0));
-			if (Fade <= 0.0f)
-			{
-				DY += 20.0;
-				continue;
-			}
-			const FLinearColor Ink = (D.bMine ? Cream : Paper) * FLinearColor(1.0f, 1.0f, 1.0f, Fade);
-			const FString Text = Wide(D.Text);
-			const FSlateFontInfo Face = Typed(10.0f);
-			Fill(18.0, DY - 2.0, WideOf(Text, Face) + 12.0, 19.0, FLinearColor(0.02f, 0.015f, 0.01f, 0.5f * Fade), 2);
-			Write(Text, 24.0, DY, Face, Ink, 3);
-			DY += 20.0;
+			const FLinearColor Ink = (Sent.bMine ? Cream : Paper) * FLinearColor(1.0f, 1.0f, 1.0f, Sent.Fade);
+			Fill(Sent.X, Sent.Y - 2.0, Sent.Wd, 19.0, FLinearColor(0.02f, 0.015f, 0.01f, 0.75f * Sent.Fade), 2);
+			Write(Sent.Text, Sent.X + 6.0, Sent.Y, Face, Ink, 3);
 		}
 	}
 	if (!S.Note.empty())
@@ -788,6 +999,35 @@ FReply SAirBattleScreen::OnMouseButtonDown(const FGeometry& Geometry, const FPoi
 	return FReply::Unhandled();
 }
 
+FReply SAirBattleScreen::OnMouseButtonDoubleClick(const FGeometry& Geometry, const FPointerEvent& Event)
+{
+	// (the second press of a double click comes here in place of OnMouseButtonDown)
+	if (!Battle.IsValid() || Event.GetEffectingButton() != EKeys::LeftMouseButton)
+	{
+		return FReply::Unhandled();
+	}
+	const FAirBattleState* S = Battle->GetState();
+	if (S && S->bFlying)
+	{
+		Battle->Press(TEXT("skip"));
+		return FReply::Handled();
+	}
+	const FVector2D Local = Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition());
+	if (const FButton* Hit = ButtonAt(Local))
+	{
+		// (the chase view's steps pressed quickly twice step twice; any other button is pressed once, as before: a
+		// second press of HAND IT OVER must never be read as an answer to a question no longer asked)
+		if (Hit->Action.StartsWith(TEXT("ride:")))
+		{
+			Do(Hit->Action);
+		}
+		return FReply::Handled();
+	}
+	// The chase view: a double click on a squadron's tag, his or the enemy's, rides behind its leader.
+	Battle->RideAt(ToPixels(Geometry, Local));
+	return FReply::Handled();
+}
+
 FReply SAirBattleScreen::OnMouseButtonUp(const FGeometry& Geometry, const FPointerEvent& Event)
 {
 	if (Event.GetEffectingButton() != EKeys::LeftMouseButton || !bLeftDown)
@@ -854,6 +1094,16 @@ FReply SAirBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& E
 		{
 			Battle->Answer(false);
 		}
+		else if (S && S->bClose && !S->bCard)
+		{
+			Battle->Press(TEXT("ride")); // (out of the close view, back to the strategy view)
+		}
+		return FReply::Handled();
+	}
+	if (S && S->bClose && !S->bCard && (Key == EKeys::Left || Key == EKeys::Right || Key == EKeys::Up || Key == EKeys::Down))
+	{
+		// The chase view's steps: left and right along the squadron, up and down to the last or next squadron.
+		Battle->Press(Key == EKeys::Left ? TEXT("ride:prev") : Key == EKeys::Right ? TEXT("ride:next") : Key == EKeys::Up ? TEXT("ride:up") : TEXT("ride:down"));
 		return FReply::Handled();
 	}
 	if (Key == EKeys::Enter && S && (S->bCard || S->Question != 0))

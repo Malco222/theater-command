@@ -136,6 +136,75 @@ class APlayerController;
  *                         the next pause is taken for it whenever the last was; only at two gigabytes over is it asked
  *                         for in the open (mended after capture 3, where half a gigabyte asked in the open and a list
  *                         of loads was cleared out every half minute, in frames of 97 and 138 ms).
+ * (Release 2, map run 7, 22 November 2026: the month's turn and the Y key's sides view.)
+ *   tc.Speed.MonthSpread  1 (default): the month's turn is spread. The season's masks picture is sent again only when
+ *                         the winter's hardness has changed (in summer it had not, and the whole picture and its smaller
+ *                         copies went again every month); where the snow's weight on occupied ground moves, only the
+ *                         box of the provinces it moved on is painted and sent, as ground changing hands is, not the
+ *                         world; and the rest of the table (works, scars, the front line, the haze and so on) and the
+ *                         campaign's monthly save come a frame and two frames after the new holders and the armies.
+ *                         0: all of it in the month's frame, as before. The same picture either way.
+ *   tc.Speed.SidesKept    1 (default): the sides view (the Y key's third view) is laid once on a mesh of its own and
+ *                         kept while it is put away; shown again it is only recoloured, province by province, where the
+ *                         sides have changed. It was laid afresh over the whole world on every press (ShowSides 211 ms
+ *                         in run 7). 0: laid afresh every time, as before. The same picture either way.
+ *   tc.Speed.SidesFade    0.18 (default): with SidesKept, the sides view's wash fades in and out over this many seconds,
+ *                         a long frame counted as a thirtieth, so the step is never a jump even where a frame stalls.
+ *                         0: at once, as before.
+ * (Release 2, map run 8, 22 November 2026: what was left of the month's frame.)
+ *   tc.Speed.TreesSpread  6 (default): the woods' turn for the month (SeasonTrees, about 155 ms in a month that changes
+ *                         the leaves) is planted a few squares a frame, about 6 ms of them, the squares in sight first
+ *                         and then the nearest; a square out of sight is not drawn, so it can wait. 0: every square in
+ *                         the month's frame, as before. The same woods either way.
+ * (Release 2, the UI director's bar of 22 November 2026: every press answers within a tenth of a second.)
+ *   tc.Speed.CardAside    1 (default): the attack card stands the moment the army is ordered at enemy ground, named
+ *                         and in the two sides' colours, the staff at work on the odds; its forecast (previewAttack,
+ *                         the staff's widening with it) is worked out on the rules' own thread, as an order's answer is,
+ *                         and fills the card a frame or a few later. 0: the forecast in the press's frame, as before.
+ *                         The same card either way.
+ *   tc.Speed.WarSpread    1 (default): a war begun or continued from the opening screen puts a plate over the screen at
+ *                         once; the rules start it a few frames on, and the table is laid under the plate a step a
+ *                         frame (the land, the towns, the holders, the armies, the works, the season, the war's marks,
+ *                         the sides view), then the war is entered. In map run 8 the first laying took 1.2 to 1.4 s
+ *                         inside a 2.2 to 2.5 s frame. 0: all in the press's frame, as before. The same table either way.
+ *   tc.Speed.SaveAside    1 (default): the month's own save (the war written out each month, some 2.3 MB of text by
+ *                         August 1944, 9 to 11 ms of a frame in February 1941 in map run 8 and about twice that by 1944)
+ *                         is written out on the rules' own thread, as an order's answer is, and onto the disk on a worker
+ *                         thread, a frame or a few later. A save at once (the opening screen's, on leaving the game)
+ *                         waits for one still being written, and a save still out is never written over a later one.
+ *                         0: all in the month's frame, as before. The same file either way.
+ *   tc.Speed.NationsAside 1 (default): the opening screen's list of countries (TC.grand: a later year is history
+ *                         played up to it with the new dice, 0.7 to 1 s for January 1941 in a cloud run, and more for
+ *                         each year later) is worked out on the rules' own thread, as an order's answer is, while the
+ *                         screen says so; it is asked when a year is picked and every time the screen opens, Escape
+ *                         from the war included, where it was worked out in the press's frame. 0: in the press's
+ *                         frame (a year picked: three frames after it), as before. The same list either way.
+ *   tc.Speed.MonthAside   0 (default, until the Mac has timed it): the other nations' months, played when he ends his
+ *                         (TC.endMonth: 0.35 to 0.8 s on the Europe-and-Americas chart and 1.0 to 1.7 s on the whole-world
+ *                         map in a cloud run, the far map's answer some 1.9 MB of text) are played and read on the rules'
+ *                         own thread, as an order's answer is, so the table's frames go on while they are; the bell rings
+ *                         at the press as before, and the watch or the month's card follows once they are in. The table
+ *                         takes no order meanwhile (IsAnswering), and a step run waits for it (IsBusyForSteps). A run that
+ *                         takes pictures plays it at once. 1 on; 0 in the press's frame, as before. The same month either way.
+ *   tc.Speed.PicturesAside 1 (default): a card's unit pictures (the arsenal's, a province's raise list, the bigger
+ *                         unit card, a page's machines, a fleet's ships) that have not been taken yet are each a model
+ *                         built and photographed in the studio, and a card opened for the first time took all of them in
+ *                         the press's frame. The card now stands at once with each picture's place kept at its size, and
+ *                         the pictures are taken one a frame after it (PortraitOwed in the log), each appearing in its
+ *                         place. A run that takes pictures takes them at once. 0: all in the press's frame, as before.
+ *                         The same pictures either way, a few frames later.
+ * And one that is off until a run on the Mac says otherwise:
+ *   tc.Speed.FrameCap     0 (default): the frames are free, as before. A cool Mac draws 80 to 97 pictures a second
+ *                         for a screen that shows 60 (capture 4, runs K to N), and the chip's work for the rest is only
+ *                         heat, on a Mac with no fan. 20 to 240: the game holds itself to that many frames a second
+ *                         (t.MaxFPS, set by code: a value set by hand or by -TheaterSet stays as it is). -1: each frame
+ *                         waits for the screen's own refresh instead (r.VSync 1). Seen at once; set back to 0, both are
+ *                         put back as they stood. The same picture either way. A capped game sleeps between frames, and
+ *                         macOS stretches those sleeps when the screen is dark or the window hidden (capture 4's void
+ *                         run Q, 21 to 26 frames a second): so a timing with a cap wants a lit screen and the window in
+ *                         front, and the log's line on held frames (below) says whether it had them.
+ * And the log's line on held frames, each five seconds: the cap in force, how long the engine waited each frame to
+ * keep to it and by how much its waits overran what it asked, and in how many frames the game's window was in front.
  * And the log's line on the machine itself, each five seconds, on a Mac: the system's own word on its heat (nominal,
  * moderate, heavy, trapping, sleeping: a Mac with no fan slows its own chip when it is hot) and how many of the chip's
  * cores the game and the other programs kept busy. Capture 3's four runs were on a Mac that slowed part way through
@@ -183,6 +252,25 @@ namespace TheaterSpeed
 	int32 QuietModel(); // 0 as before, 1 one thread a sheet, 2 the background's priority, 3 its own lowest thread, 4 and background work on a Mac
 	bool StandOne();
 	int32 ShowSpread(); // the points of towns' and trees' squares newly shown in a frame: 0 for no limit, as before
+	bool MonthSpread();
+	bool SidesKept();
+	float SidesFade(); // (tc.Speed.SidesFade) the seconds the sides view fades in and out over: 0 at once, as before
+	double TreesSpread(); // (tc.Speed.TreesSpread) the ms a frame the woods' month turn may take: 0 all in the month's frame, as before
+	bool CardAside(); // (tc.Speed.CardAside) the attack card's forecast asked on the rules' thread: false in the press's frame, as before
+	bool WarSpread(); // (tc.Speed.WarSpread) a war begun is laid a step a frame under a plate: false all in the press's frame, as before
+	bool SaveAside(); // (tc.Speed.SaveAside) the month's save written out off the game thread: false in the month's frames, as before
+	bool NationsAside(); // (tc.Speed.NationsAside) the opening screen's countries worked out on the rules' thread: false in the press's frame, as before
+	bool MonthAside(); // (tc.Speed.MonthAside) the other nations' months played and read on the rules' thread: false in the press's frame, as before
+	bool PicturesAside(); // (tc.Speed.PicturesAside) a card's unit pictures not yet taken are taken one a frame after it stands: false all in its frame, as before
+	/**
+	 * A run that only takes pictures ("-TheaterShots=<folder>" with no "-TheaterSteps="): the photographer arranges each
+	 * picture the moment it asks, so the switches above that spread a press over frames (WarSpread, NationsAside,
+	 * PicturesAside) keep it at once there. A step run puts its pictures in a -TheaterShots= folder too, but its step
+	 * player waits while the table is busy (IsBusyForSteps, a war being laid or a list being worked out among it), so it
+	 * plays them as a player meets them: the Mac's A/B of each switch is a step run. (Map run 9, 23 November: with this
+	 * read as any -TheaterShots= run, WarSpread's B laid the war at once and could not be measured.)
+	 */
+	bool PictureRun();
 
 	/**
 	 * (tc.Speed.QuietModel.) Stood on a thread while it models a fine sheet quietly: the loops under it that would

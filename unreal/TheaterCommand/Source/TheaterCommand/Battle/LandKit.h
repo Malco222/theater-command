@@ -251,6 +251,10 @@ namespace LandKit
 		std::vector<float> Normals;     // x, y, z a point (unit)
 		std::vector<uint8_t> Colours;   // r, g, b, a a point: 8-bit sRGB (FColor wants them as B, G, R, A)
 		std::vector<float> Soot;        // 0 to 1 a point: how far toward BurntColour it goes once the wreck has burnt through
+		/** Each point's paint as the file names it (Model::PaintNames' number: canvas, glass, wood, rubber ...), for an old
+		 * wreck (LandHulk, release 2) to burn each stuff its own way. A point added after the file's (a captor's mark)
+		 * has none: Paints may be shorter than Count(). */
+		std::vector<uint8_t> Paints;
 		std::vector<uint32_t> Triangles;// three point numbers a triangle
 		/** A track body's links (Near): the run of points of each, in the order of Model::Links(Side). */
 		std::vector<uint32_t> LinkFirst, LinkCount;
@@ -295,6 +299,9 @@ namespace LandKit
 		 * so (blocks[].captured) and the look is on; she wears her captor's (Nation's) coat over her maker's, the old
 		 * showing at the chipped edges and where the brush missed. Empty: her own. */
 		std::string Captured;
+		/** Swaps chosen over the month's and the nation's (swap group -> choice), where the model has that choice: Men in
+		 * lorries (the Battle rules card's row) carries her men with the Truck's tilt stowed ("tilt" -> "off"). */
+		std::map<std::string, std::string> Force;
 		/** Swaps the rules pick for her (release 2, the track's "sw": a motorcycle's sidecar, a staff jeep's gun put
 		 * away): {swap, choice}, taken before her month's row, by_nation and default where her model has that swap and
 		 * that choice; any other is let be. */
@@ -325,6 +332,8 @@ namespace LandKit
 		/** The sooty black-brown a burnt-out wreck goes to (8-bit sRGB): lerp each point toward it by its Soot times the
 		 * vehicle's Vehicle::Soot (0 to 1 over 30 s of burning). */
 		uint8_t BurntColour[3] = { 38, 33, 29 };
+		/** The file's paint names, in its order (Mesh::Paints numbers them). */
+		std::vector<std::string> PaintNames;
 
 		// The controls (controls, running): parts by number, -1 where the model has none.
 		int Turret = -1, Gun = -1, Barrel = -1, Traverse = -1, Hull = -1, Breech = -1;
@@ -550,6 +559,10 @@ namespace LandKit
 
 		/** A socket's field point and way at the pose now; false if the model has none of that name. */
 		bool SocketNow(const std::string& Name, V3& OutAt, V3& OutFacing) const;
+		/** Men in lorries (the Battle rules card's row): her way down thrown open at battle time T (her `dismount` clip,
+		 * the tailboard dropped, from T), as her first man gets down; it closes again (the clip backward) as she next moves
+		 * off. Times before the last one given are passed over. Nothing where her model has no `dismount`. */
+		void OpenBoard(double T);
 		/** The same at any battle time (poses her then; a little dearer). */
 		bool SocketAt(const std::string& Name, double T, V3& OutAt, V3& OutFacing) const;
 		/** Every scar (mk) on her, its surface place found; show one from its Word.From. */
@@ -621,6 +634,7 @@ namespace LandKit
 		std::vector<Tick> Ticks;
 		std::vector<double> Shots, MoveOffs, Stops, HeavyHits, Hatch; // times (Hatch: the open/shut changes)
 		std::vector<bool> HatchOpens;
+		std::vector<double> Boards;    // the times her way down was thrown open (OpenBoard)
 		std::vector<Strike> Strikes;
 		std::vector<Timed> Timeline;
 		size_t NextEvent = 0;
@@ -779,6 +793,9 @@ namespace LandKit
 		/** The field's ground, from the recording (field.place.terrain; "plains" where it names none): each model is
 		 * dressed for it (Dress::Terrain). Read by Load. */
 		std::string Terrain = "plains";
+		/** Men in lorries (the Battle rules card's row): every lorry's model dressed with her tilt stowed (Dress::Force), so
+		 * the men on her benches are seen. Set before Load. */
+		bool bOpenLorries = false;
 		/** The vehicles' fire odds by model name (ReadFireOdds): a kill's end is drawn by them and the face struck, and
 		 * the fates table shows that end. Empty: the table's own weights alone, as before. Set before Load. */
 		std::map<std::string, FireOdds> Fires;

@@ -10,12 +10,12 @@
 // The game calls these by name through the global object TC (this engine's own; the campaign's TC is another):
 //
 //   TC.landPieces()                        -> [{ key, title, date, att, def, seeds }]: the set pieces that can be fought
-//   TC.landStart(key, seed, { me, setup, platoons, staff, radio, relief, rider, cutters, smoke, bocage, phones, bearers, patrol, captured, worn, mud, scars, blast, escort, mech, spg, td, cars, aa, light }) -> the recording's header: the field, the blocks,
+//   TC.landStart(key, seed, { me, setup, platoons, staff, radio, relief, rider, cutters, smoke, bocage, phones, bearers, patrol, captured, worn, mud, scars, blast, escort, trucks, mech, spg, td, cars, aa, light }) -> the recording's header: the field, the blocks,
 //                                             the sky, and the setup room when the player deploys first. me 'att' | 'def'
 //                                             | null (a film). staff and radio (direct command) are on unless false
 //   TC.landStartTicket(look, opts)         -> the same header for a campaign battle (release 2, switched): the campaign's
 //                                             TC.battleLook answer as it stands ({ ticket, live: { fog, seen, designYears,
-//                                             sky } }) or a bare ticket, opts as landStart's (and any of live's, which they
+//                                             sky, latLon } }) or a bare ticket, opts as landStart's (and any of live's, which they
 //                                             override); the last delta's over goes back to TC.battleSettleLand
 //   TC.landResult()                        -> { over }: the battle's result once it is over (null before), as the
 //                                             campaign's TC.battleSettleLand takes it; the battle is kept
@@ -34,6 +34,9 @@
 //                                             land:cut { units, x, y } (hedge cutters: tanks cut a gap through the hedge
 //                                             there), land:smoke { units, x0, y0, x1, y1 } (smoke on call: men on foot lay
 //                                             a screen along that line); a refusal says why
+//                                             land:fallBack {} (all fall back, release 1.5: his whole army goes back behind
+//                                             the ground it drew up on, and the battle ends as his withdrawal; no orders after)
+//   TC.landFallBackWhy()                   -> { why }: why his army may not fall back now (null where it may)
 //   TC.landCutWhy(id, x?, y?)              -> { why }: why that tank block of his may not cut a gap there (null where it may)
 //   TC.landSmokeWhy(id, x0?, y0?, x1?, y1?) -> { why }: why that block of his may not lay smoke along that line (null where
 //                                             it may); with no point or line, whether it may at all
@@ -49,7 +52,7 @@
 // Nothing here decides anything about the fight.
 
 import type { Command, FieldTicket, Side } from '../../../src/battle/core/types';
-import { LiveBattle, livePiece, liveTicket, type LiveDelta, type LiveOpts, type LiveSky } from '../../../src/battle/land/live';
+import { LiveBattle, livePiece, liveTicket, ticketSky, type LiveDelta, type LiveOpts, type LiveSky } from '../../../src/battle/land/live';
 import type { LandPlace } from '../../../src/battle/land/field';
 import { PIECES } from '../../../src/battle/land/pieces';
 import type { Gate, Hedge } from '../../../src/battle/land/sim';
@@ -72,12 +75,12 @@ function need(): LiveBattle {
     }));
   },
 
-  landStart(key: string, seed?: number | null, opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean; phones?: boolean; bearers?: boolean; patrol?: boolean; captured?: boolean; worn?: boolean; mud?: boolean; scars?: boolean; blast?: boolean; escort?: boolean; mech?: boolean; spg?: boolean; td?: boolean; cars?: boolean; aa?: boolean; light?: boolean } | null) {
+  landStart(key: string, seed?: number | null, opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean; phones?: boolean; bearers?: boolean; patrol?: boolean; captured?: boolean; worn?: boolean; mud?: boolean; scars?: boolean; wrecks?: boolean; blast?: boolean; escort?: boolean; trucks?: boolean; mech?: boolean; spg?: boolean; td?: boolean; cars?: boolean; aa?: boolean; light?: boolean } | null) {
     live = livePiece(key, seed ?? undefined, {
       me: opts?.me ?? null, setup: !!opts?.setup, platoons: opts?.platoons !== false, staff: opts?.staff !== false, radio: opts?.radio !== false,
       hide: opts?.hide !== false, armour: opts?.armour !== false, names: opts?.names !== false, relief: opts?.relief !== false, rider: opts?.rider !== false,
       cutters: opts?.cutters !== false, smoke: opts?.smoke !== false, bocage: !!opts?.bocage,
-      phones: opts?.phones !== false, bearers: opts?.bearers !== false, patrol: opts?.patrol !== false, captured: opts?.captured !== false, worn: opts?.worn !== false, mud: opts?.mud !== false, scars: opts?.scars !== false, blast: opts?.blast === true, escort: opts?.escort === true, mech: opts?.mech === true, spg: opts?.spg === true, td: opts?.td === true, cars: opts?.cars === true, aa: opts?.aa === true, light: opts?.light === true,
+      phones: opts?.phones !== false, bearers: opts?.bearers !== false, patrol: opts?.patrol !== false, captured: opts?.captured !== false, worn: opts?.worn !== false, mud: opts?.mud !== false, scars: opts?.scars !== false, wrecks: opts?.wrecks !== false, blast: opts?.blast === true, escort: opts?.escort === true, trucks: opts?.trucks === true, mech: opts?.mech === true, spg: opts?.spg === true, td: opts?.td === true, cars: opts?.cars === true, aa: opts?.aa === true, light: opts?.light === true,
     });
     return live.header();
   },
@@ -88,19 +91,22 @@ function need(): LiveBattle {
    * landStart. Its result (the last delta's over) goes back to the campaign's TC.battleSettleLand(ids, to, over).
    */
   landStartTicket(
-    ticketOrLook: FieldTicket<LandPlace> | { ticket: FieldTicket<LandPlace>; live?: Partial<LiveOpts> },
-    opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean; phones?: boolean; bearers?: boolean; patrol?: boolean; captured?: boolean; worn?: boolean; mud?: boolean; scars?: boolean; blast?: boolean; escort?: boolean; mech?: boolean; spg?: boolean; td?: boolean; cars?: boolean; aa?: boolean; light?: boolean; fog?: boolean; seen?: number[]; designYears?: Record<string, number>; sky?: LiveSky } | null,
+    ticketOrLook: FieldTicket<LandPlace> | { ticket: FieldTicket<LandPlace>; live?: Partial<LiveOpts> & { latLon?: [number, number] } },
+    opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean; phones?: boolean; bearers?: boolean; patrol?: boolean; captured?: boolean; worn?: boolean; mud?: boolean; scars?: boolean; wrecks?: boolean; wet?: boolean; blast?: boolean; escort?: boolean; trucks?: boolean; mech?: boolean; spg?: boolean; td?: boolean; cars?: boolean; aa?: boolean; light?: boolean; fog?: boolean; seen?: number[]; designYears?: Record<string, number>; sky?: LiveSky; latLon?: [number, number] } | null,
   ) {
     // The campaign's TC.battleLook answer as it stands ({ ticket, live: { fog, seen, designYears, sky } }), or a bare ticket.
     const look = 'ticket' in ticketOrLook && ticketOrLook.ticket ? ticketOrLook : null;
     const ticket = look ? look.ticket : (ticketOrLook as FieldTicket<LandPlace>);
     const o = { ...(look?.live ?? {}), ...(opts ?? {}) };
+    // (release 1.5: the place on the earth the campaign's card sends, live.latLon, so the 3D game lays the field the
+    // card weighed, desert or steppe or bocage, under that latitude's sun; without it, as before)
+    const sky = o.sky ?? (Array.isArray(o.latLon) && o.latLon.length === 2 ? { ...ticketSky(o.wet === false ? { ...ticket, weather: undefined } : ticket), latLon: o.latLon } : undefined);
     live = liveTicket(ticket, {
       me: o.me ?? null, setup: !!o.setup, platoons: o.platoons !== false, staff: o.staff !== false, radio: o.radio !== false,
       hide: o.hide !== false, armour: o.armour !== false, names: o.names !== false, relief: o.relief !== false, rider: o.rider !== false,
       cutters: o.cutters !== false, smoke: o.smoke !== false, bocage: !!o.bocage,
-      phones: o.phones !== false, bearers: o.bearers !== false, patrol: o.patrol !== false, captured: o.captured !== false, worn: o.worn !== false, mud: o.mud !== false, scars: o.scars !== false, blast: o.blast === true, escort: o.escort === true, mech: o.mech === true, spg: o.spg === true, td: o.td === true, cars: o.cars === true, aa: o.aa === true, light: o.light === true,
-      fog: !!o.fog, seen: o.seen ?? [], designYears: o.designYears ?? {}, ...(o.sky ? { sky: o.sky } : {}),
+      phones: o.phones !== false, bearers: o.bearers !== false, patrol: o.patrol !== false, captured: o.captured !== false, worn: o.worn !== false, mud: o.mud !== false, scars: o.scars !== false, wrecks: o.wrecks !== false, wet: o.wet !== false, blast: o.blast === true, escort: o.escort === true, trucks: o.trucks === true, mech: o.mech === true, spg: o.spg === true, td: o.td === true, cars: o.cars === true, aa: o.aa === true, light: o.light === true,
+      fog: !!o.fog, seen: o.seen ?? [], designYears: o.designYears ?? {}, ...(sky ? { sky } : {}),
     });
     return live.header();
   },
@@ -122,6 +128,9 @@ function need(): LiveBattle {
     const p = c as { x?: number; y?: number; x0?: number; y0?: number; x1?: number; y1?: number };
     if (!ok && o.do === 'land:cut' && o.units?.length) return { ok, why: need().cutWhy(Number(o.units[0]), p.x, p.y) ?? '' };
     if (!ok && o.do === 'land:smoke' && o.units?.length) return { ok, why: need().smokeWhy(Number(o.units[0]), p.x0, p.y0, p.x1, p.y1) ?? '' };
+    // (an army that may not fall back, and any order to an army already falling back: all fall back)
+    if (!ok && o.do === 'land:fallBack') return { ok, why: need().fallBackWhy() ?? '' };
+    if (!ok && need().fallingBack()) return { ok, why: 'Your army is falling back: it takes no new orders.' };
     // (and a night patrol refused)
     const n = c as { unit?: number };
     if (!ok && o.do === 'land:patrol') return { ok, why: need().patrolWhy(Number(n.unit ?? o.units?.[0])) ?? '' };
@@ -130,6 +139,10 @@ function need(): LiveBattle {
 
   landWaitWhy(id: number) {
     return need().waitWhy(Number(id));
+  },
+
+  landFallBackWhy() {
+    return { why: need().fallBackWhy() };
   },
 
   landCutWhy(id: number, x?: number | null, y?: number | null) {

@@ -5054,13 +5054,13 @@
   },
   "air_far": {
    "_how": "The air scene's far forms (its 11-22 ask, so its trail room can go from 24 to 60 at 150 aircraft); OFF until the air scene and the art director take them. trails_on: a trail past trails_from_m is laid as about trails_puffs puffs over its length, each that much farther apart and reaching back to the last as much farther, its hanging bars one in trails_keep_one_in of those puffs, so it is the same line in fewer, longer pieces; it goes over by degrees across the last trails_band of the range, so no length of a trail switches form, and nothing laid changes as the eye closes in. The art director's mends of 18:44Z: until the bar over them is laid, a far trail's short pieces stand in for it, as dark as the two would be together, so the smoke behind a far aircraft is never pale; each bar comes into sight point by point along it by the age there; and every far piece's sides swell and pinch by up to trails_billow of its width at each point along it (and a little more each side on its own), so a far trail billows and its edges are broken, never a smooth contrail. guns_on: a gun past guns_from_m flies no rounds; every guns_dash_s it lays one solid dash in its tracer core's colour along the aim, guns_dash_flight_s of a round's flight long, as wide as the far tracer's dash, carried with the aircraft; it takes up its rounds again where the dashes leave off. Cloud rig (five burning aircraft, 0.8 to 2.2 km, 60 m/s, guns in bursts): a far trail holds about 35 to 40 pieces against about 128, as dark all along as today's (averaged over five moments, within a few levels), with no jump frame to frame; a far gun lays a quarter of the pieces.",
-   "trails_on": 0,
+   "trails_on": 1,
    "trails_from_m": 1200,
    "trails_band": 0.15,
    "trails_puffs": 40,
    "trails_keep_one_in": 3,
    "trails_billow": 0.25,
-   "guns_on": 0,
+   "guns_on": 1,
    "guns_from_m": 1500,
    "guns_dash_s": 0.2,
    "guns_dash_flight_s": 0.12
@@ -6779,9 +6779,9 @@
     "vehicles": {
      "low": {
       "sand": [
-       170,
-       140,
-       106
+       205,
+       190,
+       160
       ]
      },
      "high": {
@@ -6794,7 +6794,7 @@
     }
    }
   },
-  "_targets_grade": "normandy",
+  "_targets_grade": "desert with the fire's spread",
   "grounds": {
    "earth": {
     "paint": {
@@ -6852,24 +6852,24 @@
       53
      ],
      "soil": [
-      173,
-      142,
-      83
+      171,
+      146,
+      116
      ],
      "heavy": [
-      138,
-      112,
-      67
+      130,
+      111,
+      94
      ],
      "dust": [
-      214,
-      171,
-      89
+      220,
+      184,
+      129
      ],
      "smoke": [
-      194,
-      156,
-      93
+      196,
+      165,
+      126
      ]
     }
    }
@@ -6907,19 +6907,20 @@
    "vehicles": {
     "low": {
      "sand": [
-      192,
-      147,
-      84
+      231,
+      197,
+      162
      ]
     },
     "high": {
      "sand": [
-      232,
-      193,
-      122
+      240,
+      199,
+      176
      ]
     }
    }
-  }
+  },
+  "_desert_dust": "Art director, 03:04Z 24 November (release 1.5, Sidi Barrani on 849c1bc1): the tank dust was mustard, 201,158,50, and read as a coloured smoke grenade; it should be the ground's colour, about 205,190,160 at the root, thinning. Two things put it there. The sand row above was written for Normandy's grade (_targets_grade), but the desert's recording carries its own (land_grade.py GRADES desert: middles 0.66, contrast 1.25, 0.6 stops down), under which the old low dust landed 168,131,83, deeper than its 170,140,106; and the fire's spread after the grade (M_FireSpread, on the land battle's lens since 22 November) takes any kit pixel of fire's hue, orange to yellow, deep in colour (saturation past 0.30) for fire and doubles its colour: 168,131,83 went to 200,149,32. So the vehicles' sand dust is written again with land_grade.py retarget <recipe> desert (which now inverts the spread too, land_grade.unspread): low to land on 205,190,160 (_targets, the art director's new number), high on 210,196,170 as ruled at 06:48Z; both under the spread's deep-colour line, so the dust between them stays the ground's buff, never fire. The shells' paints on sand (soil, heavy jets, dust, smoke) were the same: Normandy-written, they landed after the desert's grade and the spread at 174,130,30, 119,85,14, 220,160,39 and 198,149,40, orange and mustard; written again the same way they land on the art director's passed 150,128,95, 96,78,55, 196,174,135 and 176,152,118. Sand's stones and clods stay as passed."
  }
 }

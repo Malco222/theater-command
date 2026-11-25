@@ -6,6 +6,7 @@
 #include "Battle/AirSky.h"
 #include "Battle/LandBattleScreen.h"
 #include "Battle/LandBattleState.h"
+#include "Battle/LandBench.h"
 #include "Battle/LandCarpet.h"
 #include "Battle/LandFell.h"
 #include "Battle/LandLive.h"
@@ -933,6 +934,41 @@ namespace LandParts
 					M.Muzzle = LandPlay::Vec(Muzzle.X, Muzzle.Y, Muzzle.Z);
 				}
 				S.Sight.Add(M);
+			}
+		}
+		// (the old wrecks, release 2: where the scene laid them, still, so the camera keeps out of them as it keeps out
+		// of the battle's own; none laid, none added)
+		for (size_t K = 0; K < S.OldWrecks.Hulks().size(); ++K)
+		{
+			const LandHulk::Hulk& H = S.OldWrecks.Hulks()[K];
+			const LandKit::Model* Look = S.OldWrecks.ModelOf(K);
+			if (!Look)
+			{
+				continue;
+			}
+			LandSight::Machine M;
+			M.Root = LandPlay::Vec(H.X, H.Y, H.Z);
+			M.Heading = H.Heading;
+			M.Turret = H.Heading + FMath::DegreesToRadians(H.Turret);
+			M.HullLo = LandPlay::Vec(Look->HullLo.X, Look->HullLo.Y, Look->HullLo.Z);
+			M.HullHi = LandPlay::Vec(Look->HullHi.X, Look->HullHi.Y, Look->HullHi.Z);
+			M.bTurret = Look->Turret >= 0 && !H.bTurretOff;
+			M.TurretLo = LandPlay::Vec(Look->TurretLo.X, Look->TurretLo.Y, Look->TurretLo.Z);
+			M.TurretHi = LandPlay::Vec(Look->TurretHi.X, Look->TurretHi.Y, Look->TurretHi.Z);
+			S.Sight.Add(M);
+			// (her thrown turret, a still machine of its own where it lies, up to some 7 m off her: on its side it stands
+			// as tall as a man, and a tilted one holds its gun up two metres; its box and muzzle as LandHulk settled it)
+			if (H.bTurretOff)
+			{
+				LandSight::Machine Thrown;
+				Thrown.Root = LandPlay::Vec(H.TurretX, H.TurretY, H.TurretZ);
+				Thrown.Heading = H.TurretYaw;
+				Thrown.HullLo = LandPlay::Vec(H.TurretBoxLo.X, H.TurretBoxLo.Y, H.TurretBoxLo.Z);
+				Thrown.HullHi = LandPlay::Vec(H.TurretBoxHi.X, H.TurretBoxHi.Y, H.TurretBoxHi.Z);
+				Thrown.bTurret = false;
+				Thrown.bMuzzle = H.bTurretGun;
+				Thrown.Muzzle = LandPlay::Vec(H.TurretMuzzle.X, H.TurretMuzzle.Y, H.TurretMuzzle.Z);
+				S.Sight.Add(Thrown);
 			}
 		}
 	}
@@ -2087,6 +2123,7 @@ bool ALandBattle::Open()
 	// And the tracks' marks, on the same ground and paint (none across a dug hole's bowl).
 	S.Ruts.Begin([FieldPtr](double X, double Y) { return FieldPtr->HeightAt(X, Y); }, [FieldPtr](double X, double Y) { return FieldPtr->ColourAt(X, Y); },
 		LandCrater::Ruts::KindOn(*FieldPtr));
+	S.Ruts.Snow = FieldPtr->SnowLying();
 	{
 		const LandCrater::Field* DugHoles = &S.Holes;
 		S.Ruts.DugAt = [DugHoles](double X, double Y) { return DugHoles->InCut(X, Y); };
@@ -2097,6 +2134,7 @@ bool ALandBattle::Open()
 	LayField();
 	LayScars();
 	LayOldRuts();
+	LayOldWrecks();
 	const double LaySeconds = LandParts::Seconds() - Took;
 	MakeFlags();
 	HideTheTable();
@@ -2555,6 +2593,50 @@ void ALandBattle::LayThings()
 		}
 		RungTreePlain = TreeFarFrom > 0.0f ? 0.0f : Rung.TreePlain;
 		RungShrubPlain = ShrubFarFrom > 0.0f ? 0.0f : Rung.ShrubPlain;
+	}
+	// The bocage (no region, and not the steppe), release 1.5's 45 fps gate: the ladder's third rung as its own draw. The
+	// Mac's A7 on 849c1bc1 drew the old distances at 37 frames a second at 40 s and 60 s of battle, this rung at 46 and 43,
+	// bound by the graphics chip and the draw thread, not by the men; the art director passed its look (24 Nov). Its
+	// hedges' shadows reach 150 m, not the rung's 120: the shadowed foot of the far hedge across a field is what boxes the
+	// field in. "-TheaterLandBocageRung=0..4" draws another rung (-1: the distances above); each "-TheaterLand<name>="
+	// still wins.
+	if (Step < 0 && !State->Rec.Ground.Steppe.bOn)
+	{
+		int32 BocageRung = 2;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandBocageRung="), BocageRung);
+		if (BocageRung >= 0)
+		{
+			const FRung& Rung = Ladder[FMath::Clamp(BocageRung, 0, 4)];
+			auto Said = [](const TCHAR* Key) {
+				float Value = 0.0f;
+				return FParse::Value(FCommandLine::Get(), Key, Value);
+			};
+			if (!Said(TEXT("TheaterLandShrubFarFrom=")))
+			{
+				ShrubFarFrom = Rung.ShrubPlain;
+			}
+			if (!Said(TEXT("TheaterLandTreeFarFrom=")))
+			{
+				TreeFarFrom = Rung.TreePlain;
+			}
+			if (!Said(TEXT("TheaterLandCrownFrom=")))
+			{
+				CrownFrom = Rung.Crown;
+			}
+			if (!Said(TEXT("TheaterLandTreesTo=")))
+			{
+				TreesTo = Rung.Trees;
+			}
+			if (!Said(TEXT("TheaterLandShrubsTo=")))
+			{
+				ShrubsTo = Rung.Shrubs;
+			}
+			if (!Said(TEXT("TheaterLandShrubShadowTo=")))
+			{
+				ShrubShadowTo = FMath::Min(150.0f, ShrubsTo);
+			}
+			UE_LOG(LogTheater, Display, TEXT("Land battle: the bocage drawn at the ladder's rung %d (-TheaterLandBocageRung=; -1 the old distances)"), FMath::Clamp(BocageRung, 0, 4));
+		}
 	}
 	double SaidShrubFar = 0.0, SaidTreeFar = 0.0;
 	int32 Instances = 0, Meshes = 0;
@@ -3039,7 +3121,9 @@ void ALandBattle::LayThings()
 	};
 	Carpet->Stands = [this](const LandField::Placed& One) -> bool
 	{
-		return !State.IsValid() || (!State->Holes.Bare(One.X, One.Y) && !State->Ruts.Flat(One.X, One.Y));
+		// (and none under an old wreck, her thrown turret or her run-off track, nor on her scorched patch while it is
+		// fresh: LandHulk's Covers, false at once where none was laid)
+		return !State.IsValid() || (!State->Holes.Bare(One.X, One.Y) && !State->Ruts.Flat(One.X, One.Y) && !State->OldWrecks.Covers(One.X, One.Y));
 	};
 	// (the corn's clearing round the lens: none until the eye is low, LayClutter)
 	Carpet->Clear.assign(static_cast<size_t>(Kinds), 0.0);
@@ -4120,6 +4204,14 @@ void ALandBattle::MakeArmour()
 	};
 	auto Armour = std::make_unique<LandKit::Battle>();
 	Armour->Life = S.Life;
+	// Men in lorries (the Battle rules card's row, a live battle's: the rules seat the men): the lorries' tilts stowed,
+	// so the men on their benches are seen (RideLorries)
+	S.bTrucks = S.Rec.bLive && FLandLive::RuleNow(TEXT("trucks"));
+	Armour->bOpenLorries = S.bTrucks;
+	if (S.bTrucks)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle: men in lorries ON: seated on the benches, the tilts stowed, getting down one at a time"));
+	}
 	// Tanks rolling smoothly (release 2, -TheaterLandSmoothTanks, or -TheaterLandSmoothTanks=<seconds> up to 0.45; Brian,
 	// 23 November: "have the tanks move more smooth and not rigid and zig zagging"): each tank's line blended over 0.4
 	// battle seconds either way and her hull along it (LandKit::Vehicle::SmoothTanks). Off: every tank on the rules' line
@@ -4471,6 +4563,92 @@ void ALandBattle::RideTanks()
 	}
 }
 
+void ALandBattle::RideLorries()
+{
+	LAND_SCOPE(RideLorries);
+	FLandBattleState& S = *State;
+	if (!S.bTrucks || !S.Men || !S.Armour)
+	{
+		return;
+	}
+	std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
+	// (her by her block and her track's k; a lorry with benches, a way down and the men's clips' places on her)
+	std::map<std::pair<int, int>, int> LorryOf;
+	for (size_t V = 0; V < All.size(); ++V)
+	{
+		const LandKit::Model& Look = All[V].Look();
+		if (All[V].Words().Role == "lorry" && Look.SocketIndex("rider.1") >= 0 && Look.SocketIndex("step") >= 0)
+		{
+			LorryOf[{ All[V].Words().Block, All[V].Words().K }] = static_cast<int>(V);
+		}
+	}
+	const int Men = S.Men->Count();
+	if (S.LorryRider.size() < static_cast<size_t>(Men))
+	{
+		S.LorryRider.resize(static_cast<size_t>(Men), -1);
+	}
+	const double Now = S.Battle;
+	const double Life = S.Life;
+	bool bAdded = false;
+	auto Hide = [&S](int Rider)
+	{
+		if (Rider >= 0)
+		{
+			S.Men->SetRide(Rider, LandMen::Crowd::Ride());
+		}
+	};
+	for (int Man = 0; Man < Men; ++Man)
+	{
+		if (S.Men->IsRider(Man))
+		{
+			continue;
+		}
+		int& Rider = S.LorryRider[static_cast<size_t>(Man)];
+		int Block = -1, SeatOn = -1, Seat = -1;
+		double Down = -1.0;
+		const auto Her = S.Men->AboardOf(Man, Block, SeatOn, Seat, Down) ? LorryOf.find({ Block, SeatOn }) : LorryOf.end();
+		const int Socket = LandBench::SocketOf(Seat);
+		if (Her == LorryOf.end() || Socket <= 0)
+		{
+			Hide(Rider);
+			continue;
+		}
+		LandKit::Vehicle& V = All[static_cast<size_t>(Her->second)];
+		// (her way down thrown open as her first man starts down)
+		if (Down >= 0.0)
+		{
+			V.OpenBoard(Now - Down);
+		}
+		const double Near = FVector::Dist2D(FVector(S.Pose.Eye.X, S.Pose.Eye.Y, 0.0), FVector(V.Root.At.X, V.Root.At.Y, 0.0));
+		if (V.Fade < 0.5 || HiddenVehicle(Her->second) || Near > 160.0)
+		{
+			Hide(Rider);
+			continue;
+		}
+		if (Rider < 0)
+		{
+			Rider = S.Men->AddRiderLike(Man);
+			bAdded = bAdded || Rider >= 0;
+			if (Rider < 0)
+			{
+				continue;
+			}
+		}
+		const LandMen::Soldier* Sol = S.Men->SoldierOf(Rider);
+		LandMen::Crowd::Ride Ride;
+		if (!Sol || !LandBench::RideFor(V, *Sol, Seat, Down, Now, Life, Man, Ride))
+		{
+			Hide(Rider);
+			continue;
+		}
+		S.Men->SetRide(Rider, Ride);
+	}
+	if (bAdded)
+	{
+		MenDrawn.SetNum(S.Men->Count());
+	}
+}
+
 void ALandBattle::BailOut()
 {
 	// Effects (R2): the crews' bail-out (-TheaterLandBailOut, LandBail; Brian, 23 November: "if a tank gets hit people
@@ -4520,11 +4698,12 @@ void ALandBattle::BailOut()
 		}
 		// (tankers where the army has them, the art director's notes of 23 November: "riflemen climbing out of a Tiger
 		// would break it at once". Her second note: an army with no tankers' file still bails out, in its own infantry
-		// figure with the rifle hidden, "a man with a pack is a far smaller fault than no one getting out"; said once,
-		// until the soldiers' thread makes its tankers' file)
-		const std::string Tankers = Veh.Nation == "USA" ? std::string("USA_tanker") : Veh.Nation == "GER" ? std::string("GER_panzer") : std::string();
-		const bool bTankers = !Tankers.empty() && S.Men->SoldierFile(Tankers);
-		const std::string File = bTankers ? Tankers : Veh.Nation;
+		// figure with the rifle hidden, "a man with a pack is a far smaller fault than no one getting out"; and now his pack
+		// and webbing left off where his file marks them, pack_tris (Crowd::CrewDress: "other armies own men, no
+		// rifle/pack"); said once, until the soldiers' thread makes its tankers' file)
+		const LandMen::Crowd::Dress Dressed = S.Men->CrewDress(Veh.Nation);
+		const bool bTankers = Dressed.bTankers;
+		const std::string File = Dressed.File;
 		if (!bTankers)
 		{
 			static TSet<FString> Told;
@@ -4532,10 +4711,12 @@ void ALandBattle::BailOut()
 			if (!Told.Contains(Nation))
 			{
 				Told.Add(Nation);
-				UE_LOG(LogTheater, Log, TEXT("Land battle: no tankers' soldier file for %s: their crews bail out in the infantry figure, rifle hidden (bail-out)"), *Nation);
+				const LandMen::Soldier* Worn = File.empty() ? nullptr : S.Men->SoldierFile(File);
+				UE_LOG(LogTheater, Log, TEXT("Land battle: no tankers' soldier file for %s: their crews bail out in the infantry figure, rifle hidden, %s (bail-out)"), *Nation,
+					!Worn ? TEXT("but no infantry file either: none drawn") : Worn->PackCount[LandMen::Near] > 0 ? TEXT("pack off") : TEXT("pack on (the file marks none)"));
 			}
 		}
-		if (!S.Men->SoldierFile(File))
+		if (File.empty() || !S.Men->SoldierFile(File))
 		{
 			continue;
 		}
@@ -4663,7 +4844,7 @@ void ALandBattle::BailOut()
 			H.Vehicle = static_cast<int>(V);
 			H.K = K;
 			H.File = File;
-			H.Man = S.Men->AddRider(File, Veh.Nation, W.Seed ^ ((K + 1) * 0x9E3779B97F4A7C15ull));
+			H.Man = S.Men->AddRider(File, Veh.Nation, W.Seed ^ ((K + 1) * 0x9E3779B97F4A7C15ull), Dressed.Row, Dressed.bBareHead, Dressed.bNoPack);
 			if (H.Man >= 0)
 			{
 				S.Bails.Men.push_back(H);
@@ -4977,6 +5158,12 @@ void ALandBattle::SeatCarriers()
 		const LandKit::Vehicle& Veh = All[V];
 		// (not while she is off the field or hidden: her men aboard are hers to hide too)
 		if (Veh.Fade < 0.5 || HiddenVehicle(static_cast<int32>(V)))
+		{
+			continue;
+		}
+		// (the release 2 assembly: with Men in lorries on, a lorry with benches and a way down is RideLorries' to seat,
+		// her men drawn as riders on her benches and getting down over her tailboard; a half-track's men sit here)
+		if (S.bTrucks && Veh.Words().Role == "lorry" && Veh.Look().SocketIndex("rider.1") >= 0 && Veh.Look().SocketIndex("step") >= 0)
 		{
 			continue;
 		}
@@ -5903,6 +6090,21 @@ void ALandBattle::HideTheTable()
 				const bool bShafts = bSunShafts && Day.Overcast < 0.5 && bLowSun;
 				if (bShafts)
 				{
+					// (Release 2 assembly, the ship list's review: the map's speed trims turn the engine's light shafts off
+					// for the whole game, r.LightShaftQuality 0 in ACampaignPlayerController::BeginPlay, and nothing put them
+					// back, so a battle asked for its shafts drew none. On for this battle, and the map's own again as the
+					// battle ends, with the other kept trims.)
+					if (IConsoleVariable* ShaftQuality = IConsoleManager::Get().FindConsoleVariable(TEXT("r.LightShaftQuality")))
+					{
+						if (ShaftQuality->GetInt() < 1)
+						{
+							if (!KeptTrims.ContainsByPredicate([](const TPair<FString, FString>& Kept) { return Kept.Key == TEXT("r.LightShaftQuality"); }))
+							{
+								KeptTrims.Add(TPair<FString, FString>(TEXT("r.LightShaftQuality"), ShaftQuality->GetString()));
+							}
+							ShaftQuality->Set(1, ECVF_SetByCode);
+						}
+					}
 					KeyLight->SetEnableLightShaftOcclusion(true);
 					KeyLight->SetOcclusionMaskDarkness(0.55f);
 					KeyLight->SetEnableLightShaftBloom(true);
@@ -5922,7 +6124,28 @@ void ALandBattle::HideTheTable()
 			// side and a hedge's underside catch. The art director on cut 4, fix 2. "-TheaterLandSkyBelow=0" keeps it black)
 			double Below = 0.3;
 			LandLook::Asked(TEXT("TheaterLandSkyBelow="), { &Below });
-			const FLinearColor Field = FLinearColor::FromSRGBColor(FColor(118, 116, 72)) * static_cast<float>(FMath::Clamp(Below, 0.0, 1.0));
+			// (on snow the bounce is the snow's, white and strong: lit snow is near as bright as the sky over it, and lights
+			// whatever faces it. The art director on Valdai, 24 Nov: a hull's shaded side read black, 18-22 against snow at
+			// 165, where the snow lifts it to 55-75. "-TheaterLandSnowBelow=" its strength at full snow, 2 (the Mac at
+			// Valdai on d40cc95d, the hull's shaded side: 0.85 gave 38, 1.5 52, 2 62, open snow 159 throughout); the snow
+			// lying, 0 to 1, takes it from the field's colour to the snow's)
+			const double Snowed = State.IsValid() && State->Field ? FMath::Clamp(State->Field->SnowLying(), 0.0, 1.0) : 0.0;
+			double SnowBelow = 2.0;
+			LandLook::Asked(TEXT("TheaterLandSnowBelow="), { &SnowBelow });
+			const FLinearColor Bare = FLinearColor::FromSRGBColor(FColor(118, 116, 72)) * static_cast<float>(FMath::Clamp(Below, 0.0, 1.0));
+			const FLinearColor Snowy = FLinearColor::FromSRGBColor(FColor(214, 220, 232)) * static_cast<float>(FMath::Clamp(SnowBelow, 0.0, 4.0));
+			const FLinearColor Field = FMath::Lerp(Bare, Snowy, static_cast<float>(Snowed));
+			// (the engine lays this colour over the sky's lower half only when the lower half is a solid colour, which
+			// the flag the engine still calls "black" says: with it off, as it was, the colour was ignored and the lower
+			// half was the table's cubemap's dark ground, so the hull's shaded side stayed 18-22 on the Mac at Valdai,
+			// 9ebf1fcc. Turned on where snow lies as the campaign names a snowy field (0.25 and more, FieldLookAt's
+			// "+snow"); elsewhere the lower half stays the cubemap's, as every other look passed with. Its alpha is set
+			// to 1, as the air battle's light from below (AirBattle.cpp): the scalings above carry into the alpha (0.78 at
+			// full snow, past 1 above 1.15) and the engine may weigh the colour by it. "-TheaterLandSnowBelowOld" keeps
+			// the cubemap's on snow too, to set the two side by side)
+			const bool bSolidBelow = Snowed >= 0.25 && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandSnowBelowOld"));
+			UE_LOG(LogTheater, Display, TEXT("Land battle look: the sky's lower half (the ground's bounce) %.3f, %.3f, %.3f (the snow lying %.2f; snow's strength %.2f, -TheaterLandSnowBelow=), %s"), Field.R, Field.G, Field.B, Snowed, SnowBelow,
+				bSolidBelow ? TEXT("laid as a solid colour") : Snowed >= 0.25 ? TEXT("the cubemap's own (-TheaterLandSnowBelowOld)") : TEXT("the cubemap's own (little or no snow)"));
 			for (USkyLightComponent* Sky : Skies)
 			{
 				FKeptSky& Kept = KeptSkies.AddDefaulted_GetRef();
@@ -5933,8 +6156,8 @@ void ALandBattle::HideTheTable()
 				Kept.Lower = Sky->LowerHemisphereColor;
 				if (Below > 0.0)
 				{
-					Sky->bLowerHemisphereIsBlack = false;
-					Sky->LowerHemisphereColor = Field;
+					Sky->bLowerHemisphereIsBlack = bSolidBelow;
+					Sky->SetLowerHemisphereColor(FLinearColor(Field.R, Field.G, Field.B, 1.0f));
 					Sky->RecaptureSky();
 				}
 			}
@@ -5957,10 +6180,23 @@ void ALandBattle::HideTheTable()
 	double SkyBright = 1.3, SkyAir = 1.0, SkyDust = LookAir.bSet ? LookAir.SkyDust : 0.6, HazeOver = 1.0;
 	LandLook::Asked(TEXT("TheaterLandSky="), { &SkyBright, &SkyAir, &SkyDust, &HazeOver });
 	const float SkyShine = static_cast<float>(FMath::Max(0.0, SkyBright) * (1.0 - 0.45 * Day.Overcast));
+	// The sky overhead lifted as the sun climbs (the art director on 849c1bc1: Baghdad's zenith 50,59,74 with the sun 61
+	// degrees up, "a night storm over Iraq", and Voronezh's 63,71,85 at 52; it should be a pale hazy blue, about
+	// 120,145,185, near white at the horizon). The field's light grows with the sun's height (Whole, in Day's lamps) while
+	// the sky the engine draws from the key does not, so under a high sun the field outshone its own sky. The sky's own
+	// pixels only (SkyLuminanceFactor: not the haze over the far ground, and not the sky light, which is the table's
+	// cubemap): as it was to a sun 25 degrees up, rising to SkyLift times at 60 and over. Only the looks that ask it (the
+	// dry steppe's and the farmland's, LandScape's Air); the others' skies keep 1, as they were. "-TheaterLandSkyLift=1"
+	// leaves the sky as it was.
+	double SkyLift = LookAir.SkyLift;
+	LandLook::Asked(TEXT("TheaterLandSkyLift="), { &SkyLift });
+	const double SunDeg = FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(TowardSun.Z, -1.0, 1.0)));
+	const float Lift = static_cast<float>(1.0 + (FMath::Max(1.0, SkyLift) - 1.0) * FMath::SmoothStep(25.0, 60.0, SunDeg));
 	TArray<USkyAtmosphereComponent*> Atmospheres;
 	GetComponents(Atmospheres);
 	for (USkyAtmosphereComponent* Atmosphere : Atmospheres)
 	{
+		Atmosphere->SetSkyLuminanceFactor(FLinearColor(Lift, Lift, Lift));
 		Atmosphere->SetMieAnisotropy(0.75f);
 		Atmosphere->SetRayleighScatteringScale(static_cast<float>(0.0331 * FMath::Max(0.0, SkyAir)));
 		Atmosphere->SetMieScatteringScale(static_cast<float>(0.003996 * FMath::Max(0.0, SkyDust)));
@@ -5985,9 +6221,9 @@ void ALandBattle::HideTheTable()
 	}
 	LightTheBattle();
 	LaySky();
-	UE_LOG(LogTheater, Display, TEXT("Land battle look: %s, cover %.2f (overcast %.2f), clouds from %.0f m; the sun %.0f degrees up; key %.2f, the sky's fill %.2f at %.0f K and the sky light %.2f, shaded open ground %.2f of sunlit in light before the grade; the haze from %.0f m, %.4f at the ground (%.0f m), falloff %.3f, at most %.2f; the sky %.2f bright, air %.2f, dust %.2f, haze over it %.2f (%d skies)"),
+	UE_LOG(LogTheater, Display, TEXT("Land battle look: %s, cover %.2f (overcast %.2f), clouds from %.0f m; the sun %.0f degrees up; key %.2f, the sky's fill %.2f at %.0f K and the sky light %.2f, shaded open ground %.2f of sunlit in light before the grade; the haze from %.0f m, %.4f at the ground (%.0f m), falloff %.3f, at most %.2f; the sky %.2f bright (its own pixels %.2f, for the sun's height), air %.2f, dust %.2f, haze over it %.2f (%d skies)"),
 		Day.bDeck ? TEXT("a deck") : TEXT("cumulus"), Day.Cover, Day.Overcast, Day.Base, FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(TowardSun.Z, -1.0, 1.0))),
-		Day.Key, Day.Fill, Day.FillKelvin, Day.SkyLight, Day.Shade, HazeStart, HazeDensity, GroundMean, HazeFalloff, HazeMost, SkyShine, SkyAir, SkyDust, HazeOver, Atmospheres.Num());
+		Day.Key, Day.Fill, Day.FillKelvin, Day.SkyLight, Day.Shade, HazeStart, HazeDensity, GroundMean, HazeFalloff, HazeMost, SkyShine, Lift, SkyAir, SkyDust, HazeOver, Atmospheres.Num());
 }
 
 void ALandBattle::LightTheBattle()
@@ -6704,6 +6940,14 @@ void ALandBattle::Tick(float DeltaSeconds)
 		LAND_SCOPE(PumpLive);
 		PumpLive();
 	}
+	if (bLiveBroken && !S.Rec.bOver && LiveBrokenAt >= 0.0 && RealT - LiveBrokenAt > 6.0)
+	{
+		// (release 1.5: the rules stopped mid-fight and the note has been up six seconds; the scene is destroyed here,
+		// so nothing more of this frame is run. A battle whose end had already come keeps its after card and CONTINUE.)
+		LiveBrokenAt = -1.0;
+		LiveWayOut(TEXT("its rules stopped mid-fight"));
+		return;
+	}
 	LandFell::Phase("tick: the clock");
 	const double Contact = S.Rec.Contact >= 0.0 ? S.Rec.Contact : Live.IsValid() && !S.Rec.bOver ? 1e9 : 0.0;
 	if (S.bOwnSpeed)
@@ -6739,11 +6983,12 @@ void ALandBattle::Tick(float DeltaSeconds)
 		// the near ones they look; the battle-scale plan's GS3)
 		const double Zoom = FMath::Tan(FMath::DegreesToRadians(25.0)) / FMath::Max(0.02, FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(S.Pose.Fov, 2.0, 120.0) * 0.5)));
 		S.Men->SetEye(S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z, Zoom);
-		// (the tank commanders on their tanks as just posed, and the light cars' and motorcycles' men in their seats)
+		// (the tank commanders on their tanks as just posed, the light cars' and motorcycles' men in their seats, and the men in the lorries)
 		RideTanks();
 		BailOut(); // (Effects (R2): the crews' bail-out, -TheaterLandBailOut)
 		RideLight();
 		SeatCarriers();
+		RideLorries();
 		S.Men->Update(Shown);
 	}
 	MenMs += (LandParts::Seconds() - Mark) * 1000.0;
@@ -6820,6 +7065,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 		GeneralViewMs += GenFrameMs;
 	}
 	WalkPan(Real);
+	LorryPan(Real);
 	ReadDark(Real);
 	LandFell::Phase("tick: the dispatches");
 	if (!bNight)
@@ -6868,7 +7114,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// they are drawn this frame), then the shell holes and the tracks dug and settled (the field's: their time is counted
 	// in FieldMs).
 	PlayEffects();
-	FlyOver(); // (Effects (R2): the fighters on call over the field, -TheaterLandAirSupport)
+	FlyOver(EyeWorld); // (Effects (R2): the fighters on call over the field, -TheaterLandAirSupport)
 	Mark = LandParts::Seconds();
 	LandFell::Phase("tick: the breaches");
 	MakeBreaches();
@@ -6917,6 +7163,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	Mark = LandParts::Seconds();
 	LandFell::Phase("tick: the tanks drawn");
 	DrawArmour(EyeWorld);
+	ShowOldWrecks(EyeWorld);
 	DrawArmourMs += (LandParts::Seconds() - Mark) * 1000.0;
 	LandFell::Phase("tick: the men's shades");
 	DrawManShades();
@@ -7114,6 +7361,118 @@ void ALandBattle::WalkPan(double Real)
 		const FString Folder = ShotFolder.IsEmpty() ? FPaths::Combine(FPaths::ProjectSavedDir(), bTankPan ? TEXT("LandTankPan") : TEXT("LandWalkPan")) : ShotFolder;
 		FScreenshotRequest::RequestScreenshot(FPaths::Combine(Folder, FString::Printf(TEXT("%s-%s-%02d.png"), *Key, bTankPan ? TEXT("tankpan") : TEXT("walkpan"), WalkPanStills)), true, false);
 		++WalkPanStills;
+	}
+}
+
+void ALandBattle::LorryPan(double Real)
+{
+	LAND_SCOPE(LorryPan);
+	if (LorryPanAt < 0.0 || !State.IsValid())
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	if (S.Battle < LorryPanAt || !S.Armour || !S.Men)
+	{
+		return;
+	}
+	std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
+	bool bSnap = false;
+	if (LorryPanVehicle < 0)
+	{
+		// (the drawn lorry with the most men seated on her now, of the block asked for if one was, as RideLorries finds
+		// a man's lorry: by her block and her track's k; none, asked again 5 s on)
+		std::map<std::pair<int, int>, int> Aboard;
+		const int Men = S.Men->Count();
+		for (int Man = 0; Man < Men; ++Man)
+		{
+			int Block = -1, SeatOn = -1, Seat = -1;
+			double Down = -1.0;
+			if (!S.Men->IsRider(Man) && S.Men->AboardOf(Man, Block, SeatOn, Seat, Down) && Down < 0.0 && (LorryPanBlock < 0 || Block == LorryPanBlock))
+			{
+				++Aboard[{ Block, SeatOn }];
+			}
+		}
+		int Best = -1, BestMen = 0;
+		for (size_t V = 0; V < All.size(); ++V)
+		{
+			const LandKit::Vehicle& Her = All[V];
+			if (Her.Words().Role != "lorry" || Her.Look().SocketIndex("rider.1") < 0 || Her.Fade < 0.5 || HiddenVehicle(static_cast<int32>(V)))
+			{
+				continue;
+			}
+			const auto Found = Aboard.find({ Her.Words().Block, Her.Words().K });
+			if (Found != Aboard.end() && Found->second > BestMen)
+			{
+				Best = static_cast<int>(V);
+				BestMen = Found->second;
+			}
+		}
+		if (Best < 0)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle: the lorry pan: no drawn lorry with men seated on her at %.0f s%s"), S.Battle,
+				LorryPanTries > 0 ? TEXT("; asked again 5 s on") : TEXT("; none taken"));
+			LorryPanAt = LorryPanTries-- > 0 ? S.Battle + 5.0 : -1.0;
+			return;
+		}
+		LorryPanVehicle = Best;
+		LorryPanHeading = All[static_cast<size_t>(Best)].Heading;
+		LorryPanStillAt = RealT + 0.5;
+		LorryPanStills = 0;
+		// (the side of her with the ground free for the eye, her right first)
+		LorryPanSide = 1;
+		if (S.EyeWorld.Free)
+		{
+			const LandKit::Vehicle& Her = All[static_cast<size_t>(Best)];
+			const double Sn = std::sin(Her.Heading), Cs = std::cos(Her.Heading);
+			const double Rx = Her.Root.At.X - Sn * 12.0 + Cs * 7.0, Ry = Her.Root.At.Y - Cs * 12.0 - Sn * 7.0;
+			const double Rz = (S.EyeWorld.Height ? S.EyeWorld.Height(Rx, Ry) : Her.Root.At.Z) + 3.5;
+			if (!S.EyeWorld.Free(LandPlay::Vec(Rx, Ry, Rz)))
+			{
+				LorryPanSide = -1;
+			}
+		}
+		bSnap = true;
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the lorry pan from %.0f s for %.0f s: the lorry of block %d, k %d (vehicle %d), %d men seated on her, at %.0f, %.0f; the eye off her %s rear quarter"),
+			S.Battle, LorryPanFor, All[static_cast<size_t>(Best)].Words().Block, All[static_cast<size_t>(Best)].Words().K, Best, BestMen,
+			All[static_cast<size_t>(Best)].Root.At.X, All[static_cast<size_t>(Best)].Root.At.Y, LorryPanSide > 0 ? TEXT("right") : TEXT("left"));
+		// (its length from the moment she is found)
+		LorryPanAt = S.Battle;
+	}
+	if (S.Battle >= LorryPanAt + LorryPanFor || static_cast<size_t>(LorryPanVehicle) >= All.size())
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the lorry pan done at %.0f s: %d stills"), S.Battle, LorryPanStills);
+		LorryPanAt = -1.0;
+		LorryPanVehicle = -1;
+		// (the film's own shot again, laid round as on a cut)
+		S.Pose.bCut = true;
+		return;
+	}
+	const LandKit::Vehicle& Her = All[static_cast<size_t>(LorryPanVehicle)];
+	// Her heading eased over about a second (a lorry turning on a lane does not swing the eye round at once); the eye
+	// off her rear quarter, looking into her bed a metre behind her middle, at a man's chest over her floor.
+	const double Turn = FMath::UnwindRadians(Her.Heading - LorryPanHeading);
+	LorryPanHeading += bSnap ? Turn : Turn * (1.0 - FMath::Exp(-FMath::Max(0.0, Real) / 1.0));
+	const double Sn = std::sin(LorryPanHeading), Cs = std::cos(LorryPanHeading);
+	const double Aside = 7.0 * static_cast<double>(LorryPanSide);
+	const double Ex = Her.Root.At.X - Sn * 12.0 + Cs * Aside, Ey = Her.Root.At.Y - Cs * 12.0 - Sn * Aside;
+	const double Ground = S.EyeWorld.Height ? S.EyeWorld.Height(Ex, Ey) : Her.Root.At.Z;
+	S.Pose.Eye = LandPlay::Vec(Ex, Ey, FMath::Max(Ground, Her.Root.At.Z) + 3.5);
+	S.Pose.Look = LandPlay::Vec(Her.Root.At.X - Sn * 1.0, Her.Root.At.Y - Cs * 1.0, Her.Root.At.Z + 1.6);
+	S.Pose.Fov = 40.0;
+	S.Pose.Roll = 0.0;
+	// (sharp through: the low shot's stop, not the watch shot's shallow focus)
+	S.Pose.Shot = LandEye::Kind::Low;
+	S.Pose.Subject = -1;
+	S.Pose.Focus = 0.0;
+	S.Pose.bCut = bSnap;
+	if (RealT >= LorryPanStillAt)
+	{
+		LorryPanStillAt = RealT + 1.0;
+		const FString Folder = ShotFolder.IsEmpty() ? FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("LandLorryPan")) : ShotFolder;
+		FScreenshotRequest::RequestScreenshot(FPaths::Combine(Folder, FString::Printf(TEXT("%s-lorrypan-%02d.png"), *Key, LorryPanStills)), true, false);
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the lorry pan's still %02d at %.1f s"), LorryPanStills, S.Battle);
+		++LorryPanStills;
 	}
 }
 
@@ -8559,6 +8918,8 @@ void ALandBattle::LayOldRuts()
 	};
 	const std::vector<std::vector<std::pair<double, double>>> Ways = LandCrater::OldWays(Fought, Battles, Seed, Gates, Heading, Open);
 	const int Laid = S.Ruts.LayOld(Ways, Months, bWet, Seed);
+	// (kept for the old wrecks, which keep off them: LayOldWrecks)
+	S.OldRutWays = Ways;
 	// (the grass laid again without what stands in a bare rut: dried mud or puddled; grassed over, it stands)
 	if (Carpet.IsValid() && (bWet || Months < 3.0))
 	{
@@ -8572,6 +8933,190 @@ void ALandBattle::LayOldRuts()
 	}
 	UE_LOG(LogTheater, Display, TEXT("Land battle: mud memory: %d pieces of old ruts along %d ways, %d battle(s) fought here in mud before, the last %.0f months ago%s, laid in %.2f s (-TheaterLandNoOldRuts: none)"),
 		Laid, static_cast<int32>(Ways.size()), Battles, Months, bWet ? TEXT(", puddled") : TEXT(""), LandParts::Seconds() - Took);
+}
+
+void ALandBattle::LayOldWrecks()
+{
+	// Old wrecks (release 2; Brian, 23 November 20:09Z: the burnt-out wrecks of a battle stay on the field for the next
+	// battle there; looks only, as the scars and the old ruts: nothing the rules fight reads them): the recording's
+	// "oldWrecks" {count, months, nats, per}, which the campaign writes only while the player's Battle rules row "Old
+	// wrecks" is on (count / per of them drawn: one wreck for as many real machines as a tank in the battle);
+	// -TheaterLandOldWrecks=N (N laid) and -TheaterLandOldWreckMonths=M (how long since they burnt) stand in for it on
+	// any field, the nations then the battle's two sides', for the Mac's off/on line; -TheaterLandNoOldWrecks lays
+	// none. With neither the key nor the stand-in nothing is made, nothing asked and nothing said.
+	FLandBattleState& S = *State;
+	if (!S.Field)
+	{
+		return;
+	}
+	int32 Count = S.Rec.OldWreckCount;
+	double Months = S.Rec.OldWreckMonths;
+	std::vector<std::pair<std::string, int>> Nats = S.Rec.OldWreckNats;
+	bool bStandIn = false;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandOldWrecks="), Count))
+	{
+		// (the stand-in's: the battle's two sides', not the recording's nations; and N laid, not N burnt out, so the
+		// Mac's off/on shots show N (at most 20): its months age their look and the scrap men take none away)
+		Nats.clear();
+		bStandIn = true;
+	}
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandOldWreckMonths="), Months);
+	if (Count <= 0)
+	{
+		return;
+	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoOldWrecks")))
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle: old wrecks: none laid (-TheaterLandNoOldWrecks; %d asked)"), Count);
+		return;
+	}
+	if (S.Rec.bLive)
+	{
+		// (a live battle opens with no tracks fought yet, so no ground fought over to lay them on: an open question for
+		// the art director, LAND-SCENE.md)
+		UE_LOG(LogTheater, Display, TEXT("Land battle: old wrecks: none laid (a live battle: no tracks at its open; %d asked)"), Count);
+		return;
+	}
+	const double Took = LandParts::Seconds();
+	// The field as LandHulk reads it (the cloud test, Tools/land_hulk, the same): the recording's ways, this battle's
+	// blasts, the field's lines and what stands on it, the scars' holes and the old ruts laid just before, the field
+	// telephones' wires (the recording's, or -TheaterLandPhones's made from the battle in Open) and the snow lying.
+	const LandHulk::Field Lay = LandHulk::FieldOf(S.Rec, *S.Field, &S.Holes, S.OldRutWays);
+	LandHulk::Ask Asked;
+	Asked.Count = Count;
+	Asked.Months = FMath::Max(0.0, Months);
+	Asked.Nats = Nats;
+	if (S.Armour)
+	{
+		Asked.Year = S.Armour->Year;
+		Asked.Month = S.Armour->Month;
+		Asked.Terrain = S.Armour->Terrain;
+	}
+	Asked.Seed = S.Rec.Seed ? S.Rec.Seed : 1;
+	Asked.bAsLaid = bStandIn;
+	// (the battle's scale: the key's count is real machines burnt out, a drawn wreck as many of them as a drawn tank)
+	Asked.Per = bStandIn ? 1.0 : S.Rec.OldWreckPer;
+	// (each machine from the battle's own models where it has her and they burnt this month, else read as MakeArmour
+	// reads them and dressed for their own month)
+	const FString Folder = FPaths::ProjectContentDir() / TEXT("Models/Battle");
+	const LandKit::Battle::ReadFn Read = [Folder](const std::string& FileName, std::string& OutText)
+	{
+		FString Text;
+		if (!FFileHelper::LoadFileToString(Text, *(Folder / LandParts::Wide(FileName))))
+		{
+			return false;
+		}
+		OutText = LandParts::Narrow(Text);
+		return true;
+	};
+	const LandKit::Battle* ArmourPtr = S.Armour.get();
+	const LandHulk::Yard::HaveFn Have = [ArmourPtr](const std::string& Name, const std::string& Nation) -> const LandKit::Model*
+	{
+		if (!ArmourPtr)
+		{
+			return nullptr;
+		}
+		const auto Found = ArmourPtr->Models().find(Name + "|" + Nation);
+		return Found == ArmourPtr->Models().end() ? nullptr : &Found->second;
+	};
+	S.OldWrecks.Lay(Lay, Asked, Read, Have);
+	// Each wreck's near and far levels and her scorched patch as static meshes of their own, made now (the vehicles'
+	// steel ink for her, the ground's for the patch), the near shown within LandHulk::NearTo of the eye (ShowOldWrecks).
+	const std::vector<LandHulk::Hulk>& All = S.OldWrecks.Hulks();
+	LandField::Mesh M;
+	int32 Points = 0, Made = 0;
+	for (size_t K = 0; K < All.size(); ++K)
+	{
+		const LandHulk::Hulk& H = All[K];
+		UStaticMeshComponent* Levels[2] = { nullptr, nullptr };
+		for (int32 Level = 0; Level < 3; ++Level)
+		{
+			if (Level < 2)
+			{
+				S.OldWrecks.Dress(K, Level == 0, M);
+			}
+			else
+			{
+				S.OldWrecks.Patch(K, M);
+			}
+			UMaterialInstanceDynamic* Ink = Level < 2 ? SteelInk.Get() : GroundInk.Get();
+			const FString Name = FString::Printf(TEXT("LandOldWreck%d_%d"), static_cast<int32>(K), Level);
+			UStaticMesh* Shape = LandParts::GroundMesh(this, FName(*(Name + TEXT("_Mesh"))), M, Ink, UnitsPerMetre);
+			if (!Shape)
+			{
+				continue;
+			}
+			UStaticMeshComponent* Mesh = NewObject<UStaticMeshComponent>(this, FName(*Name));
+			Mesh->SetupAttachment(Root);
+			Mesh->SetStaticMesh(Shape);
+			Mesh->SetMaterial(0, Ink);
+			Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Mesh->SetCanEverAffectNavigation(false);
+			// (her own shadow, as the battle's armour casts; the patch, lying on the ground, none)
+			Mesh->SetCastShadow(Level < 2);
+			Mesh->SetRelativeLocation(World(H.X, H.Y, H.Z));
+			Mesh->SetVisibility(Level != 1);
+			Mesh->RegisterComponent();
+			GroundKept.Add(Shape);
+			GroundKept.Add(Mesh);
+			Points += static_cast<int32>(M.Points());
+			++Made;
+			if (Level < 2)
+			{
+				Levels[Level] = Mesh;
+			}
+		}
+		OldWreckNear.Add(Levels[0]);
+		OldWreckFar.Add(Levels[1]);
+		OldWreckShownNear.Add(1);
+	}
+	// (the grass and corn already laid round the eye laid again without what stands under a wreck)
+	if (Carpet.IsValid())
+	{
+		for (const LandHulk::Hulk& H : All)
+		{
+			for (const LandHulk::Ring& R : H.Rings)
+			{
+				Carpet->Mark(R.X, R.Y, R.R + 0.5);
+			}
+			Carpet->Mark(H.X, H.Y, FMath::Max(H.PatchLong, H.PatchWide) + 0.5);
+		}
+	}
+	FString Lines;
+	for (const std::string& Line : S.OldWrecks.StandIns)
+	{
+		Lines += TEXT("; ") + LandParts::Wide(Line);
+	}
+	UE_LOG(LogTheater, Display, TEXT("Land battle: old wrecks: %s; %d meshes, %d points, made in %.2f s%s (-TheaterLandNoOldWrecks: none)"),
+		*LandParts::Wide(S.OldWrecks.Said()), Made, Points, LandParts::Seconds() - Took, *Lines);
+}
+
+void ALandBattle::ShowOldWrecks(const FVector& EyeWorld)
+{
+	if (OldWreckShownNear.Num() == 0 || !State.IsValid())
+	{
+		return;
+	}
+	const std::vector<LandHulk::Hulk>& All = State->OldWrecks.Hulks();
+	const double Ex = EyeWorld.Y / UnitsPerMetre, Ey = EyeWorld.X / UnitsPerMetre, Ez = EyeWorld.Z / UnitsPerMetre;
+	for (int32 K = 0; K < OldWreckShownNear.Num() && K < static_cast<int32>(All.size()); ++K)
+	{
+		const LandHulk::Hulk& H = All[static_cast<size_t>(K)];
+		const bool bNear = FMath::Square(H.X - Ex) + FMath::Square(H.Y - Ey) + FMath::Square(H.Z - Ez) < FMath::Square(LandHulk::NearTo);
+		if ((OldWreckShownNear[K] != 0) == bNear)
+		{
+			continue;
+		}
+		OldWreckShownNear[K] = bNear ? 1 : 0;
+		if (UStaticMeshComponent* Near = OldWreckNear.IsValidIndex(K) ? OldWreckNear[K].Get() : nullptr)
+		{
+			Near->SetVisibility(bNear);
+		}
+		if (UStaticMeshComponent* Far = OldWreckFar.IsValidIndex(K) ? OldWreckFar[K].Get() : nullptr)
+		{
+			Far->SetVisibility(!bNear);
+		}
+	}
 }
 
 void ALandBattle::SendDug()

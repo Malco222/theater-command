@@ -16,11 +16,12 @@
 
 import type { Game } from './types';
 import { SHIP_AIR_TIP, airWar, carrierRules, closeRules, groupAt, overOcean } from './air';
-import type { GroupRow, RaidKind, RaidPlan } from './airwar';
+import type { GroupRow, RaidKind, RaidPlan, RaidTarget } from './airwar';
 import {
   airGroupBases, airGroupDecks, airGroupJobs, airfieldAt, fleetView, humanUp, myAirGroups, orderAboard, orderAirBase, orderGroupJob, orderRaid, orderScout, orderSearch, previewRaid, raidMenu,
   raidTargetsFor, searchOptionsFor, wingsOfFleet,
 } from './turn';
+import { afterCard, type AfterCard, type FoughtAir } from './airfought';
 
 export interface PageButton { label: string; act: string; ok: boolean; tip: string; danger?: boolean }
 export interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[] }
@@ -33,6 +34,8 @@ export interface AirActResult {
   /** from is the province the lead group is based in (a carrier wing's port), and fromX, fromY where it took off: its airfield, or its fleet at sea. */
   fly?: { from: number; fromX: number; fromY: number; x: number; y: number; nat: string; bombers: boolean; region: number };
   report?: number;
+  /** A raid fought out as an air battle: its after card, written from what the campaign booked. */
+  after?: AfterCard;
 }
 
 const num = (n: number): string => Math.round(n).toLocaleString('en-US');
@@ -122,13 +125,42 @@ function raidsPage(g: Game): Page | null {
 
 const lossLine = (p: RaidPlan): string => `Chance of success ${pct(p.success)}: ${p.verdict.toLowerCase()}. Likely losses: ${[p.bombers ? `${num(p.bomberLossN)} of ${num(p.bombers)} bombers (${pct(p.bomberLoss)})` : '', p.fighters ? `${num(p.fighterLossN)} of ${num(p.fighters)} fighters` : ''].filter(Boolean).join(', ') || 'none'}${p.foeLossN ? `, for about ${num(p.foeLossN)} enemy fighters` : ''}.`;
 
+/**
+ * Every target of a raid as the sections of its page (Brian, 24 November 2026: "you cant bomb germany from london").
+ * The list used to stop at the twelve nearest, and from London in 1942 those were all in occupied France and
+ * Belgium: no German city could be picked, though the rules have always let bombers fly at any enemy ground in
+ * reach, seen or not. Now nothing in reach is left off. Targets on land that lie in more than one country have a
+ * section for each country and whoever holds it: for a raid on factories and railways, by day or by night, the
+ * enemy's own ground first and then the ground he holds; for every other raid the nearest country first. Inside
+ * a section the nearest target is first, as it always was. One country, or targets at sea, is one list as before.
+ */
+function targetSections(g: Game, kind: RaidKind, all: RaidTarget[], row: (t: RaidTarget) => PageRow, none: string, word = 'TARGET'): Page['sections'] {
+  if (!all.length) return [{ heading: 'TARGETS', text: none, rows: [] }];
+  const groups: { owner: string; holder: string; list: RaidTarget[] }[] = [];
+  if (all.every((t) => !t.sea && g.regions[t.id])) {
+    for (const t of all) {
+      const owner = g.regions[t.id].owner || t.holder;
+      const at = groups.find((x) => x.owner === owner && x.holder === t.holder);
+      if (at) at.list.push(t); else groups.push({ owner, holder: t.holder, list: [t] });
+    }
+  }
+  if (groups.length < 2) return [{ heading: 'TARGETS', text: '', rows: all.map(row) }];
+  // (the sort is stable: among the enemy's own countries, and among the lands he holds, the nearest stays first)
+  if (kind === 'bomb' || kind === 'night') groups.sort((a, b) => Number(b.owner === b.holder) - Number(a.owner === a.holder));
+  const name = (n: string): string => (g.nations[n]?.name ?? n).toUpperCase();
+  return groups.map((x) => ({
+    heading: `${x.owner === x.holder ? name(x.owner) : `${name(x.owner)}, HELD BY ${name(x.holder)}`}  \u00B7  ${x.list.length} ${word}${x.list.length === 1 ? '' : 'S'}`,
+    text: '', rows: x.list.map(row),
+  }));
+}
+
 function targetsPage(g: Game, kind: RaidKind, group: number): Page | null {
   const k = raidMenu(g).find((x) => x.key === kind);
   if (!k) return null;
   const up = humanUp(g);
   const lead = group >= 0 ? [group] : undefined;
   const all = raidTargetsFor(g, kind, group);
-  const rows: PageRow[] = all.slice(0, 12).map((t) => {
+  const row = (t: RaidTarget): PageRow => {
     const p = previewRaid(g, kind, t.id, lead);
     const lines = [`${t.far[0].toUpperCase()}${t.far.slice(1)}. ${t.what ? `${t.what[0].toUpperCase()}${t.what.slice(1)}.` : ''} ${t.groups} of your groups could fly it.`];
     if (p.why) lines.push(p.why);
@@ -136,12 +168,14 @@ function targetsPage(g: Game, kind: RaidKind, group: number): Page | null {
     else lines.push(`With ${p.seats.filter((s) => s.picked).map((s) => s.name).join(', ')}: ${lossLine(p)}`, ...p.effects.slice(0, 1));
     const act = kind === 'recon' ? `scout:${p.picked[0]}:${t.id}` : `open:plan:${kind}:${t.id}:${p.picked.join('.')}`;
     return { nat: t.holder, title: t.name, lines, buttons: [{ label: kind === 'recon' ? 'SEND THE FLIGHT' : 'PLAN THIS RAID', act, ok: up && !p.why, tip: p.why ?? (kind === 'recon' ? '' : 'Choose which groups fly it, and see what meeting up is worth, before you give the order.') }] };
-  });
+  };
+  const none = kind === 'fleet' ? 'No enemy fleet at sea has been found within reach. Search a sea from a group\'s page, or send a fleet to look: a fleet has to be found before it can be struck.' : kind === 'harbour' ? 'No enemy warships lie in a harbour within reach.' : kind === 'town' ? 'No enemy town that your armies stand round or beside is within reach of a bomber group that can still fly.' : 'Move a group to an airfield nearer the enemy, or wait until one that has flown is back.';
+  const sections = targetSections(g, kind, all, row, none);
   return {
     id: group >= 0 ? `raid:${kind}:${group}` : `raid:${kind}`, title: k.label.toUpperCase(),
-    headline: all.length ? `${all.length} target${all.length === 1 ? '' : 's'} in reach, nearest first` : 'No target is in reach',
+    headline: all.length ? `${all.length} target${all.length === 1 ? '' : 's'} in reach, ${sections.length > 1 ? 'by country' : 'nearest first'}` : 'No target is in reach',
     note: k.blurb, top: [{ label: 'BACK', act: group >= 0 ? `open:group:${group}` : 'open:raids', ok: true, tip: '' }],
-    sections: [{ heading: 'TARGETS', text: all.length ? '' : kind === 'fleet' ? 'No enemy fleet at sea has been found within reach. Search a sea from a group\'s page, or send a fleet to look: a fleet has to be found before it can be struck.' : kind === 'harbour' ? 'No enemy warships lie in a harbour within reach.' : kind === 'town' ? 'No enemy town that your armies stand round or beside is within reach of a bomber group that can still fly.' : 'Move a group to an airfield nearer the enemy, or wait until one that has flown is back.', rows }],
+    sections,
   };
 }
 
@@ -180,13 +214,18 @@ function scoutPage(g: Game, id: number): Page | null {
   const x = myAirGroups(g).find((r) => r.id === id);
   if (!x) return null;
   const up = humanUp(g);
-  const rows: PageRow[] = raidTargetsFor(g, 'recon', id).slice(0, 14).map((t) => ({ t, p: previewRaid(g, 'recon', t.id, [id]) })).map(({ t, p }) => ({
-    nat: t.holder, title: t.name, lines: [`${t.far[0].toUpperCase()}${t.far.slice(1)}. ${t.what}. ${p.verdict}.`], buttons: [{ label: 'SEND THE FLIGHT', act: `scout:${id}:${t.id}`, ok: up, tip: p.effects[0] ?? '' }],
-  }));
+  const all = raidTargetsFor(g, 'recon', id);
+  const row = (t: RaidTarget): PageRow => {
+    const p = previewRaid(g, 'recon', t.id, [id]);
+    return { nat: t.holder, title: t.name, lines: [`${t.far[0].toUpperCase()}${t.far.slice(1)}. ${t.what}. ${p.verdict}.`], buttons: [{ label: 'SEND THE FLIGHT', act: `scout:${id}:${t.id}`, ok: up, tip: p.effects[0] ?? '' }] };
+  };
+  // (every province in its reach, by country where there is more than one: targetSections)
+  const sections = all.length ? targetSections(g, 'recon', all, row, '', 'PROVINCE') : [{ heading: 'PROVINCES', text: '', rows: [] as PageRow[] }];
+  if (sections.length === 1) sections[0].heading = 'PROVINCES';
   return {
-    id: `scout:${id}`, title: `A RECONNAISSANCE  ·  ${x.name.toUpperCase()}`, headline: rows.length ? `${rows.length} province${rows.length === 1 ? '' : 's'} it could photograph, nearest first` : x.scouted ? 'It has flown its reconnaissance this month' : 'Nothing in its reach is hidden',
+    id: `scout:${id}`, title: `A RECONNAISSANCE  ·  ${x.name.toUpperCase()}`, headline: all.length ? `${all.length} province${all.length === 1 ? '' : 's'} it could photograph, ${sections.length > 1 ? 'by country' : 'nearest first'}` : x.scouted ? 'It has flown its reconnaissance this month' : 'Nothing in its reach is hidden',
     note: 'A few aircraft photograph one province and the ground beside it: every army there is seen whole until the month ends. One flight a month for each group, beside its raid, and it keeps its patrol.',
-    top: [{ label: 'BACK', act: `open:group:${id}`, ok: true, tip: '' }], sections: [{ heading: 'PROVINCES', text: '', rows }],
+    top: [{ label: 'BACK', act: `open:group:${id}`, ok: true, tip: '' }], sections,
   };
 }
 
@@ -308,7 +347,7 @@ export function airPage(g: Game, id: string, region = -1): Page | null {
 }
 
 /** Something pressed on one of those pages. Null if the action is not one of the air war's. */
-export function airAct(g: Game, action: string): AirActResult | null {
+export function airAct(g: Game, action: string, fought?: FoughtAir): AirActResult | null {
   if (!airWar(g) || !g.human) return null;
   const part = action.split(':');
   if (part[0] === 'raid' && isKind(part[1]) && part.length >= 4) {
@@ -316,13 +355,15 @@ export function airAct(g: Game, action: string): AirActResult | null {
     const first = g.airFleets.find((f) => f.id === list[0]);
     const from = first ? groupAt(g, first) : null;
     const h0 = g.headlines.length;
-    const rep = orderRaid(g, kind, target, list);
+    // A raid fought out as an air battle (src/battle/air) is paid with what the battle reports, inside the dice's run.
+    const rep = orderRaid(g, kind, target, list, fought);
     if (!rep) return { ok: false, note: previewRaid(g, kind, target, list).why ?? 'That raid cannot be flown now.' };
     // A strike at sea is drawn to the sea it was fought over, a raid on land to its province.
     const p = rep.zone >= 0 ? g.seas[rep.zone] : g.regions[target];
     return {
       ok: true, note: g.headlines.slice(h0).map((h) => h.text).join(' '), open: first?.ship !== undefined ? `wings:${first.ship}` : 'airfield', report: rep.id,
       fly: first && from ? { from: first.base, fromX: from.x, fromY: from.y, x: p.x, y: p.y, nat: first.nat, bombers: rep.att.some((s) => s.bmr > 0), region: rep.zone >= 0 ? -1 : target } : undefined,
+      ...(fought ? { after: afterCard(g, rep, fought) } : {}),
     };
   }
   if (part[0] === 'search') {

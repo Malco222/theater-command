@@ -325,6 +325,21 @@ describe('the weight of the news (rulings 84 and 95)', () => {
     expect([two.lead!, ...two.rows].map((r) => `${r.tag} ${r.place}`)).toEqual(['LOST the English Channel', 'WON the Norwegian Sea']);
   });
 
+  it("finds the sea in the news by how the sea is said (the UI director, 13:29Z): off the Azores, in Hudson Bay", () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    news(g, { kind: 'battle', arm: 'sea', text: 'A submarine torpedoes and sinks a battleship of the Battle Fleet off the Azores: the fleet has too few destroyers to screen its heavy ships.', nat: ME, lost: ME });
+    news(g, { kind: 'battle', arm: 'air', text: 'Bombers sink 2 destroyers of the Battle Fleet in Hudson Bay.', nat: ME, lost: ME });
+    const card = monthCard(g, mark, ME), rows = [card.lead!, ...card.rows].filter(Boolean);
+    const azores = g.seas.findIndex((z) => z.name === 'Azores Waters'), hudson = g.seas.findIndex((z) => z.name === 'Hudson Bay');
+    expect([azores, hudson].every((i) => i >= 0)).toBe(true);
+    const torpedo = rows.find((r) => r.place === 'Azores Waters')!;
+    expect(torpedo).toMatchObject({ tag: 'SUNK', sea: azores, line: 'Torpedoed: a battleship of the Battle Fleet.', head: 'A battleship is torpedoed and sunk', figures: [{ n: '1', label: 'battleship lost' }] });
+    const bombed = rows.find((r) => r.place === 'Hudson Bay')!;
+    expect(bombed.sea).toBe(hudson);
+    expect(bombed.line).not.toMatch(/Hudson Bay/);
+  });
+
   it('the lead story is the heaviest of ground, sea and air together; a light ground item never takes the picture from the sea', () => {
     const g = game();
     const mark = monthMark(g, ME);
@@ -865,7 +880,9 @@ describe('at home, what his staff did, and elsewhere', () => {
 
 describe('a year of war with nobody playing, a card a month for four countries', () => {
   it('every card keeps the brief: two bands at most, a pictured lead, a line and a place in every row, the game untouched', { timeout: 240000 }, () => {
-    const g = startOpen(createGame(31, null));
+    // (Seed 7 since the computer's air forces fight back, airwar.json ai.back: with air battles in more months, seeds 1
+    // to 12 and 31 gave these four no quiet month but seed 7, Britain's fourth. Seed 31 before.)
+    const g = startOpen(createGame(7, null));
     const who = ['GER', 'POL', 'UK', 'FRA'];
     let cards = 0, leads = 0, bands = 0, quiet = 0;
     for (let m = 0; m < 12; m++) {

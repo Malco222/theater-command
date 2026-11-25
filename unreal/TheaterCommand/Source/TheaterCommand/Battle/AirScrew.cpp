@@ -199,6 +199,31 @@ namespace AirScrew
 			Out.Screws.push_back(Made);
 			Kept[S] = true;
 		}
+		// (A piece painted blade that is no blade to read on its own, made apart from the blade it wraps (the
+		// Wellington's painted tip bands, 23 November), goes with the screw whose disc holds every point of it, a
+		// quarter of its radius either side of the disc at most: left behind, it would hang still in the turning disc.)
+		std::vector<int> KeptAt(Screws.size(), -1);
+		for (size_t S = 0, At = 0; S < Screws.size(); ++S)
+		{
+			if (Kept[S]) KeptAt[S] = static_cast<int>(At++);
+		}
+		for (size_t B = 0; B < Blades.size() && !Out.Screws.empty(); ++B)
+		{
+			if (ScrewOf[B] >= 0 && Kept[static_cast<size_t>(ScrewOf[B])]) continue;
+			for (size_t S = 0; S < Screws.size(); ++S)
+			{
+				if (!Kept[S]) continue;
+				const Screw& Disc = Out.Screws[static_cast<size_t>(KeptAt[S])];
+				bool bInside = true;
+				for (const int K : Blades[B])
+				{
+					const Vec3 D = Sub(Points[static_cast<size_t>(K)], Disc.Hub);
+					const double Along = Dot(D, Disc.Axis);
+					if (std::fabs(Along) > Disc.Radius * 0.25 || Len(Sub(D, Mul(Disc.Axis, Along))) > Disc.Radius * 1.05) { bInside = false; break; }
+				}
+				if (bInside) { ScrewOf[B] = static_cast<int>(S); break; }
+			}
+		}
 		for (size_t T = 0; T + 2 < Triangles.size(); T += 3)
 		{
 			const int A = Triangles[T];

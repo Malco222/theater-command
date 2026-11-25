@@ -101,6 +101,7 @@ namespace LandScape
 		double KeyKelvin = 0.0;                      // 0: the battle's own
 		double Cover = -1.0;                         // the cloud's usual share (the desert's clear sky), for the cloud painter where
 		                                             // the recording gives its own; the game keeps the battle's weather draw
+		double SkyLift = 1.0;                        // the sky's own pixels under a high sun (LandBattle's SkyLift; 1: as drawn)
 	};
 	Air AirOf(Look L, double Snow);
 

@@ -21,3 +21,135 @@ const forced = G.TC_FAR ?? G.process?.env?.TC_FAR;
 
 /** True where the grand campaign plays on the whole world: the far side's chart is read and its countries exist. */
 export const FAR_STAGE: boolean = forced !== undefined ? !!forced && forced !== '0' : (stage as { far: boolean }).far === true;
+
+// The wolf pack and convoy battle (release 2, ruling 241): the grand campaigns opened while this is true carry the flag
+// 'convoyBattle' (navy.ts convoyRules). A run outside the browser can be given it by its environment: TC_CONVOY=1 node ...
+const C = globalThis as { TC_CONVOY?: unknown; process?: { env?: Record<string, string | undefined> } };
+const convoyForced = C.TC_CONVOY ?? C.process?.env?.TC_CONVOY;
+
+/** True where new grand campaigns open with the convoy battle (data/campaign/stage.json 'convoyBattle'). */
+export const CONVOY_STAGE: boolean = convoyForced !== undefined ? !!convoyForced && convoyForced !== '0' : (stage as { convoyBattle?: boolean }).convoyBattle === true;
+
+// The month's submarine scene (release 2, ruling 241 D1) is a viewing setting, kept outside the rules' save: the
+// screen sets navy.ts subScene. A run outside the browser can start with it on: TC_SUBSCENE=1 node ...
+const subForced = C.process?.env?.TC_SUBSCENE ?? (globalThis as { TC_SUBSCENE?: unknown }).TC_SUBSCENE;
+
+/** True where a run outside the browser starts with the submarine scene's record on. */
+export const SUBSCENE_ENV: boolean = subForced !== undefined && !!subForced && subForced !== '0';
+
+// The fortress rows (data/campaign/stage.json 'fortRows'): forced by TC_FORTS, as the far side's switch is by TC_FAR.
+const forts = (globalThis as { TC_FORTS?: unknown }).TC_FORTS ?? G.process?.env?.TC_FORTS;
+/** True where a grand campaign opens with the fortress rows (the flag is set as it opens: game.ts fortRows). */
+export const FORTS_STAGE: boolean = forts !== undefined ? !!forts && forts !== '0' : (stage as { fortRows?: boolean }).fortRows === true;
+
+// The yield form (data/campaign/stage.json 'yieldRule'; the design director's 07:20Z of 22 November 2026): forced by
+// TC_YIELD, as the far side's switch is by TC_FAR. Off, nothing of the form is read.
+const yields = (globalThis as { TC_YIELD?: unknown }).TC_YIELD ?? G.process?.env?.TC_YIELD;
+/** True where a beaten country yields by cause, and at stops 1-2 by the record's month (src/campaign/yield.ts). */
+export const YIELD_STAGE: boolean = yields !== undefined ? !!yields && yields !== '0' : (stage as { yieldRule?: boolean }).yieldRule === true;
+
+// A neutral's bargains (release 2): the grand campaigns opened while this is true carry the flag 'bargains'
+// (bargains.ts). A run outside the browser can be given it by its environment: TC_BARGAINS=1 node ...
+const B = globalThis as { TC_BARGAINS?: unknown; TC_LEGIONS?: unknown; process?: { env?: Record<string, string | undefined> } };
+const bargainsForced = B.TC_BARGAINS ?? B.process?.env?.TC_BARGAINS;
+
+/** True where new grand campaigns open with a neutral's bargains (data/campaign/stage.json 'bargains'). */
+export const BARGAINS_STAGE: boolean = bargainsForced !== undefined ? !!bargainsForced && bargainsForced !== '0' : (stage as { bargains?: boolean }).bargains === true;
+
+// Volunteer legions (release 2): the grand campaigns opened while this is true carry the flag 'legions' (legions.ts).
+// A run outside the browser can be given it by its environment: TC_LEGIONS=1 node ...
+const legionsForced = B.TC_LEGIONS ?? B.process?.env?.TC_LEGIONS;
+
+/** True where new grand campaigns open with volunteer legions (data/campaign/stage.json 'legions'). */
+export const LEGIONS_STAGE: boolean = legionsForced !== undefined ? !!legionsForced && legionsForced !== '0' : (stage as { legions?: boolean }).legions === true;
+
+// The honest win chance on land (release 2, auto-resolve fix 1): the grand campaigns opened while this is true carry the
+// flag 'winChance' (game.ts luckOf; data/campaign/winchance.json). A run outside the browser can be given it by its
+// environment: TC_WINCHANCE=1 node ...
+const winForced = (globalThis as { TC_WINCHANCE?: unknown }).TC_WINCHANCE ?? G.process?.env?.TC_WINCHANCE;
+
+/** True where new grand campaigns open with the honest win chance on land (data/campaign/stage.json 'winChance'). */
+export const WINCHANCE_STAGE: boolean = winForced !== undefined ? !!winForced && winForced !== '0' : (stage as { winChance?: boolean }).winChance === true;
+
+// Units decide (release 2; src/campaign/units.ts): the grand campaigns opened while this is true carry the flag
+// 'unitsDecide'. Forced by TC_UNITS, as the far side's switch is by TC_FAR.
+const units = (globalThis as { TC_UNITS?: unknown }).TC_UNITS ?? G.process?.env?.TC_UNITS;
+/** True where new grand campaigns open with Units decide (data/campaign/stage.json 'unitsDecide'). */
+export const UNITS_STAGE: boolean = units !== undefined ? !!units && units !== '0' : (stage as { unitsDecide?: boolean }).unitsDecide === true;
+
+// Earned nicknames and supply columns (release 2; Brian's yes of 23 November 2026 12:05Z): the grand campaigns opened
+// while these are true carry the flags 'nicknames' (nicknames.ts) and 'columns' (columns.ts). Forced by TC_NICKNAMES
+// and TC_COLUMNS, as the far side's switch is by TC_FAR.
+const nicks = (globalThis as { TC_NICKNAMES?: unknown }).TC_NICKNAMES ?? G.process?.env?.TC_NICKNAMES;
+/** True where new grand campaigns open with earned nicknames (data/campaign/stage.json 'nicknames'). */
+export const NICKNAMES_STAGE: boolean = nicks !== undefined ? !!nicks && nicks !== '0' : (stage as { nicknames?: boolean }).nicknames === true;
+const cols = (globalThis as { TC_COLUMNS?: unknown }).TC_COLUMNS ?? G.process?.env?.TC_COLUMNS;
+/** True where new grand campaigns open with supply columns (data/campaign/stage.json 'columns'). */
+export const COLUMNS_STAGE: boolean = cols !== undefined ? !!cols && cols !== '0' : (stage as { columns?: boolean }).columns === true;
+
+// The three supply orders on top of the columns (release 2; Brian's yes of 23 November 2026 13:06Z, logistics.ts): the
+// grand campaigns opened while these are true carry the flags 'lorryShift', 'wagons' and 'dumps'. Each does nothing
+// unless the columns run too. Forced by TC_LORRYSHIFT, TC_WAGONS and TC_DUMPS.
+const forcedBy = (name: string): unknown => (globalThis as Record<string, unknown>)[name] ?? G.process?.env?.[name];
+const staged = (env: string, key: string): boolean => {
+  const v = forcedBy(env);
+  return v !== undefined ? !!v && v !== '0' : (stage as Record<string, unknown>)[key] === true;
+};
+/** True where new grand campaigns open with the marked army (release 2, marked.ts; stage.json 'marked'). Forced by TC_MARKED. */
+export const MARKED_STAGE: boolean = staged('TC_MARKED', 'marked');
+/** True where new grand campaigns open with the lorries moved to the front named first (stage.json 'lorryShift'). */
+export const LORRYSHIFT_STAGE: boolean = staged('TC_LORRYSHIFT', 'lorryShift');
+/** True where new grand campaigns open with horse-drawn wagons where lorries are short (stage.json 'wagons'). */
+export const WAGONS_STAGE: boolean = staged('TC_WAGONS', 'wagons');
+/** True where new grand campaigns open with forward dumps (stage.json 'dumps'). */
+export const DUMPS_STAGE: boolean = staged('TC_DUMPS', 'dumps');
+
+// A fleet sent straight at an enemy fleet (release 2; Brian 23 November 2026 22:23Z, fleetattack.ts): the grand
+// campaigns opened while this is true carry the flag 'fleetAttack'. Forced by TC_FLEETATTACK.
+/** True where new grand campaigns open with the player's fleets able to attack an enemy fleet at once (stage.json 'fleetAttack'). */
+export const FLEETATTACK_STAGE: boolean = staged('TC_FLEETATTACK', 'fleetAttack');
+
+// Breaking a corps up (release 2; Brian 24 November 2026 18:02Z, breakup.ts): the grand campaigns opened while this
+// is true carry the flag 'breakUp'. Forced by TC_BREAKUP.
+/** True where new grand campaigns open with the player able to split divisions off a corps (stage.json 'breakUp'). */
+export const BREAKUP_STAGE: boolean = staged('TC_BREAKUP', 'breakUp');
+
+// Task forces (release 2; Brian 24 November 2026 18:24Z, taskforce.ts): the grand campaigns opened while this is true
+// carry the flag 'taskForce'. Forced by TC_TASKFORCE.
+/** True where new grand campaigns open with the player able to make task forces of his fleets (stage.json 'taskForce'). */
+export const TASKFORCE_STAGE: boolean = staged('TC_TASKFORCE', 'taskForce');
+
+// The admirals' reasons (release 2; fleetwhy.ts): the grand campaigns opened while this is true carry the flag
+// 'fleetWhy'. Forced by TC_FLEETWHY.
+/** True where new grand campaigns open with the admirals giving a reason for each fleet they order (stage.json 'fleetWhy'). */
+export const FLEETWHY_STAGE: boolean = staged('TC_FLEETWHY', 'fleetWhy');
+
+// Rearguards (release 2; Brian 24 November 2026 18:24Z, rearguard.ts): the grand campaigns opened while this is true
+// carry the flag 'rearguard'. Forced by TC_REARGUARD.
+/** True where new grand campaigns open with the player able to order rearguards (stage.json 'rearguard'). */
+export const REARGUARD_STAGE: boolean = staged('TC_REARGUARD', 'rearguard');
+
+// Conquered towns settle (release 2; Brian 24 November 2026 18:13Z, buildings.ts): the grand campaigns opened while
+// this is true carry the flag 'settledTowns'. Forced by TC_SETTLEDTOWNS.
+/** True where new grand campaigns open with conquered towns able to build everything once settled (stage.json 'settledTowns'). */
+export const SETTLEDTOWNS_STAGE: boolean = staged('TC_SETTLEDTOWNS', 'settledTowns');
+
+// Shadowing, the voyage log, and rearguards that blow the bridges (release 2; Brian 24 November 2026 19:47Z, "yes to
+// all"; shadow.ts, voyage.ts, rearguard.ts): the grand campaigns opened while each is true carry its flag. Forced by
+// TC_SHADOW, TC_VOYAGELOG and TC_REARBRIDGES.
+/** True where new grand campaigns open with fleets able to shadow an enemy fleet (stage.json 'shadow'). */
+export const SHADOW_STAGE: boolean = staged('TC_SHADOW', 'shadow');
+/** True where new grand campaigns open with each fleet keeping a voyage log (stage.json 'voyageLog'). */
+export const VOYAGELOG_STAGE: boolean = staged('TC_VOYAGELOG', 'voyageLog');
+/** True where new grand campaigns open with rearguards blowing the bridges behind them (stage.json 'rearBridges'). */
+export const REARBRIDGES_STAGE: boolean = staged('TC_REARBRIDGES', 'rearBridges');
+
+// Mines at sea, heavy seas and the shadow relay (release 2; Brian 24 November 2026 20:38Z, "yes to all"; mines.ts,
+// heavyseas.ts, shadow.ts): the grand campaigns opened while each is true carry its flag. Forced by TC_SEAMINES,
+// TC_HEAVYSEAS and TC_SHADOWRELAY.
+/** True where new grand campaigns open with fleets able to lay mines at sea (stage.json 'seaMines'). */
+export const SEAMINES_STAGE: boolean = staged('TC_SEAMINES', 'seaMines');
+/** True where new grand campaigns open with gales at sea (stage.json 'heavySeas'). */
+export const HEAVYSEAS_STAGE: boolean = staged('TC_HEAVYSEAS', 'heavySeas');
+/** True where new grand campaigns open with the shadow relay (stage.json 'shadowRelay'). */
+export const SHADOWRELAY_STAGE: boolean = staged('TC_SHADOWRELAY', 'shadowRelay');

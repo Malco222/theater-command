@@ -15,6 +15,7 @@
 // dark aircraft).
 
 #include "Battle/AirFeed.h"
+#include "Battle/AirLand.h"
 #include "Battle/AirSky.h"
 
 #include <algorithm>
@@ -114,7 +115,9 @@ namespace
 
 	// (the sky brighter toward the sun, as the air's haze throws its light forward: the engine's sky does this of itself,
 	// the art director on round 18c, eye 8, "the sky brighter toward the sun")
-	void Backdrop(Canvas& C, const Camera& Cam, const Vec& Sun)
+	// (and under a deck the sea in its shade, AirSky::ShadeOf as the key light's light function reads it: the sea's paint is
+	// its look in the whole sun, about half of that the sky's light, the rest the sun's)
+	void Backdrop(Canvas& C, const Camera& Cam, const Vec& Sun, const AirSky::DeckShade* Shade = nullptr)
 	{
 		const double Sea[3] = { Linear(38), Linear(62), Linear(78) };
 		const double Top[3] = { Linear(120), Linear(150), Linear(190) };
@@ -130,7 +133,8 @@ namespace
 					const double F = HazeOf(Cam.Eye, P);
 					// (a little swell of light on the water)
 					const double Ripple = 0.04 * std::sin(P.X * 0.013 + std::sin(P.Y * 0.007) * 3.0) * std::sin(P.Y * 0.011);
-					for (int K = 0; K < 3; ++K) Out[K] = (Sea[K] * (1.0 + Ripple)) * (1.0 - F) + HazeCol[K] * F;
+					const double Lit = Shade ? 0.45 + 0.55 * Shade->At(P, Sun) : 1.0;
+					for (int K = 0; K < 3; ++K) Out[K] = (Sea[K] * Lit * (1.0 + Ripple)) * (1.0 - F) + HazeCol[K] * F;
 				}
 				else
 				{
@@ -284,16 +288,24 @@ int main(int Argc, char** Argv)
 	AirSky::Placing At = AirFeed::PlacingOf(Rec.Board, Rec.Views.front().Groups, Rec.Seed);
 	// (the sun as the scene has it where AIR_SKY_SUN gives the stage's "sun" as "125,18", its bearing from true north,
 	// clockwise, and its height, both in degrees; turned as the stage is turned on the board (AirStage::TowardSun).
-	// Without it, the scene's own sun for a battle with no stage: 30 degrees up on the board's bearing 150)
+	// Without it, the scene's own sun for a battle with no stage: its place's at half past noon where the recording gives
+	// its latitude (AAirBattle::TowardSun, AirLand::SunAt), else 30 degrees up on the board's bearing 150)
 	{
 		double Bearing = 150.0, Up = 30.0, Turn = 0.0;
-		if (const char* Given = std::getenv("AIR_SKY_SUN"))
+		const char* Given = std::getenv("AIR_SKY_SUN");
+		if (Given)
 		{
 			std::sscanf(Given, "%lf,%lf", &Bearing, &Up);
 			Turn = Rec.Board.StageTurn;
 		}
 		const double B = Bearing * 3.14159265358979 / 180.0 - Turn, E = Up * 3.14159265358979 / 180.0;
 		At.Sun = Vec(std::cos(E) * std::sin(B), std::cos(E) * std::cos(B), std::sin(E));
+		if (!Given && Rec.Board.StageKey.empty() && std::isfinite(Rec.Board.Latitude))
+		{
+			double X = 0.0, Y = 0.0, Z = 0.0;
+			AirLand::SunAt(Rec.Board.Latitude, Rec.Board.Month + 1, 12.5, Rec.Board.NorthX, Rec.Board.NorthY, X, Y, Z);
+			At.Sun = Vec(X, Y, std::max(Z, 0.07)).Unit(At.Sun);
+		}
 	}
 	const AirSky::Field Day = AirSky::Lay(Rec.Board.Cloud, At);
 	const double TX = Rec.Board.TargetX, TY = Rec.Board.TargetY;
@@ -339,6 +351,7 @@ int main(int Argc, char** Argv)
 	AirSky::Placing DeckAt = At;
 	DeckAt.Band = 4500.0;
 	const AirSky::Field Deck = AirSky::Lay(DeckDay, DeckAt);
+	const AirSky::DeckShade DayShade = AirSky::ShadeOf(Day), DeckDayShade = AirSky::ShadeOf(Deck);
 	AirSky::Painter Paint;
 	// (the clouds as drawn from the sheet of shapes, as the scene draws them where M_Cloud is built; AIR_SKY_DISCS=1 the
 	// soft discs, as where it is not. The sheet itself is drawn too, over a mid grey, lit from the side)
@@ -376,7 +389,8 @@ int main(int Argc, char** Argv)
 		Cam.Look(S.From, S.To, S.Fov);
 		Canvas C;
 		C.Init(Cam.W, Cam.H);
-		Backdrop(C, Cam, At.Sun);
+		const AirSky::DeckShade& Shade = Pass == 4 ? DeckDayShade : DayShade;
+		Backdrop(C, Cam, At.Sun, Shade.Side > 0 ? &Shade : nullptr);
 		std::vector<Vec> Points, Shadows;
 		std::vector<uint8_t> Rgba, ShadowRgba;
 		std::vector<float> Uvs;

@@ -400,6 +400,14 @@ namespace AirFeed
 		const Json& Ground = Place["ground"];
 		Out.Terrain = Ground["terrain"].Str("");
 		for (const Json& R : Ground["land"].Items) Out.Land.push_back(Ring(R));
+		// An inland board (place.ground.inland: no coast within it) comes with no land rings, and every "over land" here
+		// is a board with land: the Rhineland and Dnepropetrovsk raids flew over open sea (the art director, 24 November).
+		// It is one ring of land round the board, wider than anything laid under it (the sea sheet runs 300 km out).
+		if (Out.Land.empty() && Ground["inland"].Truth(false))
+		{
+			const double Wide = 400000.0;
+			Out.Land.push_back({ { -Wide, -Wide }, { Out.W + Wide, -Wide }, { Out.W + Wide, Out.H + Wide }, { -Wide, Out.H + Wide } });
+		}
 		for (const Json& R : Ground["target"].Items) Out.TargetOutline.push_back(Ring(R));
 		for (const Json& R : Ground["rivers"].Items) Out.Rivers.push_back(Ring(R));
 		const Json& North = Ground["north"];
@@ -415,6 +423,12 @@ namespace AirFeed
 			}
 		}
 
+		const Json& Lat = Place["lat"];
+		if (Lat.IsNumber() && std::fabs(Lat.Num(0.0)) <= 90.0)
+		{
+			Out.Latitude = Lat.Num(0.0);
+		}
+
 		// The day's sky (sky.ts): kept as given; a bundle from before it has none, and cumulus stands in.
 		const Json& Cloud = Place["cloud"];
 		if (Cloud.IsObject())
@@ -425,8 +439,30 @@ namespace AirFeed
 			Out.Cloud.Top = Cloud["top"].Num(Out.Cloud.Top);
 			Out.Cloud.Chance = Cloud["chance"].Num(0.0);
 			Out.Cloud.Zone = Cloud["zone"].Str("");
+			// (how much of the sky is cloud, and its word: sky.ts's cover, from 20 November; none before it)
+			const Json& Cover = Cloud["cover"];
+			Out.Cloud.Cover = Cover.IsNumber() && std::isfinite(Cover.Num(0.0)) ? std::max(0.0, std::min(1.0, Cover.Num(0.0))) : -1.0;
+			Out.Cloud.Word = Cloud["sky"].Str("");
 		}
+		Out.TrailM = TrailHeight(Out.Cloud.Zone, Out.Month, Out.Latitude);
 		return true;
+	}
+
+	double TrailHeight(const std::string& Zone, int Month, double Latitude)
+	{
+		// The day's vapour-trail height (the audit's 4.12): a fixed table by the weather zone and the month (from 0), so
+		// that the same battle draws the same trails every time, never a draw of its own. The record: the Eighth's
+		// bombers over north Germany in winter trailed from about 15,000 feet (4,600 m), in summer from about 25,000;
+		// in the subtropics no trail forms under about 30,000 feet. (Northern seasons; the war's southern battles are
+		// all in the tropics' row.)
+		const bool bKnown = std::isfinite(Latitude);
+		const bool bTropic = Zone.find("tropical") != std::string::npos || (bKnown && std::fabs(Latitude) < 30.0);
+		const bool bNorth = Zone.find("Europe") != std::string::npos || (bKnown && std::fabs(Latitude) >= 45.0);
+		const int M = ((Month % 12) + 12) % 12;
+		const bool bWinter = M <= 2 || M >= 10, bSummer = M >= 4 && M <= 8;
+		if (bTropic) return 9000.0;
+		if (bNorth) return bWinter ? 4600.0 : bSummer ? 7600.0 : 6100.0;
+		return bWinter ? 6000.0 : bSummer ? 8500.0 : 7300.0;
 	}
 
 	AirSky::Placing PlacingOf(const Sky& S, const std::vector<AirShow::Group>& First, uint64_t Seed)
@@ -466,6 +502,9 @@ namespace AirFeed
 	{
 		Show.SetBoard(S.TargetX, S.TargetY, S.FlakR, S.Scale);
 		Show.TargetR = S.TargetR;
+		Show.Year = S.Year;
+		Show.Month = S.Month + 1; // (the place's month counts from 0, as the rules' calendar does)
+		Show.TrailM = S.TrailM;
 		for (const auto& Pair : S.Guns)
 		{
 			const size_t Colon = Pair.first.find(':');
@@ -553,16 +592,24 @@ namespace AirFeed
 			G.Job = X["job"].Str("");
 			G.X = U["x"].Num();
 			G.Y = U["y"].Num();
-			G.Alt = X["alt"].Num(X["drawAlt"].Num(0.0));
+			// (the height drawn: the battle's drawAlt where it gives one, else its own band; the band kept as CountAlt)
+			G.CountAlt = X["alt"].Num(X["drawAlt"].Num(0.0));
+			G.Alt = X["drawAlt"].Num(G.CountAlt);
 			G.Face = U["face"].Num();
 			G.W = U["w"].Num(400.0);
 			G.D = U["d"].Num(300.0);
 			G.Speed = U["speed"].Num(0.0);
 			G.Ammo = X["ammo"].Num(1.0);
+			// The pilots' brief (shown, never counted): whom the group is making for, the box an escort guards, its skill.
+			G.Quarry = X["quarry"].Int(-1);
+			G.With = X["with"].Int(-1);
+			G.Skill = X["skill"].Num(-1.0);
 			G.Run = X["run"].Num(0.0);
 			G.Figures = U["figures"].Int();
+			G.Figures0 = std::max(G.Figures, U["figures0"].Int(G.Figures));
 			G.Per = std::max(1, X["per"].Int(1));
 			G.N = X["n"].Int(G.Figures * G.Per);
+			G.Boxes = X["boxes"].Int(0);
 			G.Doing = ActOf(U["act"].Str("march"));
 			G.Engaged = U["engaged"].Int(-1);
 			for (const Json& F : X["fire"].Items)
@@ -571,6 +618,9 @@ namespace AirFeed
 				Row.On = F["on"].Int(-1);
 				Row.Rate = F["rate"].Num(0.0);
 				Row.Pass = F["pass"].Str("");
+				// The beat of the passes on a box: going in, or standing off, and the air seconds of it left.
+				Row.Go = F["go"].Num(-1.0);
+				Row.Wait = F["wait"].Num(-1.0);
 				G.Firing.push_back(Row);
 			}
 			for (const Json& St : X["strag"].Items)
@@ -583,9 +633,18 @@ namespace AirFeed
 				Row.Cover = St["cover"].Int(-1);
 				Row.Back = St["back"].Num(0.0);
 				Row.Down = St["down"].Num(0.0);
+				Row.bShown = St["model"].Int(1) != 0;
 				G.Strags.push_back(std::move(Row));
 			}
 			for (const Json& Fl : X["flak"].Items) if (Fl.IsString()) G.Flak.push_back(Fl.Text);
+			if (const Json& Ace = X["ace"]; Ace.IsObject())
+			{
+				G.AceName = Ace["name"].Str("");
+				G.AceKills = std::max(0, Ace["kills"].Int(0));
+				const Json& By = Ace["by"];
+				for (size_t K = 0; K < By.Keys.size() && K < By.Values.size(); ++K)
+					if (const int V = By.Values[K].Int(0); V > 0) G.AceBy[By.Keys[K]] = V;
+			}
 
 			Label L;
 			L.Id = G.Id;
@@ -655,6 +714,13 @@ namespace AirFeed
 			Ev.Mark = X["mark"].Str("");
 			Ev.For = X["for"].Num(0.0);
 			Ev.Slot = X["slot"].Int(-1);
+			// A fighter that fell to a box's gunners: that box.
+			Ev.GunBox = X["gunner"].IsObject() ? X["gunner"]["box"].Int(-1) : -1;
+			Ev.GunSeat = X["gunner"].IsObject() ? X["gunner"]["seat"].Int(-1) : -1;
+			// Where the battle has it hit (engine, wing, tail, cockpit, fuselage): the gunnery lays its strikes there.
+			Ev.Part = X["hit"].Str("");
+			// The models it moves (AR1): a loss's models, a straggler's model (1 where the recording does not say).
+			Ev.Models = Ev.What == "air:lost" ? X["models"].Int(1) : Ev.What == "air:straggle" ? X["model"].Int(1) : 1;
 			Out.Events.push_back(std::move(Ev));
 		}
 
@@ -684,6 +750,14 @@ namespace AirFeed
 			Ship.Face = Row.Face;
 			Ship.Class = Row.Class;
 			Ship.bSunk = Row.bSunk;
+			// (for her anti-aircraft guns: whose she is, her size, her side, the share of her guns manned)
+			Ship.Nation = Row.Nation;
+			Ship.Name = Row.Name;
+			Ship.Side = !S.AttNat.empty() && Row.Nation == S.AttNat ? 0 : 1;
+			const HullSize Size = HullOf(Row.Class, Row.Name, Row.Nation);
+			Ship.Long = Size.Long;
+			Ship.Beam = Size.Beam;
+			Ship.Manned = Ships.IsObject() && Ships["guns"].IsNumber() ? std::clamp(Ships["guns"].Num(), 0.0, 1.0) : 1.0;
 			Out.Ships.push_back(Ship);
 			Out.ShipRows.push_back(std::move(Row));
 		}
@@ -708,11 +782,28 @@ namespace AirFeed
 			Row.Lost = G["lost"].IsNumber() ? G["lost"].Int(0) : G["lostFtr"].Int(0) + G["lostBmr"].Int(0);
 			Out.Groups.push_back(std::move(Row));
 		}
+		// Each side's fighters and bombers lost: the card's own totals (after.lost, the rules' afterLost, the sums of its
+		// rows); a card from before them (no lost block), the same sums made here from its rows.
 		const Json& Lost = J["lost"];
-		Out.LostAttFtr = Lost["att"]["ftr"].Int();
-		Out.LostAttBmr = Lost["att"]["bmr"].Int();
-		Out.LostDefFtr = Lost["def"]["ftr"].Int();
-		Out.LostDefBmr = Lost["def"]["bmr"].Int();
+		if (Lost.IsObject())
+		{
+			Out.LostAttFtr = Lost["att"]["ftr"].Int();
+			Out.LostAttBmr = Lost["att"]["bmr"].Int();
+			Out.LostDefFtr = Lost["def"]["ftr"].Int();
+			Out.LostDefBmr = Lost["def"]["bmr"].Int();
+			return true;
+		}
+		for (const Json& G : J["groups"].Items)
+		{
+			const std::string Side = G["side"].Str("");
+			if (Side != "att" && Side != "def") continue;
+			int Ftr = G["lostFtr"].Int(0), Bmr = G["lostBmr"].Int(0);
+			// (a row that gives one lost, by its kind)
+			if (!G["lostFtr"].IsNumber() && !G["lostBmr"].IsNumber() && G["lost"].IsNumber())
+				(G["kind"].Str(G["bmr"].Truth(false) ? "bmr" : "ftr") == "bmr" ? Bmr : Ftr) = G["lost"].Int(0);
+			(Side == "att" ? Out.LostAttFtr : Out.LostDefFtr) += Ftr;
+			(Side == "att" ? Out.LostAttBmr : Out.LostDefBmr) += Bmr;
+		}
 		return true;
 	}
 

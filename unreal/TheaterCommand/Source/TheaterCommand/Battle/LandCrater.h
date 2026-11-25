@@ -503,6 +503,10 @@ namespace LandCrater
 		std::function<bool(double X, double Y)> DugAt;
 		/** The drawn ground's normal, each strip lit by it (none: the slope of the height across the ground's spacing). */
 		UpFn Lit;
+		/** The snow lying on the field (LandField::Ground::SnowLying, 0 to 1). From a half up, a track over white snow is
+		 * a trough: its floor some 0.35 to 0.4 m across, a blue-grey in the snow's shade, the snow it pushed aside heaped
+		 * on its rims, churned (the art director on Valdai, 24 Nov: drawn as the earth's ruts they read as pencil lines). */
+		double Snow = 0.0;
 
 	private:
 		struct Last
@@ -529,9 +533,11 @@ namespace LandCrater
 		int Count = 0;
 		/** One strip from (AX, AY) to (BX, BY), about Half wide each side of its line, about Edge more at each side
 		 * feathering to the ground (each end its own, by its place and Salt); Paint at its middle, mottled; Lift metres
-		 * over the ground, lit as the ground is. Into the mesh. */
+		 * over the ground, lit as the ground is. Rim: the feathered band raised that much more (a trough's heaped rims);
+		 * BandGround: the band that share the ground's colour (less than 0: a share by its place, 0.35 to 0.65). Into the
+		 * mesh. */
 		void Strip(LandField::Mesh& Out, double AX, double AY, double BX, double BY, double Half, double Edge, const Rgb8& Paint, double Lift,
-			uint64_t Salt) const;
+			uint64_t Salt, double Rim = 0.0, double BandGround = -1.0) const;
 		Patch& PatchFor(double X, double Y, Place& OutIn);
 		/** A laid piece kept for Flat, in the squares it reaches. */
 		void Keep(const Piece& Pc);

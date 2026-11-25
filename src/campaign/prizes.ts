@@ -20,6 +20,7 @@ import data from '../../data/campaign/prizes.json';
 import { Rng, hashString } from '../core/rng';
 import { KIND, type Corps, type Game, type Region } from './types';
 import { airWar, airfieldsHold } from './air';
+import { damageField, fieldRepairing, fieldRules, fieldShut } from './fieldstate';
 import { BUDGET, PRODUCTION, budgeted, landFactor } from './economy';
 import { allied, atWar, headline, theName } from './game';
 import { armyOf } from './joint';
@@ -27,6 +28,7 @@ import { cutRail, cutRailHasty, hastyLeft, mendHasty, onNet, railCut, railsAt, r
 import { fieldOut, fireField } from './resources';
 import { besieged, fieldCtrl, garrisonOf, siegeRules } from './siege';
 import { townName, townSize, type TownSize } from './towns';
+import { baseRight } from './bargains';
 
 export type PrizeKind = 'oil' | 'works' | 'airfield' | 'harbour' | 'junction';
 export const PRIZE_KINDS: PrizeKind[] = ['oil', 'works', 'airfield', 'harbour', 'junction'];
@@ -79,6 +81,8 @@ export function prizeOut(g: Game, r: Region, kind: PrizeKind): number {
   if (!hasPrize(g, r, kind)) return 0;
   if (kind === 'junction') return railCut(g, r.id) ? hastyLeft(g, r.id) || 99 : 0;
   if (kind === 'oil') return fieldOut(g, r) > 0 ? Math.max(1, (g.flags[`oilout:${r.id}`] ?? 0) - g.turn) : 0;
+  // Airfields as targets (fieldstate.ts): the one field state answers: open, open next month with a repair in hand, or shut until repaired.
+  if (kind === 'airfield' && fieldRules(g)) return fieldShut(g, r.id) ? (fieldRepairing(g, r.id) !== undefined ? 1 : 99) : 0;
   return Math.max(0, (g.flags[outKey(r, kind)] ?? 0) - g.turn);
 }
 
@@ -118,9 +122,10 @@ export const prizeTaker = (g: Game, r: Region, kind: PrizeKind): string | null =
 
 /** True where this nation, or an ally, has the use of a province's airfield: its own ground with the roads open, or a field its side holds round an enemy town. */
 export function airfieldOpenTo(g: Game, nat: string, r: Region): boolean {
-  if (!hasPrize(g, r, 'airfield')) return allied(g, nat, r.ctrl) && !besieged(g, r);
+  // (A neutral may sell a country the use of a base: the Azores, release 2's bargains.)
+  if (!hasPrize(g, r, 'airfield')) return (allied(g, nat, r.ctrl) || baseRight(g, nat, r.id)) && !besieged(g, r);
   const user = prizeUser(g, r, 'airfield');
-  return user !== null && allied(g, nat, user);
+  return user !== null && (allied(g, nat, user) || baseRight(g, nat, r.id));
 }
 
 /** True where this nation's trains run through a province under siege: its side holds the field and the great junction outside the town. */
@@ -173,8 +178,10 @@ export function prizeIncome(g: Game, nat: string): PrizeIncome {
 const monthsWord = (n: number): string => (n <= 1 ? 'a month' : `${n} months`);
 
 /** Puts a prize out of use for so many months. False where there is none, or it is out already. */
-export function wreckPrize(g: Game, r: Region, kind: PrizeKind, months: number, by?: string): boolean {
+export function wreckPrize(g: Game, r: Region, kind: PrizeKind, months: number, by?: string, how: 'plough' | 'burn' = 'plough'): boolean {
   if (!hasPrize(g, r, kind) || prizeOut(g, r, kind) > 0) return false;
+  // Airfields as targets: an army ploughing up a field writes the one field state (shut, and levels burned), no clock of its own.
+  if (kind === 'airfield' && fieldRules(g)) return damageField(g, r.id, how) !== null;
   if (kind === 'oil') return fireField(g, r, months, 1);
   if (kind === 'junction') return cutRail(g, r.id, 'order', by);
   g.flags[outKey(r, kind)] = g.turn + months;
@@ -206,7 +213,7 @@ export function whyNotWreck(g: Game, nat: string, region: number, kind: PrizeKin
 
 const wreckWords = (g: Game, r: Region, kind: PrizeKind, months: number): string => (kind === 'oil' ? `set the oilfields of ${r.name} alight: they will burn for ${months} months`
   : kind === 'works' ? `blow up the factory district of ${r.name}: its ${worksOutside(r) === 1 ? 'factory stands' : `${worksOutside(r)} factories stand`} idle for ${months} months`
-  : kind === 'airfield' ? `plough up the airfield at ${r.name}: no aircraft will fly from it for ${months} months`
+  : kind === 'airfield' ? (fieldRules(g) ? `plough up the airfield at ${r.name}: no aircraft will fly from it until it is repaired` : `plough up the airfield at ${r.name}: no aircraft will fly from it for ${months} months`)
   : kind === 'harbour' ? `block the harbour of ${townName(r)} and blow up its quays: no ship will use it for ${months} months`
   : `blow up the rail junction at ${r.name}: no train runs through until engineers relay the line`);
 
@@ -286,7 +293,7 @@ export function prizesOnLoss(g: Game, r: Region, by: string, from: string, which
     // The railway keeps the rule it always had: torn up, or not, as the province falls (rails.ts), or by order.
     if (kind === 'junction') continue;
     const roll = new Rng(hashString(`prize:${g.seed}:${g.turn}:${r.id}:${kind}`)).next();
-    if (roll < p && wreckPrize(g, r, kind, PRIZES.burn.months[kind])) burnt.push(kind);
+    if (roll < p && wreckPrize(g, r, kind, PRIZES.burn.months[kind], undefined, 'burn')) burnt.push(kind);
   }
   if (burnt.length) noteBurnt(g, r, from, by, burnt);
   return burnt;
@@ -399,6 +406,8 @@ export function mendPrizes(g: Game, nat: string): void {
   for (const r of g.regions) {
     if (!allied(g, nat, fieldCtrl(g, r)) || !r.units.some((u) => !u.dead && u.nat === nat && u.kind === 'eng' && u.leave === undefined)) continue;
     for (const kind of ['works', 'airfield', 'harbour'] as const) {
+      // (Airfields as targets: a field is mended by Repair, and the engineers' own job; it keeps no clock here.)
+      if (kind === 'airfield' && fieldRules(g)) continue;
       const key = outKey(r, kind);
       if ((g.flags[key] ?? 0) > g.turn + 1) g.flags[key] -= PRIZES.mend;
     }
@@ -483,7 +492,8 @@ export function prizeMarks(g: Game): PrizeMark[] {
     const burning: PrizeKind[] = [], seized: PrizeKind[] = [];
     for (const kind of PRIZE_KINDS) {
       if (!hasPrize(g, r, kind)) continue;
-      if (kind !== 'junction' && prizeOut(g, r, kind) > 0) burning.push(kind);
+      // (Airfields as targets: a shut field shows its craters, not a burning prize as well.)
+      if (kind !== 'junction' && prizeOut(g, r, kind) > 0 && !(kind === 'airfield' && fieldRules(g))) burning.push(kind);
       if (prizeHolder(g, r, kind) !== r.ctrl) seized.push(kind);
     }
     if (burning.length || seized.length) out.push({ region: r.id, by: seized.length ? fieldCtrl(g, r) : null, burning, seized });

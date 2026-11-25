@@ -115,6 +115,14 @@ public:
 	bool AreFineSheetsComing() const { return bFineSheetsComing || bLandTilesComing || bSquaresComing || FogAsideBuilding.IsValid(); }
 	/** Whether the next change of holders is one month following another (ink spreads, a siege's colour moves) or the table laid out afresh (it does not). */
 	void SetInkAllowed(bool bAllowed) { bInkAllowed = bAllowed; }
+	// ---- (release 2, the front you can read) ----
+	/** The player has cut the month's replay short: ink still running is finished at once, and ground that changes hands in this same frame takes its new colour at once, with no ink. */
+	void SkipInk();
+	/** The month's replay: ink begun in this frame is run in no longer than the step is shown (Seconds), so that the next step's ground never cuts it short (TheaterFront::InkFitted). */
+	void FitInk(double Seconds);
+	/** While an order's result card is up over the table, the ink it began stands at its start; put away, the ink's second begins (the art director's ruling of 22 November, after run 4). */
+	void HoldInk(bool bHold);
+	// ---- (end release 2, the front you can read) ----
 	void SetHolders(const TArray<FString>& Holders, const TArray<FString>& League, const TArray<FString>& Owners = TArray<FString>(), const TArray<FCampaignView::FSiegePaint>& Sieges = TArray<FCampaignView::FSiegePaint>());
 
 	/**
@@ -162,6 +170,14 @@ public:
 	void SetAgentInHand(int32 AgentId);
 	/** The agent the pointer rests on: the ring on his base lights, to say he can be picked up. */
 	void SetAgentHovered(int32 AgentId) { AgentHovered = AgentId; }
+	/**
+	 * (Release 2, the spies thread of 24 November 2026.) An enemy agent his hunters uncovered stands with his own, and
+	 * AgentAtRay gives its piece a number of its own, below any agent's: FoeStand(Id) for the enemy agent Id, which
+	 * IsFoeStand tells apart and FoeOfStand turns back. It is never picked up: a press on it opens the secret service.
+	 */
+	static int32 FoeStand(int32 FoeId) { return -1000 - FoeId; }
+	static bool IsFoeStand(int32 StandId) { return StandId <= -1000; }
+	static int32 FoeOfStand(int32 StandId) { return -1000 - StandId; }
 	/** Carries the agent in hand over this point of the table; and sets him back where he stands. */
 	void CarryAgent(const FVector& GroundPoint);
 	void ReturnAgent();
@@ -213,6 +229,8 @@ public:
 	bool IsWealthShown() const { return bWealth; }
 	/** The friend-and-foe view: the player's own ground left as it is, his allies' washed blue, his enemies' red, on the table and on the small map. */
 	void ShowSides(bool bOn, const TArray<FString>& Standing);
+	/** (tc.Speed.SidesKept) Lays the sides view out of sight as the war is laid out, so that the first press shows it at once. */
+	void WarmSides(const TArray<FString>& Standing);
 	bool AreSidesShown() const { return bSides; }
 	/** How far into the night the room is, 0 to 1: the windows of the towns are lit as it comes on. */
 	void SetNight(float Night, bool bLamplight = false);
@@ -228,6 +246,12 @@ public:
 	/** Draws the road an army would take, from where it stands through the regions given. An empty list clears it. */
 	/** RouteEnds: 0 a march, 1 a battle at the end of it, 2 a frontier that means war. */
 	void SetRoute(const FVector& FromWorld, const TArray<int32>& Regions, int32 RouteEnds = 0);
+	// ---- (release 2, the enemy's month near you; Brian, 24 November 2026)
+	/** Lays the arrows of one step of the others' month, each grown to Grow (0 to 1), as Campaign/EnemyMoves draws them. An empty list clears them. */
+	void ShowStepArrows(const TArray<FStepArrow>& Arrows, float Grow);
+	/** Where to look to see these arrows whole: the middle of their ends, and how far the farthest lies from it (map units). False where there are none. */
+	bool FrameStepArrows(const TArray<FStepArrow>& Arrows, FVector2D& OutMiddle, double& OutReach) const;
+	// ---- (end release 2)
 
 	/** Called as the camera moves: decides which lettering is worth showing and turns the standards to face the viewer. */
 	void UpdateForCamera(float CameraDistance, float CameraYaw, const FVector& CameraFocus);
@@ -261,11 +285,46 @@ public:
 	const TArray<TObjectPtr<AArmyPiece>>& GetPieces() const { return Pieces; }
 	const TMap<int32, TObjectPtr<AArmyPiece>>& GetFleetPieces() const { return FleetPieces; }
 	/**
+	 * (Release 2; Brian 24 November 2026 18:13Z: "when i move a navy I want to see the boats sail to it as well".) Whether
+	 * a fleet that has changed its sea, or come in or gone out of harbour, sails there along a way by water (OPTIONS,
+	 * "Ships sail on the map"); off, it is simply found where it now is. ForgetFleetPlaces drops where each fleet was,
+	 * so that the fleets of a war just opened are laid out, not sailed from the last war's places.
+	 */
+	void SetShipsSail(bool bSail) { bShipsSail = bSail; }
+	bool GetShipsSail() const { return bShipsSail; }
+	void ForgetFleetPlaces() { FleetPlaces.Reset(); FleetSpots.Reset(); ForgetWakes(); }
+	/**
+	 * (Release 2: fading wakes; Brian 24 November 2026 18:24Z, "i like these".) An enemy fleet seen to move leaves a
+	 * faint trail of foam on the sea, the way it went by water, for a month: brightest where it is now and fading back
+	 * to where it came from, fainter again the month after, then gone. OPTIONS "Fading wakes" (the options key "wakes").
+	 * Off, none is laid. A fleet only reported, not seen, leaves none; nor do the player's own fleets or his allies'.
+	 */
+	void SetWakes(bool bOn);
+	bool GetWakes() const { return bWakes; }
+	void ForgetWakes();
+	/**
+	 * A way by water from one point of the map to another, as points from the one to the other: round the land, a
+	 * little off the coasts, and straight where the water is open. Empty where none is found in the box round the
+	 * two (a strait thinner than the search's squares, say): the fleet is then simply found at its new place, as it
+	 * was before ships sailed, and never sails over the land.
+	 */
+	TArray<FVector2D> WaterWay(const FVector2D& From, const FVector2D& To) const;
+	/**
 	 * A province crowded with the flags of one side (two armies or more) shows one flag, the player's own if it is there, with a count
 	 * of the others beside it; pointed at or picked, it fans them all out. This gives, for each province that is
 	 * folded up, the piece that is shown and how many are put away behind it.
 	 */
 	void GetCrowds(TArray<TPair<AArmyPiece*, int32>>& Out) const;
+
+	/**
+	 * (Release 2: camps you can see. Brian, 22 November 2026; the art director's paintover.) Lays the camp of every army
+	 * that stays put on the ground round its base, by the stage its fieldwork months have reached (see
+	 * AArmyPiece::GetCampStage): tents and a vehicle park on trodden ground; then part of a trench toward the enemy;
+	 * then the whole trench, a belt of wire before it, gun pits behind it and the vehicles under nets. Each part keeps
+	 * to open ground of the army's own side: off water, towns, airfields, rivers, railways, woods and other armies'
+	 * bases and guns. A camp is laid again only when what it is laid from has changed (CampaignCamps.cpp).
+	 */
+	void BuildCamps();
 
 	/** The models set out for inspection ("-TheaterParade=Kiev"): whether there are any, and where one stands on the map (or the middle of them all). */
 	bool HasParade() const { return ParadeSpots.Num() > 0; }
@@ -295,9 +354,27 @@ public:
 	/** Where a province's airfield lies on the map (or where it would), and the province whose airfield is at a point, if one is. */
 	FVector2D AirfieldSpot(int32 RegionId) const;
 	int32 AirfieldNear(const FVector2D& MapPoint) const;
+	/**
+	 * (Brian, 24 November 2026: "its hard to click on an airfield"; the art director's spec, item 1.) Every airfield
+	 * within Reach map units of a point, with its spot: for the pointer, which then measures each on the screen.
+	 */
+	void AirfieldsWithin(const FVector2D& MapPoint, double Reach, TArray<TPair<int32, FVector2D>>& Out) const;
+	/**
+	 * (The same spec, item 2.) The four corners on the table of the ground an airfield covers, its grass and a little
+	 * round it, in order round the field: for the brass outline the pointer lays round it. False where it has none.
+	 */
+	bool GetAirfieldOutline(int32 RegionId, TArray<FVector>& OutCorners) const;
 
 	/** Draws the shipping lanes over the sea: pale where the cargoes get through, amber where raiders are at them, red where the lane is cut. */
 	void ShowLanes(const TArray<FViewLane>& Lanes);
+
+	/**
+	 * (Release 2, columns.ts) The month's supply columns: the road each took from the railhead to the armies beyond it,
+	 * a few convoys of lorries crawling along it, and a burnt-out lorry with its fire wherever enemy aircraft or
+	 * partisans caught it. Nothing while the columns are off. (CampaignColumns.cpp) (Release 2, logistics.ts) Where
+	 * the wagons are on, horse-drawn wagons among the convoys; where the dumps are, their stacks of crates.
+	 */
+	void ShowColumns(const TArray<FViewColumn>& Columns, const TArray<FViewDump>& Dumps);
 
 	/**
 	 * A picture of one of the game's own models, for a unit's card: taken once for each model and kept. The name is
@@ -305,6 +382,8 @@ public:
 	 * "Rider:POL", "Pioneer:GER").
 	 */
 	UTextureRenderTarget2D* GetPortrait(const FString& Model, bool bLarge = false); // (the large one is for the bigger unit card)
+	/** (Release 2, tc.Speed.PicturesAside) Whether GetPortrait has been asked for this one already (it answers at once). */
+	bool HasPortrait(const FString& Model, bool bLarge = false) const { return (bLarge ? LargePortraits : Portraits).Contains(Model); }
 
 	/** The model that stands for a kind of corps of a nation, as it is this year: its tank, its gun, its soldier. */
 	static FString ModelFor(const FString& Nation, const FString& Kind);
@@ -676,8 +755,14 @@ private:
 	/** (The art director's round 38.) Where the gun lines' trodden earth lies: no tree stands within a few units of any of these. */
 	TArray<FVector2D> GunClearings;
 	TArray<FIntPoint> TreeSquareOf; // which square of country each of the woods' meshes holds
+	// (tc.Speed.TreesSpread) the squares still to be planted again for the month's turn of the woods, by their place in
+	// TreeSquareOf, and what one square has been costing (ms), so that a frame takes about the budget
+	TArray<int32> TreesDue;
+	float TreeSquareMs = 0.5f;
+	TArray<TArray<FVector2D>> TreeClearingsKept; // where each province's pieces stand, kept clear of trees: laid at a whole planting
+	void PlantTreesDue(const FVector& CameraFocus);
 	void RebuildHighlight();
-	void AddRegionOverlay(int32 RegionId, const FLinearColor& Fill, const FLinearColor& Outline, int32 FirstSection);
+	void AddRegionOverlay(int32 RegionId, const FLinearColor& Fill, const FLinearColor& Outline, int32 FirstSection, double HalfLine = 0.42, const FLinearColor& Under = FLinearColor::Transparent, double UnderHalf = 0.0);
 	void AppendRegionFill(FCampaignMeshBuffers& Buffers, int32 RegionId, const FLinearColor& Fill) const;
 	void AppendRibbon(FCampaignMeshBuffers& Buffers, const TArray<FVector2D>& Points, double HalfWidth, double Lift, const FColor& Ink, bool bClosed) const;
 
@@ -800,6 +885,11 @@ private:
 	FString GunLinesBuilt = TEXT("-"); // (what the lines were last made from)
 	TArray<FString> GunStanding; // how each province stands to the player, as the armies were last laid out
 	TSet<FString> GunFoes; // the countries at war with the player
+	/** (Release 2: camps you can see.) The way from a base toward the enemy of the nation it belongs to, on the map: see BuildCamps. */
+	FVector2D CampFacing(int32 HomeRegion, const FString& Nation, const FVector2D& FromSpot) const;
+	TArray<FString> CampHolders; // who holds each province, as the armies were last laid out
+	TArray<FString> CampWars; // every pair of nations at war, two by two, as then
+	TArray<FBox2D> CampRiverBoxes; // the box each river runs in, so that a camp looks only at rivers near it
 	/**
 	 * (Brian, 16 November 2026: "if the air raid is at night have search lights shown from the cities"; ruling 107
 	 * (f); the art director's brief.) The searchlights of every place under raid by night: lamps on the ground round
@@ -843,20 +933,24 @@ private:
 	FVector SkyEdgeDrawnFocus = FVector::ZeroVector;
 	void DrawSkyEdge(float CameraDistance, const FVector& CameraFocus);
 
-	/** (Ruling 153.) One agent's piece on the table, or the mark left for a month where one was caught: the base alone, with the lantern set down on it and out. */
+	/** (Ruling 153; release 2.) One agent's piece on the table, or the mark left for a month where one was caught: the empty base, with his hat and his folded newspaper on it. */
 	struct FAgentStand
 	{
 		int32 Id = INDEX_NONE, Region = INDEX_NONE;
 		bool bMark = false;
+		bool bFoe = false; // (release 2) an enemy agent his hunters uncovered: its rim in its country's colour, lit day and night, and no pool
+		FLinearColor FoeInk = FLinearColor::White; // (its country's colour)
 		FVector Rest = FVector::ZeroVector; // where it stands on the table
 		FVector CarriedAt = FVector::ZeroVector; // in the hand and carried: the point of the table it hangs over
-		bool bCarried = false, bRing = false;
+		bool bCarried = false, bRing = false, bRimLit = false; // (bRimLit: his base's brass rim, lit by night)
 		float Lift = 0.0f; // how far it has risen into the hand, 0 to 1
 		FVector SignAt = FVector::ZeroVector; // from high up: the middle of its sign on the table, and the sign's radius there
 		double SignRadius = 0.0;
 		USceneComponent* Holder = nullptr;
 		UProceduralMeshComponent* Body = nullptr;
-		class UPointLightComponent* Lamp = nullptr;
+		UProceduralMeshComponent* Pool = nullptr; // the warm pool on the ground at his feet, laid on the table itself
+		UMaterialInstanceDynamic* PoolInk = nullptr;
+		float PoolYaw = 0.0f; // which way the eye looked when the pool was last laid: it lies across the eye's view
 	};
 	TArray<FAgentStand> AgentStands;
 	/** What the stands above are made of, kept here from the collector. */
@@ -875,6 +969,8 @@ private:
 	int32 WatchRegion = INDEX_NONE;
 	float WatchDrawnAt = -1.0f; // the eye's distance the edge was last drawn for: its line is two pixels wide from any height
 	void DrawWatchEdge(float CameraDistance);
+	float EdgeWidthAt = -1.0f; // the eye's distance the picked and pointed-at provinces' edges were last drawn for: two pixels from any height
+	void KeepEdgeWidth(float CameraDistance);
 	/**
 	 * (The art director's round 38.) Where a cut province's lamp, board and post stand: on the longest stretch of its
 	 * own track, halfway between the town's last house and the border, clear of where its army stands.
@@ -955,6 +1051,33 @@ private:
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> LanesMesh;
 	FString ShownLanes; // what is drawn now, to tell when it has changed
+	/** (Release 2, columns.ts) A supply column's road as drawn: a smooth curve on the map, how far along it each point lies, and its convoys. */
+	struct FColumnRoad
+	{
+		FString Nation;
+		TArray<FVector2D> Curve;
+		TArray<double> Run; // the distance along the road to each point of the curve
+		double Length = 0.0;
+		int32 Convoys = 1; // how many convoys are seen on it: one for every hundred and fifty lorries or so, four at most
+		int32 Wagons = 0; // how many of those are horse-drawn wagons (release 2, logistics.ts), at the back
+		bool bManned = false; // its convoys are on the table (only near the eye)
+	};
+	/** A convoy on a column's road: three lorries nose to tail, built once and driven as one. */
+	struct FColumnConvoy
+	{
+		int32 Road = INDEX_NONE;
+		int32 Place = 0; // which of the road's convoys it is
+		bool bWagon = false; // horse-drawn, and slower
+		TObjectPtr<UProceduralMeshComponent> Mesh;
+	};
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> ColumnsMesh; // the roads (section 0, in ink) and the burnt-out lorries (section 1)
+	FString ShownColumns; // what is drawn now, to tell when it has changed
+	TArray<FColumnRoad> ColumnRoads;
+	TArray<FColumnConvoy> ColumnConvoys;
+	TArray<FVector4> ColumnFires; // where columns were caught: the place in the world, and how big the fire is (w)
+	void UpdateColumns(const FVector& CameraFocus, float CameraDistance);
+	void ParkColumnConvoys(int32 Road); // takes a road's convoys off the table
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> RoomMesh;
 	UPROPERTY()
@@ -1036,6 +1159,11 @@ private:
 	int32 FrontLineFar = -1; // which weight of the line is shown: 0 the working one, 1 the staff map's (none yet: -1)
 	/** (Speed: tc.Speed.FrontWeights.) Lays one weight of the front line (0 or 1) or both (INDEX_NONE); false if there is no front. */
 	bool LayFrontLine(int32 Only, bool bOwed);
+	// ---- (release 2, the front you can read: Campaign/FrontLine.h) ----
+	/** LayFrontLine's line as a map-maker's pen draws it: chained, rounded, dark ink with teeth toward the player's enemy in sections 0 and 1 (the two weights), its soft shadow in 2 and 3. */
+	bool LayPenFront(int32 Only, bool bOwed);
+	TSharedPtr<struct FPenFront> PenFront; // (what the pen keeps from one laying to the next: the border's pieces, the lines, its work arrays)
+	// ---- (end release 2, the front you can read) ----
 	int32 FrontLineOwed = INDEX_NONE; // the weight still to be laid, a frame after the other
 	uint64 FrontLineOwedFrame = 0;
 	float FrontLineSeenFrom = 0.0f; // (the eye's distance at the last look, for which weight is laid first)
@@ -1146,9 +1274,20 @@ private:
 		int32 Seed = 0; // no two alike
 		double Wings = 0.0; // a wingspan of the bombers it was fired at: every size of it is in these
 		int32 Flashed = 0; // how many frames its flash has been drawn: one or two, and no more
+		bool bLight = false; // (release 2, the flak brief, 2c) light flak: pale, half the size, lower, and soon gone
 	};
 	TArray<FFlakBurst> FlakBursts;
 	int32 FlakFired = 0;
+	// (Release 2, the art director's flak brief of 24 November 2026; "tc.Look.FlakRing", off as it comes.) The heavy
+	// guns of a town as they stand on the table: where each barrel ends and which way it points, by region. With the
+	// ring on, each is seen to fire from there while a raid is over the town.
+	struct FFlakGun
+	{
+		FVector Muzzle = FVector::ZeroVector;
+		FVector Bore = FVector::UpVector;
+	};
+	TMap<int32, TArray<FFlakGun>> FlakGuns;
+	bool bFlakRingShown = false; // (the buildings as they stand were laid with the ring on)
 	// (The art director's round 36: "the lobes are round".) The smoke of a burst is one or two of her own painted
 	// shapes, torn at the edge and never round: twelve on one sheet, four shapes at each of three ages. Each is a
 	// flat picture turned to the wind and to the eye.
@@ -1263,6 +1402,13 @@ private:
 	/** A fine sheet has stood up or been taken away over Box: the frontier lines over and around it are laid again next time. */
 	void ForgetBorderEdges(const FBox2D& Box);
 	double InkBegan = 0.0, PaintStepped = 0.0;
+	// ---- (release 2, the front you can read) ----
+	float InkSeconds = 1.0f; // how long ink takes to cross a province: release 1's second, the art director's ruling of 22 November (run 3); "-TheaterInkSeconds=1.5" for the plan's second and a half
+	uint64 InkSkipFrame = 0; // (the frame in which the player cut the month's replay short: see SkipInk)
+	uint64 InkBeganFrame = 0; // (the frame in which the last run of ink began: see FitInk)
+	bool bInkHeldByCard = false; // (an order's result card is up: the ink stands where it was, see HoldInk)
+	double InkHeldRun = 0.0; // (how far into its second the ink stood when the card came up: see HoldInk)
+	// ---- (end release 2, the front you can read) ----
 	bool bInkBorders = false; // the frontier's lines are still to be drawn in their new place
 	FIntRect InkBox = FIntRect(0, 0, 0, 0);
 	TArray<FColor> TintBefore, OccupiedBefore, TintShown, OccupiedShown;
@@ -1304,12 +1450,26 @@ private:
 	bool bWealth = false;
 	bool bSides = false;
 	TArray<FString> SideOf; // by province: own, ally, enemy or neutral, as the player stands to its holder
+	// (Release 2, map run 7: tc.Speed.SidesKept) the sides view laid once and kept: its mesh, each point's province, and
+	// the sides it was last coloured for
+	void LaySidesKept(bool bWarmOnly);
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> SidesMesh;
+	TArray<int32> SidesPointRegion;
+	TArray<FString> SidesColouredFor;
+	// (tc.Speed.SidesFade) the kept sides view's own ink, and how far it is faded in (0 put away, 1 full); each frame
+	// moves it toward the view's state, and at nought the mesh is hidden
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> SidesInk;
+	float SidesShown = 0.0f;
+	void UpdateSidesFade(float DeltaSeconds);
 	int32 ShownMonth = -1;
 	// The year turning: the look the trees wear (0 summer, 1 September, 2 October, 3 November, 4 winter, 5 March,
 	// 6 April), how hard the winter lies (0 to 1), and what the rivers were last drawn for.
 	int32 TreeLook = 0;
 	float WinterHard = 0.0f;
 	float RiversDrawnFor = -1.0f;
+	float MasksSentFor = -1.0f; // (tc.Speed.MonthSpread) the winter's hardness the masks picture was last sent with
 	TSet<int32> RiversHazedFor; // the provinces under the haze when the rivers were last drawn: a river under it is darker
 	bool bRiversNightFor = false; // and whether it was night then: by night it is darker still
 	/**
@@ -1332,8 +1492,10 @@ private:
 	{
 		FVector2D Spot = FVector2D::ZeroVector;
 		FString Nation;
+		FString YourNation; // (the player's, where his own groups stand on a field another country holds)
 		double Turn = 0.0, Wide = 1.5;
 		int32 Parked = 0, Mesh = INDEX_NONE;
+		int32 Yours = 0; // how many of the row are his, at its head
 		bool bShown = false;
 		float Up = 0.0f; // how far its aircraft have come up out of the ground, 0 to 1
 	};
@@ -1345,6 +1507,8 @@ private:
 	void ShowParkedPlanes(float CameraDistance, const FVector& CameraFocus);
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> AirSignMesh; // aircraft parked on the airfields that have air groups based there
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> AirPennantMesh; // the player's pennants on fields other countries hold: never sunk with the box aircraft
 	FLandFeatures Land;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> WaterMaterial;
@@ -1362,6 +1526,14 @@ private:
 	/** (Rules 84.3.3) The staff note's pointer on the ground: a mesh of its own, small, laid again as the eye moves. */
 	UPROPERTY(VisibleAnywhere, Category = "Campaign")
 	TObjectPtr<UProceduralMeshComponent> PointerMesh;
+
+	/**
+	 * (Release 2, the enemy's month near you.) The arrows of the watch near him: a mesh of their own, small, laid again each
+	 * frame while they grow (the 3D pre-check, 24 Nov 18:14Z: laid in a section of the orders' mesh they made the
+	 * whole of that mesh's render copy again each frame).
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "Campaign")
+	TObjectPtr<UProceduralMeshComponent> MovesMesh;
 
 	UPROPERTY(VisibleAnywhere, Category = "Campaign")
 	TObjectPtr<UInstancedStaticMeshComponent> TownMarkers;
@@ -1549,6 +1721,28 @@ private:
 
 	UPROPERTY(Transient)
 	TMap<int32, TObjectPtr<AArmyPiece>> AirPieces;
+	// (Release 2: ships that sail.) Where each fleet lay when the fleets were last laid out: its sea and its harbour
+	// (INDEX_NONE at sea), and the point on the map.
+	bool bShipsSail = true; // (the 1.5 patch: on unless switched off in OPTIONS)
+	TMap<int32, FIntPoint> FleetPlaces;
+	TMap<int32, FVector2D> FleetSpots;
+	// (Release 2: fading wakes.) Each wake laid: whose fleet, the month it was seen to move, and its way on the map.
+	struct FWakeTrail
+	{
+		int32 Fleet = INDEX_NONE;
+		int32 Turn = 0;
+		TArray<FVector2D> Points;
+	};
+	bool bWakes = false;
+	TArray<FWakeTrail> Wakes;
+	int32 WakesLaidFor = INDEX_NONE; // the month the foam was last laid for
+	bool bWakesDirty = false;
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> WakeMesh;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> WakeTrailInk;
+	/** Lays the foam of the wakes still to be seen in this month, fading with their age and back along their way. */
+	void LayWakes(int32 Turn);
 
 	/** The same pieces by "region|nation". */
 	UPROPERTY(Transient)

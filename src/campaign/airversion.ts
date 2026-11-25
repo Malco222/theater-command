@@ -15,6 +15,7 @@
 import data from '../../data/campaign/airversion.json';
 import { turnToDate } from '../core/ticket';
 import type { AirFleet, Game } from './types';
+import { damageField, fieldRules, fieldShut } from './fieldstate';
 
 export const AIRV = data as unknown as {
   nightGuns: { on: boolean; share: number };
@@ -69,23 +70,45 @@ export function openAirVersion(g: Game, majors: string[]): void {
   layStartGuns(g, majors);
 }
 
-/** The start guns themselves (ruling 124), for openAirVersion and for tests. A province keeps the higher level. */
-export function layStartGuns(g: Game, majors: string[]): void {
-  const lv = startGunLevel(g.turn);
+/**
+ * A grand campaign saved before the start guns were on (1.5.1; Brian, 24 November 2026 22:31Z, on the art director's
+ * card: "Yes, when I load a saved war") lays them once as it is loaded, for every great power, the player's and the
+ * computer's alike: the guns it would have opened with, at the level of the month the war began (openFrom, or the
+ * first month), round the capital and chief factory provinces each still owns and holds as it is loaded.
+ * A province that already has guns keeps the higher level. True when it laid them.
+ */
+export function startGunsOnLoad(g: Game, majors: string[]): boolean {
+  if (!AIRV.startGuns.on || g.flags.open !== 1 || g.flags[KEY.start] === 1) return false;
+  g.flags[KEY.start] = 1;
+  layStartGuns(g, majors, g.flags.openFrom ?? 1);
+  return true;
+}
+
+/** The start guns themselves (ruling 124), for openAirVersion, startGunsOnLoad and tests: at the level of the month
+ * the war began (the month in play, unless told). A province keeps the higher level. */
+export function layStartGuns(g: Game, majors: string[], began: number = g.turn): void {
+  const lv = startGunLevel(began);
   for (const nat of majors) for (const id of startGunSites(g, nat)) g.flags[`wk:aa:${id}`] = Math.max(g.flags[`wk:aa:${id}`] ?? 0, lv);
 }
 
 // ---- The field wrecked (ruling 151(b)) ----------------------------------------------------------------------
 
-/** True for a province whose airfield saboteurs wrecked this month. */
-export const fieldWrecked = (g: Game, region: number): boolean => g.flags[`wreck:${region}`] === g.turn;
+/**
+ * True for a province whose airfield saboteurs wrecked this month. With airfields as targets (fieldstate.ts) the one
+ * field state answers instead: its runway shut, by anything.
+ */
+export const fieldWrecked = (g: Game, region: number): boolean => (g.flags.fields === 1 && fieldRules(g) ? fieldShut(g, region) : g.flags[`wreck:${region}`] === g.turn);
 
-/** True for an air group grounded this month because saboteurs wrecked its field (never a carrier's wing). */
-export const wrecked = (g: Game, f: AirFleet): boolean => f.ship === undefined && g.flags['av:field'] === 1 && fieldWrecked(g, f.base);
+/**
+ * True for an air group grounded because its field cannot be flown from (never a carrier's wing): release 1, saboteurs
+ * wrecked it this month; with airfields as targets, its runway is shut until repaired (fieldstate.ts fieldShut).
+ */
+export const wrecked = (g: Game, f: AirFleet): boolean => f.ship === undefined && fieldShut(g, f.base);
 
-/** Why a group cannot fly this month for a wrecked field, or null. */
+/** Why a group cannot fly for a wrecked or shut field, or null. */
 export function whyNotField(g: Game, f: AirFleet): string | null {
-  return wrecked(g, f) ? `Grounded this month: saboteurs wrecked the field at ${g.regions[f.base].name}.` : null;
+  if (!wrecked(g, f)) return null;
+  return g.flags.fields === 1 && fieldRules(g) ? `Grounded: the runway at ${g.regions[f.base].name} is cratered until it is repaired.` : `Grounded this month: saboteurs wrecked the field at ${g.regions[f.base].name}.`;
 }
 
 /** The air groups of a side based on a province's field: what wrecking it would ground. */
@@ -95,6 +118,8 @@ export const groupsOnField = (g: Game, region: number, nat: (n: string) => boole
 /** Wrecks a province's field for this month. False if it is already wrecked or nothing is based there. */
 export function wreckField(g: Game, region: number, nat: (n: string) => boolean): boolean {
   if (fieldWrecked(g, region) || !groupsOnField(g, region, nat).length) return false;
+  // With airfields as targets the wreck writes the one field state, as the light hit (fieldstate.ts damageField 'agent').
+  if (g.flags.fields === 1 && fieldRules(g)) return damageField(g, region, 'agent') !== null;
   g.flags[`wreck:${region}`] = g.turn;
   return true;
 }

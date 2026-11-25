@@ -12,9 +12,11 @@ code (Tools/build_content.py, FIRE_SPREAD_HLSL). If the land battle's grade chan
   python3 land_grade.py write 70 58 45             what to write (and how far past white) to land on that
   python3 land_grade.py spread 174 116 89          a screen colour of a marked pixel, after the fire's spread
   python3 land_grade.py --grade desert write ...   the same under another ground's grade (GRADES)
-  python3 land_grade.py retarget fx.json desert [--apply]
+  python3 land_grade.py retarget fx.json desert [--apply] [--no-spread]
                                                    rewrite every land_grade.<path> listed in land_grade._targets
-                                                   (the landed colours the art director passed) for that grade
+                                                   (the landed colours the art director passed) for that grade, and
+                                                   (unless --no-spread) for the fire's spread after it, which takes
+                                                   a sand-coloured kit pixel for fire
 
 A grade per recording (the art director's ruling of 17:52Z 22 November, art-director/battles/theatres-sheet-rulings-
 1122.md): each ground's recording carries its own sky.grade. GRADES holds Normandy's as passed and the starting
@@ -127,8 +129,48 @@ def fire_spread(c, mask=None, p=SPREAD):
     return np.clip(o, 0, 1), heat
 
 
-def retarget(path, grade, apply=False):
-    """Every land_grade._targets entry written again for grade; with apply, into the recipe at path."""
+def unspread(target, p=SPREAD):
+    """The screen colour (0..255) a kit pixel must have after the grade for M_FireSpread to leave it at target.
+
+    The spread takes any marked pixel of fire's hue (orange to yellow) that is deep in colour, or bright and a little
+    coloured, for fire, and spreads its colour: a sand-coloured dust or burst is of that hue, so one written to land on
+    its colour after the grade alone lands deeper (the desert's tank dust went mustard, 201,158,50: art director,
+    03:04Z 24 November). Of the colours that spread to target, the one nearest it."""
+    t = np.asarray(target, float) / 255.0
+    y = t @ np.array([0.2126, 0.7152, 0.0722])
+
+    def sat(v):
+        return (v.max() - v.min()) / max(v.max(), 1e-6)
+
+    def polish(c):
+        for _ in range(300):
+            f = fire_spread(c, p=p)[0][0] - t
+            if np.abs(f).max() < 1e-5:
+                break
+            jac = np.zeros((3, 3))
+            for k in range(3):
+                d = np.zeros(3)
+                d[k] = 1e-4
+                jac[:, k] = (fire_spread(c + d, p=p)[0][0] - fire_spread(c - d, p=p)[0][0]) / 2e-4
+            c = np.clip(c + 0.5 * np.linalg.solve(jac + 1e-9 * np.eye(3), -f), 0.0, 1.0)
+        return c, np.abs(fire_spread(c, p=p)[0][0] - t).max()
+
+    lo, hi = 0.2, 1.0
+    for _ in range(60):
+        k = 0.5 * (lo + hi)
+        if sat(fire_spread(y + (t - y) * k, p=p)[0][0]) > sat(t):
+            hi = k
+        else:
+            lo = k
+    tries = [polish(t.copy()), polish(np.clip(y + (t - y) * 0.5 * (lo + hi), 0.0, 1.0))]
+    good = [c for c, miss in tries if miss < 0.5 / 255.0] or [min(tries, key=lambda cm: cm[1])[0]]
+    return min(good, key=lambda c: np.abs(c - t).max()) * 255.0
+
+
+def retarget(path, grade, apply=False, spread=True):
+    """Every land_grade._targets entry written again for grade; with apply, into the recipe at path. With spread (as
+    the land battle draws, its lens carrying M_FireSpread since 22 November), each lands on its target after the fire's
+    spread too."""
     import json
     from collections import OrderedDict
     with open(path) as f:
@@ -146,14 +188,18 @@ def retarget(path, grade, apply=False):
                 yield at + [key], val
 
     for keys, target in walk(row.get("_targets", {}), []):
-        written, over, shown = write_for_land(target, **kw)
+        graded = unspread(target) if spread else np.asarray(target, float)
+        written, over, shown = write_for_land(graded, **kw)
         put = [int(round(v)) for v in written]
-        print(".".join(keys), "target", list(target), "write", put, "x%.2f" % over, "lands", np.round(shown).astype(int).tolist())
+        seen = lands_land(gc.written(put, 1.0, 4.0), **kw)
+        if spread:
+            seen = fire_spread(np.asarray(seen) / 255.0)[0][0] * 255.0
+        print(".".join(keys), "target", list(target), "write", put, "x%.2f" % over, "lands", np.round(seen).astype(int).tolist())
         node = row
         for key in keys[:-1]:
             node = node.setdefault(key, OrderedDict())
         node[keys[-1]] = put
-    row["_targets_grade"] = grade
+    row["_targets_grade"] = grade + (" with the fire's spread" if spread else "")
     if apply:
         with open(path, "w") as f:
             f.write(json.dumps(book, indent=1, ensure_ascii=False) + "\n")
@@ -166,7 +212,7 @@ if __name__ == "__main__":
         grade, args = args[1], args[2:]
     kw = GRADES[grade]
     if len(args) >= 3 and args[0] == "retarget":
-        retarget(args[1], args[2], "--apply" in args)
+        retarget(args[1], args[2], "--apply" in args, "--no-spread" not in args)
     elif len(args) >= 4 and args[0] in ("lands", "write", "spread"):
         rgb = [float(v) for v in args[1:4]]
         if args[0] == "lands":

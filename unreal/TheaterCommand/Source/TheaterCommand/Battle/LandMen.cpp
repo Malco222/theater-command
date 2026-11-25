@@ -889,6 +889,7 @@ namespace LandMen
 		const char* LodNames[LodCount] = { "near", "mid", "far" };
 		for (int L = 0; L < LodCount; ++L)
 		{
+			PackFirst[L] = PackCount[L] = 0;
 			const J& Src = Root[LodNames[L]];
 			if (Src.IsNull())
 			{
@@ -900,6 +901,19 @@ namespace LandMen
 			const J& Ht = Root["helmet_tris"][LodNames[L]];
 			HelmetFirst[L] = static_cast<int>(Ht.Number(0, 0.0));
 			HelmetCount[L] = static_cast<int>(Ht.Number(1, 0.0));
+			// (Effects (R2): his pack and webbing's run, pack_tris, as helmet_tris; one that is not two whole numbers
+			// lying within the level's triangles, or that reaches into his helmet's run, is left alone, so a man without
+			// his pack is drawn whole, and a crewman with his helmet on keeps all of it)
+			const J& Pk = Root["pack_tris"][LodNames[L]];
+			const double First = Pk.Number(0, -1.0), Count = Pk.Number(1, 0.0);
+			const double Tris = static_cast<double>(Meshes[L].Triangles.size() / 3);
+			const double HelmetFrom = static_cast<double>(HelmetFirst[L]), HelmetTo = HelmetFrom + static_cast<double>(HelmetCount[L]);
+			const bool bIntoHelmet = HelmetCount[L] > 0 && First < HelmetTo && HelmetFrom < First + Count;
+			if (Pk.Size() == 2 && First >= 0.0 && Count >= 1.0 && First == std::floor(First) && Count == std::floor(Count) && First + Count <= Tris && !bIntoHelmet)
+			{
+				PackFirst[L] = static_cast<int>(First);
+				PackCount[L] = static_cast<int>(Count);
+			}
 		}
 		if (Meshes[Near].Points == 0)
 		{
@@ -1003,6 +1017,28 @@ namespace LandMen
 					{
 						const std::string Clip = List.At(N).Text();
 						if (ClipIndex(Clip) >= 0) (*Out)[Ds.Keys[I]][ByKind.Keys[K]].push_back(Clip);
+					}
+				}
+			}
+		}
+		// (a gore twin's falls by where each one's burst was against him, gore_from[clip]: front, behind, left, right or
+		// under; a gore fall the map does not name, by its own blast_from. Effects (R2), Crowd::SetGore)
+		GoreFrom.clear();
+		{
+			const J& Gf = Root["gore_from"];
+			for (size_t I = 0; I < Gf.Size() && Gf.K == J::Obj; ++I)
+			{
+				const std::string Side = Gf.Vals[I].Text();
+				if (!Side.empty() && ClipIndex(Gf.Keys[I]) >= 0) GoreFrom[Gf.Keys[I]] = Side;
+			}
+			for (const auto& St : DeathsGore)
+			{
+				for (const auto& Kd : St.second)
+				{
+					for (const std::string& Clip : Kd.second)
+					{
+						const std::string Side = Cs[Clip.c_str()]["blast_from"].Text();
+						if (!Side.empty()) GoreFrom.emplace(Clip, Side);
 					}
 				}
 			}
@@ -1352,8 +1388,12 @@ namespace LandMen
 			bool bFiring = false;           // a firing pose: its clip's shots come from the rounds
 			bool bMoving = false;           // he moved just after the change (a horse holder walks his horses)
 			float Lift = 0.f;               // carried on a stretcher: the canvas's height over the ground, metres
+			bool bUnderCanvas = false;      // riding in a lorry (pose mounted): under her canvas, not drawn (Crowd::Visible) unless seated (SeatFn)
 			uint8_t Aboard = 0;             // in a vehicle's bed (SeatFn): 1 seated on the bench, 2 kneeling on the floor
-			int SeatOn = -1, Seat = -1;     // aboard: the rules' vehicle (her k in his block) and seat (-1: not said)
+			// the rules' vehicle (her k in his block) and seat, -1 where not said; OffAt (Men in lorries, the Battle rules
+			// card's row), the battle time his turn to get down over her tailboard comes (-1: not told to get down)
+			int SeatOn = -1, Seat = -1;
+			double OffAt = -1.0;
 			std::string Pose, Cover;
 			double T = 0.0;                 // when the rules gave it (battle time)
 		};
@@ -1406,6 +1446,7 @@ namespace LandMen
 				std::string Pose, Cover;
 				bool bHidden = false;
 				int SeatOn = -1, Seat = -1;   // aboard: his vehicle's k in his block and his seat in her bed (-1: not said)
+				double OffAt = -1.0;          // and (Men in lorries) when his turn to get down over her tailboard comes (-1: not yet told)
 			};
 			std::vector<Change> Ch;
 			double D = -1.0, OutT = -1.0;
@@ -1488,10 +1529,12 @@ namespace LandMen
 					Cg.Pose = C.At(1).Text("idle");
 					Cg.Cover = C.At(2).Text("none");
 					Cg.bHidden = C.At(5).Num0() != 0.0;
+					// (aboard, with Men in lorries on: [..., seatOn, seat] and, told to get down, when his turn comes)
 					if (C.Size() >= 9)
 					{
-						Cg.SeatOn = static_cast<int>(C.At(7).Num0());
-						Cg.Seat = static_cast<int>(C.At(8).Num0());
+						Cg.SeatOn = static_cast<int>(C.At(7).Num0(-1.0));
+						Cg.Seat = static_cast<int>(C.At(8).Num0(-1.0));
+						Cg.OffAt = C.Size() >= 10 ? C.At(9).Num0(-1.0) : -1.0;
 					}
 					Ch.push_back(Cg);
 				}
@@ -1507,10 +1550,18 @@ namespace LandMen
 
 		struct Variant
 		{
-			// A soldier's mesh at one level, with his own helmet or without it (a finish drawn instead): the points only
-			// that helmet uses are left out, so they are neither skinned nor sent.
+			// A soldier's mesh at one level, with his own helmet or without it (a finish drawn instead), and (Effects, R2)
+			// with his pack and webbing or without them (a man out of his machine, AddRider's bNoPack): the runs left out
+			// (VariantCuts) and the points only they use, so those are neither skinned nor sent.
 			Mesh M;
 			std::vector<int> ToCompact;     // the file's point -> this mesh's, or -1
+		};
+		/** The runs of a soldier file's triangles a variant leaves out (bits): his own helmet's (helmet_tris), and his pack
+		 * and webbing's (pack_tris; Effects, R2). */
+		enum VariantCuts : int
+		{
+			CutHelmet = 1,
+			CutPack = 2,
 		};
 
 		struct FaceRest
@@ -1588,6 +1639,286 @@ namespace LandMen
 			Row.bMate = Rd["m"].Num0() != 0.0;
 			return Row;
 		}
+
+		/** A gore fall that is the big throw: of kind thrown, or any die_blast_* (some listed under another kind too). */
+		bool IsThrow(const std::string& Kind, const std::string& Name) { return Kind == "thrown" || Name.rfind("die_blast_", 0) == 0; }
+
+		/** Effects (R2): whether a gored man may take a gore fall of his twin's: any not a throw; a throw only where his
+		 * round may throw him (bBig, Crowd's BigThrow), and only one from its side (gore_from is Side: where the burst was
+		 * under him and no gun is known, only the throw from under, the prone one; a424a37e gave a man on his feet there a
+		 * throw from any side, with twins that hold no fall from under for his stance); one from under (gore_from under: a
+		 * lower leg off, or the prone throw) only where the burst was under him (Side under: the deaths thread, 24 Nov, the
+		 * burst within a metre). */
+		bool MayTake(const Soldier& Tw, const std::string& Kind, const std::string& Name, bool bBig, const std::string& Side)
+		{
+			const auto From = Tw.GoreFrom.find(Name);
+			if (From != Tw.GoreFrom.end() && From->second == "under" && Side != "under") return false;
+			if (!IsThrow(Kind, Name)) return true;
+			return bBig && From != Tw.GoreFrom.end() && From->second == Side;
+		}
+
+		/** Effects (R2): whether a gore fall of his twin's is from under him (gore_from under) and he may take it where
+		 * the burst was under him (the prone throw only where bBig). */
+		bool FromUnder(const Soldier& Tw, const std::string& Kind, const std::string& Name, bool bBig)
+		{
+			const auto From = Tw.GoreFrom.find(Name);
+			return From != Tw.GoreFrom.end() && From->second == "under" && MayTake(Tw, Kind, Name, bBig, "under");
+		}
+
+		/** The kinds of falls a man of stance St takes from a deaths table (ChooseFall's): his stance's, else the
+		 * nearest (cover: kneel; run: stand; prone: kneel), then stand, kneel, the table's first. None from an empty
+		 * table, or for a man lying where it has no prone falls (he goes limp). */
+		const std::map<std::string, std::vector<std::string>>* KindsOf(const std::map<std::string, std::map<std::string, std::vector<std::string>>>& Table,
+			const std::string& St)
+		{
+			if (Table.empty() || (St == "prone" && Table.find("prone") == Table.end())) return nullptr;
+			const char* Order[] = { St.c_str(), St == "cover" ? "kneel" : St == "run" ? "stand" : St == "prone" ? "kneel" : "stand", "stand", "kneel" };
+			for (const char* Name : Order)
+			{
+				auto Found = Table.find(Name);
+				if (Found != Table.end() && !Found->second.empty()) return &Found->second;
+			}
+			return &Table.begin()->second;
+		}
+
+		using GoreKinds = std::map<std::string, std::vector<std::string>>;
+		using GoreList = std::vector<std::pair<std::string, std::string>>;
+
+		/** Effects (R2): whether his stance's gore falls hold one from under him he may take (FromUnder). */
+		bool AnyFromUnder(const Soldier& Tw, const GoreKinds& Kinds, bool bBig)
+		{
+			for (const auto& KV : Kinds)
+			{
+				for (const std::string& Name : KV.second)
+				{
+					if (FromUnder(Tw, KV.first, Name, bBig)) return true;
+				}
+			}
+			return false;
+		}
+
+		/** Effects (R2): the side his gore falls are read by (GoreSide): the burst's; a burst under him, under where his
+		 * stance's gore falls hold one from under he may take, else his gun's side where known (bAway, the gun's place),
+		 * else under with no point to be thrown away from. */
+		GoreStrike ReadBy(const Soldier& Tw, const GoreKinds& Kinds, const GoreStrike& Strike)
+		{
+			GoreStrike By = Strike;
+			if (Strike.Side != "under" || AnyFromUnder(Tw, Kinds, Strike.bBig)) return By;
+			if (!Strike.Gun.empty()) By.Side = Strike.Gun;
+			else By.bAway = false;
+			return By;
+		}
+
+		/** Effects (R2): the least any limb a gore fall takes off (its limb_off events') moves away from a point at PX, PY
+		 * in his own axes, along the line from it to the limb's joint as he was struck (m; less than 0 toward it), read
+		 * from the fall's first frame and its last: FallsBySide's half metre, and against his gun GoreFalls' falls from
+		 * under. 1e9 for a fall that takes none off. */
+		double LimbsAway(const Soldier& Tw, const Clip& Cl, double PX, double PY)
+		{
+			Xform AtFirst[MaxBones], AtLast[MaxBones];
+			Pose First, End;
+			Sample(Cl, 0.f, First);
+			Sample(Cl, Cl.Long, End);
+			BoneFrames(Tw, First, AtFirst);
+			BoneFrames(Tw, End, AtLast);
+			double Least = 1e9;
+			for (const ClipEvent& E : Cl.Events)
+			{
+				if (E.Fx != "limb_off" || E.Bone < 0 || E.Bone >= MaxBones) continue;
+				const Vec3 Head = Tw.Bones[static_cast<size_t>(E.Bone)].Head;
+				const Vec3 A = AtFirst[E.Bone].Point(Head), B = AtLast[E.Bone].Point(Head);
+				const double OX = static_cast<double>(A.X) - PX, OY = static_cast<double>(A.Y) - PY;
+				const double Along = ((static_cast<double>(B.X) - static_cast<double>(A.X)) * OX + (static_cast<double>(B.Y) - static_cast<double>(A.Y)) * OY)
+					/ std::max(1e-6, std::hypot(OX, OY));
+				Least = std::min(Least, Along);
+			}
+			return Least;
+		}
+
+		/** Effects (R2): the gore falls he may be given by the side Strike.Side (GoreFalls, but a burst under him read
+		 * there first). */
+		GoreList FallsBySide(const Soldier& Tw, const GoreKinds& Kinds, const GoreStrike& Strike)
+		{
+			GoreList Out;
+			// (the art director, 23 Nov 17:52Z: the limb flies away from the blast; the deaths thread, 20:1xZ: weigh only the
+			// kind matching the burst, the big throw only for guns and howitzers) Those he may take (MayTake: no throw but
+			// a field gun's or a howitzer's, and none from another side of him; none from under but for a burst under him);
+			// of them those whose gore_from is where the burst was against him (in front, the falls from the front, of kind
+			// back; behind, forward; at his left or his right, the side falls from that side), where his stance's gore falls
+			// hold any.
+			auto May = [&](const std::string& Kind, const std::string& Name) { return MayTake(Tw, Kind, Name, Strike.bBig, Strike.Side); };
+			auto FromBurst = [&](const std::string& Kind, const std::string& Name) {
+				const auto Side = Tw.GoreFrom.find(Name);
+				return Side != Tw.GoreFrom.end() && Side->second == Strike.Side && May(Kind, Name);
+			};
+			bool bMatched = false, bAny = false;
+			for (const auto& KV : Kinds)
+			{
+				for (const std::string& Name : KV.second)
+				{
+					bMatched = bMatched || FromBurst(KV.first, Name);
+					bAny = bAny || May(KV.first, Name);
+				}
+			}
+			// (where widened past his side's falls, below, never to one from the side opposite it, front and behind, left
+			// and right: such a fall throws him toward the burst, his body and often a limb (the verifier of f6f8b75c: a
+			// man standing with a burst ahead on his left given die_leg_off_b, from behind, his pelvis 1.1 to 1.7 m toward
+			// it). Nor to one from under, which MayTake gives only where the burst was under him (a lower leg off, or the
+			// prone throw: the burst within a metre; widened to, die_leg_off_d moved a standing man's body as much as
+			// 0.23 m toward a burst or a gun 45 degrees round on his left). A burst under him is no point to be thrown
+			// away from, so none is widened then. Widened so, he keeps his side's own falls, so never none)
+			auto Opposite = [&](const std::string& Name) {
+				const auto From = Tw.GoreFrom.find(Name);
+				if (From == Tw.GoreFrom.end()) return false;
+				const std::string& Fr = From->second;
+				const std::string& Sd = Strike.Side;
+				return (Sd == "front" && Fr == "behind") || (Sd == "behind" && Fr == "front") || (Sd == "left" && Fr == "right") || (Sd == "right" && Fr == "left");
+			};
+			bool bWide = false;
+			auto Base = [&](const std::string& Kind, const std::string& Name) {
+				if (!bAny) return true;
+				if (bMatched && !bWide) return FromBurst(Kind, Name);
+				return May(Kind, Name) && !(bWide && Opposite(Name));
+			};
+			// (and of those, where he is thrown away from a point (the burst, or the gun), the falls whose every limb moves
+			// at least half a metre away from it, along the line from it to the limb's joint as he was struck, or failing
+			// any the one whose limbs move farthest so: a limb flying across the burst, or through it to land beyond, is
+			// not thrown away from it. A side is a quarter round, and the twins' falls fling a limb off their side's middle
+			// (their standing and running falls from the front a left arm or leg back and to his left, toward a burst 38
+			// degrees or more round on his left): where none from his side moves its limbs half a metre away, all he may
+			// take but those from the opposite side are weighed so (the verifier of 35ffc951: never a limb toward the burst
+			// for a fall from his side when another he may take throws it away). Read from the fall's first frame and its
+			// last, in his own axes: the same whatever frame his fall is first played on and however lately he was posed,
+			// his own pose as struck within 0.35 m of the fall's first at a cut, a running man's calf the most)
+			std::map<std::string, double> Gain;
+			double Floor = -1e9;
+			if (Strike.bAway)
+			{
+				auto Measure = [&]() {
+					for (const auto& KV : Kinds)
+					{
+						for (const std::string& Name : KV.second)
+						{
+							const int Ix = Tw.ClipIndex(Name);
+							if (Ix < 0 || !Base(KV.first, Name) || Gain.count(Name)) continue;
+							Gain[Name] = LimbsAway(Tw, Tw.Clips[static_cast<size_t>(Ix)], Strike.X, Strike.Y);
+						}
+					}
+					Floor = -1e9;
+					for (const auto& G : Gain) Floor = std::max(Floor, std::min(0.5, G.second));
+				};
+				Measure();
+				if (bMatched && Floor < 0.5)
+				{
+					bWide = true;
+					Measure();
+				}
+			}
+			for (const auto& KV : Kinds)
+			{
+				for (const std::string& Name : KV.second)
+				{
+					if (!Base(KV.first, Name)) continue;
+					if (!Gain.empty())
+					{
+						const auto G = Gain.find(Name);
+						if (G == Gain.end() || G->second < Floor) continue;
+					}
+					std::pair<std::string, std::string> Fall(KV.first, Name);
+					if (std::find(Out.begin(), Out.end(), Fall) == Out.end()) Out.push_back(std::move(Fall));
+				}
+			}
+			return Out;
+		}
+	}
+
+	std::string GoreSide(const Soldier& Tw, const GoreStrike& Strike)
+	{
+		const GoreKinds* Kinds = KindsOf(Tw.DeathsGore, Strike.Stance);
+		if (!Kinds) return std::string();
+		const GoreStrike By = ReadBy(Tw, *Kinds, Strike);
+		for (const auto& KV : *Kinds)
+		{
+			for (const std::string& Name : KV.second)
+			{
+				if (MayTake(Tw, KV.first, Name, By.bBig, By.Side)) return By.Side;
+			}
+		}
+		return std::string();
+	}
+
+	std::vector<std::pair<std::string, std::string>> GoreFalls(const Soldier& Tw, const GoreStrike& Strike)
+	{
+		const GoreKinds* Kinds = KindsOf(Tw.DeathsGore, Strike.Stance);
+		if (!Kinds) return {};
+		// (a burst under him, within 1 m whatever his stance: the deaths thread, 24 Nov, its falls from under, a lower leg
+		// off on his feet or a knee, and lying the throw from under him. Those he may take; a burst under him is no point to
+		// be thrown away from, but his gun is, below. A field gun's or a howitzer's shell may throw him too, but only as his
+		// gun's side would (the falls from there, of them the throws: from that side alone, his limbs and his body thrown
+		// away from the gun, as before); the kind from under weighed as the kind matching the burst is, ChooseFall. Where
+		// his stance's gore falls hold none from under he may take (lying, but for the prone throw, none), by his gun's
+		// side as for a burst there (ReadBy), or where it is not known all he may take but a throw (MayTake: a throw only
+		// from his side, and under him only the prone one is from under))
+		if (Strike.Side == "under" && AnyFromUnder(Tw, *Kinds, Strike.bBig))
+		{
+			GoreList Thrown;
+			if (Strike.bBig && !Strike.Gun.empty() && Strike.bAway)
+			{
+				GoreStrike ByGun = Strike;
+				ByGun.Side = Strike.Gun;
+				for (const auto& Fall : FallsBySide(Tw, *Kinds, ByGun))
+				{
+					if (IsThrow(Fall.first, Fall.second)) Thrown.push_back(Fall);
+				}
+			}
+			// (his gun known (Gun, and bAway: the gun's place): of his falls from under only those whose limb does not move
+			// toward the gun, along the line from it to the limb's joint as he was struck (LimbsAway, as a limb is read
+			// against a burst), or where every one moves it toward the gun those that move it least so (never none). The
+			// art director, 23 Nov 17:52Z: the limb flies away from the blast; with one fall from under each stance it flew
+			// toward the gun about half the time. The deaths thread's mirrors (die_leg_off_f standing and running,
+			// die_leg_off_g kneeling and in cover: the other leg, flung to the other side) give him at least one that flies
+			// away from a gun ahead (mostly both) or at either side, but for a gun a few metres off on his right just short
+			// of his back (1 to 3 m off, 133 to 135 degrees round, standing or running: a probe's 1-degree grid); with it
+			// behind him both legs may fly back toward it (the test prints those cells). His gun not known, all of them,
+			// either leg; a stance with one from under (the twins before; lying, the prone throw) is given it whatever his
+			// gun's side, as before)
+			std::map<std::string, double> Gain;
+			double Floor = -1e9;
+			if (!Strike.Gun.empty() && Strike.bAway)
+			{
+				double Best = -1e9;
+				for (const auto& KV : *Kinds)
+				{
+					for (const std::string& Name : KV.second)
+					{
+						const int Ix = Tw.ClipIndex(Name);
+						if (Ix < 0 || !FromUnder(Tw, KV.first, Name, Strike.bBig) || Gain.count(Name)) continue;
+						const double G = LimbsAway(Tw, Tw.Clips[static_cast<size_t>(Ix)], Strike.X, Strike.Y);
+						Gain[Name] = G;
+						Best = std::max(Best, G);
+					}
+				}
+				Floor = std::min(0.0, Best);
+			}
+			GoreList Out;
+			for (const auto& KV : *Kinds)
+			{
+				for (const std::string& Name : KV.second)
+				{
+					std::pair<std::string, std::string> Fall(KV.first, Name);
+					const bool bUnder = FromUnder(Tw, KV.first, Name, Strike.bBig);
+					if (!bUnder && std::find(Thrown.begin(), Thrown.end(), Fall) == Thrown.end()) continue;
+					if (bUnder)
+					{
+						const auto G = Gain.find(Name);
+						if (G != Gain.end() && G->second < Floor) continue;
+					}
+					if (std::find(Out.begin(), Out.end(), Fall) == Out.end()) Out.push_back(std::move(Fall));
+				}
+			}
+			return Out;
+		}
+		return FallsBySide(Tw, *Kinds, ReadBy(Tw, *Kinds, Strike));
 	}
 
 	struct Crowd::Impl
@@ -1657,6 +1988,7 @@ namespace LandMen
 			float F = 0.f, V = 0.f;
 			float Fade = 1.f;
 			bool bVisible = true;
+			bool bUnderCanvas = false;      // alive and riding in a lorry's bed now (his shown stance's): not drawn
 			double Last = -1.0;
 			uint32_t Stamp = 0;
 			Lod L = Far;
@@ -1703,12 +2035,19 @@ namespace LandMen
 			// A rider (a tank's commander in his hatch, Crowd::AddRider): no track; posed each frame by what the scene
 			// says (SetRide).
 			bool bRider = false;
+			int LookTrack = -1;             // a rider dressed as a man of the recording's (AddRiderLike): that man's track, for his patches
 			Crowd::Ride RideNow;
 			// Effects (R2): fallen as his file's gore twin (S the twin, OwnS his own file till a replay from the start
 			// gives it back); MeshNo counts the swaps, so the scene makes his triangles again.
 			const Soldier* OwnS = nullptr;
 			bool bGore = false;
 			uint32_t MeshNo = 0;
+			// Effects (R2): a rider drawn bareheaded, his file's own helmet left off and no finish drawn in its place (a
+			// downed pilot in an infantry file: AddRider's bBareHead).
+			bool bBareHead = false;
+			// Effects (R2): a rider drawn without his pack and webbing, his file's pack_tris left off and nothing drawn in
+			// their place (a downed pilot, or a tank's crewman bailing out, in an infantry file: AddRider's bNoPack).
+			bool bNoPack = false;
 		};
 
 		std::map<std::string, std::shared_ptr<const Soldier>> Soldiers;
@@ -1743,6 +2082,7 @@ namespace LandMen
 		std::vector<double> TailsRead;
 		std::vector<RoundRow> RoundsRead;
 		std::map<int, std::pair<std::string, std::string>> BlockArmy; // block id -> (army, file army)
+		std::map<int, std::string> BlockCal; // block id -> its guns' calibre as the recording writes it (cal), where it does
 		/** Uniforms that age (release 2, behind its switch, SetWorn): each block's side's months in the line (the
 		 * recording's sides.<side>.worn), the faded rows made from the armies' (one a row and wear, so no more sets of
 		 * men alike), and whether the look is on. */
@@ -1775,8 +2115,8 @@ namespace LandMen
 		FallMemory Falls;
 		std::string RecordingText;  // kept for a replay from the start (Update going back)
 		Crowd::Options With;
-		std::map<std::tuple<const Soldier*, int, int>, Variant> Variants;           // soldier, own helmet, level
-		std::map<std::tuple<const Soldier*, int, int, int>, FaceRest> FaceRests;   // soldier, own helmet, level, face
+		std::map<std::tuple<const Soldier*, int, int>, Variant> Variants;           // soldier, runs cut (VariantCuts), level
+		std::map<std::tuple<const Soldier*, int, int, int>, FaceRest> FaceRests;   // soldier, runs cut, level, face
 
 		// The pose bank (SO1): as read (ReadPoseBank), and each far variant's bake.
 		struct BankEntry
@@ -2120,7 +2460,8 @@ namespace LandMen
 			const Variant& V = *Mn.Var[L];
 			const double A = Mn.WornA;
 			// (a rider has no track: his own seed, PhaseSeed, tells his patches from another rider's)
-			const uint64_t Who = Mn.Track >= 0 ? (static_cast<uint64_t>(static_cast<uint32_t>(Mn.Track)) << 20) ^ 0xA6EDull
+			const int LookOf = Mn.Track >= 0 ? Mn.Track : Mn.LookTrack;
+			const uint64_t Who = LookOf >= 0 ? (static_cast<uint64_t>(static_cast<uint32_t>(LookOf)) << 20) ^ 0xA6EDull
 				: static_cast<uint64_t>(static_cast<double>(Mn.PhaseSeed) * 4294967296.0) ^ 0xB1DEull;
 			auto Ratio = [](uint32_t To, uint32_t From, double Value, float* Out) {
 				for (int K = 0; K < 3; ++K)
@@ -2271,26 +2612,44 @@ namespace LandMen
 			}
 		}
 
-		const Variant& VariantOf(const Soldier* S, bool bOwnHelmet, int L)
+		/** His file's mesh at level L with those runs of its triangles left out (VariantCuts), made once: the points only
+		 * the runs use left out (a point a kept triangle uses stays), the rest in the file's order, and the triangles in
+		 * the file's order without the runs'. A run the file has not at that level is no cut (CutsOf leaves a pack cut
+		 * off there, so such a man shares the mesh of the man with his pack). */
+		const Variant& VariantOf(const Soldier* S, int Cuts, int L)
 		{
-			const auto Key = std::make_tuple(S, bOwnHelmet ? 1 : 0, L);
+			const auto Key = std::make_tuple(S, Cuts, L);
 			auto Found = Variants.find(Key);
 			if (Found != Variants.end()) return Found->second;
 			Variant& V = Variants[Key];
 			const Mesh& Full = S->Meshes[L];
 			const size_t N = static_cast<size_t>(Full.Points);
+			const size_t Tris = Full.Triangles.size() / 3;
 			std::vector<bool> Keep(N, true);
-			size_t TriFirst = Full.Triangles.size() / 3, TriCount = 0;
-			if (!bOwnHelmet && S->HelmetCount[L] > 0)
+			// (the runs left out, [first, first + count) each: his own helmet's, then (Effects, R2) his pack's)
+			size_t RunFirst[2] = { Tris, Tris }, RunCount[2] = { 0, 0 };
+			if ((Cuts & CutHelmet) != 0 && S->HelmetCount[L] > 0)
 			{
-				TriFirst = static_cast<size_t>(S->HelmetFirst[L]);
-				TriCount = static_cast<size_t>(S->HelmetCount[L]);
-				// The points only his own helmet's triangles use (in the snow files a few are shared with the hood: kept).
+				RunFirst[0] = static_cast<size_t>(S->HelmetFirst[L]);
+				RunCount[0] = static_cast<size_t>(S->HelmetCount[L]);
+			}
+			if ((Cuts & CutPack) != 0 && S->PackCount[L] > 0)
+			{
+				RunFirst[1] = static_cast<size_t>(S->PackFirst[L]);
+				RunCount[1] = static_cast<size_t>(S->PackCount[L]);
+			}
+			const auto Cut = [&RunFirst, &RunCount](size_t T) {
+				return (T >= RunFirst[0] && T < RunFirst[0] + RunCount[0]) || (T >= RunFirst[1] && T < RunFirst[1] + RunCount[1]);
+			};
+			if (RunCount[0] > 0 || RunCount[1] > 0)
+			{
+				// The points only the runs' triangles use (in the snow files a few of the helmet's are shared with the hood,
+				// and a strap's may be the cloth's: kept).
 				std::vector<uint8_t> Use(N, 0);
-				for (size_t T = 0; T < Full.Triangles.size() / 3; ++T)
+				for (size_t T = 0; T < Tris; ++T)
 				{
-					const bool bHelmet = T >= TriFirst && T < TriFirst + TriCount;
-					for (int C = 0; C < 3; ++C) Use[Full.Triangles[T * 3 + static_cast<size_t>(C)]] |= bHelmet ? 1 : 2;
+					const bool bCut = Cut(T);
+					for (int C = 0; C < 3; ++C) Use[Full.Triangles[T * 3 + static_cast<size_t>(C)]] |= bCut ? 1 : 2;
 				}
 				for (size_t I = 0; I < N; ++I) Keep[I] = Use[I] != 1;
 			}
@@ -2313,20 +2672,20 @@ namespace LandMen
 				if (!Full.Tint.empty())
 					for (size_t C = 0; C < 3; ++C) M.Tint.push_back(Full.Tint[I * 3 + C]);
 			}
-			for (size_t T = 0; T < Full.Triangles.size() / 3; ++T)
+			for (size_t T = 0; T < Tris; ++T)
 			{
-				if (T >= TriFirst && T < TriFirst + TriCount) continue;
+				if (Cut(T)) continue;
 				for (int C = 0; C < 3; ++C) M.Triangles.push_back(static_cast<uint32_t>(V.ToCompact[Full.Triangles[T * 3 + static_cast<size_t>(C)]]));
 			}
 			return V;
 		}
 
-		const FaceRest& FaceRestOf(const Soldier* S, bool bOwnHelmet, int L, int FaceIx)
+		const FaceRest& FaceRestOf(const Soldier* S, int Cuts, int L, int FaceIx)
 		{
-			const auto Key = std::make_tuple(S, bOwnHelmet ? 1 : 0, L, FaceIx);
+			const auto Key = std::make_tuple(S, Cuts, L, FaceIx);
 			auto Found = FaceRests.find(Key);
 			if (Found != FaceRests.end()) return Found->second;
-			const Variant& V = VariantOf(S, bOwnHelmet, L);
+			const Variant& V = VariantOf(S, Cuts, L);
 			FaceRest& R = FaceRests[Key];
 			R.At = V.M.At;
 			R.Facing = V.M.Facing;
@@ -2347,7 +2706,13 @@ namespace LandMen
 			return R;
 		}
 
-		bool OwnHelmet(const Man& M) const { return M.Info.Finish < 0; }
+		bool OwnHelmet(const Man& M) const { return M.Info.Finish < 0 && !M.bBareHead; }
+		/** The runs his mesh at level L leaves out (VariantCuts): his own helmet where a finish is drawn over him or he is
+		 * bareheaded; his pack where he goes without it (Effects, R2) and his file marks it at that level. */
+		int CutsOf(const Man& M, int L) const
+		{
+			return (OwnHelmet(M) ? 0 : CutHelmet) | (M.bNoPack && M.S->PackCount[L] > 0 ? CutPack : 0);
+		}
 
 		// ---------------------------------------------------------------------------------------------------------
 		// Poses of the rules, drawn.
@@ -2423,12 +2788,20 @@ namespace LandMen
 				// back seat holds him (the scene's SeatFn puts him there, facing inboard), until the bench's own clips come.
 				Use("car_ride_back", Stance::Loop, Kneel);
 				St.Aboard = 1;
+				// (a lorry that Men in lorries rides keeps him hidden under her canvas, her rider drawn on her bench
+				// instead: ALandBattle::RideLorries; elsewhere he is seated and drawn)
+				St.bUnderCanvas = true;
 			}
 			else if (Pose == "mounted" || Pose == "ride")
 			{
 				// Aboard a lorry with no seated clip in his file: kneeling on her bed's floor by his bench (SeatFn). On a
 				// horse: kneeling where the rules have him (no rider's clip yet).
 				Use("fire_kneel", Stance::Hold, Kneel);
+				// (in a lorry he is not drawn where the rules have him: he knelt on the ground under her, "troops are stuck
+				// under the truck", Brian, 23 November 14:10Z. With Men in lorries on, the lorries' riders are drawn on her
+				// benches (ALandBattle::RideLorries) and he is hidden under her canvas; in a carrier, or a lorry with the
+				// row off, he is seated in her bed (SeatFn).)
+				St.bUnderCanvas = Pose == "mounted";
 				if (Pose == "mounted") St.Aboard = 2;
 			}
 			else if (Pose == "horses") Use(bMoving ? "walk" : "idle", bMoving ? Stance::Gait : Stance::Loop, Up);
@@ -2876,17 +3249,113 @@ namespace LandMen
 			return St;
 		}
 
+		/** Effects (R2): a man as the round that killed him struck him, and what a gore fall throws him away from. */
+		struct Blast
+		{
+			double X = 0.0, Y = 0.0, F = 0.0; // where he stood and his heading as it struck him, by his track
+			double PX = 0.0, PY = 0.0;        // the point he is thrown away from (bAway): the burst, or the gun's place
+			bool bAway = false;               // none: the burst under him and the gun not known
+			std::string Side;                 // front|behind|left|right|under (the gore falls' own words); empty: no round
+			std::string Gun;                  // the burst under him: the gun's side (front|behind|left|right), where known
+		};
+
+		/**
+		 * Effects (R2): where the round that killed him burst against his facing, in the gore falls' own words
+		 * (gore_from), and the point a gore fall throws him and his limb away from. A burst 1 m or more from him: "front"
+		 * or "behind" within 45 degrees of his nose or his back, else "left" or "right" (his right clockwise of his
+		 * heading, as the field's headings run, WorldOf); away from the burst. One within 1 m (the rules lay 8 in 10 shell
+		 * kills on the man, which says nothing of where the shell truly fell), whatever his stance: "under" (the deaths
+		 * thread, 24 Nov: its falls from under, a lower leg off), and the gun's side as it fired (its track at the round,
+		 * as FromWhere reads it) for a throw or where his stance has no fall from under he may take, away from the gun;
+		 * no gun's side where it is not known or stood within 1 m of him. Where he stood and his heading by his track at
+		 * the round (Dead less his lag, as GoreTwinFor reads them), so the same whatever frame his fall is first played
+		 * on. Read before he is gored (GoreTwinFor) and as his fall is laid (StartFall).
+		 */
+		Blast BlastOf(const Man& M) const
+		{
+			Blast B;
+			B.X = M.X;
+			B.Y = M.Y;
+			B.F = static_cast<double>(M.F);
+			{
+				float F = 0.f, V = 0.f;
+				size_t Cursor = 0;
+				const TrackData& Tr = Tracks[static_cast<size_t>(M.Track)];
+				if (!Tr.T.empty())
+				{
+					Tr.At(M.Info.Dead - M.Info.Delay, Cursor, B.X, B.Y, F, V);
+					B.F = static_cast<double>(F);
+				}
+			}
+			if (M.KillT < 0.0) return B;
+			B.PX = M.KillX;
+			B.PY = M.KillY;
+			auto SideOf = [&B](double PX, double PY) {
+				const double Off = Turn(B.F, std::atan2(PX - B.X, PY - B.Y)), Eighth = 0.785398163397448;
+				return std::string(std::fabs(Off) < Eighth ? "front" : std::fabs(Off) > 3.0 * Eighth ? "behind" : Off > 0.0 ? "right" : "left");
+			};
+			if ((B.PX - B.X) * (B.PX - B.X) + (B.PY - B.Y) * (B.PY - B.Y) < 1.0)
+			{
+				B.Side = "under";
+				const auto Found = TrackOf.find({ M.KillBy, M.KillK, M.KillJ });
+				if (Found == TrackOf.end()) return B;
+				double SX = 0.0, SY = 0.0;
+				size_t Cursor = 0;
+				float F = 0.f, V = 0.f;
+				Tracks[static_cast<size_t>(Found->second)].At(M.KillT, Cursor, SX, SY, F, V);
+				if ((SX - B.X) * (SX - B.X) + (SY - B.Y) * (SY - B.Y) < 1.0) return B;
+				B.PX = SX;
+				B.PY = SY;
+				B.bAway = true;
+				B.Gun = SideOf(SX, SY);
+				return B;
+			}
+			B.bAway = true;
+			B.Side = SideOf(B.PX, B.PY);
+			return B;
+		}
+
+		/** Effects (R2): his GoreStrike (LandMen::GoreFalls, GoreSide) from how the round struck him (BlastOf): the point
+		 * he is thrown away from in his own axes as struck (x forward, y right), and whether it may throw him. */
+		GoreStrike StrikeOf(const Man& M, const std::string& St, const Blast& Bl) const
+		{
+			GoreStrike Strike;
+			Strike.Stance = St;
+			Strike.Side = Bl.Side;
+			Strike.Gun = Bl.Gun;
+			Strike.bAway = Bl.bAway;
+			Strike.bBig = BigThrow(M);
+			if (Bl.bAway)
+			{
+				const double DX = Bl.PX - Bl.X, DY = Bl.PY - Bl.Y, Sf = std::sin(Bl.F), Cf = std::cos(Bl.F);
+				Strike.X = DX * Sf + DY * Cf;
+				Strike.Y = DX * Cf - DY * Sf;
+			}
+			return Strike;
+		}
+
+		/** Effects (R2): whether the round that killed him may throw him (a gore fall's big throw): a field gun's, a
+		 * howitzer's or a heavy gun's shell (the art director, 23 Nov 17:52Z: die_blast for field guns and howitzers), the
+		 * round's w "gun" from a block whose cal is not "light" (no cal written: a howitzer's, as the Fates table reads
+		 * it, LandKit's WeaponWord). A light gun's, a tank's, a mortar's or a grenade's never. */
+		bool BigThrow(const Man& M) const
+		{
+			if (M.KillWeapon != "gun") return false;
+			const auto Found = BlockCal.find(M.KillBy);
+			return Found == BlockCal.end() || Found->second != "light";
+		}
+
 		std::string FromWhere(const Man& M) const
 		{
 			// Where the round that killed him came from, against his facing: front, back or side. A shell from the gun's
 			// side; with no shooter known, the front (a man faces what he fights).
 			if (M.KillT < 0.0) return "front";
-			// (Effects (R2): a gored man is thrown away from the burst, so its side, where it fell 1.5 m or more off)
-			if (M.bGore && std::hypot(M.KillX - M.X, M.KillY - M.Y) >= 1.5)
-			{
-				const double Off = std::fabs(Turn(M.F, std::atan2(M.KillX - M.X, M.KillY - M.Y)));
-				return Off < 1.22 ? "front" : Off > 1.92 ? "back" : "side";
-			}
+			// (Effects (R2): a gored man is thrown away from the burst, or from the gun where it burst under him and his
+			// falls are read by its side: that side, as StartFall has just read it, GoreSide. A burst under him read below
+			// from the gun as for any man, front within 70 degrees of his nose and back past 110, not by the 45-degree
+			// quarter his throw is read by: it weighs none of his falls from under nor the throw, ChooseFall)
+			const std::string& Burst = M.Info.GoreFrom;
+			if (!Burst.empty() && Burst != "under") return Burst == "front" ? "front" : Burst == "behind" ? "back" : "side";
 			double SX = 0.0, SY = 0.0;
 			bool bKnown = false;
 			auto Found = TrackOf.find({ M.KillBy, M.KillK, M.KillJ });
@@ -2923,20 +3392,30 @@ namespace LandMen
 				// The physics-baked falls: weigh each kind by how he was struck and how he stood, then each clip of the
 				// kind by the Fates rule (never the last fall again unless it is the only one; the 2nd to 4th last
 				// 0.35, 0.6, 0.85), so a battle's dead never fall twice alike running.
-				const std::map<std::string, std::vector<std::string>>* Kinds = nullptr;
-				const char* Order[] = { St.c_str(), St == "cover" ? "kneel" : St == "run" ? "stand" : St == "prone" ? "kneel" : "stand", "stand", "kneel" };
-				for (const char* Name : Order)
-				{
-					auto Found = Table.find(Name);
-					if (Found != Table.end() && !Found->second.empty()) { Kinds = &Found->second; break; }
-				}
-				if (!Kinds && !Table.empty()) Kinds = &Table.begin()->second;
-				if (Kinds && !(St == "prone" && Table.find("prone") == Table.end()))
+				const std::map<std::string, std::vector<std::string>>* Kinds = KindsOf(Table, St);
+				if (Kinds)
 				{
 					std::vector<std::pair<std::string, double>> Odds;
 					std::vector<std::string> KindOfPick;
+					// Effects (R2), a gored man: only the falls GoreFalls gives him (those from where the burst was against him,
+					// BlastOf, of them those whose limbs move away from the burst or the gun; where none from there he may take,
+					// of all he may take: no throw but a field gun's or a howitzer's, BigThrow, and none from another side of
+					// him; where none from there moves its limbs half a metre away, of all he may take but those from the side
+					// opposite; a burst under him, his falls from under (his gun known, those whose limb flies not toward it,
+					// or where all do the least so), and such a shell's throw from his gun's side), each kind's weight shared
+					// among its falls taken, the kinds weighed as for any man and the kind from under as below. Never no fall
+					// (GoreTwinFor gores no man whose stance's gore falls hold none he may take; were it so, all of them).
+					const bool bBig = BigThrow(M);
+					std::vector<std::pair<std::string, std::string>> Given;
+					if (M.bGore) Given = GoreFalls(S, StrikeOf(M, St, BlastOf(M)));
+					auto Takes = [&](const std::string& Kind, const std::string& Name) {
+						return !M.bGore || std::find(Given.begin(), Given.end(), std::make_pair(Kind, Name)) != Given.end();
+					};
 					size_t Candidates = 0;
-					for (const auto& KV : *Kinds) Candidates += KV.second.size();
+					for (const auto& KV : *Kinds)
+					{
+						for (const std::string& Name : KV.second) Candidates += Takes(KV.first, Name) ? 1 : 0;
+					}
 					// A section's men fall close together: no fall a body within 15 m already shows, where another will do
 					// (the Fates rule above runs in time; this one on the ground, among neighbours). Only with sections,
 					// so a recording without them falls exactly as it did.
@@ -2952,6 +3431,9 @@ namespace LandMen
 					for (const auto& KV : *Kinds)
 					{
 						const std::string& Kind = KV.first;
+						size_t Taken = 0;
+						for (const std::string& Name : KV.second) Taken += Takes(Kind, Name) ? 1 : 0;
+						if (Taken == 0) continue;
 						double W = Kind == "spin" ? 0.6 : Kind == "thrown" ? 0.2 : Kind == "crawl" ? 0.3 : 1.0;
 						if (From == "front") W *= Kind == "back" ? 3.0 : Kind == "knees" ? 1.5 : Kind == "forward" ? 0.4 : 1.0;
 						if (From == "back") W *= Kind == "forward" ? 3.0 : Kind == "back" ? 0.3 : 1.0;
@@ -2959,15 +3441,29 @@ namespace LandMen
 						if (St == "run") W *= Kind == "forward" ? 2.0 : Kind == "spin" ? 1.3 : 1.0;
 						if (St == "kneel" || St == "cover") W *= Kind == "knees" ? 2.5 : Kind == "side" ? 1.5 : 1.0;
 						if (St == "prone") W *= Kind == "crawl" ? 3.0 : 1.0;
-						// (a gored man: the big throw for a field gun's or a howitzer's shell; a tank's, a mortar's or a
-						// grenade's mostly knocks him down, an arm or a leg off, by where it burst)
-						if (bShell) W *= Kind == "thrown" ? (M.bGore && M.KillWeapon != "gun" ? 1.0 : 40.0) : Kind == "spin" || Kind == "side" ? 1.3 : 1.0;
+						// (a gored man: the big throw for a field gun's, a howitzer's or a heavy gun's shell; a light gun's, a
+						// tank's, a mortar's or a grenade's knocks him down, an arm or a leg off, by where it burst: its throws
+						// are not taken above)
+						if (bShell) W *= Kind == "thrown" ? (M.bGore && !bBig ? 1.0 : 40.0) : Kind == "spin" || Kind == "side" ? 1.3 : 1.0;
+						// (a gored man the burst was under, within 1 m: the kind from under, a lower leg off (the deaths thread,
+						// 24 Nov), weighed three times, as the kind matching the burst is above (back for one in front, forward
+						// behind, side at his side; From, read from his gun as for any man, weighs none of his falls from under
+						// nor the throw). So where a field gun's or a howitzer's shell bursting on him is offered a throw from
+						// his gun's side, the throw weighs 8 (0.2, 40 times) to the fall from under's 3 whatever his stance and
+						// his gun's side, before the Fates and the section rules. Read by his gun's side (b470998e) it was the
+						// same for a man standing with his gun ahead or behind, or running with it ahead, but the matching kind
+						// weighed more elsewhere: standing or running with it at his side 3.9 (3, 1.3 for a shell's side
+						// fall), running with it behind 6 (forward twice running), kneeling with it on his left 5.85 (side 1.5
+						// kneeling, 1.3); so such men are thrown somewhat more often now. Every other round kills him in a
+						// fall from under)
+						if (M.bGore && M.Info.GoreFrom == "under") W *= Kind == "under" ? 3.0 : 1.0;
 						if (bCrushed) W *= Kind == "back" || Kind == "forward" ? 6.0 : Kind == "thrown" || Kind == "spin" ? 0.05 : 1.0;
 						if (!M.FallKindWanted.empty() && Kind == M.FallKindWanted) W *= 50.0;
 						for (const std::string& Clip : KV.second)
 						{
+							if (!Takes(Kind, Clip)) continue;
 							const bool bBeside = Candidates > 1 && std::find(Beside.begin(), Beside.end(), Clip) != Beside.end();
-							Odds.push_back({ Clip, W / static_cast<double>(KV.second.size()) * Falls.Weight(Clip, Candidates) * (bBeside ? 0.05 : 1.0) });
+							Odds.push_back({ Clip, W / static_cast<double>(Taken) * Falls.Weight(Clip, Candidates) * (bBeside ? 0.05 : 1.0) });
 							KindOfPick.push_back(Kind);
 						}
 					}
@@ -3028,6 +3524,10 @@ namespace LandMen
 		void StartFall(Man& M, double D)
 		{
 			const std::string St = StanceForFall(M, D);
+			// (Effects (R2): the side a gored man's falls are read by, his burst's or under, or his gun's where it burst
+			// under him and he has no fall from under he may take (GoreSide), for FromWhere and ChooseFall; empty for a man
+			// not gored)
+			M.Info.GoreFrom = M.bGore ? GoreSide(*M.S, StrikeOf(M, St, BlastOf(M))) : std::string();
 			const std::string From = FromWhere(M);
 			M.FallClip = ChooseFall(M, St, From);
 			M.FallAt = D;
@@ -3616,7 +4116,8 @@ namespace LandMen
 				Pl.Lift = Lifted.Lift * static_cast<float>(std::clamp(Now - Lifted.T, 0.0, 1.0));
 			}
 			// (aboard: on his vehicle's bench, or kneeling on her floor by it, as the scene says she stands now; where no
-			// vehicle carries him there, where the rules have him)
+			// vehicle carries him there, where the rules have him, hidden under the canvas of a lorry Men in lorries rides)
+			bool bSeated = false;
 			if (M.State == Man::Alive && SeatAt && M.Shown >= 0 && static_cast<size_t>(M.Shown) < M.Stances.size() && M.Stances[static_cast<size_t>(M.Shown)].Aboard)
 			{
 				SeatPlace Seat;
@@ -3633,8 +4134,11 @@ namespace LandMen
 					Pl.Pivot = Vec3();
 					const float Under = GroundAt ? GroundAt(Pl.X, Pl.Y).Height : 0.f;
 					Pl.Lift = static_cast<float>((bSits ? Seat.Z : Seat.Floor) - static_cast<double>(Under));
+					bSeated = true;
 				}
 			}
+			M.bUnderCanvas = !bSeated && M.State == Man::Alive && M.Shown >= 0 && static_cast<size_t>(M.Shown) < M.Stances.size()
+				&& M.Stances[static_cast<size_t>(M.Shown)].bUnderCanvas;
 			M.Place = Pl;
 			M.World = WorldOf(Pl, GroundAt, &M.Footing);
 			M.bFooting = true;
@@ -3684,6 +4188,7 @@ namespace LandMen
 			M.FallClip = -1;
 			M.Info.FallClip.clear();
 			M.Info.FallKind.clear();
+			M.Info.GoreFrom.clear();
 			M.Info.FallStarted = M.Info.Rested = -1.0;
 			for (int L = 0; L < LodCount; ++L) { M.bSkinned[L] = false; M.RestAt[L].clear(); M.RestFacing[L].clear(); }
 			for (Shot& Sh : M.Shots) { Sh.Done = 0; Sh.LastC = -1.f; }
@@ -3719,7 +4224,13 @@ namespace LandMen
 			// or a mortar's 0.35, a grenade's 0.25), falling away steeply past 2 m (by e every 1.5 m) to none past Reach.
 			// The rules lay most bursts on the man they kill (8 in 10 shell kills, his own spot), which says nothing of
 			// how close the shell truly fell: such a man OnHim (a gun's 0.2, the others 0.12). Measured on the rules'
-			// Normandy and Prokhorovka, shell blasts off and on: 1 shell kill in 7.6 to 11 a gore fall.
+			// Normandy and Prokhorovka, shell blasts off and on: 1 shell kill in 7.6 to 11 a gore fall, while a man lying
+			// took any shell; with twins whose prone falls are only the throw from under him, 1 in 12 to 22.5 as the
+			// recordings are (2 of Normandy's 45 shell kills, 4 of Prokhorovka's 48; these odds summed over them expect
+			// 2.8 and 5.1); with the lying falls of 24 Nov (below), 7 and 7, 1 in 6.4 and 6.9, where these odds summed over
+			// the same kills expect 4.3 and 5.6 (1 in 10.5 and 8.6; 9.8 of the 93, 1 in 9.5, within the art director's 1
+			// in 8 to 10). The 14 are those two seeded battles' dice, about 1.5 standard deviations above that (8 of them
+			// lying, by a mortar's or a tank's shell; b470998e gored the same 14 with those twins). Not changed here.
 			double Near = 0.0, OnHim = 0.0, Reach = 0.0;
 			if (M.KillWeapon == "gun") Near = 0.55, OnHim = 0.2, Reach = 8.0;
 			else if (M.KillWeapon == "tank") Near = 0.35, OnHim = 0.12, Reach = 6.0;
@@ -3727,14 +4238,16 @@ namespace LandMen
 			else if (M.KillW == Weapon::Grenade) Near = 0.25, OnHim = 0.12, Reach = 2.0;
 			else return nullptr;
 			// (where he stood when it struck him, by his track: the same whatever frame his fall is first played on)
-			double X = M.X, Y = M.Y;
-			float F = 0.f, V = 0.f;
-			size_t Cursor = 0;
-			const TrackData& Tr = Tracks[static_cast<size_t>(M.Track)];
-			if (!Tr.T.empty()) Tr.At(M.Info.Dead - M.Info.Delay, Cursor, X, Y, F, V);
-			const double Far = std::hypot(M.KillX - X, M.KillY - Y);
+			const Blast Bl = BlastOf(M);
+			const double Far = std::hypot(M.KillX - Bl.X, M.KillY - Bl.Y);
 			double Odds = Far < 0.25 ? OnHim : Far > Reach ? 0.0 : Far <= 2.0 ? Near : Near * std::exp(-(Far - 2.0) / 1.5);
 			if (St == "prone" || St == "cover") Odds *= 0.5; // (lying, or behind cover: his body under the blast)
+			// None where his stance's gore falls hold none he may take (GoreSide; the deaths thread, 20:1xZ: the big
+			// throw only for guns and howitzers, MayTake): a man lying is gored by any shell as other men are where the
+			// twin's prone falls hold falls that are not throws (the deaths thread, 24 Nov); where they hold only the throw
+			// from under him, only by a gun's shell that burst on him. He then falls as any man; asked before his dice, so
+			// no man's dice change.
+			if (GoreSide(*Found->second, StrikeOf(M, St, Bl)).empty()) return nullptr;
 			Dice D(Seed ^ Mix(0x60AEull + static_cast<uint64_t>(M.Info.Block) * 1000003ull + static_cast<uint64_t>(M.Info.K))
 				^ (M.Info.J > 0 ? Mix(0x60AE5ull + static_cast<uint64_t>(M.Info.J)) : 0ull));
 			return D.U() < Odds ? Found->second.get() : nullptr;
@@ -3746,8 +4259,8 @@ namespace LandMen
 		{
 			for (int L = 0; L < LodCount; ++L)
 			{
-				M.FaceAt[L] = &FaceRestOf(M.S, OwnHelmet(M), L, M.Info.Face);
-				M.Var[L] = &VariantOf(M.S, OwnHelmet(M), L);
+				M.FaceAt[L] = &FaceRestOf(M.S, CutsOf(M, L), L, M.Info.Face);
+				M.Var[L] = &VariantOf(M.S, CutsOf(M, L), L);
 				M.bLook[L] = false;
 				M.bSkinned[L] = false;
 				M.RestAt[L].clear();
@@ -3957,8 +4470,8 @@ namespace LandMen
 			// the frame he first comes into view (a few milliseconds each the first time).
 			for (int L = 0; L < LodCount; ++L)
 			{
-				Mn.FaceAt[L] = &FaceRestOf(Mn.S, OwnHelmet(Mn), L, Mn.Info.Face);
-				Mn.Var[L] = &VariantOf(Mn.S, OwnHelmet(Mn), L);
+				Mn.FaceAt[L] = &FaceRestOf(Mn.S, CutsOf(Mn, L), L, Mn.Info.Face);
+				Mn.Var[L] = &VariantOf(Mn.S, CutsOf(Mn, L), L);
 			}
 			AttachBank(Mn);
 			Tr.Man = static_cast<int>(Men.size()) - 1;
@@ -4004,6 +4517,7 @@ namespace LandMen
 				St.T = Cg.T;
 				St.SeatOn = Cg.SeatOn;
 				St.Seat = Cg.Seat;
+				St.OffAt = Cg.OffAt;
 				St.Cover = Cg.Cover;
 				St.bMoving = bMoving;
 				if (C < Mn.Stances.size()) Mn.Stances[C] = std::move(St);
@@ -4236,6 +4750,7 @@ namespace LandMen
 
 		// Each block's army and the soldier file its men are drawn from.
 		I.BlockArmy.clear();
+		I.BlockCal.clear();
 		I.BlockWorn.clear();
 		I.ArmyWorn.clear();
 		I.AgedRows.clear();
@@ -4246,6 +4761,8 @@ namespace LandMen
 			const std::string Army = B["army"].Text(B["nat"].Text("GER").c_str());
 			std::string File = B["standIn"].Text(Army.c_str());
 			I.BlockArmy[static_cast<int>(B["id"].Num0())] = { Army, File };
+			// (Effects (R2): its guns' calibre, for a gore fall's big throw: BigThrow)
+			if (!B["cal"].Text().empty()) I.BlockCal[static_cast<int>(B["id"].Num0())] = B["cal"].Text();
 			// (uniforms that age: his side's months in the line, the campaign's, where the recording has them)
 			const std::string Side = B["side"].Text();
 			if (!Side.empty())
@@ -4330,8 +4847,9 @@ namespace LandMen
 				});
 			});
 		};
-		// (his changes, [t, pose, cover, aimX, aimY, hidden, buttoned] each, as TrackData::ReadChanges reads them)
-		Scan::Plain Item[6];
+		// (his changes, [t, pose, cover, aimX, aimY, hidden, buttoned] each, and aboard [..., seatOn, seat, off], as
+		// TrackData::ReadChanges reads them)
+		Scan::Plain Item[10];
 		auto ReadChanges = [&]() {
 			return In.Items([&](size_t) {
 				TrackData::Change Cg;
@@ -4340,7 +4858,7 @@ namespace LandMen
 				bool bOk = true;
 				if (!In.AtList()) bOk = In.Skip();
 				else bOk = In.Items([&](size_t K) {
-					Scan::Plain& Into = K < 6 ? Item[K] : V;
+					Scan::Plain& Into = K < 10 ? Item[K] : V;
 					if (!In.Value(Into)) return false;
 					bAllNumbers = bAllNumbers && Into.K == J::Num;
 					return true;
@@ -4350,6 +4868,12 @@ namespace LandMen
 				Cg.Pose = Item[1].Text("idle");
 				Cg.Cover = Item[2].Text("none");
 				Cg.bHidden = Item[5].Num0() != 0.0;
+				if (Item[7].K == J::Num && Item[8].K == J::Num)
+				{
+					Cg.SeatOn = static_cast<int>(Item[7].N);
+					Cg.Seat = static_cast<int>(Item[8].N);
+					Cg.OffAt = Item[9].K == J::Num ? Item[9].N : -1.0;
+				}
 				Chs.push_back(std::move(Cg));
 				return bOk;
 			});
@@ -4699,7 +5223,11 @@ namespace LandMen
 	}
 
 	const ManInfo& Crowd::Info(int Man) const { return Inner->Men[static_cast<size_t>(Man)].Info; }
-	bool Crowd::Visible(int Man) const { return Inner->Men[static_cast<size_t>(Man)].bVisible; }
+	bool Crowd::Visible(int Man) const
+	{
+		const Impl::Man& M = Inner->Men[static_cast<size_t>(Man)];
+		return M.bVisible && !M.bUnderCanvas;
+	}
 	float Crowd::Fade(int Man) const { return Inner->Men[static_cast<size_t>(Man)].Fade; }
 	bool Crowd::Frozen(int Man) const { return Inner->Men[static_cast<size_t>(Man)].State == Impl::Man::Rest; }
 	bool Crowd::IsFalling(int Man) const
@@ -5224,7 +5752,40 @@ namespace LandMen
 		return File;
 	}
 
-	int Crowd::AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed, const std::string& Row)
+	Crowd::Dress Crowd::PilotDress(const std::string& Nation) const
+	{
+		Dress D;
+		const std::string Crew = Nation == "USA" ? "USA_tanker" : Nation == "GER" ? "GER_panzer" : std::string();
+		if (!Crew.empty() && SoldierFile(Crew))
+		{
+			// (his tankers' file: his own head and kit, as it is drawn)
+			D.File = Crew;
+			D.bTankers = true;
+			return D;
+		}
+		D.File = RiderFileOf(Nation, D.Row);
+		D.bBareHead = true;
+		D.bNoPack = true;
+		return D;
+	}
+
+	Crowd::Dress Crowd::CrewDress(const std::string& Nation) const
+	{
+		Dress D;
+		const std::string Crew = Nation == "USA" ? "USA_tanker" : Nation == "GER" ? "GER_panzer" : std::string();
+		D.bTankers = !Crew.empty() && SoldierFile(Crew);
+		if (D.bTankers)
+		{
+			D.File = Crew;
+			return D;
+		}
+		// (his army's own infantry figure, his helmet on, his pack and webbing off)
+		D.File = SoldierFile(Nation) ? Nation : std::string();
+		D.bNoPack = true;
+		return D;
+	}
+
+	int Crowd::AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed, const std::string& Row, bool bBareHead, bool bNoPack)
 	{
 		Impl& I = *Inner;
 		const auto Sol = I.Soldiers.find(FileArmy);
@@ -5258,16 +5819,20 @@ namespace LandMen
 		Mn.Info.FileArmy = FileArmy;
 		const Soldier& S = *Mn.S;
 		Mn.Info.Face = S.Faces.empty() ? 0 : static_cast<int>(Mix(Seed ^ 0xFACEull) % 8ull) % static_cast<int>(S.Faces.size());
-		// (his own head: the tank helmet and goggles, the side cap and headphones; no steel helmet's finish over them)
+		// (his own head: the tank helmet and goggles, the side cap and headphones; no steel helmet's finish over them.
+		// Bareheaded, not even his file's own: a downed pilot in his army's infantry file, who wears no steel helmet)
 		Mn.Info.Finish = -1;
+		Mn.bBareHead = bBareHead;
+		// (Effects (R2): no pack, his file's pack and webbing left off where it marks them: a man out of his machine)
+		Mn.bNoPack = bNoPack;
 		Mn.PhaseSeed = static_cast<float>(Unit01(Seed ^ 0x57E9ull));
 		Mn.StylePick = static_cast<float>(Unit01(Seed ^ 0x5717E5ull));
 		Mn.bVisible = false;
 		RestPose(Mn.Now);
 		for (int L = 0; L < LodCount; ++L)
 		{
-			Mn.FaceAt[L] = &I.FaceRestOf(Mn.S, true, L, Mn.Info.Face);
-			Mn.Var[L] = &I.VariantOf(Mn.S, true, L);
+			Mn.FaceAt[L] = &I.FaceRestOf(Mn.S, I.CutsOf(Mn, L), L, Mn.Info.Face);
+			Mn.Var[L] = &I.VariantOf(Mn.S, I.CutsOf(Mn, L), L);
 		}
 		return static_cast<int>(I.Men.size()) - 1;
 	}
@@ -5282,6 +5847,70 @@ namespace LandMen
 	bool Crowd::IsRider(int Man) const
 	{
 		return Man >= 0 && Man < Count() && Inner->Men[static_cast<size_t>(Man)].bRider;
+	}
+
+	bool Crowd::AboardOf(int Man, int& OutBlock, int& OutSeatOn, int& OutSeat, double& OutDown) const
+	{
+		OutBlock = OutSeatOn = OutSeat = -1;
+		OutDown = -1.0;
+		if (Man < 0 || Man >= Count()) return false;
+		const Impl& I = *Inner;
+		const Impl::Man& M = I.Men[static_cast<size_t>(Man)];
+		if (M.bRider || M.State != Impl::Man::Alive || M.Shown < 0 || static_cast<size_t>(M.Shown) >= M.Stances.size()) return false;
+		const Stance& St = M.Stances[static_cast<size_t>(M.Shown)];
+		if (!St.bUnderCanvas || St.SeatOn < 0 || St.Seat < 0) return false;
+		OutBlock = M.Info.Block;
+		OutSeatOn = St.SeatOn;
+		OutSeat = St.Seat;
+		// (on his own clock, a little behind the battle's: his Delay)
+		if (St.OffAt >= 0.0 && I.Clock - M.Info.Delay >= St.OffAt) OutDown = I.Clock - M.Info.Delay - St.OffAt;
+		return true;
+	}
+
+	int Crowd::AddRiderLike(int Man)
+	{
+		Impl& I = *Inner;
+		if (!I.bBuilt || Man < 0 || Man >= Count()) return -1;
+		// (his look taken before the crowd grows: a man is made in place, and the men may move)
+		const Impl::Man& From = I.Men[static_cast<size_t>(Man)];
+		if (From.bRider || !From.S || !From.Colours) return -1;
+		const Soldier* S = From.S;
+		const ArmyColours* Colours = From.Colours;
+		const ArmyColours* Fresh = From.Fresh;
+		const float WornA = From.WornA, PhaseSeed = From.PhaseSeed, StylePick = From.StylePick;
+		const int Track = From.Track;
+		ManInfo Info = From.Info;
+		const Variant* Var[LodCount];
+		const FaceRest* FaceAt[LodCount];
+		for (int L = 0; L < LodCount; ++L)
+		{
+			Var[L] = From.Var[L];
+			FaceAt[L] = From.FaceAt[L];
+		}
+		Impl::Man& Mn = I.Men.emplace_back();
+		Mn.bRider = true;
+		Mn.Track = -1;
+		Mn.LookTrack = Track;
+		Mn.S = S;
+		Mn.Colours = Colours;
+		Mn.Fresh = Fresh;
+		Mn.WornA = WornA;
+		Mn.Info = std::move(Info);
+		Mn.Info.Block = -1;
+		Mn.Info.K = -1;
+		Mn.Info.Role = "rider";
+		Mn.Info.Dead = Mn.Info.Out = -1.0;
+		Mn.Info.Delay = 0.0;
+		Mn.PhaseSeed = PhaseSeed;
+		Mn.StylePick = StylePick;
+		Mn.bVisible = false;
+		RestPose(Mn.Now);
+		for (int L = 0; L < LodCount; ++L)
+		{
+			Mn.Var[L] = Var[L];
+			Mn.FaceAt[L] = FaceAt[L];
+		}
+		return static_cast<int>(I.Men.size()) - 1;
 	}
 
 	const Soldier* Crowd::SoldierFile(const std::string& FileArmy) const

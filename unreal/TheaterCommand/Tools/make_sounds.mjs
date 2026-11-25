@@ -541,6 +541,106 @@ made.battle = () => {
   return finish(b, 0.01, 0.6);
 };
 
+// ---- Under the water (U1: the underwater war-film view, Battle/SeaUnder) -----------------------
+// Appended after every sound above so each of those keeps its bytes (they share the one seed, drawn in this order).
+
+/** A loop: its last `overlap` seconds laid over its first (equal power), so it plays round without a seam. */
+function looped(b, overlap) {
+  const n = Math.round(overlap * SR);
+  for (const ch of [b.L, b.R]) {
+    for (let i = 0; i < n; i++) {
+      const k = i / n;
+      ch[i] = ch[i] * Math.sqrt(k) + ch[b.n - n + i] * Math.sqrt(1 - k);
+    }
+  }
+  return { L: b.L.subarray(0, b.n - n), R: b.R.subarray(0, b.n - n), n: b.n - n };
+}
+
+/** The sea heard from under it: a low roar that swells and falls once in its 8 s loop. */
+made.under_bed = () => {
+  const b = buffer(9);
+  for (const pan of [-0.6, 0.6]) {
+    const deep = lowpass(110), deeper = lowpass(60), mid = lowpass(380);
+    const swell = between(0, TAU);
+    add(b, 0, 9, pan, (t) => (deeper(deep(noise())) * 9 + mid(noise()) * 0.5) * (0.75 + 0.25 * Math.sin(TAU * 0.125 * t + swell)));
+  }
+  finish(b, 0, 0, 0.6);
+  return looped(b, 1);
+};
+
+/** An escort's screws through the water over the boat: the blades' thrash five times a second, a 4 s loop. */
+made.under_screws = () => {
+  const b = buffer(5);
+  const hiss = bandpass(900, 0.6), thump = lowpass(140);
+  add(b, 0, 5, 0, (t) => {
+    const beat = Math.pow(0.5 + 0.5 * Math.sin(TAU * 5 * t), 3);
+    return hiss(noise()) * (0.25 + 0.75 * beat) * 0.9 + thump(noise()) * beat * 4;
+  });
+  finish(b, 0, 0, 0.7);
+  return looped(b, 1);
+};
+
+/** A depth charge heard through the water and the hull: a hard low whump, a long rumble, the hull rung by it. */
+made.under_thud = () => {
+  const b = buffer(5);
+  boom(b, 0.02, 0, 1.0, { from: 70, to: 22, ring: 0.9, bang: 0.08, tone: 500 });
+  const rumble = lowpass(90);
+  add(b, 0.05, 4.8, 0, (t) => rumble(noise()) * 6 * Math.exp(-t / 1.3) * (1 - Math.exp(-t / 0.08)));
+  clank(b, 0.03, 0.2, 0.25, [212, 347, 518, 803], 0.35);
+  reverb(b, 2.2, 0.35, 700);
+  return finish(b, 0.002, 0.4);
+};
+
+/** A steel hull creaking under the sea's weight: a stick-slip of pulses, their rate wandering, through the hull's ring. */
+function creak(seconds, from, to, ring) {
+  const b = buffer(seconds + 1.2);
+  const body = [bandpass(ring, 6), bandpass(ring * 1.63, 5), bandpass(ring * 2.71, 4)];
+  let phase = 0;
+  add(b, 0, seconds, between(-0.3, 0.3), (t) => {
+    const k = t / seconds;
+    phase += (from + (to - from) * k + 6 * Math.sin(TAU * 1.7 * t)) / SR;
+    const f = phase % 1;
+    const tick = f < 0.08 ? (1 - f / 0.08) * (0.6 + 0.4 * rnd()) : 0;
+    const env = Math.pow(Math.sin(Math.PI * Math.min(1, k * 1.1)), 0.7);
+    return (body[0](tick) + body[1](tick) * 0.6 + body[2](tick) * 0.35) * env;
+  });
+  reverb(b, 0.9, 0.3, 1200);
+  return finish(b, 0.01, 0.3, 0.8);
+}
+made.hull_creak_1 = () => creak(1.6, 18, 42, 330);
+made.hull_creak_2 = () => creak(2.4, 55, 25, 260);
+made.hull_creak_3 = () => creak(1.1, 30, 70, 470);
+
+/** Things shaken loose in the boat by a near burst: small metal and glass falling, ringing short. */
+made.hull_rattle = () => {
+  const b = buffer(2.2);
+  for (let k = 0; k < 26; k++) {
+    const f = between(700, 2600);
+    clank(b, Math.pow(between(0, 1.2), 1.6), between(-0.8, 0.8), between(0.05, 0.18), [f, f * 1.47, f * 2.31], between(0.02, 0.06));
+  }
+  reverb(b, 0.6, 0.25, 3000);
+  return finish(b, 0.002, 0.3, 0.75);
+};
+
+/** The asdic's ping as the boat hears it on her hull (the films' ping, not the set's own note): sharp, then ringing. */
+made.under_ping = () => {
+  const b = buffer(2.6);
+  add(b, 0, 2.2, 0, (t) => Math.sin(TAU * 1580 * (1 + 0.004 * Math.exp(-t / 0.05)) * t) * Math.exp(-t / 0.42) * (1 - Math.exp(-t / 0.004)) * 0.8
+    + Math.sin(TAU * 3170 * t) * Math.exp(-t / 0.12) * 0.15);
+  reverb(b, 1.6, 0.45, 2400);
+  return finish(b, 0.001, 0.4, 0.7);
+};
+
+/** The eye going under: a splash, then a rush of bubbles fizzing up as the sound goes dull. */
+made.under_plunge = () => {
+  const b = buffer(2.4);
+  const splash = bandpass(1400, 0.5), fizz = highpass(2500), low = lowpass(300);
+  add(b, 0, 0.5, 0, (t) => splash(noise()) * Math.exp(-t / 0.09) * 1.4);
+  add(b, 0.05, 2.3, 0, (t) => fizz(noise()) * 0.25 * Math.exp(-t / 0.5) + low(noise()) * 2.5 * Math.exp(-t / 0.9) + (rnd() < 0.004 * Math.exp(-t / 0.7) ? 0.6 : 0));
+  reverb(b, 0.8, 0.3, 900);
+  return finish(b, 0.002, 0.5, 0.8);
+};
+
 // ---- Writing them out -------------------------------------------------------------------------
 
 function wav(b) {

@@ -21,6 +21,7 @@
 #include "Battle/LandVat.h"
 #include "Engine/World.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformTime.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
@@ -61,6 +62,10 @@ namespace
 	 * camera thread, 22 November: its cut on action wants 2.2 real seconds of lead and a tank's knock-out 5.2: "2.5 battle
 	 * s at 1x, 5 at 2x, 10 at 4x"). */
 	constexpr double LiveLead = 2.5;
+
+	/** Milliseconds of one frame the pieces may take while the screen waits on the rules (PumpLive): past it, the rest wait
+	 * for the next frame, so a backlog of pieces is laid over a few frames and never holds the picture. */
+	constexpr double LivePumpMs = 12.0;
 
 	/** The campaign's own land battles fought live from their tickets (ALandBattle::CampaignLiveOn): on (Brian, 22 November 21:21Z). */
 	TAutoConsoleVariable<int32> CampaignLiveSwitch(TEXT("TheaterLandCampaignLive"), 1,
@@ -170,6 +175,29 @@ bool ALandBattle::BeginLiveFrom(const FString& InKey, int32 Seed, const FString&
 	{
 		UE_LOG(LogTheater, Display, TEXT("Land battle (script): his steps will be pressed in code, stills into %s"), *ScriptFolder);
 	}
+	// (the lorry pan, the Mac's stills of the men in lorries: "-TheaterLandLorryPan=<battle s>[,<seconds>[,<block>]]",
+	// read past its commas; LorryPan in LandBattle.cpp)
+	LorryPanAt = -1.0;
+	LorryPanVehicle = -1;
+	LorryPanStills = 0;
+	LorryPanTries = 12;
+	FString LorryPanAsked;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandLorryPan="), LorryPanAsked, false))
+	{
+		TArray<FString> Parts;
+		LorryPanAsked.ParseIntoArray(Parts, TEXT(","), false);
+		LorryPanAt = Parts.Num() > 0 && !Parts[0].TrimStartAndEnd().IsEmpty() ? FMath::Max(0.0, FCString::Atod(*Parts[0])) : 80.0;
+		if (Parts.Num() > 1 && !Parts[1].TrimStartAndEnd().IsEmpty())
+		{
+			LorryPanFor = FMath::Clamp(FCString::Atod(*Parts[1]), 4.0, 180.0);
+		}
+		if (Parts.Num() > 2 && !Parts[2].TrimStartAndEnd().IsEmpty())
+		{
+			LorryPanBlock = FCString::Atoi(*Parts[2]);
+		}
+		UE_LOG(LogTheater, Display, TEXT("Land battle (live): the lorry pan asked: from %.0f s for %.0f s, beside a lorry with men aboard%s"),
+			LorryPanAt, LorryPanFor, LorryPanBlock >= 0 ? *FString::Printf(TEXT(" of block %d"), LorryPanBlock) : TEXT(""));
+	}
 	// The crash locator (LandFell): on for the walk, or by -TheaterLandFell=<folder> for any live battle; a crash then
 	// leaves fell-over.txt (where it fell, its stack as library and offset) and fell-over-ring.txt (the frame's last
 	// parts, kept as it goes) in that folder.
@@ -185,6 +213,7 @@ bool ALandBattle::BeginLiveFrom(const FString& InKey, int32 Seed, const FString&
 	}
 	bLiveWaiting = true;
 	bLiveBroken = false;
+	LiveBrokenAt = -1.0;
 	LiveWaited = 0.0;
 	LiveHeld = 0.0;
 	SetActorTickEnabled(true);
@@ -203,7 +232,10 @@ bool ALandBattle::TickLiveOpening(float DeltaSeconds)
 			const FString Asked = PendingLive, Look = PendingTicket;
 			PendingLive.Empty();
 			PendingTicket.Empty();
-			BeginLiveFrom(Asked, LiveSeed, LiveMe, bLiveDeploy, Look);
+			if (!BeginLiveFrom(Asked, LiveSeed, LiveMe, bLiveDeploy, Look))
+			{
+				LiveWayOut(TEXT("its rules could not be started"));
+			}
 		}
 		return true;
 	}
@@ -218,6 +250,7 @@ bool ALandBattle::TickLiveOpening(float DeltaSeconds)
 		UE_LOG(LogTheater, Warning, TEXT("Land battle (live): %s did not open: %s"), *Key, Why.IsEmpty() ? TEXT("the rules did not answer in 90 s") : *Why);
 		bLiveWaiting = false;
 		CloseLive();
+		LiveWayOut(TEXT("it did not open"));
 		return true;
 	}
 	std::string Header;
@@ -236,6 +269,7 @@ bool ALandBattle::TickLiveOpening(float DeltaSeconds)
 		UE_LOG(LogTheater, Warning, TEXT("Land battle (live): %s: the rules' header is unreadable: %s"), *Key, Error.empty() ? TEXT("not a live battle") : *WideOf(Error));
 		State.Reset();
 		CloseLive();
+		LiveWayOut(TEXT("its header could not be read"));
 		return true;
 	}
 	UE_LOG(LogTheater, Display, TEXT("Land battle (live): %s header read in %.0f ms: \"%s\", %s, %d blocks%s"), *Key, (FPlatformTime::Seconds() - Began) * 1000.0,
@@ -244,6 +278,7 @@ bool ALandBattle::TickLiveOpening(float DeltaSeconds)
 	{
 		State.Reset();
 		CloseLive();
+		LiveWayOut(TEXT("its field could not be laid"));
 		return true;
 	}
 	// (the general sets his own pace, at life's to begin with, the keys 1 to 3 faster; a film keeps the scene's own,
@@ -310,6 +345,11 @@ void ALandBattle::PumpLive()
 			UE_LOG(LogTheater, Display, TEXT("Land battle (live): %s %s %s%s%s"), *A.Kind, *A.Asked, A.bOk ? TEXT("taken") : TEXT("refused"),
 				A.Why.IsEmpty() ? TEXT("") : TEXT(": "), *A.Why);
 		}
+		// (ALL FALL BACK refused by the rules: the button comes back, and the note says why)
+		if (!A.bOk && A.Kind == TEXT("order") && A.Asked.Contains(TEXT("land:fallBack")))
+		{
+			S.General.bAllBack = false;
+		}
 		if (!A.bOk && A.Kind != TEXT("hedges"))
 		{
 			S.Note = NoteOf(!A.Why.IsEmpty() ? A.Why : A.Kind == TEXT("place") ? FString(TEXT("The block cannot stand there")) : FString(TEXT("The order was not taken")));
@@ -321,18 +361,38 @@ void ALandBattle::PumpLive()
 	{
 		// (the rules stopped: the battle shown up to what they fought, and then held; the log says why)
 		bLiveBroken = true;
-		S.Note = "THE BATTLE STOPPED HERE: ITS RULES FAILED (THE LOG SAYS WHY)";
+		LiveBrokenAt = RealT;
+		S.Note = "THE BATTLE STOPPED HERE: ITS RULES FAILED. NOTHING IS BOOKED; BACK TO THE MAP IN A MOMENT";
 		S.NoteAge = -1.0;
 	}
 
-	// The pieces fought: one a frame (each some milliseconds to read and lay), every one waiting when the screen waits on
-	// them (the opening, the setup step's placings, the rules catching up).
+	// The pieces fought: one a frame (each some milliseconds to read and lay), and more when the screen waits on them (the
+	// opening, the setup step's placings, the rules catching up), up to LivePumpMs of the frame: the rest the next frame.
+	// (release 1.5, the Mac's speed gate on 2dcc018b, 23 November: every live battle held its picture for 200 to 550 ms
+	// every few seconds; a frame that took every waiting piece at once was one way. "-TheaterLandPumpAll": every waiting
+	// piece in one frame, as before)
+	static const bool bPumpAll = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandPumpAll"));
 	const bool bWaitedOn = !S.Rec.bOver && S.Battle >= S.Rec.Fought - LiveMargin - 1e-6;
+	const double PumpFrom = FPlatformTime::Seconds();
 	std::string Delta;
 	int32 Taken = 0;
-	while ((Taken == 0 || bWaitedOn) && Live->TakeOne(Delta))
+	while ((Taken == 0 || (bWaitedOn && (bPumpAll || (FPlatformTime::Seconds() - PumpFrom) * 1000.0 < LivePumpMs))) && Live->TakeOne(Delta))
 	{
 		++Taken;
+		// (release 1.5, the Mac's speed gate on 2dcc018b, 23 November: on every battlefield fought live a piece took 200 to
+		// 550 ms of one frame, the picture held every few seconds, where the cloud's reading of a whole piece was some 40 ms.
+		// Each step of a piece timed, and a piece over 50 ms said in the log with its parts, so the Mac's next run names the
+		// step to mend. Timing only: nothing here changes what is laid)
+		const double PieceAt = FPlatformTime::Seconds();
+		double StepAt = PieceAt;
+		double MsRead = 0.0, MsPlay = 0.0, MsMen = 0.0, MsCrowd = 0.0, MsTanks = 0.0, MsMap = 0.0;
+		auto Lap = [&StepAt](double& Ms)
+		{
+			const double Now = FPlatformTime::Seconds();
+			Ms += (Now - StepAt) * 1000.0;
+			StepAt = Now;
+		};
+		const int32 PieceKb = static_cast<int32>(Delta.size() / 1024);
 		const int32 VehiclesBefore = S.Armour ? static_cast<int32>(S.Armour->Vehicles().size()) : 0;
 		LandFeed::Grown G;
 		std::string Error;
@@ -342,12 +402,15 @@ void ALandBattle::PumpLive()
 			UE_LOG(LogTheater, Warning, TEXT("Land battle (live): a piece at %.1f s not read: %s"), S.Rec.Fought, *WideOf(Error));
 			continue;
 		}
+		Lap(MsRead);
 		S.Play.Extend(G);
+		Lap(MsPlay);
 		LandFell::Phase("live: the men grown", G.bReset ? 1 : 0);
 		if (S.Men && !S.Men->Extend(Delta, Error))
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Land battle (live): the men not grown at %.1f s: %s"), G.T, *WideOf(Error));
 		}
+		Lap(MsMen);
 		// (the men's crowd, SO1: the body sets and helmets these men bring made now, before they are drawn; a set whose mid
 		// part cannot be made has every mid man skinned, as MakeMen does)
 		if (Vat && S.Men)
@@ -359,6 +422,7 @@ void ALandBattle::PumpLive()
 				S.Men->SetPoseBankMid(false);
 			}
 		}
+		Lap(MsCrowd);
 		// (a reset made her vehicles again: kept as they are drawn if they are the same vehicles in the same order)
 		std::vector<LandKit::TrackWords> WordsBefore;
 		if (G.bReset && S.Armour)
@@ -384,8 +448,19 @@ void ALandBattle::PumpLive()
 				bVehiclesKept = W.Block == WordsBefore[V].Block && W.K == WordsBefore[V].K && W.J == WordsBefore[V].J;
 			}
 		}
+		Lap(MsTanks);
 		LandFell::Phase("live: mapped to the drawn", bVehiclesKept ? 0 : 1);
 		MapLive(static_cast<int32>(G.NewTracksFrom), VehiclesBefore, G.bReset, bVehiclesKept);
+		Lap(MsMap);
+		const double PieceMs = (StepAt - PieceAt) * 1000.0;
+		if (PieceMs > 50.0)
+		{
+			const int32 VehiclesNow = S.Armour ? static_cast<int32>(S.Armour->Vehicles().size()) : 0;
+			UE_LOG(LogTheater, Display, TEXT("Land battle (live): a slow piece, %.0f ms at %.1f s (%d KB%s, piece %d of this frame; %d men, %d tracks, %d vehicles, %d new): read %.0f, play %.0f, men %.0f, crowd %.0f, tanks %.0f, mapped and bodies made %.0f"),
+				PieceMs, G.T, PieceKb, G.bReset ? (bVehiclesKept ? TEXT(", a reset, vehicles kept") : TEXT(", a reset, vehicles made again")) : TEXT(""), Taken,
+				S.Men ? S.Men->Count() : 0, static_cast<int32>(S.Rec.Tracks.size()), VehiclesNow, FMath::Max(0, VehiclesNow - VehiclesBefore),
+				MsRead, MsPlay, MsMen, MsCrowd, MsTanks, MsMap);
+		}
 		if (G.bBegun)
 		{
 			UE_LOG(LogTheater, Display, TEXT("Land battle (live): the setup step closed; the clock runs"));
@@ -400,6 +475,14 @@ void ALandBattle::PumpLive()
 				UE_LOG(LogTheater, Display, TEXT("Land battle (live): the result for the campaign (%d bytes): %s"), Result.Len(), *Result.Left(400));
 			}
 		}
+	}
+	// (several pieces in one frame, the screen waiting on them: said with their count when they took over 50 ms together,
+	// so the Mac's run tells a backlog from one heavy piece)
+	const double FrameMs = (FPlatformTime::Seconds() - PumpFrom) * 1000.0;
+	if (Taken > 1 && FrameMs > 50.0)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle (live): %d pieces in one frame, %.0f ms (the screen waiting on the rules at %.1f s, %.1f s fought)%s"),
+			Taken, FrameMs, S.Battle, S.Rec.Fought, bPumpAll ? TEXT(", every waiting piece taken: -TheaterLandPumpAll") : TEXT(""));
 	}
 }
 
@@ -585,6 +668,13 @@ void ALandBattle::BeginFight()
 	{
 		Live->Begin();
 	}
+}
+
+void ALandBattle::LiveWayOut(const TCHAR* Why)
+{
+	UE_LOG(LogTheater, Warning, TEXT("Land battle (live): %s: %s; the field closes with no result%s"), *Key, Why,
+		HandBack ? TEXT(", the campaign's attack card back as he left it") : TEXT(""));
+	Finish(); // (as CONTINUE: the screen down, the table up, an empty result handed back, and the scene destroyed)
 }
 
 void ALandBattle::CloseLive()

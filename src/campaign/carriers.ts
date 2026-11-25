@@ -17,12 +17,13 @@
 import { byHand } from './depth';
 import { Rng, hashString } from '../core/rng';
 import {
-  AIR, AIRWAR, CARRIERS, afloat, airFleetsOf, airPool, airRange, airWar, assessAir, carrierOf, carrierRules, fieldRoom, fly, forecastAir, homeOf, isOffensive,
+  AIR, AIRWAR, CARRIERS, afloat, airFleetsOf, airPool, airRange, airWar, assessAir, carrierOf, carrierRules, fieldRoom, fly, forecastAir, homeOf, isOffensive, joinPilots, poolIn,
   kmToSea, shipsInPort, whyNotBase, whyNotMission,
 } from './air';
 import { allied, atWar, headline } from './game';
 import { INTEL, agentsOf, atWork, fogOn } from './intel';
-import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetPower, fleetReach, fleetsOf, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
+import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetPower, fleetReach, fleetsOf, keptByHand, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
+import { seaWhat, seaWhere } from './sea-words';
 import { RES, needOf } from './resources';
 import type { AirFleet, AirMission, Fleet, Game, Region, Ships } from './types';
 import { weatherOn, whyNotSky, zoneOfSea } from './weather';
@@ -110,7 +111,7 @@ export function syncWings(g: Game): void {
     const home = Math.round(w[kind] * saved);
     loseAboard(g, w, kind, w[kind] - home);
     const p = airPool(g, w.nat);
-    if (kind === 'ftr') { p.ftr += home; p.pilots += home; } else p.bmr += home;
+    if (kind === 'ftr') { p.ftr += home; poolIn(g, w.nat, home, w); } else p.bmr += home;
     g.airFleets.splice(g.airFleets.indexOf(w), 1);
   }
   for (const c of g.fleets) {
@@ -122,15 +123,16 @@ export function syncWings(g: Game): void {
       if (c.bare && c.bare[kind] > full) c.bare[kind] = full;
       const est = full - bareOf(c, kind);
       let w = wingOf(g, c.id, kind);
-      if (!w) { if (est > 0) { w = newWing(g, c, kind); w.est[kind] = w[kind] = est; } continue; }
+      // (Under Units decide a new wing's and new deck room's pilots come from the deck school, with no experience.)
+      if (!w) { if (est > 0) { w = newWing(g, c, kind); joinPilots(g, w, est, kind, 'school'); w.est[kind] = w[kind] = est; } continue; }
       const was = w.est[kind];
-      if (est > was) w[kind] += est - was;
+      if (est > was) { joinPilots(g, w, est - was, kind, 'school'); w[kind] += est - was; }
       if (est < was && was > 0) {
         const aboard = w[kind] * (1 - est / was);
         loseAboard(g, w, kind, Math.min(w[kind], Math.round(aboard * (1 - saved))));
         // What is over for the decks that are left flies ashore to the reserve.
         const over = Math.max(0, w[kind] - est);
-        if (over > 0) { const p = airPool(g, w.nat); w[kind] -= over; if (kind === 'ftr') { p.ftr += over; p.pilots += over; } else p.bmr += over; }
+        if (over > 0) { const p = airPool(g, w.nat); w[kind] -= over; if (kind === 'ftr') { p.ftr += over; poolIn(g, w.nat, over, w); } else p.bmr += over; }
       }
       w.est[kind] = est;
       w.base = portOf(g, c);
@@ -222,7 +224,7 @@ export function whyNotAshore(g: Game, w: AirFleet, r: Region): string | null {
   if (w.flew === g.turn) return 'It flew its strike this month: it is back aboard next month.';
   if (w.moved === g.turn) return 'It has already changed base this month.';
   if (!offShore(g, c, r.id)) {
-    return atSea(c) ? `The ${c.name} is in the ${g.seas[c.zone].name}: its wing can fly ashore only to an airfield on that sea.`
+    return atSea(c) ? `The ${c.name} is ${seaWhere(g.seas[c.zone].name)}: its wing can fly ashore only to an airfield on that sea.`
       : c.base >= 0 ? `The ${c.name} lies at ${c.port}: from harbour its wing can fly ashore only to the airfield there.`
       : `The ${c.name} lies at ${c.port}, where there is no airfield for its wing to fly to.`;
   }
@@ -248,7 +250,7 @@ export function whyNoShore(g: Game, w: AirFleet): string | null {
     if (allied(g, w.nat, g.regions[id].ctrl)) first ??= no;
   }
   if (first) return first;
-  return atSea(c) ? `No friendly airfield lies on the ${g.seas[c.zone].name}, where the ${c.name} is.`
+  return atSea(c) ? `The ${c.name} is ${seaWhere(g.seas[c.zone].name)}, and no friendly airfield lies on that sea.`
     : c.base >= 0 ? whyNotAshore(g, w, g.regions[c.base]) : `The ${c.name} lies at ${c.port}, where there is no airfield for its wing to fly to.`;
 }
 
@@ -276,7 +278,7 @@ export function whyNotAboard(g: Game, f: AirFleet, c: Fleet): string | null {
   if (f.flew === g.turn) return 'It flew its raid this month: it is back at its airfield next month.';
   if (f.moved === g.turn) return 'It has already changed base this month.';
   if (!offShore(g, c, f.base)) {
-    return atSea(c) ? `The ${c.name} is in the ${g.seas[c.zone].name}: the wing must be at an airfield on that sea to fly out to it.`
+    return atSea(c) ? `The ${c.name} is ${seaWhere(g.seas[c.zone].name)}: the wing must be at an airfield on that sea to fly out to it.`
       : `The ${c.name} lies at ${c.port}: the wing must be at the airfield there to go aboard.`;
   }
   return null;
@@ -290,7 +292,7 @@ export function decksFor(g: Game, f: AirFleet): DeckOption[] {
   if (!carrierRules(g) || f.ashore === undefined) return [];
   const kind = kindOfWing(f);
   return g.fleets.filter((c) => c.nat === f.nat && c.ships.cv > 0 && bareOf(c, kind) > 0)
-    .map((c) => ({ fleet: c.id, name: c.name, where: atSea(c) ? `in the ${g.seas[c.zone].name}` : `in harbour at ${c.port}`, room: bareOf(c, kind), why: whyNotAboard(g, f, c) }))
+    .map((c) => ({ fleet: c.id, name: c.name, where: atSea(c) ? seaWhere(g.seas[c.zone].name) : `in harbour at ${c.port}`, room: bareOf(c, kind), why: whyNotAboard(g, f, c) }))
     .sort((a, b) => (a.why ? 1 : 0) - (b.why ? 1 : 0) || (a.fleet === f.ashore ? 0 : 1) - (b.fleet === f.ashore ? 0 : 1) || a.fleet - b.fleet);
 }
 
@@ -308,7 +310,7 @@ export function flyAboard(g: Game, f: AirFleet, c: Fleet): boolean {
   const take = Math.min(bareOf(c, kind), f.est[kind]);
   // More aircraft than the deck room left for them (a carrier was lost meanwhile): the rest stay ashore in the reserve.
   const over = Math.max(0, f[kind] - take);
-  if (over > 0) { const p = airPool(g, f.nat); f[kind] -= over; if (kind === 'ftr') { p.ftr += over; p.pilots += over; } else p.bmr += over; }
+  if (over > 0) { const p = airPool(g, f.nat); f[kind] -= over; if (kind === 'ftr') { p.ftr += over; poolIn(g, f.nat, over, f); } else p.bmr += over; }
   c.bare![kind] -= take;
   trimBare(c);
   const ready = Math.max(AIR.ready.floor, f.ready - AIR.ready.move);
@@ -408,7 +410,7 @@ export function wingCards(g: Game, c: Fleet): WingCard[] {
     const away = w.flew === g.turn;
     const doing = away ? 'Flew its strike this month: back aboard next month'
       : w.mission === 'rest' ? 'Stood down to rest and refit'
-      : kind === 'ftr' ? (atSea(c) ? `On patrol over the ships in the ${g.seas[c.zone].name}` : `In harbour at ${c.port}: on patrol over its fleet`)
+      : kind === 'ftr' ? (atSea(c) ? `On patrol over the ships ${seaWhere(g.seas[c.zone].name)}` : `In harbour at ${c.port}: on patrol over its fleet`)
       : 'Ranged on deck, ready for a strike';
     const short = est - n;
     return {
@@ -490,6 +492,16 @@ export function fleetFound(g: Game, f: Fleet, nat: string): SeaKnown {
   const w = searchOf(g, nat, f.zone);
   if (w >= S.find * need) return 'exact';
   return w >= S.report * need || met === g.turn - 1 ? 'report' : 'none';
+}
+
+/**
+ * True where a nation's side searches a sea well enough that boats at sea there would be reported to it, as fleetFound
+ * judges a fleet of boats alone: the sea is in its view for boats, whether any are there or not. Release 2, the sea
+ * patrol's record of what each side has seen (seasight.ts), and nothing else, reads it.
+ */
+export function boatsInView(g: Game, nat: string, z: number): boolean {
+  const S = CARRIERS.search;
+  return !!g.seas[z] && searchOf(g, nat, z) >= S.report * openness(g, z) * S.subs;
 }
 
 /**
@@ -633,9 +645,9 @@ export function searchSea(g: Game, id: number, z: number, nat: string | null = g
   const news = foes.filter((_, i) => rank[after[i]] > rank[before[i]]);
   const told = news.map((x) => (fleetKnown(g, x, f.nat) === 'exact' ? `the ${x.name} (${shipList(x.ships)})` : `${g.nations[x.nat].adj} ships, not identified`));
   const sea = g.seas[z].name;
-  const text = told.length ? `Aircraft of the ${f.name} searching the ${sea} found ${told.join(', and ')}.`
-    : foes.some((_, i) => after[i] !== 'none') ? `Aircraft of the ${f.name} searched the ${sea} and found nothing new.`
-    : `Aircraft of the ${f.name} searched the ${sea} and found no enemy ships.`;
+  const text = told.length ? `Aircraft of the ${f.name} searching ${seaWhat(sea)} found ${told.join(', and ')}.`
+    : foes.some((_, i) => after[i] !== 'none') ? `Aircraft of the ${f.name} searched ${seaWhat(sea)} and found nothing new.`
+    : `Aircraft of the ${f.name} searched ${seaWhat(sea)} and found no enemy ships.`;
   if (f.nat === g.human) headline(g, 'info', text, f.nat);
   return { ok: true, text, found: news.length };
 }
@@ -768,7 +780,7 @@ export function seaStaff(g: Game, nat: string, what: 'all' | 'decks' | 'land' = 
     const here = bestBlow(g, nat, lead, escorts, hit, false, trade);
     if (here) { send(here); continue; }
     // In harbour with nothing in reach: a sortie, into a sea where its side would be much the stronger with it there.
-    if (atSea(c) || !(A.sortie > 0) || c.duty === 'raid' || c.ready < FLEETS.ai.ready) continue;
+    if (atSea(c) || !(A.sortie > 0) || c.duty === 'raid' || c.ready < FLEETS.ai.ready || keptByHand(g, c)) continue;
     const power = fleetPower(g, c);
     const keep = { zone: c.zone, stance: c.stance };
     let at = -1, plan: Blow | null = null;

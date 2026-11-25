@@ -26,6 +26,41 @@ namespace
 		return FLinearColor(Nation.R * Depth, Nation.G * Depth, Nation.B * Depth, 1.0f);
 	}
 
+	/** A dated paint's first month, "1944-04" as the aircraft modeller writes it, in months from the year 0 as
+	 * UnitTable::Month counts them: INDEX_NONE where it is not one. */
+	int32 SchemeMonth(const FString& From)
+	{
+		FString YearText, MonthText;
+		if (!From.Split(TEXT("-"), &YearText, &MonthText) || FCString::Atoi(*YearText) <= 0)
+		{
+			return INDEX_NONE;
+		}
+		return FCString::Atoi(*YearText) * 12 + FMath::Clamp(FCString::Atoi(*MonthText), 1, 12) - 1;
+	}
+
+	/** Which of a model's dated paints stands in the painter's month: 0 for none (the file's own colours stand), else
+	 * one more than its place in the list. Of those begun, the latest stands. */
+	int32 SchemeStanding(const TArray<int32>& Froms)
+	{
+		int32 Standing = 0, Since = INDEX_NONE;
+		for (int32 K = 0; K < Froms.Num(); ++K)
+		{
+			if (Froms[K] != INDEX_NONE && Froms[K] <= UnitTable::Month() && Froms[K] >= Since)
+			{
+				Standing = K + 1;
+				Since = Froms[K];
+			}
+		}
+		return Standing;
+	}
+
+	/** Each sculpted aircraft's schemes' first months, by its model's name, as Sculpted reads them (none: an empty list). */
+	TMap<FString, TArray<int32>>& SchemeMonths()
+	{
+		static TMap<FString, TArray<int32>> Months;
+		return Months;
+	}
+
 	using FPlacing = MiniatureParts::FPlacing;
 }
 
@@ -607,6 +642,21 @@ void FMiniatureMesh::PaintedNumerals(const FVector& Where, double High, int32 Nu
 bool FMiniatureMesh::bTrialTank = false;
 bool FMiniatureMesh::bCodeBuilt = false;
 bool FMiniatureMesh::bOldPieces = false;
+bool FMiniatureMesh::bTorpedoLoad = false;
+
+int32 FMiniatureMesh::SchemeOf(const FString& Name)
+{
+	FString Kind = Name, Whose;
+	Name.Split(TEXT(":"), &Kind, &Whose);
+	if (!SchemeMonths().Contains(Kind))
+	{
+		// (not read yet: read and painted in its far form, as the air battle's first look at a model reads it)
+		FMiniatureMesh Probe;
+		Probe.Sculpted(Kind, Whose, FVector::ZeroVector, 1.0, 0.0, true);
+	}
+	const TArray<int32>* Froms = SchemeMonths().Find(Kind);
+	return Froms ? SchemeStanding(*Froms) : 0;
+}
 
 bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVector& Where, double Metre, double Turn, bool bFar, const TArray<FLinearColor>* Kit)
 {
@@ -631,11 +681,29 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		// (An aircraft, from Tools/build_plane.py: the file says what colour each of its paints is, how worn the paint
 		// is at each point, and where every marking goes, with the way the skin faces there and how round it is.)
 		bool bAircraft = false, bNationPaint = false;
+		// (A warship or a merchant from tools/battle-models (kind "ship"): the file gives each paint's own colour, by its
+		// paint names (hull, upper, deck, steel, black, canvas, glass, ...), and at each point how worn and rust-streaked
+		// it is, how sooted, and how salt-stained low on her sides. A ship carries no table markings.)
+		bool bShip = false;
+		TArray<int32> Salt;
+		TArray<bool> ShipMetal, ShipPainted; // (by the file's paint_names: which paints are steel, and which painted steel that rusts and salts)
+		FLinearColor Rust = FLinearColor(FColor::FromHex(TEXT("8A4E28")));
 		// (A piece of the table that is nobody's vehicle and nobody's soldier, such as the agent: the file gives the
 		// colour of each of its paints, and it takes no dust of the road, no markings and no wear.)
 		bool bPiece = false;
 		TArray<FLinearColor> PaintColours;
 		TArray<int32> Wear, Blend, Soot; // (each 0 to 100 a point: chipped paint, how far into the second camouflage colour, exhaust soot)
+		// (An aircraft's paint by date, the aircraft modeller's "schemes" (the Mustang's, 22 November 2026): each stands
+		// from its first month until the next begins, laid over the file's own colours paint by paint, and may give the
+		// side number its own ink. Before the first, the file's own colours stand.)
+		struct FScheme
+		{
+			TMap<int32, FLinearColor> Colours;
+			bool bInk = false;
+			FLinearColor Ink = FLinearColor::Black;
+		};
+		TArray<FScheme> Schemes;
+		TArray<int32> SchemeFrom; // (each one's first month, as SchemeMonth counts it)
 		// (A vehicle with a camouflage in fields: each point of its paint says how far it is into a field of the second
 		// colour and of the third, and the thin lines that part the fields are a paint of their own.)
 		bool bFields = false;
@@ -651,6 +719,10 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 			// (a mark that fills a four-cornered place on the fin: its corners along the machine and up it, the lower
 			// leading one first, then the lower trailing, the upper trailing and the upper leading)
 			TArray<FVector2D> Quad;
+			// (and its own stripes there, where its maker gave them: {"dir": "v" or "h", "bands": [colours]}, from the
+			// leading edge or from the top, as the table's fin stripes)
+			TArray<FLinearColor> Bands;
+			bool bBandsUpright = true;
 			FString Part; // (on a land vehicle: "turret" or "hull")
 		};
 		TArray<FMark> PlaneMarks;
@@ -662,7 +734,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 	};
 	static TMap<FString, TSharedPtr<FRaw>> Read; // (a model that is not there is remembered as nothing, and not looked for again)
 	static TMap<FString, FMiniatureMesh> Painted;
-	const FString Which = Name + (bFar ? TEXT("|far") : TEXT("|near"));
+	const FString Which = Name + (bFar ? TEXT("|far") : TEXT("|near")) + (bTorpedoLoad ? TEXT("|torpedo") : TEXT(""));
 	if (!Read.Contains(Which))
 	{
 		TSharedPtr<FRaw> Raw;
@@ -705,9 +777,65 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 						Raw->Worn.Add(FMath::Clamp(static_cast<float>(Value->AsNumber()), 0.0f, 1.0f));
 					}
 				}
-				for (const TSharedPtr<FJsonValue>& Value : *TriangleList)
+				// (A model that carries a torpedo or bombs, never both (its "loads"; the aircraft modeller, 20 November
+				// 2026): the load it does not fly with is left out, a triangle at a time, so that every point keeps its
+				// place for the bay, the airscrews and the marks the air battle finds by point. Bombs unless asked.)
+				TSet<int32> Unflown;
+				const TArray<TSharedPtr<FJsonValue>> *Loads = nullptr, *PartNames = nullptr, *PartOf = nullptr;
+				if (File->TryGetArrayField(TEXT("loads"), Loads) && Loads->Num() >= 2 && File->TryGetArrayField(TEXT("parts"), PartNames)
+					&& (*Part)->TryGetArrayField(TEXT("part"), PartOf) && PartOf->Num() == PaintList->Num())
 				{
-					Raw->Triangles.Add(static_cast<int32>(Value->AsNumber()));
+					for (int32 K = 0; K < PartNames->Num(); ++K)
+					{
+						const TSharedPtr<FJsonObject> Named = (*PartNames)[K]->AsObject();
+						FString PartName;
+						if (Named.IsValid() && Named->TryGetStringField(TEXT("name"), PartName) && PartName == (bTorpedoLoad ? TEXT("bombs") : TEXT("torpedo")))
+						{
+							Unflown.Add(K);
+						}
+					}
+					// (and whatever her file's own load clip hides, load.torpedo or load.bombs, each track's part scaled to
+					// nothing: the rebuilt Betty's (the aircraft modeller, 23 November 08:53Z) hides her bay's doors with
+					// her bombs, her torpedo hanging half out of her belly where they were)
+					const TSharedPtr<FJsonObject>* Clips = nullptr;
+					const TSharedPtr<FJsonObject>* Load = nullptr;
+					const TArray<TSharedPtr<FJsonValue>>* Tracks = nullptr;
+					if (File->TryGetObjectField(TEXT("clips"), Clips) && (*Clips)->TryGetObjectField(bTorpedoLoad ? TEXT("load.torpedo") : TEXT("load.bombs"), Load)
+						&& (*Load)->TryGetArrayField(TEXT("tracks"), Tracks))
+					{
+						for (const TSharedPtr<FJsonValue>& Track : *Tracks)
+						{
+							if (!Track.IsValid() || Track->Type != EJson::Object)
+							{
+								continue;
+							}
+							const TSharedPtr<FJsonObject> Each = Track->AsObject();
+							const TArray<TSharedPtr<FJsonValue>>* Keys = nullptr;
+							double PartAt = -1.0;
+							if (!Each.IsValid() || !Each->TryGetNumberField(TEXT("part"), PartAt) || !Each->TryGetArrayField(TEXT("scale"), Keys) || Keys->Num() == 0)
+							{
+								continue;
+							}
+							// (its last key's scale: the clip holds where it ends)
+							const TArray<TSharedPtr<FJsonValue>>* Last = nullptr;
+							if ((*Keys).Last()->TryGetArray(Last) && Last->Num() >= 2 && (*Last)[1]->AsNumber() <= 0.01
+								&& PartAt >= 0.0 && static_cast<int32>(PartAt) < PartNames->Num())
+							{
+								Unflown.Add(static_cast<int32>(PartAt));
+							}
+						}
+					}
+				}
+				for (int32 K = 0; K + 2 < TriangleList->Num(); K += 3)
+				{
+					const int32 A = static_cast<int32>((*TriangleList)[K]->AsNumber()), B = static_cast<int32>((*TriangleList)[K + 1]->AsNumber()), C = static_cast<int32>((*TriangleList)[K + 2]->AsNumber());
+					if (Unflown.Num() > 0 && PartOf->IsValidIndex(A) && PartOf->IsValidIndex(B) && PartOf->IsValidIndex(C)
+						&& Unflown.Contains(static_cast<int32>((*PartOf)[A]->AsNumber())) && Unflown.Contains(static_cast<int32>((*PartOf)[B]->AsNumber()))
+						&& Unflown.Contains(static_cast<int32>((*PartOf)[C]->AsNumber())))
+					{
+						continue;
+					}
+					Raw->Triangles.Append({ A, B, C });
 				}
 				const TSharedPtr<FJsonObject>* Marks = nullptr;
 				if (File->TryGetObjectField(TEXT("marks"), Marks))
@@ -802,6 +930,54 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 						}
 					}
 				}
+				if (KindOfModel == TEXT("ship"))
+				{
+					Raw->bShip = true;
+					const TArray<TSharedPtr<FJsonValue>>* ColourList = nullptr;
+					if (File->TryGetArrayField(TEXT("colours"), ColourList))
+					{
+						for (const TSharedPtr<FJsonValue>& Value : *ColourList)
+						{
+							Raw->PaintColours.Add(FLinearColor(FColor::FromHex(Value->AsString())));
+						}
+					}
+					FString Hexed;
+					if (File->TryGetStringField(TEXT("rust"), Hexed))
+					{
+						Raw->Rust = FLinearColor(FColor::FromHex(Hexed));
+					}
+					auto Numbers = [&Part](const TCHAR* Field, TArray<int32>& Into)
+					{
+						const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+						if ((*Part)->TryGetArrayField(Field, List))
+						{
+							Into.Reserve(List->Num());
+							for (const TSharedPtr<FJsonValue>& Value : *List)
+							{
+								Into.Add(static_cast<int32>(Value->AsNumber()));
+							}
+						}
+					};
+					Numbers(TEXT("wear"), Raw->Wear);
+					Numbers(TEXT("soot"), Raw->Soot);
+					Numbers(TEXT("salt"), Raw->Salt);
+					// (each file names its own paints: a sub's 24 and 25 are upper.on and hull.on, a merchant's tarp and crate;
+					// the pre-check's list, 23 November)
+					static const TSet<FString> Metal = { TEXT("hull"), TEXT("upper"), TEXT("deck"), TEXT("flight"), TEXT("boot"), TEXT("antifoul"), TEXT("steel"),
+						TEXT("black"), TEXT("boat"), TEXT("roof"), TEXT("torn"), TEXT("brass"), TEXT("line"), TEXT("red"), TEXT("white"), TEXT("door"), TEXT("seam"),
+						TEXT("upper.on"), TEXT("hull.on"), TEXT("helmet"), TEXT("plane") };
+					static const TSet<FString> Coat = { TEXT("hull"), TEXT("upper"), TEXT("deck"), TEXT("roof"), TEXT("door"), TEXT("seam"), TEXT("upper.on"), TEXT("hull.on") };
+					const TArray<TSharedPtr<FJsonValue>>* NameList = nullptr;
+					if (File->TryGetArrayField(TEXT("paint_names"), NameList))
+					{
+						for (const TSharedPtr<FJsonValue>& Value : *NameList)
+						{
+							const FString Paint = Value->AsString();
+							Raw->ShipMetal.Add(Metal.Contains(Paint));
+							Raw->ShipPainted.Add(Coat.Contains(Paint));
+						}
+					}
+				}
 				if (KindOfModel == TEXT("aircraft"))
 				{
 					Raw->bAircraft = true;
@@ -841,6 +1017,52 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 					{
 						Raw->NumberInk = FLinearColor(FColor::FromHex(Ink));
 					}
+					// (Its paint by date: "schemes", each {"from": "1944-04", "colours": {"upper": "B0B6BA", ...}, "number_ink": ...},
+					// its paints named as the file's "paint_names" name them, or where it has none as the plain build's
+					// eighteen. A name this model does not paint, such as the battle model's rivets and bands, is passed over.)
+					const TArray<TSharedPtr<FJsonValue>>* SchemeList = nullptr;
+					if (File->TryGetArrayField(TEXT("schemes"), SchemeList))
+					{
+						static const TArray<FString> PlainPaints = { TEXT("upper"), TEXT("upper2"), TEXT("under"), TEXT("nose"), TEXT("boss"), TEXT("glass"),
+							TEXT("frame"), TEXT("steel"), TEXT("tyre"), TEXT("blade"), TEXT("line"), TEXT("soot"), TEXT("engine"), TEXT("leg"), TEXT("bomb"),
+							TEXT("stain"), TEXT("glare"), TEXT("glint") };
+						TArray<FString> PaintNames;
+						if (!File->TryGetStringArrayField(TEXT("paint_names"), PaintNames))
+						{
+							PaintNames = PlainPaints;
+						}
+						for (const TSharedPtr<FJsonValue>& Value : *SchemeList)
+						{
+							const TSharedPtr<FJsonObject>* Entry = nullptr;
+							FString From;
+							if (!Value.IsValid() || !Value->TryGetObject(Entry) || !(*Entry)->TryGetStringField(TEXT("from"), From) || SchemeMonth(From) == INDEX_NONE)
+							{
+								continue;
+							}
+							FRaw::FScheme& Scheme = Raw->Schemes.AddDefaulted_GetRef();
+							Raw->SchemeFrom.Add(SchemeMonth(From));
+							const TSharedPtr<FJsonObject>* Named = nullptr;
+							if ((*Entry)->TryGetObjectField(TEXT("colours"), Named))
+							{
+								for (const TPair<FString, TSharedPtr<FJsonValue>>& Each : (*Named)->Values)
+								{
+									const int32 Index = PaintNames.IndexOfByKey(Each.Key);
+									FString Hexed;
+									if (Index != INDEX_NONE && Each.Value.IsValid() && Each.Value->TryGetString(Hexed))
+									{
+										Scheme.Colours.Add(Index, FLinearColor(FColor::FromHex(Hexed)));
+									}
+								}
+							}
+							FString SchemeInk;
+							if ((*Entry)->TryGetStringField(TEXT("number_ink"), SchemeInk))
+							{
+								Scheme.bInk = true;
+								Scheme.Ink = FLinearColor(FColor::FromHex(SchemeInk));
+							}
+						}
+					}
+					SchemeMonths().Add(Name, Raw->SchemeFrom);
 					if (File->TryGetArrayField(TEXT("marks"), MarkList))
 					{
 						for (const TSharedPtr<FJsonValue>& Value : *MarkList)
@@ -872,6 +1094,22 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 										Mark.Quad.Reset();
 									}
 								}
+								const TSharedPtr<FJsonObject>* Striped = nullptr;
+								const TArray<TSharedPtr<FJsonValue>>* BandList = nullptr;
+								if ((*Entry)->TryGetObjectField(TEXT("bands"), Striped) && (*Striped)->TryGetArrayField(TEXT("bands"), BandList))
+								{
+									FString Way;
+									(*Striped)->TryGetStringField(TEXT("dir"), Way);
+									Mark.bBandsUpright = Way != TEXT("h");
+									for (const TSharedPtr<FJsonValue>& Band : *BandList)
+									{
+										FString Hexed;
+										if (Band.IsValid() && Band->TryGetString(Hexed))
+										{
+											Mark.Bands.Add(FLinearColor(FColor::FromHex(Hexed)));
+										}
+									}
+								}
 								// (the file has x forward and y to the right; here the nose is toward -X and the right hand at -Y)
 								Mark.At = FVector(-(*AtList)[0]->AsNumber(), -(*AtList)[1]->AsNumber(), (*AtList)[2]->AsNumber());
 								Mark.Facing = FVector(-(*FacingList2)[0]->AsNumber(), -(*FacingList2)[1]->AsNumber(), (*FacingList2)[2]->AsNumber());
@@ -892,9 +1130,11 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 	// (kept by its country and by which of the country's dated marks stands: see UnitTable::MarkEra)
 	const int32 Era = UnitTable::MarkEra(Tag);
 	// (and by whether it is whitewashed for the snow: a vehicle or a gun only, never a figure, an aircraft or a piece of scenery)
-	const bool bWash = UnitTable::Wash() && !bFigure && !Raw->bAircraft && !Raw->bPiece;
+	const bool bWash = UnitTable::Wash() && !bFigure && !Raw->bAircraft && !Raw->bPiece && !Raw->bShip;
+	// (and, an aircraft with paint by date, by which of its schemes stands in the painter's month: 0 its own colours)
+	const int32 Livery = Raw->bAircraft ? SchemeStanding(Raw->SchemeFrom) : 0;
 	const FString Key = (Era > 0 ? FString::Printf(TEXT("%s|%s|%d"), *Which, *Tag, Era) : Which + TEXT("|") + Tag) + (bWash ? TEXT("|wash") : TEXT(""))
-		+ (UnitTable::CloseMarks() ? TEXT("|close") : TEXT(""));
+		+ (UnitTable::CloseMarks() ? TEXT("|close") : TEXT("")) + (Livery > 0 ? FString::Printf(TEXT("|scheme%d"), Livery) : FString());
 	FMiniatureMesh* Model = Painted.Find(Key);
 	if (!Model)
 	{
@@ -914,9 +1154,9 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		{
 			Fresh.Dust = FColor(124, 102, 74);
 		}
-		if (Raw->bPiece)
+		if (Raw->bPiece || Raw->bShip)
 		{
-			Fresh.DustAmount = 0.0f;
+			Fresh.DustAmount = 0.0f; // (no dust of the road on a ship)
 		}
 		// An aircraft's paints are its own: the file gives the colour of each. (A plain machine built for any nation takes
 		// that nation's colour for its upper surfaces, a darker one for the patches, and darker again for its nose.)
@@ -924,6 +1164,17 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		if (Raw->bAircraft)
 		{
 			Fresh.DustAmount = 0.0f; // (no dust of the road on a machine in the air)
+			// (its paint by date, where one of its schemes stands: laid over its own colours, paint by paint)
+			if (Livery > 0 && Raw->Schemes.IsValidIndex(Livery - 1))
+			{
+				for (const TPair<int32, FLinearColor>& Each : Raw->Schemes[Livery - 1].Colours)
+				{
+					if (PlanePaints.IsValidIndex(Each.Key))
+					{
+						PlanePaints[Each.Key] = Each.Value;
+					}
+				}
+			}
 			if (Raw->bNationPaint && PlanePaints.Num() > 15)
 			{
 				// (Brian, 18 November 2026: "make the camoflage reflect their terrian". The table's paint is now the colour of
@@ -981,6 +1232,33 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		static const bool bPlaneMetal[18] = { true, true, true, true, true, false, false, true, false, false, false, false, false, true, true, false, false, false };
 		for (int32 K = 0; K < Raw->Points.Num(); ++K)
 		{
+			if (Raw->bShip && Raw->PaintColours.Num() > 0)
+			{
+				// (The ship modeller's paints, by the file's own names (hull, upper, deck, planks, steel, black, canvas, glass, ...),
+				// each in the file's own colour. Painted steel is metal and chips where the file says it is worn, in her rust's
+				// own streaks; soot from her funnels and guns darkens what it lies on; dried salt whitens her sides low down.
+				// Wood, canvas, rope, cork, lino, glass, a tarpaulin, a crate: not metal.)
+				const int32 Kind = FMath::Clamp(Raw->Paints[K], 0, Raw->PaintColours.Num() - 1);
+				const bool bShipSteel = Raw->ShipMetal.IsValidIndex(Kind) && Raw->ShipMetal[Kind];
+				const int32 Worn = Raw->Wear.IsValidIndex(K) ? FMath::Clamp(Raw->Wear[K], 0, 100) : 0;
+				Fresh.Finish = bShipSteel ? static_cast<uint8>(128 - Worn / 2) : 255;
+				FLinearColor Coat = Raw->PaintColours[Kind];
+				const bool bPainted = Raw->ShipPainted.IsValidIndex(Kind) && Raw->ShipPainted[Kind];
+				if (bPainted && Worn > 0)
+				{
+					Coat = FMath::Lerp(Coat, Raw->Rust, 0.55f * Worn / 100.0f);
+				}
+				if (Raw->Salt.IsValidIndex(K) && Raw->Salt[K] > 0 && bPainted)
+				{
+					Coat = FMath::Lerp(Coat, FLinearColor(FColor(214, 210, 198)), 0.45f * FMath::Min(Raw->Salt[K], 100) / 100.0f);
+				}
+				if (Raw->Soot.IsValidIndex(K) && Raw->Soot[K] > 4 && Raw->PaintColours.Num() > 8)
+				{
+					Coat = FMath::Lerp(Coat, Raw->PaintColours[8], 0.6f * FMath::Min(Raw->Soot[K], 100) / 100.0f);
+				}
+				Fresh.Add(Raw->Points[K], Raw->Facings[K], Coat.ToFColor(true));
+				continue;
+			}
 			if (Raw->bAircraft && PlanePaints.Num() > 0)
 			{
 				const int32 Kind = FMath::Clamp(Raw->Paints[K], 0, PlanePaints.Num() - 1);
@@ -1095,6 +1373,8 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		if (Raw->bAircraft)
 		{
 			const int32 Number = 1 + static_cast<int32>(GetTypeHash(Tag + Name) % 14);
+			// (its number in its scheme's ink where the standing scheme gives one: white on olive drab, black on bare metal)
+			const FLinearColor NumberInk = Livery > 0 && Raw->Schemes.IsValidIndex(Livery - 1) && Raw->Schemes[Livery - 1].bInk ? Raw->Schemes[Livery - 1].Ink : Raw->NumberInk;
 			for (const FRaw::FMark& Mark : Raw->PlaneMarks)
 			{
 				// (A dominion flying a British machine wears the British marks the model names, until its own wartime
@@ -1128,33 +1408,96 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 					}
 					TGuardValue<uint8> Metal(Fresh.Finish, 128);
 					const FVector At(Mark.At.X, Hand * Mark.At.Y, Mark.At.Z), Facing(Mark.Facing.X, Hand * Mark.Facing.Y, Mark.Facing.Z);
-					if (What.StartsWith(TEXT("FIN:")) && Mark.Quad.Num() == 4)
+					// (The maker's own rudder stripes, "FRA-FIN": blue, white and red, blue toward the nose; and Savoy's
+					// white cross with a small plain shield at its middle, "ITA-CROSS". Neither is a mark WingMarking
+					// knows: both wore its plain white disc with a grey middle, standing off the tail (the art director,
+					// 24 November). They fill the rudder's place as the table's stripes do.)
+					const bool bOwnBands = !What.StartsWith(TEXT("FIN:")) && Mark.Bands.Num() > 0;
+					const bool bSavoy = Mark.Tag == TEXT("ITA-CROSS");
+					if ((What.StartsWith(TEXT("FIN:")) || bOwnBands || bSavoy) && Mark.Quad.Num() == 4)
 					{
-						// (the stripes fill the rudder's own four-cornered place, a hair off the skin on each side)
-						const double Off = Hand * (FMath::Abs(Mark.At.Y) + 0.006);
-						auto Corner = [&Mark, Off](const FVector2D& P) { return FVector(P.X, Off, P.Y); };
+						// (the stripes fill the rudder's own four-cornered place, a hair off the skin on the face the mark
+						// faces: each side of a single fin, or the one face of one of twin fins the maker named)
+						const double Out = Hand * Mark.Facing.Y >= 0.0 ? 1.0 : -1.0;
+						const FVector Outward(0.0, Out, 0.0);
+						auto Corner = [&Mark, Hand, Out](const FVector2D& P, double Hair = 0.006) { return FVector(P.X, Hand * Mark.At.Y + Out * Hair, P.Y); };
 						const FVector2D LowLead = Mark.Quad[0], LowTrail = Mark.Quad[1], HighTrail = Mark.Quad[2], HighLead = Mark.Quad[3];
-						const int32 Count = FinBands.Num();
+						if (bSavoy)
+						{
+							// (the cross's arms the rudder's whole height and its whole chord, about a quarter of the chord wide;
+							// the shield a third of the chord across, blue edged, red, with its own white cross)
+							auto Place = [&](double U, double V) { return FMath::Lerp(FMath::Lerp(LowLead, LowTrail, U), FMath::Lerp(HighLead, HighTrail, U), V); };
+							const double Chord = FMath::Max(0.05, FVector2D::Distance(Place(0.0, 0.5), Place(1.0, 0.5)));
+							const double Tall = FMath::Max(0.05, FVector2D::Distance(Place(0.5, 0.0), Place(0.5, 1.0)));
+							auto Patch = [&](double U0, double V0, double U1, double V1, const FColor& Ink, double Hair)
+							{
+								Fresh.Quad(Corner(Place(U0, V0), Hair), Corner(Place(U1, V0), Hair), Corner(Place(U1, V1), Hair), Corner(Place(U0, V1), Hair), Outward, Ink);
+							};
+							const FColor White = FLinearColor(FColor::FromHex(TEXT("F2F0E8"))).ToFColor(true);
+							const FColor Red = FLinearColor(FColor::FromHex(TEXT("C8102E"))).ToFColor(true);
+							const FColor Blue = FLinearColor(FColor::FromHex(TEXT("1F3A93"))).ToFColor(true);
+							const double ArmU = 0.12, ArmV = 0.12 * Chord / Tall;
+							Patch(0.5 - ArmU, 0.0, 0.5 + ArmU, 1.0, White, 0.006);
+							Patch(0.0, 0.5 - ArmV, 0.5 - ArmU, 0.5 + ArmV, White, 0.006);
+							Patch(0.5 + ArmU, 0.5 - ArmV, 1.0, 0.5 + ArmV, White, 0.006);
+							// (the shield: a flat top, straight sides and a round foot, as a fan from its middle)
+							auto Shield = [&](double Across, const FColor& Ink, double Hair)
+							{
+								TArray<FVector2D> Edge;
+								const double Half = 0.5 * Across, Top = 0.62 * Across, Foot = -0.62 * Across, Bend = Foot + Half;
+								Edge.Add(FVector2D(-Half, Top));
+								Edge.Add(FVector2D(Half, Top));
+								for (int32 K = 0; K <= 8; ++K)
+								{
+									const double Angle = -UE_DOUBLE_HALF_PI * K / 8.0;
+									Edge.Add(FVector2D(Half * FMath::Cos(Angle), Bend + Half * FMath::Sin(Angle)));
+								}
+								for (int32 K = 7; K >= 0; --K)
+								{
+									Edge.Add(FVector2D(-Edge[2 + K].X, Edge[2 + K].Y));
+								}
+								const int32 Middle = Fresh.Add(Corner(Place(0.5, 0.5), Hair), Outward, Ink);
+								TArray<int32> Ring;
+								for (const FVector2D& E : Edge)
+								{
+									Ring.Add(Fresh.Add(Corner(Place(0.5 + E.X / Chord, 0.5 + E.Y / Tall), Hair), Outward, Ink));
+								}
+								for (int32 K = 0; K < Ring.Num(); ++K)
+								{
+									Fresh.Face(Middle, Ring[K], Ring[(K + 1) % Ring.Num()], Outward);
+								}
+							};
+							Shield(0.34 * Chord, Blue, 0.009);
+							Shield(0.27 * Chord, Red, 0.012);
+							const double SmallU = 0.035, SmallV = 0.035 * Chord / Tall, ReachU = 0.1, ReachV = 0.13 * Chord / Tall;
+							Patch(0.5 - SmallU, 0.5 - ReachV, 0.5 + SmallU, 0.5 + ReachV, White, 0.015);
+							Patch(0.5 - ReachU, 0.5 - SmallV, 0.5 - SmallU, 0.5 + SmallV, White, 0.015);
+							Patch(0.5 + SmallU, 0.5 - SmallV, 0.5 + ReachU, 0.5 + SmallV, White, 0.015);
+							continue;
+						}
+						const TArray<FLinearColor>& Stripes = bOwnBands ? Mark.Bands : FinBands;
+						const bool bUpright = bOwnBands ? Mark.bBandsUpright : bFinUpright;
+						const int32 Count = Stripes.Num();
 						for (int32 K = 0; K < Count; ++K)
 						{
 							const double A = static_cast<double>(K) / Count, B = static_cast<double>(K + 1) / Count;
-							const FColor Ink = FinBands[K].ToFColor(true);
-							if (bFinUpright)
+							const FColor Ink = Stripes[K].ToFColor(true);
+							if (bUpright)
 							{
 								Fresh.Quad(Corner(FMath::Lerp(LowLead, LowTrail, A)), Corner(FMath::Lerp(LowLead, LowTrail, B)), Corner(FMath::Lerp(HighLead, HighTrail, B)), Corner(FMath::Lerp(HighLead, HighTrail, A)),
-									FVector(0.0, Hand, 0.0), Ink);
+									Outward, Ink);
 							}
 							else
 							{
 								Fresh.Quad(Corner(FMath::Lerp(HighLead, LowLead, A)), Corner(FMath::Lerp(HighTrail, LowTrail, A)), Corner(FMath::Lerp(HighTrail, LowTrail, B)), Corner(FMath::Lerp(HighLead, LowLead, B)),
-									FVector(0.0, Hand, 0.0), Ink);
+									Outward, Ink);
 							}
 						}
 						continue;
 					}
 					if (Mark.Tag == TEXT("#"))
 					{
-						Fresh.PaintedNumerals(At, Mark.Radius, Number, Facing, Raw->NumberInk);
+						Fresh.PaintedNumerals(At, Mark.Radius, Number, Facing, NumberInk);
 					}
 					else
 					{
@@ -1164,7 +1507,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 			}
 		}
 		// Its markings: the nation's own on each side of the turret, and a number behind it.
-		if (!bFigure && !Raw->bAircraft && !Raw->bPiece)
+		if (!bFigure && !Raw->bAircraft && !Raw->bPiece && !Raw->bShip)
 		{
 			const FString Mark = Tag == TEXT("SOV") ? FString(TEXT("SOV-ARMY")) : Tag == TEXT("USA") ? FString(TEXT("USA-ARMY")) : Tag == TEXT("UK") ? FString(TEXT("UK-FLASH")) : Tag;
 			const int32 Number = 100 + static_cast<int32>(GetTypeHash(Tag) % 500);
@@ -1224,7 +1567,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				}
 			}
 		}
-		if (!bFigure && !Raw->bAircraft && !Raw->bPiece && !Raw->bBattle)
+		if (!bFigure && !Raw->bAircraft && !Raw->bPiece && !Raw->bBattle && !Raw->bShip)
 		{
 			Fresh.MarkWear(false, Raw->Roof); // (an aerial is not the top of the tank: the wear is laid by the height of its roof)
 		}
@@ -2456,7 +2799,7 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	const double Um = U / PerMap; // one house-unit, in map units
 
 	// ---- The paint of the place: walls and roofs by its part of Europe.
-	static const TCHAR* WallsOf[7][5] = {
+	static const TCHAR* WallsOf[12][5] = {
 		{ TEXT("E6DCC4"), TEXT("D8C8A6"), TEXT("CEC6B6"), TEXT("E2D2AE"), TEXT("C9B79A") }, // middle Europe: plaster
 		{ TEXT("8E5A48"), TEXT("A0705A"), TEXT("C9B79A"), TEXT("B8A890"), TEXT("7A5547") }, // the north-west: brick
 		{ TEXT("F0E8D8"), TEXT("E8DCC0"), TEXT("F2E4C8"), TEXT("E0D0B0"), TEXT("EDE0CC") }, // the south: whitewash
@@ -2466,8 +2809,15 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 		// Washington the orange roofs of the Mediterranean and Mexico City the white roofs of North Africa.)
 		{ TEXT("925846"), TEXT("C8BCA2"), TEXT("925846"), TEXT("C8BCA2"), TEXT("8C5443") }, // north of Mexico: brick 146,88,70 and cream 200,188,162, about half and half
 		{ TEXT("E4DCC8"), TEXT("E4DCC8"), TEXT("CEA464"), TEXT("E6DECA"), TEXT("CEA464") }, // the plaza town: white 228,220,200, ochre 206,164,100 on about a third
+		// (Release 2, the far side: the art director's world brief, section 3.4. A town takes the kit of the land it
+		// stands in, whoever holds it; see ACampaignMapActor's sites for where each goes.)
+		{ TEXT("86827A"), TEXT("7E7A72"), TEXT("8E8A80"), TEXT("908A7E"), TEXT("7A7872") }, // the walled town (China, Korea, Manchuria, Formosa): grey brick 134,130,122
+		{ TEXT("625040"), TEXT("E0DACC"), TEXT("5A4A3C"), TEXT("DCD4C4"), TEXT("6A5644") }, // the timber town (Japan): dark timber 98,80,64 and white plaster 224,218,204
+		{ TEXT("B69C70"), TEXT("AE946A"), TEXT("BEA478"), TEXT("B49A6E"), TEXT("A88E64") }, // thatch and tin (the Indies, Siam, Indochina, Malaya, the Philippines, the islands, Africa's middle): cane 182,156,112
+		{ TEXT("E4DCCA"), TEXT("CEB488"), TEXT("B26A50"), TEXT("E0D6C2"), TEXT("C8AE84") }, // the Indian town (India, Ceylon, Burma): whitewash 228,220,202, buff 206,180,136, red stone 178,106,80
+		{ TEXT("7C6046"), TEXT("74583E"), TEXT("84684C"), TEXT("6E5440"), TEXT("7C6046") }, // the railway town (Siberia, the Soviet Far East): log 124,96,70
 	};
-	static const TCHAR* RoofsOf[7][5] = {
+	static const TCHAR* RoofsOf[12][5] = {
 		{ TEXT("9A4A32"), TEXT("7C3F2E"), TEXT("5E5A58"), TEXT("8B5A3C"), TEXT("A65B3A") }, // red tile, some slate
 		{ TEXT("4E5560"), TEXT("5E5A58"), TEXT("444B55"), TEXT("6A6660"), TEXT("3F454D") }, // slate
 		{ TEXT("C2643A"), TEXT("B4552F"), TEXT("CC7040"), TEXT("A84E30"), TEXT("BD6A45") }, // terracotta
@@ -2475,19 +2825,31 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 		{ TEXT("D9CDB4"), TEXT("CFC2A6"), TEXT("E0D5BE"), TEXT("C6B99C"), TEXT("D3C7AE") }, // flat roofs, the colour of their walls
 		{ TEXT("484644"), TEXT("444240"), TEXT("4C4A48"), TEXT("484644"), TEXT("464442") }, // tar 72,70,68 (on pitched roofs, until there are flat ones)
 		{ TEXT("AC5E40"), TEXT("A85A3C"), TEXT("B06244"), TEXT("AC5E40"), TEXT("A65A3E") }, // low red tile 172,94,64
+		{ TEXT("5C646C"), TEXT("545C64"), TEXT("646A70"), TEXT("5A6068"), TEXT("4E565E") }, // grey-blue tile 92,100,108
+		{ TEXT("4A525E"), TEXT("464E5A"), TEXT("4E5662"), TEXT("4A525E"), TEXT("424A56") }, // blue-grey tile 74,82,94
+		{ TEXT("9C8256"), TEXT("927A50"), TEXT("A48A5E"), TEXT("9CA2A4"), TEXT("968058") }, // thatch 156,130,86, one in five tin 156,162,164
+		{ TEXT("D6CCB6"), TEXT("C2A87E"), TEXT("BCA282"), TEXT("D2C6AE"), TEXT("A8644C") }, // flat roofs, near the colour of their walls
+		{ TEXT("607A60"), TEXT("964E3E"), TEXT("5A725A"), TEXT("8E4A3A"), TEXT("667E64") }, // green 96,122,96 and iron red 150,78,62
 	};
-	const int32 Look = FMath::Clamp(Site.Look, 0, 6);
-	const bool bFlatRoofs = Look == 4;
+	const int32 Look = FMath::Clamp(Site.Look, 0, 11);
+	const bool bFlatRoofs = Look == 4 || Look == 10;
 	auto WallPaint = [&]() { return FLinearColor(FColor::FromHex(WallsOf[Look][Dice.RandRange(0, 4)])); };
 	auto RoofPaint = [&]() { return FLinearColor(FColor::FromHex(RoofsOf[Look][Dice.RandRange(0, 4)])); };
 	// (The capital's own piece takes its kit's colours too: north of Mexico stone 192,182,162 with caps and roofs in
 	// the roofs' tar; in the plaza town white, with red tile.)
-	const FLinearColor Ashlar(FColor::FromHex(Look == 5 ? TEXT("C0B6A2") : Look == 6 ? TEXT("E4DCC8") : TEXT("D9D2C0")));
-	const FLinearColor Verdigris(FColor::FromHex(Look == 5 ? TEXT("484644") : Look == 6 ? TEXT("AC5E40") : TEXT("6FA08C"))), RedBrick(FColor::FromHex(TEXT("7A5547")));
-	const FLinearColor Sooty(FColor::FromHex(TEXT("3B3532"))), LeadGrey(FColor::FromHex(Look == 5 ? TEXT("484644") : Look == 6 ? TEXT("AC5E40") : TEXT("5E5A58"))), Cobbles(FColor::FromHex(TEXT("8F887A")));
+	// (and the far side's kits: their stone, their domes and caps, and the roofs of their great buildings, in their own paints)
+	static const TCHAR* AshlarOf[12] = { TEXT("D9D2C0"), TEXT("D9D2C0"), TEXT("D9D2C0"), TEXT("D9D2C0"), TEXT("D9D2C0"), TEXT("C0B6A2"), TEXT("E4DCC8"),
+		TEXT("8E8A80"), TEXT("D6D0C2"), TEXT("E8E2D4"), TEXT("E4DCCA"), TEXT("D9D2C0") };
+	static const TCHAR* CapsOf[12] = { TEXT("6FA08C"), TEXT("6FA08C"), TEXT("6FA08C"), TEXT("6FA08C"), TEXT("6FA08C"), TEXT("484644"), TEXT("AC5E40"),
+		TEXT("5C646C"), TEXT("4A525E"), TEXT("9CA2A4"), TEXT("E4DCCA"), TEXT("5E8C80") };
+	static const TCHAR* LeadsOf[12] = { TEXT("5E5A58"), TEXT("5E5A58"), TEXT("5E5A58"), TEXT("5E5A58"), TEXT("5E5A58"), TEXT("484644"), TEXT("AC5E40"),
+		TEXT("5C646C"), TEXT("4A525E"), TEXT("9CA2A4"), TEXT("CEB488"), TEXT("607A60") };
+	const FLinearColor Ashlar(FColor::FromHex(AshlarOf[Look]));
+	const FLinearColor Verdigris(FColor::FromHex(CapsOf[Look])), RedBrick(FColor::FromHex(TEXT("7A5547")));
+	const FLinearColor Sooty(FColor::FromHex(TEXT("3B3532"))), LeadGrey(FColor::FromHex(LeadsOf[Look])), Cobbles(FColor::FromHex(TEXT("8F887A")));
 	const FLinearColor Gilding(FColor::FromHex(TEXT("C9A227"))), Paving(FColor::FromHex(TEXT("7C766A"))), Lawn(FColor::FromHex(TEXT("46553A")));
 	const FLinearColor LeafDark(FColor::FromHex(TEXT("4F6B3A"))), LeafPale(FColor::FromHex(TEXT("668249"))), Glazing(FColor::FromHex(TEXT("6E7C80")));
-	const FLinearColor TowerWhite(FColor::FromHex(TEXT("EFE9DC"))), Ochre(FColor::FromHex(TEXT("B9A27E"))), Rust(FColor::FromHex(Look == 5 ? TEXT("484644") : Look == 6 ? TEXT("AC5E40") : TEXT("8A3B2A")));
+	const FLinearColor TowerWhite(FColor::FromHex(TEXT("EFE9DC"))), Ochre(FColor::FromHex(TEXT("B9A27E"))), Rust(FColor::FromHex(Look >= 5 ? LeadsOf[Look] : TEXT("8A3B2A")));
 
 	// ---- The plan's own frame: its streets run a little off the compass, each town its own way.
 	const double Sway = Site.Tier >= 3 ? 10.0 : 24.0; // (a capital's lie nearer the compass, so that its landmark faces the usual eye)
@@ -2569,7 +2931,13 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	};
 
 	// ---- The church, by the country's own manner of building one: a spire, a dome and a bell tower, or onion domes.
-	const int32 Manner = Look == 2 || Look == 4 || Look == 6 ? 1 : Look == 3 ? 2 : 0;
+	// (Release 2, the far side's own: 3 a tiered tower beside a hall, 4 a castle keep with a red gate before a grove,
+	// 5 a white house with a veranda and a tin shed, 6 a domed pavilion on red stone; the railway town takes the
+	// east's domes)
+	const int32 Manner = Look == 7 ? 3 : Look == 8 ? 4 : Look == 9 ? 5 : Look == 10 ? 6 : Look == 11 ? 2 : Look == 2 || Look == 4 || Look == 6 ? 1 : Look == 3 ? 2 : 0;
+	// (and in the walled town's and the timber town's capitals that building, raised, stands in place of Europe's palace)
+	const bool bKitLandmark = Look == 7 || Look == 8;
+	const FLinearColor KitWall(FColor::FromHex(WallsOf[Look][0])), KitRoof(FColor::FromHex(RoofsOf[Look][0]));
 	auto Church = [&](double A, double B, double Size, double Turn, bool bCopper = false)
 	{
 		const FVector At = Stand(A, B);
@@ -2589,6 +2957,84 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 			Ball(Off(-0.2, 0.0, 0.66), FVector(0.46, 0.46, 0.4) * Size * U, FLinearColor(FColor::FromHex(TEXT("B4552F"))), 4, 10);
 			Box(Off(0.58, 0.3, 0.95), FVector(0.24, 0.24, 1.9) * Size * U, TowerWhite, Yaw0 + Turn);
 			Pillar(Off(0.58, 0.3, 1.9), 0.2 * Size * U, 0.0, 0.34 * Size * U, FLinearColor(FColor::FromHex(TEXT("B4552F"))), 4);
+		}
+		else if (Manner == 3)
+		{
+			// The walled town's: a hall under grey-blue tile, and beside it a tower of five tiers, each under its own eaves.
+			House(At, 0.9 * Size * U, 0.52 * Size * U, 0.3 * Size * U, 0.2 * Size * U, KitWall, KitRoof, Yaw0 + Turn);
+			double KUp = 0.0;
+			for (int32 KRung = 0; KRung < 5; ++KRung)
+			{
+				const double KBody = 0.2 - 0.025 * KRung, KRise = KRung == 0 ? 0.34 : 0.24;
+				Pillar(Off(0.62, 0.32, KUp), KBody * Size * U, KBody * Size * U, KRise * Size * U, KitWall, 8);
+				KUp += KRise;
+				Pillar(Off(0.62, 0.32, KUp), (KBody + 0.1) * Size * U, KBody * 0.7 * Size * U, 0.07 * Size * U, KitRoof, 8);
+				KUp += 0.05;
+			}
+			Pillar(Off(0.62, 0.32, KUp), 0.03 * Size * U, 0.0, 0.22 * Size * U, Gilding, 6);
+		}
+		else if (Manner == 4)
+		{
+			// The timber town's: a keep of three white storeys, each under wide dark eaves, on a stone base, with a red
+			// gate before a grove beside it.
+			const FLinearColor KStone(FColor::FromHex(TEXT("8F8B80"))), KPlaster(FColor::FromHex(TEXT("E0DACC"))), KGate(FColor::FromHex(TEXT("B8452E")));
+			Box(Off(0.0, 0.0, 0.15), FVector(0.86, 0.74, 0.3) * Size * U, KStone, Yaw0 + Turn);
+			double KUp = 0.3;
+			for (int32 KStorey = 0; KStorey < 3; ++KStorey)
+			{
+				const double KLong = 0.66 - 0.14 * KStorey, KWide = 0.56 - 0.12 * KStorey, KRise = 0.24;
+				Box(Off(0.0, 0.0, KUp + KRise * 0.5), FVector(KLong, KWide, KRise) * Size * U, KPlaster, Yaw0 + Turn);
+				KUp += KRise;
+				Box(Off(0.0, 0.0, KUp + 0.02), FVector(KLong + 0.16, KWide + 0.16, 0.04) * Size * U, KitRoof, Yaw0 + Turn);
+				KUp += 0.04;
+			}
+			House(Off(0.0, 0.0, KUp), 0.34 * Size * U, 0.26 * Size * U, 0.06 * Size * U, 0.2 * Size * U, KPlaster, KitRoof, Yaw0 + Turn);
+			for (const double KSide : { -1.0, 1.0 })
+			{
+				Pillar(Off(-0.95, 0.55 + KSide * 0.22, 0.0), 0.025 * Size * U, 0.022 * Size * U, 0.46 * Size * U, KGate, 6);
+			}
+			Box(Off(-0.95, 0.55, 0.47), FVector(0.06, 0.62, 0.045) * Size * U, KGate, Yaw0 + Turn);
+			Box(Off(-0.95, 0.55, 0.39), FVector(0.04, 0.48, 0.03) * Size * U, KGate, Yaw0 + Turn);
+			if (!bFar)
+			{
+				Broadleaf(Off(-1.3, 0.35, 0.0), 0.55 * Size * U, 0.2 * Size * U, LeafDark);
+				Broadleaf(Off(-1.35, 0.75, 0.0), 0.62 * Size * U, 0.22 * Size * U, LeafDark);
+				Broadleaf(Off(-1.55, 0.55, 0.0), 0.5 * Size * U, 0.19 * Size * U, LeafPale);
+			}
+		}
+		else if (Manner == 5)
+		{
+			// Thatch and tin's: one white house with a veranda all round under its tin, and a long tin shed beside it.
+			const FLinearColor KWhite(FColor::FromHex(TEXT("E8E2D4"))), KTin(FColor::FromHex(TEXT("9CA2A4")));
+			House(At, 0.72 * Size * U, 0.5 * Size * U, 0.34 * Size * U, 0.2 * Size * U, KWhite, KTin, Yaw0 + Turn);
+			Box(Off(0.0, 0.0, 0.3), FVector(0.96, 0.78, 0.025) * Size * U, KTin, Yaw0 + Turn);
+			for (const double KX : { -0.46, 0.46 })
+			{
+				for (const double KY : { -0.37, 0.37 })
+				{
+					Pillar(Off(KX, KY, 0.0), 0.015 * Size * U, 0.015 * Size * U, 0.29 * Size * U, KWhite, 4);
+				}
+			}
+			House(Off(0.0, 0.85, 0.0), 1.1 * Size * U, 0.5 * Size * U, 0.26 * Size * U, 0.1 * Size * U, KTin * 0.85f, KTin, Yaw0 + Turn);
+		}
+		else if (Manner == 6)
+		{
+			// The Indian town's: a pavilion of whitewash on a plinth of red stone, its dome swelling above its walls,
+			// a small domed kiosk at each corner and a gilt finial.
+			const FLinearColor KRedStone(FColor::FromHex(TEXT("B26A50"))), KWhite(FColor::FromHex(TEXT("E4DCCA")));
+			Box(Off(0.0, 0.0, 0.09), FVector(0.9, 0.9, 0.18) * Size * U, KRedStone, Yaw0 + Turn);
+			Box(Off(0.0, 0.0, 0.38), FVector(0.58, 0.58, 0.4) * Size * U, KWhite, Yaw0 + Turn);
+			Pillar(Off(0.0, 0.0, 0.58), 0.18 * Size * U, 0.18 * Size * U, 0.08 * Size * U, KWhite, 10);
+			Ball(Off(0.0, 0.0, 0.74), FVector(0.48, 0.48, 0.52) * Size * U, KWhite, 5, 10);
+			Pillar(Off(0.0, 0.0, 0.99), 0.02 * Size * U, 0.0, 0.16 * Size * U, Gilding, 4);
+			for (const double KX : { -0.26, 0.26 })
+			{
+				for (const double KY : { -0.26, 0.26 })
+				{
+					Pillar(Off(KX, KY, 0.58), 0.05 * Size * U, 0.05 * Size * U, 0.12 * Size * U, KWhite, 6);
+					Ball(Off(KX, KY, 0.73), FVector(0.12, 0.12, 0.13) * Size * U, KWhite, 3, 6);
+				}
+			}
 		}
 		else
 		{
@@ -3037,7 +3483,7 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	// near half of the square is only as wide as the avenue's two blocks, with a block standing in each outer
 	// corner (where the landmark is not one that fills the square itself); and in a city a block stands in the
 	// corner of the square beside its great church.
-	const bool bLandmarkFills = Site.Landmark == 2 || Site.Landmark == 6 || Site.Landmark == 7;
+	const bool bLandmarkFills = !bKitLandmark && (Site.Landmark == 2 || Site.Landmark == 6 || Site.Landmark == 7);
 	auto BuiltInSquare = [&](double A, double B)
 	{
 		if (bPacked)
@@ -3079,7 +3525,14 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	if (bCapital)
 	{
 		const int32 Before = Vertices.Num();
-		Landmark(Site.Landmark, SquareHalfA * 0.24);
+		if (bKitLandmark)
+		{
+			Church(SquareHalfA * 0.24, 0.0, 2.6, 180.0);
+		}
+		else
+		{
+			Landmark(Site.Landmark, SquareHalfA * 0.24);
+		}
 		if (OutLandmarkTop)
 		{
 			// (the highest point of it: the tip of its dome or spire, where a flag would be flown from)
@@ -3299,6 +3752,42 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 			}
 		}
 	}
+	// (Release 2) The walled city: its grid inside a square wall of grey brick, a gate tower in the middle of each side
+	// where the avenues pass through. It throws no dice, so the far town's wall stands where the near one's does.
+	if (Look == 7)
+	{
+		TArray<FVector>* const KeptWindows = Windows;
+		Windows = nullptr;
+		const FLinearColor WallBrick(FColor::FromHex(TEXT("7E7A72"))), GateTimber(FColor::FromHex(TEXT("8E5A48")));
+		const double WallRing = Reach * 0.9, WallPiece = (bFar ? 2.4 : 1.2) * Um;
+		const int32 WallPieces = FMath::Max(2, FMath::CeilToInt32(2.0 * WallRing / WallPiece));
+		const double WallEach = 2.0 * WallRing / WallPieces;
+		for (int32 WallSide = 0; WallSide < 4; ++WallSide)
+		{
+			const bool bAcross = WallSide < 2; // (the two sides that lie across the long streets)
+			const double WallAt = (WallSide % 2 == 0 ? -1.0 : 1.0) * WallRing;
+			for (int32 WallK = 0; WallK < WallPieces; ++WallK)
+			{
+				const double WallT = -WallRing + (WallK + 0.5) * WallEach;
+				if (FMath::Abs(WallT) < 0.45 * Um)
+				{
+					continue; // (the gate's own place)
+				}
+				const double WA = bAcross ? WallAt : WallT, WB = bAcross ? WallT : WallAt;
+				if (CanBuild(WA, WB))
+				{
+					Box(Stand(WA, WB, 0.0) + FVector(0.0, 0.0, 0.17 * U), FVector(WallEach * PerMap * 1.04, 0.14 * U, 0.34 * U), WallBrick, Yaw0 + (bAcross ? 90.0 : 0.0));
+				}
+			}
+			const double GateA = bAcross ? WallAt : 0.0, GateB = bAcross ? 0.0 : WallAt;
+			if (CanBuild(GateA, GateB))
+			{
+				Box(Stand(GateA, GateB, 0.0) + FVector(0.0, 0.0, 0.26 * U), FVector(0.5, 0.5, 0.52) * U, WallBrick, Yaw0);
+				House(Stand(GateA, GateB, 0.0) + FVector(0.0, 0.0, 0.52 * U), 0.58 * U, 0.46 * U, 0.16 * U, 0.16 * U, GateTimber, KitRoof, Yaw0 + (bAcross ? 90.0 : 0.0));
+			}
+		}
+		Windows = KeptWindows;
+	}
 	// (Where the plots are kept the ground is left open, a common inside the town, until something is built on it.)
 	if (OutQuarters)
 	{
@@ -3398,6 +3887,74 @@ void FMiniatureMesh::Horseman(const FVector& Where, double Scale, const FLinearC
 		Rod(P.At(0.02, Side * 0.2, 1.02), P.At(0.08, Side * 0.24, 0.6), 0.05 * Scale, Dark, 5);
 	}
 	Rod(P.At(0.2, 0.18, 1.0), P.At(0.05, 0.18, 1.85), 0.018 * Scale, Gunmetal, 5); // a lance
+}
+
+void FMiniatureMesh::Wagon(const FVector& Where, double Scale, const FLinearColor& Nation, double Turn)
+{
+	const FPlacing P(Where, Scale, Turn);
+	const FLinearColor Timber = FLinearColor(FColor::FromHex(TEXT("6E5436")));
+	const FLinearColor Cloth = Moulded(Nation, 0.8f);
+	// The cart: its bed, the canvas tilt over the load, four spoked wheels (as discs) and the shafts.
+	Box(P.At(-0.5, 0.0, 0.5), FVector(1.3, 0.74, 0.3) * Scale, Timber, Turn);
+	Rod(P.At(-1.1, 0.0, 0.74), P.At(0.08, 0.0, 0.74), 0.34 * Scale, Canvas, 9);
+	for (const double Side : { -1.0, 1.0 })
+	{
+		for (const double Along : { -0.95, -0.05 })
+		{
+			Rod(P.At(Along, Side * 0.4, 0.27), P.At(Along, Side * 0.47, 0.27), 0.27 * Scale, Rubber, 10);
+		}
+		Rod(P.At(0.12, Side * 0.24, 0.5), P.At(0.95, Side * 0.24, 0.66), 0.03 * Scale, Timber, 5);
+	}
+	// The driver on the box.
+	Pillar(P.At(0.05, 0.0, 0.62), 0.13 * Scale, 0.11 * Scale, 0.34 * Scale, Cloth, 8);
+	Ball(P.At(0.05, 0.0, 1.03), FVector(0.16, 0.16, 0.18) * Scale, Skin, 5, 8);
+	// The horse in the shafts: barrel, neck, head, four legs, tail (the horseman's horse, a little smaller).
+	const double H = 0.88;
+	Ball(P.At(1.18, 0.0, 0.7), FVector(1.0, 0.38, 0.44) * Scale, Horsehide, 6, 10);
+	Rod(P.At(1.18 + 0.4 * H, 0.0, 0.79), P.At(1.18 + 0.64 * H, 0.0, 1.14), 0.12 * Scale, Horsehide, 7);
+	Box(P.At(1.18 + 0.76 * H, 0.0, 1.16), FVector(0.32, 0.15, 0.16) * Scale, Horsehide, Turn, -28.0);
+	for (const double Side : { -1.0, 1.0 })
+	{
+		Rod(P.At(1.18 + 0.35 * H, Side * 0.11, 0.56), P.At(1.18 + 0.39 * H, Side * 0.11, 0.0), 0.045 * Scale, Horsehide, 5);
+		Rod(P.At(1.18 - 0.35 * H, Side * 0.11, 0.56), P.At(1.18 - 0.4 * H, Side * 0.11, 0.0), 0.045 * Scale, Horsehide, 5);
+	}
+	Rod(P.At(1.18 - 0.48 * H, 0.0, 0.76), P.At(1.18 - 0.68 * H, 0.0, 0.44), 0.04 * Scale, Rubber, 5);
+}
+
+void FMiniatureMesh::SupplyDump(const FVector& Where, double Scale, const FLinearColor& Nation, int32 Full, bool bFilling, double Turn)
+{
+	const FPlacing P(Where, Scale, Turn);
+	const FLinearColor Timber = FLinearColor(FColor::FromHex(TEXT("7A6040")));
+	const FLinearColor Olive = FLinearColor(FColor::FromHex(TEXT("4E5236")));
+	const FLinearColor Band = Moulded(Nation, 0.7f);
+	// The trodden ground it stands on.
+	Box(P.At(0.0, 0.0, 0.01), FVector(3.4, 2.5, 0.02) * Scale, FLinearColor(FColor::FromHex(TEXT("4A3E2C"))), Turn);
+	// Crates: three stacks, each as high as the dump is full (one to three), a band of the nation's colour on each.
+	const int32 High = bFilling ? 1 : FMath::Clamp(Full, 1, 3);
+	const int32 Stacks = bFilling ? 1 : 3;
+	for (int32 Pile = 0; Pile < Stacks; ++Pile)
+	{
+		const double X = -1.0 + Pile * 1.0, Y = -0.45 + (Pile % 2) * 0.2;
+		for (int32 Level = 0; Level < High; ++Level)
+		{
+			const double Z = 0.04 + Level * 0.42;
+			Box(P.At(X, Y, Z + 0.2), FVector(0.78, 0.7, 0.4) * Scale, Timber, Turn + (Level % 2) * 4.0);
+			Box(P.At(X, Y, Z + 0.2), FVector(0.8, 0.72, 0.08) * Scale, Band, Turn + (Level % 2) * 4.0);
+		}
+	}
+	if (bFilling)
+	{
+		// A bare pallet waiting for the column.
+		Box(P.At(0.4, -0.35, 0.07), FVector(1.4, 0.9, 0.1) * Scale, Timber, Turn);
+		return;
+	}
+	// A tarpaulin over the middle stack.
+	Box(P.At(0.0, -0.25, 0.04 + High * 0.42 + 0.03), FVector(0.95, 0.85, 0.06) * Scale, Canvas, Turn, 6.0);
+	// Fuel drums in a row behind.
+	for (int32 Drum = 0; Drum < 5; ++Drum)
+	{
+		Pillar(P.At(-1.1 + Drum * 0.48, 0.78, 0.04), 0.17 * Scale, 0.17 * Scale, 0.46 * Scale, Drum % 3 == 1 ? Gunmetal : Olive, 10);
+	}
 }
 
 void FMiniatureMesh::Bunker(const FVector& Where, double Scale, const FLinearColor& Nation, double Turn)

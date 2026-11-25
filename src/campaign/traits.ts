@@ -142,7 +142,9 @@ function edge(g: Game, c: Corps, target: Region, landing: boolean, side: 'attack
   if (!traitRules(g)) return 1;
   const row = TRAITS.nations[c.nat];
   let m = 1;
-  if (row) for (const t of row.traits) {
+  // (A battle of your own, Rules/custom-bridge.ts: the units decide, so a nation's own abilities stay out of it; what it
+  // has researched still counts below.)
+  if (row && !g.flags.custom) for (const t of row.traits) {
     const x = t[side];
     if (x === undefined || t.builtin || !holds(g, t.when, c, target, landing)) continue;
     m *= x;

@@ -112,9 +112,43 @@ namespace
 	TAutoConsoleVariable<int32> CVarShowSpread(
 		TEXT("tc.Speed.ShowSpread"), 80000,
 		TEXT("How many points of the towns' and the trees' squares are newly shown in one frame when the eye crosses a height at which they change (the nearest squares first, one always), the rest the frames after; 0 shows every square in the same frame, as before. The same picture either way, a few frames later."));
+	TAutoConsoleVariable<int32> CVarMonthSpread(
+		TEXT("tc.Speed.MonthSpread"), 1,
+		TEXT("1 spreads the month's turn: the season's masks sent only when the winter changes, snow's paint only in the box it moved in, and the rest of the table and the save a frame and two after; 0 does it all in the month's frame, as before. The same picture either way."));
+	TAutoConsoleVariable<int32> CVarSidesKept(
+		TEXT("tc.Speed.SidesKept"), 1,
+		TEXT("1 lays the sides view once on a mesh of its own, keeps it while it is put away and recolours it where the sides changed; 0 lays it afresh on every press, as before. The same picture either way."));
+	TAutoConsoleVariable<float> CVarSidesFade(
+		TEXT("tc.Speed.SidesFade"), 0.18f,
+		TEXT("(with tc.Speed.SidesKept) The seconds the sides view takes to come up and go away, its wash fading in and out, so that the step is never a jump (the art director: covered by a 0.15 to 0.2 s cross-fade); 0 shows and hides it at once, as before. A long frame counts as a thirtieth of a second, so a stall never eats the fade."));
+	TAutoConsoleVariable<float> CVarTreesSpread(
+		TEXT("tc.Speed.TreesSpread"), 6.0f,
+		TEXT("The ms a frame the woods may take to turn for the month (autumn, winter, spring): the squares in sight first, then the nearest, a few a frame; 0 plants every square again in the month's frame, as before (SeasonTrees, about 155 ms in run 8). The same woods either way, the far ones a moment later."));
+	TAutoConsoleVariable<int32> CVarCardAside(
+		TEXT("tc.Speed.CardAside"), 1,
+		TEXT("1 stands the attack card the moment the army is ordered at enemy ground and fills its forecast a frame or a few later, worked out on the rules' own thread (it took 150 ms of the press's frame); 0 works the forecast out in the press's frame, as before. The same card either way."));
+	TAutoConsoleVariable<int32> CVarWarSpread(
+		TEXT("tc.Speed.WarSpread"), 1,
+		TEXT("1 begins a war from the opening screen under a plate: the rules start it a few frames after the press, and the table is laid a step a frame before the war is entered (map run 8: 1.2 to 1.4 s of laying in a 2.2 to 2.5 s frame); 0 does it all in the press's frame, as before. The same table either way."));
+	TAutoConsoleVariable<int32> CVarSaveAside(
+		TEXT("tc.Speed.SaveAside"), 1,
+		TEXT("1 writes the month's save out on the rules' own thread and onto the disk on a worker thread, a frame or a few after the month (some 2.3 MB of text by August 1944); 0 writes it in the month's frames, as before. The same file either way."));
+	TAutoConsoleVariable<int32> CVarNationsAside(
+		TEXT("tc.Speed.NationsAside"), 1,
+		TEXT("1 works the opening screen's list of countries out on the rules' own thread while the screen says so (a later year is history played up to it: 0.7 to 1 s for 1941 in a cloud run); 0 works it out in the press's frame, as before. The same list either way."));
+	TAutoConsoleVariable<int32> CVarMonthAside(
+		TEXT("tc.Speed.MonthAside"), 0,
+		TEXT("1 plays the other nations' months and reads their answer on the rules' own thread when he ends his, so the table's frames go on meanwhile (1.0 to 1.7 s on the whole-world map in a cloud run, 0.35 to 0.8 s on Europe and the Americas), and the watch or the month's card follows once they are in; 0 plays them in the press's frame, as before. A run that takes pictures plays them at once. The same month either way."));
+	TAutoConsoleVariable<int32> CVarPicturesAside(
+		TEXT("tc.Speed.PicturesAside"), 1,
+		TEXT("1 stands a card at once and takes its unit pictures not yet taken one a frame after it, each laid in its place (the arsenal or a province's raise list opened for the first time took them all in the press's frame); 0 takes them all in the press's frame, as before. A run that takes pictures takes them at once. The same pictures either way, a few frames later."));
 	TAutoConsoleVariable<int32> CVarTidyAside(
 		TEXT("tc.Speed.TidyAside"), 1,
 		TEXT("1 has Unreal clear out what is no longer used every five minutes, where it did every 61 s in one frame of 40 to 63 ms, and at once behind any pause of a quarter of a second that the game already has (a load, a month's end); 0 leaves it every 61 s, as before. A test's run (-unattended) keeps its 61 s and has the second half only. Read as the table is laid. The same picture either way."));
+
+	TAutoConsoleVariable<int32> CVarFrameCap(
+		TEXT("tc.Speed.FrameCap"), 0,
+		TEXT("0 leaves the frames free, as before (a cool Mac draws 80 to 97 pictures a second for a screen that shows 60, and the chip's work for the rest is only heat). 20 to 240 holds the game to that many frames a second (t.MaxFPS, set by code: a value set by hand or by -TheaterSet stays); -1 has each frame wait for the screen's refresh (r.VSync 1). Seen at once; set back to 0, both are put back as they stood. The same picture either way. A capped game sleeps between frames, and macOS stretches the sleeps when the screen is dark or the window hidden: time it on a lit screen, the window in front."));
 
 	FRWLock HoldersGuard; // (tc.Speed.HoldersLock: see TheaterSpeed::FHoldersRead)
 
@@ -212,6 +246,12 @@ namespace
 	double WindowWorst = 0.0;
 	double WindowGame = 0.0, WindowDraw = 0.0, WindowChip = 0.0;
 	double WindowRHI = 0.0; // (the RHI thread's, where there is one: none, and its work is the draw thread's)
+	double WindowIdle = 0.0, WindowOverslept = 0.0; // (ms the engine waited to keep to a cap, and by how much its waits overran what it asked)
+	int32 WindowInFront = 0; // (frames in which the game's window was the one in front)
+	int32 CapInForce = 0; // (tc.Speed.FrameCap: what this file last put in force: 0 nothing, N frames a second, -1 the screen's refresh)
+	bool bCapSetMax = false, bCapSetSync = false; // (...whether it set t.MaxFPS or r.VSync itself, and so has them to put back)
+	float CapMaxWas = 0.0f; // (...t.MaxFPS as it stood before)
+	int32 CapSyncWas = 0; // (...and r.VSync)
 	int32 Summaries = 0;
 
 	double Ms(uint64 Cycles)
@@ -471,6 +511,62 @@ namespace TheaterSpeed
 	int32 ShowSpread()
 	{
 		return FMath::Clamp(CVarShowSpread.GetValueOnGameThread(), 0, 100000000);
+	}
+
+	bool MonthSpread()
+	{
+		return CVarMonthSpread.GetValueOnGameThread() != 0;
+	}
+
+	bool SidesKept()
+	{
+		return CVarSidesKept.GetValueOnGameThread() != 0;
+	}
+
+	bool WarSpread()
+	{
+		return CVarWarSpread.GetValueOnGameThread() != 0;
+	}
+
+	bool CardAside()
+	{
+		return CVarCardAside.GetValueOnGameThread() != 0;
+	}
+
+	bool SaveAside()
+	{
+		return CVarSaveAside.GetValueOnGameThread() != 0;
+	}
+
+	bool NationsAside()
+	{
+		return CVarNationsAside.GetValueOnGameThread() != 0;
+	}
+
+	bool MonthAside()
+	{
+		return CVarMonthAside.GetValueOnGameThread() != 0;
+	}
+
+	bool PicturesAside()
+	{
+		return CVarPicturesAside.GetValueOnGameThread() != 0;
+	}
+
+	bool PictureRun()
+	{
+		const TCHAR* Line = FCommandLine::Get();
+		return FCString::Strifind(Line, TEXT("TheaterShots=")) != nullptr && FCString::Strifind(Line, TEXT("TheaterSteps=")) == nullptr;
+	}
+
+	double TreesSpread()
+	{
+		return FMath::Clamp(static_cast<double>(CVarTreesSpread.GetValueOnGameThread()), 0.0, 1000.0);
+	}
+
+	float SidesFade()
+	{
+		return FMath::Clamp(CVarSidesFade.GetValueOnGameThread(), 0.0f, 2.0f);
 	}
 
 	FQuietModelling::FQuietModelling(int32 How)
@@ -868,9 +964,69 @@ namespace TheaterSpeed
 		}
 	}
 
+	/**
+	 * tc.Speed.FrameCap: puts the cap asked for in force when the switch changes, and takes it off again. With the switch
+	 * at 0 from the start nothing is touched. (Capture 4, 19 November: nothing in the game's code or settings limited its
+	 * frames, and run Q's cap was asked for by -TheaterSet=t.MaxFPS=60. Set here by code, a value set by hand or by
+	 * -TheaterSet outranks it and stays: what is read back says which.)
+	 */
+	static void ApplyFrameCap()
+	{
+		const int32 Asked = CVarFrameCap.GetValueOnGameThread();
+		const int32 Want = Asked < 0 ? -1 : Asked == 0 ? 0 : FMath::Clamp(Asked, 20, 240);
+		if (Want == CapInForce)
+		{
+			return;
+		}
+		static const TCHAR* const MaxName = TEXT("t.MaxFPS");
+		static const TCHAR* const SyncName = TEXT("r.VSync");
+		IConsoleVariable* MaxFPS = IConsoleManager::Get().FindConsoleVariable(MaxName);
+		IConsoleVariable* Sync = IConsoleManager::Get().FindConsoleVariable(SyncName);
+		// What was put in force before goes back to how it stood (a value set by hand since stays: it outranks code).
+		if (bCapSetMax && MaxFPS)
+		{
+			MaxFPS->Set(CapMaxWas, ECVF_SetByCode);
+			UE_LOG(LogTheater, Display, TEXT("Speed: %s put back to %.0f (tc.Speed.FrameCap)"), MaxName, MaxFPS->GetFloat());
+		}
+		if (bCapSetSync && Sync)
+		{
+			Sync->Set(CapSyncWas, ECVF_SetByCode);
+			UE_LOG(LogTheater, Display, TEXT("Speed: %s put back to %d (tc.Speed.FrameCap)"), SyncName, Sync->GetInt());
+		}
+		bCapSetMax = bCapSetSync = false;
+		CapInForce = Want;
+		if (Want > 0)
+		{
+			if (!MaxFPS)
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Speed: tc.Speed.FrameCap found no console variable called %s"), MaxName);
+				return;
+			}
+			CapMaxWas = MaxFPS->GetFloat();
+			MaxFPS->Set(static_cast<float>(Want), ECVF_SetByCode);
+			bCapSetMax = FMath::IsNearlyEqual(MaxFPS->GetFloat(), static_cast<float>(Want), 0.5f);
+			UE_LOG(LogTheater, Display, TEXT("Speed: %s %s %.0f%s (tc.Speed.FrameCap)"), MaxName, bCapSetMax ? TEXT("set to") : TEXT("left at"), MaxFPS->GetFloat(),
+				bCapSetMax ? TEXT("") : TEXT(", set by hand or by -TheaterSet"));
+		}
+		else if (Want < 0)
+		{
+			if (!Sync)
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Speed: tc.Speed.FrameCap found no console variable called %s"), SyncName);
+				return;
+			}
+			CapSyncWas = Sync->GetInt();
+			Sync->Set(1, ECVF_SetByCode);
+			bCapSetSync = Sync->GetInt() == 1;
+			UE_LOG(LogTheater, Display, TEXT("Speed: %s %s %d%s (tc.Speed.FrameCap)"), SyncName, bCapSetSync ? TEXT("set to") : TEXT("left at"), Sync->GetInt(),
+				bCapSetSync ? TEXT("") : TEXT(", set by hand or by -TheaterSet"));
+		}
+	}
+
 	void NoteFrame(float DeltaSeconds, UWorld* World)
 	{
 		ApplyCommandLineSets(); // (in case no table was laid first: it is done once)
+		ApplyFrameCap(); // (after the command line's sets, so that -TheaterSet=tc.Speed.FrameCap=60 is in force from the first frame)
 		// (Speed: tc.Speed.TidyAside, the second half. The frame just ended by the machine's own clock, which the game's
 		// speed and its pauses do not stretch; and when the engine last cleared out, whoever asked.)
 		const double SeenNow = FPlatformTime::Seconds();
@@ -917,6 +1073,8 @@ namespace TheaterSpeed
 			RulesTallies().Reset();
 			WindowClock = WindowWorst = WindowGame = WindowDraw = WindowChip = WindowRHI = 0.0;
 			WindowFrames = WindowSlow = WindowSlowBeside = 0;
+			WindowIdle = WindowOverslept = 0.0;
+			WindowInFront = 0;
 			for (int32 Index = 0; Index < static_cast<int32>(EMade::Count); ++Index)
 			{
 				MadeNow[Index].store(0, std::memory_order_relaxed);
@@ -1065,6 +1223,13 @@ namespace TheaterSpeed
 		WindowDraw += FPlatformTime::ToMilliseconds(GRenderThreadTime);
 		WindowRHI += FPlatformTime::ToMilliseconds(GRHIThreadTime);
 		WindowChip += FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles());
+		{
+			// (the engine's own wait to keep to a cap, in the frame just ended, and by how much the system's sleep overran it)
+			const double Idle = FApp::GetIdleTime();
+			WindowIdle += Idle * 1000.0;
+			WindowOverslept += Idle > 0.0 ? FMath::Max(FApp::GetIdleTimeOvershoot(), 0.0) * 1000.0 : 0.0;
+			WindowInFront += FSlateApplication::IsInitialized() && FSlateApplication::Get().IsActive() ? 1 : 0;
+		}
 		if (WindowClock < 5.0 || WindowFrames < 2)
 		{
 			return;
@@ -1097,6 +1262,25 @@ namespace TheaterSpeed
 				UE_LOG(LogTheater, Display, TEXT("Speed: the machine: heat %s"), *HeatWord);
 			}
 			MachineWas = Machine;
+		}
+		{
+			// (Speed: tc.Speed.FrameCap. The held frames' line, a line of its own as the machine's is. A capped game sleeps
+			// between frames, and macOS stretches those sleeps when the screen is dark or the window hidden: capture 4's
+			// run Q fell to 21 to 26 frames a second at nominal heat with 0.7 cores busy. This says whether a run had the
+			// lit screen and the window in front that a timing with a cap wants.)
+			const IConsoleVariable* MaxFPS = IConsoleManager::Get().FindConsoleVariable(TEXT("t.MaxFPS"));
+			const IConsoleVariable* Sync = IConsoleManager::Get().FindConsoleVariable(TEXT("r.VSync"));
+			const float MaxNow = MaxFPS ? MaxFPS->GetFloat() : 0.0f;
+			const int32 SyncNow = Sync ? Sync->GetInt() : 0;
+			const FString Cap = CapInForce > 0 ? FString::Printf(TEXT("%d a second"), CapInForce) : CapInForce < 0 ? FString(TEXT("the screen's refresh")) : FString(TEXT("none"));
+			UE_LOG(LogTheater, Display, TEXT("Speed: held frames: tc.Speed.FrameCap %s (t.MaxFPS %.0f, r.VSync %d); the engine waited %.1f ms a frame to keep to it, its waits overran by %.1f; the game's window in front in %d of %d frames"),
+				*Cap, MaxNow, SyncNow, WindowIdle / Frames, WindowOverslept / Frames, WindowInFront, WindowFrames);
+			const double Rate = Frames / WindowClock;
+			if (MaxNow > 0.0f && Rate < 0.8 * MaxNow && WindowIdle / Frames > 5.0)
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Speed: %.1f frames a second under a cap of %.0f while the engine waited %.1f ms a frame: held longer than the cap asks. Is the screen dark or the game's window hidden? A timing with a cap wants a lit screen and the window in front."),
+					Rate, MaxNow, WindowIdle / Frames);
+			}
 		}
 		TArray<const FSlot*> Busy;
 		for (const FSlot& Slot : Each)
@@ -1145,6 +1329,8 @@ namespace TheaterSpeed
 		RulesTallies().Reset();
 		WindowClock = WindowWorst = WindowGame = WindowDraw = WindowChip = WindowRHI = 0.0;
 		WindowFrames = WindowSlow = WindowSlowBeside = 0;
+		WindowIdle = WindowOverslept = 0.0;
+		WindowInFront = 0;
 		for (int32 Index = 0; Index < static_cast<int32>(EMade::Count); ++Index)
 		{
 			MadeWindow[Index] = 0;

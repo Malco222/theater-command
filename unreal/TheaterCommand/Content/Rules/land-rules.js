@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of cf3d7718 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 2be0afb9 2026-11-24. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -61,6 +61,19 @@
     roll(expected) {
       const whole = Math.floor(expected);
       return whole + (this.next() < expected - whole ? 1 : 0);
+    }
+    /**
+     * `roll` for two expected counts on ONE draw: the first exactly as `roll(expected)` gives it, from the same draw
+     * and leaving the same state, and the second what that draw makes of another expectation (ruling 240: the ships
+     * that would have gone down without damage control). A larger expectation never gives the smaller count.
+     */
+    rollBoth(expected, other2) {
+      const u = this.next();
+      const at = (x) => {
+        const whole = Math.floor(x);
+        return whole + (u < x - whole ? 1 : 0);
+      };
+      return [at(expected), at(other2)];
     }
     /** An independent stream, so adding rolls in one system does not shift another. */
     fork(label) {
@@ -3366,7 +3379,8 @@
   var TANK_GAIN = 3;
   var TANK_SHED = 6;
   var tankTop = (sq) => Math.max(TANK_TOP, Math.min(sq.speed, sq.u.speed ?? 0));
-  var MOUNT = { down: 4.5, downAfter: 1, up: 5.5, upAfter: 6, stayAfter: 3, climb: 0.05, saddle: 1, span: 3, hop: 0.4, hopMost: 8, tail: 4.2, clear: 2.5 };
+  var MOUNT = { down: 4.5, downAfter: 1, up: 5.5, upAfter: 6, stayAfter: 3, climb: 0.05, saddle: 1, span: 3 };
+  var HOP = { hop: 0.65, same: 1.05, takes: 2.8, most: 15, tail: 4.1, abreast: 0.35, clear: 2.5, ring: 100 };
   var RIDERS_RING = 120;
   var COVER_OF = { works: "works", bunker: "works", buildings: "building", industry: "building", suburb: "building", woods: "woods", rock: "rock", rough: "rough", field: "field" };
   var fwd = (f) => [Math.sin(f), Math.cos(f)];
@@ -4883,7 +4897,7 @@
       }
       if (sq.down && ph !== "gone" && (u.kind === "cav" || u.kind === "mot" && sq.veh.length)) {
         sq.close = sq.fast >= 1 ? true : sq.slow >= 3 ? false : sq.close;
-        if (sq.boarding === void 0 && sq.fast >= MOUNT.upAfter) this.mountUp(sq);
+        if (sq.boarding === void 0 && sq.fast >= MOUNT.upAfter && sq.hop === void 0) this.mountUp(sq);
         else if (sq.boarding !== void 0 && sq.slow >= MOUNT.stayAfter) {
           got = true;
           this.alight(sq);
@@ -6215,18 +6229,17 @@
       }
     }
     /**
-     * Off the lorries and horses. A trooper is down where he sits his horse, on his feet. Lorried men get down over their
-     * lorry's tailboard one at a time, the back of her bed first, the two benches turn about (hopOut), the lorries standing
-     * meanwhile; the block's phase then sends each man to his place.
-     * (Down where they sat, they stood in the lorry's footprint, under her: Brian, 23 November 14:10Z, "troops are stuck
-     * under the truck ... they then hop out and start engaging enemies".)
+     * Off the lorries and horses where they are, each on his feet: the block's phase then sends him to his place. With Men
+     * in lorries on, lorried men get down over their lorry's tailboard one at a time instead, the back of her bed first and
+     * the two benches turn about (hopOut), the lorries standing (Brian, 23 November 14:10Z: "soldiers in the back of a
+     * truck and they then hop out and start engaging enemies").
      */
     alight(sq) {
       sq.boarding = void 0;
       const t = this.b.t, aboard = [];
       for (const m of sq.men) {
         if (m.fell !== void 0 || m.pose !== "mounted" && m.pose !== "ride") continue;
-        if (m.pose === "mounted" && sq.veh.length) {
+        if (this.b.trucks && m.pose === "mounted" && sq.veh.length) {
           aboard.push(m);
           continue;
         }
@@ -6243,9 +6256,16 @@
         if (l) l.push(m);
         else by2.set(i, [m]);
       }
-      for (const l of by2.values()) l.sort((a, c) => this.seatNo(sq, c) - this.seatNo(sq, a)).forEach((m, n) => {
-        m.out = t + n * MOUNT.hop;
-      });
+      for (const l of by2.values()) {
+        let at = t, was = -1;
+        for (const m of l.sort((a, c) => this.seatNo(sq, c) - this.seatNo(sq, a))) {
+          const j = this.seatNo(sq, m);
+          if (was >= 0) at += was % 2 === j % 2 ? HOP.same : HOP.hop;
+          m.out = at;
+          m.off = void 0;
+          was = j;
+        }
+      }
       sq.hop = t;
       sq.left = void 0;
       for (const v of sq.veh) {
@@ -6256,10 +6276,10 @@
       }
     }
     /**
-     * Getting down (alight): each man, his turn come, over his lorry's tailboard onto the ground a stride behind her, on
-     * his bench's side, and off at a run to clear her tail (the left bench's men to her left, the right's to her right,
-     * the back benches' nearest), kneeling there till the last of the block is down; the lorries stand meanwhile. A man
-     * still aboard after MOUNT.hopMost seconds goes at once. True once every man is down.
+     * Men in lorries, getting down (alight): each man, his turn come, gets up and makes for the tailboard (off: the 3D game
+     * plays it from here, his seat said with a 1, MenOut.sv), and HOP.takes later is on the ground behind his lorry, off at
+     * a run to clear her tail (the left bench's men to her left, the right's to her right, the back benches' nearest), to
+     * kneel there till the last of the block is down; the lorries stand meanwhile. True once every man is down.
      */
     hopOut(sq) {
       const t = this.b.t;
@@ -6273,18 +6293,23 @@
         if (m.out === void 0) continue;
         if (m.fell !== void 0 || m.pose !== "mounted" || !sq.veh.length) {
           m.out = void 0;
+          m.off = void 0;
           continue;
         }
-        if (t < m.out && t - (sq.hop ?? t) < MOUNT.hopMost) {
+        const most = t - (sq.hop ?? t) >= HOP.most;
+        if (t >= m.out && !m.off) m.off = true;
+        if (t < m.out + HOP.takes && !most) {
           still = true;
           continue;
         }
         m.out = void 0;
+        m.off = void 0;
         const v = this.lorryOf(sq, m), j = this.seatNo(sq, m), side = j % 2 ? 1 : -1, row = Math.floor(j / 2);
-        [m.x, m.y] = toWorld(v, v.face, side * 0.45, -MOUNT.tail);
-        m.face = wrap(v.face + Math.PI);
+        const vf = v.roadF ?? v.face;
+        [m.x, m.y] = this.landing(sq, m);
+        m.face = wrap(vf + Math.PI);
         m.went = 0;
-        m.spot = toWorld(v, v.face, side * (1.6 + 0.5 * row), -MOUNT.tail - 1.5 - 0.4 * row);
+        m.spot = toWorld(v, vf, side * (1.6 + 0.5 * row), -HOP.tail - 1.5 - 0.4 * row);
         m.slotAt = m.spot;
         m.pose = "run";
         m.v = 3.5;
@@ -6308,7 +6333,10 @@
       const u = sq.u;
       sq.boarding = this.b.t;
       sq.hop = sq.left = void 0;
-      for (const m of sq.men) m.out = void 0;
+      for (const m of sq.men) {
+        m.out = void 0;
+        m.off = void 0;
+      }
       for (const v of sq.veh) if (v.pose === "parked") v.pose = "drive";
       const men = sq.men.filter((m) => this.stands(sq, m));
       for (const m of men) {
@@ -6365,6 +6393,14 @@
       const v = this.lorryOf(sq, m), j = this.seatNo(sq, m);
       if (sq.tier >= 1) return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 1.4 - 0.6 * Math.floor(j / 2));
       return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 0.5 - 1.1 * Math.floor(j / 2));
+    }
+    /**
+     * Men in lorries: where he stands, down off her tailboard (hopOut): HOP.tail behind her as the 3D game faces her (her
+     * way over her last metre of road: roadF), to his own bench's side.
+     */
+    landing(sq, m) {
+      const v = this.lorryOf(sq, m);
+      return toWorld(v, v.roadF ?? v.face, (this.seatNo(sq, m) % 2 ? 1 : -1) * HOP.abreast, -HOP.tail);
     }
     /**
      * His seat's number in his lorry's bed (seat): two abreast, the odd ones on her right, front to back. Each lorry's men
@@ -6537,7 +6573,7 @@
         }
       }
       if (u.kind !== "mot" || !sq.down) return;
-      if (sq.left !== void 0 && t < sq.left + MOUNT.clear && sq.phase !== "flee") {
+      if (sq.left !== void 0 && t < sq.left + HOP.clear && sq.phase !== "flee") {
         for (const v of sq.veh) {
           v.v = 0;
           v.pose = "parked";
@@ -7079,6 +7115,13 @@
         walkOne(m);
         m.went = Math.hypot(m.x - x0, m.y - y0) / DT;
         if (m.role === "tank") m.way = Math.max(m.went, (m.way ?? 0) - TANK_SHED * DT);
+        if (this.b.trucks && m.role === "lorry") {
+          if (!m.road) m.road = [x0, y0];
+          if (Math.hypot(m.x - m.road[0], m.y - m.road[1]) >= 1) {
+            m.roadF = Math.atan2(m.x - m.road[0], m.y - m.road[1]);
+            m.road = [m.x, m.y];
+          }
+        }
       };
       const walkOne = (m) => {
         if (m.v > 0 && !MOVING.has(m.pose) && !CARRIED.has(m.pose)) {
@@ -7158,8 +7201,9 @@
             if (e === void 0) e = this.threat(u);
             if (e) want = bearing2(m.x, m.y, e.x, e.y);
           }
-          if (want !== void 0) m.face = turnTo(m.face, want, rate);
+          if (want !== void 0 && !(this.b.trucks && m.role === "lorry")) m.face = turnTo(m.face, want, rate);
         }
+        if (m.role === "lorry" && (sq.hop !== void 0 || sq.left !== void 0 && t < sq.left + HOP.clear && sq.phase !== "flee")) return;
         const extra = m.role === "lorry" ? 120 : 0;
         const [lx, ly] = this.leash(sq, [m.x, m.y], extra);
         const gd = Math.hypot(lx - m.x, ly - m.y);
@@ -7181,7 +7225,7 @@
           m.pose = rev ? "reverse" : m.role === "tank" || m.role === "lorry" ? "drive" : m.role === "gun" ? "towed" : sq.phase === "flee" ? "flee" : sq.phase === "bound" || sq.phase === "fight" ? "advance" : "run";
           m.until = t + 1;
         }
-        this.ring(sq, m, extra || (u.kind === "mot" || u.kind === "cav" ? RIDERS_RING : 0));
+        this.ring(sq, m, extra || (u.kind === "mot" || u.kind === "cav" ? RIDERS_RING + (this.b.trucks && u.kind === "mot" && m.role !== "lorry" ? HOP.ring : 0) : 0));
       };
       for (const m of sq.veh) step(m);
       for (const m of sq.men) {
@@ -7191,11 +7235,11 @@
         }
         if (m.job) continue;
         if (m.pose === "mounted" && (u.kind === "mot" || m.role === "crew") && sq.veh.length) {
-          const lorry = this.lorryOf(sq, m), x0 = m.x, y0 = m.y, p = this.seat(sq, m);
+          const lorry = this.lorryOf(sq, m), x0 = m.x, y0 = m.y, p = m.off ? this.landing(sq, m) : this.seat(sq, m);
           m.x = p[0];
           m.y = p[1];
           m.face = turnTo(m.face, lorry.face, TURN.foot * DT);
-          m.went = Math.hypot(m.x - x0, m.y - y0) / DT;
+          m.went = m.off ? 0 : Math.hypot(m.x - x0, m.y - y0) / DT;
           m.spot = p;
           m.v = lorry.v;
           continue;
@@ -7587,7 +7631,7 @@
         if (u.state === "withdrawn" && !sq.men.some((m) => m.fell !== void 0)) continue;
         const men = sq.men.filter((m) => m.fell !== void 0 || m.job !== void 0 || this.stands(sq, m) && live(u)).map((m) => {
           const o = one(m);
-          if (m.pose === "mounted" && m.fell === void 0 && sq.veh.length) o.sv = [this.lorryOf(sq, m).k, this.seatNo(sq, m)];
+          if (b.trucks && m.pose === "mounted" && m.fell === void 0 && sq.veh.length) o.sv = m.out !== void 0 ? [this.lorryOf(sq, m).k, this.seatNo(sq, m), Math.round(m.out * 100) / 100] : [this.lorryOf(sq, m).k, this.seatNo(sq, m)];
           if (mark !== void 0 && m.fell === void 0 && grp(m) === mark && m.role !== "lorry" && m.role !== "holder") o.ld = 1;
           return o;
         });
@@ -7832,6 +7876,14 @@
       __publicField(this, "warned", { att: false, def: false });
       /** Each army's bar, how near breaking it stands, as last judged: what a withdrawal after contact pays by (b474). */
       __publicField(this, "bar", { att: 0, def: 0 });
+      /**
+       * All fall back (release 1.5; Brian, 23 November 14:47Z): the battle second each army was ordered back, null while it
+       * fights on. Its blocks withdraw toward its own edge and are out once behind the zone it drew up in; when the last is
+       * out, the battle ends as its withdrawal. It takes no new orders after it.
+       */
+      __publicField(this, "falling", { att: null, def: null });
+      /** The highest each falling army's bar stood from the order until its last block was out: what it pays by (DD 14:54Z, b474). */
+      __publicField(this, "fallBar", { att: 0, def: 0 });
       /** Seconds of battle time the fresh hold has kept each army at the brink, as judged: for the words on why it broke (b496(2)). */
       __publicField(this, "heldFor", { att: 0, def: 0 });
       /**
@@ -8005,6 +8057,13 @@
        */
       __publicField(this, "escort", false);
       /**
+       * Men in lorries (release 1.5, looks only; Brian, 23 November 14:10Z and 15:50Z, "soldiers in the back of a truck and
+       * they then hop out"): each man aboard says his lorry and seat (MenOut.sv), and lorried men get down over the tailboard
+       * one at a time (Drill.alight, hopOut), the lorries standing meanwhile. Off unless turned on (the bridge's
+       * { trucks: true }, the Battle rules card's Men in lorries row): off, all get down at once where they sat.
+       */
+      __publicField(this, "trucks", false);
+      /**
        * Armoured infantry (release 2; Brian, 23 November 07:01Z): an armoured block draws its division's riflemen riding
        * behind its tanks in their army's carriers, half-tracks or lorries, who get down near the enemy (Drill.addMech;
        * DRILL.mech). Looks only: the drill reads it, the fight never. Off unless turned on (the bridge's { mech: true }, the
@@ -8161,7 +8220,7 @@
       }
       for (const u of this.units) u.cover = groundAt(this.field, u.x, u.y);
       this.ai = { att: !ticket.att.human, def: !ticket.def.human };
-      const [d0, d1] = ticket.reckoning.dice;
+      const [d0, d1] = ticket.reckoning.luck ?? ticket.reckoning.dice;
       const roll2 = d0 + (d1 - d0) * new Rng(hashString(ticket.attempt ? `fortune:${ticket.seed}:${ticket.attempt}` : `fortune:${ticket.seed}`)).next();
       this.fortune = 1 + LAND.fortune * (roll2 - 1);
       for (const s of ["att", "def"]) {
@@ -9147,6 +9206,7 @@
     // ---- Orders -----------------------------------------------------------------------------------------------------
     command(c, by2) {
       if (this.over) return false;
+      if (this.falling[by2] !== null && c.do !== "auto" && c.do !== "dice" && c.do !== "withdrawAll") return false;
       const mine = (ids) => ids.map((i) => this.unit(i)).filter((u) => !!u && u.side === by2 && fighting2(u) && u.kind !== "fort" && !(this.staffing && u.waits && !u.waits.free));
       const player = !this.staffing && this.ticket[by2].human;
       const hands = (us) => {
@@ -9271,6 +9331,17 @@
             const u = this.unit(Number(c.unit ?? c.units?.[0]));
             if (!this.patrol || !u || u.side !== by2 || by2 !== this.setup || this.patrolWhy(u) !== null) return false;
             this.patrolBy = u.id;
+            return true;
+          }
+          if (c.do === "land:fallBack") {
+            if (this.fallBackWhy(by2) !== null) return false;
+            const us = this.units.filter((u) => u.side === by2 && fighting2(u) && u.kind !== "fort");
+            this.falling[by2] = this.t;
+            this.fallBar[by2] = this.breaking(by2);
+            this.coming = this.coming.filter((k) => k.u.side !== by2);
+            hands(us);
+            for (const u of us) give(u, () => this.send(u, { kind: "withdraw", x: u.x, y: by2 === "att" ? 0 : this.field.h }));
+            this.say({ what: "land:fallBack", side: by2, text: `${this.army(by2)} falls back.` });
             return true;
           }
           if (c.do === "land:wait") {
@@ -10854,7 +10925,7 @@
           u.act = "down";
           this.say({ what: "withdrawn", unit: u.id, side: u.side, text: `${this.named(u)} has fallen back off the field.` });
         }
-      } else if (u.order?.kind === "withdraw" && (u.side === "att" ? u.y <= 6 : u.y >= this.field.h - 6)) {
+      } else if (u.order?.kind === "withdraw" && (u.side === "att" ? u.y <= this.outLine("att") : u.y >= this.outLine("def"))) {
         u.state = "withdrawn";
         u.act = "down";
         this.say({ what: "withdrawn", unit: u.id, side: u.side, text: `${this.named(u)} has fallen back off the field.` });
@@ -11251,14 +11322,17 @@
     }
     judge() {
       for (const s of ["att", "def"]) {
-        const left = this.units.filter((u) => u.side === s && fighting2(u));
+        const fall = this.falling[s] !== null;
+        const left = this.units.filter((u) => u.side === s && fighting2(u) && !(fall && u.kind === "fort"));
         if (!left.length) {
-          const how = this.units.some((u) => u.side === s && u.state === "withdrawn") && !this.units.some((u) => u.side === s && u.state === "routing") ? "withdrew" : "destroyed";
+          const out = this.units.some((u) => u.side === s && u.state === "withdrawn");
+          const how = out && (fall || !this.units.some((u) => u.side === s && u.state === "routing")) ? "withdrew" : "destroyed";
           this.finish(other(s), how, void 0, how === "destroyed" ? this.breakCause(s) : void 0);
           return;
         }
         const b = this.brink(s), near = b.bar;
         this.bar[s] = near;
+        if (fall) this.fallBar[s] = Math.max(this.fallBar[s], near);
         if (b.holding) this.heldFor[s] += DT;
         if (b.holding && this.freshHold[s]) this.giveGround(s, left);
         if (!this.warned[s] && near >= 0.75 && (this.ticket.att.human || this.ticket.def.human)) {
@@ -11281,7 +11355,35 @@
           return;
         }
       }
-      if (this.t >= this.ticket.limit) this.finish("def", "time");
+      if (this.t >= this.ticket.limit) {
+        if (this.falling.def !== null) this.finish("att", "withdrew");
+        else if (this.falling.att !== null) this.finish("def", "withdrew");
+        else this.finish("def", "time");
+      }
+    }
+    /**
+     * Why this side may not fall back now, in the player's words; null where it may (all fall back, release 1.5). Only once
+     * the battle has begun, once, and with a block of it that can go.
+     */
+    fallBackWhy(s) {
+      if (this.over) return "The battle is over.";
+      if (this.setup !== null) return "The battle has not begun.";
+      if (this.falling[s] !== null) return "Your army is already falling back.";
+      if (!this.units.some((u) => u.side === s && fighting2(u) && u.kind !== "fort")) return "No unit of yours can fall back.";
+      return null;
+    }
+    /** Whether that army has been ordered back (all fall back), for the view and the 3D game. */
+    fallingBack(s) {
+      return this.falling[s] !== null;
+    }
+    /**
+     * Where a withdrawing block of that side is out: a field's breadth from its own edge (6 m), or, with its army falling
+     * back, behind the zone it drew up in (Brian: "behind them where they started").
+     */
+    outLine(s) {
+      const z = this.field.zones[s];
+      if (s === "att") return this.falling.att !== null ? Math.max(6, z[1]) : 6;
+      return this.falling.def !== null ? Math.min(this.field.h - 6, z[3]) : this.field.h - 6;
     }
     /**
      * What a block keeps of its strength in the day's count: the fled leave LAND.count.gone behind them, runners and those
@@ -11329,7 +11431,7 @@
       const line = this.practice && this.ticket.def.human ? "Your line" : this.practice ? "Their line" : `The ${this.ticket.def.adj} line`;
       const told = how === "rout" && why && why.by !== "none";
       const lines = [
-        how === "rout" ? this.brokeAfter(loser, told ? why : void 0) : how === "withdrew" ? `${this.army(loser)} withdrew from the field.` : how === "time" ? `${line} held until the day was done.` : how === "destroyed" ? `${this.army(loser)} was driven from the field.` : this.staffLine()
+        how === "rout" ? this.brokeAfter(loser, told ? why : void 0) : how === "withdrew" && this.falling[loser] !== null ? `${this.army(loser)} fell back behind the ground it started from, to fight another day.` : how === "withdrew" ? `${this.army(loser)} withdrew from the field.` : how === "time" ? `${line} held until the day was done.` : how === "destroyed" ? `${this.army(loser)} was driven from the field.` : this.staffLine()
       ];
       if (how !== "objective") lines.push(lost.att < 1e-4 && lost.def < 1e-4 ? "Neither side lost any of its strength." : told ? `By the day's end, counting the rout, ${this.sideOf("att", "attack")} had lost ${pct(lost.att)} of its strength in all, ${this.sideOf("def", "defence")} ${pct(lost.def)}.` : `${cap(this.sideOf("att", "attack"))} lost ${pct(lost.att)} of its strength, ${this.sideOf("def", "defence")} ${pct(lost.def)}.`);
       else if (this.contactAt !== null) lines.push(`Before you handed the battle to the staff, ${this.sideOf("att", "attack")} had lost ${pct(lost.att)} of its strength on the field, and ${this.sideOf("def", "defence")} ${pct(lost.def)}.`);
@@ -11354,7 +11456,9 @@
         forces: [...forces.values()].map((f) => ({ corps: f.corps, side: f.side, lost: f.p > 0 ? Math.round(f.lost / f.p * 1e3) / 1e3 : 0, ...this.joinCorps.has(f.corps) ? { arrived: this.joinedAt.get(f.corps) ?? null } : {} })),
         ...how === "rout" || how === "destroyed" ? { broke: loser, ...why ? { brokeBy: why } : {} } : {},
         // Pulled out after the armies met: the rearguard and the stragglers are the rules' to bill, by its bar (b474).
-        ...how === "withdrew" && this.contactAt !== null ? { pulled: { side: loser, bar: Math.round(Math.min(1, this.bar[loser]) * 1e3) / 1e3 } } : {},
+        // Ordered back (all fall back), the highest its bar stood from the order until its last block was out (DD 14:54Z).
+        ...how === "withdrew" && this.contactAt !== null ? { pulled: { side: loser, bar: Math.round(Math.min(1, this.falling[loser] !== null ? Math.max(this.fallBar[loser], this.bar[loser]) : this.bar[loser]) * 1e3) / 1e3 } } : {},
+        ...how === "withdrew" && this.falling[loser] !== null ? { fellBack: loser } : {},
         // What the fighters on call flew and lost, by group, for the campaign's bill (air support).
         ...this.airOn.att || this.airOn.def ? { air: this.airBill() } : {}
       };
@@ -11868,7 +11972,7 @@
     view(as) {
       const ev = this.events;
       this.events = [];
-      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking("att"), def: this.breaking("def") }, breakingBy: { att: this.breakCause("att"), def: this.breakCause("def") }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as) };
+      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking("att"), def: this.breaking("def") }, breakingBy: { att: this.breakCause("att"), def: this.breakCause("def") }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.falling.att !== null || this.falling.def !== null ? { fallBack: { att: this.falling.att !== null, def: this.falling.def !== null } } : {}, ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as) };
     }
     /** Air support's part of the view, only where a side has fighters on call. */
     airView() {
@@ -12152,6 +12256,9 @@
     return { crops: CROPS, crop: crop.join(""), fields: { turn: r3(turn3), cx: w / 2, cy: h / 2, xs: xs.map(r1), ys: ys.map(r1), shift: shift.map(r1), patch: patchOut }, balka: { line: line.map(([x, y]) => [r1(x), r1(y)]), deep }, rail: { line: rail.map(([x, y]) => [r1(x), r1(y)]), bank }, hill: { ...hill, x: r1(hill.x), y: r1(hill.y) } };
   }
 
+  // ../../src/battle/land/wrecks.ts
+  var AFV_PER_DIV = { arm: 150, mot: 40 };
+
   // ../../src/battle/land/live.ts
   var KEEP_M = 0.1;
   var KEEP_F = 0.05;
@@ -12175,7 +12282,7 @@
       const key = keyOf(b, m, fo);
       const p = [r2(t), r12(m.x), r12(m.y), r32(m.f)];
       const ch = [r2(t), m.p, m.c, m.a ? r12(m.a[0]) : null, m.a ? r12(m.a[1]) : null, m.h ? 1 : 0, m.b ? 1 : 0];
-      if (m.sv) ch.push(m.sv[0], m.sv[1]);
+      if (m.sv) ch.push(...m.sv);
       let k = this.men.get(key);
       if (!k) {
         k = {
@@ -12422,8 +12529,13 @@
       __publicField(this, "skyOf");
       __publicField(this, "steppe");
       __publicField(this, "blocks");
-      /** The player's looks switches the header reads (worn uniforms, mud remembered, scarred ground). */
-      __publicField(this, "looks", { worn: true, mud: true, scars: true });
+      /**
+       * Old wrecks: the real armoured vehicles one tank model stands for in this battle (both sides' armour together, at
+       * least 1, to a tenth), so the 3D game lays the old wrecks at the battle's own scale; null where no armour is drawn.
+       */
+      __publicField(this, "wreckPer", null);
+      /** The player's looks switches the header reads (worn uniforms, mud remembered, scarred ground, old wrecks). */
+      __publicField(this, "looks", { worn: true, mud: true, scars: true, wrecks: true, wet: true });
       __publicField(this, "seen", /* @__PURE__ */ new Set());
       __publicField(this, "roundsNew", []);
       __publicField(this, "phases", /* @__PURE__ */ new Map());
@@ -12436,7 +12548,7 @@
       __publicField(this, "placed", false);
       __publicField(this, "sentOver", false);
       this.me = opts.me ?? null;
-      this.skyOf = opts.sky ?? ticketSky(ticket);
+      this.skyOf = opts.sky ?? ticketSky(opts.wet === false ? { ...ticket, weather: void 0 } : ticket);
       const sim = this.sim = new LandBattle(ticket);
       this.steppe = piece?.open === "steppe" ? openSteppe(sim.field, ticket.seed) : null;
       if (this.steppe) for (const u of sim.units) u.cover = groundAt(sim.field, u.x, u.y);
@@ -12471,9 +12583,14 @@
       if (opts.bearers !== false) sim.bearers = true;
       if (opts.blast === true) sim.blast = true;
       if (opts.escort === true) sim.escort = true;
+      if (opts.trucks === true) sim.trucks = true;
       if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
       const tanksSeen = { att: 0, def: 0 };
-      this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false };
+      this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false, wrecks: opts.wrecks !== false, wet: opts.wet !== false };
+      const armour = sim.allBlocks().filter((u) => u.kind === "arm" && u.figures0 > 0);
+      const models = armour.reduce((s, u) => s + u.figures0, 0);
+      const real = armour.reduce((s, u) => s + (AFV_PER_DIV.arm ?? 0) * (u.worth ?? u.figures0 / Math.max(1, u.tray)), 0);
+      this.wreckPer = models > 0 && real > 0 ? Math.max(1, Math.round(real / models * 10) / 10) : null;
       const caught = !piece && opts.captured !== false && ticket.captured ? ticket.captured : null;
       const caughtLeft = { att: caught?.att?.n ?? 0, def: caught?.def?.n ?? 0 };
       this.blocks = sim.allBlocks().map((u) => {
@@ -12531,10 +12648,12 @@
         date: t.date,
         turn: t.turn,
         // (the campaign's weather word, for the ground under it, and scarred ground: looks only, release 2; the 3D game
-        // lays thaw mud from "mud", weathered old craters from the scars, and old ruts from the battles fought in mud)
-        ...t.weather ? { weather: t.weather } : {},
+        // lays thaw mud from "mud", weathered old craters from the scars, old ruts from the battles fought in mud, and the
+        // burnt-out armour of the battles here from oldWrecks)
+        ...t.weather && this.looks.wet ? { weather: t.weather } : {},
         ...t.scars && t.scars.count > 0 && this.looks.scars ? { scars: { count: t.scars.count, months: t.scars.months } } : {},
         ...t.oldRuts && t.oldRuts.count > 0 && this.looks.mud ? { oldRuts: { count: t.oldRuts.count, months: t.oldRuts.months } } : {},
+        ...t.oldWrecks && t.oldWrecks.count > 0 && this.looks.wrecks ? { oldWrecks: { count: t.oldWrecks.count, months: t.oldWrecks.months, nats: { ...t.oldWrecks.nats }, ...this.wreckPer ? { per: this.wreckPer } : {} } } : {},
         ...p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.skyOf },
         sides: {
           att: { nat: t.att.nat, adj: t.att.adj, color: t.att.color, ...p ? { army: p.att.army, ...p.att.standIn ? { standIn: p.att.standIn } : {} } : {}, ...t.att.worn !== void 0 && this.looks.worn ? { worn: t.att.worn } : {} },
@@ -12709,6 +12828,15 @@
       if (!this.me || u.side !== this.me) return "Only your own troops take your orders.";
       return this.sim.smokeWhy(u, x0, y0, x1, y1);
     }
+    /** All fall back (release 1.5): whether his army has been ordered back (it takes no new orders). */
+    fallingBack() {
+      return !!this.me && this.sim.fallingBack(this.me);
+    }
+    /** All fall back (release 1.5): why his army may not fall back now, or null where it may. */
+    fallBackWhy() {
+      if (!this.me) return "Only your own troops take your orders.";
+      return this.sim.fallBackWhy(this.me);
+    }
     /** Night patrol: why one of his blocks may not go out on patrol tonight, or null where it may. */
     patrolWhy(id) {
       const u = this.sim.unit(id);
@@ -12807,8 +12935,10 @@
         worn: opts?.worn !== false,
         mud: opts?.mud !== false,
         scars: opts?.scars !== false,
+        wrecks: opts?.wrecks !== false,
         blast: opts?.blast === true,
         escort: opts?.escort === true,
+        trucks: opts?.trucks === true,
         mech: opts?.mech === true,
         spg: opts?.spg === true,
         td: opts?.td === true,
@@ -12827,6 +12957,7 @@
       const look = "ticket" in ticketOrLook && ticketOrLook.ticket ? ticketOrLook : null;
       const ticket = look ? look.ticket : ticketOrLook;
       const o = { ...look?.live ?? {}, ...opts ?? {} };
+      const sky = o.sky ?? (Array.isArray(o.latLon) && o.latLon.length === 2 ? { ...ticketSky(o.wet === false ? { ...ticket, weather: void 0 } : ticket), latLon: o.latLon } : void 0);
       live3 = liveTicket(ticket, {
         me: o.me ?? null,
         setup: !!o.setup,
@@ -12848,8 +12979,11 @@
         worn: o.worn !== false,
         mud: o.mud !== false,
         scars: o.scars !== false,
+        wrecks: o.wrecks !== false,
+        wet: o.wet !== false,
         blast: o.blast === true,
         escort: o.escort === true,
+        trucks: o.trucks === true,
         mech: o.mech === true,
         spg: o.spg === true,
         td: o.td === true,
@@ -12859,7 +12993,7 @@
         fog: !!o.fog,
         seen: o.seen ?? [],
         designYears: o.designYears ?? {},
-        ...o.sky ? { sky: o.sky } : {}
+        ...sky ? { sky } : {}
       });
       return live3.header();
     },
@@ -12876,12 +13010,17 @@
       const p = c;
       if (!ok2 && o.do === "land:cut" && o.units?.length) return { ok: ok2, why: need().cutWhy(Number(o.units[0]), p.x, p.y) ?? "" };
       if (!ok2 && o.do === "land:smoke" && o.units?.length) return { ok: ok2, why: need().smokeWhy(Number(o.units[0]), p.x0, p.y0, p.x1, p.y1) ?? "" };
+      if (!ok2 && o.do === "land:fallBack") return { ok: ok2, why: need().fallBackWhy() ?? "" };
+      if (!ok2 && need().fallingBack()) return { ok: ok2, why: "Your army is falling back: it takes no new orders." };
       const n = c;
       if (!ok2 && o.do === "land:patrol") return { ok: ok2, why: need().patrolWhy(Number(n.unit ?? o.units?.[0])) ?? "" };
       return { ok: ok2 };
     },
     landWaitWhy(id) {
       return need().waitWhy(Number(id));
+    },
+    landFallBackWhy() {
+      return { why: need().fallBackWhy() };
     },
     landCutWhy(id, x, y) {
       return { why: need().cutWhy(Number(id), x ?? void 0, y ?? void 0) };

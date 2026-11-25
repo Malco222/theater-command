@@ -16,6 +16,7 @@ import { HISTORY, dialDraw, dialRules, stopDef, stopOf, FREE, type Ambition, typ
 import { deterred } from './league';
 import { fronts, launch, ops } from './staff';
 import type { Game, Region } from './types';
+import { feedClaims, lapseFeedClaims } from './bargains';
 
 const listOf = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 const cap = (s: string): string => (s ? s[0].toUpperCase() + s.slice(1) : s);
@@ -152,12 +153,14 @@ export function readable(g: Game, a: Ambition): boolean {
     if (done > 0 || (!done && op && g.turn <= (op.to ?? 999))) return false;
   }
   // Where anything goes, not every claim is alive in every war: who holds which is dealt from the war's seed.
-  if (S.share !== undefined && dialDraw(g, 'claim', a.id) >= S.share) return false;
+  // (A claim for patience spent is the war's own, not dealt: release 2's bargains.)
+  if (!a.feeds && S.share !== undefined && dialDraw(g, 'claim', a.id) >= S.share) return false;
   return stillHeld(g, a).length > 0;
 }
 
 /** Why a claimant thinks the moment has come, or null if it has not. */
 export function moment(g: Game, a: Ambition): string | null {
+  if (a.feeds) return feedMoment(g, a);
   const S = stopDef(g);
   const n = g.nations[a.nat], H = g.nations[a.on];
   // A claimant marches from peace: a country already at war has its hands full. Nor does it march on an ally or from inside the League.
@@ -188,6 +191,21 @@ export function moment(g: Game, a: Ambition): string | null {
   // Where anything goes a claimant needs no war to hide behind, only the odds and its month.
   if (!S.bold || !good || !waited) return null;
   return f ? 'the frontier is thinly held' : 'it is held by a handful of troops';
+}
+
+/**
+ * Why a great power at war thinks the moment has come to march on a neutral that feeds its enemy (release 2's
+ * bargains, patience spent, stops 4 and 5), or null: it is not hard pressed itself, and its front against the
+ * neutral's border ground would have the odds a claim needs.
+ */
+function feedMoment(g: Game, a: Ambition): string | null {
+  const n = g.nations[a.nat], H = g.nations[a.on];
+  if (n.league || allied(g, a.nat, a.on) || atWar(g, a.nat, a.on)) return null;
+  const held = stillHeld(g, a);
+  if (!held.length || collapseScore(g, a.nat) / n.resilience >= C.weak) return null;
+  const f = fronts(g, a.nat, { extra: new Set([a.on]) }).find((x) => x.enemies.includes(a.on) && held.some((r) => x.depth[r.id] > 0));
+  if (!f || f.near < C.odds) return null;
+  return `${theName(H, true)}'s frontier is thinly held`;
 }
 
 /** The claimant takes the field: war on the holder, a side if the holder has enemies, and an offensive pressed for a season. */
@@ -247,8 +265,10 @@ function treaty(g: Game, a: Ambition): boolean {
 
 /** The month's ambitions: claims are pressed, dropped or marched for, allies stand by, and private wars end in treaties. */
 export function claimsMonth(g: Game): void {
+  // (A neutral's bargains, release 2: a warning for a feed claim no longer listed lapses first.)
+  lapseFeedClaims(g);
   let live = false;
-  for (const a of HISTORY.ambitions) {
+  for (const a of [...HISTORY.ambitions, ...feedClaims(g)] as Ambition[]) {
     const went = g.flags[`amb:go:${a.id}`];
     if (went) {
       // A war begun for a claim runs its course whatever the dial says now.
@@ -299,7 +319,7 @@ export interface ClaimView {
 export function claimsView(g: Game): ClaimView[] {
   if (!dialRules(g)) return [];
   const out: ClaimView[] = [];
-  for (const a of HISTORY.ambitions) {
+  for (const a of [...HISTORY.ambitions, ...feedClaims(g)] as Ambition[]) {
     const went = g.flags[`amb:go:${a.id}`];
     const n = g.nations[a.nat], H = g.nations[a.on];
     if (!n || !H) continue;

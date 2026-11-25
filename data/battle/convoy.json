@@ -1,0 +1,74 @@
+{
+  "_about": "The wolf pack and convoy battle's field (release 2; ruling 241 of 22 November 2026 on naval-battles/wolfpack-r2/form.md, with the design director's rider of 24 November 12:34Z under Units decide). One night on one convoy: the boats raiding the battle sea against the convoy's escorts, read only where a grand campaign plays the convoy battle (stage.json 'convoyBattle') or in practice. Abstract by design (ruling 217(1)): contacts, attacks and their outcomes are rolls on the battle's own stream at the rates below; the pieces' courses and the scene's looks act them out. One rule for every navy: a piece's kit comes from its own navy's research and its staff's habits from its navy's doctrine, never from the flag or the month. Marks: F a source's own table, L laid with low confidence, M memory (a stand-in until the historian reads it), U not laid (no effect), D derived. The night's counts are booked against the field's own computer-against-computer nights for the same card (calibrate.ts), so these figures shape how a night plays, never what the campaign books on average.",
+  "tick": 3,
+  "check": 6,
+  "_tick": "The field's clock: every course, contact and attack is worked every 'tick' battle seconds; contacts are sought every 'check' seconds. Screens step it by the core's DT and show the same second until the next.",
+  "night": { "least": 3, "most": 18.5, "_": "Hours of darkness, sunset to sunrise, by the battle sea's latitude and the day (USNO's formula; geography, not a rule). Held between 'least' and 'most' so a midsummer night in the far north still has dark enough to attack in." },
+  "convoy": {
+    "ships": { "atlantic": 44, "libya": 2, "_": "Merchants in the night's convoy, by route (the design director, 24 November: from the route's own shipping where the game holds it, else one route figure the historian reads). Atlantic: 24,550 ships in 554 HX and SC convoys, about 44 a convoy (D from L, historian/convoy-size-1124.md); size grew with escorts and the finding that big convoys lose a smaller share, a cause not yet laid. Libya: about 2, the usual Axis operation (D from L: Bragadin's 883 escorted convoys, O'Hara; 1 to 7; historian/convoy-build-reads-1124.md; the design director 24 November 13:31Z). A look and a target list; the night is booked by its rank, not its size." },
+    "most": 60,
+    "perColumn": 5,
+    "columnGap": 900,
+    "shipGap": 550,
+    "speed": 3.6,
+    "_": "Columns 900 m apart, ships 550 m apart, 7 knots (field-side-read.md §3, M). One hull a ship (ruling 241 Q2)."
+  },
+  "boat": {
+    "surfaced": 8.7, "cruise": 6.0, "dived": 3.9, "creep": 1.5,
+    "scope": 13, "deep": 110, "crush": 260, "diveTime": 30,
+    "tubes": 5, "salvo": 4, "load": 9, "reload": 1200,
+    "fireAt": 1300, "lookout": 1.5, "home": 12000,
+    "len": 67, "beam": 6.2,
+    "_": "A boat of the record's commonest type (field-side-read.md §3, M): 17 knots surfaced, 7.6 dived, creeping at 3; periscope depth 13 m, deep 110, crushed past 260; a crash dive takes 30 s. Five tubes loaded, four forward fired in a salvo, nine reloads, a reload taking 20 minutes (M). She fires from about 1,300 m off the nearest column (M); her lookouts see a ship 1.5 times as far as an escort's see her low hull (M). Boats come on from 12 km out."
+  },
+  "escort": {
+    "screen": 7.7, "top": 12.5, "hunt": 7.0,
+    "radar": 4000, "asdic": 1800, "arc": 1.4, "deaf": 9.5, "blind": 183,
+    "pattern": 10, "ahead": 230, "spread": 120, "open": 900,
+    "station": 2600, "keepAway": 0.5,
+    "gun": 3000, "ram": 150,
+    "huntFor": 2700, "groupFor": 10800, "lostFor": 900,
+    "len": 90, "beam": 10,
+    "_": "An escort (M): 15 knots on the screen, 24 at full speed, hunting at 14 so its sonar can hear; sea-search radar finds a surfaced boat within 4,000 m, sonar a dived one within 1,800 m in an arc of 80 degrees either side of the bow, deaf above 18.5 knots; contact is lost about 200 yd short of the boat (a look only, the design director's rider 4(a): the escort runs over blind and the kill rate already carries it). A pattern of ten charges spread over 120 m; ahead-throwing weapons fire 230 m ahead while the contact holds. Stations 2,600 m outside the convoy's edge (M). At most half the escorts leave the screen at once (keepAway, M). Guns reach 3,000 m; an escort rams from 150 m. A close escort breaks off a hunt after 45 minutes, a group trained to hunt (escortgroups) after 3 hours, and any after 15 minutes without contact (M)."
+  },
+  "detect": {
+    "radar": 60, "sight": 120, "asdic": 90, "deep": 0.8, "slip": 0.04, "boat": 45,
+    "_": "Mean seconds to a contact while a boat lies within reach (M): sea-search radar on a surfaced boat 60, lookouts 120, sonar on a dived boat 90 (a deep boat at 0.8 of the chance). A held contact slips away at 0.04 a check (M). A boat's lookouts pick up an escort within their reach in 45 s (M). HF/DF, a boat's radar warning, the acoustic torpedo and the noise decoy have no rows (U): no effect."
+  },
+  "torpedo": {
+    "speed": 15, "hit": 0.3, "escortHit": 0.15, "escortSinks": 0.75, "column": 400,
+    "_": "Electric torpedoes at 15 m/s; each in a salvo fired into the columns hits at 0.3 (M; OEG T3's about one ship sunk per attacking boat a night in 1941-42 is what a night should come to, history §5), any ship within 400 m of its aim; at a manoeuvring escort 0.15. A torpedoed merchant is lost (one hull a ship); a torpedoed escort sinks at 0.75, else limps home damaged (the design director's 14:49Z ruling of 24 November 2026, from one hit sinking a small warship about 7 to 8 times in 10, historian/naval-reads-3-1124.md, D; it was 0.6, a look, ruling 241 Q7)."
+  },
+  "hunt": {
+    "patterns": 4, "hurt": 0.08, "harm": 0.4, "forced": 0.4,
+    "_": "The kill rates are convoycause.json's (OEG T10 by kit: alone 0.05, in a group 0.17; with ahead-throwers and group training 0.12 and 0.55; ahead-throwers alone x1.9), shared with the card: the chance an incident ends with the boat sunk. An incident ran to about 'patterns' attacks (M), so each attack kills at 1 - (1 - rate)^(1 / patterns). An attack that does not kill hurts at 'hurt' (M), adding 'harm' to the boat; at 1 she is forced up. Of the kills, 'forced' come up first and are lost on the surface (M), the rest are crushed below."
+  },
+  "surface": {
+    "gunAt": 2500, "gunEvery": 10, "boatHits": 0.05, "boatHarm": 0.15, "escortHits": 0.08, "escortHarm": 0.35,
+    "fight": 0.25, "scuttleIn": [90, 180], "repair": 600, "escape": 3000, "strike": 0.3, "board": 150, "taken": 0.05, "ramShare": 0.3,
+    "merchantGuns": 0.5, "merchantHits": 0.01,
+    "_": "A boat forced up (M throughout, Brian's ask of 23 November; the historian's share of scuttled, taken and escaped is asked for): a doomed boat's crew fight with her deck gun at 'fight', else abandon and scuttle her within 90-180 s. A boat forced up but not doomed repairs for ten minutes and dives again if no escort is within 3,000 m. Guns fire every 10 s within 2,500 m: a boat's deck gun hits an escort at 0.05 for 0.15 of her; an escort's guns hit a surfaced boat at 0.08 for 0.35 (at 1 she cannot dive, at 2 she sinks). An escort rams a boat that cannot dive at 0.3. Half the merchants carry a gun that hits a lit surfaced boat at 0.01. Striking (subSurrender, OFF until ruled): a doomed boat's crew give her up to an escort near at 0.3 (a look: every crew read abandoned her, historian/uboat-forced-up-1124.md, F/L), and a boarding party within 150 m as she would have gone down saves her at 0.05, so about 1 boat in 100 lost is taken (5 of about 550 sunk by ships and aircraft were boarded, D from L). Boats that dive again or get away, and deck-gun fights, are counted nowhere read: kept small (M)."
+  },
+  "light": {
+    "dark": 800, "moonlit": 1700, "weather": [0.6, 1.2],
+    "_": "How far an escort's lookouts see a surfaced boat at night (M): 800 m on a dark night, up to 1,700 m more under a full moon; the night's weather multiplies it, drawn on the battle's stream between 0.6 and 1.2 (M). The day of the month is drawn on the stream too, and the moon's phase follows from the date. Moves the odds (ruling 241 Q6)."
+  },
+  "arrive": {
+    "home": 0.5, "alone": 0.35,
+    "_": "When the boats come up. Homed from ashore (a navy whose doctrine holds it), every boat comes in the first half of the night, a shadower in touch from the start; working alone, each finds the convoy at 0.35 (M), at any time in the night's first 85%."
+  },
+  "doctrine": {
+    "_": "Each navy's staff habits as the history start seeds them (the design director's rider 3: never a lock, play may change them; every order is open to every navy). home: boats homed onto a convoy from ashore; warships: a boat's salvo goes at an escort before a merchant. A navy not listed keeps the defaults.",
+    "default": { "home": false, "warships": false },
+    "GER": { "home": true, "warships": false },
+    "ITA": { "home": true, "warships": false },
+    "JAP": { "home": false, "warships": true }
+  },
+  "guns": {
+    "_": "A boat's deck gun, millimetres, a look only (the sea scene's gunMm).",
+    "default": 88, "ITA": 100, "JAP": 140, "UK": 76, "USA": 76, "FRA": 100, "SOV": 100
+  },
+  "crew": { "ss": 44, "mv": 45, "_": "Men aboard, a look only (sea:men)." },
+  "wakeless": ["GER"],
+  "_wakeless": "Navies whose torpedoes leave almost no track (electric), a look only."
+}

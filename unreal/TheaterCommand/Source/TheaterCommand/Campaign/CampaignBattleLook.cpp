@@ -175,7 +175,7 @@ void BattleLook::Grade(FPostProcessSettings& Lens)
 	}
 }
 
-void BattleLook::AirHaze(UExponentialHeightFogComponent& Haze, double UnitsPerMetre)
+void BattleLook::AirHaze(UExponentialHeightFogComponent& Haze, double UnitsPerMetre, double Start, double Thicker)
 {
 	// (The scene's own haze began 2 km from the eye. Looking steeply down from the strategy camera the sea under the
 	// clouds then sat almost at the clouds' own brightness. It begins 15 km off, beyond everything under the eye, and
@@ -183,7 +183,8 @@ void BattleLook::AirHaze(UExponentialHeightFogComponent& Haze, double UnitsPerMe
 	// into one haze with no line between them, the far cloud keeps under half its contrast, and the near sea is as
 	// dark under its clouds as the day makes it. Her figures on the five first frames with it: span 171 to 188,
 	// blue over red 4 to 16, saturation 0.07 to 0.14.)
-	double Start = 15000.0, Density = 2.0 * Haze.FogDensity, Falloff = Haze.FogHeightFalloff, Most = 1.0;
+	// (Over land with no stage it begins 7.5 km off and is 2.6 times as thick: the caller's, AAirBattle.)
+	double Density = Thicker * Haze.FogDensity, Falloff = Haze.FogHeightFalloff, Most = 1.0;
 	Asked(TEXT("TheaterAirHaze="), { &Start, &Density, &Falloff, &Most });
 	Haze.SetStartDistance(static_cast<float>(Start * UnitsPerMetre));
 	Haze.SetFogDensity(static_cast<float>(Density));

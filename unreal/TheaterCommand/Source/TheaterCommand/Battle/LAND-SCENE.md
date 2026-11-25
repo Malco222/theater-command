@@ -22,6 +22,7 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
 | `LandField.h/.cpp` | The ground: the bocage's fields and hedges, lanes, the village, woods, slopes, in tiles near and far, and the small things (grass, stones, shrubs) laid round the eye. Plain C++. |
 | `LandMen.h/.cpp` | The soldiers: each man's pose from the soldier files' clips (walk, run, kneel, prone, fire, reload), his fall when hit, and his body lying where it fell for the rest of the battle. Plain C++. A man is (block, k, j): j is a follower of key man k in the drill's sections (0 the key man), with the roles leader, loader and crew besides the key men's. The scene plays the crowd thrifty (`SetThrift`: a man away from the eye posed every 2nd to 4th frame by distance, his place, shots and falls every frame) and skins the men who moved over all the cores (`ParallelFor`; a body's first skin, which reads the ground, on the game thread). 698 men: about 1 ms a frame on 4 cores. |
 | `LandKit.h/.cpp` | The vehicles and guns: Shermans, Tigers, Panzer IVs, the field guns and lorries from `Content/Models/Battle`, their tracks, turrets, dust, soot, and the fires and cook-offs of a kill. Plain C++. |
+| `LandHulk.h/.cpp` | Old wrecks (release 2, `-TheaterLandOldWrecks`): where the burnt-out armour of earlier battles lies on the field and how each looks, from the game's own vehicle models. Plain C++; `Tools/land_hulk/run.sh` tests it. |
 | `LandAir.h/.cpp` | The fighters on call (release 2, `-TheaterLandAirSupport`): each leg's planes down their run, the ground's guns and the lost plane's fall, from the rules' air notes. Plain C++; drawn by `LandBattleAir.cpp`. |
 | `LandBattleState.h` | The plain state above, kept out of the actor's header so the standard library never meets Unreal's header tool. |
 | `LandBattle.h/.cpp` | `ALandBattle`, the scene. It feeds the cores and draws what they say: the ground as merged meshes per tile, the men, the vehicles, the effects kit, the sky and haze, the camera, and the sound. |
@@ -75,6 +76,10 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
    - `-TheaterLandOldRuts=N`, `-TheaterLandOldRutMonths=M`, `-TheaterLandNoOldRuts` (release 2, mud memory): the ruts
      of battles fought here in mud before, as a recording's root `"oldRuts": {"count", "months"}` gives them: dried
      pale under three months, then a lusher green line fading; puddled with `-TheaterLandWeatherWord=mud`.
+   - `-TheaterLandOldWrecks=N`, `-TheaterLandOldWreckMonths=M`, `-TheaterLandNoOldWrecks` (release 2, old wrecks):
+     the burnt-out armour of battles fought here before (N laid, at most 20, burnt M months ago, the nations the
+     battle's two sides'), standing in for a recording's root `"oldWrecks": {"count", "months", "nats", "per"}`. See
+     "Old wrecks" below.
    - `-TheaterLandCraterOldEdge`: the shell holes' edge as before the art director's 23 November seam (no feather);
      `-TheaterLandMenFieldFrame`: the near men's meshes left at the field's corner (no motion vector), for the A/B.
    - `-TheaterLandHour=`: another hour (local sun time) for the sun.
@@ -522,8 +527,11 @@ own `crew_out` steps (how many, when, running or crawling, to her rear, to cover
 - **The men.** Tankers where the army has them (the art director: "riflemen climbing out of a Tiger would break it at
   once"). They are the crowd's riders, drawn from `USA_tanker` and `GER_panzer` with no rifle (`Crowd::Ride::bUnarmed`:
   those files' infantry clips carry one). An army without a tankers' file (UK, SOV, ITA, JAP, FRA for now) bails out
-  in its own infantry figure, rifle hidden, pack still on (no file carries the pack on a bone of its own): her second
-  note, "a man with a pack is a far smaller fault than no one getting out". The log says so once per army, until the
+  in its own infantry figure, rifle hidden, his helmet on: her second note, "a man with a pack is a far smaller fault
+  than no one getting out". Effects (R2): his pack and webbing are left off where his file marks them
+  (`Crowd::CrewDress`, `AddRider`'s `bNoPack`; the soldiers' `pack_tris`, see *Men out of their machines without their
+  packs* below); a file without `pack_tris` (the game's Content today) still draws him with it.
+  The log says so once per army ("rifle hidden, pack off", or "pack on (the file marks none)"), until the
   soldiers' thread makes its tankers' file (own uniform, no pack; the Soviets' padded tank helmet, the British beret
   or crash helmet). They are posed by `LandBail::PoseAt` with clips the files already have (`stand_up` for the climb, `run`, `advance`, `crawl`,
   `go_prone`, `cower`, `flee`, `die_forward`, `die_back`). Clips for the climb out, the jump down and a burning man are
@@ -555,7 +563,8 @@ own `crew_out` steps (how many, when, running or crawling, to her rear, to cover
   without them (the test, run both ways: the same tallies). Without the clips, the same crew to the last number.
   Picture: `Tools/land_bail/sheet.sh <soldiers folder>` (`bail_clips.ppm`;
   `/mnt/project-files/battle-fx/bail-out/bail-clips-r6.jpg`: three-quarters on, from her front, off her back, the
-  smoke grenade thrown from her front, and the man on fire).
+  smoke grenade thrown from her front, and the man on fire). A crewman of an army with no tankers' file without his
+  pack: `Tools/land_show/pack_picture.sh <soldiers folder with pack_tris>` (`pack_off.png`, with the downed pilots).
 - **Smoke to cover them** (`-TheaterLandBailSmoke`, with `-TheaterLandBailOut`; release 2, off until the art director
   and a 45 fps reading pass; Brian, 23 November 20:09Z). With her enemy close and in sight (`Wreck::Threat` 0.5 or
   more), the fight going on and her ammunition not about to go (no brew-up), six crews in ten have the first man out,
@@ -581,7 +590,11 @@ Sherman's crew (tank.brew_up): 3 out: 2 clear, 1 caught by the blast"). `Tools/l
 with crew_out for 300 seeds and checks each man's pose every 0.1 s for 180 s, then again with the bail clips, then with
 the clips and smoke (`LAND_BAIL_SMOKE=1`: thrown only where it may be, by her first man, toward her enemy, about six
 crews in ten, half the hits under it); `LAND_BREW_WAIT=5.5,10` runs the kit's
-own test with the wait.
+own test with the wait. Its first run also makes the crowd's man of each crew (`Crowd::CrewDress`, `AddRider`, with
+`Battle/LandMen`): USA and GER in the tankers' files as they are; SOV and UK in their own infantry file, helmet on,
+at every level his file's triangles less the pack's run and nothing in its place, every kept point as the whole
+man's; FIN none drawn (no file of its own). `LAND_BAIL_SOLDIERS` reads another soldiers folder (the soldiers thread's
+files before they come into Content).
 
 The art director's Mac shots, with `-TheaterLandBailOut` against without: a brew-up from the hit to 15 s after (the
 crew getting out, the blast), from 30 m and from 150 m; an engine fire's whole crew out; and with
@@ -592,8 +605,10 @@ screens up. The plume's own picture: `Tools/land_look/smoke_screen_picture.cpp` 
 the wind; the grenade's also at 30 s from 40 m square across its plume at a 1.5 m eye and from the game's camera 25 m
 up, with its shadow alone, and measured down its plume: how solid, how high, its top's and underside's own colour;
 `/mnt/project-files/battle-fx/bail-out/smoke-plume-r2.jpg`, round 2, against round 1's `smoke-plume-r1.jpg`).
-For the Mac shot of round 2: the plume from the side at 40 m and from 150 m, a still at 2 s close to (the jet), and
-the frame rate with four screens up (each now at most about 150 pieces, round 1's 58).
+Round 2 passed to the Mac by the art director (24 November 12:51Z). Its Mac shots: the plume from 150 m with some wind,
+the 40 m side view at a man's eye, one from the game camera with men running through it (the screen against figures),
+a still at 2 s close to (the jet), and the frame rate with four screens up (each now at most about 150 pieces, round
+1's 58). Its torn wisps are judged in the Mac clip: if its tail reads as cotton, a feathered edge is the first mend.
 
 ## Shell holes each their own (release 2, off until passed)
 
@@ -693,24 +708,175 @@ for fall and skin for skin the same as with none).
 - **The twins.** The soldiers thread's gore twins, `soldier_<ARMY>_gore.json` beside each file in
   `Content/Models/Soldiers`: the same bones, the skin split at the eight cuts (shoulder, elbow, hip, knee, left and
   right) with the stump and limb caps hidden inside the body till a limb goes, the paints wound, bone and blood, and the
-  deaths thread's gore falls (`deaths_gore[stance][kind]`: `die_blast_a` to `d`, thrown with a limb gone;
-  `die_arm_off_a`, `b`; `die_leg_off_a`, `b`), whose cut bone flies and lands on its own move track. `ALandBattle` reads
+  deaths thread's gore falls (`deaths_gore[stance][kind]`: `die_blast_*`, thrown with a limb gone; `die_arm_off_*`;
+  `die_leg_off_*`; in the twins of 24 November `a` to `f`, `a` to `m` and `a` to `e`, for standing and running,
+  kneeling and in cover, and lying), whose cut bone flies and lands on its own move track. `ALandBattle` reads
   the twin of each file it read, when the switch is on, and gives it to the crowd (`LandMen::Crowd::AddGore`), which keeps
   the twin's mesh, faces and helmets with the file's own clips and sockets, the gore falls after them, so a man swapped
   to it mid-battle keeps every clip number he had. A twin with no gore falls is passed over, and said in the log.
 - **Who.** A man killed by a field gun's or a howitzer's shell, a tank's gun, a mortar's bomb or a grenade
   (`KillWeapon`), by how far he stood from its burst (the round's x, y, as the drill writes a shell's). The art
-  director's round 1 (23 Nov 17:52Z): rarer and stronger, about 1 shell kill in 8 to 10. Within 2 m of the burst 0.55
-  of them for a gun's shell, 0.35 for a tank's or a mortar's, 0.25 for a grenade's, falling away by e every 1.5 m past
-  2 m to none past 8 m (gun), 6 m (tank, mortar) or 2 m (grenade). The rules lay most bursts on the man they kill (8 in
-  10 shell kills read 0 m), which says nothing of how close the shell truly fell: such a man 0.2 (gun) or 0.12. A man
-  lying or in cover half that. Measured on the rules' Normandy and Prokhorovka, shell blasts off and on: 1 shell kill
-  in 7.6 to 11. His own dice, so the same battle gores the same men. On the frame he is struck the crowd swaps him to
-  his file's twin (`Impl::ToTwin`: his mesh at each level, his face, no bank), then picks his fall from the twin's gore
-  falls. Which side: where the burst was 1.5 m or more off, by its side against his facing (front, back, side, so a
-  fall of kind `back` throws him away from a burst in front of him); nearer, by the gun's. The big throw (`thrown`,
-  `die_blast_*`) is a field gun's or a howitzer's; a tank's, a mortar's or a grenade's mostly knocks him down an arm or
-  a leg short. A replay from the start gives him his own file back.
+  director's round 1 (23 Nov 17:52Z): rarer and stronger, about 1 shell kill in 8 to 10. Within 2 m of the burst 0.55 of
+  them for a gun's shell, 0.35 for a tank's or a mortar's, 0.25 for a grenade's, falling away by e every 1.5 m past 2 m
+  to none past 8 m (gun), 6 m (tank, mortar) or 2 m (grenade). The rules lay most bursts on the man they kill (8 in 10
+  shell kills read 0 m), which says nothing of how close the shell truly fell: such a man 0.2 (gun) or 0.12. A man lying
+  or in cover half that. None whose stance's gore falls hold none he may take (`GoreSide`, below): with the deaths
+  thread's lying falls of 24 November a man lying is gored by any shell, as any man is; with twins whose only prone fall
+  is the throw from under him (those before), only by a field gun's or a howitzer's shell bursting on him. He falls as
+  any man, asked before his dice. Measured on the rules' Normandy and Prokhorovka, shell blasts off and on, while a man
+  lying took any shell: 1 shell kill in 7.6 to 11. The recordings as they are (45 and 48 shell kills, all by a gun's, a
+  tank's or a mortar's round, every one within 1 m of the burst): with the twins of 24 November 7 and 7 gored, 1 in 6.4
+  and 1 in 6.9 (1 in 6.6 together), 8 of the 14 lying and killed by a mortar's or a tank's shell, all 14 struck within
+  0.3 m of the burst (13 within 0.2 m; under, below). That count is these two seeded battles' dice, not the odds: the
+  odds summed over the same 93 kills expect 4.3 and 5.6 gored (1 in 10.5 and 1 in 8.6; 9.8 together, 1 in 9.5, inside
+  the art director's 1 in 8 to 10), and 14 is about 1.5 standard deviations above that. b470998e gores the same 14 men
+  with these twins: the rise from 6 is the twins' lying falls, not the rule of the burst under him. With twins whose
+  only lying fall is the throw, 2 and 4 (1 in 22.5 and 1 in 12; 2.8 and 5.1 expected). The odds are not changed here.
+  His own dice, so the same battle gores the same men. On the frame he is struck the crowd swaps him to his file's twin
+  (`Impl::ToTwin`: his mesh at each level, his face, no bank), then picks his fall from the twin's gore falls. A replay
+  from the start gives him his own file back.
+- **Which fall: away from the burst** (the art director, 23 Nov 17:52Z: "the limb flies AWAY from the blast", the kind
+  by the burst against his facing, `die_blast_*` a field gun's or a howitzer's; the deaths thread, 20:1xZ: weigh only
+  the kind matching the burst; and 24 Nov: the falls from under, and a man lying's from each side). The twin's
+  `gore_from` (clip: side; read as `Soldier::GoreFrom`, a gore fall it does not name by the clip's own `blast_from`)
+  says where each fall's burst was: front, behind, left, right, or under (a lower leg off, of kind `under`:
+  `die_leg_off_d` standing or running, `die_leg_off_e` kneeling or in cover, and in the twins of 25 November (26 gore
+  falls each) their mirrors, `die_leg_off_f` and `die_leg_off_g`; and the prone throw, `die_blast_d`). Where
+  the burst was against him, and what he is thrown away from (`Impl::BlastOf`, read by `GoreSide` and kept as
+  `ManInfo::GoreFrom`), where he stood and his heading read from his track at the round (`Dead` less his lag, as
+  `GoreTwinFor` reads them, so the same whatever frame his fall is first played on): a burst 1 m or more from him, front
+  or behind within 45 degrees of his nose or his back, left or right between (his right clockwise of his heading), away
+  from the burst. One within 1 m (the rules' 8 in 10), whatever his stance: under. He is then given the falls from
+  under he may take: where the gun that fired it is known (below), only those whose cut limb does not move toward the
+  gun, read as a limb is against a burst (`LimbsAway`, the half metre's own measure below: along the line from the
+  gun's place to the limb's joint as he was struck, from the fall's first frame and its last), or where every one does,
+  those that move it least so (never none: a stance with one fall from under, the twins of 24 November or lying, is
+  given it whatever the gun's side, as before); where the gun is not known every one, either leg (a burst under him is
+  no point to be thrown away from). And from a shell that may throw him (below) the throw his gun's side would give
+  him: the gun as it fired (the round's `by`, `k`, `j`: its track at the round, as `FromWhere` reads it; its side the
+  45-degree quarter, as for a burst), the falls from that side as for a burst there, of them the throws, so from that
+  side alone and away from the gun. Until the mirrors nothing held the falls from under away from anything: read
+  against his gun the one fall from under each stance moved his lower leg toward it about half the time (the fine grid
+  below, his gun known: 82,010 of 171,360 cells standing or running, 84,302 kneeling or in cover; his body as often),
+  and in the rules' battles 3 of the 5 men who fell from under moved it 0.84 to 1.64 m toward the gun, where under
+  b470998e, read by the gun's side, the same 5 moved every limb 1.06 to 4.92 m away from it (one thrown). The mirrors
+  as measured (the test's table: each of the 17 twins of 25 November, his gun 400 m off in the middle of a side; the
+  move along the line toward the gun, less than 0 away): standing or running `die_leg_off_d` flings the right calf back
+  and to his right (a gun ahead -1.06 to -0.68 m, at his left -2.55 to -1.74, at his right +1.74 to +2.55, behind
+  +0.68 to +1.06) and `die_leg_off_f` the left calf to his left and back, but in SOV_snow 0.07 m forward (ahead
+  -1.62 to +0.07, left +1.68 to +2.42, right -2.42 to -1.68, behind -0.07 to +1.62); kneeling or in cover
+  `die_leg_off_e` the left shin to his left and a little back (ahead -0.79 to -0.26, left +1.89 to +2.12, right -2.12
+  to -1.89, behind +0.26 to +0.79) and `die_leg_off_g` the right shin to his right and a little back (ahead -0.65 to
+  -0.17, left -2.40 to -1.91, right +1.91 to +2.40, behind +0.17 to +0.64). So with his gun at his left a man on his
+  feet loses his right calf and a man on a knee his right shin, at his right the left; ahead both (but in the one twin
+  whose `die_leg_off_f` moves the calf 0.07 m forward); behind him, where both fly back toward the gun (but in that
+  twin), the one that flies least so. So too, standing or running, with his gun a few metres off on his right just
+  short of his back (1 to 3 m off, 133 to 135 degrees round, on a 1-degree grid): both legs move toward it there.
+  Since the rules lay nearly every shell kill on its man, the falls from under now take most gored men on their feet.
+  Where his stance's gore falls hold none from under he may take (a man lying killed by any other round; any man of
+  twins before 24 November), by the gun's side as for a burst there, away from the gun (a man lying so since a424a37e:
+  under b470998e he was under, not measured, and in the rules' battles 5 of the 8 lying gored flung a limb 0.80 to
+  2.55 m toward the gun, where now every limb moves 0.90 to 3.05 m away); where the gun is not known or stood within 1
+  m of him, all he may take but a throw (a throw only from his side, and from under only the prone one; a424a37e and
+  b470998e still threw a man on his feet so struck from any side, with twins that hold no fall from under for him),
+  none measured. His `FallFrom` reads front, back or side from the side his falls are read by (the burst's, or his
+  gun's quarter); for a burst under him from the gun as for any man (`FromWhere`: front within 70 degrees of his nose,
+  back past 110, the side between), not by its quarter, and it weighs neither his falls from under nor the throw. A
+  gun's shell may throw him (`Impl::BigThrow`) when it is a field gun's, a howitzer's or a heavy gun's: the round's `w`
+  `gun` (the rules write a gun crew's shell so, whatever its calibre) from a block whose `cal` is not `light` (a block
+  with no `cal`: a howitzer's, as the Fates table reads it, `LandKit`'s `WeaponWord`); a light gun's, a tank's (`tank`),
+  a mortar's (`mortar`) or a grenade's (`grenade`) never. He may take (`MayTake`) any of his stance's gore falls that is
+  not a throw (kind `thrown`, or any `die_blast_*`) nor from under; a throw only from a shell that may throw him and
+  only one from his side (where the burst was under him and no gun is known, only the prone throw, from under); a fall
+  from under only where the burst was under him. `ChooseFall` weighs only the falls `LandMen::GoreFalls` gives him (from
+  the twin and how the round struck him, `GoreStrike`: his stance, his side, the point in his own axes, his gun's side,
+  whether the shell may throw him; the test asks it too): of those he may take, the ones from his side (a burst in
+  front: those from the front, of kind `back`; behind: `forward`; left or right: the side falls from that side), or
+  where his stance's gore falls hold none from there he may take (in twins before 24 November: kneeling or in cover none
+  from the right, and from the left only `die_blast_c`, a throw; lying only the throw from under), all he may take. Of
+  those, where he is thrown away from a point, the falls whose every limb moves at least half a metre away from it,
+  along the line from it to the limb's joint as he was struck (`((B - A) . (A - P)) / |A - P|`: a limb flung across the
+  burst, or through it to land beyond, does not count as away), read from the fall's first frame and its last, in his
+  own axes (his own pose as struck is within 0.35 m of the fall's first at a cut). Where none from his side does so, the
+  same of all he may take but those from the side opposite his (front and behind, left and right), never a throw from
+  another side (the verifier of 35ffc951: a side is a quarter round, and the twins' standing and running falls from the
+  front fling a left arm or leg back and to his left, so `die_arm_off_b` and `die_leg_off_a` flung it toward a burst or
+  a gun 33 to 44 degrees round ahead on his left); never one from the side opposite (the verifier of f6f8b75c, whose
+  widening took them: such a fall throws him toward the burst, so CHN and ITA_desert men standing or running with it 40
+  to 44.5 degrees round ahead on their left were given `die_leg_off_b`, from behind, their pelvis 1.1 to 1.7 m toward
+  it); and never one from under (b470998e's widening took `die_leg_off_d` from the twins of 24 November, a standing or
+  running man's body as much as 0.23 m toward a burst or a gun 45 degrees round ahead on his left, in 720 and 721 cells
+  of the fine grid below). Widened so, he keeps his side's own falls. Failing any, the one whose limbs move farthest so.
+  Each kind keeps its weight (by his stance, the shell, `FallKindWanted`), shared among its falls taken; where the burst
+  was under him the kind `under` three times, as the kind matching the burst is (back for one in front, forward behind,
+  side at his side; his `FallFrom` weighs neither it nor the throw). So where a field gun's or a howitzer's shell
+  bursting on him is offered a throw from his gun's side, the throw weighs 8 (0.2, 40 times) to the fall from under's 3,
+  8 times in 11 whatever his stance and his gun's side, before the Fates rule and the section rule: as often as when he
+  was read by his gun's side (b470998e) for a man standing with his gun ahead or behind, or running with it ahead;
+  somewhat more often otherwise, where the matching kind weighed more (standing or running with it at his side 3.9, 8 in
+  11.9; running with it behind 6, 8 in 14; kneeling with it on his left 5.85, 8 in 13.85). In the test's band's battle
+  73 men were offered both and 43 thrown (the Fates rule, never the last fall again, sways a choice of two). Every other
+  round kills him in a fall from under. With the twins of 24 November each stance has one, so every man on his feet so
+  struck falls alike: `die_leg_off_d`, his right calf, standing or running, and `die_leg_off_e`, his left, kneeling or
+  in cover (all 5 in the rules' battles). With the mirrors of 25 November, the leg away from his gun as above, or
+  either where it is not known. The Fates rule and the section rule as for any man. A man not gored falls exactly as
+  before: the test's digests of the switch off, and of the men not gored where the same men are gored, are the same
+  before the change and after (the code of 3f85e988 and 3e64f668 against this; the men not gored against that code with
+  only this change to who is gored, the men lying; and 35ffc951, f6f8b75c and b470998e against this, each changing no
+  dice and not who is gored, only a gored man's fall: in the band's battle below its 2232 men not gored the same and its
+  1338 gored the same men, and in the rules' Normandy and Prokhorovka every man not gored the same, the switch off and
+  on, and the same men gored; against b470998e so with the twins of 24 November and with 7caf9453's, and with 7caf9453's
+  every gored man's fall the same too but where the burst was under a man with no gun known, who is no longer thrown:
+  b470998e's own test built against this prints its output byte for byte but for its timings and those men, its first
+  battle's thrown 8 of 22 where 13, its sides' battle's 11 of 52 where 19. Against a424a37e, whose reading of a man with
+  no gun known this round changed, every fall with the twins of 24 November the same, the test's battles and the rules'
+  Normandy and Prokhorovka). What holds, read from the falls' first frames and last (the test's sweep, below: every
+  twin, every 3 degrees all round; and a finer sweep beside it, every half degree, the burst or the gun 1 to 400 m off
+  at 17 distances, 416,160 cells for each stance, and the burst under him, his gun 12 to 400 m off all round or not
+  known, 97,954 for each stance): where a fall from his side he may take moves every limb half a metre away from the
+  burst or the gun, he is given only such falls from his side; where none from his side does but another he may take not
+  from the side opposite does, such falls; else the one of those whose limbs move farthest away; so never a fall whose
+  limbs move less far away than another he may take not from the side opposite would move them, up to half a metre; and
+  with the twins of 24 November in no cell of the fine sweep a fall from the side opposite where he may take one from
+  his side, a fall from under but where the burst was under him, a throw but a field gun's or a howitzer's, or a throw
+  from a side not his (or his gun's), its own reading of the rule giving the same falls in every cell; with 7caf9453's
+  the same (where the burst was under a man on his feet and his gun is not known, 17 cells of each stance, all he may
+  take but a throw, where a424a37e and b470998e gave him a throw from any side). With the twins of 24 November, on the
+  fine grid: a man standing or running, no limb toward the burst or the gun, the least 0.36 m away, in 151 cells of each
+  stance under half a metre, the burst or the gun 25.5 to 37.5 degrees round ahead on his left, where no fall he may
+  take does better (CHN, FRA, ITA, ITA_desert and SOV, as with the twins before), and his body never toward it (the
+  least 0.18 m away); kneeling or in cover, no limb toward it and none under half a metre (the least 0.50 m), his body
+  toward it in 858 cells of each, as much as 0.36 m (SOV_snow, a burst 1 m off behind on his left, a fall from behind),
+  806 of them where another fall he may take moves it away; lying, no limb toward it and none under half a metre (the
+  least 0.50 m), his body toward it in 6824 cells, as much as 0.04 m (172 where another moves it away); the burst under
+  him, a throw from his gun's side given standing in 47,437 cells, running in 22,821, kneeling or in cover in 12,308
+  (`die_blast_c`, the gun on his left), its every limb at least 0.50 m and his body at least 1.46 m away from the gun;
+  lying, a field gun's or a howitzer's shell the throw from under him, any other by his gun's side (his body toward the
+  gun in 824 of those 48,960 cells, as much as 0.02 m). With the twins before (7caf9453's), as under b470998e: standing
+  or running the same; kneeling or in cover a limb toward it in 4932 cells of each (as much as 0.73 m: USA in cover, his
+  gun 400 m off 44.5 degrees round ahead on his right, `die_arm_off_e`), 24,083 under half a metre, his body toward it
+  in 63,859 (as much as 1.02 m: a burst behind on his left from a shell that may not throw him, so no fall from the left
+  he may take, and `die_arm_off_e` falls back). His limb leaves from his own pose as struck, not the fall's first frame,
+  so it moves a little more or less than that. In the test's four battles (below), with the twins of 24 November, no
+  limb toward the burst or the gun of a man read by a side or thrown (standing 439 limbs, running 351, kneeling 372,
+  lying 16; the least 0.38 m away, 10 under half a metre, all in the band's battle), and no body of a man standing or
+  running; the falls from under are not among them (not measured), and read against the gun the test prints them: in the
+  guns' battle 37 of 82 lower legs toward it (as much as 2.12 m) and the 2 lying thrown from under 2 of their 4 limbs
+  (4.72 m), in the band's 240 of 433 (1.32 m); in its first two battles no gun is known; with 7caf9453's, as under
+  b470998e, standing and running the same and kneeling 39 of 587 limbs toward (as much as 0.50 m). In the test's first
+  three battles with the twins of 24 November (GER, USA and POL): of 241 gored men, 105 were read by a side (6 by the
+  gun's side: lying, killed by a light gun's, a tank's or a mortar's shell bursting on them) and 129 the burst was
+  under, of them 123 in a fall from under and 6 thrown from their gun's side; every one standing or running read had a
+  fall from his side he may take, and fell in one; 23 lying gored, 18 in falls by side (not throws) and 5 thrown from
+  under by a field gun's or a howitzer's shell bursting on them. No throw but a field gun's or a howitzer's (none of a
+  light gun's gored men), and none thrown from a side toward the burst or the gun (the prone throw from under is not
+  measured: the guns' battle's 2 so thrown flung 2 of their 4 limbs toward the gun, as much as 4.72 m). In the rules'
+  Normandy and Prokhorovka with the twins of 24 November the 14 gored men were all struck within 0.3 m of the burst (13
+  within 0.2 m): of the 6 standing, running or kneeling, 5 fell from under (not measured: against the gun 3 of them
+  moved the lower leg 0.84 to 1.64 m toward it, above) and 1 (a howitzer's shell) was thrown from his gun's side, away
+  from it; the 8 lying (a mortar's or a tank's shell) fell by their gun's side, every limb 0.90 to 3.05 m away from the
+  gun, the body at most 0.01 m toward it. With 7caf9453's twins the 6 gored men as under b470998e (2 thrown, both by a
+  howitzer's or a field gun's shell), all by the gun's side.
 - **Whole joints stay whole** (the art director's PASS, 18:34Z: the caps hidden till his limb goes). The twin's skin is
   split hard at the eight cuts, which opens a crack of up to 20 cm at a bent shoulder or hip with its red caps inside.
   Its `gore.joined` lists, per level, the points at each joint with the man's own weights and the cuts they sit at:
@@ -723,15 +889,146 @@ for fall and skin for skin the same as with none).
   (`Crowd::Events`, at the stump's socket); no blood is drawn from them yet (Brian has not ruled on blood).
 - **Cost.** A gored man is posed and skinned as any falling man; at rest he is frozen as any body. The twins are read
   only with the switch on (about 6 MB of json each).
-- **Test**: `Tools/land_gore/run.sh [twins folder] [out folder]`: the off, on, same and replay checks above (with
-  rifle never, none past reach, nearer more often, the man a burst was laid on less often than one within 2 m, the
-  burst's side), no whole joint of a gored man open on its caps (his twin's seam copies within 2 mm of the points they
-  copy, skinned; without the joined skin 225 mm), a note for each limb resting under 1 m from its joint or flying over
-  3 m high (the art director's asks; the clips' own to mend), and `gore_falls.ppm`, six gored men from the hit to rest,
-  no army's clip twice. Pictures: `/mnt/project-files/battle-fx/gore/` (r3: the joined skin, fresh twins 29ad7cfe).
-- **Owed.** The deaths thread's re-runs of the falls (USA and GER `die_leg_off_a`, GER `die_arm_off_b` rest under 1 m
-  from the joint; USA and GER `die_blast_a` throw a limb 3.6 to 3.7 m up), gore falls in every army's twin, and the Mac
-  shots behind the switch.
+- **Test**: `Tools/land_gore/run.sh [twins folder] [out folder]`: the off, on, same and replay checks above (with rifle
+  never, none past reach, nearer more often, the man a burst was laid on less often than one within 2 m, the burst's
+  side), no whole joint of a gored man open on its caps (his twin's seam copies within 2 mm of the points they copy,
+  skinned; without the joined skin 225 mm), a note for each limb resting under 1 m from its joint or flying over 3 m
+  high (the art director's asks; the clips' own to mend), and `gore_falls.ppm`, six gored men from the hit to rest, no
+  army's clip twice. The sides, in its battle, in a second of 384 men standing, running, kneeling and lying, killed by a
+  gun, a tank or a mortar 0.5 to 3.2 m from the burst all round, in a third of 240 so killed by a shell bursting 0.6 m
+  from them, fired by a gun of their own 400 m off all round (a howitzer's, a light gun's, a tank's or a mortar's), and
+  in a fourth, the band's, of 210 men of each twin in the twins folder (3570 of 17) standing, running or kneeling,
+  killed by a howitzer's, a light gun's, a tank's, a mortar's or a grenade's round bursting 1.6 to 2.4 m off or 0.6 m
+  from them (their gun 400 m off, a grenade's thrower 20 m), 31 to 49 degrees round ahead on their left or their right.
+  Each gored man read by a side (1.5 m or more from the burst, or within 1 m where his stance's gore falls hold none
+  from under he may take, by his gun's side; from his track at the round as the crowd reads it) in a fall from his side
+  where one from there he may take moves every limb half a metre away, in none whose limbs move less far away than
+  another he may take would, up to half a metre (but where he may take one from his side, none from the side opposite),
+  and never in one from the side opposite where he may take one from his side (the falls read from their first frames
+  and last), every one standing or running with a fall from his side; each the burst was under (within 1 m) whose
+  stance's gore falls hold one from under he may take in one, or by a field gun's or a howitzer's shell in the throw his
+  gun's side gives him (every limb as far from the gun as that side's falls set); his gun known, none in a fall from
+  under that moves its limb toward the gun where another from under he may take does not, nor where all do in one that
+  moves it more than the least of them (read from the falls' first frames and last, 0.01 m allowed: the test reads his
+  place and heading in its own sums; asked of the guns' battle wherever the twins hold any fall from under, and there
+  of at least one man so, so that it cannot pass on none, and of the band's only with a man so; not of the first
+  battle nor the sides', whose rounds have no gun known), and printed, his fall from under read against his gun as
+  played, by stance, and the men such a shell offered both a fall from under and a throw, with how many were thrown
+  (no check of the kind's weight: the Fates rule sways a choice of two too far, the band's 43 of 73 thrown against 8
+  in 11 before it); no limb off a man standing or running moving toward the burst or the gun as it
+  moved (the least and those under half a metre counted), nor off a man of a stance whose gore falls hold one from each
+  side that is not a throw (with the twins of 24 November kneeling, in cover and lying too; in those before a note), nor
+  his body (his pelvis), standing or running, more than 0.1 m where another fall he may take moves it away (kneeling, in
+  cover or lying a note); no man thrown from a side with a limb or his body moving toward it; only a field gun's or a
+  howitzer's shell throwing a gored man (a light gun's goring some, throwing none); a man lying thrown only from under
+  him, by such a shell bursting on him; where the twins hold lying falls by side, men lying gored in them by a tank's or
+  a mortar's shell or one off to their side; where they hold falls from under, men the burst was under falling in them
+  and some thrown from their gun's side; counted by side and by stance; and digests of the falls and skins of the men
+  not gored and of the switch off, to be byte-identical before and after a change that does not change who is gored.
+  Then the sweep: `GoreFalls` and `GoreSide` for each twin in the twins folder, standing, running, kneeling, in cover
+  and lying, a shell that may throw him and one that may not, the burst 1, 1.5, 2, 2.5 or 3 m off or his gun 25 or 400 m
+  off (read by its side), every 3 degrees all round (142,800 cells), and the burst under him, his gun 25 or 400 m off
+  every 3 degrees all round or not known (40,970), each fall given read by the test from its first frame and last: every
+  fall given one he may take (none from under but where the burst was under him); the side read as the test reads it;
+  only falls from his side wherever one from there moves every limb half a metre away; none moving a limb less far away
+  than another he may take (but where he may take one from his side, none from the side opposite), up to half a metre;
+  none from the side opposite where he may take one from his side; no limb off a man standing or running moving toward
+  the burst or the gun, naming the least move and counting the cells under half a metre, the band's (30 to 50 degrees
+  round ahead on either side) apart, nor off a man of a stance whose falls hold one from each side; no fall given a man
+  standing or running moving his body toward it more than 0.01 m where another he may take moves it away (kneeling, in
+  cover or lying a note, the cells toward counted); the burst under him, the falls from under the rule gives (above)
+  and else only such a shell's throw from his gun's side, where none from under what his gun's side gives, and no throw
+  moving a limb or his body toward the gun; of the falls from under of a man standing, running, kneeling or in cover,
+  his gun known, none given that moves his limb toward it where one he may take does not (the cells counted), where
+  every one does those that move it least so (the cells counted and printed as gaps, by stance and side with where his
+  gun was and how far toward it, not failures), his gun not known every one (that none toward it and this asking for
+  cells only where some twin's falls on his feet or a knee hold one from under: 7caf9453's hold none), and any stance
+  with one from under (the twins of 24 November, or lying) given it whatever his gun's side; and a table, for each
+  stance on his feet or a knee and his gun on each side or not known, of which falls from under are given (of the
+  twins, his gun 400 m off in the side's middle, and of the sweep's cells) and how far each moves its limb along the
+  line toward the gun. Built against
+  35ffc951's rule it failed six of its then 52 checks: falls given where another he may take moves every limb farther
+  (the sides' battle 1, the guns' 3, the band's 136, the sweep 926 cells); the band's battle 60 of its 1006 standing and
+  running limbs toward the burst or the gun (as much as 0.58 m, 80 under half a metre away); the sweep 290 cells toward,
+  all in the band (756 of its 6664 under half a metre; as much as 0.63 m: SOV_winter standing, a burst 1 m off 42
+  degrees round ahead on his left that may not throw him, `die_arm_off_b`). Built against f6f8b75c's rule, whose
+  widening took falls from the side opposite, it failed six of its then 62: a fall from the side opposite (the sides'
+  battle 1 man, the guns' 2, the band's 4, all kneeling but the band's, and the sweep 164 cells), and a standing or
+  running man's body toward the burst or the gun (the band's battle 4, as much as 1.65 m: CHN standing, his gun 43
+  degrees round ahead on his left, `die_leg_off_b`; the sweep 28 cells, as much as 1.70 m). b470998e's own test and
+  code, given the twins of 24 November, fail four of its 62 checks: men lying gored in falls that are not throws (the
+  sides' battle 12, the guns' 6: the rule it held them to), and a standing or running man's body toward the burst or the
+  gun where another fall he may take moves it away (the band's battle 2, as much as 0.11 m; the sweep 95 cells, as much
+  as 0.23 m: USA_nco standing, his gun 45 degrees round ahead on his left, `die_leg_off_d`, from under, widened to);
+  built against this rule it fails eleven, reading a man the burst was under by his gun's side, so that his fall from
+  under counts as flinging a limb toward the gun. With this rule, given the twins of 24 November, all 76 checks pass: no
+  note at all; no limb toward the burst or the gun in any battle, at any stance, of the men read by a side or thrown,
+  and no body of a man standing or running (the falls from under, not measured, read against the gun: in the guns'
+  battle 37 of 82 lower legs toward it and 2 of the 4 limbs of the lying thrown from under, in the band's 240 of 433; on
+  the sweep's grid, his gun known, standing or running 4074 of 8160 cells with the leg toward it and 4080 with the body,
+  kneeling or in cover 4076 and 4082, lying, the throw from under, 3992 of 4080 with a limb toward it); on the sweep's
+  grid standing and running each 10 cells under half a metre (the least 0.36 m), kneeling and in cover none (the least
+  0.51 m), lying none (0.50 m), the band's 18 (746 given a fall from another side); a body toward it kneeling or in
+  cover in 58 cells each (as much as 0.30 m), lying in 454 (0.04 m); the burst under him, 36,873 cells with falls from
+  under he may take, in 7928 of them a throw from the gun's side (none toward it), 4080 with none from under read by the
+  gun's side, 17 with the gun not known (lying, by a smaller round: all his lying falls). Given 7caf9453's twins all 74
+  passed (the lying and the under battles' two checks need their falls), as under b470998e but that the burst under a man
+  with no gun known throws him no more (the first battle's thrown 8 of 22 where a424a37e had 13, the sides' battle's 11
+  of 52 where 19; the same men gored, the men not gored and the switch off the same): kneeling and in cover a note, 650
+  of the sweep's cells with a limb toward it (as much as 0.59 m), 8878 with the body toward it (as much as 1.02 m).
+  With the rule of the falls from under against the gun, given the twins of 25 November (17 twins, 26 gore falls each:
+  the mirrors), all 82 checks pass, no note: the switch off, the men not gored and who is gored the same as under
+  3efa6a0c with the same twins (every battle's digests); in the band's battle 433 men in a fall from under with the gun
+  known, none moving the leg toward it where the other leg would not (as played none at all; under 3efa6a0c 186 of 434
+  toward, as much as 1.50 m), 43 of its 73 offered both a fall from under and a throw thrown where 42 (the Fates rule,
+  never the last fall again, now has one fall from under to weigh where it had two); in the guns' battle 84, as played
+  9 of 82 lower legs toward the gun, as much as 0.78 m, every one with the gun behind him (under 3efa6a0c 42, 2.46 m).
+  On the sweep's grid, the burst under a man on his feet or a knee and his gun known: 29,496 cells where one of his
+  falls from under does not move his leg toward the gun, none given one that does; 3144 where both do, every one with
+  the gun behind him (standing and running 1022 cells each, kneeling and in cover 550: Owed), given the one that moves
+  it least so; his gun not known, both legs in all 136 cells. Read against the gun the falls from under given move the
+  leg toward it in 1022 of the 8160 cells standing or running (7132 under 3efa6a0c) and 550 kneeling or in cover
+  (7602), the body in 2008 and 1058 (7638 and 7400; not held). Given the twins of 24 November (one fall from under each
+  stance) every fall is as before: all 82 pass, the output 3efa6a0c's but for the new lines and the reworded labels
+  (every digest and every count the same, the band's gored men's too), its gaps printed (standing or running 1518 cells
+  behind him, 448 ahead on his right, 2108 at his right; kneeling or in cover 1296 behind, 672 ahead on his left, 2108
+  at his left). Given 7caf9453's twins (14 gore falls each, none from under on his feet or a knee) all 79 pass, their
+  own 43 notes as under 3efa6a0c, the output 3efa6a0c's but for the new lines and the reworded labels (every digest
+  and every count the same): the sweep's checks of the falls from under on his feet or a knee find no cells, asked for
+  cells only where some twin holds one, and of the battles' checks of the falls from under against his gun only the
+  guns' battle's is asked, its 2 men lying thrown from under, by `die_blast_d` (asked there wherever the twins hold
+  any fall from under, of at least one man so read: it fails rather than passes where the battle has none). With every
+  set the first battle and the sides' print instead that none there is in a fall from under with his gun known (their
+  rounds have no gun known). The repo's Content holds no twins: there the test stops at its first line, no USA or GER
+  twin, as under 3efa6a0c. The same output from g++ and clang++; 9 to 12 s here. Pictures:
+  `/mnt/project-files/battle-fx/gore/` (r3: the joined skin, fresh twins 29ad7cfe).
+- **Owed.** The Mac shots behind the switch, and gore twins for every soldier file (the soldiers folder's `GER_panzer`
+  and `USA_tanker` have none: they fall as before). The deaths thread's re-runs of the falls that rested a limb under 1
+  m from its joint or threw one over 3 m up (USA and GER `die_leg_off_a`, GER `die_arm_off_b`; USA and GER
+  `die_blast_a`): the test's first battle notes none with the twins of 24 November, nor with 7caf9453's, but it reads
+  only the falls its gored men take. From the deaths thread, for the sides: a standing or running fall from the front
+  that flings a limb back and to his right (today each flings one back and to his left, so for a burst or a gun ahead on
+  his left he is often given a fall from another side (746 of the sweep's 6664 band cells), and in CHN, FRA, ITA,
+  ITA_desert and SOV, 25.5 to 37.5 degrees round on the fine grid (27 to 36 on the test's), none he may take moves every
+  limb half a metre away: 0.36 m at least). From the deaths thread, for the burst under him: the mirrored falls from
+  under came on 25 November (`die_leg_off_f`, `die_leg_off_g`), and with his gun known a man on his feet or a knee is
+  given the leg that flies away from it; but with the gun behind him both legs fly back toward it (the sweep's gaps,
+  above: standing or running the gun within 42 degrees of his back on his right or 27 on his left, the leg as much as
+  1.19 m toward it, and on a 1-degree grid a gun 1 to 3 m off within 47 on his right, so beyond his back's quarter;
+  kneeling or in cover within 18 and 15 degrees, 0.60 m), so a fall from under that flings a lower leg forward is owed
+  for those. The prone throw from under (`die_blast_d`, a limb toward the gun in 75,810 of the fine grid's 85,680
+  cells, 3992 of the test's 4080) is kept as it was, not held away from the gun. Nor is a man's body in a fall from
+  under (toward the gun in 2008 of the sweep's 8160 cells standing, as much as 0.71 m; 1058 kneeling, 0.62 m).
+  Kneeling, in cover or lying the falls' own bodies may move toward the burst or the gun: kneeling or in cover as much
+  as 0.36 m, a burst behind on his left, in a fall from behind
+  (806 cells of each stance's on the fine grid where another he may take moves it away; in nearly all of them the falls
+  given already hold one that does, `die_arm_off_m` beside `die_arm_off_f`, so choosing among those by the body too
+  would make the test's note a check: a follow-up), lying as much as 0.04 m; the test notes them. The rate: in the
+  rules' battles 14 of 93 shell kills gored (1 in 6.6) where the odds expect 9.8 (1 in 9.5, inside the art director's 1
+  in 8 to 10; the 14 about 1.5 standard deviations above it, those battles' dice); the odds are not changed here, hers
+  to rule, with both figures before her. The half metre is the falls' own, read from their first frames: his limb leaves
+  from his pose as struck, a little less or more, and nothing holds it so (in the band's battle 10 of its 1053 limbs
+  under half a metre away, none toward).
 
 ## The fighters on call over the field (release 2, off until passed)
 
@@ -767,18 +1064,124 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   A live battle's notes plan it again as they come (the legs flown the same); a loss whose note comes after its plane
   was hit begins where it is. A replay from the start tells it all again.
 - **Downed pilots** (`-TheaterLandChutes`, with `-TheaterLandAirSupport`; release 2, off until the art director and a
-  45 fps reading pass; Brian, 23 November 20:09Z). The rules say whether a pilot got out (air:lost's chutes: half the
-  burning and spinning planes', never a plane blown apart's); `LandAir::Sky::Chutes` says how. He goes over the side 1
-  to 2 s after the hit (out of a spin 0.5 to 0.9 s), never in her last 0.8 s, and where she is under 60 m by then at the
-  highest she is after the hit; falls free 1 to 1.6 s (pulling at once under 70 m), his way off her dying fast; his
-  canopy blossoms over 1 s and he comes down at 5 to 6.5 m/s, drifting with the battle's wind, swinging under it (14
-  degrees, 3.2 s a swing, dying away). In the air he and his canopy are one small mesh (`LandBattleAir.cpp`,
-  `ChuteShape`: a 7 m canopy, eight lines, a man in his harness 4.1 m under it, its pivot the canopy so he swings),
-  built again only as it blossoms. Down, he goes flat as he lands (`go_prone`), lies 1.5 to 3.5 s, gets up
-  (`stand_up`, turning to his way) and runs 20 to 40 m from the nearest enemy block at 4.2 to 5 m/s (`run`), and goes to
-  ground there (`go_prone`, held): a man of the crowd in his army's infantry clips with no rifle (`RiderFileOf`). His
-  canopy falls in over 2.5 s and lies flat 4 m downwind of where he landed, its lines back to there (`HeapShape`).
-  Its own dice: the planes fly as before.
+  45 fps reading pass; Brian, 23 November 20:09Z; redone to the art director's notes of 24 November, 02:26Z, and his
+  canopy's shape to her verdict of 24 November, 14:34Z: (c) its skirt, (b) how it lies; her (a) waits on the soldier
+  files). The
+  rules say whether a pilot got out (air:lost's chutes: half the burning and spinning planes', never a plane blown
+  apart's); `LandAir::Sky::Chutes` says how. He goes over the side 1 to 2 s after the hit (out of a spin 0.5 to 0.9 s),
+  never in her last 0.8 s, and where she is under 60 m by then at the highest she is after the hit. (`Sky::Build` plans
+  them whenever `-TheaterLandAirSupport` is on, on dice of their own, so the planes fly the same either way; only
+  `FlyOver` reads `-TheaterLandChutes`, and draws nothing of them without it.)
+  - *In the air* (her first and second notes, and her answers). He leaves her with her way across but none of her
+    climb, and falls free on gravity alone, so he is never above where he left her and always at least half g t
+    squared under it. His way through the air (across, the wind's taken off) dies as a falling man's does (his drag at
+    the 55 m/s a man falls at) and then on his canopy as it fills; the wind is not a push from rest, he is in it from
+    the first. He pulls after 1 to 1.6 s (sooner out of a plane already diving: once he has fallen as far as a man from
+    rest would have), and his canopy fills over the next 45 to 50 m of his fall, so that he drops about 50 m before the
+    wind takes him (within 1 m/s of it). He comes down at 5 to 6.5 m/s (one man in five heavy: 6 to 7), drifting with
+    the battle's wind, swinging under it about 4 s a swing, from 14 degrees settling to a gentle 5 that never quite
+    dies. Out under 60 m (her fifth) he pulls at once and his canopy is still filling as he lands: a hard landing (his
+    way still spent: 8 m/s through the air at most).
+  - *His canopy* (her sixth, and her answers): 5 to 5.5 m across in the air (7 m is only its size lying flat) and
+    about half as deep, on 24 to 28 gores, her off-white for every nation (0.86, 0.85, 0.80, each chute about 4%
+    warmer or cooler). Side-on (her verdict's (c): its skirt had dropped straight, "like a jelly mould") it is
+    widest 0.38 of its depth under its crown (`LandAir::WidestDown`; about a third, the test a quarter to a half)
+    and its skirt curves in from there all the way down to a hem 0.82 as wide (`HemIn`; her 0.8 to 0.9), by the 1.5th
+    power of the way down (`Curl`), its silk leaning in more ring by ring (10, 17, 21, then 24 degrees at the hem,
+    toward its lines at 29 to 31 degrees in to him, so that they run on from it); its crown a round dome over its
+    widest (`Crown`). A review of 24 November found it still dropping straight from 0.41 to 0.66 of its depth under a
+    flat-topped crown: its silhouette in the picture is now 0.977 of its widest half-way down its depth and 0.953 at
+    0.6 (it was 0.988 and 0.977), within 2.3% of its widest for 0.18 m under it (0.46 m), and its crown 0.34 of its
+    widest 3% under its top and 0.63 11% under (0.44 and 0.70). Its gores billow a little between the seams as
+    before. `LandAir::CanopyShape` and `HeapShape` make it (plain C++, both its faces): the seams faint
+    darker lines and the hem a little darker, in the points' colours, so they cost nothing a frame; a line from each
+    seam to his four risers. Its glow against the sun is one number a frame: `LandAir::Glow` (a little seen from under
+    it, most against the sun, none with the sun behind the eye or at night), by the key light against a clear day's,
+    given as `FigureFill` (and `FigureSun`, the pieces' rim) to the silk's own copy of the things' ink (M_MapSurface: no
+    new material). The mesh is made once for each make it has (him falling free; him, his lines and silk; down, him
+    going over; once the crowd's man has him, his lines and silk) and otherwise moved in place where it can be
+    (`UpdateMeshSection`: its points, facings and colours, no new proxy; its makings' storage kept from frame to frame),
+    never a frame for its look (`LandAir::SilkMoved`, `ManMoved`). In the air the silk is moved in place as it fills
+    (by 0.02 of its open share): a canopy filling never folds a triangle over. Down it is made again each 0.05 of its
+    falling in: the scene winds each triangle by where its points are, and as it tips, falls in and lies in its folds a
+    few in a thousand turn over within a step, which kept for good would show their inside's shading. Between two
+    makes it is moved in place every frame toward the next step's shape (`LandAir::SilkStep`: each make is the step it
+    is in, the last make's next, and the next one; `At` moves its points and facings between them, and it is made
+    again as its slump reaches the next, `Due`), and its triangles are wound by where their points are half-way
+    through the step (`Wound`), so a triangle turning over shows its inside for at most half a step (0.08% of its
+    triangles' frames here). A second review of 24 November found it held still between makes and jumping up to 1.3 m
+    at a make some eleven times a second, and a smooth torpedo half fallen in. His part (him going over, by 0.05, and
+    his lines) is moved in place with it every frame. At 45 fps a pilot's mesh is now made 24 times (21 of them as his
+    canopy falls in) and moved in place 151 to 167; its silk moves 0.22 m in a frame at most (10 m/s), as much at a
+    make, and is drawn within 0.07 m of its true shape. Its cost: lying, his silk is 2,290 points and 4,368 triangles
+    on 26 gores, 2,466 and 4,704 on 28 (in the air 1,874 and 3,536, 2,018 and 3,808; it had been 3,138 and 6,048,
+    on 14 rings: it is now on 11); a make (one `HeapShape`, its next step's: the step it is in is the last make's) 0.13
+    ms on a flat field and about 0.3 ms on hummocks on the cloud box, its ground read once on a grid (not twice a
+    point). The log tells each pilot's count once his canopy lies flat, for the 45 fps reading: his mesh's makes and
+    moves in place, his silk's points and triangles lying, its makes as it fell in and their time (ms a make, and the
+    longest), and the most its points moved in a frame (metres).
+  - *Down* (her third, fourth and fifth notes). Seconds are real seconds from his landing. His chute's mesh draws him
+    going over flat (0.5 s; 0.35 after a hard landing) under his falling canopy; 0.4 s later, as he lies there, the
+    scene swaps him for a man of the crowd: in his army's tank crews' file where it has one (`USA_tanker`,
+    `GER_panzer`, with their own heads), else its infantry's (`RiderFileOf`) bareheaded (`AddRider`'s new `bBareHead`:
+    his file's helmet left off, no finish drawn) and without his pack (`bNoPack`, where his file marks it:
+    `Crowd::PilotDress`, below), unarmed. So that nobody sees him pop: the crowd's man is a rider, in
+    `go_prone` held at its end with its end offset not taken back (`StepRider`), so his hips lie 0.59 m forward of his
+    feet, 0.14 m to his right and 0.14 m up (every soldier file's `end_offset` and pelvis, within a centimetre); the
+    mesh's man pitches 84 degrees about his feet and is moved so that flat his hips lie there (`LandAir::OverShift`,
+    by his own file's end offset once it is known). He had been moved back 0.9 m and lay 0.7 m short, and the crowd's
+    man jumped forward in plain view (a review of 24 November). And the mesh keeps him until the crowd's man has been
+    posed with his ride: the crowd is posed before `FlyOver`, so a ride set there shows the frame after, and he had gone
+    for a frame; where no man of the crowd can be made he stays lying in the mesh. In a wind over 4 m/s his canopy
+    drags him 1 to 2 m downwind first (at 1 to 1.5 m/s). He lies 1.5 to 3.5 s (after a hard landing 3 to 5 s), gets up
+    onto his knees (`go_prone` played back from 1.9 s to 0.95 s, over 1 s; 1.4 s after a hard landing), works his
+    harness free kneeling, his hands at his chest, for 1 to 1.5 s (`kneel_down` held at its end, 0.5 s, which is
+    `stand_up`'s first pose), stands (`stand_up`, turning to his way) and runs 20 to 40 m from the nearest enemy block
+    (`run`), and goes to ground there (`go_prone`, held). After a hard landing he limps: there is no limp clip, so `run`
+    slowed to 0.65 of its pace and hurried off his right leg (a hitch of 0.45 of the loop's pace either way), his feet
+    kept to its stride, and only 0.6 as far (whole half-loops). `Chute::Rate` says how fast each clip goes (less than
+    nothing played back) for the scene's blends, and `Chute::Blend` over how long: 0.25 s, but 0.5 s into his harness's
+    kneel, `go_prone` on his knees being far from `kneel_down`'s last pose (his pelvis 55 degrees off it, his right
+    thigh 68 to 72, his pelvis 0.18 m on; no time of `go_prone` nearer than 45 degrees), so that he settles into it
+    rather than lurching. His canopy falls in over 3.2 s on an even clock (each part of it easing in and out on its
+    own; on an eased 2.5 s its crown had swept down at 17 m/s at its fastest), its lines back to his harness where he
+    lay (from the half of its skirt behind its middle, the same lines all the while: `LandAir::LineBack`; they had
+    changed halves as it fell past him), taut while it is up and a little slack once it lies (each line in two
+    lengths, its middle let down toward its lower end's height and bowed to one side, every other line to the
+    other).
+  - *How his canopy lies* (her verdict's (b): it had lain a flat oval in even scallops, "a doily", shrinking in place
+    as it fell in). `LandAir::HeapShape`: as it loses its air it tips forward on its lines about his harness and
+    blows downwind, its side toward him blown in over the other (a crescent), its far half going slack first (its
+    round section flattening, its side toward him coming down onto the other, its silk crumpling), flapping and
+    billowing along it until each part of it is down (its near end and its front first), and streaming out along the
+    wind ahead of coming down, so that its middle only ever moves away from him and its top only ever comes down (half
+    fallen in it is already 1.3 to 3.7 m longer along the wind than as he landed, its middle 6.3 to 7.4 m on). It lies
+    stretched along the wind, 2.05 to 2.9 times as long as it is wide (6.3 to 8.5 m long, a stronger wind stretching
+    it), its near end gathered 2.1 to 3.5 m past his harness, where its lines run back to him across the grass (2.1 to
+    3.4 m of his 4.1 m lines, a little slack; a review of 24 November found 0.6 to 1.2 m stubs), its far end standing
+    0.38 to 0.75 m up on the air it still holds (more in a stronger wind) and swelling a little there, and coming round
+    and down to the ground over its last fifth: its last ring (0.975 along it) about half as high as its far quarter
+    and its crown, its tip, on the ground (0.03 m up; the review found a beak hanging 0.23 m off it; at 40 m in the
+    picture its top is 0.48 m up 0.9 along it, 0.37 at 0.95, 0.22 at 0.98 and 0.05 at its tip, falling faster toward
+    it). Along it run four or five long loose folds, one big and the rest smaller in no order, each wandering across
+    as it goes, with two creases across where it bunched; its edges waver and its far end lies a little to one side.
+    The gaps between the folds are graded (the widest three times the narrowest, 2.6 times with five), the wider going
+    where two folds need more room to stand apart (a big one beside a small one: 1.4 times their widths, and the big
+    one's flank half-way between them under a third of the small one's height), and all of them spread together until
+    each two stand apart, so that the grading holds (the review found the narrowest held up to a floor alone, which
+    left half of them alike). All of that is drawn from the pilot's own number (`Chute::Folds`, on its own dice,
+    `0xC47E5`) and the wind (`Chute::Wind`), so no two pilots' canopies lie alike. `Chute::Heap` (its middle) lies
+    where it does: half its length on from its gathered near end (`LandAir::HeapOff`, 6.8 to 8.1 m downwind here).
+    The scene gives `HeapShape` the ground as it is now, as a wire is laid (`WireAt`): the field's (`HeightAt`: its
+    terrain, its lanes, its banks and its floors) raised to a hole's face or a breach's floor where one is torn under
+    it (`Holes.TopAt`). `HeapShape` reads it once a make on a grid a quarter of a metre square under the silk (coarser
+    over one still high in the air: 2,500 heights at most, 390 to 1,550 here, 750 on average, against 1,233 points a face), lays each point on it,
+    and keeps every edge of the silk over it (a bank's, a ditch's side, a crest's or a crater's rim between two points
+    lifts both), the grid raised by how sharply the ground bends about each cell (a step narrower than a cell). The
+    review found its points on the ground but its triangles cutting 0.2 m into a bank, a ditch's sides, a sharp crest
+    and a crater's rim, and the scene's ground blind to holes.
+  - Its own dice (`0xC47E1` as before; the notes' draws on `0xC47E3`; its lying folds on `0xC47E5`, drawn after all
+    the rest): the planes fly as before, frame for frame.
 - **Not yet.** The engines' and guns' sound (the sound director's), the bombs seen falling, light flak's puffs (the kit
   has only its heavy row).
 - **Test**: `Tools/land_air/run.sh [out folder]` (`LAND_AIR_OUT`): the feed, the machines, the plan, the flight (drawn
@@ -789,11 +1192,512 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   the same however the frames fall) and no NaN; `air_paths.png`, three strikes side-on and from above
   (`paths.py`); the chutes (a pilot out of the burning and the spinning plane, none out of the one blown apart; out
   after the hit and before she strikes, his canopy full well up, down at 5 to 6.5 m/s, never under the ground; flat,
-  up, running from the enemy, flat; his canopy 4 m downwind; the same twice), `chutes.py` drawing them side-on and
-  down from above. Pictures: `/mnt/project-files/battle-fx/air-support/` (`chutes_r1.png`).
+  up onto his knees, his harness, up, running from the enemy, flat; his canopy fallen in downwind, its middle 4.5 to
+  9.5 m off; the same twice). The art
+  director's notes, on that field's pilots and on a second, windy one's (5.7 m/s, an Il-2 losing her pilot 35 m up):
+  falling free never above where he left her and at least half g t squared under it (first); with the air (within
+  1 m/s of the wind) within 3 s of his pull, his way only dying away against the air, with the wind still 3 s after
+  his canopy is full, which is 40 to 75 m under where he left her (second);
+  drawn in his chute's mesh till he lies flat under his falling canopy, then the crowd's man (third); up onto his
+  knees, kneeling 1 to 1.5 s, then `stand_up`, and in a wind over 4 m/s dragged 1 to 2 m downwind first, none in a
+  light one (fourth); out under 60 m a hard landing, his canopy still filling, lying 3 to 5 s and limping off slower,
+  the rest soft (fifth); his swing about 4 s, 14 degrees settling to about 5; his canopy 5 to 5.5 m across, about half
+  as deep, 24 to 28 gores, faint seams, a line at each, both faces, her off-white within 4%, and its glow (sixth). And
+  a review's of 24 November: the scene's mesh at 45 fps, made at most 30 times and never in the air once his canopy is
+  out; at the swap he is drawn every frame, in the mesh or as the crowd's man, both (in place) one frame at most, the
+  mesh keeping him till the crowd has drawn its man (whose mesh waits when a frame's `MenRebuildsMax` is spent; held
+  at most `LandAir::RiderHoldFrames`, 30, and tested with the crowd 0, 3 and 25 frames late); the silk moved in place
+  only from one shape in the air to another (a heap's windings never carried into the air); a
+  canopy filling never folds a triangle over, and his lines run back from the same half of its skirt; flat in the
+  mesh his hips lie where the crowd's man's do in every soldier file that has `go_prone`'s end offset (18 of 19; read
+  from `Content/Models/Soldiers`, `LAND_AIR_SOLDIERS`); each clip blended into over 0.25 s, the harness's kneel 0.5 s;
+  he lies the way he faced as he landed. And her verdict of 24 November, 14:34Z, on every test pilot: side-on his
+  canopy widest a quarter to a half of its depth under its crown and its hem 0.8 to 0.9 of that, its silk leaning in
+  toward its lines ((c)); lying 2 to 3 times as long as wide, its far end up 0.3 to 0.8 m, its near end 2 to 3.6 m
+  past his harness and its lines running back to him; in a few long folds along it (most of them going on along it, 2
+  to 7 across a ring), their heights uneven and their spacing uneven (spread over mean 0.2 or more, each on its own
+  bar); another pilot's number lying apart (0.08 m or more, the root of the mean square); falling in, its middle never
+  back toward him and its top never rising, half-way longer along the wind (by 0.5 m or more) and its middle 1.5 m or
+  more on ((b)); and over 300 pilots' numbers none off. And a second review's of 24 November: side-on its skirt
+  curving in all the way down from its widest (its rings leaning in more one by one, its silhouette under 0.985 of its
+  widest 0.6 of its depth down) and its crown round (under 0.65 of its widest 11% under its top); lying, its lines
+  none longer than they are, its far end coming round and down (its last ring a quarter to three quarters of its far
+  end's height, its tip within 0.08 m of the ground); falling in at 45 fps as the scene draws it (`SilkStep`), its silk
+  moving under 0.3 m a frame and at a make, within 0.1 m of its true shape, under one in two hundred of its
+  triangles' frames showing their inside, and its makes' points, triangles and time printed (and on hummocks); none of
+  it under the ground, falling in or lying, its points nor its triangles' edges (seven places along each against the
+  ground itself), on a slope of 1 in 4 along the wind or across it, on hummocks, across a hedgerow bank 1 m high, a
+  step 0.4 m up, a ditch 0.6 m deep, a sharp crest, a crater's bowl and rim, and along a bank under one edge; and
+  lying on the slopes its underside on the ground (each ring's lowest point within 0.08 m of it). The planes' hash is
+  printed against release 1's (`e258eaf3320235ff`). `chutes.py` draws each pilot's first seconds, his way through
+  the air and his seconds on the field, and the canopy as the scene draws it: side-on full through a long lens with
+  his lines to him, from under with its glow and without, falling in across the wind, lying from 40 m at a man's eye
+  height, and lying from above (his and a second pilot's, his lines a little slack as the scene draws them),
+  measuring each from its pixels (its widest and its depth, its hem, its silhouette's width 0.5 and 0.6 of its depth
+  down and its crown's 3% and 11% under its top; its middle falling in; its length, its far and near quarters'
+  heights, its far end's top over its last twentieth and its silk's sRGB luma at 40 m; its length and width and its
+  folds' light ridges from above).
+  Pictures: `/mnt/project-files/battle-fx/air-support/` (`chutes_r1.png`, `chutes_r2.png`). The bareheaded rider:
+  `Tools/land_show/run.sh` (every infantry file's rider without his helmet at each level, none drawn in its place).
+  The crowd's man each pilot becomes (`Crowd::PilotDress`, `AddRider`; with `Battle/LandMen`): a USA or GER pilot in
+  the tankers' file as it is, a SOV or UK pilot in his infantry file bareheaded and without his pack, at every level his
+  file's triangles less the helmet's and the pack's runs (a file without `pack_tris` keeps his pack, and the line says
+  so); `LAND_AIR_SOLDIERS` reads another folder. Run on the soldiers thread's files (fc61734e), only the swap's line
+  changes: "36 soldier files read" for 19, its gore twins being in that folder (none has `go_prone`'s end offset).
 - **Owed.** The Mac shots behind the switch, the art director's look, and the 45 fps gate with a strike overhead.
   With `-TheaterLandChutes`: a pilot under his canopy from 100 m and from 300 m, his landing and run, and his canopy
-  lying on the field.
+  lying on the field; and for the notes of 24 November: one from below at 100 m with the sun behind the canopy (its
+  glow and its seams), a pilot falling free and his canopy filling, a hard landing out of a low Il-2, the swap from his
+  chute's mesh to the crowd's man (shot 7: that the man lying prone in `go_prone` lies where the mesh's man went over,
+  no jump and no frame without him; the numbers are tested, the look is not), his harness kneeling (shot 8: that he
+  settles into his kneel off `go_prone` without a lurch) and the drag in a wind over 4 m/s, the limp, and an infantry
+  file's rider bareheaded (its scalp under the helmet is the file's own skin). The 45 fps reading: the log, once each
+  pilot's canopy lies flat, tells his mesh's makes and moves in place (24 and 151 to 167 here), his silk's points and
+  triangles lying (2,290 and 4,368 on 26 gores here), its makes as it fell in (21) and their time (ms a make, and the
+  longest: about 0.13 here on a flat field, 0.3 on hummocks, on the cloud box; the Mac's own on a real field is
+  owed), and the most its points moved in a frame (0.22 m here; over 0.3 m would show it jumping). For her verdict of
+  24 November, 14:34Z: a pilot's canopy side-on from about 200 m on a long lens (its skirt curving in from its widest
+  to its hem, its crown round, its lines running on from it to him), his canopy lying from 40 m at a man's eye height
+  and from above (stretched along the wind in loose uneven folds, its far end lifted and coming round and down to the
+  ground, its near end gathered 2 to 3.5 m past him and his lines a little slack across the grass, two pilots' side
+  by side to see they differ), its falling in after he lands at 45 fps (tipping and blowing downwind, going slack and
+  crumpling, flapping until it is down, moving every frame with no jump at a make, not shrinking in place nor a
+  smooth torpedo half-way), one lying on a slope (none of it under the ground, its silk not floating either), and
+  one coming down across a hedgerow bank and one into a shell hole (its silk over the bank's crest and the hole's rim
+  and lying down into its bowl, none of it through them: the test's fields are its own, the scene's ground and holes
+  are not).
+  - *Her second note, as read* (her words: "Pilot 11 drops about 50 m straight down before the wind takes him. Once
+    his own way is spent, he drifts with the air within 2-3 s. The wind isn't a push that builds from rest."). Its
+    first sentence is release 1's fault, as her first note's first sentence is (his way died against the ground, so he
+    fell straight down and the wind then pushed him from rest). As built his way dies against the air from the first,
+    so he never falls straight down: the test's pilots are with the air 2.2 to 3.0 s after their pull (2.5 to 4.3 s
+    after leaving her, carried 50 to 240 m across first), and the test holds that to 3 s. The 40 to 75 m to a full
+    canopy is its opening's loss, kept. Her Mac shot of a pilot falling free and filling judges it.
+  - *Her third note's "no pack"* (round 2 had it waiting on the soldiers' thread): done in the code. The soldiers'
+    thread marked each infantry file's pack and webbing as one run of triangles, `pack_tris` (claude/project-thread-
+    labtrr fc61734e: the 19 men and their gore twins; the game's Content has 34 of them, not yet brought in here: the
+    ground thread merges both). Until those files come in, the game's Content has no `pack_tris` and the infantry
+    fallback still wears his pack, exactly as before; the log says "his pack on (his file marks none)".
+
+## Men out of their machines without their packs (release 2, behind the chutes' and the bail-out's switches)
+
+The art director's notes: downed pilots (24 November 02:26Z, note 3: "On the ground: no steel helmet, no rifle, no
+pack. Use the tanker files where they exist (USA, GER) ... Other armies get infantry with the helmet hidden"; round 2,
+14:34Z: "The pack waits on the soldiers' thread") and tank crews bailing out (23 November, note 1: "other armies own
+men, no rifle/pack, pistol at most", built as infantry with the rifle hidden and the pack on, for want of a range).
+
+- **The files' run.** The soldiers' thread (fc61734e) marks his pack and all his webbing at each level as `pack_tris`
+  `{near: [first, count], mid: [...], far: [...]}`, in `helmet_tris`'s shape, each ending where his helmet's run
+  begins: pack, belt, Y-straps or braces, pouches, bags, canteen, shovel, bayonet, gas-mask can and rolls; the radio
+  and its handset; the loader's rocket bag and rocket. Buttons, badges, the medic's armband, the chin strap and the
+  weapon stay drawn. "Leave that run out and draw nothing in its place, because the cloth under it is whole." Only the
+  order of the triangles between his hands and his helmet changed (the weapon's before the kit's); points,
+  `helmet_tris`, clips, deaths and the gore cut points are as they were. `Soldier::PackFirst`, `PackCount` read it,
+  0 where a file has none, or its run is not two whole numbers lying within the level's triangles, or it reaches into
+  his helmet's run (none of fc61734e's does; were one to, a crewman with his helmet on would lose part of it, so such a
+  run is left alone and he is drawn with his pack and all his helmet).
+- **The mesh.** A man's mesh at each level is a variant of his file's (`Crowd`'s `VariantOf`, `FaceRestOf`), now keyed
+  by the runs it leaves out (his own helmet, his pack, both) instead of by his own helmet alone: each run's triangles
+  are cut, and only the points nothing kept uses are dropped (as the helmet's cut always did), the rest in the file's
+  order. A pack cut where the file marks none is no cut: he shares the whole man's mesh. The whole and the helmet-only
+  variants come out as before to the byte (the crowd's men and the riders, whole and bareheaded, hashed against the
+  code before, on Content's files and on fc61734e's). Nothing else of the crowd indexes his triangles: the faces and
+  their tints, a gore twin's joined skin and its caps go by points (unchanged), the rifle is hidden by its bones
+  (`bUnarmed`), and the far men's bank and the vertex-animation sets are only ever the crowd's men, who keep their
+  packs. A gore twin's pack run cuts as its man's (its caps whole: no cap point is a pack's alone; of its joined skin's
+  points, a few with the pack, skipped as the helmet's are).
+- **Who goes without.** `AddRider`'s `bNoPack` (beside `bBareHead`, false by default). `Crowd::PilotDress`: a downed
+  pilot in the tankers' file where his army has one here (as it is: those files carry no pack range), else his army's
+  infantry file (`RiderFileOf`), bareheaded and without his pack (`ALandBattle`'s chutes, LandBattleAir.cpp).
+  `Crowd::CrewDress`: a tank's crewman bailing out in the tankers' file, else his army's own infantry file, his helmet
+  on and without his pack (`ALandBattle::BailOut`). The tank commanders in their hatches and the light cars' riders
+  are as before. With both switches off nothing changes, and a file without `pack_tris` draws every man as before.
+- **Test**: `Tools/land_show/run.sh` builds `land_pack_test` (with `-Wconversion`, g++ and clang) and runs it on the
+  folder it reads (`LAND_SHOW_SOLDIERS`, else Content's), against Content's own files as ones without the run. In every
+  file that marks its pack, at every level, four riders of one seed and ride (whole, bareheaded, no pack, both): each
+  look the file's triangles without its runs to the last index, the pack's not drawn and nothing in its place, only
+  points no kept triangle uses dropped, every kept point skinned and coloured as the whole man's to the bit, the helmet
+  and pack cut the two runs cut at once, the whole and bareheaded men as before; a gore twin's caps whole; a file's run
+  reaching into his helmet's failed; made-up runs not whole, out of range or reaching into the helmet's ignored (one
+  ending where it begins, or just after it, read); Content's files without `pack_tris` drawing a rider with no pack the
+  same to the byte; and each army's `PilotDress` and `CrewDress`. It also reports, without failing, the triangles of
+  each file's near run in the helmet's paint at his collar and shoulders (`CollarInRun`: the neck, head, collarbones,
+  upper arms or the chest's front), which should be none (see the picture's *lost with the pack* below; the files' to
+  mend). On fc61734e's 36 files: 34 mark their pack (17 gore twins), 102 levels, every run ending where the helmet
+  begins, none reaching into it, 136 riders; at the collar CHN, FRA, GER, JAP, POL and UK 24 each, ITA 72, SOV_snow
+  268, and their gore twins alike. On Content's own files every line of the land show
+  tests is as before but the timings (and the new test's). On fc61734e's folder, on both fields, only these differ, and
+  none for the pack: each file's size and clip count (GER's 93 clips to 118, USA's 96 to 121, ...); the seat check's
+  count (621 poses of 207 seat clips to 1188 of 396) and its 108 failures, the soldiers' thread's new clips for getting
+  out (`out_tail_a`/`_b`, `out_doors_a`/`_b`, `out_door_a`/`_b`, `bail_climb_out`), which leave his seat as they
+  should but which that check reads as clips he sits through (the ground thread's to mend when it brings the files
+  in). Its parent's files give the same lines but each file's size (508 or 509 bytes less: the `pack_tris` key). The
+  bank, the vertex-animation sets, the frames and the play are as on Content's. `Tools/land_gore/run.sh` with that
+  folder's twins fails one line, as it does with the code before this and with the parent's files: a gored man's whole
+  joint opens 2.2 mm on its caps (the twins', not the cut's). `Tools/land_air/run.sh` and `Tools/land_bail/run.sh`
+  check the crowd's man a pilot and a crewman become (above); on fc61734e's folder `land_air` reads 36 files for the
+  swap's lying pose (19 in Content), its other lines as before.
+- **Picture**: `Tools/land_show/pack_picture.sh <soldiers folder with pack_tris> [out folder]` (`pack_off.png`): the
+  Russian and the British pilot down (bareheaded) and crewman out (helmet on), rifle and pack off, near from the front
+  and the same as before with his pack, to compare his front (the review's, 24 November), near from behind, mid from
+  behind running, and near from behind as before with his pack, to compare his back. Seen there on
+  fc61734e's files: the baked shade keeps the pack's marks on his cloth, as the soldiers' thread said: on the British
+  back a darker yoke across the shoulder blades where the pack's top sat, a darker band at the waist where the belt
+  ran and a darker patch over the small of his back, and on his front dark blotches on his chest beside the buttons
+  and round his hips where the braces and pouches lay; on the Russian a faint dark diagonal from his left shoulder to
+  his right hip where the greatcoat roll lay and a band at the waist, his front nearly clean; at mid only the British
+  back's yoke, faint. Under the British pack a small dark notch shows below his collar (cloth folded in
+  where the pack hid it). Not new, and as before for a bareheaded man: his helmet's chin strap is drawn (not in either
+  run), two thin straps standing up beside his ears, and his scalp is bare skin.
+  *Lost with the pack that should not be* (the review of 24 November; a fault of fc61734e's run, not of the cut, which
+  leaves out exactly the run the file gives): `pack_range.py` takes a piece more than 2.6 cm across for kit, so some
+  pieces in the helmet's paint (paint 5) that are badges or cloth went into the run, against the soldiers' own note
+  that badges stay drawn. The collar tabs, two small dark-green pieces at the front of his collar on the neck and chest
+  bones (UK, POL and FRA near triangles 7283-7306, GER 6929-6952, CHN 6736-6759, JAP 6716-6739: 24 at near and 8 at
+  mid each, CHN 10, their gore twins alike): a British, Polish, French, Chinese or Japanese pilot or crewman without
+  his pack loses them, and so does a pilot whose army borrows one of those files (FIN's, the German's). The British
+  crewman's front pair on the sheet shows it, small at this size; a close-up from the front, pack off and on, shows it
+  plainly. Of the same kind, found with it: the Italian's collar patches on his lapels (ITA 8534-8605,
+  72 at near, 14 at mid, nearly his tunic's colour: his stars stay, the patches at the top of his lapels go), and the front hem of
+  the snow suit's hood on his shoulders (SOV_snow 8531-8798, 268 at near, 40 at mid, 8 at far; the hood's piece that
+  runs on into the helmet's was kept, these separate ones were not), which no man out of his machine wears today (a
+  Russian pilot in winter is drawn from SOV_winter, a crewman from SOV). The helmet's paint lower down is kit and
+  rightly in the run (the German's gas-mask can on his hip, the pieces on the American's back). Left as the
+  files give it here, until the soldiers' thread keeps those pieces out of the run (or puts them after it) in
+  `pack_range.py`: no code changes then, and `land_pack_test`'s collar line reads none.
+- **Owed.** From the soldiers' thread, the collar tabs, the Italian's collar patches and the snow hood's hem kept out
+  of `pack_tris` (above: against their own note, so theirs to mend before the art director's look). The soldiers'
+  files in Content (the ground thread's merge); then the art director's look on the Mac with
+  `-TheaterLandChutes -TheaterLandAirSupport` and `-TheaterLandBailOut`; the shade's smudges and the chin strap are the
+  soldiers' thread's to mend if she asks.
+
+## Old wrecks on a field fought over before (release 2, off unless asked)
+
+Brian, 23 November 20:09Z: the burnt-out wrecks of a battle stay on the field for the next battle there. Looks only,
+as the scars and the old ruts are: nothing the rules fight reads them, no round strikes one, no man takes cover behind
+one, and they are kept off every way the recording's men and vehicles go, so nothing the battle shows is moved by them.
+
+- **What asks for them.** The campaign writes the recording's root `"oldWrecks": {"count": n, "months": m, "nats":
+  {"GER": n1, "SOV": n2, ...}, "per": p}`: the real armoured vehicles burnt out here before (60 at most), the months
+  since the last of those battles, whose they were, and this battle's scale (the real armoured vehicles each tank
+  model drawn in it stands for, to a tenth; left out where no tank is drawn). It leaves the key out where none burnt
+  here, or where the player's Battle rules row "Old wrecks" is off (sgfei1 b0a47250, src/battle/land/wrecks.ts).
+  `LandFeed` reads it with any part missing or odd (a count over 60 is 60, below nothing is none, a nation's count
+  must be a number over 0, a per missing, not a number or under 1 is 1 and over 1000 is 1000;
+  `Recording::OldWreckCount`, `OldWreckMonths`, `OldWreckNats`, `OldWreckPer`). On the
+  Mac `-TheaterLandOldWrecks=N` and `-TheaterLandOldWreckMonths=M` stand in for it on any field (the nations then the
+  battle's two sides', the attacker's the odd one), and `-TheaterLandNoOldWrecks` lays none. The stand-in's N is how
+  many are laid (at most 20; `Ask::bAsLaid`), not how many burnt out: its months age their look and the scrap men take
+  none away, so the Mac's off/on shots show N at any age (the key's count is the burnt-out armour, salvaged as below;
+  the switch was first written to read N as the key's count, and lay 6 of `=40` at two years). **With neither the key
+  nor the stand-in nothing is made, read or said**: `LayOldWrecks` returns before anything, the grass's `Covers` and
+  `ShowOldWrecks` find an empty yard, and no die of the battle, the scars or the ruts is moved (the wrecks throw their
+  own, seeded on their own constants). A live battle lays none (it opens with no tracks: nothing fought over yet), and
+  says so.
+- **How many** (`LandHulk::Models`, `Left`, `Kept`). First the battle's scale (Brian's rule: one model stands for as
+  many real things in every part of a battle): the count's real machines are drawn `per` to a wreck, `Models(count,
+  per)` = count / per rounded, at least one where any burnt (an armoured division's 150 drawn as 20 tanks is 7.5 to a
+  tank, so the 60 a campaign can carry are 8 wrecks; 3 burnt out at 10 to a tank are still one). The stand-in's N is
+  laid as it is and reads no scale. Then the recovery companies took what could be mended within weeks and the scrap
+  men the rest over a year or two: all of them lie there within three months, half at a year, 15% at two years, 6% from
+  four years on, in straight lines between. At most 20 on a field (each a static mesh of some 70,000 to 95,000 points
+  at its near level, so twenty are about as many points as the dry run's own armour; the Mac's 45 fps gate judges it).
+- **Which machines** (`ModelFor`). Each nation's tanks as the month they burnt in had them, by live.ts's `standInModel`
+  mix (and the Panther from 1944, as shells.ts draws it): the German Panzer IV, StuG III, Tiger and Panther, the
+  American Sherman, the Soviet T-34, the light tank for the early war and for others; one in five a half-track (the
+  German Sd.Kfz. 251, the American M3) or a lorry. The battle's own models where it has them and the wrecks burnt in
+  its own month (they are dressed for its coats and kit); else each read as `MakeArmour` reads them and dressed for the
+  month she burnt in (a German wreck of the spring in a summer battle wears her spring coat under the soot). A model not
+  at hand is drawn as the nearest that is, and said in the log line.
+- **Where** (`Yard::Lay`, on `LandHulk::FieldOf`: the scene and the cloud test read the field the same way). In small
+  groups, a platoon's one to four 13 to 28 m apart, one group a fight: along the field's old lines (a run of hedges,
+  walls and lanes across the fought-over ground in one heading, as the scars' fronts, 12 to 34 m out on the side the
+  attacker came from, most of the time), at the lanes' junctions and the village's edge, along the battle's own axis
+  (the way its machines went, through their middle), a few strewn. A side's wrecks face the other side's ground, some
+  turned as they were hit, a few going back. A field with no old lines (the open steppe) gives their share to the axis.
+  Each is kept off the lanes (6 m from a lane's middle: the engineers cleared them), the banks, walls and woods' edges
+  (3 m), and never lies in a hedge, a house, a yard or garden, a wood, water, marsh, standing corn, an old shell hole,
+  an old rut or across a cattle's path; 8 m from every recorded vehicle's way at any time in the battle (her middle),
+  1.5 m from every man's, 4 m from where any shell, bomb or grenade of this battle lands (its hole would open under
+  her), 1 m from a field telephone's wire (the recording's, or `-TheaterLandPhones`'s made from the battle: a lineman
+  lays his round her), 2 m from another wreck. Her scorched patch, which reaches some 2.4 m past her outline, lies on
+  open ground too, every point of it (the steppe's first lay had three patches over a trench's works and one over a
+  garden).
+- **How each looks** (`Yard::Dress`; the art director's to judge, round 2 below). Her own model, knocked out and burnt
+  through: her turret turned (mostly within 50 degrees of ahead) and her gun drooped to its stop, or, one in five, her
+  turret blown off and lying 1 to 4 m off her side, tail or bow (clear of her hull's corners, its gun turned away from
+  her hull, and off the side her track ran off), on its roof, its side or tilted back on its rear edge with its gun in
+  the air, its own hatches and doors shut (open, one on its side stood on a door a metre over the grass), and her open
+  ring a black hole (her turret's base less 9 cm across its middle, from the file's own turret, `Kit::RingR`) inside a
+  lip of bare or rusted steel 8 cm wide (round 2 laid a disc the width of her whole turret, tagged as soot); her hatches
+  and doors open; three in ten tanks (one in five half-tracks) with a track run off beside and behind her, link by link
+  from her own track (never under her thrown turret): flat on the ground (or on her patch, 2 cm over it), snaking from
+  where it leaves her (`LieTrack`: 14 to 22 cm either way, a wave of 2.6 to 4.2 m; beside her it waves outward only,
+  its inner edge kept 3 cm off her footprint, where round 1's strip ran up to 20 cm under her outer road wheels; round
+  2's snaked only past her tail, and the half-track's short strip lay straight), and folded back on itself once, its
+  last quarter or third turned over and doubled back on top, upside down, the doubled end swung off the strip under it
+  by up to 0.4 of its width (less where that would touch her), so the fold shows from above (round 2's lay exactly on
+  top); a lorry's canvas tilt, leather, rope and cloth burnt away to the tilt's bare hoops (every nation's: by the
+  file's paint names, `LandKit::Mesh::Paints` and `Model::PaintNames`, each by its stem, the name up to its first dot,
+  so the M3's `canvas.seat`, the T-34's logs' `wood.end` and `wood.split` are canvas and wood; round 2 matched whole
+  names and missed them; round 1 burnt none), her bed's floor (`BedOf`: the biggest flat of her wood facing up, a square
+  metre or more, with its underside; round 2 took the benches) laid again as planks along her, charred, a quarter to
+  two fifths of them burnt through and gone by her own dice and some burnt short (`LayPlanks`; her benches and the rest
+  of her wood kept), her glass gone and her tyres burnt off to the rims (the half-tracks' front tyres too); a tank's
+  road wheels' rubber charred; her aerial and roof gun gone. Her coat is a burn, laid by where the fire was (the art
+  director's last round, 24 November: round 2's patchwork read as camouflage, hard black blotches over pale chalky
+  grey a week on and pale blotches on rust after, every boundary a cut line, the noise outweighing the fire; round 1
+  read as one even terracotta coat). Each point's fate (`FateOf`) reads two smooth fields over her, the noise only
+  roughening their edges: her heat, from how near the fire's places (her engine deck's grilles, the hatches it came
+  out of, her turret's ring), each place's reach leaning a little downwind (the wind of her burning, from her own
+  dice) and falling off fast below it, then how high on her and a little how much it faces up (a lorry's and a
+  half-track's thin plates burn hotter); and her soot, densest round the openings the smoke came out of (her ring
+  only when her turret was thrown), stretched downwind and up and streaked along the wind on her deck and up her
+  sides, kept short on the outside of a plate below an opening that faces away from it (the smoke rose past it: the
+  first pass of this round laid a straight-edged black band along an M3's body side, a painted stripe), burnt off the
+  hottest steel. Each coat blends into the next across a band of its field, so none meets another at a cut line. A thrown
+  turret burnt from its own hatches only, blown off her as the fire began (the first pass of this round heated it
+  from the ring under where it sat: wholly bare grey a week on, wholly orange a month on). A week on: soot black
+  (25 to 40) over about half of what faces the sky round her decks, grilles and hatches, feathered grey at its edges
+  and grained blacker and greyer along the wind (not one flat black cap); round it, by her heat, bare grey steel (85
+  to 95), smudged darker, in the hottest centres, the paint scorched to a chalky grey-buff (100 to 110) round that, a
+  narrow fringe of it heat-tinted brown, and her own paint low on her cooler sides; a fresh orange (178,90,43 before
+  the light) only along the plates' edges where the paint burnt off, a few in 100 (not on a lorry's hoops, thin tube
+  creased all over, that went wholly orange; by a month the edge is the flash rust's own). A month on: the bare steel
+  flash-rusted (some 120,69,36 in the picture), a dull orange-brown mottled at a hand orange and a browner ochre near
+  its value and darker in brown patches (not one sheet of orange paint; even at a hand, not as uneven as the steel
+  under it), its brightest in the sun, on a top or a side, no brighter than some 150,85,45 (the art director's carry
+  of 24 November 21:01Z: round 3's read hot, almost glowing, on a sunlit turret top, its brightest some 188,94,42
+  there; the fix round's first try held it down on her tops but its sunlit sides went to 158, and mottled it only 162
+  to 158 before the light, one even orange-brown), about 15 to 25 in 100 of her, coming on across a soft edge and
+  staining the paint round it rust-brown (not a bright orange against the pale grey-buff; never more than half over
+  it, so the paint still shows as the coat it is, easing to under a third by ten months), in runs soft at their edges
+  and fading as they go, and a softer wash between them, down her sides under
+  the rusted steel above them: her own plate sampled as itself up to her top there, then her top over the edge
+  (`Tops`, her height over each spot of her at rest; the first pass sampled every point above a side as a deck). Each
+  wreck's thresholds are set by her own file (`ThresholdsFor`: what faces up on her upper works, her deck and
+  turret, sampled by area a month on, a thrown turret not counted; the heat at which paint burns to bare steel
+  moved up so no more than 22 in 100 of them are bare and unsooted, and where fewer than 15 her heat's lie drawn
+  out, up to 2.5 times, till they are, the soot over her hottest steel burnt off as it goes; the heat at which it
+  scorches set so some 34 to 42 in 100 lie between). The first pass of this round moved only the bare threshold,
+  0.15 down at most, and kept the scorched one over 0.2: a third of the field's wrecks stopped there and the field's
+  scorched paint on what faces up fell from some 21 in 100 to 10; drawn out, every wreck reaches 15, the fire's
+  places still deciding where on her rather than the noise. Her heat's lie says where on her each coat lies, her
+  thresholds how much of her. A thrown track's links and the lip of an open turret ring rust a fifth by a month and
+  all by half a year, each across a soft edge and none before its time (the lip dull, not a drawn orange ring). Six
+  months to a year and a half: the rust old, darker and duller (some 84,53,39: red at most 2.2 times blue), mottled
+  deep brown and lighter at a stride and streaked darker down her sides, darkening a little as the months go; the
+  soot washed off what faces the sky (kept on her sides and under her; a dark stain of it fading where it went); the
+  scorched paint flaking from the hottest (the steel's edge eating half the way back into it by a year and a half),
+  what is left of it weathered duller and darker within half a year (some 100,88,75 at six months to 97,83,72 by a
+  year and a half; the first pass left it pale, 105,97,83, at six months: a cow pattern) and stained by the rust
+  round it, so it reads as faded paint on the rust; her own paint flaking in flecks to the rust, some one in eight
+  of it by a year and a half. And, from some three months (the art director's second carry of 24 November 21:01Z:
+  from half a year her old rust read as one even brown), a little of her paint as the fire left it, her own or
+  scorched, kept from flaking where the weather reaches least (`ShelterOf`: a little on an open side, more low on
+  her, wholly under 0.5 m over her tracks and none from 1.4 m, and under her track guards or whatever of her stands
+  out a hand or so over the face, wholly on what turns down), in soft patches a stride or so across that her runs
+  of rust pass by, lighter than the rust round it, and none where the fire burnt her bare (the fix round's first try
+  laid her own paint back over the burnt steel and on a fifth of every open side, high as much as low: it read as
+  grime); and a few darker runs (`WeepFrom`) weeping from the seam where her top meets her side, from under a ledge
+  of her and from under the hatches and grilles the flames came out of, on her upright faces only, in some stretches
+  of her and none in others, a hand wide, each narrowing as it fades within about a metre, long and short (the fix
+  round's first try ran them evenly spaced and all one length, stripes over her paint left, and blots on her sloped
+  faces and her thrown turrets; none on a thrown turret now, and none where her map of her tops has no top). Her
+  coat is halved where the file's plates are bigger (`Halve`, as LandKit halves a
+  camouflaged one's), so her coats' soft edges lie where her heat puts them on a lorry's, a half-track's or a
+  Sherman's big plates too (round 1's M3
+  showed one colour smeared from corner to corner): the near level down to 0.35 m (`NearHalve`; round 2's quarter metre
+  cost too much), the far level to 0.7 m (`FarHalve`; round 2 never halved the far level, and with the plates' edges'
+  orange laid on its few big creases it turned one orange coat again beyond 140 m). The edges' orange is the near
+  level's only (`EdgesOf`): on the far level's coarse mesh every crease is a plate's edge. Low on her the field's earth splashed
+  up and, after half a year, a green stain where the weeds stand. Settled 4 to 17 cm into the ground (a lorry less). No
+  fire and no smoke. Under her a scorched patch (`Yard::Patch`), not a soft round shadow: a week on ragged, ash
+  grey-black with lighter drifts at her engine's end (some 64,63,55 in the picture), burnt grass dark brown round it
+  (some 67,55,36), a yellow-brown rim at its ragged edge (some 94,79,50), and her fuel's stain beside her, a cool
+  near-black pool with a crisp lobed edge (some 38,38,31; round 2's three came within 5 of one another, about 41,35,26,
+  and read as her shadow); its mesh three spokes to each of round 1's and 16 rings (48,720 triangles for twenty, round
+  2's 87,360, round 1's 6,160); it browns within a few months and then greens lusher than the field round it (the halo as round 1's); the grass
+  and corn stand to her sides but not under her (her hull's corners too, which her rings leave), her thrown turret or
+  her track, nor on the patch while it is fresh (`Covers`, in the carpet's `Stands`). On a field with snow lying
+  (`LandField::Ground::SnowLying`, white from 0.45 as `LandSnow` whitens a roof) the snow fallen since she burnt lies
+  over her patch as over the field round it (only a fresh one, under a month, shows black through, its fire having
+  melted the snow round her), over the earth splashed on her low parts and the weeds' stain, and on what faces up on
+  her, the steel showing through where it lies thin.
+- **The scene** (`ALandBattle::LayOldWrecks`, after `LayOldRuts` as the battle opens; `ShowOldWrecks` each frame after
+  `DrawArmour`). Each wreck's near and far levels are static meshes of their own (`LandParts::GroundMesh`) on the
+  vehicles' `SteelInk`, casting shadows, the near one shown within 140 m of the eye (`LandHulk::NearTo`, the vehicles'
+  hand-over), the far beyond; her patch on `GroundInk`, 2 cm over the drawn ground. The camera keeps out of them as it
+  keeps out of the battle's own (`PlaceMovers` adds each to `LandSight` as a still machine, and her thrown turret as
+  another: its box as it lies and its gun's muzzle, `Hulk::TurretBoxLo`, `TurretBoxHi`, `TurretMuzzle`; on its side
+  it stands as tall as a man, and a tilted one holds its gun up two metres). One log line: "Land battle:
+  old wrecks: 20 laid of 40 the scrap men left of 40 burnt out here, 1 month since the last ...: 10 GER (...); 10 USA
+  (...); 2 turrets thrown, 1 track run off; 5 groups along the old lines, ...; N meshes, N points, made in N s" (the
+  stand-in's "20 laid of 40 asked (the stand-in: none taken by the scrap men), 6 months since they burnt ...").
+- **Test**: `Tools/land_hulk/run.sh [recording.json ...]` (`LAND_HULK_OUT`). Built with `-Wconversion` by both
+  compilers; the clang build must lay every wreck where the gcc build laid it. On every recording, laid as the scene
+  lays them: the same twice (every wreck, her pose and her near, far and patch meshes, hashed); every point of every
+  wreck read where it lies, none on a lane, a bank, a house, a wall, a yard or garden, a wood, water, marsh or standing
+  corn, none over a cattle's path; 8 m from every vehicle's way, 1.5 m from every man's; no half-metre square held by
+  two; every wreck and thrown turret settled on the ground, not floating; fewer as the months go (twenty burnt out:
+  20, 17, 10, 3 and 1 at 1, 6, 12, 24 and 60 months); the nats' shares (GER 30, USA 10: 15 and 5 of twenty); the cap;
+  none with nothing asked or on a live battle's open; the key read ten ways; the meshes finite and whole; the rust
+  spreading over the same twenty wrecks as they age; and on an old field (two battles' scars and old ruts laid first)
+  none on an old hole or rut. Since the review of 24 November: every point of every scorched patch read where it lies,
+  as her own are; the grass kept out of every hull's footprint, every 10 cm; each thrown turret clear of her own hull
+  and run-off track, its gun not through her hull, and its box for the camera on the ground; the battle's own models
+  drawn only for wrecks of its own month; the stand-in laying 12 of 12 at 18 months (the key's reading 4) and 20 of
+  40; with the field telephones made from the battle (six wires), none within 0.5 m of a wire (on the steppe, laid
+  without them, one lay over one); and the same field with snow lying 0.9, six months on: the patch the field's own
+  colour (off by 0, against 12 and 17 in summer), what faces up on her white. It paints `placement_<recording>` (the
+  field from above, the wrecks drawn to scale from their own meshes, ringed by nation, four close looks) and
+  `look_<recording>` (four wrecks a week, a month, six months, a year and a year and a half on). Pictures:
+  `/mnt/project-files/battle-fx/old-wrecks/` (`placement_r1.png`, `placement_r1_prokhorovka.png`, `look_r1.png`,
+  `look_r1_prokhorovka.png`), with the look's rules in `look_rules_r1.txt`.
+  Since round 2 of the look (the art director's notes of 24 November 14:34Z): the look sheet draws each wreck at its
+  column's age (round 1 drew an earlier battle's wreck, 30 in 100 of them, months older than her column: its "a week
+  on" Tiger and Sherman were some 7 and 4 months old), and
+  **measures it as she does, in the picture's own sRGB**: each pixel tagged with what the dressed point nearest it shows
+  (`Dressing::Coats`: soot, scorched, bare, flash rust, old rust, her paint, charred rubber, wood or glass, a track's
+  links, snow; her patch's ash, burnt grass, rim, fuel, brown, lush), and for each wreck at each age, and all four
+  pooled against her numbers, the share of her lit faces (the sun's light on them 0.75 and over) each takes and its
+  median colour, and her patch's (a table in the log and `look_<recording>.csv`). It fails where a week's soot is off
+  a third to two thirds of her lit faces, orange more than a tenth of them a week on, rust less than a tenth a month on,
+  or old rust redder than 2.25 times its blue. Every nation's lorry and half-track (twenty laid of each, GBR, SOV, ITA,
+  JAP, GER, USA) dressed and counted against her own model: every point of canvas, leather, rope, cloth, torn or skin
+  burnt away, every point of glass gone, every tyre to its rim, the tilt's hoops still standing, the lorry's bed's
+  planks laid and some but not all burnt through. Each run-off track folded back on itself once, snaking (off its own
+  smooth line, the mean of 1.5 m either side, at least 4 cm, or turning from one way to the other), its links' inner
+  edges off her footprint by half her own track's width (her road wheels), and none of its points through the ground.
+  It paints `track_<recording>` too: each run-off track of the fresh field from above and from low on its side, a week
+  on. Pictures: `/tmp/claude-0/ad-round/wrecks/` (`look_r2.png`, `look_r2_prokhorovka.png`, `placement_r2.png`,
+  `placement_r2_prokhorovka.png`, `track_r2.png`, `track_r2_prokhorovka.png`).
+  Since the review of round 2: each pixel also by its colour alone (`Hue`: dark, orange, brown rust, pale grey-buff,
+  grey, other, the review's own classes) beside its tag, and three look sheets, not one: `look_` (her near level, the
+  sun from the north-west), `look_far_` (her far level, as the game shows her beyond 140 m) and `look_side_` (her near
+  level with the sun from the south-east, on the sides the camera sees, where the first sheet shows only shade). It
+  fails, besides round 2's marks, where a week on more than 8 in 100 of her lit faces are orange by colour, or more than
+  a tenth flash rust by tag; where the far level's flash, orange, scorched paint or month's rust strays from the near
+  level's in the picture (5, 5, 6 and 8 in 100), or, over all twenty by area facing up, its soot or scorched-and-orange
+  by more than 6 (round 2's far level: a third flash orange beside the near's 3 in 100); where her sides in the sun
+  show less than a tenth her own paint a week on or less than 2 in 100 rust runs a month on; and where her patch's ash,
+  burnt grass and fuel come within 15 of one another, measured from straight above on all twenty (`scorch_<recording>`,
+  each with her hull over her patch: the look sheets' low camera hides the fuel behind her when it lies on her far
+  side). It prints each wreck's flash rust a month on by tag and by colour, and every run-off track's doubled end must
+  lie off the strip under it by 15 in 100 of its width or more (round 2's lay on top, not seen from above), the
+  half-track's short strip turning at least once. Every nation's wreck read by her paints' stems: the M3's canvas seats
+  burnt away, the T-34's logs among her charred wood, 95 in 100 of a tank's wood points dressed as wood; each thrown
+  turret's open ring a hole within her turret's own base (0.8 to 1.0 of its reach); and each lorry's floor found by the
+  test itself (her wood's biggest flat facing up): her bed and her planks' tops on it within 2 cm, at least 0.8 of it
+  taken off and laid again, 0.9 of her other wood facing up (her benches) kept, a fifth to 0.45 of her planks gone. It
+  paints `lorry_<recording>` (the first Soviet lorry of a stand-in yard of twenty, a week on, from above and from the
+  south-east). Pictures: `/tmp/claude-0/ad-round/wrecks/final/` (`look_`, `look_far_`, `look_side_`, `scorch_`,
+  `lorry_`, `track_` and `placement_` of `normandy-1944` and `prokhorovka-1943`, PNG, the measures in `gcc.log` and
+  `look_<recording>.csv`).
+  Since the art director's last round (round 2 read as camouflage): her lit faces' hard edges, each pair of side-by-side
+  pixels on them (across and down, both lit) whose sRGB luma (Rec. 709's weights) steps by more than 45, as a share
+  of all such pairs, and the mean step, for each wreck at each age and all four pooled (the log and
+  `look_<recording>.csv`'s "lit edges" rows). A plate's own outline against its shade counts too, so it is read
+  against another build's, not against none: all four on Normandy near, a week on to a year and a half, round 2's
+  0.9, 0.9, 0.9, 0.5 and 0.5 in 100 (mean step 5.7, 5.8, 5.7, 4.8, 4.5), after it 0.3, 0.3, 0.2, 0.0 and 0.0 (3.6,
+  3.5, 2.6, 2.1, 2.0) and since that round's reviews 0.2, 0.2, 0.2, 0.0 and 0.0 (3.7, 3.7, 2.4, 2.1, 2.0: the soot's
+  grain and the rusts' mottles step a little more, softly); on Prokhorovka round 2's 0.9, 0.8, 0.7, 0.4, 0.3 (4.8,
+  4.8, 5.0, 4.1, 3.8), after it 0.6, 0.5, 0.2, 0.1, 0.0 (3.1, 3.1, 2.0, 1.7, 1.5) and now 0.6, 0.4, 0.2, 0.1, 0.0
+  (3.5, 3.4, 2.0, 1.7, 1.7). Pictures: `/tmp/claude-0/ad-round/wrecks/final2/` (the round before in
+  `/tmp/claude-0/ad-round/wrecks/soft1/`, round 2's with the same measure in `/tmp/claude-0/ad-round/wrecks/before_soft/`).
+  Since the art director's pass (24 November 21:01Z) and its two carries, each measured (the log and
+  `look_<recording>.csv`), and since its fix round (the reviews of the first try: its sunlit sides unchecked, its
+  mottle lost, its paint left high on her open plates and over her burnt steel, its darker runs stripes): a month
+  on, her flash rust lit, by its brightest (the 2 in 100 of its pixels brightest by value, their median colour;
+  each channel's own 98th in 100 of the pixels that are the flash rust alone, every corner of their triangle so, not
+  its blends at her plates' edges; and the red's and the green's 98th of all its pixels, its blends too, their blue
+  the pale paint's beside them), on her sunlit tops on the first sheet near and far and on her lit faces on the
+  side sheet, within 5 of 150,85,45 in each channel for each of the four with 30 such pixels and more and for all
+  four: Normandy's all four near, far and side 189,93,42, 183,92,41 and 189,94,42 at 1e56500d, 148,78,37, 145,76,37
+  and 153,81,39 at the first try (its Tiger's side 158,83,40), now 145,77,36, 142,75,36 and 150,80,39 (the Tiger's
+  side 154,81,39 the most); Prokhorovka's 188,94,42, 175,88,41 and 192,96,42, then 150,79,38, 146,78,37 and
+  150,79,38, now 148,78,37, 141,75,36 and 147,78,37. Its median lit near, all four, within 118 to 142, 62 to 78 and
+  30 to 46 (1e56500d's 131,73,39 and 126,70,38, now 119,69,36 and 120,68,35: the price of holding its brightest
+  down), and mottled: as painted (before the light, the flash rust alone) its red's 90th in 100 at least 11 over its
+  median (1e56500d's 35 and 40, the first try's 9 and 7, now 14 and 13). A week on the plates' edges by colour some
+  138,78,45 and 145,82,47 (1e56500d's 144,81,46 and 144,82,47; the first try's 124,72,42 and 133,77,45, dull). And
+  from half a year, on the side sheet, every pixel of hers lit or in shade, by where the weather reaches her (her sky
+  faces, facing up 0.5 and more; low on her, her lower half; her open sides, the rest): her paint left (her own or
+  scorched) low on her kept to 0.8 of its share a month on and 15 in 100 and more over her open sides', her open
+  sides' no more than 8 in 100 over theirs a month on, her own paint on her sky faces no more than 2 in 100 over its
+  share a month on, lit low on her her paint left 12 and more in luma over her old rust there, and her runs on her
+  lit sides whose luma lies 10 and more under her old rust's median there 1.5 in 100 of her lit sides and more; all
+  four, at six months, a year and a year and a half. All four on Normandy: her paint left low on her 69 in 100 a
+  month on, then 67, 59 and 56 (1e56500d's 70, 68, 55 and 50; the first try's 70, 68, 58 and 55), on her open sides
+  36, then 31, 21 and 20, her own paint 4 in 100 of them (1e56500d's 30, 19 and 17, her own 5; the first try's 40, 31
+  and 30, her own 20), lit low on her some 94,81,61 (luma 82, 81 and 81) against her old rust's 80,51,37 (56, 57 and
+  57); her darker runs 3.5, 4.2 and 4.3 in 100 (1e56500d's 0.0, 0.1 and 0.1; the first try's 2.4, 2.9 and 2.7). On
+  Prokhorovka low on her 70, then 70, 61 and 58 (1e56500d's 71, 68, 55 and 51), her open sides 30, 20 and 18
+  (1e56500d's 30, 18 and 15; the first try's 41, 32 and 31), lit low on her luma 77, 74 and 74 against 58, 55 and
+  54; her darker runs 2.0, 2.0 and 1.9 (1e56500d's 0.1, 0.0 and 0.0). Some wrecks have few darker runs (the Soviet
+  lorry 0.4 to 0.5 in 100, her hoops standing as her top over her bed's sides, so no seam there; a Panzer IV on each
+  field 0.7 to 1.1). The hard edges within 0.1 in 100 of 1e56500d's for every wreck at every age (the most, 0.07 more, the
+  Sherman near at six months): all four on Normandy near 0.23, 0.19, 0.18, 0.05 and 0.04 in 100 (1e56500d's 0.23,
+  0.22, 0.16, 0.05 and 0.03), on its side sheet 1.02, 0.90, 1.10, 0.71 and 0.59 (0.99, 0.95, 1.12, 0.67 and 0.56);
+  Prokhorovka near 0.54, 0.37, 0.19, 0.04 and 0.03 (0.55, 0.43, 0.23, 0.06 and 0.03), side 2.03, 1.52, 0.60, 0.14
+  and 0.08 (2.01, 1.80, 0.62, 0.15 and 0.09). Pictures: `/tmp/claude-0/ad-round/wrecks/final3/` (the first try's in
+  `/tmp/claude-0/ad-round/wrecks/carries1/`, 1e56500d's in `/tmp/claude-0/ad-round/wrecks/before_carries/`).
+- **Not yet.** Wrecks on a live battle (none: no tracks at its open); the guns' and soft vehicles' own wrecks beyond the
+  half-tracks and lorries; a tank burnt out on her side or nose-down in a ditch.
+- **Owed.** The Mac compile (the names to check: `LayOldWrecks`, `ShowOldWrecks`, `OldWreckNear`, `OldWreckFar`,
+  `OldWreckShownNear`, `FLandBattleState::OldWrecks` and `OldRutWays`, with `LandParts::GroundMesh`,
+  `UStaticMeshComponent`'s `SetRelativeLocation` and `SetVisibility`, `FParse::Value` and `Param`; and since the
+  review of 24 November, `LandHulk::Ask::bAsLaid`, `LandHulk::Hulk`'s `TurretYaw`, `TurretBoxLo`, `TurretBoxHi`,
+  `TurretMuzzle` and `bTurretGun`, and `LandSight::Machine`'s `Root`, `Heading`, `HullLo`, `HullHi`, `bTurret`,
+  `bMuzzle` and `Muzzle` for the thrown turret; and `LandHulk::Ask::Per` with `Recording::OldWreckPer` for the battle's
+  scale), the art director's look of her two carries (the look passed at 1e56500d, 24 November 21:01Z), and the 45 fps
+  gate with twenty wrecks
+  laid. The Mac shots, with `-TheaterLandOldWrecks=20 -TheaterLandOldWreckMonths=1` against without on Normandy, then
+  `=6` and `=18` months (the same twenty, aged): from 300 m up over the old lines; a group from 40 m and from a man's
+  height; a thrown turret and a run-off track close to; a wreck as the eye crosses 140 m (her near and far levels
+  should not jump); a half-track's burnt tyres; and the patch's edge against the ground's far tile (it is laid 2 cm
+  over the near ground's height, as a hole's edge is; a far tile's coarser mesh may differ). Since the review: a
+  winter field with snow lying (a recording whose field has snow, 0.5 and over) with `-TheaterLandOldWrecks=20
+  -TheaterLandOldWreckMonths=6` (the patches lost under the snow, snow on the decks) and `=0.2` months (a fresh one
+  black through it); the grass round a wreck's corners from a man's height (it should stand round her and not through
+  her); a thrown turret on its side, from the camera at a man's height (the camera kept out of it and its gun); and
+  with `-TheaterLandPhones` on, the wires laid round the wrecks. And once the campaign's row is on (sgfei1 b0a47250,
+  "Old wrecks" off by default), one campaign battle on a field fought over before, its log line saying how many were
+  drawn for how many burnt out at the battle's scale ("one for every 7.5"). Since round 2 of the look: the Mac compile
+  of `LandKit::Mesh::Paints` and `LandKit::Model::PaintNames` (filled in `Model::Load`; the scene's own calls,
+  `Yard::Dress(K, bNear, M)` and `Yard::Patch(K, M)`, are as they were, the new `Dressing` note left out); the cost
+  against the 45 fps gate and the battle's open. Measured here (the test's twenty, the cloud machine, one core): round 1
+  dressed a wreck's near level in some 22 to 27 ms (1.24 to 1.31 million triangles for twenty), round 2 in some 66 to
+  90 ms (1.96 to 2.06 million, its patches 87,360 triangles for twenty, round 1's 6,160); since its review some 48 to
+  56 ms (1.57 to 1.60 million, 20 to 27 in 100 over round 1; the coat halved to 0.35 m, and the fire's noises read
+  only where they decide anything), since the last round some 55 to 60 ms (the same runs back to back, 49 to 52
+  before it, 10 to 17 in 100 over: the fire's places' reaches read for each point, the soot's streaks and grain, the
+  flaking's rag, the rust's mottles and runs, her height map's tops read once a cell), and since the art director's
+  carries and their fix round some 5 in 100 over 1e56500d on Normandy and 3 on Prokhorovka by the instructions her
+  dressing runs (callgrind, both levels for the twenty: 66.8 billion against 63.7, and 60.7 against 58.8), the clock
+  as noisy as the shared machine's other work made it (sixteen runs back to back, fastest and middle: 64 to 72 ms on
+  Normandy against 1e56500d's 63 to 70, 57 to 66 on Prokhorovka against 58 to 69; the first try's quieter runs 57 to
+  59 and 52.5 to 54 against 54 to 56 and 51 to 52): the rust's stain round the steel, her paint left in her shelter
+  and the darker runs, each read only where it could show), the far level some 7.5 to 9.5 ms
+  (7 to 8 before it; 170,000 to 176,000 triangles for twenty, round 2's
+  107,000 to 113,000: it is halved to 0.7 m now) and the patches 48,720 triangles. So `LayOldWrecks` with twenty
+  makes their meshes in some 1.2 to 1.4 s here (round 1 0.5, round 2 1.5 to 2.1): the Mac to time it at the battle's
+  open (its log line's "made in N s") and the frame time with twenty near levels in view (`stat unit`, against
+  round 1's). And the shots, with
+  `-TheaterLandOldWrecks=20` at `-TheaterLandOldWreckMonths=0.25`, `=1`, `=6` and `=18` on Normandy: a group from 40 m
+  and from a man's height (the patchwork: soot, chalky grey-buff, bare grey steel, orange only on the edges a week
+  on; the flash rust a month on; the old brown rust and the flaking paint at six months and a year and a half); a
+  lorry close to (the Soviet or British lorry on Prokhorovka: bare hoops, charred planks with gaps, no glass, rims);
+  a run-off track close to from above and from a man's height (snaking, folded back once, flat on the ground and the
+  patch, clear of her road wheels); and the patch a week on (ragged, ash black at her engine's end, the brown rim, the
+  fuel's stain) against six months and a year and a half on (the green halo). Since the review of round 2: a group
+  from beyond 140 m a week and a month on (her far level: soot, grey-buff and bare grey, not one orange coat; the
+  edges' orange is gone there); a wreck's sunlit side a month on (`-TheaterLandOldWreckMonths=1`, the sun on the side
+  the camera sees: her own paint low on it, the flash rust in runs down it); the Soviet lorry on Prokhorovka from
+  straight above a week on (her floor's planks with gaps showing the ground under her, her benches kept); a thrown
+  turret's open ring close to (a black hole inside a steel lip, smaller than her turret's base); a half-track's
+  thrown track from above (snaking, its fold showing); and the patch from above a week on (the ash, the burnt grass,
+  the rim and the fuel's dark pool told apart, as `scorch_<recording>` shows them).
 
 ## A town or a city fought over (release 2, off until passed)
 

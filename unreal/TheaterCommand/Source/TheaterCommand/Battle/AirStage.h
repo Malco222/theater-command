@@ -11,6 +11,7 @@
 class ACameraActor;
 class FJsonObject;
 class UMaterialInstanceDynamic;
+class UTexture2D;
 class UProceduralMeshComponent;
 class UTheaterStillMesh;
 
@@ -65,6 +66,37 @@ public:
 	 */
 	bool Raise(const FString& Key, const FVector2D& Aim, double Turn, const FVector2D& Target, double InUnitsPerMetre, FBattleEffects* InEffects);
 
+	/**
+	 * The open sea alone, for a fleet action (ASeaBattle): no stage file and no land, the sea's grid round Middle (board
+	 * metres), the sun where the scene puts it (degrees: its bearing clockwise from north, and its height). The board
+	 * is the stage's own, unturned, so a ship is laid at her board point as it is. Seed: the battle's, for the ships'
+	 * looks. Raised again, it first takes down what it put up, as Raise does.
+	 */
+	bool RaiseSea(const FVector2D& Middle, double InSunAzimuth, double InSunElevation, double InUnitsPerMetre, FBattleEffects* InEffects, uint64 Seed);
+	/**
+	 * The fleet action's own sea, before RaiseSea (Brian, 21 November 23:37Z: "make the water more realistic"): the wind
+	 * the waves run with (Downwind, radians: the board's heading it blows toward; Speed, metres a second at 10 m), so the
+	 * moving sea's waves, chop, whitecaps and their foam are the wind's own (the art director's fleet water targets,
+	 * 23:44Z), and the sky's colour at the horizon (linear), which the sea mirrors when looked at low across it; and the
+	 * red and blue gains of the grade the camera shows it through (the battle grade's own, 1.08 and 0.87, as made), so
+	 * the water's paint keeps its colour on the screen under another.
+	 */
+	void SetSeaWind(double Downwind, double Speed, const FLinearColor& SkyAtHorizon, const FVector2D& GradeRedBlue = FVector2D(1.08, 0.87));
+	/**
+	 * A ship under way (the fleet action's, each frame): where she is on the board (metres), her heading (radians
+	 * clockwise from north, the board's), her heel (degrees, plus: her starboard side down) and her pitch on the swell
+	 * (degrees, plus: her bow up). Her looks' list, trim and settle, and her end once she goes down, are laid over it
+	 * by Advance. A ship never steered lies where she was laid, as before.
+	 */
+	void Steer(int32 Id, const FVector2D& At, double Face, double Heel, double Pitch, double Heave = 0.0);
+	/**
+	 * Whether the player sees ship Id (the fleet action's, each frame: an enemy boat not yet found is hidden, SeaShow's
+	 * SetMine). Hidden, her hull (and her bow's half) is not drawn, she gives no deck to stand a burst on and no funnel
+	 * tops; she is still steered, so found she is where she should be, and what her looks lit before rides on with her
+	 * (it goes under with her, as on any boat dived). The air scene never hides a ship.
+	 */
+	void SetShown(int32 Id, bool bShown);
+
 	/** The ships of the battle, as they lie at the start. A ship already laid is moved, not made again. */
 	void SetShips(const TArray<FStageShip>& Ships);
 	/** The same from the view's JSON: view.ships = { guns, pieces: [{ id, cls, nat, name, x, y, face, dock }] }. */
@@ -73,8 +105,17 @@ public:
 	/** air:ship-hit: a bomb or torpedo strikes ship Id. Strike: "torpedo", "dive", "level" or "bomb". */
 	void Hit(int32 Id, const FString& Strike, double Now);
 	/** air:ship-sunk: ship Id goes down. How: "settle", "sink", "capsize", "explode", "burn" or "break". bBig: the
-	 * first battleship or carrier to blow up (the biggest blast of the battle: 238(5)). */
-	void Sink(int32 Id, const FString& How, bool bBig, double Now);
+	 * first battleship or carrier to blow up (the biggest blast of the battle: 238(5)). End, where given ("bow",
+	 * "stern"), the way she goes over her look's (the sea scene's boat her crew scuttled after she struck: by the stern);
+	 * none, her look's, as before. */
+	void Sink(int32 Id, const FString& How, bool bBig, double Now, const FString& End = FString());
+	/**
+	 * A bomb burst on the land at WorldAt: an oil tank it lands on or beside (inside its wall or within 6 m of it) goes
+	 * up, once: the effects kit's fuel ball off its roof (its width, 15 to 25 m) and the fire that burns on after it
+	 * (30 minutes), as Midway's tanks on Sand Island burned on 4 June 1942. Each ball's place (world) and width
+	 * (metres) is added to OutBalls, for the camera's rule 13. Returns how many tanks went up.
+	 */
+	int32 BombOnOil(const FVector& WorldAt, TArray<TPair<FVector, float>>& OutBalls);
 
 	/** Once a frame, on the battle's clock (seconds). */
 	void Advance(double Now);
@@ -93,6 +134,45 @@ public:
 	/** Ship Id's length (metres), the level way her bow points (world), and whether she lies in harbour (land within
 	 * two kilometres); false if there is no such ship. */
 	bool ShipLie(int32 Id, double& OutLong, FVector& OutBow, bool& bOutHarbour) const;
+	/** The model ship Id is drawn with: the battle modeller's file ("Ships/Submarine_GER"; empty: the kit's code-built
+	 * miniature) and the stretch fitting it took (along, across, up). False for a ship not laid. */
+	bool ShipModel(int32 Id, FString& OutFile, FVector& OutStretch) const;
+	/** The deck under a world point where it lies over a ship of the stage (her waterline where she lies now, settled,
+	 * and her deck's height above it, as her looks lay a burst): the effects kit's ground there, so a hit not on armour
+	 * bursts on her deck, not at the sea inside her hull. False off every ship, and over a ship going down. */
+	bool DeckUnder(const FVector& WorldAt, FVector& OutDeck) const;
+	/** Ship Id's funnels, bow to stern, where her model has them: each the middle of its top where she lies now (world,
+	 * X Y Z) and its width there in metres (W), for the effects kit's funnel smoke. False if her model has none the stage
+	 * can find (it finds them by their dark caps), or she is going down or gone. */
+	bool FunnelTops(int32 Id, TArray<FVector4>& Out) const;
+	/** Ship Id's model socket Name ("muzzle.turret.A.1": her forward gun's muzzle) where she lies now (world: her hull as
+	 * it is drawn, heeled, trimmed and on the swell), and the way out of it (world, of length 1): for the muzzle of a gun
+	 * the stage draws trained (TrainGun), its barrel's end as it is laid and run back now and the way its bore points;
+	 * for any other socket, its place on her model and the way along her keel from her middle toward that end of her.
+	 * False for a ship drawn with the kit's code-built miniature (no model file), a model without the socket, or a ship
+	 * going down, gone or out of the player's sight. */
+	bool SocketAt(int32 Id, const FString& Name, FVector& OutWorld, FVector& OutWay) const;
+	/**
+	 * A gun of ship Id's model that trains (a boat's deck gun, a merchant's bow or stern gun: Mount, the model's
+	 * "turret.A" or "turret.Y"), laid as the show lays it: Bearing degrees off her bow (clockwise, 0 ahead, 180 astern),
+	 * the barrel's Elevation (degrees up), and Back, how far it has run back firing (0 run out, 1 its whole slide). Its
+	 * mount turns no further than the model's limits from where it lies stowed. Drawn only where she is drawn with the
+	 * battle modeller's model and it has the mount; else nothing.
+	 */
+	void TrainGun(int32 Id, const FString& Mount, double Bearing, double Elevation, double Back);
+	/**
+	 * A place on ship Id's deck by her gun's mount (Mount as TrainGun's): Fore metres toward her bow and Right toward her
+	 * starboard side from the mount's middle, Up metres over her waterline, where she lies now (world: her hull as it is
+	 * drawn), and her turn there (world: X along her bow, Y to her starboard, Z up). False where TrainGun draws no such
+	 * gun, or she is going down, gone or out of the player's sight.
+	 */
+	bool GunDeck(int32 Id, const FString& Mount, double Fore, double Right, double Up, FVector& OutWorld, FQuat& OutHer) const;
+	/** Ship Id gone under and not lost (a boat dived, each frame she is told down or under): what her hits' looks had still
+	 * to come gives way and their fires go out under the sea (FShipLooks::PutOut); her pose stays. */
+	void PutOut(int32 Id, double Now);
+	/** Where ship Id broke in two: the sea's face over her cut where she lies now (world) and when her end came (the
+	 * scene's seconds, as Sink was given them); false unless she has broken in two. */
+	bool BreakOf(int32 Id, FVector& OutWorld, double& OutAt) const;
 	/** The way toward the sun at the hour of the record's attack, in world axes. */
 	FVector TowardSun() const;
 	/**
@@ -132,6 +212,7 @@ private:
 		FString How;
 		double SunkAt = -1.0;
 		int32 Hits = 0;
+		double FirstHitAt = -1.0; // the battle's time of her first hit (-1: none yet): how long a ship ablaze has burned
 		bool bGone = false;
 		// Her end's details, from her look (FShipLooks::Sink; the numbers' How kept): the side she rolls or lists to (0:
 		// by her id, as before), her end's pace (its times multiplied by it), "bow", "stern", "even", "fore" or "aft",
@@ -139,6 +220,35 @@ private:
 		// amidships, minus toward the bow).
 		double Side = 0.0, Pace = 1.0, Roll = -1.0, Cut = 0.0;
 		FString End;
+		// Under way (Steer): her heel and pitch as the model takes them (degrees: a list plus lowers her model's +Y
+		// side, her port side once turned; a trim plus puts her bow down), laid over her looks' and her end's.
+		bool bUnderWay = false;
+		double WayList = 0.0, WayTrim = 0.0;
+		double WayHeave = 0.0; // metres the swell lifts her from her waterline (minus: lets her fall)
+		double NextChurn = -1.0; // when the sea next boils round her as she goes (MoveShip)
+		// The battle modeller's model she is drawn with ("Ships/Destroyer_GER"; empty: the kit's code-built one), the
+		// stretch fitting it took, and whether her hull holds its far model too (section 1) and which is shown.
+		FString File;
+		FVector Stretch = FVector::OneVector;
+		bool bTwoMeshes = false;
+		bool bNearShown = true;
+		bool bHidden = false; // out of the player's sight (SetShown)
+		// Her guns that train (TrainGun): each mount of her model (its "turret.A", a merchant's "turret.Y" too) and its
+		// barrel cut out of her hull's meshes and drawn on their own, the mount on her hull at its pivot and the barrel on the
+		// mount at its own, near and far as she is (bFar: each has the far model's too). Kept alive by ShipMeshes.
+		struct FGun
+		{
+			FString Part;
+			TObjectPtr<UProceduralMeshComponent> Mount = nullptr;
+			TObjectPtr<UProceduralMeshComponent> Barrel = nullptr;
+			FVector BarrelAt = FVector::ZeroVector;                   // the barrel's pivot on the mount (units)
+			FVector TurnAxis = FVector::UpVector, LiftAxis = FVector::RightVector, Slide = FVector::ZeroVector; // the model's
+			double Rest = 0.0, Least = -180.0, Most = 180.0;          // degrees off her bow, and the mount's turn either way
+			double LiftLeast = -5.0, LiftMost = 35.0, SlideMost = 0.0; // degrees; metres
+			FVector Muzzle = FVector::ZeroVector, Bore = FVector::ForwardVector; // on the barrel (units), and the way it points
+			bool bMuzzle = false, bFar = false;
+		};
+		TArray<FGun> Guns;
 	};
 
 	/** How far from the raid's aim a stage's land may lie and be drawn (metres); past it, land and ground are left out. */
@@ -177,6 +287,29 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> SeaInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> SteelInk;
+	/** The moving sea's slopes (CampaignTextures::MakeWaterBumps), made once, for M_StageSea. */
+	UPROPERTY()
+	TObjectPtr<UTexture2D> SeaRipples;
+	/** Its gusts and the surf's sets (CampaignTextures::MakeWaves: the swell, red, and the slow unevenness, alpha). */
+	UPROPERTY()
+	TObjectPtr<UTexture2D> SeaWaves;
+	/** Its whitecaps (SeaFace::MakeFoam), made once. */
+	UPROPERTY()
+	TObjectPtr<UTexture2D> SeaFoam;
+	/** Its shore: where the water lies calm, in a lee, open to the ocean, and how far from the edge (SeaFace::MakeShore),
+	 * made from this stage's land, reef and works when it is raised. */
+	UPROPERTY()
+	TObjectPtr<UTexture2D> SeaShore;
+	/** Where the shore picture lies on the stage (metres: its west and south edges and its side), as SeaFace::MakeShore
+	 * laid it; the sea and the shallows carry where each of their points falls on it as their first texture
+	 * coordinate (ShoreAt). */
+	double ShoreWest = -1.0, ShoreSouth = -1.0, ShoreSpan = 2.0;
+	/** The sea's wind (SetSeaWind; Raise keeps Pearl's trade wind): the true heading its waves and long patches run
+	 * toward (degrees), its speed (metres a second; 0, the sea as made for the trade wind), how far the open sea's long
+	 * patches tilt its face (60 as made: a low eye squeezed their tilt into stripes), and the sky it mirrors. */
+	double SeaDownwind = 250.0, SeaWind = 0.0, SeaPatchTilt = 60.0;
+	FLinearColor SeaSky = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	FVector2D SeaGrade = FVector2D(1.08, 0.87);
 
 	TMap<int32, FShip> Ships;
 	/** How each hit on a ship looks, and the details of her end (Battle/Fates). */
@@ -184,16 +317,31 @@ private:
 	/** The oil columns burning, by ship: how much each matters (StageParts::OilRank). */
 	TMap<int32, int32> OilLit;
 	static constexpr int32 MostOilFires = 8;
+	/** The oil tanks (Tanks' rows) a bomb has set alight (BombOnOil): each goes up once. */
+	TSet<int32> TanksAlight;
 	FBattleEffects* Effects = nullptr;
 	TUniquePtr<FBattleEffects> OwnEffects; // the stage test's own
 	FRandomStream Shown = FRandomStream(238);
+	/** Each ship's funnel tops on her fitted model (her hull's own frame, in units; W the width in metres), bow to stern. */
+	TMap<int32, TArray<FVector4>> FunnelsOf;
 
 	bool ReadStage(const FString& Key);
 	void BuildGround();
 	void BuildWorks();
 	void BuildSea();
+	/** The moving sea (M_StageSea) for the sea and the shallows, its waves laid along the trade wind, gusts and
+	 * whitecaps over it, calm where the shore shuts it in (bShore: the stage's land is drawn, so its shore is worked
+	 * out; else the open sea everywhere); null where the material has not been built yet (Tools/build_content.sh), or
+	 * with -TheaterFlatSea. */
+	UMaterialInstanceDynamic* MovingSea(bool bShore);
+	/** Where a stage point (metres east, north) falls on the shore picture: M_StageSea reads the picture there, from the
+	 * mesh's own first texture coordinate (the Mac's release 2 check: placed from the world's position on the GPU, the
+	 * picture missed Pearl Harbor, and the lochs drew whitecaps and no green). */
+	FVector2D ShoreAt(double East, double North) const;
 	void LayShip(const FStageShip& Given);
 	void MoveShip(FShip& Ship, double Now);
+	/** Each ship's near or far model by how far the camera is from her (Advance). */
+	void ShowNearOrFar();
 	void Blast(FShip& Ship, bool bBig);
 
 	FVector2D StageToBoard(const FVector2D& Stage) const;

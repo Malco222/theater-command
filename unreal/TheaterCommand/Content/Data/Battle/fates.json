@@ -26,7 +26,7 @@
     "land": { "light": "light", "mortar": "mortar", "field": "gun75", "howitzer": "how105", "heavy": "how150", "bomb": "bomb250", "smallarms": "grenade" }
   },
   "glances": {
-    "sea": { "shell_medium": "gun203", "shell_light": "gun127" },
+    "sea": { "shell_heavy": "gun356", "shell_medium": "gun203", "shell_light": "gun127" },
     "land": { "light": "gun50", "field": "gun75", "howitzer": "gun75", "heavy": "gun88" }
   },
   "ways": [

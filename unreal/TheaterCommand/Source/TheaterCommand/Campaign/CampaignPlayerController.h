@@ -3,12 +3,16 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "Campaign/CampaignView.h"
+#include "Campaign/EdgeNews.h" // (Release 2, news at the map's edge: merge by hand)
 #include "CampaignPlayerController.generated.h"
+
+class FCampaignMapData;
 
 class ACampaignMapActor;
 class ACampaignCameraPawn;
 class AArmyPiece;
 class FCampaignSession;
+class FJsonObject;
 
 /** What the panel shows about the territory the player has clicked. Worked out once, when the selection changes. */
 struct FRegionPanelInfo
@@ -45,6 +49,14 @@ struct FRegionPanelInfo
 	FText OptionsTitle = FText::FromString(TEXT("PROVINCE"));
 	TArray<FOrderLine> Forming;
 	FString FormingHead; // the total of what is on order here, with its breakdown
+	FCityShelves Glance; // (release 2) the AT A GLANCE page: garrison, on order here, building and repairs
+	// (Release 2; the art director's airfield spec of 24 November, item 3.) The province's airfield as a row of the panel,
+	// "Airfield  \u00B7  3 air groups based here": a click opens it. Empty where the province has none on the table.
+	FText FieldRow;
+	// (Release 2, the town card, tc.UI.TownCard.) The province's figures as tiles: what it pays a month (-1 where the
+	// rules give no figure), its industry, its worth and its works' level; and the details line without them.
+	int32 TileYield = -1, TileIndustry = 0, TileWorth = 0, TileWorks = 0;
+	FText DetailsShort;
 	int32 Revision = 0;
 };
 
@@ -63,6 +75,8 @@ struct FTrayCard
 	bool bPicked = false; // going with the army, or left behind
 	bool bCanOrder = false;
 	FText Nickname; // empty until the corps has earned one
+	FString Marked; // (release 2, the marked army) an enemy corps that took one of his towns: that town
+	bool bNew = false; // (release 2, new units ready) his corps handed over as this month opened
 	FString NoOrders; // (ruling 176(c)) why it never takes orders, in the rules' sentence
 	FText Grade; // "Veteran, 65"
 	FString KindId; // inf, arm, art, mot, cav, mtn, eng, fort: for the picture on each division's card
@@ -85,6 +99,21 @@ struct FTrayCard
 	// march with them until it takes the field, so its card takes no click, and says why in the rules' sentence.
 	bool bInTown = false;
 	FString Apart;
+	// ---- (Release 2: the battle schools.) Its button on the card (Campaign/BattleSchool): SEND TO SCHOOL, or BRING BACK
+	// while it is there; no label, no button (release 1's rules, a history scenario, an ally's corps, fortress troops).
+	FString SchoolLabel;
+	FString SchoolTip; // unlit: the rules' reason, word for word
+	bool bSchoolLit = false;
+	bool bAtSchool = false; // at the schools: it takes no orders, but its card still takes the press of BRING BACK
+	// ---- (end of the battle schools)
+	// (Release 2, breakup.ts) Its division tiles can be picked and split off (bCanBreak), or why not; the corps it could rejoin.
+	bool bCanBreak = false;
+	FString BreakWhy;
+	int32 RejoinId = INDEX_NONE;
+	FString RejoinName;
+	// (Release 2, rearguard.ts) It can be ordered to hold as a rearguard now (bCanRear), or it holds as one (bRear).
+	bool bCanRear = false;
+	bool bRear = false;
 };
 
 /** One ship of the fleet in hand, as a card. */
@@ -95,6 +124,12 @@ struct FShipCard
 	FText Role; // what it is for, in a line
 	FText Brief; // and in three words, for the face of the card
 	int32 Count = 1; // how many ships this card stands for, when the fleet has too many to show each
+	// (Release 2; Brian 23 November 2026 22:23Z: "select which units I want to move one place and ... another".) Its class
+	// (bb, cv, ca, dd, ss), its place in the tray, and whether it is left behind: a click on the card says. Only the lit
+	// ships sail; those left behind stay where they are as a squadron of their own once the order is given.
+	FString Class;
+	int32 Index = 0;
+	bool bStaying = false;
 };
 
 /** The adviser's first steps: shown at the start of a campaign, each ticked as the player does it. */
@@ -133,6 +168,19 @@ struct FNewsreelShow
 	TArray<FNewsCard> Cards;
 	int32 Index = -1;
 	double Until = 0.0; // when the story on the screen gives way to the next
+};
+
+/**
+ * (Release 2, the enemy's month near you, round 2; Brian, 24 November 2026 18:01Z: corner pings.) A stop of the watch
+ * near him, marked on the small map in the corner: where (a share of the small map's picture, as its marks are), its
+ * ink, and whether it has been seen, is on screen or is still to come (TheaterEnemyMoves::EPing).
+ */
+struct FWatchPing
+{
+	FVector2D Share = FVector2D::ZeroVector;
+	FColor Ink = FColor::White;
+	uint8 State = 2; // 0 seen, 1 on screen, 2 to come
+	int32 Order = 0; // which stop it is, from 0
 };
 
 /** The army the player has picked up: its general, and its corps as cards. */
@@ -174,6 +222,10 @@ struct FArmyTray
 	FText PendingButton; // "MARCH TO LODZ": the place clicked once, waiting for the word. Empty when there is none
 	FText Hint; // what to do next, in a line
 	FText HintLead; // (ruling 87) and what is said before it, in brass: "No moves left this month."
+	// (Release 2: splitting a stack.) How many of the army's corps, or of the fleet's ships, go with the next order, of
+	// how many could: "3 OF 4 CORPS GOING". GoingOf 0 or 1: nothing to split, and no line is shown.
+	int32 Going = 0;
+	int32 GoingOf = 0;
 	int32 Revision = 0; // goes up whenever the cards change, so the screen knows to redraw them
 };
 
@@ -216,6 +268,87 @@ struct FOpeningGroup
 	TArray<FOpeningSide> Sides;
 };
 
+/**
+ * (Release 2) A battle of your own (Brian, 24 November 18:36Z): one land or air battle, his side against the computer's,
+ * each army bought inside one treasury from the campaign's own price list (Rules/custom-bridge.ts). The page as the
+ * opening screen's fourth door draws it.
+ */
+struct FCustomChip
+{
+	FString Id;
+	FText Name;
+	FText Tip;
+	bool bOn = false;
+	bool bLocked = false; // shown, not offered (the sea, with Tip saying why)
+};
+
+/** One line of the price list: a corps or wing, or the defence's fieldworks or guns ("works"), and how many each side has. */
+struct FCustomBuyRow
+{
+	FString Kind;
+	FText Name;
+	FText Tip;
+	int32 Cost = 0; // one more of it; for "works", the next level's price
+	int32 Mine = 0;
+	int32 Theirs = 0;
+	int32 Most = 0; // works: the most levels (0: no limit but the treasury and the room)
+	bool bDefenceOnly = false;
+};
+
+/** One side of the battle on the page. */
+struct FCustomSideView
+{
+	FString Nat;
+	FText Name;
+	FLinearColor Color = FLinearColor::Gray;
+	FText Kit; // the year its kit is from: "1942 to 1943"
+	FText KitTip;
+	FText Training; // "Seasoned"
+	FText TrainingTip;
+	int32 Spent = 0;
+	int32 Budget = 0;
+	FText Room; // "4 of the 5 corps the ground has room for"
+	bool bComputerPicks = false; // its army is the computer's own pick, made again as the battle changes
+	bool bAttacks = false;
+};
+
+struct FCustomPage
+{
+	bool bReady = false; // the rules' offer is in
+	TArray<FCustomChip> Domains; // land, air, sea
+	TArray<FCustomChip> Places; // the battlefields of the kind chosen, only those that passed the art director and the Mac
+	TArray<FCustomChip> Sizes; // the treasury
+	TArray<FCustomChip> Roles; // attack, defend
+	TArray<FCustomChip> Kinds; // in the air: a bombing raid or a fight for the sky
+	FText PlaceBlurb;
+	FCustomSideView Mine;
+	FCustomSideView Theirs;
+	TArray<FCustomBuyRow> Buys;
+	FText Problem; // why it cannot be fought as it stands (TC.customCheck), empty when it can
+	bool bCanFight = false;
+	FText Last; // how the last battle of his own ended, shown when he is back at the door
+};
+
+/** (Release 2) A battle of your own: what he has chosen so far, as the rules' spec is made from it (CustomSpec). */
+struct FCustomState
+{
+	TSharedPtr<FJsonObject> Offer; // TC.customOffer, read once
+	FString Domain = TEXT("land");
+	FString Place, AirPlace;
+	FString Size = TEXT("battle");
+	FString Role = TEXT("att");
+	FString Kind = TEXT("bomb");
+	int32 Nat[2] = { 0, 1 }; // his and the computer's, as places in the offer's list of nations
+	int32 Kit[2] = { 3, 3 };
+	int32 Train[2] = { 2, 2 }; // 1 raw to 4 veteran
+	TMap<FString, int32> Buys[2];
+	int32 Works[2] = { 0, 0 };
+	bool bTheyPick = true;
+	bool bPicked = false; // his own army has been made at least once
+	FText Last;
+	bool bOpen = false; // a battle of his own is being fought
+};
+
 /** The opening screen: where a campaign can begin and as whom, and the campaign saved on this computer if there is one. */
 struct FOpening
 {
@@ -223,7 +356,7 @@ struct FOpening
 	bool bCanReturn = false; // a campaign is under way behind the screen, so it can simply be closed
 
 	// The grand campaign: any country, taken over on one of a few days, and free to make its own history after.
-	int32 Tab = 0; // 0: the grand campaign, 1: the historical scenarios, 2: the options
+	int32 Tab = 0; // 0: the grand campaign, 1: the historical scenarios, 2: the options, 3: the saved wars (release 1.5.1), 4: a battle of your own (release 2)
 	TArray<FOpeningYear> Years;
 	int32 YearIndex = 0;
 	TArray<FOpeningNation> Nations;
@@ -238,17 +371,30 @@ struct FOpening
 	TArray<FGrandLevel> Histories; // (rules version 70) the history dial's five stops, and the one picked
 	int32 HistoryIndex = INDEX_NONE;
 	bool bWorking = false; // history is being played up to the day chosen; the list of countries follows
+	FText Laying; // (tc.Speed.WarSpread) a war is being begun and laid under the opening's plate: the plate's words, else empty
 
 	// The scenarios: single campaigns in which the other nations keep to history's plan.
 	TArray<FOpeningGroup> Groups;
 	FText SavedLine; // empty when there is nothing to continue
 	// (Ruling 130.) Nothing replaces a saved campaign without first asking and naming what would be lost. The
 	// beginning that waits on the player's answer: 0 none; 1 the grand campaign, led; 2 the grand campaign,
-	// watched; 3 a scenario (its group and side); 4 FIRST COMMAND.
+	// watched; 3 a scenario (its group and side); 4 FIRST COMMAND; 5 a saved war, loaded (AskLoad, release 1.5.1).
 	int32 AskKind = 0;
 	int32 AskGroup = 0, AskSide = 0;
+	// (Release 1.5.1; Brian, 24 November 2026: "yes add save button so i can save multiple games".) The wars kept with
+	// SAVE, the newest first (the page of saved wars, Tab 3); the one just saved (its row is marked); the one waiting on
+	// ruling 130's question before it is loaded; the one whose DELETE asks on its row first; and the page's word on what
+	// was done ("Saved: Germany, July 1940.") or what went wrong.
+	TArray<FSavedWar> SavedWars;
+	FString JustSaved, AskLoad, AskDelete;
+	FText SavesNote;
+	// (Release 2; the 1.5.1 pre-check: each SAVE is a whole copy.) What the saved wars take on the disk, and the room
+	// left on it (below nothing where the computer does not say), for the page's line under its heading.
+	int64 SavesBytes = 0, FreeBytes = -1;
 	// (Rules 84.3.3; ruling 141) FIRST COMMAND's button on the title band: its words, and whether the ten are done.
 	FLessonDoor Door;
+	// (Release 2) A battle of your own, the fourth door.
+	FCustomPage Custom;
 	int32 Revision = 0;
 };
 
@@ -292,12 +438,44 @@ struct FTownPlate
 	bool bPlus = false;
 	int32 Months = 0;
 	int32 Stage = 0; // 0 the whole badge, 1 without the count and the plus, 2 the sign alone
+	// (Release 2, Brian's city at a glance.) The plate under the name: up to four marks, left to right, the garrison,
+	// the order badge above (moved down into it), what is going up and what is damaged. Close up the whole plate;
+	// from the middle distance the signs and the months alone; from far off four dots in fixed places.
+	bool bGlance = false;
+	int32 GlanceStage = 0; // 0 close, 1 middle, 2 far (the dots)
+	bool bGlanceSpied = false; // an enemy's town as his intelligence gives it: a dashed brass frame and the report's age
+	int32 GlanceAgo = -1;
+	FString GarrisonFigure; // "3", "guard", or empty where the mark is not shown
+	int32 UpMonths = -1; // the months until the next work is finished, -1 for no mark
+	int32 Damage = 0; // percent wrecked, 0 for no mark
+	bool bGlanceOrders = false; // units on order here (the order cell itself is the badge's fields above; this is its far dot)
+	bool bPicked = false; // the selected city: the plate's lit edge
 	// (Ruling 86.) Not a town: a sea gate's mark. Its holder's flag and a lamp, green or red; with Stage 0 its name
 	// too, and with Stage 2 the lamp alone.
 	bool bGate = false;
 	bool bGateOpen = true;
 	int32 Gate = INDEX_NONE;
 	FString Flag;
+};
+
+/** (Release 2, the city at a glance; the art director's spec, section 3.) One line of the paper card over a town: a mark in words. */
+struct FHoverGlanceLine
+{
+	FString Sign; // the UI kit's sign (defence, scaffold, wrench, hourglass) or an order badge's ("inf", "bmr")
+	bool bOrderSign = false; // an order badge's sign, half as wide again as it is high
+	FString Figure; // "3 div", "1 mo", "35%"
+	FString Words; // "Third Army and the guard"
+	bool bAlarm = false; // the damaged line, in the alarm's red
+};
+
+/** (Release 2) The paper card over the town under the pointer, where it wears a plate: its name, what it is, a line a mark. */
+struct FHoverGlance
+{
+	bool bValid = false;
+	FString Title; // the town's name
+	FString Kind; // "your city", "enemy city · seen 2 mo ago"
+	TArray<FHoverGlanceLine> Lines;
+	FString Foot; // "click: open the city · right-click: send the army in hand here"
 };
 
 /** The bar of a town's building plots, shown when one of the player's provinces is picked and nothing is in hand. */
@@ -401,6 +579,17 @@ struct FFaceOff
 	bool bVisible = false;
 	bool bResolved = false;
 	int32 Region = INDEX_NONE;
+	/**
+	 * (Release 1.5, Brian 23 November 05:18Z) Whether FIGHT IT YOURSELF is offered on this card, worked out once when it is
+	 * first asked (WeighFieldOffer): -1 not yet, 0 no, 1 yes. Offered only where the battlefield's look has passed its Mac
+	 * still, 45 fps and the art director (Content/Rules/fight-yourself-looks.txt) and the field can fight this attack;
+	 * everywhere else the card offers SEND THEM IN only, with no button and no failed press.
+	 */
+	int32 FieldOffer = -1;
+	/** The battlefield's look as the land battle will pick it: "bocage", "farmland+snow", "desert", ... */
+	FString FieldLook;
+	/** The corps FieldOffer was weighed for: a change of pick on the open card weighs it again. */
+	TArray<int32> FieldPicks;
 	FText Title;
 	FText OurName;
 	FText TheirName;
@@ -449,6 +638,7 @@ struct FFaceOff
 	// (The UI director, 17 November.) The verdict reads "A long shot" or worse: SEND THEM IN is then a plain button
 	// that takes a click only, and the light and Enter go to CALL IT OFF.
 	bool bLongShot = false;
+	bool bPending = false; // (tc.Speed.CardAside) the card stands and its forecast is still being worked out on the rules' thread
 	// (The UI director, 17 November.) The card shows exactly what was picked. Where that pick cannot go (guns or
 	// engineers alone, ruling 211(a)) this is the rules' sentence: it stands at the foot, there is no forecast, SEND
 	// THEM IN is not lit and takes no key, and CALL IT OFF is lit with Enter and Esc.
@@ -479,6 +669,18 @@ public:
 
 	const FRegionPanelInfo& GetRegionPanel() const { return RegionPanel; }
 	const FArmyTray& GetArmyTray() const { return Tray; }
+	/**
+	 * (Release 2: the map gets the screen; Brian, 22 November 2026.) True from the player's second month on: the frame
+	 * folds the date card to a strip, the chief of staff's list to a line, and the army tray away while nothing is in
+	 * hand. A campaign begun here keeps everything open through its first month, so that a new player sees it all; one
+	 * picked up from a save is folded from the start, since its player has played it before.
+	 */
+	bool IsFrameFolded() const;
+	/**
+	 * (Release 2.) Whether the army tray stands on the screen: while an army or a fleet of his is in hand, and, once the
+	 * frame folds, an army only looked at while its ground is still the one picked on the map.
+	 */
+	bool IsTrayShown() const;
 	const FFaceOff& GetFaceOff() const { return FaceOff; }
 	const FOpening& GetOpening() const { return Opening; }
 	const FWarPrompt& GetWarPrompt() const { return WarPrompt; }
@@ -510,8 +712,15 @@ public:
 	/** Starts the scenario chosen on the opening screen. */
 	void BeginCampaign(int32 GroupIndex, int32 SideIndex);
 
-	/** The opening screen's two pages: 0 is the grand campaign, 1 the historical scenarios. */
+	/** The opening screen's pages: 0 the grand campaign, 1 the historical scenarios, 2 the options, 3 a battle of your own. */
 	void ShowOpeningTab(int32 Tab);
+	/**
+	 * (Release 2) A press on the page of a battle of your own: "domain:land", "place:<id>", "size:<id>", "role:att",
+	 * "kind:bomb", "nat:me:1" (the next nation; -1 the one before; "them" the computer's side), "kit:me:1", "train:them:-1",
+	 * "buy:me:arm:1" (one more; -1 one fewer; "works" the fieldworks or the guns), "pick:me" (the computer chooses his army
+	 * for him, once), "pick:them" (the computer chooses its own, or lets him choose it), "clear:me", "fight".
+	 */
+	void PressCustom(const FString& What);
 	/** The options page: the game's standing choices, and a press on one of them. */
 	TArray<FGameOption> GetOptions() const;
 	void PressOption(const FString& Id);
@@ -532,6 +741,19 @@ public:
 
 	/** Picks up the campaign saved on this computer. */
 	void ContinueCampaign();
+	/**
+	 * (Release 1.5.1; Brian, 24 November 2026: "yes add save button so i can save multiple games".) SAVE on the menu
+	 * over a war: a copy of it is kept as a saved war of its own, and the page of saved wars opens on it. LOAD (the
+	 * page). A row's LOAD: where the campaign kept by itself would be written over by it and is not kept as a saved war
+	 * too, ruling 130's question comes first, with a third answer that keeps it and then loads (AnswerLoadKeeping). A
+	 * row's DELETE asks on the row first; KEEP IT is its lit answer, and Enter's and Esc's.
+	 */
+	void SaveWar();
+	void ShowSavedWars();
+	void AskToLoadWar(const FString& Id);
+	void AnswerLoadKeeping();
+	void AskToDeleteWar(const FString& Id);
+	void AnswerDeleteWar(bool bDelete);
 
 	/**
 	 * (Ruling 130.) Begins a new war from the opening screen: at once where no campaign is saved on this computer,
@@ -555,6 +777,29 @@ public:
 
 	/** True while the other nations' months are being played out in front of the player. */
 	bool IsWatching() const { return bWatching; }
+	// ---- (release 2, the enemy's month near you; Brian, 24 November 2026)
+	/** True while the watch is of the others' months near his ground only (the option "Enemy moves near you"). */
+	bool IsWatchingNear() const { return bWatching && bWatchNear; }
+	/** The heading over the watch's sentence while it is of the moves near him ("MOVES NEAR YOU · GERMANY · 1 OF 3"); empty otherwise. */
+	FString GetWatchHeading() const;
+	/** Whose month the watch is showing, for the flag beside the heading (his own, under READY FOR ORDERS). */
+	const FString& GetWatchNation() const { return CanShowReady() ? ReadyNation : WatchNation; }
+	/** (round 2, Brian 18:01Z) TAKE ME THERE: the watch ends at the stop on screen, the eye stays on it and his nearest army is put in his hand (G). */
+	void TakeMeThere();
+	bool CanTakeMeThere() const { return bWatching && bWatchNear && bTakeMeThere && TakeRegion != INDEX_NONE; }
+	/**
+	 * (Release 2, new units ready; Brian, 24 November 2026 18:30Z: "let me know when a unit has been delivered".) As his
+	 * month opens, a brass READY FOR ORDERS plate names the units handed over to him; SHOW ME (or G) takes the eye to
+	 * each in turn and puts a new army in his hand. The plate is said once nothing else holds the screen.
+	 */
+	void ShowReady();
+	bool CanShowReady() const { return bReadyNotice && !bWatching && !IsFightingLive() && ReadyUnits.Num() > 0 && ReadySaid >= 0 && ReadySaid == NoticesSaid && FPlatformTime::Seconds() < NoticeUntil; }
+	const TArray<FReadyUnit>& GetReadyUnits() const { return ReadyUnits; }
+	/** Says the READY plate now (the month's end does, once the screen is free; a picture asks for it at once). */
+	void SayReady();
+	/** G: TAKE ME THERE while the watch offers it, else SHOW ME while the READY plate is up. */
+	void PressGo();
+	// ---- (end release 2)
 	ACampaignMapActor* GetMap() const { return Map.Get(); }
 	FCampaignSession* GetSession() const;
 	/** (release 1) What an arm is, for the bigger unit card; null where the rules give none. */
@@ -579,6 +824,19 @@ public:
 
 	/** Leaves a corps of the picked-up army behind, or takes it along again. */
 	void ToggleCorps(int32 CorpsId);
+
+	/**
+	 * (Release 2, breakup.ts; Brian 24 November 2026 18:02Z: "see each individual unit ... so I can break it up".) A
+	 * division's tile on a corps' card picked to be split off, or put back; SPLIT OFF makes the picked divisions a corps
+	 * of their own where the army stands (it stays behind when the army moves); REJOIN puts a part back.
+	 */
+	void ToggleDivision(int32 CorpsId, int32 Slot);
+	bool IsDivisionPicked(int32 CorpsId, int32 Slot) const { const TSet<int32>* Set = PickedDivisions.Find(CorpsId); return Set && Set->Contains(Slot); }
+	int32 DivisionsPicked(int32 CorpsId) const { const TSet<int32>* Set = PickedDivisions.Find(CorpsId); return Set ? Set->Num() : 0; }
+	void SplitOffDivisions(int32 CorpsId);
+	void RejoinCorps(int32 CorpsId, int32 IntoId);
+	/** (Release 2, rearguard.ts) Orders one of his corps to hold as a rearguard until his next month, or stands it down. */
+	void HoldAsRearguard(int32 CorpsId, bool bHold);
 
 	/** The standing order for the army in hand on the day the enemy comes: "stand", "dig" or "back". */
 	void SetStance(const FString& Posture);
@@ -645,6 +903,10 @@ public:
 	void PressPage(const FString& Action);
 	/** The rooms open to the player now, for the buttons that lead to them: ids and labels, in step. */
 	void GetPageLinks(TArray<FString>& OutIds, TArray<FString>& OutLabels) const;
+	// (Release 2, news at the map's edge; ruling 131: merge by hand) The month's seals on the map's edge, and a press of
+	// one: the month's card opened at its row (EdgeNews.cpp).
+	const FEdgeNewsBoard& GetEdgeNews() const { return EdgeNews; }
+	void OpenEdgeSeal(int32 Seal);
 
 	/** The generals: who commands what, who is waiting, and the corps that have nobody. */
 	const FGeneralStaff& GetGenerals() const { return Staff; }
@@ -659,6 +921,8 @@ public:
 	int32 GetSackAsked() const { return SackAsked; }
 	/** The army in hand takes drafts, or keeps its veterans together and takes none. */
 	void ToggleDrafts();
+	/** (Release 2: the battle schools.) A corps card's SEND TO SCHOOL, or its BRING BACK while the corps is there. */
+	void SchoolCorps(int32 CorpsId);
 	/** On the eve of war: the army is placed as the staff advises. */
 	void PlaceByPlan();
 	bool HasEvePlan() const;
@@ -678,6 +942,8 @@ public:
 	void StopTech(const FString& Id);
 	/** Research teams of the player's with nothing to do, for the badge on the button. */
 	int32 GetIdleTeams() const;
+	/** (Release 2, the spies thread of 24 November 2026.) The number on the SPIES door: enemy agents uncovered and at large, and his agents newly at work this month. */
+	int32 GetSpiesWaiting() const;
 	/** What is still worth doing before the month is ended: the line at this place in the list, or empty. And a press on it. */
 	FString GetToDoText(int32 Index) const;
 	FString GetToDoTip(int32 Index) const;
@@ -699,6 +965,15 @@ public:
 	 * moves left this month.</>" and "<Red>Shut to your ships:</>". The marks are the box's own; nothing else is read as one.
 	 */
 	FText GetHoverTipMarked() const { return HoverTipMarked; }
+	/** (Release 2) The paper card of the city at a glance over the town under the pointer; not valid where there is none. */
+	const FHoverGlance& GetHoverGlance() const { return HoverGlance; }
+	/**
+	 * (Release 2; the art director's airfield spec of 24 November, item 2.) The four corners of the airfield a click
+	 * would open, in the window's own pixels, for its brass outline; empty where there is none.
+	 */
+	void GetFieldOutline(TArray<FVector2D>& Out) const;
+	/** (The same spec, item 3.) The province panel's airfield row: opens the picked province's airfield. */
+	void OpenSelectedAirfield();
 	/** A country's name as it is said in a sentence: "the United States", "the Soviet Union", "the Netherlands"; "Germany". */
 	static FString WithThe(const FString& Name) { return (Name.StartsWith(TEXT("United")) || Name.StartsWith(TEXT("Soviet")) || Name.StartsWith(TEXT("Netherlands"))) ? TEXT("the ") + Name : Name; }
 	/** The same at the head of a sentence: "The United States has fallen." (84.2.6) */
@@ -725,6 +1000,45 @@ public:
 	int32 StagedSea = INDEX_NONE;
 	/** (Ruling 86.) Where the gates' marks were last drawn, in the window's own pixels: told by the screen as it paints them. */
 	void NoteGateMarks(const TArray<TPair<int32, FBox2D>>& Marks, float PixelsToAUnit = 1.0f) { GateMarks = Marks; GateMarkScale = FMath::Max(PixelsToAUnit, 0.01f); }
+	/**
+	 * (The UI director's HUD read, 22 November: mend 1.) Where the airfields' badges were last drawn, each with its
+	 * airfield's province, in the window's own pixels: told by the screen as it paints them. And the province whose
+	 * badge is under the pointer, or none: the pointer on a badge points at its airfield.
+	 */
+	void NoteFieldBadges(const TArray<TPair<int32, FBox2D>>& Badges) { FieldBadges = Badges; }
+	/**
+	 * (The UI director's read of run 7, 22 November: mend 3.) Where the towns' plates were last drawn, each with its
+	 * province, in the screen's own units: told by the screen as it paints them. And the plate of the town whose paper
+	 * card is on the pointer, for the card to stand clear of; false where no card shows or its plate is not drawn.
+	 */
+	void NoteTownPlateBoxes(const TArray<TPair<int32, FBox2D>>& Boxes) { TownPlateBoxes = Boxes; }
+	bool GetGlancePlate(FBox2D& Out) const
+	{
+		if (!HoverGlance.bValid || HoverTipRegion == INDEX_NONE)
+		{
+			return false;
+		}
+		for (const TPair<int32, FBox2D>& Each : TownPlateBoxes)
+		{
+			if (Each.Key == HoverTipRegion)
+			{
+				Out = Each.Value;
+				return true;
+			}
+		}
+		return false;
+	}
+	int32 FieldBadgeUnder(const FVector2D& Pointer) const
+	{
+		for (const TPair<int32, FBox2D>& Badge : FieldBadges)
+		{
+			if (Badge.Value.IsInside(Pointer))
+			{
+				return Badge.Key;
+			}
+		}
+		return INDEX_NONE;
+	}
 	/**
 	 * Where the pointer's box should stand clear of: the mark of the gate it explains, in the screen's own units (the
 	 * units the mark was painted in, whatever the window's pixels are). False when it explains no mark.
@@ -758,6 +1072,16 @@ public:
 	/** The town's plots as a bar of pictures; whether it is to be shown; a click on a plot; and an order from its choices. */
 	const FTownBar& GetTownBar() const { return TownBar; }
 	bool IsTownBarShown() const;
+	/**
+	 * (Release 2; Brian, 24 November 2026: "lets improve these graphics and UI. its very underwhelming".) The new
+	 * province panel and the town card, under tc.UI.TownCard (off until the art director passes the Mac stills;
+	 * -TheaterTownCard turns it on for a run). With it on, the town's plots are a card the player opens from the
+	 * province panel, not a bar that stands whenever the town is picked; Esc or its close puts it away.
+	 */
+	static bool IsTownCardStyle();
+	void OpenTownCard();
+	void CloseTownCard();
+	bool IsTownCardOpen() const { return bTownCardOpen && IsTownBarShown(); }
 	/** Where the armies' colours and their strength plates are on the screen, in its own pixels: the towns' name plates step aside from them. */
 	void GetColoursOnScreen(TArray<FBox2D>& Out) const;
 	/** Whether the reminder of the keys stands open: through a new player's first month, while the ? key is held, or kept open by a click on its mark. */
@@ -774,6 +1098,8 @@ public:
 	bool IsMinimapWorld() const;
 	/** Where the eye looks, as a share of the way round the whole world's small map (0 at its west edge, 1 at its east). */
 	double GetMinimapCentre() const;
+	/** (Release 2, round 2: corner pings) While the watch near him runs, its stops on the small map; none otherwise or with the option off. */
+	void GetWatchPings(TArray<FWatchPing>& OutPings) const;
 	/** The name plates of the towns in view, the ones that matter most first. */
 	void GetTownPlates(TArray<FTownPlate>& Out) const;
 	/** The names of the countries and the seas, letter by letter, lying on the map. */
@@ -804,6 +1130,26 @@ public:
 	void FleetToNewBase(int32 RegionId);
 	/** Sends the fleet in hand to a sea, to do there what it has been told (patrol or raid). */
 	void OrderFleetTo(int32 Zone);
+	/**
+	 * (Release 2, fleetattack.ts) The fleet in hand set down on an enemy fleet: the attack card, with the odds first, as
+	 * an army's face-off. False where fleet attacks are off, and the caller does what it did before.
+	 */
+	bool AttackFleetWith(int32 Target);
+	/** (Release 2: splitting a stack.) A ship's card in the fleet tray clicked: it is left behind, or comes along again. */
+	void ToggleShip(int32 Index);
+	/** (Release 2: splitting a stack.) ALL, NONE or HALF of the army's corps, or of the fleet's ships, go with the next order: 1, 0 or 2. */
+	void PickGoing(int32 Mode);
+	/**
+	 * (Release 2: splitting a stack.) The ships left behind are split off from the fleet in hand as a squadron of their
+	 * own, where it is and under its order, so that only the lit ships go. True where the order may go ahead (nothing
+	 * was left behind, or the split was made); false where every ship was left behind or the split was refused.
+	 */
+	bool SplitOffStaying(const FString& ForCard = FString());
+	/**
+	 * (Release 2; the pre-check's read of 24 November) A split made for a card (the attack's odds, the shelling's
+	 * question) is taken back if the card is closed without its order: the ships left behind rejoin the fleet.
+	 */
+	void RejoinHeldBack();
 	void ShowShipModel(const FString& Model, const FText& Name);
 	/** Picks up the next of the player's armies that can still move this month, and goes to it. */
 	void NextArmy();
@@ -885,6 +1231,8 @@ public:
 	FString GetPlayerTag() const;
 	/** Says in the notice line why something pressed cannot be done. */
 	void SayWhy(const FString& Why);
+	/** R2 bargains hook: says a note in the notice line with no sound of its own (the caller has played the order's one). */
+	void SayNote(const FString& Note) { Notify(Note, 6.0); }
 	/** The weather in the east this month, for the date plate; empty in clear weather. */
 	FText GetWeatherText() const;
 	// ---- (Rules 84.3.3) FIRST COMMAND: the staff's notes ------------------------------------------------------
@@ -995,6 +1343,8 @@ public:
 	void OpenArsenal();
 	void CloseArsenal();
 	void OrderFromArsenal(const FString& Key);
+	/** (Release 2, the city at a glance) Orders from the arsenal in the town the panel shows: CAN BUILD HERE and ADD GUNS. */
+	void OrderHere(const FString& Key);
 
 	/** Closes the ledger and looks at one of its provinces on the table. */
 	void ShowProvince(int32 RegionId);
@@ -1009,7 +1359,7 @@ public:
 	void OrderTo(int32 RegionId, const FVector* CarriedFrom = nullptr);
 
 	/** A click on a territory, as the mouse makes it: for scripts. */
-	void ClickRegion(int32 RegionId) { ClickOnTable(nullptr, RegionId); }
+	void ClickRegion(int32 RegionId) { PointedField = INDEX_NONE; ClickOnTable(nullptr, RegionId); } // (a step's click on a province is never the airfield the real pointer happens to rest by)
 	// ---- For the playtester's click-through (CampaignStepPlayer: a development tool) ----
 	/** What the player has in front of him: the card or page on top, the words he is shown, and what is in hand. */
 	void DescribeScreen(FString& OutOpen, FString& OutWords, FString& OutHand) const;
@@ -1067,8 +1417,24 @@ public:
 	 */
 	bool CanFightLive() const;
 	void FightLive();
+	/**
+	 * (Release 1.6; Brian, 23 November 06:52Z: the campaign's air fights open as 3D air battles) FLY IT YOURSELF on the raid
+	 * card, beside FLY THE RAID BY DAY, on a bombing raid by day and a fight for the sky only: the raid the card shows, with
+	 * the groups picked, is flown by him in the 3D sky (TC.airStart), and at CONTINUE on its after card the campaign takes
+	 * what the rules booked (TC.battleEnd books the raid as FLY THE RAID does, with the battle's losses) and the map shows
+	 * it. Behind the Battle rules card's "Fly raids yourself" (AAirBattle::CampaignLiveOn), off until it passes; offered
+	 * only where TC.airLook has a ticket for the raid as picked.
+	 */
+	bool CanFlyLive() const;
+	void FlyLive();
+	/** (Release 1.5) The look of the land a battle for this region is fought on, this month, as LandScape::Pick lays it,
+	 * with "+snow" where snow lies (LandScape::SnowOf a quarter or more). */
+	static FString FieldLookAt(const FCampaignMapData& Data, int32 RegionId, int32 Turn);
+	/** (Release 1.5) Whether a look has passed (Content/Rules/fight-yourself-looks.txt, one look a line; bocage alone
+	 * where the file is missing). -TheaterFightEveryLook offers every look (the Mac's per-theatre runs). */
+	static bool FieldLookPassed(const FString& Look);
 	/** True while his own battle is open: the map takes no order, key or month's end until it is handed back. */
-	bool IsFightingLive() const { return LiveBattle.IsValid(); }
+	bool IsFightingLive() const { return LiveBattle.IsValid() || LiveRaid.IsValid(); }
 	/** (Rules 84.1.) On the card before a march on a guarded town: SEND THEM IN (the assault as they arrive) or LAY SIEGE FIRST. */
 	void ConfirmMarch(bool bAssault);
 	/** On the attack card: pick every corps that can reach the place, and show the attack again as it would then be. */
@@ -1097,7 +1463,7 @@ public:
 	void SkipWatching();
 	/** (Ruling 64.) The month's replay, shown again from the month's card. Nothing is told twice: the card comes back when it is over. */
 	void WatchAgain();
-	bool CanWatchAgain() const { return !bWatching && Month.Steps.Num() > 0; }
+	bool CanWatchAgain() const { return !bWatching && !bMonthTurning && Month.Steps.Num() > 0; }
 
 	/**
 	 * The hand on a flag, as three steps a script can take too: take hold of the player's army in a region,
@@ -1113,6 +1479,9 @@ public:
 	void SetFrameOnScreen(TArray<FBox2D>&& Boxes) { FrameOnScreen = MoveTemp(Boxes); }
 
 private:
+	// (Release 1.5.1) The saved wars read afresh for the menu; and one laid on the table.
+	void ReadSavedWars();
+	void LoadWar(const FString& Id);
 	void WheelUp();
 	void WheelDown();
 	void Escape();
@@ -1124,6 +1493,8 @@ private:
 	void RefreshOrders();
 	void Notify(const FString& Text, double Seconds = 5.0);
 	void OpenFaceOff(int32 RegionId, bool bOpening = false, const FAttackPreview* Given = nullptr);
+	/** (tc.Speed.CardAside) OpenFaceOff(RegionId, true) with its forecast worked out on the rules' thread: the card stands at once and fills when it comes. */
+	void OpenFaceOffAside(int32 RegionId);
 	/**
 	 * (Rules 84.1.) The army in hand is ordered onto enemy ground with no army in its field. Where the town's guard
 	 * will fight, opens the attack card and returns true. Otherwise returns false (nothing is risked: no card and no
@@ -1176,12 +1547,34 @@ private:
 	void LiveHandBack(int32 RegionId, const TArray<int32>& CorpsIds, double TicketSeed, const FString& ResultJson);
 	/** The field of his own battle while it is open (FightLive). */
 	TWeakObjectPtr<class ALandBattle> LiveBattle;
+	/** (Release 1.6) His own raid handed back (FlyLive): TC.battleEnd's answer taken as the raid's act, the map brought up to date. */
+	void AirHandBack(const FString& Kind, int32 Target, const FString& EndJson);
+	/** (Release 1.6) The sky of his own raid while it is open (FlyLive). */
+	TWeakObjectPtr<class AAirBattle> LiveRaid;
+	FCustomState Custom;
+	void LoadCustomOffer();
+	/** The spec for the rules (CustomSpec), the computer's army in it if bWithTheirs and it picks its own. */
+	FString CustomSpecJson(bool bWithTheirs) const;
+	/** The page made again from the choices and the rules' check of them (TC.customArmy, TC.customCheck). */
+	void RefreshCustom();
+	void FightCustom();
+	/** A battle of his own handed back (its scene's CONTINUE): the door again, its outcome in a line. */
+	void CustomHandBack(const FString& Domain, const FString& ResultJson);
+	/** (Release 1.6) FLY IT YOURSELF's offer, weighed once for the fly act it was asked of (TC.airLook): 1 offered, 0 not, -1 not yet. */
+	mutable FString FlyOfferAct;
+	mutable int32 FlyOffer = -1;
+	/** (Release 1.5) The raid card his raid was flown from (its page and its fly act), for the card to come back as he left
+	 * it when the raid closes with no result (AirHandBack). */
+	FString FlyLivePage;
+	FString FlyLiveAct;
 	bool CanPickUp(const AArmyPiece* Piece) const;
 	void ClickOnTable(AArmyPiece* Piece, int32 RegionId);
 	bool Hold(AArmyPiece* Piece);
 	void SetPending(int32 RegionId);
 	void DropArmy(int32 RegionId, bool bOnTable);
 	void WatchNextStep();
+	/** (Release 2, tc.Speed.MonthAside) The others' months are in (Month): the watch, or the month's card. bWatchAsked: END THE MONTH AND WATCH was pressed. */
+	void MonthPlayed(bool bWatchAsked);
 	void FinishMonth();
 	void SpaceBar();
 	void ToggleMusic();
@@ -1238,6 +1631,16 @@ private:
 	/** Where every corps in hand is the garrison of its town: the sentence that says so and how it can be moved. Empty otherwise. */
 	FString GarrisonSays() const;
 	/**
+	 * (Release 2, Brian, 24 November 2026: "if a unit is dug in and i click them to attack and move I want them to over
+	 * ride their orders insted of me having to press a button".) True where the garrison in hand may come out of its
+	 * town (TAKE THE FIELD is offered for every corps in hand) and could reach that place from the open country this
+	 * month (the rules give a garrison's reach from there, all its corps out together): an order to it is given as to
+	 * an army in the field, and the rules bring them out inside the order's own call, only if the order goes.
+	 */
+	bool ComesOutTo(int32 RegionId) const;
+	/** True where the garrison in hand may come out of its town and could go somewhere this month once out. */
+	bool ComesOut() const;
+	/**
 	 * The march up to an enemy army that is not next door and the attack, planned as one order and shown before
 	 * anything is carried out. True where the card opened or the rules' sentence was said; false where the rules have
 	 * no plan to offer (no enemy army seen there, or it is next door already).
@@ -1254,6 +1657,7 @@ private:
 	/** Why the army in hand cannot attack the enemy army seen at a place, in a sentence that says what to do; empty where none is seen there. */
 	FString WhyNoAttackOn(int32 RegionId) const;
 	FText HoverTipMarked;
+	FHoverGlance HoverGlance; // (release 2) the paper card over a town with a plate
 	TArray<int32> StandingRoad; // and the road still ahead of it, if it is on a standing march
 	int32 RouteTarget = INDEX_NONE;
 	int32 PendingTarget = INDEX_NONE; // ground clicked once with an army in hand: a second click, or the button, sends it there
@@ -1261,8 +1665,15 @@ private:
 	TWeakObjectPtr<AArmyPiece> RingedPiece;
 	TWeakObjectPtr<AArmyPiece> HoverPiece; // the piece the pointer rests on, if it can be picked up
 	TWeakObjectPtr<AArmyPiece> HeldPiece; // the piece the left button went down on
+	// (Release 2; Brian 23 November 2026 22:23Z) One of the player's fleets the left button went down on: carried like a
+	// flag, and let go over a sea it sails there, or over an enemy fleet it attacks it (the attack card first). And
+	// whether it was the fleet in hand already, so a plain click on it puts it down.
+	TWeakObjectPtr<AArmyPiece> HeldFleetPiece;
+	bool bFleetWasInHand = false;
 
 	FFaceOff FaceOff;
+	/** Works out FaceOff.FieldOffer, once a card and pick (CanFightLive). */
+	void WeighFieldOffer();
 	FWarPrompt WarPrompt;
 	FLedger Ledger;
 	bool bLedgerOpen = false;
@@ -1286,6 +1697,29 @@ private:
 	int32 GrandSeed = 1939; // the dice for the campaign about to be chosen
 	int32 WorkingFrames = 0;
 	void LoadGrandNations();
+	/**
+	 * (Release 2, tc.Speed.NationsAside; the UI director's bar: every press answers within a tenth of a second.) The
+	 * list of countries for the year and the dice now chosen, worked out on the rules' own thread while the screen says
+	 * so (Opening.bWorking), and laid when it is in; a list asked while one is out is asked once that one is in. At
+	 * once, as LoadGrandNations, where the switch is off or in a run that takes pictures.
+	 */
+	void AskGrandNations();
+	/** The list of countries laid on the opening screen; the country chosen stays chosen where it is still there. */
+	void TakeGrandNations(TArray<FGrandNation>&& Listed);
+	bool bNationsAsked = false; // (tc.Speed.NationsAside) a list of countries is being worked out on the rules' thread
+	/**
+	 * (Release 2, tc.Speed.WarSpread; the UI director's bar: every press answers within a tenth of a second.) A war
+	 * begun or continued from the opening screen: at once, as before, or with the plate drawn first, the war begun
+	 * (Start) a few frames on, laid a step a frame under the plate, and entered when the last step is down (StepWar,
+	 * from PlayerTick). bFresh: a new campaign (bFreshCampaign); bBugle: the bugle as it is entered.
+	 */
+	void BeginWar(TFunction<bool(class ACampaignGameMode&)>&& Start, bool bFresh, bool bBugle);
+	void StepWar();
+	TFunction<bool(class ACampaignGameMode&)> WarDue;
+	int32 WarDueFrames = 0;
+	bool bEnterWhenLaid = false;
+	bool bWarFresh = false;
+	bool bWarBugle = false;
 	static int32 NewSeed();
 
 	FString NoticeText;
@@ -1296,7 +1730,46 @@ private:
 
 	// The other nations' month, being played out one nation at a time.
 	bool bWatching = false;
+	// ---- (release 2, the enemy's month near you) The option (kept with the options; on unless he turns it off), and the
+	// watch of only the months that came near him: how many there are, how many have been shown, whose is up, and the
+	// arrows of the one up as they grow (from ArrowsSince).
+	bool bEnemyMoves = true;
+	bool bAlliesNear = true; // (round 2, Brian 18:01Z) his allies' battles near him stop the watch too
+	bool bAlliesThisWatch = true; // (the switch as it stood when the month was ended: the watch's stops and pings keep to it)
+	bool bTakeMeThere = true; // (round 2) the TAKE ME THERE button on each stop (OPTIONS)
+	int32 TakeRegion = INDEX_NONE; // the stop's place: where its worst arrow ends
+	bool bCornerPings = true; // (round 2) the watch's stops pulse on the small map in the corner (OPTIONS)
+	// (Release 2, new units ready; Brian 24 Nov 18:30Z) The option (on unless he turns it off), the units handed over as
+	// this month opened, the next SHOW ME goes to, whether the plate is still to be said, and the notice that said it.
+	bool bReadyNotice = true;
+	TArray<FReadyUnit> ReadyUnits;
+	int32 ReadyNext = 0;
+	bool bReadyDue = false;
+	int32 ReadySaid = -1;
+	FString ReadyNation;
+	FString ReadyHeading;
+	TArray<int32> NearStopPlaces; // each stop's place, in the watch's order (INDEX_NONE where it has nothing to draw), set as the month ends
+	TArray<FColor> NearStopInks;
+	bool bWatchNear = false;
+	int32 NearCount = 0, NearShown = 0;
+	FString WatchNation;
+	TArray<FStepArrow> ArrowsShown;
+	double ArrowsSince = 0.0;
+	bool bArrowsGrowing = false;
+	/** A step the watch near him stops at: another country's month that came near his ground or touched him. */
+	bool IsNearStep(const FMonthStep& Step) const;
+	/** Puts away the step's arrows. */
+	void ClearStepArrows();
+	// ---- (end release 2)
 	bool bMonthCardDue = false; // the month's card is to open once the replay, the newsreel and the great moments are over
+	// (Release 2, news at the map's edge; ruling 131: merge by hand) Where bMonthCardDue is for a month just resolved, its
+	// rows are laid as seals on the map's edge instead of the card opening by itself, unless the option "Month report:
+	// open by itself" is on (kept with the options; off by default). Nothing here is saved: the seals are laid again
+	// from the month's card.
+	FEdgeNewsBoard EdgeNews;
+	bool bEdgeNewsDue = false;
+	bool bMonthReportOpens = false;
+	void LayEdgeNews(const FMonthCard* Shown);
 	bool bRewatching = false; // the month is being watched again from its card
 	bool bHandStands = false; // (ruling 88) the army in hand has been told to stand this month: the rules keep the order, with the saved game
 	TArray<int32> RoundSeen; // the provinces the round of armies has been to since it last began
@@ -1410,6 +1883,8 @@ private:
 	bool bFrameHidden = false; // the frame is put away for a clean picture (the F key)
 	double FrameHintUntil = 0.0;
 	bool bMoments = true; // the eye drops to the front for a few seconds when a capital falls or a great battle is decided
+	bool bShipsSail = true; // (the 1.5 patch: on unless switched off in OPTIONS) a fleet that moves sails there on the map (ACampaignMapActor::SetShipsSail)
+	bool bWakes = false; // (release 2) an enemy fleet seen to move leaves a fading wake (ACampaignMapActor::SetWakes)
 	bool bMomentDue = false; // such a thing has just happened: the moment begins when its result has been read
 	bool bMomentOn = false;
 	double MomentUntil = 0.0;
@@ -1419,6 +1894,7 @@ private:
 	bool bHelpSeen = false; // the player has ended a month, or folded the keys away: they are not shown unasked again
 	bool bHelpPinned = false; // the reminder of the keys is kept open by a click on its mark
 	bool bFreshCampaign = false; // a campaign has just been begun, not continued
+	int32 SeatTurn = INDEX_NONE; // (release 2) the month a campaign begun here opened on: the frame stays open through it
 	int32 TurnLaid = -1; // the month the table's holders were last laid for, and for whom: ink spreads only from one month to the next
 	FString HumanLaid;
 	FYearCard LastYear; // the last year's card, to show again
@@ -1456,7 +1932,7 @@ private:
 	void StopSpeaking();
 	bool IsSpeaking();
 	void SpeakAdviser();
-	int32 ProvinceTab = 0;
+	int32 ProvinceTab = 3; // (release 2) 3 AT A GLANCE, which a newly picked town opens on; 1 ORDER; 2 BUILD; 0 PROVINCE
 	int32 FleetInHand = INDEX_NONE; // the fleet picked up, by its id
 	int32 AgentInHand = INDEX_NONE; // (ruling 153) the agent picked up, by his id
 	bool bAgentHeld = false, bAgentWasInHand = false; // the left button went down on an agent's piece; and he was in hand already, so a plain click puts him down
@@ -1467,17 +1943,34 @@ private:
 	FString LookNation;
 	void LayOutLook();
 	FFleetHand FleetHand; // the fleet in hand as the rules describe it
+	TSet<int32> FleetStaying; // (release 2) the fleet tray's cards left behind, by their place in the tray
+	TMap<int32, TSet<int32>> PickedDivisions; // (release 2, breakup.ts) by corps: the division tiles picked to be split off
+	int32 HeldBackSquadron = INDEX_NONE, HeldBackFrom = INDEX_NONE; // (release 2) a split made for a card not yet answered
+	FString HeldBackCard; // that card's id
+	FString FleetStayingFor; // and the fleet they were picked on, with its ships: picked afresh when either changes
 	int32 FleetHoverSea = INDEX_NONE; // the sea the pointer is nearest, while a fleet is in hand
 	FVector2D PointerMap = FVector2D::ZeroVector; // where the pointer is on the map
 	bool bPointerOnWater = false;
 	void LayOutFleet();
 	int32 SeaNear(const FVector2D& MapPoint) const;
 	int32 PointedField = INDEX_NONE; // the province whose airfield the pointer is over
+	/**
+	 * (Brian, 24 November 2026: "its hard to click on an airfield"; the art director's spec, item 1.) The airfield whose
+	 * ring, 28 of the screen's units across round the middle of its runway, the pointer is in, at any height of the eye;
+	 * Ground is the province under the pointer, whose town wins where its ring overlaps and its middle is nearer.
+	 */
+	int32 FieldInRing(const FVector2D& Mouse, int32 Ground);
+	bool bPointerInOverlap = false; // the pointer is where a town's ring and an airfield's overlap
+	bool bOverlapSwapped = false; // and a click there has turned it to the other, until the pointer moves off
+	FVector2D OverlapClickAt = FVector2D(-1.0e6, -1.0e6);
+	TArray<FVector> FieldOutline; // (item 2) the airfield a click would open, its corners on the table
 	int32 HoverTipField = INDEX_NONE;
 	int32 StagedHover = INDEX_NONE;
 	bool bStagedField = false; // (for the photographer: the staged pointer rests on that province's airfield)
 	// (Ruling 86.) The gates' marks as last drawn; the gate under the pointer, and what its box says.
 	TArray<TPair<int32, FBox2D>> GateMarks;
+	TArray<TPair<int32, FBox2D>> FieldBadges; // (the UI director's HUD read, 22 November: mend 1) the airfields' badges as last drawn, by province
+	TArray<TPair<int32, FBox2D>> TownPlateBoxes; // (the UI director's read of run 7, 22 November: mend 3) the towns' plates as last drawn, by province
 	int32 StagedGate = INDEX_NONE;
 	int32 HoverGate = INDEX_NONE;
 	// (The code checker, 17 November.) The padlock under the pointer when the left button went down: the hover is blanked
@@ -1512,10 +2005,13 @@ private:
 	double DoorSince = 0.0; // when the door last came up: it takes no Enter in its first half second
 	bool bEnterByKey = false; // (EndMonth was called by the Enter key: on the question before the month's end it is SHOW ME)
 	bool bAlwaysWatch = false;
+	/** (Release 2, tc.Speed.MonthAside) The others' months are being played on the rules' thread: END THE MONTH waits for them. */
+	bool bMonthTurning = false;
 	bool bByRail = false;
 	bool bBySea = false;
 	int32 PanelRevision = 0;
 	FTownBar TownBar;
+	bool bTownCardOpen = false; // (tc.UI.TownCard) the town card stands open over the map
 	int32 SelectedRegion = INDEX_NONE;
 	int32 SizedForWidth = 0;
 	int32 SizedForHeight = 0;

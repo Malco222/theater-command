@@ -32,7 +32,7 @@ import worldData from '../../data/campaign/world.json';
 import { FAR_SETUP } from './far-rows';
 import { FAR_STAGE } from './stage';
 import { FAR_FIRST, farOn } from './world';
-import { addCorps, armySize, atWar, bloc, capture, headline, relocate, removeCorps, sameSide, setWar, theName } from './game';
+import { addCorps, armySize, atWar, bloc, capture, headline, relocate, removeCorps, sameSide, setWar, theName, roomless } from './game';
 import { signPeace } from './diplomacy';
 import { mapDist2 } from './wrap';
 import { STACK, type Corps, type Game, type Region } from './types';
@@ -209,7 +209,7 @@ function parts(g: Game, client: string, patron: string): void {
     for (const c of g.corps.filter((x) => x.nat === client && x.reg === from.id && !x.dead)) {
       let best: Region | null = null, bd = Infinity;
       for (const r of g.regions) {
-        if (r === from || r.ctrl !== client || r.units.length >= STACK || r.units.some((u) => u.nat !== client)) continue;
+        if (r === from || r.ctrl !== client || r.units.filter((u) => !roomless(g, u)).length >= STACK || r.units.some((u) => u.nat !== client)) continue;
         const d = mapDist2(g, r.x, r.y, from.x, from.y);
         if (d < bd) { bd = d; best = r; }
       }

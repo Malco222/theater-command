@@ -104,12 +104,23 @@ struct FMiniatureMesh
 	 * bFar gives its plainer form for the far zoom. False if there is no such model on this machine.
 	 */
 	bool Sculpted(const FString& Name, const FString& Tag, const FVector& Where, double Metre, double Turn, bool bFar = false, const TArray<FLinearColor>* Kit = nullptr);
+	/**
+	 * Which of a sculpted aircraft's paints by date (its file's "schemes") stands in the painter's month: 0 for its own
+	 * colours, else one more than the scheme's place in its file. Name as Vehicle() takes it, "Mustang" or
+	 * "Mustang:USA". A model not read yet is read first (its far form). For a cache of shapes that must not hand out
+	 * one painted for another month.
+	 */
+	static int32 SchemeOf(const FString& Name);
 	/** Set from the command line ("-TheaterTrialTank"): armoured pieces show the trial tank in place of the nation's code-built one, to be judged beside it. */
 	static bool bTrialTank;
 	/** Set from the command line ("-TheaterOldPieces"): the pieces as they were before art fix 12 (plain bases, small figures in ranks, unweathered paint), to be photographed beside the new. */
 	static bool bOldPieces;
 	/** Set from the command line ("-TheaterCodeBuilt"): the vehicles built in code are shown even where a sculpted model of the same name exists. */
 	static bool bCodeBuilt;
+	/** Set by the air battle while it builds a torpedo group's aircraft: a model whose file carries both loads (its
+	 * "loads", torpedo and bombs: the Kate, the Devastator, the Nell, the Betty) is drawn with its torpedo and without its
+	 * bombs. Otherwise such a model is drawn with its bombs, as every aircraft on the campaign map is. */
+	static bool bTorpedoLoad;
 
 	/**
 	 * A real vehicle, built from its measurements: "PanzerIV", "T34", "Sherman", "Matilda". Metre is the size
@@ -224,7 +235,8 @@ struct FMiniatureMesh
 		int32 Ruined = 0; // how many of its works are wrecks: bombed out, roofless, their stacks broken and cold
 		int32 Seed = 0;
 		// roofs and walls by region: 0 middle Europe, 1 the north-west, 2 the south, 3 the north and east, 4 the far south;
-		// and beyond Europe (the art director's brief 3.4): 5 the New World north of Mexico, 6 the plaza town south of it
+		// and beyond Europe (the art director's brief 3.4): 5 the New World north of Mexico, 6 the plaza town south of it;
+		// (release 2, the far side) 7 the walled town, 8 the timber town, 9 thatch and tin, 10 the Indian town, 11 the railway town
 		int32 Look = 0;
 		int32 Landmark = 0; // a capital's own great building, by kind (see Township)
 		bool bQuay = false; // it is a port, and its shore has been found:
@@ -261,6 +273,10 @@ struct FMiniatureMesh
 	void Tank(const FVector& Where, double Scale, const FLinearColor& Nation, double Turn = 0.0);
 	void Lorry(const FVector& Where, double Scale, const FLinearColor& Nation, double Turn = 0.0);
 	void Horseman(const FVector& Where, double Scale, const FLinearColor& Nation, double Turn = 0.0);
+	/** (Release 2, logistics.ts) A horse-drawn supply wagon: a horse in the shafts, a covered cart and its driver. Faces +X as the lorry does. */
+	void Wagon(const FVector& Where, double Scale, const FLinearColor& Nation, double Turn = 0.0);
+	/** (Release 2, logistics.ts) A forward supply dump: stacks of crates (one to three high, as full as it is) and fuel drums under a tarpaulin; a bare pallet and one stack while it is still being brought up. */
+	void SupplyDump(const FVector& Where, double Scale, const FLinearColor& Nation, int32 Full, bool bFilling, double Turn = 0.0);
 	void Bunker(const FVector& Where, double Scale, const FLinearColor& Nation, double Turn = 0.0);
 	void FieldGun(const FVector& Where, double Scale, const FLinearColor& Nation, double Turn = 0.0);
 	void Crag(const FVector& Where, double Scale);

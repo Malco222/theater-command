@@ -303,7 +303,7 @@
     [15, "GRE", "II Corps", "inf", 2, "Thessaly", {"xp": 0.15, "war": ["GRE", "ITA"], "after": 1}],
     [16, "GRE", "III Corps", "inf", 2, "Thessaly", {"xp": 0.15, "war": ["GRE", "ITA"], "after": 2}],
     [15, "UK", "Creforce", "inf", 1, "Crete", {"gen": "Bernard Freyberg", "trait": "defender", "hold": 1, "xp": 0.2, "war": ["GRE", "ITA"]}],
-    [19, "UK", "W Force (New Zealand Division and 1st Armoured Brigade)", "inf", 2, "Thessaly", {"gen": "Henry Maitland Wilson", "hold": 1, "xp": 0.25, "war": ["GRE", "ITA"]}],
+    [19, "UK", "W Force (New Zealand Division and 1st Armoured Brigade)", "inf", 2, "Thessaly", {"gen": "Henry Maitland Wilson", "hold": 1, "xp": 0.25, "war": ["GRE", "ITA"], "takes": {"name": "2nd Armoured Division", "share": 0.5, "leaves": "The 1st Armoured Brigade sails from {place} for Greece with W Force. The 2nd Armoured Division stays in the desert with its other brigade."}}],
     [19, "GER", "5th and 11th Panzer Divisions", "arm", 2, "Sofia", {"hold": 1, "xp": 0.4, "war": ["ITA", "GRE"], "until": 22}],
     [19, "GER", "2nd and 9th Panzer Divisions", "arm", 2, "Sofia", {"hold": 1, "xp": 0.4, "war": ["ITA", "GRE"], "until": 22}],
     [19, "GER", "5th and 6th Mountain Divisions", "mtn", 2, "Plovdiv", {"hold": 1, "xp": 0.35, "war": ["ITA", "GRE"]}],

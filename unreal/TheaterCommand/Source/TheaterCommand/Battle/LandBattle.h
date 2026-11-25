@@ -261,6 +261,13 @@ private:
 	/** GS8: the ground tiles' own static meshes and their components. */
 	UPROPERTY()
 	TArray<TObjectPtr<UObject>> GroundKept;
+	/** Old wrecks (release 2, LayOldWrecks): each wreck's near and far meshes (static, made as the battle opens; kept in
+	 * GroundKept with their scorched patches, which show at any distance), and which of the two shows. */
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> OldWreckNear;
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> OldWreckFar;
+	TArray<uint8> OldWreckShownNear;
 	/** The ground's things (hedge shrubs, trees, gates; LandField's bases) are far too many to lay into meshes (some
 	 * 129,000 of them, 150 million triangles at their near level): each kind is made once as a mesh of its own, in three
 	 * shades of its instances' tints, its near level the mesh's first level of detail and its far the second, and drawn
@@ -684,6 +691,17 @@ private:
 	bool bWalkPanOn = false, bTankPan = false;
 	FVector WalkPanLook = FVector::ZeroVector;
 	void WalkPan(double Real);
+	/** The lorry pan ("-TheaterLandLorryPan=<battle s>[,<seconds>[,<block>]]", release 1.5: the Mac's stills of the men
+	 * in lorries, which the film's own cuts never come near): from that battle second the eye rides beside the drawn
+	 * lorry with the most men seated on her benches (of that block, if one is given), off her rear quarter some 12 m
+	 * back, 7 m aside and 3.5 m up, looking into her bed and over her tailboard, a still each real second for that long
+	 * (40 s unless said). A live battle's only: the rules seat the men (Men in lorries on). No lorry carrying men then:
+	 * asked again 5 s on, up to twelve times. Battle second it starts at (-1 none), how long, the block (-1 any), the
+	 * lorry ridden beside (-1 none yet), the side of her the eye is on (1 her right, -1 her left), the stills' next real
+	 * time and count, the tries left, and her heading as the eye follows it, eased. */
+	double LorryPanAt = -1.0, LorryPanFor = 40.0, LorryPanStillAt = -1.0, LorryPanHeading = 0.0;
+	int32 LorryPanBlock = -1, LorryPanVehicle = -1, LorryPanSide = 1, LorryPanStills = 0, LorryPanTries = 12;
+	void LorryPan(double Real);
 	/** The dark reading for the camera director's dark rule (LandEye::World::DarkNow; the art director, cut 4 fix 6 and
 	 * cut 5: a shot over 30% darker than L 25 of 255 is left): the drawn frame copied at 64 x 36 four times a real second
 	 * by the engine's frame grabber, which waits on nothing, and the share of it under L 25 (-1 until the first comes
@@ -753,6 +771,15 @@ private:
 	/** Real seconds the clock has waited on the rules this time; whether they have stopped (and it was said). */
 	double LiveHeld = 0.0;
 	bool bLiveBroken = false;
+	/** (release 1.5) RealT when the rules stopped mid-fight: a few seconds on, the field closes with no result (LiveWayOut). */
+	double LiveBrokenAt = -1.0;
+	/**
+	 * (release 1.5: never a battle with no way out) The live battle could not open, or its rules stopped mid-fight: the
+	 * field closes as CONTINUE closes it (Finish), with no result, so a campaign battle's attack card comes back as he left
+	 * it, SEND THEM IN still on it, and the practice battle's table comes back. Before this the field stayed up with no
+	 * CONTINUE and the campaign took no order, key or month's end behind it: the game had to be quit.
+	 */
+	void LiveWayOut(const TCHAR* Why);
 	/** The tanks' meshes made again (a block placed anew in the setup step, her vehicles changed): their names' round. */
 	int32 BodyRound = 0;
 	/** A live battle's opening, frame by frame: true while it has the frame (the scene not open yet). */
@@ -857,6 +884,11 @@ private:
 	void LayScars();
 	/** Mud memory (release 2): the ruts of the battles fought here in mud before, laid as the battle opens. */
 	void LayOldRuts();
+	/** Old wrecks (release 2): the burnt-out armour of the battles fought here before, laid as the battle opens. */
+	void LayOldWrecks();
+	/** Each old wreck's near level shown within LandHulk::NearTo of the eye, its far beyond (each frame; nothing where
+	 * none was laid). */
+	void ShowOldWrecks(const FVector& EyeWorld);
 	/** The near things (hedges, trees, gates) laid into a tile's mesh, or taken out. */
 	void LayThings();
 	/** A thing's shade, 0 to 8: three times its brightness third, and its warmth third (the middle one, 1, for a thing
@@ -877,11 +909,16 @@ private:
 	void MakeRiders();
 	/** Each commander seated and posed for this frame (after the tanks are posed, before the men are updated). */
 	void RideTanks();
+	/** Men in lorries (the rules card's row): each lorried man near the eye seated on his lorry's bench, or on his way down
+	 * over her tailboard, and her tailboard dropped as her first man gets down (after the vehicles are posed, before the
+	 * men are updated). */
+	void RideLorries();
 	/** Effects (R2): the crews of knocked-out tanks getting out, -TheaterLandBailOut (LandBail). */
 	void BailOut();
 	/** Effects (R2): the fighters on call over the field, -TheaterLandAirSupport (LandAir; Battle/LandBattleAir.cpp):
-	 * each plane drawn where the plan has it, its guns, the ground's guns firing up at it, and the one lost going down. */
-	void FlyOver();
+	 * each plane drawn where the plan has it, its guns, the ground's guns firing up at it, and the one lost going down.
+	 * EyeWorld: the eye this frame (a downed pilot's canopy glows seen against the sun: -TheaterLandChutes). */
+	void FlyOver(const FVector& EyeWorld);
 	/** The men on each light car and motorcycle from FromVehicle on (release 2's jeeps, field cars and motorcycles): a
 	 * rider in the crowd for each seat her kind fills that his army's infantry file has a clip for. */
 	void SeatLight(int32 FromVehicle);

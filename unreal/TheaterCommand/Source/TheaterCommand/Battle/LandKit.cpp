@@ -2233,17 +2233,22 @@ namespace LandKit
 		High = R["high"].Num();
 
 		// The paints: the file's own colours, the coat of the month in place of upper, upper2 and shade.
-		const Json::Value ColourList = R["colours"], PaintNames = R["paint_names"];
+		const Json::Value ColourList = R["colours"], PaintList = R["paint_names"];
+		PaintNames.clear();
+		for (size_t I = 0; I < PaintList.Count(); ++I)
+		{
+			PaintNames.push_back(PaintList.At(I).Str());
+		}
 		std::vector<Lin> Paint(std::max<size_t>(ColourList.Count(), 23), Lin(0.2, 0.2, 0.2));
 		for (size_t I = 0; I < ColourList.Count(); ++I)
 		{
 			Paint[I] = FromHex(ColourList.At(I).Str("808080"));
 		}
-		auto PaintNumber = [&PaintNames](const char* PaintName, int Otherwise)
+		auto PaintNumber = [&PaintList](const char* PaintName, int Otherwise)
 		{
-			for (size_t I = 0; I < PaintNames.Count(); ++I)
+			for (size_t I = 0; I < PaintList.Count(); ++I)
 			{
-				if (PaintNames.At(I).Is(PaintName))
+				if (PaintList.At(I).Is(PaintName))
 				{
 					return static_cast<int>(I);
 				}
@@ -2382,6 +2387,11 @@ namespace LandKit
 			// (release 2: a choice the rules picked for her, where her model has it: a motorcycle's sidecar, a staff jeep's gun)
 			const auto Chosen = D.Choose.find(Group);
 			std::string Pick = Chosen != D.Choose.end() && S["choices"][Chosen->second].IsObject() ? Chosen->second : ChoiceIn(Row, Group);
+			// (a swap the battle chooses: Men in lorries, the Truck's tilt stowed)
+			if (const auto Forced = D.Force.find(Group); Forced != D.Force.end() && S["choices"][Forced->second].IsObject())
+			{
+				Pick = Forced->second;
+			}
 			// (a swap chosen by the nation she serves, where the month does not choose it: by_nation, the British
 			// Sherman without the American's .50 on her roof)
 			if (Pick.empty() && S["by_nation"].IsObject())
@@ -2953,6 +2963,7 @@ namespace LandKit
 				Out.Normals.resize(List.size() * 3);
 				Out.Colours.resize(List.size() * 4);
 				Out.Soot.resize(List.size());
+				Out.Paints.resize(List.size());
 				for (size_t J = 0; J < List.size(); ++J)
 				{
 					const size_t K = List[J];
@@ -2965,6 +2976,7 @@ namespace LandKit
 					Out.Normals[J * 3 + 2] = static_cast<float>(F.Z);
 					std::memcpy(&Out.Colours[J * 4], &Colour[K * 4], 4);
 					Out.Soot[J] = Burn[K];
+					Out.Paints[J] = static_cast<uint8_t>(std::clamp(Raw.Paints[K], 0, 255));
 				}
 			}
 			std::vector<int32_t> BodyOf(N, -1), Local(N, -1);
@@ -5224,6 +5236,21 @@ namespace LandKit
 				M.Play(*Open, HatchOpens[Last] ? Age : std::max(0.0, Open->Long - Age), 1.0, S);
 			}
 		}
+		// (Men in lorries: her tailboard down from the first man getting down, and up again as she next moves off)
+		if (!Boards.empty() && !bDeadNow)
+		{
+			if (const Clip* Board = M.FindClip("dismount"))
+			{
+				const auto Next = std::upper_bound(Boards.begin(), Boards.end(), T);
+				if (Next != Boards.begin())
+				{
+					const double Opened = *(Next - 1);
+					const auto Off = std::upper_bound(MoveOffs.begin(), MoveOffs.end(), Opened);
+					const double Age = Off != MoveOffs.end() && *Off <= T ? Board->Long - (T - *Off) * Life : (T - Opened) * Life;
+					M.Play(*Board, std::clamp(Age, 0.0, Board->Long), 1.0, S);
+				}
+			}
+		}
 		if (bDeadNow)
 		{
 			// (Effects (R2): a brew-up that waits, BrewWait, is knocked out until her ammunition goes)
@@ -5505,6 +5532,24 @@ namespace LandKit
 		Update(0.0, nullptr);
 	}
 
+	void Vehicle::OpenBoard(double T)
+	{
+		if (!Shape || !Shape->FindClip("dismount") || (!Boards.empty() && T <= Boards.back()))
+		{
+			return;
+		}
+		// (still open from the last time: she has not moved off since)
+		if (!Boards.empty())
+		{
+			const auto Off = std::upper_bound(MoveOffs.begin(), MoveOffs.end(), Boards.back());
+			if (Off == MoveOffs.end() || *Off > T)
+			{
+				return;
+			}
+		}
+		Boards.push_back(T);
+	}
+
 	bool Vehicle::SocketNow(const std::string& Name, V3& OutAt, V3& OutFacing) const
 	{
 		if (!Shape || PartXf.empty())
@@ -5596,7 +5641,10 @@ namespace LandKit
 				Across = Dx * Best->Right.X + Dy * Best->Right.Y;
 			}
 		}
-		if (!Best) for (const Benches& B : All)
+		// (Release 2 assembly) Only a man with no named seat is put on the nearest carrier: a man the rules seat on a
+		// named vehicle that is not among the carriers (a lorry RideLorries draws, with Men in lorries on, or a vehicle
+		// hidden or faded) is never moved onto another one.
+		if (!Best && (SeatOn < 0 || Seat < 0)) for (const Benches& B : All)
 		{
 			const double Dx = X - B.At.X, Dy = Y - B.At.Y, D = Dx * Dx + Dy * Dy;
 			if (D > 36.0 || D >= BestD)
@@ -6359,6 +6407,10 @@ namespace LandKit
 		D.Month = Month;
 		D.Terrain = Terrain;
 		D.Captured = Captured;
+		if (bOpenLorries)
+		{
+			D.Force["tilt"] = "off";
+		}
 		D.Choose = Choose;
 		D.bMarks = bMarks;
 		std::string Why;

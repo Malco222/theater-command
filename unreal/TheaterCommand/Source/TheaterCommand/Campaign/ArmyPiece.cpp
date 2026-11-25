@@ -1,5 +1,6 @@
 #include "Campaign/ArmyPiece.h"
 
+#include "Campaign/BargainLayer.h" // R2 bargains hook
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignUnitTable.h"
@@ -58,6 +59,10 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 			General = Unit.General; // the first general named is the senior one
 		}
 		NewSignature += FString::Printf(TEXT("|%d%s%s%s"), Unit.Id, Unit.bDim ? TEXT("?") : TEXT(""), Unit.Stale > 0 ? TEXT("~") : TEXT(""), *Unit.Ally); // (what is known of it is part of how it looks)
+		if (!Unit.Vol.IsEmpty())
+		{
+			NewSignature += TEXT("^") + Unit.Vol; // R2 bargains hook: a legion's home pennant is part of how it looks (never in release 1)
+		}
 		bHeavyCorps |= Unit.Elite == TEXT("heavy");
 		bArmoured |= Unit.Kind == TEXT("arm") || Unit.Elite == TEXT("heavy");
 	}
@@ -100,6 +105,44 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 		bCamp = Own > 0 && Resting == Own && Tired > 0;
 		SupplyState = Known == 0 ? 0 : Starved > 0 ? 2 : 1;
 		NewSignature += FString::Printf(TEXT("|w%dc%ds%d"), WorksState, bCamp ? 1 : 0, SupplyState);
+	}
+	// (Release 2: camps you can see.) How far its camp has got, by the months of fieldworks the rules count, and the
+	// figure on the spade tag beside its plate. As with the works above, it is what at least half its known corps have
+	// got to; a garrison has its town's walls and pitches no camp, and fortress troops man works of their own.
+	{
+		TArray<float, TInlineAllocator<8>> Months; // (for each corps counted: its months of works, 0 begun with none to show yet, -1 not dug at all)
+		bool bCounted = false;
+		for (const FViewCorps& Unit : Corps)
+		{
+			if (Unit.bDim || Unit.Stale > 0 || Unit.bInTown || Unit.Kind == TEXT("fort"))
+			{
+				continue;
+			}
+			bCounted |= Unit.Works >= 0.0f;
+			if (Unit.bDug)
+			{
+				// (where the months are not counted, to be dug in is to have finished)
+				Months.Add(Unit.Works >= 0.0f ? Unit.Works : Unit.bWorksDone ? static_cast<float>(FullWorks) : static_cast<float>(Unit.DugFor));
+			}
+			else
+			{
+				Months.Add(Unit.bDigging || Unit.Posture == TEXT("dig") ? 0.0f : -1.0f);
+			}
+		}
+		CampStage = 0;
+		CampFigure = 0;
+		if (Months.Num() > 0)
+		{
+			Months.Sort([](float Left, float Right) { return Left > Right; });
+			const float Had = Months[(Months.Num() + 1) / 2 - 1];
+			if (Had >= 0.0f)
+			{
+				const int32 Whole = FMath::FloorToInt32(Had + 0.05f); // (the rules call works finished at five hundredths short of the full count)
+				CampStage = Had >= FullWorks - 0.05f ? 3 : Whole >= 2 ? 2 : 1;
+				CampFigure = bCounted ? FMath::Clamp(Whole, 0, FullWorks) : 0;
+			}
+		}
+		NewSignature += FString::Printf(TEXT("|camp%d.%d"), CampStage, CampFigure);
 	}
 	// A flag that shows its wear: a battered army flies a torn and faded flag, by the strength its known corps have
 	// left. ("-TheaterFlagWear=2" wears every flag, for a picture.)
@@ -145,6 +188,57 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 		HonourCount += Unit.Honours.Num();
 	}
 	NewSignature += FString::Printf(TEXT("|%dh"), HonourCount);
+	// (Release 2, nicknames.ts) The name lettered over the flag, where the names are shown: of the corps that carry one,
+	// the one with the most honours. (What is not known of an enemy's corps carries no name.)
+	EarnedName.Reset();
+	if (bNamesShown && What == 0 && !bGlimpsed)
+	{
+		int32 Most = -1;
+		for (const FViewCorps& Unit : Corps)
+		{
+			if (!Unit.Nickname.IsEmpty() && !Unit.bDim && Unit.Honours.Num() > Most)
+			{
+				Most = Unit.Honours.Num();
+				EarnedName = Unit.Nickname;
+			}
+		}
+	}
+	if (!EarnedName.IsEmpty())
+	{
+		NewSignature += TEXT("|n:") + EarnedName;
+	}
+	// (Release 2, the marked army; marked.ts) The town an enemy army took from him, lettered on a red tag on its pole.
+	// (The rules give it only where he knows who the army is, and only with the switch on.)
+	MarkedTown.Reset();
+	if (What == 0 && !bGlimpsed)
+	{
+		for (const FViewCorps& Unit : Corps)
+		{
+			if (!Unit.Marked.IsEmpty() && !Unit.bDim)
+			{
+				MarkedTown = Unit.Marked;
+				break;
+			}
+		}
+	}
+	if (!MarkedTown.IsEmpty())
+	{
+		NewSignature += TEXT("|mk:") + MarkedTown;
+	}
+	// (Release 2, new units ready; Brian, 24 November 2026 18:30Z) One of his corps handed over as this month opened:
+	// a brass NEW tag where an enemy's red mark would hang, for its first month (the option "New units ready").
+	bTagNew = false;
+	if (What == 0 && !bGlimpsed && bReadyTags && MarkedTown.IsEmpty())
+	{
+		for (const FViewCorps& Unit : Corps)
+		{
+			bTagNew |= Unit.bReady && !Unit.bDim;
+		}
+	}
+	if (bTagNew)
+	{
+		NewSignature += TEXT("|new");
+	}
 	// The standard shows the army's strength to the nearest thousand, so it is remade when that changes.
 	NewSignature += FString::Printf(TEXT("|%dk"), FMath::RoundToInt32(Men / 1000.0f));
 	NewSignature += bGlimpsed ? TEXT("|glimpsed") : TEXT(""); // (how much of it is drawn is part of how it looks)
@@ -156,7 +250,7 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 	}
 }
 
-void AArmyPiece::DressAs(ACampaignMapActor* Map, const FCampaignNation& Nation, int32 Works, bool bInCamp, int32 Supply)
+void AArmyPiece::DressAs(ACampaignMapActor* Map, const FCampaignNation& Nation, int32 Works, bool bInCamp, int32 Supply, int32 Stage)
 {
 	if (What != 0)
 	{
@@ -165,11 +259,69 @@ void AArmyPiece::DressAs(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 	WorksState = Works;
 	bCamp = bInCamp;
 	SupplyState = Supply;
+	// (left out, the camp follows the works: still digging is part of a trench, entrenched the works finished)
+	CampStage = FMath::Clamp(Stage >= 0 ? Stage : Works >= 2 ? 3 : Works == 1 ? 2 : 0, 0, 3);
+	CampFigure = CampStage == 3 ? FullWorks : CampStage; // (as the grand campaign counts them: a month, two, then the full count)
 	Signature += TEXT("|dressed");
 	Rebuild(Map, Nation);
+	if (Map)
+	{
+		Map->BuildCamps(); // (the camp on the ground is the map's to lay: it knows the ground)
+	}
 }
 
 bool AArmyPiece::bFlockNear = true;
+bool AArmyPiece::bNamesShown = false;
+bool AArmyPiece::bReadyTags = true;
+bool AArmyPiece::bCampsNear = true;
+int32 AArmyPiece::FullWorks = 3;
+
+void AArmyPiece::LayCamp(const FString& Made, const FMiniatureMesh* Solid, const FMiniatureMesh* Trodden, UMaterialInterface* SolidPaint, UMaterialInterface* TroddenInk)
+{
+	CampMade = Made;
+	if (Camp)
+	{
+		Camp->DestroyComponent();
+		Camp = nullptr;
+	}
+	const bool bSolid = Solid && Solid->Triangles.Num() > 0 && SolidPaint;
+	const bool bTrodden = Trodden && Trodden->Triangles.Num() > 0 && TroddenInk;
+	if (!bSolid && !bTrodden)
+	{
+		return;
+	}
+	// One still model for the whole camp, its points already where they stand in the world: it is set in the world's
+	// own frame and not the piece's, which turns to face the eye and is lifted when it is picked up.
+	Camp = UTheaterStillMesh::Make(this, TEXT("Camp"));
+	Camp->SetupAttachment(Root);
+	Camp->SetUsingAbsoluteLocation(true);
+	Camp->SetUsingAbsoluteRotation(true);
+	Camp->SetUsingAbsoluteScale(true);
+	Camp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Camp->SetCastShadow(bCastsShadows);
+	Camp->RegisterComponent();
+	int32 Section = 0;
+	if (bSolid)
+	{
+		Camp->CreateMeshSection(Section, Solid->Vertices, Solid->Triangles, Solid->Normals, TArray<FVector2D>(), Solid->Colors, TArray<FProcMeshTangent>(), false);
+		Camp->SetMaterial(Section, SolidPaint);
+		++Section;
+	}
+	if (bTrodden)
+	{
+		Camp->CreateMeshSection(Section, Trodden->Vertices, Trodden->Triangles, Trodden->Normals, TArray<FVector2D>(), Trodden->Colors, TArray<FProcMeshTangent>(), false);
+		Camp->SetMaterial(Section, TroddenInk);
+	}
+	Camp->SetVisibility(bCampsNear);
+}
+
+void AArmyPiece::SetCampShown(bool bShown)
+{
+	if (Camp && Camp->IsVisible() != bShown)
+	{
+		Camp->SetVisibility(bShown);
+	}
+}
 
 void AArmyPiece::SetFlockShown(bool bShown)
 {
@@ -286,6 +438,21 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		StrengthLabel->DestroyComponent();
 		StrengthLabel = nullptr;
 	}
+	if (WorksLabel)
+	{
+		WorksLabel->DestroyComponent();
+		WorksLabel = nullptr;
+	}
+	if (NameLabel)
+	{
+		NameLabel->DestroyComponent();
+		NameLabel = nullptr;
+	}
+	if (MarkLabel)
+	{
+		MarkLabel->DestroyComponent();
+		MarkLabel = nullptr;
+	}
 	if (Mast)
 	{
 		Mast->DestroyComponent();
@@ -353,7 +520,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 			: Fleet.Stance == TEXT("escort") ? FString::Printf(TEXT("%d escort"), Fleet.Ships())
 			: Fleet.Stance == TEXT("hunt") ? FString::Printf(TEXT("%d hunting"), Fleet.Ships())
 			: Fleet.Stance == TEXT("raid") ? FString::Printf(TEXT("%d raiding"), Fleet.Ships())
-			: FString::Printf(TEXT("%d ships"), Fleet.Ships());
+			: FString::Printf(TEXT("%d ship%s"), Fleet.Ships(), Fleet.Ships() == 1 ? TEXT("") : TEXT("s")); // (1.5.1: "1 ship", Brian's hand-check list)
 		SelectionRing->SetVisibility(false);
 	}
 	else if (What == 2)
@@ -439,53 +606,17 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 
 		// The dressing round the base, which says what the army is about without a click. (The piece is always
 		// turned so that -X is toward whoever looks at the table, +Y to his right.)
+		// (Release 2: camps you can see. The works are no longer a ring of sandbags and wire round the front of the
+		// base, which faced the eye and not the enemy: an army that stands and digs grows a camp on the ground round
+		// it, its trench and wire on the side toward the enemy, which the map lays (ACampaignMapActor::BuildCamps).
+		// What stays here turns with the piece, and keeps inside the ring that camp leaves clear.)
 		const double Rim = CounterWidth * 0.5;
-		auto Round = [](double FromFront, double Out) { const double A = FMath::DegreesToRadians(FromFront); return FVector(-FMath::Cos(A) * Out, FMath::Sin(A) * Out, 0.0); };
-		if (WorksState > 0)
-		{
-			// Dug in: a breastwork of sandbags round the front of the base, two courses high, and wire before it.
-			// Still digging: one short course across the front and a heap of spoil.
-			const FLinearColor Bag(FColor::FromHex(TEXT("C2B280"))), BagDark(FColor::FromHex(TEXT("A99B6C"))), Stake(FColor::FromHex(TEXT("3A342C"))), Wire(FColor::FromHex(TEXT("55585C"))), Spoil(FColor::FromHex(TEXT("6B5338")));
-			const double Sweep = WorksState == 2 ? 118.0 : 46.0;
-			const int32 Bags = WorksState == 2 ? 13 : 5;
-			for (int32 Course = 0; Course < (WorksState == 2 ? 2 : 1); ++Course)
-			{
-				for (int32 K = 0; K < Bags - Course; ++K)
-				{
-					const double Angle = -Sweep + (K + 0.5 * Course) * (2.0 * Sweep / (Bags - 1));
-					const FVector At = Round(Angle, Rim + 0.85 * U) + FVector(0.0, 0.0, (0.24 + 0.42 * Course) * U);
-					Model.Box(At, FVector(0.62, 1.3, 0.44) * U, (K + Course) % 2 == 0 ? Bag : BagDark, FMath::RadiansToDegrees(FMath::Atan2(At.Y, At.X)));
-				}
-			}
-			if (WorksState == 2)
-			{
-				FVector Last = FVector::ZeroVector;
-				for (int32 K = 0; K < 8; ++K)
-				{
-					const double Angle = -104.0 + K * (208.0 / 7.0);
-					const FVector Foot = Round(Angle, Rim + 2.15 * U);
-					const FVector Along = Round(Angle + 90.0, 0.34 * U);
-					Model.Rod(Foot - Along, Foot + Along + FVector(0.0, 0.0, 0.8 * U), 0.05 * U, Stake, 4);
-					Model.Rod(Foot + Along, Foot - Along + FVector(0.0, 0.0, 0.8 * U), 0.05 * U, Stake, 4);
-					const FVector Top2 = Foot + FVector(0.0, 0.0, 0.5 * U);
-					if (K > 0)
-					{
-						Model.Rod(Last, Top2, 0.028 * U, Wire, 4);
-						Model.Rod(Last + FVector(0.0, 0.0, 0.26 * U), Top2 + FVector(0.0, 0.0, 0.26 * U), 0.028 * U, Wire, 4);
-					}
-					Last = Top2;
-				}
-			}
-			else
-			{
-				Model.Ball(Round(-70.0, Rim + 1.3 * U) + FVector(0.0, 0.0, 0.12 * U), FVector(1.5, 1.1, 0.7) * U, Spoil, 4, 8);
-			}
-		}
 		if (bCamp)
 		{
-			// In camp: a row of ridge tents to the right of the base, their open ends to the viewer, and a fire.
+			// In camp: a row of ridge tents to the right of the base, their open ends to the viewer, and a fire. (An
+			// army whose camp is pitched round it has its tents there, and keeps only its fire here.)
 			const FLinearColor Tent(FColor::FromHex(TEXT("D2C8A4"))), TentShade(FColor::FromHex(TEXT("B8AD86"))), Log(FColor::FromHex(TEXT("4A3A2A"))), Flame(FColor::FromHex(TEXT("FF8A2A"))), Ember(FColor::FromHex(TEXT("FFD060")));
-			for (int32 K = 0; K < 3; ++K)
+			for (int32 K = 0; K < 3 && CampStage == 0; ++K)
 			{
 				Model.House(FVector((-2.4 + K * 2.1) * U, Rim + (2.3 + 0.3 * (K % 2)) * U, 0.0), 1.9 * U, 1.5 * U, 0.06 * U, 1.1 * U, K % 2 == 0 ? Tent : TentShade, K % 2 == 0 ? TentShade : Tent, 0.0);
 			}
@@ -731,6 +862,118 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	Staff.Box(PlateAt - StandardFoot + FVector(0.0, 0.0, PlateHeight * 0.5), FVector(0.26 * U, PlateWidth + 0.1 * U, 0.14 * U), BrassPaint);
 	Staff.Box(PlateAt - StandardFoot - FVector(0.0, 0.0, PlateHeight * 0.5), FVector(0.26 * U, PlateWidth + 0.1 * U, 0.14 * U), BrassPaint);
 
+	// (Release 2: camps you can see.) Beside the plate, a smaller one in the same dark and brass for an army that has
+	// stood and dug: a spade, the months its works have had, and a tick once they are finished (the art director's
+	// paintover). The figure is lettered as the plate's is, further down; the spade and the tick are moulded on.
+	FString TagFigure; // (the months, or nothing where none are counted or none show yet)
+	FVector TagFigureAt = FVector::ZeroVector;
+	double TagHigh = 0.0;
+	if (What == 0 && !bGlimpsed && CampStage > 0)
+	{
+		TagHigh = PlateHeight * 0.8;
+		TagFigure = CampFigure > 0 ? FString::FromInt(CampFigure) : FString();
+		const bool bTick = CampStage >= 3;
+		const double Pad = 0.2 * TagHigh, Gap = 0.12 * TagHigh, SpadeWide = 0.4 * TagHigh, Letters = 0.52 * TagHigh * TagFigure.Len(), TickWide = 0.56 * TagHigh;
+		const double TagWide = Pad + SpadeWide + (Letters > 0.0 ? Gap + Letters : 0.0) + (bTick ? Gap + TickWide : 0.0) + Pad;
+		const double From = Pole.Y + Hoist + PlateWidth + 0.3 * PlateHeight; // (its near edge, a little way along from the plate's far one)
+		const FVector TagAt(Pole.X, From + TagWide * 0.5, PlateAt.Z);
+		Staff.Box(TagAt - StandardFoot, FVector(0.2 * U, TagWide, TagHigh), FLinearColor(FColor::FromHex(TEXT("15130F"))));
+		// (edged in brass all round, where the plate has it top and bottom only: it reads as a thing of its own beside it)
+		for (const double Edge : { -0.5, 0.5 })
+		{
+			Staff.Box(TagAt - StandardFoot + FVector(0.0, 0.0, TagHigh * Edge), FVector(0.26 * U, TagWide + 0.1 * U, 0.12 * U), BrassPaint);
+			Staff.Box(TagAt - StandardFoot + FVector(0.0, TagWide * Edge, 0.0), FVector(0.26 * U, 0.12 * U, TagHigh + 0.1 * U), BrassPaint);
+		}
+		// The spade and the tick lie on the plate's face, which looks back along -X: across it is +Y, up it +Z.
+		const double FaceX = Pole.X - 0.13 * U;
+		const FVector Out(-1.0, 0.0, 0.0);
+		auto OnFace = [&](double Across, double Up) { return FVector(FaceX, Across, PlateAt.Z + Up) - StandardFoot; };
+		auto Panel = [&](double Left, double Right, double Low, double High, const FColor& Ink)
+		{
+			Staff.Quad(OnFace(Left, Low), OnFace(Right, Low), OnFace(Right, High), OnFace(Left, High), Out, Ink);
+		};
+		const FColor Brassy = BrassPaint.ToFColor(true);
+		const double Spade = From + Pad + SpadeWide * 0.5;
+		Panel(Spade - 0.16 * TagHigh, Spade + 0.16 * TagHigh, 0.26 * TagHigh, 0.33 * TagHigh, Brassy); // the grip
+		Panel(Spade - 0.035 * TagHigh, Spade + 0.035 * TagHigh, -0.02 * TagHigh, 0.27 * TagHigh, Brassy); // the shaft
+		Panel(Spade - 0.14 * TagHigh, Spade + 0.14 * TagHigh, -0.2 * TagHigh, 0.0, Brassy); // the blade
+		{
+			const int32 BladeLeft = Staff.Add(OnFace(Spade - 0.14 * TagHigh, -0.2 * TagHigh), Out, Brassy);
+			const int32 BladeRight = Staff.Add(OnFace(Spade + 0.14 * TagHigh, -0.2 * TagHigh), Out, Brassy);
+			const int32 BladePoint = Staff.Add(OnFace(Spade, -0.33 * TagHigh), Out, Brassy);
+			Staff.Face(BladeLeft, BladeRight, BladePoint, Out); // and its point
+		}
+		TagFigureAt = FVector(Pole.X - 0.16 * U, From + Pad + SpadeWide + Gap + Letters * 0.5, PlateAt.Z);
+		if (bTick)
+		{
+			// The tick, finished: a short stroke down and a long one up, in a soft green.
+			const FColor TickInk = FLinearColor(FColor::FromHex(TEXT("8CC27A"))).ToFColor(true);
+			const double TickFrom = From + TagWide - Pad - TickWide;
+			const FVector2D Stroke[3] = { FVector2D(TickFrom, 0.0), FVector2D(TickFrom + 0.32 * TickWide, -0.2 * TagHigh), FVector2D(TickFrom + TickWide, 0.24 * TagHigh) };
+			for (int32 K = 0; K < 2; ++K)
+			{
+				const FVector2D Way = (Stroke[K + 1] - Stroke[K]).GetSafeNormal();
+				const FVector2D Side = FVector2D(-Way.Y, Way.X) * (0.06 * TagHigh);
+				const FVector2D Start = Stroke[K] - Way * (0.04 * TagHigh), Close = Stroke[K + 1] + Way * (0.04 * TagHigh);
+				Staff.Quad(OnFace(Start.X - Side.X, Start.Y - Side.Y), OnFace(Close.X - Side.X, Close.Y - Side.Y), OnFace(Close.X + Side.X, Close.Y + Side.Y), OnFace(Start.X + Side.X, Start.Y + Side.Y), Out, TickInk);
+			}
+		}
+	}
+
+	// ---- (Release 2, the marked army; marked.ts; Brian, 24 November 2026 18:01Z) An enemy army that took one of his
+	// towns wears a red tag on its pole until he beats it: hung on the side away from its flag, its top level with the
+	// flag's, swallow-tailed at its free end, edged in near-black, and lettered with the town in cream capitals. A long
+	// name is lettered smaller rather than run wider than the flag.
+	// (Release 2, new units ready) His own new army wears the same tag in brass, lettered NEW in near-black.
+	if (What == 0 && !bGlimpsed && (!MarkedTown.IsEmpty() || bTagNew))
+	{
+		const bool bMarkNew = MarkedTown.IsEmpty();
+		const FString MarkShown = bMarkNew ? FString(TEXT("NEW")) : MarkedTown.ToUpper();
+		const double MarkLetterWanted = PlateHeight * 0.5;
+		const double MarkWanted = MarkLetterWanted * (0.9 + 0.62 * MarkShown.Len());
+		const double MarkWide = FMath::Min(MarkWanted, FlagWidth * 1.1);
+		const double MarkLetter = MarkLetterWanted * MarkWide / MarkWanted;
+		const double MarkHigh = FMath::Max(MarkLetter * 1.55, MarkLetterWanted * 1.2);
+		const double MarkTail = MarkHigh * 0.45;
+		const double MarkNear = Pole.Y - 0.2 * U; // (against the pole)
+		const FVector MarkAt(Pole.X, MarkNear - MarkWide * 0.5, FlagAt.Z + FlagHeight * 0.5 - MarkHigh * 0.5);
+		const FLinearColor MarkRed = bMarkNew ? BrassPaint : FLinearColor(FColor(176, 30, 26)); // (brass for his own new army)
+		const FLinearColor MarkEdge(FColor::FromHex(TEXT("15130F")));
+		Staff.Box(MarkAt - StandardFoot, FVector(0.2 * U, MarkWide, MarkHigh), MarkRed);
+		for (const double MarkEdgeAt : { -0.5, 0.5 })
+		{
+			Staff.Box(MarkAt - StandardFoot + FVector(0.0, 0.0, MarkHigh * MarkEdgeAt), FVector(0.24 * U, MarkWide + 0.06 * U, 0.1 * U), MarkEdge);
+		}
+		// The swallow tail: two red points beyond the free end, on the face toward the viewer (-X).
+		const double MarkFace = Pole.X - 0.1 * U, MarkEnd = MarkNear - MarkWide;
+		const FVector MarkOut(-1.0, 0.0, 0.0);
+		const FColor MarkRedPoint = MarkRed.ToFColor(true);
+		auto MarkPoint = [&](double Across, double Up) { return Staff.Add(FVector(MarkFace, Across, MarkAt.Z + Up) - StandardFoot, MarkOut, MarkRedPoint); };
+		{
+			const int32 TopIn = MarkPoint(MarkEnd + 0.01 * U, MarkHigh * 0.5), TopOut = MarkPoint(MarkEnd - MarkTail, MarkHigh * 0.5), Notch = MarkPoint(MarkEnd + 0.01 * U, 0.0);
+			Staff.Face(TopIn, TopOut, Notch, MarkOut);
+			const int32 LowIn = MarkPoint(MarkEnd + 0.01 * U, -MarkHigh * 0.5), LowOut = MarkPoint(MarkEnd - MarkTail, -MarkHigh * 0.5), Middle = MarkPoint(MarkEnd + 0.01 * U, 0.0);
+			Staff.Face(Middle, LowOut, LowIn, MarkOut);
+		}
+		MarkLabel = NewObject<UTextRenderComponent>(this);
+		MarkLabel->SetupAttachment(Standard);
+		MarkLabel->SetText(FText::FromString(MarkShown));
+		MarkLabel->SetWorldSize(static_cast<float>(MarkLetter));
+		MarkLabel->SetTextRenderColor(FColor::FromHex(bMarkNew ? TEXT("15130F") : TEXT("F4F0E4")));
+		if (UMaterialInterface* Unlit = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineMaterials/UnlitText.UnlitText")))
+		{
+			MarkLabel->SetTextMaterial(Unlit);
+		}
+		MarkLabel->SetHorizontalAlignment(EHTA_Center);
+		MarkLabel->SetVerticalAlignment(EVRTA_TextCenter);
+		MarkLabel->SetCastShadow(false);
+		MarkLabel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		MarkLabel->SetRelativeLocation(MarkAt - StandardFoot - FVector(0.16 * U, 0.0, 0.0));
+		MarkLabel->SetRelativeRotation(FRotator(0.0f, 180.0f, 0.0f));
+		MarkLabel->RegisterComponent();
+	}
+	// ---- (end release 2)
+
 	// A small pennant under the plate for each ally whose corps march with this army.
 	if (Cloth && What == 0)
 	{
@@ -761,6 +1004,11 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 			Cloth->CreateMeshSection_LinearColor(Index + 1, Corners, { 0, 2, 1, 1, 2, 3 }, Facing, Cover, TArray<FLinearColor>(), Lie, false);
 			Cloth->SetMaterial(Index + 1, Theirs);
 		}
+	}
+	// R2 bargains hook: a volunteer legion's home pennant on the same pole, under the ally pennants (no corps has a home abroad in release 1)
+	if (Cloth && What == 0 && !bGlimpsed)
+	{
+		BargainLayer::HangPennant(Map, Cloth, Corps, Pole.X, Pole.Y + Hoist, PlateAt.Z - PlateHeight * 0.5 - 0.45 * U, FlagWidth, U);
 	}
 
 	// The mesh is done: hand it over.
@@ -855,6 +1103,62 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	StrengthLabel->SetRelativeLocation(PlateAt - StandardFoot - FVector(0.16 * U, 0.0, 0.0));
 	StrengthLabel->SetRelativeRotation(FRotator(0.0f, 180.0f, 0.0f));
 	StrengthLabel->RegisterComponent();
+	// The months on the spade tag, lettered as the strength is.
+	if (!TagFigure.IsEmpty())
+	{
+		WorksLabel = NewObject<UTextRenderComponent>(this);
+		WorksLabel->SetupAttachment(Standard);
+		WorksLabel->SetText(FText::FromString(TagFigure));
+		WorksLabel->SetWorldSize(static_cast<float>(TagHigh * 0.86));
+		WorksLabel->SetTextRenderColor(FColor::FromHex(TEXT("F4F0E4")));
+		if (UMaterialInterface* Unlit = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineMaterials/UnlitText.UnlitText")))
+		{
+			WorksLabel->SetTextMaterial(Unlit);
+		}
+		WorksLabel->SetHorizontalAlignment(EHTA_Center);
+		WorksLabel->SetVerticalAlignment(EVRTA_TextCenter);
+		WorksLabel->SetCastShadow(false);
+		WorksLabel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		WorksLabel->SetRelativeLocation(TagFigureAt - StandardFoot);
+		WorksLabel->SetRelativeRotation(FRotator(0.0f, 180.0f, 0.0f));
+		WorksLabel->RegisterComponent();
+	}
+	// (Release 2, nicknames.ts) The name its corps have earned, in quotes, on a dark scroll with brass edges over the top
+	// of the flag, clear of the finial: lettered in old gold, so that it is never read as the strength. A long name is
+	// lettered smaller rather than run wider than the flag and a half, which would lie over the next army's flag.
+	if (!EarnedName.IsEmpty() && What == 0)
+	{
+		const FString Shown = FString::Printf(TEXT("\"%s\""), *EarnedName); // (straight quotes: the engine's own text font is sure to have them)
+		const double Letter = PlateHeight * 0.6;
+		const double Wanted = Letter * (0.9 + 0.56 * Shown.Len());
+		const double Widest = FlagWidth * 1.5;
+		const double Scroll = FMath::Min(Wanted, Widest);
+		const double Lettered = Letter * Scroll / Wanted;
+		const double High = FMath::Max(Lettered * 1.45, Letter * 0.95);
+		const FVector ScrollAt = Pole + FVector(0.0, Hoist + FlagWidth * 0.5, Top + PoleHeight + 1.9 * U + High * 0.5);
+		AddPart(Cube, ScrollAt - StandardFoot, FVector(0.16 * U, Scroll + 0.3 * U, High), Map->GetSolidMaterial(FLinearColor(FColor::FromHex(TEXT("15130F"))), 0.7f, 0.0f, 0.6f), Standard)->SetCastShadow(false);
+		for (const double Edge : { -1.0, 1.0 })
+		{
+			AddPart(Cube, ScrollAt - StandardFoot + FVector(0.0, 0.0, Edge * High * 0.5), FVector(0.22 * U, Scroll + 0.4 * U, 0.12 * U),
+				Map->GetSolidMaterial(BrassPaint, 0.4f, 0.8f, 0.5f), Standard)->SetCastShadow(false);
+		}
+		NameLabel = NewObject<UTextRenderComponent>(this);
+		NameLabel->SetupAttachment(Standard);
+		NameLabel->SetText(FText::FromString(Shown));
+		NameLabel->SetWorldSize(static_cast<float>(Lettered));
+		NameLabel->SetTextRenderColor(FColor::FromHex(TEXT("E9C77B")));
+		if (UMaterialInterface* Unlit = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineMaterials/UnlitText.UnlitText")))
+		{
+			NameLabel->SetTextMaterial(Unlit);
+		}
+		NameLabel->SetHorizontalAlignment(EHTA_Center);
+		NameLabel->SetVerticalAlignment(EVRTA_TextCenter);
+		NameLabel->SetCastShadow(false);
+		NameLabel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		NameLabel->SetRelativeLocation(ScrollAt - StandardFoot - FVector(0.12 * U, 0.0, 0.0));
+		NameLabel->SetRelativeRotation(FRotator(0.0f, 180.0f, 0.0f));
+		NameLabel->RegisterComponent();
+	}
 	ApplyStandard(); // (a piece rebuilt stands as its neighbours stand)
 }
 
@@ -967,6 +1271,17 @@ bool AArmyPiece::HitByRay(const FVector& Origin, const FVector& Direction, doubl
 		|| Near(Place.TransformPosition(FVector::ZeroVector), Place.TransformPosition(FVector(0.0, 0.0, BodyTop)), BaseRadius);
 }
 
+bool AArmyPiece::ColoursHitByRay(const FVector& Origin, const FVector& Direction) const
+{
+	// (1.5.1 and release 2; Brian, 24 November 2026: "i cant click on the london airfield".) The colours alone, as HitByRay
+	// measures them: inside an airfield's ring another country's piece keeps the pointer only on its flag.
+	const FVector End = Origin + Direction * 200000.0;
+	const FVector Flag = GetActorTransform().TransformPosition(OnStandard(FlagCenter));
+	FVector OnRay, OnPart;
+	FMath::SegmentDistToSegmentSafe(Origin, End, Flag, Flag, OnRay, OnPart);
+	return FVector::DistSquared(OnRay, OnPart) <= FMath::Square(FlagRadius * StandardScale);
+}
+
 void AArmyPiece::Carry(const FVector& GroundPoint)
 {
 	bMarching = false;
@@ -993,6 +1308,7 @@ void AArmyPiece::MarchAlong(const TArray<FVector>& Waypoints, bool bInRemoveOnAr
 		return;
 	}
 	Route = Waypoints;
+	bSailing = false; // (SailAlong sets it again after)
 	RouteMarks.Reset(Route.Num());
 	double Length = 0.0;
 	RouteMarks.Add(0.0);
@@ -1015,6 +1331,28 @@ void AArmyPiece::MarchAlong(const TArray<FVector>& Waypoints, bool bInRemoveOnAr
 	}
 	SetActorLocation(Route[0]);
 	SetActorTickEnabled(true);
+}
+
+void AArmyPiece::SailAlong(const TArray<FVector>& Waypoints, float TableYaw)
+{
+	MarchAlong(Waypoints, false, false);
+	if (!bMarching || RouteMarks.Num() < 2)
+	{
+		return;
+	}
+	bSailing = true;
+	SailEndYaw = TableYaw;
+	// (slower than a piece carried by hand: the eye should follow the ships out of one sea and into the next)
+	MarchTime = FMath::Clamp(1.1 + RouteMarks.Last() / 3800.0, 1.4, 3.6);
+}
+
+void AArmyPiece::FaceTable(float Yaw)
+{
+	SailEndYaw = Yaw;
+	if (!IsSailing())
+	{
+		SetActorRotation(FRotator(0.0f, Yaw, 0.0f));
+	}
 }
 
 void AArmyPiece::Tick(float DeltaSeconds)
@@ -1047,11 +1385,33 @@ void AArmyPiece::Tick(float DeltaSeconds)
 	// A piece that is still in the hand when it arrives comes to rest a little off the table.
 	Position += (HomeLocation() - RestLocation) * Eased;
 	SetActorLocation(Position);
+	if (bSailing)
+	{
+		// Bows the way she goes (a fleet's model has its bows toward its own +Y), and round to face the table again as
+		// she comes in: turned a little each frame, never snapped.
+		const FVector Heading = Route[Segment] - Route[Segment - 1];
+		double Want = SailEndYaw;
+		if (Progress < 0.84 && Heading.SizeSquared2D() > 1.0e-4)
+		{
+			Want = FMath::RadiansToDegrees(FMath::Atan2(-Heading.X, Heading.Y));
+		}
+		const double Now = GetActorRotation().Yaw;
+		const double Turn = FRotator::NormalizeAxis(Want - Now);
+		// (The last turn, round to the table, quickens as the time left runs out: on the shortest sail it is all but
+		// done by the time she comes in, and what is left at the end is too little to see snap.)
+		const double Rate = Progress < 0.84 ? 5.0 : FMath::Max(5.0, 3.0 / FMath::Max(0.05, MarchTime * (1.0 - Progress)));
+		SetActorRotation(FRotator(0.0, Now + Turn * FMath::Min(1.0, DeltaSeconds * Rate), 0.0));
+	}
 
 	if (Progress >= 1.0)
 	{
 		bMarching = false;
 		SetActorTickEnabled(false);
+		if (bSailing)
+		{
+			bSailing = false;
+			SetActorRotation(FRotator(0.0f, SailEndYaw, 0.0f));
+		}
 		if (bHasWake && Body)
 		{
 			Body->SetMeshSectionVisible(1, true);
@@ -1077,6 +1437,10 @@ void AArmyPiece::SetShadows(bool bCast)
 		{
 			Body->SetCastShadow(bCast);
 			TheaterSpeed::NoteMade(TheaterSpeed::EMade::ShadowFlips); // (speed log: its whole model is handed to the draw thread again)
+		}
+		if (Camp)
+		{
+			Camp->SetCastShadow(bCast); // (its camp with it)
 		}
 	}
 }

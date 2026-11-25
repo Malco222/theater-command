@@ -126,6 +126,13 @@ function skiesOf(g: Game, turn: number): Sky[] {
   return skies;
 }
 
+/**
+ * The sky dealt over a zone in a month whether or not the weather's switch is on (the same deal skyOf reads where it is):
+ * heavy seas (release 2, heavyseas.ts) blow their gales under a closed one, so that with weather on a gale's sea also has
+ * nothing flying over it. Reads nothing else and moves nothing.
+ */
+export const dealtSky = (g: Game, zone: number, turn = g.turn): Sky => (zone < 0 ? 'clear' : skiesOf(g, turn)[zone]);
+
 /** A zone's sky in a month (this month by default). Clear where there is no weather. */
 export function skyOf(g: Game, zone: number, turn = g.turn): Sky {
   if (!weatherOn(g) || zone < 0) return 'clear';
@@ -155,6 +162,22 @@ export const cloudMet = (sky: Sky): number => (sky === 'cloud' ? WEATHER.cloud.m
 /** What cloud over the target does to the bombers the guns bring down. */
 export const cloudGuns = (sky: Sky, night: boolean): number => (sky === 'cloud' ? (night ? WEATHER.cloud.gunsNight : WEATHER.cloud.gunsDay) : 1);
 /** What the sky over a battle leaves of the air on either side: none under a closed sky, half under cloud. */
+/**
+ * The share of a day the sun is up at a latitude (degrees north) in a month (0 January to 11 December), at mid-month
+ * (release 2): sunrise to sunset by the sunrise equation, the sun's declination for the day of the year, and 0.833
+ * degrees for refraction and the sun's disc. Astronomy (F), never a table; 1 in the midnight sun and 0 in the polar
+ * night. One function for every system that needs daylight: the sea patrol's day-only watch first (the design
+ * director's ruling of 24 November 2026 17:10Z), and the air war's when it reads it.
+ */
+export function dayShare(lat: number, month: number): number {
+  const rad = Math.PI / 180;
+  const day = Math.round(15.5 + month * (365 / 12));
+  const decl = 23.44 * rad * Math.sin((2 * Math.PI * (284 + day)) / 365);
+  const phi = Math.max(-89.9, Math.min(89.9, lat)) * rad;
+  const c = (Math.sin(-0.833 * rad) - Math.sin(phi) * Math.sin(decl)) / (Math.cos(phi) * Math.cos(decl));
+  return c <= -1 ? 1 : c >= 1 ? 0 : Math.acos(c) / Math.PI;
+}
+
 export const skySupport = (sky: Sky): number => (sky === 'closed' ? 0 : sky === 'cloud' ? WEATHER.cloud.support : 1);
 
 // ---- The words -------------------------------------------------------------------------------

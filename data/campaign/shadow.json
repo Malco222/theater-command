@@ -1,0 +1,11 @@
+{
+  "_about": "Shadowing (release 2; Brian, 24 November 2026 19:47Z, 'yes to all', of the idea 'a cruiser can shadow an enemy fleet: it follows wherever that fleet goes and reports where it is'). A fleet of cruisers (destroyers may sail with them; no battleship or carrier) is set on an enemy fleet it can reach. At the start of every country's month it follows that fleet into the sea it is in, or off the harbour it lies in, while that is in its reach, and keeps it identified for its side all month. At the start of its own side's month it reports where it is. Out of its reach, contact is lost and the shadow ends. A shadow does not seek battle. Found alone by an enemy who would fight it, it keeps its distance 'slip' of the time (it is faster than what it follows), and fights otherwise. The computer's admirals set at most 'ai.most' at a time each, on the enemy's strongest known fleet at sea in reach, with a fleet at or above 'ai.ready' readiness, and bring it home below 'ai.home', as their admirals bring any worn fleet home. The two figures are the thread's proposal, to the design director.",
+  "slip": 0.7,
+  "ai": {
+    "most": 1,
+    "ready": 0.6,
+    "home": 0.5
+  },
+  "_relay": "The shadow relay (release 2; Brian, 24 November 2026 20:38Z, 'yes to all', of the idea 'when a shadowing squadron runs low on fuel and has to go home, a fresh squadron takes over without losing contact'). Its own switch, read only with shadowing on. A shadow's fuel lasts 'months' months on station; then, at the start of its own side's month, it makes for harbour. A fleet of cruisers of the same country lying in harbour, at 'ready' readiness or better and able to shadow the same fleet, takes over first, and contact is kept; with none, contact is lost. The same for every country.",
+  "relay": { "months": 3, "ready": 0.75 }
+}

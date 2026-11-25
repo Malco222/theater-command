@@ -37,6 +37,7 @@ struct FCampaignRegion
 	bool bOre = false;
 	bool bDepot = false;
 	bool bColony = false;
+	bool bIslet = false; // (release 2, the whole world) one of the Pacific's islets, the chart's "islet": Midway, Wake, Truk. About ten units across, which the world's coarse sheet cannot see
 	int32 FortLevel = 0;
 	FVector2D Center = FVector2D::ZeroVector; // the region's seed point (its chief town)
 	FVector2D Centroid = FVector2D::ZeroVector; // middle of its largest piece of land
@@ -106,6 +107,14 @@ public:
 	 * west edge is at x = -500 here; ShiftX is what to add to one of these x's to have the world file's.
 	 */
 	bool bWorld = false;
+	/**
+	 * (Release 2, the whole world) The far side is on: the wider chart is the whole world's, with Asia, the Indies,
+	 * the Pacific and its islands, Africa and the Middle East laid after the Americas, and their countries painted.
+	 * Only on the whole-world map: data/campaign/stage.json "far", or -TheaterFar beside -TheaterWorld.
+	 */
+	bool bFar = false;
+	/** Whether the far side is switched on for this run (stage.json "far", or -TheaterFar outside a shipping build). */
+	static bool FarSwitch();
 	double WorldMinX = 0.0, WorldMinY = 0.0, WorldWidth = 0.0, WorldHeight = 0.0, ShiftX = 0.0;
 	/** The longitude of x = 0 and the latitude of y = 0, in degrees: the map is 25.7115 units to a degree east and 40 to a degree south. */
 	double Lon0 = -11.0, Lat0 = 71.4;

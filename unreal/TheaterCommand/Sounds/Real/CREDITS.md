@@ -220,21 +220,53 @@ The game is for personal use only.
 | `russian_order_02` | `russian_order_02.wav` | [Russian Cheeky Soldier Voice](https://freesound.org/people/qubodup/sounds/212429/) | Freesound | CC BY 4.0 | qubodup |
 | `russian_order_03` | `russian_order_03.wav` | [Russian Cheeky Soldier Voice](https://freesound.org/people/qubodup/sounds/212429/) | Freesound | CC BY 4.0 | qubodup |
 | `russian_order_04` | `russian_order_04.wav` | [Russian Cheeky Soldier Voice](https://freesound.org/people/qubodup/sounds/212429/) | Freesound | CC BY 4.0 | qubodup |
+| `fw190_pass` | `fw190_pass.wav` | [Fw-190 Flyby](https://freesound.org/people/Fight2FlyPhoto/sounds/143562/) | Freesound | CC BY 3.0 | Fight2FlyPhoto |
+| `p51_pass` | `p51_pass.wav` | [P51 with supercharger](https://freesound.org/people/doubletrigger/sounds/110736/) | Freesound | CC BY 3.0 | doubletrigger |
+| `p47_pass` | `p47_pass.wav` | [P-47 Flyby](https://freesound.org/people/Fight2FlyPhoto/sounds/143560/) | Freesound | CC BY 3.0 | Fight2FlyPhoto |
+| `spitfire_pass` | `spitfire_pass.wav` | [Spitfire 2 passes Military od](https://freesound.org/people/Cheeseheadburger/sounds/170477/) | Freesound | CC BY 4.0 | Cheeseheadburger |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [G07-18_B-17 4 Engine Prop Steady Engine Noise](https://freesound.org/people/craigsmith/sounds/437862/) | Freesound | CC0 | none |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38](https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_Flying_Bulls_B-25_And_P-38.ogv) | Wikimedia Commons | CC BY 3.0 | LEJ.approach/dvldi |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [Hahnweide Vintage Air Show 2011 - B-25 And P-38](https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_B-25_And_P-38.ogv) | Wikimedia Commons | CC BY 3.0 | LEJ.approach/dvldi |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [Explosions-LS100155](https://commons.wikimedia.org/wiki/File:Explosions-LS100155.ogg) | Wikimedia Commons | Public domain | none |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [Fw-190 Flyby](https://freesound.org/people/Fight2FlyPhoto/sounds/143562/) | Freesound | CC BY 3.0 | Fight2FlyPhoto |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [M2 browning](https://commons.wikimedia.org/wiki/File:M2_browning.webm) | Wikimedia Commons | Public domain | none |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [MG 42 (Solo) WW2](https://freesound.org/people/Lubini/sounds/338242/) | Freesound | CC BY 4.0 | Lubini |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [P-47 Flyby](https://freesound.org/people/Fight2FlyPhoto/sounds/143560/) | Freesound | CC BY 3.0 | Fight2FlyPhoto |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [P51 with supercharger](https://freesound.org/people/doubletrigger/sounds/110736/) | Freesound | CC BY 3.0 | doubletrigger |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [Spitfire 2 passes Military od](https://freesound.org/people/Cheeseheadburger/sounds/170477/) | Freesound | CC BY 4.0 | Cheeseheadburger |
+| `b24_drone_loop` | `b24_drone_loop.wav` | [b24](https://freesound.org/people/relwin/sounds/391516/) | Freesound | CC BY 4.0 | relwin |
+| `stuka_drone_loop` | `stuka_drone_loop.wav` | [G04-07-WWII Stuka engine drone](https://freesound.org/people/craigsmith/sounds/437771/) | Freesound | CC0 | none |
+| `b17_interior_loop` | `b17_interior_loop.wav` | [G07-06_B-17 4 Engine Prop Ambience.wav](https://freesound.org/people/craigsmith/sounds/437850/) | Freesound | CC0 | none |
+| `b17_formation_drone_loop` | `b17_formation_drone_loop.wav` | [B-17 fly-over](https://www.dvidshub.net/video/600861) | DVIDS | Public domain | A1C Emily Rupert and SSgt Nathan Tucker, 88th Air Base Wing (U.S. Air Force video) |
+| `b17_interior_loop` | `b17_interior_whiteman_loop.wav` | [Wings Over Whiteman B-roll](https://www.dvidshub.net/video/531502) | DVIDS | Public domain | SrA Lesley Kleyh, 442d Fighter Wing (U.S. Air Force video) |
+| `b17_interior_loop` | `b17_interior_sioux_loop.wav` | [CAF brings Flying Fortress to Sioux City](https://www.dvidshub.net/video/852294) | DVIDS | Public domain | SMSgt Vincent De Groot, 185th Air Refueling Wing (U.S. Air Force video) |
+| `ship_gun_heavy` | `ship_gun_heavy.wav` | [Artillery Battery Barrage • U.S.-ROK Marines Live-Fire](https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm) | Wikimedia Commons | Public domain | none |
+| `ship_gun_medium` | `ship_gun_medium.wav` | [Artillery Battery Barrage • U.S.-ROK Marines Live-Fire](https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm) | Wikimedia Commons | Public domain | none |
+| `ship_gun_medium` | `ship_gun_medium.wav` | [913363-U.S. Marines From 2nd ANGLICO and the Coastal Brigade, Finnish Navy Conduct Series Fires Using 130mm 53 TK Cannon](https://commons.wikimedia.org/wiki/File:913363-U.S._Marines_From_2nd_ANGLICO_and_the_Coastal_Brigade,_Finnish_Navy_Conduct_Series_Fires_Using_130mm_53_TK_Cannon.webm) | Wikimedia Commons | Public domain | none |
+| `shell_splash` | `shell_splash.wav` | [Big Water Splash](https://freesound.org/people/qubodup/sounds/442773/) | Freesound | CC0 | none |
+| `dive_bomber` | `dive_bomber.wav` | [Hahnweide Vintage Air Show 2011 - B-25 And P-38](https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_B-25_And_P-38.ogv) | Wikimedia Commons | CC BY 3.0 | LEJ.approach/dvldi |
+| `sea_day_loop` | `sea_day_loop.wav` | [Ship bow wave](https://freesound.org/people/kirkrcarter/sounds/744955/) | Freesound | CC BY 4.0 | kirkrcarter |
+| `sea_battle_loop` | `sea_battle_loop.wav` | [Artillery Battery Barrage • U.S.-ROK Marines Live-Fire](https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm) | Wikimedia Commons | Public domain | none |
+| `sea_battle_loop` | `sea_battle_loop.wav` | [Oerlikon 35mm - Romania Sends Air Defense Specialists to Poland, B-Roll](https://commons.wikimedia.org/wiki/File:Oerlikon_35mm_-_Romania_Sends_Air_Defense_Specialists_to_Poland,_B-Roll.ogv) | Wikimedia Commons | Public domain | none |
+| `sea_battle_loop` | `sea_battle_loop.wav` | [G54-02-Bow Wave.wav](https://freesound.org/people/craigsmith/sounds/438837/) | Freesound | CC0 | none |
 
 ## Credits owed
 
+- **A1C Emily Rupert and SSgt Nathan Tucker, 88th Air Base Wing (U.S. Air Force video)** "B-17 fly-over" · Public domain
 - **Benboncan** "Large Anvil & Steel Hammer 2", "Hand Winch Quick Release", "Steady Rain", "Ricochet 3_2.wav", "Ricochet 1.wav", "Ricochet 2.wav", "Ricochet 3.wav" · CC BY 4.0
 - **brunoboselli** "Dragging Kayak" · CC BY 4.0
 - **Carlosjvives** "Cinema projector PROYECSON" · CC BY 4.0
 - **Cheeseheadburger** "Distant WW2 Gunfire Kent", "Spitfire 2 passes Military od", "Distant WW2 Gunfire Kent.wav" · CC BY 4.0
 - **chripei** "VICTORY CRY REVERB 1.wav" · CC BY 4.0
+- **doubletrigger** "P51 with supercharger" · CC BY 3.0
 - **duckduckpony** "Metal_Canteen_Rattle_002.wav" · CC BY 4.0
-- **Fight2FlyPhoto** "B-25 Mitchell Flyby" · CC BY 3.0, "A6M Zero Chasing P-51D Mustang" · CC BY-NC 3.0
+- **Fight2FlyPhoto** "B-25 Mitchell Flyby" · CC BY 3.0, "A6M Zero Chasing P-51D Mustang" · CC BY-NC 3.0, "Fw-190 Flyby" · CC BY 3.0, "P-47 Flyby" · CC BY 3.0
 - **FLYWITHMETOTHEMOON from Japan** "JS Ise's aircraft lift goes down from the flight-deck, -17 Jun. 2012 a" · CC BY 3.0
 - **Gary Hoover** "Steam Locomotive NKP Berkshire 765 near Toledo 07-28-12" · CC BY 3.0
 - **Huggy13ear** "parachute 2" · CC BY 4.0
 - **J.Zazvurek** "Body fall in grass CLOSE.mp3" · CC BY 4.0
 - **juskiddink** "Nearby explosion with debris.wav" · CC BY 4.0
+- **kirkrcarter** "Ship bow wave" · CC BY 4.0
 - **klankbeeld** "marching boots" · CC BY 4.0
 - **LEJ.approach/dvldi** "Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38", "Hahnweide Vintage Air Show 2011 - B-25 And P-38" · CC BY 3.0
 - **Lubini** "MG 42 (Solo) WW2", "Heavy Mashine Guns Around (Background) WW2.wav", "mp 38 schmeisser (Variations) WW2.wav", "Street Battle: Lviv Ukraine - WW1 Reconstruction.wav" · CC BY 4.0
@@ -245,7 +277,10 @@ The game is for personal use only.
 - **qubodup** "Russian Cheeky Soldier Voice" · CC BY 4.0
 - **rafowell** "M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC)", "File:M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC).ogv" · CC BY 3.0
 - **rakurka** "Incoming Ricochets.wav" · CC BY 3.0
+- **relwin** "b24" · CC BY 4.0
 - **shawshank73** "military01_scottstoked.wav" · CC BY 3.0
+- **SMSgt Vincent De Groot, 185th Air Refueling Wing (U.S. Air Force video)** "CAF brings Flying Fortress to Sioux City" · Public domain
+- **SrA Lesley Kleyh, 442d Fighter Wing (U.S. Air Force video)** "Wings Over Whiteman B-roll" · Public domain
 - **Subhashish Panigrahi** "Rubber seal dabbed on ink pad" · CC BY 3.0
 - **theuncertainman** "Charge! - (Version 2) British Warrior", "Go Go Go - (Version 2) Northern British Soldier", "Move!  - British Warrior" · CC BY 4.0
 - **WebbFilmsUK** "Marching 3.wav" · CC BY 4.0

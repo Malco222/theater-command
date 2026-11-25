@@ -2139,6 +2139,60 @@ int main(int Argc, char** Argv)
 			      Fmt("%.0f of %.0f places on its top, median %.3f m off the drawn bank", OnTop, Asked, Pct(Top, 0.5)));
 		}
 	}
+	// A region's kit houses stand on the ground drawn all round: under each model's foot the ground drawn within 10 cm, or
+	// its footing (Ground::Footings) reaching down to it, in the field (Brian, 24 November: the Algiers battle's houses
+	// stood off the ground, men walking under them).
+	{
+		int Houses = 0, Floating = 0;
+		double Worst = 0.0, Tallest = 0.0, WorstX = 0.0, WorstY = 0.0;
+		const std::vector<LandField::Footing>& Fo = G.Footings();
+		double TallX = 0.0, TallY = 0.0;
+		for (const LandField::Footing& Ft : Fo)
+			if (Ft.X >= 0.0 && Ft.Y >= 0.0 && Ft.X <= F.Width() && Ft.Y <= F.Depth() && Ft.Top - Ft.Foot > Tallest)
+			{
+				Tallest = Ft.Top - Ft.Foot;
+				TallX = Ft.X;
+				TallY = Ft.Y;
+			}
+		for (int B = static_cast<int>(LandField::Base::Kit0); B <= static_cast<int>(LandField::Base::Kit15); ++B)
+		{
+			const LandField::BaseMesh& Bm = G.BaseOf(static_cast<LandField::Base>(B));
+			if (Bm.Class != LandField::BaseMesh::Draw::House || Bm.Near.Empty()) continue;
+			const std::vector<float>& Pos = Bm.Near.Positions;
+			for (const LandField::Placed& P : G.Instances(static_cast<LandField::Base>(B)))
+			{
+				if (P.X < 0.0f || P.Y < 0.0f || P.X > F.Width() || P.Y > F.Depth()) continue;
+				++Houses;
+				const double C = std::cos(P.Yaw), S = std::sin(P.Yaw);
+				double Most = 0.0;
+				for (size_t K = 0; K + 2 < Pos.size(); K += 3)
+				{
+					if (Pos[K + 2] > 0.3f) continue;
+					const double LX = Pos[K] * P.Scale, LY = Pos[K + 1] * P.Scale;
+					const double X = P.X + LX * C - LY * S, Y = P.Y + LX * S + LY * C;
+					const double Gz = G.DrawnZ(X, Y), Over = P.Z + Pos[K + 2] * P.ScaleZ - Gz;
+					if (Over <= 0.1) continue;
+					bool bOn = false;
+					for (const LandField::Footing& Ft : Fo)
+					{
+						const double Dx = X - Ft.X, Dy = Y - Ft.Y, Fc = std::cos(Ft.Yaw), Fs = std::sin(Ft.Yaw);
+						const double U = Dx * Fc + Dy * Fs, V = -Dx * Fs + Dy * Fc;
+						if (std::fabs(U) <= Ft.HalfL + 0.2 && std::fabs(V) <= Ft.HalfD + 0.2 && Ft.Foot <= Gz + 0.05 && Ft.Top >= P.Z - 0.02)
+						{
+							bOn = true;
+							break;
+						}
+					}
+					if (!bOn) Most = std::max(Most, Over);
+				}
+				if (Most > 0.0) ++Floating;
+				if (Most > Worst) { Worst = Most; WorstX = P.X; WorstY = P.Y; }
+			}
+		}
+		char Said[240];
+		std::snprintf(Said, sizeof(Said), "%d of %d off the ground (most %.2f m, at %.0f, %.0f); %zu footings, the field's tallest %.2f m at %.0f, %.0f", Floating, Houses, Worst, WorstX, WorstY, Fo.size(), Tallest, TallX, TallY);
+		if (Houses > 0) Check(Floating == 0, "a region's kit house stands on the ground drawn all round, or on its footing", Said);
+	}
 	// Nothing standing in a house, and each thing standing on the ground drawn; no tree trunk on a vehicle's way.
 	{
 		int Bad = 0, Off = 0, All = 0, InLane = 0, ShrubsInLane = 0;
@@ -3009,6 +3063,7 @@ int main(int Argc, char** Argv)
 		// (the game's own heights: HeightAt, At's height alone)
 		R.Begin([&G](double X, double Y) { return G.HeightAt(X, Y); }, [&G](double X, double Y) { return G.ColourAt(X, Y); }, LandCrater::Ruts::KindOn(G));
 		R.Lit = [&G](double X, double Y, double& NX, double& NY, double& NZ) { G.DrawnUp(X, Y, NX, NY, NZ); };
+		R.Snow = G.SnowLying();
 		const LandCrater::Ruts::KindFn Kind = LandCrater::Ruts::KindOn(G);
 		uint64_t S = 0x7aac5ull;
 		auto U = [&S]() { S = S * 6364136223846793005ull + 1442695040888963407ull; return static_cast<double>(S >> 11) / 9007199254740992.0; };
