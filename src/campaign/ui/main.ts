@@ -74,7 +74,7 @@ import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../ca
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import {
   AIR, CARRIERS, MISSION, carrierRules, groupAt, moveTargets, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowdedFields, crowdedRow, crowding, forecastAir, isOffensive,
-  brokeOff, km as airKm, overOcean, seaKm, skyOver, smallOn, whyNotMoveAir, whyNotMission, type AirOrder,
+  brokeOff, skyWords, km as airKm, overOcean, seaKm, skyOver, smallOn, whyNotMoveAir, whyNotMission, type AirOrder,
 } from '../air';
 import {
   FLEETS, NAVY, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedLine, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, numberWord, oreRoute, seaAt, seaBorders, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips, whyNotShip,
@@ -6370,23 +6370,8 @@ function airReportCard(r: AirReport): string {
   const sum = (ss: AirSide[], k: 'ftr' | 'bmr' | 'lostFtr' | 'lostBmr'): number => ss.reduce((n, x) => n + x[k], 0);
   const side = (ss: AirSide[]): string => ss.length ? `<div class="big">${num(sum(ss, 'ftr') + sum(ss, 'bmr'))}</div><small>aircraft in ${ss.length} air ${airWar(g) ? 'group' : 'fleet'}${ss.length > 1 ? 's' : ''} · lost ${num(sum(ss, 'lostFtr') + sum(ss, 'lostBmr'))}</small>` : '<div class="big">0</div><small>no fighters came up</small>';
   const list = (ss: AirSide[]): string => ss.length ? `<ul class="ulist">${ss.map((x) => `<li><span>${esc(x.fleet)} <span style="color:var(--ink-3)">(${g.nations[x.nat].adj}${x.leader ? `, ${esc(x.leader)}` : ''})</span><br><span style="color:var(--ink-2)">${esc(capital(craft(x.ftr, x.bmr)))}</span></span><span>${x.lostFtr + x.lostBmr ? `lost ${esc(craft(x.lostFtr, x.lostBmr))}` : 'no losses'}</span></li>`).join('')}</ul>` : '<div class="empty">None.</div>';
-  // (1.5.2, the UI director 04:55Z: the same words as the raid report's own page, so the two cards agree, and no
-  // reading of "99 times" where nobody was left.)
-  // (Mended after the review, in the UI director's words of 05:38Z: the reason given is the one that held. A fight
-  // broken off wins nothing. Under the odds it takes, the odds. At or over them, the fighters still over the target
-  // at the end, air.json sky.least, the only other thing that keeps a sky unwon: the report keeps no count of those,
-  // so the card names the floor, and gives the attackers' fighters left where even they fall short of it.)
-  const stood = (whose: string): string => `${whose} fighters stood about ${r.hold.toFixed(2)} to 1 against those the defenders could still put up`;
-  const leftOver = sum(r.att, 'ftr') - sum(r.att, 'lostFtr');
-  const floor = `but it takes ${AIR.sky.least} fighters still over the target as well${leftOver < AIR.sky.least ? `, and the attackers had ${leftOver > 0 ? num(leftOver) : 'none'} left` : ''}`;
-  const sky = r.mission !== 'superiority' ? ''
-    : r.sky ? ` The ${g.nations[r.attNat].adj} air force won the sky over ${esc(r.place)}: at the end ${r.hold >= 9 ? 'no opposition was left' : stood('its')}.`
-    : brokeOff(r) ? ' The sky was not won: the raid was broken off.'
-    : r.hold < AIR.sky.win ? ` The sky was not won: at the end ${stood('the attackers\'')}, and it takes ${AIR.sky.win} to 1.`
-    // (Where no defending fighter rose at all, the report keeps no defending group: "the defenders put up no fighters".
-    // The UI director, 25 November 2026, 14:06Z.)
-    : r.hold >= 9 ? ` The sky was not won: ${r.def.length ? 'at the end the defenders had no fighters left to put up' : 'the defenders put up no fighters'}, ${floor}.`
-    : ` The sky was not won: at the end ${stood('the attackers\'')}, which is enough, ${floor}.`;
+  // (1.5.2: the sentence on the sky, in the UI director's words of 04:55Z, 05:38Z, 14:06Z and 15:04Z: air.ts skyWords.)
+  const sky = esc(skyWords(g, r));
   const what = r.mission === 'superiority' ? 'air superiority' : r.mission === 'bomb' ? 'day bombing' : r.mission === 'night' ? 'night bombing' : r.mission === 'ground' ? 'a raid on troops' : r.mission === 'line' ? 'bombing the line' : r.mission === 'fleet' ? 'a strike on a fleet' : r.mission === 'harbour' ? 'a raid on a harbour' : r.mission === 'town' ? 'a raid on a town' : 'strikes on shipping';
   const aw = airWar(g);
   // The ships under the bombs, fleet by fleet, as they were before the strike and with what each lost.

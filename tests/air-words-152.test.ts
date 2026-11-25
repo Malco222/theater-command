@@ -9,7 +9,7 @@
 //   5   shipping a group across the ocean lists every field, country by country, the first of each naming its country;
 //   8, 30  a fight for the sky that met no enemy fighters says so, where it concerns the player.
 import { describe, expect, it } from 'vitest';
-import { AIR, airPool, airRange, airUpkeep, brokeOff, fly, hasAirfield, km, loweredOf, loweredSum } from '../src/campaign/air';
+import { AIR, airPool, airRange, airUpkeep, brokeOff, fly, hasAirfield, km, loweredLine, loweredOf, loweredShort, loweredSum, skyWords } from '../src/campaign/air';
 import { airPage } from '../src/campaign/airpages';
 import { ARSENAL, offers } from '../src/campaign/arsenal';
 import { campaignWhy, groupJobs, groupRow, launchRaid, planRaid, setGroupJob } from '../src/campaign/airwar';
@@ -729,9 +729,9 @@ describe("the UI director's nine answers on the air words (25 November 2026, 14:
   it("answer 4: with an engineer corps, the line ends as it did (America, an engineer corps raised from the arsenal, USA from 40, seed 11)", () => {
     TC.start({ view: 'grand', human: 'USA', from: 40, seed: 11, world: true });
     expect(TC.order('corps:eng', -1).ok).toBe(true);
-    // (on order, she still has none)
+    // (on order and not yet raised: the month it is due, as the arsenal's order list gives it; the UI director, 15:04Z)
     TC.endMonth();
-    expect(TC.page('raid:ground').headline).toMatch(/: an engineer corps can lay one there\. You have none: raise one in the ARSENAL\.$/);
+    expect(TC.page('raid:ground').headline).toBe('No target is in reach. Your aircraft could reach the enemy from Casablanca if it had an airfield: an engineer corps can lay one there. You have one on order in the ARSENAL, due March 1943.');
     TC.endMonth();
     TC.endMonth();
     const g = copy();
@@ -754,8 +754,9 @@ describe("the UI director's nine answers on the air words (25 November 2026, 14:
   });
 
   it("answer 5: the raid report tells a defence that never rose from one that rose, by the groups it keeps", () => {
-    // (ui/main.ts airReportCard: the defenders it lists are those that rose; with none, "the defenders put up no fighters")
-    expect(page).toContain("r.hold >= 9 ? ` The sky was not won: ${r.def.length ? 'at the end the defenders had no fighters left to put up' : 'the defenders put up no fighters'}, ${floor}.`");
+    // (ui/main.ts airReportCard gives air.ts skyWords: the defenders it lists are those that rose; with none, "the
+    // defenders put up no fighters")
+    expect(page).toContain('const sky = esc(skyWords(g, r));');
     const sweep = (defenders: number): AirReport => {
       const { g, f } = overTheChannel('ftr', 40);
       let first = true;
@@ -791,5 +792,154 @@ describe("the UI director's nine answers on the air words (25 November 2026, 14:
     expect(saveGame(g)).toBe(before);
     // (the page did read the group as freed: its campaign line is on the bombing page)
     expect(airPage(g, 'raid:bomb:31')!.sections[0].text).toBe(campaignWhy(g, 31));
+  });
+});
+
+describe("the UI director's answers of 15:04Z on the air words", () => {
+  /** The 2D month card (the card whose lines must fit) and the whole card of the month a war of Germany's opens at 46, played from `from` on `seed`. */
+  function may1943(from: number, seed: number): { g: Game; mark: ReturnType<typeof monthMark>; card: string[]; whole: string[] } {
+    TC.start({ view: 'grand', human: 'GER', from, seed, world: true });
+    while (copy().turn < 45) TC.endMonth();
+    const mark = monthMark(copy());
+    TC.endMonth();
+    const g = copy();
+    expect(g.turn).toBe(46);
+    return { g, mark, card: monthCard(g, mark).also, whole: monthCard(g, mark, 'GER', { whole: true }).also };
+  }
+  const lowered46 = "The air staff has lowered Luftflotte 1's bomber establishment to 250 and raised its fighter establishment to 600: the pool, from which the other commands draw, is full, so 200 bombers are struck off.";
+
+  it("answers 1 and 2: Germany, May 1943 (GER from 40, seed 13): the 2D card gives Luftflotte 1's line in its short form first, and the two 'forms' lines, the second of which it showed cut, are summed", () => {
+    const { g, mark, card, whole } = may1943(40, 13);
+    expect(whole[0]).toBe(lowered46);
+    // (1.5.2 before these answers: ['5. Jagddivision forms in Konigsberg, a new group of Luftflotte 1.', '6. Jagddivision forms in Konigsberg, a new group…'])
+    expect(card).toEqual(['Luftflotte 1 cut back: 200 aircraft struck off', '2 air commands formed']);
+    // Built from this month by hand: its lowered line taken out of the news. The second 'forms' line would be shown
+    // cut; a cut line counts as not fitting, so the two are summed.
+    const noLow = copy();
+    noLow.headlines = noLow.headlines.filter((h) => !(h.turn === 46 && loweredOf(h.text)));
+    expect(monthCard(noLow, mark).also).toEqual(['2 air commands formed', 'LXVIII Panzer Corps has finished forming at Berlin and is ready for orders.']);
+    // A single 'forms' line that will not fit is as before: shown cut, never "1 air commands formed" (the lowered line
+    // and the first 'forms' line taken out, the second put after the month's other news, by hand).
+    const one = copy();
+    const forms = one.headlines.filter((h) => h.turn === 46 && / forms in /.test(h.text));
+    expect(forms.map((h) => h.text)).toEqual(['5. Jagddivision forms in Konigsberg, a new group of Luftflotte 1.', '6. Jagddivision forms in Konigsberg, a new group of Luftflotte 1.']);
+    one.headlines = [...one.headlines.filter((h) => !(h.turn === 46 && (loweredOf(h.text) || / forms in /.test(h.text)))), forms[1]];
+    expect(monthCard(one, mark).also).toEqual(['LXVIII Panzer Corps has finished forming at Berlin and is ready for orders.', '6. Jagddivision forms in Konigsberg, a new group…']);
+    expect(g.headlines.some((h) => h.turn === 46 && h.text === lowered46)).toBe(true);
+  });
+
+  it("answer 1: Germany, May 1943 (GER from 44, seed 7): the short form is the first of the 2D card's lines", () => {
+    const { card, whole } = may1943(44, 7);
+    expect(whole[0]).toBe(lowered46);
+    expect(card).toEqual(['Luftflotte 1 cut back: 200 aircraft struck off', 'Otto Hofmann makes his name at Sumy and is given command of LII Corps.']);
+  });
+
+  it("answer 1: Germany, May 1943 (GER from 44, seed 21): the short form is the first of the 2D card's lines", () => {
+    const { card, whole } = may1943(44, 21);
+    expect(whole[0]).toBe(lowered46);
+    expect(card).toEqual(['Luftflotte 1 cut back: 200 aircraft struck off', 'Rudolf Schmidt reaches level 5 and has a skill point to spend.']);
+  });
+
+  it('answer 1: the short forms of one command\'s own line, each where it is true, and the singular', () => {
+    const none = { ftr: 0, bmr: 0 };
+    const est = { low: 'bmr' as const, to: 250, raised: 600 };
+    expect(loweredShort(loweredLine('Luftflotte 1', est, none, { ftr: 0, bmr: 200 }))).toBe('Luftflotte 1 cut back: 200 aircraft struck off');
+    expect(loweredShort(loweredLine('Luftflotte 1', est, { ftr: 0, bmr: 200 }, none))).toBe('Luftflotte 1 cut back: 200 aircraft back to the pool');
+    // (some back, some struck off: the short form gives those struck off, as the summed line's does)
+    expect(loweredShort(loweredLine('First Air Force', 160, { ftr: 50, bmr: 0 }, { ftr: 30, bmr: 0 }))).toBe('First Air Force cut back: 30 aircraft struck off');
+    expect(loweredShort(loweredLine('First Air Force', 160, { ftr: 40, bmr: 70 }, none))).toBe('First Air Force cut back: 110 aircraft back to the pool');
+    expect(loweredShort(loweredLine('No. 11 Group', 1200, none, { ftr: 1, bmr: 0 }))).toBe('No. 11 Group cut back: 1 aircraft struck off');
+    expect(loweredShort(loweredLine('No. 11 Group', 1200, { ftr: 1, bmr: 0 }, none))).toBe('No. 11 Group cut back: 1 aircraft back to the pool');
+    expect(loweredShort(loweredLine('Luftflotte 1', 1250, { ftr: 0, bmr: 1 }, { ftr: 0, bmr: 99 }))).toBe('Luftflotte 1 cut back: 99 aircraft struck off');
+    expect(loweredShort('2. Jagddivision forms in Berlin.')).toBeNull();
+    // The summed line's short forms, as built before (two commands).
+    const two = [loweredLine('Luftflotte 1', 500, none, { ftr: 0, bmr: 200 }), loweredLine('Luftflotte 4', 400, none, { ftr: 0, bmr: 200 })];
+    expect(loweredSum(two)!.short).toBe('2 commands cut back: 400 aircraft struck off');
+    expect(loweredSum([loweredLine('Luftflotte 1', 500, { ftr: 0, bmr: 200 }, none), loweredLine('Luftflotte 4', 400, { ftr: 0, bmr: 200 }, none)])!.short).toBe('2 commands cut back: 400 aircraft back to the pool');
+  });
+
+  it('answer 2: where a line has a short form, the card never shows it cut', () => {
+    const part = 'The establishments of 2 commands were lowered: 281 fighters and 200 bombers go back to the pool, and the 29 fighters and 400 bombers it has no room for are struck off.';
+    // (with no short form, fitFoot shows it cut, its point kept)
+    expect(fitFoot([part], 35, 3, 3)).toEqual([{ text: 'The establishments of 2 commands were lowered: 281 fighters and 200 bombers go back to the pool…', at: 0 }]);
+    // (with a short form, the short form where it fits; where it does not, nothing: never the line cut)
+    expect(fitFoot([part], 35, 3, 3, ['2 commands cut back: 429 aircraft struck off'])).toEqual([{ text: '2 commands cut back: 429 aircraft struck off', at: 0 }]);
+    expect(fitFoot([part], 35, 3, 3, ['2 commands cut back: 429 aircraft struck off, a short form made by hand too long for the three lines of thirty-five letters this box has'])).toEqual([]);
+  });
+
+  /** A sweep of `n` American fighters over Calais met by one German fighter group of `d`, flown with `salt`; `estZero` gives that group no fighter establishment (built by hand). */
+  function sweep(n: number, d: number, salt = '', estZero = false): { g: Game; r: AirReport } {
+    const { g, f } = overTheChannel('ftr', n);
+    let first = true;
+    for (const x of g.airFleets) if (x.nat === 'GER') {
+      if (first && d > 0 && x.kind === 'ftr' && x.ship === undefined) { x.ftr = d; x.base = regionOf(g, 'Calais'); x.mission = 'support'; if (estZero) x.est = { ...x.est, ftr: 0 }; first = false; } else x.ftr = 0;
+    }
+    Object.assign(airPool(g, 'GER'), { ftr: 0, pilots: 0 });
+    return { g, r: fly(g, 'USA', 'superiority', regionOf(g, 'Calais'), [f], salt)! };
+  }
+
+  it('answer 3: the raid report, the sky not won at 9 to 1 or more: "no fighters left to put up" only where every defender that rose was lost', () => {
+    // Every defender that rose was lost (one fighter, shot down).
+    const lost = sweep(45, 1, ':b');
+    expect([lost.r.def.map((x) => [x.ftr, x.lostFtr]), lost.r.sky, lost.r.hold >= 9]).toEqual([[[1, 1]], false, true]);
+    expect(skyWords(lost.g, lost.r)).toBe(' The sky was not won: at the end the defenders had no fighters left to put up, but it takes 50 fighters still over the target as well, and the attackers had 45 left.');
+    // Two rose, both lost.
+    const both = sweep(45, 2, ':b');
+    expect(both.r.def.map((x) => [x.ftr, x.lostFtr])).toEqual([[2, 2]]);
+    expect(skyWords(both.g, both.r)).toBe(' The sky was not won: at the end the defenders had no fighters left to put up, but it takes 50 fighters still over the target as well, and the attackers had 45 left.');
+    // Nobody rose: as built (14:06Z).
+    const nobody = sweep(40, 0);
+    expect([nobody.r.def.length, nobody.r.hold, nobody.r.sky]).toEqual([0, 99, false]);
+    expect(skyWords(nobody.g, nobody.r)).toBe(' The sky was not won: the defenders put up no fighters, but it takes 50 fighters still over the target as well, and the attackers had 40 left.');
+  });
+
+  it('answer 3: defenders still flying at 9 to 1 or more: the true figure, as the sentence under 9 to 1 gives it', () => {
+    // (1.5.2 before these answers said "at the end the defenders had no fighters left to put up" in each case)
+    const one = sweep(45, 1);
+    expect([one.r.def.map((x) => [x.ftr, x.lostFtr]), one.r.sky]).toEqual([[[1, 0]], false]);
+    expect(one.r.hold).toBeCloseTo(58.44, 2);
+    expect(skyWords(one.g, one.r)).toBe(" The sky was not won: at the end the attackers' fighters stood about 58.44 to 1 against those the defenders could still put up, which is enough, but it takes 50 fighters still over the target as well, and the attackers had 45 left.");
+    const three = sweep(45, 3);
+    expect(three.r.def.map((x) => [x.ftr, x.lostFtr])).toEqual([[3, 1]]);
+    expect(skyWords(three.g, three.r)).toBe(" The sky was not won: at the end the attackers' fighters stood about 19.48 to 1 against those the defenders could still put up, which is enough, but it takes 50 fighters still over the target as well, and the attackers had 45 left.");
+    // (under 9 to 1 the sentence is as it was)
+    const five = sweep(30, 5);
+    expect(five.r.hold).toBeLessThan(9);
+    expect(skyWords(five.g, five.r)).toBe(` The sky was not won: at the end the attackers' fighters stood about ${five.r.hold.toFixed(2)} to 1 against those the defenders could still put up, which is enough, but it takes 50 fighters still over the target as well, and the attackers had ${five.r.att[0].ftr - five.r.att[0].lostFtr} left.`);
+  });
+
+  it('answer 3: at the cap with defenders still flying, "more than 90 to 1" (built by hand: the defending group given no fighter establishment)', () => {
+    const cap = sweep(45, 1, '', true);
+    expect([cap.r.def.map((x) => [x.ftr, x.lostFtr]), cap.r.hold, cap.r.sky]).toEqual([[[1, 0]], 99, false]);
+    expect(skyWords(cap.g, cap.r)).toBe(" The sky was not won: at the end the attackers' fighters stood more than 90 to 1 against those the defenders could still put up, which is enough, but it takes 50 fighters still over the target as well, and the attackers had 45 left.");
+    // (not ruled, not changed: a sky that WAS won at 9 to 1 or more, defenders still flying)
+    const won = sweep(120, 2);
+    expect([won.r.sky, won.r.def.map((x) => [x.ftr, x.lostFtr])]).toEqual([true, [[2, 1]]]);
+    expect(skyWords(won.g, won.r)).toBe(' The American air force won the sky over Calais: at the end no opposition was left.');
+  });
+
+  it("answer 4: an engineer corps on order and not yet raised: 'You have one on order in the ARSENAL, due March 1943.' (USA from 40, seed 11)", () => {
+    TC.start({ view: 'grand', human: 'USA', from: 40, seed: 11, world: true });
+    const head = 'No target is in reach. Your aircraft could reach the enemy from Oran if it had an airfield: an engineer corps can lay one there.';
+    // None living and none on order: as before.
+    expect(TC.page('raid:ground').headline).toBe(`${head} You have none: raise one in the ARSENAL.`);
+    expect(TC.order('corps:eng', -1).ok).toBe(true);
+    const order = copy().nations.USA.queue.filter((b) => b.what === 'corps' && b.kind === 'eng');
+    expect(order.map((b) => [b.ordered, b.eta])).toEqual([[40, 43]]);
+    expect(TC.page('raid:ground').headline).toBe(`${head} You have one on order in the ARSENAL, due March 1943.`);
+  });
+
+  it("answer 5: a harbour order's note names the place with its article: 'Ordered against the harbour of the Highlands'", () => {
+    const g = startOpen(createGame(3, 'GER'));
+    const f = g.airFleets.find((x) => x.nat === 'GER' && x.bmr > 0 && x.ship === undefined)!;
+    const order = (mission: AirFleet['mission'], place: string): string => { f.mission = mission; f.target = regionOf(g, place); delete f.flew; return groupRow(g, f).doing; };
+    // (1.5.2 before these answers: 'Ordered against the harbour of Highlands: flies when the month ends')
+    expect(order('harbour', 'Highlands')).toBe('Ordered against the harbour of the Highlands: flies when the month ends');
+    expect(order('harbour', 'Crimea')).toBe('Ordered against the harbour of the Crimea: flies when the month ends');
+    expect(order('harbour', 'London')).toBe('Ordered against the harbour of London: flies when the month ends');
+    f.flew = g.turn;
+    expect(groupRow(g, f).doing).toBe('Flew against the harbour of London this month: back at its airfield next month');
+    // (the town form names the town, as before)
+    expect(order('town', 'Highlands')).toBe('Ordered against the defences of Inverness: flies when the month ends');
   });
 });

@@ -1473,6 +1473,24 @@ export function loweredOf(text: string): { back: Craft; off: Craft } | null {
   return null;
 }
 /**
+ * The short form of a line on lowered establishments, for a card that must fit a line: "Luftflotte 1 cut back: 200
+ * aircraft struck off", "2 commands cut back: 400 aircraft back to the pool". Where some went back and some were
+ * struck off, it gives those struck off (the UI director ruled no third form, 05:45Z; one command's own, 15:04Z).
+ */
+const cutBack = (who: string, back: Craft, off: Craft): string => {
+  const no = off.ftr + off.bmr;
+  return no > 0 ? `${who} cut back: ${counted(no)} aircraft struck off` : `${who} cut back: ${counted(back.ftr + back.bmr)} aircraft back to the pool`;
+};
+/**
+ * One command's own line in its short form (the UI director, 25 November 2026, 15:04Z: "Luftflotte 1 cut back: 200
+ * aircraft struck off" where the pool's ceiling truly cuts them, "... 200 aircraft back to the pool" where they go
+ * back; "1 aircraft struck off"). Null for any other line.
+ */
+export function loweredShort(text: string): string | null {
+  const x = loweredOf(text), who = /^The air staff has lowered (.+)'s (?:fighter |bomber )?establishment to [\d,]+/.exec(text);
+  return x && who ? cutBack(who[1], x.back, x.off) : null;
+}
+/**
  * The month card's one line for several commands lowered in a month, summed from their own lines (the UI director's
  * words of 05:45Z), and its short form for a card that must fit a line. Null for fewer than two.
  */
@@ -1481,11 +1499,10 @@ export function loweredSum(lines: string[]): { text: string; short: string } | n
   if (each.length < 2) return null;
   const back = { ftr: 0, bmr: 0 }, off = { ftr: 0, bmr: 0 };
   for (const x of each) { back.ftr += x.back.ftr; back.bmr += x.back.bmr; off.ftr += x.off.ftr; off.bmr += x.off.bmr; }
-  const head = `The establishments of ${each.length} commands were lowered`, cut = `${each.length} commands cut back`;
+  const head = `The establishments of ${each.length} commands were lowered`;
   const nb = back.ftr + back.bmr, no = off.ftr + off.bmr;
-  if (no <= 0) return { text: `${head}: ${craftWords(back)} ${verb(back, 'go', 'goes')} back to the pool.`, short: `${cut}: ${counted(nb)} aircraft back to the pool` };
-  // (Where some went back and some were struck off, the short form gives those struck off: the director ruled no third.)
-  const short = `${cut}: ${counted(no)} aircraft struck off`;
+  const short = cutBack(`${each.length} commands`, back, off);
+  if (no <= 0) return { text: `${head}: ${craftWords(back)} ${verb(back, 'go', 'goes')} back to the pool.`, short };
   if (nb <= 0) return { text: `${head}: ${craftWords(off)} ${verb(off, 'are', 'is')} struck off, because the pool is full.`, short };
   return { text: `${head}: ${craftWords(back)} ${verb(back, 'go', 'goes')} back to the pool, and the ${craftWords(off)} it has no room for ${verb(off, 'are', 'is')} struck off.`, short };
 }
@@ -2276,6 +2293,31 @@ const df = (sides: AirSide[]): number => sides.reduce((s, x) => s + x.ftr, 0);
 
 /** Whether a raid's report is of one broken off before it met the enemy (fly's own result for it, "... broke off and turned for home before ..."): a card reads it to give the true reason a sky was not won. */
 export const brokeOff = (r: AirReport): boolean => r.result.includes(' broke off and turned for home before ');
+
+/**
+ * The raid report card's sentence on the sky after a fight for it (ui/main.ts airReportCard; words only, nothing read
+ * here is changed). The reason given is the one that held (the UI director, 05:38Z). At 9 to 1 or more with the sky
+ * not won (the UI director, 25 November 2026, 15:04Z): "had no fighters left to put up" only where every defending
+ * group that rose lost every fighter it had; where none rose, "the defenders put up no fighters" (14:06Z); otherwise
+ * the true figure, as the sentence under 9 to 1 gives it. `hold` is fly's reading of the attackers' fighters against
+ * what the defenders could still put up; where they could put up none it is set to 99, not a figure: the card says
+ * "more than 90 to 1" there.
+ */
+export function skyWords(g: Game, r: AirReport): string {
+  if (r.mission !== 'superiority') return '';
+  const NONE_LEFT = 99;
+  const sum = (ss: AirSide[], k: 'ftr' | 'lostFtr'): number => ss.reduce((n, x) => n + x[k], 0);
+  const stood = (whose: string): string => `${whose} fighters stood ${r.hold === NONE_LEFT ? 'more than 90 to 1' : `about ${r.hold.toFixed(2)} to 1`} against those the defenders could still put up`;
+  const leftOver = sum(r.att, 'ftr') - sum(r.att, 'lostFtr');
+  const floor = `but it takes ${AIR.sky.least} fighters still over the target as well${leftOver < AIR.sky.least ? `, and the attackers had ${leftOver > 0 ? counted(leftOver) : 'none'} left` : ''}`;
+  const usedUp = r.def.length > 0 && r.def.every((x) => x.lostFtr >= x.ftr);
+  return r.sky ? ` The ${g.nations[r.attNat].adj} air force won the sky over ${r.place}: at the end ${r.hold >= 9 ? 'no opposition was left' : stood('its')}.`
+    : brokeOff(r) ? ' The sky was not won: the raid was broken off.'
+    : r.hold < AIR.sky.win ? ` The sky was not won: at the end ${stood('the attackers\'')}, and it takes ${AIR.sky.win} to 1.`
+    : r.hold >= 9 && !r.def.length ? ` The sky was not won: the defenders put up no fighters, ${floor}.`
+    : r.hold >= 9 && usedUp ? ` The sky was not won: at the end the defenders had no fighters left to put up, ${floor}.`
+    : ` The sky was not won: at the end ${stood('the attackers\'')}, which is enough, ${floor}.`;
+}
 
 /** The air campaigns a nation ordered this month, flown once all its orders are given. */
 export function airBattles(g: Game, nat: string): AirReport[] {

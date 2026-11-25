@@ -38,7 +38,7 @@ import { NO_LAST_MONTH, ROME_HOLDS, majorsOf, stakeDue, stakeWarning } from './d
 import { ARSENAL, workLevel, yardLevel } from './arsenal';
 import { BUDGET, PRODUCTION, ledger } from './economy';
 import { allied, atWar, men, theName } from './game';
-import { loweredOf, loweredSum } from './air';
+import { loweredOf, loweredShort, loweredSum } from './air';
 import { CLASSES, NAVY, shipCount, shipList } from './navy';
 import { cityOrders } from './orders';
 import { besieged, garrisonOf, guardMen } from './siege';
@@ -324,6 +324,8 @@ export function fitFoot(items: string[], per: number, lines: number, most: numbe
     // (A line with a short form of its own, as the UI director words it, gives that where the whole will not fit.)
     const short = shorts[i];
     if (short && linesAt(short, per) <= left) { out.push({ text: short, at: i }); left -= linesAt(short, per); continue; }
+    // (Where a line has a short form, it is never shown cut: the UI director, 25 November 2026, 15:04Z.)
+    if (short) continue;
     const cut = wholeWords(whole, per, left);
     if (keepsPoint(whole, cut)) { out.push({ text: cut, at: i }); left = 0; }
   }
@@ -1229,7 +1231,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const lowered = news.filter((x) => loweredOf(x.text));
   const sum = loweredSum(lowered.map((x) => x.text));
   if (sum) said.push({ text: sum.text, full: sum.text, hs: lowered, short: sum.short });
-  else for (const h of lowered) said.push({ text: first(h.text), full: h.text, hs: [h] });
+  // (One command's own line has its short form too, "Luftflotte 1 cut back: 200 aircraft struck off": 15:04Z.)
+  else for (const h of lowered) said.push({ text: first(h.text), full: h.text, hs: [h], short: loweredShort(h.text) ?? undefined });
   for (const h of news.filter((x) => / has halted at .+ on its march to /.test(x.text))) said.push({ text: first(h.text), full: h.text, hs: [h] });
   const arrivals = new Map<string, Headline[]>();
   for (const h of news) { const m = /^(.+) has arrived at (.+)\.$/.exec(h.text); if (m) arrivals.set(m[2], [...(arrivals.get(m[2]) ?? []), h]); }
@@ -1247,10 +1250,11 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const fit = (): { text: string; at: number }[] => fitFoot(said.map((s) => s.text), opts.whole ? Infinity : signed ? FOOT_ROOM.home : FOOT_ROOM.homeWide, slots * 2 - taken, Math.min(3, slots - signed), said.map((s) => s.short));
   let fitted = signed < slots ? fit() : [];
   // (The air commands that form in a month, where their lines do not all fit, are one line: "4 air commands formed",
-  // given as the UI director words it, with no full stop. The UI director, 25 November 2026, 14:06Z.)
+  // given as the UI director words it, with no full stop. The UI director, 25 November 2026, 14:06Z. A line the card
+  // would show cut counts as not fitting: where a summed form exists, a cut line is never shown, 15:04Z.)
   const forms = said.filter((s) => s.hs.length === 1 && AIR_FORMS.test(s.hs[0].text));
   let formed: string | null = null;
-  if (forms.length > 1 && forms.some((s) => !fitted.some((f) => said[f.at] === s))) {
+  if (forms.length > 1 && forms.some((s) => !fitted.some((f) => said[f.at] === s && !f.text.endsWith('…')))) {
     formed = `${forms.length} air commands formed`;
     said.splice(said.indexOf(forms[0]), 1, { text: formed, full: forms.map((s) => s.full).join(' '), hs: forms.flatMap((s) => s.hs) });
     for (const s of forms.slice(1)) said.splice(said.indexOf(s), 1);

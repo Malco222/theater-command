@@ -17,6 +17,7 @@
 import type { AirFleet, Game } from './types';
 import { SHIP_AIR_TIP, airRange, airWar, carrierRules, closeRules, groupAt, hasAirfield, km, overOcean } from './air';
 import { offers } from './arsenal';
+import { turnToDate } from '../core/ticket';
 import { fieldCanBeLaid, isEngineer } from './engineers';
 import { atWar, placeName, theName } from './game';
 import { campaignWhy, type GroupRow, type RaidKind, type RaidPlan, type RaidTarget } from './airwar';
@@ -198,12 +199,15 @@ function fieldToLay(g: Game, group: number): string | null {
 
 /**
  * The end of finding 13's line, by whether the player has an engineer corps (the UI director, 25 November 2026,
- * 14:06Z): one in the field, the clause; none, but the arsenal offers him one (the arsenal's own list, offers()), the
- * clause and where to raise one; and where his nation can never raise one, no clause.
+ * 14:06Z): one in the field, the clause; one on order in the arsenal and not yet raised, the clause and the month it
+ * is due, the month the arsenal's order list gives it (15:04Z); none, but the arsenal offers him one (the arsenal's own
+ * list, offers()), the clause and where to raise one; and where his nation can never raise one, no clause.
  */
 function layBy(g: Game): string {
   const me = g.human!;
   if (g.corps.some((c) => c.nat === me && !c.dead && isEngineer(c))) return ': an engineer corps can lay one there.';
+  const due = g.nations[me].queue.filter((b) => b.what === 'corps' && b.kind === 'eng').map((b) => b.eta).sort((a, b) => a - b)[0];
+  if (due !== undefined) return `: an engineer corps can lay one there. You have one on order in the ARSENAL, due ${turnToDate(due).label}.`;
   if (offers(g, me).some((o) => o.key === 'corps:eng')) return ': an engineer corps can lay one there. You have none: raise one in the ARSENAL.';
   return '.';
 }
