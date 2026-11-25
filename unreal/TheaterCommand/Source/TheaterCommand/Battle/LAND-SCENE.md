@@ -2418,7 +2418,13 @@ Stage `Content/Data` (LandBattles, Battle, Sound) and `Content/Models` (Soldiers
 Brian's steppe shot of 25 November showed black jagged blobs round the burnt cottages. They were the kit's
 BurntChimney: its 'melt' skirt (one flat 143 m2 mat), its 'ash' oval and its black 'soot' chimney. They were drawn
 over the grass, and where two met they piled up into black. `Battle/LandScorch.h` (header only, its own hash, no
-dice from any shared stream) now does this instead:
+dice from any shared stream) does this instead, but only on trial.
+
+**It is on trial and off by default.** The new look is behind the trial word `burntground`. Without that word the
+game and the test lay the burnt cottages exactly as before, with the kit's flat dark skirt, byte for byte the same
+as release 2 pass 2. To turn it on, start the game with `-TheaterLandTrial=burntground` (or `=all`), or run the
+cloud test with `LAND_FIELD_TRIAL=burntground`. It goes on for good only from the ship list, after the Mac test and
+the art director's pass. With the word on:
 
 - **The model** (`Look`, from LandField's two kit hooks: the steppe's `Base::Chimney` and a region kit's
   "BurntChimney", the east village): the triangles of 'melt' and 'ash' are dropped by paint name at every level, and
@@ -2438,8 +2444,12 @@ dice from any shared stream) now does this instead:
   - under snow, wet earth and dirty snow instead
   Overlapping marks are grouped onto one grid, and where two meet the darker of the two is drawn, never their
   product or their sum. It is held off lanes, banks, floors, walls, water and marsh, fading 0.7 to 3.7 m from them.
-- **The off switch**: `-TheaterLandOldBurntGround` (LandBattle → `Field::bOldBurntGround`), or
-  `LAND_FIELD_OLD_BURNT=1` in the test. With it on, the field's digests equal 388ba015's on both compilers.
+- **The switch**: the trial word `burntground` (`Field::Tried("burntground")`, read in LandField's three hooks). The
+  game passes it with `-TheaterLandTrial=burntground`; the test reads `LAND_FIELD_TRIAL=burntground`. Without it the
+  field's digests equal release 2 pass 2's (f827915a) on both compilers. The test always lays the same field the
+  other way beside it and checks both sides: without the word the kit's skirt is still drawn and no burnt ground is
+  laid; with it there is one mark for each cottage and the skirt is gone. The checks of the look itself run only
+  with the word.
 
 Numbers (land_field_test, Prokhorovka, 21 cottages; the winter east village, normandy-1944 with LAND_FIELD_LOOK=farmland
 LATLON="51.0 36.5" SNOW=0.9 MONTH=1, 15 cottages):

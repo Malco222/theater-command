@@ -4,8 +4,8 @@
 //
 // The east kit's burnt-out house (Content/Models/East/BurntChimney.json) stood on a flat skirt of its 'melt' paint,
 // 143 m2 of one dark grey, the ring a fire thaws in snow: on summer grass every ruin drew the same black, jagged mat,
-// a crisp grey oval of 'ash' on it and a black pillar for a chimney. Here, with the field's old look kept behind
-// Field::bOldBurntGround:
+// a crisp grey oval of 'ash' on it and a black pillar for a chimney. Here, on trial behind the word "burntground"
+// (Field::Tried; without it the field's old look, untouched):
 // - Ruin: the model's flat 'melt' skirt and 'ash' oval are not drawn (found by their paint names, every level); its
 //   beams char brown-black, its stove's stack burnt brick sooted toward its top and in streaks, its stove warmer.
 // - Lay: each burnt cottage's own burnt ground, laid in the near ground's own tiles (drawn on the ground's own

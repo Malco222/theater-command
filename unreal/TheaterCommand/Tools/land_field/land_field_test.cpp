@@ -877,41 +877,115 @@ namespace
 		}
 	}
 
+	/** The field with the trial word "burntground" put in (bWord) or taken out of its Trial (Field::Tried). */
+	LandField::Field WithBurntGround(const LandField::Field& F, bool bWord)
+	{
+		LandField::Field Out = F;
+		if (bWord)
+		{
+			if (!F.Tried("burntground")) Out.Trial = F.Trial.empty() ? std::string("burntground") : F.Trial + ",burntground";
+			return Out;
+		}
+		std::string Kept;
+		for (size_t P = 0; P <= F.Trial.size();)
+		{
+			size_t E = F.Trial.find(',', P);
+			if (E == std::string::npos) E = F.Trial.size();
+			const std::string W = F.Trial.substr(P, E - P);
+			if (!W.empty() && W != "burntground") Kept += (Kept.empty() ? "" : ",") + W;
+			P = E + 1;
+		}
+		Out.Trial = Kept;
+		return Out;
+	}
+
+	/** The burnt house's flat 'melt' skirt and 'ash' oval: their triangles drawn at its three levels (found by their
+	 * paint names in the kit's own file); -1 where the kit holds no BurntChimney file or the levels do not match it. */
+	long FlatTris(const LandField::Ground& G, const LandField::Field& F, LandField::Base RB)
+	{
+		if (RB == LandField::Base::Count) return -1;
+		const std::map<std::string, std::string>& Kit = F.Steppe.bOn ? F.Steppe.Kit : F.Kit;
+		const auto Found = Kit.find("BurntChimney");
+		if (Found == Kit.end()) return -1;
+		LandJson::Json Root;
+		std::string Error;
+		LandJson::Parse(Found->second, Root, Error);
+		std::vector<std::string> Names;
+		for (size_t K = 0; K < Root["paint_names"].Count(); ++K) Names.push_back(Root["paint_names"].At(K).Str("?"));
+		const LandField::BaseMesh& Bm = G.BaseOf(RB);
+		const char* Lv[3] = { "near", "mid", "far" };
+		const LandField::Mesh* Ms[3] = { &Bm.Near, &Bm.Mid, &Bm.Far };
+		long Flat = 0;
+		bool bAny = false;
+		for (int V = 0; V < 3; ++V)
+		{
+			const std::vector<double> Paint = LandJson::Numbers(Root[Lv[V]]["paints"]);
+			const LandField::Mesh& M = *Ms[V];
+			if (M.Points() != Paint.size()) continue;
+			bAny = true;
+			for (size_t T = 0; T + 2 < M.Triangles.size(); T += 3)
+			{
+				const uint32_t P = M.Triangles[T];
+				const size_t I = P < Paint.size() ? static_cast<size_t>(Paint[P]) : Names.size();
+				if (I < Names.size() && (Names[I] == "melt" || Names[I] == "ash")) ++Flat;
+			}
+		}
+		return bAny ? Flat : -1;
+	}
+
 	/**
 	 * The burnt cottages (Brian's steppe screenshot of 25 November, 17:11Z: black jagged mats; the art director's gate
-	 * note of 14:01Z): the model's flat skirt gone, its chimney warm; each cottage's own burnt ground brown, soft-edged and
-	 * its own, against the targets as numbers; the darker of two where they meet; and everything else in the field as the
-	 * old look (Field::bOldBurntGround, "-TheaterLandOldBurntGround") lays it, which is the field before the change.
-	 * Pictures (LAND_FIELD_SCORCH_PICTURES=<folder>): a farm's burnt cottages from 150 m, 35 degrees up, in the haze; one
-	 * from 15 m; eight of them, each from 40 m.
+	 * note of 14:01Z), on trial behind the word "burntground" (Field::Tried: the game's -TheaterLandTrial=burntground, the
+	 * cloud test's LAND_FIELD_TRIAL=burntground). The field as laid (Asked, from F) and the same field with the word the
+	 * other way are built side by side. Always: without the word nothing of LandScorch is in the field (the kit's flat
+	 * skirt drawn, no burnt ground in the near tiles); with it the marks are laid, one a cottage, and the skirt is gone.
+	 * With the word asked, also: the model's chimney warm; each cottage's own burnt ground brown, soft-edged and its own,
+	 * against the targets as numbers; the darker of two where they meet; and everything else in the field as the old look
+	 * (no word) lays it, which is the field before the change. Pictures (LAND_FIELD_SCORCH_PICTURES=<folder>, with the
+	 * word): a farm's burnt cottages from 150 m, 35 degrees up, in the haze; one from 15 m; eight of them, each from 40 m.
 	 */
-	void ScorchChecks(const LandField::Ground& G, const LandField::Field& F, const LandFieldPicture::Sky& Sk)
+	void ScorchChecks(const LandField::Ground& Asked, const LandField::Field& F, const LandFieldPicture::Sky& Sk)
 	{
 		using LandScorch::Detail::Light;
-		const LandField::Base RB = RuinBase(G, F);
-		const size_t Ruins = RB == LandField::Base::Count ? 0 : G.Instances(RB).size();
-		std::printf("  burnt cottages: %zu (%s), snow lying %.2f%s\n", Ruins, RB == LandField::Base::Count ? "none" : BaseNames[static_cast<int>(RB)], G.SnowLying(), F.bOldBurntGround ? ", the old look asked (LAND_FIELD_OLD_BURNT)" : "");
-		// The old look beside it: the same field, the switch on.
-		LandField::Field FO = F;
-		FO.bOldBurntGround = true;
-		const auto T0 = std::chrono::steady_clock::now();
-		const LandField::Ground GO(FO);
-		const double OldBuild = Seconds(T0);
-		const Digest DN = DigestOf(G), DO = DigestOf(GO);
-		PrintDigest(F.bOldBurntGround ? " (old burnt ground, asked)" : " (burnt ground of release 2)", DN);
-		PrintDigest(" (old burnt ground)", DO);
-		if (F.bOldBurntGround)
+		const bool bWord = F.Tried("burntground");
+		if (F.Trial == "all")
 		{
-			Check(DN.Tiles == DO.Tiles && DN.Ring == DO.Ring && DN.Bases == DO.Bases && DN.Things == DO.Things, "the old burnt ground asked: the field laid as before", "");
-			ScorchPictures(G, F, Sk, RB);
+			std::printf("  burnt cottages: on trial with every other look (\"all\"), so the old look cannot be laid beside them; their checks run under LAND_FIELD_TRIAL=burntground\n");
 			return;
 		}
+		const LandField::Field FN = WithBurntGround(F, true), FO = WithBurntGround(F, false);
+		const auto T0 = std::chrono::steady_clock::now();
+		const LandField::Ground Other(bWord ? FO : FN);
+		const double OldBuild = Seconds(T0);
+		const LandField::Ground& G = bWord ? Asked : Other; // (with the word: the burnt ground of release 2)
+		const LandField::Ground& GO = bWord ? Other : Asked; // (without it: the old look, the field before the change)
+		const LandField::Base RB = RuinBase(G, FN);
+		const size_t Ruins = RB == LandField::Base::Count ? 0 : G.Instances(RB).size();
+		std::printf("  burnt cottages: %zu (%s), snow lying %.2f, the trial word \"burntground\" %s\n", Ruins, RB == LandField::Base::Count ? "none" : BaseNames[static_cast<int>(RB)], G.SnowLying(),
+		            bWord ? "asked (LAND_FIELD_TRIAL)" : "not asked: the field as laid is the old look, the new one laid beside it only to compare");
+		const Digest DN = DigestOf(G), DO = DigestOf(GO);
+		PrintDigest(" (with the trial word burntground)", DN);
+		PrintDigest(" (without it, the old look)", DO);
 		if (Ruins == 0)
 		{
-			Check(DN.Tiles == DO.Tiles && DN.Ring == DO.Ring && DN.Bases == DO.Bases && DN.Things == DO.Things, "no burnt cottage: the field laid as before, byte for byte", "");
+			Check(DN.Tiles == DO.Tiles && DN.Ring == DO.Ring && DN.Bases == DO.Bases && DN.Things == DO.Things, "no burnt cottage: the field laid the same with the trial word burntground or without, byte for byte", "");
 			return;
 		}
-		const LandScorch::Laid L = LandScorch::Lay(G, F);
+		const LandScorch::Laid L = LandScorch::Lay(G, FN);
+		// ---- the trial word: without it nothing of LandScorch in the field; with it the marks laid and the skirt gone
+		{
+			size_t NearNew = 0, NearOld = 0;
+			for (const LandField::Tile& Tl : G.Tiles()) NearNew += Tl.Near.Tris();
+			for (const LandField::Tile& Tl : GO.Tiles()) NearOld += Tl.Near.Tris();
+			const long FlatOld = FlatTris(GO, FO, RB), FlatNew = FlatTris(G, FN, RB);
+			Check(FlatOld != 0 && NearNew == NearOld + L.Tris && !SameMesh(G.BaseOf(RB).Near, GO.BaseOf(RB).Near),
+			      "without the trial word burntground nothing of LandScorch is laid: the burnt house's model as the kit's (its flat 'melt' skirt and 'ash' oval drawn), no burnt ground in the near tiles",
+			      Fmt("%.0f skirt and oval triangles drawn (-1: no kit file to count them by); the near tiles %.0f triangles fewer than with the word", static_cast<double>(FlatOld), static_cast<double>(NearNew) - static_cast<double>(NearOld)));
+			Check(L.Marks.size() == Ruins && L.Tris > 0 && FlatNew <= 0 && NearNew == NearOld + L.Tris, "with the trial word burntground the burnt ground is laid, one mark a cottage, and the flat skirt and oval are gone",
+			      Fmt("%.0f marks for %.0f cottages, %.0f triangles of burnt ground; %.0f skirt and oval triangles drawn", static_cast<double>(L.Marks.size()), static_cast<double>(Ruins), static_cast<double>(L.Tris), static_cast<double>(FlatNew)));
+		}
+		// (the look itself is checked with the word asked: LAND_FIELD_TRIAL=burntground)
+		if (!bWord) return;
 		// ---- nothing else moves: everything but the ruin's model and the near tiles' burnt ground as the old look lays it
 		{
 			size_t BadTiles = 0, BadBases = 0, BadThings = 0, Extra = 0, ExtraWrong = 0, BadClutter = 0, BadAt = 0;
@@ -954,7 +1028,7 @@ namespace
 			          Fmt(", %.0f At() points; %.0f triangles added", static_cast<double>(BadAt), static_cast<double>(Extra)));
 		}
 		// ---- the cost
-		std::printf("    burnt ground: %zu marks, %zu points and %zu triangles (%.0f and %.0f a cottage), %zu grid points held off a lane, bank or floor; laid in %.3f s (the old look's field built in %.2f s)\n",
+		std::printf("    burnt ground: %zu marks, %zu points and %zu triangles (%.0f and %.0f a cottage), %zu grid points held off a lane, bank or floor; laid in %.3f s (the old look's field beside it built in %.2f s)\n",
 		            L.Marks.size(), L.Points, L.Tris, static_cast<double>(L.Points) / static_cast<double>(L.Marks.size()), static_cast<double>(L.Tris) / static_cast<double>(L.Marks.size()), L.Held, L.Seconds, OldBuild);
 		Check(L.Seconds < 0.020 * static_cast<double>(L.Marks.size()) && L.Tris <= 2600 * L.Marks.size(), "the burnt ground is cheap: under 20 ms and 2,600 triangles a cottage",
 		      Fmt("%.1f ms and %.0f triangles a cottage", 1000.0 * L.Seconds / static_cast<double>(L.Marks.size()), static_cast<double>(L.Tris) / static_cast<double>(L.Marks.size())));
@@ -1306,7 +1380,7 @@ namespace
 			std::printf("    under a tank's footprint shade (LandShade, belly 0.35, edge 0.5: it multiplies what is behind it): grass 0.35 and 0.50; the burnt ground's mean %.2f gives %.2f and %.2f; its darkest %.2f gives %.2f and %.2f (the old skirt, about 0.45, gave 0.16 and 0.23)\n",
 			            Mean, Mean * 0.35, Mean * 0.5, Least, Least * 0.35, Least * 0.5);
 		}
-		ScorchPictures(G, F, Sk, RB);
+		ScorchPictures(G, FN, Sk, RB);
 	}
 }
 
@@ -1516,7 +1590,6 @@ int main(int Argc, char** Argv)
 	std::printf("%s: field %d x %d cells of %.0f m (%.0f x %.0f m), %zu ways (%d vehicles, %d men), town %s\n", Key.c_str(), F.Cols, F.Rows, F.Cell, F.Width(), F.Depth(), F.Ways.size(), Vehicles, Men,
 	            F.bTown ? Fmt("at %.0f, %.0f r %.0f m", F.TownX, F.TownY, F.TownR).c_str() : "none");
 
-	if (std::getenv("LAND_FIELD_OLD_BURNT")) F.bOldBurntGround = true; // (the burnt cottages' old look: "-TheaterLandOldBurntGround")
 	const auto Start = std::chrono::steady_clock::now();
 	LandField::Ground GroundMade(F);
 	// (burnt ground without the scorch layer, for a picture or a count: LAND_FIELD_BURN="x y core outer; x y core outer")
