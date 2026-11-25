@@ -332,7 +332,8 @@ describe('the mask (choice 6 A)', () => {
       if (!at) { expect([v.t, v.breaking]).toEqual([0, { att: 0, def: 0 }]); continue; }
       expect(v.breaking).toEqual({ att: r3(at.att), def: r3(at.def) });
     }
-  });
+    // (Two whole battles fought to a minute past contact: 37 to 41 s on the joiner's machine, so a limit of its own.)
+  }, 180_000);
 
   it("the enemy's 'near breaking' dispatch comes on the bar the player is shown, never on his true bar", () => {
     const piece = PIECES.find((p) => p.key === 'normandy-1944')!;
