@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Battle/AirMarks.h"
 #include "Battle/AirShow.h"
 #include "Battle/AirSky.h"
 
@@ -86,6 +87,29 @@ namespace AirFeed
 		double TrailM = 0.0;
 		/** The day's sky (place.cloud): a deck or scattered cumulus, its base and top; absent, cumulus. */
 		AirSky::Day Cloud;
+		/**
+		 * (Release 2, a raid on troops: Brian, 24 November, "if a bomber group is bombing troops instead of a factory or
+		 * town and they get intercepted than i want that playable") What stands on the ground under the raid
+		 * (place.marks, the every-kind contract's section 2): the column's pieces, its road, its corps. Laid here from the
+		 * ticket's seed when the ticket sends only counts. Empty for every other raid.
+		 */
+		AirMarks::Column Marks;
+		/** The raid's bombers one by one (place.bombers, by their group's corps: the rules' campaign/bombers.ts seatsOf,
+		 * ticket.ts), for their nose art (Battle/AirNoseArt): how the group's nation names its bombers (Style: "nose" for
+		 * nose art) and each seat's painting, old hands first (Art: the air thread's list's number, 0 a bare nose) and
+		 * name. The airStart board carries them; the raid card's airLook strips them (the release 2 assembly, 25 November),
+		 * so they are read here only. Empty where the battle does not say (the Bremen film, the test battles). */
+		struct BomberSeat
+		{
+			int Art = 0;
+			std::string Name;
+		};
+		struct BomberGroup
+		{
+			std::string Style;
+			std::vector<BomberSeat> Seats;
+		};
+		std::map<int, BomberGroup> Bombers;
 	};
 	bool ReadSky(const Json& J, Sky& Out);
 	/** The day's vapour-trail height, metres, by the weather zone (place.cloud.zone), the month (from 0) and the
@@ -123,6 +147,9 @@ namespace AirFeed
 		int LostAtt = 0, LostDef = 0, UpAtt = 0, UpDef = 0;
 		double Worth = 0.0, Ratio = 1.0;
 		bool bCut = false, bRuined = false;
+		/** (A raid on troops) The organisation the raid has cut so far (view.marks.cut, 0 to 0.04), and the share of the
+		 * column's guns firing back (view.marks.fire); -1: the view carried no marks. */
+		double MarksCut = -1.0, MarksFire = -1.0;
 		/** sim.called(u): only names new or changed since the last view (the screen keeps them). */
 		std::map<int, std::string> Called;
 	};
@@ -172,6 +199,8 @@ namespace AirFeed
 		std::vector<AirShow::Ship> Ships;
 		std::vector<ShipRow> ShipRows;
 		std::vector<Label> Labels;
+		/** (A raid on troops) view.marks: the pieces changed since the last view, the guns firing back, the cut. */
+		AirMarks::View Marks;
 	};
 	/** One TC.battleView() (or one recorded view) read against the sky. */
 	bool ReadView(const Json& J, const Sky& S, Frame& Out);

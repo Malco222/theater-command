@@ -39,6 +39,36 @@ namespace AirDesk
 			for (char& C : S) if (C >= 'a' && C <= 'z') C = static_cast<char>(C - 'a' + 'A');
 			return S;
 		}
+
+		/** Every From in Text made To (the after card's lines of a raid on troops speak of the column, not "the target"). */
+		std::string Swapped(std::string Text, const std::string& From, const std::string& To)
+		{
+			if (From.empty()) return Text;
+			for (size_t At = Text.find(From); At != std::string::npos; At = Text.find(From, At + To.size()))
+			{
+				Text.replace(At, From.size(), To);
+			}
+			return Text;
+		}
+
+		/** A share as a percentage with one place, "1.2%" (the organisation a raid on troops cuts: 4% at most). */
+		std::string Tenths(double Share)
+		{
+			char Buf[32];
+			std::snprintf(Buf, sizeof Buf, "%.1f%%", std::clamp(Share, 0.0, 1.0) * 100.0);
+			return Buf;
+		}
+
+		/** How a column stands (place.marks.posture), in words after its name. */
+		std::string PostureWords(const std::string& Posture)
+		{
+			if (Posture == "march") return " on the march";
+			if (Posture == "camp") return " in camp";
+			if (Posture == "dug") return " dug in";
+			if (Posture == "works") return " in its works";
+			if (Posture == "town") return " in the town";
+			return std::string();
+		}
 	}
 
 	double Clock::Step(double Real, const AirFeed::Top& Head, double Scale, std::string& Tag)
@@ -115,10 +145,45 @@ namespace AirDesk
 		if (K) Ahead.erase(Ahead.begin(), Ahead.begin() + static_cast<std::ptrdiff_t>(K));
 	}
 
+	void Desk::Struck(const AirMarks::Column& Shown, double Cut)
+	{
+		if (!OnTroops()) return;
+		// The vehicles and guns wrecked, burning and damaged, and the men lost from the blocks, as the show has them now:
+		// each piece as the hits shown on it and the views' words after them leave it (AirShow::Show::Marks), so that the
+		// aim slip never counts a hit whose bomb or rounds are still on their way (the reviewer, 25 November: it had
+		// counted each as its view came). The cut so far, likewise (Show::MarksCut).
+		MarksWrecked = MarksBurning = MarksDamaged = MarksMenLost = 0;
+		for (const AirMarks::Piece& P : Shown.Pieces)
+		{
+			if (P.What == "men")
+			{
+				MarksMenLost += std::max(0, P.N - P.Men);
+				continue;
+			}
+			MarksWrecked += P.Now == AirMarks::State::Out ? 1 : 0;
+			MarksBurning += P.Now == AirMarks::State::Burn ? 1 : 0;
+			MarksDamaged += P.Now == AirMarks::State::Hit ? 1 : 0;
+		}
+		MarksCutNow = std::max(MarksCutNow, Cut);
+	}
+
+	bool Desk::ColumnTheirs() const
+	{
+		// (the column is the enemy's when its nation is theirs; his own when it is his; any other (an ally's, or none
+		// said) stands with the side whose ground it is, the defender's)
+		const std::string& Mine = MyIndex == 0 ? Sky.AttNat : Sky.DefNat;
+		const std::string& Theirs = MyIndex == 0 ? Sky.DefNat : Sky.AttNat;
+		if (!Sky.Marks.Nat.empty() && Sky.Marks.Nat == Mine) return false;
+		if (!Sky.Marks.Nat.empty() && Sky.Marks.Nat == Theirs) return true;
+		return MyIndex == 0;
+	}
+
 	void Desk::Read(const AirFeed::Frame& View)
 	{
 		HeadNow = View.Head;
 		bStarted = true;
+		// (release 2, a raid on troops: the view's marks are not read here, but from the show, as its pieces are drawn
+		// struck: Struck)
 		for (const auto& Pair : View.Head.Called) Called[Pair.first] = Pair.second;
 		for (const AirFeed::Label& L : View.Labels) LabelsNow[L.Id] = L;
 	}
@@ -159,12 +224,20 @@ namespace AirDesk
 	{
 		const AirFeed::Top& H = HeadNow;
 		Out = Words();
-		Out.Title = Sky.Title;
+		Out.Title = OnTroops() ? TroopsTitle() : Sky.Title;
 		Out.MySide = MyIndex == 0 ? Sky.AttAdj : Sky.DefAdj;
 		Out.TheirSide = MyIndex == 0 ? Sky.DefAdj : Sky.AttAdj;
 		// The top bar (b384, land's form): the card's chance and the staff's now, his side's.
 		const double Card = MyIndex == 0 ? Sky.CardChance : 1.0 - Sky.CardChance;
-		Out.Chance = (Sky.CardChance > 0.0 ? "Card about " + Percent(Card) + " \xC2\xB7 now about " : std::string("Now about ")) + Percent(H.Chance);
+		// (release 2, the scramble offer: the view's chance is the raider's; read for the defender, it is turned to his)
+		const double StaffNow = DefendRead() ? 1.0 - H.Chance : H.Chance;
+		Out.Chance = (Sky.CardChance > 0.0 ? "Card about " + Percent(Card) + " \xC2\xB7 now about " : std::string("Now about ")) + Percent(StaffNow);
+		// (release 2, a raid on troops: what the raid has done to the army so far, as the rules count it, view.marks.cut;
+		// a raid cuts 4% of an army's organisation at most)
+		if (OnTroops())
+		{
+			Out.Chance += std::string(" \xC2\xB7 ") + (ColumnTheirs() ? "their" : "your") + " column's organisation cut by " + Tenths(MarksCutNow) + " so far";
+		}
 		// The tug-of-war bar (it took the place of the strength fill and its start mark: the UI director, 14:47Z).
 		KnotShown = KnotEase(KnotShown, KnotOf(H, MyIndex, Winner()), Real);
 		Out.Knot = KnotShown;
@@ -193,11 +266,37 @@ namespace AirDesk
 		{
 			Out.AimTarget = "The sky over " + Place;
 		}
+		else if (OnTroops())
+		{
+			// (release 2: "The British I Corps on the march near Hampshire")
+			std::string Named = ColumnName();
+			if (!Named.empty()) Named[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(Named[0])));
+			Out.AimTarget = Named + PostureWords(Sky.Marks.Posture) + (Sky.PlaceName.empty() ? std::string() : " near " + Sky.PlaceName);
+		}
 		else
 		{
 			Out.AimTarget = Place;
 		}
-		if (Sky.PlaceKind == "sky" || Sky.PlaceKind == "superiority")
+		if (OnTroops())
+		{
+			// (release 2, a raid on troops: the vehicles and guns wrecked, burning and damaged, and the men lost from the
+			// blocks, as the rules count them and as the show has drawn them struck (Struck); never the scene's own)
+			const int Wrecked = MarksWrecked, Burning = MarksBurning, Damaged = MarksDamaged, MenLost = MarksMenLost;
+			std::string Done;
+			auto Add = [&Done](int N, const char* One, const char* Many)
+			{
+				if (N <= 0) return;
+				Done += (Done.empty() ? "" : ", ") + std::to_string(N) + " " + (N == 1 ? One : Many);
+			};
+			Add(Wrecked, "vehicle or gun wrecked", "vehicles and guns wrecked");
+			Add(Burning, "burning", "burning");
+			Add(Damaged, "damaged", "damaged");
+			Add(MenLost, "man lost", "men lost");
+			const bool bTheirs = ColumnTheirs();
+			Out.AimState = Done.empty() ? std::string(bTheirs ? "No hits on the column yet" : "No hits on your column yet")
+				: std::string(bTheirs ? "On the column so far: " : "On your column so far: ") + Done;
+		}
+		else if (Sky.PlaceKind == "sky" || Sky.PlaceKind == "superiority")
 		{
 			const int Up = MyIndex == 0 ? H.UpAtt : H.UpDef, TheirUp = MyIndex == 0 ? H.UpDef : H.UpAtt;
 			Out.AimState = "Fighters in the air: yours " + std::to_string(Up) + ", " + Out.TheirSide + " " + std::to_string(TheirUp);
@@ -209,6 +308,11 @@ namespace AirDesk
 		else if (H.bRuined)
 		{
 			Out.AimState = "A factory is wrecked";
+		}
+		else if (DefendRead())
+		{
+			// (release 2, the scramble offer: the raid is the enemy's, and he is the one it costs)
+			Out.AimState = H.Ratio >= 1.0 ? "So far the raid's bombs have done more than it has cost the enemy" : "So far the raid has cost the enemy more than its bombs have done";
 		}
 		else
 		{
@@ -265,6 +369,21 @@ namespace AirDesk
 		C.Level = Upper(After.Level);
 		C.Reckoning = After.Reckoning;
 		C.Lines = After.Lines;
+		if (OnTroops())
+		{
+			// (release 2, a raid on troops: the card's title names the column, and a line that speaks of "the target"
+			// speaks of the column)
+			C.Title = TroopsTitle();
+			auto ColumnWords = [](const std::string& Line)
+			{
+				return Swapped(Swapped(Swapped(Line, "before the target", "before they reached the column"), "the target", "the column"), "The target", "The column");
+			};
+			C.Reckoning = ColumnWords(C.Reckoning);
+			for (std::string& Line : C.Lines)
+			{
+				Line = ColumnWords(Line);
+			}
+		}
 		for (int Pass = 0; Pass < 2; ++Pass)
 		{
 			for (const AirFeed::AfterRow& R : After.Groups)
@@ -320,6 +439,40 @@ namespace AirDesk
 		return Ids.empty() ? std::string() : "{\"do\":\"air:hunt\",\"units\":" + Units(Ids) + "}";
 	}
 
+	std::string Desk::Strafe(const std::vector<int>& Ids, const std::vector<Tag>& Tags) const
+	{
+		if (!CanStrafe()) return std::string();
+		std::vector<int> Fighters;
+		for (const int Id : Ids)
+		{
+			for (const Tag& T : Tags)
+			{
+				if (T.Id == Id && T.bMine && T.bFighter && !T.bGone)
+				{
+					Fighters.push_back(Id);
+					break;
+				}
+			}
+		}
+		return Fighters.empty() ? std::string() : "{\"do\":\"air:strafe\",\"units\":" + Units(Fighters) + "}";
+	}
+
+	std::string Desk::ColumnName() const
+	{
+		const std::string Adj = Sky.Marks.Nat == Sky.DefNat ? Sky.DefAdj : Sky.Marks.Nat == Sky.AttNat ? Sky.AttAdj : std::string();
+		const std::string Whose = Adj.empty() ? std::string("the ") : "the " + Adj + " ";
+		if (!Sky.Marks.Under.empty() && !Sky.Marks.Under.front().Name.empty())
+		{
+			return Whose + Sky.Marks.Under.front().Name;
+		}
+		return Whose + "column";
+	}
+
+	std::string Desk::TroopsTitle() const
+	{
+		return "The raid on " + ColumnName() + (Sky.PlaceName.empty() ? std::string() : " near " + Sky.PlaceName);
+	}
+
 	std::string Desk::Band(const std::vector<int>& Ids, int InBand) const
 	{
 		if (Ids.empty() || InBand < 0 || InBand > 2) return std::string();
@@ -339,9 +492,13 @@ namespace AirDesk
 	std::string Desk::StaffQuestion() const
 	{
 		const bool bSky = Sky.PlaceKind == "sky" || Sky.PlaceKind == "superiority";
-		std::string Q = bSky ? "Hand the fight to the staff?" : "Hand the raid to the staff?";
-		if (!HeadNow.bFired) return Q + " No shot has been fired: they settle the whole raid at once. They give you about " + Percent(HeadNow.Chance) + " to win it.";
-		return Q + " They settle the rest at once, from where it stands now. They give you about " + Percent(HeadNow.Chance) + " to win it.";
+		// (release 2, the scramble offer: read for the defender, the raid is the enemy's to hand over, the fight his, and
+		// the chance the staff give him his own, not the raider's)
+		const bool bDefending = DefendRead();
+		std::string Q = bSky || bDefending ? "Hand the fight to the staff?" : "Hand the raid to the staff?";
+		const double Yours = bDefending ? 1.0 - HeadNow.Chance : HeadNow.Chance;
+		if (!HeadNow.bFired) return Q + " No shot has been fired: they settle the whole raid at once. They give you about " + Percent(Yours) + " to win it.";
+		return Q + " They settle the rest at once, from where it stands now. They give you about " + Percent(Yours) + " to win it.";
 	}
 
 	Subject Choose(const std::vector<AirShow::PlaneOut>& Planes, const std::vector<int>& Firing, const AirShow::Vec& Near, int Avoid)

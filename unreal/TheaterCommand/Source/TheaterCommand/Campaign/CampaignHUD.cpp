@@ -8816,6 +8816,96 @@ namespace
 						]
 					]
 
+					// (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z: "i want every air battle playable".) The
+					// month stopped where an enemy raid on his ground meets his fighters, and the eye has gone to the place: the
+					// card stands low on the screen so the place is seen above it, over a clear veil that takes every click (no
+					// order behind it). SCRAMBLE is the brass one; LEAVE IT TO THE STAFF is his staff meeting it, as before; the
+					// tick settles the rest of the month's raids. Neither takes a key: a held Enter never answers it.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SBorder).BorderImage(&ClearBrush).HAlign(HAlign_Center).VAlign(VAlign_Bottom).Padding(FMargin(0.0f, 0.0f, 0.0f, 120.0f))
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetScramble().bVisible ? EVisibility::Visible : EVisibility::Collapsed; })
+						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+						[
+							SNew(SBox).WidthOverride(620.0f)
+							[
+								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(30.0f, 24.0f, 30.0f, 22.0f))
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(STextBlock).Text(FText::FromString(TEXT("AN ENEMY RAID"))).Font(Typed(9, true, 200)).ColorAndOpacity(Brass)
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+									[
+										SNew(STextBlock).Font(Serif(TEXT("Bold"), 22)).ColorAndOpacity(Cream).AutoWrapText(true)
+										.Text_Lambda([this]() { return FText::FromString(Controller.IsValid() ? Controller->ScrambleTitle() : FString()); })
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.2f)
+										.Text_Lambda([this]() { return FText::FromString(Controller.IsValid() ? Controller->ScrambleBody() : FString()); })
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 20.0f, 0.0f, 0.0f)
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 12.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&BrassStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
+											.ToolTipText(FText::FromString(TEXT("You fly your fighters against the raid in the battle in the air.")))
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AnswerScramble(true); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("SCRAMBLE"))).Font(Font(TEXT("Bold"), 12, 220)).ColorAndOpacity(DeskInk)
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth()
+										[
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false)
+											.ToolTipText(FText::FromString(TEXT("Your staff meets the raid, and the month goes on.")))
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AnswerScramble(false); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("LEAVE IT TO THE STAFF"))).Font(Font(TEXT("Bold"), 12, 200)).ColorAndOpacity(Muted)
+											]
+										]
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 16.0f, 0.0f, 0.0f)
+									[
+										SNew(SButton).ButtonStyle(&FCoreStyle::Get().GetWidgetStyle<FButtonStyle>("NoBorder")).ContentPadding(FMargin(0.0f)).IsFocusable(false)
+										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ToggleScrambleRest(); } return FReply::Handled(); })
+										[
+											SNew(SHorizontalBox)
+											+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)
+											[
+												SNew(SBox).WidthOverride(16.0f).HeightOverride(16.0f)
+												[
+													SNew(SBorder).BorderImage(&KeyCapBrush).BorderBackgroundColor(Muted).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(0.0f))
+													[
+														SNew(SBox)
+														.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetScramble().bRest ? EVisibility::HitTestInvisible : EVisibility::Hidden; })
+														[
+															SNew(SLineIcon).Kind(7).Size(11.0f).Weight(1.8f).Ink(BrightBrass)
+														]
+													]
+												]
+											]
+											+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("Settle the rest of this month's raids"))).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted)
+											]
+										]
+									]
+									// (the bridge's stand-in, -TheaterAirScrambleDemo: said on the card, so nobody takes it for the month's own)
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+										.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetScramble().Offer.bDemo ? EVisibility::Visible : EVisibility::Collapsed; })
+										.Text(FText::FromString(TEXT("A demonstration: nothing this battle decides is booked, and the month goes on as it was.")))
+									]
+								]
+							]
+						]
+					]
+
 					// The question before a war: asked when an army is sent onto the ground of a country at peace.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[

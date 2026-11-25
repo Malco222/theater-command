@@ -257,7 +257,8 @@ namespace AirShow
 	// ---------------------------------------------------------------------------------------------------------------
 	// The views and the picture between them.
 
-	void Show::Take(double T, const std::vector<Group>& InGroups, const std::vector<Event>& InEvents, const std::vector<Ship>& InShips)
+	void Show::Take(double T, const std::vector<Group>& InGroups, const std::vector<Event>& InEvents, const std::vector<Ship>& InShips,
+		const AirMarks::View* InMarks)
 	{
 		View V;
 		V.T = T;
@@ -299,6 +300,8 @@ namespace AirShow
 		for (const Event& E : InEvents) Queue.push_back(E);
 		std::stable_sort(Queue.begin(), Queue.end(), [](const Event& A, const Event& B) { return A.T < B.T; });
 		if (!InShips.empty()) ShipsNow = InShips;
+		// (a raid on troops: the view's word on the pieces, kept for its time; AirShowTroops.cpp)
+		if (InMarks && InMarks->bGiven && Column.Has()) TakeMarks(T, *InMarks);
 		if (!bStarted)
 		{
 			bStarted = true;
@@ -3467,6 +3470,12 @@ namespace AirShow
 
 	void Show::PilotDive(Craft& C, const Group& G, double Dt)
 	{
+		// (a raid on troops: a fighter's strafing pass down a lane; AirShowTroops.cpp)
+		if (C.bLaneRun)
+		{
+			PilotStrafe(C, Dt);
+			return;
+		}
 		if (G.Strike == "torpedo")
 		{
 			PilotTorpedo(C, G, Dt);
@@ -4093,6 +4102,8 @@ namespace AirShow
 		// from before the ways down names only the old three (explode, burn, spin).
 		std::string How = E.How.empty() ? (E.Kind == "explode" || E.Kind == "spin" ? E.Kind : std::string("burn")) : E.How;
 		C.FallName = How;
+		// (the bomber by name the battle says this is, for her nose art: read by the scene only)
+		C.NamedArt = E.BomberArt;
 		C.Look = std::clamp(E.Look, 0, 3);
 		C.Turn = E.Roll < 0 ? -1.0 : E.Roll > 0 ? 1.0 : (E.Hand < 0 ? -1.0 : E.Hand > 0 ? 1.0 : C.Hand);
 		// (every bomber falls as a bomber, slow and heavy: the Kate, the Val and the Dauntless too, the audit's 4.3)
@@ -4697,6 +4708,12 @@ namespace AirShow
 				B.Vel = V + Vec(0.0, 0.0, -Gee * Ago);
 				B.Size = C.bStickTorpedo ? 5.5 : C.Form.Span > 25.0 ? 2.2 : 1.8;
 				B.Heading = C.Hdg;
+				// (a raid on troops: each bomb its number, and laid clear of every piece; AirShowTroops.cpp)
+				if (Column.Has() && !B.bTorpedo)
+				{
+					B.Group = C.Group;
+					LayBomb(B);
+				}
 				Small.push_back(B);
 				Check.StickBombs++;
 				if (K == 0 && C.bStickBay) C.StickBegan = AirT;
@@ -4723,6 +4740,13 @@ namespace AirShow
 
 	void Show::Play(const Event& E)
 	{
+		// (a raid on troops: a hit on a piece of the column, held for the bomb or the rounds that carry it, as a ship's
+		// hit is held for its bombs; AirShowTroops.cpp)
+		if (Column.Has() && E.What == "air:mark-hit")
+		{
+			PlayMark(E);
+			return;
+		}
 		const bool bShips = E.What == "air:ship-hit" || E.What == "air:ship-sunk";
 		if (bShips)
 		{
@@ -4899,6 +4923,8 @@ namespace AirShow
 				More.ChuteAt.clear();
 				More.ChuteCue.clear();
 				More.Text.clear();
+				// (the bomber the battle named is the first: the rest are others of the group)
+				More.BomberArt = -1;
 				for (int K = 1; K < E.Models; ++K)
 				{
 					const int Next = PickToFall(More, -1);
@@ -4956,6 +4982,8 @@ namespace AirShow
 				C.PastT = -1.0;
 				C.StragId = E.Strag;
 				C.StragAt = AirT;
+				// (the bomber by name the battle says this is, for her nose art: read by the scene only)
+				C.NamedArt = E.BomberArt;
 				// (each dead engine trails from its own nacelle for as long as it is out, a second one its own ribbon)
 				C.DeadEngines = E.Eng.empty() ? std::vector<int>{ 1 } : E.Eng;
 				C.bFeathered = E.bFeather;
@@ -5006,6 +5034,12 @@ namespace AirShow
 				Craft& C = Pair.second;
 				if (C.Group == E.Unit && C.StragId == E.Strag && C.Doing == Role::Straggle) Leave(C);
 			}
+			return;
+		}
+		// (a raid on troops: a fighter group's pass down a lane; AirShowTroops.cpp)
+		if (Column.Has() && E.What == "air:strafe")
+		{
+			StrafeBegin(E);
 			return;
 		}
 		if (E.What == "air:bombs" || E.What == "air:jettison")
@@ -7377,6 +7411,8 @@ namespace AirShow
 			else
 			{
 				T.Vel = T.Vel * (1.0 - 0.02 * Dt) + Vec(0.0, 0.0, -Gee * Dt);
+				// (a raid on troops: steered for where it is laid; AirShowTroops.cpp)
+				if (T.bWant) SteerBomb(T);
 			}
 			T.At += T.Vel * Dt;
 		}
@@ -7419,10 +7455,15 @@ namespace AirShow
 				if (T.bTorpedo) Emit(Floor > 0.5 ? FxKind::Crash : FxKind::Splash, Down, Floor > 0.5 ? "piece" : "torpedo").Size = Floor > 0.5 ? 2.0 : 4.0;
 				else
 				{
-					Fx& Hit = Emit(FxKind::BombHit, Down, Floor > 0.5 ? "land" : "water");
+					// (a raid on troops: down where its frame crossed the ground, its number on it, and the hit it carries
+					// shown on its piece; AirShowTroops.cpp)
+					const Vec Struck = T.bWant ? Crossing(T, Dt) : Down;
+					Fx& Hit = Emit(FxKind::BombHit, Struck, Struck.Z > 0.5 ? "land" : "water");
 					Hit.Size = T.Size > 2.0 ? 500.0 : 250.0;
 					Hit.Text = T.Lead > 1 ? "stick" : T.Lead == 1 ? "one" : "";
+					Hit.Id = T.Serial;
 					Check.Bombs++;
+					if (T.bWant) BombDown(T);
 				}
 			}
 			else if (T.Kind == ThingKind::Piece)
@@ -7529,6 +7570,9 @@ namespace AirShow
 			for (int Key : Firing) Emit(FxKind::GunStop, Vec(), std::string(), Key);
 			Firing.clear();
 		}
+		// (a raid on troops: the held hits, the views' words on the pieces, the strafers' and the column's guns;
+		// AirShowTroops.cpp)
+		if (Column.Has()) TroopsFrame(AirDt);
 		ShipFire(AirDt);
 		StrikeNow();
 		for (auto It = Crafts.begin(); It != Crafts.end();)
@@ -7568,7 +7612,7 @@ namespace AirShow
 			P.bShown = C.bShown;
 			P.bOnGround = C.Doing == Role::Ground;
 			P.bFalling = C.Doing == Role::Fall;
-			P.bFiring = C.bFiring;
+			P.bFiring = C.bFiring || (C.bLaneGuns && C.bLaneRun && C.Doing == Role::Dive);
 			P.Target = C.bFighter && C.Doing == Role::Fight ? C.Target : -1;
 			P.Task = C.bFighter ? C.Task : "";
 			P.Leader = -1;
@@ -7589,6 +7633,7 @@ namespace AirShow
 			P.bBombsGone = C.StickDone >= 0.0;
 			P.At.Z += Lifted(C);
 			P.Struck = C.Struck;
+			P.NamedArt = C.NamedArt;
 			Out.push_back(P);
 		}
 	}
@@ -7611,6 +7656,9 @@ namespace AirShow
 		}
 		// (a hit on a ship the battle has counted, held until the bombs or the torpedoes could have reached her)
 		for (const Held& H : Later) StrikeHits += !H.bForShot && (H.E.What == "air:ship-hit" || H.E.What == "air:ship-sunk") ? 1 : 0;
+		// (and a hit on a piece of a column while its bomb falls, its rounds fly or its strafing pass goes in; not while
+		// it only waits for one: AirShowTroops.cpp)
+		if (Column.Has()) StrikeHits += MarkStrikes();
 		bStrikeOn = StrikeBombs + StrikeBays + StrikeDives + StrikeTorpedo + StrikeHits > 0;
 	}
 

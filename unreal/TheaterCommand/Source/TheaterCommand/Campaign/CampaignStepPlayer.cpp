@@ -842,7 +842,11 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 	}
 	else if (Verb == TEXT("press"))
 	{
+		// (release 2, the scramble offer: LEAVE IT TO THE STAFF on a SCRAMBLE card runs the month on from there, so its step
+		// waits for the month and answers its screens as END THE MONTH's does; SCRAMBLE opens a battle, an air step below)
+		const bool bScrambleUp = Player.GetScramble().bVisible;
 		Press(Player, Step.Target);
+		bMonth = bMonth || (bScrambleUp && !Player.GetScramble().bVisible && !Player.IsFightingLive());
 	}
 	else if (Verb == TEXT("press-each"))
 	{
@@ -965,6 +969,9 @@ void FStepPlayer::ActAir(ACampaignPlayerController& Player, const FStep& Step)
 	{
 		if (S->bCard)
 		{
+			// (release 2, the scramble offer: an enemy raid he met himself hands the month back, which runs on from there;
+			// the step waits for it and answers its screens as END THE MONTH's step does)
+			bMonth = bMonth || S->bScramble;
 			Battle->Press(TEXT("continue"));
 			bAirDid = true;
 			bAirHandBack = true; // (the battle is handed back to the map: the step waits, as any, for the table to be still)

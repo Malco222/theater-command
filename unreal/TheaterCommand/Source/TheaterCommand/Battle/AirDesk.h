@@ -106,6 +106,14 @@ namespace AirDesk
 		/** The battle shown has reached ShownT: the views up to it are read (the clock and the words follow what is
 		 * shown, not the view held in hand ahead of it). */
 		void Reach(double ShownT);
+		/**
+		 * (Release 2) A raid on troops: the column as the show has it now (AirShow::Show::Marks: each piece as the hits
+		 * shown on it and the views' words after them leave it) and the organisation cut so far as the show lets it out
+		 * (Show::MarksCut), for the aim slip and the top bar; given each frame after Reach. So the words never tell of a
+		 * hit before its bomb or rounds land on its piece (the reviewer, 25 November). Nothing where the raid is not on
+		 * troops.
+		 */
+		void Struck(const AirMarks::Column& Shown, double Cut);
 		/** A dispatch the show releases (FxKind::Dispatch): kept, at most a few, oldest out. */
 		void Say(const std::string& What, const std::string& Text, int Side, int Unit);
 		/** Ages the dispatches (real seconds) and writes the words for the groups as shown now. */
@@ -122,12 +130,29 @@ namespace AirDesk
 		std::string Hunt(const std::vector<int>& Units) const;
 		std::string Band(const std::vector<int>& Units, int Band) const;
 		std::string Jettison(const std::vector<int>& Units) const;
+		/**
+		 * (Release 2) A raid on troops (Brian, 24 November 2026: "if a bomber group is bombing troops instead of a
+		 * factory or town and they get intercepted than i want that playable"): his fighter groups among Units (by the
+		 * tags) sent down the column's road on a strafing pass, { do: 'air:strafe', units: [...] }. Empty where none of
+		 * them is a fighter group of his, or he may not strafe it (CanStrafe).
+		 */
+		std::string Strafe(const std::vector<int>& Units, const std::vector<Tag>& Tags) const;
 		std::string HandOver() const;
 		/** The question HAND IT TO THE STAFF asks, with the staff's chance now. */
 		std::string StaffQuestion() const;
 		static std::string BreakOffAllQuestion() { return "Break off every air group? The battle ends here."; }
 
 		int MySideIndex() const { return MyIndex; }
+		/**
+		 * (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z: "i want every air battle playable".) The desk
+		 * read for the defender. The view's chance (sky.chance, AirSim.staffChance) is the raider's whoever he is, and the
+		 * aim slip and the staff's question were written for his own raid. Set, and his side the defence: the top bar's
+		 * "now about" and the staff's question give his own chance, the aim slip speaks of the raid as the enemy's, and
+		 * HAND IT TO THE STAFF asks of the fight. The scene sets it where the Battle rules card's "Scramble your fighters"
+		 * is on (AAirBattle::DefendOn); unset, every word is as it was.
+		 */
+		void SetDefendRead(bool bOn) { bDefendRead = bOn; }
+		bool DefendRead() const { return bDefendRead && MyIndex == 1; }
 		const std::map<int, AirFeed::Label>& Labels() const { return LabelsNow; }
 		const AirFeed::Top& Head() const { return HeadNow; }
 		/**
@@ -144,6 +169,12 @@ namespace AirDesk
 		/** The winner the end shows: the after card's once it is settled, else the view's stamp ("att", "def" or ""). */
 		const std::string& Winner() const { return Settled.empty() ? HeadNow.Winner : Settled; }
 		const AirFeed::Sky& Board() const { return Sky; }
+		/** (Release 2) The raid is on an army's column (place.kind "ground", its pieces given in place.marks): the words
+		 * speak of the column, not "the target", and STRAFE THE COLUMN is offered his fighter groups. */
+		bool OnTroops() const { return Sky.PlaceKind == "ground" && Sky.Marks.Has(); }
+		/** (Release 2) STRAFE THE COLUMN is his to give: a raid on troops, and the column the enemy's (the reviewer, 25
+		 * November: a player defending his own column had been offered it). */
+		bool CanStrafe() const { return OnTroops() && ColumnTheirs(); }
 
 	private:
 		AirFeed::Sky Sky;
@@ -151,6 +182,7 @@ namespace AirDesk
 		std::string Me = "att";
 		int MyIndex = 0;
 		std::string Settled;                   // the after card's winner, once read (SettleFrom)
+		bool bDefendRead = false;              // (release 2, the scramble offer) read for the defender (SetDefendRead)
 		bool bStarted = false;
 		double KnotShown = 0.5;                // the bar's knot as drawn, eased toward KnotOf
 		std::map<int, std::string> Called;     // sim.called: kept, as the view sends only what changed
@@ -158,6 +190,16 @@ namespace AirDesk
 		std::vector<Dispatch> Said;
 		std::map<int, bool> EngagedOnce;       // air:engage shown once for each escort group (UI director, 21:19Z)
 		std::vector<AirFeed::Frame> Ahead;     // views taken, not yet reached
+		// (release 2, a raid on troops) the column as the show has drawn it struck (Struck): its vehicles and guns
+		// wrecked, burning and damaged, the men lost from its blocks, and the organisation cut so far (view.marks.cut)
+		int MarksWrecked = 0, MarksBurning = 0, MarksDamaged = 0, MarksMenLost = 0;
+		double MarksCutNow = 0.0;
+		/** The column is the enemy's (its nation theirs; one of neither side's, or none said, the defender's). */
+		bool ColumnTheirs() const;
+		/** The column as the words name it: "the British I Corps" (its corps, place.marks.corps), else "the British column". */
+		std::string ColumnName() const;
+		/** A raid on troops' title, for the screen and the after card: "The raid on the British I Corps near Hampshire". */
+		std::string TroopsTitle() const;
 		std::string Elapsed(double Seconds) const;
 		void Read(const AirFeed::Frame& View);
 	};

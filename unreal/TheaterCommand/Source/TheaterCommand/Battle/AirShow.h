@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Battle/AirMarks.h"
 #include "Battle/ShipGuns.h"
 #include "Effects/TheaterFxCore.h"
 
@@ -113,6 +114,11 @@ namespace AirShow
 		 * vics of three; a fighter one of 20, five fours); 0 where an older recording does not say. SlotOf lays every
 		 * model's box from its slot alone, so this is a reading only. */
 		int Boxes = 0;
+		/** Its corps (the view's extra.corps; -1 where the battle does not name it): which group of the board's
+		 * place.bombers it flies with, for its nose art (Battle/AirNoseArt). The rules do not send it yet (sim.ts shown,
+		 * the bridge's unitOut), and nothing else says which group is which corps, so until they do every group's
+		 * paintings are dealt. A reading only. */
+		int Corps = -1;
 		Act Doing = Act::March;
 		int Engaged = -1;
 		std::vector<Fire> Firing;
@@ -166,11 +172,25 @@ namespace AirShow
 		bool bFeather = false;     // air:straggle, air:fireout, air:regain, air:hit fireout: its dead airscrew feathered
 		int GunBox = -1;           // air:lost, air:hit, a fighter: the box whose gunners brought it down or hit it (-1: not gunners)
 		int GunSeat = -1;          // (and that bomber's seat in its group, as the battle numbers them; -1: not said)
+		// air:lost, air:straggle: the bomber by name it is (extra.bomber, a group whose bombers the battle knows one by
+		// one; the dispatch "That was <name>" names her): her nose art's number on the air thread's list, 0 a bare nose;
+		// -1 not said. Shown only: the model that falls, or falls out of her box, for it wears that bomber's painting
+		// (Battle/AirNoseArt; the review's R2, 25 November). Nothing in the show reads it.
+		int BomberArt = -1;
 		std::string Part;          // air:lost: where it was hit, as the battle says (engine, wing, tail, cockpit, fuselage)
 		/** The models it moves in the picture (AR1, a model falls only for its share of the losses): air:lost, how many
 		 * fall (0 none: told, never shown; the last loss, the rest of the group); air:straggle, 1 a model falls out of
 		 * its box, 0 none. 1 where an older recording does not say, as every loss was a fall. */
 		int Models = 1;
+		/** (Release 2, a raid on troops; the every-kind contract's section 4) air:mark-hit: the piece struck (its id in
+		 * place.marks, -1 none), the men it cost a block (Strike says bomb or strafe, How burn, wreck, blast, scatter or
+		 * near). air:strafe: the lane its pass goes down, from (FromX, FromY) to (ToX, ToY), Width across (bLane: the
+		 * event gave one); Dur, its battle seconds. */
+		int Piece = -1;
+		int Men = 0;
+		std::string PieceWhat;  // (air:mark-hit: what it struck, where the ticket sent only counts and names no piece)
+		bool bLane = false;
+		double FromX = 0.0, FromY = 0.0, ToX = 0.0, ToY = 0.0, Width = 0.0;
 	};
 
 	/** A ship under attack, as the view's ships give it. */
@@ -226,7 +246,22 @@ namespace AirShow
 		ShipGun,    // a ship's heavy anti-aircraft gun firing: Key (the ship), At (its muzzle), Aim (where it is laid), What
 		            //   (the gun, as ShipGuns names it), Size (its calibre, mm); its shell's burst follows as Flak (or a
 		            //   Splash ahead of a torpedo plane) when it gets there
+		// (Release 2, a raid on troops: Brian, 24 November, "if a bomber group is bombing troops instead of a factory or
+		// town and they get intercepted than i want that playable"; only where the sky has marks)
+		MarkHit,    // a hit the rules counted on a piece of the column, as the drawn bomb or rounds arrive (as ShipHit waits
+		            //   for the bombs): Key (the piece's id), At (the piece, on the ground), What (the strike: bomb or
+		            //   strafe), Text (how: burn, wreck, blast, scatter, near), Size (the men it cost a block), Id (the bomb's
+		            //   own number, as its BombHit's Id; 0 for rounds, or none drawn), Part ("big" where the event says
+		            //   it was a big one: extra.big). Its dispatch and its sound (the event's text and cue) come with it,
+		            //   in the same frame, never before (the reviewer, 25 November: they had gone out as the event came)
+		MarkGun,    // the column's light flak firing back (drawn only; it never decides a loss), every frame it fires: Key
+		            //   (MarkGunBase plus the piece's id), At (its muzzle), Aim (where it is laid: short of the lead), Vel
+		            //   (none: it stands), What (the kit's air_guns row, cannon20), Rate (rounds a minute), Mv; a GunStop with
+		            //   its Key when the burst ends
 	};
+	/** The column's light flak streams' keys (MarkGun): above every aircraft's guns' (a craft's key times 64) and below
+	 * the ships' streams (ShipGuns::StreamBase, 1 << 27), so a MarkGun key is never a ship's (ShipGuns::IsStream). */
+	constexpr int MarkGunBase = 1 << 26;
 
 	struct Fx
 	{
@@ -350,6 +385,10 @@ namespace AirShow
 		bool bBombsGone = false;
 		/** The bursts that have struck it so far (each a run of Hit effects along it), for marks on the model. */
 		int Struck = 0;
+		/** A bomber the battle has named (Event::BomberArt): the nose art's number of the bomber by name the loss she fell
+		 * for, or her falling out of her box, says she is (0 a bare nose); -1 where none has named her, or the loss she
+		 * fell for named none. For her nose art only (Battle/AirNoseArt): the show never reads it. */
+		int NamedArt = -1;
 	};
 
 	/** The small things drawn in one mesh: a parachute, a piece of a wreck, a bomb or a torpedo. */
@@ -374,6 +413,18 @@ namespace AirShow
 		 * tile's foot it may yet fall into a lower tile beside it); 0 once it is under the deck's laid base, or there is
 		 * no deck, and it falls on to the ground or the sea. */
 		double Deck = 0.0;
+		/** (A raid on troops; only where the sky has marks) A bomb: its group, its own number (its BombHit's Id), where it
+		 * is to come down (bWant: steered there, a few metres a second across its fall, so that a counted hit lands on
+		 * its piece and every other bomb clear of every piece: AirMarks), and the hit it carries (Show's held hits, -1
+		 * none). */
+		int Group = -1;
+		int Serial = 0;
+		bool bWant = false;
+		double WantX = 0.0, WantY = 0.0;
+		int Carries = -1;
+		/** (and the air seconds of fall it had left at (WantX, WantY) as it was last steered: kept, so that a hit waiting
+		 * for a bomb is weighed against each bomb without working its fall out again every frame) */
+		double LandLeft = 0.0;
 	};
 
 	/** An aircraft's size and where its engines and gun stations are, in its own frame (X forward, Y right, Z up). */
@@ -487,6 +538,21 @@ namespace AirShow
 		int StrikesWide = 0;               // strikes not drawn, the aircraft having turned out of the rounds' way while they flew
 		int HitsToFlak = 0, FlakStrikes = 0; // hits survived and bombers put out of their box by flak; the splinters drawn on them
 		int HitsToNobody = 0;              // hits survived that nothing was firing to make: the mark shows, no strike is drawn
+		// (Release 2) A raid on troops (AirMarks; only where the sky has marks):
+		int MarkHitsTold = 0;              // air:mark-hit events played
+		int MarkHitsShown = 0;             // MarkHit effects given (one each)
+		int MarkHitsUnseen = 0;            // of those, given with no bomb or rounds of their group drawn arriving on the piece
+		int MarkBombsLaid = 0;             // drawn bombs laid on a piece for a counted hit
+		int MarkBombsCleared = 0;          // drawn bombs moved clear of every piece (they would have come down within a blast of one)
+		double MarkMostMove = 0.0;         // metres, the most a bomb's landing was moved (laid on its piece or cleared)
+		int MarkChangesRefused = 0;        // a view's word to change a piece that is out: refused (it never changes again)
+		int StrafePasses = 0;              // aircraft that flew a strafing pass
+		long StrafeSteps = 0;              // their steps on the pass (lined up, diving, pulling out, climbing away)
+		double StrafeMostG = 0.0, StrafeLeastRadius = 1e9, StrafeMostRoll = 0.0; // the flight's limits on the pass (g, metres, degrees a second)
+		double StrafeLowest = 1e9;         // metres over the ground, the lowest a strafing aircraft flew
+		int StrafeRounds = 0;              // rounds of the passes landed (Hit effects on the ground)
+		int StrafeOnPieces = 0;            // of those, on a piece with no hit counted (none, by construction)
+		int MarkGunFrames = 0;             // frames the column's light flak fired
 	};
 
 	/** The cloud deck as drawn over a board point (Show::DeckAt): its tile's foot and the height where it hides what
@@ -642,8 +708,24 @@ namespace AirShow
 		/** The hits being shown now, and those of the last few seconds (a Moment stays 8 s after its end). */
 		const std::vector<Moment>& Moments() const { return Seen; }
 
-		/** A view: its battle time, its groups, its events and its ships. Kept for the picture between views. */
-		void Take(double T, const std::vector<Group>& InGroups, const std::vector<Event>& InEvents, const std::vector<Ship>& InShips);
+		/** A view: its battle time, its groups, its events and its ships (and, on a raid on troops, its marks: view.marks).
+		 * Kept for the picture between views. */
+		void Take(double T, const std::vector<Group>& InGroups, const std::vector<Event>& InEvents, const std::vector<Ship>& InShips,
+			const AirMarks::View* InMarks = nullptr);
+		/**
+		 * (Release 2) A raid on troops: what stands on the ground (place.marks; AirFeed::Apply hands it over). With it, a
+		 * stick's bombs come down by AirMarks (each counted hit on its piece as its bomb arrives, every other bomb clear of
+		 * every piece), a fighter group's air:strafe flies a strafing pass down its lane, the column's light flak fires
+		 * back (MarkGun), and each air:mark-hit gives one MarkHit as its bomb or rounds land. Without it (every other
+		 * raid) none of this runs, and the show plays exactly as before.
+		 */
+		void SetMarks(const AirMarks::Column& InMarks);
+		/** The pieces as shown now (their state and the men left), for the scene to draw. */
+		const AirMarks::Column& Marks() const { return Column; }
+		/** (Release 2) The organisation the raid has cut from the column so far (view.marks.cut), as shown: a view's
+		 * figure is let out only once every hit told up to its time has been shown on its piece, so the screen's words
+		 * never tell of a hit before its bomb or rounds land (AirDesk::Desk::Struck). */
+		double MarksCut() const { return CutShown; }
 		/** The battle time shown now (never past the latest view), and the air clock with it. */
 		void Advance(double T);
 
@@ -717,6 +799,7 @@ namespace AirShow
 			bool bFiring = false;
 			int StragId = -1;
 			double StragAt = -1.0;   // the air time it fell out of its box
+			int NamedArt = -1;       // the bomber by name its fall, or its falling out of its box, was for (PlaneOut::NamedArt)
 			FallHow Falling = FallHow::None;
 			double FallT = 0.0;
 			double FallHigh = 0.0;   // metres over the ground or the sea as its fall began
@@ -843,6 +926,15 @@ namespace AirShow
 			double SightUntil = 0.0; // (and the air time he lets it go at the latest)
 			double TurnNow = 0.0, PullNow = 0.0; // the turn and the pull Fly last gave it, radians a second
 			double RollNow = 0.0;    // (and the roll)
+			// (Release 2, a raid on troops) A strafing pass (Role Dive, Phase Setup, Run, Plunge, Pull, Egress; PilotStrafe):
+			// its pass (Show::Lanes, -1 none) and its place in it, one behind another; where its guns' walk down the lane
+			// begins (metres from the lane's start) and how far right of the lane's middle line it aims; the held hit it
+			// carries (Show::MarkHolds, -1 none); its guns firing this frame.
+			bool bLaneRun = false;
+			int LaneOf = -1, LaneK = 0;
+			double LaneU0 = 0.0, LaneSide = 0.0;
+			int LaneHold = -1;
+			bool bLaneGuns = false;
 		};
 
 		/** The beat of a fighter group's passes on one box, as the battle gives it (Fire::Go, Fire::Wait). */
@@ -1404,5 +1496,101 @@ namespace AirShow
 		const Craft* Find(int Key) const;
 		bool Live(const Craft& C) const;
 		std::vector<int> LiveOf(int GroupId) const;
+
+		// ---------------------------------------------------------------------------------------------------------------
+		// (Release 2) A raid on troops (Battle/AirShowTroops.cpp; Brian, 24 November: "if a bomber group is bombing troops
+		// instead of a factory or town and they get intercepted than i want that playable"). Nothing here runs where the
+		// sky has no marks (SetMarks never called): every hook in AirShow.cpp asks Column.Has() or a bomb's bWant first.
+		/** What stands on the ground, as shown now: the pieces' states as the hits shown and the views' words have them. */
+		AirMarks::Column Column;
+		/** An air:mark-hit, held until the drawn bomb or rounds that carry it arrive on its piece (as Later holds a ship's
+		 * hit for its bombs). */
+		struct MarkHold
+		{
+			Event E;
+			int Index = -1;          // its piece's place in Column.Pieces
+			double Since = 0.0;      // the air time it was played
+			int Bomb = 0;            // the drawn bomb carrying it (its Serial; 0: none yet)
+			int Claimed = 0;         // a strafe: the aircraft whose pass carries it (its key; 0: none yet)
+			double Due = -1.0;       // a strafe: the air time its rounds land on the piece (-1: none on their way yet)
+			bool bDone = false;
+		};
+		std::vector<MarkHold> MarkHolds;
+		/** A view's word on a piece (view.marks.pieces), kept until its battle time is shown and any hit on that piece
+		 * still held has been shown. */
+		struct MarkWord
+		{
+			double At = 0.0;
+			AirMarks::Change C;
+		};
+		std::vector<MarkWord> MarkWords;
+		/** A view's organisation cut (view.marks.cut), kept until its battle time is shown and every hit told up to that
+		 * time has been shown on its piece (MarksCut); and the highest let out so far. */
+		struct MarkCut
+		{
+			double At = 0.0;
+			double Cut = 0.0;
+		};
+		std::vector<MarkCut> MarkCuts;
+		double CutShown = 0.0;
+		/** A strafing pass (air:strafe): its lane, how its machine flies it, its group, when it was told, its aircraft. */
+		struct StrafeRun
+		{
+			AirMarks::Lane L;
+			AirMarks::Pass P;
+			int Unit = -1;
+			double At = 0.0;
+			std::vector<int> Keys;
+		};
+		std::vector<StrafeRun> Lanes;
+		/** The strafers' guns and the column's light flak firing now (their keys), and the rounds each strafer's gun owes
+		 * the ground (as GroundDue does a stream's). Kept, with the frame's own lists, from frame to frame, so that no
+		 * frame makes them afresh (the reviewer, 25 November). */
+		std::vector<int> StrafeFiring, MarkFiring, KeysNow;
+		std::vector<size_t> FlakNow;
+		std::map<int, double> StrafeOwing;
+		int BombSerial = 0;
+		uint32_t MarkSalt = 0;   // (each strafe round's own scatter: a hash of it, no draw on the show's dice)
+		double MarkFire = 1.0;   // the share of the column's guns firing back (view.marks.fire)
+		void TakeMarks(double T, const AirMarks::View& V);
+		/** An air:mark-hit (Play): held for its bomb or its rounds, and told (Release: its dispatch and its sound) only as
+		 * it is shown on its piece (ShowMark). */
+		void PlayMark(const Event& E);
+		/** An air:strafe (Release): its group's four (at most) go down the lane, one behind another. */
+		void StrafeBegin(const Event& E);
+		/** A bomb let go (Bays): its number, and where it comes down: clear of every piece by more than its blast. */
+		void LayBomb(Thing& B);
+		/** A bomb's way across the ground set, each frame of its fall, for where it is to come down (SmallThings). */
+		void SteerBomb(Thing& B) const;
+		/** Air seconds of fall left for a bomb to the ground under a board point, by the drag SmallThings flies it by. */
+		double FallLeft(const Thing& B, double X, double Y) const;
+		/** Where a bomb comes down, falling on as it is; its air seconds of fall left. */
+		double LandsAt(const Thing& B, double& X, double& Y) const;
+		/** Where a bomb crossed the ground in the frame just flown (SmallThings: a bomb laid on a lorry lands on it). */
+		Vec Crossing(const Thing& B, double Dt) const;
+		/** A bomb down: the hit it carries shown on its piece. */
+		void BombDown(const Thing& B);
+		/** A held bomb hit given to a bomb in the air (its group's first) with time enough left to be laid on its piece. */
+		bool BindBomb(MarkHold& H, int At);
+		/** A strafer's pass, this step (PilotDive hands it on). */
+		void PilotStrafe(Craft& C, double Dt);
+		/** A strafer done (or its pass gone): back to its place in the group. */
+		void EndStrafe(Craft& C);
+		/** A strafer no longer on its pass that did not end it (shot down, gone home, taken into a fight): its pass and
+		 * its guns let go where it is, and a hit it had claimed but not yet carried given back to its group's others. */
+		void DropStrafe(Craft& C);
+		/** What of the column's held hits keeps the strike on this frame (StrikeNow): a bomb hit whose bomb is in the air,
+		 * and a strafe hit while the strafer carrying it dives on its piece or its rounds are on their way. */
+		int MarkStrikes() const;
+		/** The strafers' guns this frame: their streams down the lane, each round's strike off every piece but one whose
+		 * counted hit the pass carries. */
+		void StrafeGuns(double Dt);
+		/** The column's light flak this frame (drawn only). */
+		void MarkGuns();
+		/** Once a frame, after the strays have landed: the held hits bound, shown when due or given up; the views' words
+		 * on the pieces; the strafers' guns and the column's. With no air time passing, every stream stopped. */
+		void TroopsFrame(double Dt);
+		/** A held hit shown: its MarkHit, and the piece as the hit leaves it (bSeen: its bomb or rounds arrived). */
+		void ShowMark(MarkHold& H, int Bomb, bool bSeen);
 	};
 }

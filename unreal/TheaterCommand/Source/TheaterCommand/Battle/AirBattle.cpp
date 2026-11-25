@@ -758,7 +758,12 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 	S.Show.SetSmooth(!AirOldFlying());
 	S.SkyPlace = AirFeed::PlacingOf(S.Board, First.Groups, 0);
 	S.Desk.Begin(S.Board, First.Head.Me);
-	S.Show.Take(First.Head.T, First.Groups, First.Events, First.Ships);
+	// (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z: "i want every air battle playable". With the Battle
+	// rules card's "Scramble your fighters" on, a battle he fights as the defender reads as his: the staff's chance his own,
+	// the raid the enemy's. Off, the desk reads as it always has. TC.scrambleStart is an enemy raid he meets himself.)
+	S.Desk.SetDefendRead(DefendOn());
+	S.bScramble = Function == TEXT("scrambleStart");
+	S.Show.Take(First.Head.T, First.Groups, First.Events, First.Ships, &First.Marks); // (release 2: a raid on troops' view.marks; none elsewhere)
 	for (const AirShow::Ship& Ship : First.Ships)
 	{
 		// (a ship's light guns' tracers in her navy's colours: their keys name her as an aircraft's name it)
@@ -1020,6 +1025,7 @@ bool AAirBattle::Open(const FString& Why)
 	Small->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Small->SetCastShadow(false);
 	Small->RegisterComponent();
+	OpenTroops(); // (release 2: the column under a raid on troops, where the sky has marks: AirBattleTroops.cpp)
 	HideTheTable();
 	LayDeckShade();
 	LayDeckSheet();
@@ -3677,7 +3683,9 @@ void AAirBattle::Tick(float DeltaSeconds)
 		}
 		if (BrokenAt >= 0.0)
 		{
-			S.Note = "THE RAID STOPPED HERE: ITS RULES FAILED. NOTHING IS BOOKED; BACK TO THE MAP IN A MOMENT";
+			// (release 2, the scramble offer: an enemy raid he met himself goes back to his staff, who meet it as the month runs on)
+			S.Note = S.bScramble ? "THE BATTLE STOPPED HERE: ITS RULES FAILED. YOUR STAFF MEETS THE RAID; BACK TO THE MAP IN A MOMENT"
+				: "THE RAID STOPPED HERE: ITS RULES FAILED. NOTHING IS BOOKED; BACK TO THE MAP IN A MOMENT";
 			S.NoteAge = -1.0; // (held, and put back each frame: no other note takes its place)
 			if (Now - BrokenAt > 4.0)
 			{
@@ -3712,6 +3720,7 @@ void AAirBattle::Tick(float DeltaSeconds)
 	}
 	S.Desk.Reach(S.Show.Shown());
 	PlayEffects();
+	S.Desk.Struck(S.Show.Marks(), S.Show.MarksCut()); // (release 2: a raid on troops' column as drawn struck, for its words; returns at once on any other raid)
 	S.Desk.Write(Real, S.Show.Groups(), S.ClockTag, S.Words);
 	if (MetRealT < 0.0 && S.Desk.Head().Contact >= 0.0)
 	{
@@ -3857,7 +3866,8 @@ void AAirBattle::Tick(float DeltaSeconds)
 					S.Card.Lines.push_back(bEnded ? "What came of it is on the map." : "Its rules failed at its end, so nothing is booked.");
 					if (!bEnded)
 					{
-						S.Card.Lines.push_back("FLY THE RAID on its card still sends your crews.");
+						// (release 2, the scramble offer: handed back empty, the campaign leaves the raid to his staff, TC.scrambleLeave)
+						S.Card.Lines.push_back(S.bScramble ? "Your staff meets the raid, and the month goes on." : "FLY THE RAID on its card still sends your crews.");
 					}
 				}
 			}
@@ -3877,7 +3887,7 @@ void AAirBattle::Feed()
 	FAirBattleState& S = *State;
 	auto Take = [this, &S](const AirFeed::Frame& View)
 	{
-		S.Show.Take(View.Head.T, View.Groups, View.Events, View.Ships);
+		S.Show.Take(View.Head.T, View.Groups, View.Events, View.Ships, &View.Marks); // (release 2: a raid on troops' view.marks; none elsewhere)
 		for (const AirShow::Ship& Ship : View.Ships)
 		{
 			GunNations.Add(ShipGuns::OwnerOf(Ship.Id), AirParts::KitNation(Ship.Nation));
@@ -4925,6 +4935,10 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 			{
 				Old->Tally->DestroyComponent();
 			}
+			if (Old->NoseArt.IsValid())
+			{
+				Old->NoseArt->DestroyComponent();
+			}
 			Struck = MoveTemp(Old->Marks);
 			for (FPlaneMade::FMark& Mark : Struck)
 			{
@@ -5106,6 +5120,19 @@ const FAirTallySide* AAirBattle::TallyOfShape(const FString& Shape)
 		}
 	}
 	return Found ? &Found->Kills : nullptr;
+}
+
+bool AAirBattle::ShapeFrameOf(const FString& Shape, FString& Kind, FVector& Middle, double& Fit) const
+{
+	const AirParts::FShape* Found = AirParts::Shapes().Find(Shape);
+	if (!Found || Found->Kind.IsEmpty())
+	{
+		return false;
+	}
+	Kind = Found->Kind;
+	Middle = Found->Middle;
+	Fit = Found->Fit;
+	return true;
 }
 
 UStaticMesh* AAirBattle::PlaneStill(const FString& Shape, bool bLight)
@@ -5639,6 +5666,8 @@ void AAirBattle::Draw(double Real)
 	// The strikes on those near the eye, laid on their skins; taken up from the rest.
 	DrawMarks(EyeAt);
 	DrawTally(EyeAt);
+	DrawTroops(EyeAt); // (release 2: the column under a raid on troops, sent with the copies below: AirBattleTroops.cpp)
+	DrawNoseArt(EyeAt);
 	// The small things, laid afresh each frame in one mesh: a parachute's canopy and its airman, a torn piece of a
 	// wreck tumbling; a bomb or a torpedo falling a copy of its own mesh (AS2), sent with the aircraft's copies.
 	FMiniatureMesh Things;
@@ -6478,6 +6507,10 @@ void AAirBattle::PlayEffects()
 				Kit->Burn(At, 40.0f, 900.0f);
 			}
 			break;
+		case AirShow::FxKind::MarkHit:
+		case AirShow::FxKind::MarkGun:
+			PlayTroops(E); // (release 2: a hit on the column under a raid on troops, its flak firing back: AirBattleTroops.cpp)
+			break;
 		}
 	}
 	S.Show.Effects.clear();
@@ -6635,6 +6668,13 @@ void AAirBattle::AimEye(double Real)
 				// rules frame him: the modeller's check, 19:45Z, found a mid-set wing (the Wildcat's) or a resting
 				// propeller (the Night Fighter's) hides a few slots only from dead level.)
 				Want = AceMarks + AceOut * 8.0 * U + FVector::UpVector * 2.0 * U - CloseAhead * 1.0 * U;
+				Look = AceMarks;
+			}
+			else if (!Rider->bFighter && NoseArtEye(Rider->Key, AceMarks, AceOut))
+			{
+				// The nose art's close picture (release 2, "-TheaterAirNoseArtEye" with the nose art on: the art director's
+				// stills and the Mac's check): 9 m off her port panel, square to it, a metre and a half above, looking at it.
+				Want = AceMarks + AceOut * 9.0 * U + FVector::UpVector * 1.5 * U;
 				Look = AceMarks;
 			}
 			else if (Rider->bFighter)
@@ -7408,6 +7448,7 @@ void AAirBattle::Press(const FString& Button)
 	else if (Button == TEXT("breakoffall")) { S.Question = 2; }
 	else if (Button == TEXT("staff")) { S.Question = 1; }
 	else if (Button == TEXT("hunt")) { Order(AirParts::Wide(S.Desk.Hunt(Hand))); }
+	else if (Button == TEXT("strafe")) { Order(AirParts::Wide(S.Desk.Strafe(Hand, S.Words.Tags))); } // (release 2, a raid on troops: his fighter groups in hand)
 	else if (Button == TEXT("jettison")) { Order(AirParts::Wide(S.Desk.Jettison(Hand))); }
 	else if (Button == TEXT("low") || Button == TEXT("middle") || Button == TEXT("high"))
 	{
@@ -7494,10 +7535,16 @@ bool AAirBattle::CampaignLiveOn()
 	return FLandLive::RuleNow(TEXT("flyLive"));
 }
 
+bool AAirBattle::DefendOn()
+{
+	return FLandLive::RuleNow(TEXT("flyDefend"));
+}
+
 void AAirBattle::EndPlay(const EEndPlayReason::Type Reason)
 {
 	SkyFinish(false); // (a turn of the clouds painted aside: done before the stage and the meshes it touches go)
 	HideScreen();
+	EndTroops(); // (release 2: the column's guns stopped in their kits before the kits end: AirBattleTroops.cpp)
 	if (KeptScreenPercent > 0.0f)
 	{
 		if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage")))

@@ -131,10 +131,31 @@ namespace
 		// (release 1.5, 24 November 03:42Z: ON. The playtester passed it on 4351110c, the Mac held 49-60 fps in flight (Part B on
 		// 6c676061) and the art director passed every raid's stills on 8913978d. -TheaterAirNoCampaignLive turns it off for a run.)
 		{ TEXT("flyLive"), TEXT("Fly raids yourself"), TEXT("On a bombing raid by day or a fight for the sky, FLY IT YOURSELF takes you into the battle in the air, where you give your groups their orders. Off: your crews fly every raid."), TEXT("TheaterAirNoCampaignLive"), true, TEXT("TheaterAirCampaignLive") },
+		// (release 2, the air battles over an army: Brian, 24 November 2026, "if a bomber group is bombing troops instead of a
+		// factory or town and they get intercepted than i want that playable". FLY IT YOURSELF on the raid card of a raid on
+		// troops: the 3D stands the army's column on its road under the planes (its tanks, lorries, guns and men), and every
+		// bomb and strafing pass the rules count shows on the piece it struck. Off until the playtester and the Mac pass it,
+		// then this row flips to on in one line; -TheaterAirRuleTroops turns it on for a run, -TheaterAirNoRuleTroops off.
+		// The campaign reads it (AAirBattle::CampaignLiveOn(TEXT("ground"))); it is never sent to the land rules.)
+		{ TEXT("flyTroops"), TEXT("Fly raids on troops yourself"), TEXT("On a raid on an army's column, FLY IT YOURSELF takes you into the battle in the air over its road, where you watch the bombs and strafing passes land on its tanks, lorries, guns and men and give your groups their orders. Off: your crews fly every raid on troops."), TEXT("TheaterAirNoRuleTroops"), false, TEXT("TheaterAirRuleTroops") },
+		// (Bomber nose art, release 2: the modeller's 200 paintings on the American bombers in the air battles, Brian, 25
+		// November 2026 01:30Z, "american only". Looks only: nothing in the battle reads it. Off until the Mac holds 45 fps
+		// with it and the art director has passed it, then this row flips to on in one line; -TheaterAirNoseArt turns it
+		// on for a run, -TheaterAirNoNoseArt off. The air battle reads it (AAirBattle::DrawNoseArt); it is never sent to the
+		// land rules.)
+		{ TEXT("noseArt"), TEXT("Bomber nose art"), TEXT("American bombers in the air battles wear painted nose art, each crew's own picture and name. Off: every bomber's nose is bare."), TEXT("TheaterAirNoNoseArt"), false, TEXT("TheaterAirNoseArt") },
 		// (Old wrecks, Brian 23 November 20:09Z: starts off as Scarred ground does, until the effects thread's wrecks pass the
 		// art director and 45 fps; -TheaterLandRuleOldWrecks turns it on for a run. The 3D's -TheaterLandOldWrecks=N and
 		// -TheaterLandOldWreckMonths=M stand-ins are other flags.)
 		{ TEXT("wrecks"), TEXT("Old wrecks"), TEXT("A field fought over before keeps the burnt-out tanks and armoured vehicles those battles left on it. Off: the field is cleared between battles."), TEXT("TheaterLandNoOldWrecks"), false, TEXT("TheaterLandRuleOldWrecks") },
+		// (Release 2, the scramble offer: Brian, 24 November 2026 22:21Z, "i want every air battle playable". In the enemy's
+		// month the campaign stops where an enemy raid on his ground meets his fighters and offers SCRAMBLE: taken, he flies
+		// the defence in the battle in the air (AAirBattle, his side 'def'), and the month runs on with what the battle
+		// decided. The month's stop is the warplanes thread's (air-battles/every-kind/CONTRACT.md section 7); until it lands,
+		// -TheaterAirScrambleDemo has the bridge's stand-in offer one raid after the month, booking nothing. Off until that
+		// stop lands, the Mac holds 45 fps, the art director and a playtest pass it (ruling 217); -TheaterAirRuleDefend turns
+		// it on for a run. The campaign reads it (AAirBattle::DefendOn), as flyLive; it is never sent to the land rules.)
+		{ TEXT("flyDefend"), TEXT("Scramble your fighters"), TEXT("When an enemy raid on your ground meets your fighters, the month stops on a SCRAMBLE card: take it and you fly your fighters against the raid in the battle in the air. Off: your staff meets every enemy raid."), TEXT("TheaterAirNoRuleDefend"), false, TEXT("TheaterAirRuleDefend") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }
@@ -242,9 +263,10 @@ bool FLandLive::Start(const FString& InKey, int32 InSeed, const FString& InMe, b
 	Switches.Reset();
 	for (int32 R = 0; R < RuleCount(); ++R)
 	{
-		if (FCString::Strcmp(LandRuleTable[R].Key, TEXT("flyLive")) == 0)
+		const FString RuleKey(LandRuleTable[R].Key);
+		if (RuleKey.StartsWith(TEXT("fly"), ESearchCase::CaseSensitive) || RuleKey.Equals(TEXT("noseArt"), ESearchCase::CaseSensitive))
 		{
-			continue; // (the air battles' own switch, on the same card: the campaign reads it, the land rules never do)
+			continue; // (the air battles' own switches, on the same card: flyLive, flyTroops, flyDefend, noseArt and those to come; the campaign and the air battle read them, the land rules never do)
 		}
 		const bool bOn = RuleNow(LandRuleTable[R].Key);
 		Switches += FString::Printf(TEXT(",\"%s\":%s"), LandRuleTable[R].Key, bOn ? TEXT("true") : TEXT("false"));

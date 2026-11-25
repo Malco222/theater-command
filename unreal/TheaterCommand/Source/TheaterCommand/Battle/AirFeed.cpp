@@ -429,6 +429,19 @@ namespace AirFeed
 			Out.Latitude = Lat.Num(0.0);
 		}
 
+		// The raid's bombers one by one (place.bombers, keyed by corps), for their nose art: each seat's painting and name.
+		const Json& Seated = Place["bombers"];
+		for (size_t K = 0; K < Seated.Keys.size() && K < Seated.Values.size(); ++K)
+		{
+			char* End = nullptr;
+			const long Corps = std::strtol(Seated.Keys[K].c_str(), &End, 10);
+			const Json& B = Seated.Values[K];
+			if (!End || *End != '\0' || End == Seated.Keys[K].c_str() || !B.IsObject()) continue;
+			Sky::BomberGroup& Row = Out.Bombers[static_cast<int>(Corps)];
+			Row.Style = B["style"].Str("");
+			for (const Json& Seat : B["seats"].Items) Row.Seats.push_back({ std::max(0, Seat["art"].Int(0)), Seat["name"].Str("") });
+		}
+
 		// The day's sky (sky.ts): kept as given; a bundle from before it has none, and cumulus stands in.
 		const Json& Cloud = Place["cloud"];
 		if (Cloud.IsObject())
@@ -445,6 +458,67 @@ namespace AirFeed
 			Out.Cloud.Word = Cloud["sky"].Str("");
 		}
 		Out.TrailM = TrailHeight(Out.Cloud.Zone, Out.Month, Out.Latitude);
+
+		// (Release 2) A raid on troops: what stands on the ground (place.marks; the contract's section 2, the air rules
+		// thread's corps). At most AirMarks::MostPieces, as the rules place them; where the ticket sends only counts, the
+		// column is laid here from its seed (marks.seed, else the sky's, else the battle's title, date and place).
+		const Json& Marks = Place["marks"];
+		if (Marks.IsObject())
+		{
+			AirMarks::Column& C = Out.Marks;
+			C.Nat = Marks["nat"].Str(Out.DefNat.c_str());
+			C.Posture = Marks["posture"].Str("march");
+			C.Road = Ring(Marks["road"]);
+			C.Divs = Marks["divs"].Int(0);
+			C.Men = Marks["men"].Int(0);
+			C.Per = std::max(1, Marks["per"].Int(10));
+			for (const Json& P : Marks["pieces"].Items)
+			{
+				if (static_cast<int>(C.Pieces.size()) >= AirMarks::MostPieces) break;
+				AirMarks::Piece Row;
+				Row.Id = P["id"].Int(static_cast<int>(C.Pieces.size()) + 1);
+				Row.What = P["what"].Str("lorry");
+				Row.Model = P["model"].Str("");
+				Row.Nat = P["nat"].Str(C.Nat.c_str());
+				Row.Posture = P["posture"].Str(C.Posture.c_str());
+				Row.X = P["x"].Num(Out.TargetX);
+				Row.Y = P["y"].Num(Out.TargetY);
+				Row.Face = P["face"].Num(0.0);
+				Row.N = std::max(1, P["n"].Int(1));
+				Row.Men = Row.N;
+				AirMarks::SizeOf(Row.What, Row.Long, Row.Wide);
+				C.Pieces.push_back(std::move(Row));
+			}
+			for (const Json& K : Marks["corps"].Items)
+			{
+				AirMarks::Corps Row;
+				Row.Id = K["id"].Int(0);
+				Row.Nat = K["nat"].Str(C.Nat.c_str());
+				Row.Name = K["name"].Str("");
+				Row.Kind = K["kind"].Str("");
+				Row.Posture = K["posture"].Str(C.Posture.c_str());
+				Row.Divs = K["divs"].Int(0);
+				Row.Men = K["men"].Int(0);
+				Row.Str = K["str"].Num(1.0);
+				Row.Org = K["org"].Num(1.0);
+				C.Under.push_back(std::move(Row));
+			}
+			const Json& Counts = Marks["counts"];
+			for (size_t K = 0; K < Counts.Keys.size() && K < Counts.Values.size(); ++K)
+				if (Counts.Values[K].Int(0) > 0) C.Counts.emplace_back(Counts.Keys[K], Counts.Values[K].Int(0));
+			if (!C.Has() && !C.Counts.empty())
+			{
+				uint64_t Named = 1469598103934665603ull;
+				for (const char Ch : Out.Title + "|" + Out.Date + "|" + Out.PlaceName)
+				{
+					Named ^= static_cast<unsigned char>(Ch);
+					Named *= 1099511628211ull;
+				}
+				const double Given = Marks["seed"].Num(J["seed"].Num(0.0));
+				const uint64_t Seed = Given != 0.0 ? static_cast<uint64_t>(static_cast<int64_t>(Given)) : Named;
+				AirMarks::Lay(C, Out.TargetX, Out.TargetY, Out.TargetR, Seed);
+			}
+		}
 		return true;
 	}
 
@@ -511,6 +585,10 @@ namespace AirFeed
 			if (Colon == std::string::npos) continue;
 			Show.SetLoadout(Pair.first.substr(0, Colon), Pair.first.substr(Colon + 1) == "ftr", Pair.second);
 		}
+		// (a raid on troops: what stands on the ground; every other raid has none, and nothing of it runs. Only on a raid
+		// on troops, as the desk's OnTroops asks: a raid of another kind that someday carries marks is not laid by them,
+		// the reviewer, 25 November)
+		if (S.PlaceKind == "ground" && S.Marks.Has()) Show.SetMarks(S.Marks);
 	}
 
 	bool ReadView(const Json& J, const Sky& S, Frame& Out)
@@ -564,6 +642,26 @@ namespace AirFeed
 			H.NearDef.At = H.BreakingDef;
 		}
 
+		// (Release 2) A raid on troops: view.marks, the pieces changed since the last view (the scene keeps the rest), the
+		// share of the column's guns firing back, the organisation cut so far.
+		const Json& Marks = J["marks"];
+		if (Marks.IsObject())
+		{
+			Out.Marks.bGiven = true;
+			Out.Marks.Fire = std::clamp(Marks["fire"].Num(1.0), 0.0, 1.0);
+			Out.Marks.Cut = std::clamp(Marks["cut"].Num(0.0), 0.0, 1.0);
+			H.MarksFire = Out.Marks.Fire;
+			H.MarksCut = Out.Marks.Cut;
+			for (const Json& P : Marks["pieces"].Items)
+			{
+				AirMarks::Change Row;
+				Row.Id = P["id"].Int(0);
+				Row.To = AirMarks::StateOf(P["state"].Str("ok"));
+				Row.Men = P["men"].IsNumber() ? P["men"].Int(0) : -1;
+				Out.Marks.Pieces.push_back(Row);
+			}
+		}
+
 		for (const Json& U : J["units"].Items)
 		{
 			const Json& X = U["extra"];
@@ -610,6 +708,8 @@ namespace AirFeed
 			G.Per = std::max(1, X["per"].Int(1));
 			G.N = X["n"].Int(G.Figures * G.Per);
 			G.Boxes = X["boxes"].Int(0);
+			// (its corps, where the battle names it: which of place.bombers' groups it flies with, for its nose art)
+			G.Corps = X["corps"].Int(-1);
 			G.Doing = ActOf(U["act"].Str("march"));
 			G.Engaged = U["engaged"].Int(-1);
 			for (const Json& F : X["fire"].Items)
@@ -717,10 +817,29 @@ namespace AirFeed
 			// A fighter that fell to a box's gunners: that box.
 			Ev.GunBox = X["gunner"].IsObject() ? X["gunner"]["box"].Int(-1) : -1;
 			Ev.GunSeat = X["gunner"].IsObject() ? X["gunner"]["seat"].Int(-1) : -1;
+			// The bomber by name this loss, or this one falling out of her box, is (extra.bomber, sim.ts toldOf): her nose
+			// art's number, for the model that falls for it to wear (Battle/AirNoseArt).
+			Ev.BomberArt = X["bomber"].IsObject() ? std::max(0, X["bomber"]["art"].Int(0)) : -1;
 			// Where the battle has it hit (engine, wing, tail, cockpit, fuselage): the gunnery lays its strikes there.
 			Ev.Part = X["hit"].Str("");
 			// The models it moves (AR1): a loss's models, a straggler's model (1 where the recording does not say).
 			Ev.Models = Ev.What == "air:lost" ? X["models"].Int(1) : Ev.What == "air:straggle" ? X["model"].Int(1) : 1;
+			// (Release 2, a raid on troops) air:mark-hit: the piece struck, and the men it cost a block (strike and how as
+			// above); air:strafe: the lane its pass goes down (from, to, its width; dur, its battle seconds, as above).
+			Ev.Piece = X["piece"].Int(-1);
+			Ev.PieceWhat = Ev.What == "air:mark-hit" ? X["what"].Str("") : std::string();
+			Ev.Men = std::max(0, X["men"].Int(0));
+			const Json& From = X["from"];
+			const Json& To = X["to"];
+			if (From.Count() >= 2 && To.Count() >= 2)
+			{
+				Ev.bLane = true;
+				Ev.FromX = From.At(0).Num();
+				Ev.FromY = From.At(1).Num();
+				Ev.ToX = To.At(0).Num();
+				Ev.ToY = To.At(1).Num();
+			}
+			Ev.Width = X["width"].Num(0.0);
 			Out.Events.push_back(std::move(Ev));
 		}
 

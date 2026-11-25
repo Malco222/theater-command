@@ -14,6 +14,9 @@ battle screen over it.
 | `AirDesk.h/.cpp` | The screen's words and clock: the top bar, the aim slip, the near line, the dispatches, the tags, the after card, the orders as `TC.battleOrder` takes them, and the close camera's subject. Plain C++. |
 | `AirBattleState.h` | The plain state above, kept out of the actor's header. |
 | `AirBattleMarks.cpp` | The strikes on the aircraft (Brian, 22 November): each of the core's hits kept on the aircraft it struck, in its own frame, and laid on its skin as a decal (`M_HitMark`) while it is near the eye. |
+| `AirMarks.h/.cpp` | What stands on the ground under a raid on troops, plain C++ (release 2, item 51): the column (`place.marks`), each piece's footprint, a bomb's blast, where a counted hit's bomb comes down on its piece and every other bomb clear of them all, what a hit makes of a piece, a strafing lane and the pass flown down it, the column's light flak's bursts. |
+| `AirShowTroops.cpp` | The flight core's half of a raid on troops (item 51): each `air:mark-hit` held until a drawn bomb or a strafing pass's rounds reach its piece and shown then (`MarkHit`), the bombs steered onto or off the pieces, the strafing pass flown (`air:strafe`), the column's flak (`MarkGun`). Plain C++. |
+| `AirBattleTroops.cpp` | The scene's half (item 51): the column drawn on the land as copies of its army's models, its fires, wrecks and scattered men, its flak in the effects kit; `AAirBattle::CampaignLiveOn(Kind)`. |
 | `AirBattle.h/.cpp` | `AAirBattle`, the scene. It feeds the core and draws what the core says: the planes, the small things, the effects kit, the stage and its ships, the cameras and the sound. |
 | `AirBattleScreen.h/.cpp` | `SAirBattleScreen`, the screen. It draws the desk's words and takes the mouse and keys. |
 | `AirStage.h/.cpp` | The Oahu and Midway stages (an earlier commit on this branch). |
@@ -1228,3 +1231,137 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    second 40; `-TheaterAirRulesFailEnd` fails the end.
    Look for: the note after about 2 s of a frozen raid, the map 4 s later with the raid card up and a note under it;
    the month can be ended and the raid sent with FLY THE RAID.
+
+51. **A raid on troops, flown in 3D** (release 2; Brian, 24 November 2026: "i want every air battle playable" and "if a
+   bomber group is bombing troops instead of a factory or town and they get intercepted than i want that playable"; the
+   every-kind contract, `/mnt/project-files/air-battles/every-kind/CONTRACT.md`, sections 1 to 4). Where the sky has
+   marks (`place.kind` "ground", `place.marks`: the army's column the rules placed, at most 64 pieces), the scene stands
+   it on the land under the planes, faced along its road: each tank, lorry, half-track and towed gun as its army's model
+   (the rules' own name where the game has it, else the nation's line tank, lorry, carrier or field gun, in its paint;
+   a light flak gun stands as the field gun until one is modelled), each block of men as a few of its riflemen, one
+   for each `per` men left in it, two files along the road. One instanced mesh a model, shadows on for the vehicles,
+   none past 12 km from the eye (`AirBattleTroops.cpp`). The flight core (`AirShowTroops.cpp`) holds each counted hit
+   (`air:mark-hit`) until a drawn bomb of its group can be steered onto its piece in the air it has left (inside it for
+   a wreck, a burn or a blast; beside it, within its blast, for a near miss or men scattered), or a strafing pass's
+   rounds reach it, and shows it then; every other bomb of the stick comes down clear of every piece by its blast ("most
+   shots miss, but every hit shows on what it struck"). An `air:strafe` sends up to four of the group down the lane:
+   run in, a plunge with the guns on from 900 m to 250 m slant and the aim walking down the road, a 4 g pull-out and a
+   climb away, within the flight's limits; their rounds miss every piece but the one they struck. As each hit shows, a
+   vehicle set burning or wrecked goes up (FuelBall) and burns on (Burn, 600 s), a wreck wears its burnt shape, a
+   damaged one smokes, a strafing pass's burn or wreck leaves a scorch (a bomb's crater is laid where it fell), a block
+   of men thins and scatters; the views' words (`view.marks`) have the last say, but a wreck never changes again. The
+   column's light flak (`aa` pieces, the share `view.marks.fire` mans) lays short streams on the nearest raider in its
+   reach, through the effects kit as every gun, heard with the mix's cannon take. The screen speaks of the column: the
+   title and the after card ("The raid on the British I Corps near Hampshire"; a card line's "the target" becomes "the
+   column"), the top bar ("their column's organisation cut by 1.2% so far", from `view.marks.cut`), the aim slip ("The
+   British I Corps on the march near Hampshire", "On the column so far: 1 vehicle or gun wrecked, 2 burning, 3 damaged,
+   22 men lost", as the views count them); and with his fighter groups in hand over the enemy's column (never his own,
+   where he defends it), STRAFE THE COLUMN in the orders strip sends `{ do: 'air:strafe', units: [...] }`. Nothing is
+   told before it is drawn (the reviewer, 25 November): a hit's dispatch line and its sound come in the frame its bomb or
+   rounds land, the aim slip counts a piece struck only from then (`AirDesk::Desk::Struck`, from the core's column), and
+   the top bar's cut waits until every hit told up to its view has landed (`Show::MarksCut`). A near miss leaves a piece
+   as it was until the views' words say it was damaged. Drawn only: the rules decide every hit, state and loss.
+   The switch: the Battle rules card's **Fly raids on troops yourself** (FLandLive's rule `flyTroops`, OFF; never sent
+   to the land rules: `FLandLive::Start` skips every rule whose key starts "fly"), read by
+   `AAirBattle::CampaignLiveOn(Kind)` ("bomb" and "superiority" read `flyLive`, "ground" `flyTroops`).
+   `-TheaterAirRuleTroops` turns it on for one run, `-TheaterAirNoRuleTroops` off. With it on, the rules are told before
+   each TC.airLook and as the battle opens, `TC.airKinds(["ground"])` (the air rules thread's switch, default none; once
+   more with `[]` after the row goes off), and FLY IT YOURSELF is offered on a raid on troops only where they could be
+   told and TC.airLook gives a ticket (this base's rules have neither TC.airKinds nor `ground` in `FOUGHT_KINDS`, so it is
+   not offered yet: the log says "the rules could not be told"); with it off nothing changes and nothing is sent. A raid with no marks never reaches any of this. The cloud test
+   (`Tools/air_show/air_marks_test`, run by `run.sh` on every recording) plays a marked recording and checks every hit,
+   every bomb, the pass and the words; `Tools/air_show/make_marks_recording.py` made the test's own recording from the
+   day raid on Hampshire (`troops-test.json.gz` in the every-kind folder's `troops/`, with its pictures).
+   Look for (the recording: gunzip it into `Content/Data/AirBattles/troops-test.json`, then `-TheaterAirBattle=troops-test`):
+   the log's "a raid on troops: the column under it, 44 pieces (34 vehicles and guns, 10 blocks of men, 0 drawn as
+   nothing)"; the column on its road through the aim, Matildas, lorries, 25-pounders and men, standing on the land (not
+   sunk, not floating) and driving nose first along the road (if every one faces backwards, the half turn in
+   `DrawTroops` is the mend); the two boxes' sticks from 394 s mostly clear of the column, and the ten hits each where
+   its bomb lands: gun 30 wrecked (burnt shape, fire), lorry 28 going up and burning, near misses smoking (lorries 18 and
+   27, flak gun 29), men blocks 15, 34 and 35 thinned and scattered; the dispatch "A gun of the column is wrecked on the
+   road." in the frame gun 30 goes up, not before, and the aim slip and the top bar's cut rising only as the hits land;
+   at 408 s four Bf 109s down the road, guns firing on the way down, pulling out some 70 m up, lorry 25 set burning by
+   them (a fuel ball half as wide again: a big hit), men 14 scattered, the clock at x1 while they go in; the four light
+   flak guns' short streams at the nearest raider, heard; gun 30 still wrecked after the stale word at 420 s; the aim
+   slip, the top bar and the after card as above;
+   45 fps or better with the whole column in view and burning; the Battle rules card's new row, OFF, its tip in full;
+   FLY IT YOURSELF still on a day raid with the row off.
+52. **The scramble offer: he meets an enemy raid himself** (release 2; Brian, 24 November 2026 22:21Z: "i want every air
+   battle playable"; the contract, air-battles/every-kind/CONTRACT.md section 7). In the enemy's month the campaign stops
+   where an enemy raid on his ground meets his fighters: TC.endMonth answers `scramble: { id, kind, target, name, nat,
+   adj, words, bombers?, escorts?, fighters?, groups?, demo? }` in place of the month's card. The controller's one
+   handler of the month's answer (`MonthAnswered`) takes the eye to the target and puts up a card low on the screen (AN
+   ENEMY RAID, "A German raid on Kent", the rules' words): SCRAMBLE (brass), LEAVE IT TO THE STAFF, and the tick "Settle
+   the rest of this month's raids". SCRAMBLE opens `BeginLiveCall(Session, "scrambleStart", ["id"])` with `HandBack` set,
+   his side the defence; what TC.battleEnd answers at CONTINUE is the month's next answer and goes back through the same
+   handler (another scramble, or the month's watch and card). LEAVE calls `TC.scrambleLeave(id, { rest })`, its answer
+   through the same handler. An answer that is not a month's (no `steps`, no `scramble` with a string `id`: the
+   stand-in's `{ ok, note }`) shows the month's answer kept aside, and the log says so. The answer's `note` is said under
+   the map and again after the month's own first line ("February 1940. Your orders. That was a demonstration ..."), which
+   would otherwise take its place at once (the reviewer, 25 November). The way out (an empty hand-back) calls TC.scrambleLeave(id);
+   if that fails too, the month in hand is shown and logged. While the card or its battle is up: no order, no key, no
+   END THE MONTH. At most three cards a month (then the rest are left with `rest: true`); at most eight stops at all.
+   SCRAMBLE with a battle already up (a set piece's, a land battle's) leaves the raid to the staff, as FlyLive refuses.
+   - **The switch:** the Battle rules card's **Scramble your fighters** (`flyDefend`, `AAirBattle::DefendOn`), OFF;
+     `-TheaterAirRuleDefend` on for a run, `-TheaterAirNoRuleDefend` off. FLandLive::Start skips every `fly` key. With
+     it on, before every TC.endMonth the rules are told `TC.scrambleMode('every'|'big'|'never')`: OPTIONS' **Scramble
+     offers** (EVERY RAID / BIG RAIDS ONLY / NEVER, shown with the switch on, kept with the options once changed). With
+     it off nothing new is sent: the rules start at `never` at every load, and `never` is sent once only where this load
+     of them was told something else before (the reviewer, 25 November: switch off, the same calls as before). Rules
+     without the call are asked once and logged. A scramble that still comes with the switch off, or with Scramble
+     offers NEVER, is answered at once with `scrambleLeave(id, { rest: true })`.
+   - **The defender's read** (with the switch on, any battle he fights as `def`): the top bar's "now about" and HAND IT TO
+     THE STAFF's chance are his (the view's `sky.chance` is the raider's), the aim slip speaks of the enemy's raid, the
+     question asks to hand over "the fight", and STAY CLOSE and RANGE AHEAD are not offered (he has no bombers to
+     escort). A scramble whose rules fail says his staff meets the raid, not that FLY THE RAID still sends his crews.
+   - **The demonstration:** `-TheaterAirScrambleDemo` (with the switch on) asks the bridge's stand-in, TC.scrambleDemo
+     (Rules/scramble-demo.ts), once after TC.endMonth's answer, and treats its offer as if the month had stopped there;
+     it books nothing, and when it ends the month's real answer (kept aside) is shown. Step file:
+     air-battles/every-kind/scramble/mac-steps/scramble-demo.steps.txt; the switch off, scramble-off.steps.txt beside it
+     (launched with `-TheaterAirNoRuleDefend`).
+   Look for: with the switch off, nothing changes (no card, no OPTIONS row); with it on and the demonstration, END THE
+   MONTH stops on the card over Kent; SCRAMBLE opens the battle over Kent with the RAF the side marked YOURS and "now
+   about" high; after CONTINUE the month's watch and card come as ever, and nothing of the battle is booked.
+53. **Bomber nose art** (release 2; Brian, 25 November 2026 01:30Z: "american only"). Each American bomber wears one of
+   the modeller's 200 paintings on her nose (battle-models/air/noseart, the air thread's list names.json), packed for the
+   game by Tools/pack_nose_art.py into Content/Data/NoseArt (each a quarter of the modeller's size, 352 by 216, lossless,
+   never otherwise altered; 11 MB in all). Only the B-17 has a panel for it (panels.json: the B-24, B-25 and B-29 are not
+   modelled; the Navy's Dauntless and Devastator and the plain twin stand-in have none). The panel is laid on the game's
+   own B-17, her near shape: the painting's 2.2 m from 7.2 m to 5.0 m forward of her middle, below the windscreen and
+   above her grey belly, all of it on her olive with some 4 cm to spare, 2 to 5 mm off her skin; port always, and
+   starboard too for one painting in eight (the brief's "a few aircraft carry it on both sides"), mirrored so that it
+   reads from left to right on both sides. Drawn with M_TallyMark over the paint under it (AirBattleNoseArt.cpp), one
+   small mesh of her own while she is within 300 m of the eye on her near shape, a painting read at most once a frame.
+   Which painting (Battle/AirNoseArt): where a view names its group's corps (extra.corps) and the airStart board's
+   place.bombers gives that corps' seats (the rules' campaign/bombers.ts; never the raid card's airLook, which strips
+   them), its models wear them, the model in slot k seat k times per (the first of the seats it stands for, as the
+   show's gunners name a bomber's slot), old hands first, a seat with art 0 bare. The rules do not name a box's corps
+   yet, and nothing else says which group is which (the battle numbers its groups in the campaign's own order of its
+   air groups, where a newer one can stand ahead of older ones, and place.bombers is keyed by corps), so its groups are
+   never paired by their order; until the rules send it, and where the battle says nothing (the Bremen film, the test
+   battles): each group's paintings shuffled from the battle's seed and its id and given in turn, none shared in the
+   battle while any is unused, about one in five a bare nose. An aircraft keeps hers for the whole battle, but for one
+   the battle names as she falls or falls out of her box (the loss's extra.bomber, the dispatch's "That was <name>"):
+   whichever model the show takes for it wears that bomber's painting from then, and the one of her group that wore it
+   takes hers. The show's choice of model is its own, the same with the nose art on or off. Shown, never counted.
+   Off until the Mac and the art director pass it: the Battle rules card's **Bomber nose art** (FLandLive's rule
+   `noseArt`, never sent to the land rules); `-TheaterAirNoseArt` on for a run, `-TheaterAirNoNoseArt` off,
+   `-TheaterRulesFlip=noseArt` clicks the card's switch. Off, DrawNoseArt returns at the switch and the scene's calls
+   are as before. The cloud test (Tools/air_show/air_nose_art_test.cpp, in run.sh) checks the pack, the panel against
+   her near shape on both sides, and who wears what on the recordings and on two raids the rules made
+   (nose_art_raid.json): one played through its first named losses, each falling model wearing the painting its loss
+   names, and one whose ticket's order is not by corps.
+   Look for (`-TheaterAirNoseArt`, the Bremen film, the close view on a B-17 of the 303rd): the log's "Air battle: nose
+   art:" lines naming each painting and its key (and "now wears" for a bomber named as she falls); on the B-17s near
+   the eye a flat sign-painter's picture on the port side of the nose under the windscreen, lettering reading left to
+   right, upright, not floating off her skin nor flickering into it, none on the Mustangs or Fw 190s, a few bare noses;
+   the frame rate as before.
+54. **Each aircraft type's own figures** (release 2; Brian, 24 November 2026: "i want the flying to be smooth and very
+   realistic" and "i want the planes flying with realistic capabilities and tactics"). The historian's table,
+   `Content/Data/Air/performance.json`, holds each type's real figures (size, weight, power, speeds and heights, climb,
+   turn, roll, g, dive, load and range), every figure with its source and a mark (measured, manufacturer, derived or
+   uncertain). `Battle/AirPerf` reads it, finds a type by the names the scene and the rules give it, and works out the
+   limits the flight core uses, each formula stated in `AirPerf.h`. Plain C++, no engine; the cloud test
+   (`Tools/air_show/air_perf_test`, run by `run.sh`) checks every figure's source and mark, that every model named is
+   found, and each type's limits inside their bounds. Not yet wired into the flight core (`AirShow`): until it is, every
+   battle flies as before (wave 1's join, 25 November; numbered 54 by the wave-2 plan).
