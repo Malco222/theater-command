@@ -98466,6 +98466,10 @@ ${standing5}`,
       setSettledTowns(s, true);
       return settledTownsOn(s);
     },
+    citydefencesrule: (s) => {
+      setCityDefences(s, true);
+      return cityDefencesOn(s);
+    },
     columns: (s) => setColumns(s, true),
     "logistics:lorryShift": (s) => setLogistics(s, "lorryShift", true),
     "logistics:wagons": (s) => setLogistics(s, "wagons", true),
