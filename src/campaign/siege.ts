@@ -290,12 +290,15 @@ export function portElsewhere(g: Game, nat: string, not: number[]): boolean {
 
 /**
  * True where a sea off the harbour lets this feeder's ships bring the town food. Under true reach (game.ts trueReach;
- * the design director's 13:58Z and 14:26Z of 25 November 2026) a sea closed to a nation of the garrison is closed to
- * every ship carrying it stores, whatever the flag: the sea must be open to the feeder and to every nation inside, as
- * the supply picture asks of an ally's quay. Off, open to the feeder is enough.
+ * the design director's 13:58Z and 14:26Z of 25 November 2026, and the ruling of 17:35Z on a town with a mixed
+ * garrison): one town, one larder, one reach, and the reach is the holder's. The town is fed when ships that could
+ * truly carry stores there for its holder can come in, so the sea must be open to the feeder and to the holder; every
+ * corps inside eats from the town, whoever's it is, and the holder needs no corps of its own inside (the town and its
+ * quay are the holder's). So a guest sent in to help never starves a town, and a guest's ships never feed a town
+ * through a sea shut to its holder. Off, open to the feeder is enough.
  */
 const feedsBy = (g: Game, r: Region, x: string, z: number, truly: boolean): boolean =>
-  !closedTo(g, z, x) && (!truly || garrisonOf(r).every((c) => c.nat === x || !closedTo(g, z, c.nat)));
+  !closedTo(g, z, x) && (!truly || !closedTo(g, z, r.ctrl));
 
 /** True where the defenders' ships can still bring food into the harbour: such a town is never starved. */
 export function fedBySea(g: Game, r: Region): boolean {
