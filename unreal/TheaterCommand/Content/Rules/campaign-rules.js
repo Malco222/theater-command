@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 8a8c7d34 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b0c55ddd 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -18018,6 +18018,71 @@
     }
   };
 
+  // data/campaign/far-japan-seat.json
+  var far_japan_seat_default = {
+    _about: "Japan's seat (a seats file, laid by src/campaign/far-rows.ts while the far side's switch is on; kept by hand by the Japan and Pacific thread of 24 November 2026). What a player who takes Japan plays for, and what the Pacific adds to America's own goals. Ruling 196, points 6 and 7 (the design director, 17 November 2026, on the Pacific planner's paper 06): Japan's short campaign is 'Oil for the fleet' (Singapore, Manila, Batavia and Palembang by the end of May 1942, month 33), its long one 'The ring holds' (Tokyo, Okinawa, Saipan and Palembang still Japan's when 1946 opens); America's long campaign gains Japan and the title 'Victory on two oceans'. Goals judge a war and never change it (goals.ts): no computer country reads them. 'USA+' lays its lines over America's long goal as goals.json has it: Germany stays in 'beaten' and Japan joins it.",
+    goals: {
+      nations: {
+        JAP: {
+          short: {
+            title: "Oil for the fleet",
+            text: "Hold Singapore, Manila, Batavia and Palembang by the end of May 1942.",
+            hold: ["Singapore", "Manila", "Batavia", "Palembang"],
+            by: 33
+          },
+          long: {
+            title: "The ring holds",
+            text: "Tokyo, Okinawa, Saipan and Palembang are still Japan's when 1946 opens.",
+            hold: ["Tokyo", "Okinawa", "Saipan", "Palembang"],
+            until: 76
+          }
+        },
+        "USA+": {
+          long: {
+            title: "Victory on two oceans",
+            text: "Germany and Japan are beaten by the end of 1945, with an American army on the continent and Washington still yours.",
+            beaten: ["JAP"]
+          }
+        }
+      }
+    }
+  };
+
+  // data/campaign/goals.json
+  var goals_default = {
+    _about: "Campaign goals: what winning means for each nation a person can play. Every nation has a short campaign and a long one. 'hold' lists cities that must be in the nation's own hands or an ally's. 'beaten' lists nations that must have capitulated. 'by' is the last month in which the goal can be reached (months count from 1 = September 1939, so 16 is December 1940 and 76 is December 1945): the goal is won the moment everything holds, and lost when that month has gone by. 'until' makes it a goal of endurance instead: nothing is decided until the month after it opens, and the goal is won if everything still holds then. 'war' gives a goal of endurance the clock of one war, history's begun in month 'from': a war that comes later moves the day it is decided by as many months, and with no war yet nothing is decided. 'outlast' makes it a goal of holding out: the nation is still in the war after that many weeks of it, four to a month, and a nation that goes down fighting later than that has won it all the same. 'ashore' asks for an army of the nation's own on the ground: one of its field corps stands in a province first owned by one of the countries listed ('in'), on that country's mainland (not overseas, not a lone island), and 'label' is how the panel names it; with 'beaten' beside it the goal is settled the day the enemy falls, so an army that arrives afterwards does not win it (the design director's ruling 33: a goal an idle player cannot win). Except for 'outlast', the player's nation must still be in the war. Goals judge the war and never change it: no computer nation knows about them.",
+    nations: {
+      GER: {
+        short: { title: "Master of the continent", text: "Hold Warsaw, Oslo and Paris by the end of 1940, as history's Germany did.", hold: ["Berlin", "Warsaw", "Oslo", "Paris"], by: 16 },
+        long: { title: "The war history lost", text: "Beat the Soviet Union by the end of 1945 with Berlin and Paris still yours.", hold: ["Berlin", "Paris"], beaten: ["SOV"], by: 76 }
+      },
+      UK: {
+        short: { title: "Alone", text: "London and Cairo are still British when 1942 opens.", hold: ["London", "Cairo"], until: 28 },
+        long: { title: "Victory in Europe", text: "Beat Germany by the end of 1945 with London still yours.", hold: ["London"], beaten: ["GER"], by: 76 }
+      },
+      FRA: {
+        short: { title: "They shall not pass", text: "Paris is still French when 1941 opens. History's France asked for an armistice in June 1940.", hold: ["Paris"], until: 16 },
+        long: { title: "Victory in Europe", text: "Beat Germany by the end of 1945 with Paris still yours.", hold: ["Paris"], beaten: ["GER"], by: 76 }
+      },
+      POL: {
+        short: { title: "Through September", text: "Poland is still in the war when October 1939 opens. History's Warsaw surrendered on 28 September.", outlast: 4 },
+        long: { title: "Longer than five weeks", text: "Poland is still fighting in the sixth week of the war. History's last Polish army laid down its arms after five.", outlast: 5 }
+      },
+      ITA: {
+        short: { title: "Mare Nostrum", text: "Hold Rome, Tripoli, Athens and Cairo by the end of 1942.", hold: ["Rome", "Tripoli", "Athens", "Cairo"], by: 40 },
+        long: { title: "A place in the sun", text: "Rome, Tripoli, Athens, Cairo and Malta are in Axis hands when 1946 opens.", hold: ["Rome", "Tripoli", "Athens", "Cairo", "Malta"], until: 76 }
+      },
+      SOV: {
+        short: { title: "Not one step back", text: "Moscow, Leningrad and Stalingrad are still Soviet a year and a half into the war with Germany: when 1943 opens, if it comes in June 1941 as history's did.", hold: ["Moscow", "Leningrad", "Stalingrad"], until: 40, war: { with: "GER", from: 22 } },
+        long: { title: "To Berlin", text: "Berlin is in Allied hands by the end of 1945, with Moscow still yours.", hold: ["Moscow", "Berlin"], by: 76 }
+      },
+      USA: {
+        short: { title: "A second front", text: "An American army is ashore in France and Paris is in Allied hands when 1945 opens, with Washington still yours.", hold: ["Washington", "Paris"], ashore: { in: ["FRA"], label: "An American army ashore in France" }, until: 64 },
+        long: { title: "Victory in Europe", text: "Germany is beaten with an American army on the continent, and Washington still yours.", hold: ["Washington"], beaten: ["GER"], ashore: { in: ["GER", "FRA", "BEL", "NED", "LUX", "DEN", "NOR", "SWE", "FIN", "EST", "LAT", "LIT", "POL", "SVK", "HUN", "ROM", "YUG", "BUL", "GRE", "ITA", "SUI", "ESP", "POR", "SOV"], label: "An American army on the continent" }, by: 76 }
+      }
+    }
+  };
+
   // src/campaign/far-rows.ts
   var TARGETS = {
     grand: grand_default,
@@ -18040,7 +18105,9 @@
     towns: towns_default,
     resources: resources_default,
     air: air_default,
-    siege: siege_default
+    siege: siege_default,
+    // (What a player of a far seat plays for, and what the far side adds to an old seat's goals: ruling 196, points 6 and 7.)
+    goals: goals_default
   };
   var FILES = [
     ["far-seats-globe", far_seats_globe_default],
@@ -18062,6 +18129,8 @@
     ["far-africa", far_africa_default],
     // (Japan's books, rulings 194 to 196: stocks, lanes and the submarines that raid them.)
     ["far-books", far_books_default],
+    // (Japan's seat, ruling 196 points 6 and 7: its two goals, and Japan in America's long one.)
+    ["far-japan-seat", far_japan_seat_default],
     // (The owed shores, ruling 234's notes of 22:05Z and 22:10Z: last, so its amendments find every row laid.)
     ["far-shores", far_shores_default]
   ];
@@ -36720,14 +36789,47 @@
   function contenders(g2) {
     return Object.values(g2.nations).filter((n) => n.alive && !n.dormant && n.capital >= 0);
   }
+  var deciders = (g2) => (farOn(g2) ? majorsOf(g2) : DIPLOMACY.majors).map((id) => g2.nations[id]).filter((n) => !!n);
+  var POWER_NAME = { USA: "America", UK: "Britain", SOV: "the Soviet Union" };
+  var powerName = (n) => POWER_NAME[n.id] ?? n.name;
+  var listed2 = (names) => names.length <= 2 ? names.join(" and ") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  function warGoesOn(g2, fallen) {
+    if (!domRules(g2) || dominating(g2) || !farOn(g2)) return null;
+    const majors = deciders(g2);
+    const down = majors.filter((n) => !n.alive && !!n.fellOn).sort((a, b) => a.fellOn.turn - b.fellOn.turn || a.fellOn.week - b.fellOn.week);
+    const told2 = fallen ? down.find((n) => n.id === fallen) : down[down.length - 1];
+    if (!told2) return null;
+    const live6 = majors.filter((n) => n.alive);
+    const far = (n) => n.capital >= 0 && shoreOf(g2.regions[n.capital]) === 2;
+    let pacific = false, europe = false;
+    const still = live6.filter((a) => {
+      const foes = live6.filter((b) => b.id !== a.id && a.atWar.includes(b.id));
+      for (const b of foes) {
+        if (far(a) || far(b)) pacific = true;
+        else europe = true;
+      }
+      return foes.length > 0;
+    });
+    if (!still.length) return null;
+    const bare = (name) => name.replace(/^the /, "");
+    const names = listed2(still.map(powerName).sort((a, b) => bare(a).localeCompare(bare(b))));
+    const where = pacific && europe ? "Europe and the Pacific" : pacific ? "the Pacific" : "Europe";
+    const who = powerName(told2);
+    return {
+      powers: still.map((n) => n.id),
+      where,
+      news: `${who.charAt(0).toUpperCase()}${who.slice(1)} is beaten. The war goes on in ${where}: ${names} are still at war.`,
+      line: `The war between the alliances is not decided yet: ${names} are still at war. It is decided once no two great powers are at war with each other.`
+    };
+  }
   function warDecided(g2) {
     if (!domRules(g2)) return null;
-    const majors = DIPLOMACY.majors.map((id) => g2.nations[id]).filter((n) => !!n);
+    const majors = deciders(g2);
     const fallen = majors.filter((n) => !n.alive && !!n.fellOn).sort((a, b) => a.fellOn.turn - b.fellOn.turn || a.fellOn.week - b.fellOn.week);
     if (!fallen.length) return null;
     const live6 = majors.filter((n) => n.alive);
     if (live6.some((a) => a.atWar.some((e) => live6.some((b) => b.id === e)))) return null;
-    const last = bloc(fallen[fallen.length - 1]);
+    const last = bloc((farOn(g2) ? [...fallen].reverse().find((n) => bloc(n) === "axis" || bloc(n) === "allies") : void 0) ?? fallen[fallen.length - 1]);
     const beaten = SIDES.filter((s) => fallen.some((n) => bloc(n) === s) && (s === last || !live6.some((n) => bloc(n) === s)));
     if (!beaten.length) return null;
     const left = SIDES.filter((s) => !beaten.includes(s) && live6.some((n) => bloc(n) === s));
@@ -36737,7 +36839,7 @@
     if (!domRules(g2)) return "World Domination belongs to the grand campaign.";
     if (!nat || !g2.nations[nat]?.alive) return "Your nation is out of the war.";
     if (dominating(g2)) return "The last war has already begun.";
-    if (!warDecided(g2)) return "The war between the alliances is not decided yet: a great power must fall, and no two great powers may still be at war with each other.";
+    if (!warDecided(g2)) return warGoesOn(g2)?.line ?? "The war between the alliances is not decided yet: a great power must fall, and no two great powers may still be at war with each other.";
     return null;
   }
   function wayHome(g2, c) {
@@ -44370,11 +44472,11 @@
     const you = sea.foe;
     const key7 = `st:quay:${nat}`, at4 = `st:quayAt:${nat}`, tk = `st:quayFor:${nat}`;
     const lod = sea.second ? lodgment(g2, nat) : null;
-    const listed8 = sea.second ? harbours(g2, you).filter((r) => opensOn(g2, nat, r) || opensSoon(g2, nat, r)) : [];
-    const shores = lod?.short ? [lod.at] : listed8.length ? listed8 : harbours(g2, you);
+    const listed9 = sea.second ? harbours(g2, you).filter((r) => opensOn(g2, nat, r) || opensSoon(g2, nat, r)) : [];
+    const shores = lod?.short ? [lod.at] : listed9.length ? listed9 : harbours(g2, you);
     const shut = g2.seas.map((z) => closedTo(g2, z.id, nat));
     const D2 = OPEN.descent;
-    const target = D2.afresh ? 1 + hashString(`${you}:${[...new Set(listed8.map((r) => r.owner))].sort().join(",")}`) % 1e6 : 0;
+    const target = D2.afresh ? 1 + hashString(`${you}:${[...new Set(listed9.map((r) => r.owner))].sort().join(",")}`) % 1e6 : 0;
     const room2 = (p) => !D2.room || STACK - placed(g2, p, nat).filter((u) => u.nat !== nat).length >= sea.L.force;
     const kept3 = g2.regions[flag2(g2, key7) - 1];
     const fresh6 = !!kept3 && kept3.ctrl === nat && g2.turn - flag2(g2, at4) < 6 && (!target || flag2(g2, tk) === target);
@@ -47508,11 +47610,11 @@
   }
   function lapseFeedClaims(g2) {
     if (!bargainRules(g2)) return;
-    const listed8 = new Set(feedClaims(g2).map((a) => a.id));
+    const listed9 = new Set(feedClaims(g2).map((a) => a.id));
     for (const k of Object.keys(g2.flags)) {
       if (!k.startsWith("amb:feed:")) continue;
       const id = k.slice("amb:".length);
-      if (listed8.has(id) || g2.flags[`amb:go:${id}`] !== void 0) continue;
+      if (listed9.has(id) || g2.flags[`amb:go:${id}`] !== void 0) continue;
       delete g2.flags[k];
       delete g2.flags[`amb:last:${id}`];
     }
@@ -47838,7 +47940,7 @@
         if (!mine4 && !r.oil && !r.cap && r.fac < 4) continue;
         const kinds = ["oil", "works", "harbour"].filter((k) => mask & BIT[k]);
         if (kinds.length) {
-          places.push(`${listed2(kinds)} of ${r.name}`);
+          places.push(`${listed3(kinds)} of ${r.name}`);
           if (at4 < 0) at4 = r.id;
         }
         if (mask & BIT.airfield) fields++;
@@ -47856,7 +47958,7 @@
     }
   }
   var PLACE_WORDS = { oil: "the oilfields", works: "the factory district", airfield: "the airfield", harbour: "the harbour", junction: "the rail junction" };
-  var listed2 = (kinds) => {
+  var listed3 = (kinds) => {
     const w = kinds.map((k) => PLACE_WORDS[k]);
     return w.length === 1 ? w[0] : `${w.slice(0, -1).join(", ")} and ${w[w.length - 1]}`;
   };
@@ -47869,7 +47971,7 @@
       if (![nat, r.ctrl].some((p) => p === g2.human || allied(g2, p, g2.human))) continue;
       const got = PRIZE_KINDS.filter((k) => hasPrize(g2, r, k) && !prizeInside(g2, r, k) && prizeOut(g2, r, k) <= 0);
       if (!got.some((k) => k !== "airfield")) continue;
-      const words = listed2(got);
+      const words = listed3(got);
       const many = got.length > 1 || got[0] === "oil";
       const money3 = Math.round(got.reduce((s, k) => s + prizeMoney(g2, r, k, nat), 0) * 10) / 10;
       headline(g2, "info", `${words[0].toUpperCase()}${words.slice(1)} outside ${townName(r)} now ${many ? "work" : "works"} for ${theName(g2.nations[nat])}, though the town holds${money3 > 0 ? `: ${money3} a month to its treasury` : ""}.`, nat, r.id);
@@ -49458,7 +49560,7 @@
     return view3;
   }
   var townsOf = (g2) => g2.regions.map((r) => townAt(g2, r.id));
-  var listed3 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  var listed4 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
   var plural4 = (n, one2, many = `${one2}s`) => `${n} ${n === 1 ? one2 : many}`;
   var whoseIs = (n) => `${theName(n)}${/s$/.test(n.name) ? "'" : "'s"}`;
   function vpShare(vp, all, owner, row2 = false) {
@@ -49525,7 +49627,7 @@
       r.port ? yard > 0 ? "a harbour with a shipyard" : "a harbour" : "",
       r.vp > 0 && !r.overseas ? vpShare(r.vp, vpAll, owner) : ""
     ].filter(Boolean);
-    const tail = gains.length ? `: ${listed3(gains)}` : "";
+    const tail = gains.length ? `: ${listed4(gains)}` : "";
     const line = kind === "yours" ? `${town} pays ${income2 ? `${income2} a month` : "nothing"} into your treasury${tail}.` : kind === "ally" ? `${town} is held by ${theName(holder)}, your ally, and pays ${incomeNow ? `${incomeNow} a month` : "nothing"} into its treasury${tail}.` : frees ? `Taking ${town} frees ${g2.nations[frees].name} if you hold it at ${monthsEnd(g2, g2.nations[frees])} with no enemy corps in or next to it: ${g2.nations[frees].name} returns to the war on your side and takes its capital back. ${theName(holder, true)} loses ${incomeNow} a month${tail}.` : kind === "restored" ? `Taking ${town} gives it back to ${theName(owner)}, your ally, and takes ${incomeNow} a month from ${theName(holder)}${tail}.` : `Taking ${town} is worth ${income2} a month to you and costs ${theName(holder)} ${incomeNow}${tail}.${capitalOf2 && atWar(g2, nat, capitalOf2) ? ` It is ${theName(owner)}'s capital.` : ""}`;
     return { region, town, nat, kind, to, income: income2, incomeNow, factories, oil, oilNow, harbour: r.port, yard, airfield, fort, vp: r.vp, capitalOf: capitalOf2, frees, rails, items, line };
   }
@@ -56758,8 +56860,8 @@
       if (best) out.push(best);
       const shown2 = out.filter((x) => x.foe === foe && x.owner === owner && x.home === home);
       if (hope && !shown2.some((x) => x.from === hope.from && x.to === hope.to) && shown2.every((x) => x.bar !== null || won(hope) < x.account.risk - 0.05) && shown2.every((x) => won(hope) < won(x) - 0.05)) out.push({ ...hope, hope: true });
-      const listed8 = out.filter((x) => x.foe === foe && x.owner === owner && x.home === home);
-      if (short && listed8.length && listed8.every((x) => x.barred !== "sea" && x.path.length > short.path.length)) out.push({ ...short, short: true });
+      const listed9 = out.filter((x) => x.foe === foe && x.owner === owner && x.home === home);
+      if (short && listed9.length && listed9.every((x) => x.barred !== "sea" && x.path.length > short.path.length)) out.push({ ...short, short: true });
     }
     return out.sort((a, b) => Number(b.planned) - Number(a.planned) || Number(b.home) - Number(a.home) || Number(a.bar !== null) - Number(b.bar !== null) || a.account.risk - b.account.risk || a.to.id - b.to.id);
   }
@@ -59170,7 +59272,7 @@
   // src/campaign/guarantees.ts
   var GUARANTEES = guarantees_default;
   var fill7 = (line, vars) => line.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "");
-  var listed4 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  var listed5 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
   function covers(g2, row2, by2) {
     if (row2.against === "any") return true;
     if (row2.against === "europe") {
@@ -59221,7 +59323,7 @@
       came.push(row2.by);
     }
     if (!came.length) return came;
-    const names = listed4(came.map((id) => newsName(g2.nations[id]))), many = came.length > 1;
+    const names = listed5(came.map((id) => newsName(g2.nations[id]))), many = came.length > 1;
     g2.headlines.push({
       turn: g2.turn,
       week: g2.week,
@@ -60079,7 +60181,7 @@
       }));
       if (open3 && !asWritten) {
         const H = g2.nations[heir2];
-        const also = [...others.entries()].sort((a, b) => b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1)).map(([id, names]) => ` ${theName(g2.nations[id], true)} takes ${names.length <= 3 ? listed5(names) : `${names.length} of its provinces`}.`).join("");
+        const also = [...others.entries()].sort((a, b) => b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1)).map(([id, names]) => ` ${theName(g2.nations[id], true)} takes ${names.length <= 3 ? listed6(names) : `${names.length} of its provinces`}.`).join("");
         headline(g2, "event", `${X.name} has signed an armistice and is out of the war. Its armies lay down their arms, and ${theName(H)} takes over what is left of the country.${also}`, X.id, void 0, { arm: "land", won: H.id, lost: X.id });
         told2 = true;
       }
@@ -60224,7 +60326,7 @@
     }
   }
   var WATCHED = DIPLOMACY.events.flatMap((e) => (e.if ?? []).filter((c) => c.startsWith("taken:")).map((c) => c.slice("taken:".length).split(",")));
-  var listed5 = (xs, last = "and") => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} ${last} ${xs[xs.length - 1]}`;
+  var listed6 = (xs, last = "and") => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} ${last} ${xs[xs.length - 1]}`;
   function romeWavers(g2) {
     const me = g2.human, I = g2.nations.ITA;
     if (g2.flags.open !== 1 || !me || me === "ITA" || !I?.alive || !g2.nations[me]?.alive || !g2.nations[me].atWar.length || !allied(g2, me, "ITA")) return;
@@ -60245,11 +60347,11 @@
     const changed = !!g2.flags["event:mussolini-falls"];
     if (!now || !(fresh6 || changed || g2.turn >= falls.from - 2)) return;
     const who = side5 === "allies" ? "the Allies" : "the Axis";
-    const held3 = lost.length <= 2 ? listed5(lost) : `${lost[0]} and ${lost.length - 1} more of its grounds`;
-    const six = listed5(grounds2, "or");
+    const held3 = lost.length <= 2 ? listed6(lost) : `${lost[0]} and ${lost.length - 1} more of its grounds`;
+    const six = listed6(grounds2, "or");
     const when = g2.turn < falls.from ? `in ${turnToDate(falls.from).label}` : "next month";
     const ground = "Italy's ground then goes to whoever has an army on Italian soil, your own corps included.";
-    const text = changed ? `Italy signs an armistice next month unless ${listed5(lost)} ${lost.length === 1 ? "is" : "are"} taken back. Rome has changed its government, and it signs while an enemy holds any of ${six}. ${ground}` : `Italy makes peace if ${who} still hold ${held3} ${when}. If an enemy holds any of ${six} ${when} or later, Rome changes its government that month and signs an armistice the month after, if one is still held. ${ground}`;
+    const text = changed ? `Italy signs an armistice next month unless ${listed6(lost)} ${lost.length === 1 ? "is" : "are"} taken back. Rome has changed its government, and it signs while an enemy holds any of ${six}. ${ground}` : `Italy makes peace if ${who} still hold ${held3} ${when}. If an enemy holds any of ${six} ${when} or later, Rome changes its government that month and signs an armistice the month after, if one is still held. ${ground}`;
     warning(g2, "Rome wavers", text, me, g2.byName[lost[0]]?.id, "ITA");
   }
   function romeStake(g2, viewer = g2.human) {
@@ -60276,7 +60378,7 @@
     const month3 = turnToDate(st.due).label.split(" ")[0];
     const n = st.lost.length, of2 = st.grounds.length;
     const num7 = (k) => COUNTED[k] ?? String(k);
-    const unless = n > 3 ? `unless all ${num7(n)} places ${st.who} hold are retaken first: ${listed5(st.lost)}` : `unless ${listed5(st.lost)} ${n === 1 ? "is" : "are"} retaken first`;
+    const unless = n > 3 ? `unless all ${num7(n)} places ${st.who} hold are retaken first: ${listed6(st.lost)}` : `unless ${listed6(st.lost)} ${n === 1 ? "is" : "are"} retaken first`;
     return {
       title: "Rome wavers",
       nat: "ITA",
@@ -60300,13 +60402,13 @@
     const st = romeStake(g2, viewer);
     if (!st) return null;
     const { grounds: grounds2, lost, who, falls } = st;
-    const six = listed5(grounds2, "or");
-    const held3 = listed5(lost);
+    const six = listed6(grounds2, "or");
+    const held3 = listed6(lost);
     const are = lost.length === 1 ? "is" : "are";
     const changed = st.fell !== void 0;
     const date2 = turnToDate(falls).label;
     const all = COUNTED[grounds2.length] ?? String(grounds2.length);
-    const text = changed ? lost.length ? `Italy signs an armistice next month unless ${held3} ${are} taken back. Mussolini has fallen, and Rome signs while ${who} hold any of ${six}: that ends your campaign. Take back what they hold this month and Italy fights on.` : `Mussolini has fallen. If ${who} hold any of the ${all} as a month opens, Rome signs at once and your campaign ends. ${NO_LAST_MONTH}: hold all ${all}. They are ${listed5(grounds2)}.` : lost.length ? `Mussolini falls ${g2.turn < falls ? `in ${date2}` : "next month"} unless ${held3} ${are} taken back. The month after, Italy signs an armistice while ${who} hold any of ${six}, and that ends your campaign.` : `Mussolini falls if ${who} take one of six places. They are ${listed5(grounds2)}${g2.turn < falls ? `, and they count from ${date2}` : ""}. The month after he falls, Italy signs an armistice if one is still held, and that ends your campaign.`;
+    const text = changed ? lost.length ? `Italy signs an armistice next month unless ${held3} ${are} taken back. Mussolini has fallen, and Rome signs while ${who} hold any of ${six}: that ends your campaign. Take back what they hold this month and Italy fights on.` : `Mussolini has fallen. If ${who} hold any of the ${all} as a month opens, Rome signs at once and your campaign ends. ${NO_LAST_MONTH}: hold all ${all}. They are ${listed6(grounds2)}.` : lost.length ? `Mussolini falls ${g2.turn < falls ? `in ${date2}` : "next month"} unless ${held3} ${are} taken back. The month after, Italy signs an armistice while ${who} hold any of ${six}, and that ends your campaign.` : `Mussolini falls if ${who} take one of six places. They are ${listed6(grounds2)}${g2.turn < falls ? `, and they count from ${date2}` : ""}. The month after he falls, Italy signs an armistice if one is still held, and that ends your campaign.`;
     return { title: changed && !lost.length ? ROME_HOLDS : "Rome wavers", text, nat: "ITA", about: "ITA", region: g2.byName[lost[0] ?? grounds2[grounds2.length - 1]]?.id, tested: turnToDate(g2.turn + 1).label.split(" ")[0] };
   }
 
@@ -61027,7 +61129,7 @@
   };
   var owedNotBefore = (g2, who, on) => PACIFIC !== null && reads(g2) && !!stopDef(g2).book && who === PACIFIC.north.nat && on === PACIFIC.power ? PACIFIC.north.book : 0;
   var fill8 = (line, words) => line.replace(/\{(\w+)\}/g, (m, k) => words[k] ?? m);
-  var listed6 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  var listed7 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
   var cap10 = (s) => s.charAt(0).toUpperCase() + s.slice(1);
   var freezeAt = (g2) => reads(g2) ? g2.flags[FREEZE] ?? 0 : 0;
   var readyRules = (g2) => reads(g2) ? PACIFIC.ready ?? null : null;
@@ -61052,7 +61154,7 @@
     }
     if (!came.length) return;
     g2.supplyDirty = true;
-    headline(g2, "war", fill8(P.says.follow, { Names: cap10(listed6(came.map((n) => theName(n)))), are: came.length === 1 ? "is" : "are", power: theName(J), lead: newsName(L2) }), came[0].id);
+    headline(g2, "war", fill8(P.says.follow, { Names: cap10(listed7(came.map((n) => theName(n)))), are: came.length === 1 ? "is" : "are", power: theName(J), lead: newsName(L2) }), came[0].id);
   }
   function pacificWar(g2, a, b) {
     const P = PACIFIC;
@@ -61464,7 +61566,7 @@
     const side5 = mine4 ? P.bloc : P.bloc === "axis" ? "allies" : "axis";
     const d = hopSlide(g2, H);
     const open3 = [], soon = [];
-    const listed8 = /* @__PURE__ */ new Set();
+    const listed9 = /* @__PURE__ */ new Set();
     const roads = !mine4 && H.lead ? H.roads ?? {} : null;
     const own = roads ? roads[nat] ?? H.behind?.[nat] ?? null : null;
     const others = roads ? new Set(Object.values(roads).flat()) : null;
@@ -61472,13 +61574,13 @@
     for (const [name, month3] of H[side5]) {
       const r = g2.byName[name];
       if (!r) continue;
-      listed8.add(r.id);
+      listed9.add(r.id);
       if (!foe(r) || !reads2(name)) continue;
       if (g2.turn >= month3 + d) open3.push(r);
       else if (g2.turn === month3 + d - 1) soon.push(r);
     }
     if (!mine4) {
-      for (const r of g2.regions) if (!listed8.has(r.id) && foe(r) && (r.ctrl === P.power || allied(g2, r.ctrl, P.power)) && neverHis(g2, r)) open3.push(r);
+      for (const r of g2.regions) if (!listed9.has(r.id) && foe(r) && (r.ctrl === P.power || allied(g2, r.ctrl, P.power)) && neverHis(g2, r)) open3.push(r);
     }
     return { book: true, open: open3, soon };
   }
@@ -61717,7 +61819,7 @@
       noOrders: whyNotOrder(g2, c)
     };
   }
-  var listed7 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  var listed8 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
   function mixOf(cs) {
     const out = [];
     for (const kind of DIVISIONS.order) {
@@ -61732,7 +61834,7 @@
     const total = mix4.reduce((s, m) => s + m.divs, 0);
     const parts2 = mix4.map((m) => `${m.divs} ${m.word}`);
     const unit = mix4.every((m) => m.kind === "eng") ? total === 1 ? "brigade" : "brigades" : total === 1 ? "division" : "divisions";
-    return `${listed7(parts2)} ${unit}`;
+    return `${listed8(parts2)} ${unit}`;
   }
   function corpsSeen(g2, c, viewer = g2.human) {
     const k = corpsKnown(g2, c, viewer);
@@ -66519,12 +66621,13 @@
     } else {
       headline(g2, "fall", said ?? `${theName(X, true)} capitulates to ${theName(g2.nations[by2])}.`, nat, void 0, { arm: "land", won: by2, lost: nat });
     }
+    const told2 = g2.headlines[g2.headlines.length - 1];
     if (kept3.length) {
       const K2 = g2.nations[kept3[0].ctrl];
       const names = kept3.map((r) => r.name);
       const chief = () => [...kept3].sort((x, y) => worthOf(g2, y) - worthOf(g2, x) || x.id - y.id).slice(0, 3).map((r) => r.name);
-      const told2 = names.length > 6 ? `${chief().join(", ")} and ${names.length - 3} other places` : names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-      headline(g2, "event", `${K2.adj} forces take ${told2} into their keeping: ${theName(X)} has fallen, and ${names.length === 1 ? "the place is" : "they are"} not to be ${g2.nations[by2].adj} for the asking.`, K2.id, kept3[0].id);
+      const told3 = names.length > 6 ? `${chief().join(", ")} and ${names.length - 3} other places` : names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+      headline(g2, "event", `${K2.adj} forces take ${told3} into their keeping: ${theName(X)} has fallen, and ${names.length === 1 ? "the place is" : "they are"} not to be ${g2.nations[by2].adj} for the asking.`, K2.id, kept3[0].id);
     }
     for (const n of Object.values(g2.nations)) n.atWar = n.atWar.filter((e) => e !== nat);
     X.atWar = [];
@@ -66555,6 +66658,8 @@
     for (const n of Object.values(g2.nations)) if (n.alive && n.atWar.includes(by2)) checkCollapse(g2, n.id, by2);
     afterFall(g2, nat);
     crown(g2);
+    const on = warGoesOn(g2, nat);
+    if (on) told2.text += ` ${on.news}`;
   }
   function shipMove(g2, c, to, rides = false) {
     if (shipCorps(g2, c, to, rides)) {
@@ -70824,7 +70929,7 @@
     now = frontsAgain(g2) ?? now;
     const made = /* @__PURE__ */ new Map();
     const firstOwed = (c) => (plan.op.landings ?? []).some((L2) => L2.corps === c.name) && g2.flags[sailedKey(c)] === void 0;
-    const listed8 = (k, i, shore) => {
+    const listed9 = (k, i, shore) => {
       const T = plan.fronts[k].then ?? [], out = [];
       for (let j = 0; j < T.length; j++) {
         const f = T[j];
@@ -70910,7 +71015,7 @@
         const joined3 = [];
         if (hopsReading(g2, nat, shore)) {
           let why = plansAsk(g2, nat, wave, shore);
-          const others = why ? listed8(k, i, shore) : [];
+          const others = why ? listed9(k, i, shore) : [];
           for (const o of others) {
             if (!why) break;
             const lot = o.force.filter((x) => x.reg === lead2.reg && g2.flags[sailedKey(x)] !== g2.turn && !wave.includes(x));
@@ -76463,41 +76568,6 @@
     }
     return out;
   }
-
-  // data/campaign/goals.json
-  var goals_default = {
-    _about: "Campaign goals: what winning means for each nation a person can play. Every nation has a short campaign and a long one. 'hold' lists cities that must be in the nation's own hands or an ally's. 'beaten' lists nations that must have capitulated. 'by' is the last month in which the goal can be reached (months count from 1 = September 1939, so 16 is December 1940 and 76 is December 1945): the goal is won the moment everything holds, and lost when that month has gone by. 'until' makes it a goal of endurance instead: nothing is decided until the month after it opens, and the goal is won if everything still holds then. 'war' gives a goal of endurance the clock of one war, history's begun in month 'from': a war that comes later moves the day it is decided by as many months, and with no war yet nothing is decided. 'outlast' makes it a goal of holding out: the nation is still in the war after that many weeks of it, four to a month, and a nation that goes down fighting later than that has won it all the same. 'ashore' asks for an army of the nation's own on the ground: one of its field corps stands in a province first owned by one of the countries listed ('in'), on that country's mainland (not overseas, not a lone island), and 'label' is how the panel names it; with 'beaten' beside it the goal is settled the day the enemy falls, so an army that arrives afterwards does not win it (the design director's ruling 33: a goal an idle player cannot win). Except for 'outlast', the player's nation must still be in the war. Goals judge the war and never change it: no computer nation knows about them.",
-    nations: {
-      GER: {
-        short: { title: "Master of the continent", text: "Hold Warsaw, Oslo and Paris by the end of 1940, as history's Germany did.", hold: ["Berlin", "Warsaw", "Oslo", "Paris"], by: 16 },
-        long: { title: "The war history lost", text: "Beat the Soviet Union by the end of 1945 with Berlin and Paris still yours.", hold: ["Berlin", "Paris"], beaten: ["SOV"], by: 76 }
-      },
-      UK: {
-        short: { title: "Alone", text: "London and Cairo are still British when 1942 opens.", hold: ["London", "Cairo"], until: 28 },
-        long: { title: "Victory in Europe", text: "Beat Germany by the end of 1945 with London still yours.", hold: ["London"], beaten: ["GER"], by: 76 }
-      },
-      FRA: {
-        short: { title: "They shall not pass", text: "Paris is still French when 1941 opens. History's France asked for an armistice in June 1940.", hold: ["Paris"], until: 16 },
-        long: { title: "Victory in Europe", text: "Beat Germany by the end of 1945 with Paris still yours.", hold: ["Paris"], beaten: ["GER"], by: 76 }
-      },
-      POL: {
-        short: { title: "Through September", text: "Poland is still in the war when October 1939 opens. History's Warsaw surrendered on 28 September.", outlast: 4 },
-        long: { title: "Longer than five weeks", text: "Poland is still fighting in the sixth week of the war. History's last Polish army laid down its arms after five.", outlast: 5 }
-      },
-      ITA: {
-        short: { title: "Mare Nostrum", text: "Hold Rome, Tripoli, Athens and Cairo by the end of 1942.", hold: ["Rome", "Tripoli", "Athens", "Cairo"], by: 40 },
-        long: { title: "A place in the sun", text: "Rome, Tripoli, Athens, Cairo and Malta are in Axis hands when 1946 opens.", hold: ["Rome", "Tripoli", "Athens", "Cairo", "Malta"], until: 76 }
-      },
-      SOV: {
-        short: { title: "Not one step back", text: "Moscow, Leningrad and Stalingrad are still Soviet a year and a half into the war with Germany: when 1943 opens, if it comes in June 1941 as history's did.", hold: ["Moscow", "Leningrad", "Stalingrad"], until: 40, war: { with: "GER", from: 22 } },
-        long: { title: "To Berlin", text: "Berlin is in Allied hands by the end of 1945, with Moscow still yours.", hold: ["Moscow", "Berlin"], by: 76 }
-      },
-      USA: {
-        short: { title: "A second front", text: "An American army is ashore in France and Paris is in Allied hands when 1945 opens, with Washington still yours.", hold: ["Washington", "Paris"], ashore: { in: ["FRA"], label: "An American army ashore in France" }, until: 64 },
-        long: { title: "Victory in Europe", text: "Germany is beaten with an American army on the continent, and Washington still yours.", hold: ["Washington"], beaten: ["GER"], ashore: { in: ["GER", "FRA", "BEL", "NED", "LUX", "DEN", "NOR", "SWE", "FIN", "EST", "LAT", "LIT", "POL", "SVK", "HUN", "ROM", "YUG", "BUL", "GRE", "ITA", "SUI", "ESP", "POR", "SOV"], label: "An American army on the continent" }, by: 76 }
-      }
-    }
-  };
 
   // src/campaign/goals.ts
   var GOAL_KEYS = ["short", "long"];
@@ -108856,7 +108926,8 @@ ${standing5}`,
       divs: n.alive ? fieldArmy(s, n.id) : 0,
       will: n.alive ? Math.max(0, Math.min(1, 1 - collapseScore(s, n.id) / n.resilience)) : 0,
       side: n.id === me.id ? "own" : atWar(s, me.id, n.id) ? "enemy" : allied(s, me.id, n.id) ? "ally" : "other",
-      note: n.alive ? `At war with ${listOf7(n.atWar.map((x) => theName2(s, x)))}` : `Fell in ${turnToDate(n.fellOn.turn).label}: asked ${theName2(s, n.fellOn.to)} for terms`,
+      // (Ruling 201, point 4: a fallen great power's own card closes with the line that the war goes on, while it does.)
+      note: n.alive ? `At war with ${listOf7(n.atWar.map((x) => theName2(s, x)))}` : `Fell in ${turnToDate(n.fellOn.turn).label}: asked ${theName2(s, n.fellOn.to)} for terms${((on) => on ? `. ${on.news}` : "")(warGoesOn(s, n.id))}`,
       war: can2.has(n.id),
       // (Version 65) Its general staff as the player knows it: its character, what it is doing in a sentence, and
       // whether a main effort of its is aimed at the player or his allies, with the place it is aimed at.
@@ -108947,7 +109018,10 @@ ${standing5}`,
       cap: DIPLOMACY.pcCap,
       partners: partners.size,
       cost: DIPLOMACY.court.cost,
-      wind,
+      // (Ruling 201, point 4: at the head of the Powers tab, while a great power has fallen and the war is not decided,
+      // the line that names the powers still at war. Only on the whole-world chart; `undecided` carries it alone.)
+      wind: ((on) => on ? `${on.line} ${wind}` : wind)(warGoesOn(s)),
+      undecided: warGoesOn(s)?.line ?? "",
       help: mine4 === "league" ? "The League courts nobody: it wins members by invitation, and only those who feel the danger say yes." : mine4 ? `Courting a neutral costs ${DIPLOMACY.court.cost} political capital and pulls it toward ${side5}. A country that leans your way trades with you${DIPLOMACY.majors.includes(me.id) ? `, worth ${worth3} a month to your treasury` : ""}; one that is fully won over joins your side.` : "Your country belongs to neither bloc, so it has nobody to win the neutrals over to.",
       powers,
       rows,

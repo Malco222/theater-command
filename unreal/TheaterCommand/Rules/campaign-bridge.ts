@@ -137,6 +137,8 @@ import { chanceOn } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
 import { answersOf, attachWorld, motherLine, patronOf } from '../../../src/campaign/world';
+// (Release 2, Japan and the Pacific: ruling 201's two lines, read where the war between the alliances goes on after a great power's fall.)
+import { warGoesOn } from '../../../src/campaign/domination';
 import { atSea as fleetAtSea, shipCount as shipsIn } from '../../../src/campaign/navy';
 import { fleetKnown as fleetKnownTo, fleetsSeen, seaPicture as seaPictureOf } from '../../../src/campaign/carriers';
 import { airfieldsSeen, announcements, attackOutlook, openingForce, pocketAt, softenOptions, orderProbe, foldChoicesAt, orderFold, fieldworksLeft, rivalStaff, swapChoices, orderSwap, jointForce, whyNotAttack, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
@@ -6985,7 +6987,8 @@ function diplomacy() {
       nat: n.id, name: n.name, alive: n.alive, divs: n.alive ? fieldArmy(s, n.id) : 0,
       will: n.alive ? Math.max(0, Math.min(1, 1 - collapseScore(s, n.id) / n.resilience)) : 0,
       side: n.id === me.id ? 'own' : atWar(s, me.id, n.id) ? 'enemy' : allied(s, me.id, n.id) ? 'ally' : 'other',
-      note: n.alive ? `At war with ${listOf(n.atWar.map((x) => theName(s, x)))}` : `Fell in ${turnToDate(n.fellOn!.turn).label}: asked ${theName(s, n.fellOn!.to)} for terms`,
+      // (Ruling 201, point 4: a fallen great power's own card closes with the line that the war goes on, while it does.)
+      note: n.alive ? `At war with ${listOf(n.atWar.map((x) => theName(s, x)))}` : `Fell in ${turnToDate(n.fellOn!.turn).label}: asked ${theName(s, n.fellOn!.to)} for terms${((on) => (on ? `. ${on.news}` : ''))(warGoesOn(s, n.id))}`,
       war: can.has(n.id),
       // (Version 65) Its general staff as the player knows it: its character, what it is doing in a sentence, and
       // whether a main effort of its is aimed at the player or his allies, with the place it is aimed at.
@@ -7058,7 +7061,10 @@ function diplomacy() {
   return {
     nation: me.name, date: turnToDate(s.turn).label, bloc: side, up,
     capital: Math.floor(me.pc), income: pcIncome(me.id), cap: DIPLOMACY.pcCap, partners: partners.size, cost: DIPLOMACY.court.cost,
-    wind,
+    // (Ruling 201, point 4: at the head of the Powers tab, while a great power has fallen and the war is not decided,
+    // the line that names the powers still at war. Only on the whole-world chart; `undecided` carries it alone.)
+    wind: ((on) => (on ? `${on.line} ${wind}` : wind))(warGoesOn(s)),
+    undecided: warGoesOn(s)?.line ?? '',
     help: mine === 'league' ? 'The League courts nobody: it wins members by invitation, and only those who feel the danger say yes.' : mine
       ? `Courting a neutral costs ${DIPLOMACY.court.cost} political capital and pulls it toward ${side}. A country that leans your way trades with you${DIPLOMACY.majors.includes(me.id) ? `, worth ${worth} a month to your treasury` : ''}; one that is fully won over joins your side.`
       : 'Your country belongs to neither bloc, so it has nobody to win the neutrals over to.',

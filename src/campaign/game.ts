@@ -23,7 +23,7 @@ import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { locked, techTick, winterReady } from './tech';
 import { liftDates } from './lift';
 import { RES, fuelAir, fuelMet, fuelSlows, hungerLost, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
-import { crown } from './domination';
+import { crown, warGoesOn } from './domination';
 import { afterFall, recordFall, rememberWars, retaken, standsFreed } from './liberation';
 import { honour } from './guarantees';
 import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, moraleWord, nerve, raiseMorale, restedDrafts, restedMonth, restedOrg } from './morale';
@@ -3825,6 +3825,9 @@ export function capitulate(g: Game, nat: string, by: string, said?: string): voi
   } else {
     headline(g, 'fall', said ?? `${theName(X, true)} capitulates to ${theName(g.nations[by])}.`, nat, undefined, { arm: 'land', won: by, lost: nat });
   }
+  // (Ruling 201, point 4: the fall's own line of news, kept so that its second line can be written once the fall
+  // has brought down whoever it brings down.)
+  const told = g.headlines[g.headlines.length - 1];
   if (kept.length) {
     const K = g.nations[kept[0].ctrl];
     const names = kept.map((r) => r.name);
@@ -3860,6 +3863,11 @@ export function capitulate(g: Game, nat: string, by: string, said?: string): voi
   afterFall(g, nat);
   // The last act of the grand campaign: was that the last but one?
   crown(g);
+  // (Ruling 201, point 4, the whole-world chart: a great power's fall that does not decide the war says so on the
+  // second line of its own band, naming the powers still at war. Read last, when every fall this one brought on has
+  // been counted. Null, and nothing said, on any narrower chart, where the fall decides the war, and in the last act.)
+  const on = warGoesOn(g, nat);
+  if (on) told.text += ` ${on.news}`;
 }
 
 /** Sea transport: a nation with shipping can send a corps from one friendly port to another. It takes the whole month, and the enemy may find the convoy. */

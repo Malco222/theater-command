@@ -82,12 +82,16 @@ import farShores from '../../data/campaign/far-shores.json';
 import farGuards from '../../data/campaign/far-guards.json';
 import farAfrica from '../../data/campaign/far-africa.json';
 import farBooks from '../../data/campaign/far-books.json';
+import japanSeat from '../../data/campaign/far-japan-seat.json';
+import goals from '../../data/campaign/goals.json';
 
 type Obj = Record<string, any>;
 
 /** The data files a seats file may name, by name without ".json". */
 const TARGETS: Record<string, Obj> = {
   grand, world, traits, eve, relations, diplomacy, government, commanders, open, 'setup-1939': setup1939, history, east, rivals, manpower, league, navy, arsenal, towns, resources, air, siege,
+  // (What a player of a far seat plays for, and what the far side adds to an old seat's goals: ruling 196, points 6 and 7.)
+  goals,
 };
 
 /** The seats files, in the order they are laid. */
@@ -107,6 +111,8 @@ const FILES: [string, Obj][] = [
   ['far-africa', farAfrica],
   // (Japan's books, rulings 194 to 196: stocks, lanes and the submarines that raid them.)
   ['far-books', farBooks],
+  // (Japan's seat, ruling 196 points 6 and 7: its two goals, and Japan in America's long one.)
+  ['far-japan-seat', japanSeat],
   // (The owed shores, ruling 234's notes of 22:05Z and 22:10Z: last, so its amendments find every row laid.)
   ['far-shores', farShores],
 ];

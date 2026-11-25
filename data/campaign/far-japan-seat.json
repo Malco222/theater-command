@@ -1,0 +1,28 @@
+{
+  "_about": "Japan's seat (a seats file, laid by src/campaign/far-rows.ts while the far side's switch is on; kept by hand by the Japan and Pacific thread of 24 November 2026). What a player who takes Japan plays for, and what the Pacific adds to America's own goals. Ruling 196, points 6 and 7 (the design director, 17 November 2026, on the Pacific planner's paper 06): Japan's short campaign is 'Oil for the fleet' (Singapore, Manila, Batavia and Palembang by the end of May 1942, month 33), its long one 'The ring holds' (Tokyo, Okinawa, Saipan and Palembang still Japan's when 1946 opens); America's long campaign gains Japan and the title 'Victory on two oceans'. Goals judge a war and never change it (goals.ts): no computer country reads them. 'USA+' lays its lines over America's long goal as goals.json has it: Germany stays in 'beaten' and Japan joins it.",
+  "goals": {
+    "nations": {
+      "JAP": {
+        "short": {
+          "title": "Oil for the fleet",
+          "text": "Hold Singapore, Manila, Batavia and Palembang by the end of May 1942.",
+          "hold": ["Singapore", "Manila", "Batavia", "Palembang"],
+          "by": 33
+        },
+        "long": {
+          "title": "The ring holds",
+          "text": "Tokyo, Okinawa, Saipan and Palembang are still Japan's when 1946 opens.",
+          "hold": ["Tokyo", "Okinawa", "Saipan", "Palembang"],
+          "until": 76
+        }
+      },
+      "USA+": {
+        "long": {
+          "title": "Victory on two oceans",
+          "text": "Germany and Japan are beaten by the end of 1945, with an American army on the continent and Washington still yours.",
+          "beaten": ["JAP"]
+        }
+      }
+    }
+  }
+}
