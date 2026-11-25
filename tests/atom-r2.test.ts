@@ -13,6 +13,7 @@ import {
   strikeBar, strikeTargets, strikeWords, whyNotPlants, whyNotStrike,
 } from '../src/campaign/atom';
 import { dayOrNight } from '../src/campaign/airwar';
+import { airTicket } from '../src/battle/air/ticket';
 import { openDamage, damageOf } from '../src/campaign/citydamage';
 import { income, upkeep } from '../src/campaign/economy';
 import { setStop } from '../src/campaign/history';
@@ -560,6 +561,21 @@ describe('the review\'s mends (25 November)', () => {
     g.nations.UK.atom!.armed = undefined;
     const plain = dayOrNight(g, 'bomb', ham, ids, 'UK')!;
     expect(plain.day.hits.length + plain.night.hits.length).toBeGreaterThan(0);
+  });
+
+  it('a raid that carries the bomb is not fought out in the 3D air battle until its own scene is built: the staff flies it', () => {
+    const g = armedUK();
+    const ham = R(g, 'Hamburg');
+    const ids = carriersFor(g, 'UK', ham).map((f) => f.id);
+    const before = airTicket(g, 'bomb', ham, ids, 'UK');
+    expect(before.why).not.toBe('A raid that carries the atomic bomb is flown by the staff.');
+    expect(orderAtomStrike(g, ham)).toBe(true);
+    const t = airTicket(g, 'bomb', ham, ids, 'UK');
+    expect(t.ticket).toBeNull();
+    expect(t.why).toBe('A raid that carries the atomic bomb is flown by the staff.');
+    // (any other city is fought out as before)
+    const other = airTicket(g, 'bomb', R(g, 'Bremen'), undefined, 'UK');
+    expect(other.why).not.toBe('A raid that carries the atomic bomb is flown by the staff.');
   });
 
   it('a chosen site that no longer fits gives way to the safest', () => {
