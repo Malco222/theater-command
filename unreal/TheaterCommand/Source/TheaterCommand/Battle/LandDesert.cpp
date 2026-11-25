@@ -267,38 +267,89 @@ namespace LandScape
 			}
 			/** The field's own wadi (the art director's Mac pass 1, B5: "a plate of ground with no dune, wadi or scrub"; the
 			 * noise's wadis some 650 m apart can miss a field): one crossing it from west to east between a quarter and three
-			 * quarters of its depth, meandering 60 to 110 m either side over 350 to 550 m, its floor 10 to 22 m across and its
-			 * banks a cut, 2.5 m from the plain's edge to the floor (the same depth as the noise's, under a metre in the field:
-			 * Relief), so from a man's eye it is a shaded step and a line of scrub across the plain (Plants). 1 on the floor.
-			 * On trial, "desertland" (0 without it). */
+			 * quarters of its depth, meandering 60 to 110 m either side over 350 to 550 m, its floor 7 to 19 m across and its
+			 * banks a cut, 4 m from the plain's edge to the floor (the same depth as the noise's, under a metre in the field:
+			 * Relief; the ground's points are 4 m apart, so a narrower bank draws as steps), so from a man's eye it is a shaded
+			 * step and a line of scrub across the plain (Plants, WadiPaint). 1 on the floor. On trial, "desertland" (0 without
+			 * it). */
 			double FieldWadi(double X, double Y) const
 			{
-				if (!bLand) return 0.0;
+				double Off = 0.0, Half = 0.0, Ends = 0.0;
+				if (!FieldWadiAt(X, Y, Off, Half, Ends)) return 0.0;
+				return Ends * Smooth(Half + 2.5, Half - 1.5, std::fabs(Off));
+			}
+			/** The field's own wadi's line here: Off metres north of its middle (negative south of it), its floor's half width
+			 * Half, and Ends (1 along the field, thinning out a kilometre beyond its ends); false without "desertland". */
+			bool FieldWadiAt(double X, double Y, double& Off, double& Half, double& Ends) const
+			{
+				if (!bLand) return false;
 				const double Mid = Fd.Depth() * (0.25 + 0.5 * Unit(Hash(Seed, 0x3AD1)));
 				const double Wave = 350.0 + 200.0 * Unit(Hash(Seed, 0x3AD2)), Swing = 60.0 + 50.0 * Unit(Hash(Seed, 0x3AD3));
 				const double Line = Mid + Swing * std::sin(2.0 * Pi * X / Wave + 6.0 * Unit(Hash(Seed, 0x3AD4))) + 0.45 * Swing * Noise(X / 170.0, 0.5, Seed ^ 0x3AD5);
-				const double Half = 5.0 + 6.0 * (0.5 + 0.5 * Noise(X / 260.0, 1.5, Seed ^ 0x3AD6));
+				Half = 4.0 + 6.0 * (0.5 + 0.5 * Noise(X / 260.0, 1.5, Seed ^ 0x3AD6));
 				// (thinning out a kilometre beyond the field's ends, so it runs into the plain's own wadis or the haze)
-				const double Ends = Smooth(-1300.0, -300.0, X) * Smooth(Fd.Width() + 1300.0, Fd.Width() + 300.0, X);
-				return Ends * Smooth(Half + 1.5, Half - 1.0, std::fabs(Y - Line));
+				Ends = Smooth(-1300.0, -300.0, X) * Smooth(Fd.Width() + 1300.0, Fd.Width() + 300.0, X);
+				Off = Y - Line;
+				return true;
 			}
-			/** A low ridge out beyond the field (the art director, B5: "a low ridge between eye and horizon"): 12 to 22 m high
-			 * some 300 to 700 m out from the field's edge, rising gently on the field's side over 350 m and falling over 500 m
-			 * beyond, broken into pieces round the field (about half the horizon), and never on the escarpment's side, which has
-			 * its own. In Relief, so all of its height stands (the rolling country is only blended in over 1.2 km). On trial,
-			 * "desertland" (0 without it). */
+			/** The field's own wadi's paint over the plain's (the art director's desertland read, 25 Nov 14:50Z: "a pale road,
+			 * not a cut"): its floor 12 to 15 darker and greyer than the plain, a gravel bed mottled with its stones; the foot
+			 * of each bank dark (about L 110 to 120 from 70 m), shade on the sun's side and the cut's damper earth on the other,
+			 * so a dark line lies under the near lip whichever side the eye stands. Bands 5 m and more, never much finer than
+			 * the ground's points (4 m apart). */
+			Tone WadiPaint(Tone T, double X, double Y, double N1) const
+			{
+				double Off = 0.0, Half = 0.0, Ends = 0.0;
+				if (!FieldWadiAt(X, Y, Off, Half, Ends) || Ends <= 0.0) return T;
+				const double A = std::fabs(Off);
+				if (A > Half + 4.0) return T;
+				const double Break = 0.5 + 0.5 * Noise(X / 23.0, Y / 23.0, Seed ^ 0x3AD7); // (the gravel's mottling, the lip broken)
+				const Tone Bed = Mixed(Rgb(170, 156, 128), Rgb(144, 132, 110), 0.2 + 0.5 * Break);
+				T = Mixed(T, Varied(Bed, 1.0 + 0.03 * N1, 0.0), Ends * Smooth(Half + 1.0, Half - 1.5, A));
+				// (the foot of each bank and the lower half of its face dark: under the sun's side the shade, under the other the
+				// cut's own darker earth and the damp; from a man's eye the floor is hidden behind the near lip and he sees the far
+				// bank, so its dark foot is the line under the near lip, whichever side he stands)
+				const bool bSunSide = (Fd.Lat >= 0.0) == (Off < 0.0);
+				const double Foot = Smooth(Half - 3.5, Half - 1.8, A) * Smooth(Half + 1.5, Half + 0.3, A);
+				T = Mixed(T, bSunSide ? Rgb(118, 102, 78) : Rgb(128, 112, 86), 0.9 * Ends * Foot * (0.8 + 0.2 * Break));
+				return T;
+			}
+			/** A low ridge out beyond the field (the art director, B5: "a low ridge between eye and horizon"; and 14:50Z: "it
+			 * must break the horizon"): 18 to 32 m high some 120 to 360 m out from the field's edge (the haze takes most of a
+			 * thing's colour by 500 m), rising on the field's side over up to 260 m and falling over 450 m beyond, its top
+			 * line uneven (knolls a few hundred metres apart and smaller bumps on them), broken into pieces round the field
+			 * (about half the horizon), and never on the escarpment's side, which has its own. Dark varnished rock where it stands, its face away from the sun in shade (RidgePaint), so the
+			 * haze leaves it its line. In Relief, so all of its height stands (the rolling country is only blended in over 1.2
+			 * km). On trial, "desertland" (0 without it). */
 			double Ridge(double X, double Y) const
 			{
 				const double D = Outside(X, Y);
 				if (!bLand || D <= 0.0) return 0.0;
 				const double Cx = 0.5 * Fd.Width(), Cy = 0.5 * Fd.Depth();
 				const double A = std::atan2(Y - Cy, X - Cx), CA = std::cos(A), SA = std::sin(A);
-				const double Out = 500.0 + 200.0 * Noise(1.8 * CA, 1.8 * SA, Seed ^ 0x51D1);
-				const double High = 12.0 + 10.0 * (0.5 + 0.5 * Noise(3.1 * CA + 4.0, 3.1 * SA, Seed ^ 0x51D2));
+				const double Out = 240.0 + 120.0 * Noise(1.8 * CA, 1.8 * SA, Seed ^ 0x51D1), Rise = std::min(260.0, Out - 30.0);
+				const double Top = 0.8 + 0.25 * Noise(9.0 * CA + 2.0, 9.0 * SA, Seed ^ 0x51D4) + 0.12 * Noise(31.0 * CA, 31.0 * SA - 5.0, Seed ^ 0x51D5);
+				const double High = (18.0 + 14.0 * (0.5 + 0.5 * Noise(3.1 * CA + 4.0, 3.1 * SA, Seed ^ 0x51D2))) * Top;
 				const double Piece = Smooth(-0.12, 0.18, Noise(2.4 * CA - 3.0, 2.4 * SA + 1.0, Seed ^ 0x51D3));
 				const double T = D - Out;
-				const double Across = T < 0.0 ? Smooth(-350.0, 0.0, T) : Smooth(500.0, 0.0, T);
+				const double Across = T < 0.0 ? Smooth(-Rise, 0.0, T) : Smooth(450.0, 0.0, T);
 				return High * Piece * Across * Smooth(-250.0, -600.0, Scarp(X, Y));
+			}
+			/** The ridge's paint over the plain's: where it stands (above some 2 m), dark varnished rock and gravel, darkest
+			 * in the rock along its top, a little paler on the face toward the sun and dark on the face away from it (north of
+			 * the equator its north face). */
+			Tone RidgePaint(Tone T, double X, double Y) const
+			{
+				if (!bLand) return T;
+				const double R = Ridge(X, Y);
+				if (R < 2.0) return T;
+				const double Gy = (Ridge(X, Y + 6.0) - Ridge(X, Y - 6.0)) / 12.0;
+				const double Toward = Fd.Lat >= 0.0 ? Gy : -Gy; // (rising toward the pole: the face looks toward the sun)
+				Tone Rock = Mixed(Rgb(112, 94, 72), Rgb(142, 120, 92), Smooth(0.0, 0.08, Toward));
+				Rock = Mixed(Rock, Rgb(76, 62, 48), Smooth(0.0, -0.08, Toward));
+				Rock = Mixed(Rock, Rgb(84, 70, 56), 0.5 * Smooth(12.0, 22.0, R)); // (the rock standing out along its top)
+				Rock = Varied(Rock, 1.0 + 0.07 * Noise(X / 90.0, Y / 90.0, Seed ^ 0x51D6), 0.0);
+				return Mixed(T, Rock, 0.9 * Smooth(2.0, 9.0, R));
 			}
 			/** The varnished gravel's patches: 1 where the pebbles lie thickest, 0 on the pale serir; organic, soft-edged
 			 * shapes tens of metres across (a noise bent by another, so its lattice never shows as square cells), some
@@ -448,6 +499,7 @@ namespace LandScape
 				const double W = Wadi(S.X, S.Y);
 				Tone T = Plain(S.Kind, S.N1, S.N2, S.Broad, W, Read(S.X, S.Y, 1), Read(S.X, S.Y, 2), Read(S.X, S.Y, 3));
 				if (bSpring) T = Mixed(T, Rgb(150, 150, 104), 0.22 * W + 0.08 * Smooth(0.3, 0.8, S.N1) * (1.0 - W));
+				if (bLand) T = RidgePaint(WadiPaint(T, S.X, S.Y, S.N1), S.X, S.Y);
 				// (beside a track: the older wheels' spread, the broken crust a little paler than the plain, fading out)
 				if (S.Lane < 30.0) T = Mixed(T, Dust, 0.08 * Smooth(30.0, 3.0, S.Lane) * (0.7 + 0.3 * S.N1));
 				return bTracks ? Braided(T, S, false) : T;
@@ -457,6 +509,7 @@ namespace LandScape
 			{
 				Tone T = Plain(S.Kind == KWoods ? static_cast<int>(KOpen) : S.Kind, S.N1, 0.0, S.Broad, 0.0, Read(S.X, S.Y, 1), Read(S.X, S.Y, 2), Read(S.X, S.Y, 3));
 				if (bTracks) T = Braided(T, S, true); // (the tracks' corridors run on into the haze)
+				if (bLand) T = RidgePaint(WadiPaint(T, S.X, S.Y, S.N1), S.X, S.Y);
 				// (the escarpment by its own contrast, which survives the haze better than its height: a scree slope at its
 				// foot, a dark band of shade over it, and the cliff's pale sunlit limestone face above, lit 220 or more:
 				// the art director, 18:51Z)
@@ -911,7 +964,14 @@ namespace LandScape
 					const Spot S = H.At(X, Y);
 					const bool bRock = S.Kind == KRough;
 					const bool bOpen = S.Kind == KOpen || S.Kind == KField;
-					const double Stones = bRock ? 0.6 : bOpen ? 0.22 : 0.0, Boulders = Stones + (bRock ? 0.14 : bOpen ? 0.004 : 0.0);
+					double Stones = bRock ? 0.6 : bOpen ? 0.22 : 0.0, Boulders = Stones + (bRock ? 0.14 : bOpen ? 0.004 : 0.0);
+					// (the field's own wadi: its gravel bed thick with stones, a boulder fallen from its banks now and then)
+					if (bLand && S.Kind != KLane && S.Kind != KVillage && S.Kind != KYard)
+					{
+						const double Fw = FieldWadi(X, Y);
+						Stones = std::max(Stones, 0.55 * Fw);
+						Boulders = std::max(Boulders, Stones + 0.03 * Fw);
+					}
 					if (Keep >= Boulders) continue;
 					const bool bBoulder = Keep >= Stones;
 					if (!H.Free(X, Y, bBoulder ? 2.0 : 1.2)) continue;
