@@ -644,7 +644,7 @@ export function whyNotShip(g: Game, c: Corps, to: Region): string | null {
   // place its side holds once its span is over is left, not reinforced. line.ts; ruling 224, b390. Never the player's.)
   if (lineShut(g, c.nat, to)) return `By the book, ${to.name} lies beyond the record's line this month.`;
   // A harbour blocked and its quays blown up takes no ship until it is mended (prizes.ts).
-  for (const p of [from, to]) { const out = prizeOut(g, p, 'harbour'); if (out > 0) return `The harbour of ${p.name} is wrecked: no ship will use it for ${out === 1 ? 'a month' : `${out} months`} more.`; }
+  for (const p of [from, to]) { const out = prizeOut(g, p, 'harbour'); if (out > 0) return `The harbour of ${placeName(p.name)} is wrecked: no ship will use it for ${out === 1 ? 'a month' : `${out} months`} more.`; }
   if (hostileUnits(g, to, c.nat).length) {
     if (siegeRules(g) && !harbourOpen(g, to)) return `The enemy holds the quays of ${to.name}: nothing can be run into the town by sea.`;
     // A town under siege with its harbour still open: ships can run more troops into the garrison, if it has room.

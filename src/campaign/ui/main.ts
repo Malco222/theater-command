@@ -4886,7 +4886,7 @@ function airVerdict(r: AirReport): { text: string; cls: string } {
 
 function airTitle(r: AirReport): string {
   if (r.mission === 'fleet') return `Air strike on the ${r.ships?.[0]?.fleet ?? 'fleet'}`;
-  if (r.mission === 'harbour') return `Raid on the harbour of ${r.place}`;
+  if (r.mission === 'harbour') return `Raid on the harbour of ${placeName(r.place)}`;
   if (r.mission === 'town') return `Bombing of the defences of ${r.region >= 0 ? townName(g.regions[r.region]) : r.place}`;
   return r.mission === 'superiority' ? `The sky over ${r.place}` : r.mission === 'bomb' ? `Bombing of ${r.place}` : r.mission === 'night' ? `Night raids on ${r.place}` : r.mission === 'ground' ? `Raid on the troops at ${r.place}` : r.mission === 'line' ? `Bombing of the line at ${r.place}` : `Air strikes, ${r.place.replace(/^the /, '')}`;
 }
@@ -5890,7 +5890,7 @@ function missionText(f: AirFleet): string {
     case 'ground': return `raiding the troops at ${where}`;
     case 'line': return `bombing the fieldworks at ${where}`;
     case 'fleet': return `striking ${where}`;
-    case 'harbour': return `raiding the harbour of ${where}`;
+    case 'harbour': return `raiding the harbour of ${placeName(where)}`;
     case 'town': return `bombing the defences of ${g.regions[f.target] ? townName(g.regions[f.target]) : where}`;
   }
 }

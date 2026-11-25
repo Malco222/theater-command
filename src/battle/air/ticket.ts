@@ -7,6 +7,7 @@
 
 import { AIR, AIRWAR, airWar, assessAir, bombLaw, carrierOf, flakGuns, forecastAir, groupAt } from '../../campaign/air';
 import { planRaid, type RaidKind } from '../../campaign/airwar';
+import { placeName } from '../../campaign/game';
 import { orderRaid } from '../../campaign/turn';
 import { weatherOn } from '../../campaign/weather';
 import type { FoughtAir } from '../../campaign/airfought';
@@ -251,9 +252,10 @@ export function escortPair(g: Game, kind: RaidKind, target: number, nat: string)
 
 /**
  * A harbour raid's place in words (the UI director, 03:43Z): where the place's name already says harbour it stands
- * alone ("The raid on Pearl Harbor"); elsewhere "the harbour of Taranto".
+ * alone ("The raid on Pearl Harbor"); elsewhere "the harbour of Taranto", the place with its article where the map's
+ * list gives it one: "the harbour of the Highlands" (the UI director's final read, 25 November 2026, 15:42Z).
  */
-export const harbourOf = (place: string): string => (/\bHarbou?r\b/.test(place) ? place : `the harbour of ${place}`);
+export const harbourOf = (place: string): string => (/\bHarbou?r\b/.test(place) ? place : `the harbour of ${placeName(place)}`);
 
 /** The ground of a strike at sea: open water across the board (a stage draws its own). */
 const OPEN_SEA: AirGround = { land: [], rivers: [], borders: [], target: [], terrain: 'sea', inland: false, north: [0, 1] };

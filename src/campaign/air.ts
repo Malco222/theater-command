@@ -20,7 +20,7 @@ import arsenalData from '../../data/campaign/arsenal.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp, tenthPct } from '../core/math';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
-import { allied, atWar, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
+import { allied, atWar, headline, newsWeek, placeName, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
 import { hasTech } from './tech';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
@@ -1193,8 +1193,8 @@ export function crowdedRow(g: Game, cs: CrowdedField[]): string {
 }
 
 const COUNT_HEAD = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
-/** "the harbour of Naples", but a place whose name is a harbour stands alone: "Pearl Harbor" (the UI director, mend 6). */
-export const harbourOf = (place: string): string => (/\bHarbou?r$/.test(place) ? place : `the harbour of ${place}`);
+/** "the harbour of Naples", but a place whose name is a harbour stands alone: "Pearl Harbor" (the UI director, mend 6); the place with its article, "the harbour of the Highlands" (15:42Z). */
+export const harbourOf = (place: string): string => (/\bHarbou?r$/.test(place) ? place : `the harbour of ${placeName(place)}`);
 /**
  * The month card's line as the player's month opens (b448): news of a field of his that has become crowded since
  * the month before, and not again while it stays crowded. Not while his staff runs the air war: it spreads the groups.
@@ -2302,18 +2302,22 @@ export const brokeOff = (r: AirReport): boolean => r.result.includes(' broke off
  * not won (the UI director, 25 November 2026, 15:04Z): "had no fighters left to put up" only where every defending
  * group that rose lost every fighter it had; where none rose, "the defenders put up no fighters" (14:06Z); otherwise
  * the true figure, as the sentence under 9 to 1 gives it. `hold` is fly's reading of the attackers' fighters against
- * what the defenders could still put up; where they could put up none it is set to 99, not a figure: the card says
- * "more than 90 to 1" there.
+ * what the defenders could still put up; where they could put up none it is set to 99, not a figure.
+ * The UI director's final read (25 November 2026, 15:42Z): one rule for both sentences, the sky won and not won, at 9
+ * to 1 or more: no opposition / no fighters left only where none rose or every one that rose was lost; else the
+ * figure. The figure: under 10 to 1 as it always printed ("about 7.53 to 1"); from 10 to 1 a whole number, rounded as
+ * the game rounds its whole figures ("about 58 to 1"); above 90, the 99 or a true figure, "more than 90 to 1".
  */
 export function skyWords(g: Game, r: AirReport): string {
   if (r.mission !== 'superiority') return '';
   const NONE_LEFT = 99;
   const sum = (ss: AirSide[], k: 'ftr' | 'lostFtr'): number => ss.reduce((n, x) => n + x[k], 0);
-  const stood = (whose: string): string => `${whose} fighters stood ${r.hold === NONE_LEFT ? 'more than 90 to 1' : `about ${r.hold.toFixed(2)} to 1`} against those the defenders could still put up`;
+  const figure = r.hold === NONE_LEFT || r.hold > 90 ? 'more than 90 to 1' : r.hold >= 10 ? `about ${counted(r.hold)} to 1` : `about ${r.hold.toFixed(2)} to 1`;
+  const stood = (whose: string): string => `${whose} fighters stood ${figure} against those the defenders could still put up`;
   const leftOver = sum(r.att, 'ftr') - sum(r.att, 'lostFtr');
   const floor = `but it takes ${AIR.sky.least} fighters still over the target as well${leftOver < AIR.sky.least ? `, and the attackers had ${leftOver > 0 ? counted(leftOver) : 'none'} left` : ''}`;
   const usedUp = r.def.length > 0 && r.def.every((x) => x.lostFtr >= x.ftr);
-  return r.sky ? ` The ${g.nations[r.attNat].adj} air force won the sky over ${r.place}: at the end ${r.hold >= 9 ? 'no opposition was left' : stood('its')}.`
+  return r.sky ? ` The ${g.nations[r.attNat].adj} air force won the sky over ${r.place}: at the end ${r.hold >= 9 && (!r.def.length || usedUp) ? 'no opposition was left' : stood('its')}.`
     : brokeOff(r) ? ' The sky was not won: the raid was broken off.'
     : r.hold < AIR.sky.win ? ` The sky was not won: at the end ${stood('the attackers\'')}, and it takes ${AIR.sky.win} to 1.`
     : r.hold >= 9 && !r.def.length ? ` The sky was not won: the defenders put up no fighters, ${floor}.`

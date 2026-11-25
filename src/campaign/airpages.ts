@@ -210,8 +210,10 @@ function fieldToLay(g: Game, group: number): string | null {
 function layBy(g: Game): string {
   const me = g.human!;
   if (g.corps.some((c) => c.nat === me && !c.dead && isEngineer(c))) return ': an engineer corps can lay one there.';
-  const due = g.nations[me].queue.filter((b) => b.what === 'corps' && b.kind === 'eng').map((b) => b.eta).sort((a, b) => a - b)[0];
-  if (due !== undefined) return `: an engineer corps can lay one there. You have one on order in the ARSENAL, due ${turnToDate(due).label}.`;
+  const etas = g.nations[me].queue.filter((b) => b.what === 'corps' && b.kind === 'eng').map((b) => b.eta).sort((a, b) => a - b);
+  // (Two or more on order, the UI director's final read of 15:42Z: how many, and the month the first is due.)
+  if (etas.length > 1) return `: an engineer corps can lay one there. You have ${etas.length} on order in the ARSENAL, the first due ${turnToDate(etas[0]).label}.`;
+  if (etas.length === 1) return `: an engineer corps can lay one there. You have one on order in the ARSENAL, due ${turnToDate(etas[0]).label}.`;
   if (offers(g, me).some((o) => o.key === 'corps:eng')) return ': an engineer corps can lay one there. You have none: raise one in the ARSENAL.';
   return '.';
 }

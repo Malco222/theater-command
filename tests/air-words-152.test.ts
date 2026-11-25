@@ -9,13 +9,17 @@
 //   5   shipping a group across the ocean lists every field, country by country, the first of each naming its country;
 //   8, 30  a fight for the sky that met no enemy fighters says so, where it concerns the player.
 import { describe, expect, it } from 'vitest';
-import { AIR, airPool, airRange, airUpkeep, brokeOff, fly, hasAirfield, km, loweredLine, loweredOf, loweredShort, loweredSum, skyWords } from '../src/campaign/air';
+import { AIR, airPool, airRange, airUpkeep, brokeOff, fly, harbourOf, hasAirfield, km, loweredLine, loweredOf, loweredShort, loweredSum, skyWords } from '../src/campaign/air';
 import { airPage } from '../src/campaign/airpages';
 import { ARSENAL, offers } from '../src/campaign/arsenal';
 import { campaignWhy, groupJobs, groupRow, launchRaid, planRaid, setGroupJob } from '../src/campaign/airwar';
 // (a namespace, so that on a build without it only the test that uses it fails)
 import * as engineers from '../src/campaign/engineers';
-import { atWar, createGame, declareWar } from '../src/campaign/game';
+import { addCorps, atWar, createGame, declareWar } from '../src/campaign/game';
+import { sail, whyNotShip } from '../src/campaign/navy';
+import { wreckPrize } from '../src/campaign/prizes';
+import { syncWings, wingsOf } from '../src/campaign/carriers';
+import { airTicket, harbourOf as ticketHarbourOf } from '../src/battle/air/ticket';
 import { fitFoot, monthCard, monthMark } from '../src/campaign/monthcard';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -898,10 +902,11 @@ describe("the UI director's answers of 15:04Z on the air words", () => {
     const one = sweep(45, 1);
     expect([one.r.def.map((x) => [x.ftr, x.lostFtr]), one.r.sky]).toEqual([[[1, 0]], false]);
     expect(one.r.hold).toBeCloseTo(58.44, 2);
-    expect(skyWords(one.g, one.r)).toBe(" The sky was not won: at the end the attackers' fighters stood about 58.44 to 1 against those the defenders could still put up, which is enough, but it takes 50 fighters still over the target as well, and the attackers had 45 left.");
+    // (the figure from 10 to 1 up a whole number: the UI director's final read, 15:42Z; 15:04Z as built gave 'about 58.44 to 1')
+    expect(skyWords(one.g, one.r)).toBe(" The sky was not won: at the end the attackers' fighters stood about 58 to 1 against those the defenders could still put up, which is enough, but it takes 50 fighters still over the target as well, and the attackers had 45 left.");
     const three = sweep(45, 3);
     expect(three.r.def.map((x) => [x.ftr, x.lostFtr])).toEqual([[3, 1]]);
-    expect(skyWords(three.g, three.r)).toBe(" The sky was not won: at the end the attackers' fighters stood about 19.48 to 1 against those the defenders could still put up, which is enough, but it takes 50 fighters still over the target as well, and the attackers had 45 left.");
+    expect(skyWords(three.g, three.r)).toBe(" The sky was not won: at the end the attackers' fighters stood about 19 to 1 against those the defenders could still put up, which is enough, but it takes 50 fighters still over the target as well, and the attackers had 45 left.");
     // (under 9 to 1 the sentence is as it was)
     const five = sweep(30, 5);
     expect(five.r.hold).toBeLessThan(9);
@@ -912,10 +917,11 @@ describe("the UI director's answers of 15:04Z on the air words", () => {
     const cap = sweep(45, 1, '', true);
     expect([cap.r.def.map((x) => [x.ftr, x.lostFtr]), cap.r.hold, cap.r.sky]).toEqual([[[1, 0]], 99, false]);
     expect(skyWords(cap.g, cap.r)).toBe(" The sky was not won: at the end the attackers' fighters stood more than 90 to 1 against those the defenders could still put up, which is enough, but it takes 50 fighters still over the target as well, and the attackers had 45 left.");
-    // (not ruled, not changed: a sky that WAS won at 9 to 1 or more, defenders still flying)
+    // (a sky that WAS won at 9 to 1 or more, defenders still flying: the figure, the UI director's final read of 15:42Z;
+    // 15:04Z as built said 'at the end no opposition was left' here)
     const won = sweep(120, 2);
     expect([won.r.sky, won.r.def.map((x) => [x.ftr, x.lostFtr])]).toEqual([true, [[2, 1]]]);
-    expect(skyWords(won.g, won.r)).toBe(' The American air force won the sky over Calais: at the end no opposition was left.');
+    expect(skyWords(won.g, won.r)).toBe(' The American air force won the sky over Calais: at the end its fighters stood about 78 to 1 against those the defenders could still put up.');
   });
 
   it("answer 4: an engineer corps on order and not yet raised: 'You have one on order in the ARSENAL, due March 1943.' (USA from 40, seed 11)", () => {
@@ -941,5 +947,121 @@ describe("the UI director's answers of 15:04Z on the air words", () => {
     expect(groupRow(g, f).doing).toBe('Flew against the harbour of London this month: back at its airfield next month');
     // (the town form names the town, as before)
     expect(order('town', 'Highlands')).toBe('Ordered against the defences of Inverness: flies when the month ends');
+  });
+});
+
+// The UI director's final read of the words list (25 November 2026, 15:42Z), marks (a), (b), (d), (e), (g) and (h).
+describe("the UI director's final read (15:42Z)", () => {
+  /** A sweep of `n` American fighters over Calais against German fighter groups of `ds`, flown with `salt`. */
+  function sweep(n: number, ds: number[], salt = '', estZero = false): { g: Game; r: AirReport } {
+    const { g, f } = overTheChannel('ftr', n);
+    const left = [...ds];
+    for (const x of g.airFleets) if (x.nat === 'GER') {
+      if (left.length && x.kind === 'ftr' && x.ship === undefined) { x.ftr = left.shift()!; x.base = regionOf(g, 'Calais'); x.mission = 'support'; if (estZero) x.est = { ...x.est, ftr: 0 }; } else x.ftr = 0;
+    }
+    Object.assign(airPool(g, 'GER'), { ftr: 0, pilots: 0 });
+    return { g, r: fly(g, 'USA', 'superiority', regionOf(g, 'Calais'), [f], salt)! };
+  }
+  const WON = ' The American air force won the sky over Calais: at the end';
+  const NOT = " The sky was not won: at the end the attackers' fighters stood";
+  const TAIL = 'against those the defenders could still put up, which is enough, but it takes 50 fighters still over the target as well, and the attackers had 45 left.';
+
+  it('(a) the sky won at 9 to 1 or more: "no opposition was left" only where none rose or every one that rose was lost; else the figure', () => {
+    // Still flying: 120 against 2, one lost.
+    const flying = sweep(120, [2]);
+    expect([flying.r.sky, flying.r.def.map((x) => [x.ftr, x.lostFtr]), flying.r.hold >= 9]).toEqual([true, [[2, 1]], true]);
+    expect(skyWords(flying.g, flying.r)).toBe(`${WON} its fighters stood about 78 to 1 against those the defenders could still put up.`);
+    // Every one that rose was lost (the same report, its one group's fighters all lost, built by hand).
+    const lost = { ...flying.r, def: flying.r.def.map((x) => ({ ...x, lostFtr: x.ftr })) };
+    expect(skyWords(flying.g, lost)).toBe(`${WON} no opposition was left.`);
+    // None rose.
+    expect(skyWords(flying.g, { ...flying.r, def: [] })).toBe(`${WON} no opposition was left.`);
+    // Under 9 to 1, as 1.5.1 printed it (150 against 30).
+    const under = sweep(150, [30]);
+    expect([under.r.sky, under.r.hold < 9]).toEqual([true, true]);
+    expect(skyWords(under.g, under.r)).toBe(`${WON} its fighters stood about 6.32 to 1 against those the defenders could still put up.`);
+  });
+
+  it('(d), (b) the figure: two places under 10 to 1, a whole number from 10 up, "more than 90 to 1" above 90 and at the 99', () => {
+    const { g, r } = sweep(45, [1]);
+    const flying = { ...r, def: r.def.map((x) => ({ ...x, lostFtr: 0 })), sky: false };
+    const not = (hold: number): string => skyWords(g, { ...flying, hold });
+    const won = (hold: number): string => skyWords(g, { ...flying, hold, sky: true });
+    expect(not(9.5)).toBe(`${NOT} about 9.50 to 1 ${TAIL}`);
+    expect(won(9.5)).toBe(`${WON} its fighters stood about 9.50 to 1 against those the defenders could still put up.`);
+    expect(not(10)).toBe(`${NOT} about 10 to 1 ${TAIL}`);
+    expect(not(58.44)).toBe(`${NOT} about 58 to 1 ${TAIL}`);
+    expect(not(58.5)).toBe(`${NOT} about 59 to 1 ${TAIL}`);
+    expect(won(19.48)).toBe(`${WON} its fighters stood about 19 to 1 against those the defenders could still put up.`);
+    expect(not(90)).toBe(`${NOT} about 90 to 1 ${TAIL}`);
+    expect(not(95.3)).toBe(`${NOT} more than 90 to 1 ${TAIL}`);
+    expect(not(168.83)).toBe(`${NOT} more than 90 to 1 ${TAIL}`);
+    expect(won(168.83)).toBe(`${WON} its fighters stood more than 90 to 1 against those the defenders could still put up.`);
+    // The rules' 99 (the defending group given no fighter establishment, built by hand).
+    const cap = sweep(45, [1], '', true);
+    expect([cap.r.hold, cap.r.sky, cap.r.def.map((x) => [x.ftr, x.lostFtr])]).toEqual([99, false, [[1, 0]]]);
+    expect(skyWords(cap.g, cap.r)).toBe(`${NOT} more than 90 to 1 ${TAIL}`);
+    // A true reading above 90, flown: 130 against 1, none lost, the sky won.
+    const far = sweep(130, [1]);
+    expect([far.r.sky, far.r.hold > 90, far.r.hold !== 99]).toEqual([true, true, true]);
+    expect(skyWords(far.g, far.r)).toBe(`${WON} its fighters stood more than 90 to 1 against those the defenders could still put up.`);
+    // Under 10 the two places stand as 1.5.1 printed them.
+    expect(not(7.53)).toBe(`${NOT} about 7.53 to 1 ${TAIL}`);
+    expect(skyWords(g, { ...flying, hold: 1.5 })).toBe(`${NOT} about 1.50 to 1 against those the defenders could still put up, and it takes 1.65 to 1.`);
+  });
+
+  it('(a), (d) the sky not won at 9 to 1 or more, flown: the whole figure where a defender still flies', () => {
+    const two = sweep(46, [2, 1], ':x');
+    expect(two.r.def.map((x) => [x.ftr, x.lostFtr])).toEqual([[2, 1], [1, 1]]);
+    expect(skyWords(two.g, two.r)).toBe(" The sky was not won: at the end the attackers' fighters stood about 20 to 1 against those the defenders could still put up, which is enough, but it takes 50 fighters still over the target as well, and the attackers had 46 left.");
+  });
+
+  it("(e) two or more engineer corps on order: 'You have 2 on order in the ARSENAL, the first due March 1943.' (USA from 40, seed 11)", () => {
+    TC.start({ view: 'grand', human: 'USA', from: 40, seed: 11, world: true });
+    const head = 'No target is in reach. Your aircraft could reach the enemy from Oran if it had an airfield: an engineer corps can lay one there.';
+    expect(TC.order('corps:eng', -1).ok).toBe(true);
+    expect(TC.page('raid:ground').headline).toBe(`${head} You have one on order in the ARSENAL, due March 1943.`);
+    expect(TC.order('corps:eng', -1).ok).toBe(true);
+    expect(copy().nations.USA.queue.filter((b) => b.what === 'corps' && b.kind === 'eng').map((b) => b.eta)).toEqual([43, 43]);
+    expect(TC.page('raid:ground').headline).toBe(`${head} You have 2 on order in the ARSENAL, the first due March 1943.`);
+  });
+
+  it("(g) the harbour with its article in all four forms: the report title, the mission words, the 3D battle ticket's title and the wrecked harbour", () => {
+    expect(harbourOf('Highlands')).toBe('the harbour of the Highlands');
+    expect(harbourOf('London')).toBe('the harbour of London');
+    expect(harbourOf('Pearl Harbor')).toBe('Pearl Harbor');
+    expect(ticketHarbourOf('Danzig Corridor')).toBe('the harbour of the Danzig Corridor');
+    expect(ticketHarbourOf('Pearl Harbor')).toBe('Pearl Harbor');
+    // The browser's report title and mission words (read from its source: the card cannot be drawn here).
+    expect(page).toContain("if (r.mission === 'harbour') return `Raid on the harbour of ${placeName(r.place)}`;");
+    expect(page).toContain("case 'harbour': return `raiding the harbour of ${placeName(where)}`;");
+    // The 3D battle ticket (built by hand: the German Battle Fleet docked in the Danzig Corridor, the Home Fleet's
+    // carriers in the Baltic).
+    const g = startOpen(createGame(3, 'UK'));
+    const port = regionOf(g, 'Danzig Corridor');
+    const home = g.fleets.find((x) => x.name === 'Home Fleet')!, foe = g.fleets.find((x) => x.name === 'Battle Fleet')!;
+    foe.home = port; foe.base = port; sail(g, foe, port, 'port');
+    home.ships.cv = 6; home.zone = g.seas.find((z) => z.name === 'Baltic Sea')!.id; home.stance = 'patrol'; delete home.lane; syncWings(g);
+    const strike = wingsOf(g, home.id).find((w) => w.kind === 'bmr')!;
+    expect(planRaid(g, 'harbour', port, [strike.id], 'UK').title).toBe('Harbour raid: the harbour of the Danzig Corridor');
+    expect(airTicket(g, 'harbour', port, [strike.id], 'UK', { ships: true }).ticket!.title).toBe('The raid on the harbour of the Danzig Corridor');
+    // A harbour wrecked (built by hand: Britain's own harbour in the Highlands blown up, a corps at London to ship there).
+    const w = startOpen(createGame(3, 'UK'));
+    const c = addCorps(w, 'UK', 'Test corps', 'inf', 3, regionOf(w, 'London'), {});
+    expect(wreckPrize(w, w.regions[regionOf(w, 'Highlands')], 'harbour', 5)).toBe(true);
+    expect(whyNotShip(w, c, w.regions[regionOf(w, 'Highlands')])).toBe('The harbour of the Highlands is wrecked: no ship will use it for 5 months more.');
+  });
+
+  it('(h) the seven towns that are their province take the article; every other town reads as before', () => {
+    const g = startOpen(createGame(3, 'GER'));
+    const f = g.airFleets.find((x) => x.nat === 'GER' && x.bmr > 0 && x.ship === undefined)!;
+    const order = (place: string): string => { f.mission = 'town'; f.target = regionOf(g, place); delete f.flew; return groupRow(g, f).doing; };
+    for (const [place, town] of [['Ohio Valley', 'the Ohio Valley'], ['Dakotas', 'the Dakotas'], ['Azores', 'the Azores'], ['Canary Islands', 'the Canary Islands'], ['Pampas', 'the Pampas'], ['Valdai', 'the Valdai'], ['Mosquitia', 'the Mosquitia']]) {
+      expect(order(place)).toBe(`Ordered against the defences of ${town}: flies when the month ends`);
+    }
+    expect(planRaid(g, 'town', regionOf(g, 'Ohio Valley'), undefined, 'GER').title).toBe('Raid on a town: the defences of the Ohio Valley');
+    // A province on the list whose town has its own name, and one off the list: as before.
+    expect(order('Highlands')).toBe('Ordered against the defences of Inverness: flies when the month ends');
+    expect(order('London')).toBe('Ordered against the defences of London: flies when the month ends');
   });
 });
