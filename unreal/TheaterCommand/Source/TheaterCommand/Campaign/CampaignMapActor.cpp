@@ -5312,11 +5312,42 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 							}
 						}
 					}
-					// (a ring of three or more; at levels 1 and 2 two pits on two sides of the town, the second never
-					// under ninety degrees of bearing from the first, however the town came to have two; else today's
-					// row: a town never shows fewer pits than its row would, and never two bunched on one side)
-					const bool bRinged = Seated.Num() >= 3 || (Guns < 3 && Seated.Num() == 2
-						&& FMath::Abs(FMath::Atan2(FMath::Sin(SeatedBears[1] - SeatedBears[0]), FMath::Cos(SeatedBears[1] - SeatedBears[0]))) >= FMath::DegreesToRadians(90.0) - 1.0e-6);
+					// (whether the pits are two on two sides of the town: the second never under ninety degrees of
+					// bearing from the first)
+					auto OnTwoSides = [&]() -> bool
+					{
+						return Seated.Num() == 2
+							&& FMath::Abs(FMath::Atan2(FMath::Sin(SeatedBears[1] - SeatedBears[0]), FMath::Cos(SeatedBears[1] - SeatedBears[0]))) >= FMath::DegreesToRadians(90.0) - 1.0e-6;
+					};
+					// TWO, BEFORE THE ROW (her ruling of 03:53Z, in place of 03:39Z's). Making way can leave a level 1
+					// or 2 town with its first pit alone, or with two under ninety degrees apart. The row would move or
+					// take away pits that were not in the way too, and show fewer guns: so the town first tries the
+					// two-pit stand, the first pit where it is and one more as nearly opposite it as is open and off
+					// the plots, sliding up to ninety degrees either way. Only if that fails does it fall back.
+					if (Guns < 3 && Displaced.Num() > 0 && Seated.Num() < 3 && !OnTwoSides())
+					{
+						Seated.SetNum(1);
+						SeatedBears.SetNum(1);
+						SeatedHomes.SetNum(1);
+						RingSlides = 36;
+						RingApart = FMath::DegreesToRadians(90.0);
+						const double Opposite = FirstBearing + PI;
+						for (int32 Slid = 0; Slid <= RingSlides && Seated.Num() < 2; ++Slid)
+						{
+							const double Bears = Opposite + SlideOf(Slid);
+							const FVector2D Try = Middle + FVector2D(FMath::Cos(Bears), FMath::Sin(Bears)) * RingOut;
+							if (StandOpen(Try) && OffThePlots(Try) && ClearOfPits(Bears, RingApart, INDEX_NONE))
+							{
+								Seated.Add(Try);
+								SeatedBears.Add(Bears);
+								SeatedHomes.Add(Opposite);
+							}
+						}
+					}
+					// (a ring of three or more; at levels 1 and 2 two pits on two sides of the town, however the town
+					// came to have two; else today's row: a town never shows fewer pits than its row would, and never
+					// two bunched on one side)
+					const bool bRinged = Seated.Num() >= 3 || (Guns < 3 && OnTwoSides());
 					++RingTowns;
 					RingAsked += Asked;
 					if (Seated.Num() < 3 || 3 * Seated.Num() < 2 * Asked)
