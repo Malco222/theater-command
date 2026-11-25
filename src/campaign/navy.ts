@@ -2416,6 +2416,9 @@ export const moveCost = (g: Game, f: Fleet, r: Region): number => voyageMonths(g
 /** The sea a fleet in passage is on in a month of its voyage: the last sea of the reach it has steamed by then. */
 const passageSea = (p: NonNullable<Fleet['passage']>, turn: number): number => p.way[Math.min((turn - p.set + 1) * NAVY.range, p.way.length) - 1];
 
+/** The sea a fleet in passage steams onto at the next month's opening, where that month's dangers meet it; -1 when it comes in then. */
+export const passageNext = (g: Game, f: Fleet): number => (f.passage && g.turn + 1 < f.passage.due ? passageSea(f.passage, g.turn + 1) : -1);
+
 /**
  * Sets a fleet out in passage on a way longer than its reach, its base, port and home already the new harbour's: at sea
  * on the last sea of the first reach this month, and in at the opening of the month its last reach is steamed. `from`:

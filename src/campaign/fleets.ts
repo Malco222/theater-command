@@ -579,20 +579,36 @@ export function merge(g: Game, a: Fleet, b: Fleet): boolean {
   // (Release 2, the far chart: their strikes at anchor go into the one fleet's book, each loss now a share of the
   // whole fleet's surface ships, for its staff's weighing of a move: navy.ts anchorLoss.)
   if (a.anchor?.length || b.anchor?.length) {
-    // Each book's shares are of its own fleet's surface ships before its strikes: the ships it has now (b's already
-    // count a's here) and those its strikes of this month and last sank. One raid on both, or on a squadron split off
-    // and joined again, is one entry: its losses added, its strikers' weight once.
+    // One raid is one entry: its share of the joined fleet is each side's share weighed by that side's surface ships
+    // before it, which are the ships it has now (b's already count a's here) and those sunk by that raid and by every
+    // later one, wherever (a strike before it, at this harbour or another, sank ships that were not there for it). A
+    // raid in one book weighs nothing on the other side's share; a raid in both, as on a squadron split off and joined
+    // again, keeps the one share it had. With no surface ships on either side, the boats weigh it.
+    type Entry = NonNullable<Fleet['anchor']>[number];
     const sa = shipCount(a.ships) - a.ships.ss, sb = shipCount(b.ships) - b.ships.ss - sa;
-    const had = (x: Fleet, n: number): number => n + (x.anchor ?? []).filter((e) => e.t >= g.turn - 1).reduce((s, e) => s + e.n, 0);
-    const ha = had(a, sa), hb = had(b, sb), H = ha + hb;
+    const key = (e: Entry): string => `${e.t}|${e.at}|${e.w}|${JSON.stringify(e.from)}`;
+    const keys: string[] = [];
+    const byKey = (x: Fleet): Map<string, Entry> => {
+      const m = new Map<string, Entry>();
+      for (const e of x.anchor ?? []) {
+        const k = key(e), one = m.get(k);
+        // (Two raids alike in a month on the one fleet: their shares and sinkings add, as before.)
+        if (one) m.set(k, { ...one, n: one.n + e.n, lost: one.lost + e.lost });
+        else { m.set(k, e); if (!keys.includes(k)) keys.push(k); }
+      }
+      return m;
+    };
+    const eb = byKey(b), ea = byKey(a);
+    const before = (x: Fleet, now: number, e: Entry | undefined, t: number): number => now + (e?.n ?? 0) + (x.anchor ?? []).filter((y) => y.t > t).reduce((s, y) => s + y.n, 0);
     const book: NonNullable<Fleet['anchor']> = [];
-    for (const [x, h] of [[b, hb], [a, ha]] as const) for (const e of x.anchor ?? []) {
-      const lost = H > 0 ? (e.lost * h) / H : e.lost;
-      const one = book.find((y) => y.t === e.t && y.at === e.at && y.w === e.w && JSON.stringify(y.from) === JSON.stringify(e.from));
-      if (one) { one.lost += lost; one.n += e.n; }
-      else book.push({ ...e, lost, from: e.from.map((o) => ({ ...o })) });
+    for (const k of keys) {
+      const x = eb.get(k), y = ea.get(k), e = (x ?? y)!;
+      let wb = before(b, sb, x, e.t), wa = before(a, sa, y, e.t);
+      if (wa + wb <= 0) { wa = a.ships.ss; wb = b.ships.ss - a.ships.ss; }
+      const lost = wa + wb > 0 ? ((x?.lost ?? 0) * wb + (y?.lost ?? 0) * wa) / (wa + wb) : Math.max(x?.lost ?? 0, y?.lost ?? 0);
+      book.push({ ...e, n: (x?.n ?? 0) + (y?.n ?? 0), lost, from: e.from.map((o) => ({ ...o })) });
     }
-    b.anchor = book;
+    b.anchor = book.sort((p, q) => p.t - q.t);
   }
   g.fleets.splice(g.fleets.indexOf(a), 1);
   moveWings(g, a, b, a.ships.cv, a.ships.cv);

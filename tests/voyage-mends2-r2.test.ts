@@ -10,9 +10,9 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import { detach, merge } from '../src/campaign/fleets';
 import { allied, atWar, createGame, declareWar } from '../src/campaign/game';
-import { MINES, mineLine, minesMonth, setSeaMines } from '../src/campaign/mines';
+import { MINES, mineLine, minesMonth, minesStrike, setSeaMines } from '../src/campaign/mines';
 import {
-  anchorLoss, besideIn, cameIn, crossingAccount, crossingsOf, fleetReach, inPassage, navalUpkeep, rebase, sail, setGate, shipCount, surfaceShips,
+  anchorLoss, besideIn, cameIn, crossingAccount, crossingsOf, fleetReach, inPassage, navalUpkeep, passageNext, rebase, sail, setGate, shipCount, surfaceShips,
 } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
 import type { Fleet, Game } from '../src/campaign/types';
@@ -138,9 +138,31 @@ describe('a fleet in passage, on its way', () => {
     expect(mineLine(g, f)).toBe('');
     f.stance = 'patrol';
     expect(mineLine(g, f)).not.toBe('');
-    f.stance = 'passage';
-    g.mines = [{ z: f.zone, nat: 'USA', s: 1, t: g.turn, known: ['JAP'] }];
+  });
+
+  it('its panel names the field on the sea it steams onto next, where the field strikes it, not the one it leaves', () => {
+    const { g, f } = voyage();
+    declareWar(g, 'JAP', 'USA');
+    setSeaMines(g, true);
+    const next = passageNext(g, f), here = f.zone;
+    expect(next).toBeGreaterThanOrEqual(0);
+    expect(next).not.toBe(here);
+    // The sea it is on now was met at this month's opening, or never: no word of it.
+    g.mines = [{ z: here, nat: 'USA', s: 100, t: g.turn, known: ['JAP'] }];
+    expect(mineLine(g, f)).toBe('');
+    g.mines = [{ z: next, nat: 'USA', s: 100, t: g.turn, known: ['JAP'] }];
     expect(mineLine(g, f)).not.toBe('');
+    // And the next month it is there, and the field takes a ship.
+    const ships = shipCount(f.ships);
+    nextMonth(g);
+    minesStrike(g, 'JAP');
+    expect(f.zone).toBe(next);
+    expect(shipCount(f.ships)).toBe(ships - 1);
+    // In its last month on the way it comes in at the next opening, in harbour, where no field strikes it.
+    g.turn = f.passage!.due - 1;
+    expect(passageNext(g, f)).toBe(-1);
+    g.mines = [{ z: f.zone, nat: 'USA', s: 100, t: g.turn, known: ['JAP'] }];
+    expect(mineLine(g, f)).toBe('');
   });
 });
 
@@ -184,5 +206,69 @@ describe("a fleet's book of strikes at anchor", () => {
     expect(other.anchor![0].n).toBe(na + nb);
     const ha = sa + na, hb = sb + nb;
     expect(anchorLoss(g, other)).toBeCloseTo((0.4 * ha + 0.2 * hb) / (ha + hb), 9);
+  });
+});
+
+/** A strike at anchor as air.ts books it: the ships go down, smallest first, and the entry is its share of the surface ships before it. */
+function sink(g: Game, f: Fleet, k: number, t = g.turn, w = 300): void {
+  const had = surface(f);
+  let left = k;
+  for (const c of ['dd', 'ca', 'bb', 'cv'] as const) { const d = Math.min(left, f.ships[c]); f.ships[c] -= d; f.lost[c] += d; left -= d; }
+  f.anchor = [...(f.anchor ?? []).filter((e) => e.t >= g.turn - 1), { t, at: f.base, n: k, lost: had > 0 ? k / had : 0, w, from: RAID(f) }];
+}
+
+describe("a fleet's book of strikes at anchor, joined (the third review)", () => {
+  it('ships sunk at another harbour before this one was struck do not water down its loss here', () => {
+    const { g, f } = anchored();
+    const cf = fleet(g, 'USA', 'Pacific Carrier Fleet'), home = g.regions[f.base], pearl = g.byName['Pearl Harbor'];
+    expect(cf.base).toBe(f.base);
+    expect(rebase(g, f, pearl)).toBe(true);
+    expect(inPassage(f)).toBe(false);
+    sink(g, f, 40, g.turn, 500);
+    expect(rebase(g, f, home)).toBe(true);
+    const had = surface(cf);
+    sink(g, cf, 4);
+    const now = surface(f);
+    expect(merge(g, f, cf)).toBe(true);
+    // The carrier fleet's 4 sunk are a share of its ships and the Pacific Fleet's as they were here, not of those lost at Pearl.
+    expect(anchorLoss(g, cf)).toBeCloseTo(4 / (had + now), 9);
+  });
+
+  it('split, struck, and joined again reads as the same fleet never split', () => {
+    const one = anchored(), two = anchored();
+    for (const { g } of [one, two]) g.turn++;
+    sink(one.g, one.f, 30, one.g.turn - 1, 500);
+    sink(one.g, one.f, 10);
+    sink(two.g, two.f, 30, two.g.turn - 1, 500);
+    const q = detach(two.g, two.f, { dd: 10, ca: 10 }, 'Screen')!;
+    expect(q).toBeTruthy();
+    sink(two.g, two.f, 10);
+    sink(two.g, q, 0);
+    expect(merge(two.g, q, two.f)).toBe(true);
+    expect(two.f.anchor!.length).toBe(2);
+    expect(anchorLoss(two.g, two.f)).toBeCloseTo(anchorLoss(one.g, one.f), 9);
+    expect(two.f.anchor!.reduce((s, e) => s + e.n, 0)).toBe(40);
+    // And a fleet struck twice joined with one never struck: each raid weighs the ships there were before it.
+    const three = anchored();
+    three.g.turn++;
+    const other = fleet(three.g, 'USA', 'Pacific Carrier Fleet'), o = surface(other);
+    const h1 = surface(three.f);
+    sink(three.g, three.f, 30, three.g.turn - 1, 500);
+    const h2 = surface(three.f);
+    sink(three.g, three.f, 10);
+    expect(merge(three.g, three.f, other)).toBe(true);
+    expect(anchorLoss(three.g, other)).toBeCloseTo(30 / (h1 + o) + 10 / (h2 + o), 9);
+  });
+
+  it('two squadrons of submarines split from one struck fleet and joined again read its share, not twice it', () => {
+    const { g } = anchored();
+    const af = fleet(g, 'USA', 'Asiatic Fleet');
+    expect(af.ships.ss).toBeGreaterThanOrEqual(6);
+    sink(g, af, 4);
+    const share = af.anchor![0].lost;
+    const q1 = detach(g, af, { ss: 3 })!, q2 = detach(g, af, { ss: 3 })!;
+    expect(anchorLoss(g, q1)).toBeCloseTo(share, 9);
+    expect(merge(g, q1, q2)).toBe(true);
+    expect(anchorLoss(g, q2)).toBeCloseTo(share, 9);
   });
 });
