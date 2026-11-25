@@ -277,13 +277,17 @@ describe('B8, the lapse says how many of the corps are gone', () => {
 });
 
 describe('B8, a row that waits on a cut the player has been offered is not struck while he decides', () => {
-  /** A player's Japan at war with America, ten months after the offer to cut Hsuchow's garrison was made, with no answer given. */
+  /**
+   * A player's Japan at war with America, in the last month of the offer to cut Hsuchow's garrison, with no answer
+   * given. (Six months after it was made, its half year's end: the design director's ruling of 13:39Z, 25 November
+   * 2026, point 5. As first built the offer stood for good, and this was ten months after.)
+   */
   const waiting = (): Game => {
     const g = war();
     months(g, 1, 30);
-    expect(offer(g, GARRISON)).toMatchObject({ since: 30, why: null });
+    expect(offer(g, GARRISON)).toMatchObject({ since: 30, last: 36, why: null });
     setWar(g, 'JAP', 'USA');
-    months(g, 31, 40);
+    months(g, 31, 36);
     return g;
   };
 
@@ -293,7 +297,7 @@ describe('B8, a row that waits on a cut the player has been offered is not struc
     // (As built it was struck in month 38, its half year out, with the offer still unanswered.)
     expect([g.flags[`sent:${index(BATAAN)}`], row(g, BATAAN), offer(g, GARRISON)!.since]).toEqual([undefined, undefined, 30]);
     expect(takeOffer(g, index(GARRISON))).toBeNull();
-    month(g, 41);
+    month(g, 37);
     const c = row(g, BATAAN)!;
     // Lingayen is America's and Japan holds no harbour in the Philippines: it forms at home (ruling B7), at its 0.25.
     expect([homeland(g.regions[c.reg], 'JAP'), c.str]).toEqual([true, 0.25]);
@@ -302,9 +306,9 @@ describe('B8, a row that waits on a cut the player has been offered is not struc
   it('declined, the cut is never made: the detachment has its half year from that month and is then struck', () => {
     const g = waiting();
     expect(declineOffer(g, index(GARRISON))).toBe(true);
-    months(g, 41, 47);
+    months(g, 37, 43);
     expect(g.flags[`sent:${index(BATAAN)}`]).toBeUndefined();
-    month(g, 48);
+    month(g, 44);
     expect([g.flags[`sent:${index(BATAAN)}`], row(g, BATAAN)]).toEqual([2, undefined]);
   });
 
@@ -340,14 +344,16 @@ describe('B8, a row made from a formation the player has been offered: nobody is
   it('while he has not answered, the 18th Division waits and is not struck; taken, the chain runs as the record ran it', () => {
     const g = rangoon();
     // (As built the 18th Division formed whole at Rangoon in month 32 and took nobody, with the offer still open.)
-    months(g, 28, 40);
+    // (He answers in the offer's last month, May 1942: its half year, the ruling of 13:39Z, 25 November 2026, point 5.)
+    expect(offer(g, A)!.last).toBe(33);
+    months(g, 28, 33);
     expect([row(g, B), g.flags[`sent:${index(B)}`], offer(g, B)]).toEqual([undefined, undefined, undefined]);
     expect(eighteenths(g)).toEqual([SRC]);
     expect(takeOffer(g, index(A))).toBeNull();
     expect(eighteenths(g)).toEqual([A]);
     // The month after, the 18th Division is offered out of the corps just formed, at Rangoon.
-    month(g, 41);
-    expect(offer(g, B)).toMatchObject({ since: 41, region: g.byName.Rangoon.id, why: null });
+    month(g, 34);
+    expect(offer(g, B)).toMatchObject({ since: 34, region: g.byName.Rangoon.id, why: null });
     expect(offer(g, B)!.takes.map((t) => t.name)).toEqual([A]);
     expect(takeOffer(g, index(B))).toBeNull();
     expect(eighteenths(g)).toEqual([B]);

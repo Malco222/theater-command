@@ -10,7 +10,8 @@
 // country's held harbour nearest the posting in the same theatre (the posting's country's ground, joined by land),
 // else at its capital. A row the record raised for an operation forms when that war has begun, never on its date.
 // B8. A row that would take corps of the player's is an offer, never a silent removal: one list a month, take all or
-// pick; it stands until he answers and lapses if a corps it needs is gone. The computer's rows as they were.
+// pick; it stands for the rest of its row's half year and lapses if a corps it needs is gone (the half year: the
+// design director's ruling of 13:39Z, 25 November 2026, point 5). The computer's rows as they were.
 // The states are set by hand, as tests/far-posted-ashore.test.ts sets them; the last block walks the 3D game's calls.
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
@@ -169,21 +170,35 @@ describe('B8, a row that would take corps of the player\'s is an offer', () => {
     expect(rowOffers(g)).toHaveLength(1);
   });
 
-  it('it stands until he answers: no half year strikes it, and the month\'s offers are one list, oldest first', () => {
+  // (Moved by the design director's ruling of 13:39Z, 25 November 2026, on the batch 1 readings, point 5 of the dated
+  // rows: "the player's offer stays in the list for the same half year". As first built it stood until he answered,
+  // and this test took it ten months on.)
+  it("it stands through the rest of its row's half year, the month's offers one list, oldest first; then it lapses and he is told", () => {
     const g = war();
-    months(g, 1, 12);
+    months(g, 1, 8);
     expect(g.flags[`sent:${index(FIFTH)}`]).toBeUndefined();
-    expect(rowOffers(g).map((o) => [o.name, o.since])).toEqual([[FIFTH, 2], [SEVENTH, 12]]);
-    // Taken ten months on, it forms as the rule always formed it: the corps it names struck off, the row in its place.
+    // Made in October 1939 (month 2), the month its row came due: open through April 1940 (month 8).
+    expect(rowOffers(g).map((o) => [o.name, o.since, o.last])).toEqual([[FIFTH, 2, 8]]);
+    // Taken in its last month, it forms as the rule always formed it: the corps it names struck off, the row in its place.
     expect(takeOffer(g, index(FIFTH))).toBeNull();
     expect(row(g, FIFTH_OF)).toBeUndefined();
     const c = row(g, FIFTH)!;
     expect([g.regions[c.reg].name, c.divs, c.str]).toEqual(['Taihoku', 1, 0.9]);
     expect(g.flags[`sent:${index(FIFTH)}`]).toBe(1);
-    expect(rowOffers(g).map((o) => o.name)).toEqual([SEVENTH]);
     // It came once.
-    month(g, 13);
+    months(g, 9, 12);
     expect(g.corps.filter((x) => x.nat === 'JAP' && x.name === FIFTH)).toHaveLength(1);
+    expect(rowOffers(g).map((o) => [o.name, o.since, o.last])).toEqual([[SEVENTH, 12, 18]]);
+
+    // Left unanswered, it lapses the month after its last, and he is told; his corps stays as it is.
+    const h = war();
+    months(h, 1, 8);
+    const src = row(h, FIFTH_OF)!;
+    const news = h.headlines.length;
+    month(h, 9);
+    expect(offer(h, FIFTH)).toBeUndefined();
+    expect(h.headlines.slice(news).map((x) => x.text).filter((t) => /has lapsed/.test(t))).toEqual([`The offer to form ${FIFTH} has lapsed: its time has passed.`]);
+    expect([h.flags[`sent:${index(FIFTH)}`], row(h, FIFTH_OF), row(h, FIFTH)]).toEqual([2, src, undefined]);
   });
 
   it('declined, the row never comes and his corps stays as it is', () => {
@@ -199,13 +214,15 @@ describe('B8, a row that would take corps of the player\'s is an offer', () => {
     expect(g.flags[`sent:${index(SEVENTH)}`]).toBe(2);
   });
 
+  // (The offers of October 1939 and August 1940 have lapsed by April 1941, their half years out: the ruling of 13:39Z,
+  // 25 November 2026, point 5. As first built they stood in this list too.)
   it('take some, leave some: the two offers of April 1941, one taken and one left open', () => {
     const g = war();
     months(g, 1, 19);
-    expect(rowOffers(g).map((o) => o.name)).toEqual([FIFTH, SEVENTH, FORTY8, CHEKIANG]);
+    expect(rowOffers(g).map((o) => o.name)).toEqual([FORTY8, CHEKIANG]);
     expect(takeOffer(g, index(FORTY8))).toBeNull();
     expect([row(g, FORMOSA), at(g, FORTY8)]).toEqual([undefined, 'Formosa']);
-    expect(rowOffers(g).map((o) => o.name)).toEqual([FIFTH, SEVENTH, CHEKIANG]);
+    expect(rowOffers(g).map((o) => o.name)).toEqual([CHEKIANG]);
   });
 
   it('it lapses if a corps it needs is gone, and he is told', () => {

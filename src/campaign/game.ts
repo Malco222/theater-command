@@ -4593,6 +4593,43 @@ function warBegan(g: Game, w: string[]): number {
 }
 
 /**
+ * The far side: whether a dated row is one the far side's rule for dated rows reads (ruling B7's reach, `postedFor`):
+ * its posting lies beyond the old chart, and no book dates its country's rows (stations.ts `bookKept`). Never with
+ * the far side off, and never a row posted on the old chart.
+ */
+const farRow = (g: Game, nat: string, row: any[]): boolean => {
+  const posting = g.byName[row[5]];
+  return farOn(g) && !!posting && beyondEurope(posting) && !bookKept(g, nat);
+};
+
+/**
+ * True where the war a row names has begun and is over: it is not on now, and the row has seen it on (`due:N`, kept
+ * the month its war first let it come), or one side declared it on the other. A war not on now that nobody has
+ * declared is a war not yet begun. (A war on from the first day was declared by nobody: a row that never saw it on
+ * reads it as not yet begun.)
+ */
+function warOver(g: Game, i: number, w: string[]): boolean {
+  if (warOn(g, w)) return false;
+  if (g.flags[`due:${i}`] !== undefined) return true;
+  return Object.keys(g.flags).some((k) => {
+    const p = k.split(':');
+    if (p.length !== 3 || p[0] !== 'war') return false;
+    return w[1] === '*' ? p[1] === w[0] || p[2] === w[0] : (p[1] === w[0] && p[2] === w[1]) || (p[1] === w[1] && p[2] === w[0]);
+  });
+}
+
+/**
+ * The month a dated row's half year is counted from, as the rule of dated rows reads it (`expeditions`): its date,
+ * or in the grand campaign the month its war let it come (`due:N`), and never before the month after the last month
+ * it was made to wait (`wait:N`: for its war by ruling B7, for a live front, for an offer it is made from).
+ */
+function rowDue(g: Game, i: number, row: any[], o: any): number {
+  const due = g.flags.open === 1 && o.war && g.flags[`due:${i}`] !== undefined ? g.flags[`due:${i}`] : row[0];
+  const waited = g.flags[`wait:${i}`];
+  return waited !== undefined ? Math.max(due, waited + 1) : due;
+}
+
+/**
  * The allies a dated row sent a corps to fight beside: the countries its 'war' names other than its own (Creforce and
  * W Force, for Greece). ai.ts wantsOut reads them: on such a country's ground the corps is its guest.
  */
@@ -4887,15 +4924,23 @@ export const struckWatch: { tell: ((e: { turn: number; due: number; nat: string;
 // seat is never moved automatically. So for the player's own country such a row is an OFFER:
 //   made     in the month the rule would have formed the row, with everything else it waits for met (its date, its
 //            war, a place with room), and only while a corps it would take is on the board. Nothing is taken.
-//   open     it stands until he answers: no half year runs against it. The month's offers are one list on the month
-//            card (the 3D game's TC.offers), take all or pick, never a card each.
+//   open     it stands until he answers, through the rest of the row's own half year: the half year a computer's
+//            row has to form before it is struck (`rowDue`, counted from its date, or from the month its war let it
+//            come). The month's offers are one list on the month card (the 3D game's TC.offers), take all or pick,
+//            never a card each. (As first built no half year ran against an offer: it stood until he answered. The
+//            design director's ruling of 13:39Z, 25 November 2026, on the batch 1 readings, point 5 of the dated
+//            rows: "The half-year wait is only for a war not yet begun, and holds for both: the player's offer stays
+//            in the list for the same half year.")
 //   taken    it does what the rule did before: the corps it names are struck off and the row forms, where the rule
 //            puts it that month (`rowPlace`; away from an unheld posting by ruling B7). Where it cannot form that
 //            month (no room) he is told why and the offer stands.
 //   declined the row never comes, and his corps stay as they are under their own names.
 //   lapses   when a corps it needed is gone from the board, when the war it was raised for is over, or when its
-//            own last month (`until`) has come: he is told. (An offer whose war was over stood on the card for good
-//            and could never be taken: the mending of 25 November 2026.)
+//            last month is past (its row's own `until`, or the end of its half year, whichever comes first:
+//            `offerLast`): he is told. (An offer whose war was over stood on the card for good and could never be
+//            taken: the mending of 25 November 2026.) A war that is over strikes the computer's row in the same month
+//            and on the same reach: one rule for both seats (the same ruling, point 5: "A row whose war is over lapses
+//            at once, the player's offer and the computer's row alike"; `warOver`).
 //   sisters  a row whose men another row releases by cutting a corps (`cut`), or which is itself made from the
 //            formation another row would make (`from`: the 18th Division for Rangoon out of the 25th Army's 18th
 //            Division), waits on his answer while that other row stands as an open offer, and no half year runs
@@ -4978,13 +5023,24 @@ function offerMade(g: Game, nat: string, i: number, o: any): void {
 }
 
 /**
- * Why an open offer has lapsed, in plain words: its row's own last month has come, the war it was raised for is
+ * The last month in which an offer may be answered: the month before its row's own last month (`until`, the month
+ * the rule stops reading the row), or the last month of the row's half year (`rowDue`: a computer's row not formed
+ * by then is struck), whichever comes first. The rule's own reading of when an offer lapses for time, not a second
+ * date: `offerGone` reads this, and the offers page shows it.
+ */
+function offerLast(g: Game, row: any[], i: number): number {
+  const o = row[6] ?? {}, half = rowDue(g, i, row, o) + 6;
+  return o.until ? Math.min(o.until - 1, half) : half;
+}
+
+/**
+ * Why an open offer has lapsed, in plain words: its last month is past (`offerLast`), the war it was raised for is
  * over, or a corps it needed is gone from the map (said by the count: "the corps" where it named one, "one of the
  * 3 corps", "2 of the 3 corps", "the 3 corps"). Null while it stands.
  */
 function offerGone(g: Game, nat: string, row: any[], i: number): string | null {
   const o = row[6] ?? {}, there = rowTakes(g, nat, o).length, named = g.flags[offerCount(i)] ?? 0;
-  if (o.until && g.turn >= o.until) return `The offer to form ${row[2]} has lapsed: its time has passed.`;
+  if (g.turn > offerLast(g, row, i)) return `The offer to form ${row[2]} has lapsed: its time has passed.`;
   if (o.war && !warOn(g, o.war)) return `The offer to form ${row[2]} has lapsed: the war it was raised for is over.`;
   if (there >= named) return null;
   const lost = named - there;
@@ -5013,8 +5069,10 @@ export interface OfferTakes { id: number; name: string; kind: Kind; region: numb
  * gives up by declining it (`menKept`). The end of a loan is in the same list (a regiment its division awaits,
  * `loanStays`): `loan` says in plain words what it was lent for and what taking and declining do (null for a
  * formation offered); its name, size and place are the lent regiment's own, and that regiment is the one it takes.
+ * `last` is the last month in which it may be answered (`offerLast`): null for the end of a loan, which stands until
+ * he answers.
  */
-export interface RowOffer { id: number; name: string; kind: Kind; divs: number; men: number; since: number; region: number; joins: string | null; takes: OfferTakes[]; why: string | null; then: string[]; loan: string | null }
+export interface RowOffer { id: number; name: string; kind: Kind; divs: number; men: number; since: number; last: number | null; region: number; joins: string | null; takes: OfferTakes[]; why: string | null; then: string[]; loan: string | null }
 
 /** One open offer of the player's, read with nothing changed. */
 function offerView(g: Game, nat: string, row: any[], i: number): RowOffer {
@@ -5043,7 +5101,7 @@ function offerView(g: Game, nat: string, row: any[], i: number): RowOffer {
     && (!r[6]?.stops || (r[6].stops as number[]).includes(stopOf(g)))
     && (names(r[6]?.cut).includes(row[2]) || (Array.isArray(r[6]?.from) && !(r[6].adds > 0) && r[6].from.includes(row[2])
       && rowTakes(g, nat, { from: (r[6].from as string[]).filter((nm) => nm !== row[2]) }).length === 0))).map((r) => r[2] as string))];
-  return { id: i, name: row[2], kind: row[3], divs, men: Math.round(divs * (o.str ?? 1) * MEN_PER_DIV), since: g.flags[offerKey(i)], region: reg ? reg.id : -1, joins: old ? old.name : null, takes, why, then, loan: null };
+  return { id: i, name: row[2], kind: row[3], divs, men: Math.round(divs * (o.str ?? 1) * MEN_PER_DIV), since: g.flags[offerKey(i)], last: offerLast(g, row, i), region: reg ? reg.id : -1, joins: old ? old.name : null, takes, why, then, loan: null };
 }
 
 const leaveKey = (i: number): string => `leave:${i}`;
@@ -5090,7 +5148,7 @@ function loanView(g: Game, nat: string, row: any[], i: number): RowOffer | null 
     : g.flags[`sent:${k}`] === undefined ? `it goes home, and joins its division, ${home[2]}, when that is formed`
       : `it leaves the map, for its division, ${home[2]}, is not there to take it`;
   const mine = { id: c.id, name: c.name, kind: c.kind, region: c.reg, divs: c.divs, men: men(c) };
-  return { id: i, name: c.name, kind: c.kind, divs: c.divs, men: men(c), since: g.flags[leaveKey(i)], region: c.reg, joins: null, takes: [mine], why: null, then: [], loan: `${lent}. Let go, ${goes}; kept, it stays under your command, and its division stays short of it.` };
+  return { id: i, name: c.name, kind: c.kind, divs: c.divs, men: men(c), since: g.flags[leaveKey(i)], last: null, region: c.reg, joins: null, takes: [mine], why: null, then: [], loan: `${lent}. Let go, ${goes}; kept, it stays under your command, and its division stays short of it.` };
 }
 
 /** The player's open offers, oldest first and then in the order of the rows: the month's one list (ruling B8). None with the far side off. */
@@ -5206,7 +5264,15 @@ function expeditions(g: Game, nat: string, take?: number): void {
       const k = reg ? THEATRE_OF.get(reg.name) ?? -1 : -1;
       if (k >= 0 && THEATRE_LIST[k].scripted && row[0] >= (THEATRE_LIST[k].opens ?? 0) && (!booked || bookWaits(g, reg!.owner))) return;
       if (o.war) {
-        if (!warOn(g, o.war)) return;
+        // (The far side: a row whose war is over lapses at once, the player's and the computer's alike, and never
+        // comes: the design director's ruling of 13:39Z, 25 November 2026, on the batch 1 readings, point 5 of the
+        // dated rows, "one rule for both sides". As built a computer's row waited here for the war to come again and
+        // was then struck for its half year, while the player's offer of it lapsed at once. A war not yet begun is
+        // waited for as before, by both. Read on the far side's rows alone, `farRow`: nothing on the old chart.)
+        if (!warOn(g, o.war)) {
+          if (farRow(g, nat, row) && warOver(g, i, o.war)) { g.flags[`sent:${i}`] = 2; if (nat === g.human && row[1] === nat) g.flags[unmadeKey(i)] = g.turn; }
+          return;
+        }
         // And it waits for its own country to be in that war: no army turns up in a war its country is not fighting.
         if (!o.war.includes(nat) && !atWar(g, nat, o.war[0]) && !atWar(g, nat, o.war[1])) return;
         // (A call-up is counted from the war's start, but never from before the month the row is first seen: a game
