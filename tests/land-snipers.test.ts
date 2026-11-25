@@ -227,3 +227,53 @@ describe('sniper teams: what the 3D game reads', () => {
     expect(LiveKeeper.assemble(fight(false).deltas).some((tr) => tr.sn !== undefined)).toBe(false);
   });
 });
+
+// The staff's half (ai.ts defend; laid by the tank and soldier AI thread, 25 November 2026): a defence's line block
+// steps out "to take one that has come round a neighbour's flank", and any block of its side with that enemy as its
+// target counted as the neighbour, a sniper pair firing hidden from far back too. Measured before the mend, 48 computer
+// battles with the teams on: 17 of 100 such orders were at an enemy that only sniper pairs were firing on, in 14 of the
+// battles. A pair never closes, so a block that stepped out for it only opened the line.
+describe('sniper teams: a pair is no neighbour in a fight (ai.ts defend)', () => {
+  type U = { id: number; side: string; team?: string; state: string; engaged?: number; reserve?: string };
+  /**
+   * A practice battle, the computer on both sides, the teams on: the defence's staff orders that send a line block (no
+   * reserve) at an enemy that is not wavering, how many of them at an enemy only sniper pairs of its side had as their
+   * target, and whether a pair of the defence fired at all.
+   */
+  const drawnOut = (ground: number, seed: number): { orders: number; byPairsAlone: number; fired: boolean } => {
+    const b = new LandBattle(withSnipers(practiceTicket(PRACTICE_GROUNDS[ground], { seed })));
+    b.ai.att = b.ai.def = true;
+    b.hideOn();
+    const units = b.units as unknown as U[];
+    const order = b.command.bind(b);
+    let orders = 0, byPairsAlone = 0, fired = false;
+    b.command = ((c: { do: string; units?: number[]; target?: number }, side: string, ...rest: unknown[]) => {
+      if (side === 'def' && c.do === 'attack' && c.units?.length === 1) {
+        const u = units.find((x) => x.id === c.units![0])!, f = units.find((x) => x.id === c.target)!;
+        if (!u.reserve && u.team !== 'snp' && f.state !== 'wavering') {
+          const at = units.filter((m) => m.side === 'def' && m.id !== u.id && m.engaged === f.id);
+          orders++;
+          if (at.length && at.every((m) => m.team === 'snp')) byPairsAlone++;
+        }
+      }
+      return (order as (...a: unknown[]) => unknown)(c, side, ...rest);
+    }) as typeof b.command;
+    for (let k = 0; !b.over && k < 2_000_000; k++) {
+      b.step();
+      if (!fired && units.some((m) => m.side === 'def' && m.team === 'snp' && m.engaged !== undefined)) fired = true;
+    }
+    return { orders, byPairsAlone, fired };
+  };
+
+  it('a sniper pair alone draws no line block out of its place, and the line still steps out for a real neighbour', () => {
+    // (the plain, and the plain under air: the six battles where the old staff was drawn out seven times)
+    let orders = 0, alone = 0, fired = 0;
+    for (const ground of [0, 9]) for (const s of [1, 2, 3]) {
+      const r = drawnOut(ground, 1000 + s * 7919);
+      orders += r.orders; alone += r.byPairsAlone; if (r.fired) fired++;
+    }
+    expect(fired).toBe(6);
+    expect(orders).toBeGreaterThan(0);
+    expect(alone).toBe(0);
+  }, 240_000);
+});

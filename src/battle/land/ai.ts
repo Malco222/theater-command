@@ -621,7 +621,10 @@ function defend(b: LandBattle, side: Side, style: Style | null, mine: LandUnit[]
     if (away > 40 && !u.order) { b.command({ do: 'move', units: [u.id], x: u.home[0], y: u.home[1], face: Math.PI }, side); continue; }
     const shaky = foes.find((f) => f.state === 'wavering' && b.gap(u, f) < finish && !outside(f));
     if (shaky) { by(b, side, u, shaky); continue; }
-    const round = foes.find((f) => dist(f.x, f.y, u.home[0], u.home[1]) < leash && !outside(f) && mine.some((m) => m.engaged === f.id && m !== u));
+    // (Sniper teams, release 2: a sniper pair is no neighbour in a fight. It fires hidden from far off and never closes,
+    // so what it fires on has not come round anyone's flank, and a block that stepped out for it only opened the line.
+    // No pair exists unless sniper teams are on, so with them off this reads as it did.)
+    const round = foes.find((f) => dist(f.x, f.y, u.home[0], u.home[1]) < leash && !outside(f) && mine.some((m) => m.team !== 'snp' && m.engaged === f.id && m !== u));
     if (round) by(b, side, u, round);
   }
 }
