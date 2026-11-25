@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of d6ba6b2c 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 011c844e4 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -40329,7 +40329,10 @@
     return null;
   }
   function oursIn(g2, f, zone, foe) {
-    return [f, ...g2.fleets.filter((x) => x.id !== f.id && x.zone === zone && x.stance === "patrol" && surfaceShips(x) > 0 && (x.nat === f.nat || allied(g2, x.nat, f.nat)) && atWar(g2, x.nat, foe))];
+    return [f, ...g2.fleets.filter((x) => x.id !== f.id && x.zone === zone && x.stance === "patrol" && surfaceShips(x) > 0 && x.attacked !== g2.turn && (x.nat === f.nat || allied(g2, x.nat, f.nat)) && atWar(g2, x.nat, foe))];
+  }
+  function foughtIn(g2, mine4) {
+    for (const x of mine4) x.attacked = g2.turn;
   }
   function theirsAt(g2, f, t, at4) {
     const side3 = (x) => x.id !== t.id && (x.nat === t.nat || allied(g2, x.nat, t.nat)) && atWar(g2, x.nat, f.nat) && shipCount(x.ships) > 0;
@@ -40473,11 +40476,13 @@
         headline(g2, "event", text, met2[0].nat, void 0, { arm: "sea", won: f.nat, lost: met2[0].nat });
         return { outcome: "declined", report: null, text };
       }
+      foughtIn(g2, mine4);
       const report2 = fleetAction(g2, zone, f.nat, mine4, met2, rng, airA2, airD2);
       return { outcome: "fought", report: report2, text: told2() };
     }
     met2 = met2.filter((x) => !atSea(x));
     const airA = airOver(g2, at4.zone, f.nat) * NAVY.air.weight, airD = airOver(g2, at4.zone, f.nat, true) * NAVY.air.weight;
+    foughtIn(g2, mine4);
     const report = fleetAction(g2, zone, f.nat, mine4, met2, rng, airA, airD, { port: at4.port, shore: at4.shore, anchor: at4.anchor });
     return { outcome: "fought", report, text: told2() };
   }
