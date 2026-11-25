@@ -252,12 +252,15 @@ namespace LandEye
 		/** The dark rule (World::DarkNow; the art director, cut 4 fix 6: reject a shot over 30% under L 25): a shot whose
 		 * drawn picture stays over DarkLeave for DarkHold seconds, past its first quarter second (the frame drawn lags the
 		 * cut), is left, and no later shot stands within DarkClear metres of where it stood. After DarkRunMost such cuts
-		 * running the light is to blame, not the place: the rule rests until a picture reads no darker than DarkLight
-		 * (past its shot's first quarter second), which shows that the light is not. Half the leaving line, so that a
-		 * dim battle whose pictures hover about the line does not start the run again and again. (Until 25 November
-		 * the run started again at every cut made for another reason: under a light dark everywhere, a dusk or a
-		 * storm, two shots of three quarters of a second followed every ordinary cut all battle long. It never showed
-		 * because the scene's reading was blind: LandBattle.cpp ReadDark.) */
+		 * running the light is to blame, not the place: the rule rests until a picture has read no darker than DarkLight
+		 * for DarkHold seconds on end (past its shot's first quarter second), which shows that the light is not. Half
+		 * the leaving line, so that a dim battle whose pictures hover about the line does not start the run again and
+		 * again; and held as long as the dark must be, so that one reading does not: the scene's reading is of a frame
+		 * asked for up to a quarter of a second before and come back later still, so a shot's first may be the last
+		 * shot's picture (an opening's or a wide's too, which the rule never judges), and one frame may be a shell's
+		 * flash. (Until 25 November the run started again at every cut made for another reason: under a light dark
+		 * everywhere, a dusk or a storm, two shots of three quarters of a second followed nearly every ordinary cut all
+		 * battle long. It never showed because the scene's reading was blind: LandBattle.cpp ReadDark.) */
 		double DarkLeave = 0.30, DarkHold = 0.5, DarkClear = 6.0, DarkLight = 0.15;
 		int DarkRunMost = 2;
 		/** The whole mass (the production lead's plan for battles of thousands, 22 November: CD1): once a battle, between
@@ -477,9 +480,10 @@ namespace LandEye
 		/** Where the shots among the men stood (Settings::SpotOnce). */
 		std::vector<Vec> UsedSpots;
 		/** Where shots left for a dark picture stood (Settings::DarkClear), the latest 32; since when the picture has been
-		 * dark (-1 not), the shots left for it in all and running, and whether the last asked shot was placed unfit. */
+		 * dark, and since when plainly light (Settings::DarkLight; -1 not, either), the shots left for it in all and
+		 * running, and whether the last asked shot was placed unfit. */
 		std::vector<Vec> DarkSpots;
-		double DarkSince = -1.0;
+		double DarkSince = -1.0, LightSince = -1.0;
 		int DarkLeft = 0, DarkRunNow = 0;
 		bool bAskedUnfit = false;
 		/** A cut's second, less choosy pass (no fit found in the middle of the battle). */

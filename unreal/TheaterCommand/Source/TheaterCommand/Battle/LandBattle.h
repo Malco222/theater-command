@@ -638,10 +638,12 @@ private:
 	 * by the engine's frame grabber, which waits on nothing, and the share of it under L 25 (-1 until the first comes
 	 * back, or with no game viewport, as in the editor). "-TheaterLandNoDarkRead" leaves it off (the rule never asked).
 	 * ReadDark takes the frame's length, as its neighbours do, and keeps the reading's own clock from it (DarkClock,
-	 * against which the next ask and the last reading's age are measured). DarkAsks and DarkBacks count the frames
-	 * asked for and those that came back, DarkReads those read (none under a result card or the night's light, nor
-	 * while the general's own view is the picture drawn and not the film): the battle's end line says all three, and
-	 * warns where under half of those asked for came back. */
+	 * against which the next ask and the last reading's age are measured: a reading is stale, and the rule told
+	 * there is none, once no frame has been read for six tenths of a second). DarkAsks and DarkBacks count the
+	 * frames asked for and those that came back, DarkReads those read (none under a result card or the night's
+	 * light, nor while the general's own view is the picture drawn and not the film, nor while a drag has the lens
+	 * looking aside from the shot): the battle's end line says all three, and warns where under half of those
+	 * asked for came back. */
 	TSharedPtr<FFrameGrabber> DarkGrab;
 	double DarkShare = -1.0, DarkClock = 0.0, DarkAskAt = 0.0, DarkGotAt = 0.0;
 	int32 DarkReads = 0, DarkAsks = 0, DarkBacks = 0;

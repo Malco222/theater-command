@@ -6306,14 +6306,18 @@ void ALandBattle::ReadDark(double Real)
 		DarkGrab->CaptureThisFrame(FFramePayloadPtr());
 		++DarkAsks;
 	}
+	// (no frame read for six tenths of a second: the last reading is stale, so the rule is told there is none;
+	// pre-check's note. Before the frames are taken, so that it holds on every way out below: a frame come back empty
+	// too. And under the rule's own quarter second and half second together (LandEye: a shot's reading counts from
+	// its first quarter second and must hold DarkHold), so that a reading of the last shot, the frames stopped, can
+	// never by itself have the next one left or the run of dark cuts started again. It was a second, 25 November.)
+	if (DarkShare >= 0.0 && Now - DarkGotAt > 0.6)
+	{
+		DarkShare = -1.0;
+	}
 	TArray<FCapturedFrameData> Frames = DarkGrab->GetCapturedFrames();
 	if (Frames.Num() == 0)
 	{
-		// (no frame back for a second: the last reading is stale, so the rule is told there is none; pre-check's note)
-		if (DarkShare >= 0.0 && Now - DarkGotAt > 1.0)
-		{
-			DarkShare = -1.0;
-		}
 		return;
 	}
 	DarkBacks += Frames.Num();
@@ -6321,9 +6325,15 @@ void ALandBattle::ReadDark(double Real)
 	// on the picture, the night before the attack and its dawn; nor while the general's own view is the picture drawn
 	// (his eye begun and the film not given the camera): the film goes on being directed behind it, for its corner
 	// and for his return to it, and a dark reading of HIS view, a wood from above, would have the film leave shots
-	// that are not dark at all. Until the reading had a clock of its own, 25 November, nothing was read and this
-	// could not show.)
-	if (State.IsValid() && (State->bCard || (State->bGeneralEye && !State->General.bFilm) || State->NightNow.Dark > 0.0 || State->NightNow.Black > 0.0))
+	// that are not dark at all; nor while a drag has the lens looking aside from the shot (AimEye; more than a degree
+	// either way): what he turns the lens to, a hedge, a crown, an open field, is not the shot's picture, and the
+	// film would leave the shot he is looking about in and bar its place, or take the field for the light come back.
+	// Until the reading had a clock of its own, 25 November, nothing was read and none of this could show.
+	// These are asked as the frame comes back, a frame or two after it was drawn: one frame already on its way at
+	// a change is read as the new picture's. One reading cannot act alone: the rule wants half a second of dark to
+	// leave a shot and half a second of light to start its run again.)
+	if (FMath::Abs(LookAside.X) > 1.0 || FMath::Abs(LookAside.Y) > 1.0
+		|| (State.IsValid() && (State->bCard || (State->bGeneralEye && !State->General.bFilm) || State->NightNow.Dark > 0.0 || State->NightNow.Black > 0.0)))
 	{
 		DarkShare = -1.0;
 		return;
