@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6a523a7a 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b9fc3818 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -20282,6 +20282,7 @@
   var globeFor = (g2, a, b) => globeOn(g2) && (a.id >= FAR_FROM || b.id >= FAR_FROM);
   var chartDist = (g2, a, b) => globeFor(g2, a, b) ? globeDist(g2, a.x, a.y, b.x, b.y) : mapDist(g2, a.x, a.y, b.x, b.y);
   var chartDist2 = (g2, a, b) => globeFor(g2, a, b) ? globeDist(g2, a.x, a.y, b.x, b.y) ** 2 : mapDist2(g2, a.x, a.y, b.x, b.y);
+  var globeLeg = (g2, a, b, region, sea = -1) => globeOn(g2) && (a.id >= FAR_FROM || b.id >= FAR_FROM || (region >= 0 ? region >= FAR_FROM : sea >= FAR_SEA_FROM));
   var FAR_SEA_FROM = world_americas_default.seas.zones.length;
   var seaDist = (g2, a, sea) => globeOn(g2) && (a.id >= FAR_FROM || sea.id >= FAR_SEA_FROM) ? globeDist(g2, a.x, a.y, sea.x, sea.y) : mapDist(g2, a.x, a.y, sea.x, sea.y);
   function nearX(g2, x, to) {
@@ -20396,6 +20397,7 @@
     bombLaw: () => bombLaw,
     bomberDefence: () => bomberDefence,
     bookCloseAir: () => bookCloseAir,
+    canStrafe: () => canStrafe,
     carrierOf: () => carrierOf,
     carrierRules: () => carrierRules,
     closeEdge: () => closeEdge,
@@ -20450,6 +20452,7 @@
     kmTo: () => kmTo,
     kmToSea: () => kmToSea,
     legKm: () => legKm,
+    legKmAt: () => legKmAt,
     levelOf: () => levelOf3,
     lineWear: () => lineWear,
     moveTargets: () => moveTargets,
@@ -20490,6 +20493,7 @@
     spreadAir: () => spreadAir,
     squadronSize: () => squadronSize,
     squadronsOf: () => squadronsOf,
+    strafersExpected: () => strafersExpected,
     troopCut: () => troopCut,
     troopLaw: () => troopLaw,
     troopWeight: () => troopWeight,
@@ -20561,7 +20565,9 @@
       dug: 0.6,
       cover: { plains: 1, desert: 1, hills: 0.85, marsh: 0.85, forest: 0.7, mountain: 0.7, urban: 0.6 },
       fire: 0.015,
-      value: 1500
+      value: 1500,
+      _reach: "Read only with the strafers' rule on (src/campaign/strafers.ts; the design director, 25 November 2026 05:12Z: the card, the settled raid and the fought raid charge the ground fire only on the fighters expected to be left after the air fight that have the reach to strafe). reach (G): a fighter group has the reach to go down on the troops when they lie within this share of its fighter range, the part of its range where it has its full time over the target (air.json range.fullAt); a group farther out escorts its bombers and turns for home, adds no weight on the troops and is not shot at by the ground.",
+      reach: 0.6
     },
     recon: {
       _note: "A reconnaissance flight. aircraft is how many of the group go. loss is the share of them lost when enemy fighters patrol the target, per unit of their cover there. ready is the readiness the group spends.",
@@ -20882,7 +20888,7 @@
       }
     },
     blocked: {
-      _note: "Real air units' names, nicknames and honour titles that no name of ours may hold, matched as whole words (the historian's 'blocked', air-unit-names-r2.json, 309 names, all arms, Italy's air division names of June 1940 among them; and two more, Sirio and Zeffiro, that are the air thread's own, added on 25 November: 311 in all). Over-blocking does no harm. A battle's city is not blocked (the historian: the Soviet manner shared one city among many units).",
+      _note: `Real air units' names, nicknames and honour titles that no name of ours may hold, matched as whole words (the historian's 'blocked', air-unit-names-r2.json, 309 names, all arms, Italy's air division names of June 1940 among them; and two more, Sirio and Zeffiro, that are the air thread's own, added on 25 November: 311); and one more, Death Rattlers, a real squadron's nickname added by the air thread on 25 November after the design director's review marks of 05:12Z ("Rattlers" was struck from our American names as too near it): 312 in all. Over-blocking does no harm. A place of this war in one of our names (a Guards city, a place name: the group's own latest hard fight) is not refused merely because one of its words is a distinctive word of a blocked name (the design director, 12:59Z question 6: a place word is the war's own map, not a nickname's mark); the rest of the name is still checked word by word, and the whole name, place included, is still tested against every blocked whole name, so a place that is itself a blocked name (Moscow) never stands in a name. This list holds no real Guards honour titles by number, place and arm together; the whole-name test covers only what is listed here and in nicknames.json 'blocked'.`,
       names: [
         "Abbeville Kids",
         "Ace of Clubs",
@@ -20968,6 +20974,7 @@
         "Cyclone's Flying Circus",
         "Dambusters",
         "Dauphiné",
+        "Death Rattlers",
         "Demon",
         "Desert Air Force",
         "Diavoli",
@@ -21195,7 +21202,9 @@
         "Ziemi Wielkopolskiej",
         "Ziemi Śląskiej",
         "Île-de-France"
-      ]
+      ],
+      _common: "The words of a blocked name that are NOT its distinctive words (the design director's review marks of 05:12Z: the block test also catches a real nickname's distinctive word, not only the whole string). A blocked name's distinctive words are all its words (letters and digits, an apostrophe kept inside a word: Hell's) but these, matched whole and without regard to case; a word made only of digits is a number and never distinctive. No name of ours, generated or listed, may hold a distinctive word of any name on this list or on nicknames.json 'blocked' (airnames.ts airBlocked; tests/air-names-r2-words.test.ts). What is here, the air thread's first cut for the historian to edit: articles and small words in the languages of the list; the plain colours, and gold and silver; the two the ruling names, Flying and Fighting; numbers in words; the words that say what kind of formation or aircraft a unit is (Air, Force, Wing, Squadron, Group, Division, Brigade, Corps, Army, Regiment, Bomber, Fighter, Command, Kommando, Jagdverband), which our own formal names must use; one word of nationality, American; and the points of the compass and 'old' (North, South, East, West, Old: added after the review of 25 November, as words of places, East India, West Riding, Old Hickory, rather than of a nickname's mark). Everything else is distinctive: Iron, Devils, Lightning, Sky, Sea, Bell, Watch, Thunder, Hill, High, Boys and Tin among them, so names of ours that held them were replaced (nicknames.json air.styles).",
+      common: ["the", "a", "an", "and", "of", "on", "in", "as", "de", "la", "le", "di", "das", "die", "all", "black", "white", "red", "blue", "green", "grey", "gray", "yellow", "brown", "gold", "golden", "silver", "flying", "fighting", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "hundred", "hundredth", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "treble", "air", "force", "wing", "squadron", "squadrons", "group", "division", "brigade", "corps", "army", "regiment", "bomber", "fighter", "command", "kommando", "sonderkommando", "jagdverband", "american", "north", "south", "east", "west", "old"]
     },
     near: [
       0.5,
@@ -28855,10 +28864,10 @@
       "The Few"
     ],
     air: {
-      _note: "Earned names for air groups (release 2; the design director's rulings of 25 November 2026 03:18Z and 03:31Z, design-director/air-names-1125.md; src/campaign/airnicks.ts). Under the same switch as the corps' names ('nicknames'); off, nothing here is read, counted or written. A group completes a mission in a month when it flies and meets its task: a raid whose bombers reached the target (a raid of fighters alone: one that fought, or that won or held the sky, or a raid on troops flown), a patrol or defence that met a raid, or support flown over a land battle. One a month; a month with no enemy met counts nothing, nor does a raid turned back. A hard fight counts double ('double'): PRESSED HOME, a raid that reached its target, or a sweep that fought, at a fighter ratio (the raid card's: the raiders' escort's fighting weight over the defence's) of 'hard.pressed' or less against a defence that came up; HELD, a defence that met a raid at a ratio of 'hard.held' or more; COSTLY, a group's loss on the mission (aircraft lost over aircraft it flew with) at least 'hard.costly' times its arm's running loss rate for that kind of mission (all aircraft lost over all aircraft flown on it since the war began, the defence one kind), once the arm has flown 'hard.least' aircraft on that kind. The name comes at 'need' missions completed. There is NO cap for air groups (the measure is the limit; the corps keep theirs). A name is in the nation's style ('styles', by nicknames.json 'nations'; a style not listed takes '_default'), never one the nation's units carry, never a blocked one, and shown as 'show' sets it beside the unit's name. A style with 'guards' gives the Guards title instead: the Guards form of the group's rung (regiment, division or corps; by its name, a regiment where it cannot tell), a new number from that Guards series in order (the historian's lists, air-unit-names-r2.json guards.SOV, M: real numbers, labels only), going on past the end, and the city it fought over as the record's honorific after 'Guards' ('city'; the historian: one city was given to many units, so it is not held unique). The Guards title is a name and a number, nothing more. ALL FIGURES ARE G: 'hard.pressed' 1.0, 'hard.held' 1.0 and 'hard.costly' 2 are the ruling's words (at most even, at least as strong, twice) and 'hard.least' 200 aircraft is ours, so that a rate is read only once it means something; 'need' 8 and 'double' 2 are the ruling's 03:31Z figures, G. None is set to reach a count of names. Every word list here is OURS, in each arm's manner, checked by tests/air-names-r2.test.ts against the historian's block list (air-names.json 'blocked', whole words) and nicknames.json 'blocked'; Italy's list is the historian's own 28 candidates in the 1940 style (air-unit-names-r2.json italyNames, G), its earned list since Brian's answer of 03:31Z dropped its day-one names. What aircrews counted as a hard fight (the historian, hardFight): a sortie counted when it reached the target, and crews judged a target by what it cost them; no aircrew measure for a defence was found, so 'held' stays the air thread's G.",
+      _note: "Earned names for air groups (release 2; the design director's rulings of 25 November 2026 03:18Z and 03:31Z, design-director/air-names-1125.md; src/campaign/airnicks.ts). Under the same switch as the corps' names ('nicknames'); off, nothing here is read, counted or written. A group completes a mission in a month when it flies and meets its task: a raid whose bombers reached the target (a raid of fighters alone: one that fought, or that won or held the sky, or a raid on troops flown), a patrol or defence that met a raid, or support flown over a land battle. One a month; a month with no enemy met counts nothing, nor does a raid turned back. A hard fight counts double ('double'): PRESSED HOME, a raid that reached its target, or a sweep that fought, at a fighter ratio (the raid card's: the raiders' escort's fighting weight over the defence's) of 'hard.pressed' or less against a defence that came up; HELD, a defence that met a raid at a ratio of 'hard.held' or more; COSTLY, a group's loss on the mission (aircraft lost over aircraft it flew with) at least 'hard.costly' times its arm's running loss rate for that kind of mission (all aircraft lost over all aircraft flown on it since the war began, the defence one kind), once the arm has flown 'hard.least' aircraft on that kind. The name comes at 'need' missions completed. There is NO cap for air groups (the measure is the limit; the corps keep theirs). A name is in the nation's style ('styles', by nicknames.json 'nations'; a style not listed takes '_default'), never one the nation's units carry, never a blocked one, and shown as 'show' sets it beside the unit's name. A style with 'guards' gives the Guards title instead: the Guards form of the group's rung (regiment, division or corps; by its name, a regiment where it cannot tell), a new number from that Guards series in order (the historian's lists, air-unit-names-r2.json guards.SOV, M: real numbers, labels only), going on past the end, and, where the group has a hard fight on record, the city of its latest hard fight in this war as the record's honorific after 'Guards' ('city'; the design director 12:59Z: the place is kept on the group as it fights, taken once when the title is given and kept; a group with no hard fight takes the title without a city; the historian: one city was given to many units, so it is not held unique). The Guards title is a name and a number, nothing more. ALL FIGURES ARE G: 'hard.pressed' 0.8 and 'hard.held' 1.25 are the design director's gap of 05:12Z (review marks: pressed home at 0.8 or less, held at 1.25 or more, both G; a fight near even, between the two, is an ordinary fight for both sides; until then 1.0 and 1.0, the 03:18Z words 'at most even' and 'at least as strong'), 'hard.costly' 2 is the ruling's word (twice) and 'hard.least' 200 aircraft is ours, so that a rate is read only once it means something; 'need' 8 and 'double' 2 are the ruling's 03:31Z figures, G. None is set to reach a count of names. Every word list here is OURS, in each arm's manner, checked by tests/air-names-r2.test.ts against the historian's block list (air-names.json 'blocked', whole words) and nicknames.json 'blocked', and by tests/air-names-r2-words.test.ts against every distinctive word of both (the design director's review marks of 05:12Z; air-names.json blocked.common says which words are not distinctive). Fifteen names that held a real unit's distinctive word were replaced on 25 November by an original word in the same manner: Iron Swifts by Slate Swifts, Summer Lightning by Summer Squall (German); Sky Wranglers by Range Wranglers, Dust Devils by Dust Twisters, Tin Lizzies by Flivvers (American); the Drizzle Boys by the Drizzle Wrens, the Bell Ringers by the Hedgers (first by the Thatchers, which read as a real person's surname, struck at the review), the Watch over {place} by the Wardens of {place} (British); the Bell Founders by the Coopers (Polish); the Sea Swallows by the Shore Swallows, the Thunder Kites by the Squall Kites (Japanese); the Smiths of the Sky by the Cloud Smiths (Soviet); the Sky Wardens by the Cloud Wardens, the Hill Hawks by the Fell Hawks, the High Larks by the Upland Larks (the default). Italy's list is the historian's own 28 candidates in the 1940 style (air-unit-names-r2.json italyNames, G), its earned list since Brian's answer of 03:31Z dropped its day-one names. What aircrews counted as a hard fight (the historian, hardFight): a sortie counted when it reached the target, and crews judged a target by what it cost them; no aircrew measure for a defence was found, so 'held' stays the air thread's G.",
       hard: {
-        pressed: 1,
-        held: 1,
+        pressed: 0.8,
+        held: 1.25,
         costly: 2,
         least: 200
       },
@@ -28873,10 +28882,10 @@
             "Storm Crows",
             "Hailstorm",
             "Rhine Gulls",
-            "Iron Swifts",
+            "Slate Swifts",
             "Harz Owls",
             "Clockmakers",
-            "Summer Lightning",
+            "Summer Squall",
             "Millrace",
             "Glassblowers",
             "Moor Harriers"
@@ -28891,13 +28900,13 @@
           any: [
             "Prairie Dogs",
             "Hot Rods",
-            "Sky Wranglers",
-            "Dust Devils",
+            "Range Wranglers",
+            "Dust Twisters",
             "Bayou Hawks",
             "Barnstormers",
             "Jackrabbits",
             "Cloud Busters",
-            "Tin Lizzies",
+            "Flivvers",
             "Pea Pickers",
             "Crop Dusters"
           ],
@@ -28919,11 +28928,11 @@
             "the Wheelwrights",
             "the Ploughmen",
             "the Curlews",
-            "the Drizzle Boys",
-            "the Bell Ringers"
+            "the Drizzle Wrens",
+            "the Hedgers"
           ],
           place: [
-            "the Watch over {place}",
+            "the Wardens of {place}",
             "the Kites of {place}"
           ]
         },
@@ -28990,7 +28999,7 @@
             "the Blizzard",
             "the Ural Kites",
             "the Taiga Owls",
-            "the Smiths of the Sky"
+            "the Cloud Smiths"
           ],
           place: [
             "{place}"
@@ -29257,7 +29266,7 @@
             "the Stoats",
             "the Amber Wings",
             "the Vistula Swallows",
-            "the Bell Founders",
+            "the Coopers",
             "the Kestrels",
             "the Polecats",
             "the Rye Larks"
@@ -29271,10 +29280,10 @@
           show: "{name} ({nick})",
           any: [
             "the Mountain Kites",
-            "the Sea Swallows",
+            "the Shore Swallows",
             "the Bamboo Wings",
             "the Paper Cranes",
-            "the Thunder Kites",
+            "the Squall Kites",
             "the Snow Herons",
             "the Swordsmiths",
             "the Rain Crows"
@@ -29302,13 +29311,13 @@
         _default: {
           show: "{name} ({nick})",
           any: [
-            "the Sky Wardens",
-            "the Hill Hawks",
+            "the Cloud Wardens",
+            "the Fell Hawks",
             "the Swift Wings",
             "the Weathervanes",
             "the Skylarks",
             "the Thunderclouds",
-            "the High Larks",
+            "the Upland Larks",
             "the Kite Makers",
             "the Hailstones",
             "the Harriers"
@@ -44169,13 +44178,13 @@
     const a = atomOn(g2) ? g2.nations[nat]?.atom?.armed : void 0;
     return a && a[0] === g2.turn && (g2.nations[nat].atom?.bombs ?? 0) > 0 ? a[1] : null;
   }
-  function strikeFlown(g2, nat, region, flown, reached) {
+  function strikeFlown(g2, nat, region, flown2, reached) {
     var _a;
     const n = g2.nations[nat], s = n.atom, r = g2.regions[region], v = r.ctrl;
     delete s.armed;
     s.bombs = Math.max(0, (s.bombs ?? 1) - 1);
     s.struck = g2.turn;
-    const p = flown > 0 ? Math.max(0, Math.min(1, reached / flown)) : 0;
+    const p = flown2 > 0 ? Math.max(0, Math.min(1, reached / flown2)) : 0;
     const roll3 = new Rng(hashString(`atom:${g2.seed}:${g2.turn}:${nat}:${region}`)).next();
     if (roll3 >= p) return { text: `The bomber carrying the atomic bomb was lost on the way to ${townName(r)}, and the bomb with it.`, hit: false, city: null, tell: !!g2.human && allied(g2, g2.human, nat) };
     const city = ruinHit(g2, r, Math.min(ATOM.strike.ruin, DAMAGE.most));
@@ -46558,15 +46567,15 @@
     }
     w += airOver(g2, z, nat) * S3.air;
     const me = g2.human;
-    let flown = !!me && (nat === me || allied(g2, nat, me)) && g2.intel?.sea?.[z] === g2.turn;
+    let flown2 = !!me && (nat === me || allied(g2, nat, me)) && g2.intel?.sea?.[z] === g2.turn;
     const by2 = g2.intel?.seaBy;
-    if (!flown && by2) {
+    if (!flown2 && by2) {
       for (const k in by2) if (by2[k][z] === g2.turn && (k === nat || allied(g2, k, nat))) {
-        flown = true;
+        flown2 = true;
         break;
       }
     }
-    if (flown) w += S3.flight;
+    if (flown2) w += S3.flight;
     return w;
   }
   function contact(g2, f, nat) {
@@ -46733,9 +46742,9 @@
     for (const k of Object.keys(by2)) if (by2[+k] !== g2.turn) delete by2[+k];
     const ready = AIRWAR.ai.raids.ready;
     const groups = airFleetsOf(g2, nat).filter((f) => f.ftr + f.bmr > 0 && f.scouted !== g2.turn && !(f.ready >= ready && f.ready - S3.ready < ready));
-    let flown = Object.keys(by2).length;
+    let flown2 = Object.keys(by2).length;
     for (const z of wanted2) {
-      if (flown >= most || !groups.length) break;
+      if (flown2 >= most || !groups.length) break;
       if (by2[z] === g2.turn || searchOf(g2, nat, z) >= S3.find * openness(g2, z)) continue;
       let best = null, bd = 0;
       for (const f of groups) {
@@ -46750,7 +46759,7 @@
       best.scouted = g2.turn;
       best.ready = Math.max(AIR.ready.floor, best.ready - S3.ready);
       by2[z] = g2.turn;
-      flown++;
+      flown2++;
     }
   }
   function tradeIn(g2, nat, z) {
@@ -46844,10 +46853,10 @@
     if (nat !== g2.human) staffSearch(g2, nat);
     const trade = !!A.trade;
     const hit = /* @__PURE__ */ new Set();
-    let flown = what === "land" ? 100 : 0;
+    let flown2 = what === "land" ? 100 : 0;
     const fit3 = (f) => !!f && f.flew !== g2.turn && f.mission === "support" && f.ready >= A.ready && !inCampaign(g2, f) && !not?.has(f.id);
     const send2 = (b) => {
-      const rep = fly(g2, nat, b.m, b.t, b.fleets, `:sea${flown++}`);
+      const rep = fly(g2, nat, b.m, b.t, b.fleets, `:sea${flown2++}`);
       hit.add(`${b.m}:${b.t}`);
       if (rep) for (const f of b.fleets) {
         f.mission = b.m;
@@ -47791,7 +47800,7 @@
     openFleetRows(g2);
     for (const f of g2.fleets) {
       if (!f.tied || !atSea(f) || f.stance !== "patrol") continue;
-      const rt = seaRoutes(g2).find((r) => r.zones.includes(f.zone) && (r.to === f.nat || allied(g2, r.to, f.nat)) && whyNotEscort(g2, f, r.id) === null);
+      const rt = seaRoutes(g2).find((r) => laneCounts(r) && r.zones.includes(f.zone) && (r.to === f.nat || allied(g2, r.to, f.nat)) && whyNotEscort(g2, f, r.id) === null);
       if (rt) escort(g2, f, rt.id);
     }
   }
@@ -57862,6 +57871,18 @@
     };
   }
 
+  // ../../src/campaign/strafers.ts
+  var flown = false;
+  function groundFlown(on2) {
+    flown = on2;
+  }
+  function strafeOn() {
+    const G5 = globalThis;
+    const env = G5.process?.env;
+    return flown || String(G5.TC_FLY ?? env?.TC_FLY ?? "").split(",").map((x) => x.trim()).includes("ground");
+  }
+  var strafeWatch = {};
+
   // ../../src/campaign/airnames.ts
   var AIRNAMES = air_names_default;
   var airNamesOn = (g2) => g2.flags.open === 1 && g2.flags.airNames === 1;
@@ -57906,7 +57927,22 @@
   var shortName = (f) => f.short ?? f.name;
   var esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   var BLOCKED2 = AIRNAMES.blocked.names.map((b) => new RegExp(`(^|[^\\p{L}\\p{N}])${esc(b)}($|[^\\p{L}\\p{N}])`, "iu"));
-  var airBlocked = (name) => BLOCKED2.some((b) => b.test(name));
+  var wordsOf = (name) => (name.match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu) ?? []).map((w) => w.toLowerCase());
+  var COMMON = new Set(AIRNAMES.blocked.common.map((w) => w.toLowerCase()));
+  var distinctiveWords = (name) => wordsOf(name).filter((w) => !COMMON.has(w) && !/^\p{N}+$/u.test(w));
+  var DISTINCTIVE = new Set([...AIRNAMES.blocked.names, ...nicknames_default.blocked].flatMap(distinctiveWords));
+  var distinctiveIn = (name) => wordsOf(name).filter((w) => DISTINCTIVE.has(w));
+  var airBlocked = (name) => BLOCKED2.some((b) => b.test(name)) || distinctiveIn(name).length > 0;
+  var airBlockedWhole = (name) => BLOCKED2.some((b) => b.test(name));
+  function airBlockedAt(name, place3) {
+    if (!place3) return airBlocked(name);
+    if (airBlockedWhole(name)) return true;
+    const w = wordsOf(name), p = wordsOf(place3);
+    let at4 = -1;
+    for (let i = 0; p.length && i + p.length <= w.length && at4 < 0; i++) if (p.every((x, j) => w[i + j] === x)) at4 = i;
+    const rest = at4 < 0 ? w : [...w.slice(0, at4), ...w.slice(at4 + p.length)];
+    return rest.some((x) => DISTINCTIVE.has(x));
+  }
 
   // ../../data/campaign/air-colours.json
   var air_colours_default = {
@@ -57917,7 +57953,7 @@
       16,
       24
     ],
-    _words: "The art director's words for each scheme (third issue, 25 November 2026 04:05Z; /mnt/project-files/art-director/air-colours/unit-colours-words.json, copied as issued, no word changed; the historian's check and second pass are applied in it). By nation, 'count' lines each: a group's 'scheme' indexes its own nation's list. A line splits at its first two commas into the spinner, the nose band and the tail, which are tiers 1, 2 and 3: tier 1 shows the first part, tier 2 the first two, tier 3 all three. Words only: no rule reads them. Nations with no list here (Poland and the rest) have no words yet.",
+    _words: "The art director's words for each scheme (fifth issue, 25 November 2026 12:34Z, five card lines changed from the third: Britain 7, Italy 3, 4, 5 and 8, scheme numbers unchanged; /mnt/project-files/art-director/air-colours/unit-colours-words.json, copied as issued, no word changed; the historian's check and second pass are applied in it). By nation, 'count' lines each: a group's 'scheme' indexes its own nation's list. A line splits at its first two commas into the spinner, the nose band and the tail, which are tiers 1, 2 and 3: tier 1 shows the first part, tier 2 the first two, tier 3 all three. Words only: no rule reads them. Nations with no list here (Poland and the rest) have no words yet.",
     words: {
       GER: [
         "Orange spinner, purple nose band, tail halved, orange over cream",
@@ -57944,7 +57980,7 @@
         "Teal spinner, pale blue nose band, teal tail with a pale blue tip",
         "Teal spinner, purple nose band, tail halved, teal over cream",
         "Wine red spinner, teal nose band, tail halved, wine red over teal",
-        "Wine red spinner, orange nose band, tail halved, wine red over orange",
+        "Turquoise spinner, wine red nose band, tail banded in turquoise and wine red",
         "Purple spinner, pale blue nose band, tail banded in purple and pale blue",
         "Purple spinner, bottle green nose band, purple and cream checked tail",
         "Orange spinner, purple nose band, orange tail with a purple tip",
@@ -58012,12 +58048,12 @@
       ITA: [
         "Azure blue spinner, moss green nose band, azure blue tail with a black tip",
         "Azure blue spinner, wine red nose band, tail halved, azure blue over wine red",
-        "Wine red spinner, pale blue nose band, tail banded in wine red and pale blue",
-        "Wine red spinner, orange nose band, wine red and orange checked tail",
-        "Wine red spinner, azure blue nose band, wine red and azure blue striped tail",
+        "Moss green spinner, turquoise nose band, moss green and turquoise checked tail",
+        "Turquoise spinner, azure blue nose band, tail banded in turquoise and azure blue",
+        "Turquoise spinner, slate blue nose band, turquoise and slate blue striped tail",
         "Moss green spinner, slate blue nose band, tail banded in moss green and black",
         "Moss green spinner, pale blue nose band, moss green and black checked tail",
-        "Orange spinner, wine red nose band, orange tail with a wine red tip",
+        "Pale blue spinner, wine red nose band, tail halved, pale blue over wine red",
         "Orange spinner, azure blue nose band, orange and black striped tail",
         "Orange spinner, pale blue nose band, tail halved, orange over pale blue",
         "Slate blue spinner, pale blue nose band, slate blue tail with a pale blue tip",
@@ -58059,6 +58095,8 @@
     return f.nick ? airStyle(f.nat).show.replace("{name}", f.name).replace("{nick}", f.nick) : f.name;
   }
   var blockedAir = (name) => isBlocked(name) || airBlocked(name);
+  var blockedAirAt = (name, place3) => isBlocked(name) || airBlockedAt(name, place3);
+  var placeBlocked = (place3) => isBlocked(place3) || airBlockedWhole(place3);
   function rateOf(g2, nat, kind) {
     const t = g2.airRates?.[`${nat}:${kind}`];
     return t && t[0] >= AIRNICKS.hard.least ? t[1] / t[0] : null;
@@ -58111,32 +58149,37 @@
       d.x = 1;
       d.n += twice - 1;
     }
-    if (hard) d.h++;
+    if (hard) {
+      d.h++;
+      f.hardAt = place3;
+    }
     if (d.n >= AIRNICKS.need && !f.nick && f.guards === void 0) nameGroup(g2, f, place3);
     colour(g2, f);
   }
-  function earnedAirName(g2, f, place3) {
+  function earnedAirName(g2, f, place3, over = "") {
     const s = airStyle(f.nat);
     const taken2 = takenNames(g2, f.nat);
     const ok2 = (n) => !taken2.has(n) && !blockedAir(n);
     const rng = new Rng(hashString(`airnick:${g2.seed}:${f.nat}:${f.id}`));
-    const placed3 = place3 ? s.place.map((t) => t.replace("{place}", place3)).filter(ok2) : [];
+    const at4 = place3 && !placeBlocked(place3) ? place3 : "";
+    const placed3 = at4 ? s.place.map((t) => t.replace("{place}", at4)).filter((n) => !taken2.has(n) && !blockedAirAt(n, at4)) : over ? s.place.map((t) => t.replace("{place}", over)).filter(ok2) : [];
     const any = s.any.filter(ok2);
     if (s.guards) {
       const G5 = s.guards, kind = f.kind ?? (f.bmr > f.ftr ? "bmr" : "ftr");
       const rung = /Corps$/.test(f.name) ? "corps" : /Division$/.test(f.name) ? "division" : "regiment";
       const row2 = G5[rung][kind];
-      const city = place3 && !blockedAir(place3) ? place3 : "";
+      const city = at4;
       const form2 = city ? row2.form.replace("Guards", G5.city.replace("{city}", city)) : row2.form;
-      const got = nextNumber(g2, `guards:${f.nat}:${rung}:${kind}`, row2.numbers, (n) => formName(form2, n), (x) => g2.airFleets.some((y) => y.nat === f.nat && y.name === x) || blockedAir(x));
+      const got = nextNumber(g2, `guards:${f.nat}:${rung}:${kind}`, row2.numbers, (n) => formName(form2, n), (x) => g2.airFleets.some((y) => y.nat === f.nat && y.name === x) || blockedAirAt(x, city));
       return { name: got.name, guards: got.n, short: formName(row2.short, got.n) };
     }
     if (placed3.length && (rng.next() < 0.25 || !any.length)) return { nick: rng.pick(placed3) };
     return any.length ? { nick: rng.pick(any) } : {};
   }
   function nameGroup(g2, f, place3) {
-    const at4 = place3 >= 0 ? g2.regions[place3]?.name ?? "" : "";
-    const got = earnedAirName(g2, f, at4);
+    const hp = f.hardAt;
+    const at4 = hp !== void 0 && hp >= 0 ? g2.regions[hp]?.name ?? "" : "";
+    const got = earnedAirName(g2, f, at4, place3 >= 0 ? g2.regions[place3]?.name ?? "" : "");
     if (!got.nick && !got.name) return;
     if (got.name) {
       f.was = f.name;
@@ -58257,16 +58300,12 @@
         if (!c || fleetKnown(g2, c, viewer) === "none") continue;
       } else if (e.base < 0 || sight2[e.base] !== SIGHT.full) continue;
       const p = groupAt(g2, e);
-      out.push({ x: p.x, y: p.y, reach: airRange(e, g2).ftr });
+      out.push({ x: p.x, y: p.y, region: p.region, sea: p.sea, reach: airRange(e, g2).ftr });
     }
     return out;
   }
-  function pointLeg(g2, x, y, from2, to) {
-    const A = g2.regions[from2], B3 = g2.regions[to];
-    const bx = nearX(g2, B3.x, A.x), px = nearX(g2, x, A.x);
-    const dx = bx - A.x, dy = B3.y - A.y, L2 = dx * dx + dy * dy;
-    const t = L2 > 0 ? Math.max(0, Math.min(1, ((px - A.x) * dx + (y - A.y) * dy) / L2)) : 0;
-    return Math.hypot(px - (A.x + t * dx), y - (A.y + t * dy)) * AIR.kmPerUnit;
+  function pointLeg(g2, p, from2, to) {
+    return legKmAt(g2, p, from2, to);
   }
   function hopsLeft(g2, f) {
     if (f.flew === g2.turn) return 0;
@@ -58288,11 +58327,11 @@
     const N = nodes.length, start2 = nodes.indexOf(f.base);
     const foes = knownFighters(g2, f, viewer);
     const nodeRisk = new Uint8Array(N);
-    for (let i = 0; i < N; i++) for (const e of foes) if (pointLeg(g2, e.x, e.y, nodes[i], nodes[i]) <= e.reach) {
+    for (let i = 0; i < N; i++) for (const e of foes) if (pointLeg(g2, e, nodes[i], nodes[i]) <= e.reach) {
       nodeRisk[i] = 1;
       break;
     }
-    const legRisk = (i, j) => nodeRisk[j] === 1 || foes.some((e) => pointLeg(g2, e.x, e.y, nodes[i], nodes[j]) <= e.reach);
+    const legRisk = (i, j) => nodeRisk[j] === 1 || foes.some((e) => pointLeg(g2, e, nodes[i], nodes[j]) <= e.reach);
     const near2 = nodes.map(() => []);
     const legKmOf = /* @__PURE__ */ new Map();
     for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
@@ -59280,15 +59319,15 @@
     const way = (k) => {
       const p = plans[k];
       const f = p.figures;
-      const flown = !p.why;
+      const flown2 = !p.why;
       const bomb = !!nat && armedAt(g2, nat) === target;
       const hits = [];
-      if (flown && f.output !== void 0) hits.push({ n: f.output <= 0 ? "0%" : f.output < 5e-3 ? "<1%" : `−${pct8(f.output)}`, words: "output, for a month" });
-      if (flown && f.rail) hits.push({ n: pct8(f.rail), words: "chance the railway is cut" });
-      if (flown && f.factory) hits.push({ n: pct8(f.factory), words: "chance a factory is wrecked" });
-      if (flown && !bomb && !hits.length) hits.push({ n: "", words: "No industry there, and too few bombers to cut the railway." });
+      if (flown2 && f.output !== void 0) hits.push({ n: f.output <= 0 ? "0%" : f.output < 5e-3 ? "<1%" : `−${pct8(f.output)}`, words: "output, for a month" });
+      if (flown2 && f.rail) hits.push({ n: pct8(f.rail), words: "chance the railway is cut" });
+      if (flown2 && f.factory) hits.push({ n: pct8(f.factory), words: "chance a factory is wrecked" });
+      if (flown2 && !bomb && !hits.length) hits.push({ n: "", words: "No industry there, and too few bombers to cut the railway." });
       const fighterLoss = p.fighters > 0 ? p.fighterLossN / p.fighters : 0;
-      const fb = flown && p.fog && !p.fog.live ? p.fog : null;
+      const fb = flown2 && p.fog && !p.fog.live ? p.fog : null;
       const about3 = (x) => band(x[0], x[1], false);
       const out2 = {
         kind: k,
@@ -59303,20 +59342,20 @@
         bomberLossN: p.bomberLossN,
         fighterLoss,
         fighterLossN: p.fighterLossN,
-        lost: flown ? `${pct8(p.bomberLoss)} · about ${num4(p.bomberLossN)}` : "",
-        fightersLost: flown && p.fighters > 0 ? `${pct8(fighterLoss)} · about ${num4(p.fighterLossN)}` : "",
-        gunLoss: flown ? p.guns.loss : 0,
-        gunLossN: flown ? p.guns.lossN : 0,
-        toGuns: flown ? `about ${num4(p.guns.lossN)}` : "",
-        gunsStop: flown ? p.guns.stop : 0,
-        gunsWords: !flown ? "" : p.guns.level ? "of them to flak and guns" : "of them to light flak",
-        stopNote: flown && !bomb && p.guns.stop > 0 ? `after the guns stop ${pct8(p.guns.stop)} of the bombing` : "",
+        lost: flown2 ? `${pct8(p.bomberLoss)} · about ${num4(p.bomberLossN)}` : "",
+        fightersLost: flown2 && p.fighters > 0 ? `${pct8(fighterLoss)} · about ${num4(p.fighterLossN)}` : "",
+        gunLoss: flown2 ? p.guns.loss : 0,
+        gunLossN: flown2 ? p.guns.lossN : 0,
+        toGuns: flown2 ? `about ${num4(p.guns.lossN)}` : "",
+        gunsStop: flown2 ? p.guns.stop : 0,
+        gunsWords: !flown2 ? "" : p.guns.level ? "of them to flak and guns" : "of them to light flak",
+        stopNote: flown2 && !bomb && p.guns.stop > 0 ? `after the guns stop ${pct8(p.guns.stop)} of the bombing` : "",
         figures: f,
         hits,
         foot: k === "bomb" ? "Escorts can fly with them." : "No escorts. Fewer lost, fewer hits.",
-        prose: flown ? p.effects[0] ?? "" : ""
+        prose: flown2 ? p.effects[0] ?? "" : ""
       };
-      if (flown && p.fog) out2.band = p.fog.band;
+      if (flown2 && p.fog) out2.band = p.fog.band;
       if (fb) {
         out2.lost = `${band(fb.loss[0], fb.loss[1])} · about ${about3(fb.bomberLossN)}`;
         if (p.fighters > 0) out2.fightersLost = `${band(fb.fighterLossN[0] / p.fighters, fb.fighterLossN[1] / p.fighters)} · about ${about3(fb.fighterLossN)}`;
@@ -59491,7 +59530,7 @@
     const book3 = g2.intel?.airSeen?.[nat] ?? {};
     const s = book3[t];
     if (s && g2.turn - s[0] < F().forget) return { live: false, scouted: false, ago: g2.turn - s[0], fighters: s[1], groups: s[2], guns: s[3], ruin: s[4] / 100, near: s[1] };
-    const R2 = fighterReach2(g2, g2.regions[t].ctrl);
+    const R2 = fighterReach2(g2, g2.regions[t].ctrl, t);
     let near2 = -1;
     for (const [id, x] of Object.entries(book3)) if (g2.turn - x[0] < F().forget && x[1] > near2 && km(g2, +id, t) <= R2) near2 = x[1];
     return { live: false, scouted: false, ago: -1, fighters: -1, groups: 0, guns: -1, ruin: -1, near: near2 };
@@ -59549,14 +59588,14 @@
     if (!raidFogOn(g2) || !fogOn(g2, nat)) return;
     const ready = AIRWAR.ai.raids.ready, cost = AIRWAR.recon.ready;
     let sight2 = sightOf(g2, nat);
-    let flown = 0;
+    let flown2 = 0;
     for (const t of targets2) {
-      if (flown >= F().scouts) break;
+      if (flown2 >= F().scouts) break;
       if (!wantsLook(g2, nat, t, sight2)) continue;
       const by2 = mine4.filter((f) => f.ftr + f.bmr > 0 && f.scouted !== g2.turn && !(f.ready >= ready && f.ready - cost < ready)).map((f) => ({ f, d: kmTo(g2, f, t) })).sort((a, b) => a.d - b.d || a.f.id - b.f.id);
       for (const { f } of by2) {
         if (!scout(g2, f.id, t, nat).ok) continue;
-        flown++;
+        flown2++;
         sight2 = sightOf(g2, nat);
         break;
       }
@@ -59828,11 +59867,16 @@
     return c.base >= 0 ? seaKm(g2, c.base, z) : Infinity;
   }
   function legKm(g2, f, from2, to) {
-    const p = groupAt(g2, f), A = g2.regions[from2], B3 = g2.regions[to];
+    return legKmAt(g2, groupAt(g2, f), from2, to);
+  }
+  function legKmAt(g2, p, from2, to) {
+    const A = g2.regions[from2], B3 = g2.regions[to];
     const bx = nearX(g2, B3.x, A.x), px = nearX(g2, p.x, A.x);
     const dx = bx - A.x, dy = B3.y - A.y, L2 = dx * dx + dy * dy;
     const t = L2 > 0 ? clamp(((px - A.x) * dx + (p.y - A.y) * dy) / L2, 0, 1) : 0;
-    return Math.hypot(px - (A.x + t * dx), p.y - (A.y + t * dy)) * AIR.kmPerUnit;
+    const qx = A.x + t * dx, qy = A.y + t * dy;
+    if (globeLeg(g2, A, B3, p.region, p.sea)) return globeDist(g2, px, p.y, qx, qy) * AIR.kmPerUnit;
+    return Math.hypot(px - qx, p.y - qy) * AIR.kmPerUnit;
   }
   function groupAt(g2, f) {
     const c = carrierOf(g2, f);
@@ -59922,7 +59966,7 @@
     }
     return n;
   }
-  var fighterReach2 = (g2, nat) => reach({ nat, name: "" }, g2).ftrRange;
+  var fighterReach2 = (g2, nat, base) => reach(base === void 0 ? { nat, name: "" } : { nat, name: "", base }, g2).ftrRange;
   function fightersInReach(g2, region, against) {
     const holder = g2.regions[region].ctrl;
     return g2.airFleets.filter((f) => f.ftr > 0 && atWar(g2, f.nat, against) && guardsLand(g2, f, region, holder) && cover(kmTo(g2, f, region), reach(f, g2).ftrRange) > 0);
@@ -60066,7 +60110,7 @@
   function bookCloseAir(g2, air2, sorties2, region = -1) {
     if (!air2) return;
     const stamp2 = g2.turn * 10 + g2.week;
-    const flown = [];
+    const flown2 = [];
     for (const [side5, home] of [[air2.att, false], [air2.def, true]]) {
       if (!side5.strikes && !sorties2) continue;
       for (const k of side5.groups) {
@@ -60085,10 +60129,10 @@
         }
         f.ready = Math.max(AIR.ready.floor, f.ready - CLOSE.ready);
         f.closeAt = stamp2;
-        flown.push(f);
+        flown2.push(f);
       }
     }
-    if (nicknamesOn(g2)) airSupportFlown(g2, flown, region);
+    if (nicknamesOn(g2)) airSupportFlown(g2, flown2, region);
   }
   function skyDenies(g2, nat, region) {
     const sky = skyOver(g2, region);
@@ -61755,7 +61799,32 @@
       const G5 = AIRWAR.ground;
       const r = g2.regions[target];
       const foes = r.units.filter((u) => !u.dead && atWar(g2, nat, u.nat));
-      if (!battle) a.att.forEach((x, i) => down(x.f, att[i], x.ftr * G5.fire * luck(), false));
+      const rule = strafeOn();
+      const strafers = [];
+      let fired = 0;
+      if (rule) a.att.forEach((x, i) => {
+        if (!battle || staff) {
+          const k0 = Math.min(x.f.ftr, rng.roll(Math.max(0, x.ftr * G5.fire * luck() * (staff ? staff.rest.ftr : 1))));
+          if (k0) rng.roll(k0 * saved(false));
+        }
+        const left = x.f.ftr * x.esc * x.crowd;
+        if (!(x.ftr > 0 && canStrafe(g2, x)) || left <= 0) return;
+        strafers.push(x.f.id);
+        if (battle && !staff) return;
+        const own = airRng(g2, `${m}:${target}:${nat}${salt}:low:${x.f.id}`);
+        const k = Math.min(x.f.ftr, own.roll(Math.max(0, left * G5.fire * own.range(1 - C4.luck, 1 + C4.luck) * (staff ? staff.rest.ftr : 1))));
+        if (k) {
+          const p = airPool(g2, x.f.nat), back = own.roll(k * saved(false));
+          x.f.ftr -= k;
+          x.f.lost.ftr += k;
+          att[i].lostFtr += k;
+          p.lostFtr += k;
+          poolIn(g2, x.f.nat, back, x.f);
+          p.lostPilots += k - back;
+        }
+        fired += k;
+      });
+      else if (!battle) a.att.forEach((x, i) => down(x.f, att[i], x.ftr * G5.fire * luck(), false));
       else if (staff) a.att.forEach((x, i) => {
         const k = Math.min(x.f.ftr, rng.roll(Math.max(0, x.ftr * G5.fire * luck() * staff.rest.ftr)));
         if (!k) return;
@@ -61767,7 +61836,11 @@
         poolIn(g2, x.f.nat, back, x.f);
         p.lostPilots += k - back;
       });
-      const low2 = fix?.strafed() ?? a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd, 0);
+      const low2 = fix?.strafed() ?? a.att.reduce((s, x) => s + (!rule || strafers.includes(x.f.id) ? x.f.ftr * x.esc * x.crowd : 0), 0);
+      if (rule) {
+        const route = battle && !staff ? "fought" : "settled";
+        strafeWatch.tell?.({ route, target, nat, strafers: route === "fought" ? [...battle?.strafers ?? []] : strafers, fire: route === "fought" ? battle?.strafeFire ?? 0 : fired, weight: low2 });
+      }
       const cut2 = troopCut(r, foes, (through2 + low2 * G5.fighters) * troopWeight(g2, nat));
       let divs = 0;
       for (const c of foes) {
@@ -62292,7 +62365,7 @@
       return m;
     };
     const done = /* @__PURE__ */ new Set();
-    let flown = 0;
+    let flown2 = 0;
     for (const s of shores) {
       if (done.has(s)) continue;
       done.add(s);
@@ -62327,7 +62400,7 @@
       for (const f of groups) named5.add(f.id);
       const fleets = groups.filter((f) => f.flew !== g2.turn && f.mission === "support" && f.ready >= R2.ready && reaches2(f, to));
       const goes = fleets.some((f) => f.kind === "ftr" && f.ftr > 0) && !assessAir(g2, fleets, "superiority", to).why;
-      const rep = goes ? fly(g2, nat, "superiority", to, fleets, `:sky${flown++}`) : null;
+      const rep = goes ? fly(g2, nat, "superiority", to, fleets, `:sky${flown2++}`) : null;
       if (rep) for (const f of fleets) {
         f.mission = "superiority";
         f.target = to;
@@ -62430,7 +62503,7 @@
     baseByThreat(g2, nat, mine4, beaches, fights2, plan?.named);
     baseBombers(g2, nat, free2, fights2);
     if (ph?.posture === "attack" || held3.length) closeStaff(g2, free2, [.../* @__PURE__ */ new Set([...ph?.posture === "attack" ? battles : [], ...held3])], !!FB);
-    let flown = 0;
+    let flown2 = 0;
     for (let k = 0; k < R2.sweeps && (front.size || beaches.length); k++) {
       let best = null;
       const bases = [...new Set(mine4.filter((f) => fit3(f) && f.kind === "ftr" && f.ftr > 0 && f.ready >= R2.ready).map(homeOf2))];
@@ -62457,7 +62530,7 @@
         if (v > R2.worth && (!best || v > best.v)) best = { t, fleets, v };
       }
       if (!best) break;
-      send2("superiority", best.t, best.fleets, flown++);
+      send2("superiority", best.t, best.fleets, flown2++);
     }
     const lineAt = (t) => {
       if (hit.has(t) || !g2.regions[t]) return;
@@ -62468,7 +62541,7 @@
       const { fc } = staffWeigh(g2, nat, fleets, "line", t);
       if (!fc) return;
       if (fc.bomberLoss > rules.loss || fc.success < R2.success || fc.cut < rivals_default.soften.raid) return;
-      send2("line", t, fleets, flown++);
+      send2("line", t, fleets, flown2++);
     };
     const aims = Object.keys(g2.flags).filter((k) => k === `st:eff:${nat}` || k.startsWith(`st:eff:${nat}:t`)).map((k) => g2.flags[k] - 1).sort((a, b) => a - b);
     for (const t of aims) lineAt(t);
@@ -62536,7 +62609,7 @@
       }
       if (!pick4.best) break;
       if (patrol?.(pick4.best.fleets[0], pick4.best.v)) continue;
-      send2(pick4.best.m, pick4.best.t, pick4.best.fleets, flown++);
+      send2(pick4.best.m, pick4.best.t, pick4.best.fleets, flown2++);
     }
   }
   function flyReadOrders(g2, nat, mine4) {
@@ -62604,6 +62677,37 @@
   function foundShare(g2, a, nat) {
     return a.ships.some((x) => atSea(x) && fleetKnown(g2, x, nat) !== "exact") ? CARRIERS.strike.report : 1;
   }
+  function canStrafe(g2, x) {
+    return x.d <= (AIRWAR.ground.reach ?? AIR.range.fullAt) * reach(x.f, g2).ftrRange;
+  }
+  function strafersExpected(g2, a, air2) {
+    const L2 = AIR.combat.luck, lo = 1 - L2, hi = 1 + L2, fire2 = AIRWAR.ground.fire;
+    const ids2 = [];
+    let left = 0, weight6 = 0;
+    for (const x of a.att) {
+      if (!(x.ftr > 0) || !canStrafe(g2, x)) continue;
+      const F2 = x.f.ftr, c = x.esc * x.crowd, m = a.E > 0 ? air2 * (x.ftr / a.E) : 0;
+      const lost = m <= 0 ? 0 : clipMean(m, F2, lo, hi);
+      const some3 = m <= 0 ? 1 : chanceBelow(m, F2, lo, hi);
+      const l = c * Math.max(0, F2 - lost);
+      if (some3 > 0.5) ids2.push(x.f.id);
+      left += l;
+      weight6 += l * (1 - c * fire2);
+    }
+    return { ids: ids2, left, fire: left * fire2, weight: weight6 };
+  }
+  function clipMean(m, F2, lo, hi) {
+    if (m * hi <= F2) return m * (lo + hi) / 2;
+    if (m * lo >= F2) return F2;
+    const u = F2 / m;
+    return (m / 2 * (u * u - lo * lo) + F2 * (hi - u)) / (hi - lo);
+  }
+  function chanceBelow(m, F2, lo, hi) {
+    const y0 = m * lo, y1 = m * hi;
+    if (y1 <= y0) return Math.max(0, Math.min(1, F2 - y0));
+    const prim = (y) => y <= F2 - 1 ? y : y >= F2 ? F2 - 1 + 0.5 : F2 - 1 + (y - (F2 - 1) - (y - (F2 - 1)) ** 2 / 2);
+    return (prim(y1) - prim(y0)) / (y1 - y0);
+  }
   function troopLaw(g2, a, m, target) {
     if (m !== "ground") return null;
     const G5 = AIRWAR.ground, r = g2.regions[target], nat = a.att[0]?.f.nat ?? "";
@@ -62622,7 +62726,9 @@
       fire: G5.fire,
       dug: G5.dug,
       str: G5.str,
-      value: G5.value
+      value: G5.value,
+      // (The strafers' rule, strafers.ts: the groups with the reach to strafe.)
+      ...strafeOn() ? { reach: a.att.filter((x) => x.ftr > 0 && canStrafe(g2, x)).map((x) => x.f.id) } : {}
     };
   }
   function bombLaw(g2, a, m, target) {
@@ -62704,6 +62810,7 @@
     let town;
     let city;
     let field4 = null;
+    let fire2, strafers;
     if (m === "superiority") {
       const based2 = g2.airFleets.filter((f) => f.base === target && f.ship === void 0 && atWar(g2, f.nat, nat)).length;
       cut2 = based2 ? Math.min(AIR.damage.airfields.max, through2 / AIR.damage.airfields.scale) : 0;
@@ -62771,9 +62878,18 @@
       const G5 = AIRWAR.ground;
       const r = g2.regions[target];
       const foes = r.units.filter((u) => !u.dead && atWar(g2, nat, u.nat));
-      const fire2 = a.E * G5.fire;
-      ftrLoss += fire2;
-      cut2 = troopCut(r, foes, (through2 + Math.max(0, a.E - ftrLoss) * G5.fighters) * troopWeight(g2, nat));
+      if (strafeOn()) {
+        const s = strafersExpected(g2, a, ftrLoss);
+        ftrLoss += s.fire;
+        fire2 = s.fire;
+        strafers = s.ids;
+        cut2 = troopCut(r, foes, (through2 + s.weight * G5.fighters) * troopWeight(g2, nat));
+        strafeWatch.tell?.({ route: "card", target, nat, strafers: s.ids, fire: s.fire, weight: s.weight });
+      } else {
+        const fire3 = a.E * G5.fire;
+        ftrLoss += fire3;
+        cut2 = troopCut(r, foes, (through2 + Math.max(0, a.E - ftrLoss) * G5.fighters) * troopWeight(g2, nat));
+      }
       value = cut2 * foes.reduce((s, c) => s + c.divs, 0) * G5.value;
     }
     const k = AIRWAR.success.k;
@@ -62802,6 +62918,10 @@
     if (atomReach !== null) success = atomReach;
     const fc = { odds, bomberLoss: a.bomberLoss, cut: cut2, nation, rail: rail2, ruin, ftrLoss, bmrLoss, foeLoss, foeGuns, success, worth: value + 300 * (pr + pf), ships, hits, town };
     if (city !== void 0) fc.city = city;
+    if (fire2 !== void 0) {
+      fc.fire = fire2;
+      fc.strafers = strafers;
+    }
     if (field4) fc.field = { shut: field4.closed, levels: field4.levels, ground: field4.ground, grounded: field4.grounded, room: field4.room, built: field4.built };
     return fc;
   }
@@ -63872,13 +63992,20 @@
   var holdsSea = (f) => atSea(f) && f.stance !== "passage";
   var fleetsOf = (g2, nat) => g2.fleets.filter((f) => f.nat === nat);
   var routeCache = /* @__PURE__ */ new WeakMap();
+  function cargoLaid(id) {
+    if (NAVY.convoys.some((c) => c.id === id)) return true;
+    const l = RES.lanes.find((x) => x.id === id);
+    if (!l) return false;
+    return l.oil > 0 || l.sup > 0 || (l.fields?.length ?? 0) > 0 || !!l.split && (l.split.oil > 0 || l.split.sup > 0);
+  }
+  var laneCounts = (rt) => rt.carries !== false;
   function seaRoutes(g2) {
     let rows = routeCache.get(g2.seas);
     if (!rows) {
       rows = [];
       const add = (id, name, to, keys) => {
         const zones = keys.map((k) => zoneOf(g2, k)).filter((z) => z >= 0);
-        if (zones.length && !rows.some((r) => r.id === id)) rows.push({ id, name, to, zones });
+        if (zones.length && !rows.some((r) => r.id === id)) rows.push({ id, name, to, zones, carries: cargoLaid(id) });
       };
       for (const l of RES.lanes) add(l.id, l.name, l.to, l.zones);
       for (const c of NAVY.convoys) add(c.id, c.name, c.to, c.zones);
@@ -65673,7 +65800,7 @@
   }
   function shippingIn(g2, nat, z) {
     let n = 0;
-    for (const rt of seaRoutes(g2)) if (rt.zones.includes(z) && g2.nations[rt.to]?.alive && atWar(g2, nat, rt.to) && !laneStopped(g2, rt.id)) n++;
+    for (const rt of seaRoutes(g2)) if (laneCounts(rt) && rt.zones.includes(z) && g2.nations[rt.to]?.alive && atWar(g2, nat, rt.to) && !laneStopped(g2, rt.id)) n++;
     return n;
   }
   function armyInAfrica(g2, cause) {
@@ -65694,7 +65821,7 @@
   }
   function lanesTo2(g2, to, z) {
     let n = 0;
-    for (const rt of seaRoutes(g2)) if (rt.to === to && rt.zones.includes(z) && g2.nations[rt.to]?.alive && !laneStopped(g2, rt.id)) n++;
+    for (const rt of seaRoutes(g2)) if (laneCounts(rt) && rt.to === to && rt.zones.includes(z) && g2.nations[rt.to]?.alive && !laneStopped(g2, rt.id)) n++;
     return n;
   }
   function huntBeat(g2, f, H, month3 = g2.turn) {
@@ -67542,7 +67669,7 @@
   function laneUnguarded(g2, f, seas) {
     let found2 = null;
     for (const rt of seaRoutes(g2)) {
-      if (!rt.zones.some((z) => seas.includes(z)) || whyNotEscort(g2, f, rt.id)) continue;
+      if (!laneCounts(rt) || !rt.zones.some((z) => seas.includes(z)) || whyNotEscort(g2, f, rt.id)) continue;
       if (g2.fleets.some((x) => x !== f && atSea(x) && x.stance === "escort" && x.lane === rt.id && (x.nat === f.nat || allied(g2, x.nat, f.nat)))) continue;
       const m = g2.convoys[rt.id];
       const fort = NAVY.convoys.find((c) => c.id === rt.id)?.base;
@@ -67599,7 +67726,7 @@
   function laneOnBeat(g2, f) {
     let found2 = null;
     for (const rt of seaRoutes(g2)) {
-      if (!rt.zones.includes(f.station) || whyNotEscort(g2, f, rt.id)) continue;
+      if (!laneCounts(rt) || !rt.zones.includes(f.station) || whyNotEscort(g2, f, rt.id)) continue;
       if (rt.to === f.nat) return rt;
       found2 ?? (found2 = rt);
     }
@@ -82015,10 +82142,10 @@
   function air(g2, nat) {
     const from2 = g2.airReports.length;
     airAI(g2, nat);
-    const flown = g2.airReports.slice(from2).filter((r) => r.attNat === nat);
-    if (!flown.length) return null;
-    const L2 = lossesOf(flown);
-    return `flew ${plural7(flown.length, "raid")}: ${some(flown.map((r) => raidWords(g2, r)), 4)}. It cost ${plural7(Math.round(L2.ours), "aircraft", "aircraft")}${L2.theirs >= 0.5 ? ` and shot down ${Math.round(L2.theirs)}` : ""}.`;
+    const flown2 = g2.airReports.slice(from2).filter((r) => r.attNat === nat);
+    if (!flown2.length) return null;
+    const L2 = lossesOf(flown2);
+    return `flew ${plural7(flown2.length, "raid")}: ${some(flown2.map((r) => raidWords(g2, r)), 4)}. It cost ${plural7(Math.round(L2.ours), "aircraft", "aircraft")}${L2.theirs >= 0.5 ? ` and shot down ${Math.round(L2.theirs)}` : ""}.`;
   }
   function navy(g2, nat) {
     const was = new Map(fleetsOf(g2, nat).map((f) => [f.id, { zone: f.zone, stance: f.stance }]));
@@ -82039,8 +82166,8 @@
     if (back.length) did.push(`brought ${some(back)} into harbour`);
     const shelled = g2.shoreReports.slice(shore).filter((r) => r.nat === nat).map((r) => g2.regions[r.region].name);
     if (shelled.length) did.push(`shelled ${some([...new Set(shelled)])}`);
-    const flown = g2.airReports.slice(strikes2).filter((r) => r.attNat === nat);
-    if (flown.length) did.push(`flew ${plural7(flown.length, "carrier strike")} at ${some(flown.map((r) => raidWords(g2, r)))}`);
+    const flown2 = g2.airReports.slice(strikes2).filter((r) => r.attNat === nat);
+    if (flown2.length) did.push(`flew ${plural7(flown2.length, "carrier strike")} at ${some(flown2.map((r) => raidWords(g2, r)))}`);
     return did.length ? `${listAnd3(did)}.` : null;
   }
   var WORK = { research, build: build2, diplomacy, spies, air, navy };
@@ -83905,9 +84032,9 @@
   var flownRaids = (g2, turn2 = g2.turn) => raidReplays(g2, turn2, g2.human);
   function orderScout(g2, id, target) {
     if (!myAir(g2, id)) return { ok: false, text: "It is not your month.", lost: 0 };
-    const flown = scout(g2, id, target, g2.human);
-    if (flown.ok) reconnoitre(g2);
-    return flown;
+    const flown2 = scout(g2, id, target, g2.human);
+    if (flown2.ok) reconnoitre(g2);
+    return flown2;
   }
   var fleetsInSight = (g2) => fleetsSeen(g2, g2.human);
   var seaPictureOf = (g2, zone) => g2.human && g2.seas[zone] ? seaPicture(g2, zone, g2.human) : null;
@@ -101388,6 +101515,9 @@
       __publicField(this, "fireDue", /* @__PURE__ */ new Map());
       /** The ground fire owed for each fighter that flies a whole pass's share: the card's 'fire' over the fighters it weighed. */
       __publicField(this, "fireEach", 0);
+      /** With the strafers' rule on: the campaign groups charged the ground fire, and what it charged them. */
+      __publicField(this, "firedOn", /* @__PURE__ */ new Set());
+      __publicField(this, "fireOwed", 0);
       /** The lane the passes run down: through the middle of the troops, along their road where they march. */
       __publicField(this, "lane", { x: 0, y: 0, dx: 0, dy: 1 });
       /** Battle seconds of the first contact, null before it (the view's contact, as land's). */
@@ -101536,6 +101666,7 @@
       if (this.troops) {
         const E = this.units.reduce((t, u) => t + (u.side === "att" && u.air === "ftr" ? u.n0 * reachOf2(u) : 0), 0);
         this.fireEach = E > 0 ? (this.place.forecast.fire ?? 0) / E : 0;
+        if (this.place.marks?.law.reach) this.fireEach = this.place.marks.law.fire;
       }
       this.think("att", true);
       this.think("def", true);
@@ -101994,7 +102125,7 @@
     // A raid on troops (release 2): the raid's fighters go down on the troops.
     /** Whether a group of the raid may go down on the troops: a fighter of a raid on troops that has not done so already, and was given no other order. */
     mayStrafe(u) {
-      return !!this.troops && u.side === "att" && u.air === "ftr" && !this.keepUp.has(u.id) && !this.strafing.get(u.id)?.over;
+      return !!this.troops && u.side === "att" && u.air === "ftr" && !this.keepUp.has(u.id) && !this.strafing.get(u.id)?.over && (!this.troops.law.reach || this.troops.law.reach.includes(u.corps));
     }
     /**
      * By default, as the staff's own raid counts every fighter that came through: each of the raid's fighter groups goes
@@ -102076,8 +102207,13 @@
       const left = dist(u.x, u.y, s.to[0], s.to[1]), p = clamp013(1 - left / len);
       const part = u.n * reachOf2(u) / S3.passes;
       if (p > s.p) {
-        this.fireDue.set(u.id, (this.fireDue.get(u.id) ?? 0) + this.fireEach * part * (p - s.p));
+        const owe = this.fireEach * part * (p - s.p);
+        this.fireDue.set(u.id, (this.fireDue.get(u.id) ?? 0) + owe);
         s.p = p;
+        if (this.troops.law.reach) {
+          this.firedOn.add(u.corps);
+          this.fireOwed += owe;
+        }
       }
       if (left > 1) return;
       s.done++;
@@ -103292,6 +103428,7 @@
         // A raid on troops: the fighters that strafed, and the organisation cut the field earned by the campaign's own law
         // from them and the bombers that dropped. Fought to the end, the campaign books the cut from these same counts.
         ...this.troops ? { strafed: this.strafed, troops: { cut: troopCutOf(this.troops.law, att.reduce((s, u) => s + u.dropped, 0), this.strafed) } } : {},
+        ...this.troops?.law.reach ? { strafers: [...this.firedOn].sort((x, y) => x - y), strafeFire: this.fireOwed } : {},
         ...this.place.bombs ? { rolls: this.staff ? { ...this.railCut ? { rail: 0 } : {}, ...this.ruined ? { ruin: 0 } : {} } : { ...this.rolls }, railCut: this.railCut, ruined: this.ruined } : {}
       };
     }
@@ -104552,7 +104689,10 @@
   var MORE_KINDS = ["ground"];
   var asked2 = [];
   function flyKinds(kinds) {
-    if (kinds) asked2 = MORE_KINDS.filter((k) => kinds.includes(k));
+    if (kinds) {
+      asked2 = MORE_KINDS.filter((k) => kinds.includes(k));
+      groundFlown(asked2.includes("ground"));
+    }
     const G5 = globalThis;
     const forced3 = String(G5.TC_FLY ?? G5.process?.env?.TC_FLY ?? "").split(",").map((x) => x.trim());
     return MORE_KINDS.filter((k) => asked2.includes(k) || forced3.includes(k));
@@ -104667,7 +104807,7 @@
       if (seats) bombers[f.corps] = seats;
     }
     const marks = more && m === "ground" ? troopPlace(g2, a, m, target, nat, seed) : null;
-    const fire2 = marks ? Math.min(armed.ftrLoss, a.E * marks.law.fire) : 0;
+    const fire2 = marks ? armed.fire !== void 0 ? armed.fire : Math.min(armed.ftrLoss, a.E * marks.law.fire) : 0;
     const lightGuns = marks ? marks.pieces.reduce((t, p) => t + (p.what === "aa" ? p.n : 0), 0) : 0;
     const place3 = {
       kind,
@@ -104781,6 +104921,7 @@
       flew,
       chance: o.chance,
       ...o.strafed !== void 0 ? { strafed: o.strafed } : {},
+      ...o.strafers ? { strafers: [...o.strafers], strafeFire: o.strafeFire ?? 0 } : {},
       ...o.gaveUp ? { gaveUp: o.gaveUp } : {},
       ...o.sunk ? { sunk: o.sunk } : {},
       ...o.kept ? { kept: o.kept } : {},
@@ -109910,7 +110051,7 @@
       const ourLost = att ? attLost : defLost, theirLost = att ? defLost : attLost;
       shotDown += theirLost;
       planesLost += ourLost;
-      const bombers = r.att.reduce((t, u) => t + u.bmr, 0), flown = r.att.reduce((t, u) => t + u.bmr + u.ftr, 0);
+      const bombers = r.att.reduce((t, u) => t + u.bmr, 0), flown2 = r.att.reduce((t, u) => t + u.bmr + u.ftr, 0);
       const shipsHit = r.ships ? sumShips(r.ships, "sunk") : null;
       if (shipsHit && shipCount(shipsHit)) {
         if (att) sunk += shipCount(shipsHit);
@@ -109929,7 +110070,7 @@
       row2.tone = good ? "good" : "bad";
       row2.kind = sky2 ? "THE SKY" : "AIR RAID";
       const town = r.region >= 0 && g2.regions[r.region] ? townName(g2.regions[r.region]) : r.place;
-      const what = bombers ? `${num7(bombers)} bombers` : `${num7(flown)} aircraft`;
+      const what = bombers ? `${num7(bombers)} bombers` : `${num7(flown2)} aircraft`;
       if (sky2) {
         row2.sign = "ftr";
         row2.picture = "airfield";
@@ -109951,8 +110092,8 @@
       row2.follows = r.result;
       const sunkHere = shipsHit ? shipCount(shipsHit) : 0;
       row2.figures = sunkHere ? [{ n: String(sunkHere), label: `${classWord(shipsHit)} ${att ? "sunk" : "lost"}` }] : att ? ourLost ? [{ n: num7(ourLost), label: r.att.every((u) => !u.lostFtr) ? "bombers lost" : "aircraft lost" }] : theirLost ? [{ n: num7(theirLost), label: "shot down" }] : [] : theirLost ? [{ n: num7(theirLost), label: "shot down" }] : ourLost ? [{ n: num7(ourLost), label: "fighters lost" }] : [];
-      row2.facts = [{ n: num7(flown), label: att ? "aircraft flew" : "aircraft came" }, { n: num7(ourLost), label: "lost" }, { n: num7(theirLost), label: "of theirs shot down" }];
-      ranked.push({ row: row2, sub: 0, weight: (flown / 20 + ourLost + theirLost) * PLANE_MEN + (shipsHit ? shipsWeight(shipsHit) : 0), great: !!shipsHit && greatShips(shipsHit) });
+      row2.facts = [{ n: num7(flown2), label: att ? "aircraft flew" : "aircraft came" }, { n: num7(ourLost), label: "lost" }, { n: num7(theirLost), label: "of theirs shot down" }];
+      ranked.push({ row: row2, sub: 0, weight: (flown2 / 20 + ourLost + theirLost) * PLANE_MEN + (shipsHit ? shipsWeight(shipsHit) : 0), great: !!shipsHit && greatShips(shipsHit) });
     }
     const shelled = /* @__PURE__ */ new Set();
     for (const r of shores) {
@@ -113482,9 +113623,9 @@
     try {
       for (const f of s.airFleets) {
         if (f.nat !== s.human) continue;
-        const flown = orderScout(s, f.id, region);
-        if (flown.ok) {
-          said = flown.text || "flown";
+        const flown2 = orderScout(s, f.id, region);
+        if (flown2.ok) {
+          said = flown2.text || "flown";
           break;
         }
       }
@@ -115268,9 +115409,9 @@ ${next.text}` : ""}` : next ? next.also : "";
       note4 = ok2 ? what === "repair" ? `${v?.town ?? "The town"} is repaired for ${moneyWords(v?.cost ?? 0)}: it pays in full again from this month.` : `The repair of ${v?.town ?? "the town"} is taken back, and the money with it.` : v?.why ?? note4;
     } else if (what === "recon") {
       const group = s.airFleets.find((f) => f.id === Number(a));
-      const flown = orderScout(s, Number(a), region);
-      ok2 = flown.ok;
-      note4 = flown.text || (ok2 ? "The flight is back with its photographs." : "No flight can be sent there now.");
+      const flown2 = orderScout(s, Number(a), region);
+      ok2 = flown2.ok;
+      note4 = flown2.text || (ok2 ? "The flight is back with its photographs." : "No flight can be sent there now.");
       if (ok2 && group && s.regions[region]) flies.push({ from: group.base, x: s.regions[region].x, y: s.regions[region].y, nat: group.nat, bombers: false, escort: false, region: -1, aa: 0, meet: "", meetFrom: -1, loss: 0 });
     }
     return { ok: ok2, note: note4, flies, view: view2() };
@@ -117506,9 +117647,9 @@ ${standing5}`,
       note4 = air2.note;
       open3 = air2.ok ? air2.open ?? "" : "";
       if (air2.ok && air2.report !== void 0) {
-        const flown = raidsSince(s, air0, [s.turn]);
-        flies = flown.flights;
-        const told2 = flown.notes.join(" ") || note4;
+        const flown2 = raidsSince(s, air0, [s.turn]);
+        flies = flown2.flights;
+        const told2 = flown2.notes.join(" ") || note4;
         note4 = told2.length > 190 ? `${told2.slice(0, told2.lastIndexOf(".", 190) + 1) || told2.slice(0, 190)}` : told2;
       }
       if (air2.ok && part[0] === "search") {
