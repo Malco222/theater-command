@@ -1341,6 +1341,7 @@ namespace LandCrater
 		Seed = InSeed ? InSeed : 1;
 		Holes.clear();
 		Breaches.clear();
+		Scorches.clear();
 		PatchList.clear();
 		PatchOf.clear();
 		Changed.clear();
@@ -1845,6 +1846,252 @@ namespace LandCrater
 		}
 		Keep(H, std::move(CutLine), FirstIndex, H.Out);
 		Breaches.push_back(Number);
+		return true;
+	}
+
+	double Field::Scorched(int Of) const
+	{
+		double Most_ = 0.0;
+		for (const int K : Scorches)
+		{
+			const Hole& H = Holes[static_cast<size_t>(K)];
+			if (H.BurntOf == Of + 1)
+			{
+				Most_ = std::max(Most_, H.Burnt);
+			}
+		}
+		return Most_;
+	}
+
+	bool Field::AddScorch(int Of, double X, double Y, double AlongX, double AlongY, double Long, double Wide, double WindX, double WindY, double Burnt,
+		const std::string& Ground)
+	{
+		if (!Height || Ground == "water" || Of < 0 || static_cast<int>(Holes.size()) >= Most || !(X == X) || !(Y == Y) || std::fabs(X) > 1e6
+			|| std::fabs(Y) > 1e6 || !(Long > 0.5) || !(Wide > 0.3) || !(Burnt > 0.0) || Burnt <= Scorched(Of))
+		{
+			return false;
+		}
+		Burnt = std::min(1.0, Burnt);
+		const bool bCore = Burnt >= 1.0;
+		const double AlongL = std::hypot(AlongX, AlongY);
+		const double Ax = AlongL > 1e-6 ? AlongX / AlongL : 0.0, Ay = AlongL > 1e-6 ? AlongY / AlongL : 1.0;
+		const double WindL = std::hypot(WindX, WindY);
+		const double Wx = WindL > 1e-6 && WindL == WindL ? WindX / WindL : 0.0, Wy = WindL > 1e-6 && WindL == WindL ? WindY / WindL : 0.0;
+		const std::string Word = (Ground == "earth" || Ground == "rock") && !Earth.empty() ? Earth : Ground;
+		const Soil Paint = SoilOf(Word);
+		// What a burning vehicle leaves round her (the effects thread's brew-ups; Brian, 25 November: "make the grass and
+		// battlefield graphics better and more realistic"): the grass browned and burnt off round her, darker toward her;
+		// where no grass grows the sand darkened by her smoke, the snow melted to wet slush and earth, a town's stones
+		// sooted. Then, once she has burnt a while, her soot core: the burnt oil, paint and rubber that fell round her,
+		// black-brown, flecked with grey ash, carried downwind.
+		Rgb8 Brown = Rgb(100, 84, 58), Straw = Rgb(134, 116, 78), Char = Rgb(50, 42, 34);
+		double BrownBy = 0.8;
+		if (Word == "sand")
+		{
+			Brown = Rgb(128, 108, 82);
+			Straw = Rgb(150, 130, 100);
+			Char = Rgb(84, 70, 56);
+			BrownBy = 0.45;
+		}
+		else if (Word == "snow")
+		{
+			Brown = Rgb(112, 106, 98);
+			Straw = Rgb(150, 146, 140);
+			Char = Rgb(64, 54, 44);
+			BrownBy = 0.7;
+		}
+		else if (Word == "town")
+		{
+			Brown = Rgb(96, 90, 82);
+			Straw = Rgb(112, 106, 98);
+			Char = Rgb(62, 56, 50);
+			BrownBy = 0.45;
+		}
+		else if (Word == "mud")
+		{
+			Brown = Rgb(62, 52, 40);
+			Straw = Rgb(74, 64, 50);
+			Char = Rgb(44, 37, 30);
+			BrownBy = 0.45;
+		}
+		else if (Word == "blackearth")
+		{
+			Brown = Rgb(112, 94, 62); // (the steppe's buff grass gone to straw and ash)
+			Straw = Rgb(146, 128, 86);
+			Char = Rgb(52, 45, 36);
+		}
+		const Rgb8 SootCore = Rgb(38, 32, 26), Ash = Rgb(118, 114, 106);
+		// (the same outline for her browned grass and her soot core: her own dice, not the record's number)
+		Dice D(Mix(Mix(Seed ^ 0x5C0BC4ull, static_cast<uint64_t>(Of) + 1u), static_cast<uint64_t>(std::llround(X * 10.0)) * 2654435761ull ^ static_cast<uint64_t>(std::llround(Y * 10.0))));
+		const double Wave[3] = { D.U(0.03, 0.05), D.U(0.02, 0.035), D.U(0.01, 0.02) };
+		const double Phase[3] = { D.U(0.0, 2.0 * Pi), D.U(0.0, 2.0 * Pi), D.U(0.0, 2.0 * Pi) };
+		const double CoreWave[2] = { D.U(0.03, 0.05), D.U(0.015, 0.03) };
+		const double CorePhase[2] = { D.U(0.0, 2.0 * Pi), D.U(0.0, 2.0 * Pi) };
+		// (patches over the ground, not each point its own: a point's own dice drew spokes out from her middle)
+		const uint64_t Salt = Mix(Seed ^ 0x5C0BC4ull, static_cast<uint64_t>(Of) + 1u);
+		const auto Patchy = [Salt](double Px, double Py, double Across, uint64_t Kind)
+		{
+			const double Gx = Px / Across, Gy = Py / Across;
+			const double Fx = std::floor(Gx), Fy = std::floor(Gy), Tx = Gx - Fx, Ty = Gy - Fy;
+			const double Sx_ = Tx * Tx * (3.0 - 2.0 * Tx), Sy_ = Ty * Ty * (3.0 - 2.0 * Ty);
+			const uint64_t K = Mix(Salt, Kind);
+			const double A00 = PlaceShare(Fx, Fy, K), A10 = PlaceShare(Fx + 1.0, Fy, K), A01 = PlaceShare(Fx, Fy + 1.0, K), A11 = PlaceShare(Fx + 1.0, Fy + 1.0, K);
+			return (A00 + (A10 - A00) * Sx_) + ((A01 + (A11 - A01) * Sx_) - (A00 + (A10 - A00) * Sx_)) * Sy_;
+		};
+		const double Reach = ScorchReach(Long);
+		const double HalfLong = 0.5 * Long + 0.8, HalfWide = 0.5 * Wide + 0.8;
+		// (her outline at a way A: the browned grass a ragged ring a tenth either way, carried a little downwind; her
+		// soot her footprint's rounded box and 0.8 m more, carried downwind up to 1.6 times as far)
+		// (the grass browned further downwind, as the fire ran with the wind; her soot kept 0.85 m inside it, so its
+		// feathered edge ends in her browned grass, never on the green)
+		const auto BrownEdge = [&](double A)
+		{
+			const double Down = std::max(0.0, std::cos(A) * Wx + std::sin(A) * Wy);
+			// (and tongues where the fire ran on through the grass a little further)
+			const double Tongue = 0.16 * (Patchy(3.2 * std::cos(A), 3.2 * std::sin(A), 1.0, 7u) - 0.5);
+			const double Rag = 1.0 + Wave[0] * std::sin(3.0 * A + Phase[0]) + Wave[1] * std::sin(5.0 * A + Phase[1]) + Wave[2] * std::sin(8.0 * A + Phase[2]) + Tongue;
+			return (Reach - 0.35) * Rag * (1.0 + 0.3 * std::pow(Down, 1.5)); // (its feather shows it to about Reach)
+		};
+		const auto Edge = [&](double A)
+		{
+			if (!bCore)
+			{
+				return BrownEdge(A);
+			}
+			const double Cx = std::cos(A), Sx = std::sin(A);
+			const double Down = std::max(0.0, Cx * Wx + Sx * Wy);
+			const double U = std::fabs(Cx * Ax + Sx * Ay) / HalfLong, Vv = std::fabs(-Cx * Ay + Sx * Ax) / HalfWide;
+			const double Box = 1.0 / std::pow(std::pow(U, 4.0) + std::pow(Vv, 4.0), 0.25);
+			const double Rag = 1.0 + CoreWave[0] * std::sin(4.0 * A + CorePhase[0]) + CoreWave[1] * std::sin(7.0 * A + CorePhase[1]);
+			return std::min(Box * Rag * (1.0 + 0.6 * std::pow(Down, 1.5)), BrownEdge(A) - 0.85);
+		};
+		// What lies there now, to lie on: an older hole's soil or her own browned grass (in its colour and light), a dug
+		// hole's floor inside its cut, else the ground as drawn.
+		struct Bed
+		{
+			double Z = 0.0;
+			Rgb8 C;
+			Up N;
+		};
+		const auto BedAt = [&](double Px, double Py)
+		{
+			Bed B;
+			const double Flat = Drawn ? std::max(Height(Px, Py), Drawn(Px, Py)) : Height(Px, Py);
+			const bool bCut = InCut(Px, Py);
+			double Z = 0.0, Ux = 0.0, Uy = 0.0, Uz = 1.0;
+			Rgb8 C;
+			if (SoilAt(Px, Py, Z, C, Ux, Uy, Uz) && (bCut || Z > Flat))
+			{
+				B.Z = Z;
+				B.C = C;
+				B.N.X = static_cast<float>(Ux);
+				B.N.Y = static_cast<float>(Uy);
+				B.N.Z = static_cast<float>(Uz);
+				return B;
+			}
+			B.Z = bCut && TopAt(Px, Py, Z) ? Z : Flat;
+			B.C = Under ? Under(Px, Py) : Paint.Turf;
+			B.N = GroundUp(Lit, Height, Px, Py);
+			return B;
+		};
+		constexpr int N = 36;
+		// (the rings: six out to her outline, three feathering past it into what lies there: 1.2 m for the grass, 1.05 m
+		// for the soot (BrownEdge keeps it inside the grass's); the lift over the bed, a centimetre inside thinning to 2 mm at the edge, so no step casts a line)
+		const double Share[6] = { 0.2, 0.4, 0.58, 0.74, 0.88, 1.0 };
+		const double CoreShare[6] = { 0.2, 0.4, 0.6, 0.75, 0.88, 1.0 };
+		const double Past[3] = { 0.3, 0.7, 1.2 }, CorePast[3] = { 0.35, 0.7, 1.05 };
+		const double Lift[HoleRings] = { 0.01, 0.01, 0.01, 0.01, 0.009, 0.008, 0.006, 0.004, 0.002 };
+		const double CoreLift[HoleRings] = { 0.006, 0.006, 0.006, 0.006, 0.005, 0.004, 0.003, 0.002, 0.002 };
+		const double BrownOf[HoleRings] = { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.45, 0.15, 0.0 };
+		const double SootOf[HoleRings] = { 0.88, 0.88, 0.88, 0.85, 0.78, 0.62, 0.36, 0.14, 0.0 };
+		const Place In = PlaceFor(X, Y);
+		LandField::Mesh& Into = PatchList[static_cast<size_t>(In.Patch)].Sections[static_cast<size_t>(In.Section)];
+		Hole H;
+		H.First = static_cast<uint32_t>(Into.Colours.size());
+		const size_t FirstIndex = Into.Triangles.size();
+		// A point's colour: T its ring's share of the way out to her outline (over 1 past it), Share how much of the
+		// burn reaches it (1 inside the outline, feathering to 0 at the last ring).
+		const auto Lay_ = [&](double Px, double Py, double Up_, double T, double Burn)
+		{
+			const Bed B = BedAt(Px, Py);
+			Rgb8 C = B.C;
+			const double Big = Patchy(Px, Py, 1.7, 1u), Small = Patchy(Px, Py, 1.0, 2u), Pt = 0.65 * Big + 0.35 * Small;
+			if (!bCore)
+			{
+				// (burnt black near her, brown further out, singed straw at the edge with the green showing through in
+				// patches; black patches and straw patches all through, as a grass fire leaves it)
+				const double Singed = T > 0.75 ? std::clamp((Pt - 0.5) / 0.3, 0.0, 1.0) * std::clamp((T - 0.75) / 0.25, 0.0, 1.0) : 0.0;
+				const Rgb8 Burnt_ = Mixed(Brown, Straw, std::clamp((Pt - 0.45) * 1.6, 0.0, 1.0) * 0.7);
+				C = Mixed(C, Burnt_, BrownBy * Burn * (1.0 - 0.6 * Singed));
+				const double Black = 0.6 * std::clamp((0.6 - T) / 0.6, 0.0, 1.0) + 0.4 * std::clamp((0.42 - Pt) / 0.2, 0.0, 1.0) * (T < 0.95 ? 1.0 : 0.0);
+				C = Mixed(C, Char, std::min(0.8, Black * Burn));
+			}
+			else
+			{
+				// (black-brown, darker in patches where her fuel and oil ran, grey ash lying in drifts)
+				C = Mixed(C, SootCore, std::min(0.95, Burn * (0.82 + 0.22 * (1.0 - Pt))));
+				const double Drift = Patchy(Px, Py, 1.4, 4u);
+				if (T <= 0.9 && Drift > 0.62)
+				{
+					C = Mixed(C, Ash, 0.4 * std::min(1.0, (Drift - 0.62) / 0.25));
+				}
+			}
+			const uint32_t I = Put(Into, Px, Py, B.Z + Up_, C);
+			Into.Normals[static_cast<size_t>(I) * 3] = B.N.X;
+			Into.Normals[static_cast<size_t>(I) * 3 + 1] = B.N.Y;
+			Into.Normals[static_cast<size_t>(I) * 3 + 2] = B.N.Z;
+			return I;
+		};
+		const uint32_t Middle = Lay_(X, Y, bCore ? CoreLift[0] : Lift[0], 0.0, bCore ? SootOf[0] : 1.0);
+		std::vector<double> EdgeOf(static_cast<size_t>(N));
+		for (int K = 0; K < N; ++K)
+		{
+			EdgeOf[static_cast<size_t>(K)] = Edge(2.0 * Pi * K / N);
+		}
+		for (int Ring = 0; Ring < HoleRings; ++Ring)
+		{
+			for (int K = 0; K < N; ++K)
+			{
+				const double A = 2.0 * Pi * K / N, E = EdgeOf[static_cast<size_t>(K)];
+				const double Rr = Ring < 6 ? E * (bCore ? CoreShare[Ring] : Share[Ring]) : E + (bCore ? CorePast[Ring - 6] : Past[Ring - 6]);
+				const double Px = X + std::cos(A) * Rr, Py = Y + std::sin(A) * Rr;
+				// (the feathering rings by patches, so the burnt edge runs out in uneven tongues; the last the bed's own
+				// colour, so no edge shows)
+				const double Jit = Ring >= 6 && Ring < HoleRings - 1 ? 0.7 + 0.55 * Patchy(Px, Py, 0.8, 3u) : 1.0;
+				const double T = Ring < 6 ? (bCore ? CoreShare[Ring] : Share[Ring]) : 1.0 + 0.1 * (Ring - 5);
+				Lay_(Px, Py, bCore ? CoreLift[Ring] : Lift[Ring], T, std::min(1.0, (bCore ? SootOf[Ring] / SootOf[0] : BrownOf[Ring]) * Jit));
+			}
+		}
+		for (int K = 0; K < N; ++K)
+		{
+			const int K1 = (K + 1) % N;
+			const auto Ring_ = [&H](int R, int Side) { return H.First + 1u + static_cast<uint32_t>(R * N + Side); };
+			Tri(Into, Middle, Ring_(0, K), Ring_(0, K1));
+			for (int Ring = 0; Ring + 1 < HoleRings; ++Ring)
+			{
+				Tri(Into, Ring_(Ring, K), Ring_(Ring + 1, K), Ring_(Ring + 1, K1));
+				Tri(Into, Ring_(Ring, K), Ring_(Ring + 1, K1), Ring_(Ring, K1));
+			}
+		}
+		H.X = X;
+		H.Y = Y;
+		H.In = In;
+		H.Sides = N;
+		// (the grass and corn burnt off to about her browned ring, raggedly: Bare's fresh clearing, 1.12 to 1.3 of R;
+		// her soot core clears nothing more)
+		H.R = bCore ? 0.0 : Reach / 1.15;
+		H.Burnt = Burnt;
+		H.BurntOf = Of + 1;
+		H.BurntX = Wx;
+		H.BurntY = Wy;
+		for (size_t P = H.First; P < Into.Colours.size(); ++P)
+		{
+			const double Dx = Into.Positions[P * 3] - X, Dy = Into.Positions[P * 3 + 1] - Y;
+			H.Out = std::max(H.Out, std::sqrt(Dx * Dx + Dy * Dy));
+		}
+		const int Number = static_cast<int>(Holes.size());
+		Keep(H, std::vector<double>(), FirstIndex, H.Out);
+		Scorches.push_back(Number);
 		return true;
 	}
 

@@ -20,7 +20,7 @@ for W in "$@"; do
   echo "$W:"
   "$OUT/crater_sheet" "$PICS" "$W" || STATUS=1
   if command -v convert > /dev/null; then
-    for P in "$PICS"/craters-"$W"-*.ppm; do convert "$P" -quality 88 "${P%.ppm}.jpg" && rm -f "$P"; done
+    for P in "$PICS"/craters-"$W"-*.ppm "$PICS"/scorch-"$W"-*.ppm; do [ -e "$P" ] && convert "$P" -quality 88 "${P%.ppm}.jpg" && rm -f "$P"; done
   fi
 done
 exit $STATUS
