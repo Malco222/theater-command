@@ -3491,11 +3491,12 @@ function lookConvoy(g: Game, nat: string, route: string, zones: number[], raider
  * The boats that met a route's convoys this month, sea by sea, for the record of what the route's nation has seen
  * (release 2, once the sea patrol is live; seasight.ts, the design director's ruling of 24 November 2026 17:54Z, Q2 (a)):
  * those that fired on its convoys (the count's convoys attacked x the boats that fire a convoy attacked) and those that
- * met its escort (the count's incidents, or each boat's per-boat share where the count is not laid), each fleet's part
- * by its share of the route's boats on station as the count shares them, and never more than its boats on station there.
+ * met its escort (the count's incidents, as the escorts' losses form counts them where it is laid (escortWork), or each
+ * boat's per-boat share where the count is not laid), each fleet's part by its share of the route's boats on station as
+ * the count shares them, and never more than its boats on station there.
  * Within a route a sea's fleets add up; between routes the most counts, since the same boats may meet both. Throws no dice.
  */
-function metConvoys(g: Game, count: ConvoyCount | null, side: ConvoySide | undefined, raiders: Fleet[], seen: SeaMonth): void {
+function metConvoys(g: Game, count: ConvoyCount | null, side: ConvoySide | undefined, raiders: Fleet[], seen: SeaMonth, work: EscortWork | null): void {
   const fired = count ? count.attacked * (side?.fired ?? count.pack) : 0;
   const attack: Record<number, number> = {}, incident: Record<number, number> = {};
   for (const f of raiders) {
@@ -3503,7 +3504,7 @@ function metConvoys(g: Game, count: ConvoyCount | null, side: ConvoySide | undef
     const most = f.ships.ss * onStation(g, f, f.zone);
     const b = f.ships.ss * raidShare(f) * onWatch(g, f, f.zone);
     if (count && count.boats > 0) attack[f.zone] = (attack[f.zone] ?? 0) + Math.min(most, (fired * b) / count.boats);
-    incident[f.zone] = (incident[f.zone] ?? 0) + Math.min(most, f.ships.ss * incidentsPerBoat(g, f, count));
+    incident[f.zone] = (incident[f.zone] ?? 0) + Math.min(most, f.ships.ss * incidentsPerBoat(g, f, count, work));
   }
   for (const z of Object.keys(attack)) seen.attack[+z] = Math.max(seen.attack[+z] ?? 0, attack[+z]);
   for (const z of Object.keys(incident)) seen.incident[+z] = Math.max(seen.incident[+z] ?? 0, incident[+z]);
@@ -3591,7 +3592,7 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>,
         work = escortWork(g, nat, route, count);
         // (Release 2, once the sea patrol is live: the boats its convoys and escort met on the route, sea by sea, before
         // any is lost, for the record of what this nation has seen.)
-        if (seen) metConvoys(g, count, side, raiders, seen);
+        if (seen) metConvoys(g, count, side, raiders, seen, work);
         for (const z of zones) {
           const p = work ? escortChance(g, nat, z, work).chance : incidentChance(g, nat, route.id, z);
           let lost = 0;
