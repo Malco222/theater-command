@@ -21,7 +21,7 @@ import { Rng, hashString } from '../core/rng';
 import { headline } from './game';
 import { formName } from './air';
 import { NICKNAMES, isBlocked, nicknamesOn, styleKey, takenNames } from './nicknames';
-import { airBlocked, nextNumber } from './airnames';
+import { airBlocked, airBlockedAt, airBlockedWhole, nextNumber } from './airnames';
 import { noteCorps } from './stories';
 import type { AirFleet, AirMission, AirSide, Corps, Game } from './types';
 
@@ -52,6 +52,14 @@ export function calledName(f: AirFleet): string {
 
 /** True for a name that holds a real unit's name, on either block list. */
 export const blockedAir = (name: string): boolean => isBlocked(name) || airBlocked(name);
+/**
+ * blockedAir for a name that holds a place of this war, the group's own hard fight (12:59Z question 6): the place's own
+ * words may match a distinctive word of a real name; the rest of the name may not, and the whole name is still tested
+ * against every blocked whole name. A place that is itself a blocked whole name (Moscow) is refused outright.
+ */
+export const blockedAirAt = (name: string, place: string): boolean => isBlocked(name) || airBlockedAt(name, place);
+/** A place of this war that may not stand in a name at all: itself a blocked whole name. */
+export const placeBlocked = (place: string): boolean => isBlocked(place) || airBlockedWhole(place);
 
 /** The running loss rate of an arm on one kind of mission (aircraft lost over aircraft flown), or null before it means anything. */
 export function rateOf(g: Game, nat: string, kind: string): number | null {
@@ -108,7 +116,8 @@ function completed(g: Game, f: AirFleet, hard: boolean, place: number): void {
   const twice = AIRNICKS.double;
   if (d.at !== g.turn) { d.at = g.turn; d.x = hard ? 1 : 0; d.n += hard ? twice : 1; }
   else if (hard && !d.x) { d.x = 1; d.n += twice - 1; }
-  if (hard) d.h++;
+  // (12:59Z question 5: the place of its latest hard fight in this war, for the city of a Guards title.)
+  if (hard) { d.h++; f.hardAt = place; }
   if (d.n >= AIRNICKS.need && !f.nick && f.guards === undefined) nameGroup(g, f, place);
   colour(g, f);
 }
@@ -116,23 +125,28 @@ function completed(g: Game, f: AirFleet, hard: boolean, place: number): void {
 /**
  * The name a group's own arm gives it: one in its style that none of its nation's units carries and no block list
  * holds, sometimes after the place of the fight. In an arm that gives the Guards title, the Guards title and a new
- * number from the Guards series, with the name of the city it fought over.
+ * number from the Guards series, with the name of the city of its latest hard fight (place; none without one). `over`
+ * is the place of the mission that brought it to the mark, for a place name only where it has no hard fight on record.
  */
-export function earnedAirName(g: Game, f: AirFleet, place: string): { nick?: string; name?: string; guards?: number; short?: string } {
+export function earnedAirName(g: Game, f: AirFleet, place: string, over = ''): { nick?: string; name?: string; guards?: number; short?: string } {
   const s = airStyle(f.nat);
   const taken = takenNames(g, f.nat);
   const ok = (n: string): boolean => !taken.has(n) && !blockedAir(n);
   const rng = new Rng(hashString(`airnick:${g.seed}:${f.nat}:${f.id}`));
-  const placed = place ? s.place.map((t) => t.replace('{place}', place)).filter(ok) : [];
+  // (12:59Z question 6: the place of the group's own hard fight may match a distinctive word; nothing else in the name
+  // may. With no hard fight on record, a place name may still take the place it flew over, checked like any other name.)
+  const at = place && !placeBlocked(place) ? place : '';
+  const placed = at ? s.place.map((t) => t.replace('{place}', at)).filter((n) => !taken.has(n) && !blockedAirAt(n, at))
+    : over ? s.place.map((t) => t.replace('{place}', over)).filter(ok) : [];
   const any = s.any.filter(ok);
   if (s.guards) {
     const G = s.guards, kind = f.kind ?? (f.bmr > f.ftr ? 'bmr' : 'ftr');
     // The group's rung, by its name (a regiment where the name cannot tell), and the next number of that Guards series.
     const rung = /Corps$/.test(f.name) ? 'corps' : /Division$/.test(f.name) ? 'division' : 'regiment';
     const row = G[rung][kind];
-    const city = place && !blockedAir(place) ? place : '';
+    const city = at;
     const form = city ? row.form.replace('Guards', G.city.replace('{city}', city)) : row.form;
-    const got = nextNumber(g, `guards:${f.nat}:${rung}:${kind}`, row.numbers, (n) => formName(form, n), (x) => g.airFleets.some((y) => y.nat === f.nat && y.name === x) || blockedAir(x));
+    const got = nextNumber(g, `guards:${f.nat}:${rung}:${kind}`, row.numbers, (n) => formName(form, n), (x) => g.airFleets.some((y) => y.nat === f.nat && y.name === x) || blockedAirAt(x, city));
     return { name: got.name, guards: got.n as number, short: formName(row.short, got.n) };
   }
   if (placed.length && (rng.next() < 0.25 || !any.length)) return { nick: rng.pick(placed) };
@@ -140,8 +154,11 @@ export function earnedAirName(g: Game, f: AirFleet, place: string): { nick?: str
 }
 
 function nameGroup(g: Game, f: AirFleet, place: number): void {
-  const at = place >= 0 ? g.regions[place]?.name ?? '' : '';
-  const got = earnedAirName(g, f, at);
+  // The place in its name, a Guards city or a place name, is that of its latest hard fight in this war (12:59Z question
+  // 5), taken now and kept; with no hard fight on record, or from a save that predates the field, no place at all.
+  const hp = f.hardAt;
+  const at = hp !== undefined && hp >= 0 ? g.regions[hp]?.name ?? '' : '';
+  const got = earnedAirName(g, f, at, place >= 0 ? g.regions[place]?.name ?? '' : '');
   if (!got.nick && !got.name) return;
   if (got.name) { f.was = f.name; f.name = got.name; f.guards = got.guards; if (got.short) f.short = got.short; f.roleNamed = true; }
   if (got.nick) f.nick = got.nick;

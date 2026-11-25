@@ -115,3 +115,20 @@ export const distinctiveIn = (name: string): string[] => wordsOf(name).filter((w
  * word of any real unit's name on either block list.
  */
 export const airBlocked = (name: string): boolean => BLOCKED.some((b) => b.test(name)) || distinctiveIn(name).length > 0;
+/** True for a name that holds, as whole words, one of the real air units' names on the air block list (the whole name only). */
+export const airBlockedWhole = (name: string): boolean => BLOCKED.some((b) => b.test(name));
+/**
+ * airBlocked for a name that holds a place of this war (the design director, 12:59Z question 6: "a place of this war
+ * may stand when only the place word matches"): the whole name is still tested against every blocked whole name, and
+ * every word of it but the place's own (taken once, where it stands) against the distinctive words ("Tobruk Rats" is
+ * still refused, for "Rats"). With no place, airBlocked itself.
+ */
+export function airBlockedAt(name: string, place: string): boolean {
+  if (!place) return airBlocked(name);
+  if (airBlockedWhole(name)) return true;
+  const w = wordsOf(name), p = wordsOf(place);
+  let at = -1;
+  for (let i = 0; p.length && i + p.length <= w.length && at < 0; i++) if (p.every((x, j) => w[i + j] === x)) at = i;
+  const rest = at < 0 ? w : [...w.slice(0, at), ...w.slice(at + p.length)];
+  return rest.some((x) => DISTINCTIVE.has(x));
+}

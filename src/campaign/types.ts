@@ -1527,6 +1527,13 @@ export interface AirFleet extends Storied {
    */
   done?: { n: number; at: number; x: number; h: number };
   /**
+   * (Release 2, earned names under the switch 'nicknames'; airnicks.ts, the design director 12:59Z question 5) The place
+   * of its latest hard fight in this war: a region id, or -1 for one over no region (at sea). Written whenever a mission
+   * of its is hard; the city of a Guards title, and the place of a place name, is taken from it once, when the name is
+   * given. Absent until its first hard fight, and in a save from before it: no city then. Words only; no rule reads it.
+   */
+  hardAt?: number;
+  /**
    * (The same) Its earned colours: the scheme it wears from its nation's palette (the 3D side's, data/campaign/
    * air-colours.json 'count' per nation), the tier of marking reached (1 spinner, 2 nose band, 3 tail) and the month
    * it was first earned. Words and paint only: no edge.

@@ -2,19 +2,23 @@
 // marks (05:12Z)"), under the switches the lane already has (airNames for the arms' own names, nicknames for the earned
 // names and the Guards title):
 //   (a) Guards with a city: allowed ("5th Guards Smolensk Fighter Aviation Division" is the record's manner); the city
-//       is the battle of its fight in this war, and it gives no edge;
+//       is the battle of its hard fight in this war, and it gives no edge (12:59Z, question 5: the place of the group's
+//       latest hard fight is kept on the group, f.hardAt; the city is taken once, when the title is given, and kept; a
+//       group with no hard fight takes the title without a city; a save without the field gives no city);
 //   (b) the hard-fight gap: pressed home at 0.8 or less, held at 1.25 or more, both G, in data; near even, ordinary;
 //   (c) the block test also catches a real nickname's distinctive word, not only the whole string: no name of ours,
-//       generated or listed, holds the distinctive word of a real unit's name ("Rattlers", of "Death Rattlers").
+//       generated or listed, holds the distinctive word of a real unit's name ("Rattlers", of "Death Rattlers"); but a
+//       place of this war may stand where only the place word matches (12:59Z, question 6), the rest of the name still
+//       checked word by word, and the whole name against every blocked whole name.
 import { afterEach, describe, expect, it } from 'vitest';
 import names from '../data/campaign/air-names.json';
 import nick from '../data/campaign/nicknames.json';
 import { formName, type Rung } from '../src/campaign/air';
-import { AIRNAMES, airBlocked, distinctiveIn, type RungR2 } from '../src/campaign/airnames';
-import { AIRNICKS, airEarn, airRaidFlown, blockedAir, earnedAirName } from '../src/campaign/airnicks';
+import { AIRNAMES, DISTINCTIVE, airBlocked, distinctiveIn, type RungR2 } from '../src/campaign/airnames';
+import { AIRNICKS, airEarn, airRaidFlown, blockedAir, blockedAirAt, earnedAirName, placeBlocked } from '../src/campaign/airnicks';
 import { createGame } from '../src/campaign/game';
 import { setNicknames } from '../src/campaign/nicknames';
-import { saveGame } from '../src/campaign/save';
+import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import type { AirFleet, AirSide, Game } from '../src/campaign/types';
 
@@ -91,7 +95,7 @@ describe('(c) the block test catches a real name\'s distinctive word', () => {
     const swapped: [string, string, string][] = [
       ['german', 'Iron Swifts', 'Slate Swifts'], ['german', 'Summer Lightning', 'Summer Squall'],
       ['american', 'Sky Wranglers', 'Range Wranglers'], ['american', 'Dust Devils', 'Dust Twisters'], ['american', 'Tin Lizzies', 'Flivvers'],
-      ['british', 'the Drizzle Boys', 'the Drizzle Wrens'], ['british', 'the Bell Ringers', 'the Thatchers'],
+      ['british', 'the Drizzle Boys', 'the Drizzle Wrens'], ['british', 'the Bell Ringers', 'the Hedgers'],
       ['polish', 'the Bell Founders', 'the Coopers'],
       ['japanese', 'the Sea Swallows', 'the Shore Swallows'], ['japanese', 'the Thunder Kites', 'the Squall Kites'],
       ['soviet', 'the Smiths of the Sky', 'the Cloud Smiths'],
@@ -102,21 +106,62 @@ describe('(c) the block test catches a real name\'s distinctive word', () => {
       expect(S[k].any, k).toContain(now);
       expect(new Set(S[k].any).size).toBe(S[k].any.length);
     }
+    // (The review: "the Thatchers", the first replacement, read as a real person's surname; a trade word in its place.)
+    expect(S.british.any).not.toContain('the Thatchers');
+    expect(blockedAir('the Hedgers')).toBe(false);
     expect(S.british.place).not.toContain('the Watch over {place}');
     expect(S.british.place).toContain('the Wardens of {place}');
     // The lists keep their length (8 at least, as the lane's own test asks).
     for (const s of Object.values(S)) expect(s.any.length).toBeGreaterThanOrEqual(8);
   });
 
-  it('a place of this war holding a distinctive word is kept out of an earned name and a Guards title', () => {
+  // (Changed on the design director's ruling of 12:59Z, question 6: this test used to keep "Tobruk" out of every name. A
+  // place of this war may now stand where only the place word matches; the rest of the name is still checked word by
+  // word, and the whole name against every blocked whole name.)
+  it('a place of this war may stand where only its own word matches; the rest of the name and the whole name are still checked', () => {
     const g = nickWar();
     const sov = g.airFleets.find((x) => x.nat === 'SOV' && x.kind === 'ftr' && /Division$/.test(x.name))!;
-    // "Tobruk" is the distinctive word of "Rats of Tobruk": no "Tobruk" in the title.
-    const got = earnedAirName(g, sov, 'Tobruk');
-    expect(got.name).toBeTruthy();
-    expect(got.name).not.toContain('Tobruk');
+    // "Tobruk" is a distinctive word of "Rats of Tobruk"; as the place of the group's own hard fight it stands.
+    expect(DISTINCTIVE.has('tobruk')).toBe(true);
+    expect(earnedAirName(g, sov, 'Tobruk').name).toMatch(/^\d+(st|nd|rd|th) Guards Tobruk Fighter Aviation Division$/);
+    // The rest of the name is still checked word by word: "Tobruk Rats" is refused, for "Rats".
+    expect(blockedAirAt('Tobruk Rats', 'Tobruk')).toBe(true);
+    expect(blockedAirAt('the Wardens of Tobruk', 'Tobruk')).toBe(false);
+    expect(blockedAirAt('the Rattlers of Tobruk', 'Tobruk')).toBe(true);
+    // Without the place being the place, the word is still caught.
+    expect(blockedAir('the Wardens of Tobruk')).toBe(true);
+    // The whole name, place and all, is still tested against every blocked whole name.
+    expect(blockedAirAt('City of London', 'London')).toBe(true);
+    expect(blockedAirAt('Desert Air Force of Tobruk', 'Tobruk')).toBe(true);
+    // A place that is itself a blocked whole name never stands.
+    expect(placeBlocked('Moscow')).toBe(true);
+    expect(earnedAirName(g, sov, 'Moscow').name).not.toContain('Moscow');
     const ger = g.airFleets.find((x) => x.nat === 'GER' && x.kind === 'ftr')!;
-    for (let k = 0; k < 20; k++) { ger.id += 1000; const n = earnedAirName(g, ger, 'Tobruk').nick ?? ''; expect(n).not.toContain('Tobruk'); }
+    let placed = 0;
+    for (let k = 0; k < 40; k++) {
+      ger.id += 1000;
+      const n = earnedAirName(g, ger, 'Tobruk').nick ?? '';
+      if (n.includes('Tobruk')) { placed++; expect(blockedAirAt(n, 'Tobruk'), n).toBe(false); }
+      expect(earnedAirName(g, ger, 'Moscow').nick ?? '').not.toContain('Moscow');
+    }
+    expect(placed).toBeGreaterThan(0);
+  });
+
+  it('the nine places of this war the distinctive words caught may stand in a Guards title; Moscow still may not', () => {
+    const g = startOpen(createGame(41, null));
+    const nine = ['London', 'West Country', 'East Anglia', 'Lancashire', 'Yorkshire', 'Aberdeen', 'Zealand', 'Old Castile', 'Tobruk'];
+    const names = new Set(g.regions.map((r) => r.name));
+    const form = AIRNICKS.styles.soviet.guards!;
+    for (const p of nine) {
+      expect(names.has(p), p).toBe(true);
+      expect(placeBlocked(p), p).toBe(false);
+      const title = formName(form.division.ftr.form.replace('Guards', form.city.replace('{city}', p)), 5);
+      expect(blockedAirAt(title, p), title).toBe(false);
+    }
+    expect(names.has('Moscow')).toBe(true);
+    expect(placeBlocked('Moscow')).toBe(true);
+    // The compass words and "old" are common words now.
+    for (const w of ['north', 'south', 'east', 'west', 'old']) expect(common.has(w), w).toBe(true);
   });
 });
 
@@ -147,7 +192,8 @@ describe('(a) Guards with the city of its fight in this war', () => {
     const city = g.regions.find((r) => r.ctrl === 'GER' && r.fac > 0 && !blockedAir(r.name))!;
     const f = g.airFleets.find((x) => x.nat === 'SOV' && x.kind === 'ftr' && /Fighter Aviation Division$/.test(x.name))!;
     // (Everything on the group but its name and the count, record and diary that give it.)
-    const rules = (x: AirFleet): string => JSON.stringify(Object.entries(x).filter(([k]) => !['name', 'was', 'guards', 'short', 'roleNamed', 'nick', 'done', 'colours', 'log'].includes(k)));
+    // ('hardAt' added on the 12:59Z ruling, question 5: the place of its latest hard fight, a word for its name only.)
+    const rules = (x: AirFleet): string => JSON.stringify(Object.entries(x).filter(([k]) => !['name', 'was', 'guards', 'short', 'roleNamed', 'nick', 'done', 'hardAt', 'colours', 'log'].includes(k)));
     const keep = rules(f);
     f.done = { n: AIRNICKS.need - 2, at: 0, x: 0, h: 0 };
     // A fight held at odds of 1.25 (hard: double) brings it to the mark.
@@ -156,8 +202,70 @@ describe('(a) Guards with the city of its fight in this war', () => {
     expect(f.guards).toBeDefined();
     expect(f.name).toMatch(new RegExp(`^\\d+(st|nd|rd|th) Guards ${city.name} Fighter Aviation Division$`));
     expect(f.nick).toBeUndefined();
+    expect(f.hardAt).toBe(city.id);
     // No edge: the title is a name and a number; nothing the rules count has moved.
     expect(rules(f)).toBe(keep);
+  });
+
+  const sovDivisions = (g: Game) => g.airFleets.filter((x) => x.nat === 'SOV' && x.kind === 'ftr' && /Fighter Aviation Division$/.test(x.name));
+  const plainCity = (g: Game, n = 0) => g.regions.filter((r) => r.ctrl === 'GER' && r.fac > 0 && !placeBlocked(r.name))[n];
+  const ordinary = { odds: 1, bombers: 100, bombed: 90, E: 80, D: 60, sky: false };
+  const held = { ...ordinary, odds: AIRNICKS.hard.held };
+
+  it('a group with only ordinary missions takes the Guards title without a city; one whose mark-reaching mission is hard takes that fight\'s city', () => {
+    const g = nickWar();
+    const [a, b] = sovDivisions(g);
+    const city = plainCity(g);
+    a.done = { n: AIRNICKS.need - 1, at: 0, x: 0, h: 0 };
+    airRaidFlown(g, 'bomb', ordinary, [], [{ f: a, side: side(a, 80) }], city.id);
+    expect(a.guards).toBeDefined();
+    expect(a.done!.h).toBe(0);
+    expect(a.hardAt).toBeUndefined();
+    expect(a.name).toMatch(/^\d+(st|nd|rd|th) Guards Fighter Aviation Division$/);
+    b.done = { n: AIRNICKS.need - 2, at: 0, x: 0, h: 0 };
+    airRaidFlown(g, 'bomb', held, [], [{ f: b, side: side(b, 80) }], city.id);
+    expect(b.name).toMatch(new RegExp(`^\\d+(st|nd|rd|th) Guards ${city.name} Fighter Aviation Division$`));
+  });
+
+  it('the city is that of the latest hard fight, not the mission that reaches the mark; taken once, and kept', () => {
+    const g = nickWar();
+    const [f] = sovDivisions(g);
+    const first = plainCity(g, 0), second = plainCity(g, 1), third = plainCity(g, 2);
+    f.done = { n: 0, at: 0, x: 0, h: 0 };
+    // A hard fight over the first city, then a later one over the second, then ordinary missions elsewhere to the mark.
+    airRaidFlown(g, 'bomb', held, [], [{ f, side: side(f, 80) }], first.id);
+    expect(f.hardAt).toBe(first.id);
+    g.turn++;
+    airRaidFlown(g, 'bomb', held, [], [{ f, side: side(f, 80) }], second.id);
+    expect(f.hardAt).toBe(second.id);
+    while (f.guards === undefined) { g.turn++; airRaidFlown(g, 'bomb', ordinary, [], [{ f, side: side(f, 80) }], third.id); }
+    expect(f.name).toContain(`Guards ${second.name} `);
+    expect(f.name).not.toContain(third.name);
+    const title = f.name;
+    // A later hard fight elsewhere moves the field, never the title.
+    g.turn++;
+    airRaidFlown(g, 'bomb', held, [], [{ f, side: side(f, 80) }], first.id);
+    expect(f.hardAt).toBe(first.id);
+    expect(f.name).toBe(title);
+    // The field survives save and load.
+    const back = loadGame(saveGame(g))!;
+    expect(back.airFleets.find((x) => x.id === f.id)!.hardAt).toBe(first.id);
+  });
+
+  it('a save without the field (from before it) loads, and the group takes the title without a city', () => {
+    const g = nickWar();
+    const [f] = sovDivisions(g);
+    const city = plainCity(g);
+    f.done = { n: AIRNICKS.need - 1, at: 0, x: 3, h: 2 };
+    const old = JSON.parse(saveGame(g));
+    for (const x of old.airFleets ?? old.game?.airFleets ?? []) delete x.hardAt;
+    const back = loadGame(JSON.stringify(old))!;
+    const h = back.airFleets.find((x) => x.id === f.id)!;
+    expect(h.hardAt).toBeUndefined();
+    expect(h.done!.h).toBe(2);
+    airRaidFlown(back, 'bomb', ordinary, [], [{ f: h, side: side(h, 80) }], city.id);
+    expect(h.guards).toBeDefined();
+    expect(h.name).toMatch(/^\d+(st|nd|rd|th) Guards Fighter Aviation Division$/);
   });
 
   it('with the nicknames switch off, no title is given and nothing is written', () => {
@@ -167,6 +275,7 @@ describe('(a) Guards with the city of its fight in this war', () => {
     const f = g.airFleets.find((x) => x.nat === 'SOV' && x.kind === 'ftr')!;
     airRaidFlown(g, 'bomb', { odds: 3, bombers: 100, bombed: 90, E: 80, D: 60, sky: false }, [], [{ f, side: side(f, 80) }], city.id);
     expect(f.guards).toBeUndefined();
+    expect(g.airFleets.some((x) => 'hardAt' in x)).toBe(false);
     expect(saveGame(g)).toBe(before);
   });
 });
