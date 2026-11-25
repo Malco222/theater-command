@@ -4455,6 +4455,10 @@ function placeJobs(s: Game, region: number): { key: string; label: string; detai
 let wreckAsked = '';
 /** The appointment or decree the player has been asked to confirm, and the month. */
 let cabinetAsked = '';
+/** The fleet the player has been asked to confirm scuttling (release 2, the far chart): the game, the order and the month. */
+let scuttleAsked = '';
+/** (Release 2, the far chart) Why a fleet waiting at sea with no harbour it can reach is not turned back, and what he can do. */
+const ADRIFT_PICK = 'It has no harbour to turn back to: pick a harbour open to it on the map once one opens, or scuttle it.';
 /** The page of the cabinet room that is open (Version 62): its business, the ministers, the decrees or the minutes. Back to its business as each month opens. */
 let cabinetTab: 'now' | 'table' | 'decrees' | 'minutes' = 'now';
 let cabinetTabTurn = -1;
@@ -4579,7 +4583,9 @@ function force(kind: string, id: number) {
     // (Release 2, the far chart: a fleet in passage to a new base offers no sea, and its order to harbour turns it back.)
     const passage = f.stance === 'passage' && f.passage ? { from: f.passage.fromPort } : null;
     if (mine && passage) {
-      options.push({ key: `fleet:${id}:${f.home}:port`, label: `Turn back to ${passage.from}`, detail: 'Back to the harbour it left, steamed from where it is: within its reach it is in this month, beyond it in passage again.', ok: up, why: notNow });
+      // (Waiting at sea with no harbour it can reach, it has none to turn back to: the fourth review, 12.)
+      const lost = adrift(f);
+      options.push({ key: `fleet:${id}:${f.home}:port`, label: `Turn back to ${passage.from}`, detail: 'Back to the harbour it left, steamed from where it is: within its reach it is in this month, beyond it in passage again.', ok: up && !lost, why: lost ? ADRIFT_PICK : notNow });
     } else if (mine) {
       // (1.5.1; the playtester, 25 November) A fleet sent at the enemy this month stays where the battle left it: its
       // seas and its harbour are shown, refused, with the reason, and not offered only to be turned down.
@@ -5653,7 +5659,11 @@ function fleetPage(s: Game, id: number): Page | null {
       // (Release 2, the far chart: a fleet in passage to a new base is turned back by the same order.)
       // (1.5.2's #37 and 1.5.1's held fleet, both: the reason it is held comes first, else it says if it is the order now.)
       fl?.stance === 'passage' && fl.passage
-        ? { label: 'TURN BACK', act: `fleet:${id}:${fl.home}:port`, ok: up, tip: `${passageWhy(s, fl)} Turned back, it makes for ${fl.passage.fromPort} again, steamed from where it is.` }
+        // (Waiting at sea with no harbour it can reach, it has none to turn back to: a harbour open to it is picked on the
+        // map, as one opens. The fourth review, 25 November 2026, 12.)
+        ? adrift(fl)
+          ? { label: 'TURN BACK', act: `fleet:${id}:${fl.home}:port`, ok: false, tip: `${passageWhy(s, fl)} ${ADRIFT_PICK}` }
+          : { label: 'TURN BACK', act: `fleet:${id}:${fl.home}:port`, ok: up, tip: `${passageWhy(s, fl)} Turned back, it makes for ${fl.passage.fromPort} again, steamed from where it is.` }
         : { label: 'RETURN TO HARBOUR', act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== 'port' && !o?.held, tip: o?.held || `${card.stance === 'port' ? 'It is in harbour now. ' : ''}Safe from the enemy fleet, and takes no part at sea.` },
       // (Release 2, the far chart: waiting at sea with no harbour it can reach, it may be scuttled on his order.)
       ...(fl && adrift(fl) ? [{ label: 'SCUTTLE IT', act: `fleetscuttle:${id}`, ok: up, tip: `${passageWhy(s, fl)} Scuttled, its ships go down at sea and are lost for good.` }] : []),
@@ -7446,8 +7456,15 @@ function act(action: string, region = -1, fought?: FoughtAir) {
   }
   if (part[0] === 'fleetscuttle') {
     // (Release 2, the far chart) 'fleetscuttle:<fleet>' scuttles a fleet of his that waits at sea with no harbour it can reach.
-    const id = Number(part[1]);
-    const name = s.fleets.find((x) => x.id === id)?.name ?? 'The fleet';
+    // Asked twice, since it cannot be undone (the design director's ruling of 16:05Z, 25 November 2026, 3b).
+    const id = Number(part[1]), fl = s.fleets.find((x) => x.id === id);
+    const name = fl?.name ?? 'The fleet';
+    const asking = `${s.seed}:${action}:${s.turn}`;
+    if (fl && adrift(fl) && fl.nat === s.human && scuttleAsked !== asking) {
+      scuttleAsked = asking;
+      return { ok: false, note: `Scuttle the ${name}? Its ships go down at sea and are lost for good, and it cannot be undone. Press it again to scuttle it.`, fly, flies, open: `fleet:${part[1]}`, view: view() };
+    }
+    scuttleAsked = '';
     ok = orderScuttle(s, id);
     note = ok ? `The ${name} is scuttled.` : 'It cannot be scuttled: only a fleet with no harbour it can reach may be.';
     return { ok, note, fly, flies, open: ok ? 'close' : `fleet:${part[1]}`, view: view() };

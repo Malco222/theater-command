@@ -112,7 +112,8 @@ export function fleetDoing(g: Game, f: Fleet): string {
   const sea = g.seas[f.zone]?.name;
   const where = sea ? seaWhere(sea) : 'at sea', what = sea ? seaWhat(sea) : 'the sea';
   if (!atSea(f)) return `In harbour at ${f.port}`;
-  // (Release 2, the far chart: on its way to a new base.)
+  // (Release 2, the far chart: waiting at sea with no harbour it can reach, navy.ts goAdrift; else on its way to a new base.)
+  if (f.stance === 'passage' && f.passage?.adrift !== undefined) return `Waiting at sea ${where}, with no harbour it can reach`;
   if (f.stance === 'passage') return `In passage to ${f.port} ${where}${f.passage ? `, in by ${turnToDate(f.passage.due).label}` : ''}`;
   if (f.stance === 'raid') return `Raiding shipping ${where}`;
   if (f.stance === 'hunt') return `Hunting submarines ${where}`;

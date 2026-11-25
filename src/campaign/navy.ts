@@ -2514,9 +2514,21 @@ export function turnBack(g: Game, f: Fleet): boolean {
 // stays, and its side's air staff puts fighters over the harbour first (air.ts baseByThreat). A fleet the player keeps
 // by hand waits for him: he is told once, and its card says so while it is struck. Every nation and the computer alike.
 
-/** A fleet's strikes at anchor this month and last, where it lies in that harbour still. None off the far chart. */
+/**
+ * Whether the strikers of a line of a fleet's anchor book are still at war with its nation: their own nation, else the
+ * carrier fleet's, else the holder of the field they flew from. One unknown counts.
+ */
+const strikersAtWar = (g: Game, f: Fleet, o: NonNullable<Fleet['anchor']>[number]['from'][number]): boolean => {
+  const nat = o.nat ?? (o.fleet !== undefined ? g.fleets.find((x) => x.id === o.fleet)?.nat : undefined) ?? (o.sea < 0 && o.field >= 0 ? g.regions[o.field]?.ctrl : undefined);
+  return !nat || atWar(g, nat, f.nat);
+};
+
+/**
+ * A fleet's strikes at anchor this month and last, where it lies in that harbour still, by strikers still at war with
+ * its nation (a peace since ends them: the fourth review, 25 November 2026, 1). None off the far chart.
+ */
 const anchorStrikes = (g: Game, f: Fleet): NonNullable<Fleet['anchor']> =>
-  farOn(g) && !atSea(f) ? (f.anchor ?? []).filter((e) => e.t >= g.turn - 1 && e.at === f.base) : [];
+  farOn(g) && !atSea(f) ? (f.anchor ?? []).filter((e) => e.t >= g.turn - 1 && e.at === f.base && (!e.from.length || e.from.some((o) => strikersAtWar(g, f, o)))) : [];
 
 /** The share of a fleet's surface ships sunk by air strikes at anchor this month and last, as its own side counts them (0 to 1): the cost of staying. */
 export function anchorLoss(g: Game, f: Fleet): number {
@@ -2549,8 +2561,10 @@ export function strikeThreat(g: Game, f: Fleet): { seas: Map<number, number>; fi
   };
   const field = (id: number, R: number): void => { if (id >= 0 && R > 0 && (fields.get(id) ?? -1) < R) fields.set(id, R); };
   const reported = (c: Fleet): boolean => shipCount(c.ships) > 0 && fleetFound(g, c, f.nat) !== 'none';
+  // (Only strikers still at war with its nation, and a field its enemy still holds: the fourth review, 1.)
   for (const e of anchorStrikes(g, f)) for (const o of e.from) {
-    if (o.sea < 0) { field(o.field, o.km); continue; }
+    if (!strikersAtWar(g, f, o)) continue;
+    if (o.sea < 0) { if (o.field >= 0 && atWar(g, g.regions[o.field]?.ctrl ?? '', f.nat)) field(o.field, o.km); continue; }
     const c = o.fleet !== undefined ? g.fleets.find((x) => x.id === o.fleet) : undefined;
     if (!c || !reported(c)) steam([o.sea], o.nat ?? c?.nat, o.km);
   }
@@ -4252,8 +4266,10 @@ function newBase(g: Game, f: Fleet, form: boolean = farOn(g), shut = ''): boolea
     return best;
   };
   // (A fleet whose ways on and back are shut, its base still its side's, takes a friendly harbour as any move of base
-  // may: an ally's too, in no sea closed to it. `haven` reads the enemy that took the base, and there is none here.)
-  const best = (form ? nearest((r) => haven(g, f, r)) : null) ?? nearest((r) => r.ctrl === f.nat || (!!shut && allied(g, f.nat, r.ctrl) && !closedTo(g, r.seas[0], f.nat)));
+  // may: an ally's too, in no sea closed to it. `haven` reads the enemy that took the base, and there is none here.
+  // On the far chart so does any fleet before it is said to have no harbour it can reach: the harbours a staff's makes
+  // for once one opens, and the player's page offers (baseTargets). The fourth review, 25 November 2026, 7.)
+  const best = (form ? nearest((r) => haven(g, f, r)) : null) ?? nearest((r) => r.ctrl === f.nat || ((!!shut || farOn(g)) && allied(g, f.nat, r.ctrl) && !closedTo(g, r.seas[0], f.nat)));
   if (best && rebase(g, f, best)) {
     headline(g, 'event', shut ? `${shut}, ${fleetName(f)} makes for ${best.name} instead.` : `With ${old.name} lost, ${fleetName(f)} moves its base to ${best.name}.`, f.nat, best.id);
     return true;
@@ -5930,7 +5946,7 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
     if (f.shadow !== undefined) continue;
     const say = (why: string): void => { if (says) f.why = [g.turn, why]; };
     // A fleet in passage keeps on its way to its new base (release 2, the far chart: steamPassages brings it in).
-    if (inPassage(f)) { say(`In passage to its new base at ${f.port}, it keeps on its way.`); continue; }
+    if (inPassage(f)) { say(adrift(f) ? 'With no harbour it can reach, it waits at sea until one opens.' : `In passage to its new base at ${f.port}, it keeps on its way.`); continue; }
     const where = (z: number): string => seaWhere(g.seas[z]?.name ?? 'sea');
     const what = (z: number): string => seaWhat(g.seas[z]?.name ?? 'sea');
     // (Release 2, fleetwhy.ts) Whether his own side has found an enemy surface fleet, or submarines, at sea there.

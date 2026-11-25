@@ -217,11 +217,13 @@ export function gatherMonth(g: Game, nat: string): void {
   const began = g.flags[GATHERED] !== undefined;
   if (byHand(g, nat, 'navy') || atWar(g, nat, target.ctrl)) { if (began) g.flags[GATHERED] = -1; return; }
   const f = fleetsOf(g, nat).find((x) => x.name === R.gather.fleet);
-  // (In passage there, it is not there yet: release 2, the far chart.)
-  const there = (): boolean => !!f && g.regions[f.base]?.name === R.gather.base && !inPassage(f);
+  // (In passage there, it is not there yet: release 2, the far chart. Bound there, it is brought home all the same,
+  // from where it is on its way: the fourth review, 25 November 2026, 2.)
+  const bound = (): boolean => !!f && g.regions[f.base]?.name === R.gather.base;
+  const there = (): boolean => bound() && !inPassage(f!);
   const m = g.turn - freeze;
   if (m > R.window[1]) {
-    if (began) { if (f && s.home && there()) orderedTo(g, f, s.home, undefined, true); g.flags[GATHERED] = -1; }
+    if (began) { if (f && s.home && bound()) orderedTo(g, f, s.home, undefined, true); g.flags[GATHERED] = -1; }
     return;
   }
   if (m >= R.gather.after && f && (orderedTo(g, f, R.gather, undefined, true) || there())) g.flags[GATHERED] ??= g.turn;
