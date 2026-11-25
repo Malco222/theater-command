@@ -1,15 +1,17 @@
 // The earned colours' test (Battle/AirUnitColours; release 2, Brian 25 November 2026 03:27Z: "unique colorings or
 // markings like the tuskegee airmen"). The palette as the game carries it (Content/Data/Air/unit-colours.json, the art
-// director's, third issue): 112 schemes, each one idea whose spinner is its tail's first colour and never its nose band.
-// Every aircraft model in Content/Models (the near shape and the far): its airscrews and fins found, the spinner only at
-// its nose, the band right behind it and never wider than the spinner is long, the fin's points only aft and above the
-// fuselage, a bomber's fin tip its top sixth; Britain's colours only on the rudder, France's only on the fin; nothing
-// that is not the machine's own coat or spinner recoloured (glass, crew, tyres, blades, rivets and seams, lamps, nose
-// art, tally); each step adding to the one before; a night finish dulled by 0.55, its cream the palette's grey, the tail's
-// pattern on the top half only; the same look the same coat, every time; with the row off, or a group the board gives no
-// row, nothing at all. The patterns measured on a frame; the parted triangles covering what they were cut from, no more
-// and no less, facing as it faced. Then the hand-made raid's board (unit_colours_raid.json): its place.corpsMarks read,
-// and its groups' corps (extra.corps) matching them.
+// director's, third issue): 112 schemes, each one idea whose spinner is its tail's first colour and never its nose
+// band. Every aircraft model in Content/Models (the near shape and the far): its airscrews and fins found, the spinner
+// only at its nose, the band right behind it and never wider than the spinner is long, the fin's points only aft and
+// above the fuselage, a bomber's fin tip its top sixth; Britain's colours only on the rudder, France's only on the fin
+// (by the regions, and by the file's own part names where it names them); nothing that is not the machine's own coat or
+// spinner recoloured (glass, crew, tyres, blades, rivets and seams, lamps, nose art, tally); a plain patch only round a
+// marking on a part its nation colours, on its own face, a little larger than the marking (measured here from the
+// marking as the miniatures draw it); each step adding to the one before; a night finish dulled by 0.55, its cream the
+// palette's grey, the tail's pattern on the top half only; the same look the same coat, every time; with the row off,
+// or a group the board gives no row, nothing at all. The patterns measured on a frame; the parted triangles covering
+// what they were cut from, no more and no less, facing as it faced. Then the hand-made raid's board
+// (unit_colours_raid.json): its place.corpsMarks read, and its groups' corps (extra.corps) matching them.
 // Usage: air_unit_colours_test <Content/Data/Air/unit-colours.json> <Content/Models> <unit_colours_raid.json>
 #include "Battle/AirFeed.h"
 #include "Battle/AirShow.h"
@@ -86,7 +88,121 @@ namespace
 	struct Result
 	{
 		int Earned = 0, Never = 0, OffPart = 0, TipLow = 0, NightLow = 0, Wrong = 0, Pieces = 0, AreaOff = 0, Turned = 0, Weights = 0;
+		int PartName = 0, PatchFar = 0, PatchPlain = 0, Patched = 0;
 	};
+
+	using Outline = std::vector<std::pair<double, double>>;
+	/** A tail marking's own footprint (x and z) as the miniatures draw it, measured here apart from the module: a disc, a
+	 * square, its four-cornered place, or Savoy's cross's two arms and shield; the face it is on (the sign of a facing
+	 * across the span that sees it; 0 either), and how far a patch may reach beyond it ("a little larger"). */
+	struct Footprint
+	{
+		std::string Tag;
+		double Y = 0.0, Side = 0.0;
+		bool bDisc = false;
+		double X = 0.0, Z = 0.0, R = 0.0;
+		std::vector<Outline> Shapes;
+		double Top = 0.0, Margin = 0.0;
+		double Distance(double PX, double PZ) const
+		{
+			if (bDisc) return std::max(0.0, std::hypot(PX - X, PZ - Z) - R);
+			double Best = 1e18;
+			for (const Outline& O : Shapes)
+			{
+				bool bPos = false, bNeg = false;
+				double Edge = 1e18;
+				for (size_t K = 0; K < O.size(); ++K)
+				{
+					const auto& A = O[K];
+					const auto& B = O[(K + 1) % O.size()];
+					const double DX = B.first - A.first, DZ = B.second - A.second;
+					const double Cross = DX * (PZ - A.second) - DZ * (PX - A.first);
+					bPos = bPos || Cross > 0.0;
+					bNeg = bNeg || Cross < 0.0;
+					const double Len2 = DX * DX + DZ * DZ;
+					const double T = Len2 > 1e-18 ? std::clamp(((PX - A.first) * DX + (PZ - A.second) * DZ) / Len2, 0.0, 1.0) : 0.0;
+					Edge = std::min(Edge, std::hypot(PX - (A.first + T * DX), PZ - (A.second + T * DZ)));
+				}
+				Best = std::min(Best, bPos && bNeg ? Edge : 0.0);
+			}
+			return Best;
+		}
+	};
+	std::vector<Footprint> FootprintsOf(const Model& M, const Look& L)
+	{
+		std::vector<Footprint> Out;
+		for (const MarkPlace& Mk : M.Marks)
+		{
+			if (Mk.Tag == "*FIN" && !L.bFinStripes) continue; // (not drawn: the nation has no rudder stripes)
+			for (const double Hand : { 1.0, -1.0 })
+			{
+				if (Hand < 0.0 && !Mk.bBoth) continue;
+				Footprint Fp;
+				Fp.Tag = Mk.Tag;
+				Fp.Y = Hand * Mk.At[1];
+				Fp.Side = std::fabs(Mk.Facing[1]) < 0.3 ? 0.0 : Hand * Mk.Facing[1] > 0.0 ? 1.0 : -1.0;
+				if (Mk.Quad.size() == 4)
+				{
+					const auto LL = Mk.Quad[0], LT = Mk.Quad[1], HT = Mk.Quad[2], HL = Mk.Quad[3];
+					auto Place = [&](double U, double V) {
+						const double AX = LL.first + (LT.first - LL.first) * U, AZ = LL.second + (LT.second - LL.second) * U;
+						const double BX = HL.first + (HT.first - HL.first) * U, BZ = HL.second + (HT.second - HL.second) * U;
+						return std::make_pair(AX + (BX - AX) * V, AZ + (BZ - AZ) * V);
+					};
+					auto Box = [&](double U0, double V0, double U1, double V1) { Fp.Shapes.push_back({ Place(U0, V0), Place(U1, V0), Place(U1, V1), Place(U0, V1) }); };
+					if (Mk.Tag == "ITA-CROSS")
+					{
+						// (CampaignMiniatures' Savoy cross: arms 0.24 of the chord wide over the whole height and chord; a
+						// shield 0.34 of the chord across, 1.24 times that high)
+						const auto Mid0 = Place(0.0, 0.5), Mid1 = Place(1.0, 0.5), Up0 = Place(0.5, 0.0), Up1 = Place(0.5, 1.0);
+						const double Chord = std::max(0.05, std::hypot(Mid1.first - Mid0.first, Mid1.second - Mid0.second));
+						const double Tall = std::max(0.05, std::hypot(Up1.first - Up0.first, Up1.second - Up0.second));
+						Box(0.38, 0.0, 0.62, 1.0);
+						Box(0.0, 0.5 - 0.12 * Chord / Tall, 1.0, 0.5 + 0.12 * Chord / Tall);
+						Box(0.33, 0.5 - 0.2108 * Chord / Tall, 0.67, 0.5 + 0.2108 * Chord / Tall);
+					}
+					else
+					{
+						Box(0.0, 0.0, 1.0, 1.0);
+					}
+					Fp.Margin = 0.1;
+					Fp.Top = -1e18;
+					for (const Outline& O : Fp.Shapes)
+						for (const auto& C : O) Fp.Top = std::max(Fp.Top, C.second);
+				}
+				else if (Mk.Tag == "#" || Mk.Tag.find("FIN") != std::string::npos)
+				{
+					const double X = Mk.At[0], Z = Mk.At[2], R = Mk.Radius;
+					Fp.Shapes.push_back({ { X - R, Z - R }, { X + R, Z - R }, { X + R, Z + R }, { X - R, Z + R } });
+					Fp.Margin = 0.25 * R;
+					Fp.Top = Z + R;
+				}
+				else
+				{
+					Fp.bDisc = true;
+					Fp.X = Mk.At[0];
+					Fp.Z = Mk.At[2];
+					Fp.R = Mk.Radius;
+					Fp.Margin = 0.3 * Mk.Radius;
+					Fp.Top = Fp.Z + Fp.R;
+				}
+				Out.push_back(Fp);
+			}
+		}
+		return Out;
+	}
+
+	/** Whether a part's name is one the earned tail never reaches (a newer file's moving surfaces, wings, airscrews, bay,
+	 * guns and load), and whether it is a rudder. */
+	bool OffTail(const std::string& Name)
+	{
+		for (const char* Prefix : { "aileron", "elevator", "flap", "wing", "prop", "bay", "turret", "flexgun", "bombs" })
+		{
+			if (Name.rfind(Prefix, 0) == 0) return true;
+		}
+		return false;
+	}
+	bool IsRudder(const std::string& Name) { return Name.rfind("rudder", 0) == 0; }
 
 	Result Examine(const Model& M, const Found& F, bool bFar, const Palette& P, const Look& L, const Coat& C)
 	{
@@ -100,6 +216,51 @@ namespace
 		const bool bNight = NightFinish(M, L);
 		std::map<int, Rgb> Laid;
 		for (const auto& Each : C.Points) Laid[Each.first] = Each.second;
+		// (by part name, on a file that names its parts: Britain's tail only on a rudder, France's never; none on a part
+		// the tail never reaches)
+		bool bRudders = false;
+		for (const Part& Pt : M.Parts) bRudders = bRudders || IsRudder(Pt.Name);
+		auto PartWrong = [&](size_t Point) {
+			if (Me.Parts.empty() || M.Parts.empty()) return false;
+			const int Index = Me.Parts[Point];
+			if (Index < 0 || static_cast<size_t>(Index) >= M.Parts.size()) return true;
+			const std::string& Name = M.Parts[static_cast<size_t>(Index)].Name;
+			if (OffTail(Name)) return true;
+			if (bRudders && Area_ == TailPart::Rudder && !IsRudder(Name)) return true;
+			if (bRudders && Area_ == TailPart::Fin && IsRudder(Name)) return true;
+			return false;
+		};
+		// (each plain patch only round a marking on its own face, a little larger than it; by night only round one that
+		// reaches the pattern's half)
+		const std::vector<Footprint> Prints = FootprintsOf(M, L);
+		auto PatchNear = [&](double X, double Y, double Z, double FaceY) {
+			double HalfAt = -1e18, Across = 1e18;
+			for (const Tail& T : F.Tails)
+			{
+				const Frame& Fr = T.Frames[static_cast<int>(Area_)];
+				if (Fr.bAny && std::fabs(Y - T.Y) < Across)
+				{
+					Across = std::fabs(Y - T.Y);
+					HalfAt = Fr.ZLow + 0.5 * Fr.High();
+				}
+			}
+			for (const Footprint& Fp : Prints)
+			{
+				if (std::fabs(Y - Fp.Y) > 0.6 || (Fp.Side != 0.0 && FaceY * Fp.Side < 0.0)) continue;
+				if (bNight && Fp.Top + Fp.Margin < HalfAt) continue;
+				if (Fp.Distance(X, Z) <= Fp.Margin + 1e-6) return true;
+			}
+			return false;
+		};
+		auto FacingY = [&Me](size_t K) { return Me.Facings[K * 3 + 1]; };
+		for (const PatchLaid& Pl_ : C.Patches)
+		{
+			const std::string& Tag = M.Marks[static_cast<size_t>(Pl_.Mark)].Tag;
+			++R.Patched;
+			// (Britain's fin flash stands on the fin, the rudder stripes (France's own, or a plain machine's) on the rudder:
+			// the parts Britain and France leave plain)
+			if ((Area_ == TailPart::Rudder && Tag == "UK-FIN") || (Area_ == TailPart::Fin && (Tag == "FRA-FIN" || Tag == "*FIN"))) ++R.PatchPlain;
+		}
 		for (size_t K = 0; K < Me.Count(); ++K)
 		{
 			const Takes T = C.Took[K];
@@ -113,13 +274,16 @@ namespace
 			{
 				const bool bOnPart = Area_ == TailPart::Both ? (Pl[K] == Where::Fin || Pl[K] == Where::Rudder) : Area_ == TailPart::Rudder ? Pl[K] == Where::Rudder : Pl[K] == Where::Fin;
 				if (!bOnPart) ++R.OffPart;
+				if (PartWrong(K)) ++R.PartName;
 				if (TailOf[K] >= 0)
 				{
 					const Frame& Fr = F.Tails[static_cast<size_t>(TailOf[K])].Frames[static_cast<int>(Area_)];
 					const double H = (Me.Z(K) - Fr.ZLow) / std::max(1e-9, Fr.High());
 					if (T == Takes::Tip && H < 5.0 / 6.0 - 1e-6) ++R.TipLow;
-					if (T != Takes::Tip && bNight && H < 0.5 - 1e-6) ++R.NightLow;
+					// (by night the pattern on the top half; a marking's patch is not the pattern, and is checked below)
+					if ((T == Takes::First || T == Takes::Second) && bNight && H < 0.5 - 1e-6) ++R.NightLow;
 				}
+				if (T == Takes::Patch && !PatchNear(Me.X(K), Me.Y(K), Me.Z(K), FacingY(K))) ++R.PatchFar;
 			}
 			if (T == Takes::Spinner && Pl[K] != Where::Spinner) ++R.OffPart;
 			if (T == Takes::Ring && Pl[K] != Where::Ring) ++R.OffPart;
@@ -137,6 +301,32 @@ namespace
 		{
 			const PaintIs A = ClassOf(F, Me.Paints[static_cast<size_t>(Ct.Triangle[0])]);
 			if (A == PaintIs::Never || ClassOf(F, Me.Paints[static_cast<size_t>(Ct.Triangle[1])]) != A || ClassOf(F, Me.Paints[static_cast<size_t>(Ct.Triangle[2])]) != A) ++R.Never;
+			// (each earned piece's part and patch, as each earned point's)
+			for (size_t Q = 0; Q + 2 < Ct.Pieces.size(); Q += 3)
+			{
+				double W[3] = { 0.0, 0.0, 0.0 };
+				const AirUnitColours::Corner& First = Ct.Corners[static_cast<size_t>(Ct.Pieces[Q])];
+				for (size_t I = 0; I < 3; ++I)
+				{
+					const AirUnitColours::Corner& Co = Ct.Corners[static_cast<size_t>(Ct.Pieces[Q + I])];
+					for (int J = 0; J < 3; ++J) W[J] += Co.Weight[J] / 3.0;
+				}
+				double PX = 0.0, PY = 0.0, PZ = 0.0, PF = 0.0;
+				for (int J = 0; J < 3; ++J)
+				{
+					const size_t V = static_cast<size_t>(Ct.Triangle[J]);
+					PX += W[J] * Me.X(V);
+					PY += W[J] * Me.Y(V);
+					PZ += W[J] * Me.Z(V);
+					PF += W[J] * FacingY(V);
+				}
+				const Takes What = First.What;
+				if (What == Takes::First || What == Takes::Second || What == Takes::Patch || What == Takes::Tip)
+				{
+					if (PartWrong(static_cast<size_t>(Ct.Triangle[0]))) ++R.PartName;
+					if (What == Takes::Patch && !PatchNear(PX, PY, PZ, PF)) ++R.PatchFar;
+				}
+			}
 			double Corner[3][3];
 			for (int I = 0; I < 3; ++I)
 				for (int X = 0; X < 3; ++X) Corner[I][X] = Me.Points[static_cast<size_t>(Ct.Triangle[I]) * 3 + static_cast<size_t>(X)];
@@ -388,6 +578,7 @@ int main(int Argc, char** Argv)
 					Look L;
 					L.Nation = Nation;
 					L.Scheme = Scheme_;
+					L.bFinStripes = Scheme_ != 6; // (a plain machine's rudder stripes drawn, and for one scheme not)
 					for (int Tier = 0; Tier <= 3; ++Tier)
 					{
 						L.Tier = Tier;
@@ -411,6 +602,10 @@ int main(int Argc, char** Argv)
 							Sum.AreaOff += R.AreaOff;
 							Sum.Turned += R.Turned;
 							Sum.Weights += R.Weights;
+							Sum.PartName += R.PartName;
+							Sum.PatchFar += R.PatchFar;
+							Sum.PatchPlain += R.PatchPlain;
+							Sum.Patched += R.Patched;
 							if (!bFar) Earned[Tier] = R.Earned;
 							Tips += C.Count(Takes::Tip);
 							if (F.bFighter) FighterTips += C.Count(Takes::Tip);
@@ -431,8 +626,12 @@ int main(int Argc, char** Argv)
 		}
 		std::snprintf(Line, sizeof Line, "%s: %d earned points off their part, %d recoloured that are not its coat or spinner, %d of the wrong colour", Kind.c_str(), Sum.OffPart, Sum.Never, Sum.Wrong);
 		Check(Sum.OffPart == 0 && Sum.Never == 0 && Sum.Wrong == 0, "each nation's colours on its own part (Britain the rudder, France the fin), nothing else recoloured", Line);
+		std::snprintf(Line, sizeof Line, "%s: %d earned tail points or pieces on the wrong part by its name%s", Kind.c_str(), Sum.PartName, M.Parts.empty() ? " (a file with no parts)" : "");
+		Check(Sum.PartName == 0, "by the file's own part names: Britain's tail only on a rudder, France's never, none on a wing, an elevator, an aileron or a flap", Line);
+		std::snprintf(Line, sizeof Line, "%s: %d patches laid, %d under a marking on a part its nation leaves plain, %d patch points or pieces not round a marking on their own face", Kind.c_str(), Sum.Patched, Sum.PatchPlain, Sum.PatchFar);
+		Check(Sum.PatchPlain == 0 && Sum.PatchFar == 0, "a plain patch only round a marking on a part its nation colours, on its own face, a little larger than it", Line);
 		std::snprintf(Line, sizeof Line, "%s: %d out of step, %d tip points below the top sixth, %d night pattern points below the half, %d at tier 0, %d not the same twice", Kind.c_str(), Steps, Sum.TipLow, Sum.NightLow, Plain, Same);
-		Check(Steps == 0 && Sum.TipLow == 0 && Sum.NightLow == 0 && Plain == 0 && Same == 0 && FighterTips == 0 && (F.bFighter || Tips > 0), "each step adds its own; a bomber's tip its top sixth; by night the top half; tier 0 nothing", Line);
+		Check(Steps == 0 && Sum.TipLow == 0 && Sum.NightLow == 0 && Plain == 0 && Same == 0 && FighterTips == 0 && (F.bFighter || Tips > 0), "each step adds its own; a bomber's tip its top sixth; by night the pattern on the top half; tier 0 nothing", Line);
 		std::snprintf(Line, sizeof Line, "%s: %d pieces, %d not covering their triangle, %d turned over, %d corners off it", Kind.c_str(), Sum.Pieces, Sum.AreaOff, Sum.Turned, Sum.Weights);
 		Check(Sum.Pieces > 0 && Sum.AreaOff == 0 && Sum.Turned == 0 && Sum.Weights == 0, "the parted triangles cover what they were cut from, facing as it faced", Line);
 		(void)Earned;
@@ -499,7 +698,7 @@ int main(int Argc, char** Argv)
 		AirFeed::Frame First;
 		Why.clear();
 		const bool bRaid = ReadText(Argv[3], Text) && AirFeed::Parse(Text, J, Why) && AirFeed::ReadSky(J["sky"], Board) && AirFeed::ReadView(J["view"], Board, First);
-		Check(bRaid && J["about"].Str("").find("HAND-MADE") != std::string::npos, "its board and first view read; it says it is hand-made", Why);
+		Check(bRaid && J["what"].Str("").rfind("HAND-MADE", 0) == 0, "its board and first view read; it says it is hand-made (its \"what\", as the Mac's ticket says it)", Why);
 		if (bRaid)
 		{
 			std::set<int> Tiers;

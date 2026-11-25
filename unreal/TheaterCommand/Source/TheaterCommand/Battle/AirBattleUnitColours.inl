@@ -56,12 +56,14 @@ FString AAirBattle::UnitColoursShape(int32 Key, UProceduralMeshComponent* Mesh, 
 		if (PlainFar)
 		{
 			auto Far = *PlainFar;
-			// (a far shape that does not take the look is left out, and the near one is drawn at every distance: never a
-			// far shape in plain paint under a coloured near one)
-			if (UnitColoursLay(true, Near.Middle, Near.Fit, Far.Points, Far.Triangles, Far.Normals, Far.Colors))
+			// (a far shape that does not take the look: the aircraft flies in its plain paint, both shapes, for the near
+			// shape alone has no airscrews at a distance (they are its own discs, made only close to); never a far shape
+			// in plain paint under a coloured near one)
+			if (!UnitColoursLay(true, Near.Middle, Near.Fit, Far.Points, Far.Triangles, Far.Normals, Far.Colors))
 			{
-				Shapes.Add(Coated + TEXT("|far"), MoveTemp(Far));
+				return Shape;
 			}
+			Shapes.Add(Coated + TEXT("|far"), MoveTemp(Far));
 		}
 		Shapes.Add(Coated, MoveTemp(Near));
 	}

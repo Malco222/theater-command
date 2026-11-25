@@ -315,7 +315,75 @@ namespace AirUnitColours
 		Line Level(double Z) { Line L; L.A = 0.0; L.C = 1.0; L.D = Z; return L; }
 		Line Upright(double X) { Line L; L.A = 1.0; L.C = 0.0; L.D = X; return L; }
 
-		/** A patch under a tail marking: a disc (Round) or a box, in x and z. */
+		using Outline = std::vector<std::pair<double, double>>;
+		/** A convex outline in x and z, counter-clockwise, grown outward by Grow on every side. */
+		Outline Grown(Outline C, double Grow)
+		{
+			double Twice = 0.0;
+			for (size_t K = 0; K < C.size(); ++K)
+			{
+				const auto& A = C[K];
+				const auto& B = C[(K + 1) % C.size()];
+				Twice += A.first * B.second - B.first * A.second;
+			}
+			if (Twice < 0.0) std::reverse(C.begin(), C.end());
+			const size_t N = C.size();
+			std::vector<double> NX(N), NZ(N), D(N);
+			for (size_t K = 0; K < N; ++K)
+			{
+				const auto& A = C[K];
+				const auto& B = C[(K + 1) % N];
+				const double DX = B.first - A.first, DZ = B.second - A.second, Len = std::hypot(DX, DZ);
+				NX[K] = Len > 1e-12 ? DZ / Len : 0.0; // (outward, the outline running counter-clockwise)
+				NZ[K] = Len > 1e-12 ? -DX / Len : 0.0;
+				D[K] = NX[K] * A.first + NZ[K] * A.second + Grow;
+			}
+			Outline Out(N);
+			for (size_t K = 0; K < N; ++K)
+			{
+				const size_t J = (K + N - 1) % N; // (the side before this corner, and the side after it)
+				const double Det = NX[J] * NZ[K] - NZ[J] * NX[K];
+				if (std::fabs(Det) < 1e-9)
+				{
+					Out[K] = { C[K].first + Grow * NX[K], C[K].second + Grow * NZ[K] };
+					continue;
+				}
+				Out[K] = { (D[J] * NZ[K] - NZ[J] * D[K]) / Det, (NX[J] * D[K] - D[J] * NX[K]) / Det };
+			}
+			return Out;
+		}
+
+		/** Where a marking's middle lies on a tail (x and z, on the face Side sees): the part of the skin under it, from the
+		 * near mesh's triangle there (a newer file's rudder is its own part); the place itself where no skin is found. */
+		OnTail MarkOn(const Model& M, const Found& F, const Tail& T, double X, double Y, double Z, double Side)
+		{
+			const Mesh& N = M.Near;
+			double Best = 1e18;
+			OnTail Out = OnTail::None;
+			bool bAny = false;
+			for (size_t K = 0; K + 2 < N.Triangles.size(); K += 3)
+			{
+				const size_t A = static_cast<size_t>(N.Triangles[K]), B = static_cast<size_t>(N.Triangles[K + 1]), C = static_cast<size_t>(N.Triangles[K + 2]);
+				if (IsOf(F, N.Paints[A]) != PaintIs::Coat || IsOf(F, N.Paints[B]) != PaintIs::Coat || IsOf(F, N.Paints[C]) != PaintIs::Coat) continue;
+				if (std::fabs((N.Y(A) + N.Y(B) + N.Y(C)) / 3.0 - T.Y) > T.Slab) continue;
+				if (Side != 0.0 && (FacingY(N, A) + FacingY(N, B) + FacingY(N, C)) * Side <= 0.0) continue;
+				const double X0 = N.X(A), Z0 = N.Z(A), X1 = N.X(B) - X0, Z1 = N.Z(B) - Z0, X2 = N.X(C) - X0, Z2 = N.Z(C) - Z0;
+				const double Det = X1 * Z2 - X2 * Z1;
+				if (std::fabs(Det) < 1e-10) continue;
+				const double U = ((X - X0) * Z2 - X2 * (Z - Z0)) / Det, V = (X1 * (Z - Z0) - (X - X0) * Z1) / Det;
+				if (U < -1e-9 || V < -1e-9 || U + V > 1.0 + 1e-9) continue;
+				const double YAt = N.Y(A) + U * (N.Y(B) - N.Y(A)) + V * (N.Y(C) - N.Y(A));
+				if (std::fabs(YAt - Y) >= Best) continue;
+				Best = std::fabs(YAt - Y);
+				Out = TailPlace(T, X, YAt, Z, PartOf(N, A), T.XMax);
+				bAny = true;
+			}
+			return bAny ? Out : TailPlace(T, X, T.Y, Z, -1, T.XMax);
+		}
+
+		/** A patch under a tail marking (or one piece of it): a disc (Round), a box, or a four-cornered outline (Outline,
+		 * its corners counter-clockwise in x and z), on one face of the tail (Side: the sign of a facing across the span
+		 * that sees it; 0 either). */
 		struct Patch
 		{
 			int Mark = -1;
@@ -323,9 +391,23 @@ namespace AirUnitColours
 			int Tail = -1;
 			bool bRound = true;
 			double X = 0.0, Z = 0.0, R = 0.0, HalfX = 0.0, HalfZ = 0.0;
+			std::vector<std::pair<double, double>> Outline;
+			double Side = 0.0;
+			double ZTop = 0.0; // the highest point of its marking's patch (all its pieces)
 			static constexpr int Sides = 24; // a disc is laid as a 24-sided figure round it, its sides touching the circle
-			bool Holds(double PX, double PZ) const
+			bool Holds(double PX, double PZ, double FaceY) const
 			{
+				if (Side != 0.0 && FaceY * Side < 0.0) return false; // (the other face of the fin: not this marking's)
+				if (!Outline.empty())
+				{
+					for (size_t K = 0; K < Outline.size(); ++K)
+					{
+						const auto& A = Outline[K];
+						const auto& B = Outline[(K + 1) % Outline.size()];
+						if ((B.first - A.first) * (PZ - A.second) - (B.second - A.second) * (PX - A.first) < 0.0) return false;
+					}
+					return true;
+				}
 				if (!bRound) return std::fabs(PX - X) <= HalfX && std::fabs(PZ - Z) <= HalfZ;
 				const double DX = PX - X, DZ = PZ - Z, Far = std::hypot(DX, DZ);
 				if (Far <= R) return true;
@@ -352,7 +434,9 @@ namespace AirUnitColours
 			std::vector<std::vector<Line>> TailLines; // each tail's cuts
 			std::vector<Line> EngineLines;
 
-			Takes At(double X, double Y, double Z, PaintIs Is, int Part, int* PatchOf = nullptr) const
+			/** What a place of the skin takes: its x, y and z, its paint's class, its part, and its facing across the span
+			 * (FaceY: which face of a fin it is on). */
+			Takes At(double X, double Y, double Z, PaintIs Is, int Part, double FaceY, int* PatchOf = nullptr) const
 			{
 				if (Is == PaintIs::Boss || Is == PaintIs::Hub)
 				{
@@ -376,15 +460,17 @@ namespace AirUnitColours
 					const double H = (Z - Fr.ZLow) / Fr.High();
 					if (L.Tier >= 3)
 					{
-						if (bNight && H < 0.5) return Takes::Keep;
+						// (a marking's patch first, and whole: by night, where it reaches the pattern's half, it is laid
+						// below the half too, so that the marking is never half on its patch and half on the camouflage)
 						for (const Patch& Pa : Patches)
 						{
-							if (Pa.Tail == static_cast<int>(T) && Pa.Holds(X, Z))
+							if (Pa.Tail == static_cast<int>(T) && (!bNight || Pa.ZTop >= Fr.ZLow + 0.5 * Fr.High()) && Pa.Holds(X, Z, FaceY))
 							{
 								if (PatchOf) *PatchOf = static_cast<int>(&Pa - Patches.data());
 								return Takes::Patch;
 							}
 						}
+						if (bNight && H < 0.5) return Takes::Keep;
 						return FirstAt(S->Pattern, Fr, Each.Normal, X, Z) ? Takes::First : Takes::Second;
 					}
 					if (!F->bFighter && H >= 5.0 / 6.0) return Takes::Tip;
@@ -1259,7 +1345,9 @@ namespace AirUnitColours
 		Pa.Area = PartFor(L.Nation);
 		Out.bNight = Pa.bNight;
 		for (const Tail& T : F.Tails) Pa.FinMost.push_back(T.XMax);
-		// The plain patches under the tail's markings, where the pattern is checks or stripes (the brief, section 2).
+		// The plain patches under the tail's markings, where the pattern is checks or stripes (the brief, section 2): for a
+		// marking whose middle lies on a part of the tail this nation colours (Britain's fin flash and France's rudder
+		// stripes are on the parts they leave plain, and need none), shaped as the marking and a little larger, on its face.
 		if (L.Tier >= 3 && (S->Pattern == "checks" || S->Pattern == "stripes"))
 		{
 			for (size_t K = 0; K < M.Marks.size(); ++K)
@@ -1270,23 +1358,66 @@ namespace AirUnitColours
 				{
 					if (bMirrored && !Mk.bBoth) continue;
 					const double X = Mk.At[0], Y = bMirrored ? -Mk.At[1] : Mk.At[1], Z = Mk.At[2], R = Mk.Radius;
+					const double FaceY = bMirrored ? -Mk.Facing[1] : Mk.Facing[1];
+					// (the face it is drawn on, as the miniatures draw it: a hair off the skin on the side it faces)
+					const double Side = std::fabs(FaceY) < 0.3 ? 0.0 : FaceY > 0.0 ? 1.0 : -1.0;
 					for (size_t T = 0; T < F.Tails.size(); ++T)
 					{
 						const Tail& Each = F.Tails[T];
 						if (std::fabs(Y - Each.Y) > Each.Slab + 0.15 || X < Each.XMin - R || X > Each.XMax + R || Z < Each.ZMin - R || Z > Each.ZMax + R) continue;
+						if (!PartTakes(Pa.Area, MarkOn(M, F, Each, X, Y, Z, Side))) continue;
 						Patch Pt;
 						Pt.Mark = static_cast<int>(K);
 						Pt.bMirrored = bMirrored;
 						Pt.Tail = static_cast<int>(T);
+						Pt.Side = Side;
+						auto Lay = [&Pa](Patch Piece) {
+							if (!Piece.Outline.empty())
+							{
+								Piece.ZTop = -1e18;
+								for (const auto& C : Piece.Outline) Piece.ZTop = std::max(Piece.ZTop, C.second);
+							}
+							else
+							{
+								Piece.ZTop = Piece.Z + (Piece.bRound ? Piece.R / std::cos(3.14159265358979 / Patch::Sides) : Piece.HalfZ);
+							}
+							Pa.Patches.push_back(std::move(Piece));
+						};
 						if (Mk.Quad.size() == 4)
 						{
-							Spread QX, QZ;
-							for (const auto& C : Mk.Quad) { QX.Take(C.first); QZ.Take(C.second); }
-							Pt.bRound = false;
-							Pt.X = 0.5 * (QX.Lo + QX.Hi);
-							Pt.Z = 0.5 * (QZ.Lo + QZ.Hi);
-							Pt.HalfX = 0.5 * (QX.Hi - QX.Lo) * 1.08 + 0.02;
-							Pt.HalfZ = 0.5 * (QZ.Hi - QZ.Lo) * 1.08 + 0.02;
+							// (its own four-cornered place, the lower leading corner first; a little larger on every side)
+							const auto LowLead = Mk.Quad[0], LowTrail = Mk.Quad[1], HighTrail = Mk.Quad[2], HighLead = Mk.Quad[3];
+							auto Place = [&](double U, double V) {
+								const double AX = LowLead.first + (LowTrail.first - LowLead.first) * U, AZ = LowLead.second + (LowTrail.second - LowLead.second) * U;
+								const double BX = HighLead.first + (HighTrail.first - HighLead.first) * U, BZ = HighLead.second + (HighTrail.second - HighLead.second) * U;
+								return std::make_pair(AX + (BX - AX) * V, AZ + (BZ - AZ) * V);
+							};
+							auto Apart = [](std::pair<double, double> From, std::pair<double, double> To) { return std::hypot(To.first - From.first, To.second - From.second); };
+							const double Chord = std::max(0.05, Apart(Place(0.0, 0.5), Place(1.0, 0.5))), Tall = std::max(0.05, Apart(Place(0.5, 0.0), Place(0.5, 1.0)));
+							auto Piece = [&](double U0, double V0, double U1, double V1) {
+								// (a little larger: 2 cm and a twenty-fifth of the piece's own narrower way, on every side)
+								const double Grow = 0.02 + 0.04 * std::min(Chord * (U1 - U0), Tall * (V1 - V0));
+								Patch One = Pt;
+								One.bRound = false;
+								One.Outline = Grown({ Place(U0, V0), Place(U1, V0), Place(U1, V1), Place(U0, V1) }, Grow);
+								Lay(std::move(One));
+							};
+							if (Mk.Tag == "ITA-CROSS")
+							{
+								// (Savoy's white cross is the marking, and the field behind it the pattern (the brief: "fin and
+								// rudder, as the field behind the white cross"): a patch under its two arms and its shield, as
+								// CampaignMiniatures draws them: the arms a quarter of the chord wide, the whole height and the
+								// whole chord; the shield a third of the chord across and 1.24 times that high)
+								const double ArmU = 0.12, ArmV = 0.12 * Chord / Tall;
+								const double ShieldU = 0.17, ShieldV = 0.62 * 0.34 * Chord / Tall;
+								Piece(0.5 - ArmU, 0.0, 0.5 + ArmU, 1.0);
+								Piece(0.0, 0.5 - ArmV, 1.0, 0.5 + ArmV);
+								Piece(0.5 - ShieldU, 0.5 - ShieldV, 0.5 + ShieldU, 0.5 + ShieldV);
+							}
+							else
+							{
+								Piece(0.0, 0.0, 1.0, 1.0);
+							}
 						}
 						else if (Mk.Tag == "#" || Mk.Tag.find("FIN") != std::string::npos)
 						{
@@ -1296,15 +1427,25 @@ namespace AirUnitColours
 							Pt.Z = Z;
 							Pt.HalfX = 1.15 * R;
 							Pt.HalfZ = 1.15 * R;
+							Lay(Pt);
 						}
 						else
 						{
 							Pt.X = X;
 							Pt.Z = Z;
 							Pt.R = 1.25 * R;
+							Lay(Pt);
 						}
-						Pa.Patches.push_back(Pt);
 					}
+				}
+			}
+			// (a marking's pieces, Savoy's cross's arms and shield, laid or left by night as one: each holds the highest of
+			// them)
+			for (Patch& Each : Pa.Patches)
+			{
+				for (const Patch& Other : Pa.Patches)
+				{
+					if (Other.Mark == Each.Mark && Other.bMirrored == Each.bMirrored && Other.Tail == Each.Tail) Each.ZTop = std::max(Each.ZTop, Other.ZTop);
 				}
 			}
 		}
@@ -1329,7 +1470,7 @@ namespace AirUnitColours
 			{
 				Lines.push_back(Through(Each.Hinge[K].first, Each.Hinge[K].second, Each.Hinge[K + 1].first, Each.Hinge[K + 1].second, true));
 			}
-			if (!Fr.bAny) continue;
+			if (!Fr.bAny || Fr.High() <= 1e-6) continue; // (a frame with no height has no pattern to cut: the painter keeps it)
 			const double H = Fr.High();
 			if (L.Tier < 3)
 			{
@@ -1369,7 +1510,16 @@ namespace AirUnitColours
 			for (const Patch& Pt : Pa.Patches)
 			{
 				if (Pt.Tail != static_cast<int>(T)) continue;
-				if (Pt.bRound)
+				if (!Pt.Outline.empty())
+				{
+					for (size_t K = 0; K < Pt.Outline.size(); ++K)
+					{
+						const auto& A = Pt.Outline[K];
+						const auto& B = Pt.Outline[(K + 1) % Pt.Outline.size()];
+						Lines.push_back(Through(A.first, A.second, B.first, B.second, true));
+					}
+				}
+				else if (Pt.bRound)
 				{
 					constexpr int Sides = Patch::Sides;
 					for (int K = 0; K < Sides; ++K)
@@ -1408,7 +1558,7 @@ namespace AirUnitColours
 		for (size_t K = 0; K < Me.Count(); ++K)
 		{
 			int Under = -1;
-			const Takes T = Pa.At(Me.X(K), Me.Y(K), Me.Z(K), IsOf(F, Me.Paints[K]), PartOf(Me, K), &Under);
+			const Takes T = Pa.At(Me.X(K), Me.Y(K), Me.Z(K), IsOf(F, Me.Paints[K]), PartOf(Me, K), FacingY(Me, K), &Under);
 			Out.Took[K] = T;
 			if (T == Takes::Keep) continue;
 			Out.Points.emplace_back(static_cast<int>(K), Sooted(M, Pa.ColourOf(T), Soot(static_cast<int>(K))));
@@ -1482,8 +1632,9 @@ namespace AirUnitColours
 				const double PX = Mid.W[0] * Corners[0].X + Mid.W[1] * Corners[1].X + Mid.W[2] * Corners[2].X;
 				const double PY = Mid.W[0] * Corners[0].Y + Mid.W[1] * Corners[1].Y + Mid.W[2] * Corners[2].Y;
 				const double PZ = Mid.W[0] * Corners[0].Z + Mid.W[1] * Corners[1].Z + Mid.W[2] * Corners[2].Z;
+				const double PF = Mid.W[0] * FacingY(Me, static_cast<size_t>(C[0])) + Mid.W[1] * FacingY(Me, static_cast<size_t>(C[1])) + Mid.W[2] * FacingY(Me, static_cast<size_t>(C[2]));
 				int Under = -1;
-				Labels.push_back(Pa.At(PX, PY, PZ, Is, Part, &Under));
+				Labels.push_back(Pa.At(PX, PY, PZ, Is, Part, PF, &Under));
 				if (Under >= 0)
 				{
 					const Patch& Pt = Pa.Patches[static_cast<size_t>(Under)];
@@ -1511,6 +1662,7 @@ namespace AirUnitColours
 						Co.Weight[I] = B.W[I];
 					}
 					Co.bEarned = What != Takes::Keep;
+					Co.What = What;
 					if (Co.bEarned)
 					{
 						const double Sooting = B.W[0] * Soot(C[0]) + B.W[1] * Soot(C[1]) + B.W[2] * Soot(C[2]);

@@ -26,8 +26,9 @@
  *   #7E7C72, and the tail's pattern on the top half of the tail only; a winter month: the colours at full strength.
  * Never recoloured: glass, crew, tyres, blades, rivet and seam lines, lamps, guns, exhausts, the recognition bands and
  * anything else that is not the machine's own coat; nor its marks, nose art or tally, which are drawn apart and lie on
- * top. Where the pattern is checks or stripes, each marking on the tail sits on a plain patch of the first colour (a
- * disc or a box a little larger than the mark, laid in the tail's own skin), so that it is never cut up.
+ * top. Where the pattern is checks or stripes, each marking on the part of the tail its nation colours sits on a plain
+ * patch of the first colour (shaped as the marking, a little larger, laid in the tail's own skin on the marking's face;
+ * by night only where the patch reaches the pattern's half, and then whole), so that it is never cut up.
  *
  * The regions are found from the model's own file (Content/Models/<Kind>.json, read as CampaignMiniatures reads it:
  * its points in order, their facings, paints and parts): the airscrews from their blades (Battle/AirScrew), the fins
@@ -252,6 +253,7 @@ namespace AirUnitColours
 		double Weight[3] = { 1.0, 0.0, 0.0 }; // (double: a few millimetres' sliver far aft keeps its place)
 		bool bEarned = false;
 		Rgb Colour;
+		Takes What = Takes::Keep; // what its piece takes (for the test and the pictures; Colour is what is drawn)
 	};
 	/** A triangle of the file's (its corners in the file's order) parted along a pattern's edges: its pieces, three
 	 * corners each, each running the way the triangle's own corners run. */
@@ -261,7 +263,10 @@ namespace AirUnitColours
 		std::vector<Corner> Corners;
 		std::vector<int> Pieces;
 	};
-	/** A patch laid under a tail marking (for the log and the test): which mark, on which tail, and how many pieces. */
+	/** A patch laid under a tail marking (for the log and the test): which mark, on which tail. A marking gets one only
+	 * where its middle lies on a part of the tail its nation colours (never Britain's fin flash, nor France's rudder
+	 * stripes); shaped as the marking is (a disc, a box, its own four-cornered place, Savoy's cross under its arms and
+	 * shield), a little larger, on the face the marking is on. */
 	struct PatchLaid
 	{
 		int Mark = -1;
