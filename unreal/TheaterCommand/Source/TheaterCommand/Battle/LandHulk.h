@@ -42,13 +42,17 @@
  *   a week on soot black over about half of what faces the sky, densest round where the flames came out and
  *   streaking downwind, feathered grey and grained along the wind; round it by her heat bare grey steel in the
  *   hottest centres, her paint scorched to a chalky grey-buff round that, a brown fringe, her own paint low on her
- *   cooler sides, orange only along the edges; a thrown turret burnt from its own hatches only; a month on the bare
- *   steel flash-rusted, mottled orange and brown, soft-edged, in runs and a softer wash down her sides; by half a
- *   year the soot washed off what faces the sky (a dark stain of it fading), the rust old and brown, mottled deep and
- *   lighter, the scorched paint flaking and weathered to faded paint on the rust, her own paint flaking; settled
- *   into the ground; a ragged scorched patch under her, ash black at her engine's end with a brown rim of burnt grass
- *   and her fuel's stain, that greens again, lusher than the field round it. No fire and no smoke: they burnt out long
- *   ago.
+ *   cooler sides, a fresh orange only along the edges; a thrown turret burnt from its own hatches only; a month on
+ *   the bare steel flash-rusted, a dull orange-brown mottled orange and ochre, no brighter than some 150, 85, 45 in
+ *   the sun on her tops or her sides, soft-edged, staining the paint round it, in runs and a softer wash down her
+ *   sides; by half a year the soot washed off what faces the sky (a dark stain of it fading), the rust old and brown,
+ *   mottled deep and lighter, the scorched paint flaking and weathered to faded paint on the rust, her own paint
+ *   flaking, a little of her paint as the fire left it kept where the weather reaches least (low on her sides, under
+ *   what stands out over them, on what turns down; none where she burnt bare), a few darker runs weeping from her
+ *   seams and hatches on her upright faces, in some stretches of her only (the art director's carries of 24 November
+ *   21:01Z); settled into the ground; a ragged scorched patch under her, ash black at her engine's end with a brown
+ *   rim of burnt grass and her fuel's stain, that greens again, lusher than the field round it. No fire and no smoke:
+ *   they burnt out long ago.
  *
  * Frames. The field is x east, y north, z up, metres (the recording's). Headings are radians, 0 north, clockwise, as
  * LandKit's. A dressed mesh is a LandField::Mesh in the field's axes, metres from its hulk's anchor (Hulk::X, Y, Z),
@@ -223,7 +227,8 @@ namespace LandHulk
 	 * scorched paint gone chalky, bare steel, flash rust, old rust, her own paint left, charred rubber, wood or glass, a
 	 * track's links or a rim black-grey through the fire (not yet rusted), the snow fallen on her since, the open hole of
 	 * her turret ring (her turret thrown: the dark of her inside, not soot), or a run of rust down her side from a rusted
-	 * patch above (flash or old as the patch is). The cloud test measures each in its pictures.
+	 * patch above (flash or old as the patch is), or, from half a year, a darker one weeping from her seams and hatches.
+	 * The cloud test measures each in its pictures.
 	 */
 	enum class Coat : uint8_t { Soot, Scorched, Bare, Flash, OldRust, Paint, Charred, Links, Snow, Hole, Run };
 	constexpr int Coats = 11;

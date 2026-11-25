@@ -601,6 +601,12 @@ namespace LandHulk
 				return static_cast<size_t>(J) * static_cast<size_t>(Nx) + static_cast<size_t>(I);
 			}
 			double At(double X, double Y) const { return Nx > 0 && Ny > 0 ? Z[CellOf(X, Y)] : -1e9; }
+			/** Her height over a spot, none (-1e9) off her (At reads the nearest cell's). */
+			double Within(double X, double Y) const
+			{
+				const double I = (X - X0) / Cell, J = (Y - Y0) / Cell;
+				return I >= 0.0 && J >= 0.0 && I < static_cast<double>(Nx) && J < static_cast<double>(Ny) ? Z[CellOf(X, Y)] : -1e9;
+			}
 		};
 
 		/** What dressing one wreck reads for every point: her, her age, the fire's places (at rest) and her height, the way
@@ -637,12 +643,12 @@ namespace LandHulk
 
 		/** Where a point of her stands as the fire and the months left it (her place at rest), each coat's share over the
 		 * one under it, 0 to 1 across its band: its heat; the heat-tinted fringe, the scorched paint, the steel showing
-		 * (burnt bare, or the paint flaked off it) and how far it has rusted; the soot left on it after the rain, the soot
-		 * there was before it, and the soot's grain (0 its greyest, 1 its blackest). */
+		 * (burnt bare, or the paint flaked off it) and how far it has rusted, and the rust's stain on the paint round it; the
+		 * soot left on it after the rain, the soot there was before it, and the soot's grain (0 its greyest, 1 its blackest). */
 		struct Fate
 		{
 			double Heat = 0.0;
-			double Tint = 0.0, Scorch = 0.0, Steel = 0.0, Rust = 0.0, Soot = 0.0, SootWas = 0.0, Grain = 0.5;
+			double Tint = 0.0, Scorch = 0.0, Steel = 0.0, Rust = 0.0, Stain = 0.0, Soot = 0.0, SootWas = 0.0, Grain = 0.5;
 		};
 
 		/** How near a point (N its way out, at rest) lies to where the flames came out, 0 to 1, for her heat and for her
@@ -703,6 +709,8 @@ namespace LandHulk
 		 * ragged where the paint flakes (FlakeRag either way at most). */
 		double SteelEdge(const Fire& W) { return W.Bare - Flaking * Smooth(0.5, 15.0, W.Months) * (W.Bare - W.Scorch); }
 		constexpr double FlakeRag = 0.12;
+		/** How far out from the steel's band the rust's stain reaches into the paint round it, in her heat (some 0.25 m). */
+		constexpr double StainBand = 0.06;
 		double FlakedHeat(const Fire& W, const V3& At, double Heat)
 		{
 			const double Ragged = Smooth(0.5, 6.0, W.Months);
@@ -764,9 +772,10 @@ namespace LandHulk
 		}
 
 		/** How far the steel showing at a point has rusted, 0 to 1: within a month, a little ragged on its way. */
+		double RustsBy(double Months) { return Smooth(0.3, 0.95, Months); }
 		double RustOf(const Fire& W, const V3& At)
 		{
-			const double Rusts = Smooth(0.3, 0.95, W.Months);
+			const double Rusts = RustsBy(W.Months);
 			if (!(Rusts > 0.0)) return 0.0;
 			return Smooth(0.0, 1.0, (1.25 * Rusts - Even(Noise3(At.X * 3.4, At.Y * 3.4, At.Z * 3.4, W.H->Seed ^ 0x66ull))) / 0.25);
 		}
@@ -778,13 +787,23 @@ namespace LandHulk
 			NearFire(W, At, N, NearH, Smoke);
 			const double Built = HeatBuilt(W, At, N.Z, SootW, NearH);
 			const double Edge = SteelEdge(W);
-			// (its noise read only where it could lift her heat to a band: the tint's, the steel's as the flaking reads it,
-			// the soot's burning off; below them all every share it sets is none)
-			const double Least = std::min({ W.Scorch - ScorchBand - TintBand, Edge - BareBand - 0.5 * FlakeRag, W.Bare - 0.02 });
+			// (where the steel's band begins, or as it rusts the rust's stain's round it)
+			const double Rusts = RustsBy(W.Months);
+			const double From = Edge - BareBand - (Rusts > 0.0 ? StainBand : 0.0);
+			// (its noise read only where it could lift her heat to a band: the tint's, the steel's or its stain's as the
+			// flaking reads it, the soot's burning off; below them all every share it sets is none)
+			const double Least = std::min({ W.Scorch - ScorchBand - TintBand, From - 0.5 * FlakeRag, W.Bare - 0.02 });
 			F.Heat = Built + HeatNoise > Least ? HeatAt(W, At, Built) : Built;
 			F.Tint = Smooth(W.Scorch - ScorchBand - TintBand, W.Scorch - 0.3 * ScorchBand, F.Heat);
 			F.Scorch = Smooth(W.Scorch - ScorchBand, W.Scorch + ScorchBand, F.Heat);
-			F.Steel = SteelOf(W, At, F.Heat, Edge);
+			// (the steel showing, as SteelOf; and as it rusts its stain: its flaking noise read only where it could lift it to
+			// either)
+			if (F.Heat + 0.5 * FlakeRag > From)
+			{
+				const double Flaked = FlakedHeat(W, At, F.Heat);
+				F.Steel = Smooth(Edge - BareBand, Edge + BareBand, Flaked);
+				if (Rusts > 0.0) F.Stain = Rusts * Smooth(From, Edge, Flaked);
+			}
 			const Sooted So = SootOf(W, At, N.Z, SootW, UpZ, Smoke, F.Heat);
 			F.Soot = So.Left;
 			F.SootWas = So.Was;
@@ -813,7 +832,7 @@ namespace LandHulk
 		 * of her sides). */
 		double RustAt(const Fire& W, const V3& At, const V3& N, double SootW, double UpZ)
 		{
-			if (!(Smooth(0.3, 0.95, W.Months) > 0.0)) return 0.0;
+			if (!(RustsBy(W.Months) > 0.0)) return 0.0;
 			double NearH = 0.5, Smoke = 0.5;
 			NearFire(W, At, N, NearH, Smoke);
 			const double Built = HeatBuilt(W, At, N.Z, SootW, NearH);
@@ -1026,6 +1045,62 @@ namespace LandHulk
 			return T;
 		}
 
+		/** From when her old rust weathers on her: her own paint kept where the weather reaches least, and darker runs weeping
+		 * from her seams and hatches (from some three months, full by six). */
+		double OldBy(double Months) { return Smooth(2.5, 6.0, Months); }
+
+		/**
+		 * How sheltered a point of her is from the weather, 0 to 1 (the art director's carry of 24 November 21:01Z: from
+		 * half a year her old rust read as one even brown; a little of her own paint wanted low and on her sheltered faces):
+		 * turned down, wholly; a side open to the weather, a little (0.25: a patch here and there; the fix round's first try
+		 * gave every side 0.45, paint on a fifth of each open plate, high on her as much as low); more low on her (wholly
+		 * under 0.5 m over her tracks, none from 1.4 m) or under something of her that stands out over it (her track guards
+		 * over her hull's sides: what lies a hand or so out from the face reaches over it). N its way out at rest, UpZ its
+		 * way up as she lies, High its height over her tracks at rest.
+		 */
+		double ShelterOf(const Fire& W, const V3& At, const V3& N, double UpZ, double High)
+		{
+			const double Side = Smooth(0.5, 0.15, UpZ);
+			if (!(Side > 0.0)) return 0.0;
+			double Under = Smooth(1.4, 0.5, High);
+			const double Nh = std::hypot(N.X, N.Y);
+			if (Under < 1.0 && Nh > 0.3 && W.Over && W.Over->Nx > 0 && W.Over->Ny > 0)
+			{
+				const double Out = W.Over->Within(At.X + 0.3 * N.X / Nh, At.Y + 0.3 * N.Y / Nh);
+				Under = std::max(Under, Smooth(0.08, 0.25, Out - At.Z));
+			}
+			return std::max(Smooth(-0.05, -0.5, UpZ), Side * (0.25 + 0.75 * Under));
+		}
+
+		/**
+		 * Where a darker run of rust weeps down her side from above a point (the same carry: a few darker rust runs below
+		 * her hatches and joints), 0 to 1: under the seam where her top meets her side, under a ledge of her that stands out
+		 * over it (her track guards), and under a hatch or grille the flames came out of (the fire's places: her hatches,
+		 * her engine deck's grilles; her turret's only while it is on her: Burn runs none on a thrown turret), a stride to either
+		 * side; each fading as the run goes down, out within about a metre. Top her top over the point (Tops), -1e9 where her map of
+		 * them has none: no seam there (the fix round's first try read none as her top at the point, a seam at every
+		 * height: dark runs cut off at the map's cells).
+		 */
+		double WeepFrom(const Fire& W, const V3& At, const V3& N, double Top)
+		{
+			double From = Top > -1e8 ? Smooth(0.9, 0.05, std::max(0.0, Top - At.Z)) : 0.0;
+			const double Nh = std::hypot(N.X, N.Y);
+			if (Nh > 0.3 && W.Over && W.Over->Nx > 0 && W.Over->Ny > 0)
+			{
+				const double Over = W.Over->Within(At.X + 0.3 * N.X / Nh, At.Y + 0.3 * N.Y / Nh) - At.Z;
+				if (Over > 0.05) From = std::max(From, Smooth(0.9, 0.05, Over));
+			}
+			for (size_t I = 0; I < W.At.size(); ++I)
+			{
+				const bool bOnTurret = I < W.OnTurret.size() && W.OnTurret[I] != 0;
+				if (W.bThrown ? !bOnTurret : W.bRingOpen && bOnTurret) continue;
+				const double Down = W.At[I].Z - At.Z;
+				if (!(Down > -0.05)) continue;
+				From = std::max(From, 1.2 * Smooth(0.7, 0.2, std::hypot(At.X - W.At[I].X, At.Y - W.At[I].Y)) * Smooth(1.4, 0.1, Down));
+			}
+			return From;
+		}
+
 		/** A point burnt: its colour and what it shows. */
 		struct Burnt
 		{
@@ -1043,17 +1118,26 @@ namespace LandHulk
 		 *   flames came out (her engine deck's grilles, her hatches, her turret's ring when it was thrown) and streaking
 		 *   downwind and up from there, feathered grey at its edges and grained along the wind; round it, by her heat, the
 		 *   bare grey steel (85 to 95), smudged darker, in the hottest centres, the paint scorched chalky grey-buff (100 to
-		 *   110) round that, a narrow fringe of it heat-tinted brown, and her own paint low on her cooler sides; orange
-		 *   only along the edges where the paint burnt off, a few in 100.
-		 * - A month on: the bare steel gone to flash rust (130, 70, 38), mottled bright and brown, coming on across a soft
-		 *   edge, on some 15 to 25 in 100 of her, and running down her sides in streaks soft at their edges and fading as
-		 *   they run, a softer wash of it under the rusting plates above.
+		 *   110) round that, a narrow fringe of it heat-tinted brown, and her own paint low on her cooler sides; a fresh
+		 *   orange only along the edges where the paint burnt off, a few in 100.
+		 * - A month on: the bare steel gone to flash rust (some 120, 69, 36 in the picture), a dull orange-brown mottled at
+		 *   a hand orange and a browner ochre and darker in brown patches, its brightest in the sun, on her tops and on her
+		 *   sunlit sides, no brighter than some 150, 85, 45 (the art director's carry of 24 November 21:01Z: round 3's read
+		 *   hot, almost glowing, on a sunlit turret top), coming on across a soft edge and staining the paint round it
+		 *   rust-brown (never more than half), on some 15 to 25 in 100 of her, and running down her sides in streaks soft
+		 *   at their edges and fading as they run, a softer wash of it under the rusting plates above.
 		 * - Six months to a year and a half: the rust old, darker and duller (80 to 90, 52 to 56, 38 to 42: red no more than
 		 *   2.2 times blue), mottled deep brown and lighter at a stride, browning darker as the months go; the soot washed
 		 *   off what faces the sky (the steel under it rusted, a dark stain of it fading), kept on her sides and under her;
 		 *   the scorched paint flaking, the steel's edge eating back into it from the hottest, what is left of it weathering
-		 *   duller and darker (some 95, 85, 73 by a year and a half), stained by the rust round it; her own paint flaking
-		 *   in flecks to the rust.
+		 *   duller and darker (some 95, 85, 73 by a year and a half), stained by the rust round it, the stain easing to
+		 *   under a third; her own paint flaking in flecks to the rust. And (the same carry: her old rust read as one even
+		 *   brown) a little of her paint as the fire left it, her own or scorched, kept where the weather reaches least
+		 *   (ShelterOf: low on her sides, under her guards and what stands out over her, on what turns down; hardly any
+		 *   high on an open side, and none where the fire burnt her bare), in soft patches a stride or so across that her
+		 *   runs of rust pass by, lighter than the rust round it; and a few darker runs weeping from her seams, ledges and
+		 *   hatches (WeepFrom), on her upright faces only, in some stretches of her and not others, narrowing and fading as
+		 *   they run (none on a thrown turret).
 		 * - Rubber (a road wheel's ring) charred black with grey ash, greying; wood charred, ember brown and ash grey in
 		 *   its grain, silvering; glass blackened in its port (a lorry's is gone: Dress). A track's links and a lorry's
 		 *   rims: steel through the fire, rusting within weeks across a soft edge, some of them still black-grey from the
@@ -1087,19 +1171,29 @@ namespace LandHulk
 					Tone Base;
 					if (Age < 1.0)
 					{
+						// (its brightest no brighter than some 150, 85, 45 in the sun: the art director's carry of 24 November
+						// 21:01Z, round 3's flash rust on a sunlit turret top reading hot, almost glowing, its bright end 220, 108, 47
+						// before the light. Mottled at a hand orange and a browner ochre near its value, so the mottle stays and
+						// its brightest is held: the fix round's first try mottled it 162 to 158 only, an even orange-brown coat)
 						const double Mottle = Even(Noise3(At.X * 2.6, At.Y * 2.6, At.Z * 2.6, S ^ 0x8Dull));
-						Base = Mixed(Tone(220, 108, 47), Tone(156, 81, 42), Mottle);
+						Base = Mixed(Tone(159, 84, 40), Tone(136, 77, 42), Smooth(0.5, 1.0, Mottle));
 					}
 					if (Age > 0.0)
 					{
 						const double Mottle = Even(Noise3(At.X * 0.8, At.Y * 0.8, At.Z * 1.6, S ^ 0x8Eull));
 						const double Older = Smooth(6.0, 18.0, M);
-						const Tone Old = Mixed(Mixed(Tone(130, 77, 52), Tone(74, 46, 38), Mottle), Mixed(Tone(124, 73, 51), Tone(68, 43, 37), Mottle), Older);
+						const Tone Old = Mixed(Mixed(Tone(130, 77, 52), Tone(74, 46, 38), Mottle), Mixed(Tone(124, 74, 51), Tone(68, 44, 37), Mottle), Older);
 						Base = Age < 1.0 ? Mixed(Base, Old, Age) : Old;
 					}
-					// (darker where it is deep, in patches and, down her sides, in streaks the rain drew)
+					// (darker where it is deep, in patches and, down her sides, in streaks the rain drew: the flash rust's patches a
+					// fifth as dark as the old's, its mottle's ochre its brown; round 3 darkened both 0.6, the fix round's first try
+					// the flash rust's 0.1)
 					const double Deep = Noise3(At.X * 1.4, At.Y * 1.4, At.Z * 0.5, S ^ 0x88ull);
-					RustTone = Mixed(Base, Tone(70, 45, 36), 0.6 * Smooth(0.55, 0.78, Deep));
+					RustTone = Mixed(Base, Tone(70, 45, 36), (0.12 + 0.48 * Age) * Smooth(0.55, 0.78, Deep));
+					// (the flash rust even at a hand's breadth, not uneven as its steel is, Vary: its brightest held down, its
+					// mottle its own; the old as uneven as the steel)
+					const double Steady = (1.0 + (Vary - 1.0) * Age) / Vary;
+					RustTone = Tone(RustTone.R * Steady, RustTone.G * Steady, RustTone.B * Steady);
 					bRustTone = true;
 				}
 				return RustTone;
@@ -1160,6 +1254,7 @@ namespace LandHulk
 				// Her own paint, low on her cooler sides: smoked a little, fading with the months, flaking in flecks to the
 				// rust from half a year (some one in eight of it by a year and a half)...
 				Out = Mixed(Tone(Own.R * 0.9, Own.G * 0.9, Own.B * 0.9), Tone(Own.R * 0.8 + 50.0, Own.G * 0.8 + 48.0, Own.B * 0.8 + 44.0), 0.25 * (1.0 - std::exp(-M / 10.0)));
+				const Tone Kept = Out;
 				double Flecks = 0.0;
 				const double Flakes = 0.16 * Smooth(3.0, 18.0, M);
 				if (Flakes > 0.0 && F.Scorch < 1.0 && F.Steel < 1.0)
@@ -1168,7 +1263,13 @@ namespace LandHulk
 					if (Flecks > 0.0) Out = Mixed(Out, Toned(Rust()), Flecks);
 				}
 				// ...a narrow fringe of it heat-tinted brown and straw where the scorch begins, weathering with her...
-				if (F.Tint > 0.0) Out = Mixed(Out, Toned(Mixed(Mixed(Own, Tone(116, 86, 56), 0.65), Tone(92, 80, 66), 0.5 * Smooth(1.0, 18.0, M))), F.Tint);
+				// (each kept for her paint left where the weather reaches least, below)
+				Tone Tinted, Chalked;
+				if (F.Tint > 0.0)
+				{
+					Tinted = Toned(Mixed(Mixed(Own, Tone(116, 86, 56), 0.65), Tone(92, 80, 66), 0.5 * Smooth(1.0, 18.0, M)));
+					Out = Mixed(Out, Tinted, F.Tint);
+				}
 				// ...the paint scorched and gone chalky, a grey-buff with a little of her own colour in it; within half a year
 				// duller and darker and stained by the rust round it, till it reads as faded paint on the rust (round 3's
 				// first try weathered it a fifth of the way by six months: pale blotches on rust)...
@@ -1182,13 +1283,46 @@ namespace LandHulk
 						const double Stain = Even(Noise3(At.X * 2.2, At.Y * 2.2, At.Z * 0.6, S ^ 0x5Aull));
 						Chalk = Mixed(Chalk, Rust(), Weathered * (0.04 + 0.18 * Stain));
 					}
-					Out = Mixed(Out, Toned(Chalk), F.Scorch);
+					Chalked = Toned(Chalk);
+					Out = Mixed(Out, Chalked, F.Scorch);
 				}
+				// ...stained rust-brown round the steel as it rusts (so the rust's edge browns into the scorched paint, not a
+				// bright orange against pale grey-buff), never more than half over it (the paint still the coat it shows: the
+				// fix round's first try stained it 0.85, a ring of rust tagged scorched paint), easing to under a third by ten
+				// months as the paint weathers round it (a stain stays: with none the old rust met the pale paint at a hard line)...
+				const double Stained = F.Stain * (0.5 - 0.2 * Smooth(1.0, 10.0, M));
+				if (Stained > 0.0) Out = Mixed(Out, Toned(Mixed(Rust(), Tone(84, 56, 40), 0.5)), Stained);
 				// ...blistered off to the steel in the hottest centres (and flaked off it after), rusting within a month...
 				if (F.Steel > 0.0)
 				{
 					const Tone Bare = Steel();
 					Out = Mixed(Out, Toned(F.Rust > 0.0 ? Mixed(Bare, Rust(), F.Rust) : Bare), F.Steel);
+				}
+				// From half a year, a little of her paint left where the weather reaches least (low on her sides, under her guards
+				// and what stands out over her, on what turns down; on her open sides hardly any), in patches a stride or so
+				// across, softly edged, stained a little by the rust round it, her runs of rust passing it by (the art director's
+				// carry of 24 November 21:01Z: her old rust read as one even brown). It is her paint as the fire left it, her own
+				// or scorched, kept from flaking to the rust there; none where the fire burnt her bare (the fix round's first
+				// try laid her own paint back over the burnt steel, and on a fifth of every open side)...
+				// (read only where something lies over her paint and the fire left it, and where her shelter could leave a
+				// patch: its patches' noise none under 0, over 0.02 / 0.85)
+				double Left = 0.0;
+				const double Old = OldBy(M);
+				if (Old > 0.0 && UpZ < 0.5 && F.Heat < W.Bare + BareBand && (F.Steel > 0.0 || F.Scorch > 0.0 || F.Tint > 0.0 || F.Stain > 0.0 || Flecks > 0.0))
+				{
+					const double Shelter = ShelterOf(W, At, N, UpZ, High);
+					if (Shelter > 0.02 / 0.85)
+					{
+						const double Patches = Even(Noise3(At.X * 1.9, At.Y * 1.9, At.Z * 1.9, S ^ 0x5Eull));
+						Left = Old * Smooth(W.Bare + BareBand, W.Bare - BareBand, F.Heat) * Smooth(-0.1, 0.1, 0.85 * Shelter - 0.12 - Patches);
+						if (Left > 0.0)
+						{
+							Tone Painted = Kept;
+							if (F.Tint > 0.0) Painted = Mixed(Painted, Tinted, F.Tint);
+							if (F.Scorch > 0.0) Painted = Mixed(Painted, Chalked, F.Scorch);
+							Out = Mixed(Out, Mixed(Painted, Toned(Rust()), 0.06), Left);
+						}
+					}
 				}
 				// ...and the soot over them all, feathered through grey, grained blacker and greyer along the wind, browning a
 				// little as the rust under it comes through; where the rain washed it off, a dark stain of it, fading.
@@ -1199,40 +1333,81 @@ namespace LandHulk
 				}
 				if (F.SootWas > F.Soot) Out = Mixed(Out, Toned(Tone(60, 50, 42)), 0.4 * (F.SootWas - F.Soot) * std::exp(-M / 10.0));
 				// (each point's coat for the measure: the one on its side of each band's middle)
-				Is = F.Soot > 0.5 ? Coat::Soot : F.Steel > 0.5 ? (F.Rust > 0.5 ? RustIs : Coat::Bare) : F.Scorch > 0.5 ? Coat::Scorched : Flecks > 0.5 ? RustIs : Coat::Paint;
-				// The first orange: along a plate's edge where the paint burnt off (a week on, the only orange on her).
+				// (her paint left where the weather reaches least: her own, or scorched where the paint left was)
+				Is = F.Soot > 0.5 ? Coat::Soot : Left > 0.5 ? (F.Scorch > 0.5 ? Coat::Scorched : Coat::Paint) : F.Steel > 0.5 ? (F.Rust > 0.5 ? RustIs : Coat::Bare) : F.Scorch > 0.5 ? Coat::Scorched : Flecks > 0.5 ? RustIs : Coat::Paint;
+				// The first orange: along a plate's edge where the paint burnt off (a week on, the only orange on her, as fresh
+				// an orange as round 3's: the fix round's first try dulled it with the flash rust held down; by a month the
+				// flash rust's own).
 				if (bEdge)
 				{
-					const double Orange = 0.85 * std::max(F.Scorch, F.Steel) * (1.0 - F.Soot);
-					if (Orange > 0.0) Out = Mixed(Out, Toned(Rust()), Orange);
-					if (Orange > 0.42) Is = RustIs;
+					const double Orange = 0.85 * std::max(F.Scorch, F.Steel) * (1.0 - F.Soot) * (1.0 - Left);
+					// (rusting through along it as the months go: not a pale orange line over the scorched paint; the edge her
+					// rust's where it shows as much as round 3's edge did, 0.42)
+					const double Rusts = RustsBy(M);
+					const double Through = std::min(1.0, Orange * (1.0 + 0.5 * Rusts));
+					if (Through > 0.0) Out = Mixed(Out, Toned(!(Rusts > 0.0) ? Tone(178, 90, 43) : Rusts < 1.0 ? Mixed(Tone(178, 90, 43), Rust(), Rusts) : Rust()), Through);
+					if (Through > 0.42) Is = RustIs;
 				}
 				// Runs of rust down her sides from the rust above (from a few weeks on): streaks a hand to a stride wide and
 				// long down her, soft at their edges and fading as they run, as strong as the rust above them shows, and a
 				// softer wash of it between them (round 3's first try ran them only in streaks, few to be seen: her rusted
 				// top met her sides at the plate's edge, a two-tone scheme).
-				if (M > 0.3 && std::fabs(UpZ) < 0.6 && F.Soot < 0.9 && Is != RustIs && W.Over && W.Over->Nx > 0 && W.Over->Ny > 0)
+				if (M > 0.3 && std::fabs(UpZ) < 0.6 && F.Soot < 0.9 && W.Over && W.Over->Nx > 0 && W.Over->Ny > 0)
 				{
-					// (what lies above her side: her own plate up to her top there, sampled as itself; then her top, facing up,
-					// its rust running over the edge, fading out a metre under it; each sample's weight falling with its
-					// height, and read only where it could raise what the others found)
 					const double Top = W.Over->At(At.X, At.Y), ToTop = std::max(0.0, Top - At.Z);
-					double Above = 0.0;
-					for (const double Dz : { 0.3, 0.7 })
+					// (fading to none over her own paint left where the weather reaches least, 1 - Left: read only where any shows)
+					if (Is != RustIs && Left < 1.0)
 					{
-						if (At.Z + Dz >= Top - 0.03 || !(Above < 1.0 - 0.3 * Dz)) continue;
-						Above = std::max(Above, (1.0 - 0.3 * Dz) * RustAt(W, At + V3(0.0, 0.0, Dz), N, Soot, UpZ));
-					}
-					const double FromTop = (1.0 - 0.3 * ToTop) * Smooth(1.0, 0.6, ToTop);
-					if (Above < FromTop) Above = std::max(Above, FromTop * TopRust(W, At));
-					if (Above > 0.0)
-					{
-						const double Streak = Noise3(At.X * 2.8, At.Y * 2.8, At.Z * 0.45, S ^ 0x99ull);
-						const double Run = 0.9 * Smooth(0.3, 1.0, M) * (0.4 + 0.6 * Smooth(0.44, 0.58, Streak)) * Above * (1.0 - F.Soot);
-						if (Run > 0.0)
+						// (what lies above her side: her own plate up to her top there, sampled as itself; then her top, facing up,
+						// its rust running over the edge, fading out a metre under it; each sample's weight falling with its
+						// height, and read only where it could raise what the others found)
+						double Above = 0.0;
+						for (const double Dz : { 0.3, 0.7 })
 						{
-							Out = Mixed(Out, Toned(Rust()), Run);
-							if (Run > 0.45) Is = Coat::Run;
+							if (At.Z + Dz >= Top - 0.03 || !(Above < 1.0 - 0.3 * Dz)) continue;
+							Above = std::max(Above, (1.0 - 0.3 * Dz) * RustAt(W, At + V3(0.0, 0.0, Dz), N, Soot, UpZ));
+						}
+						const double FromTop = (1.0 - 0.3 * ToTop) * Smooth(1.0, 0.6, ToTop);
+						if (Above < FromTop) Above = std::max(Above, FromTop * TopRust(W, At));
+						if (Above > 0.0)
+						{
+							const double Streak = Noise3(At.X * 2.8, At.Y * 2.8, At.Z * 0.45, S ^ 0x99ull);
+							const double Run = 0.9 * Smooth(0.3, 1.0, M) * (0.4 + 0.6 * Smooth(0.44, 0.58, Streak)) * Above * (1.0 - F.Soot) * (1.0 - Left);
+							if (Run > 0.0)
+							{
+								Out = Mixed(Out, Toned(Rust()), Run);
+								if (Run > 0.45) Is = Coat::Run;
+							}
+						}
+					}
+					// From half a year, a few darker runs weeping from her seams and hatches (the art director's carry of 24
+					// November 21:01Z: her old rust read as one even brown), over the rust and all: narrow streaks a hand wide, a
+					// stride or more apart and in some stretches of her only, long down her and short, each narrowing as it fades
+					// (WeepFrom), soft at their edges, passing by her paint left (1 - Left). Only on her upright faces, at rest and
+					// as she lies (the streak's noise is drawn out down her at rest), and never on her thrown turret (lying any
+					// way, its hatches reaching all of it): the fix round's first try ran them evenly spaced and all one length,
+					// stripes over her paint left, as camouflage, and blots on her sloped and curved faces and thrown turrets.
+					if (Old > 0.0 && !W.bThrown && std::fabs(UpZ) < 0.35 && std::fabs(N.Z) < 0.35 && Left < 1.0)
+					{
+						const double From = WeepFrom(W, At, N, Top);
+						if (From > 0.0)
+						{
+							// (the streak's noise turned off her axes, so its peaks do not stand at its lattice's even spacing along her
+							// plates; its edge rising as the run fades, so each run ends where its own streak falls short)
+							const double U = 0.8 * At.X + 0.6 * At.Y, V = 0.6 * At.X - 0.8 * At.Y;
+							const double Streak = Noise3(U * 5.7, V * 7.3, At.Z * 0.35, S ^ 0x9Aull);
+							const double Lo = 0.65 + 0.1 * (1.0 - std::min(1.0, From));
+							if (Streak > Lo)
+							{
+								// (a few: in some stretches of her and none in others, read only where a streak stands)
+								const double Gate = Noise3(At.X * 1.1, At.Y * 1.1, At.Z * 0.3, S ^ 0x9Cull);
+								const double Weep = 0.9 * Old * Smooth(Lo, Lo + 0.07, Streak) * Smooth(0.3, 0.45, Gate) * (1.0 - F.Soot) * (1.0 - Left);
+								if (Weep > 0.0)
+								{
+									Out = Mixed(Out, Toned(Mixed(Rust(), Tone(44, 29, 23), 0.75)), Weep);
+									if (Weep > 0.45) Is = Coat::Run;
+								}
+							}
 						}
 					}
 				}
