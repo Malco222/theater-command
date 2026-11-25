@@ -16,7 +16,10 @@ build() {
 }
 
 current() { sed -n 's/.*"TheaterCommand": "\(.*\)".*/\1/p' "$BIN/UnrealEditor.modules" 2>/dev/null; }
-newest() { local f; f="$(ls -t "$BIN"/libUnrealEditor-TheaterCommand*.dylib 2>/dev/null | head -n 1)"; [ -n "$f" ] && basename "$f"; }
+# The game module's own files only: libUnrealEditor-TheaterCommandEditor*.dylib is the editor's side (Claude's playtest
+# tools, release 2), which a wider pattern would take for the game's newest build, and would delete as a leftover.
+game_libs() { ls -t "$BIN"/libUnrealEditor-TheaterCommand.dylib "$BIN"/libUnrealEditor-TheaterCommand-[0-9]*.dylib 2>/dev/null; }
+newest() { local f; f="$(game_libs | head -n 1)"; [ -n "$f" ] && basename "$f"; }
 
 build || exit 1
 if [ "$(current)" != "$(newest)" ]; then
@@ -29,7 +32,7 @@ if [ "$(current)" != "$(newest)" ]; then
 fi
 
 # Remove builds that are no longer the current one.
-for f in "$BIN"/libUnrealEditor-TheaterCommand*.dylib; do
+game_libs | while read -r f; do
   [ "$(basename "$f")" = "$(current)" ] || rm -f "$f"
 done
 echo "Built: $(current)"

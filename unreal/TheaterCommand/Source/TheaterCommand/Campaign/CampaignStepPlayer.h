@@ -47,13 +47,37 @@ struct FKey;
  * question up), closed (no question and not falling back), falls-back, view, paused, running, order (an order went),
  * card (the after card).
  */
-class FStepPlayer
+class THEATERCOMMAND_API FStepPlayer
 {
 public:
 	/** Reads the step file. False where there is none, or nothing in it. */
 	bool Load(const FString& File, const FString& InFolder);
 	/** One frame of the run. False when the last step has been played and logged. */
 	bool Tick(ACampaignPlayerController& Player, float DeltaSeconds);
+
+	// ---- A live run (release 2, Brian 25 November: Claude play-tests in the editor; TheaterCommandEditor's playtest
+	// tools). No step file: a step is added while the game runs, and is played, judged, logged and pictured as a file's
+	// step is, by the same hand. ----
+	/** Begins a run with no steps. steps.jsonl and the pictures go to InFolder, and a saved game named by a "load" step is looked for there. */
+	void BeginLive(const FString& InFolder);
+	/** Adds a step after the last: a verb and its target as a line of a step file gives them, with no expect word. */
+	void Add(const FString& Verb, const FString& Target);
+	/** True from a step's adding until it has been played, logged and its picture given its moment to be written. */
+	bool IsPlaying() const { return Steps.IsValidIndex(At); }
+	/** What a logged step found: the reading its line in steps.jsonl holds. */
+	struct FRecord
+	{
+		FString Verb, Target, Verdict, Note, Open, Words, Hand;
+		FString Picture; // the picture's full path
+		bool bSaid = false;
+		double ActMs = 0.0, FirstMs = -1.0, SettledMs = -1.0, WaitMs = 0.0;
+		float FpsLow = 0.0f, FpsMid = 0.0f;
+		double GameMs = 0.0, DrawMs = 0.0, ChipMs = 0.0;
+		TArray<FString> Screens;
+	};
+	/** The last logged step's record; LoggedCount says how many have been logged. */
+	const FRecord& LastRecord() const { return Record; }
+	int32 LoggedCount() const { return Logged; }
 
 private:
 	struct FStep
@@ -149,4 +173,5 @@ private:
 	FString LandWait, LandPass;
 	FName LandHeld;
 	FLandSeen LandBefore;
+	FRecord Record; // the last logged step's reading
 };

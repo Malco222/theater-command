@@ -70,6 +70,7 @@ What the rules can do that the 3D game does not show yet: sending an honoured un
 | `TheaterCommand/Content/Rules/stand-in-rules.js` | A simple stand-in the game falls back on if the real rules file is missing |
 | `.../CampaignGameMode` | Lays the table and starts the campaign when the game starts |
 | `.../CampaignPhotographer` | A development tool that takes a fixed set of pictures and quits (`-TheaterShots=<folder>`) |
+| `TheaterCommand/Source/TheaterCommandEditor/` | The editor's side, never loaded by the Play icon. `TheaterPlaytestToolset` lets Claude play-test the campaign in a Play-In-Editor session through Unreal's MCP link: it reads the screen and plays one step at a time with the step player's own hand (`Campaign/CampaignStepPlayer`), each judged, timed and pictured as a step file's step is, logged to `Saved/Playtest/<time>/`. Its tests: `TheaterCommand.Editor.PlaytestToolset` |
 | `TheaterCommand/Tools/build_content.py` | Creates the few binary assets (three materials, one empty level) |
 | `TheaterCommand/Content/` | Those assets |
 

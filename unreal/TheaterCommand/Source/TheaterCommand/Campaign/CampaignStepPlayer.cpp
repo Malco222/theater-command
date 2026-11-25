@@ -329,6 +329,26 @@ bool FStepPlayer::Load(const FString& File, const FString& InFolder)
 	return Steps.Num() > 0;
 }
 
+void FStepPlayer::BeginLive(const FString& InFolder)
+{
+	Folder = InFolder;
+	StepFolder = InFolder;
+	FFileHelper::SaveStringToFile(FString(), *FPaths::Combine(Folder, TEXT("steps.jsonl")));
+	UE_LOG(LogTheater, Display, TEXT("Steps: a live run, logged to %s"), *Folder);
+}
+
+void FStepPlayer::Add(const FString& Verb, const FString& Target)
+{
+	FStep Step;
+	Step.Line = Steps.Num() + 1;
+	Step.Verb = Verb.TrimStartAndEnd().ToLower();
+	Step.Target = Target.TrimStartAndEnd();
+	if (!Step.Verb.IsEmpty())
+	{
+		Steps.Add(Step);
+	}
+}
+
 FStepPlayer::FSeen FStepPlayer::Look(ACampaignPlayerController& Player, int32 RegionId) const
 {
 	THEATER_SPEED_SCOPE(HarnessLook); // (the step player's own work, which a player does not pay for)
@@ -1457,6 +1477,27 @@ void FStepPlayer::Log(ACampaignPlayerController& Player, const FStep& Step)
 		Before.Digest.IsEmpty() ? TEXT("null") : *Before.Digest, After.Digest.IsEmpty() ? TEXT("null") : *After.Digest, *Quote(Verdict), bSaid ? TEXT("true") : TEXT("false"), *Pass, *Quote(Note), *Smooth, *Quote(Picture));
 	FFileHelper::SaveStringToFile(Line, *FPaths::Combine(Folder, TEXT("steps.jsonl")), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM, &IFileManager::Get(), FILEWRITE_Append);
 	FScreenshotRequest::RequestScreenshot(FPaths::Combine(Folder, Picture), true, false);
+	// (the same reading, kept for a live run's caller)
+	Record = FRecord();
+	Record.Verb = Step.Verb;
+	Record.Target = Step.Target;
+	Record.Verdict = Verdict;
+	Record.Note = Note;
+	Record.Open = After.Open;
+	Record.Words = Words;
+	Record.Hand = After.Hand;
+	Record.Picture = FPaths::Combine(Folder, Picture);
+	Record.bSaid = bSaid;
+	Record.ActMs = ActMs;
+	Record.FirstMs = FirstMs;
+	Record.SettledMs = LastMs;
+	Record.WaitMs = SinceAct * 1000.0;
+	Record.FpsLow = Longest > 0.0f ? 1.0f / Longest : 0.0f;
+	Record.FpsMid = Middle > 0.0f ? 1.0f / Middle : 0.0f;
+	Record.GameMs = GameMs / FrameCount;
+	Record.DrawMs = DrawMs / FrameCount;
+	Record.ChipMs = ChipMs / FrameCount;
+	Record.Screens = Screens;
 	UE_LOG(LogTheater, Display, TEXT("Steps: %d (line %d) %s %s: %s%s"), Logged, Step.Line, *Step.Verb, *Step.Target, *Verdict, Pass == TEXT("false") ? TEXT("  ** NOT AS EXPECTED **") : TEXT(""));
 	// A press of a sweep that did anything: the game is put back as it stood, and the card or the army with it.
 	if (Step.bSweep && bChanged)

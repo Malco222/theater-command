@@ -8,6 +8,11 @@
 			"Name": "TheaterCommand",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "TheaterCommandEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
 		}
 	],
 	"Plugins": [
@@ -24,6 +29,13 @@
 		},
 		{
 			"Name": "EditorScriptingUtilities",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "ToolsetRegistry",
 			"Enabled": true,
 			"TargetAllowList": [
 				"Editor"
