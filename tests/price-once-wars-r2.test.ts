@@ -45,6 +45,11 @@ describe('six years of a grand war nobody plays: no division stands twice, and n
           // (One formed out of another stays as that other, in the corps that has it; with nobody to give one, nothing is formed.)
           if (q.id !== null && !(holder && holds(g, holder, q.conv ?? q.name))) faults.push(`month ${e.turn} ${e.nat} "${e.row}": the ${q.conv ?? q.name} was to stay with "${q.from}" and is not there`);
           if (holds(g, mine, q.name) && holder !== mine) faults.push(`month ${e.turn} ${e.nat} "${e.row}": the ${q.name} stays with "${q.from}" and was laid as well`);
+        } else if (q.share) {
+          // (The war rows' draw rule, the design director, 25 November 16:42Z to 17:19Z: a division drawn by share out
+          // of a counting formation has no name of that formation's. It comes as men, and the formation keeps its cards.)
+          came++;
+          if (!holder) faults.push(`month ${e.turn} ${e.nat} "${e.row}": a division was drawn by share from "${q.from}", which does not stand`);
         } else {
           came++;
           if (!holds(g, mine, q.name)) faults.push(`month ${e.turn} ${e.nat} "${e.row}": the ${q.name} did not come from "${q.from}"`);

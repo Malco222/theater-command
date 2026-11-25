@@ -172,8 +172,10 @@ describe('a dated row that names a division a living corps holds (the design dir
     expect(names(g, c)).toEqual(['50th Infantry Division', '72nd Infantry Division', '164th Infantry Division']);
     expect(divisionsOf(g, c)[0].no).toBe(50);
     expect(holders(g, '50th Infantry Division')).toEqual([c]);
-    // (The row is not lent: nothing is remembered, and nothing goes back.)
-    expect(c.drew).toBeUndefined();
+    // (The row has no `until`, so it is no loan with a month to end in. But it is keyed to a war, and such a row is
+    // lent for that war: the design director's ruling 2 of 16:45Z, 25 November 2026, drawn.ts "the war's end". Where
+    // the 50th came from is remembered, and while the war lasts nothing goes back.)
+    expect(c.drew).toEqual([{ name: ['50th Infantry Division', '50th Infantry'], no: 50, from: iii.id }]);
     month(g, JUNE_41);
     expect(names(g, c)).toHaveLength(3);
     expect(iii.divs).toBe(2);
@@ -807,14 +809,15 @@ describe('the player\'s seat (her ruling 4 of 14:28Z): one rule with every seat,
     expect(c.divs).toBe(2);
     expect(names(g, c)).toEqual(['72nd Infantry Division', '164th Infantry Division']);
     // The lines, in the file's words.
-    const lines = g.headlines.filter((h) => h.nat === 'GER' && / (is|are) due at | was due to be formed at /.test(h.text));
+    const lines = g.headlines.filter((h) => h.nat === 'GER' && / (is|are) due in | was due to be formed in /.test(h.text));
     expect(lines).toHaveLength(3);
     expect(lines[0].text).toMatch(said(DRAWN.many));
-    expect(lines[0].text).toContain('2nd Panzer Division and the 9th Panzer Division are due at Sofia');
+    // (The UI director's marks of 17:26Z: a place can be a region, so "in"; numbers of one arm are joined as a row writes them.)
+    expect(lines[0].text).toContain('The 2nd and 9th Panzer Divisions are due in Sofia this month, but you hold them already, in ');
     expect(lines[1].text).toMatch(said(DRAWN.one));
-    expect(lines[1].text).toContain('The 50th Infantry Division is due at Plovdiv');
-    expect(lines[2].text).toContain('The 8th Panzer Division is due at Transdanubia');
-    expect(lines[2].text).toContain('The 14th Panzer Division was due to be formed at Transdanubia this month out of your 4th Infantry Division');
+    expect(lines[1].text).toContain('The 50th Infantry Division is due in Plovdiv this month, but you hold it already, in ');
+    expect(lines[2].text).toContain('The 8th Panzer Division is due in Transdanubia');
+    expect(lines[2].text).toContain('The 14th Panzer Division was due to be formed in Transdanubia this month out of your 4th Infantry Division, in ');
     // (Every place a line names is filled, where it names one twice: the UI director's words of 16:48Z.)
     for (const l of lines) expect(l.text).not.toMatch(/\{\w+\}/);
     expect(lines[0].text).toContain('they go to Sofia only if you send them');
@@ -822,7 +825,7 @@ describe('the player\'s seat (her ruling 4 of 14:28Z): one rule with every seat,
     expect(lines[2].text).toMatch(said(DRAWN.conv));
     // And nothing is told again in a later month.
     month(g, APRIL_41 + 1);
-    expect(g.headlines.filter((h) => / (is|are) due at | was due to be formed at /.test(h.text))).toHaveLength(3);
+    expect(g.headlines.filter((h) => / (is|are) due in | was due to be formed in /.test(h.text))).toHaveLength(3);
     expect(heldTwice(g)).toEqual([]);
   });
 
@@ -830,9 +833,9 @@ describe('the player\'s seat (her ruling 4 of 14:28Z): one rule with every seat,
     const { g } = balkans('GER');
     relocate(g, corps(g, 'XXII Corps')!, g.byName['Sofia']);
     month(g, MARCH_41);
-    const line = g.headlines.find((h) => h.nat === 'GER' && / are due at Sofia /.test(h.text))!;
+    const line = g.headlines.find((h) => h.nat === 'GER' && / are due in Sofia /.test(h.text))!;
     expect(line.text).toMatch(said(DRAWN.hereMany));
-    expect(line.text).toBe('The 2nd Panzer Division and the 9th Panzer Division are due at Sofia this month, and they are there already with your own forces. No division is raised twice.');
+    expect(line.text).toBe('The 2nd and 9th Panzer Divisions are due in Sofia this month, and they are there already with your own forces. No division is raised twice.');
     expect(corps(g, PANZERS)).toBeUndefined();
     expect(heldTwice(g)).toEqual([]);
   });

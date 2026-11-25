@@ -575,11 +575,24 @@ export interface Corps extends Storied {
    * corps from living corps, instead of laying them a second time: each one's name, its number, and the corps it came
    * out of ('from': this corps' own id where the row took the whole corps, and the divisions are its own). 'conv'
    * marks one formed out of another division (the 14th Panzer, out of the 4th Infantry): it never goes back. Read when
-   * the row's time with its campaign is up ('until'): each goes back to its corps, or stands on where it is.
+   * the row's time with its campaign is up ('until'), or the war it was raised for is over: each goes back to its
+   * corps, or stands on where it is. 'rec' (the stood war rows, counting.json): drawn by share, it stands for this
+   * many of the divisions the record counts in the corps it came out of.
    */
-  drew?: { name: [string, string]; no: number; from: number; conv?: true }[];
+  drew?: { name: [string, string]; no: number; from: number; conv?: true; rec?: number }[];
   /** (The same.) Its own name and standing orders from before a dated row took the whole corps under the row's name: it has them back when the row's time is up. */
   rowed?: { name: string; hold: boolean; stay?: boolean };
+  /**
+   * (The stood war rows, counting.json.) How many of the divisions the record counts in this corps dated rows have
+   * drawn out of it by share: the next share is taken of what is left. None where nothing was drawn.
+   */
+  out?: number;
+  /**
+   * (The stood war rows, counting.json.) How many of this corps' cards earlier rows counted as staying with it: the
+   * player's own, or a corps that stands where the row is for. A row after them counts the cards before those, so no
+   * card stands for two rows, and where none is left it raises new what the corps no longer holds. None where none was counted.
+   */
+  kept?: number;
   /**
    * A rearguard (release 2, rearguard.ts): the month it was ordered to hold where it stands, the weeks of marching it
    * gave up for it (given back if it is stood down in the same month), and the province it holds (driven out of it, it

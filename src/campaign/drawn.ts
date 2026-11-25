@@ -34,14 +34,48 @@
 //              Nothing goes back to a corps that is itself leaving that month.
 // Parts are not divisions: a row or a corps whose fullest size is under a division's (`est`) neither draws nor gives.
 // A historical scenario keeps the order of battle it was measured with: nothing here is read outside the grand campaign.
+//
+// The stood war rows (the design director's rulings of 16:42Z to 17:19Z, 25 November 2026, on the historian's read and
+// the joiner's count: data/campaign/counting.json, joins/s-rows-count-1125.md). A dated war row of Italy's or
+// Romania's gives no division a name the board knows, so nothing above found it: its divisions, which stood on the
+// first day, were laid new and whole beside the board's own army that stands for the same men. The table names, for
+// each such row, the board corps it draws on, and the same rule lays it:
+//   counted    so many of the row's divisions are that corps' divisions: its last ones come over, each with its even
+//              share, under its own name and number unless the row's name gives it one. A corps drawn whole comes itself.
+//   by share   where the record counts more divisions in a board corps than the game does (the Army of the Po: ten in
+//              the game's three) the row's divisions come with their share of the corps as it stands, so many of the
+//              record's divisions out of those it still stands for, and the corps keeps its own divisions, the weaker.
+//   stays      as above: a corps in the row's own side theatre, the player's, one that cannot leave: the row forms
+//              nothing for those divisions, and the player's line tells him where they are.
+//   gone       a counting formation that is dead holds nothing to draw: what it no longer holds is raised new, as a
+//              division destroyed always was.
+//   the war's end  a row keyed to a war is lent for that war, every nation's: when the war is over each division it drew
+//              goes back to the corps it came out of, by the same rule as a loan's end, or stands on where it is. What
+//              the row raised new stays (only a loan's new divisions leave), and the corps keeps the row's name and
+//              orders; a corps that came itself has its own name and orders back.
 
 import words from '../../data/campaign/drawn.json';
+import counting from '../../data/campaign/counting.json';
 import { relocate, removeCorps } from './game';
 import { divisionWords, divisionsNamed, divisionsOf, keepNumbers, ordinal, setStandInCount, standInCount, standInNumbers } from './armies';
 import { seat } from './commanders';
 import type { Corps, Game, Kind, Region } from './types';
 
-export const DRAWN = words as unknown as { one: string; many: string; here: string; hereMany: string; conv: string; stood: string };
+export const DRAWN = words as unknown as { one: string; many: string; here: string; hereMany: string; conv: string; stood: string; from: string; fromMany: string };
+
+/** A stood war row's line of the table (counting.json): the war it waits for, the board corps it draws on in order, a share it takes where it stands. */
+export interface Counted {
+  war?: [string, string];
+  /** `divs` of the row's divisions come out of `corps`; with `record`, by share: they stand for that many of the divisions the record counts in it. */
+  from?: { corps: string; divs: number; record?: number }[];
+  takes?: { name: string; share: number; leaves?: string; leavesHere?: string };
+}
+const COUNT = counting as unknown as { parents: Record<string, Record<string, { of: number }>>; rows: Record<string, Record<string, Counted>> };
+
+/** The table's line for a dated row of a country's own, in the grand campaign; nothing elsewhere, so no historical scenario reads it. */
+export const countingFor = (g: Game, nat: string, row: any[]): Counted | undefined => (g.flags.open === 1 && row[1] === nat ? COUNT.rows[nat]?.[row[2]] : undefined);
+/** How many divisions the record counts in a board corps (the historian's read), where it differs from the game's own count. */
+export const recordCount = (nat: string, corps: string): number | undefined => COUNT.parents[nat]?.[corps]?.of;
 
 /** One division as it passes between corps: its place in the corps it stands in, its name and number, its men (0 to 1) and experience, and its corps' order and morale. */
 interface Part { slot: number; name: [string, string]; no: number; str: number; xp: number; org: number; mor?: number }
@@ -59,6 +93,15 @@ export interface Claim {
   conv?: string;
   /** It stays with its corps, and the row forms nothing in its place. */
   stays: boolean;
+  /** (The stood war rows.) Found by the table's count in its counting formation, not by a name a corps holds. */
+  counted?: true;
+  /** (The same.) The row's own name gives this division: it carries that name where it comes. Else it keeps its card's own. */
+  named?: true;
+  /**
+   * (The same.) Drawn by share: no card of the corps is taken (`at` is -1). It stands for `rec` of the `of` divisions
+   * the record counts in the corps, and comes with that share of the corps as it stands.
+   */
+  share?: { rec: number; of: number };
 }
 
 /**
@@ -68,7 +111,7 @@ export interface Claim {
  * strength of all its country's corps in divisions before and after. Null in play: nothing is worked out for them.
  */
 export const drawnWatch: {
-  tell: ((e: { turn: number; nat: string; row: string; place: string; lands: string; home: boolean; divs: number; claims: { name: string; from: string | null; id: number | null; at: string | null; stays: boolean; conv: string | null }[] }) => void) | null;
+  tell: ((e: { turn: number; nat: string; row: string; place: string; lands: string; home: boolean; divs: number; claims: { name: string; from: string | null; id: number | null; at: string | null; stays: boolean; conv: string | null; share: boolean }[] }) => void) | null;
   laid: ((e: { turn: number; nat: string; row: string; corps: number; took: boolean; fresh: number; str: number; before: number; after: number }) => void) | null;
 } = { tell: null, laid: null };
 
@@ -133,7 +176,8 @@ export function formationName(names: [string, string][]): string | null {
  */
 export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number, reg: Region, home: boolean, skip: (c: Corps) => boolean, busy: (c: Corps) => boolean): Claim[] {
   const names = divisionsNamed(row[2], nat, row[3] as Kind).slice(0, n);
-  if (!names.length) return [];
+  const count = countingFor(g, nat, row)?.from;
+  if (!names.length && !count) return [];
   const whole = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && !(c.full !== undefined && c.full < 1) && !skip(c);
   let held: Map<string, { c: Corps; at: number }> | null = null;
   // (A corps on a long passage is off the map and lives all the same: it holds its divisions, and stays with them.)
@@ -173,14 +217,53 @@ export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number,
     if (!h) { out.push({ slot, name, from: null, at: -1, conv: old, stays: true }); return; }
     out.push({ slot, name, from: h.c, at: h.at, conv: old, stays: stays(h.c) });
   });
+  // The stood war rows: the divisions the table counts in a board corps, each entry the row's next places in order.
+  // (A place a corps already holds by the row's own name is that corps', above. A counting formation that is dead, or
+  // a part, or already another row's to break up, gives nothing: those places are raised new.)
+  if (count) {
+    for (const v of g.atSea ?? []) if (whole(v.corps)) afloat.add(v.corps);
+    let next = 0;
+    for (const f of count) {
+      const first = next;
+      next += f.divs;
+      // (The oldest of that name, where two carry it. One on a long passage lives, and stays with its divisions.)
+      const h = [...g.corps.filter(whole), ...afloat].filter((c) => c.name === f.corps).sort((a, b) => a.id - b.id)[0];
+      if (!h) continue;
+      const of = f.record !== undefined ? recordCount(nat, f.corps) : undefined;
+      // (By share only while the record still counts divisions in it that no row has drawn.)
+      if (of !== undefined && of - (h.out ?? 0) <= 0) continue;
+      const places = Array.from({ length: f.divs }, (_, j) => first + j).filter((slot) => slot < n && !out.some((q) => q.slot === slot));
+      const own = (slot: number): [string, string] | undefined => names[slot];
+      if (of !== undefined) {
+        for (const slot of places) out.push({ slot, name: own(slot) ?? ['', ''], from: h, at: -1, stays: stays(h), counted: true, ...(own(slot) ? { named: true as const } : {}), share: { rec: f.record! / f.divs, of } });
+        continue;
+      }
+      // Its last divisions, in the order they stand, but for one the row already holds by name, and for the ones that
+      // already stand for an earlier row (`kept`: the cards counted as staying with it, which do not move). Where it
+      // has fewer than the table counts, the row's last places are the ones raised new.
+      const free = divisionsOf(g, h).filter((d) => !out.some((q) => q.from === h && q.at === d.slot));
+      const cards = free.slice(0, Math.max(0, free.length - (h.kept ?? 0)));
+      const last = cards.slice(Math.max(0, cards.length - places.length));
+      last.forEach((d, j) => { const slot = places[j]; out.push({ slot, name: own(slot) ?? [d.name, d.short], from: h, at: d.slot, stays: stays(h), counted: true, ...(own(slot) ? { named: true as const } : {}) }); });
+    }
+  }
   // (In the order the row's name gives them, as they were always read.)
   out.sort((a, b) => a.slot - b.slot);
-  if (out.length) drawnWatch.tell?.({ turn: g.turn, nat, row: row[2], place: row[5], lands: reg.name, home, divs: n, claims: out.map((q) => ({ name: q.name[0], from: q.from?.name ?? null, id: q.from?.id ?? null, at: q.from ? g.regions[q.from.reg].name : null, stays: q.stays, conv: q.conv ?? null })) });
+  if (out.length) drawnWatch.tell?.({ turn: g.turn, nat, row: row[2], place: row[5], lands: reg.name, home, divs: n, claims: out.map((q) => ({ name: q.name[0], from: q.from?.name ?? null, id: q.from?.id ?? null, at: q.from ? g.regions[q.from.reg].name : null, stays: q.stays, conv: q.conv ?? null, share: !!q.share })) });
   return out;
 }
 
 /** True where a row with these claims has anything to form: a division of its own to raise, or one to bring. */
 export const formsAny = (claims: Claim[], n: number): boolean => n - claims.length > 0 || claims.some((q) => q.from && !q.stays);
+
+/**
+ * A row has landed or settled: each card a stood war row counted as staying with its corps (the player's, or one that
+ * stands where the row is for) now stands for that row, and the next row that counts on the corps takes the cards
+ * before it (`Corps.kept`). Cards that come move, and need no mark. Called once a row is settled: game.ts.
+ */
+export function keepCounted(claims: Claim[]): void {
+  for (const q of claims) if (q.counted && q.stays && q.from && q.at >= 0 && !q.share) q.from.kept = (q.from.kept ?? 0) + 1;
+}
 
 /**
  * Lays a dated row some of whose divisions living corps hold (`heldAlready`, and `formsAny` true): the corps that
@@ -194,25 +277,29 @@ export function layOnce(g: Game, nat: string, row: any[], n: number, reg: Region
   const names = divisionsNamed(row[2], nat, kind);
   const all = (): number => g.corps.reduce((s, x) => s + (x.nat === nat && !x.dead ? x.divs * x.str : 0), 0);
   const before = drawnWatch.laid ? all() : 0;
-  const come = claims.filter((q) => q.from && !q.stays);
+  keepCounted(claims);
+  // (A division drawn by share takes no card of its corps: `shares`. The others come as cards: `come`.)
+  const shares = claims.filter((q) => q.from && !q.stays && q.share);
+  const come = claims.filter((q) => q.from && !q.stays && !q.share);
   const fresh = Math.max(0, n - claims.length);
   // A corps all of whose divisions the row names comes itself, and takes the row's name: one of the row's own arm,
   // none of whose divisions is formed into another (an infantry corps is not a Panzer row's for giving its last division).
   const base = come.map((q) => q.from!).find((c) => c.kind === kind && come.filter((q) => q.from === c).length >= c.divs && !come.some((q) => q.from === c && q.conv)) ?? null;
   const got = new Map<Claim, Part>();
   const drew: NonNullable<Corps['drew']> = [];
-  const take = (q: Claim, p: Part, from: number, formed = false): void => {
+  const take = (q: Claim, p: Part, from: number, formed = false, rec?: number): void => {
     const no = q.conv ? numberIn(q.name[0]) ?? p.no : p.no;
     // (`cut`: the share of the row another row took before it landed, o.takes: a division that comes is the weaker by it, as one raised new is.)
     got.set(q, { ...p, name: q.name, no, str: p.str * (1 - cut) });
-    drew.push({ name: q.name, no, from, ...(q.conv || formed ? { conv: true as const } : {}) });
+    // (`rec`: a division an earlier war row drew by share keeps the record's divisions it stands for, so its corps is paid back when it goes home.)
+    drew.push({ name: q.name, no, from, ...(q.conv || formed ? { conv: true as const } : {}), ...(rec ? { rec } : {}) });
   };
   for (const h of [...new Set(come.map((q) => q.from!))]) {
     const mine = come.filter((q) => q.from === h);
     if (h === base) {
       // (A division an earlier loan drew for this corps is remembered by the corps it first came out of: it goes back
       // there when this row's time is up, not to the corps that only carried it between two loans.)
-      for (const p of partsOf(g, h)) { const q = mine.find((x) => x.at === p.slot); const old = h.drew?.find((r) => r.name[0] === p.name[0]); if (q) take(q, p, old?.from ?? h.id, !!old?.conv); }
+      for (const p of partsOf(g, h)) { const q = mine.find((x) => x.at === p.slot); const old = h.drew?.find((r) => r.name[0] === p.name[0]); if (q) take(q, p, old?.from ?? h.id, !!old?.conv, old?.rec); }
     } else if (mine.length >= h.divs) {
       // Another corps the row names whole: its divisions come over, and it is no more.
       for (const p of partsOf(g, h)) { const q = mine.find((x) => x.at === p.slot); if (q) take(q, p, h.id); }
@@ -235,16 +322,32 @@ export function layOnce(g: Game, nat: string, row: any[], n: number, reg: Region
     if (as.stay) c.stay = true;
     if (as.airborne) c.airborne = true;
     if (as.gen && c.general === null) seat(g, c, as.gen, as.trait);
-    nos = standInNumbers(g, nat, c.kind, fresh);
+    nos = standInNumbers(g, nat, c.kind, fresh + shares.length);
     raw = { str, xp: as.xp ?? 0.15, org: 1, ...(c.mor !== undefined ? { mor: c.mor } : {}) };
   } else {
     // (A corps is raised with one place at least: where the row raises no division of its own, the number that place was given goes back.)
-    const before = standInCount(g, nat, kind);
-    c = add(Math.max(1, fresh));
+    // (A division drawn by share is numbered as a new one is: no card of its corps came with it.)
+    const before = standInCount(g, nat, kind), places = fresh + shares.length;
+    c = add(Math.max(1, places));
     c.str = str;
-    nos = fresh > 0 ? divisionsOf(g, c).map((d) => d.no) : [];
-    if (fresh <= 0) setStandInCount(g, nat, kind, before);
+    nos = places > 0 ? divisionsOf(g, c).map((d) => d.no) : [];
+    if (places <= 0) setStandInCount(g, nat, kind, before);
     raw = { str: c.str, xp: c.xp, org: c.org, ...(c.mor !== undefined ? { mor: c.mor } : {}) };
+  }
+  // The stood war rows, by share: of the divisions the record still counts in the corps, the row's are so many, and
+  // they come with that share of the corps as it stands, evenly between them and never more than whole. The corps
+  // keeps its own divisions, the weaker by exactly what went, and remembers how many of the record's are out.
+  const lot = new Map<Corps, number>();
+  for (const h of [...new Set(shares.map((q) => q.from!))]) {
+    const mine = shares.filter((q) => q.from === h);
+    const recs = mine.reduce((sum, q) => sum + q.share!.rec, 0);
+    const left = Math.max(recs, mine[0].share!.of - (h.out ?? 0));
+    const men = h.divs * clamp(h.str);
+    const took = Math.min((recs / left) * men, mine.length);
+    h.str = clamp((men - took) / h.divs);
+    h.out = (h.out ?? 0) + recs;
+    lot.set(h, took / mine.length);
+    g.supplyDirty = true;
   }
   // The row's divisions in the order its name gives them: those it brought, and those it raises new.
   const parts: Part[] = [];
@@ -252,6 +355,15 @@ export function layOnce(g: Game, nat: string, row: any[], n: number, reg: Region
   let f = 0;
   for (let s = 0; s < n; s++) {
     const q = claims.find((x) => x.slot === s);
+    if (q?.share) {
+      const h = q.from;
+      if (!h || q.stays) continue;
+      const no = nos[f++] ?? 0;
+      const name: [string, string] = q.named ? q.name : [`${ordinal(no)} ${word.name}`, `${ordinal(no)} ${word.short}`];
+      parts.push({ slot: s, name, no, str: (lot.get(h) ?? 0) * (1 - cut), xp: clamp(h.xp), org: h.org, ...(h.mor !== undefined ? { mor: h.mor } : {}) });
+      drew.push({ name, no, from: h.id, rec: q.share.rec });
+      continue;
+    }
     if (q) { const p = got.get(q); if (p) parts.push(p); continue; }
     const no = nos[f++] ?? 0;
     parts.push({ slot: s, name: names[s] ?? [`${ordinal(no)} ${word.name}`, `${ordinal(no)} ${word.short}`], no, ...raw });
@@ -271,19 +383,28 @@ export function layOnce(g: Game, nat: string, row: any[], n: number, reg: Region
  * raised new leave. True where the corps stands on, with what could not go back, under its own name again and free
  * of the row's orders; false where nothing of it is left to stand, and it leaves as a lent row's corps always did.
  * `leaving` a corps that is itself on its way out this month: nothing goes back to it.
+ * `war` true for a row whose war is over (the stood war rows, above): the divisions it raised new stay with it, and it
+ * keeps the row's name and orders. A division drawn by share goes back as a division of its own, and the corps it
+ * joins counts the record's divisions it stands for as its own again.
  */
-export function rowOver(g: Game, c: Corps, leaving: (x: Corps) => boolean = () => false): boolean {
+export function rowOver(g: Game, c: Corps, leaving: (x: Corps) => boolean = () => false, war = false): boolean {
   const keep: Part[] = [];
   const back = new Map<Corps, Part[]>();
+  const home = new Map<Corps, number>();
   for (const p of partsOf(g, c)) {
     const rec = c.drew?.find((r) => r.name[0] === p.name[0]);
-    if (!rec) continue;
+    if (!rec) { if (war) keep.push(p); continue; }
     const parent = rec.from === c.id || rec.conv ? undefined : g.corps.find((x) => x.id === rec.from && x.nat === c.nat && !x.dead && !leaving(x));
-    if (parent && g.regions[parent.reg].theatre === g.regions[c.reg].theatre) back.set(parent, [...(back.get(parent) ?? []), p]);
+    if (parent && g.regions[parent.reg].theatre === g.regions[c.reg].theatre) {
+      back.set(parent, [...(back.get(parent) ?? []), p]);
+      if (rec.rec) home.set(parent, (home.get(parent) ?? 0) + rec.rec);
+    }
     else keep.push(p);
   }
   for (const [parent, ps] of back) {
     assemble(g, parent, [...partsOf(g, parent), ...ps]);
+    const rec = home.get(parent);
+    if (rec) { const out = (parent.out ?? 0) - rec; if (out > 1e-9) parent.out = out; else delete parent.out; }
     // (A parent that is itself on loan holds them as its own from here: when its own row's time is up they stand on
     // with it, whichever of the two rows is read first, and do not leave as divisions that row raised new. One it had
     // itself drawn from another corps keeps that record: it goes back there when the parent's own time is up.)
@@ -298,11 +419,13 @@ export function rowOver(g: Game, c: Corps, leaving: (x: Corps) => boolean = () =
     c.name = c.rowed.name;
     c.hold = c.rowed.hold;
     if (c.rowed.stay) c.stay = true; else delete c.stay;
-  } else {
+  } else if (!war) {
     c.name = formationName(keep.map((p) => p.name)) ?? c.name;
     c.hold = false;
     delete c.stay;
   }
+  // (A war row's corps is not on its way anywhere: it keeps the row's name, by which the rows that build on it find
+  // it, and the row's own orders, which never hung on the war. Only the divisions that could go back have gone.)
   delete c.drew;
   delete c.rowed;
   return true;
@@ -390,12 +513,35 @@ export function heldLine(g: Game, row: any[], claims: Claim[]): string | null {
   const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
   const where = (qs: Claim[]): string => list([...new Set(qs.map((q) => g.regions[q.from!.reg].name))]);
   const lines: string[] = [];
-  const mine = claims.filter((q) => q.from && !q.conv), made = claims.filter((q) => q.from && q.conv);
+  // (The stood war rows: a division the table counts in one of his corps under a name the row gives it, or by share,
+  // is not one he holds by name: `drawn`, told by the corps it was to be drawn from. One counted under its card's own
+  // name he holds, and it is told with the others.)
+  const drawn = claims.filter((q) => q.from && q.counted && (q.named || q.share));
+  const mine = claims.filter((q) => q.from && !q.conv && !drawn.includes(q)), made = claims.filter((q) => q.from && q.conv);
   // (A line may say a place more than once: every one of its places is filled.)
   const fill = (line: string, as: Record<string, string>): string => line.replace(/\{(\w+)\}/g, (all, k: string) => as[k] ?? all);
+  // (Divisions that read by numbers of one arm are said as a dated row writes them: "the 9th and 10th Infantry
+  // Divisions"; the others each with its article. The UI director's mark of 17:26Z.)
+  const said = (qs: Claim[]): string => {
+    const read = qs.map((q) => /^(\d+(?:st|nd|rd|th))\s+(.+) Division$/.exec(q.name[0]));
+    const joined = qs.length > 1 && read.every((m) => m && m[2] === read[0]![2]) ? formationName(qs.map((q) => q.name)) : null;
+    return cap(joined ? the(joined) : list(qs.map((q) => the(q.name[0]))));
+  };
   // (Where every one of them stands at the row's own place already, the place is said once: the UI director's `here`.)
   const there = mine.length > 0 && mine.every((q) => g.regions[q.from!.reg].name === row[5]);
-  if (mine.length) lines.push(fill(there ? (mine.length === 1 ? DRAWN.here : DRAWN.hereMany) : mine.length === 1 ? DRAWN.one : DRAWN.many, { names: cap(list(mine.map((q) => the(q.name[0])))), place: row[5], where: where(mine) }));
+  if (mine.length) lines.push(fill(there ? (mine.length === 1 ? DRAWN.here : DRAWN.hereMany) : mine.length === 1 ? DRAWN.one : DRAWN.many, { names: said(mine), place: row[5], where: where(mine) }));
   for (const q of made) lines.push(fill(DRAWN.conv, { names: cap(the(q.name[0])), place: row[5], was: q.conv!, where: where([q]) }));
+  // One line for each corps the row was to draw on: a division the row names by itself, or so many to make up the row.
+  for (const h of [...new Set(drawn.map((q) => q.from!))]) {
+    const qs = drawn.filter((q) => q.from === h);
+    const named = qs.filter((q) => q.named), rest = qs.filter((q) => !q.named);
+    const as = { place: row[5], army: h.name.replace(/^the /i, ''), where: g.regions[h.reg].name, formation: String(row[2]).replace(/^the /i, '') };
+    for (const q of named) lines.push(fill(DRAWN.from, { ...as, names: cap(the(q.name[0])) }));
+    if (rest.length === 1) lines.push(fill(DRAWN.from, { ...as, names: 'One division' }));
+    else if (rest.length) lines.push(fill(DRAWN.fromMany, { ...as, count: cap(inWords(rest.length)) }));
+  }
   return lines.length ? lines.join(' ') : null;
 }
+
+/** A count as the news writes it: in words to ten. */
+const inWords = (n: number): string => ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'][n] ?? String(n);
