@@ -655,6 +655,33 @@ export function portKeep(g: Game, r: Region): number {
   return (fortRows(g) ? portStores(g, r) : null) ?? DESERT.stores;
 }
 /**
+ * A nation's place in the order of the nations (Object.keys(g.nations)), as a flag holds it: whose pocket a town's is
+ * (siege.ts `pktn:`) and whose kept stores a port's are (`stores:by:`).
+ */
+export const natIndex = (g: Game, nat: string): number => Object.keys(g.nations).indexOf(nat);
+/**
+ * The months a fortified port overseas has already lived on its kept stores (the design director's ruling of 19:01Z,
+ * 25 November 2026: "one town, one larder, priced once"). Under true reach a siege that opens round such a port begins
+ * with these months eaten (siege.ts invest). The stores were last filled in the month the flag holds, so the first
+ * month on them is the month after. The present month counts too once the holder's own month has drawn its supply
+ * from them (`drawn`): the siege's clock then starts with the next month. Otherwise the present month is the siege's
+ * own to charge. They cannot have run longer than they last (portKeep).
+ * Only stores the present holder filled are his to have eaten. Whose they are is recorded at the fill, as a pocket's
+ * town records whose pocket it was (the same ruling: "as a pocket's town already does"): under true reach the supply
+ * picture writes the holder's place (`stores:by:<id>`, natIndex) beside the month, whoever's ships carried them. Stores
+ * whose record names another nation were never his, however the port came to him (a battle, a fall, a hand-back, a
+ * treaty or the last act), and stores with no record (filled with true reach off, or in a save from before the record)
+ * charge nothing until the holder's own next fill writes one: the conservative reading. A port captured in or after
+ * the month of the fill (Region.since) charges nothing either: a port lost and retaken by battle since its holder last
+ * filled it, and stores a new holder filled in the very month he took the port.
+ */
+export function keptStoresRun(g: Game, r: Region, drawn = false): number {
+  const last = g.flags[storesKey(r.id)];
+  if (!r.overseas || !r.port || !worksKept(r) || last === undefined || last <= r.since) return 0;
+  if (Object.keys(g.nations)[g.flags[storesByKey(r.id)] ?? -1] !== r.ctrl) return 0;
+  return Math.min(portKeep(g, r), Math.max(0, g.turn - (drawn ? 0 : 1) - last));
+}
+/**
  * A fortress crew in a fortified port overseas living on the port's stores this month (07:12Z): the sea behind it is
  * shut and the port still feeds it from what it holds. Its own clock runs from the month the sea closed: it eats a
  * month of its stores as a crew cut off does (09:06Z: counted apart from its organisation, which it holds), it neither rests
@@ -992,9 +1019,11 @@ const sameBytes = (a: ArrayLike<number>, b: ArrayLike<number>): boolean => {
   return true;
 };
 /** The flags' names a call asks after for every province, made once (the same names, without building them again). */
-const depotKeys: string[] = [], storesKeys: string[] = [];
+const depotKeys: string[] = [], storesKeys: string[] = [], storesByKeys: string[] = [];
 const depotKey = (id: number): string => (depotKeys[id] ??= 'depot:' + id);
 const storesKey = (id: number): string => (storesKeys[id] ??= `stores:${id}`);
+// (Whose stores they are, under true reach: keptStoresRun. It begins with "stores:" so that a load keeps it with the month.)
+const storesByKey = (id: number): string => (storesByKeys[id] ??= `stores:by:${id}`);
 
 /** One country's supply picture from its stores outward over the provinces its roads may pass, and its lines' lengths. */
 function drawSupply(g: Game, id: string, pass: Uint8Array, seeds: number[], heads: number[], wide: boolean, long: string[], deep: Uint8Array, sand: Uint8Array, rail: RailNow): { ok: Uint8Array; reach: Float32Array; east: boolean } {
@@ -1220,6 +1249,8 @@ export function computeSupply(g: Game): void {
   // lanes by the seas closed to a alone). Asked only where a's own lanes reach the port; where no sea of them is closed
   // to id the walk would take the same seas, and they are a's own lanes.
   const truly = trueReach(g);
+  // (The nations' places (natIndex), made once in a call and only when a fill under true reach asks for one.)
+  let places: Map<string, number> | null = null;
   const asIf = new Map<string, Uint8Array>();
   const carrying = (a: string, id: string, theirs: Uint8Array): Uint8Array => {
     const key = a + '>' + id;
@@ -1296,7 +1327,12 @@ export function computeSupply(g: Game): void {
       // (Under the fortress rows, a port that holds a row keeps that row's stores: one stores, not two. 07:12Z.)
       if (!shut && r.overseas && r.port && worksKept(r)) {
         if (quay) {
-          if (!truly || (by === 1 ? forHolder(id, r) : by === 2 || mates!.some((a) => feeds(a, id, r) && forHolder(a, r)))) g.flags[storesKey(r.id)] = g.turn;
+          if (!truly) g.flags[storesKey(r.id)] = g.turn;
+          else if (by === 1 ? forHolder(id, r) : by === 2 || mates!.some((a) => feeds(a, id, r) && forHolder(a, r))) {
+            // Under true reach the fill records whose stores they are: the holder's, whoever's ships carried them.
+            g.flags[storesKey(r.id)] = g.turn;
+            g.flags[storesByKey(r.id)] = (places ??= new Map(Object.keys(g.nations).map((n, i) => [n, i]))).get(r.ctrl)!;
+          }
         }
         else if (g.turn - (g.flags[storesKey(r.id)] ?? -99) <= portKeep(g, r)) quay = true;
       }
