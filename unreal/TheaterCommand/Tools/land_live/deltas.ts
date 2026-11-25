@@ -9,6 +9,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { LiveKeeper, livePiece, liveTicket, type LiveDelta, type LiveOpts } from '../../../../src/battle/land/live';
 import { PIECES, ticketOf } from '../../../../src/battle/land/pieces';
+import { ownTeamsLook } from '../../../../src/battle/land/own-teams';
 import type { Side } from '../../../../src/battle/core/types';
 
 const [folder = '.', key = 'normandy-1944', seedArg, meArg = 'att', tickArg = '0.5', ordersArg = ''] = process.argv.slice(2);
@@ -24,10 +25,14 @@ const opts: LiveOpts = { me, setup: false, ...(process.env.LAND_LIVE_BEARERS ===
 // place), fought instead of the set piece: the lorried infantry's seats, 23 November)
 const piece = PIECES.find((p) => p.key === key);
 const ticketFile = process.env.LAND_LIVE_TICKET ? JSON.parse(readFileSync(process.env.LAND_LIVE_TICKET, 'utf8')) : null;
-const L = ticketFile
-  ? liveTicket(ticketFile.ticket, { ...opts, ...(ticketFile.live ?? {}) })
+// (LAND_LIVE_SWITCHES=teams, a campaign battle's only: every infantry force with its own machine-gun and mortar
+// battalions, as the Battle rules card's "teams" row has the bridge make them: src/battle/land/own-teams.ts)
+const own = <T extends Parameters<typeof ownTeamsLook>[0]>(t: T): T => (on.has('teams') ? (ownTeamsLook(t) as T) : t);
+const withOwn = ticketFile ? own(ticketFile as { ticket: Parameters<typeof liveTicket>[0]; live?: LiveOpts }) : null;
+const L = withOwn
+  ? liveTicket(withOwn.ticket, { ...opts, ...(withOwn.live ?? {}) })
   : process.env.LAND_LIVE_CAMPAIGN === '1' && piece
-  ? liveTicket(ticketOf(piece, seedArg ? Number(seedArg) : piece.seeds[0], me), opts)
+  ? liveTicket(own(ticketOf(piece, seedArg ? Number(seedArg) : piece.seeds[0], me)), opts)
   : livePiece(key, seedArg ? Number(seedArg) : undefined, opts);
 const header = L.header();
 const deltas: LiveDelta[] = [];

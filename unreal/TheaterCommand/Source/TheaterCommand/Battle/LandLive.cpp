@@ -115,6 +115,14 @@ namespace
 		// Off until the island look has its Mac still and the art director's pass; -TheaterLandRuleIsland turns it on
 		// for a run. The campaign side's keys, ticket.look and ticket.latLon, are the Japan and Pacific thread's.)
 		{ TEXT("island"), TEXT("Island ground"), TEXT("A battle on a Pacific island is drawn as that island: beach, reef and palms, or jungle on the big islands, under its own sun. Campaign battles only. Off: it is drawn on the same ground as any other battle."), TEXT("TheaterLandNoIsland"), false, TEXT("TheaterLandRuleIsland") },
+		// (Every infantry force with its own teams, release 2: Brian, 25 November 14:14Z, "Where are the machine gun teams
+		// and mortar teams in the infantry squad", and his "Both" at 14:42Z. The rules' own-teams.ts: each infantry,
+		// mountain or lorried corps of a campaign battle gives a small share of itself to a machine-gun and a mortar
+		// battalion of its own, so nothing is added to a side. It is NOT looks only: it changes what fights, so it stays
+		// off until the design director's ruling and the fairness tables pass it; -TheaterLandRuleTeams turns it on for
+		// a run. The weapons themselves are drawn on the 3D's own trial word, teamguns. In the joined build this row
+		// goes after the squad life, hatches and tank machine gun rows.)
+		{ TEXT("teams"), TEXT("Machine gun and mortar teams"), TEXT("Each infantry, mountain and motorized corps fields its own machine gun teams and mortar teams behind its line, firing in support. They are part of the corps, not extra men. Campaign battles only. Off: a battle has only the teams the campaign built."), TEXT("TheaterLandNoTeams"), false, TEXT("TheaterLandRuleTeams") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }
