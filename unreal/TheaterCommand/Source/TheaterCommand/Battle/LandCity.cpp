@@ -1813,9 +1813,13 @@ namespace LandScape
 					const double D = std::hypot(X - CX, (Y - CY) * 1.25);
 					const double R = Fd.bTown ? std::max(Fd.TownR, 200.0) : 400.0;
 					const double Wob = 60.0 * Noise(X / 210.0, Y / 210.0, Seed ^ 0xC17);
-					if (D < 0.8 * R + Wob) return 2;
+					// (core and terraces both buildings: StoreysAt tells them apart by the same rings)
 					if (D < 1.25 * R + Wob) return 2;
-					if (D < 2.1 * R + Wob) return Unit(Hash(Seed, static_cast<uint64_t>(X / 25.0), static_cast<uint64_t>(Y / 25.0))) < 0.75 ? 1 : 0;
+					// (each 25 m cell its own, through a signed whole number: a negative double cast straight to an
+					// unsigned one is undefined, and the Mac's ARM and the cloud's x86 answer it differently)
+					const uint64_t CellX = static_cast<uint64_t>(static_cast<int64_t>(std::floor(X / 25.0)));
+					const uint64_t CellY = static_cast<uint64_t>(static_cast<int64_t>(std::floor(Y / 25.0)));
+					if (D < 2.1 * R + Wob) return Unit(Hash(Seed, CellX, CellY)) < 0.75 ? 1 : 0;
 					return 0;
 				}
 				const std::string& G = CellGround(X, Y);
