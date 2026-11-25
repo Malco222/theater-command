@@ -585,12 +585,33 @@ describe('the armed level', () => {
     expect(a.str).toBeCloseTo(0.6, 12);
     expect(g.flags[`rfa:${a.id}`]).toBeCloseTo(0.6, 12);
     expect(stock(g)).toBe(1);
-    // A higher level is never lowered by a fold.
+    // A kept corps worn below its level keeps the rifles of the men it lost, and the moved men's are added to them
+    // (the director's answer 4: "Men and rifles travel together; only a broken corps loses them"): 0.5 + 0.4 / 2.
     const c = addCorps(g, 'CHN', 'A third corps', 'inf', 2, capName, {}), d = addCorps(g, 'CHN', 'A fourth corps', 'inf', 2, capName, {});
     c.str = d.str = 0.2;
     g.flags[`rfa:${c.id}`] = 0.5;
     expect(foldCorps(g, c, d)).toBe(true);
-    expect(g.flags[`rfa:${c.id}`]).toBe(0.5);
+    expect(c.str).toBeCloseTo(0.4, 12);
+    expect(g.flags[`rfa:${c.id}`]).toBeCloseTo(0.7, 12);
+    expect(stock(g)).toBe(1);
+  });
+
+  it('15. (the ledger) a fold into a worn corps loses no rifles', () => {
+    const g = grand('CHN');
+    const capName = g.regions[g.nations.CHN.capital].name;
+    store(g, 1);
+    const held = (): number => corpsOf(g).reduce((s, x) => s + levelOf(g, x) * x.divs, 0) + stock(g);
+    // Kept: level 0.6 at strength 0.3. Folded: 0.4 at 0.4, so it has no worn part. 0.8 moves; nothing is left over.
+    const a = addCorps(g, 'CHN', 'Kept corps', 'inf', 2, capName, {}), b = addCorps(g, 'CHN', 'Folded corps', 'inf', 2, capName, {});
+    a.str = 0.3; g.flags[`rfa:${a.id}`] = 0.6;
+    b.str = 0.4; g.flags[`rfa:${b.id}`] = 0.4;
+    const before = held();
+    expect(foldCorps(g, a, b)).toBe(true);
+    expect(a.str).toBeCloseTo(0.7, 12);
+    // 0.6 + 0.8 / 2 = 1.0: the kept corps is armed to its full, and every rifle is still held or in store.
+    expect(`rfa:${a.id}` in g.flags).toBe(false);
+    expect(stock(g)).toBe(1);
+    expect(held()).toBeCloseTo(before, 12);
   });
 
   it("15. (the director's answer 4) a fold's leftover men bring their rifles home", () => {

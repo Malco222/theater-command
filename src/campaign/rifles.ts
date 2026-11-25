@@ -138,9 +138,15 @@ export function openRifles(g: Game): void {
   for (const nat of Object.keys(g.nations)) if (binds(g, nat)) stampLevels(g, nat);
 }
 
-/** A fold (fold.ts): the kept corps' level rises to its new strength where that is higher; the men moved came armed. */
-export function riflesFold(g: Game, keep: Corps): void {
-  if (binds(g, keep.nat) && keep.str > levelOf(g, keep)) setLevel(g, keep, keep.str);
+/**
+ * A fold (fold.ts): the men moved into the kept corps came armed, so its level rises by what they bring ('from', in
+ * divisions' worth), up to its full. (The director's answer 4: "Men and rifles travel together; only a broken corps
+ * loses them". A kept corps worn below its level keeps the rifles of the men it lost, and the moved men's rifles are
+ * added to them, never lost in them. Rifles that would arm it past its full are not given back: answer 4 gives back
+ * the leftover men's only; a question for the director.)
+ */
+export function riflesFold(g: Game, keep: Corps, from: number): void {
+  if (binds(g, keep.nat) && from > 0 && keep.divs > 0) setLevel(g, keep, Math.min(keep.full ?? 1, levelOf(g, keep) + from / keep.divs));
 }
 
 /**
