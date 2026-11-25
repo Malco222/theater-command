@@ -30,7 +30,7 @@ import production from '../../data/campaign/production.json';
 import { SHELVES, armsMonth, armsView, draw, gainOf, giveBack, has, put, stockOf } from './arms';
 import { atWar, headline, industryHeld, theName } from './game';
 import { majorsOf } from './diplomacy';
-import { corpsList } from './economy';
+import { corpsList, needsOf } from './economy';
 import type { Build, Corps, Game } from './types';
 
 /** A nation's rifles row: rifles to its division's worth, the share a draft draws, and whether an empty store refuses anything (the next stage reads the last two). */
@@ -176,6 +176,67 @@ export function riflesJoin(g: Game, part: Corps, into: Corps): void {
   setLevel(g, into, Math.max(weighed, str));
   const k = kLevel(String(part.id));
   if (k in g.flags) delete g.flags[k];
+}
+
+// ---- The drafts (stage B2) --------------------------------------------------------------------------------------------
+// Clause 6 and the form's section 12 share split, as ruled: for a nation that binds, a foot corps' drafts (a kind that
+// needs no industry) cost men and rifles and no points, a heavy corps' drafts cost their points and no rifles; the
+// depots' and the men's limits stay common, the treasury limits only the drafts paid in points, the stock only the drafts
+// that draw rifles. A draft refilling a corps to its level draws 'refit' of what it brings in men (15D); above the level
+// it would draw the whole, which the cap below keeps from happening (the director's answer 1: drafts fill to the lower
+// of size and level). A row marked binds: false keeps today's drafts and counts what they draw.
+
+const isFoot = (g: Game, c: Corps): boolean => needsOf(g, c.kind) === 0;
+
+/** Each corps' want of drafts capped at its armed level, in place, for a nation that binds; untouched for every other. */
+export function armWants(g: Game, nat: string, army: Corps[], want: number[]): void {
+  if (!binds(g, nat)) return;
+  army.forEach((c, i) => { if (want[i] > 0) want[i] = Math.min(want[i], Math.max(0, levelOf(g, c) - c.str) * c.divs); });
+}
+
+/** A binding nation's drafts this month: what each corps is given, the points it pays a division's worth, and where it is foot. */
+export interface ArmShares { give: number[]; price: number[]; foot: boolean[]; room: number[] }
+
+/**
+ * The share split for a nation that binds (null for every other, whose drafts keep today's one share). `common` is the
+ * depots' and the men's limit, `treasury` the points and the held call-up men in divisions' worth.
+ */
+export function armShares(g: Game, nat: string, army: Corps[], want: number[], common: number, treasury: number, perDiv: number): ArmShares | null {
+  if (!binds(g, nat)) return null;
+  const refit = pos(riflesRow(g, nat)!.refit), stock = stockOf(g, nat, 'rifles');
+  const foot = army.map((c) => isFoot(g, c));
+  let footAsk = 0, heavyAsk = 0;
+  want.forEach((w, i) => { if (foot[i]) footAsk += w; else heavyAsk += w; });
+  const footShare = Math.min(common, footAsk > 0 && refit > 0 ? stock / (refit * footAsk) : 1);
+  const heavyShare = Math.min(common, heavyAsk > 0 ? treasury / heavyAsk : 1);
+  return {
+    give: want.map((w, i) => w * (foot[i] ? footShare : heavyShare)),
+    price: foot.map((f) => (f ? 0 : perDiv)),
+    foot,
+    // (Room below each corps' level before the drafts: what a draft brings beyond it would draw whole.)
+    room: army.map((c) => Math.max(0, levelOf(g, c) - c.str) * c.divs),
+  };
+}
+
+/**
+ * The rifles the month's drafts drew, after they are given (game.ts startPhase): for a nation that carries, 'refit' of
+ * each foot corps' draft up to its level and the whole above it; heavy drafts draw none. A binds: false row's drafts are
+ * today's, want x share, and draw 'refit' of it.
+ */
+export function armDrafts(g: Game, nat: string, army: Corps[], want: number[], share: number, arm: ArmShares | null): void {
+  if (!carries(g, nat)) return;
+  const refit = pos(riflesRow(g, nat)!.refit);
+  let need = 0;
+  army.forEach((c, i) => {
+    if (!(arm ? arm.foot[i] : isFoot(g, c))) return;
+    const give = arm ? arm.give[i] : want[i] * share;
+    if (!(give > 0)) return;
+    const room = arm ? arm.room[i] : give;
+    need += refit * Math.min(give, room) + Math.max(0, give - room);
+  });
+  if (need <= 0) return;
+  const got = draw(g, nat, 'rifles', need);
+  riflesWatch.tell?.({ nat, what: 'draft', rifles: got });
 }
 
 // ---- The carve (stage B2) ---------------------------------------------------------------------------------------------

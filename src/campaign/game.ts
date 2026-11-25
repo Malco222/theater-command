@@ -24,7 +24,7 @@ import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { locked, techTick, winterReady } from './tech';
 import { liftDates } from './lift';
 import { RES, fuelAir, fuelMet, fuelSlows, hungerLost, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
-import { riflesMonth } from './rifles';
+import { armDrafts, armShares, armWants, riflesMonth } from './rifles';
 import { crown, warGoesOn } from './domination';
 import { afterFall, recordFall, rememberWars, retaken, standsFreed } from './liberation';
 import { honour } from './guarantees';
@@ -6022,6 +6022,7 @@ export function startPhase(g: Game, nat: string): void {
   // A volunteer legion's drafts come from its own home's reserve, not the patron's (legions.ts; release 2, switched off in release 1).
   const want = army.map((c) => (c.vol ? 0 : wantOf(c)));
   const volWant = army.map((c) => (c.vol ? wantOf(c) : 0));
+  armWants(g, nat, army, want);
   const asked = want.reduce((s, x) => s + x, 0);
   // The month's class comes of age and joins the reserve, and the men the armies ask for are taken from it (the
   // grand campaign): a nation whose reserve is spent makes good only what the class allows.
@@ -6031,7 +6032,9 @@ export function startPhase(g: Game, nat: string): void {
   // The player's say over the call-up (the grand campaign): while he holds the standing call-up, the men of the wave
   // that was not raised go out as drafts over and above what the depots send, and like the wave they cost the treasury nothing.
   const heldMen = heldDrafts(g, nat);
-  const share = asked > 0 ? Math.min(1, (Math.max(0, n.pp) / perDiv + heldMen) / asked, (PRODUCTION.manpower * drafts * Math.max(n.armyPeak, armySize(g, nat)) + heldMen) / asked, menLeft(g, nat) / asked) : 0;
+  const common = asked > 0 ? Math.min(1, (PRODUCTION.manpower * drafts * Math.max(n.armyPeak, armySize(g, nat)) + heldMen) / asked, menLeft(g, nat) / asked) : 0;
+  const share = asked > 0 ? Math.min(common, (Math.max(0, n.pp) / perDiv + heldMen) / asked) : 0;
+  const arm = armShares(g, nat, army, want, common, Math.max(0, n.pp) / perDiv + heldMen, perDiv);
   let drafted_ = 0, freeLeft = heldMen;
   // Corps starved into surrender this month, by where they stood: an army lost together is one piece of news.
   const starved = new Map<number, { names: string[]; men: number }>();
@@ -6052,13 +6055,13 @@ export function startPhase(g: Game, nat: string): void {
       // (A withered island garrison mends when a ship of its side can reach it again: fed from outside, its count is
       // struck off. A town's own stores under siege, or a pocket's, are not a ship.)
       if (far && !shutIn(g, c) && !inPocket(g, c)) witherFed(g, c);
-      const give = want[i] * share;
+      const give = arm ? arm.give[i] : want[i] * share;
       if (give > 0) {
         // Green drafts thin out what a corps of the player's has learned.
         drafted(g, c, c.str, give / c.divs);
         const free = Math.min(freeLeft, give);
         freeLeft -= free;
-        c.str += give / c.divs; n.pp -= (give - free) * perDiv;
+        c.str += give / c.divs; n.pp -= (give - free) * (arm ? arm.price[i] : perDiv);
         drafted_ += give;
       }
       if (volWant[i] > 0) legionDrafts(g, c, volWant[i]);
@@ -6113,6 +6116,7 @@ export function startPhase(g: Game, nat: string): void {
     if (far && withered(g, c)) c.ap = 0;
   });
   if (drafted_ > 0) drawMen(g, nat, drafted_);
+  armDrafts(g, nat, army, want, share, arm);
   if (menRules(g) && nat === g.human) {
     const level = menWarning(g, nat), left = menWords(menLeft(g, nat) * MEN_PER_DIV), start = menWords(poolAtStart(g, nat) * MEN_PER_DIV);
     // What he can do about it is said with the warning: the say he has over the call-up is in the ledger.
