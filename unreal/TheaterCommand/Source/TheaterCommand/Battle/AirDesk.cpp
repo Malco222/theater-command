@@ -763,7 +763,10 @@ namespace AirDesk
 		{
 			Fade.clear();
 			Prev.clear();
-			bStarted = bGiven = false;
+			bStarted = bGiven = bMid = bLast = false;
+			LastAnchor = NearKey = -1;
+			InMid.clear();
+			InClose.clear();
 			Away = -1.0;
 			AwayVel = 0.0;
 			LookVel = AirShow::Vec();
@@ -809,32 +812,74 @@ namespace AirDesk
 		if (!Held)
 		{
 			Prev.clear();
+			bMid = false;
+			bJump = true;
 			Frame(800.0);
 			return A;
 		}
-		// The crowd's middle: about its anchor, as CrowdOf's, each aircraft by its weight in the ring.
+		// The crowd's middle, each aircraft by its weight in the ring: about its middle as it was the last frame while
+		// any of its aircraft are still about it, else about the anchor; a move to another crowd when the anchor is
+		// one far from it. (About the anchor itself each frame, a change of anchor to another aircraft of the same
+		// crowd, a few hundred metres off, moved the middle as far in one frame: 6 times in the raid's busiest forty
+		// seconds at x4. Moved whenever the one anchor flew more than Reach from the middle, at the Hampshire raid's
+		// end at x10, its few aircraft spread over kilometres, the look jumped 2 km 12 times a real minute)
+		double Around = 0.0;
+		if (bMid)
+		{
+			for (const AirShow::PlaneOut& P : Planes)
+			{
+				const auto Share = Fade.find(P.Key);
+				if (Share != Fade.end()) Around += Share->second * InRing((P.At - LastMid).Length(), Reach);
+			}
+		}
+		const bool bMoved = !bMid || Around < 0.5 || (Held->Key != LastAnchor && (Held->At - LastMid).Length() >= Reach);
+		const AirShow::Vec About = bMoved ? Held->At : LastMid;
+		LastAnchor = Held->Key;
+		bJump = bMoved;
+		// (and each aircraft's weight in a ring eased in time as well, in or out over RingS real seconds: at x10 a
+		// fighter crosses the soft edge of the look's ring in a tenth of a real second, and the middle jumped 12 m rms
+		// in 0.4 s; on a move to another crowd every weight is as it is at once)
+		if (bMoved)
+		{
+			InMid.clear();
+			InClose.clear();
+		}
+		const double RingStep = std::clamp(Real / RingS, 0.0, 1.0);
+		auto Eased = [RingStep](std::map<int, double>& Was, std::map<int, double>& Now, int Key, double Target)
+		{
+			const auto It = Was.find(Key);
+			const double From = It != Was.end() ? It->second : Target;
+			const double To = From + std::clamp(Target - From, -RingStep, RingStep);
+			Now[Key] = To;
+			return To;
+		};
+		std::map<int, double> MidNow, CloseNow;
 		AirShow::Vec Mid;
 		double MidWeight = 0.0;
 		for (const AirShow::PlaneOut& P : Planes)
 		{
 			const auto Share = Fade.find(P.Key);
 			if (Share == Fade.end()) continue;
-			const double W = Share->second * InRing((P.At - Held->At).Length(), Reach);
+			const double W = Share->second * Eased(InMid, MidNow, P.Key, InRing((P.At - About).Length(), Reach));
 			Mid += P.At * W;
 			MidWeight += W;
 		}
+		InMid.swap(MidNow);
 		Mid = MidWeight > 1e-9 ? Mid * (1.0 / MidWeight) : Held->At;
+		LastMid = Mid;
+		bMid = true;
 		// The look: the middle of those within Tight of it, and with fewer than two there the one nearest it (eased from
 		// one to the other between one and two); its travel since the last frame, the same aircraft by the same weights.
 		// The framing: the crowd's mean span.
 		AirShow::Vec Close, CloseStep, Nearest, NearestStep;
 		double CloseWeight = 0.0, StepWeight = 0.0, SpanSum = 0.0, SpanWeight = 0.0, NearestFar = 1e18;
+		int NearKeyNow = -1;
 		for (const AirShow::PlaneOut& P : Planes)
 		{
 			const auto Share = Fade.find(P.Key);
 			if (Share == Fade.end()) continue;
 			const double Far = (P.At - Mid).Length();
-			const double Wc = Share->second * InRing(Far, Tight), Ws = Share->second * InRing(Far, Reach);
+			const double Wc = Share->second * Eased(InClose, CloseNow, P.Key, InRing(Far, Tight)), Ws = Share->second * InRing(Far, Reach);
 			Close += P.At * Wc;
 			CloseWeight += Wc;
 			SpanSum += Ws * (P.Span > 1.0 ? P.Span : 12.0);
@@ -847,11 +892,13 @@ namespace AirDesk
 			}
 			if (In[P.Key] && Far < NearestFar)
 			{
+				NearKeyNow = P.Key;
 				NearestFar = Far;
 				Nearest = P.At;
 				NearestStep = Was != Prev.end() ? P.At - Was->second : AirShow::Vec();
 			}
 		}
+		InClose.swap(CloseNow);
 		Prev.clear();
 		for (const AirShow::PlaneOut& P : Planes)
 		{
@@ -868,6 +915,12 @@ namespace AirDesk
 		A.bFound = true;
 		A.Focus = Nearest + (CloseMid - Nearest) * Many;
 		Carry = NearestStep + (CloseTravel - NearestStep) * Many;
+		// (a change of the one nearest the middle, while there are fewer than two about it, is a step of where the look
+		// would be: eased, not gone after at its speed. Gone after, at the Hampshire raid's end at x4 where the fighters
+		// are few and apart, the look jumped 20 pixels beyond its glide 2.6 to 3.8 times a real minute, and the fighters
+		// over Bremen shook 3 pixels rms on the picture at x4)
+		if (NearKeyNow != NearKey && Many < 1.0) bJump = true;
+		NearKey = NearKeyNow;
 		A.Span = SpanWeight > 1e-9 ? SpanSum / SpanWeight : 12.0;
 		Frame(TypeAwayOf(A.Span));
 		return A;
@@ -875,20 +928,26 @@ namespace AirDesk
 
 	AirShow::Vec Overview::Look(const AirShow::Vec& Was, const AirShow::Vec& Wanted, double Real)
 	{
-		// (the aircraft's speed it goes with, eased; a look set otherwise since this one's last, a picture's or a cut's,
-		// starts from rest and at their speed as it is)
-		const AirShow::Vec Rate = Real > 1e-6 ? Carry * (1.0 / Real) : CarryVel;
+		// (the look goes at the speed of what it is after, eased over VelEase: its whole way, the aircraft's travel and
+		// the crowd's own drift about them alike; carried with the aircraft's travel alone, at x10 it trailed by 220 m
+		// and more. A move to another crowd, and a look found some other way, goes at the aircraft's travel and is
+		// eased; a look set otherwise since this one's last, a picture's or a cut's, starts from rest at that speed)
+		const bool bWhole = bLast && !bJump;
+		const AirShow::Vec Way = bWhole ? Wanted - LastWanted : Carry;
+		const AirShow::Vec Rate = Real > 1e-6 ? Way * (1.0 / Real) : WantedVel;
 		if (!bGiven || (Was - Given).Length() > 0.01)
 		{
 			LookVel = AirShow::Vec();
-			CarryVel = Rate;
+			WantedVel = Rate;
 		}
-		else CarryVel += (Rate - CarryVel) * (1.0 - std::exp(-std::max(Real, 0.0) / CarryEase));
-		AirShow::Vec Off = Was + CarryVel * Real - Wanted;
+		else WantedVel += (Rate - WantedVel) * (1.0 - std::exp(-std::max(Real, 0.0) / VelEase));
+		AirShow::Vec Off = Was + WantedVel * Real - Wanted;
 		Carry = AirShow::Vec();
+		bJump = true;
 		Settle(Off, LookVel, Real, LookEase);
 		Given = Wanted + Off;
-		bGiven = true;
+		LastWanted = Wanted;
+		bGiven = bLast = true;
 		return Given;
 	}
 

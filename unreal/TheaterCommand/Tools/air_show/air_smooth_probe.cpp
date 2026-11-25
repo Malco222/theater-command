@@ -115,21 +115,21 @@ namespace
 //    its glide (a real minute; while it holds its crowd, 2 s and more after a change of the groups looked at or of its
 //    anchor, and in all: a move to another crowd is a pan, eased, but at x4 and x10 a crowd kilometres away is a fast
 //    one), the eye's steps in distance over 2% beyond its glide, and how far the look trails what it is after (95th
-//    percentile, while it holds its crowd).
+//    percentile, while it holds its crowd; and the share of all frames it is within 100 m of it, flying smooth only).
 // Flying smooth (the default) it judges, and fails where (the numbers measured on raid-steps.json and the set pieces,
 // Hampshire before and after, are in Tools/air_show/run.sh):
-//  - the strategy camera, smooth: the bombers on its picture over 2 px rms or 5 px at the 99th percentile in 0.4 s, or
-//    over 5 px rms in 1.2 s; the fighters over 1 px rms in 0.4 s; a look jump of 20 px more than once a real minute
+//  - the strategy camera, smooth: the bombers on its picture over 1.5 px rms or 2 px at the 99th percentile in 0.4 s,
+//    or over 5 px rms in 1.2 s; the fighters over 1 px rms in 0.4 s; a look jump of 20 px more than once a real minute
 //    while it holds its crowd; an eye step over 2%; its look farther than 480 px on the picture from what it is after,
 //    the middle two thirds, or the old camera's (95th percentile, holding its crowd). At x10 and on the game's own
 //    clock (x10 to the meeting): the bombers over 3 px rms or 10 at the 99th percentile in 0.4 s, the 1.2 s bombers
 //    and the 0.4 s fighters worse than the old camera's (1.2 s is 12 air seconds of the crowd's own turns), more than
 //    two look jumps a real minute, and the look off the picture, 720 px (or the old camera's);
-//  - a bomber in her box: bank BAND over 0.2, 0.6 and 0.6 degrees rms at x1, x4 and x10 for a type of two engines or
-//    20 m of span, 0.6, 1.5 and 2 for a single-engined type; the chase camera's wing tip BAND over 0.5, 3 and 2.5 px
-//    rms (2.5, 6 and 12 single-engined); roll-rate jumps over 10 degrees a second more than once a minute at x1, twice
-//    at x4, over 30 more than three times a minute at x10 (eight single-engined); banked more than RallyBankMost and a
-//    degree there; swings over 5 degrees more than 0.2 times a bomber's air minute (where a type has an air minute and
+//  - a bomber in her box: bank BAND over 0.2, 0.25 and 0.6 degrees rms at x1, x4 and x10 for a type of two engines or
+//    20 m of span, 0.2, 1.2 and 2 for a single-engined type; the chase camera's wing tip BAND over 0.2, 1 and 2.5 px
+//    rms (1, 6 and 12 single-engined); roll-rate jumps over 10 degrees a second more than once a minute at x1 and x4,
+//    over 30 more than three times a minute at x10 (eight single-engined); banked more than RallyBankMost and a
+//    degree there; swings over 1 degree more than 0.3 times a bomber's air minute (where a type has an air minute and
 //    more); banked over 5 degrees more than 1% of her time; a torpedo plane over 100 m from her slot in the 20 air
 //    seconds before her run.
 // AIR_SMOOTH_OLD=1 flies it as release 1.5 did, with the strategy camera as it was, and reports only; its report is
@@ -878,7 +878,7 @@ namespace Shake
 		// The strategy cameras: each aircraft's place on the picture, less a parabola over 0.4 s and over 1.2 s.
 		std::map<int, bool> Fighter;
 		for (const auto& Pair : Tracks) Fighter[Pair.first] = Pair.second.bFighter;
-		struct Picture { Stat B4, B12, F4, F12; double JumpsPerMinute = 0.0, HeldPerMinute = 0.0, Held = 0.0, Steps = 0.0, LagP95 = 0.0, LagP50 = 0.0, LagPxP95 = 0.0; long Jumps = 0, HeldJumps = 0; };
+		struct Picture { Stat B4, B12, F4, F12; double JumpsPerMinute = 0.0, HeldPerMinute = 0.0, Held = 0.0, Steps = 0.0, LagP95 = 0.0, LagP50 = 0.0, LagPxP95 = 0.0, Near = 0.0; long Jumps = 0, HeldJumps = 0, Frames = 0, NearFrames = 0; };
 		std::vector<Picture> Pictures(Cams.size());
 		for (size_t Ci = 0; Ci < Cams.size(); ++Ci)
 		{
@@ -919,6 +919,8 @@ namespace Shake
 			for (size_t I = 1; I < C.T.size(); ++I)
 			{
 				if (C.T[I] < WindowAt || C.T[I - 1] < WindowAt) continue;
+				++Pc.Frames;
+				Pc.NearFrames += C.Lag[I] <= 100.0 ? 1 : 0;
 				if (C.Settled[I])
 				{
 					Lags.push_back(C.Lag[I]);
@@ -961,6 +963,7 @@ namespace Shake
 			const double Minutes = std::max(1e-9, (Span1 - Span0) / 60.0);
 			Pc.JumpsPerMinute = static_cast<double>(Pc.Jumps) / Minutes;
 			Pc.HeldPerMinute = Pc.Held > 0.0 ? 60.0 * static_cast<double>(Pc.HeldJumps) / Pc.Held : 0.0;
+			Pc.Near = Pc.Frames > 0 ? static_cast<double>(Pc.NearFrames) / static_cast<double>(Pc.Frames) : 1.0;
 			if (!Lags.empty())
 			{
 				std::sort(Lags.begin(), Lags.end());
@@ -984,6 +987,10 @@ namespace Shake
 			std::printf("  (flown as release 1.5 flew it, AIR_SMOOTH_OLD: reported, not judged)\n");
 			return 0;
 		}
+		// (the guard: how much of the time the look is within 100 m of what it is after, all frames; the report as
+		// release 1.5 flew it, above, is kept to the byte, so this is given flying smooth only)
+		std::printf("  the strategy camera's look within 100 m of what it is after: %.1f%% of the frames flying smooth, %.1f%% as it was\n",
+			100.0 * Pictures[1].Near, 100.0 * Pictures[0].Near);
 
 		// ---- the judgement ----
 		Verdict V;
@@ -994,10 +1001,12 @@ namespace Shake
 			// turning and a fighter's dogfight, and a look eased over a real second trails more: there, no worse than the
 			// camera as it was, and the crowd's middle kept within the middle half of the picture)
 			const bool bFast = !(SpeedKind == "1" || SpeedKind == "4");
+			// (at x1 and x4 the bombers on its picture 1.5 px rms at most, and 2 at the 99th percentile)
+			constexpr double B4PctSlow = 2.0;
 			const double B12Most = bFast ? std::max(5.0, Was.B12.Rms()) : 5.0, F4Most = bFast ? std::max(1.0, Was.F4.Rms()) : 1.0;
-			const double B4Most = bFast ? 3.0 : 2.0, B4PctMost = bFast ? 10.0 : 5.0, JumpsMost = bFast ? 2.0 : 1.0;
+			const double B4Most = bFast ? 3.0 : 1.5, B4PctMost = bFast ? 10.0 : B4PctSlow, JumpsMost = bFast ? 2.0 : 1.0;
 			V.Judge(Pc.B4.N > 0 && Pc.B4.Rms() <= B4Most && Pc.B4.Pct(0.99) <= B4PctMost && Pc.B12.Rms() <= B12Most,
-				Say("the strategy camera's bombers steady: %.2f px rms, %.2f at the 99th percentile (0.4 s; at most %.0f and %.0f), %.2f rms (1.2 s; at most %.2f)", Pc.B4.Rms(), Pc.B4.Pct(0.99), B4Most, B4PctMost, Pc.B12.Rms(), B12Most));
+				Say("the strategy camera's bombers steady: %.2f px rms, %.2f at the 99th percentile (0.4 s; at most %.1f and %.1f), %.2f rms (1.2 s; at most %.2f)", Pc.B4.Rms(), Pc.B4.Pct(0.99), B4Most, B4PctMost, Pc.B12.Rms(), B12Most));
 			V.Judge(Pc.F4.Rms() <= F4Most, Say("the strategy camera's fighters steady: %.2f px rms (0.4 s; at most %.2f)", Pc.F4.Rms(), F4Most));
 			V.Judge(Pc.HeldPerMinute <= JumpsMost && Pc.Steps == 0.0, Say("the strategy camera's look never jumps: %.2f jumps of 20 px a real minute holding its crowd (at most %.0f), %.0f eye steps over 2%% (none)", Pc.HeldPerMinute, JumpsMost, Pc.Steps));
 			// (the crowd's middle kept on the picture, within its middle two thirds at x1 and x4: a look eased over a real
@@ -1012,15 +1021,17 @@ namespace Shake
 			if (D != OnBox || C.Seconds < 30.0 || (Pc != X1 && Pc != X4 && Pc != X10)) continue;
 			const std::string& M = std::get<0>(Pair.first);
 			const bool bTwin = Boxes[M].bTwin;
-			// (a single-engined type, a dive or torpedo bomber, rolls quicker than a twin in her place: flying smooth she
-			// rocks up to three times a twin's, under half what she did before)
-			const double BankMost = Pc == X1 ? (bTwin ? 0.2 : 0.6) : Pc == X4 ? (bTwin ? 0.6 : 1.5) : (bTwin ? 0.6 : 2.0);
-			const double TipMost = Pc == X1 ? (bTwin ? 0.5 : 2.5) : Pc == X4 ? (bTwin ? 3.0 : 6.0) : (bTwin ? 2.5 : 12.0);
+			// (a twin's wing tip on the chase camera's picture no more than 0.2 px rms at x1 and 1 at x4, her bank 0.2 and
+			// 0.25 degrees; a single-engined type, a dive or torpedo bomber, rolls quicker in her place: her bank 0.2 and
+			// 1.2 degrees, her tip 1 and 6 px)
+			const double BankMost = Pc == X1 ? 0.2 : Pc == X4 ? (bTwin ? 0.25 : 1.2) : (bTwin ? 0.6 : 2.0);
+			const double TipMost = Pc == X1 ? (bTwin ? 0.2 : 1.0) : Pc == X4 ? (bTwin ? 1.0 : 6.0) : (bTwin ? 2.5 : 12.0);
 			V.Judge(C.BankBand.Rms() <= BankMost && C.TipBand.Rms() <= TipMost,
-				Say("%s in her box at %s rocks no more than a chase camera can bear: bank BAND %.3f deg rms (at most %.1f), wing tip BAND %.2f px rms (at most %.1f)", M.c_str(), PaceName[Pc], C.BankBand.Rms(), BankMost, C.TipBand.Rms(), TipMost));
+				Say("%s in her box at %s rocks no more than a chase camera can bear: bank BAND %.3f deg rms (at most %.2f), wing tip BAND %.2f px rms (at most %.1f)", M.c_str(), PaceName[Pc], C.BankBand.Rms(), BankMost, C.TipBand.Rms(), TipMost));
 			if (Pc == X10) V.Judge(C.PerMinute(C.Jumps30) <= (bTwin ? 3.0 : 8.0), Say("%s in her box at x10: %.1f roll-rate jumps over 30 deg/s a minute (at most %.0f)", M.c_str(), C.PerMinute(C.Jumps30), bTwin ? 3.0 : 8.0));
-			else V.Judge(C.PerMinute(C.Jumps10) <= (Pc == X1 ? 1.0 : 2.0), Say("%s in her box at %s: %.1f roll-rate jumps over 10 deg/s a minute (at most %.0f)", M.c_str(), PaceName[Pc], C.PerMinute(C.Jumps10), Pc == X1 ? 1.0 : 2.0));
+			else V.Judge(C.PerMinute(C.Jumps10) <= 1.0, Say("%s in her box at %s: %.1f roll-rate jumps over 10 deg/s a minute (at most 1)", M.c_str(), PaceName[Pc], C.PerMinute(C.Jumps10)));
 		}
+		constexpr double SwingsMost = 0.3;
 		for (auto& Pair : Boxes)
 		{
 			BoxRow& R = Pair.second;
@@ -1035,12 +1046,13 @@ namespace Shake
 			if (R.Seconds < 60.0) continue;
 			std::vector<double> Sw = R.Swings;
 			std::sort(Sw.begin(), Sw.end());
-			// (a swing of a degree or two is a bomber keeping her place, and a rare large one her box's own turn; the weave
-			// was of 20 to 40, once a bomber's air minute)
-			const double Rate = 60.0 * static_cast<double>(std::count_if(Sw.begin(), Sw.end(), [](double W) { return W > 5.0; })) / R.Seconds;
-			V.Judge(Rate <= 0.2 && R.Banked / R.Seconds <= 0.01,
-				Say("%s holds her place without weaving: %.2f swings over 5 deg a bomber's air minute (at most 0.2; of all over 1 deg, the middle %.1f and the largest %.1f), banked over 5 deg %.1f%% (at most 1%%)",
-					Pair.first.c_str(), Rate, Sw.empty() ? 0.0 : Sw[Sw.size() / 2], Sw.empty() ? 0.0 : Sw.back(), 100.0 * R.Banked / R.Seconds));
+			// (every swing of a degree and more counts: the weave was of 20 to 40, once a bomber's air minute; a box closing
+			// up on its losses swings each of its bombers a degree or two, the Vals over Oahu a little over once in five
+			// air minutes)
+			const double Rate = 60.0 * static_cast<double>(Sw.size()) / R.Seconds;
+			V.Judge(Rate <= SwingsMost && R.Banked / R.Seconds <= 0.01,
+				Say("%s holds her place without weaving: %.2f swings over 1 deg a bomber's air minute (at most %.1f; the middle %.1f and the largest %.1f), banked over 5 deg %.1f%% (at most 1%%)",
+					Pair.first.c_str(), Rate, SwingsMost, Sw.empty() ? 0.0 : Sw[Sw.size() / 2], Sw.empty() ? 0.0 : Sw.back(), 100.0 * R.Banked / R.Seconds));
 		}
 		std::printf("  %s: the bombers and the strategy camera steady as a Mac plays them\n", V.bFailed ? "FAIL" : "pass");
 		return V.bFailed ? 1 : 0;

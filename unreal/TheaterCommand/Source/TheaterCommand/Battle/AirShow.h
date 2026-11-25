@@ -646,23 +646,28 @@ namespace AirShow
 		 * (RallyBankMost) and back, about once a bomber's air minute, a rock on the screen at x4 and a shake at x10; and a
 		 * single-engined bomber (the Kate, the Val, the Dauntless, the Devastator) flew those weaves as a fighter rolls,
 		 * banked to 61 to 75 degrees in her place. With this on:
-		 * - each bomber keeps her slot as the box loses others; a gap is filled by the tail, the lead's by his deputy (on
-		 *   a torpedo box's approach, abreast, the line is closed up in the order its aircraft fly across it);
-		 * - a bomber whose place in her box moves more than SlotJumpM (a new slot, the box gone abreast, loose or
-		 *   broken) slides to it, eased in and out, over SlotSlideLeast air seconds at least and SlotSlideMost at most,
-		 *   and within those never faster than SlotCloseMost metres a second at its quickest (SlotWant; a slide of more
-		 *   than 160 m, as a box's going abreast can ask, is quicker, or a 500 m one would take three minutes); one
-		 *   coming back to her place, or closing up from behind, closes as before;
-		 * - every bomber in her place in a box banks and rolls as a twin does there (RallyBankMost, HeavyRollMost), a
-		 *   single-engined one from the moment her wings are within RallyBankMost and two degrees of level (she rolls
-		 *   out of a steeper bank, a dive's pull-out, as she rolls);
-		 * - a straggler's place behind her box moves between views as her box's does.
+		 * - each bomber keeps her slot as the box loses others, and only its gaps are closed up: the box's places given
+		 *   again so that their moves, each from her own place to her new one, cost the least in all by their squares, a
+		 *   move across or up four times one ahead (LeastCost; filled from the tail, one was sent 960 m across the box);
+		 *   on a torpedo box's approach, abreast, the line is closed up in the order its aircraft fly across it;
+		 * - the place she flies goes on to her slot's when that moves, no faster than SlotAheadMost metres an air second
+		 *   ahead or back and SlotCloseMost across or up (TorpedoLineMost across a torpedo box abreast for its run), its
+		 *   speed changing by no more than SlotAheadPull and SlotPull a second, and comes to rest on it (PlaceWant), its
+		 *   own speed added to hers; one coming back to her place flies it at once;
+		 * - every bomber in her place in a box banks no more than RallyBankMost; a twin rolls at HeavyRollMost; a
+		 *   single-engined one rolls her own way, eased, no faster than SlotRollMost, and no faster than HeavyRollMost
+		 *   once her wings are within RallyBankMost and two degrees of level and she rolls no faster than that (she
+		 *   rolls out of a dive's pull-out as she rolls, her roll rate never cut in a step);
+		 * - a straggler drops back and down from where she fell out of her box, as far as the battle has her behind
+		 *   and below it, her place going there no faster than StragAheadMost ahead or back and SlotCloseMost across,
+		 *   and moving between views as her box's does; a place under wave-top is held up there, level.
 		 * Off: the flying as releases 1.5 and before had it.
 		 */
 		void SetSmooth(bool bOn) { bSmooth = bOn; }
 		bool Smooth() const { return bSmooth; }
 		double PathSpan = 0.5, RollDamping = 0.7;
-		double SlotJumpM = 10.0, SlotCloseMost = 4.0, SlotSlideLeast = 20.0, SlotSlideMost = 60.0;
+		double SlotCloseMost = 4.0, SlotPull = 0.08, SlotAheadMost = 8.0, SlotAheadPull = 0.3, StragAheadMost = 60.0, StragAheadPull = 2.0;
+		double SlotRollMost = 20.0, TorpedoLineMost = 5.0;
 		/**
 		 * Drop on the lead and the rally (Brian, 22 November 04:11Z). A level bombing box lets its bombs go on its lead:
 		 * his stick first, and each of the others as her bombardier sees his bombs leave, DropOnLeadLeast to
@@ -859,14 +864,14 @@ namespace AirShow
 			std::vector<std::pair<double, std::string>> TrailPlan; // air times its trail changes kind ("" stops it)
 			bool bShown = true;
 			bool bJoining = false;   // a replacement still closing up to its slot
-			// A bomber's place in her box as she last flew it, flying smooth (SetSmooth; SlotWant): ahead, right and up
-			// of the box's middle along its heading (X, Y, Z), the pilots' step she flew it in (Show::PilotSteps; any
-			// step she did not, she has left it and it is forgotten), and the slide she makes when it moves (from where,
-			// the air time it began, its air seconds).
-			Vec SlotLast, SlideFrom;
-			long SlotStep = -1;
-			bool bSliding = false;
-			double SlideT0 = 0.0, SlideLen = 0.0;
+			// A bomber's place in her box as her pilot flies it, flying smooth (SetSmooth; PlaceWant): ahead, right and
+			// up of the box's middle along its heading (X, Y, Z), how fast it moves there (metres an air second), the
+			// pilots' step she flew it in (Show::PilotSteps; any step she did not, she has left it and it is
+			// forgotten), whether it was her slot's or a straggler's, and a straggler's own slot's place as she fell out.
+			Vec PlaceAt, PlaceVel, StragFrom;
+			long PlaceStep = -1;
+			bool bPlaceStrag = false;
+			double StragBack = 0.0, StragDown = 0.0; // a straggler's distance behind and below, as her box's view last had it
 			// The fighter pilots (AirShow.cpp, the pilots' section):
 			int Lead = 0;            // the leader he flies on; his own key: he leads his pair (or his vic). 0: not yet paired
 			int Wing = 0;            // a leader's (first) wingman, 0: none
@@ -1171,7 +1176,7 @@ namespace AirShow
 		double ShownT = 0.0, AirT = 0.0;
 		double ViewT = 0.0;                  // the battle time of the view the groups shown now are read from
 		bool bSmooth = true;                 // (SetSmooth)
-		long PilotSteps = 0;                 // the pilots' steps flown so far (Craft::SlotStep)
+		long PilotSteps = 0;                 // the pilots' steps flown so far (Craft::PlaceStep)
 		/** How far ahead of the battle time shown the formations' velocities are read (GroupVelocity): PathSpan where
 		 * the views in hand reach that far (a live raid's always do: its rules run a battle second ahead), less where a
 		 * recording's next view has yet to come, and never moved faster than the clock, so that a view's coming is
@@ -1206,9 +1211,11 @@ namespace AirShow
 		void Reconcile(const Group& G, Band& B);
 		Craft& Make(const Group& G, const Vec& At, double Hdg, double Spd, Role Doing);
 		Vec SlotPlace(const Group& G, int Slot) const;
-		/** A bomber's place in her box this step, flying smooth (SetSmooth): her slot's place, or on her slide to it
-		 * when it has moved; the slide's own velocity added to ToVel. */
-		Vec SlotWant(Craft& C, const Group& G, Vec& ToVel);
+		/** A bomber's place in her box this step, flying smooth (SetSmooth): Want's, ahead, right and up of the box's
+		 * middle (Mid) along its heading (Face), or on her way to it when it has moved, its own velocity added to ToVel.
+		 * Ahead is how fast it may go ahead or back (metres an air second) and AheadPull how quickly it may change
+		 * that speed (a second); Across and AcrossPull the same across; up, SlotCloseMost and SlotPull. */
+		Vec PlaceWant(Craft& C, const Vec& Mid, double Face, const Vec& Want, bool bStrag, double Ahead, double AheadPull, double Across, double AcrossPull, double Dt, Vec& ToVel);
 		Vec GroupVelocity(int GroupId) const;
 		Cmd Steer(const Craft& C, const Vec& To, const Vec& ToVel, double Gain, double SpeedLow, double SpeedHigh) const;
 		Cmd Toward(const Craft& C, const Vec& To, double Speed) const;

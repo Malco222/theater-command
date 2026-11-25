@@ -570,46 +570,58 @@ namespace AirShow
 		return SlotOf(G, Slot);
 	}
 
-	Vec Show::SlotWant(Craft& C, const Group& G, Vec& ToVel)
+	namespace
+	{
+		/** One way of a bomber's place in her box (ahead, right or up; PlaceWant): on toward Want no faster than Most
+		 * metres an air second, its speed changing by no more than Pull a second, and slowing in time to come to rest on
+		 * it. */
+		void PlaceAxis(double& At, double& Vel, double Want, double Most, double Pull, double Dt)
+		{
+			const double Off = Want - At;
+			const double Ask = std::copysign(std::min(Most, std::sqrt(2.0 * Pull * std::fabs(Off))), Off);
+			Vel += Clamp(Ask - Vel, -Pull * Dt, Pull * Dt);
+			At += Vel * Dt;
+			if (std::fabs(Want - At) < 0.01 && std::fabs(Vel) <= Pull * Dt)
+			{
+				At = Want;
+				Vel = 0.0;
+			}
+		}
+	}
+
+	Vec Show::PlaceWant(Craft& C, const Vec& Mid, double Face, const Vec& Want, bool bStrag, double AheadMost, double AheadPull, double AcrossMost, double AcrossPull, double Dt, Vec& ToVel)
 	{
 		// Her place in the box's own frame: ahead, right and up of its middle along its heading.
-		const Vec Mid(G.X, G.Y, G.Alt), F = Ahead(G.Face), R = RightOf(G.Face);
-		const Vec Off = SlotPlace(G, C.Slot) - Mid;
-		const Vec Want(Off.Dot(F), Off.Dot(R), Off.Z);
-		// (she flew her place the step before: a move of it over SlotJumpM, a new slot or a new shape of the box, is
-		// slid to from where her place is drawn now, a slide under way or not. Never from where she is: one coming back
-		// to her place from a dive or a straggle, or a replacement closing up, closes as before)
-		if (C.SlotStep == PilotSteps - 1 && Len(Want - C.SlotLast) > SlotJumpM)
+		const Vec F = Ahead(Face), R = RightOf(Face);
+		const Vec Off = Want - Mid;
+		const Vec W(Off.Dot(F), Off.Dot(R), Off.Z);
+		// (a place she did not fly the step before: her slot's, as she comes back to it or closes up from behind, is
+		// flown at once, as before; a straggler's, from where she is and at her own speed about her box, so that falling
+		// out is never a step of where she is asked to be)
+		if (C.PlaceStep != PilotSteps - 1 || C.bPlaceStrag != bStrag)
 		{
-			Vec From = C.SlotLast;
-			if (C.bSliding)
+			if (bStrag)
 			{
-				const double U0 = Clamp((AirT - C.SlideT0) / std::max(C.SlideLen, 1e-6), 0.0, 1.0);
-				From = C.SlideFrom + (C.SlotLast - C.SlideFrom) * (U0 * U0 * (3.0 - 2.0 * U0));
+				const Vec Was = C.P - Mid, Rel = Velocity(C) - ToVel;
+				C.PlaceAt = Vec(Was.Dot(F), Was.Dot(R), Was.Z);
+				C.PlaceVel = Vec(Rel.Dot(F), Rel.Dot(R), Rel.Z);
 			}
-			// (at its quickest, half way, a smoothstep slide goes 1.5 times its mean speed)
-			C.SlideFrom = From;
-			C.SlideT0 = AirT;
-			C.SlideLen = Clamp(1.5 * Len(Want - From) / SlotCloseMost, SlotSlideLeast, SlotSlideMost);
-			C.bSliding = true;
-		}
-		else if (C.SlotStep != PilotSteps - 1) C.bSliding = false;
-		C.SlotLast = Want;
-		C.SlotStep = PilotSteps;
-		Vec Drawn = Want;
-		if (C.bSliding)
-		{
-			const double U = (AirT - C.SlideT0) / std::max(C.SlideLen, 1e-6);
-			if (U >= 1.0) C.bSliding = false;
 			else
 			{
-				const Vec Way = Want - C.SlideFrom;
-				Drawn = C.SlideFrom + Way * (U * U * (3.0 - 2.0 * U));
-				const Vec Rate = Way * (6.0 * U * (1.0 - U) / C.SlideLen);
-				ToVel += F * Rate.X + R * Rate.Y + Up * Rate.Z;
+				C.PlaceAt = W;
+				C.PlaceVel = Vec();
 			}
 		}
-		return Mid + F * Drawn.X + R * Drawn.Y + Up * Drawn.Z;
+		C.PlaceStep = PilotSteps;
+		C.bPlaceStrag = bStrag;
+		if (Dt > 0.0)
+		{
+			PlaceAxis(C.PlaceAt.X, C.PlaceVel.X, W.X, AheadMost, AheadPull, Dt);
+			PlaceAxis(C.PlaceAt.Y, C.PlaceVel.Y, W.Y, AcrossMost, AcrossPull, Dt);
+			PlaceAxis(C.PlaceAt.Z, C.PlaceVel.Z, W.Z, SlotCloseMost, SlotPull, Dt);
+		}
+		ToVel += F * C.PlaceVel.X + R * C.PlaceVel.Y + Up * C.PlaceVel.Z;
+		return Mid + F * C.PlaceAt.X + R * C.PlaceAt.Y + Up * C.PlaceAt.Z;
 	}
 
 	Vec SlotOf(const Group& G, int Slot)
@@ -759,6 +771,59 @@ namespace AirShow
 		}
 	}
 
+	namespace
+	{
+		/** The places for N bombers costing least in all (Cost[i][j]: bomber i to place j), one each: Kuhn and Munkres'
+		 * assignment, with potentials (a few thousand steps for a box of 29). Each bomber's place. */
+		std::vector<int> LeastCost(const std::vector<std::vector<double>>& Cost)
+		{
+			const int N = static_cast<int>(Cost.size());
+			const double Inf = 1e300;
+			std::vector<double> U(static_cast<size_t>(N) + 1, 0.0), V(static_cast<size_t>(N) + 1, 0.0);
+			std::vector<int> Holds(static_cast<size_t>(N) + 1, 0), Way(static_cast<size_t>(N) + 1, 0);
+			for (int I = 1; I <= N; ++I)
+			{
+				Holds[0] = I;
+				int J0 = 0;
+				std::vector<double> Least(static_cast<size_t>(N) + 1, Inf);
+				std::vector<char> Used(static_cast<size_t>(N) + 1, 0);
+				do
+				{
+					Used[static_cast<size_t>(J0)] = 1;
+					const int I0 = Holds[static_cast<size_t>(J0)];
+					double Delta = Inf;
+					int J1 = 0;
+					for (int J = 1; J <= N; ++J)
+					{
+						if (Used[static_cast<size_t>(J)]) continue;
+						const double Cur = Cost[static_cast<size_t>(I0 - 1)][static_cast<size_t>(J - 1)] - U[static_cast<size_t>(I0)] - V[static_cast<size_t>(J)];
+						if (Cur < Least[static_cast<size_t>(J)]) { Least[static_cast<size_t>(J)] = Cur; Way[static_cast<size_t>(J)] = J0; }
+						if (Least[static_cast<size_t>(J)] < Delta) { Delta = Least[static_cast<size_t>(J)]; J1 = J; }
+					}
+					for (int J = 0; J <= N; ++J)
+					{
+						if (Used[static_cast<size_t>(J)])
+						{
+							U[static_cast<size_t>(Holds[static_cast<size_t>(J)])] += Delta;
+							V[static_cast<size_t>(J)] -= Delta;
+						}
+						else Least[static_cast<size_t>(J)] -= Delta;
+					}
+					J0 = J1;
+				} while (Holds[static_cast<size_t>(J0)] != 0);
+				do
+				{
+					const int J1 = Way[static_cast<size_t>(J0)];
+					Holds[static_cast<size_t>(J0)] = Holds[static_cast<size_t>(J1)];
+					J0 = J1;
+				} while (J0 != 0);
+			}
+			std::vector<int> Of(static_cast<size_t>(N), 0);
+			for (int J = 1; J <= N; ++J) Of[static_cast<size_t>(Holds[static_cast<size_t>(J)] - 1)] = J - 1;
+			return Of;
+		}
+	}
+
 	void Show::Reconcile(const Group& G, Band& B)
 	{
 		const bool bAirborne = !(G.Doing == Act::Idle || (G.Alt < 30.0 && G.Job == "wait"));
@@ -893,10 +958,12 @@ namespace AirShow
 		Keys = LiveOf(G.Id);
 		if (bSmooth && !G.bFighter)
 		{
-			// (smooth flying: each bomber keeps her slot as the box loses others, and only the gaps are filled: the
-			// lead's by his deputy, the next in the order, and each other, the nearest the front first, by the bomber
-			// flying farthest back. Renumbered, every bomber behind a loss was given another's place 155 to 964 m off and
-			// flew a weave to it; SetSmooth)
+			// (smooth flying: each bomber keeps her slot as the box loses others, and only the gaps are closed up: the
+			// box's places given again so that their moves, each from her own place to her new one, cost the least
+			// in all by their squares (LeastCost): the box closes up a place or two at a time, each bomber moving to
+			// one near her own, never one sent across it. Renumbered, every bomber behind a loss was given another's
+			// place 155 to 964 m off and flew a weave to it; filled from the tail, one was sent 960 m across the box
+			// from one side to the other; SetSmooth)
 			const int N = static_cast<int>(Keys.size());
 			std::vector<Craft*> Holder(static_cast<size_t>(N), nullptr);
 			std::vector<Craft*> Over; // (a slot past the box's count now, or one another holds: in the order they stand)
@@ -924,31 +991,27 @@ namespace AirShow
 				for (int S = 0; S < N; ++S) Across[static_cast<size_t>(S)]->Slot = Places[static_cast<size_t>(S)];
 				return;
 			}
-			if (N > 0 && !Holder[0])
+			if (!bGap) return;
+			std::vector<Craft*> Each;
+			for (int Key : Keys) Each.push_back(Find(Key));
+			std::vector<Vec> Places(static_cast<size_t>(N));
+			for (int S = 0; S < N; ++S) Places[static_cast<size_t>(S)] = SlotPlace(G, S);
+			// (a move across the box, or up or down it, costs four times its square: she banks to make it, where one
+			// ahead or back is a change of her throttle)
+			const Vec Fw = Ahead(G.Face);
+			std::vector<std::vector<double>> Cost(static_cast<size_t>(N), std::vector<double>(static_cast<size_t>(N)));
+			for (int I = 0; I < N; ++I)
 			{
-				for (int S = 1; S < N && !Holder[0]; ++S)
+				const Vec Own = SlotPlace(G, Each[static_cast<size_t>(I)]->Slot);
+				for (int S = 0; S < N; ++S)
 				{
-					if (Holder[static_cast<size_t>(S)])
-					{
-						Holder[0] = Holder[static_cast<size_t>(S)];
-						Holder[static_cast<size_t>(S)] = nullptr;
-					}
-				}
-				if (!Holder[0] && !Over.empty())
-				{
-					Holder[0] = Over.front();
-					Over.erase(Over.begin());
+					const Vec Way = Places[static_cast<size_t>(S)] - Own;
+					const double Along = Way.Dot(Fw);
+					Cost[static_cast<size_t>(I)][static_cast<size_t>(S)] = Along * Along + 4.0 * (Way.Dot(Way) - Along * Along);
 				}
 			}
-			for (int S = 0; S < N; ++S)
-			{
-				if (!Holder[static_cast<size_t>(S)] && !Over.empty())
-				{
-					Holder[static_cast<size_t>(S)] = Over.back();
-					Over.pop_back();
-				}
-				if (Holder[static_cast<size_t>(S)]) Holder[static_cast<size_t>(S)]->Slot = S;
-			}
+			const std::vector<int> Of = LeastCost(Cost);
+			for (int I = 0; I < N; ++I) Each[static_cast<size_t>(I)]->Slot = Of[static_cast<size_t>(I)];
 			return;
 		}
 		for (int K = 0; K < static_cast<int>(Keys.size()); ++K) Find(Keys[K])->Slot = K;
@@ -1147,18 +1210,32 @@ namespace AirShow
 		bool bBoxed = false;
 		// (flying smooth, every bomber in her place in a box, a single-engined one too: flown as a fighter rolls, the
 		// Kate, the Val, the Dauntless and the Devastator banked to 61 to 75 degrees there, swinging as much as 131 from
-		// one side to the other. She keeps her own roll out of a steeper bank, a dive's pull-out, until her wings are
-		// within RallyBankMost and two degrees of level; SetSmooth)
+		// one side to the other. A single-engined one keeps her own roll law, eased (a step of her roll rate at a frame
+		// made her wings chatter), with the box's bank, and her roll rate the box's from the moment her wings are within
+		// RallyBankMost and two degrees of level and she rolls no faster than it: out of a steeper bank, a dive's
+		// pull-out, she rolls out as she rolls, never cut from 87 degrees a second to 5 in a step. Steeper than that
+		// she rolls no faster than SlotRollMost, her roll rate brought down to it in her own roll time: back in her
+		// place from a dive banked 55 degrees, rolled level at her full 87 degrees a second in half a second, the
+		// Dauntless rocked a third more on her way back to her box than flown as a fighter (bank BAND 0.68 degrees
+		// rms at x1 over Midway, against 0.52), and the Val 1.19 over Oahu, against 0.93; SetSmooth)
 		const bool bTwin = C.bHeavy || C.Form.Span >= 20.0 || C.Form.Engines.size() >= 2;
 		if (!C.bFighter && (bTwin || (bSmooth && C.Doing == Role::Slot)) && C.Doing != Role::Fall)
 		{
 			const bool bOnRun = C.Bay > 0.0 && (!C.bDropped || C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + StickSteady));
 			const double Most = bOnRun ? RunBankMost : C.Doing == Role::Slot ? RallyBankMost : HeavyBankMost;
 			BankWant = Clamp(BankWant, -Most * Deg, Most * Deg);
-			if (C.Doing == Role::Slot && !bOnRun && (bTwin || std::fabs(C.Bank) <= (RallyBankMost + 2.0) * Deg))
+			if (C.Doing == Role::Slot && !bOnRun && bTwin)
 			{
 				RollMost = std::min(RollMost, HeavyRollMost * Deg);
 				bBoxed = true;
+			}
+			else if (C.Doing == Role::Slot && !bOnRun && std::fabs(C.Bank) <= (RallyBankMost + 2.0) * Deg && std::fabs(C.RollNow) <= HeavyRollMost * Deg + 1e-9)
+			{
+				RollMost = std::min(RollMost, HeavyRollMost * Deg);
+			}
+			else if (C.Doing == Role::Slot && !bOnRun)
+			{
+				RollMost = std::min(RollMost, std::max(SlotRollMost * Deg, std::fabs(C.RollNow) * std::exp(-Dt / std::max(C.RollTime, 0.02))));
 			}
 		}
 		// Roll toward it, no faster than the airframe rolls.
@@ -1369,6 +1446,43 @@ namespace AirShow
 				RallyFrame(C.Group, Box, Face, BoxVel);
 				const Vec F = Ahead(Face);
 				Vec To = Box - F * (Mine ? Mine->Back : 180.0) - Up * (Mine ? Mine->Down : 18.0) + RightOf(Face) * (C.Hand * G->W * 0.3);
+				if (bSmooth)
+				{
+					// (smooth flying: she drops back and down from where she fell out of her box, by as much as the
+					// battle has her behind and below it, and out to her side; and her place goes there from where she
+					// is, no faster across than one closing up in her box. Asked at once for a place up to 790 m
+					// across and the length of her box ahead of her, a He 111 rolled to 30 degrees in half a second as
+					// she fell out; PlaceWant)
+					if (C.PlaceStep != PilotSteps - 1 || !C.bPlaceStrag)
+					{
+						const Vec Was = C.P - Box;
+						C.StragFrom = Vec(Clamp(Was.Dot(F), -1500.0, 0.0), 0.0, Clamp(Was.Z, -150.0, 150.0));
+						C.StragBack = 0.0;
+						C.StragDown = 0.0;
+					}
+					if (Mine)
+					{
+						C.StragBack = Mine->Back;
+						C.StragDown = Mine->Down;
+					}
+					To = Box + F * (C.StragFrom.X - C.StragBack) + RightOf(Face) * (C.Hand * G->W * 0.3) + Up * (C.StragFrom.Z - C.StragDown);
+					// (her place no lower than the floor below, before it is eased there as well as after; held up
+					// there, it is the floor's, level, and goes on from there: a place eased down past the floor
+					// carried its sinking on, and a Kate falling out of her box as it came down to wave-top let her
+					// torpedo go 7 m under the sea; one only held up kept its way down below the floor and climbed back
+					// from it as her box came level, and she let it go 37 m over the sea)
+					To.Z = std::max(To.Z, std::max(GroundAt(C.P.X, C.P.Y), GroundAt(To.X, To.Y)) + TorpedoLowM);
+					const double BoxClimb = BoxVel.Z;
+					To = PlaceWant(C, Box, Face, To, true, StragAheadMost, StragAheadPull, SlotCloseMost, SlotPull, Dt, BoxVel);
+					const double Floor = std::max(GroundAt(C.P.X, C.P.Y), GroundAt(To.X, To.Y)) + TorpedoLowM;
+					if (To.Z < Floor)
+					{
+						To.Z = Floor;
+						C.PlaceAt.Z = Floor - Box.Z;
+						C.PlaceVel.Z = -BoxClimb;
+						BoxVel.Z = 0.0;
+					}
+				}
 				// (below a box drawn low, a torpedo group's at wave-top: no lower than it, never into the sea)
 				To.Z = std::max(To.Z, std::max(GroundAt(C.P.X, C.P.Y), GroundAt(To.X, To.Y)) + TorpedoLowM);
 				Cmd K = Steer(C, To, BoxVel, 0.08, C.VMin, C.VMax);
@@ -1402,9 +1516,16 @@ namespace AirShow
 			if (Box != Bands.end() && Box->second.bDropped && Rally(C, *G, Box->second, Dt)) return;
 		}
 		// In its place: the formation's speed, a slow escort weaving beside its bombers; an escort with a role at its
-		// station over them (EscortStation). (A bomber flying smooth: on her slide to it when it has moved, SlotWant.)
+		// station over them (EscortStation). (A bomber flying smooth: on her way to it when it has moved, PlaceWant.)
+		// (a torpedo box gone abreast for its run, each on her own line to the ships, closes across it quicker,
+		// TorpedoLineMost: at the box's own pace across, the Kates over Oahu were up to 97 m from their places in the
+		// 20 air s before their runs, flown straight to them 18, and at this 71; pulled across quicker as well, the
+		// Devastators' wings swung a degree and more twice as often in their box)
+		const bool bLine = G->bAbreast && G->Strike == "torpedo";
 		Vec ToVel = GV;
-		Vec To = bSmooth && !C.bFighter ? SlotWant(C, *G, ToVel) : SlotPlace(*G, C.Slot);
+		Vec To = bSmooth && !C.bFighter ? PlaceWant(C, Vec(G->X, G->Y, G->Alt), G->Face, SlotPlace(*G, C.Slot), false, SlotAheadMost, SlotAheadPull,
+			bLine ? TorpedoLineMost : SlotCloseMost, SlotPull, Dt, ToVel)
+			: SlotPlace(*G, C.Slot);
 		const bool bStation = C.bFighter && G->Doing != Act::Fight && EscortStation(C, *G, To, ToVel);
 		// How near the enemy the rules have it making for (its quarry; an escort's, the enemy coming for its bombers):
 		// nothing at 7 km, all of it inside 3 km.
@@ -1461,6 +1582,8 @@ namespace AirShow
 		{
 			const Vec F = Ahead(C.Hdg);
 			const double Under = std::max({ GroundAt(C.P.X, C.P.Y), GroundAt(C.P.X + F.X * 400.0, C.P.Y + F.Y * 400.0), GroundAt(C.P.X + F.X * 900.0, C.P.Y + F.Y * 900.0) });
+			// (held up there, her place's own way down, flying smooth, is not carried on)
+			if (bSmooth && To.Z < Under + TorpedoLowM) ToVel.Z = std::max(ToVel.Z, GV.Z);
 			To.Z = std::max(To.Z, Under + TorpedoLowM);
 		}
 		const double Gap = Len(To - C.P);
