@@ -22,6 +22,7 @@ FLinearColor ACampaignEnvironment_DuskShade();
 #include "Campaign/FrontLine.h" // (release 2, the front you can read)
 #include "Campaign/EnemyMoves.h" // (release 2, the enemy's month near you)
 #include "Campaign/ShipWay.h" // (release 2, a fleet under way)
+#include "Campaign/ShipSmoke.h" // (release 2, funnel smoke)
 #include "Campaign/ArmyCarry.h" // (release 2, armies with weight)
 #include "TheaterCommand.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -158,6 +159,27 @@ namespace
 	TAutoConsoleVariable<float> CVarShipPace(
 		TEXT("tc.Map.ShipPace"), 1.0f,
 		TEXT("With tc.Map.ShipWay: her time for a voyage, as a multiple of the 2.8 to 6.5 seconds its length asks."));
+
+	// (Release 2, funnel smoke: the art director's campaign map upgrade 3, 25 November 2026, on Brian's "I want this to
+	// visually wow people on how smooth and realistic and detailed grand it looks".) The ships of a fleet at sea smoke
+	// (Campaign/ShipSmoke.h): a pale wisp over each lying still, and under way a plume that streams astern along the
+	// water she has crossed, black while she works up to speed. Off as it comes, until Brian has seen the Mac's film of
+	// it; "-TheaterShipSmoke" turns it on for that film, switch or no switch. Read every frame: nothing is remade.
+	TAutoConsoleVariable<int32> CVarShipSmoke(
+		TEXT("tc.Map.ShipSmoke"), 0,
+		TEXT("1: the ships of a fleet at sea smoke from their funnels (a wisp lying still; under way a plume astern along her course, black as she works up to speed; none at anchor, in the hand, or for submarines); 0: no funnel smoke, as before."));
+	TAutoConsoleVariable<float> CVarShipSmokeMuch(
+		TEXT("tc.Map.ShipSmokeMuch"), 1.0f,
+		TEXT("With tc.Map.ShipSmoke: how thick the funnel smoke is, 0 (none) to 2."));
+	TAutoConsoleVariable<float> CVarShipSmokeLong(
+		TEXT("tc.Map.ShipSmokeLong"), 1.0f,
+		TEXT("With tc.Map.ShipSmoke: how far astern a ship's smoke streams under way, 0 (it stands over her) to 2 (twice as far)."));
+
+	bool ShipSmokeWanted()
+	{
+		static const bool bShipSmokeAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterShipSmoke"));
+		return bShipSmokeAsked || CVarShipSmoke.GetValueOnGameThread() != 0;
+	}
 
 	const TCHAR* SurfaceMaterialPath = TEXT("/Game/Campaign/Materials/M_MapSurface.M_MapSurface");
 	const TCHAR* SolidMaterialPath = TEXT("/Game/Campaign/Materials/M_Solid.M_Solid");
@@ -11501,6 +11523,8 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 					Join.Sent = Courier;
 					Join.Joined = Piece;
 					Join.From = Road[0];
+					Join.Stood = Piece->GetRestLocation();
+					Join.Due = World->GetTimeSeconds() + Courier->MarchLasts();
 					Joining.Add(Join);
 				}
 			}
@@ -16460,7 +16484,9 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		}
 		if (AArmyPiece* Joined = Joining[JoinIndex].Joined.Get())
 		{
-			if (bWithWeight && !Joined->IsMarching())
+			// (Only a landing: the piece came down in its time, and the army still stands where it was joined.)
+			const bool bLanded = Now >= Joining[JoinIndex].Due - 0.15 && FVector::DistSquared(Joined->GetRestLocation(), Joining[JoinIndex].Stood) < 1.0;
+			if (bWithWeight && bLanded && !Joined->IsMarching())
 			{
 				Thuds.Add(ThudOf(Joined, 0.85));
 				Joined->TakeWeight(Joined->GetActorLocation() - Joining[JoinIndex].From);
@@ -16571,6 +16597,115 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			continue;
 		}
 		Plume(WorksChimneys[K], K + 500);
+	}
+
+	// (Release 2, funnel smoke: the campaign map's upgrade 3, Campaign/ShipSmoke.h; tc.Map.ShipSmoke.) Every ship of a
+	// fleet at sea has steam up: a pale wisp over her lying still, and under way a plume that streams astern along the
+	// water she has crossed, black while she works up to speed. Near what the eye looks at only. The fleets under way
+	// are drawn first and those lying still after, while there is room in what the fleets may take of the table's smoke.
+	// Nothing is kept from frame to frame: each puff is where the clock says it is.
+	if (ShipSmokeWanted())
+	{
+		const double FunnelMuch = FMath::Clamp(static_cast<double>(CVarShipSmokeMuch.GetValueOnGameThread()), 0.0, 2.0);
+		const double FunnelLong = FMath::Clamp(static_cast<double>(CVarShipSmokeLong.GetValueOnGameThread()), 0.0, 2.0);
+		const int32 SmokeLevel = TheaterShipSmoke::Level(CameraDistance);
+		const bool bEachFunnel = TheaterShipSmoke::EachFunnel(SmokeLevel);
+		const FVector LeeWay = Wind.GetSafeNormal();
+		int32 FleetPuffs = 0;
+		TArray<AArmyPiece::FFunnelNow> FunnelsSeen;
+		for (int32 SmokePass = 0; SmokePass < 2 && FunnelMuch > 0.0; ++SmokePass)
+		{
+			for (const TPair<int32, TObjectPtr<AArmyPiece>>& FleetEntry : FleetPieces)
+			{
+				const AArmyPiece* Steamer = FleetEntry.Value.Get();
+				if (!Steamer || FVector::DistSquared2D(Steamer->GetActorLocation(), CameraFocus) > Reach * Reach)
+				{
+					continue;
+				}
+				const bool bSteamsOn = Steamer->IsSailing();
+				const int32 PlumePuffs = TheaterShipSmoke::Puffs(SmokeLevel, bSteamsOn);
+				double SteamPace = 0.0, SteamGather = 0.0;
+				if (bSteamsOn != (SmokePass == 0) || PlumePuffs <= 0 || !Steamer->FunnelsNow(FunnelsSeen, SteamPace, SteamGather))
+				{
+					continue;
+				}
+				const TheaterShipSmoke::FFire Steam = TheaterShipSmoke::Fire(SteamPace, SteamGather, FunnelMuch, FunnelLong);
+				// One plume for each funnel close to; from further off one for each ship, from the middle of her funnels.
+				// (Her funnels come ship by ship.)
+				for (int32 FunnelFirst = 0; FunnelFirst < FunnelsSeen.Num();)
+				{
+					int32 FunnelsOn = 1;
+					while (FunnelFirst + FunnelsOn < FunnelsSeen.Num() && FunnelsSeen[FunnelFirst + FunnelsOn].Ship == FunnelsSeen[FunnelFirst].Ship)
+					{
+						++FunnelsOn;
+					}
+					const int32 PlumesOn = bEachFunnel ? FunnelsOn : 1;
+					for (int32 PlumeIndex = 0; PlumeIndex < PlumesOn; ++PlumeIndex)
+					{
+						const AArmyPiece::FFunnelNow& PlumeOf = FunnelsSeen[FunnelFirst + PlumeIndex];
+						FVector PlumeTop = PlumeOf.Top;
+						if (!bEachFunnel)
+						{
+							for (int32 FunnelNext = 1; FunnelNext < FunnelsOn; ++FunnelNext)
+							{
+								PlumeTop += FunnelsSeen[FunnelFirst + FunnelNext].Top;
+							}
+							PlumeTop /= static_cast<double>(FunnelsOn);
+						}
+						// (two funnels' smoke is each a little less than one funnel's alone; run together it is a little more)
+						const double PlumeGirth = TheaterShipSmoke::Girth(PlumeOf.Class) * (FunnelsOn < 2 ? 1.0 : bEachFunnel ? 0.8 : 1.15);
+						const double PlumeLong = PlumeOf.Long;
+						if (PlumeGirth <= 0.0 || PlumeLong <= 0.0 || FleetPuffs + PlumePuffs > TheaterShipSmoke::MostPuffs)
+						{
+							continue;
+						}
+						const double PlumeSeed = FMath::Frac(FleetEntry.Key * 0.137 + (FunnelFirst + PlumeIndex) * 0.29);
+						for (int32 PuffIndex = 0; PuffIndex < PlumePuffs; ++PuffIndex)
+						{
+							const double PuffAge = TheaterShipSmoke::AgeOf(Now, PuffIndex, PlumePuffs, PlumeSeed);
+							// (Under way each puff is as thick and as dark as the fire that made it, its age ago, and
+							// not as the fire is now: the plume never changes colour all at once. ShipSmoke.h, Carries.)
+							TheaterShipSmoke::FFire PuffFire = Steam;
+							if (bSteamsOn)
+							{
+								double MadePace = 0.0, MadeGather = 0.0;
+								const double MadeKeeps = Steamer->SteamedAt(PuffAge * TheaterShipSmoke::Life, MadePace, MadeGather);
+								PuffFire = TheaterShipSmoke::Carries(Steam, TheaterShipSmoke::Fire(MadePace, MadeGather, FunnelMuch, FunnelLong), MadeKeeps);
+							}
+							const TheaterShipSmoke::FPuff OnePuff = TheaterShipSmoke::Puff(PuffFire, PuffAge, PlumePuffs, PlumeGirth);
+							++FleetPuffs;
+							if (OnePuff.Thick <= 0.004)
+							{
+								continue;
+							}
+							const double PuffBack = OnePuff.Astern * PlumeLong;
+							const FVector PuffAstern = Steamer->AsternBy(PlumeTop, PuffBack);
+							const double PuffSway = FMath::Sin(Now * 0.7 + PlumeSeed * 40.0 + PuffIndex * 1.7) * 0.25 * OnePuff.Size * PlumeLong * PuffAge;
+							const FVector PuffAt = PlumeTop + PuffAstern + FVector(0.0, 0.0, OnePuff.Rise * PlumeLong) + LeeWay * (OnePuff.Lee * PlumeLong) + Right * PuffSway;
+							const TheaterShipSmoke::FInk PuffInk = TheaterShipSmoke::Ink(PuffFire.Dark, PuffAge);
+							const FLinearColor PuffColour(static_cast<float>(PuffInk.R), static_cast<float>(PuffInk.G), static_cast<float>(PuffInk.B));
+							const double PuffSize = OnePuff.Size * PlumeLong;
+							if (OnePuff.Stretch > 1.0)
+							{
+								// The way the plume runs here: astern along the water she crossed, up, and down the wind. A puff
+								// is drawn out along it only by as much of that as lies across the eye's view: one that runs
+								// straight at the eye is round.
+								const FVector PuffFurther = Steamer->AsternBy(PlumeTop, PuffBack + 0.02 * PlumeLong) - PuffAstern;
+								const FVector PuffRuns = PuffFurther.GetSafeNormal() * OnePuff.RunAstern + FVector::UpVector * OnePuff.RunRise + LeeWay * OnePuff.RunLee;
+								const FVector PuffSeen = Right * FVector::DotProduct(PuffRuns, Right) + Up * FVector::DotProduct(PuffRuns, Up);
+								const double PuffShown = FMath::Min(PuffSeen.Size(), 1.0);
+								DrawSmear(PuffAt, PuffRuns, PuffSize * (1.0 + (OnePuff.Stretch - 1.0) * PuffShown), PuffSize, PuffColour, static_cast<float>(OnePuff.Thick));
+							}
+							else
+							{
+								Draw(PuffAt, PuffSize, PuffColour, static_cast<float>(OnePuff.Thick));
+							}
+						}
+					}
+					FunnelFirst += FunnelsOn;
+				}
+			}
+		}
 	}
 
 	// Battles: for a few seconds the guns flash, and dark smoke rolls up and drifts away.

@@ -1254,6 +1254,11 @@ void FMiniatureMesh::Stamp(const FMiniatureMesh& Model, const FVector& Where, do
 	{
 		Triangles.Add(First + Index);
 	}
+	// (Release 2, funnel smoke: where the model's funnels end comes with it. Only a ship has any.)
+	for (const FVector& FunnelTop : Model.FunnelTops)
+	{
+		FunnelTops.Add(Where + FVector(FunnelTop.X * Cos - FunnelTop.Y * Sin, FunnelTop.X * Sin + FunnelTop.Y * Cos, FunnelTop.Z) * Scale);
+	}
 }
 
 // ---------------------------------------------------------------------------- ships and aircraft
@@ -1741,7 +1746,7 @@ void FMiniatureMesh::Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, in
 		const double R = FMath::DegreesToRadians(Turn);
 		// (a model's front is toward -X before it is turned: Ahead is the way her bows point on the table)
 		const FVector Ahead(-FMath::Cos(R), -FMath::Sin(R), 0.0), Abeam(-Ahead.Y, Ahead.X, 0.0);
-		const int32 FirstVertex = Vertices.Num(), FirstIndex = Triangles.Num();
+		const int32 FirstVertex = Vertices.Num(), FirstIndex = Triangles.Num(), FirstFunnel = FunnelTops.Num();
 		Vehicle(FString(Show[K]) + Tag, Where, Metre, Turn);
 		if (Vertices.Num() > FirstVertex && Triangles.Num() > FirstIndex)
 		{
@@ -1768,6 +1773,9 @@ void FMiniatureMesh::Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, in
 			Ship.Long = FMath::Clamp(Foremost - Aftmost, 0.6 * Long, 1.6 * Long);
 			Ship.Beam = FMath::Clamp(Starmost - Portmost, 0.6 * Beam, 1.6 * Beam);
 			Ship.Class = Kind.StartsWith(TEXT("Battleship")) ? 0 : Kind.StartsWith(TEXT("Carrier")) ? 1 : Kind.StartsWith(TEXT("Cruiser")) ? 2 : Kind.StartsWith(TEXT("Destroyer")) ? 3 : 4;
+			// (Release 2, funnel smoke: the funnels her model brought with it are hers.)
+			Ship.FirstFunnel = FirstFunnel;
+			Ship.FunnelCount = FunnelTops.Num() - FirstFunnel;
 		}
 		if (bUnderWay)
 		{
