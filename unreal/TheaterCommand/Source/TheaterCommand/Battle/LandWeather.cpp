@@ -140,36 +140,43 @@ namespace LandWeather
 		if (W.Kind == WeatherFall::Kind::Rain)
 		{
 			W.Wet = std::clamp(Num(Numbers, "day.rain.wet_least", 0.55) + (1.0 - Num(Numbers, "day.rain.wet_least", 0.55)) * S, 0.0, 1.0);
-			W.HazeTimes = 1.0 + Num(Numbers, "day.rain.haze_more", 1.3) * S;
-			W.HazeToward = Num(Numbers, "day.rain.haze_toward", 0.5) * S;
-			W.HazeInk[0] = Num(Numbers, "day.rain.haze_r", 0.44);
-			W.HazeInk[1] = Num(Numbers, "day.rain.haze_g", 0.46);
-			W.HazeInk[2] = Num(Numbers, "day.rain.haze_b", 0.49);
-			W.LightTimes = 1.0 - Num(Numbers, "day.rain.dimmer", 0.18) * S;
+			// (the haze thickens with the strength's square: a light rain keeps half the field's depth at a kilometre, a
+			// downpour closes it to a ghost; the art director's R5. Its colour a darker grey than any dry day's, the sky's
+			// low value, R1)
+			W.HazeTimes = 1.0 + Num(Numbers, "day.rain.haze_more", 1.3) * std::pow(S, Num(Numbers, "day.rain.haze_curve", 2.0));
+			W.HazeToward = Num(Numbers, "day.rain.haze_toward", 0.95) * std::sqrt(S); // (even a light rain's sky goes grey)
+			W.HazeInk[0] = Num(Numbers, "day.rain.haze_r", 0.2);
+			W.HazeInk[1] = Num(Numbers, "day.rain.haze_g", 0.21);
+			W.HazeInk[2] = Num(Numbers, "day.rain.haze_b", 0.23);
+			W.LightTimes = 1.0 - Num(Numbers, "day.rain.dimmer", 0.12) * S;
+			W.SkyTimes = 1.0 - Num(Numbers, "day.rain.sky_dimmer", 0.4) * S;
 			// (wet things shine: the ground's sheen from the sky at a low angle, the hedges' and the walls' a little, the
-			// steel most; the rougher the wetter, from the dry numbers each ink was made with)
-			W.GroundRough = 0.95 - Num(Numbers, "day.rain.ground_rough_less", 0.32) * W.Wet;
+			// steel most; the rougher the wetter, from the dry numbers each ink was made with. The ground's and the plants'
+			// no smoother than 0.75 at the wettest, the art director's R2: sheen is for flat hard things)
+			W.GroundRough = 0.95 - Num(Numbers, "day.rain.ground_rough_less", 0.2) * W.Wet;
 			W.GroundSpecular = 0.15 + Num(Numbers, "day.rain.ground_specular_more", 0.22) * W.Wet;
-			W.ThingRough = 0.9 - Num(Numbers, "day.rain.thing_rough_less", 0.22) * W.Wet;
+			W.ThingRough = 0.9 - Num(Numbers, "day.rain.thing_rough_less", 0.15) * W.Wet;
 			W.ThingSpecular = 0.2 + Num(Numbers, "day.rain.thing_specular_more", 0.15) * W.Wet;
-			W.SteelRough = Num(Numbers, "day.rain.steel_rough", 0.45);
+			W.SteelRough = Num(Numbers, "day.rain.steel_rough", 0.5);
 			W.SteelSpecular = Num(Numbers, "day.rain.steel_specular", 0.45);
 			W.InkOverHaze = Num(Numbers, "day.rain.ink_over_haze", 1.15);
 			W.Sound = S;
 		}
 		else
 		{
-			W.HazeTimes = 1.0 + Num(Numbers, "day.snow.haze_more", 2.0) * S;
-			W.HazeToward = Num(Numbers, "day.snow.haze_toward", 0.6) * S;
-			W.HazeInk[0] = Num(Numbers, "day.snow.haze_r", 0.70);
-			W.HazeInk[1] = Num(Numbers, "day.snow.haze_g", 0.73);
-			W.HazeInk[2] = Num(Numbers, "day.snow.haze_b", 0.78);
+			W.HazeTimes = 1.0 + Num(Numbers, "day.snow.haze_more", 0.6) * S;
+			W.HazeToward = Num(Numbers, "day.snow.haze_toward", 0.8) * S;
+			W.HazeInk[0] = Num(Numbers, "day.snow.haze_r", 0.45);
+			W.HazeInk[1] = Num(Numbers, "day.snow.haze_g", 0.47);
+			W.HazeInk[2] = Num(Numbers, "day.snow.haze_b", 0.52);
 			W.LightTimes = 1.0 - Num(Numbers, "day.snow.dimmer", 0.1) * S;
-			W.InkOverHaze = Num(Numbers, "day.snow.ink_over_haze", 1.45);
+			W.SkyTimes = 1.0 - Num(Numbers, "day.snow.sky_dimmer", 0.25) * S;
+			W.InkOverHaze = Num(Numbers, "day.snow.ink_over_haze", 1.75);
 		}
 		W.HazeTimes = std::max(1.0, W.HazeTimes);
 		W.HazeToward = std::clamp(W.HazeToward, 0.0, 1.0);
 		W.LightTimes = std::clamp(W.LightTimes, 0.3, 1.0);
+		W.SkyTimes = std::clamp(W.SkyTimes, 0.3, 1.0);
 		return W;
 	}
 

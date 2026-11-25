@@ -225,7 +225,7 @@ namespace
 		for (size_t K = 0; K < std::min(Read.Snow.size(), Standing.Snow.size()); ++K)
 			Check(SameLayer(Read.Snow[K], Standing.Snow[K]), "the file's snow layer " + Standing.Snow[K].Name + " is the standing one");
 		Check(std::fabs(Read.RainStep - Standing.RainStep) < 1e-6 && std::fabs(Read.SnowStep - Standing.SnowStep) < 1e-6 && Read.LeastPx == Standing.LeastPx &&
-			Read.StrengthAlpha == Standing.StrengthAlpha && Read.MostDrops == Standing.MostDrops, "the file's steps, least pixels, strength alpha and most drops are the standing ones");
+			Read.StrengthAlpha == Standing.StrengthAlpha && Read.StrengthLength == Standing.StrengthLength && Read.MostDrops == Standing.MostDrops, "the file's steps, least pixels, strength alpha and length and most drops are the standing ones");
 		// The pick and the day: the file's numbers give what the standing ones give, everywhere.
 		int Differ = 0;
 		for (const char* Word : { "clear", "rain", "snow", "mud", "" })
@@ -242,7 +242,7 @@ namespace
 							A.Look = Look;
 							const LandWeather::Weather X = LandWeather::Pick(A, Book), Y = LandWeather::Pick(A, LandWeather::Book());
 							const bool bSame = X.Kind == Y.Kind && std::fabs(X.Strength - Y.Strength) < 1e-9 && std::fabs(X.Wet - Y.Wet) < 1e-9 && std::fabs(X.HazeTimes - Y.HazeTimes) < 1e-9 &&
-								std::fabs(X.HazeToward - Y.HazeToward) < 1e-9 && std::fabs(X.LightTimes - Y.LightTimes) < 1e-9 && std::fabs(X.GroundRough - Y.GroundRough) < 1e-9 &&
+								std::fabs(X.HazeToward - Y.HazeToward) < 1e-9 && std::fabs(X.LightTimes - Y.LightTimes) < 1e-9 && std::fabs(X.SkyTimes - Y.SkyTimes) < 1e-9 && std::fabs(X.GroundRough - Y.GroundRough) < 1e-9 &&
 								std::fabs(X.GroundSpecular - Y.GroundSpecular) < 1e-9 && std::fabs(X.ThingRough - Y.ThingRough) < 1e-9 && std::fabs(X.SteelRough - Y.SteelRough) < 1e-9 &&
 								std::fabs(X.InkOverHaze - Y.InkOverHaze) < 1e-9 && std::fabs(X.HazeInk[0] - Y.HazeInk[0]) < 1e-9 && std::fabs(X.HazeInk[2] - Y.HazeInk[2]) < 1e-9;
 							Differ += bSame ? 0 : 1;
@@ -251,10 +251,10 @@ namespace
 		// Every number in the file is one the code reads (a misspelt path would be quietly left out).
 		static const char* const Known[] = { "pick.snow_lying_from", "pick.rain.from_cover", "pick.rain.full_cover", "pick.rain.least", "pick.rain.tropic_more", "pick.rain.dry_times",
 			"pick.snow.from_cover", "pick.snow.full_cover", "pick.snow.least", "pick.mud.from_cover", "pick.mud.least", "pick.mud.more", "day.rain.wet_least", "day.rain.haze_more",
-			"day.rain.haze_toward", "day.rain.haze_r", "day.rain.haze_g", "day.rain.haze_b", "day.rain.dimmer", "day.rain.ground_rough_less", "day.rain.ground_specular_more",
-			"day.rain.thing_rough_less", "day.rain.thing_specular_more", "day.rain.steel_rough", "day.rain.steel_specular", "day.rain.ink_over_haze", "day.snow.haze_more",
-			"day.snow.haze_toward", "day.snow.haze_r", "day.snow.haze_g", "day.snow.haze_b", "day.snow.dimmer", "day.snow.ink_over_haze", "fall.rain_step", "fall.snow_step",
-			"fall.least_px", "fall.strength_alpha", "fall.most_drops" };
+			"day.rain.haze_toward", "day.rain.haze_curve", "day.rain.haze_r", "day.rain.haze_g", "day.rain.haze_b", "day.rain.dimmer", "day.rain.ground_rough_less", "day.rain.ground_specular_more",
+			"day.rain.thing_rough_less", "day.rain.thing_specular_more", "day.rain.steel_rough", "day.rain.steel_specular", "day.rain.ink_over_haze", "day.rain.sky_dimmer", "day.snow.haze_more",
+			"day.snow.haze_toward", "day.snow.haze_r", "day.snow.haze_g", "day.snow.haze_b", "day.snow.dimmer", "day.snow.sky_dimmer", "day.snow.ink_over_haze", "fall.rain_step", "fall.snow_step",
+			"fall.least_px", "fall.strength_alpha", "fall.strength_length", "fall.most_drops" };
 		static const char* const LayerKeys[] = { "box_m", "density", "fall", "spread", "wind_share", "width_m", "length_m", "alpha", "tone", "near_from_m", "near_full_m", "far_fade", "flutter_m", "order", "off" };
 		int Unknown = 0;
 		for (const auto& [Key, Value] : Numbers)

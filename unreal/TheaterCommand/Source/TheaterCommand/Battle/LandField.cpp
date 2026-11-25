@@ -731,8 +731,63 @@ namespace LandField
 			// it: the colour is asked at every point of the ground and every track mark)
 			const double Dip = -Noise(X / 24.0, Y / 24.0, Seed ^ 0xA3);
 			const double Patch = Noise(X / 6.0, Y / 6.0, Seed ^ 0x5A1);
-			const double Puddle = Smooth(0.95 - 0.3 * W, 1.15 - 0.3 * W, Dip + 0.35 * Patch);
-			return Mixed(Varied(C, 1.0 - 0.28 * W, 0.0), Rgb(64, 66, 68), 0.55 * Puddle);
+			// Water lies on bare ground: the lanes, the trodden gateways, the ploughed earth, the holes (Room 1); a few
+			// pools in the grass, a tenth of a meadow at the most; none in standing corn, which drinks it. Read
+			// from the colour, which knows them all (the art director's R6). The water the grey of the sky it holds, as the
+			// general's slanting eye sees it (Water).
+			// (bare earth and dust: browns, hue under about 45 degrees and not bright gold; growing things, grass and
+			// crops, greener or richer than that)
+			const double Most = std::max({ C.R, C.G, C.B }), Least = std::min({ C.R, C.G, C.B }), Span = Most - Least;
+			const double Sat = Most > 0.0 ? Span / Most : 0.0;
+			double Hue = 0.0;
+			if (Span > 1e-6)
+			{
+				Hue = Most == C.R ? 60.0 * (C.G - C.B) / Span : Most == C.G ? 60.0 * ((C.B - C.R) / Span + 2.0) : 60.0 * ((C.R - C.G) / Span + 4.0);
+				if (Hue < 0.0) Hue += 360.0;
+			}
+			const double Growing = Smooth(42.0, 52.0, Hue) * (Hue < 200.0 ? 1.0 : 0.0);
+			const double Room = (1.0 - 0.9 * Growing) * (1.0 - Smooth(0.42, 0.52, Sat));
+			const double From = 0.95 - 0.3 * W * Room;
+			const double Puddle = Room <= 0.02 ? 0.0 : Smooth(From, From + 0.15, Dip + 0.35 * Patch) * (0.4 + 0.6 * Room);
+			return Mixed(Soaked(C), Water, 0.8 * Puddle);
+		}
+		/** Standing water's colour: the overcast's grey it mirrors, lighter than the wet earth round it, as ruts and
+		 * pools shine silver from a slanting eye (the art director's R6). */
+		static constexpr Col Water{ 118.0, 123.0, 130.0 };
+		/** Rain's soak on a colour (RainWet): darker the harder it falls, and the paler and drier it was the darker it
+		 * goes (a lane's dust, ripe corn and stubble most, green grass least), as wet earth and straw do. The same over
+		 * the far ground (FarColour), so near and far meet. */
+		Col Soaked(const Col& C) const
+		{
+			if (RainWet <= 0.0) return C;
+			const double W = std::clamp(RainWet, 0.0, 1.0);
+			const double Light = (0.3 * C.R + 0.59 * C.G + 0.11 * C.B) / 255.0;
+			// (wet colour deepens, never greys: away from its own grey by more than half at the wettest, against the grey
+			// day's light and the haze, which drain it; the art director's R2. A lane's dust to about 55% of dry, green
+			// grass hardly darker: the grey day and the haze darken it enough)
+			const double Most = std::max({ C.R, C.G, C.B }), Least = std::min({ C.R, C.G, C.B });
+			const double Grey = (C.R + C.G + C.B) / 3.0, Rich = 1.0 + 0.6 * W * (1.0 - (Most > 0.0 ? (Most - Least) / Most : 0.0));
+			const Col Deep{ std::max(0.0, Grey + (C.R - Grey) * Rich), std::max(0.0, Grey + (C.G - Grey) * Rich), std::max(0.0, Grey + (C.B - Grey) * Rich) };
+			return Varied(Deep, 1.0 - W * (0.05 + 0.45 * Smooth(0.35, 0.6, Light)), 0.0);
+		}
+		/** Rain's soak on a thing's tint (the corn standing, the stubble, the hay in its cocks and stacks): darker the
+		 * harder it falls, to about three quarters of dry in a downpour, and warmer, as wet straw goes ochre (the art
+		 * director's R3: red over green kept 1.05 to 1.15). As it was where no rain falls. */
+		Rgb8 Soaked(const Rgb8& T) const
+		{
+			if (RainWet <= 0.0) return T;
+			const double W = std::clamp(RainWet, 0.0, 1.0), Keep = 1.0 - 0.25 * W;
+			const auto One = [Keep](double V) { return static_cast<uint8_t>(std::clamp(std::lround(V * Keep), 0L, 255L)); };
+			Rgb8 Out;
+			Out.R = One(T.R * (1.0 + 0.04 * W));
+			Out.G = One(T.G);
+			Out.B = One(T.B * (1.0 - 0.08 * W));
+			return Out;
+		}
+		/** Whether a thing's kind is straw or corn that rain soaks darker (Soaked). */
+		static bool Soaks(Base B)
+		{
+			return B == Base::Wheat || B == Base::Stalks || B == Base::Stubble || B == Base::Haycock || B == Base::Haystack;
 		}
 		Col GroundBare(double X, double Y, const LandScape::Spot* Pre = nullptr) const;
 		Col SteppeColour(double X, double Y, const LandScape::Spot* Pre = nullptr) const;
@@ -4715,7 +4770,7 @@ namespace LandField
 	Col Ground::Impl::FarColour(double X, double Y) const
 	{
 		const Col C = FarBare(X, Y);
-		return SnowLay ? Snowed(C, X, Y, true) : C;
+		return SnowLay ? Snowed(C, X, Y, true) : Soaked(C); // (rain's soak as near, without its pools: Soaked)
 	}
 
 	Col Ground::Impl::FarBare(double X, double Y) const
@@ -5475,6 +5530,12 @@ namespace LandField
 					}
 					else C = GroundColour(Q.X, Q.Y);
 					if (SnowLay && !Rg && A < Half + LaneWall + 0.01) C = bSnowLane ? LaneSnowed(C, Mid, Q.X, Q.Y, A, Half) : Snowed(C, Q.X, Q.Y, false);
+					// (rain: the lane's floor and walls soaked and pooled as the ground is, and water lying along its ruts)
+					if (RainWet > 0.0 && A < Half + LaneWall + 0.01)
+					{
+						C = Wetted(C, Q.X, Q.Y);
+						if (A <= Half + 0.01) C = Mixed(C, Water, 0.6 * std::clamp(RainWet, 0.0, 1.0) * std::exp(-Sq((A - 0.8) / 0.25)));
+					}
 					S.P.push_back({ Q.X, Q.Y, Z });
 					S.C.push_back(C);
 				}
@@ -7336,6 +7397,10 @@ namespace LandField
 		MakeHedges();
 		MakeCowPaths();
 		MakePlants();
+		// (rain: the hay in its cocks and stacks soaked darker, Soaked; the corn and the stubble as they are laid, Clutter)
+		if (RainWet > 0.0)
+			for (const Base B : { Base::Haycock, Base::Haystack })
+				for (Placed& Pl : Inst[static_cast<size_t>(B)]) Pl.Tint = Soaked(Pl.Tint);
 		const auto T1 = Clock::now();
 		MakeBases();
 		SeatKitHouses();
@@ -7656,6 +7721,7 @@ namespace LandField
 	void Ground::Clutter(double X0, double Y0, double X1, double Y1, std::vector<Placed>& Out) const
 	{
 		const Impl& G = *In;
+		const size_t Before = Out.size();
 		constexpr double Square = ClutterSquare;
 		constexpr int Tries = 128; // two things a square metre at most
 		const int I0 = static_cast<int>(std::floor(X0 / Square)), I1 = static_cast<int>(std::floor(X1 / Square));
@@ -7937,6 +8003,10 @@ namespace LandField
 						if (B.X >= X0 && B.X < X1 && B.Y >= Y0 && B.Y < Y1) Out.push_back(B);
 					}
 			}
+		// (rain: the corn standing and the stubble soaked darker, Soaked)
+		if (G.RainWet > 0.0)
+			for (size_t K = Before; K < Out.size(); ++K)
+				if (Impl::Soaks(Out[K].Kind)) Out[K].Tint = G.Soaked(Out[K].Tint);
 	}
 }
 

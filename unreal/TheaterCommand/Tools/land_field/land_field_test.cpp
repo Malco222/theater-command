@@ -3301,6 +3301,7 @@ int main(int Argc, char** Argv)
 				Sk.HazeToward = W.HazeToward;
 				for (int C = 0; C < 3; ++C) Sk.FallHaze[C] = W.HazeInk[C];
 				Sk.LightTimes = W.LightTimes;
+				Sk.SkyTimes = W.SkyTimes;
 				WeatherFallPicture::Asked Drops;
 				Drops.Kind = W.Kind;
 				Drops.Strength = W.Strength;

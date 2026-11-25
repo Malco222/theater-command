@@ -604,6 +604,8 @@ namespace LandFieldPicture
 			double Cover = 0.45, Base = 900.0;
 			/** A grey day's softness (Sky::Overcast): shade lifted toward light by this share, the sky a deck. */
 			double Soft = 0.0;
+			/** The deck's brightness under rain or snow (Sky::SkyTimes). */
+			double DeckTimes = 1.0;
 			// (the clouds' shadows' picture moved so its clear disc lies over the field's middle at the start, as the
 			// game's LandBattle lays M_LandCloudShade's "Anchor": U along the field's y, V along its x, in repeats)
 			double AnchorU = 0.0, AnchorV = 0.0;
@@ -665,6 +667,7 @@ namespace LandFieldPicture
 				L.Bounce[C] *= Sk.LightTimes;
 			}
 			L.Beta *= std::max(1.0, Sk.HazeTimes);
+			L.DeckTimes = std::clamp(Sk.SkyTimes, 0.0, 1.0);
 			return L;
 		}
 
@@ -694,7 +697,7 @@ namespace LandFieldPicture
 				const double Over = std::pow(std::clamp(Ray.Z / 0.25, 0.0, 1.0), 0.7);
 				for (int C = 0; C < 3; ++C)
 				{
-					const double Grey = Haze[C] + (Deck[C] * (0.85 + 0.25 * Up) - Haze[C]) * Over;
+					const double Grey = Haze[C] + (Deck[C] * L.DeckTimes * (0.85 + 0.25 * Up) - Haze[C]) * Over;
 					Out[C] += (Grey - Out[C]) * L.Soft;
 				}
 				return;

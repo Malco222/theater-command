@@ -45,6 +45,9 @@ namespace LandWeather
 		double HazeInk[3] = { 0.5, 0.52, 0.55 };
 		/** The day's lamps (the sun's key, the fill, the sky light) times this. */
 		double LightTimes = 1.0;
+		/** The sky's own brightness (the deck the battle draws) times this: a rain's sky a darker grey lid than a dry
+		 * overcast's, and snow's darker than the snow lying under it (the art director's R1 and S2). */
+		double SkyTimes = 1.0;
 		/** The ground's and the things' surfaces when wet (M_LandSurface's and M_MapSurface's "Roughness" and "Specular");
 		 * negative: as they were. */
 		double GroundRough = -1.0, GroundSpecular = -1.0, ThingRough = -1.0, ThingSpecular = -1.0, SteelRough = -1.0, SteelSpecular = -1.0;

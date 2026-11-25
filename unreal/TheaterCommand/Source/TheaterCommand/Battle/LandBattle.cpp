@@ -5860,6 +5860,13 @@ void ALandBattle::HideTheTable()
 		Day.Base = FMath::Clamp(Day.Base, 300.0, 3000.0);
 		Day.bDeck = DeckAsked >= 0.5 || Day.Cover >= 0.8;
 	}
+	// (rain or snow falling comes from under a closed sky, as the campaign draws it; the same for -TheaterLandFall's
+	// stills on a fair day, so a forced rain is never lit by the sun: LandBattleWeather)
+	if (bFalling && State.IsValid() && State->Weather.Kind != WeatherFall::Kind::None)
+	{
+		Day.Cover = FMath::Max(Day.Cover, 0.85);
+		Day.bDeck = true;
+	}
 	// (scattered cumulus up to about half the sky is a fair day; past it the light dulls, and a deck is overcast)
 	Day.Overcast = Day.bDeck ? 1.0 : FMath::SmoothStep(0.55, 0.85, Day.Cover);
 	// The sun from the place, the month and the hour (Open turned it for the recording's hour; "-TheaterLandHour=" tries
@@ -6188,7 +6195,9 @@ void ALandBattle::HideTheTable()
 	// others (each against the engine's own numbers, as -TheaterAirSky's).
 	double SkyBright = 1.3, SkyAir = 1.0, SkyDust = LookAir.bSet ? LookAir.SkyDust : 0.6, HazeOver = 1.0;
 	LandLook::Asked(TEXT("TheaterLandSky="), { &SkyBright, &SkyAir, &SkyDust, &HazeOver });
-	const float SkyShine = static_cast<float>(FMath::Max(0.0, SkyBright) * (1.0 - 0.45 * Day.Overcast));
+	// (under rain or snow falling, the deck a darker grey lid still: the weather's SkyTimes, LandWeather)
+	const double SkyFalls = bFalling && State.IsValid() && State->Weather.Kind != WeatherFall::Kind::None ? State->Weather.SkyTimes : 1.0;
+	const float SkyShine = static_cast<float>(FMath::Max(0.0, SkyBright) * (1.0 - 0.45 * Day.Overcast) * SkyFalls);
 	// The sky overhead lifted as the sun climbs (the art director on 849c1bc1: Baghdad's zenith 50,59,74 with the sun 61
 	// degrees up, "a night storm over Iraq", and Voronezh's 63,71,85 at 52; it should be a pale hazy blue, about
 	// 120,145,185, near white at the horizon). The field's light grows with the sun's height (Whole, in Day's lamps) while

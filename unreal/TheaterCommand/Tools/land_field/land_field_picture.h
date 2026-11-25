@@ -48,6 +48,8 @@ namespace LandFieldPicture
 		double Overcast = 0.0;
 		double HazeTimes = 1.0, HazeToward = 0.0, FallHaze[3] = { 0.44, 0.46, 0.49 };
 		double LightTimes = 1.0;
+		/** The deck's own brightness under the weather (LandWeather's SkyTimes, as the battle's SkyShine). */
+		double SkyTimes = 1.0;
 		std::function<void(const Lens& V, const std::vector<float>& Depth, std::vector<float>& Light, std::vector<float>& Cover)> Over;
 	};
 

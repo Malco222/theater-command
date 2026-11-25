@@ -118,12 +118,19 @@ namespace WeatherFall
 			Rained("middle", 22.0, 1.2, 0.006, 0.75, 0.22, 1.0, 3.0, 4.5, 0),
 			Rained("far", 64.0, 0.2, 0.02, 1.3, 0.14, 0.95, 8.0, 12.0, -1),
 		};
+		// (the layers lean about 5 degrees apart in the same wind, the art director's R4: near gusts, far steadier)
+		R.Rain[0].WindShare = 1.25;
+		R.Rain[2].WindShare = 0.75;
 		R.MostDrops = 60000;
+		R.StrengthAlpha = 0.35;
+		R.StrengthLength = 0.3;
 		R.Snow = {
 			Snowed("near", 8.0, 2.0, 0.012, 0.9, 0.4, 1.0, 0.12, 2),
 			Snowed("middle", 22.0, 1.0, 0.02, 0.8, 3.0, 4.5, 0.15, 0),
 			Snowed("far", 64.0, 0.2, 0.05, 0.55, 8.0, 12.0, 0.2, -1),
 		};
+		R.Snow[0].WindShare = 0.75;
+		R.Snow[2].WindShare = 0.45;
 		return R;
 	}
 
@@ -139,6 +146,7 @@ namespace WeatherFall
 		Num("snow_step", SnowStep);
 		Num("least_px", LeastPx);
 		Num("strength_alpha", StrengthAlpha);
+		Num("strength_length", StrengthLength);
 		double Most = MostDrops;
 		Num("most_drops", Most);
 		MostDrops = static_cast<int>(std::clamp(Most, 0.0, 60000.0));
@@ -146,6 +154,7 @@ namespace WeatherFall
 		SnowStep = std::clamp(SnowStep, 0.005, 2.0);
 		LeastPx = std::clamp(LeastPx, 0.0, 8.0);
 		StrengthAlpha = std::clamp(StrengthAlpha, 0.0, 1.0);
+		StrengthLength = std::clamp(StrengthLength, 0.0, 1.0);
 		for (Layer& L : Rain) ReadLayer(Find, "rain", L);
 		for (Layer& L : Snow) ReadLayer(Find, "snow", L);
 		// (a layer left out: "rain.far.off" 1)
@@ -243,7 +252,7 @@ namespace WeatherFall
 		P.Move[2] = static_cast<float>(Step);
 		P.Move[3] = static_cast<float>(K == Kind::Snow ? L.Flutter : 0.0);
 		P.Look[0] = static_cast<float>(L.Width);
-		P.Look[1] = static_cast<float>(L.Length);
+		P.Look[1] = static_cast<float>(L.Length * (R.StrengthLength + (1.0 - R.StrengthLength) * S));
 		P.Look[2] = static_cast<float>(L.NearFrom);
 		P.Look[3] = static_cast<float>(L.NearFull);
 		P.Lens[0] = static_cast<float>(std::max(0.0, PixelAngle));
