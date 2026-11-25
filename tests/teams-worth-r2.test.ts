@@ -1,12 +1,11 @@
-// The support teams' value test (release 2; the design director's ruling of 25 November 2026, 19:48Z): a staff orders a
-// brigade only when, at its own sight, it buys more on the card for its price than the corps or refit the same money
-// would, by one value test for every order (src/campaign/orderworth.ts). The quota (one per five fighting corps) is gone
-// and the price is untouched. These tests hold the test's parts to the card and the staff's order to the test.
+// The support teams' value test (release 2; the design director's rulings of 25 November 2026, 19:48Z and 20:08Z): a
+// staff orders a brigade only when, at its own sight, it buys more on the card for its price than the corps or refit the
+// same money would, by one reckoning for every order: the battle card read with the order and without it where it would
+// stand (src/campaign/orderworth.ts). The quota (one per five fighting corps) is gone and the price is untouched.
 import { describe, expect, it } from 'vitest';
 import { aiTeams, buildPick, corpsCost, lineFactories, PRODUCTION } from '../src/campaign/economy';
 import { addCorps, createGame, setWar } from '../src/campaign/game';
-import { sightOf } from '../src/campaign/intel';
-import { freshWorth, orderWorth } from '../src/campaign/orderworth';
+import { Reckoning } from '../src/campaign/orderworth';
 import { startOpen } from '../src/campaign/staff';
 import { setTeams, TEAMS } from '../src/campaign/teams';
 import type { Corps, Game, Region } from '../src/campaign/types';
@@ -34,32 +33,48 @@ const only = (g: Game, keep: Corps[]): void => {
   for (const c of g.corps) if (c.nat === 'GER' && !ids.has(c.id) && !c.dead) { c.dead = true; const r = g.regions[c.reg]; r.units = r.units.filter((u) => u !== c); }
 };
 
-describe('one value test for every order', () => {
-  it('a corps with no lift is its own weight on the card per point of its price', () => {
+const worth = (g: Game, order: Parameters<Reckoning['worth']>[0], role: 'atk' | 'def', spend = 0): number => new Reckoning(g, 'GER').worth(order, role, spend);
+
+describe('one reckoning for every order: the card with the order and without it', () => {
+  it('no front, no worth: an order is worth what it adds to a fight the staff can see', () => {
     const g = grand();
-    const sight = sightOf(g, 'GER');
-    expect(orderWorth(g, 'GER', 'inf', 'def', sight)).toBeCloseTo(freshWorth(g, 'GER', 'inf', 3, 'def') / corpsCost(g, 'GER', 'inf'), 9);
-    expect(orderWorth(g, 'GER', 'inf', 'atk', sight)).toBeCloseTo(freshWorth(g, 'GER', 'inf', 3, 'atk') / corpsCost(g, 'GER', 'inf'), 9);
+    const { from } = sector(g);
+    only(g, line(g, 'GER', from, 2));
+    expect(worth(g, 'inf', 'def')).toBe(0);
+    expect(worth(g, 'mg', 'def')).toBe(0);
   });
 
-  it('machine guns are worth most behind a line dug in against men on foot, and nothing more against no one', () => {
+  it('a corps counts the ground and the works it would stand in, as a brigade does', () => {
+    const g = grand();
+    const { from, target } = sector(g);
+    const own = line(g, 'GER', from, 3);
+    only(g, own);
+    line(g, 'POL', target, 2);
+    from.terrain = 'plains';
+    const open = worth(g, 'inf', 'def');
+    dig(own);
+    const dug = worth(g, 'inf', 'def');
+    from.terrain = 'mountain';
+    const hill = worth(g, 'inf', 'def');
+    expect(open).toBeGreaterThan(0);
+    expect(dug).toBeGreaterThan(open);
+    expect(hill).toBeGreaterThan(dug);
+  });
+
+  it('machine guns are worth more behind a line dug in against men on foot than against tanks', () => {
     const g = grand();
     const { from, target } = sector(g);
     const own = line(g, 'GER', from, 4);
     only(g, own);
-    const bare = freshWorth(g, 'GER', 'mg', TEAMS.mg.divs, 'def') / corpsCost(g, 'GER', 'mg');
-    expect(orderWorth(g, 'GER', 'mg', 'def', sightOf(g, 'GER'))).toBeCloseTo(bare, 9);
-    line(g, 'POL', target, 2);
-    const open = orderWorth(g, 'GER', 'mg', 'def', sightOf(g, 'GER'));
     dig(own);
-    const dug = orderWorth(g, 'GER', 'mg', 'def', sightOf(g, 'GER'));
-    expect(open).toBeGreaterThan(bare);
-    expect(dug).toBeGreaterThan(open);
-    // Against tanks the lift is nothing: the men on foot are who it tells against.
+    line(g, 'POL', target, 2);
+    const foot = worth(g, 'mg', 'def');
     for (const c of target.units) c.dead = true;
     target.units = [];
     line(g, 'POL', target, 2, 'arm');
-    expect(orderWorth(g, 'GER', 'mg', 'def', sightOf(g, 'GER'))).toBeCloseTo(bare, 9);
+    const tanks = worth(g, 'mg', 'def');
+    expect(foot).toBeGreaterThan(tanks);
+    expect(tanks).toBeGreaterThan(0);
   });
 
   it('teams on order count as standing in the sector already: the lift is not bought twice', () => {
@@ -69,41 +84,51 @@ describe('one value test for every order', () => {
     only(g, own);
     dig(own);
     line(g, 'POL', target, 2);
-    const first = orderWorth(g, 'GER', 'mg', 'def', sightOf(g, 'GER'));
-    g.nations.GER.pp = 500;
+    const first = worth(g, 'mg', 'def');
     const full = Math.ceil(TEAMS.card.mg.most / TEAMS.card.mg.perDiv);
     for (let i = 0; i < full; i++) g.nations.GER.queue.push({ id: 900 + i, what: 'corps', kind: 'mg', divs: 1, name: `Q${i}`, cost: 0, eta: g.turn + 3, region: from.id } as never);
-    const after = orderWorth(g, 'GER', 'mg', 'def', sightOf(g, 'GER'));
-    expect(after).toBeLessThan(first);
-    expect(after).toBeCloseTo(freshWorth(g, 'GER', 'mg', TEAMS.mg.divs, 'def') / corpsCost(g, 'GER', 'mg'), 9);
+    expect(worth(g, 'mg', 'def')).toBeLessThan(first);
   });
 
-  it('mortars are worth more only against works: their own weight against a line not dug in', () => {
+  it('mortars are worth more against a line dug in than against one in the open', () => {
+    const g = grand();
+    const { from, target } = sector(g);
+    only(g, line(g, 'GER', from, 3));
+    const foes = line(g, 'POL', target, 2);
+    const open = worth(g, 'mor', 'atk');
+    dig(foes);
+    expect(worth(g, 'mor', 'atk')).toBeGreaterThan(open);
+  });
+
+  it('the card is left as it was found: no stand-in stays on the map, every strength as it was', () => {
     const g = grand();
     const { from, target } = sector(g);
     const own = line(g, 'GER', from, 3);
     only(g, own);
-    const foes = line(g, 'POL', target, 2);
-    const bare = freshWorth(g, 'GER', 'mor', TEAMS.mor.divs, 'atk') / corpsCost(g, 'GER', 'mor');
-    expect(orderWorth(g, 'GER', 'mor', 'atk', sightOf(g, 'GER'))).toBeCloseTo(bare, 9);
-    dig(foes);
-    expect(orderWorth(g, 'GER', 'mor', 'atk', sightOf(g, 'GER'))).toBeGreaterThan(bare);
+    line(g, 'POL', target, 2);
+    for (const c of own) c.str = 0.6;
+    g.nations.GER.pp = TEAMS.mg.cost + 1;
+    const units = [...from.units], strs = own.map((c) => c.str);
+    const k = new Reckoning(g, 'GER');
+    for (const o of ['inf', 'mg', 'mor', 'refit'] as const) for (const r of ['atk', 'def'] as const) k.worth(o, r, TEAMS.mg.cost);
+    expect(from.units).toEqual(units);
+    expect(own.map((c) => c.str)).toEqual(strs);
   });
 
   it('a refit is what the money would buy only where the purse, the order paid, would not cover the month\'s drafts', () => {
     const g = grand();
-    const { from } = sector(g);
+    const { from, target } = sector(g);
     const own = line(g, 'GER', from, 4);
     only(g, own);
+    line(g, 'POL', target, 2);
     for (const c of own) c.str = 0.6;
-    const sight = sightOf(g, 'GER');
     g.nations.GER.pp = 1000;
-    expect(orderWorth(g, 'GER', 'refit', 'def', sight, TEAMS.mg.cost)).toBe(0);
+    expect(worth(g, 'refit', 'def', TEAMS.mg.cost)).toBe(0);
     g.nations.GER.pp = TEAMS.mg.cost + 1;
-    const refit = orderWorth(g, 'GER', 'refit', 'def', sight, TEAMS.mg.cost);
+    const refit = worth(g, 'refit', 'def', TEAMS.mg.cost);
     expect(refit).toBeGreaterThan(0);
     // A division's worth of drafts is far cheaper than a division raised new: it buys more on the card a point.
-    expect(refit).toBeGreaterThan(orderWorth(g, 'GER', 'inf', 'def', sight));
+    expect(refit).toBeGreaterThan(worth(g, 'inf', 'def'));
     expect(PRODUCTION.replacementCost).toBeLessThan(corpsCost(g, 'GER', 'inf') / 3);
   });
 });
@@ -134,10 +159,11 @@ describe('the staff orders by the test, not by a quota', () => {
     only(g, own);
     dig(own);
     line(g, 'POL', target, 3);
+    for (const c of own) { c.xp = 0.8; c.org = 1; }
     ready(g);
-    const sight = sightOf(g, 'GER');
     const pick = buildPick(g, 'GER', lineFactories(g, 'GER'), g.nations.GER.capital).kind;
-    expect(orderWorth(g, 'GER', 'mg', 'def', sight)).toBeGreaterThan(orderWorth(g, 'GER', pick, 'def', sight));
+    const k = new Reckoning(g, 'GER');
+    expect(k.worth('mg', 'def')).toBeGreaterThan(k.worth(pick, 'def'));
     aiTeams(g, 'GER');
     expect(ordered(g)).toEqual(['mg']);
   });
