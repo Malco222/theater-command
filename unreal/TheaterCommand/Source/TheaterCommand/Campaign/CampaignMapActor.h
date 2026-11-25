@@ -1355,6 +1355,11 @@ private:
 		double Wings = 0.0; // a wingspan of the bombers it was fired at: every size of it is in these
 		int32 Flashed = 0; // how many frames its flash has been drawn: one or two, and no more
 		bool bLight = false; // (release 2, the flak brief, 2c) light flak: pale, half the size, lower, and soon gone
+		// (The far side, seam-4, the mend of 25 November 2026.) The raid that fired it, by the province bombed and the
+		// province flown from: over the chart's seam a burst is brought round to ITS OWN raid's turn of the world, never
+		// to the eye's, so that it is never left hanging over a twin town with no bombers above it.
+		int32 Over = INDEX_NONE;
+		int32 From = INDEX_NONE;
 	};
 	TArray<FFlakBurst> FlakBursts;
 	int32 FlakFired = 0;

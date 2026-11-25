@@ -15744,17 +15744,36 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		for (FFrontFire& Fire : FrontFires) { Brought(Fire.At); }
 		for (FBattleSmoke& Battle : Battles) { Brought(Battle.Where); }
 		for (FBombSmoke& Smoke : BombSmokes) { Brought(Smoke.Root); }
-		// (The flak bursts too, by the art director's ruling of 25 November 2026 05:10Z, after a second read asked
-		// whether they should stay where they were born. A burst is born at Flight.At, and a raid is drawn in the turn
-		// nearest its AIRFIELD, which is itself counted beside the eye, so while a raid is on screen its turn IS the
-		// eye's and the bursts lie with the fire that made them. The pass rounds each burst from where it lies, every
-		// frame, so one moved while its raid was far is back with its raid by the frame the raid comes within half a
-		// world. What it buys: when the eye wraps at the chart's edge (the controller's SetWrap) or the photographer
-		// jumps, every raid comes round a whole world in one frame, and the bursts in the air come with it instead of
-		// being left behind out of sight for the rest of their life. What it costs: a far raid's bursts may lie a world
-		// from it while BOTH are off screen, which no eye can see: a burst is drawn only within about 1,700 units, and
-		// a raid that far off needs over 7,500.)
-		for (FFlakBurst& Burst : FlakBursts) { Brought(Burst.At); }
+		// (THE FLAK BURSTS ARE NOT BROUGHT TO THE EYE. The art director ruled at 05:10Z that they must come round with
+		// the rest, so that when the eye wraps at the chart's edge (the controller's SetWrap) or the photographer jumps,
+		// the bursts in the air come round with their raid instead of hanging a world behind for the rest of their life.
+		// She is right about what has to happen; the eye is the wrong thing to measure it from. A raid is NOT drawn in
+		// the eye's turn: UpdateSorties counts the airfield beside the eye and then the target beside the AIRFIELD, so a
+		// raid from a near field to a far target is drawn up to a world from the eye, and the guns' own fire follows the
+		// raid there (RaidTurn and ToRaid below), as do the searchlights. A pass rounding bursts to the eye therefore
+		// moves them off their raid and onto the twin of the bombed town, which stands within sight of the seam with no
+		// bombers over it and no gun flashes under it: smoke in an empty sky, measured by a third read (eye at map x
+		// 4900, field 300, target -3000: the raid is drawn at -3000 and its bursts land at 6256, about 1,356 units from
+		// the eye and well inside the 1,700 a burst is drawn within).
+		// So each burst is brought round to the turn of ITS OWN RAID, named by the province bombed and the province
+		// flown from. That gives her what she asked for -- the eye wraps, the raid comes round a world, the bursts come
+		// with it in the same frame -- and it cannot part a burst from the fire that made it. A burst whose raid has
+		// gone home is left where it hangs and fades there, which is the only honest place for it.)
+		for (FFlakBurst& Burst : FlakBursts)
+		{
+			if (Burst.Over == INDEX_NONE)
+			{
+				continue;
+			}
+			const FFlight* Maker = Flights.FindByPredicate([&Burst](const FFlight& Flier)
+			{
+				return Flier.Sortie.Region == Burst.Over && Flier.Sortie.From == Burst.From && !Flier.At.IsZero();
+			});
+			if (Maker)
+			{
+				Burst.At.Y += FMath::RoundToDouble((Maker->At.Y - Burst.At.Y) / SeamWorld) * SeamWorld;
+			}
+		}
 		for (TPair<FVector, double>& Down : SetDowns) { Brought(Down.Key); }
 		for (FVector4& Fire : ColumnFires)
 		{
@@ -16853,6 +16872,8 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				Burst.Born = Now - Ago;
 				Burst.Seed = Chance.RandRange(1, 1 << 20);
 				Burst.Wings = Wings;
+				Burst.Over = Flight.Sortie.Region; // (seam-4's mend: whose raid it is, for its turn of the world)
+				Burst.From = Flight.Sortie.From;
 				// (a burst that goes off now, within about a wingspan and a quarter of the leader, jolts the formation:
 				// up to three and a half degrees of roll and one and a half of nod, the nearer the more)
 				const double Near = 1.0 - FMath::Clamp(FVector::Distance(Burst.At, Flight.At) / (1.25 * Wings), 0.0, 1.0);
@@ -16969,6 +16990,8 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				Puffed.Seed = Dice.RandRange(1, 1 << 20);
 				Puffed.Wings = LightWings;
 				Puffed.bLight = true;
+				Puffed.Over = Flight.Sortie.Region; // (seam-4's mend: whose raid it is, for its turn of the world)
+				Puffed.From = Flight.Sortie.From;
 			};
 			if (Flight.NextFlak <= 0.0)
 			{
