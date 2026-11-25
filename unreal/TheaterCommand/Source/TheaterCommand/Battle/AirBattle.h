@@ -258,6 +258,10 @@ private:
 		/** How big each part of it is, in metres, for its strength on the screen: section 0 a kill mark across, 1 his
 		 * name's capitals, 2 a rudder bar's height (0 where none is painted). */
 		double TallySize[3] = { 0.0, 0.0, 0.0 };
+		/** Its nose art (AirBattleNoseArt.cpp, release 2), made once when first near the eye: its painting on its model's
+		 * panels, port and starboard where it is worn on both; tried says it was looked at, painted or not. */
+		TWeakObjectPtr<UProceduralMeshComponent> NoseArt;
+		bool bNoseArtTried = false;
 	};
 	TMap<int32, FPlaneMade> PlaneMade;
 	/**
@@ -415,6 +419,36 @@ private:
 	static constexpr int32 TroopsMostFigures = 24;
 	// ---- (end of the raid on troops) -------------------------------------------------------------------------------
 
+	/**
+	 * The bombers' nose art (release 2; Brian, 25 November 2026 01:30Z: "american only"): each American bomber's painting
+	 * on her nose, one of the modeller's 200 (Content/Data/NoseArt, Tools/pack_nose_art.py), on the panels laid on her
+	 * model's skin (panels.json; only the B-17 has them), with M_TallyMark over the paint under it, while she is near the
+	 * eye on her own mesh. Which painting each wears is Battle/AirNoseArt's (her seat's, where the battle names her group's
+	 * corps and the board's place.bombers its seats; else dealt from the battle's seed, about one in five bare; and the
+	 * named bomber's, once the battle names her as she falls or falls out of her box). Shown, never counted.
+	 * Off unless the Battle rules card's "Bomber nose art" is on (FLandLive's rule "noseArt", off until the Mac and the art
+	 * director pass it): "-TheaterAirNoseArt" turns it on for a run, "-TheaterAirNoNoseArt" off, and
+	 * "-TheaterRulesFlip=noseArt" clicks the card's switch. Off, nothing past the switch is called.
+	 */
+	void DrawNoseArt(const FVector& EyeAt);
+	bool NoseArtReady();
+	/** Her nose art made: true when a painting was read for it (one a frame, so that none stalls a frame). */
+	bool MakeNoseArt(int32 Key, FPlaneMade& Made, UProceduralMeshComponent* Mesh, int32 Number);
+	/** A painting as a picture, read once (null kept for one that cannot be read). */
+	UTexture2D* NoseArtPicture(int32 Number);
+	/** Where a bomber's port nose art is (its panel's middle, in the world) and the way it faces, for the close view's
+	 * picture of it: only with the nose art on and "-TheaterAirNoseArtEye" given, and only for one wearing a painting. */
+	bool NoseArtEye(int32 Key, FVector& At, FVector& Out);
+	/** A shape's frame as its points were brought in from its model's file (the file's name, its middle and its size,
+	 * AirParts::FShape's Kind, Middle and Fit); false for a shape not made, or one of no file. */
+	bool ShapeFrameOf(const FString& Shape, FString& Kind, FVector& Middle, double& Fit) const;
+	static constexpr double NoseArtNearM = 300.0;
+	bool bNoseArtTried = false;
+	int32 NoseArtLogged = 0;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> NoseArtInk;
+	UPROPERTY()
+	TMap<int32, TObjectPtr<UTexture2D>> NoseArtPictures;
 	/** Parachutes, pieces and bombs: one mesh, laid afresh each frame. */
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> Small;

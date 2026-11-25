@@ -1313,3 +1313,37 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    Look for: with the switch off, nothing changes (no card, no OPTIONS row); with it on and the demonstration, END THE
    MONTH stops on the card over Kent; SCRAMBLE opens the battle over Kent with the RAF the side marked YOURS and "now
    about" high; after CONTINUE the month's watch and card come as ever, and nothing of the battle is booked.
+53. **Bomber nose art** (release 2; Brian, 25 November 2026 01:30Z: "american only"). Each American bomber wears one of
+   the modeller's 200 paintings on her nose (battle-models/air/noseart, the air thread's list names.json), packed for the
+   game by Tools/pack_nose_art.py into Content/Data/NoseArt (each a quarter of the modeller's size, 352 by 216, lossless,
+   never otherwise altered; 11 MB in all). Only the B-17 has a panel for it (panels.json: the B-24, B-25 and B-29 are not
+   modelled; the Navy's Dauntless and Devastator and the plain twin stand-in have none). The panel is laid on the game's
+   own B-17, her near shape: the painting's 2.2 m from 7.2 m to 5.0 m forward of her middle, below the windscreen and
+   above her grey belly, all of it on her olive with some 4 cm to spare, 2 to 5 mm off her skin; port always, and
+   starboard too for one painting in eight (the brief's "a few aircraft carry it on both sides"), mirrored so that it
+   reads from left to right on both sides. Drawn with M_TallyMark over the paint under it (AirBattleNoseArt.cpp), one
+   small mesh of her own while she is within 300 m of the eye on her near shape, a painting read at most once a frame.
+   Which painting (Battle/AirNoseArt): where a view names its group's corps (extra.corps) and the airStart board's
+   place.bombers gives that corps' seats (the rules' campaign/bombers.ts; never the raid card's airLook, which strips
+   them), its models wear them, the model in slot k seat k times per (the first of the seats it stands for, as the
+   show's gunners name a bomber's slot), old hands first, a seat with art 0 bare. The rules do not name a box's corps
+   yet, and nothing else says which group is which (the battle numbers its groups in the campaign's own order of its
+   air groups, where a newer one can stand ahead of older ones, and place.bombers is keyed by corps), so its groups are
+   never paired by their order; until the rules send it, and where the battle says nothing (the Bremen film, the test
+   battles): each group's paintings shuffled from the battle's seed and its id and given in turn, none shared in the
+   battle while any is unused, about one in five a bare nose. An aircraft keeps hers for the whole battle, but for one
+   the battle names as she falls or falls out of her box (the loss's extra.bomber, the dispatch's "That was <name>"):
+   whichever model the show takes for it wears that bomber's painting from then, and the one of her group that wore it
+   takes hers. The show's choice of model is its own, the same with the nose art on or off. Shown, never counted.
+   Off until the Mac and the art director pass it: the Battle rules card's **Bomber nose art** (FLandLive's rule
+   `noseArt`, never sent to the land rules); `-TheaterAirNoseArt` on for a run, `-TheaterAirNoNoseArt` off,
+   `-TheaterRulesFlip=noseArt` clicks the card's switch. Off, DrawNoseArt returns at the switch and the scene's calls
+   are as before. The cloud test (Tools/air_show/air_nose_art_test.cpp, in run.sh) checks the pack, the panel against
+   her near shape on both sides, and who wears what on the recordings and on two raids the rules made
+   (nose_art_raid.json): one played through its first named losses, each falling model wearing the painting its loss
+   names, and one whose ticket's order is not by corps.
+   Look for (`-TheaterAirNoseArt`, the Bremen film, the close view on a B-17 of the 303rd): the log's "Air battle: nose
+   art:" lines naming each painting and its key (and "now wears" for a bomber named as she falls); on the B-17s near
+   the eye a flat sign-painter's picture on the port side of the nose under the windscreen, lettering reading left to
+   right, upright, not floating off her skin nor flickering into it, none on the Mustangs or Fw 190s, a few bare noses;
+   the frame rate as before.

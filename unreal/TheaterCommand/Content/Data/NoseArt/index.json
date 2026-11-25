@@ -1,0 +1,2817 @@
+{
+ "about": "The bombers' nose art (Battle/AirNoseArt, AirBattleNoseArt.cpp): each number of the air thread's list (names.json), its name, whether it is painted and, if so, its picture: RGBA, its clear background kept clear, covering size_m of her skin (the painting fitted inside). A number not painted is worn as a bare nose. none: the chance a bomber has no name (a new replacement) where the battle does not say who flies her.",
+ "made": "Tools/pack_nose_art.py from the modeller's noseart folder (done.json: 200 painted, 1408x864) and the air thread's names.json, each a quarter of the modeller's size each way",
+ "count": 200,
+ "painted": 200,
+ "none": 0.2,
+ "size_m": [
+  2.2,
+  1.35
+ ],
+ "px": [
+  352,
+  216
+ ],
+ "art": [
+  {
+   "number": 1,
+   "name": "Wichita Whirlwind",
+   "painted": true,
+   "file": "art-001.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 2,
+   "name": "Lady Lantern",
+   "painted": true,
+   "file": "art-002.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 3,
+   "name": "Hometown Honey",
+   "painted": true,
+   "file": "art-003.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 4,
+   "name": "Second Wind",
+   "painted": true,
+   "file": "art-004.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 5,
+   "name": "Sally Forth",
+   "painted": true,
+   "file": "art-005.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 6,
+   "name": "Moonlight Mabel",
+   "painted": true,
+   "file": "art-006.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 7,
+   "name": "Prairie Schooner",
+   "painted": true,
+   "file": "art-007.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 8,
+   "name": "The Mule Train",
+   "painted": true,
+   "file": "art-008.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 9,
+   "name": "Dust Bowl Darlin'",
+   "painted": true,
+   "file": "art-009.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 10,
+   "name": "Iron Mitt",
+   "painted": true,
+   "file": "art-010.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 11,
+   "name": "Gremlin Trouble",
+   "painted": true,
+   "file": "art-011.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 12,
+   "name": "Wise Owl",
+   "painted": true,
+   "file": "art-012.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 13,
+   "name": "Lone Star Lucy",
+   "painted": true,
+   "file": "art-013.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 14,
+   "name": "Boomtown Belle",
+   "painted": true,
+   "file": "art-014.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 15,
+   "name": "Weather Vane",
+   "painted": true,
+   "file": "art-015.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 16,
+   "name": "Seven Seas Sue",
+   "painted": true,
+   "file": "art-016.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 17,
+   "name": "Horseshoe Hattie",
+   "painted": true,
+   "file": "art-017.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 18,
+   "name": "Bluebonnet Babe",
+   "painted": true,
+   "file": "art-018.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 19,
+   "name": "Highball Pearl",
+   "painted": true,
+   "file": "art-019.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 20,
+   "name": "Corn Belt Clipper",
+   "painted": true,
+   "file": "art-020.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 21,
+   "name": "Buckeye Buzz",
+   "painted": true,
+   "file": "art-021.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 22,
+   "name": "Hoosier Hurricane",
+   "painted": true,
+   "file": "art-022.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 23,
+   "name": "Mama's Meatloaf",
+   "painted": true,
+   "file": "art-023.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 24,
+   "name": "Loud and Clear",
+   "painted": true,
+   "file": "art-024.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 25,
+   "name": "Tulsa Tumbleweed",
+   "painted": true,
+   "file": "art-025.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 26,
+   "name": "Bashful Bear",
+   "painted": true,
+   "file": "art-026.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 27,
+   "name": "Apple Pie Order",
+   "painted": true,
+   "file": "art-027.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 28,
+   "name": "Navigator's Nightmare",
+   "painted": true,
+   "file": "art-028.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 29,
+   "name": "Night Freight",
+   "painted": true,
+   "file": "art-029.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 30,
+   "name": "Sunday Sunshine",
+   "painted": true,
+   "file": "art-030.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 31,
+   "name": "Allegheny Annie",
+   "painted": true,
+   "file": "art-031.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 32,
+   "name": "Jackalope Junction",
+   "painted": true,
+   "file": "art-032.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 33,
+   "name": "Heads We Win",
+   "painted": true,
+   "file": "art-033.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 34,
+   "name": "Sliphorn Slim",
+   "painted": true,
+   "file": "art-034.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 35,
+   "name": "Sandlot Slugger",
+   "painted": true,
+   "file": "art-035.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 36,
+   "name": "Stubborn Stork",
+   "painted": true,
+   "file": "art-036.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 37,
+   "name": "Flapjack Jack",
+   "painted": true,
+   "file": "art-037.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 38,
+   "name": "Ten and a Pup",
+   "painted": true,
+   "file": "art-038.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 39,
+   "name": "Bayou Baby",
+   "painted": true,
+   "file": "art-039.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 40,
+   "name": "Barnyard Bomber",
+   "painted": true,
+   "file": "art-040.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 41,
+   "name": "Dakota Dawn",
+   "painted": true,
+   "file": "art-041.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 42,
+   "name": "Milk Train Millie",
+   "painted": true,
+   "file": "art-042.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 43,
+   "name": "Pickle Barrel Special",
+   "painted": true,
+   "file": "art-043.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 44,
+   "name": "Looking Back",
+   "painted": true,
+   "file": "art-044.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 45,
+   "name": "Fogbound Freddie",
+   "painted": true,
+   "file": "art-045.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 46,
+   "name": "Ozark Ollie",
+   "painted": true,
+   "file": "art-046.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 47,
+   "name": "Hoop Snake Hollow",
+   "painted": true,
+   "file": "art-047.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 48,
+   "name": "The Nervous Goat",
+   "painted": true,
+   "file": "art-048.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 49,
+   "name": "Four Leaf Flo",
+   "painted": true,
+   "file": "art-049.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 50,
+   "name": "Jitterbug Jenny",
+   "painted": true,
+   "file": "art-050.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 51,
+   "name": "Stoop Ball Champ",
+   "painted": true,
+   "file": "art-051.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 52,
+   "name": "Mohawk Valley Mae",
+   "painted": true,
+   "file": "art-052.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 53,
+   "name": "Biscuits and Gravy",
+   "painted": true,
+   "file": "art-053.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 54,
+   "name": "Ball Turret Buddy",
+   "painted": true,
+   "file": "art-054.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 55,
+   "name": "Riverboat Ruby",
+   "painted": true,
+   "file": "art-055.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 56,
+   "name": "Porcupine Express",
+   "painted": true,
+   "file": "art-056.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 57,
+   "name": "Sagebrush Sara",
+   "painted": true,
+   "file": "art-057.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 58,
+   "name": "Tailwind Tilly",
+   "painted": true,
+   "file": "art-058.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 59,
+   "name": "Front Porch Swing",
+   "painted": true,
+   "file": "art-059.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 60,
+   "name": "Waist Deep in Brass",
+   "painted": true,
+   "file": "art-060.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 61,
+   "name": "Chesapeake Charlie",
+   "painted": true,
+   "file": "art-061.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 62,
+   "name": "Prize Pumpkin",
+   "painted": true,
+   "file": "art-062.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 63,
+   "name": "Sleepy Possum",
+   "painted": true,
+   "file": "art-063.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 64,
+   "name": "Hook and Ladder",
+   "painted": true,
+   "file": "art-064.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 65,
+   "name": "Rocky Mountain Rambler",
+   "painted": true,
+   "file": "art-065.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 66,
+   "name": "Wishbone Wendy",
+   "painted": true,
+   "file": "art-066.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 67,
+   "name": "Swing Shift Shirley",
+   "painted": true,
+   "file": "art-067.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 68,
+   "name": "Pelican's Lunch",
+   "painted": true,
+   "file": "art-068.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 69,
+   "name": "Letter from Home",
+   "painted": true,
+   "file": "art-069.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 70,
+   "name": "Cup of Joe",
+   "painted": true,
+   "file": "art-070.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 71,
+   "name": "Strike and Spare",
+   "painted": true,
+   "file": "art-071.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 72,
+   "name": "Golden Gate Gertie",
+   "painted": true,
+   "file": "art-072.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 73,
+   "name": "Frostbite Fran",
+   "painted": true,
+   "file": "art-073.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 74,
+   "name": "Trusty Terrier",
+   "painted": true,
+   "file": "art-074.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 75,
+   "name": "Magnolia Maid",
+   "painted": true,
+   "file": "art-075.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 76,
+   "name": "Step Right Up",
+   "painted": true,
+   "file": "art-076.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 77,
+   "name": "Saturday Night Bath",
+   "painted": true,
+   "file": "art-077.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 78,
+   "name": "Short Field",
+   "painted": true,
+   "file": "art-078.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 79,
+   "name": "Crew Chief's Pride",
+   "painted": true,
+   "file": "art-079.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 80,
+   "name": "Prickly Pear Pete",
+   "painted": true,
+   "file": "art-080.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 81,
+   "name": "Gander's Gang",
+   "painted": true,
+   "file": "art-081.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 82,
+   "name": "The Kitchen Sink",
+   "painted": true,
+   "file": "art-082.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 83,
+   "name": "Briefing at Four",
+   "painted": true,
+   "file": "art-083.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 84,
+   "name": "Rainy Day Ruth",
+   "painted": true,
+   "file": "art-084.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 85,
+   "name": "Green Mountain Girl",
+   "painted": true,
+   "file": "art-085.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 86,
+   "name": "Seven Come Home",
+   "painted": true,
+   "file": "art-086.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 87,
+   "name": "Barbershop Four",
+   "painted": true,
+   "file": "art-087.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 88,
+   "name": "Fishing Hole",
+   "painted": true,
+   "file": "art-088.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 89,
+   "name": "Tin Roof Tabby",
+   "painted": true,
+   "file": "art-089.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 90,
+   "name": "Morning Edition",
+   "painted": true,
+   "file": "art-090.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 91,
+   "name": "Bay State Bess",
+   "painted": true,
+   "file": "art-091.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 92,
+   "name": "Barbell Bruno",
+   "painted": true,
+   "file": "art-092.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 93,
+   "name": "Granny's Rocker",
+   "painted": true,
+   "file": "art-093.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 94,
+   "name": "In Triplicate",
+   "painted": true,
+   "file": "art-094.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 95,
+   "name": "Bluegrass Bugler",
+   "painted": true,
+   "file": "art-095.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 96,
+   "name": "Firefly Flossie",
+   "painted": true,
+   "file": "art-096.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 97,
+   "name": "Vapor Trail Connie",
+   "painted": true,
+   "file": "art-097.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 98,
+   "name": "Motor City Molly",
+   "painted": true,
+   "file": "art-098.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 99,
+   "name": "Blackout Betty",
+   "painted": true,
+   "file": "art-099.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 100,
+   "name": "Chow Line Champ",
+   "painted": true,
+   "file": "art-100.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 101,
+   "name": "Long Way Home",
+   "painted": true,
+   "file": "art-101.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 102,
+   "name": "Robin's Return",
+   "painted": true,
+   "file": "art-102.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 103,
+   "name": "Card Table Chester",
+   "painted": true,
+   "file": "art-103.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 104,
+   "name": "Juke Box Judy",
+   "painted": true,
+   "file": "art-104.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 105,
+   "name": "King Me",
+   "painted": true,
+   "file": "art-105.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 106,
+   "name": "Pine Tree Patrol",
+   "painted": true,
+   "file": "art-106.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 107,
+   "name": "Bolt from the Blue",
+   "painted": true,
+   "file": "art-107.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 108,
+   "name": "Bare Knuckles",
+   "painted": true,
+   "file": "art-108.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 109,
+   "name": "Spud Duty",
+   "painted": true,
+   "file": "art-109.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 110,
+   "name": "Catfish Carl",
+   "painted": true,
+   "file": "art-110.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 111,
+   "name": "Windy City Wanda",
+   "painted": true,
+   "file": "art-111.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 112,
+   "name": "Porch Light",
+   "painted": true,
+   "file": "art-112.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 113,
+   "name": "Patched Britches",
+   "painted": true,
+   "file": "art-113.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 114,
+   "name": "Hawkeye Hank",
+   "painted": true,
+   "file": "art-114.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 115,
+   "name": "Bullfrog Basso",
+   "painted": true,
+   "file": "art-115.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 116,
+   "name": "Scrap Drive Special",
+   "painted": true,
+   "file": "art-116.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 117,
+   "name": "Three Day Pass",
+   "painted": true,
+   "file": "art-117.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 118,
+   "name": "Show Me Sam",
+   "painted": true,
+   "file": "art-118.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 119,
+   "name": "Wolf at the Door",
+   "painted": true,
+   "file": "art-119.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 120,
+   "name": "Knothole Ned",
+   "painted": true,
+   "file": "art-120.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 121,
+   "name": "Drum Major Dan",
+   "painted": true,
+   "file": "art-121.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 122,
+   "name": "Orange Crate Racer",
+   "painted": true,
+   "file": "art-122.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 123,
+   "name": "Moose on the Loose",
+   "painted": true,
+   "file": "art-123.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 124,
+   "name": "The Red Caboose",
+   "painted": true,
+   "file": "art-124.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 125,
+   "name": "Soda Fountain Stella",
+   "painted": true,
+   "file": "art-125.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 126,
+   "name": "Bunk Fatigue",
+   "painted": true,
+   "file": "art-126.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 127,
+   "name": "Keystone Kid",
+   "painted": true,
+   "file": "art-127.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 128,
+   "name": "First Light",
+   "painted": true,
+   "file": "art-128.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 129,
+   "name": "Beaver Lodge",
+   "painted": true,
+   "file": "art-129.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 130,
+   "name": "Sooner or Later",
+   "painted": true,
+   "file": "art-130.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 131,
+   "name": "Clothesline Parade",
+   "painted": true,
+   "file": "art-131.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 132,
+   "name": "Lost and Found",
+   "painted": true,
+   "file": "art-132.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 133,
+   "name": "Tarheel Tess",
+   "painted": true,
+   "file": "art-133.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 134,
+   "name": "Carousel Runaway",
+   "painted": true,
+   "file": "art-134.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 135,
+   "name": "Gandy Dancer",
+   "painted": true,
+   "file": "art-135.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 136,
+   "name": "Crow's Nest Clem",
+   "painted": true,
+   "file": "art-136.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 137,
+   "name": "Tuesday's Child",
+   "painted": true,
+   "file": "art-137.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 138,
+   "name": "Do-Si-Do Dora",
+   "painted": true,
+   "file": "art-138.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 139,
+   "name": "Kite Season",
+   "painted": true,
+   "file": "art-139.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 140,
+   "name": "Sunflower Sophie",
+   "painted": true,
+   "file": "art-140.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 141,
+   "name": "Hunter's Moon",
+   "painted": true,
+   "file": "art-141.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 142,
+   "name": "Brimstone Bill",
+   "painted": true,
+   "file": "art-142.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 143,
+   "name": "Dead Reckoning Dot",
+   "painted": true,
+   "file": "art-143.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 144,
+   "name": "The Plow Horse",
+   "painted": true,
+   "file": "art-144.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 145,
+   "name": "Evergreen Evie",
+   "painted": true,
+   "file": "art-145.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 146,
+   "name": "Lunch Pail Larry",
+   "painted": true,
+   "file": "art-146.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 147,
+   "name": "Pop's Pickup",
+   "painted": true,
+   "file": "art-147.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 148,
+   "name": "Ferry Pilot Flora",
+   "painted": true,
+   "file": "art-148.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 149,
+   "name": "Granite State Gil",
+   "painted": true,
+   "file": "art-149.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 150,
+   "name": "Scarecrow Sentry",
+   "painted": true,
+   "file": "art-150.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 151,
+   "name": "Midnight Raccoon",
+   "painted": true,
+   "file": "art-151.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 152,
+   "name": "Rainbow's End",
+   "painted": true,
+   "file": "art-152.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 153,
+   "name": "Silver State Sadie",
+   "painted": true,
+   "file": "art-153.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 154,
+   "name": "Third Time Lucky",
+   "painted": true,
+   "file": "art-154.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 155,
+   "name": "Jug Band Jake",
+   "painted": true,
+   "file": "art-155.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 156,
+   "name": "Pigeon Post",
+   "painted": true,
+   "file": "art-156.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 157,
+   "name": "Kid Sister",
+   "painted": true,
+   "file": "art-157.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 158,
+   "name": "Bits and Pieces",
+   "painted": true,
+   "file": "art-158.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 159,
+   "name": "Roller Rink Rhoda",
+   "painted": true,
+   "file": "art-159.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 160,
+   "name": "Shenandoah Sunrise",
+   "painted": true,
+   "file": "art-160.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 161,
+   "name": "Switchboard Selma",
+   "painted": true,
+   "file": "art-161.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 162,
+   "name": "Seal of Approval",
+   "painted": true,
+   "file": "art-162.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 163,
+   "name": "Cornhusker Kate",
+   "painted": true,
+   "file": "art-163.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 164,
+   "name": "Spitting Mad",
+   "painted": true,
+   "file": "art-164.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 165,
+   "name": "Rattler's Reply",
+   "painted": true,
+   "file": "art-165.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 166,
+   "name": "Doughnut Run",
+   "painted": true,
+   "file": "art-166.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 167,
+   "name": "January Thaw",
+   "painted": true,
+   "file": "art-167.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 168,
+   "name": "Razorback Rush",
+   "painted": true,
+   "file": "art-168.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 169,
+   "name": "Old Snapper",
+   "painted": true,
+   "file": "art-169.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 170,
+   "name": "Keeper of the Light",
+   "painted": true,
+   "file": "art-170.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 171,
+   "name": "Ornery Otis",
+   "painted": true,
+   "file": "art-171.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 172,
+   "name": "Bicycle Squadron",
+   "painted": true,
+   "file": "art-172.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 173,
+   "name": "Covered Bridge Express",
+   "painted": true,
+   "file": "art-173.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 174,
+   "name": "Ladybug Landing",
+   "painted": true,
+   "file": "art-174.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 175,
+   "name": "Harmonica Hal",
+   "painted": true,
+   "file": "art-175.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 176,
+   "name": "Knuckle Down",
+   "painted": true,
+   "file": "art-176.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 177,
+   "name": "Otter Slide",
+   "painted": true,
+   "file": "art-177.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 178,
+   "name": "Sugaring Off",
+   "painted": true,
+   "file": "art-178.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 179,
+   "name": "Cornered Badger",
+   "painted": true,
+   "file": "art-179.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 180,
+   "name": "Dog Days",
+   "painted": true,
+   "file": "art-180.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 181,
+   "name": "Whistle Stop",
+   "painted": true,
+   "file": "art-181.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 182,
+   "name": "Rubber Boots",
+   "painted": true,
+   "file": "art-182.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 183,
+   "name": "Village Smithy",
+   "painted": true,
+   "file": "art-183.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 184,
+   "name": "Lobster Pot Lou",
+   "painted": true,
+   "file": "art-184.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 185,
+   "name": "Polar Bear Plunge",
+   "painted": true,
+   "file": "art-185.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 186,
+   "name": "Orange Grove Olive",
+   "painted": true,
+   "file": "art-186.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 187,
+   "name": "Welcome Mat",
+   "painted": true,
+   "file": "art-187.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 188,
+   "name": "Stovepipe Lodge",
+   "painted": true,
+   "file": "art-188.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 189,
+   "name": "Greenhorn",
+   "painted": true,
+   "file": "art-189.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 190,
+   "name": "Wooden Nickel",
+   "painted": true,
+   "file": "art-190.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 191,
+   "name": "Bass Fiddle Fay",
+   "painted": true,
+   "file": "art-191.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 192,
+   "name": "Double Feature",
+   "painted": true,
+   "file": "art-192.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 193,
+   "name": "Hilltop Trolley",
+   "painted": true,
+   "file": "art-193.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 194,
+   "name": "Wind-Up Wonder",
+   "painted": true,
+   "file": "art-194.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 195,
+   "name": "Wishing Star",
+   "painted": true,
+   "file": "art-195.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 196,
+   "name": "Sign Painter's Holiday",
+   "painted": true,
+   "file": "art-196.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 197,
+   "name": "Piggy Bank",
+   "painted": true,
+   "file": "art-197.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 198,
+   "name": "Wheels Down",
+   "painted": true,
+   "file": "art-198.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 199,
+   "name": "Hardstand Hermit",
+   "painted": true,
+   "file": "art-199.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  },
+  {
+   "number": 200,
+   "name": "Painted Desert Pony",
+   "painted": true,
+   "file": "art-200.png",
+   "px": [
+    352,
+    216
+   ],
+   "size_m": [
+    2.2,
+    1.35
+   ]
+  }
+ ]
+}

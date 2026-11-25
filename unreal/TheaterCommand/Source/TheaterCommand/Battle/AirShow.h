@@ -114,6 +114,11 @@ namespace AirShow
 		 * vics of three; a fighter one of 20, five fours); 0 where an older recording does not say. SlotOf lays every
 		 * model's box from its slot alone, so this is a reading only. */
 		int Boxes = 0;
+		/** Its corps (the view's extra.corps; -1 where the battle does not name it): which group of the board's
+		 * place.bombers it flies with, for its nose art (Battle/AirNoseArt). The rules do not send it yet (sim.ts shown,
+		 * the bridge's unitOut), and nothing else says which group is which corps, so until they do every group's
+		 * paintings are dealt. A reading only. */
+		int Corps = -1;
 		Act Doing = Act::March;
 		int Engaged = -1;
 		std::vector<Fire> Firing;
@@ -167,6 +172,11 @@ namespace AirShow
 		bool bFeather = false;     // air:straggle, air:fireout, air:regain, air:hit fireout: its dead airscrew feathered
 		int GunBox = -1;           // air:lost, air:hit, a fighter: the box whose gunners brought it down or hit it (-1: not gunners)
 		int GunSeat = -1;          // (and that bomber's seat in its group, as the battle numbers them; -1: not said)
+		// air:lost, air:straggle: the bomber by name it is (extra.bomber, a group whose bombers the battle knows one by
+		// one; the dispatch "That was <name>" names her): her nose art's number on the air thread's list, 0 a bare nose;
+		// -1 not said. Shown only: the model that falls, or falls out of her box, for it wears that bomber's painting
+		// (Battle/AirNoseArt; the review's R2, 25 November). Nothing in the show reads it.
+		int BomberArt = -1;
 		std::string Part;          // air:lost: where it was hit, as the battle says (engine, wing, tail, cockpit, fuselage)
 		/** The models it moves in the picture (AR1, a model falls only for its share of the losses): air:lost, how many
 		 * fall (0 none: told, never shown; the last loss, the rest of the group); air:straggle, 1 a model falls out of
@@ -373,6 +383,10 @@ namespace AirShow
 		bool bBombsGone = false;
 		/** The bursts that have struck it so far (each a run of Hit effects along it), for marks on the model. */
 		int Struck = 0;
+		/** A bomber the battle has named (Event::BomberArt): the nose art's number of the bomber by name the loss she fell
+		 * for, or her falling out of her box, says she is (0 a bare nose); -1 where none has named her, or the loss she
+		 * fell for named none. For her nose art only (Battle/AirNoseArt): the show never reads it. */
+		int NamedArt = -1;
 	};
 
 	/** The small things drawn in one mesh: a parachute, a piece of a wreck, a bomb or a torpedo. */
@@ -776,6 +790,7 @@ namespace AirShow
 			bool bFiring = false;
 			int StragId = -1;
 			double StragAt = -1.0;   // the air time it fell out of its box
+			int NamedArt = -1;       // the bomber by name its fall, or its falling out of its box, was for (PlaneOut::NamedArt)
 			FallHow Falling = FallHow::None;
 			double FallT = 0.0;
 			double FallHigh = 0.0;   // metres over the ground or the sea as its fall began

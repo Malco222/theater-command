@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Battle/AirDesk.h"
 #include "Battle/AirFeed.h"
+#include "Battle/AirNoseArt.h"
 #include "Battle/AirShow.h"
 
 #include <map>
@@ -122,6 +123,17 @@ struct FAirBattleState
 	int FlyPictures = 0;        // (the picture run: the flyover's shots taken, one bit each)
 	FVector GlideEye = FVector::ZeroVector;
 	FRotator GlideFacing = FRotator::ZeroRotator;
+
+	/** The bombers' nose art (AirBattleNoseArt.cpp, release 2): its switch as read when the battle's first frame was drawn
+	 * (-1 not yet read, 0 off, 1 on); the list and the panels' text (Content/Data/NoseArt), read then; each model's panel
+	 * once asked for (Cols 0: none); whether each model the battle names has one; and which painting each aircraft wears. */
+	int NoseArtOn = -1;
+	bool bNoseArtRead = false;
+	AirNoseArt::Index NoseArtList;
+	std::string NoseArtPanelsText;
+	std::map<std::string, AirNoseArt::Panel> NoseArtPanels;
+	std::map<std::string, bool> NoseArtModels;
+	AirNoseArt::Book NoseArt;
 
 	/** His side's own groups of one kind, as shown now. */
 	std::vector<int> MineOf(bool bFighter) const

@@ -138,6 +138,12 @@ namespace
 		// then this row flips to on in one line; -TheaterAirRuleTroops turns it on for a run, -TheaterAirNoRuleTroops off.
 		// The campaign reads it (AAirBattle::CampaignLiveOn(TEXT("ground"))); it is never sent to the land rules.)
 		{ TEXT("flyTroops"), TEXT("Fly raids on troops yourself"), TEXT("On a raid on an army's column, FLY IT YOURSELF takes you into the battle in the air over its road, where you watch the bombs and strafing passes land on its tanks, lorries, guns and men and give your groups their orders. Off: your crews fly every raid on troops."), TEXT("TheaterAirNoRuleTroops"), false, TEXT("TheaterAirRuleTroops") },
+		// (Bomber nose art, release 2: the modeller's 200 paintings on the American bombers in the air battles, Brian, 25
+		// November 2026 01:30Z, "american only". Looks only: nothing in the battle reads it. Off until the Mac holds 45 fps
+		// with it and the art director has passed it, then this row flips to on in one line; -TheaterAirNoseArt turns it
+		// on for a run, -TheaterAirNoNoseArt off. The air battle reads it (AAirBattle::DrawNoseArt); it is never sent to the
+		// land rules.)
+		{ TEXT("noseArt"), TEXT("Bomber nose art"), TEXT("American bombers in the air battles wear painted nose art, each crew's own picture and name. Off: every bomber's nose is bare."), TEXT("TheaterAirNoNoseArt"), false, TEXT("TheaterAirNoseArt") },
 		// (Old wrecks, Brian 23 November 20:09Z: starts off as Scarred ground does, until the effects thread's wrecks pass the
 		// art director and 45 fps; -TheaterLandRuleOldWrecks turns it on for a run. The 3D's -TheaterLandOldWrecks=N and
 		// -TheaterLandOldWreckMonths=M stand-ins are other flags.)
@@ -257,9 +263,10 @@ bool FLandLive::Start(const FString& InKey, int32 InSeed, const FString& InMe, b
 	Switches.Reset();
 	for (int32 R = 0; R < RuleCount(); ++R)
 	{
-		if (FString(LandRuleTable[R].Key).StartsWith(TEXT("fly"), ESearchCase::CaseSensitive))
+		const FString RuleKey(LandRuleTable[R].Key);
+		if (RuleKey.StartsWith(TEXT("fly"), ESearchCase::CaseSensitive) || RuleKey.Equals(TEXT("noseArt"), ESearchCase::CaseSensitive))
 		{
-			continue; // (the air battles' own switches, on the same card: flyLive, flyTroops, flyDefend and those to come; the campaign reads them, the land rules never do)
+			continue; // (the air battles' own switches, on the same card: flyLive, flyTroops, flyDefend, noseArt and those to come; the campaign and the air battle read them, the land rules never do)
 		}
 		const bool bOn = RuleNow(LandRuleTable[R].Key);
 		Switches += FString::Printf(TEXT(",\"%s\":%s"), LandRuleTable[R].Key, bOn ? TEXT("true") : TEXT("false"));

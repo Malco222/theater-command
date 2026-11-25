@@ -4102,6 +4102,8 @@ namespace AirShow
 		// from before the ways down names only the old three (explode, burn, spin).
 		std::string How = E.How.empty() ? (E.Kind == "explode" || E.Kind == "spin" ? E.Kind : std::string("burn")) : E.How;
 		C.FallName = How;
+		// (the bomber by name the battle says this is, for her nose art: read by the scene only)
+		C.NamedArt = E.BomberArt;
 		C.Look = std::clamp(E.Look, 0, 3);
 		C.Turn = E.Roll < 0 ? -1.0 : E.Roll > 0 ? 1.0 : (E.Hand < 0 ? -1.0 : E.Hand > 0 ? 1.0 : C.Hand);
 		// (every bomber falls as a bomber, slow and heavy: the Kate, the Val and the Dauntless too, the audit's 4.3)
@@ -4921,6 +4923,8 @@ namespace AirShow
 				More.ChuteAt.clear();
 				More.ChuteCue.clear();
 				More.Text.clear();
+				// (the bomber the battle named is the first: the rest are others of the group)
+				More.BomberArt = -1;
 				for (int K = 1; K < E.Models; ++K)
 				{
 					const int Next = PickToFall(More, -1);
@@ -4978,6 +4982,8 @@ namespace AirShow
 				C.PastT = -1.0;
 				C.StragId = E.Strag;
 				C.StragAt = AirT;
+				// (the bomber by name the battle says this is, for her nose art: read by the scene only)
+				C.NamedArt = E.BomberArt;
 				// (each dead engine trails from its own nacelle for as long as it is out, a second one its own ribbon)
 				C.DeadEngines = E.Eng.empty() ? std::vector<int>{ 1 } : E.Eng;
 				C.bFeathered = E.bFeather;
@@ -7627,6 +7633,7 @@ namespace AirShow
 			P.bBombsGone = C.StickDone >= 0.0;
 			P.At.Z += Lifted(C);
 			P.Struck = C.Struck;
+			P.NamedArt = C.NamedArt;
 			Out.push_back(P);
 		}
 	}
