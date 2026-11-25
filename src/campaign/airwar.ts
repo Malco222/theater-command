@@ -1198,6 +1198,8 @@ export interface RaidReplay {
   won: boolean;
   level: string;
   result: string;
+  /** (City defences, a night raid with the switch on) The searchlights at the target as the raid's report read them. */
+  lights?: { level: number; cloud: boolean; lit: number };
 }
 
 /** The raids flown in one month (this month unless told otherwise), oldest first, as a viewer may know them: his own side's, and those flown against it. With nobody at the controls, all of them. */
@@ -1212,7 +1214,7 @@ export function raidReplays(g: Game, turn = g.turn, viewer: string | null = g.hu
   const mineToo = (nat: string): boolean => viewer === null || (!!nat && allied(g, nat, viewer));
   return g.airReports.filter((r) => r.turn === turn && (mineToo(r.attNat) || mineToo(r.defNat))).map((r) => {
     const p = r.zone >= 0 ? g.seas[r.zone] : g.regions[r.region];
-    return { id: r.id, turn: r.turn, kind: r.mission, region: r.region, zone: r.zone, place: r.place, x: p?.x ?? 0, y: p?.y ?? 0, attNat: r.attNat, defNat: r.defNat, attackers: side(r.att), defenders: side(r.def), won: r.won, level: r.level, result: r.result };
+    return { id: r.id, turn: r.turn, kind: r.mission, region: r.region, zone: r.zone, place: r.place, x: p?.x ?? 0, y: p?.y ?? 0, attNat: r.attNat, defNat: r.defNat, attackers: side(r.att), defenders: side(r.def), won: r.won, level: r.level, result: r.result, ...(r.lights ? { lights: { ...r.lights } } : {}) };
   });
 }
 

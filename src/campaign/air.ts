@@ -46,7 +46,7 @@ import { cityForecast, cityHit, cityWorthOf, type CityHit } from './repairs';
 import { beyondEurope } from './world';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
 import { airPiece, nightGunShare, whyNotField, wrecked } from './airversion';
-import { cityDefences, cityNight, lightsFloor } from './citydefences';
+import { cityDefences, cityNight, lightsFloor, markNightRaid } from './citydefences';
 import { FIELD, burnedRoom, damageField, fieldKnown, fieldRules, fieldShut, fieldTier, planFieldHit, type FieldBlow, type FieldHit } from './fieldstate';
 import { sightOf } from './intel';
 import { RESEARCH } from './research';
@@ -2273,6 +2273,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     if (acOn(g)) cut = bombLands(g, nat, r, cut, night, aimOf(g, fleets));
     const nation = total > 0 ? cut * (r.fac / total) : 0;
     raid(g, nat, r.ctrl, nation);
+    // City defences: the night raid's own mark where its bombs fell, for the computer's order of searchlights (switch on only).
+    if (night && through > 0) markNightRaid(g, target);
     // The air war: output is weighed by the province's own factories (ruling 227), so one with no industry has none to
     // stop, and the raid is judged on its railway alone.
     value += outputWorth(g, r, cut);

@@ -14,8 +14,14 @@ import { hasTech } from './tech';
 import type { Game, Region } from './types';
 import type { Sky } from './weather';
 
-/** A row of the history start's table: searchlights laid where the historian reads a city belt at that date. */
-export interface LightsRow { region: string; level: number; why: string }
+/**
+ * A row of the history start's table: searchlights laid where the historian reads a city belt at that date
+ * (historian/start-searchlights-1125.md, section 2). `region` the map's own name; `turns` the start months the reading
+ * holds for; `level` 1 to 3; `mark` the historian's mark (F firm, L likely, D derived, U uncertain); `lay` whether it
+ * is laid (the design director's ruling of 25 Nov 2026 02:40Z: F, L and D rows are, and a U alone is a change that is
+ * not, so the last laid level holds and is written as a row of its own); `why` the source in a line.
+ */
+export interface LightsRow { region: string; turns: number[]; level: number; mark: 'L' | 'D' | 'F' | 'U'; lay: boolean; why: string }
 
 export const CITYDEF = data as unknown as {
   /** The share of a built gun level's day worth by night: dark, radar, lit (no radar), both. */
@@ -58,19 +64,49 @@ export function setCityDefences(g: Game, on: boolean): void {
 export const lightsAt = (g: Game, region: number): number => (cityDefences(g) ? g.flags[`wk:lights:${region}`] ?? 0 : 0);
 
 /**
- * The history start (city defences, the design director's ruling of 25 Nov 2026 02:23Z): with the switch on, a
- * campaign opens with searchlights where the historian reads a city belt at that date (citydefences.json 'start',
- * province by name), at the level he reads; none where he finds none, and never by nation. A province keeps the
- * higher level, as the start guns do (airversion.ts). The table is empty until he reads. Off: nothing.
+ * The rows of a history start's table that stand at a start month: those of the latest start month the table lists
+ * at or before it (a month between two listed ones takes the earlier reading), and laid. None before the first.
+ * One lookup for every table of start rows read by the start month.
+ */
+export function startRowsAt<R extends { turns: number[]; lay: boolean }>(rows: R[], month: number): R[] {
+  let at = -Infinity;
+  for (const row of rows) for (const t of row.turns) if (t <= month && t > at) at = t;
+  return at === -Infinity ? [] : rows.filter((row) => row.lay && row.turns.includes(at));
+}
+
+/**
+ * The history start (city defences, the design director's ruling of 25 Nov 2026 02:23Z, 'Also', and of 02:40Z on
+ * which rows are laid): with the switch on, a campaign opens with searchlights where the historian reads a city belt
+ * at the month the war began (openFrom, or the first month, the month the start guns read), province by name, at the
+ * level he reads; none where he finds none. The rows say nothing of nations: whoever holds the province at that date
+ * has the lights. A province keeps the higher level, as the start guns do (airversion.ts). Off: nothing.
  */
 export function openCityDefences(g: Game, rows: LightsRow[] = CITYDEF.start): void {
   if (!cityDefences(g)) return;
-  for (const row of rows) {
+  for (const row of startRowsAt(rows, g.flags.openFrom ?? 1)) {
     const r = g.regions.find((x) => x.name === row.region);
     const lv = Math.max(0, Math.min(LIGHTS_TOP, Math.floor(row.level)));
     if (!r || lv <= 0) continue;
     g.flags[`wk:lights:${r.id}`] = Math.max(g.flags[`wk:lights:${r.id}`] ?? 0, lv);
   }
+}
+
+// ---- The computer's order of searchlights (slice 5) ----------------------------------------------------------------
+
+// A night raid's own mark (form section 11, the completeness read's point 5: the 'raided' mark also fires on a strike
+// at a convoy and does not say night): 'nr:<region>' = the month a night raid's bombs last fell on the province.
+// Written only with the switch on; read only by the computer's order of searchlights (arsenal.ts aiGuns).
+
+/** Marks a province night-raided this month (air.ts fly, where the bombs of a night raid fall). Off: nothing. */
+export function markNightRaid(g: Game, region: number): void {
+  if (cityDefences(g)) g.flags[`nr:${region}`] = g.turn;
+}
+
+/** True where a night raid's bombs fell on the province within the last ai.months months. False with the switch off. */
+export function nightRaided(g: Game, region: number): boolean {
+  if (!cityDefences(g)) return false;
+  const t = g.flags[`nr:${region}`];
+  return t !== undefined && g.turn - t <= CITYDEF.ai.months;
 }
 
 // ---- The guns by night (slice 2) ------------------------------------------------------------------------------------
@@ -86,11 +122,16 @@ export function openCityDefences(g: Game, rows: LightsRow[] = CITYDEF.start): vo
  */
 export interface CityNight { guns: number; lights: number; radar: boolean; cloud: boolean; lit: number; sat: number; share: number; litShare: number }
 
+/** True where a province's holder has Fighter control (aircampaigns.json radar.control), the radar that lays the guns by night. */
+export function radarLays(g: Game, region: number): boolean {
+  const ctrl = g.regions[region]?.ctrl;
+  return !!ctrl && hasTech(g, ctrl, AC.radar.control);
+}
+
 export function cityNight(g: Game, target: number, bombers: number, sky: Sky): CityNight {
   const N = CITYDEF.night;
   const L = gunsAt(g, target), Ls = lightsAt(g, target);
-  const ctrl = g.regions[target]?.ctrl;
-  const radar = !!ctrl && hasTech(g, ctrl, AC.radar.control);
+  const radar = radarLays(g, target);
   const clear = sky === 'clear';
   const lit = clear ? Math.min(L, Ls) : 0;
   const sat = Math.min(1, (CITYDEF.saturation * Ls) / Math.max(1, bombers));

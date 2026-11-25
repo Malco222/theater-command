@@ -15,7 +15,9 @@ import { beginHuman, humanUp, orderMove, orderStorm, stepAI, stormOutlook } from
 import { techOf } from '../src/campaign/tech';
 import { WEATHER, setWeather, zoneOfRegion } from '../src/campaign/weather';
 import stage from '../data/campaign/stage.json';
-import { ARSENAL, offers, workLevel, worksUpkeep, type Offer } from '../src/campaign/arsenal';
+import { ARSENAL, aiArsenal, offers, workLevel, worksUpkeep, type Offer } from '../src/campaign/arsenal';
+import { saveGame } from '../src/campaign/save';
+import '../unreal/TheaterCommand/Rules/campaign-bridge';
 import { CITYDEF, LIGHTS_TOP, WORKS_TOP, cityDefences, cityDefencesOn, lightsAt, openCityDefences, setCityDefences } from '../src/campaign/citydefences';
 import { cancelBuild, deliver, ledger, upkeepTotal } from '../src/campaign/economy';
 import { assess, capture, createGame, endPhase, relocate } from '../src/campaign/game';
@@ -54,7 +56,7 @@ describe('city defences: the switch and the data', () => {
     expect(cd.works).toEqual({ most: 3, worth: 0.3 });
     expect(cd.ground).toEqual({ armour: 0.07, most: 0.25, lost: 1 });
     expect(cd.ai).toEqual({ months: 2 });
-    expect(cd.start).toEqual([]);
+    expect(cd.start.length).toBeGreaterThan(0);
     for (const k of ['night', 'saturation', 'fighters', 'works', 'ground', 'ai', 'start']) expect(typeof (cd as Record<string, unknown>)[`_${k}`], k).toBe('string');
     const w = ARSENAL.works.lights;
     expect(w.label).toBe('Searchlights');
@@ -76,7 +78,7 @@ describe('city defences off: nothing of the searchlights', () => {
     for (let m = 0; m < 2; m++) nextMonth(g);
     expect(lightsFlags(g)).toEqual([]);
     // The start table is not laid with the switch off, even with a row in it.
-    openCityDefences(g, [{ region: 'Hamburg', level: 2, why: 'a test row' }]);
+    openCityDefences(g, [{ region: 'Hamburg', turns: [1], level: 2, mark: 'L', lay: true, why: 'a test row' }]);
     expect(lightsFlags(g)).toEqual([]);
   });
 
@@ -199,26 +201,23 @@ describe('city defences turned off in a campaign under way', () => {
 });
 
 describe('city defences: the history start', () => {
-  it('lays the table only with the switch on, by province, keeping the higher level; empty until the historian reads', () => {
-    expect(CITYDEF.start).toEqual([]);
+  it('lays a table only with the switch on, by province, keeping the higher level', () => {
     const g = grand(true);
     const ham = g.byName['Hamburg'], ber = g.byName['Berlin'];
     g.flags[`wk:lights:${ber.id}`] = 3;
-    const before = lightsFlags(g);
-    openCityDefences(g);
-    expect(lightsFlags(g)).toEqual(before);
+    const row = (region: string, level: number, why: string) => ({ region, turns: [1], level, mark: 'L' as const, lay: true, why });
     openCityDefences(g, [
-      { region: 'Hamburg', level: 2, why: 'a test row' },
-      { region: 'Berlin', level: 1, why: 'a test row: the higher level stays' },
-      { region: 'Nowhere at all', level: 3, why: 'a test row: no such province' },
-      { region: 'Bremen', level: 9, why: 'a test row: clamped to the top' },
+      row('Hamburg', 2, 'a test row'),
+      row('Berlin', 1, 'a test row: the higher level stays'),
+      row('Nowhere at all', 3, 'a test row: no such province'),
+      row('Bremen', 9, 'a test row: clamped to the top'),
     ]);
     expect(lightsAt(g, ham.id)).toBe(2);
     expect(lightsAt(g, ber.id)).toBe(3);
     expect(lightsAt(g, g.byName['Bremen'].id)).toBe(LIGHTS_TOP);
   });
 
-  it('opens a campaign with the switch set where stage.json sets it, and nothing laid while the table is empty', () => {
+  it('opens a campaign with the switch set where stage.json sets it: off, nothing laid', () => {
     const g = startOpen(createGame(3, 'GER'));
     expect(lightsFlags(g)).toEqual([]);
   });
@@ -790,5 +789,230 @@ describe('city defences off: the town\'s guns do not fight tanks (slice 4)', () 
     expect(g.flags[`wk:aa:${town.id}`]).toBe(3);
     expect(`aal:${town.id}` in g.flags).toBe(false);
     expect(rep.lines.some((l) => l.label === 'Anti-aircraft guns' || /anti-aircraft/.test(l.value))).toBe(false);
+  });
+});
+
+// ---- Slice 5: the computer, the bridge, the Options row, the history start's rows ---------------------------------
+
+/** A September 1939 grand campaign with the switch on, its start laid as startOpen lays it under the switch. */
+function opened(on: boolean, from?: number): Game {
+  const g = startOpen(createGame(3, null));
+  setCityDefences(g, on);
+  if (from !== undefined) g.flags.openFrom = from;
+  openCityDefences(g);
+  return g;
+}
+const lightsIn = (g: Game, name: string): number => lightsAt(g, g.byName[name].id);
+
+describe('city defences: the history start\'s rows (slice 5)', () => {
+  it('names only provinces on the map, every row laid, levels 1 to 3, a mark and a source each', () => {
+    const g = startOpen(createGame(3, null));
+    expect(CITYDEF.start.length).toBeGreaterThan(0);
+    for (const row of CITYDEF.start) {
+      expect(g.byName[row.region], row.region).toBeDefined();
+      expect(row.lay, row.region).toBe(true);
+      expect(['F', 'L', 'D', 'U']).toContain(row.mark);
+      expect(row.level).toBeGreaterThanOrEqual(1);
+      expect(row.level).toBeLessThanOrEqual(LIGHTS_TOP);
+      expect(row.turns.length).toBeGreaterThan(0);
+      expect(row.why.length).toBeGreaterThan(0);
+    }
+    // One reading for each province and start month.
+    const seen = new Set<string>();
+    for (const row of CITYDEF.start) for (const t of row.turns) { const k = `${row.region}:${t}`; expect(seen.has(k), k).toBe(false); seen.add(k); }
+  });
+
+  it('a September 1939 campaign with the switch on opens with London at 2, Berlin at 1, and no lights in Paris, Rome or Washington', () => {
+    const g = opened(true);
+    expect(lightsIn(g, 'London')).toBe(2);
+    expect(lightsIn(g, 'Berlin')).toBe(1);
+    expect(lightsIn(g, 'Ruhr')).toBe(1);
+    expect(lightsIn(g, 'Kent')).toBe(2);
+    expect(lightsIn(g, 'Ulster')).toBe(1);
+    for (const none of ['Paris', 'Rome', 'Washington', 'Moscow', 'Hamburg', 'Bohemia', 'Cornwall', 'Liege']) expect(lightsIn(g, none), none).toBe(0);
+  });
+
+  it('with the switch off no searchlights mark exists at the start', () => {
+    const g = opened(false);
+    expect(lightsFlags(g)).toEqual([]);
+    expect(lightsFlags(startOpen(createGame(3, null)))).toEqual([]);
+  });
+
+  it('a later start lays the reading of its month; the last laid level holds over a U row; a month between two takes the earlier', () => {
+    const j42 = opened(true, 29);
+    expect(lightsIn(j42, 'London')).toBe(3);
+    expect(lightsIn(j42, 'Kent')).toBe(3);
+    expect(lightsIn(j42, 'Moscow')).toBe(3);
+    expect(lightsIn(j42, 'Leningrad')).toBe(3);
+    expect(lightsIn(j42, 'Liege')).toBe(1);
+    expect(lightsIn(j42, 'Berlin')).toBe(2);
+    expect(lightsIn(j42, 'Hamburg')).toBe(0);
+    const between = opened(true, 31);
+    expect(lightsFlags(between).sort()).toEqual(lightsFlags(j42).sort());
+    const m44 = opened(true, 57);
+    expect(lightsIn(m44, 'London')).toBe(3);
+    expect(lightsIn(m44, 'Northumbria')).toBe(1);
+    expect(lightsIn(m44, 'Ruhr')).toBe(3);
+    expect(lightsIn(m44, 'Hamburg')).toBe(2);
+    expect(lightsIn(m44, 'Liege')).toBe(0);
+  });
+
+  it('a row marked not to be laid is not laid', () => {
+    const g = grand(true);
+    openCityDefences(g, [
+      { region: 'Hamburg', turns: [1], level: 2, mark: 'U', lay: false, why: 'a test row: a U alone' },
+      { region: 'Bremen', turns: [1], level: 1, mark: 'D', lay: true, why: 'a test row' },
+    ]);
+    expect(lightsIn(g, 'Hamburg')).toBe(0);
+    expect(lightsIn(g, 'Bremen')).toBe(1);
+  });
+});
+
+/** Germany's staff with money in hand, its fighters kept or not, Fighter control or not, and Berlin and the Ruhr's guns set. */
+function staffOf(on: boolean, o: { fighters?: boolean; radar?: boolean; night?: string[]; raided?: boolean } = {}): Game {
+  const g = startOpen(createGame(3, null));
+  setCityDefences(g, on);
+  g.nations.GER.pp = 500;
+  g.flags[`wk:aa:${g.byName.Berlin.id}`] = 2;
+  g.flags[`wk:aa:${g.byName.Ruhr.id}`] = 1;
+  if (o.fighters === false) for (const f of g.airFleets) if (f.nat === 'GER' && f.kind === 'ftr') f.ftr = 0;
+  if (o.radar) techOf(g, 'GER')!.done.push(AC.radar.control);
+  for (const name of o.night ?? []) g.flags[`nr:${g.byName[name].id}`] = g.turn;
+  if (o.raided) g.raids.GER = { turn: g.turn, share: 0.05 };
+  return g;
+}
+const works = (g: Game): string[] => g.nations.GER.queue.filter((b) => b.what === 'work').map((b) => `${b.item}:${g.regions[b.region].name}`);
+
+describe('city defences: the computer orders searchlights where they count (slice 5)', () => {
+  it('after a night raid, with fighters in reach, at the province with the most guns, one order at a time, before more guns', () => {
+    const g = staffOf(true, { night: ['Berlin', 'Ruhr'], raided: true });
+    aiArsenal(g, 'GER');
+    expect(works(g)).toEqual(['lights:Berlin']);
+    aiArsenal(g, 'GER');
+    expect(works(g)).toEqual(['lights:Berlin']);
+  });
+
+  it('with Fighter control and no fighters, the lights still count for the guns', () => {
+    const g = staffOf(true, { fighters: false, radar: true, night: ['Ruhr'], raided: true });
+    aiArsenal(g, 'GER');
+    expect(works(g)).toEqual(['lights:Ruhr']);
+  });
+
+  it('with neither radar nor fighters in reach, or with no night raid, or with the lights as many as the guns, it orders guns as today', () => {
+    const off = staffOf(false, { night: ['Berlin'], raided: true });
+    aiArsenal(off, 'GER');
+    const today = works(off);
+    expect(today.length).toBe(1);
+    expect(today[0]).toMatch(/^aa:/);
+    for (const g of [
+      staffOf(true, { fighters: false, night: ['Berlin'], raided: true }),
+      staffOf(true, { raided: true }),
+    ]) { aiArsenal(g, 'GER'); expect(works(g)).toEqual(today); }
+    const lit = staffOf(true, { night: ['Berlin'], raided: true });
+    lit.flags[`wk:lights:${lit.byName.Berlin.id}`] = 2;
+    aiArsenal(lit, 'GER');
+    expect(works(lit)).toEqual(today);
+  });
+
+  it('a night raid writes its own mark where its bombs fall, only with the switch on', () => {
+    for (const on of [true, false]) {
+      const { g, t, f } = ruhrByNight({ on, guns: 1 });
+      fly(g, 'UK', 'night', t, [f]);
+      expect(g.flags[`nr:${t}`], String(on)).toBe(on ? g.turn : undefined);
+    }
+    const { g, t, f } = ruhrByNight({ on: true, guns: 1 });
+    g.raids = {};
+    fly(g, 'UK', 'bomb', t, [f]);
+    expect(`nr:${t}` in g.flags).toBe(false);
+  });
+});
+
+type Call = (...a: unknown[]) => unknown;
+const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
+interface ViewRegion { id: number; lt?: number; tw?: number; gl?: number; w?: number[] }
+interface BridgeView { cityDefences: boolean; regions: ViewRegion[] }
+function britain(on: boolean): Game {
+  const g = startOpen(createGame(3, 'UK'));
+  setCityDefences(g, on);
+  if (on) openCityDefences(g);
+  let guard = 0;
+  while (!humanUp(g) && guard++ < 200) stepAI(g);
+  beginHuman(g);
+  return g;
+}
+
+describe('city defences in the bridge (slice 5)', () => {
+  it('the view carries the switch, and per region the lights, the town works and the guns lost, only with it on', () => {
+    const g = britain(true);
+    const lon = g.byName.London.id, ber = g.byName.Berlin.id;
+    g.flags[`tw:${lon}`] = 2; g.flags[`twn:${lon}`] = Object.keys(g.nations).indexOf('UK');
+    g.flags[`aal:${ber}`] = g.turn;
+    TC().load(saveGame(g));
+    const v = TC().view() as BridgeView;
+    expect(v.cityDefences).toBe(true);
+    const at = (id: number) => v.regions.find((r) => r.id === id)!;
+    expect(at(lon).lt).toBe(2);
+    expect(at(lon).tw).toBe(2);
+    expect(at(ber).lt).toBe(1);
+    expect(at(ber).gl).toBe(1);
+    expect(at(ber).w?.length).toBe(4);
+    const paris = at(g.byName.Paris.id);
+    expect('lt' in paris || 'tw' in paris || 'gl' in paris).toBe(false);
+    // Off: the same marks on the ground, and not a field of them in the view.
+    expect((TC().act('citydefencesrule:off') as { ok: boolean; note: string }).note).toMatch(/^Off, the guns are as good by night as by day/);
+    const w = TC().view() as BridgeView;
+    expect(w.cityDefences).toBe(false);
+    expect(w.regions.some((r) => 'lt' in r || 'tw' in r || 'gl' in r)).toBe(false);
+  });
+
+  it('act and TC turn it on and off', () => {
+    const g = britain(false);
+    TC().load(saveGame(g));
+    expect((TC().view() as BridgeView).cityDefences).toBe(false);
+    const on = TC().act('citydefencesrule:on') as { ok: boolean; note: string };
+    expect(on.ok).toBe(true);
+    expect(on.note).toMatch(/^Searchlights to build beside the anti-aircraft guns\./);
+    expect((TC().view() as BridgeView).cityDefences).toBe(true);
+    expect((TC().cityDefences(false) as { on: boolean }).on).toBe(false);
+    expect((TC().view() as BridgeView).cityDefences).toBe(false);
+    expect((TC().cityDefences(true) as { on: boolean }).on).toBe(true);
+  });
+
+  it('the AIR DEFENCE shelf shows the searchlights beside the guns only with the switch on', () => {
+    for (const on of [true, false]) {
+      const g = britain(on);
+      g.flags[`wk:aa:${g.byName.London.id}`] = 3;
+      TC().load(saveGame(g));
+      const air = (TC().province(g.byName.London.id) as { glance: { air: Record<string, unknown> | null } }).glance.air!;
+      expect(air.add && (air.add as { key: string }).key).toBe('work:aa');
+      if (!on) { expect('lights' in air).toBe(false); continue; }
+      const l = air.lights as { level: number; lit: number; guns: number; line: string; add: { key: string } | null };
+      expect(l.level).toBe(2);
+      expect(l.lit).toBe(2);
+      expect(l.guns).toBe(3);
+      expect(l.line).toBe('level 2: 2 of the 3 levels of guns are lit by night, under a clear sky');
+      expect(l.add?.key).toBe('work:lights');
+    }
+  });
+
+  it('a night raid\'s flight row carries the searchlights from its report, only with the switch on', () => {
+    for (const on of [true, false]) {
+      const g = britain(on);
+      const t = g.byName.Ruhr.id;
+      g.flags[`wk:aa:${t}`] = 3;
+      if (on) g.flags[`wk:lights:${t}`] = 2;
+      techOf(g, 'GER')!.done.push(AC.radar.control);
+      const f = g.airFleets.find((x) => x.nat === 'UK' && x.bmr > 0 && x.ship === undefined)!;
+      f.bmr = 100;
+      TC().load(saveGame(g));
+      const out = TC().act(`raid:night:${t}:${f.id}`) as { ok: boolean; flies: Record<string, unknown>[]; note: string };
+      expect(out.ok, out.note).toBe(true);
+      const first = out.flies[0];
+      expect(first).toBeDefined();
+      if (!on) { expect('sl' in first || 'lit' in first || 'cloud' in first).toBe(false); continue; }
+      expect(first.sl).toBe(2);
+      expect(first.lit as number).toBeGreaterThan(0);
+      expect('light' in first).toBe(false);
+    }
   });
 });

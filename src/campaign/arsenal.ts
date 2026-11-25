@@ -15,9 +15,10 @@ import { syncWings } from './carriers';
 import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
 import { govMul } from './government';
 import { settledFor, settledTownsOn, whyNotWorksHere } from './buildings';
-import { cityDefences, lightsAt } from './citydefences';
+import { cityDefences, lightsAt, nightRaided } from './citydefences';
+import { AC } from './aircampaigns';
 import { BUDGET, PRODUCTION, budgeted, cadreTerms, income, upkeepTotal, cadresOf, canRaise, corpsCost, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCadre, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, whyNoCadre, type LedgerLine } from './economy';
-import { TECH, locked, paraCount, whyNoPara } from './tech';
+import { TECH, hasTech, locked, paraCount, whyNoPara } from './tech';
 import { eliteCount, eliteOf, eliteRule, priceOf, whyNoElite } from './traits';
 import { allied, atWar, headline, theName } from './game';
 import { majorsOf } from './diplomacy';
@@ -994,6 +995,8 @@ export function bareFront(g: Game, nat: string): [number, number][] {
  */
 function aiGuns(g: Game, nat: string): void {
   const n = g.nations[nat];
+  // City defences: searchlights before more guns, where a night raid has found them wanting and they count.
+  if (cityDefences(g) && aiLights(g, nat)) return;
   const raided = g.raids[nat];
   if (!raided || g.turn - raided.turn > 2) return;
   if (n.queue.some((b) => b.what === 'work' && b.item === 'aa')) return;
@@ -1005,6 +1008,37 @@ function aiGuns(g: Game, nat: string): void {
   if (!best) return;
   const o = offers(g, nat, best.id).find((x) => x.key === 'work:aa');
   if (o && o.why === null && n.pp >= o.cost + PRODUCTION.aiReserve) orderOffer(g, nat, 'work:aa', best.id);
+}
+
+/**
+ * The computer's order of searchlights (city defences, the design director's ruling of 25 Nov 2026 02:23Z, 'Also';
+ * form section 7), before its guns order, with the switch on: among its home provinces where a night raid's bombs
+ * fell within the last months (citydefences.json ai.months), with more levels of guns built than of searchlights
+ * (those on order counted), and where the lights count, for it holds Fighter control's radar (aircampaigns.json
+ * radar.control: the lights lift the guns) or one of its fighter groups has the province in reach (the night
+ * fighters' floor), it orders a level of searchlights at the one with the most levels of guns (ties: the most
+ * factories), one order at a time and above the staff's reserve, as its guns. True where the lights take the guns'
+ * turn this month: one ordered, or one already on order while more are wanted. Otherwise false, and the guns' order
+ * is as it was.
+ */
+function aiLights(g: Game, nat: string): boolean {
+  const n = g.nations[nat];
+  const radar = hasTech(g, nat, AC.radar.control);
+  const fighters = radar ? [] : landFighters(g, nat);
+  let best: Region | null = null;
+  for (const r of g.regions) {
+    if (!isHome(g, nat, r) || !nightRaided(g, r.id)) continue;
+    const guns = workLevel(g, 'aa', r.id);
+    if (guns <= lightsAt(g, r.id) + queued(g, nat, 'lights', r.id)) continue;
+    if (!radar && !fighters.some((f) => km(g, f.base, r.id) <= airRange(f, g).ftr)) continue;
+    const bg = best ? workLevel(g, 'aa', best.id) : -1;
+    if (!best || guns > bg || (guns === bg && r.fac > best.fac)) best = r;
+  }
+  if (!best) return false;
+  if (n.queue.some((b) => b.what === 'work' && b.item === 'lights')) return true;
+  const o = offers(g, nat, best.id).find((x) => x.key === 'work:lights');
+  if (!o || o.why !== null || n.pp < o.cost + PRODUCTION.aiReserve) return false;
+  return !!orderOffer(g, nat, 'work:lights', best.id);
 }
 
 /** The aircraft a nation has bought over its air force's own establishment, with the wings on order, and that establishment, by kind. */
