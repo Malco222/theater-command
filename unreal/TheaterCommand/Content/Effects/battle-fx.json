@@ -2568,6 +2568,106 @@
    ],
    "day_lamp": 1
   },
+  "_naval": "The sea's night fight, 25 November (look bible S7: 'gun flashes light the hulls'). A ship's own guns fired at ships, picked by the sea scene by calibre: naval_heavy 280 mm and up (the capital ships' main guns: 28 cm Scharnhorst to 46 cm Yamato), naval_medium 150 to 279 mm (the cruisers' 6-inch to 8-inch), naval_light under 150 mm (destroyers' 4- to 5.5-inch, and secondaries). Fired by Muzzle as any row, one call a turret (or a gun: the lamp rule's merge sums and caps either way). Each lays a short flame at the muzzle (flame_m), a fireball ahead of it (fireball_m long, fireball_wide of that across, burning fireball_s, fireball_core at its root, fireball_colour through and fireball_edge at its rim: the secondary flash, the propellant's fuel-rich gas burning again in the air, Klingenberg and Heimerl, Gun Muzzle Blast and Flash, 1992; the lengths [EST] from period photographs of 16-inch broadsides, about two barrel lengths, and scaled down by the cube root of the charge, about 300 kg for a 16-inch, 15 to 40 kg for a 6- to 8-inch, 7 kg for a 5-inch, NavWeaps' gun pages), a smoke ring on the big guns (ring_m grown, rolling ring_ahead_m down the line of fire over ring_s), and its own brown-grey cloud (cloud_m, smoke_colour, smoke_s; no billows, no dust ring: nothing under it but the sea). Its lamp (lamp_cd candelas at night at full, whatever game.lamp_candela_at_full is, coloured lamp_colour) reaches lamp_reach_m, about a hull's length for the band (a destroyer 115 m: Fletcher 114.8, Fubuki 118.4; a cruiser 190 m: Brooklyn 185.4, Baltimore 205.3, Leander 169; a battleship 240 m: King George V 227, Scharnhorst 235, Bismarck 251, Iowa 270), hung lamp_up_m over the fireball's middle, and goes down over lamp_s. lamp_cd is half the reach squared, so every band lights the far end of its hull (half the reach from a lamp amidships) at about 1.8 lux and its middle (a quarter of the reach) at about 8: about what the sea's star shells give the water and its searchlights a hull at 3 km [EST, a look choice: a real 16-inch fireball, some 900 square metres at about 1,900 K, is of the order of 10^7 cd, which would white the night out]. By day (day_lamp, at game.day_lamp_share) the heavy and medium rows light their hull, as howitzer and ship_main do; the light row does not, as ship_aa, tank_gun and at_gun do not (art director 21:16Z: by day small guns light no ground). Sound is not the kit's: sound/mix/mix.json.",
+  "naval_heavy": {
+   "_what": "a capital ship's main gun, 280 mm and up (Muzzle, one call a turret)",
+   "flame_m": 8,
+   "fireball_m": 45,
+   "fireball_wide": 0.55,
+   "fireball_s": 0.2,
+   "fireball_lobes": 9,
+   "ring_m": 12,
+   "ring_ahead_m": 60,
+   "ring_s": 5,
+   "ring_puffs": 16,
+   "ring_alpha": 0.45,
+   "cloud_m": 35,
+   "cloud_puffs": 18,
+   "cloud_alpha": 0.55,
+   "billows": 0,
+   "smoke_s": [
+    12,
+    20
+   ],
+   "smoke_colour": [
+    128,
+    112,
+    94
+   ],
+   "fireball_core": [255, 228, 172],
+   "fireball_colour": [244, 142, 48],
+   "fireball_edge": [180, 72, 24],
+   "lamp_colour": [255, 196, 140],
+   "lamp_cd": 28800,
+   "lamp_reach_m": 240,
+   "lamp_up_m": 6,
+   "lamp_s": 0.2,
+   "day_lamp": 1
+  },
+  "naval_medium": {
+   "_what": "a cruiser's main gun, 150 to 279 mm (Muzzle, one call a turret)",
+   "flame_m": 5,
+   "fireball_m": 20,
+   "fireball_wide": 0.55,
+   "fireball_s": 0.14,
+   "fireball_lobes": 6,
+   "ring_m": 6,
+   "ring_ahead_m": 30,
+   "ring_s": 3.5,
+   "ring_puffs": 12,
+   "ring_alpha": 0.4,
+   "cloud_m": 18,
+   "cloud_puffs": 14,
+   "cloud_alpha": 0.5,
+   "billows": 0,
+   "smoke_s": [
+    8,
+    14
+   ],
+   "smoke_colour": [
+    136,
+    124,
+    108
+   ],
+   "fireball_core": [255, 228, 172],
+   "fireball_colour": [244, 142, 48],
+   "fireball_edge": [180, 72, 24],
+   "lamp_colour": [255, 196, 140],
+   "lamp_cd": 18050,
+   "lamp_reach_m": 190,
+   "lamp_up_m": 4,
+   "lamp_s": 0.15,
+   "day_lamp": 1
+  },
+  "naval_light": {
+   "_what": "a destroyer's gun, or a big ship's secondary, under 150 mm (Muzzle, one call a mount)",
+   "flame_m": 3,
+   "fireball_m": 10,
+   "fireball_wide": 0.5,
+   "fireball_s": 0.08,
+   "fireball_lobes": 4,
+   "cloud_m": 8,
+   "cloud_puffs": 10,
+   "cloud_alpha": 0.45,
+   "billows": 0,
+   "smoke_s": [
+    5,
+    9
+   ],
+   "smoke_colour": [
+    146,
+    136,
+    122
+   ],
+   "fireball_core": [255, 228, 172],
+   "fireball_colour": [244, 142, 48],
+   "fireball_edge": [180, 72, 24],
+   "lamp_colour": [255, 196, 140],
+   "lamp_cd": 6612.5,
+   "lamp_reach_m": 115,
+   "lamp_up_m": 3,
+   "lamp_s": 0.1
+  },
   "_day_lamp": "By day only rows with day_lamp light the ground (at game.day_lamp_share); tank guns, anti-tank guns, machine guns, rifles and mortars do not (art director 21:16Z).",
   "veil": {
    "_how": "Art director 06:19Z, the desert: a tank or field gun's shot (any row with dust_ring_m; a towed gun's muzzle socket too) raises the ground round the muzzle in a veil spread along the line of fire, rising a metre or two (every other puff a low dense skirt on the ground, dust.vehicles.low_skirt), that hides the gun and its line of sight for hide_s, then thins to haze_alpha and lingers on the wind. by_ground: where it rises (and how thick); the ring itself takes the ground's own paint and grounds.<g>.dust against earth's.",
@@ -6082,6 +6182,18 @@
      "gone_s": 10,
      "left_third": 0.33,
      "left_two_thirds": 0.17
+    },
+    "naval_heavy": {
+     "thick_s": 3,
+     "gone_s": 45
+    },
+    "naval_medium": {
+     "thick_s": 2,
+     "gone_s": 30
+    },
+    "naval_light": {
+     "thick_s": 1,
+     "gone_s": 15
     }
    }
   },
