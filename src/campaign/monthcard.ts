@@ -329,6 +329,8 @@ export function fitFoot(items: string[], per: number, lines: number, most: numbe
   }
   return out;
 }
+/** A line of news that an air command, or a new group of one, forms (air.ts airUpkeep and growCommands). */
+const AIR_FORMS = /^.+ forms in [^,]+(?:, a new group of .+)?\.$/;
 /** The room the foot boxes have, in letters to a line: at home beside a sign and from the box's edge, elsewhere, and what a staff line may run to in all. */
 const FOOT_ROOM = { home: 30, homeWide: 35, elsewhere: 36, staff: 44 };
 const DESK_WORD: Record<string, string> = { research: 'Research', build: 'Build', diplomacy: 'Diplomacy', spies: 'Spies', air: 'Air', navy: 'Navy' };
@@ -1221,16 +1223,18 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   // the town held, the staff speaks of the battle there and not of its loss.
   const held = new Set(ranked.filter((x) => x.row.tag === 'HELD' || x.row.tag === 'BESIEGED').map((x) => x.row.place));
   const said: { text: string; full: string; hs: Headline[]; short?: string }[] = [];
+  // (Several commands' establishments lowered in a month are one line, summed from their own lines, which the reports
+  // keep; with one, its own line. The UI director, 25 November 2026, 05:45Z. It is the foot's first line, ahead of
+  // the air commands that form: the UI director, 14:06Z.)
+  const lowered = news.filter((x) => loweredOf(x.text));
+  const sum = loweredSum(lowered.map((x) => x.text));
+  if (sum) said.push({ text: sum.text, full: sum.text, hs: lowered, short: sum.short });
+  else for (const h of lowered) said.push({ text: first(h.text), full: h.text, hs: [h] });
   for (const h of news.filter((x) => / has halted at .+ on its march to /.test(x.text))) said.push({ text: first(h.text), full: h.text, hs: [h] });
   const arrivals = new Map<string, Headline[]>();
   for (const h of news) { const m = /^(.+) has arrived at (.+)\.$/.exec(h.text); if (m) arrivals.set(m[2], [...(arrivals.get(m[2]) ?? []), h]); }
-  // (Several commands' establishments lowered in a month are one line, summed from their own lines, which the reports
-  // keep; with one, its own line. The UI director, 25 November 2026, 05:45Z.)
-  const lowered = news.filter((x) => loweredOf(x.text));
-  const sum = loweredSum(lowered.map((x) => x.text));
   for (const h of news) {
     if (said.some((s) => s.hs.includes(h))) continue;
-    if (sum && lowered.includes(h)) { said.push({ text: sum.text, full: sum.text, hs: lowered, short: sum.short }); continue; }
     const m = /^(.+) has arrived at (.+)\.$/.exec(h.text);
     const same = m ? arrivals.get(m[2])! : [];
     if (m && same.length > 1) { said.push({ text: `${m[1]} and ${same.length - 1} more corps have arrived at ${m[2]}`, full: same.map((x) => x.text).join(' '), hs: same }); continue; }
@@ -1240,8 +1244,20 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const dir = /^A directive from ([^:]+): /.exec(h.text), title = dir ? N.gov?.dir?.title : undefined;
     said.push({ text: dir && title ? `A directive from ${dir[1]}: ${title}` : first(fixed), full: fixed, hs: [h] });
   }
-  if (signed < slots) for (const f of fitFoot(said.map((s) => s.text), opts.whole ? Infinity : signed ? FOOT_ROOM.home : FOOT_ROOM.homeWide, slots * 2 - taken, Math.min(3, slots - signed), said.map((s) => s.short))) {
-    card.also.push(f.text); card.alsoFull.push(said[f.at].full);
+  const fit = (): { text: string; at: number }[] => fitFoot(said.map((s) => s.text), opts.whole ? Infinity : signed ? FOOT_ROOM.home : FOOT_ROOM.homeWide, slots * 2 - taken, Math.min(3, slots - signed), said.map((s) => s.short));
+  let fitted = signed < slots ? fit() : [];
+  // (The air commands that form in a month, where their lines do not all fit, are one line: "4 air commands formed",
+  // given as the UI director words it, with no full stop. The UI director, 25 November 2026, 14:06Z.)
+  const forms = said.filter((s) => s.hs.length === 1 && AIR_FORMS.test(s.hs[0].text));
+  let formed: string | null = null;
+  if (forms.length > 1 && forms.some((s) => !fitted.some((f) => said[f.at] === s))) {
+    formed = `${forms.length} air commands formed`;
+    said.splice(said.indexOf(forms[0]), 1, { text: formed, full: forms.map((s) => s.full).join(' '), hs: forms.flatMap((s) => s.hs) });
+    for (const s of forms.slice(1)) said.splice(said.indexOf(s), 1);
+    fitted = fit();
+  }
+  for (const f of fitted) {
+    card.also.push(formed !== null && f.text === `${formed}.` ? formed : f.text); card.alsoFull.push(said[f.at].full);
     for (const h of said[f.at].hs) used.add(h);
   }
 

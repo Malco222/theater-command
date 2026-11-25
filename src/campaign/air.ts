@@ -1314,7 +1314,7 @@ export function airUpkeep(g: Game, nat: string): void {
   const built = row(AIR.production[nat], g.turn) ?? minor, trained = row(AIR.pilots.perMonth[nat], g.turn) ?? (minor ? [minor[0], minor[1]] : null);
   if (built) { p.ftr += built[1]; p.bmr += built[2]; }
   if (trained) p.pilots += trained[1];
-  const lowered = new Map<string, { est: number; ftr: number; bmr: number; region: number }>();
+  const lowered = new Map<string, { est: Est; ftr: number; bmr: number; region: number }>();
   for (const f of airFleetsOf(g, nat)) {
     // A carrier wing has no airfield to lose: it goes where its fleet goes.
     if (f.ship !== undefined) continue;
@@ -1336,15 +1336,17 @@ export function airUpkeep(g: Game, nat: string): void {
     // lowers a kind only where it is lower than the row before it for that command, fighters and bombers each on their
     // own: a raise, a first row, or a group given a smaller share because its command grew into new groups, is not a
     // lowering and tells nothing. Only the aircraft the lowering itself took off the group are counted: what it held
-    // over its new establishment, up to what it was kept at before.)
+    // over its new establishment, up to what it was kept at before. A row that lowers one kind and raises the other
+    // names both kinds, each at its own establishment in the new row: the UI director, 25 November 2026, 14:06Z.)
     const i = r && e && e[0] === g.turn && nat === g.human ? r.est.indexOf(e) : -1;
     if (i > 0) {
       const before = r!.est[i - 1];
       const low = { ftr: e![1] < before[1], bmr: e![2] < before[2] };
       const tf = low.ftr ? Math.max(0, Math.min(sf, was.ftr - f.est.ftr)) : 0, tb = low.bmr ? Math.max(0, Math.min(sb, was.bmr - f.est.bmr)) : 0;
       if (tf + tb > 0) {
-        // (the figure: the command's whole establishment, or where the row raises one kind, the kind it lowers)
-        const est = e![1] > before[1] || e![2] > before[2] ? (low.ftr ? e![1] : 0) + (low.bmr ? e![2] : 0) : e![1] + e![2];
+        // (the figure: the command's whole establishment; or, where the row raises the other kind, both kinds' own)
+        const est: Est = low.ftr && e![2] > before[2] ? { low: 'ftr', to: e![1], raised: e![2] }
+          : low.bmr && e![1] > before[1] ? { low: 'bmr', to: e![2], raised: e![1] } : e![1] + e![2];
         const c = lowered.get(r!.name) ?? { est, ftr: 0, bmr: 0, region: f.base };
         c.ftr += tf; c.bmr += tb;
         lowered.set(r!.name, c);
@@ -1403,6 +1405,12 @@ function struckOff(g: Game, order: AirFleet[], p: { ftr: number; bmr: number; pi
 
 /** Aircraft of the two kinds, as the lines on lowered establishments count them. */
 export interface Craft { ftr: number; bmr: number }
+/**
+ * What a lowered command's line says it is kept at: its whole establishment, or, where its row lowers one kind and
+ * raises the other, the lowered kind's new establishment (`to`) and the raised kind's (`raised`).
+ */
+export type Est = number | { low: 'ftr' | 'bmr'; to: number; raised: number };
+const KIND_WORD = { ftr: 'fighter', bmr: 'bomber' } as const;
 /** "80 fighters", "40 fighters and 70 bombers" (nothing of a kind there is none of). */
 const craftWords = (c: Craft): string => [c.ftr > 0 ? planes(c.ftr, 'fighter') : '', c.bmr > 0 ? planes(c.bmr, 'bomber') : ''].filter(Boolean).join(' and ');
 /** "go" for many, "goes" for one aircraft. */
@@ -1411,8 +1419,11 @@ const verb = (c: Craft, many: string, one: string): string => (c.ftr + c.bmr ===
  * A command's own line when a dated row lowers its establishment (finding 6 of 1.5.1; the UI director's words of 25
  * November 2026, 05:45Z): `back` the aircraft the pool takes, `off` those it has no room for, which are struck off.
  */
-export function loweredLine(name: string, est: number, back: Craft, off: Craft): string {
-  const head = `The air staff has lowered ${name}'s establishment to ${counted(est)}`;
+export function loweredLine(name: string, est: Est, back: Craft, off: Craft): string {
+  // (A row that lowers one kind and raises the other: "lowered Luftflotte 1's bomber establishment to 250 and raised
+  // its fighter establishment to 600", the UI director, 25 November 2026, 14:06Z.)
+  const head = typeof est === 'number' ? `The air staff has lowered ${name}'s establishment to ${counted(est)}`
+    : `The air staff has lowered ${name}'s ${KIND_WORD[est.low]} establishment to ${counted(est.to)} and raised its ${KIND_WORD[est.low === 'ftr' ? 'bmr' : 'ftr']} establishment to ${counted(est.raised)}`;
   if (off.ftr + off.bmr <= 0) return `${head}: ${craftWords(back)} ${verb(back, 'go', 'goes')} back to the pool, from which the other commands draw.`;
   if (back.ftr + back.bmr <= 0) return `${head}: the pool, from which the other commands draw, is full, so ${craftWords(off)} ${verb(off, 'are', 'is')} struck off.`;
   // ("the 30": the kind is not said again where both parts are of the one kind)
@@ -1421,7 +1432,7 @@ export function loweredLine(name: string, est: number, back: Craft, off: Craft):
 }
 /** A command's line read back: its figures, or null for any other line. The month card sums these, so that it says what the lines say. */
 export function loweredOf(text: string): { back: Craft; off: Craft } | null {
-  const m = /^The air staff has lowered .+'s establishment to [\d,]+: (.+)\.$/.exec(text);
+  const m = /^The air staff has lowered .+'s (?:establishment to [\d,]+|(?:fighter|bomber) establishment to [\d,]+ and raised its (?:fighter|bomber) establishment to [\d,]+): (.+)\.$/.exec(text);
   if (!m) return null;
   const read = (s: string): Craft => {
     const c = { ftr: 0, bmr: 0 };
@@ -1466,7 +1477,7 @@ export function loweredSum(lines: string[]): { text: string; short: string } | n
  * `struck` is what the lowerings really cost (struckOff). It is shared among the commands as their aircraft of that
  * kind are (the greatest remainders taking the odd ones), so that the lines add up to it.
  */
-function loweredNews(g: Game, nat: string, lowered: Map<string, { est: number; ftr: number; bmr: number; region: number }>, struck: Craft): void {
+function loweredNews(g: Game, nat: string, lowered: Map<string, { est: Est; ftr: number; bmr: number; region: number }>, struck: Craft): void {
   const list = [...lowered.entries()].map(([name, c]) => ({ name, c, n: { ftr: Math.round(c.ftr), bmr: Math.round(c.bmr) }, off: { ftr: 0, bmr: 0 } }));
   for (const k of ['ftr', 'bmr'] as const) {
     const all = list.reduce((s, x) => s + x.n[k], 0);

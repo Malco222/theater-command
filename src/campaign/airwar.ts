@@ -197,14 +197,16 @@ export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human):
   const deck = afloat(f), at = groupAt(g, f);
   const fleet = deck ? carrierOf(g, f) : f.ashore !== undefined ? g.fleets.find((c) => c.id === f.ashore) ?? null : null;
   const own = f.nat === viewer;
-  const doing = away ? `Flew against ${place} this month: back ${deck ? 'aboard' : 'at its airfield'} next month`
-    : isOffensive(f.mission) ? `Ordered against ${place}: flies when the month ends`
+  // (The place with its article, as the campaign's line says it: "Ordered against the Midlands". The UI director,
+  // 25 November 2026, 14:06Z.)
+  const doing = away ? `Flew against ${placeName(place)} this month: back ${deck ? 'aboard' : 'at its airfield'} next month`
+    : isOffensive(f.mission) ? `Ordered against ${placeName(place)}: flies when the month ends`
     : f.mission === 'rest' ? 'Resting and refitting'
     : kind === 'bmr' ? (deck ? 'Ranged on deck, ready for a strike' : 'Supporting the armies, and ready for a raid')
     // (Ground support, air.json 'close': it is held for the armies and meets no raid, so its row must not say it is on patrol.)
     : f.close && !deck ? 'On ground support: on call over its own side\'s battles within its reach, and meets no raid'
     : with_ ? `On patrol, and sticking with the ${with_.name} as its escort`
-    : deck ? (fleet && !atSea(fleet) ? `In harbour at ${fleet.port}: on patrol over its fleet` : 'On patrol over its fleet: meets any raid on the ships in its sea') : 'On patrol: meets any raid within its reach';
+    : deck ? (fleet && !atSea(fleet) ? `In harbour at ${placeName(fleet.port)}: on patrol over its fleet` : 'On patrol over its fleet: meets any raid on the ships in its sea') : 'On patrol: meets any raid within its reach';
   return {
     id: f.id, nat: f.nat, name: f.name, command: f.parent && f.parent !== f.name ? f.parent : '', kind,
     ftr: f.ftr, bmr: f.bmr, aircraft: f.ftr + f.bmr, est: f.est.ftr + f.est.bmr, ready: f.ready,

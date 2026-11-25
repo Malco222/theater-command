@@ -11,15 +11,18 @@
 import { describe, expect, it } from 'vitest';
 import { AIR, airPool, airRange, airUpkeep, brokeOff, fly, hasAirfield, km, loweredOf, loweredSum } from '../src/campaign/air';
 import { airPage } from '../src/campaign/airpages';
-import { campaignWhy, groupJobs, launchRaid, planRaid, setGroupJob } from '../src/campaign/airwar';
+import { ARSENAL, offers } from '../src/campaign/arsenal';
+import { campaignWhy, groupJobs, groupRow, launchRaid, planRaid, setGroupJob } from '../src/campaign/airwar';
 // (a namespace, so that on a build without it only the test that uses it fails)
 import * as engineers from '../src/campaign/engineers';
 import { atWar, createGame, declareWar } from '../src/campaign/game';
 import { fitFoot, monthCard, monthMark } from '../src/campaign/monthcard';
-import { loadGame } from '../src/campaign/save';
+import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { airGroupBases, raidTargetsFor } from '../src/campaign/turn';
-import type { AirFleet, Game } from '../src/campaign/types';
+import type { AirFleet, AirReport, Game } from '../src/campaign/types';
+// (the browser client's source, read as text: its raid report card cannot be drawn here)
+import page from '../src/campaign/ui/main.ts?raw';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -310,7 +313,9 @@ describe("finding 13: a nation whose aircraft reach no enemy at all is told wher
     for (const k of ['bomb', 'night', 'ground', 'line', 'superiority', 'town', 'harbour', 'strike', 'fleet', 'recon'] as const) expect(raidTargetsFor(g, k).length, k).toBe(0);
     const mine = g.airFleets.filter((f) => f.nat === 'USA' && f.ftr + f.bmr > 0 && f.flew !== g.turn && f.mission === 'support');
     expect(mine.length).toBeGreaterThan(0);
-    const said = /^No target is in reach\. Your aircraft could reach the enemy from (.+) if it had an airfield: an engineer corps can lay one there\.$/.exec(TC.page('raid:ground').headline);
+    // (she has no engineer corps, and the arsenal offers her one: the UI director's second form, 14:06Z)
+    expect(g.corps.some((c) => c.nat === 'USA' && !c.dead && c.kind === 'eng')).toBe(false);
+    const said = /^No target is in reach\. Your aircraft could reach the enemy from (.+) if it had an airfield: an engineer corps can lay one there\. You have none: raise one in the ARSENAL\.$/.exec(TC.page('raid:ground').headline);
     expect(said?.[1]).toBeTruthy();
     // The province: his, no field, one an engineer corps could lay out, nearest the enemy, and with the enemy in the
     // longest reach of his aircraft from it.
@@ -321,7 +326,7 @@ describe("finding 13: a nation whose aircraft reach no enemy at all is told wher
     const at = can[0];
     expect(at.name).toBe(said![1]);
     expect(near(at.id)).toBeLessThanOrEqual(reach);
-    const want = `No target is in reach. Your aircraft could reach the enemy from ${at.name} if it had an airfield: an engineer corps can lay one there.`;
+    const want = `No target is in reach. Your aircraft could reach the enemy from ${at.name} if it had an airfield: an engineer corps can lay one there. You have none: raise one in the ARSENAL.`;
     for (const kind of ['ground', 'superiority', 'bomb']) {
       const t0 = performance.now();
       const p = TC.page(`raid:${kind}`);
@@ -474,14 +479,20 @@ describe("the review's mends: a lowered establishment is told only where a dated
     expect(foot(g, mark).filter((t) => /Luftflotte [23]|of [3-9] commands/.test(t))).toEqual([]);
   });
 
-  it('a row that raises one kind and lowers the other: only the kind it lowers is told, at its own figure (Luftflotte 1, November 1943)', () => {
-    // (air.json: Luftflotte 1 goes from 250 fighters and 450 bombers to 600 fighters and 250 bombers in month 46)
+  it("a row that raises one kind and lowers the other names both kinds, each at its own establishment (Luftflotte 1, the rows of months 46 and 55)", () => {
+    // (air.json: Luftflotte 1 goes from 250 fighters and 450 bombers to 600 and 250 in month 46, and to 1,100 and 150 in
+    // month 55; the UI director's sentence of 14:06Z)
     const row = AIR.fleets.find((r) => r.nat === 'GER' && r.name === 'Luftflotte 1')!.est;
-    expect(row.filter((e) => e[0] === 20 || e[0] === 46)).toEqual([[20, 250, 450], [46, 600, 250]]);
-    const { g } = opened('GER', 45, 46);
-    // (its bomber groups, kept at 450 in all, are kept at 250: 200 bombers go; its fighter groups, given smaller shares as
-    // the command grows a third, are not told)
-    expect(told(g, 'GER')).toEqual(["The air staff has lowered Luftflotte 1's establishment to 250: 200 bombers go back to the pool, from which the other commands draw."]);
+    expect(row.filter((e) => e[0] === 20 || e[0] === 46 || e[0] === 55)).toEqual([[20, 250, 450], [46, 600, 250], [55, 1100, 150]]);
+    const head46 = "The air staff has lowered Luftflotte 1's bomber establishment to 250 and raised its fighter establishment to 600";
+    expect(told(opened('GER', 45, 46).g, 'GER')).toEqual([`${head46}: 200 bombers go back to the pool, from which the other commands draw.`]);
+    expect(told(opened('GER', 45, 46, { ...AIR.reserve.GER }).g, 'GER')).toEqual([`${head46}: the pool, from which the other commands draw, is full, so 200 bombers are struck off.`]);
+    const head55 = "The air staff has lowered Luftflotte 1's bomber establishment to 150 and raised its fighter establishment to 1,100";
+    expect(told(opened('GER', 54, 55).g, 'GER')).toEqual([`${head55}: 100 bombers go back to the pool, from which the other commands draw.`]);
+    const part = opened('GER', 54, 55, { ftr: 0, bmr: 200, pilots: 0 });
+    expect(told(part.g, 'GER')).toEqual([`${head55}: 50 bombers go back to the pool, from which the other commands draw, and the 50 it has no room for are struck off.`]);
+    // (the month card, with one command lowered, gives its own line)
+    expect(foot(part.g, part.mark)).toEqual(told(part.g, 'GER'));
   });
 });
 
@@ -602,5 +613,183 @@ describe("the review's mends: the 3D month's notes, a raid broken off, and a fra
     expect(p.fighters).toBeCloseTo(0.4);
     expect(p.tooFew).toBeUndefined();
     expect(JSON.stringify(p)).not.toContain('sending 0');
+  });
+});
+
+describe("the UI director's nine answers on the air words (25 November 2026, 14:06Z)", () => {
+  /** A nation's war opened at `from`, every one of its groups at its establishment, `ready` done to it, its pool at `pool`; then the month `to` opened. */
+  function month(nat: string, from: number, to: number, pool: { ftr: number; bmr: number; pilots: number }, ready: (g: Game) => void = () => {}): { g: Game; mark: ReturnType<typeof monthMark> } {
+    const g = startOpen(createGame(1, nat));
+    g.turn = from;
+    airUpkeep(g, nat);
+    for (const x of g.airFleets) if (x.nat === nat && x.ship === undefined) { x.ftr = x.est.ftr; x.bmr = x.est.bmr; }
+    ready(g);
+    Object.assign(airPool(g, nat), pool);
+    const mark = monthMark(g);
+    g.turn = to;
+    airUpkeep(g, nat);
+    return { g, mark };
+  }
+  const none = { ftr: 0, bmr: 0, pilots: 0 };
+  const told = (g: Game, nat: string): string[] => g.headlines.filter((h) => h.turn === g.turn && h.nat === nat && /establishment/.test(h.text)).map((h) => h.text);
+  const whole = (g: Game, mark: ReturnType<typeof monthMark>): string[] => monthCard(g, mark, g.human, { whole: true }).also;
+  /** A command's dated rows set for the test, and put back after. */
+  function withRows<T>(nat: string, name: string, est: [number, number, number][], run: () => T): T {
+    const r = AIR.fleets.find((x) => x.nat === nat && x.name === name)!;
+    const was = r.est;
+    r.est = est;
+    try { return run(); } finally { r.est = was; }
+  }
+
+  it("answer 1, the mirror case built by hand: fighters lowered and bombers raised read the other way round", () => {
+    // (Luftflotte 1's row of month 46 set to 200 fighters and 600 bombers: its fighter groups, kept at 250, give up 50)
+    const g = withRows('GER', 'Luftflotte 1', [[1, 300, 500], [10, 80, 150], [20, 250, 450], [46, 200, 600]], () => month('GER', 45, 46, none).g);
+    expect(told(g, 'GER')).toEqual(["The air staff has lowered Luftflotte 1's fighter establishment to 200 and raised its bomber establishment to 600: 50 fighters go back to the pool, from which the other commands draw."]);
+  });
+
+  it('answer 1: where no aircraft leaves the command, nothing is told; a row that lowers one kind and leaves the other prints as before', () => {
+    // (its bomber groups already at 200 in all, under the new 250: none leaves; its fighter groups' new group still forms)
+    const { g, mark } = month('GER', 45, 46, none, (h) => {
+      const bombers = h.airFleets.filter((x) => x.nat === 'GER' && x.parent === 'Luftflotte 1' && x.kind === 'bmr');
+      for (const x of bombers) x.bmr = Math.floor(200 / bombers.length);
+    });
+    expect(told(g, 'GER')).toEqual([]);
+    expect(whole(g, mark).filter((t) => /establishment|cut back/.test(t))).toEqual([]);
+    expect(g.headlines.some((h) => h.turn === 46 && /forms in .+, a new group of Luftflotte 1\./.test(h.text))).toBe(true);
+    // (the fighters held at 250 and the bombers lowered to 250: the command's whole establishment, as before)
+    const held = withRows('GER', 'Luftflotte 1', [[1, 300, 500], [10, 80, 150], [20, 250, 450], [46, 250, 250]], () => month('GER', 45, 46, none).g);
+    expect(told(held, 'GER')).toEqual(["The air staff has lowered Luftflotte 1's establishment to 500: 200 bombers go back to the pool, from which the other commands draw."]);
+  });
+
+  it("answer 1: on the month card such a command is one of the commands lowered, its aircraft in the sums, and the summed line is the sum of the commands' own lines", () => {
+    // (Luftflotte 2 given a row for month 46 that lowers it from 400 and 550 to 300 and 400, beside Luftflotte 1's mixed row)
+    const { g, mark } = withRows('GER', 'Luftflotte 2', [[1, 250, 450], [10, 650, 750], [20, 400, 550], [46, 300, 400]], () => month('GER', 45, 46, { ftr: 0, bmr: 400, pilots: 0 }));
+    const lines = told(g, 'GER');
+    expect(lines.length).toBe(2);
+    expect(lines[0]).toMatch(/^The air staff has lowered Luftflotte 1's bomber establishment to 250 and raised its fighter establishment to 600: /);
+    expect(lines[1]).toMatch(/^The air staff has lowered Luftflotte 2's establishment to 700: /);
+    // The figures, read from the lines as printed (here, not by the rules' own reader).
+    const num = (s: string, kind: string): number => Number(new RegExp(`([\\d,]+) ${kind}s?`).exec(s)?.[1].replace(/,/g, '') ?? 0);
+    const parts = (t: string): { back: string; off: string } => {
+      const tail = t.slice(t.indexOf(': ') + 2);
+      if (tail.startsWith('the pool, from which the other commands draw, is full, so ')) return { back: '', off: tail };
+      const at = tail.indexOf(', and the ');
+      return at < 0 ? { back: tail, off: '' } : { back: tail.slice(0, at), off: tail.slice(at) };
+    };
+    const of = (k: 'back' | 'off', kind: string): number => lines.reduce((n, t) => n + num(parts(t)[k], kind), 0);
+    const words = (f: number, b: number): string => [f ? `${f.toLocaleString('en-US')} fighters` : '', b ? `${b.toLocaleString('en-US')} bombers` : ''].filter(Boolean).join(' and ');
+    const back = words(of('back', 'fighter'), of('back', 'bomber')), off = words(of('off', 'fighter'), of('off', 'bomber'));
+    expect(back).not.toBe('');
+    expect(off).not.toBe('');
+    const want = `The establishments of 2 commands were lowered: ${back} go back to the pool, and the ${off} it has no room for are struck off.`;
+    expect(whole(g, mark)[0]).toBe(want);
+  });
+
+  it("answer 2: the month card's foot puts the lowered line first, and four 'forms' lines that do not all fit are one line (Germany, turn 10)", () => {
+    const { g, mark } = month('GER', 9, 10, none);
+    const lines = told(g, 'GER');
+    expect(lines.map((t) => /^The air staff has lowered (.+)'s establishment/.exec(t)?.[1])).toEqual(['Luftflotte 1', 'Luftflotte 4']);
+    const forms = g.headlines.filter((h) => h.turn === 10 && h.nat === 'GER' && / forms in /.test(h.text));
+    expect(forms.length).toBe(4);
+    const also = whole(g, mark);
+    expect(also[0]).toBe(loweredSum(lines)!.text);
+    expect(also[1]).toBe('4 air commands formed');
+    expect(also.filter((t) => / forms in /.test(t))).toEqual([]);
+    // (the card whose lines must fit: the summed line or its short form, first, then the one line for the four)
+    const card = monthCard(g, mark).also;
+    expect([loweredSum(lines)!.text, loweredSum(lines)!.short]).toContain(card[0]);
+    expect(card[1]).toBe('4 air commands formed');
+  });
+
+  it("answer 2: where the 'forms' lines all fit they stay as they are, after the lowered line (Germany, turn 55)", () => {
+    const { g, mark } = month('GER', 54, 55, none);
+    expect(whole(g, mark)).toEqual([
+      "The air staff has lowered Luftflotte 1's bomber establishment to 150 and raised its fighter establishment to 1,100: 100 bombers go back to the pool, from which the other commands draw.",
+      '5. Jagddivision forms in Berlin, a new group of Luftflotte 1.',
+      '6. Jagddivision forms in Berlin, a new group of Luftflotte 1.',
+    ]);
+  });
+
+  it("answer 3: a group's note names the place with its article, as the campaign's line does: 'Ordered against the Midlands' (GER from 17, seed 7)", () => {
+    TC.start({ view: 'grand', human: 'GER', from: 17, seed: 7, world: true });
+    const g = copy();
+    const f = g.airFleets.find((x) => x.id === 31)!;
+    f.mission = 'bomb';
+    f.target = regionOf(g, 'Midlands');
+    expect(groupRow(g, f).doing).toBe('Ordered against the Midlands: flies when the month ends');
+    expect(campaignWhy(g, 31)).toMatch(/^It flies with the day campaign over the Midlands\./);
+    f.flew = g.turn;
+    expect(groupRow(g, f).doing).toBe('Flew against the Midlands this month: back at its airfield next month');
+    // (a place with no article is as it was)
+    delete f.flew;
+    f.target = regionOf(g, 'London');
+    expect(groupRow(g, f).doing).toBe('Ordered against London: flies when the month ends');
+  });
+
+  it("answer 4: with an engineer corps, the line ends as it did (America, an engineer corps raised from the arsenal, USA from 40, seed 11)", () => {
+    TC.start({ view: 'grand', human: 'USA', from: 40, seed: 11, world: true });
+    expect(TC.order('corps:eng', -1).ok).toBe(true);
+    // (on order, she still has none)
+    TC.endMonth();
+    expect(TC.page('raid:ground').headline).toMatch(/: an engineer corps can lay one there\. You have none: raise one in the ARSENAL\.$/);
+    TC.endMonth();
+    TC.endMonth();
+    const g = copy();
+    expect(g.corps.filter((c) => c.nat === 'USA' && !c.dead && c.kind === 'eng').length).toBe(1);
+    expect(TC.page('raid:ground').headline).toBe('No target is in reach. Your aircraft could reach the enemy from Casablanca if it had an airfield: an engineer corps can lay one there.');
+  });
+
+  it("answer 4: where his nation can never raise an engineer corps, the engineer clause is dropped (the arsenal's list made to hold none, by hand)", () => {
+    TC.start({ view: 'grand', human: 'USA', from: 40, seed: 11, world: true });
+    const g = copy();
+    // (the arsenal offers the engineer corps to every nation in the grand campaign: the case is built by taking it out
+    // of the arsenal's list for the test)
+    expect(offers(g, 'USA').some((o) => o.key === 'corps:eng')).toBe(true);
+    const land = (ARSENAL as unknown as { land: Record<string, unknown> }).land, eng = land.eng;
+    delete land.eng;
+    try {
+      expect(offers(g, 'USA').some((o) => o.key === 'corps:eng')).toBe(false);
+      expect(airPage(g, 'raid:ground')!.headline).toBe('No target is in reach. Your aircraft could reach the enemy from Oran if it had an airfield.');
+    } finally { land.eng = eng; }
+  });
+
+  it("answer 5: the raid report tells a defence that never rose from one that rose, by the groups it keeps", () => {
+    // (ui/main.ts airReportCard: the defenders it lists are those that rose; with none, "the defenders put up no fighters")
+    expect(page).toContain("r.hold >= 9 ? ` The sky was not won: ${r.def.length ? 'at the end the defenders had no fighters left to put up' : 'the defenders put up no fighters'}, ${floor}.`");
+    const sweep = (defenders: number): AirReport => {
+      const { g, f } = overTheChannel('ftr', 40);
+      let first = true;
+      for (const x of g.airFleets) if (x.nat === 'GER') {
+        if (first && defenders > 0 && x.kind === 'ftr' && x.ship === undefined) { x.ftr = defenders; x.base = regionOf(g, 'Calais'); x.mission = 'support'; first = false; } else x.ftr = 0;
+      }
+      Object.assign(airPool(g, 'GER'), { ftr: 0, pilots: 0 });
+      return fly(g, 'USA', 'superiority', regionOf(g, 'Calais'), [f], '')!;
+    };
+    // Nobody rose: no defending group, the reading 99, the sky not won (40 fighters are under the least a sky needs).
+    const nobody = sweep(0);
+    expect([nobody.def.length, nobody.hold, nobody.sky, brokeOff(nobody)]).toEqual([0, 99, false, false]);
+    // Two fighters rose and were worn down: the reading is over 9 too, and the report keeps the group that rose.
+    const rose = sweep(2);
+    expect(rose.def.length).toBe(1);
+    expect(rose.def[0].ftr).toBe(2);
+    expect(rose.hold).toBeGreaterThanOrEqual(9);
+    expect([rose.sky, brokeOff(rose)]).toEqual([false, false]);
+  });
+
+  it("answer 6: reading a campaign group's pages leaves the save byte-identical, a group given escorts and close by hand included (GER from 17, seed 7)", () => {
+    TC.start({ view: 'grand', human: 'GER', from: 17, seed: 7, world: true });
+    const g = copy();
+    // (the two keys set among the group's others, not at its end, as a save that carried them would have them)
+    const at = g.airFleets.findIndex((x) => x.id === 31);
+    const was = g.airFleets[at] as unknown as Record<string, unknown>;
+    const keys = Object.keys(was);
+    expect(keys.indexOf('mission')).toBeLessThan(keys.length - 1);
+    g.airFleets[at] = Object.fromEntries(keys.flatMap((k) => (k === 'mission' ? [[k, was[k]], ['escorts', 5], ['close', true]] : [[k, was[k]]]))) as unknown as AirFleet;
+    expect(campaignWhy(g, 31)).not.toBeNull();
+    const before = saveGame(g);
+    for (const id of ['group:31', 'raid:bomb:31', 'raid:night:31', 'raid:ground:31', 'raid:harbour:31']) airPage(g, id);
+    expect(saveGame(g)).toBe(before);
+    // (the page did read the group as freed: its campaign line is on the bombing page)
+    expect(airPage(g, 'raid:bomb:31')!.sections[0].text).toBe(campaignWhy(g, 31));
   });
 });

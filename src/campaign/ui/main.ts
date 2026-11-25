@@ -6383,7 +6383,9 @@ function airReportCard(r: AirReport): string {
     : r.sky ? ` The ${g.nations[r.attNat].adj} air force won the sky over ${esc(r.place)}: at the end ${r.hold >= 9 ? 'no opposition was left' : stood('its')}.`
     : brokeOff(r) ? ' The sky was not won: the raid was broken off.'
     : r.hold < AIR.sky.win ? ` The sky was not won: at the end ${stood('the attackers\'')}, and it takes ${AIR.sky.win} to 1.`
-    : r.hold >= 9 ? ` The sky was not won: at the end the defenders had no fighters left to put up, ${floor}.`
+    // (Where no defending fighter rose at all, the report keeps no defending group: "the defenders put up no fighters".
+    // The UI director, 25 November 2026, 14:06Z.)
+    : r.hold >= 9 ? ` The sky was not won: ${r.def.length ? 'at the end the defenders had no fighters left to put up' : 'the defenders put up no fighters'}, ${floor}.`
     : ` The sky was not won: at the end ${stood('the attackers\'')}, which is enough, ${floor}.`;
   const what = r.mission === 'superiority' ? 'air superiority' : r.mission === 'bomb' ? 'day bombing' : r.mission === 'night' ? 'night bombing' : r.mission === 'ground' ? 'a raid on troops' : r.mission === 'line' ? 'bombing the line' : r.mission === 'fleet' ? 'a strike on a fleet' : r.mission === 'harbour' ? 'a raid on a harbour' : r.mission === 'town' ? 'a raid on a town' : 'strikes on shipping';
   const aw = airWar(g);

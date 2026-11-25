@@ -14,9 +14,10 @@
 // A carrier wing is an air group: 'group:<its id>' is its page, and the kinds 'fleet' (target: a fleet id) and
 // 'harbour' (target: a province) are raids like the rest.
 
-import type { Game } from './types';
+import type { AirFleet, Game } from './types';
 import { SHIP_AIR_TIP, airRange, airWar, carrierRules, closeRules, groupAt, hasAirfield, km, overOcean } from './air';
-import { fieldCanBeLaid } from './engineers';
+import { offers } from './arsenal';
+import { fieldCanBeLaid, isEngineer } from './engineers';
 import { atWar, placeName, theName } from './game';
 import { campaignWhy, type GroupRow, type RaidKind, type RaidPlan, type RaidTarget } from './airwar';
 import {
@@ -195,25 +196,38 @@ function fieldToLay(g: Game, group: number): string | null {
   return best >= 0 && near <= reach ? g.regions[best].name : null;
 }
 
+/**
+ * The end of finding 13's line, by whether the player has an engineer corps (the UI director, 25 November 2026,
+ * 14:06Z): one in the field, the clause; none, but the arsenal offers him one (the arsenal's own list, offers()), the
+ * clause and where to raise one; and where his nation can never raise one, no clause.
+ */
+function layBy(g: Game): string {
+  const me = g.human!;
+  if (g.corps.some((c) => c.nat === me && !c.dead && isEngineer(c))) return ': an engineer corps can lay one there.';
+  if (offers(g, me).some((o) => o.key === 'corps:eng')) return ': an engineer corps can lay one there. You have none: raise one in the ARSENAL.';
+  return '.';
+}
+
 /** True when no kind of raid has a target in reach of any of the player's groups. */
 const reachNothing = (g: Game): boolean => raidMenu(g).every((k) => raidTargetsFor(g, k.key, -1).length === 0);
 
 /**
  * The targets of a kind a group would have, were it taken out of its standing campaign ('Support the armies'). A
- * reading only: the group's orders are put back exactly as they were before it returns.
+ * reading only: the saved group is never written to.
  */
 function reachOnceFreed(g: Game, kind: RaidKind, id: number): number {
-  const f = g.airFleets.find((x) => x.id === id);
-  if (!f) return 0;
-  const keep = { mission: f.mission, target: f.target, escorts: f.escorts, close: f.close, hasEscorts: 'escorts' in f, hasClose: 'close' in f };
+  const i = g.airFleets.findIndex((x) => x.id === id);
+  if (i < 0) return 0;
+  const f = g.airFleets[i];
+  // (A copy of the group, freed, stands in its place in the list while the targets are read; the group itself is put
+  // back after, untouched, so that the save is byte for byte as it was, its keys in their order.)
+  const free: AirFleet = { ...f, mission: 'support', target: -1 };
+  delete free.escorts; delete free.close;
+  g.airFleets[i] = free;
   try {
-    f.mission = 'support'; f.target = -1;
-    delete f.escorts; delete f.close;
     return raidTargetsFor(g, kind, id).length;
   } finally {
-    f.mission = keep.mission; f.target = keep.target;
-    if (keep.hasEscorts) f.escorts = keep.escorts;
-    if (keep.hasClose) f.close = keep.close;
+    g.airFleets[i] = f;
   }
 }
 
@@ -250,7 +264,7 @@ function targetsPage(g: Game, kind: RaidKind, group: number): Page | null {
   return {
     id: group >= 0 ? `raid:${kind}:${group}` : `raid:${kind}`, title: k.label.toUpperCase(),
     headline: all.length ? `${all.length} target${all.length === 1 ? '' : 's'} in reach, ${sections.length > 1 ? 'by country' : 'nearest first'}`
-      : lay ? `No target is in reach. Your aircraft could reach the enemy from ${placeName(lay)} if it had an airfield: an engineer corps can lay one there.` : 'No target is in reach',
+      : lay ? `No target is in reach. Your aircraft could reach the enemy from ${placeName(lay)} if it had an airfield${layBy(g)}` : 'No target is in reach',
     note: k.blurb, top: [{ label: 'BACK', act: group >= 0 ? `open:group:${group}` : 'open:raids', ok: true, tip: '' }],
     sections,
   };
