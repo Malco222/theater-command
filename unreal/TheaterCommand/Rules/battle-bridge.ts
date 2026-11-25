@@ -788,7 +788,7 @@ export function battleCalls(h: BattleHooks) {
       // The ground's weather this month, in the 3D game's words (thaw mud, snow, rain, clear); looks only.
       const wx = groundWeather(g, g.regions[to]);
       if (wx && !ticket.weather) ticket.weather = wx;
-      // The island's own dress (release 2; the design director, 25 November 2026, 12:39Z, B(3), and 13:01Z, D(2)): on
+      // The island's own dress (release 2; the design director, 25 November 2026, 12:39Z, B(3), and 13:00Z, D(2)): on
       // any island of the table (src/campaign/islands.ts, the whole-world chart alone) the place's own latitude and
       // longitude in degrees, to a hundredth, for the sun, the weather and the men's front; and the look its row names
       // (jungle, or beach and palms on an islet) where it names one. Where it names none the 3D game dresses the field

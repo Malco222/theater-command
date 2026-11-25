@@ -1,6 +1,6 @@
 // The island battle's ticket, Part A: the dressing (release 2, 25 November 2026; the Pacific planner's build brief
 // batch3-island-ticket-brief.md and the design director's ruling of 12:39Z, B "the island battle's ticket", with its
-// looks narrowed at 13:01Z, D(2)).
+// looks narrowed at 13:00Z, D(2)).
 //
 // "A card, then an island battle": on the whole-world chart the ticket the 3D game is handed for a battle on an island
 // of the historian's table (TC.battleLook) carries the island's own latitude and longitude, for the sun, the weather
@@ -9,14 +9,15 @@
 // jungle 1 gives "jungle"; otherwise "island" only where the islet flag is 1; otherwise no word, and the 3D game dresses
 // the field by its climate from the latitude and longitude. A subarctic climate or urban ground (Attu, Kiska, Singapore)
 // and Iwo Jima by name (black volcanic ash, no palms) give no word whatever their flags, until the art director has
-// scored stills. The two chart islets with no row take "island" by the islet flag, a guess. The land battle's half (the header's field.look and sky.latLon behind the "island" row of the rules
-// card) is the ground battles thread's, with its own tests (tests/land-island.test.ts on its branch).
+// scored stills. The two chart islets with no row take "island" by the islet flag, a guess. The land battle's half
+// (the header's field.look and sky.latLon behind the "island" row of the rules card) is the ground battles thread's,
+// with its own tests (tests/land-island.test.ts on its branch).
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 
-// The island's two reads can be shut off for a look (stub.off): the ticket then built is the one the bridge built
-// before the island's dress was added, since those two answers are all the new lines read.
+// The island's two reads can be shut off for a look (stub.off): the ticket then built has no island in it, the same
+// new bridge with its island answers stubbed (tests/island-ticket-off.test.ts says how the old bridge was compared).
 const stub = vi.hoisted(() => ({ off: false }));
 vi.mock('../src/campaign/islands', async (original) => {
   const real = await original<typeof import('../src/campaign/islands')>();
@@ -133,6 +134,10 @@ describe("the islands' looks, by the table's own columns", () => {
     expect(made.noRow).toEqual(NO_ROW);
     for (const n of NO_ROW) expect(islandLook(g, g.byName[n]), n).toBe('island');
     expect((file as unknown as { _look: string })._look).toContain('(G) Addu Atoll and Seychelles have no row in the table');
+    // ... and says where each stands (13:00Z, C): Addu Atoll's row is ruled but not yet in the table; the Seychelles
+    // stay without one.
+    expect((file as unknown as { _look: string })._look).toContain('Addu Atoll: its row is ruled (13:00Z, C');
+    expect((file as unknown as { _look: string })._look).toContain('Seychelles: it stays without a row (13:00Z, C)');
     // What the rules read of a row is unchanged: an island is still its room, its floor and whether it is an islet.
     expect(islandOf(g, g.byName['Pearl Harbor'])).toEqual({ room: 2, floor: 0.5, islet: false });
     expect(Object.keys(islandOf(g, g.byName['Singapore'])!)).toEqual(['room', 'floor', 'islet']);
@@ -147,7 +152,7 @@ describe("the island battle's ticket on the whole world", () => {
     const { g, TC } = rig();
     // (staged: Japan at war with America and Britain on the first day, a corps of its own put on Honolulu and on Johore)
     const pearl = attackOn(g, TC, 'Pearl Harbor', 'Honolulu').look!.ticket!;
-    // No word: Pearl Harbor is no islet and has no jungle (13:01Z, D(2)), so the 3D game dresses it by its own climate.
+    // No word: Pearl Harbor is no islet and has no jungle (13:00Z, D(2)), so the 3D game dresses it by its own climate.
     expect('look' in pearl).toBe(false);
     // 21.47 N, 158.06 W: the chart's own point for Pearl Harbor, as latLonOf reads it (x 5475, y 1997.2). The brief's
     // figure, derived on paper, is the one the rules give.
@@ -269,6 +274,10 @@ describe('no rule reads the two keys (the ruling\'s (4)): the battle settled and
       expect(look!.ticket!.latLon).toEqual(WEWAK(g));
       if (strip) { delete look!.ticket!.look; delete look!.ticket!.latLon; }
       // The whole answer goes to the land rules as it stands; both sides are fought by the rules' own staffs.
+      // A limit, said plainly: in this tree the land rules have no reader of either key at all (the ground battles
+      // thread's island option, which reads them into the header, is on its own branch), so this case cannot fail
+      // here. Once that branch is joined it still fights with the island option at its default, off; the same case
+      // with { me: null, island: true } belongs beside it then, and should give the same result and the same game.
       Land.landStartTicket(look, { me: null });
       for (let i = 0; i < 2000 && !Land.landResult().over; i++) Land.landTick(60, 5000);
       const result = Land.landResult();

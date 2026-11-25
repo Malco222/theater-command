@@ -113,7 +113,7 @@ export const islandNames = (): string[] => (ROWS ? Object.keys(ROWS) : []);
 
 /**
  * The look an island's field is dressed in when its battle is fought in the 3D game (the design director, 25 November
- * 2026, 12:39Z, B(3), narrowed at 13:01Z, D(2)): "jungle" where the table's jungle column says 1 (a big island's fight
+ * 2026, 12:39Z, B(3), narrowed at 13:00Z, D(2)): "jungle" where the table's jungle column says 1 (a big island's fight
  * was inland), "island" (beach, reef and palms) where it is an islet, as the table's own columns give it
  * (tools/make-far-islands.mjs, lookOf). No word ('') for every other island, which the 3D game dresses by its own
  * climate from the place's latitude and longitude; for Attu, Kiska, Singapore and Iwo Jima until the art director has

@@ -5,8 +5,11 @@
 // there, so its tickets carry neither key and are, to the byte, the tickets they were before the island was dressed.
 import { describe, expect, it, vi } from 'vitest';
 
-// The island's two reads can be shut off for a look (stub.off): the ticket then built is the one the bridge built
-// before the island's dress was added, since those two answers are all the new lines read.
+// The island's two reads can be shut off for a look (stub.off): the ticket then built has no island in it at all. This
+// is the same new bridge with its island answers stubbed, not the bridge as it was before the island was dressed;
+// that the new lines change nothing else (no import, no draw, no write) was checked at review and again at the mend,
+// by laying the map head's battle-bridge (d3acce8c) beside this one over every offer, byte for byte, and by seeds 17,
+// 18 and 19.
 const stub = vi.hoisted(() => ({ off: false }));
 vi.mock('../src/campaign/islands', async (original) => {
   const real = await original<typeof import('../src/campaign/islands')>();
