@@ -651,7 +651,6 @@ describe('the fight a group carries (the design director, 18:14Z): a group goes 
     const none = card(0);
     expect(none.a.def.length).toBe(0);
     expect(none.a.D).toBe(0);
-    expect(none.a.unseen).toBeUndefined();
     expect(strafeCarry(none.a)).toBe(1);
     expect(none.fc.strafers).toEqual([LORRAINE]);
     expect(none.fc.fire!).toBeGreaterThan(0);
@@ -659,14 +658,17 @@ describe('the fight a group carries (the design director, 18:14Z): a group goes 
     // nobody is named and no ground fire is charged.
     const many = card(800);
     expect(many.a.def.length).toBe(0);
-    expect(many.a.unseen?.n).toBe(800);
-    expect(many.a.D).toBeCloseTo(800 * many.a.unseen!.w, 9);
+    expect(many.a.D).toBeGreaterThan(0);
     expect(strafeCarry(many.a)).toBe(0);
     expect(many.fc.strafers).toEqual([]);
     expect(many.fc.fire).toBe(0);
     // A handful last seen: they weigh, a little, and the group is still named.
     const few = card(20);
-    expect(few.a.unseen?.n).toBe(20);
+    expect(few.a.def.length).toBe(0);
+    expect(few.a.D).toBeGreaterThan(0);
+    // The same share of the fighters last seen meets the raid, many or few: they are inside D (and Dpow, which the
+    // fight carried reads), with no field of their own.
+    expect(many.a.D / 800).toBeCloseTo(few.a.D / 20, 9);
     expect(strafeCarry(few.a)).toBeGreaterThan(0);
     expect(strafeCarry(few.a)).toBeLessThan(1);
     expect(few.fc.strafers).toEqual([LORRAINE]);

@@ -2303,13 +2303,6 @@ export interface KnownDefence {
 export interface AirAssess {
   /** Fog on raids: set only where the mission was weighed on one side's knowledge (KnownDefence), never on a raid flown. */
   known?: KnownDefence;
-  /**
-   * Fog on raids: the fighters last seen in reach of the target that the weighing counts as all rising (KnownDefence's
-   * extra): how many, the share of them that meets the raid, one's fighting weight and whose they were. Set only with
-   * `known`, and only where some rise. A raid on troops reads it inside D and Dpow (strafeCarry), so that the fight the
-   * card's strafers carry counts the fighters the card's own odds count.
-   */
-  unseen?: { n: number; w: number; each: number; nat: string };
   /** Why the mission cannot be flown at all, or null. */
   why: string | null;
   place: string;
@@ -2618,7 +2611,6 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     out.D += unseenUp;
     out.Dpow += unseenUp * each * techMul(g, known.extraNat, 'radar');
     dPlain += unseenUp * each;
-    if (unseenUp > 0) out.unseen = { n: known.extra, w, each, nat: known.extraNat };
   }
   // The fighters' own types (fighters.ts): a small edge from measured performance, off as shipped.
   // (Fog on raids: with no group known by name there are no types to set against the escort's.)
