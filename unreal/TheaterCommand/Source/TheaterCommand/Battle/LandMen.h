@@ -81,6 +81,16 @@ namespace LandMen
 		std::vector<float> W2;          // part2's weight, 0 to 0.5; part takes the rest
 		std::vector<float> Shade;       // 0 to 1, wear and seams; empty: every point 1
 		std::vector<float> Tint;        // rgb a point, about 1 (the soldier files' "tint": mud browner, dust paler; shade only darkens); empty: every point 1
+		/**
+		 * Release 2's wear and weather on the men (tc.Look.Worn; the soldier files' about_wear, and their README's "Wear
+		 * and weather on the men"), a byte a point each, the value times 255: ShadeClean the shadow with no dirt in it
+		 * (0.4 to 1; Shade is the same with a man's grime some weeks in the line baked in), Dirt where dust and mud
+		 * collect in dry weather, DirtWet the same in rain (mud splashed higher), Wet how much the surface darkens when
+		 * soaked, Snow how much snow settles there on a man standing. Read only where asked (Soldier::Load's bWear), so a
+		 * game with the switch off keeps none of it; empty too where the file has none (each kept only whole). A byte is
+		 * finer than the look's own bytes need: shade_clean moves a colour at most half a step of 255.
+		 */
+		std::vector<uint8_t> ShadeClean, Dirt, DirtWet, Wet, Snow;
 		std::vector<int16_t> Ink;       // a helmet finish's: -1 the paint, else an index into the file's inks; empty: all -1
 		std::vector<uint32_t> Triangles;
 	};
@@ -190,7 +200,10 @@ namespace LandMen
 	class Soldier
 	{
 	public:
-		bool Load(const std::string& Text, std::string& OutError);
+		/** bWear (release 2, tc.Look.Worn): also keep each mesh's wear and weather (Mesh::ShadeClean, Dirt, DirtWet, Wet,
+		 * Snow; its body's and its helmet finishes'), the names of its own paints (OwnPaintNames) and its face's detail
+		 * (Detail), which the men's worn look reads (Crowd::SetWearMix). Off, as before: none of it is kept. */
+		bool Load(const std::string& Text, std::string& OutError, bool bWear = false);
 
 		std::string Name;
 		/** The gun his mesh carries: "rifle" unless the file says (a gunner's file would say "lmg"). */
@@ -204,6 +217,43 @@ namespace LandMen
 		std::vector<uint32_t> Inks;     // 0xRRGGBB
 		/** Paints past the army's fifteen that the file names (its new_paints), each with the file's own colour. */
 		std::map<int, uint32_t> OwnPaints;
+		/** The same paints' names (its new_paints: "eye_white", "rocket", a gore twin's "wound", "bone" and "blood"),
+		 * whether or not the file gives a colour, kept only with the wear (Load's bWear): the worn look reads a paint's
+		 * roughness by its name, and leaves the gore paints without dirt, wet or snow. The numbers are the file's own
+		 * (39 is one file's "lens" and another's "phones"): read them only against the file they came with. */
+		std::map<int, std::string> OwnPaintNames;
+		/**
+		 * The face's detail in the mesh's own tint (release 2's worn look): the soldiers thread's face_detail.py ran after
+		 * shade.py and multiplied each level's tint, near and mid (and far in a file with no faces), by the face's lines
+		 * and shadows: the lash lines, the iris's rim and pupil, the whites' corners, the sockets, the lips and the folds
+		 * from the nose, the nostrils, the shadow under the jaw and the brim's over the brow and eyes; in a file with no
+		 * faces (the sailors, the tankers) his hair, stubble and brows too. The file records what it did (its
+		 * face_detail.lods.<level>: "at", the points, and "mul", 3 a point, what their tint was multiplied by), and it is
+		 * kept here as read, Detail[L] for Meshes[L], only with the wear (Load's bWear): the worn look leaves the mesh's
+		 * tint out (the rest of it is the baked earthy cast, which the recipe makes afresh from the field's soil) and lays
+		 * this back on. A gore twin, whose file has no record but holds its file's points one for one before the gore's,
+		 * takes its file's (Crowd::AddGore).
+		 *
+		 * The same tool set each near eyeball's shade to the skin's about it but left its clean shadow (shade_clean) as
+		 * it was, darker: its record ("shade", each point's shade before) is kept as EyeAt and EyeWas, and the clean
+		 * shadow moved by as much as the shade was (MendEyes), so a clean eye is drawn as bright as the baked one.
+		 */
+		struct FaceDetail
+		{
+			std::vector<int> At;            // the level's points (Meshes[L]'s), as the file lists them
+			std::vector<float> Mul;         // rgb a point: what face_detail multiplied each one's tint by
+			std::vector<int> EyeAt;         // the eyeballs' points whose shade it set
+			std::vector<float> EyeWas;      // and their shade before
+		};
+		FaceDetail Detail[LodCount];
+		/** Move the clean shadow (Mesh::ShadeClean) of each eyeball point a face's detail lists (FaceDetail::EyeAt) by as
+		 * much as face_detail moved its shade: of Into, a mesh of this file's points one for one (its own, or its gore
+		 * twin's). Nothing where the mesh has no wear. */
+		static void MendEyes(Mesh& Into, const FaceDetail& Fd);
+		/** A gore twin (Crowd::AddGore) takes its file's face's detail (Detail, and its eyes' clean shadow mended as the
+		 * file's), level by level, where it has none of its own and holds the file's points one for one before the gore's
+		 * (the same places and paints). False where no level was taken. */
+		bool TakeFaceDetail(const Soldier& File);
 		int HelmetFirst[LodCount] = { 0, 0, 0 }, HelmetCount[LodCount] = { 0, 0, 0 };
 		/** Effects (R2): his pack and webbing at each level (pack_tris, the soldiers thread's pack_range.py, in
 		 * helmet_tris's shape: one run of triangles [first, count], ending where his helmet's begins), left out of a man
@@ -378,6 +428,11 @@ namespace LandMen
 		std::string GoreFrom;           // the side a gored man's falls are read from: front|behind|left|right (the burst's, or his gun's where it burst on him and his stance has no fall from under he may take), under (empty: not gored)
 		double FallStarted = -1.0;      // when his fall began, as played
 		double Rested = -1.0;           // when he came to rest and froze
+		/** Release 2 (tc.Look.Worn, Crowd::SetWearMix): his uniform's wear W, in twentieths, from 0.1 (a fresh replacement)
+		 * to 1 (six weeks or more in the line): his side's months in the line where uniforms age (Crowd::SetWorn) and
+		 * the recording gives them, else 0.6, the soldier files' own baked look; the mix's W where it forces one. Read
+		 * only with the mix on, and part of what keys his sets (BankKey, BodyKey): men drawn alike share one W. */
+		float Wear = 0.6f;
 	};
 
 	/** His drawn look at one level of detail: the triangles, each point's paint and its colour (sRGB, 0 to 255). */
@@ -387,6 +442,15 @@ namespace LandMen
 		std::vector<uint32_t> Triangles;
 		std::vector<uint8_t> Paint;
 		std::vector<uint8_t> Rgb;
+		/**
+		 * Release 2 (tc.Look.Worn, and only where the men's worn inks are built: Crowd::WearMix::bRough, the scene's
+		 * WholeLook::MenRough): each point's roughness by its part, the byte over 255 (1 to 253), for his vertex colour's
+		 * alpha, which M_LandManWorn and M_LandCrowdWorn read as it stands. Empty otherwise, and then every point's
+		 * alpha is 255 as before, which those inks read as "keep the ink's own" (and the plain men's ink needs: it reads
+		 * any alpha short of whole as painted metal). Alpha gives the byte a mesh builder writes for point P.
+		 */
+		std::vector<uint8_t> Rough;
+		uint8_t Alpha(size_t P) const { return P < Rough.size() ? Rough[P] : static_cast<uint8_t>(255); }
 	};
 
 	/** A clip and how it plays: what a man shows now (for tests, pictures and the lead's debug lines). */
@@ -662,6 +726,43 @@ namespace LandMen
 		 * ForcedMonths at 0 or more stands in for both sides' (the Mac's off/on line). Off unless set.
 		 */
 		void SetWorn(bool bOn, double ForcedMonths = -1.0);
+		/**
+		 * The men's worn look (release 2, behind tc.Look.Worn; the art director's 25 Nov numbers, section 2: "a man's
+		 * boots and knees take 30 to 50% of the field's own ground colour", and roughness by part; Brian's 22 Nov "Uniforms
+		 * get dirtier the longer a unit stays at the front, while fresh replacements look clean", "Rain darkens cloth and
+		 * splashes mud higher, and snow leaves white on shoulders and helmets"). With bOn, each look is made by the
+		 * soldier files' own recipe (their about_wear) wherever the file was read with its wear (Soldier::Load's bWear),
+		 * in sRGB 0 to 1: base = paint x shade_clean x (1 - 0.35 x wet x Rain), times the face's tone and tint and the
+		 * face's detail the file laid in its mesh's tint (Soldier::Detail; the rest of that tint, the baked earthy cast,
+		 * left out: the soil below makes it afresh);
+		 * d = (dirt + (dirt_wet - dirt) x Rain) x W, his wear (ManInfo::Wear); soil = (Soil + (mud - Soil) x Rain) x
+		 * shade_clean, mud the field's soil darkened as the files' own mud is their dust's, x (0.45, 0.39, 0.35); the
+		 * colour base + (soil - base) x 0.85 x d, then toward snow (0.92, 0.94, 0.97) x (0.6 + 0.4 x shade_clean) by
+		 * 0.9 x snow x Snow. The gore paints (own paints named wound, bone, blood) take no dirt, wet or snow. A mesh without
+		 * the wear keeps the look it had (shade x tint), and his patches (SetWorn) still scale on top. With bRough too
+		 * (only where the scene's men's inks read it: WholeLook::MenRough), each point's roughness into Look::Rough: by
+		 * the army's paint (tunic and trousers 0.90, boots 0.45, lower 0.88, straps 0.80, helmet 0.65, pack 0.90, skin
+		 * 0.55, wood 0.55, steel 0.42, coat 0.92, blanket 0.95, leather 0.45, hoof 0.60) or a file's own paint by its
+		 * name (skin 0.55; eye and iris 0.35; blood and wound 0.35; bone 0.55; leather, boot and belt 0.45; helmet 0.65;
+		 * steel, metal, brass, badge, buckle, rocket and tin 0.42; glass and lens 0.30; any other cloth 0.90), then
+		 * duller with dry dust (toward 0.95 by 0.6 x d x (1 - Rain)), a sheen soaked (toward 0.55 by 0.5 x wet x Rain)
+		 * and toward 0.7 under snow (by snow x Snow).
+		 *
+		 * Before Build, as SetWorn: off unless set, and with it off every look is as before, to the byte. Set after looks
+		 * are made (a different mix), every look is made again: each man's MeshNo moves (his triangles and colours made
+		 * again, LookOf), and the sets of men alike (BankKey, BodyKey) are made anew and numbered afresh, so a scene that
+		 * made meshes of them (BankLook, BankBodyLook, HelmetLook) must make those again.
+		 */
+		struct WearMix
+		{
+			bool bOn = false;
+			bool bRough = false;                        // also each point's roughness (Look::Rough); only with bOn
+			float Soil[3] = { 0.60f, 0.54f, 0.43f };    // the field's own soil, sRGB 0 to 1 (the files' dry dust unless told)
+			float Rain = 0.f;                           // 0 dry to 1 soaked: the campaign's weather word
+			float Snow = 0.f;                           // 0 to 1: snow lying, where it snows
+			float W = -1.f;                             // 0 to 1: every man's wear (pictures, tests); under 0 each his own
+		};
+		void SetWearMix(const WearMix& Mix);
 		/**
 		 * Run styles (release 2, Brian's 23 Nov: "not all players are running exactly the same at the same time"): on,
 		 * each man runs and advances as his own one of the file's runners (its run and the run's styles, run_b, run_c,

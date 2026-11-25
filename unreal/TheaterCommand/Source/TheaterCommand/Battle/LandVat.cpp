@@ -71,7 +71,8 @@ namespace
 			const FVector3f Across = FMath::Abs(Normal.Z) < 0.9f ? FVector3f::UpVector : FVector3f::ForwardVector;
 			Tangents[Corner] = FVector3f::CrossProduct(Across, Normal).GetSafeNormal(1e-6f, FVector3f::ForwardVector);
 			Signs[Corner] = 1.0f;
-			const FColor Shade = K + 2 < Paint.Rgb.size() ? FColor(Paint.Rgb[K], Paint.Rgb[K + 1], Paint.Rgb[K + 2], 255) : FColor(90, 90, 80, 255);
+			// (the alpha: release 2's roughness by part where the look carries it, tc.Look.Worn; 255 otherwise, as before)
+			const FColor Shade = K + 2 < Paint.Rgb.size() ? FColor(Paint.Rgb[K], Paint.Rgb[K + 1], Paint.Rgb[K + 2], Paint.Alpha(static_cast<size_t>(I))) : FColor(90, 90, 80, 255);
 			Colours[Corner] = FVector4f(FLinearColor(Shade));
 			const bool bSkin = static_cast<size_t>(I) < Paint.Paint.size() && Paint.Paint[static_cast<size_t>(I)] == SkinPaint;
 			Uvs.Set(Corner, 0, FVector2f(bPosed && bSkin ? 1.0f : 0.0f, 0.0f));

@@ -67,6 +67,12 @@ struct FLandBattleState
 	LandCrater::Dug Dug;
 	std::unique_ptr<LandMen::Crowd> Men;
 	std::unique_ptr<LandKit::Battle> Armour;
+	/** Release 2 (tc.Look.Worn): the field's mean paint (linear, water not counted) and its dirt (WholeLook::FieldDust),
+	 * read once a battle the first time either is asked (LandBattle.cpp's FieldDustOf: the men's soil, then the vehicles'
+	 * lower third), so boots, knees and hulls take one colour. Unread until then. */
+	bool bFieldDustRead = false;
+	FLinearColor FieldMean = FLinearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	FLinearColor FieldDust = FLinearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	/** Effects (R2): the wrecks' film fire, -TheaterLandFilmFire (LandBurn). */
 	LandBurn::Director Burns;
 	/** Effects (R2): the crews getting out of knocked-out tanks, -TheaterLandBailOut (LandBail). */

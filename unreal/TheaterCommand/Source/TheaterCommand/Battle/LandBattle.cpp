@@ -673,7 +673,8 @@ namespace LandParts
 			const FVector3f Across = FMath::Abs(Normal.Z) < 0.9f ? FVector3f::UpVector : FVector3f::ForwardVector;
 			Tangents[Corner] = FVector3f::CrossProduct(Across, Normal).GetSafeNormal(1e-6f, FVector3f::ForwardVector);
 			Signs[Corner] = 1.0f;
-			const FColor Shade = K + 2 < Paint.Rgb.size() ? FColor(Paint.Rgb[K], Paint.Rgb[K + 1], Paint.Rgb[K + 2], 255) : FColor(90, 90, 80, 255);
+			// (the alpha: release 2's roughness by part where the look carries it, tc.Look.Worn; 255 otherwise, as before)
+			const FColor Shade = K + 2 < Paint.Rgb.size() ? FColor(Paint.Rgb[K], Paint.Rgb[K + 1], Paint.Rgb[K + 2], Paint.Alpha(static_cast<size_t>(I))) : FColor(90, 90, 80, 255);
 			Colours[Corner] = FVector4f(FLinearColor(Shade));
 			Uvs.Set(Corner, 0, FVector2f::ZeroVector);
 			Corners[I] = Corner;
@@ -1164,6 +1165,9 @@ void ALandBattle::LoadInks()
 	// steel ink itself stays plain for the aircraft over the field and the old wrecks. Nothing with it off.
 	// Look/WholeLook.h)
 	ManInk = WholeLook::MenInk(Ink(0.85f, 0.2f, 0.0f), this);
+	// (the men's looks write each paint's roughness into their points' alpha only where their ink is the worn one, made
+	// so here: MakeMen's wear mix, and the crowd's ink there)
+	bMenRough = ManInk && WholeLook::MenRough() && ManInk->Parent.Get() == WholeLook::MenParent(false);
 	SteelInk = Ink(0.6f, 0.35f, 0.0f);
 	WholeLook::WornOpen(SteelInk.Get());
 	// The wind and the sky's life (release 2; Brian, 23 November: "can we make the grass, trees, and sky more visually
@@ -3375,6 +3379,80 @@ FString ALandBattle::GroundWordAt(double X, double Y) const
 	return TEXT("earth");
 }
 
+// ---- The field's own ground as dirt, for the men and the vehicles ----------------------------------------------
+
+namespace
+{
+	/** The field's mean paint as linear light (WholeLook::GroundMean on the painted field's own size, as the cloud block
+	 * reads it): water not counted, as rivers, ponds and flooded ground mirror the sky. Release 2, the whole picture: the
+	 * bounce (tc.Look.Bounce) and the ground on the vehicles' lower third and the men's boots and knees (tc.Look.Worn). */
+	FLinearColor FieldMeanPaint(const LandField::Ground& Painted, const LandFeed::Field& Plan)
+	{
+		return WholeLook::GroundMean([&Painted](double X, double Y)
+		{
+			LandField::Drawn What = LandField::Drawn::Pasture;
+			Painted.HeightAt(X, Y, &What);
+			const auto C = Painted.ColourAt(X, Y);
+			return FColor(C.R, C.G, C.B, static_cast<uint8>(What == LandField::Drawn::Water ? 0 : 255)); // (alpha 0: not counted)
+		}, Plan.Cols * Plan.Cell, Plan.Rows * Plan.Cell);
+	}
+
+	/** Release 2, tc.Look.Worn: the field's own ground as dirt (WholeLook::FieldDust of FieldMeanPaint: its hue held in
+	 * the earth box, its value kept; linear), read once a battle the first time it is asked (the men's, MakeMen, then the
+	 * vehicles' lower third, MakeArmour), so the men's boots and knees and the hulls take one colour. False where the
+	 * mean failed (every point read was water): then Out is black, as the hulls have taken it. */
+	bool FieldDustOf(FLandBattleState& S, FLinearColor& Out)
+	{
+		if (!S.bFieldDustRead && S.Field)
+		{
+			S.bFieldDustRead = true;
+			S.FieldMean = FieldMeanPaint(*S.Field, S.Rec.Ground);
+			S.FieldDust = WholeLook::FieldDust(S.FieldMean);
+		}
+		Out = S.FieldDust;
+		return S.bFieldDustRead && S.FieldMean.G > UE_KINDA_SMALL_NUMBER;
+	}
+
+	/**
+	 * Release 2, tc.Look.Worn: the men's wear mix for this battle (LandMen::Crowd::SetWearMix; the art director's 25 Nov
+	 * numbers, section 2: boots and knees take 30 to 50 in 100 of the field's own ground; Brian's 22 Nov: rain darkens
+	 * cloth and splashes mud higher, snow leaves white on shoulders and helmets). The soil: the field's dirt
+	 * (FieldDustOf, the hulls' own colour) as sRGB 0 to 1, or the soldier files' own dry dust where snow lies a quarter
+	 * or more of the ground (no earth shows) or the mean failed. The rain from the campaign's weather word as the field
+	 * took it (the recording's, or the Mac's -TheaterLandWeatherWord= stand-in): rain 1, mud 0.7, snow 0.15, else none;
+	 * the snow on the men only with the word snow, by the snow lying (at least half, at most whole). bRough: each
+	 * paint's roughness written into the men's points' alpha (ALandBattle::bMenRough). Each man's wear W is the crowd's
+	 * (his side's months in the line where uniforms age, SetWorn).
+	 */
+	LandMen::Crowd::WearMix MenWear(FLandBattleState& S, bool bRough)
+	{
+		LandMen::Crowd::WearMix Mix;
+		Mix.bOn = true;
+		Mix.bRough = bRough;
+		FString Word(UTF8_TO_TCHAR(S.Rec.WeatherWord.c_str()));
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandWeatherWord="), Word);
+		Word = Word.TrimStartAndEnd().ToLower();
+		Mix.Rain = Word == TEXT("rain") ? 1.0f : Word == TEXT("mud") ? 0.7f : Word == TEXT("snow") ? 0.15f : 0.0f;
+		const double Lying = S.Field ? FMath::Clamp(S.Field->SnowLying(), 0.0, 1.0) : 0.0;
+		Mix.Snow = Word == TEXT("snow") ? static_cast<float>(FMath::Clamp(Lying, 0.5, 1.0)) : 0.0f;
+		FLinearColor Dust;
+		const bool bMean = FieldDustOf(S, Dust);
+		const bool bField = bMean && Lying < 0.25;
+		if (bField)
+		{
+			const FColor Picture = Dust.ToFColor(true);
+			Mix.Soil[0] = Picture.R / 255.0f;
+			Mix.Soil[1] = Picture.G / 255.0f;
+			Mix.Soil[2] = Picture.B / 255.0f;
+		}
+		UE_LOG(LogTheater, Display, TEXT("Whole look: worn ON for the men: boots and knees take %s %.0f, %.0f, %.0f (sRGB); rain %.2f, snow %.2f (the weather word \"%s\"); each paint's roughness %s"),
+			bField ? TEXT("the field's own ground,") : !bMean ? TEXT("the files' own dust (the field's mean read none),") : TEXT("the files' own dust (snow lies),"),
+			Mix.Soil[0] * 255.0f, Mix.Soil[1] * 255.0f, Mix.Soil[2] * 255.0f, Mix.Rain, Mix.Snow, *Word,
+			bRough ? TEXT("written into their points' alpha") : TEXT("not written (the men's worn inks are not built: one roughness, as before)"));
+		return Mix;
+	}
+}
+
 // ---- The men ---------------------------------------------------------------------------------------------------
 
 void ALandBattle::MakeMen()
@@ -3399,6 +3477,15 @@ void ALandBattle::MakeMen()
 		{
 			UE_LOG(LogTheater, Display, TEXT("Land battle: uniforms that age ON (%s)"), Months >= 0.0 ? *FString::Printf(TEXT("%.0f months in the line, both sides"), Months) : TEXT("each side's months in the line from the recording"));
 		}
+	}
+	// The men's worn look (release 2, tc.Look.Worn; Look/WholeLook.h): the soldier files' own wear and weather read with
+	// them (below), and the crowd told the field's soil, the rain and the snow before any man's look is made (Build, the
+	// pose bank and the crowd's sets all come after: nothing to make again). Each man's wear is his side's months in the
+	// line where uniforms age (above), else the files' own baked look's. Off: no wear read, every man as before.
+	const bool bWornMen = WholeLook::WornOn();
+	if (bWornMen)
+	{
+		Crowd->SetWearMix(MenWear(S, bMenRough));
 	}
 	// Run styles (release 2, on trial: "-TheaterLandTrial=runs"; Brian's 23 Nov "not all players are running exactly the
 	// same at the same time"): each man runs and advances as his own one of his file's four runners, so a squad on the
@@ -3503,7 +3590,7 @@ void ALandBattle::MakeMen()
 		{
 			auto Detail = std::make_shared<LandMen::Soldier>();
 			std::string Why;
-			if (Detail->Load(LandParts::Narrow(Text), Why))
+			if (Detail->Load(LandParts::Narrow(Text), Why, bWornMen))
 			{
 				UE_LOG(LogTheater, Display, TEXT("Land battle: %s from Models/Soldiers/Detail"), *Name);
 				Crowd->AddSoldier(LandParts::Narrow(Army), Detail);
@@ -3519,7 +3606,7 @@ void ALandBattle::MakeMen()
 		}
 		auto One = std::make_shared<LandMen::Soldier>();
 		std::string Error;
-		if (!One->Load(LandParts::Narrow(Text), Error))
+		if (!One->Load(LandParts::Narrow(Text), Error, bWornMen))
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Land battle: soldier_%s.json: %s"), *Army, *LandParts::Wide(Error));
 			continue;
@@ -3544,7 +3631,7 @@ void ALandBattle::MakeMen()
 			}
 			LandMen::Soldier Twin;
 			std::string Why;
-			if (!Twin.Load(LandParts::Narrow(Text), Why) || !Crowd->AddGore(LandParts::Narrow(Army), Twin, Why))
+			if (!Twin.Load(LandParts::Narrow(Text), Why, bWornMen) || !Crowd->AddGore(LandParts::Narrow(Army), Twin, Why))
 			{
 				UE_LOG(LogTheater, Warning, TEXT("Land battle: soldier_%s_gore.json not used (gore): %s"), *Army, *LandParts::Wide(Why));
 				continue;
@@ -3652,9 +3739,9 @@ void ALandBattle::MakeMen()
 	if (Crowd->PoseBankOn() && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoVat")))
 	{
 		UMaterialInterface* CrowdInk = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_LandCrowd.M_LandCrowd"), nullptr, LOAD_NoWarn | LOAD_Quiet);
-		// (release 2, tc.Look.Worn: the crowd reads each paint's roughness from its points too, as the near men's ink does.
-		// Look/WholeLook.h)
-		if (WholeLook::MenRough())
+		// (release 2, tc.Look.Worn: the crowd reads each paint's roughness from its points too, as the near men's ink does;
+		// exactly where the men's looks write it, bMenRough. Look/WholeLook.h)
+		if (bMenRough)
 		{
 			CrowdInk = WholeLook::MenParent(true);
 		}
@@ -4069,7 +4156,8 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 			for (int32 I = 0; I < Points; ++I)
 			{
 				const size_t K = static_cast<size_t>(I) * 3;
-				C[I] = K + 2 < Paint.Rgb.size() ? FColor(Paint.Rgb[K], Paint.Rgb[K + 1], Paint.Rgb[K + 2], 255) : FColor(90, 90, 80, 255);
+				// (the alpha: release 2's roughness by part where the look carries it, tc.Look.Worn; 255 otherwise, as before)
+				C[I] = K + 2 < Paint.Rgb.size() ? FColor(Paint.Rgb[K], Paint.Rgb[K + 1], Paint.Rgb[K + 2], Paint.Alpha(static_cast<size_t>(I))) : FColor(90, 90, 80, 255);
 			}
 			D.Mesh->ClearAllMeshSections();
 			D.Mesh->CreateMeshSection(0, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
@@ -4154,23 +4242,6 @@ void ALandBattle::BankOut(FManDrawn& D)
 }
 
 // ---- The tanks, guns and lorries -------------------------------------------------------------------------------
-
-namespace
-{
-	/** The field's mean paint as linear light (WholeLook::GroundMean on the painted field's own size, as the cloud block
-	 * reads it): water not counted, as rivers, ponds and flooded ground mirror the sky. Release 2, the whole picture: the
-	 * bounce (tc.Look.Bounce) and the ground on the vehicles' lower third (tc.Look.Worn). */
-	FLinearColor FieldMeanPaint(const LandField::Ground& Painted, const LandFeed::Field& Plan)
-	{
-		return WholeLook::GroundMean([&Painted](double X, double Y)
-		{
-			LandField::Drawn What = LandField::Drawn::Pasture;
-			Painted.HeightAt(X, Y, &What);
-			const auto C = Painted.ColourAt(X, Y);
-			return FColor(C.R, C.G, C.B, static_cast<uint8>(What == LandField::Drawn::Water ? 0 : 255)); // (alpha 0: not counted)
-		}, Plan.Cols * Plan.Cell, Plan.Rows * Plan.Cell);
-	}
-}
 
 void ALandBattle::MakeArmour()
 {
@@ -4287,11 +4358,14 @@ void ALandBattle::MakeArmour()
 	// and its hue held inside an earth box, so grass never greens a hull. Off: none, as before. Look/WholeLook.h)
 	if (WholeLook::WornOn())
 	{
-		// (on snow the field's mean is the snow's own: packed snow in the running gear keeps its white, not the earth box's
-		// cream, as much as snow lies; the ground thread's read, 25 Nov 12:47Z)
-		const FLinearColor Mean = FieldMeanPaint(*FieldPtr, S.Rec.Ground);
+		// (the field's mean and its dirt read once a battle, FieldDustOf: the men's boots and knees take the same, MakeMen;
+		// on snow the hulls' dirt goes to the snow's own mean: packed snow in the running gear keeps its white, not the earth
+		// box's cream, as much as snow lies; the ground thread's read, 25 Nov 12:47Z)
+		FLinearColor Dust;
+		FieldDustOf(S, Dust);
+		const FLinearColor Mean = S.FieldMean;
 		const float Snowed = static_cast<float>(FMath::Clamp(FieldPtr->SnowLying(), 0.0, 1.0));
-		const FLinearColor Dust = FMath::Lerp(WholeLook::FieldDust(Mean), FLinearColor(Mean.R, Mean.G, Mean.B, 1.0f), Snowed);
+		Dust = FMath::Lerp(Dust, FLinearColor(Mean.R, Mean.G, Mean.B, 1.0f), Snowed);
 		Armour->FieldDust[0] = Dust.R;
 		Armour->FieldDust[1] = Dust.G;
 		Armour->FieldDust[2] = Dust.B;
