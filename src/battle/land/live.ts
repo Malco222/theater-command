@@ -362,6 +362,13 @@ export interface LiveOpts {
   /** Jeeps and motorcycles (release 2, looks only; sim.light): out ahead with a block's screen or behind it. A campaign battle's only; off unless true. */
   light?: boolean;
   /**
+   * Japan's own tank and field gun (release 2, looks only; the Japan/Pacific thread's finding, 25 November: Japan
+   * fought in a borrowed light tank and a German howitzer). On, a Japanese armoured block is drawn as the Type 97 and
+   * a Japanese battery as the 75 mm field gun, the models the fight's own table already names for her
+   * (shells.ts). A campaign battle's only; off unless true (the art director's stills and a Mac reading first).
+   */
+  japan?: boolean;
+  /**
    * A campaign battle's (the production lead's (a), release 2): the attack card's fog, as the campaign's battle-bridge
    * sets it for its own sim (b453, b476(3)): fog, a defence the card did not know shows only where it stands until met;
    * seen, the corps the card identified, shown as the card shows them; designYears, each nation's armour design year
@@ -389,9 +396,18 @@ export function yearOf(t: FieldTicket<LandPlace>): number {
  * IV, a Tiger, a StuG, a T-34, a light tank and three guns so far, so each nation is drawn with the nearest it has, in
  * its own coat (LandKit dresses a model in its owner's colours), until the art director's models for every theatre come
  * (Brian, 22 November: "it's a world war game not just France"). The Nth tank of a side, for a mix.
+ *
+ * `own`: the nations whose own models the game now has are drawn with them instead of the nearest (the Battle rules
+ * card's switch, off until the art director and the Mac pass them). Japan's are the first: the Type 97 medium tank
+ * (1938 on; her earlier blocks keep the light tank) and the 75 mm field gun, which the fight's own table (shells.ts)
+ * already names for her.
  */
-export function standInModel(kind: string, nat: string, year: number, n: number): string {
+export function standInModel(kind: string, nat: string, year: number, n: number, own = false): string {
   const axis = ['GER', 'ITA', 'JAP', 'HUN', 'ROM', 'BUL', 'FIN'].includes(nat);
+  if (own && nat === 'JAP') {
+    if (kind === 'art') return 'Gun75';
+    if (year >= 1938) return 'Type97';
+  }
   if (kind === 'art') return nat === 'SOV' ? 'ZiS3' : axis ? 'leFH18' : 'Howitzer105';
   if (nat === 'GER') return year >= 1943 ? ['PanzerIV', 'PanzerIV', 'Tiger', 'StuG3'][n % 4] : year >= 1941 ? ['PanzerIV', 'StuG3', 'LightTank'][n % 3] : ['LightTank', 'PanzerIV'][n % 2];
   if (nat === 'SOV') return year >= 1941 ? ['T34', 'T34', 'LightTank'][n % 3] : 'LightTank';
@@ -503,11 +519,11 @@ export class LiveBattle {
       if (model) sim.vehicleIs(u.id, model);
       // A campaign battle (no piece): the nearest model the 3D game has for the nation and year, looks only, so the
       // battle stays the one the campaign priced (the fight never reads it).
-      else if (!piece && (u.kind === 'arm' || (u.kind === 'art' && !u.team))) model = standInModel(u.kind, u.nat, opts.designYears?.[u.nat] ?? yearOf(ticket), tanksSeen[u.side]++);
+      else if (!piece && (u.kind === 'arm' || (u.kind === 'art' && !u.team))) model = standInModel(u.kind, u.nat, opts.designYears?.[u.nat] ?? yearOf(ticket), tanksSeen[u.side]++, opts.japan === true);
       const took = caught && u.kind === 'arm' && caughtLeft[u.side] > 0 ? caught[u.side as 'att' | 'def'] : undefined;
       if (took) {
         caughtLeft[u.side]--;
-        model = standInModel('arm', took.from, opts.designYears?.[took.from] ?? yearOf(ticket), 0);
+        model = standInModel('arm', took.from, opts.designYears?.[took.from] ?? yearOf(ticket), 0, opts.japan === true);
       }
       return {
         id: u.id, side: u.side, nat: u.nat, kind: u.kind, name: u.name, short: u.short, parent: u.parent, corps: u.corps,

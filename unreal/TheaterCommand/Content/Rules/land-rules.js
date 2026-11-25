@@ -12392,8 +12392,12 @@
     const m = /(19[34]\d)/.exec(t.date ?? "");
     return m ? Number(m[1]) : 1942;
   }
-  function standInModel(kind, nat, year, n) {
+  function standInModel(kind, nat, year, n, own = false) {
     const axis = ["GER", "ITA", "JAP", "HUN", "ROM", "BUL", "FIN"].includes(nat);
+    if (own && nat === "JAP") {
+      if (kind === "art") return "Gun75";
+      if (year >= 1938) return "Type97";
+    }
     if (kind === "art") return nat === "SOV" ? "ZiS3" : axis ? "leFH18" : "Howitzer105";
     if (nat === "GER") return year >= 1943 ? ["PanzerIV", "PanzerIV", "Tiger", "StuG3"][n % 4] : year >= 1941 ? ["PanzerIV", "StuG3", "LightTank"][n % 3] : ["LightTank", "PanzerIV"][n % 2];
     if (nat === "SOV") return year >= 1941 ? ["T34", "T34", "LightTank"][n % 3] : "LightTank";
@@ -12482,11 +12486,11 @@
         if (a && u.kind === "arm") model = a.tanks[Math.min(a.tanks.length - 1, tanksSeen[u.side]++)];
         else if (a && u.kind === "art" && !u.team) model = a.gun;
         if (model) sim.vehicleIs(u.id, model);
-        else if (!piece && (u.kind === "arm" || u.kind === "art" && !u.team)) model = standInModel(u.kind, u.nat, opts.designYears?.[u.nat] ?? yearOf(ticket), tanksSeen[u.side]++);
+        else if (!piece && (u.kind === "arm" || u.kind === "art" && !u.team)) model = standInModel(u.kind, u.nat, opts.designYears?.[u.nat] ?? yearOf(ticket), tanksSeen[u.side]++, opts.japan === true);
         const took = caught && u.kind === "arm" && caughtLeft[u.side] > 0 ? caught[u.side] : void 0;
         if (took) {
           caughtLeft[u.side]--;
-          model = standInModel("arm", took.from, opts.designYears?.[took.from] ?? yearOf(ticket), 0);
+          model = standInModel("arm", took.from, opts.designYears?.[took.from] ?? yearOf(ticket), 0, opts.japan === true);
         }
         return {
           id: u.id,
@@ -12814,7 +12818,8 @@
         td: opts?.td === true,
         cars: opts?.cars === true,
         aa: opts?.aa === true,
-        light: opts?.light === true
+        light: opts?.light === true,
+        japan: opts?.japan === true
       });
       return live3.header();
     },
@@ -12856,6 +12861,7 @@
         cars: o.cars === true,
         aa: o.aa === true,
         light: o.light === true,
+        japan: o.japan === true,
         fog: !!o.fog,
         seen: o.seen ?? [],
         designYears: o.designYears ?? {},

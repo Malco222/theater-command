@@ -106,6 +106,10 @@ namespace
 		{ TEXT("light"), TEXT("Jeeps and motorcycles"), TEXT("Units bring their army's jeeps, field cars and motorcycles (the Willys jeep, the Kubelwagen, the BMW with its sidecar and more), riding out ahead with the screen or parked behind, despatch riders coming and going. Campaign battles only. Off: none drawn."), TEXT("TheaterLandNoLight"), false, TEXT("TheaterLandRuleLight") },
 		{ TEXT("blast"), TEXT("Shell blasts"), TEXT("One shell can take out several men standing close to where it bursts; men lying down or in cover are hit less often. Off: each man falls to a shell of his own."), TEXT("TheaterLandNoBlast"), false, TEXT("TheaterLandRuleBlast") },
 		{ TEXT("scars"), TEXT("Scarred ground"), TEXT("A field fought over before keeps the craters of those battles, weathered by the months since. Off: every field is fresh."), TEXT("TheaterLandNoScars"), false, TEXT("TheaterLandRuleScars") },
+		// (Japan's own tank and gun, release 2: the Japan and Pacific thread's finding of 25 November, that Japan fought
+		// in a borrowed light tank and a German howitzer. Looks only, a campaign battle's only, off until the art
+		// director and a Mac reading pass them; -TheaterLandRuleJapan turns it on for a run.)
+		{ TEXT("japan"), TEXT("Japan's own tank and gun"), TEXT("Japanese units are drawn with their own Type 97 medium tank and 75 mm field gun instead of the generic light tank and a German howitzer. Campaign battles only. Off: the generic models."), TEXT("TheaterLandNoJapan"), false, TEXT("TheaterLandRuleJapan") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }

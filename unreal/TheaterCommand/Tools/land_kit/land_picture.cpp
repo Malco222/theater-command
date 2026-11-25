@@ -673,7 +673,10 @@ int main(int argc, char** argv)
 	std::map<std::string, std::unique_ptr<Model>> Models;
 	auto ModelFor = [&](const std::string& Name, const std::string& Nation, const Panel& For) -> const Model*
 	{
-		const std::string Key = Name + "|" + Nation + (For.bMarks ? "|marks " + std::to_string(For.Year * 100 + For.Month) : std::string());
+		// (the month belongs in the key whatever the panel shows, not only for a marks panel: a model whose file gives
+		// its army's face by month (the Type 97's khaki, then two camouflages) is a different model in each, and two
+		// panels a year apart were being painted from whichever was loaded first)
+		const std::string Key = Name + "|" + Nation + "|" + std::to_string(For.Year * 100 + For.Month) + (For.bMarks ? "|marks" : "");
 		if (!Models.count(Key))
 		{
 			std::string Text, Error;
@@ -1167,6 +1170,54 @@ int main(int argc, char** argv)
 			Panels.push_back(P);
 		}
 	}
+	// (LAND_KIT_JAPAN=1: Japan's own tank and field gun instead, release 2's Battle rules row "Japan's own tank and gun"
+	// (-TheaterLandRuleJapan): the Type 97 and the 75 mm gun beside the generic light tank and the German howitzer they
+	// stand in for today, each in Japan's own coat)
+	const bool bJapanSheet = std::getenv("LAND_KIT_JAPAN") != nullptr;
+	struct JapanLook
+	{
+		const char* File;
+		const char* Model;
+		const char* Nation;
+		int Year, Month;
+		double Turret, Gun, Hatches, FireAge, DeathAge, Bearing, Up, Soot;
+		bool bBrewUp;
+		const char* Caption;
+	};
+	const JapanLook JapanLooks[] = {
+		{ "jap_type97_a", "Type97", "JAP", 1942, 5, -40.0, 4.0, 1.0, -1.0, -1.0, 42.0, 17.0, 0.0, false, "Type 97 Chi-Ha, May 1942: turret 40\xC2\xB0 off, hatches open" },
+		{ "jap_type97_b", "Type97", "JAP", 1943, 8, 0.0, 6.0, 0.0, 0.08, -1.0, 72.0, 15.0, 0.0, false, "Type 97, August 1943: her later coat, just after a shot" },
+		{ "jap_type97_c", "Type97", "JAP", 1942, 5, -14.0, -6.0, 0.0, -1.0, 3.5, 36.0, 18.0, 0.35, false, "Type 97: knocked out, hatches thrown, gun drooped" },
+		{ "jap_type97_d", "Type97", "JAP", 1944, 3, 0.0, 0.0, 0.0, -1.0, 4.5, -48.0, 20.0, 1.0, true, "Type 97: brewed up and burnt out" },
+		{ "jap_light_was", "LightTank", "JAP", 1942, 5, -40.0, 4.0, 1.0, -1.0, -1.0, 42.0, 17.0, 0.0, false, "until now: the generic light tank in Japanese paint" },
+		{ "jap_gun75", "Gun75", "JAP", 1942, 5, 0.0, 35.0, 0.0, -1.0, -1.0, 62.0, 14.0, 0.0, false, "75 mm field gun, Japanese: deployed, laid at 35\xC2\xB0" },
+		{ "jap_gun75_fire", "Gun75", "JAP", 1942, 5, 0.0, 18.0, 0.0, 0.06, -1.0, 48.0, 12.0, 0.0, false, "the 75 mm gun just after a shot, the barrel back" },
+		{ "jap_lefh_was", "leFH18", "JAP", 1942, 5, 0.0, 35.0, 0.0, -1.0, -1.0, 62.0, 14.0, 0.0, false, "until now: the German 10.5 cm leFH 18 in Japanese paint" },
+	};
+	for (const JapanLook& K : JapanLooks)
+	{
+		if (!bJapanSheet)
+		{
+			break;
+		}
+		Panel P;
+		P.File = K.File;
+		P.ModelName = K.Model;
+		P.Nation = K.Nation;
+		P.Year = K.Year;
+		P.Month = K.Month;
+		P.Pin.Turret = K.Turret;
+		P.Pin.Gun = K.Gun;
+		P.Pin.Hatches = K.Hatches;
+		P.Pin.FireAge = K.FireAge;
+		P.Pin.DeathAge = K.DeathAge;
+		P.Pin.bBrewUp = K.bBrewUp;
+		P.CameraBearing = K.Bearing;
+		P.CameraUp = K.Up;
+		P.SootShare = K.Soot;
+		P.Caption = K.Caption;
+		Panels.push_back(P);
+	}
 	struct TankLook
 	{
 		const char* Model;
@@ -1176,7 +1227,7 @@ int main(int argc, char** argv)
 	const TankLook Tanks[3] = { { "Sherman", "USA", "M4 Sherman" }, { "PanzerIV", "GER", "Panzer IV" }, { "Tiger", "GER", "Tiger" } };
 	for (const TankLook& T : Tanks)
 	{
-		if (bMarksSheet || bHouseSheet)
+		if (bMarksSheet || bHouseSheet || bJapanSheet)
 		{
 			break;
 		}
@@ -1211,7 +1262,7 @@ int main(int argc, char** argv)
 		C.Caption = std::string(T.Title) + ": knocked out, hatches thrown, gun drooped";
 		Panels.push_back(C);
 	}
-	if (!bMarksSheet && !bHouseSheet)
+	if (!bMarksSheet && !bHouseSheet && !bJapanSheet)
 	{
 		Panel D;
 		D.File = "Tiger_d";

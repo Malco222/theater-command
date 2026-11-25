@@ -1581,6 +1581,13 @@ bool ALandBattle::Open()
 				{
 					bFound = V.SocketAt("coax", T, At, Facing);
 				}
+				// (a turret machine gun in place of a coaxial, for a tank that carries one instead: the Type 97's and
+				// the Ha-Go's, mounted in the back of the turret. Before the main gun's place, which would flash her
+				// 57 mm for a burst of machine-gun fire.)
+				if (!bFound && !Socket.empty())
+				{
+					bFound = V.SocketAt("turret_mg", T, At, Facing);
+				}
 				if (!bFound)
 				{
 					bFound = V.SocketAt("muzzle", T, At, Facing);
