@@ -562,8 +562,9 @@ void ALandBattle::FlyOver(const FVector& EyeWorld)
 							EndY = Own->Clips[static_cast<size_t>(Prone)].EndOffset.Y;
 						}
 					}
-					// (his lines taut while his canopy is up, a little slack once it lies)
-					const double Slack = FMath::SmoothStep(0.3, 0.8, C.Slump);
+					// (his lines taut while his canopy is up, a little slack once it lies: LandAir's own, the slack HeapShape lifts
+					// the lines across its silk over the ground for)
+					const double Slack = LandAir::LineSlack(C.Slump);
 					DownShape(Make.Built, Make.Silk, Lying >= 0.0, Lying >= 0.0 ? Lying : 1.0, C.Face - C.HeapHeading, EndX, EndY, U, Slack);
 				}
 				else

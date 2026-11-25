@@ -331,20 +331,22 @@ def silk_polys(mesh, view, sun, fill):
 
 def panel(box, title, ground=None):
     x0, y0, x1, y1 = box
+    # (no silk drawn in it yet: a panel's lines are tested against its own silk only, not a panel's drawn before it)
+    DEPTH[max(0, y0):min(H, y1 + 1), max(0, x0):min(W, x1 + 1)] = np.inf
     if ground:
         d.rectangle((x0 + 1, y0 + 1, x1 - 1, y1 - 1), fill=ground)
     d.rectangle(box, outline=GREY)
     d.text((x0 + 6, y0 + 4), title, fill=INK)
 
 
-def paint(drawn, box, onto=None):
+def paint(drawn, box, onto=None, depth=True):
     """Draws the triangles far first, clipped to the box (onto: an image of their own, for a layer), lit much as the
     pieces' paint is: the sun's light, and on the side turned from the sun the share of its own colour the scene gives
     back, its glow (fill). Each is drawn whole in one light (its corners' facings' mean, as before), and then each pixel
     inside it lit by its facing there, its corners' between them, as the scene lights it (the art director's note of 24
     November 17:40Z: a fold across the silk is a darker band and a lighter one between two rings, which one light a
-    triangle had shown as one shade). Drawn onto the picture itself (no layer), each pixel's depth from the eye is kept
-    (DEPTH), so that his lines are drawn only where the silk does not hide them, as the scene's depth test draws them.
+    triangle had shown as one shade). Each pixel's depth from the eye is kept (DEPTH: onto a layer too, unless depth is
+    False), so that his lines are drawn only where the silk does not hide them, as the scene's depth test draws them.
     Returns the silk's mask (the whole triangles')."""
     tris, sun, fill = drawn
     x0, y0, x1, y1 = box
@@ -382,7 +384,7 @@ def paint(drawn, box, onto=None):
         rgb = (255.0 * np.clip((w @ np.array(colours)) * shade[:, None], 0.0, 1.0) ** (1 / 2.2)).astype(np.uint8)
         ys, xs = np.nonzero(inside)
         pix[ys + ly, xs + lx, 0:3] = rgb
-        if onto is None:
+        if depth:
             DEPTH[ys + ly, xs + lx] = w @ np.array(depths)
     target.paste(Image.fromarray(pix))
     return Image.composite(mask, Image.new('L', (W, H), 0), clip)
@@ -414,7 +416,9 @@ DEPTH = np.full((H, W), np.inf)
 def cord(dd, view, a, b):
     """A length of line from a to b, a pixel wide, drawn where the silk does not hide it: the scene draws it as a rod
     12 mm round, so its near side is 12 mm nearer the eye than its middle (a review of 24 November 17:40Z, after a
-    second look: drawn over everything, lines under the silk had shown through it)."""
+    second look: drawn over everything, lines under the silk had shown through it). Within its view's panel only, as
+    paint clips the silk."""
+    x0, y0, x1, y1 = view.box
     u, v = view.at(a), view.at(b)
     steps = max(1, int(math.ceil(max(abs(v[0] - u[0]), abs(v[1] - u[1])) * 2.0)))
     for k in range(steps + 1):
@@ -422,7 +426,7 @@ def cord(dd, view, a, b):
         p = [a[i] + (b[i] - a[i]) * f for i in range(3)]
         x, y = view.at(p)
         xi, yi = int(round(x)), int(round(y))
-        if 0 <= xi < W and 0 <= yi < H and view.depth(p) - 0.012 <= DEPTH[yi, xi]:
+        if x0 + 1 <= xi <= x1 - 1 and y0 + 22 <= yi <= y1 - 1 and 0 <= xi < W and 0 <= yi < H and view.depth(p) - 0.012 <= DEPTH[yi, xi]:
             dd.point((xi, yi), fill=CORD)
 
 
@@ -527,7 +531,8 @@ v3 = View(eye, [0.0, 0.0, 1.2], 3600.0, r1[2])
 paint(silk_polys(meshes[0], v3, sun_behind, 0.0), r1[2])
 
 # (4) falling in, across the wind 30 m off: as he landed, and a quarter, a half and three quarters fallen in (paler
-# the earlier), and lying
+# the earlier), and lying; his lines (lying) drawn where its silk lying does not hide them, not tested against the
+# paler stages before it, which the scene never draws with it
 panel(r1[3], "falling in, across the wind 30 m off (paler earlier)", FIELD)
 v4 = View([5.5, -30.0, 2.0], [5.5, 0.0, 3.5], 1000.0, r1[3])
 x0, y0, x1, y1 = r1[3]
@@ -537,7 +542,7 @@ layers = Image.new('RGBA', (W, H), (0, 0, 0, 0))
 mids = []
 for k, which in enumerate((3, 4, 5, 6, 1)):
     layer = Image.new('RGBA', (W, H), (0, 0, 0, 0))
-    paint(silk_polys(meshes[which], v4, sun_high, 0.0), r1[3], onto=layer)
+    paint(silk_polys(meshes[which], v4, sun_high, 0.0), r1[3], onto=layer, depth=which == 1)
     alpha = layer.getchannel('A').point(lambda a, k=k: int(a * (0.35 + 0.65 * k / 4.0)))
     layer.putalpha(alpha)
     layers = Image.alpha_composite(layers, layer)

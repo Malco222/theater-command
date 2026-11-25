@@ -2,8 +2,17 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <type_traits>
+
+// (each a*b+c rounded as two steps, never fused into one: clang fuses them by default where the machine has a fused
+// multiply-add, as the Mac's arm64 has, and the lines across a canopy, routed through many near ties, then came out up
+// to 0.1 m elsewhere lying and nearly 1 m falling in than on a PC. Unreal's Mac build passes -ffp-contract=off to all
+// of this module already; this keeps it so wherever LandAir is built, as the test's run.sh does)
+#if defined(__clang__)
+#pragma clang fp contract(off)
+#endif
 
 namespace LandAir
 {
@@ -1414,7 +1423,7 @@ namespace LandAir
 		struct Column
 		{
 			double Theta, Cs, Sn, Back, Top, Arch, Over, Rim, Flip, Tuck, Bil, Late, S3, C3, S5, C5, S7, C7, Loose, Round2, Round3, Kink[4];
-			int Edge;
+			size_t Edge;    // (as wide as a double: no padding, so that a column kept as doubles is all its own bytes)
 		};
 		struct Ring
 		{
@@ -1444,7 +1453,8 @@ namespace LandAir
 		// none of it changes as it falls in)
 		const double KeyNow[] = { static_cast<double>(C.Folds), static_cast<double>(Cols), C.Across, C.Deep, C.Wind, C.Open, Off, H.X, H.Y, H.Z, Hx, Hy };
 		const size_t Each0 = static_cast<size_t>(Ringed * Cols + 1);
-		static_assert(std::is_trivially_copyable_v<Column> && sizeof(Column) % sizeof(double) == 0, "a column kept as doubles");
+		static_assert(std::is_trivially_copyable_v<Column> && sizeof(Column) % sizeof(double) == 0 && sizeof(size_t) == sizeof(double),
+			"a column kept as doubles, with no padding");
 		constexpr size_t PerColumn = sizeof(Column) / sizeof(double);
 		const bool bKept = KeptWas.Key.size() == std::size(KeyNow) && std::equal(KeyNow, KeyNow + std::size(KeyNow), KeptWas.Key.begin())
 			&& KeptWas.Lies.size() == Each0 && KeptWas.Crossing.size() == Each0 && KeptWas.Columns.size() == PerColumn * static_cast<size_t>(Cols);
@@ -1483,7 +1493,7 @@ namespace LandAir
 			Q.Loose = std::cos(1.5 * Pi * Q.Sn + L.Loose * 5.0);
 			Q.Round2 = std::sin(2.0 * Q.Theta + L.WanderRound[0]);
 			Q.Round3 = std::sin(3.0 * Q.Theta + L.WanderRound[1]);
-			Q.Edge = Q.Sn >= 0.0 ? 0 : 1;
+			Q.Edge = Q.Sn >= 0.0 ? 0u : 1u;
 			// (its far end's seams kinked: in two waves across it, so that its two layers keep together at its edges)
 			Q.Kink[0] = std::sin(1.5 * Pi * Q.Sn);
 			Q.Kink[1] = std::cos(1.5 * Pi * Q.Sn);
@@ -1607,18 +1617,25 @@ namespace LandAir
 		// down it is (Settled), how it flaps (Flap: up and across, until it is down), and how much of a fold across it is
 		// there (Crossing: 0 to 1, for its facing).
 		const size_t Each = static_cast<size_t>(Ringed * Cols + 1);
-		std::vector<V3> Was(Each), Lies(Each);
-		std::vector<double> Settled(Each), Flap(Each), Floor(Each, Clear), Crossing(Each, 0.0);
+		std::vector<V3> Was(Each), Lies;
+		std::vector<double> Settled(Each), Flap(Each), Floor, Crossing;
 		Out.Points.resize(Each);
+		// (as kept, taken back without making them anew; Floor is wanted only to lay it)
 		if (bKept)
 		{
 			Lies.swap(KeptWas.Lies);
 			Crossing.swap(KeptWas.Crossing);
 		}
+		else
+		{
+			Lies.resize(Each);
+			Crossing.assign(Each, 0.0);
+			Floor.assign(Each, Clear);
+		}
 		const double Slumps = Lean > 0.0 ? 1.0 : -1.0;
 		// (each fold across it: how much of it there is round each ring, highest at CrossAt across it and fading either
-		// way; none on a ring with none, worked out once)
-		std::vector<double> Envs(static_cast<size_t>(Ringed * Cols), 0.0);
+		// way; none on a ring with none, worked out once: only to lay it)
+		std::vector<double> Envs(bKept ? 0 : static_cast<size_t>(Ringed * Cols), 0.0);
 		for (int R = 0; R < Ringed && !bKept; ++R)
 		{
 			const Ring& G = Rg[static_cast<size_t>(R)];
@@ -1958,13 +1975,23 @@ namespace LandAir
 			}
 			const double Body = GatherX + 0.15 * (MaxX - MinX), Farthest = RingOf(0.45);
 			// (the seams that may: a line runs back to him from it, and its gore and those beside it lie as laid at its near
-			// end; the nearest its top's middle first, picked on its dice)
+			// end; the nearest its top's middle first, picked on its dice. How near, exactly: in whole half-seams round from
+			// it (by its sine's size, mirror seams had tied to the last bit or within a few, so that the libm's rounding chose
+			// which line was laid where, a Mac's apart from a PC's). Between two as near, its far side's first, but for the
+			// widest two a line runs back from (whether or not they may), its near side's first: the order glibc's sines gave
+			// for the gores the scene makes, 24, 26 and 28)
+			int Widest2 = 0;
+			for (int Sm = 0; Sm < Seams; ++Sm)
+			{
+				if (LineBack(static_cast<size_t>(Sm), static_cast<size_t>(Seams))) Widest2 = std::max(Widest2, std::abs(2 * Sm - Seams));
+			}
 			std::vector<std::pair<double, int>> May;
 			for (int Sm = 0; Sm < Seams; ++Sm)
 			{
-				const double Th = 2.0 * Pi * Sm / Seams;
 				if (!LineBack(static_cast<size_t>(Sm), static_cast<size_t>(Seams)) || Moved(4.0 * Sm)) continue;
-				May.emplace_back(std::fabs(std::sin(Th)), Sm);
+				const int Away2 = std::abs(2 * Sm - Seams);
+				const bool bFirst = Away2 == Widest2 ? 2 * Sm < Seams : 2 * Sm > Seams;
+				May.emplace_back(2.0 * Away2 + (bFirst ? 0.0 : 1.0), Sm);
 			}
 			std::sort(May.begin(), May.end());
 			const std::vector<std::pair<double, int>> Each2 = May;
@@ -2319,8 +2346,13 @@ namespace LandAir
 		Out.Kept.Key.assign(KeyNow, KeyNow + std::size(KeyNow));
 		Out.Kept.Lies.swap(Lies);
 		Out.Kept.Crossing.swap(Crossing);
-		Out.Kept.Columns.resize(PerColumn * Cl.size());
-		std::memcpy(Out.Kept.Columns.data(), static_cast<const void*>(Cl.data()), sizeof(Column) * Cl.size());
+		// (its columns as kept, handed back as they came when kept: none of them is changed after they are worked out)
+		if (bKept) Out.Kept.Columns.swap(KeptWas.Columns);
+		else
+		{
+			Out.Kept.Columns.resize(PerColumn * Cl.size());
+			std::memcpy(Out.Kept.Columns.data(), static_cast<const void*>(Cl.data()), sizeof(Column) * Cl.size());
+		}
 		// (the lines to its gathered hem: the lowest each one's middle may lie (LineLies), lying: high enough that both its
 		// lengths are Rope (the 12 mm cord's half and 3 mm) over the ground under them, bowed or straight (a review: on a
 		// slope falling away downwind a line had gone some 0.3 m into it))
@@ -2653,6 +2685,10 @@ namespace LandAir
 				const auto Ground2 = [&](double T) { const double X = A.X + Dx * T, Y = A.Y + Dy * T; return V3{ X, Y, G.At(X, Y) + Rope }; };
 				const size_t Mine = Pts.size();
 				double WasT = 0.0, WasTop = TopOn(0.0), Clear3 = -1.0;
+				// (one out from its silk (Stop) starts on it, Rise over its top, though its top be not found there: TopAt
+				// passes over its steepest triangles, as its skirt stands falling in. Else all of it had been walked as ground,
+				// and its line come down OutTo out from its edge)
+				if (bStop && WasTop < -1e8) WasTop = A.Z - Rise;
 				for (int Q = 1; Q <= N; ++Q)
 				{
 					const double T = static_cast<double>(Q) / N;
@@ -2964,13 +3000,16 @@ namespace LandAir
 					for (int J = 0; J < LineVia; ++J) P[J].Z += Lift[J];
 				}
 				// (and drawn while its lines are not yet slack (LineLies: across the grass each of its first points from the
-				// straight between his harness, as he lies on the ground there, and where it comes onto its silk, toward these
-				// as slack as they are), never under the ground: each of those raised as much more as its share of slack takes
-				// it over the ground there and over it along the straights either side, the nearer the more; a review: on a
-				// field of hummocks and across a ditch they had cut 0.2 m into the ground as it fell in)
+				// straight between his harness and where it comes onto its silk, toward these as slack as they are), never
+				// under the ground: each of those raised as much more as its share of slack takes it over the ground there and
+				// over it along the straights either side, the nearer the more; a review: on a field of hummocks and across a
+				// ditch they had cut 0.2 m into the ground as it fell in. From his harness where the scene draws it (DownShape:
+				// in the mesh's own space, his feet at its origin and his man flat and rigid, Hn), not lifted by the ground
+				// under it: a second review found the lines from the harness drawn cutting up to 0.23 m into hummocks that
+				// those from a harness lifted onto them had cleared)
 				if (Ground && Slack < 1.0)
 				{
-					const V3 Harness{ Hn.X, Hn.Y, Hn.Z + G.At(Hn.X, Hn.Y) };
+					const V3& Harness = Hn;
 					V3 Q[LineGrass + 2];
 					Q[0] = Harness;
 					for (int J = 1; J <= LineGrass; ++J)
@@ -2997,7 +3036,10 @@ namespace LandAir
 							Need[J + 1] = std::max(Need[J + 1], Short * T / Norm);
 						}
 					}
-					for (int J = 1; J <= LineGrass; ++J) P[J - 1].Z += Need[J] / std::max(Slack, 0.05);
+					// (by its share of slack, as LineLies lets them down by it, but by no less than 0.01: held to 0.05, a make
+					// with less (0.028 at a slump of 0.35) had lifted them too little and left them in the ground; with no
+					// least, one barely slack would be lifted out of all reason, for the scene to draw toward between makes)
+					for (int J = 1; J <= LineGrass; ++J) P[J - 1].Z += Need[J] / std::max(Slack, 0.01);
 				}
 				Out.Across.push_back(S.Seam);
 				std::copy(P, P + LineVia, Out.Over.begin() + static_cast<std::ptrdiff_t>(Ln * static_cast<size_t>(LineVia)));

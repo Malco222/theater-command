@@ -1245,8 +1245,21 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
         near where it comes onto its silk, 4 cm earlier in its fall), its points kept where it turns most; never under
         the ground, from his harness on. While its lines are slack only in part (`LineSlack`: taut to a slump of 0.3,
         slack from 0.8) its grass is drawn between the straight and where it lies, lifted where that would dip under the
-        ground. LandBattleAir's `DownShape` draws each line through `LandAir::LineLies`' points (31 for a line across
-        it, three for the rest, a rod from each to the next), the same points all the while it falls in. His lines and
+        ground: the straight from his harness where `DownShape` draws it (in the mesh's own space, his feet at its
+        origin and his man flat and rigid; a second review found that, lifted onto the ground under it as this had
+        lifted it, the lines from the harness drawn cut up to 0.23 m into hummocks), each point lifted by its share of
+        slack but by no less than 0.01 of it (held to 0.05, a make at a slump of 0.35, 0.028 slack, had left them in
+        the ground). Over its edge where its top there is not found (a steep skirt as it falls in: `TopAt` passes over
+        steep triangles) a line still comes down 3 cm out, not 0.6 m out over the grass. Which seams' lines are thrown
+        over it is picked from those nearest its top's middle first by whole half-seams round from it, mirror seams in
+        the order glibc's sines had put them for 24, 26 and 28 gores (by the sine's size they had tied to the last bit,
+        so that the libm chose which line lay where, a Mac's apart from a PC's); and LandAir.cpp is built with no
+        a\*b+c fused into one rounding (`#pragma clang fp contract(off)`, as Unreal's Mac build and run.sh's
+        `-ffp-contract=off` have it: clang fuses them on the Mac's arm64 by default, and the lines across it, routed
+        through many near ties, came out up to 0.1 m elsewhere lying and nearly 1 m falling in). LandBattleAir's
+        `DownShape` draws each line through `LandAir::LineLies`' points (31 for a line across it, three for the rest, a
+        rod from each to the next), the same points all the while it falls in, as slack as `LandAir::LineSlack` says
+        (the slack `HeapShape` lifts them for; it had had its own `FMath::SmoothStep`). His lines and
         risers are olive drab cord, (0.13, 0.12, 0.07), darker than her off-white silk so that those across it read on
         it (they had been near her silk's own colour), and chutes.py draws them only where the silk does not hide them,
         as the scene's depth test does.
@@ -1324,7 +1337,9 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
     end's breakup on `0xFA2D`, over the pilot's number): the planes fly as before, frame for frame.
 - **Not yet.** The engines' and guns' sound (the sound director's), the bombs seen falling, light flak's puffs (the kit
   has only its heavy row).
-- **Test**: `Tools/land_air/run.sh [out folder]` (`LAND_AIR_OUT`): the feed, the machines, the plan, the flight (drawn
+- **Test**: `Tools/land_air/run.sh [out folder]` (`LAND_AIR_OUT`; built as the Mac builds it, `-ffp-contract=off`, clang
+  by default, `CXX=g++` the other; its chute_silk.txt and air_paths.txt the same byte for byte either way, and with
+  clang's `-mfma -ffp-contract=on`): the feed, the machines, the plan, the flight (drawn
   from before the run, at a fighter's speed, never under 5 m over the ground, smooth, the Stuka steep and the Il-2 low
   while firing, the art director's dive angles, bottoms and gun ranges), the guns (each lane from the strip's start to
   its end, aimed on the ground, each plane 6 to 12 s after the one before, a lane 150 m past its own side's front), the losses (each falls as its note says, burns where it struck, no other falls), the ground's fire (only the
@@ -1368,7 +1383,13 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   it under the ground, falling in or lying, its points nor its triangles' edges (seven places along each against the
   ground itself), on a slope of 1 in 4 along the wind or across it, on hummocks, across a hedgerow bank 1 m high, a
   step 0.4 m up, a ditch 0.6 m deep, a sharp crest, a crater's bowl and rim, and along a bank under one edge; and
-  lying on the slopes its underside on the ground (each ring's lowest point within 0.08 m of it). The planes' hash is
+  lying on the slopes its underside on the ground (each ring's lowest point within 0.08 m of it). On the same fields
+  none of his lines under the ground, drawn from his harness where the scene draws it (not lifted onto the ground under
+  it, which had hidden lines 0.23 m into hummocks), for the verdict's four and, each 0.05 of its fall, 300 pilots'
+  numbers (their canopies' points too): the lines across its silk 0.015 m over it at the lowest (before this round's
+  second review, 0.23 m under it). At 45 fps his lines as drawn move up to 0.52 m a frame between makes and 0.43 m at
+  one (their run across the grass swinging as where they come onto its silk moves, at a slump of about 0.4): printed,
+  not checked, being over the silk's 0.3 m. The planes' hash is
   printed against release 1's (`e258eaf3320235ff`). `chutes.py` draws each pilot's first seconds, his way through
   the air and his seconds on the field, and the canopy as the scene draws it: side-on full through a long lens with
   his lines to him, from under with its glow and without, falling in across the wind, lying from 40 m at a man's eye
