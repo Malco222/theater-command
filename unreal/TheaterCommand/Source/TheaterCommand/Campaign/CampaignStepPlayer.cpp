@@ -170,6 +170,35 @@ namespace
 	}
 
 	/**
+	 * (1.5.3) True where a line of the button's own, one not on a button inside it, reads exactly these words (as Plain
+	 * gives both): a card's name on the card, though the card holds buttons of its own.
+	 */
+	bool HasLine(const TSharedRef<SWidget>& Widget, const FString& Want, bool bTop = true)
+	{
+		static const FName ButtonType(TEXT("SButton"));
+		static const FName TextType(TEXT("STextBlock"));
+		if (!Widget->GetVisibility().IsVisible() || (!bTop && Widget->GetType() == ButtonType))
+		{
+			return false;
+		}
+		if (Widget->GetType() == TextType)
+		{
+			return Plain(StaticCastSharedRef<STextBlock>(Widget)->GetText().ToString()) == Want;
+		}
+		if (FChildren* Children = Widget->GetChildren())
+		{
+			for (int32 Index = 0; Index < Children->Num(); ++Index)
+			{
+				if (HasLine(Children->GetChildAt(Index), Want, false))
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Every button on the screen that can be seen, with the words on it. (1.5.1, the Mac's p7, 25 November 2026: with
 	 * bDeep, a press's own search, the buttons inside a button are gathered too, after it: a division's tile on a corps'
 	 * card, a button on a page's card. Before, the search stopped at the outermost button, and a press meant for a tile
@@ -372,7 +401,8 @@ bool FStepPlayer::Press(ACampaignPlayerController& Player, const FString& Words)
 			Matched.Add(Index);
 		}
 	}
-	if (Matched.Num() == 0)
+	const bool bWhole = Matched.Num() > 0;
+	if (!bWhole)
 	{
 		for (int32 Index = 0; Index < All.Num(); ++Index)
 		{
@@ -382,23 +412,40 @@ bool FStepPlayer::Press(ACampaignPlayerController& Player, const FString& Words)
 			}
 		}
 	}
-	// (1.5.1) A button whose words are found only because a button inside it carries them gives way to that inner one:
-	// "3rd Infantry" is the division's tile, not the corps' card that holds the tile. Where no inner button matches, the
-	// outer one is pressed, as before.
 	TArray<const FFoundButton*> Alike;
-	for (const int32 Index : Matched)
+	if (!bWhole && !Want.IsEmpty())
 	{
-		bool bHolds = false;
-		for (const int32 Other : Matched)
+		// (1.5.3) Where no button's words are these and no more, a button with a line of its own that reads exactly these
+		// words wins over every button that only carries them among others: a card by its name. After a split, "press II
+		// Corps" is II Corps' card, not REJOIN II CORPS DETACHMENT on it, nor the detachment's card, nor XII Corps'. "#2"
+		// counts among those that won.
+		for (const int32 Index : Matched)
 		{
-			for (int32 Up = All[Other].Parent; Up != INDEX_NONE && !bHolds; Up = All[Up].Parent)
+			if (HasLine(All[Index].Widget.ToSharedRef(), Want))
 			{
-				bHolds = Up == Index;
+				Alike.Add(&All[Index]);
 			}
 		}
-		if (!bHolds)
+	}
+	// (1.5.1) A button whose words are found only because a button inside it carries them gives way to that inner one:
+	// "3rd Infantry" is the division's tile, not the corps' card that holds the tile and has no line of that name of its
+	// own. Where no inner button matches, the outer one is pressed, as before.
+	if (Alike.Num() == 0)
+	{
+		for (const int32 Index : Matched)
 		{
-			Alike.Add(&All[Index]);
+			bool bHolds = false;
+			for (const int32 Other : Matched)
+			{
+				for (int32 Up = All[Other].Parent; Up != INDEX_NONE && !bHolds; Up = All[Up].Parent)
+				{
+					bHolds = Up == Index;
+				}
+			}
+			if (!bHolds)
+			{
+				Alike.Add(&All[Index]);
+			}
 		}
 	}
 	if (!Alike.IsValidIndex(Which - 1))
