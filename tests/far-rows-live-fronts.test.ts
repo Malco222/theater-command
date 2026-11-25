@@ -44,6 +44,9 @@ const lose = (g: Game, name: string, to: string, away: string): Region => {
  */
 const war = (o: { stop?: number; human?: string | null; went?: boolean; rangoon?: boolean } = {}): Game => {
   const g = startOpen(createGame(3, o.human ?? null));
+  // (A player's rows are offers only where the switch 'offers' is on: stage.json, off until its screen passes, the
+  // design director's 13:39Z of 25 November 2026. A campaign opened with it on carries the flag; set by hand here.)
+  if (o.human) g.flags.offers = 1;
   if (o.stop && o.stop !== 3) setStop(g, o.stop, true);
   // (Cam Ranh is Japan's, as the demand on Vichy France makes it before the strike south in a played war. Since the
   // design director's ruling B7 of 25 November 2026 a row posted on a neutral's ground waits for its war, where no

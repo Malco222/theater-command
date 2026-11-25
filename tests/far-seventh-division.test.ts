@@ -57,6 +57,9 @@ describe('the 7th Division (rider b641)', () => {
   // takes a corps of the player's is an offer now: nothing is taken until he says yes, and taken it forms as it did.)
   it("a player's Japan is offered the row, and has it where he takes it", () => {
     const g = war(3, 'JAP');
+    // (His rows are offers only where the switch 'offers' is on: stage.json, off until its screen passes, the design
+    // director's 13:39Z of 25 November 2026. A campaign opened with it on carries the flag; the test sets it by hand.)
+    g.flags.offers = 1;
     month(g, 12);
     expect([row(g, HOME), row(g, AWAY)?.name]).toEqual([undefined, AWAY]);
     const offers = rowOffers(g).filter((o) => o.name === HOME);

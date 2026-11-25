@@ -141,6 +141,9 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
     // The 5th Division is brought to Formosa in month 2 for the landing at Pakhoi, an operation of the book alone.
     const raise = (stop: number, human: string | null) => {
       const g = grand(human);
+      // (His rows are offers only where the switch 'offers' is on: stage.json, off until its screen passes, the design
+      // director's 13:39Z of 25 November 2026. A campaign opened with it on carries the flag; the test sets it by hand.)
+      if (human) g.flags.offers = 1;
       setStop(g, stop, true);
       g.turn = 2;
       startPhase(g, 'JAP');
