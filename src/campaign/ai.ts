@@ -20,8 +20,7 @@ import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, keptByHand, landCorp
 import { shoreAI } from './fleets';
 import { plannedStrike } from './carriers';
 import { readinessMonth } from './readiness';
-import { shoreOpen, stopDef, stopOf, stormHeldBy } from './history';
-import { unitsDecide } from './units';
+import { shoreOpen, stopOf, stormHeldBy, unitsFree } from './history';
 import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, fronts, heedsCard, holdsAshore, isOpen, keepsDoor, joinsOn, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, onTheAttack, onTheDay, opensNow, opensOn, opensSoon, ownFront, probed, probing, quayGuests, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, temper, theatreStaff, descentAsks, freed, garrisonMonth, attackMembers, rearMonth } from './staff';
 import { STRENGTH, followUp } from './ashore';
 import { HOP_AIMS, firstOnRun, hopAims, hopShores, laneOn, pacificGround } from './pacific';
@@ -778,22 +777,38 @@ function seaAnswers(g: Game, nat: string): { c: Corps; on: Set<number> }[] {
  * keeps no book, the old chart's and the Americas' too (the design director's ruling of 14:15Z of 25 November 2026,
  * audit item 38: "B11's one rule on both charts"). Its edge lies on one chart, and its rows and its ground are of
  * that chart: a front with a foot on each is read by neither, as before. Otherwise the old chart's fronts and the
- * Americas' stand as they did. A staff has a front from the month it is at
- * war with the country across it, so the war itself frees the holds on the front that faces that enemy, before he
- * has crossed.
+ * Americas' stand as they did.
+ *
+ * What frees a row: two triggers, one to each chart, as the design director ruled at 15:09Z of 25 November 2026
+ * (design-director/pacific-japan-1125.md, "Held rows on the old chart: four readings before the gate", point 1).
+ * - The far side keeps its built trigger, unchanged in every state of the two switches: a staff there has a front
+ *   from the month it is at war with the country across it, its fronts split by enemy, so the war itself frees the
+ *   holds on the front that faces that enemy, before he has crossed.
+ * - On the old chart a row answers only when an enemy at war with its country holds ground of its side (a country of
+ *   its side's, or ground its side held on the first day) on the row's own province or beside it (`entered`). The
+ *   old chart's fronts are joined, as they always were (Germany has one front from Poland to France), so the war
+ *   alone freed rows held against another enemy: seed 17, 138 row-answers with no enemy near, the Berlin garrison
+ *   sent to Moravia in the first month, the Saar's corps freed by a war with Poland. "Holds" is who holds the field:
+ *   an enemy army laid round a town of its side that still holds is on that ground, as the front's ground already
+ *   counts it (ground "the enemy has taken from its side or stands round"). The cause is read each month: the month
+ *   it is gone the row does not answer and its hold stands. A row next behind the front answers by it too, once the
+ *   enemy holds ground of its side beside it (the Paris garrison when Champagne is lost); one two provinces back does
+ *   not.
  *
  * By land. An enemy who has only come ashore has not entered by land: where everything he holds on a front is
- * ground of this side's that he reached from the sea in that same move (`beach`), nobody answers by this rule. Home
+ * ground of this side's that he reached from the sea in that same move (`beach`), nobody answers by this rule, and
+ * on the old chart a beach is no ground of its side that he holds, for the cause: a row whose only such neighbour is
+ * a beach does not answer by land (15:09Z, point 4). Home
  * ground reached from the sea is `answering`'s. The month he goes on overland, into the next province or into the
  * town he stood round, the front is entered and its rows answer. Ground he took from somebody else, or held before
  * the war, is no beach: a front that faces it is a front by land from its first day.
  *
  * Its rows are the held corps that stand on the front itself: on the front's own provinces or on the friendly
  * ground next behind them, where the rule reads, as the staff's sums already read a garrison "on the front
- * itself" (staff.ts `fronts`: "one further back stays where it is"). A row further back stays held until the front
- * comes to it. A corps on the ground of two fronts answers on both. (The skeptic of 25 November 2026 asked for every
- * member of the front by the staff's one membership instead, staff.ts `membership`, so that the reserve at Ulan-Ude
- * answers with the armies on the line. Tried and not kept: a corps behind the lines is a member of the front nearest
+ * itself" (staff.ts `fronts`: "one further back stays where it is"); on the old chart, of those, only a row the
+ * cause above frees. A row further back stays held until the front comes to it. A corps on the ground of two
+ * fronts answers on both. (The skeptic of 25 November 2026 asked for every member of the front by the staff's one
+ * membership instead, staff.ts `membership`, so that the reserve at Ulan-Ude answers with the armies on the line. Tried and not kept: a corps behind the lines is a member of the front nearest
  * it however far off that is. In a war nobody played, Japan at peace with the Soviet Union, the Korea Army's two
  * held divisions stood at Kaifeng and Pengpu in China by the third month with no enemy on Japan's ground;
  * Kamchatka's garrison answered for Manchukuo's front with a hundred provinces to go to, and Sumatra's garrisons
@@ -846,7 +861,9 @@ const waitsToGo = (g: Game, c: Corps): boolean => planWaits(c) || g.flags[`st:ho
  * A landing thrown back marks nothing, so the province is no beach if it falls to a march in that same month; and a
  * later wave put ashore on ground already won leaves the first wave's month standing. Ground taken by a drop from
  * the air is marked the same way and is a beach too (the design director's ruling of 13:39Z, 25 November 2026, on
- * B11's eighth point: "mark it like a beach"). (A war saved before the mark was kept has none:
+ * B11's eighth point: "mark it like a beach"). The mark is written where the rule reads by land: on the far side, and
+ * on the old chart under Units decide at a stop that keeps no book (history.ts `unitsFree`; 15:09Z, point 4). (A war
+ * saved before the mark was kept has none:
  * its beaches read as entered by land, and their rows answer.)
  */
 function beach(g: Game, nat: string, r: Region): boolean {
@@ -865,7 +882,7 @@ function beach(g: Game, nat: string, r: Region): boolean {
  * Asked of no province, whether it answers anywhere this month.
  */
 export function answersHere(g: Game, at?: Region | number): boolean {
-  const old = unitsDecide(g) && !stopDef(g).book;
+  const old = unitsFree(g);
   if (at === undefined) return farOn(g) || old;
   return shoreOf(at) === 2 ? farOn(g) : old;
 }
@@ -880,7 +897,18 @@ function landAnswers(g: Game, nat: string): { c: Corps; on: Set<number> }[] {
   if (!rows.length) return [];
   const friendly = (r: Region): boolean => allied(g, nat, ctl(g, r)) && !aside(g, r, nat);
   // (Its side's own ground, where the rule reads: a country of its side's, or ground its side held on the first day.)
-  const ours = (r: Region): boolean => answersHere(g, r) && (allied(g, nat, r.owner) || allied(g, nat, heldFirst(r)));
+  const side = (r: Region): boolean => allied(g, nat, r.owner) || allied(g, nat, heldFirst(r));
+  const ours = (r: Region): boolean => answersHere(g, r) && side(r);
+  // (On the old chart, what frees a row: an enemy at war with its country holds ground of its side on the row's own
+  // province or beside it, and that ground is no beach, which is a landing's and no entry by land. "Holds" reads who
+  // holds the field (`ctl`), so an army laid round a town of its side that still holds is on that ground, as the
+  // front's ground below counts it. The design director's ruling of 15:09Z, 25 November 2026, point 1: "a row answers
+  // when an enemy holds ground of its side on its own province or beside it". The far side keeps its built trigger,
+  // the war itself on the front that faces that enemy. Read each month: the month it is gone the row does not answer.)
+  const entered = (c: Corps): boolean => [c.reg, ...g.regions[c.reg].nb].some((id) => {
+    const r = g.regions[id];
+    return atWar(g, nat, ctl(g, r)) && side(r) && !beach(g, nat, r);
+  });
   const grounds = new Map<Corps, Set<number>>();
   for (const f of fronts(g, nat, { skip: (r) => aside(g, r, nat) })) {
     // (A front the rule reads whole, on one chart: as the staff reads its own on the far side, `ownFront`, and under
@@ -899,7 +927,7 @@ function landAnswers(g: Game, nat: string): { c: Corps; on: Set<number> }[] {
     // (The front itself: its own provinces and the friendly ground next behind them.)
     const line = new Set<number>(f.ours);
     for (const id of f.ours) for (const j of g.regions[id].nb) if (friendly(g.regions[j])) line.add(j);
-    const here = rows.filter((c) => line.has(c.reg) && chart(c.reg));
+    const here = rows.filter((c) => line.has(c.reg) && chart(c.reg) && (far || entered(c)));
     if (!here.length) continue;
     // (Its ground: of the front itself, what is its side's own; and what the enemy has taken of its side's own
     // ground there, or stands round, which is the front's to win back. Never what its side took in his country.)

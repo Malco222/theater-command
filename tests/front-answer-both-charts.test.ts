@@ -8,16 +8,22 @@
 // to ground of its own front's chart. The skeptic's finding of 25 November 2026: with both switches on, the Saharan
 // front against Italy, read whole, tied France's Tunisia Command at Mareth to far-side ground as far as El Fasher.
 // (Whether such a front is one front to both charts is put to the design director.)
+//
+// Each chart frees its rows by its own trigger (the design director's ruling of 15:09Z of 25 November 2026, "Held rows
+// on the old chart: four readings before the gate", point 1): the far side keeps its built one, the war itself on the
+// front that faces that enemy; the old chart reads the form's cause, an enemy at war with the row's country holding
+// ground of its side on the row's own province or beside it.
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
 import { answerWatch, withAnswer } from '../src/campaign/ai';
 import { clientMonth } from '../src/campaign/far';
-import { addCorps, createGame, relocate, setWar } from '../src/campaign/game';
+import { addCorps, allied, atWar, createGame, relocate, setWar } from '../src/campaign/game';
+import { heldFirst } from '../src/campaign/far';
 import { setStop, stopDef } from '../src/campaign/history';
 import { startOpen } from '../src/campaign/staff';
-import type { Game } from '../src/campaign/types';
+import type { Corps, Game } from '../src/campaign/types';
 import { setUnitsDecide, unitsDecide } from '../src/campaign/units';
 import { farOn, shoreOf } from '../src/campaign/world';
 
@@ -52,6 +58,18 @@ const readOff = (g: Game): Map<string, string[]> => {
 };
 const onFar = (g: Game, key: string): boolean => shoreOf(g.byName[key.slice(key.lastIndexOf(' @ ') + 3)]) === 2;
 const farOnly = (g: Game, m: Map<string, string[]>): [string, string[]][] => [...m].filter(([k]) => onFar(g, k)).sort();
+/** Every held row that answers this month, as `read` reads them, as corps. */
+const rowsOf = (g: Game): Corps[] => {
+  const out: Corps[] = [];
+  answerWatch.tell = (e) => { out.push(...e.rows.map((x) => x.corps)); };
+  try { for (const nat of Object.keys(g.nations)) if (g.nations[nat].alive) withAnswer(g, nat, () => 0); } finally { answerWatch.tell = null; }
+  return out;
+};
+/** True where an enemy at war with the row's country holds (the field of) ground of its side on its province or beside it. */
+const entered = (g: Game, c: Corps): boolean => [c.reg, ...g.regions[c.reg].nb].some((id) => {
+  const r = g.regions[id];
+  return (atWar(g, c.nat, r.ctrl) || r.units.some((u) => !u.dead && atWar(g, c.nat, u.nat))) && (allied(g, c.nat, r.owner) || allied(g, c.nat, heldFirst(r)));
+});
 
 describe('held armies answer an attack by land with the far switch and Units decide both on', () => {
   it('stop 3: each chart answers by its own rule; no row is tied across the line between the charts; the far side is as with Units decide off', () => {
@@ -70,6 +88,23 @@ describe('held armies answer an attack by land with the far switch and Units dec
     expect(farOnly(g, both)).toEqual(farOnly(g, off));
     // With Units decide off nothing answers on the old chart.
     expect([...off.keys()].filter((k) => !onFar(g, k))).toEqual([]);
+  });
+
+  it('stop 3: the old chart reads the cause, the far side its own trigger as built', () => {
+    const g = war(3);
+    const rows = rowsOf(g);
+    const old = rows.filter((c) => shoreOf(c.reg) !== 2), far = rows.filter((c) => shoreOf(c.reg) === 2);
+    // The old chart: only rows on or beside ground of their side an enemy holds (the 2nd Army, the XVIII Corps and the
+    // Paris garrison beside Champagne). Not the 3rd and 4th Armies, on the front with Germany but beside no lost ground.
+    expect(old.length).toBeGreaterThan(0);
+    for (const c of old) expect([c.nat, c.name, entered(g, c)]).toEqual([c.nat, c.name, true]);
+    expect(old.map((c) => c.name)).toEqual(expect.arrayContaining(['2nd Army', 'XVIII Corps', 'Paris garrison']));
+    expect(old.map((c) => c.name)).not.toContain('3rd Army');
+    expect(old.map((c) => c.name)).not.toContain('4th Army');
+    // The far side: the war itself frees the holds on the front that faces that enemy, before he has crossed. The Soviet
+    // Far East's rows answer with no enemy on or beside them.
+    expect(far.length).toBeGreaterThan(0);
+    expect(far.filter((c) => c.nat === 'SOV' && !entered(g, c)).length).toBeGreaterThan(0);
   });
 
   for (const stop of [1, 2]) {

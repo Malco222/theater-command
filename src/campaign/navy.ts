@@ -44,7 +44,7 @@ import { alongside, riding } from './stations';
 import { stationBars, whyStationBars } from './far';
 import { FAR_SEAS_FIRST, farOn } from './world';
 import { PACIFIC, coversBeaches, hopAims, pacificGround, ringDrawn, shoreLift, skiesOver, useShoreLift, type ShoreLift } from './pacific';
-import { HISTORY, bookDate, dialDraw, onBook, stopDef, stopOf, theatreOf } from './history';
+import { HISTORY, bookDate, dialDraw, onBook, stopDef, stopOf, theatreOf, unitsFree } from './history';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, hasRoom, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, roomForAll, routineNews, warning, placed, type Assessment } from './game';
 import { islandOf, roomAt, roomRefusal, roomSays } from './islands';
 import { traitFleet, traitSeaLoss } from './traits';
@@ -1856,8 +1856,9 @@ export function landCorps(g: Game, cs: Corps[], to: Region, fight?: (cs: Corps[]
   if (why) return { ok: false, why };
   const nat = cs[0].nat, from = g.regions[cs[0].reg];
   const held = to.ctrl;
-  // (The far side: whose army held the field there before the landing, to tell a shore the landing wins. Below.)
-  const field = farOn(g) ? fieldCtrl(g, to) : null;
+  // (Whose army held the field there before the landing, to tell a shore the landing wins: on the far side, and on the
+  // old chart under Units decide at a stop that keeps no book. Below.)
+  const field = farOn(g) || unitsFree(g) ? fieldCtrl(g, to) : null;
   const air = airborne(cs);
   const surprise = !air && surpriseOn(g, nat, to);
   const rode = air ? [] : riding(g, cs);
@@ -1897,7 +1898,11 @@ export function landCorps(g: Game, cs: Corps[], to: Region, fight?: (cs: Corps[]
   // condition: the design director's ruling of 13:39Z, 25 November 2026, on B11's eighth point, "a drop from the air
   // is answered as a landing: mark it like a beach, so b641's landing answer governs it, not B11's march overland".
   // As built a drop left no mark, and the held rows on its front answered it as if the enemy had marched in.
-  // Nothing is marked with the far side off.)
+  // With the far side off it is marked on the old chart too, a landing and a drop alike, under Units decide at a
+  // stop that keeps no book (history.ts `unitsFree`), where the held rows there answer an attack by land: the
+  // design director's ruling of 15:09Z, 25 November 2026, point 4, "written under Units decide at stops 3 to 5, so a
+  // beach reads as a landing (b641) and a drop as one, never as an entry by land". Nothing is marked with the far
+  // side off and Units decide off, nor at the book's stops with the far side off.)
   if (field !== null && taken && (to.ctrl !== held || fieldCtrl(g, to) !== field)) g.flags[`shoreWon:${to.id}`] = g.turn;
   const adj = g.nations[nat].adj;
   if (air) headline(g, 'battle', taken ? `${adj} airborne troops take ${to.name} from the air.` : `A ${adj} airborne assault on ${to.name} is beaten off with heavy loss.`, nat, to.id, { arm: 'land', won: taken ? nat : held, lost: taken ? held : nat });
