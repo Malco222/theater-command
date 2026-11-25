@@ -20,8 +20,9 @@ import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, keptByHand, landCorp
 import { shoreAI } from './fleets';
 import { plannedStrike } from './carriers';
 import { readinessMonth } from './readiness';
-import { shoreOpen, stopOf, stormHeldBy } from './history';
-import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, fronts, heedsCard, holdsAshore, isOpen, keepsDoor, joinsOn, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, onTheAttack, onTheDay, opensNow, opensOn, opensSoon, ownFront, probed, probing, quayGuests, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, temper, theatreStaff, descentAsks, freed, garrisonMonth, attackMembers, rearMonth } from './staff';
+import { shoreOpen, stopDef, stopOf, stormHeldBy } from './history';
+import { unitsDecide } from './units';
+import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, fronts, heedsCard, holdsAshore, isOpen, keepsDoor, joinsOn, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, onTheAttack, onTheDay, opensNow, opensOn, opensSoon, probed, probing, quayGuests, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, temper, theatreStaff, descentAsks, freed, garrisonMonth, attackMembers, rearMonth } from './staff';
 import { STRENGTH, followUp } from './ashore';
 import { HOP_AIMS, firstOnRun, hopAims, hopShores, laneOn, pacificGround } from './pacific';
 import { beyondEurope, enemyAtTheDoor, farOn, oceanShares, overseasOf, shoreOf, type OverseasRules } from './world';
@@ -57,7 +58,7 @@ const railCorps = (g: Game, c: Corps, to: Region): boolean => !offFront(g, c, to
 // (A held home row that answers a landing from the sea marches, rides and fights only on its own piece of home
 // ground for the month, and never sails: rider b641 (f) to ruling 234, `answering`. A held row that answers an attack
 // by land is tied the same way to its front's ground: the design director's B11 of 25 November 2026, `frontAnswering`.
-// Nobody is tied with the far side off.)
+// Nobody is tied where `answersHere` reads nothing.)
 let tied = new Map<number, Set<number>>();
 const offHome = (c: Corps, to: Region): boolean => { const on = tied.get(c.id); return on !== undefined && !on.has(to.id); };
 /** Whether a province is barred to a corps this month because it answers on its own ground (its piece of home ground, or its front's) and the province is off that ground. */
@@ -772,8 +773,11 @@ function seaAnswers(g: Game, nat: string): { c: Corps; on: Set<number> }[] {
  * sixteen of the Soviet Far East's eighteen rows on hold, and the Dutch corps Britain keeps on Java stood still
  * while an army that had landed marched past them).
  *
- * The front is a front as the staff reads its own (staff.ts `fronts`), every province of its edge on the far side of
- * the chart: the old chart's fronts and the Americas' stand as they did. A staff has a front from the month it is at
+ * The front is a front as the staff reads its own (staff.ts `fronts`), every province of its edge on ground the rule
+ * reads (`answersHere`): the far side of the chart with the far switch on; and with Units decide on, at a stop that
+ * keeps no book, the old chart's and the Americas' too (the design director's ruling of 14:15Z of 25 November 2026,
+ * audit item 38: "B11's one rule on both charts"). Otherwise the old chart's fronts and the Americas' stand as they
+ * did. A staff has a front from the month it is at
  * war with the country across it, so the war itself frees the holds on the front that faces that enemy, before he
  * has crossed.
  *
@@ -784,7 +788,7 @@ function seaAnswers(g: Game, nat: string): { c: Corps; on: Set<number> }[] {
  * the war, is no beach: a front that faces it is a front by land from its first day.
  *
  * Its rows are the held corps that stand on the front itself: on the front's own provinces or on the friendly
- * ground next behind them, on the far side of the chart, as the staff's sums already read a garrison "on the front
+ * ground next behind them, where the rule reads, as the staff's sums already read a garrison "on the front
  * itself" (staff.ts `fronts`: "one further back stays where it is"). A row further back stays held until the front
  * comes to it. A corps on the ground of two fronts answers on both. (The skeptic of 25 November 2026 asked for every
  * member of the front by the staff's one membership instead, staff.ts `membership`, so that the reserve at Ulan-Ude
@@ -795,7 +799,7 @@ function seaAnswers(g: Game, nat: string): { c: Corps; on: Set<number> }[] {
  * for Java's. The staff's own sums count a held row toward a front only on the front itself. Put to the design
  * director as the edge left open.)
  *
- * Its ground is its side's own ground on that front, on the far side of the chart: of the front's own provinces and
+ * Its ground is its side's own ground on that front, where the rule reads: of the front's own provinces and
  * the friendly ground next behind them, what is a country of its side's (its own, a client's, an ally's) or was its
  * side's on the first day (far.ts `heldFirst`: Japan's ground in China); and such ground on that front as the enemy
  * has taken from its side or stands round, which is the front's to win back. What its side has taken in an enemy's
@@ -812,8 +816,10 @@ function seaAnswers(g: Game, nat: string): { c: Corps; on: Set<number> }[] {
  *
  * Never a fortress, engineers (the staff leaves them to their works), a row marked to stay or kept inside its town,
  * a row somebody still waits to send somewhere (`waitsToGo`), a corps of a side theatre's own army (no province of
- * the far side lies in a side theatre today, so this passes nobody over yet), or one lent to the player's army. None
- * for the player, whose corps no hold binds, nor with the far side off.
+ * the far side lies in a side theatre today; on the old chart the side theatres' held rows are passed over, as the
+ * filter was built), or one lent to the player's army. None for the player, whose corps no hold binds, nor where the
+ * rule does not read (`answersHere`). The book's release by date stands as it was at every stop: this adds the
+ * answer and takes nothing away (14:15Z).
  */
 export function frontAnswering(g: Game, nat: string): Corps[] {
   return landAnswers(g, nat).map((x) => x.c);
@@ -848,20 +854,37 @@ function beach(g: Game, nat: string, r: Region): boolean {
   return g.flags[`shoreWon:${r.id}`] === (town ? investedOn(g, r) : r.since);
 }
 
+/**
+ * Whether a held row answers an attack by land on this province (B11, `frontAnswering`): the one gate of that rule.
+ * On the far side of the chart, with the far switch on, at every stop, as first built (the design director's B11 of
+ * 25 November 2026). On the old chart and the Americas' side, with Units decide on and at a stop that keeps no book
+ * (stops 3 to 5): the same rule, brought there by the design director's ruling of 14:15Z of 25 November 2026 (audit
+ * item 38, "B11's one rule on both charts, behind Units decide, stops 3 to 5"). At the book's stops the book's
+ * release is the record's hand there, and with Units decide off the old chart is as it was: no row answers there.
+ * Asked of no province, whether it answers anywhere this month.
+ */
+export function answersHere(g: Game, at?: Region | number): boolean {
+  const old = unitsDecide(g) && !stopDef(g).book;
+  if (at === undefined) return farOn(g) || old;
+  return shoreOf(at) === 2 ? farOn(g) : old;
+}
+
 /** Each corps that answers an attack by land, with its front's ground. */
 function landAnswers(g: Game, nat: string): { c: Corps; on: Set<number> }[] {
-  if (!farOn(g) || nat === g.human || !g.nations[nat].atWar.length) return [];
+  if (!answersHere(g) || nat === g.human || !g.nations[nat].atWar.length) return [];
   // (Not a corps a side theatre's own staff runs, nor one whose hold is this month's only, nor a garrison the record
   // keeps inside its town, nor a corps that marches with the player's army at his asking: that one takes his orders.)
-  const rows = g.corps.filter((c) => c.nat === nat && !c.dead && c.hold && !c.stay && !c.fortress && c.joint === undefined && c.kind !== 'fort' && c.kind !== 'eng' && shoreOf(c.reg) === 2
+  const rows = g.corps.filter((c) => c.nat === nat && !c.dead && c.hold && !c.stay && !c.fortress && c.joint === undefined && c.kind !== 'fort' && c.kind !== 'eng' && answersHere(g, c.reg)
     && !waitsToGo(g, c) && !standBy.has(c) && theatreOf(g, c) < 0 && !aside(g, g.regions[c.reg], nat));
   if (!rows.length) return [];
   const friendly = (r: Region): boolean => allied(g, nat, ctl(g, r)) && !aside(g, r, nat);
-  // (Its side's own ground, on the far side: a country of its side's, or ground its side held on the first day.)
-  const ours = (r: Region): boolean => shoreOf(r) === 2 && (allied(g, nat, r.owner) || allied(g, nat, heldFirst(r)));
+  // (Its side's own ground, where the rule reads: a country of its side's, or ground its side held on the first day.)
+  const ours = (r: Region): boolean => answersHere(g, r) && (allied(g, nat, r.owner) || allied(g, nat, heldFirst(r)));
   const grounds = new Map<Corps, Set<number>>();
   for (const f of fronts(g, nat, { skip: (r) => aside(g, r, nat) })) {
-    if (!ownFront(g, f)) continue;
+    // (A front the rule reads whole: as the staff reads its own on the far side, `ownFront`, and under Units decide
+    // at a stop that keeps no book a front of the old chart too. `answersHere`.)
+    if (!f.edge.length || !f.edge.every((id) => answersHere(g, id))) continue;
     const his: Region[] = [];
     for (let id = 0; id < f.depth.length; id++) if (f.depth[id] >= 1) his.push(g.regions[id]);
     if (his.every((r) => beach(g, nat, r))) continue;
@@ -1036,7 +1059,7 @@ function mainCampaign(g: Game, nat: string): void {
   // (An enemy come from the sea onto the country's own home ground is answered by the corps held there, for the
   // month's fighting only: rider b641 (f) to ruling 234, `answering`. An attack by land on a front is answered the
   // same way by the corps held on that front: the design director's B11 of 25 November 2026, `frontAnswering`. None
-  // with the far side off.)
+  // where `answersHere` reads nothing.)
   try { withAnswer(g, nat, () => { fight(g, nat, ph, posture); lineHome(g, nat, g.turn + 1); }); } finally { if (FR) hopsRead(g, nat, FR.plan); endStaffMonth(); }
 }
 
@@ -1579,8 +1602,8 @@ function relieve(g: Game, nat: string): void {
   const mine = (c: Corps): boolean => field(c) && !c.hold && !c.dyle && c.joint === undefined && c.leave === undefined && !massed.has(c.id) && !aside(g, g.regions[c.reg], nat);
   const key = (c: Corps): string => `rl:${c.id}`;
   // (A held row that answers on its own ground this month, `withAnswer`, rests as any worn corps does and attacks
-  // nobody; its hold is the record's and is not the rest's to take off when the month is over. Nobody is tied with
-  // the far side off.)
+  // nobody; its hold is the record's and is not the rest's to take off when the month is over. Nobody is tied where
+  // `answersHere` reads nothing.)
   const keep = (c: Corps): void => { c.hold = true; if (!tied.has(c.id)) rested.push(c); };
   // The weakest first: where two worn corps stand together the stronger stays to hold the place.
   for (const c of g.corps.filter(mine).sort((a, b) => a.str - b.str || a.id - b.id)) {
@@ -3702,7 +3725,7 @@ function defend(g: Game, nat: string, line = true): void {
     let to: Region | null = null, bs = 0;
     for (const r of g.regions) {
       // (A held row that answers on its own ground this month is a reserve for that ground and no other: it does not
-      // leave its post for a place it may not go. `withAnswer`. Nobody is tied with the far side off.)
+      // leave its post for a place it may not go. `withAnswer`. Nobody is tied where `answersHere` reads nothing.)
       if (!mine(r) || d[r.id] <= 0 || placed(g, r, nat).length >= roomAt(g, r, nat) || offHome(c, r)) continue;
       const s = need(r) / (1 + 0.5 * d[r.id]);
       if (s > bs) { bs = s; to = r; }
@@ -3874,7 +3897,7 @@ function evacuations(g: Game, nat: string): void {
   // 2026, "not beyond it", as a home row that answers never sails). As first built the tie barred its marches and
   // its trains and not this step: Japan's 6th Army, a held row answering in Manchukuo, was lifted off the quay at
   // Chinchow and ended its month in Tokyo, a held row there. The skeptic's finding. This step reads no hold, so a
-  // held row that does not answer is lifted off as it always was. Nobody is tied with the far side off.)
+  // held row that does not answer is lifted off as it always was. Nobody is tied where `answersHere` reads nothing.)
   const out = g.corps.filter((c) => c.nat === nat && (!scope || scope.has(c.reg)) && !tied.has(c.id) && wantsOut(g, c));
   if (!out.length) return;
   const stuck: Corps[] = [];
