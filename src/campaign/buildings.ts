@@ -408,6 +408,41 @@ export function hallShare(g: Game, r: Region): number {
   return l?.occupiedShare ? l.occupiedShare * civicLevel(g, 'hall', r.id) : 0;
 }
 
+// ---- The staff's advice, read without ordering (release 2, the home front board) ---------------------------
+
+/**
+ * (Release 2; Brian, 25 November 2026: "easy to manage the cities"; the design director the same day: "the best
+ * building for each town is the staff's own pick, so the player sees the same advice the computer acts on".) The lines
+ * of building in the order a staff would take them up next for this nation (the line furthest behind its weight in
+ * the mix first; a line the mix leaves out last), and its home provinces as the staff ranks them, richest first. It is
+ * the working-out civicAI makes each month, and it orders nothing and writes nothing.
+ */
+export function civicAdvice(g: Game, nat: string): { lines: string[]; home: number[] } {
+  const n = g.nations[nat];
+  if (!civicRules(g) || !n?.alive) return { lines: [], home: [] };
+  const A = CIVIC.ai;
+  const worth = (r: Region): number => (n.capital === r.id ? 100 : 0) + r.vp * 3 + r.fac * 2 + LAND[r.terrain] * 10 + (r.port ? 1 : 0);
+  const home = g.regions.filter((r) => r.ctrl === nat && r.owner === nat).sort((a, b) => worth(b) - worth(a) || a.id - b.id);
+  const built: Record<string, number> = {};
+  for (const r of home) for (const { line, level } of civicAt(g, r.id)) built[line.id] = (built[line.id] ?? 0) + level;
+  for (const b of n.queue) if (b.what === 'civic' && b.item) built[b.item] = (built[b.item] ?? 0) + 1;
+  const lines = Object.keys(A.mix).sort((x, y) => (built[x] ?? 0) / A.mix[x] - (built[y] ?? 0) / A.mix[y] || A.mix[y] - A.mix[x]);
+  for (const l of CIVIC.lines) if (!lines.includes(l.id)) lines.push(l.id);
+  return { lines, home: home.map((r) => r.id) };
+}
+
+/** (Release 2, the home front board's chip.) How many of the provinces this nation holds could be given a building now: the builders free, a line open there and the treasury able to pay for it. It orders nothing and writes nothing. */
+export function civicReady(g: Game, nat: string): number {
+  const n = g.nations[nat];
+  if (!civicRules(g) || !n?.alive) return 0;
+  let count = 0;
+  for (const r of g.regions) {
+    if (r.ctrl !== nat) continue;
+    if (CIVIC.lines.some((l) => { const lv = civicLevel(g, l.id, r.id); return lv < TOP && l.cost[lv] <= n.pp && whyNotCivic(g, nat, r, l.id) === null; })) count++;
+  }
+  return count;
+}
+
 // ---- The computer's builders --------------------------------------------------------------------------
 
 /**
