@@ -22,7 +22,7 @@ import { patrolSize } from './rules';
 import { armyNames, bendAt, deploy, joinBlocks, makeBlocks, wetUnder, type LandOrder, type LandUnit } from './units';
 import { Drill, wreckOffset } from './drill';
 import { phoneFallback, phoneLines, type PhoneFallback } from './rules';
-import { ownTeamParents } from './own-teams';
+import { isOwnTeam, ownTeamParents } from './own-teams';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
 
@@ -524,7 +524,11 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.rng = new Rng(ticket.seed);
     this.style = { att: styleFor(ticket, 'att'), def: styleFor(ticket, 'def') };
     // Each side's blocks share out exactly the power the card counted, so the odds on the field are the card's.
-    const A = ticket.reckoning.A, D = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds);
+    // (Support teams, release 2 behind `teams`: where the card has priced each side's own teams (Reckoning.teams) and
+    // they are on this ticket as team blocks, the blocks share out the power before that term: the teams on the field
+    // are the term. Priced but not on the ticket, or not priced: A and A / odds, as it always was.)
+    const priced = ticket.reckoning.teams && [...ticket.att.forces, ...ticket.def.forces].some(isOwnTeam) ? ticket.reckoning.teams : undefined;
+    const A = ticket.reckoning.A / (priced ? Math.max(1e-6, priced.att) : 1), D = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds) / (priced ? Math.max(1e-6, priced.def) : 1);
     this.power = { att: A, def: D };
     this.teamParent = ownTeamParents(ticket);
     const att = makeBlocks('att', ticket.att, A, 1, undefined, ticket.turn);
