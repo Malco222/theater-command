@@ -55,6 +55,9 @@ namespace SeaLookSwitches
 		{ "TheaterSeaWeather=", "none", "none", "13", false },
 		{ "TheaterSeaCurve", "off", "extra", "14", false },
 		{ "TheaterSeaWet", "off", "extra", "14", false },
+		// (the gale, step 14(c): its numbers are made and tested, FleetWaves' gale (GaleCap, GaleFetchOf, StreakShareOf,
+		// PaintLanesGale), FleetRideGale.h and SeaFace::MakeStreaks, but the game does not draw the fleet's sea yet, so
+		// nothing reads the switch: it stays unbuilt until the scene asks FleetWaves::Make with GaleCap under it)
 		{ "TheaterSeaGale", "off", "extra", "14", false },
 		{ "TheaterSeaEyeRide", "off", "extra", "14", false },
 		{ "TheaterSeaIntoSun", "off", "extra", "14", false },

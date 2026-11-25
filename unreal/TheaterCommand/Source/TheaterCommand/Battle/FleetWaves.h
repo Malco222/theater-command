@@ -539,6 +539,79 @@ namespace FleetWaves
 	void PaintLanes(const std::vector<LanePoint>& Wake, const std::vector<OilDisc>& Oil, const LaneWindow& W, double WindU, std::vector<uint8_t>& RG);
 
 	// ------------------------------------------------------------------------------------------------------------------
+	// The gale (the plan's step 14(c), an extra behind its own switch, off by default; Brian's and the art director's
+	// decision). Under it the scene asks Make with Cap GaleCap (24.4 m/s, Beaufort 9's top) and the fetch GaleFetchOf gives;
+	// at or under Raised (13.8 m/s) it asks nothing new, so every number above is as made (Tools/sea_waves/gale_pin.cpp
+	// holds them to 942d9295's, byte for byte). Nothing here is read by anything the show decides. Nothing is wired yet:
+	// the game does not draw the fleet sea, so the switch is not read in this tree (SeaLookSwitches.h keeps it unbuilt).
+
+	/** [P] The World Meteorological Organization's Beaufort 7, 8 and 9 (WMO-No. 558, Manual on Marine Meteorological
+	 * Services, the Beaufort scale's table; the same in Bowditch's): the wind at 10 m (m/s, from and to) and the probable
+	 * height of the waves in the open sea, remote from land, and their probable most (metres). The words: 7 "sea heaps up
+	 * and white foam from breaking waves begins to be blown in streaks along the direction of the wind"; 8 "edges of crests
+	 * begin to break into spindrift; the foam is blown in well-marked streaks"; 9 "dense streaks of foam along the direction
+	 * of the wind; crests of waves begin to topple, tumble and roll over; spray may affect visibility". */
+	struct BeaufortSea
+	{
+		int Force = 0;
+		double From = 0.0, To = 0.0, Probable = 0.0, Most = 0.0;
+	};
+	inline constexpr BeaufortSea WmoGale[3] = { { 7, 13.9, 17.1, 4.0, 5.5 }, { 8, 17.2, 20.7, 5.5, 7.5 }, { 9, 20.8, 24.4, 7.0, 10.0 } };
+	/** [EST] How long the gale has blown when the field gives no fetch (hours; 63,000 s). It is picked so the sea a gale of
+	 * it raises at the cap is exactly the cap's own sea (0.021 Raised^2, 4.00 m), so the sea grows smoothly with the wind
+	 * across the cap; and then each of WMO's rows has its probable height at its foot within 5% (4.04 m at Beaufort 7's,
+	 * 5.27 at 8's, 6.68 at 9's) and rises toward the row's probable most by its head, never past it (gale_test). A sea the
+	 * wind has fully raised (Make with no fetch: Pierson-Moskowitz, the show's 0.021 U^2) is WMO's probable most instead,
+	 * within 9% at each row's middle: that needs a gale of two days and more over 1,000 km and more of sea, which a
+	 * battle's gale seldom had, so the gale's own sea is the fetch- and duration-limited one. */
+	inline constexpr double GaleHours = 17.5;
+	/** [P] The fetch whose sea a wind of U (m/s) raises in Hours over open water (metres): the fetch the duration limits
+	 * the sea as, by CERC's Shore Protection Manual (1984), eq. 3-35, g t / U = 68.8 (g F / U^2)^(2/3) (with U for its
+	 * adjusted wind U_A, as FetchLaw takes it). It grows as U^0.5, so the duration-limited sea's own height grows as
+	 * U^1.25 Hours^0.75 and its peak period as U^0.5: both rise with the wind, as a gale's sea must. */
+	double FetchOfHours(double U, double Hours);
+	/** The fetch Make is asked with under the gale, for a wind U: at or under Raised, FieldFetch as given (nothing new);
+	 * over it, the fetch a gale of Hours raises its sea over (FetchOfHours), and no more than the field's own fetch where
+	 * it gives one (FieldFetch > 0: a short fetch holds the sea lower, as it would, and then the sea may fall below the
+	 * cap's own, which only a fetch the rules send can do). */
+	double GaleFetchOf(double U, double FieldFetch = 0.0, double Hours = GaleHours);
+	/** [EST] How much of the wind's streaks (SeaFace::MakeStreaks) the sea shows at a wind U (m/s), 0 to 1: none to the
+	 * foot of Beaufort 6 (10.8), faint in its upper half (the plan's "from Beaufort 6"), 0.15 at 7's foot where WMO's
+	 * streaks begin, 0.45 at 8's (well marked), 0.8 at 9's (dense), 1 at GaleCap; straight between. The picture's green
+	 * is each streak's rank, so a streak shows where its rank is under the share (the denser sea keeps the fainter's). */
+	double StreakShareOf(double U);
+
+	/** A hull on the wake lane, for her footprint (the gale's): her middle at the waterline (board metres), her heading
+	 * (radians clockwise from north), her length and beam at the waterline (metres). */
+	struct LaneHull
+	{
+		double X = 0.0, Y = 0.0, Hdg = 0.0, Long = 100.0, Beam = 10.0;
+	};
+	/** [EST] The footprint's blue: her signed distance in from her waterline (metres, inside plus), FootReach either way
+	 * over the byte's 0 to 255 (0.5 at the waterline, 0.125 m a step); and how far in from it the sea is wholly flat.
+	 * Written as a distance, not as cover: the lane's texel is 4.9 m, wider than half a destroyer's beam, and a distance
+	 * read between texels is right along her straight sides (it is straight there), where a cover would spread the flat
+	 * half a texel out onto the water beside her. */
+	inline constexpr double FootReach = 16.0, FootRamp = 1.5;
+	/** [EST] Her waterline's half-breadth, a share of half her beam, at S along her from her stern (-1) to her stem (+1):
+	 * 1 - S^2 forward of her middle (a fine entrance), 1 - |S|^3 abaft it (a fuller run); the waterplane's coefficient
+	 * comes to 0.71, a destroyer's. */
+	double HalfBreadthShare(double S);
+	/** Her signed distance in from her waterline at a point (metres, plus inside; the first order of it, exact along her
+	 * parallel middle body, and past her ends the distance to her stem or stern). */
+	double HullInside(const LaneHull& H, double X, double Y);
+	/** The wake lane as the gale draws it: RGBA8, texel (i, j) at RGBA[4 (j Texels + i)]: red and green exactly PaintLanes'
+	 * (the same bytes), blue each hull's footprint (her signed distance in from her waterline, the most of every hull's,
+	 * FootReach either way; 0 with no hull near), alpha 0 (spare). The chip flattens the drawn sea inside her by
+	 * FootFlatten(FootInside(blue)) (the step 12 material's read: owed). */
+	void PaintLanesGale(const std::vector<LanePoint>& Wake, const std::vector<OilDisc>& Oil, const std::vector<LaneHull>& Hulls, const LaneWindow& W, double WindU,
+		std::vector<uint8_t>& RGBA);
+	/** The footprint's blue (0 to 1, as the chip reads it) as her distance in from her waterline (metres). */
+	inline double FootInside(double Blue) { return (Blue - 0.5) * 2.0 * FootReach; }
+	/** How far the drawn sea is flattened there: 0 at her waterline and outside it, 1 from FootRamp in. */
+	inline double FootFlatten(double Inside) { return std::clamp(Inside / FootRamp, 0.0, 1.0); }
+
+	// ------------------------------------------------------------------------------------------------------------------
 	// The chip's text, compiled here in float (FleetWavesGpu.inl through these stand-ins).
 
 	namespace Gpu

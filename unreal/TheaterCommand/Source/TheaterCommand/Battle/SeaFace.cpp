@@ -601,3 +601,191 @@ std::vector<uint8_t> SeaFace::MakeFoam(int Size, double TileMetres, int Count)
 	}
 	return Out;
 }
+
+namespace
+{
+	/** A fine value noise repeating Cells times across a picture Size pixels a side (smoothstepped between its lattice). */
+	std::vector<double> StreakNoise(int Size, int Cells, uint64_t Seed)
+	{
+		Dice Grain{ Seed };
+		std::vector<double> Lattice(static_cast<size_t>(Cells) * Cells);
+		for (double& L : Lattice)
+		{
+			L = Grain.Next();
+		}
+		std::vector<double> Field(static_cast<size_t>(Size) * Size);
+		for (int J = 0; J < Size; ++J)
+		{
+			for (int I = 0; I < Size; ++I)
+			{
+				const double X = (I + 0.5) * Cells / Size, Y = (J + 0.5) * Cells / Size;
+				const int X0 = static_cast<int>(std::floor(X)) % Cells, Y0 = static_cast<int>(std::floor(Y)) % Cells;
+				const int X1 = (X0 + 1) % Cells, Y1 = (Y0 + 1) % Cells;
+				const double FX = Smooth(0.0, 1.0, X - std::floor(X)), FY = Smooth(0.0, 1.0, Y - std::floor(Y));
+				const double Top = Lattice[static_cast<size_t>(Y0) * Cells + X0] * (1.0 - FX) + Lattice[static_cast<size_t>(Y0) * Cells + X1] * FX;
+				const double Bottom = Lattice[static_cast<size_t>(Y1) * Cells + X0] * (1.0 - FX) + Lattice[static_cast<size_t>(Y1) * Cells + X1] * FX;
+				Field[static_cast<size_t>(J) * Size + I] = Top * (1.0 - FY) + Bottom * FY;
+			}
+		}
+		return Field;
+	}
+}
+
+std::vector<uint8_t> SeaFace::MakeStreaks(int Size, double TileMetres, int Count)
+{
+	Size = std::max(Size, 16);
+	const size_t Pixels = static_cast<size_t>(Size) * Size;
+	std::vector<double> Cover(Pixels, 0.0), Rank(Pixels, 0.0), Along(Pixels, 0.0);
+	const double PerMetre = Size / std::max(TileMetres, 1.0);
+	const double Feather = std::max(0.3, 1.5 / PerMetre); // metres, and a pixel and a half at the least
+	Dice Roll{ 0x57AEA4D5EAF0B1ull };
+	// The rows the wind's drift gathers the foam into: along the wind, [EST] 8 to 25 m apart (a whole number across the
+	// picture, so it repeats), each a little off its even place.
+	const int Rows = std::max(1, static_cast<int>(std::lround(TileMetres / 14.0)));
+	std::vector<double> RowV;
+	for (int R = 0; R < Rows; ++R)
+	{
+		RowV.push_back((R + 0.5 + (Roll.Next() - 0.5) * 0.6) * Size / Rows);
+	}
+	auto Wrapped = [Size](int PU, int PV)
+	{
+		return static_cast<size_t>(((PV % Size) + Size) % Size) * Size + ((PU % Size) + Size) % Size;
+	};
+	std::vector<uint8_t> Taken(Pixels, 0);
+	const int Margin = 2;
+	for (int K = 0; K < Count; ++K)
+	{
+		// How big: [EST] 15 to 120 m long (most short), 0.4 to 2 m wide (most narrow); wandering 0.3 to 1.2 m across over
+		// 20 to 60 m; beaded every 3 to 8 m and broken every 9 to 25 m; thinning over the last 15% at each end.
+		const double Long = 15.0 + 105.0 * std::pow(Roll.Next(), 2.0);
+		const double Wide = 0.4 + 1.6 * std::pow(Roll.Next(), 3.0);
+		const double Wander = 0.3 + 0.9 * Roll.Next(), WanderLength = 20.0 + 40.0 * Roll.Next(), WanderPhase = Roll.Next() * 2.0 * Pi;
+		const double Bead[4] = { 3.0 + 5.0 * Roll.Next(), 9.0 + 16.0 * Roll.Next(), Roll.Next() * 2.0 * Pi, Roll.Next() * 2.0 * Pi };
+		const double Mine = Roll.Next();
+		// Its foam at a pixel, its upwind end at U (pixels) and its line at V: how much, and how far along it (0 to 1).
+		auto Foam = [&](double U, double V, int PU, int PV, double& Share)
+		{
+			const double A = ((PU + 0.5) - U) / PerMetre;
+			Share = std::clamp(A / Long, 0.0, 1.0);
+			if (A < -Feather || A > Long + Feather)
+			{
+				return 0.0;
+			}
+			const double Ends = std::clamp(std::min(A, Long - A) / (0.15 * Long), 0.0, 1.0);
+			const double Half = 0.5 * Wide * std::sqrt(Ends);
+			const double Line = V / PerMetre + Wander * std::sin(A * 2.0 * Pi / WanderLength + WanderPhase);
+			const double C = std::abs((PV + 0.5) / PerMetre - Line);
+			const double Body = std::clamp((Half - C) / Feather + 0.5, 0.0, 1.0);
+			const double Beads = 0.55 + 0.45 * std::sin(A * 2.0 * Pi / Bead[0] + Bead[2]) * std::cos(A * 2.0 * Pi / Bead[1] + Bead[3]);
+			const double Broken = std::clamp((Beads - 0.25) / 0.2, 0.0, 1.0);
+			return Body * Broken * (0.35 + 0.65 * Ends);
+		};
+		const double Reach = (Wander + 0.5 * Wide + Feather) * PerMetre + 2.0;
+		// Where: most on a row, a little off it; a few anywhere; never on another (tried again elsewhere, and left out if the
+		// picture is too full for it).
+		double U = 0.0, V = 0.0;
+		bool bRoom = false;
+		for (int Place = 0; Place < 40 && !bRoom; ++Place)
+		{
+			U = Roll.Next() * Size;
+			if (Roll.Next() < 0.7)
+			{
+				V = RowV[std::min(Rows - 1, static_cast<int>(Roll.Next() * Rows))] + (Roll.Next() + Roll.Next() - 1.0) * 0.8 * PerMetre;
+			}
+			else
+			{
+				V = Roll.Next() * Size;
+			}
+			bRoom = true;
+			const int UFrom = static_cast<int>(std::floor(U - Feather * PerMetre)) - 2, UTo = static_cast<int>(std::ceil(U + (Long + Feather) * PerMetre)) + 2;
+			const int VFrom = static_cast<int>(std::floor(V - Reach)), VTo = static_cast<int>(std::ceil(V + Reach));
+			for (int PU = UFrom; PU <= UTo && bRoom; ++PU)
+			{
+				for (int PV = VFrom; PV <= VTo; ++PV)
+				{
+					double Share = 0.0;
+					if (Taken[Wrapped(PU, PV)] && Foam(U, V, PU, PV, Share) > 0.0)
+					{
+						bRoom = false;
+						break;
+					}
+				}
+			}
+		}
+		if (!bRoom)
+		{
+			continue;
+		}
+		const int UFrom = static_cast<int>(std::floor(U - Feather * PerMetre)) - 2, UTo = static_cast<int>(std::ceil(U + (Long + Feather) * PerMetre)) + 2;
+		const int VFrom = static_cast<int>(std::floor(V - Reach)), VTo = static_cast<int>(std::ceil(V + Reach));
+		for (int PU = UFrom; PU <= UTo; ++PU)
+		{
+			for (int PV = VFrom; PV <= VTo; ++PV)
+			{
+				double Share = 0.0;
+				const double Here = Foam(U, V, PU, PV, Share);
+				if (Here <= 0.0)
+				{
+					continue;
+				}
+				const size_t P = Wrapped(PU, PV);
+				Cover[P] = Here;
+				Rank[P] = Mine;
+				Along[P] = Share;
+				for (int DU = -Margin; DU <= Margin; ++DU)
+				{
+					for (int DV = -Margin; DV <= Margin; ++DV)
+					{
+						Taken[Wrapped(PU + DU, PV + DV)] = 1;
+					}
+				}
+			}
+		}
+	}
+	// Round each streak, where it has no foam, its own rank and along out to half a metre or so, so a read between pixels
+	// (or from a smaller copy, far off) never mixes a streak's rank with the empty sea's and shows a rim round it.
+	{
+		const int Reach = std::max(2, static_cast<int>(std::lround(0.5 * PerMetre)));
+		std::vector<double> RankOut = Rank, AlongOut = Along;
+		for (int J = 0; J < Size; ++J)
+		{
+			for (int I = 0; I < Size; ++I)
+			{
+				const size_t P = static_cast<size_t>(J) * Size + I;
+				if (Cover[P] > 0.0)
+				{
+					continue;
+				}
+				double Best = 0.0;
+				for (int DJ = -Reach; DJ <= Reach; ++DJ)
+				{
+					for (int DI = -Reach; DI <= Reach; ++DI)
+					{
+						const size_t Q = static_cast<size_t>((J + DJ + Size) % Size) * Size + (I + DI + Size) % Size;
+						const double Weight = Cover[Q] > 0.0 ? 1000.0 - (DI * DI + DJ * DJ) + Cover[Q] : 0.0;
+						if (Weight > Best)
+						{
+							Best = Weight;
+							RankOut[P] = Rank[Q];
+							AlongOut[P] = Along[Q];
+						}
+					}
+				}
+			}
+		}
+		Rank.swap(RankOut);
+		Along.swap(AlongOut);
+	}
+	// The grain: a value noise at two sizes, about a metre and a third of one, repeating with the picture.
+	const int Coarse = std::max(2, static_cast<int>(std::lround(TileMetres / 1.0))), Fine = std::max(2, static_cast<int>(std::lround(TileMetres / 0.35)));
+	const std::vector<double> Big = StreakNoise(Size, std::min(Coarse, Size), 81), Small = StreakNoise(Size, std::min(Fine, Size), 82);
+	std::vector<uint8_t> Out(Pixels * 4);
+	for (size_t P = 0; P < Pixels; ++P)
+	{
+		Out[P * 4 + 0] = Byte(Cover[P]);
+		Out[P * 4 + 1] = Byte(Rank[P]);
+		Out[P * 4 + 2] = Byte(Along[P]);
+		Out[P * 4 + 3] = Byte((0.6 * Big[P] + 0.4 * Small[P] - 0.5) * 1.8 + 0.5);
+	}
+	return Out;
+}

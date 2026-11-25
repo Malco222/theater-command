@@ -2635,6 +2635,84 @@ namespace FleetWaves
 	}
 
 	// ----------------------------------------------------------------------------------------------------------------
+	// The gale (step 14(c)): new functions only; nothing above reads them.
+
+	double FetchOfHours(double U, double Hours)
+	{
+		const double Uu = std::max(U, 0.5), T = std::max(Hours, 0.0) * 3600.0;
+		return Sq(Uu) / Gee * std::pow(Gee * T / (68.8 * Uu), 1.5);
+	}
+
+	double GaleFetchOf(double U, double FieldFetch, double Hours)
+	{
+		if (U <= Raised) return FieldFetch;
+		const double Fetch = FetchOfHours(std::min(U, GaleCap), Hours);
+		return FieldFetch > 0.0 ? std::min(Fetch, FieldFetch) : Fetch;
+	}
+
+	double StreakShareOf(double U)
+	{
+		static const double At[] = { 10.8, 13.9, 17.2, 20.8, GaleCap }, Is[] = { 0.0, 0.15, 0.45, 0.8, 1.0 };
+		if (U <= At[0]) return 0.0;
+		for (int K = 1; K < 5; ++K)
+		{
+			if (U <= At[K]) return Is[K - 1] + (Is[K] - Is[K - 1]) * (U - At[K - 1]) / (At[K] - At[K - 1]);
+		}
+		return 1.0;
+	}
+
+	double HalfBreadthShare(double S)
+	{
+		const double A = std::min(std::fabs(S), 1.0);
+		return S >= 0.0 ? 1.0 - A * A : 1.0 - A * A * A;
+	}
+
+	double HullInside(const LaneHull& H, double X, double Y)
+	{
+		const double Half = 0.5 * std::max(H.Long, 1e-3), Bh = 0.5 * std::max(H.Beam, 0.0);
+		const double Sx = std::sin(H.Hdg), Cy = std::cos(H.Hdg);
+		const double A = (X - H.X) * Sx + (Y - H.Y) * Cy; // (along her, forward plus)
+		const double C = std::fabs((X - H.X) * Cy - (Y - H.Y) * Sx); // (across her, either side)
+		if (std::fabs(A) >= Half) return -std::hypot(std::fabs(A) - Half, C); // (past her stem or her stern)
+		const double S = A / Half;
+		const double Slope = (S >= 0.0 ? -2.0 * S : 3.0 * S * S) * Bh / Half; // (the half-breadth's slope along her)
+		return (Bh * HalfBreadthShare(S) - C) / std::sqrt(1.0 + Slope * Slope);
+	}
+
+	void PaintLanesGale(const std::vector<LanePoint>& Wake, const std::vector<OilDisc>& Oil, const std::vector<LaneHull>& Hulls, const LaneWindow& W, double WindU,
+		std::vector<uint8_t>& RGBA)
+	{
+		std::vector<uint8_t> RG;
+		PaintLanes(Wake, Oil, W, WindU, RG);
+		const int N = std::max(W.Texels, 1);
+		const double Texel = W.Size / N;
+		const size_t Count = static_cast<size_t>(N) * N;
+		std::vector<float> In(Count, static_cast<float>(-FootReach));
+		for (const LaneHull& H : Hulls)
+		{
+			// (the texels her square reaches, with FootReach round her: the distance is clamped there)
+			const double Reach = 0.5 * std::hypot(H.Long, H.Beam) + FootReach + Texel;
+			const int I0 = std::max(0, static_cast<int>(std::floor((H.X - Reach - W.X0) / Texel))), I1 = std::min(N - 1, static_cast<int>(std::floor((H.X + Reach - W.X0) / Texel)));
+			const int J0 = std::max(0, static_cast<int>(std::floor((H.Y - Reach - W.Y0) / Texel))), J1 = std::min(N - 1, static_cast<int>(std::floor((H.Y + Reach - W.Y0) / Texel)));
+			for (int J = J0; J <= J1; ++J)
+			{
+				for (int I = I0; I <= I1; ++I)
+				{
+					const size_t At = static_cast<size_t>(J) * N + I;
+					In[At] = std::max(In[At], static_cast<float>(std::clamp(HullInside(H, W.X0 + (I + 0.5) * Texel, W.Y0 + (J + 0.5) * Texel), -FootReach, FootReach)));
+				}
+			}
+		}
+		RGBA.assign(Count * 4, 0);
+		for (size_t K = 0; K < Count; ++K)
+		{
+			RGBA[4 * K] = RG[2 * K];
+			RGBA[4 * K + 1] = RG[2 * K + 1];
+			RGBA[4 * K + 2] = static_cast<uint8_t>(std::lround(255.0 * Sat(0.5 + In[K] / (2.0 * FootReach))));
+		}
+	}
+
+	// ----------------------------------------------------------------------------------------------------------------
 	// The chip's text in float: FleetWavesGpu.inl through stand-ins for the shader's types.
 
 	namespace Gpu
