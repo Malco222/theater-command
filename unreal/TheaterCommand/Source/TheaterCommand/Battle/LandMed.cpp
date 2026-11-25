@@ -1159,9 +1159,11 @@ namespace LandScape
 						for (int P = 0; P < 6; ++P) F.Box(-2.52 + 1.01 * P, 0.03 * ((P * 5) % 3 - 1), 0.5 * Tops[P], 0.52, 0.5 - 0.03 * (P % 2), 0.5 * Tops[P], 0.04 * ((P * 7) % 3 - 1), Varied(Rgb(152, 139, 114), Lit[P], 0.0));
 						break;
 					}
-					// (on trial, "medwall": far off two courses laid the length of the piece, the foot's darker, their faces
-					// battered in as dry stone is laid, under a pale cap of four stones' lengths, each its own height: a
-					// light line along a ragged top, never the six blocks that read as a fence of dark palings)
+					// (on trial, "medwall": far off two courses laid the length of the piece, their faces battered in as dry
+					// stone is laid, under a pale cap of four stones' lengths, each its own height: a light line along a
+					// ragged top, never the six blocks that read as a fence of dark palings. The foot a course of darker,
+					// bigger stones 0.4 m high, some 30 darker than the course above it as lit, so on pale summer ground the
+					// wall keeps a dark line under its pale one)
 					const Tone Cap = Rgb(196, 186, 160);
 					auto Face = [&F](const double (&P)[4][3], double NX, double NY, double NZ, const Tone (&C)[4]) {
 						uint32_t Id[4];
@@ -1192,9 +1194,9 @@ namespace LandScape
 						}
 						if (bLid) Face({ { X0, -Top, Z1 }, { X1, -Top, Z1 }, { X1, Top, Z1 }, { X0, Top, Z1 } }, 0.0, 0.0, 1.0, { High, High, High, High });
 					};
-					const Tone Lower = Rgb(138, 126, 104), Upper = Rgb(152, 139, 114);
-					Course(-3.03, 3.03, 0.0, 0.52, 0.46, 0.4, Varied(Lower, 0.9, 0.0), Lower, false);
-					Course(-3.03, 3.03, 0.52, 0.98, 0.4, 0.34, Varied(Upper, 0.94, 0.0), Upper, false);
+					const Tone Lower = Rgb(118, 107, 86), Upper = Rgb(152, 139, 114);
+					Course(-3.03, 3.03, 0.0, 0.4, 0.46, 0.411, Varied(Lower, 0.9, 0.0), Lower, false);
+					Course(-3.03, 3.03, 0.4, 0.98, 0.411, 0.34, Varied(Upper, 0.94, 0.0), Upper, false);
 					static const double Ends[5] = { -3.03, -1.58, -0.12, 1.41, 3.03 }, Caps[4] = { 1.12, 1.21, 1.06, 1.17 }, Lits[4] = { 1.0, 0.93, 1.04, 0.96 };
 					for (int P = 0; P < 4; ++P) Course(Ends[P], Ends[P + 1], 0.98, Caps[P], 0.34, 0.29, Varied(Cap, 0.9 * Lits[P], 0.0), Varied(Cap, Lits[P], 0.0), true);
 					// (near, each stone's faces that look up lifted toward the cap's pale, the more the more they look up, so
@@ -1962,37 +1964,47 @@ namespace LandScape
 				}
 			}
 
-			/** On trial ("medwall"): along about a third of the fields' walls, on one side, the scrub that grows where the
-			 * plough cannot reach, macchia and in the south prickly pear among it: a clump of one to three bushes some 8 to
-			 * 14 m apart (one bush alone so far apart read as dots, not a line, from the general's height), a gap now and
-			 * then; 2,000 in all at most. Its own draw (Key), so the walls themselves are laid as without it. */
-			void Fringe(Host& H, const std::vector<std::pair<double, double>>& Line, uint64_t Key)
+			/** On trial ("medwall"): beside a wall, on one side, the scrub that grows where the plough cannot reach: a
+			 * thicket of macchia some 6 to 8 m across and 2 to 4 m high at the stone's foot, and in the south now and
+			 * then a prickly pear 2 to 4 m high, one every 11 to 16 m, a gap now and then; 4,000 in all at most. Along a
+			 * Share of the lines asked, on the Side asked (-1 or 1; 0 either, by the line's own draw). One thicket a place,
+			 * not a clump of small bushes: each is a draw for the soldier's eye, and from the general's height and from
+			 * above a bush is a dot where a thicket is a dark mark beside the pale wall (a third of the fields' walls in
+			 * bushes 2 m across darkened some twenty pixels of the general's picture). Each wholly off the men's and the
+			 * vehicles' ways (its reach clear), slid along the wall to a free place or left out; its own draw (Key), so the
+			 * walls themselves are laid as without it. */
+			void Fringe(Host& H, const std::vector<std::pair<double, double>>& Line, uint64_t Key, double Share, double Side0)
 			{
-				if (Line.size() < 2 || Unit(Mix(Key ^ 0xF81)) >= 0.34) return;
+				if (Line.size() < 2 || Unit(Mix(Key ^ 0xF81)) >= Share) return;
 				Rng Rf(Key ^ 0xF82);
-				const double Side = Rf.Next() < 0.5 ? -1.0 : 1.0;
+				const double Side = Side0 != 0.0 ? Side0 : Rf.Next() < 0.5 ? -1.0 : 1.0;
 				double S = 0.0, Next = Rf.Range(2.0, 9.0);
-				for (size_t K = 1; K < Line.size() && Fringed < 2000; ++K)
+				for (size_t K = 1; K < Line.size() && Fringed < 4000; ++K)
 				{
 					const double DX = Line[K].first - Line[K - 1].first, DY = Line[K].second - Line[K - 1].second, DL = std::hypot(DX, DY);
 					if (DL < 1e-6) continue;
 					const double UX = DX / DL, UY = DY / DL;
 					S += DL;
-					while (Next <= S && Fringed < 2000)
+					while (Next <= S && Fringed < 4000)
 					{
-						const double T = 1.0 - (S - Next) / DL, Pick = Rf.Next(), Many = Rf.Next();
-						Next += Rf.Range(8.0, 14.0);
+						const double T = 1.0 - (S - Next) / DL, Pick = Rf.Next();
+						Next += Rf.Range(11.0, 16.0);
 						if (Pick < 0.12) continue;
-						const int Bushes = 1 + (Many < 0.75 ? 1 : 0) + (Many < 0.3 ? 1 : 0);
-						for (int Q = 0; Q < Bushes && Fringed < 2000; ++Q)
+						const bool bPear = bPears && Pick > 0.88;
+						const double Yaw = Rf.Range(0.0, 2.0 * Pi), Size = bPear ? Rf.Range(1.4, 2.0) : Rf.Range(3.5, 4.8), Tall = Rf.Next(), Shade = Rf.Range(0.85, 1.0);
+						// (its reach: the macchia's mound 0.85 m round as made, the pear's 0.9; its edge at the wall's foot, so
+						// the stone stays seen over it and the line of cover reads; nearer, it swallowed the wall)
+						const double Reach = (bPear ? 0.9 : 0.85) * Size, Off = 0.35 + 0.9 * Reach + Rf.Range(0.0, 0.5);
+						for (int Try = 0; Try < 5; ++Try)
 						{
-							const double Along = Q == 0 ? 0.0 : Rf.Range(1.6, 2.8) * (Q == 1 ? 1.0 : -1.0), Off = Rf.Range(1.3, 2.1), Yaw = Rf.Range(0.0, 2.0 * Pi), Size = Rf.Range(0.9, 1.35), Tall = Rf.Next(), Shade = Rf.Range(0.85, 1.0);
-							const double X = Line[K - 1].first + T * DX + UX * Along - UY * Side * Off, Y = Line[K - 1].second + T * DY + UY * Along + UX * Side * Off;
+							const double Slide = 1.5 * static_cast<double>((Try + 1) / 2) * (Try % 2 ? 1.0 : -1.0);
+							const double X = Line[K - 1].first + T * DX + UX * Slide - UY * Side * Off, Y = Line[K - 1].second + T * DY + UY * Slide + UX * Side * Off;
 							const Spot Sp = H.At(X, Y);
-							if (!Sp.bLaid || Sp.Drawn == 9 || Sp.Drawn == 11 || Sp.Drawn == 7 || Sp.Kind == KWater || Sp.Kind == KMarsh || Sp.Kind == KLane || Sp.Kind == KVillage || Sp.Kind == KYard || !H.Free(X, Y, 0.9)) continue;
-							if (bPears && Pick > 0.72) H.Plant(KitOf(KPear), X, Y, Yaw, Size * 0.9, Size * Lerp(0.9, 1.1, Tall), Tint(Shade, Shade, Shade));
-							else H.Plant(KitOf(KMacchia), X, Y, Yaw, Size * 1.15, Size * Lerp(0.9, 1.4, Tall), Tint(0.9 * Shade, 0.9 * Shade, 0.9 * Shade));
+							if (!Sp.bLaid || Sp.Drawn == 9 || Sp.Drawn == 11 || Sp.Drawn == 7 || Sp.Kind == KWater || Sp.Kind == KMarsh || Sp.Kind == KLane || Sp.Kind == KVillage || Sp.Kind == KYard || !H.Free(X, Y, Reach)) continue;
+							if (bPear) H.Plant(KitOf(KPear), X, Y, Yaw, Size, Size * Lerp(0.9, 1.1, Tall), Tint(Shade, Shade, Shade));
+							else H.Plant(KitOf(KMacchia), X, Y, Yaw, Size, Size * Lerp(0.65, 0.95, Tall), Tint(0.8 * Shade, 0.8 * Shade, 0.8 * Shade));
 							++Fringed;
+							break;
 						}
 					}
 				}
@@ -2011,6 +2023,7 @@ namespace LandScape
 					for (int Side = -1; Side <= 1; Side += 2)
 					{
 						std::vector<std::pair<double, double>> Run_;
+						uint64_t Chunk = 0; // (on trial, "medwall": each walled stretch its own draw for the scrub on its field side)
 						double S = 0.0;
 						for (size_t K = 0; K < Line.size(); ++K)
 						{
@@ -2025,6 +2038,7 @@ namespace LandScape
 							{
 								const double High = R.Range(0.9, 1.2);
 								if (Run_.size() >= 3) Run(H, R, Run_, High, 0.6, 0.12, false);
+								if (bStoneTrial && Run_.size() >= 3) Fringe(H, Run_, Hash(Hash(L ^ 0xF84, static_cast<uint64_t>(Side + 1)), Chunk++), 0.5, Side);
 								Run_.clear();
 								continue;
 							}
@@ -2032,6 +2046,7 @@ namespace LandScape
 						}
 						const double High = R.Range(0.9, 1.2);
 						if (Run_.size() >= 3) Run(H, R, Run_, High, 0.6, 0.12, false);
+						if (bStoneTrial && Run_.size() >= 3) Fringe(H, Run_, Hash(Hash(L ^ 0xF84, static_cast<uint64_t>(Side + 1)), Chunk++), 0.5, Side);
 					}
 				}
 				// The cemetery's walls.
@@ -2174,7 +2189,7 @@ namespace LandScape
 						}
 						const double High = R.Range(0.85, 1.25);
 						Run(H, R, Eased, High, 0.55, 0.3, false);
-						if (bStoneTrial) Fringe(H, Eased, Hash(Pair ^ 0xF80, Start));
+						if (bStoneTrial) Fringe(H, Eased, Hash(Pair ^ 0xF80, Start), 0.75, 0.0);
 					}
 				}
 			}
@@ -2706,9 +2721,12 @@ namespace LandScape
 			}
 			const char* Earth() const override { return "terrarossa"; }
 			// (grey-ochre field stone, lit some 170 to 190 in the sun: the kit's 8C7E66 and A8987C between; its face in the
-			// shade a dark grey-brown, never black. On trial, "medwall", paler and warmer, nearer the kit's A8987C: the wall
-			// the soldier's eye sees in the fight is mostly this one, the kit's stone kept off the men's recorded ways)
-			Tone WallStone() const override { return bStoneTrial ? Rgb(160, 146, 118) : Rgb(142, 130, 106); }
+			// shade a dark grey-brown, never black. On trial, "medwall", warmer and a little paler: the wall the soldier's
+			// eye sees in the fight is mostly this one, the kit's stone kept off the men's recorded ways. 160,146,118 lit
+			// it 195 in the July lane, over the band, and on Sicily's pale summer ground from the general's height it read
+			// 14 under the ground, a faint line; this, 183 in the lane and 20 under, while on Algiers' dark winter ground
+			// it stays 26 over: one stone that reads on both)
+			Tone WallStone() const override { return bStoneTrial ? Rgb(148, 132, 100) : Rgb(142, 130, 106); }
 			double WallIvy() const override { return 0.08; }
 			bool WallBroken() const override { return bWallTrial; }
 
@@ -2732,9 +2750,11 @@ namespace LandScape
 			 * LAND_FIELD_TRIAL=medwall; it stacks with "walltop"): warm pale dry stone that draws the fields as the bocage's
 			 * hedges draw Normandy's. Far off the kit's wall in two courses under a pale ragged cap, not six blocks that
 			 * read as dark palings; near, the faces of its stones that look up lifted toward the cap's pale, so the tops
-			 * catch a low sun; the stone paler (the kit's as made, not tinted to 0.8; the ground's own walls 160,146,118);
-			 * and along about a third of the fields' walls a fringe of macchia and, in the south, prickly pear on one side,
-			 * a dark line beside the pale one from the general's height (2,000 at most). Without the word, as before.
+			 * catch a low sun; far off a darker foot under the pale courses; the stone paler and warmer (the kit's as
+			 * made, not tinted to 0.8; the ground's own walls 148,132,100); and along three in four of the fields' walls
+			 * and half the lanes' (on their field side), on one side, thickets of macchia and, in the south, prickly pear
+			 * at the stone's foot, a dark mark beside the pale line from the general's height and from above (4,000
+			 * at most; Sicily's and Algiers' lay some 980). Without the word, as before.
 			 */
 			bool bStoneTrial = false;
 			int Fringed = 0; // (the fringe's bushes laid so far)
