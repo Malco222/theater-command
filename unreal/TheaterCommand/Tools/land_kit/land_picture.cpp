@@ -271,6 +271,9 @@ namespace
 		bool bDay = false;
 		double Bar = 0.0;
 		std::string CloseSocket;
+		// What stands higher than this (metres) is left out of the framing: a measuring bar's top, so that a low weapon
+		// fills her picture and the bar's bands still give her size.
+		double FrameHigh = 1e9;
 		double CloseDistance = 1.6;
 	};
 
@@ -436,7 +439,9 @@ namespace
 	bool Paint(const Scene& S, const Panel& P, const Vehicle& V, const std::string& Path)
 	{
 		const int Out = 3; // supersampled three times each way
-		const int W = 560 * Out, H = 420 * Out;
+		// (LAND_KIT_SCALE=2: each picture twice as wide and high, for a sheet read close)
+		const int Scale = std::getenv("LAND_KIT_SCALE") ? std::max(1, std::min(4, std::atoi(std::getenv("LAND_KIT_SCALE")))) : 1;
+		const int W = 560 * Scale * Out, H = 420 * Scale * Out;
 		// The low sun of a July morning in Normandy, from the camera's right (fifteen degrees up).
 		// (the support weapons' sheet, bDay: the battle's own daylight, the sun 46 degrees up and near white)
 		const double SunBearing = (P.SunBearing > -999.0 ? P.SunBearing : P.CameraBearing + 62.0) * Rad, SunUp = (P.bDay ? 46.0 : 15.0) * Rad;
@@ -490,9 +495,9 @@ namespace
 			{
 				for (const V3& Q : T.P)
 				{
-					if (Q.Z < -0.05)
+					if (Q.Z < -0.05 || Q.Z > P.FrameHigh)
 					{
-						continue; // (what is under the earth, a plinth's footing, a heap's rim)
+						continue; // (what is under the earth, a plinth's footing, a heap's rim; the top of a measuring bar)
 					}
 					const V3 D = Q - Cam;
 					const double Z = D.Dot(Fwd);
@@ -1337,7 +1342,8 @@ int main(int argc, char** argv)
 	{
 		const char* File;
 		const char* Model;
-		// 0: the whole of her with the 1.75 m bar beside her (on her right; -1: on her left); 2: close on a socket
+		// 0: the whole of her with the 1.75 m bar beside her (on her right; -1: on her left), seen from the side her belt
+		// comes in at; 2: close on a socket
 		int Kind;
 		double Bearing, Up;
 		const char* Socket;
@@ -1345,33 +1351,34 @@ int main(int argc, char** argv)
 		const char* Caption;
 	};
 	const SupportLook SupportLooks[] = {
-		{ "sup_mg42", "HmgMG42", 0, 38.0, 16.0, "", 0.0, "Germany: MG 42 on the Lafette, set low" },
-		{ "sup_mg42_feed", "HmgMG42", 2, -52.0, 30.0, "feed", 1.35, "her belt, every round, up out of its box and in under the feed cover" },
-		{ "sup_mg42_back", "HmgMG42", 2, -155.0, 24.0, "shoulder", 1.7, "as her gunner has her: the butt, the sight, the trigger handle" },
-		{ "sup_mg34", "HmgMG34", 0, 38.0, 16.0, "", 0.0, "Germany until mid 1942: MG 34 in the same mount" },
-		{ "sup_mg34_feed", "HmgMG34", 2, -52.0, 30.0, "feed", 1.35, "the MG 34's round jacket and its belt" },
-		{ "sup_m1919", "HmgM1919", 0, 38.0, 16.0, "", 0.0, "United States: Browning M1919A4 on the M2 tripod" },
-		{ "sup_m1919_feed", "HmgM1919", 2, -52.0, 30.0, "feed", 1.25, "her cloth belt from the box at her left" },
-		{ "sup_m1917", "HmgM1917", 0, 38.0, 16.0, "", 0.0, "the water-cooled Browning (Poland's wz. 30)" },
-		{ "sup_m1917_feed", "HmgM1917", 2, -52.0, 30.0, "feed", 1.35, "the same close: her belt, her water can and hose" },
+		// (in fours for a sheet four across: each machine gun whole and then close on her feed, two guns to a row)
+		{ "sup_mg42", "HmgMG42", 0, -38.0, 18.0, "", 0.0, "Germany: MG 42 on the Lafette, her belt up out of its box" },
+		{ "sup_mg42_feed", "HmgMG42", 2, -52.0, 30.0, "feed", 1.35, "every round in its link, over the tray and in under the feed cover" },
+		{ "sup_mg34", "HmgMG34", 0, -38.0, 18.0, "", 0.0, "Germany until mid 1942: MG 34 in the same mount" },
+		{ "sup_mg34_feed", "HmgMG34", 2, -52.0, 30.0, "feed", 1.35, "the MG 34's round jacket full of holes, the same belt" },
+		{ "sup_m1919", "HmgM1919", 0, -38.0, 18.0, "", 0.0, "United States: Browning M1919A4 on the M2 tripod" },
+		{ "sup_m1919_feed", "HmgM1919", 2, -52.0, 30.0, "feed", 1.25, "her cloth belt in under the top cover, the fired end out at the right" },
+		{ "sup_m1917", "HmgM1917", 0, -38.0, 18.0, "", 0.0, "the water-cooled Browning (Poland's wz. 30)" },
+		{ "sup_m1917_feed", "HmgM1917", 2, -52.0, 30.0, "feed", 1.35, "the same close: her belt, the smooth water jacket" },
 		{ "sup_vickers", "HmgVickers", -1, 38.0, 16.0, "", 0.0, "Britain: Vickers on the Mk IV tripod, its condenser can" },
-		{ "sup_vickers_feed", "HmgVickers", 2, 52.0, 30.0, "feed", 1.35, "her belt comes in from the right" },
+		{ "sup_vickers_feed", "HmgVickers", 2, 52.0, 30.0, "feed", 1.35, "her belt in through the feed block from the right; the crank handle" },
 		{ "sup_maxim", "HmgMaxim", -1, 38.0, 16.0, "", 0.0, "Soviet Union: Maxim on the Sokolov wheeled mount" },
-		{ "sup_maxim_feed", "HmgMaxim", 2, 128.0, 30.0, "feed", 1.5, "from behind her shield: the belt in from the right, the spade grips" },
-		{ "sup_type92", "HmgType92", 0, 38.0, 16.0, "", 0.0, "Japan: Type 92, a strip of thirty in from the left" },
-		{ "sup_type92_feed", "HmgType92", 2, -52.0, 30.0, "feed", 1.25, "her strip of cartridges going in" },
-		{ "sup_hotchkiss", "HmgHotchkiss", 0, 38.0, 16.0, "", 0.0, "France (and China): Hotchkiss of 1914" },
-		{ "sup_hotchkiss_feed", "HmgHotchkiss", 2, -52.0, 30.0, "feed", 1.25, "her strip and the five great rings" },
-		{ "sup_breda", "HmgBreda37", 0, 38.0, 16.0, "", 0.0, "Italy: Breda Mod. 37" },
-		{ "sup_breda_feed", "HmgBreda37", 2, -52.0, 30.0, "feed", 1.25, "her strip of twenty" },
-		{ "sup_mortar_ger", "MortarGER", 0, 50.0, 14.0, "", 0.0, "Germany: 8 cm mortar, three bombs laid ready" },
-		{ "sup_mortar_ger_sight", "MortarGER", 2, -140.0, 24.0, "sight", 1.5, "from behind and left: the sight, the two cranks" },
-		{ "sup_mortar_usa", "MortarUSA", 0, 50.0, 14.0, "", 0.0, "United States: 81 mm mortar" },
-		{ "sup_mortar_uk", "MortarUK", 0, 50.0, 14.0, "", 0.0, "Britain: 3-inch mortar" },
-		{ "sup_mortar_sov", "MortarSOV", 0, 50.0, 14.0, "", 0.0, "Soviet Union: 82 mm mortar on its round plate" },
-		{ "sup_mortar_jap", "MortarJAP", 0, 50.0, 14.0, "", 0.0, "Japan: Type 97 mortar" },
-		{ "sup_mortar_ita", "MortarITA", 0, 50.0, 14.0, "", 0.0, "Italy: 81 mm mortar" },
-		{ "sup_mortar_fra", "MortarFRA", 0, 50.0, 14.0, "", 0.0, "France: 81 mm Brandt mortar" },
+		{ "sup_maxim_feed", "HmgMaxim", 2, 128.0, 30.0, "feed", 1.5, "from behind her shield: the belt over the wheel and in, the spade grips" },
+		{ "sup_type92", "HmgType92", 0, -38.0, 18.0, "", 0.0, "Japan: Type 92, a strip of thirty in from the left" },
+		{ "sup_type92_feed", "HmgType92", 2, -52.0, 30.0, "feed", 1.25, "thirty on the strip going in; the fired cases come out in it at the right" },
+		{ "sup_hotchkiss", "HmgHotchkiss", 0, -38.0, 18.0, "", 0.0, "France (and China): Hotchkiss of 1914" },
+		{ "sup_hotchkiss_feed", "HmgHotchkiss", 2, -52.0, 30.0, "feed", 1.25, "twenty-four on the strip; the five great rings" },
+		{ "sup_breda", "HmgBreda37", 0, -38.0, 18.0, "", 0.0, "Italy: Breda Mod. 37" },
+		{ "sup_breda_feed", "HmgBreda37", 2, -52.0, 30.0, "feed", 1.25, "her strip of twenty going in" },
+		{ "sup_mortar_ger", "MortarGER", -1, 50.0, 14.0, "", 0.0, "Germany: 8 cm mortar, three bombs with fins and fuzes laid ready" },
+		{ "sup_mortar_ger_sight", "MortarGER", 2, -140.0, 24.0, "sight", 1.5, "from behind and left: the sight, the collar on its two shock absorbers" },
+		{ "sup_mortar_usa", "MortarUSA", -1, 50.0, 14.0, "", 0.0, "United States: 81 mm mortar" },
+		{ "sup_mortar_uk", "MortarUK", -1, 50.0, 14.0, "", 0.0, "Britain: 3-inch mortar" },
+		{ "sup_mortar_sov", "MortarSOV", -1, 50.0, 14.0, "", 0.0, "Soviet Union: 82 mm mortar on its round plate" },
+		{ "sup_mortar_jap", "MortarJAP", -1, 50.0, 14.0, "", 0.0, "Japan: Type 97 mortar" },
+		{ "sup_mortar_ita", "MortarITA", -1, 50.0, 14.0, "", 0.0, "Italy: 81 mm mortar" },
+		{ "sup_mortar_fra", "MortarFRA", -1, 50.0, 14.0, "", 0.0, "France: 81 mm Brandt mortar" },
+		{ "sup_mg42_back", "HmgMG42", 2, -155.0, 24.0, "shoulder", 1.7, "as her gunner has her: the bakelite butt, the sight low at the left" },
 	};
 	for (const SupportLook& K : SupportLooks)
 	{
@@ -1684,9 +1691,11 @@ int main(int argc, char** argv)
 		}
 		if (P.Bar != 0.0)
 		{
-			// (a man's height standing by her: 0.85 m to her right, or her left, a little behind her pin)
-			const double Side = P.Bar > 0.0 ? 0.85 : -0.85, Back = -0.25;
+			// (a man's height standing by her: 0.7 m to her right, or her left, a little behind her pin; the picture is
+			// framed on her and on the bar's first metre, so a low weapon is not lost under it)
+			const double Side = P.Bar > 0.0 ? 0.7 : -0.7, Back = -0.25;
 			const double Sh = std::sin(P.Pin.Heading), Ch = std::cos(P.Pin.Heading);
+			P.FrameHigh = std::max(S.Hi.Z + 0.10, 1.0);
 			AddBar(P.Pin.X + Sh * Back + Ch * Side, P.Pin.Y + Ch * Back - Sh * Side, std::fabs(P.Bar), S);
 		}
 		std::vector<std::unique_ptr<Vehicle>> Beside;
@@ -1733,7 +1742,7 @@ int main(int argc, char** argv)
 				NearTris += Bo.Near.Triangles.size() / 3;
 				FarTris += Bo.Far.Triangles.size() / 3;
 			}
-			std::fprintf(Captions, "%s\t%s (%zu triangles near, %zu far; the bar is 1.75 m)\n", P.File.c_str(), P.Caption.c_str(), NearTris, FarTris);
+			std::fprintf(Captions, "%s\t%s (%zu triangles near, %zu far; the post's bands are 25 cm)\n", P.File.c_str(), P.Caption.c_str(), NearTris, FarTris);
 		}
 		else
 		{
