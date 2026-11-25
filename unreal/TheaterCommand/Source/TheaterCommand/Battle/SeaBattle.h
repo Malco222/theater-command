@@ -4,6 +4,7 @@
 #include "Effects/BattleEffects.h"
 #include "Battle/ConvoyLooks.h" // D1 hook (convoy looks)
 #include "Battle/SeaUnder.h" // U1 hook (under water)
+#include "Battle/SeaWeather.h" // the clouds and the weather (step 13)
 #include "Battle/SeaFrames.h" // (the release 2 ocean, step 0: the frames by thread)
 #include "Battle/SeaLookSwitches.h" // (the release 2 ocean, step 0: the sea's look in force)
 #include "Battle/SeaMarksPool.h" // (the release 2 ocean, step 1(a): DrawMarks' meshes kept)
@@ -172,6 +173,7 @@ private:
 	TUniquePtr<FBattleEffects> Effects;
 	TUniquePtr<FConvoyLooks> SubLooks; // D1 hook (convoy looks)
 	TUniquePtr<FSeaUnder> Under;       // U1 hook (under water)
+	TUniquePtr<FSeaWeather> Weather;   // the clouds and the weather (the release 2 ocean plan, step 13)
 	int32 UnderWindow = INDEX_NONE;    // U1 hook (under water): the window AimEye stands in (FSeaUnder::ByHandWindow his own dive)
 
 	UPROPERTY()
