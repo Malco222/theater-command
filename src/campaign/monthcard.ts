@@ -38,6 +38,7 @@ import { NO_LAST_MONTH, ROME_HOLDS, majorsOf, stakeDue, stakeWarning } from './d
 import { ARSENAL, workLevel, yardLevel } from './arsenal';
 import { BUDGET, PRODUCTION, ledger } from './economy';
 import { allied, atWar, men, theName } from './game';
+import { loweredOf, loweredSum } from './air';
 import { CLASSES, NAVY, shipCount, shipList } from './navy';
 import { cityOrders } from './orders';
 import { besieged, garrisonOf, guardMen } from './siege';
@@ -313,13 +314,16 @@ const keepsPoint = (whole: string, cut: string): boolean => {
  * there; but a line that loses its point when cut is not cut: it stays in the newsreel and the next is tried in
  * its place. Returns what is shown, each with its place in the list it came from.
  */
-export function fitFoot(items: string[], per: number, lines: number, most: number): { text: string; at: number }[] {
+export function fitFoot(items: string[], per: number, lines: number, most: number, shorts: (string | undefined)[] = []): { text: string; at: number }[] {
   const out: { text: string; at: number }[] = [];
   let left = lines;
   for (let i = 0; i < items.length && out.length < most && left > 0; i++) {
     const whole = `${items[i].replace(/\s+/g, ' ').trim().replace(/[.]$/, '')}.`;
     const need = linesAt(whole, per);
     if (need <= left) { out.push({ text: whole, at: i }); left -= need; continue; }
+    // (A line with a short form of its own, as the UI director words it, gives that where the whole will not fit.)
+    const short = shorts[i];
+    if (short && linesAt(short, per) <= left) { out.push({ text: short, at: i }); left -= linesAt(short, per); continue; }
     const cut = wholeWords(whole, per, left);
     if (keepsPoint(whole, cut)) { out.push({ text: cut, at: i }); left = 0; }
   }
@@ -1216,12 +1220,17 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   // A march that halts wants his orders and comes first; armies that arrive at one place are one line; and where
   // the town held, the staff speaks of the battle there and not of its loss.
   const held = new Set(ranked.filter((x) => x.row.tag === 'HELD' || x.row.tag === 'BESIEGED').map((x) => x.row.place));
-  const said: { text: string; full: string; hs: Headline[] }[] = [];
+  const said: { text: string; full: string; hs: Headline[]; short?: string }[] = [];
   for (const h of news.filter((x) => / has halted at .+ on its march to /.test(x.text))) said.push({ text: first(h.text), full: h.text, hs: [h] });
   const arrivals = new Map<string, Headline[]>();
   for (const h of news) { const m = /^(.+) has arrived at (.+)\.$/.exec(h.text); if (m) arrivals.set(m[2], [...(arrivals.get(m[2]) ?? []), h]); }
+  // (Several commands' establishments lowered in a month are one line, summed from their own lines, which the reports
+  // keep; with one, its own line. The UI director, 25 November 2026, 05:45Z.)
+  const lowered = news.filter((x) => loweredOf(x.text));
+  const sum = loweredSum(lowered.map((x) => x.text));
   for (const h of news) {
     if (said.some((s) => s.hs.includes(h))) continue;
+    if (sum && lowered.includes(h)) { said.push({ text: sum.text, full: sum.text, hs: lowered, short: sum.short }); continue; }
     const m = /^(.+) has arrived at (.+)\.$/.exec(h.text);
     const same = m ? arrivals.get(m[2])! : [];
     if (m && same.length > 1) { said.push({ text: `${m[1]} and ${same.length - 1} more corps have arrived at ${m[2]}`, full: same.map((x) => x.text).join(' '), hs: same }); continue; }
@@ -1231,7 +1240,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const dir = /^A directive from ([^:]+): /.exec(h.text), title = dir ? N.gov?.dir?.title : undefined;
     said.push({ text: dir && title ? `A directive from ${dir[1]}: ${title}` : first(fixed), full: fixed, hs: [h] });
   }
-  if (signed < slots) for (const f of fitFoot(said.map((s) => s.text), opts.whole ? Infinity : signed ? FOOT_ROOM.home : FOOT_ROOM.homeWide, slots * 2 - taken, Math.min(3, slots - signed))) {
+  if (signed < slots) for (const f of fitFoot(said.map((s) => s.text), opts.whole ? Infinity : signed ? FOOT_ROOM.home : FOOT_ROOM.homeWide, slots * 2 - taken, Math.min(3, slots - signed), said.map((s) => s.short))) {
     card.also.push(f.text); card.alsoFull.push(said[f.at].full);
     for (const h of said[f.at].hs) used.add(h);
   }

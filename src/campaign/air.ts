@@ -1356,26 +1356,88 @@ export function airUpkeep(g: Game, nat: string): void {
   if (lowered.size) loweredNews(g, nat, lowered, over);
 }
 
+/** Aircraft of the two kinds, as the lines on lowered establishments count them. */
+export interface Craft { ftr: number; bmr: number }
+/** "80 fighters", "40 fighters and 70 bombers" (nothing of a kind there is none of). */
+const craftWords = (c: Craft): string => [c.ftr > 0 ? planes(c.ftr, 'fighter') : '', c.bmr > 0 ? planes(c.bmr, 'bomber') : ''].filter(Boolean).join(' and ');
+/** "go" for many, "goes" for one aircraft. */
+const verb = (c: Craft, many: string, one: string): string => (c.ftr + c.bmr === 1 ? one : many);
 /**
- * The month card's line when a dated row lowers one of the player's commands' establishment (finding 6 of 1.5.1; the
- * UI director's words of 25 November 2026, 05:10Z): what it is kept at now, and the aircraft that go. Words only. The
- * aircraft over the new establishment go to the nation's pool, from which every group under strength is made up as
- * the month opens; but the pool holds no more than air.json 'reserve', and what it cannot hold is lost, so where the
- * pool overflowed the line says so in place of saying the other commands draw on them.
+ * A command's own line when a dated row lowers its establishment (finding 6 of 1.5.1; the UI director's words of 25
+ * November 2026, 05:45Z): `back` the aircraft the pool takes, `off` those it has no room for, which are struck off.
  */
-function loweredNews(g: Game, nat: string, lowered: Map<string, { est: number; ftr: number; bmr: number; region: number }>, over: { ftr: number; bmr: number }): void {
-  const all = { ftr: 0, bmr: 0 };
-  for (const c of lowered.values()) { all.ftr += c.ftr; all.bmr += c.bmr; }
-  // (of the aircraft the rows sent to the pool, those it could not hold: all, some or none of each kind)
-  const lost = { ftr: Math.min(all.ftr, over.ftr), bmr: Math.min(all.bmr, over.bmr) };
-  for (const [name, c] of lowered) {
-    const craft = [c.ftr > 0 ? planes(Math.round(c.ftr), 'fighter') : '', c.bmr > 0 ? planes(Math.round(c.bmr), 'bomber') : ''].filter(Boolean).join(' and ');
-    const kinds = (['ftr', 'bmr'] as const).filter((k) => c[k] > 0);
-    const none = kinds.every((k) => lost[k] === 0), every = kinds.every((k) => lost[k] >= all[k]);
-    const fate = none ? 'go back to the pool, from which the other commands draw'
-      : every ? 'are struck off: the pool, from which the other commands draw, is full'
-      : 'go back to the pool, from which the other commands draw, but it is full: what it cannot hold is struck off';
-    headline(g, 'info', `The air staff has lowered ${name}'s establishment to ${counted(c.est)}: ${craft} ${fate}.`, nat, c.region);
+export function loweredLine(name: string, est: number, back: Craft, off: Craft): string {
+  const head = `The air staff has lowered ${name}'s establishment to ${counted(est)}`;
+  if (off.ftr + off.bmr <= 0) return `${head}: ${craftWords(back)} ${verb(back, 'go', 'goes')} back to the pool, from which the other commands draw.`;
+  if (back.ftr + back.bmr <= 0) return `${head}: the pool, from which the other commands draw, is full, so ${craftWords(off)} ${verb(off, 'are', 'is')} struck off.`;
+  // ("the 30": the kind is not said again where both parts are of the one kind)
+  const same = (back.ftr > 0) !== (back.bmr > 0) && (off.ftr > 0) !== (off.bmr > 0) && (back.ftr > 0) === (off.ftr > 0);
+  return `${head}: ${craftWords(back)} ${verb(back, 'go', 'goes')} back to the pool, from which the other commands draw, and the ${same ? counted(off.ftr + off.bmr) : craftWords(off)} it has no room for ${verb(off, 'are', 'is')} struck off.`;
+}
+/** A command's line read back: its figures, or null for any other line. The month card sums these, so that it says what the lines say. */
+export function loweredOf(text: string): { back: Craft; off: Craft } | null {
+  const m = /^The air staff has lowered .+'s establishment to [\d,]+: (.+)\.$/.exec(text);
+  if (!m) return null;
+  const read = (s: string): Craft => {
+    const c = { ftr: 0, bmr: 0 };
+    for (const x of s.matchAll(/([\d,]+) (fighter|bomber)s?/g)) c[x[2] === 'fighter' ? 'ftr' : 'bmr'] += Number(x[1].replace(/,/g, ''));
+    return c;
+  };
+  const tail = m[1];
+  let r: RegExpExecArray | null;
+  if ((r = /^(.+) goe?s? back to the pool, from which the other commands draw$/.exec(tail))) return { back: read(r[1]), off: { ftr: 0, bmr: 0 } };
+  if ((r = /^the pool, from which the other commands draw, is full, so (.+) (?:are|is) struck off$/.exec(tail))) return { back: { ftr: 0, bmr: 0 }, off: read(r[1]) };
+  if ((r = /^(.+) goe?s? back to the pool, from which the other commands draw, and the (.+) it has no room for (?:are|is) struck off$/.exec(tail))) {
+    const back = read(r[1]);
+    // ("the 30": of the one kind that went back)
+    const off = /^[\d,]+$/.test(r[2]) ? (back.ftr > 0 ? { ftr: Number(r[2].replace(/,/g, '')), bmr: 0 } : { ftr: 0, bmr: Number(r[2].replace(/,/g, '')) }) : read(r[2]);
+    return { back, off };
+  }
+  return null;
+}
+/**
+ * The month card's one line for several commands lowered in a month, summed from their own lines (the UI director's
+ * words of 05:45Z), and its short form for a card that must fit a line. Null for fewer than two.
+ */
+export function loweredSum(lines: string[]): { text: string; short: string } | null {
+  const each = lines.map(loweredOf).filter((x): x is { back: Craft; off: Craft } => !!x);
+  if (each.length < 2) return null;
+  const back = { ftr: 0, bmr: 0 }, off = { ftr: 0, bmr: 0 };
+  for (const x of each) { back.ftr += x.back.ftr; back.bmr += x.back.bmr; off.ftr += x.off.ftr; off.bmr += x.off.bmr; }
+  const head = `The establishments of ${each.length} commands were lowered`, cut = `${each.length} commands cut back`;
+  const nb = back.ftr + back.bmr, no = off.ftr + off.bmr;
+  if (no <= 0) return { text: `${head}: ${craftWords(back)} ${verb(back, 'go', 'goes')} back to the pool.`, short: `${cut}: ${counted(nb)} aircraft back to the pool` };
+  // (Where some went back and some were struck off, the short form gives those struck off: the director ruled no third.)
+  const short = `${cut}: ${counted(no)} aircraft struck off`;
+  if (nb <= 0) return { text: `${head}: ${craftWords(off)} ${verb(off, 'are', 'is')} struck off, because the pool is full.`, short };
+  return { text: `${head}: ${craftWords(back)} ${verb(back, 'go', 'goes')} back to the pool, and the ${craftWords(off)} it has no room for ${verb(off, 'are', 'is')} struck off.`, short };
+}
+
+/**
+ * The lines when dated rows lower the player's commands' establishments (finding 6 of 1.5.1; the UI director's words
+ * of 25 November 2026, 05:45Z): what each is kept at now, and where its aircraft go. Words only. The aircraft over the
+ * new establishment go to the nation's pool, from which every group under strength is made up as the month opens;
+ * but the pool is cut to air.json 'reserve' at the end of that opening, and what it cannot hold is lost. Of each kind,
+ * the lowered commands' aircraft the cut takes are those the pool held over its ceiling, up to all of theirs: had
+ * they not come, the pool would have been that much lower and nothing else changed. The cut of each kind is shared
+ * among the commands as their aircraft of that kind are (the greatest remainders taking the odd ones), so that the
+ * lines add up to it.
+ */
+function loweredNews(g: Game, nat: string, lowered: Map<string, { est: number; ftr: number; bmr: number; region: number }>, over: Craft): void {
+  const list = [...lowered.entries()].map(([name, c]) => ({ name, c, n: { ftr: Math.round(c.ftr), bmr: Math.round(c.bmr) }, off: { ftr: 0, bmr: 0 } }));
+  for (const k of ['ftr', 'bmr'] as const) {
+    const all = list.reduce((s, x) => s + x.n[k], 0);
+    const cut = Math.min(all, Math.round(over[k]));
+    if (cut <= 0) continue;
+    const share = list.map((x, i) => ({ i, q: (x.n[k] * cut) / all }));
+    for (const s of share) list[s.i].off[k] = Math.floor(s.q);
+    let left = cut - list.reduce((s, x) => s + x.off[k], 0);
+    for (const s of [...share].sort((a, b) => (b.q - Math.floor(b.q)) - (a.q - Math.floor(a.q)) || a.i - b.i)) { if (left <= 0) break; list[s.i].off[k]++; left--; }
+  }
+  for (const x of list) {
+    if (x.n.ftr + x.n.bmr <= 0) continue;
+    const back = { ftr: x.n.ftr - x.off.ftr, bmr: x.n.bmr - x.off.bmr };
+    headline(g, 'info', loweredLine(x.name, x.c.est, back, x.off), nat, x.c.region);
   }
 }
 
@@ -2080,7 +2142,13 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   const who = deck && flying.every((f) => carrierOf(g, f) === deck && f.name.startsWith(`${deck.name} `))
     ? `The ${deck.name}'s ${list([...flying].sort((x, y) => (x.kind === 'bmr' ? 0 : 1) - (y.kind === 'bmr' ? 0 : 1)).map((f) => f.name.slice(deck.name.length + 1)))}`
     : list(flying.map((f) => f.name));
-  const cost =`${planes(aLost, 'aircraft').replace('aircrafts', 'aircraft')} lost`;
+  // A fight for the sky by fighters alone that met no enemy fighters has its line of words, as every other raid has
+  // (findings 8 and 30 of 1.5.1; the UI director's words of 05:45Z). The player's own, by an arm too small to hold
+  // the sky, is told below in full, in place of this. Only where it concerns the player: his own sweep, or one over
+  // his ground or against him. Others' sweeps that met nobody keep no line, and stay out of his month's notes.
+  const his = !!g.human && (nat === g.human || defNat === g.human || (!sea && g.regions[target].ctrl === g.human));
+  if (his && m === 'superiority' && !result && !df(def) && att.every((s) => s.bmr <= 0)) rep.result = `${who} flew over ${a.place} and met no enemy fighters.`;
+  const cost = `${planes(aLost, 'aircraft').replace('aircrafts', 'aircraft')} lost`;
   const adj = defNat ? g.nations[defNat].adj : 'enemy';
   // Once the British and American air forces fight the same enemy side by side, the sky they win is the Allies'.
   const together = !!defNat && (nat === 'UK' || nat === 'USA') && ['UK', 'USA'].every((x) => g.nations[x]?.alive && g.nations[x].atWar.includes(defNat));

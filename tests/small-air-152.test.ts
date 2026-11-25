@@ -24,6 +24,8 @@ const SM = AIRWAR.ai.back!.small!;
 afterEach(() => { SM.on = true; });
 const esc = (x: string): string => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const copy = (g: Game): Game => loadGame(saveGame(g))!;
+/** The groups that flew a raid, as its report's line names them: "A", "A and B", "A, B and C". */
+const names = (r: AirReport): string => { const xs = r.att.map((x) => x.fleet); return xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`; };
 /** A grand war nobody plays, with the air campaigns on, as the gate plays it. */
 const war = (seed: number): Game => { const g = startOpen(createGame(seed, null)); g.flags.ac = 1; return g; };
 const landGroups = (g: Game, nat: string): AirFleet[] => g.airFleets.filter((f) => f.nat === nat && f.kind === 'ftr' && f.ftr > 0 && f.ship === undefined);
@@ -398,7 +400,8 @@ describe('release 1.5.2: a small air arm fights over its army (seed 17, a war no
     expect(off.rep).not.toBeNull();
     expect(off.rep!.def).toEqual([]);
     expect(off.news).toEqual([]);
-    expect(off.rep!.result).toBe('');
+    // (With the switch off, his sweep that met nobody has the UI director's line of 05:45Z, findings 8 and 30 of 1.5.1.)
+    expect(off.rep!.result).toBe(`${names(off.rep!)} flew over ${off.rep!.place} and met no enemy fighters.`);
     const on = sweep(true);
     const r = on.rep!;
     const who = r.att.length === 1 ? r.att[0].fleet : '';
@@ -496,7 +499,8 @@ describe('release 1.5.2: a small air arm fights over its army (seed 17, a war no
     expect(rep).not.toBeNull();
     expect(rep!.def).toEqual([]);
     expect(h.headlines.length).toBe(n0);
-    expect(rep!.result).toBe('');
+    // (It is still no headline; but the report, his, says in the UI director's words of 05:45Z that nobody came up.)
+    expect(rep!.result).toBe(`${names(rep!)} flew over ${rep!.place} and met no enemy fighters.`);
   });
 
   it('his staff, holding his air war, does not fly his support campaign as a fight for the sky with too few fighters', () => {

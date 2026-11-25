@@ -17,7 +17,7 @@
 import type { Game } from './types';
 import { SHIP_AIR_TIP, airRange, airWar, carrierRules, closeRules, groupAt, hasAirfield, km, overOcean } from './air';
 import { fieldCanBeLaid } from './engineers';
-import { atWar, placeName } from './game';
+import { atWar, placeName, theName } from './game';
 import { campaignWhy, type GroupRow, type RaidKind, type RaidPlan, type RaidTarget } from './airwar';
 import {
   airGroupBases, airGroupDecks, airGroupJobs, airfieldAt, fleetView, humanUp, myAirGroups, orderAboard, orderAirBase, orderGroupJob, orderRaid, orderScout, orderSearch, previewRaid, raidMenu,
@@ -154,8 +154,6 @@ function countryGroups<T>(g: Game, all: T[], at: (t: T) => number, holderOf: (t:
   }
   return groups;
 }
-/** The same list, country by country. */
-const byCountry = <T>(g: Game, all: T[], at: (t: T) => number, holderOf: (t: T) => string): T[] => countryGroups(g, all, at, holderOf).flatMap((x) => x.list);
 
 /**
  * Provinces as a section for each country and whoever holds it, in the order the list has them, each section keeping
@@ -302,13 +300,19 @@ function rebasePage(g: Game, id: number): Page | null {
   }));
   // Across an ocean a group goes by sea (ruling 133(b)): every field it could be shipped to (finding 5 of 1.5.1: the
   // eight nearest left Britain off from the Canal Zone), country by country in the order the list of a raid's targets
-  // keeps them, and within each country the fields it could be shipped to now first, then the nearest. (The countries'
-  // own headings wait on a ruling: tests/america-842.test.ts holds this page to its two sections.)
+  // keeps them, and within each country the fields it could be shipped to now first, then the nearest. No heading for
+  // each country in 1.5.2 (tests/america-842.test.ts holds this page to its two sections): the first field of each
+  // country's run names the country on its second line, as the target list's heading would, unless the field's own
+  // name is the country's (the UI director, 25 November 2026, 05:45Z).
   const far = all.filter((b) => b.sea).sort((a, b) => (a.why ? 1 : 0) - (b.why ? 1 : 0) || a.km - b.km);
-  const over: PageRow[] = byCountry(g, far, (b) => b.region, (b) => g.regions[b.region].ctrl).map((b) => ({
-    nat: g.regions[b.region].ctrl, title: b.name,
-    lines: [`${b.word}, ${num(b.km)} km away across the ocean: serves ${num(b.holds)} aircraft, room for ${num(b.free)} more.${b.why ? ` ${b.why}` : ''}`],
-    buttons: [{ label: 'SHIP IT HERE', act: `airbase:${id}:${b.region}`, ok: up && !b.why, tip: b.why ?? SHIP_AIR_TIP }],
+  const nameOf = (n: string): string => g.nations[n]?.name ?? n;
+  const over: PageRow[] = countryGroups(g, far, (b) => b.region, (b) => g.regions[b.region].ctrl).flatMap((c) => c.list.map((b, i) => {
+    const country = c.owner === c.holder ? nameOf(c.owner) : `${nameOf(c.owner)}, held by ${g.nations[c.holder] ? theName(g.nations[c.holder]) : c.holder}`;
+    return {
+      nat: g.regions[b.region].ctrl, title: b.name,
+      lines: [`${b.word}, ${num(b.km)} km away across the ocean: serves ${num(b.holds)} aircraft, room for ${num(b.free)} more.${b.why ? ` ${b.why}` : ''}`, ...(i === 0 && b.name !== nameOf(c.owner) ? [country] : [])],
+      buttons: [{ label: 'SHIP IT HERE', act: `airbase:${id}:${b.region}`, ok: up && !b.why, tip: b.why ?? SHIP_AIR_TIP }],
+    };
   }));
   const sections = [{ heading: 'AIRFIELDS', text: '', rows }];
   if (over.length) sections.push({ heading: 'ACROSS THE OCEAN, BY SEA', text: SHIP_AIR_TIP, rows: over });
