@@ -2851,7 +2851,10 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     const seen = known ? known.seen ?? -1 : -1;
     const counts = m === 'bomb' || night || m === 'harbour' || m === 'town';
     const flakWords = (): string => {
-      if (!counts) return m === 'ground' && (known ? seen > 0 : gunsAt(g, target) > 0) ? `Only the ${S} light guns every target has: the guns built here guard the town, not troops in the field.` : Only;
+      // (Her 21:22Z marks, case e: the clause, where it knows of guns built there, on the line, an airfield raid and a
+      // fight for the sky flown with bombers (they hit its airfields) as on troops.)
+      const not = m === 'ground' ? 'troops in the field' : m === 'line' ? 'the line' : m === 'airfield' ? 'the airfield' : m === 'superiority' ? 'the airfields' : '';
+      if (!counts) return not && (known ? seen > 0 : gunsAt(g, target) > 0) ? `Only the ${S} light guns every target has: the guns built here guard the town, not ${not}.` : Only;
       if (!out.guns.all) return !known ? Only : seen === 0 ? noneSeen(known.ago ?? 0) : `None reckoned built: ${only}`;
       if (known && seen < 0) return `Not scouted, so reckoned at the worst: about ${n(out.guns.all)} guns built round ${place}, ${split}`;
       // (Her 21:22Z marks, case c: a place seen at a level, the month is the hedge, leading the line: "Seen two months
