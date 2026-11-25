@@ -24,7 +24,7 @@ import { fleetKnown, fleetsSeen, seaPicture, type SeaKnown } from './carriers';
 import { allied, atWar, headline, worksFor } from './game';
 import { fogOn } from './intel';
 import { CLASSES, NAVY, airOver, atSea, cutOff, fleetAction, fleetName, fleetPower, fleetReach, sail, seaRng, shipCount, surfaceShips } from './navy';
-import { lossAt, shares, type SeaPlanFleet, type SeaPlanSide } from './seaplan';
+import { lossAt, oddsSwing, oddsWord, shares, type SeaPlanFleet, type SeaPlanSide } from './seaplan';
 import type { Fleet, Game, SeaReport, ShipClass, Ships } from './types';
 
 export const FLEET_ATTACK = data as unknown as { atAnchor: number; gunsPerLevel: number };
@@ -43,7 +43,6 @@ const cap = (s: string): string => s[0].toUpperCase() + s.slice(1);
 const seaWhere = (name: string): string => `in the ${name}`;
 const zero = (): Ships => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
-const oneDp = (x: number): string => (x >= 9.95 ? 'more than 10' : x.toFixed(1));
 const sum = (g: Game, fs: Fleet[]): number => fs.reduce((s, x) => s + fleetPower(g, x), 0);
 const shipsIn = (fs: Fleet[]): number => fs.reduce((s, x) => s + shipCount(x.ships), 0);
 const listNames = (fs: Fleet[]): string => { const l = fs.map(fleetName); return l.length === 1 ? l[0] : `${l.slice(0, -1).join(', ')} and ${l[l.length - 1]}`; };
@@ -263,9 +262,9 @@ export function planFleetAttack(g: Game, id: number, target: number, viewer: str
     if (at.shore > 0) plan.lines.push({ label: 'Shore batteries', value: port ? `The guns of ${port}` : 'The harbour\'s guns', effect: `Worth ${Math.round(at.shore)} to the defence` });
   }
   if (airA > 0.5 || airD > 0.5) plan.lines.push({ label: 'Air', value: airA > airD ? 'You have the stronger air cover from the coast' : airD > airA ? 'The enemy has the stronger air cover from the coast' : 'Even', effect: `Worth ${Math.round(airA)} against ${Math.round(airD)}` });
-  // (1.5.3, playtest #33) Where both ends of the swing read the same, they are said once: "More than 10 to 1 all day".
-  const worstOdds = oneDp(plan.odds.low), bestOdds = oneDp(plan.odds.high);
-  plan.lines.push({ label: 'Odds', value: `${oneDp(mid)} to 1`, effect: worstOdds === bestOdds ? `${cap(worstOdds === 'more than 10' ? worstOdds : `about ${worstOdds}`)} to 1 all day` : `Between ${worstOdds} and ${bestOdds} to 1 as the day goes` });
+  // (1.5.3, playtest #33) Where both ends of the swing read the same, they are said once: "More than 10 to 1 all day"
+  // (seaplan.ts, shared with the month's sea forecast).
+  plan.lines.push({ label: 'Odds', value: `${oddsWord(mid)} to 1`, effect: oddsSwing(plan.odds.low, plan.odds.high) });
   if (reported) plan.lines.push({ label: 'Not identified', value: unseen, effect: 'Not in these figures' });
   if (!at.harbour) plan.lines.push({ label: 'Search', value: seaPicture(g, at.zone, f.nat).word });
   const worn = mine.filter((x) => x.ready < 0.8);
@@ -273,7 +272,7 @@ export function planFleetAttack(g: Game, id: number, target: number, viewer: str
 
   plan.notes.push(plan.enough
     ? `Your admiral would have offered battle at these odds anyway: this fights it now, not at the month's end.`
-    : `Your admiral would not offer battle at these odds (he wants ${B.seek} to 1 and has ${oneDp(mid)}): it is your order, and it will be carried out.`);
+    : `Your admiral would not offer battle at these odds (he wants ${B.seek} to 1 and has ${oddsWord(mid)}): it is your order, and it will be carried out.`);
   const foe = foeWords(g, [t], identified(g, viewer));
   // (1.5.3, playtest #25) A fleet only reported is drawn at sea as patrolling, whatever it is about: the note says what may
   // be, the same whether it patrols or not. Words only: whether it has to be found first is for the rules, as before.

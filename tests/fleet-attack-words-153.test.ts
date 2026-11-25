@@ -2,11 +2,12 @@
 // report's strength line: no rule reads any of them, and the card stays a forecast that throws no die.
 //   25  a fleet the player's side has only reported keeps its name, its port and what it is about to itself, in every
 //       refusal and on the card;
-//   26  "1 ship", not "1 ships"; the losses listed with "and" before the last, and their range said plainly; a battleship
-//       or carrier the likely count rounds away, though it may well go down, named on that line; and in the sea report,
-//       "The Battle Fleet was caught at anchor" (not "The the"), and each side's strength summed before the sinkings;
-//       and the fleet's own name in the refusals, "Force H", not "The Force H";
-//   33  odds whose two ends read the same are said once: "More than 10 to 1 all day".
+//   26  "1 ship", not "1 ships", on the card and in the month's sea forecast; the losses listed with "and" before the
+//       last, and their range said plainly; a battleship or carrier the likely count rounds away, though it may well go
+//       down, named on that line; and in the sea report, "The Battle Fleet was caught at anchor" (not "The the"), and each
+//       side's strength summed before the sinkings; and the fleet's own name in the refusals, "Force H", not "The Force H";
+//   33  odds whose two ends read the same are said once: "More than 10 to 1 all day", on the card and in the month's sea
+//       forecast.
 import { describe, expect, it } from 'vitest';
 import { fleetKnown } from '../src/campaign/carriers';
 import { atWar, createGame, declareWar } from '../src/campaign/game';
@@ -15,6 +16,7 @@ import { HEAVY_RISK, orderFleetAttack, planFleetAttack, whyNotFleetAttack, type 
 import { setFog } from '../src/campaign/intel';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { NAVY, cutOff, fleetName, sail, zoneOf } from '../src/campaign/navy';
+import { planSeaBattle } from '../src/campaign/seaplan';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, fleetOptions, humanUp, stepAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
@@ -442,5 +444,44 @@ describe('26: the fleet\'s own name in the refusals', () => {
     expect(whyNotFleetAttack(g, f.id, t.id)).toBe('The 2nd Fleet is cut off beyond a shut strait: send it to harbour on its side first.');
     f.name = 'Force H';
     expect(whyNotFleetAttack(g, f.id, t.id)).toBe('Force H is cut off beyond a shut strait: send it to harbour on its side first.');
+  });
+});
+
+describe('26: the month\'s sea forecast counts its ships as the card does', () => {
+  it('"1 ship against 30", and "45 ships against 30"', () => {
+    const g = startOpen(createGame(3, 'UK'));
+    let guard = 0;
+    while (!humanUp(g) && guard++ < 50) stepAI(g);
+    setFog(g, false);
+    const home = fleet(g, 'Home Fleet'), battle = fleet(g, 'Battle Fleet');
+    for (const f of g.fleets.filter((x) => x.nat === 'UK' && x.id !== home.id)) sail(g, f, f.home, 'port');
+    const z = zoneOf(g, 'nsea');
+    sail(g, battle, z, 'patrol');
+    const forces = (id: number): string => planSeaBattle(g, id, z, null)!.lines.find((l) => l.label === 'Forces')!.value;
+    expect(forces(home.id)).toMatch(/^\d+ ships against \d+$/);
+    const sq = detach(g, home, { dd: 1 })!;
+    sail(g, home, home.home, 'port');
+    expect(forces(sq.id)).toMatch(/^1 ship against \d+$/);
+  });
+});
+
+describe('33: the month\'s sea forecast says its odds once, as the card does', () => {
+  it('"More than 10 to 1 all day", and the two ends where they differ', () => {
+    const g = startOpen(createGame(3, 'UK'));
+    let guard = 0;
+    while (!humanUp(g) && guard++ < 50) stepAI(g);
+    setFog(g, false);
+    const home = fleet(g, 'Home Fleet'), battle = fleet(g, 'Battle Fleet');
+    for (const f of g.fleets.filter((x) => x.nat === 'UK' && x.id !== home.id)) sail(g, f, f.home, 'port');
+    const z = zoneOf(g, 'nsea');
+    sail(g, battle, z, 'patrol');
+    const odds = (): { value: string; effect?: string } => planSeaBattle(g, home.id, z, null)!.lines.find((l) => l.label === 'Odds')!;
+    expect(odds().effect).toMatch(/^Between \d+\.\d and \d+\.\d to 1 as the day goes$/);
+    // Two German destroyers left patrolling there, the rest in harbour: the Home Fleet outweighs them past 10 to 1 all day.
+    const sq = detach(g, battle, { dd: 2 })!;
+    sail(g, battle, battle.home, 'port');
+    sail(g, sq, z, 'patrol');
+    expect(planSeaBattle(g, home.id, z, null)!.odds!.low).toBeGreaterThanOrEqual(9.95);
+    expect(odds()).toEqual({ label: 'Odds', value: 'more than 10 to 1', effect: 'More than 10 to 1 all day' });
   });
 });

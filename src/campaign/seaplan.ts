@@ -84,7 +84,22 @@ const SWING: [number, number] = [0.8, 1.2];
 const STEPS = 40;
 const zero = (): Ships => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
-const oneDp = (x: number): string => (x >= 9.95 ? 'more than 10' : x.toFixed(1));
+
+/**
+ * Odds to one decimal place, as a sentence says them: "2.4", "more than 10". The month's sea forecast and the attack
+ * card (fleetattack.ts) both say them so.
+ */
+export const oddsWord = (x: number): string => (x >= 9.95 ? 'more than 10' : x.toFixed(1));
+
+/**
+ * (1.5.3, playtest #33) The swing of the dice on the odds, from the worst to the best, in one sentence; said once where
+ * both ends read the same: "More than 10 to 1 all day", "About 0.4 to 1 all day".
+ */
+export function oddsSwing(low: number, high: number): string {
+  const worst = oddsWord(low), best = oddsWord(high);
+  if (worst === best) return `${/^\d/.test(worst) ? `About ${worst}` : `${worst[0].toUpperCase()}${worst.slice(1)}`} to 1 all day`;
+  return `Between ${worst} and ${best} to 1 as the day goes`;
+}
 
 /** The share of its ships a side loses when the two sides' strengths stand at `r` after the dice (ours to his). */
 export function shares(r: number): { ours: number; theirs: number } {
@@ -188,17 +203,20 @@ export function planSeaBattle(g: Game, id: number, zone: number, viewer: string 
   };
 
   const n = (fs: Fleet[]): number => fs.reduce((s, x) => s + shipCount(x.ships), 0);
-  plan.lines.push({ label: 'Forces', value: `${n(mine)} ships against ${n(met)}`, effect: `Fleet strength ${Math.round(ours.ships)} against ${Math.round(theirs.ships)}` });
+  // (1.5.3, playtest #26) "1 ship against 30", not "1 ships", as on the attack card.
+  const sent = n(mine);
+  plan.lines.push({ label: 'Forces', value: `${sent} ${sent === 1 ? 'ship' : 'ships'} against ${n(met)}`, effect: `Fleet strength ${Math.round(ours.ships)} against ${Math.round(theirs.ships)}` });
   if (airA > 0.5 || airD > 0.5) plan.lines.push({ label: 'Air', value: airA > airD ? 'You have the stronger air cover from the coast' : airD > airA ? 'The enemy has the stronger air cover from the coast' : 'Even', effect: `Worth ${Math.round(airA)} against ${Math.round(airD)}` });
-  plan.lines.push({ label: 'Odds', value: `${oneDp(mid)} to 1`, effect: `Between ${oneDp(ends[0])} and ${oneDp(ends[1])} to 1 as the day goes` });
+  // (1.5.3, playtest #33) Said once where both ends read the same, as on the attack card: "More than 10 to 1 all day".
+  plan.lines.push({ label: 'Odds', value: `${oddsWord(mid)} to 1`, effect: oddsSwing(ends[0], ends[1]) });
   if (reported) plan.lines.push({ label: 'Not identified', value: unseen.replace(' there', ' in this sea'), effect: 'Not in these figures' });
   plan.lines.push({ label: 'Search', value: search });
   const worn = mine.filter((x) => x.ready < 0.8);
   if (worn.length) plan.lines.push({ label: 'Readiness', value: `${worn.map((x) => x.name).join(', ')} not fully fit for sea`, effect: 'A fleet in need of refit fights below its strength' });
 
   plan.notes.push(offers
-    ? `Your admiral will offer battle: he wants ${B.seek} to 1 and has ${oneDp(mid)}.`
-    : `At these odds your admiral will not offer battle: he wants ${B.seek} to 1 and has ${oneDp(mid)}. An enemy who is patrolling and thinks himself strong enough will come to you.`);
+    ? `Your admiral will offer battle: he wants ${B.seek} to 1 and has ${oddsWord(mid)}.`
+    : `At these odds your admiral will not offer battle: he wants ${B.seek} to 1 and has ${oddsWord(mid)}. An enemy who is patrolling and thinks himself strong enough will come to you.`);
   if (plan.declines) plan.notes.push(plan.declines.who === 'theirs'
     ? `Outweighed ${B.evadeAt} to 1 or more, the enemy declines battle about ${pct(B.evade)} of the time and makes for port, which leaves you the sea.`
     : `Outweighed ${B.evadeAt} to 1 or more, your fleet declines battle about ${pct(B.evade)} of the time and makes for port.`);
