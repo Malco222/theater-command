@@ -7935,6 +7935,7 @@ const R2_SHIP: Record<string, (s: Game) => boolean> = {
   shadowrelayrule: (s) => { setShadowRelay(s, true); return shadowRelayOn(s); },
   fleetwhyrule: (s) => { setFleetWhy(s, true); return fleetWhyOn(s); },
   settledtownsrule: (s) => { setSettledTowns(s, true); return settledTownsOn(s); },
+  citydefencesrule: (s) => { setCityDefences(s, true); return cityDefencesOn(s); },
   columns: (s) => setColumns(s, true),
   'logistics:lorryShift': (s) => setLogistics(s, 'lorryShift', true),
   'logistics:wagons': (s) => setLogistics(s, 'wagons', true),

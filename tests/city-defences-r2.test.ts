@@ -1054,6 +1054,29 @@ describe('city defences in the bridge (slice 5)', () => {
     expect((TC().cityDefences(true) as { on: boolean }).on).toBe(true);
   });
 
+  it('the 3D ship list can turn it on, once: a war takes it as it opens, and a switch the player turns off afterwards stays off', () => {
+    const g = britain(false);
+    TC().load(saveGame(g));
+    expect((TC().view() as BridgeView).cityDefences).toBe(false);
+    // A list that does not name it switches nothing and marks nothing.
+    expect(TC().r2Ship(['nosuchrule'])).toBe(null);
+    expect((TC().view() as BridgeView).cityDefences).toBe(false);
+    const took = TC().r2Ship(['citydefencesrule']) as BridgeView | null;
+    expect(took?.cityDefences).toBe(true);
+    const kept = loadGame((TC().save() as { text: string }).text)!;
+    expect(kept.flags['r2:citydefencesrule']).toBe(1);
+    expect(cityDefences(kept)).toBe(true);
+    // The start lay came with it, as with the Options row: the record's lights stand.
+    expect(START_LAID in kept.flags).toBe(true);
+    // Turned off by the player, the list leaves it off, in this session and after a save and a load.
+    TC().act('citydefencesrule:off');
+    expect(TC().r2Ship(['citydefencesrule'])).toBe(null);
+    expect((TC().view() as BridgeView).cityDefences).toBe(false);
+    TC().load((TC().save() as { text: string }).text);
+    expect(TC().r2Ship(['citydefencesrule'])).toBe(null);
+    expect((TC().view() as BridgeView).cityDefences).toBe(false);
+  });
+
   it('the AIR DEFENCE shelf shows the searchlights beside the guns only with the switch on', () => {
     for (const on of [true, false]) {
       const g = britain(on);
