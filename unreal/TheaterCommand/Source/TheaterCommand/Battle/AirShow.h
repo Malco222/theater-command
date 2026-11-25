@@ -479,6 +479,9 @@ namespace AirShow
 		/** The bombers out of their box's shape this frame, by key: a straggler fallen out of it, or a model made still
 		 * closing up to its slot (neither is in the box's turn, nor its spread). */
 		std::set<int> NotInBox;
+		/** The bombers flying their place in a box this frame (not closing up, not straggling), by key: how far each is
+		 * from her own slot's place as the battle lays it (metres, level; a slide's place is not her slot's). */
+		std::map<int, double> SlotGap;
 		int Rushes = 0; // falling bombs' rushes given (bomb_release, ending at the landing, within 400 m of the eye)
 		std::map<std::string, int> FallsBy;  // falls begun, by the way down they play
 		int FallsOnTime = 0, FallsOffTime = 0; // falls that struck the sea or ground within a quarter of the battle's dur, or not
@@ -637,11 +640,29 @@ namespace AirShow
 		 *   the type's roll time: a fighter's wings take about an eighth of a second to pick the roll up, a heavy
 		 *   bomber's nearer a quarter), and her pilot asks by how far her wings are from where he wants
 		 *   them: all his aileron only for a large change, a little for a small one. No snap, in any feed.
+		 * And the bombers (Brian, 25 November 13:27Z: "the bomber is shaking in the video too like the fighter").
+		 * Measured (air_smooth_probe --shake, the Hampshire raid's minute): every loss renumbered every bomber behind it,
+		 * so each was given a place 155 to 964 m from her own in one step and flew a weave to it, banked to 20 degrees
+		 * (RallyBankMost) and back, about once a bomber's air minute, a rock on the screen at x4 and a shake at x10; and a
+		 * single-engined bomber (the Kate, the Val, the Dauntless, the Devastator) flew those weaves as a fighter rolls,
+		 * banked to 61 to 75 degrees in her place. With this on:
+		 * - each bomber keeps her slot as the box loses others; a gap is filled by the tail, the lead's by his deputy (on
+		 *   a torpedo box's approach, abreast, the line is closed up in the order its aircraft fly across it);
+		 * - a bomber whose place in her box moves more than SlotJumpM (a new slot, the box gone abreast, loose or
+		 *   broken) slides to it, eased in and out, over SlotSlideLeast air seconds at least and SlotSlideMost at most,
+		 *   and within those never faster than SlotCloseMost metres a second at its quickest (SlotWant; a slide of more
+		 *   than 160 m, as a box's going abreast can ask, is quicker, or a 500 m one would take three minutes); one
+		 *   coming back to her place, or closing up from behind, closes as before;
+		 * - every bomber in her place in a box banks and rolls as a twin does there (RallyBankMost, HeavyRollMost), a
+		 *   single-engined one from the moment her wings are within RallyBankMost and two degrees of level (she rolls
+		 *   out of a steeper bank, a dive's pull-out, as she rolls);
+		 * - a straggler's place behind her box moves between views as her box's does.
 		 * Off: the flying as releases 1.5 and before had it.
 		 */
 		void SetSmooth(bool bOn) { bSmooth = bOn; }
 		bool Smooth() const { return bSmooth; }
 		double PathSpan = 0.5, RollDamping = 0.7;
+		double SlotJumpM = 10.0, SlotCloseMost = 4.0, SlotSlideLeast = 20.0, SlotSlideMost = 60.0;
 		/**
 		 * Drop on the lead and the rally (Brian, 22 November 04:11Z). A level bombing box lets its bombs go on its lead:
 		 * his stick first, and each of the others as her bombardier sees his bombs leave, DropOnLeadLeast to
@@ -838,6 +859,14 @@ namespace AirShow
 			std::vector<std::pair<double, std::string>> TrailPlan; // air times its trail changes kind ("" stops it)
 			bool bShown = true;
 			bool bJoining = false;   // a replacement still closing up to its slot
+			// A bomber's place in her box as she last flew it, flying smooth (SetSmooth; SlotWant): ahead, right and up
+			// of the box's middle along its heading (X, Y, Z), the pilots' step she flew it in (Show::PilotSteps; any
+			// step she did not, she has left it and it is forgotten), and the slide she makes when it moves (from where,
+			// the air time it began, its air seconds).
+			Vec SlotLast, SlideFrom;
+			long SlotStep = -1;
+			bool bSliding = false;
+			double SlideT0 = 0.0, SlideLen = 0.0;
 			// The fighter pilots (AirShow.cpp, the pilots' section):
 			int Lead = 0;            // the leader he flies on; his own key: he leads his pair (or his vic). 0: not yet paired
 			int Wing = 0;            // a leader's (first) wingman, 0: none
@@ -1142,6 +1171,7 @@ namespace AirShow
 		double ShownT = 0.0, AirT = 0.0;
 		double ViewT = 0.0;                  // the battle time of the view the groups shown now are read from
 		bool bSmooth = true;                 // (SetSmooth)
+		long PilotSteps = 0;                 // the pilots' steps flown so far (Craft::SlotStep)
 		/** How far ahead of the battle time shown the formations' velocities are read (GroupVelocity): PathSpan where
 		 * the views in hand reach that far (a live raid's always do: its rules run a battle second ahead), less where a
 		 * recording's next view has yet to come, and never moved faster than the clock, so that a view's coming is
@@ -1176,6 +1206,9 @@ namespace AirShow
 		void Reconcile(const Group& G, Band& B);
 		Craft& Make(const Group& G, const Vec& At, double Hdg, double Spd, Role Doing);
 		Vec SlotPlace(const Group& G, int Slot) const;
+		/** A bomber's place in her box this step, flying smooth (SetSmooth): her slot's place, or on her slide to it
+		 * when it has moved; the slide's own velocity added to ToVel. */
+		Vec SlotWant(Craft& C, const Group& G, Vec& ToVel);
 		Vec GroupVelocity(int GroupId) const;
 		Cmd Steer(const Craft& C, const Vec& To, const Vec& ToVel, double Gain, double SpeedLow, double SpeedHigh) const;
 		Cmd Toward(const Craft& C, const Vec& To, double Speed) const;

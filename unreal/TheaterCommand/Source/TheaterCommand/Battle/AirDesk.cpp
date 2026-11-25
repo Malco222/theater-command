@@ -726,6 +726,172 @@ namespace AirDesk
 		return true;
 	}
 
+	namespace
+	{
+		/** A critically damped ease over Real seconds of what is still to go (Off, from where it is wanted) and its
+		 * speed (Vel): about three fifths of the way in Ease seconds and nine tenths in twice it, never past, and its
+		 * speed never stepping. */
+		template <typename T>
+		void Settle(T& Off, T& Vel, double Real, double Ease)
+		{
+			const double W = 2.0 / std::max(Ease, 1e-3);
+			const double Fall = std::exp(-W * std::max(Real, 0.0));
+			const T Lead = Vel + Off * W;
+			Off = (Off + Lead * Real) * Fall;
+			Vel = (Vel - Lead * (W * Real)) * Fall;
+		}
+
+		/** An aircraft's weight in a ring of Reach metres about a point it is Far from: 1 well inside, 0 well outside,
+		 * eased between over Overview::Soft metres either side of the ring. */
+		double InRing(double Far, double Reach)
+		{
+			const double X = std::clamp((Reach + Overview::Soft - Far) / (2.0 * Overview::Soft), 0.0, 1.0);
+			return X * X * (3.0 - 2.0 * X);
+		}
+	}
+
+	double Overview::TypeAwayOf(double Span)
+	{
+		const double Heavy = std::clamp((Span - 24.0) / 2.0, 0.0, 1.0);
+		const double Pixels = 45.0 + 25.0 * Heavy * Heavy * (3.0 - 2.0 * Heavy);
+		return std::clamp(Span * 1920.0 / (Pixels * 2.0 * std::tan(27.5 * 3.14159265358979323846 / 180.0)), 250.0, 1500.0);
+	}
+
+	Overview::Aim Overview::Step(const std::vector<AirShow::PlaneOut>& Planes, const std::vector<int>& Picked, double Real, int& Anchor, bool bCut)
+	{
+		if (bCut)
+		{
+			Fade.clear();
+			Prev.clear();
+			bStarted = bGiven = false;
+			Away = -1.0;
+			AwayVel = 0.0;
+			LookVel = AirShow::Vec();
+		}
+		Carry = AirShow::Vec();
+		// (each aircraft's share of its weight: eased in while it flies, is drawn and is of the groups looked at, eased
+		// out once it is not; all in at once on a cut)
+		const double Ease = std::clamp(Real / FadeS, 0.0, 1.0);
+		std::map<int, double> Shares;
+		std::map<int, bool> In;
+		for (const AirShow::PlaneOut& P : Planes)
+		{
+			const bool bIn = P.bShown && !P.bFalling && !P.bOnGround && std::find(Picked.begin(), Picked.end(), P.Group) != Picked.end();
+			const auto It = Fade.find(P.Key);
+			const double Was = It != Fade.end() ? It->second : (!bStarted && bIn ? 1.0 : 0.0);
+			const double Share = bIn ? std::min(1.0, Was + Ease) : std::max(0.0, Was - Ease);
+			if (Share > 0.0)
+			{
+				Shares[P.Key] = Share;
+				In[P.Key] = bIn;
+			}
+		}
+		Fade.swap(Shares);
+		bStarted = true;
+		Aim A;
+		auto Frame = [this, Real, &A](double Wanted)
+		{
+			if (Away < 0.0) Away = Wanted;
+			double Off = Away - Wanted;
+			Settle(Off, AwayVel, Real, AwayEase);
+			Away = Wanted + Off;
+			A.TypeAway = Away;
+		};
+		AirShow::Vec Crowd;
+		const AirShow::PlaneOut* Held = nullptr;
+		if (CrowdOf(Planes, Picked, Reach, Anchor, Crowd))
+		{
+			for (const AirShow::PlaneOut& P : Planes)
+			{
+				if (P.Key == Anchor) Held = &P;
+			}
+		}
+		if (!Held)
+		{
+			Prev.clear();
+			Frame(800.0);
+			return A;
+		}
+		// The crowd's middle: about its anchor, as CrowdOf's, each aircraft by its weight in the ring.
+		AirShow::Vec Mid;
+		double MidWeight = 0.0;
+		for (const AirShow::PlaneOut& P : Planes)
+		{
+			const auto Share = Fade.find(P.Key);
+			if (Share == Fade.end()) continue;
+			const double W = Share->second * InRing((P.At - Held->At).Length(), Reach);
+			Mid += P.At * W;
+			MidWeight += W;
+		}
+		Mid = MidWeight > 1e-9 ? Mid * (1.0 / MidWeight) : Held->At;
+		// The look: the middle of those within Tight of it, and with fewer than two there the one nearest it (eased from
+		// one to the other between one and two); its travel since the last frame, the same aircraft by the same weights.
+		// The framing: the crowd's mean span.
+		AirShow::Vec Close, CloseStep, Nearest, NearestStep;
+		double CloseWeight = 0.0, StepWeight = 0.0, SpanSum = 0.0, SpanWeight = 0.0, NearestFar = 1e18;
+		for (const AirShow::PlaneOut& P : Planes)
+		{
+			const auto Share = Fade.find(P.Key);
+			if (Share == Fade.end()) continue;
+			const double Far = (P.At - Mid).Length();
+			const double Wc = Share->second * InRing(Far, Tight), Ws = Share->second * InRing(Far, Reach);
+			Close += P.At * Wc;
+			CloseWeight += Wc;
+			SpanSum += Ws * (P.Span > 1.0 ? P.Span : 12.0);
+			SpanWeight += Ws;
+			const auto Was = Prev.find(P.Key);
+			if (Was != Prev.end())
+			{
+				CloseStep += (P.At - Was->second) * Wc;
+				StepWeight += Wc;
+			}
+			if (In[P.Key] && Far < NearestFar)
+			{
+				NearestFar = Far;
+				Nearest = P.At;
+				NearestStep = Was != Prev.end() ? P.At - Was->second : AirShow::Vec();
+			}
+		}
+		Prev.clear();
+		for (const AirShow::PlaneOut& P : Planes)
+		{
+			if (Fade.count(P.Key)) Prev[P.Key] = P.At;
+		}
+		if (NearestFar > 1e17)
+		{
+			Nearest = Held->At;
+			NearestStep = AirShow::Vec();
+		}
+		const double Many = std::clamp(CloseWeight - 1.0, 0.0, 1.0);
+		const AirShow::Vec CloseMid = CloseWeight > 1e-9 ? Close * (1.0 / CloseWeight) : Nearest;
+		const AirShow::Vec CloseTravel = StepWeight > 1e-9 ? CloseStep * (1.0 / StepWeight) : AirShow::Vec();
+		A.bFound = true;
+		A.Focus = Nearest + (CloseMid - Nearest) * Many;
+		Carry = NearestStep + (CloseTravel - NearestStep) * Many;
+		A.Span = SpanWeight > 1e-9 ? SpanSum / SpanWeight : 12.0;
+		Frame(TypeAwayOf(A.Span));
+		return A;
+	}
+
+	AirShow::Vec Overview::Look(const AirShow::Vec& Was, const AirShow::Vec& Wanted, double Real)
+	{
+		// (the aircraft's speed it goes with, eased; a look set otherwise since this one's last, a picture's or a cut's,
+		// starts from rest and at their speed as it is)
+		const AirShow::Vec Rate = Real > 1e-6 ? Carry * (1.0 / Real) : CarryVel;
+		if (!bGiven || (Was - Given).Length() > 0.01)
+		{
+			LookVel = AirShow::Vec();
+			CarryVel = Rate;
+		}
+		else CarryVel += (Rate - CarryVel) * (1.0 - std::exp(-std::max(Real, 0.0) / CarryEase));
+		AirShow::Vec Off = Was + CarryVel * Real - Wanted;
+		Carry = AirShow::Vec();
+		Settle(Off, LookVel, Real, LookEase);
+		Given = Wanted + Off;
+		bGiven = true;
+		return Given;
+	}
+
 	bool Flyover::Begin(const std::map<int, AirShow::Group>& Groups, double InTargetX, double InTargetY, bool bHarbour)
 	{
 		TargetX = InTargetX;

@@ -6735,6 +6735,12 @@ void AAirBattle::AimEye(double Real)
 			Lens->SetFieldOfView(62.0f);
 			Lens->PostProcessSettings.bOverride_MotionBlurAmount = true;
 			Lens->PostProcessSettings.MotionBlurAmount = 0.12f;
+			// (flying smooth, the strategy camera starts afresh when it is back, a cut: the aircraft it went with have
+			// flown on meanwhile, AirDesk::Overview)
+			if (S.Show.Smooth())
+			{
+				bLookSet = false;
+			}
 			return;
 		}
 		S.bClose = false;
@@ -6782,7 +6788,25 @@ void AAirBattle::AimEye(double Real)
 	// one nearest it. The art director on a1acb552's frames, 22 November 08:13Z: Bremen's B-17s 145 to 290 pixels,
 	// Pearl 01's and Midway 04's 10 to 25 pixel specks off the middle of the picture)
 	double CrowdSpan = 0.0;
-	if (AirDesk::CrowdOf(S.Show.Planes(), Picked, 1200.0, FocusAnchor, Crowd))
+	// (flying smooth: its rings soft, the look going with the aircraft it is on, the framing by their mean span, all of
+	// it AirDesk::Overview's, which Tools/air_show/air_smooth_probe --shake plays as here; the hard rings jumped the
+	// whole picture each time an aircraft crossed one, Brian's "the bomber is shaking", 25 November 13:27Z)
+	double OverAway = -1.0;
+	if (S.Show.Smooth())
+	{
+		const AirDesk::Overview::Aim OverAim = S.Over.Step(S.Show.Planes(), Picked, Real, FocusAnchor, !bLookSet);
+		if (OverAim.bFound)
+		{
+			Focus = OverAim.Focus;
+			CrowdSpan = OverAim.Span;
+		}
+		else if (Count > 0)
+		{
+			Focus = Sum * (1.0 / Count);
+		}
+		OverAway = OverAim.TypeAway;
+	}
+	else if (AirDesk::CrowdOf(S.Show.Planes(), Picked, 1200.0, FocusAnchor, Crowd))
 	{
 		Focus = Crowd;
 		std::vector<double> Spans;
@@ -6833,7 +6857,7 @@ void AAirBattle::AimEye(double Real)
 		Focus = Sum * (1.0 / Count);
 	}
 	FVector Wanted = World(Focus.X, Focus.Y, Focus.Z);
-	const double TypeAway = CrowdSpan > 0.0 ? FMath::Clamp(CrowdSpan * 1920.0 / ((CrowdSpan >= 25.0 ? 70.0 : 45.0) * 2.0 * FMath::Tan(FMath::DegreesToRadians(27.5))), 250.0, 1500.0) : 800.0;
+	const double TypeAway = OverAway > 0.0 ? OverAway : CrowdSpan > 0.0 ? FMath::Clamp(CrowdSpan * 1920.0 / ((CrowdSpan >= 25.0 ? 70.0 : 45.0) * 2.0 * FMath::Tan(FMath::DegreesToRadians(27.5))), 250.0, 1500.0) : 800.0;
 	double Away = Distance * TypeAway / 800.0, Down = Pitch, Heading = Yaw;
 	StrategyAway = Away;
 	StrategySpan = CrowdSpan;
@@ -7055,7 +7079,15 @@ void AAirBattle::AimEye(double Real)
 	// (the look carried with the crowd as it moves, and only a jump to another crowd eased: eased all the way, at the
 	// clock's x10 the look trailed the raid by a kilometre and more, and the strategy pictures before the meeting showed
 	// empty sky, the art director on 2b177386's Pearl 01, Midway 01 and Bremen 01, 22 November 04:16Z)
-	if (bLookSet && !bOnShip && !bOnGuns && !bOnChutes)
+	if (bLookSet && !bOnShip && !bOnGuns && !bOnChutes && S.Show.Smooth())
+	{
+		// (flying smooth: carried with the aircraft it is on and eased on to the rest, AirDesk::Overview::Look; in the
+		// show's metres, Wanted being World(Focus) here)
+		const AirShow::Vec LookWas(LookAt.Y / U, LookAt.X / U, LookAt.Z / U);
+		const AirShow::Vec LookNow = S.Over.Look(LookWas, Focus, Real);
+		LookAt = World(LookNow.X, LookNow.Y, LookNow.Z);
+	}
+	else if (bLookSet && !bOnShip && !bOnGuns && !bOnChutes)
 	{
 		const FVector Moved = Wanted - LookWanted;
 		if (Moved.Size() < 150.0 * U)

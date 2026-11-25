@@ -260,6 +260,58 @@ namespace AirDesk
 	bool CrowdOf(const std::vector<AirShow::PlaneOut>& Planes, const std::vector<int>& Groups, double Reach, int& Anchor, AirShow::Vec& Middle);
 
 	/**
+	 * The strategy camera's look and framing, flying smooth (AirShow::Show::SetSmooth; Brian, 25 November 13:27Z: "the
+	 * bomber is shaking in the video too like the fighter"). Measured (Tools/air_show/air_smooth_probe --shake, the
+	 * Hampshire raid's minute about its first contact): the look took the plain middle of the aircraft within 350 m of
+	 * the crowd's middle, that middle the plain middle of those within 1200 m of CrowdOf's anchor, and any step of it
+	 * under 150 m was the eye's step in that frame; so each time an aircraft crossed one of the rings the whole picture
+	 * jumped: by 20 pixels and more beyond its glide 14 to 18 times a real minute at x1 and 52 to 64 at x4 (in the
+	 * raid's busiest forty seconds 100 to 120 and 320 to 410), the He 111s shaking 5 to 6 pixels rms on the 1440
+	 * picture at x1 and 12 at x4 (14 to 37 in the busy seconds); and the framing took the crowd's middle span, so a
+	 * crowd of He 111s and Spitfires flipped the eye between 926 and 459 m. Here:
+	 * - every ring is soft, an aircraft's weight in it falling from 1 to 0 over Soft metres either side of it, and an
+	 *   aircraft that falls, lands, is hidden or leaves the groups looked at fades out of it over FadeS real seconds
+	 *   (one coming in fades in);
+	 * - the look goes with the aircraft it is on (the same aircraft by the same weights, their travel since the last
+	 *   frame, its speed eased over CarryEase real seconds so that it does not step when the one nearest the middle
+	 *   changes) and only a change of which they are is eased, critically damped over about LookEase real seconds, so
+	 *   that neither the look nor its speed steps;
+	 * - the framing is by the crowd's mean span by weight (TypeAwayOf), eased the same way over AwayEase.
+	 * Off (release 1.5's flying), the scene keeps its own camera as it was.
+	 */
+	class Overview
+	{
+	public:
+		static constexpr double Reach = 1200.0, Tight = 350.0, Soft = 100.0, FadeS = 1.0, LookEase = 1.0, AwayEase = 1.0, CarryEase = 0.3;
+		struct Aim
+		{
+			bool bFound = false;     // the groups have aircraft up to look at
+			AirShow::Vec Focus;      // where the look would be
+			double Span = 0.0;       // the crowd's mean span, metres (0: none)
+			double TypeAway = 800.0; // the eye's distance at the player's own 800 m, eased
+		};
+		/** This frame's aim on the aircraft of the groups Picked, Real seconds after the last; Anchor as CrowdOf's. bCut:
+		 * a cut, and the look and the framing start afresh. */
+		Aim Step(const std::vector<AirShow::PlaneOut>& Planes, const std::vector<int>& Picked, double Real, int& Anchor, bool bCut);
+		/** Where the look is drawn this frame, from where it was (Was): carried with the aircraft it is on and eased on to
+		 * Wanted (Step's Focus). A look set otherwise since its last (a picture's, a cut's) starts from rest. */
+		AirShow::Vec Look(const AirShow::Vec& Was, const AirShow::Vec& Wanted, double Real);
+		/**
+		 * The eye's distance at the player's own 800 m for a crowd of this span (metres): its aircraft about 45 pixels
+		 * across at 1920, 70 from 25 m, through the 55 degree lens, as the scene framed them; the 45 eased into the 70
+		 * between 24 and 26 m. Within 250 and 1500 m.
+		 */
+		static double TypeAwayOf(double Span);
+
+	private:
+		std::map<int, double> Fade;      // each aircraft's share of its weight, 0 to 1
+		std::map<int, AirShow::Vec> Prev; // and where it was last frame
+		AirShow::Vec Carry, CarryVel, LookVel, Given;
+		bool bStarted = false, bGiven = false;
+		double Away = -1.0, AwayVel = 0.0;
+	};
+
+	/**
 	 * The tug-of-war bar's knot (the air thread's rule, passed by the UI director 21 November 14:47Z): the running form
 	 * of the result the battle is judged by. x is the view's sky.score.ratio, (aircraft the defender lost + what the
 	 * bombs were worth + 10) / (aircraft the raider lost + 10), and the knot is x / (1 + x) from the raider's flag; a

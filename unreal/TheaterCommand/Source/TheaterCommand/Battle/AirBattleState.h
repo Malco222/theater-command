@@ -106,6 +106,8 @@ struct FAirBattleState
 	 * black above and below, which draws back over the glide (FlyBars, 1 to 0).
 	 */
 	AirDesk::Flyover Fly;
+	/** The strategy camera's look and framing, flying smooth (AirShow::Show::SetSmooth; AAirBattle::AimEye). */
+	AirDesk::Overview Over;
 	bool bFlying = false;
 	bool bFlyTried = false;     // looked for once, when the battle's first groups stand
 	double FlyT = 0.0;

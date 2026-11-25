@@ -338,6 +338,21 @@ namespace AirShow
 					G.Alt = Lerp(G.Alt, Next->second.Alt, F);
 					G.CountAlt = Lerp(G.CountAlt, Next->second.CountAlt, F);
 					G.Face = Wrap(G.Face + Wrap(Next->second.Face - G.Face) * F);
+					// (smooth flying: a straggler's place behind her box as well, or it steps at every view)
+					if (bSmooth)
+					{
+						for (Strag& S : G.Strags)
+						{
+							for (const Strag& N : Next->second.Strags)
+							{
+								if (N.Id == S.Id)
+								{
+									S.Back = Lerp(S.Back, N.Back, F);
+									S.Down = Lerp(S.Down, N.Down, F);
+								}
+							}
+						}
+					}
 				}
 			}
 			Now[Pair.first] = G;
@@ -553,6 +568,48 @@ namespace AirShow
 	Vec Show::SlotPlace(const Group& G, int Slot) const
 	{
 		return SlotOf(G, Slot);
+	}
+
+	Vec Show::SlotWant(Craft& C, const Group& G, Vec& ToVel)
+	{
+		// Her place in the box's own frame: ahead, right and up of its middle along its heading.
+		const Vec Mid(G.X, G.Y, G.Alt), F = Ahead(G.Face), R = RightOf(G.Face);
+		const Vec Off = SlotPlace(G, C.Slot) - Mid;
+		const Vec Want(Off.Dot(F), Off.Dot(R), Off.Z);
+		// (she flew her place the step before: a move of it over SlotJumpM, a new slot or a new shape of the box, is
+		// slid to from where her place is drawn now, a slide under way or not. Never from where she is: one coming back
+		// to her place from a dive or a straggle, or a replacement closing up, closes as before)
+		if (C.SlotStep == PilotSteps - 1 && Len(Want - C.SlotLast) > SlotJumpM)
+		{
+			Vec From = C.SlotLast;
+			if (C.bSliding)
+			{
+				const double U0 = Clamp((AirT - C.SlideT0) / std::max(C.SlideLen, 1e-6), 0.0, 1.0);
+				From = C.SlideFrom + (C.SlotLast - C.SlideFrom) * (U0 * U0 * (3.0 - 2.0 * U0));
+			}
+			// (at its quickest, half way, a smoothstep slide goes 1.5 times its mean speed)
+			C.SlideFrom = From;
+			C.SlideT0 = AirT;
+			C.SlideLen = Clamp(1.5 * Len(Want - From) / SlotCloseMost, SlotSlideLeast, SlotSlideMost);
+			C.bSliding = true;
+		}
+		else if (C.SlotStep != PilotSteps - 1) C.bSliding = false;
+		C.SlotLast = Want;
+		C.SlotStep = PilotSteps;
+		Vec Drawn = Want;
+		if (C.bSliding)
+		{
+			const double U = (AirT - C.SlideT0) / std::max(C.SlideLen, 1e-6);
+			if (U >= 1.0) C.bSliding = false;
+			else
+			{
+				const Vec Way = Want - C.SlideFrom;
+				Drawn = C.SlideFrom + Way * (U * U * (3.0 - 2.0 * U));
+				const Vec Rate = Way * (6.0 * U * (1.0 - U) / C.SlideLen);
+				ToVel += F * Rate.X + R * Rate.Y + Up * Rate.Z;
+			}
+		}
+		return Mid + F * Drawn.X + R * Drawn.Y + Up * Drawn.Z;
 	}
 
 	Vec SlotOf(const Group& G, int Slot)
@@ -834,6 +891,66 @@ namespace AirShow
 		}
 		// Places in the formation, in the order they stand.
 		Keys = LiveOf(G.Id);
+		if (bSmooth && !G.bFighter)
+		{
+			// (smooth flying: each bomber keeps her slot as the box loses others, and only the gaps are filled: the
+			// lead's by his deputy, the next in the order, and each other, the nearest the front first, by the bomber
+			// flying farthest back. Renumbered, every bomber behind a loss was given another's place 155 to 964 m off and
+			// flew a weave to it; SetSmooth)
+			const int N = static_cast<int>(Keys.size());
+			std::vector<Craft*> Holder(static_cast<size_t>(N), nullptr);
+			std::vector<Craft*> Over; // (a slot past the box's count now, or one another holds: in the order they stand)
+			for (int Key : Keys)
+			{
+				Craft& C = *Find(Key);
+				if (C.Slot >= 0 && C.Slot < N && !Holder[static_cast<size_t>(C.Slot)]) Holder[static_cast<size_t>(C.Slot)] = &C;
+				else Over.push_back(&C);
+			}
+			// (a torpedo box on its approach goes in abreast, each on her own line to the ships: a gap there is closed up
+			// across the line, its places given again in the order its aircraft fly from left to right, so that none
+			// crosses it. Filled from the tail, the line's far end, a Kate was 227 m from her place in the 20 s before
+			// her run)
+			bool bGap = !Over.empty();
+			for (const Craft* H : Holder) bGap = bGap || !H;
+			if (G.bAbreast && G.Strike == "torpedo" && bGap)
+			{
+				const Vec Right = RightOf(G.Face);
+				std::vector<Craft*> Across;
+				for (int Key : Keys) Across.push_back(Find(Key));
+				std::vector<int> Places(static_cast<size_t>(N));
+				for (int S = 0; S < N; ++S) Places[static_cast<size_t>(S)] = S;
+				std::stable_sort(Across.begin(), Across.end(), [&Right](const Craft* Ca, const Craft* Cb) { return Ca->P.Dot(Right) < Cb->P.Dot(Right); });
+				std::stable_sort(Places.begin(), Places.end(), [this, &G, &Right](int Sa, int Sb) { return SlotPlace(G, Sa).Dot(Right) < SlotPlace(G, Sb).Dot(Right); });
+				for (int S = 0; S < N; ++S) Across[static_cast<size_t>(S)]->Slot = Places[static_cast<size_t>(S)];
+				return;
+			}
+			if (N > 0 && !Holder[0])
+			{
+				for (int S = 1; S < N && !Holder[0]; ++S)
+				{
+					if (Holder[static_cast<size_t>(S)])
+					{
+						Holder[0] = Holder[static_cast<size_t>(S)];
+						Holder[static_cast<size_t>(S)] = nullptr;
+					}
+				}
+				if (!Holder[0] && !Over.empty())
+				{
+					Holder[0] = Over.front();
+					Over.erase(Over.begin());
+				}
+			}
+			for (int S = 0; S < N; ++S)
+			{
+				if (!Holder[static_cast<size_t>(S)] && !Over.empty())
+				{
+					Holder[static_cast<size_t>(S)] = Over.back();
+					Over.pop_back();
+				}
+				if (Holder[static_cast<size_t>(S)]) Holder[static_cast<size_t>(S)]->Slot = S;
+			}
+			return;
+		}
 		for (int K = 0; K < static_cast<int>(Keys.size()); ++K) Find(Keys[K])->Slot = K;
 	}
 
@@ -1028,12 +1145,17 @@ namespace AirShow
 		// rally turn)
 		double RollMost = C.RollMax;
 		bool bBoxed = false;
-		if (!C.bFighter && (C.bHeavy || C.Form.Span >= 20.0 || C.Form.Engines.size() >= 2) && C.Doing != Role::Fall)
+		// (flying smooth, every bomber in her place in a box, a single-engined one too: flown as a fighter rolls, the
+		// Kate, the Val, the Dauntless and the Devastator banked to 61 to 75 degrees there, swinging as much as 131 from
+		// one side to the other. She keeps her own roll out of a steeper bank, a dive's pull-out, until her wings are
+		// within RallyBankMost and two degrees of level; SetSmooth)
+		const bool bTwin = C.bHeavy || C.Form.Span >= 20.0 || C.Form.Engines.size() >= 2;
+		if (!C.bFighter && (bTwin || (bSmooth && C.Doing == Role::Slot)) && C.Doing != Role::Fall)
 		{
 			const bool bOnRun = C.Bay > 0.0 && (!C.bDropped || C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + StickSteady));
 			const double Most = bOnRun ? RunBankMost : C.Doing == Role::Slot ? RallyBankMost : HeavyBankMost;
 			BankWant = Clamp(BankWant, -Most * Deg, Most * Deg);
-			if (C.Doing == Role::Slot && !bOnRun)
+			if (C.Doing == Role::Slot && !bOnRun && (bTwin || std::fabs(C.Bank) <= (RallyBankMost + 2.0) * Deg))
 			{
 				RollMost = std::min(RollMost, HeavyRollMost * Deg);
 				bBoxed = true;
@@ -1280,8 +1402,9 @@ namespace AirShow
 			if (Box != Bands.end() && Box->second.bDropped && Rally(C, *G, Box->second, Dt)) return;
 		}
 		// In its place: the formation's speed, a slow escort weaving beside its bombers; an escort with a role at its
-		// station over them (EscortStation).
-		Vec To = SlotPlace(*G, C.Slot), ToVel = GV;
+		// station over them (EscortStation). (A bomber flying smooth: on her slide to it when it has moved, SlotWant.)
+		Vec ToVel = GV;
+		Vec To = bSmooth && !C.bFighter ? SlotWant(C, *G, ToVel) : SlotPlace(*G, C.Slot);
 		const bool bStation = C.bFighter && G->Doing != Act::Fight && EscortStation(C, *G, To, ToVel);
 		// How near the enemy the rules have it making for (its quarry; an escort's, the enemy coming for its bombers):
 		// nothing at 7 km, all of it inside 3 km.
@@ -7540,6 +7663,7 @@ namespace AirShow
 			for (auto& Pair : Crafts) { Pair.second.LastP = Pair.second.P; Pair.second.bHasLast = Pair.second.Doing != Role::Gone; }
 			for (int S = 0; S < Steps; ++S)
 			{
+				++PilotSteps;
 				for (auto& Pair : Crafts) Pilot(Pair.second, Dt);
 			}
 			for (auto& Pair : Crafts)
@@ -7593,10 +7717,20 @@ namespace AirShow
 		Out.clear();
 		Out.reserve(Crafts.size());
 		Check.NotInBox.clear();
+		Check.SlotGap.clear();
 		for (const auto& Pair : Crafts)
 		{
 			const Craft& C = Pair.second;
 			if (!C.bFighter && (C.Doing == Role::Straggle || (C.Doing == Role::Slot && C.bJoining))) Check.NotInBox.insert(C.Key);
+			if (!C.bFighter && C.Doing == Role::Slot && !C.bJoining)
+			{
+				const auto Gi = Now.find(C.Group);
+				if (Gi != Now.end())
+				{
+					const Vec Own = SlotPlace(Gi->second, C.Slot);
+					Check.SlotGap[C.Key] = std::hypot(Own.X - C.P.X, Own.Y - C.P.Y);
+				}
+			}
 			PlaneOut P;
 			P.Key = C.Key;
 			P.Group = C.Group;

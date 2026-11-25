@@ -24,6 +24,33 @@ $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" 
   "$HERE/air_smooth_probe.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirDesk.cpp" "$SRC/Battle/AirGround.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
   -o "$OUT/air_smooth_probe"
 "$OUT/air_smooth_probe" "$HERE/data/raid-steps.json" 60 200 260 || STATUS=1
+# The bombers and the strategy camera as a Mac plays them (air_smooth_probe --shake; Brian, 25 November 13:27Z: "the
+# bomber is shaking in the video too like the fighter"): each bomber keeping her place in her box without weaving or
+# rocking, by model and at x1, x4 and x10, the chase camera riding her, and the strategy camera's picture steady and
+# its look never jumping, at 60 frames a second and at a Mac's uneven ones; the raid's minute (fed live, and late),
+# its busiest forty seconds (data/raid-busy.json) and the set pieces. Flown as release 1.5 flew it (AIR_SMOOTH_OLD=1),
+# the report must be the release 2 build's before the check, to the byte (data/shake-old-30899121.txt). That build
+# (30899121) flew the He 111s in weaves, banked to 20 degrees, about once a bomber's air minute, and the single-engined
+# bombers banked to 61 to 75 degrees in their places, and its strategy camera's look jumped 14 to 18 times a real
+# minute at x1 and 52 to 64 at x4 (410 in the busiest forty seconds at x4 on a Mac's frames).
+for P in "60 1" "60 4" "60 10" "mac 1" "mac 4" "mac 10"; do
+  "$OUT/air_smooth_probe" --shake "$HERE/data/raid-steps.json" $P live 200 260 || STATUS=1
+done
+"$OUT/air_smooth_probe" --shake "$HERE/data/raid-steps.json" mac 1 late 200 260 || STATUS=1
+for P in "60 1" "mac 4" "mac 10"; do
+  "$OUT/air_smooth_probe" --shake "$HERE/data/raid-busy.json" $P live 290 330 || STATUS=1
+done
+for R in bremen-b17 oahu midway-fleet; do
+  for P in "60 1" "mac 4"; do
+    "$OUT/air_smooth_probe" --shake "$ROOT/Content/Data/AirBattles/$R.json" $P replay || STATUS=1
+  done
+done
+if ! { AIR_SMOOTH_OLD=1 "$OUT/air_smooth_probe" --shake "$HERE/data/raid-steps.json" 60 1 live 200 260;
+       AIR_SMOOTH_OLD=1 "$OUT/air_smooth_probe" --shake "$HERE/data/raid-steps.json" mac 4 live 200 260; } |
+     cmp -s - "$HERE/data/shake-old-30899121.txt"; then
+  echo "FAIL: flown as release 1.5 (AIR_SMOOTH_OLD=1), air_smooth_probe --shake's report is not data/shake-old-30899121.txt's"
+  STATUS=1
+fi
 # A raid on troops (Battle/AirMarks, Battle/AirShowTroops; Brian, 24 November 2026: "if a bomber group is bombing troops
 # instead of a factory or town and they get intercepted than i want that playable"): every hit on a piece of the column
 # shown once as its bomb or rounds arrive, every other bomb clear of every piece, the strafing pass within the flight's
