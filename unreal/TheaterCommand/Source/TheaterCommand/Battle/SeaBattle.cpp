@@ -1550,6 +1550,14 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 	// (the release 2 ocean plan, step 1(a), pay first: DrawMarks' two meshes sent again in place while their shape holds,
 	// -TheaterSeaMarksPool=1; by default, until the Mac's A/B, both made afresh every frame, as today)
 	bMarksPool = SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaMarksPool=");
+	// S6 hook (heavy weather; the look bible's S6, the release 2 ocean plan steps 6(b) and 12(b)): the bow sheets under
+	// -TheaterSeaSpray=1, and the hulls' ice under -TheaterSeaIce=1 (the frost set on the stage below). Both off by default:
+	// nothing is drawn. The gale is false here until step 14(c) lands it (the sea gale switch, another thread's, which is not
+	// built and so is read nowhere yet): Beaufort 7 and over, its green seas and spindrift, are the gale's own, and that step
+	// passes its own flag in on this line. The spray's core takes winds to the gale's 24.4 m/s and gates 7 and over behind it
+	// (Battle/FleetSpray, held to it by Tools/sea_waves/spray_test.cpp).
+	FHeavyWeather::Open(Weather, SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaSpray="), false, Seed);
+	const bool bSeaIce = SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaIce=");
 	// (funnel smoke wherever the kit has its own "funnel" kind; with a kit before it, none: the air trail borrowed for it
 	// stood as a fence of streaks behind a ship, the first Mac frames of 21 November. "-TheaterSeaNoFunnels" for none.)
 	bFunnels = SeaParts::HasFunnelSmoke<FBattleEffects>() && !FParse::Param(FCommandLine::Get(), TEXT("TheaterSeaNoFunnels"));
@@ -1670,6 +1678,9 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 	{
 		Effects->SetSun(Stage->TowardSun());
 	}
+	// S6 hook (ship ice): the frost of the battle's place, month and wind set on the stage, which glazes each hull's colours
+	// as LayShip lays her (Battle/ShipIce; -TheaterSeaIce=1 only, so by default the hulls are laid as made).
+	if (bSeaIce) { FHeavyWeather::Ice(Stage, S.Rec.Board, S.Show.WindSpeed(), S.Show.WindFrom(), S.BeginT); } // S6 hook (ship ice)
 
 	// The paint: the wakes and tracks see-through and unlit (M_Highlight, by each point's alpha), the aircraft as the
 	// air battle's.
@@ -2240,6 +2251,8 @@ void ASeaBattle::LayAndSteer()
 		// A boat (ruling 241) drawn as far under as the show has her dived. D1 hook (convoy looks): the submarine scene's
 		// boat states (surfaced, periscope, deep) may give her own heave here.
 		const double Heave = FConvoyLooks::Steer(SubLooks, Root, Stage, Effects.Get(), S.Show, UnitsPerMetre, S.BattleT, bSkipping, bOnWater, Ship); // D1 hook (convoy looks)
+		// S6 hook (heavy weather): her bow's sheet of spray, for the 4 ships nearest the eye (nothing unless -TheaterSeaSpray=1)
+		FHeavyWeather::Ship(Weather, Effects.Get(), S.Show, Ship, UnitsPerMetre, S.BattleT, bSkipping, bOnWater); // S6 hook (bow spray)
 		// U1 hook (under water): the boat in the picture shaken by a burst near her, under the water only
 		Stage->Steer(Ship.Key, At, Face, Ship.Heel + (Under ? Under->Shudder(Ship.Key, S.BattleT) : 0.0), Ship.Pitch, Heave);
 		// (an enemy boat the player has not found: steered in her place, so that found she is where she should be, but not
@@ -6232,6 +6245,7 @@ void ASeaBattle::SayThreadsAndLook() const
 	// every switch of the release 2 sea in force; and any asked for before its step has landed, which changes nothing)
 	const FString Look(UTF8_TO_TCHAR(SeaLookSwitches::Line(SeaLook).c_str()));
 	UE_LOG(LogTheater, Display, TEXT("%s"), *Look);
+	FHeavyWeather::Say(Weather); // S6 hook (bow spray): its sheets and the most puffs alive, once a battle
 	if (bMarksPool) // (the release 2 ocean plan, step 1(a): DrawMarks' meshes, what each was sent, once a battle)
 	{
 		const FString Pools(UTF8_TO_TCHAR(SeaMarksPool::Line(FoamShape, MarksShape).c_str()));
