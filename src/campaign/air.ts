@@ -607,7 +607,11 @@ export function legKm(g: Game, f: AirFleet, from: number, to: number): number {
  *   chart either is on; seaKm from a sea, a carrier wing at sea being anywhere in its sea (a field on its shore at no
  *   distance, not the sea's centre: North Atlantic against the Highlands read 444.0 km, kmTo 0).
  * - From a province, where the nearest point of the leg is one of its ends, the distance is km() to that end (Moscow
- *   against the leg Kirov to Yaroslavl read 248.763 km on the globe where km() reads 259.688 on the map).
+ *   against the leg Kirov to Yaroslavl read 248.763 km on the globe where km() reads 259.688 on the map), or to the
+ *   leg's other field where km() reads that one nearer: on the far chart the end nearest on the chart need not be the
+ *   nearer by km() (Singapore against Kuantan to Kuala Lumpur read 309.355 km, km() to Kuala Lumpur, where km() to
+ *   Kuantan is 289.260; the check of the third round). On the old chart the end nearest on the chart is always the
+ *   nearer by km(), so nothing moves there.
  * - A point inside the leg is measured by the leg's own ruler (the globe's where an end of the leg or the place is of
  *   the far side, else the map's straight line; from a sea, from the sea's centre), capped at the rules' distance to
  *   each end: a leg never reads farther than either of its own fields (Manila against Formosa to Hong Kong read 904.052
@@ -625,10 +629,9 @@ export function legKmAt(g: Game, p: { x: number; y: number; region: number; sea:
   const dx = bx - A.x, dy = B.y - A.y, L = dx * dx + dy * dy;
   const t = L > 0 ? clamp(((px - A.x) * dx + (p.y - A.y) * dy) / L, 0, 1) : 0;
   const atEnd = t <= 0 || t >= 1;
-  if (atEnd && p.region >= 0) return chartDist(g, g.regions[p.region], t <= 0 ? A : B) * AIR.kmPerUnit;
-  // The rules' own distance to each field of the leg (kmTo's; seaKm takes the field, then the sea).
+  // The rules' own distance to each field of the leg (kmTo's; seaKm takes the field, then the sea), the nearer of the two.
   const ends = p.region >= 0 ? Math.min(km(g, p.region, from), km(g, p.region, to)) : p.sea >= 0 ? Math.min(seaKm(g, from, p.sea), seaKm(g, to, p.sea)) : Infinity;
-  if (atEnd && p.sea >= 0) return ends;
+  if (atEnd && (p.region >= 0 || p.sea >= 0)) return ends;
   const qx = A.x + t * dx, qy = A.y + t * dy;
   const d = globeLeg(g, A, B, p.region, p.sea) ? globeDist(g, px, p.y, qx, qy) * AIR.kmPerUnit : Math.hypot(px - qx, p.y - qy) * AIR.kmPerUnit;
   // From a sea, a point inside the leg keeps the sea centre's ruler, capped at seaKm to each end: the smallest change

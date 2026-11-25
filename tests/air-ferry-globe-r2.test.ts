@@ -197,6 +197,19 @@ describe('a leg never reads one of its ends differently from km()', () => {
     expect(r.leg).toBe(km(g, r.E.id, r.A.id));
   });
 
+  it('Singapore against Kuantan to Kuala Lumpur: the end nearest on the chart read 309.355 km where km() to the other field is 289.260; now the nearer field', () => {
+    const g = world();
+    for (const [x, y] of [['Kuantan', 'Kuala Lumpur'], ['Kuala Lumpur', 'Kuantan']]) {
+      const r = read(g, 'Singapore', x, y);
+      // The nearest point on the chart is the Kuala Lumpur end; km() reads Kuantan nearer (the far side's globe).
+      expect(r.t <= 0 || r.t >= 1).toBe(true);
+      const kl = km(g, r.E.id, at(g, 'Kuala Lumpur').id), ku = km(g, r.E.id, at(g, 'Kuantan').id);
+      expect(kl).toBeCloseTo(309.355, 3);
+      expect(ku).toBeCloseTo(289.260, 3);
+      expect(r.leg).toBe(ku);
+    }
+  });
+
   it('a place in a province of the old chart, against a leg of the old chart, reads as before: the cap never binds', () => {
     const g = world();
     // The old chart's provinces: those km() reads on the map's straight line (wrap.ts globeFor).
