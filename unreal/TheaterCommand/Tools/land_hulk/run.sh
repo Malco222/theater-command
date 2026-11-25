@@ -15,7 +15,7 @@ OUT="${LAND_HULK_OUT:-${TMPDIR:-/tmp}/land_hulk}"
 mkdir -p "$OUT/obj"
 STRICT="-std=c++20 -O2 -Wall -Wextra -Wshadow -Wconversion -Wno-sign-conversion -Werror -I$SRC"
 CORE_FLAGS="-std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I$SRC"
-CORES="LandJson LandFeed LandPlay LandSight LandCrater LandKit Fates LandField LandHouse LandSteppe LandScape LandDesert LandMed LandTropic LandFarm LandSnow LandDry LandAsia LandAmerica LandPlain"
+CORES="LandJson LandFeed LandPlay LandSight LandCrater LandKit Fates LandField LandHouse LandSteppe LandScape LandDesert LandMed LandTropic LandFarm LandSnow LandDry LandAsia LandAmerica LandPlain LandCity"
 build() {
   local CXX="$1" TAG="$2" EXTRA="$3"
   local OBJS=()
