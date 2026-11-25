@@ -27,7 +27,6 @@ export interface TeamSpec { label: string; divs: number; cost: number; months: n
 export const TEAMS = (arsenalData as unknown as {
   teams: Record<TeamKind, TeamSpec> & {
     card: { mg: { perDiv: number; most: number }; mor: { perDiv: number; most: number } };
-    ai: { per: number; most: number; fit: number };
     frontage: number;
   };
 }).teams;

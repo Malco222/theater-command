@@ -6,11 +6,10 @@
   },
   "needs": { "inf": 0, "mtn": 0, "cav": 0, "eng": 0, "mot": 1, "art": 1, "arm": 2 },
   "teams": {
-    "_about": "Release 2 (Brian, 21 Nov 03:57Z): support teams built apart from the infantry, off unless the game's 'teams' flag is set (src/campaign/teams.ts). One division's worth each. card: what each division of them is worth on the attack card (perDiv, at most 'most'): mg, a defence stiffened against men on foot; mor, the share of the defence's fieldworks the attack's mortars break up. ai: one team for every 'per' line corps, at most 'most', with 'fit' of the line at strength. frontage: how many ride into one attack without taking room on the roads. First figures, for the design director to rule.",
+    "_about": "Release 2 (Brian, 21 Nov 03:57Z): support teams built apart from the infantry, off unless the game's 'teams' flag is set (src/campaign/teams.ts). One division's worth each. card: what each division of them is worth on the attack card (perDiv, at most 'most'): mg, a defence stiffened against men on foot; mor, the share of the defence's fieldworks the attack's mortars break up. A computer staff orders one only where it buys more on the card for its price than the corps or refit the same money would (the design director's 19:48Z of 25 November 2026; src/campaign/orderworth.ts). frontage: how many ride into one attack without taking room on the roads. First figures, for the design director to rule.",
     "mg": { "label": "Machine-gun brigade", "name": "Machine-Gun Brigade", "divs": 1, "cost": 16, "months": 3, "blurb": "Heavy machine guns on tripods. Fires from behind the line and stiffens a defence against men on foot, most from fieldworks. Cannot take ground on its own: it goes in beside infantry or tanks, and is lost if caught alone." },
     "mor": { "label": "Mortar brigade", "name": "Mortar Brigade", "divs": 1, "cost": 18, "months": 3, "blurb": "Heavy mortars. Lobs its bombs from behind the line and breaks up the fieldworks an attack goes in against. Cannot take ground on its own: it goes in beside infantry or tanks, and is lost if caught alone." },
     "card": { "mg": { "perDiv": 0.04, "most": 0.1 }, "mor": { "perDiv": 0.05, "most": 0.15 } },
-    "ai": { "per": 5, "most": 6, "fit": 0.9 },
     "frontage": 2
   },
   "air": {
