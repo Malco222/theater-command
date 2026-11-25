@@ -4223,8 +4223,8 @@ export class Drill {
         else if (due && e) {
           g.due = undefined; w.burnt++; w.ammo--;
           if (roll(this.seed, u.id, g.n, w.burnt, 295) < M.p) {
-            const a = M.wait[0] + (M.wait[1] - M.wait[0]) * roll(this.seed, u.id, g.n, w.burnt, 301);
-            w.mis = [t + a, t + a + M.clear[0] + (M.clear[1] - M.clear[0]) * roll(this.seed, u.id, g.n, w.burnt, 302)];
+            const a = M.wait[0] + (M.wait[1] - M.wait[0]) * roll(this.seed, u.id, g.n, w.burnt, 441);
+            w.mis = [t + a, t + a + M.clear[0] + (M.clear[1] - M.clear[0]) * roll(this.seed, u.id, g.n, w.burnt, 442)];
             g.pose = 'hide';
           } else {
             g.shot = t; g.pose = 'fire';
@@ -4267,7 +4267,7 @@ export class Drill {
       at: still ? [g.x, g.y] : undefined, slot: still ? toWorld(u, u.face, a, l) : undefined, set: still ? t : Infinity,
       per: lerp(C.sweep.every, r(260)), ph: r(261), on: false, spell: t + lerp(C.open, r(262)), hot: 0, limit: lerp(B, r(263)),
       from: t, stay: lerp(C.move.after, r(264)), most: lerp(C.move.most, r(265)), moves: 0,
-      ammo: lerp(g.role === 'hmg' ? C.supply.mg.start : C.supply.mortar.start, r(266)), burnt: 0, jamAt: lerp(C.jam.every, r(303)),
+      ammo: lerp(g.role === 'hmg' ? C.supply.mg.start : C.supply.mortar.start, r(266)), burnt: 0, jamAt: lerp(C.jam.every, r(443)),
     };
   }
 
@@ -4329,7 +4329,7 @@ export class Drill {
     // (a bomb only once the tube is laid on its band)
     if (!draw || Math.abs(wrap(bearing(g.x, g.y, mid[0], mid[1]) - g.face)) > DR.teamwork.sweep.arc) return { mid };
     for (let k = 0; k < 4; k++) {
-      let [x, y] = at(lo + (hi - lo) * roll(this.seed, u.id, g.n, b.t * 10, k, 305), (roll(this.seed, u.id, g.n, b.t * 10, k, 306) - 0.5) * 2 * half);
+      let [x, y] = at(lo + (hi - lo) * roll(this.seed, u.id, g.n, b.t * 10, k, 445), (roll(this.seed, u.id, g.n, b.t * 10, k, 446) - 0.5) * 2 * half);
       // (no further from the enemy's box than its reach, wherever along its front)
       const [nx, ny] = nearIn(e, x, y), dn = Math.hypot(x - nx, y - ny);
       if (dn > F.reach) { x = nx + ((x - nx) * F.reach) / dn; y = ny + ((y - ny) * F.reach) / dn; }
@@ -4411,7 +4411,7 @@ export class Drill {
     if (own) {
       // (its share of a strip along the enemy's near edge, across the way it comes on, never within 10 m of the own line)
       const vx = own.x - e.x, vy = own.y - e.y, vl = Math.hypot(vx, vy) || 1, ux = vx / vl, uy = vy / vl;
-      const lead = e.d / 2 + Math.min(DR.teamwork.fpl.short * roll(this.seed, u.id, g.n, Math.floor(cyc * 2), 304), Math.max(0, b.gap(own, e) - 10));
+      const lead = e.d / 2 + Math.min(DR.teamwork.fpl.short * roll(this.seed, u.id, g.n, Math.floor(cyc * 2), 444), Math.max(0, b.gap(own, e) - 10));
       const cx = e.x + ux * lead, cy = e.y + uy * lead;
       // (across the way it comes on, with the same hand as right(f0) above: the shares still cross)
       ax = cx - uy * (mid + half * tri); ay = cy + ux * (mid + half * tri);
@@ -4612,7 +4612,7 @@ export class Drill {
     // filling up; bringing it, he kneels at the gun just behind its number two)
     const fetch = !!run && (run.stage === 'fetch' || run.stage === 'load');
     // (the dump: marked on the ground as the run is sent, out on the feed side of the bearers' rows, behind the gun)
-    if (run && fetch && !run.dump) run.dump = this.leash(sq, toWorld(L, face, feed * S.lane, -(S.dump[0] + (S.dump[1] - S.dump[0]) * roll(this.seed, u.id, L.n, w.moves, 307))), -4);
+    if (run && fetch && !run.dump) run.dump = this.leash(sq, toWorld(L, face, feed * S.lane, -(S.dump[0] + (S.dump[1] - S.dump[0]) * roll(this.seed, u.id, L.n, w.moves, 447))), -4);
     const o: [number, number] = run && run.stage !== 'back' ? [two[0] + (mg ? feed : 1) * 0.8, two[1] - 0.9] : own;
     // (the number two by the gun's mount once it is set up; till then at his post as it will lie)
     const hand = !!run && (run.stage === 'up' || run.stage === 'at'), seated = m.cj === 'two' && !run && w.set <= t;
@@ -4635,7 +4635,7 @@ export class Drill {
     if (run) {
       if (run.stage === 'fetch') {
         if (d > 0.6) { m.pose = under ? 'creep' : 'run'; m.v = under ? 2.5 : 4.5; m.lay = undefined; return true; }
-        run.stage = 'load'; run.t1 = t + S.load[0] + (S.load[1] - S.load[0]) * roll(this.seed, u.id, m.n, Math.floor(t), 308);
+        run.stage = 'load'; run.t1 = t + S.load[0] + (S.load[1] - S.load[0]) * roll(this.seed, u.id, m.n, Math.floor(t), 448);
       }
       if (run.stage === 'load') {
         m.v = 0; m.pose = 'wait'; m.lay = face + Math.PI;
