@@ -38,7 +38,7 @@ import grand from '../data/campaign/grand.json';
 import open from '../data/campaign/open.json';
 import setup from '../data/campaign/setup-1939.json';
 
-const DEC_41 = 28, JAN_42 = 29, SEP_42 = 37, JUN_43 = 46;
+const DEC_41 = 28, JAN_42 = 29, MAR_43 = 43, JUN_43 = 46;
 /** A grand campaign on the wider world as it opens. */
 const wide = (seed = 1, human: string | null = null): Game => startOpen(createGame(seed, human));
 const field = (g: Game, nat: string): Corps[] => g.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng');
@@ -58,7 +58,7 @@ const guard: number[] = [];
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, warned: e.warned, island: e.to.nb.length === 0, wave: e.wave }); };
   while (g.turn < JUN_43) {
     runTurnAI(g);
-    if ([DEC_41, JAN_42, SEP_42, JUN_43].includes(g.turn)) war[g.turn] = saveGame(g);
+    if ([DEC_41, JAN_42, MAR_43, JUN_43].includes(g.turn)) war[g.turn] = saveGame(g);
     if (g.turn > JAN_42) guard.push(atHome(g, 'USA').length);
   }
   landingWatch.tell = null;
@@ -237,7 +237,7 @@ describe('the army sent across the ocean', () => {
   it('ships nobody over a crossing too dangerous for its staff', () => {
     const O = WORLD.overseas.USA;
     const sail = (risk: number): Region[] => {
-      // September 1942: a month in this war with danger on the way to the harbour where the army is built up, and no more
+      // March 1943: a month in this war with danger on the way to the harbour where the army is built up, and no more
       // than the staff will bear. (Since ruling 233 riders b598, b601 and b603 the Bordeaux flotilla hunts the Western
       // Approaches and not the Iberian Coast, so in October 1942 the way to Gibraltar, that month's harbour, carries no
       // danger. Seed 5's war scanned month by month from turn 26 to 46: danger at turns 28 to 33, on the way to
@@ -248,8 +248,11 @@ describe('the army sent across the ocean', () => {
       // computer's air forces fight back (airwar.json ai.back): scanned again, from 28 to 39 and at 46 the harbour is
       // Gibraltar, with none on the way, and from 40 to 45 it is Cornwall, with danger under the staff's bar. September
       // 1942 since 1.5.1's start guns moved the war: scanned again, from 29 to 34 and 40 to 45 the harbour is Gibraltar,
-      // with none on the way, at 28 and from 35 to 39 it is Cornwall, with danger under the staff's bar, and at 46 Sardinia.)
-      const g = at(SEP_42);
+      // with none on the way, at 28 and from 35 to 39 it is Cornwall, with danger under the staff's bar, and at 46 Sardinia.
+      // March 1943 since 1.5.2's small air arms (an arm too small to hold any sky fights over its army) moved the war:
+      // scanned again, from 28 to 33 and from 40 to 46 the harbour is Cornwall, with danger under the staff's bar, and
+      // from 34 to 39 it is Gibraltar, with none on the way; turn 43 stands in the middle of the later run.)
+      const g = at(MAR_43);
       const before = new Set(across(g, 'USA').map((c) => c.id));
       // A month's sailing banked and a fit corps on the quay.
       const run = oceanRuns(g, 'USA')[0];
