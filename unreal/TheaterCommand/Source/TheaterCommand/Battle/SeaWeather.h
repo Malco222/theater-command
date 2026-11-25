@@ -23,7 +23,8 @@ class UTheaterStillMesh;
  * What it lays, when the day gives a sky (or the stand-in switch is on) and the switches ask for it:
  * - one sky dome, a still mesh of 48 by 12 quads at 150 km on M_SkyDome, showing the picture SeaSky::PaintDome paints of
  *   the laid clouds as the shot's own eye sees them. The picture is repainted at each cut on a pool thread and handed to
- *   the chip in the settling ticks before a frame is kept; until a repaint lands, the last picture stays. The material
+ *   the chip as soon as it lands (in a picture run, waited for in the settling ticks before a frame is kept; in play
+ *   never waited for); until a repaint lands, the last picture stays. The material
  *   reads it by the camera's own way (u the bearing, v one less the height's sine), drifting slowly downwind;
  * - under a deck, the deck carried on to the horizon as one far sheet, and a haze band over the sea's far edge, as the
  *   air battle lays them (AAirBattle::LayDeckSheet and LayHazeBand), on the same M_Highlight;
@@ -56,6 +57,9 @@ public:
 		/** A night action: no clouds are drawn (the night dome has the stars, and a cloud dome by moonlight is the rain
 		 * thread's and the night sky's business, not this one's). */
 		bool bNight = false;
+		/** A picture run (-TheaterSeaBattleShots=): a dome painted at a cut is waited for before the frame is kept. In
+		 * play it never is: the last picture stays until the new one lands, so a cut never stalls the game thread. */
+		bool bPictures = false;
 	};
 
 	FSeaWeather() = default;
@@ -128,6 +132,7 @@ private:
 	TArray<FColor> Pixels;
 	TFuture<void> Job;
 	bool bWaiting = false;
+	bool bCutLater = false; // (a cut that came while a paint was under way: painted for as soon as that one lands)
 	int32 SinceAsked = 0;
 	double AskedAt = -1e9, PaintedAt = 0.0;
 	FVector AskedEye = FVector::ZeroVector;

@@ -1805,6 +1805,7 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 		WeatherRoom.UnitsPerMetre = UnitsPerMetre;
 		// (a night action: light{sun} under the horizon, as the convoy nights give it)
 		WeatherRoom.bNight = S.Rec.Board.bLight && S.Rec.Board.SunUp < 0.0;
+		WeatherRoom.bPictures = !ShotFolder.IsEmpty();
 		const SeaShow::Vec Blow = S.Show.Wind();
 		Weather->Begin(WeatherRoom, SeaLook, Text, Seed, Middle, Middle, FVector2D(Blow.X, Blow.Y));
 	}

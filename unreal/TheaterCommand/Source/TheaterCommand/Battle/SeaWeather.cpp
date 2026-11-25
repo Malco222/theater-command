@@ -286,8 +286,10 @@ void FSeaWeather::TakePaint()
 	}
 	if (!Job.IsReady())
 	{
-		// (a paint asked at a cut is given its ticks and then waited for, so the frame that is kept has the right sky)
-		if (SinceAsked < SeaWeatherParts::PaintTicks)
+		// (in a picture run, a paint asked at a cut is given its ticks and then waited for, so the frame that is kept has
+		// the right sky; in play it is never waited for: a full dome is some tenths of a second on one core, and a stall
+		// at every cut would cost more than a sky a few frames late)
+		if (!Room.bPictures || SinceAsked < SeaWeatherParts::PaintTicks)
 		{
 			++SinceAsked;
 			return;
@@ -733,8 +735,10 @@ void FSeaWeather::Tick(const FVector& EyeWorld, bool bCut, double BattleSeconds)
 			FLinearColor(static_cast<float>((Now.Y - Was.Y) * U), static_cast<float>((Now.X - Was.X) * U), 0.0f, 0.0f));
 	}
 	const bool bMoved = FVector(EyeWorld - AskedEye).Size() > SeaWeatherParts::PaintMoved * Room.UnitsPerMetre;
-	if (!bWaiting && (bCut || bMoved || BattleSeconds - AskedAt > SeaWeatherParts::PaintEvery))
+	bCutLater = bCutLater || bCut;
+	if (!bWaiting && (bCutLater || bMoved || BattleSeconds - AskedAt > SeaWeatherParts::PaintEvery))
 	{
+		bCutLater = false;
 		AskPaint(EyeWorld, BattleSeconds);
 	}
 	DeckSheetAt(EyeWorld);
