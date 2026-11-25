@@ -4287,12 +4287,16 @@ void ALandBattle::MakeArmour()
 	// and its hue held inside an earth box, so grass never greens a hull. Off: none, as before. Look/WholeLook.h)
 	if (WholeLook::WornOn())
 	{
-		const FLinearColor Dust = WholeLook::FieldDust(FieldMeanPaint(*FieldPtr, S.Rec.Ground));
+		// (on snow the field's mean is the snow's own: packed snow in the running gear keeps its white, not the earth box's
+		// cream, as much as snow lies; the ground thread's read, 25 Nov 12:47Z)
+		const FLinearColor Mean = FieldMeanPaint(*FieldPtr, S.Rec.Ground);
+		const float Snowed = static_cast<float>(FMath::Clamp(FieldPtr->SnowLying(), 0.0, 1.0));
+		const FLinearColor Dust = FMath::Lerp(WholeLook::FieldDust(Mean), FLinearColor(Mean.R, Mean.G, Mean.B, 1.0f), Snowed);
 		Armour->FieldDust[0] = Dust.R;
 		Armour->FieldDust[1] = Dust.G;
 		Armour->FieldDust[2] = Dust.B;
-		UE_LOG(LogTheater, Display, TEXT("Whole look: worn ON: the vehicles' lower third takes the field's own ground, %.3f, %.3f, %.3f (linear), some 44 in 100 of it"),
-			Dust.R, Dust.G, Dust.B);
+		UE_LOG(LogTheater, Display, TEXT("Whole look: worn ON: the vehicles' lower third takes the field's own ground, %.3f, %.3f, %.3f (linear), some 44 in 100 of it (the snow lying %.2f)"),
+			Dust.R, Dust.G, Dust.B, Snowed);
 	}
 	std::string Error;
 	{

@@ -2836,10 +2836,12 @@ namespace LandKit
 				const Lin Old = !bCaptured ? C : PaintK == Upper2 ? OldCoat[1] : PaintK == Shade ? OldCoat[2] : OldCoat[0];
 				// (release 2, the whole picture's worn paint, tc.Look.Worn: the field's own ground over her dust, a third layer
 				// (the ground thread, 25 Nov 05:48Z): thickest at the ground and patchy, half as thick by the top of her lower
-				// third and gone a quarter of it above, so it leaves no line; her tracks, tyres and the steel of her running
-				// gear carry some all over. Some 44 in 100 of the field's colour over her lower third, inside the art
-				// director's 30 to 50. Nothing without Dress::FieldDust; her creases' shade goes over it, and her national
-				// marks take it as they take her dust)
+				// third and gone a quarter of it above, so it leaves no line; her tracks carry some all over. Some 44 in 100
+				// of the field's colour over her lower third, inside the art director's 30 to 50. Her tyres take half as much
+				// and no more higher up, so a road wheel's rubber stays dark (the art director's Type 97 rims, L 35 to 55;
+				// the ground thread's read, 25 Nov 12:47Z). Over her exhaust soot and her file's dust and haze, under her
+				// creases' shade, the same order with or without a file's dust. Nothing without Dress::FieldDust; her
+				// national marks take it as they take her dust)
 				auto OwnGround = [&](const Lin& Cv)
 				{
 					if (!bFieldDust || !(bCoat || PaintK == Tread || PaintK == Rubber || PaintK == Steel))
@@ -2847,12 +2849,13 @@ namespace LandKit
 						return Cv;
 					}
 					double Ramp = 1.0 - 0.5 * Smooth(0.5 * LowerThird, LowerThird, At.Z) - 0.5 * Smooth(LowerThird, 1.25 * LowerThird, At.Z);
-					if (PaintK == Tread || PaintK == Rubber)
+					if (PaintK == Tread)
 					{
 						Ramp = std::max(Ramp, 0.7);
 					}
 					const double Patch = 0.7 + 0.6 * Noise(Here * 2.0, Seed + 41);
-					return Mix(Cv, FieldDust, std::min(0.6, 0.5 * Ramp * Patch));
+					const double Share = PaintK == Rubber ? 0.25 : 0.5;
+					return Mix(Cv, FieldDust, std::min(0.6, Share * Ramp * Patch));
 				};
 				// (everything done to her paint from here: worn edges, dust, soot, her creases' shade; a scale and an addition
 				// to the paint, which the national marks read to take on her own dirt, Dress::bMarks)
@@ -2891,14 +2894,15 @@ namespace LandKit
 						const double Low = Clamp(1.0 - At.Z / 1.0, 0.0, 1.0);
 						Cv = Mix(Cv, Dust, 0.42 * Low * Low * (0.6 + 0.8 * Noise(Here * 3.0, Seed + 5)));
 					}
-					if (!bFileDust)
-					{
-						Cv = OwnGround(Cv);
-					}
 					// Exhaust soot as the file lays it.
 					if (Raw.SootIn[K] > 4)
 					{
 						Cv = Mix(Cv, Paint[static_cast<size_t>(Black)], 0.72 * std::min(Raw.SootIn[K], 100) / 100.0);
+					}
+					// (the field's own ground over the soot as over the file's dust below: the same order either way)
+					if (!bFileDust)
+					{
+						Cv = OwnGround(Cv);
 					}
 					if (bFileDust)
 					{
