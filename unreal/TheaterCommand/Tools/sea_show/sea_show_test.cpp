@@ -36,6 +36,9 @@ namespace
 		bool bOk;
 		std::string Got;
 		const char* Want;
+		/** What a check a night may be known to fail reads, against the most its entry in the known failures allows (below
+		 * 0: none, and a failure is never known). */
+		double Measure = -1.0;
 	};
 
 	std::string Num(double V, int Places = 1)
@@ -140,6 +143,11 @@ namespace
 	/** What one play of a recording saw. */
 	struct Played
 	{
+		// (the ships the show sent down, each Sink; the slicks it drew, by the ship that laid each: one for each ship sent
+		// down, more only for one given up, abandoned or struck still settling, or held afloat a prize, at the end)
+		std::set<int> Sank;
+		int SlicksDrawn = 0, SlicksForSunk = 0, SlicksSettling = 0, SlicksOdd = 0;
+		std::string SlickOddAt;
 		std::map<std::string, int> Fx;
 		std::map<std::string, int> Sounds;
 		double WorstFrameMs = 0.0, TotalMs = 0.0;
@@ -163,6 +171,18 @@ namespace
 		int BoatOdd = 0;                                // boat-frames with no state or a keel above the sea
 		int BoatSwings = 0;                             // a boat's angle swinging 4 degrees one way or the other (a dive is two: down, level)
 		std::map<int, std::pair<double, int>> BoatSwing; // by boat: the last extreme of her angle, which way it is going (+1, -1, 0)
+		std::map<int, int> SwingsOf, PieceOf;            // by boat: her swings, and her piece
+		// (her angle from one of the show's steps to the next: the most it moved in one, where, and each boat's last angle and
+		// when; a steady depth told passed, the most, where, and the way the battle's depth last went, by piece: +1 down)
+		double MostAngleStep = 0.0, MostPass = 0.0;
+		std::string AngleStepAt, PassAt;
+		std::map<int, std::pair<double, double>> LastAngle;
+		// (a boat attacked where the battle has her: at each depth charge thrown at her, and each hit booked on her, whose drop
+		// the battle laid within its lethal reach of her own place, how far the show draws her from that place, the most and
+		// where; and how many were judged)
+		int AttacksJudged = 0;
+		double MostAttackOff = 0.0;
+		std::string AttackOffAt;
 		int ChargesOffBoat = 0;                         // depth charges booked on a boat that burst out of her reach
 		int ChargesListedOdd = 0, MostChargesListed = 0; // U1 (the view under the water): ChargesDown's list, charges burst or above the sea
 		// A boat's deck gun and a merchant's gun (the convoy battle's "gun"): the rounds each class fired; those no view the
@@ -525,6 +545,88 @@ namespace
 		for (const SeaFeed::Frame& Told : Rec.Views)
 			for (const SeaShow::Event& Hit : Told.Events)
 				if (Hit.What == "sea:gunHit" && Hit.From >= 0 && Hit.Unit >= 0) HitsBy[Hit.From].push_back({ Hit.T, Hit.Unit });
+		// (a boat attacked where the battle has her, the review of 24 November, the second: each sea:depthCharge thrown at her
+		// whose drop the battle laid within its lethal reach of her own place, and each sea:depthChargeHit booked on her of
+		// such a drop of that escort's; when, her piece, and the battle's place for her then, between its views)
+		struct AtBoat
+		{
+			double T = 0.0;
+			int Piece = -1;
+			double X = 0.0, Y = 0.0;
+			std::string What;
+		};
+		std::vector<AtBoat> Attacks;
+		{
+			auto PlaceAt = [&Rec](int Id, double When, double& OutX, double& OutY)
+			{
+				const SeaShow::Piece* A = nullptr;
+				const SeaShow::Piece* B = nullptr;
+				double TA = 0.0, TB = 0.0;
+				for (const SeaFeed::Frame& V : Rec.Views)
+				{
+					const SeaShow::Piece* Here = nullptr;
+					for (const SeaShow::Piece& Q : V.Pieces)
+						if (Q.Id == Id) Here = &Q;
+					if (!Here) continue;
+					if (V.Head.T <= When + 1e-9) { A = Here; TA = V.Head.T; }
+					else { B = Here; TB = V.Head.T; break; }
+				}
+				if (!A) return false;
+				const double Fr = B && TB > TA ? std::clamp((When - TA) / (TB - TA), 0.0, 1.0) : 0.0;
+				OutX = A->X + ((B ? B->X : A->X) - A->X) * Fr;
+				OutY = A->Y + ((B ? B->Y : A->Y) - A->Y) * Fr;
+				return true;
+			};
+			std::map<std::pair<int, int>, bool> DropAtHer; // (by escort and boat: her last drop on her lay within its reach of her)
+			for (const SeaFeed::Frame& V : Rec.Views)
+			{
+				for (const SeaShow::Event& E : V.Events)
+				{
+					AtBoat A;
+					A.T = E.T;
+					if (E.What == "sea:depthCharge" && E.On >= 0 && E.bAt)
+					{
+						double X = 0.0, Y = 0.0;
+						const bool bAtHer = PlaceAt(E.On, E.T, X, Y) && std::hypot(E.X - X, E.Y - Y) <= Rec.Board.ChargeLethal;
+						DropAtHer[{ E.Unit, E.On }] = bAtHer;
+						if (!bAtHer) continue;
+						A.Piece = E.On;
+						A.X = X;
+						A.Y = Y;
+						A.What = E.Kind == "ahead" ? "ahead" : "pattern";
+						Attacks.push_back(A);
+					}
+					else if (E.What == "sea:depthChargeHit" && E.Unit >= 0)
+					{
+						const auto Drop = DropAtHer.find({ E.From, E.Unit });
+						if (Drop == DropAtHer.end() || !Drop->second || !PlaceAt(E.Unit, E.T, A.X, A.Y)) continue;
+						A.Piece = E.Unit;
+						A.What = "hit";
+						Attacks.push_back(A);
+					}
+				}
+			}
+			std::sort(Attacks.begin(), Attacks.end(), [](const AtBoat& L, const AtBoat& R) { return L.T < R.T; });
+		}
+		size_t NextAttack = 0;
+		// (each boat's keel as each view tells it, by piece, and the way it last went by then: +1 down, -1 up)
+		std::vector<std::map<int, double>> KeelAt(Rec.Views.size());
+		std::vector<std::map<int, int>> KeelWay(Rec.Views.size());
+		{
+			std::map<int, int> Way;
+			for (size_t I = 0; I < Rec.Views.size(); ++I)
+			{
+				for (const SeaShow::Piece& Q : Rec.Views[I].Pieces)
+				{
+					if (Q.Keel < 0.0) continue;
+					KeelAt[I][Q.Id] = Q.Keel;
+					if (I == 0) continue;
+					const auto Was = KeelAt[I - 1].find(Q.Id);
+					if (Was != KeelAt[I - 1].end() && std::fabs(Q.Keel - Was->second) > 1e-9) Way[Q.Id] = Q.Keel > Was->second ? 1 : -1;
+				}
+				KeelWay[I] = Way;
+			}
+		}
 		while (true)
 		{
 			const auto F0 = std::chrono::steady_clock::now();
@@ -585,6 +687,7 @@ namespace
 				if (E.Kind == SeaShow::FxKind::Sink && Out.StruckAt.count(E.Key) && !Out.SentDownAt.count(E.Key)) Out.SentDownAt[E.Key] = Show.Shown();
 				if (E.Kind == SeaShow::FxKind::Sink)
 				{
+					Out.Sank.insert(E.Key);
 					// (as the scene tells the stage: her way, and her end by the stern where she struck and was scuttled)
 					const SeaShow::ShipOut* Sent = Show.Ship(E.Key);
 					Out.SinkEnd[E.Key] = E.What + "/" + (Sent ? SeaShow::StageEndOf(E.What, Sent->Struck, Sent->Lowered) : std::string("?"));
@@ -855,7 +958,7 @@ namespace
 				auto Was = Last.find(S.Key);
 				if (Was != Last.end() && Out.Frames > 1)
 				{
-					const double Allowed = (std::max(S.Speed, LastSpeed[S.Key]) * 1.2 + 1.0) * Dt + 0.05;
+					const double Allowed = (std::max(std::fabs(S.Speed), std::fabs(LastSpeed[S.Key])) * 1.2 + 1.0) * Dt + 0.05; // (her way ahead or astern)
 					Out.MostPop = std::max(Out.MostPop, Flat(S.At - Was->second) - Allowed);
 				}
 				Last[S.Key] = S.At;
@@ -866,18 +969,39 @@ namespace
 				{
 					Out.MostBoatAngle = std::max(Out.MostBoatAngle, std::fabs(S.Pitch));
 					{
-						// (her angle followed: a swing counted each time it turns back by 4 degrees from its last extreme)
+						// (her angle diving or surfacing followed, her pitch less the sea's (whose ride has its own check, the ships
+						// riding the sea: in a Beaufort 6 a stopped boat pitches 4 degrees each way by herself): a swing counted each
+						// time it turns back by 4 degrees from its last extreme)
+						const double Angle = S.DiveAngle;
+						Out.PieceOf[S.Key] = S.Piece;
 						auto Swing = Out.BoatSwing.find(S.Key);
-						if (Swing == Out.BoatSwing.end()) Out.BoatSwing[S.Key] = { S.Pitch, 0 };
+						if (Swing == Out.BoatSwing.end()) Out.BoatSwing[S.Key] = { Angle, 0 };
 						else
 						{
 							double& Ext = Swing->second.first;
 							int& Way = Swing->second.second;
-							if ((Way >= 0 && S.Pitch > Ext) || (Way < 0 && S.Pitch < Ext)) { if (Way != 0) Ext = S.Pitch; }
-							if (Way == 0 && std::fabs(S.Pitch - Ext) > 4.0) { Way = S.Pitch > Ext ? 1 : -1; Ext = S.Pitch; ++Out.BoatSwings; }
-							else if (Way > 0 && Ext - S.Pitch > 4.0) { Way = -1; Ext = S.Pitch; ++Out.BoatSwings; }
-							else if (Way < 0 && S.Pitch - Ext > 4.0) { Way = 1; Ext = S.Pitch; ++Out.BoatSwings; }
+							const int SwungBefore = Out.BoatSwings;
+							if ((Way >= 0 && Angle > Ext) || (Way < 0 && Angle < Ext)) { if (Way != 0) Ext = Angle; }
+							if (Way == 0 && std::fabs(Angle - Ext) > 4.0) { Way = Angle > Ext ? 1 : -1; Ext = Angle; ++Out.BoatSwings; }
+							else if (Way > 0 && Ext - Angle > 4.0) { Way = -1; Ext = Angle; ++Out.BoatSwings; }
+							else if (Way < 0 && Angle - Ext > 4.0) { Way = 1; Ext = Angle; ++Out.BoatSwings; }
+							Out.SwingsOf[S.Key] += Out.BoatSwings - SwungBefore;
 						}
+						// (and from one of the show's steps to the next, a twentieth of a second: a swing counts a snap level in one
+						// step as one swing at most, so it is held here on its own, at 2 degrees a step)
+						const auto Last1 = Out.LastAngle.find(S.Key);
+						if (Last1 != Out.LastAngle.end())
+						{
+							const double Steps = std::max(1.0, std::ceil((Show.Shown() - Last1->second.second) / 0.05 - 1e-6));
+							const double Step = std::fabs(Angle - Last1->second.first) / Steps;
+							if (Step > Out.MostAngleStep)
+							{
+								Out.MostAngleStep = Step;
+								Out.AngleStepAt = "ship " + std::to_string(S.Key) + " at " + Num(Show.Shown(), 2) + " s, " + Num(Last1->second.first, 1) + " to " + Num(Angle, 1) + " deg, keel " +
+								                  Num(S.Keel, 2) + " m";
+							}
+						}
+						Out.LastAngle[S.Key] = { Angle, Show.Shown() };
 					}
 					Out.MostBoatKeel = std::max(Out.MostBoatKeel, S.Keel);
 					if (S.Keel < 0.0 || (S.Dive != "surfaced" && S.Dive != "periscope" && S.Dive != "deep")) ++Out.BoatOdd;
@@ -1007,7 +1131,7 @@ namespace
 					// (her speed, the fastest of the struck boats, carries him as she rides; he runs at 3 m/s at the most)
 					double Fastest = 0.0;
 					for (const SeaShow::ShipOut& S : Ships)
-						if (Out.StruckAt.count(S.Key)) Fastest = std::max(Fastest, S.Speed);
+						if (Out.StruckAt.count(S.Key)) Fastest = std::max(Fastest, std::fabs(S.Speed));
 					const auto Was = Out.LastHand.find(M.Key);
 					if (Was != Out.LastHand.end() && Was->second.second == Out.Frames - 1)
 					{
@@ -1219,6 +1343,42 @@ namespace
 					}
 				}
 			}
+			// A boat attacked where the battle has her, drawn there: within 30 m of it as the charges go in and as the blow lands
+			// (the battle lays each drop within 5 m of its boat; drawn 120 m and more off it, a pattern burst far from her while a
+			// lone burst struck her, and an ahead ring fell 124 m from its bombs' bursts: the review of 24 November, the second)
+			while (NextAttack < Attacks.size() && Attacks[NextAttack].T <= Show.Shown() + 1e-9)
+			{
+				const AtBoat& A = Attacks[NextAttack++];
+				double Off = -1.0;
+				for (const SeaShow::ShipOut& S : Ships)
+					if (S.Piece == A.Piece && S.Class == "ss" && (Off < 0.0 || std::hypot(S.At.X - A.X, S.At.Y - A.Y) < Off)) Off = std::hypot(S.At.X - A.X, S.At.Y - A.Y);
+				if (Off < 0.0) continue;
+				++Out.AttacksJudged;
+				if (Off > Out.MostAttackOff)
+				{
+					Out.MostAttackOff = Off;
+					Out.AttackOffAt = A.What + " on piece " + std::to_string(A.Piece) + " at " + Num(A.T, 1) + " s";
+				}
+			}
+			// A boat in her line whose depth the battle tells steady now (the view before and the view after alike): never past it
+			// the way it last went, coming down or coming up to it (the review of 24 November, the second: 1.25 m past 68 m).
+			{
+				const size_t After = std::min(Seen + 1, Rec.Views.size() - 1);
+				for (const SeaShow::ShipOut& S : Ships)
+				{
+					if (S.Class != "ss" || S.Doing != SeaShow::Fate::Line) continue;
+					const auto KA = KeelAt[Seen].find(S.Piece), KB = KeelAt[After].find(S.Piece);
+					if (KA == KeelAt[Seen].end() || KB == KeelAt[After].end() || std::fabs(KA->second - KB->second) > 1e-9) continue;
+					const auto Way = KeelWay[Seen].find(S.Piece);
+					if (Way == KeelWay[Seen].end()) continue;
+					const double Pass = Way->second > 0 ? S.Keel - KA->second : KA->second - S.Keel;
+					if (Pass > Out.MostPass)
+					{
+						Out.MostPass = Pass;
+						Out.PassAt = "ship " + std::to_string(S.Key) + " at " + Num(Show.Shown(), 2) + " s, " + Num(S.Keel, 2) + " m against " + Num(KA->second, 2) + " told";
+					}
+				}
+			}
 
 			if (Track && Show.Shown() >= NextSample - 1e-9)
 			{
@@ -1249,6 +1409,32 @@ namespace
 
 		for (const SeaShow::ShipOut& S : Show.Ships())
 			if (S.Doing != SeaShow::Fate::Sinking) Out.EndAt[S.Key] = S.At;
+		// The slicks drawn (Show::Slicks, as the looks have them), counted by the ship that laid each against the ships sent
+		// down: hers for every one, one each, and more only for a ship given up, abandoned or struck that is still settling
+		// or held afloat a prize at the end (her slick laid as she was left). The review of 24 November, the second.
+		{
+			std::map<int, int> SlickBy;
+			for (const SeaShow::SlickOut& Sl : Show.Slicks()) ++SlickBy[Sl.Ship];
+			for (const int Key : Out.Sank)
+			{
+				if (SlickBy.count(Key)) ++Out.SlicksForSunk;
+				else if (Out.SlickOddAt.empty()) Out.SlickOddAt = "ship " + std::to_string(Key) + " went down with none";
+			}
+			for (const auto& Laid : SlickBy)
+			{
+				Out.SlicksDrawn += Laid.second;
+				const SeaShow::ShipOut* Left = Show.Ship(Laid.first);
+				const bool bSettling = Left && (Left->Doing == SeaShow::Fate::Sinking || Left->bPrize || Left->Struck >= 0.0);
+				if (Laid.second == 1 && (Out.Sank.count(Laid.first) || bSettling))
+				{
+					Out.SlicksSettling += Out.Sank.count(Laid.first) ? 0 : 1;
+					continue;
+				}
+				++Out.SlicksOdd;
+				if (Out.SlickOddAt.empty())
+					Out.SlickOddAt = "ship " + std::to_string(Laid.first) + ": " + std::to_string(Laid.second) + (Laid.second == 1 ? " slick, neither gone down nor settling" : " slicks");
+			}
+		}
 		for (const auto& Held : Out.PrizeDown)
 		{
 			const SeaShow::ShipOut* Prize = Show.Ship(Held.first);
@@ -1304,6 +1490,7 @@ int main(int Argc, char** Argv)
 	int Events = 0, Told = 0, LineTurns = 0, Sunk = 0, Burning = 0, TorpSalvos = 0, TorpFull = 0, TorpHits = 0, Strikes = 0, StrikesLanded = 0, Raids = 0;
 	int DiveEvents = 0, ChargeEvents = 0, ChargeHits = 0, Starshells = 0, Rescues = 0, Boats = 0; // a convoy's night (ruling 241)
 	int MenTold = 0, OilTold = 0, AbandonTold = 0; // the naval rules' sailor events (22 November)
+	std::map<int, int> DivesOf;                    // (the dives told of each boat, by piece)
 	bool bGunfire = false;
 	// (a boat's deck gun and a merchant's gun, the convoy battle's: told on some view, their actions told, the hits each piece
 	// was told it took of them, one entry a hit)
@@ -1336,7 +1523,11 @@ int main(int Argc, char** Argv)
 			else if (E.What == "sea:strike" && E.Landed > 0.0) ++StrikesLanded;
 			else if (E.What == "sea:air") ++Raids;
 			else if (E.What == "sea:line") ++LineTurns;
-			else if (E.What == "sea:dive") ++DiveEvents;
+			else if (E.What == "sea:dive")
+			{
+				++DiveEvents;
+				++DivesOf[E.Unit];
+			}
 			else if (E.What == "sea:depthCharge") ++ChargeEvents;
 			else if (E.What == "sea:depthChargeHit") ++ChargeHits;
 			else if (E.What == "sea:starshell") ++Starshells;
@@ -1446,6 +1637,8 @@ int main(int Argc, char** Argv)
 	            "%d pushed aside by a ship, %d dead gone under for room; %d floats (%d rafts, %d boats), %d slicks (%d alight)\n",
 	            C.Wrecks, C.WrecksManned, C.WrecksDue, C.MenReal, C.MenKept, C.MenReal ? 100.0 * C.MenKept / C.MenReal : 100.0, C.MostMen, P.MostMenSeen, C.MenDead, C.MenPicked,
 	            C.MenSwept, C.MenUnder, C.Floats, C.Rafts, C.Boats, C.Slicks, C.SlicksAlight);
+	// (ships the battle's own count took out of her line with no word of how by then: given up, as one abandoned, Show::Untold)
+	if (C.LeftUntold > 0) std::printf("  ships out of the fight by the battle's count alone, given up untold: %d\n", C.LeftUntold);
 	if (SurrenderTold > 0)
 		std::printf("  boats struck: %d of %d told (%d unmatched); %d men out on their casings (%d at once at the most, %d man-frames with hands up), %d over from them of %d, "
 		            "%d prisoners, %d prizes (%d boarders below); worst hand step %.2f m beyond his pace (%s), over the side %.2f m (%d)\n",
@@ -1515,6 +1708,7 @@ int main(int Argc, char** Argv)
 	                   P.OtherTouching ? std::to_string(P.OtherTouching) + " pair-frames, " + std::to_string(P.TouchPairs.size()) + " pairs" : "0", "0" });
 	Limits.push_back({ "the line's ships as many as the battle's", P.LineOff == 0, P.LineOff ? std::to_string(P.LineOff) + " frames off (" + P.LineOffFirst + ")" : "always",
 	                   "always between the view before and after" });
+	Limits.back().Measure = static_cast<double>(P.LineOff); // (frames off)
 	Limits.push_back({ "salvos only from ships in the line", (!bGunfire || C.Salvos > 0) && P.SalvosFromOut == 0,
 	                   std::to_string(C.Salvos) + " salvos, " + std::to_string(P.SalvosFromOut) + " from out", "some where the guns met, none from out" });
 	Limits.push_back({ "every splash in the sea, clear of the hulls", P.SplashOnHull == 0, std::to_string(P.SplashOnHull) + " on a hull", "0" });
@@ -1588,9 +1782,18 @@ int main(int Argc, char** Argv)
 	}
 	Limits.push_back({ "the zig-zag steadied a minute after contact", C.MostZigAfter <= 1.0, Num(C.MostZigAfter, 2) + " m", "1 m or less" });
 	// Where ships went down (Brian, 22 November 05:32Z to 05:33Z): her men in the water, her wreckage and her oil.
-	Limits.push_back({ "every ship gone down leaves her oil, and her men in the water where her way down leaves any", C.Slicks == C.Sinks && C.WrecksManned == C.WrecksDue,
-	                   std::to_string(C.Slicks) + " slicks for " + std::to_string(C.Sinks) + " sunk, " + std::to_string(C.WrecksManned) + " of " + std::to_string(C.WrecksDue) + " with men",
-	                   "all" });
+	// (the slicks as drawn, Show::Slicks, by the ship that laid each: one for every ship sent down (each Sink), and more only
+	// for ships given up, abandoned or struck still settling or held a prize at the end; and the show's own count of those
+	// laid, one a wreck, agreeing with what is drawn. The review of 24 November, the second)
+	Limits.push_back({ "every ship gone down leaves her oil, and her men in the water where her way down leaves any",
+	                   P.SlicksForSunk == static_cast<int>(P.Sank.size()) && static_cast<int>(P.Sank.size()) == C.Sinks && P.SlicksOdd == 0 &&
+	                       P.SlicksDrawn == C.Slicks && C.Slicks == C.Wrecks && C.WrecksManned == C.WrecksDue,
+	                   std::to_string(P.SlicksDrawn) + " slicks drawn (" + std::to_string(C.Slicks) + " laid, " + std::to_string(C.Wrecks) + " wrecks): " +
+	                       std::to_string(P.SlicksForSunk) + " for " + std::to_string(P.Sank.size()) + " gone down (" + std::to_string(C.Sinks) + " sunk), " +
+	                       std::to_string(P.SlicksSettling) + " of ships still settling or held" + (P.SlicksOdd ? ", " + std::to_string(P.SlicksOdd) + " odd (" + P.SlickOddAt + ")" : std::string()) +
+	                       (P.SlicksForSunk < static_cast<int>(P.Sank.size()) ? " (" + P.SlickOddAt + ")" : std::string()) + ", " +
+	                       std::to_string(C.WrecksManned) + " of " + std::to_string(C.WrecksDue) + " with men",
+	                   "one each gone down, extras only settling or held; all with men" });
 	Limits.push_back({ "no man in the water nor any wreckage inside a ship", P.MenInHull == 0 && P.FloatsInHull == 0,
 	                   std::to_string(P.MenInHull) + " man-looks, " + std::to_string(P.FloatsInHull) + " float-looks" + (P.MenInHull ? " (first " + P.MenInHullFirst + ")" : std::string()), "0" });
 	Limits.push_back({ "no man in the water pops", P.MostManPop <= 0.0, P.MostManPop > 0.0 ? Num(P.MostManPop, 2) + " m over (" + P.ManPopAt + ")" : "none", "none" });
@@ -1726,6 +1929,8 @@ int main(int Argc, char** Argv)
 		                   std::to_string(GunHitsTold - Undrawn) + " of " + std::to_string(GunHitsTold) + " drawn (" + std::to_string(C.GunHitEvents) + " of " +
 		                       std::to_string(GunHitEventsTold) + " told), at most " + Num(Lag, 1) + " s after",
 		                   "all, 30 s or less" });
+		// (seconds late, each drawn and each told counted: one undrawn or uncounted is never a known lateness)
+		Limits.back().Measure = Undrawn == 0 && C.GunHitEvents == GunHitEventsTold && C.GunHitsTold == GunHitsTold ? Lag : 1e9;
 		// (a ship up, afloat and her casing clear, shows a hit as it is told, the reel the player reads at that moment)
 		Limits.push_back({ "every gun hit told on a ship up drawn as told", UpLate == 0 && UpLag <= 0.1,
 		                   std::to_string(UpHits - UpLate) + " of " + std::to_string(UpHits) + " drawn in time, at most " + Num(UpLag, 2) + " s after", "all, 0.1 s or less" });
@@ -1878,10 +2083,37 @@ int main(int Argc, char** Argv)
 		Limits.push_back({ "every boat drawn with her state, her keel under the sea and above her crush depth", P.BoatOdd == 0 && P.MostBoatKeel <= Rec.Board.CrushKeel,
 		                   std::to_string(P.BoatOdd) + " odd boat-frames, the deepest " + Num(P.MostBoatKeel, 0) + " m (crush " + Num(Rec.Board.CrushKeel, 0) + ")", "0, the crush depth or less" });
 		Limits.push_back({ "a boat's angle diving or surfacing within reason", P.MostBoatAngle <= 15.0, Num(P.MostBoatAngle, 1) + " deg", "15 deg or less" });
-		// (a depth told as it changes, a view at a time, followed without a nod at each: the pre-check, 22 November)
-		const int Swings = 2 * (DiveEvents + 2 * Boats);
-		Limits.push_back({ "a boat's angle goes over and comes back once a dive, no nodding", P.BoatSwings <= Swings,
-		                   std::to_string(P.BoatSwings) + " swings of 4 degrees (" + std::to_string(Swings) + " allowed)", "two a dive told and four a boat, or fewer" });
+		// (a depth told as it changes, a view at a time, followed without a nod at each: the pre-check, 22 November; each boat
+		// against her own dives, not the night's, so one nodding is not hidden by the others' room: the review of 24 November)
+		{
+			int Over = 0, Allowed = 0;
+			std::string Worst;
+			int WorstLeft = 1 << 30;
+			for (const auto& [Key, N] : P.SwingsOf)
+			{
+				const auto Piece = P.PieceOf.find(Key);
+				const auto Dives = Piece == P.PieceOf.end() ? DivesOf.end() : DivesOf.find(Piece->second);
+				const int Hers = 2 * (Dives == DivesOf.end() ? 0 : Dives->second) + 2;
+				Allowed += Hers;
+				if (N > Hers) ++Over;
+				if (Hers - N < WorstLeft)
+				{
+					WorstLeft = Hers - N;
+					Worst = "boat " + std::to_string(Key) + " " + std::to_string(N) + " of " + std::to_string(Hers);
+				}
+			}
+			Limits.push_back({ "a boat's angle goes over and comes back once a dive, no nodding", Over == 0,
+			                   std::to_string(P.BoatSwings) + " swings of 4 degrees (" + std::to_string(Allowed) + " allowed in all), " + std::to_string(Over) + " boats over" +
+			                       (Worst.empty() ? std::string() : ", the nearest " + Worst),
+			                   "two a dive told of hers and two, each boat" });
+		}
+		Limits.push_back({ "a boat's angle never snaps (from one step of the show to the next)", P.MostAngleStep <= 2.0,
+		                   Num(P.MostAngleStep, 2) + " deg" + (P.AngleStepAt.empty() ? std::string() : " (" + P.AngleStepAt + ")"), "2 deg a step (a twentieth of a second) or less" });
+		Limits.push_back({ "a boat attacked where the battle has her is drawn there (each drop at her and each hit of it)", P.MostAttackOff <= 30.0,
+		                   std::to_string(P.AttacksJudged) + " judged, the farthest " + Num(P.MostAttackOff, 1) + " m" + (P.AttackOffAt.empty() ? std::string() : " (" + P.AttackOffAt + ")"),
+		                   "30 m or less" });
+		Limits.push_back({ "no boat passes a steady depth told", P.MostPass <= 0.5, Num(P.MostPass, 2) + " m" + (P.PassAt.empty() ? std::string() : " (" + P.PassAt + ")"),
+		                   "0.5 m or less, the way she came" });
 		Limits.push_back({ "every dive told shown going", C.Dives == DiveEvents && C.DiveEvents == DiveEvents, std::to_string(C.Dives) + " of " + std::to_string(DiveEvents), "all" });
 		Limits.push_back({ "every depth-charge attack goes in", C.ChargeDrops == ChargeEvents && C.ChargeEvents == ChargeEvents,
 		                   std::to_string(C.ChargeDrops) + " of " + std::to_string(ChargeEvents) + ", " + std::to_string(C.ChargeBursts) + " charges burst", "all" });
@@ -2138,6 +2370,7 @@ int main(int Argc, char** Argv)
 		                   "0.5, 0.643, 0.357, 0.6, 0.4, -1, 0.6" });
 		int Recorded = 0, WrongSide = 0;
 		double FirstKnot = -1.0, LastKnot = -1.0;
+		const SeaFeed::Top* FirstHead = nullptr;
 		for (const SeaFeed::Frame& F : Rec.Views)
 		{
 			const double Knot = SeaFeed::KnotOf(F.Head);
@@ -2148,6 +2381,7 @@ int main(int Argc, char** Argv)
 			if (Recorded++ == 0)
 			{
 				FirstKnot = Knot;
+				FirstHead = &F.Head;
 			}
 			LastKnot = Knot;
 			const int BrokeSide = SeaFeed::SideOf(F.Head.Broken), NamedSide = F.Head.bOver ? SeaFeed::SideOf(F.Head.Winner) : -1;
@@ -2164,7 +2398,23 @@ int main(int Argc, char** Argv)
 		}
 		else
 		{
-			Limits.push_back({ "the bar's knot starts level", std::fabs(FirstKnot - 0.5) < 1e-9, Num(FirstKnot, 3), "0.5" });
+			// (a recording from its battle's start opens level: the fleet actions and the sub-air stand-in, all from t 0. One that
+			// opens on the battle under way, a convoy night's window, carries what both sides have lost by then: its knot on the
+			// side of the one who has lost less, level only where they have lost alike)
+			const bool bFromStart = Rec.Views.front().Head.T <= 1e-9;
+			if (bFromStart || !FirstHead) Limits.push_back({ "the bar's knot starts level", std::fabs(FirstKnot - 0.5) < 1e-9, Num(FirstKnot, 3), "0.5" });
+			else
+			{
+				const SeaFeed::Top& Open = *FirstHead;
+				const bool bDef = SeaFeed::SideOf(Open.Me) == 1;
+				const double Mine = bDef ? Open.LostDef : Open.LostAtt, Theirs = bDef ? Open.LostAtt : Open.LostDef;
+				// (or, a side broken off by then, on the other side's half: the bar's rule, above)
+				const bool bWhere = !Open.Broken.empty() ? (SeaFeed::SideOf(Open.Broken) == SeaFeed::SideOf(Open.Me) ? FirstKnot < 0.5 : FirstKnot > 0.5)
+				                                         : (FirstKnot - 0.5) * (Theirs - Mine) >= 0.0 && (std::fabs(Theirs - Mine) < 1e-9) == (std::fabs(FirstKnot - 0.5) < 1e-9);
+				Limits.push_back({ "the bar's knot starts where the battle stands as the recording opens on it", bWhere,
+				                   Num(FirstKnot, 3) + " at " + Num(Open.T, 0) + " s, lost " + Num(Mine, 3) + " to " + Num(Theirs, 3) + " (" + Open.Me + ")",
+				                   "past the middle on the side that has lost less, level where alike" });
+			}
 			Limits.push_back({ "the bar's knot on the winner's side from the break or the end", WrongSide == 0 && Rec.Views.back().Head.bOver,
 			                   std::to_string(WrongSide) + " views wrong, the last at " + Num(LastKnot, 3), "0 wrong" });
 		}
@@ -2176,6 +2426,7 @@ int main(int Argc, char** Argv)
 		const int Salvos = P.Fx.count("salvo") ? P.Fx.at("salvo") : 0, Hits = P.Fx.count("shellhit") ? P.Fx.at("shellhit") : 0;
 		Limits.push_back({ "most salvos miss (hits only as the battle books them)", Salvos == 0 || Hits * 5 <= Salvos,
 		                   std::to_string(Hits) + " hits for " + std::to_string(Salvos) + " salvos", "a fifth or fewer" });
+		Limits.back().Measure = std::max(0.0, Hits - Salvos / 5.0); // (hits over a fifth of the salvos)
 	}
 	Limits.push_back({ "every battle line formed or turned told to the camera", (P.Fx.count("line") ? P.Fx.at("line") : 0) == LineTurns,
 	                   std::to_string(P.Fx.count("line") ? P.Fx.at("line") : 0) + " of " + std::to_string(LineTurns), "all" });
@@ -2200,12 +2451,42 @@ int main(int Argc, char** Argv)
 	                   Num(Slow, 3) + " ms (one in a thousand), " + Num(Mean, 3) + " ms mean, " + Num(P.WorstFrameMs, 2) + " worst",
 	                   "under 1 ms one in a thousand, 0.25 mean (the least of three plays)" });
 
-	int Failed = 0;
+	// The real nights' known failures (the review of 24 November, the second): the naval rules' side of a real night's
+	// failure, until its fix lands, read from the list run.sh names (SEA_SHOW_KNOWN: Tools/sea_show/known_failures.txt; a
+	// line each, tab apart: the recording's name without .json, the check's name as printed here, and the most it may read,
+	// its Measure). Within that it prints KNOWN and fails nothing; past it, or any check not listed, fails as ever; one
+	// listed that passes is told, to be taken off the list.
+	std::map<std::string, double> Known;
+	if (const char* KnownPath = std::getenv("SEA_SHOW_KNOWN"))
+	{
+		std::string Night = Path.substr(Path.find_last_of("/\\") == std::string::npos ? 0 : Path.find_last_of("/\\") + 1);
+		if (Night.size() > 5 && Night.compare(Night.size() - 5, 5, ".json") == 0) Night.resize(Night.size() - 5);
+		std::ifstream KnownIn(KnownPath);
+		std::string Row;
+		while (std::getline(KnownIn, Row))
+		{
+			if (Row.empty() || Row[0] == '#') continue;
+			const size_t Tab1 = Row.find('\t'), Tab2 = Tab1 == std::string::npos ? std::string::npos : Row.find('\t', Tab1 + 1);
+			if (Tab2 == std::string::npos || Row.compare(0, Tab1, Night) != 0) continue;
+			Known[Row.substr(Tab1 + 1, Tab2 - Tab1 - 1)] = std::atof(Row.c_str() + Tab2 + 1);
+		}
+	}
+	int Failed = 0, KnownFailed = 0;
 	for (const Limit& L : Limits)
 	{
-		std::printf("  %s %-58s %s (%s)\n", L.bOk ? "ok  " : "FAIL", L.Name, L.Got.c_str(), L.Want);
+		const auto Listed = Known.find(L.Name);
+		if (!L.bOk && Listed != Known.end() && L.Measure >= 0.0 && L.Measure <= Listed->second + 1e-9)
+		{
+			std::printf("  KNOWN %-57s %s (%s; known on this night, the rules' side: up to %s)\n", L.Name, L.Got.c_str(), L.Want, Num(Listed->second, 1).c_str());
+			++KnownFailed;
+			continue;
+		}
+		std::printf("  %s %-58s %s (%s)%s\n", L.bOk ? "ok  " : "FAIL", L.Name, L.Got.c_str(), L.Want,
+		            Listed == Known.end() ? "" : L.bOk ? " (listed as known: take it off the list)" : (" (past its known bound, " + Num(Listed->second, 1) + ")").c_str());
 		if (!L.bOk) ++Failed;
 	}
-	std::printf("%s\n", Failed ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED");
+	if (Failed) std::printf("SOME CHECKS FAILED\n");
+	else if (KnownFailed) std::printf("ALL CHECKS PASSED (%d known failures, each within its bound)\n", KnownFailed);
+	else std::printf("ALL CHECKS PASSED\n");
 	return Failed ? 1 : 0;
 }

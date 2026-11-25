@@ -123,6 +123,7 @@ namespace
 		Drawn Size;
 		StageBoat Stage{ std::string(), 95.0, 8.3 };
 		bool bSeen = false;
+		int Piece = -1;
 		double LastHeave = 0.0, WorstPop = 0.0, WorstOff = 0.0, PopAt = 0.0, OffAt = 0.0;
 		// (what of the stage's model shows, against her state: frames at periscope depth with the show's periscope up and
 		// settled, how many show its head out, the least it shows, the most of her shorter periscope and her bridge; with it
@@ -233,6 +234,46 @@ namespace
 
 		const SeaShow::Field& Board = Night.Board();
 		const double Sky = SkyLit(Board.bLight, Board.SunUp, Board.MoonUp, Board.MoonLit);
+		// What the battle tells of the night, read from the recording, not the show (the checks below of what a night holds ask
+		// for each where it is told: a stand-in was made with all of it, a real night has what its rules and its kit gave it):
+		// the rescues it tells (sea:rescue: the naval rules send one only on the player's order, so a night fought by the
+		// computer on both sides has none); the seconds each boat is told at periscope depth with her periscope up (her dive
+		// "periscope", her scope up, her keel within half a metre of it or not told; the convoy field's crash dive passes
+		// through it in a view); a pattern dropped, an ahead-thrown salvo with a hit booked from the same escort within 60 s
+		// (the show bursts that salvo's bombs only on such a hit), and a starshell.
+		int RescuesTold = 0;
+		bool bPatternTold = false, bAheadHitTold = false, bStarTold = false;
+		std::map<int, double> ToldAtScope;
+		{
+			std::map<int, std::string> DiveWas;
+			std::map<int, double> AheadAt;
+			for (size_t I = 0; I < Rec.Views.size(); ++I)
+			{
+				const SeaFeed::Frame& V = Rec.Views[I];
+				const double For = I + 1 < Rec.Views.size() ? Rec.Views[I + 1].Head.T - V.Head.T : 0.0;
+				for (const SeaShow::Piece& P : V.Pieces)
+				{
+					if (P.Class != "ss") continue;
+					if (!P.Dive.empty()) DiveWas[P.Id] = P.Dive;
+					if (DiveWas[P.Id] == "periscope" && P.bScope && (P.Keel < 0.0 || std::fabs(P.Keel - Board.ScopeKeel) <= 0.5)) ToldAtScope[P.Id] += For;
+				}
+				for (const SeaShow::Event& E : V.Events)
+				{
+					RescuesTold += E.What == "sea:rescue" ? 1 : 0;
+					bStarTold = bStarTold || E.What == "sea:starshell";
+					if (E.What == "sea:depthCharge")
+					{
+						if (E.Kind == "ahead") AheadAt[E.Unit] = E.T;
+						else bPatternTold = true;
+					}
+					if (E.What == "sea:depthChargeHit")
+					{
+						const auto Thrown = AheadAt.find(E.From);
+						bAheadHitTold = bAheadHitTold || (Thrown != AheadAt.end() && E.T - Thrown->second <= 60.0);
+					}
+				}
+			}
+		}
 		std::map<int, BoatSeen> Boats;
 		std::map<int, RescueSeen> Rescues;
 		std::map<int, bool> Jumped, Climbed;
@@ -247,7 +288,36 @@ namespace
 		// (sent down, every man off her within SeaShow's HurryFor of it; her scuttling charges no sooner than ChargesFrom after
 		// it, and after the last of them)
 		const double HandsGoneIn = 5.0, ChargesFrom = 6.5;
-		double WorstMiss = 0.0, LeastLead = 1e9, AheadOff = -1e9;
+		double WorstMiss = 0.0, LeastLead = 1e9, AheadOff = -1e9, AheadBeyond = -1e9;
+		// (where the battle has a boat at a moment, between its views before and after: the boat piece nearest a point)
+		auto BattleBoatNear = [&Rec](double At, double X, double Y, double& PX, double& PY)
+		{
+			size_t B = 0;
+			while (B + 1 < Rec.Views.size() && Rec.Views[B].Head.T < At) ++B;
+			const size_t A = B > 0 ? B - 1 : 0;
+			const double TA = Rec.Views[A].Head.T, TB = Rec.Views[B].Head.T;
+			const double Fr = TB > TA ? std::clamp((At - TA) / (TB - TA), 0.0, 1.0) : 0.0;
+			double Best = 1e18;
+			for (const SeaShow::Piece& Was : Rec.Views[A].Pieces)
+			{
+				if (Was.Class != "ss") continue;
+				double X1 = Was.X, Y1 = Was.Y;
+				for (const SeaShow::Piece& Then : Rec.Views[B].Pieces)
+					if (Then.Id == Was.Id)
+					{
+						X1 = Was.X + (Then.X - Was.X) * Fr;
+						Y1 = Was.Y + (Then.Y - Was.Y) * Fr;
+					}
+				const double D = std::hypot(X1 - X, Y1 - Y);
+				if (D < Best)
+				{
+					Best = D;
+					PX = X1;
+					PY = Y1;
+				}
+			}
+			return Best < 1e17;
+		};
 		const double Step = 1.0 / 30.0;
 		double T = Rec.Views.front().Head.T;
 		const double EndT = Rec.Views.back().Head.T;
@@ -259,6 +329,7 @@ namespace
 			{
 				if (Ship.Class != "ss" || Ship.Dive.empty()) continue;
 				BoatSeen& B = Boats[Ship.Key];
+				B.Piece = Ship.Piece;
 				if (!B.bSeen)
 				{
 					// (the stage draws the battle modeller's boat for her navy, as made: AirStage's ShipFileOf)
@@ -621,9 +692,19 @@ namespace
 					if (bAhead)
 					{
 						// (the ahead thrower's bombs burst only on a hit, the show placing them at the boat where she is then, wherever the
-						// salvo was aimed: the ring is drawn where the show aimed it, so how far off it is the show's, told, not checked)
+						// salvo was aimed: the ring is drawn where the show aimed it. The battle's own boat has moved on from its drop
+						// as the bombs sank, so the burst lies off the ring as far as she does, and no more than the 30 m the show may
+						// draw her from her place where she is attacked (sea_show_test): on the real nights it lay 124 m off, the boat
+						// drawn far from her place. The review of 24 November, the second)
 						++AheadBursts;
-						AheadOff = std::max(AheadOff, std::hypot(E.At.X - Near->Middle.X, E.At.Y - Near->Middle.Y) - Near->Ring);
+						const double FromMiddle = std::hypot(E.At.X - Near->Middle.X, E.At.Y - Near->Middle.Y);
+						AheadOff = std::max(AheadOff, FromMiddle - Near->Ring);
+						double BX = 0.0, BY = 0.0;
+						const bool bHers = BattleBoatNear(T, E.At.X, E.At.Y, BX, BY);
+						const double Hers = bHers ? std::hypot(BX - Near->Middle.X, BY - Near->Middle.Y) : 0.0;
+						AheadBeyond = std::max(AheadBeyond, FromMiddle - Hers);
+						ShowCheck(bHers && FromMiddle - Hers <= 30.0,
+						          Said("an ahead bomb's burst at %.1f s lies off the ring's middle no more than the battle's boat does, and 30 m (%.1f m, hers %.1f m)", T, FromMiddle, Hers));
 						ShowCheck(T > Near->Lands, Said("an ahead bomb's burst at %.1f s comes after its ring is in (%.1f s after)", T, T - Near->Lands));
 					}
 					else if (E.Size < 0.5)
@@ -665,8 +746,14 @@ namespace
 		{
 			ShowCheck(B.WorstPop < 0.25, Said("boat %.0f never pops where she can be seen (worst %.3f m in a frame, at %.1f s)", Key, B.WorstPop, B.PopAt));
 			ShowCheck(B.WorstOff < 0.3, Said("boat %.0f surfaced rides where the show has her, her casing awash, or high once blown (worst %.2f m off, at %.1f s)", Key, B.WorstOff, B.OffAt));
-			ShowCheck(B.UpFrames > 0 && B.UpShown == B.UpFrames && B.UpLeast > 0.5,
-			          Said("boat %.0f at periscope depth with the show's periscope up: the stage's model shows its taller periscope's head in every frame (%.0f), at least %.2f m", Key, B.UpFrames, B.UpLeast));
+			// (some such frames where the battle holds her there long enough to settle: 30 s told, the scene's 20 s or so from the
+			// surface to periscope depth and its 5 s settling; every stand-in boat is told there 56 s and more. Every such frame,
+			// on any night, shows the head)
+			const auto AtScope = ToldAtScope.find(B.Piece);
+			const double ToldUp = AtScope != ToldAtScope.end() ? AtScope->second : 0.0;
+			ShowCheck((B.UpFrames > 0 || ToldUp < 30.0) && B.UpShown == B.UpFrames && (B.UpFrames == 0 || B.UpLeast > 0.5),
+			          Said("boat %.0f at periscope depth with the show's periscope up: the stage's model shows its taller periscope's head in every frame (%.0f), at least %.2f m", Key, B.UpFrames, B.UpLeast) +
+			              Said(" (told there %.0f s)", ToldUp));
 			ShowCheck(B.UpFrames == 0 || (B.UpLowMost < 0.0 && B.UpBridgeMost < -1.0),
 			          Said("boat %.0f, the periscope up: her shorter periscope (at most %.2f m) and her bridge (at most %.2f m) under", Key, B.UpLowMost, B.UpBridgeMost));
 			ShowCheck(B.DownFrames == 0 || B.DownMost < -0.3, Said("boat %.0f at periscope depth with the show's periscope down: nothing of the stage's model out (its highest point at most %.2f m)", Key, B.DownMost));
@@ -676,12 +763,18 @@ namespace
 			ShowCheck(B.FeatherBridgeMost < 0.0, Said("boat %.0f: feathers (%.0f) only while all of the stage's model's bridge is under (at most %.2f m)", Key, B.Feathers, B.FeatherBridgeMost));
 		}
 		ShowCheck(Jumpers > 0 && JumpWorst < 0.35, Said("a boat's men (%.0f) go over her side from her deck as the looks ride her (at most %.2f m off; %.2f m as they leave it)", Jumpers, JumpWorst, JumpRawWorst));
-		ShowCheck(ClimbFrames > 0 && ClimbOn == ClimbFrames, Said("every man the scene has climbing a rescuer's side is on a net that is down (%.0f of %.0f man-frames)", ClimbOn, ClimbFrames));
-		ShowCheck(Climbers > 0 && ClimbersOn == Climbers, Said("and his net was down before he reached it (%.0f of %.0f men)", ClimbersOn, Climbers));
+		// (climbers where the battle tells a rescue, every one on a net down; where it tells none, none: every stand-in tells one)
+		ShowCheck((RescuesTold == 0 && ClimbFrames == 0) || (ClimbFrames > 0 && ClimbOn == ClimbFrames),
+		          Said("every man the scene has climbing a rescuer's side is on a net that is down (%.0f of %.0f man-frames; %.0f rescues told)", ClimbOn, ClimbFrames, RescuesTold));
+		ShowCheck((RescuesTold == 0 && Climbers == 0) || (Climbers > 0 && ClimbersOn == Climbers), Said("and his net was down before he reached it (%.0f of %.0f men)", ClimbersOn, Climbers));
 		ShowCheck(ClimbOver == 0, Said("no man climbs over the net's top (her deck's height): %.0f man-frames", ClimbOver));
 		ShowCheck(ClimbUnnamed == 0, Said("no man climbs a ship no rescue named (%.0f man-frames)", ClimbUnnamed));
 		ShowCheck(NetsAway == 0, Said("no net down while she is under way or her rescue over and no one is on it (%.0f net-frames)", NetsAway));
-		ShowCheck(PatternBursts > 0 && AheadBursts > 0 && Stars > 0, Said("the night has pattern bursts (%.0f), ahead bursts (%.0f) and a starshell (%.0f)", PatternBursts, AheadBursts, Stars));
+		// (each where the battle tells it, and the night tells one of them at the least: the stand-ins tell all three; a real night
+		// what its kit and its contacts gave it, a pattern and a starshell in 1940, ahead-thrown salvos and no pattern in 1943)
+		ShowCheck((bPatternTold || bAheadHitTold || bStarTold) && (!bPatternTold || PatternBursts > 0) && (!bAheadHitTold || AheadBursts > 0) && (!bStarTold || Stars > 0),
+		          Said("the night has pattern bursts (%.0f), ahead bursts (%.0f) and a starshell (%.0f)", PatternBursts, AheadBursts, Stars) +
+		              Said(" where told (%.0f, %.0f, %.0f)", bPatternTold ? 1.0 : 0.0, bAheadHitTold ? 1.0 : 0.0, bStarTold ? 1.0 : 0.0));
 		// A boat that struck (sea:surrender): her flag, her men on her casing, her vents. Where the night has none, nothing asked.
 		int StruckBoats = 0;
 		for (const auto& [Key, B] : Boats)
@@ -715,8 +808,9 @@ namespace
 			              Said(" (boat %.0f)", HandsWorstKey));
 			ShowCheck(HandsLate == 0, Said("sent down, no man on her or in her hatches more than %.0f s after (%.0f man-frames, at most %.1f s)", HandsGoneIn, HandsLate, HandsLateMost));
 		}
-		std::printf("%s: %zu boats, %d drops, %d pattern bursts (worst %.1f m off a charge drawn going in, the least %.1f s after it), %d ahead bursts (at most %.1f m outside the ring the show aimed), %d starshells\n",
-		            Rec.Key.c_str(), Boats.size(), Drops, PatternBursts, WorstMiss, LeastLead, AheadBursts, AheadOff, Stars);
+		std::printf("%s: %zu boats, %d drops, %d pattern bursts (worst %.1f m off a charge drawn going in, the least %.1f s after it), %d ahead bursts (at most %.1f m outside the ring the show aimed, "
+		            "%.1f m farther from its middle than the battle's boat), %d starshells\n",
+		            Rec.Key.c_str(), Boats.size(), Drops, PatternBursts, WorstMiss, LeastLead, AheadBursts, AheadOff, AheadBeyond, Stars);
 		std::printf("  the scene's men: %d went over a boat's side, at most %.2f m off her deck as the looks ride her; %d climbed a rescuer's side, %d man-frames, every one on a net down (most nets on one "
 		            "ship %d); she stood by %.0f s; her heave while men climbed %.2f to %.2f m (the net rides it, the scene's climbers do not); the climbers %.2f to %.2f m out "
 		            "from her side as the stage draws her\n",
@@ -757,7 +851,7 @@ namespace
 		BoatState Hid, Open;
 		BoatModel Model;
 		bool bSeen = false, bWasShown = true;
-		int HiddenFrames = 0, Reveals = 0;
+		int HiddenFrames = 0, HiddenShallow = 0, Reveals = 0;
 		int Thrown = 0, TwinThrown = 0, Laid = 0, ShownOff = 0;
 		double MostApart = 0.0;
 		/** Her first swirl after each time she is found, and her twin's after the same moment (-1: none yet; RevealAt -1
@@ -852,6 +946,8 @@ namespace
 				if (!Ship.bShown)
 				{
 					++B.HiddenFrames;
+					// (near enough the surface that her twin might throw something: the line the deep frames are judged from)
+					if (Ship.Keel <= Board.ScopeKeel + 6.0) ++B.HiddenShallow;
 					B.Thrown += static_cast<int>(Out.Splashes.size());
 					B.TwinThrown += static_cast<int>(Twin.Splashes.size());
 					// (a swirl laid this frame while she is hidden: none)
@@ -868,10 +964,11 @@ namespace
 			T = std::min(EndT, T + Step);
 			while (Taken < Rec.Views.size() && Rec.Views[Taken - 1].Head.T <= T + 1e-9) TakeNext();
 		}
-		int Hidden = 0, Found = 0, TwinThrown = 0, SwirledAfter = 0;
+		int Hidden = 0, HiddenShallow = 0, Found = 0, TwinThrown = 0, SwirledAfter = 0;
 		for (const auto& [Key, B] : Boats)
 		{
 			Hidden += B.HiddenFrames;
+			HiddenShallow += B.HiddenShallow;
 			Found += B.Reveals;
 			TwinThrown += B.TwinThrown;
 			SwirledAfter += B.SwirlsAfter;
@@ -881,8 +978,11 @@ namespace
 			ShowCheck(B.SwirlsOff == 0, Said("boat %.0f found lays her first swirl when her twin in sight does (%.0f times found with a swirl after, %.0f otherwise)", Key, B.SwirlsAfter,
 			                                 B.SwirlsOff));
 		}
-		ShowCheck(Boats.empty() || (Hidden > 0 && Found > 0 && TwinThrown > 0),
-		          Said("the night's enemy boats out of the player's sight a while (%.0f boat-frames), then found (%.0f times); their twins in sight threw %.0f splashes then", Hidden, Found, TwinThrown));
+		// (their twins threw something, so that throwing nothing hidden means something: where any was hidden near the surface,
+		// where a twin throws; one hidden only deep throws nothing in sight or out of it. Every stand-in hides one near it)
+		ShowCheck(Boats.empty() || (Hidden > 0 && Found > 0 && (HiddenShallow == 0 || TwinThrown > 0)),
+		          Said("the night's enemy boats out of the player's sight a while (%.0f boat-frames), then found (%.0f times); their twins in sight threw %.0f splashes then", Hidden, Found, TwinThrown) +
+		              Said(" (%.0f boat-frames hidden near the surface)", HiddenShallow));
 		std::printf("%s as the player's side sees it: %zu enemy boats, %d boat-frames out of sight, found %d times (%d with a swirl after, laid when her twin's)\n", Rec.Key.c_str(),
 		            Boats.size(), Hidden, Found, SwirledAfter);
 		return 0;

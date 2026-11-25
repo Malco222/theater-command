@@ -399,6 +399,8 @@ namespace SeaShow
 		{
 			bStarted = true;
 			ShownT = T;
+			ClockFrom = T;
+			Elapsed = 0.0;
 			DrawT = T;
 			Interpolate();
 			StartColumns();
@@ -470,6 +472,19 @@ namespace SeaShow
 					P.Face = Wrap(P.Face + Wrap(Next->second.Face - P.Face) * Fr);
 					P.Speed = Lerp(P.Speed, Next->second.Speed, Fr);
 					P.Str = Lerp(P.Str, Next->second.Str, Fr);
+					// (a boat's keel told as it changes, a view at a time no faster than a boat goes, blown up 2 m/s or going
+					// down 1 m/s or so: between the two, as her place is, and how fast; a told jump stays a jump, which she
+					// makes at her own rates, Trim; and the next view's keel, where what is told so far may end)
+					if (P.Keel >= 0.0 && Next->second.Keel >= 0.0 && B->T > A->T)
+					{
+						const double KeelPace = (Next->second.Keel - P.Keel) / (B->T - A->T);
+						if (std::fabs(KeelPace) <= KeelRampMost)
+						{
+							P.Keel = Lerp(P.Keel, Next->second.Keel, Fr);
+							P.KeelRate = KeelPace;
+							P.KeelNext = Next->second.Keel;
+						}
+					}
 				}
 			}
 			Now[Pair.first] = P;
@@ -862,9 +877,10 @@ namespace SeaShow
 			}
 			if (Left)
 			{
-				// (a boat's end as the battle says it, where it says one of the show's ways: one her crew left and scuttled
-				// goes "scuttled", her vents open, by the stern, not as a ship settling; none said, she settles as she was)
-				if (H->Class == "ss" && IsWayDown(E.How)) H->How = E.How;
+				// (her end as the battle says it, where it says one of the show's ways: a boat her crew left and scuttled goes
+				// "scuttled", her vents open, by the stern, not as a ship settling; a merchant given up burning, breaking or
+				// capsizing goes so; none said, she settles as she was)
+				if (IsWayDown(E.How)) H->How = E.How;
 				// (none said of one that struck, as the battle's own sea:sunk says none: her crew's own way, scuttled, the way
 				// she struck to go; one taken and sent down after all goes so too)
 				else if (H->bStruck) H->How = "scuttled";
@@ -872,12 +888,11 @@ namespace SeaShow
 				{
 					// (struck: every man still below or on her casing goes over now, the last within HurryFor of it, riding her
 					// down on the stage's sinking until he does (HandAt), and her flag comes down with her; a prize the battle
-					// sends down after all leaves no prize. One taken had no slick counted as she was given up: she has one now)
+					// sends down after all leaves no prize)
 					H->SentDownAt = ShownT;
 					for (Wreck& W : Wrecked)
 						if (W.Ship == H->Key && W.bStruck) Hurry(W);
 					if (H->FlagDownAt < 0.0) H->FlagDownAt = ShownT;
-					if (H->StruckHow == "captured") ++Check.Slicks;
 					H->bPrize = false;
 				}
 				// (her going down now: she settles the rest of the way from as far down as she is, as one that settles)
@@ -887,7 +902,11 @@ namespace SeaShow
 				H->SinkFor = Rest / (1.0 - Was);
 				H->SinkAt = ShownT - Was * H->SinkFor;
 				for (Wreck& W : Wrecked)
-					if (W.Ship == H->Key) W.For = std::max(10.0, ShownT + Rest - W.T0);
+				{
+					if (W.Ship != H->Key) continue;
+					W.For = std::max(10.0, ShownT + Rest - W.T0);
+					W.How = H->How;
+				}
 				Fx& Down = Emit(FxKind::Sink, H->P, H->How, H->Key);
 				Down.Size = 0.0;
 				Down.Text = E.Text;
@@ -1004,6 +1023,7 @@ namespace SeaShow
 			Fx& X = Emit(FxKind::TorpedoHit, Hit, "torpedo", Struck->Key);
 			X.Side = Struck->Side;
 			Struck->LastBlow = "torpedo";
+			Struck->BlowAt = ShownT;
 			SightHit(*Struck); // (a boat struck is found: SetMine)
 			++Check.TorpedoHits;
 			return;
@@ -1236,6 +1256,7 @@ namespace SeaShow
 				++Check.ShellHits;
 			}
 			On->LastBlow = Weapon;
+			On->BlowAt = ShownT;
 			On->ShakenAt = ShownT;
 			SightHit(*On); // (a boat struck is found: SetMine)
 			return;
@@ -1287,7 +1308,16 @@ namespace SeaShow
 				C.Boat = E.On;
 				C.Side = H->Side;
 				C.Kind = "pattern";
-				C.At = Stern + Ahead(H->Hdg) * (Share * Spread) + RightOf(H->Hdg) * Side + Vec(Roll.Bell() * 3.0, Roll.Bell() * 3.0, 0.0);
+				// (each charge a few metres off its place in the pattern, as they fell, never more than ChargeScatterMost: the
+				// looks draw it going in at its place, and a burst far off that would be one where no charge went in. The two
+				// draws named, the northing first, as the cloud build's compiler drew them as arguments: so its dice fall as
+				// they always have, and alike on every compiler)
+				const double ScatterY = Roll.Bell() * 3.0;
+				const double ScatterX = Roll.Bell() * 3.0;
+				Vec Scatter(ScatterX, ScatterY, 0.0);
+				const double ScatterOff = Scatter.Length();
+				if (ScatterOff > ChargeScatterMost) Scatter = Scatter * (ChargeScatterMost / ScatterOff);
+				C.At = Stern + Ahead(H->Hdg) * (Share * Spread) + RightOf(H->Hdg) * Side + Scatter;
 				C.At.Z = -Set;
 				C.Bursts = E.T + Share * Run + Sinks;
 				C.Dropped = E.T;
@@ -1302,7 +1332,11 @@ namespace SeaShow
 			++Check.ChargeHitEvents;
 			AirBlowAt[E.Unit] = E.T;
 			Hull* Boat = NearestOf(E.Unit, At.X, At.Y);
-			if (Boat) Boat->LastBlow = "depthcharge";
+			if (Boat)
+			{
+				Boat->LastBlow = "depthcharge";
+				Boat->BlowAt = ShownT;
+			}
 			const double Keel = E.Keel >= 0.0 ? E.Keel : Boat ? Boat->Keel : F.DeepKeel;
 			const Vec Near = Boat ? Boat->P + Vec(Roll.U(-1.0, 1.0), Roll.U(-1.0, 1.0), 0.0) * (F.ChargeLethal * 0.6) : At;
 			// The blow: of that escort's charges due within 15 s, the one nearest her keel where it is now (going down at the
@@ -1438,6 +1472,18 @@ namespace SeaShow
 			}
 			if (!H)
 			{
+				// (a ship the battle's count gave up first with no word of how, Untold: her crew already leaving her, she is
+				// the one this abandoning tells, and now has the battle's own number, which its sea:men and sea:sunk for her
+				// will give; she is not abandoned again. The review of 24 November, the second)
+				for (auto& Pair : Hulls)
+				{
+					Hull& A = Pair.second;
+					if (A.Piece != E.Unit || !A.bGivenUp || !A.bAbandoned || A.Doing != Fate::Sinking) continue;
+					A.bGivenUp = false;
+					NoteLost(A, E.Ship);
+					++Check.Abandons;
+					return;
+				}
 				// (a boat that struck already, sea:surrender: her crew are leaving her as the battle now orders, the same
 				// leaving, shown once from her casing; so counted as shown, once)
 				for (auto& Pair : Hulls)
@@ -1452,6 +1498,9 @@ namespace SeaShow
 			}
 			AbandonShip(*H, E.Text);
 			NoteLost(*H, E.Ship);
+			// (a boat: told abandoned before her casing is clear, a forced-up boat's crew ordered out as she comes up, she comes
+			// the rest of the way up first, as the battle's own dive has her; her men over once she is up, LeaveUp)
+			LeaveUp(*H);
 			++Check.Abandons;
 			return;
 		}
@@ -1617,6 +1666,15 @@ namespace SeaShow
 	{
 		// (on her way up, her state "surfaced", she is coming into sight: under again only once she has gone down)
 		return Boat.Keel > SurfacedKeel(Boat.Class) + 1.0 && Boat.Dive != "surfaced";
+	}
+
+	bool Show::HeldDeep(const Hull& Boat) const
+	{
+		if (Boat.Class != "ss" || Boat.Doing != Fate::Line || Boat.Keel <= SurfacedKeel(Boat.Class) + 1.0) return false;
+		const Piece* Her = PieceNow(Boat.Piece);
+		if (!Her) return false;
+		const double Told = Her->Keel >= 0.0 ? Her->Keel : Her->Dive == "deep" ? F.DeepKeel : Her->Dive == "periscope" ? F.ScopeKeel : 0.0;
+		return Told > F.ScopeKeel + 0.5;
 	}
 
 	void Show::Sight(const Hull& Boat, double For)
@@ -1874,17 +1932,87 @@ namespace SeaShow
 			H.KeelRate = 0.0;
 		}
 		if (H.Doing == Fate::Line) H.KeelTo = To;
+		// A depth the battle tells as it changes, a view at a time (Interpolate's KeelRate: the convoy field blows a boat up
+		// at 2 m/s, against her own 1.2 below), she follows at the battle's own rate, where it has her: behind it (as it
+		// begins, or coming onto it from her own way) she takes up its rate and gains on it smoothly, never stepping onto it;
+		// coming up she eases off over the last few metres to her trim. (The review of 24 November: forced up from 110 m, her
+		// gun told firing for 45 s before her casing was clear here, and her shell hits owed.)
+		// The show holds one view in hand, so a change told may end at the next view: she keeps where she could stop there,
+		// braking at KeelBrake of her KeelTakeUp, and follows the battle's depth that far behind it (her stopping distance at
+		// its rate: so on a change that goes on she never brakes, and a step in its rate moves her wish by a share of the
+		// step, her rate easing onto the new one without turning back). Coming up she is on it until her own keel is at her
+		// trim (the battle's depth below her trim is her trim). Where it ends, or she leaves her line in the middle of it (her
+		// crew leave her, or given up, or she strikes), she stays on it, easing to a stop at the depth she was given, and
+		// leaves it once stopped there: never stopped dead from her rate, which would snap her angle level in a frame. (The
+		// review of 24 November, the second: her pitch snapped 12 degrees at the end of a rise and of a dive, and she passed
+		// a steady depth by more than a metre.)
+		const double Ramp = P && H.Doing == Fate::Line ? P->KeelRate : 0.0;
+		const bool bRamp = Ramp > 0.0 || (Ramp < 0.0 && H.Keel > Up + 1e-6);
+		if (!bRamp && H.bOnRamp && std::fabs(H.KeelRate) < 0.03 && std::fabs(H.KeelTo - H.Keel) < 0.05) H.bOnRamp = false;
+		if (bRamp || H.bOnRamp)
+		{
+			H.bOnRamp = true;
+			const double Brake = KeelBrake * KeelTakeUp;
+			const double Deepest = std::max(Up, F.CrushKeel);
+			// Blown up for the surface (her rise told "surfaced", or out of her line given her trim) her rise ends at her trim
+			// and nowhere short of it: she keeps on the battle's depth itself, not her stopping distance behind it, and the sea
+			// stops her as her casing breaks it (KeelTopBrake, until her angle is about to come off; her own braking from
+			// there). (The review of 24 November, the second: 4.4 m behind the battle's rise and braking onto her trim from
+			// 4.4 m under it, her casing came clear 2.5 s after the battle's, and the gun hit it told while she was 90 m down
+			// was drawn a round later still.)
+			const bool bForTop = Ramp < 0.0 ? H.Dive == "surfaced" : Ramp == 0.0 && H.KeelRate < 0.0 && H.KeelTo <= Up + 1e-6;
+			// (where she aims: on a change, the battle's depth less her stopping distance at its rate, which she could stop
+			// within at the next view's (blown up for the surface, the battle's depth, and her trim where she stops); ended,
+			// or out of her line, the depth she was given. She stops KeelShort of where she could stop and leaves the last of
+			// it to her own easing, below: a stop in the last step of a braking at her rate would still level her a degree or
+			// two in one)
+			const double Lag = bForTop ? 0.0 : Ramp * std::fabs(Ramp) / (2.0 * Brake) + (Ramp > 0.0 ? KeelShort : Ramp < 0.0 ? -KeelShort : 0.0);
+			const double Aim = Ramp != 0.0 ? Clamp(To - Lag, Up, Deepest) : H.KeelTo;
+			const double Stop = bForTop ? Up : Ramp != 0.0 && P->KeelNext >= 0.0 ? Clamp(P->KeelNext, Up, Deepest) : H.KeelTo;
+			const double RampTop = std::max(1.2, KeelRampOver * std::fabs(Ramp));
+			double Wish = Clamp(Ramp + Clamp((Aim - H.Keel) * KeelGain, -KeelGainMost, KeelGainMost), -RampTop, RampTop);
+			// (ended, or out of her line: she keeps the way she has toward the depth she was given (her gain's most at
+			// least, the ramp's at most) and brakes for it only as she must, not easing in on it by her gain, which left a boat
+			// given up as she rose some ten seconds short of her casing clear, and her hits owed later still)
+			if (Ramp == 0.0)
+				Wish = (H.KeelTo >= H.Keel ? 1.0 : -1.0) * Clamp(std::fabs(H.KeelRate), KeelGainMost, KeelRampMost);
+			// (for her trim, the sea brakes her while her angle is at its most, 12 degrees as Steam draws it from her rise
+			// against her way (1.5 m/s at the least): down to KeelTopEase times the rise that gives it, Soft; she from there)
+			const double Soft = KeelTopEase * std::tan(12.0 * Deg) * std::max(1.5, std::fabs(H.Spd));
+			if (Wish > 0.0) Wish = std::min(Wish, std::sqrt(2.0 * Brake * std::max(0.0, Stop - KeelShort - H.Keel)));
+			else if (Wish < 0.0)
+			{
+				// (rising: the most she may rise at to stop where she must)
+				const double ToGo = std::max(0.0, H.Keel - Stop - KeelShort);
+				const double SoftGo = Soft * Soft / (2.0 * Brake);
+				const double Room = !bForTop || ToGo <= SoftGo ? std::sqrt(2.0 * Brake * ToGo) : std::sqrt(Soft * Soft + 2.0 * KeelTopBrake * (ToGo - SoftGo));
+				Wish = -std::min(-Wish, Room);
+			}
+			// (her rate taken up and taken off at KeelTakeUp; rising for her trim faster than Soft, taken off as fast as the
+			// sea brakes her, down to Soft)
+			double Rate = H.KeelRate + Clamp(Wish - H.KeelRate, -KeelTakeUp * Dt, KeelTakeUp * Dt);
+			if (bForTop && Wish > H.KeelRate && H.KeelRate < -Soft)
+				Rate = std::max(Rate, std::min(std::min(Wish, -Soft), H.KeelRate + KeelTopBrake / KeelBrake * Dt));
+			H.KeelRate = Rate;
+			const double Before = H.Keel;
+			H.Keel = Clamp(H.Keel + H.KeelRate * Dt, Up, Deepest);
+			if (H.Keel <= Up && H.KeelRate < 0.0) H.KeelRate = 0.0;
+			OutSink = Dt > 0.0 ? (H.Keel - Before) / Dt : 0.0;
+			Check.MostKeel = std::max(Check.MostKeel, H.Keel);
+			return std::exp(-std::max(0.0, H.Keel - Up) / 8.0);
+		}
 		// Her depth follows the battle's at her own rate, the rate itself eased (a depth told as it changes, a view at a
 		// time, is followed without a stop at each; the pre-check, 22 November): a crash dive puts her casing under and her
 		// at periscope depth in about 27 s, then about 1 m/s deeper; she comes up at about 1.2 m/s (tanks blown), and from
-		// periscope depth to the surface in about 20 s; she eases off as she comes to the depth she wants.
+		// periscope depth to the surface in about 20 s; she eases off as she comes to the depth she wants (braking at
+		// KeelBrake of her easing, so that her rate can follow it down and she comes onto it without a stop from her way).
 		const double Left = H.KeelTo - H.Keel;
 		const bool bDown = Left > 0.0;
 		const bool bShallow = bDown ? H.Keel < F.ScopeKeel : H.Keel <= F.ScopeKeel;
 		const double Band = std::max(1.0, F.ScopeKeel - Up);
 		const double Most = bShallow ? Band / (bDown ? 27.0 : 20.0) * 1.3 : bDown ? 1.0 : 1.2;
 		const double Ease = 0.08; // (metres a second, each second)
-		const double WantRate = (bDown ? 1.0 : -1.0) * std::min(Most, std::sqrt(2.0 * Ease * std::fabs(Left)));
+		const double WantRate = (bDown ? 1.0 : -1.0) * std::min(Most, std::sqrt(2.0 * KeelBrake * Ease * std::fabs(Left)));
 		H.KeelRate += Clamp(WantRate - H.KeelRate, -Ease * Dt, Ease * Dt);
 		const double Was = H.Keel;
 		H.Keel += H.KeelRate * Dt;
@@ -2026,9 +2154,61 @@ namespace SeaShow
 		auto Helm = [&](Hull& L, const Vec& Goal, const Vec& GoalV, double Face, double Speed)
 		{
 			const Vec ToWant = Goal - L.P;
-			const double Reach = std::max(Speed * 20.0, 2.5 * Sz.Long);
-			const double Hope = Flat(ToWant) > 1500.0 ? Bearing(L.P, Goal + GoalV * 6.0)
-				: Wrap(Face + Clamp(std::atan2(ToWant.Dot(RightOf(Face)), Reach), -40.0 * Deg, 40.0 * Deg));
+			// (a boat deep, out of every ship's way at the surface (KeepClear), holds the battle's place itself, where its
+			// hunters drop on her: she comes back across to it over her own length, not two and a half, at up to 60 degrees;
+			// and where the battle has turned her round (the convoy field reverses a boat in a few seconds at 1.5 m/s), her
+			// station fallen more than 60 degrees off her bow and the battle's course more than 90 off hers (not her station
+			// astern on her own course, where she eases her way for it), she comes round for her station, steering for it, at
+			// her best way dived, until it is off her bow or near: her turning circle is her class's at any way above a crawl,
+			// and eased to a crawl as her station falls astern, her rate of turn is held at its least and she runs off in a
+			// wide circle, 170 m from where she is attacked. The review of 24 November, the second)
+			const bool bDeep = &L != &C.Ghost && HeldDeep(L);
+			// (where it turns her round at a crawl as her hunter runs over her, and runs her back along her own track to his
+			// next attack some 30 s on, she cannot come round inside her circle, 140 m across at any way: she goes astern on
+			// her motors, her stern on the battle's course, at its speed, while an escort has her or has had her within the
+			// minute (its echo on her piece); and ahead again once the battle's course is back before her beam, or she is
+			// deep no longer. With no escort on her for a minute she comes round as above.)
+			if (bDeep)
+			{
+				for (const auto& Pr : Now)
+				{
+					const Piece& By = Pr.second;
+					if (By.Side != L.Side && By.Ships > 0 && By.EchoOn == L.Piece && By.EchoKind != "bearing")
+					{
+						L.HeldAt = ShownT;
+						break;
+					}
+				}
+			}
+			const double Crawl = 2.0;
+			const double OnBow = std::cos(Face - L.Hdg);
+			const bool bHeld = L.HeldAt >= 0.0 && ShownT - L.HeldAt < 60.0;
+			const bool bWasAstern = L.bAstern;
+			if (!bDeep || Speed > Crawl || !bHeld || OnBow > 0.0) L.bAstern = false;
+			else if (!L.bAstern && OnBow < -0.87 && L.Spd < Crawl + 0.5) L.bAstern = true;
+			// (coming round only where the battle has turned her round, its course more than a right angle off her heading, and
+			// then on round until her station is off her bow or near, or the course within 20 degrees of hers: where the course
+			// is a few degrees off hers and her station has fallen a little astern of her, as a zig-zag's swing leaves it, she eases
+			// her way for it as a ship does, never circling at her best way round a station inside her turning circle)
+			const double Apart = Flat(ToWant);
+			const bool bOffBow = Apart > 0.1 * Sz.Long && ToWant.Dot(Ahead(L.Hdg)) < 0.5 * Apart;
+			if (!bDeep || L.bAstern || Speed <= 0.5 || !bOffBow || OnBow >= 0.94) L.bRounding = false;
+			else if (OnBow < 0.0) L.bRounding = true;
+			// (going astern no longer because the battle has swung its course across her beam, her station beside her and
+			// drawing away at the battle's speed: she steers for it, for where it will be as she closes it at her way (CatchLead
+			// s ahead at the most), her way the battle's and CatchGain more a metre it lies ahead of her, eased as it lies abaft
+			// her beam so that she turns short, until she is within CatchNear m of it with the course within 60 degrees of her
+			// heading; and from there she keeps it as above. Coming round for it in her circle at a crawl, 140 m across, she
+			// was drawn 40 m off her place as her hunter threw his ahead salvo at it. The review of 24 November, the second)
+			if (!bDeep || L.bAstern || Speed <= 0.5) L.bCatching = false;
+			else if (bWasAstern) L.bCatching = true;
+			else if (Apart < CatchNear && OnBow >= 0.5) L.bCatching = false;
+			const bool bRound = L.bRounding && !L.bCatching;
+			const double Reach = std::max(Speed * 20.0, (bDeep ? 1.0 : 2.5) * Sz.Long);
+			const double Cut = (bDeep ? 60.0 : 40.0) * Deg;
+			const double Hope = L.bCatching ? Bearing(L.P, Goal + GoalV * Clamp(Apart / std::max(1.0, std::fabs(L.Spd)), 0.0, CatchLead))
+				: Flat(ToWant) > 1500.0 || bRound ? Bearing(L.P, Goal + GoalV * (bRound ? 10.0 : 6.0))
+				: Wrap(Face + Clamp(std::atan2(ToWant.Dot(RightOf(Face)), Reach), -Cut, Cut));
 			// Keeping clear of his own line: a ship of it that would pass nearer than most of its spacing within the next
 			// 40 s he turns away from, astern of her where she crosses, to starboard where she comes on head on, away from
 			// her where she lies alongside; the harder the nearer. (Every other ship, his and every ship's alike: ClearWay,
@@ -2082,7 +2262,15 @@ namespace SeaShow
 			const double Behind = ToWant.Dot(Ahead(L.Hdg));
 			// (a boat dived makes her best speed on her batteries, ruling 241)
 			const double Top = C.Class == "ss" && L.Keel > SurfacedKeel(C.Class) + 1.0 ? std::min(Sz.Speed * 1.45, F.DivedTop) : Sz.Speed * 1.45;
-			double WantSpd = Clamp(Speed + Clamp(Behind * 0.06, -0.4 * Speed, 4.0), 0.0, Top);
+			double WantSpd = bRound ? Top : Clamp(Speed + Clamp(Behind * (L.bCatching ? CatchGain : 0.06), -0.4 * Speed, 4.0), 0.0, Top);
+			if (L.bAstern)
+			{
+				// (going astern: her stern on the battle's course, bent toward her station as her bow would be going ahead;
+				// her way astern the battle's speed, a little more or less to close what she lies short of it or past it)
+				const double Sternward = -ToWant.Dot(Ahead(L.Hdg));
+				Steer = Wrap(Face + Clamp(std::atan2(ToWant.Dot(RightOf(Face)), Reach), -Cut, Cut) + Pi);
+				WantSpd = -Clamp(Speed + Clamp(Sternward * 0.06, -0.4 * Speed, 1.0), 0.0, Crawl + 0.5);
+			}
 			// (the ship herself keeps clear of every other: not his ghost, which only marks the column's course)
 			if (&L != &C.Ghost) ClearWay(L, Sz, Acc, Dt, Steer, WantSpd);
 			// (her rate of turn held to the way she will have at the end of the step, where she is losing way: a boat dived
@@ -2931,7 +3119,12 @@ namespace SeaShow
 			int Id = 0;
 			Vec W, Push;
 			double Face = 0.0, Long = 0.0, Room = 1e18;
+			bool bDeep = false;
 		};
+		// (a boat the battle has below periscope depth, and under as drawn, keeps no water at the surface: every ship passes
+		// over her, as her hunters run over her to drop, ruling 241, and ClearWay has them. Her station is the battle's place
+		// itself, pushed off nothing and pushing nothing off: so she is drawn where the battle attacks her, its drops laid
+		// within 5 m of her, and not 120 m and more away (the review of 24 November, the second): HeldDeep)
 		std::vector<Station> Stations;
 		for (auto& Pair : Lines)
 		{
@@ -2944,10 +3137,13 @@ namespace SeaShow
 			St.W = Vec(P->X, P->Y, 0.0) + RightOf(P->Face) * C.Zig + C.Keep;
 			St.Face = P->Face;
 			St.Long = C.Size.Long;
+			const Hull* Lead = FindHull(C.Line.front());
+			St.bDeep = Lead && HeldDeep(*Lead);
 			Stations.push_back(St);
 		}
 		for (Station& St : Stations)
 		{
+			if (St.bDeep) continue;
 			const Vec Side = RightOf(St.Face);
 			auto From = [&St, &Side](const Vec& There, double Clear, double Share, bool bRight)
 			{
@@ -2961,14 +3157,14 @@ namespace SeaShow
 			};
 			for (const Station& Other : Stations)
 			{
-				if (Other.Id == St.Id) continue;
+				if (Other.Id == St.Id || Other.bDeep) continue;
 				From(Other.W, 0.5 * (St.Long + Other.Long) + 200.0, 0.5, St.Id > Other.Id);
 			}
 			const Column& Own = Lines[St.Id];
 			for (const auto& Pair : Hulls)
 			{
 				const Hull& H = Pair.second;
-				if (H.Doing == Fate::Gone || H.Key == Own.Line.front()) continue;
+				if (H.Doing == Fate::Gone || H.Key == Own.Line.front() || HeldDeep(H)) continue;
 				if (std::fabs(H.P.X - St.W.X) > 1500.0 || std::fabs(H.P.Y - St.W.Y) > 1500.0) continue;
 				// (his own line too, where he comes back past it in a turn: only nearer than its ships' spacing)
 				if (H.Piece == St.Id) From(H.P, St.Long + 60.0, 1.0, true);
@@ -2982,8 +3178,9 @@ namespace SeaShow
 			// (laid out at the start, a third of his push a pass: two stations too near are pushed apart by each other's
 			// station and each other's ships, three shares between them, so a third closes just the gap; the whole push
 			// overshoots, and with neighbours on both sides sends stations past each other)
+			// (a boat deep comes back to the battle's place faster, at 1.5 m/s: nothing at the surface is in her way)
 			if (Flat(St.Push) > 1e-6) Goal = C.Keep + St.Push * (bSettle ? 1.0 / 3.0 : 1.0);
-			else if (St.Room > 120.0 && Flat(C.Keep) > 0.0) Goal = C.Keep * std::max(0.0, 1.0 - 0.6 * Dt / std::max(1.0, Flat(C.Keep)));
+			else if (St.Room > 120.0 && Flat(C.Keep) > 0.0) Goal = C.Keep * std::max(0.0, 1.0 - (St.bDeep ? 1.5 : 0.6) * Dt / std::max(1.0, Flat(C.Keep)));
 			const Vec Was = C.Keep;
 			Vec Step = Goal - C.Keep;
 			// (never on away from a leader who has already fallen 450 m behind his station: at his best speed he could
@@ -3064,7 +3261,9 @@ namespace SeaShow
 			}
 			else if (H.Doing == Fate::Sinking)
 			{
-				H.Spd = std::max(0.0, H.Spd - (H.bAbandoned ? AbandonedSlowing : 0.12) * Dt);
+				// (losing her way, ahead or astern: a boat given up going astern stops as one going ahead does)
+				const double Losing = (H.bAbandoned ? AbandonedSlowing : 0.12) * Dt;
+				H.Spd = H.Spd >= 0.0 ? std::max(0.0, H.Spd - Losing) : std::min(0.0, H.Spd + Losing);
 				const double Most = MostRateAt(Own, H.Spd);
 				const double Rate = Clamp(Wrap(H.Away - H.Hdg) * 0.4, -Most, Most);
 				H.Rate += Clamp(Rate - H.Rate, -Rudder * Dt, Rudder * Dt);
@@ -3102,7 +3301,8 @@ namespace SeaShow
 			H.Heel += (Want - H.Heel) * Clamp(Dt / 2.0, 0.0, 1.0);
 			H.Pitch = AtForce(R.Pitch, Force) * (0.35 + 0.65 * std::sqrt(std::max(0.0, 1.0 - Beam * Beam))) * Swells(ShownT, H.PitchT, H.Roll0 * 1.7 + 0.5) * Calm;
 			H.Heave = R.Heave * High * Swells(ShownT, H.PitchT * 1.05, H.Roll0 * 2.3 + 1.3) * Calm;
-			if (Sinking != 0.0) H.Pitch += Clamp(-std::atan(Sinking / std::max(1.5, H.Spd)) / Deg, -12.0, 12.0);
+			H.DiveAngle = Sinking != 0.0 ? Clamp(-std::atan(Sinking / std::max(1.5, std::fabs(H.Spd))) / Deg, -12.0, 12.0) : 0.0;
+			H.Pitch += H.DiveAngle;
 			if (H.Doing != Fate::Sinking && std::fabs(H.Heel) > Check.MostHeel)
 			{
 				Check.MostHeel = std::fabs(H.Heel);
@@ -3125,11 +3325,16 @@ namespace SeaShow
 			const Piece* P = PieceNow(Pair.first);
 			if (!P) continue;
 			// A boat's deck gun and a merchant's gun fire only where the battle says they do (its "gun", view by view, and the
-			// hits it tells of them); a warship's line on the piece it is engaged with. (A boat or a merchant told "engaged"
-			// alone never opens fire: the show fires no gun the battle did not.)
+			// hits it tells of them); a warship's line on the piece it is engaged with, or, engaged with none, the one its own
+			// "gun" is told on (a convoy's escort at a boat forced up: the convoy field tells its guns so, never "engaged").
+			// (A boat or a merchant told "engaged" alone never opens fire: the show fires no gun the battle did not.)
 			const bool bOneGun = P->Class == "ss" || P->Class == "mv";
-			const int FoeId = bOneGun ? P->GunOn : P->Engaged;
+			const int FoeId = bOneGun ? P->GunOn : P->Engaged >= 0 ? P->Engaged : P->GunOn;
 			const Piece* Foe = FoeId >= 0 ? PieceNow(FoeId) : nullptr;
+			// (a gun told on a piece, a boat's, a merchant's or an escort's, is on her ships wherever they lie afloat, in her
+			// line or out of it: a straggler, or one her men have left, as the convoy field keeps an escort's gun on a boat
+			// forced up whose crew abandon her until she goes. A warship engaged, on her line)
+			const bool bAnyAfloat = bOneGun || P->Engaged < 0;
 			// (her next hit told: the ship it strikes, afloat, nearest her piece, and the ship of hers nearest that one, whose
 			// gun fires it)
 			const auto Next = bOneGun ? Due.find(P->Id) : Due.end();
@@ -3150,11 +3355,21 @@ namespace SeaShow
 					On = H->AimKey >= 0 ? FindHull(H->AimKey) : nullptr;
 					// (a boat's or a merchant's gun on a ship out of her line too while she is afloat: a straggler, or one her
 					// men have left, as a deck gun most often finished one)
-					if (!On || On->Piece != Foe->Id || !(bOneGun ? StillAfloat(*On) : On->Doing == Fate::Line) || std::fmod(ShownT, 5.0) < Dt)
-						On = bOneGun ? NearestAfloatOf(Foe->Id, H->P.X, H->P.Y) : NearestOf(Foe->Id, H->P.X, H->P.Y);
+					if (!On || On->Piece != Foe->Id || !(bAnyAfloat ? StillAfloat(*On) : On->Doing == Fate::Line) || std::fmod(ShownT, 5.0) < Dt)
+						On = bAnyAfloat ? NearestAfloatOf(Foe->Id, H->P.X, H->P.Y) : NearestOf(Foe->Id, H->P.X, H->P.Y);
 				}
-				// (a boat dived is no gun target: her hunters' weapon is the depth charge)
-				if (On && On->Class == "ss" && On->Keel > SurfacedKeel(On->Class) + 1.0) On = nullptr;
+				// (a boat dived is no gun target: her hunters' weapon is the depth charge. But a warship's gun the battle tells
+				// on a boat it has forced up, her rise told "surfaced", is laid on her as she comes up, its fire held until her
+				// casing is clear, as an escort waits for the boat she has blown up: bearing on her as she comes clear, not
+				// trained round to her from fore and aft after it; never on one the player has not found, InSight, whom it
+				// would give away. The review of 24 November, the second: her hunter's next round after her casing came clear
+				// fell 15 s on, his gun swung round from aft)
+				bool bHold = false;
+				if (On && On->Class == "ss" && On->Keel > SurfacedKeel(On->Class) + 1.0)
+				{
+					bHold = !bOneGun && P->GunOn == On->Piece && On->Dive == "surfaced" && On->KeelRate < 0.0 && !On->bStruck && InSight(*On);
+					if (!bHold) On = nullptr;
+				}
 				// (nor one that has struck, her white flag up: no gun is laid on her but for a hit the battle tells, which it
 				// never does once she has)
 				if (On && On->bStruck && !bTold) On = nullptr;
@@ -3223,6 +3438,11 @@ namespace SeaShow
 				const double Mv = H->Class == "dd" ? 760.0 : bOneGun ? 700.0 : 820.0;
 				const double WantElev = 0.5 * std::asin(Clamp(Gee * Range / (Mv * Mv), 0.0, 1.0)) / Deg * 1.6;
 				H->Elev += Clamp(WantElev - H->Elev, -3.0 * Dt, 3.0 * Dt);
+				if (bHold)
+				{
+					H->NextSalvo = -1.0;
+					continue;
+				}
 				// Her guns fire: the shells in the air until they fall (LandShells, or Play for a round that carries a hit told:
 				// ToldAt), the flash at her guns.
 				auto Fire = [&](double Lands, double ToldAt)
@@ -3247,6 +3467,7 @@ namespace SeaShow
 					S.Lands = Lands;
 					S.ToldAt = ToldAt;
 					S.OnKey = ToldAt >= 0.0 ? On->Key : -1;
+					S.bLaidAfloat = bAnyAfloat;
 					Flying.push_back(S);
 					const ClassSize& Sz = SizeOf(H->Class);
 					// (a boat's gun on her casing, forward of her tower or aft of it; a merchant's on her forecastle or her poop)
@@ -3316,10 +3537,11 @@ namespace SeaShow
 			if (S.Lands > ShownT) { ++K; continue; }
 			const Shells Fell = S;
 			Flying.erase(Flying.begin() + static_cast<long>(K));
-			// (a boat's deck gun's or a merchant's gun's round falls on the ship it was laid on in her line or out of it, a
-			// straggler or one her men have left, as Gunnery lays it: NearestAfloatOf)
+			// (a boat's deck gun's or a merchant's gun's round, or a warship's told on her piece, falls on the ship it was laid
+			// on in her line or out of it, a straggler or one her men have left, as Gunnery lays it: NearestAfloatOf)
 			const bool bOneGun = Fell.Class == "ss" || Fell.Class == "mv";
-			Hull* On = bOneGun ? NearestAfloatOf(Fell.OnPiece, Fell.Fired.X, Fell.Fired.Y) : NearestOf(Fell.OnPiece, Fell.Fired.X, Fell.Fired.Y);
+			const bool bAfloatToo = bOneGun || Fell.bLaidAfloat;
+			Hull* On = bAfloatToo ? NearestAfloatOf(Fell.OnPiece, Fell.Fired.X, Fell.Fired.Y) : NearestOf(Fell.OnPiece, Fell.Fired.X, Fell.Fired.Y);
 			if (!On) continue;
 			const std::string Weapon = Fell.Calibre >= 300.0 ? "shell_heavy" : Fell.Calibre >= 180.0 ? "shell_medium" : "shell_light";
 			// (a boat's deck gun's or a merchant's gun's round, of any bore a deck gun has to a Japanese boat's 14 cm, throws a
@@ -3333,10 +3555,11 @@ namespace SeaShow
 			Owed& D = Debt[Fell.OnPiece];
 			int Hits = 0;
 			// (a boat gone under while the round was in the air takes no hit: what she is owed waits until she is up again; a
-			// boat's or a merchant's round draws what a straggler or a ship abandoned is owed too, where she lies afloat; a round
-			// that carried a hit told is drawn as told, Play, and one here is one whose hit she was under for: a miss)
+			// boat's or a merchant's round, or a warship's told on her piece, draws what a straggler or a ship abandoned is owed
+			// too, where she lies afloat; a round that carried a hit told is drawn as told, Play, and one here is one whose hit
+			// she was under for: a miss)
 			const bool bUnder = On->Class == "ss" && On->Keel > SurfacedKeel(On->Class) + 1.0;
-			if (Fell.ToldAt < 0.0 && !bUnder && D.Hits >= 0.5 && (On->Doing == Fate::Line || (bOneGun && StillAfloat(*On))))
+			if (Fell.ToldAt < 0.0 && !bUnder && D.Hits >= 0.5 && (On->Doing == Fate::Line || (bAfloatToo && StillAfloat(*On))))
 			{
 				Hits = Fell.Class == "bb" && D.Hits >= 1.5 ? 2 : 1;
 				D.Hits -= Hits;
@@ -3348,6 +3571,7 @@ namespace SeaShow
 				E.Size = Fell.Calibre;
 				E.Side = On->Side;
 				On->LastBlow = Weapon;
+				On->BlowAt = ShownT;
 				++Check.ShellHits;
 			}
 			if (Hits > 0)
@@ -3550,6 +3774,7 @@ namespace SeaShow
 								Fx& E = Emit(FxKind::BombHit, At, bTorp ? "torpedo" : S.bFromCoast ? "level" : "dive", On->Key);
 								E.Side = On->Side;
 								On->LastBlow = bTorp ? "torpedo" : "dive";
+								On->BlowAt = ShownT;
 								SightHit(*On); // (a boat struck is found: SetMine)
 								++Check.BombHits;
 								// B5.4: beside a dive bomber's hit, its two small wing bombs close aboard (Repulse took one hit
@@ -4044,8 +4269,9 @@ namespace SeaShow
 			if (Pair.second.Doing != Fate::Gone && Flat(Pair.second.P - H.P) < 1500.0) W.Near.push_back(Pair.first);
 		Wrecked.push_back(W);
 		++Check.Wrecks;
-		// (a boat struck to be taken does not go down: her slick is counted if the battle sends her down after all)
-		if (!(H.bStruck && H.StruckHow == "captured")) ++Check.Slicks;
+		// (her slick counted where it is laid, every wreck's: one given up, abandoned or struck may not go down by the
+		// battle's last word, a prize never, and the cloud test allows those theirs, still settling or afloat at the end)
+		++Check.Slicks;
 		Check.MenReal += W.Real;
 		Check.MenKept += W.Men;
 	}
@@ -4080,9 +4306,63 @@ namespace SeaShow
 		{
 			if (W.Ship != H.Key) continue;
 			W.bLeft = true;
-			W.Start = ShownT + std::min(20.0, 0.4 * H.Spd / AbandonedSlowing);
+			W.Start = ShownT + std::min(20.0, 0.4 * std::fabs(H.Spd) / AbandonedSlowing);
 			W.End = W.Start + 90.0;
-			W.BoatsFrom = ShownT + std::min(40.0, 0.8 * H.Spd / AbandonedSlowing);
+			W.BoatsFrom = ShownT + std::min(40.0, 0.8 * std::fabs(H.Spd) / AbandonedSlowing);
+		}
+	}
+
+	void Show::LeaveUp(Hull& H)
+	{
+		if (H.Class != "ss") return;
+		// (as one that struck: her tanks blown, her engines stopped; out of her line Trim keeps the depth she is going to)
+		H.Dive = "surfaced";
+		H.bScope = false;
+		H.KeelTo = SurfacedKeel(H.Class);
+		if (H.Keel <= SurfacedKeel(H.Class) + 0.3) return;
+		H.bLeftUnder = true;
+		for (Wreck& W : Wrecked)
+			if (W.Ship == H.Key) W.Start = W.End = W.BoatsFrom = 1e18;
+	}
+
+	void Show::Untold(double Upto)
+	{
+		// (the view the picture has reached, as each step's events are played: one at its own moment counts)
+		const View* At = nullptr;
+		for (const View& V : Views)
+		{
+			if (V.T > Upto + 1e-9) break;
+			At = &V;
+		}
+		if (!At) return;
+		for (const auto& Pair : At->Pieces)
+		{
+			const Piece& P = Pair.second;
+			const auto Line = Lines.find(P.Id);
+			if (Line == Lines.end()) continue;
+			int InLine = 0;
+			for (const int Key : Line->second.Line)
+			{
+				const Hull* H = FindHull(Key);
+				InLine += H && H->Doing == Fate::Line ? 1 : 0;
+			}
+			while (InLine > std::max(0, P.Ships))
+			{
+				Hull* Given = nullptr;
+				for (const int Key : Line->second.Line)
+				{
+					Hull* H = FindHull(Key);
+					if (!H || H->Doing != Fate::Line) continue;
+					if (!Given || H->BlowAt >= Given->BlowAt) Given = H;
+				}
+				if (!Given) break;
+				AbandonShip(*Given, std::string());
+				NoteLost(*Given, 0);
+				Given->bGivenUp = true;
+				LeaveUp(*Given);
+				++Check.LeftUntold;
+				--InLine;
+			}
 		}
 	}
 
@@ -4393,7 +4673,8 @@ namespace SeaShow
 		const double Half = std::max(0.0, 0.5 * (Long - Beam)), R = 0.5 * Beam + Clear;
 		const Vec Fore = Ahead(H.Hdg), Right = RightOf(H.Hdg), Mid(H.P.X, H.P.Y, 0.0);
 		const Vec Bow = Mid + Fore * Half, Stern = Mid - Fore * Half;
-		auto Clears = [&Bow, &Stern, R](const Vec& A, const Vec& B) { return FlatGap(A, B, Bow, Stern) >= R; };
+		// (clear by its own width, to within a hair: a way along which the last step found it clear stays so)
+		auto Clears = [&Bow, &Stern, R](const Vec& A, const Vec& B) { return FlatGap(A, B, Bow, Stern) >= R - 1e-6; };
 		if (Clears(From, To)) return To;
 		// (round the end nearer the way: off her shoulder on To's side, where it can be reached; else off that end, on her
 		// middle line; else off her shoulder on its own side, to come to that end along her. Each a point half as far again
@@ -4433,6 +4714,21 @@ namespace SeaShow
 
 	void Show::StepHands(double Dt)
 	{
+		// A boat abandoned coming up (LeaveUp): her men over her side, her raft and her boats, once her casing is clear, as
+		// AbandonShip has them go (she has long lost her way); sent down first, every man of hers goes as she does (RunWrecks).
+		for (auto& Pair : Hulls)
+		{
+			Hull& H = Pair.second;
+			if (!H.bLeftUnder || H.Keel > SurfacedKeel(H.Class) + 0.3) continue;
+			H.bLeftUnder = false;
+			for (Wreck& W : Wrecked)
+			{
+				if (W.Ship != H.Key) continue;
+				W.Start = ShownT + std::min(20.0, 0.4 * std::fabs(H.Spd) / AbandonedSlowing);
+				W.End = W.Start + 90.0;
+				W.BoatsFrom = ShownT + std::min(40.0, 0.8 * std::fabs(H.Spd) / AbandonedSlowing);
+			}
+		}
 		// A struck boat coming up: her crew's plan once her casing is clear (her keel within 0.3 m of her trim surfaced).
 		for (auto& Pair : Hulls)
 		{
@@ -4655,8 +4951,23 @@ namespace SeaShow
 			auto CrossTo = [&](const Vec& Off, double Hdg)
 			{
 				Vec Way = bBy ? RoundHull(B.Whaler.At, Off, *By, Clear) : Off;
-				if (bBoat) Way = RoundHull(B.Whaler.At, Way, *Boat, Clear);
+				// (rounding her, it is carried with her as she drifts and turns no more: so a way round her end found clear
+				// stays clear as it pulls along it, and it never hangs off her end between two ways round, as it did astern of
+				// a prize drifting down the wind at a quarter of a metre a second, the review of 24 November, the second)
+				Vec Carried;
+				if (bBoat)
+				{
+					Vec Round = RoundHull(B.Whaler.At, Way, *Boat, Clear);
+					if (Flat(Round - Way) > 1e-6 && Boat->bHasLast)
+					{
+						Carried = Vec(Boat->P.X - Boat->LastP.X, Boat->P.Y - Boat->LastP.Y, 0.0);
+						B.Whaler.At += Carried;
+						Round = RoundHull(B.Whaler.At, Way, *Boat, Clear);
+					}
+					Way = Round;
+				}
 				const double Left = PullTo(Off, Way, 1.8);
+				B.Pull += Carried * (1.0 / Dt);
 				Turn(Left > 12.0 ? Bearing(B.Whaler.At, Way) : Hdg);
 				return Left < 0.05 && std::fabs(Wrap(B.Whaler.Heading - Hdg)) < 0.02;
 			};
@@ -5310,6 +5621,7 @@ namespace SeaShow
 					const double Side = Rel.Dot(RightOf(By->Hdg)) >= 0.0 ? 1.0 : -1.0;
 					Let();
 					M.Near = -1;
+					if (M.To != By->Key) M.ToSince = ShownT;
 					M.To = By->Key;
 					M.Off = Vec(Along, Side * (0.5 * Sz.Beam + 1.0), 0.0);
 					Into(Swim::Swim);
@@ -5405,6 +5717,12 @@ namespace SeaShow
 				{
 					if (On) Into(On->O.Kind == "boat" && M.bIn ? Swim::Boat : M.bIn ? Swim::Raft : Swim::Cling);
 					else if (By && W.PickCap >= 0 && W.Picked >= W.PickCap) Into(Swim::Tread); // (at her side, his turn up it to come)
+					else if (By && ShownT < M.ToSince + NetDownFor)
+					{
+						// (at her side before a net could be down there, brought near her on a float: at its foot until it is)
+						M.Next = std::min(M.Next, M.ToSince + NetDownFor);
+						Into(Swim::Tread);
+					}
 					else if (By && [&]()
 						{
 							// (one man up a net at a time: another climbing there, he moves along her side to the next)
@@ -5540,7 +5858,8 @@ namespace SeaShow
 		while (ShownT + Fixed <= T + 1e-9)
 		{
 			for (auto& Pair : Hulls) { Pair.second.LastP = Pair.second.P; Pair.second.bHasLast = Pair.second.Doing != Fate::Gone; Pair.second.LastRate = Pair.second.Rate; }
-			ShownT += Fixed;
+			Elapsed += Fixed;
+			ShownT = ClockFrom + Elapsed;
 			Interpolate();
 			StartColumns();
 			while (!Queue.empty() && Queue.front().T <= ShownT + 1e-9)
@@ -5549,6 +5868,7 @@ namespace SeaShow
 				Queue.pop_front();
 				Play(E);
 			}
+			Untold(ShownT);
 			Rechosen = 0;
 			KeepClear(Fixed);
 			Steam(Fixed);
@@ -5575,8 +5895,10 @@ namespace SeaShow
 					if (Flat(H->P - H->LastP) > 0.2)
 					{
 						const double Way = Bearing(H->LastP, H->P);
-						// (the bow against the way she made over the step, half a step's turn allowed for the chord)
-						Check.MostSlip = std::max(Check.MostSlip, std::max(0.0, std::fabs(Wrap(Way - H->Hdg)) - std::fabs(H->Rate) * Fixed * 0.5) / Deg);
+						// (the bow against the way she made over the step, half a step's turn allowed for the chord; her stern,
+						// going astern)
+						const double Facing = H->Spd < 0.0 ? Wrap(H->Hdg + Pi) : H->Hdg;
+						Check.MostSlip = std::max(Check.MostSlip, std::max(0.0, std::fabs(Wrap(Way - Facing)) - std::fabs(H->Rate) * Fixed * 0.5) / Deg);
 					}
 					// (her limit at her speed: her turning circle the same at any speed, her rudder answering as fast)
 					const double Pace = Clamp(H->Spd / std::max(1.0, Sz.Speed), 0.15, 1.45);
@@ -5596,6 +5918,7 @@ namespace SeaShow
 				Queue.pop_front();
 				Play(E);
 			}
+			Untold(T);
 		}
 		// (the guns laid twenty times a second, not every frame: the kit draws each stream's rounds between, from where its
 		// muzzle was as each fired, and they cost a third as much)
@@ -5637,6 +5960,7 @@ namespace SeaShow
 			S.Heading = Wrap(H.Hdg + H.Rate * On) / Deg;
 			S.Heel = H.Heel;
 			S.Pitch = H.Pitch;
+			S.DiveAngle = H.DiveAngle;
 			S.Heave = H.Heave;
 			S.Speed = H.Spd;
 			S.Wake = Clamp(H.Spd / (Sz.Speed * 1.3), 0.0, 1.0);

@@ -1,0 +1,20 @@
+# The real nights' known failures (the review of 24 November, the second): the naval rules' side of a failure on one of the
+# convoy battle's real nights (Tools/sea_show/recordings, D2), until its rules fix lands. sea_show_test reads this list
+# (run.sh names it in SEA_SHOW_KNOWN). Each line, tab apart: the recording's file name without .json, the check's name as
+# sea_show_test prints it, and the most that check may read on that night (its Measure: frames off for the line, seconds
+# late for the gun hits, hits over a fifth of the salvos for the salvos). Within its bound the failure prints KNOWN and fails
+# nothing; past it, or any check not listed failing, fails the run as ever; a listed check that passes says to take its line
+# off. Take each line off when its rules fix lands.
+#
+# The line: the battle gives up a boat's ship (Untold) while its views still count her afloat, 1 to 1 (first-pack piece 49 at
+# 2289 s, hunted 61 at 8430 s, hunters 62 at 11589 s).
+convoy-first-pack	the line's ships as many as the battle's	2880
+convoy-hunted	the line's ships as many as the battle's	2880
+convoy-hunters	the line's ships as many as the battle's	2880
+# The gun hits: told on a boat forced up from 110 m while she is still some 90 m down, drawn by her hunter's next round once
+# her casing is clear (2 m/s up on the battle's own depth as it tells her rise, the sea stopping her at her trim: hunted piece
+# 61 hit at 8331 s, hunters 62 at 11550 s). The bounds as the review set them, from d2fix-r1 (46.1 and 53.5 s).
+convoy-hunted	every gun hit told drawn on the ship struck within 30 s	46.1
+convoy-hunters	every gun hit told drawn on the ship struck within 30 s	53.5
+# The salvos: two gun hits booked on hunters' piece 62 in 60 s against five salvos drawn (2 for 5: one hit over a fifth).
+convoy-hunters	most salvos miss (hits only as the battle books them)	1.0

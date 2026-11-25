@@ -165,6 +165,10 @@ namespace
 		{ "Battle/SeaUnder.cpp", "SeaUnder::BoatPose Her = Boat ? SeaUnder::PoseOf(*Boat) : SeaUnder::BoatPose();" },
 		{ "Battle/SeaUnder.cpp", "Her.bThere = Her.bThere && Boat != nullptr && !SeaUnder::CrewUp(*Boat, Now);" },
 		{ "Battle/SeaUnder.cpp", "Sea.Ended(Now, E.Key);" },
+		// (the ways a pattern's eye under her is tried from, Director::SeenMostWay: each 10 degrees, of length 1 as sin and cos
+		// round it; THE LOOK'S OWN NUMBERS poses each)
+		{ "Battle/SeaUnderCore.cpp", "const double Angle = K * 10.0 * Pi / 180.0;" },
+		{ "Battle/SeaUnderCore.cpp", "Try.Near = P3(std::sin(Angle), std::cos(Angle), 0.0);" },
 	};
 
 	// -------------------------------------------------------------------------------------------------------------
@@ -301,8 +305,9 @@ namespace
 
 	/**
 	 * A run over a boat: one escort coming up astern of a boat lying 60 m down and passing her, both steaming north (he at
-	 * 8 m/s, she at 3: the show keeps their hulls apart, so he passes her some 200 m off), his asdic on her from 10 s, lost at
-	 * 30 s. Her hunters' list (extra.heard) in every other view only, the reader keeping it between: none to 11 s, him and a
+	 * 8 m/s, she at 3), she 200 m to starboard of his track, so he passes her some 200 m off: the battle's own places, where the
+	 * show draws a boat deep (SeaShow::KeepClear: she keeps no water at the surface, so it no longer holds his hull off hers;
+	 * the review of 24 November, the second), his asdic on her from 10 s, lost at 30 s. Her hunters' list (extra.heard) in every other view only, the reader keeping it between: none to 11 s, him and a
 	 * surface ship of her own side far off from 12 s to 50 s, then that ship alone. DropT: he drops a pattern of three, Spread
 	 * across, set to her depth (below 0: none); HitT: a sea:depthChargeHit on her told then (below 0: none). Me: the player;
 	 * Seconds: how long it runs.
@@ -318,7 +323,7 @@ namespace
 			                          "\"sinking\":21,\"spread\":" + Num(Spread, 4) + ",\"kind\":\"pattern\"}}" });
 		if (HitT >= 0.0)
 			Events.push_back({ HitT, "{\"t\":" + Num(HitT, 4) + ",\"what\":\"sea:depthChargeHit\",\"unit\":30,\"side\":\"def\",\"text\":\"\",\"extra\":{\"from\":20,\"harm\":0.5}}" });
-		const std::vector<Craft> Crafts = { { 20, "def", "dd", 10000.0, 8700.0, 8.0, -1.0, "" }, { 30, "att", "ss", 10000.0, 9000.0, 3.0, -1.0, Deep },
+		const std::vector<Craft> Crafts = { { 20, "def", "dd", 10000.0, 8700.0, 8.0, -1.0, "" }, { 30, "att", "ss", 10200.0, 9000.0, 3.0, -1.0, Deep },
 		                                    { 40, "att", "dd", 15000.0, 15000.0, 0.0, -1.0, "" } };
 		return Recorded("run-over", "the view under the water's own run over a boat (the test's, not a battle's)", Events, Crafts, Seconds, Me,
 		                [](int Id, int K) { return Id != 30 || K % 2 != 0 ? std::string() : std::string(K < 12 ? "[]" : K <= 50 ? "[20,40]" : "[40]"); });
@@ -488,9 +493,9 @@ namespace
 	 * one, so the ships go as they went): of a pattern of three SeaShow lays the middle one half the spread ahead of his stern
 	 * and the spread's half less his half beam to starboard, bursting half his run and its sinking (21 s) after the drop. The
 	 * moment (to a tenth of a second) and the spread that put it nearest her; false where none comes
-	 * within 2 m. The moment the test then tells the blow at is the show's own (Replay), so this only aims. (The show keeps
-	 * his hull some 200 m off hers, SeaShow::KeepClear, so only a wide pattern's thrown charge comes down where she will be:
-	 * up to 600 m across, the mechanism tried, not the drill.)
+	 * within 2 m. The moment the test then tells the blow at is the show's own (Replay), so this only aims. (He passes some
+	 * 200 m off her, RunOver, so only a wide pattern's thrown charge comes down where she will be: up to 600 m across, the
+	 * mechanism tried, not the drill.)
 	 */
 	bool AimOver(const SeaFeed::Recording& Rec, double& OutDrop, double& OutSpread, double& OutMiss)
 	{
@@ -1106,6 +1111,65 @@ int main(int ArgC, char** ArgV)
 		bool bSpaced = One.size() == Two.size() && !One.empty();
 		for (size_t K = 0; K < One.size() && bSpaced; ++K) bSpaced = One[K].T == Two[K].T && One[K].Which == Two[K].Which && (K == 0 || One[K].T - One[K - 1].T >= 0.8);
 		Check("the hull's creaks the same each time and 0.8 s apart at the least", bSpaced, std::to_string(One.size()) + " creaks");
+		// (a pattern's eye under her looks the way it is given, Window::Near, for every way SeenMostWay tries, each 10 degrees,
+		// whatever the last bit of its length as the maths library's sin and cos round it, a bit under 1 or over; only none,
+		// Near 0, looks toward the pattern's middle from her Hand side: so the shot is the way the trial chose, on any build)
+		{
+			Window W;
+			W.What = Kind::Pattern;
+			W.Escort = 5;
+			W.From = 0.0;
+			W.Until = 60.0;
+			W.HoldUntil = 72.0;
+			W.FirstBurst = 40.0;
+			W.Aim = P3(30.0, 10.0, 0.0);
+			W.Hand = 1;
+			BoatPose Her;
+			Her.Key = 3;
+			Her.bThere = true;
+			Her.Heading = 30.0;
+			Her.Keel = 60.0;
+			Her.At = P3(0.0, 0.0, -MiddleOf(Her.Keel));
+			// (the way the eye looks, level: before the first burst's last 8 s it stands on that way, looking up along it)
+			auto LooksWay = [&](const P3& Near, P3& OutWay)
+			{
+				Window Try = W;
+				Try.Near = Near;
+				EyePose Eye;
+				if (!EyeOf(Try, Her, std::vector<Hull>(), 0.5, Eye)) return false;
+				const double Across = std::hypot(Eye.Look.X - Eye.Eye.X, Eye.Look.Y - Eye.Eye.Y);
+				if (Across < 1e-6) return false;
+				OutWay = P3((Eye.Look.X - Eye.Eye.X) / Across, (Eye.Look.Y - Eye.Eye.Y) / Across, 0.0);
+				return true;
+			};
+			int Ways = 0, Held = 0;
+			double WorstWay = 0.0;
+			std::string Lost;
+			for (int K = 0; K < 36; ++K)
+			{
+				const double Angle = K * 10.0 * Pi / 180.0;
+				const P3 Way(std::sin(Angle), std::cos(Angle), 0.0);
+				for (const double Bit : { 1.0 - 4e-16, 1.0, 1.0 + 4e-16 })
+				{
+					++Ways;
+					P3 Got;
+					const bool bPosed = LooksWay(Way * Bit, Got);
+					const double Off = bPosed ? std::hypot(Got.X - Way.X, Got.Y - Way.Y) : 1e9;
+					WorstWay = std::max(WorstWay, Off);
+					if (Off < 1e-9) ++Held;
+					else if (Lost.find(std::to_string(K * 10) + " ") == std::string::npos) Lost += std::to_string(K * 10) + " ";
+				}
+			}
+			const P3 Right = ConvoyLook::RightOf(Her.Heading);
+			const P3 Middle = P3(W.Aim.X - Her.At.X, W.Aim.Y - Her.At.Y, 0.0) + Right * (-W.Hand * 15.0);
+			const double Mid = std::hypot(Middle.X, Middle.Y);
+			P3 None;
+			const bool bNone = LooksWay(P3(), None) && std::hypot(None.X - Middle.X / Mid, None.Y - Middle.Y / Mid) < 1e-9;
+			Check("a pattern's eye under her looks each way SeenMostWay tries (every 10 degrees, its length a last bit under or over 1), and only with none toward the pattern's middle",
+			      Held == Ways && bNone,
+			      std::to_string(Held) + " of " + std::to_string(Ways) + " ways held, worst " + Num(WorstWay, 12) + (Lost.empty() ? "" : "; posed off the way at degrees " + Lost) +
+			          (bNone ? "; none: the pattern's middle" : "; none: not the pattern's middle"));
+		}
 	}
 	// THE ONE RULE ON WHAT MAY BE NEAR HER (no recording): a boat the show hides (not found: BoatAt::bShown, SeaShow's SetMine)
 	// within the clearance of her (UnheldClearBy: 232.5 m in the water's own sight) keeps the eye up, for the director's
@@ -1564,6 +1628,51 @@ int main(int ArgC, char** ArgV)
 				      bAllUp && bNoneUnder, Said);
 			}
 		}
+		// (the night's booked blows from patterns as the battle books them: each from a pattern its escort laid within its
+		// lethal reach of the battle's own boat where it dropped, and told as that pattern bursts at her (its drop and its
+		// sinking time, within a view's three seconds), as the convoy field books them; or not, as the stand-ins' hand-made
+		// blows come some seconds after their patterns are spent. On a night whose every such blow is so, the show drawing
+		// her at her place where she is attacked (sea_show_test), every booked blow bursts by a charge drawn. The review of
+		// 24 November, the second)
+		int BlowsAtPattern = 0, BlowsElse = 0;
+		{
+			auto HerPlace = [&Rec](int Id, double When, double& OutX, double& OutY)
+			{
+				const SeaShow::Piece* Was = nullptr;
+				const SeaShow::Piece* Then = nullptr;
+				double TWas = 0.0, TThen = 0.0;
+				for (const SeaFeed::Frame& W : Rec.Views)
+				{
+					const SeaShow::Piece* Here = nullptr;
+					for (const SeaShow::Piece& Q : W.Pieces)
+						if (Q.Id == Id) Here = &Q;
+					if (!Here) continue;
+					if (W.Head.T <= When + 1e-9) { Was = Here; TWas = W.Head.T; }
+					else { Then = Here; TThen = W.Head.T; break; }
+				}
+				if (!Was) return false;
+				const double Fr = Then && TThen > TWas ? std::clamp((When - TWas) / (TThen - TWas), 0.0, 1.0) : 0.0;
+				OutX = Was->X + ((Then ? Then->X : Was->X) - Was->X) * Fr;
+				OutY = Was->Y + ((Then ? Then->Y : Was->Y) - Was->Y) * Fr;
+				return true;
+			};
+			std::map<std::pair<int, int>, const SeaShow::Event*> LastPattern; // (by escort and boat)
+			for (const SeaFeed::Frame& V : Rec.Views)
+				for (const SeaShow::Event& E : V.Events)
+				{
+					if (E.What == "sea:depthCharge" && E.Kind != "ahead" && E.On >= 0) LastPattern[{ E.Unit, E.On }] = &E;
+					if (E.What != "sea:depthChargeHit" || E.Unit < 0) continue;
+					const auto Drop = LastPattern.find({ E.From, E.Unit });
+					if (Drop == LastPattern.end()) continue; // (an ahead salvo's hit, or none told: not a pattern's)
+					const SeaShow::Event& D = *Drop->second;
+					double HerX = 0.0, HerY = 0.0;
+					const bool bOnHer = D.bAt && HerPlace(D.On, D.T, HerX, HerY) && std::hypot(D.X - HerX, D.Y - HerY) <= Rec.Board.ChargeLethal;
+					const double Bursts = D.T + (D.Sinking >= 0.0 ? D.Sinking : (D.Set >= 0.0 ? D.Set : 100.0) / std::max(0.5, Rec.Board.ChargeSink));
+					if (bOnHer && std::fabs(E.T - Bursts) <= 3.0) ++BlowsAtPattern;
+					else ++BlowsElse;
+				}
+		}
+		const bool bLaysOnHer = BlowsAtPattern > 0 && BlowsElse == 0;
 		// THE LOOK, played as the scene plays it, for the watched windows and then the staged ones
 		double SunFrom = 0.0, SunUp = 45.0;
 		StageSun(Rec, SunFrom, SunUp);
@@ -1781,9 +1890,14 @@ int main(int ArgC, char** ArgV)
 			Check(How + ": each charge drawn where it bursts (1.5 m)", Bursts.Off == 0, std::to_string(Bursts.Met) + " bursts, worst " + Num(Bursts.WorstOff, 2) + " m");
 			Check(How + ": each booked blow with a charge drawn within twice its reach of her keel bursts within that reach of a charge drawn the frame before", Bursts.BookedOff == 0,
 			      std::to_string(Bursts.BookedNear) + " such, worst " + Num(Bursts.WorstBooked, 2) + " m");
-			if (Bursts.LaidOff > 0)
+			if (bLaysOnHer)
+				Check(How + ": on a night whose every booked blow comes as its pattern, laid on her, bursts at her, each bursts by a charge drawn within twice its reach of her keel (none laid off her)",
+				      Bursts.LaidOff == 0, std::to_string(Bursts.LaidOff) + " laid off her" + (Bursts.LaidOff ? ", the nearest charge to her as far as " + Num(Bursts.FarthestLaid, 1) + " m" : std::string()) +
+				                               " (" + std::to_string(BlowsAtPattern) + " blows booked as their patterns burst at her)");
+			else if (Bursts.LaidOff > 0)
 				Note(How + ": booked blows with no charge of the escort's drawn within twice its reach of her keel (the pattern laid off her: the show's boat and drop places, an ask), burst by her",
-				     std::to_string(Bursts.LaidOff) + ", the nearest charge to her as far as " + Num(Bursts.FarthestLaid, 1) + " m");
+				     std::to_string(Bursts.LaidOff) + ", the nearest charge to her as far as " + Num(Bursts.FarthestLaid, 1) + " m (" + std::to_string(BlowsElse) +
+				         " blows the battle booked off a pattern's own burst at her)");
 			Check(How + ": no charge drawn sliding sideways faster than 3 m a second", Fast == 0, std::to_string(Fast) + " frames, the fastest " + Num(FastestSideways, 2) + " m/s");
 			Check(How + ": the look within its budgets (160 motes, 12 globes, 40 drums, 240 bubbles and air, 6 shafts)", OverBudget == 0, std::to_string(OverBudget) + " frames over");
 			// (a hit told sooner than its flight and keel/7 s after the throw, as the proposed rule has it at the soonest, is the

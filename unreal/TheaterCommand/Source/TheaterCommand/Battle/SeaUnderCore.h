@@ -67,8 +67,9 @@ namespace SeaUnder
 		double Sinking = 0.0, Spread = 0.0, Run = 0.0;          // the drop's: seconds to the burst, metres across, seconds going in
 		int N = 0;                        // charges, or bombs
 		P3 Aim, Track;                    // the pattern's middle; the way the escort ran over it (level, length 1)
-		P3 Near;                          // a pattern's: where its charges laid near her (within PatternSeen m) were set to burst
-		                                  //   from her, on the average (level, from her place as each was due; the blow's too)
+		P3 Near;                          // a pattern's: the way the eye under her looks, the one it sees the most of its charges come down
+		                                  //   from (Director::SeenMostWay; level, length 1 to a last bit either side; none seen
+		                                  //   from any way: 0; EyeOf tells the two apart at half a unit)
 		P3 HerAt;                         // her middle as it opened
 		double Heading = 0.0, Keel = 0.0, Long = 67.0, Beam = 6.2; // hers as it opened
 		int Hand = 1;                     // the eye stands to her starboard (+1) or port (-1)
@@ -171,6 +172,8 @@ namespace SeaUnder
 		/** [EST] A pattern's charge laid nearest her (level, metres, from her as it was due) for the eye beside her to see its
 		 * charges come down. */
 		static constexpr double PatternSeen = 60.0;
+		/** A charge made out in the eye's picture: this share of its light left at the least (LightLeft). */
+		static constexpr double SeenLight = 0.1;
 		static double PaceOf(const Beat& B);
 
 		/** InClearBy: how far a boat the show hides must be from her (UnheldClearBy, by the water's sight in use). */
@@ -202,6 +205,19 @@ namespace SeaUnder
 		/** The level distance from her (her ship key) to a point at a step of the trial (-1: she is not there then); OutOff, if
 		 * given: the point less her place then (level). */
 		double FromHer(int BoatKey, double T, double X, double Y, P3* OutOff = nullptr) const;
+		/**
+		 * A pattern's way for the eye under her (Window::Near): of every way round her (each 10 degrees), the one from which
+		 * the eye, posed through the window as EyeOf poses it (under her looking up as they come down, then out at her side
+		 * at her depth as they burst), has the most of its charges in its picture and made out (SeenLight of their light left
+		 * by the day's sight: the stage's water is lit by day, its sun 12 degrees up at the least, SeaBattle's OpenOn): first
+		 * of those before the first bursts and 3 s more (all a staged beat cut short at them keeps), then of all, then the
+		 * most light. Her place each half second as the trial had her; each charge where its pattern laid it, in from the
+		 * surface at the show's sinking rate to burst at its depth when due. Where they lie on one side of her that is toward
+		 * them; where they straddle her all round, as a pattern laid on her own place does (a boat deep, SeaShow's KeepClear),
+		 * toward the side that brings the most into the picture. None seen from any way: 0 (EyeOf looks to the pattern's
+		 * middle). Latest: the last moment a charge of it may be due.
+		 */
+		P3 SeenMostWay(const Window& W, double Latest) const;
 		SeaShow::Field Board;
 		double ClearBy = 200.0;        // UnheldClearBy's, as Begin is told it
 		Sight Pings;

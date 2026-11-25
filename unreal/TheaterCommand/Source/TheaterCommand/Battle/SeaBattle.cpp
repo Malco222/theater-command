@@ -1756,7 +1756,9 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 		MyFlag = Flag(bDefender ? S.Rec.Board.DefNat : S.Rec.Board.AttNat);
 		TheirFlag = Flag(bDefender ? S.Rec.Board.AttNat : S.Rec.Board.DefNat);
 		BarKnot = 0.5;
-		MoveKnot(0.0, bStartedLater);
+		// (a recording that opens on the battle under way, a convoy night's window, its first view after the battle's own
+		// start: where the action stands then, not level and sliding over with nothing happening)
+		MoveKnot(0.0, bStartedLater || S.BeginT > 0.0);
 		ShowScreen();
 	}
 	// The eye on its first shot before the first frame (not the camera's spawn spot), told as a cut; and again on the
