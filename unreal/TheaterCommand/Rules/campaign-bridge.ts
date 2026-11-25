@@ -4530,6 +4530,16 @@ function cutOffWhyNoSea(s: Game, id: number): string {
   const f = s.fleets.find((x) => x.id === id);
   return `Every sea in its reach lies beyond the shut strait. ${f && cutOffHomeTip(s, f) ? 'RETURN TO HARBOUR takes it to a harbour on its side.' : 'No friendly harbour on its side can take it, so it stays at sea.'}`;
 }
+/**
+ * (1.5.3, the 1.5.2 review) The page note's rule for a fleet's orders, with a space before it. A cut-off fleet reaches no
+ * sea, so it is not told it reaches three from its base: it keeps its one order a month where a harbour on its side can
+ * take it, and with none no order moves it, so nothing is said (the cut-off line at the head of the note says why).
+ */
+function fleetRuleNote(s: Game, id: number): string {
+  const f = s.fleets.find((x) => x.id === id);
+  if (!f || !cutOff(s, f)) return ' A fleet reaches three seas from its base, and can be given one order a month.';
+  return harbourFor(s, f) ? ' It can be given one order a month.' : '';
+}
 
 function fleetPage(s: Game, id: number): Page | null {
   const card = s.flags.open === 1 ? fleetView(s, id) : null;
@@ -4609,7 +4619,7 @@ function fleetPage(s: Game, id: number): Page | null {
   const who = whoSails(s, id);
   return {
     id: `fleet:${id}`, title: card.name.toUpperCase(), headline: `${card.doing}`,
-    note: `${cutOffNote(s, id)}${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ship${card.ships === 1 ? '' : 's'}, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.${who ? ` ${who}` : ''}`,
+    note: `${cutOffNote(s, id)}${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ship${card.ships === 1 ? '' : 's'}, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''}${fleetRuleNote(s, id)}${who ? ` ${who}` : ''}`,
     top: [
       ...(() => {
         // (1.5.2) Cut off at sea beyond a shut strait, it makes for the nearest friendly harbour on its side, or has none.

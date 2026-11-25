@@ -78,7 +78,7 @@ import {
   brokeOff, skyWords, km as airKm, overOcean, seaKm, skyOver, smallOn, whyNotMoveAir, whyNotMission, type AirOrder,
 } from '../air';
 import {
-  FLEETS, NAVY, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedLine, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, numberWord, oreRoute, seaAt, seaBorders, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips, whyNotShip,
+  FLEETS, NAVY, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedLine, closedTo, cutOff, cutOffLine, fleetPower, fleetReach, fleetsOf, harbourFor, liftLeft, numberWord, oreRoute, seaAt, seaBorders, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips, whyNotShip,
   type CrossingAccount, type CrossingOutlook, type SeaHold,
 } from '../navy';
 import { bombard, fleetDoing, squadronName, type FleetCard, type ShipCard } from '../fleets';
@@ -1593,7 +1593,9 @@ function refresh(): void {
   else if (fl) {
     if (ui.rebase) for (const r of baseTargets(g, fl)) mark(`<path class="mk rail" d="${pathOf(r.polys)}"/>`, r);
     else {
-      for (const z of fleetReach(g, fl)) marks.push(pieceAt(`<circle class="mk sea${atSea(fl) && fl.zone === z ? ' at' : ''}" cx="${g.seas[z].x}" cy="${g.seas[z].y + 9}" r="29"/>`, g.seas[z].x, g.seas[z].y + 9, 33));
+      // (1.5.3, the 1.5.2 review) A fleet cut off beyond a shut strait has its reach counted from its base, on the far side:
+      // no sea is ringed for it, as in the 3D game, since it can be sent to none of them.
+      if (!cutOff(g, fl)) for (const z of fleetReach(g, fl)) marks.push(pieceAt(`<circle class="mk sea${atSea(fl) && fl.zone === z ? ' at' : ''}" cx="${g.seas[z].x}" cy="${g.seas[z].y + 9}" r="29"/>`, g.seas[z].x, g.seas[z].y + 9, 33));
       for (const id of shellAt) mark(`<path class="mk hit" d="${pathOf(g.regions[id].polys)}"/>`, g.regions[id]);
     }
   } else if (ui.rail && picked.length) {
@@ -5493,7 +5495,11 @@ function fleetOrders(f: Fleet): string {
   if (o.merge.length) {
     out += `<h3>Join another fleet here</h3>${o.merge.map((id) => { const x = g.fleets.find((q) => q.id === id)!; return `<div class="pickrow">${hullIcon(x)}<span class="grow"><b>${esc(x.name)}</b><br>${small(esc(capital(shipList(x.ships))))}</span><button class="btn small" data-act="fleetjoin" data-id="${id}" title="The ships of the ${esc(f.name)} sail under the ${esc(x.name)}'s flag from now on.">Join it</button></div>`; }).join('')}`;
   }
-  out += `<h3>Seas in reach</h3><p class="sub" style="margin:0 0 6px">Fleet strength ${num(fleetPower(g, f))}. It can reach the seas within ${NAVY.range} of ${esc(f.port)}: click a ringed sea on the map, or pick one here. It will ${will} there.</p>${rows}</div>`;
+  // (1.5.3, the 1.5.2 review) Cut off beyond a shut strait, no sea is offered or ringed: its line says why, and where it can go.
+  const cut = cutOffLine(g, f);
+  const reachLine = !cut ? `It can reach the seas within ${NAVY.range} of ${esc(f.port)}: click a ringed sea on the map, or pick one here. It will ${will} there.`
+    : `${esc(cut)} Every sea in its reach lies beyond the shut strait${harbourFor(g, f) ? '. <b>Return to port</b> takes it to a harbour on its side.' : ', so it stays at sea.'}`;
+  out += `<h3>Seas in reach</h3><p class="sub" style="margin:0 0 6px">Fleet strength ${num(fleetPower(g, f))}. ${reachLine}</p>${rows}</div>`;
   return out;
 }
 
@@ -8586,7 +8592,8 @@ function onSea(z: number): void {
     else if (atSea(fl) && fl.zone === z && fl.stance === ui.stance) ui.msg = `The ${fl.name} is already in the ${g.seas[z].name}.`;
     else {
       const stayed = atSea(fl) && fl.zone === z;
-      if (!orderFleet(g, fl.id, z, ui.stance)) ui.msg = gateBar(g, fl, z)?.line ?? `The ${g.seas[z].name} is out of reach of the ${fl.name} from ${fl.port}.`;
+      // (1.5.3) Cut off beyond a shut strait, it is refused with its card's line, as the 3D game answers it (the bridge's fleetWhyId).
+      if (!orderFleet(g, fl.id, z, ui.stance)) ui.msg = cutOffLine(g, fl) || (gateBar(g, fl, z)?.line ?? `The ${g.seas[z].name} is out of reach of the ${fl.name} from ${fl.port}.`);
       // The piece does not move when only its work changes, so the line says what was ordered.
       else ui.msg = stayed ? `The ${fl.name} stays in the ${g.seas[z].name} and will ${ui.stance === 'raid' ? 'raid shipping' : ui.stance === 'hunt' ? 'hunt submarines' : 'patrol'} there.`
         : `Ordered: the ${fl.name} sails to ${ui.stance === 'raid' ? 'raid shipping in' : ui.stance === 'hunt' ? 'hunt submarines in' : 'patrol'} the ${g.seas[z].name}.`;
@@ -9001,7 +9008,7 @@ function onClick(e: MouseEvent): void {
       if (f && atSea(f) && f.stance !== 'escort') {
         // The piece does not move when only its work changes, so the line says what was ordered, as a click on its sea does.
         // (The order it is already under is the lit button: pressed again, it stands.)
-        if (f.stance !== ui.stance) ui.msg = orderFleet(g, f.id, f.zone, ui.stance) ? `The ${f.name} stays in the ${g.seas[f.zone].name} and will ${seaWork(ui.stance)} there.` : `The ${f.name} cannot ${seaWork(ui.stance)} in the ${g.seas[f.zone].name} now.`;
+        if (f.stance !== ui.stance) ui.msg = orderFleet(g, f.id, f.zone, ui.stance) ? `The ${f.name} stays in the ${g.seas[f.zone].name} and will ${seaWork(ui.stance)} there.` : cutOffLine(g, f) || `The ${f.name} cannot ${seaWork(ui.stance)} in the ${g.seas[f.zone].name} now.`;
       } else if (f) ui.msg = `Click a ringed sea: the ${f.name} will ${seaWork(ui.stance)} there.`;
       refresh(); break;
     }
@@ -9070,7 +9077,7 @@ function onClick(e: MouseEvent): void {
     case 'toport': {
       // The order is said as it is given (ruling 204(d)): the piece may not move on the map at this zoom.
       const f = myFleet();
-      if (f) ui.msg = !atSea(f) ? inHarbour(f) : orderFleet(g, f.id, f.home, 'port') ? `Ordered: the ${f.name} returns to ${f.port}.` : `The ${f.name} cannot be given orders now.`;
+      if (f) ui.msg = !atSea(f) ? inHarbour(f) : orderFleet(g, f.id, f.home, 'port') ? `Ordered: the ${f.name} returns to ${f.port}.` : cutOffLine(g, f) || `The ${f.name} cannot be given orders now.`;
       ui.rebase = false; refresh(); break;
     }
     case 'rebase': ui.rebase = !ui.rebase; refresh(); break;
