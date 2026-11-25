@@ -273,10 +273,11 @@ export function planFleetAttack(g: Game, id: number, target: number, viewer: str
   plan.notes.push(plan.enough
     ? `Your admiral would have offered battle at these odds anyway: this fights it now, not at the month's end.`
     : `Your admiral would not offer battle at these odds (he wants ${B.seek} to 1 and has ${oneDp(mid)}): it is your order, and it will be carried out.`);
-  if (plan.found < 1) {
-    const foe = foeWords(g, [t], identified(g, viewer));
-    plan.notes.push(`${cap(foe.text)} ${foe.one ? 'is' : 'are'} not patrolling, so ${foe.one ? 'it has' : 'they have'} to be found first: about ${pct(plan.found)} of the time. Not found, your fleet patrols ${seaWhere(sea.name)}.`);
-  }
+  const foe = foeWords(g, [t], identified(g, viewer));
+  // (1.5.3, playtest #25) A fleet only reported is drawn at sea as patrolling, whatever it is about: the note says what may
+  // be, the same whether it patrols or not. Words only: whether it has to be found first is for the rules, as before.
+  if (!at.harbour && !foe.one) plan.notes.push(`${cap(foe.text)} may not be patrolling. If not, they have to be found first: about ${pct(B.catchRaider)} of the time. Not found, your fleet patrols ${seaWhere(sea.name)}.`);
+  else if (plan.found < 1) plan.notes.push(`${cap(foe.text)} is not patrolling, so it has to be found first: about ${pct(plan.found)} of the time. Not found, your fleet patrols ${seaWhere(sea.name)}.`);
   if (plan.slips > 0) plan.notes.push(`Outweighed ${B.evadeAt} to 1 or more, the enemy makes for port about ${pct(plan.slips)} of the time, which leaves you the sea.`);
   if (at.harbour) plan.notes.push('A fleet in harbour cannot make for port: it is there, and it fights where it lies.');
   if (mine.length > 1) plan.notes.push(`${cap(listNames(mine.slice(1)))}, already patrolling ${seaWhere(sea.name)}, ${mine.length === 2 ? 'joins' : 'join'} the attack.`);

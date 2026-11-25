@@ -1,6 +1,7 @@
 // Release 1.5.3: the fleet attack card's words (the 1.5.1 playtest, findings 25, 26 and 33). Words only, and the sea
 // report's strength line: no rule reads any of them, and the card stays a forecast that throws no die.
-//   25  a fleet the player's side has only reported keeps its name and its port to itself, in every refusal and on the card;
+//   25  a fleet the player's side has only reported keeps its name, its port and what it is about to itself, in every
+//       refusal and on the card;
 //   26  "1 ship", not "1 ships"; the losses listed with "and" before the last, and their range said plainly; a battleship
 //       or carrier the likely count rounds away, though it may well go down, named on that line; and in the sea report,
 //       "The Battle Fleet was caught at anchor" (not "The the"), and each side's strength summed before the sinkings;
@@ -12,7 +13,7 @@ import { detach } from '../src/campaign/fleets';
 import { HEAVY_RISK, orderFleetAttack, planFleetAttack, whyNotFleetAttack, type FleetAttackPlan } from '../src/campaign/fleetattack';
 import { setFog } from '../src/campaign/intel';
 import { loadGame, saveGame } from '../src/campaign/save';
-import { fleetName, sail, zoneOf } from '../src/campaign/navy';
+import { NAVY, fleetName, sail, zoneOf } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
@@ -110,7 +111,7 @@ describe('25: a fleet only reported stays unnamed', () => {
       if (fleetKnown(g, home, 'GER') !== 'report') continue;
       const plan = planFleetAttack(g, battle.id, home.id)!;
       expect(plan.theirs.fleets.find((x) => x.id === home.id)!.name).toBe('British ships reported');
-      expect(plan.notes.join(' ')).toContain('Those British ships are not patrolling, so they have to be found first: about ');
+      expect(plan.notes.join(' ')).toContain('Those British ships may not be patrolling. If not, they have to be found first: about ');
       for (const w of [...plan.notes, ...plan.lines.flatMap((l) => [l.value, l.effect ?? ''])]) expect(w).not.toContain('Home Fleet');
       const out = orderFleetAttack(g, battle.id, home.id)!;
       // (Fought, the two sides are in contact and know each other by name: the battle's news names them.)
@@ -143,6 +144,42 @@ describe('25: a fleet only reported stays unnamed', () => {
     sail(g, home, zoneOf(g, 'wapp'), 'patrol');
     home.seen = { GER: g.turn };
     expect(whyNotFleetAttack(g, swine.id, home.id)).toBe('The Home Fleet is in the Western Approaches, out of reach of the Swinemunde Fleet from Swinemunde.');
+  });
+
+  it('a fleet only reported at sea may not be patrolling, the card says, whatever it is about', () => {
+    // (The 1.5.3 review) The map draws every fleet only reported at sea as patrolling, so the card does not say which it is.
+    const maybe = `Those British ships may not be patrolling. If not, they have to be found first: about ${Math.round(NAVY.battle.catchRaider * 100)}% of the time. Not found, your fleet patrols in the North Sea.`;
+    let checked = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      const seen: Record<string, { notes: string[]; worth: string; stance: string }> = {};
+      for (const stance of ['raid', 'patrol'] as const) {
+        const g = germany(seed);
+        const battle = fleet(g, 'Battle Fleet'), home = fleet(g, 'Home Fleet');
+        sail(g, home, zoneOf(g, 'nsea'), stance);
+        home.seen = { GER: g.turn - 1 };
+        const sq = detach(g, home, { dd: 2 })!;
+        sail(g, sq, zoneOf(g, 'nsea'), 'patrol');
+        sq.seen = { GER: g.turn };
+        if (fleetKnown(g, home, 'GER') !== 'report') continue;
+        // Identified, it is said as it is: not patrolling, or nothing.
+        expect(planFleetAttack(g, battle.id, home.id, null)!.notes.filter((n) => / patrolling/.test(n))).toEqual(stance === 'raid'
+          ? [`The Home Fleet is not patrolling, so it has to be found first: about ${Math.round(NAVY.battle.catchRaider * 100)}% of the time. Not found, your fleet patrols in the North Sea.`] : []);
+        TC.load(saveGame(g));
+        const p = TC.page(`fleetattack:${battle.id}:${home.id}`) as Page;
+        seen[stance] = {
+          notes: planFleetAttack(g, battle.id, home.id)!.notes,
+          worth: p.sections.find((x) => x.heading === 'WORTH KNOWING')!.text,
+          stance: (TC.view() as { fleets: { id: number; stance: string }[] }).fleets.find((x) => x.id === home.id)!.stance,
+        };
+      }
+      if (!seen.raid || !seen.patrol) continue;
+      checked++;
+      expect(seen.raid.notes).toContain(maybe);
+      expect(seen.raid.worth).toContain(maybe);
+      expect(seen.patrol).toEqual(seen.raid);
+      expect(seen.raid.stance).toBe('patrol');
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 
   it('in harbour beside a fleet identified, the odds name the fleet identified and not the harbour', () => {
