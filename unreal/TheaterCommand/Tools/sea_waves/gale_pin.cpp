@@ -2,15 +2,20 @@
 // cap, FleetWaves' outputs stay byte for byte as made, and the gale acts only behind its switch). A digest of everything
 // the wave core gives at winds up to Raised (13.8 m/s), under its own cap and under the gale's (Make's every field, the
 // whitecaps' gate, the frame's drawn sea and the stage's numbers, SeaNear, the sum, its slopes and foam, the ride, the
-// grid and the lane), and of the whitecaps' picture and a shore (SeaFace::MakeFoam, MakeShore: Pearl's and Midway's sea),
-// held to gale.sha, which was written by this same file built against the wave core at 942d9295 (ocean-r2's head, before
-// the gale). It calls nothing the gale added, so it builds against both. Exact bits: doubles and floats by their bytes.
-// Its pins are g++'s (the runner's); a line "<hex>  <name>@clang" is clang's own, where the two lay a float differently (the
-// grid's, at 942d9295 as now). Plain C++20, no engine. Usage: gale_pin [gale.sha]   (no file: it prints the digests; with one
-// it checks them)
+// grid and the lane), of Make at its edges (no wind, a cap of 0 or less, every PixelTrains from 0 to 16, bearings round the
+// whole circle and past it, fetches of a metre and ten thousand kilometres), of the meshes (the clipmap at 96 and 128 at
+// every ring count, and the patch), of where the chip puts the points (PlaceOf, now and before), the weights, the drawn
+// surface over a fixed point, SeaNear's shift, the whitecaps' fade and their picture's shape, of the chip's own text in
+// float (FleetWavesGpu.inl through Gpu::Run, every mode, now and before, and an empty MPC), and of the whitecaps' picture
+// and a shore (SeaFace::MakeFoam, MakeShore: Pearl's and Midway's sea), held to gale.sha, which was written by this same
+// file built against the wave core at 942d9295 (ocean-r2's head, before the gale). It calls nothing the gale added, so it
+// builds against both. Exact bits: doubles and floats by their bytes. Its pins are g++'s (the runner's); a line
+// "<hex>  <name>@clang" is clang's own, where the two lay a float differently at 942d9295 itself. Plain C++20, no engine.
+// Usage: gale_pin [gale.sha]   (no file: it prints the digests; with one it checks them)
 #include "Battle/FleetWaves.h"
 #include "Battle/SeaFace.h"
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -84,10 +89,32 @@ namespace
 		return Make(A);
 	}
 
-	Drawn FrameOf(const Sea& S, double Ex, double Ey, double Ez, double T, const double* Subject, const Drawn* Last)
+	Drawn FrameOf(const Sea& S, double Ex, double Ey, double Ez, double T, const double* Subject, const Drawn* Last, int N = 96)
 	{
 		const double Eye[3] = { Ex, Ey, Ez }, Look[3] = { Ex + 100.0, Ey + 100.0, 0.0 };
-		return DrawnFor(S, Eye, Look, 60.0, Subject, T, Last, Last == nullptr, RingsFor(S), 96);
+		return DrawnFor(S, Eye, Look, 60.0, Subject, T, Last, Last == nullptr, RingsFor(S, N), N);
+	}
+
+	void MeshOf(Digest& G, const Mesh& M)
+	{
+		G.I(static_cast<long long>(M.Points.size()));
+		for (const GridPoint& P : M.Points)
+		{
+			for (float V : { P.X, P.Y, P.AxisX, P.AxisY }) G.F(V);
+			G.I(P.Ring * 16 + P.Kind);
+		}
+		for (int T : M.Triangles) G.I(T);
+	}
+
+	void PlacedOf(Digest& G, const Placed& P)
+	{
+		for (double V : { P.RestX, P.RestY, P.Cell, P.X, P.Y, P.Z, P.Ease }) G.D(V);
+		G.I((P.bCollapsed ? 1 : 0) | (P.bDropped ? 2 : 0) | (P.bNotch ? 4 : 0));
+	}
+
+	void Float4Of(Digest& G, const Gpu::float4& V)
+	{
+		for (float X : { V.x, V.y, V.z, V.w }) G.F(X);
 	}
 
 	void DrawnOf(Digest& G, const Drawn& D)
@@ -274,6 +301,150 @@ int main(int argc, char** argv)
 		G.I(Sh.Size);
 		for (double V : { Sh.West, Sh.South, Sh.Span }) G.D(V);
 		G.Bytes(Sh.Pixels.data(), Sh.Pixels.size());
+	}
+
+	// Make at its edges (the second review of the gale): no wind and the least, the cap given as 0 or less (Raised), winds
+	// over the cap under a cap that means Raised, every PixelTrains from 0 to 16, bearings round the whole circle and
+	// beyond it, fetches of a metre and of ten thousand kilometres
+	{
+		Digest& G = Parts["edges"];
+		for (double U : { 0.0, 1e-9, 0.25, 0.5, 0.75, 6.0, 13.8, 13.81, 20.0, 30.0 })
+		{
+			for (double Cap : { Raised, 0.0, -3.0, GaleCap })
+			{
+				if (Cap == GaleCap && U > Raised) continue; // (the gale's own winds: not 942d9295's)
+				for (int Pixel = 0; Pixel <= 16; ++Pixel) SeaOf(G, Made(U, 1234, 0.0, 0.0, 0.0, Cap, Pixel));
+				for (double Fetch : { 1.0, 1e7 }) SeaOf(G, Made(U, 99, 0.0, 0.0, Fetch, Cap));
+			}
+		}
+		for (double U : { 0.0, 6.0, 13.8 })
+		{
+			for (double Cap : { Raised, GaleCap })
+			{
+				for (double Down : { -7.0, -Pi, 0.0, 1.0, Pi, 5.0, TwoPi, 9.5 })
+				{
+					for (double From : { -2.0, 0.0, Pi, 7.0 })
+					{
+						for (int Swell = 0; Swell < 3; ++Swell)
+						{
+							Asked A;
+							A.WindU = U;
+							A.DownwindR = Down;
+							A.Seed = 4242;
+							A.SwellH = Swell == 1 ? 1.8 : (Swell == 2 ? 3.0 : 0.0);
+							A.SwellT = Swell == 1 ? 12.0 : (Swell == 2 ? 16.0 : 0.0);
+							A.SwellFromR = From;
+							A.Cap = Cap;
+							SeaOf(G, Make(A));
+						}
+					}
+				}
+			}
+		}
+	}
+	// The meshes: the clipmap at 96 and at 128 at every ring count, and the subject's patch
+	{
+		Digest& G = Parts["mesh"];
+		for (int Rings = 1; Rings <= 8; ++Rings) MeshOf(G, Grid(96, Rings));
+		for (int Rings = 1; Rings <= 7; ++Rings) MeshOf(G, Grid(128, Rings));
+		MeshOf(G, Patch());
+	}
+	// Where the chip puts the points (PlaceOf, now and before), the weights at a point, the drawn surface over a fixed point,
+	// SeaNear's shift, the whitecaps' fade and their picture's shape under a head; and the chip's own text in float
+	// (FleetWavesGpu.inl through Gpu::Run: the point's place and rest, now and before, the pixel's light and foam) and an
+	// empty MPC under a NaN-keeping shim; at 96 and at 128
+	{
+		Digest& Gp = Parts["place"];
+		Digest& Gc = Parts["chip"];
+		const Mesh Pm = Patch();
+		const std::vector<uint8_t> Picture = SeaFace::MakeFoam(256, 160.0);
+		for (double U : { 3.0, 8.0, 13.8 })
+		{
+			for (double Cap : { Raised, GaleCap })
+			{
+				for (int Swell = 0; Swell < 2; ++Swell)
+				{
+					for (int N : { 96, 128 })
+					{
+						const Sea S = Made(U, 239, Swell ? 2.5 : 0.0, Swell ? 12.0 : 0.0, 0.0, Cap);
+						const double Subject[2] = { -800.0, 1900.0 };
+						const Drawn D0 = FrameOf(S, -1234.0, 2345.0, 18.0, 444.0, Subject, nullptr, N);
+						const Drawn D = FrameOf(S, -1231.5, 2347.0, 18.0, 444.0 + 1.0 / 60.0, Subject, &D0, N);
+						const Mesh M = Grid(D.N, D.Rings);
+						for (int Before = 0; Before < 2; ++Before)
+						{
+							for (size_t K = 0; K < M.Points.size(); K += 37) PlacedOf(Gp, PlaceOf(S, D, M.Points[K], Before == 1));
+							for (size_t K = 0; K < Pm.Points.size(); K += 41) PlacedOf(Gp, PlaceOf(S, D, Pm.Points[K], Before == 1));
+						}
+						Near Nr;
+						BuildNear(S, D, Nr);
+						for (int P = 0; P < 60; ++P)
+						{
+							const double X = D.EyeX + (Mix(9500 + P) - 0.5) * 2400.0, Y = D.EyeY + (Mix(9700 + P) - 0.5) * 2400.0;
+							double W[MostDrawn] = {};
+							WeightsAt(S, D, X, Y, W);
+							for (double V : W) Gp.D(V);
+							double Rest[2] = { 0.0, 0.0 }, Sx = 0.0, Sy = 0.0;
+							if (P < 20) Gp.D(DrawnSurfaceZ(S, D, X, Y, Rest));
+							Gp.D(Rest[0]);
+							Gp.D(Rest[1]);
+							NearShift(Nr, X, Y, Sx, Sy);
+							for (double V : { Sx, Sy, FoamFade(S, 5.0 + 90.0 * P, D.PxPerRad), HeadShapeAt(S, Picture, 256, X, Y, D.SeaT) }) Gp.D(V);
+						}
+						// the chip's text in float
+						const double Units = 100.0;
+						const ForStage Fs = StageParams(S, D, Units);
+						for (int Before = 0; Before < 2; ++Before)
+						{
+							Gpu::Inputs In = Gpu::From(Fs, Before == 1);
+							for (const Mesh* From : { &M, &Pm })
+							{
+								for (size_t K = 0; K < From->Points.size(); K += (From == &M ? 53 : 61))
+								{
+									const GridPoint& G = From->Points[K];
+									In.Local = Gpu::float2(G.X, G.Y);
+									In.Vtx = Gpu::float2(static_cast<float>(G.Ring), static_cast<float>(G.Kind));
+									In.Axis = Gpu::float2(G.AxisX, G.AxisY);
+									for (float Mode : { 0.0f, 1.0f })
+									{
+										In.Mode = Mode;
+										Float4Of(Gc, Gpu::Run(In));
+									}
+								}
+							}
+						}
+						Gpu::Inputs In = Gpu::From(Fs, false);
+						for (int P = 0; P < 120; ++P)
+						{
+							const double Rr = 4000.0 * Mix(9900 + P) * Mix(9900 + P), Bb = TwoPi * Mix(10100 + P);
+							const double X = D.EyeX + Rr * std::sin(Bb), Y = D.EyeY + Rr * std::cos(Bb);
+							In.Local = Gpu::float2(static_cast<float>((Y - D.OriginY) * Units), static_cast<float>((X - D.OriginX) * Units));
+							In.Depth = static_cast<float>(std::max(Rr, 3.0) * Units);
+							In.Cell = static_cast<float>(CellAt(D, X, Y) * Units);
+							for (float Mode : { 2.0f, 3.0f })
+							{
+								In.Mode = Mode;
+								Float4Of(Gc, Gpu::Run(In));
+							}
+						}
+					}
+				}
+			}
+		}
+		const ForStage E = EmptyStage();
+		Gpu::Inputs In = Gpu::From(E, false);
+		const Mesh G7 = Grid(96, 7);
+		for (size_t K = 0; K < G7.Points.size(); K += 97)
+		{
+			In.Local = Gpu::float2(G7.Points[K].X, G7.Points[K].Y);
+			In.Vtx = Gpu::float2(static_cast<float>(G7.Points[K].Ring), static_cast<float>(G7.Points[K].Kind));
+			for (float Mode : { 0.0f, 1.0f, 2.0f, 3.0f })
+			{
+				In.Mode = Mode;
+				In.Depth = 1000.0f * static_cast<float>(K % 7);
+				Float4Of(Gc, Gpu::Run(In, true));
+			}
+		}
 	}
 
 	std::string Text;
