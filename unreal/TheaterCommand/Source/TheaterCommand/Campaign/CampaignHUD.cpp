@@ -575,6 +575,21 @@ namespace
 			case 20: // (release 2) a chevron pointing up: fold the card away
 				Line({ { 0.25, 0.62 }, { 0.5, 0.37 }, { 0.75, 0.62 } });
 				break;
+			case 31: // (release 2, the home front) a house: its gable, its walls and its door
+				Line({ { 0.08, 0.5 }, { 0.5, 0.14 }, { 0.92, 0.5 } });
+				Line({ { 0.2, 0.4 }, { 0.2, 0.86 }, { 0.8, 0.86 }, { 0.8, 0.4 } });
+				Line({ { 0.42, 0.86 }, { 0.42, 0.6 }, { 0.58, 0.6 }, { 0.58, 0.86 } });
+				break;
+			case 32: // (release 2, the home front) a sight: show the place on the map
+				Ring(0.5, 0.5, 0.3);
+				Line({ { 0.5, 0.06 }, { 0.5, 0.34 } });
+				Line({ { 0.5, 0.66 }, { 0.5, 0.94 } });
+				Line({ { 0.06, 0.5 }, { 0.34, 0.5 } });
+				Line({ { 0.66, 0.5 }, { 0.94, 0.5 } });
+				break;
+			case 33: // (release 2, the home front) a chevron pointing down: unfold what lies under the row
+				Line({ { 0.25, 0.38 }, { 0.5, 0.63 }, { 0.75, 0.38 } });
+				break;
 			default: // a clock's dial: the long hand at twelve, the short one at the hour
 			{
 				Ring(0.5, 0.5, 0.45);
@@ -3702,6 +3717,30 @@ namespace
 		return Look;
 	}
 
+	/**
+	 * (Release 2, THE HOME FRONT, tc.UI.HomeFront) The board's own brushes, in the UI kit's colours, made once: a town's
+	 * row once something has been ordered in it, a plot that is built (brass), one with something going up (a brass edge)
+	 * and a free one (the kit's line), the ORDER AGAIN box, and a hairline. Its buttons and tiles are the town card's.
+	 */
+	struct FHomeLook
+	{
+		FSlateRoundedBoxBrush RowKept, PlotBuilt, PlotGoing, PlotFree, Again, Hair;
+		FHomeLook()
+			: RowKept(FLinearColor(FColor::FromHex(TEXT("2D241A"))), 4.0f, FLinearColor(FColor::FromHex(TEXT("8A6B3B"))), 1.0f)
+			, PlotBuilt(FLinearColor(FColor::FromHex(TEXT("E0B872"))), 3.0f)
+			, PlotGoing(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 3.0f, FLinearColor(FColor::FromHex(TEXT("E0B872"))), 1.0f)
+			, PlotFree(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 3.0f, FLinearColor(FColor::FromHex(TEXT("4B3D2D"))), 1.0f)
+			, Again(FLinearColor(FColor::FromHex(TEXT("2D241A"))), 4.0f, FLinearColor(FColor::FromHex(TEXT("B08D57"))), 1.0f)
+			, Hair(FLinearColor(FColor::FromHex(TEXT("4B3D2D"))), 0.0f)
+		{
+		}
+	};
+	const FHomeLook& HomeLook()
+	{
+		static const FHomeLook Look;
+		return Look;
+	}
+
 	/** Where the towns' name plates and their badges were last drawn, in the screen's own units: what a sky's plate steps clear of. */
 	TArray<FBox2D> DrawnTownPlates;
 
@@ -6813,6 +6852,15 @@ namespace
 								.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); }) // the strip is not the map
 								[
 									SNew(SHorizontalBox)
+									// (Release 2, tc.UI.HomeFront) THE HOME FRONT's door, first in the row, where the rules name the room.
+									+ SHorizontalBox::Slot().AutoWidth()
+									[
+										SNew(SBox)
+										.Visibility_Lambda([this]() { return ACampaignPlayerController::IsHomeFrontStyle() && Controller.IsValid() && Controller->GetSession() && Controller->GetSession()->GetView().PageIds.Contains(TEXT("home")) ? EVisibility::Visible : EVisibility::Collapsed; })
+										[
+											MakeDoor(31, TEXT("HOME FRONT"), TEXT("The home front: every town of yours on one board with what to build in each, the forces you can raise, and everything on order."), [this]() { Controller->OpenHomeFront(); })
+										]
+									]
 									+ SHorizontalBox::Slot().AutoWidth()[Aimed(TEXT("arsenal"), MakeDoor(0, TEXT("ARSENAL"), TEXT("The arsenal: order corps, aircraft, ships, factories and other works. (1)"), [this]() { Controller->OpenArsenal(); }))]
 									+ SHorizontalBox::Slot().AutoWidth()[MakeDoor(1, TEXT("GENERALS"), TEXT("Your generals: who commands what, who is waiting for a command, and the corps that have nobody. (2)"), [this]() { Controller->OpenGenerals(); })]
 									+ SHorizontalBox::Slot().AutoWidth()[MakeDoor(2, TEXT("RESEARCH"), TEXT("The design offices: put design teams on the branches whose new weapons you want early. The number is the teams standing idle. (3)"), [this]() { Controller->OpenResearch(); }, [this]() { return Controller->GetIdleTeams(); })]
@@ -8142,7 +8190,7 @@ namespace
 							// box that only ever scales down: every other page has a size that fits, and is left as it is.)
 							SNew(SScaleBox).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly)
 							[
-							SAssignNew(PageCardBox, SBox).WidthOverride_Lambda([this]() { return FOptionalSize(IsMonthCard() ? 1300.0f : IsRaidCard() ? 1180.0f : 1100.0f); }).HeightOverride_Lambda([this]() { return IsMonthCard() ? FOptionalSize() : FOptionalSize(IsRaidCard() ? 934.0f : 780.0f); })
+							SAssignNew(PageCardBox, SBox).WidthOverride_Lambda([this]() { return FOptionalSize(IsMonthCard() ? 1300.0f : IsRaidCard() ? 1180.0f : IsHomeBoard() ? 1380.0f : 1100.0f); }).HeightOverride_Lambda([this]() { return IsMonthCard() ? FOptionalSize() : FOptionalSize(IsRaidCard() ? 934.0f : IsHomeBoard() ? 888.0f : 780.0f); }) // (release 2: THE HOME FRONT is a board, 1380 by 888)
 							// (the month's card is as tall as what it has to tell: a quiet month is a small card)
 							[
 								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(30.0f, 22.0f, 26.0f, 22.0f))
@@ -8178,9 +8226,14 @@ namespace
 											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
 											[
 												SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
-												.Visibility_Lambda([this]() { return IsRaidCard() ? EVisibility::Collapsed : EVisibility::Visible; })
+												.Visibility_Lambda([this]() { return IsRaidCard() || IsHomeBoard() ? EVisibility::Collapsed : EVisibility::Visible; }) // (the board says it in its rows)
 												.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetPage().Note) : FText::GetEmpty(); })
 											]
+										]
+										// (Release 2, THE HOME FRONT) The board's doors to its neighbours, at the card's head beside CLOSE.
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(16.0f, 0.0f, 0.0f, 0.0f)
+										[
+											SAssignNew(HomeHead, SHorizontalBox).Visibility_Lambda([this]() { return IsHomeBoard() ? EVisibility::Visible : EVisibility::Collapsed; })
 										]
 										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(16.0f, 0.0f, 0.0f, 0.0f)
 										[
@@ -8201,6 +8254,11 @@ namespace
 									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 14.0f, 0.0f, 0.0f)
 									[
 										SAssignNew(EdgeMarks.Scroll, SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)[SAssignNew(PageBody, SVerticalBox)] // (Release 2, news at the map's edge: merge by hand)
+									]
+									// (Release 2, THE HOME FRONT) The board stands here in place of the scrolling page: LayOutPage shows one or the other.
+									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 14.0f, 0.0f, 0.0f)
+									[
+										SAssignNew(HomeBody, SBox).Visibility(EVisibility::Collapsed)
 									]
 									// (what a page pins to its foot stays on the screen whatever scrolls above it: the raid card's buttons)
 									+ SVerticalBox::Slot().AutoHeight()[SAssignNew(PageFoot, SVerticalBox)]
@@ -11441,7 +11499,7 @@ namespace
 				else
 				{
 					const FFaceOff& Face = Controller->GetFaceOff();
-					const double CardWide = Controller->IsPageOpen() ? (IsMonthCard() ? 1300.0 : IsRaidCard() ? 1180.0 : 1100.0)
+					const double CardWide = Controller->IsPageOpen() ? (IsMonthCard() ? 1300.0 : IsRaidCard() ? 1180.0 : IsHomeBoard() ? 1380.0 : 1100.0)
 						: Controller->GetDocument().bValid ? 820.0 : Controller->IsArsenalOpen() ? 1320.0 : Controller->IsLedgerOpen() ? 1120.0
 						: Controller->IsGeneralsOpen() ? 1220.0 : Controller->IsDiplomacyOpen() ? 1180.0 : Face.bVisible ? 912.0
 						: Controller->IsResearchOpen() && !(Controller->GetResearch().bTree && ChartLayout().bGood) ? 1220.0 : Screen.X;
@@ -15200,12 +15258,609 @@ namespace
 			];
 		}
 
+		/** (Release 2, THE HOME FRONT) Whether the room open is the home front, set out as a board of its own. */
+		bool IsHomeBoard() const { return Controller.IsValid() && Controller->IsHomeFrontOpen(); }
+
+		/** (Release 2, THE HOME FRONT) Months in words: "1 month", "3 months". */
+		static FString HomeMonths(int32 Count)
+		{
+			return Count == 1 ? FString(TEXT("1 month")) : FString::Printf(TEXT("%d months"), Count);
+		}
+
+		/** (Release 2, THE HOME FRONT) Smaller words under a name on the board: what a building does, or why it cannot go up. */
+		TSharedRef<SWidget> HomeWords(const FString& Words, const FLinearColor& Ink = Muted)
+		{
+			return SNew(STextBlock).Text(FText::FromString(Words)).Font(Serif(TEXT("Italic"), 10.5f)).ColorAndOpacity(Ink).AutoWrapText(true);
+		}
+
+		/** (Release 2, THE HOME FRONT) A name on the board, its sign before it and its figures after it: "Market hall  900 · 3 months". */
+		TSharedRef<SWidget> HomeName(const FString& Sign, const FString& Name, const FString& Figures, const FLinearColor& Ink, bool bBold = false)
+		{
+			TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox);
+			if (!Sign.IsEmpty())
+			{
+				Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 7.0f, 0.0f)[TownSign(Sign, 15.0f, Brass)];
+			}
+			Row->AddSlot().AutoWidth().VAlign(VAlign_Center)
+			[
+				SNew(STextBlock).Text(FText::FromString(Name)).Font(Serif(bBold ? TEXT("Bold") : TEXT("Regular"), 13.5f)).ColorAndOpacity(Ink)
+			];
+			if (!Figures.IsEmpty())
+			{
+				Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 1.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Figures)).Font(Typed(9.5f)).ColorAndOpacity(Muted)
+				];
+			}
+			return Row;
+		}
+
+		/**
+		 * (Release 2, THE HOME FRONT) The board's order button, lit brass where the order can be given (BUILD, RAISE, ORDER
+		 * AGAIN) and quiet with its reason under the pointer where it cannot.
+		 */
+		TSharedRef<SWidget> HomeOrderButton(const TCHAR* Label, bool bOn, const FString& Tip, TFunction<void()> Do, bool bSmall = false)
+		{
+			const FTownLook& Look = TownLook();
+			const FLinearColor OnBrass(FColor::FromHex(TEXT("1E1608")));
+			return SNew(SButton).ButtonStyle(bOn ? &Look.Build : &Look.Quiet).ContentPadding(bSmall ? FMargin(12.0f, 5.0f) : FMargin(16.0f, 7.0f)).IsFocusable(false).IsEnabled(bOn)
+				.ToolTipText(FText::FromString(Tip))
+				.OnClicked_Lambda([Do]() { Do(); return FReply::Handled(); })
+				[
+					SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), bSmall ? 10 : 11, 200)).ColorAndOpacity(bOn ? OnBrass : Faint)
+				];
+		}
+
+		/** (Release 2, THE HOME FRONT) A small square button with a sign on it: the row's other buildings, and the place on the map. */
+		TSharedRef<SWidget> HomeSquare(int32 Sign, const FString& Tip, TFunction<void()> Do)
+		{
+			return SNew(SBox).WidthOverride(30.0f).HeightOverride(30.0f)
+				[
+					SNew(SButton).ButtonStyle(&TownLook().Quiet).ContentPadding(FMargin(0.0f)).IsFocusable(false).HAlign(HAlign_Center).VAlign(VAlign_Center)
+					.ToolTipText(FText::FromString(Tip))
+					.OnClicked_Lambda([Do]() { Do(); return FReply::Handled(); })
+					[
+						SNew(SLineIcon).Kind(Sign).Size(14.0f).Weight(1.5f).Ink(Cream)
+					]
+				];
+		}
+
+		/**
+		 * (Release 2, THE HOME FRONT) One town on the board: its name, and under it its province, what kind of place it is
+		 * and what the province pays each month; its plots as marks (built in brass with its level, going up with a brass
+		 * edge, free with the kit's line); the building the staff would choose for it, what that costs and does, and BUILD;
+		 * or what is going up, when it is due, and TAKE IT BACK in the month it was ordered. The chevron unfolds the town's
+		 * other buildings and its plan; the sight shows the place on the map.
+		 */
+		TSharedRef<SWidget> HomeTownRow(const FHomeTown& Town, bool bUnfolded)
+		{
+			const FTownLook& Look = TownLook();
+			const FHomeLook& Home = HomeLook();
+			const FLinearColor OnBrass(FColor::FromHex(TEXT("1E1608")));
+			const int32 Region = Town.Region;
+			const bool bKept = Controller.IsValid() && Controller->IsHomeKept(Region);
+			auto Go = [this](const FString& Act) -> TFunction<void()> { return [this, Act]() { if (Controller.IsValid()) { Controller->PressPage(Act); } }; };
+			auto Build = [this, Region](const FHomeBuild& Offer, const FString& Where, bool bSmall) -> TSharedRef<SWidget>
+			{
+				return HomeOrderButton(TEXT("BUILD"), Offer.bOk, Offer.bOk ? FString::Printf(TEXT("%s at %s. %s"), *Offer.Label, *Where, *Offer.Effect) : Offer.Why,
+					[this, Region, Act = Offer.Act]() { if (Controller.IsValid()) { Controller->BuildFromHome(Region, Act); } }, bSmall);
+			};
+
+			FString Kind = Town.Size;
+			if (!Kind.IsEmpty())
+			{
+				Kind[0] = FChar::ToUpper(Kind[0]);
+			}
+			FString Under = Town.Town == Town.Province ? Kind : Town.Province + TEXT("  \u00B7  ") + Town.Size;
+			if (!Town.bOwn)
+			{
+				Under += TEXT("  \u00B7  taken");
+			}
+			if (Town.Pays > 0)
+			{
+				Under += TEXT("  \u00B7  pays ") + Cash(Town.Pays);
+			}
+
+			TSharedRef<SHorizontalBox> Plots = SNew(SHorizontalBox);
+			for (const FHomePlot& Plot : Town.Plots)
+			{
+				const bool bBuilt = Plot.State == TEXT("built"), bRising = Plot.State == TEXT("going");
+				const FString Rising = Town.GoingName.IsEmpty() ? Plot.Name : Town.GoingName;
+				const FString Tip = bBuilt ? FString::Printf(TEXT("%s, level %d."), *Plot.Name, Plot.Level)
+					: bRising ? FString::Printf(TEXT("%s: going up, %s to go."), *Rising, *HomeMonths(Plot.Months))
+					: FString(TEXT("A free plot."));
+				TSharedRef<SHorizontalBox> Mark = SNew(SHorizontalBox);
+				if (bBuilt || bRising)
+				{
+					Mark->AddSlot().AutoWidth().VAlign(VAlign_Center)[TownSign(TEXT("civic-") + Plot.Line, 16.0f, bBuilt ? OnBrass : BrightBrass)];
+				}
+				if (bBuilt)
+				{
+					Mark->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(3.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::AsNumber(Plot.Level)).Font(Typed(9.0f, true)).ColorAndOpacity(OnBrass)
+					];
+				}
+				Plots->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 4.0f, 0.0f)
+				[
+					SNew(SBorder).BorderImage(bBuilt ? &Home.PlotBuilt : bRising ? &Home.PlotGoing : &Home.PlotFree).Padding(FMargin(5.0f, 0.0f)).HAlign(HAlign_Center).VAlign(VAlign_Center)
+					.ToolTipText(FText::FromString(Tip))
+					[
+						SNew(SBox).MinDesiredWidth(18.0f).HeightOverride(28.0f).HAlign(HAlign_Center).VAlign(VAlign_Center)[Mark]
+					]
+				];
+			}
+
+			TSharedRef<SVerticalBox> Middle = SNew(SVerticalBox);
+			TSharedRef<SWidget> Order = SNew(SSpacer);
+			if (Town.bGoing)
+			{
+				Middle->AddSlot().AutoHeight()[HomeName(TEXT("scaffold"), Town.GoingName + TEXT(" going up"), FString(), Cream)];
+				Middle->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+				[
+					HomeWords(Town.GoingMonths > 0 ? FString::Printf(TEXT("Due %s, in %s."), *Town.GoingDue, *HomeMonths(Town.GoingMonths)) : FString::Printf(TEXT("Due %s."), *Town.GoingDue))
+				];
+				if (Town.bGoingCancel)
+				{
+					Order = OfficeButton(TEXT("TAKE IT BACK"), Cream, true, TEXT("The order is taken back and the money returned. Only in the month it was placed."), Go(Town.GoingAct));
+				}
+			}
+			else if (Town.bBest)
+			{
+				const FHomeBuild& Best = Town.Best;
+				Middle->AddSlot().AutoHeight()[HomeName(TEXT("civic-") + Best.Line, Best.Label, FString::Printf(TEXT("%s  \u00B7  %s"), *Cash(Best.Cost), *HomeMonths(Best.Months)), Cream)];
+				Middle->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)[HomeWords(Best.bOk || Best.Why.IsEmpty() ? Best.Effect : Best.Why)];
+				Order = Build(Best, Town.Town, false);
+			}
+			else
+			{
+				Middle->AddSlot().AutoHeight()[HomeWords(Town.Note.IsEmpty() ? FString(TEXT("Nothing more can be built here now.")) : Town.Note)];
+			}
+
+			TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(SBox).WidthOverride(214.0f)
+					[
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock).Text(FText::FromString(Town.Town)).Font(Serif(TEXT("Bold"), 15.0f)).ColorAndOpacity(Cream)
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Under)).Font(Typed(9.5f)).ColorAndOpacity(Muted).AutoWrapText(true)
+						]
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(SBox).WidthOverride(150.0f).HAlign(HAlign_Left)[Plots]
+				]
+				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(8.0f, 0.0f, 10.0f, 0.0f)[Middle]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Order]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+				[
+					HomeSquare(bUnfolded ? 20 : 33, bUnfolded ? FString(TEXT("Fold these away.")) : FString(TEXT("The other buildings this town could take, and its town plan.")),
+						[this, Region]() { if (Controller.IsValid()) { Controller->UnfoldHomeTown(Region); } })
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6.0f, 0.0f, 0.0f, 0.0f)
+				[
+					HomeSquare(32, FString::Printf(TEXT("Show %s on the map."), *Town.Town), Go(FString::Printf(TEXT("goto:region:%d"), Region)))
+				];
+
+			TSharedRef<SVerticalBox> Whole = SNew(SVerticalBox) + SVerticalBox::Slot().AutoHeight()[Row];
+			if (bUnfolded)
+			{
+				Whole->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 7.0f)[SNew(SBox).HeightOverride(1.0f)[SNew(SImage).Image(&Home.Hair)]];
+				for (const FHomeBuild& Offer : Town.More)
+				{
+					Whole->AddSlot().AutoHeight().Padding(222.0f, 0.0f, 74.0f, 7.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight()[HomeName(TEXT("civic-") + Offer.Line, Offer.Label, FString::Printf(TEXT("%s  \u00B7  %s"), *Cash(Offer.Cost), *HomeMonths(Offer.Months)), Cream)]
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)[HomeWords(Offer.bOk || Offer.Why.IsEmpty() ? Offer.Effect : Offer.Why)]
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[Build(Offer, Town.Town, true)]
+					];
+				}
+				Whole->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(222.0f, 1.0f, 0.0f, 0.0f)
+				[
+					OfficeButton(TEXT("TOWN PLAN"), BrightBrass, true, TEXT("Every plot of this town, and everything that could be built there."),
+						[this, Region]() { if (Controller.IsValid()) { Controller->OpenTownFromHome(Region); } })
+				];
+			}
+			return SNew(SBorder).BorderImage(bKept ? &Home.RowKept : &Look.Tile).Padding(FMargin(12.0f, 8.0f, 10.0f, 8.0f))[Whole];
+		}
+
+		/**
+		 * (Release 2, tc.UI.HomeFront; Brian, 25 November 2026: "lets make the campaign map and playing of that feel less
+		 * choppy and hard to manage. I want the UI and user experience to feel seamless and easy to manage the cities,
+		 * recruitment, ect". The UI director's mock-up on the Campaign Screens canvas.) THE HOME FRONT: the treasury, what
+		 * is on order, the towns and the men as four tiles; who runs building, and what the staff may spend; every town on
+		 * a row of its own with BUILD beside the building the staff would choose for it; and on the right what can be
+		 * raised, with ORDER AGAIN over it, and what is on order. Every button is an order the rules already had: the town
+		 * plan's BUILD, the arsenal's order, its cancel. Nothing in the rules changes. A press lays the board out again
+		 * where it stood: each list keeps its place, and a town just built in keeps its row.
+		 */
+		void LayOutHomeFront(const FOfficePage& Page)
+		{
+			if (!Controller.IsValid() || !HomeBody.IsValid())
+			{
+				return;
+			}
+			const FHomeBoard& Board = Page.Home;
+			const FTownLook& Look = TownLook();
+			const FHomeLook& Home = HomeLook();
+			const FLinearColor OnBrass(FColor::FromHex(TEXT("1E1608")));
+			auto Go = [this](const FString& Act) -> TFunction<void()> { return [this, Act]() { if (Controller.IsValid()) { Controller->PressPage(Act); } }; };
+			const int32 Filter = Controller->GetHomeFilter(), Unfolded = Controller->GetHomeUnfolded(), Most = Controller->GetHomeRows();
+
+			// Where each list stood, to be put back once the board is laid out again: from its head when the board is newly
+			// opened, and the towns from their head when another list of them is asked for.
+			const bool bFresh = HomeLaidOpening != Controller->GetHomeOpenings();
+			const float TownsAt = !bFresh && HomeLaidFilter == Filter && HomeTownsScroll.IsValid() ? HomeTownsScroll->GetScrollOffset() : 0.0f;
+			const float RaiseAt = !bFresh && HomeRaiseScroll.IsValid() ? HomeRaiseScroll->GetScrollOffset() : 0.0f;
+			const float OrdersAt = !bFresh && HomeOrdersScroll.IsValid() ? HomeOrdersScroll->GetScrollOffset() : 0.0f;
+			HomeLaidOpening = Controller->GetHomeOpenings();
+			HomeLaidFilter = Filter;
+
+			// The card's head: the board's doors to its neighbours, beside CLOSE.
+			if (HomeHead.IsValid())
+			{
+				auto Head = [](const FString& Label, bool bOn, const FString& Tip, TFunction<void()> Do) -> TSharedRef<SWidget>
+				{
+					return SNew(SButton).ButtonStyle(&TownLook().Quiet).ContentPadding(FMargin(16.0f, 9.0f)).IsFocusable(false).IsEnabled(bOn)
+						.ToolTipText(FText::FromString(Tip))
+						.OnClicked_Lambda([Do]() { Do(); return FReply::Handled(); })
+						[
+							SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(bOn ? BrightBrass : Faint)
+						];
+				};
+				for (const FPageButton& Button : Page.Top)
+				{
+					HomeHead->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 8.0f, 0.0f)[Head(Button.Label, Button.bOk, Button.Tip, Go(Button.Act))];
+				}
+				HomeHead->AddSlot().AutoWidth()
+				[
+					Head(TEXT("THE ARSENAL"), true, TEXT("The arsenal: every order with its picture, and the works a province can take. (1)"), [this]() { if (Controller.IsValid()) { Controller->OpenArsenal(); } })
+				];
+			}
+
+			// The four tiles.
+			TSharedRef<SHorizontalBox> Tiles = SNew(SHorizontalBox);
+			for (int32 Index = 0; Index < Board.Tiles.Num(); ++Index)
+			{
+				const FHomeTile& Tile = Board.Tiles[Index];
+				const bool bDebt = Tile.Kind == TEXT("money") && Board.Money < 0;
+				Tiles->AddSlot().FillWidth(1.0f).Padding(Index == 0 ? 0.0f : 10.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(SBorder).BorderImage(&Look.Tile).Padding(FMargin(14.0f, 8.0f, 14.0f, 9.0f))
+					[
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock).Text(FText::FromString(Tile.Label)).Font(SmallCaps()).ColorAndOpacity(Muted)
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
+							[
+								SNew(STextBlock).Text(FText::FromString(Tile.Figure)).Font(Serif(TEXT("Bold"), 22.0f)).ColorAndOpacity(bDebt ? Alarm : Cream)
+							]
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Bottom).Padding(10.0f, 0.0f, 0.0f, 4.0f)
+							[
+								SNew(SBox).Clipping(EWidgetClipping::ClipToBounds)
+								[
+									SNew(STextBlock).Text(FText::FromString(Tile.Sub)).Font(Serif(TEXT("Regular"), 11.5f)).ColorAndOpacity(Muted)
+								]
+							]
+						]
+					]
+				];
+			}
+
+			TSharedRef<SVerticalBox> Whole = SNew(SVerticalBox) + SVerticalBox::Slot().AutoHeight()[Tiles];
+
+			// The staff: who gives these orders, what the staff may spend, and the button that changes hands.
+			if (Board.bStaff)
+			{
+				TSharedRef<SHorizontalBox> Caps = SNew(SHorizontalBox);
+				for (const int32 Share : Board.StaffCaps)
+				{
+					const bool bNow = Share == Board.StaffCap;
+					Caps->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(6.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(SButton).ButtonStyle(bNow ? &Look.SegOn : &Look.Seg).ContentPadding(FMargin(10.0f, 5.0f)).IsFocusable(false)
+						.ToolTipText(FText::FromString(FString::Printf(TEXT("Your staff may spend up to %d%% of the treasury each month on the desks it runs."), Share)))
+						.OnClicked_Lambda([Do = Go(FString::Printf(TEXT("cap:%d"), Share))]() { Do(); return FReply::Handled(); })
+						[
+							SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%d%%"), Share))).Font(Font(TEXT("Bold"), 10, 120)).ColorAndOpacity(bNow ? OnBrass : Cream)
+						]
+					];
+				}
+				Whole->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+				[
+					SNew(SBorder).BorderImage(&Look.Tile).Padding(FMargin(14.0f, 8.0f, 12.0f, 8.0f))
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
+						[
+							SNew(SLineIcon).Kind(19).Size(22.0f).Weight(1.5f).Ink(Board.bStaffOn ? BrightBrass : Brass)
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(STextBlock).Text(FText::FromString(Board.bStaffOn ? TEXT("YOUR STAFF GIVES THESE ORDERS") : TEXT("YOU GIVE THESE ORDERS YOURSELF"))).Font(SmallCaps()).ColorAndOpacity(Board.bStaffOn ? BrightBrass : Brass)
+							]
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Text(FText::FromString(Board.StaffLine)).Font(Serif(TEXT("Regular"), 11.5f)).ColorAndOpacity(Muted).AutoWrapText(true)
+							]
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(16.0f, 0.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("MAY SPEND"))).Font(SmallCaps()).ColorAndOpacity(Muted)
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Caps]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(14.0f, 0.0f, 0.0f, 0.0f)
+						[
+							OfficeButton(*Board.StaffLabel, BrightBrass, true, Board.StaffTip, Go(Board.StaffAct))
+						]
+					]
+				];
+			}
+
+			// The towns: the list asked for, the richest first, no more of them than the board is told to list.
+			auto Chip = [this, &Look, OnBrass](const TCHAR* Label, int32 Count, int32 Which, const TCHAR* Tip) -> TSharedRef<SWidget>
+			{
+				const bool bOn = Controller->GetHomeFilter() == Which;
+				return SNew(SButton).ButtonStyle(bOn ? &Look.SegOn : &Look.Seg).ContentPadding(FMargin(12.0f, 5.0f)).IsFocusable(false)
+					.ToolTipText(FText::FromString(Tip))
+					.OnClicked_Lambda([this, Which]() { if (Controller.IsValid()) { Controller->SetHomeFilter(Which); } return FReply::Handled(); })
+					[
+						SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d"), Label, Count))).Font(Font(TEXT("Bold"), 10, 140)).ColorAndOpacity(bOn ? OnBrass : Cream)
+					];
+			};
+			TSharedRef<SVerticalBox> Towns = SNew(SVerticalBox);
+			int32 Fit = 0, Listed = 0;
+			for (const FHomeTown& Town : Board.Towns)
+			{
+				const bool bCan = Town.State == TEXT("ready") || Town.State == TEXT("short");
+				if (!(Filter == 2 || (Filter == 1 ? Town.bGoing : bCan || Controller->IsHomeKept(Town.Region))))
+				{
+					continue;
+				}
+				++Fit;
+				if (Listed < Most)
+				{
+					++Listed;
+					Towns->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)[HomeTownRow(Town, Unfolded == Town.Region)];
+				}
+			}
+			if (Fit == 0)
+			{
+				Towns->AddSlot().AutoHeight().Padding(2.0f, 8.0f, 0.0f, 0.0f)
+				[
+					HomeWords(Filter == 1 ? FString(TEXT("Nothing is going up in your towns.")) : Filter == 0 ? FString(TEXT("Every town is building or complete.")) : FString(TEXT("You hold no town with a plot to build on.")), Faint)
+				];
+			}
+			if (Fit > Listed)
+			{
+				Towns->AddSlot().AutoHeight().Padding(2.0f, 4.0f, 0.0f, 6.0f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+					[
+						HomeWords(Fit - Listed == 1 ? FString(TEXT("One more town, poorer than these.")) : FString::Printf(TEXT("%d more towns, poorer than these."), Fit - Listed))
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+					[
+						OfficeButton(TEXT("SHOW MORE"), BrightBrass, true, TEXT("Lists the next forty."), [this]() { if (Controller.IsValid()) { Controller->ShowMoreHomeTowns(); } })
+					]
+				];
+			}
+			TSharedRef<SWidget> Left = SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 12.0f, 10.0f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("Your towns, richest first"))).Font(Serif(TEXT("Regular"), 18.0f)).ColorAndOpacity(Cream)
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Chip(TEXT("CAN BUILD"), Board.Ready, 0, TEXT("The towns with a plot that can take a building now."))]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6.0f, 0.0f, 0.0f, 0.0f)[Chip(TEXT("BUILDING"), Board.Going, 1, TEXT("The towns where something is going up. A town puts up one building at a time."))]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6.0f, 0.0f, 0.0f, 0.0f)[Chip(TEXT("ALL"), Board.All, 2, TEXT("Every town you hold that has plots."))]
+				]
+				+ SVerticalBox::Slot().FillHeight(1.0f)
+				[
+					SAssignNew(HomeTownsScroll, SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)[Towns]
+				];
+
+			// Raising forces: ORDER AGAIN over the list, then what the arsenal offers that is raised, what can be ordered now first.
+			TSharedRef<SVerticalBox> Raise = SNew(SVerticalBox);
+			static const TCHAR* const Groups[][2] = { { TEXT("army"), TEXT("THE ARMY") }, { TEXT("air"), TEXT("THE AIR FORCE") }, { TEXT("navy"), TEXT("THE NAVY") } };
+			for (const auto& Group : Groups)
+			{
+				bool bHeaded = false;
+				for (int32 Pass = 0; Pass < 2; ++Pass)
+				{
+					for (const FHomeRaise& Offer : Board.Raise)
+					{
+						if (Offer.Group != Group[0] || Offer.bOk != (Pass == 0))
+						{
+							continue;
+						}
+						if (!bHeaded)
+						{
+							bHeaded = true;
+							Raise->AddSlot().AutoHeight().Padding(0.0f, Raise->NumSlots() == 0 ? 0.0f : 8.0f, 0.0f, 5.0f)
+							[
+								SNew(STextBlock).Text(FText::FromString(Group[1])).Font(SmallCaps()).ColorAndOpacity(Brass)
+							];
+						}
+						Raise->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 5.0f)
+						[
+							SNew(SBorder).BorderImage(&Look.Tile).Padding(FMargin(12.0f, 6.0f, 10.0f, 7.0f))
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight()[HomeName(FString(), Offer.Label, FString::Printf(TEXT("%s  \u00B7  %s"), *Cash(Offer.Cost), *HomeMonths(Offer.Months)), Offer.bOk ? Cream : Muted, true)]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)[HomeWords(Offer.bOk || Offer.Why.IsEmpty() ? Offer.Note : Offer.Why)]
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+								[
+									HomeOrderButton(TEXT("RAISE"), Offer.bOk, Offer.bOk ? Offer.Note : Offer.Why, Go(Offer.Act), true)
+								]
+							]
+						];
+					}
+				}
+			}
+			if (Raise->NumSlots() == 0)
+			{
+				Raise->AddSlot().AutoHeight()[HomeWords(TEXT("Nothing can be raised in this campaign."), Faint)];
+			}
+			TSharedRef<SWidget> Again = SNew(SBorder).BorderImage(Board.bAgain ? &Home.Again : &Look.Tile).Padding(FMargin(12.0f, 8.0f, 10.0f, 9.0f))
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+					[
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock).Text(FText::FromString(Board.bAgain && Board.AgainCost > 0 ? FString::Printf(TEXT("ORDER AGAIN  \u00B7  %s"), *Cash(Board.AgainCost)) : FString(TEXT("ORDER AGAIN")))).Font(SmallCaps()).ColorAndOpacity(Board.bAgain ? BrightBrass : Faint)
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Font(Serif(TEXT("Regular"), 12.0f)).ColorAndOpacity(Board.bAgain ? Cream : Faint).AutoWrapText(true)
+							.Text(FText::FromString(Board.bAgain ? Board.AgainText : FString(TEXT("Nothing to repeat yet. Once you have raised forces, one press here places the same orders again next month."))))
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+						[
+							SNew(SBox).Visibility(Board.bAgain && !Board.AgainLeft.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed)[HomeWords(Board.AgainLeft)]
+						]
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(SBox).Visibility(Board.bAgain ? EVisibility::Visible : EVisibility::Collapsed)
+						[
+							HomeOrderButton(TEXT("ORDER AGAIN"), Board.bAgainOk, Board.bAgainOk ? FString(TEXT("Places each of these orders again, at today's price.")) : Board.AgainWhy, Go(Board.AgainAct), true)
+						]
+					]
+				];
+
+			// On order: the forces being raised, the soonest ready first. (What is going up in the towns is in their own list.)
+			TSharedRef<SVerticalBox> Orders = SNew(SVerticalBox);
+			for (const FHomeOrder& Each : Board.Orders)
+			{
+				TSharedRef<SHorizontalBox> Line = SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+					[
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock).Text(FText::FromString(Each.Name)).Font(Serif(TEXT("Regular"), 12.5f)).ColorAndOpacity(Cream).AutoWrapText(true)
+						]
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock).Font(Typed(9.5f)).ColorAndOpacity(Muted)
+							.Text(FText::FromString(Each.Where.IsEmpty() ? FString::Printf(TEXT("Due %s"), *Each.Due) : FString::Printf(TEXT("%s  \u00B7  due %s"), *Each.Where, *Each.Due)))
+						]
+					];
+				if (Each.bCancel)
+				{
+					Line->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+					[
+						OfficeButton(TEXT("TAKE IT BACK"), Cream, true, TEXT("The order is taken back and the money returned. Only in the month it was placed."), Go(Each.Act))
+					];
+				}
+				Orders->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 7.0f)[Line];
+			}
+			if (Board.Orders.Num() == 0)
+			{
+				Orders->AddSlot().AutoHeight()[HomeWords(TEXT("Nothing is being raised."), Faint)];
+			}
+
+			TSharedRef<SWidget> Right = SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 9.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("Raise forces"))).Font(Serif(TEXT("Regular"), 18.0f)).ColorAndOpacity(Cream)
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)[Again]
+				+ SVerticalBox::Slot().FillHeight(0.6f)
+				[
+					SAssignNew(HomeRaiseScroll, SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)[Raise]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 7.0f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("On order"))).Font(Serif(TEXT("Regular"), 18.0f)).ColorAndOpacity(Cream)
+					]
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Bottom).HAlign(HAlign_Right).Padding(10.0f, 0.0f, 0.0f, 3.0f)
+					[
+						SNew(STextBlock).Font(Serif(TEXT("Italic"), 10.5f)).ColorAndOpacity(Muted)
+						.Text(FText::FromString(Board.Orders.Num() > 1 ? FString(TEXT("the soonest ready first")) : FString()))
+					]
+				]
+				+ SVerticalBox::Slot().FillHeight(0.4f)
+				[
+					SAssignNew(HomeOrdersScroll, SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)[Orders]
+				];
+
+			Whole->AddSlot().FillHeight(1.0f).Padding(0.0f, 14.0f, 0.0f, 0.0f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.0f)[Left]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(12.0f, 0.0f, 0.0f, 0.0f)[SNew(SBox).WidthOverride(432.0f)[Right]]
+			];
+			HomeBody->SetContent(Whole);
+			HomeTownsScroll->SetScrollOffset(TownsAt);
+			HomeRaiseScroll->SetScrollOffset(RaiseAt);
+			HomeOrdersScroll->SetScrollOffset(OrdersAt);
+		}
+
 		void LayOutPage(const FOfficePage& Page)
 		{
 			PageBody->ClearChildren();
 			if (PageFoot.IsValid())
 			{
 				PageFoot->ClearChildren();
+			}
+			{
+				// (Release 2, THE HOME FRONT) The board stands in place of the scrolling page; any other room has the page.
+				const bool bBoard = Page.Home.bValid && ACampaignPlayerController::IsHomeFrontStyle() && HomeBody.IsValid();
+				if (EdgeMarks.Scroll.IsValid())
+				{
+					EdgeMarks.Scroll->SetVisibility(bBoard ? EVisibility::Collapsed : EVisibility::Visible);
+				}
+				if (HomeHead.IsValid())
+				{
+					HomeHead->ClearChildren();
+				}
+				if (HomeBody.IsValid())
+				{
+					HomeBody->SetVisibility(bBoard ? EVisibility::Visible : EVisibility::Collapsed);
+					if (!bBoard)
+					{
+						HomeBody->SetContent(SNullWidget::NullWidget);
+					}
+				}
+				if (bBoard)
+				{
+					LayOutHomeFront(Page);
+					return;
+				}
 			}
 			if (Page.Top.Num() > 0)
 			{
@@ -19953,6 +20608,12 @@ namespace
 		FEdgeNewsCardMarks EdgeMarks; // (Release 2, news at the map's edge: merge by hand)
 		TSharedPtr<SVerticalBox> PageFoot;
 		int32 ShownRoom = -1;
+		// (Release 2, THE HOME FRONT) The board in the room's card; its buttons at the card's head; and its three lists,
+		// kept so that each stays where it was scrolled to when the board is laid out again after a press.
+		TSharedPtr<SBox> HomeBody;
+		TSharedPtr<SHorizontalBox> HomeHead;
+		TSharedPtr<SScrollBox> HomeTownsScroll, HomeRaiseScroll, HomeOrdersScroll;
+		int32 HomeLaidOpening = -1, HomeLaidFilter = -1;
 		TSharedPtr<SVerticalBox> GeneralsList;
 		TSharedPtr<SVerticalBox> GeneralsVacant;
 		int32 ShownGenerals = -1;

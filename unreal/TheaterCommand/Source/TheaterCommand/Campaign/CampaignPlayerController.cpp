@@ -1773,6 +1773,91 @@ bool ACampaignPlayerController::IsTownCardStyle()
 	return bAsked || CVarTownCard.GetValueOnGameThread() != 0;
 }
 
+namespace
+{
+	// (Release 2; Brian, 25 November 2026: "lets make the campaign map and playing of that feel less choppy and hard to
+	// manage. I want the UI and user experience to feel seamless and easy to manage the cities, recruitment, ect".) THE
+	// HOME FRONT, off until the art director has passed the Mac's stills of it; -TheaterHomeFront turns it on for a run.
+	TAutoConsoleVariable<int32> CVarHomeFront(
+		TEXT("tc.UI.HomeFront"), 0,
+		TEXT("1 shows THE HOME FRONT: a door on the top bar to one board for every town, raising forces and everything on order; 0 the game as before (as -TheaterHomeFront). The door is named by the rules when a campaign's rules are loaded, so set it before the campaign is begun or loaded."));
+}
+
+bool ACampaignPlayerController::IsHomeFrontStyle()
+{
+	static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterHomeFront"));
+	return bAsked || CVarHomeFront.GetValueOnGameThread() != 0;
+}
+
+void ACampaignPlayerController::OpenHomeFront()
+{
+	if (IsHomeFrontStyle())
+	{
+		OpenPage(TEXT("home"));
+	}
+}
+
+void ACampaignPlayerController::SetHomeFilter(int32 Filter)
+{
+	if (bPageOpen && Page.Home.bValid && Filter != HomeFilter)
+	{
+		CampaignSounds::Play(this, TEXT("click"), 0.5f);
+		HomeFilter = FMath::Clamp(Filter, 0, 2);
+		HomeUnfolded = INDEX_NONE;
+		HomeRows = 40;
+		++Page.Revision; // (the board is laid out again as it stands: nothing is asked of the rules)
+	}
+}
+
+void ACampaignPlayerController::ShowMoreHomeTowns()
+{
+	if (bPageOpen && Page.Home.bValid)
+	{
+		CampaignSounds::Play(this, TEXT("click"), 0.5f);
+		HomeRows += 40;
+		++Page.Revision;
+	}
+}
+
+void ACampaignPlayerController::OpenTownFromHome(int32 Region)
+{
+	if (!bPageOpen || !Page.Home.bValid)
+	{
+		return;
+	}
+	if (IsTownCardStyle())
+	{
+		// (tc.UI.TownCard) The town's card stands on the map: the board is put away, the view goes to the town, and its
+		// card is opened.
+		ClosePage();
+		ShowProvince(Region);
+		OpenTownCard();
+		return;
+	}
+	PressPage(FString::Printf(TEXT("open:town:%d"), Region));
+}
+
+void ACampaignPlayerController::UnfoldHomeTown(int32 Region)
+{
+	if (bPageOpen && Page.Home.bValid)
+	{
+		CampaignSounds::Play(this, TEXT("click"), 0.5f);
+		HomeUnfolded = HomeUnfolded == Region ? INDEX_NONE : Region;
+		++Page.Revision;
+	}
+}
+
+void ACampaignPlayerController::BuildFromHome(int32 Region, const FString& Act)
+{
+	if (bPageOpen && Page.Home.bValid)
+	{
+		// (the town keeps its row, now with what is going up and TAKE IT BACK, until the board is put away)
+		HomeKept.Add(Region);
+		HomeUnfolded = INDEX_NONE;
+		PressPage(Act);
+	}
+}
+
 void ACampaignPlayerController::OpenTownCard()
 {
 	if (Map.IsValid() && Map->GetSelectedRegion() != INDEX_NONE && Map->GetSelectedRegion() == TownBar.Region && TownBar.Plots.Num() > 0)
@@ -1910,6 +1995,15 @@ void ACampaignPlayerController::OpenPage(const FString& Id)
 	Page = Session->Page(Id, SelectedRegion);
 	Page.Revision = Revision;
 	bPageOpen = Page.bValid;
+	if (Id == TEXT("home"))
+	{
+		// (Release 2, THE HOME FRONT) Opened afresh: the towns that can take a building, none unfolded, none kept.
+		HomeFilter = 0;
+		HomeUnfolded = INDEX_NONE;
+		HomeRows = 40;
+		++HomeOpenings;
+		HomeKept.Reset();
+	}
 	if (bPageOpen && Id == TEXT("atom"))
 	{
 		// (Release 2, atom.ts; the UI director's marks.) THE ATOMIC PROJECT opened with a bomb in hand: the chip under END
