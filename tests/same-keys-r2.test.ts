@@ -14,7 +14,7 @@ vi.mock('../src/core/rng', async (orig) => {
 
 import { Rng, hashString } from '../src/core/rng';
 import { LandBattle, sampleTicket } from '../src/battle/land';
-import { atWar, capture, createGame, setWar } from '../src/campaign/game';
+import { atWar, capture, changedThisMonth, createGame, setWar, takenInWarThisMonth } from '../src/campaign/game';
 import { PRIZE_KINDS, hasPrize, prizeInside, prizeOut, setScorchPolicy } from '../src/campaign/prizes';
 import { onNet, railCut } from '../src/campaign/rails';
 import { blowChance, bridgeDown, crossingsAt, farBank } from '../src/campaign/rivers';
@@ -222,6 +222,17 @@ describe('the four low keys take the missing side on a second change of hands in
     const laid = g.regions.filter((r) => r.since === g.turn && g.flags[`fellP:${r.id}`] === undefined && r.ctrl === 'SOV' && onNet(r.id) && !railCut(g, r.id));
     expect(laid.length).toBeGreaterThan(0);
     setWar(g, 'GER', 'SOV');
+    // (Belt and braces: none of this laid ground has an enemy of its holder as its r.prev, so the taking-in-war rule
+    // alone reads it as no taking. The opening month's own rule still holds where one would: given Germany as r.prev,
+    // at war with the Red Army, a laid province is still no change of hands, and no taking in war.)
+    for (const r of laid) expect(takenInWarThisMonth(g, r)).toBe(false);
+    {
+      const q = laid[0], was = q.prev;
+      q.prev = 'GER';
+      expect(changedThisMonth(g, q)).toBe(false);
+      expect(takenInWarThisMonth(g, q)).toBe(false);
+      q.prev = was;
+    }
     let met = 0;
     for (const r of laid) {
       const old = `rail:${g.seed}:${g.turn}:${r.id}`;
@@ -336,6 +347,42 @@ describe('the four low keys take the missing side on a second change of hands in
         met++;
         break;
       }
+    }
+    expect(met).toBeGreaterThan(0);
+  });
+
+  // The scorch rolls' guard: a taking in war earlier this month threw them only where the side then driven out (r.prev)
+  // burns. The side driven out now is no guide: it throws only where it burns, so it would salt every such throw.
+  it('the railway (row 6b): taken in war from a side that burns nothing, then retaken from one that burns: the month\'s first scorch throw, today\'s key', () => {
+    const g = scorching(1);
+    setScorchPolicy(g, 'POL', 'never');
+    let met = 0;
+    for (const r of g.regions) {
+      if (met >= 2) break;
+      if (r.ctrl !== 'POL' || !onNet(r.id) || railCut(g, r.id)) continue;
+      const old = `prize:${g.seed}:${g.turn}:${r.id}:rail`;
+      expect(keysOf(`prize:${g.seed}:`, () => capture(g, r, 'GER'))).toEqual([]);
+      if (railCut(g, r.id)) continue;
+      // (Germany, driven out now, burns: its throw is the month's first for the track.)
+      expect(keysOf(old, () => capture(g, r, 'POL'))).toEqual([old]);
+      met++;
+    }
+    expect(met).toBeGreaterThan(0);
+  });
+
+  it('lost whole by a side that burns nothing, then lost whole again by one that burns (row 6a): the month\'s first scorch throws, today\'s keys', () => {
+    const g = scorching(1);
+    setScorchPolicy(g, 'POL', 'never');
+    let met = 0;
+    for (const r of g.regions) {
+      if (met >= 2) break;
+      if (r.ctrl !== 'POL' || !standing(g, r, true).length || g.flags[`siege:${r.id}`] !== undefined) continue;
+      const pre = `prize:${g.seed}:${g.turn}:${r.id}:`;
+      expect(keysOf(pre, () => fall(g, r, 'GER', 'empty'))).toEqual([]);
+      const second = keysOf(pre, () => fall(g, r, 'POL', 'empty'));
+      expect(second.length).toBeGreaterThan(0);
+      for (const k of second) expect(k.split(':').length).toBe(5);
+      met++;
     }
     expect(met).toBeGreaterThan(0);
   });

@@ -726,11 +726,12 @@ export function fall(g: Game, r: Region, by: string, how: Fell): void {
   const since = g.flags[`siege:${r.id}`];
   const lasted = since === undefined ? 0 : g.turn - since;
   const old = r.ctrl;
-  // (Read before this fall's capture: a town taken in war already this month from a side that burns was thrown for,
-  // so it throws its own dice (game.ts takenInWarThisMonth). Where the town was relieved
+  // (Read before this fall's capture: a town taken in war already this month from a side that burns (r.prev) was
+  // thrown for, so it throws its own dice (game.ts takenInWarThisMonth). Not the side driven out now: prizesOnLoss
+  // throws only where it burns, so it would salt the month's first throw too. Where the town was relieved
   // this month and the place is lost whole, what lay outside was thrown for by the besiegers driven off: those kinds
   // only take the side, and what lies inside keeps its key.)
-  const again = (takenInWarThisMonth(g, r) && (willBurn(g, r.prev!, r) || willBurn(g, old, r))) || (since === undefined && g.flags[`relieved:${r.id}`] === g.turn ? 'outside' : false);
+  const again = (takenInWarThisMonth(g, r) && willBurn(g, r.prev!, r)) || (since === undefined && g.flags[`relieved:${r.id}`] === g.turn ? 'outside' : false);
   tallySiege(g, how);
   if (how !== 'empty') tallySiege(g, 'months', lasted);
   tallySiege(g, 'taken', garrisonOf(r).length);

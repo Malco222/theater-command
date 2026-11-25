@@ -3126,6 +3126,9 @@ export function probeLine(g: Game, c: Corps, target: Region): ProbeReport | null
  * twice in a month is not the same throw twice. Read from what the game holds, so a save in mid-month plays the same.
  * In the opening month of a later start the ground history laid that month carries this month too (world.ts
  * settleFallen): there only a province capture() has ever taken (its fellP mark) counts, so laying is no change.
+ * (Belt and braces: in the starts probed (seed 1, months 10 and 22) no laid province has a side at war with its holder
+ * as its r.prev, so takenInWarThisMonth reads such ground as no taking in war without this rule. It holds where one
+ * would: a laid province whose r.prev is an enemy of its holder.)
  */
 export function changedThisMonth(g: Game, r: Region): boolean {
   if (r.since !== g.turn) return false;
@@ -3147,10 +3150,11 @@ export function capture(g: Game, r: Region, nat: string): void {
   const old = r.ctrl;
   if (old === nat) return;
   // (Read before this capture marks the month: a province taken in war already this month threw the track's dice, and
-  // the scorch roll's where a side driven out burns; a second taking throws its own. Only the last change of hands is
-  // held (r.prev), so after two or more the side it drove out stands for the takings before it: its own taking this
-  // month was in war, and its burning counts too.)
-  const prev = r.prev, again = takenInWarThisMonth(g, r), burnt = again && (willBurn(g, prev!, r) || willBurn(g, old, r));
+  // the scorch roll's where the side then driven out (r.prev) burns; a second taking throws its own. The side driven
+  // out now cannot stand for that: railOnScorch throws only where it burns, so it would salt every such throw, the
+  // month's first among them. Only the last change of hands is held, so a place taken three times, whose first loser
+  // burned and whose second did not, throws the first's key again: the residual.)
+  const prev = r.prev, again = takenInWarThisMonth(g, r), burnt = again && willBurn(g, prev!, r);
   const owner = g.nations[r.owner];
   r.ctrl = owner.alive && allied(g, nat, r.owner) ? r.owner : nat;
   r.since = g.turn;
