@@ -506,9 +506,15 @@ class Fit:
         man = self.man
         Pw = man.weapon_pts - man.H[self.wi]
         lo, hi = Pw[:, 0].min(), Pw[:, 0].max()
-        side = Pw[(Pw[:, 1] > 0) & (Pw[:, 1] < 0.03), 1].max()          # (the receiver's right face)
+        sl = self.gun.grips.get("slung")
+        if sl:                                                          # (a gun with a wide top, as a pan, says which of
+            side = float(sl["off"])                                     #  its sides lies to his back and how far that
+            to_back = np.array(sl["to_back"], float)                    #  side stands off the bore)
+        else:
+            side = Pw[(Pw[:, 1] > 0) & (Pw[:, 1] < 0.03), 1].max()      # (the receiver's right face)
+            to_back = np.array((0, 1.0, 0))
         a = unit((0.0, 0.38, 1.0))
-        Rw = fc.frame_map(np.array((1.0, 0, 0)), np.array((0, 1.0, 0)), a, np.array((1.0, 0, 0)))
+        Rw = fc.frame_map(np.array((1.0, 0, 0)), to_back, a, np.array((1.0, 0, 0)))
         ch = man.b("chest")
 
         def at(t):
@@ -532,7 +538,8 @@ class Fit:
         Pw = man.weapon_pts - man.H[self.wi]
         mid = np.array(((Pw[:, 0].min() + Pw[:, 0].max()) / 2, 0.0, 0.0))
         half = float(Pw[:, 1].max())                                    # (how far the right side stands off the bore)
-
+        ld = self.gun.grips.get("laid")                                 # (a gun that cannot lie flat on its side says
+                                                                        #  which way is down for it and how far off)
         def at(t):
             lq, mv = man.locals_of(clip, t)
             G, X = man.fk(lq, mv)
@@ -542,9 +549,14 @@ class Fit:
             right = X[man.b("upperarm_r")] - X[man.b("upperarm_l")]
             right[2] = 0.0
             right = unit(right)
-            Gw = fc.frame_map(np.array((1.0, 0, 0)), np.array((0, 1.0, 0)), along, np.array((0.0, 0.0, -1.0)))
             target = 0.5 * (X[man.b("upperarm_r")] + X[man.b("thigh_r")]) + right * 0.32
-            target[2] = half + 0.004
+            if ld:
+                n = unit(ld["down"])
+                Gw = fc.frame_map(n, np.array((1.0, 0, 0)), np.array((0.0, 0.0, -1.0)), along)
+                target[2] = float(ld["off"]) - float(mid @ n) + 0.004
+            else:
+                Gw = fc.frame_map(np.array((1.0, 0, 0)), np.array((0, 1.0, 0)), along, np.array((0.0, 0.0, -1.0)))
+                target[2] = half + 0.004
             Xw = target - Gw @ mid
             p = man.par[self.wi]
             lq[self.wi] = G[p].T @ Gw
