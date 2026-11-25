@@ -398,6 +398,9 @@ int main(int argc, char** argv)
 		Rec.Rounds.size(), Rec.Events.size(), Rec.End, ReadMs);
 
 	LandPlay::World PW;
+	// Effects (R2), small arms off armour: on as the game has it (-TheaterLandNoRicochet off); LAND_PLAY_NO_RICOCHET as
+	// before, every output as it was
+	PW.bRicochet = std::getenv("LAND_PLAY_NO_RICOCHET") == nullptr;
 	LandPlay::Replay Play;
 	Play.Begin(Rec, PW);
 	{
@@ -1269,6 +1272,11 @@ int main(int argc, char** argv)
 	for (size_t I = 0; I < Rec.Rounds.size(); ++I) RoundIx[Rec.Rounds[I].N] = I;
 	int FollowerShots = 0, FollowerStruck = 0, FollowerOnHim = 0, FollowerBursts = 0, FollowerBurstsBeside = 0;
 	double FollowerWorst = 0.0;
+	// Effects (R2), small arms off armour: the bursts drawn off a plate, by the role of what they struck; the worst way
+	// off a unit outward way, the farthest plate from her middle, and how many such bursts had it wrong
+	std::map<std::string, int> RicochetBy;
+	double RicochetNormalWorst = 0.0, RicochetPlateFarthest = 0.0;
+	int RicochetWrong = 0, RicochetOffPlate = 0;
 
 	// The picture run (LAND_PLAY_STILLS; LAND_PLAY_ONLY_STILLS runs it alone): the scene's ten stills as LandBattle asks
 	// them (each asked two battle seconds before it is taken, one film from the start), and for each what the camera made
@@ -1749,6 +1757,25 @@ int main(int argc, char** argv)
 			static_assert(sizeof(Names) / sizeof(Names[0]) == static_cast<size_t>(LandPlay::FxKind::Screen) + 1, "a name for every effect kind");
 			++FxCount[Names[static_cast<int>(E.Kind)]];
 			if (std::isnan(E.At.X) || std::isnan(E.At.Y) || std::isnan(E.At.Z)) Fault("an effect at no number", Battle);
+			if (PW.bRicochet && E.Kind == LandPlay::FxKind::Shots && RoundIx.count(E.Round))
+			{
+				// A rifle's or a machine gun's burst that struck armour (rules: not a miss) is drawn off her plate, and
+				// only such a burst: a lorry, a jeep or a man as ever.
+				const LandFeed::Round& Rr = Rec.Rounds[RoundIx[E.Round]];
+				const int Hit = Rr.On >= 0 && Rr.Ok >= 0 ? Rec.TrackIndexOf(Rr.On, Rr.Ok, Rr.Oj) : -1;
+				const LandFeed::Track* HitTr = Hit >= 0 ? &Rec.Tracks[static_cast<size_t>(Hit)] : nullptr;
+				const bool bWant = (Rr.W == "rifle" || Rr.W == "mg") && Rr.R != LandFeed::Result::Miss && HitTr && HitTr->IsVehicle() && LandPlay::ArmouredVehicle(*HitTr, Rec.BlockOf(HitTr->Block));
+				if (bWant != E.bArmour) ++RicochetWrong;
+				if (E.bArmour && HitTr)
+				{
+					++RicochetBy[HitTr->Role];
+					RicochetNormalWorst = std::max(RicochetNormalWorst, std::abs(E.Normal.Length() - 1.0));
+					const LandFeed::Spot Sp = LandFeed::SpotAt(*HitTr, Rr.L);
+					const double Off = std::hypot(E.To.X - Sp.X, E.To.Y - Sp.Y), Up = E.To.Z - Rec.Ground.HeightAt(Sp.X, Sp.Y);
+					RicochetPlateFarthest = std::max(RicochetPlateFarthest, Off);
+					if (Off > 4.0 || Up < -0.2 || Up > 3.2 || std::isnan(Up)) ++RicochetOffPlate;
+				}
+			}
 			if (!bSections || !RoundIx.count(E.Round)) continue;
 			const LandFeed::Round& R = Rec.Rounds[RoundIx[E.Round]];
 			if (R.Oj <= 0 || R.R != LandFeed::Result::Kill) continue;
@@ -1982,6 +2009,17 @@ int main(int argc, char** argv)
 		std::printf("sections: %d followers; %d rounds fired by followers, %d struck one (%d bullets landed on him, the farthest %.3f m off; %d bursts of their own, %d beside him, of %d due)\n",
 			Followers, FollowerShots, FollowerStruck, FollowerOnHim, FollowerWorst, FollowerBursts, FollowerBurstsBeside, Play.FollowerBurstCount());
 	}
+	if (PW.bRicochet)
+	{
+		int OffPlates = 0;
+		for (auto& P : RicochetBy) OffPlates += P.second;
+		std::printf("ricochets: %d small-arms bursts struck armour and were drawn off her plate (", OffPlates);
+		for (auto& P : RicochetBy) std::printf("%s%s %d", P.first == RicochetBy.begin()->first ? "" : ", ", P.first.c_str(), P.second);
+		std::printf("); outward ways unit within %.1e, the farthest plate %.2f m from her middle; %d off her, %d drawn the wrong way\n", RicochetNormalWorst, RicochetPlateFarthest, RicochetOffPlate, RicochetWrong);
+		if (RicochetWrong) Fault("a small-arms burst at armour was not drawn off her plate, or one at a soft thing or a man was");
+		if (RicochetOffPlate) Fault("a burst off armour was drawn off her plate (more than 4 m from her middle or above her)");
+		if (RicochetNormalWorst > 1e-6) Fault("a burst off armour has no unit outward way");
+	}
 	std::printf("effects:");
 	for (auto& P : FxCount) std::printf(" %s %d", P.first.c_str(), P.second);
 	std::printf("\nsound: %d shots, %d taken, %d out of hearing, %d dropped by the limits (%d on the screen), %d heard in a copy already sounding (a volley), %d cracks overhead, %d landings, %d falls; %d takes moved for the 0.15 s rule\n",
@@ -2137,6 +2175,48 @@ int main(int argc, char** argv)
 		std::printf("armour: a machine-gun round off a tank %s (%d rang off armour in the battle); with a steel recording listed it %s\n", bRicochetKept ? (Mix.ArmourRings > 0 ? "rings the steel" : "keeps its ricochet") : "WRONG", Mix.ArmourRings, bRing ? "rings the steel" : "is WRONG");
 		if (!bRicochetKept) Fault("a small-arms round off a tank lost its ricochet with no armourStrikes recording listed");
 		if (!bRing) Fault("land.armourStrikes did not ring a small-arms round off a tank");
+		if (PW.bRicochet && LandAt != std::string::npos)
+		{
+			// Effects (R2), small arms off armour: a machine gun's burst (8 rounds at 20 a second, 0.4 s) off a tank
+			// rattles: burstShare of its rounds ring (at most burstMost), each a take of the list (never the same twice
+			// running), spread over the burst; a long one (30 rounds) no more; a rifle's single round rings once.
+			std::string RattleText = MixText;
+			RattleText.insert(LandAt + 9, " \"armourStrikes\": { \"smallArms\": [\"steel_a\", \"steel_b\", \"steel_c\"], \"db\": -4, \"whineChance\": 1, \"burstMost\": 4, \"burstShare\": 0.5 },");
+			LandSound::Mixer Rattle;
+			std::string RattleError;
+			int Pings = 0, LongPings = 0, OnePings = 0, Whined = 0, Twice = 0;
+			double First = 1e9, Last = -1e9;
+			if (Rattle.Begin(RattleText, Rec.Seed, RattleError))
+			{
+				LandPlay::Noise Burst = Off;
+				Burst.Rounds = 8;
+				Burst.PerSecond = 20.0;
+				Cue.clear();
+				Rattle.Hear(Burst, 70.0, 70.0, 1.0, Near, Cue);
+				std::string Was;
+				for (const LandSound::Take& K : Cue)
+				{
+					if (K.Name.rfind("steel_", 0) != 0) { Whined += K.Family == "small_arms" ? 1 : 0; continue; }
+					++Pings;
+					if (K.Name == Was) ++Twice;
+					Was = K.Name;
+					First = std::min(First, K.Delay);
+					Last = std::max(Last, K.Delay);
+				}
+				Burst.Rounds = 30;
+				Cue.clear();
+				Rattle.Hear(Burst, 90.0, 90.0, 1.0, Near, Cue);
+				for (const LandSound::Take& K : Cue) LongPings += K.Name.rfind("steel_", 0) == 0 ? 1 : 0;
+				Burst.Rounds = 1;
+				Cue.clear();
+				Rattle.Hear(Burst, 110.0, 110.0, 1.0, Near, Cue);
+				for (const LandSound::Take& K : Cue) OnePings += K.Name.rfind("steel_", 0) == 0 ? 1 : 0;
+			}
+			const bool bRattle = Pings == 4 && Twice == 0 && First >= 0.0 && Last <= 0.4 && Last - First >= 0.15 && LongPings == 4 && OnePings == 1;
+			std::printf("armour: a burst of 8 off a tank rattles %d pings over %.2f s (%.2f to %.2f, never one take twice running: %s), %d whine; 30 rounds %d pings; a single round %d: %s\n",
+				Pings, Pings ? Last - First : 0.0, Pings ? First : 0.0, Pings ? Last : 0.0, Twice ? "WRONG" : "so", Whined, LongPings, OnePings, bRattle ? "as it should" : "WRONG");
+			if (!bRattle) Fault("a small arm's burst off armour did not rattle (land.armourStrikes' burst keys)");
+		}
 		// A mortar bomb's own landings past the near band (land.landings), and a tank's engine by her model
 		// (land.engines): a probe mix with both listed; near, the shells' takes as before.
 		std::string BandText = MixText;

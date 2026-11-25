@@ -38,6 +38,10 @@ Blasts->Shell(Where, TEXT("howitzer"), TEXT("earth"), /*bOnArmour*/ false);
 // a machine gun's burst at a target (Ground: what the rounds kick up, earth if left out)
 Blasts->Shots(Gun, Muzzle, Target, TEXT("mg"), 25, 15.0f, TEXT("snow"));
 
+// the same burst striking a tank's plate at Target, Normal its outward way: it bounces off her (release 2, see
+// "A burst off armour: ricochets"); never a dust spurt
+Blasts->ShotsOnArmour(Gun, Muzzle, Target, Normal, TEXT("mg"), 25, 15.0f);
+
 // a tank or towed gun firing on the desert (Ground: what its blast throws up, earth if left out)
 Blasts->Muzzle(MuzzleSocket, Facing, TEXT("tank_gun"), TEXT("sand"));
 
@@ -1605,13 +1609,77 @@ glowing shot followed off for about a second, some 470 pieces of its 500. With g
 from anything smaller is its two-frame ragged flash and its sparks only. Its sparks are as before for its calibre
 (read at 20 mm at the least: 7 to 13, about half a 75's in count, speed and size). It takes no lamp and no place
 among the shots followed (most_shots, most_a_frame), so a tank's own gun glancing nearby is still followed. A
-calibre that is no number counts as a shell's, and without the key every glance is as before.
+calibre that is no number counts as a shell's, and without the key every glance is as before. Release 2: with the
+ground battle's ricochets on (the default; -TheaterLandNoRicochet off), a rifle's or machine gun's round on armour
+sends no glance. Its burst goes off her plate instead (`ShotsOnArmour`, "A burst off armour: ricochets" below). A
+towed gun's shield still glances.
 
 | | One glance | Ten a second along a tank's side, 30 s | Standing at the most |
 |---|---|---|---|
 | 8 mm before | 507 pieces, a lamp, a shot followed | 123,917 pieces | 3,023 |
 | 8 mm now (and 12.7 mm) | 32 pieces | 10,562 pieces | 95 |
 | 20 mm and 75 mm | as before | as before | as before |
+
+## A burst off armour: ricochets (release 2, after head 388ba015)
+
+Brian, 25 November 15:58Z: "are bullets taking out german tanks? cannon fire or bazookas should be the only thing
+taking them out ... bullets should be bouncing off it". The rules thread settles what a round does. This is how it
+looks: the war film's machine gun raking a tank. `ShotsOnArmour(Now, Gun, From, To, Normal, Weapon, Rounds, PerSecond,
+Ground)` is the same burst as `Shots` (its flicker, its brass, its tracers by the gun's own count), with its rounds
+striking a plate at To whose outward way is Normal (row `bullet_ricochet`; every key is read with its default):
+
+- Each round strikes about the aim, spread over the plate (the burst's own spread, held to `spread_m` across and up
+  it). It strikes on the plate, never inside the hull, and never kicks up a dust spurt.
+- Each strike has a two-frame near-white flash (`flash_m`, `flash_s`, `flash_over`) in a faint warm halo, never under
+  `flash_least_px`.
+- Each strike throws 3 to 8 sparks (`sparks`) in a cone about the mirror of its way in (`cone_deg`), opened more the
+  squarer it struck (`square_open_deg`), never nearer the plate than `least_off_deg`. Their speed is skewed slow
+  (`spark_mps`, `spark_uneven`): most are short and a few long. They burn `spark_over` past white, fall, cool
+  white-yellow to orange by their end, and are gone in `spark_life_s` (under 0.3 s). Each is laid as its own
+  flight's streak with its tail on the plate. One that would fall back onto a roof or a glacis, or into the ground,
+  goes out first.
+- Now and then (`chip_chance`) a strike leaves a faint grey puff of paint (no wind: the wind would carry it into the
+  hull).
+- A tracer that strikes is drawn to the plate and never past it. `tracer_chance` of them go off again as a ricochet,
+  `tracer.ricochet.deflect_deg` off the plate the way the round was going, up to `tracer_yaw_deg` aside, at
+  `tracer.ricochet.slower`, falling (`tracer_drop`), with `kinks` tumbling kinks of `kink_deg` (`kink_slow` slower at
+  each), gone in `tracer_life_s`. A way headed down is turned as shallowly up, as a skip off the ground would be, and
+  a ricochet is drawn only to where it meets the ground.
+- Far off: where a metre on the plate is under `full_px` on the screen, it throws that share of sparks (never under
+  `far_least`, never under one a round), each the root of it bigger and drawn out to `spark_long_px` (never a bead).
+  On a busy screen (the room over `halve_past` full) it throws half as many, and a quarter past four fifths full.
+- Its own dice: `Shots` into the ground throws exactly what it did before, and the kit's every other output is
+  byte-identical (the before/after below).
+
+The game: LandPlay hands a rifle's or machine gun's burst at armour that the rules do not call a miss (glance, worn
+or kill) to `ShotsOnArmour`. The strike point and the plate's way come from her skin, or from a plain box on the face
+the rules name. Armour (`LandPlay::ArmouredVehicle`) is a tank, an assault gun or a tank destroyer, an armoured car, a
+half-track (the Sd.Kfz. 251, the M3, the flak half-tracks and the M16) or a battery's self-propelled gun. A lorry, a
+jeep, a field car, a motorcycle and a towed gun are as before. On by default; `-TheaterLandNoRicochet` gives the game
+as before, and the log says which.
+
+Test: `preview/ricochet_test.cpp` (kit only). A machine gun 120 m off fires 25 rounds at 15 a second into a tank's
+side, 45 degrees off square, with the eye 30, 150 and 600 m off, and once from a rise into her turret's roof. All
+checks pass on g++ and clang++, and the two lay the same pieces to the digit (one digest of every piece laid):
+
+| eye | strikes / flashes | sparks a round | widest spark | ricochets of 5 tracers | dust by her | inside her hull or under the ground |
+|---|---|---|---|---|---|---|
+| side, 30 m | 25 / 25 | 5.2 | 0.016 m | 4, 24 to 45 degrees off the plate | 0 | 0 |
+| side, 150 m | 25 / 25 | 2.2 | 0.025 m | 5, 19 to 49 degrees | 0 | 0 |
+| side, 600 m | 25 / 25 | 1.1 | 0.034 m | 5, 24 to 41 degrees | 0 | 0 |
+| roof, 30 m | 25 / 25 | 6.0 | 0.016 m | 4, 13 to 43 degrees | 0 | 0 |
+
+Every incoming tracer ends on the plate. No spark starts off the plate's face, is thrown into it, lives 0.3 s, or is
+drawn shorter than 1.5 times its width (the shortest is 5 px). The stand-in tank's side is one flat face over her tracks,
+as LandPlay's plain box is. The kit knows only the plate it is told of, so a spark thrown down off a plate may cross a
+track guard standing out below it, but never the plate's own hull.
+
+Cost: one burst lays 144 to 261 pieces on the plate (57 into the ground) and draws at most 9 to 20 puffs in a frame
+(5 to 15 into the ground). The call takes about 0.25 to 0.5 ms on a shared machine, against 0.1 ms into the ground,
+most of it stepping the sparks that could fall back onto a roof or to the ground.
+
+Preview: `fxpreview <recipe> <dir> ricochet <30|150|600> <frames> [WxH]` (FX_RICO_BEFORE=1: the same burst as
+`Shots` into her middle; FX_DUSK, FX_FPS). Pictures and notes: battle-fx/ricochet/ in the project files.
 
 ## Fire under a scene's grade: the fire's spread (after head 2811047)
 

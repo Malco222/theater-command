@@ -80,6 +80,8 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
      the burnt-out armour of battles fought here before (N laid, at most 20, burnt M months ago, the nations the
      battle's two sides'), standing in for a recording's root `"oldWrecks": {"count", "months", "nats", "per"}`. See
      "Old wrecks" below.
+   - `-TheaterLandNoRicochet` (release 2): small arms on armour as before, sparks and dust and one ring, in place of
+     the ricochets (see "Small arms off armour" below); the log says which.
    - `-TheaterLandCraterOldEdge`: the shell holes' edge as before the art director's 23 November seam (no feather);
      `-TheaterLandMenFieldFrame`: the near men's meshes left at the field's corner (no motion vector), for the A/B.
    - `-TheaterLandHour=`: another hour (local sun time) for the sun.
@@ -108,8 +110,9 @@ camera comes back to its shot.
 ## What the scene draws
 
 - **Every shot is seen and heard.** Each round in the recording flashes at its muzzle and lands where it struck. Most
-  rounds miss (the land rules' odds), so most landings are dust in the grass or a chip off a wall. A shot on screen is
-  always heard; only far and off-screen shots give way when the mix is full.
+  rounds miss (the land rules' odds), so most landings are dust in the grass or a chip off a wall. A rifle's or a
+  machine gun's burst that strikes armour bounces off her (release 2: "Small arms off armour" below). A shot on screen
+  is always heard; only far and off-screen shots give way when the mix is full.
 - **A man hit falls and stays.** His fall is one of the soldier file's deaths for his stance (standing, running,
   kneeling, prone, in cover), picked so the same fall does not repeat nearby. He lies where he fell, on the slope of
   the ground, his rifle beside him, for the rest of the battle; the camera's last picture walks past the fallen.
@@ -697,6 +700,48 @@ for byte, with the switch off).
   burst re-kicks its dust every fourth round and lights its lamp each round. The lamps compete for the kit's two.
 - **Pictures**: `/mnt/project-files/battle-fx/muzzle/` (cloud preview: `FX_MG_VIEW=flash`, `FX_MG_GUN=mg:star`,
   `FX_DIM` for dusk, `FX_FLASH_AHEAD=2.2 FX_FLASH_OFF=2.2` for the star from ahead, `FX_GUN_ROW=at_gun:brake`).
+
+## Small arms off armour: ricochets (release 2, on; `-TheaterLandNoRicochet` off)
+
+Brian, 25 November 15:58Z: "are bullets taking out german tanks? cannon fire or bazookas should be the only thing
+taking them out ... bullets should be bouncing off it". The rules thread settles what a round does. This is the look
+and the sound: the war film's machine gun raking a tank. It is on in release 2; the Mac and the art director have yet
+to pass it.
+`-TheaterLandNoRicochet` gives the battle as before, and the log's line "small arms on armour" says which.
+
+- **What is armour** (`LandPlay::ArmouredVehicle`, from what the replay sees: the track's role, her own model where the
+  recording names one (`LandFeed::Track::Model`, the rules' `"ml"`), else her block's): a tank of any model; an
+  assault gun or tank destroyer (the StuG, the M10, the SU-85, the Semovente); an armoured car (the Sd.Kfz. 222, the
+  M8, the ArmouredCar) and an AA half-track (the FlakHalftrack, the M16), which ride as tanks; an armoured infantry's
+  half-track (the Hanomag, the M3: a lorry with one of those models); a battery's self-propelled gun (a gun with a
+  model of her own: the M7, the Hummel, the Sexton, the SU-76). Soft, as ever: the lorry and the flak lorry, jeeps,
+  field cars, staff cars, motorcycles, and a towed gun (its shield still glances: FX4's flash and sparks).
+- **The look.** A rifle's or a machine gun's burst at armour that the rules do not call a miss (glance, worn or kill:
+  no harm is shown for any) goes to the kit's `ShotsOnArmour` (`LandPlay::FxKind::Shots` with `bArmour`, its `To` on
+  her plate and `Normal` the plate's outward way). That point comes from her skin (`World::Skin`), or else from a plain
+  box on the face the rules name. Each round that strikes gives a tiny two-frame white-yellow flash on the plate and 3
+  to 8 short sparks thrown the way it glances, falling and gone in under 0.3 s. Now and then it leaves a faint grey
+  puff of paint, and never a dust spurt. Most tracers that strike go off again as ricochets, 10 to 50 degrees off the
+  plate, slower and tumbling. Far off there are fewer, bigger sparks, never beads, and never none. The recipe row is
+  `bullet_ricochet` (tools/battle-fx/README.md, "A burst off armour: ricochets"). The old 8 mm glance (FX4) is not
+  sent for such a round. A miss is as before.
+- **The sound** (`LandSound`, `land.armourStrikes` in mix.json): the burst's glance (`NoiseKind::Glance` with its
+  `Rounds` and `PerSecond`) rattles. Up to `burstMost` (4) steel pings, about `burstShare` (half) of its rounds, are
+  spread over the burst, each a take of `steel_hit_01..03` (never the same twice running) with its own pitch and level
+  (`burstPitchPercent`, `burstDbSpread`), and now and then a whine off it. The mix's limits and same-take rule hold as
+  ever. A single rifle round rings once, as before.
+- **The cloud test** (land_play, on unless `LAND_PLAY_NO_RICOCHET`): "ricochets:" checks that every small-arms burst
+  at armour, and no other, goes off her plate, with a unit outward way and within 4 m of her middle (Normandy 370
+  bursts, Prokhorovka 372, all tanks: neither recording names a model of its own). "armour: a burst of 8 off a tank
+  rattles" checks that a probe mix plays 4 pings over the burst, never one take twice running, that 30 rounds give no
+  more, and that a single round rings once. With `LAND_PLAY_NO_RICOCHET=1` every output is byte for byte the run
+  before but for its timings (g++ and clang++). On, the cuts are the same and the mix's dice run on from the first
+  rattle: Normandy rings 369 steel takes where it rang 215, 2060 dropped by the limits where 1950. Its Garand clips (a
+  "body" take, dropped when the world total of 64 is full) went 10 to 5 under g++ and stayed 9 under clang++; with
+  `burstMost` 1 (one ping a burst, as the old ring) g++ gives 7, so that count follows the dice, not the rattle's
+  places. The kit's own check is `tools/battle-fx/preview/ricochet_test.cpp`.
+- **Pictures**: `/mnt/project-files/battle-fx/ricochet/` (the kit's preview, `fxpreview ... ricochet 30|150|600`), with
+  notes.
 
 ## Shell and tank hits take limbs off (release 2, off until passed)
 

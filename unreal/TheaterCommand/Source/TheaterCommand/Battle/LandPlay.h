@@ -58,13 +58,24 @@ namespace LandPlay
 		 * sub-machine gun) its rounds and their rate a life second, else left at 0 for the round's own. Empty, or this
 		 * unset: the kit's row by the weapon alone, as before. */
 		std::function<std::string(int Track, const std::string& Weapon, const std::string& Army, const std::string& Role, int& OutRounds, double& OutPerSecond)> GunLook;
+		/** Effects (R2), small arms off armour (Brian, 25 November: "bullets should be bouncing off it"; the scene's
+		 * -TheaterLandNoRicochet turns it off): a rifle's or a machine gun's round that strikes an armoured vehicle
+		 * (ArmouredVehicle: a tank, an assault gun, a self-propelled gun, an armoured car, a half-track), whatever the rules
+		 * made of it, is its burst's Shots with bArmour (the plate's point and its outward Normal: the kit's ricochets,
+		 * never dirt) and a Glance noise carrying the burst's rounds (a rattle of steel), and no Glance effect of its own.
+		 * Off (as left): as before. */
+		bool bRicochet = false;
 	};
+
+	/** Whether a vehicle's plate turns a rifle or machine-gun round (World::bRicochet): her own model where the
+	 * recording names one (Track::Model), else her block's (Block::Model, may be null). */
+	bool ArmouredVehicle(const LandFeed::Track& Tr, const LandFeed::Block* B);
 
 	/** One thing for the effects kit (BattleEffects), at battle time T. */
 	enum class FxKind : unsigned char
 	{
 		Muzzle,     // Name: rifle, mg, tank_gun, at_gun, howitzer, mortar; At the muzzle, Way its facing
-		Shots,      // small arms: Rounds from At toward To at PerSecond (the kit lays tracers and the dust spurts)
+		Shots,      // small arms: Rounds from At toward To at PerSecond (the kit lays tracers and the dust spurts; bArmour: ricochets off the plate at To, Normal its outward way)
 		Shell,      // a shell by the field's calibre (Name: light, mortar, field, howitzer, heavy) at At on Ground
 		Size,       // a burst by the kit's size row (Name: grenade, gun75, how105...) at At on Ground
 		Skip,       // an armour-piercing round that missed: a low spurt and a skip along Way
@@ -96,7 +107,7 @@ namespace LandPlay
 	{
 		Shot,       // Weapon: rifle, mg, at, tank, gun, mortar; Army the shooter's; Rounds a burst's; From/To its line
 		Landing,    // Size: grenade, mortar, field_gun, howitzer_105, howitzer_150, tank_he; or ap (an AP miss)
-		Glance,     // a round off armour (Weapon the round's)
+		Glance,     // a round off armour (Weapon the round's; Rounds and PerSecond a small arm's burst, World::bRicochet)
 		Holed,      // a round that went into a vehicle short of a kill
 		Fall,       // a man down
 		KnockedOut, // a tank or gun knocked out
@@ -219,6 +230,11 @@ namespace LandPlay
 	private:
 		/** Where a round lands: on the ground at x, y; on a vehicle's skin where the rules name the face. */
 		Vec LandingOf(const LandFeed::Round& R, int Target, Vec& OutNormal) const;
+		/** World::bRicochet: a rifle's or machine gun's round, not a miss, on an armoured vehicle. */
+		bool Ricochets(const LandFeed::Round& R, int Target) const;
+		/** Where such a round strikes her plate and its outward way: her skin (World::Skin) where it is known, else her
+		 * plain box's face that the rules name, never her middle. */
+		Vec PlateOf(const LandFeed::Round& R, int Target, Vec& OutNormal) const;
 		void Fire(const LandFeed::Round& R, int Index, std::vector<Effect>& OutFx, std::vector<Noise>& OutNoise);
 		void Land(const LandFeed::Round& R, int Index, std::vector<Effect>& OutFx, std::vector<Noise>& OutNoise);
 		void Blast(const LandFeed::Event& E, int Round, std::vector<Effect>& OutFx, std::vector<Noise>& OutNoise);

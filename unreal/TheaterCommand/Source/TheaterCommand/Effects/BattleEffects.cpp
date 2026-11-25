@@ -424,6 +424,14 @@ void FBattleEffects::Shots(int32 Gun, const FVector& From, const FVector& To, co
 	});
 }
 
+void FBattleEffects::ShotsOnArmour(int32 Gun, const FVector& From, const FVector& To, const FVector& Normal, const FString& Weapon, int32 Rounds, float PerSecond, const FString& Ground)
+{
+	Do([=, this]()
+	{
+		Core.ShotsOnArmour(Time(), Gun, ToFx(From), ToFx(To), ToFxWay(Normal), Named(Weapon).c_str(), Rounds, PerSecond, Named(Ground).c_str());
+	});
+}
+
 void FBattleEffects::AirGun(double Now, int32 Gun, const FVector& Muzzle, const FVector& Aim, const FVector& ShooterVelocity, const FString& Kind, float RatePerMinute, float MuzzleSpeed, const FString& Nation)
 {
 	Do([=, this]()

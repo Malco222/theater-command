@@ -1749,6 +1749,12 @@ bool ALandBattle::Open()
 			return Pinned->Armour->Vehicles()[static_cast<size_t>(Pinned->VehicleOf[static_cast<size_t>(Track)])].Look().RoofGun();
 		};
 	}
+	// Effects (R2): small arms off armour (Brian, 25 November 15:58Z: "bullets should be bouncing off it"): a rifle's or
+	// machine gun's round on a tank, an assault gun, a self-propelled gun, an armoured car or a half-track is drawn
+	// bouncing off her plate (sparks, ricochets, never dirt) and heard as a rattle of steel, whatever the rules made of
+	// it (LandPlay::World::bRicochet; the kit's ShotsOnArmour). On unless -TheaterLandNoRicochet.
+	PlayWorld.bRicochet = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoRicochet"));
+	UE_LOG(LogTheater, Log, TEXT("Land battle: small arms on armour %s"), PlayWorld.bRicochet ? TEXT("bounce off it (ricochets and a rattle of steel, release 2; -TheaterLandNoRicochet: as before)") : TEXT("as before (-TheaterLandNoRicochet)"));
 	S.Play.Begin(Rec, PlayWorld);
 	MakeRiders();
 	SeatLight(0);
@@ -7415,6 +7421,12 @@ void ALandBattle::PlayEffects()
 			Effects->Muzzle(At, WorldWay(E.Way.X, E.Way.Y, E.Way.Z).GetSafeNormal(), Name, Ground);
 			break;
 		case LandPlay::FxKind::Shots:
+			if (E.bArmour)
+			{
+				// (Effects (R2): small arms off armour, LandPlay::World::bRicochet: its rounds bounce off her plate at To)
+				Effects->ShotsOnArmour(E.Gun, At, World(E.To.X, E.To.Y, E.To.Z), WorldWay(E.Normal.X, E.Normal.Y, E.Normal.Z).GetSafeNormal(), Name, E.Rounds, static_cast<float>(E.PerSecond), Ground);
+				break;
+			}
 			Effects->Shots(E.Gun, At, World(E.To.X, E.To.Y, E.To.Z), Name, E.Rounds, static_cast<float>(E.PerSecond), Ground); // (rounds a life second, on the kit's life clock: the mix cuts the burst alike)
 			break;
 		case LandPlay::FxKind::Shell:

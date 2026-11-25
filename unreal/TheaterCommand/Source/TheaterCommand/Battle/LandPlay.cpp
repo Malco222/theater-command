@@ -110,6 +110,23 @@ namespace LandPlay
 		return "earth";
 	}
 
+	bool ArmouredVehicle(const Track& Tr, const LandFeed::Block* B)
+	{
+		// Effects (R2), small arms off armour (Brian, 25 November: "cannon fire or bazookas should be the only thing
+		// taking them out ... bullets should be bouncing off it"). Armour: a tank, an assault gun or a tank destroyer (the
+		// StuG, the M10, the SU-85, the Semovente), an armoured car (the Sd.Kfz. 222, the M8, the others' ArmouredCar), a
+		// half-track (the Sd.Kfz. 251 and the M3, carrying riflemen or a flak gun, and the M16), a battery's self-propelled
+		// gun (the M7, the Hummel, the Sexton, the SU-76). Soft, bullets going in as ever: the lorry and the flak lorry,
+		// jeeps, field and staff cars, motorcycles, and a towed gun (its shield is no hull; its crew are the rules'). Her
+		// own model where the recording names one (Track::Model, the rules' "ml": the drawn escorts ride as tanks), else
+		// her block's; a tank of a model not named here (every tank the game draws, and any it stands in for) is armour.
+		const std::string& Model = !Tr.Model.empty() || !B ? Tr.Model : B->Model;
+		if (Tr.Role == "lorry") return IsOneOf(Tr.Model, { "Hanomag", "M3Halftrack", "FlakHalftrack", "M16" });
+		if (Tr.Role == "gun") return !Tr.Model.empty() || IsOneOf(Model, { "M7", "Hummel", "Sexton", "SU76", "Priest", "Wespe" });
+		if (Tr.Role != "tank") return false;
+		return !IsOneOf(Model, { "Truck", "FlakTruck", "Jeep", "Kubelwagen", "FieldCar", "GAZ67", "Fiat508", "Kurogane", "Motorcycle", "R75", "M72", "WLA", "M20", "Alce", "Rikuo" });
+	}
+
 	bool Replay::Begin(const Recording& InRecording, const World& InWorld)
 	{
 		Rec = &InRecording;
@@ -360,6 +377,43 @@ namespace LandPlay
 		return Vec(R.X, R.Y, HeightAt(R.X, R.Y));
 	}
 
+	bool Replay::Ricochets(const Round& R, int Target) const
+	{
+		if (!Here.bRicochet || (R.W != "rifle" && R.W != "mg") || R.R == Result::Miss || Target < 0 || !Rec) return false;
+		const Track& Tr = Rec->Tracks[static_cast<size_t>(Target)];
+		return Tr.IsVehicle() && ArmouredVehicle(Tr, Rec->BlockOf(Tr.Block));
+	}
+
+	Vec Replay::PlateOf(const Round& R, int Target, Vec& OutNormal) const
+	{
+		const std::string Face = R.Fc.empty() ? std::string("front") : R.Fc;
+		Vec At;
+		if (Here.Skin && Here.Skin(Target, R.N, R.L, Face, R.U, R.H, At, OutNormal) && OutNormal.Length() > 0.5) return At;
+		// Plainly: her box (a tank about 6 m long, 3.2 wide and 2.6 high; a half-track or an armoured car 5.8, 2.2, 2.2),
+		// on the face the rules name, U across it and H up it, the face's own outward way.
+		const Track& Tr = Rec->Tracks[static_cast<size_t>(Target)];
+		const LandFeed::Spot S = LandFeed::SpotAt(Tr, R.L);
+		const bool bBig = Tr.Role != "lorry";
+		const double HalfLong = bBig ? 3.0 : 2.9, HalfWide = bBig ? 1.6 : 1.1, High = bBig ? 2.6 : 2.2;
+		const Vec Ahead(std::sin(S.F), std::cos(S.F), 0.0), Right(std::cos(S.F), -std::sin(S.F), 0.0);
+		const double U = std::clamp(R.U, -1.0, 1.0), Ground = HeightAt(S.X, S.Y);
+		const Vec Mid(S.X, S.Y, Ground + std::clamp(R.H, 0.05, 0.95) * High);
+		if (Face == "top")
+		{
+			OutNormal = Vec(0.0, 0.0, 1.0);
+			return Vec(S.X, S.Y, Ground + High) + Ahead * (U * HalfLong * 0.6);
+		}
+		if (Face == "left" || Face == "right")
+		{
+			const double Out = Face == "right" ? 1.0 : -1.0;
+			OutNormal = Right * Out;
+			return Mid + Right * (Out * HalfWide) + Ahead * (U * HalfLong * Out);
+		}
+		const double Out = Face == "rear" ? -1.0 : 1.0;
+		OutNormal = Ahead * Out;
+		return Mid + Ahead * (Out * HalfLong) + Right * (U * HalfWide * Out);
+	}
+
 	void Replay::Step(double From, double To, std::vector<Effect>& OutFx, std::vector<Noise>& OutNoise, std::vector<Loss>& OutLoss)
 	{
 		if (!Rec || To < From) return;
@@ -497,6 +551,13 @@ namespace LandPlay
 			Sh.PerSecond = LookRate > 0.0 ? std::min(LookRate, 30.0) : B.PerSecond;
 			Sh.Ground = GroundAt(To.X, To.Y);
 			Sh.Round = R.N;
+			// Effects (R2), small arms off armour (World::bRicochet): a burst that strikes a tank, an armoured car or a
+			// half-track is drawn bouncing off her plate, its point and outward way: sparks and ricochets, never dirt
+			if (Ricochets(R, Target))
+			{
+				Sh.bArmour = true;
+				Sh.To = PlateOf(R, Target, Sh.Normal);
+			}
 			N.Rounds = B.Rounds;
 			N.PerSecond = B.PerSecond;
 			if (S >= 0) OutFx.push_back(M);
@@ -554,6 +615,17 @@ namespace LandPlay
 		F.Way = Incoming;
 		F.CalibreMm = CalibreOf(R.W, Model, Army);
 
+		if (Ricochets(R, Target))
+		{
+			// Effects (R2), small arms off armour (World::bRicochet): its ricochets are its burst's (Fire's Shots); here the
+			// steel heard, the burst's rounds a rattle of pings (LandSound), whatever the rules made of it
+			const Burst B = BurstOf(R.W, Army, S >= 0 ? Rec->Tracks[static_cast<size_t>(S)].Role : std::string());
+			N.Kind = NoiseKind::Glance;
+			N.Rounds = B.Rounds;
+			N.PerSecond = B.PerSecond;
+			OutNoise.push_back(N);
+			return;
+		}
 		if (R.W == "rifle" || R.W == "mg")
 		{
 			// The kit's Shots lays the strikes in the dirt. On armour small arms only rattle: sparks and the ring.

@@ -109,6 +109,10 @@ public:
 	/** Rounds fired by one gun (any number that stays the same for that gun) toward To: every fifth a tracer. Ground
 	 * is what they strike, for the little dust spurts there ("earth" if left out). */
 	void Shots(int32 Gun, const FVector& From, const FVector& To, const FString& Weapon, int32 Rounds, float PerSecond, const FString& Ground = TEXT("earth"));
+	/** Effects (R2), small arms off armour: Shots whose rounds strike a tank's, an armoured car's or a half-track's plate
+	 * at To (Normal its outward way) and bounce off it: on each round's strike a two-frame flash and a spray of sparks,
+	 * its tracers going off again as ricochets, never a spurt of dust (the recipe's bullet_ricochet). */
+	void ShotsOnArmour(int32 Gun, const FVector& From, const FVector& To, const FVector& Normal, const FString& Weapon, int32 Rounds, float PerSecond, const FString& Ground = TEXT("earth"));
 	/** A gun on an aircraft firing: call it every frame while the trigger is down, for each gun (Gun: any number that
 	 * stays the same for that gun). Now is this frame's time on the same clock Tick is given; an air scene with its
 	 * own air time (slowed when the player slows it) gives its own FBattleEffects that time in both. Muzzle is where

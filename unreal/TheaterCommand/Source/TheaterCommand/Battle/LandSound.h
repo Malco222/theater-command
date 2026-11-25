@@ -215,6 +215,10 @@ namespace LandSound
 		double StrikeWithin = 12.0, StrikeBelow = 20.0, WhineChance = 0.3, StrikeDb = -4.0, WhineAt = -1e9, WhineGap = 0.35;
 		std::vector<Piece> WhinePieces;
 		double ArmourDb = -4.0, ArmourWhineChance = 0.3;
+		/** A burst off armour (RattleOff): at most burstMost pings, burstShare of its rounds, burstPitchPercent and
+		 * burstDbSpread (under db) of each its own. */
+		int ArmourBurstMost = 4;
+		double ArmourBurstShare = 0.5, ArmourBurstPitch = 6.0, ArmourBurstDbSpread = 4.0;
 		std::map<std::string, std::pair<double, double>> FiringPart;
 		// (a take that fires in several bursts with silences between: its other stretches of firing, besides its part, a
 		// crowded machine gun's next places to play from)
@@ -284,6 +288,9 @@ namespace LandSound
 		/** A ricochet's whine off At (a piece of groundStrikes.whines), Delay real seconds from now, if the gap allows and
 		 * the roll falls under Chance: false if none. */
 		bool WhineOff(const Vec& At, double Far, double Now, double Delay, double Db, double Chance, std::vector<Take>& Out);
+		/** Effects (R2): a small arm's burst off armour (Glance, Rounds over 1): a rattle of steel pings over the burst
+		 * (land.armourStrikes' burst keys), Base's delay and place, and now and then a whine off it. */
+		void RattleOff(const LandPlay::Noise& N, const Take& Base, double Far, double Now, bool bOnScreen, std::vector<Take>& Out);
 		/** A burst cut to its rounds: From a random point in the take's firing part, Cut to rounds / rate + tail. */
 		void CutBurst(Take& T, const LandPlay::Noise& N);
 		void CutBurstAt(Take& T, const LandPlay::Noise& N, double A, double B);
