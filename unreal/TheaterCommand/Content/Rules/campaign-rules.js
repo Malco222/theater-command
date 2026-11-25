@@ -101277,16 +101277,18 @@ ${standing5}`,
   };
   function r2Ship(ids2) {
     const s = game();
-    if (s.flags.open !== 1 || s.flags.r2Ship === 1) return null;
+    if (s.flags.open !== 1) return null;
     let took = 0;
     for (const id of Array.isArray(ids2) ? ids2 : []) {
       const turnOn = R2_SHIP[id];
+      const mark = "r2:" + id;
+      if (!turnOn || s.flags[mark] === 1) continue;
       try {
-        if (turnOn && turnOn(s)) took++;
+        if (turnOn(s)) took++;
       } catch {
       }
+      s.flags[mark] = 1;
     }
-    s.flags.r2Ship = 1;
     return took > 0 ? view2() : null;
   }
   globalThis.TC.r2Ship = r2Ship;

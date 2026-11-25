@@ -7772,9 +7772,10 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).logistics = (which: LogisticsSwitch, on: boolean) => { const s = game(); const set = setLogistics(s, which, !!on); return { set, on: logisticsSet(s, which) }; };
 // ---- (Release 2 assembly) The ship list's campaign switches (Brian, 25 November 2026 01:10Z: "turn them on automatically") ----
 // The 3D's release 2 ship list (Source/TheaterCommand/Release2Ship.h) names the grand campaign's release 2 rule switches
-// that ship ON, by the ids OPTIONS presses them with (act('<id>:on')). A grand war takes them once: as it opens, or the
-// first time an older war (1.5, 1.5.1) is played in release 2. It is then marked (g.flags.r2Ship), so that a switch he
-// turns off afterwards stays off, through every save and load. A switch that can be set only in a war's opening month
+// that ship ON, by the ids OPTIONS presses them with (act('<id>:on')). A grand war takes each one once: as it opens, the
+// first time an older war (1.5, 1.5.1) is played in release 2, or the first time a war is played in a build whose list
+// has newly gained it. Each is then marked in the war (g.flags['r2:<id>']), so that a switch he turns off afterwards
+// stays off, through every save and load. A switch that can be set only in a war's opening month
 // (the supply columns and their three orders) is left as it is in an older war. Fleets sent straight at the enemy and
 // breaking corps up are not here: they are already on unless he turned them off. The secret war is not here either: a
 // new war reads it from its own setting, and an older war cannot take it. A parent switch comes before the one that
@@ -7800,13 +7801,15 @@ const R2_SHIP: Record<string, (s: Game) => boolean> = {
 };
 function r2Ship(ids: string[]) {
   const s = game();
-  if (s.flags.open !== 1 || s.flags.r2Ship === 1) return null;
+  if (s.flags.open !== 1) return null;
   let took = 0;
   for (const id of Array.isArray(ids) ? ids : []) {
     const turnOn = R2_SHIP[id];
-    try { if (turnOn && turnOn(s)) took++; } catch { /* a switch this war cannot take now is left as it is */ }
+    const mark = 'r2:' + id;
+    if (!turnOn || s.flags[mark] === 1) continue;
+    try { if (turnOn(s)) took++; } catch { /* a switch this war cannot take now is left as it is */ }
+    s.flags[mark] = 1;
   }
-  s.flags.r2Ship = 1;
   return took > 0 ? view() : null;
 }
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).r2Ship = r2Ship;

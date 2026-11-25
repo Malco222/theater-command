@@ -29,8 +29,8 @@ namespace
 	}
 
 	/** (Release 2 ship list: the grand campaign's rule switches that ship on are switched on once in each war, as it
-	 * opens or the first time an older war is played in release 2. The rules mark the war, so that a switch he turns off
-	 * afterwards stays off; they answer null when there was nothing to do, else the new picture, which replaces Json.) */
+	 * opens, the first time an older war is played in release 2, or the first time the list has gained one. The rules
+	 * mark each switch in the war, so that a switch he turns off afterwards stays off; they answer null when there was nothing to do, else the new picture, which replaces Json.) */
 	void ShipWarSwitches(FRulesHost& Host, FString& Json)
 	{
 		const FString Switches = Release2Ship::WarSwitchesJson();

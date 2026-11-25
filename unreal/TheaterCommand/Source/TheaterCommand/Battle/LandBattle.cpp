@@ -6084,6 +6084,21 @@ void ALandBattle::HideTheTable()
 				const bool bShafts = bSunShafts && Day.Overcast < 0.5 && bLowSun;
 				if (bShafts)
 				{
+					// (Release 2 assembly, the ship list's review: the map's speed trims turn the engine's light shafts off
+					// for the whole game, r.LightShaftQuality 0 in ACampaignPlayerController::BeginPlay, and nothing put them
+					// back, so a battle asked for its shafts drew none. On for this battle, and the map's own again as the
+					// battle ends, with the other kept trims.)
+					if (IConsoleVariable* ShaftQuality = IConsoleManager::Get().FindConsoleVariable(TEXT("r.LightShaftQuality")))
+					{
+						if (ShaftQuality->GetInt() < 1)
+						{
+							if (!KeptTrims.ContainsByPredicate([](const TPair<FString, FString>& Kept) { return Kept.Key == TEXT("r.LightShaftQuality"); }))
+							{
+								KeptTrims.Add(TPair<FString, FString>(TEXT("r.LightShaftQuality"), ShaftQuality->GetString()));
+							}
+							ShaftQuality->Set(1, ECVF_SetByCode);
+						}
+					}
 					KeyLight->SetEnableLightShaftOcclusion(true);
 					KeyLight->SetOcclusionMaskDarkness(0.55f);
 					KeyLight->SetEnableLightShaftBloom(true);

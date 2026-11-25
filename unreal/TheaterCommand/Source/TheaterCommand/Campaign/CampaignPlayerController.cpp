@@ -594,6 +594,7 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 	else if (Id == TEXT("wakes")) // (release 2: fading wakes)
 	{
 		bWakes = !bWakes;
+		Release2Ship::Keep(Release2Ship::EKind::Option, TEXT("wakes"), bWakes); // (his choice, kept where the ship list reads it)
 		if (Map.IsValid())
 		{
 			Map->SetWakes(bWakes);
@@ -787,7 +788,8 @@ void ACampaignPlayerController::SaveOptions() const
 void ACampaignPlayerController::LoadOptions()
 {
 	// (Release 2 assembly; Brian, 25 November 2026: "turn them on automatically") Fading wakes come as the release 2 ship
-	// list ships them (on), wherever options.json does not hold his own choice yet (Release2Ship.h).
+	// list ships them (on), or as he left them on OPTIONS (kept by the list, Release2Ship::Keep). options.json's own
+	// "wakes" is no longer read: release 2 builds before the list wrote their old default (off) there on any save.
 	bWakes = Release2Ship::Ships(Release2Ship::EKind::Option, TEXT("wakes"));
 	if (Map.IsValid())
 	{
@@ -836,7 +838,7 @@ void ACampaignPlayerController::LoadOptions()
 	bTakeMeThere = Yes(TEXT("takeMe"), true);
 	bCornerPings = Yes(TEXT("cornerPings"), true);
 	bShipsSail = Yes(TEXT("sail"), true); // (the 1.5 patch: ships that sail, on unless switched off)
-	bWakes = Yes(TEXT("wakes"), bWakes); // (release 2: fading wakes; where the file has no word, as the ship list ships them)
+	// (release 2: fading wakes, as set above from the ship list: the file's "wakes" is still written, and not read)
 	if (Map.IsValid())
 	{
 		Map->SetShipsSail(bShipsSail);

@@ -18,9 +18,11 @@
  *   ground's trial list is one word of -TheaterLandTrial=, gathered with the others that are on into that one word (a
  *   -TheaterLandTrial= typed on the launch is left as typed).
  * - A Battle rules card row: on unless he switched it off on the card (FLandLive::RuleOn asks Ships).
- * - A grand campaign rule: switched on once in each war, as the war opens, or the first time an older war (1.5, 1.5.1)
- *   is played in release 2 (TC.r2Ship, which marks the war so that his own OFF afterwards stands).
- * - An OPTIONS viewing choice: its default where options.json does not hold it yet.
+ * - A grand campaign rule: switched on once in each war, as the war opens, the first time an older war (1.5, 1.5.1)
+ *   is played in release 2, or the first time a war is played after the list gains it (TC.r2Ship, which marks each
+ *   switch in the war so that his own OFF afterwards stands).
+ * - An OPTIONS viewing choice: on until he turns it off there. His choice is kept with the launch-word features' (in
+ *   GameUserSettings.ini), not in options.json: earlier release 2 builds wrote their old default into that file unasked.
  * - A console variable: set to 1 at start.
  *
  * For a test run, -TheaterR2Off leaves the whole list off (release 2 as it was before this list: everything as its own
@@ -71,6 +73,10 @@ namespace Release2Ship
 
 	/** The default the list gives a Battle rules card row or an OPTIONS viewing choice named Words (false if none). */
 	bool Ships(EKind Kind, const TCHAR* Words);
+
+	/** OPTIONS: he turned the viewing choice named Words (EKind::Option) on or off. Kept for the next start, unless a
+	 * test word holds the list back for this run (then for this run only). */
+	void Keep(EKind Kind, const TCHAR* Words, bool bOn);
 
 	/** The grand campaign rule switches that ship on, as the rules' TC.r2Ship takes them: ["nicknames","marked",...]. */
 	FString WarSwitchesJson();

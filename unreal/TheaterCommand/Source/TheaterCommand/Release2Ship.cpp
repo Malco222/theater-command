@@ -253,7 +253,7 @@ bool Release2Ship::IsOn(int32 Index)
 		return false;
 	}
 	bool bOn = true;
-	if (GConfig && (Feature.Kind == EKind::Launch || Feature.Kind == EKind::TrialWord || Feature.Kind == EKind::Variable))
+	if (GConfig && (Feature.Kind == EKind::Launch || Feature.Kind == EKind::TrialWord || Feature.Kind == EKind::Variable || Feature.Kind == EKind::Option))
 	{
 		GConfig->GetBool(ShipSection, Feature.Key, bOn, GGameUserSettingsIni);
 	}
@@ -306,6 +306,13 @@ void Release2Ship::Flip(int32 Index)
 	{
 		return;
 	}
+	if (HeldForRun(Feature.Key))
+	{
+		// (a test run's -TheaterR2Off or -TheaterR2Without: the row reads OFF whatever he chose, so a press here would save
+		// the opposite of what he sees; nothing is saved, and the feature stays held for this run)
+		UE_LOG(LogTheater, Display, TEXT("Release 2 ship list: %s is held back for this run (-TheaterR2Off or -TheaterR2Without): nothing saved"), Feature.Label);
+		return;
+	}
 	bool bWas = true;
 	GConfig->GetBool(ShipSection, Feature.Key, bWas, GGameUserSettingsIni);
 	GConfig->SetBool(ShipSection, Feature.Key, !bWas, GGameUserSettingsIni);
@@ -337,6 +344,25 @@ bool Release2Ship::Ships(EKind Kind, const TCHAR* Words)
 		}
 	}
 	return false;
+}
+
+void Release2Ship::Keep(EKind Kind, const TCHAR* Words, bool bOn)
+{
+	for (int32 Index = 0; Index < Count(); ++Index)
+	{
+		const FFeature& Feature = ShipList[Index];
+		if (Feature.Kind != Kind || FCString::Stricmp(Feature.Words, Words) != 0)
+		{
+			continue;
+		}
+		if (!GConfig || HeldForRun(Feature.Key))
+		{
+			return; // (held back for this run: his press holds for this run only)
+		}
+		GConfig->SetBool(ShipSection, Feature.Key, bOn, GGameUserSettingsIni);
+		GConfig->Flush(false, GGameUserSettingsIni);
+		return;
+	}
 }
 
 FString Release2Ship::WarSwitchesJson()
