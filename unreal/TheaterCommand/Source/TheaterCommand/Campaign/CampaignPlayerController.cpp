@@ -12052,17 +12052,25 @@ namespace
 		return OutIds.Num() > 0;
 	}
 
-	/** (Release 1.6) The raids he may fly himself: a bombing raid by day and a fight for the sky (the rules' FOUGHT_KINDS). */
+	/**
+	 * (Release 1.6) The raids he may fly himself: a bombing raid by day and a fight for the sky (the rules' FOUGHT_KINDS).
+	 * (Release 2) A raid on troops ("ground") too (Brian, 24 November 2026: "if a bomber group is bombing troops instead of
+	 * a factory or town and they get intercepted than i want that playable"), but each kind only while its own switch on
+	 * the Battle rules card is on (AAirBattle::CampaignLiveOn(Kind): "ground" reads "Fly raids on troops yourself", off
+	 * until it passes), and still only where TC.airLook gives the raid a ticket (CanFlyLive). With that row off a raid on
+	 * troops is never offered, as before.
+	 */
 	bool IsFlownKind(const FString& Kind)
 	{
-		return Kind == TEXT("bomb") || Kind == TEXT("superiority");
+		return (Kind == TEXT("bomb") || Kind == TEXT("superiority") || Kind == TEXT("ground")) && AAirBattle::CampaignLiveOn(Kind);
 	}
 }
 
 bool ACampaignPlayerController::CanFlyLive() const
 {
-	// (the raid card up, a raid by day or for the sky that can go as picked, and no battle of his already open)
-	if (!AAirBattle::CampaignLiveOn() || bScripted || !bPageOpen || !Page.Card.bValid || !Page.Card.Fly.bOk || LiveRaid.IsValid() || LiveBattle.IsValid())
+	// (the raid card up, a raid by day or for the sky (or, release 2, on troops) that can go as picked, and no battle of his
+	// already open; each kind behind its own switch, read again in IsFlownKind)
+	if ((!AAirBattle::CampaignLiveOn() && !AAirBattle::CampaignLiveOn(TEXT("ground"))) || bScripted || !bPageOpen || !Page.Card.bValid || !Page.Card.Fly.bOk || LiveRaid.IsValid() || LiveBattle.IsValid())
 	{
 		return false;
 	}

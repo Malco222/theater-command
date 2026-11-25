@@ -121,6 +121,13 @@ public:
 	 * "-TheaterAirCampaignLive" turns it on for one run, "-TheaterAirNoCampaignLive" off. Off: FLY THE RAID only.
 	 */
 	static bool CampaignLiveOn();
+	/**
+	 * (Release 2) The switch for a campaign raid of one kind flown by him (the every-kind contract's section 1, each kind
+	 * its own row on the Battle rules card): "bomb" and "superiority" read "Fly raids yourself" (as CampaignLiveOn()),
+	 * "ground", a raid on troops, reads "Fly raids on troops yourself" (FLandLive's rule "flyTroops", off until it passes;
+	 * "-TheaterAirRuleTroops" on for one run, "-TheaterAirNoRuleTroops" off); any other kind false. Battle/AirBattleTroops.cpp.
+	 */
+	static bool CampaignLiveOn(const FString& Kind);
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
@@ -143,7 +150,8 @@ public:
 	void OrderAt(const FVector2D& Pixel);
 	/** A button of the orders strip, or its key: "hold", "breakoff", "breakoffall", "staff", "close", "ahead", "hunt",
 	 * "jettison", "low", "middle", "high", "ride" (the close view on or off), "ride:next" and "ride:prev" (the next or
-	 * the last aircraft of the squadron ridden), "ride:down" and "ride:up" (the next or the last squadron), "continue". */
+	 * the last aircraft of the squadron ridden), "ride:down" and "ride:up" (the next or the last squadron), "continue";
+	 * (release 2) "strafe", on a raid on troops: his fighter groups in hand sent down the column's road. */
 	void Press(const FString& Button);
 	/** 0 (held), 0.5, 1, 2 or 4. */
 	void SetSpeed(double Speed);
@@ -352,6 +360,53 @@ private:
 	TObjectPtr<UTexture2D> TallySheet;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> TallyInk;
+
+	// ---- (Release 2) A raid on troops: the army under the raid, drawn (Battle/AirBattleTroops.cpp) -------------------
+	/**
+	 * The column under a raid on troops (Brian, 24 November 2026: "i want every air battle playable" and "if a bomber
+	 * group is bombing troops instead of a factory or town and they get intercepted than i want that playable"). Where the
+	 * sky has marks (the flight core's Marks(): place.marks, the pieces the rules placed), each piece stands on the land
+	 * under the planes, faced along its road: a vehicle or a gun as its army's model (FMiniatureMesh::Vehicle: the model
+	 * the rules name, else the nation's tank, lorry, carrier or field gun; a light flak gun stands as its army's field gun
+	 * until one is modelled), a block of men as a few of its nation's riflemen (one figure for each "per" men left in it,
+	 * at most TroopsMostFigures). Every piece of one model is a copy of one mesh (CopiesFor, sent with the aircraft's by
+	 * SendCopies), and none is drawn past TroopsFarM from the eye. As the core shows each hit (MarkHit) and the views'
+	 * words land, a piece wears its state: damaged, a wisp of smoke; burning, a fire; wrecked, its burnt shape and a fire,
+	 * a scorch under it; a block of men thinned, and scattered. The column's light flak's streams (MarkGun) go to the
+	 * effects kit as every other gun's, and are heard. Drawn only: nothing here decides anything, and where the sky has
+	 * no marks none of it runs (each hook returns at once).
+	 */
+	/** Open: each piece's look made (its meshes built once a model), from the core's column. */
+	void OpenTroops();
+	/** Draw: each piece within reach placed as a copy on the land; a fire or smoke laid on a piece the state calls for. */
+	void DrawTroops(const FVector& EyeAt);
+	/** PlayEffects: a hit on a piece (MarkHit), or the column's light flak firing (MarkGun). */
+	void PlayTroops(const AirShow::Fx& E);
+	/** EndPlay: the column's guns stopped in the kit, the looks let go. */
+	void EndTroops();
+	/** A piece as drawn: its copies' keys (as it stands, and burnt) and their meshes, and what has been laid on it. */
+	struct FTroopLook
+	{
+		FString Key, BurntKey;
+		TWeakObjectPtr<UStaticMesh> Mesh, Burnt;
+		bool bMen = false;
+		/** What its state has had laid on it in the kit (0 nothing, 1 smoke, 2 a fire), and a block of men scattered. */
+		int32 Laid = 0;
+		bool bScattered = false;
+	};
+	TArray<FTroopLook> TroopLooks;
+	/** The meshes, by model and look ("troops|<model>|<nation>|ok" and "|burnt", "troops|man|<nation>"): kept from the
+	 * collector. */
+	UPROPERTY()
+	TMap<FString, TObjectPtr<UStaticMesh>> TroopStills;
+	/** The column's nation as the kit colours its guns' tracers. */
+	FString TroopsNation;
+	int32 TroopsDrawn = 0;
+	double TroopsLogAt = 0.0;
+	static constexpr double TroopsFarM = 12000.0;
+	static constexpr int32 TroopsMostFigures = 24;
+	// ---- (end of the raid on troops) -------------------------------------------------------------------------------
+
 	/** Parachutes, pieces and bombs: one mesh, laid afresh each frame. */
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> Small;

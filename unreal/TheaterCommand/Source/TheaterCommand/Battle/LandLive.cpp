@@ -130,6 +130,13 @@ namespace
 		// (release 1.5, 24 November 03:42Z: ON. The playtester passed it on 4351110c, the Mac held 49-60 fps in flight (Part B on
 		// 6c676061) and the art director passed every raid's stills on 8913978d. -TheaterAirNoCampaignLive turns it off for a run.)
 		{ TEXT("flyLive"), TEXT("Fly raids yourself"), TEXT("On a bombing raid by day or a fight for the sky, FLY IT YOURSELF takes you into the battle in the air, where you give your groups their orders. Off: your crews fly every raid."), TEXT("TheaterAirNoCampaignLive"), true, TEXT("TheaterAirCampaignLive") },
+		// (release 2, the air battles over an army: Brian, 24 November 2026, "if a bomber group is bombing troops instead of a
+		// factory or town and they get intercepted than i want that playable". FLY IT YOURSELF on the raid card of a raid on
+		// troops: the 3D stands the army's column on its road under the planes (its tanks, lorries, guns and men), and every
+		// bomb and strafing pass the rules count shows on the piece it struck. Off until the playtester and the Mac pass it,
+		// then this row flips to on in one line; -TheaterAirRuleTroops turns it on for a run, -TheaterAirNoRuleTroops off.
+		// The campaign reads it (AAirBattle::CampaignLiveOn(TEXT("ground"))); it is never sent to the land rules.)
+		{ TEXT("flyTroops"), TEXT("Fly raids on troops yourself"), TEXT("On a raid on an army's column, FLY IT YOURSELF takes you into the battle in the air over its road, where you watch the bombs and strafing passes land on its tanks, lorries, guns and men and give your groups their orders. Off: your crews fly every raid on troops."), TEXT("TheaterAirNoRuleTroops"), false, TEXT("TheaterAirRuleTroops") },
 		// (Old wrecks, Brian 23 November 20:09Z: starts off as Scarred ground does, until the effects thread's wrecks pass the
 		// art director and 45 fps; -TheaterLandRuleOldWrecks turns it on for a run. The 3D's -TheaterLandOldWrecks=N and
 		// -TheaterLandOldWreckMonths=M stand-ins are other flags.)
@@ -239,9 +246,9 @@ bool FLandLive::Start(const FString& InKey, int32 InSeed, const FString& InMe, b
 	Switches.Reset();
 	for (int32 R = 0; R < RuleCount(); ++R)
 	{
-		if (FCString::Strcmp(LandRuleTable[R].Key, TEXT("flyLive")) == 0)
+		if (FString(LandRuleTable[R].Key).StartsWith(TEXT("fly")))
 		{
-			continue; // (the air battles' own switch, on the same card: the campaign reads it, the land rules never do)
+			continue; // (the air battles' own switches, "flyLive" and "flyTroops", on the same card: the campaign reads them, the land rules never do)
 		}
 		const bool bOn = RuleNow(LandRuleTable[R].Key);
 		Switches += FString::Printf(TEXT(",\"%s\":%s"), LandRuleTable[R].Key, bOn ? TEXT("true") : TEXT("false"));

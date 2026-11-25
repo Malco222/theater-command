@@ -743,7 +743,7 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 	S.Show.SetSmooth(!AirOldFlying());
 	S.SkyPlace = AirFeed::PlacingOf(S.Board, First.Groups, 0);
 	S.Desk.Begin(S.Board, First.Head.Me);
-	S.Show.Take(First.Head.T, First.Groups, First.Events, First.Ships);
+	S.Show.Take(First.Head.T, First.Groups, First.Events, First.Ships, &First.Marks); // (release 2: a raid on troops' view.marks; none elsewhere)
 	for (const AirShow::Ship& Ship : First.Ships)
 	{
 		// (a ship's light guns' tracers in her navy's colours: their keys name her as an aircraft's name it)
@@ -1005,6 +1005,7 @@ bool AAirBattle::Open(const FString& Why)
 	Small->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Small->SetCastShadow(false);
 	Small->RegisterComponent();
+	OpenTroops(); // (release 2: the column under a raid on troops, where the sky has marks: AirBattleTroops.cpp)
 	HideTheTable();
 	LayDeckShade();
 	LayDeckSheet();
@@ -3826,7 +3827,7 @@ void AAirBattle::Feed()
 	FAirBattleState& S = *State;
 	auto Take = [this, &S](const AirFeed::Frame& View)
 	{
-		S.Show.Take(View.Head.T, View.Groups, View.Events, View.Ships);
+		S.Show.Take(View.Head.T, View.Groups, View.Events, View.Ships, &View.Marks); // (release 2: a raid on troops' view.marks; none elsewhere)
 		for (const AirShow::Ship& Ship : View.Ships)
 		{
 			GunNations.Add(ShipGuns::OwnerOf(Ship.Id), AirParts::KitNation(Ship.Nation));
@@ -5375,6 +5376,7 @@ void AAirBattle::Draw(double Real)
 	// The strikes on those near the eye, laid on their skins; taken up from the rest.
 	DrawMarks(EyeAt);
 	DrawTally(EyeAt);
+	DrawTroops(EyeAt); // (release 2: the column under a raid on troops, sent with the copies below: AirBattleTroops.cpp)
 	// The small things, laid afresh each frame in one mesh: a parachute's canopy and its airman, a torn piece of a
 	// wreck tumbling; a bomb or a torpedo falling a copy of its own mesh (AS2), sent with the aircraft's copies.
 	FMiniatureMesh Things;
@@ -6213,6 +6215,10 @@ void AAirBattle::PlayEffects()
 			{
 				Kit->Burn(At, 40.0f, 900.0f);
 			}
+			break;
+		case AirShow::FxKind::MarkHit:
+		case AirShow::FxKind::MarkGun:
+			PlayTroops(E); // (release 2: a hit on the column under a raid on troops, its flak firing back: AirBattleTroops.cpp)
 			break;
 		}
 	}
@@ -7144,6 +7150,7 @@ void AAirBattle::Press(const FString& Button)
 	else if (Button == TEXT("breakoffall")) { S.Question = 2; }
 	else if (Button == TEXT("staff")) { S.Question = 1; }
 	else if (Button == TEXT("hunt")) { Order(AirParts::Wide(S.Desk.Hunt(Hand))); }
+	else if (Button == TEXT("strafe")) { Order(AirParts::Wide(S.Desk.Strafe(Hand, S.Words.Tags))); } // (release 2, a raid on troops: his fighter groups in hand)
 	else if (Button == TEXT("jettison")) { Order(AirParts::Wide(S.Desk.Jettison(Hand))); }
 	else if (Button == TEXT("low") || Button == TEXT("middle") || Button == TEXT("high"))
 	{
@@ -7234,6 +7241,7 @@ void AAirBattle::EndPlay(const EEndPlayReason::Type Reason)
 {
 	SkyFinish(false); // (a turn of the clouds painted aside: done before the stage and the meshes it touches go)
 	HideScreen();
+	EndTroops(); // (release 2: the column's guns stopped in their kits before the kits end: AirBattleTroops.cpp)
 	if (KeptScreenPercent > 0.0f)
 	{
 		if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage")))

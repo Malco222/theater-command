@@ -122,6 +122,13 @@ namespace AirDesk
 		std::string Hunt(const std::vector<int>& Units) const;
 		std::string Band(const std::vector<int>& Units, int Band) const;
 		std::string Jettison(const std::vector<int>& Units) const;
+		/**
+		 * (Release 2) A raid on troops (Brian, 24 November 2026: "if a bomber group is bombing troops instead of a
+		 * factory or town and they get intercepted than i want that playable"): his fighter groups among Units (by the
+		 * tags) sent down the column's road on a strafing pass, { do: 'air:strafe', units: [...] }. Empty where none of
+		 * them is a fighter group of his, or the raid is not on troops.
+		 */
+		std::string Strafe(const std::vector<int>& Units, const std::vector<Tag>& Tags) const;
 		std::string HandOver() const;
 		/** The question HAND IT TO THE STAFF asks, with the staff's chance now. */
 		std::string StaffQuestion() const;
@@ -144,6 +151,9 @@ namespace AirDesk
 		/** The winner the end shows: the after card's once it is settled, else the view's stamp ("att", "def" or ""). */
 		const std::string& Winner() const { return Settled.empty() ? HeadNow.Winner : Settled; }
 		const AirFeed::Sky& Board() const { return Sky; }
+		/** (Release 2) The raid is on an army's column (place.kind "ground", its pieces given in place.marks): the words
+		 * speak of the column, not "the target", and STRAFE THE COLUMN is offered his fighter groups. */
+		bool OnTroops() const { return Sky.PlaceKind == "ground" && Sky.Marks.Has(); }
 
 	private:
 		AirFeed::Sky Sky;
@@ -158,6 +168,15 @@ namespace AirDesk
 		std::vector<Dispatch> Said;
 		std::map<int, bool> EngagedOnce;       // air:engage shown once for each escort group (UI director, 21:19Z)
 		std::vector<AirFeed::Frame> Ahead;     // views taken, not yet reached
+		// (release 2, a raid on troops) the column's pieces as the views have said them (view.marks: only those changed
+		// are sent, so each is kept), the men left in each block said, and the organisation cut so far (view.marks.cut)
+		std::map<int, AirMarks::State> MarksNow;
+		std::map<int, int> MenNow;
+		double MarksCutNow = 0.0;
+		/** The column as the words name it: "the British I Corps" (its corps, place.marks.corps), else "the British column". */
+		std::string ColumnName() const;
+		/** A raid on troops' title, for the screen and the after card: "The raid on the British I Corps near Hampshire". */
+		std::string TroopsTitle() const;
 		std::string Elapsed(double Seconds) const;
 		void Read(const AirFeed::Frame& View);
 	};

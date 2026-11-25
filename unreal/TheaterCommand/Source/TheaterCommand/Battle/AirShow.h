@@ -247,8 +247,8 @@ namespace AirShow
 		            //   (none: it stands), What (the kit's air_guns row, cannon20), Rate (rounds a minute), Mv; a GunStop with
 		            //   its Key when the burst ends
 	};
-	/** The column's light flak streams' keys (MarkGun): above every aircraft's guns' (a craft's key times 64) and the
-	 * ships' streams (ShipGuns::StreamBase). */
+	/** The column's light flak streams' keys (MarkGun): above every aircraft's guns' (a craft's key times 64) and below
+	 * the ships' streams (ShipGuns::StreamBase, 1 << 27), so a MarkGun key is never a ship's (ShipGuns::IsStream). */
 	constexpr int MarkGunBase = 1 << 26;
 
 	struct Fx

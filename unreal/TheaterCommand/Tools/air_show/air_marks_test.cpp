@@ -18,6 +18,7 @@
 //
 // Usage: air_marks_test <recording.json> [out-dir] [frames a second, 60]
 
+#include "Battle/AirDesk.h"
 #include "Battle/AirFeed.h"
 #include "Battle/AirGround.h"
 #include "Battle/AirMarks.h"
@@ -293,6 +294,46 @@ int main(int Argc, char** Argv)
 		if (P.Now != Want || (M != LastMen.end() && P.Men != M->second)) ++EndWrong;
 	}
 
+	// 4. The screen's words and the after card speak of the column (AirDesk, as the 3D screen writes them), and STRAFE THE
+	// COLUMN sends his own fighter groups only: the views read as the screen reads them, to the end.
+	AirDesk::Desk Desk;
+	Desk.Begin(Rec.Board, Rec.Views.front().Head.Me);
+	for (const AirFeed::Frame& F : Rec.Views) Desk.Take(F);
+	Desk.Reach(EndT + 1.0);
+	AirDesk::Words W;
+	Desk.Write(0.0, Show.Groups(), std::string(), W);
+	// (a live recording keeps its after card in end.after, not at the top: read from there where the top has none; and
+	// one line of the old target's words added, which the card must turn to the column's)
+	AirFeed::After After = Rec.Card;
+	if (After.Lines.empty())
+	{
+		AirFeed::Json Root;
+		std::string Why;
+		if (AirFeed::Parse(Buffer.str(), Root, Why)) AirFeed::ReadAfter(Root["end"]["after"], After);
+	}
+	const size_t CardLines = After.Lines.size();
+	After.Lines.push_back("The bombers found the target under broken cloud.");
+	const AirDesk::Card Card = Desk.CardOf(After);
+	auto Says = [](const std::string& Text, const char* Part) { return Text.find(Part) != std::string::npos; };
+	bool bCardTarget = Says(Card.Reckoning, "the target") || Says(Card.Reckoning, "The target");
+	for (const std::string& Line : Card.Lines) bCardTarget = bCardTarget || Says(Line, "the target") || Says(Line, "The target");
+	std::vector<int> All, Fighters;
+	for (const AirDesk::Tag& Tg : W.Tags)
+	{
+		All.push_back(Tg.Id);
+		if (Tg.bMine && Tg.bFighter && !Tg.bGone) Fighters.push_back(Tg.Id);
+	}
+	std::string Want = "{\"do\":\"air:strafe\",\"units\":[";
+	for (size_t K = 0; K < Fighters.size(); ++K) Want += (K ? "," : "") + std::to_string(Fighters[K]);
+	Want += "]}";
+	const std::string Strafe = Desk.Strafe(All, W.Tags);
+	const bool bWords = Desk.OnTroops() && Says(W.Title, "The raid on") && Says(W.AimTarget, Given.Under.empty() ? "column" : Given.Under.front().Name.c_str())
+		&& Says(W.Chance, "organisation cut") && (Says(W.AimState, "column so far") || Says(W.AimState, "No hits"));
+	std::printf("  words: title \"%s\"; top bar \"%s\"; aim \"%s\" / \"%s\"; card \"%s\" (%zu lines of the recording's, and one added)\n",
+	            W.Title.c_str(), W.Chance.c_str(), W.AimTarget.c_str(), W.AimState.c_str(), Card.Title.c_str(), CardLines);
+	for (const std::string& Line : Card.Lines) std::printf("    card: %s\n", Line.c_str());
+	std::printf("  STRAFE THE COLUMN with every group in hand: %s\n", Strafe.empty() ? "(nothing sent)" : Strafe.c_str());
+
 	std::vector<Row> Rows = {
 		{ "every air:mark-hit shown once (none missing)", HitsMissing == 0, std::to_string(HitsMissing), "0" },
 		{ "no MarkHit twice, nor for a hit not told", HitsTwice == 0, std::to_string(HitsTwice), "0" },
@@ -320,6 +361,10 @@ int main(int Argc, char** Argv)
 		{ "a piece that is out never changes again", OutChanged == 0, std::to_string(OutChanged) + " (" + std::to_string(C.MarkChangesRefused) + " stale words refused)", "0" },
 		{ "the pieces end as the views' last words have them", EndWrong == 0, std::to_string(EndWrong), "0" },
 		{ "the column's light flak fired back", C.MarkGunFrames > 0, std::to_string(C.MarkGunFrames) + " frames, " + std::to_string(MarkGuns.size()) + " streams", "some" },
+		{ "the screen's words speak of the column (title, top bar, the aim)", bWords, bWords ? "yes" : "no", "yes" },
+		{ "the after card speaks of the column, not \"the target\"", !bCardTarget && Says(Card.Title, "The raid on") && Says(Card.Lines.back(), "found the column"),
+		  bCardTarget ? "the target" : Card.Title + " / " + Card.Lines.back(), "the column" },
+		{ "STRAFE THE COLUMN sends his fighter groups only", Fighters.empty() ? Strafe.empty() : Strafe == Want, Strafe.empty() ? "(nothing)" : Strafe, Fighters.empty() ? "(nothing)" : Want },
 	};
 	std::printf("== %s: raid on troops: %zu pieces, %d hits told, %d strafes, %ld frames at %.0f a second\n", Rec.Key.c_str(),
 	            Given.Pieces.size(), ToldHitsAll, ToldStrafes, Frame, Fps);

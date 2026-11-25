@@ -22,7 +22,7 @@ done
 # limits, a piece that is out never changed again. A recording with no marks has nothing to check. Its dump,
 # <key>-marks.csv, is drawn by Tools/air_show/marks_picture.py.
 $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
-  "$HERE/air_marks_test.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirGround.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
+  "$HERE/air_marks_test.cpp" "$SRC/Battle/AirDesk.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirGround.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
   -o "$OUT/air_marks_test"
 for F in "$@"; do
   "$OUT/air_marks_test" "$F" "$OUT" || STATUS=1
