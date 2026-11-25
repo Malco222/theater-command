@@ -56,8 +56,15 @@ struct FMiniatureMesh
 		FVector Ahead = FVector(0.0, 1.0, 0.0);
 		double Long = 0.0, Beam = 0.0;
 		int32 Class = 2;
+		int32 FirstFunnel = 0, FunnelCount = 0; // (release 2, funnel smoke) which of FunnelTops are hers
 	};
 	TArray<FShip> Ships;
+	/**
+	 * (Release 2, funnel smoke: Campaign/ShipSmoke.h.) Where each funnel of a ship ends, at the middle of its top: noted
+	 * by the ship builders as they build one (Campaign/CampaignShips.cpp) and carried by Stamp, for the campaign map's
+	 * piece whose ships smoke. No point of any mesh is made or moved for it, and nothing else reads it.
+	 */
+	TArray<FVector> FunnelTops;
 
 	/** A box, given its middle, its size, and how far it is turned about the upright axis (degrees). */
 	void Box(const FVector& Center, const FVector& Size, const FLinearColor& Colour, double Turn = 0.0, double Tip = 0.0);

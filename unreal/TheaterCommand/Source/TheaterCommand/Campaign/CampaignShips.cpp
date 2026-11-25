@@ -203,6 +203,7 @@ namespace ShipParts
 			M.Stack(FVector::ZeroVector, 1.0, 0.0, { Oval(X - High * Lean, Long * 0.48, Wide * 0.48), Oval(X - High * Lean * 1.1, Long * 0.46, Wide * 0.46) }, { Z + High * 0.88, Z + High }, Black, true);
 			// (and a little soot down the after side of it)
 			M.Box(At(X - Long * 0.47, 0.0, Z + High * 0.72), FVector(0.3, Wide * 0.5, High * 0.3), FMath::Lerp(L.Upper, Black, 0.45f));
+			M.FunnelTops.Add(At(X - High * Lean * 1.1, 0.0, Z + High)); // (release 2, funnel smoke on the campaign map: where it ends; no point is made for it)
 		}
 
 		/** A mast, with a yard across it and a top. */
@@ -659,6 +660,7 @@ namespace ShipParts
 			}
 			M.Stack(FVector::ZeroVector, 1.0, 0.0, { Foot, Head }, { Top + 7.0, Top + 15.0 }, L.Upper, true);
 			M.Stack(FVector::ZeroVector, 1.0, 0.0, { Head, Head }, { Top + 15.0, Top + 16.2 }, Black, true);
+			M.FunnelTops.Add(At(7.0, Side, Top + 16.2)); // (release 2, funnel smoke on the campaign map: where it ends)
 		}
 		// Guns along the edges of the deck.
 		for (const double Hand : { -1.0, 1.0 })

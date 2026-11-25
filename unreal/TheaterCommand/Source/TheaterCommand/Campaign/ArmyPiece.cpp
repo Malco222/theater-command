@@ -6,6 +6,7 @@
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignUnitTable.h"
 #include "Campaign/ShipRide.h"
+#include "Campaign/ShipSmoke.h"
 #include "Campaign/ShipWay.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
@@ -516,6 +517,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	// that a fleet remade in the middle of her turn does not snap upright.
 	const TArray<FHullRide> HullsWere = MoveTemp(HullRides);
 	HullRides.Reset();
+	Funnels.Reset(); // (release 2, funnel smoke: they are her model's, and go with it)
 	for (UProceduralMeshComponent* HullMesh : Hulls)
 	{
 		if (HullMesh)
@@ -622,6 +624,23 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		else
 		{
 			Model.Fleet(Fleet.Battleships, Fleet.Carriers, Fleet.Cruisers, Fleet.Destroyers, Fleet.Submarines, U, Colour, NationTag, Fleet.Stance != TEXT("port"));
+			// (Release 2, funnel smoke: where each of her ships' funnels ends, for the smoke the map draws from it.)
+			for (int32 SmokerIndex = 0; SmokerIndex < Model.Ships.Num(); ++SmokerIndex)
+			{
+				const FMiniatureMesh::FShip& Smoker = Model.Ships[SmokerIndex];
+				for (int32 FunnelIndex = 0; FunnelIndex < Smoker.FunnelCount; ++FunnelIndex)
+				{
+					if (Model.FunnelTops.IsValidIndex(Smoker.FirstFunnel + FunnelIndex))
+					{
+						FFunnel Funnel;
+						Funnel.Top = Model.FunnelTops[Smoker.FirstFunnel + FunnelIndex];
+						Funnel.Ship = SmokerIndex;
+						Funnel.Class = Smoker.Class;
+						Funnel.Long = Smoker.Long;
+						Funnels.Add(Funnel);
+					}
+				}
+			}
 		}
 		Size = Fleet.bReport ? 0.9 : FMath::Clamp(0.8 + 0.012 * Fleet.Ships(), 0.9, 1.7);
 		// Its plate says how many ships, and what they are about when it is not a plain patrol.
@@ -1786,6 +1805,65 @@ void AArmyPiece::LevelHulls()
 		}
 		bHullsLevel = true;
 	}
+}
+
+bool AArmyPiece::FunnelsNow(TArray<FFunnelNow>& OutFunnels, double& OutPace, double& OutGather) const
+{
+	OutFunnels.Reset();
+	OutPace = 0.0;
+	OutGather = 0.0;
+	// Only a fleet whose ships are shown, on the water: not one in the hand or carried over the table, and not one at
+	// anchor by her port, whose fires are banked.
+	if (What != 1 || Funnels.Num() == 0 || bGlimpsed || bInHand || bAtAnchor || IsHidden() || (bMarching && !bSailing && bLiftOnMarch))
+	{
+		return false;
+	}
+	const FVector Middle = GetActorLocation();
+	const FQuat Turned = GetActorQuat();
+	const double Scale = GetActorScale3D().X;
+	for (const FFunnel& Funnel : Funnels)
+	{
+		FFunnelNow Stands;
+		Stands.Top = Middle + Turned.RotateVector(Funnel.Top * Scale);
+		Stands.Ship = Funnel.Ship;
+		Stands.Class = Funnel.Class;
+		Stands.Long = Funnel.Long * Scale;
+		OutFunnels.Add(Stands);
+	}
+	if (bMarching && bSailing)
+	{
+		if (SailAt.Num() >= 2)
+		{
+			TheaterShipSmoke::Steams(SailAt.GetData(), SailAt.Num(), SailEach, SailFull, MarchClock, OutPace, OutGather);
+		}
+		else
+		{
+			// (the old sail, corner to corner on one ease)
+			TheaterShipSmoke::SteamsEased(MarchClock / FMath::Max(MarchTime, 1.0e-3), MarchTime, OutPace, OutGather);
+		}
+	}
+	return true;
+}
+
+FVector AArmyPiece::AsternBy(const FVector& Point, double Back) const
+{
+	if (Back <= 0.0)
+	{
+		return FVector::ZeroVector;
+	}
+	if (bMarching && bSailing && SailAt.Num() >= 2 && SailHead.Num() == SailAt.Num() && SailRan.Num() == SailAt.Num())
+	{
+		// On a course of her own: how far she has run by the clock (as Tick reckons it), and the water that far back.
+		const double Beat = FMath::Clamp(MarchClock / SailEach, 0.0, static_cast<double>(SailAt.Num() - 1));
+		const int32 Before = FMath::Min(FMath::FloorToInt32(Beat), SailAt.Num() - 2);
+		const double Run = FMath::Lerp(SailRan[Before], SailRan[Before + 1], Beat - Before);
+		const FVector Off = Point - GetActorLocation();
+		const TheaterShipWay::FSpot Gone = TheaterShipSmoke::Was(SailAt.GetData(), SailHead.GetData(), SailRan.GetData(), SailAt.Num(), Run, Back, TheaterShipWay::FSpot{ Off.X, Off.Y });
+		return FVector(Gone.X, Gone.Y, 0.0);
+	}
+	const FVector Bows = GetActorQuat().RotateVector(FVector(0.0, 1.0, 0.0));
+	const TheaterShipWay::FSpot Gone = TheaterShipSmoke::WasStraight(TheaterShipWay::FSpot{ Bows.X, Bows.Y }, Back);
+	return FVector(Gone.X, Gone.Y, 0.0);
 }
 
 void AArmyPiece::FaceTable(float Yaw)

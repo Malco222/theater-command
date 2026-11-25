@@ -194,6 +194,29 @@ public:
 	bool IsAtAnchor() const { return What == 1 && bAtAnchor; }
 	int32 GetFleetShips() const { return What == 1 ? Fleet.Ships() : 0; }
 	int32 GetFleetBase() const { return What == 1 ? Fleet.Base : INDEX_NONE; }
+	/**
+	 * (Release 2, funnel smoke: Campaign/ShipSmoke.h; the map draws it, tc.Map.ShipSmoke.) A funnel of one of her ships
+	 * as it stands now, in the world.
+	 */
+	struct FFunnelNow
+	{
+		FVector Top = FVector::ZeroVector; // the middle of its top
+		int32 Ship = 0; // which of her ships it is on, counted from nought
+		int32 Class = 2; // 0 battleship, 1 carrier, 2 cruiser, 3 destroyer
+		double Long = 0.0; // that ship's length, in the world
+	};
+	/**
+	 * Her funnels, and how she steams: her speed as a share of her full speed, and how fast it grows in shares a second
+	 * (both nought lying still, or let down from the hand). False, and nothing, for a piece that makes no smoke: one
+	 * that is no fleet, a fleet known only from a report or a glimpse, one hidden, carried in the hand or over the
+	 * table, or at anchor by her port. A submarine has no funnel.
+	 */
+	bool FunnelsNow(TArray<FFunnelNow>& OutFunnels, double& OutPace, double& OutGather) const;
+	/**
+	 * What must be added to a point of her, to find where it was when she was Back further astern (in the world's
+	 * measure) along the water she has crossed: round her turns on a course of her own, straight astern otherwise.
+	 */
+	FVector AsternBy(const FVector& Point, double Back) const;
 	const FString& GetNationTag() const { return NationTag; }
 	/** Its colours, as a ball in the world: what a town's name plate must not be drawn across. False while the piece is hidden. */
 	bool GetColours(FVector& OutMiddle, double& OutRadius) const;
@@ -374,6 +397,15 @@ private:
 	 */
 	bool RideHulls(double Seconds, double Turn, double Pace);
 	void LevelHulls();
+	/** (Release 2, funnel smoke.) A funnel of one of her ships as her model was built, in the piece's own space: see FunnelsNow. */
+	struct FFunnel
+	{
+		FVector Top = FVector::ZeroVector;
+		int32 Ship = 0;
+		int32 Class = 2;
+		double Long = 0.0;
+	};
+	TArray<FFunnel> Funnels;
 	/**
 	 * (Release 2, armies with weight: Campaign/ArmyCarry.h.) A piece is held by its top and is heavy at its foot: as the
 	 * hand carries it its foot hangs back and swings on, and as it is set down it rocks once and is still. Never a
