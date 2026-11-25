@@ -3674,6 +3674,12 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 	// picture's lines and at most 2.5 times their size, so a section reads as a dark dash and a platoon as a row of them;
 	// the art director, 22 November 18:29Z: "the men are not on screen at all" at his height, culled under two lines)
 	const bool bHigh = S.General.bOn && !S.General.bFilm;
+	// (the film in a corner, while its lens is up: a second picture of the same men. A man in its picture is posed and
+	// placed as one in his own, or he would stand frozen in the window as he last stood in his; and one within
+	// CornerTrueWithin of its lens is not grown, or he would stand a giant before it. His own picture's count is his
+	// own picture's still.)
+	const bool bFilmLens = bHigh && bCornerLens;
+	const LandPlay::Vec FilmEye = S.FilmPose.Eye;
 	for (int32 Man = 0; Man < Crowd.Count(); ++Man)
 	{
 		FManDrawn& D = MenDrawn[Man];
@@ -3683,8 +3689,11 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		Crowd.PlaceAsPosed(Man, X, Y, Z, Facing); // (his height as last posed: no ground asked a man a frame)
 		// (skinned only when in the picture, or close by: a man out of the picture keeps the pose he had)
 		const LandPlay::Vec At(X, Y, Z + 0.9);
-		const bool bLooked = (At - EyeAt).Length() < 6.0 || LandParts::InPicture(S.Pose, Aspect, At, 1.15);
-		if (bShown && bLooked)
+		const bool bOwnLooked = (At - EyeAt).Length() < 6.0 || LandParts::InPicture(S.Pose, Aspect, At, 1.15);
+		const double FilmFar = bFilmLens ? (At - FilmEye).Length() : 0.0;
+		const bool bInFilm = bFilmLens && (FilmFar < 6.0 || LandParts::InPicture(S.FilmPose, 16.0 / 9.0, At, 1.15));
+		const bool bLooked = bOwnLooked || bInFilm;
+		if (bShown && bOwnLooked)
 		{
 			++MenInPicture;
 		}
@@ -3718,7 +3727,7 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 			{
 				Grow = FMath::Max(1.0, MassMinPx * Crowd.SeenDistance(Man) / FMath::Max(1.0, S.MenLines));
 			}
-			else if (bHigh && Level == static_cast<int32>(LandMen::Far) && GeneralMinPx > 0.0)
+			else if (bHigh && Level == static_cast<int32>(LandMen::Far) && GeneralMinPx > 0.0 && !(bInFilm && FilmFar < CornerTrueWithin))
 			{
 				Grow = FMath::Clamp(GeneralMinPx * Crowd.SeenDistance(Man) / FMath::Max(1.0, S.MenLines), 1.0, 2.5);
 			}
@@ -6827,7 +6836,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// The picture: the camera, the ground round it, the men and the tanks.
 	LandFell::Phase("tick: the lens aimed");
 	AimEye(static_cast<float>(Real));
-	LandFell::Phase("tick: the film in a corner");
+	LandFell::Phase("tick: the film in a corner's lens");
 	FilmCorner();
 	if (Live.IsValid())
 	{
@@ -6936,6 +6945,9 @@ void ALandBattle::Tick(float DeltaSeconds)
 			PuffsMostAsked = Effects->PuffsAsked();
 		}
 	}
+	// (the film in a corner's picture, once everything this frame draws stands where it has it)
+	LandFell::Phase("tick: the film in a corner's picture");
+	FilmCornerTake();
 	Mark = LandParts::Seconds();
 	LandFell::Phase("tick: the sound");
 	PlaySound(Real);

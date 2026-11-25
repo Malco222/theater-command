@@ -376,6 +376,143 @@ namespace
 			if (Kick > 1200.0) Fault("the camera's swing jolted in a frame (over 1200 degrees a second a second)");
 		}
 	};
+
+	/** The tilt the view takes by itself at a zoom, degrees: what a tilt of his own is measured against. */
+	double AutoTiltDeg(double Zoom)
+	{
+		const LandGeneralEye::Settings TiltSet;
+		return TiltSet.TiltNear + (TiltSet.TiltFar - TiltSet.TiltNear) * std::clamp(Zoom, 0.0, 1.0);
+	}
+
+	/** The general's eye on a bare field with no recording behind it: flat ground, one track. A rule of the kept views
+	 * that a scripted battle cannot be relied on to walk into is checked here instead, at its own set-up. */
+	struct EyeBench
+	{
+		LandFeed::Recording Rec;
+		LandEye::World W;
+		LandGeneralEye::Eye Gen;
+		double T = 0.0;
+		EyeBench()
+		{
+			Rec.Ground.W = 3000.0;
+			Rec.Ground.H = 2000.0;
+			W.Height = [](double, double) { return 0.0; };
+			LandFeed::Track Tr;
+			Tr.Block = 3;
+			Tr.Role = "rifle";
+			Tr.At.push_back({ 0.0, 400.0, 400.0, 0.0 });
+			Tr.At.push_back({ 900.0, 400.0, 400.0, 0.0 });
+			Rec.Tracks.push_back(Tr);
+			Gen.Begin(Rec, W, Vec(1500.0, 1000.0, 0.0), 0.0, 250.0);
+		}
+		void Frame(const LandGeneralEye::Input& In) { Gen.Update(In, 1.0 / 60.0, 0.0); T += 1.0 / 60.0; }
+		void Still(int Frames) { for (int K = 0; K < Frames; ++K) Frame(LandGeneralEye::Input()); }
+		/** How much of his own tilt the picture shows over the automatic one, degrees. */
+		double Shown() const { return Gen.TiltDegrees() - AutoTiltDeg(Gen.Zoom()); }
+	};
+
+	/** A flight to a view kept with a tilt of his own, taken back by his own hand. The tilt he is left with must be
+	 * judged at the zoom the taking move leaves him at, not the one he is leaving: farther out the automatic tilt is
+	 * steeper, so a tilt of his own that shows now can be swallowed by it, and that one has to be handed back (Rule
+	 * 21: the picture is the truth, and he is never left standing with a tilt of his own he cannot see). One that
+	 * still shows there must stay his own. Two moves change the zoom in the very frame that takes the flight: a notch
+	 * of the wheel, and a unit's card, which follows the unit no nearer than FollowNearest (but not with a pan in the
+	 * same frame, which ends the follow). Each is set up here with its own control beside it, since no scripted battle
+	 * can be relied on to walk into either. */
+	void TiltTakeBench()
+	{
+		const LandGeneralEye::Settings Set;
+		// (a notch of the zoom is this much of the automatic tilt, degrees)
+		const double NotchTilt = (Set.TiltFar - Set.TiltNear) * Set.ZoomStep;
+		const bool bSay = std::getenv("LAND_PLAY_VIEWS") != nullptr;
+		struct TakeCase
+		{
+			const char* Name;
+			/** Low over the field, between the zoom under which his tilt is handed toward a man's shoulder and the
+			 * nearest a followed unit is watched from; else the middle of the zoom. */
+			bool bLow;
+			/** How much of his own tilt the kept view shows, degrees. */
+			double Want, ShownLeast, ShownMost;
+			/** The taking move: 0 a notch out, 1 a unit's card (followed), 2 a key's pan, 3 a card and a pan in one
+			 * frame (the pan ends the follow as it begins, so nothing holds the zoom off). */
+			int Move;
+			/** Whether the zoom he is left at hides the tilt (so it must be handed back). */
+			bool bHides;
+		};
+		const TakeCase Cases[] = {
+			{ "a notch out that hides it", false, 0.45 * NotchTilt, 0.3, 0.8 * NotchTilt, 0, true },
+			{ "a notch out that leaves it showing", false, NotchTilt + 4.0, NotchTilt + 2.0, 90.0, 0, false },
+			{ "a unit's card, low, whose follow hides it", true, 0.5, 0.35, 0.75, 1, true },
+			{ "a pan, low, that leaves it showing", true, 0.5, 0.35, 0.75, 2, false },
+			{ "a unit's card and a pan at once, low, that leave it showing", true, 0.5, 0.35, 0.75, 3, false },
+		};
+		for (const TakeCase& C : Cases)
+		{
+			EyeBench B;
+			B.Still(60);
+			// (to the zoom the case wants: a notch at a time, or a quarter of one low down, each let settle, so the
+			// wish is never driven past the zoom asked for)
+			const double ZoomOver = C.bLow ? 0.225 : 0.52, ZoomStepIn = C.bLow ? 0.25 : 1.0;
+			for (int K = 0; K < 200 && B.Gen.Zoom() > ZoomOver; ++K) { LandGeneralEye::Input In; In.Zoom = ZoomStepIn; B.Frame(In); B.Still(20); }
+			for (int K = 0; K < 60 && !C.bLow && B.Gen.Zoom() < 0.48; ++K) { LandGeneralEye::Input In; In.Zoom = -1.0; B.Frame(In); B.Still(20); }
+			B.Still(180);
+			// (his own tilt turned down by hand until the picture shows what this case wants of it, in the same way)
+			for (int K = 0; K < 400 && B.Shown() < C.Want; ++K) { LandGeneralEye::Input In; In.Tilt = C.bLow ? 0.1 : 0.15; B.Frame(In); B.Still(12); }
+			B.Still(180);
+			const double ShownBefore = B.Shown(), ZoomBefore = B.Gen.Zoom();
+			const bool bZoomSet = C.bLow ? ZoomBefore > Set.TiltOwnFrom + 0.005 && ZoomBefore < Set.FollowNearest - 0.015 : ZoomBefore > 0.4 && ZoomBefore < 0.6;
+			if (!B.Gen.OwnTilt() || !bZoomSet || ShownBefore < C.ShownLeast || ShownBefore > C.ShownMost)
+			{
+				std::printf("  the tilt bench (%s) could not set its view up: own %d, shown %.2f degrees over the automatic one (%.2f to %.2f wanted) at zoom %.3f\n",
+					C.Name, B.Gen.OwnTilt() ? 1 : 0, ShownBefore, C.ShownLeast, C.ShownMost, ZoomBefore);
+				Fault("the tilt bench could not set up a tilt of his own to judge");
+				continue;
+			}
+			LandGeneralEye::Input Keep;
+			Keep.KeepView = 0;
+			B.Frame(Keep);
+			if (!B.Gen.ViewKept(0)) { Fault("the tilt bench's view was not kept"); continue; }
+			// (away from it, and his own tilt turned back by hand, so the call and not his hand has the turning of the
+			// tilt on the way back)
+			for (int K = 0; K < 240; ++K) { LandGeneralEye::Input In; In.PanRight = 1.0; B.Frame(In); }
+			for (int K = 0; K < 4000 && B.Gen.OwnTilt(); ++K) { LandGeneralEye::Input In; In.Tilt = -0.5; B.Frame(In); }
+			B.Still(120);
+			if (B.Gen.OwnTilt()) { Fault("the tilt bench could not turn his own tilt back by hand"); continue; }
+			LandGeneralEye::Input Call;
+			Call.CallView = 0;
+			B.Frame(Call);
+			// (the flight taken back by his hand late on: in the middle of the zoom once its tilt has come up to the
+			// kept one; low down, where the flight climbs first, once it has come down again to within a hundredth of
+			// the kept zoom, by when the tilt has long been there)
+			int Took = -1;
+			bool bClimbed = false;
+			for (int K = 0; K < 900 && Took < 0 && B.Gen.FlyingTo() == 0; ++K)
+			{
+				bClimbed = bClimbed || B.Gen.Zoom() > ZoomBefore + 0.05;
+				const bool bNow = C.bLow ? bClimbed && B.Gen.Zoom() < ZoomBefore + 0.01 : B.Shown() >= ShownBefore - 0.3;
+				if (!bNow) { B.Still(1); continue; }
+				LandGeneralEye::Input In;
+				if (C.Move == 0) In.Zoom = -1.0;
+				if (C.Move == 1 || C.Move == 3) { In.GoBlock = B.Rec.Tracks[0].Block; In.bFollow = true; }
+				if (C.Move == 2 || C.Move == 3) In.PanRight = 1.0;
+				B.Frame(In);
+				Took = K;
+			}
+			if (Took < 0) { Fault("the tilt bench's flight was over, or never came down, before its tilt could be taken"); continue; }
+			B.Still(360);
+			const double ZoomAfter = B.Gen.Zoom();
+			if (C.Move == 0 && ZoomAfter < ZoomBefore + 0.5 * Set.ZoomStep) Fault("the tilt bench's notch did not take the zoom out");
+			if (C.Move == 1 && std::abs(ZoomAfter - Set.FollowNearest) > 0.01) Fault("the tilt bench's card did not leave the zoom at a followed unit's nearest");
+			if (C.Move >= 2 && std::abs(ZoomAfter - ZoomBefore) > 0.02) Fault("the tilt bench's pan did not leave the zoom where the flight was taking it");
+			if (bSay)
+				std::printf("  the tilt bench (%s): shown %.2f degrees at zoom %.3f before, taken on frame %d of the flight, left %.2f degrees at zoom %.3f with his own tilt %s\n",
+					C.Name, ShownBefore, ZoomBefore, Took, B.Shown(), ZoomAfter, B.Gen.OwnTilt() ? "on" : "off");
+			if (C.bHides && (B.Gen.OwnTilt() || std::abs(B.Shown()) > 1.0))
+				Fault("a flight taken by his hand left a tilt of his own on that the zoom he is left at hides");
+			if (!C.bHides && (!B.Gen.OwnTilt() || B.Shown() < 0.25))
+				Fault("a flight taken by his hand handed back a tilt of his own that still shows where he is left");
+		}
+	}
 }
 
 int main(int argc, char** argv)
@@ -2459,9 +2596,26 @@ int main(int argc, char** argv)
 	// that also tilts and presses the top view. The same rules hold; the top view must look down from about 100 m, his
 	// tilt be kept through the zoom, and the view tilt with the zoom again once tilted all the way back.
 	// And a third time with his kept views (Brian, 24 November 20:38Z, release 2: saved views): three kept (the opening
-	// one from high up, one low and turned, one in the top view), each called back and reached; a number never kept is
-	// kept by its first press and does not move the view; calls on each other's heels, a call while following a tank,
-	// then a wander that also keeps and calls. The same rules hold, and a called view must be reached as it was kept.
+	// one from high up, one low and turned, one in the top view by the first press of its number), each called back and
+	// reached; calls on each other's heels; a tank followed from as near as the view comes, with a first press and a
+	// keep there, neither of which may move the view or end the follow, and the turn and the zoom back to their own
+	// easing once drawn back; a view kept while still coasting from a pan, and a top view kept as soon as pressed, each
+	// kept where the view comes to rest; a flight taken by a pan and by a notch of zoom begun in the middle of it, let
+	// go where it is with no rush on to the kept view; calls made with a slide still running on, a pan key still held
+	// and the pointer at the screen's edge, all reached; a flight taken by a notch with the pointer resting at the edge,
+	// by a unit's card (the look-at must go to the unit), and by a pan from the top view on the way to a view without his tilt, none flying on in its
+	// look-at, turn, zoom or tilt; a view kept in the middle of a flight, and with the top view just pressed while
+	// following a unit; a reached call's end (flight over, chip lit, the edge panning again); his hand tilting the
+	// view away from a lit chip's view, once from a view kept without his own tilt and once from one kept with it (the
+	// chip goes out), and each of the two then called back with only the tilt to travel (the flight is not over before
+	// the tilt is there); two calls on each other's heels to views kept without his tilt, the second where he stands,
+	// taken by a pan (his tilt stays his own); a view kept in the top view, tilted part of the way back and called
+	// again, taken by a notch (his own tilt to his own tilt, stopping where its push allows); a long flight from the
+	// top view taken by a notch once his tilt has sunk to the automatic one, and another with a view kept in it at
+	// that point instead (the view must tilt with the zoom again, not keep a tilt it cannot show); then a wander that also keeps and calls. The same rules hold; a called view must be reached as it was
+	// kept, and a chip must not stay lit with the view away from its view.
+	// (and the one rule of the kept views no scripted battle can be relied on to walk into, on a bare field of its own)
+	if (!std::getenv("LAND_PLAY_NO_VIEWS")) TiltTakeBench();
 	for (int GenRun = 0; GenRun < 3; ++GenRun)
 	{
 		const bool bTiltRun = GenRun == 1, bViewRun = GenRun == 2;
@@ -2473,10 +2627,18 @@ int main(int argc, char** argv)
 		const double Ox = 0.5 * (Za[0] + Za[2]), Oy = 0.5 * (Za[1] + Za[3]);
 		const double Ex = 0.5 * (Zd[0] + Zd[2]), Ey = 0.5 * (Zd[1] + Zd[3]);
 		Gen.Begin(Rec, EW, Vec(Ox, Oy, 0.0), LandFeed::FacingTo(Ox, Oy, Ex, Ey), 250.0);
-		int TankBlock = -1;
+		// (the block his card presses and his follows rest on: one of his own still on the field at the end of the
+		// scripted steps, so a block lost on the way cannot fault a build that is right. A tank's block where one
+		// lives that long, else any of his; -1 where none does, and the steps that need one are left out)
+		double StepsEnd = 0.0;
+		for (double T = 0.0; T < 215.0; T += Dt) StepsEnd += Dt * (StepsEnd < Contact - 10.0 ? 2.0 : 0.5);
+		int TankBlock = -1, StandingBlock = -1;
 		for (const LandFeed::Block& Bk : Rec.Blocks)
 		{
-			if (Bk.Side == ES.Own && !Bk.Model.empty() && TankBlock < 0)
+			double Ux = 0.0, Uy = 0.0;
+			if (Bk.Side != ES.Own || !Gen.BlockAt(Bk.Id, StepsEnd, Ux, Uy)) continue;
+			if (StandingBlock < 0) StandingBlock = Bk.Id;
+			if (!Bk.Model.empty() && TankBlock < 0)
 			{
 				for (const LandFeed::Track& Tr : Rec.Tracks)
 				{
@@ -2484,6 +2646,7 @@ int main(int argc, char** argv)
 				}
 			}
 		}
+		if (TankBlock < 0) TankBlock = StandingBlock;
 		uint64_t Dice = Rec.Seed * 0x9E3779B97F4A7C15ull + 99;
 		auto Roll = [&Dice]() { Dice ^= Dice << 13; Dice ^= Dice >> 7; Dice ^= Dice << 17; return static_cast<double>(Dice % 1000000) / 1000000.0; };
 		LandGeneralEye::Input Wander;
@@ -2495,7 +2658,7 @@ int main(int argc, char** argv)
 		double ZWas = 0.0, ZWas2 = 0.0, WorstRise = 0.0, WorstRiseAt = 0.0;
 		int GCuts = 0;
 		bool CutWas = false;
-		const double End = bViewRun ? 200.0 : 260.0;
+		const double End = bViewRun ? 404.0 : 260.0;
 		// (the kept views' own checks: each view as it stood when kept, the call being timed, and the worst a called view
 		// was missed by once it should have been reached)
 		struct KeptAs { bool bKept = false, bOwn = false; double X = 0.0, Y = 0.0, H = 0.0, S = 0.0, Tilt = 0.0; };
@@ -2504,6 +2667,55 @@ int main(int argc, char** argv)
 		double CalledAt = 0.0, CheckAt = -1.0, MissPlace = 0.0, MissZoom = 0.0, MissTurn = 0.0, MissTilt = 0.0, LongestFlight = 0.0, FirstPressMoved = 0.0;
 		Vec FirstPressAt;
 		double FirstPressUntil = -1.0;
+		// (a keep watched: the view as it stood at the press, and whether it was following or flying; the view must go on
+		// only to where it was kept, a follow must go on, and left alone the view must come to rest as kept, its chip lit)
+		struct KeepWatch { int Number = -1; double Until = 0.0, SettleAt = 0.0, S0 = 0.0, H0 = 0.0; Vec La0; int Follow0 = -1, Braked0 = 0, Waited0 = 0; bool bFlight = false, bHidden = false; };
+		KeepWatch Watch;
+		int KeptAtRest = 0, KeptWrong = 0, KeepsSettled = 0, SettledWrong = 0, KeepMoved = 0, KeepEndedFollow = 0;
+		// (a flight his hand took: the look-at's speed as it was taken, where, and whether by a pan; the look-at must not
+		// rush on faster than that and his pan, and must come to rest about where a glide let go would)
+		double TakenUntil = -1.0, TakenSpeed = 0.0, WorstRush = 0.0, WorstRunOn = 0.0;
+		Vec TakenAt;
+		bool bTakenPanned = false;
+		int HandTook = 0, NotTaken = 0, Rushes = 0, RunsOn = 0;
+		// (a scripted hand on a flight: begun once the flight has covered three tenths of its way)
+		double HandAt = -1.0;
+		Vec CallFrom;
+		// (and its turn, zoom and tilt: each as it stood and how fast it was going as he took it, and what his own hand
+		// has asked of it since; none may go on toward the kept view past where its own push stops it)
+		double TakenH = 0.0, TakenS = 0.0, TakenTilt = 0.0, TakenHRate = 0.0, TakenSRate = 0.0, TakenTiltRate = 0.0, OwnTurn = 0.0, OwnS = 0.0, OwnTiltIn = 0.0;
+		double LastTurnIn = -1e9, LastZoomIn = -1e9, LastTiltIn = -1e9, WorstFlewOn = 0.0;
+		bool bTakenTop = false, bTakenToBlock = false, bTakenOwn = false, bTakenHidden = false;
+		int FlewOn = 0, BlockTakes = 0, TiltTakes = 0, TiltTakesJudged = 0;
+		// (a called view reached: a second and a half on, left alone, the flight is over, the turn and the zoom are
+		// free again and its chip is lit)
+		int ReachedView = -1, EndsChecked = 0, EndsWrong = 0, ReachedBraked = 0, ReachedWaited = 0;
+		double ReachedAt = 0.0;
+		// (the pointer at the screen's edge once a flight is over: it pans again)
+		Vec EdgeFrom;
+		int EdgeChecks = 0, EdgeDead = 0;
+		// (his own tilt and the chips: a chip's going out when his hand tilts the view away from its view, judged where
+		// the chip was lit and the tilt did go; and a called flight with only the tilt to travel, at its own end)
+		int TiltChips = 0, TiltChipsOwn = 0, TiltChipLit = 0, TiltEnds = 0, TiltEndsAuto = 0, TiltEndsWrong = 0, ChipWas = -1;
+		// (every flight to a kept view that is over by itself, no hand on it and no keep: the view is there)
+		int OwnEnds = 0, OwnEndsWrong = 0;
+		// (a flight taken once his own tilt had already sunk to the automatic one, with none of it on the picture:
+		// the view must tilt with the zoom again, not keep a tilt of his own it cannot show)
+		int HandBacks = 0, HandBacksWrong = 0, KeepBacks = 0, KeepBacksWrong = 0;
+		// (the most his own pan asked of the look-at through a flight he took: each axis is asked for in full, so a
+		// pan across and ahead at once carries the look-at up to its two axes together)
+		double TakenPanMost = 0.0;
+		// (keeps made in the middle of a flight and while following a unit: what is not his own hand's kept as it
+		// stood, and after a unit the turn, the zoom and the tilt come to rest as kept)
+		int FlightKeeps = 0, FlightKeptWrong = 0, FollowKeeps = 0, FollowKeptWrong = 0, FollowSettled = 0, FollowSettledWrong = 0;
+		// (calls that must stand: made with a slide still running on, a pan key still held, the pointer at the edge)
+		int Stood = 0, StoodReached = 0;
+		bool bCalledStands = false;
+		// (the turn and the zoom held long after coming to rest; a chip lit with the view away from its view)
+		double HeldFor = 0.0, LitFor = 0.0;
+		int HeldLong = 0, LitAway = 0, BrakedWas = 0, WaitedWas = 0;
+		Vec LaWas(Ox, Oy, 0.0);
+		double SWas = 0.0, HWas = 0.0, TiltWas = 0.0;
 		// (the tilted run's own checks: the top view's steepest and highest, his tilt after the zoom out, the view back to
 		// tilting with the zoom, and how often the top view and his tilt were on)
 		double TopTiltBest = 0.0, TopUpBest = 0.0, KeptTilt = -1.0, NearTilt = 0.0;
@@ -2513,6 +2725,20 @@ int main(int argc, char** argv)
 			LandGeneralEye::Input In;
 			auto Notch = [&](double Way, double Every) { if (R >= NextNotch) { In.Zoom = Way; NextNotch = R + Every; } };
 			auto Once = [&](double At) { return R >= At && R - Dt < At; };
+			// (the kept views' run: this frame's hand is one the view must leave out, and the call stand)
+			bool bStands = false;
+			// (or the pointer resting at the edge through a flight that his hand then takes: left out too, but the call
+			// is not one that must stand)
+			bool bEdgeRests = false;
+			// (the tilt the view takes by itself at a zoom, degrees: what his own tilt is measured against)
+			auto AutoTilt = [](double Zoom) { return AutoTiltDeg(Zoom); };
+			// (and how much of a flight's way to a kept view is covered)
+			auto Covered = [&](int Number)
+			{
+				const Vec La = Gen.LookAt();
+				const double All = std::hypot(Kept[Number].X - CallFrom.X, Kept[Number].Y - CallFrom.Y);
+				return All < 1.0 ? 1.0 : 1.0 - std::hypot(Kept[Number].X - La.X, Kept[Number].Y - La.Y) / All;
+			};
 			if (bTiltRun)
 			{
 				if (R < 2.0) {}
@@ -2573,11 +2799,11 @@ int main(int argc, char** argv)
 				else if (R < 16.0) { if (Once(15.5)) In.KeepView = 1; }
 				else if (R < 17.0) In.bTopView = Once(16.0);
 				else if (R < 22.0) In.PanRight = 1.0;
-				else if (R < 24.0) { if (Once(22.5)) In.KeepView = 2; }
+				// (the first press of a number never kept, in the top view: kept, and the view does not move)
+				else if (R < 24.0) { if (Once(22.5)) In.CallView = 2; }
 				else if (R < 32.0) { if (Once(24.0)) In.CallView = 0; }
 				else if (R < 40.0) { if (Once(32.0)) In.CallView = 1; }
 				else if (R < 48.0) { if (Once(40.0)) In.CallView = 2; }
-				else if (R < 49.0) { if (Once(48.0)) In.CallView = 3; }
 				else if (R < 52.0) In.PanAhead = 1.0;
 				else if (R < 62.0)
 				{
@@ -2592,7 +2818,172 @@ int main(int argc, char** argv)
 					if (Once(62.0)) In.GoBlock = TankBlock;
 					In.bFollow = R < 75.0;
 					if (R < 66.0) Notch(1.0, 0.25);
+					// (following the tank from as near as the view comes: the first press of a number never kept, then
+					// that number kept anew; neither may move the view or end the follow)
+					if (Once(68.0)) In.CallView = 3;
+					if (Once(71.5)) In.KeepView = 3;
 					if (Once(75.0)) In.CallView = 0;
+				}
+				else if (R < 96.0) { if (Once(90.0)) In.CallView = 0; }
+				else if (R < 104.0)
+				{
+					// (a long pan from high up, and the view kept three frames after the key is let go, still coasting: it
+					// is kept where it comes to rest)
+					if (R < 99.0) In.PanAhead = 1.0;
+					if (Once(99.05)) In.KeepView = 3;
+				}
+				else if (R < 112.0) { if (Once(104.0)) In.CallView = 1; }
+				else if (R < 118.0)
+				{
+					// (a flight across the field taken by a pan begun in the middle of it)
+					if (Once(112.0)) { In.CallView = 3; HandAt = -1.0; }
+					else if (HandAt < 0.0 && Gen.FlyingTo() == 3 && Covered(3) >= 0.3) HandAt = R;
+					if (HandAt >= 0.0 && R < HandAt + 0.6) In.PanAhead = 1.0;
+				}
+				else if (R < 124.0)
+				{
+					// (and by a notch of zoom)
+					if (Once(118.0)) { In.CallView = 0; HandAt = -1.0; }
+					else if (HandAt < 0.0 && Gen.FlyingTo() == 0 && Covered(0) >= 0.3) { HandAt = R; In.Zoom = -1.0; }
+				}
+				else if (R < 133.0)
+				{
+					// (a trackpad's slide still running on as a view is called, dying away over most of a second: left
+					// out of the flight, and the view is reached)
+					if (R < 125.0) { In.SlideRight = 0.012; In.SlideAhead = 0.004; }
+					else if (R < 125.8)
+					{
+						const double Runs = 1.0 - (R - 125.0) / 0.8;
+						In.SlideRight = 0.012 * Runs * Runs;
+						In.SlideAhead = 0.004 * Runs * Runs;
+					}
+					if (Once(125.0)) In.CallView = 3;
+					bStands = R >= 125.0;
+				}
+				else if (R < 142.0)
+				{
+					// (a pan key held as a view is called and for a second after: left out until it is let go)
+					if (R < 135.0) In.PanRight = 1.0;
+					if (Once(134.0)) In.CallView = 1;
+					bStands = R >= 134.0;
+				}
+				else if (R < 147.0)
+				{
+					// (the top view pressed and kept a third of a second on, in the middle of its swing: the top view is
+					// kept, not the half-way one)
+					In.bTopView = Once(142.0);
+					if (Once(142.3)) In.KeepView = 0;
+				}
+				else if (R < 155.0)
+				{
+					// (the pointer resting at the screen's edge as a view is called: no pan through the flight)
+					if (R < 148.4) In.EdgeRight = 1.0;
+					if (Once(147.4)) In.CallView = 3;
+					bStands = R >= 147.4;
+				}
+				else if (R < 163.0)
+				{
+					// (the pointer resting at the edge through a flight that a notch of zoom takes in the middle: the
+					// edge pans again from that frame, and the look-at, coasting, must not rush on under it)
+					if (R < 161.0) In.EdgeRight = 1.0;
+					if (Once(155.4)) { In.CallView = 1; HandAt = -1.0; }
+					else if (R > 155.4 && HandAt < 0.0 && Gen.FlyingTo() == 1 && Covered(1) >= 0.3) { HandAt = R; In.Zoom = -1.0; }
+					bEdgeRests = R >= 155.4 && HandAt < 0.0;
+				}
+				else if (R < 172.0)
+				{
+					// (a flight taken by a unit's card in the middle of it: the look-at glides to the unit, the turn and
+					// the zoom are let go where they are)
+					if (Once(163.0)) { In.CallView = 3; HandAt = -1.0; }
+					else if (HandAt < 0.0 && Gen.FlyingTo() == 3 && Covered(3) >= 0.3) { HandAt = R; In.GoBlock = TankBlock; }
+					In.bFollow = HandAt >= 0.0 && R < 171.0;
+				}
+				else if (R < 184.0)
+				{
+					// (from the top view, a call to a view kept without his own tilt, taken by a pan a fifth of a second
+					// on: his tilt stays his own, about where it was, and does not swing on to the automatic one)
+					if (Once(172.0)) In.CallView = 0;
+					if (Once(178.0)) In.CallView = 1;
+					if (R >= 178.2 && R < 178.6) In.PanAhead = 1.0;
+				}
+				else if (R < 194.0)
+				{
+					// (a view kept in the middle of a flight across the field, no hand on it: kept as it stood at the
+					// press, and the flight ends there, its chip lit)
+					if (Once(184.0)) { In.CallView = 3; HandAt = -1.0; }
+					else if (HandAt < 0.0 && Gen.FlyingTo() == 3 && Covered(3) >= 0.3) { HandAt = R; In.KeepView = 2; }
+				}
+				else if (R < 203.0)
+				{
+					// (a call left alone to its end, then the pointer at the edge for a second: it pans again)
+					if (Once(194.0)) In.CallView = 1;
+					if (R >= 200.0 && R < 201.0) In.EdgeRight = 1.0;
+				}
+				else if (R < 215.0)
+				{
+					// (following a unit, the top view pressed and the view kept a fifth of a second on, in the middle of
+					// its swing: the top view is kept, as with no unit followed)
+					if (Once(203.0)) In.GoBlock = TankBlock;
+					In.bFollow = R < 214.0;
+					In.bTopView = Once(207.0);
+					if (Once(207.2)) In.KeepView = 2;
+				}
+				else if (R < 226.0)
+				{
+					// (from the top view, a call to a view kept without his own tilt, and a view kept a third of a second
+					// into the flight: kept with his own tilt as it stood, and the flight ends there)
+					if (Once(215.0)) In.CallView = 0;
+					if (Once(221.0)) In.CallView = 3;
+					if (Once(221.3)) In.KeepView = 2;
+				}
+				else if (R < 246.0)
+				{
+					// (his own tilt and the chips. At a view kept without his own tilt, his hand tilts the view: its chip
+					// goes out. That tilted view kept; his hand tilts it part of the way back, still his own tilt: its
+					// chip goes out again. Called back, only the tilt has to travel, and the flight is not over before
+					// the tilt is there; nor is the flight back to the view without his own tilt, from the same place,
+					// before the tilt is the automatic one again)
+					if (Once(226.0)) In.CallView = 1;
+					if (R >= 231.0 && R < 232.0) In.Tilt = 40.0 * Dt;
+					if (Once(233.5)) In.KeepView = 3;
+					if (R >= 234.5 && R < 234.875) In.Tilt = -40.0 * Dt;
+					if (Once(237.0)) In.CallView = 3;
+					if (Once(241.0)) In.CallView = 1;
+				}
+				else if (R < 264.0)
+				{
+					// (his own tilt through two calls on each other's heels to views kept without one, the second to
+					// a view where he stands, taken by a pan a fifth of a second on: his tilt is still his own,
+					// where it was, and stops where its own push allows. Then a view kept in the top view and
+					// tilted part of the way back by hand, called again: the tilt flies from his own to his own,
+					// and a notch of zoom in the middle must not let it fly on either)
+					if (R >= 246.0 && R < 247.0) Notch(-1.0, 0.12);
+					if (Once(248.0)) In.KeepView = 3;
+					if (Once(249.0)) In.bTopView = true;
+					if (Once(252.0)) In.CallView = 3;
+					if (Once(252.1)) In.CallView = 1;
+					if (R >= 252.2 && R < 252.6) In.PanAhead = 1.0;
+					if (Once(256.0)) In.bTopView = true;
+					if (Once(258.5)) In.KeepView = 2;
+					if (R >= 259.5 && R < 260.5) In.Tilt = -40.0 * Dt;
+					if (Once(262.0)) In.CallView = 2;
+					if (R >= 262.3 && R < 262.4) In.Zoom = -1.0;
+				}
+				else if (R < 296.0)
+				{
+					// (a long flight from the top view to a view kept without his own tilt: the tilt is the first
+					// thing there, and a notch of zoom once it has sunk to the automatic one takes the flight with
+					// nothing of his tilt left on the picture. The view must tilt with the zoom again, not keep a
+					// tilt of his own that it cannot show. Then that flight again with a view kept in it instead of
+					// a hand on it: it is kept as the picture stands, the automatic tilt, and his own tilt handed back)
+					if (R >= 264.0 && R < 269.0) In.PanAhead = 1.0;
+					if (Once(271.0)) In.bTopView = true;
+					if (Once(274.0)) { In.CallView = 1; HandAt = -1.0; }
+					else if (R > 274.0 && R < 280.0 && HandAt < 0.0 && Gen.FlyingTo() == 1 && Gen.TiltDegrees() - AutoTilt(Gen.Zoom()) < 0.2) { HandAt = R; In.Zoom = -1.0; }
+					else if (R >= 281.0 && R < 286.0) In.PanAhead = 1.0;
+					else if (Once(288.0)) In.bTopView = true;
+					else if (Once(290.0)) { In.CallView = 1; HandAt = -1.0; }
+					else if (R > 290.0 && HandAt < 0.0 && Gen.FlyingTo() == 1 && Gen.TiltDegrees() - AutoTilt(Gen.Zoom()) < 0.2) { HandAt = R; In.KeepView = 2; }
 				}
 				else
 				{
@@ -2657,50 +3048,374 @@ int main(int argc, char** argv)
 			B += Dt * (B < Contact - 10.0 ? 2.0 : 0.5);
 			R += Dt;
 			PlaceMovers(B);
+			const double Pi = 3.14159265358979;
+			auto Wrapped = [](double Degrees) { while (Degrees > 180.0) Degrees -= 360.0; while (Degrees < -180.0) Degrees += 360.0; return Degrees; };
+			// (the view before this frame's move: where it looked, how fast, and what it was doing)
+			const Vec LaBefore = Gen.LookAt();
+			const double SBefore = Gen.Zoom(), HBefore = Gen.Heading(), TiltBefore = Gen.TiltDegrees();
+			const double SpeedBefore = std::hypot(LaBefore.X - LaWas.X, LaBefore.Y - LaWas.Y) / Dt;
+			const bool bRestBefore = SpeedBefore < 0.05 && std::abs(SBefore - SWas) / Dt < 0.002 && std::abs(Wrapped((HBefore - HWas) * 180.0 / Pi)) / Dt < 0.05 && std::abs(TiltBefore - TiltWas) / Dt < 0.05;
+			const int FlyBefore = Gen.FlyingTo(), FollowBefore = Gen.Following();
+			const bool bPanIn = In.PanRight != 0.0 || In.PanAhead != 0.0 || In.EdgeRight != 0.0 || In.SlideRight != 0.0 || In.SlideAhead != 0.0;
+			const bool bHandIn = bPanIn || In.Zoom != 0.0 || In.Turn != 0.0 || In.Tilt != 0.0 || In.bTopView || In.GoBlock >= 0;
+			// (a view kept: by Shift's press, or by the first press of a number never kept)
+			const int Keeping = !bViewRun ? -1 : In.KeepView >= 0 ? In.KeepView : In.CallView >= 0 && !Gen.ViewKept(In.CallView) ? In.CallView : -1;
+			// (a flight his own hand takes this frame: a move not left out)
+			const bool bLeftOut = bStands || bEdgeRests, bOwnBefore = Gen.OwnTilt();
+			const bool bTake = bViewRun && FlyBefore >= 0 && bHandIn && !bLeftOut;
 			if (bViewRun)
 			{
-				// (a view as it stands when kept: by Shift's press, or by the first press of a number never kept)
-				const int Keeping = In.KeepView >= 0 ? In.KeepView : In.CallView >= 0 && !Gen.ViewKept(In.CallView) ? In.CallView : -1;
-				if (Keeping >= 0)
-				{
-					KeptAs& K = Kept[Keeping];
-					const Vec La = Gen.LookAt();
-					K.bKept = true;
-					K.X = La.X;
-					K.Y = La.Y;
-					K.H = Gen.Heading();
-					K.S = Gen.Zoom();
-					K.bOwn = Gen.OwnTilt();
-					K.Tilt = Gen.TiltDegrees();
-					++Keeps;
-					if (In.KeepView < 0)
-					{
-						FirstPressAt = La;
-						FirstPressUntil = R + 1.0;
-					}
-					// (kept anew while a call to it was being timed: the call is no longer the test's to judge)
-					if (Keeping == Called) Called = -1;
-				}
-				else if (In.CallView >= 0)
+				if (Keeping < 0 && In.CallView >= 0)
 				{
 					Called = In.CallView;
 					CalledAt = R;
 					CheckAt = R + 7.9;
+					CallFrom = LaBefore;
+					bCalledStands = bStands;
+					Stood += bStands ? 1 : 0;
 					++Calls;
 				}
-				// (his own hand on the view: the call is over)
-				if (In.PanRight != 0.0 || In.PanAhead != 0.0 || In.EdgeRight != 0.0 || In.SlideRight != 0.0 || In.Zoom != 0.0 || In.Turn != 0.0 || In.Tilt != 0.0 || In.bTopView || In.GoBlock >= 0) Called = -1;
+				// (his own hand on the view: the call is over, but for a hand the view must leave out)
+				if (bHandIn && !bLeftOut) Called = -1;
+				// (and a keep's watch is over at his next move, call or keep; so is a reached view's)
+				if (bHandIn || In.CallView >= 0 || In.KeepView >= 0) Watch.Number = ReachedView = -1;
+				if (Once(200.0)) EdgeFrom = LaBefore;
+				if (Once(231.0) || Once(234.5)) ChipWas = Gen.ViewAt();
+				if (In.CallView >= 0 || In.KeepView >= 0) TakenUntil = -1.0;
 			}
 			const auto GT0 = std::chrono::steady_clock::now();
 			const LandEye::Pose P = Gen.Update(In, Dt, B);
 			const double Ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - GT0).count();
 			if (bViewRun)
 			{
+				const Vec LaNow = Gen.LookAt();
 				FlyFrames += Gen.Flying() ? 1 : 0;
+				if (Keeping >= 0)
+				{
+					// (the view as the eye has kept it: where a call will bring it)
+					KeptAs& K = Kept[Keeping];
+					Vec KeptLook;
+					K.bKept = Gen.ViewIs(Keeping, KeptLook, K.H, K.S, K.Tilt);
+					K.X = KeptLook.X;
+					K.Y = KeptLook.Y;
+					++Keeps;
+					// (kept at rest, it is kept as it stood)
+					if (bRestBefore && FlyBefore < 0)
+					{
+						++KeptAtRest;
+						if (std::hypot(K.X - LaBefore.X, K.Y - LaBefore.Y) > 0.2 || std::abs(K.S - SBefore) > 0.002 || std::abs(Wrapped((K.H - HBefore) * 180.0 / Pi)) > 0.2 || std::abs(K.Tilt - TiltBefore) > 0.5)
+						{
+							++KeptWrong;
+							std::printf("  view %d kept at rest at real %.2f, but not as it stood: %.2f m, zoom %.4f, turn %.2f, tilt %.2f off\n", Keeping, R, std::hypot(K.X - LaBefore.X, K.Y - LaBefore.Y), K.S - SBefore,
+								Wrapped((K.H - HBefore) * 180.0 / Pi), K.Tilt - TiltBefore);
+						}
+					}
+					// (kept in the middle of a flight: all of it as it stood, his own tilt too where the flight was turning
+					// it back; kept while following a unit: where it looks as it stood)
+					const double OffPlace = std::hypot(K.X - LaBefore.X, K.Y - LaBefore.Y);
+					if (FlyBefore >= 0 && !bHandIn)
+					{
+						++FlightKeeps;
+						if (OffPlace > 0.2 || std::abs(K.S - SBefore) > 0.002 || std::abs(Wrapped((K.H - HBefore) * 180.0 / Pi)) > 0.2 || std::abs(K.Tilt - TiltBefore) > 0.5)
+						{
+							++FlightKeptWrong;
+							std::printf("  view %d kept in a flight at real %.2f, but not as it stood: %.2f m, zoom %.4f, turn %.2f, tilt %.2f off\n", Keeping, R, OffPlace, K.S - SBefore, Wrapped((K.H - HBefore) * 180.0 / Pi),
+								K.Tilt - TiltBefore);
+						}
+					}
+					else if (FlyBefore < 0 && FollowBefore >= 0)
+					{
+						++FollowKeeps;
+						if (OffPlace > 0.2)
+						{
+							++FollowKeptWrong;
+							std::printf("  view %d kept following a unit at real %.2f, but %.2f m from where it looked\n", Keeping, R, OffPlace);
+						}
+					}
+					if (!bHandIn)
+					{
+						Watch.Number = Keeping;
+						Watch.Until = R + 3.0;
+						// (settled a frame or two before his next scripted press, so a keep is judged at rest even where
+					// the next press follows 3.5 s on)
+					Watch.SettleAt = R + 3.5 - 2.0 * Dt;
+						Watch.S0 = SBefore;
+						Watch.H0 = HBefore;
+						Watch.La0 = LaBefore;
+						Watch.Follow0 = FollowBefore;
+						Watch.Braked0 = Gen.BrakedFrames();
+						Watch.Waited0 = Gen.WaitedFrames();
+						Watch.bFlight = FlyBefore >= 0;
+						// (kept with his own tilt on but none of it on the picture: it is handed back, as a hand's take hands
+						// it back, and the view tilts with the zoom again)
+						Watch.bHidden = bOwnBefore && SBefore > 0.25 && TiltBefore - AutoTilt(SBefore) < 0.3;
+					}
+					if (In.KeepView < 0 && FollowBefore < 0)
+					{
+						FirstPressAt = LaBefore;
+						FirstPressUntil = R + 1.0;
+					}
+					// (kept anew while a call to it was being timed, or any view kept in the middle of a flight, which then
+					// ends at the view just kept: the call is no longer the test's to judge)
+					if (Keeping == Called || FlyBefore >= 0) Called = -1;
+				}
+				else if (Watch.Number >= 0)
+				{
+					const KeptAs& K = Kept[Watch.Number];
+					if (R < Watch.Until && !Watch.bFlight)
+					{
+						// (no further than from where it stood to where it was kept: the keep itself moves nothing)
+						const double Turned = Wrapped((Gen.Heading() - Watch.H0) * 180.0 / Pi), TurnKept = Wrapped((K.H - Watch.H0) * 180.0 / Pi);
+						bool bMoved = Gen.Zoom() < std::min(Watch.S0, K.S) - 0.01 || Gen.Zoom() > std::max(Watch.S0, K.S) + 0.01 || Turned < std::min(0.0, TurnKept) - 1.0 || Turned > std::max(0.0, TurnKept) + 1.0;
+						if (Watch.Follow0 >= 0)
+						{
+							// (not where the unit itself has gone from the field: the keep did not end that follow)
+							double Wx = 0.0, Wy = 0.0;
+							if (In.bFollow && Gen.Following() != Watch.Follow0 && Gen.BlockAt(Watch.Follow0, B, Wx, Wy)) ++KeepEndedFollow;
+						}
+						else
+						{
+							const double Lx = K.X - Watch.La0.X, Ly = K.Y - Watch.La0.Y, L2 = Lx * Lx + Ly * Ly;
+							const double U = L2 < 1e-9 ? 0.0 : std::clamp(((LaNow.X - Watch.La0.X) * Lx + (LaNow.Y - Watch.La0.Y) * Ly) / L2, 0.0, 1.0);
+							if (std::hypot(LaNow.X - Watch.La0.X - U * Lx, LaNow.Y - Watch.La0.Y - U * Ly) > 1.0) bMoved = true;
+						}
+						if (bMoved)
+						{
+							++KeepMoved;
+							if (std::getenv("LAND_PLAY_VIEWS")) std::printf("  the keep of view %d moved the view at real %.2f: zoom %.3f (%.3f to %.3f), turned %.1f (to %.1f), following %d\n", Watch.Number, R, Gen.Zoom(), Watch.S0, K.S, Turned, TurnKept, Gen.Following());
+						}
+					}
+					if (R >= Watch.SettleAt)
+					{
+						// (left alone since: where it came to rest is the view kept, its chip lit; after a unit followed, its
+						// turn, zoom and tilt are, where no hedge has made the view wait since)
+						if (Watch.Follow0 >= 0)
+						{
+							if (Gen.Following() == Watch.Follow0 && Gen.BrakedFrames() == Watch.Braked0 && Gen.WaitedFrames() == Watch.Waited0)
+							{
+								const double Zoomed = std::abs(Gen.Zoom() - K.S), Turned = std::abs(Wrapped((Gen.Heading() - K.H) * 180.0 / Pi)), Tilted = std::abs(Gen.TiltDegrees() - K.Tilt);
+								++FollowSettled;
+								if (Zoomed > 0.005 || Turned > 0.5 || Tilted > 1.5)
+								{
+									++FollowSettledWrong;
+									std::printf("  view %d kept at real %.2f following a unit: left alone, the view came to rest zoom %.3f, turn %.1f, tilt %.1f off it\n", Watch.Number, Watch.SettleAt - 3.5 + 2.0 * Dt, Zoomed, Turned, Tilted);
+								}
+							}
+						}
+						else
+						{
+							const double Place = std::hypot(LaNow.X - K.X, LaNow.Y - K.Y), Zoomed = std::abs(Gen.Zoom() - K.S), Turned = std::abs(Wrapped((Gen.Heading() - K.H) * 180.0 / Pi)), Tilted = std::abs(Gen.TiltDegrees() - K.Tilt);
+							++KeepsSettled;
+							if (Watch.bHidden)
+							{
+								++KeepBacks;
+								if (Gen.OwnTilt() || std::abs(Gen.TiltDegrees() - AutoTilt(Gen.Zoom())) > 1.0)
+								{
+									++KeepBacksWrong;
+									std::printf("  view %d kept at real %.2f once his own tilt had sunk to the automatic one: left alone, his own tilt is %s and the view is tilted %.2f degrees off the automatic one\n", Watch.Number, Watch.SettleAt - 3.5 + 2.0 * Dt,
+										Gen.OwnTilt() ? "still on" : "off", Gen.TiltDegrees() - AutoTilt(Gen.Zoom()));
+								}
+							}
+							if (Place > 0.5 || Zoomed > 0.005 || Turned > 0.5 || Tilted > 1.5 || Gen.ViewAt() != Watch.Number)
+							{
+								++SettledWrong;
+								std::printf("  view %d kept at real %.2f (%s): left alone, the view came to rest %.1f m, zoom %.3f, turn %.1f, tilt %.1f off it, at view %d\n", Watch.Number, Watch.SettleAt - 3.5 + 2.0 * Dt, Watch.bFlight ? "in a flight" : "by his hand",
+									Place, Zoomed, Turned, Tilted, Gen.ViewAt());
+							}
+						}
+						Watch.Number = -1;
+					}
+				}
+				if (bTake)
+				{
+					// (taken: the flight is over this frame)
+					++HandTook;
+					if (Gen.FlyingTo() >= 0) ++NotTaken;
+					// (a card take counts only where the unit is still on the field: a card for a block that is gone
+					// tests nothing)
+					double Cx = 0.0, Cy = 0.0;
+					BlockTakes += In.GoBlock >= 0 && Gen.BlockAt(In.GoBlock, B, Cx, Cy) ? 1 : 0;
+					// (taken with his own tilt on, on the way to a view tilted far otherwise: the tilt's own case.
+					// And taken once his own tilt had sunk to the automatic one, with none of it on the picture:
+					// the other way about, the view must go back to tilting with the zoom)
+					const bool bTiltTake = bOwnBefore && std::abs(Kept[FlyBefore].Tilt - TiltBefore) > 10.0;
+					const bool bTiltHidden = bOwnBefore && TiltBefore - AutoTilt(SBefore) < 0.3;
+					TiltTakes += bTiltTake ? 1 : 0;
+					if (TakenUntil < 0.0)
+					{
+						TakenUntil = R + 1.5;
+						TakenSpeed = SpeedBefore;
+						TakenAt = LaBefore;
+						bTakenPanned = false;
+						bTakenToBlock = In.GoBlock >= 0;
+						bTakenTop = false;
+						bTakenOwn = bTiltTake;
+						bTakenHidden = bTiltHidden;
+						TakenPanMost = 0.0;
+						TakenH = HBefore;
+						TakenS = OwnS = SBefore;
+						TakenTilt = TiltBefore;
+						TakenHRate = Wrapped((HBefore - HWas) * 180.0 / Pi) / Dt;
+						TakenSRate = (SBefore - SWas) / Dt;
+						TakenTiltRate = (TiltBefore - TiltWas) / Dt;
+						OwnTurn = OwnTiltIn = 0.0;
+						LastTurnIn = LastZoomIn = LastTiltIn = -1e9;
+					}
+				}
+				if (TakenUntil >= 0.0)
+				{
+					const LandGeneralEye::Settings Rule;
+					bTakenPanned = bTakenPanned || bPanIn;
+					bTakenTop = bTakenTop || In.bTopView;
+					// (what his own hand has asked of the turn, the zoom and the tilt since he took it)
+					if (In.Turn != 0.0) { OwnTurn += In.Turn; LastTurnIn = R; }
+					if (In.Zoom != 0.0) { OwnS = std::clamp(OwnS - In.Zoom * Rule.ZoomStep, 0.0, 1.0); LastZoomIn = R; }
+					if (In.Tilt != 0.0) { OwnTiltIn += In.Tilt; LastTiltIn = R; }
+					const double Speed = std::hypot(LaNow.X - LaBefore.X, LaNow.Y - LaBefore.Y) / Dt, Arm = (P.Look - P.Eye).Length();
+					// (no faster than it was going as he took it, or than his own pan goes if that is faster: a look-at let
+					// go dies away as his pan's own speed comes up, and the two never add; not where he sent it to a unit)
+					TakenPanMost = std::max(TakenPanMost, std::hypot(std::clamp(In.PanRight + In.EdgeRight, -1.0, 1.0), std::clamp(In.PanAhead + In.EdgeAhead, -1.0, 1.0)));
+					const double Over = Speed - (std::max(TakenSpeed, bTakenPanned ? std::max(1.0, TakenPanMost) * (0.75 * Arm + 4.0) : 0.0) + std::max(2.0, 0.05 * TakenSpeed));
+					if (Over > 0.0 && !bTakenToBlock)
+					{
+						++Rushes;
+						WorstRush = std::max(WorstRush, Over);
+					}
+					if (R >= TakenUntil)
+					{
+						// (taken by a zoom, a turn or a tilt alone: at rest about where a glide let go comes to rest)
+						const double Ran = std::hypot(LaNow.X - TakenAt.X, LaNow.Y - TakenAt.Y) - (TakenSpeed / Rule.Glide * 1.15 + 3.0);
+						if (!bTakenPanned && !bTakenToBlock && Ran > 0.0)
+						{
+							++RunsOn;
+							WorstRunOn = std::max(WorstRunOn, Ran);
+						}
+						// (the turn, the zoom and his tilt: each no further on than its own push stops it from the rate it
+						// had, and what his own hand has asked since. Not one his hand was still moving in the last second;
+						// not the zoom or the tilt once the top view is pressed; the zoom no nearer than a followed unit
+						// lets it; the tilt only where it was his own and the kept view's far from it, out of the reach of
+						// the shoulder's handing back)
+						const double TurnOn = std::abs(Wrapped((Gen.Heading() - TakenH) * 180.0 / Pi - OwnTurn)) - (TakenHRate * TakenHRate / (2.0 * Rule.TurnPush) + 3.0);
+						const double ZoomWant = bTakenToBlock ? std::max(OwnS, Rule.FollowNearest) : OwnS;
+						const double ZoomOn = std::abs(Gen.Zoom() - ZoomWant) - (TakenSRate * TakenSRate / (2.0 * Rule.ZoomPush * Rule.FlySlower) + 0.02);
+						const double TiltOn = std::abs(Gen.TiltDegrees() - TakenTilt - OwnTiltIn) - (TakenTiltRate * TakenTiltRate / (2.0 * Rule.TiltPush * Rule.FlySlower) + 3.0);
+						// (taken by a unit's card: the look-at went to the unit and follows it, not on to the kept view)
+						if (bTakenToBlock)
+						{
+							double Ux = 0.0, Uy = 0.0;
+							if (Gen.BlockAt(TankBlock, B, Ux, Uy) && (Gen.Following() != TankBlock || std::hypot(LaNow.X - Ux, LaNow.Y - Uy) > 0.5 * std::hypot(TakenAt.X - Ux, TakenAt.Y - Uy) + 5.0))
+							{
+								Fault("a flight taken by a unit's card did not go to the unit");
+							}
+						}
+						// (his tilt judged where some of it showed on the picture as he took it: it stays his own and
+						// stops where its push allows. Where none of it showed, the other way about: it is handed
+						// back and the view tilts with the zoom again)
+						const bool bTiltJudged = bTakenOwn && !bTakenHidden && !bTakenTop && R - LastTiltIn > 1.0 && TakenS > 0.25 && Gen.Zoom() > 0.25;
+						if (bTakenHidden && !bTakenTop && R - LastTiltIn > 1.0 && Gen.Zoom() > 0.25)
+						{
+							++HandBacks;
+							if (Gen.OwnTilt() || std::abs(Gen.TiltDegrees() - AutoTilt(Gen.Zoom())) > 1.0)
+							{
+								++HandBacksWrong;
+								std::printf("  a flight taken at real %.2f once his own tilt had sunk to the automatic one: a second and a half on, his own tilt is %s and the view is tilted %.2f degrees off the automatic one\n", TakenUntil - 1.5,
+									Gen.OwnTilt() ? "still on" : "off", Gen.TiltDegrees() - AutoTilt(Gen.Zoom()));
+							}
+						}
+						TiltTakesJudged += bTiltJudged ? 1 : 0;
+						const bool bTurnOn = R - LastTurnIn > 1.0 && TurnOn > 0.0, bZoomOn = !bTakenTop && R - LastZoomIn > 1.0 && ZoomOn > 0.0, bTiltOn = bTiltJudged && TiltOn > 0.0;
+						if (bTurnOn || bZoomOn || bTiltOn)
+						{
+							++FlewOn;
+							WorstFlewOn = std::max(WorstFlewOn, std::max(bTurnOn ? TurnOn : 0.0, std::max(bZoomOn ? ZoomOn * 100.0 : 0.0, bTiltOn ? TiltOn : 0.0)));
+							std::printf("  a flight taken at real %.2f: the view flew on past where it was let go: turn %.1f degrees%s, zoom %.3f%s, tilt %.1f degrees%s over what its own push allows\n", TakenUntil - 1.5,
+								TurnOn, bTurnOn ? " (FAULT)" : "", ZoomOn, bZoomOn ? " (FAULT)" : "", TiltOn, bTiltOn ? " (FAULT)" : "");
+						}
+						TakenUntil = -1.0;
+					}
+				}
+				// (a called view reached and left alone: a second and a half on the flight is over, the turn and the zoom
+				// are free again, and its chip is lit; not where a hedge has made the view wait since)
+				if (ReachedView >= 0 && R >= ReachedAt + 1.5)
+				{
+					if (Gen.BrakedFrames() == ReachedBraked && Gen.WaitedFrames() == ReachedWaited)
+					{
+						++EndsChecked;
+						if (Gen.FlyingTo() >= 0 || Gen.Flying() || Gen.ViewAt() != ReachedView)
+						{
+							++EndsWrong;
+							std::printf("  view %d reached at real %.2f: a second and a half on, flying to %d, turn and zoom %s, at view %d\n", ReachedView, ReachedAt, Gen.FlyingTo(), Gen.Flying() ? "held" : "free", Gen.ViewAt());
+						}
+					}
+					ReachedView = -1;
+				}
+				// (his hand has tilted the view away from the view whose chip was lit, a second and more ago: the chip is
+				// out. The first time from a view kept without his own tilt; the second from one kept with it, his tilt
+				// still his own, which only the tilt's own angle can tell)
+				if (Once(233.0) || Once(236.5))
+				{
+					const bool bSecond = R > 235.0;
+					const int Want = bSecond ? 3 : 1;
+					if (ChipWas == Want && std::abs(Gen.TiltDegrees() - Kept[Want].Tilt) > 8.0 && (!bSecond || Gen.OwnTilt()))
+					{
+						++TiltChips;
+						TiltChipsOwn += bSecond ? 1 : 0;
+						if (Gen.ViewAt() == Want)
+						{
+							++TiltChipLit;
+							std::printf("  chip %d still lit at real %.2f, his hand having tilted the view %.1f degrees away from it\n", Want, R, Gen.TiltDegrees() - Kept[Want].Tilt);
+						}
+					}
+					else std::printf("  the tilt's chip check at real %.2f was not made: chip %d was lit (wanted %d), tilt %.1f degrees off, his own tilt %d\n", R, ChipWas, Want, Gen.TiltDegrees() - Kept[Want].Tilt, Gen.OwnTilt() ? 1 : 0);
+				}
+				// (a flight to a kept view over by itself, no hand on it and no keep, be it in the very frame of its call:
+				// the view is there, in where it looks, its turn, its zoom and its tilt. The flights called at 237 and
+				// 241 have only the tilt to travel: his own to the view's, then back to the automatic one)
+				if (const int Ended = !bHandIn && Keeping < 0 && Gen.FlyingTo() < 0 ? (In.CallView >= 0 ? In.CallView : FlyBefore) : -1; Ended >= 0)
+				{
+					const KeptAs& K = Kept[Ended];
+					const double Place = std::hypot(LaNow.X - K.X, LaNow.Y - K.Y), Zoomed = std::abs(Gen.Zoom() - K.S), Turned = std::abs(Wrapped((Gen.Heading() - K.H) * 180.0 / Pi)), Tilted = std::abs(Gen.TiltDegrees() - K.Tilt);
+					const bool bTiltOnly = R >= 237.0 && R < 246.0;
+					++OwnEnds;
+					TiltEnds += bTiltOnly ? 1 : 0;
+					TiltEndsAuto += bTiltOnly && !Gen.OwnTilt() ? 1 : 0;
+					TiltEndsWrong += bTiltOnly && Tilted > 2.0 ? 1 : 0;
+					if (Place > 1.6 || Zoomed > 0.006 || Turned > 1.0 || Tilted > 2.0)
+					{
+						++OwnEndsWrong;
+						std::printf("  the flight to view %d was over at real %.2f with the view not there: %.1f m, zoom %.3f, turn %.1f degrees, tilt %.1f degrees off\n", Ended, R, Place, Zoomed, Turned, Tilted);
+					}
+				}
+				// (the pointer at the edge for a second once a flight is over: the look-at has gone with it)
+				if (Once(201.0))
+				{
+					++EdgeChecks;
+					if (std::hypot(LaNow.X - EdgeFrom.X, LaNow.Y - EdgeFrom.Y) < 5.0) ++EdgeDead;
+				}
+				// (the turn and the zoom held, with no flight on and nothing asked of them, and no hedge braked at: they
+				// should long have gone back to their own easing)
+				const bool bHeldIdle = Gen.Flying() && Gen.FlyingTo() < 0 && In.Zoom == 0.0 && In.Turn == 0.0 && In.Tilt == 0.0 && !In.bTopView && In.GoBlock < 0 && Gen.BrakedFrames() == BrakedWas && Gen.WaitedFrames() == WaitedWas;
+				HeldFor = bHeldIdle ? HeldFor + Dt : 0.0;
+				HeldLong += HeldFor > 3.0 ? 1 : 0;
+				BrakedWas = Gen.BrakedFrames();
+				WaitedWas = Gen.WaitedFrames();
+				// (a chip lit, no flight on: the view is at that view, or coming to rest there within a second or two)
+				if (Gen.ViewAt() >= 0 && Gen.FlyingTo() < 0)
+				{
+					const KeptAs& K = Kept[Gen.ViewAt()];
+					LitFor += Dt;
+					if (LitFor > 2.5 && (std::hypot(LaNow.X - K.X, LaNow.Y - K.Y) > 5.0 || std::abs(Gen.Zoom() - K.S) > 0.03 || std::abs(Wrapped((Gen.Heading() - K.H) * 180.0 / Pi)) > 3.0
+						|| std::abs(Gen.TiltDegrees() - K.Tilt) > 3.0))
+					{
+						++LitAway;
+						if (std::getenv("LAND_PLAY_VIEWS") && LitAway < 20) std::printf("  chip %d lit away from its view at real %.2f: %.1f m, zoom %.3f, tilt %.1f off, following %d\n", Gen.ViewAt(), R, std::hypot(LaNow.X - K.X, LaNow.Y - K.Y), Gen.Zoom() - K.S,
+							Gen.TiltDegrees() - K.Tilt, Gen.Following());
+					}
+				}
+				else LitFor = 0.0;
 				if (R < FirstPressUntil)
 				{
-					const Vec La = Gen.LookAt();
-					FirstPressMoved = std::max(FirstPressMoved, std::hypot(La.X - FirstPressAt.X, La.Y - FirstPressAt.Y));
+					FirstPressMoved = std::max(FirstPressMoved, std::hypot(LaNow.X - FirstPressAt.X, LaNow.Y - FirstPressAt.Y));
 				}
 				if (Called >= 0)
 				{
@@ -2721,7 +3436,12 @@ int main(int argc, char** argv)
 						if (bThere)
 						{
 							++Reached;
+							StoodReached += bCalledStands ? 1 : 0;
 							LongestFlight = std::max(LongestFlight, R - CalledAt);
+							ReachedView = Called;
+							ReachedAt = R;
+							ReachedBraked = Gen.BrakedFrames();
+							ReachedWaited = Gen.WaitedFrames();
 						}
 						else
 						{
@@ -2755,6 +3475,10 @@ int main(int argc, char** argv)
 					std::printf("  tilt at %.2f: zoom %.3f tilt %.1f own %d top %d, eye %.1f over the look-at, %.1f over the ground\n", R + Dt, Gen.Zoom(), Gen.TiltDegrees(), Gen.OwnTilt() ? 1 : 0, Gen.TopView() ? 1 : 0, P.Eye.Z - P.Look.Z, P.Eye.Z - GroundAt(P.Eye.X, P.Eye.Y));
 				}
 			}
+			LaWas = LaBefore;
+			SWas = SBefore;
+			HWas = HBefore;
+			TiltWas = TiltBefore;
 			Spent += Ms;
 			GSlowest = std::max(GSlowest, Ms);
 			if (Ms > 3.0 && std::getenv("LAND_PLAY_SLOW")) std::printf("  slow general's eye %.2f ms at real %.2f: zoom %.3f, lift %.2f need %.2f hurried %d aside %.2f waited %d braked %d, asked %d\n", Ms, R + Dt, Gen.Zoom(), Gen.LiftNow(), Gen.NeedNow(), Gen.HurriedNow(), Gen.PushNow(), Gen.WaitedFrames(), Gen.BrakedFrames(), Gen.AskedNow());
@@ -2832,10 +3556,49 @@ int main(int argc, char** argv)
 		{
 			std::printf("\ngeneral's view, kept views: %d kept, %d called, %d reached as kept before his hand took the view again (the longest flight %.1f s); the worst miss %.1f m, zoom %.3f, turn %.1f degrees, tilt %.1f degrees; a first press moved the view %.2f m; flying %.0f s",
 				Keeps, Calls, Reached, LongestFlight, MissPlace, MissZoom, MissTurn, MissTilt, FirstPressMoved, FlyFrames * Dt);
+			std::printf("\ngeneral's view, kept views: %d kept at rest (%d not as they stood); %d left alone came to rest (%d not as kept, or unlit); a keep moved the view on %d frames and ended a follow on %d; his hand took %d flights (%d not let go; the look-at rushed on for %d frames, %.0f m/s over at the worst; %d ran on past where a glide rests, %.0f m at the worst); %d of %d calls stood through a slide running on, a key held and the pointer at the edge; the turn and the zoom stayed held %d frames past 3 s at rest; a chip was lit away from its view on %d frames",
+				KeptAtRest, KeptWrong, KeepsSettled, SettledWrong, KeepMoved, KeepEndedFollow, HandTook, NotTaken, Rushes, WorstRush, RunsOn, WorstRunOn, StoodReached, Stood, HeldLong, LitAway);
 			if (MissPlace > 0.0 || MissZoom > 0.0 || MissTurn > 0.0 || MissTilt > 0.0) Fault("a kept view called back was not reached as it was kept");
 			if (Reached < 5) Fault("the general's kept views were hardly called (under 5 reached)");
 			if (FirstPressMoved > 0.5) Fault("the first press of a view never kept moved the view");
 			if (!Gen.ViewKept(0) || !Gen.ViewKept(1) || !Gen.ViewKept(2) || !Gen.ViewKept(3)) Fault("a kept view was lost");
+			if (KeptWrong > 0) Fault("a view kept at rest was not kept as it stood");
+			if (KeptAtRest < 1 || KeepsSettled < 2) Fault("the keeping of a view at rest and still coasting was hardly tested");
+			if (SettledWrong > 0) Fault("a kept view was not where the view came to rest, or its chip was not lit there");
+			if (KeepMoved > 0) Fault("keeping a view moved the view");
+			if (KeepEndedFollow > 0) Fault("keeping a view ended the follow of a unit");
+			if (HandTook < 2) Fault("a flight taken by his own hand was hardly tested (under 2)");
+			if (NotTaken > 0) Fault("a move by his own hand begun in a flight did not take the view");
+			if (Rushes > 0) Fault("a flight taken by his own hand rushed on toward the kept view");
+			if (RunsOn > 0) Fault("a flight taken by his own hand did not come to rest where it was let go");
+			if (Stood < 3 || StoodReached < Stood) Fault("a call was lost to a slide still running on, a key still held or the pointer at the screen's edge");
+			if (HeldLong > 0) Fault("the view's turn and zoom stayed held long after they had come to rest");
+			if (LitAway > 0) Fault("a kept view's chip stayed lit with the view away from it");
+			std::printf("\ngeneral's view, kept views: of the flights his hand took, %d by a unit's card and %d with his own tilt on (%d judged); the turn, the zoom or the tilt flew on past its own push %d times (%.1f over at the worst, degrees or hundredths of the zoom); %d reached calls left alone were over a second and a half on (%d not, or their chip unlit); the edge panned again after a flight %d of %d times; %d kept in a flight (%d not as they stood), %d following a unit (%d not where it looked; %d left alone came to rest, %d not as kept)",
+				BlockTakes, TiltTakes, TiltTakesJudged, FlewOn, WorstFlewOn, EndsChecked, EndsWrong, EdgeChecks - EdgeDead, EdgeChecks, FlightKeeps, FlightKeptWrong, FollowKeeps, FollowKeptWrong, FollowSettled, FollowSettledWrong);
+			if (FlewOn > 0) Fault("a flight taken by his own hand flew on in its turn, its zoom or its tilt");
+			if (BlockTakes < 1 && TankBlock >= 0) Fault("a flight taken by a unit's card was not tested");
+			if (TiltTakesJudged < 3) Fault("a flight taken with his own tilt on was hardly tested (under 3: the call that turns it back, two calls on each other's heels, and his own tilt to a view's own tilt)");
+			if (EndsChecked < 3) Fault("the end of a called flight was hardly tested (under 3)");
+			if (EndsWrong > 0) Fault("a called view was reached but the flight was not over, or its chip not lit");
+			if (EdgeChecks < 1 || EdgeDead > 0) Fault("the pointer at the screen's edge did not pan again once a flight was over");
+			if (FlightKeeps < 2) Fault("the keeping of a view in the middle of a flight was hardly tested (under 2)");
+			if (FlightKeptWrong > 0) Fault("a view kept in the middle of a flight was not kept as it stood");
+			if (FollowKeeps < 2 || (FollowSettled < 1 && TankBlock >= 0)) Fault("the keeping of a view while following a unit was hardly tested");
+			if (FollowKeptWrong > 0) Fault("a view kept while following a unit was not kept where it looked");
+			if (FollowSettledWrong > 0) Fault("a view kept while following a unit was not as the view came to rest");
+			std::printf("\ngeneral's view, kept views: his hand tilted the view away from a lit chip's view %d times (%d of them with his tilt his own before and after) and the chip stayed lit %d times; %d flights were over by themselves, %d with the view not there; of them a called flight with only the tilt to travel %d times (%d back at the automatic tilt), %d before the tilt was there",
+				TiltChips, TiltChipsOwn, TiltChipLit, OwnEnds, OwnEndsWrong, TiltEnds, TiltEndsAuto, TiltEndsWrong);
+			if (TiltChips < 2 || TiltChipsOwn < 1) Fault("a chip's going out when his hand tilts the view was not tested (twice, once with his tilt his own throughout)");
+			if (TiltChipLit > 0) Fault("a chip stayed lit after his own hand tilted the view away from its view");
+			if (TiltEnds < 2 || TiltEndsAuto < 1) Fault("a called flight with only the tilt to travel was not tested (to his own tilt and back to the automatic one)");
+			if (TiltEndsWrong > 0) Fault("a called flight was over before the tilt of its view was reached");
+			if (OwnEndsWrong > TiltEndsWrong) Fault("a called flight was over, by itself, with the view not at its view");
+			std::printf("\ngeneral's view, kept views: %d flights taken and %d views kept once his own tilt had sunk to the automatic one with none of it on the picture (%d and %d left his own tilt on, or the view not tilting with the zoom); the block his cards and follows rested on %d",
+				HandBacks, KeepBacks, HandBacksWrong, KeepBacksWrong, TankBlock);
+			if (HandBacks < 1 || KeepBacks < 1) Fault("a flight taken, or a view kept, once his own tilt had sunk to the automatic one was not tested");
+			if (HandBacksWrong > 0 || KeepBacksWrong > 0) Fault("a flight taken, or a view kept, once his own tilt had sunk to the automatic one left it his own, unseen");
+			if (TankBlock < 0) std::printf("\n  (no block of his own lived through the scripted steps on this recording: the card press and the follows were left out)");
 		}
 		if (bTiltRun)
 		{

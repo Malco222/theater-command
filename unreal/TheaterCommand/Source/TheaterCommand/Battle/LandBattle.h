@@ -827,18 +827,42 @@ private:
 	 * The film in a corner (release 2; Brian, 24 November 20:38Z): while he commands from his own view, the film
 	 * director's shot in a small window. A second picture of the field, drawn small through the film's lens every few
 	 * frames. Off without "-TheaterLandCorner" until the Mac holds 45 fps with it and the art director has passed it;
-	 * "-TheaterLandCornerWide=<pixels>" (480), "-TheaterLandCornerEvery=<frames>" (2: every other frame) and
-	 * "-TheaterLandCornerNoShadows" are the Mac's trials. CornerOn: 1 on, 0 off, -1 not yet read.
+	 * "-TheaterLandCornerWide=<pixels>" (480), "-TheaterLandCornerEvery=<frames>" (2: every other frame),
+	 * "-TheaterLandCornerNoShadows" and "-TheaterLandCornerTrueWithin=<metres>" (40) are the Mac's trials. CornerOn: 1
+	 * on, 0 off, -1 not yet read.
+	 *
+	 * One field is drawn for both lenses, and it is laid out for his own. What the window gets of its own: the men in
+	 * the film's picture are posed and placed as those in his are (DrawMen), and those of them within CornerTrueWithin
+	 * of the film's lens are drawn their own size, not grown as his far men are (a man 2.5 times his size before a low
+	 * lens is a giant; the cost is that those few stand smaller in his own picture while the film is on them; 0: all
+	 * keep his growth). Its known limits, all by his own eye alone: the men's level of detail and how often a far man
+	 * is posed (a man more than 80 m from HIS eye as his picture sees him, and from the top view that is every man, is
+	 * the far figure in the bank's poses in the window too, however close the film's own lens stands) and his shade
+	 * (none past 150 m of his eye); the vehicles past 140 m of his eye drawn as far ones, grown in his high view, with
+	 * their barrels' sticks and flatter ink; the effects kit, which lays only what is on his own screen, thinned by
+	 * his distance, its puffs in his lens's plane (a film shot outside his picture has no smoke, bursts, flashes or
+	 * tracers; under his top view the puffs lie flat); and the near ground's detail and grass, laid round his eye.
+	 * All of it goes by how far the film's subject is from his own eye and picture, not by how high he stands: least
+	 * when the film looks at what he is looking at from near by; in full when its shot is outside his picture or far
+	 * from his eye, the top view included. Mending those needs a second eye through the men, the vehicles, the
+	 * effects kit and the ground: not built until the Mac's look says the window earns it.
 	 */
 	UPROPERTY()
 	TObjectPtr<USceneCaptureComponent2D> CornerLens;
 	UPROPERTY()
 	TObjectPtr<UTextureRenderTarget2D> CornerFilm;
 	int32 CornerOn = -1, CornerWide = 480, CornerEvery = 2, CornerFrame = 0, CornerTaken = 0;
-	bool bCornerShown = false;
-	double CornerMs = 0.0;
-	/** Each frame after the lens is aimed: the film's shot taken for the window, where it is shown. */
+	/** bCornerLens: the window's lens is up and aimed this frame (FilmCorner). bCornerShown: and it holds a picture
+	 * taken since it came up (FilmCornerTake), so the screen shows it. */
+	bool bCornerLens = false, bCornerShown = false;
+	/** CornerMs: what the window's pictures have cost to ask for since the last log line. CornerSendMs: what the
+	 * frame's own end-of-frame sending, done before each picture, has cost (the frame pays that with or without the
+	 * window). */
+	double CornerMs = 0.0, CornerSendMs = 0.0, CornerTrueWithin = 40.0;
+	/** Each frame after the lens is aimed: the window's lens set up and aimed where it is shown; and once the men and
+	 * the vehicles are drawn, its picture taken. */
 	void FilmCorner();
+	void FilmCornerTake();
 	/** The spotter's mark (release 2, "-TheaterLandSpotter", off without it): 1 on, 0 off, -1 not yet read. On only
 	 * where the battle hides anyone (the Forest ambushes rule). */
 	int32 SpotterOn = -1;
