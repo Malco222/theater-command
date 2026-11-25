@@ -56,7 +56,7 @@
 
 import words from '../../data/campaign/drawn.json';
 import counting from '../../data/campaign/counting.json';
-import { relocate, removeCorps } from './game';
+import { atWar, relocate, removeCorps } from './game';
 import { divisionWords, divisionsNamed, divisionsOf, keepNumbers, ordinal, setStandInCount, standInCount, standInNumbers } from './armies';
 import { seat } from './commanders';
 import type { Corps, Game, Kind, Region } from './types';
@@ -192,7 +192,12 @@ export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number,
   };
   // The side theatre the row is for: its own place's, wherever it lands.
   const k = g.byName[row[5]]?.theatre ?? -1;
-  const stays = (c: Corps): boolean => home || nat === g.human || afloat.has(c) || c.reg === reg.id || (k >= 0 && g.regions[c.reg].theatre === k) || busy(c);
+  // (Nor out of a fight, on either chart: a corps with an enemy at war on its province or beside it, holding the ground
+  // or standing on it, keeps its divisions there, and the row forms without them, as for a corps that cannot leave.
+  // A date never lifts a corps out of a fight: the design director's ruling of 18:47Z, 25 November 2026.)
+  const enemy = (r: Region): boolean => (!!r.ctrl && atWar(g, nat, r.ctrl)) || r.units.some((u) => !u.dead && atWar(g, nat, u.nat));
+  const fighting = (c: Corps): boolean => { const r = g.regions[c.reg]; return enemy(r) || r.nb.some((j) => enemy(g.regions[j])); };
+  const stays = (c: Corps): boolean => home || nat === g.human || afloat.has(c) || c.reg === reg.id || (k >= 0 && g.regions[c.reg].theatre === k) || busy(c) || fighting(c);
   const was = o.was as Record<string, string> | undefined;
   const out: Claim[] = [];
   // The divisions living corps hold under the row's own names first: a place one of them stands in is never asked for

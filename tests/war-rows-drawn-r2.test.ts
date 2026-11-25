@@ -475,6 +475,13 @@ describe('Romania: the armies of the Don are the board\'s own corps', () => {
     }
     g.supplyDirty = true;
     month(g, 'ROM', 21);
+    // (By the rows' months the front stands far to the east: no Romanian corps stands beside the enemy. A corps in a
+    // fight keeps its divisions, the design director's ruling of 18:47Z, read on its own below.)
+    for (const c of g.corps.filter((x) => x.nat === 'ROM' && !x.dead)) for (const j of [c.reg, ...g.regions[c.reg].nb]) {
+      if (g.regions[j].ctrl !== 'SOV') continue;
+      g.regions[j].ctrl = 'GER';
+      for (const u of g.corps.filter((x) => x.reg === j && !x.dead && x.nat === 'SOV')) removeCorps(g, u);
+    }
     return w;
   }
   const A = '3rd Army: I and II Corps', B = '3rd Army: IV and V Corps', C = '4th Army: VI Corps', D = '4th Army: VII Corps';
