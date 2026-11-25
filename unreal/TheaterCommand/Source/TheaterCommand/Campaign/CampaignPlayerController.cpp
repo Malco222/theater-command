@@ -434,6 +434,13 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	Add(TEXT("takeme"), TEXT("Take me there"), TEXT("On: each stop of the enemy's month near you has a TAKE ME THERE button (or press G). It ends the watch at that place, keeps the eye on it and puts your nearest army in your hand, ready to answer. The month's news comes as usual."), bTakeMeThere ? TEXT("ON") : TEXT("OFF"), bTakeMeThere);
 	// (Release 2, new units ready; Brian, 24 November 2026 18:30Z: "let me know when a unit has been delivered")
 	Add(TEXT("readynotice"), TEXT("New units ready"), TEXT("On: when a corps, aircraft or ships you raised or bought are handed over, a brass READY FOR ORDERS plate names them as your month opens. SHOW ME (or press G) takes the eye to each in turn and puts a new army in your hand, and a new army wears a brass NEW tag on its pole for its first month. Off: they are told only in the month's news."), bReadyNotice ? TEXT("ON") : TEXT("OFF"), bReadyNotice);
+	// (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z: "i want every air battle playable". Shown only with
+	// the Battle rules card's "Scramble your fighters" on: off, his staff meets every raid and there is nothing to choose.)
+	if (AAirBattle::DefendOn())
+	{
+		Add(TEXT("scramble"), TEXT("Scramble offers"), TEXT("When an enemy raid on your ground meets your fighters, the month stops on a SCRAMBLE card and you can fly your fighters against it in the battle in the air. Every raid, the big raids only, or never: your staff meets the rest."),
+			ScrambleMode == TEXT("every") ? TEXT("EVERY RAID") : ScrambleMode == TEXT("never") ? TEXT("NEVER") : TEXT("BIG RAIDS ONLY"), ScrambleMode != TEXT("never"));
+	}
 	Add(TEXT("cornerpings"), TEXT("Corner pings"), TEXT("On: while the enemy's month near you plays, the small map in the corner marks each of its stops: the ones still to come pulse (red where you were attacked, amber or deep red where an army came up to you, steel for your allies' battles), the one on screen stands in a brass ring, the ones seen fade to a dot. Off: the small map stays as it is."), bCornerPings ? TEXT("ON") : TEXT("OFF"), bCornerPings);
 	Add(TEXT("showsfirst"), TEXT("Play the month before its card"), TEXT("Off: the month's news comes first when a month ends (as seals along the map's edge, or its card if 'Month report: open by itself' is on), and the tour of the map and the newsreel are a press away on the card. On: the other countries' moves, the newsreel and the great moments play first."), bShowsFirst ? TEXT("ON") : TEXT("OFF"), bShowsFirst);
 	// (Release 2, news at the map's edge; ruling 131: merge by hand)
@@ -531,6 +538,10 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 				ShowWar(TagSession->GetView(), TArray<FCorpsMove>()); // (the NEW tags come or go at once)
 			}
 		}
+	}
+	else if (Id == TEXT("scramble")) // (release 2, the scramble offer: every raid, big raids only, never; told to the rules before each month's end)
+	{
+		ScrambleMode = ScrambleMode == TEXT("every") ? TEXT("big") : ScrambleMode == TEXT("big") ? TEXT("never") : TEXT("every");
 	}
 	else if (Id == TEXT("cardself")) // (Release 2, news at the map's edge; ruling 131: merge by hand)
 	{
@@ -739,7 +750,10 @@ void ACampaignPlayerController::SaveOptions() const
 	// (Release 2, news at the map's edge; ruling 131: merge by hand) "Month report: open by itself", kept with the rest.
 	// (Release 2, the enemy's month near you) "Enemy moves near you", kept with the rest; (release 2) "Ships sail on the map", "Fading wakes"
 	// and "New units ready" too.
-	FFileHelper::SaveStringToFile(Text.LeftChop(2) + FString::Printf(TEXT(",\"reportOpens\":%s,\"enemyMoves\":%s,\"alliesNear\":%s,\"takeMe\":%s,\"cornerPings\":%s,\"sail\":%s,\"wakes\":%s,\"readyNotice\":%s}\n"), Word(bMonthReportOpens), Word(bEnemyMoves), Word(bAlliesNear), Word(bTakeMeThere), Word(bCornerPings), Word(bShipsSail), Word(bWakes), Word(bReadyNotice)), *OptionsFile());
+	// (Release 2, the scramble offer) "Scramble offers", kept only once it has been changed from big raids only, so that
+	// the file is written as before until then.
+	const FString ScrambleKept = ScrambleMode == TEXT("big") ? FString() : FString::Printf(TEXT(",\"scramble\":\"%s\""), *ScrambleMode);
+	FFileHelper::SaveStringToFile(Text.LeftChop(2) + FString::Printf(TEXT(",\"reportOpens\":%s,\"enemyMoves\":%s,\"alliesNear\":%s,\"takeMe\":%s,\"cornerPings\":%s,\"sail\":%s,\"wakes\":%s,\"readyNotice\":%s%s}\n"), Word(bMonthReportOpens), Word(bEnemyMoves), Word(bAlliesNear), Word(bTakeMeThere), Word(bCornerPings), Word(bShipsSail), Word(bWakes), Word(bReadyNotice), *ScrambleKept), *OptionsFile());
 	// (the options page, if it is up, is drawn again)
 	++const_cast<ACampaignPlayerController*>(this)->Opening.Revision;
 }
@@ -797,6 +811,9 @@ void ACampaignPlayerController::LoadOptions()
 	}
 	bReadyNotice = Yes(TEXT("readyNotice"), true); // (Release 2, new units ready)
 	AArmyPiece::bReadyTags = bReadyNotice;
+	// (Release 2, the scramble offer) "Scramble offers": big raids only unless it was changed.
+	FString ScrambleKept;
+	ScrambleMode = Kept->TryGetStringField(TEXT("scramble"), ScrambleKept) && (ScrambleKept == TEXT("every") || ScrambleKept == TEXT("never")) ? ScrambleKept : FString(TEXT("big"));
 	if (UWorld* World = GetWorld())
 	{
 		TActorIterator<ACampaignEnvironment> Room(World);
@@ -10429,6 +10446,10 @@ bool ACampaignPlayerController::IsAnswering() const
 	{
 		return true; // (his own battle is open: the map takes no order until it is handed back)
 	}
+	if (Scramble.bVisible)
+	{
+		return true; // (release 2: the month stands on a SCRAMBLE card; no order until he answers it, as with his own raid)
+	}
 	if (Afterwards.Num() > 0)
 	{
 		return true;
@@ -10546,7 +10567,9 @@ void ACampaignPlayerController::RightClickOn(int32 RegionId, int32 Sea, bool bOn
 bool ACampaignPlayerController::IsBusyForSteps() const
 {
 	// (an order still being answered, or its picture still being laid, counts as the table moving: see MoveAside)
-	return bWatching || Newsreel.bOn || Announcements.Num() > 0 || EndAsk.bVisible || IsAnswering();
+	// (release 2, the scramble offer: a SCRAMBLE card waits for the step file's own press, SCRAMBLE or LEAVE IT TO THE
+	// STAFF, so it does not count as the table moving; the battle it opens does, as his own raid's)
+	return bWatching || Newsreel.bOn || Announcements.Num() > 0 || EndAsk.bVisible || (IsAnswering() && !Scramble.bVisible);
 }
 
 void ACampaignPlayerController::StepThroughMonth()
@@ -10595,6 +10618,9 @@ bool ACampaignPlayerController::RestoreCampaign(const FString& SaveText)
 	PutDownFleet();
 	PutDownAgent();
 	StopLooking();
+	// (release 2, the scramble offer: a SCRAMBLE card and the month it held belong to the game being left)
+	Scramble = FScrambleCard();
+	ScrambleMonth = FMonthResult();
 	if (!Mode->RestoreCampaign(SaveText))
 	{
 		return false;
@@ -10642,7 +10668,7 @@ bool ACampaignPlayerController::BeginGrandFor(const FString& Tag, int32 FromTurn
 
 FString ACampaignPlayerController::StepState() const
 {
-	return EndAsk.bVisible ? FString(TEXT("the question at the month's end")) : bWatching ? FString(TEXT("the other countries' month"))
+	return EndAsk.bVisible ? FString(TEXT("the question at the month's end")) : Scramble.bVisible ? FString(TEXT("the SCRAMBLE card")) : bWatching ? FString(TEXT("the other countries' month"))
 		: Newsreel.bOn ? FString(TEXT("a newsreel")) : Announcements.Num() > 0 ? FString(TEXT("an announcement")) : bPageOpen ? Page.Title : FString();
 }
 
@@ -10674,6 +10700,7 @@ void ACampaignPlayerController::DescribeScreen(FString& OutOpen, FString& OutWor
 	if (FaceOff.bVisible) { OutOpen = FaceOff.Title.ToString() + (FaceOff.bResolved ? TEXT(" (the result)") : TEXT("")); }
 	else if (WarPrompt.bVisible) { OutOpen = WarPrompt.Title.ToString(); }
 	else if (EndAsk.bVisible) { OutOpen = TEXT("The question at the month's end"); }
+	else if (Scramble.bVisible) { OutOpen = TEXT("SCRAMBLE: ") + ScrambleTitle(); } // (release 2, the scramble offer)
 	else if (Document.bValid) { OutOpen = Document.Title; }
 	else if (bLessonGuideOpen) { OutOpen = LessonGuidePage.Head.IsEmpty() ? FString(TEXT("THE GUIDE")) : TEXT("THE GUIDE: ") + LessonGuidePage.Head; } // (84.3.3: the ten lessons)
 	else if (bPageOpen) { OutOpen = Page.Title; }
@@ -10696,6 +10723,7 @@ void ACampaignPlayerController::DescribeScreen(FString& OutOpen, FString& OutWor
 		else { Said.Add(FaceOff.OddsLine.ToString()); }
 	}
 	else if (WarPrompt.bVisible) { Said.Add(WarPrompt.Body.ToString()); }
+	else if (Scramble.bVisible) { Said.Add(ScrambleBody()); } // (release 2, the scramble offer)
 	else if (bLessonGuideOpen)
 	{
 		if (!LessonGuidePage.State.IsEmpty()) { Said.Add(LessonGuidePage.State); }
@@ -12392,9 +12420,9 @@ namespace
 
 void ACampaignPlayerController::EndMonth()
 {
-	if (LiveBattle.IsValid() || LiveRaid.IsValid())
+	if (LiveBattle.IsValid() || LiveRaid.IsValid() || Scramble.bVisible)
 	{
-		return; // (his own battle is open: no key reaches the map behind it)
+		return; // (his own battle is open, or the month stands on a SCRAMBLE card: no key reaches the map behind it)
 	}
 	// (Speed, b414 mark 1.) An order still being answered is finished, and its picture laid, before anything else: the
 	// END THE MONTH button is not gated as the keys are, and the answer's follow-up must not land on the next month's table.
@@ -12545,7 +12573,36 @@ void ACampaignPlayerController::EndMonth()
 	{
 		WatchStood.Add(Unit.Id, Unit.Region);
 	}
+	// ---- (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z: "i want every air battle playable".) The rules
+	// are told before every month's end whether the month may stop on an enemy raid he meets himself: his OPTIONS setting
+	// with the Battle rules card's "Scramble your fighters" on, "never" with it off (and in a run that takes pictures).
+	// Rules without the call are harmless: the session asks them once and logs it. A new month: no scramble answered yet.
+	bScrambleRest = false;
+	ScrambleRound = 0;
+	ScrambleFlown.Reset();
+	bScrambleWatch = bAlwaysWatch;
+	Session->TellScrambleMode(AAirBattle::DefendOn() && !bScripted ? ScrambleMode : FString(TEXT("never")));
+	// ---- (end release 2)
 	Month = Session->EndMonth();
+	// ---- (Release 2, the scramble offer) "-TheaterAirScrambleDemo": until the warplanes thread's month stop lands, the
+	// bridge's stand-in is asked once, after the month's answer has come, for an enemy raid on him now; where it has one,
+	// the month is treated as having stopped there (the month's real answer kept aside, and shown when the scramble ends).
+	// The stand-in books nothing. With the switch off it is not asked.
+	static const bool bScrambleDemo = FParse::Param(FCommandLine::Get(), TEXT("TheaterAirScrambleDemo"));
+	if (bScrambleDemo && !Month.Scramble.bValid && Month.Steps.Num() > 0 && Month.Fallen.IsEmpty() && AAirBattle::DefendOn() && !bScripted)
+	{
+		FScrambleOffer Demo;
+		if (Session->ScrambleDemo(Demo))
+		{
+			Month.Scramble = Demo;
+			UE_LOG(LogTheater, Display, TEXT("Scramble (demonstration): TC.scrambleDemo offers %s, a %s raid on %s (%d)"), *Demo.Id, *Demo.Adjective, *Demo.Name, Demo.Target);
+		}
+		else
+		{
+			UE_LOG(LogTheater, Display, TEXT("Scramble (demonstration): TC.scrambleDemo has no enemy raid on him now"));
+		}
+	}
+	// ---- (end release 2)
 	if (!bHelpSeen)
 	{
 		bHelpSeen = true; // a month has been played: the reminder of the keys folds away into its mark
@@ -12557,6 +12614,19 @@ void ACampaignPlayerController::EndMonth()
 		WatchReturnFocus = Eye->GetFocus();
 		WatchReturnZoom = Eye->GetZoom();
 	}
+	MonthAnswered();
+}
+
+void ACampaignPlayerController::MonthAnswered()
+{
+	// ---- (Release 2, the scramble offer) The month stopped where an enemy raid meets his fighters: its card first, and
+	// the rest of the month waits on his answer (which comes back here, through TakeScrambleAnswer). With the switch off
+	// a scramble that still comes is left to his staff at once, and the month goes on below as it always has.
+	if (Month.Scramble.bValid && OfferScramble())
+	{
+		return;
+	}
+	// ---- (end release 2)
 	// (Ruling 203.) The month's card is the first thing he sees: the other countries' moves play first only where he
 	// has asked for that (Options, or END THE MONTH AND WATCH), and are TOUR THE MAP on the card otherwise.
 	// ---- (release 2, the enemy's month near you; Brian, 24 November 2026: "when the AI nations are doing their turn,
@@ -12616,6 +12686,211 @@ void ACampaignPlayerController::EndMonth()
 		FinishMonth();
 	}
 }
+
+// ---- (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z: "i want every air battle playable".) In the enemy's
+// month the campaign stops where an enemy raid on his ground meets his fighters (TC.endMonth's answer carries scramble in
+// place of the month's card; air-battles/every-kind/CONTRACT.md section 7). The eye goes to the place and a card offers
+// SCRAMBLE: taken, he flies his fighters against the raid in the battle in the air (AAirBattle, his side the defender), and
+// TC.battleEnd's answer is the month's next; left to the staff, TC.scrambleLeave's is. Every answer comes back through
+// MonthAnswered, the one handler of the month's answer: another scramble, or the month's watch and card as ever.
+
+namespace
+{
+	/** A scramble's cards a month: past this many, the month's other raids are left to his staff (the card's tick, ticked). */
+	constexpr int32 ScrambleCardsAMonth = 3;
+	/** And past this many stops at all, the rules are not answered again: the month in hand is shown, and the log says so. */
+	constexpr int32 ScrambleStopsAMonth = 8;
+}
+
+bool ACampaignPlayerController::OfferScramble()
+{
+	++ScrambleRound;
+	const FScrambleOffer Offer = Month.Scramble;
+	Month.Scramble = FScrambleOffer();
+	ScrambleMonth = Month; // (the month's answer in hand, shown where the next answer is not a month's)
+	if (ScrambleRound > ScrambleStopsAMonth)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Scramble: the month has stopped %d times; %s is not answered, and the month's answer in hand is shown"), ScrambleRound, *Offer.Id);
+		return false;
+	}
+	const bool bSwitchOn = AAirBattle::DefendOn();
+	if (!bSwitchOn || bScripted || bScrambleRest || ScrambleRound > ScrambleCardsAMonth)
+	{
+		// (the switch off, a run that takes pictures, the card's tick, or enough cards this month: his staff meet it, and
+		// every raid left this month, at once)
+		UE_LOG(LogTheater, Display, TEXT("Scramble: %s left to the staff at once (%s)"), *Offer.Id,
+			!bSwitchOn ? TEXT("Scramble your fighters is off") : bScripted ? TEXT("a run that takes pictures") : bScrambleRest ? TEXT("the rest of the month is settled") : TEXT("enough cards this month"));
+		LeaveScramble(Offer.Id, true);
+		return true;
+	}
+	// The eye goes to the place the raid is heading for, as it does after a raid of his. (Not in a run that takes pictures.)
+	FString Shots;
+	const bool bPictures = FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Shots, false);
+	if (Map.IsValid() && Map->GetData().Regions.IsValidIndex(Offer.Target) && !bPictures)
+	{
+		if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+		{
+			const FVector2D At = Map->GetData().Regions[Offer.Target].Center;
+			Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Clamp(Eye->GetZoom(), 0.3f, 0.45f));
+		}
+	}
+	Scramble = FScrambleCard();
+	Scramble.bVisible = true;
+	Scramble.Offer = Offer;
+	Scramble.Since = FPlatformTime::Seconds();
+	CampaignSounds::Play(this, TEXT("bell"), 0.6f);
+	UE_LOG(LogTheater, Display, TEXT("Scramble: the month stops on %s, a %s raid on %s (%d)%s"), *Offer.Id, *Offer.Adjective, *Offer.Name, Offer.Target, Offer.bDemo ? TEXT(", the bridge's demonstration") : TEXT(""));
+	return true;
+}
+
+void ACampaignPlayerController::AnswerScramble(bool bFly)
+{
+	if (!Scramble.bVisible || FPlatformTime::Seconds() - Scramble.Since < 0.5)
+	{
+		return; // (no card, or a doubled press in its first half second)
+	}
+	const FScrambleOffer Offer = Scramble.Offer;
+	bScrambleRest = Scramble.bRest;
+	Scramble = FScrambleCard();
+	FCampaignSession* Session = GetSession();
+	UWorld* Here = GetWorld();
+	if (!bFly || !Session || !Here)
+	{
+		CampaignSounds::Play(this, TEXT("click"), 0.6f);
+		LeaveScramble(Offer.Id, bScrambleRest);
+		return;
+	}
+	CampaignSounds::Play(this, TEXT("stamp"), 0.6f);
+	AAirBattle* Sky = Here->SpawnActor<AAirBattle>(FVector::ZeroVector, FRotator::ZeroRotator);
+	if (!Sky)
+	{
+		LeaveScramble(Offer.Id, bScrambleRest);
+		return;
+	}
+	const TWeakObjectPtr<ACampaignPlayerController> Self(this);
+	Sky->HandBack = [Self](const FString& EndJson)
+	{
+		if (ACampaignPlayerController* Me = Self.Get())
+		{
+			Me->ScrambleHandBack(EndJson);
+		}
+	};
+	if (!Sky->BeginLiveCall(Session, TEXT("scrambleStart"), FCampaignSession::ScrambleArgs(Offer.Id)))
+	{
+		// (the rules would not open it after all: his staff meet the raid, and the month goes on)
+		Sky->HandBack = nullptr;
+		Sky->Destroy();
+		Notify(TEXT("This raid cannot be flown in the battle in the air: your staff meets it."), 6.0);
+		LeaveScramble(Offer.Id, bScrambleRest);
+		return;
+	}
+	LiveRaid = Sky;
+	ScrambleFlown = Offer.Id;
+	UE_LOG(LogTheater, Display, TEXT("Scramble: %s opened live, his side the defence"), *Offer.Id);
+}
+
+void ACampaignPlayerController::ToggleScrambleRest()
+{
+	if (Scramble.bVisible)
+	{
+		Scramble.bRest = !Scramble.bRest;
+	}
+}
+
+void ACampaignPlayerController::LeaveScramble(const FString& Id, bool bRest)
+{
+	FString Json;
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Session->ScrambleLeave(Id, bRest, Json))
+	{
+		Json.Reset(); // (the call failed: the month's answer in hand is shown, and the log says so)
+	}
+	TakeScrambleAnswer(Json);
+}
+
+void ACampaignPlayerController::ScrambleHandBack(const FString& EndJson)
+{
+	LiveRaid.Reset();
+	const FString Id = ScrambleFlown;
+	ScrambleFlown.Reset();
+	if (EndJson.IsEmpty())
+	{
+		// The way out: the battle closed with no result (its rules failed, or it was taken down), so nothing of it is
+		// booked, and his staff meet the raid as they would have.
+		UE_LOG(LogTheater, Warning, TEXT("Scramble: the battle for %s closed with no result; left to the staff (TC.scrambleLeave)"), *Id);
+		LeaveScramble(Id, bScrambleRest);
+		return;
+	}
+	TakeScrambleAnswer(EndJson);
+}
+
+void ACampaignPlayerController::TakeScrambleAnswer(const FString& Json)
+{
+	FCampaignSession* Session = GetSession();
+	FMonthResult Next;
+	FString Note;
+	if (Session && Session->ReadMonthAnswer(Json, Next, Note))
+	{
+		Month = MoveTemp(Next);
+	}
+	else
+	{
+		// (not a month's answer: the stand-in's, which books nothing, or a call that failed; the month in hand is shown)
+		if (Json.IsEmpty())
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Scramble: no answer from the rules; the month's answer in hand is shown"));
+		}
+		else
+		{
+			UE_LOG(LogTheater, Display, TEXT("Scramble: the answer is not a month's (%s); the month's answer in hand is shown"), *Json.Left(160));
+		}
+		Month = ScrambleMonth;
+	}
+	ScrambleMonth = FMonthResult();
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 9.0);
+	}
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
+	// (the month runs on from here as it does from TC.endMonth's answer; every move watched where it was ended to be watched)
+	WatchIndex = 0;
+	const bool bWasWatching = bAlwaysWatch;
+	bAlwaysWatch = bScrambleWatch;
+	MonthAnswered();
+	bAlwaysWatch = bWasWatching;
+}
+
+FString ACampaignPlayerController::ScrambleTitle() const
+{
+	const FScrambleOffer& Offer = Scramble.Offer;
+	const FString Who = Offer.Adjective.IsEmpty() ? FString(TEXT("An enemy")) : (FString(TEXT("AEIOU")).Contains(Offer.Adjective.Left(1)) ? TEXT("An ") : TEXT("A ")) + Offer.Adjective;
+	return Offer.Name.IsEmpty() ? Who + TEXT(" raid is coming") : FString::Printf(TEXT("%s raid on %s"), *Who, *Offer.Name);
+}
+
+FString ACampaignPlayerController::ScrambleBody() const
+{
+	const FScrambleOffer& Offer = Scramble.Offer;
+	if (!Offer.Words.IsEmpty())
+	{
+		return Offer.Words; // (the rules' own words: who is coming, about how many, what he has to meet them)
+	}
+	// (rules that give no words: the figures they do give)
+	TArray<FString> Said;
+	if (Offer.Bombers >= 0)
+	{
+		Said.Add(Offer.Escorts > 0 ? FString::Printf(TEXT("About %d bombers are coming, with %d fighters as escort."), Offer.Bombers, Offer.Escorts)
+			: FString::Printf(TEXT("About %d bombers are coming."), Offer.Bombers));
+	}
+	if (Offer.Fighters >= 0)
+	{
+		Said.Add(FString::Printf(TEXT("About %d of your fighters can rise to meet them."), Offer.Fighters));
+	}
+	return Said.Num() > 0 ? FString::Join(Said, TEXT(" ")) : FString(TEXT("Your fighters can rise to meet it."));
+}
+// ---- (end release 2, the scramble offer)
 
 void ACampaignPlayerController::PlayLastReel()
 {

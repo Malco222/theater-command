@@ -46,6 +46,9 @@ struct FAirBattleState
 
 	/** A recorded battle (Content/Data/AirBattles/<key>.json), played back: no orders are taken. */
 	bool bReplay = true;
+	/** (Release 2, the scramble offer) An enemy raid he meets himself (TC.scrambleStart): a failed end says his staff
+	 * meets it, as the month then does, not that FLY THE RAID still sends his crews. */
+	bool bScramble = false;
 	AirFeed::Recording Recording;
 	size_t NextView = 0;
 	/** The battle time the show has been asked for, and the latest view the feed has handed it. */

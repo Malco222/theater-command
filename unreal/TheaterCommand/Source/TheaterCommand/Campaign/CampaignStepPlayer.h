@@ -31,6 +31,12 @@ struct FKey;
  * Neither waits for the table to be still first (the raid keeps it busy until it is handed back), and the press that
  * opens the raid (FLY IT YOURSELF) takes its picture a second in, in the flyover. The picture is the battle screen.
  *
+ * (Release 2, the scramble offer.) Where the month stops on a SCRAMBLE card (the Battle rules card's "Scramble your
+ * fighters" on, -TheaterAirRuleDefend; -TheaterAirScrambleDemo for the bridge's stand-in), END THE MONTH's step ends with
+ * the card up, and the file answers it with "press SCRAMBLE" or "press LEAVE IT TO THE STAFF" (its tick: "press Settle
+ * the rest of this month's raids"). SCRAMBLE opens the battle as FLY IT YOURSELF does: an air step. Its "air-key
+ * continue" hands the month back, and that step waits for the month's end and answers its screens as END THE MONTH's does.
+ *
  * A land battle he fights himself (FIGHT IT YOURSELF) covers the map too. Three verbs play it with his own keys and
  * clicks, sent through Slate (FSlateApplication's key and mouse events), so the battle screen's own handlers take them
  * (release 1.5's ALL FALL BACK checks, the release lead 23 November 19:11Z):

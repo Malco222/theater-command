@@ -1210,6 +1210,27 @@ public:
 	void AnswerEndAsk(bool bShowMe);
 	bool IsEndAskWanted() const { return bAskAtMonthsEnd; }
 	void ToggleEndAskWanted();
+	/**
+	 * (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z: "i want every air battle playable".) The month
+	 * stopped where an enemy raid on his ground meets his fighters: the card that offers SCRAMBLE (he flies his fighters
+	 * against it in the battle in the air) or LEAVE IT TO THE STAFF, with the tick "Settle the rest of this month's raids".
+	 * Behind the Battle rules card's "Scramble your fighters" (AAirBattle::DefendOn, off by default). While it or its
+	 * battle is up, no order and no END THE MONTH, as while his own raid is open.
+	 */
+	struct FScrambleCard
+	{
+		bool bVisible = false;
+		FScrambleOffer Offer;
+		bool bRest = false; // the tick: the rest of this month's raids are settled by his staff
+		double Since = 0.0; // (it takes no press in its first half second: a doubled END THE MONTH never answers it)
+	};
+	const FScrambleCard& GetScramble() const { return Scramble; }
+	/** SCRAMBLE (bFly) or LEAVE IT TO THE STAFF. */
+	void AnswerScramble(bool bFly);
+	void ToggleScrambleRest();
+	/** The card's title ("A GERMAN RAID ON KENT") and its words: who is coming, about how many, what he has to meet them. */
+	FString ScrambleTitle() const;
+	FString ScrambleBody() const;
 	/** The list of everything the player commands, each with a way to go to it (L). */
 	void OpenForces();
 	/** The reserve of men as a sum, and the player's say over the call-up (version 62). */
@@ -1775,6 +1796,31 @@ private:
 	int32 EndAskedTurn = -1; // the month the question was last put: it is put once a month
 	bool bAskAtMonthsEnd = true; // (kept with the options)
 	FMonthResult Month;
+	// ---- (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z) The card up; the month's answer in hand while
+	// it waits (shown where the next answer is not a month's: the stand-in's, or a failure); how many scrambles this month
+	// has stopped on (a cap, so a month is never a queue of cards); the raid being flown; the card's tick as last answered
+	// (every later scramble this month is left to the staff); whether the month was ended to be watched (V's END THE MONTH
+	// AND WATCH), kept for the month's rest; and the OPTIONS setting, "every", "big" or "never" (kept with the options).
+	FScrambleCard Scramble;
+	FMonthResult ScrambleMonth;
+	int32 ScrambleRound = 0;
+	FString ScrambleFlown;
+	bool bScrambleRest = false;
+	bool bScrambleWatch = false;
+	FString ScrambleMode = TEXT("big");
+	/** The month's answer in Month taken: a scramble is offered (or left at once), or the month's watch and card follow as ever. */
+	void MonthAnswered();
+	/** The scramble in Month offered on its card, or left to the staff at once (the switch off, a run that takes pictures,
+	 * the card's tick, enough cards this month) and the month's next answer taken: true either way. False only where the
+	 * month has stopped too many times: its scramble is dropped, and the month in hand runs on. */
+	bool OfferScramble();
+	/** TC.scrambleLeave(Id, { rest }), its answer taken as the month's next. */
+	void LeaveScramble(const FString& Id, bool bRest);
+	/** The scramble's battle handed back at CONTINUE: TC.battleEnd's answer, or empty from the way out (then left to the staff). */
+	void ScrambleHandBack(const FString& EndJson);
+	/** The month's next answer after a scramble taken through the same handler as TC.endMonth's (MonthAnswered); where it
+	 * is not a month's (or is empty: the call failed), the month in hand is shown, and the log says so. */
+	void TakeScrambleAnswer(const FString& Json);
 	int32 WatchIndex = 0;
 	double WatchNext = 0.0;
 	FVector WatchReturnFocus = FVector::ZeroVector;

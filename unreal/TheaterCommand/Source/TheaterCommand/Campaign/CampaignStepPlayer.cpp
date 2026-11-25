@@ -936,6 +936,9 @@ void FStepPlayer::ActAir(ACampaignPlayerController& Player, const FStep& Step)
 	{
 		if (S->bCard)
 		{
+			// (release 2, the scramble offer: an enemy raid he met himself hands the month back, which runs on from there;
+			// the step waits for it and answers its screens as END THE MONTH's step does)
+			bMonth = bMonth || S->bScramble;
 			Battle->Press(TEXT("continue"));
 			bAirDid = true;
 			bAirHandBack = true; // (the battle is handed back to the map: the step waits, as any, for the table to be still)

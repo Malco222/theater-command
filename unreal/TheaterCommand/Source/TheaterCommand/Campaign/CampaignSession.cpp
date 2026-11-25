@@ -110,6 +110,7 @@ bool FCampaignSession::Prepare(FString& OutError)
 	DropAside(); // (before the engine it was asked of goes)
 	bReady = false;
 	bRunning = false;
+	bNoScrambleMode = false; // (release 2, the scramble offer: the rules about to be loaded are asked afresh)
 	Host = MakeUnique<FRulesHost>();
 	if (!Host->IsAvailable())
 	{
@@ -2758,12 +2759,48 @@ bool FCampaignSession::StepFind(const FString& Name, int32& OutRegion, int32& Ou
 
 FMonthResult FCampaignSession::EndMonth()
 {
-	FMonthResult Out;
 	TSharedPtr<FJsonObject> Object;
 	if (!CallRules(TEXT("endMonth"), TEXT("[]"), Object))
 	{
-		return Out;
+		return FMonthResult();
 	}
+	return ReadMonth(Object);
+}
+
+namespace
+{
+	/**
+	 * (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z: "i want every air battle playable".) The rules'
+	 * "scramble" object (air-battles/every-kind/CONTRACT.md section 7): the month stopped where an enemy raid meets his
+	 * fighters. Its id is all that is needed to answer it (TC.scrambleStart, TC.scrambleLeave); the rest is the card's,
+	 * each figure -1 where the answer does not give it.
+	 */
+	void ReadScrambleOffer(const TSharedPtr<FJsonObject>& Object, FScrambleOffer& Out)
+	{
+		Out = FScrambleOffer();
+		if (!Object.IsValid())
+		{
+			return;
+		}
+		Out.bValid = Object->TryGetStringField(TEXT("id"), Out.Id) && !Out.Id.IsEmpty();
+		Object->TryGetStringField(TEXT("kind"), Out.Kind);
+		double Number = 0.0;
+		Out.Target = Object->TryGetNumberField(TEXT("target"), Number) && Number >= 0.0 ? FMath::RoundToInt32(Number) : INDEX_NONE;
+		Object->TryGetStringField(TEXT("name"), Out.Name);
+		Object->TryGetStringField(TEXT("nat"), Out.Nation);
+		Object->TryGetStringField(TEXT("adj"), Out.Adjective);
+		Object->TryGetStringField(TEXT("words"), Out.Words);
+		Out.Bombers = Object->TryGetNumberField(TEXT("bombers"), Number) && Number >= 0.0 ? FMath::RoundToInt32(Number) : -1;
+		Out.Escorts = Object->TryGetNumberField(TEXT("escorts"), Number) && Number >= 0.0 ? FMath::RoundToInt32(Number) : -1;
+		Out.Fighters = Object->TryGetNumberField(TEXT("fighters"), Number) && Number >= 0.0 ? FMath::RoundToInt32(Number) : -1;
+		Object->TryGetStringArrayField(TEXT("groups"), Out.Groups);
+		Object->TryGetBoolField(TEXT("demo"), Out.bDemo);
+	}
+}
+
+FMonthResult FCampaignSession::ReadMonth(const TSharedPtr<FJsonObject>& Object)
+{
+	FMonthResult Out;
 	const TArray<TSharedPtr<FJsonValue>>* Steps = nullptr;
 	if (Object->TryGetArrayField(TEXT("steps"), Steps))
 	{
@@ -2959,9 +2996,93 @@ FMonthResult FCampaignSession::EndMonth()
 		(*Year)->TryGetStringField(TEXT("kicker"), Out.Year.Kicker);
 		(*Year)->TryGetStringArrayField(TEXT("lines"), Out.Year.Lines);
 	}
+	// (Release 2, the scramble offer) The month stopped where an enemy raid meets his fighters: the rest waits on his answer.
+	const TSharedPtr<FJsonObject>* Stop = nullptr;
+	if (Object->TryGetObjectField(TEXT("scramble"), Stop) && Stop)
+	{
+		ReadScrambleOffer(*Stop, Out.Scramble);
+	}
 	TakeView(Object);
 	return Out;
 }
+
+// ---- (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z: "i want every air battle playable") ----
+
+bool FCampaignSession::TellScrambleMode(const FString& Mode)
+{
+	if (bNoScrambleMode || !bRunning)
+	{
+		return false;
+	}
+	FString Json, Error;
+	if (!CallBattle(TEXT("scrambleMode"), FString::Printf(TEXT("[%s]"), *JsonQuote(Mode)), Json, Error))
+	{
+		// (rules without the scramble offer: nothing is asked of them again, and the month goes on as it always has)
+		bNoScrambleMode = true;
+		UE_LOG(LogTheater, Display, TEXT("Scramble: these rules have no TC.scrambleMode (%s); the month goes on as before"), *Error);
+		return false;
+	}
+	return true;
+}
+
+bool FCampaignSession::ScrambleDemo(FScrambleOffer& Out)
+{
+	Out = FScrambleOffer();
+	FString Json, Error;
+	if (!CallBattle(TEXT("scrambleDemo"), TEXT("[]"), Json, Error))
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Scramble (demonstration): TC.scrambleDemo failed: %s"), *Error);
+		return false;
+	}
+	TSharedPtr<FJsonObject> Object;
+	if (Json.IsEmpty() || Json == TEXT("null") || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
+	{
+		return false; // (no enemy raid on him now that his fighters would meet)
+	}
+	ReadScrambleOffer(Object, Out);
+	return Out.bValid;
+}
+
+bool FCampaignSession::ScrambleLeave(const FString& Id, bool bRest, FString& OutJson)
+{
+	FString Error;
+	if (!CallBattle(TEXT("scrambleLeave"), FString::Printf(TEXT("[%s,{\"rest\":%s}]"), *JsonQuote(Id), bRest ? TEXT("true") : TEXT("false")), OutJson, Error))
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Scramble: TC.scrambleLeave failed: %s"), *Error);
+		return false;
+	}
+	return true;
+}
+
+FString FCampaignSession::ScrambleArgs(const FString& Id)
+{
+	return FString::Printf(TEXT("[%s]"), *JsonQuote(Id));
+}
+
+bool FCampaignSession::ReadMonthAnswer(const FString& Json, FMonthResult& Out, FString& OutNote)
+{
+	Settle(); // (an order still being answered on the rules' thread comes first)
+	TSharedPtr<FJsonObject> Object;
+	if (Json.IsEmpty() || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
+	{
+		return false;
+	}
+	// (the war may have changed: the kept answers to questions are forgotten, as after any order)
+	RulesMemo.Reset();
+	Object->TryGetStringField(TEXT("note"), OutNote);
+	// A month's answer has the month's steps, or the next scramble; anything else (the stand-in's { ok, note }, which books
+	// nothing) is not one, and the month in hand stands.
+	const TArray<TSharedPtr<FJsonValue>>* Steps = nullptr;
+	const TSharedPtr<FJsonObject>* Stop = nullptr;
+	if (!Object->TryGetArrayField(TEXT("steps"), Steps) && !Object->TryGetObjectField(TEXT("scramble"), Stop))
+	{
+		return false;
+	}
+	Out = ReadMonth(Object);
+	return true;
+}
+
+// ---- (end release 2, the scramble offer) ----
 
 TArray<FNewsCard> FCampaignSession::Briefing(FString& OutNation, FString& OutDate)
 {

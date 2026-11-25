@@ -1228,3 +1228,34 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    second 40; `-TheaterAirRulesFailEnd` fails the end.
    Look for: the note after about 2 s of a frozen raid, the map 4 s later with the raid card up and a note under it;
    the month can be ended and the raid sent with FLY THE RAID.
+
+51. **The scramble offer: he meets an enemy raid himself** (release 2; Brian, 24 November 2026 22:21Z: "i want every air
+   battle playable"; the contract, air-battles/every-kind/CONTRACT.md section 7). In the enemy's month the campaign stops
+   where an enemy raid on his ground meets his fighters: TC.endMonth answers `scramble: { id, kind, target, name, nat,
+   adj, words, bombers?, escorts?, fighters?, groups?, demo? }` in place of the month's card. The controller's one
+   handler of the month's answer (`MonthAnswered`) takes the eye to the target and puts up a card low on the screen (AN
+   ENEMY RAID, "A German raid on Kent", the rules' words): SCRAMBLE (brass), LEAVE IT TO THE STAFF, and the tick "Settle
+   the rest of this month's raids". SCRAMBLE opens `BeginLiveCall(Session, "scrambleStart", ["id"])` with `HandBack` set,
+   his side the defence; what TC.battleEnd answers at CONTINUE is the month's next answer and goes back through the same
+   handler (another scramble, or the month's watch and card). LEAVE calls `TC.scrambleLeave(id, { rest })`, its answer
+   through the same handler. An answer that is not a month's (no `steps`, no `scramble`: the stand-in's `{ ok, note }`)
+   shows the month's answer kept aside, and the log says so. The way out (an empty hand-back) calls TC.scrambleLeave(id);
+   if that fails too, the month in hand is shown and logged. While the card or its battle is up: no order, no key, no
+   END THE MONTH. At most three cards a month (then the rest are left with `rest: true`); at most eight stops at all.
+   - **The switch:** the Battle rules card's **Scramble your fighters** (`flyDefend`, `AAirBattle::DefendOn`), OFF;
+     `-TheaterAirRuleDefend` on for a run, `-TheaterAirNoRuleDefend` off. FLandLive::Start skips every `fly` key. Before
+     every TC.endMonth the rules are told `TC.scrambleMode('every'|'big'|'never')`: OPTIONS' **Scramble offers** (EVERY
+     RAID / BIG RAIDS ONLY / NEVER, shown with the switch on, kept with the options once changed) with it on, `never`
+     with it off; rules without the call are asked once and logged. A scramble that still comes with the switch off is
+     answered at once with `scrambleLeave(id, { rest: true })`.
+   - **The defender's read** (with the switch on, any battle he fights as `def`): the top bar's "now about" and HAND IT TO
+     THE STAFF's chance are his (the view's `sky.chance` is the raider's), the aim slip speaks of the enemy's raid, the
+     question asks to hand over "the fight", and STAY CLOSE and RANGE AHEAD are not offered (he has no bombers to
+     escort). A scramble whose rules fail says his staff meets the raid, not that FLY THE RAID still sends his crews.
+   - **The demonstration:** `-TheaterAirScrambleDemo` (with the switch on) asks the bridge's stand-in, TC.scrambleDemo
+     (Rules/scramble-demo.ts), once after TC.endMonth's answer, and treats its offer as if the month had stopped there;
+     it books nothing, and when it ends the month's real answer (kept aside) is shown. Step file:
+     air-battles/every-kind/scramble/mac-steps/scramble-demo.steps.txt.
+   Look for: with the switch off, nothing changes (no card, no OPTIONS row); with it on and the demonstration, END THE
+   MONTH stops on the card over Kent; SCRAMBLE opens the battle over Kent with the RAF the side marked YOURS and "now
+   about" high; after CONTINUE the month's watch and card come as ever, and nothing of the battle is booked.
