@@ -33,8 +33,8 @@ import { SIEGE, besieged } from './siege';
 import { atomBill } from './atom';
 import { prizeIncome, prizeOut, prizeRules } from './prizes';
 import { govMul } from './government';
-import { MANPOWER, drawMen, menSpare, ownMen, raisable, returnMen } from './manpower';
-import { armOrder, canArm, carved, riflesRaised, unarmOrder } from './rifles';
+import { MANPOWER, drawMen, menSpare, raisable, returnMen } from './manpower';
+import { armOrder, binds, canArm, carved, riflesRaised, unarmOrder } from './rifles';
 import { raiseMorale } from './morale';
 import { WORLD_MAP, armyIdle, peaceFooting, shoreOf, warFooting, warWorkLeft } from './world';
 import { footLabel, footLineStays, footShare } from './footing';
@@ -77,17 +77,10 @@ export function corpsList(g: Game, nat: string, kind: string): number {
 }
 
 /**
- * True where this nation forms a corps of this kind from its own men (rider B of 20:45Z to ruling 234; manpower.ts,
- * ownMen): the fighting arms that need no industry. It is paid for in men from the reserve, as every corps is, and
- * in no points. Nobody with the far side off.
+ * What a corps of this kind costs this nation in points: its price. Where the nation's store of rifles binds, the
+ * price no longer charges for the rifles the store charges (rifles.ts carve).
  */
-export const paidInMen = (g: Game, nat: string, kind: string): boolean => ownMen(g, nat) && kind !== 'eng' && needsOf(g, kind) === 0;
-
-/**
- * What a corps of this kind costs this nation in points: its price, or nothing where it is paid for in men. Where the
- * nation's store of rifles binds, the price no longer charges for the rifles the store charges (rifles.ts carve).
- */
-export const corpsCost = (g: Game, nat: string, kind: string): number => (paidInMen(g, nat, kind) ? 0 : carved(g, nat, corpsList(g, nat, kind), specOf(g, kind)?.divs ?? 0));
+export const corpsCost = (g: Game, nat: string, kind: string): number => carved(g, nat, corpsList(g, nat, kind), specOf(g, kind)?.divs ?? 0);
 
 /** How many factories a province must have for a corps of this kind to be raised there. None in a historical scenario. */
 export const needsOf = (g: Game, kind: string): number => (budgeted(g) ? (arsenalData.needs as Record<string, number>)[kind] ?? 0 : 0);
@@ -807,11 +800,13 @@ export function aiProduction(g: Game, nat: string): void {
   // The grand campaign: a staff whose line has met dug-in troops orders massed guns to break them, one corps of guns
   // to every few of the rest, and brings them up where the works are.
   const wantsGuns = (): boolean => gunsWanted(g, nat);
-  // A corps paid for in men asks nothing of the bank (rider B of 20:45Z to ruling 234; paidInMen, above), and its
-  // men are counted in the reserve itself. Such a nation's thin corps are its standing shape, not a want its
-  // drafts will ever meet, so by the other test it would never have a man to spare. Nobody with the far side off.
-  const bank = (kind: string, price: number): boolean => paidInMen(g, nat, kind) || n.pp >= price + PRODUCTION.aiReserve;
-  const men = (kind: string, divs: number): boolean => (paidInMen(g, nat, kind) ? raisable(g, nat, divs) >= 1 : menSpare(g, nat) >= divs);
+  // The bank: the price and the reserve kept back. Where the nation's store of rifles binds, a kind the carve makes
+  // free passes, read from the price the order pays (corpsCost), so a staff is not held by a bank for a corps that
+  // costs nothing (the design director's answer 6 of 25 November 2026, 19:08Z); any carved price left takes the test.
+  // The men: the reserve beyond what the corps in the field are short of, which for a binding nation counts only up to
+  // each corps' armed level (manpower.ts menSpare). The rifles' own test is the order's (canArm).
+  const bank = (kind: string, price: number): boolean => (binds(g, nat) && corpsCost(g, nat, kind) === 0) || n.pp >= price + PRODUCTION.aiReserve;
+  const men = (_kind: string, divs: number): boolean => menSpare(g, nat) >= divs;
   while (slots() < most) {
     // The wider world: a staff an ocean away from every enemy raises no more corps than it has a use for at home.
     if (armyIdle(g, nat)) break;

@@ -316,9 +316,8 @@ describe('the carve', () => {
     for (const [kind, pts] of Object.entries(want)) expect(carved(g, 'CHN', corpsList(g, 'CHN', kind), specOf(g, kind)!.divs), kind).toBe(pts);
     // The support teams carve the same way, to 0 and 2.
     expect([carved(g, 'CHN', corpsList(g, 'CHN', 'mg'), 1), carved(g, 'CHN', corpsList(g, 'CHN', 'mor'), 1)]).toEqual([0, 2]);
-    // As corpsCost gives them: rider B still asks nothing for infantry and mountain until China's men are laid (S3).
-    for (const kind of ['mot', 'art', 'arm', 'eng']) expect(corpsCost(g, 'CHN', kind), kind).toBe(want[kind]);
-    for (const kind of ['inf', 'mtn']) expect(corpsCost(g, 'CHN', kind), kind).toBe(0);
+    // As corpsCost gives them, every kind (S3: rider B is retired, so mountain is no longer free; infantry is 0 by the carve).
+    for (const kind of Object.keys(want)) expect(corpsCost(g, 'CHN', kind), kind).toBe(want[kind]);
     // Japan pays its list price, untouched, for every kind.
     for (const kind of corpsKinds(g)) expect(corpsCost(g, 'JAP', kind), kind).toBe(corpsList(g, 'JAP', kind));
     // China's cadres are priced from the carved price: carved x fold.price x size.

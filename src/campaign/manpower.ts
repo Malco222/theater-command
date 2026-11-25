@@ -42,8 +42,6 @@ export const MANPOWER = data as unknown as {
   early: { months: number; gap: number };
   /** Folding two worn corps into one: see the note in the data. */
   fold: { worn: number; org: number; price: number; xp: number };
-  /** The nations whose pool row forms corps from its own men (ownMen, below). Far-side rows alone name any. */
-  ownMen?: string[];
 };
 
 const KP: Record<string, string> = {}, KX: Record<string, string> = {}, KL: Record<string, string> = {}, KS: Record<string, string> = {};
@@ -105,15 +103,6 @@ export function menLeft(g: Game, nat: string): number {
 
 /** How many new corps of this many divisions the reserve could fill today. */
 export const raisable = (g: Game, nat: string, divs: number): number => (menRules(g) ? Math.floor((menLeft(g, nat) + 1e-9) / Math.max(0.1, divs)) : Infinity);
-
-/**
- * True for a nation whose pool row forms its corps from its own men (rider B of 20:45Z, 20 November 2026, to ruling
- * 234, mending a fault against rulings 216(3) and 218(a)). Its pool row and its last levy were ruled to raise new
- * corps as well as fill the old ones, and as built neither raised one, because a corps asked a treasury the nation
- * never holds. For such a nation a corps of the arms that need no industry is paid for in men from the reserve and
- * not in the treasury's points (economy.ts). The far side's rows name it (china-stop3.json): nobody with it off.
- */
-export const ownMen = (g: Game, nat: string): boolean => menRules(g) && !!MANPOWER.ownMen?.includes(nat);
 
 /**
  * What the reserve holds beyond what the armies in the field are short of: the men a staff can put into new corps
