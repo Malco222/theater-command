@@ -6,7 +6,7 @@
 // them; bombers that hold their run over the target drop; morale breaks groups that bleed too much. When a group's
 // count drops by one, an 'air:lost' event says how the 3D side shows that aircraft going down.
 
-import { Rng } from '../../core/rng';
+import { hashString, Rng } from '../../core/rng';
 import { dist, bearing } from '../core/geometry';
 import { fieldRatio } from '../core/result';
 import type { BattleSim, BattleView, Command, FieldEvent, FieldResult, FieldTicket, Side, UnitState, Zone } from '../core/types';
@@ -152,6 +152,13 @@ export class AirSim implements BattleSim<AirUnit> {
   private oneGunOf = new Map<number, string | null>();
   /** The pass each fighter group is flying at each bomber group it is on ('fighter:bomber'). */
   private passes = new Map<string, Pass>();
+  /**
+   * R1 (the design director, 25 November 2026): the bomber box each fighter group was given as its quarry, whose pass
+   * was drawn then, not at contact; and how many passes have been drawn for each fighter and box, the label of the
+   * pass's own stream (drawPass).
+   */
+  private aimed = new Map<number, number>();
+  private passDraws = new Map<string, number>();
   /** This tick, what each group was owed and by whom ('flak' for the guns): who shot down whom. */
   private owedBy = new Map<number, Map<number | 'flak', number>>();
   /** Each bomber group's gunners' kills: the enemy fighters whose loss was booked to it (ruling 227), for the campaign's record. */
@@ -505,6 +512,44 @@ export class AirSim implements BattleSim<AirUnit> {
         keep(e);
       }
     }
+    this.aimAll();
+  }
+
+  /**
+   * The bomber box a fighter group has been given as its quarry (its job, by the computer or by the player's order):
+   * one it is sent to intercept, while it is fighting. Null for any other job, and for a group gone, broken or homeward.
+   */
+  private quarryBox(u: AirUnit): AirUnit | null {
+    if (u.air !== 'ftr' || off(u) || away(u) || u.job.do !== 'intercept') return null;
+    const b = this.unit(u.job.on);
+    return b && b.air === 'bmr' && b.side !== u.side && flying(b) ? b : null;
+  }
+
+  /**
+   * R1: each fighter group given a bomber box as its quarry has the pass it will fly on it drawn then, once; again only
+   * when its quarry changes. Called wherever a job is given (think, the player's attack) and before contact.
+   */
+  private aimAll(): void {
+    for (const u of this.units) {
+      if (u.air !== 'ftr') continue;
+      const b = this.quarryBox(u);
+      if ((b?.id ?? null) === (this.aimed.get(u.id) ?? null)) continue;
+      if (!b) { this.aimed.delete(u.id); continue; }
+      this.aimed.set(u.id, b.id);
+      this.drawPass(u, b);
+    }
+  }
+
+  /**
+   * The pass a fighter group flies at a bomber box, by its doctrine against that bomber (doctrine.ts), from a stream of
+   * its own for that fighter, that box and that draw: a fork of the battle's pass stream, which is never drawn on
+   * itself, so when and in what order the passes are drawn moves no other throw. Never a count: it sets the beat of the
+   * passes (beat), what the dispatches tell of a ram, and between flak and the fighters who a box's loss is booked to.
+   */
+  private drawPass(d: AirUnit, b: AirUnit): void {
+    const key = `${d.id}:${b.id}`, n = this.passDraws.get(key) ?? 0;
+    this.passDraws.set(key, n + 1);
+    this.passes.set(key, pickPass(this.passRng.fork(hashString(`${key}:${n}`)), passesOn(d.nat, this.when, b.model, b.nat)));
   }
 
   /**
@@ -923,6 +968,7 @@ export class AirSim implements BattleSim<AirUnit> {
   private touch(): void {
     const r = this.place.night ? SKY.contact.night : SKY.contact.day;
     const live = this.units.filter(flying);
+    this.aimAll();
     const before = new Map(live.map((u) => [u.id, new Set(u.contacts)]));
     for (const u of live) u.contacts = [];
     for (const a of live) {
@@ -943,7 +989,8 @@ export class AirSim implements BattleSim<AirUnit> {
         this.fired = true;
         if (before.get(a.id)?.has(d.id)) continue;
         // A new run at a bomber group: the fighters fly the pass their doctrine gives against that bomber (doctrine.ts).
-        if (a.air === 'bmr') this.passes.set(`${d.id}:${a.id}`, pickPass(this.passRng, passesOn(d.nat, this.when, a.model, a.nat)));
+        // At their quarry, the pass drawn when they were given it (R1); at any other box, one drawn now.
+        if (a.air === 'bmr' && !(this.aimed.get(d.id) === a.id && this.passes.has(`${d.id}:${a.id}`))) this.drawPass(d, a);
         // A new contact: the higher fighter group dives on the lower one and strikes first. A bomber box above a fighter
         // is simply in contact: bombers do not dive on fighters (the tactics panel's S0).
         const hi = a.band > d.band && a.air === 'ftr' ? a : d.band > a.band ? d : null;
@@ -1671,12 +1718,16 @@ export class AirSim implements BattleSim<AirUnit> {
       // ('quarry': an interceptor's from before the groups meet, an escort's only while it has turned on an attacker),
       // and how good its pilots are ('skill').
       const q = flying(u) && !away(u) ? this.after.get(u.id) : undefined;
+      // R1: the pass it will fly at the bomber box it has been given as its quarry, from then until it has another or none.
+      const box = this.quarryBox(u);
+      const pass = box && this.aimed.get(u.id) === box.id ? this.passes.get(`${u.id}:${box.id}`) : undefined;
       u.extra = {
         model: u.model, cool: coolOf(u.model), form: u.form, style: u.style, boxes: this.boxesOf(u), ammo: Math.round(ammo * 1000) / 1000,
         ...(u.job.do === 'escort' ? { role: roleOf(u.job), with: u.job.on } : {}),
         // A raid on troops: a group on its passes flies them low ('strafe'), and 'run' is how far down this pass it is.
         ...(u.job.do === 'strafe' ? { strike: 'strafe', run: Math.round((this.strafing.get(u.id)?.p ?? 0) * 1000) / 1000, passes: this.strafing.get(u.id)?.done ?? 0 } : {}),
         ...(q !== undefined ? { quarry: q } : {}),
+        ...(pass ? { pass } : {}),
         skill: this.skill.get(u.id) ?? SKY.pilots.base,
         ...(u.def ? { def: u.def } : {}),
         ...(u.side === 'att' && u.fuel0 < SKY.fuel.home ? { fuel: Math.round(clamp01(u.fuel / Math.max(1, u.fuel0)) * 1000) / 1000 } : {}),
@@ -1860,6 +1911,7 @@ export class AirSim implements BattleSim<AirUnit> {
         const us = fighters(c.units);
         for (const u of us) u.job = { do: 'intercept', on: e.id };
         this.keptUp(us);
+        this.aimAll();
         return us.length > 0;
       }
       case 'air:escort': {
