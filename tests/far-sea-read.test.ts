@@ -17,7 +17,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
 import { allied, atWar, createGame, declareWar } from '../src/campaign/game';
-import { NAVY, SeaPicture, airOver, besideIn, closedTo, seaSide, zoneOf } from '../src/campaign/navy';
+import { NAVY, SeaPicture, airOver, besideIn, closedTo, quality, seaSide, zoneOf } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
 import { groupOverSea, seaKm } from '../src/campaign/air';
 import { skiesOver } from '../src/campaign/pacific';
@@ -79,7 +79,7 @@ describe('a nation counts in a sea\'s read only against those it is at war with 
     expect(new SeaPicture(g).closed(honshu, 'USA')).toBe(false);
   });
 
-  it('and with that division at Hsinking, where the first day\'s chart has it, the coast is out of its reach and stays open (the chart\'s kilometre)', () => {
+  it('and with that division at Hsinking, where the first day\'s chart has it, the coast is out of its reach: its bombers are not counted over it (the chart\'s kilometre)', () => {
     const g = war();
     const honshu = zoneOf(g, 'honshu');
     const f = fifth(g);
@@ -90,13 +90,17 @@ describe('a nation counts in a sea\'s read only against those it is at war with 
     expect(Math.round(seaKm(g, division.base, honshu))).toBe(1295);
     expect(groupOverSea(g, division, honshu, skiesOver(g, honshu)!)).toBe(0);
     f.stance = 'patrol';
-    // Japan's read of her coast is the fleet's 7 and the 150 aircraft at Tokyo: 12.625, under the 15 that closes a sea.
+    // Japan's read of her coast is the fleet's ten ships' worth at Japan's ship quality and the 150 aircraft at Tokyo,
+    // 5.625: nothing of the division's 200 bombers. (At the old default of 0.7 a navy with no row fought at, that was
+    // 7 and 12.625, under the 15 that closes a sea. The design director's form B1 of 25 November gave Japan's navy a
+    // row of its own, so the fleet is worth more, and whether the coast closes is the read's own rule on the sums.)
     const e = seaSide(g, honshu, 'USA', true);
-    expect(e.ships).toBeCloseTo(7, 9);
+    expect(e.ships).toBeCloseTo(10 * quality(g, 'JAP'), 9);
     expect(e.air).toBeCloseTo(5.625, 9);
-    expect(e.total).toBeLessThan(NAVY.closed.min);
-    expect(closedTo(g, honshu, 'USA')).toBe(false);
-    expect(new SeaPicture(g).closed(honshu, 'USA')).toBe(false);
+    expect(e.total).toBeCloseTo(e.ships + e.air, 9);
+    const closes = e.total >= NAVY.closed.min && e.total >= NAVY.closed.ratio * seaSide(g, honshu, 'USA', false).total;
+    expect(closedTo(g, honshu, 'USA')).toBe(closes);
+    expect(new SeaPicture(g).closed(honshu, 'USA')).toBe(closes);
   });
 
   it('with none of its enemies in a sea nothing is against it, and its friends count as before', () => {
