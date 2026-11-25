@@ -2107,10 +2107,12 @@ export function whyNotEscort(g: Game, f: Fleet, lane: string): string | null {
   return null;
 }
 
-/** Binds a fleet to a shipping lane as its escort: it sails with the convoys, in the sea of the lane where the raiders are thickest. */
-export function escort(g: Game, f: Fleet, lane: string): boolean {
-  if (whyNotEscort(g, f, lane)) return false;
-  const rt = seaRoutes(g).find((r) => r.id === lane)!;
+/**
+ * The sea of a lane a fleet sails in as its escort: of the lane's seas in its reach, the one where the raiders are
+ * thickest (the first in its reach on a tie), or -1 where none is in reach. It moves nothing: escort reads it to sail
+ * the fleet there, and escortGain to price the fleet bound to the lane without moving it.
+ */
+function escortSea(g: Game, f: Fleet, rt: SeaRoute): number {
   const reach = fleetReach(g, f);
   let best = -1, bv = -1;
   for (const z of reach) {
@@ -2118,6 +2120,13 @@ export function escort(g: Game, f: Fleet, lane: string): boolean {
     const v = raidersIn(g, rt.to, z);
     if (v > bv) { bv = v; best = z; }
   }
+  return best;
+}
+
+/** Binds a fleet to a shipping lane as its escort: it sails with the convoys, in the sea of the lane where the raiders are thickest. */
+export function escort(g: Game, f: Fleet, lane: string): boolean {
+  if (whyNotEscort(g, f, lane)) return false;
+  const best = escortSea(g, f, seaRoutes(g).find((r) => r.id === lane)!);
   return best >= 0 && sail(g, f, best, 'escort', lane);
 }
 
@@ -4516,13 +4525,16 @@ function routeCeiling(g: Game, route: ConvoyRoute, fire = 1): RouteCeiling | nul
  * month's mean stays the card's (ruling 241's mean-1 swing): a good night's torpedoes hit more often than the average's; the two shares together at most LANE_CAP. The boats' tons are of the ships
  * sailing both ways, the others' of the loaded sailings, as the lanes count them.
  */
-function sideLoss(route: ConvoyRoute, side: ConvoySide, Lo: number, w: number): { L: number; tons: number; sunk: number } {
+function sideLoss(route: ConvoyRoute, side: ConvoySide, Lo: number, w: number): { L: number; tons: number; exact: number; sunk: number } {
   const ships = CAUSE.count.ships[route.id] ?? 0;
   const sunk = Math.min(ships, side.sunk * w);
   const Lb = side.sunk > 0 ? side.L * (sunk / side.sunk) : 0;
   const lo = Lo * w, sum = Lb + lo, L = Math.min(LANE_CAP, sum);
   const cut = sum > 0 ? L / sum : 1;
-  return { L, tons: Math.round(((CAUSE.count.ways * route.tons * Lb + route.tons * lo) * cut) / 1000) * 1000, sunk: sunk * cut };
+  // (The card's tons are rounded to the thousand. 'exact' is the same tons before the rounding, for the escort's worth
+  // (escortGain), which differences two months and would lose a small escort's tons in the rounding.)
+  const exact = (CAUSE.count.ways * route.tons * Lb + route.tons * lo) * cut;
+  return { L, tons: Math.round(exact / 1000) * 1000, exact, sunk: sunk * cut };
 }
 
 /** A route's tons ruling figures this month as the fleets stand now (Units decide, where laid), for the record and the readings. */
@@ -4698,6 +4710,87 @@ export function convoyMeeting(g: Game, nat: string, route: ConvoyRoute): ConvoyM
     raiders: raiders.map((f) => ({ id: f.id, nat: f.nat, ss: f.ships.ss, expect: f.ships.ss * (hunt.get(f.zone) ?? 0) })),
     escorts: escorts.map((f) => ({ id: f.id, nat: f.nat, dd: f.ships.dd, expect: raid > 0 ? raid * NAVY.convoy.escortLoss * (f.ships.dd / Math.max(1, dd)) : 0 })),
   };
+}
+
+/**
+ * What a fleet's escort of a convoy route is worth this month to the admirals who weigh its duties (release 2, for the
+ * general's fleetWithArmy; the design director's ruling of 25 November 2026 05:31Z on
+ * naval-battles/convoy-r2/escort-gain-form.md, (a) on all five questions and Q6 as written). It throws no dice and
+ * changes nothing, and nothing in the game calls it: the general's round 2 calls it under his own switch, fleetWithArmy.
+ *
+ * It is the route's month as the rules price it (routeForces, and the tons the card gives), run twice with the fleets
+ * as they stand now: once with the fleet off the route, as if it lay in harbour, so that no share of it is on the
+ * route; and once with it bound to the route as its full escort, at sea on that lane in the sea escort would sail it to
+ * (escortSea), so that its guard share is 1. dL is the share of the route's cargoes saved, the month's L without the
+ * fleet less its L with it. tons is the shipping saved, the same two months' tons before the card's rounding to the
+ * thousand.
+ *
+ * Priced once (Q1 (a)): everything the escorts' form prices comes in through that one month, and nothing is added
+ * beside it. With Units decide off the month is the lanes' old form, raiders / (raiders + G + ocean), so dL is that
+ * form's; with it on, it is the convoys' side's, with the escorts' form where it is laid.
+ *
+ * Its points are dL on the admirals' scale (Q5 (a), marked G), by the battleship: a battleship is 150 on the strike
+ * scale and 10 in fleet power, and a nation's whole month of goods is 3000 on the strike scale, as the sea patrol and
+ * the carrier staff price trade, so the route's whole month is 200 x its share, and points = 200 x share x dL.
+ * pointsByDestroyer is the same by the destroyer, 10 to 1, so 300 x share x dL: the (b) the ruling asked to be
+ * reported beside it.
+ *
+ * Q2: a truth read today (Units decide audit item 28). It reads the boats at sea, as every admirals' term does, and it
+ * moves to the boats its side last saw (seenBoats) with them in ruling 3's joint form, never alone. Q3: the boats the
+ * escort sinks are left out. They sink nothing in later months, but that is a later month's gain, not this month's
+ * tons. Q4: the escort's own losses (escortLoss) are not netted, for no admirals' term nets a fleet's own risk; if the
+ * joint form brings that risk into the admirals' terms, it comes to every term at once. Q6: only a fleet that can
+ * escort the route is priced.
+ *
+ * Null where the route is not a convoy route of navy.json (a lane of resources.json alone is priced by laneLoss, not
+ * here), where the nation it feeds is not alive and at war, or where the fleet cannot escort it (whyNotEscort).
+ *
+ * The fleet is placed for each month and put back in a finally, as seapatrol.ts patrolWorth does: its sea, its stance
+ * and its lane, and nothing else. Its lane is assigned again where it had one and taken off where it had none, so the
+ * save writes its fields in the same order as before. sail is never called, so the supply picture is never marked to
+ * be drawn again (the save writes that mark). The caches checked: seaRoutes' routeCache is kept by the game's seas and
+ * built from the data's rows, and reads no fleet. The chart's own (seaAt's lookups, seaSquares, seaLatitude and
+ * seapatrol.ts's squares within reach) read only the chart. The far map's speedups (the supply picture's SeaPicture,
+ * game.ts's supply books and kept sea lanes, the seas a search by sea asks once) are made and read only by the supply
+ * picture and the searches by sea, which routeForces never asks. seaCover, onWatch (onStation, passageSeas and
+ * keptUp), convoyCount, routeCeiling and the screen's stations (onStations) keep nothing: each reads the fleets afresh
+ * on every call, so the second month sees the fleet bound, and nothing of either placement is left once it is put
+ * back. What else routeForces and the choice of sea reach that keeps anything reads no fleet: tech.ts's research by
+ * nation (aswKit), the skies and gales dealt for the month (weather.ts and heavyseas.ts) and line.ts's spans (canPass).
+ * The hunt cap's book on a fleet (capBook) is read by the meeting's expected losses, which this does not price.
+ */
+export function escortGain(g: Game, f: Fleet, route: string): { dL: number; tons: number; points: number; pointsByDestroyer: number } | null {
+  const rt = NAVY.convoys.find((r) => r.id === route);
+  if (!rt) return null;
+  const to = g.nations[rt.to];
+  if (!to?.alive || !to.atWar.length || whyNotEscort(g, f, route) !== null) return null;
+  const lane = seaRoutes(g).find((r) => r.id === route);
+  const z = lane ? escortSea(g, f, lane) : -1;
+  if (z < 0) return null;
+  // (The month as the card prices it: routeForces' L, and its tons, from the convoys' side where it is counted.)
+  const month = (): { L: number; tons: number } => {
+    const m = routeForces(g, rt.to, rt);
+    return { L: m.L, tons: m.side ? sideLoss(rt, m.side, m.Lo ?? 0, 1).exact : rt.tons * m.L };
+  };
+  const was = { zone: f.zone, stance: f.stance, lane: f.lane, had: Object.prototype.hasOwnProperty.call(f, 'lane') };
+  let off: { L: number; tons: number }, on: { L: number; tons: number };
+  try {
+    // (Off the route: in harbour, as sail sends a fleet home. A fleet in harbour reads no lane, so its own is left.)
+    f.stance = 'port'; f.zone = f.home;
+    off = month();
+    // (Bound to the route as its full escort, in the sea escort would choose.)
+    f.stance = 'escort'; f.zone = z; f.lane = route;
+    on = month();
+  } finally {
+    f.zone = was.zone; f.stance = was.stance;
+    if (was.had) f.lane = was.lane; else delete f.lane;
+  }
+  const dL = off.L - on.L;
+  // (Q5 (a), marked G: 3000, a nation's whole month of goods on the strike scale as the sea patrol and the carrier staff
+  // price trade, over a battleship's 150 there against its 10 in fleet power. (b), by the destroyer, beside it.)
+  const points = (3000 / (CARRIERS.strike.value.bb / NAVY.classes.bb.power)) * rt.share * dL;
+  const pointsByDestroyer = (3000 / (CARRIERS.strike.value.dd / NAVY.classes.dd.power)) * rt.share * dL;
+  return { dL, tons: off.tons - on.tons, points, pointsByDestroyer };
 }
 
 /** The nights fought on this nation's convoy routes this month, asked of the seam before the hunt. Empty while the convoy battle is off or nobody has set the seam. */
