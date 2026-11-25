@@ -4558,6 +4558,16 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 		Told->TryGetStringField(TEXT("typesEdge"), Card.TypesEdge);
 		Told->TryGetStringField(TEXT("pilots"), Card.Pilots);
 		Told->TryGetStringField(TEXT("typesTip"), Card.TypesTip);
+		// (Release 2, a raid on troops with the strafers' rule on.) The groups likely to go down and strafe; absent otherwise.
+		const TSharedPtr<FJsonObject>* StrafeObject = nullptr;
+		if (Told->TryGetObjectField(TEXT("strafe"), StrafeObject) && StrafeObject && StrafeObject->IsValid())
+		{
+			Card.bStrafe = true;
+			(*StrafeObject)->TryGetStringField(TEXT("heading"), Card.StrafeHeading);
+			(*StrafeObject)->TryGetStringField(TEXT("note"), Card.StrafeNote);
+			(*StrafeObject)->TryGetStringField(TEXT("none"), Card.StrafeNone);
+			(*StrafeObject)->TryGetStringArrayField(TEXT("names"), Card.StrafeNames);
+		}
 		// (Ruling 107(d).) A bombing raid by day and by night.
 		const TSharedPtr<FJsonObject>* WaysObject = nullptr;
 		if (Told->TryGetObjectField(TEXT("ways"), WaysObject) && WaysObject && WaysObject->IsValid())

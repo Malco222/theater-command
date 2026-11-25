@@ -15217,6 +15217,40 @@ namespace
 				];
 			};
 			Deal(TEXT("FLYING THE RAID"), Going, TEXT("No group is picked. Add one from those that could join."));
+			// (Release 2, a raid on troops with the strafers' rule on; the UI director's words, as the browser's card has them,
+			// between the raid's own forces and those that could join.) The heading as the card's others; then the muted line
+			// once and a group's name a row (text only: no picture, no tag, no button), or the line for none in place of both.
+			// Every word is the rules'. With no strafe on the card nothing is added.
+			if (Card.bStrafe)
+			{
+				PageBody->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 5.0f)[Heading(Card.StrafeHeading)];
+				TSharedRef<SVerticalBox> StrafeRows = SNew(SVerticalBox);
+				if (Card.StrafeNames.Num() == 0)
+				{
+					StrafeRows->AddSlot().AutoHeight()
+					[
+						SNew(STextBlock).Text(FText::FromString(Card.StrafeNone)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+					];
+				}
+				else
+				{
+					if (!Card.StrafeNote.IsEmpty())
+					{
+						StrafeRows->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Card.StrafeNote)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+						];
+					}
+					for (const FString& StrafeName : Card.StrafeNames)
+					{
+						StrafeRows->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(StrafeName)).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream).AutoWrapText(true)
+						];
+					}
+				}
+				PageBody->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 10.0f)[StrafeRows];
+			}
 			Deal(TEXT("COULD JOIN"), Could, TEXT("No other group can reach it this month."));
 
 			// One brass button flies the raid. (Pinned to the card's foot: it names what he is about to do, and stays on
