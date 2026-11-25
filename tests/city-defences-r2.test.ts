@@ -1083,15 +1083,18 @@ describe('city defences in the bridge (slice 5)', () => {
       const g = britain(on);
       g.flags[`wk:aa:${g.byName.London.id}`] = 3;
       TC().load(saveGame(g));
-      const air = (TC().province(g.byName.London.id) as { glance: { air: Record<string, unknown> | null } }).glance.air!;
+      const glance = (TC().province(g.byName.London.id) as { glance: { air: Record<string, unknown> | null; can: { key: string }[] } }).glance;
+      const air = glance.air!;
       expect(air.add && (air.add as { key: string }).key).toBe('work:aa');
-      if (!on) { expect('lights' in air).toBe(false); continue; }
-      const l = air.lights as { level: number; lit: number; guns: number; line: string; add: { key: string } | null };
+      if (!on) { expect('lights' in air).toBe(false); expect(glance.can.some((c) => c.key === 'work:lights')).toBe(false); continue; }
+      const l = air.lights as Record<string, unknown>;
       expect(l.level).toBe(2);
       expect(l.lit).toBe(2);
       expect(l.guns).toBe(3);
       expect(l.line).toBe('level 2: 2 of the 3 levels of guns are lit by night, under a clear sky');
-      expect(l.add?.key).toBe('work:lights');
+      // The next level's offer lives in one place, `work:lights` in `glance.can`, and not on the air shelf (the UI director).
+      expect('add' in l).toBe(false);
+      expect(glance.can.filter((c) => c.key === 'work:lights')).toHaveLength(1);
     }
   });
 
