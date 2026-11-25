@@ -264,6 +264,19 @@ describe("the month card's row and the reports page", () => {
     expect(end.month.offersRow).toEqual({ text: '1 formation offered: it waits for your answer.', amber: false, act: 'open:offers' });
     const rep = TC().page('reports');
     expect(rep.sections[0]).toEqual({ heading: 'FORMATIONS OFFERED', text: '', rows: [{ nat: '', title: '', lines: ['1 formation offered: it waits for your answer.'], tones: [''], buttons: [{ label: 'SEE THE OFFERS', act: 'open:offers', ok: true, tip: '' }] }] });
+    // The way back to the card, as a battle report has it; never beside a question, whose two answers stand alone.
+    expect(TC().page('offers').top.map((b: any) => [b.label, b.act])).toEqual([["BACK TO THE MONTH'S REPORT", 'open:reports'], ['ACCEPT ALL', 'offers:ask:take'], ['DECLINE ALL', 'offers:ask:decline']]);
+    TC().act('offers:ask:decline');
+    expect(TC().page('offers').top.map((b: any) => b.label)).toEqual(['GO BACK', 'DECLINE ALL']);
+    TC().act('offers:back');
+    // The card opened once more shows the row as the offers stand now: declined, it is gone from the card and the list.
+    expect(rep.month.offersRow.text).toBe('1 formation offered: it waits for your answer.');
+    TC().act('offers:ask:decline');
+    TC().act('offers:all:decline');
+    expect(TC().page('offers')).toEqual({ ok: false });
+    const again = TC().page('reports');
+    expect(again.month.offersRow).toEqual({ text: '', amber: false, act: '' });
+    expect(again.sections.map((x: any) => x.heading)).not.toContain('FORMATIONS OFFERED');
   }, 900000);
 
   it('with the whole world off: no offers page, and the card\'s row is empty', () => {

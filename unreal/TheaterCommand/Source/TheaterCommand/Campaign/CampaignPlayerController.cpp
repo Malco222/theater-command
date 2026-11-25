@@ -3769,6 +3769,22 @@ void ACampaignPlayerController::ToggleEffects()
 	SaveOptions();
 }
 
+FString ACampaignPlayerController::SafeAnswerOnPage() const
+{
+	// (A page of the rules' own only: the month's card and a raid's card have their own lit answers.)
+	if (bPageOpen && !Page.Month.bValid && !Page.Card.bValid)
+	{
+		for (const FPageButton& Button : Page.Top)
+		{
+			if (Button.bSafe && Button.bOk && !Button.Act.IsEmpty())
+			{
+				return Button.Act;
+			}
+		}
+	}
+	return FString();
+}
+
 void ACampaignPlayerController::EnterKey()
 {
 	if (IsAnswering())
@@ -5908,6 +5924,11 @@ void ACampaignPlayerController::Escape()
 		{
 			AtomBackAt = FPlatformTime::Seconds();
 			PressPage(Page.Card.Back.Act); // (release 2, atom.ts: Esc, as Enter, is BACK on a bomb raid's card: the bomb is kept)
+		}
+		else if (const FString Safe = SafeAnswerOnPage(); !Safe.IsEmpty())
+		{
+			SafeBackAt = FPlatformTime::Seconds();
+			PressPage(Safe); // (release 2, formations offered; ruling 134(f): Esc, as Enter, is GO BACK on a question asked on the page's head, and the page stays open)
 		}
 		else
 		{
@@ -12382,6 +12403,25 @@ void ACampaignPlayerController::EndMonth()
 	if (bEnterByKey && !bScripted && FPlatformTime::Seconds() - AtomBackAt < 0.5)
 	{
 		return;
+	}
+	// (Release 2, formations offered; the UI director's marks of 25 November 2026 under ruling 134(f).) A question asked
+	// in place on a page's head (form them all, decline them all): Enter is GO BACK, the lit answer, and nothing is
+	// formed or declined. The other answer takes a click. (END THE MONTH clicked goes on as ever.)
+	if (bEnterByKey && !bScripted)
+	{
+		const FString Safe = SafeAnswerOnPage();
+		if (!Safe.IsEmpty())
+		{
+			SafeBackAt = FPlatformTime::Seconds();
+			PressPage(Safe);
+			return;
+		}
+		// (The page is as it was before the question: a held or doubled Enter takes no key for its first half second,
+		// so that it cannot end the month he was still answering in.)
+		if (FPlatformTime::Seconds() - SafeBackAt < 0.5)
+		{
+			return;
+		}
 	}
 	// (Rulings 88 and 90.) Armies at the front that have not been touched and have no orders: the month is never
 	// barred, but he is asked once, and may tick not to be asked. With the question up, this key is its END THE

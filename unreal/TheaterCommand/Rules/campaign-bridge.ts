@@ -3654,7 +3654,7 @@ function shownCard(s: Game, c: RuleCard): MonthCard {
     rest: over > 0 ? `${over} more ${over === 1 ? 'line' : 'lines'} of news ${over === 1 ? 'is' : 'are'} in the Newsreel.` : "Every figure comes from the month's own battle reports.",
     // (Ruling B8) What is offered him this month and still open from earlier ones: one list, never a card each.
     offers: offersLook(s),
-    offersRow: ((): { text: string; amber: boolean; act: string } => { try { return cardRowOf(s, formationOffers(s)); } catch { return { text: '', amber: false, act: '' }; } })(),
+    offersRow: offersRowNow(s),
   };
 }
 
@@ -5313,12 +5313,18 @@ let lastReel = -9;
 
 let lastMonth: { date: string; rows: { nat: string; note: string; region: number; mine: boolean }[]; news: string[] } | null = null;
 
+/** The month card's one row for the formations offered, as they stand now (offers-look.ts `cardRowOf`); empty where none is. */
+function offersRowNow(s: Game): { text: string; amber: boolean; act: string } {
+  try { return cardRowOf(s, formationOffers(s)); } catch { return { text: '', amber: false, act: '' }; }
+}
+
 /** The month's card as it is shown now: a desk the player has since taken back no longer offers to be taken. */
 function monthShown(s: Game, card: MonthCard) {
   let run: string[] = [];
   try { run = (commandOf(s)?.desks ?? []).filter((d) => d.staff).map((d) => String(d.id)); } catch { run = []; }
-  // (Ruling B8) And the offers as they stand now: one he has answered since is off the list.
-  return { ...card, staff: card.staff.map((x) => ({ ...x, ok: run.includes(x.desk) })), offers: offersLook(s) };
+  // (Ruling B8) And the offers as they stand now: one he has answered since is off the list, and the card's row for
+  // them is counted again, so a card opened once more after his answers never shows offers that are gone.
+  return { ...card, staff: card.staff.map((x) => ({ ...x, ok: run.includes(x.desk) })), offers: offersLook(s), offersRow: offersRowNow(s) };
 }
 
 /** A battle's report set out to be read: who fought, what each lost, and what the map fed into the fight. */
@@ -5414,6 +5420,10 @@ function offersPage(s: Game): Page | null {
   if (asked === 'take' && formQ) { note = formQ; top = [back, { label: 'FORM ALL', act: 'offers:all:take', ok: true, tip: '', danger: true }]; }
   else if (asked === 'decline') { note = askDecline(open); top = [back, { label: 'DECLINE ALL', act: 'offers:all:decline', ok: true, tip: '', danger: true }]; }
   else top = [{ label: 'ACCEPT ALL', act: 'offers:ask:take', ok: up && formQ !== null, tip: '' }, { label: 'DECLINE ALL', act: 'offers:ask:decline', ok: up, tip: '' }];
+  // (The way back to the month's card, as a battle report has it: the UI director's marks, section 1, "the card comes
+  // back when the page is closed, as it does for a battle report". Only where there is a card to go back to, and never
+  // beside a question: its two answers stand alone.)
+  if (top[0] !== back && lastMonth) top.unshift({ label: "BACK TO THE MONTH'S REPORT", act: 'open:reports', ok: true, tip: '' });
   // (Not his month: every button greyed, and the reason said once, under the head: the marks, section 3.)
   if (!up) note = `It is not your month.\n${note}`;
   const rows: PageRow[] = open.map((o) => {
