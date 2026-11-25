@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 46821cb53 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 8fe20a4cc 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -73937,9 +73937,12 @@
   }
   function handsChanged(g2, r) {
     let at4 = Math.max(r.since, g2.flags[`hand:${r.id}`] ?? -1, g2.nations[r.ctrl]?.freedOn?.turn ?? -1);
+    const held3 = r.ctrl !== r.owner, back = r.prev === r.ctrl;
+    const vichy = r.vichy && (r.ctrl === "FRA" || r.ctrl === "VIC");
+    if ((held3 || back) && g2.flags.dom !== void 0) at4 = Math.max(at4, g2.flags.dom);
     for (const n of Object.values(g2.nations)) {
       if (!n.fellOn) continue;
-      if (n.id === r.owner || n.fellOn.to === r.ctrl || r.vichy && r.ctrl === "VIC" && n.id === "FRA") at4 = Math.max(at4, n.fellOn.turn);
+      if (back || held3 && (n.id === r.owner || n.fellOn.to === r.ctrl) || vichy && (n.id === "FRA" || n.id === "VIC")) at4 = Math.max(at4, n.fellOn.turn);
     }
     return at4;
   }
