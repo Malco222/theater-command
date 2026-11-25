@@ -59,7 +59,7 @@ namespace
 		TEXT("With tc.Map.ArmyWeight: how far a piece leans as it is carried and rocks as it lands, as a multiple of its own (8 degrees at the most). 0 to 2."));
 	TAutoConsoleVariable<float> CVarArmyRound(
 		TEXT("tc.Map.ArmyRound"), 1.0f,
-		TEXT("With tc.Map.ArmyWeight: how much of each corner of its road is rounded, as a multiple of the usual (four fifths of half the shorter leg). 0 to 1.25; 0 is the road corner to corner."));
+		TEXT("With tc.Map.ArmyWeight: how much of each corner of its road is rounded, as a multiple of the usual (four fifths of half the shorter leg, and no further back than nine units). 0 to 3; 0 is the road corner to corner; over 1 the curve may also reach further back, a wider sweep."));
 	TAutoConsoleVariable<float> CVarArmyTime(
 		TEXT("tc.Map.ArmyTime"), 1.0f,
 		TEXT("With tc.Map.ArmyWeight: how long a march takes, as a multiple of what it takes without. 0.7 to 1.6."));
@@ -1588,8 +1588,9 @@ void AArmyPiece::MarchAlong(const TArray<FVector>& Waypoints, bool bInRemoveOnAr
 		{
 			Road.push_back(TheaterArmyCarry::FSpot{ Corner.X, Corner.Y, Corner.Z });
 		}
-		const double RoundBy = FMath::Clamp(static_cast<double>(CVarArmyRound.GetValueOnGameThread()), 0.0, 1.25);
-		TheaterArmyCarry::Round(Road, 0.8 * RoundBy, 9.0 * LiftHeight / 3.2, Rounded);
+		// (Over 1 the measure also lets the curve reach further back along each leg: a wider sweep, for the Mac's film to try.)
+		const double RoundBy = FMath::Clamp(static_cast<double>(CVarArmyRound.GetValueOnGameThread()), 0.0, 3.0);
+		TheaterArmyCarry::Round(Road, 0.8 * RoundBy, 9.0 * FMath::Max(RoundBy, 1.0) * LiftHeight / 3.2, Rounded);
 		if (Rounded.size() >= 2)
 		{
 			Route.Reset(static_cast<int32>(Rounded.size()));
