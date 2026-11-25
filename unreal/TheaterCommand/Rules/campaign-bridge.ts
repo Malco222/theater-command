@@ -1954,10 +1954,11 @@ function reachOf(ids: number[]) {
  * garrison looked at as if out (lookOut), and two things more. `out`: the corps of the hand inside a town that an
  * order would bring out with a move to make (comeOut brings them all or none, and one that went in this month has
  * none once out), so that a hand of a garrison and a field army can say which come out. `why`: for a hand that is all
- * garrison and can march nowhere this month, the reason, in the sentence garrisonWhy gives. Such a hand is spent on
- * the eve of war too, where no other hand is: nothing of it marches before next month, kept or not. (The 1.5.3
- * review.) `stays`: for a hand beside the army in the field, why the last of its corps inside a town that no order
- * brings out with a move stays inside (staysWhy), so that the 3D game takes it out of the hand and says so.
+ * garrison and can march nowhere this month, the reason, in the sentence garrisonWhy gives. (The 1.5.3 review.) It
+ * is spent as any hand is (reachOf): not on the eve of war, where a corps brought out of its town has its whole month
+ * when the war opens, as every corps in the field has. `stays`: for a hand beside the army in the field, why the last
+ * of its corps inside a town that no order brings out with a move stays inside (staysWhy), so that the 3D game takes
+ * it out of the hand and says so.
  */
 function reachHand(ids: number[]) {
   const s = game();
@@ -1969,7 +1970,7 @@ function reachHand(ids: number[]) {
   }, true);
   const stuck = humanUp(s) && !out.length ? garrisonHand(s, ids) : [];
   const mixed = humanUp(s) && inside.length > 0 && !stuck.length && inside.length < corpsById(s, ids).length;
-  return { ...seen, out, why: stayLine(s, stuck), stays: mixed ? staysWhy(s, ids, out) : '', spent: seen.spent || (stuck.length > 0 && onEve(s)) };
+  return { ...seen, out, why: stayLine(s, stuck), stays: mixed ? staysWhy(s, ids, out) : '' };
 }
 
 /**
@@ -2695,9 +2696,15 @@ function sally(region: number) {
  * (Rules 84.2.4.) Why the player's corps inside a province's town take no marching orders, in the rules' own sentence;
  * '' where he has none there. (The 1.5.3 patch, the playtest's find 18: where every one of them went in this month,
  * and so has no move once out, the rules' sentence says when they can march, not to take the field: garrisonLine.)
+ * (The 1.5.3 review.) Given the corps in hand, the sentence is theirs, not the whole town's: one that went in this
+ * month beside an older garrison is told when it can march, as its own card tells it.
  */
-function garrisonWhy(region: number) {
-  try { return { why: whyNotOrderGarrison(game(), region) ?? '' }; } catch { return { why: '' }; }
+function garrisonWhy(region: number, ids?: number[]) {
+  try {
+    const s = game();
+    const hand = insideOf(s, ids).filter((c) => c.reg === region && !c.dead);
+    return { why: hand.length ? stayLine(s, hand) : whyNotOrderGarrison(s, region) ?? '' };
+  } catch { return { why: '' }; }
 }
 
 function takeOutlook(ids: number[], to: number) {

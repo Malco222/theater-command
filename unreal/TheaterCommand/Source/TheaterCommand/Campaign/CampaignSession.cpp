@@ -2076,11 +2076,12 @@ FAttackResult FCampaignSession::Attack(const TArray<int32>& CorpsIds, int32 Regi
 	return CorpsIds.Num() == 0 ? FAttackResult() : Fight(TEXT("attack"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId));
 }
 
-FString FCampaignSession::GarrisonWhy(int32 RegionId)
+FString FCampaignSession::GarrisonWhy(int32 RegionId, const TArray<int32>& CorpsIds)
 {
 	FString Why;
 	TSharedPtr<FJsonObject> Object;
-	if (CallRules(TEXT("garrisonWhy"), FString::Printf(TEXT("[%d]"), RegionId), Object))
+	const FString Args = CorpsIds.Num() > 0 ? FString::Printf(TEXT("[%d,[%s]]"), RegionId, *IdList(CorpsIds)) : FString::Printf(TEXT("[%d]"), RegionId);
+	if (CallRules(TEXT("garrisonWhy"), Args, Object))
 	{
 		Object->TryGetStringField(TEXT("why"), Why);
 	}

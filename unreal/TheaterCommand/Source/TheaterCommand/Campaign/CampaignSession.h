@@ -126,8 +126,12 @@ public:
 	FGateAsk AskGate(int32 GateId);
 	/** The march up to an enemy army that is not next door, and the attack, planned as one order (the rules' own reckoning). */
 	FApproachPlan PlanApproach(const TArray<int32>& CorpsIds, int32 RegionId);
-	/** (Rules 84.2.4.) Why the player's corps inside a province's town take no marching orders, in the rules' own sentence; empty where he has none there. */
-	FString GarrisonWhy(int32 RegionId);
+	/**
+	 * (Rules 84.2.4.) Why the player's corps inside a province's town take no marching orders, in the rules' own sentence;
+	 * empty where he has none there. (The 1.5.3 review.) Given the corps in hand, the sentence is theirs, not the whole
+	 * town's (a bundle before it answers for the town).
+	 */
+	FString GarrisonWhy(int32 RegionId, const TArray<int32>& CorpsIds = TArray<int32>());
 	/** (Rules 84.2.5; ruling 211(a).) Why these corps cannot go forward onto that ground by themselves ("Guns cannot take ground alone. ..."), in the rules' own sentence; empty where they can, and before that version. */
 	FString WhyNotLead(const TArray<int32>& CorpsIds, int32 RegionId);
 	/** Why the chosen corps cannot go by sea to a place the by-sea offer leaves out: the rules' own sentence for the first test it fails, or nothing. */

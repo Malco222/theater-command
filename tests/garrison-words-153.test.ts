@@ -13,6 +13,12 @@
 // one that went in this month is the rules' own (garrisonLine), so the corps' card, the province and both games say
 // the same; and the reach says why a corps of the garrison beside the field army stays inside (`stays`), so that the
 // 3D game takes it out of the hand and says so, never leaving it behind without a word.
+// The third review: a garrison is sent to TAKE THE FIELD for a ship or a train only where that would put it aboard this
+// month (coming out costs a move, and both take a corps' whole month): any other is told it can go out of the town
+// next month, and one in a town with no port is told so. Beside the army in the field, the train, the voyage and the
+// landing are the field army's, and the garrison is named as it stays. On the eve of war a corps brought out of its
+// town has its whole month when the war opens, so Warsaw is told to take the field. Where the field outside is full,
+// the sentence gives that reason. And the 3D game asks the sentence for the corps in hand, not for the whole town.
 import { describe, expect, it } from 'vitest';
 import { allied, createGame, hostileUnits, relocate, whyNoTrain } from '../src/campaign/game';
 import { whyNotLand, whyNotShip } from '../src/campaign/navy';
@@ -33,7 +39,7 @@ interface Bridge {
   save(): { text: string };
   view(): { eve: boolean; turn: number; corps: Seen[] };
   reach(ids: number[]): { regions: { id: number; attack: boolean }[]; spent: boolean; why: string; out: number[]; stays: string };
-  garrisonWhy(region: number): { why: string };
+  garrisonWhy(region: number, ids?: number[]): { why: string };
   move(ids: number[], to: number): { moved: { id: number; path: number[] }[]; note: string };
   rail(ids: number[], to: number): { moved: { id: number }[]; said: string };
   railReach(ids: number[]): { regions: number[] };
@@ -255,7 +261,7 @@ describe('find 16: a garrison in hand marches up and attacks as its field brothe
   });
 });
 
-describe('find 18: a garrison that went in this month says when it can march, and is spent, on the eve of war too', () => {
+describe('find 18: a garrison that went in this month says when it can march, and is spent; on the eve of war it is told to take the field', () => {
   it('Warsaw Defence Command on the eve of war (Poland from September 1939, seed 31)', () => {
     TC.start({ view: 'grand', human: 'POL', from: 1, seed: 31 });
     const v = TC.view();
@@ -264,14 +270,17 @@ describe('find 18: a garrison that went in this month says when it can march, an
     expect(w.town).toBe(true);
     expect(w.ap).toBe(0);
     expect(w.apOut).toBe(0);
-    const line = 'Warsaw Defence Command is the garrison of Warsaw. It went in this month, and can march out next month.';
+    // (The third review.) Brought out on the eve, it has its whole month when the war opens, as every corps in the
+    // field has (startPhase): it is told to take the field, as in 1.5.2, and is not spent, as no hand is on the eve.
+    const line = 'Warsaw Defence Command is the garrison of Warsaw. Order it to take the field first.';
     expect(w.garrison).toBe(line);
     expect(TC.garrisonWhy(w.reg).why).toBe(line);
+    expect(TC.garrisonWhy(w.reg, [w.id]).why).toBe(line);
     // (The review.) The corps' card in both games says the same: the view's noOrders is the rules' whyNotOrder.
     expect(w.noOrders).toBe(line);
     const t0 = saved();
     const hand = TC.reach([w.id]);
-    expect(hand).toMatchObject({ regions: [], spent: true, why: line, out: [] });
+    expect(hand).toMatchObject({ regions: [], spent: false, why: line, out: [] });
     const near = v.corps.find((x) => x.nat === 'POL' && x.reg !== w.reg && !x.town)!;
     expect(TC.move([w.id], near.reg).note).toBe(line);
     expect(saved()).toBe(t0);
@@ -282,6 +291,12 @@ describe('find 18: a garrison that went in this month says when it can march, an
       expect(army.regions.length).toBeGreaterThan(0);
       expect(army).toMatchObject({ spent: false, why: '', out: [] });
     }
+    // So with the train: brought out now, it rides when the war opens.
+    expect(TC.railTip([w.id], near.reg).no).toBe('A garrison does not take the train: TAKE THE FIELD first.');
+    expect(saved()).toBe(t0);
+    // The order it is told of is there to be given on the eve.
+    expect(TC.work(`field:${w.id}`)).toMatchObject({ ok: true });
+    expect(TC.view().corps.find((x) => x.id === w.id)).toMatchObject({ town: false, reg: w.reg });
   });
 
   it('in a month of the war: one put in this month says so; one put in earlier comes out with its moves', () => {
@@ -476,5 +491,54 @@ describe('the review: a garrison beside the field army sent by rail or by sea st
     expect(port).toBeDefined();
     expect(TC.ship([f.id, c.id], port).moved.map((m) => m.id)).toEqual([f.id]);
     expect(corpsIn(saved(), c.id)).toMatchObject({ reg: hamburg.id, town: EARLIER });
+  });
+});
+
+describe('the third review: the sentence of the hand, and of a town whose field is full', () => {
+  it('a corps that went in this month beside an older garrison is told its own sentence, not the town\'s', () => {
+    const g = playing();
+    const eifel = g.byName['Eifel'];
+    const old = inside(g, eifel, EARLIER);
+    const now = inside(g, eifel, g.turn);
+    TC.load(saveGame(g));
+    const t0 = saved();
+    const town = townName(eifel);
+    // The town's sentence, for the province's paper line, is for them all.
+    expect(TC.garrisonWhy(eifel.id).why).toBe(`They are the garrison of ${town}. Order them to take the field first.`);
+    // The hand's, for the 3D game's tray and pointer (GarrisonSays), is the corps' own, as its card says.
+    const mine = `${now.name} is in the garrison of ${town}. It went in this month, and can march out next month.`;
+    expect(TC.garrisonWhy(eifel.id, [now.id]).why).toBe(mine);
+    expect(seen(now.id).garrison).toBe(mine);
+    expect(TC.reach([now.id]).why).toBe(mine);
+    expect(TC.garrisonWhy(eifel.id, [old.id]).why).toBe(`${old.name} is in the garrison of ${town}. Order it to take the field first.`);
+    // Both in hand: only the older one comes out with a move (the 3D game takes the other out of the hand: LeftInside).
+    expect(TC.reach([old.id, now.id])).toMatchObject({ out: [old.id], why: '' });
+    expect(saved()).toBe(t0);
+  });
+
+  it('where the field outside is full, a garrison is told so, whenever it went in, and TAKE THE FIELD is refused with the same reason', () => {
+    const g = playing();
+    const saar = g.byName['Saar'];
+    const now = inside(g, saar, g.turn);
+    const ours = (): number => saar.units.filter((u) => allied(g, u.nat, 'GER') && u.kind !== 'eng').length;
+    for (const x of g.corps.filter((x) => goes(x) && x.reg !== saar.id)) {
+      if (ours() >= STACK) break;
+      relocate(g, x, saar);
+    }
+    expect(ours()).toBe(STACK);
+    const full = `There is no room in the field at ${saar.name} for another corps.`;
+    const line = `${now.name} is the garrison of ${townName(saar)}. ${full}`;
+    expect(whyNotOrder(g, now)).toBe(line);
+    expect(whyNotOrderGarrison(g, saar.id)).toBe(line);
+    TC.load(saveGame(g));
+    expect(seen(now.id)).toMatchObject({ garrison: line, apOut: 0 });
+    expect(TC.garrisonWhy(saar.id).why).toBe(line);
+    expect(TC.reach([now.id]).why).toBe(line);
+    expect(TC.work(`field:${now.id}`)).toMatchObject({ ok: false, note: full });
+    // One that went in a month before is told the same.
+    now.town = EARLIER;
+    expect(whyNotOrder(g, now)).toBe(line);
+    TC.load(saveGame(g));
+    expect(TC.reach([now.id]).why).toBe(line);
   });
 });

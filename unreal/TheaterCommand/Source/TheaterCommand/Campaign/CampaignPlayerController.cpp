@@ -9142,7 +9142,9 @@ FString ACampaignPlayerController::GarrisonSays() const
 		}
 	}
 	{
-		const FString Rules = Session->GarrisonWhy(ArmyRegion);
+		// (The 1.5.3 review: the sentence of the corps in hand, not of the whole town. One that went in this month beside an
+		// older garrison is told when it can march, as its own card tells it.)
+		const FString Rules = Session->GarrisonWhy(ArmyRegion, PickedCorps);
 		if (!Rules.IsEmpty())
 		{
 			return Rules;
