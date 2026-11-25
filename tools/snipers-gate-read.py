@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The sniper gate's marks, from the gate's JSONL files in a directory (arms off, on, p0, carve): the design director's
-ruling of 25 Nov 16:30Z with the bars as re-read at 17:48Z (design-director/snipers-gate-1125.md).
+ruling of 25 Nov 16:30Z with the bars as re-read at 17:48Z and G7's at 18:55Z (design-director/snipers-gate-1125.md).
 
   python3 tools/snipers-gate-read.py <dir>     (dir: the gate's JSONL files, named <set>-<arm>.jsonl)
 
@@ -164,19 +164,28 @@ for s in SETS:
         say(f'G6 {s}: ' + ' '.join(f'{a} {v:.3f}' for a, v in vals.items()))
         mark(f'G6 {s} outside the run', d <= max(floor, 0.01) + 1e-9, f'|on-off| {d:.3f} (0.01 or carve-only {floor:.3f})')
 
-# ---- G7 the plain attack (mark 4)
-for a in ['off', 'on']:
+# ---- G7 the plain attack (mark 4), against OFF (the design director, 18:55Z): where OFF meets an environment's bar
+# (|bias| 0.1, gap 0.15) ON must too; where OFF fails it, ON at most OFF + 0.06; mean gap 0.10 and mean bias 0.04 stand
+def g7(a):
     R = list(rows('M', a).values())
-    if not R: continue
+    if not R: return None
     by = defaultdict(list)
     for r in R: by[r['cell']].append(r)
     k = defaultdict(list)
     for c, rs in by.items(): k[c.split(':')[0]].append(win(rs) - rs[0]['chance'])
-    res = {e: (sum(abs(x) for x in v) / len(v), sum(v) / len(v)) for e, v in k.items()}
-    ok = all(-0.1 <= b <= 0.1 and g <= 0.15 for g, b in res.values()) and sum(g for g, _ in res.values()) / len(res) <= 0.1 and abs(sum(b for _, b in res.values()) / len(res)) <= 0.04
-    txt = ' '.join(f'{e} g{g:.2f} b{b:+.2f}' for e, (g, b) in sorted(res.items()))
-    if a == 'on': mark('G7 plain attack on', ok, txt)
-    else: say(f'G7 off: {"holds" if ok else "FAILS"} {txt}')
+    return {e: (sum(abs(x) for x in v) / len(v), sum(v) / len(v)) for e, v in k.items()}
+G7 = {a: g7(a) for a in ('off', 'on')}
+for a, res in G7.items():
+    if res: say(f'G7 {a}: ' + ' '.join(f'{e} g{g:.2f} b{b:+.2f}' for e, (g, b) in sorted(res.items())) + f' | mean gap {sum(g for g, _ in res.values()) / len(res):.3f} bias {sum(b for _, b in res.values()) / len(res):+.3f}')
+if G7['on'] and G7['off']:
+    bad = []
+    for e, (g, b) in G7['on'].items():
+        g0, b0 = G7['off'][e]
+        if abs(b0) <= 0.1 and g0 <= 0.15:
+            if not (abs(b) <= 0.1 and g <= 0.15): bad.append(e)
+        elif abs(b) > abs(b0) + 0.06 + 1e-9 or g > g0 + 0.06 + 1e-9: bad.append(e)
+    on = G7['on']; mg = sum(g for g, _ in on.values()) / len(on); mb = sum(b for _, b in on.values()) / len(on)
+    mark('G7 plain attack', not bad and mg <= 0.1 and abs(mb) <= 0.04, f'environments past their bar: {", ".join(bad) or "none"}; mean gap {mg:.3f} (0.10), mean bias {mb:+.3f} (0.04)')
 
 # ---- W: the pin's price at bite 0.6, reported only (pin 20 is ON; W on80 at pin 80)
 w20 = [r for r in rows('F', 'on').values() if r['cell'].split(':')[0] in ('plains', 'forest', 'urban')]

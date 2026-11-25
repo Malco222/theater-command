@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 413baed5 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 1728f154 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -75493,9 +75493,19 @@
         }
         case "attack": {
           const t = this.unit(c.target);
-          const us = mine4(c.units);
-          if (!t || t.side === by2 || !live3(t) || t.hid || !us.length) return false;
-          hands(us);
+          const all = mine4(c.units);
+          if (!t || t.side === by2 || !live3(t) || t.hid || !all.length) return false;
+          hands(all);
+          const lone = all.some((u) => u.team !== "snp") ? all.filter((u) => u.team === "snp") : [];
+          for (const u of lone) give(u, () => {
+            u.order = null;
+            u.path = [];
+            u.keepFace = null;
+            u.aim = t.id;
+            delete u.cut;
+          });
+          const us = lone.length ? all.filter((u) => u.team !== "snp") : all;
+          if (!us.length) return true;
           const cx = us.reduce((s, u) => s + u.x, 0) / us.length, cy = us.reduce((s, u) => s + u.y, 0) / us.length;
           const axis2 = bearing(cx, cy, t.x, t.y);
           const [rx, ry] = ahead(axis2 + Math.PI / 2);
