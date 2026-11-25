@@ -861,6 +861,12 @@ run) each key man has his weapon:
   runs through the gun, a mortar's bomb is not seen dropped. Suppression itself is the rules' (the smarter-fighting
   thread's), not the scene's.
 
+**The sections' own machine gunners** (trial word `gunners`, off): where the soldiers thread has made an army's
+section gunner with his gun, `soldier_<ARMY>_lmg.json` (the German MG 42) and the earlier gun's man, `_lmg34` (his
+MG 34), the scene reads those files (`MakeMen`'s list) and `LandMen` draws a section's `mg` man from them: `_lmg34`
+before July 1942 where it is made, else `_lmg`, else the American's `_bar` as before. Off, the files are not read and he
+is the rifleman he was. The men's test plays one of each date (`Tools/land_show`).
+
 Two exposure words came with it (`LandScape::AirOf`): `desertstop` takes the desert's fields half a stop down and
 `islandstop` an island's a third, for sand that washed pale on the Mac. Both off until a before and after still.
 

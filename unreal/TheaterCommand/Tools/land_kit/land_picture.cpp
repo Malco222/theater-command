@@ -264,6 +264,14 @@ namespace
 		bool bAim = false;
 		V3 AimAt, AimFrom;
 		double AimDistance = 5.0;
+		// The support weapons' sheet (LAND_KIT_SUPPORT=1): the battle's own daylight, a high near-white sun, in place of
+		// the low warm morning (the art director rules paint by it); a 1.75 m bar standing by her, a man's height, banded
+		// every quarter metre; a close look at one of her sockets (the feed: the belt going in), from a bearing and a
+		// height as the whole look's, so far off.
+		bool bDay = false;
+		double Bar = 0.0;
+		std::string CloseSocket;
+		double CloseDistance = 1.6;
 	};
 
 	/** A farmhouse's level as triangles, its floor FloorUp over the plain earth. */
@@ -287,6 +295,53 @@ namespace
 			}
 			S.Tris.push_back(Out);
 		}
+	}
+
+	/** A measuring bar standing on the earth at a place, so high: 5 cm square, banded light and dark every quarter metre. */
+	void AddBar(double X, double Y, double High, Scene& S)
+	{
+		const double Half = 0.025;
+		for (double Z0 = 0.0; Z0 < High - 1e-6; Z0 += 0.25)
+		{
+			const double Z1 = std::min(High, Z0 + 0.25);
+			const Colour Band = (static_cast<int>(std::floor(Z0 / 0.25 + 0.5)) % 2) == 0 ? FromPicture(226, 222, 210) : FromPicture(150, 44, 36);
+			const V3 Corner[4] = { V3(X - Half, Y - Half, 0.0), V3(X + Half, Y - Half, 0.0), V3(X + Half, Y + Half, 0.0), V3(X - Half, Y + Half, 0.0) };
+			for (int K = 0; K < 4; ++K)
+			{
+				const V3 A = Corner[K], B = Corner[(K + 1) % 4];
+				const V3 Out = V3(B.Y - A.Y, A.X - B.X, 0.0).Unit();
+				const V3 Q[4] = { V3(A.X, A.Y, Z0), V3(B.X, B.Y, Z0), V3(B.X, B.Y, Z1), V3(A.X, A.Y, Z1) };
+				const int Order[6] = { 0, 1, 2, 0, 2, 3 };
+				for (int T = 0; T < 6; T += 3)
+				{
+					Tri Face;
+					for (int C = 0; C < 3; ++C)
+					{
+						Face.P[C] = Q[Order[T + C]];
+						Face.N[C] = Out;
+						Face.C[C] = Band;
+					}
+					S.Tris.push_back(Face);
+				}
+			}
+		}
+		// (its top)
+		const V3 Top[4] = { V3(X - Half, Y - Half, High), V3(X + Half, Y - Half, High), V3(X + Half, Y + Half, High), V3(X - Half, Y + Half, High) };
+		const int Order[6] = { 0, 1, 2, 0, 2, 3 };
+		for (int T = 0; T < 6; T += 3)
+		{
+			Tri Face;
+			for (int C = 0; C < 3; ++C)
+			{
+				Face.P[C] = Top[Order[T + C]];
+				Face.N[C] = V3(0.0, 0.0, 1.0);
+				Face.C[C] = FromPicture(226, 222, 210);
+			}
+			S.Tris.push_back(Face);
+		}
+		S.Lo = V3(std::min(S.Lo.X, X - Half), std::min(S.Lo.Y, Y - Half), std::min(S.Lo.Z, 0.0));
+		S.Hi = V3(std::max(S.Hi.X, X + Half), std::max(S.Hi.Y, Y + Half), std::max(S.Hi.Z, High));
+		S.Feet.push_back({ X - Half, Y - Half, X + Half, Y + Half });
 	}
 
 	/** The sun's shadow: depth toward the sun, an orthographic map over everything that casts. */
@@ -383,7 +438,8 @@ namespace
 		const int Out = 3; // supersampled three times each way
 		const int W = 560 * Out, H = 420 * Out;
 		// The low sun of a July morning in Normandy, from the camera's right (fifteen degrees up).
-		const double SunBearing = (P.SunBearing > -999.0 ? P.SunBearing : P.CameraBearing + 62.0) * Rad, SunUp = 15.0 * Rad;
+		// (the support weapons' sheet, bDay: the battle's own daylight, the sun 46 degrees up and near white)
+		const double SunBearing = (P.SunBearing > -999.0 ? P.SunBearing : P.CameraBearing + 62.0) * Rad, SunUp = (P.bDay ? 46.0 : 15.0) * Rad;
 		const V3 Sun(std::sin(SunBearing) * std::cos(SunUp), std::cos(SunBearing) * std::cos(SunUp), std::sin(SunUp));
 		ShadowMap Shadow;
 		Shadow.Build(S, Sun);
@@ -529,9 +585,9 @@ namespace
 		}
 
 		// Light: the sun (warm, low), the sky (cool, all round), the earth's bounce; plain earth and the morning haze.
-		const Colour SunLight = Colour(1.0, 0.84, 0.64) * 2.7;
-		const Colour SkyLight = Colour(0.50, 0.60, 0.80) * 0.62;
-		const Colour Bounce = Colour(0.36, 0.30, 0.22) * 0.30;
+		const Colour SunLight = P.bDay ? Colour(1.0, 0.97, 0.91) * 2.15 : Colour(1.0, 0.84, 0.64) * 2.7;
+		const Colour SkyLight = P.bDay ? Colour(0.58, 0.66, 0.80) * 0.80 : Colour(0.50, 0.60, 0.80) * 0.62;
+		const Colour Bounce = P.bDay ? Colour(0.34, 0.30, 0.24) * 0.34 : Colour(0.36, 0.30, 0.22) * 0.30;
 		// (a damp brown loam, the patches faint, so the ground reads as plain earth and not as sand)
 		const Colour Earth = FromPicture(102, 90, 72), EarthDark = FromPicture(90, 79, 63), Haze = FromPicture(196, 192, 182);
 		std::vector<Colour> Lit(Count);
@@ -1281,32 +1337,41 @@ int main(int argc, char** argv)
 	{
 		const char* File;
 		const char* Model;
-		double Gun, Bearing, Up;
+		// 0: the whole of her with the 1.75 m bar beside her (on her right; -1: on her left); 2: close on a socket
+		int Kind;
+		double Bearing, Up;
+		const char* Socket;
+		double Distance;
 		const char* Caption;
 	};
 	const SupportLook SupportLooks[] = {
-		{ "sup_mg42", "HmgMG42", 0.0, 38.0, 16.0, "Germany: MG 42 on the Lafette, set low" },
-		{ "sup_mg42_back", "HmgMG42", 0.0, -150.0, 22.0, "the same from the gunner's left: the sight, the belt and its box" },
-		{ "sup_mg34", "HmgMG34", 0.0, 38.0, 16.0, "Germany until mid 1942: MG 34 in the same mount" },
-		{ "sup_m1919", "HmgM1919", 0.0, 38.0, 16.0, "United States: Browning M1919A4 on the M2 tripod" },
-		{ "sup_m1919_back", "HmgM1919", 0.0, -150.0, 22.0, "the same from the gunner's left" },
-		{ "sup_m1917", "HmgM1917", 0.0, 38.0, 16.0, "the water-cooled Browning (Poland's wz. 30)" },
-		{ "sup_vickers", "HmgVickers", 0.0, 38.0, 16.0, "Britain: Vickers on the Mk IV tripod, its condenser can" },
-		{ "sup_vickers_back", "HmgVickers", 0.0, 150.0, 22.0, "the same from the gunner's right: the belt comes in from the right" },
-		{ "sup_maxim", "HmgMaxim", 0.0, 38.0, 16.0, "Soviet Union: Maxim on the Sokolov wheeled mount" },
-		{ "sup_maxim_back", "HmgMaxim", 0.0, 150.0, 22.0, "the same from the gunner's right: the trail and its handle" },
-		{ "sup_type92", "HmgType92", 0.0, 38.0, 16.0, "Japan: Type 92, its strip in from the left" },
-		{ "sup_type92_back", "HmgType92", 0.0, -150.0, 22.0, "the same from the gunner's left" },
-		{ "sup_hotchkiss", "HmgHotchkiss", 0.0, 38.0, 16.0, "France (and China): Hotchkiss of 1914" },
-		{ "sup_breda", "HmgBreda37", 0.0, 38.0, 16.0, "Italy: Breda Mod. 37" },
-		{ "sup_mortar_ger", "MortarGER", 0.0, 50.0, 14.0, "Germany: 8 cm mortar, three bombs laid ready" },
-		{ "sup_mortar_ger_back", "MortarGER", 0.0, -140.0, 24.0, "the same from behind and left: the sight on the collar" },
-		{ "sup_mortar_usa", "MortarUSA", 0.0, 50.0, 14.0, "United States: 81 mm mortar" },
-		{ "sup_mortar_uk", "MortarUK", 0.0, 50.0, 14.0, "Britain: 3-inch mortar" },
-		{ "sup_mortar_sov", "MortarSOV", 0.0, 50.0, 14.0, "Soviet Union: 82 mm mortar on its round plate" },
-		{ "sup_mortar_jap", "MortarJAP", 0.0, 50.0, 14.0, "Japan: Type 97 mortar" },
-		{ "sup_mortar_ita", "MortarITA", 0.0, 50.0, 14.0, "Italy: 81 mm mortar" },
-		{ "sup_mortar_fra", "MortarFRA", 0.0, 50.0, 14.0, "France: 81 mm Brandt mortar" },
+		{ "sup_mg42", "HmgMG42", 0, 38.0, 16.0, "", 0.0, "Germany: MG 42 on the Lafette, set low" },
+		{ "sup_mg42_feed", "HmgMG42", 2, -52.0, 30.0, "feed", 1.35, "her belt, every round, up out of its box and in under the feed cover" },
+		{ "sup_mg42_back", "HmgMG42", 2, -155.0, 24.0, "shoulder", 1.7, "as her gunner has her: the butt, the sight, the trigger handle" },
+		{ "sup_mg34", "HmgMG34", 0, 38.0, 16.0, "", 0.0, "Germany until mid 1942: MG 34 in the same mount" },
+		{ "sup_mg34_feed", "HmgMG34", 2, -52.0, 30.0, "feed", 1.35, "the MG 34's round jacket and its belt" },
+		{ "sup_m1919", "HmgM1919", 0, 38.0, 16.0, "", 0.0, "United States: Browning M1919A4 on the M2 tripod" },
+		{ "sup_m1919_feed", "HmgM1919", 2, -52.0, 30.0, "feed", 1.25, "her cloth belt from the box at her left" },
+		{ "sup_m1917", "HmgM1917", 0, 38.0, 16.0, "", 0.0, "the water-cooled Browning (Poland's wz. 30)" },
+		{ "sup_m1917_feed", "HmgM1917", 2, -52.0, 30.0, "feed", 1.35, "the same close: her belt, her water can and hose" },
+		{ "sup_vickers", "HmgVickers", -1, 38.0, 16.0, "", 0.0, "Britain: Vickers on the Mk IV tripod, its condenser can" },
+		{ "sup_vickers_feed", "HmgVickers", 2, 52.0, 30.0, "feed", 1.35, "her belt comes in from the right" },
+		{ "sup_maxim", "HmgMaxim", -1, 38.0, 16.0, "", 0.0, "Soviet Union: Maxim on the Sokolov wheeled mount" },
+		{ "sup_maxim_feed", "HmgMaxim", 2, 128.0, 30.0, "feed", 1.5, "from behind her shield: the belt in from the right, the spade grips" },
+		{ "sup_type92", "HmgType92", 0, 38.0, 16.0, "", 0.0, "Japan: Type 92, a strip of thirty in from the left" },
+		{ "sup_type92_feed", "HmgType92", 2, -52.0, 30.0, "feed", 1.25, "her strip of cartridges going in" },
+		{ "sup_hotchkiss", "HmgHotchkiss", 0, 38.0, 16.0, "", 0.0, "France (and China): Hotchkiss of 1914" },
+		{ "sup_hotchkiss_feed", "HmgHotchkiss", 2, -52.0, 30.0, "feed", 1.25, "her strip and the five great rings" },
+		{ "sup_breda", "HmgBreda37", 0, 38.0, 16.0, "", 0.0, "Italy: Breda Mod. 37" },
+		{ "sup_breda_feed", "HmgBreda37", 2, -52.0, 30.0, "feed", 1.25, "her strip of twenty" },
+		{ "sup_mortar_ger", "MortarGER", 0, 50.0, 14.0, "", 0.0, "Germany: 8 cm mortar, three bombs laid ready" },
+		{ "sup_mortar_ger_sight", "MortarGER", 2, -140.0, 24.0, "sight", 1.5, "from behind and left: the sight, the two cranks" },
+		{ "sup_mortar_usa", "MortarUSA", 0, 50.0, 14.0, "", 0.0, "United States: 81 mm mortar" },
+		{ "sup_mortar_uk", "MortarUK", 0, 50.0, 14.0, "", 0.0, "Britain: 3-inch mortar" },
+		{ "sup_mortar_sov", "MortarSOV", 0, 50.0, 14.0, "", 0.0, "Soviet Union: 82 mm mortar on its round plate" },
+		{ "sup_mortar_jap", "MortarJAP", 0, 50.0, 14.0, "", 0.0, "Japan: Type 97 mortar" },
+		{ "sup_mortar_ita", "MortarITA", 0, 50.0, 14.0, "", 0.0, "Italy: 81 mm mortar" },
+		{ "sup_mortar_fra", "MortarFRA", 0, 50.0, 14.0, "", 0.0, "France: 81 mm Brandt mortar" },
 	};
 	for (const SupportLook& K : SupportLooks)
 	{
@@ -1318,13 +1383,23 @@ int main(int argc, char** argv)
 		P.File = K.File;
 		P.ModelName = K.Model;
 		P.Nation = "any";
-		P.Pin.Gun = K.Gun;
 		P.CameraBearing = SupportSet == "side" ? 90.0 : K.Bearing;
 		P.CameraUp = SupportSet == "side" ? 4.0 : K.Up;
 		P.Caption = K.Caption;
-		if (SupportSet == "side" && std::string(K.File).find("_back") != std::string::npos)
+		// (the battle's daylight; =warm for the low morning sun the vehicles' sheets have)
+		P.bDay = SupportSet != "warm";
+		if (K.Kind == 2)
 		{
-			continue;
+			if (SupportSet == "side")
+			{
+				continue;
+			}
+			P.CloseSocket = K.Socket;
+			P.CloseDistance = K.Distance;
+		}
+		else
+		{
+			P.Bar = K.Kind < 0 ? -1.75 : 1.75;
 		}
 		Panels.push_back(P);
 	}
@@ -1590,6 +1665,30 @@ int main(int argc, char** argv)
 		V.PinPose(*M, P.Pin, Flat);
 		Scene S;
 		AddVehicle(V, P.SootShare, S);
+		if (!P.CloseSocket.empty())
+		{
+			// (a close look at one of her sockets, from the look's own bearing and height)
+			V3 SocketPlace, SocketWay;
+			if (V.SocketAt(P.CloseSocket, 0.0, SocketPlace, SocketWay))
+			{
+				const double CloseBearing = P.CameraBearing * Rad + P.Pin.Heading, CloseUp = P.CameraUp * Rad;
+				P.bAim = true;
+				P.AimAt = SocketPlace;
+				P.AimFrom = V3(std::sin(CloseBearing) * std::cos(CloseUp), std::cos(CloseBearing) * std::cos(CloseUp), std::sin(CloseUp));
+				P.AimDistance = P.CloseDistance;
+			}
+			else
+			{
+				std::printf("  %s has no socket %s to look at\n", P.ModelName.c_str(), P.CloseSocket.c_str());
+			}
+		}
+		if (P.Bar != 0.0)
+		{
+			// (a man's height standing by her: 0.85 m to her right, or her left, a little behind her pin)
+			const double Side = P.Bar > 0.0 ? 0.85 : -0.85, Back = -0.25;
+			const double Sh = std::sin(P.Pin.Heading), Ch = std::cos(P.Pin.Heading);
+			AddBar(P.Pin.X + Sh * Back + Ch * Side, P.Pin.Y + Ch * Back - Sh * Side, std::fabs(P.Bar), S);
+		}
 		std::vector<std::unique_ptr<Vehicle>> Beside;
 		for (const Panel::Other& O : P.Others)
 		{
@@ -1625,7 +1724,21 @@ int main(int argc, char** argv)
 			std::printf("cannot write %s\n", Path.c_str());
 			return 1;
 		}
-		std::fprintf(Captions, "%s\t%s\n", P.File.c_str(), P.Caption.c_str());
+		if (bSupportSheet && P.Bar != 0.0)
+		{
+			// (the art director's Speed line: each file's triangles, near and far, lettered under her whole look)
+			size_t NearTris = 0, FarTris = 0;
+			for (const Body& Bo : M->Bodies)
+			{
+				NearTris += Bo.Near.Triangles.size() / 3;
+				FarTris += Bo.Far.Triangles.size() / 3;
+			}
+			std::fprintf(Captions, "%s\t%s (%zu triangles near, %zu far; the bar is 1.75 m)\n", P.File.c_str(), P.Caption.c_str(), NearTris, FarTris);
+		}
+		else
+		{
+			std::fprintf(Captions, "%s\t%s\n", P.File.c_str(), P.Caption.c_str());
+		}
 		std::printf("  %s (%zu triangles)\n", Path.c_str(), S.Tris.size());
 	}
 	// The level switches: the house's left half as one level draws it and its right half as the next, at the distance the

@@ -2364,6 +2364,14 @@ namespace LandMen
 				St.Cl = Cl;
 			};
 			const bool bGunner = S.Weapon == "lmg";
+			if (Serves != 0 && Pose == "wait" && (Role == "hmg" || Role == "mortar"))
+			{
+				// (release 2's "teamguns": set down a moment, he is at his weapon still, as deployed, not kneeling apart
+				// with his rifle up)
+				Stance AtHer = StanceOf(S, Role, "deployed", bMoving, Serves);
+				AtHer.Pose = Pose;
+				return AtHer;
+			}
 			if (Pose == "walk" || Pose == "run" || Pose == "advance" || Pose == "creep" || Pose == "flee") Use(Pose.c_str(), Stance::Gait, Up);
 			else if (Pose == "crawl") Use("crawl", Stance::Gait, Prone);
 			else if (Pose == "idle") Use("idle", Stance::Loop, Up);
@@ -3864,8 +3872,16 @@ namespace LandMen
 				const auto Dress = Armies.find(File);
 				if (Dress != Armies.end()) Colours = Dress;
 			}
-			// (a machine gunner from the army's gunner's file where it has one: the American's BAR, soldier_USA_bar)
-			if (Tr.Role == "mg" && Soldiers.find(File + "_bar") != Soldiers.end()) File += "_bar";
+			// (a machine gunner from the army's gunner's file where it has one: his section's own gun, soldier_<ARMY>_lmg,
+			// the German's MG 42, and before July 1942 the earlier one where it is made, _lmg34, his MG 34 (release 2: the
+			// scene reads those files only on trial "gunners"); else the American's BAR, soldier_USA_bar)
+			if (Tr.Role == "mg")
+			{
+				const bool bEarly = MonthNo < 1942 * 12 + 6;
+				if (bEarly && Soldiers.find(File + "_lmg34") != Soldiers.end()) File += "_lmg34";
+				else if (Soldiers.find(File + "_lmg") != Soldiers.end()) File += "_lmg";
+				else if (Soldiers.find(File + "_bar") != Soldiers.end()) File += "_bar";
+			}
 			// (a section's leader with his nation's leader's arm: the Gruppenfuehrer's MP 40, the Soviet squad leader's
 			// PPSh, the British section leader's Sten, from the army's _smg file where one is made; until then, and for
 			// the American squad leader, whose issue in 1944 was the M1 rifle, the army's rifleman's file)
