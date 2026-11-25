@@ -61,7 +61,7 @@ import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarnin
 import { legionDrafts } from './legions';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
-import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardForce, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
+import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fedBySea, feedingSeas, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardForce, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld, type SeaReach } from './siege';
 import { battleHit } from './repairs';
 import { TOWNS, townName, townSize, worthOf } from './towns';
 import { WEATHER, skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
@@ -1018,6 +1018,27 @@ function drawSupply(g: Game, id: string, pass: Uint8Array, seeds: number[], head
   return { ok, reach, east };
 }
 
+/**
+ * True reach (audit item 41; the design director's ruling of 13:58Z, "Withering garrisons" 1, and 14:26Z, 25 November
+ * 2026): a sea the shutting power holds closed to the nation fed is closed to every ship carrying it stores, whatever
+ * the flag. An ally's ships feed a port for another nation (the supply picture's holder's and mates' quays) only by a
+ * way that stays open with the seas closed to the nation fed closed to them too; paper reach is not reach. One rule
+ * for both charts: on wherever the far side is on, and on the old chart under Units decide with its own sub-flag
+ * 'trueReach' (stage.json), off until its gate passes. Every history stop alike.
+ */
+export const trueReach = (g: Game): boolean => farOn(g) || (unitsDecide(g) && g.flags.trueReach === 1);
+/**
+ * Sets the old chart's sub-flag of true reach, for tests and the bench: only in a grand campaign with Units decide
+ * (returns whether it was set). The supply picture is drawn afresh at its next asking.
+ */
+export function setTrueReach(g: Game, on: boolean): boolean {
+  if (!unitsDecide(g)) return false;
+  if (on) g.flags.trueReach = 1;
+  else delete g.flags.trueReach;
+  g.supplyDirty = true;
+  return true;
+}
+
 export function computeSupply(g: Game): void {
   const active = new Set(g.corps.map((c) => c.nat));
   const withShips = Object.values(g.nations).filter((n) => n.alive && (n.seaSupply || n.sealift > 0)).map((n) => n.id);
@@ -1185,6 +1206,45 @@ export function computeSupply(g: Game): void {
     if (!lanes.has(id)) { const n = g.nations[id]; lanes.set(id, n && (n.seaSupply || n.sealift > 0) ? lanesKept(id) : null); }
     return lanes.get(id)!;
   };
+  // True reach (trueReach): the seas ally a's ships could use carrying nation id's stores, every sea closed to id closed
+  // to them as well, asked afresh each call and kept for the call only (never in kept0.lanes, which keeps a's own
+  // lanes by the seas closed to a alone). Asked only where a's own lanes reach the port; where no sea of them is closed
+  // to id the walk would take the same seas, and they are a's own lanes.
+  const truly = trueReach(g);
+  const asIf = new Map<string, Uint8Array>();
+  const carrying = (a: string, id: string, theirs: Uint8Array): Uint8Array => {
+    const key = a + '>' + id;
+    let o = asIf.get(key);
+    if (!o) {
+      o = theirs;
+      for (let z = 0; z < theirs.length; z++) {
+        if (!theirs[z] || !seasNow.closed(z, id)) continue;
+        o = openSeas(g, a, seasNow, undefined, undefined, kept0.lanes.get(a)!.starts, id);
+        break;
+      }
+      if (supplyCheck && !sameBytes(openSeas(g, a, seasNow, undefined, undefined, undefined, id), o)) throw new Error(`sea lanes of ${a} carrying for ${id} in month ${g.turn} differ from fresh ones`);
+      asIf.set(key, o);
+    }
+    return o;
+  };
+  // An ally's ships feed a port of nation id's: its own lanes reach the port, and under true reach they reach it
+  // carrying id's stores.
+  const feeds = (a: string, id: string, r: Region): boolean => {
+    const theirs = lanesOf(a);
+    if (!theirs || !r.seas.some((z) => theirs[z])) return false;
+    if (!truly) return true;
+    const o = carrying(a, id, theirs);
+    return r.seas.some((z) => o[z]);
+  };
+  // Under true reach a fortified port's stores are filled only by ships that could carry them there for its holder:
+  // ships a, whose lanes reach the port, reach it as well with every sea closed to the holder closed to them.
+  // (Otherwise another country's ships, reaching the port by a sea the holder is shut out of, would keep the
+  // holder's stores full by the same paper: Norway's own quay at a British Malta.)
+  const forHolder = (a: string, r: Region): boolean => {
+    if (a === r.ctrl) return true;
+    const o = carrying(a, r.ctrl, lanesOf(a)!);
+    return r.seas.some((z) => o[z]);
+  };
   // The sources on a country's friends' roads, in order: one friend's own list when only one has any.
   const sourcesFor = (friend: Uint8Array): number[] => {
     let one: number[] | null = null;
@@ -1217,14 +1277,18 @@ export function computeSupply(g: Game): void {
       const home = !shut && r.ctrl === id && r.owner === id;
       const depot = home && (r.cap || r.fac >= 3 || !!g.flags[depotKey(r.id)]);
       let quay = !!open && r.port && r.seas.some((z) => open[z]);
+      // (Whose ships make the quay: the nation's own, the holder's, or the side theatre's shared shipping.)
+      let by = quay ? 1 : 0;
       // Overseas, an ally's working port feeds the troops who came to fight beside him.
-      if (!quay && !shut && r.overseas && r.port && r.ctrl !== id) { const theirs = lanesOf(r.ctrl); quay = !!theirs && r.seas.some((z) => theirs[z]); }
+      if (!quay && !shut && r.overseas && r.port && r.ctrl !== id && (quay = feeds(r.ctrl, id, r))) by = 2;
       // In a side theatre the allies share their shipping: a port any of them can still reach feeds them all.
-      if (!quay && r.theatre >= 0 && r.port) quay = (mates ??= shippers(id)).some((a) => { const theirs = lanesOf(a); return !!theirs && r.seas.some((z) => theirs[z]); });
+      if (!quay && r.theatre >= 0 && r.port && (quay = (mates ??= shippers(id)).some((a) => feeds(a, id, r)))) by = 3;
       // A fortified port overseas keeps stores: with the sea behind it closed, it feeds its garrison a while longer.
       // (Under the fortress rows, a port that holds a row keeps that row's stores: one stores, not two. 07:12Z.)
       if (!shut && r.overseas && r.port && worksKept(r)) {
-        if (quay) g.flags[storesKey(r.id)] = g.turn;
+        if (quay) {
+          if (!truly || (by === 1 ? forHolder(id, r) : by === 2 || mates!.some((a) => feeds(a, id, r) && forHolder(a, r)))) g.flags[storesKey(r.id)] = g.turn;
+        }
         else if (g.turn - (g.flags[storesKey(r.id)] ?? -99) <= portKeep(g, r)) quay = true;
       }
       if (!depot && !quay) continue;
@@ -1255,8 +1319,19 @@ export function computeSupply(g: Game): void {
   }
   // An army at peace is fed by its own country wherever it stands.
   for (const c of g.corps) c.supplied = !g.nations[c.nat].atWar.length || !!g.supply[c.nat]?.[c.reg];
-  // A garrison shut in its town lives on the town's stores while they last.
-  if (field) siegeSupply(g);
+  // A garrison shut in its town lives on the town's stores while they last. Under true reach a besieged port town is
+  // fed by the very lanes drawn here (siege.ts fedBySea, SeaReach): a nation's own lanes, or its lanes carrying the
+  // holder's stores (carrying), and nothing for a nation with no ships. The siege walks nothing of its own.
+  const none = truly ? new Uint8Array(g.seas.length) : null;
+  const townReach: SeaReach | undefined = truly ? (x, id) => { const theirs = lanesOf(x); return !theirs ? none! : x === id ? theirs : carrying(x, id, theirs); } : undefined;
+  if (field) siegeSupply(g, townReach);
+  // (TC_SUPPLY_CHECK: every besieged town reads the same from the kept lanes as from a fresh walk.)
+  if (field && townReach && supplyCheck) {
+    for (const r of g.regions) {
+      if (!r.garr || !r.garr.length || !besieged(g, r)) continue;
+      if (fedBySea(g, r, townReach) !== fedBySea(g, r) || !sameBytes(feedingSeas(g, r, townReach), feedingSeas(g, r))) throw new Error(`the besieged town of ${r.name} read from kept sea lanes in month ${g.turn} differs from a fresh reading`);
+    }
+  }
   g.supplyDirty = false;
   resetRailheads(g);
 }

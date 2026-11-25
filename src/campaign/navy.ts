@@ -958,12 +958,18 @@ export function gatesTick(g: Game): void {
  * (For the supply picture's kept lanes, game.ts: `asked`, if given, is filled in with every answer the walk took, -1
  * where it asked nothing, and `starts` are seaStarts' seas, in the same form, when the caller has them already.
  * Neither changes the answer.)
+ *
+ * `carrying`, if given, is another nation whose stores the ships carry (true reach, game.ts trueReach; the design
+ * director's ruling of 13:58Z and 14:26Z, 25 November 2026): a sea closed to that nation is closed to every ship
+ * carrying it stores, whatever the flag, so the walk takes the seas closed to either. The same harbours, the same
+ * passages for the ships' own flag, the same homeward form. Absent, nothing changes.
  */
-export function openSeas(g: Game, nat: string, seas?: SeaPicture, homeward: boolean = farOn(g), asked?: Int8Array, starts?: number[]): Uint8Array {
+export function openSeas(g: Game, nat: string, seas?: SeaPicture, homeward: boolean = farOn(g), asked?: Int8Array, starts?: number[], carrying?: string): Uint8Array {
   const open = new Uint8Array(g.seas.length);
   // Whether a sea is closed to the nation is asked only of the seas its ships could reach, once each (-1: not asked yet).
   const shutAt = asked ?? new Int8Array(g.seas.length).fill(-1);
-  const shut = (z: number): boolean => { if (shutAt[z] < 0) shutAt[z] = (seas ? seas.closed(z, nat) : closedTo(g, z, nat)) ? 1 : 0; return shutAt[z] === 1; };
+  const closedFor = (z: number, who: string): boolean => (seas ? seas.closed(z, who) : closedTo(g, z, who));
+  const shut = (z: number): boolean => { if (shutAt[z] < 0) shutAt[z] = closedFor(z, nat) || (carrying !== undefined && carrying !== nat && closedFor(z, carrying)) ? 1 : 0; return shutAt[z] === 1; };
   const q: number[] = [];
   for (const z of starts ?? seaStarts(g, nat, seas, undefined, homeward)) if (!open[z] && !shut(z)) { open[z] = 1; q.push(z); }
   for (let i = 0; i < q.length; i++) for (const j of g.seas[q[i]].adj) if (!open[j] && !shut(j) && canPass(g, q[i], j, nat)) { open[j] = 1; q.push(j); }
