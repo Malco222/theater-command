@@ -1607,9 +1607,10 @@ function glanceLights(s: Game, id: number, guns: number) {
   const level = lightsAt(s, id);
   const going = s.nations[r.ctrl]?.queue.filter((b) => b.what === 'work' && b.item === 'lights' && b.region === id).length ?? 0;
   // With lights and no guns there is nothing to count: the raid card's own words for that case (the UI director's
-  // section 2, "No guns built"), after the level, rather than "0 of the 0 levels of guns".
+  // section 2, "No guns built"), after the level, rather than "0 of the 0 levels of guns". The town is one the side
+  // sees, so it takes the known form, with the small letter after the colon (the UI director, 25 Nov 2026 20:33Z).
   const line = level <= 0 ? ''
-    : guns <= 0 ? `level ${level}: There are no guns for them to light. They help the night fighters a little.`
+    : guns <= 0 ? `level ${level}: there are no guns built here for them to light. They help the night fighters a little.`
     : `level ${level}: ${Math.min(level, guns)} of the ${guns} levels of guns are lit by night, under a clear sky`;
   return {
     level, lit: Math.min(level, guns), guns, radar: radarLays(s, id), going,

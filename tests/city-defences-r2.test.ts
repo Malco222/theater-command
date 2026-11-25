@@ -341,7 +341,7 @@ describe('city defences: the guns by night (slice 2)', () => {
     // Release 1's flat 0.03 likewise.
     expect(ruhrByNight({ lights: 3, fighters: true }).a().D).toBe(ruhrByNight({ fighters: true }).a().D);
     // And with no guns the card says what they do.
-    expect(line(lit, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Level 3 searchlights over Ruhr', effect: 'There are no guns for them to light. They help the night fighters a little.' });
+    expect(line(lit, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Level 3 searchlights over Ruhr', effect: 'There are no guns built here for them to light. They help the night fighters a little.' });
     expect(line(lit, 'Anti-aircraft guns')).toBeUndefined();
     expect(lit.lights).toEqual({ level: 3, cloud: false, lit: 0 });
   });
@@ -360,11 +360,11 @@ describe('city defences: the guns by night (slice 2)', () => {
 
   it('words the searchlights line in each of its forms, and the guns by night in theirs', () => {
     const some = ruhrByNight({ guns: 3, lights: 2, radar: true, bombers: 200 }).a();
-    expect(line(some, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Level 2 searchlights over Ruhr', effect: 'With radar laying the guns, they light 2 of the 3 levels of guns, and they help the night fighters a little.' });
+    expect(line(some, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Level 2 searchlights over Ruhr', effect: 'With radar laying the guns, they light two of the three levels of guns built here, and they help the night fighters a little.' });
     expect(line(some, 'Anti-aircraft guns')).toEqual({ label: 'Anti-aircraft guns', value: 'Level 3 guns ring the factories of Ruhr', effect: `They stop 45% of the bombing. By night they fire by radar and searchlight, and bring down about ${Math.round(((1 * 0.45 + 2 * 0.75) / 3) * 100)}% as many bombers as they would by day.` });
     expect(some.lights).toEqual({ level: 2, cloud: false, lit: 2 / 3 });
     const all = ruhrByNight({ guns: 2, lights: 3, radar: true }).a();
-    expect(line(all, 'Searchlights')!.effect).toBe('With radar laying the guns, they light every level of the guns, and they help the night fighters a little.');
+    expect(line(all, 'Searchlights')!.effect).toBe('With radar laying the guns, they light every level of the guns built here, and they help the night fighters a little.');
     expect(all.lights!.lit).toBe(1);
     const blind = ruhrByNight({ guns: 3, lights: 3 }).a();
     expect(line(blind, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Level 3 searchlights over Ruhr', effect: "Without Fighter control's radar to lay the guns, they help only the night fighters, a little." });
@@ -1109,7 +1109,7 @@ describe('city defences in the bridge (slice 5)', () => {
     expect(l.level).toBe(2);
     expect(l.guns).toBe(0);
     expect(l.lit).toBe(0);
-    expect(l.line).toBe('level 2: There are no guns for them to light. They help the night fighters a little.');
+    expect(l.line).toBe('level 2: there are no guns built here for them to light. They help the night fighters a little.');
     expect(l.line).not.toMatch(/0 of the 0/);
   });
 
@@ -1290,14 +1290,14 @@ describe('city defences under fog on raids (the design director, 19:44Z: radar a
     const r = ruhrByNight({ guns: 3, lights: 1, radar: true, bombers: 100 });
     const fog = assessAir(r.g, [r.f], 'night', r.t, knownAs(1));
     expect(fog.lights).toEqual({ level: 1, cloud: false, lit: 1 });
-    expect(line(fog, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Level 1 searchlights over Ruhr', effect: 'With radar laying the guns, they light every level of the guns, and they help the night fighters a little.' });
+    expect(line(fog, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Level 1 searchlights over Ruhr', effect: 'With radar laying the guns, they may light every level of the guns built here, and they help the night fighters a little.' });
     // The guns keep their fog hedge, for the guns are what the side counts.
     expect(line(fog, 'Anti-aircraft guns')).toEqual({ label: 'Anti-aircraft guns', value: 'Level 1 guns may ring the factories of Ruhr', effect: 'They stop 15% of the bombing. By night they fire by radar and searchlight, and bring down about 75% as many bombers as they would by day.' });
     expect(gunsTerm(fog)).toBeCloseTo(1 * 0.012 * 0.7 * 0.75, 12);
     // The truth, and the raid flown, count the three levels built: the one level of lights lights one of them.
     const truth = r.a();
     expect(truth.lights).toEqual({ level: 1, cloud: false, lit: 1 / 3 });
-    expect(line(truth, 'Searchlights')!.effect).toBe('With radar laying the guns, they light 1 of the 3 levels of guns, and they help the night fighters a little.');
+    expect(line(truth, 'Searchlights')!.effect).toBe('With radar laying the guns, they light one of the three levels of guns built here, and they help the night fighters a little.');
     expect(gunsTerm(truth)).toBeCloseTo(3 * 0.012 * 0.7 * ((2 * 0.45 + 0.75) / 3), 12);
     const rep = fly(r.g, 'UK', 'night', r.t, [r.f], ':fog')!;
     expect(rep.lights).toEqual(truth.lights);
@@ -1324,7 +1324,7 @@ describe('city defences under fog on raids (the design director, 19:44Z: radar a
       expect(line(end.a, 'Searchlights')!.value).toBe('Level 3 searchlights over Ruhr');
     }
     // The low end counts no guns where none were seen: the lights have none of its guns to light.
-    expect(line(w.lo.a, 'Searchlights')!.effect).toBe('There are no guns for them to light. They help the night fighters a little.');
+    expect(line(w.lo.a, 'Searchlights')!.effect).toBe('There may be no guns built here for them to light. They help the night fighters a little.');
     // The targets list hedges the guns under fog and names the lights as they are; with the fog off it names both.
     expect(raidTargets(r.g, 'night', 'UK').find((x) => x.id === r.t)!.what).toMatch(/guns not known, level 3 searchlights/);
     setRaidFog(r.g, false);
@@ -1357,7 +1357,7 @@ describe('city defences under fog on raids (the design director, 19:44Z: radar a
     const fog = assessAir(r.g, [r.f], 'night', r.t, knownAs(1));
     expect(fog.lights).toEqual({ level: 3, cloud: false, lit: 1 });
     expect(gunsTerm(fog)).toBeCloseTo(1 * 0.012 * 0.7 * 0.75, 12);
-    expect(line(fog, 'Searchlights')!.effect).toBe('With radar laying the guns, they light every level of the guns, and they help the night fighters a little.');
+    expect(line(fog, 'Searchlights')!.effect).toBe('With radar laying the guns, they may light every level of the guns built here, and they help the night fighters a little.');
   });
 
   it('a night raid flown under fog on raids is priced on the truth, exactly as with the fog off', () => {
@@ -1376,6 +1376,45 @@ describe('city defences under fog on raids (the design director, 19:44Z: radar a
     expect(rep.lights).toEqual(truth.lights);
     expect(JSON.stringify(rep)).toBe(JSON.stringify(rep0));
     expect(JSON.stringify(r.g.airFleets)).toBe(JSON.stringify(twin.airFleets));
+  });
+
+  // The design director, 25 Nov 2026 20:32Z: one footing on one card. The clauses that rest on the guns' count carry the
+  // guns' hedge under fog on raids, in the UI director's words of 20:33Z (counts in words, the guns "built here"). The
+  // every-level fog form is the land rules builder's by the UI director's pattern, sent for a yes at 20:34Z.
+  it('words the searchlights\' guns clauses with the guns\' hedge under fog, and plainly on the truth and on a raid flown', () => {
+    const say = {
+      none: 'There are no guns built here for them to light. They help the night fighters a little.',
+      noneFog: 'There may be no guns built here for them to light. They help the night fighters a little.',
+      some: 'With radar laying the guns, they light one of the three levels of guns built here, and they help the night fighters a little.',
+      someFog: 'With radar laying the guns, they may light one of the two levels of guns built here, and they help the night fighters a little.',
+      every: 'With radar laying the guns, they light every level of the guns built here, and they help the night fighters a little.',
+      everyFog: 'With radar laying the guns, they may light every level of the guns built here, and they help the night fighters a little.',
+    };
+    // No guns counted: level 3 lights and level 3 guns truly stand, the side counts none.
+    const none = ruhrByNight({ guns: 3, lights: 3, radar: true, bombers: 100 });
+    expect(line(assessAir(none.g, [none.f], 'night', none.t, knownAs(0)), 'Searchlights')!.effect).toBe(say.noneFog);
+    expect(line(none.a(), 'Searchlights')!.effect).toBe(say.every);
+    // And with truly no guns, on the truth.
+    expect(line(ruhrByNight({ lights: 3, radar: true, bombers: 100 }).a(), 'Searchlights')!.effect).toBe(say.none);
+    // Some levels lit: level 1 lights, level 3 guns truly, the side counts two.
+    const some = ruhrByNight({ guns: 3, lights: 1, radar: true, bombers: 100 });
+    expect(line(assessAir(some.g, [some.f], 'night', some.t, knownAs(2)), 'Searchlights')!.effect).toBe(say.someFog);
+    expect(line(some.a(), 'Searchlights')!.effect).toBe(say.some);
+    // Every level lit: level 3 lights, level 3 guns truly, the side counts two.
+    const every = ruhrByNight({ guns: 3, lights: 3, radar: true, bombers: 100 });
+    expect(line(assessAir(every.g, [every.f], 'night', every.t, knownAs(2)), 'Searchlights')!.effect).toBe(say.everyFog);
+    expect(line(every.a(), 'Searchlights')!.effect).toBe(say.every);
+    // A raid flown under fog on raids is assessed with no side's count (fly passes none), so it reads the known forms.
+    for (const [o, want] of [
+      [{ lights: 3, radar: true, bombers: 100 }, say.none],
+      [{ guns: 3, lights: 1, radar: true, bombers: 100 }, say.some],
+      [{ guns: 3, lights: 3, radar: true, bombers: 100 }, say.every],
+    ] as const) {
+      const r = ruhrByNight(o);
+      setRaidFog(r.g, true);
+      expect(line(r.a(), 'Searchlights')!.effect).toBe(want);
+      expect(fly(r.g, 'UK', 'night', r.t, [r.f], ':fog')).not.toBeNull();
+    }
   });
 });
 
