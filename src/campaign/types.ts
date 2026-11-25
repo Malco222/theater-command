@@ -866,8 +866,8 @@ export interface ConvoyMonth {
   byEscorts?: number;
   /** Release 2, with Units decide and the sea patrol live (seapatrol.ts), record only: of subsLost, the boats the receiving nation's aircraft on patrol sank in the route's seas. */
   byAircraft?: number;
-  /** Release 2, with Units decide and the route's convoy count laid (the one-pass ruling), record only: the boats on station on the route, the convoys that sailed (both ways), those sighted and attacked, the incidents with the escort, the boats a convoy attacked (the pack), and, where the tons are counted from the convoys' side, the ships a convoy attacked lost, on average. */
-  count?: { boats: number; sailed: number; sighted: number; attacked: number; incidents: number; pack: number; sunk?: number; torps?: number; watched?: number };
+  /** Release 2, with Units decide and the route's convoy count laid (the one-pass ruling), record only: the boats on station on the route, the convoys that sailed (both ways), those sighted and attacked, the incidents with the escort at OEG T2's rate (the boats that fired), the boats a convoy attacked (the pack), and, where the tons are counted from the convoys' side, the ships a convoy attacked lost, on average. With the escorts' losses form laid, 'met' is the incidents with the escort a convoy attacked by cause (navy.ts escortWork), which the escort's kills read. */
+  count?: { boats: number; sailed: number; sighted: number; attacked: number; incidents: number; pack: number; sunk?: number; torps?: number; watched?: number; met?: number };
 }
 
 /** A boat or ship group in the submarine scene's record: its fleet, its nation and its boats or destroyers as the month began. */

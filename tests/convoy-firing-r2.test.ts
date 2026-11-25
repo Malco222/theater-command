@@ -150,11 +150,17 @@ describe('a convoy attacked', () => {
 });
 
 describe('what it leaves alone', () => {
-  it('the escort\'s kills keep the count\'s incidents (Q3 (a))', () => {
+  it('with the escorts\' losses form unread, the escort\'s kills keep the count\'s incidents (Q3 (a)); laid, they read the same contest (convoy-escorts-r2)', () => {
     const g = open(true);
+    grantTech(g, 'UK', 'asvradar');
     const ub = meet(g, 60, 30);
     const z = zoneOf(g, 'natl');
-    expect(huntExpected(g, 'UK', z, [ub])).toBe(unread(() => huntExpected(g, 'UK', z, [ub])));
+    const keep = CAUSE.escorts;
+    CAUSE.escorts = null;
+    try {
+      expect(huntExpected(g, 'UK', z, [ub])).toBe(unread(() => huntExpected(g, 'UK', z, [ub])));
+    } finally { CAUSE.escorts = keep; }
+    expect(huntExpected(g, 'UK', z, [ub])).not.toBe(unread(() => huntExpected(g, 'UK', z, [ub])));
     expect(convoyCount(g, atlantic)).toEqual(unread(() => convoyCount(g, atlantic)));
   });
 

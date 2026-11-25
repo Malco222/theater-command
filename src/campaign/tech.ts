@@ -578,7 +578,7 @@ function shipWords(t: Tech): string | null {
 }
 
 /** What a technology does, in plain words worked out from its numbers, so the words and the rule cannot drift apart. */
-const CAUSE = causeData as unknown as { cover: number; asv: string; incident: { coordinated: number; independent: number; coordinatedKit: number; independentKit: number; atw: number }; seaLoss: string[] };
+const CAUSE = causeData as unknown as { cover: number; asv: string; incident: { coordinated: number; independent: number; coordinatedKit: number; independentKit: number; atw: number }; seaLoss: string[]; escorts?: boolean | null };
 const in100 = (x: number): number => Math.round(x * 100);
 
 /**
@@ -596,12 +596,19 @@ function unitsWords(id: string): string | null {
 /** What a row does in the convoy war by cause (Units decide; data/campaign/convoycause.json), in words, or null. */
 function causeWords(id: string): string | null {
   const I = CAUSE.incident, third = `${in100(CAUSE.cover)} in 100`;
-  const kills = `a hunting group sinks the submarine in ${in100(I.coordinatedKit)} of every 100 attacks it answers and a convoy's own escort in ${in100(I.independentKit)}, against ${in100(I.coordinated)} and ${in100(I.independent)} with depth charges alone`;
+  // (With the escorts' losses form laid, the design director's ruling of 24 November 2026 17:58Z, Q2 (a): a convoy's
+  // escorts beyond its close screen's stations work the coordinated column beside the hunting groups, and the escorts on
+  // the stations the independent one. With it null the cards read as they did.)
+  const laid = CAUSE.escorts === true;
+  const kills = laid
+    ? `a hunting group and a convoy's escorts beyond its close screen sink the submarine in ${in100(I.coordinatedKit)} of every 100 attacks they answer, and the escorts on the close screen in ${in100(I.independentKit)}, against ${in100(I.coordinated)} and ${in100(I.independent)} with depth charges alone`
+    : `a hunting group sinks the submarine in ${in100(I.coordinatedKit)} of every 100 attacks it answers and a convoy's own escort in ${in100(I.independentKit)}, against ${in100(I.coordinated)} and ${in100(I.independent)} with depth charges alone`;
   const air = `submarines in the waters its aircraft reach attack with only ${third} of their strength`;
   if (id === 'sonar') return `Its aircraft carry depth charges. With ${BY_ID[CAUSE.asv]?.name.toLowerCase() ?? 'sea-search radar'} as well, ${air}.`;
   if (id === CAUSE.asv) return `With its aircraft's depth charges, ${air}. Its escorts carry the sets too.`;
   if (id === 'patrolaircraft') return 'Its aircraft with anti-submarine kit reach all of the seas off its coasts, and the open ocean next to them.';
   if (id === 'escortgroups') return `Destroyers sent hunting work as trained support groups. With ahead-throwing weapons too, ${kills}.`;
+  if (id === 'hedgehog' && laid) return `The escorts on a convoy's close screen sink the submarine in ${in100(I.independent * I.atw)} of every 100 attacks they answer, and a hunting group and the convoy's escorts beyond the screen in ${in100(I.coordinated * I.atw)}, against ${in100(I.independent)} and ${in100(I.coordinated)} with depth charges alone. With escort groups too, ${kills}.`;
   if (id === 'hedgehog') return `A convoy's own escort sinks the submarine in ${in100(I.independent * I.atw)} of every 100 attacks it answers, and a hunting group in ${in100(I.coordinated * I.atw)}, against ${in100(I.independent)} and ${in100(I.coordinated)} with depth charges alone. With escort groups too, ${kills}.`;
   return null;
 }
