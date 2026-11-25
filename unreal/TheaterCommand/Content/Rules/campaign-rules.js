@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a3f55bc9 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 94751f1c 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -60445,7 +60445,7 @@
           share: 1
         };
         if (first2.raised) grp2.raised = first2.raised;
-        grp2.name = groupName(g2, first2.nat, kind, want, base);
+        grp2.name = groupName(g2, first2.nat, kind, want, base, grp2);
         g2.airFleets.splice(g2.airFleets.indexOf(mine4[mine4.length - 1]) + 1, 0, grp2);
         headline(g2, "info", `${grp2.name} forms in ${base.name}, a new group of ${r.name}.`, first2.nat, base.id);
       }
