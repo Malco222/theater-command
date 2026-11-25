@@ -104,6 +104,11 @@ const staged = (env: string, key: string): boolean => {
 };
 /** True where new grand campaigns open with the marked army (release 2, marked.ts; stage.json 'marked'). Forced by TC_MARKED. */
 export const MARKED_STAGE: boolean = staged('TC_MARKED', 'marked');
+// A row that takes a named corps whole waits while that corps is in contact, on the old chart (release 2; the design
+// director's ruling of 19:47Z, 25 November 2026; game.ts `expeditions`): the grand campaigns opened while this is true
+// carry the flag 'fromWait'. Forced by TC_FROMWAIT.
+/** True where new grand campaigns open with the old chart's "from" rows waiting on contact (stage.json 'fromWait'). */
+export const FROMWAIT_STAGE: boolean = staged('TC_FROMWAIT', 'fromWait');
 /** True where new grand campaigns open with the lorries moved to the front named first (stage.json 'lorryShift'). */
 export const LORRYSHIFT_STAGE: boolean = staged('TC_LORRYSHIFT', 'lorryShift');
 /** True where new grand campaigns open with horse-drawn wagons where lorries are short (stage.json 'wagons'). */
