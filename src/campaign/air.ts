@@ -770,8 +770,13 @@ export function fightersOver(g: Game, region: number, against: string): number {
   return n;
 }
 
-/** Fog on raids (airfog.ts): how far a nation's fighters reach, by its own table (a group of long-range fighters may reach farther). */
-export const fighterReach = (g: Game, nat: string): number => reach({ nat, name: '' }, g).ftrRange;
+/**
+ * Fog on raids (airfog.ts): how far a nation's fighters reach, by its own table (a group of long-range fighters may reach
+ * farther), as reach() reads it for a group based at `base` where one is given: on the far side the far rows
+ * (far-air.json ftrReach) and the cover cap (jobs.cover) of a group based there (the join's read of r2-head-1125k,
+ * fault 2). With no base, or off the far side, Europe's dated row as before.
+ */
+export const fighterReach = (g: Game, nat: string, base?: number): number => reach(base === undefined ? { nat, name: '' } : { nat, name: '', base }, g).ftrRange;
 
 /**
  * Fog on raids (airfog.ts, read only with its switch on): every enemy fighter group that guards a province's ground and
