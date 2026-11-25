@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 94751f1c 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e059a3de 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -3083,6 +3083,7 @@
       ready: "A fleet in harbour regains 'port' of its fitness for sea each month. On patrol it wears down to 'floor' and no further, and a damaged fleet that stays out mends only slowly. A battle costs the loser 'lost' and the winner 'won'. A computer-run fleet that has gone in to refit comes out again at sortieAt.",
       battle: "A patrolling fleet offers battle when it is at least 'seek' times as strong as the enemy in its sea. Raiding surface ships are brought to action with chance catchRaider. A fleet outnumbered by evadeAt or more slips away to port with chance evade.",
       watch: "The coast watch's report (the grand campaign). When a nation's month closes with 'corps' or more of its field corps standing idle on a quay, shipping for as many, and an enemy's home coast within a landing's range over seas open to its troopships, that enemy's coast watch reports it: his staff mans its harbours and a player is warned. Only a corps that has not moved in the month can embark, so the report is always a month ahead of the landing. The same quay is reported again only after 'every' months.",
+      anchor: "Release 2, the far chart (the design director's ruling of 04:33Z, 25 November 2026, 2): a fleet struck from the air at anchor this month or last weighs staying against moving its base out of the strikers' reach. Staying costs the share of its ships lost there, borne month after month over 'horizon' months (the share times horizon x (horizon + 1) / 2, in fleet-months); moving costs its voyage's months and its month in harbour (moveCost). It moves when staying costs more.",
       intercept: "Troopships crossing a sea where enemy ships or aircraft are at work lose men: up to 'loss' of a corps when the enemy is unopposed. 'sea' is how hard a convoy is to find.",
       landing: "A corps landing on a defended coast fights at 'assault' strength; in the month war is declared the defenders are caught unready and it fights at 'surprise' strength and cannot be intercepted. range is how many seas a landing force can cross. Enemy fleets in harbour on those seas or the next ones put to sea against an invasion at 'sortie' of their strength. No landing can be made under a sky the enemy's fighters still hold, unless it is a surprise. Airborne troops (corps marked 'airborne' in the setup) need no ships and no open sea lane: once a month they can be flown from a friendly coast to an enemy one across a single sea, and fight there at 'airborne' strength, without heavy weapons. craft lists, as [from turn, nations, strength], who has purpose-built landing ships and the naval gunfire to cover a beach, and from when: their assaults fight at that strength instead of 'assault'.",
       convoys: "Routes that feed a nation by sea. The share of the cargo lost is raiders / (raiders + escorts x escortWorth + ocean); 'share' of the nation's production rides on the route, and 'tons' is the shipping sunk in a month if nothing got through. 'base' is a fortress astride the route: while an enemy of the route's owner holds it, its own submarines and aircraft hunt the convoys with strength 'raid', or 'starved' of that when it is cut off itself. What is sunk on the Libya route also lengthens the supply line of the armies in the desert: see desert.json.",
@@ -3108,6 +3109,7 @@
     watch: { corps: 2, every: 6 },
     landing: { assault: 0.6, surprise: 1, range: 3, sortie: 0.5, airborne: 0.9, craft: [[46, ["UK", "USA"], 0.8]] },
     range: 3,
+    anchor: { horizon: 6 },
     admiral: { perLevel: 0.04, maxLevel: 5, lostWithFlagship: 0.25 },
     convoy: { escortWorth: 1.5, ocean: 40, air: 0.3, patrolRaid: 0.5, subBase: 0.012, subHunt: 0.06, escortLoss: 4e-3 },
     convoys: [
@@ -7633,6 +7635,38 @@
             dd: 0,
             ss: 0
           }
+        },
+        {
+          nat: "UK",
+          name: "British Pacific Fleet",
+          base: "Trincomalee",
+          port: "Trincomalee",
+          home: "ceylon",
+          zone: "ceylon",
+          duty: "port",
+          ships: {
+            bb: 0,
+            cv: 0,
+            ca: 0,
+            dd: 0,
+            ss: 0
+          },
+          admiral: "Bruce Fraser",
+          from: 99,
+          book: {
+            stops: [
+              1,
+              2
+            ],
+            from: 63,
+            ships: {
+              bb: 0,
+              cv: 0,
+              ca: 0,
+              dd: 0,
+              ss: 0
+            }
+          }
         }
       ],
       arrivals: [
@@ -7680,6 +7714,37 @@
             dd: 1
           },
           "a new destroyer"
+        ],
+        [
+          8,
+          "UK",
+          "Mediterranean Fleet",
+          {
+            dd: 5
+          },
+          "five of the China Station's destroyers",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "China Fleet"
+          }
+        ],
+        [
+          10,
+          "UK",
+          "China Fleet",
+          {
+            ca: -5
+          },
+          "Five cruisers of the China Station leave to hunt raiders in the Indian Ocean and the South Atlantic",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
         ],
         [
           12,
@@ -7825,7 +7890,7 @@
           {
             ss: 23
           },
-          "twenty-three submarines reach Manila"
+          "twenty-three submarines, come out to Manila,"
         ],
         [
           28,
@@ -7835,6 +7900,39 @@
             dd: 1
           },
           "a new destroyer"
+        ],
+        [
+          28,
+          "UK",
+          "China Fleet",
+          {
+            bb: 2,
+            dd: 2
+          },
+          "Force Z, the battleship Prince of Wales, the battlecruiser Repulse and two destroyers,",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Home Fleet"
+          }
+        ],
+        [
+          28,
+          "UK",
+          "China Fleet",
+          {
+            dd: 2
+          },
+          "two more of Force Z's destroyers",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Mediterranean Fleet"
+          }
         ],
         [
           29,
@@ -7874,6 +7972,25 @@
           "the battleships Mississippi and New Mexico, back from the Atlantic"
         ],
         [
+          29,
+          "UK",
+          "China Fleet",
+          {
+            ca: 5
+          },
+          "the cruisers Cornwall and Dorsetshire and three more, back from hunting raiders,",
+          {
+            stops: [
+              1,
+              2
+            ],
+            back: [
+              10,
+              "China Fleet"
+            ]
+          }
+        ],
+        [
           30,
           "JAP",
           "Combined Fleet",
@@ -7901,6 +8018,56 @@
           "the battleship Idaho, back from the Atlantic"
         ],
         [
+          30,
+          "UK",
+          "China Fleet",
+          {
+            bb: 2,
+            dd: 8
+          },
+          "the battleships Royal Sovereign and Ramillies and eight destroyers",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Home Fleet"
+          }
+        ],
+        [
+          30,
+          "UK",
+          "China Fleet",
+          {
+            bb: 1,
+            dd: 8
+          },
+          "the battleship Warspite, repaired in America, and eight destroyers",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Mediterranean Fleet"
+          }
+        ],
+        [
+          30,
+          "UK",
+          "China Fleet",
+          {
+            bb: 2,
+            ca: 2
+          },
+          "the old battleships Revenge and Resolution and the cruisers Emerald and Caledon",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
           31,
           "USA",
           "Pacific Carrier Fleet",
@@ -7910,6 +8077,23 @@
           "the new carrier Hornet"
         ],
         [
+          31,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Formidable, repaired in America,",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Mediterranean Fleet",
+            by: 19
+          }
+        ],
+        [
           33,
           "JAP",
           "Mobile Fleet",
@@ -7917,6 +8101,22 @@
             cv: 1
           },
           "the carrier Junyo, converted from a liner"
+        ],
+        [
+          33,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Illustrious",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Mediterranean Fleet"
+          }
         ],
         [
           35,
@@ -7946,6 +8146,21 @@
           "the new battleship North Carolina"
         ],
         [
+          36,
+          "UK",
+          "China Fleet",
+          {
+            cv: -1
+          },
+          "The carrier Indomitable leaves the China Fleet for the Malta convoy",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
           37,
           "USA",
           "Pacific Fleet",
@@ -7964,6 +8179,22 @@
           "the new light cruiser Agano"
         ],
         [
+          38,
+          "UK",
+          "Mediterranean Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Formidable",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "China Fleet"
+          }
+        ],
+        [
           41,
           "JAP",
           "Combined Fleet",
@@ -7980,6 +8211,54 @@
             bb: 1
           },
           "the new battleship Indiana"
+        ],
+        [
+          41,
+          "UK",
+          "Home Fleet",
+          {
+            bb: 2,
+            cv: 1
+          },
+          "the battleships Royal Sovereign and Ramillies and the carrier Illustrious",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "China Fleet"
+          }
+        ],
+        [
+          41,
+          "UK",
+          "Mediterranean Fleet",
+          {
+            bb: 1
+          },
+          "the battleship Warspite",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "China Fleet"
+          }
+        ],
+        [
+          41,
+          "UK",
+          "China Fleet",
+          {
+            bb: -2
+          },
+          "The old battleships Revenge and Resolution go home to the reserve",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
         ],
         [
           42,
@@ -8024,7 +8303,7 @@
           {
             cv: 1
           },
-          "the new carrier Yorktown, named for the one lost at Midway"
+          "another new Essex-class carrier"
         ],
         [
           48,
@@ -8033,7 +8312,7 @@
           {
             cv: 1
           },
-          "the new carrier Lexington, named for the one lost in the Coral Sea"
+          "another new Essex-class carrier"
         ],
         [
           48,
@@ -8126,6 +8405,69 @@
           "the new battleships Iowa and New Jersey"
         ],
         [
+          53,
+          "UK",
+          "China Fleet",
+          {
+            bb: 1
+          },
+          "the battleship Valiant",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Mediterranean Fleet"
+          }
+        ],
+        [
+          53,
+          "UK",
+          "China Fleet",
+          {
+            bb: 1
+          },
+          "the battlecruiser Renown",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Force H"
+          }
+        ],
+        [
+          53,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Illustrious",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Home Fleet"
+          }
+        ],
+        [
+          53,
+          "UK",
+          "China Fleet",
+          {
+            bb: 1
+          },
+          "the battleship Queen Elizabeth, repaired,",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
           55,
           "JAP",
           "Mobile Fleet",
@@ -8141,7 +8483,7 @@
           {
             cv: 1
           },
-          "the new carrier Hornet, named for the one lost at Santa Cruz"
+          "another new Essex-class carrier"
         ],
         [
           57,
@@ -8150,7 +8492,7 @@
           {
             cv: 1
           },
-          "the new carrier Wasp, named for the one lost off Guadalcanal"
+          "another new Essex-class carrier"
         ],
         [
           57,
@@ -8180,6 +8522,41 @@
           "the new carrier Franklin"
         ],
         [
+          59,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Victorious",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Home Fleet"
+          }
+        ],
+        [
+          59,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Indomitable",
+          {
+            stops: [
+              1,
+              2
+            ],
+            back: [
+              36,
+              "China Fleet"
+            ]
+          }
+        ],
+        [
           60,
           "JAP",
           "Mobile Fleet",
@@ -8187,6 +8564,21 @@
             cv: 1
           },
           "the new carriers Unryu and Amagi, short of aircraft to fly from them"
+        ],
+        [
+          60,
+          "UK",
+          "China Fleet",
+          {
+            bb: 1
+          },
+          "the new battleship Howe",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
         ],
         [
           62,
@@ -8225,6 +8617,72 @@
           "the new carrier Ticonderoga"
         ],
         [
+          63,
+          "UK",
+          "British Pacific Fleet",
+          {
+            bb: 1,
+            cv: 3,
+            ca: 6
+          },
+          "the battleship Howe, the carriers Indomitable, Victorious and Illustrious and six cruisers",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "China Fleet"
+          }
+        ],
+        [
+          63,
+          "UK",
+          "British Pacific Fleet",
+          {
+            bb: 1,
+            dd: 15
+          },
+          "the battleship King George V and fifteen destroyers",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Home Fleet"
+          }
+        ],
+        [
+          63,
+          "UK",
+          "British Pacific Fleet",
+          {
+            cv: 1
+          },
+          "the new carrier Indefatigable",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
+          63,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1,
+            ca: 2
+          },
+          "escort carriers with about a fleet carrier's aircraft, and two cruisers, for the East Indies Fleet,",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
           64,
           "USA",
           "Pacific Fleet",
@@ -8261,6 +8719,36 @@
           "the new battleship Missouri"
         ],
         [
+          66,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "more of the escort carriers",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
+          68,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "more of the escort carriers",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
           69,
           "USA",
           "Pacific Carrier Fleet",
@@ -8277,6 +8765,21 @@
             cv: 1
           },
           "the new carrier Bon Homme Richard"
+        ],
+        [
+          70,
+          "UK",
+          "British Pacific Fleet",
+          {
+            cv: 1
+          },
+          "the new carrier Implacable",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
         ],
         [
           31,
@@ -8532,11 +9035,65 @@
             1,
             2
           ]
+        },
+        {
+          turn: 33,
+          nat: "UK",
+          fleet: "China Fleet",
+          base: "Mombasa",
+          port: "Kilindini",
+          home: "zanzibar",
+          words: "After the raid on Ceylon the China Fleet withdraws to Kilindini",
+          stops: [
+            1,
+            2
+          ]
+        },
+        {
+          turn: 49,
+          nat: "UK",
+          fleet: "China Fleet",
+          base: "Trincomalee",
+          port: "Trincomalee",
+          home: "ceylon",
+          words: "The China Fleet returns to Trincomalee",
+          stops: [
+            1,
+            2
+          ]
+        },
+        {
+          turn: 66,
+          nat: "UK",
+          fleet: "British Pacific Fleet",
+          base: "Sydney",
+          port: "Sydney",
+          home: "tasman",
+          words: "The British Pacific Fleet moves to Sydney",
+          stops: [
+            1,
+            2
+          ],
+          ally: true
+        },
+        {
+          turn: 67,
+          nat: "UK",
+          fleet: "British Pacific Fleet",
+          base: "Admiralty Islands",
+          port: "Manus",
+          home: "bismarck",
+          words: "The British Pacific Fleet moves forward to Manus, for Okinawa",
+          stops: [
+            1,
+            2
+          ],
+          ally: true
         }
       ],
       quality: {
-        USA: 1,
-        JAP: 1.1
+        USA: 0.95,
+        JAP: 1.15
       }
     },
     rivals: {
@@ -19755,7 +20312,8 @@
       raid: { label: "Raid shipping", blurb: "Hunt the enemy's merchant ships and keep clear of his fleet." },
       escort: { label: "Escort a lane", blurb: "Sail with the convoys on one shipping lane and guard them the whole way." },
       hunt: { label: "Hunt submarines", blurb: "Destroyers and carrier aircraft comb one sea for submarines." },
-      port: { label: "In harbour", blurb: "Safe, and refitting quickly." }
+      port: { label: "In harbour", blurb: "Safe, and refitting quickly." },
+      passage: { label: "In passage", blurb: "At sea on its way to a new base, more than a month's steaming off: it can be found and attacked on the way, and strikes, patrols and escorts nothing until it comes in. It can be turned back." }
     }
   };
 
@@ -46271,7 +46829,7 @@
       }
     };
     for (const c of what === "land" ? [] : fleetsOf(g2, nat)) {
-      if (c.ships.cv <= 0) continue;
+      if (c.ships.cv <= 0 || c.stance === "passage") continue;
       const lead2 = wingOf(g2, c.id, "bmr"), cap17 = wingOf(g2, c.id, "ftr");
       if (!fit3(lead2) || lead2.bmr < 6) continue;
       const escorts = fit3(cap17) && cap17.ftr > 0 ? [cap17] : [];
@@ -46797,6 +47355,7 @@
     const sea = g2.seas[f.zone]?.name;
     const where = sea ? seaWhere(sea) : "at sea", what = sea ? seaWhat(sea) : "the sea";
     if (!atSea(f)) return `In harbour at ${f.port}`;
+    if (f.stance === "passage") return `In passage to ${f.port} ${where}${f.passage ? `, in by ${turnToDate(f.passage.due).label}` : ""}`;
     if (f.stance === "raid") return `Raiding shipping ${where}`;
     if (f.stance === "hunt") return `Hunting submarines ${where}`;
     if (f.stance === "escort") return `Escorting ${seaRoutes(g2).find((r) => r.id === f.lane)?.name ?? "a shipping lane"}`;
@@ -46962,6 +47521,7 @@
   function whyNotBombard(g2, f, r, what, viewer = null) {
     if (!seaWar(g2)) return "Fleets shell a coast only in the grand campaign.";
     if (!shipCount(f.ships)) return `The ${f.name} has no ships.`;
+    if (f.stance === "passage") return passageWhy(g2, f);
     if (!atSea(f)) return `The ${f.name} is in harbour. Send it to sea off the coast first.`;
     if (!r.seas.includes(f.zone)) return `The ${f.name} is ${seaWhere(g2.seas[f.zone].name)}, and ${r.name} is not on that sea.`;
     if (!atWar(g2, f.nat, r.ctrl)) return `${r.name} is not in enemy hands.`;
@@ -47126,6 +47686,7 @@
   };
   function whyNotDetach(g2, f, take3) {
     if (!seaWar(g2)) return "Fleets are split only in the grand campaign.";
+    if (f.stance === "passage") return `${passageWhy(g2, f)} It is split once it is in.`;
     const s = taken(take3);
     if (!shipCount(s)) return "Choose the ships that are to go.";
     for (const c of CLASSES) if (s[c] > f.ships[c]) return `The ${f.name} has only ${f.ships[c]} ${f.ships[c] === 1 ? NAVY.classes[c].one : NAVY.classes[c].many}.`;
@@ -47161,6 +47722,7 @@
     if (f.attacked !== void 0) sq.attacked = f.attacked;
     if (f.seen) sq.seen = { ...f.seen };
     if (f.struck) sq.struck = [f.struck[0], f.struck[1], f.struck[2]];
+    if (f.anchor) sq.anchor = f.anchor.map((e) => ({ ...e, from: e.from.map((o) => ({ ...o })) }));
     if (stars) sq.stars = stars;
     g2.fleets.push(sq);
     moveWings(g2, f, sq, s.cv, f.ships.cv + s.cv);
@@ -47171,6 +47733,7 @@
     if (!seaWar(g2)) return "Fleets are joined only in the grand campaign.";
     if (a.id === b.id || a.nat !== b.nat) return "Only two fleets of the same navy can be joined.";
     if (!shipCount(a.ships)) return `The ${a.name} has no ships.`;
+    if (a.stance === "passage" || b.stance === "passage") return `${passageWhy(g2, a.stance === "passage" ? a : b)} Fleets are joined once it is in.`;
     const together = atSea(a) && atSea(b) ? a.zone === b.zone : !atSea(a) && !atSea(b) && a.base === b.base && a.home === b.home;
     if (!together) return `The ${a.name} and the ${b.name} are not in the same place: bring them into the same harbour, or the same sea.`;
     return null;
@@ -60135,6 +60698,10 @@
   function whyNotMission(g2, f, m, target) {
     if (m === "support" || m === "rest") return null;
     if (!g2.nations[f.nat].atWar.length) return "The nation is at peace.";
+    {
+      const c = carrierOf(g2, f);
+      if (c?.stance === "passage") return passageWhy(g2, c);
+    }
     if (m === "seapatrol") return whyNotPatrol(g2, f, target);
     if (weatherOn(g2)) {
       const why = whyNotSky(g2, f, skyZone(g2, m, target));
@@ -61054,6 +61621,15 @@
         }
         x.ready = Math.max(0, x.ready - Math.min(0.3, 0.05 + CARRIERS.strike.ready * (afloatBefore > 0 ? exp.hits / afloatBefore : 0)));
         x.struck = [g2.turn, (x.struck && x.struck[0] === g2.turn ? x.struck[1] : 0) + 1, atSea(x) ? x.zone : -1];
+        if (m === "harbour" && farOn(g2)) {
+          const sunk = shipCount(struck[i].sunk) - struck[i].sunk.ss, had2 = shipCount(struck[i].ships) - struck[i].ships.ss;
+          const from2 = a.att.map((y) => {
+            const c = carrierOf(g2, y.f), R2 = reach(y.f, g2, raidJob(m));
+            return c && atSea(c) ? { sea: c.zone, field: -1, km: R2.bmrRange } : { sea: -1, field: c ? c.base : y.f.base, km: R2.bmrRange };
+          });
+          const w = a.att.reduce((s, y) => s + y.ftr + y.bmr, 0) * (airWeight(g2, nat) ?? 1);
+          x.anchor = [...(x.anchor ?? []).filter((e) => e.t >= g2.turn - 1), { t: g2.turn, at: target, n: sunk, lost: had2 > 0 ? sunk / had2 : 0, w, from: from2 }];
+        }
         (x.seen ?? (x.seen = {}))[nat] = g2.turn;
         for (const y of a.att) {
           const c = carrierOf(g2, y.f);
@@ -61411,7 +61987,13 @@
         raided.set(r.region, (raided.get(r.region) ?? 0) + sent * FB.raided);
       }
     }
-    const places = [.../* @__PURE__ */ new Set([...troops, ...cities, ...raided.keys()])];
+    const struck = /* @__PURE__ */ new Map();
+    for (const f of g2.fleets) {
+      if (f.nat !== nat || f.base < 0 || atSea(f) || !((g2.flags[`anc:${f.id}`] ?? -9) >= g2.turn - 1)) continue;
+      const w = (f.anchor ?? []).filter((e) => e.t >= g2.turn - 2 && e.at === f.base).reduce((s, e) => s + e.w, 0);
+      if (w > 0) struck.set(f.base, Math.max(struck.get(f.base) ?? 0, w));
+    }
+    const places = [.../* @__PURE__ */ new Set([...troops, ...cities, ...raided.keys(), ...struck.keys()])];
     if (!places.length) return;
     const at4 = new Map(places.map((id, i) => [id, i]));
     const ask = new Float64Array(places.length);
@@ -61433,6 +62015,7 @@
     if (battles.length) {
       for (const id of troops) if (battles.includes(id) || g2.regions[id].nb.some((j) => battles.includes(j))) ask[at4.get(id)] *= Math.max(1, AIRWAR.sky.own);
     }
+    for (const [id, w] of struck) ask[at4.get(id)] += w * Math.max(1, AIRWAR.sky.own);
     const P = g2.flags.open === 1 ? K2.presence ?? 0 : 0;
     if (P > 0 && troops.size) {
       const divs = /* @__PURE__ */ new Map();
@@ -62353,6 +62936,7 @@
   var whereIs = (g2, t) => atSea(t) ? seaWhere(g2.seas[t.zone]?.name ?? "sea") : `in harbour at ${t.port}`;
   function ruleOut2(g2, f, t) {
     if (!shipCount(f.ships)) return "There is no such fleet.";
+    if (f.stance === "passage") return passageWhy(g2, f);
     if (!shadowShips(f)) return "Shadowing is cruisers' work: a fleet of cruisers, with destroyers or without, and no battleship or carrier. Split the cruisers off first.";
     if (!t || t.nat === f.nat || !shipCount(t.ships) || fleetKnown(g2, t, f.nat) === "none") return "No such enemy fleet is known.";
     if (!atWar(g2, f.nat, t.nat)) return `${g2.nations[t.nat]?.name ?? t.nat} is not at war with ${g2.nations[f.nat].name}.`;
@@ -62459,7 +63043,7 @@
       sail(g2, f, f.home, "port");
     }
     if (mine4.filter((f) => f.shadow !== void 0).length >= SHADOW.ai.most) return;
-    const free2 = mine4.filter((f) => f.shadow === void 0 && shadowShips(f) && f.ready >= SHADOW.ai.ready && f.stance !== "escort" && f.duty !== "raid");
+    const free2 = mine4.filter((f) => f.shadow === void 0 && shadowShips(f) && f.ready >= SHADOW.ai.ready && f.stance !== "escort" && f.stance !== "passage" && f.duty !== "raid");
     if (!free2.length) return;
     const prey = g2.fleets.filter((t) => atSea(t) && atWar(g2, nat, t.nat) && surfaceShips(t) > 0 && fleetKnown(g2, t, nat) !== "none").sort((a, b) => fleetPower(g2, b) - fleetPower(g2, a) || a.id - b.id);
     for (const t of prey) {
@@ -62527,6 +63111,9 @@
         return `hunting submarines ${sea}`;
       case "escort":
         return `escorting convoys ${sea}`;
+      // (Release 2, the far chart: on its way to a new base, the port it was making for.)
+      case "passage":
+        return `in passage to ${e.p}, ${sea}`;
       default:
         return `on patrol ${sea}`;
     }
@@ -63223,7 +63810,7 @@
       const ports = () => (row2.base ?? []).map((nm) => g2.byName[nm]).filter((r) => !!r && r.port && r.seas.length > 0 && allied(g2, nat, r.ctrl));
       const move2 = (r) => {
         const old = [f.base, f.port, f.home, f.station];
-        if (!rebase(g2, f, r)) return false;
+        if (!rebase(g2, f, r, true)) return false;
         f.bookBase ?? (f.bookBase = old);
         f.station = f.home;
         return true;
@@ -63242,7 +63829,7 @@
         if (f.bookBase && g2.turn === to + 1) {
           const [base, port, home, station2] = f.bookBase;
           const r = base >= 0 ? g2.regions[base] : null;
-          if (r && rebase(g2, f, r)) {
+          if (r && rebase(g2, f, r, true)) {
             f.port = port;
             f.home = home;
             f.zone = home;
@@ -63281,6 +63868,8 @@
   var shipCount = (s, list5 = CLASSES) => list5.reduce((n, c) => n + s[c], 0);
   var surfaceShips = (f) => shipCount(f.ships, SURFACE2);
   var atSea = (f) => f.stance !== "port";
+  var inPassage = (f) => f.stance === "passage";
+  var holdsSea = (f) => atSea(f) && f.stance !== "passage";
   var fleetsOf = (g2, nat) => g2.fleets.filter((f) => f.nat === nat);
   var routeCache = /* @__PURE__ */ new WeakMap();
   function seaRoutes(g2) {
@@ -63553,7 +64142,7 @@
   function seaSide(g2, z, nat, hostile, form2 = farOn(g2)) {
     const beside = hostile ? null : besideIn(g2, z, nat, form2);
     let ships = 0;
-    for (const f of g2.fleets) if (f.zone === z && atSea(f) && (hostile ? atWar(g2, f.nat, nat) : allied(g2, f.nat, nat) && (!beside || beside(f.nat)))) ships += fleetPower(g2, f);
+    for (const f of g2.fleets) if (f.zone === z && holdsSea(f) && (hostile ? atWar(g2, f.nat, nat) : allied(g2, f.nat, nat) && (!beside || beside(f.nat)))) ships += fleetPower(g2, f);
     const air2 = airOver(g2, z, nat, hostile, beside) * NAVY.air.weight;
     return { ships, air: air2, total: ships + air2 };
   }
@@ -63653,7 +64242,7 @@
       const g2 = this.g;
       if (!this.fleets) {
         const by2 = g2.seas.map(() => []);
-        for (const f of g2.fleets) if (atSea(f) && by2[f.zone]) by2[f.zone].push({ nat: f.nat, power: fleetPower(g2, f) });
+        for (const f of g2.fleets) if (holdsSea(f) && by2[f.zone]) by2[f.zone].push({ nat: f.nat, power: fleetPower(g2, f) });
         this.fleets = by2;
       }
       return this.fleets[z];
@@ -64575,6 +65164,12 @@
     }
     return d;
   }
+  function laneNear(g2, f, lane) {
+    if (!farOn(g2) || f.stance === "escort" && f.lane === lane.id) return true;
+    if (inPassage(f)) return false;
+    const d = seaSteps(g2, f);
+    return lane.zones.some((z) => d[z] > 0 && d[z] <= 2 * NAVY.range);
+  }
   function tieLapses(g2, f) {
     if (!f.tied) return false;
     if (f.base >= 0 && !allied(g2, f.nat, g2.regions[f.base].ctrl)) return true;
@@ -64585,6 +65180,7 @@
   }
   var tiedNow = (g2, f) => f.tied && !tieLapses(g2, f);
   function sail(g2, f, zone, stance2, lane) {
+    if (inPassage(f)) return false;
     if ((stance2 === "escort" || stance2 === "hunt") && !seaWar(g2)) return false;
     if (stance2 === "escort" && !seaRoutes(g2).some((r) => r.id === lane && r.zones.includes(zone))) return false;
     if (stance2 !== "port" && (!shipCount(f.ships) || !fleetReach(g2, f, false, stance2 === "raid").includes(zone))) return false;
@@ -64612,6 +65208,7 @@
     if (!rt) return "There is no such lane.";
     const to = g2.nations[rt.to];
     if (!shipCount(f.ships)) return `The ${f.name} has no ships.`;
+    if (inPassage(f)) return passageWhy(g2, f);
     const many = /s$/.test(rt.name);
     if (!to?.alive || rt.to !== f.nat && !allied(g2, f.nat, rt.to)) return `${cap9(rt.name)} ${many ? "feed" : "feeds"} ${to?.name ?? rt.to}, which is no ally of ${g2.nations[f.nat].name}.`;
     if (!to.atWar.length || !g2.nations[f.nat].atWar.length) return `Not under attack: nobody is at war over ${rt.name}.`;
@@ -64639,8 +65236,8 @@
   }
   function canSailTo(g2, f, r) {
     const seen2 = new Uint8Array(g2.seas.length);
-    const q = [f.home];
-    seen2[f.home] = 1;
+    const q = [inPassage(f) ? f.zone : f.home];
+    seen2[q[0]] = 1;
     for (let i = 0; i < q.length; i++) {
       if (r.seas.includes(q[i])) return true;
       for (const j of g2.seas[q[i]].adj) if (!seen2[j] && canPass(g2, q[i], j, f.nat)) {
@@ -64661,6 +65258,7 @@
     f.station = sea;
     f.stance = "port";
     delete f.lane;
+    delete f.passage;
     g2.supplyDirty = true;
     syncWings(g2);
     headline(g2, "info", `${m.words}.`, f.nat);
@@ -64683,17 +65281,174 @@
   function baseTargets(g2, f) {
     return g2.regions.filter((r) => r.port && r.seas.length > 0 && r.id !== f.base && allied(g2, f.nat, r.ctrl) && canSailTo(g2, f, r));
   }
-  function rebase(g2, f, r) {
+  function rebase(g2, f, r, instant = false) {
     if (!r.port || !r.seas.length || r.id === f.base || !allied(g2, f.nat, r.ctrl) || !canSailTo(g2, f, r)) return false;
+    const way = !instant && farOn(g2) ? voyageWay(g2, f, r) : null;
+    if (!instant && farOn(g2) && !way) return false;
+    const was = inPassage(f) && f.passage ? { base: f.passage.from, port: f.passage.fromPort, home: f.passage.fromHome } : { base: f.base, port: f.port, home: f.home };
     f.base = r.id;
     f.port = r.name;
     f.home = r.seas[0];
-    f.zone = f.home;
-    f.stance = "port";
     delete f.lane;
+    if (way && way.length > NAVY.range) setOut(g2, f, way, was, false);
+    else {
+      f.zone = f.home;
+      f.stance = "port";
+      delete f.passage;
+    }
     g2.supplyDirty = true;
     syncWings(g2);
     return true;
+  }
+  function voyageWay(g2, f, r) {
+    const prev = new Int16Array(g2.seas.length).fill(-2);
+    const q = [];
+    for (const z of atSea(f) ? [f.zone] : f.base >= 0 ? g2.regions[f.base].seas : [f.home]) if (prev[z] === -2) {
+      prev[z] = -1;
+      q.push(z);
+    }
+    for (let i = 0; i < q.length; i++) {
+      if (r.seas.includes(q[i])) {
+        const way = [];
+        for (let z = q[i]; z >= 0; z = prev[z]) way.unshift(z);
+        return way;
+      }
+      for (const j of g2.seas[q[i]].adj) if (prev[j] === -2 && canPass(g2, q[i], j, f.nat)) {
+        prev[j] = q[i];
+        q.push(j);
+      }
+    }
+    return null;
+  }
+  var voyageOf = (seas) => Math.max(1, Math.ceil(seas / NAVY.range));
+  function voyageMonths(g2, f, r) {
+    if (!farOn(g2)) return 0;
+    const way = voyageWay(g2, f, r);
+    return way ? voyageOf(way.length) - 1 : 0;
+  }
+  var moveCost2 = (g2, f, r) => voyageMonths(g2, f, r) + 1;
+  var passageSea = (p, turn2) => p.way[Math.min((turn2 - p.set + 1) * NAVY.range, p.way.length) - 1];
+  function setOut(g2, f, way, from2, back) {
+    const months4 = voyageOf(way.length) - 1;
+    f.passage = { from: from2.base, fromPort: from2.port, fromHome: from2.home, way, set: g2.turn, due: g2.turn + months4 };
+    if (back) f.passage.back = true;
+    f.stance = "passage";
+    f.zone = passageSea(f.passage, g2.turn);
+    g2.supplyDirty = true;
+    const due = turnToDate(f.passage.due).label;
+    headline(g2, "info", back ? `${cap9(fleetName(f))} turns back for ${f.port}, ${way.length} seas off, due in ${due}.` : `${cap9(fleetName(f))} sails for its new base at ${f.port}, ${way.length} seas off, due in ${due}.`, f.nat, f.base);
+  }
+  function turnBack(g2, f) {
+    const p = f.passage;
+    if (!inPassage(f) || !p || p.from < 0) return false;
+    const r = g2.regions[p.from];
+    if (!r?.port || !r.seas.length || !allied(g2, f.nat, r.ctrl)) return false;
+    const way = voyageWay(g2, f, r);
+    if (!way) return false;
+    const to = { base: f.base, port: f.port, home: f.home };
+    f.base = r.id;
+    f.port = p.fromPort;
+    f.home = r.seas.includes(p.fromHome) ? p.fromHome : r.seas[0];
+    delete f.lane;
+    if (way.length > NAVY.range) setOut(g2, f, way, to, !p.back);
+    else {
+      delete f.passage;
+      f.zone = f.home;
+      f.stance = "port";
+      g2.supplyDirty = true;
+      headline(g2, "info", `${cap9(fleetName(f))} turns back, and is in harbour at ${f.port} again.`, f.nat, f.base);
+    }
+    syncWings(g2);
+    return true;
+  }
+  var anchorStrikes = (g2, f) => farOn(g2) && !atSea(f) ? (f.anchor ?? []).filter((e) => e.t >= g2.turn - 1 && e.at === f.base) : [];
+  function anchorLoss(g2, f) {
+    return Math.min(1, anchorStrikes(g2, f).reduce((s, e) => s + e.lost, 0));
+  }
+  function outOfStrikes(g2, f, r) {
+    for (const e of anchorStrikes(g2, f)) for (const o of e.from) {
+      const d = o.sea >= 0 ? seaKm(g2, r.id, o.sea) : o.field >= 0 && g2.regions[o.field] ? km(g2, o.field, r.id) : Infinity;
+      if (d <= o.km) return false;
+    }
+    return true;
+  }
+  function safeHarbour(g2, f) {
+    if (!anchorStrikes(g2, f).length) return null;
+    const here = g2.regions[f.base];
+    let best = null, bm = Infinity, bd = Infinity;
+    for (const r of baseTargets(g2, f)) {
+      if (closedTo(g2, r.seas[0], f.nat) || !outOfStrikes(g2, f, r)) continue;
+      const m = voyageMonths(g2, f, r), d = here ? chartDist(g2, r, here) : 0;
+      if (m < bm || m === bm && d < bd) {
+        best = r;
+        bm = m;
+        bd = d;
+      }
+    }
+    return best;
+  }
+  function strikeMoves(g2, f, r) {
+    const H = NAVY.anchor?.horizon ?? 6;
+    return anchorLoss(g2, f) * H * (H + 1) / 2 > moveCost2(g2, f, r);
+  }
+  function struckLine(g2, f) {
+    const hits = anchorStrikes(g2, f);
+    if (!hits.length) return "";
+    const n = hits.reduce((s, e) => s + e.n, 0), r = safeHarbour(g2, f);
+    const lost = n ? `${n === 1 ? "one ship" : `${numberWord(n)} ships`} lost there this month and last` : "struck there this month or last";
+    return `Struck at anchor at ${f.port}: ${lost}. ${r ? `Nearest friendly harbour out of the strikers' reach: ${r.name}${voyageMonths(g2, f, r) ? `, ${voyageMonths(g2, f, r) + 1} months away` : ""}.` : "No friendly harbour is out of the strikers' reach: fighters over the harbour keep them off."}`;
+  }
+  function withdraws(g2, f) {
+    if (!anchorStrikes(g2, f).length || g2.flags[`withArmy:${f.id}`]) return false;
+    const to = safeHarbour(g2, f), from2 = f.port;
+    if (to && strikeMoves(g2, f, to) && rebase(g2, f, to)) {
+      headline(g2, "info", `${cap9(fleetName(f))} withdraws from ${from2}, struck at anchor there, to ${to.name}, out of the strikers' reach.`, f.nat, to.id);
+      return true;
+    }
+    if (!to && anchorLoss(g2, f) > 0) g2.flags[`anc:${f.id}`] = g2.turn;
+    return false;
+  }
+  function anchorTold(g2, f) {
+    if (!anchorStrikes(g2, f).length || f.nat !== g2.human || !(keptByHand(g2, f) || byHand(g2, f.nat, "navy"))) return;
+    const k = `anct:${f.id}`, told2 = g2.flags[k];
+    g2.flags[k] = g2.turn;
+    if (told2 !== void 0 && told2 >= g2.turn - 2) return;
+    const r = safeHarbour(g2, f);
+    headline(g2, "info", `${cap9(fleetName(f))} is struck from the air at anchor at ${f.port}. You keep it under your own orders, so it stays there: ${r ? `the nearest friendly harbour out of the strikers' reach is ${r.name}, and its page offers the move.` : "no friendly harbour is out of the strikers' reach, and fighters over the harbour keep them off."}`, f.nat, f.base);
+  }
+  var cameIn = (g2, f) => g2.flags[`fin:${f.id}`] === g2.turn && !atSea(f);
+  function passageWhy(g2, f) {
+    const p = f.passage;
+    const due = p ? `, due in ${turnToDate(p.due).label}` : "";
+    return `${cap9(fleetName(f))} is in passage to ${f.port}, at sea on the way${due}: it strikes, patrols and escorts nothing until it comes in.`;
+  }
+  function steamPassages(g2, nat) {
+    for (const f of fleetsOf(g2, nat)) {
+      const p = f.passage;
+      if (!p) continue;
+      if (!inPassage(f)) {
+        delete f.passage;
+        continue;
+      }
+      if (p.set >= g2.turn) continue;
+      if (f.base >= 0 && !allied(g2, nat, g2.regions[f.base].ctrl)) {
+        newBase(g2, f);
+        continue;
+      }
+      if (g2.turn < p.due) {
+        f.zone = passageSea(p, g2.turn);
+        g2.supplyDirty = true;
+        continue;
+      }
+      const months4 = g2.turn - p.set;
+      delete f.passage;
+      f.zone = f.home;
+      f.stance = "port";
+      g2.flags[`fin:${f.id}`] = g2.turn;
+      g2.supplyDirty = true;
+      syncWings(g2);
+      headline(g2, "info", p.back ? `${cap9(fleetName(f))} is back in harbour at ${f.port}, ${months4 === 1 ? "a month" : `${months4} months`} after it turned back.` : `${cap9(fleetName(f))} comes in to its new base at ${f.port} after ${months4 === 1 ? "a month" : `${months4} months`} in passage.`, nat, f.base);
+    }
   }
   var toughAt = (c, dc) => NAVY.classes[c].tough / (c === "ss" ? 1 : dc);
   var toughOf = (g2, f, c) => toughAt(c, dcOf(g2, f.nat));
@@ -64767,6 +65522,8 @@
   function navalUpkeep(g2, nat) {
     const n = g2.nations[nat];
     wingStep(g2, nat);
+    steamPassages(g2, nat);
+    for (const f of fleetsOf(g2, nat)) anchorTold(g2, f);
     for (const given3 of NAVY.fleets) {
       const b = given3.book;
       const booked2 = !!b && g2.flags.open === 1 && b.stops.includes(stopOf(g2)) && dialRuns(g2, nat);
@@ -64823,7 +65580,7 @@
         if (dial?.waits && n2 > 0) fill6(g2, f, c, n2);
       }
       if (dial && leaving2 && !gone || (src || dial?.most) && !came || turn2 < g2.turn && !dial?.waits) continue;
-      const many = / and /.test(what) || /s$/.test(what.split(" ")[0]) || /\bof\b/.test(what) && /s$/.test(what);
+      const many = / and /.test(what) || /s$/.test(what.split(" ")[0]) || /\bof\b/.test(what) && /s$/.test(what) || /^(?:\d+|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty)\b/i.test(what);
       const words = leaving2 ? `${cap9(what)}.` : src ? `${cap9(what)} ${many ? "leave" : "leaves"} ${fleetName(src)} for ${fleetName(f)}.` : `${cap9(what)} ${many ? "join" : "joins"} ${fleetName(f)}.`;
       headline(g2, "info", words, nat);
     }
@@ -64867,8 +65624,10 @@
       if (tieLapses(g2, f)) f.tied = false;
       if (f.base >= 0 && !allied(g2, nat, g2.regions[f.base].ctrl) && !newBase(g2, f)) continue;
       if (!n.atWar.length) {
-        f.stance = "port";
-        f.zone = f.home;
+        if (!inPassage(f)) {
+          f.stance = "port";
+          f.zone = f.home;
+        }
         delete f.cruised;
       } else if (f.cruised !== void 0) {
         if (f.cruised < g2.turn && f.stance === "patrol") {
@@ -65199,7 +65958,7 @@
     for (const z of [...seas].sort((a, b) => a - b)) {
       if (z === here || !reach3.has(z)) continue;
       const to = nearerPort(g2, f, z);
-      const gain = seenOnWatch(g2, to ? portOf2(f, to) : f, z) - up - moveLoss(g2, f, z, !!to, !!stay);
+      const gain = seenOnWatch(g2, to ? portOf2(f, to) : f, z) - up - moveLoss(g2, f, z, to, stay);
       if (gain > bv + 1e-9) {
         best = z;
         bv = gain;
@@ -65208,12 +65967,12 @@
     return best;
   }
   var portOf2 = (f, r) => ({ nat: f.nat, base: r.id, home: r.seas[0] });
-  function moveLoss(g2, f, z, rebases, would) {
+  function moveLoss(g2, f, z, to, stay) {
     const D2 = stationDays("ss");
     if (!D2) return 0;
-    if (rebases) return would ? 0 : seenOnWatch(g2, f, f.station);
+    if (to) return (stay ? voyageMonths(g2, f, to) - voyageMonths(g2, f, stay) : moveCost2(g2, f, to)) * seenOnWatch(g2, f, f.station);
     const passage = atSea(f) ? seenOnWatch(g2, f, f.zone) * D2.passage * passageSeas(g2, { nat: f.nat, base: -1, home: f.zone }, z) / MONTH_DAYS : 0;
-    return would ? passage - seenOnWatch(g2, f, f.station) : passage;
+    return stay ? passage - moveCost2(g2, f, stay) * seenOnWatch(g2, f, f.station) : passage;
   }
   var escortRate = () => {
     const K2 = CAUSE2.count;
@@ -65710,7 +66469,7 @@
   function guardShare(g2, f, zones, lane) {
     if (!seaWar(g2)) return f.stance === "patrol" && zones.includes(f.zone) ? 1 : 0;
     if (f.stance === "escort" && lane !== void 0 && f.lane === lane) return 1;
-    return f.stance !== "raid" && zones.includes(f.zone) ? FLEETS.escort.loose : 0;
+    return f.stance !== "raid" && f.stance !== "passage" && zones.includes(f.zone) ? FLEETS.escort.loose : 0;
   }
   var LANE_CAP = 0.95;
   function firingShare(radarEscorts, tries) {
@@ -66481,7 +67240,7 @@
     const seas = [];
     for (const { from: from2, to } of aims) for (const z of seaPath(g2, nat, from2, to, { max: NAVY.landing.range, surprise: true }) ?? []) if (!seas.includes(z)) seas.push(z);
     const patrols = (f) => (f.duty === "patrol" || !!cover3?.covers.has(f.id)) && !cover3?.moved.has(f.id);
-    const free2 = fleetsOf(g2, nat).filter((f) => patrols(f) && !f.tied && f.cruised !== g2.turn && shipCount(f.ships) > 0 && !orders2?.some((o) => o.fleet === f.name) && f.ready >= 0.5 && (atSea(f) || f.ready >= NAVY.ready.sortieAt));
+    const free2 = fleetsOf(g2, nat).filter((f) => patrols(f) && !inPassage(f) && !cameIn(g2, f) && !f.tied && f.cruised !== g2.turn && shipCount(f.ships) > 0 && !orders2?.some((o) => o.fleet === f.name) && f.ready >= 0.5 && (atSea(f) || f.ready >= NAVY.ready.sortieAt));
     for (const z of seas) {
       if (!closedTo(g2, z, nat)) continue;
       const need = seaSide(g2, z, nat, true).total / NAVY.closed.ratio;
@@ -66517,16 +67276,21 @@
       if (bookMoved(g2, nat, f)) forget2(f);
       else g2.flags[`fl:coverAt:${f.id}`] = f.base + 1;
     }
-    if (!coversBeaches(g2, nat)) {
-      for (const f of mine4) if (was(f) !== void 0 && !ordered2(f)) {
-        const r = g2.regions[was(f) - 1];
+    const goBack = (f, r) => {
+      if (!inPassage(f)) {
         forget2(f);
-        if (r && rebase(g2, f, r)) moved.add(f.id);
+        return !!r && r.id !== f.base && rebase(g2, f, r);
       }
+      if (f.passage?.from !== r?.id) return false;
+      forget2(f);
+      return turnBack(g2, f);
+    };
+    if (!coversBeaches(g2, nat)) {
+      for (const f of mine4) if (was(f) !== void 0 && !ordered2(f) && goBack(f, g2.regions[was(f) - 1])) moved.add(f.id);
       return { covers: covers2, moved };
     }
     const kept3 = keptTogether(g2, nat);
-    const fit3 = (f) => surfaceShips(f) > 0 && f.duty !== "raid" && !f.tied && f.cruised !== g2.turn && !ordered2(f) && !kept3.has(f.id) && f.ready >= 0.5 && f.base >= 0 && pacificGround(g2, g2.regions[f.base]);
+    const fit3 = (f) => surfaceShips(f) > 0 && f.duty !== "raid" && !inPassage(f) && !f.tied && f.cruised !== g2.turn && !ordered2(f) && !kept3.has(f.id) && f.ready >= 0.5 && f.base >= 0 && pacificGround(g2, g2.regions[f.base]);
     const beaches = [];
     for (const { from: from2, to } of hopAims(g2, nat)) {
       if (!pacificGround(g2, to)) continue;
@@ -66534,9 +67298,10 @@
       const z = path?.length ? path[path.length - 1] : -1;
       if (z >= 0 && !beaches.some((b) => b.z === z)) beaches.push({ z, to });
     }
+    const onWay = (f) => inPassage(f) && g2.flags[`fl:coverAt:${f.id}`] === f.base + 1 && !ordered2(f) && !kept3.has(f.id);
     for (const { z, to } of beaches) {
       const can2 = mine4.filter(fit3);
-      const reaching = can2.filter((f) => fleetReach(g2, f).includes(z));
+      const reaching = mine4.filter((f) => (fit3(f) || onWay(f)) && fleetReach(g2, f).includes(z));
       if (reaching.length) {
         for (const f of reaching) covers2.add(f.id);
         continue;
@@ -66559,12 +67324,10 @@
       if (at4 === void 0 || covers2.has(f.id) || ordered2(f)) continue;
       const reach3 = fleetReach(g2, f);
       if (!kept3.has(f.id) && beaches.some((b) => reach3.includes(b.z))) continue;
-      const r = g2.regions[at4 - 1];
-      forget2(f);
-      if (r && r.id !== f.base && rebase(g2, f, r)) {
-        moved.add(f.id);
-        headline(g2, "info", `The ${f.name} returns to ${r.name}.`, nat, r.id);
-      }
+      const r = g2.regions[at4 - 1], going = inPassage(f);
+      if (!goBack(f, r)) continue;
+      moved.add(f.id);
+      if (!going) headline(g2, "info", `The ${f.name} returns to ${r.name}.`, nat, r.id);
     }
     return { covers: covers2, moved };
   }
@@ -66653,6 +67416,10 @@
       const say = (why) => {
         if (says) f.why = [g2.turn, why];
       };
+      if (inPassage(f)) {
+        say(`In passage to its new base at ${f.port}, it keeps on its way.`);
+        continue;
+      }
       const where = (z) => seaWhere(g2.seas[z]?.name ?? "sea");
       const what = (z) => seaWhat(g2.seas[z]?.name ?? "sea");
       const found2 = (z, subs) => g2.fleets.some((x) => x.zone === z && atSea(x) && atWar(g2, x.nat, nat) && (subs ? x.ships.ss > 0 : surfaceShips(x) > 0) && fleetKnown(g2, x, nat) !== "none");
@@ -66672,6 +67439,14 @@
         continue;
       }
       if (covering?.has(f.id) || bases.moved.has(f.id)) continue;
+      if (withdraws(g2, f)) {
+        say(`Struck at anchor, it withdraws to ${f.port}, out of the strikers' reach.`);
+        continue;
+      }
+      if (cameIn(g2, f)) {
+        say(`In from its passage this month, it lies in harbour at ${f.port}.`);
+        continue;
+      }
       if (f.ready < 0.5 || !atSea(f) && f.ready < NAVY.ready.sortieAt) {
         home(`Worn down to ${Math.round(f.ready * 100)}% readiness, it refits in harbour and sails again at ${Math.round(NAVY.ready.sortieAt * 100)}%.`);
         continue;
@@ -76162,6 +76937,7 @@
     if (surfaceShips(f) <= 0) return "Submarines fight no fleet action: they raid shipping, and escorts hunt them.";
     if (f.attacked === g2.turn) return `The ${f.name} has already been sent at the enemy this month.`;
     if (hasSought(g2, f)) return `The ${f.name} has already sought battle this month: a fleet seeks battle once a month.`;
+    if (f.stance === "passage") return passageWhy(g2, f);
     const t = g2.fleets.find((x) => x.id === target);
     if (!t || !shipCount(t.ships) || fleetKnown(g2, t, f.nat) === "none") return "No such enemy fleet is known.";
     if (!atWar(g2, f.nat, t.nat)) return `${g2.nations[t.nat]?.name ?? t.nat} is not at war with ${g2.nations[f.nat].name}.`;
@@ -81196,7 +81972,8 @@
     for (const f of fleetsOf(g2, nat)) {
       const w = was.get(f.id);
       if (!w || w.zone === f.zone && w.stance === f.stance) continue;
-      if (atSea(f)) out.push(`the ${f.name} into ${seaWhat(g2.seas[f.zone].name)}${f.stance === "escort" ? " with the convoys" : f.stance === "raid" ? " to raid" : ""}`);
+      if (f.stance === "passage") out.push(`the ${f.name} on its way to ${f.port}`);
+      else if (atSea(f)) out.push(`the ${f.name} into ${seaWhat(g2.seas[f.zone].name)}${f.stance === "escort" ? " with the convoys" : f.stance === "raid" ? " to raid" : ""}`);
       else if (w.stance !== "port") back.push(`the ${f.name}`);
     }
     if (out.length) did.push(`sent ${some(out)}`);
@@ -81550,6 +82327,7 @@
         delete f.task;
         continue;
       }
+      if (f.stance === "passage") continue;
       if (!g2.nations[nat].atWar.length) continue;
       const job = jobWords(g2, f.task);
       if (atSea(f) && f.ready < TASKFORCE.refit) {
@@ -81606,6 +82384,7 @@
   var mineable = (g2, nat, z) => !!g2.seas[z]?.narrow || enemyHarbours(g2, nat).has(z);
   function ruleOut3(g2, f, z) {
     if (!shipCount(f.ships)) return "There is no such fleet.";
+    if (f.stance === "passage") return passageWhy(g2, f);
     if (!minelayer(f)) return "Mines are laid by destroyers, cruisers or submarines: a fleet of battleships and carriers alone carries none.";
     if (!g2.nations[f.nat]?.atWar.length) return "Mines are laid only in a war.";
     if (f.mined === g2.turn) return "It has laid its mines this month already.";
@@ -81810,7 +82589,7 @@
         name: r.name,
         holder: r.ctrl,
         atWar: war,
-        fleets: there.map((x) => fleetKnown(g2, x, viewer) === "exact" ? fleetName(x) : `${g2.nations[x.nat]?.adj ?? x.nat} ships reported`),
+        fleets: anchorNames(g2, there, viewer),
         ships,
         launch: launch2,
         forward: forward?.id ?? -1,
@@ -81819,12 +82598,26 @@
     }
     return out.sort((a, b) => Number(b.atWar) - Number(a.atWar) || Number(b.launch >= 0) - Number(a.launch >= 0) || a.name.localeCompare(b.name));
   }
+  var FLEETS_COUNTED = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+  function anchorNames(g2, there, viewer) {
+    const named5 = [], seen2 = /* @__PURE__ */ new Map();
+    for (const x of there) {
+      if (fleetKnown(g2, x, viewer) === "exact") named5.push(fleetName(x));
+      else seen2.set(x.nat, (seen2.get(x.nat) ?? 0) + 1);
+    }
+    for (const [nat, n] of seen2) {
+      const adj = g2.nations[nat]?.adj ?? nat;
+      named5.push(n === 1 ? `${adj} ships reported` : `${FLEETS_COUNTED[n] ?? n} ${adj} fleets reported`);
+    }
+    return named5;
+  }
   function whyNotCarrierStrike(g2, id, region) {
     if (!carrierStrikeOn(g2)) return "Carrier strikes on harbours are given from a fleet's page only where that is switched on.";
     if (!carrierRules(g2)) return "Harbours are raided only in the grand campaign.";
     const c = ownFleet2(g2, id);
     if (!c) return "Only your own fleet can be given the order, in your own month.";
     if (c.ships.cv <= 0) return `${cap14(fleetName(c))} has no carriers.`;
+    if (c.stance === "passage") return passageWhy(g2, c);
     const lead2 = leadOf(g2, c);
     if (!lead2) return `${cap14(fleetName(c))} has no strike aircraft aboard.`;
     if (lead2.flew === g2.turn) return "Its strike aircraft have flown this month.";
@@ -82753,14 +83546,14 @@
   };
   function orderFleet(g2, id, zone, stance2) {
     const f = myFleet(g2, id);
-    const ok2 = !!f && !heldAfterAttack(g2, f) && hisOrder(f, sail(g2, f, zone, stance2));
+    const ok2 = !!f && !heldAfterAttack(g2, f) && hisOrder(f, f && inPassage(f) ? stance2 === "port" && turnBack(g2, f) : sail(g2, f, zone, stance2));
     if (ok2) retask(g2, f);
     if (ok2) stopShadow(f);
     return ok2;
   }
   function orderRebase(g2, id, region) {
     const f = myFleet(g2, id);
-    const ok2 = !!f && !heldAfterAttack(g2, f) && hisOrder(f, rebase(g2, f, g2.regions[region]));
+    const ok2 = !!f && !heldAfterAttack(g2, f) && !inPassage(f) && hisOrder(f, rebase(g2, f, g2.regions[region]));
     if (ok2) stopShadow(f);
     if (ok2 && f.planBase?.base === g2.regions[region].name) delete f.planBase;
     return ok2;
@@ -82848,19 +83641,21 @@
     const f = myFleet(g2, id);
     if (!f) return null;
     const war = g2.nations[f.nat].atWar.length > 0;
-    const held3 = heldAfterAttack(g2, f);
+    const held3 = heldAfterAttack(g2, f) || inPassage(f);
     const out = {
       seas: war && !held3 ? seaOptions(g2, f, f.nat) : [],
-      lanes: war && !held3 ? escortLanes(g2, f.nat).map((l) => planEscort(g2, f, l.id)) : [],
+      // (Release 2, the far chart: only the lanes within two months' steaming of it, and its own: laneNear.)
+      lanes: war && !held3 ? escortLanes(g2, f.nat).filter((l) => laneNear(g2, f, l)).map((l) => planEscort(g2, f, l.id)) : [],
       coasts: war ? bombardTargets(g2, f, f.nat).map((r) => r.id) : [],
       ports: held3 ? [] : baseTargets(g2, f).map((r) => r.id),
       merge: mergeTargets(g2, f).map((x) => x.id),
-      split: g2.flags.open === 1 && Object.values(f.ships).reduce((s, n) => s + n, 0) > 1
+      split: g2.flags.open === 1 && !inPassage(f) && Object.values(f.ships).reduce((s, n) => s + n, 0) > 1
     };
     if (fleetAttackOn(g2)) out.attack = war ? attackTargets(g2, f.id) : [];
     if (shadowOn(g2)) out.shadow = war ? shadowTargets(g2, f.id) : [];
     if (seaMinesOn(g2)) out.mines = war && !held3 ? mineSeas(g2, f.id) : [];
-    if (held3) out.held = `The ${f.name} was sent at the enemy this month: it stays where the battle left it until next month.`;
+    if (inPassage(f)) out.held = `${passageWhy(g2, f)} It can be turned back to ${f.passage?.fromPort ?? "the harbour it left"}.`;
+    else if (held3) out.held = `The ${f.name} was sent at the enemy this month: it stays where the battle left it until next month.`;
     return out;
   }
   function lanesToGuard(g2) {
@@ -109086,7 +109881,7 @@
       } else {
         row2.sign = "bmr";
         row2.tag = att ? r.won ? "HIT" : "MISSED" : r.won ? "HIT" : "HELD";
-        const [pic, place3, hit, miss] = r.mission === "line" ? ["rail-yard", `${town} rail yard`, `${what} cut the railway there.`, "The bombs fell wide. The line still runs."] : r.mission === "harbour" ? ["harbour", `${r.place} harbour`, `${what} struck the ships in harbour.`, "The raid on the harbour was beaten off."] : r.mission === "fleet" ? ["fleet", cap16(the4(r.ships?.[0]?.fleet ?? r.place)), `${what} struck the fleet at sea.`, "The strike on the fleet was beaten off."] : r.mission === "strike" ? ["fleet", cap16(r.place.replace(/^the /, "The ")), `${what} struck the shipping there.`, "The strike on the shipping was beaten off."] : r.mission === "ground" ? ["troops", r.place, `${what} struck the troops there.`, "The raid on the troops was beaten off."] : r.mission === "town" ? ["town", town, `${what} broke down its defences.`, "The raid on its defences was beaten off."] : ["factories", r.place, `${what} hit its factories${r.mission === "night" ? " by night" : ""}.`, "The bombers were beaten off."];
+        const [pic, place3, hit, miss] = r.mission === "line" ? ["rail-yard", `${town} rail yard`, `${what} cut the railway there.`, "The bombs fell wide. The line still runs."] : r.mission === "harbour" ? ["harbour", /\bHarbou?r$/.test(r.place) ? r.place : `${r.place} harbour`, `${what} struck the ships in harbour.`, "The raid on the harbour was beaten off."] : r.mission === "fleet" ? ["fleet", cap16(the4(r.ships?.[0]?.fleet ?? r.place)), `${what} struck the fleet at sea.`, "The strike on the fleet was beaten off."] : r.mission === "strike" ? ["fleet", cap16(r.place.replace(/^the /, "The ")), `${what} struck the shipping there.`, "The strike on the shipping was beaten off."] : r.mission === "ground" ? ["troops", r.place, `${what} struck the troops there.`, "The raid on the troops was beaten off."] : r.mission === "town" ? ["town", town, `${what} broke down its defences.`, "The raid on its defences was beaten off."] : ["factories", r.place, `${what} hit its factories${r.mission === "night" ? " by night" : ""}.`, "The bombers were beaten off."];
         row2.picture = pic;
         row2.place = place3;
         row2.line = r.won ? att ? hit : hit.replace(/^([\d,]+) (bombers|aircraft)/, "Their $2") : miss;
@@ -110826,12 +111621,14 @@
           wingFtr: Math.round(wings2.filter((w) => w.kind === "ftr").reduce((n, w) => n + w.aircraft, 0)),
           wingStrike: Math.round(wings2.filter((w) => w.kind !== "ftr").reduce((n, w) => n + w.aircraft, 0)),
           // For the player's own fleets: the seas each can reach this month, so that a fleet in hand shows where it can go.
-          reach: f.nat === s.human && up ? fleetReach(s, f) : [],
+          // (Release 2, the far chart: none for a fleet in passage to a new base, which keeps on its way or is turned back.)
+          reach: f.nat === s.human && up && f.stance !== "passage" ? fleetReach(s, f) : [],
           // (Ruling 86.) And the seas it would reach but for a gate shut to it, each with that gate: sea, gate, sea, gate.
-          barred: f.nat === s.human && up ? barredSeas(s, f) : [],
+          barred: f.nat === s.human && up && f.stance !== "passage" ? barredSeas(s, f) : [],
           // And the friendly ports it could make its new home. (1.5.1) None for a fleet held where its battle left it this
           // month: the rules refuse it a new base, so no port is tinted to offer one (its seas still say why when hovered).
-          bases: f.nat === s.human && up && !heldWhy(s, f) ? baseTargets(s, f).map((r) => r.id) : []
+          // (Release 2, the far chart: and none for a fleet in passage, which keeps on its way or is turned back.)
+          bases: f.nat === s.human && up && f.stance !== "passage" && !heldWhy(s, f) ? baseTargets(s, f).map((r) => r.id) : []
         };
       }),
       // (Ruling 86.) The sea gates: where each mark stands, who holds it, and whether the player's ships may pass.
@@ -114445,7 +115242,10 @@ ${next.text}` : ""}` : next ? next.also : "";
       const sea = s.seas[f2.zone]?.name ?? "the sea";
       const doing3 = `${fleetView(s, f2.id)?.doing ?? (f2.stance === "port" ? `In harbour at ${f2.port}` : f2.stance === "raid" ? `Raiding shipping in the ${sea}` : `On patrol in the ${sea}`)}.`;
       const mine5 = f2.nat === s.human;
-      if (mine5) {
+      const passage = f2.stance === "passage" && f2.passage ? { from: f2.passage.fromPort } : null;
+      if (mine5 && passage) {
+        options.push({ key: `fleet:${id}:${f2.home}:port`, label: `Turn back to ${passage.from}`, detail: "Back to the harbour it left, steamed from where it is: within its reach it is in this month, beyond it in passage again.", ok: up, why: notNow });
+      } else if (mine5) {
         const held3 = heldWhy(s, f2);
         const reach3 = fleetReach(s, f2).slice().sort((a, b) => a === f2.zone ? -1 : b === f2.zone ? 1 : 0);
         for (const z of reach3) {
@@ -114457,6 +115257,8 @@ ${next.text}` : ""}` : next ? next.also : "";
           options.push({ key: `fleet:${id}:${z}:raid`, label: `Raid shipping in the ${s.seas[z].name}`, detail: "Goes for merchant ships and avoids a fight with the enemy fleet.", ok: up && !here && !held3, why: here ? "It is doing so now." : notNow || held3 });
         }
         options.push({ key: `fleet:${id}:${f2.home}:port`, label: `Return to harbour at ${f2.port}`, detail: "Safe from the enemy fleet, and takes no part at sea.", ok: up && f2.stance !== "port" && !held3, why: f2.stance === "port" ? "It is in harbour now." : notNow || held3 });
+      }
+      if (mine5) {
         if (staffRunsDesk(s, "navy") && fleetKeptByHand(s, id)) options.push({ key: `fleet:${id}:staff`, label: "Hand it back to your admirals", detail: HAND_BACK_TIP, ok: up, why: notNow });
         if (taskForceOn(s)) {
           if (f2.task) options.push({ key: `fleet:${id}:untask`, label: "Release the task force", detail: RELEASE_TIP, ok: up, why: notNow });
@@ -114472,7 +115274,7 @@ ${next.text}` : ""}` : next ? next.also : "";
       const shadow = mine5 ? shadowLine(s, f2) : "";
       const mined = mine5 ? mineLine(s, f2) : "";
       const gale = mine5 ? galeLine(s, f2) : "";
-      return { name: f2.name, nat: f2.nat, mine: mine5, lines: [parts2.join(", ") || "No ships left", doing3, ...shadow ? [shadow] : [], ...mined ? [mined] : [], ...gale ? [gale] : [], ...why ? [why] : [], ...task ? [task] : [], ...who ? [who] : []], options };
+      return { name: f2.name, nat: f2.nat, mine: mine5, lines: [parts2.join(", ") || "No ships left", doing3, ...mine5 && passage ? [passageWhy(s, f2)] : [], ...mine5 && struckLine(s, f2) ? [struckLine(s, f2)] : [], ...shadow ? [shadow] : [], ...mined ? [mined] : [], ...gale ? [gale] : [], ...why ? [why] : [], ...task ? [task] : [], ...who ? [who] : []], options };
     }
     const f = s.airFleets.find((x) => x.id === id);
     if (!f) return null;
@@ -115398,10 +116200,12 @@ ${next.text}` : ""}` : next ? next.also : "";
       id: `fleet:${id}`,
       title: card.name.toUpperCase(),
       headline: `${card.doing}`,
-      note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ""}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? " Its guns have spoken this month." : ""} A fleet reaches three seas from its base, and can be given one order a month.${why ? ` ${why}` : ""}${task ? ` ${task}` : ""}${who ? ` ${who}` : ""}`,
+      // (Release 2, the far chart: struck at anchor this month or last, the card says so first, and where is out of reach.)
+      note: `${fl && struckLine(s, fl) ? `${struckLine(s, fl)} ` : ""}${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ""}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? " Its guns have spoken this month." : ""} A fleet reaches three seas from its base, and can be given one order a month.${why ? ` ${why}` : ""}${task ? ` ${task}` : ""}${who ? ` ${who}` : ""}`,
       top: [
+        // (Release 2, the far chart: a fleet in passage to a new base is turned back by the same order.)
         // (1.5.2's #37 and 1.5.1's held fleet, both: the reason it is held comes first, else it says if it is the order now.)
-        { label: "RETURN TO HARBOUR", act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== "port" && !o?.held, tip: o?.held || `${card.stance === "port" ? "It is in harbour now. " : ""}Safe from the enemy fleet, and takes no part at sea.` },
+        fl?.stance === "passage" && fl.passage ? { label: "TURN BACK", act: `fleet:${id}:${fl.home}:port`, ok: up, tip: `${passageWhy(s, fl)} Turned back, it makes for ${fl.passage.fromPort} again, steamed from where it is.` } : { label: "RETURN TO HARBOUR", act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== "port" && !o?.held, tip: o?.held || `${card.stance === "port" ? "It is in harbour now. " : ""}Safe from the enemy fleet, and takes no part at sea.` },
         ...staffRunsDesk(s, "navy") && fleetKeptByHand(s, id) ? [{ label: "HAND BACK TO YOUR ADMIRALS", act: `fleetstaff:${id}`, ok: up, tip: HAND_BACK_TIP }] : [],
         ...taskForceOn(s) && fl ? [fl.task ? { label: "RELEASE TASK FORCE", act: `taskforce:${id}:off`, ok: up, tip: RELEASE_TIP } : { label: "MAKE IT A TASK FORCE", act: `taskforce:${id}:on`, ok: up && !whyTask, tip: whyTask ?? TASK_TIP }] : [],
         ...shadowing ? [{ label: "STOP SHADOWING", act: `fleetshadow:${id}:off`, ok: up, tip: "It stays where it is, under your orders, and no longer follows the enemy fleet." }] : [],
