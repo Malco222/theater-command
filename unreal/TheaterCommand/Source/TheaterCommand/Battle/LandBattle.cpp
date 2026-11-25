@@ -6266,6 +6266,8 @@ void ALandBattle::StartDarkRead()
 	StopDarkRead();
 	DarkShare = -1.0;
 	DarkReads = 0;
+	DarkAsks = 0;
+	DarkBacks = 0;
 	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoDarkRead")))
 	{
 		return;
@@ -6279,6 +6281,7 @@ void ALandBattle::StartDarkRead()
 	}
 	DarkGrab = MakeShared<FFrameGrabber>(Game->SceneViewport.ToSharedRef(), FIntPoint(64, 36), PF_B8G8R8A8, 3);
 	DarkGrab->StartCapturingFrames();
+	DarkClock = 0.0;
 	DarkAskAt = 0.0;
 	DarkGotAt = 0.0;
 	UE_LOG(LogTheater, Display, TEXT("Land battle: the dark reading on: the drawn frame at 64 x 36 four times a second, its share under L 25 for the camera's dark rule"));
@@ -6291,26 +6294,36 @@ void ALandBattle::ReadDark(double Real)
 	{
 		return;
 	}
+	// (the reading's own clock, from this frame's length. Until 25 November the asks and the staleness below were
+	// measured against the frame's length itself, at most a tenth of a second: one frame was asked for as the battle
+	// began, the next ask's time was never reached, and the camera's dark rule saw nothing all battle.)
+	DarkClock += Real;
+	const double Now = DarkClock;
 	// Ask for a copy of the frame now and then; take what has come back (a frame or two later), the newest.
-	if (Real >= DarkAskAt && DarkGrab->IsCapturingFrames())
+	if (Now >= DarkAskAt && DarkGrab->IsCapturingFrames())
 	{
-		DarkAskAt = Real + 0.25;
+		DarkAskAt = Now + 0.25;
 		DarkGrab->CaptureThisFrame(FFramePayloadPtr());
+		++DarkAsks;
 	}
 	TArray<FCapturedFrameData> Frames = DarkGrab->GetCapturedFrames();
 	if (Frames.Num() == 0)
 	{
 		// (no frame back for a second: the last reading is stale, so the rule is told there is none; pre-check's note)
-		if (DarkShare >= 0.0 && Real - DarkGotAt > 1.0)
+		if (DarkShare >= 0.0 && Now - DarkGotAt > 1.0)
 		{
 			DarkShare = -1.0;
 		}
 		return;
 	}
-	DarkGotAt = Real;
+	DarkBacks += Frames.Num();
 	// (a result card up: the whole picture dimmed under it, so no reading till it goes; nor while the night's light is
-	// on the picture, the night before the attack and its dawn)
-	if (State.IsValid() && (State->bCard || State->NightNow.Dark > 0.0 || State->NightNow.Black > 0.0))
+	// on the picture, the night before the attack and its dawn; nor while the general's own view is the picture drawn
+	// (his eye begun and the film not given the camera): the film goes on being directed behind it, for its corner
+	// and for his return to it, and a dark reading of HIS view, a wood from above, would have the film leave shots
+	// that are not dark at all. Until the reading had a clock of its own, 25 November, nothing was read and this
+	// could not show.)
+	if (State.IsValid() && (State->bCard || (State->bGeneralEye && !State->General.bFilm) || State->NightNow.Dark > 0.0 || State->NightNow.Black > 0.0))
 	{
 		DarkShare = -1.0;
 		return;
@@ -6338,6 +6351,8 @@ void ALandBattle::ReadDark(double Real)
 		}
 	}
 	DarkShare = static_cast<double>(Dark) / static_cast<double>((Ht - Skip) * Wd);
+	// (only a frame that was read keeps the reading fresh: one that comes back empty leaves the last to go stale)
+	DarkGotAt = Now;
 	++DarkReads;
 }
 
@@ -8835,9 +8850,13 @@ void ALandBattle::EndPlay(const EEndPlayReason::Type Reason)
 	if (State.IsValid())
 	{
 		const FLandBattleState& S = *State;
-		UE_LOG(LogTheater, Display, TEXT("Land battle: ended at %.0f s: %d rounds played, %d blasts paired; shots heard %d, takes %d, out of hearing %d, dropped %d (on the screen %d); cracks %d, landings %d, falls %d; %d cuts (%d left for a dark picture, from %d dark readings)"),
+		UE_LOG(LogTheater, Display, TEXT("Land battle: ended at %.0f s: %d rounds played, %d blasts paired; shots heard %d, takes %d, out of hearing %d, dropped %d (on the screen %d); cracks %d, landings %d, falls %d; %d cuts (%d left for a dark picture; the picture read %d times, %d frames back of %d asked)"),
 			S.Battle, S.Play.RoundsPlayed(), S.Play.BlastsPaired(), S.Mix.ShotsHeard, S.Mix.ShotTakes, S.Mix.ShotsOutOfHearing, S.Mix.ShotsDropped, S.Mix.ShotsOnScreenDropped,
-			S.Mix.Cracks, S.Mix.Landings, S.Mix.Falls, S.Eye.Cuts(), S.Eye.DarkCuts(), DarkReads);
+			S.Mix.Cracks, S.Mix.Landings, S.Mix.Falls, S.Eye.Cuts(), S.Eye.DarkCuts(), DarkReads, DarkBacks, DarkAsks);
+		if (DarkAsks >= 8 && DarkBacks * 2 < DarkAsks)
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: the dark reading was all but blind: %d frames back of %d asked, so the camera's dark rule had little or nothing to go on"), DarkBacks, DarkAsks);
+		}
 		LogSound();
 	}
 	if (Limiter)
