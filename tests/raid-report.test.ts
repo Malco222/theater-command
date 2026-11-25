@@ -8,7 +8,7 @@ import { AIR, BROKE_OFF_SKY, skyWords } from '../src/campaign/air';
 import { FLIP } from '../src/campaign/airfought';
 import { airAct, airPage, raidsToRead } from '../src/campaign/airpages';
 import { launchRaid, planRaid, raidTargets } from '../src/campaign/airwar';
-import { allied, createGame } from '../src/campaign/game';
+import { allied, createGame, placeName } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
@@ -117,7 +117,7 @@ describe('a raid that has been flown has its report (the patch after 1.5.1)', ()
     // The fight's own level, and beside it what it was flown for: a sweep can win its fight and not win the sky.
     expect(p.headline.startsWith(`The sky over ${r.place}: ${r.level.toLowerCase()}, `)).toBe(true);
     expect(p.headline).toMatch(r.sky ? /sky won$/ : /sky not won$/);
-    if (r.sky) expect(p.note).toContain(`The German air force won the sky over ${r.place}`);
+    if (r.sky) expect(p.note).toContain(`The German air force won the sky over ${placeName(r.place)}`);
     else expect(p.note).toContain('The sky was not won: ');
     // The page says the one sentence the browser's report card says (air.ts skyWords): the game and the browser agree.
     expect(p.note).toContain(skyWords(g, r));
@@ -127,18 +127,18 @@ describe('a raid that has been flown has its report (the patch after 1.5.1)', ()
     r.sky = false; r.hold = 0.67;
     expect(page(g, `airreport:${r.id}`).note).toContain(`The sky was not won: at the end the attackers' fighters stood about 0.67 to 1 against those the defenders could still put up, and it takes ${AIR.sky.win} to 1.`);
     r.sky = true; r.hold = 2.5;
-    expect(page(g, `airreport:${r.id}`).note).toContain(`The German air force won the sky over ${r.place}: at the end its fighters stood about 2.50 to 1 against those the defenders could still put up.`);
+    expect(page(g, `airreport:${r.id}`).note).toContain(`The German air force won the sky over ${placeName(r.place)}: at the end its fighters stood about 2.50 to 1 against those the defenders could still put up.`);
     // The rules write 99 where the defence can put nothing more up. While a defender that rose still flies the figure
     // is given, as "more than 90 to 1" (the UI director's final read, 15:42Z); "no opposition was left" only where
     // none rose or every one that rose was lost.
     r.hold = 99;
     expect(r.def.some((x) => x.lostFtr < x.ftr)).toBe(true);
-    expect(page(g, `airreport:${r.id}`).note).toContain(`won the sky over ${r.place}: at the end its fighters stood more than 90 to 1 against those the defenders could still put up.`);
+    expect(page(g, `airreport:${r.id}`).note).toContain(`won the sky over ${placeName(r.place)}: at the end its fighters stood more than 90 to 1 against those the defenders could still put up.`);
     expect(page(g, `airreport:${r.id}`).note).not.toContain('99');
     r.def = r.def.map((x) => ({ ...x, lostFtr: x.ftr }));
-    expect(page(g, `airreport:${r.id}`).note).toContain(`won the sky over ${r.place}: at the end no opposition was left.`);
+    expect(page(g, `airreport:${r.id}`).note).toContain(`won the sky over ${placeName(r.place)}: at the end no opposition was left.`);
     r.def = [];
-    expect(page(g, `airreport:${r.id}`).note).toContain(`won the sky over ${r.place}: at the end no opposition was left.`);
+    expect(page(g, `airreport:${r.id}`).note).toContain(`won the sky over ${placeName(r.place)}: at the end no opposition was left.`);
     expect(page(g, `airreport:${r.id}`).note).not.toContain('times');
   });
 
@@ -171,7 +171,7 @@ describe('a raid that has been flown has its report (the patch after 1.5.1)', ()
     r.sky = false; r.hold = 99; r.def = [];
     r.att = r.att.map((x) => ({ ...x, ftr: 0, lostFtr: 0, bmr: 250, lostBmr: 5 }));
     let note = page(g, `airreport:${r.id}`).note;
-    expect(note).toContain(`The sky was not won: the defenders put up no fighters, but it takes ${AIR.sky.least} fighters still over the target as well, and the attackers had none left.`);
+    expect(note).toContain(`The sky was not won: the defenders put up no fighters, but it takes at least ${AIR.sky.least} fighters still over the target at the end as well, and the attackers sent none.`);
     expect(note).not.toContain('99');
     expect(note).not.toContain(' to 1');
     // Bombers alone against a defence that rose: the ratio is 0, and is not quoted either.
@@ -183,24 +183,24 @@ describe('a raid that has been flown has its report (the patch after 1.5.1)', ()
     r.att = r.att.map((x, i) => ({ ...x, ftr: i ? 0 : 30, lostFtr: 0 }));
     r.hold = 4;
     note = page(g, `airreport:${r.id}`).note;
-    expect(note).toContain(`The sky was not won: at the end the attackers' fighters stood about 4.00 to 1 against those the defenders could still put up, which is enough, but it takes ${AIR.sky.least} fighters still over the target as well, and the attackers had 30 left.`);
+    expect(note).toContain(`The sky was not won: at the end the attackers' fighters stood about 4.00 to 1 against those the defenders could still put up, which is enough, but it takes at least ${AIR.sky.least} fighters still over the target at the end as well, and the attackers had 30 left.`);
     expect(note).not.toContain('none flew');
     // Some flew and every one was lost: none were left, which is not "none flew", and no ratio of nothing is quoted.
     r.att = r.att.map((x, i) => ({ ...x, ftr: i ? 0 : 30, lostFtr: i ? 0 : 30 }));
     r.hold = 0;
     note = page(g, `airreport:${r.id}`).note;
-    expect(note).toContain(`The sky was not won: it takes at least ${AIR.sky.least} fighters still over it at the end, and none were left.`);
+    expect(note).toContain(`The sky was not won: it takes at least ${AIR.sky.least} fighters still over the target at the end, and none were left.`);
     expect(note).not.toContain('0.00');
     // One left reads as one.
     r.att = r.att.map((x, i) => ({ ...x, ftr: i ? 0 : 30, lostFtr: i ? 0 : 29 }));
     r.hold = 4;
-    expect(page(g, `airreport:${r.id}`).note).toContain('fighters still over the target as well, and the attackers had 1 left.');
+    expect(page(g, `airreport:${r.id}`).note).toContain('fighters still over the target at the end as well, and the attackers had 1 left.');
     // Fighters enough left, odds enough, and the sky still not won: the odds are given, and that it takes fighters
     // enough over the target as well (too few could stay over a target at the edge of their range)...
     r.att = r.att.map((x, i) => ({ ...x, ftr: i ? 0 : 158, lostFtr: 0 }));
     r.hold = 1.8; r.result = '';
     note = page(g, `airreport:${r.id}`).note;
-    expect(note).toContain(`The sky was not won: at the end the attackers' fighters stood about 1.80 to 1 against those the defenders could still put up, which is enough, but it takes ${AIR.sky.least} fighters still over the target as well.`);
+    expect(note).toContain(`The sky was not won: at the end the attackers' fighters stood about 1.80 to 1 against those the defenders could still put up, which is enough, but it takes at least ${AIR.sky.least} fighters still over the target at the end as well.`);
     expect(note).not.toContain('the attackers had');
     // ...or they gave the fight up before it was joined (the rules' own sentence for that, which the note also carries).
     r.result = BROKE_OFF_SKY;

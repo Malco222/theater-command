@@ -2312,16 +2312,21 @@ export function skyWords(g: Game, r: AirReport): string {
   if (r.mission !== 'superiority') return '';
   const NONE_LEFT = 99;
   const sum = (ss: AirSide[], k: 'ftr' | 'lostFtr'): number => ss.reduce((n, x) => n + x[k], 0);
-  const figure = r.hold === NONE_LEFT || r.hold > 90 ? 'more than 90 to 1' : r.hold >= 10 ? `about ${counted(r.hold)} to 1` : `about ${r.hold.toFixed(2)} to 1`;
+  // (Whole from 10 to 1 up, going by the figure as it would print: a reading a hair under 10 that rounds to "10.00"
+  // is told as "10", never as a 10 with two places.)
+  const figure = r.hold === NONE_LEFT || r.hold > 90 ? 'more than 90 to 1' : Number(r.hold.toFixed(2)) >= 10 ? `about ${counted(r.hold)} to 1` : `about ${r.hold.toFixed(2)} to 1`;
   const stood = (whose: string): string => `${whose} fighters stood ${figure} against those the defenders could still put up`;
   const leftOver = sum(r.att, 'ftr') - sum(r.att, 'lostFtr');
-  const floor = `but it takes ${AIR.sky.least} fighters still over the target as well${leftOver < AIR.sky.least ? `, and the attackers had ${leftOver > 0 ? counted(leftOver) : 'none'} left` : ''}`;
+  // (One voice for the floor, the UI director at 16:15Z on 25 November: "at least 50 fighters still over the target at
+  // the end"; a raid that sent no fighter is told so, one that lost them all "had none left".)
+  const sent = sum(r.att, 'ftr');
+  const floor = `but it takes at least ${AIR.sky.least} fighters still over the target at the end as well${sent < 1 ? ', and the attackers sent none' : leftOver < AIR.sky.least ? `, and the attackers had ${leftOver > 0 ? counted(leftOver) : 'none'} left` : ''}`;
   const usedUp = r.def.length > 0 && r.def.every((x) => x.lostFtr >= x.ftr);
-  return r.sky ? ` The ${g.nations[r.attNat].adj} air force won the sky over ${r.place}: at the end ${r.hold >= 9 && (!r.def.length || usedUp) ? 'no opposition was left' : stood('its')}.`
+  return r.sky ? ` The ${g.nations[r.attNat].adj} air force won the sky over ${placeName(r.place)}: at the end ${r.hold >= 9 && (!r.def.length || usedUp) ? 'no opposition was left' : stood('its')}.`
     : brokeOff(r) ? ' The sky was not won: the raid was broken off.'
     // (No fighter of the raid's was left, or none flew: a ratio of nothing is not quoted. The raid report page's own
-    // sentence for it, as the UI director ruled that page at 03:55Z and 04:07Z on 25 November, kept to the letter.)
-    : leftOver < 1 && r.hold < AIR.sky.win ? ` The sky was not won: it takes at least ${AIR.sky.least} fighters still over it at the end, and none ${sum(r.att, 'ftr') < 1 ? 'flew' : 'were left'}.`
+    // sentence for it, as the UI director ruled that page at 03:55Z and 04:07Z on 25 November, in the floor's one voice.)
+    : leftOver < 1 && r.hold < AIR.sky.win ? ` The sky was not won: it takes at least ${AIR.sky.least} fighters still over the target at the end, and none ${sent < 1 ? 'flew' : 'were left'}.`
     : r.hold < AIR.sky.win ? ` The sky was not won: at the end ${stood('the attackers\'')}, and it takes ${AIR.sky.win} to 1.`
     : r.hold >= 9 && !r.def.length ? ` The sky was not won: the defenders put up no fighters, ${floor}.`
     : r.hold >= 9 && usedUp ? ` The sky was not won: at the end the defenders had no fighters left to put up, ${floor}.`

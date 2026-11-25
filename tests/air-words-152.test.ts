@@ -886,15 +886,15 @@ describe("the UI director's answers of 15:04Z on the air words", () => {
     // Every defender that rose was lost (one fighter, shot down).
     const lost = sweep(45, 1, ':b');
     expect([lost.r.def.map((x) => [x.ftr, x.lostFtr]), lost.r.sky, lost.r.hold >= 9]).toEqual([[[1, 1]], false, true]);
-    expect(skyWords(lost.g, lost.r)).toBe(' The sky was not won: at the end the defenders had no fighters left to put up, but it takes 50 fighters still over the target as well, and the attackers had 45 left.');
+    expect(skyWords(lost.g, lost.r)).toBe(' The sky was not won: at the end the defenders had no fighters left to put up, but it takes at least 50 fighters still over the target at the end as well, and the attackers had 45 left.');
     // Two rose, both lost.
     const both = sweep(45, 2, ':b');
     expect(both.r.def.map((x) => [x.ftr, x.lostFtr])).toEqual([[2, 2]]);
-    expect(skyWords(both.g, both.r)).toBe(' The sky was not won: at the end the defenders had no fighters left to put up, but it takes 50 fighters still over the target as well, and the attackers had 45 left.');
+    expect(skyWords(both.g, both.r)).toBe(' The sky was not won: at the end the defenders had no fighters left to put up, but it takes at least 50 fighters still over the target at the end as well, and the attackers had 45 left.');
     // Nobody rose: as built (14:06Z).
     const nobody = sweep(40, 0);
     expect([nobody.r.def.length, nobody.r.hold, nobody.r.sky]).toEqual([0, 99, false]);
-    expect(skyWords(nobody.g, nobody.r)).toBe(' The sky was not won: the defenders put up no fighters, but it takes 50 fighters still over the target as well, and the attackers had 40 left.');
+    expect(skyWords(nobody.g, nobody.r)).toBe(' The sky was not won: the defenders put up no fighters, but it takes at least 50 fighters still over the target at the end as well, and the attackers had 40 left.');
   });
 
   it('answer 3: defenders still flying at 9 to 1 or more: the true figure, as the sentence under 9 to 1 gives it', () => {
@@ -903,20 +903,20 @@ describe("the UI director's answers of 15:04Z on the air words", () => {
     expect([one.r.def.map((x) => [x.ftr, x.lostFtr]), one.r.sky]).toEqual([[[1, 0]], false]);
     expect(one.r.hold).toBeCloseTo(58.44, 2);
     // (the figure from 10 to 1 up a whole number: the UI director's final read, 15:42Z; 15:04Z as built gave 'about 58.44 to 1')
-    expect(skyWords(one.g, one.r)).toBe(" The sky was not won: at the end the attackers' fighters stood about 58 to 1 against those the defenders could still put up, which is enough, but it takes 50 fighters still over the target as well, and the attackers had 45 left.");
+    expect(skyWords(one.g, one.r)).toBe(" The sky was not won: at the end the attackers' fighters stood about 58 to 1 against those the defenders could still put up, which is enough, but it takes at least 50 fighters still over the target at the end as well, and the attackers had 45 left.");
     const three = sweep(45, 3);
     expect(three.r.def.map((x) => [x.ftr, x.lostFtr])).toEqual([[3, 1]]);
-    expect(skyWords(three.g, three.r)).toBe(" The sky was not won: at the end the attackers' fighters stood about 19 to 1 against those the defenders could still put up, which is enough, but it takes 50 fighters still over the target as well, and the attackers had 45 left.");
+    expect(skyWords(three.g, three.r)).toBe(" The sky was not won: at the end the attackers' fighters stood about 19 to 1 against those the defenders could still put up, which is enough, but it takes at least 50 fighters still over the target at the end as well, and the attackers had 45 left.");
     // (under 9 to 1 the sentence is as it was)
     const five = sweep(30, 5);
     expect(five.r.hold).toBeLessThan(9);
-    expect(skyWords(five.g, five.r)).toBe(` The sky was not won: at the end the attackers' fighters stood about ${five.r.hold.toFixed(2)} to 1 against those the defenders could still put up, which is enough, but it takes 50 fighters still over the target as well, and the attackers had ${five.r.att[0].ftr - five.r.att[0].lostFtr} left.`);
+    expect(skyWords(five.g, five.r)).toBe(` The sky was not won: at the end the attackers' fighters stood about ${five.r.hold.toFixed(2)} to 1 against those the defenders could still put up, which is enough, but it takes at least 50 fighters still over the target at the end as well, and the attackers had ${five.r.att[0].ftr - five.r.att[0].lostFtr} left.`);
   });
 
   it('answer 3: at the cap with defenders still flying, "more than 90 to 1" (built by hand: the defending group given no fighter establishment)', () => {
     const cap = sweep(45, 1, '', true);
     expect([cap.r.def.map((x) => [x.ftr, x.lostFtr]), cap.r.hold, cap.r.sky]).toEqual([[[1, 0]], 99, false]);
-    expect(skyWords(cap.g, cap.r)).toBe(" The sky was not won: at the end the attackers' fighters stood more than 90 to 1 against those the defenders could still put up, which is enough, but it takes 50 fighters still over the target as well, and the attackers had 45 left.");
+    expect(skyWords(cap.g, cap.r)).toBe(" The sky was not won: at the end the attackers' fighters stood more than 90 to 1 against those the defenders could still put up, which is enough, but it takes at least 50 fighters still over the target at the end as well, and the attackers had 45 left.");
     // (a sky that WAS won at 9 to 1 or more, defenders still flying: the figure, the UI director's final read of 15:42Z;
     // 15:04Z as built said 'at the end no opposition was left' here)
     const won = sweep(120, 2);
@@ -964,7 +964,7 @@ describe("the UI director's final read (15:42Z)", () => {
   }
   const WON = ' The American air force won the sky over Calais: at the end';
   const NOT = " The sky was not won: at the end the attackers' fighters stood";
-  const TAIL = 'against those the defenders could still put up, which is enough, but it takes 50 fighters still over the target as well, and the attackers had 45 left.';
+  const TAIL = 'against those the defenders could still put up, which is enough, but it takes at least 50 fighters still over the target at the end as well, and the attackers had 45 left.';
 
   it('(a) the sky won at 9 to 1 or more: "no opposition was left" only where none rose or every one that rose was lost; else the figure', () => {
     // Still flying: 120 against 2, one lost.
@@ -989,6 +989,10 @@ describe("the UI director's final read (15:42Z)", () => {
     const won = (hold: number): string => skyWords(g, { ...flying, hold, sky: true });
     expect(not(9.5)).toBe(`${NOT} about 9.50 to 1 ${TAIL}`);
     expect(won(9.5)).toBe(`${WON} its fighters stood about 9.50 to 1 against those the defenders could still put up.`);
+    // The edge, by the figure as printed: 9.99 keeps its two places, and a reading that would print "10.00" is "10".
+    expect(not(9.99)).toBe(`${NOT} about 9.99 to 1 ${TAIL}`);
+    expect(not(9.997)).toBe(`${NOT} about 10 to 1 ${TAIL}`);
+    expect(won(9.997)).toBe(`${WON} its fighters stood about 10 to 1 against those the defenders could still put up.`);
     expect(not(10)).toBe(`${NOT} about 10 to 1 ${TAIL}`);
     expect(not(58.44)).toBe(`${NOT} about 58 to 1 ${TAIL}`);
     expect(not(58.5)).toBe(`${NOT} about 59 to 1 ${TAIL}`);
@@ -1013,7 +1017,7 @@ describe("the UI director's final read (15:42Z)", () => {
   it('(a), (d) the sky not won at 9 to 1 or more, flown: the whole figure where a defender still flies', () => {
     const two = sweep(46, [2, 1], ':x');
     expect(two.r.def.map((x) => [x.ftr, x.lostFtr])).toEqual([[2, 1], [1, 1]]);
-    expect(skyWords(two.g, two.r)).toBe(" The sky was not won: at the end the attackers' fighters stood about 20 to 1 against those the defenders could still put up, which is enough, but it takes 50 fighters still over the target as well, and the attackers had 46 left.");
+    expect(skyWords(two.g, two.r)).toBe(" The sky was not won: at the end the attackers' fighters stood about 20 to 1 against those the defenders could still put up, which is enough, but it takes at least 50 fighters still over the target at the end as well, and the attackers had 46 left.");
   });
 
   it("(e) two or more engineer corps on order: 'You have 2 on order in the ARSENAL, the first due March 1943.' (USA from 40, seed 11)", () => {
