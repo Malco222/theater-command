@@ -98,6 +98,17 @@ namespace LandScape
 		                                             // the recording gives its own; the game keeps the battle's weather draw
 	};
 	Air AirOf(Look L, double Snow);
+	/**
+	 * The east's summer graded as its own theatre (release 2, on trial "eastgold" until the art director passes it on the
+	 * Mac): the farmland of the Eastern Front east of 23.5 degrees (LandFarm's Russia: the Ukraine, Belarus, western
+	 * Russia to the Urals, 44 to 62 north; Voronezh, Kursk, Kharkov, Orel) from May to September with no snow lying (0.3
+	 * or less). Its air is the art director's T2, warm gold where Normandy's grade washed it to cream, and LandFarm lays its
+	 * ripe corn and stubble a step darker for it. Trial: the field's words (Field::Tried's reading of them).
+	 */
+	bool EastGold(Look L, double Snow, double Lat, double Lon, int Month, const std::string& Trial);
+	/** The day's air as above, for the field's place, month and trials (the recording's sky.latLon, its date's month and
+	 * "-TheaterLandTrial=", as the field was laid from them): the east's summer its own where EastGold holds. */
+	Air AirOf(Look L, double Snow, double Lat, double Lon, int Month, const std::string& Trial);
 
 	// ------------------------------------------------------------------ numbers (a region's own noise; LandField keeps its own)
 

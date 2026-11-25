@@ -302,7 +302,17 @@ namespace LandScape
 		return Clamp01((0.3 + 0.7 * Smooth(0.35, 0.9, Cold)) * Vary);
 	}
 
-	Air AirOf(Look L, double SnowLying)
+	bool EastGold(Look L, double SnowLying, double Lat, double Lon, int Month, const std::string& Trial)
+	{
+		if (L != Look::Farmland || SnowLying > 0.3 || Month < 5 || Month > 9) return false;
+		if (Lat < 44.0 || Lat > 62.0 || Lon < 23.5 || Lon > 60.0) return false;
+		LandField::Field Words;
+		Words.Trial = Trial;
+		return Words.Tried("eastgold");
+	}
+
+	/** The day's air over a look (AirOf), the east's summer its own where bEastGold (EastGold). */
+	static Air AirFor(Look L, double SnowLying, bool bEastGold)
 	{
 		Air A;
 		auto Ink = [](double* To, double R, double G, double B) { To[0] = R; To[1] = G; To[2] = B; };
@@ -363,6 +373,21 @@ namespace LandScape
 			break;
 		case Look::Farmland:
 			A.bSet = true;
+			if (bEastGold)
+			{
+				// (the east's summer on trial "eastgold" (EastGold): Normandy's grade and haze washed its ripe strips to a
+				// near-blown cream, the art director's Voronezh read (236,228,195 against her gold). The summer steppe's dust
+				// hanging warm over the corn: the east set's steppe.json, C2B99E at 4,200 m, its hue at about the bocage's
+				// brightness (the plain grey-warm 0.70,0.68,0.62 first tried greyed the far band further in the cloud
+				// painter, its blue over green 0.99 to 0.93 where this takes it to 0.78); a little more dust in the sky;
+				// her T2 grade as ruled (the look bible's T2 row, theatres-sheet-rulings-1122.md item 1: middles 0.55,
+				// darks 0.50, contrast 1.35, half a stop down, toe 0.55, red 1.01 and blue 0.99), which keeps more of the
+				// gold in the middle tones than Normandy's 0.48)
+				Ink(A.HazeInk, 0.73, 0.66, 0.41);
+				A.HazeDensity = 0.0058;
+				A.SkyDust = 0.8;
+				Grade(0.50, 0.55, 1.35, -0.5, 0.55, 1.01, 0.99);
+			}
 			break;
 		case Look::Rice:
 			// (monsoon.json's A0A898 at 3,500 m: a damp grey-green haze over the paddies, the hills behind in steps; a
@@ -433,6 +458,13 @@ namespace LandScape
 		// (the farm belt's winter air dry and clear: the windbreaks and the elevator carry over the snow)
 		if (L == Look::America) A.HazeDensity = std::min(A.HazeDensity, 0.0072);
 		return A;
+	}
+
+	Air AirOf(Look L, double SnowLying) { return AirFor(L, SnowLying, false); }
+
+	Air AirOf(Look L, double SnowLying, double Lat, double Lon, int Month, const std::string& Trial)
+	{
+		return AirFor(L, SnowLying, EastGold(L, SnowLying, Lat, Lon, Month, Trial));
 	}
 
 	// ------------------------------------------------------------------ a region's plain answers

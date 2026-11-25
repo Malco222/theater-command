@@ -107,6 +107,7 @@ namespace LandScape
 				bSlate = (F.Lat >= 49.3 && F.Lon < 7.6) || F.Terrain == "hills" || F.Terrain == "mountain";
 				SnowLying = SnowOf(F, Look::Farmland);
 				bSpruceTrial = F.Tried("spruce");
+				bGold = EastGold(Look::Farmland, SnowLying, F.Lat, F.Lon, F.Month, F.Trial);
 				bBare = Month >= 11 || Month <= 3;
 				// the share of the woods' blocks that are conifer: the Ardennes' spruce plantations most
 				Conifers = bArdennes ? 0.72 : bEast ? 0.45 : 0.28;
@@ -278,8 +279,12 @@ namespace LandScape
 			Tone CropTone(int C, double N1, double N2, double Bands, double Streak) const
 			{
 				const Tone Earth = Varied(Soil, 1.0 + 0.07 * Bands + 0.05 * Streak + 0.04 * N2, 0.0);
-				const Tone Young = Rgb(96, 122, 50), Green = Rgb(82, 112, 44), Ripe = C == Rye ? Rgb(178, 160, 104) : Rgb(194, 154, 66);
-				const Tone Stubble = Rgb(170, 150, 104), Leaves = Rgb(62, 92, 44);
+				const Tone Young = Rgb(96, 122, 50), Green = Rgb(82, 112, 44);
+				// (the east's summer on trial "eastgold": the ripe corn and the stubble a step darker for its own grade, as
+				// the steppe's (LandSteppe: its wheat 170,148,82), so open ground lands at 120 to 160 lit and the far band
+				// gold, not the cream near-blown that Normandy's grade made of them; the far ring's too, through Far)
+				const Tone Ripe = bGold ? (C == Rye ? Rgb(162, 146, 98) : Rgb(176, 144, 64)) : C == Rye ? Rgb(178, 160, 104) : Rgb(194, 154, 66);
+				const Tone Stubble = bGold ? Rgb(152, 134, 92) : Rgb(170, 150, 104), Leaves = Rgb(62, 92, 44);
 				// (the west's wheat in May and June: the glaucous blue-green of the leaf before the ear turns)
 				const Tone Blue = Rgb(82, 108, 74);
 				auto Haze = [&](double G) { return Mixed(Earth, Varied(Young, 1.0 + 0.06 * Streak, 0.0), G); };
@@ -1593,6 +1598,9 @@ namespace LandScape
 			bool bEast = false, bRussia = false, bArdennes = false, bSlate = true, bBare = false;
 			/** The winter spruce on trial (Field::Tried("spruce")): from above a dark mass flecked with snow (KitLook). */
 			bool bSpruceTrial = false;
+			/** The east's summer on trial "eastgold" (LandScape::EastGold): its ripe corn and stubble a step darker
+			 * (CropTone), for its own grade. */
+			bool bGold = false;
 			double SnowLying = 0.0, Conifers = 0.3, Ca = 1.0, Sa = 0.0;
 			Tone Soil = Rgb(126, 102, 78), GrassT = Rgb(92, 134, 54);
 			/** The breakup's grid (2 a point: Lt, Wm), 10 m. */
