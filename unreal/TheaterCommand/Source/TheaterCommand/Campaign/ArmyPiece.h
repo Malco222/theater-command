@@ -78,6 +78,14 @@ public:
 	void MarchAlong(const TArray<FVector>& Waypoints, bool bRemoveOnArrival, bool bLifted = true);
 	bool IsMarching() const { return bMarching; }
 	/**
+	 * (Release 2, the far side.) The whole world's table goes round, and a piece is laid once, in one turn of it: from
+	 * West, Span wide, along the table's east (the world's +Y). Given that, a march or a sail between two places takes
+	 * the short way round (San Diego to Pearl Harbor is west across the chart's seam, not east across two oceans), and
+	 * a piece lifted or under sail comes round the seam as it crosses, so it is seen to leave on the one side and to
+	 * come in on the other. Nought, as it is made: a table with edges.
+	 */
+	void KeepRound(double West, double Span) { RoundWest = West; RoundSpan = FMath::Max(Span, 0.0); }
+	/**
 	 * (Release 2; Brian 24 November 2026 18:13Z: "when i move a navy I want to see the boats sail to it as well".) A
 	 * fleet sails along the points given, on the water: not lifted, its bows turned the way it goes and its passage wake
 	 * thrown, and turned back to face the table (TableYaw) as it comes to rest. Longer ways take longer, from about a
@@ -261,6 +269,7 @@ private:
 	bool bRemoveOnArrival = false;
 	bool bLiftOnMarch = true;
 	bool bSailing = false; // (release 2) a fleet under sail: see SailAlong
+	double RoundWest = 0.0, RoundSpan = 0.0; // (release 2, the far side) the turn of the world it is kept in: see KeepRound
 	float SailEndYaw = 0.0f; // the table's yaw it turns back to on arrival
 	bool bSelected = false;
 	bool bHovered = false;

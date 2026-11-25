@@ -11025,12 +11025,22 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 			// holder for every province they know: if that is more than the table has, it is said once, as an error,
 			// so that the picture check stops on it. (Fewer is as it should be: a history scenario's rules know
 			// Europe's 375 alone, and the world beyond them is the table's backdrop.)
+			// (Release 2, the far side: the Pacific thread's audit, 25 November 2026.) The other way round is said too,
+			// when the rules know a wider world than Europe's own and the table draws a wider one still: the far side
+			// switched on for the table (stage.json "far") with a rules bundle not built for it draws 2,067 provinces
+			// while the rules play 915, and Asia stands painted with nobody in it. A rules picture of Europe's own
+			// provinces and no more is still as it should be.)
 			static int32 SaidFor = -1;
-			const int32 Known = View.RegionHolder.Num(), Drawn = Map->GetData().Regions.Num();
+			const int32 Known = View.RegionHolder.Num(), Drawn = Map->GetData().Regions.Num(), Own = Map->GetData().FirstBeyond;
 			if (Known > Drawn && SaidFor != Known)
 			{
 				SaidFor = Known;
 				UE_LOG(LogTheater, Error, TEXT("The rules know %d provinces and the table draws %d: an army in a province the table does not have cannot be seen. The map files the table reads are not the ones the rules were built from."), Known, Drawn);
+			}
+			else if (Known < Drawn && Own > 0 && Known > Own && SaidFor != Known)
+			{
+				SaidFor = Known;
+				UE_LOG(LogTheater, Error, TEXT("The rules know %d provinces and the table draws %d: the table has a wider world than the rules play, and the ground beyond theirs is painted with nobody on it. The far side is switched on for the table (stage.json far, or -TheaterFar) and the rules' bundle was not built for it."), Known, Drawn);
 			}
 		}
 		HumanLaid = View.Human;

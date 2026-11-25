@@ -420,46 +420,157 @@ void FCampaignTerrain::BuildOver(const FCampaignMapData& Data, double MinX, doub
 	// the island falls between the grid's points. A fine sheet sees an islet at its own size and raises nothing for it.
 	// And a sheet may lie in any turn of the world, as the lands filled in step 1 do: the mound is raised where the
 	// island falls on this sheet.
-	for (const FCampaignRegion& R : Data.Regions)
+	// (Release 2, the far side: the Pacific thread's second audit, 25 November 2026.) The islet flag was the wrong key:
+	// Samoa, Kauai, Okinawa, Attu, Jolo, Zanzibar, Mauritius, Bahrain, Sao Tome, Curacao and the Azores carry no flag
+	// and are as small, and Oahu itself (Pearl Harbor and Honolulu, under 200 square units between them) comes out of
+	// the smoothing at about a half: sea, or a speck one cell wide. So on a coarse sheet (the world's own) a mound is
+	// raised for any province of a small island (itself and the provinces it borders by land, taken together, too
+	// small for the sheet) whose chief town would not stand on land once the shore is smoothed: under its town, where
+	// the plate and the pieces are laid. Which provinces were raised is kept (Raised), for the click on the speck.
+	Raised.Reset();
+	const bool bCoarseSheet = Cell >= 3.0;
+	TArray<double> IslandArea; // the land a province stands on: its own and its neighbours' by land, right through
+	if (bCoarseSheet)
 	{
+		TArray<int32> Root;
+		Root.SetNumUninitialized(Data.Regions.Num());
+		for (int32 K = 0; K < Root.Num(); ++K)
+		{
+			Root[K] = K;
+		}
+		auto Find = [&Root](int32 K)
+		{
+			while (Root[K] != K)
+			{
+				Root[K] = Root[Root[K]];
+				K = Root[K];
+			}
+			return K;
+		};
+		for (int32 K = 0; K < Data.Regions.Num(); ++K)
+		{
+			for (int32 Other : Data.Regions[K].Neighbors)
+			{
+				if (Data.Regions.IsValidIndex(Other))
+				{
+					Root[Find(K)] = Find(Other);
+				}
+			}
+		}
+		TArray<double> Sum;
+		Sum.SetNumZeroed(Data.Regions.Num());
+		for (int32 K = 0; K < Data.Regions.Num(); ++K)
+		{
+			Sum[Find(K)] += Data.Regions[K].Area;
+		}
+		IslandArea.SetNumUninitialized(Data.Regions.Num());
+		for (int32 K = 0; K < Data.Regions.Num(); ++K)
+		{
+			IslandArea[K] = Sum[Find(K)];
+		}
+	}
+	// (the cover as step 4's smoothing would leave it at a place: the grid point nearest it and the eight round it)
+	auto Smoothed = [&](const FVector2D& P) -> float
+	{
+		const int32 I = FMath::Clamp(FMath::RoundToInt32((P.X - OriginX) / Cell), 0, NX - 1);
+		const int32 J = FMath::Clamp(FMath::RoundToInt32((P.Y - OriginY) / Cell), 0, NY - 1);
+		float Sum = 0.0f;
+		for (int32 DJ = -1; DJ <= 1; ++DJ)
+		{
+			for (int32 DI = -1; DI <= 1; ++DI)
+			{
+				Sum += Coverage[Index(FMath::Clamp(I + DI, 0, NX - 1), FMath::Clamp(J + DJ, 0, NY - 1))];
+			}
+		}
+		return Sum / 9.0f;
+	};
+	// (Every mound is settled on the sheet as the chart left it, before any is raised: one island's mound must not hide
+	// that its neighbour is lost too.)
+	struct FMound
+	{
+		int32 Id;
+		FVector2D Middle;
+		double Radius;
+	};
+	TArray<FMound> Mounds;
+	const double Lost = 2.2 * Cell; // (a round island of less than this radius is too small for the sheet)
+	for (int32 K = 0; K < Data.Regions.Num(); ++K)
+	{
+		const FCampaignRegion& R = Data.Regions[K];
 		if (R.Area <= 0.0)
 		{
 			continue;
 		}
 		const double Round = FMath::Sqrt(R.Area / UE_DOUBLE_PI);
-		const bool bLostIslet = R.bIslet && Round < 2.2 * Cell;
-		if (R.Area > 40.0 && !bLostIslet)
+		const bool bSmall = R.Area <= 40.0;
+		const bool bIslet = R.bIslet && Round < Lost;
+		const bool bIsland = bCoarseSheet && Round < Lost && FMath::Sqrt(IslandArea[K] / UE_DOUBLE_PI) < Lost;
+		if (!bSmall && !bIslet && !bIsland)
 		{
 			continue;
 		}
-		const double Radius = FMath::Max(bLostIslet ? 2.2 * Cell : 2.6, Round + 1.4);
 		const bool bRound = Data.bWorld && Data.WorldWidth > 0.0;
 		for (int32 Turn = bRound ? -1 : 0; Turn <= (bRound ? 1 : 0); ++Turn)
 		{
-			const FVector2D Middle(R.Centroid.X + Turn * Data.WorldWidth, R.Centroid.Y);
+			const FVector2D Seed(R.Center.X + Turn * Data.WorldWidth, R.Center.Y);
+			// (six tenths, where the shore is at a half: an island the smoothing leaves at the very edge of land shows
+			// as one cell or none, by where it falls between the grid's points)
+			const bool bSunk = bIsland && !bIslet && Seed.X >= OriginX && Seed.X <= OriginX + ExtentX && Seed.Y >= OriginY && Seed.Y <= OriginY + ExtentY
+				&& Smoothed(Seed) < 0.6f;
+			if (!bSmall && !bIslet && !bSunk)
+			{
+				continue;
+			}
+			const double Radius = FMath::Max(bIslet || bSunk ? Lost : 2.6, Round + 1.4);
+			const FVector2D Middle = bSunk ? Seed : FVector2D(R.Centroid.X + Turn * Data.WorldWidth, R.Centroid.Y);
 			if (Middle.X + Radius < OriginX || Middle.X - Radius > OriginX + ExtentX || Middle.Y + Radius < OriginY || Middle.Y - Radius > OriginY + ExtentY)
 			{
 				continue;
 			}
-			const int32 I0 = FMath::Max(FMath::FloorToInt32((Middle.X - OriginX - Radius) / Cell), 0);
-			const int32 I1 = FMath::Min(FMath::CeilToInt32((Middle.X - OriginX + Radius) / Cell), NX - 1);
-			const int32 J0 = FMath::Max(FMath::FloorToInt32((Middle.Y - OriginY - Radius) / Cell), 0);
-			const int32 J1 = FMath::Min(FMath::CeilToInt32((Middle.Y - OriginY + Radius) / Cell), NY - 1);
-			for (int32 J = J0; J <= J1; ++J)
+			Mounds.Add(FMound{ R.Id, Middle, Radius });
+			if (bIslet || bSunk)
 			{
-				for (int32 I = I0; I <= I1; ++I)
+				Raised.Add(R.Id);
+			}
+		}
+	}
+	if (bCoarseSheet && Raised.Num() > 0)
+	{
+		// (for the Mac's log: 43 on the whole world's chart, 21 of them the flagged islets)
+		UE_LOG(LogTheater, Log, TEXT("Terrain: %d provinces too small for a sheet of %.1f units a cell stand on mounds of their own"), Raised.Num(), Cell);
+	}
+	TMap<int32, float> Claimed; // (the sea a mound has taken, and how firmly: where two mounds meet, Pearl Harbor's and Honolulu's, each keeps the side nearer its own middle)
+	for (const FMound& Each : Mounds)
+	{
+		const FVector2D Middle = Each.Middle;
+		const double Radius = Each.Radius;
+		const int32 I0 = FMath::Max(FMath::FloorToInt32((Middle.X - OriginX - Radius) / Cell), 0);
+		const int32 I1 = FMath::Min(FMath::CeilToInt32((Middle.X - OriginX + Radius) / Cell), NX - 1);
+		const int32 J0 = FMath::Max(FMath::FloorToInt32((Middle.Y - OriginY - Radius) / Cell), 0);
+		const int32 J1 = FMath::Min(FMath::CeilToInt32((Middle.Y - OriginY + Radius) / Cell), NY - 1);
+		for (int32 J = J0; J <= J1; ++J)
+		{
+			for (int32 I = I0; I <= I1; ++I)
+			{
+				const double D = FVector2D::Distance(PointAt(I, J), Middle);
+				const float Mound = 1.0f - FMath::SmoothStep(static_cast<float>(Radius * 0.55), static_cast<float>(Radius), static_cast<float>(D));
+				const int32 Idx = Index(I, J);
+				const bool bRaises = Mound > Coverage[Idx];
+				if (Mound > 0.3f)
 				{
-					const double D = FVector2D::Distance(PointAt(I, J), Middle);
-					const float Mound = 1.0f - FMath::SmoothStep(static_cast<float>(Radius * 0.55), static_cast<float>(Radius), static_cast<float>(D));
-					const int32 Idx = Index(I, J);
-					if (Mound > Coverage[Idx])
+					const float* Held = bCoarseSheet ? Claimed.Find(Idx) : nullptr;
+					if ((bRaises && Region[Idx] < 0) || (Held && Mound > *Held))
 					{
-						Coverage[Idx] = Mound;
-						if (Region[Idx] < 0 && Mound > 0.3f)
+						Region[Idx] = static_cast<int16>(Each.Id);
+						if (bCoarseSheet)
 						{
-							Region[Idx] = static_cast<int16>(R.Id);
+							Claimed.Add(Idx, Mound);
 						}
 					}
+				}
+				if (bRaises)
+				{
+					Coverage[Idx] = Mound;
 				}
 			}
 		}

@@ -306,9 +306,21 @@ public:
 	 * A way by water from one point of the map to another, as points from the one to the other: round the land, a
 	 * little off the coasts, and straight where the water is open. Empty where none is found in the box round the
 	 * two (a strait thinner than the search's squares, say): the fleet is then simply found at its new place, as it
-	 * was before ships sailed, and never sails over the land.
+	 * was before ships sailed, and never sails over the land. (Release 2, the far side: the short way round the
+	 * world. The way is given in the turn it leaves from, so over the chart's seam its last point lies a whole world
+	 * from To: a sailing piece comes round by itself, see RoundPiece, and a wake is laid in both turns.)
 	 */
 	TArray<FVector2D> WaterWay(const FVector2D& From, const FVector2D& To) const;
+	/**
+	 * (Release 2, the far side.) The whole world's chart goes round, and what is laid once on it (a town, a plate, a
+	 * piece) is laid in the chart's own turn of the world, from its seam at 141 W. LaidX brings a place from west to
+	 * east into that turn; NearX brings it into the turn nearest another place, which is the short way round between
+	 * the two (San Diego to Pearl Harbor is 1,066 units west across the seam, not 8,190 east across two oceans).
+	 * Both give the place back as it was on a table with edges. RoundPiece tells a piece its turn (AArmyPiece::KeepRound).
+	 */
+	double LaidX(double X) const;
+	double NearX(double X, double BesideX) const;
+	void RoundPiece(AArmyPiece* Piece) const;
 	/**
 	 * A province crowded with the flags of one side (two armies or more) shows one flag, the player's own if it is there, with a count
 	 * of the others beside it; pointed at or picked, it fans them all out. This gives, for each province that is

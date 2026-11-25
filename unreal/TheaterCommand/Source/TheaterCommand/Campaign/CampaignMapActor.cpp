@@ -403,6 +403,28 @@ int32 ACampaignMapActor::TurnFor(double X, double EyeX) const
 	return Data.bWorld && Data.WorldWidth > 0.0 ? FMath::RoundToInt32((EyeX - X) / Data.WorldWidth) : 0;
 }
 
+double ACampaignMapActor::LaidX(double X) const
+{
+	if (!Data.bFar || !Data.Charted.bIsValid || Data.WorldWidth <= 0.0)
+	{
+		return X;
+	}
+	return X - FMath::FloorToDouble((X - Data.Charted.Min.X) / Data.WorldWidth) * Data.WorldWidth;
+}
+
+double ACampaignMapActor::NearX(double X, double BesideX) const
+{
+	return Data.bFar && Data.WorldWidth > 0.0 ? X + FMath::RoundToDouble((BesideX - X) / Data.WorldWidth) * Data.WorldWidth : X;
+}
+
+void ACampaignMapActor::RoundPiece(AArmyPiece* Piece) const
+{
+	if (Piece && Data.bFar && Data.Charted.bIsValid && Data.WorldWidth > 0.0)
+	{
+		Piece->KeepRound(MapToWorld(Data.Charted.Min.X, 0.0).Y, Data.WorldWidth * UnitScale);
+	}
+}
+
 float ACampaignMapActor::GroundAt(double InX, double Y) const
 {
 	// The map's own ground where it reaches; beyond it a fine sheet's where one stands, and the world's coarse sheet's elsewhere.
@@ -2080,9 +2102,10 @@ int32 ACampaignMapActor::RegionAtWorld(const FVector& World) const
 			return Id;
 		}
 	}
-	// (Release 2, the whole world.) So is the mound the world's own sheet raises for one of the Pacific's islets, which
-	// is all he sees of it from the high view: a click anywhere on the speck is a click on the island. Where a fine
-	// sheet stands the island is drawn at its own size, and only its own ground is the island.
+	// (Release 2, the whole world.) So is the mound the world's own sheet raises for one of the Pacific's islets or any
+	// other island too small for it (Oahu, Okinawa, Samoa), which is all he sees of it from the high view: a click
+	// anywhere on the speck is a click on the island. Where a fine sheet stands the island is drawn at its own size,
+	// and only its own ground is the island.
 	if (Data.bWorld && WorldTerrain.NX > 0)
 	{
 		const double X = WrapX(P.X);
@@ -2091,7 +2114,7 @@ int32 ACampaignMapActor::RegionAtWorld(const FVector& World) const
 			const int32 I = FMath::Clamp(FMath::RoundToInt32((X - WorldTerrain.OriginX) / WorldTerrain.Cell), 0, WorldTerrain.NX - 1);
 			const int32 J = FMath::Clamp(FMath::RoundToInt32((P.Y - WorldTerrain.OriginY) / WorldTerrain.Cell), 0, WorldTerrain.NY - 1);
 			const int16 Id = WorldTerrain.Region[WorldTerrain.Index(I, J)];
-			if (Id >= 0 && Data.Regions.IsValidIndex(Id) && Data.Regions[Id].bIslet)
+			if (Id >= 0 && Data.Regions.IsValidIndex(Id) && WorldTerrain.Raised.Contains(Id))
 			{
 				return Id;
 			}
@@ -10532,6 +10555,7 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 		if (!Piece)
 		{
 			Piece = World->SpawnActor<AArmyPiece>(Spot, FRotator(0.0f, LastPieceYaw, 0.0f));
+			RoundPiece(Piece); // (the far side: a march over the chart's seam, Alaska to the Yukon, goes the short way)
 		}
 		if (Piece)
 		{
@@ -10638,6 +10662,7 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 			}
 			if (AArmyPiece* Courier = World->SpawnActor<AArmyPiece>(CarriedFrom ? *CarriedFrom : *From, Piece->GetActorRotation()))
 			{
+				RoundPiece(Courier);
 				Courier->SetArmy(this, *Nation, Piece->GetRegionId(), Travellers);
 				Courier->MarchAlong(Road, true, CarriedFrom == nullptr);
 			}
@@ -11135,8 +11160,9 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 		if (bInHarbour)
 		{
 			// Out from the port toward its sea until the water is reached, and a little beyond.
+			// (Release 2, the far side: toward its sea the short way round, where the sea's middle lies over the chart's seam.)
 			const FVector2D Port = Data.Regions[Fleet.Base].Center;
-			const FVector2D Out = (Sea - Port).GetSafeNormal();
+			const FVector2D Out = (FVector2D(NearX(Sea.X, Port.X), Sea.Y) - Port).GetSafeNormal();
 			At = Port;
 			for (int32 Step = 0; Step < 80 && CoverAt(At.X, At.Y) > 0.35f; ++Step)
 			{
@@ -11152,12 +11178,14 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 			const double Angle = Others * 2.1 + Fleet.Zone;
 			At += FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * (Others > 0 ? 16.0 : 0.0);
 		}
+		At.X = LaidX(At.X); // (the far side: laid in the chart's own turn of the world, wherever the steps out ended)
 		++Others;
 		TObjectPtr<AArmyPiece>& Piece = FleetPieces.FindOrAdd(Fleet.Id);
 		const bool bWasLaid = Piece != nullptr;
 		if (!Piece)
 		{
 			Piece = World->SpawnActor<AArmyPiece>(MapToWorld(At.X, At.Y), Facing);
+			RoundPiece(Piece); // (the far side: a sail over the chart's seam, San Diego to Pearl Harbor, goes the short way)
 		}
 		// (Release 2: ships that sail.) A fleet seen where it was and where it is now, that has changed its sea or
 		// come in or gone out of harbour, sails there by water. A fleet only reported (a sighting, not a fleet seen)
@@ -11178,6 +11206,21 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 			if (Wake.Num() >= 2)
 			{
 				Wakes.RemoveAll([&Fleet, &View](const FWakeTrail& Old) { return Old.Fleet == Fleet.Id && Old.Turn == View.Turn; });
+				// (Release 2, the far side.) A way over the chart's seam comes back in the turn of the world it left from,
+				// and ends a whole world from where the fleet is laid. Its wake is laid twice, once from where it left and
+				// once to where it lies: each is whole, and each lies on ground that is drawn while the eye is near it.
+				const double WorldRound = At.X - Wake.Last().X;
+				if (FMath::Abs(WorldRound) > 1.0)
+				{
+					FWakeTrail& Twin = Wakes.AddDefaulted_GetRef();
+					Twin.Fleet = Fleet.Id;
+					Twin.Turn = View.Turn;
+					Twin.Points = Wake;
+					for (FVector2D& Point : Twin.Points)
+					{
+						Point.X += WorldRound;
+					}
+				}
 				FWakeTrail& Trail = Wakes.AddDefaulted_GetRef();
 				Trail.Fleet = Fleet.Id;
 				Trail.Turn = View.Turn;
@@ -11264,6 +11307,7 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 		if (!Piece)
 		{
 			Piece = World->SpawnActor<AArmyPiece>(SurfacePoint(At.X, At.Y, 0.0), Facing);
+			RoundPiece(Piece);
 		}
 		if (Piece)
 		{
@@ -11375,11 +11419,15 @@ void ACampaignMapActor::LayWakes(int32 Turn)
 	Foam.Commit(WakeMesh, 0, WakeTrailInk ? static_cast<UMaterialInterface*>(WakeTrailInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
 }
 
-TArray<FVector2D> ACampaignMapActor::WaterWay(const FVector2D& From, const FVector2D& To) const
+TArray<FVector2D> ACampaignMapActor::WaterWay(const FVector2D& From, const FVector2D& Given) const
 {
 	// (Release 2: ships that sail.) A search over squares of the chart, in a box round the two points: water is
 	// what the harbour's own way out counts as water (land cover no more than 0.35); a square beside land costs a
 	// little more, which keeps a fleet off the coasts; then the corners are cut where open water lets them be.
+	// (Release 2, the far side.) The short way round the world: the far end is counted in the turn nearest the near
+	// one, and the box is searched there (the cover is read whichever turn a place is given in). So the way comes back
+	// in the turn it left from, and over the chart's seam its last point is a whole world from the place given.
+	const FVector2D To(NearX(Given.X, From.X), Given.Y);
 	const double Apart = FVector2D::Distance(From, To);
 	TArray<FVector2D> Way = { From, To };
 	if (Apart < 1.0)
@@ -13423,19 +13471,31 @@ void ACampaignMapActor::ShowSeaReach(const TArray<int32>& Zones, int32 Hover, in
 		const bool bHere = Zone == Hover;
 		// An anchorage marked on the chart: a ring of brass, doubled and brighter under the pointer.
 		const double Wide = bHere ? 15.0 : 13.0;
-		Wash(Middle, Wide, FLinearColor(1.0f, 0.82f, 0.3f, static_cast<float>(bHere ? SeaFill.Y : SeaFill.X))); // the water inside it, tinted
-		Ring(Middle, Wide, bHere ? 0.9 : 0.55, FLinearColor(1.0f, 0.82f, 0.3f, bHere ? 0.98f : 0.7f));
-		Ring(Middle, 1.8, bHere ? 1.4 : 1.0, FLinearColor(1.0f, 0.86f, 0.4f, bHere ? 0.98f : 0.75f));
-		if (bHere && bHaveFleet && FVector2D::Distance(From, Middle) > 12.0)
+		auto Anchorage = [&](const FVector2D& Where)
+		{
+			Wash(Where, Wide, FLinearColor(1.0f, 0.82f, 0.3f, static_cast<float>(bHere ? SeaFill.Y : SeaFill.X))); // the water inside it, tinted
+			Ring(Where, Wide, bHere ? 0.9 : 0.55, FLinearColor(1.0f, 0.82f, 0.3f, bHere ? 0.98f : 0.7f));
+			Ring(Where, 1.8, bHere ? 1.4 : 1.0, FLinearColor(1.0f, 0.86f, 0.4f, bHere ? 0.98f : 0.75f));
+		};
+		Anchorage(Middle);
+		// (Release 2, the far side.) A sea over the chart's seam from the fleet is marked a second time in the fleet's
+		// own turn of the world, where the eye that picked the fleet up can see it (Hawaiian Waters from San Diego),
+		// and the course is dashed to it the short way round.
+		const FVector2D Nearer(bHaveFleet ? NearX(Middle.X, From.X) : Middle.X, Middle.Y);
+		if (FMath::Abs(Nearer.X - Middle.X) > 1.0)
+		{
+			Anchorage(Nearer);
+		}
+		if (bHere && bHaveFleet && FVector2D::Distance(From, Nearer) > 12.0)
 		{
 			// The course it would steer, dashed from the fleet to the sea.
-			const double Length = FVector2D::Distance(From, Middle);
+			const double Length = FVector2D::Distance(From, Nearer);
 			const int32 Dashes = FMath::Clamp(FMath::RoundToInt32(Length / 6.0), 2, 200);
 			for (int32 Dash = 0; Dash < Dashes; ++Dash)
 			{
 				TArray<FVector2D> Stroke;
-				Stroke.Add(FMath::Lerp(From, Middle, (Dash + 0.15) / Dashes));
-				Stroke.Add(FMath::Lerp(From, Middle, (Dash + 0.7) / Dashes));
+				Stroke.Add(FMath::Lerp(From, Nearer, (Dash + 0.15) / Dashes));
+				Stroke.Add(FMath::Lerp(From, Nearer, (Dash + 0.7) / Dashes));
 				AppendRibbon(Buffers, Stroke, 0.5, 0.3, FLinearColor(1.0f, 0.92f, 0.6f, 0.85f).ToFColor(false), false);
 			}
 		}

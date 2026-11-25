@@ -1308,6 +1308,15 @@ void AArmyPiece::MarchAlong(const TArray<FVector>& Waypoints, bool bInRemoveOnAr
 		return;
 	}
 	Route = Waypoints;
+	if (RoundSpan > 0.0)
+	{
+		// (Release 2, the far side.) The short way round: each point is counted in the turn of the world nearest the
+		// one before it, so the way may run on past the seam. Tick brings the piece itself round as it crosses.
+		for (int32 i = 1; i < Route.Num(); ++i)
+		{
+			Route[i].Y += FMath::RoundToDouble((Route[i - 1].Y - Route[i].Y) / RoundSpan) * RoundSpan;
+		}
+	}
 	bSailing = false; // (SailAlong sets it again after)
 	RouteMarks.Reset(Route.Num());
 	double Length = 0.0;
@@ -1384,6 +1393,13 @@ void AArmyPiece::Tick(float DeltaSeconds)
 	}
 	// A piece that is still in the hand when it arrives comes to rest a little off the table.
 	Position += (HomeLocation() - RestLocation) * Eased;
+	if (RoundSpan > 0.0 && (bSailing || bLiftOnMarch))
+	{
+		// (Release 2, the far side.) Kept in its own turn of the world: over the seam, it comes round, and is seen to
+		// leave on the one side and to come in on the other. (Not a piece gliding back from the hand, which may have
+		// been carried a little over the seam: it glides straight back as it was seen to go.)
+		Position.Y -= FMath::FloorToDouble((Position.Y - RoundWest) / RoundSpan) * RoundSpan;
+	}
 	SetActorLocation(Position);
 	if (bSailing)
 	{
