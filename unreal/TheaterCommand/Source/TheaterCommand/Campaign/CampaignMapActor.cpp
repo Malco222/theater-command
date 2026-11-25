@@ -4768,6 +4768,12 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 					}
 					++RingTowns;
 					RingAsked += Asked;
+					if (3 * Seated.Num() < 2 * Asked)
+					{
+						// (the art director, 25 November 2026: the log names any town that seats under two thirds of its pits)
+						UE_LOG(LogTheater, Display, TEXT("Flak ring: %s (level %d) seats %d of the %d pits it asks%s"), *Region.Name, Guns, Seated.Num(), Asked,
+							Seated.Num() >= 3 ? TEXT("") : TEXT(" and keeps today's row"));
+					}
 					if (Seated.Num() >= 3)
 					{
 						RingSeated += Seated.Num();
@@ -16304,7 +16310,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			// (round 37: at 1.55 a burst was 40 by 34 px from playing height and eleven of them ran together; the brief's 28 by 21)
 			const double Held = FMath::Lerp(1.0, 1.1, Playing);
 			// (it fades out, it does not pop: over its last second and a half; from playing height from the four-and-a-half-second look)
-			const double Going = Burst.bLight ? 1.0 - FMath::SmoothStep(1.5, 2.5, Age) : 1.0 - FMath::SmoothStep(SmokeLife - FMath::Lerp(1.5, 1.0, Playing), SmokeLife, Age);
+			const double Going = 1.0 - FMath::SmoothStep(SmokeLife - FMath::Lerp(1.5, 1.0, Playing), SmokeLife, Age);
 			// (it drifts the way the flags fly: about half a wingspan over its life)
 			const FVector Heartland = Burst.At + Downwind * (0.055 * W * Age) + FVector(0.0, 0.0, 0.01 * W * Age);
 			// (The art director's round 36: "the lobes are round".) The smoke is her painted shapes, one or two a burst and
@@ -16330,13 +16336,6 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			else if (Lived < SheetAge[1]) { AgeShare[1] = static_cast<float>((Lived - SheetAge[0]) / (SheetAge[1] - SheetAge[0])); AgeShare[0] = 1.0f - AgeShare[1]; }
 			else if (Lived < SheetAge[2]) { AgeShare[2] = static_cast<float>((Lived - SheetAge[1]) / (SheetAge[2] - SheetAge[1])); AgeShare[1] = 1.0f - AgeShare[2]; }
 			else { AgeShare[2] = 1.0f; }
-			if (Burst.bLight)
-			{
-				// (pale from its first moment: the painted shapes of a burst's middle and old age, the palest on the sheet)
-				AgeShare[0] = 0.0f;
-				AgeShare[1] = 0.3f;
-				AgeShare[2] = 0.7f;
-			}
 			// (how much of it is left: as painted, a third thicker from playing height; in at its birth and out at its end, never popping)
 			const float Remains = static_cast<float>(FMath::Min(0.5 * FMath::Lerp(1.0, 2.0, Playing), 1.0) * Going * FMath::SmoothStep(0.0, 0.12, Age));
 			// (Smoke of every age takes the hour's light as the bombers do: about half by night, and bluer. The painted
@@ -16347,8 +16346,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			const float Hazed = static_cast<float>(FMath::Clamp((FVector::Distance(EyeAt, Burst.At) / FMath::Max(static_cast<double>(CameraDistance), 1.0) - 1.0), 0.0, 1.0));
 			const FLinearColor Hour = FMath::Lerp(SmokeHour * Held2, FLinearColor(SmokeHour.R, SmokeHour.G * 1.02f, SmokeHour.B * 1.06f).GetClamped(), 0.6f * Hazed);
 			// (and it ages from black through charcoal to a grey-brown: the painted greys of its middle and old age are warmed)
-			// (light flak's puff is not held darker from playing height and is not warmed: it stays a pale grey)
-			const FLinearColor Aged[3] = { Burst.bLight ? SmokeHour : Hour, Burst.bLight ? SmokeHour : FLinearColor(Hour.R, Hour.G * 0.95f, Hour.B * 0.88f), Burst.bLight ? SmokeHour : FLinearColor(Hour.R, Hour.G * 0.91f, Hour.B * 0.8f) };
+			const FLinearColor Aged[3] = { Hour, FLinearColor(Hour.R, Hour.G * 0.95f, Hour.B * 0.88f), FLinearColor(Hour.R, Hour.G * 0.91f, Hour.B * 0.8f) };
 			// (flat to the eye, with the wind along it: across it is square to both the wind and the eye's own line)
 			const FVector Sight = FVector::CrossProduct(Right, Up);
 			FVector AcrossWind = FVector::CrossProduct(Downwind, Sight);
@@ -16391,7 +16389,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				const double Strong = Along < Beam.ToHeight ? FMath::Lerp(0.80, 0.36, Along / Beam.ToHeight) : FMath::Lerp(0.36, 0.0, (Along - Beam.ToHeight) / FMath::Max(Beam.Long - Beam.ToHeight, 1.0));
 				InBeam = FMath::Max(InBeam, static_cast<float>(Strong * (1.0 - FMath::SmoothStep(0.5 * Wide, Wide, Off))) * Beam.Strength);
 			}
-			if (InBeam > 0.01f)
+			if (InBeam > 0.01f && !Burst.bLight)
 			{
 				for (int32 Row = 0; Row < 3; ++Row)
 				{
@@ -16402,15 +16400,34 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			// ("-TheaterFlakFlashHeld" holds every flash for six tenths of a second, so that a still catches some: a
 			// flash of two frames is in one still in ten. Its smoke is held as thin as it is in those two frames.)
 			static const bool bFlashHeld = FParse::Param(FCommandLine::Get(), TEXT("TheaterFlakFlashHeld"));
-			const float Thinned = Remains * (1.0f - 0.3f * Hazed) * (bFlashHeld && Age < 0.6 && Burst.Born >= 0.0 ? 0.15f : 1.0f) * (bNightBurst ? 0.3f : 1.0f) * (Burst.bLight ? 0.75f : 1.0f);
-			for (int32 Row = 0; Row < 3; ++Row)
+			const float Thinned = Remains * (1.0f - 0.3f * Hazed) * (bFlashHeld && Age < 0.6 && Burst.Born >= 0.0 ? 0.15f : 1.0f) * (bNightBurst ? 0.3f : 1.0f);
+			if (Burst.bLight)
 			{
-				const double Square = 0.5 * SmokeLong * SheetSquare[Row] / SheetSmoke[Row];
-				DrawShape(Heartland, Downwind * Square, AcrossWind * Square, FirstShape, Row, Aged[Row], Thinned * AgeShare[Row], bTurned);
-				if (bTwo && !bTop)
+				// (The art director's mend of the flak brief's 2c, 25 November 2026: light flak is drawn with the soft puffs
+				// in a set pale grey, not with the painted sheet, whose shapes are a heavy burst's. A warm off-white, about
+				// 200, 198, 190 as it is seen, six tenths strong at its birth and fading evenly until it is gone at two and
+				// a half seconds: one soft puff, and a smaller one a little down the wind of it. By night it takes the
+				// hour's light as all smoke does, and is barely there.)
+				const FLinearColor PaleGrey(FColor(200, 198, 190));
+				const float PaleStrong = static_cast<float>(0.6 * (1.0 - FMath::Clamp(Age / 2.5, 0.0, 1.0)) * FMath::SmoothStep(0.0, 0.06, Age)) * (bNightBurst ? 0.3f : 1.0f);
+				const double PaleOut = 0.55 * SmokeLong;
+				Draw(Heartland, PaleOut, PaleGrey, PaleStrong);
+				if (!bTop)
 				{
-					DrawShape(Heartland + Downwind * (SecondAlong * SmokeLong) + AcrossWind * (SecondUp * SmokeLong), Downwind * (Square * SecondSize), AcrossWind * (Square * SecondSize),
-						SecondShape, Row, Aged[Row], 0.85f * Thinned * AgeShare[Row], !bTurned);
+					Draw(Heartland + Downwind * (0.45 * PaleOut) + FVector(0.0, 0.0, (bTurned ? 0.2 : -0.12) * PaleOut), 0.68 * PaleOut, PaleGrey, 0.75f * PaleStrong);
+				}
+			}
+			else
+			{
+				for (int32 Row = 0; Row < 3; ++Row)
+				{
+					const double Square = 0.5 * SmokeLong * SheetSquare[Row] / SheetSmoke[Row];
+					DrawShape(Heartland, Downwind * Square, AcrossWind * Square, FirstShape, Row, Aged[Row], Thinned * AgeShare[Row], bTurned);
+					if (bTwo && !bTop)
+					{
+						DrawShape(Heartland + Downwind * (SecondAlong * SmokeLong) + AcrossWind * (SecondUp * SmokeLong), Downwind * (Square * SecondSize), AcrossWind * (Square * SecondSize),
+							SecondShape, Row, Aged[Row], 0.85f * Thinned * AgeShare[Row], !bTurned);
+					}
 				}
 			}
 			const double Long = SmokeLong, Wide = SmokeLong * 0.6; // (for the flash, which is placed by the smoke's size)
