@@ -817,6 +817,12 @@ struct FHomePlot
 	int32 Months = 0; // months left, where something is going up
 };
 
+/** (Release 2, a queue for a town: townqueue.ts) A building queued in a town, in its order, with the press that takes it off. */
+struct FHomeQueued
+{
+	FString Line, Label, Act;
+};
+
 struct FHomeTown
 {
 	int32 Region = INDEX_NONE;
@@ -833,6 +839,11 @@ struct FHomeTown
 	int32 GoingId = INDEX_NONE, GoingMonths = 0;
 	FString GoingName, GoingDue, GoingAct;
 	bool bGoingCancel = false;
+	// (Release 2, a queue for a town; empty with that switch off) What is queued here, how the first stands
+	// ("Waits for 40 more.", "Goes up after the market hall."), and what could be queued next, the staff's pick first.
+	TArray<FHomeQueued> Queue;
+	FString Wait;
+	TArray<FHomeBuild> Then;
 };
 
 /** Something the arsenal offers that is raised and not built in a province: a corps, a wing, a ship. */
@@ -873,6 +884,7 @@ struct FHomeBoard
 	int32 Money = 0, Net = 0;
 	TArray<FHomeTile> Tiles;
 	int32 Ready = 0, Going = 0, All = 0;
+	int32 Waits = 0; // (release 2, a queue for a town) towns whose first queued building waits for money
 	TArray<FHomeTown> Towns; // richest first, as the staff ranks them
 	TArray<FHomeRaise> Raise;
 	// ORDER AGAIN: his own orders of the last month he ordered in, at today's prices.
@@ -1333,6 +1345,7 @@ struct FCampaignView
 	bool bCarrierStrike = false; // (release 2, harbourstrike.ts) a carrier fleet's page offers a strike on an enemy harbour (the switch as set)
 	bool bWingByDate = false; // (release 2, carriers.ts) a navy's carrier wing changes by date (the switch as set)
 	bool bSettledTowns = false; // (release 2, buildings.ts) a conquered town held three months can put up every building
+	bool bTownQueue = false; // (release 2, townqueue.ts) the player can queue the next buildings for his towns
 	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
 	// opening month only.
 	bool bR2Switches = false, bColumnsOn = false, bColumnsCan = false;

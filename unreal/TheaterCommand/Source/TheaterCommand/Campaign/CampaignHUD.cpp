@@ -15465,6 +15465,41 @@ namespace
 				Middle->AddSlot().AutoHeight()[HomeWords(Town.Note.IsEmpty() ? FString(TEXT("Nothing more can be built here now.")) : Town.Note)];
 			}
 
+			// (Release 2, a queue for a town: the rules switch townQueue) What is queued here, in a line under the rest,
+			// and QUEUE beside BUILD or TAKE IT BACK where the builders are at work or the money is short: it queues the
+			// staff's pick of what can go up next. The chevron lists every choice, and each queued building with TAKE IT OFF.
+			if (Town.Queue.Num() > 0)
+			{
+				TArray<FString> Names;
+				for (const FHomeQueued& Queued : Town.Queue)
+				{
+					Names.Add(Queued.Label.ToLower());
+				}
+				Middle->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+				[
+					HomeWords(FString::Printf(TEXT("Queued: %s.%s%s"), *FString::Join(Names, TEXT(", then ")), Town.Wait.IsEmpty() ? TEXT("") : TEXT(" "), *Town.Wait))
+				];
+			}
+			const bool bQueueHere = Town.Then.Num() > 0 && (Town.bGoing || (Town.bBest && !Town.Best.bOk));
+			if (bQueueHere)
+			{
+				const FHomeBuild& Next = Town.Then[0];
+				const bool bBeside = Town.bGoingCancel || Town.bBest;
+				TSharedRef<SWidget> Queue = HomeOrderButton(TEXT("QUEUE"), Next.bOk,
+					Next.bOk ? FString::Printf(TEXT("%s, queued at %s: ordered for you at the opening of a month once the builders are free and the treasury can pay, at that day's price. The chevron lists every choice."), *Next.Label, *Town.Town) : Next.Why,
+					[this, Region, Act = Next.Act]() { if (Controller.IsValid()) { Controller->BuildFromHome(Region, Act); } }, bBeside);
+				if (bBeside)
+				{
+					Order = SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Order]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6.0f, 0.0f, 0.0f, 0.0f)[Queue];
+				}
+				else
+				{
+					Order = Queue;
+				}
+			}
+
 			TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 				[
@@ -15514,6 +15549,46 @@ namespace
 						]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[Build(Offer, Town.Town, true)]
 					];
+				}
+				// (Release 2, a queue for a town) Each queued building in its order with TAKE IT OFF, and where BUILD cannot be
+				// pressed, every building that could be queued next.
+				for (int32 Place = 0; Place < Town.Queue.Num(); ++Place)
+				{
+					const FHomeQueued& Queued = Town.Queue[Place];
+					Whole->AddSlot().AutoHeight().Padding(222.0f, 0.0f, 74.0f, 7.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight()[HomeName(TEXT("civic-") + Queued.Line, Queued.Label, FString::Printf(TEXT("QUEUED  \u00B7  %d"), Place + 1), Cream)]
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)[HomeWords(Place == 0 ? Town.Wait : FString::Printf(TEXT("After the %s."), *Town.Queue[Place - 1].Label.ToLower()))]
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+						[
+							OfficeButton(TEXT("TAKE IT OFF"), Cream, true, TEXT("Comes off the queue. Nothing has been paid for it."), Go(Queued.Act))
+						]
+					];
+				}
+				if (Town.bGoing || (Town.bBest && !Town.Best.bOk))
+				{
+					for (const FHomeBuild& Offer : Town.Then)
+					{
+						Whole->AddSlot().AutoHeight().Padding(222.0f, 0.0f, 74.0f, 7.0f)
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+							[
+								SNew(SVerticalBox)
+								+ SVerticalBox::Slot().AutoHeight()[HomeName(TEXT("civic-") + Offer.Line, Offer.Label, FString::Printf(TEXT("%s  \u00B7  %s"), *Cash(Offer.Cost), *HomeMonths(Offer.Months)), Cream)]
+								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)[HomeWords(Offer.bOk || Offer.Why.IsEmpty() ? Offer.Effect : Offer.Why)]
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+							[
+								HomeOrderButton(TEXT("QUEUE"), Offer.bOk, Offer.bOk ? FString::Printf(TEXT("%s, queued at %s: ordered for you at the opening of a month once the builders are free and the treasury can pay, at that day's price."), *Offer.Label, *Town.Town) : Offer.Why, Go(Offer.Act), true)
+							]
+						];
+					}
 				}
 				Whole->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(222.0f, 1.0f, 0.0f, 0.0f)
 				[

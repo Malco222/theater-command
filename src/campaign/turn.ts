@@ -80,6 +80,7 @@ import {
 import { footingView, orderFooting, whyNotFooting, type FootingId, type FootingView } from './footing';
 import { MANPOWER, callEarly, classGapUntil, classNow, earlyClass, earlyGap, manpower, menWords, raisable, whyNotEarly, type MenView } from './manpower';
 import { commandView, crossingWord, handOver, setDepth, setStaffCap, staffMonth, type CommandView, type CrossingWord } from './desks';
+import { pressQueue } from './townqueue';
 import { HISTORY, dialView, setStop, whyNotStop, type DialView, type Stop } from './history';
 import { claimsView, historyMonth, type ClaimView } from './claims';
 import { finishMonthEnd, finishMonthOpen } from './finish';
@@ -221,7 +222,9 @@ export function beginHuman(g: Game): void {
   taskForcesMonth(g, current(g));
   // Last, the desks he has handed to his staff do their month's work, each with one line of news (the grand campaign).
   staffMonth(g);
-  // (The supply window: his month opens on a fresh supply picture, whatever his desks did.)
+  // And then, as his own presses would, the buildings he queued for his towns (release 2, townqueue.ts; nothing with that switch off).
+  pressQueue(g);
+  // (The supply window: his month opens on a fresh supply picture, whatever his desks and his queue did.)
   ensureSupply(g);
 }
 
