@@ -205,6 +205,19 @@ def trace_of(fake, asset):
 
 # ---- The build loop --------------------------------------------------------------------------------------------------
 
+def builder_of(node):
+    """A build loop entry's builder as the checks name it: a builder named outright by its name; a lambda (release 2's
+    graphics join builds M_LandManWorn and the crowd's material through one, ("M_LandManWorn", lambda:
+    build_land_men_worn_or_tell(...))) as "lambda: " and the function it calls. A pinned material's builder must be
+    named outright, so a lambda on one of the 15 never matches PINNED and fails the check that keeps them."""
+    if isinstance(node, ast.Name):
+        return node.id
+    body = node.body
+    if isinstance(body, ast.Call) and isinstance(body.func, ast.Name):
+        return "lambda: " + body.func.id
+    return "lambda"
+
+
 def loop_entries():
     """The (name, builder) pairs of build_content.py's build loop, read from its source."""
     with open(BUILD, encoding="utf-8") as f:
@@ -215,9 +228,10 @@ def loop_entries():
                 [getattr(e, "id", None) for e in node.target.elts] == ["name", "build"] and isinstance(node.iter, ast.Tuple):
             entries = []
             for elt in node.iter.elts:
-                if not (isinstance(elt, ast.Tuple) and len(elt.elts) == 2 and isinstance(elt.elts[0], ast.Constant) and isinstance(elt.elts[1], ast.Name)):
+                if not (isinstance(elt, ast.Tuple) and len(elt.elts) == 2 and isinstance(elt.elts[0], ast.Constant) and
+                        isinstance(elt.elts[1], (ast.Name, ast.Lambda))):
                     raise SystemExit("graph_pin: the build loop holds an entry that is not (\"name\", builder)")
-                entries.append((elt.elts[0].value, elt.elts[1].id))
+                entries.append((elt.elts[0].value, builder_of(elt.elts[1])))
             loops.append(entries)
     if len(loops) != 1:
         raise SystemExit(f"graph_pin: build_content.py should have one build loop over (name, build); found {len(loops)}")

@@ -19,6 +19,12 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 SRC="$ROOT/Source/TheaterCommand"
+# (release 2's air troops join: AirFeed.cpp and AirShow.cpp call AirMarks and the column code, so where those files are
+# present they are linked beside them, as sea_show's run.sh does; a branch from before that join has neither)
+AIR_TROOPS=()
+for AIR_PART in AirShowTroops.cpp AirMarks.cpp; do
+  if [ -f "$SRC/Battle/$AIR_PART" ]; then AIR_TROOPS+=("$SRC/Battle/$AIR_PART"); fi
+done
 OUT="${SEA_WEATHER_OUT:-${TMPDIR:-/tmp}/sea_weather}"
 mkdir -p "$OUT"
 cd "$ROOT" || exit 1
@@ -38,7 +44,7 @@ step() {
 }
 
 # The core's own files: the sky, the air sky it lays through, and what those two need to link.
-CORE=("$SRC/Battle/SeaSky.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirDesk.cpp" \
+CORE=("$SRC/Battle/SeaSky.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" ${AIR_TROOPS[@]+"${AIR_TROOPS[@]}"} "$SRC/Battle/AirDesk.cpp" \
   "$SRC/Battle/AirGround.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Effects/TheaterFxCore.cpp")
 FLAGS=(-std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC")
 

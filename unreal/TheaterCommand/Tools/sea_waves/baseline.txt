@@ -406,6 +406,10 @@ Step 11 wired (the storms' thread, 25 November 2026, on 7df10413: the light core
   Tools/sea_waves/run_sea_field.sh, run_night.sh, run_storm.sh and run_weather.sh: each ALL PASSED
   Tools/sea_show/run.sh: the 12 each ALL CHECKS PASSED, the frame budget among them (load 1 to 3); sea_under_test 590
     checks, 0 failed. Tools/convoy_looks/run.sh: passed; against the show 741 checks, 0 failed
+  Fitted to the release 2 build (the assembler's pass 2 run, 21:58Z; the sea scene's ruling 22:25Z): the runners link
+    AirShowTroops.cpp and AirMarks.cpp where present (none here: every count as above); graph_pin reads a lambda
+    builder on an unpinned entry (72 checks); pearl_pin's campaign check takes PEARL_CAMPAIGN=report on an assembled
+    build (here, by default: 38 pins, 0 changed, the three files as at 2f89c8e5); pearl_pin_test 13 checks, 0 failed
 
 Tools/air_show/run.sh (Pearl's guard beside pearl_pin): 3 recordings ALL CHECKS PASSED; airscrews 18 aircraft, 0 failed; sea face all checks pass
 

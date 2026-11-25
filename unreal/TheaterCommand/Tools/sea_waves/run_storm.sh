@@ -22,6 +22,12 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 SRC="$ROOT/Source/TheaterCommand"
+# (release 2's air troops join: AirFeed.cpp and AirShow.cpp call AirMarks and the column code, so where those files are
+# present they are linked beside them, as sea_show's run.sh does; a branch from before that join has neither)
+AIR_TROOPS=()
+for AIR_PART in AirShowTroops.cpp AirMarks.cpp; do
+  if [ -f "$SRC/Battle/$AIR_PART" ]; then AIR_TROOPS+=("$SRC/Battle/$AIR_PART"); fi
+done
 OUT="${STORM_OUT:-${TMPDIR:-/tmp}/sea_storm}"
 mkdir -p "$OUT"
 cd "$ROOT" || exit 1
@@ -46,7 +52,7 @@ shopt -s nullglob
 if [ "$#" -eq 0 ]; then set -- "$ROOT"/Content/Data/SeaBattles/*.json "$ROOT"/Tools/sea_show/stand-ins/*.json "$ROOT"/Tools/sea_show/recordings/*.json; fi
 shopt -u nullglob
 
-SHOW=("$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Effects/TheaterFxCore.cpp")
+SHOW=("$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" ${AIR_TROOPS[@]+"${AIR_TROOPS[@]}"} "$SRC/Battle/AirSky.cpp" "$SRC/Effects/TheaterFxCore.cpp")
 
 # g++ and clang++ (clang with -Wshadow-all too), each building and running both tests.
 for PAIR in "gnu:${CXX:-g++}" "clang:${CLANGXX:-clang++}"; do

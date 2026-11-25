@@ -16,18 +16,34 @@
 # with the release 2 join 2f89c8e5: release 2's campaign lanes changed all three outside the ocean lane's history, from
 # 23 November on (release 1.5's air campaign d0266a02, 1.5.1, the map branch sgfei1, lku6by, the ship list 485bb365, and
 # the sea scene's own "The month at sea" row 5286a1fd), and the air scene only hides the map, its pieces and the HUD's
-# frame while a stage stands, so Pearl's and Midway's sea draw nothing from them. A base is a fixed commit: the next
-# campaign-lane change to release 2 fails this again, and gets its own ruling.)
+# frame while a stage stands, so Pearl's and Midway's sea draw nothing from them.)
+# The three campaign files are a hard gate on the sea lanes' own branches (ocean-r2, d2zd89, wonnkr and its lanes): there
+# a change since the base means a sea lane touched them. An assembled release build joins the map and UI lanes as well,
+# which change them by right, so there the assembler, and only the assembler, sets PEARL_CAMPAIGN=report (the sea
+# scene's ruling, 25 November 22:25Z): each changed file is said, with every commit since the base that touched it (sha
+# and subject), so the pre-check sees at a glance whether a sea commit is among them, and it still fails if one is (a
+# subject starting "Sea " or "Storms and night at sea", the sea lanes' own), or if the change is not yet committed. A sea
+# lane never changes those files, joined or not. Report mode never touches the Pearl and Midway pins above: they gate in
+# every mode.
 # A body is found by its definition at the head of a line and runs to its closing brace (strings, characters and
-# comments skipped). Usage: Tools/sea_waves/pearl_pin.sh [--write]  (--write re-pins pearl.sha from this tree: only with
+# comments skipped). Usage: Tools/sea_waves/pearl_pin.sh [--write | --campaign-only]  (--campaign-only runs the campaign
+# files' check alone, for its test, Tools/sea_waves/pearl_pin_test.sh, on a repository of its own named by PEARL_ROOT;
+# PEARL_PINS names another pins file, for the same test; --write re-pins pearl.sha from this tree: only with
 # the change it pins, in the same commit where that commit's tree has this pin; the deck crews' 5ff6b021, which the
 # wolf-pack nights' merge 55419eb6 brought, moved ConvoyLooksCore.cpp, and its re-pin came at the release 2 join).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$HERE/../.." && pwd)"
+ROOT="${PEARL_ROOT:-$(cd "$HERE/../.." && pwd)}"
+PINS="${PEARL_PINS:-$HERE/pearl.sha}"
 BASE="${PEARL_BASE:-2f89c8e5}"
+CAMPAIGN="${PEARL_CAMPAIGN:-gate}"
+MODE="${1:-}"
 STATUS=0
-python3 -I - "$ROOT" "$HERE/pearl.sha" "${1:-}" <<'PY' || STATUS=1
+if [ "$CAMPAIGN" != "gate" ] && [ "$CAMPAIGN" != "report" ]; then
+  echo "  FAIL PEARL_CAMPAIGN=$CAMPAIGN: only report (the assembler's, on an assembled release build) or nothing"; STATUS=1
+fi
+if [ "$MODE" != "--campaign-only" ]; then
+python3 -I - "$ROOT" "$PINS" "$MODE" <<'PY' || STATUS=1
 import hashlib, os, re, sys
 
 root, pins_path, mode = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -164,14 +180,33 @@ if grep -Eq '^[[:space:]]*bUseUnity = false;[[:space:]]*$' "$ROOT/Source/Theater
 else
   echo "  FAIL TheaterCommand.Build.cs no longer says \"bUseUnity = false;\""; STATUS=1
 fi
+fi
 if ! git -C "$ROOT" rev-parse --verify --quiet "$BASE^{commit}" > /dev/null; then
   echo "  FAIL the commit $BASE is not in this repository"; STATUS=1
 else
   for F in CampaignMapActor CampaignHUD CampaignPlayerController; do
-    if git -C "$ROOT" diff --quiet "$BASE" -- "Source/TheaterCommand/Campaign/$F.h" "Source/TheaterCommand/Campaign/$F.cpp"; then
+    H="Source/TheaterCommand/Campaign/$F.h"; C="Source/TheaterCommand/Campaign/$F.cpp"
+    if git -C "$ROOT" diff --quiet "$BASE" -- "$H" "$C"; then
       echo "  ok   Campaign/$F.{h,cpp} as at $BASE"
+      continue
+    fi
+    # (every commit since the base that itself touched the file, merges left out, side branches followed)
+    TOUCHED="$(git -C "$ROOT" log --full-history --no-merges --format='%h %s' "$BASE..HEAD" -- "$H" "$C")"
+    SEA="$(printf '%s\n' "$TOUCHED" | grep -E '^[0-9a-f]+ (Sea |Storms and night at sea)' || true)"
+    if [ "$CAMPAIGN" = "report" ]; then
+      echo "  note Campaign/$F.{h,cpp} changed since $BASE (PEARL_CAMPAIGN=report, an assembled release build: said, not failed); the commits that touched it:"
     else
-      echo "  FAIL Campaign/$F.{h,cpp} changed since $BASE:"; git -C "$ROOT" diff --stat "$BASE" -- "Source/TheaterCommand/Campaign/$F.h" "Source/TheaterCommand/Campaign/$F.cpp"; STATUS=1
+      echo "  FAIL Campaign/$F.{h,cpp} changed since $BASE; the commits that touched it:"; STATUS=1
+    fi
+    if [ -n "$TOUCHED" ]; then printf '%s\n' "$TOUCHED" | sed 's/^/         /'; else echo "         none committed"; fi
+    git -C "$ROOT" diff --stat "$BASE" -- "$H" "$C" | sed 's/^/       /'
+    if [ "$CAMPAIGN" = "report" ]; then
+      if [ -n "$SEA" ]; then
+        echo "  FAIL Campaign/$F.{h,cpp} was touched by a sea lane's commit, which no build may carry:"; printf '%s\n' "$SEA" | sed 's/^/         /'; STATUS=1
+      fi
+      if ! git -C "$ROOT" diff --quiet HEAD -- "$H" "$C"; then
+        echo "  FAIL Campaign/$F.{h,cpp} has a change not yet committed, so no commit can be named for it"; STATUS=1
+      fi
     fi
   done
 fi
