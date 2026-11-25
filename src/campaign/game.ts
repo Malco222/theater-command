@@ -5041,9 +5041,19 @@ function offerMade(g: Game, nat: string, i: number, o: any): void {
  * the rule stops reading the row), or the last month of the row's half year (`rowDue`: a computer's row not formed
  * by then is struck), whichever comes first. The rule's own reading of when an offer lapses for time, not a second
  * date: `offerGone` reads this, and the offers page shows it.
+ *
+ * (The half year runs against an offer on the far side's rule's own reach and no further: a dated row `farRow` reads
+ * (ruling B7's reach: posted beyond the old chart, no book dating its country's rows), and a row of the formations
+ * list (Oahu's split). The design director's ruling of 13:39Z, 25 November 2026, point 5 of the dated rows, is built
+ * "for every dated row the far side's rule reaches": an offer of a row posted on the old chart (the Fifth Army's II
+ * Corps at Naples, the First Parachute Army in Gelderland) keeps what it had, its row's own `until` where it has one,
+ * and otherwise no last month: it stands until he answers. As first mended the half year reached those too: the
+ * skeptic's review of 25 November 2026.)
  */
-function offerLast(g: Game, row: any[], i: number): number {
-  const o = row[6] ?? {}, half = rowDue(g, i, row, o) + 6;
+function offerLast(g: Game, nat: string, row: any[], i: number): number | null {
+  const o = row[6] ?? {};
+  if (!offerRow(i)?.form && !farRow(g, nat, row)) return o.until ? o.until - 1 : null;
+  const half = rowDue(g, i, row, o) + 6;
   return o.until ? Math.min(o.until - 1, half) : half;
 }
 
@@ -5053,9 +5063,15 @@ function offerLast(g: Game, row: any[], i: number): number {
  * 3 corps", "2 of the 3 corps", "the 3 corps"). Null while it stands.
  */
 function offerGone(g: Game, nat: string, row: any[], i: number): string | null {
-  const o = row[6] ?? {}, there = rowTakes(g, nat, o).length, named = g.flags[offerCount(i)] ?? 0;
-  if (g.turn > offerLast(g, row, i)) return `The offer to form ${row[2]} has lapsed: its time has passed.`;
+  const o = row[6] ?? {}, there = rowTakes(g, nat, o).length, named = g.flags[offerCount(i)] ?? 0, last = offerLast(g, nat, row, i);
+  if (last !== null && g.turn > last) return `The offer to form ${row[2]} has lapsed: its time has passed.`;
   if (o.war && !warOn(g, o.war)) return `The offer to form ${row[2]} has lapsed: the war it was raised for is over.`;
+  // (A row of the formations list takes its strength out of the corps it names, in their order, and does not come
+  // only where none of them is left (`formRow`): its offer lapses there and nowhere sooner. As first built it lapsed
+  // when any one of them was gone, so that a player's America who took the 24th Infantry Division first, emptying
+  // the Hawaiian Division, lost the offer of the 25th, though the 298th Infantry still stood to form it as the rule
+  // would have: the skeptic's review of 25 November 2026.)
+  if (offerRow(i)?.form) return there > 0 || named === 0 ? null : `The offer to form ${row[2]} has lapsed: ${named === 1 ? 'the corps' : `the ${named} corps`} it was to be formed from ${named === 1 ? 'is' : 'are'} no longer on the map.`;
   if (there >= named) return null;
   const lost = named - there;
   const which = named === 1 ? 'the corps' : `${lost === named ? 'the' : lost === 1 ? 'one of the' : `${lost} of the`} ${named} corps`;
@@ -5083,8 +5099,8 @@ export interface OfferTakes { id: number; name: string; kind: Kind; region: numb
  * gives up by declining it (`menKept`). The end of a loan is in the same list (a regiment its division awaits,
  * `loanStays`): `loan` says in plain words what it was lent for and what taking and declining do (null for a
  * formation offered); its name, size and place are the lent regiment's own, and that regiment is the one it takes.
- * `last` is the last month in which it may be answered (`offerLast`): null for the end of a loan, which stands until
- * he answers.
+ * `last` is the last month in which it may be answered (`offerLast`): null for the end of a loan, and for an offer
+ * of a row on the old chart with no `until` of its own, which stand until he answers.
  */
 export interface RowOffer {
   id: number; name: string; kind: Kind; divs: number; men: number; since: number; last: number | null; region: number; joins: string | null; takes: OfferTakes[]; why: string | null; then: string[]; loan: string | null;
@@ -5130,7 +5146,7 @@ function offerView(g: Game, nat: string, row: any[], i: number): RowOffer {
     && (!r[6]?.stops || (r[6].stops as number[]).includes(stopOf(g)))
     && (names(r[6]?.cut).includes(row[2]) || (Array.isArray(r[6]?.from) && !(r[6].adds > 0) && r[6].from.includes(row[2])
       && rowTakes(g, nat, { from: (r[6].from as string[]).filter((nm) => nm !== row[2]) }).length === 0))).map((r) => r[2] as string))];
-  return { id: i, name: row[2], kind: row[3], divs, men: Math.round(divs * (o.str ?? 1) * MEN_PER_DIV), since: g.flags[offerKey(i)], last: offerLast(g, row, i), region: reg ? reg.id : -1, joins: old ? old.name : null, takes, why, then, loan: null, rest: 'lost', lent: null };
+  return { id: i, name: row[2], kind: row[3], divs, men: Math.round(divs * (o.str ?? 1) * MEN_PER_DIV), since: g.flags[offerKey(i)], last: offerLast(g, nat, row, i), region: reg ? reg.id : -1, joins: old ? old.name : null, takes, why, then, loan: null, rest: 'lost', lent: null };
 }
 
 const leaveKey = (i: number): string => `leave:${i}`;
@@ -5192,7 +5208,10 @@ function formView(g: Game, nat: string, row: any[], id: number): RowOffer {
   const reg = formPlace(g, nat, row, made);
   const takes = made.map((c) => ({ id: c.id, name: c.name, kind: c.kind, region: c.reg, divs: c.divs, men: men(c) }));
   const why = offerGone(g, nat, row, id) ?? (reg ? null : `There is nowhere for it to form: ${row[5]} is not yours.`);
-  return { id, name: row[2], kind: row[3], divs: row[4], men: Math.round(row[4] * (o.str ?? 1) * MEN_PER_DIV), since: g.flags[offerKey(id)], last: offerLast(g, row, id), region: reg ? reg.id : -1, joins: null, takes, why, then: [], loan: null, rest: 'stay', lent: null };
+  // (Its size is what `formRow` would make of it this month: its own strength, and never more than the corps it
+  // names now hold. As first built it said the row's size, more than those corps held: the skeptic's review.)
+  const held = made.reduce((t, x) => t + x.divs * x.str, 0);
+  return { id, name: row[2], kind: row[3], divs: row[4], men: Math.round(Math.min(row[4] * (o.str ?? 1), held) * MEN_PER_DIV), since: g.flags[offerKey(id)], last: offerLast(g, nat, row, id), region: reg ? reg.id : -1, joins: null, takes, why, then: [], loan: null, rest: 'stay', lent: null };
 }
 
 /** The player's open offers, oldest first and then in the order of the rows: the month's one list (ruling B8). None with the far side off. */

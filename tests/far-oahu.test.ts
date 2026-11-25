@@ -20,6 +20,7 @@ import { loadGame, saveGame } from '../src/campaign/save';
 import { setStop } from '../src/campaign/history';
 import { startOpen } from '../src/campaign/staff';
 import { shipsItsOwn } from '../src/campaign/world';
+import { askForm } from '../unreal/TheaterCommand/Rules/offers-look';
 import type { Corps, Game } from '../src/campaign/types';
 import setup from '../data/campaign/setup-1939.json';
 import world from '../data/campaign/world.json';
@@ -145,6 +146,51 @@ describe('the islands by month, with no fighting', () => {
     months(g, 27, 40);
     expect([named(g, D25), named(g, D24), named(g, HD)]).toEqual([undefined, undefined, hd]);
     expect(rowOffers(g)).toEqual([]);
+  });
+
+  // (The skeptic's review of 25 November 2026: taken in the other order, the 24th first, the offer of the 25th lapsed
+  // although the 298th still stood to form it, and the 24th's row said more men than the division held.)
+  it("taken the 24th first, with the division short: the 25th is still offered and forms from what is left, and each row says only the men it would get", () => {
+    const g = startOpen(createGame(5, 'USA'));
+    months(g, 2, 26);
+    const hd = named(g, HD)!, g298 = named(g, G298)!;
+    hd.str = 0.6;
+    const was = sum(g, ISLAND);
+    const at = (nm: string) => rowOffers(g).find((o) => o.name === nm)!;
+    // The 24th asks 0.65 and the division holds 0.6: the row says the 0.6 it would get.
+    expect(at(D24).men).toBe(Math.round(0.6 * 15000));
+    expect(takeOffer(g, at(D24).id)).toBeNull();
+    expect(named(g, HD)).toBeUndefined();
+    // The 298th still stands: the offer of the 25th stands, with the one corps left, and forms from it.
+    expect(at(D25).why).toBeNull();
+    expect(at(D25).takes.map((t) => t.name)).toEqual([G298]);
+    expect(at(D25).men).toBe(Math.round(g298.divs * g298.str * 15000));
+    expect(takeOffer(g, at(D25).id)).toBeNull();
+    expect(field(g, ISLAND).map((c) => c.name).sort()).toEqual([D24, D25].sort());
+    expect(sum(g, ISLAND)).toBeCloseTo(was, 6);
+    expect(rowOffers(g)).toEqual([]);
+  });
+
+  // (The question counts the corps struck off whole, each once, with the men they hold when they go: the 25th takes
+  // the 298th whole and part of the division, and the 24th then empties what is left of it.)
+  it("ACCEPT ALL's question counts the corps the split empties, each once: the 298th and what the 25th leaves of the Hawaiian Division", () => {
+    const g = startOpen(createGame(5, 'USA'));
+    months(g, 2, 26);
+    const [d25] = rowOffers(g), g298 = d25.takes[0].men, hd = d25.takes[1].men;
+    const struck = g298 + (hd - (d25.men - g298));
+    expect(askForm(g, rowOffers(g))).toBe(`Form all 2? 2 of your corps leave the map, ${(Math.round(struck / 1000) * 1000).toLocaleString('en-US')} men, and 2 formations form. It cannot be undone.`);
+  });
+
+  it('an offer of the formations list lapses only when none of the corps it names is left', () => {
+    const g = startOpen(createGame(5, 'USA'));
+    months(g, 2, 26);
+    const news = g.headlines.length;
+    removeCorps(g, named(g, HD)!);
+    months(g, 27, 27);
+    // The 24th named the division alone: it lapses. The 25th still has the 298th: it stands.
+    expect(rowOffers(g).map((o) => o.name)).toEqual([D25]);
+    expect(g.headlines.slice(news).map((h) => h.text).filter((t) => /has lapsed/.test(t))).toEqual([
+      `The offer to form ${D24} has lapsed: the corps it was to be formed from is no longer on the map.`]);
   });
 
   it('left unanswered, the offers lapse after their half year, and he is told; his corps stay whole', () => {

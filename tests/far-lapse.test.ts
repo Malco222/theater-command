@@ -132,3 +132,21 @@ describe("the player's offer stays in the list for the same half year as the com
     expect(offer(g, FIFTH)).toMatchObject({ since: 6, last: 8 });
   });
 });
+
+// (The skeptic's review of 25 November 2026: the half year reached offers of rows on the old chart too, beyond ruling
+// B7's reach, which the ruling is built for. An offer of a row posted on the old chart keeps what it had: its row's
+// own `until` where it has one, and otherwise it stands until he answers.)
+describe('the half year reaches no offer of a row posted on the old chart', () => {
+  it("a player's America offered the Fifth Army's II Corps at Naples: it has no last month and stands ten months on", () => {
+    const g = startOpen(createGame(5, 'USA'));
+    const naples = rows.findIndex((r) => r[1] === 'USA' && r[2] === 'Fifth Army: II Corps (34th and 36th Infantry Divisions)');
+    expect(rows[naples][6].until).toBeUndefined();
+    setWar(g, 'USA', 'GER');
+    g.flags[`offer:${naples}`] = rows[naples][0];
+    g.flags[`offer:n:${naples}`] = 0;
+    g.turn = rows[naples][0] + 10;
+    const o = rowOffers(g).find((x) => x.id === naples)!;
+    expect(o.last).toBeNull();
+    expect(o.why ?? '').not.toMatch(/has lapsed/);
+  });
+});
