@@ -1589,7 +1589,10 @@ namespace LandScape
 			}
 			Block(W, V3d{}, V3d{ 1, 0, 0 }, V3d{ 0, 1, 0 }, V3d{ 0, 0, 1 }, -0.5 * L, 0.5 * L, -0.5 * D, 0.5 * D, -0.3, 0.04, false,
 			      [&](const V3d&, const V3d& Nn) { return Nn.Z > 0.5 ? Mixed(P.Dust, Rgb(70, 66, 60), 0.4) : P.Inner; });
-			Heap(W, R.Range(-10.0, 10.0), R.Range(-6.0, 6.0), 8.0, 6.0, 2.4, Key ^ 0x4EAD, P, Lod, 30, 8);
+			// (one draw a line: the order of two in one call's arguments is the compiler's, and gcc and clang differ)
+			const double HX = R.Range(-10.0, 10.0);
+			const double HY = R.Range(-6.0, 6.0);
+			Heap(W, HX, HY, 8.0, 6.0, 2.4, Key ^ 0x4EAD, P, Lod, 30, 8);
 		}
 
 		/** A facade standing alone, its building gone: 12 m long, three storeys, broken, its windows open to the sky. */

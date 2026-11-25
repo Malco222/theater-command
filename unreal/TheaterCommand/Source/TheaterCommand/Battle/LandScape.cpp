@@ -259,7 +259,9 @@ namespace LandScape
 		if (!F.Look.empty())
 		{
 			const Look L = LookOf(F.Look);
-			if (L != Look::Count) return L;
+			// (a recording's "city", "ruins", "urban" or "town" takes the city only while it is on trial; off, the
+			// country's look as ever)
+			if (L != Look::Count && (L != Look::City || F.Tried("city"))) return L;
 		}
 		if (F.Steppe.bOn) return Look::Steppe;
 		// A town or a city the rules laid with streets (release 2, on trial "city" until the art director passes it and
