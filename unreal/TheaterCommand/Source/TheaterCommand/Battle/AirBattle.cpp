@@ -4806,6 +4806,10 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 			{
 				Old->Tally->DestroyComponent();
 			}
+			if (Old->NoseArt.IsValid())
+			{
+				Old->NoseArt->DestroyComponent();
+			}
 			Struck = MoveTemp(Old->Marks);
 			for (FPlaneMade::FMark& Mark : Struck)
 			{
@@ -5048,6 +5052,19 @@ const FAirTallySide* AAirBattle::TallyOfShape(const FString& Shape)
 		}
 	}
 	return Found ? &Found->Kills : nullptr;
+}
+
+bool AAirBattle::ShapeFrameOf(const FString& Shape, FString& Kind, FVector& Middle, double& Fit) const
+{
+	const AirParts::FShape* Found = AirParts::Shapes().Find(Shape);
+	if (!Found || Found->Kind.IsEmpty())
+	{
+		return false;
+	}
+	Kind = Found->Kind;
+	Middle = Found->Middle;
+	Fit = Found->Fit;
+	return true;
 }
 
 UStaticMesh* AAirBattle::PlaneStill(const FString& Shape, bool bLight)
@@ -5375,6 +5392,7 @@ void AAirBattle::Draw(double Real)
 	// The strikes on those near the eye, laid on their skins; taken up from the rest.
 	DrawMarks(EyeAt);
 	DrawTally(EyeAt);
+	DrawNoseArt(EyeAt);
 	// The small things, laid afresh each frame in one mesh: a parachute's canopy and its airman, a torn piece of a
 	// wreck tumbling; a bomb or a torpedo falling a copy of its own mesh (AS2), sent with the aircraft's copies.
 	FMiniatureMesh Things;
@@ -6371,6 +6389,13 @@ void AAirBattle::AimEye(double Real)
 				// rules frame him: the modeller's check, 19:45Z, found a mid-set wing (the Wildcat's) or a resting
 				// propeller (the Night Fighter's) hides a few slots only from dead level.)
 				Want = AceMarks + AceOut * 8.0 * U + FVector::UpVector * 2.0 * U - CloseAhead * 1.0 * U;
+				Look = AceMarks;
+			}
+			else if (!Rider->bFighter && NoseArtEye(Rider->Key, AceMarks, AceOut))
+			{
+				// The nose art's close picture (release 2, "-TheaterAirNoseArtEye" with the nose art on: the art director's
+				// stills and the Mac's check): 9 m off her port panel, square to it, a metre and a half above, looking at it.
+				Want = AceMarks + AceOut * 9.0 * U + FVector::UpVector * 1.5 * U;
 				Look = AceMarks;
 			}
 			else if (Rider->bFighter)

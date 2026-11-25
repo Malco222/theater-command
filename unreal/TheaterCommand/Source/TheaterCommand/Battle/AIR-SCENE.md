@@ -1228,3 +1228,30 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    second 40; `-TheaterAirRulesFailEnd` fails the end.
    Look for: the note after about 2 s of a frozen raid, the map 4 s later with the raid card up and a note under it;
    the month can be ended and the raid sent with FLY THE RAID.
+
+51. **Bomber nose art** (release 2; Brian, 25 November 2026 01:30Z: "american only"). Each American bomber wears one of
+   the modeller's 200 paintings on her nose (battle-models/air/noseart, the air thread's list names.json), packed for the
+   game by Tools/pack_nose_art.py into Content/Data/NoseArt (each a quarter of the modeller's size, 352 by 216, lossless,
+   never otherwise altered; 11 MB in all). Only the B-17 has a panel for it (panels.json: the B-24, B-25 and B-29 are not
+   modelled; the Navy's Dauntless and Devastator and the plain twin stand-in have none). The panel is laid on the game's
+   own B-17, her near shape: the painting's 2.2 m from 7.2 m to 5.0 m forward of her middle, below the windscreen and
+   above her grey belly, all of it on her olive with some 4 cm to spare, 2 to 5 mm off her skin; port always, and
+   starboard too for one painting in eight (the brief's "a few aircraft carry it on both sides"), mirrored so that it
+   reads from left to right on both sides. Drawn with M_TallyMark over the paint under it (AirBattleNoseArt.cpp), one
+   small mesh of her own while she is within 300 m of the eye on her near shape, a painting read at most once a frame.
+   Which painting (Battle/AirNoseArt): where the airStart board's place.bombers gives a group's seats (the rules'
+   campaign/bombers.ts; never the raid card's airLook, which strips them), its aircraft wear them in turn, old hands
+   first, a seat with art 0 bare; its groups are paired in order with place.bombers' nose groups, only where the counts
+   agree (the views name no corps: a view's extra.corps, read where the rules send one, pairs them exactly). Where the
+   battle says nothing (the Bremen film, the test battles): each group's paintings shuffled from the battle's seed and
+   its id and given in turn, none shared in the battle while any is unused, about one in five a bare nose. An aircraft
+   keeps hers for the whole battle. Shown, never counted.
+   Off until the Mac and the art director pass it: the Battle rules card's **Bomber nose art** (FLandLive's rule
+   `noseArt`, never sent to the land rules); `-TheaterAirNoseArt` on for a run, `-TheaterAirNoNoseArt` off,
+   `-TheaterRulesFlip=noseArt` clicks the card's switch. Off, DrawNoseArt returns at the switch and the scene's calls
+   are as before. The cloud test (Tools/air_show/air_nose_art_test.cpp, in run.sh) checks the pack, the panel against
+   her near shape on both sides, and who wears what on the recordings and on a raid the rules made.
+   Look for (`-TheaterAirNoseArt`, the Bremen film, the close view on a B-17 of the 303rd): the log's "Air battle: nose
+   art:" lines naming each painting and its key; on the B-17s near the eye a flat sign-painter's picture on the port
+   side of the nose under the windscreen, lettering reading left to right, upright, not floating off her skin nor
+   flickering into it, none on the Mustangs or Fw 190s, a few bare noses; the frame rate as before.

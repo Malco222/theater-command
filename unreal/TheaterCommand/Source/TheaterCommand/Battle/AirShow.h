@@ -113,6 +113,11 @@ namespace AirShow
 		 * vics of three; a fighter one of 20, five fours); 0 where an older recording does not say. SlotOf lays every
 		 * model's box from its slot alone, so this is a reading only. */
 		int Boxes = 0;
+		/** Its corps (the view's extra.corps; -1 where the battle does not name it) and its aircraft as the battle began
+		 * (extra.n0; its n where an older recording does not say): which group of the board's place.bombers it flies
+		 * with, for its nose art (Battle/AirNoseArt). A reading only. */
+		int Corps = -1;
+		int N0 = 0;
 		Act Doing = Act::March;
 		int Engaged = -1;
 		std::vector<Fire> Firing;

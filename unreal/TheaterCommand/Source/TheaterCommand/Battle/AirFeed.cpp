@@ -429,6 +429,19 @@ namespace AirFeed
 			Out.Latitude = Lat.Num(0.0);
 		}
 
+		// The raid's bombers one by one (place.bombers, keyed by corps), for their nose art: each seat's painting and name.
+		const Json& Seated = Place["bombers"];
+		for (size_t K = 0; K < Seated.Keys.size() && K < Seated.Values.size(); ++K)
+		{
+			char* End = nullptr;
+			const long Corps = std::strtol(Seated.Keys[K].c_str(), &End, 10);
+			const Json& B = Seated.Values[K];
+			if (!End || *End != '\0' || End == Seated.Keys[K].c_str() || !B.IsObject()) continue;
+			Sky::BomberGroup& Row = Out.Bombers[static_cast<int>(Corps)];
+			Row.Style = B["style"].Str("");
+			for (const Json& Seat : B["seats"].Items) Row.Seats.push_back({ std::max(0, Seat["art"].Int(0)), Seat["name"].Str("") });
+		}
+
 		// The day's sky (sky.ts): kept as given; a bundle from before it has none, and cumulus stands in.
 		const Json& Cloud = Place["cloud"];
 		if (Cloud.IsObject())
@@ -610,6 +623,10 @@ namespace AirFeed
 			G.Per = std::max(1, X["per"].Int(1));
 			G.N = X["n"].Int(G.Figures * G.Per);
 			G.Boxes = X["boxes"].Int(0);
+			// (its corps, where the battle names it, and its aircraft as the battle began: which of place.bombers' groups
+			// it flies with, for its nose art)
+			G.Corps = X["corps"].Int(-1);
+			G.N0 = X["n0"].Int(G.N);
 			G.Doing = ActOf(U["act"].Str("march"));
 			G.Engaged = U["engaged"].Int(-1);
 			for (const Json& F : X["fire"].Items)
