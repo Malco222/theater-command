@@ -25,7 +25,7 @@ import { afterCard } from '../src/campaign/airfought';
 import { createGame, setWar } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
-import { STRAFE_WORDS, strafeOn, strafeWatch, strafedLine } from '../src/campaign/strafers';
+import { STRAFE_WORDS, resultFor, strafeOn, strafeWatch, strafedLine } from '../src/campaign/strafers';
 import type { Game } from '../src/campaign/types';
 import { AirSim, airBattle } from '../src/battle/air/sim';
 import { airTicket, flyKinds, foughtAir } from '../src/battle/air/ticket';
@@ -34,7 +34,7 @@ import '../unreal/TheaterCommand/Rules/campaign-bridge';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const TC = (globalThis as Record<string, unknown>).TC as any;
 
-type Told = { route: 'card' | 'settled' | 'fought'; target: number; nat: string; strafers: number[] };
+type Told = { route: 'card' | 'settled' | 'fought'; target: number; nat: string; strafers: number[]; weight?: number; cut?: number };
 let heard: Told[] = [];
 const WAS = AIR.combat.fighters;
 afterEach(() => { flyKinds([]); strafeWatch.tell = undefined; heard = []; AIR.combat.fighters = WAS; });
@@ -49,6 +49,9 @@ const NONE = {
   fought: 'No fighter group is likely to go down and strafe: the air fight is likely to leave them with no fight left. One you send down before it meets the defence still may.',
 };
 const NOBODY = 'No fighter group went down to strafe.';
+// A group that went down with under one fighter's weight on the troops (the UI director, 19:10Z A5; its forms, 19:17Z).
+const LITTLE = 'went down to strafe, but had too little fight left to do any harm.';
+const FOUND_LITTLE = 'The aircraft found little to hit.';
 const GC1 = 9, GC3 = 10, GC2 = 36, BOMBERS = 38;
 const NAME: Record<number, string> = { [GC1]: 'Groupement de Chasse 1', [GC2]: 'Groupement de Chasse 2', [GC3]: 'Groupement de Chasse 3' };
 
@@ -80,7 +83,7 @@ describe('the raid card: LIKELY TO GO DOWN AND STRAFE', () => {
     const p = planRaid(c.g, 'ground', c.target, c.ids, 'FRA');
     expect(p.why).toBeNull();
     expect(p.strafe).toEqual({ heading: HEADING, note: NOTE, names: ['Groupement de Chasse 3'], none: '' });
-    expect(STRAFE_WORDS).toEqual({ heading: HEADING, note: NOTE, none: NONE, nobody: NOBODY });
+    expect(STRAFE_WORDS).toEqual({ heading: HEADING, note: NOTE, none: NONE, nobody: NOBODY, little: LITTLE });
     // The air page (the rows the rules build): at the foot of the raid's forces, right under FLYING THE RAID; the muted
     // line is the section's text, each group a row with no nation (no flag, no picture, no colour).
     const page = airPage(c.g, `plan:ground:${c.target}:${p.picked.join('.')}`)!;
@@ -223,7 +226,10 @@ describe('the raid report: who went down', () => {
       expect(settled.length).toBe(1);
       expect(rep.strafed).toEqual(names(settled[0].strafers));
       const line = strafedLine(rep, 'FRA');
-      expect(line).toBe(settled[0].strafers.length ? 'Groupement de Chasse 3 went down and strafed.' : NOBODY);
+      // (A5, the UI director 19:10Z and 19:17Z: where the air fight left it under one fighter's weight on the troops, its
+      // line says it had too little fight left to do any harm.)
+      const w = settled[0].weight!;
+      expect(line).toBe(!settled[0].strafers.length ? NOBODY : w < 1 ? `Groupement de Chasse 3 ${LITTLE}` : 'Groupement de Chasse 3 went down and strafed.');
       seen.set(line, (seen.get(line) ?? 0) + 1);
       // The report kept it: read back from the save.
       expect(loadGame(saveGame(c.g))!.airReports.at(-1)!.strafed).toEqual(rep.strafed);
@@ -309,5 +315,114 @@ describe('the raid report: who went down', () => {
     // A report from an older save, read with the switch on: no field, no line.
     on();
     expect(strafedLine(loadGame(saveGame(c.g))!.airReports.at(-1)!, 'FRA')).toBe('');
+  });
+});
+
+// The UI director, 19:10Z A5 and 19:17Z (her readings 3 and 4): "{A} went down and strafed. {B} went down to strafe, but
+// had too little fight left to do any harm."; two "{A} and {B}", three or more "{A}, {B} and {C}"; a group whose harm on
+// the troops is under one fighter's weight (the game's own unit, the design director 19:09Z item 3); "The aircraft found
+// little to hit." where the raid as a whole did no harm worth a figure; where the only aircraft over the troops were such
+// groups, their line alone. The Saar with all three French fighter groups at Lorraine against 2. Jagddivision at a
+// strength the setup sets, near the edge where each group carries almost none of its fight.
+describe('the raid report: too little fight left to do any harm (A5)', () => {
+  function edge(n: number, bombers = true, k = 0) {
+    const c = saar(k, 'three');
+    const d = c.g.airFleets.find((f) => f.id === 3)!;
+    d.ftr = n; d.est.ftr = Math.max(d.est.ftr, n);
+    return { ...c, ids: bombers ? c.ids : c.ids.filter((id) => id !== BOMBERS) };
+  }
+
+  it('the forms, each sentence opening with a capital', () => {
+    const rep = (strafed: string[], little: string[]) => ({ mission: 'ground', attNat: 'FRA', strafed, ...(little.length ? { strafeLittle: { names: little } } : {}) });
+    expect(strafedLine(rep(['the 3rd'], ['the 3rd']), 'FRA')).toBe(`The 3rd ${LITTLE}`);
+    expect(strafedLine(rep(['A', 'B'], ['B']), 'FRA')).toBe(`A went down and strafed. B ${LITTLE}`);
+    expect(strafedLine(rep(['A', 'B', 'C'], ['A', 'B']), 'FRA')).toBe(`C went down and strafed. A and B ${LITTLE}`);
+    expect(strafedLine(rep(['A', 'B', 'C'], ['A', 'B', 'C']), 'FRA')).toBe(`A, B and C ${LITTLE}`);
+    expect(strafedLine(rep(['the 3rd', 'B'], []), 'FRA')).toBe('The 3rd and B went down and strafed.');
+    expect(strafedLine(rep(['A'], ['A']), 'GER')).toBe('');
+  });
+
+  it('the settled raid: who had under one fighter\'s weight on the troops, in the report\'s words and kept in the save; the result sentence for no harm', () => {
+    on();
+    // 646: Groupement de Chasse 3 with a fighter's weight or more, the other two with less.
+    const a = edge(646);
+    heard = [];
+    const r1 = launchRaid(a.g, 'ground', a.target, a.ids, 'FRA')!;
+    const settled = heard.find((x) => x.route === 'settled')!;
+    expect(r1.strafed!.length).toBe(3);
+    expect(r1.strafeLittle).toEqual({ names: names([GC1, GC2]) });
+    expect(strafedLine(r1, 'FRA')).toBe(`Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 and Groupement de Chasse 2 ${LITTLE}`);
+    expect(Math.round(settled.cut! * 100)).toBe(0);
+    expect(r1.result).toBe(FOUND_LITTLE);
+    expect(resultFor(r1, 'FRA')).toBe(FOUND_LITTLE);
+    expect(resultFor(r1, 'GER')).toBe(FOUND_LITTLE);
+    expect(strafedLine(r1, 'GER')).toBe('');
+    expect(loadGame(saveGame(a.g))!.airReports.at(-1)!.strafeLittle).toEqual(r1.strafeLittle);
+    // 648: all three with less, the bombers' weight beside them: three names joined, and the result sentence stands.
+    const b = edge(648);
+    const r2 = launchRaid(b.g, 'ground', b.target, b.ids, 'FRA')!;
+    expect(r2.strafeLittle).toEqual({ names: names([GC1, GC2, GC3]) });
+    expect(strafedLine(r2, 'FRA')).toBe(`Groupement de Chasse 1, Groupement de Chasse 2 and Groupement de Chasse 3 ${LITTLE}`);
+    expect(resultFor(r2, 'FRA')).toBe(FOUND_LITTLE);
+    // 648 with no bombers: they were all that reached the troops. The raider reads their line alone; the defender, whom
+    // her words do not cover, the report's own sentence.
+    const c = edge(648, false);
+    const r3 = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+    expect(r3.strafeLittle).toEqual({ names: names([GC1, GC2, GC3]), alone: true });
+    expect(r3.result).toBe(FOUND_LITTLE);
+    expect(resultFor(r3, 'FRA')).toBe('');
+    expect(resultFor(r3, 'GER')).toBe(r3.result);
+    // As built (200 German fighters): every group with a fighter's weight or more, no field written.
+    const d = saar(0, 'three');
+    const r4 = launchRaid(d.g, 'ground', d.target, d.ids, 'FRA')!;
+    expect(r4.strafed!.length).toBe(3);
+    expect('strafeLittle' in r4).toBe(false);
+    expect(saveGame(d.g).includes('"strafeLittle"')).toBe(false);
+    expect(strafedLine(r4, 'FRA')).toBe(`${r4.strafed![0]}, ${r4.strafed![1]} and ${r4.strafed![2]} went down and strafed.`);
+  });
+
+  it('the result sentence: "The aircraft found little to hit." exactly where the cut prints as 0%, with the rule on; off, as shipped', () => {
+    on();
+    for (const [n, mult] of [[200, 1], [0, 1], [646, 1], [200, 30]] as const) {
+      AIR.combat.fighters = WAS * mult;
+      const c = saar(0, 'three');
+      const d = c.g.airFleets.find((f) => f.id === 3)!;
+      d.ftr = n;
+      heard = [];
+      const rep = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+      const cut = heard.find((x) => x.route === 'settled')!.cut!;
+      if (Math.round(cut * 100) > 0) expect(rep.result.startsWith('The raids cut the organisation of')).toBe(true);
+      else expect(rep.result).toBe(FOUND_LITTLE);
+    }
+    AIR.combat.fighters = WAS;
+    flyKinds([]);
+    const off = saar(0, 'three');
+    const r = launchRaid(off.g, 'ground', off.target, off.ids, 'FRA')!;
+    expect('strafeLittle' in r).toBe(false);
+    expect(resultFor(r, 'FRA')).toBe(r.result);
+  });
+
+  it('the fought raid: a group whose passes counted under one fighter on the troops is told so, from the field\'s own count', () => {
+    on();
+    let little = 0;
+    for (const k of [0, 1]) {
+      const f = edge(648, true, k);
+      const sim = airBattle(airTicket(f.g, 'ground', f.target, f.ids, 'FRA').ticket!) as AirSim;
+      fight(sim);
+      const o = sim.outcome();
+      // The field's count group by group sums to its whole.
+      const by = o.strafedBy!;
+      expect(Object.values(by).reduce((t, x) => t + x, 0)).toBeCloseTo(o.strafed!, 9);
+      const fought = foughtAir(o);
+      const rep = launchRaid(f.g, 'ground', f.target, f.ids, 'FRA', fought)!;
+      const few = (o.strafers ?? []).filter((id) => (by[id] ?? 0) < 1);
+      little += few.length;
+      expect(rep.strafeLittle?.names ?? []).toEqual(rep.strafed!.filter((x) => names(few).includes(x)));
+      // The after card carries the line to the raider, after what the bombers did.
+      const line = strafedLine(rep, 'FRA');
+      expect(line.includes(LITTLE)).toBe(few.length > 0);
+      expect(afterCard(f.g, rep, fought).lines.filter((x) => x === line).length).toBe(1);
+    }
+    expect(little).toBeGreaterThan(0);
   });
 });

@@ -88,6 +88,8 @@ export interface FoughtAir {
    */
   strafers?: number[];
   strafeFire?: number;
+  /** With the strafers' rule on: by campaign group id, the fighters its passes counted on the troops (the report's words). */
+  strafedBy?: Record<number, number>;
 }
 
 /**

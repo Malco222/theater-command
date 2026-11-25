@@ -206,6 +206,11 @@ export class AirSim implements BattleSim<AirUnit> {
    * on, at the first such group; read by nothing else, and never kept: no view, outcome, digest or save has it.
    */
   private gone: Set<number> | null = null;
+  /**
+   * With the strafers' rule on: by campaign group id, the fighters each group's completed passes counted on the troops
+   * (the report's words, the UI director 19:10Z A5). It goes out only in the outcome of a raid on troops with the rule on.
+   */
+  private booked = new Map<number, number>();
   /** The raid's fighter groups ordered to stay with the bombers (or given any other order): they never go down on their own. */
   private keepUp = new Set<number>();
   /** The bomber box each of the raid's fighter groups was last escorting (it goes down once that box has bombed). */
@@ -960,6 +965,7 @@ export class AirSim implements BattleSim<AirUnit> {
     // The pass made: its part of the group counts on the troops, by the campaign's own law, and its hits follow.
     s.done++; s.run = false; s.p = 0;
     this.strafed += part;
+    if (this.troops!.law.reach) this.booked.set(u.corps, (this.booked.get(u.corps) ?? 0) + part);
     const mid = [(s.from[0] + s.to[0]) / 2, (s.from[1] + s.to[1]) / 2];
     this.marksHit(u, this.troops!.land(this.droppedNow(), this.strafed, 'strafe', mid[0], mid[1]));
     if (s.done >= S.passes) {
@@ -2196,7 +2202,7 @@ export class AirSim implements BattleSim<AirUnit> {
       // A raid on troops: the fighters that strafed, and the organisation cut the field earned by the campaign's own law
       // from them and the bombers that dropped. Fought to the end, the campaign books the cut from these same counts.
       ...(this.troops ? { strafed: this.strafed, troops: { cut: troopCutOf(this.troops.law, att.reduce((s, u) => s + u.dropped, 0), this.strafed) } } : {}),
-      ...(this.troops?.law.reach ? { strafers: [...this.firedOn].sort((x, y) => x - y), strafeFire: this.fireOwed } : {}),
+      ...(this.troops?.law.reach ? { strafers: [...this.firedOn].sort((x, y) => x - y), strafeFire: this.fireOwed, strafedBy: Object.fromEntries([...this.booked].sort((x, y) => x[0] - y[0])) } : {}),
       ...(this.place.bombs ? { rolls: this.staff ? { ...(this.railCut ? { rail: 0 } : {}), ...(this.ruined ? { ruin: 0 } : {}) } : { ...this.rolls }, railCut: this.railCut, ruined: this.ruined } : {}),
     };
   }

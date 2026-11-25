@@ -3024,6 +3024,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   let fh: FieldHit | null = null;
   // (A raid on troops with the strafers' rule on, strafers.ts: the names of the groups that went down, for the report.)
   let strafed: string[] | undefined;
+  // (And those of them that went down with under one fighter's weight on the troops: the UI director, 19:10Z A5.)
+  let strafeLittle: AirReport['strafeLittle'];
   const bookGround = (hit: FieldHit): void => {
     for (const x of hit.losses) {
       const f = g.airFleets.find((y) => y.id === x.id);
@@ -3269,6 +3271,14 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       // the report names its groups and in the raid's order. Nothing is drawn: a record only.)
       const down = route === 'fought' ? battle?.strafers ?? [] : strafers;
       strafed = a.att.flatMap((x, i) => (down.includes(x.f.id) ? [att[i].fleet] : []));
+      // (A5, the UI director 19:10Z and 19:17Z; the design director 19:09Z item 3, "the words never say more than the
+      // weight was, counted in the game's own unit": a group that went down with a weight on the troops under one
+      // fighter's, the weight the raid booked for it (settled, its fighters left x esc x crowd x carry, as `low` weighs it;
+      // fought, what its passes counted), is told as having too little fight left to do any harm. Alone: they were all
+      // that reached the troops, no bomber's weight and no other strafer's.)
+      const booked = (x: AirAssess['att'][number]): number => (route === 'fought' ? battle?.strafedBy?.[x.f.id] ?? 0 : x.f.ftr * x.esc * x.crowd * carry);
+      const little = a.att.flatMap((x, i) => (down.includes(x.f.id) && booked(x) < 1 ? [att[i].fleet] : []));
+      if (little.length) strafeLittle = { names: little, ...(little.length === strafed.length && !(through > 0) ? { alone: true as const } : {}) };
     }
     let divs = 0;
     for (const c of foes) {
@@ -3278,7 +3288,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       divs += c.divs;
     }
     value += cut * divs * G.value;
-    result = cut > 0
+    // (The strafers' rule, the UI director 19:17Z: where the raid as a whole did no harm worth a figure, the cut printing
+    // as 0%, the sentence for no harm in place of "by 0%". Off, as shipped.)
+    result = (rule ? Math.round(cut * 100) > 0 : cut > 0)
       ? `The raids cut the organisation of ${foes.length === 1 ? foes[0].name : `the ${foes.length} corps`} at ${r.name} by ${Math.round(cut * 100)}%${foes.some((c) => c.dug) ? ', less where they are dug in' : ''}. They fight the weaker for it until they have rested.`
       : 'The aircraft found little to hit.';
   } else {
@@ -3368,6 +3380,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   if (fh) rep.field = { region: fh.region, shut: fh.shut, levels: fh.levels, ground: fh.ground };
   if (transit) rep.ferry = transit.to;
   if (strafed) rep.strafed = strafed;
+  if (strafeLittle) rep.strafeLittle = strafeLittle;
   g.airReports.push(rep);
   storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' || m === 'airfield' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, guns, ...(battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {}) });
   // (Release 2, earned names for air groups under the switch 'nicknames', airnicks.ts: the missions completed and the

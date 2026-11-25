@@ -1719,9 +1719,9 @@ interface Flight { from: number; x: number; y: number; nat: string; bombers: boo
 const lastAirReport = (s: Game): number => s.airReports.reduce((m, r) => Math.max(m, r.id), -1);
 
 /** The raids flown since a report (by its id), as the player may know them: each group that flew, from its own airfield. */
-function raidsSince(s: Game, since: number, turns: number[], skipNat: string | null = null): { flights: Flight[]; notes: string[]; focus: number[]; mine: boolean } {
+function raidsSince(s: Game, since: number, turns: number[], skipNat: string | null = null): { flights: Flight[]; notes: string[]; focus: number[]; mine: boolean; quiet: boolean } {
   const flights: Flight[] = [], notes: string[] = [], focus: number[] = [];
-  let mine = false;
+  let mine = false, quiet = false;
   const seenIds = new Set<number>();
   for (const turn of [...new Set(turns)]) {
     for (const r of flownRaids(s, turn)) {
@@ -1752,11 +1752,14 @@ function raidsSince(s: Game, since: number, turns: number[], skipNat: string | n
       if (first) continue;
       // (1.5.2, playtest #38: a raid with nothing to say adds no empty note, so a joined note never opens with a space.)
       if (r.result.trim()) notes.push(r.result.trim());
+      // (A raid on troops whose only aircraft over them had too little fight left: the raider reads their line alone, its
+      // result sentence left out (strafers.ts resultFor, the UI director 19:17Z), so the act's note falls back on nothing.)
+      else if (s.airReports.find((x) => x.id === r.id)?.strafeLittle?.alone && r.attNat === s.human) quiet = true;
       if (r.region >= 0) focus.push(r.region);
       if (r.defNat === s.human || (r.region >= 0 && s.regions[r.region].ctrl === s.human)) mine = true;
     }
   }
-  return { flights, notes, focus, mine };
+  return { flights, notes, focus, mine, quiet };
 }
 
 const lastSeaReport = (s: Game): number => s.seaReports.reduce((m, r) => Math.max(m, r.id), -1);
@@ -7049,7 +7052,7 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       const flown = raidsSince(s, air0, [s.turn]);
       flies = flown.flights;
       // What came of it, in the report's own words first, kept short enough to read while the raid is flown.
-      const told = flown.notes.join(' ') || note;
+      const told = flown.notes.join(' ') || (flown.quiet ? '' : note);
       note = told.length > 190 ? `${told.slice(0, told.lastIndexOf('.', 190) + 1) || told.slice(0, 190)}` : told;
       // (Release 2, a raid on troops with the strafers' rule on; the UI director's words of 15:04Z: the report then says
       // who went down, to the side that flew it. Added whole after the cut, so the line is never cut. Nothing with the

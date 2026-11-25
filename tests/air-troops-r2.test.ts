@@ -85,8 +85,14 @@ describe('the switch (off by default, bit for bit as before)', () => {
       expect(rb.strafed).toEqual([]);
       expect('strafed' in ra).toBe(false);
       delete rb.strafed;
-      expect(JSON.stringify(rb)).toBe(JSON.stringify(ra));
-      expect(saveGame(b.g)).toBe(saveGame(a.g));
+      // (Changed in round seven, the UI director 19:17Z, reading 4: with the switch on, where the cut prints as 0% the
+      // report says "The aircraft found little to hit." in place of "... by 0%", and so does the raid's headline, which
+      // carries the report's sentence. That sentence apart too, as off.)
+      const nil = (x: string): string => x.replace(/The raids cut the organisation of [^.]* by 0%\. They fight the weaker for it until they have rested\./g, 'The aircraft found little to hit.');
+      expect(ra.result).toMatch(/^The raids cut the organisation of .* by 0%/);
+      expect(rb.result).toBe('The aircraft found little to hit.');
+      expect(JSON.stringify(rb)).toBe(nil(JSON.stringify(ra)));
+      expect(saveGame(b.g)).toBe(nil(saveGame(a.g)));
     }
     // A raid with a fighter group out of reach to strafe (Groupement de Chasse 1 moved to Namur, 216 km off, beyond
     // 0.9 of its 220 km, the design director's reach of 13:35Z; it stood at Belfort, 190 km off, beyond the old 0.6,

@@ -52,6 +52,9 @@ export const STRAFE_WORDS = {
     fought: 'No fighter group is likely to go down and strafe: the air fight is likely to leave them with no fight left. One you send down before it meets the defence still may.',
   },
   nobody: 'No fighter group went down to strafe.',
+  // (The report: a group that went down with too little fight left to do any harm, the UI director 19:10Z A5 and its
+  // forms at 19:17Z; the order's answer for a group that carries nothing, A6, said by the battle, src/battle/air/sim.ts.)
+  little: 'went down to strafe, but had too little fight left to do any harm.',
 } as const;
 
 /**
@@ -78,14 +81,33 @@ export function strafeSection(names: string[], why: WhyNone): StrafeSection {
 // (Names joined as the report's other sentences join them: air.ts `list`, "A, B and C", the same line every module keeps.)
 const list = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
+// (A sentence opens with a capital, the group named as the news names it: the UI director, 19:17Z.)
+const cap = (x: string): string => x.charAt(0).toUpperCase() + x.slice(1);
+
 /**
  * The raid report's line on who went down, as `reader` reads it: only a raid on troops whose report kept its strafers
  * (the switch on when it was flown), and only for the side that flew it. '' otherwise: for the defender, whom her words
- * do not cover, for any other raid, and for a report saved without the field (an older save, or the switch off).
+ * do not cover, for any other raid, and for a report saved without the field (an older save, or the switch off). The
+ * groups that went down with too little fight left to do any harm (strafeLittle) are told apart, after the others
+ * (the UI director, 19:17Z: "{A} went down and strafed. {B} went down to strafe, but had too little fight left to do any
+ * harm."), each sentence joining its names as the report joins them.
  */
-export function strafedLine(rep: { mission: string; attNat: string; strafed?: string[] }, reader: string | null): string {
+export function strafedLine(rep: { mission: string; attNat: string; strafed?: string[]; strafeLittle?: { names: string[] } }, reader: string | null): string {
   if (rep.mission !== 'ground' || !rep.strafed || reader === null || reader !== rep.attNat) return '';
-  return rep.strafed.length ? `${list(rep.strafed)} went down and strafed.` : STRAFE_WORDS.nobody;
+  if (!rep.strafed.length) return STRAFE_WORDS.nobody;
+  const little = rep.strafeLittle?.names ?? [];
+  const full = rep.strafed.filter((n) => !little.includes(n)), few = rep.strafed.filter((n) => little.includes(n));
+  return [full.length ? `${cap(list(full))} went down and strafed.` : '', few.length ? `${cap(list(few))} ${STRAFE_WORDS.little}` : ''].filter(Boolean).join(' ');
+}
+
+/**
+ * The raid report's own result sentence, as `reader` reads it: the report's, except for the raider where the only
+ * aircraft that reached the troops were groups with too little fight left (strafeLittle.alone), whose line already
+ * gives the cause (the UI director, 19:17Z: "Print the A5 line alone there"). The defender, whom her words do not
+ * cover, reads the report's own sentence. Every other report reads as it always did.
+ */
+export function resultFor(rep: { mission: string; attNat: string; result: string; strafeLittle?: { alone?: true } }, reader: string | null): string {
+  return rep.mission === 'ground' && rep.strafeLittle?.alone && reader !== null && reader === rep.attNat ? '' : rep.result;
 }
 
 /**
