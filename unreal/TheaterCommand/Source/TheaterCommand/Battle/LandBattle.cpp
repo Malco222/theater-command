@@ -1159,11 +1159,13 @@ void ALandBattle::LoadInks()
 			UE_LOG(LogTheater, Warning, TEXT("Land battle: /Game/Campaign/Materials/M_LandStalks is missing (run Tools/build_content.sh): the corn keeps its bundles to the lens."));
 		}
 	}
-	ManInk = Ink(0.85f, 0.2f, 0.0f);
+	// (release 2, the whole picture's worn paint, tc.Look.Worn: with it on, the men's ink reads each paint's roughness from
+	// their points, and this battle's vehicles each take their own worn ink as their bodies are made (MakeBodies); the
+	// steel ink itself stays plain for the aircraft over the field and the old wrecks. Nothing with it off.
+	// Look/WholeLook.h)
+	ManInk = WholeLook::MenInk(Ink(0.85f, 0.2f, 0.0f), this);
 	SteelInk = Ink(0.6f, 0.35f, 0.0f);
-	// (release 2, the whole picture's worn paint, tc.Look.Worn: the vehicles' paint broken in patches and laid flat;
-	// nothing with it off. Look/WholeLook.h)
-	WholeLook::Wear(SteelInk.Get());
+	WholeLook::WornOpen(SteelInk.Get());
 	// The wind and the sky's life (release 2; Brian, 23 November: "can we make the grass, trees, and sky more visually
 	// realistic and epic?"), each on its own switch and all three with "-TheaterLandEpic", off until the art director
 	// and the Mac's frame rate pass them. Built by build_content.py (TC_REBUILD=M_LandBlades,M_LandCloudShade,
@@ -3650,6 +3652,12 @@ void ALandBattle::MakeMen()
 	if (Crowd->PoseBankOn() && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoVat")))
 	{
 		UMaterialInterface* CrowdInk = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_LandCrowd.M_LandCrowd"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+		// (release 2, tc.Look.Worn: the crowd reads each paint's roughness from its points too, as the near men's ink does.
+		// Look/WholeLook.h)
+		if (WholeLook::MenRough())
+		{
+			CrowdInk = WholeLook::MenParent(true);
+		}
 		if (!CrowdInk || !ManInk)
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Land battle: /Game/Campaign/Materials/M_LandCrowd is missing (run Tools/build_content.sh): far men are drawn a mesh a pose, mid men skinned."));
@@ -5211,13 +5219,14 @@ void ALandBattle::MakeBodies(int32 FromVehicle)
 			{
 				LandParts::FromBody(Body.Near, Model.BurntColour, 0.0, UnitsPerMetre, P, N, C, &T);
 				Mesh->CreateMeshSection(0, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
-				Mesh->SetMaterial(0, SteelInk);
+				// (release 2, tc.Look.Worn: her own worn ink; the steel ink with it off. Look/WholeLook.h)
+				Mesh->SetMaterial(0, WholeLook::VehicleInk(SteelInk.Get(), static_cast<int32>(V), this));
 			}
 			if (bFarSection) // TK1
 			{
 				LandParts::FromBody(Body.Far, Model.BurntColour, 0.0, UnitsPerMetre, P, N, C, &T);
 				Mesh->CreateMeshSection(1, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
-				Mesh->SetMaterial(1, SteelInk);
+				Mesh->SetMaterial(1, WholeLook::VehicleInk(SteelInk.Get(), static_cast<int32>(V), this));
 				Mesh->SetMeshSectionVisible(1, Body.Near.Triangles.empty());
 			}
 			BodyMeshes.Add(Mesh);

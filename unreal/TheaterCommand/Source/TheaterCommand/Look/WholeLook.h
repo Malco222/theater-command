@@ -3,6 +3,8 @@
 #include "CoreMinimal.h"
 
 class UMaterialInstanceDynamic;
+class UMaterialInterface;
+class UObject;
 class USkyLightComponent;
 
 /**
@@ -48,14 +50,20 @@ class USkyLightComponent;
  * - tc.Look.Worn (-TheaterLookWorn): the ground battle's tanks, guns and lorries carry weathered paint, broken in patches
  *   and flat, not one even coat (the art director, 25 Nov 05:00Z, art-director/reviews/battle-sky-and-worn-numbers.md
  *   section 2: a large flat panel of the desert tank's hull varied by 2.3 of 255 over its whole area; her line is 10,
- *   and the ground thread's Type 97, whose own file breaks her paint, carries 12 to 19). The battle's surface's own
- *   weathering (the map's pieces' paint job), a mottle read in each body's own space, is laid on the vehicles' ink
- *   (it paints the battle's tanks, guns and lorries near and far, its old wrecks and the aircraft over it), and its
- *   roughness taken from 0.6, a sheen, to army paint's 0.85. Read as a battle's inks are made.
- *   tc.Look.WornStrength (1), tc.Look.WornRepeat (metres, 2.5) and tc.Look.WornRoughness (0.85) tune it. The ground's
- *   colour on a hull's lower third and on the men's boots and knees, and roughness by part, are the vehicles' and the
- *   soldiers' own painting, not this.
- *
+ *   and the ground thread's Type 97, whose own file breaks her paint, carries 12 to 19). Their ink is M_LandWorn
+ *   (build_content.py): the battle's surface's own mottle (the map's pieces' paint job), read in each body's own space,
+ *   in two layers that repeat at periods no multiple of each other (2.5 and 6.1 m, so no patch comes round on one hull),
+ *   each vehicle with her own shift of both (no twins in a troop), and the paint's roughness taken from 0.6, a sheen, to
+ *   army paint's 0.85, moving with the patches (the dark ones about 0.72, the pale 0.98). The art director's read of
+ *   05:45Z set all of it. Past the hand-over (140 m) the far pieces of one model share one shift. Nothing touches an
+ *   edge: wear on an edge is the vehicles' own files' and goes darker, never paler. The aircraft over the field, the old
+ *   wrecks and the map's pieces keep their own paint: the steel ink itself is never changed. Read as a battle opens
+ *   (WornOpen); without M_LandWorn the even coat, said once. With it on the men's inks also read each paint's roughness
+ *   from their points' alpha (M_LandManWorn, M_LandCrowdWorn), which the men's looks write with it on: the soldiers'
+ *   half, with their boots and knees taking the field's colour. tc.Look.WornStrength (1), tc.Look.WornRepeat (metres,
+ *   2.5), tc.Look.WornRepeat2 (metres, 6.1), tc.Look.WornMix (the second layer's share, 0.5), tc.Look.WornRoughness
+ *   (0.85) and tc.Look.WornSheen (how far the roughness moves with the patches, 1.3) tune it.
+
  * The whole look's lens: one post-process volume over the whole play world (the map and every battle are laid in the one
  * world), above the ground battle's grade volume, carrying only the sharpening and the ambient occlusion fields. No other
  * volume or camera in the game sets those fields, so it fights nothing.
@@ -63,7 +71,7 @@ class USkyLightComponent;
  * The tunings can be set from the launch line too, for the Mac's sweeps: -TheaterLookCrispSharpen=,
  * -TheaterLookCrispFiltering=, -TheaterLookDepthStrength=, -TheaterLookDepthReach= (metres), -TheaterLookDepthRadius=
  * (metres), -TheaterLookDepthQuality=, -TheaterLookDepthClosed=, -TheaterLookBounceStrength=, -TheaterLookBounceClosed=, -TheaterLookWornStrength=, -TheaterLookWornRepeat= (metres),
- * -TheaterLookWornRoughness=.
+ * -TheaterLookWornRepeat2= (metres), -TheaterLookWornMix=, -TheaterLookWornRoughness=, -TheaterLookWornSheen=.
  */
 namespace WholeLook
 {
@@ -100,9 +108,40 @@ namespace WholeLook
 	void FieldLaid(bool bClosedCanopy);
 	void FieldGone();
 
-	/** tc.Look.Worn is on: the ground battle's vehicles' ink (made as a battle loads its inks, before any vehicle is drawn)
-	 * takes the weathered, flat paint. Nothing with it off. */
-	void Wear(UMaterialInstanceDynamic* VehicleInk);
+	/** tc.Look.Worn is on (its variable as it stands). */
+	bool WornOn();
+
+	/** A ground battle loads its inks (Steel its vehicles' plain ink, all its settings laid): whether this battle's
+	 * vehicles wear their paint is settled here, once (the switch on and M_LandWorn built), and the last battle's worn
+	 * inks forgotten. Steel itself is never changed. */
+	void WornOpen(UMaterialInstanceDynamic* Steel);
+
+	/** The ink a ground battle's vehicle's near bodies are drawn with: Steel itself unless WornOpen settled on the worn
+	 * paint; then her own ink on M_LandWorn, Steel's settings copied and the patches shifted by a seed of her number
+	 * (Vehicle), made once a vehicle for the battle (Outer, the scene, owns it). */
+	UMaterialInterface* VehicleInk(UMaterialInstanceDynamic* Steel, int32 Vehicle, UObject* Outer);
+
+	/** The parent the ground's far vehicles' pieces are inked on while this battle wears its paint (M_LandWorn, which has
+	 * M_LandSteel's soot), nullptr otherwise: the paint does not change at the hand-over. */
+	UMaterialInterface* FarParent();
+
+	/** A far kind's ink, made on FarParent with the steel's settings copied: the worn paint's settings, the shift seeded
+	 * by her model's name (Model). Nothing for an ink on another parent. */
+	void WearFar(UMaterialInstanceDynamic* FarInk, const FString& Model);
+
+	/** With tc.Look.Worn on, the men's worn parents, which read each paint's roughness from the points' alpha (no metal, no
+	 * wake read from it): M_LandManWorn for the near men (bCrowd false), M_LandCrowdWorn for the crowd's instances; nullptr
+	 * with it off or unbuilt (said once). */
+	UMaterialInterface* MenParent(bool bCrowd);
+
+	/** Both men's worn parents are there with the switch on: the men's looks may write each paint's roughness into their
+	 * points' alpha. Never otherwise: the men's plain ink reads any alpha short of whole as part painted metal, and chips it. A
+	 * look kept from battle to battle must be made again when this changes. */
+	bool MenRough();
+
+	/** The men's ink (Made, on the campaign's surface, its settings laid): with MenRough, the same settings on
+	 * M_LandManWorn (Outer owns it); Made itself otherwise. The crowd's ink copies its settings from it. */
+	UMaterialInstanceDynamic* MenInk(UMaterialInstanceDynamic* Made, UObject* Outer);
 
 	/** A night before the attack plays first: the battle's sky lights keep the lower half as shipped, and Bounce is laid
 	 * under them at Dawn. FieldGone forgets it. */

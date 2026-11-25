@@ -52,6 +52,12 @@ namespace
 		TEXT("tc.Look.Worn: metres over which the patches' pattern repeats on a vehicle (its patches some tenths of a metre across)."));
 	TAutoConsoleVariable<float> CVarWornRoughness(TEXT("tc.Look.WornRoughness"), 0.85f,
 		TEXT("tc.Look.Worn: the vehicles' paint roughness (the battle's own is 0.6; the art director: army paint 0.8 to 0.9)."));
+	TAutoConsoleVariable<float> CVarWornRepeat2(TEXT("tc.Look.WornRepeat2"), 6.1f,
+		TEXT("tc.Look.Worn: metres over which the second, larger layer of patches repeats (no multiple of tc.Look.WornRepeat, so no patch comes round on one hull; the art director: about 6 m)."));
+	TAutoConsoleVariable<float> CVarWornMix(TEXT("tc.Look.WornMix"), 0.5f,
+		TEXT("tc.Look.Worn: the second layer's share of the patches (0 the first alone, 1 the second alone; the blend is lifted so it keeps one layer's contrast)."));
+	TAutoConsoleVariable<float> CVarWornSheen(TEXT("tc.Look.WornSheen"), 1.3f,
+		TEXT("tc.Look.Worn: how far the roughness moves with the patches (the art director: dark, oily patches about 0.7, pale, dusty ones about 0.95; 0 keeps one roughness)."));
 
 	/** The engine's world units in a metre (the battles are laid at 100, as the engine's own measure is). */
 	constexpr float UnitsPerMetre = 100.0f;
@@ -388,6 +394,9 @@ void WholeLook::Start()
 	Tuned(TEXT("TheaterLookWornStrength="), CVarWornStrength);
 	Tuned(TEXT("TheaterLookWornRepeat="), CVarWornRepeat);
 	Tuned(TEXT("TheaterLookWornRoughness="), CVarWornRoughness);
+	Tuned(TEXT("TheaterLookWornRepeat2="), CVarWornRepeat2);
+	Tuned(TEXT("TheaterLookWornMix="), CVarWornMix);
+	Tuned(TEXT("TheaterLookWornSheen="), CVarWornSheen);
 	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLookBounceUnclamped")))
 	{
 		CVarBounceHue->Set(0, ECVF_SetByCode);
@@ -504,25 +513,176 @@ void WholeLook::Dawn()
 	UE_LOG(LogTheater, Display, TEXT("Whole look: the ground's bounce laid at the dawn: %.3f, %.3f, %.3f under %d sky lights"), DawnBounce.R, DawnBounce.G, DawnBounce.B, Laid);
 }
 
-void WholeLook::Wear(UMaterialInstanceDynamic* VehicleInk)
+namespace
 {
-	if (!VehicleInk || CVarWorn.GetValueOnGameThread() == 0)
+	// ---- Worn: the vehicles' paint and the men's sheen ------------------------------------------------------------------
+
+	/** The battle now opening wears its vehicles' paint (WornOpen: the switch on and M_LandWorn built). */
+	bool bWornBattle = false;
+
+	/** M_LandWorn (WornOpen looks for it again each battle until it is found). */
+	TWeakObjectPtr<UMaterialInterface> WornParent;
+
+	/** Each vehicle's own worn ink, by her number in the battle (VehicleInk), for the battle WornOpen opened. */
+	TMap<int32, TWeakObjectPtr<UMaterialInstanceDynamic>> WornInks;
+
+	/** The men's worn parents (MenParent): the near men's and the crowd's, and whether each has been looked for. */
+	TWeakObjectPtr<UMaterialInterface> MenParents[2];
+	bool bMenLooked[2] = { false, false };
+
+	/** A material of the campaign's, quietly (nullptr when build_content.py has not made it). */
+	UMaterialInterface* Campaign(const TCHAR* Path)
+	{
+		return LoadObject<UMaterialInterface>(nullptr, Path, nullptr, LOAD_NoWarn | LOAD_Quiet);
+	}
+
+	/** The worn paint's settings on an ink made on M_LandWorn (its other settings already copied from the steel), the
+	 * patches shifted by Seed. */
+	void LayWorn(UMaterialInstanceDynamic* Ink, uint32 Seed)
+	{
+		const float Strength = FMath::Clamp(CVarWornStrength.GetValueOnGameThread(), 0.0f, 2.0f);
+		const float Repeat = FMath::Clamp(CVarWornRepeat.GetValueOnGameThread(), 0.2f, 20.0f);
+		const float Repeat2 = FMath::Clamp(CVarWornRepeat2.GetValueOnGameThread(), 0.2f, 40.0f);
+		const float Mix = FMath::Clamp(CVarWornMix.GetValueOnGameThread(), 0.0f, 1.0f);
+		// (two patterns blended half and half are flatter than either: their swings partly cancel, by the root of the sum
+		// of the shares' squares. The wear is lifted by as much, so strength 1 keeps one layer's contrast, the art
+		// director's 10 of 255 on a sunlit panel)
+		const float Lift = 1.0f / FMath::Sqrt(FMath::Square(Mix) + FMath::Square(1.0f - Mix));
+		FRandomStream Stream(static_cast<int32>(Seed));
+		const float A = Stream.FRand(), B = Stream.FRand(), C = Stream.FRand(), D = Stream.FRand();
+		Ink->SetScalarParameterValue(TEXT("Wear"), Strength * Lift);
+		Ink->SetScalarParameterValue(TEXT("BlotTiling"), 1.0f / (Repeat * UnitsPerMetre));
+		Ink->SetScalarParameterValue(TEXT("Blot2Tiling"), 1.0f / (Repeat2 * UnitsPerMetre));
+		Ink->SetScalarParameterValue(TEXT("Blot2Mix"), Mix);
+		Ink->SetVectorParameterValue(TEXT("BlotShift"), FLinearColor(A, B, C, D));
+		Ink->SetScalarParameterValue(TEXT("Roughness"), FMath::Clamp(CVarWornRoughness.GetValueOnGameThread(), 0.0f, 1.0f));
+		Ink->SetScalarParameterValue(TEXT("WearRough"), FMath::Clamp(CVarWornSheen.GetValueOnGameThread(), 0.0f, 4.0f));
+	}
+}
+
+bool WholeLook::WornOn()
+{
+	return CVarWorn.GetValueOnGameThread() != 0;
+}
+
+void WholeLook::WornOpen(UMaterialInstanceDynamic* Steel)
+{
+	WornInks.Reset();
+	bWornBattle = false;
+	if (!WornOn())
 	{
 		return;
 	}
-	// (the battle's surface's own weathering, the map's pieces' paint job, art fix 12: a mottle read in each body's own
-	// space, so it stays put on her as she moves. The vehicles' points are painted with no metal mark (alpha whole), so
-	// only the mottle shows, at half its strength, and none of the surface's own chips: the vehicle's file and the kit
-	// lay hers. The far vehicles' inks copy this one's settings as they are made.)
-	const float Was = VehicleInk->K2_GetScalarParameterValue(TEXT("Roughness"));
+	if (!WornParent.IsValid())
+	{
+		WornParent = Campaign(TEXT("/Game/Campaign/Materials/M_LandWorn.M_LandWorn"));
+	}
+	if (!WornParent.IsValid())
+	{
+		static bool bToldNoWorn = false;
+		if (!bToldNoWorn)
+		{
+			bToldNoWorn = true;
+			UE_LOG(LogTheater, Warning, TEXT("Whole look: worn is on but /Game/Campaign/Materials/M_LandWorn is missing (run Tools/build_content.sh): the vehicles keep the even coat."));
+		}
+		return;
+	}
+	bWornBattle = true;
 	const float Strength = FMath::Clamp(CVarWornStrength.GetValueOnGameThread(), 0.0f, 2.0f);
-	const float Repeat = FMath::Clamp(CVarWornRepeat.GetValueOnGameThread(), 0.2f, 20.0f);
+	const float Mix = FMath::Clamp(CVarWornMix.GetValueOnGameThread(), 0.0f, 1.0f);
 	const float Roughness = FMath::Clamp(CVarWornRoughness.GetValueOnGameThread(), 0.0f, 1.0f);
-	VehicleInk->SetScalarParameterValue(TEXT("Wear"), Strength);
-	VehicleInk->SetScalarParameterValue(TEXT("BlotTiling"), 1.0f / (Repeat * UnitsPerMetre));
-	VehicleInk->SetScalarParameterValue(TEXT("Roughness"), Roughness);
-	UE_LOG(LogTheater, Display, TEXT("Whole look: worn ON: the vehicles' paint broken in patches (wear %.2f, the pattern repeating every %.1f m) and laid flat, roughness %.2f (it was %.2f)"),
-		Strength, Repeat, Roughness, Was);
+	const float Sheen = FMath::Clamp(CVarWornSheen.GetValueOnGameThread(), 0.0f, 4.0f);
+	const float Was = Steel ? Steel->K2_GetScalarParameterValue(TEXT("Roughness")) : 0.0f;
+	// (the mottle's swing at strength 1 runs from about 0.9 to 1.1 of the paint: the roughness moves by its own swing
+	// times the sheen, and is held inside 0 to 1)
+	const float Swing = 0.1f * Strength * Sheen;
+	UE_LOG(LogTheater, Display, TEXT("Whole look: worn ON for this battle: the vehicles' paint broken in patches, two layers repeating every %.1f and %.1f m (the second's share %.2f), wear %.2f, each vehicle her own shift of them; roughness %.2f (the plain steel's %.2f), about %.2f on the dark patches and %.2f on the pale; the planes over the field and the old wrecks keep the plain steel"),
+		FMath::Clamp(CVarWornRepeat.GetValueOnGameThread(), 0.2f, 20.0f), FMath::Clamp(CVarWornRepeat2.GetValueOnGameThread(), 0.2f, 40.0f), Mix, Strength, Roughness, Was,
+		FMath::Clamp(Roughness - Swing, 0.0f, 1.0f), FMath::Clamp(Roughness + Swing, 0.0f, 1.0f));
+}
+
+UMaterialInterface* WholeLook::VehicleInk(UMaterialInstanceDynamic* Steel, int32 Vehicle, UObject* Outer)
+{
+	UMaterialInterface* Worn = WornParent.Get();
+	if (!bWornBattle || !Steel || !Outer || !Worn)
+	{
+		return Steel;
+	}
+	if (const TWeakObjectPtr<UMaterialInstanceDynamic>* Made = WornInks.Find(Vehicle))
+	{
+		if (UMaterialInstanceDynamic* Ink = Made->Get())
+		{
+			return Ink;
+		}
+	}
+	UMaterialInstanceDynamic* Ink = UMaterialInstanceDynamic::Create(Worn, Outer);
+	if (!Ink)
+	{
+		return Steel;
+	}
+	// (the steel's own settings, as LoadInks gave them, then the worn paint's; the shift seeded by her number, so a troop
+	// of one model in line wears as many stains as it has tanks, and the same ones every time the battle is shown)
+	Ink->CopyParameterOverrides(Steel);
+	LayWorn(Ink, HashCombine(GetTypeHash(Vehicle), 0x9E3779B9u));
+	WornInks.Add(Vehicle, Ink);
+	return Ink;
+}
+
+UMaterialInterface* WholeLook::FarParent()
+{
+	return bWornBattle ? WornParent.Get() : nullptr;
+}
+
+void WholeLook::WearFar(UMaterialInstanceDynamic* FarInk, const FString& Model)
+{
+	if (!bWornBattle || !FarInk || !WornParent.IsValid() || FarInk->Parent != WornParent.Get())
+	{
+		return;
+	}
+	LayWorn(FarInk, HashCombine(GetTypeHash(Model), 0x85EBCA6Bu));
+}
+
+UMaterialInterface* WholeLook::MenParent(bool bCrowd)
+{
+	if (!WornOn())
+	{
+		return nullptr;
+	}
+	const int32 Which = bCrowd ? 1 : 0;
+	if (!MenParents[Which].IsValid() && !bMenLooked[Which])
+	{
+		bMenLooked[Which] = true;
+		MenParents[Which] = Campaign(bCrowd ? TEXT("/Game/Campaign/Materials/M_LandCrowdWorn.M_LandCrowdWorn") : TEXT("/Game/Campaign/Materials/M_LandManWorn.M_LandManWorn"));
+		if (!MenParents[Which].IsValid())
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Whole look: worn is on but /Game/Campaign/Materials/%s is missing (run Tools/build_content.sh): the men keep one roughness, and their paint's roughness is not written."),
+				bCrowd ? TEXT("M_LandCrowdWorn") : TEXT("M_LandManWorn"));
+		}
+	}
+	return MenParents[Which].Get();
+}
+
+bool WholeLook::MenRough()
+{
+	return MenParent(false) && MenParent(true);
+}
+
+UMaterialInstanceDynamic* WholeLook::MenInk(UMaterialInstanceDynamic* Made, UObject* Outer)
+{
+	UMaterialInterface* Worn = MenRough() ? MenParent(false) : nullptr;
+	if (!Made || !Outer || !Worn)
+	{
+		return Made;
+	}
+	UMaterialInstanceDynamic* Ink = UMaterialInstanceDynamic::Create(Worn, Outer);
+	if (!Ink)
+	{
+		return Made;
+	}
+	Ink->CopyParameterOverrides(Made);
+	UE_LOG(LogTheater, Display, TEXT("Whole look: worn ON for the men: each paint's roughness read from its points' alpha (written by the men's looks), a point left whole keeping %.2f"),
+		Made->K2_GetScalarParameterValue(TEXT("Roughness")));
+	return Ink;
 }
 
 void WholeLook::FieldLaid(bool bClosedCanopy)
@@ -537,5 +697,6 @@ void WholeLook::FieldGone()
 	bFieldOn = false;
 	bClosedField = false;
 	DawnSkies.Reset();
+	WornInks.Reset();
 	KeepLens();
 }
