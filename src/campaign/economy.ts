@@ -28,6 +28,7 @@ import { isTeam, TEAM_KINDS, TEAMS, teamName, teamsOn, type TeamKind } from './t
 import { TECH, locked, whyNoPara } from './tech';
 import { fieldOut, keepsStores, shortOfOil, supIncome } from './resources';
 import { SIEGE, besieged } from './siege';
+import { atomBill } from './atom';
 import { prizeIncome, prizeOut, prizeRules } from './prizes';
 import { govMul } from './government';
 import { MANPOWER, drawMen, menSpare, raisable, returnMen } from './manpower';
@@ -293,6 +294,9 @@ export function upkeep(g: Game, nat: string): LedgerLine[] {
   // What it pays neutrals for their goods this month (release 2).
   const bought = bargainCost(g, nat);
   if (bought > 0) out.push({ key: 'bargains', label: 'Paid to neutrals for their goods', amount: bought });
+  // What the atomic project drew this month, its plants or the making of more bombs (release 2, atom.ts).
+  const atom = atomBill(g, nat);
+  if (atom > 0) out.push({ key: 'atom', label: 'The atomic plants', amount: atom });
   return out;
 }
 

@@ -17,6 +17,7 @@ import { TECH } from './tech';
 import { oilAtHome } from './world';
 import { footWorn } from './footing';
 import { bombWorn, oilHeld } from './aircampaigns';
+import { atomWorn } from './atom';
 
 export type Good = 'oil' | 'sup';
 
@@ -373,6 +374,8 @@ export interface StoresView {
   /** Of that, what shortage took, and what all-out war took (the nation's footing, ruling 172; 0 with it switched off). */
   hungerLost: number;
   footWorn: number;
+  /** Of that, what atomic strikes on its cities took (release 2, atom.ts; 0 with the project off): it does not come back. */
+  atomWorn: number;
 }
 
 function incomeLines(g: Game, nat: string, good: Good, lanes: Lane[]): ResLine[] {
@@ -464,7 +467,7 @@ export function stores(g: Game, nat: string): StoresView | null {
     const met = good === 'oil' ? st.oilMet : st.supMet;
     return { good, stock: st[good], cap, income, spend, made, need, net, months: net < -1e-9 ? st[good] / -net : Infinity, met, effects: met < 0.995 ? (good === 'oil' ? SHORT_OIL(met) : SHORT_SUP(met)) : [] };
   };
-  return { nat, oil: book('oil'), sup: book('sup'), lanes, willLost: willLost(g, nat), hungerLost: hungerLost(g, nat), footWorn: footWorn(g, nat) };
+  return { nat, oil: book('oil'), sup: book('sup'), lanes, willLost: willLost(g, nat), hungerLost: hungerLost(g, nat), footWorn: footWorn(g, nat), atomWorn: atomWorn(g, nat) };
 }
 
 /** Opens the stocks of every power that keeps them, once, when a grand campaign begins. */
@@ -527,7 +530,8 @@ export function resourcesTick(g: Game, nat: string): void {
 export function willLost(g: Game, nat: string): number {
   // (All-out war wears it too, with the nation's footing switched on: a count of its own above what shortage takes, ruling 172.)
   // (And the bombing of its cities, with the air campaigns on: a small count of its own, ruling 236.2, b549.)
-  return hungerLost(g, nat) + footWorn(g, nat) + bombWorn(g, nat);
+  // (And atomic strikes on its cities, with the atomic project on: atom.ts, the design director's ruling of 25 November.)
+  return hungerLost(g, nat) + footWorn(g, nat) + bombWorn(g, nat) + atomWorn(g, nat);
 }
 
 /** What privation alone has taken from a nation's will to fight: what shortage takes, up to its own ceiling. */

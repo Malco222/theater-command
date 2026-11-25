@@ -1279,6 +1279,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("heavySeas"), Out.bHeavySeas); // (release 2, heavyseas.ts)
 	Object->TryGetBoolField(TEXT("shadowRelay"), Out.bShadowRelay); // (release 2, shadow.ts)
 	Object->TryGetBoolField(TEXT("seekOnce"), Out.bSeekOnce); // (release 2, navy.ts)
+	Object->TryGetBoolField(TEXT("atomBomb"), Out.bAtomBomb); // (release 2, atom.ts)
 	Object->TryGetBoolField(TEXT("settledTowns"), Out.bSettledTowns); // (release 2, buildings.ts)
 	Object->TryGetBoolField(TEXT("r2Switches"), Out.bR2Switches);
 	Object->TryGetBoolField(TEXT("columnsOn"), Out.bColumnsOn);
@@ -4469,6 +4470,17 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 			(*FlyObject)->TryGetStringField(TEXT("tip"), Card.Fly.Tip);
 			(*FlyObject)->TryGetBoolField(TEXT("ok"), Card.Fly.bOk);
 		}
+		// (Release 2, atom.ts) A raid that carries the atomic bomb, and its BACK.
+		Told->TryGetBoolField(TEXT("bomb"), Card.bBomb);
+		const TSharedPtr<FJsonObject>* BackObject = nullptr;
+		if (Told->TryGetObjectField(TEXT("back"), BackObject) && BackObject && BackObject->IsValid())
+		{
+			(*BackObject)->TryGetStringField(TEXT("label"), Card.Back.Label);
+			(*BackObject)->TryGetStringField(TEXT("act"), Card.Back.Act);
+			(*BackObject)->TryGetStringField(TEXT("tip"), Card.Back.Tip);
+			(*BackObject)->TryGetBoolField(TEXT("ok"), Card.Back.bOk);
+		}
+		Card.bBomb = Card.bBomb && !Card.Back.Act.IsEmpty();
 	}
 	const TArray<TSharedPtr<FJsonValue>>* Sections = nullptr;
 	if (Object->TryGetArrayField(TEXT("sections"), Sections))
