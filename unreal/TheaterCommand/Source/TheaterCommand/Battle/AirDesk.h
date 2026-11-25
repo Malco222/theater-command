@@ -135,6 +135,16 @@ namespace AirDesk
 		static std::string BreakOffAllQuestion() { return "Break off every air group? The battle ends here."; }
 
 		int MySideIndex() const { return MyIndex; }
+		/**
+		 * (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z: "i want every air battle playable".) The desk
+		 * read for the defender. The view's chance (sky.chance, AirSim.staffChance) is the raider's whoever he is, and the
+		 * aim slip and the staff's question were written for his own raid. Set, and his side the defence: the top bar's
+		 * "now about" and the staff's question give his own chance, the aim slip speaks of the raid as the enemy's, and
+		 * HAND IT TO THE STAFF asks of the fight. The scene sets it where the Battle rules card's "Scramble your fighters"
+		 * is on (AAirBattle::DefendOn); unset, every word is as it was.
+		 */
+		void SetDefendRead(bool bOn) { bDefendRead = bOn; }
+		bool DefendRead() const { return bDefendRead && MyIndex == 1; }
 		const std::map<int, AirFeed::Label>& Labels() const { return LabelsNow; }
 		const AirFeed::Top& Head() const { return HeadNow; }
 		/**
@@ -161,6 +171,7 @@ namespace AirDesk
 		std::string Me = "att";
 		int MyIndex = 0;
 		std::string Settled;                   // the after card's winner, once read (SettleFrom)
+		bool bDefendRead = false;              // (release 2, the scramble offer) read for the defender (SetDefendRead)
 		bool bStarted = false;
 		double KnotShown = 0.5;                // the bar's knot as drawn, eased toward KnotOf
 		std::map<int, std::string> Called;     // sim.called: kept, as the view sends only what changed

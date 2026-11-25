@@ -758,6 +758,11 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 	S.Show.SetSmooth(!AirOldFlying());
 	S.SkyPlace = AirFeed::PlacingOf(S.Board, First.Groups, 0);
 	S.Desk.Begin(S.Board, First.Head.Me);
+	// (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z: "i want every air battle playable". With the Battle
+	// rules card's "Scramble your fighters" on, a battle he fights as the defender reads as his: the staff's chance his own,
+	// the raid the enemy's. Off, the desk reads as it always has. TC.scrambleStart is an enemy raid he meets himself.)
+	S.Desk.SetDefendRead(DefendOn());
+	S.bScramble = Function == TEXT("scrambleStart");
 	S.Show.Take(First.Head.T, First.Groups, First.Events, First.Ships, &First.Marks); // (release 2: a raid on troops' view.marks; none elsewhere)
 	for (const AirShow::Ship& Ship : First.Ships)
 	{
@@ -3678,7 +3683,9 @@ void AAirBattle::Tick(float DeltaSeconds)
 		}
 		if (BrokenAt >= 0.0)
 		{
-			S.Note = "THE RAID STOPPED HERE: ITS RULES FAILED. NOTHING IS BOOKED; BACK TO THE MAP IN A MOMENT";
+			// (release 2, the scramble offer: an enemy raid he met himself goes back to his staff, who meet it as the month runs on)
+			S.Note = S.bScramble ? "THE BATTLE STOPPED HERE: ITS RULES FAILED. YOUR STAFF MEETS THE RAID; BACK TO THE MAP IN A MOMENT"
+				: "THE RAID STOPPED HERE: ITS RULES FAILED. NOTHING IS BOOKED; BACK TO THE MAP IN A MOMENT";
 			S.NoteAge = -1.0; // (held, and put back each frame: no other note takes its place)
 			if (Now - BrokenAt > 4.0)
 			{
@@ -3858,7 +3865,8 @@ void AAirBattle::Tick(float DeltaSeconds)
 					S.Card.Lines.push_back(bEnded ? "What came of it is on the map." : "Its rules failed at its end, so nothing is booked.");
 					if (!bEnded)
 					{
-						S.Card.Lines.push_back("FLY THE RAID on its card still sends your crews.");
+						// (release 2, the scramble offer: handed back empty, the campaign leaves the raid to his staff, TC.scrambleLeave)
+						S.Card.Lines.push_back(S.bScramble ? "Your staff meets the raid, and the month goes on." : "FLY THE RAID on its card still sends your crews.");
 					}
 				}
 			}
@@ -7499,6 +7507,11 @@ void AAirBattle::WayOut(const TCHAR* Why)
 bool AAirBattle::CampaignLiveOn()
 {
 	return FLandLive::RuleNow(TEXT("flyLive"));
+}
+
+bool AAirBattle::DefendOn()
+{
+	return FLandLive::RuleNow(TEXT("flyDefend"));
 }
 
 void AAirBattle::EndPlay(const EEndPlayReason::Type Reason)

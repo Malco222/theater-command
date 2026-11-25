@@ -1487,6 +1487,30 @@ struct FReadyUnit
 	int32 Corps = INDEX_NONE;
 };
 
+/**
+ * (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z: "i want every air battle playable".) The month stopped
+ * where an enemy raid meets his fighters: the rules' "scramble" object (the contract, air-battles/every-kind/CONTRACT.md
+ * section 7), carried by TC.endMonth's answer in place of the month's card. Who is coming ("GER", "German") and where
+ * ("Kent", its province), the rules' plain words for the card, and the figures when the answer gives them (-1 when it does
+ * not). bDemo: offered by the bridge's stand-in (Rules/scramble-demo.ts), which books nothing.
+ */
+struct FScrambleOffer
+{
+	bool bValid = false;
+	FString Id;
+	FString Kind;
+	int32 Target = INDEX_NONE;
+	FString Name;
+	FString Nation;
+	FString Adjective;
+	FString Words;
+	int32 Bombers = -1;
+	int32 Escorts = -1;
+	int32 Fighters = -1;
+	TArray<FString> Groups;
+	bool bDemo = false;
+};
+
 struct FMonthResult
 {
 	TArray<FMonthStep> Steps;
@@ -1497,6 +1521,7 @@ struct FMonthResult
 	FYearCard Year; // set when the month that opens is a January
 	TArray<FNewsCard> Reel; // the month's stories; empty in a quiet month
 	TArray<FReadyUnit> Ready; // (release 2) the units handed over to him as his month opened
+	FScrambleOffer Scramble; // (release 2) set when the month stopped on an enemy raid he can meet: the rest waits on it
 };
 
 /** One way into a campaign: a nation to lead (or nobody, to watch), with a line about what lies ahead. */

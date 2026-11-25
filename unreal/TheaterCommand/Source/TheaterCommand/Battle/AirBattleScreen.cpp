@@ -814,8 +814,13 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 		if (bFighters)
 		{
 			X += 10.0;
-			X = Button(TEXT("STAY CLOSE"), TEXT("close"), X, SY, false, bLive, 3);
-			X = Button(TEXT("RANGE AHEAD"), TEXT("ahead"), X, SY, false, bLive, 3);
+			// (release 2, the scramble offer: read for the defender, he has no bombers of his own for his fighters to stay
+			// close to or range ahead of, so only HUNT is offered; the rules would refuse the escort's orders)
+			if (!S.Desk.DefendRead())
+			{
+				X = Button(TEXT("STAY CLOSE"), TEXT("close"), X, SY, false, bLive, 3);
+				X = Button(TEXT("RANGE AHEAD"), TEXT("ahead"), X, SY, false, bLive, 3);
+			}
 			X = Button(TEXT("HUNT"), TEXT("hunt"), X, SY, false, bLive, 3);
 			// (release 2, a raid on troops: Brian, 24 November 2026, "if a bomber group is bombing troops instead of a factory
 			// or town and they get intercepted than i want that playable"; his fighter groups sent down the column's road)

@@ -207,7 +207,9 @@ namespace AirDesk
 		Out.TheirSide = MyIndex == 0 ? Sky.DefAdj : Sky.AttAdj;
 		// The top bar (b384, land's form): the card's chance and the staff's now, his side's.
 		const double Card = MyIndex == 0 ? Sky.CardChance : 1.0 - Sky.CardChance;
-		Out.Chance = (Sky.CardChance > 0.0 ? "Card about " + Percent(Card) + " \xC2\xB7 now about " : std::string("Now about ")) + Percent(H.Chance);
+		// (release 2, the scramble offer: the view's chance is the raider's; read for the defender, it is turned to his)
+		const double StaffNow = DefendRead() ? 1.0 - H.Chance : H.Chance;
+		Out.Chance = (Sky.CardChance > 0.0 ? "Card about " + Percent(Card) + " \xC2\xB7 now about " : std::string("Now about ")) + Percent(StaffNow);
 		// (release 2, a raid on troops: what the raid has done to the army so far, as the rules count it, view.marks.cut;
 		// a raid cuts 4% of an army's organisation at most)
 		if (OnTroops())
@@ -300,6 +302,11 @@ namespace AirDesk
 		else if (H.bRuined)
 		{
 			Out.AimState = "A factory is wrecked";
+		}
+		else if (DefendRead())
+		{
+			// (release 2, the scramble offer: the raid is the enemy's, and he is the one it costs)
+			Out.AimState = H.Ratio >= 1.0 ? "So far the raid's bombs have done more than it has cost the enemy" : "So far the raid has cost the enemy more than its bombs have done";
 		}
 		else
 		{
@@ -479,9 +486,13 @@ namespace AirDesk
 	std::string Desk::StaffQuestion() const
 	{
 		const bool bSky = Sky.PlaceKind == "sky" || Sky.PlaceKind == "superiority";
-		std::string Q = bSky ? "Hand the fight to the staff?" : "Hand the raid to the staff?";
-		if (!HeadNow.bFired) return Q + " No shot has been fired: they settle the whole raid at once. They give you about " + Percent(HeadNow.Chance) + " to win it.";
-		return Q + " They settle the rest at once, from where it stands now. They give you about " + Percent(HeadNow.Chance) + " to win it.";
+		// (release 2, the scramble offer: read for the defender, the raid is the enemy's to hand over, the fight his, and
+		// the chance the staff give him his own, not the raider's)
+		const bool bDefending = DefendRead();
+		std::string Q = bSky || bDefending ? "Hand the fight to the staff?" : "Hand the raid to the staff?";
+		const double Yours = bDefending ? 1.0 - HeadNow.Chance : HeadNow.Chance;
+		if (!HeadNow.bFired) return Q + " No shot has been fired: they settle the whole raid at once. They give you about " + Percent(Yours) + " to win it.";
+		return Q + " They settle the rest at once, from where it stands now. They give you about " + Percent(Yours) + " to win it.";
 	}
 
 	Subject Choose(const std::vector<AirShow::PlaneOut>& Planes, const std::vector<int>& Firing, const AirShow::Vec& Near, int Avoid)

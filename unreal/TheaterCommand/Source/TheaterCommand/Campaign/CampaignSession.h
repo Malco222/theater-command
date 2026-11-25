@@ -370,6 +370,29 @@ public:
 	 * the rules' note, the groups seen to fly it, and its picture of the war taken. False where it could not be read or did not go.
 	 */
 	bool SettleAirLive(const FString& EndJson, FString& OutNote, TArray<FSortie>* OutSorties = nullptr);
+
+	// ---- (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z: "i want every air battle playable".) The month
+	// may stop where an enemy raid meets his fighters (EndMonth's FMonthResult::Scramble); he flies the defence himself
+	// (AAirBattle::BeginLiveCall with TC.scrambleStart and ScrambleArgs) or leaves it to his staff. The calls are the
+	// contract's (air-battles/every-kind/CONTRACT.md section 7): until the warplanes thread's month stop lands, the
+	// bridge's stand-in (Rules/scramble-demo.ts) answers them, and books nothing.
+	/** TC.scrambleMode(Mode) before TC.endMonth: "every", "big" or "never". Rules without it are not asked again (logged once): harmless.
+	 * "never" over "never" is not sent: the rules start there at every load, so with the switch off nothing new is asked. */
+	bool TellScrambleMode(const FString& Mode);
+	/** (-TheaterAirScrambleDemo) TC.scrambleDemo(): the stand-in's offer of an enemy raid on him now, or false where there is none. Changes nothing in the war. */
+	bool ScrambleDemo(FScrambleOffer& Out);
+	/** TC.scrambleLeave(Id, { rest }): his staff meets the raid; bRest (the card's tick) settles the rest of the month's raids too. OutJson: its answer as given. */
+	bool ScrambleLeave(const FString& Id, bool bRest, FString& OutJson);
+	/** TC.scrambleStart's arguments, ["Id"], for AAirBattle::BeginLiveCall. */
+	static FString ScrambleArgs(const FString& Id);
+	/**
+	 * The month's next answer after a scramble (TC.battleEnd's at CONTINUE, or TC.scrambleLeave's), read as EndMonth reads
+	 * TC.endMonth's: true where it is a month's answer (it has the month's steps, or the next scramble with its id), its
+	 * picture of the war taken. False where it is not (the stand-in's { ok, note }, a scramble with no id, or nothing): Out
+	 * and the war's picture are left as they were. OutNote: the answer's note, where it has one, either way.
+	 */
+	bool ReadMonthAnswer(const FString& Json, FMonthResult& Out, FString& OutNote);
+	// ---- (end release 2, the scramble offer)
 	/** True from an order given aside until its Then has been run. */
 	bool IsAnswering() const { return Aside.IsValid() || static_cast<bool>(AsideThen); }
 	/** Once a frame, from the player's controller: where the answer is in, it is taken and its Then is run. bWait: waited for, where it is still being worked out. */
@@ -440,6 +463,12 @@ private:
 	mutable FString SubScene;
 	/** The rules have no month's scene (the stand-in rules, or rules before D1): nothing is asked of them. */
 	bool bNoSubScene = false;
+	/** (Release 2, the scramble offer) The rules have no TC.scrambleMode (the stand-in rules, or rules before it): it is not asked again. */
+	bool bNoScrambleMode = false;
+	/** (Release 2, the scramble offer; the reviewer, 25 November) What TC.scrambleMode was last told by this load of the
+	 * rules ("never" until told: the rules start there). "never" is not sent again over "never", so that with "Scramble
+	 * your fighters" off no new call is made. */
+	FString ScrambleModeSent = TEXT("never");
 	int32 WarsBegun = 0;
 
 	TUniquePtr<FRulesHost> Host;

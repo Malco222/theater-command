@@ -142,6 +142,14 @@ namespace
 		// art director and 45 fps; -TheaterLandRuleOldWrecks turns it on for a run. The 3D's -TheaterLandOldWrecks=N and
 		// -TheaterLandOldWreckMonths=M stand-ins are other flags.)
 		{ TEXT("wrecks"), TEXT("Old wrecks"), TEXT("A field fought over before keeps the burnt-out tanks and armoured vehicles those battles left on it. Off: the field is cleared between battles."), TEXT("TheaterLandNoOldWrecks"), false, TEXT("TheaterLandRuleOldWrecks") },
+		// (Release 2, the scramble offer: Brian, 24 November 2026 22:21Z, "i want every air battle playable". In the enemy's
+		// month the campaign stops where an enemy raid on his ground meets his fighters and offers SCRAMBLE: taken, he flies
+		// the defence in the battle in the air (AAirBattle, his side 'def'), and the month runs on with what the battle
+		// decided. The month's stop is the warplanes thread's (air-battles/every-kind/CONTRACT.md section 7); until it lands,
+		// -TheaterAirScrambleDemo has the bridge's stand-in offer one raid after the month, booking nothing. Off until that
+		// stop lands, the Mac holds 45 fps, the art director and a playtest pass it (ruling 217); -TheaterAirRuleDefend turns
+		// it on for a run. The campaign reads it (AAirBattle::DefendOn), as flyLive; it is never sent to the land rules.)
+		{ TEXT("flyDefend"), TEXT("Scramble your fighters"), TEXT("When an enemy raid on your ground meets your fighters, the month stops on a SCRAMBLE card: take it and you fly your fighters against the raid in the battle in the air. Off: your staff meets every enemy raid."), TEXT("TheaterAirNoRuleDefend"), false, TEXT("TheaterAirRuleDefend") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }
@@ -249,9 +257,9 @@ bool FLandLive::Start(const FString& InKey, int32 InSeed, const FString& InMe, b
 	Switches.Reset();
 	for (int32 R = 0; R < RuleCount(); ++R)
 	{
-		if (FString(LandRuleTable[R].Key).StartsWith(TEXT("fly")))
+		if (FString(LandRuleTable[R].Key).StartsWith(TEXT("fly"), ESearchCase::CaseSensitive))
 		{
-			continue; // (the air battles' own switches, "flyLive" and "flyTroops", on the same card: the campaign reads them, the land rules never do)
+			continue; // (the air battles' own switches, on the same card: flyLive, flyTroops, flyDefend and those to come; the campaign reads them, the land rules never do)
 		}
 		const bool bOn = RuleNow(LandRuleTable[R].Key);
 		Switches += FString::Printf(TEXT(",\"%s\":%s"), LandRuleTable[R].Key, bOn ? TEXT("true") : TEXT("false"));

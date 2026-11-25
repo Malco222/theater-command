@@ -128,6 +128,14 @@ public:
 	 * "-TheaterAirRuleTroops" on for one run, "-TheaterAirNoRuleTroops" off); any other kind false. Battle/AirBattleTroops.cpp.
 	 */
 	static bool CampaignLiveOn(const FString& Kind);
+	/**
+	 * (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z: "i want every air battle playable".) The switch for
+	 * the enemy's raids he meets himself: the Battle rules card's "Scramble your fighters" (FLandLive's rule "flyDefend"),
+	 * off by default; "-TheaterAirRuleDefend" turns it on for one run, "-TheaterAirNoRuleDefend" off. On, the month may
+	 * stop on a SCRAMBLE card where an enemy raid meets his fighters, and TC.scrambleStart opens the battle with his side
+	 * the defender (BeginLiveCall). Off: his staff meets every enemy raid, as before.
+	 */
+	static bool DefendOn();
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
