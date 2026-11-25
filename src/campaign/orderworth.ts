@@ -19,9 +19,10 @@
 //     attack from the sector into a province next door the staff can see and the plan attacks (any, where it names
 //     none), with the order going in and without it, read as attack strength: what the attack would have to gain on
 //     its own to move the odds as far.
-//   - The defence card where the plan holds, or names nothing there (nor anywhere, for a staff that ran no campaign
-//     this month): the card's defence (D) of the sector against the attack the enemy it can see next door could
-//     bring, with the order there and without it.
+//   - The defence card where the plan holds, or names nothing there: the card's defence (D) of the sector against the
+//     attack the enemy it can see next door could bring, with the order there and without it.
+// A player who runs his own army has his own orders for a plan: the fronts next to a province his corps attacked this
+// month or the month just ended read the attack card (the design director, 21:44Z; plannow.ts hisOrders).
 // The order is weighed at the sector where it adds most and there is room for it (as teamsUp and gunsUp send them),
 // joining the works of the line it stands in (the fewest months of them). Orders of the same kind already on order
 // stand there too, so a want is not bought twice. A new formation is full, at a new corps' readiness, training and

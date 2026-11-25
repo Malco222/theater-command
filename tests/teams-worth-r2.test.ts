@@ -183,6 +183,30 @@ describe('one card, not a sum: the front decides the card, not the order\'s kind
     expect(new Reckoning(g, 'GER').worth('mg')).toBeCloseTo(going.mg, 12);
   });
 
+  it('a player who runs his own army: his own attacks this month or the month just ended are his plan', () => {
+    const g = startOpen(createGame(3, 'GER'));
+    setTeams(g, true);
+    const from = set(g);
+    const target = g.regions.find((r) => r.ctrl === 'POL' && r.nb.includes(from.id) && r.units.some((u) => u.nat === 'POL' && !u.dead))!;
+    const card = (): string | undefined => new Reckoning(g, 'GER').cards().get(from.name);
+    const attacked = (turn: number, at: Region): void => { g.reports.push({ turn, week: 1, region: at.id, regionName: at.name, attNat: 'GER', defNat: 'POL' } as never); };
+    // No attack of his: he holds, and the card is the defence's.
+    expect(card()).toBe('def');
+    // His corps went in here the month just ended: the front reads the attack card.
+    attacked(g.turn - 1, target);
+    expect(card()).toBe('atk');
+    // An attack two months back is no order of this month's.
+    g.reports.length = 0;
+    attacked(g.turn - 2, target);
+    expect(card()).toBe('def');
+    // Nor is an attack somewhere else.
+    const far = g.regions.find((r) => r.ctrl === 'POL' && !from.nb.includes(r.id) && r !== target)!;
+    attacked(g.turn, far);
+    expect(card()).toBe('def');
+    attacked(g.turn, target);
+    expect(card()).toBe('atk');
+  });
+
   it('the campaign sets the plan as it reads the month: a staff at war has one when its month is over', () => {
     const g = grand();
     setWar(g, 'GER', 'POL');
