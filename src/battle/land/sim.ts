@@ -22,6 +22,7 @@ import { patrolSize } from './rules';
 import { armyNames, bendAt, deploy, joinBlocks, makeBlocks, wetUnder, type LandOrder, type LandUnit } from './units';
 import { Drill, wreckOffset } from './drill';
 import { phoneFallback, phoneLines, type PhoneFallback } from './rules';
+import { ownTeamParents } from './own-teams';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
 
@@ -331,9 +332,19 @@ export class LandBattle implements BattleSim<LandUnit> {
    *     strength left, stopped being worn, and battles ran to the clock. The line's and the guns' are added as fitted,
    *     and LAND.teams is untouched.
    *   - the defence's staff never counts a team block firing from far back as a neighbour in a fight (ai.ts defend).
+   *   - a team is its own division's, never a gun (the design director, 25 November 20:03Z, on the ground thread's
+   *     teams-traces-1125.md). At the brink a force's own team block stands in its army's sums as its division's line
+   *     stands (wornShare, brokenShare, freshShare: ownLine). Off, as it was: a team far back, never worn, was whole
+   *     power in the sum, so the line had to be worn that much more before its army was spent. A team block with no
+   *     division of its own (a set piece's battalion, a brigade the player built) counts as itself, on or off.
+   *   - a team fires on the target in its reach its own weapon harms most, the nearest among those it harms alike
+   *     (targetOf), and the attack's staff no longer lays it on the main effort's target as it lays guns (ai.ts
+   *     planned). Off, as it was: laid with the guns, a machine gun spent half its fire on tanks.
    * A battle with no team block on the field is the same on or off. Off unless whoever opens the field turns it on.
    */
   teamsRule = false;
+  /** Each own team block's parent force (own-teams.ts ownTeamParents), by the forces' ids: read once from the ticket. */
+  private teamParent: Map<number, number>;
   /** The computer's tank blocks going round to a tank block's flank (ai.ts): where to, at whom, since when. */
   readonly flanking = new Map<number, { target: number; at: [number, number]; since: number }>();
   /** Each block's tank or gun model, as the rules weigh it (armour.ts vehicleOf): null for the rest. */
@@ -510,6 +521,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Each side's blocks share out exactly the power the card counted, so the odds on the field are the card's.
     const A = ticket.reckoning.A, D = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds);
     this.power = { att: A, def: D };
+    this.teamParent = ownTeamParents(ticket);
     const att = makeBlocks('att', ticket.att, A, 1, undefined, ticket.turn);
     const def = makeBlocks('def', ticket.def, D, att.length + 1, undefined, ticket.turn);
     this.units = [...att, ...def];
@@ -2696,6 +2708,11 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Hidden in the woods (release 2): it holds its fire till the enemy is close, unless it is sent in.
     if (u.hid && u.order?.kind !== 'attack') reach = Math.min(reach, this.ambushAt(u));
     let best: LandUnit | null = null, score = Infinity;
+    // Support teams in battle (teamsRule; the design director, 25 November 20:03Z): a team fires on the target in its
+    // reach its own weapon harms most (a machine gun does little to tanks, a mortar little close in: LAND.teams' armour
+    // and close), the nearest as every block reckons it among those it harms alike.
+    const T = this.teamsRule && u.team ? LAND.teams[u.team] : null;
+    let harm = 0;
     for (const e of this.units) {
       // A block hidden from its side is never struck: nobody there knows it is there.
       if (e.side === u.side || !live(e) || e.hid) continue;
@@ -2704,6 +2721,12 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (u.order?.kind === 'attack' && u.order.target === e.id) return e;
       const off = Math.abs(turn(u.face, bearing(u.x, u.y, e.x, e.y)));
       const s = d * (1 + off) * (e.state === 'routing' ? 2 : 1);
+      if (T) {
+        const h = (e.kind === 'arm' ? T.armour : 1) * (d < T.closeAt ? T.close : 1);
+        if (h < harm - 1e-9 || (h <= harm + 1e-9 && s >= score)) continue;
+        harm = h; score = s; best = e;
+        continue;
+      }
       if (s < score) { score = s; best = e; }
     }
     // Firing on cover (reconnaissance by fire): nothing else in reach, it strikes blind at what hides near that point.
@@ -3567,16 +3590,65 @@ export class LandBattle implements BattleSim<LandUnit> {
     return s;
   }
 
+  /**
+   * A force's own team block's division on the field (own-teams.ts): the line blocks of the force it was taken from.
+   * Empty for every other block, and for a team block with no division of its own.
+   */
+  ownLine(u: LandUnit): LandUnit[] {
+    if (!u.team) return [];
+    const parent = this.teamParent.get(u.corps);
+    return parent === undefined ? [] : this.units.filter((p) => p.corps === parent && !p.team);
+  }
+
+  /**
+   * The power of its force's own team blocks that stands with a line block (0 for a block whose force brought none):
+   * each team block's shared among its division's line blocks by their power. The 8% a division gave its teams is
+   * still the division's weight (the staff's plan, ai.ts makePlan, with teamsRule).
+   */
+  ownTeamsPower(u: LandUnit): number {
+    if (u.team || !this.teamParent.size) return 0;
+    let n = 0;
+    for (const t of this.units) {
+      if (!t.team || this.teamParent.get(t.corps) !== u.corps) continue;
+      const line = this.ownLine(t), whole = line.reduce((a, p) => a + p.power0, 0);
+      if (whole > 0 && line.includes(u)) n += t.power0 * (u.power0 / whole);
+    }
+    return n;
+  }
+
+  /**
+   * Support teams in battle (teamsRule): of a force's own team block, the share that stands in a sum at the brink as
+   * its division's line stands: `part` of each of its line blocks over their `whole`. Null where the block counts as
+   * itself: the rule off, no team block, or one with no division of its own on the field.
+   */
+  private asItsLine(u: LandUnit, whole: (p: LandUnit) => number, part: (p: LandUnit) => number): number | null {
+    if (!this.teamsRule || !u.team) return null;
+    const line = this.ownLine(u);
+    if (!line.length) return null;
+    const all = line.reduce((a, p) => a + whole(p), 0);
+    return all > 0 ? line.reduce((a, p) => a + part(p), 0) / all : null;
+  }
+
   private brokenShare(s: Side): number {
+    const running = (u: LandUnit): boolean => u.state === 'routing' || u.state === 'gone';
     let gone = 0;
-    for (const u of this.units) if (u.side === s && (u.state === 'routing' || u.state === 'gone')) gone += weightOf(u);
+    for (const u of this.units) {
+      if (u.side !== s) continue;
+      const k = this.asItsLine(u, weightOf, (p) => (running(p) ? weightOf(p) : 0));
+      if (k !== null) gone += weightOf(u) * k;
+      else if (running(u)) gone += weightOf(u);
+    }
     return gone / this.power[s];
   }
 
   /** The share of a side's power worn away on the field (strength lost, before anyone runs). */
   wornShare(s: Side): number {
     let worn = 0;
-    for (const u of this.units) if (u.side === s) worn += u.power0 * (1 - u.str / u.str0);
+    for (const u of this.units) {
+      if (u.side !== s) continue;
+      const k = this.asItsLine(u, (p) => p.power0, (p) => p.power0 * (1 - p.str / p.str0));
+      worn += u.power0 * (k ?? 1 - u.str / u.str0);
+    }
     return worn / this.power[s];
   }
 
@@ -3631,7 +3703,12 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   private freshShare(s: Side): number {
     let n = 0;
-    for (const u of this.units) if (u.side === s && fighting(u) && this.fresh(u)) n += weightOf(u);
+    for (const u of this.units) {
+      if (u.side !== s) continue;
+      const k = this.asItsLine(u, weightOf, (p) => (fighting(p) && this.fresh(p) ? weightOf(p) : 0));
+      if (k !== null) n += weightOf(u) * k;
+      else if (fighting(u) && this.fresh(u)) n += weightOf(u);
+    }
     // A corps still coming up from next door has not been in the fight: it holds its army at the brink.
     for (const c of this.coming) if (c.u.side === s) n += c.u.priced!;
     return n / this.power[s];
