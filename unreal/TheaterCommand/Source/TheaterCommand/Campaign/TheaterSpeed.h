@@ -368,6 +368,17 @@ namespace TheaterSpeed
 		bool bOwn = false;
 	};
 
+	/**
+	 * (Release 2, the far side: the art director's seam-2, 25 November 2026.) The whole world's chart goes round, and
+	 * what the screen draws at a place on the table (a town's plate, a country's name, a badge over a harbour) is given
+	 * at the place's own turn of the world, counted from the chart's seam at 141 W. Looked at from the other side of
+	 * the seam, that is a whole world from the eye: California had no name from over Hawaii. Told where the eye looks
+	 * along the table's east (the world's +Y) and how far round the world is, FEye::Project counts every point in the
+	 * turn of the world nearest the eye. Span 0 (a table with edges, and every table until this is called) leaves each
+	 * point as it is given, and the answer the same to the bit. The map tells it every frame (UpdateForCamera).
+	 */
+	void RoundWorld(double EyeAlong, double Span);
+
 	/** (for THEATER_SPEED_SCOPE) */
 	int32 SlotFor(const TCHAR* Name);
 	void AddTime(int32 Slot, uint64 Cycles);

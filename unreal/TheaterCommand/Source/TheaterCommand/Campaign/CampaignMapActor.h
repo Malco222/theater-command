@@ -322,6 +322,12 @@ public:
 	double NearX(double X, double BesideX) const;
 	void RoundPiece(AArmyPiece* Piece) const;
 	/**
+	 * (Release 2, the far side: seam-2.) Whether what lies within sight of the chart's seam is shown from both sides of
+	 * it: the far side on, and tc.Far.OverSeam not 0. Then the screen counts its names, plates and badges in the turn of
+	 * the world nearest the eye (TheaterSpeed::RoundWorld).
+	 */
+	bool OverSeam() const;
+	/**
 	 * A province crowded with the flags of one side (two armies or more) shows one flag, the player's own if it is there, with a count
 	 * of the others beside it; pointed at or picked, it fans them all out. This gives, for each province that is
 	 * folded up, the piece that is shown and how many are put away behind it.

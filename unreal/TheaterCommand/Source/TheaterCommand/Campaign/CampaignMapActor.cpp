@@ -108,6 +108,14 @@ namespace
 		return bOnTheLine || CVarFlakRing.GetValueOnGameThread() != 0;
 	}
 
+	// (Release 2, the far side: the art director's seam-2, 25 November 2026.) With the whole world on the table, what
+	// lies within sight of the chart's seam is shown from both sides of it: the screen's names and plates, the lines and
+	// towns laid on the table, and the pieces. On as it comes, and it does nothing without the far side. 0 is the table
+	// as the third far bundle left it, everything laid once, for the Mac to set the one against the other.
+	TAutoConsoleVariable<int32> CVarOverSeam(
+		TEXT("tc.Far.OverSeam"), 1,
+		TEXT("With the far side on, 1 shows what lies within sight of the chart's seam (141 W) from both sides of it; 0 lays everything once, as before. Release 2."));
+
 	const TCHAR* SurfaceMaterialPath = TEXT("/Game/Campaign/Materials/M_MapSurface.M_MapSurface");
 	const TCHAR* SolidMaterialPath = TEXT("/Game/Campaign/Materials/M_Solid.M_Solid");
 	const TCHAR* HighlightMaterialPath = TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight");
@@ -410,6 +418,11 @@ double ACampaignMapActor::LaidX(double X) const
 		return X;
 	}
 	return X - FMath::FloorToDouble((X - Data.Charted.Min.X) / Data.WorldWidth) * Data.WorldWidth;
+}
+
+bool ACampaignMapActor::OverSeam() const
+{
+	return Data.bFar && Data.Charted.bIsValid && Data.WorldWidth > 0.0 && CVarOverSeam.GetValueOnGameThread() != 0;
 }
 
 double ACampaignMapActor::NearX(double X, double BesideX) const
@@ -16655,6 +16668,9 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	LastAskedYaw = CameraYaw;
 	LastAskedFocus = CameraFocus;
 	bViewAsked = true;
+	// (Release 2, the far side: seam-2. What the screen draws at a place on the table is counted in the turn of the world
+	// nearest the eye; on a table with edges, as it is given.)
+	TheaterSpeed::RoundWorld(CameraFocus.Y, OverSeam() ? Data.WorldWidth * UnitScale : 0.0);
 	if (bUpdatesHeld)
 	{
 		return;
