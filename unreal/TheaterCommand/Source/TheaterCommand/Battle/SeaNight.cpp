@@ -390,7 +390,7 @@ UProceduralMeshComponent* FSeaNight::Mesh()
 	if (UMaterialInterface* Beam = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Beam.M_Beam")))
 	{
 		UMaterialInstanceDynamic* Shaft = UMaterialInstanceDynamic::Create(Beam, Made);
-		Shaft->SetScalarParameterValue(TEXT("Strength"), ShaftGlow);
+		Shaft->SetScalarParameterValue(TEXT("Strength"), SeaNightParts::ShaftGlow);
 		Made->SetMaterial(ShaftSection, Shaft);
 	}
 	else
@@ -400,7 +400,7 @@ UProceduralMeshComponent* FSeaNight::Mesh()
 	if (UMaterialInterface* Glow = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Glow.M_Glow")))
 	{
 		UMaterialInstanceDynamic* Lit = UMaterialInstanceDynamic::Create(Glow, Made);
-		Lit->SetScalarParameterValue(TEXT("Strength"), StarGlow);
+		Lit->SetScalarParameterValue(TEXT("Strength"), SeaNightParts::StarGlow);
 		Made->SetMaterial(GlowSection, Lit);
 	}
 	else

@@ -1555,8 +1555,11 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 	// nothing is drawn. The gale is false here until step 14(c) lands it (the sea gale switch, another thread's, which is not
 	// built and so is read nowhere yet): Beaufort 7 and over, its green seas and spindrift, are the gale's own, and that step
 	// passes its own flag in on this line. The spray's core takes winds to the gale's 24.4 m/s and gates 7 and over behind it
-	// (Battle/FleetSpray, held to it by Tools/sea_waves/spray_test.cpp).
-	FHeavyWeather::Open(Weather, SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaSpray="), false, Seed);
+	// (Battle/FleetSpray, held to it by Tools/sea_waves/spray_test.cpp). The switch is taken here, in its place among the
+	// others, and the last battle's spray dropped at once (a recording that cannot be read leaves none); the spray is made
+	// once the battle's seed is read, below.
+	const bool bSeaSpray = SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaSpray=");
+	Weather.Reset();
 	const bool bSeaIce = SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaIce=");
 	// (funnel smoke wherever the kit has its own "funnel" kind; with a kit before it, none: the air trail borrowed for it
 	// stood as a fence of streaks behind a ship, the first Mac frames of 21 November. "-TheaterSeaNoFunnels" for none.)
@@ -1581,6 +1584,7 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 		return false;
 	}
 	const uint64 Seed = Rec.Seed ? Rec.Seed : 239;
+	FHeavyWeather::Open(Weather, bSeaSpray, false, Seed); // S6 hook (heavy weather): the bow sheets, with the battle's seed (above)
 	State = MakeShared<FSeaBattleState>(Seed);
 	FSeaBattleState& S = *State;
 	S.Rec = std::move(Rec);
