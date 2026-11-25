@@ -505,7 +505,8 @@ namespace
 			return true;
 		}
 		// (each setting laid, then 1.5 s for the picture to settle on it (the filtering's samplers made again, the
-		// upscaler's history filled on a still view), the still asked, and 0.5 s for it to be written)
+		// upscaler's history filled on a still view), the still asked, and 1.5 s more for it to be written and for the
+		// Mac's own screen capture, which the crisp look is judged from, to be taken on the log's line)
 		LookTimeHoldIn += DeltaSeconds;
 		if (LookTimeHoldStep < LookTimeSets.Num())
 		{
@@ -516,7 +517,7 @@ namespace
 				FScreenshotRequest::RequestScreenshot(File, false, false);
 				UE_LOG(LogTheater, Display, TEXT("Whole look timing: view %d, %s: still %s"), LookTimeHoldAt + 1, *LookTimeSets[LookTimeHoldStep].Name, *File);
 			}
-			if (LookTimeHoldIn >= 2.0f)
+			if (LookTimeHoldIn >= 3.0f)
 			{
 				LookTimeHoldIn = 0.0f;
 				bLookTimeHoldShot = false;

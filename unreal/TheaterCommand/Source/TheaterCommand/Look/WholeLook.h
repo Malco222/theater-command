@@ -91,8 +91,9 @@ class USkyLightComponent;
  * them, and their mean give or take its standard error. Frames over a tenth of a second (a still, a bake) are left out.
  * Held views for the art director's pairs: "-TheaterLookTimeHold=20,60,117" (seconds after the field is laid, by the
  * clock, not the battle's own time) pauses the battle at each, lays every setting in turn on the one still view (1.5 s
- * to settle, then a still, full size, no interface) into "-TheaterLookTimeStills=<folder>" (Saved/LookTime by default)
- * as held-<view>-<setting>.png, then lets the battle go and takes the timing up from a fresh window.
+ * to settle, then a still, full size, no interface, then 1.5 s held for a screen capture on the log's line) into
+ * "-TheaterLookTimeStills=<folder>" (Saved/LookTime by default) as held-<view>-<setting>.png, then lets the battle go
+ * and takes the timing up from a fresh window.
  */
 namespace WholeLook
 {
