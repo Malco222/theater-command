@@ -99,7 +99,8 @@ describe("Japan's place in the technology tree", () => {
     const g = seat('JAP');
     for (const nat of ['GER', 'UK', 'FRA', 'SOV', 'ITA', 'USA', 'JAP']) expect(teamsOf(g, nat), nat).toBe(2);
     expect(teamsOf(g, 'CHN')).toBe(1);
-    expect(TECH.ai.order.JAP).toEqual(['naval', 'air', 'land', 'industry', 'doctrine']);
+    // (The historian's read of 25 November, marked memory: industry ahead of the army's arms.)
+    expect(TECH.ai.order.JAP).toEqual(['naval', 'air', 'industry', 'land', 'doctrine']);
   }, 300000);
 
   it('leaves every older row of the tree as it was', () => {
