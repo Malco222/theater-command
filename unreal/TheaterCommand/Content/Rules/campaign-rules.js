@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f2a3fce7 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of aaae410d 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -12650,6 +12650,7 @@
     airWeight: () => airWeight,
     airfieldsHold: () => airfieldsHold,
     assessAir: () => assessAir,
+    backOn: () => backOn,
     bombLaw: () => bombLaw,
     bomberDefence: () => bomberDefence,
     bookCloseAir: () => bookCloseAir,
@@ -12667,11 +12668,13 @@
     crowding: () => crowding,
     dayAim: () => dayAim,
     deckBred: () => deckBred2,
+    defendBattles: () => defendBattles,
     effortBattles: () => effortBattles,
     fieldClass: () => fieldClass,
     fieldOrder: () => fieldOrder,
     fieldRoom: () => fieldRoom,
     fieldServes: () => fieldServes,
+    fightBack: () => fightBack,
     fighterTech: () => fighterTech,
     fightersOver: () => fightersOver,
     flakGuns: () => flakGuns,
@@ -12708,6 +12711,8 @@
     poolIn: () => poolIn,
     previewAir: () => previewAir,
     raid: () => raid,
+    raiseAirForce: () => raiseAirForce,
+    ratedAir: () => ratedAir,
     rebaseAir: () => rebaseAir,
     rungsOf: () => rungsOf,
     seaKm: () => seaKm,
@@ -12847,7 +12852,9 @@
       _note: "The computer's air staff. escortReady is the least readiness at which a fighter group flies escort. raids is how every computer nation at war plans raids of its own, at every level: each month 'share' of its bomber groups fit to fly go out (a group is fit with 'least' bombers and readiness 'ready'), each against the best target among the 'look' most promising it can reach, and only where the forecast gives a chance of success of 'success' or better, a gain of 'worth' aircraft or more, and bomber losses of no more than 'loss'. 'rail' is what a province with a junction and no factory is worth beside one with industry. It flies up to 'sweeps' fights for the sky a month, over front where its fighters go in at 'sky' times the odds that win it; 'skyWorth' is what the sky over an army's front is worth to it, in aircraft. The harder levels replace share, least, loss and rail for a rival (difficulty.json, bombing); the easier ones cut a rival's share. 'sour' is how a staff gives up a poor trade: a raid on factories that loses 'dear' aircraft or more and is worth less than 'trade' for each one lost, 'times' running on the same target, is not flown there again for 'rest' months (a wrecked factory or a cut railway makes it a good month). 'beach' is for a player who has named a crossing as their plan and handed the air war to the staff: it brings fighter groups up to airfields within reach of the beach, up to 'monthly' a month, until 'groups' are in reach, leaves at least 'home' guarding the homeland, and puts none on an airfield that is already full; and it sends every fit fighter group in reach up together to fight for the sky over the beach in any month it expects to win it, at 'sky' times the odds that win a sky (a staff's own offensives keep the wider margin above). A computer nation's own staff does not use it.",
       escortReady: 0.5,
       basing: { _note: "Ruling 227 (b428): each month a staff bases its fighter groups by the threat (air.ts baseByThreat): every place where the nation has troops, or its own cities and works, asks for a share of its fighters as large as its share of the enemy aircraft that can reach it (fighters and bombers against troops, bombers against cities; each enemy group counted once at its real weight, airwar.json 'weight', shared among the places it reaches). A group moves to the airfield where it meets most of what is still asked for, only when that is more than 'better' times what it meets where it is, plus 'least' of its own fighters. Ruling 52(a): every stretch of front asks for a standing share besides, by the divisions the nation has there, whether or not enemy aircraft can reach it: 'presence' of all that the threat asks for, and every fighter where nothing threatens at all. So a staff with no enemy air force over it still brings its fighters up behind its army. And where a stretch of its front has stood beyond the reach of every airfield its fighters could use for 'fields' months running, a computer staff orders an airfield from the arsenal behind it (arsenal.ts aiAirfields), at a player's price and one at a time; a front that begins a new war out of reach is not waited on. And a group that can reach ground an enemy holds from where it stands moves only to a field from which it still can. A group out of the fight whose best field lies beyond a month's flight (air.json 'ferry') goes there by stages, each month to the open field within a month's flight that lies nearest to it. And with 'idle', a group left where nothing within its reach asks for fighters at all (a campaign that is over, a front that has moved on) goes to the open field within a month's flight from which it would serve the most of what is asked, though others cover it already: no group stands idle while there is work anywhere it can fly to.", better: 1.25, least: 0.05, presence: 0.25, fields: 2, idle: true },
-      raids: { share: 0.34, least: 60, loss: 0.1, rail: 0.25, ready: 0.6, success: 0.55, look: 4, worth: 15, sweeps: 1, sky: 1.2, skyWorth: 150, sour: { trade: 8, dear: 5, times: 3, rest: 12 }, beach: { groups: 8, home: 2, monthly: 2, sky: 1 } }
+      raids: { share: 0.34, least: 60, loss: 0.1, rail: 0.25, ready: 0.6, success: 0.55, look: 4, worth: 15, sweeps: 1, sky: 1.2, skyWorth: 150, sour: { trade: 8, dear: 5, times: 3, rest: 12 }, beach: { groups: 8, home: 2, monthly: 2, sky: 1 } },
+      _back: `The computer's air forces fight back (Brian, 24 November 2026: "im attacking other nations that have airforces but they arent using them"; release 1.5.1). One rule for every staff (the design director, 18:38Z): with 'on', every nation's air staff in the grand campaign (the player's too while he leaves it the air war; he has each tool by hand): puts up to 'close' of its land fighters (by aircraft) on ground support over the battles it is defending, where the enemy attacked its side since last month and beside them, as well as over its own offensive's (air.json close.ai is not read while this is on); fights for the sky over a stretch of front where the armies fought since last month, not only where it is attacking, up to 'sweeps' a month at 'sky' times the odds that win one; flies 'more' times as many raids, at 'risk' more bomber losses, where the forecast gives 'success' or better and a gain of 'worth' aircraft or more (in proportion below 'full' bombers, so a small air force flies too; the enemy's troops on its own soil count 'home' times, and it never bombs its own country's factories the enemy has taken), each level keeping its own margin (difficulty.json); and the places the enemy raided since last month ask its fighters for 'raided' times the aircraft he sent there, so they go where the raids are coming. A bomber group of 'least' bombers or more may raid (small air forces have small groups), and a country fighting on its own soil (the enemy holds ground it owns, or attacked it there since last month) takes 'invaded' times the risk: it throws in what it has. 'minor': a country at war whose air force was only its air rating (nations.json 'air'; the great powers' come from air.json fleets) raises one once, with its capital held, in its first month at war: 'per' aircraft a point of its rating (at least 'least' points), 'ftr' of them fighters and the rest bombers (all fighters below 'split'), at its capital, and builds 'refit' of them a month to replace losses (air.ts raiseAirForce). Once a country has raised its groups its air rating no longer tilts its land battles (air.ts ratedAir): its air is its groups, never both. Grades (the design director, 18:38Z): close, sweeps, sky, more, risk, invaded, success, worth, full, home, least and raided are the staffs' doctrine (G), not outcome knobs; minor.per, minor.ftr and minor.refit are G/D for release 1.5.1, and release 2 replaces them with each minor's own air force at the history start, from the record. Off, every staff is as it was in release 1.5 and no country raises an air force.`,
+      back: { on: true, close: 0.34, sweeps: 2, sky: 1, more: 1.5, risk: 0.05, invaded: 4, success: 0.45, worth: 10, full: 150, home: 2, least: 12, raided: 1, minor: { least: 1, per: 20, ftr: 0.6, split: 40, refit: 0.05 } }
     }
   };
 
@@ -43319,6 +43326,57 @@
   var CLOSE = AIR.close;
   var closeRules = (g2) => CLOSE.on === true && g2.flags.open === 1;
   var closeStaffRules = (g2) => closeRules(g2) && CLOSE.ai.on === true;
+  var fightBack = (g2, nat) => backOn(g2) && !!g2.nations[nat];
+  var backOn = (g2) => AIRWAR.ai.back?.on === true && g2.flags.open === 1 && airWar(g2);
+  function raiseAirForce(g2, nat) {
+    const M2 = AIRWAR.ai.back?.minor;
+    const n = g2.nations[nat];
+    if (!M2 || !backOn(g2) || !n?.alive || !n.atWar.length || g2.flags[`mair:${nat}`] || !((n.air ?? 0) >= M2.least) || AIR.production[nat]) return [];
+    if (g2.airFleets.some((f) => f.nat === nat)) return [];
+    const base = g2.regions[n.capital];
+    if (!base || base.ctrl !== nat) return [];
+    g2.flags[`mair:${nat}`] = g2.turn;
+    const all = Math.round(n.air * M2.per);
+    const ftr = all < M2.split ? all : Math.round(all * M2.ftr), bmr = all - ftr;
+    seedField(g2, base.id, AIRWAR.fields.seed.base);
+    for (const r of g2.regions) if (r.owner === nat && r.ctrl === nat && (r.fac > 0 || r.vp > 0)) seedField(g2, r.id, 1);
+    const out = [];
+    for (const [kind, k] of [["ftr", ftr], ["bmr", bmr]]) {
+      if (k < 1) continue;
+      const f = foundAirFleet(g2, nat, base, `${n.adj} Air Force`, kind, k);
+      f.ftr = kind === "ftr" ? k : 0;
+      f.bmr = kind === "bmr" ? k : 0;
+      f.est = { ftr: f.ftr, bmr: f.bmr };
+      out.push(f);
+    }
+    if (out.length) headline(g2, "info", `The ${n.adj} air force goes to war: ${out.map((f) => f.name).join(" and ")} at ${base.name}.`, nat, base.id);
+    return out;
+  }
+  var ratedAir = (g2, nat) => backOn(g2) && g2.flags[`mair:${nat}`] ? 0 : g2.nations[nat]?.air ?? 0;
+  function minorBuilt(g2, nat) {
+    const M2 = AIRWAR.ai.back?.minor;
+    if (!M2 || !backOn(g2) || !g2.flags[`mair:${nat}`]) return null;
+    const all = Math.round((g2.nations[nat]?.air ?? 0) * M2.per);
+    const ftr = all < M2.split ? all : Math.round(all * M2.ftr), bmr = all - ftr;
+    return [g2.turn, ftr ? Math.max(1, Math.round(ftr * M2.refit)) : 0, bmr ? Math.max(1, Math.round(bmr * M2.refit)) : 0];
+  }
+  function defendBattles(g2, nat) {
+    const struck = /* @__PURE__ */ new Set();
+    for (let i = g2.reports.length - 1; i >= 0 && g2.reports[i].turn >= g2.turn - 1; i--) {
+      const b = g2.reports[i];
+      if (b.yielded || !g2.regions[b.region] || !(b.defNat === nat || allied(g2, b.defNat, nat)) || !atWar(g2, nat, b.attNat)) continue;
+      struck.add(b.region);
+    }
+    if (!struck.size) return [];
+    const facing2 = (id) => g2.regions[id].nb.some((j) => g2.regions[j].units.some((u) => !u.dead && atWar(g2, nat, u.nat)));
+    const mine4 = (id) => g2.regions[id].units.some((u) => !u.dead && u.nat === nat && u.kind !== "fort");
+    const out = /* @__PURE__ */ new Set();
+    for (const r of struck) {
+      if (mine4(r) || g2.regions[r].ctrl === nat || allied(g2, nat, g2.regions[r].ctrl)) out.add(r);
+      for (const j of g2.regions[r].nb) if (mine4(j) && facing2(j)) out.add(j);
+    }
+    return [...out].sort((a, b) => a - b);
+  }
   var closeEdge = (W2) => CLOSE.most * Math.min(1, Math.max(0, W2) / CLOSE.full);
   function closeOf(g2, nats, enemies, region, underFoe = false) {
     const out = { W: 0, share: 0, strikes: 0, groups: [] };
@@ -43956,8 +44014,10 @@
       }
     }
     if (airWar(g2)) growCommands(g2, nat);
+    raiseAirForce(g2, nat);
     const p = airPool(g2, nat);
-    const built = row(AIR.production[nat], g2.turn), trained = row(AIR.pilots.perMonth[nat], g2.turn);
+    const minor = AIR.production[nat] ? null : minorBuilt(g2, nat);
+    const built = row(AIR.production[nat], g2.turn) ?? minor, trained = row(AIR.pilots.perMonth[nat], g2.turn) ?? (minor ? [minor[0], minor[1]] : null);
     if (built) {
       p.ftr += built[1];
       p.bmr += built[2];
@@ -44906,7 +44966,17 @@
     const troops = /* @__PURE__ */ new Set();
     for (const c of g2.corps) if (c.nat === nat && !c.dead && c.kind !== "fort" && !troops.has(c.reg) && g2.regions[c.reg].nb.some((j) => atWar(g2, nat, g2.regions[j].ctrl))) troops.add(c.reg);
     const cities = g2.regions.filter((r) => own(r) && (r.fac > 0 || r.vp > 0)).map((r) => r.id);
-    const places = [.../* @__PURE__ */ new Set([...troops, ...cities])];
+    const raided = /* @__PURE__ */ new Map();
+    const FB = fightBack(g2, nat) ? AIRWAR.ai.back : null;
+    if (FB) {
+      for (let i = g2.airReports.length - 1; i >= 0 && g2.airReports[i].turn >= g2.turn - 1; i--) {
+        const r = g2.airReports[i];
+        if (r.region < 0 || !g2.regions[r.region] || g2.regions[r.region].ctrl !== nat || !(r.defNat === nat || allied(g2, r.defNat, nat)) || !atWar(g2, nat, r.attNat)) continue;
+        const sent = r.att.reduce((s, x) => s + x.ftr + x.bmr, 0) * (airWeight(g2, r.attNat) ?? 1);
+        raided.set(r.region, (raided.get(r.region) ?? 0) + sent * FB.raided);
+      }
+    }
+    const places = [.../* @__PURE__ */ new Set([...troops, ...cities, ...raided.keys()])];
     if (!places.length) return;
     const at4 = new Map(places.map((id, i) => [id, i]));
     const ask = new Float64Array(places.length);
@@ -44924,6 +44994,7 @@
       const weight6 = Math.max(...hits.map((x) => x[1])) * w;
       for (const [i, n] of hits) ask[i] += weight6 * n / all;
     }
+    for (const [id, w] of raided) ask[at4.get(id)] += w;
     if (battles.length) {
       for (const id of troops) if (battles.includes(id) || g2.regions[id].nb.some((j) => battles.includes(j))) ask[at4.get(id)] *= Math.max(1, AIRWAR.sky.own);
     }
@@ -45068,12 +45139,49 @@
     }
     return [...out];
   }
-  function closeStaff(g2, mine4, battles) {
-    if (!closeStaffRules(g2) || !battles.length) return;
+  function closeStaff(g2, mine4, battles, back = false) {
+    if (!(back && closeRules(g2) || closeStaffRules(g2)) || !battles.length) return;
     const land2 = mine4.filter((f) => f.kind === "ftr" && f.ftr > 0 && f.ship === void 0 && !afloat(f));
-    let left = CLOSE.ai.share * land2.reduce((s, f) => s + f.ftr, 0);
+    let left = (back ? AIRWAR.ai.back.close : CLOSE.ai.share) * land2.reduce((s, f) => s + f.ftr, 0);
     const near2 = (f) => Math.min(...battles.map((b) => kmTo(g2, f, b)));
     const can2 = land2.filter((f) => f.mission === "support" && f.flew !== g2.turn && f.ready >= CLOSE.least && battles.some((b) => cover(kmTo(g2, f, b), reach(f, g2).ftrRange) > 0)).map((f) => ({ f, d: near2(f) })).sort((a, b) => a.d - b.d || a.f.id - b.f.id);
+    if (back) {
+      const ftrR = (f) => reach(f, g2).ftrRange;
+      const over = (f, base) => battles.filter((b) => cover(km(g2, base, b), ftrR(f)) > 0);
+      const patrol = /* @__PURE__ */ new Map(), onCall2 = /* @__PURE__ */ new Map();
+      for (const f of land2) if (f.mission === "support" && !f.close) for (const b of over(f, f.base)) patrol.set(b, (patrol.get(b) ?? 0) + f.ftr);
+      const put = (f, to) => {
+        if (f.ftr > left) return;
+        const bs = over(f, to ? to.id : f.base);
+        const stays = (b) => (patrol.get(b) ?? 0) - (to ? 0 : f.ftr);
+        if (!bs.length || bs.some((b) => stays(b) < (onCall2.get(b) ?? 0) + f.ftr)) return;
+        if (to && !rebaseAir(g2, f, to)) return;
+        if (!to) for (const b of over(f, f.base)) patrol.set(b, (patrol.get(b) ?? 0) - f.ftr);
+        for (const b of bs) onCall2.set(b, (onCall2.get(b) ?? 0) + f.ftr);
+        f.close = true;
+        delete f.escorts;
+        left -= f.ftr;
+      };
+      for (const { f } of can2) put(f, null);
+      const far = [];
+      for (const f of land2) {
+        if (left <= 0) break;
+        if (f.ftr > left || f.close || f.mission !== "support" || f.flew === g2.turn || f.moved === g2.turn || f.ready < CLOSE.least || can2.some((x) => x.f === f)) continue;
+        let to = null, bv = 0;
+        for (const r of airBases(g2, f)) {
+          if (overOcean(g2, f, r) || !fieldRoom(g2, r.id, f)) continue;
+          const v = over(f, r.id).length;
+          if (v > bv) {
+            bv = v;
+            to = r;
+          }
+        }
+        if (to) far.push({ f, to, d: near2(f) });
+      }
+      far.sort((a, b) => a.d - b.d || a.f.id - b.f.id);
+      for (const { f, to } of far) put(f, to);
+      return;
+    }
     for (const { f } of can2) {
       if (f.ftr > left) continue;
       f.close = true;
@@ -45107,11 +45215,27 @@
       if (to && to.v > here * K2.better + K2.least * f.bmr) rebaseAir(g2, f, to.r);
     }
   }
+  function invaded(g2, nat) {
+    if (g2.regions.some((r) => r.owner === nat && r.ctrl !== nat && atWar(g2, nat, r.ctrl))) return true;
+    for (let i = g2.reports.length - 1; i >= 0 && g2.reports[i].turn >= g2.turn - 1; i--) {
+      const b = g2.reports[i];
+      if (!b.yielded && b.defNat === nat && g2.regions[b.region]?.owner === nat && atWar(g2, nat, b.attNat)) return true;
+    }
+    return false;
+  }
+  function staffRules(g2, nat) {
+    const FB = fightBack(g2, nat) ? AIRWAR.ai.back : null;
+    const R0 = AIRWAR.ai.raids;
+    const R2 = FB ? { ...R0, success: FB.success, worth: FB.worth, sweeps: FB.sweeps, sky: FB.sky } : R0;
+    const B3 = bombingFor(g2, nat);
+    const base = B3 ? { ...R2, ...B3 } : { ...R2, share: R2.share * raidsMul(g2, nat) };
+    const risk = FB ? FB.risk * (invaded(g2, nat) ? FB.invaded : 1) : 0;
+    const more = FB && !B3 ? { share: Math.min(1, base.share * FB.more), least: Math.min(base.least, FB.least) } : {};
+    return { FB, R: R2, B: B3, rules: FB ? { ...base, ...more, loss: base.loss + risk } : base };
+  }
   function raidStaff(g2, nat, mine4, ph, patrol) {
     if (!airWar(g2)) return;
-    const R2 = AIRWAR.ai.raids;
-    const B3 = bombingFor(g2, nat);
-    const rules = B3 ? { ...R2, ...B3 } : { ...R2, share: R2.share * raidsMul(g2, nat) };
+    const { FB, R: R2, B: B3, rules } = staffRules(g2, nat);
     const you = B3 ? seat2(g2) : null;
     const rng = airRng(g2, `staff:${nat}`);
     const used = /* @__PURE__ */ new Set();
@@ -45203,14 +45327,16 @@
       }
     }
     const battles = effortBattles(g2, nat, ph);
-    baseByThreat(g2, nat, mine4, beaches, battles);
-    baseBombers(g2, nat, mine4, battles);
-    if (ph?.posture === "attack") closeStaff(g2, mine4, battles);
+    const held3 = FB ? defendBattles(g2, nat) : [];
+    const fights2 = [.../* @__PURE__ */ new Set([...battles, ...held3])];
+    baseByThreat(g2, nat, mine4, beaches, fights2);
+    baseBombers(g2, nat, mine4, fights2);
+    if (ph?.posture === "attack" || held3.length) closeStaff(g2, mine4, [.../* @__PURE__ */ new Set([...ph?.posture === "attack" ? battles : [], ...held3])], !!FB);
     let flown = 0;
     for (let k = 0; k < R2.sweeps && (front.size || beaches.length); k++) {
       let best = null;
       const bases = [...new Set(mine4.filter((f) => fit3(f) && f.kind === "ftr" && f.ftr > 0 && f.ready >= R2.ready).map(homeOf2))];
-      const spots = [...beaches.filter((t) => !hit.has(t)).map((t) => [t, 6]), ...[...front.entries()].filter(([t]) => !hit.has(t) && pushed(t) && skyOver(g2, t) === null).sort((a, b) => b[1] - a[1] || a[0] - b[0])].slice(0, R2.look);
+      const spots = [...beaches.filter((t) => !hit.has(t)).map((t) => [t, 6]), ...[...front.entries()].filter(([t]) => !hit.has(t) && (pushed(t) || !!FB && fought.has(t)) && skyOver(g2, t) === null).sort((a, b) => b[1] - a[1] || a[0] - b[0])].slice(0, R2.look);
       for (const base of bases) {
         for (const [t, divs] of spots) {
           const fleets = fightersAt(base).filter((f) => f.ready >= R2.ready && whyNotMission(g2, f, "superiority", t) === null);
@@ -45268,13 +45394,16 @@
         const escorts = fightersAt(homeOf2(f));
         const weigh3 = (m, r, fleets) => {
           if (soured(m, r.id)) return;
+          if (FB && (m === "bomb" || m === "night") && r.owner === nat) return;
           const a = assessAir(g2, fleets, m, r.id);
           if (a.why) return;
           const fc = forecastAir(g2, a, m, r.id);
           if (fc.bomberLoss > rules.loss || fc.success < R2.success || m === "line" && fc.cut < rivals_default.soften.raid) return;
           const railWorth = (m === "bomb" || m === "night") && r.fac <= 0 ? rules.rail : 1;
-          const v = (fc.worth * railWorth * (m === "town" ? SIEGE.ai.raid : 1) + fc.foeLoss) * (you !== null && r.ctrl === you ? rules.focus ?? 1 : 1) - fc.ftrLoss - fc.bmrLoss;
-          if (v > R2.worth && (!pick4.best || v > pick4.best.v)) pick4.best = { m, t: r.id, fleets, v };
+          const home = FB && (m === "ground" || m === "line") && r.owner === nat ? FB.home : 1;
+          const v = (fc.worth * railWorth * home * (m === "town" ? SIEGE.ai.raid : 1) + fc.foeLoss) * (you !== null && r.ctrl === you ? rules.focus ?? 1 : 1) - fc.ftrLoss - fc.bmrLoss;
+          const bar = FB ? FB.worth * Math.min(1, fleets.reduce((n, x) => n + x.bmr, 0) / FB.full) : R2.worth;
+          if (v > bar && (!pick4.best || v > pick4.best.v)) pick4.best = { m, t: r.id, fleets, v };
         };
         const works = g2.regions.filter((r) => !hit.has(r.id) && atWar(g2, nat, r.ctrl) && (r.fac > 0 || railsAt(r.id).length >= 3) && whyNotMission(g2, f, "bomb", r.id) === null).sort((a, b) => b.fac + rules.rail * railsAt(b.id).length - (a.fac + rules.rail * railsAt(a.id).length) || a.id - b.id).slice(0, R2.look);
         for (const r of works) {
@@ -45331,9 +45460,7 @@
   }
   function fieldOrder(g2, nat, field4) {
     if (!airWar(g2)) return null;
-    const R2 = AIRWAR.ai.raids;
-    const B3 = bombingFor(g2, nat);
-    const rules = B3 ? { ...R2, ...B3 } : { ...R2, share: R2.share * raidsMul(g2, nat) };
+    const { R: R2, B: B3, rules } = staffRules(g2, nat);
     const you = B3 ? seat2(g2) : null;
     const here = (f) => f.nat === nat && f.ship === void 0 && f.base === field4 && f.mission === "support" && f.flew !== g2.turn;
     const lead2 = g2.airFleets.filter((f) => here(f) && f.kind !== "ftr" && f.bmr >= rules.least && f.ready >= R2.ready).sort((a, b2) => b2.bmr - a.bmr || a.id - b2.id)[0];
@@ -48687,12 +48814,12 @@
       for (const z of tied ? [f.station] : reach3) {
         const e = seaSide(g2, z, nat, true);
         const own = seaSide(g2, z, nat, false).total + (f.zone === z && atSea(f) ? 0 : mine4);
-        const invaded = invadedHere(g2, z, nat) && own >= 0.5 * e.total;
-        if (airOver(g2, z, nat, true) - airOver(g2, z, nat, false) > NAVY.air.avoid && !invaded) {
+        const invaded2 = invadedHere(g2, z, nat) && own >= 0.5 * e.total;
+        if (airOver(g2, z, nat, true) - airOver(g2, z, nat, false) > NAVY.air.avoid && !invaded2) {
           shy2++;
           continue;
         }
-        if (f.struck && f.struck[2] === z && g2.turn - f.struck[0] <= CARRIERS.ai.shy && !invaded && carrierRules(g2)) continue;
+        if (f.struck && f.struck[2] === z && g2.turn - f.struck[0] <= CARRIERS.ai.shy && !invaded2 && carrierRules(g2)) continue;
         let quarry = 0;
         for (const x of g2.fleets) if (x.zone === z && atSea(x) && surfaceShips(x) > 0 && atWar(g2, x.nat, nat)) quarry += fleetPower(g2, x);
         let v = 0;
@@ -48709,7 +48836,7 @@
         if (landedLately(g2, z, nat) && own >= e.total) add(30, () => `It patrols ${sea} to cut the sea lane behind the enemy's landing.`);
         if (f.duty === "patrol" && own >= e.total && (cross.off.has(z) || cross.way.has(z))) add(cross.off.has(z) ? 40 : 25, cross.off.has(z) ? () => `It stands ${at4}, off the beach your army means to land on.` : () => `It patrols ${sea}, which your army's landing must cross.`);
         if (f.duty === "patrol" && own >= e.total && (theirs.off.has(z) || theirs.way.has(z))) add(theirs.off.has(z) ? 40 : 25, () => `It patrols ${sea} to cover an ally's landing.`);
-        if (invaded) add(60, () => `It patrols ${sea}: the enemy is crossing it to invade the homeland.`);
+        if (invaded2) add(60, () => `It patrols ${sea}: the enemy is crossing it to invade the homeland.`);
         if (f.duty === "patrol" && own >= NAVY.battle.seek * e.total && blockadeWanted(g2, z, nat)) add(SIEGE.ai.sea.blockade, () => `It patrols ${sea} to blockade the port your army is besieging.`);
         if (z === f.station && f.duty === "patrol" && (quarry <= 0 || own >= 0.7 * e.total)) add(5, () => `It patrols ${sea}, its usual beat: no other sea in its reach needs it more.`);
         if (v > bv) {
@@ -53593,8 +53720,8 @@
     const at4 = (step2, fallen = false) => ({ step: step2, answers: answersOf(p, step2), fallen });
     if (!P?.alive) return at4(1);
     const foe = (u) => !u.dead && u.kind !== "fort" && atWar(g2, u.nat, p);
-    const invaded = g2.regions.some((r) => r.owner === p && !r.overseas && (r.units.some(foe) || !allied(g2, p, r.ctrl) && (r.garr ?? []).some(foe)));
-    if (invaded || P.resilience > 0 && collapseScore(g2, p) >= willGone * P.resilience) return at4(4);
+    const invaded2 = g2.regions.some((r) => r.owner === p && !r.overseas && (r.units.some(foe) || !allied(g2, p, r.ctrl) && (r.garr ?? []).some(foe)));
+    if (invaded2 || P.resilience > 0 && collapseScore(g2, p) >= willGone * P.resilience) return at4(4);
     const enemies = europe.filter((e) => e !== p && g2.nations[e]?.alive && atWar(g2, p, e));
     if (!enemies.length) return at4(1);
     const F = beside ? g2.nations[beside] : void 0;
@@ -54277,10 +54404,10 @@
   var monthsUnfed = (org = 1) => Math.max(1, Math.ceil(org / UNFED));
   function airOf(g2, nats, enemies) {
     let s = 0;
-    for (const id of nats) s += g2.nations[id].air * fuelAir(g2, id);
+    for (const id of nats) s += ratedAir(g2, id) * fuelAir(g2, id);
     for (const n of Object.values(g2.nations)) {
       if (!n.alive || nats.has(n.id) || n.capital < 0) continue;
-      if ([...nats].some((a) => allied(g2, a, n.id)) && [...enemies].some((e) => atWar(g2, n.id, e))) s += n.air * 0.25;
+      if ([...nats].some((a) => allied(g2, a, n.id)) && [...enemies].some((e) => atWar(g2, n.id, e))) s += ratedAir(g2, n.id) * 0.25;
     }
     return s;
   }
@@ -57503,7 +57630,10 @@
     return null;
   }
   function oursIn(g2, f, zone, foe) {
-    return [f, ...g2.fleets.filter((x) => x.id !== f.id && x.zone === zone && x.stance === "patrol" && surfaceShips(x) > 0 && !hasSought(g2, x) && (x.nat === f.nat || allied(g2, x.nat, f.nat)) && atWar(g2, x.nat, foe))];
+    return [f, ...g2.fleets.filter((x) => x.id !== f.id && x.zone === zone && x.stance === "patrol" && surfaceShips(x) > 0 && x.attacked !== g2.turn && !hasSought(g2, x) && (x.nat === f.nat || allied(g2, x.nat, f.nat)) && atWar(g2, x.nat, foe))];
+  }
+  function foughtIn(g2, mine4) {
+    for (const x of mine4) x.attacked = g2.turn;
   }
   function theirsAt(g2, f, t, at4) {
     const side5 = (x) => x.id !== t.id && (x.nat === t.nat || allied(g2, x.nat, t.nat)) && atWar(g2, x.nat, f.nat) && shipCount(x.ships) > 0;
@@ -57648,11 +57778,13 @@
         headline(g2, "event", text, met2[0].nat, void 0, { arm: "sea", won: f.nat, lost: met2[0].nat });
         return { outcome: "declined", report: null, text };
       }
+      foughtIn(g2, mine4);
       const report2 = fleetAction(g2, zone, f.nat, mine4, met2, rng, airA2, airD2);
       return { outcome: "fought", report: report2, text: told2() };
     }
     met2 = met2.filter((x) => !atSea(x));
     const airA = airOver(g2, at4.zone, f.nat) * NAVY.air.weight, airD = airOver(g2, at4.zone, f.nat, true) * NAVY.air.weight;
+    foughtIn(g2, mine4);
     const report = fleetAction(g2, zone, f.nat, mine4, met2, rng, airA, airD, { port: at4.port, shore: at4.shore, anchor: at4.anchor });
     return { outcome: "fought", report, text: told2() };
   }
@@ -64653,10 +64785,10 @@
     for (const s of SHARES) if (Math.abs(s[0] - share) < Math.abs(best[0] - share)) best = s;
     return `the army is at ${best[1]} its strength`;
   }
-  function atTheGates(g2, nat, seat5, invaded = false) {
+  function atTheGates(g2, nat, seat5, invaded2 = false) {
     let best = null;
     for (const id of [seat5, ...g2.regions[seat5].nb]) {
-      if (invaded && id !== seat5 && (g2.regions[id].owner !== nat || g2.regions[id].overseas)) continue;
+      if (invaded2 && id !== seat5 && (g2.regions[id].owner !== nat || g2.regions[id].overseas)) continue;
       const w = {};
       for (const u of g2.regions[id].units) if (!u.dead && u.kind !== "fort" && atWar(g2, u.nat, nat)) w[u.nat] = (w[u.nat] ?? 0) + u.divs * u.str;
       for (const by2 of Object.keys(w).sort()) {
@@ -65360,13 +65492,33 @@
     };
   }
   var lossLine = (p) => `Chance of success ${pct12(p.success)}: ${p.verdict.toLowerCase()}. Likely losses: ${[p.bombers ? `${num4(p.bomberLossN)} of ${num4(p.bombers)} bombers (${pct12(p.bomberLoss)})` : "", p.fighters ? `${num4(p.fighterLossN)} of ${num4(p.fighters)} fighters` : ""].filter(Boolean).join(", ") || "none"}${p.foeLossN ? `, for about ${num4(p.foeLossN)} enemy fighters` : ""}.`;
+  function targetSections(g2, kind, all, row2, none4, word3 = "TARGET") {
+    if (!all.length) return [{ heading: "TARGETS", text: none4, rows: [] }];
+    const groups = [];
+    if (all.every((t) => !t.sea && g2.regions[t.id])) {
+      for (const t of all) {
+        const owner = g2.regions[t.id].owner || t.holder;
+        const at4 = groups.find((x) => x.owner === owner && x.holder === t.holder);
+        if (at4) at4.list.push(t);
+        else groups.push({ owner, holder: t.holder, list: [t] });
+      }
+    }
+    if (groups.length < 2) return [{ heading: "TARGETS", text: "", rows: all.map(row2) }];
+    if (kind === "bomb" || kind === "night") groups.sort((a, b) => Number(b.owner === b.holder) - Number(a.owner === a.holder));
+    const name = (n) => (g2.nations[n]?.name ?? n).toUpperCase();
+    return groups.map((x) => ({
+      heading: `${x.owner === x.holder ? name(x.owner) : `${name(x.owner)}, HELD BY ${name(x.holder)}`}  ·  ${x.list.length} ${word3}${x.list.length === 1 ? "" : "S"}`,
+      text: "",
+      rows: x.list.map(row2)
+    }));
+  }
   function targetsPage(g2, kind, group) {
     const k = raidMenu(g2).find((x) => x.key === kind);
     if (!k) return null;
     const up = humanUp(g2);
     const lead2 = group >= 0 ? [group] : void 0;
     const all = raidTargetsFor(g2, kind, group);
-    const rows = all.slice(0, 12).map((t) => {
+    const row2 = (t) => {
       const p = previewRaid(g2, kind, t.id, lead2);
       const lines2 = [`${t.far[0].toUpperCase()}${t.far.slice(1)}. ${t.what ? `${t.what[0].toUpperCase()}${t.what.slice(1)}.` : ""} ${t.groups} of your groups could fly it.`];
       if (p.why) lines2.push(p.why);
@@ -65374,14 +65526,16 @@
       else lines2.push(`With ${p.seats.filter((s) => s.picked).map((s) => s.name).join(", ")}: ${lossLine(p)}`, ...p.effects.slice(0, 1));
       const act2 = kind === "recon" ? `scout:${p.picked[0]}:${t.id}` : `open:plan:${kind}:${t.id}:${p.picked.join(".")}`;
       return { nat: t.holder, title: t.name, lines: lines2, buttons: [{ label: kind === "recon" ? "SEND THE FLIGHT" : "PLAN THIS RAID", act: act2, ok: up && !p.why, tip: p.why ?? (kind === "recon" ? "" : "Choose which groups fly it, and see what meeting up is worth, before you give the order.") }] };
-    });
+    };
+    const none4 = kind === "fleet" ? "No enemy fleet at sea has been found within reach. Search a sea from a group's page, or send a fleet to look: a fleet has to be found before it can be struck." : kind === "harbour" ? "No enemy warships lie in a harbour within reach." : kind === "town" ? "No enemy town that your armies stand round or beside is within reach of a bomber group that can still fly." : "Move a group to an airfield nearer the enemy, or wait until one that has flown is back.";
+    const sections = targetSections(g2, kind, all, row2, none4);
     return {
       id: group >= 0 ? `raid:${kind}:${group}` : `raid:${kind}`,
       title: k.label.toUpperCase(),
-      headline: all.length ? `${all.length} target${all.length === 1 ? "" : "s"} in reach, nearest first` : "No target is in reach",
+      headline: all.length ? `${all.length} target${all.length === 1 ? "" : "s"} in reach, ${sections.length > 1 ? "by country" : "nearest first"}` : "No target is in reach",
       note: k.blurb,
       top: [{ label: "BACK", act: group >= 0 ? `open:group:${group}` : "open:raids", ok: true, tip: "" }],
-      sections: [{ heading: "TARGETS", text: all.length ? "" : kind === "fleet" ? "No enemy fleet at sea has been found within reach. Search a sea from a group's page, or send a fleet to look: a fleet has to be found before it can be struck." : kind === "harbour" ? "No enemy warships lie in a harbour within reach." : kind === "town" ? "No enemy town that your armies stand round or beside is within reach of a bomber group that can still fly." : "Move a group to an airfield nearer the enemy, or wait until one that has flown is back.", rows }]
+      sections
     };
   }
   function planPage(g2, kind, target, picked) {
@@ -65418,19 +65572,20 @@
     const x = myAirGroups(g2).find((r) => r.id === id);
     if (!x) return null;
     const up = humanUp(g2);
-    const rows = raidTargetsFor(g2, "recon", id).slice(0, 14).map((t) => ({ t, p: previewRaid(g2, "recon", t.id, [id]) })).map(({ t, p }) => ({
-      nat: t.holder,
-      title: t.name,
-      lines: [`${t.far[0].toUpperCase()}${t.far.slice(1)}. ${t.what}. ${p.verdict}.`],
-      buttons: [{ label: "SEND THE FLIGHT", act: `scout:${id}:${t.id}`, ok: up, tip: p.effects[0] ?? "" }]
-    }));
+    const all = raidTargetsFor(g2, "recon", id);
+    const row2 = (t) => {
+      const p = previewRaid(g2, "recon", t.id, [id]);
+      return { nat: t.holder, title: t.name, lines: [`${t.far[0].toUpperCase()}${t.far.slice(1)}. ${t.what}. ${p.verdict}.`], buttons: [{ label: "SEND THE FLIGHT", act: `scout:${id}:${t.id}`, ok: up, tip: p.effects[0] ?? "" }] };
+    };
+    const sections = all.length ? targetSections(g2, "recon", all, row2, "", "PROVINCE") : [{ heading: "PROVINCES", text: "", rows: [] }];
+    if (sections.length === 1) sections[0].heading = "PROVINCES";
     return {
       id: `scout:${id}`,
       title: `A RECONNAISSANCE  ·  ${x.name.toUpperCase()}`,
-      headline: rows.length ? `${rows.length} province${rows.length === 1 ? "" : "s"} it could photograph, nearest first` : x.scouted ? "It has flown its reconnaissance this month" : "Nothing in its reach is hidden",
+      headline: all.length ? `${all.length} province${all.length === 1 ? "" : "s"} it could photograph, ${sections.length > 1 ? "by country" : "nearest first"}` : x.scouted ? "It has flown its reconnaissance this month" : "Nothing in its reach is hidden",
       note: "A few aircraft photograph one province and the ground beside it: every army there is seen whole until the month ends. One flight a month for each group, beside its raid, and it keeps its patrol.",
       top: [{ label: "BACK", act: `open:group:${id}`, ok: true, tip: "" }],
-      sections: [{ heading: "PROVINCES", text: "", rows }]
+      sections
     };
   }
   function rebasePage(g2, id) {
