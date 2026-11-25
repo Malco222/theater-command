@@ -806,6 +806,8 @@ public:
 	 * run). It is the rules' own room "home", laid out as a board. Off, no door leads to it and the game is as it was.
 	 */
 	static bool IsHomeFrontStyle();
+	/** (Release 2, tc.UI.Ease) The rooms and the province panel ease in and out instead of appearing and vanishing at once. */
+	static bool IsEaseStyle();
 	void OpenHomeFront();
 	bool IsHomeFrontOpen() const { return bPageOpen && Page.Home.bValid && IsHomeFrontStyle(); }
 	/** Which towns the board lists: 0 those that can take a building, 1 those building, 2 every town. */
@@ -1572,6 +1574,14 @@ private:
 	// towns built in since it was opened.
 	int32 HomeFilter = 0, HomeUnfolded = INDEX_NONE, HomeRows = 40, HomeOpenings = 0;
 	TSet<int32> HomeKept;
+	// (Release 2, tc.UI.Ease: Esc steps back one screen at a time.) The pages this one was reached from by their own
+	// doors, the nearest last; and the town whose card was opened from THE HOME FRONT, whose Esc goes back to the board.
+	TArray<FString> PageTrail;
+	int32 TownFromHomeRegion = INDEX_NONE;
+	/** (tc.UI.Ease) Esc on a page: the page it was reached from, if there is one. */
+	bool StepBackPage();
+	/** (tc.UI.Ease) THE HOME FRONT again as it was left: the same towns listed, the same rows unfolded and kept. */
+	void ReturnToHomeFront();
 	void RefreshGenerals(bool bArmiesChanged);
 	FString PathAsked; // the path waiting for the player's yes, with its partner: "found:DEN"
 	FArsenal Arsenal;
