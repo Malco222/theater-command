@@ -200,6 +200,9 @@ export class AirSim implements BattleSim<AirUnit> {
   private fireDue = new Map<number, number>();
   /** The ground fire owed for each fighter that flies a whole pass's share: the card's 'fire' over the fighters it weighed. */
   private fireEach = 0;
+  /** With the strafers' rule on: the campaign groups charged the ground fire, and what it charged them. */
+  private firedOn = new Set<number>();
+  private fireOwed = 0;
   /** The lane the passes run down: through the middle of the troops, along their road where they march. */
   private lane = { x: 0, y: 0, dx: 0, dy: 1 };
   /** Battle seconds of the first contact, null before it (the view's contact, as land's). */
@@ -323,6 +326,9 @@ export class AirSim implements BattleSim<AirUnit> {
     if (this.troops) {
       const E = this.units.reduce((t, u) => t + (u.side === 'att' && u.air === 'ftr' ? u.n0 * reachOf(u) : 0), 0);
       this.fireEach = E > 0 ? (this.place.forecast.fire ?? 0) / E : 0;
+      // (The strafers' rule, campaign/strafers.ts: each fighter that goes down pays the campaign's own share, as the card
+      // charged each one it expected to go down; those without the reach never go down.)
+      if (this.place.marks?.law.reach) this.fireEach = this.place.marks.law.fire;
     }
     // Both sides start on the staff's plan; the player changes what he likes before or after he starts the clock.
     this.think('att', true);
@@ -792,7 +798,9 @@ export class AirSim implements BattleSim<AirUnit> {
 
   /** Whether a group of the raid may go down on the troops: a fighter of a raid on troops that has not done so already, and was given no other order. */
   private mayStrafe(u: AirUnit): boolean {
-    return !!this.troops && u.side === 'att' && u.air === 'ftr' && !this.keepUp.has(u.id) && !this.strafing.get(u.id)?.over;
+    return !!this.troops && u.side === 'att' && u.air === 'ftr' && !this.keepUp.has(u.id) && !this.strafing.get(u.id)?.over
+      // (The strafers' rule: only a group with the reach to strafe goes down on the troops.)
+      && (!this.troops.law.reach || this.troops.law.reach.includes(u.corps));
   }
 
   /**
@@ -873,7 +881,11 @@ export class AirSim implements BattleSim<AirUnit> {
     const len = Math.max(1, dist(s.from[0], s.from[1], s.to[0], s.to[1]));
     const left = dist(u.x, u.y, s.to[0], s.to[1]), p = clamp01(1 - left / len);
     const part = (u.n * reachOf(u)) / S.passes;
-    if (p > s.p) { this.fireDue.set(u.id, (this.fireDue.get(u.id) ?? 0) + this.fireEach * part * (p - s.p)); s.p = p; }
+    if (p > s.p) {
+      const owe = this.fireEach * part * (p - s.p);
+      this.fireDue.set(u.id, (this.fireDue.get(u.id) ?? 0) + owe); s.p = p;
+      if (this.troops!.law.reach) { this.firedOn.add(u.corps); this.fireOwed += owe; }
+    }
     if (left > 1) return;
     // The pass made: its part of the group counts on the troops, by the campaign's own law, and its hits follow.
     s.done++; s.run = false; s.p = 0;
@@ -2107,6 +2119,7 @@ export class AirSim implements BattleSim<AirUnit> {
       // A raid on troops: the fighters that strafed, and the organisation cut the field earned by the campaign's own law
       // from them and the bombers that dropped. Fought to the end, the campaign books the cut from these same counts.
       ...(this.troops ? { strafed: this.strafed, troops: { cut: troopCutOf(this.troops.law, att.reduce((s, u) => s + u.dropped, 0), this.strafed) } } : {}),
+      ...(this.troops?.law.reach ? { strafers: [...this.firedOn].sort((x, y) => x - y), strafeFire: this.fireOwed } : {}),
       ...(this.place.bombs ? { rolls: this.staff ? { ...(this.railCut ? { rail: 0 } : {}), ...(this.ruined ? { ruin: 0 } : {}) } : { ...this.rolls }, railCut: this.railCut, ruined: this.ruined } : {}),
     };
   }

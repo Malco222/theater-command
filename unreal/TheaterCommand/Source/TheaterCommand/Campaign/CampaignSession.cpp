@@ -177,6 +177,17 @@ bool FCampaignSession::Prepare(FString& OutError)
 		return false;
 	}
 #endif
+	// (Release 2, THE HOME FRONT; tc.UI.HomeFront, as -TheaterHomeFront.) The board's door on the top bar and its chip
+	// under END THE MONTH are the rules' to name (the view's rooms and its to-do list), and they name them only when
+	// asked here. In a shipped build too: the ship list turns the board on by its launch word.
+	{
+		const IConsoleVariable* HomeFront = IConsoleManager::Get().FindConsoleVariable(TEXT("tc.UI.HomeFront"));
+		if (bReal && (FParse::Param(FCommandLine::Get(), TEXT("TheaterHomeFront")) || (HomeFront && HomeFront->GetInt() != 0))
+			&& !Host->Evaluate(TEXT("globalThis.TC_HOME_FRONT = 1;"), TEXT("release 2 the home front"), OutError))
+		{
+			return false;
+		}
+	}
 	if (!Host->LoadScript(bReal ? RealRules : FPaths::Combine(RulesFolder, TEXT("stand-in-rules.js")), OutError))
 	{
 		return false;
@@ -1277,6 +1288,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("shadow"), Out.bShadowRule); // (release 2, shadow.ts)
 	Object->TryGetBoolField(TEXT("voyageLog"), Out.bVoyageLog); // (release 2, voyage.ts)
 	Object->TryGetBoolField(TEXT("sailors"), Out.bSailors); // (release 2, the sea field's sailor rules: battle/sea/ticket.ts)
+	Object->TryGetBoolField(TEXT("ownWater"), Out.bOwnWater); // (release 2, the sea field's own water: battle/sea/ticket.ts)
 	Object->TryGetBoolField(TEXT("seaMines"), Out.bSeaMines); // (release 2, mines.ts)
 	Object->TryGetBoolField(TEXT("heavySeas"), Out.bHeavySeas); // (release 2, heavyseas.ts)
 	Object->TryGetBoolField(TEXT("shadowRelay"), Out.bShadowRelay); // (release 2, shadow.ts)
@@ -4143,6 +4155,207 @@ namespace
 	}
 }
 
+namespace
+{
+	/** (Release 2, the home front board.) A building on the board, as the bridge lists it. */
+	void ReadHomeBuild(const TSharedPtr<FJsonObject>& From, FHomeBuild& Out)
+	{
+		From->TryGetStringField(TEXT("line"), Out.Line);
+		From->TryGetStringField(TEXT("name"), Out.Name);
+		From->TryGetStringField(TEXT("label"), Out.Label);
+		From->TryGetStringField(TEXT("effect"), Out.Effect);
+		From->TryGetStringField(TEXT("why"), Out.Why);
+		From->TryGetStringField(TEXT("act"), Out.Act);
+		From->TryGetNumberField(TEXT("cost"), Out.Cost);
+		From->TryGetNumberField(TEXT("months"), Out.Months);
+		From->TryGetBoolField(TEXT("ok"), Out.bOk);
+	}
+
+	/** (Release 2.) The home front board: the bridge's homeBoard, field for field. */
+	void ReadHomeBoard(const TSharedPtr<FJsonObject>& Told, FHomeBoard& Board)
+	{
+		Board.bValid = true;
+		Told->TryGetStringField(TEXT("nation"), Board.Nation);
+		Told->TryGetStringField(TEXT("date"), Board.Date);
+		Told->TryGetBoolField(TEXT("up"), Board.bUp);
+		Told->TryGetNumberField(TEXT("money"), Board.Money);
+		Told->TryGetNumberField(TEXT("net"), Board.Net);
+		const TArray<TSharedPtr<FJsonValue>>* Tiles = nullptr;
+		if (Told->TryGetArrayField(TEXT("tiles"), Tiles))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Tiles)
+			{
+				const TSharedPtr<FJsonObject>* Entry = nullptr;
+				if (Value->TryGetObject(Entry))
+				{
+					FHomeTile& Tile = Board.Tiles.AddDefaulted_GetRef();
+					(*Entry)->TryGetStringField(TEXT("k"), Tile.Kind);
+					(*Entry)->TryGetStringField(TEXT("label"), Tile.Label);
+					(*Entry)->TryGetStringField(TEXT("figure"), Tile.Figure);
+					(*Entry)->TryGetStringField(TEXT("sub"), Tile.Sub);
+				}
+			}
+		}
+		const TSharedPtr<FJsonObject>* Counts = nullptr;
+		if (Told->TryGetObjectField(TEXT("counts"), Counts) && Counts && Counts->IsValid())
+		{
+			(*Counts)->TryGetNumberField(TEXT("ready"), Board.Ready);
+			(*Counts)->TryGetNumberField(TEXT("going"), Board.Going);
+			(*Counts)->TryGetNumberField(TEXT("all"), Board.All);
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Towns = nullptr;
+		if (Told->TryGetArrayField(TEXT("towns"), Towns))
+		{
+			Board.Towns.Reserve(Towns->Num());
+			for (const TSharedPtr<FJsonValue>& Value : *Towns)
+			{
+				const TSharedPtr<FJsonObject>* EntryPtr = nullptr;
+				if (!Value->TryGetObject(EntryPtr))
+				{
+					continue;
+				}
+				const TSharedPtr<FJsonObject>& Entry = *EntryPtr;
+				FHomeTown& Town = Board.Towns.AddDefaulted_GetRef();
+				Entry->TryGetNumberField(TEXT("region"), Town.Region);
+				Entry->TryGetStringField(TEXT("town"), Town.Town);
+				Entry->TryGetStringField(TEXT("province"), Town.Province);
+				Entry->TryGetStringField(TEXT("size"), Town.Size);
+				Entry->TryGetStringField(TEXT("state"), Town.State);
+				Entry->TryGetStringField(TEXT("note"), Town.Note);
+				Entry->TryGetBoolField(TEXT("own"), Town.bOwn);
+				Entry->TryGetNumberField(TEXT("pays"), Town.Pays);
+				const TArray<TSharedPtr<FJsonValue>>* Plots = nullptr;
+				if (Entry->TryGetArrayField(TEXT("plots"), Plots))
+				{
+					for (const TSharedPtr<FJsonValue>& PlotValue : *Plots)
+					{
+						const TSharedPtr<FJsonObject>* PlotEntry = nullptr;
+						if (PlotValue->TryGetObject(PlotEntry))
+						{
+							FHomePlot& Plot = Town.Plots.AddDefaulted_GetRef();
+							(*PlotEntry)->TryGetStringField(TEXT("s"), Plot.State);
+							(*PlotEntry)->TryGetStringField(TEXT("line"), Plot.Line);
+							(*PlotEntry)->TryGetStringField(TEXT("name"), Plot.Name);
+							(*PlotEntry)->TryGetNumberField(TEXT("level"), Plot.Level);
+							(*PlotEntry)->TryGetNumberField(TEXT("months"), Plot.Months);
+						}
+					}
+				}
+				const TSharedPtr<FJsonObject>* Best = nullptr;
+				if (Entry->TryGetObjectField(TEXT("best"), Best) && Best && Best->IsValid())
+				{
+					Town.bBest = true;
+					ReadHomeBuild(*Best, Town.Best);
+				}
+				const TArray<TSharedPtr<FJsonValue>>* More = nullptr;
+				if (Entry->TryGetArrayField(TEXT("more"), More))
+				{
+					for (const TSharedPtr<FJsonValue>& MoreValue : *More)
+					{
+						const TSharedPtr<FJsonObject>* MoreEntry = nullptr;
+						if (MoreValue->TryGetObject(MoreEntry))
+						{
+							ReadHomeBuild(*MoreEntry, Town.More.AddDefaulted_GetRef());
+						}
+					}
+				}
+				const TSharedPtr<FJsonObject>* Going = nullptr;
+				if (Entry->TryGetObjectField(TEXT("going"), Going) && Going && Going->IsValid())
+				{
+					Town.bGoing = true;
+					(*Going)->TryGetNumberField(TEXT("id"), Town.GoingId);
+					(*Going)->TryGetNumberField(TEXT("months"), Town.GoingMonths);
+					(*Going)->TryGetStringField(TEXT("name"), Town.GoingName);
+					(*Going)->TryGetStringField(TEXT("due"), Town.GoingDue);
+					(*Going)->TryGetStringField(TEXT("act"), Town.GoingAct);
+					(*Going)->TryGetBoolField(TEXT("cancel"), Town.bGoingCancel);
+				}
+			}
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Raise = nullptr;
+		if (Told->TryGetArrayField(TEXT("raise"), Raise))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Raise)
+			{
+				const TSharedPtr<FJsonObject>* Entry = nullptr;
+				if (Value->TryGetObject(Entry))
+				{
+					FHomeRaise& Offer = Board.Raise.AddDefaulted_GetRef();
+					(*Entry)->TryGetStringField(TEXT("key"), Offer.Key);
+					(*Entry)->TryGetStringField(TEXT("group"), Offer.Group);
+					(*Entry)->TryGetStringField(TEXT("label"), Offer.Label);
+					(*Entry)->TryGetStringField(TEXT("where"), Offer.Where);
+					(*Entry)->TryGetStringField(TEXT("note"), Offer.Note);
+					(*Entry)->TryGetStringField(TEXT("why"), Offer.Why);
+					(*Entry)->TryGetStringField(TEXT("act"), Offer.Act);
+					(*Entry)->TryGetNumberField(TEXT("cost"), Offer.Cost);
+					(*Entry)->TryGetNumberField(TEXT("months"), Offer.Months);
+					(*Entry)->TryGetBoolField(TEXT("ok"), Offer.bOk);
+				}
+			}
+		}
+		const TSharedPtr<FJsonObject>* Again = nullptr;
+		if (Told->TryGetObjectField(TEXT("again"), Again) && Again && Again->IsValid())
+		{
+			Board.bAgain = true;
+			(*Again)->TryGetBoolField(TEXT("ok"), Board.bAgainOk);
+			(*Again)->TryGetStringField(TEXT("when"), Board.AgainWhen);
+			(*Again)->TryGetStringField(TEXT("text"), Board.AgainText);
+			(*Again)->TryGetStringField(TEXT("left"), Board.AgainLeft);
+			(*Again)->TryGetStringField(TEXT("why"), Board.AgainWhy);
+			(*Again)->TryGetStringField(TEXT("act"), Board.AgainAct);
+			(*Again)->TryGetNumberField(TEXT("cost"), Board.AgainCost);
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Orders = nullptr;
+		if (Told->TryGetArrayField(TEXT("orders"), Orders))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Orders)
+			{
+				const TSharedPtr<FJsonObject>* Entry = nullptr;
+				if (Value->TryGetObject(Entry))
+				{
+					FHomeOrder& Order = Board.Orders.AddDefaulted_GetRef();
+					(*Entry)->TryGetNumberField(TEXT("id"), Order.Id);
+					(*Entry)->TryGetNumberField(TEXT("region"), Order.Region);
+					(*Entry)->TryGetStringField(TEXT("what"), Order.What);
+					(*Entry)->TryGetStringField(TEXT("name"), Order.Name);
+					(*Entry)->TryGetStringField(TEXT("where"), Order.Where);
+					(*Entry)->TryGetStringField(TEXT("due"), Order.Due);
+					(*Entry)->TryGetStringField(TEXT("act"), Order.Act);
+					(*Entry)->TryGetNumberField(TEXT("months"), Order.Months);
+					(*Entry)->TryGetNumberField(TEXT("cost"), Order.Cost);
+					(*Entry)->TryGetBoolField(TEXT("cancel"), Order.bCancel);
+					(*Entry)->TryGetNumberField(TEXT("share"), Order.Share);
+				}
+			}
+		}
+		const TSharedPtr<FJsonObject>* Staff = nullptr;
+		if (Told->TryGetObjectField(TEXT("staff"), Staff) && Staff && Staff->IsValid())
+		{
+			Board.bStaff = true;
+			(*Staff)->TryGetBoolField(TEXT("on"), Board.bStaffOn);
+			(*Staff)->TryGetStringField(TEXT("line"), Board.StaffLine);
+			(*Staff)->TryGetStringField(TEXT("label"), Board.StaffLabel);
+			(*Staff)->TryGetStringField(TEXT("act"), Board.StaffAct);
+			(*Staff)->TryGetStringField(TEXT("tip"), Board.StaffTip);
+			(*Staff)->TryGetNumberField(TEXT("cap"), Board.StaffCap);
+			const TArray<TSharedPtr<FJsonValue>>* Caps = nullptr;
+			if ((*Staff)->TryGetArrayField(TEXT("caps"), Caps))
+			{
+				for (const TSharedPtr<FJsonValue>& Value : *Caps)
+				{
+					const TSharedPtr<FJsonObject>* Entry = nullptr;
+					int32 Share = 0;
+					if (Value->TryGetObject(Entry) && (*Entry)->TryGetNumberField(TEXT("n"), Share))
+					{
+						Board.StaffCaps.Add(Share);
+					}
+				}
+			}
+		}
+	}
+}
+
 FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 {
 	FOfficePage Out;
@@ -4494,6 +4707,12 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 			(*BackObject)->TryGetBoolField(TEXT("ok"), Card.Back.bOk);
 		}
 		Card.bBomb = Card.bBomb && !Card.Back.Act.IsEmpty();
+	}
+	// (Release 2, the home front board.) The room comes with its board: every town, what can be raised, what is on order.
+	const TSharedPtr<FJsonObject>* HomeObject = nullptr;
+	if (Object->TryGetObjectField(TEXT("home"), HomeObject) && HomeObject && HomeObject->IsValid())
+	{
+		ReadHomeBoard(*HomeObject, Out.Home);
 	}
 	const TArray<TSharedPtr<FJsonValue>>* Sections = nullptr;
 	if (Object->TryGetArrayField(TEXT("sections"), Sections))

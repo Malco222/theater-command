@@ -15,7 +15,7 @@
 import ferryData from '../../data/campaign/ferry.json';
 import type { AirFleet, Game, Region } from './types';
 import {
-  AIR, airRange, airWar, airfieldsHold, assessAir, carrierOf, cover, fieldRoom, fly, groupAt, isOffensive, legKm, overOcean, shipAir,
+  AIR, airRange, airWar, airfieldsHold, assessAir, carrierOf, cover, fieldRoom, fly, groupAt, isOffensive, legKm, legKmAt, overOcean, shipAir,
   whyNotMission, whyNotShipAir, whyNotStop, SHIP_AIR_ONE, SHIP_AIR_ROOM,
 } from './air';
 import { allied, atWar, headline } from './game';
@@ -26,7 +26,6 @@ import { grounded, skyAt, weatherOn } from './weather';
 import { wrecked } from './airversion';
 import { fieldRules, fieldShut } from './fieldstate';
 import { NAVY, crossingRisk, seaPath } from './navy';
-import { nearX } from './wrap';
 import { Rng, hashString } from '../core/rng';
 
 export const FERRY = ferryData as unknown as {
@@ -119,26 +118,25 @@ const num = (n: number): string => Math.round(n).toLocaleString('en-US');
 const turnsWord = (n: number): string => `${n} turn${n === 1 ? '' : 's'}`;
 
 /** The enemy fighters the viewer's side knows of: groups on a field it sees whole, and carrier wings of a fleet it has found. Where each is, and how far its fighters reach. */
-function knownFighters(g: Game, f: AirFleet, viewer: string): { x: number; y: number; reach: number }[] {
+function knownFighters(g: Game, f: AirFleet, viewer: string): { x: number; y: number; region: number; sea: number; reach: number }[] {
   const sight = sightOf(g, viewer);
-  const out: { x: number; y: number; reach: number }[] = [];
+  const out: { x: number; y: number; region: number; sea: number; reach: number }[] = [];
   for (const e of g.airFleets) {
     if (e.ftr <= 0 || !atWar(g, e.nat, f.nat) || e.way !== undefined) continue;
     if (e.ship !== undefined) { const c = carrierOf(g, e); if (!c || fleetKnown(g, c, viewer) === 'none') continue; }
     else if (e.base < 0 || sight[e.base] !== SIGHT.full) continue;
     const p = groupAt(g, e);
-    out.push({ x: p.x, y: p.y, reach: airRange(e, g).ftr });
+    out.push({ x: p.x, y: p.y, region: p.region, sea: p.sea, reach: airRange(e, g).ftr });
   }
   return out;
 }
 
-/** Distance in km on the chart from a point to the leg between two fields (as air.ts legKm measures an enemy's reach). */
-function pointLeg(g: Game, x: number, y: number, from: number, to: number): number {
-  const A = g.regions[from], B = g.regions[to];
-  const bx = nearX(g, B.x, A.x), px = nearX(g, x, A.x);
-  const dx = bx - A.x, dy = B.y - A.y, L = dx * dx + dy * dy;
-  const t = L > 0 ? Math.max(0, Math.min(1, ((px - A.x) * dx + (y - A.y) * dy) / L)) : 0;
-  return Math.hypot(px - (A.x + t * dx), y - (A.y + t * dy)) * AIR.kmPerUnit;
+/**
+ * Distance in km from a place to the leg between two fields: air.ts legKmAt, the one ruler the battle that follows reads
+ * (legKm), on the globe wherever the far side is in it (the join's read of r2-head-1125k, fault 1).
+ */
+export function pointLeg(g: Game, p: { x: number; y: number; region: number; sea: number }, from: number, to: number): number {
+  return legKmAt(g, p, from, to);
 }
 
 /** Hops this group can still fly this month: none if it has flown a raid or made another move, all of them if it has not started. */
@@ -174,8 +172,8 @@ export function ferryRoutes(g: Game, f: AirFleet, viewer: string = f.nat): Map<n
   const N = nodes.length, start = nodes.indexOf(f.base);
   const foes = knownFighters(g, f, viewer);
   const nodeRisk = new Uint8Array(N);
-  for (let i = 0; i < N; i++) for (const e of foes) if (pointLeg(g, e.x, e.y, nodes[i], nodes[i]) <= e.reach) { nodeRisk[i] = 1; break; }
-  const legRisk = (i: number, j: number): boolean => nodeRisk[j] === 1 || foes.some((e) => pointLeg(g, e.x, e.y, nodes[i], nodes[j]) <= e.reach);
+  for (let i = 0; i < N; i++) for (const e of foes) if (pointLeg(g, e, nodes[i], nodes[i]) <= e.reach) { nodeRisk[i] = 1; break; }
+  const legRisk = (i: number, j: number): boolean => nodeRisk[j] === 1 || foes.some((e) => pointLeg(g, e, nodes[i], nodes[j]) <= e.reach);
   // The hops it can fly, worked out once: each pair within its ferry range.
   const near: number[][] = nodes.map(() => []);
   const legKmOf = new Map<number, number>();

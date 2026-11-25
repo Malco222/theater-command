@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { launchRaid, raidTargets } from '../src/campaign/airwar';
 import { airAct } from '../src/campaign/airpages';
 import { troopCutOf } from '../src/campaign/airfought';
+import { AIRWAR } from '../src/campaign/air';
 import { createGame, setWar } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -63,14 +64,48 @@ describe('the switch (off by default, bit for bit as before)', () => {
     expect(TC.airLook('ground', target, ids).ticket).toBeNull();
   });
 
-  it('the staff\'s raid on troops with no battle books the same with the switch on as off', () => {
-    const a = saar(3), b = saar(3);
-    flyKinds([]);
-    const ra = launchRaid(a.g, 'ground', a.target, a.ids, a.nat)!;
-    flyKinds(['ground']);
-    const rb = launchRaid(b.g, 'ground', b.target, b.ids, b.nat)!;
-    expect(JSON.stringify(rb)).toBe(JSON.stringify(ra));
-    expect(saveGame(b.g)).toBe(saveGame(a.g));
+  // (Changed on the design director's ruling of 25 November 2026, 05:12Z, folded under this switch at 12:59Z, question
+  // 1: this test used to say the staff's raid books the same with the switch on as off. The ruling changes exactly that:
+  // with the switch on, the ground fire and the fighters' weight on the troops fall only on the fighters left with the
+  // reach to strafe, campaign/strafers.ts. Everything else the staff's raid books stays as with the switch off.)
+  it('the staff\'s raid on troops with no battle: on, it books as off except the ground fire and the fighters\' weight, which fall only on the groups with the reach to strafe', () => {
+    // Bombers alone: nothing goes down low either way, so the raid books exactly as with the switch off.
+    {
+      const a = saar(3), b = saar(3);
+      const bombers = a.ids.filter((id) => a.g.airFleets.find((f) => f.id === id)!.ftr === 0);
+      expect(bombers.length).toBeGreaterThan(0);
+      flyKinds([]);
+      const ra = launchRaid(a.g, 'ground', a.target, bombers, a.nat)!;
+      flyKinds(['ground']);
+      const rb = launchRaid(b.g, 'ground', b.target, bombers, b.nat)!;
+      expect(JSON.stringify(rb)).toBe(JSON.stringify(ra));
+      expect(saveGame(b.g)).toBe(saveGame(a.g));
+    }
+    // A raid with a fighter group out of reach to strafe (Groupement de Chasse 1 moved to Namur, 216 km off, beyond
+    // 0.9 of its 220 km, the design director's reach of 13:35Z; it stood at Belfort, 190 km off, beyond the old 0.6,
+    // which is inside 0.9): the defence, the odds and the bombers book as off; the far group loses only what the air fight
+    // took (as off would with no ground fire at all), and the weight on the troops is only the strafers'.
+    const far = (k: number) => {
+      const s = saar(k);
+      s.g.airFleets.find((f) => f.id === 9)!.base = s.g.regions.find((r) => r.name === 'Namur')!.id;
+      return { ...s, ids: [...s.ids, 9] };
+    };
+    for (const k of [3, 4]) {
+      const a = far(k), b = far(k), c = far(k);
+      flyKinds([]);
+      const ra = launchRaid(a.g, 'ground', a.target, a.ids, a.nat)!;
+      const fire = AIRWAR.ground.fire;
+      let rc;
+      try { AIRWAR.ground.fire = 0; rc = launchRaid(c.g, 'ground', c.target, c.ids, c.nat)!; } finally { AIRWAR.ground.fire = fire; }
+      flyKinds(['ground']);
+      const rb = launchRaid(b.g, 'ground', b.target, b.ids, b.nat)!;
+      expect(JSON.stringify(rb.def)).toBe(JSON.stringify(ra.def));
+      expect(rb.odds).toBe(ra.odds);
+      expect(rb.att.map((x) => x.lostBmr)).toEqual(ra.att.map((x) => x.lostBmr));
+      expect(rb.att.find((x) => x.id === 9)!.lostFtr).toBe(rc.att.find((x) => x.id === 9)!.lostFtr);
+      // With the switch off the far group pays the ground fire too: at Namur, on these two seeds.
+      expect(ra.att.find((x) => x.id === 9)!.lostFtr).toBeGreaterThanOrEqual(rc.att.find((x) => x.id === 9)!.lostFtr);
+    }
   });
 
   it('on through the environment, the bridge, or the call', () => {

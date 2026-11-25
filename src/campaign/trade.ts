@@ -11,7 +11,7 @@ import { civicHouses, civicSum } from './buildings';
 import { govMul } from './government';
 import { provinceYield } from './economy';
 import { atWar, bloc, headline } from './game';
-import { canPass, closedTo, seaRisk, zoneOf } from './navy';
+import { canPass, seaOdds, zoneOf } from './navy';
 import { WORLD, worldOn } from './world';
 import type { Game, Nation, Region, TradeDeal } from './types';
 import { chartDist } from './wrap';
@@ -101,9 +101,11 @@ function seaView(g: Game, nat: string, ctx: TradeCtx): SeaView {
   if (v) return v;
   const n = g.nations[nat];
   const war = n.atWar.length > 0;
+  // (Each sea's closing and risk from one count of its sides: navy.ts seaOdds. The playtest's finding 41.)
+  const odds = war ? g.seas.map((z) => seaOdds(g, z.id, nat)) : null;
   v = {
-    shut: g.seas.map((z) => war && closedTo(g, z.id, nat)),
-    risk: g.seas.map((z) => (war ? seaRisk(g, z.id, nat) : 0)),
+    shut: g.seas.map((_, i) => !!odds && odds[i].shut),
+    risk: g.seas.map((_, i) => (odds ? odds[i].risk : 0)),
     from: [],
   };
   // Goods are landed at a harbour. A country with none on the map still has its fishing ports: any coast will do.

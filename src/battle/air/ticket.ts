@@ -13,6 +13,7 @@ import { seatsOf } from '../../campaign/bombers';
 import { orderRaid } from '../../campaign/turn';
 import { weatherOn } from '../../campaign/weather';
 import type { FoughtAir } from '../../campaign/airfought';
+import { groundFlown } from '../../campaign/strafers';
 import type { AirFleet, AirMission, AirReport, BomberSeats, Game } from '../../campaign/types';
 import { hashString } from '../../core/rng';
 import { turnToDate } from '../../core/ticket';
@@ -60,7 +61,7 @@ let asked: RaidKind[] = [];
  * list, it sets the bridge's; either way it answers the kinds now on.
  */
 export function flyKinds(kinds?: readonly string[]): RaidKind[] {
-  if (kinds) asked = MORE_KINDS.filter((k) => kinds.includes(k));
+  if (kinds) { asked = MORE_KINDS.filter((k) => kinds.includes(k)); groundFlown(asked.includes('ground')); }
   const G = globalThis as { TC_FLY?: unknown; process?: { env?: Record<string, string | undefined> } };
   const forced = String(G.TC_FLY ?? G.process?.env?.TC_FLY ?? '').split(',').map((x) => x.trim());
   return MORE_KINDS.filter((k) => asked.includes(k) || forced.includes(k));
@@ -220,7 +221,9 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
   // the ground fire to bring down its share of the fighters that go down on them (forecastAir), so the field is told
   // how many of the raid's fighters lost are the ground fire's, and arms the defence with the rest.
   const marks = more && m === 'ground' ? troopPlace(g, a, m, target, nat, seed) : null;
-  const fire = marks ? Math.min(armed.ftrLoss, a.E * marks.law.fire) : 0;
+  // (With the strafers' rule on, campaign/strafers.ts: the card's own ground fire, on the fighters it expects left after
+  // the air fight that have the reach to strafe.)
+  const fire = marks ? (armed.fire !== undefined ? armed.fire : Math.min(armed.ftrLoss, a.E * marks.law.fire)) : 0;
   // The army's own light guns, for the picture, where the card counted none round the target (a raid with no bombers).
   const lightGuns = marks ? marks.pieces.reduce((t, p) => t + (p.what === 'aa' ? p.n : 0), 0) : 0;
   const place: AirPlace = {
@@ -379,6 +382,7 @@ export function foughtAir(o: AirOutcome): FoughtAir {
   return {
     lost, dropped: o.dropped, jettisoned: o.jettisoned, lostBefore: o.lostBefore, lostAfter: o.lostAfter, flew, chance: o.chance,
     ...(o.strafed !== undefined ? { strafed: o.strafed } : {}),
+    ...(o.strafers ? { strafers: [...o.strafers], strafeFire: o.strafeFire ?? 0 } : {}),
     ...(o.gaveUp ? { gaveUp: o.gaveUp } : {}), ...(o.sunk ? { sunk: o.sunk } : {}), ...(o.kept ? { kept: o.kept } : {}), ...(o.staff ? { staff: o.staff } : {}), ...(o.rolls ? { rolls: o.rolls } : {}),
     ...(Object.keys(fell).length ? { fell, shot } : {}), ...(Object.keys(guns).length ? { guns } : {}),
   };

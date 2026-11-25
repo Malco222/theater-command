@@ -4916,6 +4916,20 @@ function rowPlace(g: Game, nat: string, row: any[], o: any, at: Region): { reg: 
 /** For the measuring harness: told of each dated row struck off unsent when its half year is out. Nothing in the game listens. */
 export const struckWatch: { tell: ((e: { turn: number; due: number; nat: string; name: string; kind: string; divs: number; place: string; owner: string | null; holder: string | null; to: string | null; toHolder: string | null; war: boolean; until: boolean; ifLost: boolean; joins: string | null; hold: boolean }) => void) | null } = { tell: null };
 
+/**
+ * The share a division not landed yet gives up to a row that took part of it (o.takes), kept under 'takecut:<row>'.
+ * (Release 2 assembly, 25 November 2026: it was kept under 'cut:<row>', which cutOffNews also keeps per region, as the
+ * month an army there was cut off. Where a row's number met a ringed region's, a month was read as a share and the row
+ * landed at minus thirty-odd strength: Italy's Folgore at Tobruk, seed 11, month 36.) A save from before keeps its
+ * share under 'cut:<row>', read only where it is a fraction, which a month never is.
+ */
+function takenShare(g: Game, i: number): number | undefined {
+  const share = g.flags[`takecut:${i}`];
+  if (share !== undefined) return share;
+  const old = g.flags[`cut:${i}`];
+  return old !== undefined && old > 0 && old < 1 ? old : undefined;
+}
+
 // ---- Rows that take a corps from the player: an offer, never a silent removal (ruling B8) ---------------------------
 //
 // The design director's ruling B8 of 25 November 2026 (design-director/pacific-japan-1125.md), whole world only. A
@@ -5517,14 +5531,15 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // (A row that takes part of a division already landed leaves that division the weaker by it, in the grand campaign:
     // W Force's 1st Armoured Brigade came out of the 2nd Armoured Division in Egypt, and was counted in both. A
     // division not landed yet comes the weaker when it does.)
-    if (g.flags.open === 1 && g.flags[`cut:${i}`] !== undefined) { c.str *= 1 - g.flags[`cut:${i}`]; delete g.flags[`cut:${i}`]; }
+    const taken = g.flags.open === 1 ? takenShare(g, i) : undefined;
+    if (taken !== undefined) { c.str *= 1 - taken; delete g.flags[`takecut:${i}`]; if (g.flags[`cut:${i}`] === taken) delete g.flags[`cut:${i}`]; }
     if (g.flags.open === 1 && o.takes) {
       const x = g.corps.find((u) => u.nat === nat && !u.dead && u.name === o.takes.name);
       const j = ((setup as any).expeditions as any[]).findIndex((r2) => r2[1] === nat && r2[2] === o.takes.name);
       if (x) {
         x.str *= 1 - o.takes.share;
         if (nat === g.human && o.takes.leaves) headline(g, 'event', o.takes.leaves.replace('{place}', g.regions[x.reg].name), nat, reg.id);
-      } else if (j >= 0 && !g.flags[`sent:${j}`]) g.flags[`cut:${j}`] = o.takes.share;
+      } else if (j >= 0 && !g.flags[`sent:${j}`]) g.flags[`takecut:${j}`] = o.takes.share;
     }
     if (g.flags.open === 1 && UNLESS.has(row[2])) {
       g.flags[`came:${i}`] = g.turn;

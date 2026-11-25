@@ -292,6 +292,12 @@ export interface AirOutcome {
    */
   strafed?: number;
   troops?: { cut: number };
+  /**
+   * With the strafers' rule on (campaign/strafers.ts): the campaign groups that went down on the troops and paid the
+   * ground fire, and the ground fire charged them (aircraft owed, before whole aircraft fall). Absent otherwise.
+   */
+  strafers?: number[];
+  strafeFire?: number;
 }
 
 /**

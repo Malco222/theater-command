@@ -253,7 +253,7 @@
   }
  },
  "blocked": {
-  "_note": "Real air units' names, nicknames and honour titles that no name of ours may hold, matched as whole words (the historian's 'blocked', air-unit-names-r2.json, 309 names, all arms, Italy's air division names of June 1940 among them; and two more, Sirio and Zeffiro, that are the air thread's own, added on 25 November: 311 in all). Over-blocking does no harm. A battle's city is not blocked (the historian: the Soviet manner shared one city among many units).",
+  "_note": "Real air units' names, nicknames and honour titles that no name of ours may hold, matched as whole words (the historian's 'blocked', air-unit-names-r2.json, 309 names, all arms, Italy's air division names of June 1940 among them; and two more, Sirio and Zeffiro, that are the air thread's own, added on 25 November: 311); and one more, Death Rattlers, a real squadron's nickname added by the air thread on 25 November after the design director's review marks of 05:12Z (\"Rattlers\" was struck from our American names as too near it): 312 in all. Over-blocking does no harm. A place of this war in one of our names (a Guards city, a place name: the group's own latest hard fight) is not refused merely because one of its words is a distinctive word of a blocked name (the design director, 12:59Z question 6: a place word is the war's own map, not a nickname's mark); the rest of the name is still checked word by word, and the whole name, place included, is still tested against every blocked whole name, so a place that is itself a blocked name (Moscow) never stands in a name. This list holds no real Guards honour titles by number, place and arm together; the whole-name test covers only what is listed here and in nicknames.json 'blocked'.",
   "names": [
    "Abbeville Kids",
    "Ace of Clubs",
@@ -339,6 +339,7 @@
    "Cyclone's Flying Circus",
    "Dambusters",
    "Dauphiné",
+   "Death Rattlers",
    "Demon",
    "Desert Air Force",
    "Diavoli",
@@ -566,7 +567,9 @@
    "Ziemi Wielkopolskiej",
    "Ziemi Śląskiej",
    "Île-de-France"
-  ]
+  ],
+  "_common": "The words of a blocked name that are NOT its distinctive words (the design director's review marks of 05:12Z: the block test also catches a real nickname's distinctive word, not only the whole string). A blocked name's distinctive words are all its words (letters and digits, an apostrophe kept inside a word: Hell's) but these, matched whole and without regard to case; a word made only of digits is a number and never distinctive. No name of ours, generated or listed, may hold a distinctive word of any name on this list or on nicknames.json 'blocked' (airnames.ts airBlocked; tests/air-names-r2-words.test.ts). What is here, the air thread's first cut for the historian to edit: articles and small words in the languages of the list; the plain colours, and gold and silver; the two the ruling names, Flying and Fighting; numbers in words; the words that say what kind of formation or aircraft a unit is (Air, Force, Wing, Squadron, Group, Division, Brigade, Corps, Army, Regiment, Bomber, Fighter, Command, Kommando, Jagdverband), which our own formal names must use; one word of nationality, American; and the points of the compass and 'old' (North, South, East, West, Old: added after the review of 25 November, as words of places, East India, West Riding, Old Hickory, rather than of a nickname's mark). Everything else is distinctive: Iron, Devils, Lightning, Sky, Sea, Bell, Watch, Thunder, Hill, High, Boys and Tin among them, so names of ours that held them were replaced (nicknames.json air.styles).",
+  "common": ["the", "a", "an", "and", "of", "on", "in", "as", "de", "la", "le", "di", "das", "die", "all", "black", "white", "red", "blue", "green", "grey", "gray", "yellow", "brown", "gold", "golden", "silver", "flying", "fighting", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "hundred", "hundredth", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "treble", "air", "force", "wing", "squadron", "squadrons", "group", "division", "brigade", "corps", "army", "regiment", "bomber", "fighter", "command", "kommando", "sonderkommando", "jagdverband", "american", "north", "south", "east", "west", "old"]
  },
  "near": [
   0.5,

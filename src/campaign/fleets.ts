@@ -575,6 +575,15 @@ export function merge(g: Game, a: Fleet, b: Fleet): boolean {
   b.fought = Math.max(b.fought, a.fought);
   for (const [k, t] of Object.entries(a.seen ?? {})) if ((b.seen?.[k] ?? -99) < t) (b.seen ??= {})[k] = t;
   if (a.struck && (!b.struck || b.struck[0] < a.struck[0] || (b.struck[0] === a.struck[0] && b.struck[1] < a.struck[1]))) b.struck = [a.struck[0], a.struck[1], a.struck[2]];
+  // (Release 2, the far chart: their strikes at anchor go into the one fleet's book, each loss now a share of the
+  // whole fleet's surface ships, for its staff's weighing of a move: navy.ts anchorLoss.)
+  if (a.anchor?.length || b.anchor?.length) {
+    // (b's ships already count a's here.)
+    const all = shipCount(b.ships) - b.ships.ss, sa = shipCount(a.ships) - a.ships.ss;
+    const of = (x: NonNullable<Fleet['anchor']>, n: number): NonNullable<Fleet['anchor']> =>
+      x.map((e) => ({ ...e, lost: all > 0 ? (e.lost * n) / all : e.lost, from: e.from.map((o) => ({ ...o })) }));
+    b.anchor = [...of(b.anchor ?? [], all - sa), ...of(a.anchor ?? [], sa)];
+  }
   g.fleets.splice(g.fleets.indexOf(a), 1);
   moveWings(g, a, b, a.ships.cv, a.ships.cv);
   g.supplyDirty = true;

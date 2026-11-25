@@ -6,7 +6,7 @@
   16,
   24
  ],
- "_words": "The art director's words for each scheme (third issue, 25 November 2026 04:05Z; /mnt/project-files/art-director/air-colours/unit-colours-words.json, copied as issued, no word changed; the historian's check and second pass are applied in it). By nation, 'count' lines each: a group's 'scheme' indexes its own nation's list. A line splits at its first two commas into the spinner, the nose band and the tail, which are tiers 1, 2 and 3: tier 1 shows the first part, tier 2 the first two, tier 3 all three. Words only: no rule reads them. Nations with no list here (Poland and the rest) have no words yet.",
+ "_words": "The art director's words for each scheme (fifth issue, 25 November 2026 12:34Z, five card lines changed from the third: Britain 7, Italy 3, 4, 5 and 8, scheme numbers unchanged; /mnt/project-files/art-director/air-colours/unit-colours-words.json, copied as issued, no word changed; the historian's check and second pass are applied in it). By nation, 'count' lines each: a group's 'scheme' indexes its own nation's list. A line splits at its first two commas into the spinner, the nose band and the tail, which are tiers 1, 2 and 3: tier 1 shows the first part, tier 2 the first two, tier 3 all three. Words only: no rule reads them. Nations with no list here (Poland and the rest) have no words yet.",
  "words": {
   "GER": [
    "Orange spinner, purple nose band, tail halved, orange over cream",
@@ -33,7 +33,7 @@
    "Teal spinner, pale blue nose band, teal tail with a pale blue tip",
    "Teal spinner, purple nose band, tail halved, teal over cream",
    "Wine red spinner, teal nose band, tail halved, wine red over teal",
-   "Wine red spinner, orange nose band, tail halved, wine red over orange",
+   "Turquoise spinner, wine red nose band, tail banded in turquoise and wine red",
    "Purple spinner, pale blue nose band, tail banded in purple and pale blue",
    "Purple spinner, bottle green nose band, purple and cream checked tail",
    "Orange spinner, purple nose band, orange tail with a purple tip",
@@ -101,12 +101,12 @@
   "ITA": [
    "Azure blue spinner, moss green nose band, azure blue tail with a black tip",
    "Azure blue spinner, wine red nose band, tail halved, azure blue over wine red",
-   "Wine red spinner, pale blue nose band, tail banded in wine red and pale blue",
-   "Wine red spinner, orange nose band, wine red and orange checked tail",
-   "Wine red spinner, azure blue nose band, wine red and azure blue striped tail",
+   "Moss green spinner, turquoise nose band, moss green and turquoise checked tail",
+   "Turquoise spinner, azure blue nose band, tail banded in turquoise and azure blue",
+   "Turquoise spinner, slate blue nose band, turquoise and slate blue striped tail",
    "Moss green spinner, slate blue nose band, tail banded in moss green and black",
    "Moss green spinner, pale blue nose band, moss green and black checked tail",
-   "Orange spinner, wine red nose band, orange tail with a wine red tip",
+   "Pale blue spinner, wine red nose band, tail halved, pale blue over wine red",
    "Orange spinner, azure blue nose band, orange and black striped tail",
    "Orange spinner, pale blue nose band, tail halved, orange over pale blue",
    "Slate blue spinner, pale blue nose band, slate blue tail with a pale blue tip",

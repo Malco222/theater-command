@@ -22,7 +22,7 @@ import {
 } from './air';
 import { allied, atWar, headline } from './game';
 import { INTEL, agentsOf, atWork, fogOn } from './intel';
-import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetName, fleetPower, fleetReach, fleetsOf, keptByHand, orderedTo, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
+import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetName, fleetPower, fleetReach, fleetsOf, inPassage, keptByHand, orderedTo, passageWhy, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
 import { seaWhat, seaWhere } from './sea-words';
 import { RES, needOf } from './resources';
 import type { AirFleet, AirMission, Fleet, Game, Region, Ships } from './types';
@@ -499,8 +499,11 @@ export function searchOf(g: Game, nat: string, z: number): number {
   let w = 0;
   for (const f of g.fleets) {
     if (!atSea(f) || !(f.nat === nat || allied(g, f.nat, nat))) continue;
-    if (f.zone === z) { for (const c of CLASSES) w += f.ships[c] * S.ships[c] * (c === 'cv' ? wingShare(g, f) : 1); }
-    else if (f.ships.cv > 0 && g.seas[f.zone]?.adj.includes(z)) w += f.ships.cv * S.next * wingShare(g, f);
+    // (A carrier in passage to a new base flies nothing on its way, searches included: its ships keep their own
+    // lookout on the sea they cross. Release 2, the far chart.)
+    const wings = inPassage(f) ? 0 : wingShare(g, f);
+    if (f.zone === z) { for (const c of CLASSES) w += f.ships[c] * S.ships[c] * (c === 'cv' ? wings : 1); }
+    else if (f.ships.cv > 0 && wings > 0 && g.seas[f.zone]?.adj.includes(z)) w += f.ships.cv * S.next * wings;
   }
   w += airOver(g, z, nat) * S.air;
   const me = g.human;
@@ -663,6 +666,8 @@ export function whyNotSearch(g: Game, f: AirFleet, z: number): string | null {
   if (f.ftr + f.bmr <= 0) return 'It has no aircraft fit to fly.';
   if (f.scouted === g.turn) return 'It has flown its reconnaissance this month.';
   if (!g.nations[f.nat].atWar.length) return 'The nation is at peace.';
+  // (A carrier's aircraft fly no search while it is in passage to a new base: release 2, the far chart.)
+  { const c = carrierOf(g, f); if (c && inPassage(c)) return passageWhy(g, c); }
   // Weather (ruling 127): no search flies from or over a closed sky.
   if (weatherOn(g)) { const why = whyNotSky(g, f, zoneOfSea(g, z)); if (why) return why; }
   const R = airRange(f, g);

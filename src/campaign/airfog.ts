@@ -115,8 +115,9 @@ export function skyKnown(g: Game, nat: string, t: number, sight?: Uint8Array): S
   const book = g.intel?.airSeen?.[nat] ?? {};
   const s = book[t];
   if (s && g.turn - s[0] < F().forget) return { live: false, scouted: false, ago: g.turn - s[0], fighters: s[1], groups: s[2], guns: s[3], ruin: s[4] / 100, near: s[1] };
-  // Never seen: the fighters seen in reach of the places near it may be in reach of it too.
-  const R = fighterReach(g, g.regions[t].ctrl);
+  // Never seen: the fighters seen in reach of the places near it may be in reach of it too. Their reach is the holder's
+  // fighters' as a group based there has it (on the far side the far rows and the cover cap, as reach() reads them).
+  const R = fighterReach(g, g.regions[t].ctrl, t);
   let near = -1;
   for (const [id, x] of Object.entries(book)) if (g.turn - x[0] < F().forget && x[1] > near && km(g, +id, t) <= R) near = x[1];
   return { live: false, scouted: false, ago: -1, fighters: -1, groups: 0, guns: -1, ruin: -1, near };

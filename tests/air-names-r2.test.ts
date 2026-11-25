@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import names from '../data/campaign/air-names.json';
 import { foundAirFleet, formName, type Rung } from '../src/campaign/air';
 import { AIRNAMES, airBlocked, airNamesOn, roleWord, setAirNames, shortName, type RungR2 } from '../src/campaign/airnames';
-import { AIRCOLOURS, AIRNICKS, airEarn, airRaidFlown, airStyleKey, blockedAir, calledName, earnedAirName } from '../src/campaign/airnicks';
+import { AIRCOLOURS, AIRNICKS, airEarn, airRaidFlown, airStyleKey, blockedAir, calledName, earnedAirName, placeBlocked } from '../src/campaign/airnicks';
 import { groupRow } from '../src/campaign/airwar';
 import { createGame } from '../src/campaign/game';
 import { isBlocked, setNicknames } from '../src/campaign/nicknames';
@@ -365,8 +365,12 @@ describe('earned names and colours', () => {
       expect(f.was).toBe(was);
       return f.name;
     });
-    const at = blockedAir(city.name) ? '' : `${city.name} `;
-    expect(got).toEqual([`5th Guards ${at}Fighter Aviation Division`, `9th Guards ${at}Fighter Aviation Division`, `10th Guards ${at}Fighter Aviation Division`]);
+    // (Changed on the design director's ruling of 12:59Z, question 5: the city of a Guards title is that of the group's
+    // latest hard fight, and an odds-1 fight is ordinary under the 0.8 / 1.25 gap of 05:12Z, so these groups have no hard
+    // fight on record and take the title without a city. This test used to give them the city they flew over.)
+    expect(sov.slice(0, 3).every((f) => f.hardAt === undefined)).toBe(true);
+    expect(got).toEqual(['5th Guards Fighter Aviation Division', '9th Guards Fighter Aviation Division', '10th Guards Fighter Aviation Division']);
+    const at = placeBlocked(city.name) ? '' : `${city.name} `;
     expect(sov[0].short).toBe('5 GvIAD');
     expect(sov[0].nick).toBeUndefined();
     expect(earnedAirName(g, sov[3], city.name).name).toBe(`11th Guards ${at}Fighter Aviation Division`);

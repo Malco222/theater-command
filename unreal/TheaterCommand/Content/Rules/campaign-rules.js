@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e059a3de 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 682e3ac9 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -282,589 +282,6 @@
       [61, "GER", "West Wall fortress battalions, Baden", "Baden", 0.3, { mark: "unsure" }]
     ]
   };
-
-  // ../../data/campaign/divisions.json
-  var divisions_default = {
-    _about: {
-      what: "The divisions inside a corps, as both interfaces show them: what each kind is called, the numbers they carry, and how a corps' strength and experience are shared out among its divisions.",
-      rule: "A corps fights as one body: its strength and its experience are the corps' own, and the divisions shown inside it always add up to exactly those. Each division keeps its own character through the war, so the same one is always the most worn or the most seasoned of its corps. Nothing here changes a battle.",
-      kinds: "For each kind of corps: 'word' as it reads in a count ('5 infantry divisions'), 'name' for one division ('7th Infantry Division') and 'short' for a card.",
-      names: "What a nation calls its own divisions of a kind, where it differs: [name, short].",
-      historic: "The divisions a corps of the 1939 order of battle (setup-1939.json) actually had, by nation and corps name, in its own order: [name, short]. A division past the end of a list, or of a corps not listed, takes its nation's number for its kind. From the historian, for the field battles (the design director, b358). A division whose kind the corps does not hold is left to its number (b371: I Corps' third, Panzer Division Kempf, waits until the corps holds armour).",
-      order: "The order the kinds are listed in when an army is summed up.",
-      spread: "How far apart the divisions of a corps stand: the share of the room the corps' own strength (or experience) leaves either side of it.",
-      hardened: "The experience (0 to 1) at which a division counts as battle-hardened.",
-      record: "Real division numbers of 1939 that no first-day corps carries (setup-1939.json's 'nos' holds those that do), by nation and arm, from the historian's divisions-1939-ger.md (18 November 2026): divisions in no corps that day, and those of another arm than the game's corps. A stand-in division is numbered from above the highest real number of its nation's arm, so that no stand-in ever takes a real number and no name is carried twice (the design director, 18 November)."
-    },
-    record: {
-      GER: { arm: [5, 6], mot: [2, 20], cav: [1], inf: [14, 26, 31, 56, 57, 62, 72, 73, 76, 86, 208, 209, 212, 214, 215, 216, 223, 227, 231, 246, 251, 252, 253, 254, 255, 256, 257, 258, 260, 262, 263, 267, 268, 269] },
-      POL: { inf: [24, 36, 39, 45, 50] }
-    },
-    kinds: {
-      inf: { word: "infantry", name: "Infantry Division", short: "Infantry" },
-      mot: { word: "motorised", name: "Motorised Division", short: "Motorised" },
-      arm: { word: "armoured", name: "Armoured Division", short: "Armoured" },
-      cav: { word: "cavalry", name: "Cavalry Division", short: "Cavalry" },
-      mtn: { word: "mountain", name: "Mountain Division", short: "Mountain" },
-      fort: { word: "fortress", name: "Fortress Division", short: "Fortress" },
-      art: { word: "artillery", name: "Artillery Division", short: "Artillery" },
-      eng: { word: "engineer", name: "Engineer Brigade", short: "Engineers" },
-      mg: { word: "machine-gun", name: "Machine-Gun Brigade", short: "Machine-Gun" },
-      mor: { word: "mortar", name: "Mortar Brigade", short: "Mortar" }
-    },
-    historic: {
-      GER: {
-        "I Corps": [["11th Infantry Division", "11th Infantry"], ["61st Infantry Division", "61st Infantry"]],
-        "Corps Wodrig": [["1st Infantry Division", "1st Infantry"], ["12th Infantry Division", "12th Infantry"]]
-      }
-    },
-    names: {
-      GER: { arm: ["Panzer Division", "Panzer"] },
-      SOV: { inf: ["Rifle Division", "Rifles"], arm: ["Tank Division", "Tanks"], mot: ["Motor Rifle Division", "Motor Rifles"] },
-      USA: { arm: ["Armored Division", "Armored"], mot: ["Motorized Division", "Motorized"] },
-      ITA: { mtn: ["Alpine Division", "Alpini"] },
-      POL: { mtn: ["Mountain Brigade", "Mountain"] },
-      FRA: { mtn: ["Alpine Division", "Alpine"] }
-    },
-    order: ["arm", "mot", "cav", "inf", "mtn", "art", "eng", "fort", "mg", "mor"],
-    spread: { str: 0.6, xp: 0.7 },
-    hardened: 0.4
-  };
-
-  // ../../data/campaign/setup-1939.json
-  var setup_1939_default = {
-    _about: "Starting armies for 1 September 1939 and the formations that arrive later. Each line is one corps: [nation, name, kind, divisions, region, options]. Kinds: inf, mot, arm, cav, mtn, fort. Options: gen names the general in command, and trait is what he is known for (panzer, attacker or defender; commanders.json turns the label into his level, skills and traits); hold keeps a corps in place as a garrison; xp is experience from 0 to 1. Corps names and commanders follow the historical order of battle; strengths are rounded. 'reinforcements' are [month, nation, ...] and form up at home. 'formations' are the same again, but are armies and fronts put together later in the war from men already under arms: they arrive like reinforcements and do not hold up the building of new corps, which a computer-run nation begins only once its last reinforcement has arrived. 'expeditions' are the same, but go to a war away from the main fronts: they arrive only at a place still in friendly hands with room for them (the move is put off while it is not, and cancelled after half a year), and 'war' names two nations that must be at war for the troops to be sent at all. 'until' marks formations only lent to a campaign: in that month they go back to the main army, whose order of battle already counts them. 'joins' names a corps already at the front that the divisions go into: it keeps its general and what it has learned, and takes the row's name and kind (if that corps is gone, the divisions form up on their own at the place named). 'news' is a line for the dispatches in place of the bare notice of arrival. 'airborne' marks parachute and glider troops (see navy.json). 'nos' on a first-day corps gives its divisions their real numbers of 1 September 1939, one a division in order (the historian's divisions-1939-ger.md, 18 November 2026, for Germany and Poland: XIX Corps the 10th Panzer, which joined it in mid-September; the light divisions their panzer numbers of that winter, the 2nd Light the 7th, the 3rd the 8th, the 4th the 9th; VIII Corps the 239th, which followed it); null where the corps holds a division the record has none for, or of another arm than the game's, which then takes a stand-in number (armies.ts). The grand campaign alone reads them. 'from' names a theatre whose army the formation is put together from: as it arrives, as many divisions leave the corps already there, the largest first ('of' names the nation whose army gives them up, if it is not the formation's own). 'from' can also be a list of corps names: those corps are broken up to make the new one, and are struck off as it forms. 'ifLost' makes a formation wait on a defeat: it forms only once the enemy holds every place named, and until then the corps it would be made from fight on where they stand. 'after' (ruling 229, part 3, the grand campaign) counts a country's own call-up from its war's start and not from the book's month: it comes this many months after the war its 'war' names began, however early that war comes ('*' as the second name: a war with anyone). Greece's reserves come over the war's first three months; Yugoslavia, whose paper army was three times what stood ready in April 1941, calls up twelve divisions over its war's second and third months, in the grand campaign only. Ruling 229, part 1c, the grand campaign: a formation whose place its side no longer holds when it is due lands at the nearest harbour its side holds on that front (in the same side theatre, or else in the same country), clear of the enemy and with room, and does not hold in place there, as ruling 221's F lands troops lifted off a coast; it is not cancelled for the loss. 'unless' names another row: once that row has landed, this one never comes (the New Zealanders stand in the desert only in a war where W Force did not sail), and if this one has landed already its corps leaves as the other lands, with 'leaves' as the player's news when the corps is his ({place} where it stood). 'openDivs' is a row's size in the grand campaign, where the historian's earlier rows bring part of its men (XIII and XXX Corps, 1 division each: the South Africans and New Zealanders come by June 1941, as in the record); 'carried' names the corps row whose full-size history row already brought a row's men, so that a grand campaign begun after that corps landed under history does not bring them again. Add new expeditions at the end of the list: saved games remember them by their place in it.",
-    corps: [
-      ["GER", "XIX Corps", "arm", 2, "Farther Pomerania", { gen: "Heinz Guderian", trait: "panzer", xp: 0.4, nos: [3, 10] }],
-      ["GER", "II Corps", "inf", 3, "Grenzmark", { xp: 0.3, nos: [3, 32, 23] }],
-      ["GER", "III Corps", "inf", 3, "Neumark", { xp: 0.3, nos: [50, 218, 207] }],
-      ["GER", "I Corps", "inf", 3, "Masuria", { xp: 0.3, nos: [11, 61, null] }],
-      ["GER", "Corps Wodrig", "inf", 2, "Masuria", { xp: 0.3, nos: [1, 12] }],
-      ["GER", "XXI Corps", "inf", 3, "Elbing", { xp: 0.3, nos: [21, 228, 206] }],
-      ["GER", "Konigsberg garrison", "inf", 1, "Konigsberg", { hold: 1, nos: [217] }],
-      ["GER", "X Corps", "inf", 3, "Lower Silesia", { xp: 0.3, nos: [24, 30, 221] }],
-      ["GER", "XIII Corps", "inf", 3, "Lower Silesia", { xp: 0.3, nos: [10, 17, 213] }],
-      ["GER", "XVI Corps", "arm", 2, "Upper Silesia", { gen: "Erich Hoepner", trait: "attacker", xp: 0.4, nos: [1, 4] }],
-      ["GER", "XV Corps", "arm", 2, "Upper Silesia", { gen: "Hermann Hoth", trait: "panzer", xp: 0.4, nos: [7, 8] }],
-      ["GER", "XIV Corps", "mot", 2, "Lower Silesia", { xp: 0.35, nos: [13, 29] }],
-      ["GER", "IV Corps", "inf", 3, "Upper Silesia", { xp: 0.3, nos: [4, 46, 27] }],
-      ["GER", "XI Corps", "inf", 3, "Upper Silesia", { xp: 0.3, nos: [18, 19, 68] }],
-      ["GER", "XXII Corps", "arm", 2, "Moravia", { gen: "Ewald von Kleist", trait: "attacker", xp: 0.4, nos: [2, 9] }],
-      ["GER", "VIII Corps", "inf", 3, "Moravia", { xp: 0.3, nos: [8, 28, 239] }],
-      ["GER", "XVII Corps", "inf", 3, "Moravia", { xp: 0.3, nos: [7, 44, 45] }],
-      ["GER", "XVIII Corps", "mtn", 3, "Slovakia", { xp: 0.3, nos: [3, 2, 1] }],
-      ["GER", "XII Corps", "inf", 4, "Saar", { hold: 1, nos: [15, 34, 52, 79] }],
-      ["GER", "IX Corps", "inf", 4, "Eifel", { hold: 1, nos: [25, 33, 71, 75] }],
-      ["GER", "XXV Corps", "inf", 4, "Baden", { hold: 1, nos: [5, 35, 205, 78] }],
-      ["GER", "V Corps", "inf", 4, "Rhineland", { hold: 1, nos: [22, 225, 58, 87] }],
-      ["GER", "VI Corps", "inf", 3, "Frankfurt", { nos: [16, 69, 211] }],
-      ["GER", "XXIV Corps", "inf", 3, "Westphalia", { nos: [6, 9, 36] }],
-      ["GER", "Berlin garrison", "inf", 1, "Berlin", { hold: 1 }],
-      ["GER", "Vienna garrison", "inf", 1, "Vienna", { hold: 1 }],
-      ["GER", "Protectorate garrison", "inf", 2, "Bohemia", { hold: 1 }],
-      ["GER", "Hamburg garrison", "inf", 1, "Hamburg", { hold: 1 }],
-      ["POL", "Army Pomorze", "inf", 3, "Pomorze", { gen: "Wladyslaw Bortnowski", nos: [4, 15, 16] }],
-      ["POL", "Corridor Group", "inf", 2, "Danzig Corridor", { nos: [9, 27] }],
-      ["POL", "Army Modlin", "inf", 3, "Mlawa", { nos: [8, 20, 5] }],
-      ["POL", "Narew Group", "inf", 2, "Bialystok", { nos: [18, 33] }],
-      ["POL", "Army Poznan", "inf", 4, "Poznan", { gen: "Tadeusz Kutrzeba", trait: "attacker", nos: [14, 17, 25, 26] }],
-      ["POL", "Wielkopolska Cavalry", "cav", 1, "Poznan", {}],
-      ["POL", "Army Lodz", "inf", 4, "Lodz", { gen: "Juliusz Rommel", nos: [2, 10, 28, 30] }],
-      ["POL", "Army Krakow (Silesia)", "inf", 3, "Polish Silesia", { gen: "Antoni Szylling", trait: "defender", nos: [23, 55, 7] }],
-      ["POL", "Army Krakow (Bielsko)", "inf", 3, "Krakow", { nos: [21, 6, 22] }],
-      ["POL", "Army Karpaty", "mtn", 2, "Przemysl", { nos: [2, 3] }],
-      ["POL", "Army Prusy", "inf", 3, "Kielce", { nos: [13, 19, 29] }],
-      ["POL", "Wyszkow Group", "inf", 3, "Warsaw", { nos: [1, 35, 41] }],
-      ["POL", "Warsaw garrison", "inf", 2, "Warsaw", { hold: 1, nos: [44, null] }],
-      ["POL", "Lublin reserve", "inf", 2, "Lublin", { nos: [3, 12] }],
-      ["POL", "Lwow garrison", "inf", 1, "Lwow", { hold: 1, nos: [11] }],
-      ["POL", "Wilno garrison", "inf", 1, "Wilno", { hold: 1, nos: [38] }],
-      ["POL", "Polesie Group", "inf", 1, "Brest", { hold: 1, nos: [60] }],
-      ["POL", "Border Protection Corps", "inf", 1, "Volhynia", { hold: 1 }],
-      ["FRA", "Metz fortified region", "fort", 3, "Lorraine", { hold: 1 }],
-      ["FRA", "3rd Army", "inf", 4, "Lorraine", { hold: 1 }],
-      ["FRA", "Lauter fortified region", "fort", 3, "Alsace", { hold: 1 }],
-      ["FRA", "5th Army", "inf", 4, "Alsace", { hold: 1 }],
-      ["FRA", "4th Army", "inf", 3, "Vosges", { hold: 1 }],
-      ["FRA", "8th Army", "inf", 3, "Belfort", { hold: 1 }],
-      ["FRA", "Montmedy sector", "fort", 1, "Verdun", { hold: 1 }],
-      ["FRA", "XVIII Corps", "inf", 2, "Verdun", { hold: 1 }],
-      ["FRA", "2nd Army", "inf", 3, "Sedan", { gen: "Charles Huntziger", hold: 1, xp: 0 }],
-      ["FRA", "9th Army", "inf", 3, "Champagne", { gen: "Andre Corap", dyle: "Namur", xp: 0 }],
-      ["FRA", "1st Army", "inf", 4, "Lille", { gen: "Georges Blanchard", dyle: "Brussels", xp: 0.25 }],
-      ["FRA", "Cavalry Corps", "arm", 2, "Lille", { gen: "Rene Prioux", trait: "defender", dyle: "Namur", xp: 0.3 }],
-      ["FRA", "7th Army", "mot", 3, "Calais", { gen: "Henri Giraud", dyle: "Antwerp", xp: 0.25 }],
-      ["FRA", "Paris garrison", "inf", 2, "Paris", { hold: 1 }],
-      ["FRA", "General reserve", "inf", 3, "Aube", {}],
-      ["FRA", "6th Army", "inf", 3, "Burgundy", {}],
-      ["FRA", "10th Army", "inf", 2, "Somme", {}],
-      ["FRA", "Army of the Alps", "mtn", 3, "Savoy", { hold: 1 }],
-      ["FRA", "XV Corps", "inf", 2, "Riviera", { hold: 1 }],
-      ["FRA", "Marseille garrison", "inf", 1, "Marseille", { hold: 1 }],
-      ["FRA", "Bordeaux garrison", "inf", 1, "Bordeaux", { hold: 1 }],
-      ["UK", "London District", "inf", 2, "London", { hold: 1 }],
-      ["UK", "Eastern Command", "inf", 2, "Kent", { hold: 1 }],
-      ["UK", "Southern Command", "inf", 1, "Hampshire", { hold: 1 }],
-      ["UK", "Northern Command", "inf", 1, "Yorkshire", { hold: 1 }],
-      ["UK", "Scottish Command", "inf", 1, "Lothian", { hold: 1 }],
-      ["BEL", "I Corps", "inf", 4, "Liege", { hold: 1 }],
-      ["BEL", "II Corps", "inf", 4, "Antwerp", { hold: 1 }],
-      ["BEL", "III Corps", "inf", 4, "Brussels", {}],
-      ["BEL", "VII Corps", "inf", 3, "Namur", { hold: 1 }],
-      ["BEL", "Chasseurs Ardennais", "mtn", 2, "Ardennes", {}],
-      ["BEL", "V Corps", "inf", 3, "Flanders", {}],
-      ["NED", "I Corps", "inf", 3, "Holland", { hold: 1 }],
-      ["NED", "II Corps", "inf", 3, "Gelderland", {}],
-      ["NED", "III Corps", "inf", 2, "Brabant", {}],
-      ["NED", "Territorial Command", "inf", 1, "Friesland", {}],
-      ["NED", "Rotterdam garrison", "inf", 1, "Rotterdam", { hold: 1 }],
-      ["DEN", "Jutland Division", "inf", 1, "Jutland", {}],
-      ["DEN", "Zealand Division", "inf", 1, "Zealand", { hold: 1 }],
-      ["NOR", "1st and 2nd Divisions", "inf", 2, "Oslo", { hold: 1 }],
-      ["NOR", "3rd Division", "inf", 1, "Sorlandet", {}],
-      ["NOR", "4th Division", "inf", 1, "Bergen", {}],
-      ["NOR", "6th Division", "inf", 1, "Finnmark", {}],
-      ["ITA", "1st Army", "inf", 4, "Liguria", {}],
-      ["ITA", "4th Army", "mtn", 3, "Piedmont", {}],
-      ["ITA", "Army of the Po", "mot", 3, "Lombardy", {}],
-      ["ITA", "2nd Army", "inf", 3, "Friuli", { hold: 1 }],
-      ["ITA", "8th Army", "inf", 3, "Veneto", {}],
-      ["ITA", "Rome garrison", "inf", 3, "Rome", { hold: 1 }],
-      ["ITA", "3rd Army", "inf", 2, "Naples", { hold: 1 }],
-      ["ITA", "Sicily Command", "inf", 2, "Sicily", { hold: 1 }],
-      ["ITA", "Sardinia Command", "inf", 2, "Sardinia", { hold: 1 }],
-      ["ITA", "Albania Command", "inf", 4, "Albania", { hold: 1 }],
-      ["SVK", "Army Bernolak", "inf", 2, "Slovakia", { hold: 1 }],
-      ["SOV", "Belorussian Front", "inf", 5, "Minsk", {}],
-      ["SOV", "15th Tank Corps", "arm", 2, "Minsk", {}],
-      ["SOV", "3rd Army", "inf", 3, "Polotsk", {}],
-      ["SOV", "Ukrainian Front", "inf", 5, "Zhitomir", {}],
-      ["SOV", "25th Tank Corps", "arm", 2, "Vinnitsa", {}],
-      ["SOV", "Kiev Military District", "inf", 4, "Kiev", { hold: 1 }],
-      ["SOV", "Leningrad Military District", "inf", 5, "Leningrad", { hold: 1 }],
-      ["SOV", "Odessa Military District", "inf", 3, "Odessa", { hold: 1 }],
-      ["SOV", "Western reserve", "inf", 4, "Smolensk", { hold: 1 }],
-      ["SUI", "1st Army Corps", "mtn", 3, "Bern", { hold: 1 }],
-      ["SUI", "2nd Army Corps", "mtn", 3, "Zurich", { hold: 1 }],
-      ["ESP", "Army of the Centre", "inf", 4, "Madrid", { hold: 1 }],
-      ["ESP", "Army of Catalonia", "inf", 3, "Catalonia", { hold: 1 }],
-      ["ESP", "Army of the North", "inf", 2, "Basque Country", { hold: 1 }],
-      ["POR", "Lisbon garrison", "inf", 2, "Lisbon", { hold: 1 }],
-      ["IRL", "Irish Army", "inf", 1, "Dublin", { hold: 1 }],
-      ["SWE", "Eastern Army", "inf", 3, "Stockholm", { hold: 1 }],
-      ["SWE", "Southern Army", "inf", 2, "Scania", { hold: 1 }],
-      ["FIN", "Army of the Isthmus", "inf", 4, "Karelia", { hold: 1 }],
-      ["FIN", "Helsinki reserve", "inf", 2, "Helsinki", { hold: 1 }],
-      ["EST", "Estonian Army", "inf", 2, "Estonia", { hold: 1 }],
-      ["LAT", "Latvian Army", "inf", 2, "Latvia", { hold: 1 }],
-      ["LIT", "Lithuanian Army", "inf", 2, "Lithuania", { hold: 1 }],
-      ["HUN", "1st Army", "inf", 3, "Budapest", { hold: 1 }],
-      ["HUN", "3rd Army", "inf", 2, "Debrecen", { hold: 1 }],
-      ["ROM", "1st Army", "inf", 3, "Bucharest", { hold: 1 }],
-      ["ROM", "3rd Army", "inf", 3, "Bukovina", { hold: 1 }],
-      ["ROM", "4th Army", "inf", 3, "Bessarabia", { hold: 1 }],
-      ["ROM", "Ploiesti guard", "inf", 1, "Ploiesti", { hold: 1 }],
-      ["YUG", "1st Army Group", "inf", 3, "Croatia", { hold: 1 }],
-      ["YUG", "2nd Army Group", "inf", 3, "Belgrade", { hold: 1 }],
-      ["YUG", "3rd Army Group", "inf", 3, "Macedonia", { hold: 1 }],
-      ["BUL", "1st Army", "inf", 3, "Sofia", { hold: 1 }],
-      ["GRE", "Epirus Army", "mtn", 3, "Epirus", { hold: 1 }],
-      ["GRE", "Macedonia Army", "inf", 3, "Salonika", { hold: 1 }],
-      ["GRE", "Athens garrison", "inf", 1, "Athens", { hold: 1 }],
-      ["TUR", "1st Army", "inf", 4, "Istanbul", { hold: 1 }],
-      ["TUR", "2nd Army", "inf", 3, "Bursa", { hold: 1 }],
-      ["TUR", "3rd Army", "inf", 3, "Erzurum", { hold: 1 }],
-      ["TUR", "Ankara garrison", "inf", 2, "Ankara", { hold: 1 }],
-      ["SOV", "Moscow Military District", "inf", 5, "Moscow", { hold: 1 }],
-      ["SOV", "Moscow tank reserve", "arm", 2, "Tula", { hold: 1 }],
-      ["SOV", "Orel Military District", "inf", 3, "Orel", { hold: 1 }],
-      ["SOV", "Kharkov Military District", "inf", 4, "Kharkov", { hold: 1 }],
-      ["SOV", "North Caucasus Military District", "inf", 3, "Rostov", { hold: 1 }],
-      ["SOV", "Transcaucasus Military District", "mtn", 4, "Tbilisi", { hold: 1 }],
-      ["SOV", "Volga Military District", "inf", 3, "Saratov", { hold: 1 }],
-      ["SOV", "Crimea garrison", "inf", 1, "Crimea", { hold: 1 }],
-      ["SOV", "14th Army", "inf", 3, "Murmansk", { hold: 1 }],
-      ["SOV", "Kandalaksha Group", "inf", 2, "Kandalaksha", { hold: 1 }],
-      ["SOV", "Karelian garrison", "inf", 2, "Petrozavodsk", { hold: 1 }],
-      ["FRA", "Army of the Levant", "inf", 2, "Syria", { hold: 1 }],
-      ["IRQ", "Iraqi Army", "inf", 1, "Iraq", { hold: 1 }],
-      ["IRN", "Iranian Army", "inf", 2, "Iran", { hold: 1 }],
-      ["ITA", "XXI Corps, 10th Army", "inf", 2, "Bardia", { gen: "Mario Berti", xp: 0.05 }],
-      ["ITA", "XXIII Corps, 10th Army", "inf", 2, "Bardia", { xp: 0.05 }],
-      ["ITA", "Libyan Group", "mot", 1, "Tobruk", { xp: 0.05 }],
-      ["ITA", "Tobruk garrison", "inf", 1, "Tobruk", { hold: 1, xp: 0.05 }],
-      ["ITA", "XX Corps, 10th Army", "inf", 2, "Benghazi", { xp: 0.05 }],
-      ["ITA", "5th Army", "inf", 3, "Nalut", { hold: 1, xp: 0.05 }],
-      ["ITA", "Aegean Command", "inf", 1, "Rhodes", { hold: 1 }],
-      ["UK", "7th Armoured Division", "arm", 1, "Mersa Matruh", { gen: "Richard O'Connor", trait: "attacker", xp: 0.4 }],
-      ["UK", "4th Indian Division", "inf", 1, "Mersa Matruh", { xp: 0.35 }],
-      ["UK", "British Troops in Egypt", "inf", 1, "Cairo", { hold: 1 }],
-      ["UK", "Alexandria garrison", "inf", 1, "Alexandria", { hold: 1 }],
-      ["UK", "Palestine garrison", "inf", 1, "Palestine", { hold: 1 }],
-      ["UK", "Malta garrison", "inf", 1, "Malta", { hold: 1, xp: 0.2 }],
-      ["UK", "Gibraltar garrison", "fort", 1, "Gibraltar", { hold: 1 }],
-      ["FRA", "Army of Africa", "inf", 3, "Algiers", { hold: 1 }],
-      ["FRA", "Tunisia Command", "inf", 3, "Mareth", { hold: 1 }],
-      ["FRA", "Morocco Command", "inf", 2, "Casablanca", { hold: 1 }]
-    ],
-    reinforcements: [
-      [1, "UK", "I Corps (BEF)", "inf", 3, "Lille", { gen: "John Dill", dyle: "Brussels", xp: 0.2 }],
-      [2, "UK", "II Corps (BEF)", "inf", 3, "Lille", { gen: "Alan Brooke", trait: "defender", dyle: "Brussels", xp: 0.2 }],
-      [2, "FRA", "XXI Corps", "inf", 3, "Champagne", {}],
-      [3, "FRA", "Colonial Corps", "inf", 3, "Orleans", {}],
-      [3, "GER", "XXVI Corps", "inf", 3, "Hanover", {}],
-      [3, "GER", "XXVII Corps", "inf", 3, "Hesse", {}],
-      [4, "FRA", "XVII Corps", "inf", 3, "Berry", {}],
-      [4, "SOV", "10th Army", "inf", 5, "Bialystok", {}],
-      [4, "SOV", "4th Army", "inf", 4, "Brest", {}],
-      [4, "SOV", "5th Army", "inf", 4, "Volhynia", {}],
-      [4, "SOV", "6th Army", "inf", 4, "Lwow", {}],
-      [5, "GER", "XXXXI Corps", "arm", 2, "Frankfurt", { gen: "Georg-Hans Reinhardt", trait: "attacker", xp: 0.3 }],
-      [5, "GER", "XXXVIII Corps", "inf", 3, "Wurttemberg", {}],
-      [5, "GER", "XXXX Corps", "inf", 3, "Franconia", {}],
-      [6, "FRA", "Armoured reserve", "arm", 2, "Champagne", { xp: 0.1 }],
-      [6, "FRA", "XXIII Corps", "inf", 3, "Aube", {}],
-      [7, "GER", "XXXIX Corps", "arm", 2, "Hesse", { gen: "Rudolf Schmidt", xp: 0.3 }],
-      [7, "GER", "Group XXI", "inf", 3, "Schleswig-Holstein", { gen: "Nikolaus von Falkenhorst", hold: 1, xp: 0.2 }],
-      [7, "GER", "Mountain Corps Norway", "mtn", 1, "Bremen", { gen: "Eduard Dietl", trait: "defender", hold: 1, xp: 0.3 }],
-      [7, "GER", "Trondheim Landing Group", "mtn", 1, "Bremen", { hold: 1, xp: 0.2 }],
-      [7, "GER", "Bergen Landing Group", "inf", 1, "Bremen", { hold: 1, xp: 0.2 }],
-      [7, "GER", "XXXXII Corps", "inf", 3, "Hanover", {}],
-      [7, "GER", "XXXXIII Corps", "inf", 3, "Saxony", {}],
-      [8, "UK", "III Corps (BEF)", "inf", 3, "Lille", { dyle: "Flanders", xp: 0.1 }],
-      [8, "UK", "North Western Expeditionary Force", "inf", 2, "Clydeside", { gen: "Claude Auchinleck", hold: 1, xp: 0.1 }],
-      [8, "GER", "XXXXIV Corps", "inf", 3, "Magdeburg", {}],
-      [9, "UK", "1st Armoured Division", "arm", 1, "Rouen", {}],
-      [9, "FRA", "XXV Corps", "inf", 3, "Paris", {}],
-      [10, "SOV", "23rd Army", "inf", 4, "Leningrad", {}],
-      [10, "SOV", "7th Army", "inf", 3, "Tikhvin", {}],
-      [12, "GER", "XXXXVI Panzer Corps", "arm", 2, "Saxony", { gen: "Heinrich von Vietinghoff", xp: 0.3 }],
-      [12, "GER", "XXVIII Corps", "inf", 3, "Hanover", {}],
-      [12, "GER", "XXIX Corps", "inf", 3, "Hesse", {}],
-      [12, "SOV", "26th Army", "inf", 3, "Lwow", {}],
-      [12, "SOV", "12th Army", "inf", 4, "Bukovina", {}],
-      [13, "GER", "XXXXVII Panzer Corps", "arm", 2, "Franconia", { gen: "Joachim Lemelsen", xp: 0.3 }],
-      [13, "GER", "XXX Corps", "inf", 3, "Bavaria", {}],
-      [14, "GER", "XXXIV Corps", "inf", 3, "Magdeburg", {}],
-      [14, "GER", "XXXV Corps", "inf", 3, "Saxony", {}],
-      [15, "GER", "XXXXVIII Panzer Corps", "arm", 2, "Lower Silesia", { gen: "Werner Kempf", xp: 0.3 }],
-      [15, "GER", "VII Corps", "inf", 3, "Bavaria", {}],
-      [16, "GER", "III Motorized Corps", "mot", 2, "Berlin", { gen: "Eberhard von Mackensen", xp: 0.3 }],
-      [16, "GER", "XX Corps", "inf", 3, "Stettin", {}],
-      [16, "SOV", "27th Army", "inf", 3, "Estonia", {}],
-      [17, "GER", "XXIII Corps", "inf", 3, "Hanover", {}],
-      [17, "GER", "L Corps", "inf", 3, "Wurttemberg", {}],
-      [17, "SOV", "6th Mechanized Corps", "arm", 3, "Bialystok", {}],
-      [17, "SOV", "4th Mechanized Corps", "arm", 3, "Lwow", {}],
-      [17, "SOV", "8th Mechanized Corps", "arm", 3, "Volhynia", {}],
-      [18, "GER", "XXIV Motorized Corps", "mot", 2, "Upper Silesia", { gen: "Leo Geyr von Schweppenburg", xp: 0.3 }],
-      [18, "GER", "XXXXIX Mountain Corps", "mtn", 2, "Vienna", {}],
-      [18, "SOV", "12th Mechanized Corps", "arm", 2, "Latvia", {}],
-      [18, "SOV", "3rd Mechanized Corps", "arm", 2, "Lithuania", {}],
-      [18, "SOV", "1st Mechanized Corps", "arm", 2, "Pskov", {}],
-      [19, "GER", "LII Corps", "inf", 3, "Dresden", {}],
-      [19, "GER", "LIII Corps", "inf", 3, "Hesse", {}],
-      [19, "SOV", "13th Army", "inf", 3, "Minsk", {}],
-      [19, "SOV", "14th Mechanized Corps", "arm", 2, "Brest", {}],
-      [19, "SOV", "9th Mechanized Corps", "arm", 2, "Zhitomir", {}],
-      [19, "SOV", "2nd Mechanized Corps", "arm", 2, "Odessa", {}],
-      [20, "GER", "LIV Corps", "inf", 3, "Bavaria", {}],
-      [20, "GER", "LV Corps", "inf", 3, "Franconia", {}],
-      [20, "GER", "LVI Panzer Corps", "arm", 2, "Stettin", { gen: "Erich von Manstein", trait: "attacker", xp: 0.3 }],
-      [20, "GER", "LVII Panzer Corps", "arm", 2, "Dresden", { gen: "Adolf-Friedrich Kuntzen", xp: 0.3 }],
-      [21, "ROM", "Mountain Corps", "mtn", 2, "Moldavia", {}],
-      [21, "ROM", "Cavalry Corps", "cav", 2, "Moldavia", {}],
-      [21, "ROM", "II Corps", "inf", 3, "Moldavia", {}],
-      [21, "ROM", "V Corps", "inf", 3, "Dobruja", {}],
-      [21, "HUN", "Mobile Corps", "mot", 1, "Debrecen", {}],
-      [21, "SOV", "21st Army", "inf", 4, "Gomel", {}],
-      [21, "SOV", "22nd Army", "inf", 3, "Vitebsk", {}],
-      [21, "SOV", "19th Army", "inf", 3, "Kiev", {}],
-      [21, "SOV", "18th Army", "inf", 3, "Vinnitsa", {}],
-      [21, "SOV", "16th Army", "inf", 3, "Kiev", {}],
-      [21, "SOV", "20th Army", "inf", 4, "Smolensk", {}],
-      [27, "SOV", "1st Shock Army", "inf", 4, "Moscow", { xp: 0.3, trait: "attacker" }],
-      [27, "SOV", "20th Army (re-formed)", "inf", 4, "Vladimir", {}],
-      [27, "SOV", "10th Army (re-formed)", "inf", 4, "Ryazan", {}],
-      [27, "SOV", "26th Army (re-formed)", "inf", 3, "Tula", {}],
-      [27, "SOV", "60th Army", "inf", 3, "Yaroslavl", {}],
-      [27, "SOV", "61st Army", "inf", 3, "Tambov", {}],
-      [28, "SOV", "Far East rifle divisions", "inf", 4, "Moscow", { xp: 0.4 }],
-      [28, "SOV", "Siberian rifle divisions", "inf", 4, "Vladimir", { xp: 0.4 }],
-      [28, "SOV", "Ural rifle divisions", "inf", 3, "Ryazan", { xp: 0.3 }],
-      [28, "SOV", "39th Army", "inf", 3, "Kalinin", {}],
-      [28, "SOV", "59th Army", "inf", 3, "Vologda", {}],
-      [28, "SOV", "2nd Guards Cavalry Corps", "cav", 2, "Tula", { xp: 0.3 }]
-    ],
-    formations: [
-      [41, "ITA", "Sardinia coastal divisions", "inf", 1, "Sardinia", { hold: 1, str: 0.3, est: 0.3, xp: 0.05, open: 1 }],
-      [47, "ITA", "Nembo Parachute Division", "inf", 1, "Sardinia", { hold: 1, str: 0.7, est: 0.7, xp: 0.15, open: 1 }],
-      [46, "SOV", "Central Front", "inf", 12, "Kursk", { gen: "Konstantin Rokossovsky", hold: 1, xp: 0.4 }],
-      [46, "SOV", "Voronezh Front", "inf", 12, "Kursk", { gen: "Nikolai Vatutin", trait: "attacker", hold: 1, xp: 0.4 }],
-      [46, "SOV", "1st Tank Army", "arm", 2, "Kursk", { gen: "Mikhail Katukov", trait: "panzer", hold: 1, xp: 0.4 }],
-      [46, "SOV", "2nd Tank Army", "arm", 2, "Kursk", { gen: "Aleksei Rodin", hold: 1, xp: 0.3 }],
-      [46, "SOV", "Steppe Front", "inf", 10, "Voronezh", { gen: "Ivan Konev", xp: 0.3 }],
-      [46, "SOV", "5th Guards Tank Army", "arm", 2, "Voronezh", { gen: "Pavel Rotmistrov", trait: "panzer", xp: 0.4 }],
-      [46, "SOV", "3rd Guards Tank Army", "arm", 2, "Tula", { gen: "Pavel Rybalko", trait: "panzer", xp: 0.4 }],
-      [46, "SOV", "4th Tank Army", "arm", 2, "Tula", { gen: "Vasily Badanov", xp: 0.3 }]
-    ],
-    book: {
-      _note: "Ruling 233, rider b612 (4). At these stops of the history dial, in the grand campaign, a computer's staff is sent the dated rows below ('expeditions') whose place is home ground of the second country named, though the theatre is a scripted one whose rows free play does not send: Germany's moves into Italy in 1943 and 1944 are the book's. Each row waits until an enemy holds or stands on one of the grounds Italy's armistice names (the ward's trigger, open.json), and then comes at its date, or at once if the date has passed: a quiet Italy draws no German corps. 'from' keeps anything from being counted twice (b609): a row named here breaks up the corps listed, where they still live, to find its divisions (the Hermann Goring Division of Tunisia and the 15th Panzer Division of the desert, re-formed in Sicily as XIV Panzer Corps's two).",
-      stops: [1, 2],
-      scripted: [["GER", "ITA"]],
-      from: { "XIV Panzer Corps (Hermann Goring and 15th Panzergrenadier Divisions)": ["Hermann Goring Division", "15th Panzer Division"] }
-    },
-    expeditions: [
-      [13, "UK", "6th Australian Division", "inf", 1, "Alexandria", { xp: 0.2, war: ["UK", "ITA"] }],
-      [17, "UK", "2nd Armoured Division", "arm", 1, "Alexandria", { xp: 0, war: ["UK", "ITA"] }],
-      [18, "UK", "Tobruk garrison (9th Australian Division)", "inf", 3, "Tobruk", { hold: 1, xp: 0.25, war: ["UK", "ITA"] }],
-      [24, "UK", "XIII Corps, Eighth Army", "inf", 2, "Alexandria", { xp: 0.3, war: ["UK", "ITA"], openDivs: 1 }],
-      [26, "UK", "XXX Corps, Eighth Army", "arm", 2, "Alexandria", { xp: 0.15, war: ["UK", "ITA"], openDivs: 1 }],
-      [17, "ITA", "Ariete Armoured Division", "arm", 1, "Tripoli", { hold: 1, xp: 0.1, war: ["UK", "ITA"] }],
-      [18, "ITA", "Trento Motorized Division", "mot", 1, "Tripoli", { hold: 1, xp: 0.1, war: ["UK", "ITA"] }],
-      [19, "ITA", "Brescia and Pavia Divisions", "inf", 1, "Tripoli", { xp: 0.1, war: ["UK", "ITA"] }],
-      [23, "ITA", "Bologna and Savona Divisions", "inf", 1, "Tripoli", { xp: 0.1, war: ["UK", "ITA"] }],
-      [24, "ITA", "Trieste Motorized Division", "mot", 1, "Tripoli", { xp: 0.1, war: ["UK", "ITA"] }],
-      [18, "GER", "5th Light Division", "arm", 1, "Tripoli", { gen: "Erwin Rommel", trait: "panzer", hold: 1, xp: 0.4, war: ["UK", "ITA"] }],
-      [20, "GER", "15th Panzer Division", "arm", 1, "Tripoli", { gen: "Ludwig Cruwell", xp: 0.4, war: ["UK", "ITA"] }],
-      [24, "GER", "90th Light Division", "mot", 1, "Tripoli", { xp: 0.3, war: ["UK", "ITA"] }],
-      [13, "ITA", "Ciamuria Corps and Julia Alpine Division", "inf", 3, "Albania", { gen: "Sebastiano Visconti Prasca", xp: 0.1, war: ["ITA", "UK"] }],
-      [13, "ITA", "XXVI Corps", "inf", 2, "Albania", { xp: 0.1, war: ["ITA", "UK"] }],
-      [15, "ITA", "9th Army", "inf", 4, "Albania", { xp: 0.05, war: ["ITA", "GRE"] }],
-      [17, "ITA", "11th Army reserves", "inf", 4, "Albania", { gen: "Ugo Cavallero", xp: 0.05, war: ["ITA", "GRE"] }],
-      [14, "GRE", "West Macedonia Army Section", "inf", 3, "Salonika", { xp: 0.15, war: ["GRE", "ITA"], after: 0 }],
-      [14, "GRE", "I Corps", "inf", 2, "Epirus", { gen: "Alexandros Papagos", trait: "defender", xp: 0.15, war: ["GRE", "ITA"], after: 0 }],
-      [15, "GRE", "II Corps", "inf", 2, "Thessaly", { xp: 0.15, war: ["GRE", "ITA"], after: 1 }],
-      [16, "GRE", "III Corps", "inf", 2, "Thessaly", { xp: 0.15, war: ["GRE", "ITA"], after: 2 }],
-      [15, "UK", "Creforce", "inf", 1, "Crete", { gen: "Bernard Freyberg", trait: "defender", hold: 1, xp: 0.2, war: ["GRE", "ITA"] }],
-      [19, "UK", "W Force (New Zealand Division and 1st Armoured Brigade)", "inf", 2, "Thessaly", { gen: "Henry Maitland Wilson", hold: 1, xp: 0.25, war: ["GRE", "ITA"], takes: { name: "2nd Armoured Division", share: 0.5, leaves: "The 1st Armoured Brigade sails from {place} for Greece with W Force. The 2nd Armoured Division stays in the desert with its other brigade." } }],
-      [19, "GER", "5th and 11th Panzer Divisions", "arm", 2, "Sofia", { hold: 1, xp: 0.4, war: ["ITA", "GRE"], until: 22 }],
-      [19, "GER", "2nd and 9th Panzer Divisions", "arm", 2, "Sofia", { hold: 1, xp: 0.4, war: ["ITA", "GRE"], until: 22 }],
-      [19, "GER", "5th and 6th Mountain Divisions", "mtn", 2, "Plovdiv", { hold: 1, xp: 0.35, war: ["ITA", "GRE"] }],
-      [19, "GER", "50th, 72nd and 164th Infantry Divisions", "inf", 3, "Plovdiv", { hold: 1, xp: 0.3, war: ["ITA", "GRE"] }],
-      [20, "GER", "Grossdeutschland motorized group", "mot", 1, "Banat", { hold: 1, xp: 0.4, war: ["ITA", "GRE"], until: 22 }],
-      [20, "GER", "8th and 14th Panzer Divisions", "arm", 2, "Transdanubia", { hold: 1, xp: 0.35, war: ["ITA", "GRE"], until: 22 }],
-      [20, "GER", "132nd and 183rd Infantry Divisions", "inf", 2, "Transdanubia", { hold: 1, xp: 0.2, war: ["ITA", "GRE"] }],
-      [21, "GER", "XI Air Corps", "inf", 3, "Athens", { gen: "Kurt Student", trait: "attacker", airborne: 1, hold: 1, xp: 0.7, war: ["GER", "UK"] }],
-      [35, "HUN", "2nd Army: III Corps", "inf", 3, "Voronezh", { gen: "Gusztav Jany", trait: "defender", hold: 1, join: 1, until: 45, xp: 0.05, war: ["GER", "SOV"] }],
-      [35, "HUN", "2nd Army: IV and VII Corps", "inf", 4, "Voronezh", { hold: 1, join: 1, until: 45, xp: 0.05, war: ["GER", "SOV"] }],
-      [36, "ITA", "8th Army: II Corps", "inf", 3, "Millerovo", { gen: "Italo Gariboldi", trait: "defender", hold: 1, join: 1, until: 45, xp: 0.1, war: ["ITA", "SOV"] }],
-      [36, "ITA", "8th Army: XXXV Corps", "inf", 3, "Millerovo", { hold: 1, join: 1, until: 45, xp: 0.1, war: ["ITA", "SOV"] }],
-      [36, "ITA", "Alpine Corps", "mtn", 3, "Millerovo", { hold: 1, join: 1, until: 45, xp: 0.2, war: ["ITA", "SOV"] }],
-      [37, "ROM", "3rd Army: I and II Corps", "inf", 4, "Don Bend", { gen: "Petre Dumitrescu", trait: "defender", hold: 1, join: 1, xp: 0.1, war: ["GER", "SOV"] }],
-      [37, "ROM", "3rd Army: IV and V Corps", "inf", 4, "Don Bend", { hold: 1, join: 1, xp: 0.1, war: ["GER", "SOV"] }],
-      [38, "ROM", "4th Army: VI Corps", "inf", 3, "Kalmyk Steppe", { gen: "Constantin Constantinescu-Claps", trait: "defender", hold: 1, join: 1, xp: 0.1, war: ["GER", "SOV"] }],
-      [38, "ROM", "4th Army: VII Corps", "inf", 3, "Kalmyk Steppe", { hold: 1, join: 1, xp: 0.1, war: ["GER", "SOV"] }],
-      [42, "GER", "Panzer Corps from France", "arm", 3, "Poltava", { xp: 0.4, war: ["GER", "SOV"] }],
-      [31, "UK", "1st South African and 50th Divisions", "inf", 2, "Alexandria", { xp: 0.2, war: ["UK", "ITA"] }],
-      [32, "UK", "1st Armoured Division", "arm", 1, "Alexandria", { xp: 0.1, war: ["UK", "ITA"] }],
-      [34, "UK", "New Zealand and 9th Australian Divisions", "inf", 2, "Alexandria", { xp: 0.35, war: ["UK", "ITA"] }],
-      [36, "UK", "X Corps (8th and 10th Armoured Divisions)", "arm", 2, "Alexandria", { gen: "Bernard Montgomery", xp: 0.2, war: ["UK", "ITA"] }],
-      [37, "UK", "44th and 51st Divisions", "inf", 2, "Alexandria", { xp: 0.1, war: ["UK", "ITA"] }],
-      [31, "ITA", "Littorio Armoured Division", "arm", 1, "Tripoli", { xp: 0.1, war: ["UK", "ITA"] }],
-      [36, "GER", "164th Light Division and Ramcke Brigade", "inf", 1, "Tobruk", { xp: 0.3, war: ["UK", "ITA"] }],
-      [36, "ITA", "Folgore Parachute Division", "inf", 1, "Tobruk", { xp: 0.3, war: ["UK", "ITA"] }],
-      [39, "UK", "First Army: 78th Division", "inf", 1, "Gibraltar", { gen: "Kenneth Anderson", trait: "defender", xp: 0.2, war: ["UK", "GER"] }],
-      [39, "USA", "II Corps (1st Infantry and 1st Armored Divisions)", "mot", 2, "Gibraltar", { gen: "Lloyd Fredendall", xp: 0.05, war: ["USA", "GER"] }],
-      [39, "USA", "Western Task Force (2nd Armored and 9th Infantry Divisions)", "mot", 2, "Gibraltar", { gen: "George S. Patton", trait: "attacker", xp: 0.05, war: ["USA", "GER"] }],
-      [41, "UK", "First Army: 6th Armoured Division", "arm", 1, "Algiers", { xp: 0.1, war: ["UK", "GER"] }],
-      [41, "UK", "French XIX Corps", "inf", 2, "Constantine", { xp: 0.05, war: ["UK", "GER"] }],
-      [42, "USA", "34th Infantry Division", "inf", 1, "Oran", { xp: 0.05, war: ["USA", "GER"] }],
-      [42, "UK", "First Army: V Corps", "inf", 2, "Algiers", { xp: 0.15, war: ["UK", "GER"] }],
-      [40, "GER", "10th Panzer Division", "arm", 1, "Tunis", { gen: "Hans-Jurgen von Arnim", trait: "defender", xp: 0.4, war: ["GER", "USA"] }],
-      [41, "GER", "334th Infantry Division", "inf", 1, "Tunis", { xp: 0.2, war: ["GER", "USA"] }],
-      [41, "GER", "Hermann Goring Division", "mot", 1, "Tunis", { xp: 0.3, war: ["GER", "USA"] }],
-      [42, "ITA", "Pistoia and La Spezia Divisions", "inf", 2, "Tunis", { gen: "Giovanni Messe", xp: 0.15, war: ["ITA", "USA"] }],
-      [39, "USA", "3rd Infantry Division", "inf", 1, "Gibraltar", { xp: 0.05, war: ["USA", "GER"] }],
-      [47, "ITA", "6th Army", "inf", 3, "Sicily", { gen: "Alfredo Guzzoni", trait: "defender", hold: 1, join: 1, xp: 0.05, war: ["ITA", "USA"] }],
-      [47, "GER", "XIV Panzer Corps (Hermann Goring and 15th Panzergrenadier Divisions)", "mot", 2, "Calabria", { gen: "Hans-Valentin Hube", trait: "defender", join: 1, xp: 0.3, war: ["GER", "USA"] }],
-      [47, "UK", "Eighth Army: XIII Corps (5th, 50th and 78th Divisions)", "inf", 3, "Malta", { gen: "Bernard Montgomery", join: 1, xp: 0.4, from: "North Africa", war: ["UK", "ITA"] }],
-      [47, "UK", "Eighth Army: XXX Corps (51st, 1st Canadian and 1st Airborne Divisions)", "inf", 3, "Malta", { gen: "Oliver Leese", join: 1, xp: 0.4, from: "North Africa", war: ["UK", "ITA"] }],
-      [47, "USA", "Seventh Army: II Corps (1st, 9th and 45th Infantry Divisions)", "inf", 3, "Malta", { gen: "Omar Bradley", join: 1, xp: 0.2, from: "North Africa", war: ["USA", "ITA"] }],
-      [47, "USA", "Seventh Army: Provisional Corps (3rd Infantry, 2nd Armored and 82nd Airborne Divisions)", "mot", 3, "Malta", { gen: "George S. Patton", trait: "attacker", join: 1, xp: 0.2, from: "North Africa", war: ["USA", "ITA"] }],
-      [48, "GER", "LXXVI Panzer Corps (26th Panzer, 29th Panzergrenadier and 1st Parachute Divisions)", "mot", 2, "Calabria", { gen: "Traugott Herr", join: 1, xp: 0.3, war: ["GER", "USA"] }],
-      [48, "GER", "16th Panzer Division", "arm", 1, "Naples", { hold: 1, join: 1, xp: 0.3, war: ["GER", "USA"] }],
-      [48, "GER", "2nd Parachute and 3rd Panzergrenadier Divisions", "mot", 2, "Rome", { join: 1, xp: 0.3, war: ["GER", "USA"] }],
-      [49, "GER", "LI Mountain Corps (44th and 305th Divisions)", "mtn", 2, "Abruzzo", { gen: "Heinrich von Vietinghoff", trait: "defender", join: 1, xp: 0.2, war: ["GER", "USA"] }],
-      [50, "GER", "5th Mountain and 65th Divisions", "mtn", 2, "Abruzzo", { join: 1, xp: 0.2, war: ["GER", "USA"] }],
-      [49, "UK", "Eighth Army: V Corps (1st Airborne and 8th Indian Divisions)", "inf", 2, "Malta", { join: 1, xp: 0.3, from: "North Africa", war: ["UK", "GER"] }],
-      [49, "USA", "Fifth Army: VI Corps (36th and 34th Infantry Divisions)", "inf", 2, "Malta", { gen: "Mark Clark", join: 1, xp: 0.1, from: "North Africa", war: ["USA", "GER"] }],
-      [49, "USA", "Fifth Army: X Corps (British 46th, 56th and 7th Armoured Divisions)", "mot", 3, "Malta", { gen: "Richard McCreery", join: 1, xp: 0.2, from: "North Africa", of: "UK", war: ["USA", "GER"] }],
-      [53, "USA", "Fifth Army: VI Corps (3rd and 45th Infantry and British 1st Divisions)", "inf", 1, "Naples", { joins: "Fifth Army: VI Corps (36th and 34th Infantry Divisions)" }],
-      [53, "USA", "Fifth Army: VI Corps (3rd and 45th Infantry, 1st Armored and British 1st and 5th Divisions)", "mot", 2, "Naples", { joins: "Fifth Army: VI Corps (3rd and 45th Infantry and British 1st Divisions)", until: 60 }],
-      [53, "USA", "Fifth Army: II Corps (34th and 36th Infantry Divisions)", "inf", 2, "Naples", { gen: "Geoffrey Keyes", join: 1, xp: 0.3, from: ["Seventh Army: II Corps (1st, 9th and 45th Infantry Divisions)", "Seventh Army: Provisional Corps (3rd Infantry, 2nd Armored and 82nd Airborne Divisions)"], war: ["USA", "GER"], news: "Eisenhower, Montgomery, Bradley and Patton have left the Mediterranean for England, and seven veteran divisions have gone with them for the invasion of France. Alexander fights on in Italy with what is left." }],
-      [53, "USA", "Fifth Army: French Expeditionary Corps (2nd Moroccan and 3rd Algerian Divisions)", "mtn", 2, "Naples", { gen: "Alphonse Juin", trait: "attacker", join: 1, xp: 0.35, war: ["USA", "GER"] }],
-      [53, "UK", "Eighth Army: XIII Corps (4th, 78th and 6th Armoured Divisions)", "inf", 3, "Naples", { gen: "Oliver Leese", join: 1, xp: 0.4, from: ["Eighth Army: XIII Corps (5th, 50th and 78th Divisions)"], war: ["UK", "GER"] }],
-      [53, "UK", "Eighth Army: I Canadian Corps (1st Canadian Infantry and 5th Canadian Armoured Divisions)", "mot", 2, "Apulia", { gen: "E. L. M. Burns", join: 1, xp: 0.35, from: ["Eighth Army: XXX Corps (51st, 1st Canadian and 1st Airborne Divisions)"], war: ["UK", "GER"] }],
-      [53, "UK", "Eighth Army: V Corps (4th and 10th Indian Divisions)", "inf", 2, "Apulia", { gen: "Charles Allfrey", join: 1, xp: 0.3, from: ["Eighth Army: V Corps (1st Airborne and 8th Indian Divisions)"], war: ["UK", "GER"] }],
-      [53, "GER", "I Parachute Corps (4th Parachute and 715th Divisions)", "mot", 2, "Rome", { gen: "Alfred Schlemm", join: 1, xp: 0.25, war: ["USA", "GER"] }],
-      [54, "GER", "14th Army: 114th Jager and 362nd Divisions", "inf", 2, "Rome", { gen: "Eberhard von Mackensen", join: 1, xp: 0.2, war: ["USA", "GER"] }],
-      [54, "UK", "New Zealand Corps (2nd New Zealand and 4th Indian Divisions)", "inf", 2, "Naples", { gen: "Bernard Freyberg", join: 1, xp: 0.45, war: ["UK", "GER"] }],
-      [56, "USA", "Fifth Army: II Corps (34th, 36th, 85th and 88th Infantry Divisions)", "inf", 2, "Naples", { joins: "Fifth Army: II Corps (34th and 36th Infantry Divisions)", from: ["Fifth Army: X Corps (British 46th, 56th and 7th Armoured Divisions)"], news: "Two new American divisions, the 85th and the 88th, join the Fifth Army below Cassino. The British X Corps leaves it for the Eighth Army." }],
-      [56, "USA", "Fifth Army: French Expeditionary Corps (2nd Moroccan, 3rd Algerian, 4th Moroccan Mountain and 1st Free French Divisions)", "mtn", 2, "Naples", { joins: "Fifth Army: French Expeditionary Corps (2nd Moroccan and 3rd Algerian Divisions)", until: 60 }],
-      [56, "UK", "Eighth Army: Polish II Corps (3rd Carpathian and 5th Kresowa Divisions)", "inf", 2, "Naples", { gen: "Wladyslaw Anders", trait: "attacker", join: 1, xp: 0.35, from: ["New Zealand Corps (2nd New Zealand and 4th Indian Divisions)"], war: ["UK", "GER"], news: "General Anders brings the Polish II Corps into the line opposite Monte Cassino: men who came out of Soviet camps by way of Persia to fight for a country they cannot go home to." }],
-      [56, "UK", "Eighth Army: XIII Corps (4th, 78th, 8th Indian and 6th Armoured Divisions)", "inf", 1, "Naples", { joins: "Eighth Army: XIII Corps (4th, 78th and 6th Armoured Divisions)" }],
-      [56, "GER", "Group Hauck (305th and 334th Divisions)", "inf", 2, "Abruzzo", { join: 1, hold: 1, xp: 0.2, war: ["USA", "GER"] }],
-      [58, "USA", "Fifth Army: IV Corps (91st Infantry, 6th South African Armoured and Brazilian 1st Divisions)", "mot", 3, "Naples", { gen: "Willis Crittenberger", join: 1, xp: 0.25, war: ["USA", "GER"] }],
-      [59, "GER", "14th Army: LXXV Corps (16th SS Panzergrenadier, 19th and 20th Luftwaffe Field Divisions)", "inf", 3, "Emilia", { join: 1, xp: 0.15, war: ["USA", "GER"] }],
-      [61, "UK", "Eighth Army: V Corps (46th, 56th, 4th Indian and 1st Armoured Divisions)", "inf", 2, "Marche", { joins: "Eighth Army: V Corps (4th and 10th Indian Divisions)" }],
-      [57, "GER", "Seventh Army: LXXXIV Corps (352nd and 716th Divisions)", "inf", 2, "Normandy", { join: 1, gen: "Erich Marcks", trait: "defender", xp: 0.2, war: ["USA", "GER"] }],
-      [57, "GER", "Panzer Group West: I SS Panzer Corps (21st Panzer, 12th SS Panzer and Panzer Lehr Divisions)", "arm", 3, "Maine", { join: 1, gen: "Sepp Dietrich", trait: "panzer", xp: 0.45, war: ["USA", "GER"] }],
-      [57, "GER", "Panzer Group West: XLVII Panzer Corps (2nd and 116th Panzer Divisions)", "arm", 2, "Somme", { join: 1, gen: "Hans von Funck", xp: 0.45, war: ["USA", "GER"] }],
-      [57, "GER", "Seventh Army: II Parachute Corps (3rd Parachute, 353rd and 17th SS Panzergrenadier Divisions)", "inf", 3, "Rennes", { join: 1, gen: "Eugen Meindl", trait: "defender", xp: 0.4, war: ["USA", "GER"] }],
-      [57, "GER", "Fifteenth Army: LXXXI and LXXXII Corps", "inf", 4, "Calais", { join: 1, gen: "Hans von Salmuth", hold: 1, xp: 0.15, war: ["USA", "GER"] }],
-      [57, "GER", "Fifteenth Army: LXVII and LXXXIX Corps", "inf", 4, "Flanders", { join: 1, hold: 1, xp: 0.15, war: ["USA", "GER"] }],
-      [57, "GER", "Army Group G: LVIII Panzer Corps (2nd SS Panzer and 9th Panzer Divisions)", "arm", 2, "Toulouse", { join: 1, xp: 0.4, war: ["USA", "GER"] }],
-      [57, "GER", "Nineteenth Army: 11th Panzer Division", "arm", 1, "Languedoc", { join: 1, hold: 1, xp: 0.45, war: ["USA", "GER"] }],
-      [57, "GER", "Nineteenth Army: 242nd and 244th Divisions", "inf", 1, "Marseille", { join: 1, hold: 1, xp: 0.1, war: ["USA", "GER"] }],
-      [57, "GER", "Nineteenth Army: IV Luftwaffe Field Corps (198th, 716th and 189th Divisions)", "inf", 3, "Languedoc", { join: 1, gen: "Friedrich Wiese", hold: 1, xp: 0.15, war: ["USA", "GER"] }],
-      [57, "GER", "Nineteenth Army: LXII Corps (148th and 157th Reserve Divisions)", "inf", 2, "Riviera", { join: 1, hold: 1, xp: 0.1, war: ["USA", "GER"] }],
-      [57, "UK", "Second Army: I Corps (3rd British, 3rd Canadian and 6th Airborne Divisions)", "inf", 3, "Hampshire", { gen: "Miles Dempsey", join: 1, xp: 0.3, from: "the West", war: ["UK", "GER"] }],
-      [57, "UK", "Second Army: XXX Corps (50th, 49th and 7th Armoured Divisions)", "mot", 3, "Hampshire", { gen: "Bernard Montgomery", trait: "attacker", join: 1, xp: 0.4, from: "the West", war: ["UK", "GER"] }],
-      [57, "USA", "First Army: V Corps (1st, 2nd and 29th Infantry Divisions)", "inf", 3, "Cornwall", { gen: "Omar Bradley", xp: 0.3, war: ["USA", "GER"] }],
-      [57, "USA", "First Army: VII Corps (4th, 9th and 90th Infantry, 82nd and 101st Airborne Divisions)", "inf", 5, "Cornwall", { gen: "J. Lawton Collins", trait: "attacker", xp: 0.3, war: ["USA", "GER"] }],
-      [59, "GER", "II SS Panzer Corps (9th and 10th SS Panzer Divisions)", "arm", 2, "Rouen", { join: 1, gen: "Paul Hausser", trait: "panzer", xp: 0.5, news: "The II SS Panzer Corps is pulled out of the Eastern Front and sent across Europe to Normandy.", war: ["USA", "GER"] }],
-      [59, "GER", "Seventh Army: LXXXVI Corps (346th, 711th and 16th Luftwaffe Field Divisions)", "inf", 3, "Rouen", { join: 1, xp: 0.15, war: ["USA", "GER"] }],
-      [59, "UK", "Second Army: VIII Corps (11th Armoured, Guards Armoured and 15th Scottish Divisions)", "arm", 3, "Normandy", { gen: "Richard O'Connor", trait: "attacker", xp: 0.25, war: ["UK", "GER"] }],
-      [59, "USA", "First Army: XIX Corps (30th and 35th Infantry, 2nd and 3rd Armored Divisions)", "mot", 4, "Cotentin", { gen: "Charles Corlett", xp: 0.2, war: ["USA", "GER"] }],
-      [59, "USA", "First Army: VIII Corps (8th, 79th and 83rd Infantry, 4th and 6th Armored Divisions)", "mot", 5, "Cotentin", { gen: "Troy Middleton", xp: 0.2, war: ["USA", "GER"] }],
-      [60, "UK", "First Canadian Army: II Canadian Corps and British I Corps (2nd and 3rd Canadian, 4th Canadian Armoured, 1st Polish Armoured and 51st Highland Divisions)", "mot", 3, "Normandy", { joins: "Second Army: I Corps (3rd British, 3rd Canadian and 6th Airborne Divisions)", news: "The First Canadian Army takes over the left of the line in Normandy, with the Polish 1st Armoured Division under its command.", war: ["UK", "GER"] }],
-      [60, "USA", "Third Army: XV Corps (5th Armored, French 2nd Armored and 79th Infantry Divisions)", "arm", 3, "Cotentin", { gen: "George S. Patton", trait: "attacker", join: 1, xp: 0.3, news: "General Patton's Third Army becomes operational in Normandy. Its orders are to go through the gap at Avranches and keep going.", war: ["USA", "GER"] }],
-      [60, "USA", "Third Army: XX Corps (7th Armored, 5th and 90th Infantry Divisions)", "mot", 3, "Cotentin", { gen: "Walton Walker", join: 1, xp: 0.2, war: ["USA", "GER"] }],
-      [60, "USA", "Third Army: XII Corps (4th Armored, 35th and 80th Infantry Divisions)", "arm", 3, "Cotentin", { gen: "Manton Eddy", join: 1, xp: 0.2, war: ["USA", "GER"] }],
-      [60, "USA", "Seventh Army: VI Corps (3rd, 36th and 45th Infantry Divisions)", "inf", 3, "Naples", { gen: "Lucian Truscott", trait: "attacker", join: 1, xp: 0.5, war: ["USA", "GER"] }],
-      [60, "USA", "French Army B: II Corps (1st Free French, 3rd Algerian and 1st Armoured Divisions)", "mot", 3, "Naples", { gen: "Jean de Lattre de Tassigny", trait: "attacker", join: 1, xp: 0.35, war: ["USA", "GER"] }],
-      [61, "GER", "First Parachute Army: II Parachute Corps and LXXXVI Corps", "inf", 3, "Gelderland", { join: 1, gen: "Kurt Student", trait: "defender", xp: 0.3, from: ["Seventh Army: II Parachute Corps (3rd Parachute, 353rd and 17th SS Panzergrenadier Divisions)", "Seventh Army: LXXXVI Corps (346th, 711th and 16th Luftwaffe Field Divisions)"], news: "General Student is given the First Parachute Army, which exists so far only on paper, and told to hold the line of the Dutch canals.", war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "II SS Panzer Corps (9th and 10th SS Panzer Divisions), refitting", "arm", 2, "Gelderland", { join: 1, gen: "Wilhelm Bittrich", xp: 0.5, from: ["II SS Panzer Corps (9th and 10th SS Panzer Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "Fifteenth Army: LXVII and LXXXVIII Corps", "inf", 4, "Rotterdam", { join: 1, gen: "Gustav-Adolf von Zangen", xp: 0.2, from: ["Fifteenth Army: LXXXI and LXXXII Corps", "Fifteenth Army: LXVII and LXXXIX Corps"], news: "The German Fifteenth Army, cut off on the Channel coast, is ferried across the mouth of the Scheldt by night and gets away into Holland.", war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "Seventh Army: LXXXI and XII SS Corps (the West Wall at Aachen)", "inf", 4, "Rhineland", { join: 1, xp: 0.2, from: ["Seventh Army: LXXXIV Corps (352nd and 716th Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "Seventh Army: LXXIV Corps (the Hurtgen Forest)", "inf", 3, "Eifel", { join: 1, xp: 0.2, war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "First Parachute Army: LXXXVIII Corps", "inf", 3, "Gelderland", { join: 1, xp: 0.2, war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "Seventh Army: I SS Panzer Corps", "mot", 3, "Eifel", { join: 1, xp: 0.35, from: ["Panzer Group West: I SS Panzer Corps (21st Panzer, 12th SS Panzer and Panzer Lehr Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "First Army: LXXXII and XIII SS Corps (the forts of Metz)", "inf", 3, "Lorraine", { join: 1, gen: "Otto von Knobelsdorff", xp: 0.25, war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "First Army: LXXX Corps", "inf", 2, "Saar", { join: 1, xp: 0.2, war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "Fifth Panzer Army: XLVII and LVIII Panzer Corps", "arm", 2, "Lorraine", { join: 1, gen: "Hasso von Manteuffel", trait: "panzer", xp: 0.35, from: ["Panzer Group West: XLVII Panzer Corps (2nd and 116th Panzer Divisions)", "Army Group G: LVIII Panzer Corps (2nd SS Panzer and 9th Panzer Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "Nineteenth Army: IV Luftwaffe Field Corps and LXIV Corps", "inf", 3, "Vosges", { join: 1, xp: 0.15, from: ["Nineteenth Army: IV Luftwaffe Field Corps (198th, 716th and 189th Divisions)", "Nineteenth Army: 242nd and 244th Divisions"], war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "Nineteenth Army: LXXXV Corps and 11th Panzer Division", "inf", 3, "Belfort", { join: 1, xp: 0.2, from: ["Nineteenth Army: 11th Panzer Division", "Nineteenth Army: LXII Corps (148th and 157th Reserve Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "USA", "French First Army: I Corps (2nd Moroccan, 4th Moroccan Mountain and 9th Colonial Divisions)", "inf", 3, "Marseille", { join: 1, xp: 0.35, war: ["USA", "GER"] }],
-      [60, "UK", "Second Army: XII Corps (43rd Wessex, 53rd Welsh and 59th Divisions)", "inf", 3, "Normandy", { gen: "Neil Ritchie", xp: 0.25, war: ["UK", "GER"] }],
-      [61, "UK", "First Allied Airborne Army: I Airborne Corps (1st Airborne, US 82nd and 101st Airborne Divisions)", "inf", 3, "Brussels", { gen: "Frederick Browning", join: 1, xp: 0.4, war: ["UK", "GER"] }],
-      [62, "USA", "Ninth Army: XIII and XIX Corps (29th, 30th, 84th and 102nd Infantry and 2nd Armored Divisions)", "inf", 5, "Liege", { gen: "William Simpson", join: 1, xp: 0.2, war: ["USA", "GER"] }],
-      [63, "USA", "Third Army: III Corps (26th and 95th Infantry, 6th and 10th Armored Divisions)", "mot", 4, "Verdun", { gen: "John Millikin", join: 1, xp: 0.15, war: ["USA", "GER"] }],
-      [63, "GER", "Fifth Panzer Army: XLVII and LVIII Panzer Corps (behind the Roer)", "arm", 2, "Eifel", { join: 1, gen: "Hasso von Manteuffel", trait: "panzer", xp: 0.35, from: ["Fifth Panzer Army: XLVII and LVIII Panzer Corps"], news: "The Fifth Panzer Army is taken out of Lorraine and sent north behind the river Roer. Nobody on the Allied side asks why.", war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [64, "GER", "Sixth Panzer Army: I SS Panzer Corps (1st and 12th SS Panzer Divisions)", "arm", 3, "Eifel", { join: 1, gen: "Sepp Dietrich", trait: "panzer", xp: 0.4, from: ["Seventh Army: I SS Panzer Corps"], news: "Behind the Eifel the Germans have gathered two panzer armies in secret: a quarter of a million men and the last tanks and fuel the Reich can find.", war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [64, "GER", "Fifth Panzer Army: XLVII Panzer Corps (2nd Panzer, Panzer Lehr and 26th Volksgrenadier Divisions)", "arm", 3, "Eifel", { join: 1, gen: "Hasso von Manteuffel", trait: "panzer", xp: 0.4, from: ["Fifth Panzer Army: XLVII and LVIII Panzer Corps (behind the Roer)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [64, "GER", "Fifth Panzer Army: LVIII Panzer Corps (116th Panzer and 560th Volksgrenadier Divisions)", "arm", 2, "Eifel", { join: 1, xp: 0.3, war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [64, "GER", "Seventh Army: LXXXV Corps (5th Parachute and 352nd Volksgrenadier Divisions)", "inf", 2, "Eifel", { join: 1, gen: "Erich Brandenberger", xp: 0.2, war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [35, "UK", "Royal Artillery, Eighth Army", "art", 2, "Alexandria", { open: 1, xp: 0.2, war: ["UK", "ITA"] }],
-      [37, "UK", "Royal Artillery, X Corps", "art", 2, "Alexandria", { open: 1, xp: 0.2, war: ["UK", "ITA"] }],
-      [1, "YUG", "Sixth Army", "inf", 3, "Belgrade", { open: 1, xp: 0.05, war: ["YUG", "*"], after: 1 }],
-      [1, "YUG", "Third Army", "inf", 3, "Montenegro", { open: 1, xp: 0.05, war: ["YUG", "*"], after: 1 }],
-      [1, "YUG", "Seventh Army", "inf", 3, "Slovenia", { open: 1, xp: 0.05, war: ["YUG", "*"], after: 2 }],
-      [1, "YUG", "Coastal Army", "inf", 3, "Dalmatia", { open: 1, xp: 0.05, war: ["YUG", "*"], after: 2 }],
-      [21, "UK", "1st South African Division", "inf", 1, "Alexandria", { open: 1, carried: "XXX Corps, Eighth Army", xp: 0.2, war: ["UK", "ITA"] }],
-      [22, "UK", "2nd South African Division", "inf", 1, "Alexandria", { open: 1, carried: "XXX Corps, Eighth Army", xp: 0.05, war: ["UK", "ITA"] }],
-      [19, "UK", "2nd New Zealand Division", "inf", 1, "Alexandria", { open: 1, carried: "XIII Corps, Eighth Army", xp: 0.25, war: ["UK", "ITA"], unless: "W Force (New Zealand Division and 1st Armoured Brigade)", leaves: "The 2nd New Zealand Division sails from {place} for Greece. It goes as part of W Force, which has landed there with the 1st Armoured Brigade." }],
-      [32, "UK", "5th Indian Division", "inf", 1, "Alexandria", { open: 1, xp: 0.3, war: ["UK", "ITA"] }],
-      [34, "UK", "10th Indian Division", "inf", 1, "Mersa Matruh", { open: 1, xp: 0.2, war: ["UK", "ITA"] }]
-    ]
-  };
-
-  // ../../src/core/rng.ts
-  var Rng = class _Rng {
-    constructor(seed) {
-      __publicField(this, "s");
-      this.s = seed >>> 0 || 2654435769;
-    }
-    /** Uniform in [0, 1). mulberry32. */
-    next() {
-      let t = this.s = this.s + 1831565813 >>> 0;
-      t = Math.imul(t ^ t >>> 15, t | 1);
-      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-      return ((t ^ t >>> 14) >>> 0) / 4294967296;
-    }
-    range(a, b) {
-      return a + (b - a) * this.next();
-    }
-    int(n) {
-      return Math.floor(this.next() * n);
-    }
-    chance(p) {
-      return this.next() < p;
-    }
-    pick(arr) {
-      return arr[this.int(arr.length)];
-    }
-    /** Roughly normal, mean 0, sd 1 (sum of uniforms; cheap and deterministic). */
-    normal() {
-      return (this.next() + this.next() + this.next() + this.next() - 2) * 1.7320508;
-    }
-    /** Turns an expected count into a whole number of events. */
-    roll(expected) {
-      const whole2 = Math.floor(expected);
-      return whole2 + (this.next() < expected - whole2 ? 1 : 0);
-    }
-    /**
-     * `roll` for two expected counts on ONE draw: the first exactly as `roll(expected)` gives it, from the same draw
-     * and leaving the same state, and the second what that draw makes of another expectation (ruling 240: the ships
-     * that would have gone down without damage control). A larger expectation never gives the smaller count.
-     */
-    rollBoth(expected, other4) {
-      const u = this.next();
-      const at4 = (x) => {
-        const whole2 = Math.floor(x);
-        return whole2 + (u < x - whole2 ? 1 : 0);
-      };
-      return [at4(expected), at4(other4)];
-    }
-    /** An independent stream, so adding rolls in one system does not shift another. */
-    fork(label) {
-      return new _Rng(Math.imul(this.s ^ 2246822507, 3266489909) + label * 668265263 >>> 0);
-    }
-    get state() {
-      return this.s;
-    }
-  };
-  function hashString(str) {
-    let h = 2166136261;
-    for (let i = 0; i < str.length; i++) {
-      h ^= str.charCodeAt(i);
-      h = Math.imul(h, 16777619);
-    }
-    return h >>> 0;
-  }
-
-  // ../../src/core/ticket.ts
-  function turnToDate(turn2) {
-    const idx2 = 8 + (turn2 - 1);
-    const year = 1939 + Math.floor(idx2 / 12);
-    const month3 = idx2 % 12;
-    const names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    return { year, month: month3, label: `${names[month3]} ${year}` };
-  }
-
-  // ../../src/campaign/types.ts
-  var MEN_PER_DIV = 15e3;
-  var KIND = {
-    inf: { label: "Infantry", atk: 10, def: 14, move: 2, mobile: false },
-    mot: { label: "Motorised", atk: 12, def: 12, move: 1, mobile: true },
-    arm: { label: "Armor", atk: 24, def: 11, move: 1, mobile: true },
-    cav: { label: "Cavalry", atk: 8, def: 8, move: 1, mobile: true },
-    mtn: { label: "Mountain", atk: 9, def: 15, move: 2, mobile: false },
-    fort: { label: "Fortress", atk: 1, def: 15, move: 99, mobile: false },
-    // Massed guns, raised only in the grand campaign: see the artillery rule in the battle assessment.
-    art: { label: "Artillery", atk: 14, def: 8, move: 2, mobile: false },
-    // Engineers, raised only in the grand campaign: they are there for what they build and breach, not for their rifles.
-    eng: { label: "Engineers", atk: 4, def: 9, move: 2, mobile: false },
-    // Support teams (release 2, src/campaign/teams.ts): a machine-gun brigade and a mortar brigade, a division's worth
-    // each. Their own weight is small; what they do besides (a defence stiffened against foot, works broken up) is on the
-    // attack card. Never raised while the teams are off.
-    mg: { label: "Machine guns", atk: 3, def: 7, move: 2, mobile: false },
-    mor: { label: "Mortars", atk: 6, def: 4, move: 2, mobile: false }
-  };
-  var TERRAIN_DEF = { plains: 1, forest: 1.2, hills: 1.25, mountain: 1.6, marsh: 1.3, urban: 1.35, desert: 1 };
-  var FORT_MUL = [1, 1.3, 1.7, 2.6];
-  var STACK = 5;
 
   // ../../data/campaign/stage.json
   var stage_default = {
@@ -2619,6 +2036,445 @@
       FIN: [{ id: "east", name: "With Germany into Russia", side: true, declare: ["SOV"], if: ["war:GER,SOV", "flag:event:finland"], chance: 0.7 }],
       BUL: [{ id: "balkans", name: "With Germany into the Balkans", side: true, declare: ["YUG", "GRE"], if: ["war:GER,YUG", "inBloc:BUL,axis"], chance: 0.1 }]
     }
+  };
+
+  // ../../data/campaign/setup-1939.json
+  var setup_1939_default = {
+    _about: "Starting armies for 1 September 1939 and the formations that arrive later. Each line is one corps: [nation, name, kind, divisions, region, options]. Kinds: inf, mot, arm, cav, mtn, fort. Options: gen names the general in command, and trait is what he is known for (panzer, attacker or defender; commanders.json turns the label into his level, skills and traits); hold keeps a corps in place as a garrison; xp is experience from 0 to 1. Corps names and commanders follow the historical order of battle; strengths are rounded. 'reinforcements' are [month, nation, ...] and form up at home. 'formations' are the same again, but are armies and fronts put together later in the war from men already under arms: they arrive like reinforcements and do not hold up the building of new corps, which a computer-run nation begins only once its last reinforcement has arrived. 'expeditions' are the same, but go to a war away from the main fronts: they arrive only at a place still in friendly hands with room for them (the move is put off while it is not, and cancelled after half a year), and 'war' names two nations that must be at war for the troops to be sent at all. 'until' marks formations only lent to a campaign: in that month they go back to the main army, whose order of battle already counts them. 'joins' names a corps already at the front that the divisions go into: it keeps its general and what it has learned, and takes the row's name and kind (if that corps is gone, the divisions form up on their own at the place named). 'news' is a line for the dispatches in place of the bare notice of arrival. 'airborne' marks parachute and glider troops (see navy.json). 'nos' on a first-day corps gives its divisions their real numbers of 1 September 1939, one a division in order (the historian's divisions-1939-ger.md, 18 November 2026, for Germany and Poland: XIX Corps the 10th Panzer, which joined it in mid-September; the light divisions their panzer numbers of that winter, the 2nd Light the 7th, the 3rd the 8th, the 4th the 9th; VIII Corps the 239th, which followed it); null where the corps holds a division the record has none for, or of another arm than the game's, which then takes a stand-in number (armies.ts). The grand campaign alone reads them. 'from' names a theatre whose army the formation is put together from: as it arrives, as many divisions leave the corps already there, the largest first ('of' names the nation whose army gives them up, if it is not the formation's own). 'from' can also be a list of corps names: those corps are broken up to make the new one, and are struck off as it forms. 'ifLost' makes a formation wait on a defeat: it forms only once the enemy holds every place named, and until then the corps it would be made from fight on where they stand. 'after' (ruling 229, part 3, the grand campaign) counts a country's own call-up from its war's start and not from the book's month: it comes this many months after the war its 'war' names began, however early that war comes ('*' as the second name: a war with anyone). Greece's reserves come over the war's first three months; Yugoslavia, whose paper army was three times what stood ready in April 1941, calls up twelve divisions over its war's second and third months, in the grand campaign only. Ruling 229, part 1c, the grand campaign: a formation whose place its side no longer holds when it is due lands at the nearest harbour its side holds on that front (in the same side theatre, or else in the same country), clear of the enemy and with room, and does not hold in place there, as ruling 221's F lands troops lifted off a coast; it is not cancelled for the loss. 'unless' names another row: once that row has landed, this one never comes (the New Zealanders stand in the desert only in a war where W Force did not sail), and if this one has landed already its corps leaves as the other lands, with 'leaves' as the player's news when the corps is his ({place} where it stood). 'openDivs' is a row's size in the grand campaign, where the historian's earlier rows bring part of its men (XIII and XXX Corps, 1 division each: the South Africans and New Zealanders come by June 1941, as in the record); 'carried' names the corps row whose full-size history row already brought a row's men, so that a grand campaign begun after that corps landed under history does not bring them again. Add new expeditions at the end of the list: saved games remember them by their place in it.",
+    corps: [
+      ["GER", "XIX Corps", "arm", 2, "Farther Pomerania", { gen: "Heinz Guderian", trait: "panzer", xp: 0.4, nos: [3, 10] }],
+      ["GER", "II Corps", "inf", 3, "Grenzmark", { xp: 0.3, nos: [3, 32, 23] }],
+      ["GER", "III Corps", "inf", 3, "Neumark", { xp: 0.3, nos: [50, 218, 207] }],
+      ["GER", "I Corps", "inf", 3, "Masuria", { xp: 0.3, nos: [11, 61, null] }],
+      ["GER", "Corps Wodrig", "inf", 2, "Masuria", { xp: 0.3, nos: [1, 12] }],
+      ["GER", "XXI Corps", "inf", 3, "Elbing", { xp: 0.3, nos: [21, 228, 206] }],
+      ["GER", "Konigsberg garrison", "inf", 1, "Konigsberg", { hold: 1, nos: [217] }],
+      ["GER", "X Corps", "inf", 3, "Lower Silesia", { xp: 0.3, nos: [24, 30, 221] }],
+      ["GER", "XIII Corps", "inf", 3, "Lower Silesia", { xp: 0.3, nos: [10, 17, 213] }],
+      ["GER", "XVI Corps", "arm", 2, "Upper Silesia", { gen: "Erich Hoepner", trait: "attacker", xp: 0.4, nos: [1, 4] }],
+      ["GER", "XV Corps", "arm", 2, "Upper Silesia", { gen: "Hermann Hoth", trait: "panzer", xp: 0.4, nos: [7, 8] }],
+      ["GER", "XIV Corps", "mot", 2, "Lower Silesia", { xp: 0.35, nos: [13, 29] }],
+      ["GER", "IV Corps", "inf", 3, "Upper Silesia", { xp: 0.3, nos: [4, 46, 27] }],
+      ["GER", "XI Corps", "inf", 3, "Upper Silesia", { xp: 0.3, nos: [18, 19, 68] }],
+      ["GER", "XXII Corps", "arm", 2, "Moravia", { gen: "Ewald von Kleist", trait: "attacker", xp: 0.4, nos: [2, 9] }],
+      ["GER", "VIII Corps", "inf", 3, "Moravia", { xp: 0.3, nos: [8, 28, 239] }],
+      ["GER", "XVII Corps", "inf", 3, "Moravia", { xp: 0.3, nos: [7, 44, 45] }],
+      ["GER", "XVIII Corps", "mtn", 3, "Slovakia", { xp: 0.3, nos: [3, 2, 1] }],
+      ["GER", "XII Corps", "inf", 4, "Saar", { hold: 1, nos: [15, 34, 52, 79] }],
+      ["GER", "IX Corps", "inf", 4, "Eifel", { hold: 1, nos: [25, 33, 71, 75] }],
+      ["GER", "XXV Corps", "inf", 4, "Baden", { hold: 1, nos: [5, 35, 205, 78] }],
+      ["GER", "V Corps", "inf", 4, "Rhineland", { hold: 1, nos: [22, 225, 58, 87] }],
+      ["GER", "VI Corps", "inf", 3, "Frankfurt", { nos: [16, 69, 211] }],
+      ["GER", "XXIV Corps", "inf", 3, "Westphalia", { nos: [6, 9, 36] }],
+      ["GER", "Berlin garrison", "inf", 1, "Berlin", { hold: 1 }],
+      ["GER", "Vienna garrison", "inf", 1, "Vienna", { hold: 1 }],
+      ["GER", "Protectorate garrison", "inf", 2, "Bohemia", { hold: 1 }],
+      ["GER", "Hamburg garrison", "inf", 1, "Hamburg", { hold: 1 }],
+      ["POL", "Army Pomorze", "inf", 3, "Pomorze", { gen: "Wladyslaw Bortnowski", nos: [4, 15, 16] }],
+      ["POL", "Corridor Group", "inf", 2, "Danzig Corridor", { nos: [9, 27] }],
+      ["POL", "Army Modlin", "inf", 3, "Mlawa", { nos: [8, 20, 5] }],
+      ["POL", "Narew Group", "inf", 2, "Bialystok", { nos: [18, 33] }],
+      ["POL", "Army Poznan", "inf", 4, "Poznan", { gen: "Tadeusz Kutrzeba", trait: "attacker", nos: [14, 17, 25, 26] }],
+      ["POL", "Wielkopolska Cavalry", "cav", 1, "Poznan", {}],
+      ["POL", "Army Lodz", "inf", 4, "Lodz", { gen: "Juliusz Rommel", nos: [2, 10, 28, 30] }],
+      ["POL", "Army Krakow (Silesia)", "inf", 3, "Polish Silesia", { gen: "Antoni Szylling", trait: "defender", nos: [23, 55, 7] }],
+      ["POL", "Army Krakow (Bielsko)", "inf", 3, "Krakow", { nos: [21, 6, 22] }],
+      ["POL", "Army Karpaty", "mtn", 2, "Przemysl", { nos: [2, 3] }],
+      ["POL", "Army Prusy", "inf", 3, "Kielce", { nos: [13, 19, 29] }],
+      ["POL", "Wyszkow Group", "inf", 3, "Warsaw", { nos: [1, 35, 41] }],
+      ["POL", "Warsaw garrison", "inf", 2, "Warsaw", { hold: 1, nos: [44, null] }],
+      ["POL", "Lublin reserve", "inf", 2, "Lublin", { nos: [3, 12] }],
+      ["POL", "Lwow garrison", "inf", 1, "Lwow", { hold: 1, nos: [11] }],
+      ["POL", "Wilno garrison", "inf", 1, "Wilno", { hold: 1, nos: [38] }],
+      ["POL", "Polesie Group", "inf", 1, "Brest", { hold: 1, nos: [60] }],
+      ["POL", "Border Protection Corps", "inf", 1, "Volhynia", { hold: 1 }],
+      ["FRA", "Metz fortified region", "fort", 3, "Lorraine", { hold: 1 }],
+      ["FRA", "3rd Army", "inf", 4, "Lorraine", { hold: 1 }],
+      ["FRA", "Lauter fortified region", "fort", 3, "Alsace", { hold: 1 }],
+      ["FRA", "5th Army", "inf", 4, "Alsace", { hold: 1 }],
+      ["FRA", "4th Army", "inf", 3, "Vosges", { hold: 1 }],
+      ["FRA", "8th Army", "inf", 3, "Belfort", { hold: 1 }],
+      ["FRA", "Montmedy sector", "fort", 1, "Verdun", { hold: 1 }],
+      ["FRA", "XVIII Corps", "inf", 2, "Verdun", { hold: 1 }],
+      ["FRA", "2nd Army", "inf", 3, "Sedan", { gen: "Charles Huntziger", hold: 1, xp: 0 }],
+      ["FRA", "9th Army", "inf", 3, "Champagne", { gen: "Andre Corap", dyle: "Namur", xp: 0 }],
+      ["FRA", "1st Army", "inf", 4, "Lille", { gen: "Georges Blanchard", dyle: "Brussels", xp: 0.25 }],
+      ["FRA", "Cavalry Corps", "arm", 2, "Lille", { gen: "Rene Prioux", trait: "defender", dyle: "Namur", xp: 0.3 }],
+      ["FRA", "7th Army", "mot", 3, "Calais", { gen: "Henri Giraud", dyle: "Antwerp", xp: 0.25 }],
+      ["FRA", "Paris garrison", "inf", 2, "Paris", { hold: 1 }],
+      ["FRA", "General reserve", "inf", 3, "Aube", {}],
+      ["FRA", "6th Army", "inf", 3, "Burgundy", {}],
+      ["FRA", "10th Army", "inf", 2, "Somme", {}],
+      ["FRA", "Army of the Alps", "mtn", 3, "Savoy", { hold: 1 }],
+      ["FRA", "XV Corps", "inf", 2, "Riviera", { hold: 1 }],
+      ["FRA", "Marseille garrison", "inf", 1, "Marseille", { hold: 1 }],
+      ["FRA", "Bordeaux garrison", "inf", 1, "Bordeaux", { hold: 1 }],
+      ["UK", "London District", "inf", 2, "London", { hold: 1 }],
+      ["UK", "Eastern Command", "inf", 2, "Kent", { hold: 1 }],
+      ["UK", "Southern Command", "inf", 1, "Hampshire", { hold: 1 }],
+      ["UK", "Northern Command", "inf", 1, "Yorkshire", { hold: 1 }],
+      ["UK", "Scottish Command", "inf", 1, "Lothian", { hold: 1 }],
+      ["BEL", "I Corps", "inf", 4, "Liege", { hold: 1 }],
+      ["BEL", "II Corps", "inf", 4, "Antwerp", { hold: 1 }],
+      ["BEL", "III Corps", "inf", 4, "Brussels", {}],
+      ["BEL", "VII Corps", "inf", 3, "Namur", { hold: 1 }],
+      ["BEL", "Chasseurs Ardennais", "mtn", 2, "Ardennes", {}],
+      ["BEL", "V Corps", "inf", 3, "Flanders", {}],
+      ["NED", "I Corps", "inf", 3, "Holland", { hold: 1 }],
+      ["NED", "II Corps", "inf", 3, "Gelderland", {}],
+      ["NED", "III Corps", "inf", 2, "Brabant", {}],
+      ["NED", "Territorial Command", "inf", 1, "Friesland", {}],
+      ["NED", "Rotterdam garrison", "inf", 1, "Rotterdam", { hold: 1 }],
+      ["DEN", "Jutland Division", "inf", 1, "Jutland", {}],
+      ["DEN", "Zealand Division", "inf", 1, "Zealand", { hold: 1 }],
+      ["NOR", "1st and 2nd Divisions", "inf", 2, "Oslo", { hold: 1 }],
+      ["NOR", "3rd Division", "inf", 1, "Sorlandet", {}],
+      ["NOR", "4th Division", "inf", 1, "Bergen", {}],
+      ["NOR", "6th Division", "inf", 1, "Finnmark", {}],
+      ["ITA", "1st Army", "inf", 4, "Liguria", {}],
+      ["ITA", "4th Army", "mtn", 3, "Piedmont", {}],
+      ["ITA", "Army of the Po", "mot", 3, "Lombardy", {}],
+      ["ITA", "2nd Army", "inf", 3, "Friuli", { hold: 1 }],
+      ["ITA", "8th Army", "inf", 3, "Veneto", {}],
+      ["ITA", "Rome garrison", "inf", 3, "Rome", { hold: 1 }],
+      ["ITA", "3rd Army", "inf", 2, "Naples", { hold: 1 }],
+      ["ITA", "Sicily Command", "inf", 2, "Sicily", { hold: 1 }],
+      ["ITA", "Sardinia Command", "inf", 2, "Sardinia", { hold: 1 }],
+      ["ITA", "Albania Command", "inf", 4, "Albania", { hold: 1 }],
+      ["SVK", "Army Bernolak", "inf", 2, "Slovakia", { hold: 1 }],
+      ["SOV", "Belorussian Front", "inf", 5, "Minsk", {}],
+      ["SOV", "15th Tank Corps", "arm", 2, "Minsk", {}],
+      ["SOV", "3rd Army", "inf", 3, "Polotsk", {}],
+      ["SOV", "Ukrainian Front", "inf", 5, "Zhitomir", {}],
+      ["SOV", "25th Tank Corps", "arm", 2, "Vinnitsa", {}],
+      ["SOV", "Kiev Military District", "inf", 4, "Kiev", { hold: 1 }],
+      ["SOV", "Leningrad Military District", "inf", 5, "Leningrad", { hold: 1 }],
+      ["SOV", "Odessa Military District", "inf", 3, "Odessa", { hold: 1 }],
+      ["SOV", "Western reserve", "inf", 4, "Smolensk", { hold: 1 }],
+      ["SUI", "1st Army Corps", "mtn", 3, "Bern", { hold: 1 }],
+      ["SUI", "2nd Army Corps", "mtn", 3, "Zurich", { hold: 1 }],
+      ["ESP", "Army of the Centre", "inf", 4, "Madrid", { hold: 1 }],
+      ["ESP", "Army of Catalonia", "inf", 3, "Catalonia", { hold: 1 }],
+      ["ESP", "Army of the North", "inf", 2, "Basque Country", { hold: 1 }],
+      ["POR", "Lisbon garrison", "inf", 2, "Lisbon", { hold: 1 }],
+      ["IRL", "Irish Army", "inf", 1, "Dublin", { hold: 1 }],
+      ["SWE", "Eastern Army", "inf", 3, "Stockholm", { hold: 1 }],
+      ["SWE", "Southern Army", "inf", 2, "Scania", { hold: 1 }],
+      ["FIN", "Army of the Isthmus", "inf", 4, "Karelia", { hold: 1 }],
+      ["FIN", "Helsinki reserve", "inf", 2, "Helsinki", { hold: 1 }],
+      ["EST", "Estonian Army", "inf", 2, "Estonia", { hold: 1 }],
+      ["LAT", "Latvian Army", "inf", 2, "Latvia", { hold: 1 }],
+      ["LIT", "Lithuanian Army", "inf", 2, "Lithuania", { hold: 1 }],
+      ["HUN", "1st Army", "inf", 3, "Budapest", { hold: 1 }],
+      ["HUN", "3rd Army", "inf", 2, "Debrecen", { hold: 1 }],
+      ["ROM", "1st Army", "inf", 3, "Bucharest", { hold: 1 }],
+      ["ROM", "3rd Army", "inf", 3, "Bukovina", { hold: 1 }],
+      ["ROM", "4th Army", "inf", 3, "Bessarabia", { hold: 1 }],
+      ["ROM", "Ploiesti guard", "inf", 1, "Ploiesti", { hold: 1 }],
+      ["YUG", "1st Army Group", "inf", 3, "Croatia", { hold: 1 }],
+      ["YUG", "2nd Army Group", "inf", 3, "Belgrade", { hold: 1 }],
+      ["YUG", "3rd Army Group", "inf", 3, "Macedonia", { hold: 1 }],
+      ["BUL", "1st Army", "inf", 3, "Sofia", { hold: 1 }],
+      ["GRE", "Epirus Army", "mtn", 3, "Epirus", { hold: 1 }],
+      ["GRE", "Macedonia Army", "inf", 3, "Salonika", { hold: 1 }],
+      ["GRE", "Athens garrison", "inf", 1, "Athens", { hold: 1 }],
+      ["TUR", "1st Army", "inf", 4, "Istanbul", { hold: 1 }],
+      ["TUR", "2nd Army", "inf", 3, "Bursa", { hold: 1 }],
+      ["TUR", "3rd Army", "inf", 3, "Erzurum", { hold: 1 }],
+      ["TUR", "Ankara garrison", "inf", 2, "Ankara", { hold: 1 }],
+      ["SOV", "Moscow Military District", "inf", 5, "Moscow", { hold: 1 }],
+      ["SOV", "Moscow tank reserve", "arm", 2, "Tula", { hold: 1 }],
+      ["SOV", "Orel Military District", "inf", 3, "Orel", { hold: 1 }],
+      ["SOV", "Kharkov Military District", "inf", 4, "Kharkov", { hold: 1 }],
+      ["SOV", "North Caucasus Military District", "inf", 3, "Rostov", { hold: 1 }],
+      ["SOV", "Transcaucasus Military District", "mtn", 4, "Tbilisi", { hold: 1 }],
+      ["SOV", "Volga Military District", "inf", 3, "Saratov", { hold: 1 }],
+      ["SOV", "Crimea garrison", "inf", 1, "Crimea", { hold: 1 }],
+      ["SOV", "14th Army", "inf", 3, "Murmansk", { hold: 1 }],
+      ["SOV", "Kandalaksha Group", "inf", 2, "Kandalaksha", { hold: 1 }],
+      ["SOV", "Karelian garrison", "inf", 2, "Petrozavodsk", { hold: 1 }],
+      ["FRA", "Army of the Levant", "inf", 2, "Syria", { hold: 1 }],
+      ["IRQ", "Iraqi Army", "inf", 1, "Iraq", { hold: 1 }],
+      ["IRN", "Iranian Army", "inf", 2, "Iran", { hold: 1 }],
+      ["ITA", "XXI Corps, 10th Army", "inf", 2, "Bardia", { gen: "Mario Berti", xp: 0.05 }],
+      ["ITA", "XXIII Corps, 10th Army", "inf", 2, "Bardia", { xp: 0.05 }],
+      ["ITA", "Libyan Group", "mot", 1, "Tobruk", { xp: 0.05 }],
+      ["ITA", "Tobruk garrison", "inf", 1, "Tobruk", { hold: 1, xp: 0.05 }],
+      ["ITA", "XX Corps, 10th Army", "inf", 2, "Benghazi", { xp: 0.05 }],
+      ["ITA", "5th Army", "inf", 3, "Nalut", { hold: 1, xp: 0.05 }],
+      ["ITA", "Aegean Command", "inf", 1, "Rhodes", { hold: 1 }],
+      ["UK", "7th Armoured Division", "arm", 1, "Mersa Matruh", { gen: "Richard O'Connor", trait: "attacker", xp: 0.4 }],
+      ["UK", "4th Indian Division", "inf", 1, "Mersa Matruh", { xp: 0.35 }],
+      ["UK", "British Troops in Egypt", "inf", 1, "Cairo", { hold: 1 }],
+      ["UK", "Alexandria garrison", "inf", 1, "Alexandria", { hold: 1 }],
+      ["UK", "Palestine garrison", "inf", 1, "Palestine", { hold: 1 }],
+      ["UK", "Malta garrison", "inf", 1, "Malta", { hold: 1, xp: 0.2 }],
+      ["UK", "Gibraltar garrison", "fort", 1, "Gibraltar", { hold: 1 }],
+      ["FRA", "Army of Africa", "inf", 3, "Algiers", { hold: 1 }],
+      ["FRA", "Tunisia Command", "inf", 3, "Mareth", { hold: 1 }],
+      ["FRA", "Morocco Command", "inf", 2, "Casablanca", { hold: 1 }]
+    ],
+    reinforcements: [
+      [1, "UK", "I Corps (BEF)", "inf", 3, "Lille", { gen: "John Dill", dyle: "Brussels", xp: 0.2 }],
+      [2, "UK", "II Corps (BEF)", "inf", 3, "Lille", { gen: "Alan Brooke", trait: "defender", dyle: "Brussels", xp: 0.2 }],
+      [2, "FRA", "XXI Corps", "inf", 3, "Champagne", {}],
+      [3, "FRA", "Colonial Corps", "inf", 3, "Orleans", {}],
+      [3, "GER", "XXVI Corps", "inf", 3, "Hanover", {}],
+      [3, "GER", "XXVII Corps", "inf", 3, "Hesse", {}],
+      [4, "FRA", "XVII Corps", "inf", 3, "Berry", {}],
+      [4, "SOV", "10th Army", "inf", 5, "Bialystok", {}],
+      [4, "SOV", "4th Army", "inf", 4, "Brest", {}],
+      [4, "SOV", "5th Army", "inf", 4, "Volhynia", {}],
+      [4, "SOV", "6th Army", "inf", 4, "Lwow", {}],
+      [5, "GER", "XXXXI Corps", "arm", 2, "Frankfurt", { gen: "Georg-Hans Reinhardt", trait: "attacker", xp: 0.3 }],
+      [5, "GER", "XXXVIII Corps", "inf", 3, "Wurttemberg", {}],
+      [5, "GER", "XXXX Corps", "inf", 3, "Franconia", {}],
+      [6, "FRA", "Armoured reserve", "arm", 2, "Champagne", { xp: 0.1 }],
+      [6, "FRA", "XXIII Corps", "inf", 3, "Aube", {}],
+      [7, "GER", "XXXIX Corps", "arm", 2, "Hesse", { gen: "Rudolf Schmidt", xp: 0.3 }],
+      [7, "GER", "Group XXI", "inf", 3, "Schleswig-Holstein", { gen: "Nikolaus von Falkenhorst", hold: 1, xp: 0.2 }],
+      [7, "GER", "Mountain Corps Norway", "mtn", 1, "Bremen", { gen: "Eduard Dietl", trait: "defender", hold: 1, xp: 0.3 }],
+      [7, "GER", "Trondheim Landing Group", "mtn", 1, "Bremen", { hold: 1, xp: 0.2 }],
+      [7, "GER", "Bergen Landing Group", "inf", 1, "Bremen", { hold: 1, xp: 0.2 }],
+      [7, "GER", "XXXXII Corps", "inf", 3, "Hanover", {}],
+      [7, "GER", "XXXXIII Corps", "inf", 3, "Saxony", {}],
+      [8, "UK", "III Corps (BEF)", "inf", 3, "Lille", { dyle: "Flanders", xp: 0.1 }],
+      [8, "UK", "North Western Expeditionary Force", "inf", 2, "Clydeside", { gen: "Claude Auchinleck", hold: 1, xp: 0.1 }],
+      [8, "GER", "XXXXIV Corps", "inf", 3, "Magdeburg", {}],
+      [9, "UK", "1st Armoured Division", "arm", 1, "Rouen", {}],
+      [9, "FRA", "XXV Corps", "inf", 3, "Paris", {}],
+      [10, "SOV", "23rd Army", "inf", 4, "Leningrad", {}],
+      [10, "SOV", "7th Army", "inf", 3, "Tikhvin", {}],
+      [12, "GER", "XXXXVI Panzer Corps", "arm", 2, "Saxony", { gen: "Heinrich von Vietinghoff", xp: 0.3 }],
+      [12, "GER", "XXVIII Corps", "inf", 3, "Hanover", {}],
+      [12, "GER", "XXIX Corps", "inf", 3, "Hesse", {}],
+      [12, "SOV", "26th Army", "inf", 3, "Lwow", {}],
+      [12, "SOV", "12th Army", "inf", 4, "Bukovina", {}],
+      [13, "GER", "XXXXVII Panzer Corps", "arm", 2, "Franconia", { gen: "Joachim Lemelsen", xp: 0.3 }],
+      [13, "GER", "XXX Corps", "inf", 3, "Bavaria", {}],
+      [14, "GER", "XXXIV Corps", "inf", 3, "Magdeburg", {}],
+      [14, "GER", "XXXV Corps", "inf", 3, "Saxony", {}],
+      [15, "GER", "XXXXVIII Panzer Corps", "arm", 2, "Lower Silesia", { gen: "Werner Kempf", xp: 0.3 }],
+      [15, "GER", "VII Corps", "inf", 3, "Bavaria", {}],
+      [16, "GER", "III Motorized Corps", "mot", 2, "Berlin", { gen: "Eberhard von Mackensen", xp: 0.3 }],
+      [16, "GER", "XX Corps", "inf", 3, "Stettin", {}],
+      [16, "SOV", "27th Army", "inf", 3, "Estonia", {}],
+      [17, "GER", "XXIII Corps", "inf", 3, "Hanover", {}],
+      [17, "GER", "L Corps", "inf", 3, "Wurttemberg", {}],
+      [17, "SOV", "6th Mechanized Corps", "arm", 3, "Bialystok", {}],
+      [17, "SOV", "4th Mechanized Corps", "arm", 3, "Lwow", {}],
+      [17, "SOV", "8th Mechanized Corps", "arm", 3, "Volhynia", {}],
+      [18, "GER", "XXIV Motorized Corps", "mot", 2, "Upper Silesia", { gen: "Leo Geyr von Schweppenburg", xp: 0.3 }],
+      [18, "GER", "XXXXIX Mountain Corps", "mtn", 2, "Vienna", {}],
+      [18, "SOV", "12th Mechanized Corps", "arm", 2, "Latvia", {}],
+      [18, "SOV", "3rd Mechanized Corps", "arm", 2, "Lithuania", {}],
+      [18, "SOV", "1st Mechanized Corps", "arm", 2, "Pskov", {}],
+      [19, "GER", "LII Corps", "inf", 3, "Dresden", {}],
+      [19, "GER", "LIII Corps", "inf", 3, "Hesse", {}],
+      [19, "SOV", "13th Army", "inf", 3, "Minsk", {}],
+      [19, "SOV", "14th Mechanized Corps", "arm", 2, "Brest", {}],
+      [19, "SOV", "9th Mechanized Corps", "arm", 2, "Zhitomir", {}],
+      [19, "SOV", "2nd Mechanized Corps", "arm", 2, "Odessa", {}],
+      [20, "GER", "LIV Corps", "inf", 3, "Bavaria", {}],
+      [20, "GER", "LV Corps", "inf", 3, "Franconia", {}],
+      [20, "GER", "LVI Panzer Corps", "arm", 2, "Stettin", { gen: "Erich von Manstein", trait: "attacker", xp: 0.3 }],
+      [20, "GER", "LVII Panzer Corps", "arm", 2, "Dresden", { gen: "Adolf-Friedrich Kuntzen", xp: 0.3 }],
+      [21, "ROM", "Mountain Corps", "mtn", 2, "Moldavia", {}],
+      [21, "ROM", "Cavalry Corps", "cav", 2, "Moldavia", {}],
+      [21, "ROM", "II Corps", "inf", 3, "Moldavia", {}],
+      [21, "ROM", "V Corps", "inf", 3, "Dobruja", {}],
+      [21, "HUN", "Mobile Corps", "mot", 1, "Debrecen", {}],
+      [21, "SOV", "21st Army", "inf", 4, "Gomel", {}],
+      [21, "SOV", "22nd Army", "inf", 3, "Vitebsk", {}],
+      [21, "SOV", "19th Army", "inf", 3, "Kiev", {}],
+      [21, "SOV", "18th Army", "inf", 3, "Vinnitsa", {}],
+      [21, "SOV", "16th Army", "inf", 3, "Kiev", {}],
+      [21, "SOV", "20th Army", "inf", 4, "Smolensk", {}],
+      [27, "SOV", "1st Shock Army", "inf", 4, "Moscow", { xp: 0.3, trait: "attacker" }],
+      [27, "SOV", "20th Army (re-formed)", "inf", 4, "Vladimir", {}],
+      [27, "SOV", "10th Army (re-formed)", "inf", 4, "Ryazan", {}],
+      [27, "SOV", "26th Army (re-formed)", "inf", 3, "Tula", {}],
+      [27, "SOV", "60th Army", "inf", 3, "Yaroslavl", {}],
+      [27, "SOV", "61st Army", "inf", 3, "Tambov", {}],
+      [28, "SOV", "Far East rifle divisions", "inf", 4, "Moscow", { xp: 0.4 }],
+      [28, "SOV", "Siberian rifle divisions", "inf", 4, "Vladimir", { xp: 0.4 }],
+      [28, "SOV", "Ural rifle divisions", "inf", 3, "Ryazan", { xp: 0.3 }],
+      [28, "SOV", "39th Army", "inf", 3, "Kalinin", {}],
+      [28, "SOV", "59th Army", "inf", 3, "Vologda", {}],
+      [28, "SOV", "2nd Guards Cavalry Corps", "cav", 2, "Tula", { xp: 0.3 }]
+    ],
+    formations: [
+      [41, "ITA", "Sardinia coastal divisions", "inf", 1, "Sardinia", { hold: 1, str: 0.3, est: 0.3, xp: 0.05, open: 1 }],
+      [47, "ITA", "Nembo Parachute Division", "inf", 1, "Sardinia", { hold: 1, str: 0.7, est: 0.7, xp: 0.15, open: 1 }],
+      [46, "SOV", "Central Front", "inf", 12, "Kursk", { gen: "Konstantin Rokossovsky", hold: 1, xp: 0.4 }],
+      [46, "SOV", "Voronezh Front", "inf", 12, "Kursk", { gen: "Nikolai Vatutin", trait: "attacker", hold: 1, xp: 0.4 }],
+      [46, "SOV", "1st Tank Army", "arm", 2, "Kursk", { gen: "Mikhail Katukov", trait: "panzer", hold: 1, xp: 0.4 }],
+      [46, "SOV", "2nd Tank Army", "arm", 2, "Kursk", { gen: "Aleksei Rodin", hold: 1, xp: 0.3 }],
+      [46, "SOV", "Steppe Front", "inf", 10, "Voronezh", { gen: "Ivan Konev", xp: 0.3 }],
+      [46, "SOV", "5th Guards Tank Army", "arm", 2, "Voronezh", { gen: "Pavel Rotmistrov", trait: "panzer", xp: 0.4 }],
+      [46, "SOV", "3rd Guards Tank Army", "arm", 2, "Tula", { gen: "Pavel Rybalko", trait: "panzer", xp: 0.4 }],
+      [46, "SOV", "4th Tank Army", "arm", 2, "Tula", { gen: "Vasily Badanov", xp: 0.3 }]
+    ],
+    book: {
+      _note: "Ruling 233, rider b612 (4). At these stops of the history dial, in the grand campaign, a computer's staff is sent the dated rows below ('expeditions') whose place is home ground of the second country named, though the theatre is a scripted one whose rows free play does not send: Germany's moves into Italy in 1943 and 1944 are the book's. Each row waits until an enemy holds or stands on one of the grounds Italy's armistice names (the ward's trigger, open.json), and then comes at its date, or at once if the date has passed: a quiet Italy draws no German corps. 'from' keeps anything from being counted twice (b609): a row named here breaks up the corps listed, where they still live, to find its divisions (the Hermann Goring Division of Tunisia and the 15th Panzer Division of the desert, re-formed in Sicily as XIV Panzer Corps's two).",
+      stops: [1, 2],
+      scripted: [["GER", "ITA"]],
+      from: { "XIV Panzer Corps (Hermann Goring and 15th Panzergrenadier Divisions)": ["Hermann Goring Division", "15th Panzer Division"] }
+    },
+    expeditions: [
+      [13, "UK", "6th Australian Division", "inf", 1, "Alexandria", { xp: 0.2, war: ["UK", "ITA"] }],
+      [17, "UK", "2nd Armoured Division", "arm", 1, "Alexandria", { xp: 0, war: ["UK", "ITA"] }],
+      [18, "UK", "Tobruk garrison (9th Australian Division)", "inf", 3, "Tobruk", { hold: 1, xp: 0.25, war: ["UK", "ITA"] }],
+      [24, "UK", "XIII Corps, Eighth Army", "inf", 2, "Alexandria", { xp: 0.3, war: ["UK", "ITA"], openDivs: 1 }],
+      [26, "UK", "XXX Corps, Eighth Army", "arm", 2, "Alexandria", { xp: 0.15, war: ["UK", "ITA"], openDivs: 1 }],
+      [17, "ITA", "Ariete Armoured Division", "arm", 1, "Tripoli", { hold: 1, xp: 0.1, war: ["UK", "ITA"] }],
+      [18, "ITA", "Trento Motorized Division", "mot", 1, "Tripoli", { hold: 1, xp: 0.1, war: ["UK", "ITA"] }],
+      [19, "ITA", "Brescia and Pavia Divisions", "inf", 1, "Tripoli", { xp: 0.1, war: ["UK", "ITA"] }],
+      [23, "ITA", "Bologna and Savona Divisions", "inf", 1, "Tripoli", { xp: 0.1, war: ["UK", "ITA"] }],
+      [24, "ITA", "Trieste Motorized Division", "mot", 1, "Tripoli", { xp: 0.1, war: ["UK", "ITA"] }],
+      [18, "GER", "5th Light Division", "arm", 1, "Tripoli", { gen: "Erwin Rommel", trait: "panzer", hold: 1, xp: 0.4, war: ["UK", "ITA"] }],
+      [20, "GER", "15th Panzer Division", "arm", 1, "Tripoli", { gen: "Ludwig Cruwell", xp: 0.4, war: ["UK", "ITA"] }],
+      [24, "GER", "90th Light Division", "mot", 1, "Tripoli", { xp: 0.3, war: ["UK", "ITA"] }],
+      [13, "ITA", "Ciamuria Corps and Julia Alpine Division", "inf", 3, "Albania", { gen: "Sebastiano Visconti Prasca", xp: 0.1, war: ["ITA", "UK"] }],
+      [13, "ITA", "XXVI Corps", "inf", 2, "Albania", { xp: 0.1, war: ["ITA", "UK"] }],
+      [15, "ITA", "9th Army", "inf", 4, "Albania", { xp: 0.05, war: ["ITA", "GRE"] }],
+      [17, "ITA", "11th Army reserves", "inf", 4, "Albania", { gen: "Ugo Cavallero", xp: 0.05, war: ["ITA", "GRE"] }],
+      [14, "GRE", "West Macedonia Army Section", "inf", 3, "Salonika", { xp: 0.15, war: ["GRE", "ITA"], after: 0 }],
+      [14, "GRE", "I Corps", "inf", 2, "Epirus", { gen: "Alexandros Papagos", trait: "defender", xp: 0.15, war: ["GRE", "ITA"], after: 0 }],
+      [15, "GRE", "II Corps", "inf", 2, "Thessaly", { xp: 0.15, war: ["GRE", "ITA"], after: 1 }],
+      [16, "GRE", "III Corps", "inf", 2, "Thessaly", { xp: 0.15, war: ["GRE", "ITA"], after: 2 }],
+      [15, "UK", "Creforce", "inf", 1, "Crete", { gen: "Bernard Freyberg", trait: "defender", hold: 1, xp: 0.2, war: ["GRE", "ITA"] }],
+      [19, "UK", "W Force (New Zealand Division and 1st Armoured Brigade)", "inf", 2, "Thessaly", { gen: "Henry Maitland Wilson", hold: 1, xp: 0.25, war: ["GRE", "ITA"], takes: { name: "2nd Armoured Division", share: 0.5, leaves: "The 1st Armoured Brigade sails from {place} for Greece with W Force. The 2nd Armoured Division stays in the desert with its other brigade." } }],
+      [19, "GER", "5th and 11th Panzer Divisions", "arm", 2, "Sofia", { hold: 1, xp: 0.4, war: ["ITA", "GRE"], until: 22 }],
+      [19, "GER", "2nd and 9th Panzer Divisions", "arm", 2, "Sofia", { hold: 1, xp: 0.4, war: ["ITA", "GRE"], until: 22 }],
+      [19, "GER", "5th and 6th Mountain Divisions", "mtn", 2, "Plovdiv", { hold: 1, xp: 0.35, war: ["ITA", "GRE"] }],
+      [19, "GER", "50th, 72nd and 164th Infantry Divisions", "inf", 3, "Plovdiv", { hold: 1, xp: 0.3, war: ["ITA", "GRE"] }],
+      [20, "GER", "Grossdeutschland motorized group", "mot", 1, "Banat", { hold: 1, xp: 0.4, war: ["ITA", "GRE"], until: 22 }],
+      [20, "GER", "8th and 14th Panzer Divisions", "arm", 2, "Transdanubia", { hold: 1, xp: 0.35, war: ["ITA", "GRE"], until: 22 }],
+      [20, "GER", "132nd and 183rd Infantry Divisions", "inf", 2, "Transdanubia", { hold: 1, xp: 0.2, war: ["ITA", "GRE"] }],
+      [21, "GER", "XI Air Corps", "inf", 3, "Athens", { gen: "Kurt Student", trait: "attacker", airborne: 1, hold: 1, xp: 0.7, war: ["GER", "UK"] }],
+      [35, "HUN", "2nd Army: III Corps", "inf", 3, "Voronezh", { gen: "Gusztav Jany", trait: "defender", hold: 1, join: 1, until: 45, xp: 0.05, war: ["GER", "SOV"] }],
+      [35, "HUN", "2nd Army: IV and VII Corps", "inf", 4, "Voronezh", { hold: 1, join: 1, until: 45, xp: 0.05, war: ["GER", "SOV"] }],
+      [36, "ITA", "8th Army: II Corps", "inf", 3, "Millerovo", { gen: "Italo Gariboldi", trait: "defender", hold: 1, join: 1, until: 45, xp: 0.1, war: ["ITA", "SOV"] }],
+      [36, "ITA", "8th Army: XXXV Corps", "inf", 3, "Millerovo", { hold: 1, join: 1, until: 45, xp: 0.1, war: ["ITA", "SOV"] }],
+      [36, "ITA", "Alpine Corps", "mtn", 3, "Millerovo", { hold: 1, join: 1, until: 45, xp: 0.2, war: ["ITA", "SOV"] }],
+      [37, "ROM", "3rd Army: I and II Corps", "inf", 4, "Don Bend", { gen: "Petre Dumitrescu", trait: "defender", hold: 1, join: 1, xp: 0.1, war: ["GER", "SOV"] }],
+      [37, "ROM", "3rd Army: IV and V Corps", "inf", 4, "Don Bend", { hold: 1, join: 1, xp: 0.1, war: ["GER", "SOV"] }],
+      [38, "ROM", "4th Army: VI Corps", "inf", 3, "Kalmyk Steppe", { gen: "Constantin Constantinescu-Claps", trait: "defender", hold: 1, join: 1, xp: 0.1, war: ["GER", "SOV"] }],
+      [38, "ROM", "4th Army: VII Corps", "inf", 3, "Kalmyk Steppe", { hold: 1, join: 1, xp: 0.1, war: ["GER", "SOV"] }],
+      [42, "GER", "Panzer Corps from France", "arm", 3, "Poltava", { xp: 0.4, war: ["GER", "SOV"] }],
+      [31, "UK", "1st South African and 50th Divisions", "inf", 2, "Alexandria", { xp: 0.2, war: ["UK", "ITA"] }],
+      [32, "UK", "1st Armoured Division", "arm", 1, "Alexandria", { xp: 0.1, war: ["UK", "ITA"] }],
+      [34, "UK", "New Zealand and 9th Australian Divisions", "inf", 2, "Alexandria", { xp: 0.35, war: ["UK", "ITA"] }],
+      [36, "UK", "X Corps (8th and 10th Armoured Divisions)", "arm", 2, "Alexandria", { gen: "Bernard Montgomery", xp: 0.2, war: ["UK", "ITA"] }],
+      [37, "UK", "44th and 51st Divisions", "inf", 2, "Alexandria", { xp: 0.1, war: ["UK", "ITA"] }],
+      [31, "ITA", "Littorio Armoured Division", "arm", 1, "Tripoli", { xp: 0.1, war: ["UK", "ITA"] }],
+      [36, "GER", "164th Light Division and Ramcke Brigade", "inf", 1, "Tobruk", { xp: 0.3, war: ["UK", "ITA"] }],
+      [36, "ITA", "Folgore Parachute Division", "inf", 1, "Tobruk", { xp: 0.3, war: ["UK", "ITA"] }],
+      [39, "UK", "First Army: 78th Division", "inf", 1, "Gibraltar", { gen: "Kenneth Anderson", trait: "defender", xp: 0.2, war: ["UK", "GER"] }],
+      [39, "USA", "II Corps (1st Infantry and 1st Armored Divisions)", "mot", 2, "Gibraltar", { gen: "Lloyd Fredendall", xp: 0.05, war: ["USA", "GER"] }],
+      [39, "USA", "Western Task Force (2nd Armored and 9th Infantry Divisions)", "mot", 2, "Gibraltar", { gen: "George S. Patton", trait: "attacker", xp: 0.05, war: ["USA", "GER"] }],
+      [41, "UK", "First Army: 6th Armoured Division", "arm", 1, "Algiers", { xp: 0.1, war: ["UK", "GER"] }],
+      [41, "UK", "French XIX Corps", "inf", 2, "Constantine", { xp: 0.05, war: ["UK", "GER"] }],
+      [42, "USA", "34th Infantry Division", "inf", 1, "Oran", { xp: 0.05, war: ["USA", "GER"] }],
+      [42, "UK", "First Army: V Corps", "inf", 2, "Algiers", { xp: 0.15, war: ["UK", "GER"] }],
+      [40, "GER", "10th Panzer Division", "arm", 1, "Tunis", { gen: "Hans-Jurgen von Arnim", trait: "defender", xp: 0.4, war: ["GER", "USA"] }],
+      [41, "GER", "334th Infantry Division", "inf", 1, "Tunis", { xp: 0.2, war: ["GER", "USA"] }],
+      [41, "GER", "Hermann Goring Division", "mot", 1, "Tunis", { xp: 0.3, war: ["GER", "USA"] }],
+      [42, "ITA", "Pistoia and La Spezia Divisions", "inf", 2, "Tunis", { gen: "Giovanni Messe", xp: 0.15, war: ["ITA", "USA"] }],
+      [39, "USA", "3rd Infantry Division", "inf", 1, "Gibraltar", { xp: 0.05, war: ["USA", "GER"] }],
+      [47, "ITA", "6th Army", "inf", 3, "Sicily", { gen: "Alfredo Guzzoni", trait: "defender", hold: 1, join: 1, xp: 0.05, war: ["ITA", "USA"] }],
+      [47, "GER", "XIV Panzer Corps (Hermann Goring and 15th Panzergrenadier Divisions)", "mot", 2, "Calabria", { gen: "Hans-Valentin Hube", trait: "defender", join: 1, xp: 0.3, war: ["GER", "USA"] }],
+      [47, "UK", "Eighth Army: XIII Corps (5th, 50th and 78th Divisions)", "inf", 3, "Malta", { gen: "Bernard Montgomery", join: 1, xp: 0.4, from: "North Africa", war: ["UK", "ITA"] }],
+      [47, "UK", "Eighth Army: XXX Corps (51st, 1st Canadian and 1st Airborne Divisions)", "inf", 3, "Malta", { gen: "Oliver Leese", join: 1, xp: 0.4, from: "North Africa", war: ["UK", "ITA"] }],
+      [47, "USA", "Seventh Army: II Corps (1st, 9th and 45th Infantry Divisions)", "inf", 3, "Malta", { gen: "Omar Bradley", join: 1, xp: 0.2, from: "North Africa", war: ["USA", "ITA"] }],
+      [47, "USA", "Seventh Army: Provisional Corps (3rd Infantry, 2nd Armored and 82nd Airborne Divisions)", "mot", 3, "Malta", { gen: "George S. Patton", trait: "attacker", join: 1, xp: 0.2, from: "North Africa", war: ["USA", "ITA"] }],
+      [48, "GER", "LXXVI Panzer Corps (26th Panzer, 29th Panzergrenadier and 1st Parachute Divisions)", "mot", 2, "Calabria", { gen: "Traugott Herr", join: 1, xp: 0.3, war: ["GER", "USA"] }],
+      [48, "GER", "16th Panzer Division", "arm", 1, "Naples", { hold: 1, join: 1, xp: 0.3, war: ["GER", "USA"] }],
+      [48, "GER", "2nd Parachute and 3rd Panzergrenadier Divisions", "mot", 2, "Rome", { join: 1, xp: 0.3, war: ["GER", "USA"] }],
+      [49, "GER", "LI Mountain Corps (44th and 305th Divisions)", "mtn", 2, "Abruzzo", { gen: "Heinrich von Vietinghoff", trait: "defender", join: 1, xp: 0.2, war: ["GER", "USA"] }],
+      [50, "GER", "5th Mountain and 65th Divisions", "mtn", 2, "Abruzzo", { join: 1, xp: 0.2, war: ["GER", "USA"] }],
+      [49, "UK", "Eighth Army: V Corps (1st Airborne and 8th Indian Divisions)", "inf", 2, "Malta", { join: 1, xp: 0.3, from: "North Africa", war: ["UK", "GER"] }],
+      [49, "USA", "Fifth Army: VI Corps (36th and 34th Infantry Divisions)", "inf", 2, "Malta", { gen: "Mark Clark", join: 1, xp: 0.1, from: "North Africa", war: ["USA", "GER"] }],
+      [49, "USA", "Fifth Army: X Corps (British 46th, 56th and 7th Armoured Divisions)", "mot", 3, "Malta", { gen: "Richard McCreery", join: 1, xp: 0.2, from: "North Africa", of: "UK", war: ["USA", "GER"] }],
+      [53, "USA", "Fifth Army: VI Corps (3rd and 45th Infantry and British 1st Divisions)", "inf", 1, "Naples", { joins: "Fifth Army: VI Corps (36th and 34th Infantry Divisions)" }],
+      [53, "USA", "Fifth Army: VI Corps (3rd and 45th Infantry, 1st Armored and British 1st and 5th Divisions)", "mot", 2, "Naples", { joins: "Fifth Army: VI Corps (3rd and 45th Infantry and British 1st Divisions)", until: 60 }],
+      [53, "USA", "Fifth Army: II Corps (34th and 36th Infantry Divisions)", "inf", 2, "Naples", { gen: "Geoffrey Keyes", join: 1, xp: 0.3, from: ["Seventh Army: II Corps (1st, 9th and 45th Infantry Divisions)", "Seventh Army: Provisional Corps (3rd Infantry, 2nd Armored and 82nd Airborne Divisions)"], war: ["USA", "GER"], news: "Eisenhower, Montgomery, Bradley and Patton have left the Mediterranean for England, and seven veteran divisions have gone with them for the invasion of France. Alexander fights on in Italy with what is left." }],
+      [53, "USA", "Fifth Army: French Expeditionary Corps (2nd Moroccan and 3rd Algerian Divisions)", "mtn", 2, "Naples", { gen: "Alphonse Juin", trait: "attacker", join: 1, xp: 0.35, war: ["USA", "GER"] }],
+      [53, "UK", "Eighth Army: XIII Corps (4th, 78th and 6th Armoured Divisions)", "inf", 3, "Naples", { gen: "Oliver Leese", join: 1, xp: 0.4, from: ["Eighth Army: XIII Corps (5th, 50th and 78th Divisions)"], war: ["UK", "GER"] }],
+      [53, "UK", "Eighth Army: I Canadian Corps (1st Canadian Infantry and 5th Canadian Armoured Divisions)", "mot", 2, "Apulia", { gen: "E. L. M. Burns", join: 1, xp: 0.35, from: ["Eighth Army: XXX Corps (51st, 1st Canadian and 1st Airborne Divisions)"], war: ["UK", "GER"] }],
+      [53, "UK", "Eighth Army: V Corps (4th and 10th Indian Divisions)", "inf", 2, "Apulia", { gen: "Charles Allfrey", join: 1, xp: 0.3, from: ["Eighth Army: V Corps (1st Airborne and 8th Indian Divisions)"], war: ["UK", "GER"] }],
+      [53, "GER", "I Parachute Corps (4th Parachute and 715th Divisions)", "mot", 2, "Rome", { gen: "Alfred Schlemm", join: 1, xp: 0.25, war: ["USA", "GER"] }],
+      [54, "GER", "14th Army: 114th Jager and 362nd Divisions", "inf", 2, "Rome", { gen: "Eberhard von Mackensen", join: 1, xp: 0.2, war: ["USA", "GER"] }],
+      [54, "UK", "New Zealand Corps (2nd New Zealand and 4th Indian Divisions)", "inf", 2, "Naples", { gen: "Bernard Freyberg", join: 1, xp: 0.45, war: ["UK", "GER"] }],
+      [56, "USA", "Fifth Army: II Corps (34th, 36th, 85th and 88th Infantry Divisions)", "inf", 2, "Naples", { joins: "Fifth Army: II Corps (34th and 36th Infantry Divisions)", from: ["Fifth Army: X Corps (British 46th, 56th and 7th Armoured Divisions)"], news: "Two new American divisions, the 85th and the 88th, join the Fifth Army below Cassino. The British X Corps leaves it for the Eighth Army." }],
+      [56, "USA", "Fifth Army: French Expeditionary Corps (2nd Moroccan, 3rd Algerian, 4th Moroccan Mountain and 1st Free French Divisions)", "mtn", 2, "Naples", { joins: "Fifth Army: French Expeditionary Corps (2nd Moroccan and 3rd Algerian Divisions)", until: 60 }],
+      [56, "UK", "Eighth Army: Polish II Corps (3rd Carpathian and 5th Kresowa Divisions)", "inf", 2, "Naples", { gen: "Wladyslaw Anders", trait: "attacker", join: 1, xp: 0.35, from: ["New Zealand Corps (2nd New Zealand and 4th Indian Divisions)"], war: ["UK", "GER"], news: "General Anders brings the Polish II Corps into the line opposite Monte Cassino: men who came out of Soviet camps by way of Persia to fight for a country they cannot go home to." }],
+      [56, "UK", "Eighth Army: XIII Corps (4th, 78th, 8th Indian and 6th Armoured Divisions)", "inf", 1, "Naples", { joins: "Eighth Army: XIII Corps (4th, 78th and 6th Armoured Divisions)" }],
+      [56, "GER", "Group Hauck (305th and 334th Divisions)", "inf", 2, "Abruzzo", { join: 1, hold: 1, xp: 0.2, war: ["USA", "GER"] }],
+      [58, "USA", "Fifth Army: IV Corps (91st Infantry, 6th South African Armoured and Brazilian 1st Divisions)", "mot", 3, "Naples", { gen: "Willis Crittenberger", join: 1, xp: 0.25, war: ["USA", "GER"] }],
+      [59, "GER", "14th Army: LXXV Corps (16th SS Panzergrenadier, 19th and 20th Luftwaffe Field Divisions)", "inf", 3, "Emilia", { join: 1, xp: 0.15, war: ["USA", "GER"] }],
+      [61, "UK", "Eighth Army: V Corps (46th, 56th, 4th Indian and 1st Armoured Divisions)", "inf", 2, "Marche", { joins: "Eighth Army: V Corps (4th and 10th Indian Divisions)" }],
+      [57, "GER", "Seventh Army: LXXXIV Corps (352nd and 716th Divisions)", "inf", 2, "Normandy", { join: 1, gen: "Erich Marcks", trait: "defender", xp: 0.2, war: ["USA", "GER"] }],
+      [57, "GER", "Panzer Group West: I SS Panzer Corps (21st Panzer, 12th SS Panzer and Panzer Lehr Divisions)", "arm", 3, "Maine", { join: 1, gen: "Sepp Dietrich", trait: "panzer", xp: 0.45, war: ["USA", "GER"] }],
+      [57, "GER", "Panzer Group West: XLVII Panzer Corps (2nd and 116th Panzer Divisions)", "arm", 2, "Somme", { join: 1, gen: "Hans von Funck", xp: 0.45, war: ["USA", "GER"] }],
+      [57, "GER", "Seventh Army: II Parachute Corps (3rd Parachute, 353rd and 17th SS Panzergrenadier Divisions)", "inf", 3, "Rennes", { join: 1, gen: "Eugen Meindl", trait: "defender", xp: 0.4, war: ["USA", "GER"] }],
+      [57, "GER", "Fifteenth Army: LXXXI and LXXXII Corps", "inf", 4, "Calais", { join: 1, gen: "Hans von Salmuth", hold: 1, xp: 0.15, war: ["USA", "GER"] }],
+      [57, "GER", "Fifteenth Army: LXVII and LXXXIX Corps", "inf", 4, "Flanders", { join: 1, hold: 1, xp: 0.15, war: ["USA", "GER"] }],
+      [57, "GER", "Army Group G: LVIII Panzer Corps (2nd SS Panzer and 9th Panzer Divisions)", "arm", 2, "Toulouse", { join: 1, xp: 0.4, war: ["USA", "GER"] }],
+      [57, "GER", "Nineteenth Army: 11th Panzer Division", "arm", 1, "Languedoc", { join: 1, hold: 1, xp: 0.45, war: ["USA", "GER"] }],
+      [57, "GER", "Nineteenth Army: 242nd and 244th Divisions", "inf", 1, "Marseille", { join: 1, hold: 1, xp: 0.1, war: ["USA", "GER"] }],
+      [57, "GER", "Nineteenth Army: IV Luftwaffe Field Corps (198th, 716th and 189th Divisions)", "inf", 3, "Languedoc", { join: 1, gen: "Friedrich Wiese", hold: 1, xp: 0.15, war: ["USA", "GER"] }],
+      [57, "GER", "Nineteenth Army: LXII Corps (148th and 157th Reserve Divisions)", "inf", 2, "Riviera", { join: 1, hold: 1, xp: 0.1, war: ["USA", "GER"] }],
+      [57, "UK", "Second Army: I Corps (3rd British, 3rd Canadian and 6th Airborne Divisions)", "inf", 3, "Hampshire", { gen: "Miles Dempsey", join: 1, xp: 0.3, from: "the West", war: ["UK", "GER"] }],
+      [57, "UK", "Second Army: XXX Corps (50th, 49th and 7th Armoured Divisions)", "mot", 3, "Hampshire", { gen: "Bernard Montgomery", trait: "attacker", join: 1, xp: 0.4, from: "the West", war: ["UK", "GER"] }],
+      [57, "USA", "First Army: V Corps (1st, 2nd and 29th Infantry Divisions)", "inf", 3, "Cornwall", { gen: "Omar Bradley", xp: 0.3, war: ["USA", "GER"] }],
+      [57, "USA", "First Army: VII Corps (4th, 9th and 90th Infantry, 82nd and 101st Airborne Divisions)", "inf", 5, "Cornwall", { gen: "J. Lawton Collins", trait: "attacker", xp: 0.3, war: ["USA", "GER"] }],
+      [59, "GER", "II SS Panzer Corps (9th and 10th SS Panzer Divisions)", "arm", 2, "Rouen", { join: 1, gen: "Paul Hausser", trait: "panzer", xp: 0.5, news: "The II SS Panzer Corps is pulled out of the Eastern Front and sent across Europe to Normandy.", war: ["USA", "GER"] }],
+      [59, "GER", "Seventh Army: LXXXVI Corps (346th, 711th and 16th Luftwaffe Field Divisions)", "inf", 3, "Rouen", { join: 1, xp: 0.15, war: ["USA", "GER"] }],
+      [59, "UK", "Second Army: VIII Corps (11th Armoured, Guards Armoured and 15th Scottish Divisions)", "arm", 3, "Normandy", { gen: "Richard O'Connor", trait: "attacker", xp: 0.25, war: ["UK", "GER"] }],
+      [59, "USA", "First Army: XIX Corps (30th and 35th Infantry, 2nd and 3rd Armored Divisions)", "mot", 4, "Cotentin", { gen: "Charles Corlett", xp: 0.2, war: ["USA", "GER"] }],
+      [59, "USA", "First Army: VIII Corps (8th, 79th and 83rd Infantry, 4th and 6th Armored Divisions)", "mot", 5, "Cotentin", { gen: "Troy Middleton", xp: 0.2, war: ["USA", "GER"] }],
+      [60, "UK", "First Canadian Army: II Canadian Corps and British I Corps (2nd and 3rd Canadian, 4th Canadian Armoured, 1st Polish Armoured and 51st Highland Divisions)", "mot", 3, "Normandy", { joins: "Second Army: I Corps (3rd British, 3rd Canadian and 6th Airborne Divisions)", news: "The First Canadian Army takes over the left of the line in Normandy, with the Polish 1st Armoured Division under its command.", war: ["UK", "GER"] }],
+      [60, "USA", "Third Army: XV Corps (5th Armored, French 2nd Armored and 79th Infantry Divisions)", "arm", 3, "Cotentin", { gen: "George S. Patton", trait: "attacker", join: 1, xp: 0.3, news: "General Patton's Third Army becomes operational in Normandy. Its orders are to go through the gap at Avranches and keep going.", war: ["USA", "GER"] }],
+      [60, "USA", "Third Army: XX Corps (7th Armored, 5th and 90th Infantry Divisions)", "mot", 3, "Cotentin", { gen: "Walton Walker", join: 1, xp: 0.2, war: ["USA", "GER"] }],
+      [60, "USA", "Third Army: XII Corps (4th Armored, 35th and 80th Infantry Divisions)", "arm", 3, "Cotentin", { gen: "Manton Eddy", join: 1, xp: 0.2, war: ["USA", "GER"] }],
+      [60, "USA", "Seventh Army: VI Corps (3rd, 36th and 45th Infantry Divisions)", "inf", 3, "Naples", { gen: "Lucian Truscott", trait: "attacker", join: 1, xp: 0.5, war: ["USA", "GER"] }],
+      [60, "USA", "French Army B: II Corps (1st Free French, 3rd Algerian and 1st Armoured Divisions)", "mot", 3, "Naples", { gen: "Jean de Lattre de Tassigny", trait: "attacker", join: 1, xp: 0.35, war: ["USA", "GER"] }],
+      [61, "GER", "First Parachute Army: II Parachute Corps and LXXXVI Corps", "inf", 3, "Gelderland", { join: 1, gen: "Kurt Student", trait: "defender", xp: 0.3, from: ["Seventh Army: II Parachute Corps (3rd Parachute, 353rd and 17th SS Panzergrenadier Divisions)", "Seventh Army: LXXXVI Corps (346th, 711th and 16th Luftwaffe Field Divisions)"], news: "General Student is given the First Parachute Army, which exists so far only on paper, and told to hold the line of the Dutch canals.", war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "II SS Panzer Corps (9th and 10th SS Panzer Divisions), refitting", "arm", 2, "Gelderland", { join: 1, gen: "Wilhelm Bittrich", xp: 0.5, from: ["II SS Panzer Corps (9th and 10th SS Panzer Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "Fifteenth Army: LXVII and LXXXVIII Corps", "inf", 4, "Rotterdam", { join: 1, gen: "Gustav-Adolf von Zangen", xp: 0.2, from: ["Fifteenth Army: LXXXI and LXXXII Corps", "Fifteenth Army: LXVII and LXXXIX Corps"], news: "The German Fifteenth Army, cut off on the Channel coast, is ferried across the mouth of the Scheldt by night and gets away into Holland.", war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "Seventh Army: LXXXI and XII SS Corps (the West Wall at Aachen)", "inf", 4, "Rhineland", { join: 1, xp: 0.2, from: ["Seventh Army: LXXXIV Corps (352nd and 716th Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "Seventh Army: LXXIV Corps (the Hurtgen Forest)", "inf", 3, "Eifel", { join: 1, xp: 0.2, war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "First Parachute Army: LXXXVIII Corps", "inf", 3, "Gelderland", { join: 1, xp: 0.2, war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "Seventh Army: I SS Panzer Corps", "mot", 3, "Eifel", { join: 1, xp: 0.35, from: ["Panzer Group West: I SS Panzer Corps (21st Panzer, 12th SS Panzer and Panzer Lehr Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "First Army: LXXXII and XIII SS Corps (the forts of Metz)", "inf", 3, "Lorraine", { join: 1, gen: "Otto von Knobelsdorff", xp: 0.25, war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "First Army: LXXX Corps", "inf", 2, "Saar", { join: 1, xp: 0.2, war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "Fifth Panzer Army: XLVII and LVIII Panzer Corps", "arm", 2, "Lorraine", { join: 1, gen: "Hasso von Manteuffel", trait: "panzer", xp: 0.35, from: ["Panzer Group West: XLVII Panzer Corps (2nd and 116th Panzer Divisions)", "Army Group G: LVIII Panzer Corps (2nd SS Panzer and 9th Panzer Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "Nineteenth Army: IV Luftwaffe Field Corps and LXIV Corps", "inf", 3, "Vosges", { join: 1, xp: 0.15, from: ["Nineteenth Army: IV Luftwaffe Field Corps (198th, 716th and 189th Divisions)", "Nineteenth Army: 242nd and 244th Divisions"], war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "Nineteenth Army: LXXXV Corps and 11th Panzer Division", "inf", 3, "Belfort", { join: 1, xp: 0.2, from: ["Nineteenth Army: 11th Panzer Division", "Nineteenth Army: LXII Corps (148th and 157th Reserve Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "USA", "French First Army: I Corps (2nd Moroccan, 4th Moroccan Mountain and 9th Colonial Divisions)", "inf", 3, "Marseille", { join: 1, xp: 0.35, war: ["USA", "GER"] }],
+      [60, "UK", "Second Army: XII Corps (43rd Wessex, 53rd Welsh and 59th Divisions)", "inf", 3, "Normandy", { gen: "Neil Ritchie", xp: 0.25, war: ["UK", "GER"] }],
+      [61, "UK", "First Allied Airborne Army: I Airborne Corps (1st Airborne, US 82nd and 101st Airborne Divisions)", "inf", 3, "Brussels", { gen: "Frederick Browning", join: 1, xp: 0.4, war: ["UK", "GER"] }],
+      [62, "USA", "Ninth Army: XIII and XIX Corps (29th, 30th, 84th and 102nd Infantry and 2nd Armored Divisions)", "inf", 5, "Liege", { gen: "William Simpson", join: 1, xp: 0.2, war: ["USA", "GER"] }],
+      [63, "USA", "Third Army: III Corps (26th and 95th Infantry, 6th and 10th Armored Divisions)", "mot", 4, "Verdun", { gen: "John Millikin", join: 1, xp: 0.15, war: ["USA", "GER"] }],
+      [63, "GER", "Fifth Panzer Army: XLVII and LVIII Panzer Corps (behind the Roer)", "arm", 2, "Eifel", { join: 1, gen: "Hasso von Manteuffel", trait: "panzer", xp: 0.35, from: ["Fifth Panzer Army: XLVII and LVIII Panzer Corps"], news: "The Fifth Panzer Army is taken out of Lorraine and sent north behind the river Roer. Nobody on the Allied side asks why.", war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [64, "GER", "Sixth Panzer Army: I SS Panzer Corps (1st and 12th SS Panzer Divisions)", "arm", 3, "Eifel", { join: 1, gen: "Sepp Dietrich", trait: "panzer", xp: 0.4, from: ["Seventh Army: I SS Panzer Corps"], news: "Behind the Eifel the Germans have gathered two panzer armies in secret: a quarter of a million men and the last tanks and fuel the Reich can find.", war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [64, "GER", "Fifth Panzer Army: XLVII Panzer Corps (2nd Panzer, Panzer Lehr and 26th Volksgrenadier Divisions)", "arm", 3, "Eifel", { join: 1, gen: "Hasso von Manteuffel", trait: "panzer", xp: 0.4, from: ["Fifth Panzer Army: XLVII and LVIII Panzer Corps (behind the Roer)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [64, "GER", "Fifth Panzer Army: LVIII Panzer Corps (116th Panzer and 560th Volksgrenadier Divisions)", "arm", 2, "Eifel", { join: 1, xp: 0.3, war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [64, "GER", "Seventh Army: LXXXV Corps (5th Parachute and 352nd Volksgrenadier Divisions)", "inf", 2, "Eifel", { join: 1, gen: "Erich Brandenberger", xp: 0.2, war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [35, "UK", "Royal Artillery, Eighth Army", "art", 2, "Alexandria", { open: 1, xp: 0.2, war: ["UK", "ITA"] }],
+      [37, "UK", "Royal Artillery, X Corps", "art", 2, "Alexandria", { open: 1, xp: 0.2, war: ["UK", "ITA"] }],
+      [1, "YUG", "Sixth Army", "inf", 3, "Belgrade", { open: 1, xp: 0.05, war: ["YUG", "*"], after: 1 }],
+      [1, "YUG", "Third Army", "inf", 3, "Montenegro", { open: 1, xp: 0.05, war: ["YUG", "*"], after: 1 }],
+      [1, "YUG", "Seventh Army", "inf", 3, "Slovenia", { open: 1, xp: 0.05, war: ["YUG", "*"], after: 2 }],
+      [1, "YUG", "Coastal Army", "inf", 3, "Dalmatia", { open: 1, xp: 0.05, war: ["YUG", "*"], after: 2 }],
+      [21, "UK", "1st South African Division", "inf", 1, "Alexandria", { open: 1, carried: "XXX Corps, Eighth Army", xp: 0.2, war: ["UK", "ITA"] }],
+      [22, "UK", "2nd South African Division", "inf", 1, "Alexandria", { open: 1, carried: "XXX Corps, Eighth Army", xp: 0.05, war: ["UK", "ITA"] }],
+      [19, "UK", "2nd New Zealand Division", "inf", 1, "Alexandria", { open: 1, carried: "XIII Corps, Eighth Army", xp: 0.25, war: ["UK", "ITA"], unless: "W Force (New Zealand Division and 1st Armoured Brigade)", leaves: "The 2nd New Zealand Division sails from {place} for Greece. It goes as part of W Force, which has landed there with the 1st Armoured Brigade." }],
+      [32, "UK", "5th Indian Division", "inf", 1, "Alexandria", { open: 1, xp: 0.3, war: ["UK", "ITA"] }],
+      [34, "UK", "10th Indian Division", "inf", 1, "Mersa Matruh", { open: 1, xp: 0.2, war: ["UK", "ITA"] }]
+    ]
   };
 
   // ../../data/campaign/history.json
@@ -19052,390 +18908,53 @@
     for (const [name, a] of amends) amendRow(TARGETS, name, a);
   }
 
-  // ../../src/campaign/commanders.ts
-  var COMMAND = commanders_default;
-  var SKILLS = ["offense", "defense", "logistics", "leadership"];
-  var blank = () => ({ battles: 0, won: 0, attacks: 0, defences: 0, wounds: 0, fast: 0, close: 0, enc: 0, held: 0, winter: 0, costly: 0, streak: 0 });
-  function generalOf(g2, c) {
-    return c.general === null ? null : g2.generals[c.general] ?? null;
-  }
-  function corpsOf(g2, gen) {
-    return gen.corps < 0 ? null : g2.corps.find((c) => c.id === gen.corps) ?? null;
-  }
-  var serving = (gen) => gen.status === "active" || gen.status === "wounded";
-  function newGeneral(g2, nat, name, o) {
-    const gen = {
-      id: g2.generals.length,
-      nat,
-      name,
-      historical: o.historical ?? true,
-      level: o.level ?? 1,
-      xp: 0,
-      points: 0,
-      skills: { offense: 0, defense: 0, logistics: 0, leadership: 0, ...o.skills },
-      traits: [...o.traits ?? []],
-      corps: -1,
-      status: "active",
-      backOn: 0,
-      joined: g2.turn,
-      moved: 0,
-      rec: blank()
-    };
-    gen.points = Math.max(0, gen.level - 1 - SKILLS.reduce((s, k) => s + gen.skills[k], 0));
-    g2.generals.push(gen);
-    return gen;
-  }
-  function appoint(g2, gen, c) {
-    const old = corpsOf(g2, gen);
-    if (old && old.general === gen.id) old.general = null;
-    gen.corps = -1;
-    if (!c) return;
-    const sitting = generalOf(g2, c);
-    if (sitting && sitting !== gen) sitting.corps = -1;
-    c.general = gen.id;
-    gen.corps = c.id;
-  }
-  function seat(g2, c, name, label) {
-    const known = g2.generals.find((x) => x.nat === c.nat && x.name === name);
-    if (known) {
-      if (serving(known) && known.status === "active" && (c.nat !== g2.human || known.corps < 0)) appoint(g2, known, c);
-      return known;
-    }
-    const l = COMMAND.legacy[label ?? "none"] ?? COMMAND.legacy.none;
-    const gen = newGeneral(g2, c.nat, name, { level: l.level, skills: l.skills, traits: l.traits, historical: true });
-    appoint(g2, gen, c);
-    return gen;
-  }
-  function traitsFor(gen, c) {
-    const out = [];
-    for (const id of gen.traits) {
-      const d = COMMAND.traits[id];
-      if (d && (!d.mobile || KIND[c.kind].mobile)) out.push(d);
-    }
-    return out;
-  }
-  function cmdAttack(g2, c, pocket) {
-    const gen = generalOf(g2, c);
-    if (!gen) return 1;
-    let m = 1 + COMMAND.skills.offense.per * gen.skills.offense;
-    for (const d of traitsFor(gen, c)) {
-      if (d.attack) m *= d.attack;
-      if (pocket && d.pocket) m *= d.pocket;
-    }
-    return m;
-  }
-  function cmdDefence(g2, c) {
-    const gen = generalOf(g2, c);
-    if (!gen) return 1;
-    let m = 1 + COMMAND.skills.defense.per * gen.skills.defense;
-    for (const d of traitsFor(gen, c)) if (d.defence) m *= d.defence;
-    return m;
-  }
-  function cmdAp(g2, c) {
-    const gen = generalOf(g2, c);
-    if (!gen) return 0;
-    let ap = 0;
-    for (const d of traitsFor(gen, c)) ap += d.ap ?? 0;
-    return ap;
-  }
-  function cmdLoss(g2, c) {
-    const gen = generalOf(g2, c);
-    if (!gen) return 1;
-    let m = 1;
-    for (const d of traitsFor(gen, c)) m *= d.loss ?? 1;
-    return m;
-  }
-  function cmdSteady(g2, c) {
-    const gen = generalOf(g2, c);
-    return gen ? 1 - COMMAND.skills.leadership.steady * gen.skills.leadership : 1;
-  }
-  function cmdRally(g2, c) {
-    const gen = generalOf(g2, c);
-    return gen ? 1 + COMMAND.skills.leadership.rally * gen.skills.leadership : 1;
-  }
-  function cmdWinter(g2, c) {
-    const gen = generalOf(g2, c);
-    if (!gen) return 1;
-    let m = 1;
-    for (const d of traitsFor(gen, c)) if (d.winter !== void 0) m = Math.min(m, d.winter);
-    return m;
-  }
-  function cmdLine(g2, c, mul2) {
-    const gen = generalOf(g2, c);
-    if (!gen || mul2 >= 1 || !gen.skills.logistics) return mul2;
-    return 1 - (1 - mul2) * (1 - COMMAND.skills.logistics.per * gen.skills.logistics);
-  }
-  function cmdCutOff(g2, c) {
-    const gen = generalOf(g2, c);
-    return 0.5 + (gen ? COMMAND.skills.logistics.cutOff * gen.skills.logistics : 0);
-  }
-  function commandersIn(g2, cs) {
-    const names = [];
-    for (const c of cs) {
-      const gen = generalOf(g2, c);
-      if (gen) names.push(`${gen.name} (level ${gen.level})`);
-    }
-    return names.length > 3 ? `${names.slice(0, 3).join(", ")} and ${names.length - 3} more` : names.join(", ");
-  }
-  var xpToNext = (gen) => gen.level >= COMMAND.maxLevel ? Infinity : COMMAND.levelXp[gen.level] ?? Infinity;
-  var notable = (g2, gen) => gen.nat === g2.human || gen.historical || gen.level >= 5;
-  function rankOf(gen) {
-    const rows = COMMAND.ranks[gen.nat] ?? COMMAND.ranks._default;
-    let out = rows[0][1];
-    for (const [from2, title] of rows) if (gen.level >= from2) out = title;
-    return out;
-  }
-  function gainXp(g2, gen, amount) {
-    if (gen.level >= COMMAND.maxLevel) return;
-    let mul2 = 1;
-    for (const t of gen.traits) mul2 *= COMMAND.traits[t]?.xp ?? 1;
-    gen.xp += Math.round(amount * mul2);
-    while (gen.xp >= xpToNext(gen)) {
-      gen.xp -= xpToNext(gen);
-      const was = rankOf(gen);
-      gen.level++;
-      gen.points++;
-      if (gen.nat === g2.human) headline(g2, "info", `${gen.name} reaches level ${gen.level} and has a skill point to spend.`, gen.nat);
-      const now = rankOf(gen);
-      if (now !== was && notable(g2, gen)) headline(g2, "info", `${gen.name} is promoted to ${now}.`, gen.nat);
-    }
-    if (gen.level >= COMMAND.maxLevel) gen.xp = 0;
-    if (gen.nat !== g2.human) autoSpend(gen);
-  }
-  function spendPoint(gen, skill) {
-    if (gen.points < 1 || gen.skills[skill] >= COMMAND.skillMax || !serving(gen)) return false;
-    gen.skills[skill]++;
-    gen.points--;
-    return true;
-  }
-  function autoSpend(gen) {
-    while (gen.points > 0) {
-      const w = {
-        offense: 2 + gen.rec.attacks,
-        defense: 2 + gen.rec.defences,
-        logistics: 1.5 + 0.3 * gen.rec.battles,
-        leadership: 1.5 + 0.3 * gen.rec.battles
-      };
-      let best = null, bs = -1;
-      for (const k of SKILLS) {
-        if (gen.skills[k] >= COMMAND.skillMax) continue;
-        const s = w[k] / (1 + gen.skills[k]);
-        if (s > bs) {
-          bs = s;
-          best = k;
-        }
+  // ../../data/campaign/divisions.json
+  var divisions_default = {
+    _about: {
+      what: "The divisions inside a corps, as both interfaces show them: what each kind is called, the numbers they carry, and how a corps' strength and experience are shared out among its divisions.",
+      rule: "A corps fights as one body: its strength and its experience are the corps' own, and the divisions shown inside it always add up to exactly those. Each division keeps its own character through the war, so the same one is always the most worn or the most seasoned of its corps. Nothing here changes a battle.",
+      kinds: "For each kind of corps: 'word' as it reads in a count ('5 infantry divisions'), 'name' for one division ('7th Infantry Division') and 'short' for a card.",
+      names: "What a nation calls its own divisions of a kind, where it differs: [name, short].",
+      historic: "The divisions a corps of the 1939 order of battle (setup-1939.json) actually had, by nation and corps name, in its own order: [name, short]. A division past the end of a list, or of a corps not listed, takes its nation's number for its kind. From the historian, for the field battles (the design director, b358). A division whose kind the corps does not hold is left to its number (b371: I Corps' third, Panzer Division Kempf, waits until the corps holds armour).",
+      order: "The order the kinds are listed in when an army is summed up.",
+      spread: "How far apart the divisions of a corps stand: the share of the room the corps' own strength (or experience) leaves either side of it.",
+      hardened: "The experience (0 to 1) at which a division counts as battle-hardened.",
+      record: "Real division numbers of 1939 that no first-day corps carries (setup-1939.json's 'nos' holds those that do), by nation and arm, from the historian's divisions-1939-ger.md (18 November 2026): divisions in no corps that day, and those of another arm than the game's corps. A stand-in division is numbered from above the highest real number of its nation's arm, so that no stand-in ever takes a real number and no name is carried twice (the design director, 18 November)."
+    },
+    record: {
+      GER: { arm: [5, 6], mot: [2, 20], cav: [1], inf: [14, 26, 31, 56, 57, 62, 72, 73, 76, 86, 208, 209, 212, 214, 215, 216, 223, 227, 231, 246, 251, 252, 253, 254, 255, 256, 257, 258, 260, 262, 263, 267, 268, 269] },
+      POL: { inf: [24, 36, 39, 45, 50] }
+    },
+    kinds: {
+      inf: { word: "infantry", name: "Infantry Division", short: "Infantry" },
+      mot: { word: "motorised", name: "Motorised Division", short: "Motorised" },
+      arm: { word: "armoured", name: "Armoured Division", short: "Armoured" },
+      cav: { word: "cavalry", name: "Cavalry Division", short: "Cavalry" },
+      mtn: { word: "mountain", name: "Mountain Division", short: "Mountain" },
+      fort: { word: "fortress", name: "Fortress Division", short: "Fortress" },
+      art: { word: "artillery", name: "Artillery Division", short: "Artillery" },
+      eng: { word: "engineer", name: "Engineer Brigade", short: "Engineers" },
+      mg: { word: "machine-gun", name: "Machine-Gun Brigade", short: "Machine-Gun" },
+      mor: { word: "mortar", name: "Mortar Brigade", short: "Mortar" }
+    },
+    historic: {
+      GER: {
+        "I Corps": [["11th Infantry Division", "11th Infantry"], ["61st Infantry Division", "61st Infantry"]],
+        "Corps Wodrig": [["1st Infantry Division", "1st Infantry"], ["12th Infantry Division", "12th Infantry"]]
       }
-      if (!best) break;
-      gen.skills[best]++;
-      gen.points--;
-    }
-  }
-  function earn(g2, gen, c) {
-    for (const [id, d] of Object.entries(COMMAND.traits)) {
-      if (!d.needs || gen.traits.includes(id)) continue;
-      if (gen.rec[d.needs[0]] < d.needs[1]) continue;
-      if (d.not?.some((x) => gen.traits.includes(x))) continue;
-      if (d.mobile && !KIND[c.kind].mobile) continue;
-      gen.traits.push(id);
-      if (notable(g2, gen)) headline(g2, "info", `${gen.name} has earned a reputation: ${d.label}. ${d.earned}`, gen.nat);
-    }
-  }
-  function inventName(g2, nat, rng) {
-    const pool = COMMAND.names[nat];
-    if (!pool) return null;
-    for (let tries = 0; tries < 12; tries++) {
-      const name = `${rng.pick(pool.first)} ${rng.pick(pool.last)}`;
-      if (!g2.generals.some((x) => x.nat === nat && x.name === name)) return name;
-    }
-    return null;
-  }
-  function room(g2, nat) {
-    let have = 0, corps = 0;
-    for (const x of g2.generals) if (x.nat === nat && serving(x)) have++;
-    for (const c of g2.corps) if (c.nat === nat && c.kind !== "fort") corps++;
-    return have < Math.ceil(COMMAND.rise.share * corps);
-  }
-  function rise(g2, c, rng, place3) {
-    if (c.kind === "fort" || c.general !== null || !COMMAND.names[c.nat]) return;
-    if (!rng.chance(COMMAND.rise.chance) || !room(g2, c.nat)) return;
-    const name = inventName(g2, c.nat, rng);
-    if (!name) return;
-    const gen = newGeneral(g2, c.nat, name, { historical: false, traits: ["rising_star"] });
-    appoint(g2, gen, c);
-    gen.moved = g2.turn;
-    if (c.nat === g2.human) headline(g2, "info", `${name} makes his name at ${place3} and is given command of ${c.name}.`, c.nat, c.reg);
-  }
-  function lose(g2, gen, status, text, region) {
-    appoint(g2, gen, null);
-    gen.status = status;
-    if (notable(g2, gen)) headline(g2, "battle", text, gen.nat, region, { arm: "land", lost: gen.nat });
-  }
-  function hazard(g2, gen, c, lossFrac, rng, rep) {
-    const H = COMMAND.hazard;
-    const roll3 = rng.next();
-    if (c.dead) {
-      if (roll3 < H.lost.captured) lose(g2, gen, "captured", `${gen.name} is taken prisoner with ${c.name} at ${rep.regionName}.`, rep.region);
-      else if (roll3 < H.lost.captured + H.lost.killed) lose(g2, gen, "dead", `${gen.name} is killed as ${c.name} is destroyed at ${rep.regionName}.`, rep.region);
-      else {
-        gen.corps = -1;
-        if (gen.nat === g2.human) headline(g2, "info", `${gen.name} gets away from the disaster at ${rep.regionName} and is waiting for a new command.`, gen.nat, rep.region);
-      }
-      return;
-    }
-    const p = H.base + H.perLoss * lossFrac;
-    if (roll3 < p * H.killedShare) lose(g2, gen, "dead", `${gen.name} is killed in action at ${rep.regionName}.`, rep.region);
-    else if (roll3 < p) {
-      const months4 = H.woundMonths[0] + rng.int(H.woundMonths[1] - H.woundMonths[0] + 1);
-      appoint(g2, gen, null);
-      gen.status = "wounded";
-      gen.backOn = g2.turn + months4;
-      gen.rec.wounds++;
-      if (notable(g2, gen)) headline(g2, "battle", `${gen.name} is wounded at ${rep.regionName} and will be out for ${months4} months.`, gen.nat, rep.region, { arm: "land" });
-    }
-  }
-  function afterBattle(g2, rep, target, preOdds, attackers2, attGens, defenders, defGens, luck = `${rep.id}`, even = 1.2) {
-    const rng = new Rng(hashString(`command:${g2.seed}:${luck}`));
-    const X = COMMAND.xp;
-    const decisive = rep.level === "Decisive victory" || rep.level === "Heroic victory";
-    const side5 = (cs, gens, us, attacking) => cs.forEach((c, i) => {
-      const won = attacking ? rep.taken : !rep.taken;
-      const againstOdds = attacking ? preOdds < COMMAND.closeOdds : preOdds >= 1;
-      const gen = gens[i];
-      if (!gen) {
-        if (!c.dead && won && (attacking ? decisive : againstOdds)) rise(g2, c, rng, rep.regionName);
-        return;
-      }
-      const lossFrac = us[i].men > 0 ? Math.min(1, us[i].lost / us[i].men) : 0;
-      const r = gen.rec;
-      let xp = X.fought;
-      r.battles++;
-      if (attacking) r.attacks++;
-      else r.defences++;
-      if (frozen(g2, c.nat, target)) r.winter++;
-      if (won) {
-        r.won++;
-        r.streak = 0;
-        if (r.lost) delete r.lost;
-        xp += attacking ? X.won : X.held;
-        if (againstOdds) xp += X.odds;
-        if (attacking) {
-          if (decisive) xp += X.decisive;
-          if (decisive && KIND[c.kind].mobile) r.fast++;
-          if (againstOdds) r.close++;
-          if (rep.prisoners > 0) r.enc++;
-          if (target.cap && target.owner === rep.defNat) xp += X.capital;
-        } else if (againstOdds) r.held++;
-      } else {
-        r.streak++;
-        if (attacking && lossFrac >= COMMAND.costly) r.costly++;
-        if (g2.flags.open === 1) {
-          (r.lost ?? (r.lost = [])).push({ t: g2.turn, reg: target.id, odds: Math.round(preOdds * 100) / 100, att: attacking, even: Math.round(even * 100) / 100 });
-          if (r.lost.length > 6) r.lost.shift();
-        }
-      }
-      gainXp(g2, gen, xp);
-      earn(g2, gen, c);
-      hazard(g2, gen, c, lossFrac, rng, rep);
-    });
-    side5(attackers2, attGens, rep.attackers, true);
-    side5(defenders, defGens, rep.defenders, false);
-  }
-  function monthlyCommand(g2, nat) {
-    for (const [from2, name, level, skills, traits] of COMMAND.roster[nat] ?? []) {
-      if (from2 > g2.turn || g2.generals.some((x) => x.nat === nat && x.name === name)) continue;
-      newGeneral(g2, nat, name, { level, skills, traits, historical: true });
-      if (nat === g2.human && g2.turn > 1) headline(g2, "info", `${name} reports for duty and is waiting for a command.`, nat);
-    }
-    for (const gen of g2.generals) {
-      if (gen.nat !== nat || gen.status !== "wounded" || gen.backOn > g2.turn) continue;
-      gen.status = "active";
-      if (nat === g2.human) headline(g2, "info", `${gen.name} is fit for duty again and is waiting for a command.`, nat);
-    }
-    if (nat !== g2.human) aiAssign(g2, nat);
-  }
-  function waiting(g2, nat) {
-    return g2.generals.filter((x) => x.nat === nat && x.status === "active" && x.corps < 0).sort((a, b) => b.level - a.level || a.id - b.id);
-  }
-  function fit(g2, gen, c) {
-    const fastMan = gen.rec.fast > 0 || gen.traits.some((t) => COMMAND.traits[t]?.mobile);
-    const fast = KIND[c.kind].mobile;
-    const front = g2.regions[c.reg].nb.some((j) => atWar(g2, c.nat, g2.regions[j].ctrl));
-    return (fastMan ? fast ? c.kind === "arm" ? 8 : 6 : 0 : fast ? 1 : 2) + (front ? 2 : 0) - (c.hold ? 3 : 0) + c.divs * 0.3 + c.xp;
-  }
-  function vacant(g2, nat) {
-    return g2.corps.filter((c) => c.nat === nat && c.general === null && c.kind !== "fort");
-  }
-  function aiAssign(g2, nat) {
-    const free2 = waiting(g2, nat);
-    if (!free2.length) return;
-    const open3 = vacant(g2, nat);
-    for (const gen of free2) {
-      let best = null, bs = -1e9;
-      for (const c of open3) {
-        if (c.general !== null) continue;
-        const s = fit(g2, gen, c);
-        if (s > bs) {
-          bs = s;
-          best = c;
-        }
-      }
-      if (!best) break;
-      appoint(g2, gen, best);
-      gen.moved = g2.turn;
-    }
-  }
-  function whyNotAssign(g2, gen, c) {
-    if (gen.status !== "active") return gen.status === "wounded" ? "He is recovering from his wounds." : "He is no longer serving.";
-    if (gen.nat !== c.nat) return "He serves another nation.";
-    if (c.dead || c.kind === "fort") return "This formation takes no general.";
-    if (gen.corps === c.id) return "He already commands this corps.";
-    if (gen.moved === g2.turn) return "He took up a new command this month already.";
-    return "";
-  }
-  function assignGeneral(g2, gen, c) {
-    if (whyNotAssign(g2, gen, c)) return false;
-    appoint(g2, gen, c);
-    gen.moved = g2.turn;
-    return true;
-  }
-  function relieve(g2, gen) {
-    if (gen.status !== "active" || gen.corps < 0) return false;
-    appoint(g2, gen, null);
-    return true;
-  }
-  var popular = (gen) => gen.level >= COMMAND.sack.popularLevel || gen.rec.won >= COMMAND.sack.popularWins;
-  function sack(g2, gen) {
-    if (!serving(gen)) return false;
-    const loved = popular(gen);
-    const c = corpsOf(g2, gen);
-    if (loved) {
-      if (c) c.org = Math.max(0, c.org - COMMAND.sack.org);
-      const n = g2.nations[gen.nat];
-      n.pc = Math.max(0, n.pc - COMMAND.sack.pc);
-    }
-    appoint(g2, gen, null);
-    gen.status = "sacked";
-    headline(g2, "info", loved ? `${gen.name} is dismissed. He was popular with his men, and the army takes it badly.` : `${gen.name} is dismissed.`, gen.nat);
-    return true;
-  }
-  function whyNotPromote(g2, c) {
-    if (c.general !== null) return "The corps already has a general.";
-    if (c.dead || c.kind === "fort") return "This formation takes no general.";
-    if (!COMMAND.names[c.nat]) return "There is no officer ready to step up.";
-    if (g2.nations[c.nat].pc < COMMAND.promote.pc) return `It takes ${COMMAND.promote.pc} political capital to promote a man over his seniors.`;
-    return "";
-  }
-  function promote(g2, c) {
-    if (whyNotPromote(g2, c)) return null;
-    const rng = new Rng(hashString(`promote:${g2.seed}:${g2.turn}:${c.id}:${g2.generals.length}`));
-    const name = inventName(g2, c.nat, rng);
-    if (!name) return null;
-    g2.nations[c.nat].pc -= COMMAND.promote.pc;
-    const gen = newGeneral(g2, c.nat, name, { historical: false, traits: ["rising_star"] });
-    appoint(g2, gen, c);
-    gen.moved = g2.turn;
-    return gen;
-  }
+    },
+    names: {
+      GER: { arm: ["Panzer Division", "Panzer"] },
+      SOV: { inf: ["Rifle Division", "Rifles"], arm: ["Tank Division", "Tanks"], mot: ["Motor Rifle Division", "Motor Rifles"] },
+      USA: { arm: ["Armored Division", "Armored"], mot: ["Motorized Division", "Motorized"] },
+      ITA: { mtn: ["Alpine Division", "Alpini"] },
+      POL: { mtn: ["Mountain Brigade", "Mountain"] },
+      FRA: { mtn: ["Alpine Division", "Alpine"] }
+    },
+    order: ["arm", "mot", "cav", "inf", "mtn", "art", "eng", "fort", "mg", "mor"],
+    spread: { str: 0.6, xp: 0.7 },
+    hardened: 0.4
+  };
 
   // ../../data/campaign/pacific.json
   var pacific_default = {
@@ -19831,6 +19350,514 @@
       agreedHolder: "Belongs to {owner}. Your troops are stationed here by agreement, and the French garrison keeps its posts under its own officers."
     }
   };
+
+  // ../../data/campaign/legions.json
+  var legions_default = {
+    _about: "Volunteer legions (release 2; Brian's yes of 22 November 2026, the design director's frame of 03:42 UTC and rulings of 03:47 and 03:55 UTC; the record is the historian's table, historian/volunteer-legions-1939-45.md). A country at peace outside both alliances may send one legion at a time, of a division at most, to fight under the flag and staff of a country at war: its patron. The legion is a corps of the patron's army with its own name and its home's flag. Its men come from its home's reserve (manpower.ts), first to raise it and then as its drafts; the patron pays its upkeep and its drafts' equipment. It goes home on recall or at its tour's end, and its men go back to the reserve and teach the home army what they learned. Switched by stage.json 'legions'.",
+    _cost: "Political capital a country pays to send a legion: as courting (diplomacy.json court.cost).",
+    cost: 6,
+    _leanAt: "The player may send one to a patron his public opinion leans toward by at least this many points (opinion is -100 for the Allies to +100 for the Axis), or to a friend (relations.json) that has been attacked.",
+    leanAt: 30,
+    _send: "A computer-run country at stops 3 to 5 sends one when it leans this far toward the patron and leans against the enemy, or when a friend has been attacked. At stops 1 and 2 it sends the record's legions by their dates and no others.",
+    send: 50,
+    _backAt: "A computer-run country at stops 3 to 5 calls its legion home when its leaning toward the patron falls under this.",
+    backAt: 20,
+    _tour: "Months a legion serves before it comes home (the historian: the Blue Division's 28 months, the Eagle Squadrons' 24, the AVG's contracts of 12; tour 24 fits). At stops 1 and 2 the record's dates instead.",
+    tour: 24,
+    _train: "A legion home again teaches the army: every corps of its home gains this share of the legion's experience, never more than the legion's own.",
+    train: 0.25,
+    _legionFall: "Each month a legion fights a great power, that power's patience with its home falls by this many points (bargains.ts patience, with the bargains switched on; a claim at stops 4 and 5).",
+    legionFall: 2,
+    _generic: "A legion the record does not name: 'share' of the reserve its country opened the war with (manpower.ts), rounded to a twentieth of a division, at least 'least' and at most 'est', a division (Spain's reserve of about 17 divisions' worth gives a division, Sweden's a little under one, Denmark's a third); 'xp' its experience when raised; 'spare' divisions' worth a computer-run country's reserve must still hold beyond it; and its name after the home's adjective.",
+    generic: { est: 1, share: 0.1, least: 0.1, xp: 0.15, spare: 2, name: "{adj} Volunteer Legion" },
+    _rows: "The record's legions (the historian's table): 'est' the share of a division it was (worth = men / 15,000 x quality), 'from' and 'to' the months it was in the line (turn 1 = September 1939), 'then' the row that carried on with its men the month after, 'no' its division's number. A legion is sent the month before 'from' and is in the line from 'from'.",
+    rows: [
+      { id: "esp-blue", home: "ESP", patron: "GER", against: "SOV", name: "Blue Division", est: 1, xp: 0.25, from: 23, to: 51, then: "esp-legion", no: 250, _why: "18,946 men when formed, kept near 17,000; about 45,000 served in all, by 27 marching battalions. Jul 1941 to Nov 1943 (H men, L quality)." },
+      { id: "esp-legion", home: "ESP", patron: "GER", against: "SOV", name: "Blue Legion", est: 0.12, from: 52, to: 55, _why: "2,269 men who stayed when the division went home; ordered home 3 Mar 1944 (M)." },
+      { id: "swe-corps", home: "SWE", patron: "FIN", against: "SOV", name: "Swedish Volunteer Corps", est: 0.4, xp: 0.15, from: 6, to: 7, _why: "9,640 men; in the line on the Salla front 28 Feb to 13 Mar 1940 (H-M)." }
+    ]
+  };
+
+  // ../../src/core/rng.ts
+  var Rng = class _Rng {
+    constructor(seed) {
+      __publicField(this, "s");
+      this.s = seed >>> 0 || 2654435769;
+    }
+    /** Uniform in [0, 1). mulberry32. */
+    next() {
+      let t = this.s = this.s + 1831565813 >>> 0;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    }
+    range(a, b) {
+      return a + (b - a) * this.next();
+    }
+    int(n) {
+      return Math.floor(this.next() * n);
+    }
+    chance(p) {
+      return this.next() < p;
+    }
+    pick(arr) {
+      return arr[this.int(arr.length)];
+    }
+    /** Roughly normal, mean 0, sd 1 (sum of uniforms; cheap and deterministic). */
+    normal() {
+      return (this.next() + this.next() + this.next() + this.next() - 2) * 1.7320508;
+    }
+    /** Turns an expected count into a whole number of events. */
+    roll(expected) {
+      const whole2 = Math.floor(expected);
+      return whole2 + (this.next() < expected - whole2 ? 1 : 0);
+    }
+    /**
+     * `roll` for two expected counts on ONE draw: the first exactly as `roll(expected)` gives it, from the same draw
+     * and leaving the same state, and the second what that draw makes of another expectation (ruling 240: the ships
+     * that would have gone down without damage control). A larger expectation never gives the smaller count.
+     */
+    rollBoth(expected, other4) {
+      const u = this.next();
+      const at4 = (x) => {
+        const whole2 = Math.floor(x);
+        return whole2 + (u < x - whole2 ? 1 : 0);
+      };
+      return [at4(expected), at4(other4)];
+    }
+    /** An independent stream, so adding rolls in one system does not shift another. */
+    fork(label) {
+      return new _Rng(Math.imul(this.s ^ 2246822507, 3266489909) + label * 668265263 >>> 0);
+    }
+    get state() {
+      return this.s;
+    }
+  };
+  function hashString(str) {
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  // ../../src/core/ticket.ts
+  function turnToDate(turn2) {
+    const idx2 = 8 + (turn2 - 1);
+    const year = 1939 + Math.floor(idx2 / 12);
+    const month3 = idx2 % 12;
+    const names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    return { year, month: month3, label: `${names[month3]} ${year}` };
+  }
+
+  // ../../src/campaign/types.ts
+  var MEN_PER_DIV = 15e3;
+  var KIND = {
+    inf: { label: "Infantry", atk: 10, def: 14, move: 2, mobile: false },
+    mot: { label: "Motorised", atk: 12, def: 12, move: 1, mobile: true },
+    arm: { label: "Armor", atk: 24, def: 11, move: 1, mobile: true },
+    cav: { label: "Cavalry", atk: 8, def: 8, move: 1, mobile: true },
+    mtn: { label: "Mountain", atk: 9, def: 15, move: 2, mobile: false },
+    fort: { label: "Fortress", atk: 1, def: 15, move: 99, mobile: false },
+    // Massed guns, raised only in the grand campaign: see the artillery rule in the battle assessment.
+    art: { label: "Artillery", atk: 14, def: 8, move: 2, mobile: false },
+    // Engineers, raised only in the grand campaign: they are there for what they build and breach, not for their rifles.
+    eng: { label: "Engineers", atk: 4, def: 9, move: 2, mobile: false },
+    // Support teams (release 2, src/campaign/teams.ts): a machine-gun brigade and a mortar brigade, a division's worth
+    // each. Their own weight is small; what they do besides (a defence stiffened against foot, works broken up) is on the
+    // attack card. Never raised while the teams are off.
+    mg: { label: "Machine guns", atk: 3, def: 7, move: 2, mobile: false },
+    mor: { label: "Mortars", atk: 6, def: 4, move: 2, mobile: false }
+  };
+  var TERRAIN_DEF = { plains: 1, forest: 1.2, hills: 1.25, mountain: 1.6, marsh: 1.3, urban: 1.35, desert: 1 };
+  var FORT_MUL = [1, 1.3, 1.7, 2.6];
+  var STACK = 5;
+
+  // ../../src/campaign/commanders.ts
+  var COMMAND = commanders_default;
+  var SKILLS = ["offense", "defense", "logistics", "leadership"];
+  var blank = () => ({ battles: 0, won: 0, attacks: 0, defences: 0, wounds: 0, fast: 0, close: 0, enc: 0, held: 0, winter: 0, costly: 0, streak: 0 });
+  function generalOf(g2, c) {
+    return c.general === null ? null : g2.generals[c.general] ?? null;
+  }
+  function corpsOf(g2, gen) {
+    return gen.corps < 0 ? null : g2.corps.find((c) => c.id === gen.corps) ?? null;
+  }
+  var serving = (gen) => gen.status === "active" || gen.status === "wounded";
+  function newGeneral(g2, nat, name, o) {
+    const gen = {
+      id: g2.generals.length,
+      nat,
+      name,
+      historical: o.historical ?? true,
+      level: o.level ?? 1,
+      xp: 0,
+      points: 0,
+      skills: { offense: 0, defense: 0, logistics: 0, leadership: 0, ...o.skills },
+      traits: [...o.traits ?? []],
+      corps: -1,
+      status: "active",
+      backOn: 0,
+      joined: g2.turn,
+      moved: 0,
+      rec: blank()
+    };
+    gen.points = Math.max(0, gen.level - 1 - SKILLS.reduce((s, k) => s + gen.skills[k], 0));
+    g2.generals.push(gen);
+    return gen;
+  }
+  function appoint(g2, gen, c) {
+    const old = corpsOf(g2, gen);
+    if (old && old.general === gen.id) old.general = null;
+    gen.corps = -1;
+    if (!c) return;
+    const sitting = generalOf(g2, c);
+    if (sitting && sitting !== gen) sitting.corps = -1;
+    c.general = gen.id;
+    gen.corps = c.id;
+  }
+  function seat(g2, c, name, label) {
+    const known = g2.generals.find((x) => x.nat === c.nat && x.name === name);
+    if (known) {
+      if (serving(known) && known.status === "active" && (c.nat !== g2.human || known.corps < 0)) appoint(g2, known, c);
+      return known;
+    }
+    const l = COMMAND.legacy[label ?? "none"] ?? COMMAND.legacy.none;
+    const gen = newGeneral(g2, c.nat, name, { level: l.level, skills: l.skills, traits: l.traits, historical: true });
+    appoint(g2, gen, c);
+    return gen;
+  }
+  function traitsFor(gen, c) {
+    const out = [];
+    for (const id of gen.traits) {
+      const d = COMMAND.traits[id];
+      if (d && (!d.mobile || KIND[c.kind].mobile)) out.push(d);
+    }
+    return out;
+  }
+  function cmdAttack(g2, c, pocket) {
+    const gen = generalOf(g2, c);
+    if (!gen) return 1;
+    let m = 1 + COMMAND.skills.offense.per * gen.skills.offense;
+    for (const d of traitsFor(gen, c)) {
+      if (d.attack) m *= d.attack;
+      if (pocket && d.pocket) m *= d.pocket;
+    }
+    return m;
+  }
+  function cmdDefence(g2, c) {
+    const gen = generalOf(g2, c);
+    if (!gen) return 1;
+    let m = 1 + COMMAND.skills.defense.per * gen.skills.defense;
+    for (const d of traitsFor(gen, c)) if (d.defence) m *= d.defence;
+    return m;
+  }
+  function cmdAp(g2, c) {
+    const gen = generalOf(g2, c);
+    if (!gen) return 0;
+    let ap = 0;
+    for (const d of traitsFor(gen, c)) ap += d.ap ?? 0;
+    return ap;
+  }
+  function cmdLoss(g2, c) {
+    const gen = generalOf(g2, c);
+    if (!gen) return 1;
+    let m = 1;
+    for (const d of traitsFor(gen, c)) m *= d.loss ?? 1;
+    return m;
+  }
+  function cmdSteady(g2, c) {
+    const gen = generalOf(g2, c);
+    return gen ? 1 - COMMAND.skills.leadership.steady * gen.skills.leadership : 1;
+  }
+  function cmdRally(g2, c) {
+    const gen = generalOf(g2, c);
+    return gen ? 1 + COMMAND.skills.leadership.rally * gen.skills.leadership : 1;
+  }
+  function cmdWinter(g2, c) {
+    const gen = generalOf(g2, c);
+    if (!gen) return 1;
+    let m = 1;
+    for (const d of traitsFor(gen, c)) if (d.winter !== void 0) m = Math.min(m, d.winter);
+    return m;
+  }
+  function cmdLine(g2, c, mul2) {
+    const gen = generalOf(g2, c);
+    if (!gen || mul2 >= 1 || !gen.skills.logistics) return mul2;
+    return 1 - (1 - mul2) * (1 - COMMAND.skills.logistics.per * gen.skills.logistics);
+  }
+  function cmdCutOff(g2, c) {
+    const gen = generalOf(g2, c);
+    return 0.5 + (gen ? COMMAND.skills.logistics.cutOff * gen.skills.logistics : 0);
+  }
+  function commandersIn(g2, cs) {
+    const names = [];
+    for (const c of cs) {
+      const gen = generalOf(g2, c);
+      if (gen) names.push(`${gen.name} (level ${gen.level})`);
+    }
+    return names.length > 3 ? `${names.slice(0, 3).join(", ")} and ${names.length - 3} more` : names.join(", ");
+  }
+  var xpToNext = (gen) => gen.level >= COMMAND.maxLevel ? Infinity : COMMAND.levelXp[gen.level] ?? Infinity;
+  var notable = (g2, gen) => gen.nat === g2.human || gen.historical || gen.level >= 5;
+  function rankOf(gen) {
+    const rows = COMMAND.ranks[gen.nat] ?? COMMAND.ranks._default;
+    let out = rows[0][1];
+    for (const [from2, title] of rows) if (gen.level >= from2) out = title;
+    return out;
+  }
+  function gainXp(g2, gen, amount) {
+    if (gen.level >= COMMAND.maxLevel) return;
+    let mul2 = 1;
+    for (const t of gen.traits) mul2 *= COMMAND.traits[t]?.xp ?? 1;
+    gen.xp += Math.round(amount * mul2);
+    while (gen.xp >= xpToNext(gen)) {
+      gen.xp -= xpToNext(gen);
+      const was = rankOf(gen);
+      gen.level++;
+      gen.points++;
+      if (gen.nat === g2.human) headline(g2, "info", `${gen.name} reaches level ${gen.level} and has a skill point to spend.`, gen.nat);
+      const now = rankOf(gen);
+      if (now !== was && notable(g2, gen)) headline(g2, "info", `${gen.name} is promoted to ${now}.`, gen.nat);
+    }
+    if (gen.level >= COMMAND.maxLevel) gen.xp = 0;
+    if (gen.nat !== g2.human) autoSpend(gen);
+  }
+  function spendPoint(gen, skill) {
+    if (gen.points < 1 || gen.skills[skill] >= COMMAND.skillMax || !serving(gen)) return false;
+    gen.skills[skill]++;
+    gen.points--;
+    return true;
+  }
+  function autoSpend(gen) {
+    while (gen.points > 0) {
+      const w = {
+        offense: 2 + gen.rec.attacks,
+        defense: 2 + gen.rec.defences,
+        logistics: 1.5 + 0.3 * gen.rec.battles,
+        leadership: 1.5 + 0.3 * gen.rec.battles
+      };
+      let best = null, bs = -1;
+      for (const k of SKILLS) {
+        if (gen.skills[k] >= COMMAND.skillMax) continue;
+        const s = w[k] / (1 + gen.skills[k]);
+        if (s > bs) {
+          bs = s;
+          best = k;
+        }
+      }
+      if (!best) break;
+      gen.skills[best]++;
+      gen.points--;
+    }
+  }
+  function earn(g2, gen, c) {
+    for (const [id, d] of Object.entries(COMMAND.traits)) {
+      if (!d.needs || gen.traits.includes(id)) continue;
+      if (gen.rec[d.needs[0]] < d.needs[1]) continue;
+      if (d.not?.some((x) => gen.traits.includes(x))) continue;
+      if (d.mobile && !KIND[c.kind].mobile) continue;
+      gen.traits.push(id);
+      if (notable(g2, gen)) headline(g2, "info", `${gen.name} has earned a reputation: ${d.label}. ${d.earned}`, gen.nat);
+    }
+  }
+  function inventName(g2, nat, rng) {
+    const pool = COMMAND.names[nat];
+    if (!pool) return null;
+    for (let tries = 0; tries < 12; tries++) {
+      const name = `${rng.pick(pool.first)} ${rng.pick(pool.last)}`;
+      if (!g2.generals.some((x) => x.nat === nat && x.name === name)) return name;
+    }
+    return null;
+  }
+  function room(g2, nat) {
+    let have = 0, corps = 0;
+    for (const x of g2.generals) if (x.nat === nat && serving(x)) have++;
+    for (const c of g2.corps) if (c.nat === nat && c.kind !== "fort") corps++;
+    return have < Math.ceil(COMMAND.rise.share * corps);
+  }
+  function rise(g2, c, rng, place3) {
+    if (c.kind === "fort" || c.general !== null || !COMMAND.names[c.nat]) return;
+    if (!rng.chance(COMMAND.rise.chance) || !room(g2, c.nat)) return;
+    const name = inventName(g2, c.nat, rng);
+    if (!name) return;
+    const gen = newGeneral(g2, c.nat, name, { historical: false, traits: ["rising_star"] });
+    appoint(g2, gen, c);
+    gen.moved = g2.turn;
+    if (c.nat === g2.human) headline(g2, "info", `${name} makes his name at ${place3} and is given command of ${c.name}.`, c.nat, c.reg);
+  }
+  function lose(g2, gen, status, text, region) {
+    appoint(g2, gen, null);
+    gen.status = status;
+    if (notable(g2, gen)) headline(g2, "battle", text, gen.nat, region, { arm: "land", lost: gen.nat });
+  }
+  function hazard(g2, gen, c, lossFrac, rng, rep) {
+    const H = COMMAND.hazard;
+    const roll3 = rng.next();
+    if (c.dead) {
+      if (roll3 < H.lost.captured) lose(g2, gen, "captured", `${gen.name} is taken prisoner with ${c.name} at ${rep.regionName}.`, rep.region);
+      else if (roll3 < H.lost.captured + H.lost.killed) lose(g2, gen, "dead", `${gen.name} is killed as ${c.name} is destroyed at ${rep.regionName}.`, rep.region);
+      else {
+        gen.corps = -1;
+        if (gen.nat === g2.human) headline(g2, "info", `${gen.name} gets away from the disaster at ${rep.regionName} and is waiting for a new command.`, gen.nat, rep.region);
+      }
+      return;
+    }
+    const p = H.base + H.perLoss * lossFrac;
+    if (roll3 < p * H.killedShare) lose(g2, gen, "dead", `${gen.name} is killed in action at ${rep.regionName}.`, rep.region);
+    else if (roll3 < p) {
+      const months4 = H.woundMonths[0] + rng.int(H.woundMonths[1] - H.woundMonths[0] + 1);
+      appoint(g2, gen, null);
+      gen.status = "wounded";
+      gen.backOn = g2.turn + months4;
+      gen.rec.wounds++;
+      if (notable(g2, gen)) headline(g2, "battle", `${gen.name} is wounded at ${rep.regionName} and will be out for ${months4} months.`, gen.nat, rep.region, { arm: "land" });
+    }
+  }
+  function afterBattle(g2, rep, target, preOdds, attackers2, attGens, defenders, defGens, luck = `${rep.id}`, even = 1.2) {
+    const rng = new Rng(hashString(`command:${g2.seed}:${luck}`));
+    const X = COMMAND.xp;
+    const decisive = rep.level === "Decisive victory" || rep.level === "Heroic victory";
+    const side5 = (cs, gens, us, attacking) => cs.forEach((c, i) => {
+      const won = attacking ? rep.taken : !rep.taken;
+      const againstOdds = attacking ? preOdds < COMMAND.closeOdds : preOdds >= 1;
+      const gen = gens[i];
+      if (!gen) {
+        if (!c.dead && won && (attacking ? decisive : againstOdds)) rise(g2, c, rng, rep.regionName);
+        return;
+      }
+      const lossFrac = us[i].men > 0 ? Math.min(1, us[i].lost / us[i].men) : 0;
+      const r = gen.rec;
+      let xp = X.fought;
+      r.battles++;
+      if (attacking) r.attacks++;
+      else r.defences++;
+      if (frozen(g2, c.nat, target)) r.winter++;
+      if (won) {
+        r.won++;
+        r.streak = 0;
+        if (r.lost) delete r.lost;
+        xp += attacking ? X.won : X.held;
+        if (againstOdds) xp += X.odds;
+        if (attacking) {
+          if (decisive) xp += X.decisive;
+          if (decisive && KIND[c.kind].mobile) r.fast++;
+          if (againstOdds) r.close++;
+          if (rep.prisoners > 0) r.enc++;
+          if (target.cap && target.owner === rep.defNat) xp += X.capital;
+        } else if (againstOdds) r.held++;
+      } else {
+        r.streak++;
+        if (attacking && lossFrac >= COMMAND.costly) r.costly++;
+        if (g2.flags.open === 1) {
+          (r.lost ?? (r.lost = [])).push({ t: g2.turn, reg: target.id, odds: Math.round(preOdds * 100) / 100, att: attacking, even: Math.round(even * 100) / 100 });
+          if (r.lost.length > 6) r.lost.shift();
+        }
+      }
+      gainXp(g2, gen, xp);
+      earn(g2, gen, c);
+      hazard(g2, gen, c, lossFrac, rng, rep);
+    });
+    side5(attackers2, attGens, rep.attackers, true);
+    side5(defenders, defGens, rep.defenders, false);
+  }
+  function monthlyCommand(g2, nat) {
+    for (const [from2, name, level, skills, traits] of COMMAND.roster[nat] ?? []) {
+      if (from2 > g2.turn || g2.generals.some((x) => x.nat === nat && x.name === name)) continue;
+      newGeneral(g2, nat, name, { level, skills, traits, historical: true });
+      if (nat === g2.human && g2.turn > 1) headline(g2, "info", `${name} reports for duty and is waiting for a command.`, nat);
+    }
+    for (const gen of g2.generals) {
+      if (gen.nat !== nat || gen.status !== "wounded" || gen.backOn > g2.turn) continue;
+      gen.status = "active";
+      if (nat === g2.human) headline(g2, "info", `${gen.name} is fit for duty again and is waiting for a command.`, nat);
+    }
+    if (nat !== g2.human) aiAssign(g2, nat);
+  }
+  function waiting(g2, nat) {
+    return g2.generals.filter((x) => x.nat === nat && x.status === "active" && x.corps < 0).sort((a, b) => b.level - a.level || a.id - b.id);
+  }
+  function fit(g2, gen, c) {
+    const fastMan = gen.rec.fast > 0 || gen.traits.some((t) => COMMAND.traits[t]?.mobile);
+    const fast = KIND[c.kind].mobile;
+    const front = g2.regions[c.reg].nb.some((j) => atWar(g2, c.nat, g2.regions[j].ctrl));
+    return (fastMan ? fast ? c.kind === "arm" ? 8 : 6 : 0 : fast ? 1 : 2) + (front ? 2 : 0) - (c.hold ? 3 : 0) + c.divs * 0.3 + c.xp;
+  }
+  function vacant(g2, nat) {
+    return g2.corps.filter((c) => c.nat === nat && c.general === null && c.kind !== "fort");
+  }
+  function aiAssign(g2, nat) {
+    const free2 = waiting(g2, nat);
+    if (!free2.length) return;
+    const open3 = vacant(g2, nat);
+    for (const gen of free2) {
+      let best = null, bs = -1e9;
+      for (const c of open3) {
+        if (c.general !== null) continue;
+        const s = fit(g2, gen, c);
+        if (s > bs) {
+          bs = s;
+          best = c;
+        }
+      }
+      if (!best) break;
+      appoint(g2, gen, best);
+      gen.moved = g2.turn;
+    }
+  }
+  function whyNotAssign(g2, gen, c) {
+    if (gen.status !== "active") return gen.status === "wounded" ? "He is recovering from his wounds." : "He is no longer serving.";
+    if (gen.nat !== c.nat) return "He serves another nation.";
+    if (c.dead || c.kind === "fort") return "This formation takes no general.";
+    if (gen.corps === c.id) return "He already commands this corps.";
+    if (gen.moved === g2.turn) return "He took up a new command this month already.";
+    return "";
+  }
+  function assignGeneral(g2, gen, c) {
+    if (whyNotAssign(g2, gen, c)) return false;
+    appoint(g2, gen, c);
+    gen.moved = g2.turn;
+    return true;
+  }
+  function relieve(g2, gen) {
+    if (gen.status !== "active" || gen.corps < 0) return false;
+    appoint(g2, gen, null);
+    return true;
+  }
+  var popular = (gen) => gen.level >= COMMAND.sack.popularLevel || gen.rec.won >= COMMAND.sack.popularWins;
+  function sack(g2, gen) {
+    if (!serving(gen)) return false;
+    const loved = popular(gen);
+    const c = corpsOf(g2, gen);
+    if (loved) {
+      if (c) c.org = Math.max(0, c.org - COMMAND.sack.org);
+      const n = g2.nations[gen.nat];
+      n.pc = Math.max(0, n.pc - COMMAND.sack.pc);
+    }
+    appoint(g2, gen, null);
+    gen.status = "sacked";
+    headline(g2, "info", loved ? `${gen.name} is dismissed. He was popular with his men, and the army takes it badly.` : `${gen.name} is dismissed.`, gen.nat);
+    return true;
+  }
+  function whyNotPromote(g2, c) {
+    if (c.general !== null) return "The corps already has a general.";
+    if (c.dead || c.kind === "fort") return "This formation takes no general.";
+    if (!COMMAND.names[c.nat]) return "There is no officer ready to step up.";
+    if (g2.nations[c.nat].pc < COMMAND.promote.pc) return `It takes ${COMMAND.promote.pc} political capital to promote a man over his seniors.`;
+    return "";
+  }
+  function promote(g2, c) {
+    if (whyNotPromote(g2, c)) return null;
+    const rng = new Rng(hashString(`promote:${g2.seed}:${g2.turn}:${c.id}:${g2.generals.length}`));
+    const name = inventName(g2, c.nat, rng);
+    if (!name) return null;
+    g2.nations[c.nat].pc -= COMMAND.promote.pc;
+    const gen = newGeneral(g2, c.nat, name, { historical: false, traits: ["rising_star"] });
+    appoint(g2, gen, c);
+    gen.moved = g2.turn;
+    return gen;
+  }
 
   // ../../data/campaign/depth.json
   var depth_default = {
@@ -20255,6 +20282,7 @@
   var globeFor = (g2, a, b) => globeOn(g2) && (a.id >= FAR_FROM || b.id >= FAR_FROM);
   var chartDist = (g2, a, b) => globeFor(g2, a, b) ? globeDist(g2, a.x, a.y, b.x, b.y) : mapDist(g2, a.x, a.y, b.x, b.y);
   var chartDist2 = (g2, a, b) => globeFor(g2, a, b) ? globeDist(g2, a.x, a.y, b.x, b.y) ** 2 : mapDist2(g2, a.x, a.y, b.x, b.y);
+  var globeLeg = (g2, a, b, region, sea = -1) => globeOn(g2) && (a.id >= FAR_FROM || b.id >= FAR_FROM || (region >= 0 ? region >= FAR_FROM : sea >= FAR_SEA_FROM));
   var FAR_SEA_FROM = world_americas_default.seas.zones.length;
   var seaDist = (g2, a, sea) => globeOn(g2) && (a.id >= FAR_FROM || sea.id >= FAR_SEA_FROM) ? globeDist(g2, a.x, a.y, sea.x, sea.y) : mapDist(g2, a.x, a.y, sea.x, sea.y);
   function nearX(g2, x, to) {
@@ -20369,6 +20397,7 @@
     bombLaw: () => bombLaw,
     bomberDefence: () => bomberDefence,
     bookCloseAir: () => bookCloseAir,
+    canStrafe: () => canStrafe,
     carrierOf: () => carrierOf,
     carrierRules: () => carrierRules,
     closeEdge: () => closeEdge,
@@ -20387,6 +20416,7 @@
     effortBattles: () => effortBattles,
     fieldClass: () => fieldClass,
     fieldFed: () => fieldFed,
+    fieldNear: () => fieldNear,
     fieldOrder: () => fieldOrder,
     fieldRoom: () => fieldRoom,
     fieldServes: () => fieldServes,
@@ -20423,9 +20453,11 @@
     kmTo: () => kmTo,
     kmToSea: () => kmToSea,
     legKm: () => legKm,
+    legKmAt: () => legKmAt,
     levelOf: () => levelOf3,
     lineWear: () => lineWear,
     moveTargets: () => moveTargets,
+    nearRow: () => nearRow,
     nearestRung: () => nearestRung,
     openAirWar: () => openAirWar,
     openPilots: () => openPilots,
@@ -20463,6 +20495,7 @@
     spreadAir: () => spreadAir,
     squadronSize: () => squadronSize,
     squadronsOf: () => squadronsOf,
+    strafersExpected: () => strafersExpected,
     troopCut: () => troopCut,
     troopLaw: () => troopLaw,
     troopWeight: () => troopWeight,
@@ -20534,7 +20567,9 @@
       dug: 0.6,
       cover: { plains: 1, desert: 1, hills: 0.85, marsh: 0.85, forest: 0.7, mountain: 0.7, urban: 0.6 },
       fire: 0.015,
-      value: 1500
+      value: 1500,
+      _reach: "Read only with the strafers' rule on (src/campaign/strafers.ts; the design director, 25 November 2026 05:12Z: the card, the settled raid and the fought raid charge the ground fire only on the fighters expected to be left after the air fight that have the reach to strafe). reach (G, flagged; one figure for every nation): a fighter group has the reach to go down on the troops when they lie within this share of its fighter range (air.json ftrRange and the dated range rows below, read by air.ts reach()), an escort radius that already holds about 15 to 20 minutes of fighting at the far end; a group farther out escorts its bombers and turns for home, adds no weight on the troops and is not shot at by the ground. The design director, 25 November 2026 13:35Z (historian/strafing-reach-1125.md): 0.9, because the cause is fuel: the strafers here are fighters carrying no bombs, and the record's strafers spent about 15 to 20 minutes low, flak cutting their passes short more than fuel did; the historian's sum gives 0.85 to 1.0 there. Flak is priced once, as ground fire on the strafers left (fire above): the reach is not cut again for it. A fighter carrying bombs takes 0.6 (200 miles against 350 with the tank) once the game tells fighter-bombers apart by a kit row (bomb racks) on the type: not this build. (air.json range.fullAt, the share of range at which an escort is at full effect, is another figure and is not this one.)",
+      reach: 0.9
     },
     recon: {
       _note: "A reconnaissance flight. aircraft is how many of the group go. loss is the share of them lost when enemy fighters patrol the target, per unit of their cover there. ready is the readiness the group spends.",
@@ -20855,7 +20890,7 @@
       }
     },
     blocked: {
-      _note: "Real air units' names, nicknames and honour titles that no name of ours may hold, matched as whole words (the historian's 'blocked', air-unit-names-r2.json, 309 names, all arms, Italy's air division names of June 1940 among them; and two more, Sirio and Zeffiro, that are the air thread's own, added on 25 November: 311 in all). Over-blocking does no harm. A battle's city is not blocked (the historian: the Soviet manner shared one city among many units).",
+      _note: `Real air units' names, nicknames and honour titles that no name of ours may hold, matched as whole words (the historian's 'blocked', air-unit-names-r2.json, 309 names, all arms, Italy's air division names of June 1940 among them; and two more, Sirio and Zeffiro, that are the air thread's own, added on 25 November: 311); and one more, Death Rattlers, a real squadron's nickname added by the air thread on 25 November after the design director's review marks of 05:12Z ("Rattlers" was struck from our American names as too near it): 312 in all. Over-blocking does no harm. A place of this war in one of our names (a Guards city, a place name: the group's own latest hard fight) is not refused merely because one of its words is a distinctive word of a blocked name (the design director, 12:59Z question 6: a place word is the war's own map, not a nickname's mark); the rest of the name is still checked word by word, and the whole name, place included, is still tested against every blocked whole name, so a place that is itself a blocked name (Moscow) never stands in a name. This list holds no real Guards honour titles by number, place and arm together; the whole-name test covers only what is listed here and in nicknames.json 'blocked'.`,
       names: [
         "Abbeville Kids",
         "Ace of Clubs",
@@ -20941,6 +20976,7 @@
         "Cyclone's Flying Circus",
         "Dambusters",
         "Dauphiné",
+        "Death Rattlers",
         "Demon",
         "Desert Air Force",
         "Diavoli",
@@ -21168,7 +21204,9 @@
         "Ziemi Wielkopolskiej",
         "Ziemi Śląskiej",
         "Île-de-France"
-      ]
+      ],
+      _common: "The words of a blocked name that are NOT its distinctive words (the design director's review marks of 05:12Z: the block test also catches a real nickname's distinctive word, not only the whole string). A blocked name's distinctive words are all its words (letters and digits, an apostrophe kept inside a word: Hell's) but these, matched whole and without regard to case; a word made only of digits is a number and never distinctive. No name of ours, generated or listed, may hold a distinctive word of any name on this list or on nicknames.json 'blocked' (airnames.ts airBlocked; tests/air-names-r2-words.test.ts). What is here, the air thread's first cut for the historian to edit: articles and small words in the languages of the list; the plain colours, and gold and silver; the two the ruling names, Flying and Fighting; numbers in words; the words that say what kind of formation or aircraft a unit is (Air, Force, Wing, Squadron, Group, Division, Brigade, Corps, Army, Regiment, Bomber, Fighter, Command, Kommando, Jagdverband), which our own formal names must use; one word of nationality, American; and the points of the compass and 'old' (North, South, East, West, Old: added after the review of 25 November, as words of places, East India, West Riding, Old Hickory, rather than of a nickname's mark). Everything else is distinctive: Iron, Devils, Lightning, Sky, Sea, Bell, Watch, Thunder, Hill, High, Boys and Tin among them, so names of ours that held them were replaced (nicknames.json air.styles).",
+      common: ["the", "a", "an", "and", "of", "on", "in", "as", "de", "la", "le", "di", "das", "die", "all", "black", "white", "red", "blue", "green", "grey", "gray", "yellow", "brown", "gold", "golden", "silver", "flying", "fighting", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "hundred", "hundredth", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "treble", "air", "force", "wing", "squadron", "squadrons", "group", "division", "brigade", "corps", "army", "regiment", "bomber", "fighter", "command", "kommando", "sonderkommando", "jagdverband", "american", "north", "south", "east", "west", "old"]
     },
     near: [
       0.5,
@@ -28828,10 +28866,10 @@
       "The Few"
     ],
     air: {
-      _note: "Earned names for air groups (release 2; the design director's rulings of 25 November 2026 03:18Z and 03:31Z, design-director/air-names-1125.md; src/campaign/airnicks.ts). Under the same switch as the corps' names ('nicknames'); off, nothing here is read, counted or written. A group completes a mission in a month when it flies and meets its task: a raid whose bombers reached the target (a raid of fighters alone: one that fought, or that won or held the sky, or a raid on troops flown), a patrol or defence that met a raid, or support flown over a land battle. One a month; a month with no enemy met counts nothing, nor does a raid turned back. A hard fight counts double ('double'): PRESSED HOME, a raid that reached its target, or a sweep that fought, at a fighter ratio (the raid card's: the raiders' escort's fighting weight over the defence's) of 'hard.pressed' or less against a defence that came up; HELD, a defence that met a raid at a ratio of 'hard.held' or more; COSTLY, a group's loss on the mission (aircraft lost over aircraft it flew with) at least 'hard.costly' times its arm's running loss rate for that kind of mission (all aircraft lost over all aircraft flown on it since the war began, the defence one kind), once the arm has flown 'hard.least' aircraft on that kind. The name comes at 'need' missions completed. There is NO cap for air groups (the measure is the limit; the corps keep theirs). A name is in the nation's style ('styles', by nicknames.json 'nations'; a style not listed takes '_default'), never one the nation's units carry, never a blocked one, and shown as 'show' sets it beside the unit's name. A style with 'guards' gives the Guards title instead: the Guards form of the group's rung (regiment, division or corps; by its name, a regiment where it cannot tell), a new number from that Guards series in order (the historian's lists, air-unit-names-r2.json guards.SOV, M: real numbers, labels only), going on past the end, and the city it fought over as the record's honorific after 'Guards' ('city'; the historian: one city was given to many units, so it is not held unique). The Guards title is a name and a number, nothing more. ALL FIGURES ARE G: 'hard.pressed' 1.0, 'hard.held' 1.0 and 'hard.costly' 2 are the ruling's words (at most even, at least as strong, twice) and 'hard.least' 200 aircraft is ours, so that a rate is read only once it means something; 'need' 8 and 'double' 2 are the ruling's 03:31Z figures, G. None is set to reach a count of names. Every word list here is OURS, in each arm's manner, checked by tests/air-names-r2.test.ts against the historian's block list (air-names.json 'blocked', whole words) and nicknames.json 'blocked'; Italy's list is the historian's own 28 candidates in the 1940 style (air-unit-names-r2.json italyNames, G), its earned list since Brian's answer of 03:31Z dropped its day-one names. What aircrews counted as a hard fight (the historian, hardFight): a sortie counted when it reached the target, and crews judged a target by what it cost them; no aircrew measure for a defence was found, so 'held' stays the air thread's G.",
+      _note: "Earned names for air groups (release 2; the design director's rulings of 25 November 2026 03:18Z and 03:31Z, design-director/air-names-1125.md; src/campaign/airnicks.ts). Under the same switch as the corps' names ('nicknames'); off, nothing here is read, counted or written. A group completes a mission in a month when it flies and meets its task: a raid whose bombers reached the target (a raid of fighters alone: one that fought, or that won or held the sky, or a raid on troops flown), a patrol or defence that met a raid, or support flown over a land battle. One a month; a month with no enemy met counts nothing, nor does a raid turned back. A hard fight counts double ('double'): PRESSED HOME, a raid that reached its target, or a sweep that fought, at a fighter ratio (the raid card's: the raiders' escort's fighting weight over the defence's) of 'hard.pressed' or less against a defence that came up; HELD, a defence that met a raid at a ratio of 'hard.held' or more; COSTLY, a group's loss on the mission (aircraft lost over aircraft it flew with) at least 'hard.costly' times its arm's running loss rate for that kind of mission (all aircraft lost over all aircraft flown on it since the war began, the defence one kind), once the arm has flown 'hard.least' aircraft on that kind. The name comes at 'need' missions completed. There is NO cap for air groups (the measure is the limit; the corps keep theirs). A name is in the nation's style ('styles', by nicknames.json 'nations'; a style not listed takes '_default'), never one the nation's units carry, never a blocked one, and shown as 'show' sets it beside the unit's name. A style with 'guards' gives the Guards title instead: the Guards form of the group's rung (regiment, division or corps; by its name, a regiment where it cannot tell), a new number from that Guards series in order (the historian's lists, air-unit-names-r2.json guards.SOV, M: real numbers, labels only), going on past the end, and, where the group has a hard fight on record, the city of its latest hard fight in this war as the record's honorific after 'Guards' ('city'; the design director 12:59Z: the place is kept on the group as it fights, taken once when the title is given and kept; a group with no hard fight takes the title without a city; the historian: one city was given to many units, so it is not held unique). The Guards title is a name and a number, nothing more. ALL FIGURES ARE G: 'hard.pressed' 0.8 and 'hard.held' 1.25 are the design director's gap of 05:12Z (review marks: pressed home at 0.8 or less, held at 1.25 or more, both G; a fight near even, between the two, is an ordinary fight for both sides; until then 1.0 and 1.0, the 03:18Z words 'at most even' and 'at least as strong'), 'hard.costly' 2 is the ruling's word (twice) and 'hard.least' 200 aircraft is ours, so that a rate is read only once it means something; 'need' 8 and 'double' 2 are the ruling's 03:31Z figures, G. None is set to reach a count of names. Every word list here is OURS, in each arm's manner, checked by tests/air-names-r2.test.ts against the historian's block list (air-names.json 'blocked', whole words) and nicknames.json 'blocked', and by tests/air-names-r2-words.test.ts against every distinctive word of both (the design director's review marks of 05:12Z; air-names.json blocked.common says which words are not distinctive). Fifteen names that held a real unit's distinctive word were replaced on 25 November by an original word in the same manner: Iron Swifts by Slate Swifts, Summer Lightning by Summer Squall (German); Sky Wranglers by Range Wranglers, Dust Devils by Dust Twisters, Tin Lizzies by Flivvers (American); the Drizzle Boys by the Drizzle Wrens, the Bell Ringers by the Hedgers (first by the Thatchers, which read as a real person's surname, struck at the review), the Watch over {place} by the Wardens of {place} (British); the Bell Founders by the Coopers (Polish); the Sea Swallows by the Shore Swallows, the Thunder Kites by the Squall Kites (Japanese); the Smiths of the Sky by the Cloud Smiths (Soviet); the Sky Wardens by the Cloud Wardens, the Hill Hawks by the Fell Hawks, the High Larks by the Upland Larks (the default). Italy's list is the historian's own 28 candidates in the 1940 style (air-unit-names-r2.json italyNames, G), its earned list since Brian's answer of 03:31Z dropped its day-one names. What aircrews counted as a hard fight (the historian, hardFight): a sortie counted when it reached the target, and crews judged a target by what it cost them; no aircrew measure for a defence was found, so 'held' stays the air thread's G.",
       hard: {
-        pressed: 1,
-        held: 1,
+        pressed: 0.8,
+        held: 1.25,
         costly: 2,
         least: 200
       },
@@ -28846,10 +28884,10 @@
             "Storm Crows",
             "Hailstorm",
             "Rhine Gulls",
-            "Iron Swifts",
+            "Slate Swifts",
             "Harz Owls",
             "Clockmakers",
-            "Summer Lightning",
+            "Summer Squall",
             "Millrace",
             "Glassblowers",
             "Moor Harriers"
@@ -28864,13 +28902,13 @@
           any: [
             "Prairie Dogs",
             "Hot Rods",
-            "Sky Wranglers",
-            "Dust Devils",
+            "Range Wranglers",
+            "Dust Twisters",
             "Bayou Hawks",
             "Barnstormers",
             "Jackrabbits",
             "Cloud Busters",
-            "Tin Lizzies",
+            "Flivvers",
             "Pea Pickers",
             "Crop Dusters"
           ],
@@ -28892,11 +28930,11 @@
             "the Wheelwrights",
             "the Ploughmen",
             "the Curlews",
-            "the Drizzle Boys",
-            "the Bell Ringers"
+            "the Drizzle Wrens",
+            "the Hedgers"
           ],
           place: [
-            "the Watch over {place}",
+            "the Wardens of {place}",
             "the Kites of {place}"
           ]
         },
@@ -28963,7 +29001,7 @@
             "the Blizzard",
             "the Ural Kites",
             "the Taiga Owls",
-            "the Smiths of the Sky"
+            "the Cloud Smiths"
           ],
           place: [
             "{place}"
@@ -29230,7 +29268,7 @@
             "the Stoats",
             "the Amber Wings",
             "the Vistula Swallows",
-            "the Bell Founders",
+            "the Coopers",
             "the Kestrels",
             "the Polecats",
             "the Rye Larks"
@@ -29244,10 +29282,10 @@
           show: "{name} ({nick})",
           any: [
             "the Mountain Kites",
-            "the Sea Swallows",
+            "the Shore Swallows",
             "the Bamboo Wings",
             "the Paper Cranes",
-            "the Thunder Kites",
+            "the Squall Kites",
             "the Snow Herons",
             "the Swordsmiths",
             "the Rain Crows"
@@ -29275,13 +29313,13 @@
         _default: {
           show: "{name} ({nick})",
           any: [
-            "the Sky Wardens",
-            "the Hill Hawks",
+            "the Cloud Wardens",
+            "the Fell Hawks",
             "the Swift Wings",
             "the Weathervanes",
             "the Skylarks",
             "the Thunderclouds",
-            "the High Larks",
+            "the Upland Larks",
             "the Kite Makers",
             "the Hailstones",
             "the Harriers"
@@ -44142,13 +44180,13 @@
     const a = atomOn(g2) ? g2.nations[nat]?.atom?.armed : void 0;
     return a && a[0] === g2.turn && (g2.nations[nat].atom?.bombs ?? 0) > 0 ? a[1] : null;
   }
-  function strikeFlown(g2, nat, region, flown, reached) {
+  function strikeFlown(g2, nat, region, flown2, reached) {
     var _a;
     const n = g2.nations[nat], s = n.atom, r = g2.regions[region], v = r.ctrl;
     delete s.armed;
     s.bombs = Math.max(0, (s.bombs ?? 1) - 1);
     s.struck = g2.turn;
-    const p = flown > 0 ? Math.max(0, Math.min(1, reached / flown)) : 0;
+    const p = flown2 > 0 ? Math.max(0, Math.min(1, reached / flown2)) : 0;
     const roll3 = new Rng(hashString(`atom:${g2.seed}:${g2.turn}:${nat}:${region}`)).next();
     if (roll3 >= p) return { text: `The bomber carrying the atomic bomb was lost on the way to ${townName(r)}, and the bomb with it.`, hit: false, city: null, tell: !!g2.human && allied(g2, g2.human, nat) };
     const city = ruinHit(g2, r, Math.min(ATOM.strike.ruin, DAMAGE.most));
@@ -46525,21 +46563,22 @@
     let w = 0;
     for (const f of g2.fleets) {
       if (!atSea(f) || !(f.nat === nat || allied(g2, f.nat, nat))) continue;
+      const wings2 = inPassage(f) ? 0 : wingShare(g2, f);
       if (f.zone === z) {
-        for (const c of CLASSES) w += f.ships[c] * S3.ships[c] * (c === "cv" ? wingShare(g2, f) : 1);
-      } else if (f.ships.cv > 0 && g2.seas[f.zone]?.adj.includes(z)) w += f.ships.cv * S3.next * wingShare(g2, f);
+        for (const c of CLASSES) w += f.ships[c] * S3.ships[c] * (c === "cv" ? wings2 : 1);
+      } else if (f.ships.cv > 0 && wings2 > 0 && g2.seas[f.zone]?.adj.includes(z)) w += f.ships.cv * S3.next * wings2;
     }
     w += airOver(g2, z, nat) * S3.air;
     const me = g2.human;
-    let flown = !!me && (nat === me || allied(g2, nat, me)) && g2.intel?.sea?.[z] === g2.turn;
+    let flown2 = !!me && (nat === me || allied(g2, nat, me)) && g2.intel?.sea?.[z] === g2.turn;
     const by2 = g2.intel?.seaBy;
-    if (!flown && by2) {
+    if (!flown2 && by2) {
       for (const k in by2) if (by2[k][z] === g2.turn && (k === nat || allied(g2, k, nat))) {
-        flown = true;
+        flown2 = true;
         break;
       }
     }
-    if (flown) w += S3.flight;
+    if (flown2) w += S3.flight;
     return w;
   }
   function contact(g2, f, nat) {
@@ -46637,6 +46676,10 @@
     if (f.ftr + f.bmr <= 0) return "It has no aircraft fit to fly.";
     if (f.scouted === g2.turn) return "It has flown its reconnaissance this month.";
     if (!g2.nations[f.nat].atWar.length) return "The nation is at peace.";
+    {
+      const c = carrierOf(g2, f);
+      if (c && inPassage(c)) return passageWhy(g2, c);
+    }
     if (weatherOn(g2)) {
       const why = whyNotSky(g2, f, zoneOfSea(g2, z));
       if (why) return why;
@@ -46706,9 +46749,9 @@
     for (const k of Object.keys(by2)) if (by2[+k] !== g2.turn) delete by2[+k];
     const ready = AIRWAR.ai.raids.ready;
     const groups = airFleetsOf(g2, nat).filter((f) => f.ftr + f.bmr > 0 && f.scouted !== g2.turn && !(f.ready >= ready && f.ready - S3.ready < ready));
-    let flown = Object.keys(by2).length;
+    let flown2 = Object.keys(by2).length;
     for (const z of wanted2) {
-      if (flown >= most || !groups.length) break;
+      if (flown2 >= most || !groups.length) break;
       if (by2[z] === g2.turn || searchOf(g2, nat, z) >= S3.find * openness(g2, z)) continue;
       let best = null, bd = 0;
       for (const f of groups) {
@@ -46723,7 +46766,7 @@
       best.scouted = g2.turn;
       best.ready = Math.max(AIR.ready.floor, best.ready - S3.ready);
       by2[z] = g2.turn;
-      flown++;
+      flown2++;
     }
   }
   function tradeIn(g2, nat, z) {
@@ -46817,10 +46860,10 @@
     if (nat !== g2.human) staffSearch(g2, nat);
     const trade = !!A.trade;
     const hit = /* @__PURE__ */ new Set();
-    let flown = what === "land" ? 100 : 0;
+    let flown2 = what === "land" ? 100 : 0;
     const fit3 = (f) => !!f && f.flew !== g2.turn && f.mission === "support" && f.ready >= A.ready && !inCampaign(g2, f) && !not?.has(f.id);
     const send2 = (b) => {
-      const rep = fly(g2, nat, b.m, b.t, b.fleets, `:sea${flown++}`);
+      const rep = fly(g2, nat, b.m, b.t, b.fleets, `:sea${flown2++}`);
       hit.add(`${b.m}:${b.t}`);
       if (rep) for (const f of b.fleets) {
         f.mission = b.m;
@@ -47753,6 +47796,11 @@
     b.fought = Math.max(b.fought, a.fought);
     for (const [k, t] of Object.entries(a.seen ?? {})) if ((b.seen?.[k] ?? -99) < t) (b.seen ?? (b.seen = {}))[k] = t;
     if (a.struck && (!b.struck || b.struck[0] < a.struck[0] || b.struck[0] === a.struck[0] && b.struck[1] < a.struck[1])) b.struck = [a.struck[0], a.struck[1], a.struck[2]];
+    if (a.anchor?.length || b.anchor?.length) {
+      const all = shipCount(b.ships) - b.ships.ss, sa = shipCount(a.ships) - a.ships.ss;
+      const of2 = (x, n) => x.map((e) => ({ ...e, lost: all > 0 ? e.lost * n / all : e.lost, from: e.from.map((o) => ({ ...o })) }));
+      b.anchor = [...of2(b.anchor ?? [], all - sa), ...of2(a.anchor ?? [], sa)];
+    }
     g2.fleets.splice(g2.fleets.indexOf(a), 1);
     moveWings(g2, a, b, a.ships.cv, a.ships.cv);
     g2.supplyDirty = true;
@@ -47969,33 +48017,6 @@
   function takeWinterPeace(g2, up) {
     return whyNotWinterPeace(g2, up) === null && makeWinterPeace(g2, false);
   }
-
-  // ../../data/campaign/legions.json
-  var legions_default = {
-    _about: "Volunteer legions (release 2; Brian's yes of 22 November 2026, the design director's frame of 03:42 UTC and rulings of 03:47 and 03:55 UTC; the record is the historian's table, historian/volunteer-legions-1939-45.md). A country at peace outside both alliances may send one legion at a time, of a division at most, to fight under the flag and staff of a country at war: its patron. The legion is a corps of the patron's army with its own name and its home's flag. Its men come from its home's reserve (manpower.ts), first to raise it and then as its drafts; the patron pays its upkeep and its drafts' equipment. It goes home on recall or at its tour's end, and its men go back to the reserve and teach the home army what they learned. Switched by stage.json 'legions'.",
-    _cost: "Political capital a country pays to send a legion: as courting (diplomacy.json court.cost).",
-    cost: 6,
-    _leanAt: "The player may send one to a patron his public opinion leans toward by at least this many points (opinion is -100 for the Allies to +100 for the Axis), or to a friend (relations.json) that has been attacked.",
-    leanAt: 30,
-    _send: "A computer-run country at stops 3 to 5 sends one when it leans this far toward the patron and leans against the enemy, or when a friend has been attacked. At stops 1 and 2 it sends the record's legions by their dates and no others.",
-    send: 50,
-    _backAt: "A computer-run country at stops 3 to 5 calls its legion home when its leaning toward the patron falls under this.",
-    backAt: 20,
-    _tour: "Months a legion serves before it comes home (the historian: the Blue Division's 28 months, the Eagle Squadrons' 24, the AVG's contracts of 12; tour 24 fits). At stops 1 and 2 the record's dates instead.",
-    tour: 24,
-    _train: "A legion home again teaches the army: every corps of its home gains this share of the legion's experience, never more than the legion's own.",
-    train: 0.25,
-    _legionFall: "Each month a legion fights a great power, that power's patience with its home falls by this many points (bargains.ts patience, with the bargains switched on; a claim at stops 4 and 5).",
-    legionFall: 2,
-    _generic: "A legion the record does not name: 'share' of the reserve its country opened the war with (manpower.ts), rounded to a twentieth of a division, at least 'least' and at most 'est', a division (Spain's reserve of about 17 divisions' worth gives a division, Sweden's a little under one, Denmark's a third); 'xp' its experience when raised; 'spare' divisions' worth a computer-run country's reserve must still hold beyond it; and its name after the home's adjective.",
-    generic: { est: 1, share: 0.1, least: 0.1, xp: 0.15, spare: 2, name: "{adj} Volunteer Legion" },
-    _rows: "The record's legions (the historian's table): 'est' the share of a division it was (worth = men / 15,000 x quality), 'from' and 'to' the months it was in the line (turn 1 = September 1939), 'then' the row that carried on with its men the month after, 'no' its division's number. A legion is sent the month before 'from' and is in the line from 'from'.",
-    rows: [
-      { id: "esp-blue", home: "ESP", patron: "GER", against: "SOV", name: "Blue Division", est: 1, xp: 0.25, from: 23, to: 51, then: "esp-legion", no: 250, _why: "18,946 men when formed, kept near 17,000; about 45,000 served in all, by 27 marching battalions. Jul 1941 to Nov 1943 (H men, L quality)." },
-      { id: "esp-legion", home: "ESP", patron: "GER", against: "SOV", name: "Blue Legion", est: 0.12, from: 52, to: 55, _why: "2,269 men who stayed when the division went home; ordered home 3 Mar 1944 (M)." },
-      { id: "swe-corps", home: "SWE", patron: "FIN", against: "SOV", name: "Swedish Volunteer Corps", est: 0.4, xp: 0.15, from: 6, to: 7, _why: "9,640 men; in the line on the Salla front 28 Feb to 13 Mar 1940 (H-M)." }
-    ]
-  };
 
   // ../../src/campaign/legions.ts
   var LEGIONS = legions_default;
@@ -52414,9 +52435,10 @@
     if (v) return v;
     const n = g2.nations[nat];
     const war = n.atWar.length > 0;
+    const odds = war ? g2.seas.map((z) => seaOdds(g2, z.id, nat)) : null;
     v = {
-      shut: g2.seas.map((z) => war && closedTo(g2, z.id, nat)),
-      risk: g2.seas.map((z) => war ? seaRisk(g2, z.id, nat) : 0),
+      shut: g2.seas.map((_, i) => !!odds && odds[i].shut),
+      risk: g2.seas.map((_, i) => odds ? odds[i].risk : 0),
       from: []
     };
     const ports = /* @__PURE__ */ new Set(), coasts = /* @__PURE__ */ new Set();
@@ -55554,6 +55576,32 @@
     const l = lineOf2("hall");
     return l?.occupiedShare ? l.occupiedShare * civicLevel(g2, "hall", r.id) : 0;
   }
+  function civicAdvice(g2, nat) {
+    const n = g2.nations[nat];
+    if (!civicRules(g2) || !n?.alive) return { lines: [], home: [] };
+    const A = CIVIC.ai;
+    const worth3 = (r) => (n.capital === r.id ? 100 : 0) + r.vp * 3 + r.fac * 2 + LAND[r.terrain] * 10 + (r.port ? 1 : 0);
+    const home = g2.regions.filter((r) => r.ctrl === nat && r.owner === nat).sort((a, b) => worth3(b) - worth3(a) || a.id - b.id);
+    const built = {};
+    for (const r of home) for (const { line, level } of civicAt(g2, r.id)) built[line.id] = (built[line.id] ?? 0) + level;
+    for (const b of n.queue) if (b.what === "civic" && b.item) built[b.item] = (built[b.item] ?? 0) + 1;
+    const lines2 = Object.keys(A.mix).sort((x, y) => (built[x] ?? 0) / A.mix[x] - (built[y] ?? 0) / A.mix[y] || A.mix[y] - A.mix[x]);
+    for (const l of CIVIC.lines) if (!lines2.includes(l.id)) lines2.push(l.id);
+    return { lines: lines2, home: home.map((r) => r.id) };
+  }
+  function civicReady(g2, nat) {
+    const n = g2.nations[nat];
+    if (!civicRules(g2) || !n?.alive) return 0;
+    let count4 = 0;
+    for (const r of g2.regions) {
+      if (r.ctrl !== nat) continue;
+      if (CIVIC.lines.some((l) => {
+        const lv = civicLevel(g2, l.id, r.id);
+        return lv < TOP2 && l.cost[lv] <= n.pp && whyNotCivic(g2, nat, r, l.id) === null;
+      })) count4++;
+    }
+    return count4;
+  }
   function civicAI(g2, nat, earned, keeps = false, wait = false) {
     const n = g2.nations[nat];
     if (!civicRules(g2) || byHand(g2, nat, "build") || !n?.alive || n.capital < 0) return;
@@ -57862,6 +57910,18 @@
     };
   }
 
+  // ../../src/campaign/strafers.ts
+  var flown = false;
+  function groundFlown(on2) {
+    flown = on2;
+  }
+  function strafeOn() {
+    const G5 = globalThis;
+    const env = G5.process?.env;
+    return flown || String(G5.TC_FLY ?? env?.TC_FLY ?? "").split(",").map((x) => x.trim()).includes("ground");
+  }
+  var strafeWatch = {};
+
   // ../../src/campaign/airnames.ts
   var AIRNAMES = air_names_default;
   var airNamesOn = (g2) => g2.flags.open === 1 && g2.flags.airNames === 1;
@@ -57906,7 +57966,22 @@
   var shortName = (f) => f.short ?? f.name;
   var esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   var BLOCKED2 = AIRNAMES.blocked.names.map((b) => new RegExp(`(^|[^\\p{L}\\p{N}])${esc(b)}($|[^\\p{L}\\p{N}])`, "iu"));
-  var airBlocked = (name) => BLOCKED2.some((b) => b.test(name));
+  var wordsOf = (name) => (name.match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu) ?? []).map((w) => w.toLowerCase());
+  var COMMON = new Set(AIRNAMES.blocked.common.map((w) => w.toLowerCase()));
+  var distinctiveWords = (name) => wordsOf(name).filter((w) => !COMMON.has(w) && !/^\p{N}+$/u.test(w));
+  var DISTINCTIVE = new Set([...AIRNAMES.blocked.names, ...nicknames_default.blocked].flatMap(distinctiveWords));
+  var distinctiveIn = (name) => wordsOf(name).filter((w) => DISTINCTIVE.has(w));
+  var airBlocked = (name) => BLOCKED2.some((b) => b.test(name)) || distinctiveIn(name).length > 0;
+  var airBlockedWhole = (name) => BLOCKED2.some((b) => b.test(name));
+  function airBlockedAt(name, place3) {
+    if (!place3) return airBlocked(name);
+    if (airBlockedWhole(name)) return true;
+    const w = wordsOf(name), p = wordsOf(place3);
+    let at4 = -1;
+    for (let i = 0; p.length && i + p.length <= w.length && at4 < 0; i++) if (p.every((x, j) => w[i + j] === x)) at4 = i;
+    const rest = at4 < 0 ? w : [...w.slice(0, at4), ...w.slice(at4 + p.length)];
+    return rest.some((x) => DISTINCTIVE.has(x));
+  }
 
   // ../../data/campaign/air-colours.json
   var air_colours_default = {
@@ -57917,7 +57992,7 @@
       16,
       24
     ],
-    _words: "The art director's words for each scheme (third issue, 25 November 2026 04:05Z; /mnt/project-files/art-director/air-colours/unit-colours-words.json, copied as issued, no word changed; the historian's check and second pass are applied in it). By nation, 'count' lines each: a group's 'scheme' indexes its own nation's list. A line splits at its first two commas into the spinner, the nose band and the tail, which are tiers 1, 2 and 3: tier 1 shows the first part, tier 2 the first two, tier 3 all three. Words only: no rule reads them. Nations with no list here (Poland and the rest) have no words yet.",
+    _words: "The art director's words for each scheme (fifth issue, 25 November 2026 12:34Z, five card lines changed from the third: Britain 7, Italy 3, 4, 5 and 8, scheme numbers unchanged; /mnt/project-files/art-director/air-colours/unit-colours-words.json, copied as issued, no word changed; the historian's check and second pass are applied in it). By nation, 'count' lines each: a group's 'scheme' indexes its own nation's list. A line splits at its first two commas into the spinner, the nose band and the tail, which are tiers 1, 2 and 3: tier 1 shows the first part, tier 2 the first two, tier 3 all three. Words only: no rule reads them. Nations with no list here (Poland and the rest) have no words yet.",
     words: {
       GER: [
         "Orange spinner, purple nose band, tail halved, orange over cream",
@@ -57944,7 +58019,7 @@
         "Teal spinner, pale blue nose band, teal tail with a pale blue tip",
         "Teal spinner, purple nose band, tail halved, teal over cream",
         "Wine red spinner, teal nose band, tail halved, wine red over teal",
-        "Wine red spinner, orange nose band, tail halved, wine red over orange",
+        "Turquoise spinner, wine red nose band, tail banded in turquoise and wine red",
         "Purple spinner, pale blue nose band, tail banded in purple and pale blue",
         "Purple spinner, bottle green nose band, purple and cream checked tail",
         "Orange spinner, purple nose band, orange tail with a purple tip",
@@ -58012,12 +58087,12 @@
       ITA: [
         "Azure blue spinner, moss green nose band, azure blue tail with a black tip",
         "Azure blue spinner, wine red nose band, tail halved, azure blue over wine red",
-        "Wine red spinner, pale blue nose band, tail banded in wine red and pale blue",
-        "Wine red spinner, orange nose band, wine red and orange checked tail",
-        "Wine red spinner, azure blue nose band, wine red and azure blue striped tail",
+        "Moss green spinner, turquoise nose band, moss green and turquoise checked tail",
+        "Turquoise spinner, azure blue nose band, tail banded in turquoise and azure blue",
+        "Turquoise spinner, slate blue nose band, turquoise and slate blue striped tail",
         "Moss green spinner, slate blue nose band, tail banded in moss green and black",
         "Moss green spinner, pale blue nose band, moss green and black checked tail",
-        "Orange spinner, wine red nose band, orange tail with a wine red tip",
+        "Pale blue spinner, wine red nose band, tail halved, pale blue over wine red",
         "Orange spinner, azure blue nose band, orange and black striped tail",
         "Orange spinner, pale blue nose band, tail halved, orange over pale blue",
         "Slate blue spinner, pale blue nose band, slate blue tail with a pale blue tip",
@@ -58059,6 +58134,8 @@
     return f.nick ? airStyle(f.nat).show.replace("{name}", f.name).replace("{nick}", f.nick) : f.name;
   }
   var blockedAir = (name) => isBlocked(name) || airBlocked(name);
+  var blockedAirAt = (name, place3) => isBlocked(name) || airBlockedAt(name, place3);
+  var placeBlocked = (place3) => isBlocked(place3) || airBlockedWhole(place3);
   function rateOf(g2, nat, kind) {
     const t = g2.airRates?.[`${nat}:${kind}`];
     return t && t[0] >= AIRNICKS.hard.least ? t[1] / t[0] : null;
@@ -58111,32 +58188,37 @@
       d.x = 1;
       d.n += twice - 1;
     }
-    if (hard) d.h++;
+    if (hard) {
+      d.h++;
+      f.hardAt = place3;
+    }
     if (d.n >= AIRNICKS.need && !f.nick && f.guards === void 0) nameGroup(g2, f, place3);
     colour(g2, f);
   }
-  function earnedAirName(g2, f, place3) {
+  function earnedAirName(g2, f, place3, over = "") {
     const s = airStyle(f.nat);
     const taken2 = takenNames(g2, f.nat);
     const ok2 = (n) => !taken2.has(n) && !blockedAir(n);
     const rng = new Rng(hashString(`airnick:${g2.seed}:${f.nat}:${f.id}`));
-    const placed3 = place3 ? s.place.map((t) => t.replace("{place}", place3)).filter(ok2) : [];
+    const at4 = place3 && !placeBlocked(place3) ? place3 : "";
+    const placed3 = at4 ? s.place.map((t) => t.replace("{place}", at4)).filter((n) => !taken2.has(n) && !blockedAirAt(n, at4)) : over ? s.place.map((t) => t.replace("{place}", over)).filter(ok2) : [];
     const any = s.any.filter(ok2);
     if (s.guards) {
       const G5 = s.guards, kind = f.kind ?? (f.bmr > f.ftr ? "bmr" : "ftr");
       const rung = /Corps$/.test(f.name) ? "corps" : /Division$/.test(f.name) ? "division" : "regiment";
       const row2 = G5[rung][kind];
-      const city = place3 && !blockedAir(place3) ? place3 : "";
+      const city = at4;
       const form2 = city ? row2.form.replace("Guards", G5.city.replace("{city}", city)) : row2.form;
-      const got = nextNumber(g2, `guards:${f.nat}:${rung}:${kind}`, row2.numbers, (n) => formName(form2, n), (x) => g2.airFleets.some((y) => y.nat === f.nat && y.name === x) || blockedAir(x));
+      const got = nextNumber(g2, `guards:${f.nat}:${rung}:${kind}`, row2.numbers, (n) => formName(form2, n), (x) => g2.airFleets.some((y) => y.nat === f.nat && y.name === x) || blockedAirAt(x, city));
       return { name: got.name, guards: got.n, short: formName(row2.short, got.n) };
     }
     if (placed3.length && (rng.next() < 0.25 || !any.length)) return { nick: rng.pick(placed3) };
     return any.length ? { nick: rng.pick(any) } : {};
   }
   function nameGroup(g2, f, place3) {
-    const at4 = place3 >= 0 ? g2.regions[place3]?.name ?? "" : "";
-    const got = earnedAirName(g2, f, at4);
+    const hp = f.hardAt;
+    const at4 = hp !== void 0 && hp >= 0 ? g2.regions[hp]?.name ?? "" : "";
+    const got = earnedAirName(g2, f, at4, place3 >= 0 ? g2.regions[place3]?.name ?? "" : "");
     if (!got.nick && !got.name) return;
     if (got.name) {
       f.was = f.name;
@@ -58257,16 +58339,12 @@
         if (!c || fleetKnown(g2, c, viewer) === "none") continue;
       } else if (e.base < 0 || sight2[e.base] !== SIGHT.full) continue;
       const p = groupAt(g2, e);
-      out.push({ x: p.x, y: p.y, reach: airRange(e, g2).ftr });
+      out.push({ x: p.x, y: p.y, region: p.region, sea: p.sea, reach: airRange(e, g2).ftr });
     }
     return out;
   }
-  function pointLeg(g2, x, y, from2, to) {
-    const A = g2.regions[from2], B3 = g2.regions[to];
-    const bx = nearX(g2, B3.x, A.x), px = nearX(g2, x, A.x);
-    const dx = bx - A.x, dy = B3.y - A.y, L2 = dx * dx + dy * dy;
-    const t = L2 > 0 ? Math.max(0, Math.min(1, ((px - A.x) * dx + (y - A.y) * dy) / L2)) : 0;
-    return Math.hypot(px - (A.x + t * dx), y - (A.y + t * dy)) * AIR.kmPerUnit;
+  function pointLeg(g2, p, from2, to) {
+    return legKmAt(g2, p, from2, to);
   }
   function hopsLeft(g2, f) {
     if (f.flew === g2.turn) return 0;
@@ -58288,11 +58366,11 @@
     const N = nodes.length, start2 = nodes.indexOf(f.base);
     const foes = knownFighters(g2, f, viewer);
     const nodeRisk = new Uint8Array(N);
-    for (let i = 0; i < N; i++) for (const e of foes) if (pointLeg(g2, e.x, e.y, nodes[i], nodes[i]) <= e.reach) {
+    for (let i = 0; i < N; i++) for (const e of foes) if (pointLeg(g2, e, nodes[i], nodes[i]) <= e.reach) {
       nodeRisk[i] = 1;
       break;
     }
-    const legRisk = (i, j) => nodeRisk[j] === 1 || foes.some((e) => pointLeg(g2, e.x, e.y, nodes[i], nodes[j]) <= e.reach);
+    const legRisk = (i, j) => nodeRisk[j] === 1 || foes.some((e) => pointLeg(g2, e, nodes[i], nodes[j]) <= e.reach);
     const near2 = nodes.map(() => []);
     const legKmOf = /* @__PURE__ */ new Map();
     for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
@@ -59280,15 +59358,15 @@
     const way = (k) => {
       const p = plans[k];
       const f = p.figures;
-      const flown = !p.why;
+      const flown2 = !p.why;
       const bomb = !!nat && armedAt(g2, nat) === target;
       const hits = [];
-      if (flown && f.output !== void 0) hits.push({ n: f.output <= 0 ? "0%" : f.output < 5e-3 ? "<1%" : `−${pct8(f.output)}`, words: "output, for a month" });
-      if (flown && f.rail) hits.push({ n: pct8(f.rail), words: "chance the railway is cut" });
-      if (flown && f.factory) hits.push({ n: pct8(f.factory), words: "chance a factory is wrecked" });
-      if (flown && !bomb && !hits.length) hits.push({ n: "", words: "No industry there, and too few bombers to cut the railway." });
+      if (flown2 && f.output !== void 0) hits.push({ n: f.output <= 0 ? "0%" : f.output < 5e-3 ? "<1%" : `−${pct8(f.output)}`, words: "output, for a month" });
+      if (flown2 && f.rail) hits.push({ n: pct8(f.rail), words: "chance the railway is cut" });
+      if (flown2 && f.factory) hits.push({ n: pct8(f.factory), words: "chance a factory is wrecked" });
+      if (flown2 && !bomb && !hits.length) hits.push({ n: "", words: "No industry there, and too few bombers to cut the railway." });
       const fighterLoss = p.fighters > 0 ? p.fighterLossN / p.fighters : 0;
-      const fb = flown && p.fog && !p.fog.live ? p.fog : null;
+      const fb = flown2 && p.fog && !p.fog.live ? p.fog : null;
       const about3 = (x) => band(x[0], x[1], false);
       const out2 = {
         kind: k,
@@ -59303,20 +59381,20 @@
         bomberLossN: p.bomberLossN,
         fighterLoss,
         fighterLossN: p.fighterLossN,
-        lost: flown ? `${pct8(p.bomberLoss)} · about ${num4(p.bomberLossN)}` : "",
-        fightersLost: flown && p.fighters > 0 ? `${pct8(fighterLoss)} · about ${num4(p.fighterLossN)}` : "",
-        gunLoss: flown ? p.guns.loss : 0,
-        gunLossN: flown ? p.guns.lossN : 0,
-        toGuns: flown ? `about ${num4(p.guns.lossN)}` : "",
-        gunsStop: flown ? p.guns.stop : 0,
-        gunsWords: !flown ? "" : p.guns.level ? "of them to flak and guns" : "of them to light flak",
-        stopNote: flown && !bomb && p.guns.stop > 0 ? `after the guns stop ${pct8(p.guns.stop)} of the bombing` : "",
+        lost: flown2 ? `${pct8(p.bomberLoss)} · about ${num4(p.bomberLossN)}` : "",
+        fightersLost: flown2 && p.fighters > 0 ? `${pct8(fighterLoss)} · about ${num4(p.fighterLossN)}` : "",
+        gunLoss: flown2 ? p.guns.loss : 0,
+        gunLossN: flown2 ? p.guns.lossN : 0,
+        toGuns: flown2 ? `about ${num4(p.guns.lossN)}` : "",
+        gunsStop: flown2 ? p.guns.stop : 0,
+        gunsWords: !flown2 ? "" : p.guns.level ? "of them to flak and guns" : "of them to light flak",
+        stopNote: flown2 && !bomb && p.guns.stop > 0 ? `after the guns stop ${pct8(p.guns.stop)} of the bombing` : "",
         figures: f,
         hits,
         foot: k === "bomb" ? "Escorts can fly with them." : "No escorts. Fewer lost, fewer hits.",
-        prose: flown ? p.effects[0] ?? "" : ""
+        prose: flown2 ? p.effects[0] ?? "" : ""
       };
-      if (flown && p.fog) out2.band = p.fog.band;
+      if (flown2 && p.fog) out2.band = p.fog.band;
       if (fb) {
         out2.lost = `${band(fb.loss[0], fb.loss[1])} · about ${about3(fb.bomberLossN)}`;
         if (p.fighters > 0) out2.fightersLost = `${band(fb.fighterLossN[0] / p.fighters, fb.fighterLossN[1] / p.fighters)} · about ${about3(fb.fighterLossN)}`;
@@ -59491,7 +59569,7 @@
     const book3 = g2.intel?.airSeen?.[nat] ?? {};
     const s = book3[t];
     if (s && g2.turn - s[0] < F().forget) return { live: false, scouted: false, ago: g2.turn - s[0], fighters: s[1], groups: s[2], guns: s[3], ruin: s[4] / 100, near: s[1] };
-    const R2 = fighterReach2(g2, g2.regions[t].ctrl);
+    const R2 = fighterReach2(g2, g2.regions[t].ctrl, t);
     let near2 = -1;
     for (const [id, x] of Object.entries(book3)) if (g2.turn - x[0] < F().forget && x[1] > near2 && km(g2, +id, t) <= R2) near2 = x[1];
     return { live: false, scouted: false, ago: -1, fighters: -1, groups: 0, guns: -1, ruin: -1, near: near2 };
@@ -59549,14 +59627,14 @@
     if (!raidFogOn(g2) || !fogOn(g2, nat)) return;
     const ready = AIRWAR.ai.raids.ready, cost = AIRWAR.recon.ready;
     let sight2 = sightOf(g2, nat);
-    let flown = 0;
+    let flown2 = 0;
     for (const t of targets2) {
-      if (flown >= F().scouts) break;
+      if (flown2 >= F().scouts) break;
       if (!wantsLook(g2, nat, t, sight2)) continue;
       const by2 = mine4.filter((f) => f.ftr + f.bmr > 0 && f.scouted !== g2.turn && !(f.ready >= ready && f.ready - cost < ready)).map((f) => ({ f, d: kmTo(g2, f, t) })).sort((a, b) => a.d - b.d || a.f.id - b.f.id);
       for (const { f } of by2) {
         if (!scout(g2, f.id, t, nat).ok) continue;
-        flown++;
+        flown2++;
         sight2 = sightOf(g2, nat);
         break;
       }
@@ -59633,6 +59711,7 @@
   var airFleetsOf = (g2, nat) => g2.airFleets.filter((f) => f.nat === nat);
   var ROWS = null;
   var ROWS_N = -1;
+  var ROW_KEPT = /* @__PURE__ */ new WeakMap();
   var rowOf = (f) => {
     if (!ROWS || ROWS_N !== AIR.fleets.length) {
       ROWS = /* @__PURE__ */ new Map();
@@ -59642,7 +59721,12 @@
         if (!ROWS.has(k)) ROWS.set(k, r);
       }
     }
-    return ROWS.get(`${f.raised ?? f.nat}|${f.parent ?? f.name}`);
+    const nat = f.raised ?? f.nat, name = f.parent ?? f.name;
+    const kept3 = ROW_KEPT.get(f);
+    if (kept3 && kept3.rows === ROWS && kept3.nat === nat && kept3.name === name) return kept3.row;
+    const row2 = ROWS.get(`${nat}|${name}`);
+    ROW_KEPT.set(f, { rows: ROWS, nat, name, row: row2 });
+    return row2;
   };
   var homeCommand = (f) => !!rowOf(f)?.home;
   var posted = (g2, f) => f.nat !== g2.human && !!rowOf(f)?.posted && hopsBind(g2);
@@ -59828,11 +59912,20 @@
     return c.base >= 0 ? seaKm(g2, c.base, z) : Infinity;
   }
   function legKm(g2, f, from2, to) {
-    const p = groupAt(g2, f), A = g2.regions[from2], B3 = g2.regions[to];
+    return legKmAt(g2, groupAt(g2, f), from2, to);
+  }
+  function legKmAt(g2, p, from2, to) {
+    const A = g2.regions[from2], B3 = g2.regions[to];
     const bx = nearX(g2, B3.x, A.x), px = nearX(g2, p.x, A.x);
     const dx = bx - A.x, dy = B3.y - A.y, L2 = dx * dx + dy * dy;
     const t = L2 > 0 ? clamp(((px - A.x) * dx + (p.y - A.y) * dy) / L2, 0, 1) : 0;
-    return Math.hypot(px - (A.x + t * dx), p.y - (A.y + t * dy)) * AIR.kmPerUnit;
+    if ((t <= 0 || t >= 1) && (p.region >= 0 || p.sea >= 0)) {
+      const E = t <= 0 ? A : B3;
+      return (p.region >= 0 ? chartDist(g2, g2.regions[p.region], E) : seaDist(g2, E, { id: p.sea, x: p.x, y: p.y })) * AIR.kmPerUnit;
+    }
+    const qx = A.x + t * dx, qy = A.y + t * dy;
+    if (globeLeg(g2, A, B3, p.region, p.sea)) return globeDist(g2, px, p.y, qx, qy) * AIR.kmPerUnit;
+    return Math.hypot(px - qx, p.y - qy) * AIR.kmPerUnit;
   }
   function groupAt(g2, f) {
     const c = carrierOf(g2, f);
@@ -59922,7 +60015,7 @@
     }
     return n;
   }
-  var fighterReach2 = (g2, nat) => reach({ nat, name: "" }, g2).ftrRange;
+  var fighterReach2 = (g2, nat, base) => reach(base === void 0 ? { nat, name: "" } : { nat, name: "", base }, g2).ftrRange;
   function fightersInReach(g2, region, against) {
     const holder = g2.regions[region].ctrl;
     return g2.airFleets.filter((f) => f.ftr > 0 && atWar(g2, f.nat, against) && guardsLand(g2, f, region, holder) && cover(kmTo(g2, f, region), reach(f, g2).ftrRange) > 0);
@@ -60066,7 +60159,7 @@
   function bookCloseAir(g2, air2, sorties2, region = -1) {
     if (!air2) return;
     const stamp2 = g2.turn * 10 + g2.week;
-    const flown = [];
+    const flown2 = [];
     for (const [side5, home] of [[air2.att, false], [air2.def, true]]) {
       if (!side5.strikes && !sorties2) continue;
       for (const k of side5.groups) {
@@ -60085,36 +60178,78 @@
         }
         f.ready = Math.max(AIR.ready.floor, f.ready - CLOSE.ready);
         f.closeAt = stamp2;
-        flown.push(f);
+        flown2.push(f);
       }
     }
-    if (nicknamesOn(g2)) airSupportFlown(g2, flown, region);
+    if (nicknamesOn(g2)) airSupportFlown(g2, flown2, region);
   }
   function skyDenies(g2, nat, region) {
     const sky = skyOver(g2, region);
     if (sky !== null && allied(g2, sky, nat)) return false;
     return fightersOver(g2, region, nat) >= AIR.sky.least;
   }
+  var LONGEST = null;
+  function longestReach() {
+    if (LONGEST !== null) return LONGEST;
+    let m = Math.max(CARRIERS.range.ftr, CARRIERS.range.bmr);
+    const up = (x) => {
+      if (x !== void 0) m = Math.max(m, x);
+    };
+    for (const s of Object.values(AIR.nations)) {
+      up(s.ftrRange);
+      up(s.bmrRange);
+    }
+    for (const r of AIR.fleets) {
+      up(r.ftrRange);
+      up(r.bmrRange);
+    }
+    for (const rows of Object.values(AIR.ftrReach ?? {})) for (const r of rows) up(r[1]);
+    for (const rows of Object.values(AIRWAR.day.range)) for (const r of rows) up(r[1]);
+    for (const J of Object.values(AIR.jobs ?? {})) {
+      up(J.cover);
+      for (const r of J.raid) up(r[1]);
+    }
+    return LONGEST = m;
+  }
   var seaDist2 = /* @__PURE__ */ new WeakMap();
   function fieldToSea(g2, base, z) {
     let m = seaDist2.get(g2.seas);
     if (!m) {
-      m = /* @__PURE__ */ new Map();
+      m = [];
       seaDist2.set(g2.seas, m);
     }
-    const k = base * 4096 + z;
-    let d = m.get(k);
-    if (d === void 0) {
+    const row2 = m[base] ?? (m[base] = new Float64Array(g2.seas.length).fill(NaN));
+    let d = row2[z];
+    if (Number.isNaN(d)) {
       d = seaKm(g2, base, z);
-      m.set(k, d);
+      row2[z] = d;
     }
     return d;
+  }
+  var nearSeas = /* @__PURE__ */ new WeakMap();
+  function nearRow(g2, z) {
+    let m = nearSeas.get(g2.seas);
+    if (!m) {
+      m = [];
+      nearSeas.set(g2.seas, m);
+    }
+    return m[z] ?? (m[z] = new Int8Array(g2.regions.length).fill(-1));
+  }
+  function fieldNear(g2, row2, base, z) {
+    const k = row2[base];
+    if (k === void 0) return !!g2.regions[base] && !(fieldToSea(g2, base, z) > longestReach());
+    if (k >= 0) return k === 1;
+    const near2 = !(fieldToSea(g2, base, z) > longestReach());
+    row2[base] = near2 ? 1 : 0;
+    return near2;
   }
   function groupOverSea(g2, f, z, S3) {
     if (f.ship !== void 0 || f.mission === "rest" || f.unfed || f.ftr + f.bmr <= 0 || !g2.regions[f.base]) return 0;
     const n = g2.nations[f.nat];
     if (!n?.alive || !n.atWar.length) return 0;
-    const d = fieldToSea(g2, f.base, z), R2 = reach(f, g2);
+    const d = fieldToSea(g2, f.base, z);
+    if (d > longestReach()) return 0;
+    const R2 = reach(f, g2);
     const most = S3.cover?.[f.raised ?? f.nat];
     const ftr = f.ftr > 0 ? f.ftr * cover(d, most === void 0 ? R2.ftrRange : Math.min(R2.ftrRange, most)) : 0;
     const bmr = f.bmr > 0 && d <= R2.bmrRange ? f.bmr : 0;
@@ -60124,8 +60259,9 @@
   }
   function groupsOver(g2, z, nat, hostile, S3, beside) {
     let s = 0;
+    const near2 = nearRow(g2, z);
     for (const f of g2.airFleets) {
-      if (f.ship !== void 0 || !(hostile ? atWar(g2, f.nat, nat) : allied(g2, f.nat, nat) && (!beside || beside(f.nat)))) continue;
+      if (f.ship !== void 0 || !fieldNear(g2, near2, f.base, z) || !(hostile ? atWar(g2, f.nat, nat) : allied(g2, f.nat, nat) && (!beside || beside(f.nat)))) continue;
       s += groupOverSea(g2, f, z, S3);
     }
     return s / S3.per * g2.seas[z].air;
@@ -61623,7 +61759,7 @@
         x.struck = [g2.turn, (x.struck && x.struck[0] === g2.turn ? x.struck[1] : 0) + 1, atSea(x) ? x.zone : -1];
         if (m === "harbour" && farOn(g2)) {
           const sunk = shipCount(struck[i].sunk) - struck[i].sunk.ss, had2 = shipCount(struck[i].ships) - struck[i].ships.ss;
-          const from2 = a.att.map((y) => {
+          const from2 = a.att.filter((y) => y.bmr > 0).map((y) => {
             const c = carrierOf(g2, y.f), R2 = reach(y.f, g2, raidJob(m));
             return c && atSea(c) ? { sea: c.zone, field: -1, km: R2.bmrRange } : { sea: -1, field: c ? c.base : y.f.base, km: R2.bmrRange };
           });
@@ -61755,7 +61891,32 @@
       const G5 = AIRWAR.ground;
       const r = g2.regions[target];
       const foes = r.units.filter((u) => !u.dead && atWar(g2, nat, u.nat));
-      if (!battle) a.att.forEach((x, i) => down(x.f, att[i], x.ftr * G5.fire * luck(), false));
+      const rule = strafeOn();
+      const strafers = [];
+      let fired = 0;
+      if (rule) a.att.forEach((x, i) => {
+        if (!battle || staff) {
+          const k0 = Math.min(x.f.ftr, rng.roll(Math.max(0, x.ftr * G5.fire * luck() * (staff ? staff.rest.ftr : 1))));
+          if (k0) rng.roll(k0 * saved(false));
+        }
+        const left = x.f.ftr * x.esc * x.crowd;
+        if (!(x.ftr > 0 && canStrafe(g2, x)) || left <= 0) return;
+        strafers.push(x.f.id);
+        if (battle && !staff) return;
+        const own = airRng(g2, `${m}:${target}:${nat}${salt}:low:${x.f.id}`);
+        const k = Math.min(x.f.ftr, own.roll(Math.max(0, left * G5.fire * own.range(1 - C4.luck, 1 + C4.luck) * (staff ? staff.rest.ftr : 1))));
+        if (k) {
+          const p = airPool(g2, x.f.nat), back = own.roll(k * saved(false));
+          x.f.ftr -= k;
+          x.f.lost.ftr += k;
+          att[i].lostFtr += k;
+          p.lostFtr += k;
+          poolIn(g2, x.f.nat, back, x.f);
+          p.lostPilots += k - back;
+        }
+        fired += k;
+      });
+      else if (!battle) a.att.forEach((x, i) => down(x.f, att[i], x.ftr * G5.fire * luck(), false));
       else if (staff) a.att.forEach((x, i) => {
         const k = Math.min(x.f.ftr, rng.roll(Math.max(0, x.ftr * G5.fire * luck() * staff.rest.ftr)));
         if (!k) return;
@@ -61767,8 +61928,12 @@
         poolIn(g2, x.f.nat, back, x.f);
         p.lostPilots += k - back;
       });
-      const low2 = fix?.strafed() ?? a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd, 0);
+      const low2 = fix?.strafed() ?? a.att.reduce((s, x) => s + (!rule || strafers.includes(x.f.id) ? x.f.ftr * x.esc * x.crowd : 0), 0);
       const cut2 = troopCut(r, foes, (through2 + low2 * G5.fighters) * troopWeight(g2, nat));
+      if (rule) {
+        const route = battle && !staff ? "fought" : "settled";
+        strafeWatch.tell?.({ route, target, nat, strafers: route === "fought" ? [...battle?.strafers ?? []] : strafers, fire: route === "fought" ? battle?.strafeFire ?? 0 : fired, weight: low2, cut: cut2 });
+      }
       let divs = 0;
       for (const c of foes) {
         const k = cut2 * (c.dug ? G5.dug : 1);
@@ -62292,7 +62457,7 @@
       return m;
     };
     const done = /* @__PURE__ */ new Set();
-    let flown = 0;
+    let flown2 = 0;
     for (const s of shores) {
       if (done.has(s)) continue;
       done.add(s);
@@ -62327,7 +62492,7 @@
       for (const f of groups) named5.add(f.id);
       const fleets = groups.filter((f) => f.flew !== g2.turn && f.mission === "support" && f.ready >= R2.ready && reaches2(f, to));
       const goes = fleets.some((f) => f.kind === "ftr" && f.ftr > 0) && !assessAir(g2, fleets, "superiority", to).why;
-      const rep = goes ? fly(g2, nat, "superiority", to, fleets, `:sky${flown++}`) : null;
+      const rep = goes ? fly(g2, nat, "superiority", to, fleets, `:sky${flown2++}`) : null;
       if (rep) for (const f of fleets) {
         f.mission = "superiority";
         f.target = to;
@@ -62430,7 +62595,7 @@
     baseByThreat(g2, nat, mine4, beaches, fights2, plan?.named);
     baseBombers(g2, nat, free2, fights2);
     if (ph?.posture === "attack" || held3.length) closeStaff(g2, free2, [.../* @__PURE__ */ new Set([...ph?.posture === "attack" ? battles : [], ...held3])], !!FB);
-    let flown = 0;
+    let flown2 = 0;
     for (let k = 0; k < R2.sweeps && (front.size || beaches.length); k++) {
       let best = null;
       const bases = [...new Set(mine4.filter((f) => fit3(f) && f.kind === "ftr" && f.ftr > 0 && f.ready >= R2.ready).map(homeOf2))];
@@ -62457,7 +62622,7 @@
         if (v > R2.worth && (!best || v > best.v)) best = { t, fleets, v };
       }
       if (!best) break;
-      send2("superiority", best.t, best.fleets, flown++);
+      send2("superiority", best.t, best.fleets, flown2++);
     }
     const lineAt = (t) => {
       if (hit.has(t) || !g2.regions[t]) return;
@@ -62468,7 +62633,7 @@
       const { fc } = staffWeigh(g2, nat, fleets, "line", t);
       if (!fc) return;
       if (fc.bomberLoss > rules.loss || fc.success < R2.success || fc.cut < rivals_default.soften.raid) return;
-      send2("line", t, fleets, flown++);
+      send2("line", t, fleets, flown2++);
     };
     const aims = Object.keys(g2.flags).filter((k) => k === `st:eff:${nat}` || k.startsWith(`st:eff:${nat}:t`)).map((k) => g2.flags[k] - 1).sort((a, b) => a - b);
     for (const t of aims) lineAt(t);
@@ -62536,7 +62701,7 @@
       }
       if (!pick4.best) break;
       if (patrol?.(pick4.best.fleets[0], pick4.best.v)) continue;
-      send2(pick4.best.m, pick4.best.t, pick4.best.fleets, flown++);
+      send2(pick4.best.m, pick4.best.t, pick4.best.fleets, flown2++);
     }
   }
   function flyReadOrders(g2, nat, mine4) {
@@ -62604,6 +62769,78 @@
   function foundShare(g2, a, nat) {
     return a.ships.some((x) => atSea(x) && fleetKnown(g2, x, nat) !== "exact") ? CARRIERS.strike.report : 1;
   }
+  function canStrafe(g2, x) {
+    return x.d <= (AIRWAR.ground.reach ?? AIR.range.fullAt) * reach(x.f, g2).ftrRange;
+  }
+  function strafersExpected(g2, a, air2) {
+    const L2 = AIR.combat.luck, lo = 1 - L2, hi = 1 + L2, fire2 = AIRWAR.ground.fire;
+    const ids2 = [];
+    const parts2 = [];
+    let left = 0, weight6 = 0;
+    for (const x of a.att) {
+      if (!(x.ftr > 0) || !canStrafe(g2, x)) continue;
+      const F2 = x.f.ftr, c = x.esc * x.crowd, m = a.E > 0 ? air2 * (x.ftr / a.E) : 0;
+      const lost = m <= 0 ? 0 : clipMean(m, F2, lo, hi);
+      const some3 = m <= 0 ? 1 : chanceBelow(m, F2, lo, hi);
+      const l = c * Math.max(0, F2 - lost);
+      if (some3 > 0.5) ids2.push(x.f.id);
+      left += l;
+      weight6 += l * (1 - c * fire2);
+      parts2.push({ F: F2, c, m, keep: 1 - c * fire2 });
+    }
+    return { ids: ids2, left, fire: left * fire2, weight: weight6, parts: parts2 };
+  }
+  function troopCutExpected(g2, a, r, foes, nat, through2, s) {
+    const G5 = AIRWAR.ground, w = troopWeight(g2, nat);
+    const linear = troopCut(r, foes, (through2 + s.weight * G5.fighters) * w);
+    const divs = foes.reduce((t, c) => t + c.divs, 0);
+    if (divs <= 0 || w <= 0) return linear;
+    const L2 = AIR.combat.luck, lo = 1 - L2, hi = 1 + L2, bl = a.bomberLoss;
+    const M2 = G5.max * (G5.scale + G5.perDiv * divs) / w;
+    const S3 = (u) => s.parts.reduce((t, p) => t + p.c * (p.F - Math.min(p.F, p.m * u)) * p.keep, 0) * G5.fighters;
+    const T0 = bl < 1 ? through2 / (1 - bl) : through2, beta = bl < 1 ? through2 * bl / (1 - bl) : 0;
+    if (T0 - beta * lo + S3(lo) <= M2) return linear;
+    const overB = (A) => {
+      if (beta <= 0) return Math.min(M2, A);
+      const c = Math.max(lo, Math.min(hi, (A - M2) / beta));
+      return (M2 * (c - lo) + (A * (hi - c) - beta * (hi * hi - c * c) / 2)) / (hi - lo);
+    };
+    const h = (u) => overB(T0 + S3(u));
+    const knots = [lo, hi];
+    for (const p of s.parts) if (p.m > 0 && p.F / p.m > lo && p.F / p.m < hi) knots.push(p.F / p.m);
+    knots.sort((x, y) => x - y);
+    const all = [...knots];
+    for (let i = 0; i + 1 < knots.length; i++) {
+      const u0 = knots[i], u1 = knots[i + 1];
+      if (u1 <= u0) continue;
+      const s0 = S3(u0), s1 = S3(u1);
+      if (s1 === s0) continue;
+      for (const b of [lo, hi]) {
+        const u = u0 + (M2 + beta * b - T0 - s0) / (s1 - s0) * (u1 - u0);
+        if (u > u0 && u < u1) all.push(u);
+      }
+    }
+    all.sort((x, y) => x - y);
+    let sum3 = 0;
+    for (let i = 0; i + 1 < all.length; i++) {
+      const u0 = all[i], u1 = all[i + 1];
+      if (u1 <= u0) continue;
+      sum3 += (u1 - u0) / 6 * (h(u0) + 4 * h((u0 + u1) / 2) + h(u1));
+    }
+    return sum3 / (hi - lo) * (w / (G5.scale + G5.perDiv * divs)) * (G5.cover[r.terrain] ?? 1);
+  }
+  function clipMean(m, F2, lo, hi) {
+    if (m * hi <= F2) return m * (lo + hi) / 2;
+    if (m * lo >= F2) return F2;
+    const u = F2 / m;
+    return (m / 2 * (u * u - lo * lo) + F2 * (hi - u)) / (hi - lo);
+  }
+  function chanceBelow(m, F2, lo, hi) {
+    const y0 = m * lo, y1 = m * hi;
+    if (y1 <= y0) return Math.max(0, Math.min(1, F2 - y0));
+    const prim = (y) => y <= F2 - 1 ? y : y >= F2 ? F2 - 1 + 0.5 : F2 - 1 + (y - (F2 - 1) - (y - (F2 - 1)) ** 2 / 2);
+    return (prim(y1) - prim(y0)) / (y1 - y0);
+  }
   function troopLaw(g2, a, m, target) {
     if (m !== "ground") return null;
     const G5 = AIRWAR.ground, r = g2.regions[target], nat = a.att[0]?.f.nat ?? "";
@@ -62622,7 +62859,9 @@
       fire: G5.fire,
       dug: G5.dug,
       str: G5.str,
-      value: G5.value
+      value: G5.value,
+      // (The strafers' rule, strafers.ts: the groups with the reach to strafe.)
+      ...strafeOn() ? { reach: a.att.filter((x) => x.ftr > 0 && canStrafe(g2, x)).map((x) => x.f.id) } : {}
     };
   }
   function bombLaw(g2, a, m, target) {
@@ -62704,6 +62943,7 @@
     let town;
     let city;
     let field4 = null;
+    let fire2, strafers;
     if (m === "superiority") {
       const based2 = g2.airFleets.filter((f) => f.base === target && f.ship === void 0 && atWar(g2, f.nat, nat)).length;
       cut2 = based2 ? Math.min(AIR.damage.airfields.max, through2 / AIR.damage.airfields.scale) : 0;
@@ -62771,9 +63011,18 @@
       const G5 = AIRWAR.ground;
       const r = g2.regions[target];
       const foes = r.units.filter((u) => !u.dead && atWar(g2, nat, u.nat));
-      const fire2 = a.E * G5.fire;
-      ftrLoss += fire2;
-      cut2 = troopCut(r, foes, (through2 + Math.max(0, a.E - ftrLoss) * G5.fighters) * troopWeight(g2, nat));
+      if (strafeOn()) {
+        const s = strafersExpected(g2, a, ftrLoss);
+        ftrLoss += s.fire;
+        fire2 = s.fire;
+        strafers = s.ids;
+        cut2 = troopCutExpected(g2, a, r, foes, nat, through2, s);
+        strafeWatch.tell?.({ route: "card", target, nat, strafers: s.ids, fire: s.fire, weight: s.weight, cut: cut2 });
+      } else {
+        const fire3 = a.E * G5.fire;
+        ftrLoss += fire3;
+        cut2 = troopCut(r, foes, (through2 + Math.max(0, a.E - ftrLoss) * G5.fighters) * troopWeight(g2, nat));
+      }
       value = cut2 * foes.reduce((s, c) => s + c.divs, 0) * G5.value;
     }
     const k = AIRWAR.success.k;
@@ -62802,6 +63051,10 @@
     if (atomReach !== null) success = atomReach;
     const fc = { odds, bomberLoss: a.bomberLoss, cut: cut2, nation, rail: rail2, ruin, ftrLoss, bmrLoss, foeLoss, foeGuns, success, worth: value + 300 * (pr + pf), ships, hits, town };
     if (city !== void 0) fc.city = city;
+    if (fire2 !== void 0) {
+      fc.fire = fire2;
+      fc.strafers = strafers;
+    }
     if (field4) fc.field = { shut: field4.closed, levels: field4.levels, ground: field4.ground, grounded: field4.grounded, room: field4.room, built: field4.built };
     return fc;
   }
@@ -64125,11 +64378,12 @@
     const foe = (x) => {
       if (!foes.includes(x)) foes.push(x);
     };
-    for (const f of g2.fleets) if (f.zone === z && atSea(f) && atWar(g2, f.nat, nat) && fleetPower(g2, f) > 0) foe(f.nat);
+    for (const f of g2.fleets) if (f.zone === z && holdsSea(f) && atWar(g2, f.nat, nat) && fleetPower(g2, f) > 0) foe(f.nat);
     const zone = g2.seas[z];
     const S3 = skiesOver(g2, z);
     if (S3) {
-      for (const f of g2.airFleets) if (atWar(g2, f.nat, nat) && !foes.includes(f.nat) && groupOverSea(g2, f, z, S3) > 0) foe(f.nat);
+      const near2 = nearRow(g2, z);
+      for (const f of g2.airFleets) if (fieldNear(g2, near2, f.base, z) && atWar(g2, f.nat, nat) && !foes.includes(f.nat) && groupOverSea(g2, f, z, S3) > 0) foe(f.nat);
     } else if (zone.coast.length && seaSkyMul(g2, z) !== 0) {
       for (const id of zone.coast) {
         const r = g2.regions[id];
@@ -64153,7 +64407,46 @@
     const air2 = airOver(g2, z, nat, hostile, beside) * NAVY.air.weight;
     return { ships, air: air2, total: ships + air2 };
   }
+  var reading = null;
+  function seaReading(g2, f) {
+    if (reading) return f();
+    reading = { g: g2, closed: /* @__PURE__ */ new Map(), risk: /* @__PURE__ */ new Map(), searches: /* @__PURE__ */ new Map(), steps: /* @__PURE__ */ new Map() };
+    try {
+      return f();
+    } finally {
+      reading = null;
+    }
+  }
+  var readingOf = (g2) => reading !== null && reading.g === g2 ? reading : null;
   function closedTo(g2, z, nat) {
+    const R2 = readingOf(g2);
+    if (!R2) return closedNow(g2, z, nat);
+    let a = R2.closed.get(nat);
+    if (!a) R2.closed.set(nat, a = new Int8Array(g2.seas.length).fill(-1));
+    if (a[z] < 0) a[z] = closedNow(g2, z, nat) ? 1 : 0;
+    return a[z] === 1;
+  }
+  function seaOdds(g2, z, nat) {
+    const R2 = readingOf(g2);
+    if (!R2) return oddsNow(g2, z, nat);
+    let a = R2.closed.get(nat), b = R2.risk.get(nat);
+    if (!a) R2.closed.set(nat, a = new Int8Array(g2.seas.length).fill(-1));
+    if (!b) R2.risk.set(nat, b = new Float64Array(g2.seas.length).fill(NaN));
+    if (a[z] < 0 || Number.isNaN(b[z])) {
+      const o = oddsNow(g2, z, nat);
+      a[z] = o.shut ? 1 : 0;
+      b[z] = o.risk;
+    }
+    return { shut: a[z] === 1, risk: b[z] };
+  }
+  function oddsNow(g2, z, nat) {
+    const e = seaSide(g2, z, nat, true);
+    const hunters = e.ships + e.air * 0.5;
+    const closes = e.total >= NAVY.closed.min;
+    const own = closes || hunters > 0 ? seaSide(g2, z, nat, false).total : 0;
+    return { shut: closes && e.total >= NAVY.closed.ratio * own, risk: hunters <= 0 ? 0 : hunters / (hunters + 2 * own + NAVY.intercept.sea) };
+  }
+  function closedNow(g2, z, nat) {
     const e = seaSide(g2, z, nat, true);
     if (e.total < NAVY.closed.min) return false;
     return e.total >= NAVY.closed.ratio * seaSide(g2, z, nat, false).total;
@@ -64278,7 +64571,9 @@
       let gs = this.groups[z];
       if (!gs) {
         gs = [];
+        const near2 = nearRow(g2, z);
         for (const f of g2.airFleets) {
+          if (!fieldNear(g2, near2, f.base, z)) continue;
           const n = groupOverSea(g2, f, z, S3);
           if (n > 0) gs.push({ nat: f.nat, n });
         }
@@ -64431,6 +64726,14 @@
   }
   var seaOpenAt = (g2, nat, r) => r.seas.some((z) => !closedTo(g2, z, nat));
   function seaRisk(g2, z, nat) {
+    const R2 = readingOf(g2);
+    if (!R2) return riskNow2(g2, z, nat);
+    let a = R2.risk.get(nat);
+    if (!a) R2.risk.set(nat, a = new Float64Array(g2.seas.length).fill(NaN));
+    if (Number.isNaN(a[z])) a[z] = riskNow2(g2, z, nat);
+    return a[z];
+  }
+  function riskNow2(g2, z, nat) {
     const e = seaSide(g2, z, nat, true);
     const hunters = e.ships + e.air * 0.5;
     if (hunters <= 0) return 0;
@@ -64446,26 +64749,54 @@
     return seaPathTo(seaSearch(g2, nat, from2, o), to);
   }
   function seaSearch(g2, nat, from2, o = {}) {
+    const R2 = readingOf(g2);
+    if (!R2) return o.surprise ? surpriseSearch(g2, nat, from2, o) : searchNow(g2, nat, from2, o);
+    const k = `${nat}|${from2.id}|${o.max ?? 0}|${o.surprise ? 1 : 0}`;
+    let S3 = R2.searches.get(k);
+    if (!S3) R2.searches.set(k, S3 = searchNow(g2, nat, from2, o));
+    return S3;
+  }
+  var SURPRISE = /* @__PURE__ */ new WeakMap();
+  function surpriseSearch(g2, nat, from2, o) {
+    let m = SURPRISE.get(g2.seas);
+    if (!m) SURPRISE.set(g2.seas, m = /* @__PURE__ */ new Map());
+    let k = `${nat}|${from2.id}|${o.max ?? 0}|`;
+    for (const gt of g2.gates) k += canPass(g2, gt.a, gt.b, nat) ? "1" : "0";
+    let S3 = m.get(k);
+    if (!S3) {
+      if (m.size >= 5e4) m.clear();
+      m.set(k, S3 = searchNow(g2, nat, from2, o));
+    }
+    return S3;
+  }
+  function searchNow(g2, nat, from2, o) {
     const N = g2.seas.length;
     const cost = new Float64Array(N).fill(1e9), prev = new Int16Array(N).fill(-1), len = new Int16Array(N), done = new Uint8Array(N);
     const shutAt = new Int8Array(N).fill(-1), weightAt = new Float64Array(N);
+    const look = (z) => {
+      const s = seaOdds(g2, z, nat);
+      shutAt[z] = s.shut ? 1 : 0;
+      weightAt[z] = 1 + 20 * s.risk;
+    };
     const shut = (z) => {
       if (o.surprise) return false;
-      if (shutAt[z] < 0) shutAt[z] = closedTo(g2, z, nat) ? 1 : 0;
+      if (shutAt[z] < 0) look(z);
       return shutAt[z] === 1;
     };
     const weight6 = (z) => {
-      if (weightAt[z] === 0) weightAt[z] = 1 + (o.surprise ? 0 : 20 * seaRisk(g2, z, nat));
+      if (o.surprise) return 1;
+      if (shutAt[z] < 0) look(z);
       return weightAt[z];
     };
+    const heap = new SeaHeap();
     for (const z of from2.seas) if (!shut(z)) {
       cost[z] = weight6(z);
       len[z] = 1;
+      heap.push(cost[z], z);
     }
-    for (; ; ) {
-      let a = -1;
-      for (let i = 0; i < N; i++) if (!done[i] && cost[i] < 1e9 && (a < 0 || cost[i] < cost[a])) a = i;
-      if (a < 0) break;
+    while (heap.size) {
+      const c0 = heap.topCost(), a = heap.pop();
+      if (done[a] || c0 !== cost[a] || !(cost[a] < 1e9)) continue;
       done[a] = 1;
       if (o.max && len[a] >= o.max) continue;
       for (const j of g2.seas[a].adj) {
@@ -64475,11 +64806,62 @@
           cost[j] = c;
           prev[j] = a;
           len[j] = len[a] + 1;
+          heap.push(c, j);
         }
       }
     }
     return { cost, prev };
   }
+  var SeaHeap = class {
+    constructor() {
+      __publicField(this, "c", []);
+      __publicField(this, "i", []);
+    }
+    get size() {
+      return this.c.length;
+    }
+    topCost() {
+      return this.c[0];
+    }
+    less(a, b) {
+      return this.c[a] < this.c[b] || this.c[a] === this.c[b] && this.i[a] < this.i[b];
+    }
+    swap(a, b) {
+      const c = this.c[a], i = this.i[a];
+      this.c[a] = this.c[b];
+      this.i[a] = this.i[b];
+      this.c[b] = c;
+      this.i[b] = i;
+    }
+    push(cost, z) {
+      let k = this.c.length;
+      this.c.push(cost);
+      this.i.push(z);
+      while (k > 0) {
+        const p = k - 1 >> 1;
+        if (!this.less(k, p)) break;
+        this.swap(k, p);
+        k = p;
+      }
+    }
+    pop() {
+      const top = this.i[0], n = this.c.length - 1;
+      this.swap(0, n);
+      this.c.pop();
+      this.i.pop();
+      let k = 0;
+      for (; ; ) {
+        const l = 2 * k + 1, r = l + 1;
+        let m = k;
+        if (l < n && this.less(l, m)) m = l;
+        if (r < n && this.less(r, m)) m = r;
+        if (m === k) break;
+        this.swap(k, m);
+        k = m;
+      }
+      return top;
+    }
+  };
   var seaWays = (g2, nat, from2, o) => seaSearch(g2, nat, from2, o);
   function wayTo2(prev, end) {
     const path = [];
@@ -64544,6 +64926,14 @@
   }
   var sailReach = (g2, nat) => farOn(g2) && (nat === void 0 || ownShips !== nat) ? NAVY.sail?.reach ?? 0 : 0;
   function convoySteps(g2, nat, from2) {
+    const R2 = readingOf(g2);
+    if (!R2) return stepsNow(g2, nat, from2);
+    const k = `${nat}|${from2.id}`;
+    let S3 = R2.steps.get(k);
+    if (!S3) R2.steps.set(k, S3 = stepsNow(g2, nat, from2));
+    return S3;
+  }
+  function stepsNow(g2, nat, from2) {
     const N = g2.seas.length, steps = new Int16Array(N), prev = new Int16Array(N).fill(-1);
     const q = [];
     for (const z of from2.seas) if (!closedTo(g2, z, nat)) {
@@ -64746,7 +65136,7 @@
     for (const z of path) for (const j of g2.seas[z].adj) near2.add(j);
     let s = 0;
     for (const f of g2.fleets) {
-      if (!atWar(g2, f.nat, nat) || !surfaceShips(f)) continue;
+      if (!atWar(g2, f.nat, nat) || !surfaceShips(f) || inPassage(f)) continue;
       if (atSea(f)) {
         if (!path.includes(f.zone) && near2.has(f.zone)) s += fleetPower(g2, f);
         continue;
@@ -64797,7 +65187,7 @@
     const wait = [];
     const commanded = {};
     for (const f of g2.fleets) {
-      if (!atWar(g2, f.nat, nat) || !surfaceShips(f) || atSea(f) && f.zone === last) continue;
+      if (!atWar(g2, f.nat, nat) || !surfaceShips(f) || inPassage(f) || atSea(f) && f.zone === last) continue;
       const hand2 = byHand(g2, f.nat, "navy");
       if (!hand2 && (f.duty === "raid" || tiedNow(g2, f)) && f.station !== last) continue;
       if (!fleetReach(g2, f).includes(last)) continue;
@@ -65226,9 +65616,7 @@
     if (!rt.zones.some((z) => reach3.includes(z))) return `${cap9(rt.name)} ${many ? "are" : "is"} out of reach of ${fleetName(f)} from ${f.port}.`;
     return null;
   }
-  function escort(g2, f, lane) {
-    if (whyNotEscort(g2, f, lane)) return false;
-    const rt = seaRoutes(g2).find((r) => r.id === lane);
+  function escortSea(g2, f, rt) {
     const reach3 = fleetReach(g2, f);
     let best = -1, bv = -1;
     for (const z of reach3) {
@@ -65239,12 +65627,17 @@
         best = z;
       }
     }
+    return best;
+  }
+  function escort(g2, f, lane) {
+    if (whyNotEscort(g2, f, lane)) return false;
+    const best = escortSea(g2, f, seaRoutes(g2).find((r) => r.id === lane));
     return best >= 0 && sail(g2, f, best, "escort", lane);
   }
   function canSailTo(g2, f, r) {
     const seen2 = new Uint8Array(g2.seas.length);
-    const q = [inPassage(f) ? f.zone : f.home];
-    seen2[q[0]] = 1;
+    const q = farOn(g2) ? [...new Set(wayFrom(g2, f))] : [f.home];
+    for (const z of q) seen2[z] = 1;
     for (let i = 0; i < q.length; i++) {
       if (r.seas.includes(q[i])) return true;
       for (const j of g2.seas[q[i]].adj) if (!seen2[j] && canPass(g2, q[i], j, f.nat)) {
@@ -65310,7 +65703,7 @@
   function voyageWay(g2, f, r) {
     const prev = new Int16Array(g2.seas.length).fill(-2);
     const q = [];
-    for (const z of atSea(f) ? [f.zone] : f.base >= 0 ? g2.regions[f.base].seas : [f.home]) if (prev[z] === -2) {
+    for (const z of wayFrom(g2, f)) if (prev[z] === -2) {
       prev[z] = -1;
       q.push(z);
     }
@@ -65327,6 +65720,19 @@
     }
     return null;
   }
+  var wayFrom = (g2, f) => atSea(f) ? [f.zone] : f.base >= 0 ? g2.regions[f.base].seas : [f.home];
+  function seasOpen(g2, f) {
+    const seen2 = new Uint8Array(g2.seas.length), q = [];
+    for (const z of wayFrom(g2, f)) if (!seen2[z]) {
+      seen2[z] = 1;
+      q.push(z);
+    }
+    for (let i = 0; i < q.length; i++) for (const j of g2.seas[q[i]].adj) if (!seen2[j] && canPass(g2, q[i], j, f.nat)) {
+      seen2[j] = 1;
+      q.push(j);
+    }
+    return seen2;
+  }
   var voyageOf = (seas) => Math.max(1, Math.ceil(seas / NAVY.range));
   function voyageMonths(g2, f, r) {
     if (!farOn(g2)) return 0;
@@ -65341,6 +65747,8 @@
     if (back) f.passage.back = true;
     f.stance = "passage";
     f.zone = passageSea(f.passage, g2.turn);
+    delete f.shadow;
+    delete f.shadowAt;
     g2.supplyDirty = true;
     const due = turnToDate(f.passage.due).label;
     headline(g2, "info", back ? `${cap9(fleetName(f))} turns back for ${f.port}, ${way.length} seas off, due in ${due}.` : `${cap9(fleetName(f))} sails for its new base at ${f.port}, ${way.length} seas off, due in ${due}.`, f.nat, f.base);
@@ -65415,6 +65823,9 @@
     if (!to && anchorLoss(g2, f) > 0) g2.flags[`anc:${f.id}`] = g2.turn;
     return false;
   }
+  function anchorMark(g2, f) {
+    if (anchorLoss(g2, f) > 0 && !safeHarbour(g2, f)) g2.flags[`anc:${f.id}`] = g2.turn;
+  }
   function anchorTold(g2, f) {
     if (!anchorStrikes(g2, f).length || f.nat !== g2.human || !(keptByHand(g2, f) || byHand(g2, f.nat, "navy"))) return;
     const k = `anct:${f.id}`, told2 = g2.flags[k];
@@ -65429,6 +65840,11 @@
     const due = p ? `, due in ${turnToDate(p.due).label}` : "";
     return `${cap9(fleetName(f))} is in passage to ${f.port}, at sea on the way${due}: it strikes, patrols and escorts nothing until it comes in.`;
   }
+  function wayShut(g2, f, p) {
+    const at4 = Math.min((g2.turn - p.set) * NAVY.range, p.way.length) - 1, to = Math.min((g2.turn - p.set + 1) * NAVY.range, p.way.length) - 1;
+    for (let i = Math.max(1, at4 + 1); i <= to; i++) if (!canPass(g2, p.way[i - 1], p.way[i], f.nat)) return true;
+    return false;
+  }
   function steamPassages(g2, nat) {
     for (const f of fleetsOf(g2, nat)) {
       const p = f.passage;
@@ -65442,12 +65858,28 @@
         newBase(g2, f);
         continue;
       }
-      if (g2.turn < p.due) {
+      if (wayShut(g2, f, p)) {
+        const way = voyageWay(g2, f, g2.regions[f.base]);
+        if (!way) {
+          if (!turnBack(g2, f)) newBase(g2, f, farOn(g2), true);
+          continue;
+        }
+        p.start ?? (p.start = p.set);
+        p.way = way;
+        p.set = g2.turn;
+        p.due = g2.turn + voyageOf(way.length) - 1;
+        if (way.length > NAVY.range) {
+          f.zone = passageSea(p, g2.turn);
+          g2.supplyDirty = true;
+          headline(g2, "info", `${cap9(fleetName(f))} finds its way shut, and steams another way to ${f.port}, ${way.length} seas off, due in ${turnToDate(p.due).label}.`, nat, f.base);
+          continue;
+        }
+      } else if (g2.turn < p.due) {
         f.zone = passageSea(p, g2.turn);
         g2.supplyDirty = true;
         continue;
       }
-      const months4 = g2.turn - p.set;
+      const months4 = g2.turn - (p.start ?? p.set);
       delete f.passage;
       f.zone = f.home;
       f.stance = "port";
@@ -65530,7 +65962,10 @@
     const n = g2.nations[nat];
     wingStep(g2, nat);
     steamPassages(g2, nat);
-    for (const f of fleetsOf(g2, nat)) anchorTold(g2, f);
+    for (const f of fleetsOf(g2, nat)) {
+      anchorMark(g2, f);
+      anchorTold(g2, f);
+    }
     for (const given3 of NAVY.fleets) {
       const b = given3.book;
       const booked2 = !!b && g2.flags.open === 1 && b.stops.includes(stopOf(g2)) && dialRuns(g2, nat);
@@ -66359,7 +66794,7 @@
     const gap = screenGap(f);
     if (gap <= 0) return 0;
     let subs = 0;
-    for (const x of g2.fleets) if (x.zone === z && atSea(x) && x.ships.ss > 0 && atWar(g2, x.nat, f.nat)) subs += boatsOut(g2, x) * quality(g2, x.nat) * fit2(g2, x);
+    for (const x of g2.fleets) if (x.zone === z && holdsSea(x) && x.ships.ss > 0 && atWar(g2, x.nat, f.nat)) subs += boatsOut(g2, x) * quality(g2, x.nat) * fit2(g2, x);
     return Math.min(FLEETS.screen.most, subs * FLEETS.screen.risk * gap);
   }
   function torpedoes(g2, nat) {
@@ -66402,12 +66837,13 @@
     if (!(g2.supply[f.nat] ?? g2.supply[r.ctrl])?.[r.id]) return false;
     return !closedTo(g2, r.seas[0], f.nat);
   }
-  function newBase(g2, f, form2 = farOn(g2)) {
+  function newBase(g2, f, form2 = farOn(g2), shut = false) {
     const old = g2.regions[f.base];
+    const open3 = farOn(g2) ? seasOpen(g2, f) : null;
     const nearest = (ok2) => {
       let best2 = null, bd = 1e9;
       for (const r of g2.regions) {
-        if (!r.port || !r.seas.length || !ok2(r) || !canSailTo(g2, f, r)) continue;
+        if (!r.port || !r.seas.length || !ok2(r) || !canSailTo(g2, f, r) || open3 && !r.seas.some((z) => open3[z])) continue;
         const d = chartDist(g2, r, old);
         if (d < bd) {
           bd = d;
@@ -66417,9 +66853,8 @@
       return best2;
     };
     const best = (form2 ? nearest((r) => haven(g2, f, r)) : null) ?? nearest((r) => r.ctrl === f.nat);
-    if (best) {
-      rebase(g2, f, best);
-      headline(g2, "event", `With ${old.name} lost, ${fleetName(f)} moves its base to ${best.name}.`, f.nat, best.id);
+    if (best && rebase(g2, f, best)) {
+      headline(g2, "event", shut ? `With its way to ${old.name} and back shut, ${fleetName(f)} makes for ${best.name} instead.` : `With ${old.name} lost, ${fleetName(f)} moves its base to ${best.name}.`, f.nat, best.id);
       return true;
     }
     nameLosses(g2, f.nat, f.name, f.ships, `scuttle:${g2.turn}:${f.id}`);
@@ -66680,7 +67115,8 @@
     const Lb = side5.sunk > 0 ? side5.L * (sunk / side5.sunk) : 0;
     const lo = Lo * w, sum3 = Lb + lo, L2 = Math.min(LANE_CAP, sum3);
     const cut2 = sum3 > 0 ? L2 / sum3 : 1;
-    return { L: L2, tons: Math.round((CAUSE2.count.ways * route.tons * Lb + route.tons * lo) * cut2 / 1e3) * 1e3, sunk: sunk * cut2 };
+    const exact = (CAUSE2.count.ways * route.tons * Lb + route.tons * lo) * cut2;
+    return { L: L2, tons: Math.round(exact / 1e3) * 1e3, exact, sunk: sunk * cut2 };
   }
   function routeForces(g2, nat, route) {
     const zones = route.zones.map((k) => zoneOf(g2, k));
@@ -66846,7 +67282,7 @@
     return l;
   }
   function lookTorpedo(g2, f, cls, sunk) {
-    const could = g2.fleets.filter((x) => x.zone === f.zone && atSea(x) && x.ships.ss > 0 && atWar(g2, x.nat, f.nat));
+    const could = g2.fleets.filter((x) => x.zone === f.zone && holdsSea(x) && x.ships.ss > 0 && atWar(g2, x.nat, f.nat));
     const w = could.map((x) => x.ships.ss * quality(g2, x.nat) * fit2(g2, x));
     const all = w.reduce((a, b) => a + b, 0);
     let by2 = null;
@@ -70401,6 +70837,55 @@
     if (list5.some((n, i) => n !== list5[0] + i)) c.nos = list5;
     else delete c.nos;
   }
+  var NAMED = /* @__PURE__ */ new Map();
+  function ownNames(name, nat, kind) {
+    const k = `${nat}:${kind}:${name}`;
+    let got = NAMED.get(k);
+    if (!got) NAMED.set(k, got = DIVISIONS.historic[nat]?.[name] ?? namedDivisions(name, nat, kind));
+    return got;
+  }
+  var ROW_NAMES = null;
+  function rowNames() {
+    if (ROW_NAMES) return ROW_NAMES;
+    const out = /* @__PURE__ */ new Map();
+    const note4 = (nat, name, kind) => {
+      const own = ownNames(name, nat, kind);
+      if (!own.length) return;
+      let set = out.get(nat);
+      if (!set) out.set(nat, set = /* @__PURE__ */ new Set());
+      for (const [full] of own) set.add(full);
+    };
+    const walk2 = (x) => {
+      if (Array.isArray(x)) {
+        const at4 = typeof x[0] === "number" ? 1 : 0;
+        const nat = x[at4], name = x[at4 + 1], kind = x[at4 + 2];
+        if (typeof nat === "string" && /^[A-Z]{2,3}$/.test(nat) && typeof name === "string" && typeof kind === "string" && kind in KIND) note4(nat, name, kind);
+        for (const y of x) if (y && typeof y === "object") walk2(y);
+      } else if (x && typeof x === "object") {
+        for (const y of Object.values(x)) if (y && typeof y === "object") walk2(y);
+      }
+    };
+    for (const file of [setup_1939_default, world_default, diplomacy_default, siege_default, open_default, pacific_default, legions_default]) walk2(file);
+    return ROW_NAMES = out;
+  }
+  function standIns(g2, nat, kind) {
+    const words = divisionWords(nat, kind).name;
+    const rows = rowNames().get(nat);
+    let living2 = null;
+    const taken2 = (name) => {
+      if (rows?.has(name)) return true;
+      if (!living2) {
+        living2 = /* @__PURE__ */ new Set();
+        for (const o of g2.corps) if (o.nat === nat && !o.dead) for (const [full] of o.names ?? ownNames(o.name, o.nat, o.kind)) living2.add(full);
+      }
+      return living2.has(name);
+    };
+    return (from2) => {
+      let n = from2 + 1;
+      while (taken2(`${ordinal3(n)} ${words}`)) n++;
+      return n;
+    };
+  }
   function numberCorps(g2, c, real) {
     if (g2.flags.open !== 1 || c.dn !== void 0) return;
     const key7 = counter(c.nat, c.kind);
@@ -70409,13 +70894,14 @@
     if (real) {
       for (const o of g2.corps) if (o !== c && !o.dead && o.nat === c.nat && o.kind === c.kind && o.dn !== void 0) for (const n of numbersOf(o)) held3.add(n);
     }
+    const free2 = standIns(g2, c.nat, c.kind);
     const list5 = [];
     for (let i = 0; i < c.divs; i++) {
       const n = real?.[i];
       if (n && !held3.has(n)) {
         held3.add(n);
         list5.push(n);
-      } else list5.push(++next);
+      } else list5.push(next = free2(next));
     }
     if (next > (g2.flags[key7] ?? 0)) g2.flags[key7] = next;
     keepNumbers(c, list5);
@@ -70432,8 +70918,9 @@
     if (!was) return;
     const key7 = counter(c.nat, kind);
     let next = Math.max(g2.flags[key7] ?? 0, TOP3.get(key7) ?? 0);
+    const free2 = standIns(g2, c.nat, kind);
     const list5 = same4 ? was : [];
-    while (list5.length < c.divs) list5.push(++next);
+    while (list5.length < c.divs) list5.push(next = free2(next));
     g2.flags[key7] = next;
     keepNumbers(c, list5);
   }
@@ -75947,6 +76434,12 @@
     return farOn(g2) && !!row2[6]?.levy && !!own && !own.alive && !!reg && reg.owner === row2[1] && reg.ctrl === nat && !!keepersOf(g2, reg)?.includes(nat);
   }
   var struckWatch = { tell: null };
+  function takenShare(g2, i) {
+    const share = g2.flags[`takecut:${i}`];
+    if (share !== void 0) return share;
+    const old = g2.flags[`cut:${i}`];
+    return old !== void 0 && old > 0 && old < 1 ? old : void 0;
+  }
   function expeditions(g2, nat) {
     const gone = [], down = [];
     (setup_1939_default.expeditions ?? []).forEach((row2, i) => {
@@ -76064,9 +76557,11 @@
       if (kept3) c.raised = row2[1];
       if (ashore?.adds) c.str = Math.min(c.str, ashore.adds);
       if (own) c.str = Math.min(c.str, o.adds);
-      if (g2.flags.open === 1 && g2.flags[`cut:${i}`] !== void 0) {
-        c.str *= 1 - g2.flags[`cut:${i}`];
-        delete g2.flags[`cut:${i}`];
+      const taken2 = g2.flags.open === 1 ? takenShare(g2, i) : void 0;
+      if (taken2 !== void 0) {
+        c.str *= 1 - taken2;
+        delete g2.flags[`takecut:${i}`];
+        if (g2.flags[`cut:${i}`] === taken2) delete g2.flags[`cut:${i}`];
       }
       if (g2.flags.open === 1 && o.takes) {
         const x = g2.corps.find((u) => u.nat === nat && !u.dead && u.name === o.takes.name);
@@ -76074,7 +76569,7 @@
         if (x) {
           x.str *= 1 - o.takes.share;
           if (nat === g2.human && o.takes.leaves) headline(g2, "event", o.takes.leaves.replace("{place}", g2.regions[x.reg].name), nat, reg.id);
-        } else if (j >= 0 && !g2.flags[`sent:${j}`]) g2.flags[`cut:${j}`] = o.takes.share;
+        } else if (j >= 0 && !g2.flags[`sent:${j}`]) g2.flags[`takecut:${j}`] = o.takes.share;
       }
       if (g2.flags.open === 1 && UNLESS.has(row2[2])) {
         g2.flags[`came:${i}`] = g2.turn;
@@ -81963,10 +82458,10 @@
   function air(g2, nat) {
     const from2 = g2.airReports.length;
     airAI(g2, nat);
-    const flown = g2.airReports.slice(from2).filter((r) => r.attNat === nat);
-    if (!flown.length) return null;
-    const L2 = lossesOf(flown);
-    return `flew ${plural7(flown.length, "raid")}: ${some(flown.map((r) => raidWords(g2, r)), 4)}. It cost ${plural7(Math.round(L2.ours), "aircraft", "aircraft")}${L2.theirs >= 0.5 ? ` and shot down ${Math.round(L2.theirs)}` : ""}.`;
+    const flown2 = g2.airReports.slice(from2).filter((r) => r.attNat === nat);
+    if (!flown2.length) return null;
+    const L2 = lossesOf(flown2);
+    return `flew ${plural7(flown2.length, "raid")}: ${some(flown2.map((r) => raidWords(g2, r)), 4)}. It cost ${plural7(Math.round(L2.ours), "aircraft", "aircraft")}${L2.theirs >= 0.5 ? ` and shot down ${Math.round(L2.theirs)}` : ""}.`;
   }
   function navy(g2, nat) {
     const was = new Map(fleetsOf(g2, nat).map((f) => [f.id, { zone: f.zone, stance: f.stance }]));
@@ -81987,8 +82482,8 @@
     if (back.length) did.push(`brought ${some(back)} into harbour`);
     const shelled = g2.shoreReports.slice(shore).filter((r) => r.nat === nat).map((r) => g2.regions[r.region].name);
     if (shelled.length) did.push(`shelled ${some([...new Set(shelled)])}`);
-    const flown = g2.airReports.slice(strikes2).filter((r) => r.attNat === nat);
-    if (flown.length) did.push(`flew ${plural7(flown.length, "carrier strike")} at ${some(flown.map((r) => raidWords(g2, r)))}`);
+    const flown2 = g2.airReports.slice(strikes2).filter((r) => r.attNat === nat);
+    if (flown2.length) did.push(`flew ${plural7(flown2.length, "carrier strike")} at ${some(flown2.map((r) => raidWords(g2, r)))}`);
     return did.length ? `${listAnd3(did)}.` : null;
   }
   var WORK = { research, build: build2, diplomacy, spies, air, navy };
@@ -82455,7 +82950,7 @@
     for (const m of g2.mines) {
       if (m.s <= 0 || !atWar(g2, m.nat, nat)) continue;
       for (const f of g2.fleets) {
-        if (f.nat !== nat || !shipCount(f.ships) || !atSea(f) || f.zone !== m.z && f.home !== m.z) continue;
+        if (f.nat !== nat || !shipCount(f.ships) || !atSea(f) || f.zone !== m.z && (inPassage(f) || f.home !== m.z)) continue;
         const rng = new Rng(hashString(`mine:${g2.seed}:${g2.turn}:${m.z}:${m.nat}:${f.id}`));
         if (rng.next() >= MINES.hit * m.s) continue;
         const c = sinkOne(f, rng.next());
@@ -83853,9 +84348,9 @@
   var flownRaids = (g2, turn2 = g2.turn) => raidReplays(g2, turn2, g2.human);
   function orderScout(g2, id, target) {
     if (!myAir(g2, id)) return { ok: false, text: "It is not your month.", lost: 0 };
-    const flown = scout(g2, id, target, g2.human);
-    if (flown.ok) reconnoitre(g2);
-    return flown;
+    const flown2 = scout(g2, id, target, g2.human);
+    if (flown2.ok) reconnoitre(g2);
+    return flown2;
   }
   var fleetsInSight = (g2) => fleetsSeen(g2, g2.human);
   var seaPictureOf = (g2, zone) => g2.human && g2.seas[zone] ? seaPicture(g2, zone, g2.human) : null;
@@ -84411,7 +84906,7 @@
     }
     return best ? { by: best.by, from: best.from } : null;
   }
-  function reading(g2, viewer = g2.human) {
+  function reading2(g2, viewer = g2.human) {
     if (!viewer) return null;
     const n = g2.nations[viewer];
     if (!n?.alive || n.capital < 0 || standsFreed(g2, n)) return null;
@@ -84499,7 +84994,7 @@
     };
   }
   function fallWarning(g2, viewer = g2.human, told2 = false) {
-    const r = reading(g2, viewer);
+    const r = reading2(g2, viewer);
     if (!r) return null;
     const n = g2.nations[r.nat];
     const seat5 = g2.regions[r.region];
@@ -84544,7 +85039,7 @@
     return null;
   }
   function withinReach(g2, viewer = g2.human) {
-    const r = reading(g2, viewer);
+    const r = reading2(g2, viewer);
     return !!r && (r.within || r.twoThirds || r.canFall);
   }
   var KIND_WORDS = { inf: "infantry", mot: "motorized infantry", arm: "tanks", cav: "cavalry", mtn: "mountain troops", art: "guns", eng: "engineers" };
@@ -101336,6 +101831,9 @@
       __publicField(this, "fireDue", /* @__PURE__ */ new Map());
       /** The ground fire owed for each fighter that flies a whole pass's share: the card's 'fire' over the fighters it weighed. */
       __publicField(this, "fireEach", 0);
+      /** With the strafers' rule on: the campaign groups charged the ground fire, and what it charged them. */
+      __publicField(this, "firedOn", /* @__PURE__ */ new Set());
+      __publicField(this, "fireOwed", 0);
       /** The lane the passes run down: through the middle of the troops, along their road where they march. */
       __publicField(this, "lane", { x: 0, y: 0, dx: 0, dy: 1 });
       /** Battle seconds of the first contact, null before it (the view's contact, as land's). */
@@ -101484,6 +101982,7 @@
       if (this.troops) {
         const E = this.units.reduce((t, u) => t + (u.side === "att" && u.air === "ftr" ? u.n0 * reachOf2(u) : 0), 0);
         this.fireEach = E > 0 ? (this.place.forecast.fire ?? 0) / E : 0;
+        if (this.place.marks?.law.reach) this.fireEach = this.place.marks.law.fire;
       }
       this.think("att", true);
       this.think("def", true);
@@ -101942,7 +102441,7 @@
     // A raid on troops (release 2): the raid's fighters go down on the troops.
     /** Whether a group of the raid may go down on the troops: a fighter of a raid on troops that has not done so already, and was given no other order. */
     mayStrafe(u) {
-      return !!this.troops && u.side === "att" && u.air === "ftr" && !this.keepUp.has(u.id) && !this.strafing.get(u.id)?.over;
+      return !!this.troops && u.side === "att" && u.air === "ftr" && !this.keepUp.has(u.id) && !this.strafing.get(u.id)?.over && (!this.troops.law.reach || this.troops.law.reach.includes(u.corps));
     }
     /**
      * By default, as the staff's own raid counts every fighter that came through: each of the raid's fighter groups goes
@@ -102024,8 +102523,13 @@
       const left = dist(u.x, u.y, s.to[0], s.to[1]), p = clamp013(1 - left / len);
       const part = u.n * reachOf2(u) / S3.passes;
       if (p > s.p) {
-        this.fireDue.set(u.id, (this.fireDue.get(u.id) ?? 0) + this.fireEach * part * (p - s.p));
+        const owe = this.fireEach * part * (p - s.p);
+        this.fireDue.set(u.id, (this.fireDue.get(u.id) ?? 0) + owe);
         s.p = p;
+        if (this.troops.law.reach) {
+          this.firedOn.add(u.corps);
+          this.fireOwed += owe;
+        }
       }
       if (left > 1) return;
       s.done++;
@@ -103240,6 +103744,7 @@
         // A raid on troops: the fighters that strafed, and the organisation cut the field earned by the campaign's own law
         // from them and the bombers that dropped. Fought to the end, the campaign books the cut from these same counts.
         ...this.troops ? { strafed: this.strafed, troops: { cut: troopCutOf(this.troops.law, att.reduce((s, u) => s + u.dropped, 0), this.strafed) } } : {},
+        ...this.troops?.law.reach ? { strafers: [...this.firedOn].sort((x, y) => x - y), strafeFire: this.fireOwed } : {},
         ...this.place.bombs ? { rolls: this.staff ? { ...this.railCut ? { rail: 0 } : {}, ...this.ruined ? { ruin: 0 } : {} } : { ...this.rolls }, railCut: this.railCut, ruined: this.ruined } : {}
       };
     }
@@ -104500,7 +105005,10 @@
   var MORE_KINDS = ["ground"];
   var asked2 = [];
   function flyKinds(kinds) {
-    if (kinds) asked2 = MORE_KINDS.filter((k) => kinds.includes(k));
+    if (kinds) {
+      asked2 = MORE_KINDS.filter((k) => kinds.includes(k));
+      groundFlown(asked2.includes("ground"));
+    }
     const G5 = globalThis;
     const forced3 = String(G5.TC_FLY ?? G5.process?.env?.TC_FLY ?? "").split(",").map((x) => x.trim());
     return MORE_KINDS.filter((k) => asked2.includes(k) || forced3.includes(k));
@@ -104615,7 +105123,7 @@
       if (seats) bombers[f.corps] = seats;
     }
     const marks = more && m === "ground" ? troopPlace(g2, a, m, target, nat, seed) : null;
-    const fire2 = marks ? Math.min(armed.ftrLoss, a.E * marks.law.fire) : 0;
+    const fire2 = marks ? armed.fire !== void 0 ? armed.fire : Math.min(armed.ftrLoss, a.E * marks.law.fire) : 0;
     const lightGuns = marks ? marks.pieces.reduce((t, p) => t + (p.what === "aa" ? p.n : 0), 0) : 0;
     const place3 = {
       kind,
@@ -104729,6 +105237,7 @@
       flew,
       chance: o.chance,
       ...o.strafed !== void 0 ? { strafed: o.strafed } : {},
+      ...o.strafers ? { strafers: [...o.strafers], strafeFire: o.strafeFire ?? 0 } : {},
       ...o.gaveUp ? { gaveUp: o.gaveUp } : {},
       ...o.sunk ? { sunk: o.sunk } : {},
       ...o.kept ? { kept: o.kept } : {},
@@ -104785,7 +105294,7 @@
       ai: "The computer's captains (and the player's, where no order is given): each side has a main effort, the enemy piece nearest the middle of its own fleet, kept until it goes or breaks off, when the enemy then nearest the middle that is still fighting takes its place. Around it each ship does its class's job ('jobs'). That is exactly what a newcomer does (select all, right-click the enemy nearest the middle, Space): an order to attack given to two or more pieces is a fleet order, which sets the main effort and leaves each piece to its job, so the newcomer's battle and the staff's are the same (b402, ruling 239). An order to one piece alone is its own target. A ship further than 'keep' metres from the middle of its own fleet works back toward it as it fights. A ship steers for the enemy nearest it, and for the main effort only when that lies more than 'beyond' metres further off than the nearest enemy (ruling 226, 4: every ship sent at one point made a knot the enemy fought around). Until the guns first meet, a fleet keeps together: its gun ships sail at the speed of its slowest gun ship, and one more than 'station' metres ahead of the rearmost of them slows to half that speed until the line comes up, so the screen closes up on the battle line and stays just ahead of it (the historian: fleet speed was the slowest heavy ship's, and the screen kept station on the battle line). Drawn up 700 m a row apart and each at its own speed, a battle line reached the fight a minute after its screen and lost to a light fleet of the same weight 95 times in 100; with the screen kept 600 m ahead it still came 13 in 100 short (b407, ruling 217). A fleet keeps together only to meet a gun line: not once either side has broken off (the chase runs at full speed) and not against an enemy with no gun ship left: then every gun ship not sent at a speed of its own runs the carriers down at full speed, as a broken enemy is. While it keeps together a fleet also holds one course, from its own middle to the enemy's, so the line comes on as it drew up: each steering for the enemy nearest it, the wings turned in toward the middle and the line came on bunched (b438). A ship the player sends at a speed of their own, or on a course, goes as told, and a destroyer piece whose torpedo run has opened goes in at flank (torp; the ship plan's R4). A ship within 'broadside' metres of the enemy it is steering for turns to bring its broadside to bear; further off it closes. Closing until 3,450 m left the ships behind their own screen end-on for the whole fight. The AA ring (the ship plan's R3; the design director, 14:36Z): while the enemy brings aircraft and until the guns first meet, a side with carriers and no battleship keeps its whole escort, cruisers and destroyers at cruising speed fighting at will or under a fleet order and not on a torpedo run, round its carriers at torp's 'station' metres (inside the strike's radius, so their guns count against aircraft and they share what a strike lands), spaced evenly round from the bearing of the enemy's middle, the pieces shared in turn over the carriers fighting at will or sent to strike. At contact they fight as any other ship does. Held through the action the ring kept its guns' weight out of the fight, which the card prices whole: carriers against carriers missed the card by .13 to .38 in every such form, and the campaign's flak law hands back 0.2 to 0.3% of a strike whatever the ring. It is let go for good once a carrier of its side sights an enemy battleship within evade's 'see' metres: the screen left the carriers to meet surface ships (Samar, October 1944), and a ring that turned away with them kept the guns from meeting for most of the action, or all of it. None once a side has broken off, or against an enemy with no gun ship left. While the enemy brings aircraft a carrier keeps station 'keep' metres astern of the middle of its gun ships keeping with the fleet (not those in the ring, on a run, or sent at a target, a speed or a course of the player's own), on the line from the enemy's middle through theirs, and further back until no enemy lies within its standoff (the 1944 War Instructions: carrier groups manoeuvre away from the enemy); kept inside the field's edge by the margin of the turn away, which may bring it nearer. Two or more stand abreast across that line, their navy's spacing apart ('carriers': the record's one figure for carriers in one group, whatever they stand behind; it was torp's 'station', 1,000 m, closer than any figure in the record: the design director, 21:00Z). On station it keeps the gun ships' course and way, never below its slow speed. With no such gun ship (a carrier group whose escorts are all in its ring) it keeps its standoff as before, and a carrier the player sends at a speed of their own goes as told. Once the guns have met the station runs only while the side has a battleship afloat and not breaking off, its carriers astern of the line (Formidable stayed out on the disengaged side at Matapan while the battleships fought); a carrier group has none after contact, the ring's window: it is the screen's geometry, so it runs when the screen does (kept on, it held the group's carriers astern through the gun fight and the cruiser-heavy side lost .05 more of the card). With no station, two or more carriers keep their navy's way ('carriers', by navy and era: the design director, 20:50Z): each for herself, never inside the navy's spacing of a sister, or on a guide, the first by id keeping her standoff at a pace her followers can close on and each other her place abreast of her; a carrier with an enemy strike aloft at her leaves the guide's formation and steers on her own, never inside the spacing of a sister (let each steer off her own nearest enemy with neither, a carrier group's carriers came 132-214 m apart in the gun fight). Its turn into the wind to launch is the 3D game's to show: the rules keep its course.",
       evade: "A carrier group without battleships that sees an enemy battleship within 'see' metres of a carrier turns away from it and opens the range at 'speed' times a carrier's cruising speed, launching as it goes, unless the player has ordered it to steer, hold or withdraw (a carrier evades even when ordered to strike). Near the edge of the field it turns along it. 'screen' is how near a carrier a ship of its screen must be to turn away with it: 0, so the screen stays and fights (b402: a screen that ran with its carriers left the plain order short of the card). A fleet with battleships of its own stands and fights, its carriers behind the line. Before the guns first meet, where the enemy brings aircraft, a carrier group's escorts keep the AA ring round its carriers (ai), and the ring is let go the moment a carrier sights a battle line: the screen stays and fights as b402 has it (the ship plan's R3).",
       jobs: "Each ship class to its own job (the tactics panel's item 2, ruling 239): 'fire' lists, for each gun class, the enemy classes it fires on, in order; 'strike', the enemy classes a carrier strikes, in order (see strike). A piece takes the first class it has in reach, ships still fighting before ships breaking off, and among them the one nearest its fleet's main effort; a style that shares the big guns' fire out ('spread' 1) has each battleship and cruiser take, among them, the one fewest of its side's battleships and cruisers are firing on (ties: nearest the main effort, then its own left), and keep it until another has two fewer. So big guns go on big ships and no enemy big ship is left untroubled, cruisers fight cruisers and back the line, and destroyers fight destroyers and cruisers, turning their guns on battleships and carriers only when nothing else is in reach: a destroyer's shells burst on a big ship's upper works and never pierced its belt (Samar, October 1944; Hiei, November 1942), and its real blow at a big ship is the torpedo run (torp). A bar on destroyer guns firing at big ships was measured and withdrawn (ruling 239): it held priced weight out of the fight. No dice: the same ships in the same places make the same choice. The navies shared fire so that no enemy capital ship went unengaged, and cruisers engaged cruisers (the panel's history notes).",
-      torp: "The destroyers' torpedo run (the tactics panel's item 3, ruling 239). A destroyer piece whose guns have nothing in reach banks their weight each second after the guns first meet (fire's rate times its weight, its nerve and the day, with no range or angle), up to 'bank' seconds' worth, and that bank is its salvo: weight its guns could not fire, so the card's weight is moved, not added to. On a run its guns keep firing at whatever their job finds in reach, so a run takes no weight out of the fight. A run: on the cues below, a steady destroyer piece outside the screen goes for the enemy big ship nearest the main effort within 'start' metres, battleships first, then cruisers, then carriers; with spread 1 the ship fewest runs are closing on first (pieces opening together still go as one division at one target). A piece runs only with a full salvo banked ('bank' seconds' worth at its guns' weight now); short of one it chases with its guns, as destroyers that had fired off their torpedoes did (the ship plan's R5). It goes in with its tubes full: a full salvo loaded at the start, drawn in advance from its guns' later fire. Weight its guns cannot fire earns it down, and on a run that includes what its guns lose bearing end-on going in and stern-on coming out, which pays its own salvo's advance first, before and after it launches, the rest banking as ever (the design director, 08:10Z: the bank is the weight the guns could not fire, so the run's lost gunfire is not a second cost on top of the advance); what is still unearned when the salvo lands is owed by its side then, paid out of the side's gunfire weight for weight, as R2's debt is paid out of its blows, and like that debt it counts on neither side until it is paid (the break and the odds read weight dealt: the design director, 09:48Z), so a loaded salvo never fired, or still running when the action ends, moves no weight; once fired, the tubes fill again only by the bank (the design director, 05:01Z and 06:14Z: owed at launch out of the destroyer's own guns, it was paid in the deciding minutes for weight that lands after the break, since as the run's clock then stood no salvo landed before it). It closes at flank, launches at its style's 'press' range (a cover run, on the Samar cue below, as soon as its target is within 'start' metres: its job is to turn her away, and at Samar Johnston fired at about 9,000 m and the others soon after: the design director, 11:25Z), turns away at flank for 'away' seconds and rejoins; it may run again 'again' seconds after it launched. Wavering on the run-in breaks it off, its bank kept for the next. The salvo runs 'travel' seconds and falls on its target, as any blow does (the same weight out of the fight whatever it falls on); with the target gone, on the enemy nearest where it was aimed within 'radius' metres, else on the heaviest. When a run goes is what its crews could see, never a clock (the ship plan's R4; the design director, 06:14Z and 06:48Z). A piece's run opens at once, at the ship doing the threatening within 'start' metres, ahead of her beam or not, when an enemy battleship or cruiser is coming at one of the side's carriers, heading at her (she lies ahead of its beam), the range falling, and making more way than she does, so it will overtake her (a carrier keeping her distance is the very flight the screen covers), or is within its own gun reach of one of the side's battleships where the enemy's heavy ships in reach of her outnumber the side's own in reach of them (Samar, October 1944: the escort carriers' screen ran early as Kurita's ships came on and turned them away), and such a division launches at once and runs on through its own side's break, covering the withdrawal; at once, once the guns have met and while a battleship or cruiser of its own side is within gun reach of an enemy battleship or cruiser (one still fighting, or one it is running down once the enemy has broken off), when it lies ahead of the beam of the enemy big ship it would run at, within 'start' metres (of the course she flees on, for a ship running for home: a piece on her bow as she turns away is soon astern of her) (the record's firing position ahead of the target's beam; by day the record's runs at an alert line came while the lines were engaged, at Jutland, the Java Sea and North Cape, and unsupported destroyers ran in at a heavy line only to cover something, so a destroyer-only side opens none; Surigao's runs before the guns met were the night's, which the field does not fight: the design director, 08:10Z and 09:48Z); and, abaft her beam, once its style's torpWhen finds the enemy's big ships in reach of the side's big guns shaken to that much of their nerve, slowed by gunfire (North Cape, December 1943). The pieces whose runs open in the same second go as one division at one target, the one the piece nearest its own target would take (a ship threatening the side's carriers or outnumbered battleships first), those of them within 'start' metres of her (the others open their own in the next second): they close in company, a piece more than the fleet's station distance (ai.station) nearer the target than the division's rearmost slowing to half until it comes up, and each launches at press, so the division's salvoes land together (a cover division launches at once, its target being in reach). Sea visibility and night actions are not modelled yet (on the after-release list, from the battle's one weather draw). The screen (styles: screen) is the destroyer pieces nearest the side's big ships as it draws up: each keeps 'station' metres ahead of the big ship it guards, toward the enemy, until its guns find a target, and then fights where it is, as the line's other pieces do (held on station, its weight stood out of the fight); it steers for any enemy run within 'intercept' metres and fires first on destroyers making a run; it never runs, and launches its bank from station at an enemy big ship that comes within press. A fleet with no big ship keeps no screen. Once no enemy destroyer is afloat its job is done, and its pieces run and fight as any other destroyer does (the design director, 22:57Z). Destroyers screened the line and attacked in groups with torpedoes, then turned away (North Cape, December 1943; Samar, October 1944: the panel's history notes). A battleship, cruiser or carrier with tracks running at her combs them (the ship plan's R6; the design director, 05:17Z): the ship a salvo is fired at, and every battleship, cruiser or carrier of her side within 'radius' metres of its aim point (its water), turns away from the tick after the launch, her stern to the tracks on their bearing from the launcher's place to the aim point, the shorter way round (to starboard with them dead at her bow), until the salvo lands ('travel'), as the record's ships turned away from tracks running at them whether or not aimed at them (Jutland, 31 May 1916: Hercules, Revenge, Colossus, from tracks fired at the line; Samar, 25 October 1944: Yamato, from torpedoes that missed Haruna), while the hit is unchanged: the salvo still lands on the ship it was fired at with its whole weight, wherever she steers. What her guns cannot bring to bear while she combs is banked, as a destroyer's idle guns' weight is, and goes with her first blow once the comb is over, on the ship her guns bear on, and no more: the bank is the weight the guns could not fire, every class and every navy (the design director, 11:58Z) (while the rule is built in steps, the water and a carrier group's ships wait their step).",
+      torp: "The destroyers' torpedo run (the tactics panel's item 3, ruling 239). A destroyer piece whose guns have nothing in reach banks their weight each second after the guns first meet (fire's rate times its weight, its nerve and the day, with no range or angle), up to 'bank' seconds' worth, and that bank is its salvo: weight its guns could not fire, so the card's weight is moved, not added to. On a run its guns keep firing at whatever their job finds in reach, so a run takes no weight out of the fight. A run: on the cues below, a steady destroyer piece outside the screen goes for the enemy big ship nearest the main effort within 'start' metres, battleships first, then cruisers, then carriers; with spread 1 the ship fewest runs are closing on first (pieces opening together still go as one division at one target). A piece runs only with a full salvo banked ('bank' seconds' worth at its guns' weight now); short of one it chases with its guns, as destroyers that had fired off their torpedoes did (the ship plan's R5). It goes in with its tubes full: a full salvo loaded at the start, drawn in advance from its guns' later fire. Weight its guns cannot fire earns it down, and on a run that includes what its guns lose bearing end-on going in and stern-on coming out, which pays its own salvo's advance first, before and after it launches, the rest banking as ever (the design director, 08:10Z: the bank is the weight the guns could not fire, so the run's lost gunfire is not a second cost on top of the advance); what is still unearned when the salvo lands is owed by its side then, paid out of the side's gunfire weight for weight, as R2's debt is paid out of its blows, and like that debt it counts on neither side until it is paid (the break and the odds read weight dealt: the design director, 09:48Z), so a loaded salvo never fired, or still running when the action ends, moves no weight; once fired, the tubes fill again only by the bank (the design director, 05:01Z and 06:14Z: owed at launch out of the destroyer's own guns, it was paid in the deciding minutes for weight that lands after the break, since as the run's clock then stood no salvo landed before it). It closes at flank, launches at its style's 'press' range (a cover run, on the Samar cue below, as soon as its target is within 'start' metres: its job is to turn her away, and at Samar Johnston fired at about 9,000 m and the others soon after: the design director, 11:25Z), turns away at flank for 'away' seconds and rejoins; it may run again 'again' seconds after it launched. Wavering on the run-in breaks it off, its bank kept for the next. The salvo runs 'travel' seconds and falls on its target, as any blow does (the same weight out of the fight whatever it falls on); with the target gone, on the enemy nearest where it was aimed within 'radius' metres, else on the heaviest. When a run goes is what its crews could see, never a clock (the ship plan's R4; the design director, 06:14Z and 06:48Z). A piece's run opens at once, at the ship doing the threatening within 'start' metres, ahead of her beam or not, when an enemy battleship or cruiser is coming at one of the side's carriers, heading at her (she lies ahead of its beam), the range falling, and making more way than she does, so it will overtake her (a carrier keeping her distance is the very flight the screen covers), or is within its own gun reach of one of the side's battleships where the enemy's heavy ships in reach of her outnumber the side's own in reach of them (Samar, October 1944: the escort carriers' screen ran early as Kurita's ships came on and turned them away), and such a division launches at once and runs on through its own side's break, covering the withdrawal; at once, once the guns have met and while a battleship or cruiser of its own side is within gun reach of an enemy battleship or cruiser (one still fighting, or one it is running down once the enemy has broken off), when it lies ahead of the beam of the enemy big ship it would run at, within 'start' metres (of the course she flees on, for a ship running for home: a piece on her bow as she turns away is soon astern of her) (the record's firing position ahead of the target's beam; by day the record's runs at an alert line came while the lines were engaged, at Jutland, the Java Sea and North Cape, and unsupported destroyers ran in at a heavy line only to cover something, so a destroyer-only side opens none; Surigao's runs before the guns met were the night's, which the field does not fight: the design director, 08:10Z and 09:48Z); and, abaft her beam, once its style's torpWhen finds the enemy's big ships in reach of the side's big guns shaken to that much of their nerve, slowed by gunfire (North Cape, December 1943). The pieces whose runs open in the same second go as one division at one target, the one the piece nearest its own target would take (a ship threatening the side's carriers or outnumbered battleships first), those of them within 'start' metres of her (the others open their own in the next second): they close in company, a piece more than the fleet's station distance (ai.station) nearer the target than the division's rearmost slowing to half until it comes up, and each launches at press, so the division's salvoes land together (a cover division launches at once, its target being in reach). Sea visibility and night actions are not modelled yet (on the after-release list, from the battle's one weather draw). The screen (styles: screen) is the destroyer pieces nearest the side's big ships as it draws up: each keeps 'station' metres ahead of the big ship it guards, toward the enemy, until its guns find a target, and then fights where it is, as the line's other pieces do (held on station, its weight stood out of the fight); it steers for any enemy run within 'intercept' metres and fires first on destroyers making a run; it never runs, and launches its bank from station at an enemy big ship that comes within press. A fleet with no big ship keeps no screen. Once no enemy destroyer is afloat its job is done, and its pieces run and fight as any other destroyer does (the design director, 22:57Z). Destroyers screened the line and attacked in groups with torpedoes, then turned away (North Cape, December 1943; Samar, October 1944: the panel's history notes). A battleship, cruiser or carrier with tracks running at her combs them (the ship plan's R6; the design director, 05:17Z): the ship a salvo is fired at, and every battleship, cruiser or carrier of her side within 'radius' metres of its aim point (its water), turns away from the tick after the launch, her stern to the tracks on their bearing from the launcher's place to the aim point, the shorter way round (to starboard with them dead at her bow), until the salvo lands ('travel'), as the record's ships turned away from tracks running at them whether or not aimed at them (Jutland, 31 May 1916: Hercules, Revenge, Colossus, from tracks fired at the line; Samar, 25 October 1944: Yamato, from torpedoes that missed Haruna), while the hit is unchanged: the salvo still lands on the ship it was fired at with its whole weight, wherever she steers. What her guns cannot bring to bear while she combs is banked, as a destroyer's idle guns' weight is, and goes with her first blow once the comb is over, on the ship her guns bear on, and no more: the bank is the weight the guns could not fire, every class and every navy (the design director, 11:58Z) (while the rule is built in steps, the water and a carrier group's ships wait their step). Release 2's own water, only with the campaign's switch on (the options page's 'Friendly torpedoes'; Brian, 25 November 12:52Z: friendly ships passed right in front of their own side's torpedoes): a salvo's water is the fan from the launcher's place at the launch, as wide there as her beam, to 'radius' metres either side of its aim point, its heads crossing it in 'travel' seconds; a piece's ships are where the 3D game lays them, her leader at the piece's place and the rest astern of him along the way he came, three lengths apart. A destroyer piece holds its salvo while another ship of its side, on her course and way, would be in that water as the heads come level with her, and launches the first second the way is clear: on a run it keeps closing at flank meanwhile, and from the screen's station it looks again each second. Every ship of the side with way on, of every class and whatever she is doing, that the heads of a salvo of her side's (not her own) would pass through turns square off its tracks, on the side of them she lies, from the tick after its launch until the heads are past her or it lands, at her own speed; a comb of an enemy salvo stands and the field's edge wins. The crews' rule in the record: a ship of one's own in the line of fire fouled the range and the tubes waited, and ships kept clear of their own side's torpedo water. Off, the field is as before to the byte. Geometry of the field's own numbers: no new number, no dice.",
       styles: "How a side's captains fight (ruling 239): a temperament, not a weapon. The card has priced the fight, so a style changes how the action unfolds, never how much weight each side brings. 'spread': 1 shares the big guns' fire out over the enemy's big ships (jobs), 0 fires on the one nearest the main effort. 'torpWhen': a destroyer piece abaft the beam of its target opens its run once the enemy big ships in the big guns' reach average this much of their nerve or less (1, at first contact); runs ahead of the beam, or against a ship threatening the side's carriers or outnumbered battleships, open at once (torp). 'press': the range a run closes to before it launches, in metres (a cover run launches once its target is within torp.start: torp). 'screen': the share of the side's destroyer pieces kept back as the screen, rounded down, and at least one where the share is above 0 and there are two or more. 'cover': the share of each carrier strike held back as fighters over the fleet when the enemy brings aircraft (cap); a strike the player orders holds back the same share (ruling 239, 12).",
       cap: "Fighters and guns over the fleet (ruling 239; the tactics panel's item 3, at sea): two neutral trades, so they move where weight falls, never how much. Fighters: when the enemy brings aircraft (a carrier with its air group, or the coasts' aircraft), each carrier flies (1 - cover) of its strike and holds the rest over the fleet, its side's pool; what it holds and has not spent flies with its next strike, so nothing is lost. A strike or a raid of weight W coming in is met by the pool and denied min(pool, W x cap.spoil x the square root of pool / (pool + W)): cap.spoil is the campaign's own (carriers.json cap.spoil, 0.8; air.ts), and the pool pays what it denies, weight for weight, out of each carrier's cover by its share. Guns: the gun ships within the strike's radius of the ship it finds deny f of what is left, f the sum of their ships times carriers.json flak.ships times flak.per, to at most flak.most (0.12), the campaign's own law; each ship pays its share, weight for weight, out of its own next gunfire, and a ship that leaves the fight hands what it owes to the nearest of its side still fighting. Both are told as events, 'sea:cap' (the share the fighters denied) and 'sea:flak' (what the guns denied), for the 3D game: fighters circling over the fleet, flak over the screen.",
       carrierBattle: "Where both sides bring carriers and neither a battleship (ruling 239, 11): 'field' fights it out here, carriers striking from beyond the guns' reach; 'staff' leaves it to the dice, as an action where one side has no gun ship is (b438). It stays 'field' until the design director has read how many such actions the campaign fights.",
@@ -105454,6 +105963,11 @@
     if (on2) g2.flags.sailors = 1;
     else delete g2.flags.sailors;
   }
+  var ownWaterOn = (g2) => g2.flags.open === 1 && g2.flags.ownWater === 1;
+  function setOwnWater(g2, on2) {
+    if (on2) g2.flags.ownWater = 1;
+    else delete g2.flags.ownWater;
+  }
   function sailorsOf(g2, zone) {
     if (!sailorsOn(g2)) return null;
     const water = waterOf(g2.seas[zone].key, turnToDate(g2.turn).month);
@@ -105480,7 +105994,7 @@
       date: turnToDate(g2.turn).label,
       // The second in the same sea this month is "The second action ...", as the battle stars name it.
       title: seaAction(zone.name, 1 + g2.seaReports.filter((r) => r.turn === g2.turn && r.zone === m.zone).length),
-      place: { zone: m.zone, zoneName: zone.name, fleets, air: air2, ...sailors ? { sailors } : {} },
+      place: { zone: m.zone, zoneName: zone.name, fleets, air: air2, ...sailors ? { sailors } : {}, ...ownWaterOn(g2) ? { ownWater: true } : {} },
       att: sideTicket(attNat, nation(attNat).adj, nation(attNat).color, human("att"), fleets.filter((f) => f.side === "att"), researchOf(g2, attNat)),
       def: sideTicket(defNat, nation(defNat).adj, nation(defNat).color, human("def"), fleets.filter((f) => f.side === "def"), researchOf(g2, defNat)),
       reckoning: { A: m.A, D: m.D, odds, dice: DICE, even: 1 },
@@ -105555,6 +106069,11 @@
   var BIG_GUNS = /* @__PURE__ */ new Set(["bb", "ca"]);
   var ARRIVE = 200;
   var EDGE_MARGIN = 1200;
+  var HULL = [-0.5, 0, 0.5];
+  var aimAt = (x, y, face, way) => {
+    const F2 = SEA.field.size, ahead2 = way * SEA.torp.travel;
+    return [Math.round(clamp5(x + Math.sin(face) * ahead2, 2, F2 - 2)), Math.round(clamp5(y + Math.cos(face) * ahead2, 2, F2 - 2))];
+  };
   var aheadOfBeam = (e, u) => Math.abs(turn(e.face, bearing(e.x, e.y, u.x, u.y))) < Math.PI / 2;
   function nearestEnemy(units2, side5, x, y) {
     const f0 = side5 === "att" ? 0 : Math.PI, c = Math.cos(f0), s = Math.sin(f0);
@@ -105675,6 +106194,30 @@
        * ("while the rule is built in steps ...").
        */
       __publicField(this, "r6Step", 1);
+      /**
+       * Release 2's own water (Brian, 25 November 12:52Z: "the friendly ships would pass though right in front of
+       * torpedoes. have more awareness to avoid friendly fire"; naval-battles/own-water-r2/form.md): captains mind their own
+       * side's torpedoes. A destroyer holds its salvo while one of its own ships would be in the tracks' way (clearAim), and
+       * every ship with way on keeps out of the water ahead of its own side's running salvoes (keepClear). On only with the
+       * ticket's ownWater (the campaign's switch, ticket.ts ownWaterOn); off, nothing below reads or writes anything.
+       */
+      __publicField(this, "ownWater");
+      /** The own-side salvo each ship keeps clear of, by her id (keepClear): held until its heads are past her or it lands. */
+      __publicField(this, "clearing", /* @__PURE__ */ new Map());
+      /** The pieces holding their salvo for a ship of their own in the way, by id: that ship's piece and the second it was
+       *  last found there (clearAim; the marks, and the look field heldFor). */
+      __publicField(this, "holding", /* @__PURE__ */ new Map());
+      /** The ships whose course keeping clear of an own salvo set this tick (keepClear; the look fields). */
+      __publicField(this, "clearSteered", /* @__PURE__ */ new Set());
+      /** The course each ship took up keeping clear of a salvo while others ran beside it, held while no own salvo's heads
+       *  would cross her on it (clearAway). */
+      __publicField(this, "clearHeading", /* @__PURE__ */ new Map());
+      /** Every piece's ships and way as the tick's steering began, while the pieces steer (clearAim), else null. */
+      __publicField(this, "poses", null);
+      /** Ships turning back to their helm's course after keeping clear, until they are on it (crossed reads the line's). */
+      __publicField(this, "clearBack", /* @__PURE__ */ new Set());
+      /** Each piece's wake (own water: hullsOf): the places her leader has passed, newest first, one every length of hers. */
+      __publicField(this, "trail", /* @__PURE__ */ new Map());
       /**
        * R6 item (2), how a ship that combed regains her place (the design director, 19:03Z; naval-battles/r6/regain-form.md,
        * on the historian's record, historian/regain-station-record-1122.md). A build switch, as r6Step is: a private readonly
@@ -105817,6 +106360,7 @@
         this.fleetLoss.abandoned[f.id] = none3();
       }
       this.sail = ticket.place.sailors;
+      this.ownWater = ticket.place.ownWater === true;
       this.caps = sunkCaps(ticket.place.fleets, ticket.reckoning.odds);
       this.plainCaps = sunkCaps(ticket.place.fleets, ticket.reckoning.odds, true);
       this.ai = { att: !ticket.att.human, def: !ticket.def.human };
@@ -106131,7 +106675,9 @@
       const tick = Math.round(this.t / DT);
       this.planLines();
       this.planRings();
+      if (this.ownWater) this.poses = new Map(this.units.filter(live5).map((u) => [u.id, { hulls: this.hullsOf(u), way: u.extra.way }]));
       for (const u of this.units) if (live5(u)) this.steer(u);
+      this.poses = null;
       this.combReach();
       if (tick % 10 === 0) {
         this.sample();
@@ -106420,6 +106966,19 @@
           foeId = -1;
         }
       }
+      const steered0 = this.clearSteered.has(u.id);
+      if (this.ownWater) {
+        const had = this.clearing.has(u.id);
+        const clear = comb || this.away[u.id] ? this.stopClear(u) : this.keepClear(u, u.state === "routing" || o.kind === "leave");
+        if (clear !== null) {
+          want = clear;
+          foeId = -1;
+          this.clearSteered.add(u.id);
+        } else this.clearSteered.delete(u.id);
+        const has = this.clearing.has(u.id);
+        if (!had && has) this.holdPlace(u);
+        else if (had && !has && this.place.has(u.id)) this.regaining.add(u.id);
+      }
       if (u.state !== "routing" && o.kind !== "leave") {
         const m = 800;
         if (u.x < m || u.x > F2.size - m || u.y < m || u.y > F2.size - m) {
@@ -106427,6 +106986,11 @@
           foeId = -1;
           edge4 = true;
         }
+      }
+      if (edge4) this.clearSteered.delete(u.id);
+      if (this.ownWater) {
+        if (this.clearSteered.has(u.id) || edge4) this.clearBack.delete(u.id);
+        else if (steered0) this.clearBack.add(u.id);
       }
       if (comb && !edge4) this.combSteered.add(u.id);
       else this.combSteered.delete(u.id);
@@ -106441,8 +107005,17 @@
       u.face = norm(u.face + swing);
       u.x += Math.sin(u.face) * u.extra.way * DT;
       u.y += Math.cos(u.face) * u.extra.way * DT;
+      if (this.ownWater) {
+        this.lay(u);
+        if (this.clearBack.has(u.id) && Math.abs(turn(u.face, want)) < 1e-9) this.clearBack.delete(u.id);
+      }
       if ((u.state === "routing" || o.kind === "leave") && (u.side === "att" ? u.y < 300 : u.y > F2.size - 300)) {
         u.state = "withdrawn";
+        this.clearing.delete(u.id);
+        this.clearSteered.delete(u.id);
+        this.clearHeading.delete(u.id);
+        this.holding.delete(u.id);
+        this.clearBack.delete(u.id);
         this.say({ what: "withdrawn", unit: u.id, side: u.side, text: `${this.told(u, true)} ${this.many(u) ? "have broken off and make" : "has broken off and makes"} for port.` });
       }
     }
@@ -106561,7 +107134,7 @@
       if (!L2 || !them || this.t - L2.turned < SEA.line.settle || !ours.length || !theirs.length) return 0;
       const N = SEA.line, g2 = ours[0], [mx, my] = this.middle(ours), [ex, ey] = this.middle(theirs);
       const broadside = Math.abs(Math.sin(turn(them.course, bearing(ex, ey, mx, my)))) > Math.cos(N.crossed);
-      const gf = this.combSteered.has(g2.id) ? L2.course : g2.face;
+      const gf = this.combSteered.has(g2.id) || this.clearSteered.has(g2.id) || this.clearBack.has(g2.id) ? L2.course : g2.face;
       if (!broadside || Math.abs(turn(gf, bearing(g2.x, g2.y, ex, ey))) >= N.crossed) return 0;
       const foes = this.lineFoes(side5);
       const off2 = (h) => Math.abs(turn(this.lineCourse(ours, foes, h), them.course));
@@ -106965,6 +107538,262 @@
       if (u.x < m && x < 0 || u.x > F2 - m && x > 0) x = 0;
       return Math.hypot(x, y) < 1e-9 ? home : Math.atan2(x, y);
     }
+    // ---- Her own side's tracks (release 2's own water) -----------------------------------------------------------------
+    /** Where a salvo fired at a ship now is aimed: where she will be by the time it lands, on her course and way (launch). */
+    aimOf(foe) {
+      return aimAt(foe.x, foe.y, foe.face, foe.extra.way);
+    }
+    /**
+     * When the heads of a salvo would pass through a ship on her present course and way: the seconds from now, or null if
+     * they never do (release 2's own water). The salvo runs from the tubes (x0, y0) to its aim point (x, y) in torp.travel
+     * seconds from t0, its tracks spreading as they go: its water is the fan from the tubes, where it is as narrow as
+     * the tubes, there as wide as the launcher's beam (tubes: half of it), to torp.radius either side of the aim point more
+     * (the zone the 3D game draws there). The piece is her ships as the 3D game lays them (hullsOf), each the whole of her
+     * from stern to bow, widened by half her beam, going on as she goes now (or on course 'face', for a course she might
+     * take: clearAway). The heads pass through her if some point of a hull is in the fan at the moment they come level with
+     * it, before they reach the aim point: for a point k of her length from her middle, where it lies along and across the
+     * tracks, when the heads reach it and where it then is are each straight-line in k, so the points that are met make one
+     * stretch of her, found exactly, and the soonest of them is at one of its ends. 'pose', her ships and way as the tick
+     * began (clearAim's, so that what a launcher reads does not hang on the order the pieces steer in). Geometry of the
+     * field's own numbers only: no new number, no dice.
+     */
+    meets(u, x0, y0, x, y, t0, tubes, face, pose) {
+      const L2 = dist(x0, y0, x, y), T = SEA.torp.travel;
+      if (L2 < 1) return null;
+      const ux = (x - x0) / L2, uy = (y - y0) / L2, V = L2 / T, R2 = SEA.torp.radius;
+      const h = V * Math.max(0, this.t - t0), left = T - Math.max(0, this.t - t0);
+      const len = SEA.classes[u.extra.cls].len, beam = tubes + u.w / 2, way = pose ? pose.way : u.extra.way;
+      let best = null;
+      for (const [hx, hy, hf] of pose ? pose.hulls : this.hullsOf(u)) {
+        const hv = face ?? hf, vx = Math.sin(hv) * way, vy = Math.cos(hv) * way;
+        const va = vx * ux + vy * uy, vb = vx * uy - vy * ux, W2 = V - va;
+        if (W2 <= 1e-9) continue;
+        const sx = Math.sin(hf) * len, sy = Math.cos(hf) * len;
+        const a0 = [(hx - x0) * ux + (hy - y0) * uy, sx * ux + sy * uy], b0 = [(hx - x0) * uy - (hy - y0) * ux, sx * uy - sy * ux];
+        const tau = [(a0[0] - h) / W2, a0[1] / W2];
+        const a = [a0[0] + va * tau[0], a0[1] + va * tau[1]], b = [b0[0] + vb * tau[0], b0[1] + vb * tau[1]];
+        const room2 = [R2 * a[0] / L2 + beam, R2 * a[1] / L2];
+        let lo = -0.5, hi = 0.5;
+        for (const [f0, f1] of [[-tau[0], -tau[1]], [tau[0] - left, tau[1]], [a[0] - L2, a[1]], [b[0] - room2[0], b[1] - room2[1]], [-b[0] - room2[0], -b[1] - room2[1]]]) {
+          if (Math.abs(f1) < 1e-12) {
+            if (f0 > 0) {
+              lo = 1;
+              break;
+            }
+            continue;
+          }
+          if (f1 > 0) hi = Math.min(hi, -f0 / f1);
+          else lo = Math.max(lo, -f0 / f1);
+        }
+        if (lo > hi) continue;
+        const soonest = Math.max(0, Math.min(tau[0] + tau[1] * lo, tau[0] + tau[1] * hi));
+        if (best === null || soonest < best) best = soonest;
+      }
+      return best;
+    }
+    /**
+     * Where a destroyer piece's salvo at a ship would be aimed, if she may launch it now, else null (release 2's own water;
+     * with it off, always where launch has always aimed: aimOf). Held when another ship of her side afloat, with her way as
+     * it is, would be in the tracks' way when the heads come level with her (meets, from the tubes now to the aim point).
+     * While the pieces steer, every ship, the target too, is read as the tick began (poses), so what a launcher reads does
+     * not hang on the order the pieces steer in, nor on which side steers first. Held, she runs on as before and launches
+     * the first second it is clear: a piece on a run keeps closing at flank (runCourse), a screen piece looks again each
+     * second (startRuns). The crews' rule in the record: a ship of one's own in the line of fire fouled the range, and the
+     * tubes waited.
+     */
+    clearAim(u, foe) {
+      if (!this.ownWater) return this.aimOf(foe);
+      const pf = this.poses?.get(foe.id);
+      const [x, y] = pf ? aimAt(pf.hulls[0][0], pf.hulls[0][1], pf.hulls[0][2], pf.way) : this.aimOf(foe);
+      let by2 = null, bt = Infinity, bd = Infinity;
+      for (const f of this.units) {
+        if (f === u || f.side !== u.side || !live5(f)) continue;
+        const pose = this.poses?.get(f.id);
+        const tau = this.meets(f, u.x, u.y, x, y, this.t, u.w / 2, void 0, pose);
+        if (tau === null) continue;
+        const d = pose ? dist(u.x, u.y, pose.hulls[0][0], pose.hulls[0][1]) : dist(u.x, u.y, f.x, f.y);
+        if (tau < bt - 1e-9 || Math.abs(tau - bt) <= 1e-9 && d < bd) {
+          by2 = f;
+          bt = tau;
+          bd = d;
+        }
+      }
+      if (!by2) {
+        this.holding.delete(u.id);
+        return [x, y];
+      }
+      const was = this.holding.get(u.id);
+      if (!was || was.t < this.t - 1 - 1e-6) this.mark(`${u.side}:torpHeld`, 1);
+      this.holding.set(u.id, { by: by2.id, t: this.t });
+      this.mark(`${u.side}:torpHeld:s`, this.runs.has(u.id) ? DT : 1);
+      return null;
+    }
+    /**
+     * The course a ship steers this tick to keep out of her own side's torpedo water, or null (release 2's own water). WHO:
+     * every ship with way on, of every class, whatever she is doing, from the tick after a salvo's launch (seen by every
+     * ship at once, as an enemy salvo is: runningAt), for any salvo of her side but her own whose heads would pass through
+     * her (meets). WHICH: the one she kept clear of last tick, while its heads are not yet past her; else the one they would
+     * reach soonest, then the one needing the smaller turn, then to starboard (as combSooner), never by unit id. HOW: square
+     * off its tracks on the side of them she lies (clearCourse), at her own speed, unless that would carry her into another
+     * own salvo's water (clearAway), until its heads are past every point of her column or it lands; then her helm as
+     * before. Marks only: turns begun and seconds held.
+     */
+    keepClear(u, out) {
+      if (u.extra.way <= 0) {
+        this.clearing.delete(u.id);
+        this.clearHeading.delete(u.id);
+        return null;
+      }
+      const held3 = this.clearing.get(u.id);
+      if (held3 && held3.at > this.t && this.notPast(u, held3)) {
+        this.mark(`${u.side}:clear:s`, DT);
+        return this.clearAway(u, held3, out);
+      }
+      let best = null, bt = Infinity;
+      for (const s of this.torps) {
+        if (s.side !== u.side || s.from === u.id || s.weight <= 0 || s.t0 >= this.t || s.at <= this.t) continue;
+        const tau = this.meets(u, s.x0, s.y0, s.x, s.y, s.t0, (this.byId.get(s.from)?.w ?? 0) / 2);
+        if (tau === null) continue;
+        if (!best || tau < bt - 1e-9 || Math.abs(tau - bt) <= 1e-9 && this.clearSooner(u, s, best)) {
+          best = s;
+          bt = tau;
+        }
+      }
+      if (!best) {
+        this.clearing.delete(u.id);
+        this.clearHeading.delete(u.id);
+        return null;
+      }
+      if (best !== held3) {
+        this.mark(`${u.side}:clear`, 1);
+        this.mark(`${u.side}:clear>${u.extra.cls}`, 1);
+        this.clearHeading.delete(u.id);
+      }
+      this.clearing.set(u.id, best);
+      this.mark(`${u.side}:clear:s`, DT);
+      return this.clearAway(u, best, out);
+    }
+    /**
+     * The course a ship keeping clear of salvo 's' steers (keepClear): square off its tracks on the side of them she lies
+     * (clearCourse), unless the heads of some other running salvo of her side would then cross her (two salvoes running
+     * side by side, she between them); then, in turn, along its tracks, square off on the other side, back up its tracks:
+     * the first of these that no own salvo's heads would cross, as she lies now at her own speed (meets, on that course).
+     * Once on one she holds it while none would cross her on it (a captain steadies on a clear course), judged again each
+     * tick as she swings: held while it has gone foul, the heads crossed her more often than a helm that sometimes goes
+     * from one hand to the other. A ship breaking off takes none that would carry her out over the field's side, as
+     * breakOffCourse never does. If every one is crossed,
+     * square off on her side, as with one salvo. The order is the field's own geometry, never a unit id (b402).
+     */
+    clearAway(u, s, out) {
+      const side5 = this.clearCourse(u, s), F2 = SEA.field.size, m = 800;
+      const offSide = (c) => out && (u.x < m && Math.sin(c) < -1e-9 || u.x > F2 - m && Math.sin(c) > 1e-9);
+      const ways = [side5, norm(s.dir), norm(side5 + Math.PI), norm(s.dir + Math.PI)].filter((c) => !offSide(c));
+      const first2 = ways.length ? ways[0] : side5;
+      const running = this.torps.filter((o) => o.side === u.side && o.from !== u.id && o.weight > 0 && o.t0 < this.t && o.at > this.t && this.notPast(u, o));
+      if (running.length < 2) {
+        this.clearHeading.delete(u.id);
+        return first2;
+      }
+      const clear = (c) => running.every((o) => this.meets(u, o.x0, o.y0, o.x, o.y, o.t0, (this.byId.get(o.from)?.w ?? 0) / 2, c) === null);
+      const was = this.clearHeading.get(u.id);
+      if (was !== void 0 && !offSide(was) && clear(was)) return was;
+      for (const c of ways) {
+        if (clear(c)) {
+          this.clearHeading.set(u.id, c);
+          return c;
+        }
+      }
+      this.clearHeading.delete(u.id);
+      return first2;
+    }
+    /** Keeps clear of nothing this tick (she combs, or her carrier group turns away): the course is let go, the salvo kept,
+     *  so that taking it up again after is no new turn. */
+    stopClear(u) {
+      this.clearHeading.delete(u.id);
+      return null;
+    }
+    /** Whether a salvo's heads have yet to come level with some point of one of a piece's ships (keepClear). */
+    notPast(u, s) {
+      const L2 = dist(s.x0, s.y0, s.x, s.y);
+      if (L2 < 1) return false;
+      const ux = (s.x - s.x0) / L2, uy = (s.y - s.y0) / L2, h = L2 * Math.max(0, this.t - s.t0) / SEA.torp.travel;
+      const len = SEA.classes[u.extra.cls].len;
+      return this.hullsOf(u).some(([hx, hy, hf]) => HULL.some((k) => {
+        const a = (hx + Math.sin(hf) * k * len - s.x0) * ux + (hy + Math.cos(hf) * k * len - s.y0) * uy;
+        return a >= h && a <= L2;
+      }));
+    }
+    /**
+     * A piece's ships where the 3D game lays them (own water; SeaShow.cpp's columns): her leader at the piece's place on
+     * its heading, the rest of her ships afloat astern of him along the way he came, as far apart as the piece's length
+     * gives (pieces.ts: three lengths), each heading along her own stretch of it; where the wake runs out, straight on
+     * astern. Each as [x, y, heading].
+     */
+    hullsOf(u) {
+      const len = SEA.classes[u.extra.cls].len, N = u.extra.ships0;
+      const gap = N > 1 && u.d > len ? (u.d - len) / (N - 1) : 3 * len;
+      const out = [[u.x, u.y, u.face]];
+      const wake = this.trail.get(u.id) ?? [];
+      let px = u.x, py = u.y, back = 0, i = 0, dir = u.face;
+      for (let k = 1; k < u.extra.ships; k++) {
+        const want = k * gap;
+        for (; ; ) {
+          if (i < wake.length) {
+            const [qx, qy] = wake[i], seg = dist(px, py, qx, qy);
+            if (seg > 1e-6) dir = bearing(qx, qy, px, py);
+            if (back + seg >= want) {
+              const f = (want - back) / Math.max(seg, 1e-6);
+              out.push([px + (qx - px) * f, py + (qy - py) * f, dir]);
+              break;
+            }
+            back += seg;
+            px = qx;
+            py = qy;
+            i++;
+          } else {
+            out.push([px - Math.sin(dir) * (want - back), py - Math.cos(dir) * (want - back), dir]);
+            break;
+          }
+        }
+      }
+      return out;
+    }
+    /** Lays a point of a piece's wake once she has run a length of hers from the last, and lets go what lies further astern
+     *  than her rearmost ship (hullsOf). */
+    lay(u) {
+      const len = SEA.classes[u.extra.cls].len;
+      let wake = this.trail.get(u.id);
+      if (!wake) {
+        wake = [];
+        this.trail.set(u.id, wake);
+      }
+      if (wake.length && dist(u.x, u.y, wake[0][0], wake[0][1]) < len) return;
+      wake.unshift([u.x, u.y]);
+      let run = 0;
+      for (let i = 1; i < wake.length; i++) {
+        run += dist(wake[i - 1][0], wake[i - 1][1], wake[i][0], wake[i][1]);
+        if (run > u.d + len) {
+          wake.length = i + 1;
+          break;
+        }
+      }
+    }
+    /** The course square off a salvo's tracks, on the side of them her middle lies; on them, the smaller turn, then to
+     *  starboard (keepClear). */
+    clearCourse(u, s) {
+      const b = (u.x - s.x0) * Math.cos(s.dir) - (u.y - s.y0) * Math.sin(s.dir);
+      const right2 = norm(s.dir + Math.PI / 2), left = norm(s.dir - Math.PI / 2);
+      if (b > 1e-6) return right2;
+      if (b < -1e-6) return left;
+      return Math.abs(turn(u.face, left)) < Math.abs(turn(u.face, right2)) - 1e-6 ? left : right2;
+    }
+    /** Of two salvoes whose heads would reach her at the same moment, whether she keeps clear of 'a' first: the smaller
+     *  turn, then the one further to starboard (keepClear; as combSooner). */
+    clearSooner(u, a, b) {
+      const ta = turn(u.face, this.clearCourse(u, a)), tb = turn(u.face, this.clearCourse(u, b));
+      if (Math.abs(Math.abs(ta) - Math.abs(tb)) > 1e-6) return Math.abs(ta) < Math.abs(tb);
+      return ta > tb;
+    }
     // ---- Combing the tracks (the ship plan's R6) -----------------------------------------------------------------------
     /**
      * The enemy salvo a battleship, cruiser or carrier combs this tick, or null (the ship plan's R6; the design director,
@@ -107034,6 +107863,16 @@
     r6Held(u) {
       return this.r6Step < 3 && this.groupAt[u.side];
     }
+    /** Her place in her line from its middle, as a turn off her line's course begins (a comb, R6 item 2; or keeping clear
+     *  of her own side's tracks), unless she holds one already that she has not yet worked back to: the point she held
+     *  before the first. Only for a line ship inside the line's keep (place). */
+    holdPlace(u) {
+      const P = this.linePlans[u.side];
+      if (this.r6Back && !this.place.has(u.id) && this.lines[u.side] && P.t === this.t && P.members.includes(u)) {
+        const [cx, cy] = this.middle(P.members);
+        if (dist(u.x, u.y, cx, cy) <= SEA.ai.keep) this.place.set(u.id, [u.x - cx, u.y - cy]);
+      }
+    }
     /**
      * What a ship's comb this tick leaves behind (R6): the salvo she combs, kept for the next tick (combing, crossed); a
      * 'sea:comb' event each time she takes one, the first and each switch to the next, with the launcher ('from'), the
@@ -107058,11 +107897,7 @@
       }
       if (s !== was) {
         if (!was) {
-          const P = this.linePlans[side5];
-          if (this.r6Back && !this.place.has(u.id) && this.lines[side5] && P.t === this.t && P.members.includes(u)) {
-            const [cx, cy] = this.middle(P.members);
-            if (dist(u.x, u.y, cx, cy) <= SEA.ai.keep) this.place.set(u.id, [u.x - cx, u.y - cy]);
-          }
+          this.holdPlace(u);
           if (this.combLast[u.id] === s) this.mark(`${side5}:combResume`, 1);
           else {
             this.mark(`${side5}:combs`, 1);
@@ -107355,6 +108190,11 @@
         this.combSteered.delete(u.id);
         this.place.delete(u.id);
         this.regaining.delete(u.id);
+        this.clearing.delete(u.id);
+        this.clearSteered.delete(u.id);
+        this.clearHeading.delete(u.id);
+        this.holding.delete(u.id);
+        this.clearBack.delete(u.id);
         const all = `All ${u.extra.ships0} ${RULES_CLASSES[c].many} ${ofFleet(u.extra.fleet)}`;
         this.say({ what: u.state === "gone" ? "gone" : "withdrawn", unit: u.id, side: side5, text: u.extra.ships0 === 1 ? "" : u.state === "gone" ? `${all} are lost.` : `${all} are out of the fight.` });
       }
@@ -107824,7 +108664,8 @@
                 foe2 = e;
               }
             }
-            if (foe2) this.launch(u, foe2, null);
+            const aim = foe2 ? this.clearAim(u, foe2) : null;
+            if (foe2 && aim) this.launch(u, foe2, null, aim);
             continue;
           }
           if (!this.salvoReady(u)) continue;
@@ -107966,7 +108807,9 @@
           }
           return { want: bearing(u.x, u.y, foe.x, foe.y), speed: rear - d > SEA.ai.station ? SEA.classes.dd.speed * SEA.speeds.slow : flank };
         }
-        this.launch(u, foe, run);
+        const aim = this.clearAim(u, foe);
+        if (!aim) return { want: bearing(u.x, u.y, foe.x, foe.y), speed: flank };
+        this.launch(u, foe, run, aim);
       }
       if (u.state === "routing" || told2) {
         this.endRun(u, run, true);
@@ -107995,6 +108838,7 @@
     /** A run ends: after its launch it may run again torp.again seconds after it; broken off before, as soon as it is fit. */
     endRun(u, run, done) {
       this.runs.delete(u.id);
+      this.holding.delete(u.id);
       delete u.extra.run;
       if (this.broken === u.side && live5(u) && u.state !== "routing") u.state = "routing";
       if (!done) {
@@ -108011,16 +108855,15 @@
      * game; it lasts while the salvo runs). On a run, it then turns away; from station, it may launch again torp.again
      * seconds later.
      */
-    launch(u, foe, run) {
-      const T = SEA.torp, F2 = SEA.field.size, w = this.bank[u.id];
+    launch(u, foe, run, aim) {
+      const T = SEA.torp, w = this.bank[u.id];
       const full = SEA.fire.rate * this.output(u) * this.day(u.side) * T.bank;
       const share = full > 0 ? Math.round(clamp5(w / full, 0, 1) * 100) / 100 : 0;
       this.bank[u.id] = 0;
       const drawn = Math.min(this.loaded[u.id], w);
       this.loaded[u.id] = 0;
-      const ahead2 = foe.extra.way * T.travel;
-      const x = Math.round(clamp5(foe.x + Math.sin(foe.face) * ahead2, 2, F2 - 2)), y = Math.round(clamp5(foe.y + Math.cos(foe.face) * ahead2, 2, F2 - 2));
-      this.torps.push({ at: this.t + T.travel, side: u.side, target: foe.id, x, y, weight: w, from: u.id, drawn, dir: bearing(u.x, u.y, x, y), t0: this.t });
+      const [x, y] = aim ?? this.aimOf(foe);
+      this.torps.push({ at: this.t + T.travel, side: u.side, target: foe.id, x, y, weight: w, from: u.id, drawn, dir: bearing(u.x, u.y, x, y), t0: this.t, x0: u.x, y0: u.y });
       this.zones.push({ id: ++this.zoneId, kind: "torpedo", x, y, r: T.radius, until: this.t + T.travel, side: u.side, at: Math.round(this.t * 10) / 10, unit: u.id });
       const first2 = !this.toldTorp.has(u.id);
       this.toldTorp.add(u.id);
@@ -108475,6 +109318,28 @@
         } else {
           delete x.combFrom;
           delete x.combUntil;
+        }
+        if (this.ownWater) {
+          const hd = on2 ? this.holding.get(u.id) : void 0, hb = hd && hd.t >= this.t - 1 - 1e-9 ? this.byId.get(hd.by) : void 0;
+          if (hd && hb) {
+            x.heldFor = hd.by;
+            x.heldForName = this.told(hb);
+          } else {
+            delete x.heldFor;
+            delete x.heldForName;
+          }
+          const cl = on2 && this.clearSteered.has(u.id) ? this.clearing.get(u.id) : void 0, cb2 = cl ? this.byId.get(cl.from) : void 0;
+          if (cl && cb2) {
+            x.clearFrom = cl.from;
+            x.clearUntil = Math.round(cl.at * 10) / 10;
+            x.clearFromName = this.told(cb2);
+          } else {
+            delete x.clearFrom;
+            delete x.clearUntil;
+            delete x.clearFromName;
+          }
+          if ((x.heldFor !== void 0 || x.clearFrom !== void 0) && this.orders.has(u.id)) x.ordered = true;
+          else delete x.ordered;
         }
         const at4 = on2 && L0[u.side] ? this.linePlans[u.side].members.indexOf(u) : -1;
         if (at4 >= 0) x.lineAt = at4;
@@ -109858,7 +110723,7 @@
       const ourLost = att ? attLost : defLost, theirLost = att ? defLost : attLost;
       shotDown += theirLost;
       planesLost += ourLost;
-      const bombers = r.att.reduce((t, u) => t + u.bmr, 0), flown = r.att.reduce((t, u) => t + u.bmr + u.ftr, 0);
+      const bombers = r.att.reduce((t, u) => t + u.bmr, 0), flown2 = r.att.reduce((t, u) => t + u.bmr + u.ftr, 0);
       const shipsHit = r.ships ? sumShips(r.ships, "sunk") : null;
       if (shipsHit && shipCount(shipsHit)) {
         if (att) sunk += shipCount(shipsHit);
@@ -109877,7 +110742,7 @@
       row2.tone = good ? "good" : "bad";
       row2.kind = sky2 ? "THE SKY" : "AIR RAID";
       const town = r.region >= 0 && g2.regions[r.region] ? townName(g2.regions[r.region]) : r.place;
-      const what = bombers ? `${num7(bombers)} bombers` : `${num7(flown)} aircraft`;
+      const what = bombers ? `${num7(bombers)} bombers` : `${num7(flown2)} aircraft`;
       if (sky2) {
         row2.sign = "ftr";
         row2.picture = "airfield";
@@ -109899,8 +110764,8 @@
       row2.follows = r.result;
       const sunkHere = shipsHit ? shipCount(shipsHit) : 0;
       row2.figures = sunkHere ? [{ n: String(sunkHere), label: `${classWord(shipsHit)} ${att ? "sunk" : "lost"}` }] : att ? ourLost ? [{ n: num7(ourLost), label: r.att.every((u) => !u.lostFtr) ? "bombers lost" : "aircraft lost" }] : theirLost ? [{ n: num7(theirLost), label: "shot down" }] : [] : theirLost ? [{ n: num7(theirLost), label: "shot down" }] : ourLost ? [{ n: num7(ourLost), label: "fighters lost" }] : [];
-      row2.facts = [{ n: num7(flown), label: att ? "aircraft flew" : "aircraft came" }, { n: num7(ourLost), label: "lost" }, { n: num7(theirLost), label: "of theirs shot down" }];
-      ranked.push({ row: row2, sub: 0, weight: (flown / 20 + ourLost + theirLost) * PLANE_MEN + (shipsHit ? shipsWeight(shipsHit) : 0), great: !!shipsHit && greatShips(shipsHit) });
+      row2.facts = [{ n: num7(flown2), label: att ? "aircraft flew" : "aircraft came" }, { n: num7(ourLost), label: "lost" }, { n: num7(theirLost), label: "of theirs shot down" }];
+      ranked.push({ row: row2, sub: 0, weight: (flown2 / 20 + ourLost + theirLost) * PLANE_MEN + (shipsHit ? shipsWeight(shipsHit) : 0), great: !!shipsHit && greatShips(shipsHit) });
     }
     const shelled = /* @__PURE__ */ new Set();
     for (const r of shores) {
@@ -111482,11 +112347,11 @@
       ...(() => {
         if (!groundRules(s)) return { cut: [], cuts: [] };
         try {
-          const known = [...cutsKnown(s).entries()];
+          const known = [...cutsKnown(s, s.human, seen2).entries()];
           return {
             cut: known.map(([id]) => id),
             cuts: known.map(([id, k]) => {
-              const said = cutSays(s, id);
+              const said = cutSays(s, id, s.human, seen2);
               return { region: id, how: k.how, head: said?.head ?? "", line: said?.line ?? "", short: said?.short ?? "" };
             })
           };
@@ -111936,6 +112801,8 @@
       voyageLog: voyageOn(s),
       // (Release 2, the sea field's sailor rules: battle/sea/ticket.ts) Whether men go into the water when a ship goes down.
       sailors: sailorsOn(s),
+      // (Release 2, the sea field's own water: battle/sea/ticket.ts) Whether captains mind their own side's torpedoes.
+      ownWater: ownWaterOn(s),
       // (Release 2, mines.ts) Whether fleets can lay mines at sea, and the fields the player knows of: his side's and the enemy's he has found.
       seaMines: seaMinesOn(s),
       mines: minesSeen(s),
@@ -112910,6 +113777,7 @@
     swapAsked = "";
     wreckAsked = "";
     fallenNation = null;
+    forgetOwnOrders();
     lastMonth = null;
     lastReel = -9;
     monthBook = null;
@@ -113025,6 +113893,7 @@
     swapAsked = "";
     wreckAsked = "";
     fallenNation = null;
+    forgetOwnOrders();
     const kept3 = reportOfSave(g);
     lastMonth = kept3.report;
     lastReel = -9;
@@ -113430,9 +114299,9 @@
     try {
       for (const f of s.airFleets) {
         if (f.nat !== s.human) continue;
-        const flown = orderScout(s, f.id, region);
-        if (flown.ok) {
-          said = flown.text || "flown";
+        const flown2 = orderScout(s, f.id, region);
+        if (flown2.ok) {
+          said = flown2.text || "flown";
           break;
         }
       }
@@ -114695,11 +115564,11 @@
     const s = game();
     const ports = /* @__PURE__ */ new Set();
     let beaches = [];
-    if (humanUp(s) && !onEve(s)) {
+    if (humanUp(s) && !onEve(s)) seaReading(s, () => {
       const cs = corpsById(s, ids2).filter((c) => canOrder(s, c));
       for (const c of cs) for (const r of s.regions) if (r.port && r.id !== c.reg && whyNotShip(s, c, r) === null) ports.add(r.id);
       beaches = landingTargets(s, cs).map((r) => r.id);
-    }
+    });
     return { ports: [...ports], beaches };
   }
   function bySeaWhy(ids2, to) {
@@ -114707,14 +115576,16 @@
     const r = s.regions[to];
     const cs = corpsById(s, ids2).filter((c) => canOrder(s, c));
     if (!r || !cs.length) return { why: "" };
-    if (allied(s, cs[0].nat, r.ctrl)) {
-      for (const c of cs) {
-        const why = whyNotShip(s, c, r);
-        if (why) return { why };
+    return seaReading(s, () => {
+      if (allied(s, cs[0].nat, r.ctrl)) {
+        for (const c of cs) {
+          const why = whyNotShip(s, c, r);
+          if (why) return { why };
+        }
+        return { why: "" };
       }
-      return { why: "" };
-    }
-    return { why: whyNotLand(s, cs, r) ?? "" };
+      return { why: whyNotLand(s, cs, r) ?? "" };
+    });
   }
   function ship(ids2, to) {
     const s = game();
@@ -115216,9 +116087,9 @@ ${next.text}` : ""}` : next ? next.also : "";
       note4 = ok2 ? what === "repair" ? `${v?.town ?? "The town"} is repaired for ${moneyWords(v?.cost ?? 0)}: it pays in full again from this month.` : `The repair of ${v?.town ?? "the town"} is taken back, and the money with it.` : v?.why ?? note4;
     } else if (what === "recon") {
       const group = s.airFleets.find((f) => f.id === Number(a));
-      const flown = orderScout(s, Number(a), region);
-      ok2 = flown.ok;
-      note4 = flown.text || (ok2 ? "The flight is back with its photographs." : "No flight can be sent there now.");
+      const flown2 = orderScout(s, Number(a), region);
+      ok2 = flown2.ok;
+      note4 = flown2.text || (ok2 ? "The flight is back with its photographs." : "No flight can be sent there now.");
       if (ok2 && group && s.regions[region]) flies.push({ from: group.base, x: s.regions[region].x, y: s.regions[region].y, nat: group.nat, bombers: false, escort: false, region: -1, aa: 0, meet: "", meetFrom: -1, loss: 0 });
     }
     return { ok: ok2, note: note4, flies, view: view2() };
@@ -115385,7 +116256,9 @@ ${next.text}` : ""}` : next ? next.also : "";
   }
   function cancel(id) {
     const s = game();
-    return { ok: orderCancelBuild(s, id), view: view2() };
+    const ok2 = orderCancelBuild(s, id);
+    if (ok2) forgetOwnOrder(id);
+    return { ok: ok2, view: view2() };
   }
   function arsenal(region = -1) {
     const s = game();
@@ -115419,7 +116292,9 @@ ${next.text}` : ""}` : next ? next.also : "";
   }
   function order(key7, region = -1) {
     const s = game();
+    const label = arsenalOffers(s, region).find((o) => o.key === key7)?.label ?? "";
     const built = orderArsenal(s, key7, region);
+    if (built) noteOwnOrder(s, built, key7, region, label || built.name);
     return { ok: !!built, name: built?.name ?? "", view: view2() };
   }
   function declare(on2) {
@@ -115503,6 +116378,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     } catch {
     }
     if (pictureTrade(s)) out.push({ id: "trade", label: "TRADE AGREEMENTS" });
+    if (homeFrontOn() && s.nations[s.human]?.alive && townBuildings(s, s.nations[s.human].capital)) out.push({ id: "home", label: "THE HOME FRONT" });
     if (s.nations[s.human] && townBuildings(s, s.nations[s.human].capital)) out.push({ id: "towns", label: "TOWNS TO BUILD UP" });
     if (pictureDamaged(s).length) out.push({ id: "repairs", label: "DAMAGED TOWNS" });
     if (columnsOn(s) && s.nations[s.human]?.alive) out.push({ id: "lorries", label: "SUPPLY COLUMNS" });
@@ -115623,7 +116499,22 @@ ${next.text}` : ""}` : next ? next.also : "";
         tip: `Nothing is being raised or built, and there is ${inHand(me.pp).toLocaleString("en-US")} in the treasury. Open the ARSENAL to order corps, aircraft, ships or works.`
       });
     }
-    const theirs = { research: "research", arsenal: "build", "page:trade": "build", "page:spies": "spies", "page:repairs": "build" };
+    if (homeFrontOn()) {
+      let can2 = 0;
+      try {
+        can2 = civicReady(s, me.id);
+      } catch {
+        can2 = 0;
+      }
+      if (can2 > 0) {
+        out.push({
+          k: "page:home",
+          t: can2 === 1 ? "A TOWN CAN BUILD" : `${can2} TOWNS CAN BUILD`,
+          tip: `${can2 === 1 ? "One of your towns has" : `${can2} of your towns have`} the builders free and something the treasury can pay for: it holds ${inHand(me.pp).toLocaleString("en-US")}. Open THE HOME FRONT to build in each with one press.`
+        });
+      }
+    }
+    const theirs = { research: "research", arsenal: "build", "page:trade": "build", "page:spies": "spies", "page:repairs": "build", "page:home": "build" };
     return out.filter((t) => {
       const desk = t.k.startsWith("field:") ? "air" : theirs[t.k];
       try {
@@ -116168,6 +117059,14 @@ ${next.text}` : ""}` : next ? next.also : "";
       ].filter(Boolean);
       return { nat: card.nat, title: cap1(seaWhat(name)), lines: lines2, buttons: [{ label: "LAY MINES", act: `fleetmines:${id}:${z}`, ok: up, tip: "It sails there and lays a field. Enemy ships at sea there, or sailing from a harbour on it, may lose a ship each month, until their destroyers sweep it. The field wears down over a few months." }] };
     });
+    const fp = s.fleets.find((x) => x.id === id);
+    const passing = fp?.stance === "passage";
+    const moveTip = (r, tip) => {
+      if (!fp) return tip;
+      if (passing) return passageWhy(s, fp);
+      const m = voyageMonths(s, fp, s.regions[r.id]);
+      return m ? `${tip.replace(/ It spends the month in harbour there\.$/, "")} It is a voyage: ${m === 1 ? "a month" : `${m} months`} at sea on the way, and a month in harbour there when it comes in.` : tip;
+    };
     const may = new Set(s.human && up ? declarable(s) : []);
     const harbours2 = (card.ships > 0 ? strikeHarbours(s, id, (nat) => may.has(nat)) : []).map((h) => {
       const who2 = s.nations[h.holder];
@@ -116177,7 +117076,7 @@ ${next.text}` : ""}` : next ? next.also : "";
         h.launch >= 0 ? `Its aircraft reach it from ${seaWhat(s.seas[h.launch]?.name ?? "sea")}.` : base ? `Beyond its aircraft from ${s.fleets.find((x) => x.id === id)?.port ?? "its base"}: from ${base.name} they reach it.` : "",
         h.atWar ? "" : `${who2 ? upFirst4(theName2(s, h.holder)) : h.holder} is at peace with you. Declare war first: a strike flown in the month war is declared goes in without warning.`
       ].filter(Boolean);
-      const buttons = h.launch >= 0 ? [{ label: "STRIKE FROM THE AIR", act: `fleetstrike:${id}:${h.region}`, ok: up && !h.why, tip: h.why ?? "It sails to the nearest sea from which its aircraft reach the harbour, and its wings go in with this month's air war. Ships at anchor cannot manoeuvre." }] : base ? [{ label: `MOVE BASE TO ${base.name.toUpperCase()}`, act: `fleetstrikebase:${id}:${base.id}`, ok: up, tip: `Its new home port: from there its aircraft reach ${h.name}.` }] : [];
+      const buttons = h.launch >= 0 ? [{ label: "STRIKE FROM THE AIR", act: `fleetstrike:${id}:${h.region}`, ok: up && !h.why, tip: h.why ?? "It sails to the nearest sea from which its aircraft reach the harbour, and its wings go in with this month's air war. Ships at anchor cannot manoeuvre." }] : base ? [{ label: `MOVE BASE TO ${base.name.toUpperCase()}`, act: `fleetstrikebase:${id}:${base.id}`, ok: up && !passing, tip: moveTip(base, `Its new home port: from there its aircraft reach ${h.name}.`) }] : [];
       return { nat: h.holder, title: `${h.name}${who2 ? ` (${who2.adj ?? who2.name})` : ""}`, lines: lines2, buttons };
     });
     const fb = s.fleets.find((x) => x.id === id);
@@ -116189,7 +117088,14 @@ ${next.text}` : ""}` : next ? next.also : "";
         `${waits2.words} (${turnToDate(waits2.turn).label}).`,
         staffRunsDesk(s, "navy") ? "You keep it under your own orders: hand it back to your admirals and it goes there with their next month." : "You run the navy yourself: the move is yours to make."
       ],
-      buttons: [{ label: `MOVE BASE TO ${waits2.region.name.toUpperCase()}`, act: `fleetbookbase:${id}`, ok: up, tip: "Its new home port, where the staff's plan has it. It spends the month in harbour there." }]
+      buttons: [{ label: `MOVE BASE TO ${waits2.region.name.toUpperCase()}`, act: `fleetbookbase:${id}`, ok: up && !passing, tip: moveTip(waits2.region, "Its new home port, where the staff's plan has it. It spends the month in harbour there.") }]
+    }] : [];
+    const away2 = fp && !passing && struckLine(s, fp) ? safeHarbour(s, fp) : null;
+    const withdraw2 = away2 ? [{
+      nat: card.nat,
+      title: away2.name,
+      lines: [`The nearest friendly harbour out of reach of the aircraft that struck it at anchor at ${fp.port}.`],
+      buttons: [{ label: `WITHDRAW TO ${away2.name.toUpperCase()}`, act: `fleetstrikebase:${id}:${away2.id}`, ok: up, tip: moveTip(away2, "Its new home port, out of the strikers' reach. It spends the month in harbour there.") }]
     }] : [];
     const joins = (o?.merge ?? []).map((other4) => {
       const f = fleetView(s, other4);
@@ -116225,6 +117131,7 @@ ${next.text}` : ""}` : next ? next.also : "";
         { heading: "ENEMY FLEETS TO SHADOW", text: "", rows: shadows },
         { heading: "SEAS TO MINE", text: "", rows: minable },
         { heading: "ENEMY HARBOURS TO STRIKE", text: "", rows: harbours2 },
+        { heading: "OUT OF THE STRIKERS' REACH", text: "", rows: withdraw2 },
         { heading: "THE STAFF'S PLAN", text: "", rows: plan },
         { heading: "SEAS IN ITS REACH", text: seas.length ? "" : o?.held ? o.held : up ? "The country is at peace: the fleet keeps its station." : "It is not your month.", rows: seas },
         { heading: "LANES TO ESCORT", text: "", rows: lanes2 },
@@ -116548,6 +117455,8 @@ ${standing5}`,
       note: "A town is a high street with a few empty lots: a village has one, a town two, a city three and the capital four. Each lot takes one kind of building, and each building can be raised two more levels. A lot once built on stays that kind.",
       top: [
         { label: "SHOW ON THE MAP", act: `goto:region:${region}`, ok: true, tip: "Looks at the place on the map." },
+        // (Release 2, THE HOME FRONT) The way back to the board, where the game shows it.
+        ...homeFrontOn() ? [{ label: "THE HOME FRONT", act: "open:home", ok: true, tip: "Every town of yours on one board, with raising forces and everything on order." }] : [],
         { label: "TOWNS TO BUILD UP", act: "open:towns", ok: true, tip: "The best place for each kind of building now." },
         { label: "TRADE AGREEMENTS", act: "open:trade", ok: !!tradeLedger(s), tip: "What the commerce of your towns is traded for." }
       ],
@@ -116807,6 +117716,238 @@ ${standing5}`,
       note: "Commerce pays into the treasury, farming fills the depots, learning quickens research, training and medicine look after the army, and administration brings in tax and political capital. Pick any province of yours on the map and press TOWN PLAN to see its plots.",
       top: [{ label: "TRADE AGREEMENTS", act: "open:trade", ok: !!tradeLedger(s), tip: "What the commerce of your towns is traded for." }],
       sections
+    };
+  }
+  var homeFrontOn = () => !!globalThis.TC_HOME_FRONT;
+  var ordersNow = null;
+  var ordersBefore = null;
+  function forgetOwnOrders() {
+    ordersNow = null;
+    ordersBefore = null;
+  }
+  function noteOwnOrder(s, b, key7, region, label) {
+    if (key7.startsWith("work:")) return;
+    if (!ordersNow || ordersNow.turn !== s.turn) {
+      if (ordersNow && ordersNow.list.length) ordersBefore = ordersNow;
+      ordersNow = { turn: s.turn, list: [] };
+    }
+    ordersNow.list.push({ id: b.id, key: key7, region, label });
+  }
+  function forgetOwnOrder(id) {
+    if (ordersNow) ordersNow.list = ordersNow.list.filter((o) => o.id !== id);
+  }
+  var keyOfBuild = (b) => b.what === "corps" && b.kind && !b.elite && !b.airborne && !b.revive ? `corps:${b.kind}` : b.what === "air" && b.item ? `air:${b.item}` : b.what === "ship" && b.item ? `ship:${b.item}` : "";
+  function ownOrdersBefore(s) {
+    const kept3 = ordersNow && ordersNow.turn < s.turn && ordersNow.list.length ? ordersNow : ordersBefore && ordersBefore.turn < s.turn && ordersBefore.list.length ? ordersBefore : null;
+    if (kept3) return kept3;
+    if (ordersNow || ordersBefore) return null;
+    const me = s.human ? s.nations[s.human] : null;
+    let staffed = true;
+    try {
+      staffed = !!pictureCommand(s)?.desks.find((d) => d.id === "build")?.staff;
+    } catch {
+      staffed = true;
+    }
+    if (!me || staffed) return null;
+    const offers2 = arsenalOffers(s, -1);
+    const list5 = me.queue.filter((b) => b.ordered === s.turn - 1 && keyOfBuild(b)).map((b) => ({ key: keyOfBuild(b), region: -1, label: offers2.find((o) => o.key === keyOfBuild(b))?.label ?? b.name }));
+    return list5.length ? { turn: s.turn - 1, list: list5 } : null;
+  }
+  function ordersInWords(labels) {
+    const counts = /* @__PURE__ */ new Map();
+    for (const l of labels) counts.set(l, (counts.get(l) ?? 0) + 1);
+    const many = (l) => /(corps|ships)$/i.test(l) ? l : `${l}s`;
+    return listNames2([...counts].map(([l, n]) => `${n} ${lowFirst(n === 1 ? l : many(l))}`));
+  }
+  function againPlan(s) {
+    const me = s.human ? s.nations[s.human] : null;
+    const before = me ? ownOrdersBefore(s) : null;
+    if (!me || !before) return null;
+    const book3 = /* @__PURE__ */ new Map();
+    const offersAt = (region) => {
+      if (!book3.has(region)) book3.set(region, arsenalOffers(s, region));
+      return book3.get(region);
+    };
+    let pp = me.pp;
+    const go = [], out = [];
+    for (const it of before.list) {
+      const o = offersAt(it.region).find((x) => x.key === it.key);
+      if (!o) {
+        out.push({ label: it.label, why: "no longer on offer" });
+        continue;
+      }
+      if (o.why && !o.poor) {
+        out.push({ label: o.label, why: o.why.replace(/\.$/, "") });
+        continue;
+      }
+      if (o.cost > pp) {
+        out.push({ label: o.label, why: `${Math.max(1, shown(o.cost) - inHand(pp)).toLocaleString("en-US")} short` });
+        continue;
+      }
+      pp -= o.cost;
+      go.push({ key: it.key, region: it.region, label: o.label, cost: o.cost });
+    }
+    return { when: turnToDate(before.turn).label, go, out };
+  }
+  function homeBoard(s) {
+    const me = s.human ? s.nations[s.human] : null;
+    if (!me || !me.alive || !townBuildings(s, me.capital)) return null;
+    const up = humanUp(s) && !onEve(s);
+    const notUp = "It is not your month.";
+    const advice = civicAdvice(s, me.id);
+    const rank2 = new Map(advice.lines.map((l, i) => [l, i]));
+    const place3 = new Map(advice.home.map((id, i) => [id, i]));
+    const pays = /* @__PURE__ */ new Map();
+    try {
+      for (const p of ledger(s, me.id).provinces) pays.set(p.id, shown(p.total));
+    } catch {
+    }
+    const held3 = s.regions.filter((r) => r.ctrl === me.id).sort((a, b) => (place3.get(a.id) ?? 1e6) - (place3.get(b.id) ?? 1e6) || (pays.get(b.id) ?? 0) - (pays.get(a.id) ?? 0) || a.id - b.id);
+    const towns2 = [];
+    for (const r of held3) {
+      const t = townBuildings(s, r.id);
+      if (!t || !t.mine || !t.plots.length) continue;
+      const asBuild = (o) => ({
+        line: o.line,
+        name: o.name,
+        label: o.label,
+        cost: shown(o.cost),
+        months: o.months,
+        effect: o.effect,
+        ok: up && o.why === null,
+        why: !up ? notUp : o.poor ? `${Math.max(1, shown(o.cost) - inHand(me.pp)).toLocaleString("en-US")} short: the treasury holds ${inHand(me.pp).toLocaleString("en-US")}.` : o.why ?? "",
+        act: `civic:${r.id}:${o.line}`
+      });
+      const open3 = t.offers.filter((o) => o.why === null || o.poor).sort((a, b2) => (rank2.get(a.line) ?? 99) - (rank2.get(b2.line) ?? 99));
+      const b = me.queue.find((x) => x.what === "civic" && x.region === r.id);
+      const going = b ? { id: b.id, name: b.name.split(" at ")[0], due: turnToDate(b.eta).label, months: Math.max(0, b.eta - s.turn), cancel: b.ordered === s.turn && up, act: `home:cancel:${b.id}` } : null;
+      const best = open3.length ? asBuild(open3[0]) : null;
+      towns2.push({
+        region: r.id,
+        town: t.town,
+        province: r.name,
+        size: t.size,
+        own: r.owner === me.id,
+        pays: pays.get(r.id) ?? 0,
+        state: going ? "going" : !best ? "done" : open3[0].poor ? "short" : "ready",
+        plots: t.plots.map((p) => ({ s: !p.line ? "free" : p.building ? "going" : "built", line: p.line ?? "", name: p.line ? p.level > 0 ? p.label : p.name : "", level: p.level, months: p.building ? Math.max(0, p.due - s.turn) : 0 })),
+        best,
+        more: open3.slice(1).map(asBuild),
+        going,
+        // (why nothing is offered: the one reason every line gives, or that the town is complete)
+        note: best || going ? "" : ((whys) => whys.length && whys.every((w) => w === whys[0]) ? whys[0] : "Nothing more can be built here now.")(t.offers.map((o) => o.why ?? "").filter(Boolean))
+      });
+    }
+    const ready = towns2.filter((t) => t.state === "ready" || t.state === "short").length, goingUp = towns2.filter((t) => t.state === "going").length;
+    const book3 = ordersBookOf(s);
+    const orders2 = me.queue.filter((b) => b.what !== "civic").slice().sort((a, b) => a.eta - b.eta || a.id - b.id).map((b) => {
+      const l = orderLine(s, b, book3);
+      return { id: l.id, what: l.what, name: l.words, where: l.where, due: l.due, months: l.months, cost: shown(b.cost), cancel: l.canCancel && up, act: `home:cancel:${l.id}`, share: l.share, region: l.region };
+    });
+    const money3 = inHand(me.pp);
+    const raise2 = arsenalOffers(s, -1).filter((o) => o.group !== "works").map((o) => ({
+      key: o.key,
+      group: o.group,
+      label: o.label,
+      cost: shown(o.cost),
+      months: o.months,
+      where: s.regions[o.at]?.name ?? "",
+      note: o.note,
+      ok: up && !o.why,
+      why: !up ? notUp : o.poor && shown(o.cost) > money3 ? `${(shown(o.cost) - money3).toLocaleString("en-US")} short: the treasury holds ${money3.toLocaleString("en-US")}.` : o.why ?? "",
+      act: `home:order:${o.key}`
+    }));
+    const plan = againPlan(s);
+    const total = plan ? plan.go.reduce((sum3, x) => sum3 + shown(x.cost), 0) : 0;
+    const leftOut = plan && plan.out.length ? `Left out: ${plan.out.map((x) => `${lowFirst(x.label)} (${lowFirst(x.why)})`).join("; ")}.` : "";
+    const again = plan ? {
+      ok: up && plan.go.length > 0,
+      when: plan.when,
+      cost: total,
+      left: leftOut,
+      act: "home:again",
+      text: plan.go.length ? `As in ${plan.when}: ${ordersInWords(plan.go.map((x) => x.label))}.` : `Nothing of ${plan.when}'s order can be placed now.`,
+      why: !up ? notUp : plan.go.length ? "" : leftOut
+    } : null;
+    let T = null;
+    try {
+      T = treasuryOf(s, me.id);
+    } catch {
+      T = null;
+    }
+    const net = T ? T.net : 0;
+    let men2 = null;
+    try {
+      men2 = manpowerOf(s);
+    } catch {
+      men2 = null;
+    }
+    const short = (n) => Math.abs(n) >= 1e6 ? `${(n / 1e6).toFixed(Math.abs(n) >= 1e7 ? 0 : 1)} million` : Math.round(n).toLocaleString("en-US");
+    const tiles = [
+      { k: "money", label: "TREASURY", figure: money3.toLocaleString("en-US"), sub: T && T.budget ? `${net < 0 ? "−" : "+"}${Math.abs(net).toLocaleString("en-US")} a month` : "" },
+      { k: "orders", label: "ON ORDER", figure: String(orders2.length), sub: orders2.length ? `next ready ${orders2[0].due}` : "nothing is being raised" },
+      { k: "towns", label: "TOWNS", figure: String(towns2.length), sub: `${ready} can build  ·  ${goingUp} building` },
+      ...men2 ? [{ k: "men", label: "MEN IN RESERVE", figure: short(men2.men), sub: men2.word }] : []
+    ];
+    let staff = null;
+    try {
+      const v = commandOf(s), bar = deskBar(s, "build");
+      if (v && bar) staff = { on: bar.staff, line: bar.staff ? bar.line : deskRuns(s, "build"), label: bar.label, act: bar.act, tip: bar.tip, cap: v.cap, caps: v.caps.map((c) => ({ n: c, now: c === v.cap, act: `cap:${c}` })) };
+    } catch {
+      staff = null;
+    }
+    return { nation: me.name, date: turnToDate(s.turn).label, up, money: money3, net, tiles, counts: { ready, going: goingUp, all: towns2.length }, towns: towns2, raise: raise2, again, orders: orders2, staff };
+  }
+  function homePage(s) {
+    const h = homeBoard(s);
+    if (!h) return null;
+    const cash = (n2) => n2.toLocaleString("en-US");
+    const can2 = h.towns.filter((t) => t.state === "ready" || t.state === "short");
+    const townRows = can2.slice(0, 60).map((t) => ({
+      nat: "",
+      title: `${t.town}${t.town === t.province ? "" : `, ${t.province}`}  ·  ${t.size}${t.pays ? `  ·  pays ${cash(t.pays)}` : ""}`,
+      lines: [`${t.best.name}: ${t.best.label}  ·  ${cash(t.best.cost)}  ·  ${monthsWords(t.best.months)}`, t.best.effect],
+      buttons: [
+        { label: "BUILD", act: t.best.act, ok: t.best.ok, tip: t.best.ok ? `${t.best.label}: ${t.best.effect}` : t.best.why },
+        { label: "TOWN PLAN", act: `open:town:${t.region}`, ok: true, tip: "Every plot of this town and everything that could be built there." },
+        { label: "SHOW ON THE MAP", act: `goto:region:${t.region}`, ok: true, tip: "Looks at the place on the map." }
+      ]
+    }));
+    const goingRows = h.towns.filter((t) => t.going).map((t) => ({
+      nat: "",
+      title: `${t.going.name}  ·  ${t.town}`,
+      lines: [`Due ${t.going.due}.`],
+      buttons: t.going.cancel ? [{ label: "TAKE IT BACK", act: t.going.act, ok: true, tip: "The order is taken back and the money returned. Only in the month it was placed." }] : []
+    }));
+    const raiseRows = [
+      ...h.again ? [{ nat: "", title: `Order again${h.again.cost ? `  ·  ${cash(h.again.cost)}` : ""}`, lines: [h.again.text, h.again.left].filter(Boolean), buttons: [{ label: "ORDER AGAIN", act: h.again.act, ok: h.again.ok, tip: h.again.ok ? "Places each of these orders again at today's price." : h.again.why }] }] : [],
+      ...h.raise.map((o) => ({
+        nat: "",
+        title: `${o.label}  ·  ${cash(o.cost)}  ·  ${monthsWords(o.months)}`,
+        lines: [o.note, o.ok ? "" : o.why].filter(Boolean),
+        buttons: [{ label: "RAISE", act: o.act, ok: o.ok, tip: o.ok ? o.note : o.why }]
+      }))
+    ];
+    const orderRows = h.orders.map((o) => ({
+      nat: "",
+      title: `${o.name}  ·  ${cash(o.cost)}`,
+      lines: [`${o.where ? `${o.where}. ` : ""}Due ${o.due}.`],
+      buttons: o.cancel ? [{ label: "TAKE IT BACK", act: o.act, ok: true, tip: "The order is taken back and the money returned. Only in the month it was placed." }] : []
+    }));
+    const n = h.counts.ready;
+    return {
+      id: "home",
+      title: `THE HOME FRONT  ·  ${h.nation.toUpperCase()}  ·  ${h.date.toUpperCase()}`,
+      headline: `${h.money >= 0 ? `${cash(h.money)} to spend` : `The treasury is ${cash(-h.money)} overdrawn`}, and ${n === 0 ? "no town can take a building now" : n === 1 ? "one town can take a building" : `${n} towns can take a building`}`,
+      note: "Every town of yours, raising forces and everything on order, in one place. BUILD puts up the building your staff would choose for that town; TOWN PLAN shows every choice.",
+      top: [{ label: "TRADE AGREEMENTS", act: "open:trade", ok: !!tradeLedger(s), tip: "What the commerce of your towns is traded for." }],
+      sections: [
+        { heading: "TOWNS THAT CAN TAKE A BUILDING", text: can2.length ? can2.length > 60 ? `The richest 60 of ${can2.length}.` : "" : "Every town is building or complete.", rows: townRows },
+        ...goingRows.length ? [{ heading: "GOING UP IN YOUR TOWNS", text: "", rows: goingRows }] : [],
+        { heading: "RAISE FORCES", text: h.up ? "" : "It is not your month.", rows: raiseRows },
+        { heading: "ON ORDER", text: orderRows.length ? "" : "Nothing is being raised.", rows: orderRows }
+      ],
+      home: h
     };
   }
   function tradePage(s) {
@@ -117303,7 +118444,7 @@ ${standing5}`,
   function page(id, region = -1) {
     const s = game();
     const part = id.split(":");
-    const p = id === "repairs" ? repairsPage(s) : id === "lorries" ? lorriesPage(s) : id === "atom" ? atomPage2(s) : id === "staff" ? staffPage(s) : id === "cabinet" ? cabinetPage(s) : id === "men" ? menPage(s) : id === "trade" ? tradePage(s) : id === "towns" ? townsPage(s) : part[0] === "town" ? townPage(s, Number(part[1])) : id === "spies" ? spiesPage(s, region) : id === "crossings" ? crossingsPage(s) : id === "lastact" ? lastActPage(s) : id === "forces" ? forcesPage(s) : id === "reports" ? reportsPage(s) : part[0] === "battle" ? battleReportPage(s, Number(part[1])) : id === "goals" ? goalsPage(s) : id === "heroes" ? heroesPage(s) : part[0] === "fleet" ? fleetPage(s, Number(part[1])) : part[0] === "fleetattack" ? fleetAttackPage(s, Number(part[1]), Number(part[2])) : part[0] === "shell" ? shellPage(s, Number(part[1]), Number(part[2])) : airPage(s, id, region) ? airPage(s, id, region) : id === "airfield" ? airfieldPage2(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage2(s, Number(part[1])) : part[0] === "fold" ? foldPage(s, Number(part[1])) : null;
+    const p = id === "repairs" ? repairsPage(s) : id === "lorries" ? lorriesPage(s) : id === "atom" ? atomPage2(s) : id === "staff" ? staffPage(s) : id === "cabinet" ? cabinetPage(s) : id === "men" ? menPage(s) : id === "trade" ? tradePage(s) : id === "towns" ? townsPage(s) : id === "home" ? homePage(s) : part[0] === "town" ? townPage(s, Number(part[1])) : id === "spies" ? spiesPage(s, region) : id === "crossings" ? crossingsPage(s) : id === "lastact" ? lastActPage(s) : id === "forces" ? forcesPage(s) : id === "reports" ? reportsPage(s) : part[0] === "battle" ? battleReportPage(s, Number(part[1])) : id === "goals" ? goalsPage(s) : id === "heroes" ? heroesPage(s) : part[0] === "fleet" ? fleetPage(s, Number(part[1])) : part[0] === "fleetattack" ? fleetAttackPage(s, Number(part[1]), Number(part[2])) : part[0] === "shell" ? shellPage(s, Number(part[1]), Number(part[2])) : airPage(s, id, region) ? airPage(s, id, region) : id === "airfield" ? airfieldPage2(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage2(s, Number(part[1])) : part[0] === "fold" ? foldPage(s, Number(part[1])) : null;
     if (p && id === "atom" && s.human) {
       const a = s.nations[s.human]?.atom;
       if (a && (a.bombs ?? 0) > 0) a.seen = s.turn;
@@ -117347,7 +118488,7 @@ ${standing5}`,
   var runsLine = (lead2, desk) => lead2.toLowerCase().endsWith(lowFirst(desk).replace(/^the /, "")) ? `${lead2} runs itself for you.` : `${lead2} run${/s$/.test(lead2) ? "" : "s"} ${lowFirst(desk)}.`;
   function deskOfPage(id) {
     const head = id.split(":")[0];
-    return head === "spies" ? "spies" : head === "trade" || head === "towns" ? "build" : head === "airfield" ? "air" : head === "fleet" ? "navy" : null;
+    return head === "spies" ? "spies" : head === "trade" || head === "towns" || head === "home" ? "build" : head === "airfield" ? "air" : head === "fleet" ? "navy" : null;
   }
   function deskBar(s, desk) {
     let v = null;
@@ -117454,9 +118595,9 @@ ${standing5}`,
       note4 = air2.note;
       open3 = air2.ok ? air2.open ?? "" : "";
       if (air2.ok && air2.report !== void 0) {
-        const flown = raidsSince(s, air0, [s.turn]);
-        flies = flown.flights;
-        const told2 = flown.notes.join(" ") || note4;
+        const flown2 = raidsSince(s, air0, [s.turn]);
+        flies = flown2.flights;
+        const told2 = flown2.notes.join(" ") || note4;
         note4 = told2.length > 190 ? `${told2.slice(0, told2.lastIndexOf(".", 190) + 1) || told2.slice(0, 190)}` : told2;
       }
       if (air2.ok && part[0] === "search") {
@@ -117532,6 +118673,33 @@ ${standing5}`,
           ok2 = false;
         }
         note4 = ok2 ? `${v?.town ?? "The town"} is repaired: it pays in full again from this month.` : v?.why ?? "It cannot be repaired now.";
+      }
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
+    }
+    if (part[0] === "home") {
+      if (part[1] === "order") {
+        const key7 = part.slice(2).join(":");
+        const offer = arsenalOffers(s, -1).find((o) => o.key === key7);
+        const b = orderArsenal(s, key7, -1);
+        ok2 = !!b;
+        if (b) noteOwnOrder(s, b, key7, -1, offer?.label ?? b.name);
+        note4 = b ? `${b.name} ordered. Due ${turnToDate(b.eta).label}.` : !humanUp(s) ? "It is not your month." : offer?.why ?? "That cannot be ordered now.";
+      } else if (part[1] === "cancel") {
+        ok2 = orderCancelBuild(s, Number(part[2]));
+        if (ok2) forgetOwnOrder(Number(part[2]));
+        note4 = ok2 ? "The order is taken back and the money returned." : "An order can only be taken back in the month it was placed.";
+      } else if (part[1] === "again") {
+        const plan = againPlan(s);
+        const placed3 = [], out = plan ? plan.out.slice() : [];
+        for (const it of humanUp(s) && plan ? plan.go : []) {
+          const b = orderArsenal(s, it.key, it.region);
+          if (b) {
+            placed3.push(it.label);
+            noteOwnOrder(s, b, it.key, it.region, it.label);
+          } else out.push({ label: it.label, why: arsenalOffers(s, it.region).find((o) => o.key === it.key)?.why?.replace(/\.$/, "") ?? "it cannot be ordered now" });
+        }
+        ok2 = placed3.length > 0;
+        note4 = !humanUp(s) ? "It is not your month." : !plan ? "There is no earlier order of yours to repeat." : `${ok2 ? `Ordered again: ${ordersInWords(placed3)}.` : "Nothing could be ordered again."}${out.length ? ` Left out: ${out.map((x) => `${lowFirst(x.label)} (${lowFirst(x.why)})`).join("; ")}.` : ""}`;
       }
       return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
     }
@@ -117733,6 +118901,13 @@ ${standing5}`,
       setSailors(s, on2);
       ok2 = true;
       note4 = sailorsOn(s) ? "Sailor rules are on: in fleet actions fought live on the sea field, men go into the water when a ship goes down, and the side left holding the water picks up who it can." : on2 ? "Sailor rules work in the grand campaign only." : "Sailor rules are off.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
+    }
+    if (part[0] === "ownwaterrule") {
+      const on2 = part[1] === "on";
+      setOwnWater(s, on2);
+      ok2 = true;
+      note4 = ownWaterOn(s) ? "Friendly torpedoes are watched: in fleet actions fought live on the sea field, a destroyer holds its torpedoes while one of its own ships is in their way, and ships keep out of the way of their own side's torpedoes." : on2 ? "Watching for friendly torpedoes works in the grand campaign only." : "Friendly torpedoes are no longer watched.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
     }
     if (part[0] === "fleetshadow") {
@@ -119092,6 +120267,11 @@ ${standing5}`,
     setSailors(s, !!on2);
     return { on: sailorsOn(s) };
   };
+  globalThis.TC.ownWater = (on2) => {
+    const s = game();
+    setOwnWater(s, !!on2);
+    return { on: ownWaterOn(s) };
+  };
   globalThis.TC.seaMines = (on2) => {
     const s = game();
     setSeaMines(s, !!on2);
@@ -119157,6 +120337,7 @@ ${standing5}`,
     const set = setLogistics(s, which, !!on2);
     return { set, on: logisticsSet(s, which) };
   };
+  globalThis.TC.homeFront = () => homeBoard(game());
   var R2_SHIP = {
     nicknames: (s) => {
       setNicknames(s, true);

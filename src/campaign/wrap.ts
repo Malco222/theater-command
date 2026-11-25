@@ -87,6 +87,14 @@ export const chartDist = (g: Game, a: Spot, b: Spot): number => (globeFor(g, a, 
 /** The square of it, for a search for the nearest. */
 export const chartDist2 = (g: Game, a: Spot, b: Spot): number => (globeFor(g, a, b) ? globeDist(g, a.x, a.y, b.x, b.y) ** 2 : mapDist2(g, a.x, a.y, b.x, b.y));
 
+/**
+ * True where the rules read the globe for the reach of a point to a straight leg between two provinces (air.ts legKmAt:
+ * the ferry lane's legs): as globeFor, when either end of the leg or the point is of the far side. The point is a
+ * province (region >= 0), or a sea where it is none (a carrier wing at sea).
+ */
+export const globeLeg = (g: Game, a: Spot, b: Spot, region: number, sea = -1): boolean =>
+  globeOn(g) && (a.id >= FAR_FROM || b.id >= FAR_FROM || (region >= 0 ? region >= FAR_FROM : sea >= FAR_SEA_FROM));
+
 /** The first sea of the far side: the whole chart keeps the old chart's seas first, in the old chart's order. */
 const FAR_SEA_FROM = (americasMap as unknown as { seas: { zones: unknown[] } }).seas.zones.length;
 

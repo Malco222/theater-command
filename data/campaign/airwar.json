@@ -56,7 +56,9 @@
     "dug": 0.6,
     "cover": { "plains": 1, "desert": 1, "hills": 0.85, "marsh": 0.85, "forest": 0.7, "mountain": 0.7, "urban": 0.6 },
     "fire": 0.015,
-    "value": 1500
+    "value": 1500,
+    "_reach": "Read only with the strafers' rule on (src/campaign/strafers.ts; the design director, 25 November 2026 05:12Z: the card, the settled raid and the fought raid charge the ground fire only on the fighters expected to be left after the air fight that have the reach to strafe). reach (G, flagged; one figure for every nation): a fighter group has the reach to go down on the troops when they lie within this share of its fighter range (air.json ftrRange and the dated range rows below, read by air.ts reach()), an escort radius that already holds about 15 to 20 minutes of fighting at the far end; a group farther out escorts its bombers and turns for home, adds no weight on the troops and is not shot at by the ground. The design director, 25 November 2026 13:35Z (historian/strafing-reach-1125.md): 0.9, because the cause is fuel: the strafers here are fighters carrying no bombs, and the record's strafers spent about 15 to 20 minutes low, flak cutting their passes short more than fuel did; the historian's sum gives 0.85 to 1.0 there. Flak is priced once, as ground fire on the strafers left (fire above): the reach is not cut again for it. A fighter carrying bombs takes 0.6 (200 miles against 350 with the tank) once the game tells fighter-bombers apart by a kit row (bomb racks) on the type: not this build. (air.json range.fullAt, the share of range at which an escort is at full effect, is another figure and is not this one.)",
+    "reach": 0.9
   },
   "recon": {
     "_note": "A reconnaissance flight. aircraft is how many of the group go. loss is the share of them lost when enemy fighters patrol the target, per unit of their cover there. ready is the readiness the group spends.",

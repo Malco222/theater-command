@@ -1629,9 +1629,11 @@ function refresh(): void {
   lands = picked.length && (g.regions[picked[0].reg].port || byAir(picked)) && g.nations[picked[0].nat].atWar.length ? landTargets(g, picked) : [];
   if (!lands.length) ui.land = false;
   const fl = ui.tab === 'navy' ? myFleet() : null;
-  if (!fl) ui.rebase = false;
+  // (Release 2, the far chart: a fleet in passage is held to its way. Its seas and ports are not ringed: it can only be turned back.)
+  const onWay = !!fl && fl.stance === 'passage';
+  if (!fl || onWay) ui.rebase = false;
   // The coasts the picked fleet's guns can reach: red on the map, and a click on one plans a bombardment.
-  shellAt = fl && seaWar(g) && g.nations[fl.nat].atWar.length ? fleetOptions(g, fl.id)?.coasts ?? [] : [];
+  shellAt = fl && !onWay && seaWar(g) && g.nations[fl.nat].atWar.length ? fleetOptions(g, fl.id)?.coasts ?? [] : [];
   const af = ui.tab === 'air' ? myAir() : null;
   if (!af) ui.airMode = '';
   const raiding = ui.tab === 'air' && airWar(g) && !!g.human && humanUp(g);
@@ -1640,7 +1642,7 @@ function refresh(): void {
   else if (af) marks.push(whole(airMarks(af)));
   else if (fl) {
     if (ui.rebase) for (const r of baseTargets(g, fl)) mark(`<path class="mk rail" d="${pathOf(r.polys)}"/>`, r);
-    else {
+    else if (!onWay) {
       for (const z of fleetReach(g, fl, false, true)) marks.push(pieceAt(`<circle class="mk sea${atSea(fl) && fl.zone === z ? ' at' : ''}" cx="${g.seas[z].x}" cy="${g.seas[z].y + 9}" r="29"/>`, g.seas[z].x, g.seas[z].y + 9, 33));
       for (const id of shellAt) mark(`<path class="mk hit" d="${pathOf(g.regions[id].polys)}"/>`, g.regions[id]);
     }
@@ -2619,7 +2621,9 @@ function drawFleetTray(f: Fleet): void {
     <span class="m3 wide">${bar('Ready', card.ready, card.ready < 0.5 ? 'low' : '', `${Math.round(card.ready * 100)}%`, 'How fit for sea the ships are. A fleet in harbour refits quickly.')}${screen}${card.deckRoom > 0 ? bar('Aircraft', card.decks, card.decks < 0.5 ? 'low' : 'mor', `${num(card.aboard)} of ${num(card.deckRoom)} aboard`, 'The aircraft aboard its carriers against what the decks can carry. A wing is made up to strength only while the fleet lies in harbour, and a carrier with empty decks is worth far less in a fight.') : ''}</span>${card.bare ? `<small class="tcount wingbare" title="${esc(card.bare)}">${WARN_SIGN}${esc(card.bareBrief)}</small>` : ''}</div>`;
   const now = fleetStance(f);
   const ord = (s: Stance, label: string): string => `<button class="${now === s ? 'on' : ''}" data-act="stance" data-stance="${s}" title="${esc(FLEETS.orders[s].blurb)}">${label}</button>`;
-  const orders = can
+  const orders = can && f.stance === 'passage'
+    ? `<div class="tstance fleetord" role="group" aria-label="Orders for this fleet"><small>Orders</small><button data-act="toport" title="${esc(fleetOptions(g, f.id)?.held ?? '')}">Turn back</button></div>`
+    : can
     ? `<div class="tstance fleetord" role="group" aria-label="Orders for this fleet"><small>Orders</small>${ord('patrol', 'Patrol')}${ord('raid', 'Raid')}${pieces ? `${ord('hunt', 'Hunt subs')}<button class="${f.stance === 'escort' ? 'on' : ''}" data-act="fleetsec" data-sec="flanes" title="${esc(FLEETS.orders.escort.blurb)}">Escort</button>` : ''}<button data-act="toport" ${atSea(f) ? '' : 'disabled'} title="${esc(atSea(f) ? FLEETS.orders.port.blurb : inHarbour(f))}">Port</button>${pieces ? `<button data-act="fleetsplit" ${fleetOptions(g, f.id)?.split ? '' : 'disabled'} title="${fleetOptions(g, f.id)?.split ? 'Send some of its ships off as a fleet of their own.' : esc(oneShip(f))}">Split</button>` : ''}</div>`
     : `<small class="tcount">${n.atWar.length ? 'Orders can be given in your own month.' : 'At peace: the fleet stays in harbour.'}</small>`;
   // The wings stand beside the carriers they fly from.
@@ -5812,9 +5816,10 @@ function fleetOrders(f: Fleet): string {
     return `<button class="pickrow${s.here ? ' pick' : ''}" data-act="sail" data-zone="${s.zone}"><span class="grow"><b>${esc(s.name)}</b><br>${small(`${foe} · your side ${num(s.ours)}${more.length ? `<br>${more.join(' · ')}` : ''}`)}</span>${s.here ? '<span class="tag good">Here now</span>' : ''}${s.raidOnly ? '<span class="tag">Raid only</span>' : ''}</button>`;
   }).join('');
   const st = (s: Stance, label: string): string => `<button class="btn small${now === s ? ' on' : ''}" data-act="stance" data-stance="${s}" title="${esc(FLEETS.orders[s].blurb)}">${label}</button>`;
+  const passing = f.stance === 'passage';
   const will = now === 'raid' ? 'raid shipping' : now === 'hunt' ? 'hunt submarines' : 'patrol';
   let out = `<div class="orders">
-    <div class="acts">${st('patrol', 'Patrol')}${st('raid', 'Raid shipping')}${pieces ? st('hunt', 'Hunt submarines') : ''}<button class="btn small" data-act="toport" ${atSea(f) ? '' : 'disabled'} title="${esc(atSea(f) ? 'A fleet in harbour refits quickly.' : inHarbour(f))}">Return to port</button><button class="btn small${ui.rebase ? ' on' : ''}" data-act="rebase">Change base</button>${o.split ? '<button class="btn small" data-act="fleetsplit" title="Send some of its ships off as a fleet of their own: to escort a lane, to hunt submarines, to shell a coast.">Split off ships</button>' : ''}</div>`;
+    <div class="acts">${passing ? `<button class="btn small" data-act="toport" title="${esc(o.held ?? '')}">Turn back</button>` : `${st('patrol', 'Patrol')}${st('raid', 'Raid shipping')}${pieces ? st('hunt', 'Hunt submarines') : ''}<button class="btn small" data-act="toport" ${atSea(f) ? '' : 'disabled'} title="${esc(atSea(f) ? 'A fleet in harbour refits quickly.' : inHarbour(f))}">Return to port</button><button class="btn small${ui.rebase ? ' on' : ''}" data-act="rebase">Change base</button>`}${o.split ? '<button class="btn small" data-act="fleetsplit" title="Send some of its ships off as a fleet of their own: to escort a lane, to hunt submarines, to shell a coast.">Split off ships</button>' : ''}</div>${passing && o.held ? `<p class="sub">${esc(o.held)}</p>` : ''}`;
   const wings = wingsOfFleet(g, f.id);
   if (wings.length) {
     out += `<h3>Its aircraft</h3><p class="sub" style="margin:0 0 6px">A carrier is a floating airfield. At sea its aircraft reach every coast of the sea they are in, inland as far as their range allows, and the seas next door. Fighters keep enemy bombers off the fleet; strike aircraft go for ships, harbours and targets ashore. They are made up to strength only in harbour.</p>${wings.map((w) => `<button class="pickrow" data-act="wing" data-id="${w.id}">${groupIcon(w.kind, f.nat)}<span class="grow"><b>${esc(w.label)}</b> · ${num(w.aircraft)} of ${num(w.est)}<br>${small(esc(`${w.doing}. Reach ${num(w.range)} km.${w.aircraft < w.est ? ` ${w.note}` : ''}`))}</span><span class="tag${w.flew ? '' : ' good'}">${w.flew ? 'Flew' : w.kind === 'bmr' ? 'Plan a strike' : 'Orders'}</span></button>`).join('')}`;
@@ -9125,7 +9130,8 @@ function onSea(z: number): void {
   }
   const fl = ui.tab === 'navy' ? myFleet() : null;
   if (fl) {
-    if (ui.rebase) ui.msg = 'A base has to be a port: click one of the blue regions.';
+    if (fl.stance === 'passage') ui.msg = fleetOptions(g, fl.id)?.held ?? '';
+    else if (ui.rebase) ui.msg = 'A base has to be a port: click one of the blue regions.';
     else if (!g.nations[fl.nat].atWar.length) ui.msg = 'At peace the fleet stays in harbour.';
     else if (atSea(fl) && fl.zone === z && fl.stance === ui.stance) ui.msg = `The ${fl.name} is already ${seaWhere(g.seas[z].name)}.`;
     else {
@@ -10425,7 +10431,8 @@ function onRegion(id: number): void {
   // Under the Navy tab with a fleet picked, a click on a port is a change of base.
   const fl = ui.tab === 'navy' ? myFleet() : null;
   if (fl && ui.rebase) {
-    if (orderRebase(g, fl.id, id)) ui.rebase = false;
+    if (fl.stance === 'passage') { ui.rebase = false; ui.msg = fleetOptions(g, fl.id)?.held ?? ''; }
+    else if (orderRebase(g, fl.id, id)) ui.rebase = false;
     else ui.msg = `${r.name} cannot be the fleet's base: it has to be a friendly port the ships can steam to.`;
     refresh();
     return;

@@ -18,9 +18,22 @@
  * (setup-1939.json, 'nos'). Every other division is a stand-in, numbered from above the highest real number of its
  * nation's arm (divisions.json, 'record'), so no stand-in ever takes a real number and no country carries one
  * division's name twice (the design director, 18 November 2026).
+ *
+ * Above that top a stand-in still passes over any number whose name is another division's own (the design director,
+ * 12:49Z, 25 November 2026, "B, the skip"): one a dated row of its country gives for that arm, whether or not the row
+ * ever lands, or one a living named division of that arm carries. The 15th Panzer Division that lands at Tripoli keeps
+ * its name to itself: Germany's stand-ins run 11th, 12th, 13th, 14th, 16th. A named division that dies does not free
+ * its number where a row gave it. A war already under way keeps the names its save carries.
  */
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/divisions.json';
 import setup from '../../data/campaign/setup-1939.json';
+import worldRows from '../../data/campaign/world.json';
+import diplomacyRows from '../../data/campaign/diplomacy.json';
+import siegeRows from '../../data/campaign/siege.json';
+import openRows from '../../data/campaign/open.json';
+import pacificRows from '../../data/campaign/pacific.json';
+import legionRows from '../../data/campaign/legions.json';
 import { hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
 import { KIND, MEN_PER_DIV, type Corps, type Game, type Kind } from './types';
@@ -71,6 +84,76 @@ function keepNumbers(c: Corps, list: number[]): void {
   else delete c.nos;
 }
 
+// ---- Names that are another division's own (the design director, 12:49Z, 25 November 2026) -------------------
+
+/** What a formation's own name makes of its divisions, kept by "nation:kind:name" (the same few names are asked often). */
+const NAMED = new Map<string, [string, string][]>();
+function ownNames(name: string, nat: string, kind: Kind): [string, string][] {
+  const k = `${nat}:${kind}:${name}`;
+  let got = NAMED.get(k);
+  if (!got) NAMED.set(k, got = DIVISIONS.historic[nat]?.[name] ?? namedDivisions(name, nat, kind));
+  return got;
+}
+
+/**
+ * The division names the data's rows give, by nation: every row of the campaign's data files that names a formation
+ * of a country and an arm, as [nation, name, kind, ...] or dated, [month, nation, name, kind, ...] (the first day's
+ * corps, the expeditions, the wider world's and the far side's rows, the garrisons). Read once, when a division is
+ * first numbered: by then the far side's rows are laid over the files (far-rows.ts), where its switch is on. A row
+ * that never lands keeps its names all the same, and so does one whose division has died.
+ */
+let ROW_NAMES: Map<string, Set<string>> | null = null;
+function rowNames(): Map<string, Set<string>> {
+  if (ROW_NAMES) return ROW_NAMES;
+  const out = new Map<string, Set<string>>();
+  const note = (nat: string, name: string, kind: Kind): void => {
+    const own = ownNames(name, nat, kind);
+    if (!own.length) return;
+    let set = out.get(nat);
+    if (!set) out.set(nat, set = new Set());
+    for (const [full] of own) set.add(full);
+  };
+  const walk = (x: unknown): void => {
+    if (Array.isArray(x)) {
+      const at = typeof x[0] === 'number' ? 1 : 0;
+      const nat = x[at], name = x[at + 1], kind = x[at + 2];
+      if (typeof nat === 'string' && /^[A-Z]{2,3}$/.test(nat) && typeof name === 'string' && typeof kind === 'string' && kind in KIND) note(nat, name, kind as Kind);
+      for (const y of x) if (y && typeof y === 'object') walk(y);
+    } else if (x && typeof x === 'object') for (const y of Object.values(x)) if (y && typeof y === 'object') walk(y);
+  };
+  for (const file of [setup, worldRows, diplomacyRows, siegeRows, openRows, pacificRows, legionRows]) walk(file);
+  return ROW_NAMES = out;
+}
+
+/**
+ * The next stand-in number above `from` for a nation's arm whose name is no other division's own: none a row of the
+ * country gives, and none a living named division of the country carries (a corps broken up by hand keeps its
+ * divisions' names on itself, and they count). The living are read once for each corps numbered.
+ */
+function standIns(g: Game, nat: string, kind: Kind): (from: number) => number {
+  const words = divisionWords(nat, kind).name;
+  const rows = rowNames().get(nat);
+  let living: Set<string> | null = null;
+  const taken = (name: string): boolean => {
+    if (rows?.has(name)) return true;
+    if (!living) {
+      living = new Set();
+      for (const o of g.corps) if (o.nat === nat && !o.dead) for (const [full] of o.names ?? ownNames(o.name, o.nat, o.kind)) living.add(full);
+    }
+    return living.has(name);
+  };
+  return (from) => {
+    let n = from + 1;
+    while (taken(`${ordinal(n)} ${words}`)) n++;
+    return n;
+  };
+}
+
+/** True where a stand-in of this number would carry a name that is another division's own: a row's, or a living named division's. */
+export function numberSpokenFor(g: Game, nat: string, kind: Kind, n: number): boolean {
+  return standIns(g, nat, kind)(n - 1) !== n;
+}
+
 /**
  * Gives a corps the numbers its divisions will carry (the grand campaign): the record's real ones where it has them
  * and no division of the nation's arm carries them already, and otherwise the next stand-ins its nation has free.
@@ -81,10 +164,11 @@ export function numberCorps(g: Game, c: Corps, real?: (number | null)[]): void {
   let next = Math.max(g.flags[key] ?? 0, TOP.get(key) ?? 0);
   const held = new Set<number>();
   if (real) for (const o of g.corps) if (o !== c && !o.dead && o.nat === c.nat && o.kind === c.kind && o.dn !== undefined) for (const n of numbersOf(o)) held.add(n);
+  const free = standIns(g, c.nat, c.kind);
   const list: number[] = [];
   for (let i = 0; i < c.divs; i++) {
     const n = real?.[i];
-    if (n && !held.has(n)) { held.add(n); list.push(n); } else list.push(++next);
+    if (n && !held.has(n)) { held.add(n); list.push(n); } else list.push(next = free(next));
   }
   if (next > (g.flags[key] ?? 0)) g.flags[key] = next;
   keepNumbers(c, list);
@@ -111,8 +195,9 @@ export function growCorps(g: Game, c: Corps, divs: number, kind: Kind): void {
   if (!was) return;
   const key = counter(c.nat, kind);
   let next = Math.max(g.flags[key] ?? 0, TOP.get(key) ?? 0);
+  const free = standIns(g, c.nat, kind);
   const list = same ? was : [];
-  while (list.length < c.divs) list.push(++next);
+  while (list.length < c.divs) list.push(next = free(next));
   g.flags[key] = next;
   keepNumbers(c, list);
 }
