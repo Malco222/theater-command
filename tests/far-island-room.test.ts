@@ -123,6 +123,40 @@ describe('the player and Wake', () => {
     expect(whyNotTakeField(g, a)).toBeNull();
     expect(roomAt(g, wake, 'USA')).toBe(1);
     expect(shoreRoom(g, wake, 'USA')).toBe(1);
+    // (Each corps in a town is asked for itself. Were a town's list ever of two sides, each side would count its own
+    // corps there and not the other's, whichever stood first on the list.)
+    const us = g.corps.find((c) => c.nat === 'USA' && !c.dead && c.kind === 'inf')!;
+    const truk = at(g, 'Truk');
+    expect(roomAt(g, { ...truk, garr: [a, us] }, 'JAP')).toBe(1);
+    expect(roomAt(g, { ...truk, garr: [a, us] }, 'USA')).toBe(1);
+    expect(roomAt(g, { ...truk, garr: [us, a, b] }, 'JAP')).toBe(0);
+  }, 300000);
+
+  it('engineers are counted apart on an island by ship as by march and by landing: the three counts agree', () => {
+    const g = war('USA');
+    const wake = at(g, 'Wake'), honolulu = at(g, 'Honolulu');
+    expect(placed(g, wake, 'USA')).toHaveLength(0);
+    const sappers = addCorps(g, 'USA', 'Sappers', 'eng', 1, honolulu.id, {}), bridgers = addCorps(g, 'USA', 'Bridgers', 'eng', 1, honolulu.id, {});
+    for (const e of [sappers, bridgers]) e.ap = e.apMax;
+    const first = corps(g, 'USA', 'First', honolulu), second = corps(g, 'USA', 'Second', honolulu);
+    // Engineers alone hold the atoll: they work among the troops and take none of its room of one corps.
+    expect(whyNotShip(g, sappers, wake)).toBeNull();
+    relocate(g, sappers, wake);
+    expect(hasRoom(g, wake, first)).toBe(true);
+    expect(roomForAll(g, wake, [first])).toBe(true);
+    expect(shoreRoom(g, wake, 'USA')).toBe(1);
+    expect(whyNotShip(g, first, wake)).toBeNull();
+    relocate(g, first, wake);
+    // The one corps is there: a second is refused by ship as it would be by march or by landing, and told why.
+    expect(hasRoom(g, wake, second)).toBe(false);
+    expect(roomForAll(g, wake, [second])).toBe(false);
+    expect(whyNotShip(g, second, wake)).toBe('Wake has room for one corps.');
+    // A second engineer corps may still join the first, as on any ground.
+    expect(hasRoom(g, wake, bridgers)).toBe(true);
+    expect(whyNotShip(g, bridgers, wake)).toBeNull();
+    // (A harbour that is no island of the table counts every corps on its quay, as it always did.)
+    const osaka = at(g, 'Osaka');
+    expect(islandOf(g, osaka)).toBeNull();
   }, 300000);
 
   it('cannot march a third corps onto Singapore, and is told why; the two may still change places', () => {
@@ -137,8 +171,7 @@ describe('the player and Wake', () => {
     expect(orderMove(g, c, singapore.id)).toBe(0);
     expect(moveCorps(g, c, singapore)).toBe(false);
     // (Nor by rail, with the island's own sentence.)
-    const train = whyNoTrainFor(g, [c], singapore.id);
-    if (train?.code === 'room') expect(train.line).toBe('Singapore has room for 2 corps.');
+    expect(whyNoTrainFor(g, [c], singapore.id)).toMatchObject({ code: 'room', line: 'Singapore has room for 2 corps.', at: singapore.id });
     // Ground that is no island says nothing of room here.
     expect(whyNoRoom(g, c, at(g, 'Kuala Lumpur'))).toBeNull();
     // The 3D game's march: the island's sentence, and the offer to change places with the corps that stands there.
@@ -203,7 +236,13 @@ describe('the winners of a fight for an island', () => {
   }, 300000);
 });
 
-describe("the record's rows and an island's room", () => {
+// The record's own hand, as built. Form B3, (c), says both that rows which put more corps on an island than its room
+// are left and listed for the historian, and that a row arriving on a full island follows what today's code does for
+// a full province. As built, the record's place is counted against five as it always was, so its rows are put down
+// over an island's room and nobody else may join them. The other reading (the row sent next door or kept waiting at
+// the island's own room) was built and measured and is not in the rules: it is the design director's to rule, and
+// these tests say what the rules do until he has.
+describe("the record's rows and an island's room, as built", () => {
   it('a row the record puts on an island is put down there as before, over its room, and nobody else may join it', () => {
     const g = startOpen(createGame(3, 'USA'));
     // Pearl Harbor has room for two, and two stand there on the first day. The 298th Infantry's row (October 1940)
@@ -246,5 +285,20 @@ describe("the record's rows and an island's room", () => {
     expect(placed(g, samoa, 'USA').length).toBeGreaterThan(roomAt(g, samoa, 'USA'));
     g.turn = 30; startPhase(g, 'USA');
     expect(placed(g, samoa, 'USA')).toHaveLength(2);
+  }, 300000);
+
+  it('a row made from the corps that holds an island takes its place there, and is not sent away for want of room', () => {
+    const g = startOpen(createGame(3, null));
+    // Hong Kong has room for one, and China Command holds it. Its row of August 1941 is made from that corps,
+    // which is struck off as the row forms: the stronger command stands where the weaker stood, on the island.
+    const hk = at(g, 'Hong Kong');
+    const was = placed(g, hk, 'UK');
+    expect(was.map((c) => [c.name, c.str])).toEqual([['China Command (Hong Kong garrison)', 0.35]]);
+    for (let t = 2; t <= 24; t++) { g.turn = t; startPhase(g, 'UK'); }
+    const now = placed(g, hk, 'UK');
+    expect(now.map((c) => c.name)).toEqual(['China Command (Hong Kong garrison)']);
+    expect(now[0].id).not.toBe(was[0].id);
+    expect(now[0].str).toBeCloseTo(0.7, 5);
+    expect(g.corps.filter((c) => c.nat === 'UK' && !c.dead && c.name === 'China Command (Hong Kong garrison)')).toHaveLength(1);
   }, 300000);
 });

@@ -42,12 +42,20 @@ export function islandOf(g: Game, r: Region | undefined | null): Island | null {
  * the book's station taken, counted against five as before (game.ts roomNear and expeditions, stations.ts). The
  * record was written before this table; where the two disagree the row is not sent away, kept waiting or struck,
  * and the historian mends the one or the other (form B3 of 25 November 2026, (c)).
+ * (This is one reading of (c). The other, a row for a full island sent on or kept waiting at the island's own room
+ * and the book's stations counted against it, was built and measured on 25 November 2026 and left out: by the book,
+ * at stop 1 of the history dial, the British divisions of Malaya could not step back onto Singapore Island, which
+ * has room for two, so Johore held and Singapore still stood in month 40 where it had fallen in month 31; the guard
+ * rows of Kwajalein, Yap and Chichi Jima waited two months for their landing forces to sail; and the standing tests
+ * of the islands' garrisons, the lent rows, Oahu's rows and the book's stations failed. The record is to be mended,
+ * or the reading ruled, before the record's hand reads the table.)
  */
 export function roomAt(g: Game, r: Region | undefined | null, nat: string): number {
   if (!ROWS || !r || !farOn(g)) return STACK;
   const row = ROWS[r.name];
   if (!row) return STACK;
-  const inTown = r.garr?.length && allied(g, nat, r.garr[0].nat) ? r.garr.filter((c) => !roomless(g, c)).length : 0;
+  // (Each corps in the town is asked for itself: only those of this side take this side's room.)
+  const inTown = r.garr ? r.garr.filter((c) => allied(g, nat, c.nat) && !roomless(g, c)).length : 0;
   return Math.max(0, row[0] - inTown);
 }
 

@@ -115,7 +115,8 @@ import { TOWNS, townName, townSize, type Prize, type TownView } from '../towns';
 import type { Mood } from '../morale';
 import { STORIES, awardOf, drillTo, whyNoSchool, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, envoysWord, freeCourt, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
-import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, placeName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
+import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, placeName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoRoom, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
+import { roomSays } from '../islands';
 import { setTeams, TEAMS_RELEASE } from '../teams';
 import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance, type CrewOrder, type Hero } from '../types';
 import { tenthPct } from '../../core/math';
@@ -2883,6 +2884,11 @@ function marchTo(id: number, picked: Corps[], look = false): boolean {
     // A full province next door: one corps can still change places with a corps there, in one order.
     const one = picked.length === 1 ? picked[0] : null;
     if (one && g.regions[one.reg].nb.includes(id) && !hasRoom(g, r, one) && swapChoices(g, one, id).length) { openModal({ kind: 'swap', corps: one.id, target: id }); return true; }
+    // (Release 2, the Pacific's islands.) An island that has no room for one more corps says so in its own words to
+    // the corps next door that was refused, where nobody there can change places with it: "Singapore has room for
+    // 2 corps." (rulings 173(b) and 179(s); the 3D game's march says the same, campaign-bridge.ts).
+    const full = picked.filter((c) => g.regions[c.reg].nb.includes(id)).map((c) => whyNoRoom(g, c, r)).find(Boolean);
+    if (full) { ui.msg = full; refresh(); return true; }
     return false;
   }
   if (gateGone(leftGate)) ui.msg = gateGone(leftGate);
@@ -3741,11 +3747,13 @@ function swapCard(corpsId: number, target: number): string {
   const c = g.corps.find((x) => x.id === corpsId);
   const r = g.regions[target];
   const vs = c ? swapChoices(g, c, target) : [];
+  // (An island of the Pacific is full at its own room, and the card says that: "Singapore has room for 2 corps.")
+  const full = roomSays(g, r);
   const pct = (x: number): string => `${Math.round(x * 100)}%`;
   const state = (x: Corps): string => `${num(men(x))} men at ${pct(x.str)} of its strength, ${x.dug ? `dug in, ${worksTag(x)}` : 'not dug in'}`;
   const rows = c ? vs.map((b) => `<div class="foldopt"><span class="grow"><b class="foldkeep">${esc(b.name)}</b><small>${esc(state(b))}. It marches to ${esc(g.regions[c.reg].name)}${c.dug ? ` and takes over the fieldworks ${esc(c.name)} stands in` : ''}${b.dug ? `; ${esc(c.name)} takes over its fieldworks` : ''}.</small></span><button class="btn small go" data-act="swap" data-a="${c.id}" data-b="${b.id}" title="${esc(c.name)} and ${esc(b.name)} change places.">Change places</button></div>`).join('') : '';
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${c ? `${esc(g.regions[c.reg].name)} and ${esc(r.name)}` : esc(r.name)} · ${date(g.turn)}</div><h2>Change places</h2></header>
-    <div class="body"><p class="sub" style="margin:0 0 10px">${esc(r.name)} holds every corps its roads will carry, so ${c ? esc(c.name) : 'the corps'} cannot march in beside them. It can change places with one of them in a single order${c ? ` (${esc(state(c))})` : ''}. Both march at the same moment, each spends the moves of its march, and each takes over the fieldworks the other leaves, so a worn corps comes out of the line and a fresh one goes in with nothing lost.</p>${rows || '<div class="empty">No corps there has the moves left to change places this month.</div>'}</div>
+    <div class="body"><p class="sub" style="margin:0 0 10px">${full ? `${esc(full)} ${c ? esc(c.name) : 'The corps'} cannot march in beside them.` : `${esc(r.name)} holds every corps its roads will carry, so ${c ? esc(c.name) : 'the corps'} cannot march in beside them.`} It can change places with one of them in a single order${c ? ` (${esc(state(c))})` : ''}. Both march at the same moment, each spends the moves of its march, and each takes over the fieldworks the other leaves, so a worn corps comes out of the line and a fresh one goes in with nothing lost.</p>${rows || '<div class="empty">No corps there has the moves left to change places this month.</div>'}</div>
     <footer><button class="btn" data-act="close">Leave them where they are</button></footer>`;
 }
 

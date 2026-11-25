@@ -45,7 +45,7 @@ import { stationBars, whyStationBars } from './far';
 import { FAR_SEAS_FIRST, farOn } from './world';
 import { PACIFIC, coversBeaches, hopAims, pacificGround, ringDrawn, shoreLift, skiesOver, useShoreLift, type ShoreLift } from './pacific';
 import { HISTORY, bookDate, dialDraw, onBook, stopDef, stopOf, theatreOf } from './history';
-import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, roomForAll, routineNews, warning, placed, type Assessment } from './game';
+import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, hasRoom, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, roomForAll, routineNews, warning, placed, type Assessment } from './game';
 import { islandOf, roomAt, roomSays } from './islands';
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, fieldCtrl, garrisonOf, roomIn, siegeRules, housed } from './siege';
@@ -1220,8 +1220,11 @@ function whyNotQuay(g: Game, c: Corps, to: Region, rides = false): string | null
   }
   const steep = whyBarred(g, c, to);
   if (steep) return steep;
-  // (A harbour holds five corps of a side, and an island of the Pacific its own room, said in its own words: islands.ts.)
-  if (placed(g, to, c.nat).length >= roomAt(g, to, c.nat)) return roomSays(g, to) ?? `${to.name} has no room for another corps.`;
+  // (A harbour holds five corps of a side, and an island of the Pacific its own room, said in its own words: islands.ts.
+  // On an island the quay counts as a march and a landing count, engineers apart up to two (`hasRoom`): at a room of
+  // one corps the count decides what the island holds, and a ship must not be refused where a march or a landing
+  // would be let in. Every other harbour counts all the corps of a side on its quay, as it always did.)
+  if (islandOf(g, to) ? !hasRoom(g, to, c) : placed(g, to, c.nat).length >= roomAt(g, to, c.nat)) return roomSays(g, to) ?? `${to.name} has no room for another corps.`;
   // (A row that goes with a corps already shipped there this month sails in that corps' lift: `rides`, rider b604 to ruling 234.)
   if (!rides && ownShips !== c.nat && liftLeft(g, c.nat) < 1) return 'All the shipping is in use this month.';
   return null;
