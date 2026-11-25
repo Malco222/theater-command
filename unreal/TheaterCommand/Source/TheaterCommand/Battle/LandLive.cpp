@@ -110,6 +110,11 @@ namespace
 		// in a borrowed light tank and a German howitzer. Looks only, a campaign battle's only, off until the art
 		// director and a Mac reading pass them; -TheaterLandRuleJapan turns it on for a run.)
 		{ TEXT("japan"), TEXT("Japan's own tank and gun"), TEXT("Japanese units are drawn with their own Type 97 medium tank and 75 mm field gun instead of the generic light tank and a German howitzer. Campaign battles only. Off: the generic models."), TEXT("TheaterLandNoJapan"), false, TEXT("TheaterLandRuleJapan") },
+		// (Island ground, release 2, looks only: a campaign battle on an island of the campaign's table is drawn as that
+		// island, beach and palms or jungle under its own sun, where the campaign's ticket names its look and its place.
+		// Off until the island look has its Mac still and the art director's pass; -TheaterLandRuleIsland turns it on
+		// for a run. The campaign side's keys, ticket.look and ticket.latLon, are the Japan and Pacific thread's.)
+		{ TEXT("island"), TEXT("Island ground"), TEXT("A battle on a Pacific island is drawn as that island: beach, reef and palms, or jungle on the big islands, under its own sun. Campaign battles only. Off: it is drawn on the same ground as any other battle."), TEXT("TheaterLandNoIsland"), false, TEXT("TheaterLandRuleIsland") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }

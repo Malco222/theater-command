@@ -371,6 +371,16 @@ export interface LiveOpts {
    */
   japan?: boolean;
   /**
+   * Island ground (release 2, looks only; "a card, then an island battle", the Japan/Pacific thread's batch 3): on, a
+   * campaign battle on ground the campaign has dressed (ticket.look, ticket.latLon) is drawn as that place. The
+   * header's field.look names the 3D look ("island": beach, reef and palms; "jungle": a big island's inland fight) and
+   * sky.latLon carries the place's own latitude and longitude, for its sun, its weather and the men's front (without
+   * it every campaign battle is drawn at 49 N 0 E, which is Normandy). Off unless true: the island look has not passed
+   * the art director or the Mac. Off, or on a ticket with neither key, the header is byte for byte what it was; a set
+   * piece keeps its own, and a sky given outright with its own latLon keeps that.
+   */
+  island?: boolean;
+  /**
    * A campaign battle's (the production lead's (a), release 2): the attack card's fog, as the campaign's battle-bridge
    * sets it for its own sim (b453, b476(3)): fog, a defence the card did not know shows only where it stands until met;
    * seen, the corps the card identified, shown as the card shows them; designYears, each nation's armour design year
@@ -454,6 +464,8 @@ export class LiveBattle {
   private blocks: Record<string, unknown>[];
   /** The player's looks switches the header reads (worn uniforms, mud remembered, scarred ground). */
   private looks: { worn: boolean; mud: boolean; scars: boolean } = { worn: true, mud: true, scars: true };
+  /** The place's own dress passed on to the 3D game (release 2, LiveOpts.island): a campaign battle's only. */
+  private island = false;
   private seen = new Set<number>();
   private roundsNew: (Round & { n: number })[] = [];
   private phases = new Map<number, [number, string, number | null, number | null]>();
@@ -506,6 +518,7 @@ export class LiveBattle {
     if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
     const tanksSeen: Record<string, number> = { att: 0, def: 0 };
     this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false };
+    this.island = !piece && opts.island === true;
     // (captured kit, a campaign battle's only: the first few tank blocks of a side that lately beat an army with tanks
     // are drawn as the loser's model, marked with whose they were, in their captor's paint; looks only)
     const caught = !piece && opts.captured !== false && ticket.captured ? ticket.captured : null;
@@ -556,7 +569,9 @@ export class LiveBattle {
       ...(t.weather ? { weather: t.weather } : {}),
       ...(t.scars && t.scars.count > 0 && this.looks.scars ? { scars: { count: t.scars.count, months: t.scars.months } } : {}),
       ...(t.oldRuts && t.oldRuts.count > 0 && this.looks.mud ? { oldRuts: { count: t.oldRuts.count, months: t.oldRuts.months } } : {}),
-      ...(p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.skyOf }),
+      // (the place's own latitude and longitude, release 2 on its "island" option: only where the sky has none)
+      ...(p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } }
+        : { sky: this.island && t.latLon && !this.skyOf.latLon ? { ...this.skyOf, latLon: t.latLon } : this.skyOf }),
       sides: {
         att: { nat: t.att.nat, adj: t.att.adj, color: t.att.color, ...(p ? { army: p.att.army, ...(p.att.standIn ? { standIn: p.att.standIn } : {}) } : {}), ...(t.att.worn !== undefined && this.looks.worn ? { worn: t.att.worn } : {}) },
         def: { nat: t.def.nat, adj: t.def.adj, color: t.def.color, ...(p ? { army: p.def.army, ...(p.def.standIn ? { standIn: p.def.standIn } : {}) } : {}), ...(t.def.worn !== undefined && this.looks.worn ? { worn: t.def.worn } : {}) },
@@ -566,6 +581,8 @@ export class LiveBattle {
         zones: f.zones, town: f.town, place: t.place,
         ...(f.storeys ? { storeys: f.storeys } : {}), ...(f.landmark ? { landmark: f.landmark } : {}), ...(f.stream ? { stream: f.stream } : {}),
         ...(this.steppe ? { steppe: this.steppe } : {}),
+        // (the 3D look the campaign names for this ground, release 2 on its "island" option: LandScape reads it first)
+        ...(this.island && t.look ? { look: t.look } : {}),
       },
       limit: LAND.limit, contact: null, end: 0,
       blocks: this.blocks,

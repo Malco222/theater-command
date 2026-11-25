@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 13faf36a 2026-11-25. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of bc842b30 2026-11-25. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -12428,6 +12428,8 @@
       __publicField(this, "blocks");
       /** The player's looks switches the header reads (worn uniforms, mud remembered, scarred ground). */
       __publicField(this, "looks", { worn: true, mud: true, scars: true });
+      /** The place's own dress passed on to the 3D game (release 2, LiveOpts.island): a campaign battle's only. */
+      __publicField(this, "island", false);
       __publicField(this, "seen", /* @__PURE__ */ new Set());
       __publicField(this, "roundsNew", []);
       __publicField(this, "phases", /* @__PURE__ */ new Map());
@@ -12478,6 +12480,7 @@
       if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
       const tanksSeen = { att: 0, def: 0 };
       this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false };
+      this.island = !piece && opts.island === true;
       const caught = !piece && opts.captured !== false && ticket.captured ? ticket.captured : null;
       const caughtLeft = { att: caught?.att?.n ?? 0, def: caught?.def?.n ?? 0 };
       this.blocks = sim.allBlocks().map((u) => {
@@ -12543,7 +12546,8 @@
         ...t.weather ? { weather: t.weather } : {},
         ...t.scars && t.scars.count > 0 && this.looks.scars ? { scars: { count: t.scars.count, months: t.scars.months } } : {},
         ...t.oldRuts && t.oldRuts.count > 0 && this.looks.mud ? { oldRuts: { count: t.oldRuts.count, months: t.oldRuts.months } } : {},
-        ...p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.skyOf },
+        // (the place's own latitude and longitude, release 2 on its "island" option: only where the sky has none)
+        ...p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.island && t.latLon && !this.skyOf.latLon ? { ...this.skyOf, latLon: t.latLon } : this.skyOf },
         sides: {
           att: { nat: t.att.nat, adj: t.att.adj, color: t.att.color, ...p ? { army: p.att.army, ...p.att.standIn ? { standIn: p.att.standIn } : {} } : {}, ...t.att.worn !== void 0 && this.looks.worn ? { worn: t.att.worn } : {} },
           def: { nat: t.def.nat, adj: t.def.adj, color: t.def.color, ...p ? { army: p.def.army, ...p.def.standIn ? { standIn: p.def.standIn } : {} } : {}, ...t.def.worn !== void 0 && this.looks.worn ? { worn: t.def.worn } : {} }
@@ -12563,7 +12567,9 @@
           ...f.storeys ? { storeys: f.storeys } : {},
           ...f.landmark ? { landmark: f.landmark } : {},
           ...f.stream ? { stream: f.stream } : {},
-          ...this.steppe ? { steppe: this.steppe } : {}
+          ...this.steppe ? { steppe: this.steppe } : {},
+          // (the 3D look the campaign names for this ground, release 2 on its "island" option: LandScape reads it first)
+          ...this.island && t.look ? { look: t.look } : {}
         },
         limit: LAND.limit,
         contact: null,
@@ -12866,6 +12872,7 @@
         aa: o.aa === true,
         light: o.light === true,
         japan: o.japan === true,
+        island: o.island === true,
         fog: !!o.fog,
         seen: o.seen ?? [],
         designYears: o.designYears ?? {},

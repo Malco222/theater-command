@@ -89,7 +89,7 @@ function need(): LiveBattle {
    */
   landStartTicket(
     ticketOrLook: FieldTicket<LandPlace> | { ticket: FieldTicket<LandPlace>; live?: Partial<LiveOpts> },
-    opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean; phones?: boolean; bearers?: boolean; patrol?: boolean; captured?: boolean; worn?: boolean; mud?: boolean; scars?: boolean; blast?: boolean; escort?: boolean; mech?: boolean; spg?: boolean; td?: boolean; cars?: boolean; aa?: boolean; light?: boolean; japan?: boolean; fog?: boolean; seen?: number[]; designYears?: Record<string, number>; sky?: LiveSky } | null,
+    opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean; phones?: boolean; bearers?: boolean; patrol?: boolean; captured?: boolean; worn?: boolean; mud?: boolean; scars?: boolean; blast?: boolean; escort?: boolean; mech?: boolean; spg?: boolean; td?: boolean; cars?: boolean; aa?: boolean; light?: boolean; japan?: boolean; island?: boolean; fog?: boolean; seen?: number[]; designYears?: Record<string, number>; sky?: LiveSky } | null,
   ) {
     // The campaign's TC.battleLook answer as it stands ({ ticket, live: { fog, seen, designYears, sky } }), or a bare ticket.
     const look = 'ticket' in ticketOrLook && ticketOrLook.ticket ? ticketOrLook : null;
@@ -99,7 +99,7 @@ function need(): LiveBattle {
       me: o.me ?? null, setup: !!o.setup, platoons: o.platoons !== false, staff: o.staff !== false, radio: o.radio !== false,
       hide: o.hide !== false, armour: o.armour !== false, names: o.names !== false, relief: o.relief !== false, rider: o.rider !== false,
       cutters: o.cutters !== false, smoke: o.smoke !== false, bocage: !!o.bocage,
-      phones: o.phones !== false, bearers: o.bearers !== false, patrol: o.patrol !== false, captured: o.captured !== false, worn: o.worn !== false, mud: o.mud !== false, scars: o.scars !== false, blast: o.blast === true, escort: o.escort === true, mech: o.mech === true, spg: o.spg === true, td: o.td === true, cars: o.cars === true, aa: o.aa === true, light: o.light === true, japan: o.japan === true,
+      phones: o.phones !== false, bearers: o.bearers !== false, patrol: o.patrol !== false, captured: o.captured !== false, worn: o.worn !== false, mud: o.mud !== false, scars: o.scars !== false, blast: o.blast === true, escort: o.escort === true, mech: o.mech === true, spg: o.spg === true, td: o.td === true, cars: o.cars === true, aa: o.aa === true, light: o.light === true, japan: o.japan === true, island: o.island === true,
       fog: !!o.fog, seen: o.seen ?? [], designYears: o.designYears ?? {}, ...(o.sky ? { sky: o.sky } : {}),
     });
     return live.header();
