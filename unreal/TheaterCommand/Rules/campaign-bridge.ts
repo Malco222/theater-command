@@ -4600,13 +4600,14 @@ function fleetPage(s: Game, id: number): Page | null {
   });
   const joins: PageRow[] = (o?.merge ?? []).map((other) => {
     const f = fleetView(s, other);
-    return { nat: card.nat, title: f?.name ?? 'A fleet', lines: [f ? `${f.ships} ships. ${f.doing}.` : ''], buttons: [{ label: 'JOIN IT', act: `fleetmerge:${id}:${other}`, ok: up, tip: 'The two become one fleet under the other\'s flag and orders.' }] };
+    // (1.5.3, playtest #26) "1 ship", not "1 ships", here and in the room's note.
+    return { nat: card.nat, title: f?.name ?? 'A fleet', lines: [f ? `${f.ships} ship${f.ships === 1 ? '' : 's'}. ${f.doing}.` : ''], buttons: [{ label: 'JOIN IT', act: `fleetmerge:${id}:${other}`, ok: up, tip: 'The two become one fleet under the other\'s flag and orders.' }] };
   });
   const gap = card.screen.gap > 0 ? ` ${cap1(card.screen.word)}: it has ${card.screen.have} destroyers where its heavy ships need ${card.screen.need}.` : '';
   const who = whoSails(s, id);
   return {
     id: `fleet:${id}`, title: card.name.toUpperCase(), headline: `${card.doing}`,
-    note: `${cutOffNote(s, id)}${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.${who ? ` ${who}` : ''}`,
+    note: `${cutOffNote(s, id)}${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ship${card.ships === 1 ? '' : 's'}, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.${who ? ` ${who}` : ''}`,
     top: [
       ...(() => {
         // (1.5.2) Cut off at sea beyond a shut strait, it makes for the nearest friendly harbour on its side, or has none.

@@ -246,7 +246,7 @@ const cardFor = (mine: string, theirs: string): Page => {
 };
 
 describe('26: the card counts and lists its ships in plain words', () => {
-  it('a fleet of one ship is "1 ship", on its row and in the forces line', () => {
+  it('a fleet of one ship is "1 ship", on its row, in the forces line, in its room and in the sea report', () => {
     // The playtest's case: UK from 17, seed 5, one destroyer split off the Home Fleet.
     TC.start({ human: 'UK', view: 'grand', from: 17, seed: 5 });
     const v = TC.view() as { fleets: { id: number; nat: string; name: string }[] };
@@ -259,12 +259,22 @@ describe('26: the card counts and lists its ships in plain words', () => {
     expect(titles).toContain('1st Escort Fleet  \u00B7  1 ship');
     expect(titles.some((t) => /^Home Fleet  \u00B7  \d+ ships$/.test(t))).toBe(true);
     for (const t of titles) expect(t).not.toMatch(/\b1 ships\b/);
-    // The forces line, where one ship goes in alone.
+    // (The 1.5.3 review) The fleet's room on the way to the card, and the Home Fleet's row to join it, say so too.
+    expect((TC.page(`fleet:${made.made}`) as Page).note).toMatch(/^1 ship, readiness \d+%\. /);
+    const join = (TC.page(`fleet:${home.id}`) as Page).sections.find((s) => s.heading === 'FLEETS TO JOIN')!.rows.find((r) => r.title === '1st Escort Fleet')!;
+    expect(join.lines[0]).toMatch(/^1 ship\. [A-Z]/);
+    expect((TC.page(`fleet:${home.id}`) as Page).note).toMatch(/\b\d+ ships, readiness /);
+    // The forces line, where one ship goes in alone; and the sea report of the fight.
     const g = germany(3);
     setFog(g, false);
     const sq = detach(g, fleet(g, 'Battle Fleet'), { dd: 1 })!;
     const plan = planFleetAttack(g, sq.id, fleet(g, 'Home Fleet').id)!;
     expect(plan.lines.find((l) => l.label === 'Forces')!.value).toMatch(/^1 ship against \d+$/);
+    const them = fleet(g, 'Home Fleet');
+    sail(g, them, them.home, 'port');
+    const out = orderFleetAttack(g, sq.id, them.id)!;
+    expect(out.outcome).toBe('fought');
+    expect(out.report!.lines.find((l) => l.label === 'Forces')!.value).toMatch(/^1 ship against \d+$/);
   });
 
   it('the losses read as a list, and their range as "at best ... at worst ..."', () => {

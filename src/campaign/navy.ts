@@ -2373,8 +2373,10 @@ export function fleetAction(g: Game, zone: Game['seas'][number], nat: string, mi
   met.forEach((f, i) => { def[i].sunk = sinkShips(f, won ? hard : light, rng); });
   const total = (sides: SeaSide[]): Ships => { const t = none(); for (const s of sides) for (const c of CLASSES) t[c] += s.sunk[c]; return t; };
   const ships = (fs: SeaSide[]): number => fs.reduce((s, x) => s + shipCount(x.ships), 0);
+  // (1.5.3, playtest #26) "1 ship against 30", not "1 ships".
+  const sent = ships(att);
   const lines: TicketLine[] = [
-    { label: 'Forces', value: `${ships(att)} ships against ${ships(def)}`, effect: `Fleet strength ${Math.round(powA)} against ${Math.round(powD)} before the battle` },
+    { label: 'Forces', value: `${sent} ship${sent === 1 ? '' : 's'} against ${ships(def)}`, effect: `Fleet strength ${Math.round(powA)} against ${Math.round(powD)} before the battle` },
   ];
   if (airA > 0.5 || airD > 0.5) lines.push({ label: 'Air', value: airA > airD ? 'The attacker has the stronger air cover from the coast' : airD > airA ? 'The defender has the stronger air cover from the coast' : 'Even', effect: `Worth ${Math.round(airA)} to the attacker and ${Math.round(airD)} to the defender` });
   const flag = (fs: Fleet[]): string => fs.filter((f) => f.admiral).map((f) => `${f.admiral!.name}${f.admiral!.level > 1 ? ` (level ${f.admiral!.level})` : ''}`).join(', ') || 'no admiral named';
