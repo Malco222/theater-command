@@ -332,6 +332,14 @@ public:
 	 * screen's names are counted from there at once (the camera's CameRound), not from the frame after.
 	 */
 	void EyeCameRound(const FVector& Focus);
+	/**
+	 * (Seam-2.) A builder says that it has laid this model of the table again. The twins' keeper looks at a model by
+	 * its counts and a few of its points, and a model may change and keep all of those (a gun pit moved a few degrees,
+	 * an airfield drawn smaller): this is what tells it. FCampaignMeshBuffers::Commit says it for every model it
+	 * fills; a builder that fills a model with CreateMeshSection itself says it after. It costs a look through the
+	 * twins' short list, and does nothing for a model that has no twin.
+	 */
+	void SeamLaidAgain(const UProceduralMeshComponent* Of);
 
 private:
 	/**
@@ -340,8 +348,8 @@ private:
 	 * not there. LayOverSeam lays the share of a model that lies within the high view's sight of the seam a second
 	 * time, a whole world away, on a twin of the model that is kept beside it: so the west end's things stand beyond
 	 * the east end too, and the east end's beyond the west. KeepSeamTwins, each frame, looks at each such model by a
-	 * few of its points and lays its twin again when the model has changed, and keeps the twin shown, hidden and
-	 * placed as its model is. No builder knows of it.
+	 * few of its points, and by the count of times its builder has laid it again (SeamLaidAgain), and lays its twin
+	 * again when the model has changed, and keeps the twin shown, hidden and placed as its model is.
 	 */
 	void LayOverSeam(UProceduralMeshComponent* Of);
 	void KeepSeamTwins();
@@ -355,6 +363,7 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UProceduralMeshComponent>> SeamTwins; // each one's twin, once it has anything to lay (else none)
 	TArray<uint32> SeamStamps; // and what each looked like when its twin was last laid
+	TArray<uint32> SeamCounts; // and how many times each has been laid again since it was first looked at (SeamLaidAgain)
 
 public:
 	/**
