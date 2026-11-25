@@ -14,7 +14,7 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { setDesk } from '../src/campaign/depth';
-import { addCorps, atWar, createGame, declareWar } from '../src/campaign/game';
+import { addCorps, atWar, capitulate, createGame, declareWar } from '../src/campaign/game';
 import { beginHuman, endHuman, humanUp, stepAI } from '../src/campaign/turn';
 import { setStop } from '../src/campaign/history';
 import { km } from '../src/campaign/air';
@@ -22,6 +22,7 @@ import { enemyInReach, foeInReach, foesOf, forwardHarbour, foundFleet, holdTo, i
 import { gatherMonth } from '../src/campaign/readiness';
 import { startOpen } from '../src/campaign/staff';
 import { ferry } from '../src/campaign/ai';
+import { liberate } from '../src/campaign/liberation';
 import type { Fleet, Game } from '../src/campaign/types';
 
 const fleet = (g: Game, nat: string, name: string): Fleet => g.fleets.find((f) => f.nat === nat && f.name === name)!;
@@ -92,6 +93,33 @@ describe('a fleet with no enemy in its reach stands forward', () => {
       g.turn++;
       navalAI(g, 'USA');
       expect(pf.port).toBe('Bristol Bay');
+    } finally { standTo.against = {}; }
+  }, 300000);
+
+  it('at peace, a fleet that came in from its passage this month, or that its staff moved home this month, lies in harbour that month: the next it stands forward', () => {
+    const { g, pf } = opening();
+    const sd = g.byName['San Diego'];
+    standTo.against = { USA: ['JAP'] };
+    try {
+      g.flags[`fin:${pf.id}`] = g.turn;
+      navalAI(g, 'USA');
+      expect(pf.port).toBe('San Diego');
+      g.turn++;
+      navalAI(g, 'USA');
+      expect(pf.port).toBe('Bristol Bay');
+      // (Sent to a cover base near home, and brought back by its staff when the beaches are done: coverBases.)
+      const { g: h, pf: hf } = opening();
+      const near = h.regions.find((r) => r.port && r.ctrl === 'USA' && r.id !== sd.id && r.seas.length && voyageMonths(h, hf, r) === 0)!;
+      expect(near).toBeDefined();
+      expect(rebase(h, hf, near, true)).toBe(true);
+      expect(hf.base).toBe(near.id);
+      h.flags[`fl:cover:${hf.id}`] = sd.id + 1;
+      h.flags[`fl:coverAt:${hf.id}`] = near.id + 1;
+      navalAI(h, 'USA');
+      expect(hf.port).toBe('San Diego');
+      h.turn++;
+      navalAI(h, 'USA');
+      expect(hf.port).toBe('Bristol Bay');
     } finally { standTo.against = {}; }
   }, 300000);
 
@@ -238,6 +266,40 @@ describe('a fleet with no enemy in its reach stands forward', () => {
     }
   }, 300000);
 
+  it("a fallen country's book still stations its fleet in a keeper's hands: the Dutch East Indies Fleet under Britain's flag", () => {
+    for (const stop of [1, 2, 3]) {
+      const g = startOpen(createGame(3, null));
+      setStop(g, stop, true);
+      const dei = fleet(g, 'NED', 'Dutch East Indies Fleet');
+      expect(at(g, dei)).toBe('Soerabaja');
+      expect(atWar(g, 'UK', 'GER')).toBe(true);
+      standTo.against = { UK: ['JAP'] };
+      try {
+        capitulate(g, 'NED', 'GER');
+        expect(dei.nat, `stop ${stop}`).toBe('UK');
+        // (At stops 1 and 2 the Dutch row is its leash still; at the free stop it stands forward as any fleet.)
+        if (stop <= 2) expect(forwardHarbour(g, dei), `stop ${stop}`).toBeNull();
+        else expect(forwardHarbour(g, dei), `stop ${stop}`).not.toBeNull();
+        if (stop > 2) continue;
+        // (A squadron of Britain's own split off there is the book's nowhere, even one bearing a fallen country's fleet's
+        // name from home waters: France's Atlantic Fleet, at Brest, is no far ground's.)
+        const java = foundFleet(g, 'UK', g.byName['Soerabaja'], 'Java Squadron');
+        expect(forwardHarbour(g, java), `stop ${stop}`).not.toBeNull();
+        g.nations.FRA.alive = false;
+        g.fleets.splice(g.fleets.findIndex((x) => x.nat === 'FRA' && x.name === 'Atlantic Fleet'), 1);
+        const named = foundFleet(g, 'UK', g.byName['Soerabaja'], 'Atlantic Fleet');
+        named.name = 'Atlantic Fleet'; // (A player's split squadron is named apart from his own fleets only: fleets.ts detach.)
+        expect(forwardHarbour(g, named)?.name, `stop ${stop}`).toBe(forwardHarbour(g, java)?.name);
+        // (Freed again, the Netherlands has its ground back; the fleet still answers to Britain, and the book still has it.)
+        g.nations.NED.fellOn!.turn = g.turn - 99;
+        expect(liberate(g, 'NED', 'UK')).toBe(true);
+        expect(g.nations.NED.alive).toBe(true);
+        expect(dei.nat).toBe('UK');
+        expect(forwardHarbour(g, dei), `stop ${stop}`).toBeNull();
+      } finally { standTo.against = {}; }
+    }
+  }, 300000);
+
   it('off the far chart, no fleet stands forward', () => {
     const { g, pf } = opening();
     declareWar(g, 'JAP', 'USA');
@@ -332,11 +394,15 @@ describe('the fleet that goes where its army has gone (19:13Z, 3: the order behi
     expect(g.flags[`held:${atl.id}`]).toBe(g.turn + 1);
   }, 300000);
 
-  it('with balance switched off, nothing is written', () => {
+  it('with balance switched off, or off the far chart, nothing is written', () => {
     const { g, atl, alex } = across();
     expect(rebase(g, atl, g.regions[alex], true)).toBe(true);
     standTo.on = false;
     try { ferry(g, 'USA'); } finally { standTo.on = true; }
+    expect(g.flags[`held:${atl.id}`]).toBeUndefined();
+    // (Nor off the far chart, where standing forward never acts.)
+    g.flags.world = 0;
+    holdTo(g, atl, 1);
     expect(g.flags[`held:${atl.id}`]).toBeUndefined();
   }, 300000);
 });
