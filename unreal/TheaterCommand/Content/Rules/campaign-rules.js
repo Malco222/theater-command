@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0c984b212 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 46821cb53 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -31236,7 +31236,11 @@
   }
   var placeWords = (g2, r) => r.cap && r.owner === r.ctrl ? `the capital of ${theName(g2.nations[r.owner])}` : `the ${TOWNS.words[townSize(g2, r)].toLowerCase()}`;
   var months = (n) => n <= 1 ? "a month" : `${n} months`;
-  function invest(g2, r, by2) {
+  function keptAtOpening(g2, r, monthOpen = false) {
+    if (!trueReach(g2)) return 0;
+    return keptStoresRun(g2, r, !monthOpen && g2.order.indexOf(r.ctrl) <= g2.phase);
+  }
+  function invest(g2, r, by2, monthOpen = false) {
     const key7 = `siege:${r.id}`;
     if (g2.flags[key7] !== void 0) return;
     g2.flags[key7] = g2.turn;
@@ -31248,7 +31252,7 @@
       if (pocket > 0 && pocketNat(g2, r) === r.ctrl) eaten = pocket;
       clearPocket(g2, r);
     }
-    if (trueReach(g2)) eaten = Math.min(storesOf(g2, r), Math.max(eaten, keptStoresRun(g2, r)));
+    if (trueReach(g2)) eaten = Math.min(storesOf(g2, r), Math.max(eaten, keptAtOpening(g2, r, monthOpen)));
     if (eaten > 0) g2.flags[`sgm:${r.id}`] = eaten;
     g2.supplyDirty = true;
     tallySiege(g2, "begun");
@@ -31485,7 +31489,7 @@
         continue;
       }
       const by2 = armyOf(foes[0]);
-      if (g2.flags[`siege:${r.id}`] === void 0) invest(g2, r, by2);
+      if (g2.flags[`siege:${r.id}`] === void 0) invest(g2, r, by2, true);
       if (!townHeld(g2, r)) {
         fall(g2, r, by2, "empty");
         continue;
@@ -31601,7 +31605,8 @@
         lines2.push(sat >= SIEGE.capitalYear ? `Shut in for ${months(sat)}, the government has lost its hold on the country: the capital counts as lost when it reckons whether to fight on.` : `A government shut in its capital loses its hold on the country month by month. After ${months(SIEGE.capitalYear)} of siege the capital counts as lost, whether it has fallen or not.`);
       }
     } else {
-      lines2.push(`Closely invested, its stores would feed the defenders for ${months(stores2)}${r.port ? ", and for as long as ships can reach its harbour" : ""}.`);
+      const would = stores2 - Math.min(stores2, keptAtOpening(g2, r));
+      lines2.push(would > 0 ? `Closely invested, its stores would feed the defenders for ${months(would)}${r.port ? ", and for as long as ships can reach its harbour" : ""}.` : `Closely invested, its defenders would go hungry at once: its stores have been eaten while no ship came in${r.port ? ", and only ships reaching its harbour could feed them" : ""}.`);
     }
     return {
       region,
@@ -73930,10 +73935,18 @@
   function portKeep(g2, r) {
     return (fortRows(g2) ? portStores(g2, r) : null) ?? DESERT.stores;
   }
-  function keptStoresRun(g2, r) {
+  function handsChanged(g2, r) {
+    let at4 = Math.max(r.since, g2.flags[`hand:${r.id}`] ?? -1, g2.nations[r.ctrl]?.freedOn?.turn ?? -1);
+    for (const n of Object.values(g2.nations)) {
+      if (!n.fellOn) continue;
+      if (n.id === r.owner || n.fellOn.to === r.ctrl || r.vichy && r.ctrl === "VIC" && n.id === "FRA") at4 = Math.max(at4, n.fellOn.turn);
+    }
+    return at4;
+  }
+  function keptStoresRun(g2, r, drawn = false) {
     const last = g2.flags[storesKey(r.id)];
-    if (!r.overseas || !r.port || !worksKept(r) || last === void 0 || last <= r.since) return 0;
-    return Math.min(portKeep(g2, r), Math.max(0, g2.turn - 1 - last));
+    if (!r.overseas || !r.port || !worksKept(r) || last === void 0 || last <= handsChanged(g2, r)) return 0;
+    return Math.min(portKeep(g2, r), Math.max(0, g2.turn - (drawn ? 0 : 1) - last));
   }
   function onPortStores(g2, c) {
     if (!fortRow(g2, c) || !c.supplied) return false;
