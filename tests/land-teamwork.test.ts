@@ -39,7 +39,7 @@ interface Seen {
   sweeps: number; inArc: number; lifts: number; beyond: number; badPose: number; out: number;
   /** Seconds (in half-second looks) a team is in its fight; with its final line laid; its guns firing on it, laid in
    * front of the enemy towards our own line; its mortars firing on it, their bombs between the enemy and our line. */
-  batt: number; finalT: number; finalFire: number; finalFront: number; fpf: number; fpfFront: number;
+  batt: number; finalT: number; finalFire: number; finalFront: number; fpf: number; fpfFront: number; fpfBeyond: number; fpfOwn: number;
   /** Looks at a set-up gun in its fight; firing; firing short (ammunition low); dry; the longest dry spell, seconds;
    * times a gun was fed. Stoppages and misfires begun, and the seconds guns spent stopped. */
   gunT: number; fireT: number; shortT: number; dry: number; dryRun: number; fed: number; jams: number; misfires: number; jamT: number;
@@ -48,7 +48,7 @@ interface Seen {
 /** Fights one battle with the drill as given, reading every half second what each support team's men are doing. */
 function watch(f: Fight, opts: { sections?: boolean; platoons?: boolean; life?: boolean; teamwork?: boolean }): Seen {
   const b = new LandBattle(ticket(f)), d = b.drillOn(opts);
-  const s: Seen = { sig: '', crews: 0, alike: 0, kinds: 0, volleys: 0, allFire: 0, noneFire: 0, two: new Map(), packs: [], hops: 0, sweeps: 0, inArc: 0, lifts: 0, beyond: 0, badPose: 0, out: 0, batt: 0, finalT: 0, finalFire: 0, finalFront: 0, fpf: 0, fpfFront: 0, gunT: 0, fireT: 0, shortT: 0, dry: 0, dryRun: 0, fed: 0, jams: 0, misfires: 0, jamT: 0 };
+  const s: Seen = { sig: '', crews: 0, alike: 0, kinds: 0, volleys: 0, allFire: 0, noneFire: 0, two: new Map(), packs: [], hops: 0, sweeps: 0, inArc: 0, lifts: 0, beyond: 0, badPose: 0, out: 0, batt: 0, finalT: 0, finalFire: 0, finalFront: 0, fpf: 0, fpfFront: 0, fpfBeyond: 0, fpfOwn: 0, gunT: 0, fireT: 0, shortT: 0, dry: 0, dryRun: 0, fed: 0, jams: 0, misfires: 0, jamT: 0 };
   const inside = (d as unknown as { squads: Map<number, Inside> }).squads;
   const jammed = new Set<string>(), misfired = new Set<string>(), dryFor = new Map<string, number>(), had = new Map<string, number>();
   const teams = b.units.filter((u) => u.team);
@@ -135,6 +135,9 @@ function watch(f: Fight, opts: { sections?: boolean; platoons?: boolean; life?: 
             const ux = own.x - e.x, uy = own.y - e.y, ul = Math.hypot(ux, uy) || 1, along = ((gm.aim[0] - e.x) * ux + (gm.aim[1] - e.y) * uy) / ul;
             s.fpf++;
             if (along > 0 && along < ul) s.fpfFront++;
+            else if (along <= 0) s.fpfBeyond++;
+            const [ax, ay] = gm.aim;
+            if (b.units.some((o) => o.side === u.side && o.state !== 'gone' && o.state !== 'withdrawn' && Math.abs((ax - o.x) * Math.cos(o.face) - (ay - o.y) * Math.sin(o.face)) <= o.w / 2 && Math.abs((ax - o.x) * Math.sin(o.face) + (ay - o.y) * Math.cos(o.face)) <= o.d / 2)) s.fpfOwn++;
           }
         }
       }
@@ -248,7 +251,11 @@ describe('machine gun and mortar teams at work (looks only, ruling 217)', () => 
     expect(sum(work, 'finalFire')).toBeGreaterThan(200);
     expect(sum(work, 'finalFront') / sum(work, 'finalFire')).toBeGreaterThan(0.7);
     expect(sum(work, 'fpf')).toBeGreaterThan(50);
-    expect(sum(work, 'fpfFront') / sum(work, 'fpf')).toBeGreaterThan(0.85);
+    // A bomb falls between the lines when there is room for a band there; when the enemy is already too close to our
+    // line for one, the tube shifts beyond him instead (lifted fire), and no bomb is ever aimed on our own men.
+    expect(sum(work, 'fpfFront') / sum(work, 'fpf')).toBeGreaterThan(0.7);
+    expect((sum(work, 'fpfFront') + sum(work, 'fpfBeyond')) / sum(work, 'fpf')).toBeGreaterThan(0.97);
+    expect(sum(work, 'fpfOwn')).toBe(0);
   });
 
   it('the guns run short now and then and are fed again by their bearers: short bursts some of the time, dry rarely and briefly', () => {
