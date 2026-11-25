@@ -47,12 +47,13 @@ import { patronOfClient, stationed, tieWar } from './far';
 import { inTheWay, pacificGround, runQuays } from './pacific';
 import { EASTERN, addCorps, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
-import { ATOM_STAGE, BEATREACH_STAGE, BREAKUP_STAGE, CARRIERSTRIKE_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, SHADOWRELAY_STAGE, SHADOW_STAGE, TASKFORCE_STAGE, TOWNQUEUE_STAGE, UNITS_STAGE, VOYAGELOG_STAGE, WAGONS_STAGE, WINCHANCE_STAGE, WINGBYDATE_STAGE, AIRNAMES_STAGE, FERRY_STAGE } from './stage';
+import { ATOM_STAGE, BREAKUP_STAGE, CARRIERSTRIKE_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, SHADOWRELAY_STAGE, SHADOW_STAGE, TASKFORCE_STAGE, TOWNQUEUE_STAGE, UNITS_STAGE, VOYAGELOG_STAGE, WAGONS_STAGE, WINCHANCE_STAGE, WINGBYDATE_STAGE, AIRNAMES_STAGE, FERRY_STAGE } from './stage';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
 import { openLegions } from './legions';
 import { openQuality } from './units';
 import type { PlanFront } from './planfronts';
+import { BEATREACH_STAGE } from './stage';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
 
@@ -192,10 +193,11 @@ export function startOpen(g: Game, wide = true): Game {
   if (REARBRIDGES_STAGE) g.flags.rearBridges = 1;
   // Mines at sea, heavy seas and the shadow relay (release 2; mines.ts, heavyseas.ts, shadow.ts).
   if (SEAMINES_STAGE) g.flags.seaMines = 1;
-  if (BEATREACH_STAGE) g.flags.beatReach = 1;
   if (HEAVYSEAS_STAGE) g.flags.heavySeas = 1;
   if (SHADOWRELAY_STAGE) g.flags.shadowRelay = 1;
   if (SEEKONCE_STAGE) g.flags.seekOnce = 1;
+  // A moved fleet's beat in its new base's reach (release 2; navy.ts beatReachOn).
+  if (BEATREACH_STAGE) g.flags.beatReach = 1;
   // A queue for a town (release 2; townqueue.ts).
   if (TOWNQUEUE_STAGE) g.flags.townQueue = 1;
   // The atomic project (release 2; atom.ts).
