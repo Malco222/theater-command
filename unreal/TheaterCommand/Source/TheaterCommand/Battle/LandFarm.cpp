@@ -1218,9 +1218,12 @@ namespace LandScape
 								if (Edge < 0.0) Edge = InWood(PX, PY);
 								const double Age = Clamp01(0.5 + 0.9 * Noise(X / 60.0, Y / 60.0, Seed ^ 0xA6E));
 								const double High = (14.0 + 12.0 * Age) * (0.78 + 0.44 * Own) * (Edge < 8.0 && Young < 1.0 / 7.0 ? 0.35 + 0.25 * Grown : 1.0);
-								// deeper in, darker and cooler, the snow on its boughs dimmer, as the light under the crowns
-								// (full by 30 m in)
-								const double Dk = Smooth(3.0, 30.0, Edge), Lt = 1.0 - 0.3 * Dk, Bl = 1.0 - 0.22 * Dk;
+								// deeper in, darker, the snow on its boughs dimmer, as the light under the crowns (full by 30 m
+								// in): its blue down faster than its red and green, so the deep wood keeps its green over blue.
+								// (The sky's fill adds blue to whatever is darker: with blue spared the canopy read bluer from
+								// above than under "spruce" alone, and even with blue down as much as red and green it did,
+								// 8 less blue than green where "spruce" has 12; the art director's mend, 25 Nov.)
+								const double Dk = Smooth(3.0, 30.0, Edge), Lt = 1.0 - 0.3 * Dk, Bl = 1.0 - 0.55 * Dk;
 								H.Plant(Spruce, PX, PY, Yaw, High / 18.6 * (0.85 + 0.2 * Size), High / 18.6, Tint((0.94 + 0.1 * Size) * Lt, (0.96 + 0.08 * Size) * Lt, 0.96 * Bl));
 								continue;
 							}
