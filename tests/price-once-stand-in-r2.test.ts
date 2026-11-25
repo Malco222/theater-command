@@ -19,7 +19,7 @@ ROWS.push([12, 'GER', NAME, 'arm', 2, 'Berlin', { open: 1 }]);
 ROWS.push([14, 'GER', '904th Panzer Division', 'arm', 1, 'Hamburg', { open: 1, unless: NAME }]);
 const { createGame, relocate, startPhase } = await import('../src/campaign/game');
 const { startOpen } = await import('../src/campaign/staff');
-const { divisionsOf } = await import('../src/campaign/armies');
+const { divisionsNamed, divisionsOf } = await import('../src/campaign/armies');
 afterAll(() => { ROWS.length = FOOT; });
 
 describe('a row that lays nothing, and the row that stands in for it (the design director, 16:39Z, 25 November 2026)', () => {
@@ -49,5 +49,26 @@ describe('a row that lays nothing, and the row that stands in for it (the design
     expect(g.flags[`sent:${FOOT + 2}`]).toBe(2);
     expect(named('904th Panzer Division')).toBeUndefined();
     expect(s.dead).toBe(false);
+  });
+});
+
+// The one case left (the design director, 17:19Z): where a row lays nothing while its stand-in has landed, the
+// stand-in's corps and the corps that hold the row's divisions both stand. No row of the data reaches it: a row lays
+// nothing only where every division it brings is one its name gives, and every row another stands in for brings a
+// division its name does not give, so it always has one of its own to form and its stand-in goes with it as ruling
+// 229, 1c had it. This guard fails the day a row is written that could.
+describe('no row of the data lays nothing while a row stands in for it (the guard)', () => {
+  it('every row another stands in for brings a division its name does not give', () => {
+    const data = ROWS.slice(0, FOOT);
+    const stoodFor = [...new Set(data.map((r) => r[6]?.unless).filter((x: unknown): x is string => typeof x === 'string'))];
+    expect(stoodFor.length).toBeGreaterThan(0);
+    for (const name of stoodFor) {
+      const rows = data.filter((r) => r[2] === name);
+      expect(rows.length, name).toBeGreaterThan(0);
+      for (const r of rows) {
+        const n: number = r[6]?.openDivs ?? r[4];
+        expect(divisionsNamed(r[2], r[1], r[3]).slice(0, n).length, `${name}: the divisions its name gives, of the ${n} it brings`).toBeLessThan(n);
+      }
+    }
   });
 });
