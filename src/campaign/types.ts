@@ -1,7 +1,8 @@
 import type { Rng } from '../core/rng';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
 
-export type Kind = 'inf' | 'mot' | 'arm' | 'cav' | 'mtn' | 'fort' | 'art' | 'eng';
+/** The arms of a corps. 'mg' and 'mor' are the support teams (release 2, src/campaign/teams.ts): off unless switched on. */
+export type Kind = 'inf' | 'mot' | 'arm' | 'cav' | 'mtn' | 'fort' | 'art' | 'eng' | 'mg' | 'mor';
 export type Terrain = 'plains' | 'forest' | 'hills' | 'mountain' | 'marsh' | 'urban' | 'desert';
 export type Align = 'allies' | 'allies_cobelligerent' | 'leaning_allies' | 'independent' | 'leaning_axis' | 'axis_cobelligerent' | 'axis';
 
@@ -1141,6 +1142,11 @@ export const KIND: Record<Kind, { label: string; atk: number; def: number; move:
   art: { label: 'Artillery', atk: 14, def: 8, move: 2, mobile: false },
   // Engineers, raised only in the grand campaign: they are there for what they build and breach, not for their rifles.
   eng: { label: 'Engineers', atk: 4, def: 9, move: 2, mobile: false },
+  // Support teams (release 2, src/campaign/teams.ts): a machine-gun brigade and a mortar brigade, a division's worth
+  // each. Their own weight is small; what they do besides (a defence stiffened against foot, works broken up) is on the
+  // attack card. Never raised while the teams are off.
+  mg: { label: 'Machine guns', atk: 3, def: 7, move: 2, mobile: false },
+  mor: { label: 'Mortars', atk: 6, def: 4, move: 2, mobile: false },
 };
 
 export const TERRAIN_DEF: Record<Terrain, number> = { plains: 1, forest: 1.2, hills: 1.25, mountain: 1.6, marsh: 1.3, urban: 1.35, desert: 1 };

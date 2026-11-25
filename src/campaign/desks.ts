@@ -12,7 +12,7 @@
 import { DEPTH, DESKS, capOf, capPct, deskDef, deskRan, depthRules, markRan, setCap, setDesk, staffRuns, type DeskId, type DepthDef } from './depth';
 import { atWar, bloc, headline } from './game';
 import { turnToDate } from '../core/ticket';
-import { BUDGET, PRODUCTION, aiProduction, armyWorn, gunsWanted, income, specOf, upkeepTotal } from './economy';
+import { BUDGET, PRODUCTION, aiProduction, aiTeams, armyWorn, gunsWanted, income, specOf, upkeepTotal } from './economy';
 import { menSpare } from './manpower';
 import { ARSENAL, aiArsenal, liftView, offers, orderOffer, type Wing } from './arsenal';
 import { civicAI } from './buildings';
@@ -224,6 +224,7 @@ function build(g: Game, nat: string): string | null {
   const spent = fromPurse(g, nat, () => {
     shipping(g, nat);
     aiProduction(g, nat);
+    aiTeams(g, nat);
     aiArsenal(g, nat);
     civicAI(g, nat, income(g, nat), keepsStores(g, nat), gunsWanted(g, nat) || armyWorn(g, nat));
     machines(g, nat);

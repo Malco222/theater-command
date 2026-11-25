@@ -94,6 +94,7 @@ import type { Mood } from '../morale';
 import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, envoysWord, freeCourt, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
 import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
+import { setTeams, TEAMS_RELEASE } from '../teams';
 import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { tenthPct } from '../../core/math';
 import { turnToDate } from '../../core/ticket';
@@ -348,6 +349,9 @@ function symbol(kind: Kind, w: number, h: number): string {
     case 'art': return `<circle class="symf" cx="${w / 2}" cy="${h / 2}" r="${h * 0.24}"/>`;
     // Engineers: a bridge span on its piers.
     case 'eng': return `<path class="sym" d="M${w * 0.22} ${h * 0.72}V${h * 0.32}H${w * 0.78}V${h * 0.72}M${w / 2} ${h * 0.32}V${h * 0.6}"/>`;
+    // Support teams (release 2): machine guns, a weapon's upward arrow on its tripod; mortars, a tube's arc over its plate.
+    case 'mg': return `<path class="sym" d="M${w / 2} ${h * 0.78}V${h * 0.22}M${w * 0.38} ${h * 0.4}L${w / 2} ${h * 0.22}L${w * 0.62} ${h * 0.4}M${w * 0.36} ${h * 0.78}H${w * 0.64}"/>`;
+    case 'mor': return `<path class="sym" d="M${w * 0.32} ${h * 0.75}Q${w / 2} ${h * 0.05} ${w * 0.68} ${h * 0.75}"/><circle class="symf" cx="${w / 2}" cy="${h * 0.75}" r="${h * 0.1}"/>`;
   }
 }
 
@@ -367,6 +371,8 @@ function badge(kind: Kind): string {
     case 'fort': s = `<path class="bsym" d="M2 ${h - 1.3}V1.7H3.6V2.9H5.4V1.7H7V${h - 1.3}Z"/>`; break;
     case 'art': s = `<circle class="bsymf" cx="${w / 2}" cy="${h / 2}" r="1.7"/>`; break;
     case 'eng': s = `<path class="bsym" d="M2 ${h - 1.4}V2H${w - 2}V${h - 1.4}M${w / 2} 2V${h - 2.2}"/>`; break;
+    case 'mg': s = `<path class="bsym" d="M${w / 2} ${h - 1.2}V1.2M${w / 2 - 1.6} 2.8L${w / 2} 1.2L${w / 2 + 1.6} 2.8"/>`; break;
+    case 'mor': s = `<path class="bsym" d="M2.2 ${h - 1.3}Q${w / 2} 0 ${w - 2.2} ${h - 1.3}"/>`; break;
   }
   return `<g class="badge" transform="translate(14.4 8.2)"><rect width="${w}" height="${h}" rx="1"/>${s}</g>`;
 }
@@ -7874,6 +7880,8 @@ function newGame(human: string | null, seed?: number, from = 1, view = '', level
   // How deep he plays: a depth sets the desks his staff runs, the cabinet, whether it can fall, and the fog of war.
   // (The staff goes to work when his first month opens. A game started with no depth is the full game.)
   if (grand && human && depth) setDepth(g, depth);
+  // The support teams (release 2, teams.ts): on in a grand campaign once release 2 opens them, or with ?teams.
+  if (grand && (TEAMS_RELEASE || /[?&]teams(=|&|$)/.test(location.search))) setTeams(g, true);
   // Honours earned before the player took over are his to carry; their citations are old news.
   if (from > 1) takeOver(g);
   if (human) openGoals(g, human, from);

@@ -21,17 +21,48 @@
   "ranges": {"column": 900, "bound": 450, "debus": 700, "fo": 500, "ambush": 500, "grenade": 35, "hullDown": [1, 3.2]},
   "pin": {"harm": 0.004, "shelled": 3},
   "rounds": {
-    "_about": "Every round fired (Brian, 21 November 04:04Z: 'make the right odds if they actually hit so it not always an automatic hit ... when they do hit ... it shows up on the receiving object'). Looks only (ruling 217), the drill's own dice: a man falls and a tank is knocked out only where the rules take the model, and that round is a hit. odds: [best chance, metres at which it halves] for an aimed round from a halted shooter at a halted target in the open (tank: a 75 mm class gun at a tank; at: a launcher or anti-tank rifle; gun: a field or anti-tank gun over open sights; mg and rifle: at a lorry or a gun's shield, never at a man, as a man hit is a man the rules take). Times the shooter moving, the target moving, the target's cover (crest: hull-down) and the crew's experience [at none, more at full]. glance: the share of hits on a tank that bounce, by the face struck (the rest go in and do harm short of a kill). turret: the share of hits on a tank's turret. spread: a miss's error in metres [along the line of fire, more per metre of range, across, more per metre]. indirect: a gun firing over a crest lands round its aim [metres, more per metre of range], a hit where it lands within onVehicle of a vehicle. speed: metres a second a round flies. smallArms: seconds between a rifleman's shots and a machine gun's bursts [least, most]. keep: seconds the drill keeps a round in its list; marks: the most scars one vehicle keeps.",
-    "odds": {"tank": [0.85, 900], "at": [0.7, 90], "gun": [0.6, 700], "mg": [0.5, 300], "rifle": [0.3, 200], "grenade": [0.6, 15]},
+    "_about": "Every round fired (Brian, 21 November 04:04Z: 'make the right odds if they actually hit so it not always an automatic hit ... when they do hit ... it shows up on the receiving object'). Looks only (ruling 217), the drill's own dice: a man falls and a tank is knocked out only where the rules take the model, and that round is a hit. odds: [best chance, metres at which it halves] for an aimed round from a halted shooter at a halted target in the open (tank: a 75 mm class gun at a tank; at: a launcher or anti-tank rifle; gun: a field or anti-tank gun over open sights; mg and rifle: at a lorry or a gun's shield, never at a man, as a man hit is a man the rules take). Times the shooter moving, the target moving, the target's cover (crest: hull-down) and the crew's experience [at none, more at full]. glance: the share of hits on a tank that bounce, by the face struck (the rest go in and do harm short of a kill). turret: the share of hits on a tank's turret. spread: a miss's error in metres [along the line of fire, more per metre of range, across, more per metre]. indirect: a gun firing over a crest lands round its aim [metres, more per metre of range], a mortar always so (mortar: its own spread), a hit where it lands within onVehicle of a vehicle. mortar (release 2: a support team's tube) is always indirect, so its odds and spread are never read. speed: metres a second a round flies. smallArms: seconds between a rifleman's shots and a machine gun's bursts [least, most]. keep: seconds the drill keeps a round in its list; marks: the most scars one vehicle keeps.",
+    "odds": {"tank": [0.85, 900], "at": [0.7, 90], "gun": [0.6, 700], "mg": [0.5, 300], "rifle": [0.3, 200], "grenade": [0.6, 15], "mortar": [0.3, 300]},
     "shooterMoving": 0.3, "targetMoving": 0.7,
     "cover": {"none": 1, "field": 0.9, "rough": 0.8, "woods": 0.6, "building": 0.5, "works": 0.5, "rock": 0.6, "wreck": 0.6, "crater": 0.7, "crest": 0.45},
     "xp": [0.8, 0.4],
     "glance": {"front": 0.75, "left": 0.45, "right": 0.45, "rear": 0.25, "top": 0.5},
     "turret": 0.35,
-    "spread": {"tank": [4, 0.012, 1, 0.003], "at": [2, 0.03, 0.6, 0.01], "gun": [5, 0.012, 1.2, 0.003], "mg": [1.5, 0.004, 0.8, 0.003], "rifle": [1.5, 0.006, 0.8, 0.004], "grenade": [1.5, 0.05, 1, 0.05]},
-    "indirect": {"sigma": [8, 0.02], "onVehicle": 2.5},
-    "speed": {"tank": 800, "at": 150, "gun": 450, "mg": 750, "rifle": 750, "grenade": 12},
+    "spread": {"tank": [4, 0.012, 1, 0.003], "at": [2, 0.03, 0.6, 0.01], "gun": [5, 0.012, 1.2, 0.003], "mg": [1.5, 0.004, 0.8, 0.003], "rifle": [1.5, 0.006, 0.8, 0.004], "grenade": [1.5, 0.05, 1, 0.05], "mortar": [6, 0.02, 2, 0.01]},
+    "indirect": {"sigma": [8, 0.02], "mortar": [8, 0.025], "onVehicle": 2.5},
+    "speed": {"tank": 800, "at": 150, "gun": 450, "mg": 750, "rifle": 750, "grenade": 12, "mortar": 200},
     "smallArms": {"rifle": [3, 6], "mg": [1.2, 2.4]},
     "keep": 2, "marks": 12
+  },
+  "teams": {
+    "_about": "Support teams (release 2; Brian, 21 November 2026, 03:49Z: 'units you can place at the begining of a battle on your side and they can then attack from the back'): a machine-gun team's three guns on their tripods (role hmg) or a mortar team's three tubes (role mortar), each with its crew, carried by hand. hmg.burst: seconds between a tripod gun's bursts [least, most] (longer and closer than a section's light gun). mortar.every: a tube's shots as a share of the style's gunEvery (a mortar fires faster than a field gun). file: metres between the crews carrying their weapons in file on the march; pace: metres a battle second a crew runs its weapon to a new place in the line; sep: metres kept between two weapons set up.",
+    "hmg": {"burst": [0.8, 1.6]},
+    "mortar": {"every": 0.5},
+    "file": 7, "pace": 3.5, "sep": 8
+  },
+  "sections": {
+    "_about": "Each model drawn as its section (release 2; the 3D ground battle scene for Brian, 21 November 2026, 18:29Z: 'the ground battle needs a lot more soldiers in it'). Looks only (ruling 217): the model stays the rules' one, its key man; the rest of his section stand round him and fall one by one as the block loses strength, the last of them when the rules lift the model. rifle: a rifle section by army (the default for the rest): men in all, its leader the key man, one automatic weapon (US the BAR, Germany the MG 42, Britain the Bren), its number twos and ammunition bearers (loaders), and its scouts out ahead on the move. officer: the headquarters (the officer and his runners); mg: a machine-gun section (the gun, two loaders, its leader); at: an anti-tank team (the launcher and its loader); sapper: an assault pioneer section; holder: a horse holder and the two with him; gun: a field gun's crew (beside the gun); hmg and mortar: a support team's ammunition bearers (beside the three the 3D game draws with each weapon). Each number counts the key man: a gun's counts the gun itself (8: the gun and seven crew), hmg's and mortar's the three drawn with the weapon (7: four bearers; 8: five). space: metres between the men of a section in its line; rows: metres between a block's front and second row of sections; files: men to a file on the march (more files for more men); ahead: metres a section's scouts go before it.",
+    "rifle": {
+      "USA": {"men": 12, "loaders": 2, "scouts": 2},
+      "GER": {"men": 10, "loaders": 2, "scouts": 0},
+      "UK": {"men": 10, "loaders": 1, "scouts": 0},
+      "SOV": {"men": 10, "loaders": 1, "scouts": 0},
+      "JAP": {"men": 13, "loaders": 2, "scouts": 0},
+      "ITA": {"men": 10, "loaders": 1, "scouts": 0},
+      "FRA": {"men": 12, "loaders": 2, "scouts": 0},
+      "default": {"men": 10, "loaders": 1, "scouts": 0}
+    },
+    "officer": 4, "mg": 4, "at": 2, "sapper": 8, "holder": 3, "gun": 8, "hmg": 7, "mortar": 8,
+    "space": 3.5, "rows": 18, "files": 24, "ahead": 14,
+    "platoon": {
+      "_about": "Drawn as platoons (Brian, 22 November 2026: 'I want a lot of troops in the ground battles'): each rifle model drawn as its rifle platoon, by army. squads: its squads, the key man's own leading and the rest one behind another, step metres apart, each on its own leader and the same as the key man's section; hq: its headquarters, its leader counted, inside the leading squad's wedge. The US 3 squads of 12 and 5 (41 men), Germany 3 of 10 and a Zugtrupp of 7 (37), Britain 3 of 10 and 7 (37), the Soviets 4 of 10 and 3, Japan 3 of 13 and 4, Italy 3 of 10 and 4, France 3 of 12 and 4; the rest 3 and 4. rows: metres between a block's front and second row of platoons. Gun crews, support teams, anti-tank teams, sappers, an officer's party and tanks stay as they are.",
+      "USA": { "squads": 3, "hq": 5 }, "GER": { "squads": 3, "hq": 7 }, "UK": { "squads": 3, "hq": 7 }, "SOV": { "squads": 4, "hq": 3 },
+      "JAP": { "squads": 3, "hq": 4 }, "ITA": { "squads": 3, "hq": 4 }, "FRA": { "squads": 3, "hq": 4 }, "default": { "squads": 3, "hq": 4 },
+      "step": 9, "rows": 27
+    }
+  },
+  "tanks": {
+    "_about": "A tank halted in a fight fights from alternate posts (every army but a mass, whose scoot is 0): 'shots' [least, most] from one post, then she backs 'back' metres out of sight, crosses behind the line and comes up at her next post, 'post' metres to one side of her own place and then the other (her own place is where the rules lay her wreck, so she never goes far from it).",
+    "post": 16, "back": 12, "shots": [2, 4]
   }
 }

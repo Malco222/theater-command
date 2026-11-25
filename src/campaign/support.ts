@@ -13,6 +13,7 @@ import { turnToDate } from '../core/ticket';
 import { isFoot } from './ground';
 import { hasTech, techById } from './tech';
 import type { Corps, Game, Region } from './types';
+import { isTeam } from './teams';
 
 export const SUPPORT = data as unknown as {
   antiTank: {
@@ -111,6 +112,7 @@ export function antiTank(g: Game, attackers: Corps[], defenders: Corps[], target
   const close = S.handHeld.ground.includes(target.terrain);
   let all = 0, carry = 0, tanks = 0, guns = 0, destroyers = 0, handHeld = 0, kit = true;
   for (const d of defenders) {
+    if (isTeam(d)) continue;
     const k = weight(d);
     all += k;
     if (d.kind === 'arm') { tanks += k; continue; }
@@ -150,7 +152,8 @@ export function antiTank(g: Game, attackers: Corps[], defenders: Corps[], target
 /** The share of an attack's weight that goes in on foot. */
 export function footShare(attackers: Corps[]): number {
   let all = 0, foot = 0;
-  for (const c of attackers) { const k = weight(c); all += k; if (isFoot(c)) foot += k; }
+  // (The support teams, release 2, go in behind the line: neither on foot nor counted against it.)
+  for (const c of attackers) { if (isTeam(c)) continue; const k = weight(c); all += k; if (isFoot(c)) foot += k; }
   return all > 0 ? foot / all : 0;
 }
 
@@ -167,7 +170,7 @@ export function machineGuns(g: Game, d: Corps, foot: number, works: number): num
 /** Mortars: the share of the worth of fieldworks (never of fortress works) that the attack's own mortars take out. */
 export function mortars(g: Game, attackers: Corps[]): number {
   let all = 0, have = 0;
-  for (const c of attackers) { const k = weight(c); all += k; if (isFoot(c) && hasTech(g, c.nat, SUPPORT.tech.support)) have += k; }
+  for (const c of attackers) { if (isTeam(c)) continue; const k = weight(c); all += k; if (isFoot(c) && hasTech(g, c.nat, SUPPORT.tech.support)) have += k; }
   return all > 0 ? SUPPORT.mortars.works * (have / all) : 0;
 }
 
@@ -189,18 +192,21 @@ export interface Toll {
 }
 
 /** Works out who pays for an attack on this defence. In an assault on a town (no anti-tank strength, no facing) only the snipers tell. */
-export function tollOf(g: Game, attackers: Corps[], defenders: Corps[], at: AntiTank | null, f: Facing | null, sniped: Sniped): Toll {
+export function tollOf(g: Game, attackers: Corps[], defenders: Corps[], at: AntiTank | null, f: Facing | null, sniped: Sniped, mgUp = 0): Toll {
   const L = SUPPORT.toll, M = SUPPORT.machineGuns;
   const snipers = sniped ? SUPPORT.snipers.toll : 0;
   if (!at || !f) return { tanks: 1, foot: 1 + snipers, guns: 1, why: { machineGuns: 0, guns: 0, snipers, shield: 0 } };
   let all = 0, mg = 0;
   for (const d of defenders) {
+    if (isTeam(d)) continue;
     const k = weight(d);
     all += k;
     if (carries(d) && hasTech(g, d.nat, SUPPORT.tech.support)) mg += k * (M.open + (1 - M.open) * f.works(d));
+    // The defence's machine-gun brigades (release 2) add their fire to every line corps' own.
+    if (mgUp && carries(d)) mg += (k * (M.open + (1 - M.open) * f.works(d)) * mgUp) / M.defence;
   }
   let mine = 0, armour = 0;
-  for (const c of attackers) { const k = weight(c); mine += k; if (c.kind === 'arm') armour += k; }
+  for (const c of attackers) { if (isTeam(c)) continue; const k = weight(c); mine += k; if (c.kind === 'arm') armour += k; }
   // Tanks beside the infantry take part of the toll off it, as far as the anti-tank guns let them work.
   const shield = mine > 0 ? L.shield * Math.min(1, (2 * armour) / mine) * (1 - at.strength) : 0;
   const machine = L.machineGuns * (all > 0 ? mg / all : 0), guns = Math.min(L.gunsMost, L.guns * f.guns);
@@ -213,7 +219,8 @@ export function tollOf(g: Game, attackers: Corps[], defenders: Corps[], at: Anti
 }
 
 /** What one attacking corps pays, as a multiple of the usual share. */
-export const tollFor = (t: Toll | null | undefined, c: Corps): number => (!t ? 1 : c.kind === 'arm' ? t.tanks : c.kind === 'art' ? t.guns : t.foot);
+// (A support team, release 2, fires from behind the line and pays as the guns do.)
+export const tollFor = (t: Toll | null | undefined, c: Corps): number => (!t ? 1 : c.kind === 'arm' ? t.tanks : c.kind === 'art' || isTeam(c) ? t.guns : t.foot);
 
 /**
  * What an attack faces, as the battle works it out (the grand campaign): the defence's anti-tank strength, who will

@@ -2,7 +2,7 @@
 // fought through it, the way the game will call it, and settled through the campaign's own attack order.
 import { describe, expect, it } from 'vitest';
 import { battleCalls, planOut, unitOut } from '../unreal/TheaterCommand/Rules/battle-bridge';
-import { practiceTicket, PRACTICE_GROUNDS, LandBattle, sampleTicket } from '../src/battle/land';
+import { practiceTicket, PRACTICE_GROUNDS, LandBattle, sampleTicket, withTeams } from '../src/battle/land';
 import { newCampaign, offers } from '../src/battle/ui/campaign';
 import { attackOutlook, orderAttack } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
@@ -154,5 +154,55 @@ describe('the battle doorway for the 3D game', () => {
     for (let i = 0; i < 10; i++) TC.battleTick(1);
     men = TC.battleMen() as M;
     expect(men.blocks.filter((b) => mine.includes(b.id)).some((b) => b.men.some((m) => m.v > 0))).toBe(true);
+  });
+  it('the setup step (release 2): only when asked; the clock waits while his guns are placed, then runs from Begin', () => {
+    const { g, TC } = rig();
+    // An attack of two corps, the second made guns for the test: the campaign's opening offers bring none.
+    const o = offers(g).find((x) => x.corps.length >= 2)!;
+    o.corps[1].kind = 'art';
+    const ids = o.corps.map((c) => c.id);
+    // Two arguments: as always, no setup step.
+    const plain = TC.battleStart(ids, o.target.id)!;
+    expect((plain as { setup?: unknown }).setup).toBeUndefined();
+    expect((plain.view as { setup?: unknown }).setup).toBeUndefined();
+    const st = TC.battleStart(ids, o.target.id, { setup: true })! as typeof plain & { setup: { room: number[] } };
+    expect(st.setup.room).toHaveLength(4);
+    expect((st.view as { setup?: string }).setup).toBe('att');
+    // A speed or a tick while placing runs nothing; a block that is no gun is refused, with why.
+    expect(TC.battleTick(5).t).toBe(0);
+    const units = st.view.units as { id: number; side: string; kind: string; x: number; y: number }[];
+    const foot = units.find((u) => u.side === 'att' && u.kind !== 'art')!;
+    const no = TC.battlePlace(foot.id, foot.x, foot.y - 30);
+    expect(no.ok).toBe(false);
+    expect(no.why).toMatch(/Only guns/);
+    const gun = units.find((u) => u.side === 'att' && u.kind === 'art')!;
+    expect(gun).toBeDefined();
+    {
+      const [x0, , x1, y1] = st.setup.room;
+      // The ghost asks first and moves nothing; the drop places it.
+      let at = -1;
+      for (let x = x0 + 80; x < x1 - 80 && at < 0; x += 30) if (TC.battleCanPlace(gun.id, x, y1 - 40).why === null) at = x;
+      expect(at).toBeGreaterThan(0);
+      expect((TC.battleView().units as { id: number; y: number }[]).find((u) => u.id === gun.id)!.y).not.toBeCloseTo(y1 - 40, 0);
+      expect(TC.battleCanPlace(foot.id, foot.x, foot.y - 30).why).toMatch(/Only guns/);
+      const theirs = units.find((u) => u.side === 'def')!;
+      expect(TC.battleCanPlace(theirs.id, theirs.x, theirs.y).why).toMatch(/your own/);
+      const put = TC.battlePlace(gun.id, at, y1 - 40);
+      expect(put!.ok).toBe(true);
+      expect(put!.why).toBeNull();
+      const moved = (put!.view.units as { id: number; y: number }[]).find((u) => u.id === gun.id)!;
+      expect(moved.y).toBeCloseTo(y1 - 40, 0);
+    }
+    const go = TC.battleBegin();
+    expect((go.view as { setup?: unknown }).setup).toBeUndefined();
+    expect(go.view.speed).toBe(1);
+    expect(TC.battleTick(1).t).toBeGreaterThan(0);
+    expect(TC.battlePlace(foot.id, foot.x, foot.y).ok).toBe(false);
+  });
+  it('a support team is sent as a gun block with its team, so the 3D game draws its own models (release 2)', () => {
+    const b = new LandBattle(withTeams(practiceTicket(PRACTICE_GROUNDS[0], { seed: 7, humanAtt: true })));
+    const out = b.units.filter((u) => u.team).map((u) => unitOut(u) as { kind: string; team?: string; cal?: string });
+    expect(out.map((u) => [u.kind, u.team, u.cal ?? null])).toEqual([['art', 'mg', null], ['art', 'mor', 'mortar'], ['art', 'mg', null], ['art', 'mor', 'mortar']]);
+    expect(b.units.filter((u) => !u.team).every((u) => (unitOut(u) as { team?: string }).team === undefined)).toBe(true);
   });
 });

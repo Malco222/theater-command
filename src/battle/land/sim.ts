@@ -12,11 +12,11 @@ import { lineUp } from '../core/select';
 import { DT, type AirFlown, type AirOnCall, type BattleSim, type BattleView, type BreakCause, type Command, type FieldEvent, type FieldResult, type FieldTicket, type Flight, type Side, type Zone } from '../core/types';
 import { thinkFor, type AttackPlan } from './ai';
 import { STYLE, styleFor, type Style } from './styles';
-import { buildField, coverAt, FIELD, groundAt, GROUNDS, heightAt, slopeAt, streetsOf, builtShare, zonesOf, type Ground, type LandField, type LandPlace } from './field';
+import { BEND, buildField, coverAt, FIELD, groundAt, GROUNDS, heightAt, slopeAt, streetsOf, builtShare, zonesOf, type Ground, type LandField, type LandPlace } from './field';
 import { crewFor } from './crews';
 import { calFor, CRATER, REACH, SHELLS_FROM } from './shells';
-import { LAND, MOTION, type Kind, type Motion } from './rules';
-import { bendAt, deploy, makeBlocks, type LandUnit } from './units';
+import { LAND, MOTION, gunsOf, reachOf, type Kind, type Motion } from './rules';
+import { bendAt, deploy, makeBlocks, wetUnder, type LandUnit } from './units';
 import { Drill, wreckOffset } from './drill';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
@@ -149,6 +149,14 @@ export class LandBattle implements BattleSim<LandUnit> {
    * bridge, the browser page). Looks only: the fight never reads it, and it never draws on the battle's dice.
    */
   drill: Drill | null = null;
+  /**
+   * The side placing its guns and support teams before the clock starts (release 2; Brian, 21 Nov 03:49Z: "units you
+   * can place at the begining of a battle on your side"): null unless something asks (setupOn), as the drill is.
+   * While it is set the battle does not step; land:place moves one of that side's gun blocks, land:begin ends it.
+   */
+  setup: Side | null = null;
+  /** Where the placing side may put a block: its zone, grown to take in every block of its own where it was drawn up. */
+  private room: [number, number, number, number] | null = null;
 
   // Air support (see "Air support" below). Nothing here moves where neither side has fighters on call.
   /** Each side's fighters on call, where it has any. */
@@ -187,12 +195,14 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.units = [...att, ...def];
     this.covered = coveredTanks(ticket, this.units);
     const works = ticket.place.fort >= 1 || def.some((u) => u.kind === 'fort');
-    this.freshHold = { att: att.filter((u) => u.kind !== 'fort').length <= LAND.fresh.upTo, def: !works && def.filter((u) => u.kind !== 'fort').length <= LAND.fresh.upTo };
+    // A support team (release 2) is no block of the line: a side's count is its divisions' and regiments'.
+    this.freshHold = { att: att.filter((u) => u.kind !== 'fort' && !u.team).length <= LAND.fresh.upTo, def: !works && def.filter((u) => u.kind !== 'fort' && !u.team).length <= LAND.fresh.upTo };
     // Tank crews name their tanks after their unit's third battle (b477): data only, nothing in the fight reads it.
     for (const u of this.units) { const c = crewFor(u, ticket[u.side].forces.find((f) => f.corps === u.corps)?.battles ?? 0); if (c) u.crew = c; }
     // What each block's guns throw, from the model the 3D game draws it with (shells.ts): data only, as the crews'
     // marks are.
-    for (const u of this.units) { const c = calFor(u.kind, u.nat, ticket.turn); if (c) u.cal = c; }
+    // A mortar team throws mortar bombs; a machine-gun team throws none (release 2).
+    for (const u of this.units) { const c = u.team ? (u.team === 'mor' ? 'mortar' : undefined) : calFor(u.kind, u.nat, ticket.turn); if (c) u.cal = c; }
     // Where some of the attack's corps cross the river and some come on over dry ground, the river lies only before
     // those that cross: it bends away from the lanes of the others, at their end of the field (the design director,
     // b464(5)). Where all cross, or there is no river, the field is as it always was.
@@ -393,6 +403,19 @@ export class LandBattle implements BattleSim<LandUnit> {
         // Fire on, stay put (the design director, ruling 239(6)): { do: 'land:fire', units, target }. The player's guns
         // fire on that block whenever it is in their reach, before whatever else is nearest, and stand where they are:
         // the computer's aim given to the player, never aimed sharper than the player (b533). Other blocks are left be.
+        // The setup step (release 2): { do: 'land:place', units: [id], x, y } puts one gun block there; { do:
+        // 'land:begin' } ends the step, and the clock may run.
+        if (c.do === 'land:place') {
+          const u = this.unit(Number((c.units as number[] | undefined)?.[0])), x = Number(c.x), y = Number(c.y);
+          if (!u || this.placeWhy(u, x, y) !== null || by !== this.setup) return false;
+          this.place(u, x, y);
+          return true;
+        }
+        if (c.do === 'land:begin') {
+          if (by !== this.setup) return false;
+          this.setup = null; this.room = null;
+          return true;
+        }
         if (c.do === 'land:fire') {
           const t = this.unit(Number(c.target));
           const guns = mine((c.units ?? []) as number[]).filter((u) => u.kind === 'art');
@@ -428,7 +451,7 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   /** How near a block closes on what it attacks before it stands and fights: well inside its reach. */
   private closeTo(u: LandUnit): number {
-    return LAND.reach[u.kind] * (u.kind === 'art' ? 0.85 : 0.6);
+    return reachOf(u) * (u.kind === 'art' ? 0.85 : 0.6);
   }
 
   /**
@@ -614,9 +637,68 @@ export class LandBattle implements BattleSim<LandUnit> {
   // ---- The tick -----------------------------------------------------------------------------------------------------
 
   /** The squad brain, made the first time it is asked for (drill.ts). */
-  drillOn(): Drill { return (this.drill ??= new Drill(this)); }
+  drillOn(opts?: { sections?: boolean; platoons?: boolean }): Drill { return (this.drill ??= new Drill(this, opts)); }
+
+  /**
+   * Opens the setup step for one side (release 2): only before the first step. Its guns and support teams may then be
+   * placed anywhere in its own zone (or where its own blocks were drawn up), on dry ground they can stand on, clear of
+   * every other block; the computer's stand where they were drawn up. Every other order is taken as before the clock
+   * starts. False if the battle has begun.
+   */
+  setupOn(side: Side): boolean {
+    if (this.t > 0 || this.over) return false;
+    const z = this.field.zones[side];
+    const mine = this.units.filter((u) => u.side === side);
+    this.room = [
+      Math.min(z[0], ...mine.map((u) => u.x - u.w / 2)), Math.min(z[1], ...mine.map((u) => u.y - u.d / 2)),
+      Math.max(z[2], ...mine.map((u) => u.x + u.w / 2)), Math.max(z[3], ...mine.map((u) => u.y + u.d / 2)),
+    ];
+    this.setup = side;
+    return true;
+  }
+
+  /** Where the placing side may put its guns and teams, [x0, y0, x1, y1] metres; null outside the setup step. */
+  setupRoom(): [number, number, number, number] | null { return this.room ? [...this.room] as [number, number, number, number] : null; }
+
+  /** Why a block may not stand there in the setup step, or null where it may (release 2). */
+  placeWhy(u: LandUnit, x: number, y: number): string | null {
+    if (!this.setup || u.side !== this.setup) return 'The battle has begun.';
+    if (u.kind !== 'art' || !fighting(u)) return 'Only guns and support teams are placed.';
+    if (u.dug) return 'It is dug in where it stands.';
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return 'Off the field.';
+    const r = this.room!, hw = u.w / 2, hd = u.d / 2;
+    if (x - hw < r[0] || x + hw > r[2] || y - hd < r[1] || y + hd > r[3]) return 'Outside your ground.';
+    if (this.wet(u, x, y, false) || wetUnder(this.field, { ...u, x, y })) return 'Not on water, a bridge or ground it cannot stand on.';
+    // A river bend: the attack's lanes either side of it are each the card's own (b464(5)); a block keeps to its lane.
+    const B = this.field.bend;
+    if (B && u.side === 'att' && (Math.sign(x - B.x) !== Math.sign(u.x - B.x) || Math.abs(x - B.x) < BEND.clear + hw)) return 'Its corps keeps to its own side of the river.';
+    // A city's river up the field: the defence's line ends on it, so a block stays on the bank it was drawn up on.
+    const St = this.field.stream;
+    if (St?.lie === 'up') {
+      const xAt = (yy: number): number => St.course.reduce((m, p) => (Math.abs(p[1] - yy) < Math.abs(m[1] - yy) ? p : m))[0];
+      if (Math.sign(x - xAt(y)) !== Math.sign(u.x - xAt(u.y))) return 'It stays on its own bank of the river.';
+    }
+    // Clear of every block by a few metres, so neither is shoved off its place as they turn to fire (spread).
+    for (const o of this.units) {
+      if (o === u || !live(o)) continue;
+      if (Math.abs(o.x - x) < (o.w + u.w) / 2 + LAND.placeClear && Math.abs(o.y - y) < (o.d + u.d) / 2 + LAND.placeClear) return 'Another block stands there.';
+    }
+    return null;
+  }
+
+  /** Puts a block where the setup step placed it: drawn up there, facing the enemy, with no order. */
+  private place(u: LandUnit, x: number, y: number): void {
+    u.x = x; u.y = y; u.face = u.side === 'att' ? 0 : Math.PI;
+    u.order = null; u.path = []; u.keepFace = null;
+    delete u.aim; delete u.stand; delete u.standFor; delete u.standFace; delete u.closing;
+    this.ways.delete(u.id);
+    u.home = [x, y];
+    u.cover = groundAt(this.field, x, y);
+    this.drill?.relay(u);
+  }
 
   step(): void {
+    if (this.setup) return;
     if (this.over) { this.drill?.step(); return; }
     if (this.t >= this.nextThink) {
       this.nextThink = this.t + LAND.think;
@@ -749,7 +831,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const marching = u.order && u.order.kind !== 'attack' && u.path.length > 0;
     if (u.kind === 'art' && marching) return null;
     if (u.order?.kind === 'withdraw') return null;
-    const reach = LAND.reach[u.kind];
+    const reach = reachOf(u);
     // Guns told to fire on one block strike it whenever it is in their reach (ai.ts; ruling 239(6)).
     if (u.aim !== undefined) { const a = this.unit(u.aim); if (a && live(a) && a.side !== u.side && this.gap(u, a) <= reach) return a; }
     let best: LandUnit | null = null, score = Infinity;
@@ -854,9 +936,11 @@ export class LandBattle implements BattleSim<LandUnit> {
     if ((u.order && u.path.length && u.speed > 0.5) || rearguard) p *= LAND.moving;
     let nerveMul = 1;
     if (u.kind === 'art') {
-      const close = this.gap(u, t) < LAND.guns.closeAt;
-      p *= close ? LAND.guns.close : LAND.guns.punch;
-      if (!close) nerveMul *= LAND.guns.nerve;
+      const G = gunsOf(u), close = this.gap(u, t) < G.closeAt;
+      p *= close ? G.close : G.punch;
+      if (!close) nerveMul *= G.nerve;
+      // A support team's bullets and light bombs do little to tanks (release 2).
+      if (u.team && t.kind === 'arm') p *= LAND.teams[u.team].armour;
     }
     if (u.kind === 'arm' && LAND.tanksClose.ground.includes(gu)) p *= LAND.tanksClose.punch;
     const rise = heightAt(this.field, u.x, u.y) - heightAt(this.field, t.x, t.y);
@@ -897,7 +981,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       for (const [u] of from) if (!by || owed[u.id] > owed[by.id]) by = u;
       if (!by) { this.drill?.fromAir(t.id, k); continue; }
       owed[by.id] -= model;
-      if (SHELLS_FROM.includes(by.kind)) this.shell(by, t, k, w);
+      if (SHELLS_FROM.includes(by.kind) && by.team !== 'mg') this.shell(by, t, k, w);
       else this.drill?.struckBy(by.id, t.id, k);
     }
   }
@@ -911,10 +995,11 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   private shell(by: LandUnit, t: LandUnit, k: number, w: Zone | null): void {
     let x: number, y: number;
-    // With the men drawn (drill.ts), the shell lands on the man it costs, where he stands; else at his place on the tray.
-    const man = w ? null : this.drill?.manAt(t.id, k);
-    if (w) { x = w.x; y = w.y; }
-    else if (man) { x = Math.round(clamp(man[0], 2, this.field.w - 2) * 10) / 10; y = Math.round(clamp(man[1], 2, this.field.h - 2) * 10) / 10; }
+    // With the men drawn (drill.ts), the shell lands on the man it costs, where he stands, and on the tank it knocks out
+    // where she stands (at a post, she burns there: drill.ts wreckSpot); else at his place on the tray, or at her wreck.
+    const man = this.drill?.manAt(t.id, k);
+    if (man) { x = Math.round(clamp(man[0], 2, this.field.w - 2) * 10) / 10; y = Math.round(clamp(man[1], 2, this.field.h - 2) * 10) / 10; }
+    else if (w) { x = w.x; y = w.y; }
     else {
       const across = (mix(t.id * 787 + k * 271 + 11) - 0.5) * t.w * 0.9, along = (mix(t.id * 449 + k * 523 + 5) - 0.5) * t.d * 0.8;
       const c = Math.cos(t.face), s = Math.sin(t.face);
@@ -939,7 +1024,8 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   private wreck(t: LandUnit): Zone {
     const n = this.wrecks.filter((z) => z.unit === t.id).length;
-    // The drill stands each tank at this same place (drill.ts wreckOffset), so a tank burns where she stood.
+    // The drill stands each tank at this same place (drill.ts wreckOffset), or at a post near it in a fight, and draws her
+    // wreck where she fell (drill.ts wreckSpot): this place is the rules' own, for the shelter it gives men beside it.
     const [across, along] = wreckOffset(t.id, n, t.w, t.d);
     const c = Math.cos(t.face), s = Math.sin(t.face);
     const x = clamp(t.x + across * c + along * s, 2, this.field.w - 2), y = clamp(t.y - across * s + along * c, 2, this.field.h - 2);
@@ -1080,7 +1166,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     // every bank read as a cliff above the bed, and foot crawled their last 20 m of the river at 0.8 m a second).
     const up = inRiver(g) ? 0 : heightAt(this.field, u.x + Math.sin(head) * 20, u.y + Math.cos(head) * 20) - heightAt(this.field, u.x, u.y);
     pace *= up > 0 ? Math.max(0.4, 1 - (up / 20) * 1.5) : 1;
-    let v = LAND.speed[k] * Math.max(0.12, pace) * (run ? 1.15 : 1) * (u.state === 'wavering' ? 0.85 : 1);
+    const top = u.team ? LAND.teams[u.team].speed : LAND.speed[k];
+    let v = top * Math.max(0.12, pace) * (run ? 1.15 : 1) * (u.state === 'wavering' ? 0.85 : 1);
     const d = dist(u.x, u.y, to[0], to[1]);
     const stepLen = Math.min(d, v * DT);
     const [ax, ay] = ahead(head);
@@ -1099,7 +1186,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     u.y = run ? ny : clamp(ny, 5, this.field.h - 5);
     u.speed = stepLen / DT;
     if (!run) u.pressing = head;
-    u.act = run ? 'rout' : v > LAND.speed[k] * 1.05 ? 'run' : 'march';
+    u.act = run ? 'rout' : v > top * 1.05 ? 'run' : 'march';
     u.cover = groundAt(this.field, u.x, u.y);
     if (d <= Math.max(6, stepLen + 0.01)) {
       u.path.shift();
@@ -1156,7 +1243,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const key = lone ? `${t.id}` : `${t.id}/${lane}/${axis}`;
     // How far off its target a block may stand, at its own stretch, and still fight: half way from where it closes to
     // the end of its reach. A stand pushed further out by its friends, it never fires from (the review, b453).
-    const hold = want + (LAND.reach[u.kind] - want) / 2;
+    const hold = want + (reachOf(u) - want) / 2;
     const off = (x: number, y: number): number => dist(x, y, t.x, t.y) - (Math.max(u.w, u.d) + Math.max(t.w, t.d)) / 4;
     const there = (s: [number, number]): [number, number] | null => {
       if (dist(u.x, u.y, s[0], s[1]) >= 12) return s;
@@ -2003,7 +2090,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const ev = this.events;
     this.events = [];
     void as; // Every block on the field is in sight: what the player knows of each is known() (b464(2)).
-    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...this.airView(), ...this.planView() };
+    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...this.airView(), ...this.planView() };
   }
 
   /** Air support's part of the view, only where a side has fighters on call. */

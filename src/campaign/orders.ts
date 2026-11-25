@@ -109,7 +109,7 @@ function lineOf(g: Game, b: Build, nat: string): OrderLine {
     sign = b.airborne ? 'para' : b.kind ?? 'inf';
     // A nation's special formation goes by its own name: "heavy tank corps", "Commonwealth corps".
     const own = b.elite ? eliteOf(nat) : null;
-    label = b.airborne ? 'airborne corps' : own && own.id === b.elite ? (/^(Commonwealth|Guards|Ardennes|Evzone|Legion|Alpine)\b/.test(own.label) ? own.label : low(own.label)) : low(PRODUCTION.builds[b.kind ?? 'inf']?.label ?? (ARSENAL as unknown as { land?: Record<string, { label: string }> }).land?.[b.kind ?? 'inf']?.label ?? `${KIND[b.kind ?? 'inf']?.label ?? 'Infantry'} corps`);
+    label = b.airborne ? 'airborne corps' : own && own.id === b.elite ? (/^(Commonwealth|Guards|Ardennes|Evzone|Legion|Alpine)\b/.test(own.label) ? own.label : low(own.label)) : low(PRODUCTION.builds[b.kind ?? 'inf']?.label ?? (ARSENAL as unknown as { land?: Record<string, { label: string }> }).land?.[b.kind ?? 'inf']?.label ?? (ARSENAL as unknown as { teams?: Record<string, { label: string }> }).teams?.[b.kind ?? 'inf']?.label ?? `${KIND[b.kind ?? 'inf']?.label ?? 'Infantry'} corps`);
   } else if (b.what === 'air') {
     sign = b.item ?? 'ftr';
     label = low(ARSENAL.air[sign as keyof typeof ARSENAL.air]?.label ?? 'air wing');

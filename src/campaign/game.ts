@@ -34,6 +34,7 @@ import defenceData from '../../data/campaign/defence.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot, whyBarred } from './ground';
 import { SUPPORT, antiTank, assaultFire, footShare, machineGuns, mortars, snipedIn, tollFor, tollOf, whoPaid, type Faced, type Facing } from './support';
+import { isTeam, TEAMS, teamsIn } from './teams';
 import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName } from './rivers';
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
@@ -761,16 +762,20 @@ export function corpsNamed(g: Game, nat: string, name: string): string {
  */
 export const thornGround = (g: Game, r: Region, nat: string): boolean => nat !== r.owner && nat !== g.human && g.flags[`americas:in:${r.owner}`] !== undefined && allied(g, nat, r.owner);
 
-export const fights = (c: Corps): boolean => c.kind !== 'art' && c.kind !== 'eng' && c.kind !== 'fort';
+// The support teams (release 2, teams.ts) are no fighting corps either: they go in beside one.
+export const fights = (c: Corps): boolean => c.kind !== 'art' && c.kind !== 'eng' && c.kind !== 'fort' && !isTeam(c);
 /** The sentence wherever guns are sent forward alone (ruling 146). */
 export const GUNS_ALONE = 'Guns cannot take ground alone. Send infantry or tanks in with them.';
 /** The same for a force of engineers with no guns among them. */
 export const ENGINEERS_ALONE = 'Engineers cannot take ground alone. Send infantry or tanks in with them.';
 /** And for one of guns and engineers together. */
 export const GUNS_ENGINEERS_ALONE = 'Guns and engineers cannot take ground alone. Send infantry or tanks in with them.';
+/** And for one of support teams alone (release 2). */
+export const TEAMS_ALONE = 'Machine-gun and mortar brigades cannot take ground alone. Send infantry or tanks in with them.';
 /** The sentence for a force with no fighting corps in it. */
 export function aloneLine(corps: Corps[]): string {
   const guns = corps.some((c) => c.kind === 'art'), sappers = corps.some((c) => c.kind === 'eng');
+  if (!guns && !sappers && corps.some(isTeam)) return TEAMS_ALONE;
   return guns && sappers ? GUNS_ENGINEERS_ALONE : sappers ? ENGINEERS_ALONE : GUNS_ALONE;
 }
 /** Where the rule that guns never go forward alone holds: the grand campaign, which alone raises guns and engineers. */
@@ -785,6 +790,8 @@ export function limitAttackers(g: Game, corps: Corps[], target: Region): Corps[]
   const most = corps.length ? g.nations[corps[0].nat].maxAttack || 99 : 99;
   const ranked = [...corps].sort((x, y) => corpsBase(g, y) * KIND[y.kind].atk - corpsBase(g, x) * KIND[x.kind].atk);
   const guns: Corps[] = [];
+  // Support teams (release 2) fire from behind the line: a few ride in beside the corps that fight, as guns do.
+  const teams: Corps[] = [];
   if (g.flags.open === 1 && corps.length) {
     // Attacked from several sides at once a defence cannot cover every road: each side's roads carry more (the grand campaign).
     if (new Set(corps.filter((c) => !blocked(g, c, target)).map((c) => c.reg)).size >= DEFENCE.frontage.sides) cap += DEFENCE.frontage.extra;
@@ -792,6 +799,7 @@ export function limitAttackers(g: Game, corps: Corps[], target: Region): Corps[]
     if (target.fort || hostileUnits(g, target, armyOf(corps[0])).some((u) => u.dug)) {
       for (const c of ranked) if (c.kind === 'art' && guns.length < DEFENCE.frontage.guns && !blocked(g, c, target)) guns.push(c);
     }
+    for (const c of ranked) if (isTeam(c) && teams.length < TEAMS.frontage && !blocked(g, c, target)) teams.push(c);
   }
   const fill = (over: Corps[]): Corps[] => {
     const used: Record<number, number> = {};
@@ -806,14 +814,16 @@ export function limitAttackers(g: Game, corps: Corps[], target: Region): Corps[]
     }
     return out;
   };
-  const out = fill(guns);
+  const behind = teams.length ? [...guns, ...teams] : guns;
+  const out = fill(behind);
   // The guns support somebody: with nobody else to go in, they take the roads themselves like any other corps.
-  const force = out.length ? [...out, ...guns] : fill([]);
+  // (The teams ride only beside a fighting corps.)
+  const force = out.length ? (teams.length && out.some(fights) ? [...out, ...behind] : [...out, ...guns]) : fill([]);
   if (!gunsRule(g) || force.some(fights)) return force;
   // In the grand campaign guns never go forward alone (ruling 211(a)): where the roads filled up with guns and
   // engineers, the fighting corps to hand take them instead, and with no fighting corps there is no attack.
   const line = fill(corps.filter((c) => !fights(c)));
-  return line.length ? [...line, ...guns] : [];
+  return line.length ? (teams.length ? [...line, ...guns, ...teams] : [...line, ...guns]) : [];
 }
 
 /** Which week of the month a corps reaches after spending this many more action points. */
@@ -1065,6 +1075,11 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const gunsA = gunsIn(attackers), gunsD = gunsIn(defenders);
   const soften = gunsA ? Math.min(GUNS.softenMost, GUNS.soften * gunsA) : 0;
   const thicken = gunsD ? Math.min(GUNS.thickenMost, GUNS.thicken * gunsD) : 0;
+  // Support teams (release 2, teams.ts): the defence's machine-gun brigades against men on foot, the attack's mortar
+  // brigades against fieldworks. None exist unless the teams are switched on, so both are 0 and nothing below moves.
+  const mgD = teamsIn(defenders, 'mg'), morA = teamsIn(attackers, 'mor');
+  const mgUp = mgD ? Math.min(TEAMS.card.mg.most, TEAMS.card.mg.perDiv * mgD) : 0;
+  const morUp = morA ? Math.min(TEAMS.card.mor.most, TEAMS.card.mor.perDiv * morA) : 0;
   // The grand campaign's ground rules: each arm on the ground that suits it or does not, and tanks and infantry
   // worth more together than apart. A historical scenario has none of this and is worked out as it always was.
   const wide = groundRules(g);
@@ -1096,7 +1111,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // the defence's anti-tank strength against this attack is two thirds or more. (The mark is met at its printed value.)
   const boxed = !wide || (!!at && Math.round(at.strength * 1e6) / 1e6 >= DESERT.box);
   const onFoot = facing ? footShare(attackers) : 0;
-  const mortar = facing ? mortars(g, attackers) : 0;
+  const mortar = facing ? (morUp ? 1 - (1 - mortars(g, attackers)) * (1 - morUp) : mortars(g, attackers)) : 0;
   // An assault the month the army comes up to the town goes in off the march, with nothing made ready.
   const rushed = town && g.flags[`siege:${target.id}`] === g.turn ? SIEGE.assault.hasty[townSize(g, target)] : 1;
   const hasty = rushed < 1;
@@ -1188,6 +1203,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (d.dug) { const dug = wide ? 1 + (DUG_IN - 1) * Math.min(1, Math.max(0, (d.dugFor ?? 1) - wornBy)) : DUG_IN; const left = (1 - soften) * (1 - mortar); p *= left < 1 ? 1 + (dug - 1) * left : dug; dugIn++; }
     // Machine guns tell against men on foot, most from finished fieldworks (the grand campaign).
     if (facing) p *= machineGuns(g, d, onFoot, facing.works(d));
+    // The machine-gun brigades stiffen the line they stand behind (release 2): its corps that fight, not themselves.
+    if (facing && mgUp && fights(d)) p *= 1 + mgUp * onFoot * (SUPPORT.machineGuns.open + (1 - SUPPORT.machineGuns.open) * facing.works(d));
     // Men who have stood off an attack already this month meet the next one tired (the grand campaign).
     const blows = wide && !town ? Math.min(DEFENCE.tired.most, (d.blows ?? 0) + (opts.after?.blows ?? 0)) : 0;
     if (blows > 0) p *= 1 - DEFENCE.tired.per * blows;
@@ -1467,7 +1484,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   let faced: Faced | null = null;
   if (wide) {
     const sniped = snipedIn(target, town);
-    const toll = tollOf(g, attackers, defenders, at, facing, sniped);
+    const toll = tollOf(g, attackers, defenders, at, facing, sniped, mgUp);
     const tanksIn = attackers.some((c) => c.kind === 'arm');
     const dugNow = facing ? defenders.some((d) => facing.works(d) > 0) : false;
     faced = {
@@ -1482,20 +1499,22 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       if (armorAlone >= 0.005) lines.push({ label: 'Tanks alone', value: `Tank attack cut by ${Math.round(armorAlone * 100)}%`, ...(aloneOver < 1 ? { effect: `This takes the place of the ${Math.round((1 - aloneOver) * 100)}% cut for tanks alone in close country` } : {}) });
       if (w > 0 && up / w >= 0.005) lines.push({ label: 'Machine guns', value: `Defence up ${Math.round((up / w) * 100)}% against the men on foot` });
       if (mortar >= 0.005 && dugNow) lines.push({ label: 'Mortars', value: `The fieldworks count for ${Math.round(mortar * 100)}% less` });
+      if (mgUp && onFoot > 0) lines.push({ label: 'Machine-gun brigades', value: `Defence up to ${Math.round(mgUp * onFoot * 100)}% more against the men on foot` });
       if (attackers.some((c) => assaultFire(g, c) > 1)) lines.push({ label: 'Assault rifles', value: `Infantry attack up ${Math.round(SUPPORT.assault.attack * 100)}%` });
     }
     const share = (x: number): string => `${Math.round(x * 100)}%`;
     // (Only the arms that go in, and no row where each of them pays the usual share.)
     const arms: [string, number][] = [];
     if (tanksIn) arms.push(['tanks', toll.tanks]);
-    if (attackers.some((c) => c.kind !== 'arm' && c.kind !== 'art')) arms.push(['men on foot', toll.foot]);
-    if (attackers.some((c) => c.kind === 'art')) arms.push(['guns', toll.guns]);
+    if (attackers.some((c) => c.kind !== 'arm' && c.kind !== 'art' && !isTeam(c))) arms.push(['men on foot', toll.foot]);
+    if (attackers.some((c) => c.kind === 'art' || isTeam(c))) arms.push(['guns', toll.guns]);
     if (arms.some((x) => Math.abs(x[1] - 1) >= 0.005)) lines.push({ label: 'Who pays', value: `Of the usual share of losses: ${listAnd(arms.map((x) => `${x[0]} ${share(x[1])}`))}` });
   }
   // Guns caught alone in the field are overrun (ruling 146, the grand campaign): with no infantry or tanks in front
   // of them they make no stand, whatever the figures say. The odds are at least what the worst of the day's luck
   // still makes a decisive win, so the forecast is certain and the battle is fought on the same ticket.
-  const overrun = gunsRule(g) && !town && defenders.some((c) => c.kind === 'art') && defenders.every((c) => c.kind === 'art' || c.kind === 'eng');
+  // (Support teams caught alone, release 2, are overrun as guns are.)
+  const overrun = gunsRule(g) && !town && defenders.some((c) => c.kind === 'art' || isTeam(c)) && defenders.every((c) => c.kind === 'art' || c.kind === 'eng' || isTeam(c));
   if (overrun) lines.push(GUNS_OVERRUN);
   return { A, D, odds: overrun ? Math.max(A / D, OVERRUN_ODDS / dice[0]) : A / D, lines, defenders, dice, prepared, works, wear, weight, tired, faced, ...(overrun ? { overrun } : {}) };
 }
@@ -2044,7 +2063,7 @@ export const probeRules = (g: Game): boolean => g.flags.open === 1 && !!DEFENCE.
 export function whyNoProbe(g: Game, c: Corps, target: Region): string | null {
   const P = DEFENCE.probe;
   if (!probeRules(g) || !P) return 'A line is probed only in the grand campaign.';
-  if (c.dead || c.kind === 'fort' || c.kind === 'art' || c.kind === 'eng') return 'Only a fighting corps probes: infantry, cavalry, mountain troops, motorized troops or tanks.';
+  if (c.dead || c.kind === 'fort' || c.kind === 'art' || c.kind === 'eng' || isTeam(c)) return 'Only a fighting corps probes: infantry, cavalry, mountain troops, motorized troops or tanks.';
   if (c.town !== undefined) return 'A garrison does not leave its town to probe.';
   if (c.leave !== undefined) return 'The corps is at home.';
   if (!g.regions[c.reg].nb.includes(target.id) || blocked(g, c, target)) return 'It cannot reach that line from where it stands.';

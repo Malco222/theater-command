@@ -23,7 +23,7 @@ import { dist } from '../core/geometry';
 import type { Side } from '../core/types';
 import { coverAt, groundAt, type Ground } from './field';
 import type { LandBattle } from './sim';
-import { LAND, MOTION } from './rules';
+import { LAND, MOTION, reachOf } from './rules';
 import { STYLE, type Style } from './styles';
 import type { LandUnit } from './units';
 
@@ -84,9 +84,10 @@ const inLane = (u: LandUnit, foes: LandUnit[]): LandUnit => foes.reduce((best, f
 /** Guns come up until the enemy is in reach, and stand. */
 function gunsUp(b: LandBattle, side: Side, u: LandUnit, foes: LandUnit[]): void {
   const near = foes.reduce((m, f) => Math.min(m, b.gap(u, f)), Infinity);
-  if (near > LAND.reach.art * 0.9 && !u.order) {
+  const reach = reachOf(u);
+  if (near > reach * 0.9 && !u.order) {
     const cy = foes.reduce((s, f) => s + f.y, 0) / foes.length;
-    b.command({ do: 'move', units: [u.id], x: u.x, y: Math.min(cy - LAND.reach.art * 0.75, u.y + 400) }, side);
+    b.command({ do: 'move', units: [u.id], x: u.x, y: Math.min(cy - reach * 0.75, u.y + 400) }, side);
   }
 }
 

@@ -226,3 +226,20 @@ export function practiceBill(p: PracticeGround, R: number, field: Record<Side, n
 export function practiceTicket(p: PracticeGround, o: Omit<SampleOpts, 'river' | 'fort' | 'bridgeDown' | 'dug'> = {}): FieldTicket<LandPlace> {
   return made(p.terrain, practiceReckoning(p), { ...o, river: p.river, fort: p.fort, ...(p.air ? { air: PRACTICE_AIR, date: PRACTICE_AIR_DATE } : {}) }, defenceOn(p), p.str ?? 0.9);
 }
+
+/**
+ * A ticket with a machine-gun team and a mortar team on each side (release 2, the test kitchen's ?teams and the
+ * tests): each team a twenty-fifth of its side's power, the corps' shares cut to make room, so the side's power and the
+ * odds are the ticket's own. The campaign builds and prices its own teams (stage 2); this only puts some on the field.
+ */
+export function withTeams(t: FieldTicket<LandPlace>, share = 0.04): FieldTicket<LandPlace> {
+  const add = (s: SideTicket, base: number): SideTicket => {
+    const nat = s.forces[0]?.nat ?? s.nat;
+    const team = (kind: 'mg' | 'mor', i: number): ForceTicket => ({
+      corps: base + i, name: kind === 'mg' ? 'Machine-Gun Battalion' : 'Mortar Battalion', nat, kind, divs: 1, men: 900,
+      str: 0.9, org: 0.85, xp: 0.3, mor: 0.65, share, first: 1,
+    });
+    return { ...s, forces: [...s.forces.map((f) => ({ ...f, share: f.share * (1 - 2 * share) })), team('mg', 1), team('mor', 2)] };
+  };
+  return { ...t, att: add(t.att, 9000), def: add(t.def, 9100) };
+}

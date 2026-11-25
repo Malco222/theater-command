@@ -471,6 +471,8 @@ export interface BattleView<U extends UnitBase = UnitBase> {
   breakingBy?: Record<Side, BreakCause>;
   /** Battle time of the first contact between the lines, null before it: until then the screens may run the clock faster (ruling 226(1)). */
   contact?: number | null;
+  /** Land, release 2: the side placing its guns and support teams before the clock starts (LandBattle.setupOn); absent otherwise. */
+  setup?: Side;
   /** Land: the flights over the field now (air support); left out where neither side has fighters on call. */
   flights?: Flight[];
   /**

@@ -9,7 +9,7 @@
 import type { CrewMarks } from './crews';
 import type { Calibre, ForceTicket, Side, SideTicket, UnitBase } from '../core/types';
 import { BEND, GROUNDS, STREAM, digWorks, type Bend, type LandField } from './field';
-import { LAND, type Kind } from './rules';
+import { LAND, TEAMS, type Kind, type Team } from './rules';
 
 export interface LandOrder {
   kind: 'move' | 'attack' | 'withdraw';
@@ -33,6 +33,8 @@ export interface LandOrder {
 
 export interface LandUnit extends UnitBase {
   kind: Kind;
+  /** A support team (release 2): a gun block ('art') with its team's numbers (LAND.teams). Absent on every other block. */
+  team?: Team;
   /** Its name for a card, and what it belongs to under it: "11th Infantry" over "I Corps", "1st Regiment" over "1st Infantry". */
   short: string;
   parent: string;
@@ -133,6 +135,9 @@ export interface LandUnit extends UnitBase {
 
 const ORD = (n: number): string => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 const KIND_WORD: Record<Kind, string> = { inf: 'Infantry', mtn: 'Mountain', cav: 'Cavalry', eng: 'Engineers', mot: 'Motorized', arm: 'Armoured', art: 'Artillery', fort: 'Fortress' };
+const TEAM_WORD: Record<Team, string> = { mg: 'Machine-Gun Battalion', mor: 'Mortar Battalion' };
+/** The team a ticket force makes, where its kind is one (release 2). */
+export const teamOf = (f: { kind: string }): Team | undefined => (TEAMS as readonly string[]).includes(f.kind) ? (f.kind as Team) : undefined;
 
 /** What one block carries of its force: one whole division, or one of its regiments. */
 export interface BlockPart { divs: number[]; regiment?: number }
@@ -141,12 +146,14 @@ export interface BlockPart { divs: number[]; regiment?: number }
 export function partsFor(forces: ForceTicket[]): BlockPart[][] {
   const B = LAND.blocks;
   const parts: BlockPart[][] = forces.map((f) => Array.from({ length: Math.max(1, Math.round(f.divs)) }, (_, i) => ({ divs: [i] })));
-  const total = (): number => parts.reduce((s, p) => s + p.length, 0);
+  // A support team is one block a battalion, never cut into regiments, and never counted toward the side's least: a side
+  // with teams cuts its divisions as it would without them.
+  const total = (): number => parts.reduce((s, p, i) => s + (teamOf(forces[i]) ? 0 : p.length), 0);
   // The force whose blocks are biggest gives up a whole division to its regiments first.
   while (total() < B.least) {
     let best = -1, size = 0;
     parts.forEach((p, i) => {
-      if (!p.some((x) => x.regiment === undefined && x.divs.length === 1)) return;
+      if (teamOf(forces[i]) || !p.some((x) => x.regiment === undefined && x.divs.length === 1)) return;
       const each = forces[i].share / p.length;
       if (each > size) { size = each; best = i; }
     });
@@ -167,14 +174,15 @@ export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: nu
   const out: LandUnit[] = [];
   const cut = partsFor(t.forces);
   t.forces.forEach((f, i) => {
-    const k = (Object.keys(LAND.speed).includes(f.kind) ? f.kind : 'inf') as Kind;
+    const team = teamOf(f);
+    const k = (team ? 'art' : Object.keys(LAND.speed).includes(f.kind) ? f.kind : 'inf') as Kind;
     const n = Math.max(1, Math.round(f.divs));
     // Each division as the campaign has it; where the ticket carries none, numbered as the corps' own and alike.
     const divs = Array.from({ length: n }, (_, d) => {
       const own = f.divisions?.[d];
       const no = (f.first ?? 1) + d;
       return {
-        name: own?.name ?? `${ORD(no)} ${KIND_WORD[k]} Division`, short: own?.short ?? `${ORD(no)} ${KIND_WORD[k]}`,
+        name: own?.name ?? (team ? `${ORD(no)} ${TEAM_WORD[team]}` : `${ORD(no)} ${KIND_WORD[k]} Division`), short: own?.short ?? (team ? `${ORD(no)} ${TEAM_WORD[team].split(' ')[0]}` : `${ORD(no)} ${KIND_WORD[k]}`),
         str: own?.str ?? f.str, xp: own?.xp ?? f.xp, men: own?.men ?? f.men / n,
       };
     });
@@ -189,13 +197,14 @@ export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: nu
       // A regiment holds its division's frontage, thinner: a third of the models on the same tray. Cut to a third of the
       // frontage, three regiments of a small attack crowded onto one enemy block, power packed three times as thick as the
       // card counts it, and the desert's coast villages ran 18 points over their card (b418, b420).
-      const [w, d] = LAND.size[k];
-      const full = p.regiment !== undefined ? Math.max(1, Math.round(LAND.figures[k] / LAND.blocks.regiments)) : LAND.figures[k];
+      const [w, d] = team ? LAND.teams[team].size : LAND.size[k];
+      const per = team ? LAND.teams[team].figures : LAND.figures[k];
+      const full = p.regiment !== undefined ? Math.max(1, Math.round(per / LAND.blocks.regiments)) : per;
       const str0 = Math.max(0.05, Math.min(1, ds.reduce((s, x) => s + x.str, 0) / ds.length));
       const mor0 = Math.min(1, 0.45 + 0.35 * f.org + 0.2 * (f.mor ?? 0.6));
       const share = weightOf(p) / all;
       out.push({
-        id: firstId + out.length, side, corps: f.corps, nat: f.nat, kind: k, name, short, parent,
+        id: firstId + out.length, side, corps: f.corps, nat: f.nat, kind: k, ...(team ? { team } : {}), name, short, parent,
         x: 0, y: 0, face: side === 'att' ? 0 : Math.PI,
         str: str0, str0, mor: mor0, mor0, xp: ds.reduce((s, x) => s + x.xp, 0) / ds.length,
         state: 'steady', men0: Math.round(ds.reduce((s, x) => s + x.men, 0) / (p.regiment !== undefined ? LAND.blocks.regiments : 1)),
@@ -279,7 +288,7 @@ export function deploy(units: LandUnit[], side: Side, f: LandField): void {
 }
 
 /** Whether any of a block's box, grown by off metres each way, stands in water or on a bridge. */
-function wetUnder(f: LandField, u: LandUnit, off = 0): boolean {
+export function wetUnder(f: LandField, u: Pick<LandUnit, 'x' | 'y' | 'w' | 'd'>, off = 0): boolean {
   const hw = u.w / 2 + off, hd = u.d / 2 + off, nx = Math.ceil((2 * hw) / (f.cell / 2)), ny = Math.ceil((2 * hd) / (f.cell / 2));
   for (let i = 0; i <= nx; i++) for (let j = 0; j <= ny; j++) {
     const c = Math.floor((u.x - hw + (2 * hw * i) / nx) / f.cell), r = Math.floor((u.y - hd + (2 * hd * j) / ny) / f.cell);

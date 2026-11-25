@@ -6,7 +6,7 @@
 import plan from '../../data/campaign/plan-historical.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { afloat, airAI, airFleetsOf, fieldRoom, homeCommand, km, rebaseAir, whyNotBase } from './air';
-import { aiProduction, armyWorn, gunsWanted, income } from './economy';
+import { aiProduction, aiTeams, armyWorn, gunsWanted, income } from './economy';
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
 import { aiArsenal, aiFortify } from './arsenal';
@@ -25,6 +25,7 @@ import { hashString } from '../core/rng';
 import { SIEGE, besieged, feeders, fieldCtrl, garrison, garrisonOf, guardOf, investedOn, previewSally, ringClosed, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
+import { isTeam, TEAMS, teamsOn } from './teams';
 import {
   DEFENCE, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
   hasRoom, hostileUnits, limitAttackers, moveCorps, moveCost, probeLine, probeRules, probeWeight, railMove, railReach, resolveBattle, shipMove, weekOf, whyNoProbe, worksOf,
@@ -159,6 +160,8 @@ export function runAI(g: Game, nat: string): void {
   // With the month's moves made, a defence on a river blows its bridges.
   aiBridges(g, nat, (x, from) => blowBridges(g, nat, x, from));
   aiProduction(g, nat);
+  // The support teams (release 2): nothing unless they are switched on.
+  aiTeams(g, nat);
   aiArsenal(g, nat);
   aiFortify(g, nat, Object.keys(coastWatch(g, nat)), coastRules());
   civicAI(g, nat, income(g, nat), keepsStores(g, nat), gunsWanted(g, nat) || armyWorn(g, nat));
@@ -410,7 +413,7 @@ function overseas(g: Game, nat: string): void {
       for (const p of phases) if (p.from <= g.turn) for (const e of p.enemies ?? []) if (n.atWar.includes(e)) enemies.add(e);
       for (const id of ids[k]) { const r = g.regions[id]; if (n.atWar.includes(r.ctrl)) enemies.add(r.ctrl); }
       // An army overseas brings its guns up as the main army does: the guns go where the works are (the grand campaign).
-      if (enemies.size) gunsUp(g, nat, enemies, ph?.targets ? new Set(ph.targets) : null);
+      if (enemies.size) { gunsUp(g, nat, enemies, ph?.targets ? new Set(ph.targets) : null); teamsUp(g, nat, enemies, ph?.targets ? new Set(ph.targets) : null); }
       if (ph?.posture === 'attack' && enemies.size) {
         const only = ph.targets ? new Set(ph.targets) : null;
         // Nothing outside the theatre, and nothing the plan has not named, draws this army on.
@@ -529,6 +532,7 @@ function fightOn(g: Game, nat: string, ph: PlanPhase | null, posture: string): v
   const halt = new Set([...(ph && g.turn === ph.from ? ph.haltOrder ?? [] : []), ...(ph?.siege ?? [])]);
   const only = ph?.targets ? new Set(ph.targets) : ph?.limited ? new Set(objectivesFor(g, nat)) : null;
   gunsUp(g, nat, enemies, only);
+  teamsUp(g, nat, enemies, only);
   // (The month a main effort is named the army masses and attacks nowhere: the word of it runs ahead of the blow.)
   if (!ph?.massing) {
     softenLine(g, nat, enemies, halt, only, ph?.minOdds ?? 1.3, ph?.oddsFor);
@@ -1436,6 +1440,46 @@ function doorstep(g: Game, nat: string, goal: Region | null): Int16Array | null 
 }
 
 /**
+ * The support teams (release 2, src/campaign/teams.ts): a machine-gun or mortar brigade that stands beside no enemy
+ * goes to the nearest sector of its army's front, the sectors opposite the staff's targets first (and for mortars,
+ * those facing works), where a fighting corps of its own stands and the sector has not its teams already. Nothing
+ * while the teams are off.
+ */
+export function teamsUp(g: Game, nat: string, enemies: Set<string>, targets: Set<string> | null): void {
+  if (!teamsOn(g)) return;
+  const teams = g.corps.filter((c) => c.nat === nat && !c.dead && isTeam(c) && !c.hold && !c.town && c.ap > 0 && c.joint === undefined && c.leave === undefined && !massed.has(c.id));
+  if (!teams.length) return;
+  const foe = (x: Region): boolean => enemies.has(ctl(g, x)) && atWar(g, nat, ctl(g, x));
+  const works = (x: Region): boolean => !!x.fort || hostileUnits(g, x, nat).some((u) => u.dug);
+  const facing = (r: Region, c: Corps): number => {
+    let best = 0;
+    for (const j of r.nb) {
+      const x = g.regions[j];
+      if (!foe(x)) continue;
+      best = Math.max(best, (!targets || targets.has(x.name) ? 2 : 1) + (c.kind === 'mor' && works(x) ? 1 : 0));
+    }
+    return best;
+  };
+  const teamsAt = (r: Region): number => r.units.filter((u) => u.nat === nat && !u.dead && isTeam(u)).length;
+  for (const c of teams) {
+    const here = g.regions[c.reg];
+    const now = facing(here, c);
+    if (now >= 2) continue;
+    const far = hops(g, c.reg, (x) => within(x) && allied(g, nat, ctl(g, x)));
+    let best: Region | null = null, bv = now ? now * 10 : 0;
+    for (const r of g.regions) {
+      const d = far[r.id];
+      if (d < 1 || d > 4) continue;
+      const f = facing(r, c);
+      if (!f || teamsAt(r) >= TEAMS.frontage || friendlyUnits(g, r, nat).length >= STACK || !r.units.some((u) => u.nat === nat && !u.dead && fights(u))) continue;
+      const v = f * 10 - d;
+      if (v > bv) { bv = v; best = r; }
+    }
+    if (best) walkToward(g, c, best);
+  }
+}
+
+/**
  * The grand campaign: the guns go where the works are. Before the month's attacks an artillery corps that stands
  * beside no dug-in enemy and no fortress is sent to the nearest sector of its army's front that does, the sectors
  * opposite the staff's targets first, as long as other troops stand there and the sector has not its guns already.
@@ -1461,7 +1505,7 @@ export function gunsUp(g: Game, nat: string, enemies: Set<string>, targets: Set<
       const d = far[r.id];
       if (d < 1 || d > 4) continue;
       const f = facing(r);
-      if (!f || gunsAt(r) >= DEFENCE.frontage.guns || !r.units.some((u) => u.nat === nat && u.kind !== 'art' && u.kind !== 'eng')) continue;
+      if (!f || gunsAt(r) >= DEFENCE.frontage.guns || !r.units.some((u) => u.nat === nat && u.kind !== 'art' && u.kind !== 'eng' && !isTeam(u))) continue;
       const v = f * 10 - d;
       if (v > bv) { bv = v; best = r; }
     }

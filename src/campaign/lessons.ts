@@ -176,7 +176,7 @@ export function lessonMoment(g: Game, l: Lesson, m: Moment): boolean {
   switch (l.due) {
     case 'army': return pickupPlace(g) >= 0;
     case 'reach': return held(g, m).some((c) => [...reach(g, c)].some(([id, x]) => id !== c.reg && !x.attack));
-    case 'foe': return mine(g).some((c) => c.ap > 0 && c.kind !== 'art' && c.kind !== 'eng' && foesBeside(g, g.regions[c.reg], me));
+    case 'foe': return mine(g).some((c) => c.ap > 0 && c.kind !== 'art' && c.kind !== 'eng' && c.kind !== 'mg' && c.kind !== 'mor' && foesBeside(g, g.regions[c.reg], me));
     case 'month': return true;
     case 'siege': return siegeOf(g) !== null;
     case 'train': return trainInHand(g, m);

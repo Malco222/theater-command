@@ -23,8 +23,18 @@
 //   TC.battleLook(ids, to)       -> { ticket } for the attack the card shows, null where there is no field battle to fight,
 //                                   or { ticket: null, why } where the staff settles that kind of place (offered.ts): keep
 //                                   FIGHT IT YOURSELF on the card, off, with why beside it
-//   TC.battleStart(ids, to)      -> { field, view }: the battle opens paused; field is the ground, sent once ("The
-//                                   ground" below)
+//   TC.battleStart(ids, to[, { setup: true }]) -> { field, going, view[, setup] }: the battle opens paused; field is the
+//                                   ground, sent once ("The ground" below). With { setup: true } (release 2) it opens
+//                                   on the setup step: the player places his guns and support teams before the clock
+//                                   runs ("The setup step" below), and setup is { room: [x0, y0, x1, y1] }, where they
+//                                   may stand. Two arguments: no setup step, as always
+//   TC.battleCanPlace(id, x, y)  -> { why }: the setup step, while the pointer carries one of the player's guns or
+//                                   support teams: null where it may stand (a brass ghost), else why not, in words (a
+//                                   red ghost with the words beside it). Moves nothing (release 2)
+//   TC.battlePlace(id, x, y)     -> { ok, why, view }: the setup step, on the drop: the gun or team put there (ok), or
+//                                   why it may not stand there, and it stays where it was (release 2)
+//   TC.battleBegin()             -> { view }: ends the setup step and starts the clock at ×1, the rush still on
+//                                   (release 2). A speed chosen while placing (TC.battleSpeed) begins it too
 //   TC.battleTick(seconds)       -> view: runs the clock for that much real time at the speed set. Until the armies first
 //                                   meet (view.contact null) a land battle runs ×4 whatever the speed below that, then
 //                                   drops to the speed set (ruling 226(1)): say so on the field, "×4 until the armies
@@ -104,7 +114,10 @@
 // A land view's zones are its wrecks (b477, Brian's pick: burning wrecks stay): { id, kind: 'wreck', x, y, r, until,
 // side, at, unit }, one for each tank a block has lost, where she stood, from battle second 'at' to the end of the
 // fight. Draw her as the model of block 'unit', knocked out (her knocked_out clip, then burn), burning at first and
-// then smoking to the end, never cut off (the art director's b477 look). Men on foot within r metres take light cover
+// then smoking to the end, never cut off (the art director's b477 look). With the men drawn (TC.battleMen), draw her
+// where her tank fell, her last x, y there (the 3D ground battle scene, 21 November 20:35Z): she falls where she
+// stands, at a firing post up to about 20 m from this x, y or held back behind her own foot in woods, and a shell that
+// knocked her out lands on her there; this x, y is the rules' own place for the shelter the wreck gives. Men on foot within r metres take light cover
 // in the rules already; nothing more to draw for it. The zones also hold its craters (below).
 // The ground (Brian, 18 November: "make sure the battle terrian matches the map in the world so it matches. if are
 // attacking in hills than have that or a forrest or towns ect"): field is built from the province on the campaign map
@@ -201,11 +214,41 @@
 //   own speed, capped at 1.6 times: the battle runs faster than life, and blocks march at up to 6 m a battle second); c the cover he is in (none, works, building, woods, rock, rough, field, wreck, crater, crest); a
 //   where he fires, while he fires; s the battle time of his last shot (a tank's or a gun's round, an anti-tank round,
 //   a grenade): play one shot each time it changes; d the battle time he fell (he lies where he fell to the end of the
-//   fight; a tank burns at her wreck, which stands where she stood; the men of a block that runs off the field go with
+//   fight; a tank burns where she fell, never moved to her wreck zone's x, y; the men of a block that runs off the field go with
 //   it and never fall: they leave the list with it, the moment its middle crosses the edge, so its trailing lorries and
 //   the men in them can still be up to about 130 m inside: carry each on at its last v and f and fade it out over a
 //   second rather than drop it); h an anti-tank team lying hidden in ambush (draw it, it is the player's own or a known
 //   enemy's); b a tank closed up (hatches shut), or a gun firing over open sights; mk a vehicle's scars (below).
+//   Full sections (release 2; Brian, 21 November 18:29Z: "the ground battle needs a lot more soldiers in it"): the bridge
+//   runs the drill with { sections: true }, so each model on the tray comes as its whole section. Its key man is the
+//   model the rules know (no j); every other man has j, his place in model k's section from 1, so a man is (block, k, j).
+//   Roles, by data/battle/drill.json sections: a rifle section is its leader (r leader, the key man), an automatic rifle
+//   or light machine gun (mg), his loaders (loader) and riflemen, the US with two scouts out ahead on the move (US 12
+//   men, Germany and Britain 10); an officer has three runners (rifle); an mg team two loaders and a rifleman; an
+//   anti-tank team a loader; sappers seven more; a horse holder two; a gun seven crew (crew) round it; a machine-gun or
+//   mortar team four or five bearers (loader) besides the three drawn with the weapon. Tanks and lorries have none. As
+//   the rules wear a model down its section's men fall one by one, each by his own kill round (j the shooter's man, oj
+//   the man struck; a shell's falls share one burst, x and y); the key man falls only when the rules take the model, and
+//   the section's men still up join the nearest standing section of the block. Halted in a fight, a tank of every army
+//   but a mass one fights from alternate posts: two to four shots, back 12 m out of sight (reverse), across behind the
+//   line, and up at a post 16 m to one side of her place and then the other. A tank drives no faster than 12 m a battle
+//   second (the rules' armour goes at 10 across open ground) unless her block itself goes faster (13 on a road), and on
+//   the move she halts to fire only for a shot, and only while she keeps up with her place; from a halt she gathers way
+//   at 3 m a battle second each second (to 10 in about 3 s). The battle runs about twice as fast as life: played at half
+//   its clock a tank goes 5 m a second across a field and backs at 2, a rifleman rushes at 3. Living men on foot keep
+//   at least 1.6 m apart (a gun's crew 1.1 m at their own gun): a man whose place is taken stands at the nearest free
+//   spot (creeping, or crawling if he lies low); a man on the move bends his way round a mate ahead of him, and where
+//   two men's ways cross the lesser (a loader for his gunner) checks his pace to let the other by. Each battery's
+//   spotter party takes a place of its own, 12 m or more from another's. Men of different blocks are not spaced.
+//   Platoons (release 2; Brian, 22 November: "I want a lot of troops in the ground battles"): the bridge runs the drill
+//   with { platoons: true } too, so each rifle model is its whole platoon by its army (data/battle/drill.json
+//   sections.platoon: the US three squads of 12 and five at its head, 41; Germany and Britain three of 10 and seven, 37;
+//   the rest by their own). The key man's squad leads; the platoon's other squads form one behind another 9 m apart, a
+//   little to either side, its headquarters inside the leading squad's wedge. Each squad and the headquarters has its
+//   own leader (r leader, with j), and j runs on through the platoon (a German platoon's key man has j 1 to 9 in his own
+//   squad, the next squad 10 to 19, the third 20 to 29, the headquarters 30 to 36). Gun crews, support teams, anti-tank
+//   teams, sappers, an officer's party and tanks stay as sections. Lorried, each squad and the headquarters has a lorry.
+//   Normandy draws about 2,000 men (690 as sections).
 //   Every round (Brian, 21 November 04:04Z: "make the right odds if they actually hit so it not always an automatic hit
 //   ... when they do hit ... it shows up on the receiving object"): rounds lists those fired in the last two battle
 //   seconds, each { n, t, l, by?, k?, w, on, ok?, x, y, r, fc?, u?, h? }: play each once, those with n above the last
@@ -454,6 +497,9 @@ export function unitOut(u: UnitBase, t = 0): Record<string, unknown> {
     ...(land.aloneAt !== undefined && t - land.aloneAt <= 1 ? { alone: true } : {}),
     // Guns told to fire on one block and stay put (the computer's main effort, or the player's order): that block.
     ...(land.aim !== undefined ? { aim: land.aim } : {}),
+    // A support team (release 2): kind 'art' with its team, 'mg' (tripod machine guns) or 'mor' (mortars). Draw the
+    // team's models, never a field gun.
+    ...(land.team ? { team: land.team } : {}),
     order: land.order ? { kind: land.order.kind, x: land.order.x, y: land.order.y, target: land.order.target ?? -1, path: land.path } : null,
     ...(extra ? { extra } : {}),
   };
@@ -494,6 +540,8 @@ function viewOut(s: Session, v: BattleView): Record<string, unknown> {
     // until the battle is over, as its blocks are hidden (hiddenOut).
     ...(v.breakingBy ? { breakingBy: land?.fog && !v.over ? fogged(v.breakingBy, s.me) : v.breakingBy } : {}),
     ...(v.contact !== undefined ? { contact: v.contact } : {}),
+    // The setup step (release 2): the side placing its guns and teams; the clock does not run until it ends.
+    ...(v.setup ? { setup: v.setup } : {}),
     // The computer general's attack plan, for the pictures ("The computer general's plan" above): never its style's
     // name, which the player is not told (ruling 239(4)).
     ...(v.plan ? { plan: planOut(v.plan) } : {}),
@@ -543,7 +591,7 @@ export function battleCalls(h: BattleHooks) {
       const why = staffOnly(t);
       return why ? { ticket: null, why } : { ticket: t };
     },
-    battleStart(ids: number[], to: number) {
+    battleStart(ids: number[], to: number, opts?: { setup?: boolean }) {
       const g = h.game();
       const corps = ids.map((i) => g.corps.find((c) => c.id === i)).filter((c): c is NonNullable<typeof c> => !!c);
       const target = g.regions[to];
@@ -560,7 +608,8 @@ export function battleCalls(h: BattleHooks) {
       // All but the corps the card identified, which show as the card shows them (b476(3)).
       if (sim.fog) sim.seen = cardKnows(g, t);
       // The men inside the blocks, for the 3D game to draw as men (TC.battleMen): looks only, never read by the fight.
-      sim.drillOn();
+      // Each model as its whole section (release 2: "the ground battle needs a lot more soldiers in it").
+      sim.drillOn({ sections: true, platoons: true });
       // The campaign is asked again at the end with the corps the player picked: it decides who goes in, as it did for the
       // card. Those going in are the ticket's own, so a corps spent since it was picked is not shown going (b453).
       const going = t.att.forces.map((f) => f.corps);
@@ -574,6 +623,8 @@ export function battleCalls(h: BattleHooks) {
         return out && typeof out === 'object' && Object.keys(more).length ? { ...out, ...more } : out;
       });
       if (look && !look.exact) ses.band = { lo: look.lo, hi: look.hi };
+      // The setup step (release 2): only when asked; the 3D game's two-argument call never opens it.
+      if (opts?.setup) sim.setupOn(ses.me);
       const f = sim.field;
       return {
         field: {
@@ -582,7 +633,28 @@ export function battleCalls(h: BattleHooks) {
           ...(f.stream ? { stream: f.stream } : {}),
         },
         going, view: viewOut(ses, sim.view(ses.me)),
+        ...(sim.setup ? { setup: { room: sim.setupRoom() } } : {}),
       };
+    },
+    battleCanPlace(id: number, x: number, y: number) {
+      const ses = need();
+      const land = ses.sim instanceof LandBattle ? ses.sim : null;
+      const u = land?.unit(Number(id));
+      return { why: !land || !u ? 'Nothing to place.' : u.side !== ses.me ? 'Only your own guns and support teams are placed.' : land.placeWhy(u, Number(x), Number(y)) };
+    },
+    battlePlace(id: number, x: number, y: number) {
+      const ses = need();
+      const land = ses.sim instanceof LandBattle ? ses.sim : null;
+      const u = land?.unit(Number(id));
+      const why = !land || !u ? 'Nothing to place.' : land.placeWhy(u, Number(x), Number(y));
+      const ok = why === null && ses.sim.command({ do: 'land:place', units: [Number(id)], x: Number(x), y: Number(y) }, ses.me);
+      return { ok, why: ok ? null : why, view: viewOut(ses, ses.sim.view(ses.me)) };
+    },
+    battleBegin() {
+      const ses = need();
+      const land = ses.sim instanceof LandBattle ? ses.sim : null;
+      if (land?.setup) { land.command({ do: 'land:begin' }, ses.me); ses.clock.set(1); }
+      return { view: viewOut(ses, ses.sim.view(ses.me)) };
     },
     battleTick(seconds: number) {
       const ses = need();
@@ -595,6 +667,8 @@ export function battleCalls(h: BattleHooks) {
     battleSpeed(speed: number) {
       const ses = need();
       const sp = (SPEEDS as readonly number[]).includes(speed) ? (speed as Speed) : 1;
+      // A speed chosen while placing ends the setup step first (release 2), as Space does on the page.
+      if (sp > 0 && ses.sim instanceof LandBattle && ses.sim.setup) ses.sim.command({ do: 'land:begin' }, ses.me);
       // Before the armies meet, a speed chosen ends the rush at once (b467); the pause does not.
       if (sp > 0 && (ses.sim as Partial<LandBattle>).contactAt === null) ses.byHand = true;
       ses.clock.set(sp);
@@ -612,7 +686,7 @@ export function battleCalls(h: BattleHooks) {
       const ses = need();
       const land = ses.sim instanceof LandBattle ? ses.sim : null;
       if (!land) return null;
-      const d = land.drillOn();
+      const d = land.drillOn({ sections: true, platoons: true });
       return { t: land.t, blocks: d.view(ses.me), rounds: d.rounds(ses.me) };
     },
     battleAirRun(x: number, y: number, x1?: number, y1?: number) {

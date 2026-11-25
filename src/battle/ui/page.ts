@@ -16,7 +16,7 @@ import { RATIO, levelOf } from '../core/result';
 import { lineUp, unitAt, unitsIn } from '../core/select';
 import type { Command, FieldEvent, FieldTicket, Side } from '../core/types';
 import type { LandPlace, Terrain } from '../land/field';
-import { PRACTICE_GROUNDS, practiceBill, practiceTicket, wornWords, type PracticeGround } from '../land/sample';
+import { PRACTICE_GROUNDS, practiceBill, practiceTicket, withTeams, wornWords, type PracticeGround } from '../land/sample';
 import { crewLine } from '../land/crews';
 import { LandBattle } from '../land/sim';
 import { cardKnows, pursuitLine } from '../land/ticket';
@@ -146,6 +146,10 @@ function setSpeed(sp: Speed): void {
   S.clock.set(sp);
 }
 const guard = (): void => { S.guardUntil = now() + KEY_GUARD; };
+/** A page address flag (?setup, ?teams): read when a battle starts, never at load, so the campaign's own page is untouched. */
+const flagged = (k: string): boolean => { try { return new URLSearchParams(location.search).has(k); } catch { return false; } };
+/** The setup step ends when the clock is first started (release 2): Space, a speed, or the Begin button. */
+function beginIfPlacing(): void { if (S.b?.setup) { S.b.command({ do: 'land:begin' }, S.scene.me); S.scene.place = null; } }
 
 // ---- Choosing a battle --------------------------------------------------------------------------------------------
 
@@ -196,7 +200,9 @@ function showChooser(): void {
   }));
   app.querySelectorAll<HTMLElement>('[data-ground]').forEach((el) => el.addEventListener('click', () => {
     const p = PRACTICE_GROUNDS[Number(el.dataset.ground)];
-    const t = practiceTicket(p, { humanAtt: true, seed: 1 + Math.floor(Math.random() * 1e6), title: practiceTitle(p) });
+    const t0 = practiceTicket(p, { humanAtt: true, seed: 1 + Math.floor(Math.random() * 1e6), title: practiceTitle(p) });
+    // ?teams (release 2): each side brings a machine-gun team and a mortar team.
+    const t = flagged('teams') ? withTeams(t0) : t0;
     startBattle(t, null, p);
   }));
   app.querySelector('[data-act="restart"]')?.addEventListener('click', () => { S.g = newCampaign(S.g.seed + 1); S.before = null; showChooser(); });
@@ -254,7 +260,10 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
   S.clock = new Clock(); S.clock.set(1); S.clock.toggle();
   S.asking = false; S.holding = new Set(); S.trayFrom = 0; S.tag = null; S.wasRunning = false; S.met = false; S.rushByHand = false;
   const place = t.place.town ? `before ${t.place.town}` : `in ${t.place.name}`;
-  S.dispatch = { t: 0, what: 'contact', text: `${riverWords(t)}Your army stands ${place}: give your orders, then press Space to begin.` };
+  // ?setup (release 2): his guns and support teams are placed first, dragged to where they will stand.
+  const placing = flagged('setup') && b.setupOn(S.scene.me);
+  S.scene.place = null;
+  S.dispatch = { t: 0, what: 'contact', text: placing ? `${riverWords(t)}Your army stands ${place}: drag your guns and support teams to where they will fire from, inside your ground, then press Space to begin.` : `${riverWords(t)}Your army stands ${place}: give your orders, then press Space to begin.` };
   S.dispatchAge = 0;
   S.resume = null;
   guard();
@@ -632,6 +641,7 @@ function wireBattle(): void {
   const sc = S.scene;
   let down: { x: number; y: number; button: number; at: number; touch: boolean; moved: boolean; px: number; py: number } | null = null;
   let hold: number | undefined;
+  let carry: number | null = null;
   const pos = (e: PointerEvent | WheelEvent | MouseEvent): [number, number] => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
 
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -641,10 +651,16 @@ function wireBattle(): void {
     canvas.setPointerCapture(e.pointerId);
     const touch = e.pointerType === 'touch';
     down = { x: px, y: py, button: e.button, at: now(), touch, moved: false, px, py };
+    // The setup step: a press on one of his own guns or teams picks it up to carry (release 2).
+    carry = null;
+    if (S.b?.setup && (touch || e.button === 0) && !sc.air) {
+      const [fx, fy] = toField(sc, px, py), u = unitAt(S.b.units, fx, fy, Math.max(30, 8 / sc.cam.z), sc.me);
+      if (u && u.side === sc.me && u.kind === 'art') carry = u.id;
+    }
     // On a touch screen, press and hold orders, as on the campaign map.
     // Air support armed: a touch shows the run where it is, and lifting calls it; holding gives no march or attack.
     if (touch && sc.air && S.b) { const [fx, fy] = toField(sc, px, py), run = S.b.airRunAt(sc.me, fx, fy); sc.air = { run, ok: S.b.airWhyNot(sc.me, run) === null }; }
-    if (touch && !sc.air) hold = window.setTimeout(() => { if (down && !down.moved && !sc.air) { orderAt(down.x, down.y); down = null; } }, 450);
+    if (touch && !sc.air && carry === null) hold = window.setTimeout(() => { if (down && !down.moved && !sc.air) { orderAt(down.x, down.y); down = null; } }, 450);
   });
   canvas.addEventListener('pointermove', (e) => {
     const [px, py] = pos(e);
@@ -669,6 +685,7 @@ function wireBattle(): void {
     }
     if (Math.hypot(px - down.x, py - down.y) > 6) down.moved = true;
     if (!down.moved) return;
+    if (carry !== null) { const u = b.unit(carry)!; sc.place = { id: carry, x: fx, y: fy, ok: b.placeWhy(u, fx, fy) === null }; down.px = px; down.py = py; return; }
     if (down.touch || down.button === 1) {
       // Drag the map.
       sc.cam.x -= (px - down.px) / sc.cam.z; sc.cam.y += (py - down.py) / sc.cam.z; clampCam();
@@ -698,6 +715,17 @@ function wireBattle(): void {
     const [px, py] = pos(e);
     const d = down;
     down = null;
+    // The setup step: a gun or team carried and let go is placed there, if it may stand there; else it stays (release 2).
+    if (carry !== null) {
+      const id = carry, was = sc.place;
+      carry = null; sc.place = null;
+      if (d.moved && was) {
+        const why = b.placeWhy(b.unit(id)!, was.x, was.y);
+        if (why) S.tag = { text: why, until: now() + 1.5 }; else give({ do: 'land:place', units: [id], x: was.x, y: was.y });
+        updateTray(true);
+        return;
+      }
+    }
     // Air support armed: a click (either button) strikes there; a right-drag strikes down the run drawn.
     if (sc.air && !(d.touch && d.moved) && (d.touch || d.button === 0 || d.button === 2)) {
       const [fx, fy] = toField(sc, px, py);
@@ -728,7 +756,7 @@ function wireBattle(): void {
     updateTray(true);
   };
   canvas.addEventListener('pointerup', up);
-  canvas.addEventListener('pointercancel', () => { down = null; sc.box = null; sc.line = null; });
+  canvas.addEventListener('pointercancel', () => { down = null; carry = null; sc.place = null; sc.box = null; sc.line = null; });
   // The hover goes the moment the pointer leaves the field, as hovers do everywhere else in the game: one left standing
   // over the tray reads as a fact about a division he is no longer pointing at (the UI director).
   canvas.addEventListener('pointerleave', () => { if (!down) { sc.hover = null; canvas.style.cursor = 'default'; } });
@@ -741,7 +769,7 @@ function wireBattle(): void {
     else { sc.cam.x += e.deltaX / sc.cam.z; sc.cam.y -= e.deltaY / sc.cam.z; clampCam(); }
   }, { passive: false });
 
-  app.querySelectorAll<HTMLElement>('[data-speed]').forEach((el) => el.addEventListener('click', () => { if (S.asking || S.b?.over) return; setSpeed(Number(el.dataset.speed) as Speed); updateTop(); }));
+  app.querySelectorAll<HTMLElement>('[data-speed]').forEach((el) => el.addEventListener('click', () => { if (S.asking || S.b?.over) return; if (Number(el.dataset.speed) > 0) beginIfPlacing(); setSpeed(Number(el.dataset.speed) as Speed); updateTop(); }));
   app.querySelectorAll<HTMLElement>('[data-zoom]').forEach((el) => el.addEventListener('click', () => {
     const k = Number(el.dataset.zoom);
     if (k === 0) whole(); else zoomAt(sc.W / 2, sc.H / 2, k > 0 ? 1.4 : 1 / 1.4);
@@ -880,10 +908,10 @@ window.addEventListener('keydown', (e) => {
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   const pan = 120 / sc.cam.z;
   switch (key) {
-    case ' ': e.preventDefault(); if (!S.asking && !b.over) S.clock.toggle(); break;
-    case '1': if (!S.asking && !b.over) setSpeed(1); break;
-    case '2': if (!S.asking && !b.over) setSpeed(2); break;
-    case '3': if (!S.asking && !b.over) setSpeed(4); break;
+    case ' ': e.preventDefault(); if (!S.asking && !b.over) { beginIfPlacing(); S.clock.toggle(); } break;
+    case '1': if (!S.asking && !b.over) { beginIfPlacing(); setSpeed(1); } break;
+    case '2': if (!S.asking && !b.over) { beginIfPlacing(); setSpeed(2); } break;
+    case '3': if (!S.asking && !b.over) { beginIfPlacing(); setSpeed(4); } break;
     case 'f': toggleAir(); break;
     case 'h': give({ do: 'hold', units: chosen() }); break;
     case 'r': give({ do: 'withdraw', units: chosen() }); break;
