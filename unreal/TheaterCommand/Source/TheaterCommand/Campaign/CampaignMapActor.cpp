@@ -7635,10 +7635,12 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 	{
 		if (Field.Groups > 0)
 		{
-			// (where the player shares the field, the row's share is drawn from the two counts of aircraft: they are in the
-			// signature by twenty-fives, so that his share does not go stale as the groups grow and shrink)
+			// (where the player shares the field, the row's share is drawn from the two counts of aircraft: both are in the
+			// signature, so that his share does not go stale as the groups grow and shrink. They were in it by
+			// twenty-fives, and the row is cut by a rounded share: 26 or 49 of a hundred were one signature and two rows.
+			// The 3D pre-check's read, 24 November 2026. Few fields are shared, so the signs are seldom laid again for it.)
 			Signature += Field.YourGroups > 0
-				? FString::Printf(TEXT("%d:%s:%d:%d:%d:%d;"), Field.Region, *Field.Nation, Field.Groups, Field.YourGroups, FMath::Max(Field.Aircraft, 0) / 25, FMath::Max(Field.YourAircraft, 0) / 25)
+				? FString::Printf(TEXT("%d:%s:%d:%d:%d:%d;"), Field.Region, *Field.Nation, Field.Groups, Field.YourGroups, FMath::Max(Field.Aircraft, 0), FMath::Max(Field.YourAircraft, 0))
 				: FString::Printf(TEXT("%d:%s:%d;"), Field.Region, *Field.Nation, Field.Groups);
 		}
 	}
