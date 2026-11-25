@@ -1546,11 +1546,39 @@ def build_land():
     finish(m)
 
 
-def build_sea():
+# The breakers' measures (release 2, surf on the coasts: the art director's campaign map upgrade 4, 25 November 2026;
+# tc.Map.Surf). In one place, so that the cloud's check (Tools/sea_surf) builds the material from the same numbers
+# and compares what it draws with the picture they were judged on. Distances from the shore are the Water picture's
+# alpha (1 at sixty of the table's units); lengths along the table are its own units; times are seconds.
+SEA_BREAKERS = {
+    "Every": 5.0,       # from a breaker's rising to its last wash; there are three sets, a third of that apart
+    "Uneven": 0.7,      # how far the slow unevenness puts one stretch of coast ahead of the next, in beats
+    "From": 0.85,       # where she rises ...
+    "To": 0.09,         # ... and where she ends
+    "Slows": 0.75,      # under 1: she comes in fast and slows on the beach
+    "Wob": 0.18,        # how far a crest bows out of the line of equal depth
+    "BowLong": 520.0,   # one turn of the Waves picture for the bows
+    "GapLong": 1100.0,  # and for the gaps along a crest
+    "Gap": 0.43,        # how much of a crest's length is missing (at a half, half of it)
+    "Lace": 0.55,       # how far the chop tears the foam
+    "Front": 0.035,     # how sharp she is on the side nearer the land
+    "Tail": 0.2,        # the foam she leaves behind her, seaward
+    "Young": 0.35,      # how much of that tail she has as she rises
+    "Gain": 2.0,        # how much foam a breaker is, beside the wash's line
+    "Lee": 0.2,         # what is left of it in a bay's lee (the Shore picture's red is how open the coast is)
+    "White": 0.9,       # how far a crest goes from the surf's pale blue toward white
+    "Deep": 0.08,       # none at all where the Water picture's alpha is 1: this far inside it they are whole
+}
+
+
+def build_sea(name="M_Sea", breakers=None):
     """The sea: its colour from a picture the game paints (pale over the shoals, dark over the deeps), glossy
     like poured resin, with two sets of small ripples sliding across each other so that the lamp glints and moves on it;
-    and over that paint a swell, a chop, glints and a wash of foam that move (the moving sea, below)."""
-    m = new_material("M_Sea")
+    and over that paint a swell, a chop, glints and a wash of foam that move (the moving sea, below).
+    breakers (M_SeaSurf, release 2: SEA_BREAKERS): the same sea with breakers rolling in on an open coast (5, below).
+    Its own material, so that the sea without them pays nothing for them; with none asked, every node of M_Sea is made
+    as it was, in the order it was (Tools/sea_surf holds that to account)."""
+    m = new_material(name)
     uv = node(m, unreal.MaterialExpressionTextureCoordinate, -1800, 0)
     water = picture(m, "Water", uv, -1400, 0)
     # A thin white line of surf just off every shore: the picture's alpha is how far offshore a point is (1 at six
@@ -1655,8 +1683,65 @@ def build_sea():
     near = one_in(m, SAT, one_in(m, INV, times(m, one_in(m, unreal.MaterialExpressionAbs, less(offshore, lerp(m, 0.32, 0.08, roll, -1150, 5900), -1000, 5900), -850, 5900), 1.0 / 0.035, -700, 5900), -550, 5900), -400, 5900)
     rolling = times(m, times(m, times(m, near, one_in(m, SAT, plus(m, times(m, chop, 2.0, -700, 6100), 0.3, -550, 6100), -400, 6100), -250, 6000),
                              node_from(m, unreal.MaterialExpressionSine, roll, -400, 6250, period=2.0), -100, 6000), 0.2, 50, 6000)
-    foam = one_in(m, SAT, times(m, plus(m, line, rolling, 200, 5600), strength, 350, 5600), 500, 5600)
-    colour = lerp(m, glinting, vector(m, "SurfColour", (0.46, 0.74, 0.9, 1.0), 400, 1450), foam, 700, 1200)
+    surf = plus(m, line, rolling, 200, 5600)
+    whiten = None
+    if breakers:
+        # 5. Breakers (release 2, the art director's campaign map upgrade 4, on Brian's "I want this to visually wow
+        # people on how smooth and realistic and detailed grand it looks"). On an open coast white arcs rise some
+        # fifty units out, come in over five seconds and die on the beach: three sets, a third of a beat apart, each
+        # stretch of coast at its own moment. A crest is never a ruled line round the land (that reads as a depth
+        # line on a chart): it bows in and out of the line of equal depth, it is missing along parts of its length,
+        # it is sharp on the side nearer the land and leaves a tail of foam behind it, and the chop tears it. In a
+        # bay's lee there is a fifth of it. Three more reads of the Waves picture: one for the bows, two for the gaps.
+        b = breakers
+        FRAC, ABS = unreal.MaterialExpressionFrac, unreal.MaterialExpressionAbs
+
+        def eased(low, high, value, x, y):
+            """Nothing below `low`, whole above `high`, eased between."""
+            t = one_in(m, SAT, plus(m, times(m, value, 1.0 / (high - low), x, y), -low / (high - low), x + 150, y), x + 300, y)
+            return times(m, times(m, t, t, x + 450, y), plus(m, times(m, t, -2.0, x + 450, y + 80), 3.0, x + 600, y + 80), x + 750, y)
+
+        bow = waves(along(70.0, b["BowLong"], 1.5, -2800, 6600), -2000, 6600)
+        gap_one = waves(along(160.0, b["GapLong"], 3.0, -2800, 7050), -2000, 7050)
+        gap_two = waves(along(-35.0, b["GapLong"] * 0.83, 2.0, -2800, 7500), -2000, 7500)
+        bows = [plus(m, (bow, "A"), -0.5, -1700, 6600), plus(m, (bow, "R"), -0.5, -1700, 6700), plus(m, (gap_two, "R"), -0.5, -1700, 7500)]
+        gaps = [(gap_one, "R"), (gap_two, "R"),
+                plus(m, plus(m, times(m, (gap_two, "R"), 0.5, -1700, 7050), times(m, (gap_one, "R"), -0.1, -1700, 7150), -1550, 7100), 0.3, -1400, 7100)]
+        beat = plus(m, times(m, node(m, unreal.MaterialExpressionTime, -2000, 7900), 1.0 / b["Every"], -1800, 7900), times(m, (slow, "A"), b["Uneven"], -1800, 8000), -1600, 7950)
+        lace = lerp(m, 1.0, one_in(m, SAT, plus(m, times(m, chop, 2.5, -1400, 7900), 0.55, -1250, 7900), -1100, 7900), b["Lace"], -950, 7900)
+        # (a crest does not bow at the water's edge, where the wash's own line lies)
+        shoaling = one_in(m, SAT, times(m, offshore, 6.0, -1400, 8050), -1250, 8050)
+        foams, crests = None, None
+        for k in range(3):
+            y = 8300 + 500 * k
+            run = one_in(m, FRAC, plus(m, beat, k / 3.0 + 0.4, -1450, y), -1300, y)  # (0 as she rises, 1 as she ends)
+            bowed = plus(m, offshore, times(m, times(m, bows[k], b["Wob"], -1300, y + 100), shoaling, -1150, y + 100), -1000, y + 100)
+            come = node(m, unreal.MaterialExpressionPower, -1150, y, const_exponent=b["Slows"])
+            connect(run, "", come, "Base")
+            off = less(bowed, lerp(m, b["From"], b["To"], come, -1000, y), -850, y)  # (over nothing: seaward of her, behind her)
+            grown = lerp(m, b["Young"], 1.0, one_in(m, SAT, times(m, run, 2.0, -1150, y + 200), -1000, y + 200), -850, y + 200)
+            reach = node(m, unreal.MaterialExpressionMax, -550, y)
+            _feed(m, reach, "A", over(m, off, times(m, grown, b["Tail"], -700, y + 200), -700, y + 100))
+            _feed(m, reach, "B", times(m, off, -1.0 / b["Front"], -700, y))
+            body = one_in(m, SAT, one_in(m, INV, reach, -400, y), -250, y)
+            life = times(m, times(m, one_in(m, SAT, times(m, run, 1.0 / 0.25, -1150, y + 300), -1000, y + 300),
+                                     one_in(m, SAT, times(m, one_in(m, INV, run, -1150, y + 400), 1.0 / 0.15, -1000, y + 400), -850, y + 400), -700, y + 350),
+                         eased(b["Gap"], b["Gap"] + 0.1, gaps[k], -1450, y + 450), -100, y + 350)
+            foamed = times(m, times(m, times(m, body, body, -100, y), life, 50, y), lace, 200, y)
+            edge = times(m, one_in(m, SAT, one_in(m, INV, times(m, one_in(m, ABS, off, -700, y - 80), 1.0 / b["Front"], -550, y - 80), -400, y - 80), -250, y - 80), life, 50, y - 80)
+            foams = foamed if foams is None else plus(m, foams, foamed, 350, y)
+            crests = edge if crests is None else plus(m, crests, edge, 350, y - 80)
+        # (how much of them: the game's measure, tc.Map.SurfMuch, times the lee, and none over the open sea)
+        much = times(m, times(m, scalar(m, "Breakers", 1.0, 350, 9900), lerp(m, b["Lee"], 1.0, (shore, "R"), 350, 10000), 500, 9950),
+                     one_in(m, SAT, times(m, one_in(m, INV, offshore, 350, 10100), 1.0 / b["Deep"], 500, 10100), 650, 10100), 800, 10000)
+        surf = plus(m, surf, times(m, times(m, foams, b["Gain"], 800, 9800), much, 950, 9900), 1100, 5700)
+        whiten = times(m, one_in(m, SAT, times(m, crests, much, 950, 10100), 1100, 10100), b["White"], 1250, 10100)
+    foam = one_in(m, SAT, times(m, surf, strength, 350, 5600), 500, 5600)
+    surf_colour = vector(m, "SurfColour", (0.46, 0.74, 0.9, 1.0), 400, 1450)
+    if whiten is not None:
+        # (a breaker's crest goes toward white; the wash's line stays the surf's pale blue, as it was)
+        surf_colour = lerp(m, surf_colour, vector(m, "BreakerColour", (0.8, 0.9, 0.95, 1.0), 400, 1600), whiten, 550, 1500)
+    colour = lerp(m, glinting, surf_colour, foam, 700, 1200)
     # The staff map (art fix 11): from the top of the zoom the sea is pale blue-grey paper, a little darker over the
     # deeps, with the coast drawn in ink and a second line ruled round it a little way out, as a chart has.
     paper = scalar(m, "Paper", 0.0, 0, -900)
@@ -2318,6 +2403,25 @@ if REBUILD == "all" or "M_BattlePuffsSoft" in REBUILD.split(",") or not eal.does
     build_battle_puffs("M_BattlePuffsSoft", soft=True)
 else:
     unreal.log(f"Theater Command: {MATERIALS}/M_BattlePuffsSoft already exists, left alone")
+
+# (M_SeaSurf, release 2, the campaign map's surf (tc.Map.Surf): M_Sea with breakers rolling in on an open coast
+# (build_sea, SEA_BREAKERS). Its own material, so that the sea without them pays nothing. The same: built when missing,
+# or with TC_REBUILD=M_SeaSurf or all; after a change to build_sea, TC_REBUILD=M_Sea,M_SeaSurf remakes both. The map
+# draws its sea with M_Sea when this one is not there, so whatever goes wrong in it is told, and the rest of the
+# content is built as before.)
+if REBUILD == "all" or "M_SeaSurf" in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/M_SeaSurf"):
+    try:
+        build_sea("M_SeaSurf", SEA_BREAKERS)
+    except Exception:
+        import traceback
+        unreal.log_error("Theater Command: M_SeaSurf was not built (the map's sea is drawn without breakers, as before):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_SeaSurf"):
+                eal.delete_asset(f"{MATERIALS}/M_SeaSurf")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_SeaSurf could not be removed:\n" + traceback.format_exc())
+else:
+    unreal.log(f"Theater Command: {MATERIALS}/M_SeaSurf already exists, left alone")
 # (M_FireSpread, the same: built when missing, or with TC_REBUILD=M_FireSpread or all. An M_BattlePuffs made before it
 # came does not mark its pixels: TC_REBUILD=M_BattlePuffs,M_FireSpread once)
 if REBUILD == "all" or "M_FireSpread" in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/M_FireSpread"):
