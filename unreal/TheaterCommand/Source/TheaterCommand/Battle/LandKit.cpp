@@ -986,9 +986,9 @@ namespace LandKit
 				// her read as a second army, a pea green by a straw khaki). The second colour goes where the file's
 				// own blotches are, so the coat is broken and not one flat tone.
 				OutName = "japan";
-				OutUpper = "796C47";
-				OutUpper2 = "615236";
-				OutShade = "463E28";
+				OutUpper = "796C4F";
+				OutUpper2 = "61523C";
+				OutShade = "463E2D";
 				return true;
 			}
 			if (D.Terrain == "desert")
