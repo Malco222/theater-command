@@ -8,11 +8,12 @@
 //        and rider's at every level, the banked far sets, the vertex-animation body sets and their helmets) is the
 //        same to the byte, with the same sets numbered the same, and no roughness; a file read without its wear keeps
 //        none of it. (worn.sh also builds --dump against the code before the worn look and compares every byte.)
-//   ON:  W 1, no rain, sand (221, 210, 180): the American's and the German's boots (paint 2 below the knee: the files
-//        paint the eyes as boots at mid and far) and knee fronts move 30 to 50 in 100 of the way to the soil (the mean
-//        over their points); a fresh man (W 0.1) under 6 in 100. Read at W 0.6 too, the wear every man has with the
-//        worn trial off: printed, and said plainly where it is below the band's floor (not a failure: the band is the
-//        art director's for a man long in the line), with the W from which it is met.
+//   ON:  no rain, sand (221, 210, 180), the art director's band as she ruled it on 25 November (for every man in the
+//        line): the American's, the German's and the Soviet's boots (paint 2 below the knee: the files paint the eyes as
+//        boots at mid and far) move 30 in 100 of the way to the soil (the mean over their points) by W 0.75 and no more
+//        than 50 at W 1; their knee fronts run 0 to 9 under the boots at W 1 (she asks 5 to 8, as the American's do: his
+//        read 8.9); a fresh man (W 0.1) under 6 in 100. Read at the default W 0.8 too (every man's with the worn trial
+//        off): at least 30. (The German and Soviet files' boots were raised to the American's by dirt_band.py.)
 //   Face: the face's detail face_detail.py laid in the mesh's tint (Soldier::Detail) is kept with it on: at W 0 each of
 //        its points is the OFF colour times the clean shadow over the baked one and the cast, within 2 bytes; at W 0.6
 //        on the files' own dust it reads as OFF within a few bytes, the darkest of it too, and the eyes; a gore twin
@@ -413,7 +414,7 @@ int main(int Argc, char** Argv)
 	return 2;
 #else
 	Files Worn;
-	if (!LoadFiles(Folder, { "USA", "GER", "USA_gore", "USA_tanker", "USA_nco", "USA_bazooka" }, true, Worn)) return 1;
+	if (!LoadFiles(Folder, { "USA", "GER", "USA_gore", "USA_tanker", "USA_nco", "USA_bazooka", "SOV" }, true, Worn)) return 1;
 	std::printf("soldier files read in %.0f ms\n", std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - T0).count());
 
 	// ---- What is read: nothing new without the wear; with it, every level's and every finish's whole ----------------
@@ -500,20 +501,26 @@ int main(int Argc, char** Argv)
 		std::printf("OFF checked in %.0f ms\n", std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - T).count());
 	}
 
-	// ---- ON, no rain, sand: the boots and knees toward the soil at W 1 (the band), at W 0.6 (the default), fresh ----
-	// (The art director's band is read at W 1, a man six weeks or more in the line, which the game gives only with the
-	// worn trial on (LandMen's uniforms that age) and his side's months known; with tc.Look.Worn on and the trial off,
-	// the default, every man is W 0.6, the files' own baked look, and reads 0.6 of it: printed, and said plainly where it
-	// falls below the band's floor. The reading is linear in W (each point goes 0.85 x dirt x W of the way), so the W from
-	// which the floor is met is told too.)
+	// ---- ON, no rain, sand: the boots and knees toward the soil at W 1, W 0.75, the default W 0.8, and fresh ----------
+	// (The art director's band, as she ruled it on 25 November, is for every man in the line: his boots 30 in 100 of the
+	// way to the field's ground by W 0.75 and no more than 50 at W 1, his knee fronts 5 to 8 under the boots. With
+	// tc.Look.Worn on and the worn trial off every man is W 0.8 (LandMen's DefaultWear). The reading is linear in W (each
+	// point goes 0.85 x dirt x W of the way): checked, so what is read at one W holds at the others.)
 	{
-		const std::vector<std::string> Names = { "USA", "GER" };
-		const Crowd::WearMix Clean = MixOf(0.0, 0.0, 0.0), Veteran = MixOf(1.0, 0.0, 0.0), Default = MixOf(0.6, 0.0, 0.0), Fresh = MixOf(0.1, 0.0, 0.0);
+		const std::vector<std::string> Names = { "USA", "GER", "SOV" };
+		const Crowd::WearMix Clean = MixOf(0.0, 0.0, 0.0), Veteran = MixOf(1.0, 0.0, 0.0), Floor = MixOf(0.75, 0.0, 0.0),
+			Default = MixOf(static_cast<double>(Crowd::DefaultWear), 0.0, 0.0), Fresh = MixOf(0.1, 0.0, 0.0);
 		Setup Su = Base;
 		Su.F = &Worn;
-		Riders Bs = RidersWith(Su, &Clean, Names), Vs = RidersWith(Su, &Veteran, Names), Ds = RidersWith(Su, &Default, Names), Fs = RidersWith(Su, &Fresh, Names);
-		if (!Bs.C || !Vs.C || !Ds.C || !Fs.C) { Fail("the riders' crowds were not made"); return 1; }
+		std::vector<std::string> Have;
 		for (const std::string& N : Names)
+		{
+			if (Worn.count(N)) Have.push_back(N);
+		}
+		Riders Bs = RidersWith(Su, &Clean, Have), Vs = RidersWith(Su, &Veteran, Have), Ls = RidersWith(Su, &Floor, Have),
+			Ds = RidersWith(Su, &Default, Have), Fs = RidersWith(Su, &Fresh, Have);
+		if (!Bs.C || !Vs.C || !Ls.C || !Ds.C || !Fs.C) { Fail("the riders' crowds were not made"); return 1; }
+		for (const std::string& N : Have)
 		{
 			const Soldier& S = *Worn.at(N);
 			for (const Lod L : { Near, Mid, Far })
@@ -522,32 +529,33 @@ int main(int Argc, char** Argv)
 				BootsAndKnees(S, L, Boots, Knees);
 				const Look& B = Bs.C->LookOf(Bs.Of[N], L);
 				const Look& V = Vs.C->LookOf(Vs.Of[N], L);
+				const Look& Lo = Ls.C->LookOf(Ls.Of[N], L);
 				const Look& D = Ds.C->LookOf(Ds.Of[N], L);
 				const Look& F = Fs.C->LookOf(Fs.Of[N], L);
 				if (B.Points != S.Meshes[L].Points) { Fail("%s's rider is not his file's mesh one for one", N.c_str()); continue; }
 				int UsedB = 0, UsedK = 0;
 				const double BootsV = MeanToward(B, V, S.Meshes[L], Boots, 0.0, &UsedB), KneesV = MeanToward(B, V, S.Meshes[L], Knees, 0.0, &UsedK);
+				const double BootsL = MeanToward(B, Lo, S.Meshes[L], Boots, 0.0);
 				const double BootsD = MeanToward(B, D, S.Meshes[L], Boots, 0.0), KneesD = MeanToward(B, D, S.Meshes[L], Knees, 0.0);
 				const double BootsF = MeanToward(B, F, S.Meshes[L], Boots, 0.0), KneesF = MeanToward(B, F, S.Meshes[L], Knees, 0.0);
 				const char* Level = L == Near ? "near" : L == Mid ? "mid" : "far";
-				std::printf("%s %s: boots (%d points) %.1f%% of the way to the sand at W 1, %.1f%% at W 0.6, %.1f%% at W 0.1; knee fronts (%d points) %.1f%%, %.1f%%, %.1f%%\n", N.c_str(),
-					Level, UsedB, 100.0 * BootsV, 100.0 * BootsD, 100.0 * BootsF, UsedK, 100.0 * KneesV, 100.0 * KneesD, 100.0 * KneesF);
-				// (the reading at W 0.6 is 0.6 of W 1's, but for the bytes' rounding: what the W told below rests on)
-				if (UsedB && std::fabs(BootsD - 0.6 * BootsV) > 0.02) Fail("%s %s: the boots at W 0.6 (%.1f%%) are not 0.6 of W 1's (%.1f%%)", N.c_str(), Level, 100.0 * BootsD, 100.0 * BootsV);
+				std::printf("%s %s: boots (%d points) %.1f%% of the way to the sand at W 1, %.1f%% at W 0.75, %.1f%% at the default W %.2f, %.1f%% at W 0.1; "
+							"knee fronts (%d points) %.1f%% at W 1, %.1f%% at W %.2f, %.1f%% at W 0.1\n", N.c_str(), Level, UsedB, 100.0 * BootsV, 100.0 * BootsL,
+					100.0 * BootsD, static_cast<double>(Crowd::DefaultWear), 100.0 * BootsF, UsedK, 100.0 * KneesV, 100.0 * KneesD,
+					static_cast<double>(Crowd::DefaultWear), 100.0 * KneesF);
+				// (linear in W, but for the bytes' rounding)
+				if (UsedB && std::fabs(BootsL - 0.75 * BootsV) > 0.02) Fail("%s %s: the boots at W 0.75 (%.1f%%) are not 0.75 of W 1's (%.1f%%)", N.c_str(), Level, 100.0 * BootsL, 100.0 * BootsV);
+				if (UsedB && std::fabs(BootsD - Crowd::DefaultWear * BootsV) > 0.02) Fail("%s %s: the boots at the default W (%.1f%%) are not %.2f of W 1's (%.1f%%)", N.c_str(), Level, 100.0 * BootsD, static_cast<double>(Crowd::DefaultWear), 100.0 * BootsV);
 				if (L == Far) continue;
 				if (!(BootsF < 0.06) || !(KneesF < 0.06)) Fail("%s fresh (W 0.1): boots %.1f%%, knees %.1f%% (under 6)", N.c_str(), 100.0 * BootsF, 100.0 * KneesF);
 				// (the pass line on the near man, the one the close camera sees: the mid and far levels' dirt is the near's
 				// sampled on fewer points, for the reading only)
 				if (L != Near) continue;
 				if (UsedB < 50 || UsedK < 10) Fail("%s: too few boot (%d) or knee (%d) points to read", N.c_str(), UsedB, UsedK);
-				if (!(BootsV >= 0.30 && BootsV <= 0.50)) Fail("%s's boots move %.1f%% toward the soil at W 1 (30 to 50)", N.c_str(), 100.0 * BootsV);
-				if (!(KneesV >= 0.30 && KneesV <= 0.50)) Fail("%s's knees move %.1f%% toward the soil at W 1 (30 to 50)", N.c_str(), 100.0 * KneesV);
-				const double Floor = 0.30 / std::max(1e-6, std::min(BootsV, KneesV));
-				const double Months = std::max(0.0, (Floor - 0.1) * 1.5 / 0.9);
-				if (BootsD < 0.30 || KneesD < 0.30)
-					std::printf("  NOTE %s near at the default W 0.6 (tc.Look.Worn on, the worn trial off): boots %.1f%%, knee fronts %.1f%%, BELOW the art director's 30%% floor; "
-								"the band is met only from W %.2f (the worn trial on, %.1f months or more in the line)\n",
-						N.c_str(), 100.0 * BootsD, 100.0 * KneesD, Floor, Months);
+				if (!(BootsL >= 0.30)) Fail("%s's boots move %.1f%% toward the soil at W 0.75 (30 at least)", N.c_str(), 100.0 * BootsL);
+				if (!(BootsD >= 0.30 && KneesD >= 0.25)) Fail("%s at the default W %.2f: boots %.1f%%, knee fronts %.1f%% (30 and 25 at least)", N.c_str(), static_cast<double>(Crowd::DefaultWear), 100.0 * BootsD, 100.0 * KneesD);
+				if (!(BootsV <= 0.50 && KneesV <= 0.50)) Fail("%s at W 1: boots %.1f%%, knee fronts %.1f%% (50 at most)", N.c_str(), 100.0 * BootsV, 100.0 * KneesV);
+				if (!(KneesV >= BootsV - 0.09 && KneesV <= BootsV + 0.005)) Fail("%s at W 1: knee fronts %.1f%% against boots %.1f%% (0 to 9 under)", N.c_str(), 100.0 * KneesV, 100.0 * BootsV);
 			}
 		}
 	}
