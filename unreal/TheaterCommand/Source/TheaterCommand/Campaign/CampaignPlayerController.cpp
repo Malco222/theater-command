@@ -1059,6 +1059,7 @@ void ACampaignPlayerController::EnterCampaign()
 	ReadyUnits.Reset(); // (release 1.5.1, new units ready: nor a READY plate of the campaign left)
 	bReadyDue = false;
 	ReadySaid = -1;
+	RaidCardDue.Reset(); // (nor the report of a raid flown in the campaign left)
 	PendingEnemyReach.Reset();
 	Opening.bVisible = false;
 	FaceOff = FFaceOff();
@@ -1674,6 +1675,19 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 				Spread = FMath::Max(Spread, FVector2D::Distance(Map->SortieStart(Sortie), Sortie.To));
 			}
 			Eye->GoTo(Map->MapToWorld(Middle.X, Middle.Y), FMath::Clamp(static_cast<float>(0.3 + Spread / 420.0), 0.4f, 0.85f));
+		}
+		// (Brian, 24 November 2026: a raid "didnt't tell me the results of the battle".) The rules name the raid's report
+		// as the page that comes next. It opens once the aircraft have been seen to fly the raid (PlayerTick), half a
+		// second after the last of them is home: the flight over the map lasts eleven seconds (CampaignMapActor,
+		// FlightLasts). A run of pictures or of steps has it only when it asks for it by name ("-TheaterRaidCard"):
+		// the runs there are were timed without it, and a page opening by itself would lie over their pictures.
+		FString Asked;
+		const bool bRun = FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Asked, false) || FParse::Value(FCommandLine::Get(), TEXT("TheaterSteps="), Asked, false);
+		if (Next.StartsWith(TEXT("airreport:")) && (!bRun || FParse::Param(FCommandLine::Get(), TEXT("TheaterRaidCard"))))
+		{
+			RaidCardDue = Next;
+			RaidCardAt = (GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0) + 11.5;
+			RaidCardTurn = Session->GetView().Turn;
 		}
 		ClosePage();
 		return;
@@ -5344,6 +5358,25 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		bMonthCardDue = false;
 		OpenPage(TEXT("reports"));
+	}
+	// (Brian, 24 November 2026: a raid "didnt't tell me the results of the battle".) The report of a raid his crews
+	// flew, once its aircraft have been seen to fly it, nothing else has the screen and no button of the mouse is held
+	// (a drag of the map, or of a fleet, is let finish). It is dropped when the month moves on, or when something else
+	// has held the screen for twenty seconds: it is still to be read from the airfield, in THE MONTH'S RAIDS.
+	if (!RaidCardDue.IsEmpty())
+	{
+		const double RaidNow = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+		const FCampaignSession* Told = GetSession();
+		if (!Told || bWatching || bMonthCardDue || Told->GetView().Turn != RaidCardTurn || RaidNow >= RaidCardAt + 20.0)
+		{
+			RaidCardDue.Reset();
+		}
+		else if (RaidNow >= RaidCardAt && !IsCardUp() && !IsAnswering() && !bLeftHeld && !bRightHeld)
+		{
+			const FString Due = RaidCardDue;
+			RaidCardDue.Reset();
+			OpenPage(Due);
+		}
 	}
 	// (Release 1.5.1, new units ready) The READY plate, once nothing else holds the screen (the month's card closed) and
 	// the month's own notice ("June 1941. Your orders.") has gone.
@@ -9417,7 +9450,9 @@ void ACampaignPlayerController::RightClickOn(int32 RegionId, int32 Sea, bool bOn
 bool ACampaignPlayerController::IsBusyForSteps() const
 {
 	// (an order still being answered, or its picture still being laid, counts as the table moving: see MoveAside)
-	return bWatching || Newsreel.bOn || Announcements.Num() > 0 || EndAsk.bVisible || IsAnswering();
+	// (a raid's report still to open is the table moving too: the step that flew the raid ends with its report up.
+	// Only a run that asked for the report by name, "-TheaterRaidCard", is ever owed one: see PressPage.)
+	return bWatching || Newsreel.bOn || Announcements.Num() > 0 || EndAsk.bVisible || IsAnswering() || !RaidCardDue.IsEmpty();
 }
 
 void ACampaignPlayerController::StepThroughMonth()

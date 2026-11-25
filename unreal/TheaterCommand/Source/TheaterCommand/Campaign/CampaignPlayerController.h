@@ -1412,6 +1412,12 @@ private:
 	// The other nations' month, being played out one nation at a time.
 	bool bWatching = false;
 	bool bMonthCardDue = false; // the month's card is to open once the replay, the newsreel and the great moments are over
+	// (Brian, 24 November 2026: a raid "didnt't tell me the results of the battle".) The report of the raid his crews
+	// have just been sent on ('airreport:<id>', which the rules name as the page that comes next): it opens once the
+	// aircraft have been seen to fly the raid, in the month it was flown in.
+	FString RaidCardDue;
+	double RaidCardAt = 0.0;
+	int32 RaidCardTurn = 0;
 	bool bRewatching = false; // the month is being watched again from its card
 	bool bHandStands = false; // (ruling 88) the army in hand has been told to stand this month: the rules keep the order, with the saved game
 	TArray<int32> RoundSeen; // the provinces the round of armies has been to since it last began
