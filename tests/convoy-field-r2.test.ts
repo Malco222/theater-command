@@ -141,8 +141,12 @@ describe('the hand-back (217\'s seam: booked by rank)', () => {
   it('computer against computer books the dice\'s own spread: ranks flat, the upper count at the dice\'s odds, a swing of 1 on average', () => {
     for (const p of [CONVOY_PRACTICE[1], CONVOY_PRACTICE[3]]) {
       // (a card's 30 staff nights are one draw of the staff's spread, and the ranks are flat over the draws: the proof
-      // pools six tickets of the card, 20 nights against each one's own 30)
-      const seeds = [7, 8, 9, 10, 11, 12], M = 20 * seeds.length, mv: number[] = [], ss: number[] = [], swing: number[] = [];
+      // pools tickets of the card, 20 nights against each one's own 30. The sample is sized for the bound on the mean
+      // swing, chosen before it was run: the swing is 0.8 + 0.4 x the merchants' rank, the rank close to even on 0 to 1
+      // (its spread 0.289), so the mean's standard error is about 0.4 x 0.289 / sqrt(N). At the 120 nights of seeds 7 to 12
+      // that is 0.0105, and the bound 0.03 only 2.9 of them; 240 nights, seeds 7 to 18, the least whole number of tickets
+      // from the same start that puts the bound at 4 or more (0.0075, 4.0), is the sample. Round 5; the bound is unchanged.)
+      const seeds = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18], M = 20 * seeds.length, mv: number[] = [], ss: number[] = [], swing: number[] = [];
       let upper = 0;
       for (const seed of seeds) {
         const t = convoyPracticeTicket({ ...p, boats: p.boats.map((b) => ({ ...b, expect: 1.4 })), escorts: p.escorts.map((e) => ({ ...e, expect: 0.3 })) }, seed, null);
@@ -162,7 +166,7 @@ describe('the hand-back (217\'s seam: booked by rank)', () => {
       expect(Math.abs(swing.reduce((a, b) => a + b, 0) / M - 1)).toBeLessThan(0.03);
       expect(Math.abs(upper / M - 0.4)).toBeLessThan(0.15);
     }
-  }, 180_000);
+  }, 900_000);
 
   it('counts the night against the staff\'s own, plainly, for the after card (words only)', () => {
     const t = card(4, 3, kit(true, false, false), 5);
@@ -429,7 +433,7 @@ describe('orders answered (playtest bugs 12-14 and 23)', () => {
     const { v: x, told: t2 } = run(sim, 'att', (_, t) => said(t, 'sea:dive', boat.id).length > 0, 600);
     const line = said(t2, 'sea:dive', boat.id)[0];
     if (line.text === `${boat.name} surfaces.`) expect(keel(x)).toBe(0);
-    else expect(line.text).toMatch(new RegExp(`^${boat.name} (comes up to periscope depth|goes deep)(: .+)?\\.$`));
+    else expect(line.text).toMatch(new RegExp(`^${boat.name} (comes up (only )?to periscope depth|goes deep)(: .+)?\\.$`));
   });
 });
 
@@ -560,7 +564,7 @@ describe('the after card counts the whole night (playtest bugs 4, 5 and 17)', ()
   it('says how every boat lost went, rammed, shelled and taken too, and those forced up that got away', () => {
     // (round 3, 5 and 24: 'None of the 6 boats was lost.', '1 of the 6 boats was lost: ...'; a boat forced up and
     // later scuttled told on one line, with what became of her)
-    const tl = (x: Partial<ConvoyTally>): ConvoyTally => ({ attacks: 0, hunts: 0, salvoes: 0, hits: 0, forcedUp: 0, kept: 0, escaped: 0, scuttled: 0, rammed: 0, shelled: 0, crushed: 0, captured: 0, ...x });
+    const tl = (x: Partial<ConvoyTally>): ConvoyTally => ({ attacks: 0, hunts: 0, salvoes: 0, hits: 0, forcedUp: 0, kept: 0, keptLost: 0, escaped: 0, scuttled: 0, rammed: 0, shelled: 0, crushed: 0, captured: 0, ...x });
     expect(fateWords(tl({ forcedUp: 4, escaped: 1, rammed: 1, shelled: 1, crushed: 2, captured: 1 }), 5, 8))
       .toEqual(['5 of the 8 boats were lost: 2 sunk by depth charges and 3 after they were forced to the surface.', '4 boats were forced to the surface: 1 was taken by an escort, 1 was rammed, 1 was sunk by gunfire and 1 dived again and got away.']);
     expect(fateWords(tl({ forcedUp: 1, escaped: 1 }), 0, 6)).toEqual(['None of the 6 boats was lost.', '1 boat was forced to the surface and dived again to get away.']);
@@ -572,7 +576,14 @@ describe('the after card counts the whole night (playtest bugs 4, 5 and 17)', ()
     // (a boat on the surface already when gunfire left her unable to dive was kept there, not forced up: said so)
     expect(fateWords(tl({ forcedUp: 2, kept: 2, escaped: 2 }), 0, 6)).toEqual(['None of the 6 boats was lost.', '2 boats were kept on the surface by gunfire and dived again to get away.']);
     expect(fateWords(tl({ forcedUp: 3, kept: 1, escaped: 1, shelled: 2 }), 2, 6))
-      .toEqual(['2 of the 6 boats were lost.', '3 boats were forced to the surface or kept there by gunfire: 2 were sunk by gunfire and 1 dived again and got away.']);
+      .toEqual(['2 of the 6 boats were lost.', '2 boats were forced to the surface and 1 kept there by gunfire: 2 were sunk by gunfire and 1 dived again and got away.']);
+    // (the two kinds counted apart on both lines, round 5: never 'forced' for a boat kept up, never 'or')
+    expect(fateWords(tl({ forcedUp: 2, kept: 1, keptLost: 1, rammed: 2 }), 2, 6)).toEqual(['2 of the 6 boats were lost.', '1 boat was forced to the surface and 1 kept there by gunfire; both were rammed.']);
+    expect(fateWords(tl({ forcedUp: 3, kept: 1, rammed: 3 }), 3, 6)).toEqual(['3 of the 6 boats were lost.', '2 boats were forced to the surface and 1 kept there by gunfire; all 3 were rammed.']);
+    expect(fateWords(tl({ forcedUp: 3, kept: 3, keptLost: 2, crushed: 3, rammed: 1, shelled: 1, escaped: 1 }), 5, 15))
+      .toEqual(['5 of the 15 boats were lost: 3 sunk by depth charges and 2 after they were kept on the surface by gunfire.', '3 boats were kept on the surface by gunfire: 1 was rammed, 1 was sunk by gunfire and 1 dived again and got away.']);
+    expect(fateWords(tl({ forcedUp: 4, kept: 1, keptLost: 1, crushed: 3, rammed: 2, shelled: 1, escaped: 1 }), 6, 15))
+      .toEqual(['6 of the 15 boats were lost: 3 sunk by depth charges, 2 after they were forced to the surface and 1 after she was kept on the surface by gunfire.', '3 boats were forced to the surface and 1 kept there by gunfire: 2 were rammed, 1 was sunk by gunfire and 1 dived again and got away.']);
     expect(fateWords(tl({ forcedUp: 2, scuttled: 2 }), 2, 12)).toEqual(['2 of the 12 boats were lost.', '2 boats were forced to the surface and scuttled by their crews.']);
     expect(fateWords(tl({ forcedUp: 3, scuttled: 1, escaped: 1, crushed: 2 }), 3, 15))
       .toEqual(['3 of the 15 boats were lost: 2 sunk by depth charges and 1 after she was forced to the surface.', '3 boats were forced to the surface: 1 was scuttled by her crew, 1 dived again and got away and 1 was still on the surface at dawn.']);
@@ -717,22 +728,24 @@ describe('a radar night\'s boats press home (round 3, the rules owner\'s (i) to 
         if (dive === 'surfaced' && why === 'attack' && b.order === null && b.dive !== 'surfaced') { rises++; expect(spy.seesEscort(b)).toBe(false); }
         return set(b, dive, why, ...more);
       };
-      // (what the log has said of each boat's depth: up, at periscope depth, or deep)
+      // (what the pack's log has said of each boat's depth: up, at periscope depth, or deep; a duck's dive said late,
+      // once it is no longer brief, is the page's own line, round 5)
       const at = new Map<number, 'up' | 'scope' | 'deep'>();
-      each(sim, (v) => {
-        for (const e of v.events) {
-          if (e.what !== 'sea:dive') continue;
+      while (!sim.over) {
+        sim.advance();
+        for (const e of sim.view('att').events) {
+          if (e.what !== 'sea:dive' && e.what !== 'sea:depth') continue;
           const x = (e.extra ?? {}) as { dive?: string; why?: string; reason?: string };
-          if (x.dive === 'periscope' && (x.why === 'radar' || x.why === 'evade') && /^an escort (has found her|is closing)$/.test(x.reason ?? '')) { ducks++; if (e.text) told++; }
+          if (e.what === 'sea:dive' && x.dive === 'periscope' && (x.why === 'radar' || x.why === 'evade') && /^an escort (has found her|is closing)$/.test(x.reason ?? '')) { ducks++; if (e.text) told++; }
           if (!e.text) continue;
           const was = at.get(e.unit!) ?? 'up';
-          if (/ dives/.test(e.text)) expect(was).toBe('up');
+          if (/ dive(s|d .+ ago)[:.]/.test(e.text)) expect(was).toBe('up');
           else if (/ goes deep/.test(e.text)) expect(was).not.toBe('deep');
-          else if (/ comes up to periscope depth/.test(e.text)) expect(was).toBe('deep');
+          else if (/ comes up (only )?to periscope depth/.test(e.text)) expect(was).toBe('deep');
           else if (/ surfaces/.test(e.text)) expect(was).not.toBe('up');
-          at.set(e.unit!, x.dive === 'surfaced' ? 'up' : x.dive === 'deep' ? 'deep' : 'scope');
+          at.set(e.unit!, e.what === 'sea:depth' ? 'scope' : x.dive === 'surfaced' ? 'up' : x.dive === 'deep' ? 'deep' : 'scope');
         }
-      });
+      }
     }
     expect(rises).toBeGreaterThan(100);
     expect(ducks).toBeGreaterThan(100);
@@ -759,7 +772,8 @@ describe('a radar night\'s boats press home (round 3, the rules owner\'s (i) to 
           // (never deep while the order stands; forced down, to periscope depth only, said so)
           expect(x.dive).not.toBe('deep');
           // (said, or left unsaid where she ducks again within two minutes of coming up from the last: round 4)
-          if (x.override) { forced++; expect(x.dive).toBe('periscope'); expect(x.reason).toBe('an escort is closing'); if (e.text) expect(e.text).toMatch(/^Boat \d+ (dives|comes up to periscope depth): an escort is closing\.$/); }
+          // (or, ordered up from deep while an escort holds her or is in her sight, only to periscope depth: round 5)
+          if (x.override) { forced++; expect(x.dive).toBe('periscope'); expect(x.reason).toMatch(/^an escort (is closing|holds her|is in her sight)$/); if (e.text) expect(e.text).toMatch(/^Boat \d+ (dives|comes up only to periscope depth): an escort (is closing|holds her|is in her sight)\.$/); }
         }
         for (const u of v.units) if (under.has(u.id) && (u.extra.order !== 'attack' || u.state === 'gone')) under.delete(u.id);
         void t;
@@ -1055,4 +1069,184 @@ describe('the night\'s end and its verdict (round 3, problems 3 and 23)', () => 
     }
     expect(winners.size).toBe(2);
   }, 120_000);
+});
+
+// ---- Round 5 (the rules owner's calls on round 4's leftovers, A to E) ------------------------------------------------
+
+describe('the boats as the log and the scene are told them (round 5, A to E)', () => {
+  /** Battle seconds within which a duck again is the same dodging (sim.ts AGAIN). */
+  const AGAIN = 120;
+  /** Her captain's own and her orders' calls on her depth, as each is made: the boat, the depth, why, and whether she then saw or was held by an escort. */
+  type SpyBoat = { u: ConvoyUnit; dive: string; keel: number; order: string | null; saying: { cut: boolean; why: string; reason?: string } | null };
+  type Spy = { setDive: (b: SpyBoat, dive: string, why: string, ...more: unknown[]) => boolean; seesEscort: (b: unknown) => boolean; firstHeard: (b: unknown) => number;
+    fire: (b: SpyBoat, target: unknown) => void; sayDive: (b: SpyBoat) => void };
+
+  it('(A) a boat that has left the night is told stopped where she left it, on every practice night', () => {
+    let left = 0;
+    for (const p of CONVOY_PRACTICE) for (const seed of [1, 2, 3]) {
+      const sim = new ConvoySim(convoyPracticeTicket(p, seed, null));
+      const first = new Map<number, [number, number]>();
+      while (!sim.over) {
+        for (let k = 0; k < 5 && !sim.over; k++) sim.advance();
+        for (const u of sim.view().units) {
+          if (u.kind !== 'ss' || u.extra.doing !== 'left') continue;
+          // (before, the helm steered her one step after she left, and her last speed and 'march' stayed in every view)
+          expect(u.speed).toBe(0);
+          expect(u.act).toBe('idle');
+          expect(u.state).toBe('withdrawn');
+          const f = first.get(u.id);
+          if (!f) { first.set(u.id, [u.x, u.y]); continue; }
+          expect(Math.hypot(u.x - f[0], u.y - f[1])).toBeLessThan(1e-9);
+        }
+      }
+      left += first.size;
+    }
+    expect(left).toBeGreaterThan(10);
+  }, 300_000);
+
+  it('(B) a duck left unsaid is said once it is no longer brief, and a salvo fired dived always follows her dive in the log', () => {
+    let spells = 0, late = 0, dived = 0, rising = 0;
+    for (const p of [CONVOY_PRACTICE[2], CONVOY_PRACTICE[3]]) for (const seed of [1, 3, 7]) {
+      const sim = new ConvoySim(convoyPracticeTicket(p, seed, null));
+      // (her keel as she fires, by the sim itself: below the surface is dived, though her captain has her on her way up,
+      // round 5's replay: n3s3, Boat 3 at 13 m)
+      const spy = sim as unknown as Spy, fire = spy.fire.bind(sim), keelAt = new Map<number, number>();
+      spy.fire = (b, target) => { keelAt.set(b.u.id, b.keel); if (b.keel > 0 && b.dive === 'surfaced') rising++; fire(b, target); };
+      // (what the pack's log last said of each boat: up or down; and since when each boat's keel has been below the surface)
+      const said = new Map<number, 'up' | 'down'>(), below = new Map<number, number>(), long = new Set<number>();
+      while (!sim.over) {
+        sim.advance();
+        const v = sim.view('att');
+        for (const e of v.events) {
+          if ((e.what === 'sea:dive' || e.what === 'sea:depth') && e.text) {
+            if (e.what === 'sea:depth') late++;
+            said.set(e.unit!, / surfaces| is forced to the surface/.test(e.text) ? 'up' : 'down');
+          }
+          // (fired dived: her dive said before it, and no surfacing since; the salvo tells the scene she is dived)
+          if (e.what === 'sea:torpedo') {
+            const d = (e.extra as { dive?: string }).dive;
+            if ((keelAt.get(e.unit!) ?? 0) > 0) expect(d).not.toBe('surfaced');
+            if (d !== 'surfaced') { dived++; expect(said.get(e.unit!) ?? 'up').toBe('down'); }
+          }
+        }
+        for (const u of v.units) {
+          if (u.kind !== 'ss' || u.state === 'gone' || u.state === 'withdrawn') { below.delete(u.id); continue; }
+          if ((u.extra.keel ?? 0) <= 0) { below.delete(u.id); long.delete(u.id); continue; }
+          if (!below.has(u.id)) below.set(u.id, v.t);
+          // (down longer than AGAIN: the log says so by now)
+          if (v.t - below.get(u.id)! > AGAIN) { if (!long.has(u.id)) { long.add(u.id); spells++; } expect(said.get(u.id) ?? 'up').toBe('down'); }
+        }
+      }
+    }
+    expect(spells).toBeGreaterThan(100);
+    expect(late).toBeGreaterThan(20);
+    expect(dived).toBeGreaterThan(10);
+    expect(rising).toBeGreaterThan(0);
+  }, 300_000);
+
+  it('(C) under Attack submerged a boat surfaces to run in only from periscope depth or above, and never in an escort\'s sight', () => {
+    // (Attack submerged to every boat up at 1:00 on nights 1 to 3; round 4's replay had n1s11, n2s3 and n3s3 bob)
+    let rises = 0, off = 0;
+    for (const p of [CONVOY_PRACTICE[1], CONVOY_PRACTICE[2], CONVOY_PRACTICE[3]]) for (const seed of [1, 3, 11]) {
+      const sim = new ConvoySim(convoyPracticeTicket(p, seed, 'att'));
+      const spy = sim as unknown as Spy, set = spy.setDive.bind(sim);
+      spy.setDive = (b, dive, why, ...more) => {
+        if (dive === 'surfaced' && why === 'attack' && b.order === 'under' && b.dive !== 'surfaced') { rises++; expect(spy.seesEscort(b)).toBe(false); expect(b.keel).toBeLessThanOrEqual(CONVOY.boat.scope + 0.5); }
+        return set(b, dive, why, ...more);
+      };
+      run(sim, 'att', () => false, 3600);
+      const boats = boatsUp(sim.view('att')).filter((u) => u.extra.doing !== 'up' && u.extra.doing !== 'gun').map((u) => u.id);
+      sim.command({ do: 'convoy:attack', units: boats, under: true }, 'att');
+      run(sim, 'att', (v) => { for (const u of v.units) if (u.extra.off && u.extra.order === 'under') off++; return false; });
+    }
+    expect(rises).toBeGreaterThan(5);
+    expect(off).toBeGreaterThan(0);
+  }, 300_000);
+
+  it('(D) Attack on the surface to a deep boat an escort holds brings her only to periscope depth, and up from there once none holds her or is in her sight', () => {
+    let tried = 0, cut = 0, ups = 0;
+    // (night 2 on six seeds, and night 3 seed 3, round 4's case of a deep boat brought straight up and lost)
+    for (const [night, seed] of [[2, 1], [2, 2], [2, 3], [2, 4], [2, 5], [2, 6], [3, 3]]) {
+      const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[night], seed, 'att'));
+      // (the first boat deep with an escort holding her, as her captain took her down)
+      const { v } = run(sim, 'att', (w) => w.units.some((u) => u.kind === 'ss' && u.extra.dive === 'deep' && (u.extra.keel ?? 0) >= 60 && (u.extra.heard ?? []).length > 0 && (u.extra.tubes ?? 0) > 0), 8 * 3600);
+      const boat = v.units.find((u) => u.kind === 'ss' && u.extra.dive === 'deep' && (u.extra.keel ?? 0) >= 60 && (u.extra.heard ?? []).length > 0 && (u.extra.tubes ?? 0) > 0);
+      if (!boat || sim.over) continue;
+      tried++;
+      const spy = sim as unknown as Spy, set = spy.setDive.bind(sim), say = spy.sayDive.bind(sim);
+      let under = true;
+      spy.setDive = (b, dive, why, ...more) => {
+        // (while the order stands she is sent on up to the surface only from periscope depth, with no escort holding her
+        // and none in her sight: never on her way up from below, round 5's replay, n3s3 Boat 1 at 68 m)
+        if (b.u.id === boat.id && under && b.order === 'attack' && dive === 'surfaced' && why === 'attack') {
+          ups++; expect(spy.firstHeard(b)).toBeLessThan(0); expect(spy.seesEscort(b)).toBe(false); expect(Math.abs(b.keel - CONVOY.boat.scope)).toBeLessThanOrEqual(0.5);
+        }
+        return set(b, dive, why, ...more);
+      };
+      // (her stop at periscope depth is said once she is there, with its reason as it is then)
+      spy.sayDive = (b) => {
+        if (b.u.id === boat.id && b.saying?.cut && b.saying.why === 'attack') {
+          expect(b.keel).toBe(CONVOY.boat.scope);
+          if (b.saying.reason === 'an escort holds her') expect(spy.firstHeard(b)).toBeGreaterThanOrEqual(0);
+          else { expect(b.saying.reason).toBe('an escort is in her sight'); expect(spy.seesEscort(b)).toBe(true); }
+        }
+        say(b);
+      };
+      sim.command({ do: 'convoy:attack', units: [boat.id], under: false }, 'att');
+      const { told } = run(sim, 'att', (w) => { const u = w.units.find((x) => x.id === boat.id); if (!u || u.extra.order !== 'attack' || u.state !== 'steady') under = false; return !under; }, 3600);
+      // (her first line: stopped at periscope depth, or up to the surface where nothing held her or was in her sight when she got there)
+      const first = said(told, 'sea:dive', boat.id).find((e) => e.text);
+      if (first && first.text !== `${boat.name} surfaces.`) { expect(first.text).toMatch(new RegExp(`^${boat.name} comes up only to periscope depth: an escort (holds her|is in her sight)\\.$`)); cut++; }
+    }
+    expect(tried).toBeGreaterThan(1);
+    expect(cut).toBeGreaterThan(0);
+    expect(ups).toBeGreaterThan(0);
+  }, 300_000);
+
+  it('(D) given Attack at 1:00, a deep boat goes on up to the surface only from periscope depth, and her panel never says an escort forced her down', () => {
+    // (every boat deep at 1:00 on nights 1 to 3, round 5's replay: n3s3 Boat 1 sent straight up from 68 m as the hold lapsed)
+    let deep = 0, stopped = 0;
+    for (const night of [1, 2, 3]) for (const seed of [1, 3, 7]) {
+      const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[night], seed, 'att'));
+      const { v } = run(sim, 'att', () => false, 3600);
+      const ids = new Set(v.units.filter((u) => u.kind === 'ss' && u.state === 'steady' && (u.extra.keel ?? 0) > CONVOY.boat.scope + 0.5 && u.extra.doing !== 'up' && u.extra.doing !== 'gun' && (u.extra.tubes ?? 0) > 0).map((u) => u.id));
+      if (sim.over || !ids.size) continue;
+      deep += ids.size;
+      const spy = sim as unknown as Spy, set = spy.setDive.bind(sim);
+      let ordering = true;
+      spy.setDive = (b, dive, why, ...more) => {
+        // (the order itself may send one nothing holds or is in sight of straight up; after it, only from periscope depth)
+        if (!ordering && ids.has(b.u.id) && b.order === 'attack' && dive === 'surfaced' && why === 'attack' && b.dive === 'periscope') expect(b.keel).toBeLessThanOrEqual(CONVOY.boat.scope + 0.5);
+        return set(b, dive, why, ...more);
+      };
+      sim.command({ do: 'convoy:attack', units: [...ids], under: false }, 'att');
+      ordering = false;
+      run(sim, 'att', (w) => {
+        for (const u of w.units) if (ids.has(u.id) && u.extra.stopped) { stopped++; expect(u.extra.dive).toBe('periscope'); expect(u.extra.order).toBe('attack'); }
+        return false;
+      }, 1800);
+    }
+    expect(deep).toBeGreaterThan(3);
+    expect(stopped).toBeGreaterThan(0);
+  }, 300_000);
+
+  it('(C) Attack submerged to a boat on her way up from below periscope depth stops her there, to come up only by the order\'s own rule', () => {
+    // (round 5's replay, n1s11 Boat 1 at 62 m: she went on up with no reason said)
+    let met = 0;
+    for (const night of [1, 2, 3]) for (const seed of [1, 3, 7, 11]) {
+      const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[night], seed, 'att'));
+      const { v } = run(sim, 'att', (w) => w.units.some((u) => u.kind === 'ss' && u.state === 'steady' && u.extra.dive === 'surfaced' && (u.extra.keel ?? 0) > CONVOY.boat.scope + 2 && (u.extra.tubes ?? 0) > 0 && u.extra.doing !== 'up' && u.extra.doing !== 'gun'), 8 * 3600);
+      const boat = v.units.find((u) => u.kind === 'ss' && u.state === 'steady' && u.extra.dive === 'surfaced' && (u.extra.keel ?? 0) > CONVOY.boat.scope + 2 && (u.extra.tubes ?? 0) > 0 && u.extra.doing !== 'up' && u.extra.doing !== 'gun');
+      if (!boat || sim.over) continue;
+      met++;
+      sim.command({ do: 'convoy:attack', units: [boat.id], under: true }, 'att');
+      expect((sim as unknown as { boatOf: Map<number, SpyBoat> }).boatOf.get(boat.id)!.dive).toBe('periscope');
+      // (said once she is there, and any surfacing after it said with its reason)
+      const { told } = run(sim, 'att', (w) => (w.units.find((u) => u.id === boat.id)?.extra.order ?? null) !== 'under', 900);
+      const lines = said(told, 'sea:dive', boat.id).filter((e) => e.text).map((e) => e.text);
+      if (lines.length) expect(lines[0]).toBe(`${boat.name} comes up to periscope depth.`);
+      for (const l of lines) if (/ surfaces/.test(l)) expect(l).toMatch(/ surfaces: .+\.$/);
+    }
+    expect(met).toBeGreaterThan(2);
+  }, 300_000);
 });

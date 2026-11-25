@@ -16,14 +16,15 @@
 // only after a quiet spell, no boat held for QUIET; in a running fight it is a line in the log and a banner. So does
 // one of the player's escorts on a hunt finding her quarry again (never a new contact, however long she was lost), or
 // first attacking her on that hunt. Such a slow-down follows its boat: it lasts while she is held or her last-seen
-// mark is up, and a minute more, but never past SLOW_MOST from its start, and each order the player gives in it adds
-// SLOW_MORE; a new cause on her after that brings a new one. The convoy under attack (the night's first salvo) drops
-// the clock to x10 on both sides until that salvo has run; each later salvo's hits drop it to x60 for a minute, and on
-// the pack's side each later salvo of the player's own boats from the moment she fires until it has run. A boat of the
-// pack's player first found or first attacked, forced up or sunk drops it to x10 for a minute. Then the clock goes back
-// to the speed the player last chose (a cause slows it only where it is slower than his speed). A speed key ends a
-// slow-down at once; pausing does not. While the staff steer his side the player only watches, and nothing slows the
-// clock.
+// mark is up, and a minute more, but never past SLOW_MOST from its start (its banner says so), and each order the
+// player gives in it adds SLOW_MORE; a new cause on her after that brings a new one, and a hunter's finding her again
+// brings one of its own at once. A new contact is never left out of the banners (contactBanner), not even at dawn
+// (atDawn). The convoy under attack (the night's first salvo) drops the clock to x10 on both sides until that salvo
+// has run; each later salvo's hits drop it to x60 for a minute, and on the pack's side each later salvo of the
+// player's own boats from the moment she fires until it has run. A boat of the pack's player first found or first
+// attacked, forced up or sunk drops it to x10 for a minute. Then the clock goes back to the speed the player last
+// chose (a cause slows it only where it is slower than his speed). A speed key ends a slow-down at once; pausing does
+// not. While the staff steer his side the player only watches, and nothing slows the clock.
 
 import { againstStaff, foughtOf, ranksOf, restFrom, staffNights, type StaffNights } from '../convoy/calibrate';
 import { CONVOY_BATTLE } from '../../campaign/navy';
@@ -120,8 +121,16 @@ interface State {
   charges: Charge[];
   said: Said[];
   mode: 'starshell' | 'gun' | null;
-  /** The banner on the sea: its words, and until when; the new contacts of a running fight it names, where it is theirs. */
-  tag: { text: string; until: number; contacts?: string[] } | null;
+  /**
+   * The banner on the sea: its words, until when, and when it went up; where it is the new contacts' of a running fight,
+   * each contact it counts and when each joined it; where it is a slow-down's for a new contact, that contact; 'clock',
+   * where it only tells the clock given back (the clock note says so too).
+   */
+  tag: { text: string; until: number; at?: number; contacts?: string[]; joined?: number[]; contact?: string; clock?: boolean } | null;
+  /** The new contacts waiting behind a banner of news (a slow-down, a hit), to be told in a banner of their own once it has gone. */
+  queued: string[];
+  /** The night over: the real millisecond the after card waits for, while new contacts not yet read are told (atDawn). */
+  dawnAt: number | null;
   staff: StaffNights | null;
   /** The hand-over asked (the question is up), or under way (the staff are fighting out the rest). */
   asking: boolean;
@@ -148,7 +157,7 @@ interface State {
 const S: State = {
   screen: 'choose', card: 0, side: 'def', seed: 1, t: null, sim: null, units: [], zones: [], lastSeen: [], pack: 0, names: new Map(), picked: new Set(),
   speed: 60, chosen: 60, paused: false, slows: [], heldAt: -Infinity, spell: -Infinity, foundLine: null, owed: 0, cam: { x: 0, y: 0, scale: 0.06, follow: 'convoy', fit: true }, tracks: [], charges: [], said: [],
-  mode: null, tag: null, staff: null, asking: false, handing: false, rush: true, alarmed: new Set(), firstSalvo: null, dropped: new Map(), reins: [], drag: null, sideOpen: true, keyOn: null, panelAt: 0, panelKey: '', detailWas: '',
+  mode: null, tag: null, queued: [], dawnAt: null, staff: null, asking: false, handing: false, rush: true, alarmed: new Set(), firstSalvo: null, dropped: new Map(), reins: [], drag: null, sideOpen: true, keyOn: null, panelAt: 0, panelKey: '', detailWas: '',
 };
 
 let app: HTMLElement;
@@ -210,7 +219,7 @@ function begin(seed: number): void {
   S.speed = 60;
   if (S.keyOn === null) S.keyOn = true;
   S.panelKey = ''; S.detailWas = ''; barWas = '';
-  S.tag = { text: 'DUSK · RUNNING ×60 · THE CLOCK SLOWS TO ×10 AT THE FIRST CONTACT', until: performance.now() + 5000 };
+  S.tag = { text: 'DUSK · RUNNING ×60 · THE CLOCK SLOWS TO ×10 AT THE FIRST CONTACT', until: performance.now() + 5000, clock: true }; S.queued = []; S.dawnAt = null;
   S.screen = 'night';
   const we = S.side === 'def' ? 'escorts' : 'pack';
   app.innerHTML = `<div class="tc convoy night">
@@ -272,7 +281,7 @@ function begin(seed: number): void {
     steer(!s.ai[S.side]);
     S.said.push({ t: s.t, text: s.ai[S.side] ? `The staff steer your ${we}. You can take it back at any time.` : `You take back command of your ${we}.`, tone: '' });
     // (watching, the clock keeps the player's speed: a slow-down in force ends, and the banner of what slows it goes)
-    if (s.ai[S.side]) { S.slows = []; S.tag = null; }
+    if (s.ai[S.side]) { S.slows = []; S.tag = null; S.queued = []; }
     clock();
     paintOrders(true); paintBar();
   });
@@ -327,50 +336,118 @@ function clock(): void { S.speed = runSpeed(); paintClock(); }
 
 /** A speed key: the player's choice from now on. It ends the slow-downs in force (a new cause brings a new one); the first contact's at dusk stays armed. */
 function setSpeed(v: number): void {
-  S.paused = false; S.chosen = v; S.slows = []; S.tag = null;
+  S.paused = false; S.chosen = v; S.slows = []; dropTag();
   clock();
 }
 
 /** Pause, or run on: running on keeps the slow-downs still in force, and the first contact's at dusk. */
-function togglePause(): void { S.paused = !S.paused; S.tag = null; clock(); }
+function togglePause(): void { S.paused = !S.paused; dropTag(); clock(); }
 
-/** The banner on the sea, for a few seconds. */
-function banner(text: string, ms = 4500): void { S.tag = { text, until: performance.now() + ms }; }
+/** A speed key takes down the banner of a slow-down it ended, never one of new contacts (a contact it told before it could be read comes back in one). */
+const dropTag = (): void => { if (S.tag?.contacts) return; S.queued.unshift(...unread(S.tag, performance.now())); S.tag = null; };
+
+/** Real milliseconds a banner stays up, and a banner of new contacts from when it first went up (later ones join it, never put it off). */
+const TAG_MS = 4500;
+/** Real milliseconds a new contact must have been told in a banner, a third of its time, before a banner of news may take its place for good (else the contact comes back after it), or dawn end the night. */
+const TAG_SEEN = TAG_MS / 3;
 
 /**
- * A new contact in a running fight (the rules owner's (a): a line in the log and a banner, no slow-down). While such a
- * banner is up the next joins it rather than replacing it, so that at speed none flickers past unread: 'A NEW CONTACT ·
- * ESCORT 3 HAS BOAT 1', then '2 NEW CONTACTS · ESCORT 3 HAS BOAT 1 · ESCORT 5 HAS BOAT 2' (the last two named, the
- * rest in the log). A banner of the clock's own (a slow-down, or the clock given back) is never covered by one.
+ * The new contacts a banner told that cannot have been read yet, each told in it less than TAG_SEEN: those of a banner of
+ * new contacts that joined it that lately (one that joined it a moment ago, though it has been up long), a slow-down's
+ * one while it is that young.
+ */
+const unread = (up: State['tag'], now: number): string[] => !up || up.until <= now ? []
+  : up.contacts ? up.contacts.filter((_, i) => now - (up.joined?.[i] ?? up.at ?? -Infinity) < TAG_SEEN)
+  : up.contact && now - (up.at ?? -Infinity) < TAG_SEEN ? [up.contact] : [];
+
+/**
+ * The banner on the sea, for a few seconds. A banner of news (a slow-down, a hit) takes the place of any, and the new
+ * contacts of a banner it covers before they could be read come back after it in one of their own (nextTag); one that
+ * only tells the clock given back ('back') never covers a banner of new contacts, and the clock note says it all the same.
+ */
+function banner(text: string, ms = TAG_MS, back = false): void {
+  const now = performance.now(), up = S.tag && S.tag.until > now ? S.tag : null;
+  if (up?.contacts && back) return;
+  S.queued.unshift(...unread(up, now));
+  S.tag = { text, until: now + ms, at: now, ...(back ? { clock: true } : {}) };
+}
+
+/** A banner of new contacts, up from now: every one counted, the last two told named, each once ('2 NEW CONTACTS · ESCORT 3 HAS BOAT 1 · ESCORT 5 HAS BOAT 2'). */
+const contactsText = (all: string[]): string => {
+  const names = all.filter((c, i) => all.lastIndexOf(c) === i);
+  return all.length === 1 ? `A NEW CONTACT · ${all[0]}` : `${all.length} NEW CONTACTS · ${names.slice(-2).join(' · ')}`;
+};
+const contactsTag = (all: string[], now: number): State['tag'] => ({ text: contactsText(all), until: now + TAG_MS, contacts: all, joined: all.map(() => now), at: now });
+
+/**
+ * A new contact in a running fight (the rules owner's (a): a line in the log and a banner, no slow-down), never left
+ * out of the banners. One takes the place of a banner of the clock given back ('BACK TO ×300'); behind a banner of news
+ * it waits for that to go (nextTag). While a banner of new contacts is up the next joins it rather than replacing it, so
+ * that at speed none flickers past unread: 'A NEW CONTACT · ESCORT 3 HAS BOAT 1', then '2 NEW CONTACTS · ESCORT 3 HAS
+ * BOAT 1 · ESCORT 5 HAS BOAT 2' (every contact counted, the last two named, the rest in the log). It goes TAG_MS after
+ * it first went up, however many join it; a contact after that, or in its last TAG_SEEN, has a banner of its own.
  */
 function contactBanner(what: string): void {
   const now = performance.now(), up = S.tag && S.tag.until > now ? S.tag : null;
-  if (up && !up.contacts) return;
-  const all = [...(up?.contacts ?? []).filter((c) => c !== what), what];
-  S.tag = { text: all.length === 1 ? `A NEW CONTACT · ${what}` : `${all.length} NEW CONTACTS · ${all.slice(-2).join(' · ')}`, until: now + 4500, contacts: all };
+  if (up && !up.contacts && !up.clock) { S.queued.push(what); return; }
+  // (one in the last TAG_SEEN of a banner of new contacts could not be read in it: it waits for a banner of its own)
+  if (up?.contacts) { if (up.until - now < TAG_SEEN) S.queued.push(what); else { up.contacts.push(what); up.joined?.push(now); up.text = contactsText(up.contacts); } return; }
+  S.tag = contactsTag([...S.queued, what], now);
+  S.queued = [];
+}
+
+/** Each frame: the new contacts kept waiting behind a banner of news come up once it has gone, in one banner of their own. */
+function nextTag(): void {
+  const now = performance.now();
+  if (!S.queued.length || (S.tag && S.tag.until > now && !S.tag.clock)) return;
+  S.tag = contactsTag(S.queued, now);
+  S.queued = [];
 }
 
 /**
- * A cause to slow the clock. One that is the same as a slow-down in force (her boat's, or the same salvo's hits) keeps
- * that one, to the later end; else it is added. Where the clock runs below the player's speed for it, the banner says
- * why and for how long; 'news' is said in a banner all the same (a new contact in a running fight, the rules owner's (a)).
+ * The night over: the new contacts not yet told long enough to be read (waiting behind a banner, or told less than
+ * TAG_SEEN ago) are put up in a banner of their own, and the sea stays on screen TAG_SEEN for it before the after card;
+ * none is left out of the banners at dawn. Whether the after card may come now.
  */
-function slowDown(w: Slow, news = false): void {
-  const same = S.slows.find((o) => (w.on !== undefined && o.on === w.on) || (w.key !== undefined && o.key === w.key));
+function atDawn(): boolean {
+  const now = performance.now();
+  if (S.dawnAt === null) {
+    const up = S.tag && S.tag.until > now ? S.tag : null, owed = [...unread(up, now), ...S.queued];
+    S.queued = [];
+    S.dawnAt = owed.length ? now + TAG_SEEN : now;
+    if (owed.length) S.tag = contactsTag(owed, now);
+  }
+  return now >= S.dawnAt;
+}
+
+/** Minutes in words: 'a minute', '5 minutes'. */
+const minutes = (m: number): string => m <= 1 ? 'a minute' : `${m} minutes`;
+
+/**
+ * A cause to slow the clock. One that is the same as a slow-down in force (her boat's, or the same salvo's hits) keeps
+ * that one, to the later end, unless it is one of its own ('alone'); else it is added. Where the clock runs below the
+ * player's speed for it, the banner says why and for how long (one that follows a boat, the most it may last from now);
+ * 'news' is said in a banner all the same (a new contact in a running fight, the rules owner's (a)).
+ */
+function slowDown(w: Slow, news = false, alone = false): void {
+  const same = alone ? undefined : S.slows.filter((o) => (w.on !== undefined && o.on === w.on) || (w.key !== undefined && o.key === w.key)).sort((p, q) => q.most - p.most)[0];
   if (same) { same.until = Math.max(same.until, w.until); same.why = w.why; } else S.slows.push(w);
-  const v = runSpeed();
-  if (v < S.chosen && Math.min(w.to, S.chosen) === v) banner(`${w.why} · RUNNING ×${v} ${w.how}, THEN ×${S.chosen}`);
+  const v = runSpeed(), held = same ?? w;
+  const most = held.on === undefined ? '' : `, ${minutes(Math.ceil((held.most - S.sim!.t) / 60)).toUpperCase()} AT MOST`;
+  if (v < S.chosen && Math.min(w.to, S.chosen) === v) banner(`${w.why} · RUNNING ×${v} ${held.how}${most}, THEN ×${S.chosen}`);
   else if (news) banner(w.why);
   clock();
 }
 
 /**
  * A slow-down to x10 that follows a boat (the escorts' side, the rules owner's (b)): while she is held or her mark is up,
- * and a minute more, at most SLOW_MOST from its cause unless orders put that off. Her cause again while it is in force
- * keeps it as it is; a new cause after it has run to its most brings a new one.
+ * and a minute more, at most SLOW_MOST from its cause unless orders put that off; its banner says that most
+ * ('RUNNING ×10 WHILE BOAT 1 IS HELD OR HER MARK IS UP, 5 MINUTES AT MOST, THEN ×300'). Her cause again while it is in
+ * force keeps it as it is; a new cause after it has run to its most brings a new one, and so does a hunter's finding
+ * her own quarry again ('alone', the rules owner's (c): as in (b), with a most of its own, though another is in force).
  */
-function slowBoat(why: string, on: number, t: number, news = true): void {
-  slowDown({ to: 10, why, how: `WHILE ${(nameOf(on) || 'the boat').toUpperCase()} IS HELD OR HER MARK IS UP`, until: t + SLOW_AFTER, most: t + SLOW_MOST, on }, news);
+function slowBoat(why: string, on: number, t: number, news = true, alone = false): void {
+  slowDown({ to: 10, why, how: `WHILE ${(nameOf(on) || 'the boat').toUpperCase()} IS HELD OR HER MARK IS UP`, until: t + SLOW_AFTER, most: t + SLOW_MOST, on }, news, alone);
 }
 
 /** A slow-down for a moment of the night: x10 (or 'to') for a minute. */
@@ -394,7 +471,7 @@ function easeOff(): void {
   for (const w of S.slows) if (w.on !== undefined && (heldNow(w.on) || markedNow(w.on))) w.until = Math.max(w.until, now + SLOW_AFTER);
   S.slows = S.slows.filter((w) => now < Math.min(w.until, w.most));
   const v = runSpeed();
-  if (!S.paused && v > was) banner(v === S.chosen ? `BACK TO ×${v}` : `NOW ×${v}, THEN ×${S.chosen}`, 2500);
+  if (!S.paused && v > was) banner(v === S.chosen ? `BACK TO ×${v}` : `NOW ×${v}, THEN ×${S.chosen}`, 2500, true);
   clock();
 }
 
@@ -457,7 +534,7 @@ function alarm(e: FieldEvent, x: Record<string, unknown>, mine: boolean, u: Conv
     // own hunt it slows the clock as in (b), however long she had lost her.
     const on = x.on as number, b = before ?? u;
     if (b && HUNTS.has(b.extra.doing as string) && (b.extra.prey === on || b.extra.chase === on)) {
-      if (ownPiece(b)) slowBoat(`${who} HAS FOUND ${name(on)} AGAIN`, on, t);
+      if (ownPiece(b)) slowBoat(`${who} HAS FOUND ${name(on)} AGAIN`, on, t, true, true);
       return;
     }
     // (a) A new contact (no escort held her for two minutes): the clock slows for it only after a quiet spell, no boat
@@ -467,7 +544,9 @@ function alarm(e: FieldEvent, x: Record<string, unknown>, mine: boolean, u: Conv
     S.rush = false;
     const why = `${first ? 'FIRST CONTACT' : 'A NEW CONTACT'} · ${who} HAS ${name(on)}`;
     // (two new contacts in the second that broke the quiet spell both broke it: each slows the clock for its boat)
-    if (t - S.heldAt >= QUIET || S.spell === t) { S.spell = t; slowBoat(why, on, t); } else contactBanner(`${who} HAS ${name(on)}`);
+    // (the slow-down's banner tells the contact: covered before it could be read, it comes back in a banner of its own)
+    if (t - S.heldAt >= QUIET || S.spell === t) { S.spell = t; slowBoat(why, on, t); if (S.tag?.text.startsWith(why)) S.tag.contact = `${who} HAS ${name(on)}`; }
+    else contactBanner(`${who} HAS ${name(on)}`);
     return;
   }
   // One of the player's escorts dropping her first charges of a hunt: x10 as in (b), once a hunt.
@@ -493,7 +572,8 @@ function take(): void {
   for (const e of v.events) note(e, at, before);
   // (a boat held now keeps the spell from being quiet: a new contact in it is the fight's, not a fresh one)
   if (S.side === 'def' && S.units.some((u) => u.side === 'def' && u.kind === 'dd' && u.state !== 'gone' && !!u.extra.echo)) S.heldAt = Math.max(S.heldAt, s.worked);
-  if (v.over && S.screen === 'night') after();
+  // (handed to the staff, the player has left the night: the after card comes at once)
+  if (v.over && S.screen === 'night' && (S.handing || atDawn())) after();
 }
 
 /** How a line reads for the player: his losses bad news, the other side's good, an order refused or overridden a warning. */
@@ -525,7 +605,7 @@ function note(e: FieldEvent, at: Map<number, ConvoyUnit>, before: Map<number, Co
     const prev = S.said[S.said.length - 1];
     if (prev?.gunners && prev.t === e.t) { prev.gunners.push(u.name); prev.text = `The gunners of ${namesOf(prev.gunners)} open fire.`; }
     else S.said.push({ t: e.t, text: e.text, tone: '', gunners: [u.name] });
-  } else if (e.text && e.what === 'sea:dive' && found && found.on === e.unit && x.reason === 'an escort has found her' && e.t - found.said.t <= 60) {
+  } else if (e.text && (e.what === 'sea:dive' || e.what === 'sea:depth') && found && found.on === e.unit && x.reason === 'an escort has found her' && e.t - found.said.t <= 60) {
     // (the found boat's own line, 'Boat 1 dives: an escort has found her.', takes the place of the page's first-contact
     // line in the log: one line for one event, the first contact still told at once)
     found.said.text = e.text; found.said.t = e.t; S.foundLine = null;
@@ -547,6 +627,7 @@ function frame(nowMs: number): void {
   last = nowMs;
   const s = S.sim;
   easeOff();
+  nextTag();
   // (the dusk view widens to show every piece of the player's as it comes up, until the first contact or until he moves it)
   if (S.cam.fit) { if (S.rush) fit(); else S.cam.fit = false; }
   if (!s.over && S.speed > 0 && !S.asking && !S.handing) {
@@ -667,7 +748,7 @@ function detailOf(ps: ConvoyUnit[], staff: boolean): string {
     // (true on every night: what a captain left to himself does when found, and what an Attack order makes of it)
     const radar = !!S.t!.place.kit[S.t!.def.nat]?.radar;
     // (the sim's own rules, round 3 (ii) and (iii): a boat found and not hunted ducks to periscope depth and keeps on)
-    const pressed = ' An Attack order makes a captain stay up while she is only held; forced down by an escort closing, she keeps at periscope depth to attack submerged if the convoy comes within reach, and comes up to press in as soon as no escort is in her sight.';
+    const pressed = ' An Attack order makes a captain stay up while she is only held; forced down by an escort closing, she keeps at periscope depth to attack submerged if the convoy comes within reach, and comes up to press in as soon as no escort holds her and none is in her sight. Ordered up from deep while an escort holds her or is in her sight, she comes up only to periscope depth and does the same.';
     const habit = (radar ? ' Left to themselves, your captains close the convoy, fire and turn away to reload. The escorts\' radar finds a boat on the surface far out: a boat found dives to periscope depth and keeps closing at her slower dived speed, and comes up again once no escort holds her and none is in her sight (one that cannot get in submerged first draws off out of the escorts\' sight); she goes deep only when an escort hunts her, and then lies quiet a long while.'
       : ' Left to themselves, your captains close the convoy, fire and turn away to reload; a boat an escort finds dives to periscope depth and keeps closing, and goes deep only when an escort hunts her.') + pressed;
     return `<p class="tc-muted">${where}${more}${habit} Pick one up to give her orders.</p>`;
@@ -713,9 +794,13 @@ function pieceWords(u: ConvoyUnit): string {
       : x.doing === 'gun' ? (x.doomed ? 'Forced to the surface too badly hurt to dive again; her crew fight her deck gun until they must abandon her' : 'Forced to the surface and fighting her deck gun while her damage is repaired') : '';
     const aim = nameOf(x.aim as number | undefined);
     // (the rules owner, round 3, (iii): an Attack order forced down by an escort closing keeps her at periscope depth, to
-    // attack dived where the convoy comes within reach, and up again as soon as no escort is in her sight)
+    // attack dived where the convoy comes within reach, and up again as soon as no escort holds her and none is in her
+    // sight (turning away to reload under an order to fire her gun, as soon as none is in her sight); round 5, D: one
+    // whose rise to attack on the surface stopped at periscope depth for an escort does the same, and is said why she
+    // stopped, never 'forced down')
+    const stopped = x.stopped === 'an escort holds her' ? 'an escort held her' : x.stopped === 'an escort is in her sight' ? 'she had an escort in her sight' : '';
     const kept = (x.order === 'attack' || x.order === 'gun') && x.dive === 'periscope' && (x.doing === 'close' || x.doing === 'away')
-      ? ` An escort closing forced her down: she keeps at periscope depth${x.order === 'attack' ? ', attacks submerged if the convoy comes within her reach,' : ''} and comes up to ${x.order === 'attack' ? 'press in' : 'fire her gun'} as soon as no escort is in her sight.` : '';
+      ? ` ${stopped ? `She comes up only to periscope depth, since ${stopped}: she keeps there` : 'An escort closing forced her down: she keeps at periscope depth'}${x.order === 'attack' ? ', attacks submerged if the convoy comes within her reach,' : ''} and comes up to ${x.order === 'attack' ? 'press in' : 'fire her gun'} as soon as ${x.doing === 'close' ? 'no escort holds her and none is in her sight' : 'no escort is in her sight'}.` : '';
     const ord = (x.order === 'attack' ? `Ordered to attack${aim ? ` ${aim}` : ''} on the surface.` : x.order === 'under' ? `Ordered to attack${aim ? ` ${aim}` : ''} submerged.`
       : x.order === 'gun' ? `Ordered to fire her deck gun${aim ? ` at ${aim}` : ''}.` : x.order === 'dive' ? 'Ordered to periscope depth.' : x.order === 'deep' ? 'Ordered deep.'
       : x.order === 'surface' ? 'Ordered to stay on the surface.' : x.order === 'evade' ? 'Ordered to evade.' : '') + kept;
@@ -891,7 +976,7 @@ function after(): void {
     if (S.screen !== 'after' || S.sim !== s) return;
     const staff = S.staff ?? staffNights(t, STAFF_NIGHTS);
     const el = app.querySelector('[data-verdict]'), camp = app.querySelector('[data-camp]');
-    if (el) el.innerHTML = `<b>${esc(rankWords(t, x, staff, cmd, leanOf(placeOf(t, x, staff)), over.winner))}</b>`;
+    if (el) el.innerHTML = `<b>${esc(rankWords(t, x, staff, cmd, leanOf(t, x, staff), over.winner))}</b>`;
     if (camp) camp.textContent = campaignWords(t, x, staff);
   }, 30));
 }
@@ -918,8 +1003,17 @@ function placeOf(t: ConvoyTicket, x: ConvoyOverExtra, staff: StaffNights): numbe
   return (foughtOf(t, ranksOf(t, x.counts, staff)).swing - low) / Math.max(1e-6, high - low);
 }
 
-/** The side a place favours: the pack's at 0.6 or more, the escorts' at 0.4 or less (the campaign line's better and worse nights), else neither. */
-const leanOf = (place: number): Side | null => place >= 0.6 ? 'att' : place <= 0.4 ? 'def' : null;
+/**
+ * The side the night favours by the ships sunk (the campaign line's better and worse nights): the pack's where its place
+ * is 0.6 or more and it sank more ships than at least half the staff's nights did, the escorts' where its place is 0.4
+ * or less and it sank fewer than at least half did, else neither. A tie drawn by lot may place a night high among the
+ * staff's nights it ties, but a night that sank no more ships than most of them is never one of the better ones for the
+ * pack, nor one that sank no fewer one of the better ones for the escorts.
+ */
+function leanOf(t: ConvoyTicket, x: ConvoyOverExtra, staff: StaffNights): Side | null {
+  const place = placeOf(t, x, staff), a = againstStaff(t, x.counts, staff), half = a.n / 2;
+  return place >= 0.6 && a.mv.less >= half ? 'att' : place <= 0.4 && a.mv.more >= half ? 'def' : null;
+}
 
 /**
  * The night against the staff's own nights at it, in true counts: 'Your pack sank more ships than the staff's pack did
@@ -962,23 +1056,27 @@ function rankWords(t: ConvoyTicket, x: ConvoyOverExtra, staff: StaffNights, cmd:
 /**
  * What a campaign would make of the night, in plain words: what the month would book by the rules (calibrate.ts
  * foughtOf on the night's ranks, unchanged) and so where the night falls among the staff's nights by the ships sunk,
- * which is what sets the tonnage booked: the share of the usual tonnage, with the night's ties drawn by lot said so,
- * and the boats and escorts lost booked the same way, by their own counts, where the month expects any.
+ * which is what sets the tonnage booked: the share of the usual tonnage, and the boats and escorts lost booked the same
+ * way, by their own counts, where the month expects any. Where staff nights sank as many ships as this one, it says so,
+ * and that the lot placed it among them, high or low (words only: the booking is the ranks' own).
  */
 function campaignWords(t: ConvoyTicket, x: ConvoyOverExtra, staff: StaffNights): string {
   const a = againstStaff(t, x.counts, staff), n = Math.max(1, a.n);
-  const fought = foughtOf(t, ranksOf(t, x.counts, staff));
-  const pct = Math.round(fought.swing * 100);
-  // (the place is the booked swing's own: the merchants' rank, 0 to 1, as it lies between the swing's low and high)
+  const ranks = ranksOf(t, x.counts, staff), fought = foughtOf(t, ranks);
   const { low, high } = CONVOY_BATTLE.swing;
-  const rank = (fought.swing - low) / Math.max(1e-6, high - low), good = S.side === 'att' ? rank : 1 - rank;
+  // (in whole per cent, but never rounded to the high or the low that only a night past every staff night's books: a
+  // night that ties the best of them at 119.6% reads '119.6%', not '120%')
+  const raw = fought.swing * 100, hi = high * 100, lo = low * 100, tenth = Math.round(raw * 10) / 10;
+  const near = (raw < hi && Math.round(raw) >= hi) || (raw > lo && Math.round(raw) <= lo);
+  const pct = !near ? String(Math.round(raw)) : (tenth >= hi ? Math.floor(raw * 10) / 10 : tenth <= lo ? Math.ceil(raw * 10) / 10 : tenth).toFixed(1);
+  // (the place is the booked swing's own, held to the counts: never one of the better nights for a side whose count most of the staff's nights matched or beat)
+  const lean = leanOf(t, x, staff);
   const who = S.side === 'att' ? 'the pack, by the ships it sank' : 'the escorts, by the ships they lost';
-  const place = good >= 0.6 ? `one of the better nights the staff could have had for ${who}` : good <= 0.4 ? `one of the worse nights the staff could have had for ${who}` : `an ordinary night for ${who}, about as the staff would have fought it`;
-  const tons = ` The month would book ${pct}% of the tonnage a convoy usually loses (${Math.round(high * 100)}% after a night that sinks more ships than every one of the staff's nights, ${Math.round(low * 100)}% after one that sinks fewer than every one).`;
-  const sunk = S.side === 'att' ? 'sank as many ships as' : 'lost as many ships as';
-  const tie = a.mv.same === n ? ` This night ${sunk} every one of the staff's ${n} nights, so where it falls among them, and so that figure, was drawn by lot.`
-    : a.mv.same === 1 ? ` It ${sunk} one of the staff's nights; which of the two ranks higher was drawn by lot.`
-    : a.mv.same > 1 ? ` It ${sunk} ${a.mv.same} of the staff's nights; where it falls among those ${a.mv.same} was drawn by lot.` : '';
+  const place = lean === S.side ? `one of the better nights the staff could have had for ${who}` : lean ? `one of the worse nights the staff could have had for ${who}` : `an ordinary night for ${who}, about as the staff would have fought it`;
+  const tons = `the month would book ${pct}% of the tonnage a convoy usually loses (${Math.round(high * 100)}% after a night that sinks more ships than every one of the staff's nights, ${Math.round(low * 100)}% after one that sinks fewer than every one).`;
+  // (tied: where the lot put the night among the staff's nights it ties, 0 to 1, from the rank it booked)
+  const fell = a.mv.same > 0 ? (ranks.mv * a.n - a.mv.less) / a.mv.same : 0;
+  const tie = a.mv.same > 0 ? ` ${S.side === 'att' ? 'The pack sank' : 'The escorts lost'} as many ships as ${a.mv.same === n ? 'every one' : a.mv.same === 1 ? 'one' : a.mv.same} of the staff's ${n} nights; the tie is settled by lot, and this time it fell ${fell >= 0.5 ? 'high' : 'low'}: ${tons}` : '';
   // Boats and escorts lost: booked at the lower or the higher of the two whole counts around what the month expects, by
   // the same ranks. A practice card expects none, so there is nothing to book.
   const booked = (side: Side): string => {
@@ -992,7 +1090,7 @@ function campaignWords(t: ConvoyTicket, x: ConvoyOverExtra, staff: StaffNights):
   const bits = [booked('att'), booked('def')].filter(Boolean);
   const lost = bits.length ? ` Its boats and escorts lost, placed the same way by their own counts, would book ${andOf(bits)}.`
     : ' Boats and escorts lost are booked the same way where the month expects some to be lost; a practice night has no month behind it, so it books none.';
-  return `In a campaign this night would count as ${place}:${tons.replace(/^ The/, ' the')}${tie}${lost}`;
+  return `In a campaign this night would count as ${place}${tie ? `.${tie}` : `: ${tons}`}${lost}`;
 }
 
 // ---- The sea ----------------------------------------------------------------------------------------------------------
