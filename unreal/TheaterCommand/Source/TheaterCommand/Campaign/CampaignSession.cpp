@@ -1570,7 +1570,7 @@ namespace
 	}
 }
 
-TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds, TArray<int32>* OutDanger, TMap<int32, int32>* OutFar, TArray<int32>* OutStanding, bool* OutSpent, TArray<int32>* OutComesOut)
+TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds, TArray<int32>* OutDanger, TMap<int32, int32>* OutFar, TArray<int32>* OutStanding, bool* OutSpent, TArray<int32>* OutComesOut, FString* OutStays)
 {
 	TArray<FReachRegion> Out;
 	if (OutSpent)
@@ -1580,6 +1580,10 @@ TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds, TArr
 	if (OutComesOut)
 	{
 		OutComesOut->Reset();
+	}
+	if (OutStays)
+	{
+		OutStays->Reset();
 	}
 	if (OutDanger)
 	{
@@ -1653,6 +1657,10 @@ TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds, TArr
 		{
 			OutComesOut->Add(FMath::RoundToInt32(Value->AsNumber()));
 		}
+	}
+	if (OutStays)
+	{
+		Object->TryGetStringField(TEXT("stays"), *OutStays); // (the 1.5.3 review: beside the army in the field, why one of the garrison stays inside)
 	}
 	return Out;
 }

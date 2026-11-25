@@ -1334,6 +1334,10 @@ private:
 	// (The 1.5.3 patch.) The corps of the hand inside a town that an order would bring out with a move to make, as the
 	// rules' reach names them: all of the garrison in hand or none, and never one that went in this month.
 	TArray<int32> HandComesOut;
+	// (The 1.5.3 review.) And, for a hand beside the army in the field, the rules' reason why the last of its corps inside a
+	// town that no order brings out with a move stays inside: RefreshOrders takes that corps out of the hand and says so.
+	FString HandStays;
+	int32 HandStaysDepth = 0; // (RefreshOrders looking again at the hand without it: the reason is said once, by the first look)
 	bool bMarchSlipDone = false; // (kept with the options) GOT IT has been pressed, or one march kept for a spent army
 	// (One voice after a press; the UI director's brief, 17 November.) An order has been given to the army in hand since
 	// it was picked up: the slip stays put away, and the tray's foot no longer speaks of next month.
@@ -1378,6 +1382,20 @@ private:
 	 * army in the field (bOk false otherwise). The march the card gives brings it out as it goes (CarryOutApproach).
 	 */
 	FApproachPlan GarrisonApproach(int32 RegionId) const;
+	/** (The 1.5.3 review; the playtest's find 17.) The rules' reason the corps of the hand inside a town take no ship (bySeaWhy); empty where none is in hand. */
+	FString GarrisonAboard() const;
+	/**
+	 * (The 1.5.3 review.) By sea, a hand of corps in the field and of the town's garrison: the sentence that names those
+	 * of the garrison, which stay in the town, and the rules' reason (GarrisonAboard). Empty for a hand that is all
+	 * garrison or has none of it.
+	 */
+	FString StaysAshore() const;
+	/**
+	 * (The 1.5.3 review; the playtest's find 14.) Beside the army in the field, the last corps of the hand inside a town
+	 * that no order would bring out with a move (not in HandComesOut): it would be left behind without a word.
+	 * INDEX_NONE where there is none, by sea or by rail, and while it is not the player's turn.
+	 */
+	int32 LeftInside() const;
 	/**
 	 * The march up to an enemy army that is not next door and the attack, planned as one order and shown before
 	 * anything is carried out. True where the card opened or the rules' sentence was said; false where the rules have

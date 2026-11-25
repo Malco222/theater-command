@@ -9,9 +9,10 @@
 // - 15: the garrison's card read "No moves left this month" although it can march: the view says the moves it has once out.
 // - 14: the reach names the corps of a garrison in hand that come out with an order, for a hand that has a field army too.
 // The two reviews of the patch: a refusal names the garrison only where taking the field is what stands in the way (a
-// garrison that could come out and is sent onto the enemy next door is answered as a field corps is); and the sentence
-// for one that went in this month is the rules' own (garrisonLine), so the corps' card, the province and both games say
-// the same.
+// garrison that could come out and is sent onto the enemy next door is answered as a field corps is); the sentence for
+// one that went in this month is the rules' own (garrisonLine), so the corps' card, the province and both games say
+// the same; and the reach says why a corps of the garrison beside the field army stays inside (`stays`), so that the
+// 3D game takes it out of the hand and says so, never leaving it behind without a word.
 import { describe, expect, it } from 'vitest';
 import { createGame, hostileUnits, relocate } from '../src/campaign/game';
 import { whyNotLand, whyNotShip } from '../src/campaign/navy';
@@ -31,10 +32,13 @@ interface Bridge {
   load(text: string): unknown;
   save(): { text: string };
   view(): { eve: boolean; turn: number; corps: Seen[] };
-  reach(ids: number[]): { regions: { id: number; attack: boolean }[]; spent: boolean; why: string; out: number[] };
+  reach(ids: number[]): { regions: { id: number; attack: boolean }[]; spent: boolean; why: string; out: number[]; stays: string };
   garrisonWhy(region: number): { why: string };
   move(ids: number[], to: number): { moved: { id: number; path: number[] }[]; note: string };
-  rail(ids: number[], to: number): { moved: unknown[]; said: string };
+  rail(ids: number[], to: number): { moved: { id: number }[]; said: string };
+  railReach(ids: number[]): { regions: number[] };
+  seaReach(ids: number[]): { ports: number[]; beaches: number[] };
+  ship(ids: number[], to: number): { moved: { id: number }[] };
   railTip(ids: number[], to: number): { no: string };
   approach(ids: number[], to: number): { ok: boolean; none: string; rows: Row[] };
   bySeaWhy(ids: number[], to: number): { why: string };
@@ -299,9 +303,9 @@ describe('find 14: a hand of a garrison and a field army', () => {
     const f = bring(g, eifel);
     TC.load(saveGame(g));
     const t0 = saved();
-    expect(TC.reach([c.id, f.id]).out).toEqual([c.id]);
-    expect(TC.reach([c.id]).out).toEqual([c.id]);
-    expect(TC.reach([f.id]).out).toEqual([]);
+    expect(TC.reach([c.id, f.id])).toMatchObject({ out: [c.id], stays: '' });
+    expect(TC.reach([c.id])).toMatchObject({ out: [c.id], stays: '' });
+    expect(TC.reach([f.id])).toMatchObject({ out: [], stays: '' });
     expect(saved()).toBe(t0);
     // The order goes, and the garrison goes with the field corps.
     const to = home(g, eifel);
@@ -310,10 +314,13 @@ describe('find 14: a hand of a garrison and a field army', () => {
       expect(corpsIn(saved(), id).reg).toBe(to);
       expect(corpsIn(saved(), id).town).toBeUndefined();
     }
-    // Gone in this month, it has no move once out: it is not named, and the order goes without it.
+    // Gone in this month, it has no move once out: it is not named, and the order goes without it. The reach says why
+    // it stays, in the rules' sentence, so that the 3D game takes it out of the hand and says so.
     c.town = g.turn;
     TC.load(saveGame(g));
-    expect(TC.reach([c.id, f.id])).toMatchObject({ out: [], why: '', spent: false });
+    const t1 = saved();
+    expect(TC.reach([c.id, f.id])).toMatchObject({ out: [], why: '', spent: false, stays: fresh(c, eifel) });
+    expect(saved()).toBe(t1);
   });
 
   it('two corps inside with room outside for one, beside a field corps: neither is named', () => {
@@ -325,7 +332,54 @@ describe('find 14: a hand of a garrison and a field army', () => {
     for (const x of fill) relocate(g, x, r);
     const f = r.units.find(goes)!;
     TC.load(saveGame(g));
-    expect(TC.reach([a.id, f.id]).out).toEqual([a.id]);
-    expect(TC.reach([a.id, b.id, f.id]).out).toEqual([]);
+    const t0 = saved();
+    expect(TC.reach([a.id, f.id])).toMatchObject({ out: [a.id], stays: '' });
+    expect(TC.reach([b.id, f.id])).toMatchObject({ out: [b.id], stays: '' });
+    // (The review.) Both clicked in: neither comes out, and the reach says why, in the rules' own words (whyNotTakeField),
+    // so that the 3D game takes the last of them out of the hand and the other comes out with the field corps.
+    expect(TC.reach([f.id, a.id, b.id])).toMatchObject({ out: [], stays: `There is no room in the field at ${r.name} for another corps.` });
+    expect(saved()).toBe(t0);
+    // The order would have gone without them: the field corps alone marches.
+    const to = home(g, r);
+    TC.move([f.id, a.id, b.id], to);
+    expect(corpsIn(saved(), a.id).town).toBe(EARLIER);
+    expect(corpsIn(saved(), b.id).town).toBe(EARLIER);
+    expect(corpsIn(saved(), f.id).reg).toBe(to);
+    // A hand that is all garrison is told by its own line (why), not by `stays`.
+    TC.load(saveGame(g));
+    expect(TC.reach([a.id, b.id]).stays).toBe('');
+  });
+});
+
+describe('the review: a garrison beside the field army sent by rail or by sea stays in its town, and is named', () => {
+  it('by rail: the field corps rides, and the answer names the garrison that stays, with the railway\'s reason, not that there is no room', () => {
+    const g = playing();
+    const saar = g.byName['Saar'];
+    const c = inside(g, saar, EARLIER);
+    const f = bring(g, saar);
+    f.ap = f.apMax;
+    TC.load(saveGame(g));
+    const to = TC.railReach([f.id]).regions.find((id) => id !== saar.id)!;
+    expect(to).toBeDefined();
+    const went = TC.rail([f.id, c.id], to);
+    expect(went.moved.map((m) => m.id)).toEqual([f.id]);
+    expect(went.said).toMatch(/ by rail: there this month, the whole month spent\. /);
+    expect(went.said).not.toMatch(/has no room for more/);
+    expect(went.said.endsWith(`${c.name} stays in the town. A garrison does not take the train: TAKE THE FIELD first.`)).toBe(true);
+    expect(corpsIn(saved(), c.id).town).toBe(EARLIER);
+  });
+
+  it('by sea: asked of its own province, the rules give a garrison its own reason (the 3D game\'s GarrisonAboard); a ship takes the field corps alone', () => {
+    const g = playing();
+    const hamburg = g.byName['Hamburg'];
+    const c = inside(g, hamburg, EARLIER);
+    const f = bring(g, hamburg);
+    f.ap = f.apMax;
+    TC.load(saveGame(g));
+    expect(TC.bySeaWhy([c.id], hamburg.id).why).toBe('A garrison does not take ship: TAKE THE FIELD first.');
+    const port = TC.seaReach([f.id, c.id]).ports[0];
+    expect(port).toBeDefined();
+    expect(TC.ship([f.id, c.id], port).moved.map((m) => m.id)).toEqual([f.id]);
+    expect(corpsIn(saved(), c.id)).toMatchObject({ reg: hamburg.id, town: EARLIER });
   });
 });

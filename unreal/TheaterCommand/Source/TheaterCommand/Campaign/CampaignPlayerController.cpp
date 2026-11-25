@@ -1310,8 +1310,14 @@ void ACampaignPlayerController::ToggleSea()
 	RefreshOrders();
 	if (bBySea)
 	{
-		Notify(Reach.Num() > 0 ? TEXT("By sea: ground tinted blue is a friendly port they can be shipped to, or an enemy coast they can land on. It takes the corps' whole month.")
-			: TEXT("None of these corps can go by sea this month: they must stand in a port, with their whole month before them, and there must be shipping."), 6.0);
+		// (The 1.5.3 review; the playtest's find 17.) A garrison in hand takes no ship. A hand that is all garrison is told
+		// the rules' reason (bySeaWhy), not that it must stand in a port with its whole month before it; one beside the
+		// army in the field is told which of its corps stay in the town.
+		const FString Aboard = GarrisonSays().IsEmpty() ? FString() : GarrisonAboard();
+		const FString Staying = Reach.Num() > 0 ? StaysAshore() : FString();
+		const FString Sea = Reach.Num() > 0 ? FString(TEXT("By sea: ground tinted blue is a friendly port they can be shipped to, or an enemy coast they can land on. It takes the corps' whole month."))
+			: FString(TEXT("None of these corps can go by sea this month: they must stand in a port, with their whole month before them, and there must be shipping."));
+		Notify(!Aboard.IsEmpty() ? Aboard : Staying.IsEmpty() ? Sea : Sea + TEXT(" ") + Staying, Staying.IsEmpty() ? 6.0 : 9.0);
 	}
 }
 
@@ -8515,6 +8521,7 @@ void ACampaignPlayerController::RefreshOrders()
 	TMap<int32, int32> Far;
 	bHandSpent = false;
 	HandComesOut.Reset();
+	HandStays.Reset();
 	bHandStands = ArmyRegion != INDEX_NONE && Session && Session->Stands(ArmyRegion) == TEXT("all");
 	KeptPlanRegion = -2; // (whatever was planned was planned for another hand)
 	if (bBySea)
@@ -8549,7 +8556,30 @@ void ACampaignPlayerController::RefreshOrders()
 	}
 	else
 	{
-		Reach = Session->Reach(PickedCorps, &Danger, &Far, &Road, &bHandSpent, &HandComesOut);
+		Reach = Session->Reach(PickedCorps, &Danger, &Far, &Road, &bHandSpent, &HandComesOut, &HandStays);
+	}
+	// (The 1.5.3 review; the playtest's find 14.) Beside the army in the field, a corps of the town's garrison that no
+	// order would bring out with a move would be left behind without a word: the rules bring the garrison in hand out
+	// all or none (two inside with room outside for one), and one that went in this month has no move once out. It is
+	// taken out of the hand, the last picked first, the hand is looked at again without it, and the rules' reason is
+	// said once, by the first look.
+	if (const int32 Stays = LeftInside(); Stays != INDEX_NONE)
+	{
+		FString StaysWhy = HandStays;
+		if (StaysWhy.IsEmpty())
+		{
+			const FViewCorps* Inside = View.Corps.FindByPredicate([Stays](const FViewCorps& Each) { return Each.Id == Stays; });
+			StaysWhy = Inside ? Inside->Garrison : FString();
+		}
+		PickedCorps.Remove(Stays);
+		++HandStaysDepth;
+		RefreshOrders();
+		--HandStaysDepth;
+		if (HandStaysDepth == 0 && !StaysWhy.IsEmpty())
+		{
+			Notify(StaysWhy, 8.0);
+		}
+		return;
 	}
 	EnemyReach = TSet<int32>(Danger);
 	FarMonths = MoveTemp(Far);
@@ -8982,6 +9012,102 @@ FApproachPlan ACampaignPlayerController::GarrisonApproach(int32 RegionId) const
 	return Session->PlanApproach(PickedCorps, RegionId);
 }
 
+FString ACampaignPlayerController::GarrisonAboard() const
+{
+	// (The 1.5.3 review; the playtest's find 17. The rules answer a garrison before they ask about the place it is sent
+	// to, so its own province is asked: "A garrison does not take ship: TAKE THE FIELD first.", or that no ship leaves a
+	// siege, or that there is no shipping.)
+	FCampaignSession* Session = GetSession();
+	if (!Session || ArmyRegion == INDEX_NONE)
+	{
+		return FString();
+	}
+	const FCampaignView& View = Session->GetView();
+	TArray<int32> InTown;
+	for (const int32 Id : PickedCorps)
+	{
+		const FViewCorps* Unit = View.Corps.FindByPredicate([Id](const FViewCorps& Each) { return Each.Id == Id; });
+		if (Unit && Unit->bInTown)
+		{
+			InTown.Add(Id);
+		}
+	}
+	return InTown.Num() > 0 ? Session->WhyNotBySea(InTown, ArmyRegion) : FString();
+}
+
+FString ACampaignPlayerController::StaysAshore() const
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || ArmyRegion == INDEX_NONE)
+	{
+		return FString();
+	}
+	const FCampaignView& View = Session->GetView();
+	bool bInField = false;
+	TArray<FString> Names;
+	for (const int32 Id : PickedCorps)
+	{
+		const FViewCorps* Unit = View.Corps.FindByPredicate([Id](const FViewCorps& Each) { return Each.Id == Id; });
+		if (!Unit)
+		{
+			continue;
+		}
+		if (!Unit->bInTown)
+		{
+			bInField = true;
+		}
+		else
+		{
+			Names.Add(Unit->Name);
+		}
+	}
+	if (!bInField || Names.Num() == 0)
+	{
+		return FString(); // (a hand that is all garrison is told by GarrisonAboard alone)
+	}
+	const bool bOne = Names.Num() == 1;
+	FString Who = Names.Pop();
+	if (!bOne)
+	{
+		Who = FString::Join(Names, TEXT(", ")) + TEXT(" and ") + Who;
+	}
+	const FString Why = GarrisonAboard();
+	return FString::Printf(TEXT("%s %s in the town."), *Who, bOne ? TEXT("stays") : TEXT("stay")) + (Why.IsEmpty() ? FString() : TEXT(" ") + Why);
+}
+
+int32 ACampaignPlayerController::LeftInside() const
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || ArmyRegion == INDEX_NONE || bBySea || bByRail || PickedCorps.Num() < 2)
+	{
+		return INDEX_NONE;
+	}
+	const FCampaignView& View = Session->GetView();
+	if (!View.bHumanUp)
+	{
+		return INDEX_NONE;
+	}
+	bool bInField = false;
+	int32 Last = INDEX_NONE;
+	for (const int32 Id : PickedCorps)
+	{
+		const FViewCorps* Unit = View.Corps.FindByPredicate([Id](const FViewCorps& Each) { return Each.Id == Id; });
+		if (!Unit)
+		{
+			continue;
+		}
+		if (!Unit->bInTown)
+		{
+			bInField = true;
+		}
+		else if (Unit->MovesOut != INDEX_NONE && !HandComesOut.Contains(Id))
+		{
+			Last = Id; // (rules that do not say a garrison's moves once out do not say who comes out either: the hand stays as it was)
+		}
+	}
+	return bInField ? Last : INDEX_NONE;
+}
+
 FString ACampaignPlayerController::GarrisonWhere() const
 {
 	// (The design director, 17 November: no hint sends him to a press that does nothing. The sortie and the order to
@@ -9193,6 +9319,9 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 			WarPrompt.Confirm = FText::FromString(TEXT("SEND THEM IN"));
 			return;
 		}
+		// (The 1.5.3 review; the playtest's finds 14 and 17. Asked before the hand sails: corps of the town's garrison
+		// beside the army in the field take no ship, and are named as they stay.)
+		const FString Staying = StaysAshore();
 		const TArray<FCorpsMove> Convoys = Session->Ship(PickedCorps, RegionId);
 		if (Convoys.Num() == 0)
 		{
@@ -9211,6 +9340,10 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		bBySea = false;
 		RefreshOrders();
 		SelectRegion(RegionId);
+		if (!Staying.IsEmpty())
+		{
+			Notify(Staying, 8.0);
+		}
 		return;
 	}
 	if ((!Target || Target->IsWar()) && OfferWar(RegionId))
@@ -9339,7 +9472,15 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 	}
 	if (bByRail)
 	{
-		const TArray<FCorpsMove> Trains = Session->Rail(PickedCorps, RegionId);
+		// (The 1.5.3 review. A corps of the town's garrison beside the army in the field takes no train: the rules' line
+		// names it as it stays in the town, and is said where the hand held one. Any other hand is answered as before.)
+		const bool bTownInHand = PickedCorps.ContainsByPredicate([Session](int32 Id)
+		{
+			const FViewCorps* Unit = Session->GetView().Corps.FindByPredicate([Id](const FViewCorps& Each) { return Each.Id == Id; });
+			return Unit && Unit->bInTown;
+		});
+		FString TrainSaid;
+		const TArray<FCorpsMove> Trains = Session->Rail(PickedCorps, RegionId, &TrainSaid);
 		if (Trains.Num() == 0)
 		{
 			Notify(TEXT("No corps could go: there is no room there, or they have already used their month."));
@@ -9358,6 +9499,10 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		bByRail = false;
 		RefreshOrders();
 		SelectRegion(RegionId);
+		if (bTownInHand && !TrainSaid.IsEmpty())
+		{
+			Notify(TrainSaid, 8.0);
+		}
 		return;
 	}
 	if (Target->bAttack)

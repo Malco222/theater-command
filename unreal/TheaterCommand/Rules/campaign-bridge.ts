@@ -1121,6 +1121,30 @@ function approachHand(ids: number[], to: number) {
   } catch { /* (the plan stands as the rules made it) */ }
   return plan;
 }
+/**
+ * (The 1.5.3 review; the playtest's find 14.) Why the last corps of the hand inside a town that no order would bring
+ * out with a move stays inside, in the rules' words, so that the 3D game can take it out of a hand beside the army in
+ * the field and say why. They are taken out in turn, as an order takes them (comeOut, all or none), and put back: the
+ * first the rules keep inside gives the reason ("There is no room in the field at Saar for another corps."), and where
+ * every one comes out, the last has no move once out (it went in this month: garrisonLine says when it can march).
+ * '' where every corps of the hand inside a town comes out with a move.
+ */
+function staysWhy(s: Game, ids: number[], out: number[]): string {
+  const inside = insideOf(s, ids);
+  const left = inside.filter((c) => !out.includes(c.id));
+  if (!left.length) return '';
+  const xs = inside.map((c) => insideNow(s, c));
+  const done: Inside[] = [];
+  let why = '';
+  try {
+    for (const x of xs) {
+      const no = whyNotLeaveTown(s, x.c);
+      if (no !== null || !orderTakeField(s, x.c)) { why = no ?? ''; break; }
+      done.push(x);
+    }
+  } catch { why = ''; } finally { backInside(done); }
+  return why || stayLine(s, [left[left.length - 1]]);
+}
 
 
 /** One formation seen to fly a raid: where from, where to, whose, what flies, and what it meets. */
@@ -1915,7 +1939,9 @@ function reachOf(ids: number[]) {
  * order would bring out with a move to make (comeOut brings them all or none, and one that went in this month has
  * none once out), so that a hand of a garrison and a field army can say which come out. `why`: for a hand that is all
  * garrison and can march nowhere this month, the reason, in the sentence garrisonWhy gives. Such a hand is spent on
- * the eve of war too, where no other hand is: nothing of it marches before next month, kept or not.
+ * the eve of war too, where no other hand is: nothing of it marches before next month, kept or not. (The 1.5.3
+ * review.) `stays`: for a hand beside the army in the field, why the last of its corps inside a town that no order
+ * brings out with a move stays inside (staysWhy), so that the 3D game takes it out of the hand and says so.
  */
 function reachHand(ids: number[]) {
   const s = game();
@@ -1926,7 +1952,8 @@ function reachHand(ids: number[]) {
     return reachOf(ids);
   }, true);
   const stuck = humanUp(s) && !out.length ? garrisonHand(s, ids) : [];
-  return { ...seen, out, why: stayLine(s, stuck), spent: seen.spent || (stuck.length > 0 && onEve(s)) };
+  const mixed = humanUp(s) && inside.length > 0 && !stuck.length && inside.length < corpsById(s, ids).length;
+  return { ...seen, out, why: stayLine(s, stuck), stays: mixed ? staysWhy(s, ids, out) : '', spent: seen.spent || (stuck.length > 0 && onEve(s)) };
 }
 
 /**
@@ -3186,8 +3213,13 @@ function rail(ids: number[], to: number) {
   const went: string[] = [];
   for (const c of asked) if (orderRail(s, c, to)) { forgetMarch(s, [c.id]); moved.push({ id: c.id, path: [to] }); went.push(c.name); } // (an order carried out ends a standing march)
   // (the message line, as the browser says it)
-  const place = s.regions[to]?.name ?? '', left = asked.length - went.length;
-  const said = went.length ? `${went.length === 1 ? `${went[0]} goes` : `${went.length} corps go`} to ${place} by rail: there this month, the whole month spent.${left ? ` ${left === 1 ? 'One corps stays' : `${left} corps stay`} behind: ${place} has no room for more.` : ''}` : '';
+  // (The 1.5.3 review.) A corps of the town's garrison beside the army in the field takes no train: it is named as it
+  // stays in the town, with the rules' reason (whyNoTrain), and is not counted among those the place has no room for.
+  const inside = asked.filter((c) => c.town !== undefined && !moved.some((m) => m.id === c.id));
+  const place = s.regions[to]?.name ?? '', left = asked.length - inside.length - went.length;
+  const names = inside.map((c) => shortName(c.name));
+  const stay = names.length ? ` ${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} stay` : `${names[0]} stays`} in the town. ${whyNoTrain(s, inside[0])?.line ?? ''}`.trimEnd() : '';
+  const said = went.length ? `${went.length === 1 ? `${went[0]} goes` : `${went.length} corps go`} to ${place} by rail: there this month, the whole month spent.${left ? ` ${left === 1 ? 'One corps stays' : `${left} corps stay`} behind: ${place} has no room for more.` : ''}${stay}` : '';
   return { moved, said, view: view() };
 }
 

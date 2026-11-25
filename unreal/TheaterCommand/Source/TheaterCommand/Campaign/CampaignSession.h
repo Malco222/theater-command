@@ -64,9 +64,10 @@ public:
 	 * Where a picked-up army could go. If asked for (release 1): OutDanger, the regions the enemy the player can see
 	 * could strike next month; OutFar, friendly ground beyond this month's reach with about how many months the march
 	 * would take; OutStanding, the road still ahead of a corps already on a standing march; (the 1.5.3 patch) OutComesOut,
-	 * the corps of the hand inside a town that an order would bring out with a move to make.
+	 * the corps of the hand inside a town that an order would bring out with a move to make; and OutStays, beside the army
+	 * in the field, the rules' reason why the last of the others stays inside.
 	 */
-	TArray<FReachRegion> Reach(const TArray<int32>& CorpsIds, TArray<int32>* OutDanger = nullptr, TMap<int32, int32>* OutFar = nullptr, TArray<int32>* OutStanding = nullptr, bool* OutSpent = nullptr, TArray<int32>* OutComesOut = nullptr);
+	TArray<FReachRegion> Reach(const TArray<int32>& CorpsIds, TArray<int32>* OutDanger = nullptr, TMap<int32, int32>* OutFar = nullptr, TArray<int32>* OutStanding = nullptr, bool* OutSpent = nullptr, TArray<int32>* OutComesOut = nullptr, FString* OutStays = nullptr);
 	/** (Ruling 87.) The rules' plan for a march of these corps to a place on a standing order: nothing is ordered by asking. */
 	/** Army, ArmyIds: (one voice after a press) the army in hand's name as its tray names it, and its corps in the field, so that the line names whom it is true of. */
 	FMarchPlan PlanMarch(const TArray<int32>& CorpsIds, int32 RegionId, const FString& Army = FString(), const TArray<int32>& ArmyIds = TArray<int32>());
