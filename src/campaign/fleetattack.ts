@@ -93,10 +93,20 @@ export function whyNotFleetAttack(g: Game, id: number, target: number): string |
   return null;
 }
 
-/** Ours: the fleet, and every fleet of its side already patrolling that sea that is at war with the enemy's side. */
+/**
+ * Ours: the fleet, and every fleet of its side already patrolling that sea that is at war with the enemy's side and has
+ * not fought in an attack this month. (1.5.1, the playtester, 25 November 2026: a fleet that joined one attack joined the
+ * next as well, so the enemy could be fought five times in a month by five destroyers split off it; a fleet that fights
+ * in an attack has attacked, orderFleetAttack.)
+ */
 function oursIn(g: Game, f: Fleet, zone: number, foe: string): Fleet[] {
   return [f, ...g.fleets.filter((x) => x.id !== f.id && x.zone === zone && x.stance === 'patrol' && surfaceShips(x) > 0
-    && (x.nat === f.nat || allied(g, x.nat, f.nat)) && atWar(g, x.nat, foe))];
+    && x.attacked !== g.turn && (x.nat === f.nat || allied(g, x.nat, f.nat)) && atWar(g, x.nat, foe))];
+}
+
+/** Every fleet of ours that fought in the attack has attacked this month: it stays where the battle left it until the next. */
+function foughtIn(g: Game, mine: Fleet[]): void {
+  for (const x of mine) x.attacked = g.turn;
 }
 
 /** His: the target, and every fleet of his side that stands with it (patrolling that sea, or lying in that harbour). */
@@ -275,11 +285,13 @@ export function orderFleetAttack(g: Game, id: number, target: number): FleetAtta
       headline(g, 'event', text, met[0].nat, undefined, { arm: 'sea', won: f.nat, lost: met[0].nat });
       return { outcome: 'declined', report: null, text };
     }
+    foughtIn(g, mine);
     const report = fleetAction(g, zone, f.nat, mine, met, rng, airA, airD);
     return { outcome: 'fought', report, text: told() };
   }
   met = met.filter((x) => !atSea(x));
   const airA = airOver(g, at.zone, f.nat) * NAVY.air.weight, airD = airOver(g, at.zone, f.nat, true) * NAVY.air.weight;
+  foughtIn(g, mine);
   const report = fleetAction(g, zone, f.nat, mine, met, rng, airA, airD, { port: at.port!, shore: at.shore, anchor: at.anchor });
   return { outcome: 'fought', report, text: told() };
 }

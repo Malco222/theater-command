@@ -520,7 +520,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 			: Fleet.Stance == TEXT("escort") ? FString::Printf(TEXT("%d escort"), Fleet.Ships())
 			: Fleet.Stance == TEXT("hunt") ? FString::Printf(TEXT("%d hunting"), Fleet.Ships())
 			: Fleet.Stance == TEXT("raid") ? FString::Printf(TEXT("%d raiding"), Fleet.Ships())
-			: FString::Printf(TEXT("%d ships"), Fleet.Ships());
+			: FString::Printf(TEXT("%d ship%s"), Fleet.Ships(), Fleet.Ships() == 1 ? TEXT("") : TEXT("s")); // (1.5.1: "1 ship", Brian's hand-check list)
 		SelectionRing->SetVisibility(false);
 	}
 	else if (What == 2)

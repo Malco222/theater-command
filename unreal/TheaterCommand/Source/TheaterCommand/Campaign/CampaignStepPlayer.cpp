@@ -141,6 +141,7 @@ namespace
 		TSharedPtr<SWidget> Widget;
 		FString Words;
 		bool bEnabled = true;
+		int32 Parent = INDEX_NONE; // (a press's own search only) the found button this one lies inside, if any
 	};
 
 	void Lettering(const TSharedRef<SWidget>& Widget, FString& Out)
@@ -168,8 +169,13 @@ namespace
 		}
 	}
 
-	/** Every button on the screen that can be seen, with the words on it. */
-	void Gather(const TSharedRef<SWidget>& Widget, bool bEnabledAbove, TArray<FFoundButton>& Out)
+	/**
+	 * Every button on the screen that can be seen, with the words on it. (1.5.1, the Mac's p7, 25 November 2026: with
+	 * bDeep, a press's own search, the buttons inside a button are gathered too, after it: a division's tile on a corps'
+	 * card, a button on a page's card. Before, the search stopped at the outermost button, and a press meant for a tile
+	 * pressed the card around it. The sweep and the bare table's buttons keep the old, shallow list.)
+	 */
+	void Gather(const TSharedRef<SWidget>& Widget, bool bEnabledAbove, TArray<FFoundButton>& Out, bool bDeep = false, int32 Parent = INDEX_NONE)
 	{
 		static const FName ButtonType(TEXT("SButton"));
 		if (!Widget->GetVisibility().IsVisible())
@@ -186,27 +192,31 @@ namespace
 			{
 				Found.Widget = Widget;
 				Found.bEnabled = bEnabled;
-				Out.Add(Found);
+				Found.Parent = Parent;
+				Parent = Out.Add(Found);
 			}
-			return;
+			if (!bDeep)
+			{
+				return;
+			}
 		}
 		if (FChildren* Children = Widget->GetChildren())
 		{
 			for (int32 Index = 0; Index < Children->Num(); ++Index)
 			{
-				Gather(Children->GetChildAt(Index), bEnabled, Out);
+				Gather(Children->GetChildAt(Index), bEnabled, Out, bDeep, Parent);
 			}
 		}
 	}
 
-	TArray<FFoundButton> ButtonsOnScreen()
+	TArray<FFoundButton> ButtonsOnScreen(bool bDeep = false)
 	{
 		THEATER_SPEED_SCOPE(HarnessFindButton); // (the step player's own work, which a player does not pay for)
 		TArray<FFoundButton> Out;
 		const TSharedPtr<SWindow> Window = GEngine && GEngine->GameViewport ? GEngine->GameViewport->GetWindow() : nullptr;
 		if (Window.IsValid())
 		{
-			Gather(Window.ToSharedRef(), true, Out);
+			Gather(Window.ToSharedRef(), true, Out, bDeep);
 		}
 		return Out;
 	}
@@ -353,23 +363,42 @@ bool FStepPlayer::Press(ACampaignPlayerController& Player, const FString& Words)
 		Wanted = Words;
 	}
 	const FString Want = Plain(Wanted);
-	const TArray<FFoundButton> All = ButtonsOnScreen();
-	TArray<const FFoundButton*> Alike;
-	for (const FFoundButton& Each : All)
+	const TArray<FFoundButton> All = ButtonsOnScreen(true);
+	TArray<int32> Matched;
+	for (int32 Index = 0; Index < All.Num(); ++Index)
 	{
-		if (Plain(Each.Words) == Want)
+		if (Plain(All[Index].Words) == Want)
 		{
-			Alike.Add(&Each);
+			Matched.Add(Index);
 		}
 	}
-	if (Alike.Num() == 0)
+	if (Matched.Num() == 0)
 	{
-		for (const FFoundButton& Each : All)
+		for (int32 Index = 0; Index < All.Num(); ++Index)
 		{
-			if (Plain(Each.Words).Contains(Want))
+			if (Plain(All[Index].Words).Contains(Want))
 			{
-				Alike.Add(&Each);
+				Matched.Add(Index);
 			}
+		}
+	}
+	// (1.5.1) A button whose words are found only because a button inside it carries them gives way to that inner one:
+	// "3rd Infantry" is the division's tile, not the corps' card that holds the tile. Where no inner button matches, the
+	// outer one is pressed, as before.
+	TArray<const FFoundButton*> Alike;
+	for (const int32 Index : Matched)
+	{
+		bool bHolds = false;
+		for (const int32 Other : Matched)
+		{
+			for (int32 Up = All[Other].Parent; Up != INDEX_NONE && !bHolds; Up = All[Up].Parent)
+			{
+				bHolds = Up == Index;
+			}
+		}
+		if (!bHolds)
+		{
+			Alike.Add(&All[Index]);
 		}
 	}
 	if (!Alike.IsValidIndex(Which - 1))

@@ -2947,7 +2947,13 @@ void ALandBattle::LayThings()
 				continue;
 			}
 			const FVector3f Tint = Number[Shade] > 0 ? Sum[Shade] / static_cast<float>(Number[Shade]) : Mean;
-			const FString Name = FString::Printf(TEXT("LandThing_%s_%d"), *LandParts::Wide(Shape.Name), Shade);
+			// (named by its kind's number as well as its shape's name. A region may give several of its kit's slots one
+			// name: the jungle's boulder, fallen log, edge curtain and thicket are all "Boulder", an island's tall palm
+			// and its stump both "CoconutPalmTall". NewObject under a name its owner already holds makes the same object
+			// again where it stood: the first kind's mesh and its copies were gone from under the tree Unreal was still
+			// building for them, and the field fell over as it opened, "InstanceReorderTable.Num() ==
+			// PerInstanceSMData.Num()" in ApplyBuildTree)
+			const FString Name = FString::Printf(TEXT("LandThing_%s_%d_%d"), *LandParts::Wide(Shape.Name), Kind, Shade);
 			const FWindPaint Wind = bStalks ? FWindPaint() : WindInk(Base, Shape);
 			UMaterialInstanceDynamic* Blown = Wind.Paint;
 			UMaterialInterface* Paint = bStalks ? StalkInk.Get() : Blown ? Blown : ThingInk.Get();

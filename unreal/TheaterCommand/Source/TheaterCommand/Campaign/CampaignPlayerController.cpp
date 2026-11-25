@@ -689,6 +689,13 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
 				ShowWar(Session->GetView(), TArray<FCorpsMove>());
+				// (1.5.1, Brian's hand-check list: a fleet still in hand when the row is flipped is laid out afresh, so that its
+				// pointer, its "Drop ..." line and its first drop follow the new setting; its copy was refreshed only when it
+				// was picked up, and switched back on, its first drop sailed it to the sea instead of opening the ATTACK card)
+				if (FleetInHand != INDEX_NONE)
+				{
+					RefreshOrders();
+				}
 			}
 			if (!Note.IsEmpty())
 			{
@@ -728,6 +735,13 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
 				ShowWar(Session->GetView(), TArray<FCorpsMove>());
+				// (1.5.1, Brian's hand-check list: an army still in hand when the row is flipped has its card laid out afresh,
+				// its division tiles and SPLIT OFF with it, as the fleet in hand is for "Fleets attack fleets"; before, the card
+				// kept the old setting until the army was put down and picked up again)
+				if (ArmyRegion != INDEX_NONE)
+				{
+					RefreshOrders();
+				}
 			}
 			if (!Note.IsEmpty())
 			{
@@ -10803,7 +10817,13 @@ void ACampaignPlayerController::DescribeScreen(FString& OutOpen, FString& OutWor
 	else if (bPageOpen)
 	{
 		if (!Page.Headline.IsEmpty()) { Said.Add(Page.Headline); }
-		if (!Page.Note.IsEmpty()) { Said.Add(Page.Note.Left(400)); }
+		// (1.5.1, the Mac's p7, 25 November 2026: the step player's reading only. A fleet's note runs past 400 letters
+		// with its admirals' line last, and a section's own line, "it stays where the battle left it", was not read.)
+		if (!Page.Note.IsEmpty()) { Said.Add(Page.Note.Left(1200)); }
+		for (const FPageSection& Section : Page.Sections)
+		{
+			if (!Section.Text.IsEmpty()) { Said.Add(Section.Text.Left(400)); }
+		}
 	}
 	else if (IsTrayShown()) // (release 2: a look folded away is not on the screen to be read)
 	{
@@ -10818,7 +10838,14 @@ void ACampaignPlayerController::DescribeScreen(FString& OutOpen, FString& OutWor
 	{
 		TArray<FString> Ids;
 		for (const int32 Id : PickedCorps) { Ids.Add(FString::FromInt(Id)); }
-		OutHand = FString::Printf(TEXT("army at %s: corps %s%s"), *Place(ArmyRegion), *FString::Join(Ids, TEXT(",")), bByRail ? TEXT(" (by rail)") : bBySea ? TEXT(" (by sea)") : TEXT(""));
+		// (1.5.1, the Mac's p7: a division's tile picked or let go on a card is a change in hand the step player can see)
+		int32 Splitting = 0;
+		for (const TPair<int32, TSet<int32>>& Each : PickedDivisions)
+		{
+			Splitting += Each.Value.Num();
+		}
+		const FString Split = Splitting > 0 ? FString::Printf(TEXT(", %d division%s picked to split off"), Splitting, Splitting == 1 ? TEXT("") : TEXT("s")) : FString();
+		OutHand = FString::Printf(TEXT("army at %s: corps %s%s%s"), *Place(ArmyRegion), *FString::Join(Ids, TEXT(",")), bByRail ? TEXT(" (by rail)") : bBySea ? TEXT(" (by sea)") : TEXT(""), *Split);
 	}
 	else if (FleetInHand != INDEX_NONE) { OutHand = FString::Printf(TEXT("fleet %d"), FleetInHand); }
 	else if (AgentInHand != INDEX_NONE) { OutHand = FString::Printf(TEXT("agent %d"), AgentInHand); }

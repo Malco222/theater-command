@@ -4,8 +4,8 @@
 // behind a switch: off, nothing changes. Since Brian's ask of 2026-11-21 ("you pick which fighter wings you have on air
 // defense that go up and which ones you want to keep in reserve for ground air support", "add it to release 1") the
 // player's choice is on in the data, and a staff's own use of it is behind a second switch (close.ai.on), which is off.
-import { afterEach, describe, expect, it } from 'vitest';
-import { AIR, CLOSE, airAI, airFleetsOf, airRange, assessAir, bookCloseAir, closeEdge, closeOf, closeRules, closeStaffRules, cover, fightersOver, kmTo } from '../src/campaign/air';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { AIR, AIRWAR, CLOSE, airAI, airFleetsOf, airRange, assessAir, bookCloseAir, closeEdge, closeOf, closeRules, closeStaffRules, cover, fightersOver, kmTo } from '../src/campaign/air';
 import { airAct, airPage } from '../src/campaign/airpages';
 import { groupJobs, groupRow, setGroupJob } from '../src/campaign/airwar';
 import { assess, createGame, resolveBattle } from '../src/campaign/game';
@@ -225,6 +225,9 @@ describe('a staff\'s ground support (b536)', () => {
 });
 
 describe('the player picks, the staffs do not yet (Brian\'s ask of 2026-11-21; air.json as it ships)', () => {
+  // (Release 1.5's staff doctrine, with the fight back off (airwar.json ai.back): the fight back has its own tests, air-fight-back.test.ts.)
+  beforeAll(() => { AIRWAR.ai.back!.on = false; });
+  afterAll(() => { AIRWAR.ai.back!.on = true; });
   const attack = (g: Game): PlanPhase => ({ from: g.turn, to: g.turn, posture: 'attack', enemies: ['POL'], objectives: ['Warsaw', 'Lodz', 'Krakow', 'Poznan'] });
   it('ships with the player\'s choice on and the staffs\' own switch off', () => {
     expect(CLOSE.on).toBe(true);

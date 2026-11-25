@@ -7,6 +7,7 @@
 // fleet are in italy-233-staff.test.ts. Rider (h), the armistice for the mainland alone, was tried and put away.)
 import { beforeAll, describe, expect, it } from 'vitest';
 import historyData from '../data/campaign/history.json';
+import openData from '../data/campaign/open.json';
 import { atWar, createGame, setWar } from '../src/campaign/game';
 import { HISTORY, setStop, shoreOpen, straitOpen } from '../src/campaign/history';
 import { blocked } from '../src/campaign/rivers';
@@ -198,13 +199,20 @@ describe('who is not bound', () => {
   });
 });
 
+/**
+ * Ground that open.json's own lists say is not the Italian mainland, whoever owns it (descent.planned 'not'): not home
+ * soil here. (Since the computer's air forces fight back, airwar.json ai.back, seed 17's Greek army counter-attacks
+ * overland into Albania in month 19; the design director, 24 Nov 2026 20:00Z: the rule working, read from open.json.)
+ */
+const NOT_HOME = new Set(Object.values((openData as unknown as { descent: { planned: Record<string, { not?: string[] }> } }).descent.planned).flatMap((p) => p.not ?? []));
+
 describe('a computer-run grand campaign', () => {
   let first = 0, who = '';
   beforeAll(() => {
     const g = grand(null, 17);
     const onSoil = (): string => {
       for (const r of g.regions as Region[]) {
-        if (r.owner !== 'ITA' || r.overseas) continue;
+        if (r.owner !== 'ITA' || r.overseas || NOT_HOME.has(r.name)) continue;
         const u = r.units.find((c) => !c.dead && c.kind !== 'fort' && atWar(g, 'ITA', c.nat));
         if (u) return u.nat;
         if (atWar(g, 'ITA', r.ctrl)) return r.ctrl;
