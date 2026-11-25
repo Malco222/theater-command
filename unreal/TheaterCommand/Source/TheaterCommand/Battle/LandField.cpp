@@ -5406,7 +5406,7 @@ namespace LandField
 					for (int K = 0; K < N; ++K)
 					{
 						const uint64_t PK = Hash(WK, static_cast<uint64_t>(K));
-						const double Wd = 0.7 + 0.8 * Unit(PK), A = 1.0 + std::max(0.0, Fc.Len - 2.0 - Wd) * Unit(Mix(PK ^ 1)), Hi = 0.4 + 0.45 * Unit(Mix(PK ^ 2));
+						const double Wd = 0.9 + 0.5 * Unit(PK), A = 1.0 + std::max(0.0, Fc.Len - 2.0 - Wd) * Unit(Mix(PK ^ 1)), Hi = 0.55 + 0.35 * Unit(Mix(PK ^ 2));
 						const double Z0 = std::max(Gd(A), Gd(A + Wd)) + 0.48 + 0.3 * Unit(Mix(PK ^ 3));
 						bool bFree = A + Wd < Fc.Len - 0.8;
 						for (const Opening& O : Ops) bFree = bFree && (A + Wd < O.A0 - 0.45 || A > O.A1 + 0.45 || Z0 + Hi < O.Z0 - 0.3);
@@ -5484,7 +5484,11 @@ namespace LandField
 						// (the rain's grey streaks under the eaves; the wash come away to the clay in patches, most where the
 						// damp lifts it low down; damp and splash at the foot)
 						C = Mixed(C, Rgb(146, 144, 134), 0.35 * Smooth(0.1, 0.7, Noise(AA / 0.55, P.Z / 7.0, H.Key ^ 0x52)) * Smooth(Eaves - 2.4, Eaves - 0.2, P.Z));
-						const double Fl = Noise(AA / 1.2, P.Z / 0.8, H.Key ^ 0x53) + 0.85 * Smooth(1.6, 0.45, Z);
+						// (round a place where the daub has fallen the wash is gone with it: bare clay two hands out from the break)
+						double Bare = 0.0;
+						for (const Opening& O : Ops)
+							if (O.What == 5) Bare = std::max(Bare, Smooth(0.45, 0.0, std::hypot(std::max({ O.A0 - A, A - O.A1, 0.0 }), std::max({ O.Z0 - P.Z, P.Z - O.Z1, 0.0 }))));
+						const double Fl = Noise(AA / 1.2, P.Z / 0.8, H.Key ^ 0x53) + 0.85 * Smooth(1.6, 0.45, Z) + 1.4 * Bare;
 						C = Mixed(C, Sd.Clay, 0.85 * Smooth(0.42, 0.8, Fl));
 						C = Mixed(C, Rgb(88, 84, 66), 0.6 * Smooth(1.0, 0.4, Z));
 						return Burnt(C, P, Tz);
@@ -5664,13 +5668,24 @@ namespace LandField
 					// opens in its way and gone at a door; along a long wall the plate under the eaves. The daub between.
 					if (Sd.bFrame)
 					{
-						const double Pr = 0.02, CapZ = !Fc.bGable && bRoof ? Eaves - (Pr + 0.01) * Tan : Eaves;
+						const double Pr = 0.02, CapZ = !Fc.bGable && bRoof ? Eaves - (Sd.bThatch ? 0.3 : 0.0) - (Pr + 0.01) * Tan : Eaves; // (a thatch is 30 cm thick: the plate under it)
 						const int NP = std::max(1, static_cast<int>(std::lround(Fc.Len / 2.2)));
 						const Col Post = Mixed(Sd.Timber, Rgb(60, 54, 46), 0.25);
 						for (int K = 0; K <= NP; ++K)
 						{
 							const double AC = Fc.Len * K / NP, PA0 = K == 0 ? -Pr : K == NP ? Fc.Len - 0.16 : AC - 0.08, PA1 = K == 0 ? 0.16 : K == NP ? Fc.Len + Pr : AC + 0.08;
-							const double TopP = std::min(CapZ, Top(AC));
+							// (the post's top no higher than the wall's drawn top under either edge of it, or at a cut between them: a
+							// broken clay wall's top runs straight from cut to cut)
+							auto Drawn = [&](double Ap) {
+								Ap = std::clamp(Ap, 0.0, Fc.Len);
+								size_t Ic = static_cast<size_t>(std::upper_bound(Cuts.begin(), Cuts.end(), Ap) - Cuts.begin());
+								Ic = std::clamp<size_t>(Ic, 1, Cuts.size() - 1) - 1;
+								const std::pair<double, double> Tc = BoardTop(Ic);
+								return Lerp(Tc.first, Tc.second, (Ap - Cuts[Ic]) / std::max(1e-6, Cuts[Ic + 1] - Cuts[Ic]));
+							};
+							double TopP = std::min({ CapZ, Drawn(PA0), Drawn(PA1) });
+							for (const double Ct : Cuts)
+								if (Ct > PA0 && Ct < PA1) TopP = std::min(TopP, std::min(Eaves, Top(Ct)));
 							bool bDoorHere = false;
 							std::vector<std::pair<double, double>> Gp;
 							for (const Opening& O : Ops)
@@ -5700,31 +5715,54 @@ namespace LandField
 					{
 						if (O.What == 5)
 						{
-							// The daub fallen from the wattle: its broken edge, and 4 cm back the withies woven round their stakes,
-							// each withy before one stake and behind the next, the row over it the other way.
-							const double D5 = 0.04;
-							const V3 A0 = At(O.A0, O.Z0, -Lap), A1 = At(O.A1, O.Z0, -Lap), A2 = At(O.A1, O.Z1, -Lap), A3 = At(O.A0, O.Z1, -Lap);
-							const V3 B0 = At(O.A0, O.Z0, D5), B1 = At(O.A1, O.Z0, D5), B2 = At(O.A1, O.Z1, D5), B3 = At(O.A0, O.Z1, D5);
-							const Col Edge = Scaled(Sd.Clay, 0.86);
-							B.Quad1(A0, B0, B3, A3, Edge, Along3);
-							B.Quad1(A1, B1, B2, A2, Edge, Along3 * -1.0);
-							B.Quad1(A3, A2, B2, B3, Scaled(Edge, 0.7), { 0, 0, -1 });
-							B.Quad1(A0, A1, B1, B0, Scaled(Edge, 1.12), { 0, 0, 1 });
-							const int NS = std::max(2, static_cast<int>(std::lround((O.A1 - O.A0) / 0.32))), NB = std::max(4, static_cast<int>(std::lround((O.Z1 - O.Z0) / 0.07)));
+							// The daub fallen from the wattle: the clay broken off in a ragged line round the place, its raw edge a lip
+							// back to the rods 4 cm in; the rods thin and level, woven round upright stakes, each before one stake and
+							// behind the next, the row over it the other way; weathered grey-brown, clay still in the weave.
+							const double D5 = 0.04, Wide5 = O.A1 - O.A0, High5 = O.Z1 - O.Z0;
 							const uint64_t WKey = Hash(FK, 0x3A78ull, static_cast<uint64_t>(std::llround(O.A0 * 16.0)));
+							const Col Rod = Rgb(188, 165, 130);
+							const int NS = std::max(2, static_cast<int>(std::lround(Wide5 / 0.35))), NB = std::max(6, static_cast<int>(std::lround(High5 / 0.05)));
 							for (int Bn = 0; Bn < NB; ++Bn)
 								for (int Sg = 0; Sg < NS; ++Sg)
 								{
 									const double Wa0 = Lerp(O.A0, O.A1, static_cast<double>(Sg) / NS), Wa1 = Lerp(O.A0, O.A1, static_cast<double>(Sg + 1) / NS);
 									const double Wz0 = Lerp(O.Z0, O.Z1, static_cast<double>(Bn) / NB), Wz1 = Lerp(O.Z0, O.Z1, static_cast<double>(Bn + 1) / NB);
-									const Col Wy = Scaled(Sd.Withy, ((Bn + Sg) % 2 == 0 ? 1.0 : 0.6) * (0.9 + 0.2 * Unit(Hash(WKey, static_cast<uint64_t>(Bn * 16 + Sg)))));
-									const Col Wd = Scaled(Wy, 0.66);
+									const uint64_t RK = Hash(WKey, static_cast<uint64_t>(Bn * 16 + Sg));
+									Col Wy = Scaled(Rod, ((Bn + Sg) % 2 == 0 ? 1.0 : 0.88) * (0.92 + 0.16 * Unit(RK)));
+									if (Unit(Mix(RK ^ 0x21)) < 0.3) Wy = Mixed(Wy, Sd.Clay, 0.6); // (clay still on it)
+									const Col Wd = Scaled(Wy, 0.85);
 									B.Quad(At(Wa0, Wz0, D5), At(Wa1, Wz0, D5), At(Wa1, Wz1, D5), At(Wa0, Wz1, D5), Wd, Wd, Wy, Wy, Out3);
 								}
 							for (int Sg = 1; Sg < NS; ++Sg)
 							{
 								const double Sa = Lerp(O.A0, O.A1, static_cast<double>(Sg) / NS);
-								B.Quad1(At(Sa - 0.014, O.Z0, D5 - 0.012), At(Sa + 0.014, O.Z0, D5 - 0.012), At(Sa + 0.014, O.Z1, D5 - 0.012), At(Sa - 0.014, O.Z1, D5 - 0.012), Scaled(Sd.Withy, 0.5), Out3);
+								B.Quad1(At(Sa - 0.014, O.Z0, D5 - 0.012), At(Sa + 0.014, O.Z0, D5 - 0.012), At(Sa + 0.014, O.Z1, D5 - 0.012), At(Sa - 0.014, O.Z1, D5 - 0.012), Scaled(Rod, 0.78), Out3);
+							}
+							// (the break's edge: round the place a point each 20 cm or so, the clay standing in from it 2 to 12 cm, each
+							// its own; from there the lip, 3 cm further in and back to the rods)
+							struct Rim
+							{
+								double A, Z, DA, DZ;
+							};
+							std::vector<Rim> Round;
+							const int NA5 = std::max(3, static_cast<int>(std::lround(Wide5 / 0.2))), NZ5 = std::max(2, static_cast<int>(std::lround(High5 / 0.2)));
+							for (int K = 0; K < NA5; ++K) Round.push_back({ Lerp(O.A0, O.A1, static_cast<double>(K) / NA5), O.Z0, K == 0 ? 1.0 : 0.0, 1.0 });
+							for (int K = 0; K < NZ5; ++K) Round.push_back({ O.A1, Lerp(O.Z0, O.Z1, static_cast<double>(K) / NZ5), -1.0, K == 0 ? 1.0 : 0.0 });
+							for (int K = 0; K < NA5; ++K) Round.push_back({ Lerp(O.A1, O.A0, static_cast<double>(K) / NA5), O.Z1, K == 0 ? -1.0 : 0.0, -1.0 });
+							for (int K = 0; K < NZ5; ++K) Round.push_back({ O.A0, Lerp(O.Z1, O.Z0, static_cast<double>(K) / NZ5), 1.0, K == 0 ? -1.0 : 0.0 });
+							auto Clay5 = [&](double A, double Z) { return WashAt(A, At(A, Z, -Lap), Gd(A), std::min(Eaves, Top(A))); };
+							for (size_t K = 0; K < Round.size(); ++K)
+							{
+								const Rim& R0 = Round[K];
+								const Rim& R1 = Round[(K + 1) % Round.size()];
+								auto InOf = [&](size_t Kk) { return (Round[Kk].DA != 0.0 && Round[Kk].DZ != 0.0 ? 0.07 : 0.02) + 0.11 * Unit(Hash(WKey, 0x200ull + Kk)); };
+								auto DeepOf = [](const Rim& Rm) { return Rm.DZ < 0.0 ? 0.035 : 0.03; };
+								const double In0 = InOf(K), In1 = InOf((K + 1) % Round.size());
+								const double QA0 = R0.A + R0.DA * In0, QZ0 = R0.Z + R0.DZ * In0, QA1 = R1.A + R1.DA * In1, QZ1 = R1.Z + R1.DZ * In1;
+								B.Quad(At(R0.A, R0.Z, -Lap), At(R1.A, R1.Z, -Lap), At(QA1, QZ1, -Lap), At(QA0, QZ0, -Lap), Clay5(R0.A, R0.Z), Clay5(R1.A, R1.Z), Scaled(Clay5(QA1, QZ1), 0.93), Scaled(Clay5(QA0, QZ0), 0.93), Out3);
+								// (the lip: lit where it looks up, in its own shade where it looks down)
+								const Col Lip = Scaled(Sd.Clay, 0.95 + 0.025 * (R0.DZ + R1.DZ));
+								B.Quad1(At(QA0, QZ0, -Lap), At(QA1, QZ1, -Lap), At(QA1 + R1.DA * DeepOf(R1), QZ1 + R1.DZ * DeepOf(R1), D5), At(QA0 + R0.DA * DeepOf(R0), QZ0 + R0.DZ * DeepOf(R0), D5), Lip, Out3);
 							}
 							continue;
 						}
@@ -5972,6 +6010,51 @@ namespace LandField
 				{
 					auto RP = [&](double Uu, double T, double Down) { return W(Uu, S * (0.5 * Deep + Over) * (1.0 - T), EaveZ + T * (Ridge - EaveZ) - Down); };
 					const V3 Up = Unit3(V3{ V.X * S * Tan, V.Y * S * Tan, 1.0 });
+					// (a thatch's sheaves, two to a panel, the line between them a little to one side in each course; a course's
+					// lower edge jogs 3 to 6 cm up or down the slope at each sheaf, the two of a panel opposite ways, so no line
+					// runs straight for over two sheaves; at the eave each hangs up to 10 cm as it was cut)
+					const uint64_t SS = static_cast<uint64_t>(S + 2);
+					const double SlopeLen = std::hypot(0.5 * Deep + Over, Ridge - EaveZ);
+					auto Edge = [&](int Pn, int Jn, int Rw) {
+						const double At0 = U0 + (U1 - U0) * Pn / NU;
+						if (Pn <= 0 || Pn >= NU || Missing(S, Pn - 1, Jn) || Missing(S, Pn, Jn)) return At0;
+						return At0 + 0.24 * (U1 - U0) / NU * (Unit(Hash(H.Key, 0x7AE0ull + SS, static_cast<uint64_t>(Pn * 16 + Rw))) - 0.5);
+					};
+					auto Split = [&](int Pn, int Rw) { return 0.5 + 0.2 * (Unit(Hash(H.Key, 0x7AB0ull + SS, static_cast<uint64_t>(Pn * 16 + Rw))) - 0.5); };
+					auto Jog = [&](int Sf, int Rw) {
+						const uint64_t RK = Hash(H.Key, 0x7AA0ull + SS, static_cast<uint64_t>(Rw));
+						const bool bUp = (((Hash(RK, static_cast<uint64_t>(Sf / 2)) >> 9) + static_cast<uint64_t>(Sf)) & 1ull) != 0;
+						const double Far = 0.03 + 0.03 * Unit(Hash(RK, 0x100ull + static_cast<uint64_t>(Sf)));
+						return bUp ? Far : -Far;
+					};
+					auto Hang = [&](int Sf) { return 0.10 * Unit(Hash(H.Key, 0x7AD0ull + SS, static_cast<uint64_t>(Sf))); };
+					// (the streaks down the slope: a tone at each panel's side and one of its own between, 18 in 100 across, half
+					// as much again as a course's own swing from its butts to its top)
+					auto Streak = [&](int Cn) {
+						auto Side = [&](int Pn) { return 0.91 + 0.18 * Unit(Hash(H.Key, 0x7A70ull + SS, static_cast<uint64_t>(Pn))); };
+						return Cn % 2 == 0 ? Side(Cn / 2) : 0.5 * (Side(Cn / 2) + Side(Cn / 2 + 1)) + 0.10 * (Unit(Hash(H.Key, 0x7AC0ull + SS, static_cast<uint64_t>(Cn))) - 0.5);
+					};
+					// (a place mended with newer straw: one panel in twenty begins one, four sheaves wide at most; each sheaf's
+					// part of it begins and ends a course off its neighbour's, so its outline is ragged along the sheaves and no
+					// side of it straight for over two courses)
+					auto Mended = [&](int Sf, int Rw) {
+						static const int Shape[4][4][2] = {
+							{ { 0, 0 }, { -1, 1 }, { 0, 2 }, { -1, 0 } },
+							{ { 0, 1 }, { 1, 3 }, { 0, 2 }, { 1, 1 } },
+							{ { 0, 0 }, { -1, 1 }, { 0, 0 }, { 9, -9 } },
+							{ { 0, 1 }, { -1, 0 }, { 0, 2 }, { 1, 1 } },
+						};
+						for (int Pn = Sf / 2 - 1; Pn <= Sf / 2; ++Pn)
+							for (int Jn = 0; Jn < NV && Pn >= 0; ++Jn)
+							{
+								const uint64_t NH = Hash(H.Key, static_cast<uint64_t>(Pn * 8 + Jn), SS);
+								if (!(Unit(Mix(NH ^ 0x51)) < 0.05) || Missing(S, Pn, Jn)) continue;
+								const int Cg = Sf - 2 * Pn, Rr = Rw - (4 * Jn + 1);
+								const int* Span5 = Shape[(NH >> 20) & 3][((NH >> 24) & 1) != 0 ? 3 - Cg : Cg];
+								if (Rr >= Span5[0] && Rr <= Span5[1]) return true;
+							}
+						return false;
+					};
 					for (int I = 0; I < NU; ++I)
 						for (int J = 0; J < NV; ++J)
 						{
@@ -5981,37 +6064,63 @@ namespace LandField
 							// (thatch takes its tone from the roof's corners below, so no panel reads as a tile of its own)
 							Col C = bThatch ? RoofC : Varied(RoofC, 0.94 + 0.12 * Unit(PH), 0.0);
 							if (!bThatch && J == 0 && Unit(Mix(PH)) < 0.5) C = Mixed(C, H.Roof == 1 ? Rgb(92, 84, 62) : Rgb(132, 132, 104), 0.3); // moss, lichen
-							if (bThatch && Unit(Mix(PH ^ 0x51)) < 0.05) C = Mixed(C, Rgb(196, 176, 118), 0.55); // (a place mended with newer straw)
 							if (H.Hurt != DmNone && Near(S, I, J)) C = Mixed(C, Rgb(36, 32, 30), 0.55);
 							const Col C2 = Varied(C, 1.04, 0.0);
+							const Col Under = H.bBoards ? Rgb(50, 44, 38) : Rgb(70, 60, 52); // (a shed on trial: its roof's underside as dark as its inside)
 							if (bThatch)
+							{
 								for (int Cs = 0; Cs < 4; ++Cs)
-								{
-									// (a course of sheaves: its butts 4 cm proud at its lower edge, its top run in under the next course's
-									// butts by a third of a course, so the step shows a dark line and never the sky; flat at the eave, at a
-									// verge and at a hole's edge, where the roof's own edge closes it)
-									const double Ta = Lerp(TA, TB, Cs / 4.0), Tb = Lerp(TA, TB, (Cs + 1) / 4.0);
-									const bool bFoot = Cs == 0 && (J == 0 || Missing(S, I, J - 1)), bHead = Cs == 3 && (J + 1 >= NV || Missing(S, I, J + 1));
-									const double Tu = bHead ? Tb : std::min(1.0, Tb + 0.3 * (Tb - Ta));
-									const double RA = bFoot || I == 0 || Missing(S, I - 1, J) ? 0.0 : -0.04, RB = bFoot || I == NU - 1 || Missing(S, I + 1, J) ? 0.0 : -0.04;
-									// (its tone: a streak down the slope from each corner along the roof, a little of each course's own, and
-									// moss on the lowest third, thickest at the eave; the corners shared, so the tone runs on along a course)
-									auto Straw = [&](int Ii, double Tt, double Lit) {
-										const uint64_t SS = static_cast<uint64_t>(S + 2), II = static_cast<uint64_t>(Ii);
-										const double Tone = 0.915 + 0.10 * Unit(Hash(H.Key, 0x7A70ull + SS, II)) + 0.07 * Unit(Hash(H.Key, 0x7A80ull + SS, II * 16 + static_cast<uint64_t>(J * 4 + Cs)));
-										const double Mo = Unit(Hash(H.Key, 0x7A90ull + SS, II));
-										const double Moss = J == 0 ? 0.5 * Mo * Mo * Clamp01(1.0 - Tt * NV) : 0.0;
-										return Scaled(Mixed(C, Rgb(98, 102, 68), Moss), Tone * Lit);
-									};
-									B.Quad(RP(UA, Ta, RA), RP(UB, Ta, RB), RP(UB, Tu, 0.0), RP(UA, Tu, 0.0), Straw(I, Ta, 1.03), Straw(I + 1, Ta, 1.03), Straw(I + 1, Tb, 0.8), Straw(I, Tb, 0.8), Up);
-								}
+									for (int Bh = 0; Bh < 2; ++Bh)
+									{
+										// (a sheaf in its course: its butts 4 cm proud at its lower edge, that edge 3 to 6 cm up or down the
+										// slope from the course's line, each sheaf its own way; its top run in under the next course's butts
+										// by a third of a course and more, so the step shows a dark line and never the sky. Flat at a verge
+										// and at a hole's edge, where the roof's own edge closes it; at the eave it hangs as its straw was cut)
+										const int Rw = J * 4 + Cs, Sf = 2 * I + Bh;
+										const double UL = Edge(I, J, Rw), UR = Edge(I + 1, J, Rw), UM = Lerp(UL, UR, Split(I, Rw)), Ua = Bh == 0 ? UL : UM, Ub = Bh == 0 ? UM : UR;
+										const double Ta = Lerp(TA, TB, Cs / 4.0), Tb = Lerp(TA, TB, (Cs + 1) / 4.0);
+										const bool bEave = Cs == 0 && J == 0, bFoot = Cs == 0 && J > 0 && Missing(S, I, J - 1), bHead = Cs == 3 && (J + 1 >= NV || Missing(S, I, J + 1));
+										const double Te = bEave ? -Hang(Sf) / SlopeLen : bFoot ? Ta : Ta + Jog(Sf, Rw) / SlopeLen;
+										const double Tu = bHead ? Tb : std::min(1.0, Tb + 0.3 * (Tb - Ta) + 0.07 / SlopeLen);
+										const bool bEdgeA = Bh == 0 && (I == 0 || Missing(S, I - 1, J)), bEdgeB = Bh == 1 && (I == NU - 1 || Missing(S, I + 1, J));
+										// (a corner over a hole's corner lies flat as its neighbour's does)
+										const bool bDiagA = Bh == 0 && Cs == 0 && J > 0 && I > 0 && Missing(S, I - 1, J - 1), bDiagB = Bh == 1 && Cs == 0 && J > 0 && I + 1 < NU && Missing(S, I + 1, J - 1);
+										const double RA = bEave || bFoot || bEdgeA || bDiagA ? 0.0 : -0.04, RB = bEave || bFoot || bEdgeB || bDiagB ? 0.0 : -0.04, Sink = bHead ? 0.0 : 0.012;
+										// (its tone: the streak down the slope from each side of it, the stronger; a little of its course's own;
+										// moss on the lowest third, thickest at the eave; a place mended with newer straw a step lighter and
+										// yellower, by the same step on a dark roof as on a pale one, and no moss on it yet)
+										const bool bNew = Mended(Sf, Rw);
+										const Col Cc = bNew ? Col{ C.R * 1.126, C.G * 1.129, C.B * 1.086 } : C;
+										auto Straw = [&](int Cn, double Tt, double Lit) {
+											const double Tone = Streak(Cn) + 0.04 * (Unit(Hash(H.Key, 0x7A80ull + SS, static_cast<uint64_t>(Cn * 16 + Rw))) - 0.5);
+											const double Mo = Unit(Hash(H.Key, 0x7A90ull + SS, static_cast<uint64_t>(Cn)));
+											const double Moss = J == 0 && !bNew ? 0.5 * Mo * Mo * Clamp01(1.0 - Tt * NV) : 0.0;
+											return Scaled(Mixed(Cc, Rgb(98, 102, 68), Moss), Tone * Lit);
+										};
+										B.Quad(RP(Ua, Te, RA), RP(Ub, Te, RB), RP(Ub, Tu, Sink), RP(Ua, Tu, Sink), Straw(Sf, Ta, 0.98), Straw(Sf + 1, Ta, 0.98), Straw(Sf + 1, Tb, 0.86), Straw(Sf, Tb, 0.86), Up);
+										if (!bEave) continue;
+										// (the eave: the sheaf's cut butts, the thatch's underside out to them, and its side where its
+										// neighbour hangs shorter or longer, or the roof ends)
+										B.Quad1(RP(Ua, Te, 0.0), RP(Ub, Te, 0.0), RP(Ub, Te, Th), RP(Ua, Te, Th), Scaled(RoofC, 0.7), V3{ V.X * S, V.Y * S, -0.3 });
+										B.Quad1(RP(Ua, Te, Th), RP(Ub, Te, Th), RP(Ub, TB, Th), RP(Ua, TB, Th), Under, Up * -1.0);
+										if (bEdgeA) B.Quad1(RP(Ua, Te, 0.0), RP(Ua, 0.0, 0.0), RP(Ua, 0.0, Th), RP(Ua, Te, Th), Scaled(RoofC, 0.75), V3{ -U.X, -U.Y, 0.0 });
+										if (bEdgeB) B.Quad1(RP(Ub, Te, 0.0), RP(Ub, 0.0, 0.0), RP(Ub, 0.0, Th), RP(Ub, Te, Th), Scaled(RoofC, 0.75), V3{ U.X, U.Y, 0.0 });
+										else
+										{
+											const double Tn = -Hang(Sf + 1) / SlopeLen, Way = Te < Tn ? 1.0 : -1.0;
+											B.Quad1(RP(Ub, Te, 0.0), RP(Ub, Tn, 0.0), RP(Ub, Tn, Th), RP(Ub, Te, Th), Scaled(RoofC, 0.75), V3{ U.X * Way, U.Y * Way, 0.0 });
+										}
+									}
+							}
 							else B.Quad(RP(UA, TA, 0.0), RP(UB, TA, 0.0), RP(UB, TB, 0.0), RP(UA, TB, 0.0), C, C, C2, C2, Up);
-							B.Quad1(RP(UA, TA, Th), RP(UB, TA, Th), RP(UB, TB, Th), RP(UA, TB, Th), H.bBoards ? Rgb(50, 44, 38) : Rgb(70, 60, 52), Up * -1.0); // (a shed on trial: its roof's underside as dark as its inside)
-							if (J == 0) B.Quad1(RP(UA, 0.0, 0.0), RP(UB, 0.0, 0.0), RP(UB, 0.0, Th), RP(UA, 0.0, Th), Scaled(RoofC, 0.7), V3{ V.X * S, V.Y * S, -0.3 });
-							if (I == 0 || Missing(S, I - 1, J)) B.Quad1(RP(UA, TA, 0.0), RP(UA, TB, 0.0), RP(UA, TB, Th), RP(UA, TA, Th), Scaled(RoofC, 0.75), V3{ -U.X, -U.Y, 0.0 });
-							if (I == NU - 1 || Missing(S, I + 1, J)) B.Quad1(RP(UB, TA, 0.0), RP(UB, TB, 0.0), RP(UB, TB, Th), RP(UB, TA, Th), Scaled(RoofC, 0.75), V3{ U.X, U.Y, 0.0 });
-							if (J + 1 < NV && Missing(S, I, J + 1)) B.Quad1(RP(UA, TB, 0.0), RP(UB, TB, 0.0), RP(UB, TB, Th), RP(UA, TB, Th), Scaled(RoofC, 0.7), Up * -1.0 + V3{ 0, 0, 0.5 });
-							if (J > 0 && Missing(S, I, J - 1)) B.Quad1(RP(UA, TA, 0.0), RP(UB, TA, 0.0), RP(UB, TA, Th), RP(UA, TA, Th), Scaled(RoofC, 0.7), V3{ V.X * S, V.Y * S, -0.3 });
+							if (!bThatch || J > 0) B.Quad1(RP(UA, TA, Th), RP(UB, TA, Th), RP(UB, TB, Th), RP(UA, TB, Th), Under, Up * -1.0);
+							if (!bThatch && J == 0) B.Quad1(RP(UA, 0.0, 0.0), RP(UB, 0.0, 0.0), RP(UB, 0.0, Th), RP(UA, 0.0, Th), Scaled(RoofC, 0.7), V3{ V.X * S, V.Y * S, -0.3 });
+							// (a thatch's cut edge at a hole or a broken end is charred straw; a verge is straw)
+							const Col Char = bThatch ? Mixed(RoofC, Rgb(36, 32, 30), 0.6) : Scaled(RoofC, 0.75), CharD = bThatch ? Char : Scaled(RoofC, 0.7);
+							if (I == 0 || Missing(S, I - 1, J)) B.Quad1(RP(UA, TA, 0.0), RP(UA, TB, 0.0), RP(UA, TB, Th), RP(UA, TA, Th), I > 0 ? Char : Scaled(RoofC, 0.75), V3{ -U.X, -U.Y, 0.0 });
+							if (I == NU - 1 || Missing(S, I + 1, J)) B.Quad1(RP(UB, TA, 0.0), RP(UB, TB, 0.0), RP(UB, TB, Th), RP(UB, TA, Th), I < NU - 1 ? Char : Scaled(RoofC, 0.75), V3{ U.X, U.Y, 0.0 });
+							if (J + 1 < NV && Missing(S, I, J + 1)) B.Quad1(RP(UA, TB, 0.0), RP(UB, TB, 0.0), RP(UB, TB, Th), RP(UA, TB, Th), CharD, Up * -1.0 + V3{ 0, 0, 0.5 });
+							if (J > 0 && Missing(S, I, J - 1)) B.Quad1(RP(UA, TA, 0.0), RP(UB, TA, 0.0), RP(UB, TA, Th), RP(UA, TA, Th), CharD, V3{ V.X * S, V.Y * S, -0.3 });
 						}
 					// Charred rafters across what is open.
 					if (H.Hurt == DmRoofHole || Broken)
@@ -6035,8 +6144,9 @@ namespace LandField
 				const Col Cap = bThatch ? Mixed(RoofC, Sd.Clay, 0.3) : H.Roof == 1 ? Scaled(L.Roof, 0.82) : Scaled(L.Roof, 0.8);
 				// (a thatch's ridge: straw bent over it and sealed with clay, a roll twice as wide; held by pairs of crossed poles)
 				const double CW = bThatch ? 0.45 : 0.22, CZ = bThatch ? 0.14 : 0.09;
+				const double CE = bThatch ? Ridge - CW * Tan + 0.04 : Ridge + CZ - CW * Tan * 0.6; // (a thatch's roll comes down onto the straw)
 				for (int S = -1; S <= 1; S += 2)
-					B.Quad1(W(CU0, 0.0, Ridge + CZ), W(CU1, 0.0, Ridge + CZ), W(CU1, S * CW, Ridge + CZ - CW * Tan * 0.6), W(CU0, S * CW, Ridge + CZ - CW * Tan * 0.6), Cap, V3{ V.X * S, V.Y * S, 1.5 });
+					B.Quad1(W(CU0, 0.0, Ridge + CZ), W(CU1, 0.0, Ridge + CZ), W(CU1, S * CW, CE), W(CU0, S * CW, CE), Cap, V3{ V.X * S, V.Y * S, 1.5 });
 				if (bThatch)
 				{
 					const Col Pole = Rgb(112, 104, 92);
@@ -6047,7 +6157,10 @@ namespace LandField
 						{
 							// (a pole up one slope from 1.2 m under the ridge, on over it by 40 cm: its fellow up the other slope beside it)
 							const double Uu = CU0 + 0.5 + (CU1 - CU0 - 1.0) * K / NPair + S * 0.05;
-							const V3 P0 = W(Uu, S * 1.2, Ridge - 1.2 * Tan + 0.2), P1 = W(Uu, -S * 0.4, Ridge + 0.4 * Tan + 0.2);
+							// (no pole over open rafters: not past a broken end, not over a hole that reaches the ridge)
+							const int RI = std::clamp(static_cast<int>((Uu - U0) / (U1 - U0) * NU), 0, NU - 1);
+							if (Missing(-1, RI, NV - 1) || Missing(1, RI, NV - 1)) continue;
+							const V3 P0 = W(Uu, S * 1.2, Ridge - 1.2 * Tan + 0.08), P1 = W(Uu, -S * 0.4, Ridge + 0.4 * Tan + 0.08);
 							const V3 Nn = Unit3(Cross(P1 - P0, U3)) * 0.028, Uh = U3 * 0.028;
 							B.Quad1(P0 - Uh, P0 + Uh, P1 + Uh, P1 - Uh, Pole, V3{ V.X * S, V.Y * S, 1.0 });
 							B.Quad1(P0 - Nn, P0 + Nn, P1 + Nn, P1 - Nn, Scaled(Pole, 0.8), U3);
