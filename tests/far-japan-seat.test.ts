@@ -83,9 +83,11 @@ describe("America's long goal once Japan is on the chart", () => {
 // where every other great power has two, and with the carrier's own technology unresearched (a year's work before
 // its national ability, cheaper carriers, meant anything).
 describe("Japan's place in the technology tree", () => {
-  it('opens September 1939 with its five rows, every one of them a row of the common tree', () => {
+  it('opens September 1939 with the historian\'s four rows, every one of them a row of the common tree', () => {
     const g = seat('JAP');
-    expect(techOf(g, 'JAP')!.done).toEqual(['tanks', 'monoplanes', 'mediumbombers', 'carriers', 'fleetsubs']);
+    // (The historian's seed of 25 November: anti-tank guns in, the tank arm and monoplane fighters to be earned.)
+    expect(techOf(g, 'JAP')!.done).toEqual(['antitank', 'mediumbombers', 'carriers', 'fleetsubs']);
+    for (const id of ['tanks', 'monoplanes']) expect(hasTech(g, 'JAP', id), id).toBe(false);
     for (const id of TECH.start.JAP) expect(TECH.techs.some((t) => t.id === id), id).toBe(true);
     // The carrier's gate is the common one, and Japan is past it on the first day; Britain and America as before.
     expect(gateOf('ship:cv')?.id).toBe('carriers');
