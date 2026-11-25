@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0febb9739 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 28ebd83ae 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -33648,6 +33648,17 @@
   function makesHarbour(g2, f) {
     const r = harbourFor(g2, f);
     const was = f.port, gate = shutBetween(g2, f);
+    if (r && r.id === f.base) {
+      const sea = landfall(g2, f, r);
+      if (sea < 0) return false;
+      f.home = sea;
+      f.zone = sea;
+      f.stance = "port";
+      delete f.lane;
+      g2.supplyDirty = true;
+      syncWings(g2);
+      return true;
+    }
     if (!r || !rebase(g2, f, r)) return false;
     headline(g2, "info", `${cap8(fleetName(f))} cannot reach ${was}${gate ? `: ${gateIs(gate)} shut to it` : ""}. It makes for ${r.name} instead, its new base.`, f.nat);
     return true;
@@ -33656,6 +33667,10 @@
     if (!cutOff(g2, f)) return "";
     const r = harbourFor(g2, f), gate = shutBetween(g2, f);
     return `Cut off${gate ? `: ${gateIs(gate)} shut to it` : ""}. ${r ? `Nearest friendly harbour on its side: ${r.name}.` : "No friendly harbour on its side can take it."}`;
+  }
+  function cutOffHomeTip(g2, f) {
+    const r = cutOff(g2, f) ? harbourFor(g2, f) : null;
+    return !r ? "" : r.id === f.base ? `Cut off beyond a shut strait: it comes in to ${r.name} on its own side, and keeps its base there.` : `Cut off beyond a shut strait: it makes for ${r.name}, which becomes its base.`;
   }
   function cutOffNews(g2, nat) {
     if (nat !== g2.human) return;
@@ -33668,7 +33683,7 @@
       if (g2.flags[key6] !== void 0 || !(keptByHand(g2, f) || byHand(g2, nat, "navy"))) continue;
       g2.flags[key6] = g2.turn;
       const r = harbourFor(g2, f), gate = shutBetween(g2, f);
-      headline(g2, "info", `${cap8(fleetName(f))} is cut off in the ${g2.seas[f.zone].name}${gate ? `: ${gateIs(gate)} shut to it` : ""}, so it cannot sail home to ${f.port}. ${r ? `Send it to harbour and it makes for ${r.name}, the nearest friendly harbour it can reach, or move its base on its page.` : "No friendly harbour on its side of the strait can take it: it stays at sea."}`, nat);
+      headline(g2, "info", r && r.id === f.base ? `${cap8(fleetName(f))} is cut off in the ${g2.seas[f.zone].name}${gate ? `: ${gateIs(gate)} shut to it` : ""}. Send it to harbour and it comes in to ${r.name} on this side of the strait, and keeps its base there.` : `${cap8(fleetName(f))} is cut off in the ${g2.seas[f.zone].name}${gate ? `: ${gateIs(gate)} shut to it` : ""}, so it cannot sail home to ${f.port}. ${r ? `Send it to harbour and it makes for ${r.name}, the nearest friendly harbour it can reach, or move its base on its page.` : "No friendly harbour on its side of the strait can take it: it stays at sea."}`, nat);
     }
   }
   function sail(g2, f, zone, stance2, lane) {
@@ -46003,9 +46018,10 @@
     if (!f) return null;
     const war = g2.nations[f.nat].atWar.length > 0;
     const held2 = heldAfterAttack(g2, f);
+    const cut = cutOff(g2, f);
     const out = {
-      seas: war && !held2 ? seaOptions(g2, f, f.nat) : [],
-      lanes: war && !held2 ? escortLanes(g2, f.nat).map((l) => planEscort(g2, f, l.id)) : [],
+      seas: war && !held2 && !cut ? seaOptions(g2, f, f.nat) : [],
+      lanes: war && !held2 && !cut ? escortLanes(g2, f.nat).map((l) => planEscort(g2, f, l.id)) : [],
       coasts: war ? bombardTargets(g2, f, f.nat).map((r) => r.id) : [],
       ports: held2 ? [] : baseTargets(g2, f).map((r) => r.id),
       merge: mergeTargets(g2, f).map((x) => x.id),
@@ -62888,7 +62904,7 @@ ${next.text}` : ""}` : next ? next.also : "";
         options.push({
           key: `fleet:${id}:${f2.home}:port`,
           label: `Return to harbour at ${haven?.name ?? f2.port}`,
-          detail: cut2 && haven ? `It is cut off beyond a shut strait: it makes for ${haven.name}, the nearest friendly harbour it can reach, which becomes its base.` : "Safe from the enemy fleet, and takes no part at sea.",
+          detail: cut2 && haven ? haven.id === f2.base ? `It is cut off beyond a shut strait: it comes in to ${haven.name} on its own side, and keeps its base there.` : `It is cut off beyond a shut strait: it makes for ${haven.name}, the nearest friendly harbour it can reach, which becomes its base.` : "Safe from the enemy fleet, and takes no part at sea.",
           ok: up && f2.stance !== "port" && !held2 && (!cut2 || !!haven),
           why: f2.stance === "port" ? "It is in harbour now." : notNow || held2 || (cut2 && !haven ? "It is cut off beyond a shut strait, and no friendly harbour on its side can take it." : "")
         });
@@ -62935,9 +62951,9 @@ ${next.text}` : ""}` : next ? next.also : "";
   function heldWhy2(s, f) {
     return f.nat === s.human && f.attacked === s.turn ? fleetOptions(s, f.id)?.held ?? "" : "";
   }
-  function heldWhyId(s, id) {
+  function fleetWhyId(s, id) {
     const f = s.fleets.find((x) => x.id === id);
-    return f ? heldWhy2(s, f) : "";
+    return !f || f.nat !== s.human ? "" : heldWhy2(s, f) || cutOffLine(s, f);
   }
   function whoSails(s, id) {
     if (!staffRunsDesk(s, "navy")) return "";
@@ -62953,7 +62969,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     else if (what === "fleetbase") ok = orderRebase(s, Number(id), Number(a));
     else if (what === "air") ok = orderAir(s, Number(id), a, Number(b));
     else if (what === "airbase") ok = orderAirBase(s, Number(id), Number(a));
-    return { ok, note: ok ? "The order is given." : (what === "fleet" && a !== "staff" || what === "fleetbase") && heldWhyId(s, Number(id)) || "That order cannot be given now.", view: view2() };
+    return { ok, note: ok ? "The order is given." : (what === "fleet" && a !== "staff" || what === "fleetbase") && fleetWhyId(s, Number(id)) || "That order cannot be given now.", view: view2() };
   }
   function townsList() {
     const s = game();
@@ -63577,6 +63593,12 @@ ${next.text}` : ""}` : next ? next.also : "";
         fleetAttack: fleetAttackOn(s),
         attack: o?.attack ?? [],
         held: o?.held ?? "",
+        // (1.5.2) Cut off beyond a shut strait: its card's line, and RETURN TO HARBOUR's tip where a harbour on its side can
+        // take it (empty with none, or when it is not cut off).
+        ...(() => {
+          const f = s.fleets.find((x) => x.id === id);
+          return { cut: f ? cutOffLine(s, f) : "", homeTip: f ? cutOffHomeTip(s, f) : "" };
+        })(),
         wings: wingsOfFleet(s, id).map((w) => ({ id: w.id, label: w.label, aircraft: Math.round(w.aircraft), doing: w.doing, flew: w.flew }))
       };
     } catch {
@@ -63587,6 +63609,10 @@ ${next.text}` : ""}` : next ? next.also : "";
   function cutOffNote(s, id) {
     const f = s.fleets.find((x) => x.id === id), line = f ? cutOffLine(s, f) : "";
     return line ? `${line} ` : "";
+  }
+  function cutOffWhyNoSea(s, id) {
+    const f = s.fleets.find((x) => x.id === id);
+    return `Every sea in its reach lies beyond the shut strait. ${f && cutOffHomeTip(s, f) ? "RETURN TO HARBOUR takes it to a harbour on its side." : "No friendly harbour on its side can take it, so it stays at sea."}`;
   }
   function fleetPage(s, id) {
     const card = s.flags.open === 1 ? fleetView(s, id) : null;
@@ -63678,7 +63704,7 @@ ${next.text}` : ""}` : next ? next.also : "";
             label: "RETURN TO HARBOUR",
             act: `fleet:${id}:${f?.home ?? card.zone}:port`,
             ok: up && card.stance !== "port" && !o?.held && (!cut || !!haven),
-            tip: card.stance === "port" ? "It is in harbour now. Safe from the enemy fleet, and takes no part at sea." : o?.held || (cut ? haven ? `Cut off beyond a shut strait: it makes for ${haven.name}, which becomes its base.` : "Cut off beyond a shut strait, and no friendly harbour on its side can take it." : "Safe from the enemy fleet, and takes no part at sea.")
+            tip: card.stance === "port" ? "It is in harbour now. Safe from the enemy fleet, and takes no part at sea." : o?.held || (cut ? haven ? cutOffHomeTip(s, f) : "Cut off beyond a shut strait, and no friendly harbour on its side can take it." : "Safe from the enemy fleet, and takes no part at sea.")
           }];
         })(),
         ...staffRunsDesk(s, "navy") && fleetKeptByHand(s, id) ? [{ label: "HAND BACK TO YOUR ADMIRALS", act: `fleetstaff:${id}`, ok: up, tip: HAND_BACK_TIP }] : [],
@@ -63687,7 +63713,8 @@ ${next.text}` : ""}` : next ? next.also : "";
       sections: [
         { heading: "ITS SHIPS", text: "", rows: ships },
         { heading: "ENEMY FLEETS TO ATTACK", text: "", rows: targets2 },
-        { heading: "SEAS IN ITS REACH", text: seas.length ? "" : o?.held ? o.held : up ? "The country is at peace: the fleet keeps its station." : "It is not your month.", rows: seas },
+        // (1.5.2, the release review) Cut off, it is offered no sea: the section says why, not that the country is at peace.
+        { heading: "SEAS IN ITS REACH", text: seas.length ? "" : o?.held ? o.held : cutOffNote(s, id) ? cutOffWhyNoSea(s, id) : up ? "The country is at peace: the fleet keeps its station." : "It is not your month.", rows: seas },
         { heading: "LANES TO ESCORT", text: "", rows: lanes2 },
         { heading: "COASTS TO SHELL", text: "", rows: coasts },
         { heading: "FLEETS TO JOIN", text: "", rows: joins }
@@ -65023,7 +65050,7 @@ ${standing5}`,
       note4 = ok ? `The group moves to ${s.regions[Number(part[2])]?.name ?? "its new airfield"}.` : "It cannot move there now.";
     } else if (part[0] === "fleet") {
       ok = orderFleet(s, Number(part[1]), Number(part[2]), part[3]);
-      note4 = ok ? `${fleetView(s, Number(part[1]))?.doing ?? "The order is given"}.` : heldWhyId(s, Number(part[1])) || "That order cannot be given now.";
+      note4 = ok ? `${fleetView(s, Number(part[1]))?.doing ?? "The order is given"}.` : fleetWhyId(s, Number(part[1])) || "That order cannot be given now.";
       return { ok, note: note4, fly: fly2, flies: [], open: `fleet:${part[1]}`, view: view2() };
     } else if (part[0] === "fleetstaff") {
       ok = handBackFleet(s, Number(part[1]));
@@ -65031,7 +65058,7 @@ ${standing5}`,
       return { ok, note: note4, fly: fly2, flies: [], open: `fleet:${part[1]}`, view: view2() };
     } else if (part[0] === "fleetescort") {
       ok = orderEscort(s, Number(part[1]), part.slice(2).join(":"));
-      note4 = ok ? `${fleetView(s, Number(part[1]))?.doing ?? "The fleet is bound to the lane"}.` : heldWhyId(s, Number(part[1])) || "It cannot escort that lane now.";
+      note4 = ok ? `${fleetView(s, Number(part[1]))?.doing ?? "The fleet is bound to the lane"}.` : fleetWhyId(s, Number(part[1])) || "It cannot escort that lane now.";
       return { ok, note: note4, fly: fly2, flies: [], open: `fleet:${part[1]}`, view: view2() };
     } else if (part[0] === "fleetshell") {
       const rep2 = orderBombard(s, Number(part[1]), Number(part[2]), part[3]);
