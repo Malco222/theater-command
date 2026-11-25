@@ -331,8 +331,8 @@ describe('what a second review found (25 November 2026, evening)', () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('The 9th Panzer Division was due');
     expect(lines[0]).toContain('your XXII Corps');
-    // (His part is named after the division it carries: the line says he holds it, in release 2's words.)
-    expect(lines[0]).toContain(`The 2nd Panzer Division is due in Sofia this month, but you hold it already, in ${g.regions[part.reg].name}. No division is raised twice: it goes to Sofia only if you send it.`);
+    // (His part is named after the division it carries: the line says he holds it, in the tense of the line beside it.)
+    expect(lines[0]).toContain(`The 2nd Panzer Division was due in Sofia this month, and you hold it already, in ${g.regions[part.reg].name}. No division is raised twice: it is not formed, and it goes to Sofia only if you send it.`);
   });
 
   it('put back into the part he broke off it, the holder is gone, and the part keeps both divisions: the row comes without them', () => {
@@ -350,7 +350,7 @@ describe('what a second review found (25 November 2026, evening)', () => {
     expect(holders(g, 'GER', '9th Panzer Division')).toEqual([part]);
     const lines = said(g);
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain('The 2nd Panzer Division and the 9th Panzer Division are due in Sofia this month, but you hold them already');
+    expect(lines[0]).toContain('The 2nd Panzer Division and the 9th Panzer Division were due in Sofia this month, and you hold them already');
   });
 
   it('a part that outlived the holder keeps its division: the row raises only the one nobody holds', () => {

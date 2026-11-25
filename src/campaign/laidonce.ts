@@ -101,7 +101,7 @@ function told(g: Game, row: any[], place: Region, x: Corps, nos: number[], v: Vo
   const at = v ? fill(WORDS.afloat, { to: g.regions[v.to].name }) : fill(WORDS.ashore, { where: g.regions[x.reg].name });
   const as = { names: cards.join(' and '), place: place.name, army: x.name, at, count: String(nos.length), formation: row[2] };
   // (A corps named after a division it carries, as a part he broke off is: the line says he holds it, not that it comes
-  // from itself. Release 2's words for a division he holds, the UI director's.)
+  // from itself, in the same tense as the lines beside it.)
   const self = all.some((d) => d.name === x.name);
   const line = fill(self ? (nos.length === 1 ? WORDS.held : WORDS.heldMany) : nos.length === 1 ? WORDS.from : WORDS.fromMany, as);
   return line.charAt(0).toUpperCase() + line.slice(1);
