@@ -9,10 +9,13 @@ const ISSUED = '/mnt/project-files/art-director/air-colours/unit-colours-words.j
 const game = colours as unknown as { count: number; words: Record<string, string[]> };
 
 describe('the earned colours\' words', () => {
-  it('the game\'s words are the art director\'s file, line for line (where the project\'s files are mounted)', async () => {
-    let issued: { count: number; words: Record<string, string[]> };
-    // (Off the project's machine the file cannot be read; the issued lines in the next test stand for it there.)
-    try { issued = ((await import(/* @vite-ignore */ ISSUED)) as { default: typeof issued }).default; } catch { return; }
+  it('the game\'s words are the art director\'s file, line for line (where the project\'s files are mounted)', async (ctx) => {
+    type Issued = { count: number; words: Record<string, string[]> };
+    // (Off the project's machine the file cannot be read; the issued lines in the next test stand for it there. The test
+    // then shows as skipped, by its name, never as passed with nothing checked: the review of the air follow-on, note 4.)
+    const issued: Issued | null = await import(/* @vite-ignore */ ISSUED).then((m: { default: Issued }) => m.default, () => null);
+    if (!issued) return ctx.skip(`the issued file ${ISSUED} cannot be read here`);
+    expect.hasAssertions();
     expect(issued.words.UK.length).toBe(16);
     expect(game.count).toBe(issued.count);
     expect(Object.keys(game.words)).toEqual(Object.keys(issued.words));
