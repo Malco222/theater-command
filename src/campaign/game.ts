@@ -52,7 +52,7 @@ import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCros
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
-import { answersOf, beyondEurope, patronOf, pressData, protectorOf, shipsItsOwn, worldOn } from './world';
+import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, worldOn } from './world';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -889,12 +889,24 @@ interface SupplyBook {
   lanes: Map<string, LanesKept>; home: Map<string, HomeKept>;
   /** The calls made on this book, counted; each sea's state when last looked at, and the call that found it changed. */
   calls: number; seaSeen: (SeaState | null | undefined)[]; seaStamp: Int32Array;
+  /** Each country's friends among every holder numbered (friendsFor of them), good while friendsKey (friendsKeyOf) is the same. */
+  friends: Map<string, Uint8Array>; friendsKey: string; friendsFor: number;
 }
 const supplyBooks = new WeakMap<Game, SupplyBook>();
 /** Every holder a campaign's supply has seen, numbered in the order seen: the numbers never change. */
 const supplyHolders = new WeakMap<Game, { no: Map<string, number>; list: string[] }>();
 const supplyCheckEnv = (globalThis as { TC_SUPPLY_CHECK?: unknown }).TC_SUPPLY_CHECK ?? (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.TC_SUPPLY_CHECK;
 const supplyCheck = supplyCheckEnv !== undefined && !!supplyCheckEnv && supplyCheckEnv !== '0';
+/**
+ * Everything allied() reads of the war, for every country: its alliance (bloc), whether it is alive and whom it is at
+ * war with (far.ts tiedPair's tie), and whether the far side is on. While this is the same, so is every answer
+ * allied() gives (a change to allied() must be followed here; TC_SUPPLY_CHECK asks every kept answer afresh).
+ */
+const friendsKeyOf = (g: Game): string => {
+  let key = farOn(g) ? 'far' : 'near';
+  for (const id in g.nations) { const n = g.nations[id]; key += `|${id}:${bloc(n)}:${n.alive ? 1 : 0}:${n.atWar.join(',')}`; }
+  return key;
+};
 const sameBytes = (a: ArrayLike<number>, b: ArrayLike<number>): boolean => {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
@@ -991,7 +1003,7 @@ export function computeSupply(g: Game): void {
   let book = supplyBooks.get(g);
   const longKey = `${long.join('|')}/${DESERT.step}`;
   if (!book || book.size !== size || book.wide !== wide || book.long !== longKey || book.seas !== g.seas || book.gates !== g.gates || !sameBytes(book.deep, deep) || !sameBytes(book.sand, sand)) {
-    book = { size, wide, long: longKey, seas: g.seas, gates: g.gates, deep, sand, rail: { step, home }, drawn: new Map(), road, own, log: [], logBase: 0, lanes: new Map(), home: new Map(), calls: 0, seaSeen: [], seaStamp: new Int32Array(g.seas.length) };
+    book = { size, wide, long: longKey, seas: g.seas, gates: g.gates, deep, sand, rail: { step, home }, drawn: new Map(), road, own, log: [], logBase: 0, lanes: new Map(), home: new Map(), calls: 0, seaSeen: [], seaStamp: new Int32Array(g.seas.length), friends: new Map(), friendsKey: '', friendsFor: -1 };
     supplyBooks.set(g, book);
   } else {
     // The provinces whose holder has changed since the last call, on the field or in the books.
@@ -1008,16 +1020,21 @@ export function computeSupply(g: Game): void {
   let rail = book.rail;
   if (!sameBytes(rail.step, step) || !sameBytes(rail.home, home)) book.rail = rail = { step, home };
   const railHolds = (then: RailNow | null): boolean => !then || then === rail || (sameBytes(then.step, rail.step) && sameBytes(then.home, rail.home));
-  // Each country's friends among the holders, asked afresh at every call (an alliance, a surrender or a hand-over is in
-  // it at once), once a country a call. A holder that holds nothing this call is not asked after (0): no province of
-  // this call's is his, and none is looked at by his number.
-  const friends = new Map<string, Uint8Array>();
+  // Each country's friends among every holder numbered, asked once a country while what allied() reads of the war is
+  // the same as when they were asked (friendsKeyOf: an alliance, a surrender, a war or the far side's ties change it,
+  // and the tables are asked afresh) and no new holder has been numbered. (Only this call's holders are looked at by
+  // number below; the others' entries are never read.)
+  const friendsKey = friendsKeyOf(g);
+  if (book.friendsKey !== friendsKey || book.friendsFor !== holders.length) { book.friends = new Map(); book.friendsKey = friendsKey; book.friendsFor = holders.length; }
+  const friends = book.friends;
   const friendOf = (id: string): Uint8Array => {
     let friend = friends.get(id);
     if (!friend) {
       friend = new Uint8Array(holders.length);
-      for (let k = 0; k < holders.length; k++) if (here[k] === 1 && allied(g, id, holders[k])) friend[k] = 1;
+      for (let k = 0; k < holders.length; k++) if (allied(g, id, holders[k])) friend[k] = 1;
       friends.set(id, friend);
+    } else if (supplyCheck) {
+      for (let k = 0; k < holders.length; k++) if (friend[k] !== (allied(g, id, holders[k]) ? 1 : 0)) throw new Error(`friends kept for ${id} in month ${g.turn} differ from fresh ones (${holders[k]})`);
     }
     return friend;
   };
