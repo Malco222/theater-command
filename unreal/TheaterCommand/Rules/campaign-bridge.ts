@@ -4590,7 +4590,8 @@ function fleetPage(s: Game, id: number): Page | null {
   const targets: PageRow[] = (o?.attack ?? []).map((t) => {
     const p = previewFleetAttack(s, id, t);
     const them = p?.theirs.fleets.find((x) => x.id === t);
-    const where = p ? (p.where === 'harbour' ? `In harbour at ${p.port}.` : `At sea, in the ${p.zoneName}.`) : '';
+    // (1.5.3, playtest #25) A fleet only reported is in harbour, and no more: the map gives it no port.
+    const where = p ? (p.where === 'harbour' ? `In harbour${them?.known === 'exact' ? ` at ${p.port}` : ''}.` : `At sea, in the ${p.zoneName}.`) : '';
     return {
       nat: them?.nat ?? '', title: them?.name ?? 'An enemy fleet',
       lines: [where, p?.odds ? `${p.verdict}: ${p.odds.mid >= 9.95 ? 'more than 10' : p.odds.mid.toFixed(1)} to 1.` : 'Its strength is not known.'].filter(Boolean),
@@ -4648,7 +4649,8 @@ function fleetAttackPage(s: Game, id: number, target: number): Page | null {
   };
   const them = p.theirs.fleets.find((x) => x.id === target);
   const name = them?.name ?? 'the enemy fleet';
-  const where = p.where === 'harbour' ? `in harbour at ${p.port}` : `in the ${p.zoneName}`;
+  // (1.5.3, playtest #25) A fleet only reported is in harbour, and no more: the map gives it no port.
+  const where = p.where === 'harbour' ? `in harbour${them?.known === 'exact' ? ` at ${p.port}` : ''}` : `in the ${p.zoneName}`;
   const side = (fs: typeof p.ours.fleets, own: boolean): PageRow[] => fs.map((x) => ({
     nat: x.nat, title: `${x.name}${x.count >= 0 ? `  \u00B7  ${x.count} ships` : x.size ? `  \u00B7  ${x.size.toLowerCase()}` : ''}`,
     lines: [

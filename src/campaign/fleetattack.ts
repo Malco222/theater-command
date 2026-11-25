@@ -47,6 +47,18 @@ const oneDp = (x: number): string => (x >= 9.95 ? 'more than 10' : x.toFixed(1))
 const sum = (g: Game, fs: Fleet[]): number => fs.reduce((s, x) => s + fleetPower(g, x), 0);
 const shipsIn = (fs: Fleet[]): number => fs.reduce((s, x) => s + shipCount(x.ships), 0);
 const listNames = (fs: Fleet[]): string => { const l = fs.map(fleetName); return l.length === 1 ? l[0] : `${l.slice(0, -1).join(', ')} and ${l[l.length - 1]}`; };
+/**
+ * (1.5.3, playtest #25) Enemy fleets in a sentence, as the viewer's side knows them: a fleet it has identified by its
+ * name, and one only reported as the map has it, "those British ships" (once a nation), with no name and no port.
+ * `one` is a single fleet, named: it takes "is", "it" and "declines".
+ */
+function foeWords(g: Game, fs: Fleet[], named: (x: Fleet) => boolean): { text: string; one: boolean } {
+  const known = fs.filter(named).map(fleetName);
+  const unknown = [...new Set(fs.filter((x) => !named(x)).map((x) => `those ${g.nations[x.nat].adj} ships`))];
+  const l = [...known, ...unknown];
+  return { text: l.length === 1 ? l[0] : `${l.slice(0, -1).join(', ')} and ${l[l.length - 1]}`, one: l.length === 1 && !unknown.length };
+}
+const identified = (g: Game, viewer: string | null) => (x: Fleet): boolean => fleetKnown(g, x, viewer) === 'exact';
 
 /** The swing of the dice on a fleet action's odds, either way (navy.ts fleetAction), and the steps the forecast walks it in. */
 const SWING: [number, number] = [0.8, 1.2];
@@ -89,6 +101,9 @@ export function whyNotFleetAttack(g: Game, id: number, target: number): string |
   if (!atWar(g, f.nat, t.nat)) return `${g.nations[t.nat]?.name ?? t.nat} is not at war with ${g.nations[f.nat].name}.`;
   if (surfaceShips(t) <= 0) return 'Submarines are not brought to a fleet action: send ships to hunt them in their sea.';
   if (!groundOf(g, f, t)) {
+    // (1.5.3, playtest #25) A fleet only reported keeps its name and its port to itself: the sea it is in, or that it is in harbour.
+    const foe = foeWords(g, [t], identified(g, f.nat));
+    if (!foe.one) return `${cap(foe.text)} are ${atSea(t) ? seaWhere(g.seas[t.zone].name) : 'in harbour'}, out of reach of ${fleetName(f)} from ${f.port}.`;
     return atSea(t)
       ? `${cap(fleetName(t))} is ${seaWhere(g.seas[t.zone].name)}, out of reach of ${fleetName(f)} from ${f.port}.`
       : `${t.port} is out of reach of ${fleetName(f)} from ${f.port}.`;
@@ -239,7 +254,10 @@ export function planFleetAttack(g: Game, id: number, target: number, viewer: str
   plan.notes.push(plan.enough
     ? `Your admiral would have offered battle at these odds anyway: this fights it now, not at the month's end.`
     : `Your admiral would not offer battle at these odds (he wants ${B.seek} to 1 and has ${oneDp(mid)}): it is your order, and it will be carried out.`);
-  if (plan.found < 1) plan.notes.push(`${cap(fleetName(t))} is not patrolling, so it has to be found first: about ${pct(plan.found)} of the time. Not found, your fleet patrols ${seaWhere(sea.name)}.`);
+  if (plan.found < 1) {
+    const foe = foeWords(g, [t], identified(g, viewer));
+    plan.notes.push(`${cap(foe.text)} ${foe.one ? 'is' : 'are'} not patrolling, so ${foe.one ? 'it has' : 'they have'} to be found first: about ${pct(plan.found)} of the time. Not found, your fleet patrols ${seaWhere(sea.name)}.`);
+  }
   if (plan.slips > 0) plan.notes.push(`Outweighed ${B.evadeAt} to 1 or more, the enemy makes for port about ${pct(plan.slips)} of the time, which leaves you the sea.`);
   if (at.harbour) plan.notes.push('A fleet in harbour cannot make for port: it is there, and it fights where it lies.');
   if (mine.length > 1) plan.notes.push(`${cap(listNames(mine.slice(1)))}, already patrolling ${seaWhere(sea.name)}, ${mine.length === 2 ? 'joins' : 'join'} the attack.`);
@@ -265,6 +283,9 @@ export function orderFleetAttack(g: Game, id: number, target: number): FleetAtta
   if (whyNotFleetAttack(g, id, target)) return null;
   const f = ownFleet(g, id)!, t = g.fleets.find((x) => x.id === target)!;
   const at = groundOf(g, f, t)!;
+  // (1.5.3, playtest #25) The enemy as the player's side knew him when the order was given: a fleet only reported stays unnamed.
+  const named = new Set(theirsAt(g, f, t, at).filter(identified(g, f.nat)).map((x) => x.id));
+  const foes = (fs: Fleet[]): { text: string; one: boolean } => foeWords(g, fs, (x) => named.has(x.id));
   if (!sail(g, f, at.zone, 'patrol')) return null;
   f.attacked = g.turn;
   const news = g.headlines.length;
@@ -276,7 +297,8 @@ export function orderFleetAttack(g: Game, id: number, target: number): FleetAtta
   if (!at.harbour) {
     // Ships that are not patrolling have to be found first; those that are stand with him.
     if (t.stance !== 'patrol' && !rng.chance(NAVY.battle.catchRaider)) {
-      const text = `${cap(fleetName(f))} searched ${seaWhere(zone.name)} for ${fleetName(t)} and did not find it.`;
+      const foe = foes([t]);
+      const text = `${cap(fleetName(f))} searched ${seaWhere(zone.name)} for ${foe.text} and did not find ${foe.one ? 'it' : 'them'}.`;
       headline(g, 'event', text, f.nat);
       return { outcome: 'missed', report: null, text };
     }
@@ -284,7 +306,8 @@ export function orderFleetAttack(g: Game, id: number, target: number): FleetAtta
     const A = sum(g, mine) + airA, D = Math.max(1, sum(g, met) + airD);
     if (A >= NAVY.battle.evadeAt * D && rng.chance(NAVY.battle.evade)) {
       for (const x of met) sail(g, x, x.home, 'port');
-      const text = `${cap(listNames(met))} ${met.length === 1 ? 'declines' : 'decline'} battle ${seaWhere(zone.name)} and ${met.length === 1 ? 'makes' : 'make'} for port.`;
+      const foe = foes(met);
+      const text = `${cap(foe.text)} ${foe.one ? 'declines' : 'decline'} battle ${seaWhere(zone.name)} and ${foe.one ? 'makes' : 'make'} for port.`;
       headline(g, 'event', text, met[0].nat, undefined, { arm: 'sea', won: f.nat, lost: met[0].nat });
       return { outcome: 'declined', report: null, text };
     }
