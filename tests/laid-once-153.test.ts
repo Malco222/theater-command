@@ -9,6 +9,7 @@ import setup from '../data/campaign/setup-1939.json';
 import { divisionsOf, keepNumbers, numbersOf } from '../src/campaign/armies';
 import { addCorps, createGame, declareWar, putToSea, relocate, removeCorps, startPhase } from '../src/campaign/game';
 import { breakUp } from '../src/campaign/breakup';
+import { setStop } from '../src/campaign/history';
 import { drawHeld, layDrawn, loanOver } from '../src/campaign/laidonce';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -343,5 +344,31 @@ describe('what a second review found (25 November 2026, evening)', () => {
     expect(held.drawn.reduce((s, d) => s + d.k, 0)).toBe(1);
     expect(held.n).toBe(1);
     expect(iv.divs).toBe(was);
+  });
+});
+
+describe("the dial: a holder in a fight keeps its division at stops 3 to 5; at the book's stops the book's rows keep their book", () => {
+  // The design director's ruling of 21:50Z, 25 November 2026: "a date never lifts a corps out of a fight" acts at stops 3
+  // to 5 on the draw's door as on the 'from' rows'. At stops 1 and 2 a row that draws a held division takes it at its
+  // date, even from a fight, and it is still laid once.
+  function fight(stop: number): Game {
+    // (Germany's first wars go on: Neumark, where III Corps stands, lies beside Poznan.)
+    const g = balkans(null, true, false);
+    expect(setStop(g, stop, true)).toBe(true);
+    only(g, 'GER', INFANTRY);
+    month(g, 'GER', 19);
+    return g;
+  }
+  it.each([1, 2])('at stop %i the row draws the 50th out of III Corps at its date, fight or not, and it is laid once', (stop) => {
+    const g = fight(stop);
+    expect(corps(g, 'GER', 'III Corps')!.divs).toBe(2);
+    expect(corps(g, 'GER', INFANTRY)!.divs).toBe(3);
+    expect(holders(g, 'GER', '50th Infantry Division')).toEqual([corps(g, 'GER', INFANTRY)]);
+  });
+  it.each([4, 5])('at stop %i it acts as at stop 3: the 50th stays and fights, and the row forms without it', (stop) => {
+    const g = fight(stop);
+    expect(corps(g, 'GER', 'III Corps')!.divs).toBe(3);
+    expect(corps(g, 'GER', INFANTRY)!.divs).toBe(2);
+    expect(holders(g, 'GER', '50th Infantry Division')).toHaveLength(1);
   });
 });
