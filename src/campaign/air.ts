@@ -57,7 +57,7 @@ import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretw
 import { armedAt, atomRaidWorth, strikeFlown } from './atom';
 import { acOn, aimOf, bombLands, campaignOrders, campaignResults, chainAt, gunnerRatio, inCampaign, nightFighters, recordField, skyFought, stockLoss } from './aircampaigns';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
-import { chartDist, globeDist, globeLeg, mapDist, nearX } from './wrap';
+import { chartDist, globeDist, globeLeg, mapDist, nearX, seaDist as seaChartDist } from './wrap';
 import { seaWhat, seaWhere } from './sea-words';
 import { baseField } from './bargains';
 import { flagName } from './flagnames';
@@ -600,12 +600,23 @@ export function legKm(g: Game, f: AirFleet, from: number, to: number): number {
   return legKmAt(g, groupAt(g, f), from, to);
 }
 
-/** legKm from a place on the chart: a province, or a sea where region is -1 (ferry.ts reads its known fighters so). */
+/**
+ * legKm from a place on the chart: a province, or a sea where region is -1 (ferry.ts reads its known fighters so).
+ * Where the nearest point of the leg is one of its ends, the distance is the rules' own to that field, km() from a
+ * province (wrap.ts seaDist from a sea), whichever chart either is on: a field never reads two distances (the review
+ * of the air follow-on, finding 1: Moscow against the leg Kirov to Yaroslavl read 248.763 km on the globe where km()
+ * reads 259.688 on the map). Only a point inside the leg is measured by the leg's own ruler, below; so just inside
+ * an old-chart end of a leg that crosses to the far side the reading steps from the map's to the globe's.
+ */
 export function legKmAt(g: Game, p: { x: number; y: number; region: number; sea: number }, from: number, to: number): number {
   const A = g.regions[from], B = g.regions[to];
   const bx = nearX(g, B.x, A.x), px = nearX(g, p.x, A.x);
   const dx = bx - A.x, dy = B.y - A.y, L = dx * dx + dy * dy;
   const t = L > 0 ? clamp(((px - A.x) * dx + (p.y - A.y) * dy) / L, 0, 1) : 0;
+  if ((t <= 0 || t >= 1) && (p.region >= 0 || p.sea >= 0)) {
+    const E = t <= 0 ? A : B;
+    return (p.region >= 0 ? chartDist(g, g.regions[p.region], E) : seaChartDist(g, E, { id: p.sea, x: p.x, y: p.y })) * AIR.kmPerUnit;
+  }
   const qx = A.x + t * dx, qy = A.y + t * dy;
   if (globeLeg(g, A, B, p.region, p.sea)) return globeDist(g, px, p.y, qx, qy) * AIR.kmPerUnit;
   return Math.hypot(px - qx, p.y - qy) * AIR.kmPerUnit;
@@ -3189,11 +3200,11 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     });
     // The fighters that count on the troops: every one that came through; fought out, those that strafed on the field.
     const low = fix?.strafed() ?? a.att.reduce((s, x) => s + (!rule || strafers.includes(x.f.id) ? x.f.ftr * x.esc * x.crowd : 0), 0);
+    const cut = troopCut(r, foes, (through + low * G.fighters) * troopWeight(g, nat));
     if (rule) {
       const route = battle && !staff ? 'fought' : 'settled';
-      strafeWatch.tell?.({ route, target, nat, strafers: route === 'fought' ? [...(battle?.strafers ?? [])] : strafers, fire: route === 'fought' ? battle?.strafeFire ?? 0 : fired, weight: low });
+      strafeWatch.tell?.({ route, target, nat, strafers: route === 'fought' ? [...(battle?.strafers ?? [])] : strafers, fire: route === 'fought' ? battle?.strafeFire ?? 0 : fired, weight: low, cut });
     }
-    const cut = troopCut(r, foes, (through + low * G.fighters) * troopWeight(g, nat));
     let divs = 0;
     for (const c of foes) {
       const k = cut * (c.dug ? G.dug : 1);
@@ -4269,9 +4280,10 @@ export function canStrafe(g: Game, x: { f: AirFleet; d: number }): boolean {
  * whole group F against a share counted on F x esc x crowd). The ground fire and the weight are linear in what is left,
  * so their means follow from E[k]. A group is named when it is more likely than not to have a fighter left.
  */
-export function strafersExpected(g: Game, a: AirAssess, air: number): { ids: number[]; left: number; fire: number; weight: number } {
+export function strafersExpected(g: Game, a: AirAssess, air: number): { ids: number[]; left: number; fire: number; weight: number; parts: StrafePart[] } {
   const L = AIR.combat.luck, lo = 1 - L, hi = 1 + L, fire = AIRWAR.ground.fire;
   const ids: number[] = [];
+  const parts: StrafePart[] = [];
   let left = 0, weight = 0;
   for (const x of a.att) {
     if (!(x.ftr > 0) || !canStrafe(g, x)) continue;
@@ -4283,8 +4295,75 @@ export function strafersExpected(g: Game, a: AirAssess, air: number): { ids: num
     if (some > 0.5) ids.push(x.f.id);
     left += l;
     weight += l * (1 - c * fire);
+    parts.push({ F, c, m, keep: 1 - c * fire });
   }
-  return { ids, left, fire: left * fire, weight };
+  return { ids, left, fire: left * fire, weight, parts };
+}
+
+/**
+ * One group with the reach to strafe, as strafersExpected weighs it: F fighters, c = esc x crowd of them counting, m the
+ * air fight's loss to it at even luck, keep the share of a counting fighter's weight left after the ground fire.
+ */
+export interface StrafePart { F: number; c: number; m: number; keep: number }
+
+/**
+ * The card's cut on the troops with the strafers' rule on: the expectation of the settled raid's troopCut over the
+ * raid's luck (the design director, 12:59Z question 4: where a term is not linear the card gives the expectation of the
+ * outcome; the review of the air follow-on, finding 2). troopCut clips at ground.max, so it is not linear where the clip
+ * binds. The settled raid throws two independent lucks that move the weight on the troops, each even on
+ * [1 - combat.luck, 1 + combat.luck]: the bombers' (their losses, so those that get through) and the escort's (the air
+ * fight's losses, so the strafers left). Given them, the expected weight is linear in what gets through and in the
+ * strafers left, as the card's own figures read them: through(ub) = through x (1 - bomberLoss x ub) / (1 - bomberLoss),
+ * mean the card's through; strafers left E[F - min(F, m ue)] x c x keep for each group, mean strafersExpected's weight.
+ * So the expectation is a double integral of a clipped plane: taken exactly, in closed form over the bombers' luck and by
+ * Simpson's rule over the escort's between every kink, where the integrand is a quadratic. No dice are drawn.
+ * Where the clip cannot bind at the raid's best luck the cut is troopCut at the expected weight, the card's figure
+ * before this, to the last digit. The rolls' whole numbers and each strafer's own ground-fire luck are taken at their
+ * means (linear terms, except where they move the clip by a fraction of an aircraft).
+ */
+function troopCutExpected(g: Game, a: AirAssess, r: Region, foes: Corps[], nat: string, through: number, s: { weight: number; parts: StrafePart[] }): number {
+  const G = AIRWAR.ground, w = troopWeight(g, nat);
+  const linear = troopCut(r, foes, (through + s.weight * G.fighters) * w);
+  const divs = foes.reduce((t, c) => t + c.divs, 0);
+  if (divs <= 0 || w <= 0) return linear;
+  const L = AIR.combat.luck, lo = 1 - L, hi = 1 + L, bl = a.bomberLoss;
+  // The weight in bombers through plus strafers x ground.fighters: what the clip M stands at in those units.
+  const M = (G.max * (G.scale + G.perDiv * divs)) / w;
+  const S = (u: number): number => s.parts.reduce((t, p) => t + p.c * (p.F - Math.min(p.F, p.m * u)) * p.keep, 0) * G.fighters;
+  // through(ub) = T0 - beta x ub.
+  const T0 = bl < 1 ? through / (1 - bl) : through, beta = bl < 1 ? (through * bl) / (1 - bl) : 0;
+  if (T0 - beta * lo + S(lo) <= M) return linear;
+  // E over the bombers' luck of min(M, A - beta ub), in closed form.
+  const overB = (A: number): number => {
+    if (beta <= 0) return Math.min(M, A);
+    const c = Math.max(lo, Math.min(hi, (A - M) / beta));
+    return (M * (c - lo) + (A * (hi - c) - (beta * (hi * hi - c * c)) / 2)) / (hi - lo);
+  };
+  const h = (u: number): number => overB(T0 + S(u));
+  // Kinks over the escort's luck: where a group's loss reaches the whole group, and where the clip meets either edge of
+  // the bombers' luck (S is linear between the first kind, so the second kind is found on each piece).
+  const knots = [lo, hi];
+  for (const p of s.parts) if (p.m > 0 && p.F / p.m > lo && p.F / p.m < hi) knots.push(p.F / p.m);
+  knots.sort((x, y) => x - y);
+  const all = [...knots];
+  for (let i = 0; i + 1 < knots.length; i++) {
+    const u0 = knots[i], u1 = knots[i + 1];
+    if (u1 <= u0) continue;
+    const s0 = S(u0), s1 = S(u1);
+    if (s1 === s0) continue;
+    for (const b of [lo, hi]) {
+      const u = u0 + ((M + beta * b - T0 - s0) / (s1 - s0)) * (u1 - u0);
+      if (u > u0 && u < u1) all.push(u);
+    }
+  }
+  all.sort((x, y) => x - y);
+  let sum = 0;
+  for (let i = 0; i + 1 < all.length; i++) {
+    const u0 = all[i], u1 = all[i + 1];
+    if (u1 <= u0) continue;
+    sum += ((u1 - u0) / 6) * (h(u0) + 4 * h((u0 + u1) / 2) + h(u1));
+  }
+  return (sum / (hi - lo)) * (w / (G.scale + G.perDiv * divs)) * (G.cover[r.terrain] ?? 1);
 }
 
 /** The mean of min(F, m u) for u even on [lo, hi] (m > 0). */
@@ -4507,8 +4586,10 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
       const s = strafersExpected(g, a, ftrLoss);
       ftrLoss += s.fire;
       fire = s.fire; strafers = s.ids;
-      cut = troopCut(r, foes, (through + s.weight * G.fighters) * troopWeight(g, nat));
-      strafeWatch.tell?.({ route: 'card', target, nat, strafers: s.ids, fire: s.fire, weight: s.weight });
+      // (The cut clips at ground.max, so it is the expectation of the settled raid's cut over the raid's luck, ruling 4;
+      // where the clip cannot bind on any luck that is the cut at the expected weight, to the last digit.)
+      cut = troopCutExpected(g, a, r, foes, nat, through, s);
+      strafeWatch.tell?.({ route: 'card', target, nat, strafers: s.ids, fire: s.fire, weight: s.weight, cut });
     } else {
       const fire = a.E * G.fire;
       ftrLoss += fire;

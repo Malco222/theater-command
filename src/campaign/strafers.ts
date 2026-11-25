@@ -35,5 +35,5 @@ export function strafeOn(): boolean {
  * raid's booking say whom, by the one rule). Never set in play; read only with the rule on.
  */
 export const strafeWatch: {
-  tell?: (x: { route: 'card' | 'settled' | 'fought'; target: number; nat: string; strafers: number[]; fire: number; weight: number }) => void;
+  tell?: (x: { route: 'card' | 'settled' | 'fought'; target: number; nat: string; strafers: number[]; fire: number; weight: number; cut?: number }) => void;
 } = {};
