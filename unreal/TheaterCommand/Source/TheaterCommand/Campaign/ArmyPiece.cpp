@@ -4,6 +4,7 @@
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignUnitTable.h"
+#include "Campaign/ShipWay.h"
 #include "Misc/ScopeExit.h"
 #include "Campaign/TheaterSpeed.h"
 #include "Campaign/TheaterStillMesh.h"
@@ -1023,6 +1024,8 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	}
 	// (a fleet at sea: its wake, foam lying on the water. Two of them, on patrol and on passage: the one that is not wanted is hidden.)
 	bHasWake = false;
+	WakeLaid.Reset();
+	bWakeBent = false; // (a new mesh: its wake is as it was built)
 	if (Model.Wake[0].Vertices.Num() > 0 && Map->GetWakeMaterial())
 	{
 		for (int32 Passage = 0; Passage < 2; ++Passage)
@@ -1030,6 +1033,16 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 			const FMiniatureMesh::FWakeMesh& Foam = Model.Wake[Passage];
 			Body->CreateMeshSection(1 + Passage, Foam.Vertices, Foam.Triangles, Foam.Normals, Foam.UVs, Foam.Colors, TArray<FProcMeshTangent>(), false);
 			Body->SetMaterial(1 + Passage, Map->GetWakeMaterial());
+		}
+		// (Release 2, a fleet under way.) The passage wake is kept as it was built, to be laid along her course. Her
+		// ships lie in echelon about her middle, the sternmost stern nine of the piece's units astern of it (the
+		// battleship's: FMiniatureMesh::Fleet): from there forward the piece turns as one.
+		WakeLaid = Model.Wake[1].Vertices;
+		WakeStiff = 9.0 * U;
+		WakeReach = WakeStiff;
+		for (const FVector& Point : WakeLaid)
+		{
+			WakeReach = FMath::Max(WakeReach, -Point.Y);
 		}
 		bHasWake = true;
 		Body->SetMeshSectionVisible(1, !bMarching);
@@ -1343,6 +1356,11 @@ void AArmyPiece::MarchAlong(const TArray<FVector>& Waypoints, bool bInRemoveOnAr
 		return;
 	}
 	Route = Waypoints;
+	// (Release 2, a fleet under way: a march, or a sail corner to corner, is no course of her own. SailCourse sets it after.)
+	SailAt.Reset();
+	SailHead.Reset();
+	SailRan.Reset();
+	StraightenWake();
 	if (RoundSpan > 0.0)
 	{
 		// (Release 2, the far side.) The short way round: each point is counted in the turn of the world nearest the
@@ -1390,6 +1408,60 @@ void AArmyPiece::SailAlong(const TArray<FVector>& Waypoints, float TableYaw)
 	MarchTime = FMath::Clamp(1.1 + RouteMarks.Last() / 3800.0, 1.4, 3.6);
 }
 
+void AArmyPiece::SailCourse(const TArray<FVector>& At, const TArray<FVector2D>& Head, const TArray<double>& Ran, double Each, float TableYaw)
+{
+	if (At.Num() < 2 || Head.Num() != At.Num() || Ran.Num() != At.Num() || Each <= 0.0)
+	{
+		return;
+	}
+	// (as a piece glides: under way, not lifted, its passage wake shown)
+	MarchAlong({ At[0], At.Last() }, false, false);
+	if (!bMarching)
+	{
+		return;
+	}
+	bSailing = true;
+	SailEndYaw = TableYaw;
+	SailLaidYaw = TableYaw;
+	SailAt = At;
+	SailHead = Head;
+	SailRan = Ran;
+	SailEach = Each;
+	MarchTime = (At.Num() - 1) * Each;
+}
+
+void AArmyPiece::BendWake(double Ran, const FVector2D& Bows, double Progress)
+{
+	if (!bHasWake || !Body || WakeLaid.Num() == 0 || SailAt.Num() < 2)
+	{
+		return;
+	}
+	// The water astern of her sterns, station by station back along her course, and each point of the wake laid on it.
+	const double Scale = GetActorScale3D().X;
+	static TheaterShipWay::FAstern Astern; // (the game's thread only)
+	TheaterShipWay::LookAstern(SailAt.GetData(), SailHead.GetData(), SailRan.GetData(), SailAt.Num(), Ran, FMath::Max((WakeReach - WakeStiff) * Scale, 1.0), 128, Astern);
+	const double Settle = TheaterShipWay::Straighten(Progress);
+	const TheaterShipWay::FSpot Head{ Bows.X, Bows.Y };
+	WakeBent.SetNumUninitialized(WakeLaid.Num());
+	for (int32 K = 0; K < WakeLaid.Num(); ++K)
+	{
+		double X = 0.0, Y = 0.0;
+		TheaterShipWay::Trail(Astern, Head, Scale, Settle, WakeStiff, WakeLaid[K].X, WakeLaid[K].Y, X, Y);
+		WakeBent[K] = FVector(X, Y, WakeLaid[K].Z);
+	}
+	Body->UpdateMeshSection(2, WakeBent, TArray<FVector>(), TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>());
+	bWakeBent = true;
+}
+
+void AArmyPiece::StraightenWake()
+{
+	if (bWakeBent && Body && WakeLaid.Num() > 0)
+	{
+		Body->UpdateMeshSection(2, WakeLaid, TArray<FVector>(), TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>());
+	}
+	bWakeBent = false;
+}
+
 void AArmyPiece::FaceTable(float Yaw)
 {
 	SailEndYaw = Yaw;
@@ -1412,15 +1484,33 @@ void AArmyPiece::Tick(float DeltaSeconds)
 	const double Progress = FMath::Clamp(MarchClock / MarchTime, 0.0, 1.0);
 	// Ease away from the start and into the finish, as a hand moves a piece.
 	const double Eased = Progress * Progress * (3.0 - 2.0 * Progress);
-	const double Target = Eased * RouteMarks.Last();
-
+	// (Release 2, a fleet under way.) On a course of her own she is where her times say, and heads as they say: the
+	// course has her weight in it already.
+	const bool bCourse = bSailing && SailAt.Num() >= 2;
+	FVector Position;
+	FVector2D CourseBows(0.0, 1.0);
+	double CourseRan = 0.0;
 	int32 Segment = 1;
-	while (Segment < RouteMarks.Num() - 1 && RouteMarks[Segment] < Target)
+	if (bCourse)
 	{
-		++Segment;
+		const double Beat = FMath::Clamp(MarchClock / SailEach, 0.0, static_cast<double>(SailAt.Num() - 1));
+		const int32 Before = FMath::Min(FMath::FloorToInt32(Beat), SailAt.Num() - 2);
+		const double Between = Beat - Before;
+		Position = FMath::Lerp(SailAt[Before], SailAt[Before + 1], Between);
+		const FVector2D Mixed = SailHead[Before] + (SailHead[Before + 1] - SailHead[Before]) * Between;
+		CourseBows = Mixed.SizeSquared() > 1.0e-8 ? Mixed.GetSafeNormal() : SailHead[Before + 1];
+		CourseRan = FMath::Lerp(SailRan[Before], SailRan[Before + 1], Between);
 	}
-	const double Span = FMath::Max(RouteMarks[Segment] - RouteMarks[Segment - 1], 1.0e-3);
-	FVector Position = FMath::Lerp(Route[Segment - 1], Route[Segment], (Target - RouteMarks[Segment - 1]) / Span);
+	else
+	{
+		const double Target = Eased * RouteMarks.Last();
+		while (Segment < RouteMarks.Num() - 1 && RouteMarks[Segment] < Target)
+		{
+			++Segment;
+		}
+		const double Span = FMath::Max(RouteMarks[Segment] - RouteMarks[Segment - 1], 1.0e-3);
+		Position = FMath::Lerp(Route[Segment - 1], Route[Segment], (Target - RouteMarks[Segment - 1]) / Span);
+	}
 	// Picked up, carried, set down.
 	if (bLiftOnMarch)
 	{
@@ -1438,7 +1528,18 @@ void AArmyPiece::Tick(float DeltaSeconds)
 	// (Seam-2: or shown in the turn nearest the eye, where the map has said so. Then it does not leave the table at the
 	// seam at all: it sails on across it, and the eye comes round with it.)
 	SetActorLocation(Shown(Position));
-	if (bSailing)
+	if (bCourse)
+	{
+		// Her bows as her course has them (a fleet's model has its bows toward its own +Y). The table may have been
+		// turned to a new eye since the course was laid: what it has turned by comes on over the last fifth of her time,
+		// so she still comes to rest facing it, with no snap.
+		const double Late = FMath::SmoothStep(0.8, 1.0, Progress);
+		const double Yaw = FMath::RadiansToDegrees(FMath::Atan2(-CourseBows.X, CourseBows.Y)) + FRotator::NormalizeAxis(SailEndYaw - SailLaidYaw) * Late;
+		SetActorRotation(FRotator(0.0, Yaw, 0.0));
+		const double Turned = FMath::DegreesToRadians(Yaw);
+		BendWake(CourseRan, FVector2D(-FMath::Sin(Turned), FMath::Cos(Turned)), Progress);
+	}
+	else if (bSailing)
 	{
 		// Bows the way she goes (a fleet's model has its bows toward its own +Y), and round to face the table again as
 		// she comes in: turned a little each frame, never snapped.
@@ -1465,6 +1566,7 @@ void AArmyPiece::Tick(float DeltaSeconds)
 			bSailing = false;
 			SetActorRotation(FRotator(0.0f, SailEndYaw, 0.0f));
 		}
+		StraightenWake();
 		if (bHasWake && Body)
 		{
 			Body->SetMeshSectionVisible(1, true);
