@@ -3,7 +3,8 @@
 #
 #   check_on_spare_copy.sh [project folder] [skill branch]
 #
-# 1. Steps aside if any Unreal editor or build is running.
+# 1. Waits for the Mac job lock (an empty folder; mkdir takes it, rmdir frees it),
+#    holds it throughout, and steps aside if any Unreal editor or build is running.
 # 2. Makes a copy-on-write clone of the project (no extra disk until written to).
 # 3. Puts this plugin into the clone and switches it on there, with the editor's
 #    Claude link (MCP) on port 8001, so it never meets 8000 or 8765.
@@ -19,6 +20,9 @@ PORT=8001
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/tc-skill-check.XXXXXX")"
 PROJECT="$WORK/TheaterCommand"
 LOG="$WORK/editor.log"
+JOBLOCK="${JOBLOCK:-/private/tmp/claude-501/-Users-malco-Total-War-WW2/72bb45fd-2576-4457-bddc-ae9ea2105b54/scratchpad/joblock}"
+WAIT_MIN="${WAIT_MIN:-20}"
+HAVE_LOCK=0
 PY=/usr/bin/python3
 [ -x "$PY" ] || PY="$ENGINE/Engine/Binaries/ThirdParty/Python3/Mac/bin/python3"
 
@@ -32,10 +36,23 @@ finish() {
   [ -f "$LOG" ] && { say "editor log, link and skill lines:"; grep -iE "ModelContextProtocol|AgentSkill|theater_command_skills|Python.*(Error|Traceback)|LogPython: Error" "$LOG" | tail -25; }
   rm -rf "$WORK"
   say "clone removed"
+  if [ "$HAVE_LOCK" = 1 ]; then rmdir "$JOBLOCK" 2>/dev/null && say "job lock released"; fi
 }
 trap finish EXIT
 
-# 1. Step aside.
+# 1. Take the Mac job lock, waiting up to WAIT_MIN minutes for it.
+if [ -d "$(dirname "$JOBLOCK")" ]; then
+  DEADLINE=$(( $(date +%s) + WAIT_MIN * 60 ))
+  until mkdir "$JOBLOCK" 2>/dev/null; do
+    [ "$(date +%s)" -ge "$DEADLINE" ] && { say "STEP ASIDE: the Mac job lock stayed taken for $WAIT_MIN minutes"; exit 3; }
+    /bin/sleep 20
+  done
+  HAVE_LOCK=1
+  say "job lock taken"
+else
+  say "no job lock folder at $(dirname "$JOBLOCK"); relying on the process checks"
+fi
+# Step aside if anything is still running.
 if pgrep -x UnrealEditor >/dev/null || pgrep -f "UnrealBuildTool|Build.sh|UnrealEditor-Cmd" >/dev/null; then
   say "STEP ASIDE: an Unreal editor or build is running:"; pgrep -lf "UnrealEditor|UnrealBuildTool|Build.sh"; exit 3
 fi
