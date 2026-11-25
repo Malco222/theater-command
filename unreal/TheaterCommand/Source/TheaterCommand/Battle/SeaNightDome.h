@@ -61,6 +61,10 @@ public:
 	/** Every frame: the dome stays round the eye. */
 	void Follow(const FVector& Eye);
 
+	/** Kept out of a view it should not stand in (the scene's view under the water: an unfogged sky would show through
+	 * the sea's one-sided face). */
+	void SetHidden(bool bHide);
+
 	void Close();
 
 	bool IsOn() const { return bOn; }
@@ -77,7 +81,7 @@ private:
 	SeaNightSky::Seeing See;
 	SeaNightSky::Sky Sky;
 	double StarStrength = 1.0, BiasStops = 2.4, LayMs = 0.0;
-	bool bOn = false, bSaid = false;
+	bool bOn = false, bSaid = false, bHidden = false;
 	FVector Centre = FVector::ZeroVector;
 	TWeakObjectPtr<UProceduralMeshComponent> Dome;
 	TWeakObjectPtr<UMaterialInstanceDynamic> StarPaint, MoonPaint;

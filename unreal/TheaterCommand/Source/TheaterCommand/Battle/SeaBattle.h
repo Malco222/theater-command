@@ -10,6 +10,8 @@
 #include "Battle/SeaMarksPool.h" // (the release 2 ocean, step 1(a): DrawMarks' meshes kept)
 #include "Battle/HeavyWeather.h" // S6 hook (heavy weather: bow spray and ship ice)
 #include "Battle/SeaNight.h" // (the release 2 ocean, step 11: night fighting's looks, -TheaterSeaNightFight=)
+#include "Battle/SeaDayCore.h" // (the release 2 ocean, step 11: the battle's light from its field, -TheaterSeaDay=field)
+#include "Battle/SeaNightDome.h" // (the release 2 ocean, step 11(f): the moon and the stars, with the field's day)
 #include "GameFramework/Actor.h"
 #include "SeaBattle.generated.h"
 
@@ -386,7 +388,7 @@ private:
 	bool bScreensSaid = false;
 
 	// What the room had before the battle took its place, put back by EndPlay.
-	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White; };
+	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White; bool PerPixel = false; };
 	struct FKeptSky { TWeakObjectPtr<USkyLightComponent> Sky; float Intensity = 0.0f; FLinearColor Colour; };
 	struct FKeptHaze { TWeakObjectPtr<UExponentialHeightFogComponent> Haze; float Start = 0.0f, Density = 0.0f, Falloff = 0.0f, MostOpacity = 0.0f; FLinearColor Colour; };
 	TArray<FKeptLamp> KeptLamps;
@@ -402,6 +404,39 @@ private:
 	void TakeTheRoom(double SunAzimuth, double SunElevation);
 	void LightTheBattle();
 	void GiveBackTheRoom();
+
+	/** The battle's day (the release 2 ocean plan, step 11: Battle/SeaDayCore, the sea scene's light core). Worked out in
+	 * OpenOn just after the stage's pinned hour and clamp, and again in TakeTheRoom with the kept fog's own height and the
+	 * room's haze as AirHaze left it. Seed mode, the default, is today's numbers: nothing but the "Sea day:" line reads it,
+	 * so the scene is today's bit for bit. Field mode (-TheaterSeaDay=field) lights the battle by it: the key lamp on the
+	 * field's own sun, moon or the night's glow, unclamped; the lamps' strengths and warmth, the haze, the exposure and the
+	 * night grade, the unlit inks, the smoke's hour, the sky the sea mirrors, the night fighting's and the weather's share
+	 * of the day, the view under the water's sun, and the night's moon and stars (NightDome). */
+	SeaDay::Look Day;
+	SeaDay::Field DayField;
+	SeaDay::StageSun DaySun;
+	SeaDay::Asked DayAsked;
+	bool bFieldDay = false;
+	/** The sky's cover as it reads (SeaSky's chosen day, as FSeaWeather lays it), 0 to 1: the light core's sky and the
+	 * stars' (the cover is counted once, here, never through StarField::Visible as well). */
+	double DayCover = 0.0;
+	/** The night dome's "when" (the field's place and date, with the light core's sun and moon), and the stars' light
+	 * (-TheaterSeaStars=, 1 with field mode). */
+	SeaNightSky::When DayWhen;
+	double StarStrength = 1.0;
+	FSeaNightDome NightDome;
+	bool bDomeLaid = false;
+	/** OpenOn, after the pinned clamp: the switches, the field (the recording's light, hour and sky as it reads) and the
+	 * first working out of the day. */
+	void OpenTheDay(const FString& Text, uint64 Seed, double SunAzimuth, double SunElevation);
+	/** LookOf on the kept field, the fog's height (metres) and the scene's own sky and haze; the "Sea day:" line. */
+	void WorkOutTheDay(double FogZ, const SeaDay::TodayScene& Scene, bool bSay);
+	/** Field mode, after the room is taken: the lens's exposure and night grade, the unlit inks, the far smoke's sky. */
+	void DressTheDay();
+	/** The key body's way in the world (field mode's sun, moon or glow; the stage's sun in seed mode). */
+	FVector DayKeyWay() const;
+	/** The sky's light the sea mirrors: field mode's from the day, else SeaParts::SeaSkyLight(), today's. */
+	FLinearColor SeaSkyNow() const;
 
 	/** The scene opened on a recording's text (BeginReplay's file, or BeginMonthScene's); Where names it in a warning. */
 	bool OpenOn(const FString& Text, const FString& Name, const FString& Where);

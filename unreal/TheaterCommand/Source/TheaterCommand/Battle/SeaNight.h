@@ -45,8 +45,9 @@ namespace SeaShow
  *
  * Everything in it is drawn at the night's own strength (SeaNight::Night::Glow(), 1 at full night and less under a
  * moon), so that nothing glows by day: by day, and in twilight, the core lights nothing at all and this draws nothing.
- * Step 11's own night light, when it lands, hands its share in through SetShare; until then the share is read from the
- * recording's light (ConvoyLook::SkyLit), which no fleet action as recorded gives, so the three recorded fleet actions
+ * Step 11's own night light, in field mode (-TheaterSeaDay=field), hands its share in through SetShare; otherwise the
+ * share is read from the recording's light (ConvoyLook::SkyLit). Either way the night needs the recording's own light
+ * (light{sun} more than 6 degrees under), which no fleet action as recorded gives, so the three recorded fleet actions
  * draw nothing new even with the switch on.
  *
  * LOOKS ONLY: nothing here is read by anything the show decides, and nothing here touches the show.
@@ -73,7 +74,7 @@ public:
 	bool IsOn() const { return bOn; }
 	/** Night fighting's night now: the recording's light with the sun well under, or the share handed in. */
 	bool IsNight() const { return bOn && Reckoned.IsOn(); }
-	/** Step 11's night share (0 night to 1 day) once it lands, in place of the recording's light. */
+	/** Step 11's night share (0 night to 1 day: the battle day's UnlitShare, field mode), in place of the recording's light. */
 	void SetShare(double Share);
 	/** How strong the night's own added light is drawn: 1 at full night, less under a moon, 0 by day. */
 	double Glow() const { return bOn ? Reckoned.Glow() : 0.0; }

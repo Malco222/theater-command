@@ -129,8 +129,9 @@ namespace SeaNightSky
 	/** The air between: Kasten and Young's air mass at a height in degrees (1 overhead, about 38 at the horizon). */
 	double AirMass(double UpDeg);
 
-	/** The faintest magnitude seen tonight: by the sun's depth (twilight), the moon's light on the sky, and StarShare
-	 * where the light core gives it. */
+	/** The faintest magnitude seen tonight: by the sun's depth (twilight) and the moon's light on the sky; or, where the
+	 * light core gives StarShare, by that alone, which already dims the stars for a moon that is up (the sea scene's note
+	 * at step 11: the moon counted once). */
 	double LimitOf(const When& W, const Seeing& See);
 
 	/** A colour temperature's light, as a white with its tint (linear, the brightest channel 1). */

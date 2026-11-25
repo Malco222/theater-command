@@ -216,12 +216,25 @@ void FSeaUnder::Bind(const FRoom& InRoom, const SeaShow::Field& InBoard)
 		bOn ? TEXT("on") : TEXT("off"), SunUp, SunFrom, Daylight);
 }
 
+void FSeaUnder::SetSky(double Up, double From)
+{
+	bSkyGiven = true;
+	SkyUp = FMath::Clamp(Up, -90.0, 90.0);
+	SkyFrom = From;
+}
+
 void FSeaUnder::ReadSun()
 {
 	// The stage's own sun, which the key lamp is laid on (AAirStage::TowardSun, ASeaBattle::TakeTheRoom): the day under
 	// the water is the day over it. Its height and bearing in the board's own frame, and the share of the day the lamp
-	// gives now (dimmed while under, so what is read at the dive is the room's own).
-	if (Room.Stage)
+	// gives now (dimmed while under, so what is read at the dive is the room's own). Where the sea's light core gave the
+	// battle's own sun (SetSky, field mode), that one: the key lamp is laid on it.
+	if (bSkyGiven)
+	{
+		SunUp = SkyUp;
+		SunFrom = SkyFrom;
+	}
+	else if (Room.Stage)
 	{
 		const FVector Toward = Room.Stage->TowardSun();
 		SunUp = FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(Toward.Z, -1.0, 1.0)));

@@ -4,6 +4,7 @@
 #include "Battle/DeckCrewCore.h"
 #include "Battle/SeaBattleScreen.h"
 #include "Battle/SeaFeed.h"
+#include "Battle/SeaLookField.h" // (the release 2 ocean, step 11: the field's hour, sun and night for the day)
 #include "Battle/SeaLookSwitches.h" // (the release 2 ocean, step 0: the "Sea look:" line)
 #include "Battle/SeaSailors.h"
 #include "Battle/SeaShow.h"
@@ -1466,21 +1467,54 @@ namespace SeaParts
 		return bAsked ? LightOfStill(SkyColour(), GradeNow()) : LightOfStill(FLinearColor(229.0f / 255.0f, 230.0f / 255.0f, 231.0f / 255.0f), GradeOfTheFit);
 	}
 
+	/** The scene's own sky and haze as the light core takes them (SeaDay::TodayScene; the release 2 ocean plan, step 11):
+	 * the horizon on the screen and the sky's light the sea mirrors as SkyColour and SeaSkyLight give them under their
+	 * switches, the sky higher up as MovingSea makes it of that light (SeaDay::SkyHighShare, held to AirStage.cpp by the
+	 * cloud test; its review knob -TheaterSeaHigh= is not followed here, nor -TheaterSeaHaze= for the sea material's own
+	 * haze, left at today's), and the kept fog as AirHaze left it (none given: the core's own bare command line's). Seed
+	 * mode takes nothing from it but the "Sea day:" line; field mode tints its sky from the two colours. */
+	static SeaDay::TodayScene SceneNow(const UExponentialHeightFogComponent* Fog, double UnitsPerMetre)
+	{
+		SeaDay::TodayScene Scene = SeaDay::BuiltInScene(UnitsPerMetre);
+		const FLinearColor Screen = SkyColour(), Mirrored = SeaSkyLight();
+		Scene.SkyOnScreen = { Screen.R, Screen.G, Screen.B };
+		Scene.SeaSkyLight = { Mirrored.R, Mirrored.G, Mirrored.B };
+		Scene.SkyHigh = { Mirrored.R * SeaDay::SkyHighShare[0], Mirrored.G * SeaDay::SkyHighShare[1], Mirrored.B * SeaDay::SkyHighShare[2] };
+		if (Fog)
+		{
+			Scene.FogStart = Fog->StartDistance / UnitsPerMetre;
+			Scene.FogDensity = Fog->FogDensity;
+			Scene.FogFalloff = Fog->FogHeightFalloff;
+			Scene.FogMostOpacity = Fog->FogMaxOpacity;
+			const FLinearColor Ink = HazeColour(Fog, HazeInk);
+			Scene.FogColour = { Ink.R, Ink.G, Ink.B };
+		}
+		return Scene;
+	}
+
 	/** Tells the kit the horizon's haze, where the kit takes it (the effects head 86d71f2: smoke far off pales into it,
-	 * a mid grey until it is told), so this builds on the kit before and after. "-TheaterSeaSky=red,green,blue" (0 to
-	 * 255, as a still's pixel) tries another. The scene's sky and hour are set once a battle and have no weather yet,
-	 * so it is told once. */
+	 * a mid grey until it is told), so this builds on the kit before and after: Sky as a still's pixel (0 to 1). The
+	 * scene's sky and hour are set once a battle, so it is told once. */
 	template <typename TKit>
-	static void SetSky(TKit* Kit)
+	static void SetSky(TKit* Kit, const FLinearColor& Sky)
 	{
 		if constexpr (requires(TKit* K) { K->SetSky(FLinearColor()); })
 		{
-			Kit->SetSky(SkyColour());
+			Kit->SetSky(Sky);
 		}
 		else
 		{
 			(void)Kit;
+			(void)Sky;
 		}
+	}
+
+	/** The same with today's horizon, SkyColour ("-TheaterSeaSky=red,green,blue", 0 to 255 as a still's pixel, tries
+	 * another). */
+	template <typename TKit>
+	static void SetSky(TKit* Kit)
+	{
+		SetSky(Kit, SkyColour());
 	}
 }
 
@@ -1713,6 +1747,8 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 	double SunAzimuth = 120.0, SunElevation = 30.0;
 	SunAt(S.Rec.Board.Lat, S.Rec.Board.Month, Hour, SunAzimuth, SunElevation);
 	SunElevation = FMath::Clamp(SunElevation, 12.0, 70.0);
+	// (the release 2 ocean plan, step 11: the battle's day from its field; in seed mode, the default, nothing reads it)
+	OpenTheDay(Text, Seed, SunAzimuth, SunElevation);
 
 	// The open sea and its ships: the Pearl Harbor stage's sea, hulls, hit looks and ends, raised with no land.
 	Stage = Here->SpawnActor<AAirStage>(FVector::ZeroVector, FRotator::ZeroRotator);
@@ -1724,12 +1760,12 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 		// it, the sky's light over the horizon as the engine takes it, SeaSkyLight)
 		const SeaShow::Vec Blow = S.Show.Wind();
 		const double Blowing = S.Show.WindSpeed();
-		const FLinearColor Sky = SeaParts::SeaSkyLight();
+		const FLinearColor Sky = SeaSkyNow(); // (step 11: field mode's sky, the night's at night; today's otherwise)
 		// (a recorded calm is a light air on the stage, which takes no speed for no wind given and would lay Pearl's
 		// trade-wind sea: at its least, 2 m/s, the sea lies almost glassy, a whitecap at most here and there; its swell
 		// runs off the field's bearing)
 		Stage->SetSeaWind(Blowing > 0.0 ? FMath::Atan2(Blow.X, Blow.Y) : S.Show.WindFrom() + UE_DOUBLE_PI, FMath::Max(Blowing, 0.5),
-			Sky, SeaParts::GradeNow());
+			Sky, bFieldDay ? FVector2D(SeaParts::GradeNow().X, SeaParts::GradeNow().Y * Day.BlueGain) : SeaParts::GradeNow());
 	}
 	if (!Stage || !Stage->RaiseSea(FVector2D(Middle, Middle), SunAzimuth, SunElevation, UnitsPerMetre, Effects.Get(), Seed))
 	{
@@ -1738,7 +1774,7 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 	}
 	if (Effects)
 	{
-		Effects->SetSun(Stage->TowardSun());
+		Effects->SetSun(bFieldDay ? DayKeyWay() : Stage->TowardSun()); // (step 11: field mode's key body, unclamped)
 	}
 	// S6 hook (ship ice): the frost of the battle's place, month and wind set on the stage, which glazes each hull's colours
 	// as LayShip lays her (Battle/ShipIce; -TheaterSeaIce=1 only, so by default the hulls are laid as made).
@@ -1771,7 +1807,7 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 			{
 				Band = FVector(FCString::Atod(*BandBits[0]), FCString::Atod(*BandBits[1]), FCString::Atod(*BandBits[2])).ComponentMax(FVector::ZeroVector);
 			}
-			const FLinearColor Sky = SeaParts::SeaSkyLight();
+			const FLinearColor Sky = SeaSkyNow();
 			FoamInk->SetVectorParameterValue(TEXT("Band"), FLinearColor(static_cast<float>(Sky.R * Band.X), static_cast<float>(Sky.G * Band.Y), static_cast<float>(Sky.B * Band.Z), 1.0f));
 		}
 		else
@@ -1865,6 +1901,7 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 		}
 	}
 	TakeTheRoom(SunAzimuth, SunElevation);
+	DressTheDay(); // (step 11: field mode's exposure, night grade and unlit inks; nothing in seed mode)
 	// The clouds and the weather (the release 2 ocean plan, step 13): the day's sky from the recording's field, laid
 	// through the air battle's own clouds, with the cloud dome, the clouds' shade on the sea and the far rain behind
 	// their own switches. Nothing is drawn unless one is asked for.
@@ -1874,18 +1911,31 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 		WeatherRoom.Owner = this;
 		WeatherRoom.Root = Root;
 		WeatherRoom.Key = BattleKey;
-		WeatherRoom.Sun = Stage ? Stage->TowardSun() : FRotator(SunElevation, SunAzimuth, 0.0).Vector();
+		WeatherRoom.Sun = bFieldDay ? DayKeyWay() : (Stage ? Stage->TowardSun() : FRotator(SunElevation, SunAzimuth, 0.0).Vector());
 		WeatherRoom.UnitsPerMetre = UnitsPerMetre;
-		// (a night action: light{sun} under the horizon, as the convoy nights give it)
-		WeatherRoom.bNight = S.Rec.Board.bLight && S.Rec.Board.SunUp < 0.0;
+		// (a night action: light{sun} under the horizon, as the convoy nights give it; in field mode the day's own sun,
+		// which a fleet action's hour alone may put under it too)
+		WeatherRoom.bNight = bFieldDay ? Day.SunUp < 0.0 : S.Rec.Board.bLight && S.Rec.Board.SunUp < 0.0;
 		WeatherRoom.bPictures = !ShotFolder.IsEmpty();
 		const SeaShow::Vec Blow = S.Show.Wind();
 		SkyWeather->Begin(WeatherRoom, SeaLook, Text, Seed, Middle, Middle, FVector2D(Blow.X, Blow.Y));
+		if (bFieldDay)
+		{
+			SkyWeather->SetDayLight(Day.UnlitShare); // (step 11: the dome, the sheets and the rain dim with the day)
+		}
 	}
 	if (Effects)
 	{
-		// (the sky is set: the kit's far smoke pales into the haze the screen shows at the horizon)
-		SeaParts::SetSky(Effects.Get());
+		// (the sky is set: the kit's far smoke pales into the haze the screen shows at the horizon; in field mode the
+		// day's horizon, the night's at night)
+		if (bFieldDay)
+		{
+			SeaParts::SetSky(Effects.Get(), FLinearColor(static_cast<float>(Day.SkyOnScreen.R), static_cast<float>(Day.SkyOnScreen.G), static_cast<float>(Day.SkyOnScreen.B), 1.0f));
+		}
+		else
+		{
+			SeaParts::SetSky(Effects.Get());
+		}
 	}
 	if (APlayerController* Controller = Here->GetFirstPlayerController())
 	{
@@ -1921,11 +1971,28 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 		}
 		Below.Key = BattleKey;
 		Below.UnitsPerMetre = UnitsPerMetre;
+		if (bFieldDay)
+		{
+			Under->SetSky(Day.SunUp, Day.SunFrom); // (step 11(d): field mode's sun, unclamped, so night under the water is night)
+		}
 		Under->Bind(Below, S.Rec.Board);
 	}
 	// (the release 2 ocean plan, step 11: night fighting's looks, off by default: -TheaterSeaNightFight=1 lays the
 	// searchlights' beams and the fleet's star shells, by the recording's own light; Battle/SeaNight)
 	Night.Begin(FSeaNight::FRoom{ this, Root.Get(), UnitsPerMetre }, S.Show, SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaNightFight="), Seed);
+	if (bFieldDay)
+	{
+		// (step 11: the night fighting's night by the day's light on the sea, in place of the recording's own reckoning)
+		Night.SetShare(Day.UnlitShare);
+		// (step 11(f): the moon and the stars on their unfogged dome, at night only, laid at the first cut; the cover is
+		// counted here once, and the moon once, by the core's StarShare)
+		if (NightDome.Open(FSeaNightDome::FRoom{ this, Root.Get(), UnitsPerMetre }, DayWhen, StarStrength))
+		{
+			NightDome.SetSeeing(DayCover, Day.StarShare);
+			NightDome.SetExposure(Day.Bias);
+		}
+		bDomeLaid = false;
+	}
 
 	PlanShots();
 	if (!ShotFolder.IsEmpty())
@@ -2038,7 +2105,8 @@ void ASeaBattle::TakeTheRoom(double SunAzimuth, double SunElevation)
 		return;
 	}
 	bRoomTaken = true;
-	const FVector Sun = Stage ? Stage->TowardSun() : FRotator(SunElevation, SunAzimuth, 0.0).Vector();
+	// (step 11: in field mode the key lamp is laid on the field's own key body, the sun unclamped, the moon or the glow)
+	const FVector Sun = bFieldDay ? DayKeyWay() : (Stage ? Stage->TowardSun() : FRotator(SunElevation, SunAzimuth, 0.0).Vector());
 	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
 	{
 		if (It->IsA<ACampaignMapActor>() || It->IsA<AArmyPiece>())
@@ -2089,6 +2157,7 @@ void ASeaBattle::TakeTheRoom(double SunAzimuth, double SunElevation)
 			Kept.Temperature = Light->Temperature;
 			Kept.SourceAngle = Light->LightSourceAngle;
 			Kept.SunDisc = Light->AtmosphereSunDiskColorScale;
+			Kept.PerPixel = Light->bPerPixelAtmosphereTransmittance != 0;
 			if (Light->GetFName() == TEXT("KeyLight") || (!Main && Lights.Num() == 1))
 			{
 				Main = Light;
@@ -2114,6 +2183,16 @@ void ASeaBattle::TakeTheRoom(double SunAzimuth, double SunElevation)
 			// holding six thousandths of its light, the haze throwing it forward at 0.75.
 			Main->LightSourceAngle = 0.53f;
 			Main->AtmosphereSunDiskColorScale = FLinearColor(0.006f, 0.006f, 0.006f);
+			if (bFieldDay)
+			{
+				// (step 11, field mode: the atmosphere's own transmittance on each pixel reddens a low sun; a key that is the
+				// moon or the night's glow draws no sun's disc)
+				Main->bPerPixelAtmosphereTransmittance = Day.bPerPixelTransmittance;
+				if (Day.Key.Kind != SeaDay::BodyKind::Sun)
+				{
+					Main->AtmosphereSunDiskColorScale = FLinearColor(0.0f, 0.0f, 0.0f);
+				}
+			}
 			Main->MarkRenderStateDirty();
 			TArray<USkyAtmosphereComponent*> Atmospheres;
 			GetComponents(Atmospheres);
@@ -2130,6 +2209,28 @@ void ASeaBattle::TakeTheRoom(double SunAzimuth, double SunElevation)
 			Kept.Sky = Sky;
 			Kept.Intensity = Sky->Intensity;
 			Kept.Colour = Sky->GetLightColor();
+		}
+	}
+	// (the release 2 ocean plan, step 11: the day worked out again with the kept fog's own height, its density being given
+	// there, and the room's haze as AirHaze left it; field mode lays the day's haze on each kept fog, AirHaze itself
+	// untouched: the rules' vis as fog by day, the night's own air at night, the air scene's sea haze by day without vis)
+	{
+		const UExponentialHeightFogComponent* First = KeptHazes.Num() > 0 ? KeptHazes[0].Haze.Get() : nullptr;
+		WorkOutTheDay(First ? First->GetComponentLocation().Z / UnitsPerMetre : 0.0, SeaParts::SceneNow(First, UnitsPerMetre), true);
+	}
+	if (bFieldDay)
+	{
+		const FLinearColor Ink(static_cast<float>(Day.Air.Colour.R), static_cast<float>(Day.Air.Colour.G), static_cast<float>(Day.Air.Colour.B), 1.0f);
+		for (const FKeptHaze& Kept : KeptHazes)
+		{
+			if (UExponentialHeightFogComponent* Fog = Kept.Haze.Get())
+			{
+				Fog->SetStartDistance(static_cast<float>(Day.Air.Start * UnitsPerMetre));
+				Fog->SetFogDensity(static_cast<float>(Day.Air.Density));
+				Fog->SetFogHeightFalloff(static_cast<float>(Day.Air.Falloff));
+				Fog->SetFogMaxOpacity(static_cast<float>(Day.Air.MostOpacity));
+				Fog->SetFogInscatteringColor(Ink);
+			}
 		}
 	}
 	LightTheBattle();
@@ -2149,14 +2250,25 @@ void ASeaBattle::LightTheBattle()
 		const bool bMain = Light == BattleKey.Get();
 		// U1 hook (under water): under the sea the sun's lamp is what reaches her depth, in the water's own colour
 		const float Want = (bMain ? 7.0f : 0.75f) * (Under ? Under->LightShare() : 1.0f);
+		// (the release 2 ocean plan, step 11: field mode's key and fills as shares of today's; seed mode never reads them)
+		const float KeyWant = bFieldDay ? Want * static_cast<float>(bMain ? Day.KeyShare : Day.FillShare) : Want;
 		const FLinearColor Shade = Under ? Under->LightTint() : FLinearColor::White;
 		if (!Light->GetLightColor().Equals(Shade, 0.002f))
 		{
 			Light->SetLightColor(Shade);
 		}
-		if (!FMath::IsNearlyEqual(Light->Intensity, Want, 0.001f))
+		if (!FMath::IsNearlyEqual(Light->Intensity, KeyWant, 0.001f))
 		{
-			Light->SetIntensity(Want);
+			Light->SetIntensity(KeyWant);
+		}
+		if (bMain && bFieldDay)
+		{
+			// (field mode's warmth: today's 4,900 K above 12 degrees of sun, easing to twilight's, then the night's)
+			if (!FMath::IsNearlyEqual(Light->Temperature, static_cast<float>(Day.Kelvin), 1.0f))
+			{
+				Light->SetTemperature(static_cast<float>(Day.Kelvin));
+			}
+			continue;
 		}
 		if (bMain && !FMath::IsNearlyEqual(Light->Temperature, 4900.0f, 1.0f))
 		{
@@ -2174,13 +2286,14 @@ void ASeaBattle::LightTheBattle()
 		// wash out and nothing pops at the face
 		const FLinearColor Shade = Under ? Under->LightTint() : FLinearColor::White;
 		const float SkyWant = 0.72f * (Under ? FMath::Max(0.3f, Under->LightShare()) : 1.0f);
+		const float SkyLit = bFieldDay ? SkyWant * static_cast<float>(Day.SkyShare) : SkyWant; // (step 11: field mode's sky light)
 		if (!Sky->GetLightColor().Equals(Shade, 0.002f))
 		{
 			Sky->SetLightColor(Shade);
 		}
-		if (!FMath::IsNearlyEqual(Sky->Intensity, SkyWant, 0.001f))
+		if (!FMath::IsNearlyEqual(Sky->Intensity, SkyLit, 0.001f))
 		{
-			Sky->SetIntensity(SkyWant);
+			Sky->SetIntensity(SkyLit);
 		}
 	}
 	// (the campaign's controller may stand a piece again under the pointer: put away again)
@@ -2229,6 +2342,7 @@ void ASeaBattle::GiveBackTheRoom()
 			Light->SetTemperature(Kept.Temperature);
 			Light->LightSourceAngle = Kept.SourceAngle;
 			Light->AtmosphereSunDiskColorScale = Kept.SunDisc;
+			Light->bPerPixelAtmosphereTransmittance = Kept.PerPixel;
 			Light->MarkRenderStateDirty();
 		}
 	}
@@ -2274,6 +2388,187 @@ void ASeaBattle::GiveBackTheRoom()
 	KeptSkies.Reset();
 	KeptRooms.Reset();
 	KeptHidden.Reset();
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The battle's day (the release 2 ocean plan, step 11: the sea scene's light core, Battle/SeaDayCore). Seed mode, the
+// default, is today's light: nothing below is read but the "Sea day:" line. Field mode (-TheaterSeaDay=field, tier 2)
+// lights the battle by the field's own sun, moon or the night's glow.
+
+void ASeaBattle::OpenTheDay(const FString& Text, uint64 Seed, double SunAzimuth, double SunElevation)
+{
+	// The switches, each written back as taken so the "Sea look:" line says what was applied: -TheaterSeaDay=seed|field
+	// (seed, today's, for anything but field), and with field mode -TheaterSeaVisContrast= (the least contrast a ship
+	// keeps at the rules' vis, between 0 and 1, else 0.05) and -TheaterSeaStars= (the stars' light, 0 to 8, 1 as made).
+	auto Find = [this](const char* Name) -> SeaLookSwitches::Asked*
+	{
+		for (SeaLookSwitches::Asked& One : SeaLook.Given)
+		{
+			if (One.Index >= 0 && One.Index < SeaLookSwitches::Count && std::string(SeaLookSwitches::All[One.Index].Name) == Name)
+			{
+				return &One;
+			}
+		}
+		return nullptr;
+	};
+	DayAsked = SeaDay::Asked();
+	bFieldDay = false;
+	if (SeaLookSwitches::Asked* Mode = Find("TheaterSeaDay="))
+	{
+		bFieldDay = FString(UTF8_TO_TCHAR(Mode->Value.c_str())).TrimStartAndEnd().Equals(TEXT("field"), ESearchCase::IgnoreCase);
+		Mode->Value = bFieldDay ? "field" : "seed";
+	}
+	DayAsked.Day = bFieldDay ? SeaDay::Mode::Field : SeaDay::Mode::Seed;
+	if (SeaLookSwitches::Asked* Contrast = Find("TheaterSeaVisContrast="))
+	{
+		const double Want = FCString::Atod(UTF8_TO_TCHAR(Contrast->Value.c_str()));
+		DayAsked.VisContrast = bFieldDay && Want > 0.0 && Want < 1.0 ? Want : SeaDay::VisContrast;
+		Contrast->Value = SeaParts::Narrow(FString::SanitizeFloat(DayAsked.VisContrast));
+	}
+	StarStrength = bFieldDay ? 1.0 : 0.0;
+	if (SeaLookSwitches::Asked* Stars = Find("TheaterSeaStars="))
+	{
+		StarStrength = bFieldDay ? FMath::Clamp(FCString::Atod(UTF8_TO_TCHAR(Stars->Value.c_str())), 0.0, 8.0) : 0.0;
+		Stars->Value = SeaParts::Narrow(FString::SanitizeFloat(StarStrength));
+	}
+	float AskedHour = -1.0f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaHour="), AskedHour);
+	DayAsked.AskedHour = AskedHour;
+	DayAsked.UnitsPerMetre = UnitsPerMetre;
+
+	// The field: the recording's light as the show reads it (SeaFeed: a moon given only her lit share stands 30 degrees
+	// up in the south, as the show has her), the sun's bearing and the hour as step 4 reads them (SeaLookField), and the
+	// sky as it reads: the day SeaSky chooses, as FSeaWeather lays it, its cover held to what its kind can draw (the sea
+	// scene's ruling: never the cumulus's laid cover), whatever of it is drawn.
+	const SeaShow::Field& Board = State->Rec.Board;
+	const std::string Recording = SeaParts::Narrow(Text);
+	SeaLookField::Field Rules;
+	SeaLookField::ReadRecording(Recording, Rules);
+	DayField = SeaDay::Field();
+	DayField.Lat = Board.Lat;
+	DayField.Lon = Board.Lon;
+	DayField.Month = Board.Month;
+	DayField.Seed = Seed;
+	DayField.Wind = State->Show.WindSpeed();
+	DayField.bLight = Board.bLight;
+	DayField.SunUp = Board.SunUp;
+	DayField.bSunFrom = Rules.L.bSunFrom;
+	DayField.SunFrom = Rules.L.SunFrom;
+	DayField.MoonUp = Board.MoonUp;
+	DayField.MoonFrom = Board.MoonFrom;
+	DayField.MoonLit = Board.MoonLit;
+	DayField.Seeing = Board.Seeing;
+	DayField.bHour = Rules.Hour >= 0.0;
+	DayField.Hour = DayField.bHour ? Rules.Hour : 12.0;
+	SeaLookSwitches::Look Unwritten = SeaLook; // (the weather takes its own switches at its Begin: this reads a copy)
+	const SeaSky::Sky Reads = SeaSky::Choose(SeaSky::ReadRecording(Recording), SeaSky::Take(Unwritten));
+	DayCover = Reads.bLaid ? FMath::Clamp(Reads.Cover, 0.0, 1.0) : 0.0;
+	if (Reads.bLaid)
+	{
+		DayField.Sky.bGiven = true;
+		DayField.Sky.Cover = DayCover;
+		DayField.Sky.Rain = FMath::Clamp(Reads.Rain, 0.0, 1.0);
+		DayField.Sky.Base = Reads.Day.Base;
+		DayField.Sky.Top = Reads.Day.Top;
+		// (a closed deck as the deck; the broken stratocumulus, drawn as a deck to read as its cover, and cumulus as
+		// cumulus; the rules' squalls as theirs)
+		DayField.Sky.Kind = Reads.Day.bDeck && !Reads.bStrato ? "deck" : (!Reads.bAsked && Rules.S.Kind == "squalls" ? "squalls" : "cumulus");
+		DayField.Sky.Word = Reads.Day.Word;
+	}
+	DaySun.Up = SunElevation;
+	DaySun.From = SunAzimuth;
+	WorkOutTheDay(0.0, SeaParts::SceneNow(nullptr, UnitsPerMetre), false);
+
+	// The night dome's when: the field's place and date (night.day where given), with the day's own sun and moon, so the
+	// moon on the dome is the moon that lights the sea.
+	DayWhen = SeaLookField::NightWhen(Rules);
+	DayWhen.SunUp = Day.SunUp;
+	DayWhen.bMoon = Day.Moon.bUp;
+	DayWhen.MoonUp = Day.Moon.bUp ? Day.MoonUp : -90.0;
+	DayWhen.MoonFrom = Day.Moon.bUp ? Day.MoonFrom : 0.0;
+	DayWhen.MoonLit = Day.Moon.bUp ? Day.MoonLit : 0.0;
+	if (DayWhen.SolarHour < 0.0 && Day.Hour >= 0.0)
+	{
+		DayWhen.SolarHour = Day.Hour;
+	}
+	if (bFieldDay)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Sea day: field mode: %s; the sky as it reads: %s."), *SeaParts::Wide(SeaLookField::Said(Rules)),
+			Reads.bLaid ? *SeaParts::Wide(Reads.Why) : TEXT("clear (none given)"));
+	}
+}
+
+void ASeaBattle::WorkOutTheDay(double FogZ, const SeaDay::TodayScene& Scene, bool bSay)
+{
+	DayAsked.FogZ = FogZ;
+	Day = SeaDay::LookOf(DayField, DaySun, DayAsked, Scene);
+	if (bSay)
+	{
+		UE_LOG(LogTheater, Display, TEXT("%s%s."), *SeaParts::Wide(SeaDay::Say(Day)),
+			bFieldDay ? TEXT("") : TEXT(" (seed mode: the scene reads none of it; \"-TheaterSeaDay=field\" lights the battle by its field)"));
+	}
+}
+
+void ASeaBattle::DressTheDay()
+{
+	if (!bFieldDay)
+	{
+		return;
+	}
+	// The battle camera's exposure over the battle grade's own (BattleLook::Grade's, which is manual), and the night grade:
+	// less colour, a little more blue. The camera is the scene's own and goes with it; the view under the water keeps its
+	// lens as it finds it and adds its own stop on top (FSeaUnder::GoUnder), and gives it back as it was.
+	if (Eye)
+	{
+		FPostProcessSettings& Lens = Eye->GetCameraComponent()->PostProcessSettings;
+		const float Graded = Lens.bOverride_AutoExposureBias ? Lens.AutoExposureBias : 0.0f;
+		Lens.bOverride_AutoExposureBias = true;
+		Lens.AutoExposureBias = Graded + static_cast<float>(Day.Bias);
+		if (Day.Saturation < 1.0)
+		{
+			const double Less = Day.Saturation;
+			Lens.bOverride_ColorSaturation = true;
+			Lens.ColorSaturation = Lens.ColorSaturation * FVector4(Less, Less, Less, 1.0);
+		}
+		if (Day.BlueGain != 1.0)
+		{
+			const FVector4 Gain = Lens.bOverride_ColorGain ? Lens.ColorGain : FVector4(1.0, 1.0, 1.0, 1.0);
+			Lens.bOverride_ColorGain = true;
+			Lens.ColorGain = FVector4(Gain.X, Gain.Y, Gain.Z * Day.BlueGain, Gain.W);
+		}
+	}
+	// The unlit inks (the wakes' foam and the marks): by the light on the sea against a clear day's at the same sun, so
+	// nothing glows white at night; their colours stay.
+	if (MarkInk)
+	{
+		MarkInk->SetScalarParameterValue(TEXT("Brightness"), static_cast<float>(WakeBright * Day.UnlitShare));
+	}
+	if (FoamInk)
+	{
+		FoamInk->SetScalarParameterValue(TEXT("Brightness"), static_cast<float>(WakeBright * 1.15 * Day.UnlitShare));
+	}
+	// (the key's way against the stage's own sun, for the Mac's log: the board to the world turned as the stage turns it,
+	// so in daylight with the field's sun inside 12 to 70 degrees the two lie within a few degrees)
+	const double Apart = Stage ? FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(DayKeyWay(), Stage->TowardSun()), -1.0, 1.0))) : -1.0;
+	UE_LOG(LogTheater, Display, TEXT("Sea day: field mode dressed: the key the %s, %.1f deg up, %.1f deg from the stage's clamped sun; exposure %+.2f stops over the grade's, saturation %.2f, blue %.2f; the unlit inks at %.3f; the stars %s."),
+		Day.Key.Kind == SeaDay::BodyKind::Sun ? TEXT("sun") : Day.Key.Kind == SeaDay::BodyKind::Moon ? TEXT("moon") : TEXT("night's glow"), Day.Key.Up, Apart,
+		Day.Bias, Day.Saturation, Day.BlueGain, Day.UnlitShare,
+		StarStrength <= 0.0 ? TEXT("off (-TheaterSeaStars=0)") : Day.SunUp > FSeaNightDome::OpensUnder ? TEXT("not out (the sun is up)") : TEXT("on the night dome"));
+}
+
+FVector ASeaBattle::DayKeyWay() const
+{
+	const SeaDay::Way& Toward = Day.Key.Toward;
+	return WorldVector(Toward.X, Toward.Y, Toward.Z).GetSafeNormal();
+}
+
+FLinearColor ASeaBattle::SeaSkyNow() const
+{
+	if (!bFieldDay)
+	{
+		return SeaParts::SeaSkyLight();
+	}
+	return FLinearColor(static_cast<float>(Day.SeaSkyLight.R), static_cast<float>(Day.SeaSkyLight.G), static_cast<float>(Day.SeaSkyLight.B), 1.0f);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -6246,6 +6541,21 @@ void ASeaBattle::AimEye()
 	{
 		SkyWeather->Tick(EyeAt, TicksSinceCut == 0, S.BattleT);
 	}
+	// (step 11(f): the night dome laid afresh for the lens at each cut, carried with the eye between; kept out of the
+	// view under the water, where the sea's face would not hide an unfogged sky)
+	if (NightDome.IsOn())
+	{
+		NightDome.SetHidden(EyeAt.Z < 0.0);
+		if (TicksSinceCut == 0 || !bDomeLaid)
+		{
+			NightDome.Lay(EyeLens, EyeAt);
+			bDomeLaid = true;
+		}
+		else
+		{
+			NightDome.Follow(EyeAt);
+		}
+	}
 	// U1 hook (under water): a burst's shock in the eye, on the camera only (never in EyeAt, so no cut comes of it)
 	Eye->SetActorLocationAndRotation(EyeAt + (Under ? Under->ShakeAt(S.BattleT) : FVector::ZeroVector), EyeFacing);
 	Eye->GetCameraComponent()->SetFieldOfView(static_cast<float>(EyeLens));
@@ -6613,9 +6923,9 @@ void ASeaBattle::Beds()
 	// The sound director's sea beds (mix.json sea.beds): the sea by day always, the battle's own bed from contact.
 	if (!DayBed)
 	{
-		if (USoundBase* Day = SoundOf(TEXT("sea_day_loop"), true))
+		if (USoundBase* DayLoop = SoundOf(TEXT("sea_day_loop"), true))
 		{
-			DayBed = UGameplayStatics::SpawnSound2D(this, Day, SeaParts::FromDb(-10.0), 1.0f, 0.0f, nullptr, false, false);
+			DayBed = UGameplayStatics::SpawnSound2D(this, DayLoop, SeaParts::FromDb(-10.0), 1.0f, 0.0f, nullptr, false, false);
 		}
 	}
 	if (!bBattleBedUp && State.IsValid() && State->Show.ContactAt() >= 0.0 && State->BattleT >= State->Show.ContactAt())
@@ -6774,7 +7084,9 @@ void ASeaBattle::Tick(float DeltaSeconds)
 		{
 			Controller->GetViewportSize(ViewW, ViewH);
 		}
-		Effects->Tick(S.BattleT, Eye->GetActorLocation(), Eye->GetActorRotation(), Eye->GetCameraComponent()->FieldOfView, ViewW, FLinearColor::White, ViewH);
+		// (step 11: field mode's hour on the smoke, darker toward the night; white, today's, otherwise)
+		const FLinearColor HourShade = bFieldDay ? FLinearColor(static_cast<float>(Day.HourLight.R), static_cast<float>(Day.HourLight.G), static_cast<float>(Day.HourLight.B), 1.0f) : FLinearColor::White;
+		Effects->Tick(S.BattleT, Eye->GetActorLocation(), Eye->GetActorRotation(), Eye->GetCameraComponent()->FieldOfView, ViewW, HourShade, ViewH);
 	}
 	for (int32 K = Later.Num() - 1; K >= 0; --K)
 	{
@@ -6968,6 +7280,7 @@ void ASeaBattle::EndPlay(const EEndPlayReason::Type Reason)
 		SkyWeather.Reset();
 	}
 	Night.End(); // (step 11: night fighting's lamps out and its mesh cleared before the room is given back)
+	NightDome.Close(); // (step 11(f): the moon and the stars taken down)
 	HideScreen();
 	for (UAudioComponent* Bed : { DayBed.Get(), BattleBed.Get() })
 	{
