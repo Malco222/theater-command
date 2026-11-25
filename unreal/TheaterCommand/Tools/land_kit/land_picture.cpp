@@ -1014,7 +1014,7 @@ int main(int argc, char** argv)
 			{ "dsr_gate", 0, 0, 0, 7, 14.0, 7.0, 62.0, 27, 6.0, "close: the yard's gate", 10, 11.0, 11.0, 1 },
 			{ "dsr_spout", 0, 0, 0, 7, 196.0, 10.0, 250.0, 121, 4.5, "close: a spout, the roof's mud run down", 10, 11.0, 11.0, 1 },
 			{ "dsr_scab", 0, 0, 0, 7, 262.0, 6.0, 250.0, 124, 3.6, "close: plaster come away under the parapet", 10, 11.0, 11.0, 1 },
-			{ "dsr_foot", 0, 0, 0, 7, 20.0, 8.0, 62.0, 227, 3.6, "close: a wall's foot the damp has stripped", 10, 11.0, 11.0, 1 },
+			{ "dsr_foot", 0, 0, 0, 54, 84.0, 8.0, 62.0, 327, 4.6, "close: a wall's foot the damp has stripped", 10, 11.0, 11.0, 1 },
 			{ "dsr_corner", 0, 0, 0, 20, 236.0, 8.0, 250.0, 124, 3.8, "close: the plaster come away round a corner", 10, 11.0, 11.0, 1 },
 			{ "dsr_yard_corner", 0, 0, 0, 20, 325.0, 8.0, 62.0, 224, 3.6, "close: and round a corner of the yard wall", 10, 11.0, 11.0, 1 },
 			{ "dsr_fallen", 0, 0, 0, 7, 262.0, 10.0, 250.0, 127, 4.2, "close: fallen plaster at the wall's foot", 10, 11.0, 11.0, 1 },

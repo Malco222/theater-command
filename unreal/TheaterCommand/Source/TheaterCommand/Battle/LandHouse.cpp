@@ -10554,12 +10554,13 @@ namespace LandHouse
 					auto Free = [&](double U, double Hw) { return !(Blk == 2 && F == 1 && U + Hw > Out1) && !(Blk == 2 && F == 3 && U - Hw < Out3); };
 					Rng Rs(Hash(S.Key, 0x5CAB, static_cast<uint64_t>(I)));
 					const double UFoot = Rs.Next(), UTop = Rs.Next();
-					// (a stretch of its foot, 2.4 to 4 m of it and 20 to 50 cm high: not along the rooms' fronts, where the yard is kept)
+					// (a stretch of its foot, 3 to 4.6 m of it and 20 to 50 cm high, its ends thinning away over a metre each:
+					// not along the rooms' fronts, where the yard is kept)
 					if (I > 0 && UFoot < AtFoot[Wear] * More)
 						for (int Try = 0; Try < 6; ++Try)
 						{
 							const double Ua = Rs.Next(), Ub = Rs.Next(), Uc = Rs.Next();
-							const double Hw = std::min(1.2 + 0.8 * Ub, Half - 0.2), Tall = 0.26 + 0.24 * Uc, U = (2.0 * Ua - 1.0) * (Half - 0.12 - Hw);
+							const double Hw = std::min(1.5 + 0.8 * Ub, Half - 0.2), Tall = 0.26 + 0.24 * Uc, U = (2.0 * Ua - 1.0) * (Half - 0.12 - Hw);
 							if (Hw < 0.7 || !Free(U, Hw) || !Clear(Bk, F, U, Hw, -0.2, Tall, false, true)) continue;
 							if (Put(Blk, F, 0, U, PmOf(Bk, F, U - Hw), PmOf(Bk, F, U + Hw), Tall, -0.2, Tall, Hash(S.Key, 0x5CAC, static_cast<uint64_t>(I * 8 + Try)))) break;
 						}
@@ -11108,24 +11109,35 @@ namespace LandHouse
 			{
 				double Lo = 0.0, Hi = 0.0;
 			};
+			/** How far in from a patch's ends a place is, of the stretch each end takes to run out, each its own (0 at an end,
+			 * 1 clear of both); an end cut square against a room's wall takes none. A foot's ends take a metre or so each,
+			 * never over a third of its length. */
+			double EndsOf(const Plan::Scab& S, double Pm)
+			{
+				const double Slow = S.Hang == 2 ? 1.7 : 0.7, Most = 0.35 * (S.Pm1 - S.Pm0), Ua = Unit(Hash(S.Seed, 0x41)), Ub = Unit(Hash(S.Seed, 0x42));
+				const double Ra = S.Hang == 0 ? std::min(Most, 1.0 + 0.4 * Ua) : Slow * (0.28 + 0.3 * Ua), Rb = S.Hang == 0 ? std::min(Most, 1.0 + 0.4 * Ub) : Slow * (0.28 + 0.3 * Ub);
+				const double Ea = S.bCutA ? 1.0 : Smooth(0.0, Ra, Pm - S.Pm0), Eb = S.bCutB ? 1.0 : Smooth(0.0, Rb, S.Pm1 - Pm);
+				return std::min(Ea, Eb);
+			}
 			Bare BareOf(const Plan& P, const Block& Bk, const Plan::Scab& S, double Pm)
 			{
 				const double Top = TopAt(Bk, Along(Bk, Pm)) - (Bk.bYard ? 0.1 : 0.08) - 0.014;
 				const double X = (Pm - S.Pm0) / std::max(1e-6, S.Pm1 - S.Pm0);
-				// (how far in from its ends it is, of the stretch each end takes to run out, each its own; an end cut square
-				// against a room's wall takes none)
-				const double Slow = S.Hang == 2 ? 1.7 : S.Hang == 0 ? 0.85 : 0.7, Ra = Slow * (0.28 + 0.3 * Unit(Hash(S.Seed, 0x41))), Rb = Slow * (0.28 + 0.3 * Unit(Hash(S.Seed, 0x42)));
-				const double Ea = S.bCutA ? 1.0 : Smooth(0.0, Ra, Pm - S.Pm0), Eb = S.bCutB ? 1.0 : Smooth(0.0, Rb, S.Pm1 - Pm), E = std::min(Ea, Eb);
+				const double E = EndsOf(S, Pm);
 				const double Rag = 0.03 * Noise(Pm / 0.17, 1.5, S.Seed ^ 0x22) + 0.012 * Noise(Pm / 0.05, 2.5, S.Seed ^ 0x23);
 				const double Lump = Noise01(Pm / 0.5, 0.5, S.Seed ^ 0x21);
 				switch (S.Hang)
 				{
 				case 0:
 				{
-					// (a foot: a long low band; its top uneven and its ends coming down, in steps where the plaster broke off
-					// along a course)
-					const double Rise = E * (0.05 + S.Tall * (0.5 + 0.5 * Noise01(Pm / 0.95, 0.5, S.Seed ^ 0x24))), Hi = -0.05 + Lerp(Rise, 0.118 * std::round(Rise / 0.118), 0.65) + 0.3 * E * Rag;
-					return { Lerp(Hi, std::max(-std::max(0.25, P.S.Below), -0.72), Smooth(0.0, 0.3, E)), Hi };
+					// (a foot: a long low band; its top uneven, in steps where the plaster broke off along a course; its
+					// ends run down to the ground with no step in them, and on under the floor's level where the ground lies
+					// lower; Bricks thins it away into the wall's coat along them, so from far off it is no box against the
+					// wall)
+					const double Rise = E * (0.05 + S.Tall * (0.5 + 0.5 * Noise01(Pm / 0.95, 0.5, S.Seed ^ 0x24)));
+					const double Up = -0.05 + Lerp(Rise, 0.118 * std::round(Rise / 0.118), 0.65 * Smooth(0.8, 1.0, E)) + 0.3 * E * Rag;
+					const double Deep = std::max(-std::max(0.25, P.S.Below), -0.72);
+					return { Deep, Lerp(Deep, Up, Smooth(0.0, 0.3, E)) };
 				}
 				case 1:
 				{
@@ -11153,7 +11165,11 @@ namespace LandHouse
 			void Bricks(Pen& B, const Plan& P, const Plan::Scab& S, bool bFine)
 			{
 				const Block& Bk = BlockOf(P, S.Blk);
-				const double Off = bFine ? (S.Hang == 0 ? 0.013 : 0.01) : 0.05, Zm = Bk.bYard ? Bk.Zp - 0.4 : Bk.Zr;
+				const double Off = bFine ? (S.Hang == 0 ? 0.013 : 0.01) : 0.05, Zm = Bk.bYard ? Bk.Zp - 0.4 : Bk.Zr, SkimMost = 0.5;
+				// (under a limewashed wall the damp leaves its salts on the bricks it bared: pale, within a step of the wall's
+				// own value from across the street; the bare mud house's are near its wall's already)
+				const double Pale = P.bMud ? 0.0 : 0.4;
+				const Col Salt = Mixed(P.Dust, P.Wash, 0.35);
 				// (its two edges lie down onto the plaster: nothing of it stands off the wall to throw a line of shade below it)
 				const double Flat = bFine ? 0.15 * Off : Off;
 				const Col Joint = Scaled(P.Brick, 0.86), Lip = P.bMud ? Scaled(P.Mud, 1.08) : Mixed(P.Wash, P.Mud, 0.5);
@@ -11215,6 +11231,10 @@ namespace LandHouse
 					}
 					else R.Lo = R.Hi = 0.5 * (R.Lo + R.Hi);
 					const double LoB = S.Hang == 0 ? std::min(0.128, R.Hi) : std::min(R.Lo + 0.023, R.Hi), HiB = std::max(LoB, R.Hi - 0.02);
+					// (a foot's upper half still skimmed with what is left of the wall's own coat, more of it the higher: its
+					// top within a step of the wall's value, its bricks bare only low down)
+					const Col Coat = S.Hang == 0 ? WallCol(P, Bk, C, std::max(0.0, R.Hi) + 0.03, 0) : P.Mud;
+					const double Thin = S.Hang == 0 ? Smooth(0.0, 0.7, EndsOf(S, St[I])) : 1.0;
 					double Was = R.Lo;
 					for (size_t J = 0; J < NR; ++J)
 					{
@@ -11223,9 +11243,11 @@ namespace LandHouse
 						const double Z = std::max(Was, std::clamp(Zq, R.Lo, R.Hi));
 						Was = Z;
 						const double Tone = Noise01(St[I] / 0.45, Z / 0.35, S.Seed ^ 0x12);
-						Col Cc = !bFine ? Scaled(Mixed(P.Brick, Joint, 0.35), 0.95 + 0.08 * Tone) : Q.Tone == 1 ? Scaled(Joint, 0.85) : Q.Tone == 2 ? Lip : Scaled(Joint, (Q.Tone == 3 ? 0.84 : Q.Tone == 4 ? 0.7 : 0.94) + 0.1 * Tone);
+						Col Cc = !bFine ? Scaled(Mixed(P.Brick, Joint, 0.35), 0.95 + 0.08 * Tone) : Q.Tone == 1 ? Scaled(Joint, S.Hang == 0 ? 0.95 : 0.85) : Q.Tone == 2 ? Lip : Scaled(Joint, (Q.Tone == 3 ? 0.84 : Q.Tone == 4 ? 0.7 : 0.94) + 0.1 * Tone);
 						// (the ground's dust on what stands in it)
 						Cc = Mixed(Cc, P.Dust, 0.42 * Smooth(0.3, 0.0, Z));
+						// (and along its ends the coat not yet gone, thinner toward the middle)
+						if (S.Hang == 0) Cc = Mixed(Coat, Mixed(Mixed(Cc, Salt, Pale), Coat, SkimMost * Smooth(0.3, 1.0, Z / std::max(0.06, R.Hi))), Thin);
 						Zs[I * NR + J] = Z;
 						Id[I * NR + J] = B.Vert(Skin(P, Bk, C, Z, Q.bEdge ? Flat : Off), WallN(P, Bk, C, std::min(Z, Zm)), Cc);
 					}
@@ -11249,9 +11271,12 @@ namespace LandHouse
 				auto JointAt = [&](int K, int I) {
 					return (I + ((K & 1) != 0 ? 0.5 : 0.0) + 0.1 * (Unit(Hash(Bk.Key ^ 0xB1D, static_cast<uint64_t>(K + 4096), static_cast<uint64_t>(I + 65536))) - 0.5)) * Bl;
 				};
+				// (a foot's brick: the wall's coat it is skimmed toward, and the band's top where it stands)
+				Col SkimTo = P.Mud;
+				double SkimHi = 1.0;
 				auto Put = [&](double Pm, double Z, const Col& C) {
 					const Column Cn = Along(Bk, Pm);
-					return B.Vert(Skin(P, Bk, Cn, Z, Lift), WallN(P, Bk, Cn, std::min(Z, Zm)), C);
+					return B.Vert(Skin(P, Bk, Cn, Z, Lift), WallN(P, Bk, Cn, std::min(Z, Zm)), S.Hang == 0 ? Mixed(SkimTo, Mixed(Mixed(C, Salt, Pale), SkimTo, SkimMost * Smooth(0.3, 1.0, Z / SkimHi)), Smooth(0.0, 0.7, EndsOf(S, Pm))) : C);
 				};
 				const int K0 = static_cast<int>(std::floor((Zlo - 0.02) / Ch)), K1 = static_cast<int>(std::ceil((Zhi + 0.02) / Ch));
 				const int I0 = static_cast<int>(std::floor(S.Pm0 / Bl)) - 1, I1 = static_cast<int>(std::ceil(S.Pm1 / Bl)) + 1;
@@ -11284,6 +11309,11 @@ namespace LandHouse
 						}
 						if (!bAny) continue;
 						const V3 Out = Along(Bk, Pm[2]).H;
+						if (S.Hang == 0)
+						{
+							SkimHi = std::max(0.06, BareOf(P, Bk, S, Pm[2]).Hi);
+							SkimTo = WallCol(P, Bk, Along(Bk, Pm[2]), SkimHi + 0.03, 0);
+						}
 						if (bWhole && Unit(Hash(Kb, 3)) < 0.14)
 						{
 							// (worn: its four corners gone)
