@@ -54,7 +54,8 @@ import { gunsAlone, homeAlarms, type HomeAlarm } from '../../../src/campaign/dan
 import { DEPTH, deskDef, type DeskId } from '../../../src/campaign/depth';
 import { deskRuns } from '../../../src/campaign/desks';
 import { LEAGUE, leagueFounded, leagueMembers, type PathId } from '../../../src/campaign/league';
-import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, step, tradePartners } from '../../../src/campaign/diplomacy';
+import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, majorsOf, momentum, pcIncome, receptive, step, tradePartners } from '../../../src/campaign/diplomacy';
+import { startGunsOnLoad } from '../../../src/campaign/airversion';
 import {
   arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderRebase, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
@@ -130,7 +131,7 @@ import { whyNotCash, drillTo, whyNoSchool, wearOf } from '../../../src/campaign/
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
 import { NAVY, subScene } from '../../../src/campaign/navy';
-import { chanceOn } from '../../../src/campaign/game';
+import { chanceOn, headline } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
 import { answersOf, motherLine, patronOf } from '../../../src/campaign/world';
@@ -2032,6 +2033,7 @@ function load(text: string) {
   const loaded = loadGame(text);
   if (!loaded) return null;
   g = loaded;
+  startGunsLoaded(g);
   lessonsBegin(false);
   swapAsked = ''; wreckAsked = ''; // (nothing asked in the campaign being left is remembered in this one)
   fallenNation = null;
@@ -2112,6 +2114,13 @@ const fieldCalls = {
 };
 function openFieldTargets(g: Game): void {
   try { if (fieldCalls.shipped?.()) fieldCalls.on?.(g, true); } catch { /* rules without airfields as targets */ }
+}
+/**
+ * A grand campaign saved before the start guns were on lays them as it is loaded (1.5.1; Brian, 24 November 22:31Z: "Yes,
+ * when I load a saved war"): once, for every great power, with one line in the news. airversion.ts startGunsOnLoad.
+ */
+function startGunsLoaded(g: Game): void {
+  if (startGunsOnLoad(g, majorsOf(g))) headline(g, 'info', "Anti-aircraft guns now stand round each great power's capital and its two chief factory towns.", g.human ?? undefined);
 }
 const repairView = (g: Game, region: number): RepairLike | null => { try { return repairCalls.view?.(g, region) ?? null; } catch { return null; } };
 const damagedOfMine = (g: Game): RepairLike[] => { try { return repairCalls.mine?.(g) ?? []; } catch { return []; } };

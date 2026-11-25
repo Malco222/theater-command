@@ -419,8 +419,19 @@ describe('one war at the history stop, nobody playing', () => {
     // the Cotentin refuse America's corps in May 1944, the staff lands at Nantes that month, Calais refuses again in
     // July, and the corps land on the Cotentin in August. Seeds 23, 26, 32, 36, 40, 46, 48, 53 and 55 are refused in
     // May 1944 but land in France that same month; 49, 51 and 57 are refused every month and hold their corps back;
-    // 19, 22, 27, 39, 44 and 47 see Germany fall first. Seed 42 is the one used.)
-    const g = startOpen(createGame(42, null));
+    // 19, 22, 27, 39, 44 and 47 see Germany fall first. Seed 42 until the start guns of 1.5.1 came onto release 2
+    // (ruling 124; airversion.json startGuns, 24 November 2026): the guns blunt the opening's bombing and the war moves
+    // again, and seed 42's Americans land at Nantes in April 1944, never refused. Of seeds 17 to 58 on release 2's tree
+    // with the guns on (169ae947), only seed 18 tells the story in full: Calais, Rouen, the Cotentin and Brittany refuse
+    // America's corps in May 1944, the mainland refuses them again in June, July and August, and in August the staff
+    // lands its three corps at Nantes, its only landing of the war. Seeds 17, 31, 32, 36, 45, 46, 51, 52, 56 and 58 are
+    // refused in May 1944 but land in France that same month; 21, 48, 49 and 57 are refused and put no first wave
+    // ashore that summer; 22 and 55 are refused and land in Sicily; 19, 20, 25, 29, 30, 33, 43, 47 and 54 see Germany
+    // fall first; the other sixteen are never refused. One of those, seed 34, puts three American corps on Rhodes in
+    // June 1944, never having been refused on the mainland: the first measured war in which an American first wave of
+    // 1944 goes to an island (named for the design director; this test's claim is of the staff that was refused).
+    // Seed 18 is the one used.)
+    const g = startOpen(createGame(18, null));
     expect(setStop(g, 3, true)).toBe(true);
     const landings: { turn: number; nat: string; to: Region; corps: number }[] = [];
     const refused = new Set<number>();
