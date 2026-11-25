@@ -38,7 +38,7 @@
  */
 import { hashString } from '../core/rng';
 import { garrisonLine } from './armies';
-import { allied, atWar, headline, moveCost } from './game';
+import { allied, atWar, ensureSupply, headline, moveCost } from './game';
 import { blocked } from './rivers';
 import { canOrder, humanUp, onEve, orderMove, reach, sight, type Reach } from './turn';
 import type { Corps, Game } from './types';
@@ -334,5 +334,7 @@ export function advanceMarches(g: Game): { ended: MarchNews[]; went: number[] } 
     else g.flags[`marchAs:${id}`] = standing(c);
   }
   sweepHot(g);
+  // (The supply window, turn.ts stepAI: the marches that took ground leave a fresh supply picture behind them.)
+  ensureSupply(g);
   return { ended, went: [...new Set(went)] };
 }

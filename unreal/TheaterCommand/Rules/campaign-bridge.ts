@@ -40,7 +40,7 @@
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
 import { setTeams, TEAMS_RELEASE } from '../../../src/campaign/teams';
-import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, hostileUnits, limitAttackers, men, moveCost, railReach as railReachOf, litTracks, railReachFor, railSays, rideLines, whyNoTrain, whyNoTrainFor, weather as weatherNow, worksOf } from '../../../src/campaign/game';
+import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, ensureSupply, fieldArmy, frontage, hostileUnits, limitAttackers, men, moveCost, railReach as railReachOf, litTracks, railReachFor, railSays, rideLines, whyNoTrain, whyNoTrainFor, weather as weatherNow, worksOf } from '../../../src/campaign/game';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
 import { ARSENAL as arsenalBook, airJoinsPlan, factoriesBuilt, joinsFleet, workLevel, yardLevel } from '../../../src/campaign/arsenal';
@@ -515,6 +515,10 @@ const pictureDamaged = (s: Game): RepairLike[] => inPicture(s, 'damaged', () => 
 const pictureGunsAlone = (s: Game): ReturnType<typeof gunsAloneOf> => inPicture(s, 'alone', () => gunsAloneOf(s));
 
 function view() {
+  // (The supply window, turn.ts stepAI: an order that answers with the picture hands it a fresh supply picture, as part
+  // of the order itself. Every other call ends fresh by the wrapper at this file's foot, so a picture never finds
+  // supply stale, and when a picture is drawn decides nothing.)
+  if (pictureDepth === 0 && g) ensureSupply(g);
   pictureDepth++;
   try {
     return drawView();
@@ -7873,3 +7877,23 @@ function r2Ship(ids: string[]) {
   return took > 0 ? view() : null;
 }
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).r2Ship = r2Ship;
+
+// The supply window (release 2; the map-speed lane's finding of 24 November 2026: a picture could refresh the supply
+// picture, so when one was drawn decided when supply was refreshed, and two tables playing the same orders could part).
+// Every call into the rules from the table now ends with supply made fresh, the looks as well as the orders. With the
+// rules' own step ends (turn.ts stepAI, beginHuman, endHuman; marches.ts advanceMarches) and view() above, supply is
+// clean whenever the rules hand control back: the moment it is refreshed is fixed by the rules and the player's
+// orders alone. A call that finds it clean pays one test of a flag.
+{
+  const table = (globalThis as Record<string, unknown>).TC as Record<string, unknown>;
+  for (const name of Object.keys(table)) {
+    const fn = table[name];
+    if (typeof fn !== 'function') continue;
+    table[name] = function supplyKept(this: unknown, ...a: unknown[]): unknown {
+      // (A call that throws is left as it stands: nothing more is done to a game in the middle of a failed order.)
+      const out = (fn as (...x: unknown[]) => unknown).apply(this, a);
+      if (g) ensureSupply(g);
+      return out;
+    };
+  }
+}
