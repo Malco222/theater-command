@@ -9,7 +9,7 @@
  * smooth and realistic and detailed grand it looks".) Funnel smoke for a fleet on the campaign map: every ship with a
  * funnel has steam up. Lying still at sea she shows a pale wisp that stands over her and leans down the wind. Under
  * way her smoke streams astern, along the water she has crossed (so it bends where she turned), lower and longer the
- * faster she goes; it is thick and black while she works up to speed, with her fires forced, and thins to grey as she
+ * faster she goes; it is thick and dark while she works up to speed, with her fires forced, and thins to grey as she
  * holds her speed or eases. A submarine shows none, and nor does a fleet at anchor by her port.
  *
  * Plain arithmetic with no engine in it, so that the cloud can check it (Tools/ship_smoke/run.sh). The piece
@@ -61,7 +61,7 @@ namespace TheaterShipSmoke
 	struct FFire
 	{
 		double Thick = 0.0; // how thick the smoke is as it leaves her (the most a puff covers, 0 to 1)
-		double Dark = 0.0;  // 0 the pale haze of fires banked, 1 the black of fires forced
+		double Dark = 0.0;  // 0 the pale haze of fires banked, 1 the dark, dirty smoke of fires forced
 		double Reach = 0.0; // how far astern the plume streams, in her lengths
 		double High = 0.0;  // how high it stands over the funnel by its end, in her lengths
 		double Lee = 0.0;   // how far down the wind it has gone by its end, in her lengths
@@ -75,12 +75,15 @@ namespace TheaterShipSmoke
 	 *
 	 * Lying still: a thin pale wisp that rises a little over a quarter of her length and leans down the wind (it is the
 	 * common sight on the table, and is kept slight). At her best: a pale haze still, twice as thick, a length and a
-	 * half astern and blown low. Working up: thick and black, for as long as she gathers way. Easing: a little thinner
+	 * half astern and blown low. Working up: thick and dark, for as long as she gathers way. Easing: a little thinner
 	 * and paler than her speed alone would make it.
 	 *
-	 * (Why a steady fire is pale. The table's sea at working height is a dark blue, about a tenth to a sixth of white
-	 * on the Mac's stills. A pale smoke reads on it strongly and a middle grey weakly; black reads least of all, on
-	 * the water, and is seen where it lies over her wake and herself: so it is made the thickest.)
+	 * (Why a steady fire is pale, and a forced one is not black. The table's sea at working height is a dark blue,
+	 * about a tenth to a sixth of white on the Mac's stills. A pale smoke reads on it strongly. A true black, under a
+	 * tenth, is as dark as the water: drawn at the size it has on the screen a plume of it could hardly be seen, and
+	 * she seemed to lose her smoke just as she worked hardest. So the darkest smoke is a dirty brown-grey of about a
+	 * third of white (Ink): well over the sea still, and told from the pale by its tone and its warmth. It is also
+	 * the thickest.)
 	 */
 	inline FFire Fire(double Pace, double Gather, double Much = 1.0, double Long = 1.0)
 	{
@@ -101,7 +104,7 @@ namespace TheaterShipSmoke
 
 	/**
 	 * The fire a puff carries with it. The plume lies as her fire is Now (how far astern, how high, how far down the
-	 * wind, how big), but each puff is as thick and as dark as the fire that made it (Then, its age ago): the black of
+	 * wind, how big), but each puff is as thick and as dark as the fire that made it (Then, its age ago): the dark of
 	 * working up goes down the plume with the puffs that were made then and thins out with them, and the plume never
 	 * changes colour all at once, as it would if every puff took the fire of the moment (on a course with bends she
 	 * eases and works up again several times in a few seconds). Keep, 1 to 0, is how much of the fire that made it a
@@ -180,15 +183,16 @@ namespace TheaterShipSmoke
 	};
 
 	/**
-	 * The colour of a puff: as it leaves her, from the pale grey of an easy fire to the brown-black of oil burnt in a
-	 * hurry (Dark); and paler and greyer the older it is, as it thins into the air. The pale is as light as the smoke
-	 * of the towns' chimneys (0.6), well over the tone of the table's sea. Never bright enough or warm enough to be
+	 * The colour of a puff: as it leaves her, from the pale grey of an easy fire to the dirty brown-grey of oil burnt
+	 * in a hurry (Dark: about a third of white and no darker, for a black cannot be told from the table's dark sea);
+	 * and paler and greyer the older it is, as it thins into the air. The pale is as light as the smoke of the towns'
+	 * chimneys (0.6), well over the tone of the table's sea. Never bright enough or warm enough to be
 	 * taken for a light by night (the map's night rule tells a light by its colour, from 0.75: Tools/ship_smoke checks it).
 	 */
 	inline FInk Ink(double Dark, double Age)
 	{
 		const double D = Clamp(Dark, 0.0, 1.0), Thinned = 0.55 * Clamp(Age, 0.0, 1.0);
-		const FInk Pale{ 0.6, 0.59, 0.575 }, Oily{ 0.07, 0.066, 0.063 }, Haze{ 0.64, 0.63, 0.62 };
+		const FInk Pale{ 0.6, 0.59, 0.575 }, Oily{ 0.385, 0.335, 0.28 }, Haze{ 0.64, 0.63, 0.62 };
 		const FInk Head{ Pale.R + (Oily.R - Pale.R) * D, Pale.G + (Oily.G - Pale.G) * D, Pale.B + (Oily.B - Pale.B) * D };
 		return FInk{ Head.R + (Haze.R - Head.R) * Thinned, Head.G + (Haze.G - Head.G) * Thinned, Head.B + (Haze.B - Head.B) * Thinned };
 	}

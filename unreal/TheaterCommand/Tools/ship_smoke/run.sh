@@ -1,7 +1,7 @@
 #!/bin/bash
 # Funnel smoke for a fleet on the campaign map, its cloud test (release 2): builds Campaign/ShipSmoke.h (the game's
 # own code, no engine) with the strictest warnings and checks it. A ship lying still shows a pale wisp and one under
-# way a plume that streams astern; it is thicker and blacker while she works up to speed; a plume begins at its
+# way a plume that streams astern; it is thicker and darker while she works up to speed; a plume begins at its
 # funnel, grows and thins as it goes, never stands apart in beads and never jumps; its colour is never taken for a
 # light by night; the puffs it costs are few and counted; on a real course (Campaign/ShipWay.h) it lies along the
 # water she crossed, round her turns; each puff is as thick and dark as the fire that made it, so that the plume never

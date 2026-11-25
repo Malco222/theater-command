@@ -85,8 +85,8 @@ int main()
 		Check(Best.Reach > 1.2 && Best.Reach < 2.0 && Best.High < 0.5 * Still.High + 0.1, "at her best: a length and a half astern, blown low");
 		// (A steady fire is pale: the table's sea at working height is a dark blue, and pale smoke reads on it best.)
 		Check(Best.Thick > 2.0 * Still.Thick && Best.Dark > Still.Dark && Best.Dark < 0.3, "at her best: twice as thick as lying still, and a pale haze still");
-		Check(Luminance(Ink(Still.Dark, 0.0)) > 0.5 && Luminance(Ink(Best.Dark, 0.0)) > 0.45 && Luminance(Ink(Forced.Dark, 0.0)) < 0.12, "a steady fire's smoke is pale, far over the tone of the table's sea (0.10 to 0.17), and a forced one's is black");
-		Check(Forced.Dark > 0.8 && Forced.Thick > Best.Thick && Fire(0.3, Hard).Dark == Forced.Dark, "working up to speed: black, and thicker than at her best");
+		Check(Luminance(Ink(Still.Dark, 0.0)) > 0.5 && Luminance(Ink(Best.Dark, 0.0)) > 0.45 && Luminance(Ink(Forced.Dark, 0.0)) > 0.28 && Luminance(Ink(Forced.Dark, 0.0)) < Luminance(Ink(Best.Dark, 0.0)) - 0.15, "a steady fire's smoke is pale, far over the tone of the table's sea (0.10 to 0.17); a forced one's is dark beside it, and over the sea still (a black is as dark as the water and cannot be seen on it)");
+		Check(Forced.Dark > 0.8 && Forced.Thick > Best.Thick && Fire(0.3, Hard).Dark == Forced.Dark, "working up to speed: dark, and thicker than at her best");
 		Check(Easing.Dark < Fire(0.6, 0.0).Dark && Easing.Thick < Fire(0.6, 0.0).Thick, "easing: paler and thinner than her speed alone would make it");
 		bool bGrows = true, bBounded = true, bForcedMore = true;
 		for (int Step = 0; Step < 100; ++Step)
@@ -209,7 +209,7 @@ int main()
 				const FInk C = Ink(D / 50.0, A / 50.0);
 				// (the map's night rule, DrawPuff: warm is R - 2.2 B - 0.03 over nought, bright is a luminance over 0.75)
 				bNoLight = bNoLight && Luminance(C) < 0.7 && C.R - 2.2 * C.B - 0.03 < 0.0;
-				bGrey = bGrey && C.R >= C.G && C.G >= C.B && C.R - C.B < 0.03 && C.B > 0.05;
+				bGrey = bGrey && C.R >= C.G && C.G >= C.B && C.R - C.B < 0.11 && C.R - C.B >= 0.018 && C.B > 0.25;
 				if (D < 50)
 				{
 					bDarker = bDarker && Luminance(Ink((D + 1) / 50.0, A / 50.0)) < Luminance(C);
@@ -221,10 +221,10 @@ int main()
 			}
 		}
 		Check(bNoLight, "no smoke of hers is bright or warm enough to be taken for a light by night");
-		Check(bGrey, "it is grey, a shade to the warm side, and never quite black");
+		Check(bGrey, "it is grey, to the warm side (the more the darker), and never near black");
 		Check(bDarker, "the harder her fires are forced the darker it leaves her");
 		Check(bPaler, "and the older a puff the paler");
-		Check(Luminance(Ink(1.0, 0.0)) < 0.08 && Luminance(Ink(0.0, 0.0)) > 0.4, "from the pale of an easy fire to the black of a forced one");
+		Check(Luminance(Ink(1.0, 0.0)) > 0.3 && Luminance(Ink(1.0, 0.0)) < 0.38 && Luminance(Ink(0.0, 0.0)) > 0.55, "from the pale of an easy fire to the dirty brown-grey of a forced one, which is a third of white: twice the sea's tone and more");
 		Check(Ink(-4.0, 9.0).R == Ink(0.0, 1.0).R && Ink(4.0, -9.0).R == Ink(1.0, 0.0).R, "out of range is held");
 	}
 
