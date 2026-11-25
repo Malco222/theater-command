@@ -106,7 +106,9 @@ describe('a lane in a staff\'s count by sea', () => {
       expect(row.lines).toEqual([LANE_UNCOUNTED, LANE_NO_STAFF]);
       expect(row.buttons[0].ok).toBe(true);
       // A lane that carries something reads its losses as before.
-      const other = sec.rows.find((r) => r.title !== EMPTY.name);
+      // (With the Pacific's three lanes laid, the Hawaii lane stands in this list too and is not counted either: the
+      // row asked here is one whose lane carries something. Mended at the join of the lanes, 25 November 2026.)
+      const other = sec.rows.find((r) => r.title !== EMPTY.name && !r.lines.includes(LANE_UNCOUNTED));
       if (other) expect(other.lines[0]).toMatch(/^Cargoes lost on it now: |cut|closed|no port/i);
     }, {}, asAmerica);
   });
