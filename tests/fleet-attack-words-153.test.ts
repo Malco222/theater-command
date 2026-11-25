@@ -6,8 +6,8 @@
 //       last, and their range said plainly; a battleship or carrier the likely count rounds away, though it may well go
 //       down, named on that line; and in the sea report, "The Battle Fleet was caught at anchor" (not "The the"), and each
 //       side's strength summed before the sinkings; and the fleet's own name in the refusals, "Force H", not "The Force H";
-//   33  odds whose two ends read the same are said once: "More than 10 to 1 all day", on the card and in the month's sea
-//       forecast; and odds that round to nothing are "less than 0.1", not "0.0".
+//   33  odds whose two ends read the same are said once: "More than 10 to 1 all day", on the card, in the month's sea
+//       forecast and in the browser's fleet orders; and odds that round to nothing are "less than 0.1", not "0.0".
 import { describe, expect, it } from 'vitest';
 import { fleetKnown } from '../src/campaign/carriers';
 import { atWar, createGame, declareWar } from '../src/campaign/game';
@@ -20,6 +20,8 @@ import { oddsSwing, oddsWord, planSeaBattle } from '../src/campaign/seaplan';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, fleetOptions, humanUp, stepAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
+// (the browser client's source, read as text: its fleet orders cannot be drawn here)
+import browser from '../src/campaign/ui/main.ts?raw';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -483,6 +485,20 @@ describe('33: the month\'s sea forecast says its odds once, as the card does', (
     sail(g, sq, z, 'patrol');
     expect(planSeaBattle(g, home.id, z, null)!.odds!.low).toBeGreaterThanOrEqual(9.95);
     expect(odds()).toEqual({ label: 'Odds', value: 'more than 10 to 1', effect: 'More than 10 to 1 all day' });
+  });
+});
+
+describe('33: the browser\'s fleet orders say the forecast\'s odds as the card does', () => {
+  it('"odds more than 10 to 1 all day", not "(over 10 to over 10)", and "less than 0.1", not "0.0"', () => {
+    // (The 1.5.3 review) The month's sea forecast reaches the player in one line under each sea, on patrol (ui/main.ts seaOddsLine).
+    const line = browser.slice(browser.indexOf('function seaOddsLine('), browser.indexOf('function fleetOrders('));
+    expect(line).toContain('const swing = oddsSwing(p.odds.low, p.odds.high);');
+    expect(line).toContain("swing.endsWith(' all day') ? lowerFirst(swing) : `${oddsWord(p.odds.mid)} to 1 (${oddsWord(p.odds.low)} to ${oddsWord(p.odds.high)})`");
+    expect(line).not.toContain("'over 10'");
+    expect(line).not.toContain('toFixed');
+    // The band is said once exactly where oddsSwing ends "all day"; where its ends differ, both are given.
+    for (const [lo, hi] of [[0.01, 0.02], [0.04, 0.06], [0.2, 0.24], [12, 18]]) expect(oddsSwing(lo, hi)).toMatch(/^[A-Z][a-z ]+[\d.]+ to 1 all day$/);
+    for (const [lo, hi] of [[0.12, 0.18], [9, 13], [1.6, 2.4]]) expect(oddsSwing(lo, hi)).toMatch(/^Between .+ to 1 as the day goes$/);
   });
 });
 

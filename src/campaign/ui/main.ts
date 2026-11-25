@@ -13,6 +13,7 @@ import { NO_MOVES, aboutMonths, advanceMarches, forgetMarch, marchState, orderMa
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../round';
 import { gateBar, gateSpot, gateViews, onLand } from '../gates';
 import { inMonths } from '../orders';
+import { oddsSwing, oddsWord } from '../seaplan';
 import { FAR_PATHS } from '../far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import grandData from '../../../data/campaign/grand.json';
 import {
@@ -5439,9 +5440,12 @@ function seaOddsLine(f: Fleet, zone: number, meet: 'battle' | 'shy'): string {
   const lead = offers ? 'on patrol it would bring the enemy fleet to battle' : 'the enemy fleet is too strong here to offer battle';
   if (!p || !p.odds) return lead;
   const n = (s: Record<string, number>): number => Object.values(s).reduce((a, b) => a + b, 0);
-  const one = (x: number): string => (x >= 9.95 ? 'over 10' : x.toFixed(1));
+  // (1.5.3, playtest #33) The odds as the attack card says them (seaplan.ts): "more than 10", and "less than 0.1", not
+  // "0.0"; and said once where both ends of the band read the same, "more than 10 to 1 all day", not "(over 10 to over 10)".
+  const swing = oddsSwing(p.odds.low, p.odds.high);
+  const odds = swing.endsWith(' all day') ? lowerFirst(swing) : `${oddsWord(p.odds.mid)} to 1 (${oddsWord(p.odds.low)} to ${oddsWord(p.odds.high)})`;
   const ours = n(p.likely.ours), theirs = n(p.likely.theirs);
-  return `${lead}: odds ${one(p.odds.mid)} to 1 (${one(p.odds.low)} to ${one(p.odds.high)}), ${p.verdict.toLowerCase()}${offers ? '' : ' if he comes to you'}; likely to cost ${ours} of your ship${ours === 1 ? '' : 's'} for ${theirs} of his`;
+  return `${lead}: odds ${odds}, ${p.verdict.toLowerCase()}${offers ? '' : ' if he comes to you'}; likely to cost ${ours} of your ship${ours === 1 ? '' : 's'} for ${theirs} of his`;
 }
 
 /** The orders the player can give the fleet that is picked. */
