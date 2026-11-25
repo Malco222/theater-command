@@ -5011,7 +5011,7 @@ namespace LandField
 			{
 				bool bPlank = false;
 				double Lap = 0.0; // how far its boards stand out of the wall's line
-				Col Board, BoardB, Wash, Clay, Plinth, Timber, Leaf, Iron, Fallen;
+				Col Board, BoardB, Wash, Clay, Plinth, Timber, Leaf, Iron, Fallen, Within;
 			} Sd;
 			if (H.bBoards)
 			{
@@ -5023,12 +5023,13 @@ namespace LandField
 				Sd.BoardB = Scaled(Rgb(116, 102, 86), T);
 				Sd.Wash = L.Stone;
 				Sd.Clay = Rgb(150, 124, 92);
-				Sd.Plinth = Unit(Mix(SK ^ 2)) < 0.5 ? Rgb(112, 104, 94) : Rgb(98, 78, 68); // (fieldstone, or old brick gone dull)
+				Sd.Plinth = Unit(Mix(SK ^ 2)) < 0.5 ? Rgb(112, 104, 94) : Rgb(94, 79, 70); // (fieldstone, or old brick gone dull)
 				Sd.Timber = Scaled(Rgb(98, 86, 72), T);
 				const double UL = Unit(Mix(SK ^ 3));
 				// (its doors bare, or an old paint gone chalky: blue-green, ochre red, green)
 				Sd.Leaf = UL < 0.5 ? Rgb(110, 100, 86) : Mixed(UL < 0.75 ? Rgb(92, 110, 112) : UL < 0.9 ? Rgb(126, 80, 62) : Rgb(96, 108, 86), Rgb(122, 118, 110), 0.35);
 				Sd.Iron = Rgb(48, 44, 42);
+				Sd.Within = Rgb(38, 34, 31); // (a shed's inside seen through a breach: unlit timber, darker than a house's plaster)
 				Sd.Fallen = Rgb(72, 62, 52); // (what lies where a boarded wall came down: its boards, broken and burnt)
 			}
 			const V2 U{ std::cos(H.Yaw), std::sin(H.Yaw) }, V = Perp(U);
@@ -5265,7 +5266,11 @@ namespace LandField
 					// away, Tz the wall's top over the point)
 					auto Burnt = [&](const Col& C, V3 P, double Tz) {
 						const Col Out = bInside ? Mixed(C, Scorch, 0.5 * Smooth(Eaves - 2.5, Eaves + 0.5, P.Z + 1.2 * Noise(P.X + P.Y, 1.0, H.Key)) * (bShell ? 1.0 : 0.6)) : C;
-						return Tz < Eaves - 0.05 ? Mixed(Out, Rgb(34, 30, 28), 0.85 * Smooth(1.5, 0.1, Tz - P.Z)) : Out;
+						if (Tz >= Eaves - 0.05) return Out;
+						// (black in its last 18 cm under the break, the soot gone by 70 cm under it: below that the wall its own tone, so
+						// the ragged edge reads against the dark inside)
+						const double Dn = Tz - P.Z;
+						return Mixed(Out, Rgb(34, 30, 28), Dn < 0.18 ? Lerp(0.85, 0.45, Clamp01(Dn / 0.18)) : 0.45 * Smooth(0.7, 0.18, Dn));
 					};
 					// (each paint by the point and the ground under it, Gz)
 					auto PlinthAt = [&](V3 P, double Gz, double Tz) {
@@ -5367,14 +5372,36 @@ namespace LandField
 						auto Piece = [&](double Z00, double Z01, double Z10, double Z11) {
 							if (Z10 <= Z00 + 0.01 && Z11 <= Z01 + 0.01) return;
 							const V3 P0 = At(A0, Z00, -Lap), P1 = At(A1, Z01, -Lap), P2 = At(A1, std::max(Z01, Z11), -Lap), P3 = At(A0, std::max(Z00, Z10), -Lap);
-							if (Sd.bPlank) Shut(P0, P1, P2, P3, BoardAt(BK, 0, P0, G0, T0), BoardAt(BK, 1, P1, G1, T1), BoardAt(BK, 1, P2, G1, T1), BoardAt(BK, 0, P3, G0, T0), Out3);
+							if (Sd.bPlank)
+							{
+								// (a board flat across its width, its own tone; the edge its neighbour laps a hard dark line, its first 2 cm)
+								const double AL = std::min(A0 + 0.02, 0.5 * (A0 + A1)), UL = (AL - A0) / (A1 - A0), GL = Lerp(G0, G1, UL), TL = Lerp(T0, T1, UL);
+								const V3 PL0 = At(AL, Lerp(P0.Z, P1.Z, UL), -Lap), PL1 = At(AL, Lerp(P3.Z, P2.Z, UL), -Lap);
+								Shut(P0, PL0, PL1, P3, BoardAt(BK, 0, P0, G0, T0), BoardAt(BK, 0, PL0, GL, TL), BoardAt(BK, 0, PL1, GL, TL), BoardAt(BK, 0, P3, G0, T0), Out3);
+								Shut(PL0, P1, P2, PL1, BoardAt(BK, 1, PL0, GL, TL), BoardAt(BK, 1, P1, G1, T1), BoardAt(BK, 1, P2, G1, T1), BoardAt(BK, 1, PL1, GL, TL), Out3);
+							}
 							else Shut(P0, P1, P2, P3, WashAt(A0, P0, G0, T0), WashAt(A1, P1, G1, T1), WashAt(A1, P2, G1, T1), WashAt(A0, P3, G0, T0), Out3);
 						};
-						auto Span = [&](double Za0, double Za1, double Zb0, double Zb1) {
-							double L0 = Za0, L1 = Za1;
+						// (where its paint is told again going up it: the foot's wear and its damp over the ground, or the clay's rows;
+						// under a broken top the soot's foot and the char's, 70 and 18 cm under the break)
+						auto Span = [&](double Za0, double Za1, double Zb0, double Zb1, bool bTop) {
+							std::pair<double, double> Lines[7];
+							int NL = 0;
 							for (int K = 0; K < (Sd.bPlank ? 2 : 5); ++K)
 							{
-								const double Off = !Sd.bPlank ? Rows[K] : K == 0 ? RotOf(BK) : DampOf(BK), S0 = G0 + Off, S1 = G1 + Off;
+								const double Off = !Sd.bPlank ? Rows[K] : K == 0 ? RotOf(BK) : DampOf(BK);
+								Lines[NL++] = { G0 + Off, G1 + Off };
+							}
+							if (bTop && (T0 < Eaves - 0.05 || T1 < Eaves - 0.05))
+							{
+								Lines[NL++] = { Zb0 - 0.7, Zb1 - 0.7 };
+								Lines[NL++] = { Zb0 - 0.18, Zb1 - 0.18 };
+							}
+							std::sort(Lines, Lines + NL, [](const std::pair<double, double>& X, const std::pair<double, double>& Y) { return X.first + X.second < Y.first + Y.second; });
+							double L0 = Za0, L1 = Za1;
+							for (int K = 0; K < NL; ++K)
+							{
+								const double S0 = Lines[K].first, S1 = Lines[K].second;
 								if (S0 < L0 + 0.05 || S1 < L1 + 0.05 || S0 > Zb0 - 0.05 || S1 > Zb1 - 0.05) continue;
 								Piece(L0, L1, S0, S1);
 								L0 = S0;
@@ -5388,16 +5415,16 @@ namespace LandField
 						const double Cap = !Fc.bGable && bRoof ? Eaves - (Lap + 0.01) * Tan : Eaves, TB0 = std::min(T0, Cap), TB1 = std::min(T1, Cap);
 						for (const std::pair<double, double>& G : Gaps)
 						{
-							if (G.first > std::max(F0, F1) + 0.01) Span(F0, F1, std::min(G.first, TB0), std::min(G.first, TB1));
+							if (G.first > std::max(F0, F1) + 0.01) Span(F0, F1, std::min(G.first, TB0), std::min(G.first, TB1), false);
 							F0 = std::max(F0, G.second);
 							F1 = std::max(F1, G.second);
 						}
-						Span(F0, F1, TB0, TB1);
+						Span(F0, F1, TB0, TB1, true);
 						if (bInside)
 						{
 							// (from the wall's foot, as the other houses: a wall broken below the floor has its inside and its charred top there)
 							const V3 Q2 = At(A1, std::max(H.Foot, T1), Thick), Q3 = At(A0, std::max(H.Foot, T0), Thick);
-							Shut(At(A0, H.Foot, Thick), At(A1, H.Foot, Thick), Q2, Q3, L.Inside, L.Inside, L.Inside, L.Inside, Out3 * -1.0);
+							Shut(At(A0, H.Foot, Thick), At(A1, H.Foot, Thick), Q2, Q3, Sd.Within, Sd.Within, Sd.Within, Sd.Within, Out3 * -1.0);
 							if (T0 < Eaves - 0.01 || T1 < Eaves - 0.01) B.Quad1(At(A0, std::max(H.Foot, TB0), -Lap), At(A1, std::max(H.Foot, TB1), -Lap), Q2, Q3, Mixed(Sd.bPlank ? Sd.BoardB : Sd.Clay, Rgb(34, 30, 28), Sd.bPlank ? 0.85 : 0.4), { 0, 0, 1 });
 						}
 					}
@@ -5532,26 +5559,25 @@ namespace LandField
 							if (std::fabs(A - 0.5 * Fc.Len) >= 0.05) GB.push_back(A);
 						std::sort(GB.begin(), GB.end());
 						GB.erase(std::unique(GB.begin(), GB.end(), [](double X, double Y) { return std::fabs(X - Y) < 0.05; }), GB.end());
-						auto Three = [&](V3 Pa, V3 Pb, V3 Pc, const Col& Ca, const Col& Cb, const Col& Cc) {
-							const uint32_t Ia = B.Vert(Pa, Out3, Ca), Ib = B.Vert(Pb, Out3, Cb), Ic = B.Vert(Pc, Out3, Cc);
-							if (Dot3(Cross(Pb - Pa, Pc - Pa), Out3) > 0.0) B.Tri(Ia, Ib, Ic);
-							else B.Tri(Ia, Ic, Ib);
-						};
 						for (size_t I = 0; I + 1 < GB.size(); ++I)
 						{
 							const double A0 = GB[I], A1 = GB[I + 1], Gz = Eaves - 9.0, Tz = 1e9; // (no foot's damp up here, and its top whole)
 							const uint64_t BK = Hash(GK, 0xB0A3ull, static_cast<uint64_t>(I));
-							const V3 P0 = At(A0, Eaves, -0.04), P1 = At(A1, Eaves, -0.04), P2 = At(A1, Rake(A1), -0.04), P3 = At(A0, Rake(A0), -0.04);
-							if (P3.Z < Eaves + 0.005) Three(P0, P1, P2, BoardAt(BK, 0, P0, Gz, Tz), BoardAt(BK, 1, P1, Gz, Tz), BoardAt(BK, 1, P2, Gz, Tz));
-							else if (P2.Z < Eaves + 0.005) Three(P0, P1, P3, BoardAt(BK, 0, P0, Gz, Tz), BoardAt(BK, 1, P1, Gz, Tz), BoardAt(BK, 0, P3, Gz, Tz));
-							else B.Quad(P0, P1, P2, P3, BoardAt(BK, 0, P0, Gz, Tz), BoardAt(BK, 1, P1, Gz, Tz), BoardAt(BK, 1, P2, Gz, Tz), BoardAt(BK, 0, P3, Gz, Tz), Out3);
+							// (each board flat across its width, the edge its neighbour laps a hard dark line: its first 2 cm)
+							const double AL = std::min(A0 + 0.02, 0.5 * (A0 + A1));
+							for (int Side = 0; Side < 2; ++Side)
+							{
+								const double B0 = Side == 0 ? A0 : AL, B1 = Side == 0 ? AL : A1;
+								const V3 P0 = At(B0, Eaves, -0.04), P1 = At(B1, Eaves, -0.04), P2 = At(B1, Rake(B1), -0.04), P3 = At(B0, Rake(B0), -0.04);
+								Shut(P0, P1, P2, P3, BoardAt(BK, Side, P0, Gz, Tz), BoardAt(BK, Side, P1, Gz, Tz), BoardAt(BK, Side, P2, Gz, Tz), BoardAt(BK, Side, P3, Gz, Tz), Out3);
+							}
 						}
 						// (the weather board from corner to corner, its ends cut to the rake: nothing of it stands up through the roof)
 						const double AW = std::min(0.45 * Fc.Len, 0.05 * Fc.Len / (Ridge - Eaves));
 						Rail(0.0, AW, Eaves - 0.07, Eaves - 0.07, Eaves - 0.01, Eaves + 0.09, 0.075, Sd.Timber, true);
 						Level(AW, Fc.Len - AW, Eaves - 0.07, Eaves + 0.09, 0.075, Sd.Timber, true);
 						Rail(Fc.Len - AW, Fc.Len, Eaves - 0.07, Eaves - 0.07, Eaves + 0.09, Eaves - 0.01, 0.075, Sd.Timber, true);
-						if (bInside) B.Tri1(At(0.0, Eaves, Thick), At(Fc.Len, Eaves, Thick), At(0.5 * Fc.Len, Ridge, Thick), L.Inside, Out3 * -1.0);
+						if (bInside) B.Tri1(At(0.0, Eaves, Thick), At(Fc.Len, Eaves, Thick), At(0.5 * Fc.Len, Ridge, Thick), Sd.Within, Out3 * -1.0);
 					}
 					continue;
 				}
@@ -5684,7 +5710,7 @@ namespace LandField
 							if (H.Hurt != DmNone && Near(S, I, J)) C = Mixed(C, Rgb(36, 32, 30), 0.55);
 							const Col C2 = Varied(C, 1.04, 0.0);
 							B.Quad(RP(UA, TA, 0.0), RP(UB, TA, 0.0), RP(UB, TB, 0.0), RP(UA, TB, 0.0), C, C, C2, C2, Up);
-							B.Quad1(RP(UA, TA, Th), RP(UB, TA, Th), RP(UB, TB, Th), RP(UA, TB, Th), Rgb(70, 60, 52), Up * -1.0);
+							B.Quad1(RP(UA, TA, Th), RP(UB, TA, Th), RP(UB, TB, Th), RP(UA, TB, Th), H.bBoards ? Rgb(50, 44, 38) : Rgb(70, 60, 52), Up * -1.0); // (a shed on trial: its roof's underside as dark as its inside)
 							if (J == 0) B.Quad1(RP(UA, 0.0, 0.0), RP(UB, 0.0, 0.0), RP(UB, 0.0, Th), RP(UA, 0.0, Th), Scaled(L.Roof, 0.7), V3{ V.X * S, V.Y * S, -0.3 });
 							if (I == 0 || Missing(S, I - 1, J)) B.Quad1(RP(UA, TA, 0.0), RP(UA, TB, 0.0), RP(UA, TB, Th), RP(UA, TA, Th), Scaled(L.Roof, 0.75), V3{ -U.X, -U.Y, 0.0 });
 							if (I == NU - 1 || Missing(S, I + 1, J)) B.Quad1(RP(UB, TA, 0.0), RP(UB, TB, 0.0), RP(UB, TB, Th), RP(UB, TA, Th), Scaled(L.Roof, 0.75), V3{ U.X, U.Y, 0.0 });
