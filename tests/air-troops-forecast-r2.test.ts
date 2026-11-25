@@ -25,7 +25,7 @@ import { AirSim, airBattle } from '../src/battle/air/sim';
 import { airTicket, flyKinds, foughtAir, raidGroups } from '../src/battle/air/ticket';
 import { TROOPS } from '../src/battle/air/troops';
 
-type Told = { route: 'card' | 'settled' | 'fought'; target: number; nat: string; strafers: number[]; fire: number; weight: number };
+type Told = { route: 'card' | 'settled' | 'fought'; target: number; nat: string; strafers: number[]; fire: number; weight: number; cut?: number };
 let heard: Told[] = [];
 
 afterEach(() => { flyKinds([]); strafeWatch.tell = undefined; heard = []; });
@@ -380,5 +380,67 @@ describe('the ground fire\'s throws are same-keyed (12:59Z, answer 4)', () => {
     // Nothing after the raid moves: the month's own stream stands where it stood.
     expect(one.month).toBe(both.month);
     expect(both.month).toBe(off.month);
+  });
+});
+
+// The card's cut on the troops is an expectation too (the review of the air follow-on, finding 2; the design director,
+// 12:59Z question 4: where a term is not linear the card gives the expectation of the outcome). troopCut clips at
+// airwar.json ground.max; where the clip binds on part of the raid's luck the card's cut is the mean of the settled
+// raid's, not the cut at the expected weight. ground.max is lowered in setup only, to make the clip bind on the Saar.
+describe('the card\'s cut on the troops is the expectation of the settled raid\'s (finding 2)', () => {
+  function cuts(ids: number[], max: number | null, seeds: number, mult = 1) {
+    const was = AIRWAR.ground.max, fw = AIR.combat.fighters;
+    try {
+      if (max !== null) AIRWAR.ground.max = max;
+      AIR.combat.fighters = fw * mult;
+      on();
+      heard = [];
+      const c = reviewRaid(0);
+      const a = assessAir(c.g, fleetsOf(c.g, ids), 'ground', c.target);
+      const fc = forecastAir(c.g, a, 'ground', c.target);
+      const card = heard.filter((x) => x.route === 'card');
+      expect(card.length).toBe(1);
+      expect(card[0].cut).toBe(fc.cut);
+      let sum = 0, clipped = 0;
+      for (let k = 0; k < seeds; k++) {
+        heard = [];
+        const s = reviewRaid(k);
+        launchRaid(s.g, 'ground', s.target, ids, 'FRA');
+        const st = heard.filter((x) => x.route === 'settled');
+        expect(st.length).toBe(1);
+        sum += st[0].cut!;
+        if (st[0].cut! >= AIRWAR.ground.max * cover() * (1 - 1e-12)) clipped++;
+      }
+      return { card: fc.cut, mean: sum / seeds, clipped };
+    } finally { AIRWAR.ground.max = was; AIR.combat.fighters = fw; }
+  }
+  /** The ground's cover at the Saar, which troopCut multiplies the clipped cut by. */
+  const cover = (): number => { const g = reviewRaid(0).g; const r = raidTargets(g, 'ground', 'FRA').find((x) => g.regions[x.id].name === 'Saar')!; return AIRWAR.ground.cover[g.regions[r.id].terrain] ?? 1; };
+
+  it('where the clip cannot bind, the card\'s cut is the cut at the expected weight, to the last digit', () => {
+    // At the game's own ground.max the Saar's cut lies far below the clip: the card reads the same with the clip lifted.
+    for (const ids of [REVIEW_IDS, [BOMBERS]]) {
+      const own = cuts(ids, null, 0), lifted = cuts(ids, 1, 0);
+      expect(own.card).toBeGreaterThan(0);
+      expect(own.card).toBe(lifted.card);
+      expect(own.card / cover()).toBeLessThan(AIRWAR.ground.max);
+    }
+  });
+
+  it('the clip binding on part of the luck: the card against the settled mean over 200 lucks (escort and strafers, and bombers alone)', () => {
+    for (const [ids, mult] of [[REVIEW_IDS, 1], [REVIEW_IDS, 30], [[BOMBERS], 1]] as const) {
+      // The clip set at the cut the card expects with no clip: it binds on about half the raid's luck.
+      const free = cuts([...ids], 1, 0, mult).card / cover();
+      const r = cuts([...ids], free, 200, mult);
+      // On part of the luck the settled raid is clipped, on part not.
+      expect(r.clipped).toBeGreaterThan(20);
+      expect(r.clipped).toBeLessThan(180);
+      // The cut at the expected weight would be the clip itself; the card is the mean, below it, as the settled raid is.
+      expect(r.card).toBeLessThan(free * cover());
+      expect(r.mean).toBeLessThan(free * cover());
+      near(r.mean, r.card, 0.01);
+      // And nearer the settled mean than the cut at the expected weight is.
+      expect(Math.abs(r.card - r.mean)).toBeLessThan(Math.abs(free * cover() - r.mean));
+    }
   });
 });
