@@ -7,6 +7,7 @@
  * far side's clause and the old chart's statement, one rule, and `rowHolds` for what holds a row as the board
  * stands). Every word the player reads of it is here, and every reader the screens and the bridge call; nothing here
  * knows which chart is up. Words only: nothing here changes the war. The rule acts as it did before the telling.
+ * (One exception, section 6: `setFromWait`, the Options row's switch for the rule itself, in any month.)
  *
  * Its own flags (numbers only, saved with the game; none begins with "wait", so a tool may leave them out by prefix):
  *   rowTold:<i>   the month the wait began, told once in a headline: also the card's "due ... since {month}"
@@ -197,4 +198,34 @@ export function rowsWaitingOnRows(g: Game, nat: string | null): string[] {
     out.push(theWords(`${named(w.row[2], true)}, due in ${g.regions[w.at].name} since ${turnToDate(w.since).label}, waits for ${join(unformed.map((x) => named(x)))}, which ${unformed.length === 1 ? 'has' : 'have'} not formed yet.`));
   }
   return out;
+}
+
+// ---- 6. The Options row: the switch, in any month ------------------------------------------------------------------
+
+/**
+ * The Options row's name and line (the UI director's words of 21:49Z, section 6, its close as rewritten at 22:13Z).
+ * For a screen that lists the release 2 switches; the 3D's own row carries the same words (CampaignPlayerController.cpp).
+ */
+export const FROMWAIT_ROW = {
+  id: 'fromwaitrule',
+  name: 'Arrivals wait while their corps are at the front',
+  line: 'An arrival due on a date and formed from a corps already in the field, yours or any other side\'s, waits while that corps is at the front, and forms the month after the corps leaves it. Where an arrival is offered to you, you decide instead. Off, the corps is taken wherever it stands, as before. This changes the month some arrivals form. It works only in a grand campaign: from History\'s shape to Anything goes, and at By the book and Close to history once History\'s book has closed where the arrival is due. It can be switched on or off in any month.',
+} as const;
+
+/** The switch as the rule reads it, in a grand campaign (game.ts `expeditions` reads `g.flags.fromWait`). */
+export const fromWaitOn = (g: Game): boolean => g.flags.open === 1 && g.flags.fromWait === 1;
+
+/**
+ * Switches 'fromWait' on or off in any month of a grand campaign; outside one it does nothing and answers false. On,
+ * a row that takes named corps whole waits from the next month it comes due (`expeditions` reads the flag each month).
+ * Off deletes the flag, as a war that never had it, and the telling's own flags with it (`rowTold:`, `rowAt:`,
+ * `rowFront:`), so a later "on" starts clean: a row waiting this month forms next month wherever its corps stand, with
+ * today's headline. The rule's own `wait:<i>` stays: it is the month its half year is counted from, as before.
+ */
+export function setFromWait(g: Game, on: boolean): boolean {
+  if (g.flags.open !== 1) return false;
+  if (on) { g.flags.fromWait = 1; return true; }
+  delete g.flags.fromWait;
+  for (const k of Object.keys(g.flags)) if (k.startsWith('rowTold:') || k.startsWith('rowAt:') || k.startsWith('rowFront:')) delete g.flags[k];
+  return true;
 }
