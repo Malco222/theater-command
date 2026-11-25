@@ -4959,34 +4959,41 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 					// plot that is built on or going up makes way: it alone moves, to the nearest slide of its own stand
 					// that is off the plots and clear of the other pits, which keep their places; with nowhere to go it
 					// is taken away. The first pit by the track never moves (ruling 125): there the plot loses, as today.
+					// (Every pit in the way is lifted before any is set down again, so that a pit is tried against the
+					// others where they will stand, and never against a place another pit is about to leave.)
+					TArray<double, TInlineAllocator<9>> Displaced; // (the home bearings of the pits lifted, the last seated first)
 					for (int32 InTheWay = Seated.Num() - 1; InTheWay >= 1; --InTheWay)
 					{
-						if (OffThePlots(Seated[InTheWay]))
+						if (!OffThePlots(Seated[InTheWay]))
 						{
-							continue;
-						}
-						bool bMadeWay = false;
-						for (int32 Slid = 0; Slid <= RingSlides && !bMadeWay; ++Slid)
-						{
-							const double Bears = SeatedHomes[InTheWay] + SlideOf(Slid);
-							const FVector2D Try = Middle + FVector2D(FMath::Cos(Bears), FMath::Sin(Bears)) * RingOut;
-							if (StandOpen(Try) && OffThePlots(Try) && ClearOfPits(Bears, RingApart, InTheWay))
-							{
-								Seated[InTheWay] = Try;
-								SeatedBears[InTheWay] = Bears;
-								bMadeWay = true;
-							}
-						}
-						if (!bMadeWay)
-						{
+							Displaced.Add(SeatedHomes[InTheWay]);
 							Seated.RemoveAt(InTheWay);
 							SeatedBears.RemoveAt(InTheWay);
 							SeatedHomes.RemoveAt(InTheWay);
 						}
 					}
-					// (a ring of three or more; at levels 1 and 2 two pits on two sides of the town; else today's row: a
-					// town never shows fewer pits than its row would)
-					const bool bRinged = Seated.Num() >= (Guns >= 3 ? 3 : 2);
+					for (int32 SetDown = Displaced.Num() - 1; SetDown >= 0; --SetDown)
+					{
+						// (in the order they were seated; a pit with no place left is not set down)
+						bool bMadeWay = false;
+						for (int32 Slid = 0; Slid <= RingSlides && !bMadeWay; ++Slid)
+						{
+							const double Bears = Displaced[SetDown] + SlideOf(Slid);
+							const FVector2D Try = Middle + FVector2D(FMath::Cos(Bears), FMath::Sin(Bears)) * RingOut;
+							if (StandOpen(Try) && OffThePlots(Try) && ClearOfPits(Bears, RingApart, INDEX_NONE))
+							{
+								Seated.Add(Try);
+								SeatedBears.Add(Bears);
+								SeatedHomes.Add(Displaced[SetDown]);
+								bMadeWay = true;
+							}
+						}
+					}
+					// (a ring of three or more; at levels 1 and 2 two pits on two sides of the town, the second never
+					// under ninety degrees of bearing from the first, however the town came to have two; else today's
+					// row: a town never shows fewer pits than its row would, and never two bunched on one side)
+					const bool bRinged = Seated.Num() >= 3 || (Guns < 3 && Seated.Num() == 2
+						&& FMath::Abs(FMath::Atan2(FMath::Sin(SeatedBears[1] - SeatedBears[0]), FMath::Cos(SeatedBears[1] - SeatedBears[0]))) >= FMath::DegreesToRadians(90.0) - 1.0e-6);
 					++RingTowns;
 					RingAsked += Asked;
 					if (Seated.Num() < 3 || 3 * Seated.Num() < 2 * Asked)
