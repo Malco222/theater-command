@@ -416,10 +416,14 @@ function planned(b: LandBattle, side: Side, s: Style, mine: LandUnit[], foes: La
     // On its start line when three quarters of its foot by weight are there: a straggler held up by a friend in its way
     // does not hold the rest.
     const there = (u: LandUnit): boolean => !u.order && (!P.spot[u.id] || dist(u.x, u.y, P.spot[u.id][0], P.spot[u.id][1]) <= 25);
-    const all = stood.reduce((a, u) => a + u.power0, 0);
-    if (P.arrived === null && stood.filter(there).reduce((a, u) => a + u.power0, 0) >= 0.75 * all) P.arrived = b.t;
+    // (Support teams in battle, sim.teamsRule: this sum too reads each block with its own teams, as makePlan's step 2.)
+    const withTeams = (u: LandUnit): number => u.power0 + (b.teamsRule ? b.ownTeamsPower(u) : 0);
+    const all = stood.reduce((a, u) => a + withTeams(u), 0);
+    if (P.arrived === null && stood.filter(there).reduce((a, u) => a + withTeams(u), 0) >= 0.75 * all) P.arrived = b.t;
     // It waits under its own guns: an army with none on the field goes in as soon as it is on its start line.
-    const wait = guns.length ? s.wait : 0;
+    // (Support teams in battle, sim.teamsRule: a team is not a gun for the preparation, so an army whose only fire is its
+    // own teams goes in as soon as it is on its start line: the design director, 25 November 20:03Z, mend 3.)
+    const wait = guns.some((g) => !(b.teamsRule && g.team)) ? s.wait : 0;
     if ((P.arrived !== null && b.t >= P.arrived + wait) || b.t >= STYLE.latest * limit || !us.length) { P.went = b.t; P.phase = 'assault'; }
   }
   const going = P.went !== null;
