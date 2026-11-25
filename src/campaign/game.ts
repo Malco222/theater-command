@@ -5718,9 +5718,10 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // from the month the corps comes free. Where the corps already stands at the place the row forms the row goes ahead:
     // a new name, nothing lifted. The design director's ruling of 19:47Z, 25 November 2026, the 18:47Z test on this
     // door too (pacific-japan/dd-form-from-rows-contact-1125.md). Its own switch, 'fromWait' (stage.json), off until its
-    // gate passes. drawn.ts, `corpsInContact`.)
+    // gate passes. drawn.ts, `corpsInContact`. As on the far side it acts at stops 3 to 5 only: at the book's stops the
+    // book's rows keep their book, her ruling of 21:25Z.)
     const formsAt = reg?.id;
-    if (g.flags.fromWait === 1 && g.flags.open === 1 && !farOn(g) && Array.isArray(o.from) && !ashore && row[1] === nat && formsAt !== undefined
+    if (g.flags.fromWait === 1 && g.flags.open === 1 && !farOn(g) && !stopDef(g).book && Array.isArray(o.from) && !ashore && row[1] === nat && formsAt !== undefined
       && g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && x.reg !== formsAt && corpsInContact(g, nat, x))) { g.flags[`wait:${i}`] = g.turn; return; }
     // (The far side: a row that waits on a formation the player has been offered and has not answered, the one that
     // makes its cut or the one it is itself made from, waits on his answer and has its half year from the month he

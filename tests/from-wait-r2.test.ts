@@ -14,6 +14,7 @@ import setup from '../data/campaign/setup-1939.json';
 import stage from '../data/campaign/stage.json';
 import { corpsInContact } from '../src/campaign/drawn';
 import { addCorps, createGame, relocate, startPhase } from '../src/campaign/game';
+import { setStop } from '../src/campaign/history';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game } from '../src/campaign/types';
@@ -121,5 +122,27 @@ describe('on, a row waits while the corps it takes is in contact', () => {
     expect(back.flags.fromWait).toBe(1);
     expect(back.flags[`wait:${i}`]).toBe(2);
     expect(back.corps.some((c) => c.nat === 'GER' && !c.dead && c.name === 'Test Corps')).toBe(true);
+  });
+});
+
+describe("the dial: the rule acts at stops 3 to 5, and at the book's stops the book's rows keep their book", () => {
+  // The design director's ruling of 21:25Z, 25 November 2026, for the far side's rows and read on this door alike: "at
+  // stops 1 and 2 the book's rows keep their book, as for every other piece. The contact rule acts at stops 3 to 5."
+  it.each([1, 2])('at stop %i, with the switch on, the corps in contact is lifted and the row forms in its month, as with the switch off', (stop) => {
+    const { g, i, held } = board('Grenzmark');
+    expect(setStop(g, stop, true)).toBe(true);
+    expect(corpsInContact(g, 'GER', held)).toBe(true);
+    month(g, 2);
+    expect(living(g, 'Test Corps')).toBeUndefined();
+    expect(at(g, living(g, 'Test Army'))).toBe('Magdeburg');
+    expect(g.flags[`wait:${i}`]).toBeUndefined();
+  });
+  it.each([4, 5])('at stop %i it acts as at stop 3: the row waits and the corps stays where it fights', (stop) => {
+    const { g, i, held } = board('Grenzmark');
+    expect(setStop(g, stop, true)).toBe(true);
+    month(g, 2);
+    expect(at(g, held)).toBe('Grenzmark');
+    expect(living(g, 'Test Army')).toBeUndefined();
+    expect(g.flags[`wait:${i}`]).toBe(2);
   });
 });
