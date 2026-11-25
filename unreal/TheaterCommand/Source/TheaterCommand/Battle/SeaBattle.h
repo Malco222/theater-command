@@ -4,6 +4,12 @@
 #include "Effects/BattleEffects.h"
 #include "Battle/ConvoyLooks.h" // D1 hook (convoy looks)
 #include "Battle/SeaUnder.h" // U1 hook (under water)
+#include "Battle/SeaWeather.h" // the clouds and the weather (step 13)
+#include "Battle/SeaFrames.h" // (the release 2 ocean, step 0: the frames by thread)
+#include "Battle/SeaLookSwitches.h" // (the release 2 ocean, step 0: the sea's look in force)
+#include "Battle/SeaMarksPool.h" // (the release 2 ocean, step 1(a): DrawMarks' meshes kept)
+#include "Battle/HeavyWeather.h" // S6 hook (heavy weather: bow spray and ship ice)
+#include "Battle/SeaNight.h" // (the release 2 ocean, step 11: night fighting's looks, -TheaterSeaNightFight=)
 #include "GameFramework/Actor.h"
 #include "SeaBattle.generated.h"
 
@@ -16,6 +22,7 @@ class UDirectionalLightComponent;
 class UExponentialHeightFogComponent;
 class UInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
+class UMaterialInterface;
 class UProceduralMeshComponent;
 class USceneComponent;
 class USkyLightComponent;
@@ -167,8 +174,11 @@ private:
 	TSharedPtr<FSeaBattleState> State;
 	TUniquePtr<FBattleEffects> Effects;
 	TUniquePtr<FConvoyLooks> SubLooks; // D1 hook (convoy looks)
+	TUniquePtr<FHeavyWeather> Weather;  // S6 hook (heavy weather): the bow spray, made only under -TheaterSeaSpray=1
 	TUniquePtr<FSeaUnder> Under;       // U1 hook (under water)
+	TUniquePtr<FSeaWeather> SkyWeather; // the clouds and the weather (the release 2 ocean plan, step 13)
 	int32 UnderWindow = INDEX_NONE;    // U1 hook (under water): the window AimEye stands in (FSeaUnder::ByHandWindow his own dive)
+	FSeaNight Night;                   // (the release 2 ocean, step 11: the searchlights and the fleet's star shells; off, it draws nothing)
 
 	UPROPERTY()
 	TObjectPtr<USceneComponent> Root;
@@ -333,6 +343,23 @@ private:
 	int32 FramesLeftOut = 0;
 	bool bLastFrameApart = false;
 	bool bFrameTimesSaid = false;
+	/** (the release 2 ocean plan, step 0: measure first) The same frames by thread, the game's, the renderer's, the RHI's
+	 * and the graphics chip's, with the whole frame and the effects kit's ground asks in each (GroundAsks, counted in its
+	 * ground), from ThreadsFrom seconds of play, for the threads' line and the "Sea look:" line after the frame-time line
+	 * (SayThreadsAndLook). "-TheaterSeaBench=drop,span" (Tools/sea_bench.sh) counts them from its drop and quits span
+	 * seconds later (BenchUntil), or at the battle's end ("drop,end": there). SeaLook: the sea's look as OpenOn applied
+	 * it, which the "Sea look:" line says. */
+	SeaFrames::Record Threads;
+	int32 GroundAsks = 0;
+	double ThreadsFrom = 1.0;
+	double BenchUntil = -1.0;
+	SeaLookSwitches::Look SeaLook;
+	/** (the release 2 ocean plan, step 1(a), pay first) -TheaterSeaMarksPool=1: DrawMarks' two meshes each made afresh only
+	 * when its shape changes, its points sent again in place while the same points and triangles hold, and cleared once when
+	 * it has nothing (Battle/SeaMarksPool.h: each one's shape as last made); by default, until the Mac's A/B, today's: both
+	 * meshes made afresh every frame. */
+	bool bMarksPool = false;
+	SeaMarksPool::Shape FoamShape, MarksShape;
 	TArray<FOilLater> OilLater;
 	TArray<FFlakLater> FlakLater;
 	TArray<FLater> Later;
@@ -397,6 +424,15 @@ private:
 	void DrawPlanes();
 	void LayWakes();
 	void DrawMarks();
+	/** (the release 2 ocean plan, step 1(a)) DrawMarks' end under -TheaterSeaMarksPool=1: the frame's foam (FV...) and marks
+	 * (DV...) sent to their meshes, each kept while its shape holds, the marks taking the foam too where there is no wake
+	 * ink, as today. */
+	void DrawMarksPooled(const TArray<FVector>& FV, const TArray<FVector>& FN, const TArray<FVector2D>& FU, const TArray<FColor>& FC, const TArray<int32>& FT,
+		TArray<FVector>& DV, TArray<FVector>& DN, TArray<FColor>& DC, TArray<int32>& DT, bool bInk);
+	/** One mesh's frame sent: made afresh when its shape is new or changed (as today), its points sent again in place while
+	 * the shape holds, cleared once when there is nothing to draw. U: the frame's UVs, or none (the marks' mesh has none). */
+	void PoolMarks(SeaMarksPool::Shape& Into, UProceduralMeshComponent* Mesh, const TArray<FVector>& V, const TArray<int32>& T, const TArray<FVector>& N, const TArray<FVector2D>& U,
+		const TArray<FColor>& C, UMaterialInterface* Ink);
 	/** Where ships went down: rafts, boats, wreckage and the men in the water (SeaShow's Floats and Men). */
 	void DrawWrecks();
 	/** The pose bank's copies for one mesh (SeaParts::SailorKey), made if Builds allows (-1 not yet, -2 never). */
@@ -413,6 +449,9 @@ private:
 	/** The frame-time line (the production lead, 22 November: the real frame cost of each battle kind): how many frames,
 	 * and their mean, middle, 95th and 99th in the hundred and worst times, once a battle. */
 	void SayFrameTimes();
+	/** (the release 2 ocean plan, step 0) The frames by thread (Battle/SeaFrames) and the sea's tier and switches in force
+	 * (Battle/SeaLookSwitches), each on a line of its own, after the frame-time line. */
+	void SayThreadsAndLook() const;
 	/** The screen on the viewport and off it. */
 	void ShowScreen();
 	void HideScreen();
