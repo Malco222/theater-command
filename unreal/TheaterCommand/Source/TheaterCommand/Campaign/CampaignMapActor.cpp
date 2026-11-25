@@ -11501,6 +11501,8 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 					Join.Sent = Courier;
 					Join.Joined = Piece;
 					Join.From = Road[0];
+					Join.Stood = Piece->GetRestLocation();
+					Join.Due = World->GetTimeSeconds() + Courier->MarchLasts();
 					Joining.Add(Join);
 				}
 			}
@@ -16460,7 +16462,9 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		}
 		if (AArmyPiece* Joined = Joining[JoinIndex].Joined.Get())
 		{
-			if (bWithWeight && !Joined->IsMarching())
+			// (Only a landing: the piece came down in its time, and the army still stands where it was joined.)
+			const bool bLanded = Now >= Joining[JoinIndex].Due - 0.15 && FVector::DistSquared(Joined->GetRestLocation(), Joining[JoinIndex].Stood) < 1.0;
+			if (bWithWeight && bLanded && !Joined->IsMarching())
 			{
 				Thuds.Add(ThudOf(Joined, 0.85));
 				Joined->TakeWeight(Joined->GetActorLocation() - Joining[JoinIndex].From);

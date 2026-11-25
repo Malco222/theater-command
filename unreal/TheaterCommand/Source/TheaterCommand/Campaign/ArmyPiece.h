@@ -77,6 +77,8 @@ public:
 	 */
 	void MarchAlong(const TArray<FVector>& Waypoints, bool bRemoveOnArrival, bool bLifted = true);
 	bool IsMarching() const { return bMarching; }
+	/** How long the march it is on (or was last on) takes, in seconds. */
+	double MarchLasts() const { return MarchTime; }
 	/**
 	 * (Release 2, armies with weight: Campaign/ArmyCarry.h.) Whether pieces are carried with weight: tc.Map.ArmyWeight,
 	 * or -TheaterArmyWeight on the command line. The map asks, for the dust a set-down raises.

@@ -1740,12 +1740,18 @@ private:
 		int32 Ground = 0; // 0 earth, 1 snow, 2 sand
 	};
 	TArray<FThud> Thuds;
-	/** A piece sent to join an army already standing (it is taken off as it lands), the army it joins, and where it set out from. */
+	/**
+	 * A piece sent to join an army already standing (it is taken off as it lands), the army it joins, and where it set
+	 * out from. Also where that army stood and when the piece is due: an army laid somewhere else since, or a piece
+	 * taken off before its time, is no landing, and nothing rocks.
+	 */
 	struct FJoining
 	{
 		TWeakObjectPtr<AArmyPiece> Sent;
 		TWeakObjectPtr<AArmyPiece> Joined;
 		FVector From = FVector::ZeroVector;
+		FVector Stood = FVector::ZeroVector;
+		double Due = 0.0;
 	};
 	TArray<FJoining> Joining;
 
