@@ -106,6 +106,18 @@ describe('the army under the raid (place.marks; CONTRACT.md section 2)', () => {
     expect(JSON.stringify(one.pieces)).not.toBe(JSON.stringify(two.pieces));
   });
 
+  it('the ticket goes to the raider\'s screen, so it carries no enemy corps\'s strength or organisation', () => {
+    // (The raider's side knows an enemy corps only as far as its sight and reports go: armies.ts corpsSeen gives a
+    // band or nothing. Nothing on the board needs these two figures, so the ticket must not carry them at all.)
+    const { g, target, ids, nat } = saar(0);
+    const M = ticketOf(g, target, ids, nat).place.marks!;
+    expect(M.corps.length).toBeGreaterThan(0);
+    for (const c of M.corps) {
+      expect(c).not.toHaveProperty('str');
+      expect(c).not.toHaveProperty('org');
+    }
+  });
+
   it('a corps\'s kind and nation shape the sample', () => {
     const count = (M: { pieces: { what: string; n: number }[] }, what: string): number => M.pieces.filter((p) => p.what === what).reduce((s, p) => s + p.n, 0);
     // Infantry: men, guns and their haul, no tanks; the haul split between lorries and wagons by the nation's share.

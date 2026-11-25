@@ -43,7 +43,11 @@ export interface MarkPiece {
   posture: MarkPosture;
 }
 
-export interface MarkCorps { id: number; nat: string; name: string; kind: string; divs: number; men: number; str: number; org: number; posture: MarkPosture; works: number }
+/**
+ * A corps under the raid, as the ticket carries it. (No strength or organisation: the ticket goes to the raider's
+ * screen, and his side knows an enemy corps's only as far as its sight and reports go, armies.ts corpsSeen.)
+ */
+export interface MarkCorps { id: number; nat: string; name: string; kind: string; divs: number; men: number; posture: MarkPosture; works: number }
 
 export interface MarkPlace {
   /** Whose they mostly are. */
@@ -178,7 +182,7 @@ export function troopPlace(g: Game, a: AirAssess, m: AirMission, target: number,
     nat: lead.nat, posture, road,
     divs: Math.round(foes.reduce((s, c) => s + c.divs, 0) * 10) / 10, men: all, per: Math.max(1, Math.ceil(shownMen / TROOPS.figures)),
     pieces,
-    corps: foes.map((c) => ({ id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, men: men(c), str: c.str, org: c.org, posture: postureOf(c), works: c.dug ? Math.round((c.dugFor ?? 0) * 10) / 10 : 0 })),
+    corps: foes.map((c) => ({ id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, men: men(c), posture: postureOf(c), works: c.dug ? Math.round((c.dugFor ?? 0) * 10) / 10 : 0 })),
     law,
   };
 }
