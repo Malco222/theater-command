@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 76dba7eb2 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of bdcd64a27 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -59739,7 +59739,7 @@
     const k = raidFogOn(g2) && g2.regions[t] ? skyKnown(g2, nat, t, sight2) : null;
     const hide = k && !k.live ? fogBits(k) : null;
     const gunsBit = () => hide ? hide.guns : gunsAt(g2, t) ? `level ${gunsAt(g2, t)} guns` : "";
-    const lightsBit = () => hide ? "" : lightsAt(g2, t) ? `level ${lightsAt(g2, t)} searchlights` : "";
+    const lightsBit = () => lightsAt(g2, t) ? `level ${lightsAt(g2, t)} searchlights` : "";
     if (kind === "harbour") {
       const there = shipsInPort(g2, t, nat);
       const seen2 = there.filter((f) => fleetKnown(g2, f, nat) === "exact");
@@ -62116,7 +62116,7 @@
       }
     } else out.radar = transit ? null : radarAt(g2, g2.regions[target]);
     const amb = !sea && !transit && ambushAt(g2, target);
-    const floor = night && !transit && !known ? lightsFloor(g2, target, sky) : 0;
+    const floor = night && !transit ? lightsFloor(g2, target, sky) : 0;
     for (const f of g2.airFleets) {
       if (f.ftr <= 0 || f.mission !== "support" || f.close || !atWar(g2, f.nat, nat)) continue;
       if (!transit && !comesUp(g2, f, m, target, zone)) continue;
@@ -62184,9 +62184,9 @@
     const most = mostBomberLoss(g2, night);
     const L2 = airWar(g2) ? night ? AIRWAR.losses.night : AIRWAR.losses : null;
     const gun2 = cloudGuns(sky, night);
-    const cn = night && !transit && cityDefences(g2) ? cityNight(g2, target, out.B, sky, false, known ? { guns: known.aa, lights: 0 } : void 0) : null;
+    const cn = night && !transit && cityDefences(g2) ? cityNight(g2, target, out.B, sky, false, known ? { guns: known.aa, lights: lightsAt(g2, target) } : void 0) : null;
     const aaGun = gun2 * (cn ? cn.share : nightGunShare(g2, night));
-    if (cn && !known) out.lights = { level: cn.lights, cloud: cn.cloud, lit: cn.litShare };
+    if (cn) out.lights = { level: cn.lights, cloud: cn.cloud, lit: cn.litShare };
     out.drilled = out.B > 0 ? out.att.reduce((t, x) => t + x.bmr * trainedEdge(g2, x.f), 0) / out.B : 0;
     out.bomberLoss = out.B > 0 ? Math.min(most, (L2 ? L2.bombers * Math.pow(met2, L2.power) : C4.bombers * met2) * (1 - out.drilled) * I + (night ? C4.night.flak : C4.flak) * gun2 * I) : 0;
     out.aa = m === "bomb" || night || m === "harbour" || m === "town" ? known ? known.aa : gunsAt(g2, target) : 0;
@@ -115047,18 +115047,16 @@
         skyBy: sky ? s.nations[sky]?.adj ?? sky : "",
         add: o ? { key: o.key, size: o.size, cost: shown(o.cost), months: o.months, why: !up ? "It is not your month." : short || (o.why ?? "") } : null,
         // (City defences, the switch on only) The searchlights beside the guns, seen as the guns are.
-        ...cityDefences(s) ? { lights: glanceLights(s, id, level, see.own, up) } : {}
+        ...cityDefences(s) ? { lights: glanceLights(s, id, level) } : {}
       };
     } catch {
       return null;
     }
   }
-  function glanceLights(s, id, guns2, own, up) {
-    const me = s.human, r = s.regions[id];
+  function glanceLights(s, id, guns2) {
+    const r = s.regions[id];
     const level = lightsAt(s, id);
     const going = s.nations[r.ctrl]?.queue.filter((b) => b.what === "work" && b.item === "lights" && b.region === id).length ?? 0;
-    const o = own ? arsenalOffers(s, id).find((x) => x.key === "work:lights" && x.at === id) : void 0;
-    const short = o && up && o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString("en")} short: the treasury holds ${inHand(s.nations[me].pp).toLocaleString("en")}.` : "";
     const line = level <= 0 ? "" : guns2 <= 0 ? `level ${level}: There are no guns for them to light. They help the night fighters a little.` : `level ${level}: ${Math.min(level, guns2)} of the ${guns2} levels of guns are lit by night, under a clear sky`;
     return {
       level,
@@ -115066,8 +115064,7 @@
       guns: guns2,
       radar: radarLays(s, id),
       going,
-      line,
-      add: o ? { key: o.key, size: o.size, cost: shown(o.cost), months: o.months, why: !up ? "It is not your month." : short || (o.why ?? "") } : null
+      line
     };
   }
   function cityMarks(s, r) {
