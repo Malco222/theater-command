@@ -1019,7 +1019,9 @@ namespace LandHouse
 					const double Out = RK.Range(0.35, 0.95) * (bLeft ? -1.0 : 1.0);
 					const double A = (bLeft ? O.A0 - 0.2 : O.A1 + 0.2) + RK.Range(-0.04, 0.04);
 					const double Z = bHead ? O.Z1 + (O.What == OpShop ? 0.66 : 0.22) : O.Z0 - 0.12;
-					Lay(O.Face, A, Z, bHead ? Out : Pi - Out, RK.Range(0.3, 1.1), RK.Range(0.005, 0.009) + 0.0015 * P.Hurt);
+					const double Deep_ = RK.Range(0.005, 0.009) + 0.0015 * P.Hurt;
+					const double Size_ = RK.Range(0.3, 1.1);
+					Lay(O.Face, A, Z, bHead ? Out : Pi - Out, Size_, Deep_);
 				}
 			}
 			for (int F = 0; F < 4; ++F)
@@ -1027,7 +1029,10 @@ namespace LandHouse
 				const Face Fc = FaceOf(P, F);
 				if (Fc.bGable || RK.Next() > 0.35 + 0.15 * P.Hurt) continue;
 				const double A = RK.Range(0.8, std::max(0.81, Fc.Len - 0.8));
-				Lay(F, A, RenderTop(P, Fc, F, A) - 0.08, Pi + RK.Range(-0.15, 0.15), RK.Range(0.8, 2.4), RK.Range(0.006, 0.01) + 0.0015 * P.Hurt);
+				const double Deep_ = RK.Range(0.006, 0.01) + 0.0015 * P.Hurt;
+				const double Size_ = RK.Range(0.8, 2.4);
+				const double Turn_ = Pi + RK.Range(-0.15, 0.15);
+				Lay(F, A, RenderTop(P, Fc, F, A) - 0.08, Turn_, Size_, Deep_);
 			}
 			for (const auto& [F, M] : Bursts)
 			{
@@ -1035,7 +1040,9 @@ namespace LandHouse
 				for (int J = 0; J < N; ++J)
 				{
 					const double Ang = RK.Range(0.0, 2.0 * Pi), R0 = RK.Range(0.04, 0.12);
-					Lay(F, M.first + R0 * std::sin(Ang), M.second + R0 * std::cos(Ang), Ang, RK.Range(0.3, 0.9), RK.Range(0.006, 0.011));
+					const double Deep_ = RK.Range(0.006, 0.011);
+					const double Size_ = RK.Range(0.3, 0.9);
+					Lay(F, M.first + R0 * std::sin(Ang), M.second + R0 * std::cos(Ang), Ang, Size_, Deep_);
 				}
 			}
 		}
@@ -3105,7 +3112,8 @@ namespace LandHouse
 					B.Quad1(C - A - Wv, C + A - Wv, C + A + Wv + Up * 0.006, C - A + Wv + Up * 0.006, SC, Up);
 				}
 				const double HX = std::clamp(L.X + (R.Next() < 0.5 ? -1.0 : 1.0) * (L.HW + 1.4), -IX + 1.0, IX - 1.0), HY = L.Side * (IY - R.Range(1.3, 2.2));
-				HayMound(B, P, V3{ HX, HY, 0.02 }, R.Range(0.9, 1.3), R.Range(0.7, 1.0), R.Range(0.5, 0.8), R.Range(0.0, Pi), Hash(K0, 0x4B, static_cast<uint64_t>(std::llround((L.X + 50.0) * 10.0))), 0.72 * FloorK(HX, HY));
+				const double Yaw_ = R.Range(0.0, Pi), C_ = R.Range(0.5, 0.8), B_ = R.Range(0.7, 1.0), A_ = R.Range(0.9, 1.3);
+				HayMound(B, P, V3{ HX, HY, 0.02 }, A_, B_, C_, Yaw_, Hash(K0, 0x4B, static_cast<uint64_t>(std::llround((L.X + 50.0) * 10.0))), 0.72 * FloorK(HX, HY));
 			}
 		}
 
@@ -4390,12 +4398,14 @@ namespace LandHouse
 				if (R.Next() < 0.25)
 				{
 					// (a fallen slate or tile, flat)
-					B.Box(At3 + Up * 0.03, AX * R.Range(0.1, 0.16), AY * R.Range(0.07, 0.12), AZ * 0.006, Mixed(P.K.Roof, P.K.Soot, R.Range(0.0, 0.4)), 16);
+					const double Soot_ = R.Range(0.0, 0.4), Wy_ = R.Range(0.07, 0.12), Wx_ = R.Range(0.1, 0.16);
+					B.Box(At3 + Up * 0.03, AX * Wx_, AY * Wy_, AZ * 0.006, Mixed(P.K.Roof, P.K.Soot, Soot_), 16);
 				}
 				else
 				{
 					const double Sz = R.Range(0.1, 0.24) * Big;
-					B.Box(At3, AX * Sz * R.Range(1.0, 1.8), AY * Sz, AZ * Sz * R.Range(0.6, 1.0), StoneOwn(P, Hash(Seed, static_cast<uint64_t>(K))), 16);
+					const double Hz_ = R.Range(0.6, 1.0), Lx_ = R.Range(1.0, 1.8);
+					B.Box(At3, AX * Sz * Lx_, AY * Sz, AZ * Sz * Hz_, StoneOwn(P, Hash(Seed, static_cast<uint64_t>(K))), 16);
 				}
 			}
 		}
@@ -4470,7 +4480,8 @@ namespace LandHouse
 				{
 					const double X = R.Range(-IX + 1.2, IX - 1.2);
 					if (P.Hurt == 2 && P.Broken * X > 0.5 * P.L - 3.6) continue;
-					HayMound(B, P, V3{ X, R.Range(-IY + 1.0, IY - 1.0), P.Loft }, R.Range(1.0, 1.8), R.Range(0.8, 1.3), R.Range(0.5, 0.9), R.Range(0.0, Pi), Hash(P.Key ^ 0x4A71, static_cast<uint64_t>(K)), P.Hurt == 2 ? 0.8 : 1.0);
+					const double Yaw_ = R.Range(0.0, Pi), C_ = R.Range(0.5, 0.9), B_ = R.Range(0.8, 1.3), A_ = R.Range(1.0, 1.8), Y_ = R.Range(-IY + 1.0, IY - 1.0);
+					HayMound(B, P, V3{ X, Y_, P.Loft }, A_, B_, C_, Yaw_, Hash(P.Key ^ 0x4A71, static_cast<uint64_t>(K)), P.Hurt == 2 ? 0.8 : 1.0);
 				}
 			}
 			if (P.Hurt == 3)
@@ -4547,7 +4558,11 @@ namespace LandHouse
 					const double Yw = R.Range(0.0, Pi);
 					const V3 AX{ std::cos(Yw), std::sin(Yw), 0.0 }, AY{ -std::sin(Yw), std::cos(Yw), 0.0 };
 					if (R.Next() < 0.3) B.Beam(At3, At3 + AX * R.Range(0.4, 1.0) + Up * 0.03, 0.04, 0.025, Mixed(Rgb(110, 90, 66), P.K.Char, 0.5), Up, 0);
-					else B.Box(At3 + Up * 0.008, AX * R.Range(0.1, 0.15), AY * R.Range(0.07, 0.11), Up * 0.007, Mixed(P.K.Roof, P.K.Soot, R.Range(0.0, 0.5)), 16);
+					else
+					{
+						const double Soot_ = R.Range(0.0, 0.5), Wy_ = R.Range(0.07, 0.11), Wx_ = R.Range(0.1, 0.15);
+						B.Box(At3 + Up * 0.008, AX * Wx_, AY * Wy_, Up * 0.007, Mixed(P.K.Roof, P.K.Soot, Soot_), 16);
+					}
 				}
 				Heap(B, P, V3{ std::clamp(P.HoleX, -0.5 * P.L + 1.5, 0.5 * P.L - 1.5), P.HoleSide * (0.5 * P.D + 0.75), -0.25 }, 1.1, 0.5, 0.28, 0.0, 12, 3, P.Key ^ 0x51E, true);
 			}

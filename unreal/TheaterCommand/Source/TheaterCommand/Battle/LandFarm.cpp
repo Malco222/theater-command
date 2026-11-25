@@ -830,7 +830,8 @@ namespace LandScape
 						W.Blade(0.0, 0.0, 0.0, -TY * 0.5, TX * 0.5, High * 0.92, 0.025, Rgb(112, 92, 64), Rgb(140, 118, 84));
 						if (B % 2 == 0)
 						{
-							W.Bead(TX, TY, High + 0.005, R.Range(0.016, 0.024), R.Range(0.028, 0.04), Rgb(150, 132, 104), Rgb(104, 88, 64));
+							const double Deep = R.Range(0.028, 0.04), Bulk = R.Range(0.016, 0.024);
+							W.Bead(TX, TY, High + 0.005, Bulk, Deep, Rgb(150, 132, 104), Rgb(104, 88, 64));
 						}
 						else
 						{
@@ -908,7 +909,9 @@ namespace LandScape
 						for (int K = 0; K < 12 && !bChurch; ++K)
 						{
 							const double A = K * 2.0 * Pi / 12.0 + Ring * 0.37, D = Ring * 8.0;
-							bChurch = H.Church(TX + D * std::cos(A), TY + D * std::sin(A), RC.Range(-0.1, 0.1), RC.Next() < 0.3 ? 1 : 0);
+							const int Kind = RC.Next() < 0.3 ? 1 : 0;
+							const double Turn = RC.Range(-0.1, 0.1);
+							bChurch = H.Church(TX + D * std::cos(A), TY + D * std::sin(A), Turn, Kind);
 						}
 				}
 				// Houses fronting the roads through the village, both sides, a few metres back; now and then a long-house

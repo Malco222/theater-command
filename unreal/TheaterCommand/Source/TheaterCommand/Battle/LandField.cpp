@@ -3915,7 +3915,8 @@ namespace LandField
 				}
 				if (Thin > 0.0 && R.Next() < Thin) continue;
 				V2 Way;
-				V2 P = PointAt(S, Way) + Perp(Way) * (bBocage ? R.Range(-0.28, 0.28) : R.Range(-0.35, 0.35));
+				V2 P = PointAt(S, Way);
+				P = P + Perp(Way) * (bBocage ? R.Range(-0.28, 0.28) : R.Range(-0.35, 0.35));
 				if (!Clear(P.X, P.Y, Built | (bBocage ? 0 : OcMan))) continue;
 				bool bTrod = false, bThrough = false;
 				if (bBocage)
@@ -3976,7 +3977,8 @@ namespace LandField
 			{
 				if (S < 3.0) continue;
 				V2 Way;
-				V2 P = PointAt(S, Way) + Perp(Way) * R.Range(-0.3, 0.3);
+				V2 P = PointAt(S, Way);
+				P = P + Perp(Way) * R.Range(-0.3, 0.3);
 				if (bBocage ? !Clear(P.X, P.Y, static_cast<uint8_t>(Built | OcCut)) || !Nudged(P, Way, 0.9, 0.45, 4.0) || !Clear(P.X, P.Y, OcCut)
 							: !Clear(P.X, P.Y, static_cast<uint8_t>(Built | OcMan | OcCut))) continue;
 				double High = 0.0;
@@ -3996,7 +3998,8 @@ namespace LandField
 			for (double S = R.Range(1.5, 6.0); S < Total - 2.0; S += R.Range(4.0, 7.0))
 			{
 				V2 Way;
-				V2 P = PointAt(S, Way) + Perp(Way) * R.Range(-0.35, 0.35);
+				V2 P = PointAt(S, Way);
+				P = P + Perp(Way) * R.Range(-0.35, 0.35);
 				if (!InField(P) || !Clear(P.X, P.Y, static_cast<uint8_t>(Built | OcCut)) || !Nudged(P, Way, 0.9, 0.45, 1.5) || !Clear(P.X, P.Y, OcCut)) continue;
 				const double U = R.Next();
 				const Base B = U < 0.45 ? Base::Oak : U < 0.75 ? Base::Ash : Base::Pollard;
@@ -7089,8 +7092,10 @@ namespace LandField
 					const V3 Foot{ X, Y + R.Range(-0.012, 0.012), -0.01 };
 					const double High = R.Range(0.08, 0.15), A = R.Range(0.0, Pi);
 					const V3 Lean{ R.Range(-0.02, 0.02), R.Range(-0.02, 0.02), 0 };
+					const double VaryHue = R.Range(-0.03, 0.03);
+					const double VaryTone = R.Range(0.9, 1.08);
 					Strip(M, { Foot, Foot + Lean + V3{ 0, 0, High } }, { 0.008, 0.005 }, { std::cos(A), std::sin(A), 0 },
-						  Rgb(112, 98, 66), Varied(Rgb(178, 160, 110), R.Range(0.9, 1.08), R.Range(-0.03, 0.03)));
+						  Rgb(112, 98, 66), Varied(Rgb(178, 160, 110), VaryTone, VaryHue));
 				}
 			}
 			for (int K = 0; K < 8; ++K)
