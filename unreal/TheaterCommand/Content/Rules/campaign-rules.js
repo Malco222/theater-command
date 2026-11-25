@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of af63437f2 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of d6ba6b2c 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -56901,13 +56901,33 @@
     };
   }
   var lossLine = (p) => `Chance of success ${pct10(p.success)}: ${p.verdict.toLowerCase()}. Likely losses: ${[p.bombers ? `${num3(p.bomberLossN)} of ${num3(p.bombers)} bombers (${pct10(p.bomberLoss)})` : "", p.fighters ? `${num3(p.fighterLossN)} of ${num3(p.fighters)} fighters` : ""].filter(Boolean).join(", ") || "none"}${p.foeLossN ? `, for about ${num3(p.foeLossN)} enemy fighters` : ""}.`;
+  function targetSections(g2, kind, all, row2, none3, word2 = "TARGET") {
+    if (!all.length) return [{ heading: "TARGETS", text: none3, rows: [] }];
+    const groups = [];
+    if (all.every((t) => !t.sea && g2.regions[t.id])) {
+      for (const t of all) {
+        const owner = g2.regions[t.id].owner || t.holder;
+        const at4 = groups.find((x) => x.owner === owner && x.holder === t.holder);
+        if (at4) at4.list.push(t);
+        else groups.push({ owner, holder: t.holder, list: [t] });
+      }
+    }
+    if (groups.length < 2) return [{ heading: "TARGETS", text: "", rows: all.map(row2) }];
+    if (kind === "bomb" || kind === "night") groups.sort((a, b) => Number(b.owner === b.holder) - Number(a.owner === a.holder));
+    const name = (n) => (g2.nations[n]?.name ?? n).toUpperCase();
+    return groups.map((x) => ({
+      heading: `${x.owner === x.holder ? name(x.owner) : `${name(x.owner)}, HELD BY ${name(x.holder)}`}  ·  ${x.list.length} ${word2}${x.list.length === 1 ? "" : "S"}`,
+      text: "",
+      rows: x.list.map(row2)
+    }));
+  }
   function targetsPage(g2, kind, group) {
     const k = raidMenu(g2).find((x) => x.key === kind);
     if (!k) return null;
     const up = humanUp(g2);
     const lead2 = group >= 0 ? [group] : void 0;
     const all = raidTargetsFor(g2, kind, group);
-    const rows = all.slice(0, 12).map((t) => {
+    const row2 = (t) => {
       const p = previewRaid(g2, kind, t.id, lead2);
       const lines2 = [`${t.far[0].toUpperCase()}${t.far.slice(1)}. ${t.what ? `${t.what[0].toUpperCase()}${t.what.slice(1)}.` : ""} ${t.groups} of your groups could fly it.`];
       if (p.why) lines2.push(p.why);
@@ -56915,14 +56935,16 @@
       else lines2.push(`With ${p.seats.filter((s) => s.picked).map((s) => s.name).join(", ")}: ${lossLine(p)}`, ...p.effects.slice(0, 1));
       const act2 = kind === "recon" ? `scout:${p.picked[0]}:${t.id}` : `open:plan:${kind}:${t.id}:${p.picked.join(".")}`;
       return { nat: t.holder, title: t.name, lines: lines2, buttons: [{ label: kind === "recon" ? "SEND THE FLIGHT" : "PLAN THIS RAID", act: act2, ok: up && !p.why, tip: p.why ?? (kind === "recon" ? "" : "Choose which groups fly it, and see what meeting up is worth, before you give the order.") }] };
-    });
+    };
+    const none3 = kind === "fleet" ? "No enemy fleet at sea has been found within reach. Search a sea from a group's page, or send a fleet to look: a fleet has to be found before it can be struck." : kind === "harbour" ? "No enemy warships lie in a harbour within reach." : kind === "town" ? "No enemy town that your armies stand round or beside is within reach of a bomber group that can still fly." : "Move a group to an airfield nearer the enemy, or wait until one that has flown is back.";
+    const sections = targetSections(g2, kind, all, row2, none3);
     return {
       id: group >= 0 ? `raid:${kind}:${group}` : `raid:${kind}`,
       title: k.label.toUpperCase(),
-      headline: all.length ? `${all.length} target${all.length === 1 ? "" : "s"} in reach, nearest first` : "No target is in reach",
+      headline: all.length ? `${all.length} target${all.length === 1 ? "" : "s"} in reach, ${sections.length > 1 ? "by country" : "nearest first"}` : "No target is in reach",
       note: k.blurb,
       top: [{ label: "BACK", act: group >= 0 ? `open:group:${group}` : "open:raids", ok: true, tip: "" }],
-      sections: [{ heading: "TARGETS", text: all.length ? "" : kind === "fleet" ? "No enemy fleet at sea has been found within reach. Search a sea from a group's page, or send a fleet to look: a fleet has to be found before it can be struck." : kind === "harbour" ? "No enemy warships lie in a harbour within reach." : kind === "town" ? "No enemy town that your armies stand round or beside is within reach of a bomber group that can still fly." : "Move a group to an airfield nearer the enemy, or wait until one that has flown is back.", rows }]
+      sections
     };
   }
   function planPage(g2, kind, target, picked) {
@@ -56959,19 +56981,20 @@
     const x = myAirGroups(g2).find((r) => r.id === id);
     if (!x) return null;
     const up = humanUp(g2);
-    const rows = raidTargetsFor(g2, "recon", id).slice(0, 14).map((t) => ({ t, p: previewRaid(g2, "recon", t.id, [id]) })).map(({ t, p }) => ({
-      nat: t.holder,
-      title: t.name,
-      lines: [`${t.far[0].toUpperCase()}${t.far.slice(1)}. ${t.what}. ${p.verdict}.`],
-      buttons: [{ label: "SEND THE FLIGHT", act: `scout:${id}:${t.id}`, ok: up, tip: p.effects[0] ?? "" }]
-    }));
+    const all = raidTargetsFor(g2, "recon", id);
+    const row2 = (t) => {
+      const p = previewRaid(g2, "recon", t.id, [id]);
+      return { nat: t.holder, title: t.name, lines: [`${t.far[0].toUpperCase()}${t.far.slice(1)}. ${t.what}. ${p.verdict}.`], buttons: [{ label: "SEND THE FLIGHT", act: `scout:${id}:${t.id}`, ok: up, tip: p.effects[0] ?? "" }] };
+    };
+    const sections = all.length ? targetSections(g2, "recon", all, row2, "", "PROVINCE") : [{ heading: "PROVINCES", text: "", rows: [] }];
+    if (sections.length === 1) sections[0].heading = "PROVINCES";
     return {
       id: `scout:${id}`,
       title: `A RECONNAISSANCE  ·  ${x.name.toUpperCase()}`,
-      headline: rows.length ? `${rows.length} province${rows.length === 1 ? "" : "s"} it could photograph, nearest first` : x.scouted ? "It has flown its reconnaissance this month" : "Nothing in its reach is hidden",
+      headline: all.length ? `${all.length} province${all.length === 1 ? "" : "s"} it could photograph, ${sections.length > 1 ? "by country" : "nearest first"}` : x.scouted ? "It has flown its reconnaissance this month" : "Nothing in its reach is hidden",
       note: "A few aircraft photograph one province and the ground beside it: every army there is seen whole until the month ends. One flight a month for each group, beside its raid, and it keeps its patrol.",
       top: [{ label: "BACK", act: `open:group:${id}`, ok: true, tip: "" }],
-      sections: [{ heading: "PROVINCES", text: "", rows }]
+      sections
     };
   }
   function rebasePage(g2, id) {
