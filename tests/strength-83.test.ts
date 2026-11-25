@@ -425,8 +425,13 @@ describe('one war at the history stop, nobody playing', () => {
     // every month. (Seed 40 until the start guns of 1.5.1, ruling 124: the guns blunt the bombing, so Germany keeps
     // more in reserve; seed 40's first refused beach fell from 0.49 to 0.32 and its Americans went to Sicily. Seeds 41
     // to 52 are all refused at 0.32 to 0.40; seed 46 tells the story whole. The design director, 24 Nov 2026 22:58Z.)
+    // (Seed 46 until 1.5.1 came onto release 2's tree (pi6nal a87043e1, 25 Nov 2026): there seed 46's America is never
+    // refused before month 60. Staged the same way, of seeds 17 to 34 on that tree only seed 18 tells the story whole:
+    // refused in Brittany in May 1944 (0.44 against 0.6), 0.75 after the cut, and it lands three corps at Calais in
+    // August 1944 with Corsica open every month. Seeds 21 and 29 are refused but land in Sicily; 27 lands in Brittany the
+    // month it is refused; 30, 31 and 33 see Germany fall first; the rest are never refused.)
     const CUT = 0.25, ISLE = 'Corsica';
-    const g = startOpen(createGame(46, null));
+    const g = startOpen(createGame(18, null));
     expect(setStop(g, 3, true)).toBe(true);
     const landings: { turn: number; nat: string; to: Region; corps: number }[] = [];
     const refused = new Set<number>();
