@@ -8,6 +8,7 @@
 // The Unreal side calls these by name through a global object, TC:
 //
 //   TC.starts()                         -> { years: [{ year, title, from, note }], groups: [{ title, from, view, sides: [{ nat, name, blurb, aims }] }] }
+//                                          (with the whole world on, `years` is September 1939 alone and `only` is the line that says so; else `only` is '')
 //   TC.grand(from, seed, world)         -> { from, chart, beyond, nations: [{ nat, name, major, small, blurb, door, standing, corps, regions }], absent: [{ nat, name, years, line }] }: who can be led in the grand campaign from that month; 'door' is a far seat's own words under its blurb, 'absent' the seats of other years, 'beyond' the line about the map this game is not on
 //   TC.nationsBook(world)               -> [{ tag, name, adjective, colour, alignment }]: every country the rules know (the running campaign's, else a first day's on that chart)
 //   TC.start({ human, from, view, seed }) -> view. view 'grand' is the grand campaign: history up to `from`, and free play after it
@@ -1842,10 +1843,18 @@ function arrive(s: Game): string | null {
   return lost;
 }
 
+/** With the whole world on: the one day its war begins from, said under the years (the owner's answer of 25 November 2026: 1939 first, December 1941 next). */
+const WHOLE_FROM_1939 = 'On the whole-world map the war begins in September 1939.';
+
 /** The places a campaign can begin, with each playable nation's aims for the campaigns that start in September 1939. */
 function starts() {
+  // (Release 2, Japan and the Pacific.) On the whole-world map a later year is no start at all yet: history up to it is
+  // played on Europe's chart and the far side is laid over it as of September 1939, so January 1942 opened with America
+  // at peace with Japan and the Pacific Fleet still at San Diego. Only the first day is offered there, and `only` says so.
+  const whole = CHART_NOW === 'whole';
   return {
-    years: GRAND.years.map((y) => ({ year: String(y.year), title: y.date.replace(/^1 /, ''), from: y.turn, note: y.text })),
+    years: GRAND.years.filter((y) => !whole || y.turn <= 1).map((y) => ({ year: String(y.year), title: y.date.replace(/^1 /, ''), from: y.turn, note: y.text })),
+    only: whole ? WHOLE_FROM_1939 : '',
     // How hard a grand campaign can be made, easiest first, and the level it is on unless another is chosen.
     levels: DIFFICULTY.levels.map((l) => ({ id: l.id, name: l.name, blurb: l.blurb, lines: l.lines })),
     level: DIFFICULTY.start,

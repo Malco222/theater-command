@@ -26,6 +26,12 @@ describe('the door with the whole world off', () => {
     expect(d.nations.some((n) => n.nat === 'GER' && n.major)).toBe(true);
   }, 600000);
 
+  it('every start year is offered, as ever', () => {
+    const s = TC().starts() as { years: { year: string; from: number }[]; only: string };
+    expect(s.years.map((y) => [y.year, y.from])).toEqual([['1939', 1], ['1940', 5], ['1941', 17], ['1942', 29]]);
+    expect(s.only).toBe('');
+  }, 300000);
+
   it('January 1940: Poland is a seat of 1939, and says so', () => {
     const d = TC().grand(5, 1939, true) as { nations: Seat[]; absent: { nat: string; line: string }[] };
     expect(d.absent).toEqual([{ nat: 'POL', name: 'Poland', years: [1939], line: 'Poland can be led from 1939.' }]);

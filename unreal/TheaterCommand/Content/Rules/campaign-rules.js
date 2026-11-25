@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 92bc0844 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 77fb8bcc 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -103876,9 +103876,12 @@
     }
     return lost;
   }
+  var WHOLE_FROM_1939 = "On the whole-world map the war begins in September 1939.";
   function starts() {
+    const whole2 = CHART_NOW === "whole";
     return {
-      years: GRAND.years.map((y) => ({ year: String(y.year), title: y.date.replace(/^1 /, ""), from: y.turn, note: y.text })),
+      years: GRAND.years.filter((y) => !whole2 || y.turn <= 1).map((y) => ({ year: String(y.year), title: y.date.replace(/^1 /, ""), from: y.turn, note: y.text })),
+      only: whole2 ? WHOLE_FROM_1939 : "",
       // How hard a grand campaign can be made, easiest first, and the level it is on unless another is chosen.
       levels: DIFFICULTY.levels.map((l) => ({ id: l.id, name: l.name, blurb: l.blurb, lines: l.lines })),
       level: DIFFICULTY.start,
