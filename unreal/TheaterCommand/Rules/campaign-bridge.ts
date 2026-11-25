@@ -116,6 +116,7 @@ import { setShadow, setShadowRelay, shadowLine, shadowOn, shadowRelayOn } from '
 import { mineLine, minesSeen, seaMinesOn, setSeaMines } from '../../../src/campaign/mines';
 import { galeLine, galeSeas, heavySeasOn, setHeavySeas } from '../../../src/campaign/heavyseas';
 import { setVoyageLog, voyageLines, voyageOn } from '../../../src/campaign/voyage';
+import { sailorsOn, setSailors } from '../../../src/battle/sea/ticket';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
 import { cityOrders as ordersBook, inMonths as readyWhen, type CityOrders as CityBook } from '../../../src/campaign/orders';
 import { inOrAt, townName } from '../../../src/campaign/towns';
@@ -977,6 +978,8 @@ function drawView() {
     shadow: shadowOn(s),
     // (Release 2, voyage.ts) Whether each fleet keeps a voyage log on its page.
     voyageLog: voyageOn(s),
+    // (Release 2, the sea field's sailor rules: battle/sea/ticket.ts) Whether men go into the water when a ship goes down.
+    sailors: sailorsOn(s),
     // (Release 2, mines.ts) Whether fleets can lay mines at sea, and the fields the player knows of: his side's and the enemy's he has found.
     seaMines: seaMinesOn(s),
     mines: minesSeen(s),
@@ -6533,6 +6536,16 @@ function act(action: string, region = -1, fought?: FoughtAir) {
         : (rearBridgesOn(s) ? 'Rearguards blow the bridges: a rearguard lays charges on the bridges behind it, and if its province is lost they go up almost every time.' : on ? 'Rearguards will blow the bridges once rearguards are on.' : 'Rearguards no longer lay charges: bridges behind them go up on the usual chance.');
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'sailorsrule') {
+    // (Release 2, the sea field's sailor rules: battle/sea/ticket.ts) Men in the water, switched by the player in any month.
+    const on = part[1] === 'on';
+    setSailors(s, on);
+    ok = true;
+    note = sailorsOn(s)
+      ? 'Sailor rules are on: men go into the water when a ship goes down, and a fleet\'s call after a fight, stop for survivors or leave them, decides who is saved.'
+      : on ? 'Sailor rules work in the grand campaign only.' : 'Sailor rules are off.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'fleetshadow') {
     // (Release 2, shadow.ts) 'fleetshadow:<fleet>:<enemy fleet>' sets it to shadow that fleet; 'fleetshadow:<fleet>:off' ends it.
     const id = Number(part[1]);
@@ -7729,6 +7742,9 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).shadow = (on: boolean) => { const s = game(); setShadow(s, !!on); return { on: shadowOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).voyageLog = (on: boolean) => { const s = game(); setVoyageLog(s, !!on); return { on: voyageOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).rearBridges = (on: boolean) => { const s = game(); setRearBridges(s, !!on); return { on: rearBridgesOn(s) }; };
+// (Release 2, the sea field's sailor rules: battle/sea/ticket.ts) TC.sailors(on) at any time; the options page uses
+// act('sailorsrule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).sailors = (on: boolean) => { const s = game(); setSailors(s, !!on); return { on: sailorsOn(s) }; };
 // (Release 2: mines.ts, heavyseas.ts, shadow.ts) TC.seaMines(on), TC.heavySeas(on), TC.shadowRelay(on) at any time; the
 // options page uses act('seaminesrule:on' / 'heavyseasrule:on' / 'shadowrelayrule:on', or ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).seaMines = (on: boolean) => { const s = game(); setSeaMines(s, !!on); return { on: seaMinesOn(s) }; };

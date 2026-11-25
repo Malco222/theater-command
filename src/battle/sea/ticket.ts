@@ -125,9 +125,17 @@ export function carriersOnly(t: SeaTicket): boolean {
 
 /**
  * Men in the water (release 2's sailor rules): on in a grand campaign whose 'sailors' flag is set, as the support teams'
- * switch is (teams.ts teamsOn). The flag is the campaign's to set at a new grand campaign; the ticket only reads it.
+ * switch is (teams.ts teamsOn). The flag is the campaign's, set by setSailors (the options page's 'sailorsrule'); the
+ * ticket only reads it.
  */
 export const sailorsOn = (g: Game): boolean => g.flags.open === 1 && g.flags.sailors === 1;
+
+/** Turns the sailor rules on or off in a campaign under way, as the voyage log's switch is (voyage.ts setVoyageLog): off
+ *  deletes the flag, so the save is as one that never had them. It changes nothing else. */
+export function setSailors(g: Game, on: boolean): void {
+  if (on) g.flags.sailors = 1;
+  else delete g.flags.sailors;
+}
 
 /**
  * What the field needs of men in the water for an action in this sea this month, with the switch on: the water's band
