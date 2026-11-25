@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ada288de 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 196c1873 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -7621,6 +7621,38 @@
             dd: 0,
             ss: 0
           }
+        },
+        {
+          nat: "UK",
+          name: "British Pacific Fleet",
+          base: "Trincomalee",
+          port: "Trincomalee",
+          home: "ceylon",
+          zone: "ceylon",
+          duty: "port",
+          ships: {
+            bb: 0,
+            cv: 0,
+            ca: 0,
+            dd: 0,
+            ss: 0
+          },
+          admiral: "Bruce Fraser",
+          from: 99,
+          book: {
+            stops: [
+              1,
+              2
+            ],
+            from: 63,
+            ships: {
+              bb: 0,
+              cv: 0,
+              ca: 0,
+              dd: 0,
+              ss: 0
+            }
+          }
         }
       ],
       arrivals: [
@@ -7668,6 +7700,37 @@
             dd: 1
           },
           "a new destroyer"
+        ],
+        [
+          8,
+          "UK",
+          "Mediterranean Fleet",
+          {
+            dd: 5
+          },
+          "five of the China Station's destroyers",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "China Fleet"
+          }
+        ],
+        [
+          10,
+          "UK",
+          "China Fleet",
+          {
+            ca: -5
+          },
+          "Five cruisers of the China Station leave to hunt raiders in the Indian Ocean and the South Atlantic",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
         ],
         [
           12,
@@ -7825,6 +7888,39 @@
           "a new destroyer"
         ],
         [
+          28,
+          "UK",
+          "China Fleet",
+          {
+            bb: 2,
+            dd: 2
+          },
+          "Force Z, the battleship Prince of Wales, the battlecruiser Repulse and two destroyers,",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Home Fleet"
+          }
+        ],
+        [
+          28,
+          "UK",
+          "China Fleet",
+          {
+            dd: 2
+          },
+          "two more of Force Z's destroyers",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Mediterranean Fleet"
+          }
+        ],
+        [
           29,
           "JAP",
           "4th Fleet",
@@ -7862,6 +7958,25 @@
           "the battleships Mississippi and New Mexico, back from the Atlantic"
         ],
         [
+          29,
+          "UK",
+          "China Fleet",
+          {
+            ca: 5
+          },
+          "the cruisers Cornwall and Dorsetshire and three more, back from hunting raiders,",
+          {
+            stops: [
+              1,
+              2
+            ],
+            back: [
+              10,
+              "China Fleet"
+            ]
+          }
+        ],
+        [
           30,
           "JAP",
           "Combined Fleet",
@@ -7889,6 +8004,56 @@
           "the battleship Idaho, back from the Atlantic"
         ],
         [
+          30,
+          "UK",
+          "China Fleet",
+          {
+            bb: 2,
+            dd: 8
+          },
+          "the battleships Royal Sovereign and Ramillies and eight destroyers",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Home Fleet"
+          }
+        ],
+        [
+          30,
+          "UK",
+          "China Fleet",
+          {
+            bb: 1,
+            dd: 8
+          },
+          "the battleship Warspite, repaired in America, and eight destroyers",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Mediterranean Fleet"
+          }
+        ],
+        [
+          30,
+          "UK",
+          "China Fleet",
+          {
+            bb: 2,
+            ca: 2
+          },
+          "the old battleships Revenge and Resolution and the cruisers Emerald and Caledon",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
           31,
           "USA",
           "Pacific Carrier Fleet",
@@ -7898,6 +8063,23 @@
           "the new carrier Hornet"
         ],
         [
+          31,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Formidable, repaired in America,",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Mediterranean Fleet",
+            by: 19
+          }
+        ],
+        [
           33,
           "JAP",
           "Mobile Fleet",
@@ -7905,6 +8087,22 @@
             cv: 1
           },
           "the carrier Junyo, converted from a liner"
+        ],
+        [
+          33,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Illustrious",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Mediterranean Fleet"
+          }
         ],
         [
           35,
@@ -7934,6 +8132,21 @@
           "the new battleship North Carolina"
         ],
         [
+          36,
+          "UK",
+          "China Fleet",
+          {
+            cv: -1
+          },
+          "The carrier Indomitable leaves the China Fleet for the Malta convoy",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
           37,
           "USA",
           "Pacific Fleet",
@@ -7952,6 +8165,22 @@
           "the new light cruiser Agano"
         ],
         [
+          38,
+          "UK",
+          "Mediterranean Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Formidable",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "China Fleet"
+          }
+        ],
+        [
           41,
           "JAP",
           "Combined Fleet",
@@ -7968,6 +8197,54 @@
             bb: 1
           },
           "the new battleship Indiana"
+        ],
+        [
+          41,
+          "UK",
+          "Home Fleet",
+          {
+            bb: 2,
+            cv: 1
+          },
+          "the battleships Royal Sovereign and Ramillies and the carrier Illustrious",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "China Fleet"
+          }
+        ],
+        [
+          41,
+          "UK",
+          "Mediterranean Fleet",
+          {
+            bb: 1
+          },
+          "the battleship Warspite",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "China Fleet"
+          }
+        ],
+        [
+          41,
+          "UK",
+          "China Fleet",
+          {
+            bb: -2
+          },
+          "The old battleships Revenge and Resolution go home to the reserve",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
         ],
         [
           42,
@@ -8114,6 +8391,69 @@
           "the new battleships Iowa and New Jersey"
         ],
         [
+          53,
+          "UK",
+          "China Fleet",
+          {
+            bb: 1
+          },
+          "the battleship Valiant",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Mediterranean Fleet"
+          }
+        ],
+        [
+          53,
+          "UK",
+          "China Fleet",
+          {
+            bb: 1
+          },
+          "the battlecruiser Renown",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Force H"
+          }
+        ],
+        [
+          53,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Illustrious",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Home Fleet"
+          }
+        ],
+        [
+          53,
+          "UK",
+          "China Fleet",
+          {
+            bb: 1
+          },
+          "the battleship Queen Elizabeth, repaired,",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
           55,
           "JAP",
           "Mobile Fleet",
@@ -8168,6 +8508,41 @@
           "the new carrier Franklin"
         ],
         [
+          59,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Victorious",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Home Fleet"
+          }
+        ],
+        [
+          59,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Indomitable",
+          {
+            stops: [
+              1,
+              2
+            ],
+            back: [
+              36,
+              "China Fleet"
+            ]
+          }
+        ],
+        [
           60,
           "JAP",
           "Mobile Fleet",
@@ -8175,6 +8550,21 @@
             cv: 1
           },
           "the new carriers Unryu and Amagi, short of aircraft to fly from them"
+        ],
+        [
+          60,
+          "UK",
+          "China Fleet",
+          {
+            bb: 1
+          },
+          "the new battleship Howe",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
         ],
         [
           62,
@@ -8213,6 +8603,72 @@
           "the new carrier Ticonderoga"
         ],
         [
+          63,
+          "UK",
+          "British Pacific Fleet",
+          {
+            bb: 1,
+            cv: 3,
+            ca: 6
+          },
+          "the battleship Howe, the carriers Indomitable, Victorious and Illustrious and six cruisers",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "China Fleet"
+          }
+        ],
+        [
+          63,
+          "UK",
+          "British Pacific Fleet",
+          {
+            bb: 1,
+            dd: 15
+          },
+          "the battleship King George V and fifteen destroyers",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Home Fleet"
+          }
+        ],
+        [
+          63,
+          "UK",
+          "British Pacific Fleet",
+          {
+            cv: 1
+          },
+          "the new carrier Indefatigable",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
+          63,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1,
+            ca: 2
+          },
+          "escort carriers with about a fleet carrier's aircraft, and two cruisers, for the East Indies Fleet,",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
           64,
           "USA",
           "Pacific Fleet",
@@ -8249,6 +8705,36 @@
           "the new battleship Missouri"
         ],
         [
+          66,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "more of the escort carriers",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
+          68,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "more of the escort carriers",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
           69,
           "USA",
           "Pacific Carrier Fleet",
@@ -8265,6 +8751,21 @@
             cv: 1
           },
           "the new carrier Bon Homme Richard"
+        ],
+        [
+          70,
+          "UK",
+          "British Pacific Fleet",
+          {
+            cv: 1
+          },
+          "the new carrier Implacable",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
         ],
         [
           31,
@@ -8520,11 +9021,65 @@
             1,
             2
           ]
+        },
+        {
+          turn: 33,
+          nat: "UK",
+          fleet: "China Fleet",
+          base: "Mombasa",
+          port: "Kilindini",
+          home: "zanzibar",
+          words: "After the raid on Ceylon the China Fleet withdraws to Kilindini",
+          stops: [
+            1,
+            2
+          ]
+        },
+        {
+          turn: 49,
+          nat: "UK",
+          fleet: "China Fleet",
+          base: "Trincomalee",
+          port: "Trincomalee",
+          home: "ceylon",
+          words: "The China Fleet returns to Trincomalee",
+          stops: [
+            1,
+            2
+          ]
+        },
+        {
+          turn: 66,
+          nat: "UK",
+          fleet: "British Pacific Fleet",
+          base: "Sydney",
+          port: "Sydney",
+          home: "tasman",
+          words: "The British Pacific Fleet moves to Sydney",
+          stops: [
+            1,
+            2
+          ],
+          ally: true
+        },
+        {
+          turn: 67,
+          nat: "UK",
+          fleet: "British Pacific Fleet",
+          base: "Admiralty Islands",
+          port: "Manus",
+          home: "bismarck",
+          words: "The British Pacific Fleet moves forward to Manus, for Okinawa",
+          stops: [
+            1,
+            2
+          ],
+          ally: true
         }
       ],
       quality: {
-        USA: 1,
-        JAP: 1.1
+        USA: 0.95,
+        JAP: 1.15
       }
     },
     rivals: {
