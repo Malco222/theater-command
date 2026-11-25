@@ -16,7 +16,10 @@ more realistic angles and shapes"): every cartridge is drawn on the fine mesh, a
 copper bullet (CARTRIDGES: each gun's own round), in its steel link or its webbing (STRIPS), on a belt that hangs from
 the feed down into an open box standing end-on to the gun, the top fold of the belt lying in the box; or on a rigid
 strip pushed in from the left. The fed end of a belt is part of the `gun` (so its rounds always go in under the feed
-cover however she is swung and laid); the box and its fold stand on the ground with the mount. Slots, holes, bores
+cover however she is swung and laid); the box and its fold are a third part, `box`, on the ground: the game swings it
+with the gun about the pintle and never tips it, so the belt runs into its mouth wherever she points (the art
+director, 25 Nov: past ten degrees of swing the belt left a box that stood with the mount). A strip gun's box of
+strips stands with the mount: nothing joins it to her. Slots, holes, bores
 and flutes are dark marks a millimetre proud of the face they are on (_mark). So a machine gun is three to five
 thousand triangles near (a third of them her cartridges), a mortar about 2,300; far off (the plain mesh, no rounds, no
 marks: one band of the belt's colour) six hundred to eleven hundred. The MG 42 is drawn to the same measures as the
@@ -46,7 +49,7 @@ CLOTH = "5E5946"          # a webbing belt (Browning, Vickers, Maxim): under sun
 LINK = "3A3C40"           # a steel link belt: no lighter than the gun's steel
 BRASS = "9C7A3C"          # a cartridge's case (the soldiers' brass), a filler cap
 BULLET = "6A4630"         # the bullet in it: a copper-washed jacket (the soldiers' own)
-ROUNDS = "6E5E38"         # a belt far off: brass and links as one colour
+ROUNDS = "7E643B"         # a belt far off: brass, bullets and links as one colour, by their share of the belt's face (the art director, 25 Nov: a truer brass than 6E5E38)
 DARK = "17181A"           # a slot or a hole through a jacket, a muzzle's bore: a dark mark
 EARTH = "5F5443"          # what feet and spades stand in
 RUBBER = "2E2C2A"         # the condenser's hose
@@ -444,9 +447,11 @@ def lafette(fine=True, gun="mg42"):
     v.socket("feed", (-0.50, 0.07, gz + 0.025), Y, part="gun", note="the belt comes in here from the left: the number two's hands")
     v.socket("eject", (-0.50, 0.0, gz - 0.045), -Z, part="gun", note="the empties fall out underneath")
     v.socket("shoulder", (-0.92, 0.0, gz - 0.02), -X, part="gun", note="the butt: the gunner's right shoulder")
-    v.use("mount")
+    v.part("box", "mount", (0.0, 0.0, pz), axis=(0, 0, -1), limits=[-25.0, 25.0], kind="turn",
+           note="the belt box and the fold of belt in it: swung with the gun about the pintle (the number two shifts it as she swings), so the belt always runs into its mouth; it stays on the ground")
     _belt_box(v, (-0.50, 0.265, 0.0), (0.36, 0.092, 0.17), "7.92", 0.015, "link", lid="end", far=1)
-    v.socket("box", (-0.50, 0.265, 0.17), Z, part="mount", note="the belt box on the ground at the gun's left, end-on to her, its lid swung up at the far end")
+    v.socket("box", (-0.50, 0.265, 0.17), Z, part="box", note="the belt box on the ground at the gun's left, end-on to her, its lid swung up at the far end")
+    v.use("mount")
     v.socket("seat", (-1.39, 0.20, 0.0), X, part="mount", note="the gunner's root, lying behind her a little to the left: his right shoulder at the butt 0.47 m ahead, his eye by the sight")
     v.socket("seat.loader", (-0.78, 0.62, 0.0), X, part="mount", note="the number two, lying at her left by the belt box")
     _controls(v, "prone", "left", burst="long bursts of 8 to 12 at 1,200 a minute (the MG 42; the MG 34 at 850), a pause, again")
@@ -551,9 +556,11 @@ def browning(fine=True, kind="m1919"):
     v.socket("muzzle", (mx, 0.0, gz + 0.005), X, part="gun", note="the muzzle: the flash and the tracer")
     v.socket("feed", (-0.05, 0.06, gz + 0.03), Y, part="gun", note="the belt comes in here from the left: the number two's hands")
     v.socket("eject", (-0.05, 0.0, gz - 0.05), -Z, part="gun", note="the empties fall out underneath")
-    v.use("mount")
+    v.part("box", "mount", (0.0, 0.0, pz), axis=(0, 0, -1), limits=[-22.0, 22.0], kind="turn",
+           note="the belt box and the fold of belt in it: swung with the gun about the pintle (the number two shifts it as she swings), so the belt always runs into its mouth; it stays on the ground")
     _belt_box(v, (-0.05, 0.235, 0.0), (0.28, 0.097, box_h), ".30", 0.018, "cloth", lid="off", far=1)
-    v.socket("box", (-0.05, 0.235, box_h), Z, part="mount", note="the belt box on the ground at the gun's left, end-on to her, its lid off")
+    v.socket("box", (-0.05, 0.235, box_h), Z, part="box", note="the belt box on the ground at the gun's left, end-on to her, its lid off")
+    v.use("mount")
     if not air:                                   # the water can and its hose, at the right
         v.box((0.20, 0.13, 0.26), (0.30, -0.36, 0.13), "mount", bevel=0.01)
         if fine:
@@ -640,9 +647,11 @@ def vickers(fine=True):
     v.socket("muzzle", (0.74, 0.0, gz + 0.005), X, part="gun", note="the muzzle: the flash and the tracer")
     v.socket("feed", (-0.055, -0.085, gz + 0.08), -Y, part="gun", note="the belt comes in here from the RIGHT: the number two's hands")
     v.socket("eject", (-0.02, 0.0, gz - 0.07), -Z, part="gun", note="the empties fall out underneath")
-    v.use("mount")
+    v.part("box", "mount", (0.0, 0.0, pz), axis=(0, 0, -1), limits=[-30.0, 30.0], kind="turn",
+           note="the belt box and the fold of belt in it: swung with the gun about the pintle (the number two shifts it as she swings), so the belt always runs into its mouth; it stays on the ground")
     _belt_box(v, (-0.055, -0.285, 0.0), (0.36, 0.10, box_h), ".303", 0.02, "cloth", lid="front", far=-1)
-    v.socket("box", (-0.055, -0.285, box_h), Z, part="mount", note="the belt box on the ground at the gun's right, end-on to her, its lid up")
+    v.socket("box", (-0.055, -0.285, box_h), Z, part="box", note="the belt box on the ground at the gun's right, end-on to her, its lid up")
+    v.use("mount")
     v.box((0.24, 0.15, 0.32), (0.42, 0.40, 0.16), "mount", bevel=0.012)                       # the condenser can
     v.rod((0.42, 0.40, 0.32), (0.42, 0.40, 0.345), 0.022, "steel", 8)
     if fine:
@@ -734,9 +743,11 @@ def maxim(fine=True):
     v.socket("muzzle", (0.74, 0.0, gz + 0.005), X, part="gun", note="the muzzle: the flash and the tracer")
     v.socket("feed", (-0.05, -0.085, gz + 0.075), -Y, part="gun", note="the belt comes in here from the RIGHT: the number two's hands")
     v.socket("eject", (0.0, 0.0, gz - 0.07), -Z, part="gun", note="the empties fall out forward, under the jacket")
-    v.use("mount")
+    v.part("box", "mount", (0.0, 0.0, pz), axis=(0, 0, -1), limits=[-35.0, 35.0], kind="turn",
+           note="the belt box and the fold of belt in it: swung with the gun about the pintle (the number two shifts it as she swings), so the belt always runs into its mouth; it stays on the ground")
     _belt_box(v, (-0.05, -0.50, 0.0), (0.28, 0.097, box_h), "7.62R", 0.022, "cloth", lid="front", far=-1)
-    v.socket("box", (-0.05, -0.50, box_h), Z, part="mount", note="the belt box on the ground at her right, outside the wheel, end-on to her")
+    v.socket("box", (-0.05, -0.50, box_h), Z, part="box", note="the belt box on the ground at her right, outside the wheel, end-on to her")
+    v.use("mount")
     v.socket("seat", (-0.74, 0.20, 0.0), X, part="mount", note="the gunner's root: sitting (today kneeling) inside the trail's loop, his hands 0.35 m ahead on the grips, the shield before him")
     v.socket("seat.loader", (-0.30, -0.80, 0.0), X, part="mount", note="the number two, lying at her right by the belt box")
     _controls(v, "sit", "right", left=35.0, right=35.0, burst="long steady bursts of 10 to 20 at 550 a minute",
@@ -751,7 +762,8 @@ def _strip(v, x_mid, y_in, y_out, z, cal, pitch, fed=0.0, empties=False):
     """A rigid feed strip of cartridges lying across the gun at x_mid, its rounds' bullets forward: the strip's plate
     from y_in (at the receiver's side) out to y_out, a round every `pitch` on it from its outer end inward. `fed`: the
     length of it that has gone through and sticks out at the other side (bare, or with `empties` the fired cases put
-    back in it, as the Type 92 and the Breda do)."""
+    back in it, as the Breda 37 alone does: the Type 92 and the Hotchkiss throw their cases clear and the strip comes
+    out empty; the art director, 25 Nov)."""
     L, case, sh, rb, rn = CARTRIDGES[cal]
     side = 1.0 if y_out > y_in else -1.0
     x0 = x_mid - L / 2.0
@@ -779,8 +791,8 @@ def _strip(v, x_mid, y_in, y_out, z, cal, pitch, fed=0.0, empties=False):
 def strip_gun(fine=True, kind="type92"):
     """An air-cooled heavy machine gun fed by rigid strips of cartridges pushed in from the left, every round on the
     strip drawn: a slab receiver, a barrel with cooling fins, on a tripod of two front legs and one rear. type92:
-    Japan's Type 92 (the Hotchkiss pattern made again: a strip of thirty, the fired cases put back in it as it comes
-    out at the right; two grips that fold down, an oiler on the top, sockets on the legs for the carrying poles, a
+    Japan's Type 92 (the Hotchkiss pattern made again: a strip of thirty that comes out bare at the right, her fired
+    cases thrown clear; two grips that fold down, an oiler on the top, sockets on the legs for the carrying poles, a
     flash hider); hotchkiss: France's Mle 1914 (a strip of twenty-four that comes out bare, a pistol grip, five great
     rings by the receiver, a seat on the rear leg); breda37: Italy's Breda Mod. 37 (a strip of twenty, its fired cases
     put back; spade grips, a heavier finned barrel)."""
@@ -874,7 +886,7 @@ def strip_gun(fine=True, kind="type92"):
         _mark(v, (-rl * 0.62, 0.03, gz - 0.02), Y, X, rl * 0.5, 0.04, "flute")                # the receiver's side plate, let in
     # The strip: in from the left, every round on it; the fired end out at the right.
     fx = -0.10
-    cal, pitch, fed, empties = {"type92": ("7.7", 0.013, 0.11, True), "hotchkiss": ("8L", 0.0155, 0.10, False), "breda37": ("8B", 0.0165, 0.055, True)}[kind]
+    cal, pitch, fed, empties = {"type92": ("7.7", 0.013, 0.11, False), "hotchkiss": ("8L", 0.0155, 0.10, False), "breda37": ("8B", 0.0165, 0.055, True)}[kind]
     zs = gz + 0.026
     for sy in (1, -1):                                                                      # the feedway through the receiver
         _mark(v, (fx, sy * 0.03, zs + 0.005), Y * sy, X, 0.092, 0.022)

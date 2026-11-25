@@ -53,8 +53,12 @@ namespace LandTeamGun
 		bool bKneels = false;
 		/** The side her belt or strip comes in from: -1 the left, +1 the right (0 a mortar). */
 		int FeedSide = 0;
-		/** Her model's bodies: what stands on the ground, and what the game turns and a man carries. */
-		std::vector<int> Mount, Turned;
+		/** Her model's bodies: what stands on the ground, and what the game turns and a man carries. Swung (a belt-fed
+		 * gun's part `box`: her ammunition box and the fold of belt in it; none in a file without one): what stands on
+		 * the ground beside her and is turned about her pin as she swings, never tipped or shaken, so the belt that
+		 * hangs from her feed always runs into its mouth (the art director, 25 November: in life her number two shifts
+		 * it). */
+		std::vector<int> Mount, Turned, Swung;
 		/** Model frame (x forward, y right, z up; metres): what Turned swings and tips about; the key man's own place
 		 * on the ground; the muzzle at rest and the way a round leaves it; the middle of what is carried; the trail's
 		 * handle (bWheeled). */
@@ -119,9 +123,13 @@ namespace LandTeamGun
 
 		bool MountShown() const { return Is == State::SetUp || Is == State::Rolled || Is == State::Left; }
 		bool TurnedShown() const { return Is != State::Away; }
-		/** Her mount's frame on the field, and that of what turns (field = R * own + T, as a man's WorldFrame). */
+		/** Her box stands by her only where she is set up or was left: never dragged behind a rolled one. */
+		bool SwungShown() const { return Is == State::SetUp || Is == State::Left; }
+		/** Her mount's frame on the field, that of what turns, and that of what only swings with her (field = R * own
+		 * + T, as a man's WorldFrame). */
 		LandMen::Xform MountFrame() const;
 		LandMen::Xform TurnedFrame(const Kind& K) const;
+		LandMen::Xform SwungFrame(const Kind& K) const;
 		/** Her muzzle on the field and the way a round leaves it, while she stands set up. */
 		bool MuzzleAt(const Kind& K, LandMen::Vec3& OutAt, LandMen::Vec3& OutWay) const;
 	};

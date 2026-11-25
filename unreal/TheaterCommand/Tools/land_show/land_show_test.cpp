@@ -682,7 +682,11 @@ int main(int Argc, char** Argv)
 			{
 				OpenBurst[Ev.Man] = Shots.size();
 				Shots.push_back({ Ev.T, Ev.Man, Ev.Gun, 1, C.PlayingOf(Ev.Man).bShooting });
-				if (Ev.Cue.empty()) Fail("a round's first shot has no cue (man %d at %.2f s)", Ev.Man, Ev.T);
+				// (a grenade's release carries none: its throw is heard through its round, LandSound's grenade.throw, and a
+				// cue here would be heard a second time by the scene's HearBody. normandy-1944-air.json's 248 grenades
+				// each failed this until 25 November 2026; normandy-1944.json has none.)
+				if (Ev.Cue.empty() && Ev.Fx != "grenade_release") Fail("a round's first shot has no cue (man %d at %.2f s)", Ev.Man, Ev.T);
+				if (!Ev.Cue.empty() && Ev.Fx == "grenade_release") Fail("a grenade's release has a cue, %s: its throw would be heard twice (man %d at %.2f s)", Ev.Cue.c_str(), Ev.Man, Ev.T);
 			}
 			else
 			{

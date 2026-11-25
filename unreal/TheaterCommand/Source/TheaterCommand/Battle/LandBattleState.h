@@ -103,16 +103,16 @@ struct FLandBattleState
 	/**
 	 * The support teams' weapons (release 2, on trial "teamguns"; Battle/LandTeamGun): a machine gun on its mount or a
 	 * mortar at each team's key man (role hmg or mortar), stepped each frame from where the crowd draws him
-	 * (ALandBattle::MakeTeamGuns). The weapon files read so far; each weapon, with its copies in its file's two instanced
-	 * meshes (-1: none yet); each track's weapon (its row in TeamGuns, -1 none), which the fire reads for her muzzle
+	 * (ALandBattle::MakeTeamGuns). The weapon files read so far; each weapon, with its copies in its file's three instanced
+	 * meshes (her mount, what turns, and a belt-fed gun's box that swings with her; -1: none yet); each track's weapon (its row in TeamGuns, -1 none), which the fire reads for her muzzle
 	 * (PlayWorld.Muzzle) and her burst (PlayWorld.GunLook); and the files asked for and not read, each said once.
 	 */
 	struct FTeamGun
 	{
 		int Track = -1, Kind = -1;
 		LandTeamGun::Gun Gun;
-		int32 MountCopy = -1, TurnedCopy = -1;
-		bool bMountShown = false, bTurnedShown = false;
+		int32 MountCopy = -1, TurnedCopy = -1, SwungCopy = -1;
+		bool bMountShown = false, bTurnedShown = false, bSwungShown = false;
 		/** Her gunner has been told he serves her (LandMen::Crowd::Serve). */
 		bool bServed = false;
 	};

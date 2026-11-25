@@ -17,6 +17,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -865,7 +866,10 @@ namespace
 		// ---- Each weapon.
 		const std::map<std::string, int> FeedOf = { { "HmgMG42", -1 }, { "HmgMG34", -1 }, { "HmgM1919", -1 }, { "HmgM1917", -1 }, { "HmgType92", -1 },
 			{ "HmgHotchkiss", -1 }, { "HmgBreda37", -1 }, { "HmgVickers", 1 }, { "HmgMaxim", 1 } };
-		Tally Frames, Seats, Rates, Lays, Limits, Shakes, Carries, Rolls, Falls;
+		Tally Frames, Seats, Rates, Lays, Limits, Shakes, Carries, Rolls, Falls, Boxes;
+		// (a belt runs from its box into the gun: those boxes are swung with her; a strip gun's box of strips and a
+		// mortar's bombs stand with the mount)
+		const std::set<std::string> BeltFed = { "HmgMG42", "HmgMG34", "HmgM1919", "HmgM1917", "HmgVickers", "HmgMaxim" };
 		size_t Guns = 0, Mortars = 0;
 		for (const std::string& Name : Files)
 		{
@@ -891,10 +895,11 @@ namespace
 			}
 			(K.bMortar ? Mortars : Guns) += 1;
 			// What the file tells the game.
-			size_t MountTris = 0, TurnedTris = 0;
-			double Lowest = 1e9;
+			size_t MountTris = 0, TurnedTris = 0, SwungTris = 0;
+			double Lowest = 1e9, BoxLowest = 1e9;
 			std::vector<int> All = K.Mount;
 			All.insert(All.end(), K.Turned.begin(), K.Turned.end());
+			All.insert(All.end(), K.Swung.begin(), K.Swung.end());
 			std::sort(All.begin(), All.end());
 			bool bEach = All.size() == M.Bodies.size();
 			for (size_t B = 0; B < All.size() && bEach; ++B)
@@ -914,6 +919,15 @@ namespace
 			{
 				TurnedTris += M.Bodies[static_cast<size_t>(B)].Near.Triangles.size() / 3;
 			}
+			for (int B : K.Swung)
+			{
+				const Body& Of = M.Bodies[static_cast<size_t>(B)];
+				SwungTris += Of.Near.Triangles.size() / 3;
+				for (size_t P = 2; P < Of.Near.Points.size(); P += 3)
+				{
+					BoxLowest = std::min(BoxLowest, Of.Near.Points[P] + Of.Pivot.Z);
+				}
+			}
 			K.File = Name;
 			if (K.Title.empty())
 			{
@@ -921,7 +935,11 @@ namespace
 			}
 			else if (!bEach)
 			{
-				Why = "a body neither stands nor turns, or does both";
+				Why = "a body neither stands, turns nor swings, or does two of them";
+			}
+			else if (K.Swung.empty() != (BeltFed.count(Name) == 0) || (!K.Swung.empty() && (M.SocketIndex("box") < 0 || std::fabs(BoxLowest) > 0.002)))
+			{
+				Why = "her belt's box is not a part of its own on the ground (a belt-fed gun's must be; a strip gun and a mortar have none)";
 			}
 			// (a gun's feet on the ground to 2 cm; a mortar's base plate bedded in, its ribs up to 7 cm under)
 			else if (Lowest > 0.02 || Lowest < (K.bMortar ? -0.07 : -0.02))
@@ -956,10 +974,10 @@ namespace
 				Fail(Name + ": " + Why);
 				continue;
 			}
-			std::printf("  %-13s %-6s %s%s%s  swings %2.0f left %2.0f right, lays %3.0f to %2.0f  seat %5.2f back %5.2f %s  mount %4zu triangles, what turns %4zu  %s\n",
+			std::printf("  %-13s %-6s %s%s%s  swings %2.0f left %2.0f right, lays %3.0f to %2.0f  seat %5.2f back %5.2f %s  mount %4zu triangles, what turns %4zu, her box %3zu  %s\n",
 				Name.c_str(), K.bMortar ? "mortar" : "gun", K.FeedSide < 0 ? "fed from the left " : K.FeedSide > 0 ? "fed from the right" : "dropped down her  ",
 				K.bKneels ? ", gunner kneels" : ", gunner lies  ", K.bWheeled ? ", on wheels" : "          ", K.Left, K.Right, K.Low, K.High, -K.Seat.X,
-				std::fabs(K.Seat.Y), K.Seat.Y < 0.0 ? "left " : "right", MountTris, TurnedTris, K.Title.c_str());
+				std::fabs(K.Seat.Y), K.Seat.Y < 0.0 ? "left " : "right", MountTris, TurnedTris, SwungTris, K.Title.c_str());
 
 			// Set up at her gunner, on a slope, nothing to fire at.
 			Crew C;
@@ -975,7 +993,14 @@ namespace
 				LandMen::Vec3 At, Way;
 				const bool bMuzzle = G.MuzzleAt(K, At, Way);
 				const V3 Rest = Apply(G.MountFrame(), K.Muzzle);
-				Frames.Note(G.Is == Gun::State::SetUp && G.MountShown() && G.TurnedShown(), 0.0, Name + ": not set up at a deployed gunner");
+				Frames.Note(G.Is == Gun::State::SetUp && G.MountShown() && G.TurnedShown() && G.SwungShown(), 0.0, Name + ": not set up at a deployed gunner");
+				if (!K.Swung.empty())
+				{
+					// (not swung, her box stands where her file put it)
+					const V3 BoxAt = M.Sockets[static_cast<size_t>(M.SocketIndex("box"))].At;
+					const V3 With = Apply(G.SwungFrame(K), BoxAt), Stood = Apply(G.MountFrame(), BoxAt);
+					Boxes.Note(FrameFault(G.SwungFrame(K)) < 1e-5 && (With - Stood).Length() < 1e-5, (With - Stood).Length(), Name + ": at rest her belt's box is not where her file stands it");
+				}
 				Frames.Note(FrameFault(G.MountFrame()) < 1e-5 && FrameFault(G.TurnedFrame(K)) < 1e-5, std::max(FrameFault(G.MountFrame()), FrameFault(G.TurnedFrame(K))),
 					Name + ": her frame set up is not a soldier's kind of frame");
 				Seats.Note(std::hypot(Seat.X - C.X, Seat.Y - C.Y) < 0.001, std::hypot(Seat.X - C.X, Seat.Y - C.Y), Name + ": her seat is not on her gunner's place");
@@ -1059,6 +1084,20 @@ namespace
 					const double Off = std::fabs(WrapDeg(Bearing(Way.X, Way.Y) - By.Facing * 180.0 / Pi - Stop));
 					Limits.Note(std::fabs(Of.Traverse - Stop) < 1e-9 && Off < 0.01 && std::fabs(WrapDeg((Of.Facing - By.Facing) * 180.0 / Pi)) < 1e-9, Off,
 						Name + ": a gun does not stop at her swing's limit, her mount as her gunner faces");
+					if (!K.Swung.empty())
+					{
+						// Her belt's box: where her swing alone would carry it about her pin (so the belt, which is the
+						// gun's, still runs into its mouth), never tipped with her lay nor shaken with her, on the ground.
+						Gun Level = Of;
+						Level.Elevation = 0.0;
+						Level.Recoil = 0.0;
+						const V3 BoxAt = M.Sockets[static_cast<size_t>(M.SocketIndex("box"))].At;
+						const V3 With = Apply(Of.SwungFrame(K), BoxAt), Swing = Apply(Level.TurnedFrame(K), BoxAt), Stood = Apply(Of.MountFrame(), BoxAt);
+						const V3 UpNow = Turn(Of.SwungFrame(K), V3(0.0, 0.0, 1.0)), UpWas = Turn(Of.MountFrame(), V3(0.0, 0.0, 1.0));
+						const double From = (With - Swing).Length();
+						Boxes.Note(Of.SwungShown() && FrameFault(Of.SwungFrame(K)) < 1e-5 && From < 1e-4 && std::fabs(With.Z - Stood.Z) < 1e-4 && (UpNow - UpWas).Length() < 1e-5
+							&& std::hypot(With.X - Stood.X, With.Y - Stood.Y) > 0.02, From, Name + ": swung to her limit, her belt's box is not carried about her pin with her, upright on the ground");
+					}
 				}
 			}
 			// Up a hill and down into a hollow: laid no further than she can be.
@@ -1161,6 +1200,8 @@ namespace
 				const LandMen::Xform Man = ManFrame(By.X, By.Y, Slope(By.X, By.Y), By.Way);
 				By.Frame = &Man;
 				Of.Step(K, By, 1.0, Dt, Slope);
+				// (on the move her box is in the number two's hands, not drawn sliding over the ground)
+				Boxes.Note(!Of.SwungShown(), 0.0, Name + ": her belt's box is drawn while the team moves");
 				LandMen::Vec3 At, Way;
 				if (K.bWheeled)
 				{
@@ -1205,7 +1246,7 @@ namespace
 				{
 					By.Pose = Pose;
 					Of.Step(K, By, 30.0, Dt, Slope);
-					bStill = bStill && Of.Is == Gun::State::Left && Of.MountShown() && Of.TurnedShown() && Of.X == Before.X && Of.Y == Before.Y && Of.Z == Before.Z
+					bStill = bStill && Of.Is == Gun::State::Left && Of.MountShown() && Of.TurnedShown() && Of.SwungShown() && Of.X == Before.X && Of.Y == Before.Y && Of.Z == Before.Z
 						&& Of.Facing == Before.Facing && Of.Traverse == Before.Traverse && Of.Elevation == Before.Elevation && Of.Recoil == 0.0 && !Of.bFiring;
 				}
 				Falls.Note(bStill && FrameFault(Of.TurnedFrame(K)) < 1e-5, 0.0, Name + ": she does not stay as she stood when her gunner falls");
@@ -1227,7 +1268,7 @@ namespace
 						By.Pose = "cower";
 					}
 					Of.Step(K, By, 1.0, Dt, Flat);
-					bAway = bAway && Of.Is == Gun::State::Away && !Of.MountShown() && !Of.TurnedShown();
+					bAway = bAway && Of.Is == Gun::State::Away && !Of.MountShown() && !Of.TurnedShown() && !Of.SwungShown();
 				}
 				for (const char* Pose : { "cower", "wait", "deployed", "fire" })
 				{
@@ -1260,6 +1301,7 @@ namespace
 		Line("carried by her middle on his right shoulder", Carries, "m");
 		Line("the wheeled one rolled behind by her trail", Rolls, "m");
 		Line("left as she stood when her gunner falls", Falls, "");
+		Line("a belt's box swung with her about her pin, upright", Boxes, "m");
 		if (Guns < 9 || Mortars < 7)
 		{
 			Fail("fewer weapons than the armies serve: " + std::to_string(Guns) + " guns, " + std::to_string(Mortars) + " mortars");

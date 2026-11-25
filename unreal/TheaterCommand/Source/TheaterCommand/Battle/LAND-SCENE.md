@@ -835,12 +835,17 @@ run) each key man has his weapon:
   kit): `HmgMG42`, `HmgMG34`, `HmgM1919`, `HmgM1917`, `HmgVickers`, `HmgMaxim`, `HmgType92`, `HmgHotchkiss`,
   `HmgBreda37`; `MortarGER`, `MortarUSA`, `MortarUK`, `MortarSOV`, `MortarJAP`, `MortarITA`, `MortarFRA`. A machine
   gun's parts are `mount` (the tripod or wheeled carriage, its origin on the ground under the pin), `cradle` (swings)
-  and `gun` (tips); a mortar's `mortar` and `tube`. Sockets: `seat` (the key man's own root), `seat.loader`, `muzzle`,
+  and `gun` (tips), and on a belt-fed gun `box` (her belt's box and the fold of belt in it, swung with her about the
+  pin and never tipped); a mortar's `mortar` and `tube`. Sockets: `seat` (the key man's own root), `seat.loader`, `muzzle`,
   `feed`, the grips, `box` or `rounds`, the Maxim's `pull`. Every cartridge is drawn on the near mesh (Brian on the
   first sheet, 25 November: "make them more detailed with bullets feeding into the machine gun and more realistic
   angles and shapes"): a belt hangs from the feed down into an open box standing end-on to the gun, or a strip of
   rounds goes in from the left. The fed end of a belt is part of `gun`, so its rounds go in under the feed cover
-  however she is swung and laid; the box and the fold of belt in it stand with `mount`. Slots, holes and bores are
+  however she is swung and laid; the box and the fold of belt in it are the part `box`, which the game swings with
+  her so the belt runs into its mouth wherever she points (the art director, 25 November: past ten degrees of swing
+  the belt left a box that stood with the mount). A strip gun's box of strips stands with `mount`; the Type 92's and
+  the Hotchkiss's strip comes out bare (their fired cases are thrown clear), the Breda 37's with its cases put back.
+  Far off a belt is one band of brass (`rounds`, 7E643B). Slots, holes and bores are
   dark marks a millimetre proud of their face. A machine gun is 3,300 to 5,200 triangles near and 600 to 1,100 far;
   a mortar 2,300 and 1,000. The MG 42 is the section gunner's own gun (the soldiers' `soldier_GER_lmg`) to the same
   measures. The picture sheet: `LAND_KIT_SUPPORT=1` to the painter (`Tools/land_kit/land_picture.cpp`; the battle's
@@ -852,17 +857,23 @@ run) each key man has his weapon:
   and 20 degrees a second, stopped at the model's limits; a mortar turned whole); on his right shoulder while the team
   moves (the Maxim rolled behind him by her trail); left where she stood when he falls; not drawn while he is hidden,
   riding or mounted.
-- **In the scene** (`ALandBattle::MakeTeamGuns`, after the men are posed and before the fire is stepped): two instanced
-  meshes a file, the mount and what turns (`LandParts::BodiesMesh`: the fine level, the plain one from 90 m; gone past
-  460 m), placed by `LandParts::BankedAt` as a man is. `PlayWorld.Muzzle` gives a team's rounds her own muzzle and
+- **In the scene** (`ALandBattle::MakeTeamGuns`, after the men are posed and before the fire is stepped): three
+  instanced meshes a file, the mount, what turns, and a belt-fed gun's box (`LandParts::BodiesMesh`: the fine level
+  with every round, the plain one from 90 m; gone past 460 m; a file with no `box` part has an empty third row),
+  placed by `LandParts::BankedAt` as a man is. The box is drawn only while she is set up or left where she stood
+  (`Gun::SwungShown`, `Gun::SwungFrame`: her mount's frame swung by her traverse about her pin): on the move it is in
+  the number two's hands, not drawn. `PlayWorld.Muzzle` gives a team's rounds her own muzzle and
   tells her of each burst (she shakes 6 mm back along her bore a round); `PlayWorld.GunLook` gives her own burst
-  (`LandTeamGun::BurstOf`: the MG 42's 18 rounds in 0.9 s, where a section's gun fires 8), which `LandPlay` hands to
-  the sound as well.
+  (`LandTeamGun::BurstOf`: the MG 42's 18 rounds in 0.9 s, where a section's gun fires 8; the Maxim 8 at 10 a second
+  and the Vickers 6 at 8, as the sound check's recordings run), which `LandPlay` hands to the sound as well, and
+  `PlayWorld.TeamGunFile` gives her file's name, which the round's noise carries as its `Mount` so her burst is heard
+  on her own gun's row (`land.teamMg`, the sound check's).
 - **The gunner** (`LandMen::Crowd::Serve`): his rifle laid down, lying behind a low gun (`fire_prone`, whose hands
   reach her grips) or kneeling at a high one or at his tube (`fire_kneel`), until his file brings `hmg_fire_prone`,
   `hmg_fire_sit` or `mortar_sight`, which are used by name as soon as it has them.
 - **Checked in the cloud**: `Tools/land_kit/run.sh` (the section THE SUPPORT TEAMS' WEAPONS: every army's file reads;
-  seat, swing, lay, limits, bursts, carried, rolled, left, not drawn; `LAND_KIT_ONLY_TEAMGUNS=1` runs it alone) and
+  seat, swing, lay, limits, bursts, carried, rolled, left, not drawn, a belt's box swung with her about her pin and
+  upright; `LAND_KIT_ONLY_TEAMGUNS=1` runs it alone) and
   `Tools/land_show/run.sh` (the support teams' key men). The engine's part (`MakeTeamGuns`, `BodiesMesh`) has not been
   compiled or seen: the Mac's first build and stills are owed.
 - **Not in this**: the loaders are where the drill puts them (the model's `seat.loader` is not read yet), no belt
