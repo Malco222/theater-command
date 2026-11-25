@@ -63,7 +63,7 @@ import { seat } from './commanders';
 import { stopDef } from './history';
 import type { Corps, Game, Kind, Region } from './types';
 
-export const DRAWN = words as unknown as { one: string; many: string; here: string; hereMany: string; conv: string; stood: string; from: string; fromMany: string };
+export const DRAWN = words as unknown as { one: string; many: string; here: string; hereMany: string; hereSea: string; hereSeaMany: string; ashore: string; afloat: string; conv: string; stood: string; from: string; fromMany: string };
 
 /** A stood war row's line of the table (counting.json): the war it waits for, the board corps it draws on in order, a share it takes where it stands. */
 export interface Counted {
@@ -569,7 +569,15 @@ export function heldLine(g: Game, row: any[], claims: Claim[]): string | null {
   const the = (name: string): string => (/^the /i.test(name) ? name : `the ${name}`);
   const list = (xs: string[]): string => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : xs[0] ?? '');
   const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
-  const where = (qs: Claim[]): string => list([...new Set(qs.map((q) => g.regions[q.from!.reg].name))]);
+  // (Where his own stand: in the place, or, for a corps on a passage, at sea and bound for its harbour, never the port it
+  // sailed from. The UI director's marks of 21:52Z.)
+  const bound = (c: Corps): string | undefined => { const v = (g.atSea ?? []).find((x) => x.corps === c); return v ? g.regions[v.to].name : undefined; };
+  const at = (cs: Corps[]): string => {
+    const ashore = [...new Set(cs.filter((c) => bound(c) === undefined).map((c) => g.regions[c.reg].name))];
+    const afloat = [...new Set(cs.map(bound).filter((x): x is string => x !== undefined))];
+    return list([...(ashore.length ? [fill(DRAWN.ashore, { where: list(ashore) })] : []), ...(afloat.length ? [fill(DRAWN.afloat, { to: list(afloat) })] : [])]);
+  };
+  const where = (qs: Claim[]): string => at(qs.map((q) => q.from!));
   const lines: string[] = [];
   // (The stood war rows: a division the table counts in one of his corps under a name the row gives it, or by share,
   // is not one he holds by name: `drawn`, told by the corps it was to be drawn from. One counted under its card's own
@@ -586,14 +594,17 @@ export function heldLine(g: Game, row: any[], claims: Claim[]): string | null {
     return cap(joined ? the(joined) : list(qs.map((q) => the(q.name[0]))));
   };
   // (Where every one of them stands at the row's own place already, the place is said once: the UI director's `here`.)
-  const there = mine.length > 0 && mine.every((q) => g.regions[q.from!.reg].name === row[5]);
-  if (mine.length) lines.push(fill(there ? (mine.length === 1 ? DRAWN.here : DRAWN.hereMany) : mine.length === 1 ? DRAWN.one : DRAWN.many, { names: said(mine), place: row[5], where: where(mine) }));
-  for (const q of made) lines.push(fill(DRAWN.conv, { names: cap(the(q.name[0])), place: row[5], was: q.conv!, where: where([q]) }));
+  const there = mine.length > 0 && mine.every((q) => bound(q.from!) === undefined && g.regions[q.from!.reg].name === row[5]);
+  // (Every one of them on a passage bound for the row's own place: he has sent them already. The UI director's 21:52Z.)
+  const sailing = mine.length > 0 && mine.every((q) => bound(q.from!) === row[5]);
+  const one = mine.length === 1;
+  if (mine.length) lines.push(fill(there ? (one ? DRAWN.here : DRAWN.hereMany) : sailing ? (one ? DRAWN.hereSea : DRAWN.hereSeaMany) : one ? DRAWN.one : DRAWN.many, { names: said(mine), place: row[5], at: where(mine) }));
+  for (const q of made) lines.push(fill(DRAWN.conv, { names: cap(the(q.name[0])), place: row[5], was: q.conv!, at: where([q]) }));
   // One line for each corps the row was to draw on: a division the row names by itself, or so many to make up the row.
   for (const h of [...new Set(drawn.map((q) => q.from!))]) {
     const qs = drawn.filter((q) => q.from === h);
     const named = qs.filter((q) => q.named), rest = qs.filter((q) => !q.named);
-    const as = { place: row[5], army: h.name.replace(/^the /i, ''), where: g.regions[h.reg].name, formation: String(row[2]).replace(/^the /i, '') };
+    const as = { place: row[5], army: h.name.replace(/^the /i, ''), at: at([h]), formation: String(row[2]).replace(/^the /i, '') };
     for (const q of named) lines.push(fill(DRAWN.from, { ...as, names: cap(the(q.name[0])) }));
     if (rest.length === 1) lines.push(fill(DRAWN.from, { ...as, names: 'One division' }));
     else if (rest.length) lines.push(fill(DRAWN.fromMany, { ...as, count: cap(inWords(rest.length)) }));

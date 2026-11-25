@@ -1001,3 +1001,36 @@ describe("the dial: a date never lifts a corps out of a fight at stops 3 to 5; a
     expect(heldTwice(g)).toEqual([]);
   });
 });
+
+describe('his corps on a passage at sea: the line says where it is bound, never the port it sailed from (the UI director, 21:52Z)', () => {
+  it('bound elsewhere: he holds them already, at sea, bound for the harbour, and they go to the row\'s place only if he sends them', () => {
+    const { g } = balkans('GER');
+    const xxii = corps(g, 'XXII Corps')!;
+    const from = place(g, xxii);
+    g.turn = MARCH_41 - 1;
+    putToSea(g, xxii, g.byName['Hamburg'], 2);
+    month(g, MARCH_41);
+    const line = g.headlines.find((h) => h.nat === 'GER' && / are due in Sofia /.test(h.text))!;
+    expect(line.text).toMatch(said(DRAWN.many));
+    expect(line.text).toBe('The 2nd and 9th Panzer Divisions are due in Sofia this month, but you hold them already, at sea, bound for Hamburg. No division is raised twice: they go to Sofia only if you send them.');
+    expect(line.text).not.toContain(from);
+    expect(corps(g, PANZERS)).toBeUndefined();
+    expect(heldTwice(g)).toEqual([]);
+  });
+  it('bound for the row\'s own place: they are on their way there already, at sea, and nothing is promised about sending', () => {
+    const { g } = balkans('GER');
+    const xxii = corps(g, 'XXII Corps')!;
+    g.turn = MARCH_41 - 1;
+    putToSea(g, xxii, g.byName['Sofia'], 2);
+    month(g, MARCH_41);
+    const line = g.headlines.find((h) => h.nat === 'GER' && / are due in Sofia /.test(h.text))!;
+    expect(line.text).toMatch(said(DRAWN.hereSeaMany));
+    expect(line.text).toBe('The 2nd and 9th Panzer Divisions are due in Sofia this month, and they are on their way there already with your own forces, at sea. No division is raised twice.');
+    expect(corps(g, PANZERS)).toBeUndefined();
+    expect(heldTwice(g)).toEqual([]);
+  });
+  it('ashore the words are as they were: in the place where his corps stands', () => {
+    expect(DRAWN.ashore).toBe('in {where}');
+    expect(DRAWN.one.replace('{at}', DRAWN.ashore)).toBe('{names} is due in {place} this month, but you hold it already, in {where}. No division is raised twice: it goes to {place} only if you send it.');
+  });
+});
