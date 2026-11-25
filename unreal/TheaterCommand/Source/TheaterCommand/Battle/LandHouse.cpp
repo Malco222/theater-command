@@ -11165,7 +11165,7 @@ namespace LandHouse
 			void Bricks(Pen& B, const Plan& P, const Plan::Scab& S, bool bFine)
 			{
 				const Block& Bk = BlockOf(P, S.Blk);
-				const double Off = bFine ? (S.Hang == 0 ? 0.013 : 0.01) : 0.05, Zm = Bk.bYard ? Bk.Zp - 0.4 : Bk.Zr, SkimMost = 0.5;
+				const double Off = bFine ? (S.Hang == 0 ? 0.013 : 0.01) : 0.05, Zm = Bk.bYard ? Bk.Zp - 0.4 : Bk.Zr, SkimMost = 0.5, Under = 0.8;
 				// (under a limewashed wall the damp leaves its salts on the bricks it bared: pale, within a step of the wall's
 				// own value from across the street; the bare mud house's are near its wall's already)
 				const double Pale = P.bMud ? 0.0 : 0.4;
@@ -11233,7 +11233,7 @@ namespace LandHouse
 					const double LoB = S.Hang == 0 ? std::min(0.128, R.Hi) : std::min(R.Lo + 0.023, R.Hi), HiB = std::max(LoB, R.Hi - 0.02);
 					// (a foot's upper half still skimmed with what is left of the wall's own coat, more of it the higher: its
 					// top within a step of the wall's value, its bricks bare only low down)
-					const Col Coat = S.Hang == 0 ? WallCol(P, Bk, C, std::max(0.0, R.Hi) + 0.03, 0) : P.Mud;
+					const Col Coat = S.Hang == 0 ? WallCol(P, Bk, C, std::max(0.0, R.Hi) + 0.03, 0) : P.Mud, Skim = Scaled(Coat, Under);
 					const double Thin = S.Hang == 0 ? Smooth(0.0, 0.7, EndsOf(S, St[I])) : 1.0;
 					double Was = R.Lo;
 					for (size_t J = 0; J < NR; ++J)
@@ -11245,9 +11245,9 @@ namespace LandHouse
 						const double Tone = Noise01(St[I] / 0.45, Z / 0.35, S.Seed ^ 0x12);
 						Col Cc = !bFine ? Scaled(Mixed(P.Brick, Joint, 0.35), 0.95 + 0.08 * Tone) : Q.Tone == 1 ? Scaled(Joint, S.Hang == 0 ? 0.95 : 0.85) : Q.Tone == 2 ? Lip : Scaled(Joint, (Q.Tone == 3 ? 0.84 : Q.Tone == 4 ? 0.7 : 0.94) + 0.1 * Tone);
 						// (the ground's dust on what stands in it)
-						Cc = Mixed(Cc, P.Dust, 0.42 * Smooth(0.3, 0.0, Z));
+						Cc = Mixed(Cc, P.Dust, (S.Hang == 0 ? 0.54 : 0.42) * Smooth(0.3, 0.0, Z));
 						// (and along its ends the coat not yet gone, thinner toward the middle)
-						if (S.Hang == 0) Cc = Mixed(Coat, Mixed(Mixed(Cc, Salt, Pale), Coat, SkimMost * Smooth(0.3, 1.0, Z / std::max(0.06, R.Hi))), Thin);
+						if (S.Hang == 0) Cc = Mixed(Coat, Mixed(Mixed(Cc, Salt, Pale), Skim, SkimMost * Smooth(0.3, 1.0, Z / std::max(0.06, R.Hi))), Thin);
 						Zs[I * NR + J] = Z;
 						Id[I * NR + J] = B.Vert(Skin(P, Bk, C, Z, Q.bEdge ? Flat : Off), WallN(P, Bk, C, std::min(Z, Zm)), Cc);
 					}
@@ -11272,11 +11272,11 @@ namespace LandHouse
 					return (I + ((K & 1) != 0 ? 0.5 : 0.0) + 0.1 * (Unit(Hash(Bk.Key ^ 0xB1D, static_cast<uint64_t>(K + 4096), static_cast<uint64_t>(I + 65536))) - 0.5)) * Bl;
 				};
 				// (a foot's brick: the wall's coat it is skimmed toward, and the band's top where it stands)
-				Col SkimTo = P.Mud;
+				Col SkimTo = P.Mud, SkimUnder = P.Mud;
 				double SkimHi = 1.0;
 				auto Put = [&](double Pm, double Z, const Col& C) {
 					const Column Cn = Along(Bk, Pm);
-					return B.Vert(Skin(P, Bk, Cn, Z, Lift), WallN(P, Bk, Cn, std::min(Z, Zm)), S.Hang == 0 ? Mixed(SkimTo, Mixed(Mixed(C, Salt, Pale), SkimTo, SkimMost * Smooth(0.3, 1.0, Z / SkimHi)), Smooth(0.0, 0.7, EndsOf(S, Pm))) : C);
+					return B.Vert(Skin(P, Bk, Cn, Z, Lift), WallN(P, Bk, Cn, std::min(Z, Zm)), S.Hang == 0 ? Mixed(SkimTo, Mixed(Mixed(C, Salt, Pale), SkimUnder, SkimMost * Smooth(0.3, 1.0, Z / SkimHi)), Smooth(0.0, 0.7, EndsOf(S, Pm))) : C);
 				};
 				const int K0 = static_cast<int>(std::floor((Zlo - 0.02) / Ch)), K1 = static_cast<int>(std::ceil((Zhi + 0.02) / Ch));
 				const int I0 = static_cast<int>(std::floor(S.Pm0 / Bl)) - 1, I1 = static_cast<int>(std::ceil(S.Pm1 / Bl)) + 1;
@@ -11313,6 +11313,7 @@ namespace LandHouse
 						{
 							SkimHi = std::max(0.06, BareOf(P, Bk, S, Pm[2]).Hi);
 							SkimTo = WallCol(P, Bk, Along(Bk, Pm[2]), SkimHi + 0.03, 0);
+							SkimUnder = Scaled(SkimTo, Under);
 						}
 						if (bWhole && Unit(Hash(Kb, 3)) < 0.14)
 						{
