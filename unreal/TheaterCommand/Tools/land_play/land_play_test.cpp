@@ -2181,9 +2181,9 @@ int main(int argc, char** argv)
 	}
 	{
 		// A support team's gun is heard on its own row by the gun drawn (land.teamMg, Noise.Mount the file, release 2's
-		// "teamguns"), at the burst the ground scene gives it (LandTeamGun::BurstOf): every take on its row, long enough for
-		// the burst, save the Maxim's (9 rounds at 10 a second against its take's 0.86 s); a hmg burst with no file, or a
-		// file with no row, takes its army's row as before.
+		// "teamguns"), at the burst the ground scene gives it (LandTeamGun::BurstOf, the ground thread's 4252a1c7: the
+		// Maxim's 8 rounds at 10 a second and the Vickers' 6 at 8, inside the Maxim take's 0.86 s of firing): every take on
+		// its row long enough for the burst; a hmg burst with no file, or a file with no row, takes its army's row as before.
 		struct TeamShot
 		{
 			const char* File;
@@ -2192,7 +2192,7 @@ int main(int argc, char** argv)
 			double PerSecond;
 		};
 		const TeamShot Shots[] = { { "HmgMG42", "GER", 18, 20.0 }, { "HmgMG34", "GER", 13, 15.0 }, { "HmgM1919", "USA", 7, 8.0 },
-			{ "HmgM1917", "POL", 7, 8.0 }, { "HmgVickers", "UK", 7, 8.0 }, { "HmgMaxim", "SOV", 9, 10.0 }, { "HmgType92", "JAP", 6, 7.5 },
+			{ "HmgM1917", "POL", 7, 8.0 }, { "HmgVickers", "UK", 6, 8.0 }, { "HmgMaxim", "SOV", 8, 10.0 }, { "HmgType92", "JAP", 6, 7.5 },
 			{ "HmgHotchkiss", "FRA", 6, 7.5 }, { "HmgBreda37", "ITA", 6, 7.5 }, { "", "GER", 10, 20.0 }, { "HmgNoRow", "SOV", 8, 10.0 } };
 		LandSound::Mixer Probe;
 		std::string ProbeError;
@@ -2251,8 +2251,8 @@ int main(int argc, char** argv)
 		if (!ProbeError.empty()) Fault(("the probe mix for land.teamMg did not load: " + ProbeError).c_str());
 		if (Heard < 40) Fault("a support team's close burst was not heard");
 		if (OffRow > 0) Fault("a support team's gun played a take off its row (land.teamMg) or, with none, off its army's");
-		// (the Maxim's 4 bursts play whole until her burst is 8 rounds; any other gun's row holds a take too short)
-		if (Probe.TeamMgWhole > 4) Fault("a support team's burst played a take shorter than the burst, whole, beyond the Maxim's");
+		// (no burst longer than its take's firing: a row holds a take too short for its gun's bursts)
+		if (Probe.TeamMgWhole > 0) Fault("a support team's burst played a take shorter than the burst, whole (its row holds a take too short)");
 	}
 	{
 		// A sniper's aimed round (the rules' sn; release 2's sniper teams) is heard as a sniper's (distance.sniper): near,
