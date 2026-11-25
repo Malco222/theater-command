@@ -40,7 +40,7 @@ import type { Corps, Game, Region } from './types';
 import { PACIFIC, freezeAt, readyRules, type ReadyRules } from './pacific';
 import { RIVALS, asGoes, characterOf, monthly, ops, strengthAsked, type Op } from './staff';
 import { leash, stopDef } from './history';
-import { FLEETS, NAVY, fleetReach, fleetsOf, orderedTo, seaPath, shipCount } from './navy';
+import { FLEETS, NAVY, fleetReach, fleetsOf, inPassage, orderedTo, seaPath, shipCount } from './navy';
 import { followUp, reckon } from './ashore';
 import { WORLD } from './world';
 import { allied, atWar } from './game';
@@ -133,7 +133,8 @@ export function readiness(g: Game, nat: string): Readiness | null {
   const s = op.strikes?.[0];
   const f = s ? fleetsOf(g, nat).find((x) => x.name === s.fleet) : undefined;
   const target = s ? g.byName[s.harbour] : undefined;
-  const fleet = !s || (!!f && !!target && shipCount(f.ships) > 0 && f.ready >= FLEETS.ai.ready && fleetReach(g, f).some((z) => target.seas.includes(z)));
+  // (A fleet in passage strikes nothing until it comes in: release 2, the far chart.)
+  const fleet = !s || (!!f && !!target && shipCount(f.ships) > 0 && !inPassage(f) && f.ready >= FLEETS.ai.ready && fleetReach(g, f).some((z) => target.seas.includes(z)));
   // 2. The landing forces on their quays.
   const F = forces(g, nat, op, foe);
   const onQuays = F.filter((x) => x.quay);
@@ -175,7 +176,8 @@ export function readinessMonth(g: Game, nat: string): void {
   // it flies is still meant: one that leaves America out flies none.)
   if (m >= R.gather.after && (!stopDef(g).ambitions || (op.strikes ?? []).some((s) => s.fleet === R.gather.fleet))) {
     const f = fleetsOf(g, nat).find((x) => x.name === R.gather.fleet);
-    if (f) orderedTo(g, f, R.gather);
+    // (Beyond a month's steaming the gathering is a voyage: release 2, the far chart, the ruling of 15:48Z, 3.)
+    if (f) orderedTo(g, f, R.gather, undefined, true);
   }
   if (m < R.window[0]) return;
   const now = readiness(g, nat);
@@ -215,11 +217,12 @@ export function gatherMonth(g: Game, nat: string): void {
   const began = g.flags[GATHERED] !== undefined;
   if (byHand(g, nat, 'navy') || atWar(g, nat, target.ctrl)) { if (began) g.flags[GATHERED] = -1; return; }
   const f = fleetsOf(g, nat).find((x) => x.name === R.gather.fleet);
-  const there = (): boolean => !!f && g.regions[f.base]?.name === R.gather.base;
+  // (In passage there, it is not there yet: release 2, the far chart.)
+  const there = (): boolean => !!f && g.regions[f.base]?.name === R.gather.base && !inPassage(f);
   const m = g.turn - freeze;
   if (m > R.window[1]) {
-    if (began) { if (f && s.home && there()) orderedTo(g, f, s.home); g.flags[GATHERED] = -1; }
+    if (began) { if (f && s.home && there()) orderedTo(g, f, s.home, undefined, true); g.flags[GATHERED] = -1; }
     return;
   }
-  if (m >= R.gather.after && f && (orderedTo(g, f, R.gather) || there())) g.flags[GATHERED] ??= g.turn;
+  if (m >= R.gather.after && f && (orderedTo(g, f, R.gather, undefined, true) || there())) g.flags[GATHERED] ??= g.turn;
 }

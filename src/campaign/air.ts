@@ -3088,7 +3088,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
         // (Only the groups that carried bombs struck it: an escort's fighters reach no further than the bombers they guard.)
         const from = a.att.filter((y) => y.bmr > 0).map((y) => {
           const c = carrierOf(g, y.f), R = reach(y.f, g, raidJob(m));
-          return c && atSea(c) ? { sea: c.zone, field: -1, km: R.bmrRange } : { sea: -1, field: c ? c.base : y.f.base, km: R.bmrRange };
+          // (A carrier's strikers are booked with its fleet and the sea it is on, or its harbour's sea: the staff that was
+          // struck reckons where that fleet could be next month: navy.ts strikeThreat.)
+          return c ? { sea: atSea(c) ? c.zone : c.home, field: -1, km: R.bmrRange, nat: y.f.nat, fleet: c.id } : { sea: -1, field: y.f.base, km: R.bmrRange, nat: y.f.nat };
         });
         const w = a.att.reduce((s, y) => s + y.ftr + y.bmr, 0) * (airWeight(g, nat) ?? 1);
         x.anchor = [...(x.anchor ?? []).filter((e) => e.t >= g.turn - 1), { t: g.turn, at: target, n: sunk, lost: had > 0 ? sunk / had : 0, w, from }];

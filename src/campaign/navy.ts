@@ -5,6 +5,7 @@
 
 import { chartDist, seaDist } from './wrap';
 import { byHand } from './depth';
+import { SIGHT, sightOf } from './intel';
 import mapData from '../generated/campaign-map.json';
 import americasMap from '../generated/world-americas.json';
 import wholeMap from '../generated/world-whole.json';
@@ -19,10 +20,10 @@ import { clamp } from '../core/math';
 /** The wider world's chart: the Americas with their cities, or the whole world once the far stage is on (stage.ts). */
 const worldMap = FAR_STAGE ? wholeMap : americasMap;
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
-import { AIR, CARRIERS, airPool, assessAir, carrierRules, fieldNear, groupOverSea, groupsOver, km, nearRow, seaKm, skyDenies, skyOver, skyReach } from './air';
+import { AIR, CARRIERS, airPool, airRange, assessAir, carrierRules, fieldNear, groupOverSea, groupsOver, hasAirfield, km, nearRow, seaKm, skyDenies, skyOver, skyReach } from './air';
 import { dayShare, oddsOf, skyAtSea, skySupport, weatherOn, zoneOfSea } from './weather';
 import { galeConvoyLoss, galeLaneLoss, galeSeas } from './heavyseas';
-import { capOver, deckWorth, fleetKnown, syncWings, wingShare, wingStep } from './carriers';
+import { capOver, deckWorth, fleetFound, fleetKnown, syncWings, wingShare, wingStep } from './carriers';
 import { COMMAND } from './commanders';
 import { nameLosses, nameSide } from './hulls';
 import { storyConvoy, storyEdge, storySea } from './stories';
@@ -248,6 +249,9 @@ export const atSea = (f: Fleet): boolean => f.stance !== 'port';
  * attacked as any fleet at sea; it strikes, patrols, escorts and holds no sea. No fleet is in passage on the old chart.
  */
 export const inPassage = (f: Fleet): boolean => f.stance === 'passage';
+
+/** A fleet in passage with no harbour it can reach, waiting at sea until one opens (release 2, the far chart: goAdrift). */
+export const adrift = (f: Fleet): boolean => f.stance === 'passage' && f.passage?.adrift !== undefined;
 /** A fleet at sea that holds the sea it is on: every one but a fleet in passage, which is only crossing it. */
 const holdsSea = (f: Fleet): boolean => atSea(f) && f.stance !== 'passage';
 export const fleetsOf = (g: Game, nat: string): Fleet[] => g.fleets.filter((f) => f.nat === nat);
@@ -2151,17 +2155,35 @@ function seaSteps(g: Game, f: Sailing): Int16Array {
 }
 
 /**
+ * Whether the Pacific planner's lanes are laid (release 2, the far chart: far-rows.ts lays the Hawaii, South Pacific and
+ * Cape lanes in one, so the Hawaii lane stands for all three; the Japan and Pacific thread, 15:56Z, 25 November 2026).
+ */
+export const lanesLaid = (g: Game): boolean => seaRoutes(g).some((r) => r.id === 'america-hawaii');
+
+/**
  * Whether a shipping lane is one for a fleet's page (release 2, the far chart; the design director's ruling of 04:33Z,
- * 25 November 2026, 3, finding 50 of the 1.5.1 playtest): on the whole world only a lane within two months' steaming of
- * its base (two reaches of seas, through straits open to it), or the one it escorts, is listed. A fleet in passage
- * lists none. Every lane elsewhere.
+ * 25 November 2026, 3, finding 50 of the 1.5.1 playtest): on the whole world, until the Pacific lanes are laid, only a
+ * lane within two months' steaming of its base (two reaches of seas, through straits open to it), or the one it
+ * escorts, is listed; once they are laid, every lane (his ruling of 15:48Z, 4), nearest first (laneSteps). A fleet in
+ * passage lists none. Every lane elsewhere.
  */
 export function laneNear(g: Game, f: Fleet, lane: { id: string; zones: number[] }): boolean {
   if (!farOn(g) || (f.stance === 'escort' && f.lane === lane.id)) return true;
   if (inPassage(f)) return false;
+  if (lanesLaid(g)) return true;
   const d = seaSteps(g, f);
   return lane.zones.some((z) => d[z] > 0 && d[z] <= 2 * NAVY.range);
 }
+
+/** How many seas a lane's nearest sea lies from a fleet's base (its own sea 1), through straits open to it: for the page's order, nearest first. Infinity where none is reached. */
+export function laneSteps(g: Game, f: Fleet, lane: { zones: number[] }, d: Int16Array = seaSteps(g, f)): number {
+  let m = Infinity;
+  for (const z of lane.zones) if (d[z] > 0 && d[z] < m) m = d[z];
+  return m;
+}
+
+/** A fleet's sea steps from its base, for laneSteps over many lanes. */
+export const laneStepsFrom = (g: Game, f: Fleet): Int16Array => seaSteps(g, f);
 
 /**
  * Whether a fleet's tie to its home and its beat has lapsed (ruling 233 rider b598(2), for every tied fleet in every
@@ -2284,12 +2306,25 @@ export function canSailTo(g: Game, f: Fleet, r: Region): boolean {
  * marked 'ally', whether the harbour's holder is one whose harbour the fleet may take. False for a fleet the player
  * keeps by hand.
  */
-export function orderedTo(g: Game, f: Fleet, m: { base: string; port: string; home: string; words: string }, friend?: (holder: string) => boolean): boolean {
+export function orderedTo(g: Game, f: Fleet, m: { base: string; port: string; home: string; words: string }, friend?: (holder: string) => boolean, voyage = false): boolean {
   // (A fleet the player has ordered himself is his until he hands it back: no book row moves it, as no admiral does.
   // 1.5.1, Brian 24 November 2026 18:32Z, "they dont stay where they were moved"; navalAI skips it the same way.)
   if (keptByHand(g, f)) return false;
   const r = g.byName[m.base], sea = zoneOf(g, m.home);
   if (!r || (r.ctrl !== f.nat && !friend?.(r.ctrl)) || r.id === f.base || sea < 0) return false;
+  // (`voyage`, release 2, the far chart: the readiness gather and a strike's way home are made in their month only
+  // within a month's steaming, and beyond it are a voyage, as any move of base is, from the sea it is on: the design
+  // director's ruling of 15:48Z, 25 November 2026, 3. With no open sea there, no move.)
+  const way = voyage && farOn(g) ? voyageWay(g, f, r) : null;
+  if (voyage && farOn(g) && !way) return false;
+  if (way && way.length > NAVY.range) {
+    const was = inPassage(f) && f.passage ? { base: f.passage.from, port: f.passage.fromPort, home: f.passage.fromHome } : { base: f.base, port: f.port, home: f.home };
+    f.base = r.id; f.port = m.port; f.home = sea; f.station = sea;
+    delete f.lane;
+    setOut(g, f, way, was, false);
+    syncWings(g);
+    return true;
+  }
   f.base = r.id; f.port = m.port; f.home = sea; f.zone = sea; f.station = sea; f.stance = 'port';
   delete f.lane;
   // (The book's dated moves are the record's, and are made in their month as the book's own sailings are: one ends a
@@ -2325,7 +2360,8 @@ export function bookBaseOf(g: Game, f: Fleet): { region: Region; words: string; 
 
 /** Friendly ports a fleet could move its base to. */
 export function baseTargets(g: Game, f: Fleet): Region[] {
-  return g.regions.filter((r) => r.port && r.seas.length > 0 && r.id !== f.base && allied(g, f.nat, r.ctrl) && canSailTo(g, f, r));
+  // (Waiting at sea with no harbour it could reach, its own base is one too, once a way there opens: release 2.)
+  return g.regions.filter((r) => r.port && r.seas.length > 0 && (r.id !== f.base || adrift(f)) && allied(g, f.nat, r.ctrl) && canSailTo(g, f, r));
 }
 
 /**
@@ -2337,7 +2373,7 @@ export function baseTargets(g: Game, f: Fleet): Region[] {
  * wherever it goes. A fleet already in passage is put on a new way from where it is.
  */
 export function rebase(g: Game, f: Fleet, r: Region, instant = false): boolean {
-  if (!r.port || !r.seas.length || r.id === f.base || !allied(g, f.nat, r.ctrl) || !canSailTo(g, f, r)) return false;
+  if (!r.port || !r.seas.length || (r.id === f.base && !adrift(f)) || !allied(g, f.nat, r.ctrl) || !canSailTo(g, f, r)) return false;
   const way = !instant && farOn(g) ? voyageWay(g, f, r) : null;
   if (!instant && farOn(g) && !way) return false;
   const was = inPassage(f) && f.passage ? { base: f.passage.from, port: f.passage.fromPort, home: f.passage.fromHome } : { base: f.base, port: f.port, home: f.home };
@@ -2416,8 +2452,8 @@ export const moveCost = (g: Game, f: Fleet, r: Region): number => voyageMonths(g
 /** The sea a fleet in passage is on in a month of its voyage: the last sea of the reach it has steamed by then. */
 const passageSea = (p: NonNullable<Fleet['passage']>, turn: number): number => p.way[Math.min((turn - p.set + 1) * NAVY.range, p.way.length) - 1];
 
-/** The sea a fleet in passage steams onto at the next month's opening, where that month's dangers meet it; -1 when it comes in then. */
-export const passageNext = (g: Game, f: Fleet): number => (f.passage && g.turn + 1 < f.passage.due ? passageSea(f.passage, g.turn + 1) : -1);
+/** The sea a fleet in passage steams onto at the next month's opening, where that month's dangers meet it; -1 when it comes in then. One waiting at sea with no harbour (goAdrift) stays where it is. */
+export const passageNext = (g: Game, f: Fleet): number => (adrift(f) ? f.zone : f.passage && g.turn + 1 < f.passage.due ? passageSea(f.passage, g.turn + 1) : -1);
 
 /**
  * Sets a fleet out in passage on a way longer than its reach, its base, port and home already the new harbour's: at sea
@@ -2487,12 +2523,54 @@ export function anchorLoss(g: Game, f: Fleet): number {
   return Math.min(1, anchorStrikes(g, f).reduce((s, e) => s + e.lost, 0));
 }
 
-/** Whether a harbour lies beyond the reach of every strike on a fleet at anchor this month and last, from where its strikers were seen to fly. */
-function outOfStrikes(g: Game, f: Fleet, r: Region): boolean {
-  for (const e of anchorStrikes(g, f)) for (const o of e.from) {
-    const d = o.sea >= 0 ? seaKm(g, r.id, o.sea) : o.field >= 0 && g.regions[o.field] ? km(g, o.field, r.id) : Infinity;
-    if (d <= o.km) return false;
+/**
+ * Where the enemy could strike a fleet's harbour from next month, at its side's own sight, never where its forces truly
+ * are (the design director's rulings of 15:48Z and 16:05Z, 25 November 2026, 1; every nation). Each enemy carrier fleet
+ * its side has reported this month, identified or not, from where it is reported (carriers.ts fleetFound), and those
+ * that struck it at anchor (this month and last, at the harbour it lies in) and are not reported now, from where the
+ * strike showed them: each with a month's steaming on, through straits open to them, and the reach of its strike
+ * aircraft. A sighting with nothing kept of it is not placed. And the enemy's fields: where its side's sight shows them
+ * (intel.ts sightOf, the province seen whole), each enemy group with strike aircraft on its field, with its reach;
+ * beyond its sight, every enemy field it knows of, with the reach of the strike types it has met (the strikes from land
+ * in its book); and the fields the strikers flew from, with theirs. `seas`: the reach from each sea; `fields`: the
+ * reach from each field.
+ */
+export function strikeThreat(g: Game, f: Fleet): { seas: Map<number, number>; fields: Map<number, number> } {
+  const seas = new Map<number, number>(), fields = new Map<number, number>();
+  const steam = (from: number[], nat: string | undefined, R: number): void => {
+    const d = new Int16Array(g.seas.length).fill(-1), q: number[] = [];
+    for (const z of from) if (z >= 0 && d[z] < 0) { d[z] = 1; q.push(z); }
+    for (let i = 0; i < q.length; i++) {
+      const z = q[i];
+      if ((seas.get(z) ?? -1) < R) seas.set(z, R);
+      if (d[z] >= NAVY.range) continue;
+      for (const j of g.seas[z].adj) if (d[j] < 0 && (!nat || canPass(g, z, j, nat))) { d[j] = d[z] + 1; q.push(j); }
+    }
+  };
+  const field = (id: number, R: number): void => { if (id >= 0 && R > 0 && (fields.get(id) ?? -1) < R) fields.set(id, R); };
+  const reported = (c: Fleet): boolean => shipCount(c.ships) > 0 && fleetFound(g, c, f.nat) !== 'none';
+  const book = anchorStrikes(g, f);
+  let met = 0;
+  for (const e of book) for (const o of e.from) {
+    if (o.sea < 0) { field(o.field, o.km); met = Math.max(met, o.km); continue; }
+    const c = o.fleet !== undefined ? g.fleets.find((x) => x.id === o.fleet) : undefined;
+    if (!c || !reported(c)) steam([o.sea], o.nat ?? c?.nat, o.km);
   }
+  for (const c of g.fleets) {
+    if (c.ships.cv <= 0 || !atWar(g, c.nat, f.nat) || !reported(c)) continue;
+    const w = g.airFleets.find((a) => a.ship === c.id && a.bmr > 0);
+    if (w) steam(atSea(c) ? [c.zone] : c.base >= 0 ? g.regions[c.base].seas : [c.home], c.nat, airRange(w, g, 'harbour').bmr);
+  }
+  const sight = sightOf(g, f.nat);
+  for (const a of g.airFleets) if (a.ship === undefined && a.bmr > 0 && a.base >= 0 && atWar(g, a.nat, f.nat) && sight[a.base] === SIGHT.full) field(a.base, airRange(a, g, 'harbour').bmr);
+  if (met > 0) for (const r of g.regions) if (sight[r.id] !== SIGHT.full && atWar(g, r.ctrl, f.nat) && hasAirfield(g, r.id)) field(r.id, met);
+  return { seas, fields };
+}
+
+/** Whether a harbour lies beyond where the enemy could strike a fleet's harbour from next month (strikeThreat). */
+function outOfStrikes(g: Game, r: Region, T: ReturnType<typeof strikeThreat>): boolean {
+  for (const [z, R] of T.seas) if (seaKm(g, r.id, z) <= R) return false;
+  for (const [id, R] of T.fields) if (km(g, id, r.id) <= R) return false;
   return true;
 }
 
@@ -2504,9 +2582,10 @@ function outOfStrikes(g: Game, f: Fleet, r: Region): boolean {
 export function safeHarbour(g: Game, f: Fleet): Region | null {
   if (!anchorStrikes(g, f).length) return null;
   const here = g.regions[f.base];
+  const T = strikeThreat(g, f);
   let best: Region | null = null, bm = Infinity, bd = Infinity;
   for (const r of baseTargets(g, f)) {
-    if (closedTo(g, r.seas[0], f.nat) || !outOfStrikes(g, f, r)) continue;
+    if (closedTo(g, r.seas[0], f.nat) || !outOfStrikes(g, r, T)) continue;
     const m = voyageMonths(g, f, r), d = here ? chartDist(g, r, here) : 0;
     if (m < bm || (m === bm && d < bd)) { best = r; bm = m; bd = d; }
   }
@@ -2577,6 +2656,7 @@ export const cameIn = (g: Game, f: Fleet): boolean => g.flags[`fin:${f.id}`] ===
 /** Why a fleet in passage can do nothing else this month: the words for its page and its orders. */
 export function passageWhy(g: Game, f: Fleet): string {
   const p = f.passage;
+  if (adrift(f)) return `${cap(fleetName(f))} has no harbour it can reach: it waits at sea ${seaWhere(g.seas[f.zone]?.name ?? 'sea')}, open to attack, and strikes, patrols and escorts nothing until one opens.`;
   const due = p ? `, due in ${turnToDate(p.due).label}` : '';
   return `${cap(fleetName(f))} is in passage to ${f.port}, at sea on the way${due}: it strikes, patrols and escorts nothing until it comes in.`;
 }
@@ -2603,6 +2683,25 @@ function steamPassages(g: Game, nat: string): void {
     if (p.set >= g.turn) continue;
     // (In harbour at once, within its reach, it lies there this month as a fleet that comes in does: cameIn.)
     const inNow = (): void => { if (g.fleets.includes(f) && !inPassage(f)) g.flags[`fin:${f.id}`] = g.turn; };
+    // Waiting at sea with no harbour it could reach (goAdrift): the player's fleet waits for his order, his navy his
+    // own. A staff's, and his admirals', make for a harbour as soon as one opens: its own base again, by a way open to
+    // it; else the harbour it left; else the nearest it can reach, an ally's too.
+    if (p.adrift !== undefined) {
+      if (waitsForHim(g, f)) continue;
+      const base = f.base >= 0 ? g.regions[f.base] : undefined;
+      const way = base && allied(g, nat, base.ctrl) ? voyageWay(g, f, base) : null;
+      if (!way) {
+        if (!turnBack(g, f)) newBase(g, f, farOn(g), 'With a way open to it at last');
+        inNow();
+        continue;
+      }
+      delete p.adrift;
+      p.way = way;
+      p.set = g.turn;
+      p.due = g.turn + voyageOf(way.length) - 1;
+      if (way.length > NAVY.range) headline(g, 'info', `${cap(fleetName(f))} finds its way open again, and steams for ${f.port}, ${way.length} seas off, due in ${turnToDate(p.due).label}.`, nat, f.base);
+      // (It steams its first reach of the way from here, or comes in at once within it.)
+    }
     if (f.base >= 0 && !allied(g, nat, g.regions[f.base].ctrl)) { newBase(g, f); inNow(); continue; }
     if (wayShut(g, f, p)) {
       const way = voyageWay(g, f, g.regions[f.base]);
@@ -2968,7 +3067,9 @@ export function navalUpkeep(g: Game, nat: string): void {
     // A tie lapses the month its home falls, or once its beat is out of reach (ruling 233 rider b598(2)). Read before
     // a fallen base is moved: newBase's own line of news tells the base's loss, and the tie goes with it.
     if (tieLapses(g, f)) f.tied = false;
-    if (f.base >= 0 && !allied(g, nat, g.regions[f.base].ctrl) && !newBase(g, f)) continue;
+    // (A fleet waiting at sea with no harbour it can reach was weighed at its passage this month, and a player's waits for
+    // his order: release 2, the far chart. One that newBase leaves waiting at sea, not scuttled, has its month at sea.)
+    if (f.base >= 0 && !allied(g, nat, g.regions[f.base].ctrl) && !adrift(f) && !newBase(g, f) && !g.fleets.includes(f)) continue;
     // (A fleet in passage keeps on its way in peace as in war: release 2, the far chart.)
     if (!n.atWar.length) { if (!inPassage(f)) { f.stance = 'port'; f.zone = f.home; } delete f.cruised; }
     // (Back from its month at sea into a war: it is at its base, and from here its admiral's.)
@@ -4147,10 +4248,58 @@ function newBase(g: Game, f: Fleet, form: boolean = farOn(g), shut = ''): boolea
     headline(g, 'event', shut ? `${shut}, ${fleetName(f)} makes for ${best.name} instead.` : `With ${old.name} lost, ${fleetName(f)} moves its base to ${best.name}.`, f.nat, best.id);
     return true;
   }
+  // (Release 2, the far chart: a fleet with no harbour it can reach is not scuttled, in passage or in harbour as its base
+  // falls. It puts to sea and waits there: goAdrift. No ship is kept in dock by repairs, so every ship can sail.)
+  if (farOn(g)) { goAdrift(g, f, shut || `With ${old.name} lost`); return false; }
   nameLosses(g, f.nat, f.name, f.ships, `scuttle:${g.turn}:${f.id}`); // the names go down with the ships (a record only)
   g.fleets.splice(g.fleets.indexOf(f), 1);
   if (shipCount(f.ships) >= 5) headline(g, 'event', `With no port left to it, ${fleetName(f)} is scuttled.`, f.nat, old.id, { arm: 'sea', lost: f.nat });
   return false;
+}
+
+/**
+ * A fleet that has no harbour it can reach (release 2, the far chart; the design director's rulings of 15:48Z and
+ * 16:05Z, 25 November 2026, 3): it is not scuttled. In passage it waits at sea where it is; in harbour as its base
+ * falls it puts to sea, off the harbour, and waits there; doing nothing and open to attack as any fleet in passage is,
+ * until a harbour opens to it (steamPassages). A staff's then makes for it, and so do the player's admirals with his
+ * navy handed to them; the player's own waits for his order. Only he scuttles it (scuttleFleet); a computer's staff
+ * scuttles it only under its nation's fall rules. With news once, as it begins to wait. `lead`: why, as the news opens.
+ */
+function goAdrift(g: Game, f: Fleet, lead: string): void {
+  if (adrift(f)) return;
+  const zone = atSea(f) ? f.zone : f.home;
+  const p = (f.passage ??= { from: f.base, fromPort: f.port, fromHome: f.home, way: [zone], set: g.turn, due: g.turn });
+  p.start ??= p.set;
+  p.adrift = g.turn;
+  p.way = [zone];
+  p.set = g.turn;
+  p.due = g.turn;
+  f.zone = zone;
+  f.stance = 'passage';
+  delete f.lane;
+  delete f.shadow;
+  delete f.shadowAt;
+  g.supplyDirty = true;
+  syncWings(g);
+  const his = f.nat === g.human ? (waitsForHim(g, f) ? ' Its page offers what it can still do: make for a harbour if one opens, or be scuttled.' : ' Its admirals will make for a harbour as soon as one opens; only your order scuttles it.') : '';
+  headline(g, 'event', `${lead}, ${fleetName(f)} has no harbour it can reach: it waits at sea ${seaWhere(g.seas[f.zone]?.name ?? 'sea')}, open to attack, until one opens.${his}`, f.nat, f.base);
+}
+
+/** True where a fleet waiting at sea with no harbour it can reach waits for its player's order: his navy his own, or this fleet kept by hand. */
+const waitsForHim = (g: Game, f: Fleet): boolean => f.nat === g.human && (byHand(g, f.nat, 'navy') || keptByHand(g, f));
+
+/**
+ * The player's order to scuttle a fleet of his that waits at sea with no harbour it can reach (goAdrift). False for any
+ * other fleet. Its ships go down, by name, with news.
+ */
+export function scuttleFleet(g: Game, f: Fleet): boolean {
+  if (f.nat !== g.human || !adrift(f)) return false;
+  nameLosses(g, f.nat, f.name, f.ships, `scuttle:${g.turn}:${f.id}`);
+  g.fleets.splice(g.fleets.indexOf(f), 1);
+  syncWings(g);
+  g.supplyDirty = true;
+  headline(g, 'event', `With no harbour it can reach, ${fleetName(f)} is scuttled at sea ${seaWhere(g.seas[f.zone]?.name ?? 'sea')} on your order.`, f.nat, undefined, { arm: 'sea', lost: f.nat });
+  return true;
 }
 
 /** Bombers flying from an enemy coast take their toll of a surface fleet that stays within their reach. */

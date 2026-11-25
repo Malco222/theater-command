@@ -859,7 +859,8 @@ export function plannedStrike(g: Game, nat: string, fleet: string, harbour: stri
   const rep = fly(g, nat, 'harbour', r.id, fleets, ':plan');
   if (!rep) return false;
   for (const f of fleets) { f.mission = 'harbour'; f.target = r.id; f.flew = g.turn; }
-  if (home) orderedTo(g, c, home);
+  // (Its way home is a voyage beyond a month's steaming: release 2, the far chart, the ruling of 15:48Z, 3.)
+  if (home) orderedTo(g, c, home, undefined, true);
   return true;
 }
 

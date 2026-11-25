@@ -437,9 +437,13 @@ describe("Japan's month of December 1941", () => {
     // force as one fleet, and the row goes where most of it went. (Two of its six carriers stood off Wake for three
     // days by the record; a part of the fleet is no row of the game's, and Wake's landing of the 23rd sails without it.)
     const force = g.fleets.find((x) => x.nat === 'JAP' && x.name === 'Mobile Fleet')!;
-    expect(news(g, 28, 'The carrier striking force comes home to Kure.')).toBe(true);
+    // (Beyond a month's steaming from the Kuriles, its way home is a voyage: release 2, the far chart, the design
+    // director's ruling of 15:48Z, 25 November 2026, 3. It sails for Kure, its base already Hiroshima's.)
+    expect(news(g, 28, 'The Mobile Fleet sails for its new base at Kure')).toBe(true);
     expect(g.regions[force.base].name).toBe('Hiroshima');
-    expect(['inland', 'echina']).toContain(g.seas[force.zone].key);
+    expect(force.port).toBe('Kure');
+    expect(force.stance).toBe('passage');
+    expect(force.passage!.way).toContain(force.zone);
     expect(force.bookBase).toBeUndefined();
     // The quays: the two divisions on Hainan, which Japan holds and does not own, have sailed.
     // (The 5th lands at Singora, Siam's shore, and is carried down the west coast within the month by the record's dated
