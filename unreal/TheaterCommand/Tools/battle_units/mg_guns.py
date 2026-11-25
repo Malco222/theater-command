@@ -346,6 +346,7 @@ class Gun:
         self.muzzle = None
         self.paints = {}
         self.hinge = None
+        self.bore = BORE                 # (the bore's height over the weapon bone's head, the fist on the rifle's wrist)
 
     def add(self, level, pieces):
         if isinstance(pieces, Piece):
@@ -613,8 +614,8 @@ def foot_of(g, s):
 def mg34():
     """The German machine gun of 1934 on (still carried beside the MG 42 to the end), on its bipod: 1.22 m, a rounded
     receiver with the hinged feed cover on top, the round barrel jacket pierced all round with rows of oval holes, the
-    front sight on its post at the jacket's front, the muzzle cone, the sloped butt and the pistol grip in dark brown
-    plastic, the rocking trigger, the rear sight on the jacket's back end, the bipod, a 50-round belt drum on the left."""
+    front sight on its post at the jacket's front, the muzzle cone, the sloped butt (a fifth of the gun) and the pistol
+    grip in dark red-brown plastic, the rocking trigger, the rear sight on the jacket's back end, the bipod, a 50-round belt drum on the left."""
     g = Gun("mg34", "MG 34")
     b = BORE
     g.paints = {"bakelite": BAKELITE, "brass": BRASS, "bullet": BULLET}
@@ -623,15 +624,16 @@ def mg34():
     g.hinge = hinge_of(b, -JA)
     le = leg_end(g.hinge)
     # --- the butt: sloped, its comb falling from the receiver toward the heel, a hand's hollow under it
-    butt = [(-0.360, 0.0, b - 0.020, 0.0210, 0.058), (-0.300, 0.0, b - 0.017, 0.0218, 0.055),
-            (-0.200, 0.0, b - 0.010, 0.0195, 0.040), (-0.120, 0.0, b - 0.004, 0.0170, 0.030),
-            (-0.040, 0.0, b + 0.004, 0.0210, 0.032)]
+    # (a fifth of the gun, as the MG 42's: 0.24 of 1.22 m; the art director's round 2)
+    butt = [(-0.360, 0.0, b - 0.020, 0.0210, 0.058), (-0.315, 0.0, b - 0.017, 0.0218, 0.054),
+            (-0.240, 0.0, b - 0.010, 0.0195, 0.040), (-0.170, 0.0, b - 0.004, 0.0170, 0.030),
+            (-0.125, 0.0, b + 0.002, 0.0200, 0.031)]
     g.add("near", loft_x(butt, 8, "bakelite", e=3.0, cap0=False, cap1=False))
     g.add("near", loft_x([(-0.366, 0.0, b - 0.020, 0.0215, 0.059), (-0.359, 0.0, b - 0.020, 0.0218, 0.060)], 8,
                          "steel", e=3.0, cap1=False))
     # --- the receiver: rounded, the feed cover over its fore part, the trigger housing under its rear
-    g.add("near", loft_x([(-0.040, 0.0, b + 0.008, 0.0240, 0.034), (0.270, 0.0, b + 0.008, 0.0240, 0.034)], 12,
-                         "steel", e=2.8))
+    g.add("near", loft_x([(-0.125, 0.0, b + 0.004, 0.0210, 0.030), (-0.060, 0.0, b + 0.008, 0.0240, 0.034),
+                          (0.270, 0.0, b + 0.008, 0.0240, 0.034)], 10, "steel", e=2.8, cap0=False))
     g.add("near", loft_x([(0.000, 0.0, b + 0.036, 0.0255, 0.012), (0.175, 0.0, b + 0.036, 0.0255, 0.012)], 8,
                          "steel", e=3.5))
     g.add("near", hole((0.09, 0.0, b + 0.0485), (0, 0, 1), (1, 0, 0), 0.075, 0.003, n=6))
@@ -675,14 +677,15 @@ def mg34():
     belt_drum(g, "near", 0.053, 0.147, -0.0775, b - 0.002, 0.050, n=10)
     feed_rounds(g, "near", 0.058, [(-0.036, b + 0.028), (-0.048, b + 0.037), (-0.060, b + 0.044)], n=4)
     g.grips["legs"] = [(np.array((le, 0.0, b - JA - 0.012)), np.array((0.580, 0.0, b - JA - 0.008)))]
-    line = [(-0.330, b - 0.076), (-0.170, b - 0.050), (-0.040, b - 0.028), (0.046, b - 0.046), (J0 - 0.002, b - 0.026),
+    line = [(-0.330, b - 0.076), (-0.240, b - 0.050), (-0.125, b - 0.028), (-0.040, b - 0.026), (0.046, b - 0.046),
+            (J0 - 0.002, b - 0.026),
             (le, b - JA - 0.012), (0.580, b - JA - 0.008), (J1, b - JA)]
     g.grips["under"] = [(np.array((x0, 0.0, z0)), np.array((x1, 0.0, z1))) for (x0, z0), (x1, z1) in zip(line, line[1:])]
-    g.grips["butt"] = [(np.array((-0.330, 0.0, b - 0.076)), np.array((-0.100, 0.0, b - 0.034)))]
+    g.grips["butt"] = [(np.array((-0.330, 0.0, b - 0.076)), np.array((-0.170, 0.0, b - 0.034)))]
     # ------------------------------------------------------------------------------------------- mid (LOD1) ----
-    g.add("mid", loft_x([(-0.362, 0.0, b - 0.020, 0.021, 0.058), (-0.200, 0.0, b - 0.010, 0.0195, 0.040),
-                         (-0.040, 0.0, b + 0.004, 0.021, 0.032)], 6, "bakelite", e=3.0, cap1=False))
-    g.add("mid", loft_x([(-0.040, 0.0, b + 0.012, 0.0245, 0.040), (0.270, 0.0, b + 0.012, 0.0245, 0.040)], 6, "steel",
+    g.add("mid", loft_x([(-0.362, 0.0, b - 0.020, 0.021, 0.058), (-0.240, 0.0, b - 0.010, 0.0195, 0.040),
+                         (-0.125, 0.0, b + 0.002, 0.020, 0.031)], 6, "bakelite", e=3.0, cap1=False))
+    g.add("mid", loft_x([(-0.125, 0.0, b + 0.012, 0.0245, 0.040), (0.270, 0.0, b + 0.012, 0.0245, 0.040)], 6, "steel",
                         e=3.0, cap0=False))
     g.add("mid", loft_path([gt - ga * 0.016, gt + ga * 0.105], [(1, 0, 0.40)] * 2, [(0.0145, 0.0185)] * 2, 4,
                            "bakelite", cap0=False))
@@ -694,9 +697,9 @@ def mg34():
     folded_bipod(g, "mid", b, -JA)
     belt_drum(g, "mid", 0.053, 0.147, -0.0775, b - 0.002, 0.050, n=8, shared=True)
     # ------------------------------------------------------------------------------------------- far (LOD2) ----
-    g.add("far", loft_x([(-0.362, 0.0, b - 0.020, 0.021, 0.056), (-0.040, 0.0, b + 0.004, 0.021, 0.032)], 4,
+    g.add("far", loft_x([(-0.362, 0.0, b - 0.020, 0.021, 0.056), (-0.125, 0.0, b + 0.002, 0.021, 0.032)], 4,
                         "bakelite", e=2.0, cap0=False, cap1=False, phase=math.pi / 4))
-    g.add("far", loft_x([(-0.040, 0.0, b + 0.008, 0.026, 0.036), (0.270, 0.0, b + 0.008, 0.026, 0.036),
+    g.add("far", loft_x([(-0.125, 0.0, b + 0.008, 0.026, 0.036), (0.270, 0.0, b + 0.008, 0.026, 0.036),
                          (0.852, 0.0, b, 0.019, 0.019)], 4, "steel", e=2.0, cap0=False, cap1=False, phase=math.pi / 4))
     g.add("far", loft_path([gt - ga * 0.016, gt + ga * 0.102], [(1, 0, 0.40)] * 2, [(0.015, 0.0185)] * 2, 3,
                            "bakelite", cap0=False, cap1=False))
