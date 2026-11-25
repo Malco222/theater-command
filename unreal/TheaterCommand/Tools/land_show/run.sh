@@ -39,6 +39,13 @@ $CXX ${LAND_SHOW_FLAGS:-} $STRICT -pthread "$HERE/land_pack_test.cpp" "$SRC/Batt
 if command -v clang++ >/dev/null 2>&1; then
   clang++ ${LAND_SHOW_FLAGS:-} $STRICT -Wunreachable-code-aggressive -pthread "$HERE/land_pack_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_pack_test_clang"
 fi
+# The men's worn look (release 2, tc.Look.Worn: Crowd::SetWearMix): off every look as before, on the field's soil on boots
+# and knees, rain, snow and each paint's roughness; the Mac's strict warnings. worn.sh also compares the looks with it off
+# against the code before it, to the byte.
+$CXX ${LAND_SHOW_FLAGS:-} $STRICT -pthread "$HERE/land_worn_men_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_worn_men_test"
+if command -v clang++ >/dev/null 2>&1; then
+  clang++ ${LAND_SHOW_FLAGS:-} $STRICT -Wunreachable-code-aggressive -pthread "$HERE/land_worn_men_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_worn_men_test_clang"
+fi
 STATUS=0
 for F in "$@"; do
   "$OUT/land_show_test" "$F" "$SOLDIERS" "$ROOT/Content/Data/LandBattles/armies.json" || STATUS=1
@@ -47,6 +54,7 @@ for F in "$@"; do
   "$OUT/land_vat_pack_test" "$F" "$SOLDIERS" "$ROOT/Content/Data/LandBattles/armies.json" "$SOLDIERS/pose_bank.json" || STATUS=1
 done
 "$OUT/land_pack_test" "$SOLDIERS" "$ROOT/Content/Data/LandBattles/armies.json" "$ROOT/Content/Models/Soldiers" || STATUS=1
+"$OUT/land_worn_men_test" "$SOLDIERS" "$ROOT/Content/Data/LandBattles/armies.json" "$SOLDIERS/pose_bank.json" || STATUS=1
 if [ "${LAND_MEN_PICTURES:-}" = "1" ]; then
   PICS="${LAND_MEN_PICTURES_OUT:-$OUT}"
   mkdir -p "$PICS"

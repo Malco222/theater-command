@@ -573,7 +573,7 @@ namespace LandMen
 			return std::atoi(YyyyMm.substr(0, 4).c_str()) * 12 + std::atoi(YyyyMm.substr(5, 2).c_str()) - 1;
 		}
 
-		void ReadMesh(const J& Src, Mesh& Out, bool bInk)
+		void ReadMesh(const J& Src, Mesh& Out, bool bInk, bool bWear)
 		{
 			const J& Pt = Src["points"];
 			Out.Points = static_cast<int>(Pt.Size() / 3);
@@ -610,6 +610,22 @@ namespace LandMen
 			{
 				Out.Tint.resize(N * 3);
 				for (size_t I = 0; I < N * 3; ++I) Out.Tint[I] = static_cast<float>(std::min(2.0, std::max(0.0, Ti.Number(I, 1.0))));
+			}
+			// (release 2's wear and weather, tc.Look.Worn, only where asked: a byte a point each, the value times 255; an
+			// array kept only whole, so a file without them, or with a short one, keeps the look it had)
+			if (bWear)
+			{
+				const auto Bytes = [&Src, N](const char* Key, double Default, std::vector<uint8_t>& Into) {
+					const J& A = Src[Key];
+					if (A.Size() != N) return;
+					Into.resize(N);
+					for (size_t I = 0; I < N; ++I) Into[I] = static_cast<uint8_t>(std::lround(std::clamp(A.Number(I, Default), 0.0, 1.0) * 255.0));
+				};
+				Bytes("shade_clean", 1.0, Out.ShadeClean);
+				Bytes("dirt", 0.0, Out.Dirt);
+				Bytes("dirt_wet", 0.0, Out.DirtWet);
+				Bytes("wet", 0.0, Out.Wet);
+				Bytes("snow", 0.0, Out.Snow);
 			}
 			if (bInk)
 			{
@@ -691,7 +707,7 @@ namespace LandMen
 	// -------------------------------------------------------------------------------------------------------------
 	// The soldier file.
 	// -------------------------------------------------------------------------------------------------------------
-	bool Soldier::Load(const std::string& Text, std::string& OutError)
+	bool Soldier::Load(const std::string& Text, std::string& OutError, bool bWear)
 	{
 		J Root;
 		if (!ReadJson(Text, Root, OutError)) return false;
@@ -700,12 +716,15 @@ namespace LandMen
 		// The file's own paints past the army's fifteen (new_paints: the medic's white and red, the sergeant's
 		// chevrons, the bazooka's rocket), each in the file's own colour: the armies' table names none of them.
 		OwnPaints.clear();
+		OwnPaintNames.clear();
 		const J& Np = Root["new_paints"];
 		for (size_t I = 0; I < Np.Size() && Np.K == J::Obj; ++I)
 		{
 			const int Ix = static_cast<int>(Np.Vals[I].Num0(-1.0));
 			const J& Rgb = Root["colours"][Np.Keys[I].c_str()];
 			if (Ix >= static_cast<int>(PaintNames().size()) && Ix < 256 && Rgb.K == J::Str) OwnPaints[Ix] = Hex(Rgb.S, 0x808080);
+			// (and its name, for the worn look's roughness and its gore paints: only with the wear)
+			if (bWear && Ix >= static_cast<int>(PaintNames().size()) && Ix < 256) OwnPaintNames[Ix] = Np.Keys[I];
 		}
 
 		const J& Bs = Root["bones"];
@@ -894,10 +913,10 @@ namespace LandMen
 			if (Src.IsNull())
 			{
 				// (An old file with no mid: the far stands in.)
-				if (L == Mid && !Root["far"].IsNull()) ReadMesh(Root["far"], Meshes[L], false);
+				if (L == Mid && !Root["far"].IsNull()) ReadMesh(Root["far"], Meshes[L], false, bWear);
 				continue;
 			}
-			ReadMesh(Src, Meshes[L], false);
+			ReadMesh(Src, Meshes[L], false, bWear);
 			const J& Ht = Root["helmet_tris"][LodNames[L]];
 			HelmetFirst[L] = static_cast<int>(Ht.Number(0, 0.0));
 			HelmetCount[L] = static_cast<int>(Ht.Number(1, 0.0));
@@ -938,6 +957,42 @@ namespace LandMen
 					OutError = "a triangle names a point the mesh does not have";
 					return false;
 				}
+			}
+		}
+
+		// (release 2's worn look, only with the wear: the face's detail face_detail.py laid in each level's tint, and the
+		// eyeballs' shade it set, Detail; a level's record kept only whole, every point one the level has, else none (the
+		// worn face then plain skin, as a file without the record). A mid read from the far, an old file's, the far's.)
+		for (int L = 0; L < LodCount; ++L) Detail[L] = FaceDetail();
+		if (bWear)
+		{
+			const J& Recs = Root["face_detail"]["lods"];
+			for (int L = 0; L < LodCount; ++L)
+			{
+				const J& Rec = Recs[L == Mid && Root["mid"].IsNull() ? "far" : LodNames[L]];
+				const J& At = Rec["at"];
+				const J& Mu = Rec["mul"];
+				const J& Eyes = Rec["shade"];
+				const double Pts = static_cast<double>(Meshes[L].Points);
+				FaceDetail Fd;
+				bool bOk = Mu.Size() == At.Size() * 3;
+				for (size_t K = 0; bOk && K < At.Size(); ++K)
+				{
+					const double P = At.Number(K, -1.0);
+					bOk = P >= 0.0 && P < Pts;
+					Fd.At.push_back(static_cast<int>(P));
+				}
+				for (size_t K = 0; bOk && K < Mu.Size(); ++K) Fd.Mul.push_back(static_cast<float>(std::clamp(Mu.Number(K, 1.0), 0.0, 2.0)));
+				for (size_t K = 0; bOk && Eyes.K == J::Obj && K < Eyes.Size(); ++K)
+				{
+					const double P = std::atof(Eyes.Keys[K].c_str()), Was = Eyes.Vals[K].Num0(-1.0);
+					bOk = P >= 0.0 && P < Pts && Was > 0.0;
+					Fd.EyeAt.push_back(static_cast<int>(P));
+					Fd.EyeWas.push_back(static_cast<float>(Was));
+				}
+				if (!bOk) continue;
+				MendEyes(Meshes[L], Fd);
+				Detail[L] = std::move(Fd);
 			}
 		}
 
@@ -988,7 +1043,7 @@ namespace LandMen
 			bool bOk = true;
 			for (int L = 0; L < LodCount; ++L)
 			{
-				ReadMesh(H[LodNames[L]], Fi.Lods[L], true);
+				ReadMesh(H[LodNames[L]], Fi.Lods[L], true, bWear);
 				for (size_t K = 0; K < static_cast<size_t>(Fi.Lods[L].Points); ++K)
 				{
 					bOk = bOk && Fi.Lods[L].Part[K] < Bones.size() && Fi.Lods[L].Part2[K] < Bones.size();
@@ -1091,6 +1146,44 @@ namespace LandMen
 			if (!bOk) Jn = Joined();
 		}
 		return true;
+	}
+
+	void Soldier::MendEyes(Mesh& Into, const FaceDetail& Fd)
+	{
+		// (face_detail.py set each eyeball's shade to the skin's about the eye, lighter than the socket's shadow shade.py
+		// had given it, and left its clean shadow at the old: the clean shadow moved by the same ratio, so with no dirt on
+		// it (the eyes have none) the worn look draws the eye as the baked look does)
+		const size_t N = static_cast<size_t>(Into.Points);
+		if (Into.ShadeClean.size() != N || Into.Shade.size() != N) return;
+		for (size_t K = 0; K < Fd.EyeAt.size() && K < Fd.EyeWas.size(); ++K)
+		{
+			const size_t P = static_cast<size_t>(Fd.EyeAt[K]);
+			if (P >= N || !(Fd.EyeWas[K] > 0.f)) continue;
+			const double Clean = static_cast<double>(Into.ShadeClean[P]) / 255.0 * static_cast<double>(Into.Shade[P]) / static_cast<double>(Fd.EyeWas[K]);
+			Into.ShadeClean[P] = static_cast<uint8_t>(std::lround(std::clamp(Clean, 0.0, 1.0) * 255.0));
+		}
+	}
+
+	bool Soldier::TakeFaceDetail(const Soldier& File)
+	{
+		bool bTook = false;
+		for (int L = 0; L < LodCount; ++L)
+		{
+			const FaceDetail& Fd = File.Detail[L];
+			const Mesh& Fm = File.Meshes[L];
+			Mesh& Me = Meshes[L];
+			if ((Fd.At.empty() && Fd.EyeAt.empty()) || !Detail[L].At.empty() || !Detail[L].EyeAt.empty() || Me.Points < Fm.Points) continue;
+			// (the file's points one for one: the same places and paints)
+			const size_t N = static_cast<size_t>(Fm.Points);
+			bool bSame = Me.Paint.size() >= N && Fm.Paint.size() >= N && Me.At.size() >= N * 3 && Fm.At.size() >= N * 3;
+			for (size_t P = 0; bSame && P < N; ++P) bSame = Me.Paint[P] == Fm.Paint[P];
+			for (size_t P = 0; bSame && P < N * 3; ++P) bSame = std::fabs(Me.At[P] - Fm.At[P]) < 1e-4f;
+			if (!bSame) continue;
+			Detail[L] = Fd;
+			MendEyes(Me, Fd);
+			bTook = true;
+		}
+		return bTook;
 	}
 
 	int Soldier::ClipIndex(const std::string& N) const
@@ -1948,6 +2041,9 @@ namespace LandMen
 			// and a half in the line; his patches and mismatched kit drawn where his own look is made, LookOf)
 			const ArmyColours* Fresh = nullptr;
 			float WornA = 0.f;
+			// (release 2, the worn look's wear (SetWearMix): his side's months in the line where uniforms age and the
+			// recording gives them, under 0 where not; his W, ManInfo::Wear, is read from it: SettleWear)
+			double WearMonths = -1.0;
 			std::vector<Stance> Stances;    // one per change of the track
 			std::vector<Shot> Shots;
 			bool bShotsDirty = false;
@@ -2092,6 +2188,9 @@ namespace LandMen
 		bool bWornLook = false;
 		bool bRunStyles = false;        // each man his own runner (SetRunStyles)
 		double WornForced = -1.0;
+		/** The men's worn look (release 2, tc.Look.Worn; SetWearMix): the field's soil, the rain, the snow, and whether each
+		 * point's roughness is written. Off unless set: every look as before. */
+		Crowd::WearMix Wear;
 		bool bSections = false;     // the recording has followers (the drill's sections)
 		GroundFn GroundAt;
 		SeatFn SeatAt;              // the men aboard vehicles: their benches (SetSeats)
@@ -2138,10 +2237,12 @@ namespace LandMen
 			const Soldier* S = nullptr;
 			const Bank* B = nullptr;
 			int Finish = -1;
+			float W = 0.6f;     // (the wear its look is made at: SetWearMix)
 			Look Lk;
 		};
 		std::vector<BankSet> BankSets;
-		std::map<std::tuple<const Variant*, int, const ArmyColours*>, int> BankSetOf;
+		// (far variant, finish, colours row, and the wear in twentieths with the worn look on, -1 with it off: WearKeyOf)
+		std::map<std::tuple<const Variant*, int, const ArmyColours*, int>, int> BankSetOf;
 		/** Mid men banked too (SetPoseBankMid): their pose is the bank's, and their mid mesh is baked as the far one. */
 		bool bBankMid = false;
 		/**
@@ -2154,6 +2255,7 @@ namespace LandMen
 		{
 			const Soldier* S = nullptr;
 			const ArmyColours* Colours = nullptr;
+			float W = 0.6f;     // (the wear its looks are made at: SetWearMix)
 			const Variant* Var[LodCount] = { nullptr, nullptr, nullptr };
 			const Bank* B[LodCount] = { nullptr, nullptr, nullptr };
 			Look Lk[LodCount];
@@ -2161,7 +2263,8 @@ namespace LandMen
 			std::vector<Look> Helmets[LodCount];   // each finish of the file at that level, alone
 		};
 		std::vector<BodySet> BodySets;
-		std::map<std::pair<const Variant*, const ArmyColours*>, int> BodySetOf;
+		// (far variant, colours row, and the wear in twentieths with the worn look on, -1 with it off: WearKeyOf)
+		std::map<std::tuple<const Variant*, const ArmyColours*, int>, int> BodySetOf;
 
 		/** Which levels show the bank's poses: far always (with a bank), mid when asked (SetPoseBankMid). */
 		bool BanksAt(Lod L) const { return L == Far || (L == Mid && bBankMid); }
@@ -2255,9 +2358,133 @@ namespace LandMen
 			return &Out;
 		}
 
+		// ---------------------------------------------------------------------------------------------------------
+		// The men's worn look (release 2, tc.Look.Worn; SetWearMix): the soldier files' own recipe for their wear and
+		// weather (each file's about_wear), with the field's soil for their dust, and each point's roughness by its part.
+		// ---------------------------------------------------------------------------------------------------------
+
+		/** A mesh carries the wear (read with it, Soldier::Load's bWear, and every array whole). */
+		static bool HasWear(const Mesh& M)
+		{
+			const size_t N = static_cast<size_t>(M.Points);
+			return N > 0 && M.ShadeClean.size() == N && M.Dirt.size() == N && M.DirtWet.size() == N && M.Wet.size() == N && M.Snow.size() == N;
+		}
+
+		/** Each paint's roughness by its part (the art director's 25 Nov numbers: cloth 0.85 to 0.95, skin 0.5 to 0.6,
+		 * helmets 0.6 to 0.7, leather 0.4 to 0.5, a weapon's metal 0.35 to 0.5), and whether it is gore (no dirt, wet or
+		 * snow on it), for a paint number of that file: the army's fifteen by the table, the file's own by their names
+		 * (Soldier::OwnPaintNames), any other the cloth's. */
+		struct PaintWear
+		{
+			float Rough[256];
+			bool bGore[256];
+		};
+		static void PaintWearOf(const Soldier& S, PaintWear& Out)
+		{
+			// (tunic, trousers, boots, lower, straps, helmet, pack, skin, wood, steel, coat, coat_dark, leather, blanket, hoof)
+			static const float ArmyRough[] = { 0.90f, 0.90f, 0.45f, 0.88f, 0.80f, 0.65f, 0.90f, 0.55f, 0.55f, 0.42f, 0.92f, 0.92f, 0.45f, 0.95f, 0.60f };
+			for (int Pa = 0; Pa < 256; ++Pa)
+			{
+				Out.Rough[Pa] = 0.90f;
+				Out.bGore[Pa] = false;
+			}
+			for (size_t Pa = 0; Pa < sizeof(ArmyRough) / sizeof(ArmyRough[0]) && Pa < PaintNames().size(); ++Pa) Out.Rough[Pa] = ArmyRough[Pa];
+			for (const auto& Own : S.OwnPaintNames)
+			{
+				if (Own.first < 0 || Own.first > 255) continue;
+				std::string Name = Own.second;
+				for (char& Ch : Name) Ch = static_cast<char>(std::tolower(static_cast<unsigned char>(Ch)));
+				const auto Has = [&Name](std::initializer_list<const char*> Words) {
+					for (const char* Wd : Words)
+					{
+						if (Name.find(Wd) != std::string::npos) return true;
+					}
+					return false;
+				};
+				float R = 0.90f;
+				if (Has({ "skin" })) R = 0.55f;
+				else if (Has({ "eye", "iris" })) R = 0.35f;
+				else if (Has({ "blood", "wound" })) R = 0.35f;
+				else if (Has({ "bone" })) R = 0.55f;
+				else if (Has({ "leather", "boot", "belt" })) R = 0.45f;
+				else if (Has({ "helmet" })) R = 0.65f;
+				else if (Has({ "steel", "metal", "brass", "badge", "buckle", "rocket", "tin" })) R = 0.42f;
+				else if (Has({ "glass", "lens" })) R = 0.30f;
+				Out.Rough[Own.first] = R;
+				Out.bGore[Own.first] = Has({ "wound", "bone", "blood" });
+			}
+		}
+
+		/** One point's wear as the mix reads it: its clean shadow, how dirty it is (d, his wear W in it), how wet it
+		 * darkens and how much snow it holds. A gore paint's, or a mesh without the wear (its roughness alone): none. */
+		struct WornAt
+		{
+			float Clean = 1.f, D = 0.f, Wet = 0.f, Snow = 0.f;
+		};
+		static WornAt WornOf(const Mesh& M, size_t P, const Crowd::WearMix& Wm, float W, bool bGore)
+		{
+			WornAt A;
+			A.Clean = static_cast<float>(M.ShadeClean[P]) / 255.f;
+			if (bGore) return A;
+			const float Dry = static_cast<float>(M.Dirt[P]) / 255.f, Rainy = static_cast<float>(M.DirtWet[P]) / 255.f;
+			A.D = (Dry + (Rainy - Dry) * Wm.Rain) * W;
+			A.Wet = static_cast<float>(M.Wet[P]) / 255.f;
+			A.Snow = static_cast<float>(M.Snow[P]) / 255.f;
+			return A;
+		}
+
+		/** The files' recipe (about_wear), sRGB 0 to 1: the paint (Rgb, 0xRRGGBB: the army's, the file's own or a
+		 * finish's ink) times the clean shadow, darkened where soaked, times K (the face's tone, tint and detail; null:
+		 * 1); toward the soil (the field's, wetter toward its mud, in the same shadow) by 0.85 x d; then toward the snow's
+		 * white. */
+		static void WornColour(const Crowd::WearMix& Wm, const WornAt& A, uint32_t Rgb, const float* K, uint8_t* Out)
+		{
+			// (the files' mud over their dust, 0.27, 0.21, 0.15 over 0.60, 0.54, 0.43: the field's soil wet; and snow)
+			static const float MudOfDust[3] = { 0.45f, 0.39f, 0.35f };
+			static const float SnowWhite[3] = { 0.92f, 0.94f, 0.97f };
+			for (int C = 0; C < 3; ++C)
+			{
+				const float Paint = static_cast<float>((Rgb >> (16 - 8 * C)) & 0xFF) / 255.f;
+				const float Base = Paint * A.Clean * (1.f - 0.35f * A.Wet * Wm.Rain) * (K ? K[C] : 1.f);
+				const float Soil = Wm.Soil[C] * (1.f + (MudOfDust[C] - 1.f) * Wm.Rain) * A.Clean;
+				float V = Base + (Soil - Base) * 0.85f * A.D;
+				const float White = SnowWhite[C] * (0.6f + 0.4f * A.Clean);
+				V += (White - V) * 0.9f * A.Snow * Wm.Snow;
+				Out[C] = static_cast<uint8_t>(std::min(255.f, std::max(0.f, V * 255.f + 0.5f)));
+			}
+		}
+
+		/** A point's roughness: its part's (PaintWear), duller with dry dust, a sheen soaked, toward 0.7 under snow; as the
+		 * byte the worn inks read (over 255), held to 1 to 253 (255 is theirs for "keep the ink's own"). */
+		static uint8_t WornRough(float Part, const WornAt& A, const Crowd::WearMix& Wm)
+		{
+			float R = Part;
+			R += (0.95f - R) * 0.6f * A.D * (1.f - Wm.Rain);
+			R += (0.55f - R) * 0.5f * A.Wet * Wm.Rain;
+			R += (0.70f - R) * A.Snow * Wm.Snow;
+			return static_cast<uint8_t>(std::clamp(std::lround(R * 255.f), 1L, 253L));
+		}
+
+		/** His wear (ManInfo::Wear) from his months in the line (WearMonths: 0 months 0.1, six weeks or more 1), 0.6 where
+		 * they are not known (the files' own baked look), the mix's where it forces one; in twentieths, as it keys his sets. */
+		void SettleWear(Man& M) const
+		{
+			double W = M.WearMonths > 0.0 ? std::clamp(0.1 + 0.9 * M.WearMonths / 1.5, 0.1, 1.0) : 0.6;
+			if (Wear.W >= 0.f) W = Wear.W;
+			M.Info.Wear = static_cast<float>(std::lround(std::clamp(W, 0.0, 1.0) * 20.0)) / 20.f;
+		}
+
+		/** What of his wear keys his sets (BankSetOf, BodySetOf): his W in twentieths with the worn look on; one -1 for all
+		 * with it off, so the sets are as many and numbered as before. */
+		int WearKeyOf(const Man& M) const { return Wear.bOn ? static_cast<int>(std::lround(M.Info.Wear * 20.f)) : -1; }
+
 		/** A look at level L: the variant's triangles and the finish's after them, each point's army colour (or the
-		 * finish's ink) times its shade; skin times the face's tone and its hair, brows and stubble times their tint. */
-		static void MakeLook(const Soldier& S, const Variant& V, const Finish* Fi, const ArmyColours& Colours, const Face* Fc, Lod L, Look& Lk)
+		 * finish's ink) times its shade; skin times the face's tone and its hair, brows and stubble times their tint.
+		 * With the worn look on (Wm.bOn), each point the files' wear recipe at his wear W (WornColour) where the mesh
+		 * carries it, the face's detail (Soldier::Detail) in place of the mesh's tint; and with Wm.bRough, each point's
+		 * roughness (Look::Rough). */
+		static void MakeLook(const Soldier& S, const Variant& V, const Finish* Fi, const ArmyColours& Colours, const Face* Fc, Lod L, const Crowd::WearMix& Wm, float W,
+			Look& Lk)
 		{
 			const int Body = V.M.Points;
 			const int Extra = Fi ? Fi->Lods[L].Points : 0;
@@ -2292,7 +2519,22 @@ namespace LandMen
 					for (int A = 0; A < 3; ++A) Mul[static_cast<size_t>(C) * 3 + static_cast<size_t>(A)] *= Lv.Tint[K * 3 + static_cast<size_t>(A)];
 				}
 			}
-			auto Put = [&](size_t At, uint32_t Rgb, float Shade, const float* K) {
+			// (the worn look, where the mesh carries the wear: the recipe leaves the mesh's own tint out, so the face's
+			// detail face_detail.py laid in it (Soldier::Detail: the lash lines, the eyes, the lips and folds, the brim's
+			// shade; a faceless file's hair and brows) goes into Mul with the face's tone and tint)
+			const bool bWorn = Wm.bOn && HasWear(V.M);
+			if (bWorn)
+			{
+				const Soldier::FaceDetail& Fd = S.Detail[L];
+				for (size_t K = 0; K < Fd.At.size() && K * 3 + 2 < Fd.Mul.size(); ++K)
+				{
+					const size_t Full = static_cast<size_t>(Fd.At[K]);
+					const int C = Full < V.ToCompact.size() ? V.ToCompact[Full] : -1;
+					if (C < 0) continue;
+					for (size_t Cc = 0; Cc < 3; ++Cc) Mul[static_cast<size_t>(C) * 3 + Cc] *= Fd.Mul[K * 3 + Cc];
+				}
+			}
+			auto Put =[&](size_t At, uint32_t Rgb, float Shade, const float* K) {
 				const float Ch[3] = { static_cast<float>((Rgb >> 16) & 0xFF), static_cast<float>((Rgb >> 8) & 0xFF), static_cast<float>(Rgb & 0xFF) };
 				for (int A = 0; A < 3; ++A)
 				{
@@ -2307,24 +2549,45 @@ namespace LandMen
 				const auto Own = S.OwnPaints.find(Pa);
 				return Own != S.OwnPaints.end() ? Own->second : Colours.Paint[0];
 			};
+			// (the worn look: the recipe where the mesh carries the wear, else as before; the roughness only where asked)
+			Lk.Rough.clear();
+			const bool bRough = Wm.bOn && Wm.bRough;
+			if (bRough) Lk.Rough.resize(static_cast<size_t>(Lk.Points));
+			PaintWear Pw;
+			if (Wm.bOn) PaintWearOf(S, Pw);
 			for (int P = 0; P < Body; ++P)
 			{
 				const size_t Pz = static_cast<size_t>(P);
 				const uint8_t Pa = V.M.Paint[Pz];
 				Lk.Paint[Pz] = Pa;
+				if (bWorn)
+				{
+					// (the mesh's own tint left out: but for the face's detail, in Mul above, it is the baked look's earthy
+					// cast, the dry look at W 0.6, which the recipe makes afresh from the field's soil)
+					const WornAt A = WornOf(V.M, Pz, Wm, W, Pw.bGore[Pa]);
+					WornColour(Wm, A, ColourOf(Pa), &Mul[Pz * 3], &Lk.Rgb[Pz * 3]);
+					if (bRough) Lk.Rough[Pz] = WornRough(Pw.Rough[Pa], A, Wm);
+					continue;
+				}
 				float K[3] = { Mul[Pz * 3], Mul[Pz * 3 + 1], Mul[Pz * 3 + 2] };
 				if (V.M.Tint.size() == static_cast<size_t>(Body) * 3)
 					for (size_t A = 0; A < 3; ++A) K[A] *= V.M.Tint[Pz * 3 + A];
 				Put(Pz, ColourOf(Pa), V.M.Shade.empty() ? 1.f : V.M.Shade[Pz], K);
+				if (bRough) Lk.Rough[Pz] = WornRough(Pw.Rough[Pa], WornAt(), Wm);
 			}
-			if (Fi) FinishColours(S, Fi->Lods[L], Colours, Lk, static_cast<size_t>(Body));
+			if (Fi) FinishColours(S, Fi->Lods[L], Colours, Wm, W, Lk, static_cast<size_t>(Body));
 		}
 
 		/** A finish's points' paints and colours (its ink, or the army's colour for its paint, times its shade and tint),
-		 * written into a look from point At on. */
-		static void FinishColours(const Soldier& S, const Mesh& Fm, const ArmyColours& Colours, Look& Lk, size_t At)
+		 * written into a look from point At on; with the worn look on, the ink or paint by the files' wear recipe where
+		 * the finish carries it, and with Wm.bRough each point's roughness (into Lk.Rough, already made whole). */
+		static void FinishColours(const Soldier& S, const Mesh& Fm, const ArmyColours& Colours, const Crowd::WearMix& Wm, float W, Look& Lk, size_t At)
 		{
 			const size_t ArmyPaints = PaintNames().size();
+			const bool bWorn = Wm.bOn && HasWear(Fm);
+			const bool bRough = Wm.bOn && Wm.bRough && Lk.Rough.size() >= At + static_cast<size_t>(Fm.Points);
+			PaintWear Pw;
+			if (Wm.bOn) PaintWearOf(S, Pw);
 			for (int P = 0; P < Fm.Points; ++P)
 			{
 				const size_t Pz = static_cast<size_t>(P);
@@ -2339,6 +2602,14 @@ namespace LandMen
 					const auto Own = S.OwnPaints.find(Pa);
 					Rgb = Own != S.OwnPaints.end() ? Own->second : Colours.Paint[0];
 				}
+				if (bWorn)
+				{
+					const WornAt A = WornOf(Fm, Pz, Wm, W, Pw.bGore[Pa]);
+					WornColour(Wm, A, Rgb, nullptr, &Lk.Rgb[(At + Pz) * 3]);
+					if (bRough) Lk.Rough[At + Pz] = WornRough(Pw.Rough[Pa], A, Wm);
+					continue;
+				}
+				if (bRough) Lk.Rough[At + Pz] = WornRough(Pw.Rough[Pa], WornAt(), Wm);
 				const float Shade = Fm.Shade.empty() ? 1.f : Fm.Shade[Pz];
 				const float* K = Fm.Tint.size() == static_cast<size_t>(Fm.Points) * 3 ? &Fm.Tint[Pz * 3] : nullptr;
 				const float Ch[3] = { static_cast<float>((Rgb >> 16) & 0xFF), static_cast<float>((Rgb >> 8) & 0xFF), static_cast<float>(Rgb & 0xFF) };
@@ -2351,14 +2622,16 @@ namespace LandMen
 		}
 
 		/** A finish alone at level L (a helmet drawn as its own instance): its points' look, its own triangles. */
-		static void HelmetLookOf(const Soldier& S, const Finish& Fi, const ArmyColours& Colours, Lod L, Look& Lk)
+		static void HelmetLookOf(const Soldier& S, const Finish& Fi, const ArmyColours& Colours, Lod L, const Crowd::WearMix& Wm, float W, Look& Lk)
 		{
 			const Mesh& Fm = Fi.Lods[L];
 			Lk.Points = Fm.Points;
 			Lk.Triangles = Fm.Triangles;
 			Lk.Paint.assign(static_cast<size_t>(Fm.Points), 0);
 			Lk.Rgb.assign(static_cast<size_t>(Fm.Points) * 3, 0);
-			FinishColours(S, Fm, Colours, Lk, 0);
+			Lk.Rough.clear();
+			if (Wm.bOn && Wm.bRough) Lk.Rough.assign(static_cast<size_t>(Fm.Points), 255);
+			FinishColours(S, Fm, Colours, Wm, W, Lk, 0);
 		}
 
 		void AttachBank(Man& M)
@@ -2377,15 +2650,17 @@ namespace LandMen
 			M.BodyKey = -1;
 			if (!M.Banked || !M.Colours) return;
 			AttachBody(M);
-			const auto Key = std::make_tuple(M.Var[Far], M.Info.Finish, M.Colours);
+			// (his wear in the key with the worn look on: two men whose W differs are never drawn with one look)
+			const auto Key = std::make_tuple(M.Var[Far], M.Info.Finish, M.Colours, WearKeyOf(M));
 			const auto Found = BankSetOf.find(Key);
 			if (Found != BankSetOf.end()) { M.BankKey = Found->second; return; }
 			BankSet Set;
 			Set.S = M.S;
 			Set.B = M.Banked;
 			Set.Finish = M.Info.Finish;
+			Set.W = M.Info.Wear;
 			const Finish* Fi = Set.Finish >= 0 ? &M.S->Finishes[static_cast<size_t>(Set.Finish)] : nullptr;
-			MakeLook(*M.S, *M.Var[Far], Fi, *M.Colours, nullptr, Far, Set.Lk);
+			MakeLook(*M.S, *M.Var[Far], Fi, *M.Colours, nullptr, Far, Wear, Set.W, Set.Lk);
 			M.BankKey = static_cast<int>(BankSets.size());
 			BankSetOf[Key] = M.BankKey;
 			BankSets.push_back(std::move(Set));
@@ -2506,7 +2781,8 @@ namespace LandMen
 		/** His body set (BodyKey): made the first time a man of it is met, each banked level's bake and look. */
 		void AttachBody(Man& M)
 		{
-			const auto Key = std::make_pair(M.Var[Far], M.Colours);
+			// (his wear in the key with the worn look on, as BankSetOf's)
+			const auto Key = std::make_tuple(M.Var[Far], M.Colours, WearKeyOf(M));
 			const auto Found = BodySetOf.find(Key);
 			int K = -1;
 			if (Found != BodySetOf.end()) K = Found->second;
@@ -2517,6 +2793,7 @@ namespace LandMen
 				BodySet Set;
 				Set.S = M.S;
 				Set.Colours = M.Colours;
+				Set.W = M.Info.Wear;
 				// (the bone the finishes ride: every soldier file's finishes are rigid on the head)
 				for (const Finish& Fi : M.S->Finishes)
 				{
@@ -2533,9 +2810,9 @@ namespace LandMen
 				const Lod Lv = static_cast<Lod>(L);
 				Set.Var[L] = M.Var[L];
 				Set.B[L] = M.BankAt[L];
-				MakeLook(*M.S, *M.Var[L], nullptr, *M.Colours, nullptr, Lv, Set.Lk[L]);
+				MakeLook(*M.S, *M.Var[L], nullptr, *M.Colours, nullptr, Lv, Wear, Set.W, Set.Lk[L]);
 				Set.Helmets[L].resize(M.S->Finishes.size());
-				for (size_t F = 0; F < M.S->Finishes.size(); ++F) HelmetLookOf(*M.S, M.S->Finishes[F], *M.Colours, Lv, Set.Helmets[L][F]);
+				for (size_t F = 0; F < M.S->Finishes.size(); ++F) HelmetLookOf(*M.S, M.S->Finishes[F], *M.Colours, Lv, Wear, Set.W, Set.Helmets[L][F]);
 			}
 		}
 
@@ -2671,6 +2948,12 @@ namespace LandMen
 				if (!Full.Shade.empty()) M.Shade.push_back(Full.Shade[I]);
 				if (!Full.Tint.empty())
 					for (size_t C = 0; C < 3; ++C) M.Tint.push_back(Full.Tint[I * 3 + C]);
+				// (release 2's wear and weather, where the file was read with it: SetWearMix)
+				if (!Full.ShadeClean.empty()) M.ShadeClean.push_back(Full.ShadeClean[I]);
+				if (!Full.Dirt.empty()) M.Dirt.push_back(Full.Dirt[I]);
+				if (!Full.DirtWet.empty()) M.DirtWet.push_back(Full.DirtWet[I]);
+				if (!Full.Wet.empty()) M.Wet.push_back(Full.Wet[I]);
+				if (!Full.Snow.empty()) M.Snow.push_back(Full.Snow[I]);
 			}
 			for (size_t T = 0; T < Tris; ++T)
 			{
@@ -4280,6 +4563,30 @@ namespace LandMen
 			++M.Stamp;
 		}
 
+		/** The worn look's mix changed (SetWearMix) after men were made: each man's wear settled again and his looks made
+		 * again (his MeshNo moves, so a scene makes his triangles and colours again); every set of men alike made anew
+		 * from its key (the bakes kept: they are the pose bank's, not the look's), each banked man attached again. */
+		void Relook()
+		{
+			for (Man& M : Men)
+			{
+				SettleWear(M);
+				for (int L = 0; L < LodCount; ++L) M.bLook[L] = false;
+				++M.MeshNo;
+				++M.Stamp;
+			}
+			if (BankSets.empty() && BodySets.empty()) return;
+			BankSets.clear();
+			BankSetOf.clear();
+			BodySets.clear();
+			BodySetOf.clear();
+			for (Man& M : Men)
+			{
+				// (as ReadPoseBank attaches them, but not a rider, nor a man gored: neither is banked, Remesh)
+				if (M.S && !M.bRider && !M.bGore) AttachBank(M);
+			}
+		}
+
 		void ToTwin(Man& M, const Soldier* Twin)
 		{
 			M.OwnS = M.S;
@@ -4409,6 +4716,7 @@ namespace LandMen
 				const double Months = WornForced >= 0.0 ? WornForced : Worn != BlockWorn.end() ? Worn->second : 0.0;
 				if (Months > 0.0)
 				{
+					Mn.WearMonths = Months; // (and his wear for the worn look: SettleWear)
 					Mn.Fresh = Mn.Colours;
 					Mn.WornA = static_cast<float>(std::clamp(Months / 18.0, 0.0, 1.0));
 					// (up to some 45 in 100 men in a newer tunic or trousers than the rest of their kit, drawn piecemeal:
@@ -4418,6 +4726,7 @@ namespace LandMen
 					Mn.Colours = &AgedRow(*Mn.Fresh, static_cast<int>(std::lround(Mn.WornA * 20.f)), Garment);
 				}
 			}
+			SettleWear(Mn);
 			Mn.Info.Block = Tr.B;
 			Mn.Info.K = Tr.K;
 			Mn.Info.J = Tr.J;
@@ -4662,6 +4971,10 @@ namespace LandMen
 		M->Styles = B.Styles;
 		M->Styles.resize(M->Clips.size());
 		for (const auto& P : B.OwnPaints) M->OwnPaints.insert(P);
+		for (const auto& P : B.OwnPaintNames) M->OwnPaintNames.insert(P);
+		// (release 2's worn look, where both were read with the wear: the twin's points are the file's one for one before
+		// the gore's, but only the file records the face's detail laid in their tint and the eyes' shade it set)
+		M->TakeFaceDetail(B);
 		I.Gores[FileArmy] = std::move(M);
 		return true;
 	}
@@ -5244,6 +5557,32 @@ namespace LandMen
 		Inner->bWornLook = bOn;
 		Inner->WornForced = ForcedMonths;
 	}
+	void Crowd::SetWearMix(const WearMix& Wearing)
+	{
+		Impl& I = *Inner;
+		// (held to their spans: the soil and the weather 0 to 1, a forced wear at most 1; a NaN as none)
+		const auto Unit = [](float V) { return V >= 0.f ? std::min(V, 1.f) : 0.f; };
+		WearMix Now;
+		Now.bOn = Wearing.bOn;
+		Now.bRough = Wearing.bOn && Wearing.bRough;
+		for (int C = 0; C < 3; ++C) Now.Soil[C] = Unit(Wearing.Soil[C]);
+		Now.Rain = Unit(Wearing.Rain);
+		Now.Snow = Unit(Wearing.Snow);
+		Now.W = Wearing.W >= 0.f ? std::min(Wearing.W, 1.f) : -1.f;
+		const WearMix& Was = I.Wear;
+		const bool bSame = Now.bOn == Was.bOn && Now.bRough == Was.bRough && Now.Soil[0] == Was.Soil[0] && Now.Soil[1] == Was.Soil[1] && Now.Soil[2] == Was.Soil[2]
+			&& Now.Rain == Was.Rain && Now.Snow == Was.Snow && Now.W == Was.W;
+		const bool bStillOff = !Now.bOn && !Was.bOn;
+		I.Wear = Now;
+		if (bSame) return;
+		// (off before and off now: no look changes, only each man's wear as it reads)
+		if (bStillOff)
+		{
+			for (Impl::Man& M : I.Men) I.SettleWear(M);
+			return;
+		}
+		I.Relook();
+	}
 	void Crowd::SetLevels(double NearTo, double MidTo)
 	{
 		Inner->NearTo = std::clamp(NearTo, 1.0, 400.0);
@@ -5603,7 +5942,7 @@ namespace LandMen
 		const Soldier& S = *Mn.S;
 		const Finish* Fi = Mn.Info.Finish >= 0 ? &S.Finishes[static_cast<size_t>(Mn.Info.Finish)] : nullptr;
 		const Face* Fc = Mn.Info.Face >= 0 && Mn.Info.Face < static_cast<int>(S.Faces.size()) ? &S.Faces[static_cast<size_t>(Mn.Info.Face)] : nullptr;
-		Impl::MakeLook(S, *Mn.Var[L], Fi, *Mn.Colours, Fc, L, Lk);
+		Impl::MakeLook(S, *Mn.Var[L], Fi, *Mn.Colours, Fc, L, I.Wear, Mn.Info.Wear, Lk);
 		I.AgeLook(Mn, L, Lk);
 		return Lk;
 	}
@@ -5806,12 +6145,14 @@ namespace LandMen
 			const double Months = I.WornForced >= 0.0 ? I.WornForced : Worn != I.ArmyWorn.end() ? Worn->second : 0.0;
 			if (Months > 0.0)
 			{
+				Mn.WearMonths = Months; // (and his wear for the worn look: SettleWear)
 				Mn.Fresh = Mn.Colours;
 				Mn.WornA = static_cast<float>(std::clamp(Months / 18.0, 0.0, 1.0));
 				const int Garment = Unit01(Seed ^ 0xA6ED1ull) < 0.45 * Mn.WornA ? (Unit01(Seed ^ 0xA6ED2ull) < 0.65 ? 1 : 0) : -1;
 				Mn.Colours = &I.AgedRow(*Mn.Fresh, static_cast<int>(std::lround(Mn.WornA * 20.f)), Garment);
 			}
 		}
+		I.SettleWear(Mn);
 		Mn.Info.Block = -1;
 		Mn.Info.K = -1;
 		Mn.Info.Role = "commander";
@@ -5878,6 +6219,7 @@ namespace LandMen
 		const ArmyColours* Colours = From.Colours;
 		const ArmyColours* Fresh = From.Fresh;
 		const float WornA = From.WornA, PhaseSeed = From.PhaseSeed, StylePick = From.StylePick;
+		const double WearMonths = From.WearMonths;
 		const int Track = From.Track;
 		ManInfo Info = From.Info;
 		const Variant* Var[LodCount];
@@ -5895,6 +6237,7 @@ namespace LandMen
 		Mn.Colours = Colours;
 		Mn.Fresh = Fresh;
 		Mn.WornA = WornA;
+		Mn.WearMonths = WearMonths; // (his wear, ManInfo::Wear, comes with his Info)
 		Mn.Info = std::move(Info);
 		Mn.Info.Block = -1;
 		Mn.Info.K = -1;

@@ -71,6 +71,12 @@ struct FLandBattleState
 	/** Release 2, the look bible's G10: the battle's weather (LandWeather::Pick: what falls, how hard, and the day's
 	 * changes for it), picked once the field is laid; none (Kind None) without -TheaterLandFalling. */
 	LandWeather::Weather Weather;
+	/** Release 2 (tc.Look.Worn): the field's mean paint (linear, water not counted) and its dirt (WholeLook::FieldDust),
+	 * read once a battle the first time either is asked (LandBattle.cpp's FieldDustOf: the men's soil, then the vehicles'
+	 * lower third), so boots, knees and hulls take one colour. Unread until then. */
+	bool bFieldDustRead = false;
+	FLinearColor FieldMean = FLinearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	FLinearColor FieldDust = FLinearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	/** Effects (R2): the wrecks' film fire, -TheaterLandFilmFire (LandBurn). */
 	LandBurn::Director Burns;
 	/** Effects (R2): the crews getting out of knocked-out tanks, -TheaterLandBailOut (LandBail). */

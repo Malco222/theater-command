@@ -210,6 +210,11 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> StalkInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> ManInk;
+	/** Release 2 (tc.Look.Worn): ManInk is on the men's worn parent as LoadInks made it (WholeLook::MenRough, and the ink
+	 * really made on M_LandManWorn), so the men's looks may write each paint's roughness into their points' alpha
+	 * (LandMen::Crowd::WearMix::bRough) and the crowd's ink is the worn one too (MakeMen). Settled once a battle, never
+	 * from the switch alone: the plain men's inks read any alpha short of whole as painted metal. */
+	bool bMenRough = false;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> SteelInk;
 	/**
