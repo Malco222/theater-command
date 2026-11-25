@@ -485,6 +485,94 @@ namespace LandScape
 			}
 		}
 
+		/** The snow on a laden spruce's boughs with soft edges, near (the art director's Mac pass 1, B4 shot 3: under about
+		 * 15 m the boughs broke into hard black and white shards). The model paints each triangle snow or bough whole, so
+		 * where the two meet the edge is a hard line across a wedge metres long. Here each place on the boughs takes the
+		 * share of snow of the triangles meeting there (by their area): a snow wedge stays white where only snow meets and
+		 * greys toward the bough along its edges, the bough lightens toward the snow; the normals go the same share of the
+		 * way to the pad's (Pads). The bough's own
+		 * green a little frosted, the snow's light thrown up into it, so it is never near-black beside the snow. */
+		void SoftPads(LandField::Mesh& M) const
+		{
+			const size_t N = M.Points();
+			if (N == 0 || M.Normals.size() < 3 * N || M.Positions.size() < 3 * N || M.Colours.size() < N) return;
+			const std::vector<float> Was = M.Normals;
+			Pads(M);
+			const std::vector<float> Pad = M.Normals;
+			// (the places: points at the same spot, to a millimetre, are one place)
+			std::vector<uint32_t> PlaceOf(N);
+			{
+				std::vector<std::pair<uint64_t, uint32_t>> Keys(N);
+				for (size_t K = 0; K < N; ++K)
+				{
+					const auto Q = [&M, K](int C) { return static_cast<uint64_t>(static_cast<int64_t>(std::lround(M.Positions[3 * K + C] * 1000.0)) & 0x1FFFFF); };
+					Keys[K] = { Q(0) | Q(1) << 21 | Q(2) << 42, static_cast<uint32_t>(K) };
+				}
+				std::sort(Keys.begin(), Keys.end());
+				uint32_t Place = 0;
+				for (size_t K = 0; K < N; ++K)
+				{
+					if (K > 0 && Keys[K].first != Keys[K - 1].first) ++Place;
+					PlaceOf[Keys[K].second] = Place;
+				}
+			}
+			const size_t Places = N == 0 ? 0 : *std::max_element(PlaceOf.begin(), PlaceOf.end()) + 1;
+			struct Sum
+			{
+				double Snow = 0.0, All = 0.0;
+				Tone White{}, Green{};
+				double WhiteW = 0.0, GreenW = 0.0;
+			};
+			std::vector<Sum> At(Places);
+			const auto Snowy = [&M](uint32_t K) { return Lum(OfByte(M.Colours[K])) >= 190.0; };
+			for (size_t T = 0; T + 2 < M.Triangles.size(); T += 3)
+			{
+				const uint32_t I[3] = { M.Triangles[T], M.Triangles[T + 1], M.Triangles[T + 2] };
+				if (I[0] >= N || I[1] >= N || I[2] >= N) continue;
+				const float* A = &M.Positions[3 * I[0]];
+				const float* B = &M.Positions[3 * I[1]];
+				const float* C = &M.Positions[3 * I[2]];
+				const double UX = B[0] - A[0], UY = B[1] - A[1], UZ = B[2] - A[2], VX = C[0] - A[0], VY = C[1] - A[1], VZ = C[2] - A[2];
+				const double Area = 0.5 * std::sqrt((UY * VZ - UZ * VY) * (UY * VZ - UZ * VY) + (UZ * VX - UX * VZ) * (UZ * VX - UX * VZ) + (UX * VY - UY * VX) * (UX * VY - UY * VX)) + 1e-6;
+				const bool bSnow = (Snowy(I[0]) ? 1 : 0) + (Snowy(I[1]) ? 1 : 0) + (Snowy(I[2]) ? 1 : 0) >= 2;
+				for (const uint32_t K : I)
+				{
+					Sum& S = At[PlaceOf[K]];
+					S.All += Area;
+					const Tone C3 = OfByte(M.Colours[K]);
+					if (bSnow)
+					{
+						S.Snow += Area;
+						S.White = Mixed(S.White, C3, Area / (S.WhiteW + Area));
+						S.WhiteW += Area;
+					}
+					else
+					{
+						S.Green = Mixed(S.Green, C3, Area / (S.GreenW + Area));
+						S.GreenW += Area;
+					}
+				}
+			}
+			const Tone Frost = Rgb(118, 130, 126), Bough = Rgb(45, 69, 53), Lying = Rgb(230, 234, 238);
+			for (size_t K = 0; K < N; ++K)
+			{
+				const Sum& S = At[PlaceOf[K]];
+				if (S.All <= 0.0) continue;
+				// (a snow point keeps most of its white, a bough's point takes a little of the snow beside it: the step
+				// between them a third of what it was, each side shading into it)
+				const double Share = Snowy(static_cast<uint32_t>(K)) ? 0.5 + 0.5 * S.Snow / S.All : 0.4 * S.Snow / S.All;
+				const Tone Green = Mixed(S.GreenW > 0.0 ? S.Green : Bough, Frost, 0.3);
+				const Tone White = S.WhiteW > 0.0 ? S.White : Lying;
+				M.Colours[K] = Byte(Mixed(Green, White, Share));
+				double NX = Lerp(Was[3 * K], Pad[3 * K], Share), NY = Lerp(Was[3 * K + 1], Pad[3 * K + 1], Share), NZ = Lerp(Was[3 * K + 2], Pad[3 * K + 2], Share);
+				const double L = std::sqrt(NX * NX + NY * NY + NZ * NZ);
+				if (L < 1e-6) continue;
+				M.Normals[3 * K] = static_cast<float>(NX / L);
+				M.Normals[3 * K + 1] = static_cast<float>(NY / L);
+				M.Normals[3 * K + 2] = static_cast<float>(NZ / L);
+			}
+		}
+
 		/** A broadleaf crown bare for the winter: its leaves gone, a share of the cards and sprigs left as the twig mass
 		 * (their places kept, recoloured), the snow on its limbs' tops. Dense for a hedge's thorn, sparse for a tree. */
 		void Bare(LandField::BaseMesh& M, const Tone& TwigOf, double Keep, double CapShare, uint64_t Salt, double Brown = 0.0) const
@@ -663,7 +751,7 @@ namespace LandScape
 			// already laden left as it is).
 			if (Named(M.Name, "Snow"))
 			{
-				Pads(M.Near);
+				SoftPads(M.Near);
 				Pads(M.Far);
 				return;
 			}
