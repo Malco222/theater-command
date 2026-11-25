@@ -2570,7 +2570,7 @@ function wingCardHtml(card: FleetCard, w: WingCard): string {
 }
 
 /** The order a fleet is under, or (in harbour) the one it will sail under when a sea is clicked. */
-const fleetStance = (f: Fleet): Stance => (atSea(f) ? f.stance : ui.stance);
+const fleetStance = (f: Fleet): Stance => (atSea(f) && f.stance !== 'passage' ? f.stance : ui.stance);
 
 /** The tray of a fleet that has been picked up: its admiral, its ships as cards by class, and its orders. */
 /**
@@ -9009,7 +9009,7 @@ function mapPoint(cx: number, cy: number): { x: number; y: number } {
 }
 
 /** The order a fleet will sail under when it is sent to a sea: the work it is doing, or its usual duty. Escorting is given by lane, not by sea. */
-const sailingAs = (f: Fleet): Stance => (atSea(f) && f.stance !== 'escort' ? f.stance : f.duty === 'raid' ? 'raid' : 'patrol');
+const sailingAs = (f: Fleet): Stance => (atSea(f) && f.stance !== 'escort' && f.stance !== 'passage' ? f.stance : f.duty === 'raid' ? 'raid' : 'patrol');
 
 /** Picks up one of the player's fleets: the Navy tab opens on it, its tray is laid out, and the map shows where it can go. */
 function pickFleet(id: number): void {

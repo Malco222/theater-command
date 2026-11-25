@@ -980,7 +980,8 @@ export function bookFleets(g: Game, nat: string): { fleet: string; zone: string;
     const ports = (): Region[] => (row.base ?? []).map((nm) => g.byName[nm]).filter((r): r is Region => !!r && r.port && r.seas.length > 0 && allied(g, nat, r.ctrl));
     const move = (r: Region): boolean => {
       const old: [number, string, number, number] = [f.base, f.port, f.home, f.station];
-      if (!rebase(g, f, r)) return false;
+      // (The book's dated moves are the record's, made in their month as its own sailings are: no voyage. Release 2.)
+      if (!rebase(g, f, r, true)) return false;
       f.bookBase ??= old;
       f.station = f.home;
       return true;
@@ -998,7 +999,7 @@ export function bookFleets(g: Game, nat: string): { fleet: string; zone: string;
       if (f.bookBase && g.turn === to + 1) {
         const [base, port, home, station] = f.bookBase;
         const r = base >= 0 ? g.regions[base] : null;
-        if (r && rebase(g, f, r)) { f.port = port; f.home = home; f.zone = home; f.station = station; }
+        if (r && rebase(g, f, r, true)) { f.port = port; f.home = home; f.zone = home; f.station = station; }
         delete f.bookBase;
       }
       continue;

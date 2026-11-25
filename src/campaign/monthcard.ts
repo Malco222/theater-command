@@ -766,7 +766,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       row.tag = att ? (r.won ? 'HIT' : 'MISSED') : r.won ? 'HIT' : 'HELD';
       const [pic, place, hit, miss]: [CardPicture, string, string, string] =
         r.mission === 'line' ? ['rail-yard', `${town} rail yard`, `${what} cut the railway there.`, 'The bombs fell wide. The line still runs.']
-        : r.mission === 'harbour' ? ['harbour', `${r.place} harbour`, `${what} struck the ships in harbour.`, 'The raid on the harbour was beaten off.']
+        : r.mission === 'harbour' ? ['harbour', /\bHarbou?r$/.test(r.place) ? r.place : `${r.place} harbour`, `${what} struck the ships in harbour.`, 'The raid on the harbour was beaten off.']
         : r.mission === 'fleet' ? ['fleet', cap(the(r.ships?.[0]?.fleet ?? r.place)), `${what} struck the fleet at sea.`, 'The strike on the fleet was beaten off.']
         : r.mission === 'strike' ? ['fleet', cap(r.place.replace(/^the /, 'The ')), `${what} struck the shipping there.`, 'The strike on the shipping was beaten off.']
         : r.mission === 'ground' ? ['troops', r.place, `${what} struck the troops there.`, 'The raid on the troops was beaten off.']

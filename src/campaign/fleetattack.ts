@@ -22,7 +22,7 @@ import type { TicketLine } from '../core/ticket';
 import { fleetKnown, fleetsSeen, seaPicture, type SeaKnown } from './carriers';
 import { allied, atWar, headline, worksFor } from './game';
 import { fogOn } from './intel';
-import { CLASSES, NAVY, airOver, atSea, fleetAction, fleetName, fleetPower, fleetReach, hasSought, markSought, sail, seaRng, shipCount, surfaceShips } from './navy';
+import { CLASSES, NAVY, airOver, atSea, passageWhy, fleetAction, fleetName, fleetPower, fleetReach, hasSought, markSought, sail, seaRng, shipCount, surfaceShips } from './navy';
 import { lossAt, shares, type SeaPlanFleet, type SeaPlanSide } from './seaplan';
 import { seaWhere } from './sea-words';
 import type { Fleet, Game, SeaReport, Ships } from './types';
@@ -82,6 +82,8 @@ export function whyNotFleetAttack(g: Game, id: number, target: number): string |
   if (f.attacked === g.turn) return `The ${f.name} has already been sent at the enemy this month.`;
   // (Release 2, seekOnce) A fleet that sought battle in an earlier meeting this month (its own side's or an ally's).
   if (hasSought(g, f)) return `The ${f.name} has already sought battle this month: a fleet seeks battle once a month.`;
+  // (A fleet in passage to a new base does nothing on its way: release 2, the far chart.)
+  if (f.stance === 'passage') return passageWhy(g, f);
   const t = g.fleets.find((x) => x.id === target);
   if (!t || !shipCount(t.ships) || fleetKnown(g, t, f.nat) === 'none') return 'No such enemy fleet is known.';
   if (!atWar(g, f.nat, t.nat)) return `${g.nations[t.nat]?.name ?? t.nat} is not at war with ${g.nations[f.nat].name}.`;

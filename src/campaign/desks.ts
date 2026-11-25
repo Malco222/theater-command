@@ -467,7 +467,9 @@ function navy(g: Game, nat: string): string | null {
   for (const f of fleetsOf(g, nat)) {
     const w = was.get(f.id);
     if (!w || (w.zone === f.zone && w.stance === f.stance)) continue;
-    if (atSea(f)) out.push(`the ${f.name} into ${seaWhat(g.seas[f.zone].name)}${f.stance === 'escort' ? ' with the convoys' : f.stance === 'raid' ? ' to raid' : ''}`);
+    // (Release 2, the far chart: one set out for a new base beyond a month's steaming.)
+    if (f.stance === 'passage') out.push(`the ${f.name} on its way to ${f.port}`);
+    else if (atSea(f)) out.push(`the ${f.name} into ${seaWhat(g.seas[f.zone].name)}${f.stance === 'escort' ? ' with the convoys' : f.stance === 'raid' ? ' to raid' : ''}`);
     else if (w.stance !== 'port') back.push(`the ${f.name}`);
   }
   if (out.length) did.push(`sent ${some(out)}`);
