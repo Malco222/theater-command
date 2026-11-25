@@ -2285,6 +2285,17 @@ namespace LandKit
 			{
 				Choice = ChoiceIn(Row, "paint");
 			}
+			// Then the army she serves (swaps.paint.by_nation), for a model several armies share: Japan's khaki and
+			// earth on the field gun that otherwise stands in for everyone in its maker's olive. A nation the table
+			// does not name, or a coat the file does not have, falls through to the default as before.
+			if (Choice.empty() && PaintSwap["by_nation"].IsObject())
+			{
+				Choice = PaintSwap["by_nation"][Nation].Str("");
+				if (!Choice.empty() && !PaintSwap["choices"][Choice].IsObject())
+				{
+					Choice.clear();
+				}
+			}
 			if (Choice.empty() && Nation == "GER" && PaintSwap["choices"]["yellow"].IsObject())
 			{
 				// Dark yellow from February 1943 (the Tiger's file names the years but has no months).
