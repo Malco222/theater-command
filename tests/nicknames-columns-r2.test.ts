@@ -181,7 +181,10 @@ describe('supply columns', () => {
     expect(back!.columns).toEqual(g.columns);
   }, 240_000);
   it('on, over a longer war: some columns are caught, by partisans on occupied ground and by aircraft', () => {
-    const g = war({ cols: true }, 2);
+    // (Seed 2 until 1.5.1's fight back (f417aece) came onto release 2's tree, pi6nal a87043e1, 25 November 2026: seed
+    // 2's war now runs another course, and its 26 months catch columns by air 3,790 times and by partisans none. Seeds
+    // 1, 3, 4 and 5 all see both; seed 3, as city glance chose on its line: 4,639 by air, 28 by partisans.)
+    const g = war({ cols: true }, 3);
     const by = { air: 0, partisans: 0 };
     for (let m = 0; m < 26; m++) {
       months(g, 1);
