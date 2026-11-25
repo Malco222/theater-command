@@ -393,6 +393,114 @@ namespace LandSteppe
 		return true;
 	}
 
+	void BirchBark(LandField::Mesh& M, bool bMarks)
+	{
+		using LandField::Rgb8;
+		auto Is = [](const Rgb8& C, int R, int G, int B) { return C.R == R && C.G == G && C.B == B; };
+		const size_t N = M.Colours.size();
+		// (the kit's birch_bark DCD7CB and its birch_mark 2F2C29: the mark painted whole facets of the trunk, a metre high)
+		std::vector<uint8_t> Bark(N, 0);
+		for (size_t K = 0; K < N; ++K) Bark[K] = Is(M.Colours[K], 0xDC, 0xD7, 0xCB) || Is(M.Colours[K], 0x2F, 0x2C, 0x29) ? 1 : 0;
+		auto P = [&M](size_t I, int D) { return static_cast<double>(M.Positions[3 * I + static_cast<size_t>(D)]); };
+		auto Nm = [&M](size_t I, int D) { return static_cast<double>(M.Normals[3 * I + static_cast<size_t>(D)]); };
+		auto Byte = [](const Tone& C) {
+			Rgb8 B;
+			B.R = static_cast<uint8_t>(std::clamp(std::lround(C.R), 0L, 255L));
+			B.G = static_cast<uint8_t>(std::clamp(std::lround(C.G), 0L, 255L));
+			B.B = static_cast<uint8_t>(std::clamp(std::lround(C.B), 0L, 255L));
+			return B;
+		};
+		// The bark off-white, a shade greyer here and there (by the point's place, so points that meet agree), and the
+		// foot dark: the lowest ring of the trunk rough grey-brown, fading up to the white over the first metre.
+		for (size_t K = 0; K < N; ++K)
+		{
+			if (!Bark[K]) continue;
+			const uint64_t Key = static_cast<uint64_t>(std::llround(P(K, 0) * 1000.0) + 100000) * 0x9E3779B97F4A7C15ull ^ static_cast<uint64_t>(std::llround(P(K, 1) * 1000.0) + 100000) * 0xC2B2AE3D27D4EB4Full ^
+								 static_cast<uint64_t>(std::llround(P(K, 2) * 1000.0) + 100000) * 0x165667B19E3779F9ull;
+			const double U = Unit(Key);
+			const Tone White = bMarks ? Rgb(216.0 - 8.0 * U, 213.0 - 8.0 * U, 201.0 - 7.0 * U) : Rgb(209.0 - 5.0 * U, 206.0 - 5.0 * U, 195.0 - 4.0 * U);
+			M.Colours[K] = Byte(P(K, 2) < 0.15 ? Rgb(92.0 + 10.0 * U, 84.0 + 9.0 * U, 74.0 + 8.0 * U) : White);
+		}
+		if (!bMarks) return;
+		// The marks: short dark lenticels lying across the trunk, each a flat lens 1.2 cm proud of its facet, no wider than
+		// a third of the trunk (0.8 of a facet of its eight), 2 to 4 cm high, soft at their ends; two or so to a metre
+		// of each facet, more and bigger in the rough foot, fewer on the thin stem up in the crown.
+		Writer W(M);
+		const size_t Tris = M.Triangles.size() / 3;
+		for (size_t T = 0; T + 1 < Tris; T += 2)
+		{
+			uint32_t Q[6];
+			for (size_t K = 0; K < 6; ++K) Q[K] = M.Triangles[3 * T + K];
+			bool bBark = true;
+			for (const uint32_t I : Q) bBark = bBark && Bark[I];
+			if (!bBark) continue;
+			// (a facet: two triangles sharing an edge, four corners)
+			uint32_t C4[4];
+			int Have = 0;
+			for (const uint32_t I : Q)
+			{
+				bool bSeen = false;
+				for (int K = 0; K < Have; ++K) bSeen = bSeen || C4[K] == I;
+				if (!bSeen && Have < 4) C4[Have++] = I;
+				else if (!bSeen) Have = 5;
+			}
+			if (Have != 4) continue;
+			std::sort(C4, C4 + 4, [&P](uint32_t A, uint32_t B) { return P(A, 2) < P(B, 2); });
+			uint32_t B0 = C4[0], B1 = C4[1], T0 = C4[2], T1 = C4[3];
+			auto Dist = [&P](uint32_t A, uint32_t B) { return std::sqrt((P(A, 0) - P(B, 0)) * (P(A, 0) - P(B, 0)) + (P(A, 1) - P(B, 1)) * (P(A, 1) - P(B, 1)) + (P(A, 2) - P(B, 2)) * (P(A, 2) - P(B, 2))); };
+			if (Dist(B0, T0) + Dist(B1, T1) > Dist(B0, T1) + Dist(B1, T0)) std::swap(T0, T1);
+			const double WB = Dist(B0, B1), WT = Dist(T0, T1);
+			double Foot[3], Top[3], Up[3], Nn[3];
+			for (int D = 0; D < 3; ++D)
+			{
+				Foot[D] = 0.5 * (P(B0, D) + P(B1, D));
+				Top[D] = 0.5 * (P(T0, D) + P(T1, D));
+				Up[D] = Top[D] - Foot[D];
+				Nn[D] = Nm(B0, D) + Nm(B1, D) + Nm(T0, D) + Nm(T1, D);
+			}
+			const double High = std::sqrt(Up[0] * Up[0] + Up[1] * Up[1] + Up[2] * Up[2]), NL = std::sqrt(Nn[0] * Nn[0] + Nn[1] * Nn[1] + Nn[2] * Nn[2]);
+			if (High < 0.4 || NL < 1e-6 || std::max(WB, WT) > 0.45 || std::min(WB, WT) < 0.03) continue;
+			for (int D = 0; D < 3; ++D)
+			{
+				Up[D] /= High;
+				Nn[D] /= NL;
+			}
+			const bool bFoot = Foot[2] < 0.15;
+			const double Dense = bFoot ? 3.2 : WB + WT > 0.2 ? 2.2 : 1.2;
+			const uint64_t Seed = 0xB1C4ull + T * 0x9E3779B97F4A7C15ull;
+			const int Count = static_cast<int>(High * Dense + Unit(Seed));
+			for (int K = 0; K < Count; ++K)
+			{
+				const uint64_t S = Seed + static_cast<uint64_t>(K + 1) * 0xD1B54A32D192ED03ull;
+				// (in the foot the marks crowd low, where the bark breaks to black)
+				const double Along = bFoot ? 0.05 + 0.75 * Unit(S ^ 1) * Unit(S ^ 7) : 0.06 + 0.88 * Unit(S ^ 1);
+				double Mid[3], Ac[3];
+				for (int D = 0; D < 3; ++D)
+				{
+					Mid[D] = Foot[D] + (Top[D] - Foot[D]) * Along;
+					Ac[D] = (P(B1, D) - P(B0, D)) * (1.0 - Along) + (P(T1, D) - P(T0, D)) * Along;
+				}
+				const double Wide = std::sqrt(Ac[0] * Ac[0] + Ac[1] * Ac[1] + Ac[2] * Ac[2]);
+				if (Wide < 0.03) continue;
+				for (int D = 0; D < 3; ++D) Ac[D] /= Wide;
+				const double Long = Wide * (0.35 + 0.45 * Unit(S ^ 2)), Off = (Unit(S ^ 3) - 0.5) * 0.9 * (Wide - Long);
+				const double Tall = (bFoot ? 0.03 + 0.05 * Unit(S ^ 4) : 0.018 + 0.022 * Unit(S ^ 4)) * (Wide < 0.1 ? 0.7 : 1.0), Skew = (Unit(S ^ 5) - 0.5) * 0.3 * Long;
+				const double Shade = 0.85 + 0.3 * Unit(S ^ 6);
+				const Tone Dark = Rgb(58.0 * Shade, 52.0 * Shade, 46.0 * Shade), Soft = Rgb(0.5 * (58.0 * Shade + 212.0), 0.5 * (52.0 * Shade + 209.0), 0.5 * (46.0 * Shade + 197.0));
+				double Cc[3];
+				for (int D = 0; D < 3; ++D) Cc[D] = Mid[D] + Ac[D] * Off + Nn[D] * 0.012;
+				const uint32_t L = W.Vert(Cc[0] - Ac[0] * 0.5 * Long, Cc[1] - Ac[1] * 0.5 * Long, Cc[2] - Ac[2] * 0.5 * Long, Nn[0], Nn[1], Nn[2], Soft);
+				const uint32_t R = W.Vert(Cc[0] + Ac[0] * 0.5 * Long, Cc[1] + Ac[1] * 0.5 * Long, Cc[2] + Ac[2] * 0.5 * Long, Nn[0], Nn[1], Nn[2], Soft);
+				const uint32_t Hi = W.Vert(Cc[0] + Up[0] * 0.5 * Tall + Ac[0] * Skew, Cc[1] + Up[1] * 0.5 * Tall + Ac[1] * Skew, Cc[2] + Up[2] * 0.5 * Tall + Ac[2] * Skew, Nn[0], Nn[1], Nn[2], Dark);
+				const uint32_t Lo = W.Vert(Cc[0] - Up[0] * 0.5 * Tall + Ac[0] * Skew, Cc[1] - Up[1] * 0.5 * Tall + Ac[1] * Skew, Cc[2] - Up[2] * 0.5 * Tall + Ac[2] * Skew, Nn[0], Nn[1], Nn[2], Dark);
+				// (counter-clockwise seen from the front, as the kit's own triangles are wound)
+				const double CX = Ac[1] * Up[2] - Ac[2] * Up[1], CY = Ac[2] * Up[0] - Ac[0] * Up[2], CZ = Ac[0] * Up[1] - Ac[1] * Up[0];
+				if (CX * Nn[0] + CY * Nn[1] + CZ * Nn[2] >= 0.0) M.Triangles.insert(M.Triangles.end(), { L, Lo, Hi, Hi, Lo, R });
+				else M.Triangles.insert(M.Triangles.end(), { L, Hi, Lo, Lo, Hi, R });
+			}
+		}
+	}
+
 	void PlainKit(LandField::Base B, LandField::BaseMesh& Out)
 	{
 		using LandField::Base;
