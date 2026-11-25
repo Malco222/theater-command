@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <type_traits>
 
 namespace LandAir
 {
@@ -822,6 +824,8 @@ namespace LandAir
 		Seams.clear();
 		Across.clear();
 		Over.clear();
+		MidLow.clear();
+		Kept = LyingKept();
 	}
 
 	namespace
@@ -929,23 +933,24 @@ namespace LandAir
 				const V3 Sum = Plus(Plus(Fc[A], Fc[B]), Fc[C2]);
 				*Ow++ = Times(Sum, 1.0 / std::max(1e-9, Length(Sum)));
 			};
-			for (int Side = 0; Side < 2; ++Side)
+			for (int R = 0; R + 1 < Ringed; ++R)
 			{
-				const int First = Side * Each;
-				for (int R = 0; R + 1 < Ringed; ++R)
-				{
-					for (int Col = 0; Col < Cols; ++Col)
-					{
-						const int A = First + R * Cols + Col, B = First + R * Cols + (Col + 1) % Cols;
-						Tri(A, B, B + Cols);
-						Tri(A, B + Cols, A + Cols);
-					}
-				}
 				for (int Col = 0; Col < Cols; ++Col)
 				{
-					Tri(First + (Ringed - 1) * Cols + Col, First + (Ringed - 1) * Cols + (Col + 1) % Cols, First + Ringed * Cols);
+					const int A = R * Cols + Col, B = R * Cols + (Col + 1 == Cols ? 0 : Col + 1);
+					Tri(A, B, B + Cols);
+					Tri(A, B + Cols, A + Cols);
 				}
 			}
+			for (int Col = 0; Col < Cols; ++Col)
+			{
+				Tri((Ringed - 1) * Cols + Col, (Ringed - 1) * Cols + (Col + 1 == Cols ? 0 : Col + 1), Ringed * Cols);
+			}
+			// (its inner face's the same, on its own points, each facing its outer's turned round)
+			const int* Outer = Out.Triangles.data() + T0;
+			const V3* OuterOw = Out.Outward.data() + O0;
+			for (size_t T = 0; T < 3 * Tris; ++T) *Tr++ = Outer[T] + Each;
+			for (size_t T = 0; T < Tris; ++T) *Ow++ = Times(OuterOw[T], -1.0);
 			for (int Col = 0; Col < Cols; Col += 4) Out.Seams.push_back(Col);
 		}
 
@@ -1055,12 +1060,13 @@ namespace LandAir
 			// along it and from where, and from where round it
 			double Wander[2] = {}, WanderAlong[2] = {}, WanderFrom[2] = {}, WanderRound[2] = {};
 			// (her note of 17:40Z, (3), after a second look: its lines had crossed only the flap at its near end) How many of
-			// its lines lie across it, two to four; for each, its pick among the seams that may (0 to 1), how far along it
-			// it may reach at most (a share of its length: HeapShape draws it in to what the line's length lets it), its
-			// curl across as it goes (either way, a share of the way across) and its bow along (rings), and its wiggle's
-			// phase
+			// its lines lie across it, two to four; for each, its pick among the seams that may (0 to 1), how much farther
+			// along than it must it crosses to (0 to 1: half a ring), its curl across as it goes (either way, a share of the
+			// way across) and its bow along (rings), its wiggle's phase, on which ring it comes onto its top (0 to 1: its
+			// first to its second), from its seam at its top's middle, from which edge, and, should it come on over its
+			// near end, how far across (0 to 1)
 			int Strewn = 0;
-			double StrewnPick[4] = {}, StrewnReach[4] = {}, StrewnCurl[4] = {}, StrewnBow[4] = {}, StrewnWiggle[4] = {};
+			double StrewnPick[4] = {}, StrewnFar[4] = {}, StrewnCurl[4] = {}, StrewnBow[4] = {}, StrewnWiggle[4] = {}, StrewnRing[4] = {}, StrewnWay[4] = {}, StrewnFront[4] = {};
 			// (her note of 17:40Z, (2), after a second look: its far end had been a neat dome, its seams running cleanly to
 			// a point at its tip) Its far end broken up: its vent over toward the side it slumps to (a share of half its
 			// width); a crease across its dome on its eleventh ring, how deep (a share of its air there) and how slanted
@@ -1233,15 +1239,21 @@ namespace LandAir
 			for (int K = 0; K < 4; ++K)
 			{
 				L.StrewnPick[K] = S.U();
-				L.StrewnReach[K] = S.U(0.26, 0.46);
-				L.StrewnCurl[K] = S.U(-0.45, 0.45);
-				L.StrewnBow[K] = S.U(-0.5, 0.5);
+				L.StrewnFar[K] = S.U();
+				L.StrewnCurl[K] = S.U(-0.35, 0.35);
+				L.StrewnBow[K] = S.U(-0.35, 0.35);
 				L.StrewnWiggle[K] = S.U(0.0, 2.0 * Pi);
+				L.StrewnRing[K] = S.U();
+				L.StrewnWay[K] = S.U();
+				L.StrewnFront[K] = S.U();
 			}
 			// (its far end's breakup, on dice of their own as well)
 			Dice F(static_cast<uint64_t>(Folds) | (0xFA2Dull << 36));
 			L.Vent = F.U(0.22, 0.38);
-			L.CreaseDeep = F.U(0.8, 0.95);
+			// (its crease letting down a little over half its air there: a review of 24 November 17:40Z, after a second look,
+			// had found its far end at eye height a sawtooth, 0.17 m lower 0.9 along it, its inside showing along the crease,
+			// where it had let down 80 to 95%; the same draw, so that the rest fall as they did)
+			L.CreaseDeep = F.U(0.55, 0.7);
 			L.CreaseSlant = F.U(0.22, 0.38);
 			if (F.U() < 0.5) L.CreaseSlant = -L.CreaseSlant;
 			L.UnderAt = F.U(0.5, 0.66);
@@ -1319,7 +1331,9 @@ namespace LandAir
 		{
 			const int R0 = std::clamp(static_cast<int>(std::floor(R)), 0, Ringed - 2);
 			const double A = std::clamp(R - R0, 0.0, 1.0), Cf = std::floor(C), B = std::clamp(C - Cf, 0.0, 1.0);
-			const int C0 = ((static_cast<int>(Cf) % Cols) + Cols) % Cols, C1 = (C0 + 1) % Cols;
+			int C0 = static_cast<int>(Cf);
+			if (C0 < 0 || C0 >= Cols) C0 = ((C0 % Cols) + Cols) % Cols;
+			const int C1 = C0 + 1 == Cols ? 0 : C0 + 1;
 			const size_t I00 = static_cast<size_t>(R0 * Cols + C0), I01 = static_cast<size_t>(R0 * Cols + C1);
 			const size_t I10 = I00 + static_cast<size_t>(Cols), I11 = I01 + static_cast<size_t>(Cols);
 			const double W00 = B >= A ? 1.0 - B : 1.0 - A, W01 = B >= A ? B - A : 0.0, W10 = B >= A ? 0.0 : A - B, W11 = B >= A ? A : B;
@@ -1358,6 +1372,8 @@ namespace LandAir
 
 	void HeapShape(const Chute& C, double Slump, double Off, SilkMesh& Out, const GroundFn& Ground)
 	{
+		SilkMesh::LyingKept KeptWas;
+		std::swap(KeptWas, Out.Kept);
 		Out.Clear();
 		const double K = std::clamp(Slump, 0.0, 1.0);
 		const Lay L = LayOf(C.Folds, C.Across, C.Wind);
@@ -1424,9 +1440,18 @@ namespace LandAir
 			const double Pocket = Smooth((U - 0.5) / 0.3);
 			return Ny * (1.0 - Smooth(U / 0.5)) + L.FarSide * U + (L.Bend + Bows) * std::sin(Pi * U) + Kink * Pocket * Pocket;
 		};
+		// (as it lies, and each column round it, worked out at its last make for the same chute lying the same way, kept:
+		// none of it changes as it falls in)
+		const double KeyNow[] = { static_cast<double>(C.Folds), static_cast<double>(Cols), C.Across, C.Deep, C.Wind, C.Open, Off, H.X, H.Y, H.Z, Hx, Hy };
+		const size_t Each0 = static_cast<size_t>(Ringed * Cols + 1);
+		static_assert(std::is_trivially_copyable_v<Column> && sizeof(Column) % sizeof(double) == 0, "a column kept as doubles");
+		constexpr size_t PerColumn = sizeof(Column) / sizeof(double);
+		const bool bKept = KeptWas.Key.size() == std::size(KeyNow) && std::equal(KeyNow, KeyNow + std::size(KeyNow), KeptWas.Key.begin())
+			&& KeptWas.Lies.size() == Each0 && KeptWas.Crossing.size() == Each0 && KeptWas.Columns.size() == PerColumn * static_cast<size_t>(Cols);
 		// (its far end's crest across, a share of its half-width, to its right more than nothing: Lean)
 		std::vector<Column> Cl(static_cast<size_t>(Cols));
-		for (int Col = 0; Col < Cols; ++Col)
+		if (bKept) std::memcpy(static_cast<void*>(Cl.data()), KeptWas.Columns.data(), sizeof(Column) * Cl.size());
+		for (int Col = 0; Col < Cols && !bKept; ++Col)
 		{
 			Column& Q = Cl[static_cast<size_t>(Col)];
 			Q.Theta = Round(Col, Cols);
@@ -1513,7 +1538,7 @@ namespace LandAir
 			G.X = Nx + L.Long * U;
 			G.Crease = R == 11 ? L.CreaseDeep : 0.0;
 			G.Creased = R == 11 ? L.CreaseSlant : R == 10 || R == 12 ? 0.5 * L.CreaseSlant : 0.0;
-			if (R == 10 || R == 12) G.X += (R == 10 ? 1.0 : -1.0) * 0.1;
+			if (R == 10 || R == 12) G.X += (R == 10 ? 1.0 : -1.0) * 0.05;   // (5 cm: at 10 its silk had folded over there)
 			G.Under = R < 11 ? 0.0 : 1.0;
 			G.UnderAt = L.UnderAt + L.UnderSlant * (R - 11.5);
 			for (int Ph = 0; Ph < 2; ++Ph)
@@ -1585,11 +1610,16 @@ namespace LandAir
 		std::vector<V3> Was(Each), Lies(Each);
 		std::vector<double> Settled(Each), Flap(Each), Floor(Each, Clear), Crossing(Each, 0.0);
 		Out.Points.resize(Each);
+		if (bKept)
+		{
+			Lies.swap(KeptWas.Lies);
+			Crossing.swap(KeptWas.Crossing);
+		}
 		const double Slumps = Lean > 0.0 ? 1.0 : -1.0;
 		// (each fold across it: how much of it there is round each ring, highest at CrossAt across it and fading either
 		// way; none on a ring with none, worked out once)
 		std::vector<double> Envs(static_cast<size_t>(Ringed * Cols), 0.0);
-		for (int R = 0; R < Ringed; ++R)
+		for (int R = 0; R < Ringed && !bKept; ++R)
 		{
 			const Ring& G = Rg[static_cast<size_t>(R)];
 			if (G.Cross <= 0.0) continue;
@@ -1613,75 +1643,78 @@ namespace LandAir
 				const double Rx = Out1 * Q.Cs * (1.0 + 0.1 * Sag) + Blown * Ax, Ry = Out1 * Q.Sn * (1.0 + 0.1 * Sag) * (1.0 - 0.25 * Blown);
 				const double Rz = Skirt - Pivot + Dz * G.Gz * (1.0 - 0.6 * Sag) - 0.35 * Blown * Dz;
 				Was[P] = { Rx * TipC + Rz * TipS, Ry, Pivot - Rx * TipS * (1.0 - 0.8 * G.Slack) + Rz * TipC };
-				// (its folds across it: each highest somewhere across it and fading either way; and where one is, on its ring
-				// and those either side, its long folds a little flattened, bunched across)
-				const double Env = EnvAt(R, Col), Before = EnvAt(R - 1, Col), After = EnvAt(R + 1, Col);
-				const double Crossed = std::max({ Env, Before, After });
-				double F = 0.0;
-				for (int Fd = 0; Fd < L.Ridges; ++Fd)
+				if (!bKept)
 				{
-					const double Aside = (Q.Sn - G.Mid[Fd]) / L.Width[Fd];
-					if (std::fabs(Aside) < 3.5) F += G.Fold[Fd] * std::exp(-Aside * Aside);
-				}
-				F *= 1.0 - 0.3 * Crossed * (1.0 - Smooth((G.U - 0.15) / 0.15));
-				// (its far end's air, buckled across its top on the side it slumps from; on its narrow side coming down to
-				// where it is folded under, and let down along its crease, deeper on its narrow side; and over its folded
-				// edge, the rest lifted by the silk under it)
-				double Arch = Q.Arch;
-				const bool bNarrow = Q.Sn * Slumps < 0.0;
-				if (G.Under > 0.0 && bNarrow)
-				{
-					const double Across2 = (Q.Sn - Lean) / (G.UnderAt + std::fabs(Lean));
-					Arch += (std::sqrt(std::max(0.0, 1.0 - Across2 * Across2)) - Arch) * G.Under;
-				}
-				const double Air = L.Lift * G.Pocket * Arch * G.End * (1.0 - G.Buckle * Smooth((0.4 - Slumps * Q.Sn) / 0.6)) * (1.0 - G.Crease * (0.8 - 0.2 * Slumps * Q.Sn));
-				const double High = 0.045 + G.Bunch + F * G.End + std::max(0.0, G.Loose * Q.Loose) + Air;
-				const double Low = Clear + (0.3 * F + 0.05 * G.Pocket * Arch) * G.End + (bNarrow ? 0.012 * G.Under : 0.0);
-				// (a fold across it, highest somewhere across it and fading either way, lifts its long folds and the troughs
-				// between them alike, the whole of its top there, and its underside a little; and bunches it up toward the
-				// ring before it or after it, the more where it stands higher, slanted and bowed)
-				Crossing[P] = Env;
-				// (and its crest rounded over onto the ring it is bunched toward, its other flank steep, the ring there a
-				// little let down)
-				double Shoulder = 0.0, Dip = 0.0;
-				if (Before > 0.0)
-				{
-					const double Was2 = Rg[static_cast<size_t>(R - 1)].Cross * Before;
-					(L.CrossBunch[R - 1] > 0.0 ? Shoulder : Dip) = Was2;
-				}
-				if (After > 0.0)
-				{
-					const double Next2 = Rg[static_cast<size_t>(R + 1)].Cross * After;
-					double& Into = L.CrossBunch[R + 1] < 0.0 ? Shoulder : Dip;
-					Into = std::max(Into, Next2);
-				}
-				double Z = Low + (High - Low) * Q.Top * (1.0 - 0.8 * Dip) + (G.Cross * Env + 0.5 * Shoulder) * G.End * (0.12 + 0.88 * std::min(1.0, Q.Top / 0.6));
-				// (its edges' folds: a gore flipped over outward lies flat on the ground, its two layers one on the other)
-				const double Rim = G.Rim[Q.Edge] * Q.Rim;
-				if (Rim * Q.Sn > 0.0) Z += (Clear + 0.004 + 0.022 * Q.Top - Z) * std::min(1.0, std::fabs(Rim) / 0.15) * Q.Rim * Q.Rim;
-				double X = G.X + G.Fore * Q.Cs + G.Skew * Q.Sn + G.Bow * (Q.Sn * Q.Sn - 0.5) + G.Bunched * (0.35 + 0.65 * Env);
-				const double Wandered = G.Wander2 * Q.Round2 + G.Wander3 * Q.Round3;
-				double Y = G.Half[Q.Edge] * Q.Sn + Rim + Wandered + LeanOver * G.Pocket * G.End * Q.Over * Q.Top;
-				if (G.Broken > 0.0)
-				{
-					// (its far end: its crease slanted across it; its seams kinked, in two waves across it, both its layers
-					// alike so that they keep together at its edges; and its narrow side past UnderAt folded back under it,
-					// flat on the ground, its two layers the other way up, under the rest)
-					X += G.Creased * Q.Sn;
-					const double Wave = (Q.Kink[0] * G.KinkC[0] + Q.Kink[1] * G.KinkS[0]) + 0.5 * (Q.Kink[2] * G.KinkC[1] + Q.Kink[3] * G.KinkS[1]);
-					Y += L.Kinked * G.Broken * Wave;
-					X += 0.8 * L.Kinked * G.Broken * (Q.Kink[1] * G.KinkC[0] - Q.Kink[0] * G.KinkS[0]);
-					// (its last ring no farther on than its tip)
-					if (R == Ringed - 1) X = std::min(X, Nx + L.Long - 0.06);
-					const double Fold = -Slumps * G.UnderAt * G.Half[Q.Edge], Past = -Slumps * (Y - Fold);
-					if (bNarrow && Past > 0.0)
+					// (its folds across it: each highest somewhere across it and fading either way; and where one is, on its ring
+					// and those either side, its long folds a little flattened, bunched across)
+					const double Env = EnvAt(R, Col), Before = EnvAt(R - 1, Col), After = EnvAt(R + 1, Col);
+					const double Crossed = std::max({ Env, Before, After });
+					double F = 0.0;
+					for (int Fd = 0; Fd < L.Ridges; ++Fd)
 					{
-						Y += Slumps * 1.8 * Past * G.Under;
-						Z += (Clear + 0.002 + 0.004 * (1.0 - Q.Top) - Z) * G.Under * Smooth(Past / 0.08);
+						const double Aside = (Q.Sn - G.Mid[Fd]) / L.Width[Fd];
+						if (std::fabs(Aside) < 3.5) F += G.Fold[Fd] * std::exp(-Aside * Aside);
 					}
+					F *= 1.0 - 0.3 * Crossed * (1.0 - Smooth((G.U - 0.15) / 0.15));
+					// (its far end's air, buckled across its top on the side it slumps from; on its narrow side coming down to
+					// where it is folded under, and let down along its crease, deeper on its narrow side; and over its folded
+					// edge, the rest lifted by the silk under it)
+					double Arch = Q.Arch;
+					const bool bNarrow = Q.Sn * Slumps < 0.0;
+					if (G.Under > 0.0 && bNarrow)
+					{
+						const double Across2 = (Q.Sn - Lean) / (G.UnderAt + std::fabs(Lean));
+						Arch += (std::sqrt(std::max(0.0, 1.0 - Across2 * Across2)) - Arch) * G.Under;
+					}
+					const double Air = L.Lift * G.Pocket * Arch * G.End * (1.0 - G.Buckle * Smooth((0.4 - Slumps * Q.Sn) / 0.6)) * (1.0 - G.Crease * (0.8 - 0.2 * Slumps * Q.Sn));
+					const double High = 0.045 + G.Bunch + F * G.End + std::max(0.0, G.Loose * Q.Loose) + Air;
+					const double Low = Clear + (0.3 * F + 0.05 * G.Pocket * Arch) * G.End + (bNarrow ? 0.012 * G.Under : 0.0);
+					// (a fold across it, highest somewhere across it and fading either way, lifts its long folds and the troughs
+					// between them alike, the whole of its top there, and its underside a little; and bunches it up toward the
+					// ring before it or after it, the more where it stands higher, slanted and bowed)
+					Crossing[P] = Env;
+					// (and its crest rounded over onto the ring it is bunched toward, its other flank steep, the ring there a
+					// little let down)
+					double Shoulder = 0.0, Dip = 0.0;
+					if (Before > 0.0)
+					{
+						const double Was2 = Rg[static_cast<size_t>(R - 1)].Cross * Before;
+						(L.CrossBunch[R - 1] > 0.0 ? Shoulder : Dip) = Was2;
+					}
+					if (After > 0.0)
+					{
+						const double Next2 = Rg[static_cast<size_t>(R + 1)].Cross * After;
+						double& Into = L.CrossBunch[R + 1] < 0.0 ? Shoulder : Dip;
+						Into = std::max(Into, Next2);
+					}
+					double Z = Low + (High - Low) * Q.Top * (1.0 - 0.8 * Dip) + (G.Cross * Env + 0.5 * Shoulder) * G.End * (0.12 + 0.88 * std::min(1.0, Q.Top / 0.6));
+					// (its edges' folds: a gore flipped over outward lies flat on the ground, its two layers one on the other)
+					const double Rim = G.Rim[Q.Edge] * Q.Rim;
+					if (Rim * Q.Sn > 0.0) Z += (Clear + 0.004 + 0.022 * Q.Top - Z) * std::min(1.0, std::fabs(Rim) / 0.15) * Q.Rim * Q.Rim;
+					double X = G.X + G.Fore * Q.Cs + G.Skew * Q.Sn + G.Bow * (Q.Sn * Q.Sn - 0.5) + G.Bunched * (0.35 + 0.65 * Env);
+					const double Wandered = G.Wander2 * Q.Round2 + G.Wander3 * Q.Round3;
+					double Y = G.Half[Q.Edge] * Q.Sn + Rim + Wandered + LeanOver * G.Pocket * G.End * Q.Over * Q.Top;
+					if (G.Broken > 0.0)
+					{
+						// (its far end: its crease slanted across it; its seams kinked, in two waves across it, both its layers
+						// alike so that they keep together at its edges; and its narrow side past UnderAt folded back under it,
+						// flat on the ground, its two layers the other way up, under the rest)
+						X += G.Creased * Q.Sn;
+						const double Wave = (Q.Kink[0] * G.KinkC[0] + Q.Kink[1] * G.KinkS[0]) + 0.5 * (Q.Kink[2] * G.KinkC[1] + Q.Kink[3] * G.KinkS[1]);
+						Y += L.Kinked * G.Broken * Wave;
+						X += 0.8 * L.Kinked * G.Broken * (Q.Kink[1] * G.KinkC[0] - Q.Kink[0] * G.KinkS[0]);
+						// (its last ring no farther on than its tip)
+						if (R == Ringed - 1) X = std::min(X, Nx + L.Long - 0.06);
+						const double Fold = -Slumps * G.UnderAt * G.Half[Q.Edge], Past = -Slumps * (Y - Fold);
+						if (bNarrow && Past > 0.0)
+						{
+							Y += Slumps * 1.8 * Past * G.Under;
+							Z += (Clear + 0.002 + 0.004 * (1.0 - Q.Top) - Z) * G.Under * Smooth(Past / 0.08);
+						}
+					}
+					Lies[P] = { X, G.Axis + G.Vent + Y, Z };
+					Floor[P] = Low + 0.012 * Q.Top;
 				}
-				Lies[P] = { X, G.Axis + G.Vent + Y, Z };
-				Floor[P] = Low + 0.012 * Q.Top;
 				Settled[P] = Smooth((K - Early - Q.Late) / 0.6);
 				const double Flapping = 0.6 * (Q.S3 * G.A1C + Q.C3 * G.A1S) + 0.4 * (Q.S7 * G.A2C + Q.C7 * G.A2S);
 				Flap[P] = Sag * (1.0 - Settled[P]) * (0.55 * std::min(1.0, 0.3 + G.Gr) * Flapping + G.Billow);
@@ -1689,6 +1722,7 @@ namespace LandAir
 		}
 		const int Seams = Cols / 4;
 		const V3 Hn{ Hx, Hy, H.Z };
+		if (!bKept)
 		{
 			// (its hem as it lies where not flipped: each gore's a little back toward him or on, in a wave round it, so that
 			// its near edge wavers)
@@ -1763,29 +1797,96 @@ namespace LandAir
 				Floor[static_cast<size_t>(Cols + Col)] = Clear;
 			}
 		}
-		// (her note of 24 November 17:40Z, (3), after a second look: its lines had crossed only the flap at its near end, by
-		// 0.2 to 0.3 m, all running to one point. It slid and slewed as it fell in, and two to four of the lines to its top's
-		// gores were drawn across it: each from the grass to its own seam's end on its gathered hem as the rest, then on
-		// over its gathering onto its top past it, and over its top at a slant, in a loose curve (bowed along it, curled
-		// round it, a little wiggle), to the edge on the far side of its top's middle from its seam (one at its middle to
-		// its narrow side), a third of its length along it or more, over that edge and down under it (its gore's hem was
-		// carried round under there as it slewed). Each as far along it as the line's length lets it, lying slack (from his
-		// harness to its hem in the air, up his riser and along its line, LineLong; lying slack 1.6 times that at most: a
-		// real canopy's lines are about as long as its flat width, 7 to 8 m, which the air's short hang under-draws), and no
-		// farther than its own reach; none over a flipped or tucked gore's near end, nor under its flap, whose silk lies
-		// elsewhere or over it. Laid out on its silk's own rings and round it (Strand: its points' rings and columns), its
-		// points where its silk turns most along its way (over a fold's crest, down into its trough), so that it lies on its
-		// silk as that falls in and wherever it lies, sagging into its folds. The rest run to its gathered hem as they did.)
+		// (her note of 24 November 17:40Z, (3), after a second look, and the reviews of what followed: its lines had
+		// crossed only the flap at its near end, all running to one point; then, laid on past their seams' ends over its
+		// gathering, they had still all run from that point, lain more along it than across it, too long, floating over its
+		// folds and buried under its edge. It slid and slewed as it fell in, and two to four of its lines were thrown over
+		// its near part: each from his harness across the grass, bowed out to one side of the rest, either to the edge of
+		// its near part on that side (from its first ring to its third, not where its lines gather) or over its near end
+		// aside of its gathering (0.2 m or more from it, a third to four fifths of the way out to an edge), onto its top
+		// and across it at a slant (28 to 36 degrees off its wind line at the least, as steep as each may lie, 45 on the
+		// mean; bowed along it, curling across it and a little wiggle), up over its folds and down into them, to an edge,
+		// over that and down to the ground beside it (on under there, hidden, back to its hem). Each laid out on its silk's
+		// own rings and round it (a Strand's path: from its seam's end on its hem, where it was in the air, round its near
+		// part to where it comes onto its top, and across to its other edge), so that it lies on its silk as that falls in
+		// and wherever it lies; as its lines go slack it is drawn over its silk along that path (below). 1 to 2.35 m of it
+		// on its silk as laid (to 2.55 m in later tries, should fewer lie so; the drawn line, over its folds, a little
+		// longer), 0.35 m or more of that past 0.15 of its length from where its lines gather (its body), none of it
+		// farther along than 0.45 of its length, none under its flipped gores' flap, its way across the grass clear of its
+		// near part, and from his harness to its far edge no longer than a real canopy's line (RealLines times its spread
+		// across: the air's hang draws its lines short, LinesLong; the line's seam's end, where it is sewn, stays on its
+		// gathered hem with the rest). The rest run to its gathered hem as they did.)
 		struct Strand
 		{
 			int Seam = 0;
-			double R[LineVia] = {}, C[LineVia] = {}, Inward = 0.0;
+			double Th0 = 0.0, Ri = 0.0, Si = 1.0, Re = 0.0, Se = -1.0, Curl = 0.0, Bow = 0.0, Wiggle = 0.0;
 		};
 		std::vector<Strand> Strands;
-		constexpr double Rise = 0.012, Onto = 2.1;
-		constexpr int Last = LineVia - 2;
+		constexpr double Rise = 0.012, Rope = 0.015;
+		// (a point of a strand's path at T, from -1, its seam's end on its hem, to 0, its edge where it comes onto its top,
+		// and on to 1, its other edge: its ring and column there, with their fractions; its top's points round from its
+		// middle (Sn 0) to its edges (-1 and 1) as Round's columns go)
+		const auto PathAt = [Cols](const Strand& S, double T, double& R, double& Cf)
 		{
-			const double LineLong = 0.8 + std::hypot(Ax * HemIn / Widest() - 0.25, LinesLong - 0.8);
+			if (T < 0.0)
+			{
+				const double A = T + 1.0;
+				R = A * S.Ri;
+				Cf = ColOf(S.Th0 + (Pi - std::asin(S.Si) - S.Th0) * A, Cols);
+				return;
+			}
+			R = S.Ri + (S.Re - S.Ri) * T + S.Bow * std::sin(Pi * T);
+			const double Sn = S.Si + (S.Se - S.Si) * (T + S.Curl * T * (1.0 - T)) + 0.05 * std::sin(3.0 * Pi * T + S.Wiggle) * std::sin(Pi * T);
+			Cf = ColOf(Pi - std::asin(std::clamp(Sn, -1.0, 1.0)), Cols);
+		};
+		constexpr int PathNear = 6, PathOver = 80, PathFine = PathNear + PathOver + 1;
+		const auto PathT = [](int I) { return I < PathNear ? -1.0 + static_cast<double>(I) / PathNear : static_cast<double>(I - PathNear) / PathOver; };
+		// (its edge at ring R on side Side (1 its right), its silk's outermost there: where it goes over it, and the way
+		// out from it across the ground, square to its edge)
+		const auto EdgeOut = [Cols](const std::vector<V3>& Pts, double R, double Side, V3& Out2)
+		{
+			const double Ce = ColOf(Side > 0.0 ? 0.5 * Pi : 1.5 * Pi, Cols);
+			const V3 A = SurfAt(Pts, nullptr, Ringed, Cols, std::max(0.0, R - 0.25), Ce, nullptr), B = SurfAt(Pts, nullptr, Ringed, Cols, R + 0.25, Ce, nullptr);
+			const double Tx = B.X - A.X, Ty = B.Y - A.Y, Tl = std::max(1e-9, std::hypot(Tx, Ty));
+			Out2 = { -Ty / Tl, Tx / Tl, 0.0 };
+			if (Out2.Y * Side < 0.0) Out2 = { Ty / Tl, -Tx / Tl, 0.0 };
+			return SurfAt(Pts, nullptr, Ringed, Cols, R, Ce, nullptr);
+		};
+		// (where a strand comes onto its silk and the way out from there: its edge, or, one coming on over its near end (Si
+		// short of its edge), its top there and the way out toward his harness)
+		const auto EntryOut = [&EdgeOut, &Hn, Cols](const std::vector<V3>& Pts, const Strand& S, V3& Out2)
+		{
+			if (std::fabs(S.Si) > 0.999) return EdgeOut(Pts, S.Ri, S.Si, Out2);
+			const V3 P = SurfAt(Pts, nullptr, Ringed, Cols, S.Ri, ColOf(Pi - std::asin(S.Si), Cols), nullptr);
+			const double Wx = Hn.X - P.X, Wy = Hn.Y - P.Y, Wl = std::max(1e-9, std::hypot(Wx, Wy));
+			Out2 = { Wx / Wl, Wy / Wl, 0.0 };
+			return P;
+		};
+		// (its way across the grass from his harness to its edge, bowed out that side by 0.07 of its length: at T, 0 to 1)
+		const auto GrassAt = [](const V3& From, const V3& To, double Side, double T)
+		{
+			const double Wx = To.X - From.X, Wy = To.Y - From.Y, Wl = std::max(1e-9, std::hypot(Wx, Wy));
+			double Nx2 = -Wy / Wl, Ny2 = Wx / Wl;
+			if (Ny2 * Side < 0.0) { Nx2 = -Nx2; Ny2 = -Ny2; }
+			const double Aside = 0.07 * Wl * std::sin(Pi * T);
+			return V3{ From.X + Wx * T + Nx2 * Aside, From.Y + Wy * T + Ny2 * Aside, 0.0 };
+		};
+		// (laid once, from its lying shape before the ground, and kept with it)
+		constexpr size_t PerStrand = 9;
+		const std::vector<double>& LaidWas = KeptWas.Laid;
+		if (bKept && LaidWas.size() % PerStrand == 0)
+		{
+			for (size_t Q = 0; Q < LaidWas.size(); Q += PerStrand)
+			{
+				Strand S;
+				S.Seam = static_cast<int>(LaidWas[Q]);
+				S.Th0 = LaidWas[Q + 1]; S.Ri = LaidWas[Q + 2]; S.Si = LaidWas[Q + 3]; S.Re = LaidWas[Q + 4];
+				S.Se = LaidWas[Q + 5]; S.Curl = LaidWas[Q + 6]; S.Bow = LaidWas[Q + 7]; S.Wiggle = LaidWas[Q + 8];
+				Strands.push_back(S);
+			}
+		}
+		else
+		{
 			const auto RingOf = [&Along](double U)
 			{
 				int R = 0;
@@ -1841,6 +1942,21 @@ namespace LandAir
 				}
 				return false;
 			};
+			// (its length as it lies, from its near end to its tip (its crown, not yet laid: Nx + L.Long), and where its
+			// lines gather: its body is past 0.15 of that from there; and the farthest along it a line may reach)
+			double MinX = 1e9, MaxX = Nx + L.Long, GatherX = 0.0;
+			for (size_t P = 0; P + 1 < Each; ++P)
+			{
+				MinX = std::min(MinX, Lies[P].X);
+				MaxX = std::max(MaxX, Lies[P].X);
+			}
+			double GatherY = 0.0;
+			for (int Sm = 0; Sm < Seams; ++Sm)
+			{
+				GatherX += Lies[static_cast<size_t>(4 * Sm)].X / Seams;
+				GatherY += Lies[static_cast<size_t>(4 * Sm)].Y / Seams;
+			}
+			const double Body = GatherX + 0.15 * (MaxX - MinX), Farthest = RingOf(0.45);
 			// (the seams that may: a line runs back to him from it, and its gore and those beside it lie as laid at its near
 			// end; the nearest its top's middle first, picked on its dice)
 			std::vector<std::pair<double, int>> May;
@@ -1851,8 +1967,9 @@ namespace LandAir
 				May.emplace_back(std::fabs(std::sin(Th)), Sm);
 			}
 			std::sort(May.begin(), May.end());
+			const std::vector<std::pair<double, int>> Each2 = May;
 			// (no more than six of its lines over its silk in all, with those over its flipped gores' flap: those to its
-			// flipped gores and the gores beside them)
+			// flipped gores and the gores beside them; one at the least)
 			int Flapping = 0;
 			for (int Sm = 0; Sm < Seams; ++Sm)
 			{
@@ -1860,141 +1977,176 @@ namespace LandAir
 				for (int D = -1; D <= 1; ++D) bOver = bOver || Cl[static_cast<size_t>((4 * Sm + D + Cols) % Cols)].Flip > 0.3;
 				Flapping += LineBack(static_cast<size_t>(Sm), static_cast<size_t>(Seams)) && bOver;
 			}
-			const int Wanted = std::max(2, std::min(L.Strewn, 6 - Flapping));
-			const double NarrowSn = WideSide == 0 ? -1.0 : 1.0;
-			Strand S;
-			for (int Ln = 0; static_cast<int>(Strands.size()) < Wanted && !May.empty(); Ln = std::min(Ln + 1, 3))
+			const int Wanted = std::min(L.Strewn, std::max(1, 6 - Flapping));
+			// (how much of one coming on over its near end lies over its near part before it comes onto its top: from its
+			// hem there, across the ground, to where it comes on; and where it first lies over its silk)
+			const auto NearOver = [&](const Strand& S, V3& From)
 			{
-				const size_t Pick = std::min(May.size() - 1, static_cast<size_t>(L.StrewnPick[Ln] * static_cast<double>(May.size())));
-				const int Sm = May[Pick].second;
-				May.erase(May.begin() + static_cast<std::ptrdiff_t>(Pick));
-				const double Th0 = 2.0 * Pi * Sm / Seams, Sn0 = std::sin(Th0);
-				// (to the edge on the far side of its top's middle from its seam: round to it on its top, and on round it,
-				// under)
-				// (or from one out toward its edge, in toward its middle and back out to that edge farther along, in a loop)
-				const bool bLoop = std::fabs(Sn0) >= 0.6;
-				const double ExitSn = std::fabs(Sn0) < 0.15 ? NarrowSn : (Sn0 > 0.0) == bLoop ? 1.0 : -1.0;
-				const double Exit = ExitSn < 0.0 ? 1.5 * Pi : 0.5 * Pi, TopWay = ExitSn < 0.0 ? -1.0 : 1.0, ThTop = Exit + TopWay * 0.3;
-				const double Inward = bLoop ? (Th0 < Pi ? 1.0 : -1.0) * 0.75 * (1.0 + 0.4 * L.StrewnCurl[Ln]) : 0.0;
+				From = SurfAt(Lies, nullptr, Ringed, Cols, S.Ri, ColOf(Pi - std::asin(std::clamp(S.Si, -1.0, 1.0)), Cols), nullptr);
+				if (std::fabs(S.Si) > 0.999) return 0.0;
+				const V3 B = From;
+				From = SurfAt(Lies, nullptr, Ringed, Cols, 0.0, ColOf(Pi - std::asin(S.Si), Cols), nullptr);
+				return std::hypot(B.X - From.X, B.Y - From.Y);
+			};
+			// (whether a strand lies as it should on its silk as laid: Least to Most of it on its silk, BodyLeast of that past
+			// its body's start, none of it farther along than Farthest and a little, Steep or more off its wind line from edge
+			// to edge and on downwind (over its flipped gores' flap, should it cross that, as over the rest), coming onto it
+			// within his lines' length in the air of his
+			// harness (LinesLong), and from his harness (the grass bowed, 1.02 times the straight) over its silk (a twentieth
+			// more for its folds) and over its far edge to the ground no longer than a real line (RealLines))
+			const double Budget = 0.98 * RealLines * C.Across;
+			const auto Fits = [&](const Strand& S, double Least, double Most, double BodyLeast, double Steep)
+			{
+				constexpr int Samples = 16;
+				V3 First, Back, Onto;
+				double Silk = NearOver(S, Onto), Over3 = Silk, OnBody = 0.0;
+				for (int I = 0; I <= Samples; ++I)
+				{
+					double R = 0.0, Cf = 0.0;
+					PathAt(S, static_cast<double>(I) / Samples, R, Cf);
+					if (R > Farthest + 0.25) return false;
+					const V3 Now = SurfAt(Lies, nullptr, Ringed, Cols, R, Cf, nullptr);
+					if (I == 0) First = Now;
+					else
+					{
+						const double Step = std::hypot(Now.X - Back.X, Now.Y - Back.Y);
+						Silk += Step;
+						Over3 += Length(Minus(Now, Back));
+						OnBody += Now.X > Body ? Step : 0.0;
+					}
+					Back = Now;
+				}
+				const double Slant = std::atan2(std::fabs(Back.Y - Onto.Y), Back.X - Onto.X), Grass = Length(Minus(First, Hn));
+				return Silk >= Least && Silk <= Most && OnBody >= BodyLeast && Slant >= Steep && Grass <= LinesLong - 0.15 && 1.03 * Grass + 1.1 * Over3 + 0.3 <= Budget;
+			};
+			// (whether its way across the grass from his harness to just outside its edge at In keeps 3 cm or more outside its
+			// near part that side, and off its flap: each point of its rings before that edge's, and its flipped gores')
+			const auto Clear2 = [&](const V3& In, const V3& Way, double Side, double Ri)
+			{
+				const V3 To{ In.X + 0.06 * Way.X, In.Y + 0.06 * Way.Y, 0.0 };
+				constexpr int Samples = 12;
+				V3 Gr[Samples + 1];
+				for (int I = 0; I <= Samples; ++I) Gr[I] = GrassAt(Hn, To, Side, static_cast<double>(I) / Samples);
+				const int Upto = std::min(Ringed - 1, static_cast<int>(std::floor(Ri)));
+				for (int R = 0; R <= Upto; ++R)
+				{
+					for (int Col = 0; Col < Cols; ++Col)
+					{
+						const V3& Q = Lies[static_cast<size_t>(R * Cols + Col)];
+						if (Q.X >= To.X - 0.05 || Q.X <= Gr[0].X) continue;
+						int I = 0;
+						while (I + 1 < Samples && Gr[I + 1].X < Q.X) ++I;
+						const double T = std::clamp((Q.X - Gr[I].X) / std::max(1e-9, Gr[I + 1].X - Gr[I].X), 0.0, 1.0);
+						if (Side * (Gr[I].Y + (Gr[I + 1].Y - Gr[I].Y) * T - Q.Y) < 0.03) return false;
+					}
+				}
+				for (int I = 1; I < Samples && !Flapped.empty(); ++I)
+				{
+					if (UnderFlap({ Gr[I].X, Gr[I].Y, Rope })) return false;
+				}
+				return true;
+			};
+			// (laid from a seam, on its own dice: which edge it comes onto (its own seam's side of its top, or either where its
+			// seam is at its middle) and on which ring (its first to its second, where its near part narrows to its gathering),
+			// and how much farther along than it must it crosses to its other edge: there 0.3 m or more past its body's start,
+			// and on by up to half a ring as diced. Tried again as needed farther along that edge, from a little nearer or
+			// farther along its first, from its other edge, and then over its near end (where its near end lies far from his
+			// harness or its grass would cross its near part), a third to four fifths of the way out to either edge, onto its
+			// top on its first ring or nearer; none coming onto its silk where another does, nor crossing less steeply than
+			// Steep)
+			const auto Lay = [&](int Sm, int Ln, double Least, double Most, double BodyLeast, double Steep, Strand& S)
+			{
 				S.Seam = Sm;
-				S.Inward = -ExitSn;
-				S.R[1] = 0.0;
-				S.C[1] = 4.0 * Sm;
-				const V3& Hem0 = Lies[static_cast<size_t>(4 * Sm)];
-				// (laid out to reach Ru, its rings: onto its top past its gathering on its own gore, and from there across at
-				// a slant to Ru, evenly round it and along it, a little bowed and curled, and its wiggle, each point on its
-				// silk; then to its edge there (that ring's outermost point that side, a little round from where it reaches)
-				// and under it)
-				const auto LayOut = [&](double Ru)
+				S.Th0 = 2.0 * Pi * Sm / Seams;
+				S.Curl = L.StrewnCurl[Ln];
+				S.Bow = L.StrewnBow[Ln];
+				S.Wiggle = L.StrewnWiggle[Ln];
+				const double Sn0 = std::sin(S.Th0);
+				const double Side0 = std::fabs(Sn0) > 0.2 ? (Sn0 > 0.0 ? 1.0 : -1.0) : (L.StrewnWay[Ln] < 0.5 ? -1.0 : 1.0);
+				const double Ri0 = 0.6 + 0.9 * L.StrewnRing[Ln], On0 = 0.5 * L.StrewnFar[Ln];
+				constexpr double Rings4[4] = { 0.0, 0.3, -0.3, 0.6 };
+				for (int Go = 0; Go < 16; ++Go)
 				{
-					for (int J = 2; J < Last; ++J)
+					const bool bFront = Go >= 8;
+					const double Sign = (bFront ? (Go < 12 ? 1.0 : -1.0) : (Go < 4 ? 1.0 : -1.0)) * Side0;
+					S.Si = bFront ? Sign * (0.05 + 0.25 * L.StrewnFront[Ln] + 0.2 * (Go / 2 % 2)) : Sign;
+					S.Ri = bFront ? 0.2 + 0.3 * L.StrewnRing[Ln] + 0.25 * (Go % 2) : std::clamp(Ri0 + Rings4[Go % 4], 0.35, 2.2);
+					bool bTaken = false;
+					for (const Strand& O : Strands) bTaken = bTaken || ((O.Si > 0.0) == (Sign > 0.0) && (std::fabs(O.Si) > 0.999) != bFront && std::fabs(O.Ri - S.Ri) < 0.5);
+					if (bTaken) continue;
+					V3 Way;
+					const V3 In = EntryOut(Lies, S, Way);
+					if (!bFront && !Clear2(In, Way, S.Si, S.Ri)) continue;
+					// (one coming on over its near end aside of where its lines gather, not over it: 0.2 m or more)
+					bool bNear = false;
+					for (int Q = 1; Q <= 8 && bFront; ++Q)
 					{
-						const double T = (J - 2.0) / (Last - 3.0), Curled = T + L.StrewnCurl[Ln] * T * (1.0 - T);
-						const double R = std::max(Onto, Onto + (Ru - Onto) * T + L.StrewnBow[Ln] * std::sin(Pi * T));
-						const double Th = Th0 + (ThTop - Th0) * Curled + (Inward + 0.05 * std::sin(3.0 * Pi * T + L.StrewnWiggle[Ln])) * std::sin(Pi * T);
-						S.R[J] = R;
-						S.C[J] = ColOf(Th, Cols);
-						if (R < 3.0 && !Flapped.empty() && UnderFlap(SurfAt(Lies, nullptr, Ringed, Cols, R, S.C[J], nullptr))) return false;
+						const V3 G2 = GrassAt(Hn, In, S.Si, Q / 8.0);
+						bNear = bNear || std::hypot(G2.X - GatherX, G2.Y - GatherY) < 0.2;
 					}
-					// (and from its seam's end onto its top, straight, clear of its flap)
-					V3 Up = SurfAt(Lies, nullptr, Ringed, Cols, S.R[2], S.C[2], nullptr);
-					Up.Z += Rise;
-					for (int Q = 1; Q < 4 && !Flapped.empty(); ++Q)
+					if (bNear) continue;
+					V3 Onto;
+					const double Over = NearOver(S, Onto);
+					// (off its other edge; or, one coming on over its near end (near its middle), off that same side, or should
+					// that not be steep enough, its other)
+					for (int Off3 = 0; Off3 < (bFront ? 2 : 1); ++Off3)
 					{
-						if (UnderFlap(Plus(Hem0, Times(Minus(Up, Hem0), Q / 4.0)))) return false;
-					}
-					const int Rw = std::clamp(static_cast<int>(std::lround(S.R[Last - 1])), 2, Ringed - 2), Cw = static_cast<int>(std::lround(ColOf(Exit, Cols)));
-					double Out2 = -1e9;
-					for (int D = -6; D <= 6; ++D)
-					{
-						const int Col = (Cw + D + Cols) % Cols;
-						const double Y = ExitSn * Lies[static_cast<size_t>(Rw * Cols + Col)].Y;
-						if (Y > Out2) { Out2 = Y; S.R[Last] = Rw; S.C[Last] = Col; }
-					}
-					return true;
-				};
-				// (how long it lies so on its silk, from its seam's end to its edge, and under it)
-				const auto Long = [&]()
-				{
-					V3 Back = Hem0;
-					double Sum = 0.05;
-					for (int J = 2; J <= Last; ++J)
-					{
-						const V3 Now = SurfAt(Lies, nullptr, Ringed, Cols, S.R[J], S.C[J], nullptr);
-						Sum += Length(Minus(Now, Back));
-						Back = Now;
-					}
-					return Sum;
-				};
-				// (from his harness slack across the grass to its seam's end, its middle bowed aside, and what that leaves;
-				// tried from its reach in, first by the straight from its seam's end to its edge there, at the least as
-				// long, and the way laid out on its silk as much longer than that as the last one tried)
-				const double Left = 1.55 * LineLong - 1.01 * Length(Minus(Hem0, Hn));
-				double Longer = 1.0;
-				bool bLaid = false;
-				for (double U = L.StrewnReach[Ln]; U >= 0.25 && !bLaid; U -= 0.03)
-				{
-					const double Ru = RingOf(U);
-					const double Beeline = Length(Minus(SurfAt(Lies, nullptr, Ringed, Cols, Ru, ColOf(Exit, Cols), nullptr), Hem0));
-					if (Beeline * Longer > Left || !LayOut(Ru)) continue;
-					const double Way = Long();
-					Longer = std::max(1.0, 0.95 * Way / std::max(1e-6, Beeline));
-					bLaid = Way <= Left;
-				}
-				if (!bLaid) continue;
-				// (its points where its silk turns most along its way: its way on its top four times as finely, and from where
-				// it comes onto it and where it reaches, each next point the one farthest off the line through those so far)
-				{
-					constexpr int Fine = 4, Steps = (Last - 3) * Fine + 1, Picks = Last - 2;
-					const auto Dot3 = [](const V3& A, const V3& B) { return A.X * B.X + A.Y * B.Y + A.Z * B.Z; };
-					double Rf[Steps], Cf[Steps];
-					V3 Pf[Steps];
-					for (int I = 0; I < Steps; ++I)
-					{
-						const int J = 2 + std::min(Last - 4, I / Fine);
-						const double T = (I - (J - 2) * Fine) / static_cast<double>(Fine);
-						Rf[I] = S.R[J] + (S.R[J + 1] - S.R[J]) * T;
-						Cf[I] = S.C[J] + (S.C[J + 1] - S.C[J]) * T;
-						Pf[I] = SurfAt(Lies, nullptr, Ringed, Cols, Rf[I], Cf[I], nullptr);
-					}
-					int Kept[Picks] = { 0, Steps - 1 };
-					int Count = 2;
-					while (Count < Picks)
-					{
-						int Best = -1, At = 0;
-						double Most = -1.0;
-						for (int Seg = 0; Seg + 1 < Count; ++Seg)
+						S.Se = (Off3 == 0) == bFront ? Sign : -Sign;
+						const double Ce = ColOf(S.Se > 0.0 ? 0.5 * Pi : 1.5 * Pi, Cols);
+						double Rb = S.Ri + 0.5;
+						while (Rb < Farthest && SurfAt(Lies, nullptr, Ringed, Cols, Rb, Ce, nullptr).X < Body + 0.75 * BodyLeast) Rb += 0.25;
+						for (int On = 0; On < 5; ++On)
 						{
-							const V3& A = Pf[Kept[Seg]];
-							const V3 Ab = Minus(Pf[Kept[Seg + 1]], A);
-							const double Ab2 = std::max(1e-12, Dot3(Ab, Ab));
-							for (int I = Kept[Seg] + 1; I < Kept[Seg + 1]; ++I)
-							{
-								const V3 Ap = Minus(Pf[I], A);
-								const V3 Aside2 = Minus(Ap, Times(Ab, std::clamp(Dot3(Ap, Ab) / Ab2, 0.0, 1.0)));
-								// (its height off the line counting thrice its way aside, and its longest gaps a little, so that it
-								// keeps to its curve where its silk is smooth)
-								const double How = 9.0 * Aside2.Z * Aside2.Z + Aside2.X * Aside2.X + Aside2.Y * Aside2.Y + 1e-4 * Ab2;
-								if (How > Most) { Most = How; Best = I; At = Seg + 1; }
-							}
+							S.Re = Rb + On0 + 0.25 * On;
+							if (S.Re > Farthest) break;
+							const V3 Off2 = SurfAt(Lies, nullptr, Ringed, Cols, S.Re, Ce, nullptr);
+							if (std::atan2(std::fabs(Off2.Y - Onto.Y), Off2.X - Onto.X) < Steep) break;
+							if (Over + Length(Minus(Off2, In)) > Most - 0.05) continue;
+							if (Fits(S, Least, Most, BodyLeast, Steep)) return true;
 						}
-						if (Best < 0) break;
-						for (int K2 = Count; K2 > At; --K2) Kept[K2] = Kept[K2 - 1];
-						Kept[At] = Best;
-						++Count;
-					}
-					for (int J = 2; J < Last; ++J)
-					{
-						const int I = Kept[std::min(Count - 1, J - 2)];
-						S.R[J] = Rf[I];
-						S.C[J] = Cf[I];
 					}
 				}
-				Strands.push_back(S);
-				// (and none from the seams either side of it, so that they lie apart)
-				May.erase(std::remove_if(May.begin(), May.end(), [Sm, Seams](const std::pair<double, int>& Mp) { return (Mp.second - Sm + Seams + 1) % Seams <= 2; }), May.end());
+				return false;
+			};
+			// (as many as it may, each 1 to 2.5 m on its silk; then, should fewer than two lie so, on a wide canopy whose body
+			// is wider than that across, up to 3 m; and should none, the first that may laid less strictly: shorter, less
+			// of it past its body's start, less steeply (a review: one in some thousand pilots had had none across it))
+			constexpr double PassMost[3] = { 2.35, 2.45, 2.55 }, PassSteep[3] = { 36.0, 30.0, 28.0 };
+			for (int Pass = 0; Pass < 3; ++Pass)
+			{
+				for (int Ln = 0; static_cast<int>(Strands.size()) < (Pass == 0 ? Wanted : std::min(Wanted, 2)) && !May.empty(); Ln = std::min(Ln + 1, 3))
+				{
+					const size_t Pick = std::min(May.size() - 1, static_cast<size_t>(L.StrewnPick[Ln] * static_cast<double>(May.size())));
+					const int Sm = May[Pick].second;
+					May.erase(May.begin() + static_cast<std::ptrdiff_t>(Pick));
+					Strand S;
+					if (!Lay(Sm, Ln, 1.0, PassMost[Pass], 0.35, PassSteep[Pass] * Rad, S)) continue;
+					Strands.push_back(S);
+					// (and none from the seams either side of it, so that they lie apart)
+					May.erase(std::remove_if(May.begin(), May.end(), [Sm, Seams](const std::pair<double, int>& Mp) { return (Mp.second - Sm + Seams + 1) % Seams <= 2; }), May.end());
+				}
+				if (Pass < 2)
+				{
+					// (the seams that may again, but those laid and those beside them)
+					May = Each2;
+					for (const Strand& S : Strands)
+					{
+						const int Sm = S.Seam;
+						May.erase(std::remove_if(May.begin(), May.end(), [Sm, Seams](const std::pair<double, int>& Mp) { return (Mp.second - Sm + Seams + 1) % Seams <= 2; }), May.end());
+					}
+				}
+			}
+			for (int Last = 0; Last < 2; ++Last)
+			{
+				for (size_t Pick = 0; Strands.empty() && Pick < Each2.size(); ++Pick)
+				{
+					Strand S;
+					if (Lay(Each2[Pick].second, static_cast<int>(Pick % 4), 0.7, Last == 0 ? 2.6 : 3.0, 0.3, (Last == 0 ? 25.0 : 20.0) * Rad, S)) Strands.push_back(S);
+				}
 			}
 		}
+		for (const Strand& S : Strands) Out.Kept.Laid.insert(Out.Kept.Laid.end(), { static_cast<double>(S.Seam), S.Th0, S.Ri, S.Si, S.Re, S.Se, S.Curl, S.Bow, S.Wiggle });
+		if (!bKept)
 		{
 			// (his lines as they lie (LandBattleAir's DownShape, slack): from his harness, each in two lengths, its middle
 			// let down to the lower end's height and bowed aside by 0.06 of its length, every other line the other way.
@@ -2074,7 +2226,8 @@ namespace LandAir
 		UnderGrid G;
 		if (Ground)
 		{
-			double MinX = 1e18, MinY = 1e18, MaxX = -1e18, MaxY = -1e18;
+			// (and to his harness, where its lines run back to him across the ground)
+			double MinX = Hn.X, MinY = Hn.Y, MaxX = Hn.X, MaxY = Hn.Y;
 			for (size_t P = 0; P < Each; ++P)
 			{
 				for (const V3* Q : { &Out.Points[P], &Lies[P] })
@@ -2114,7 +2267,7 @@ namespace LandAir
 			{
 				for (int Col = 0; Col < Cols; ++Col)
 				{
-					const size_t A = static_cast<size_t>(R * Cols + Col), B = static_cast<size_t>(R * Cols + (Col + 1) % Cols);
+					const size_t A = static_cast<size_t>(R * Cols + Col), B = static_cast<size_t>(R * Cols + (Col + 1 == Cols ? 0 : Col + 1));
 					const size_t Ua = R + 1 < Ringed ? A + static_cast<size_t>(Cols) : Each - 1, Ub = R + 1 < Ringed ? B + static_cast<size_t>(Cols) : Each - 1;
 					Keep(A, B);
 					Keep(A, Ua);
@@ -2123,11 +2276,14 @@ namespace LandAir
 			}
 		}
 		Out.Facings.assign(Each, { 0.0, 0.0, 1.0 });
-		Out.Colours.reserve(Each * 3);
-		for (int R = 0; R < Ringed; ++R)
-			for (int Col = 0; Col < Cols; ++Col)
-				for (int Ch = 0; Ch < 3; ++Ch) Out.Colours.push_back(C.Silk[Ch] * Hemmed(R, Col));
-		for (int Ch = 0; Ch < 3; ++Ch) Out.Colours.push_back(C.Silk[Ch]);
+		Out.Colours.resize(Each * 3);
+		{
+			double* Cs = Out.Colours.data();
+			for (int R = 0; R < Ringed; ++R)
+				for (int Col = 0; Col < Cols; ++Col)
+					for (int Ch = 0; Ch < 3; ++Ch) *Cs++ = C.Silk[Ch] * Hemmed(R, Col);
+			for (int Ch = 0; Ch < 3; ++Ch) *Cs++ = C.Silk[Ch];
+		}
 		// (each point's facing from where the points about it are: round its ring by up it toward its crown, by the rings
 		// either side of it. Where a fold across it is (the art director's note of 24 November 17:40Z), once it streams
 		// out, up it as the silk runs on from it to the next ring: those folds stand two rings apart or more, and by the
@@ -2135,7 +2291,7 @@ namespace LandAir
 		// fold's near side and a crest down its far side, each fold a darker band and a lighter one. And its flipped
 		// gores' fold, a roll of silk at its near edge, faces out of the roll, back toward him, so that its silk either
 		// side of it, one layer turned over onto the other, is each wound its own way)
-		const auto Pt = [&Out, Cols](int R, int Col) -> const V3& { return Out.Points[static_cast<size_t>(R * Cols + (Col + Cols) % Cols)]; };
+		const auto Pt = [&Out, Cols](int R, int Col) -> const V3& { return Out.Points[static_cast<size_t>(R * Cols + (Col < 0 ? Col + Cols : Col >= Cols ? Col - Cols : Col))]; };
 		const V3 Tip2 = Out.Points[Each - 1];
 		for (int R = 0; R < Ringed; ++R)
 		{
@@ -2160,170 +2316,698 @@ namespace LandAir
 		for (int Col = 0; Col < Cols; ++Col) Sum = Plus(Sum, Cross(Minus(Pt(Ringed - 1, Col), Tip2), Minus(Pt(Ringed - 1, Col + 1), Tip2)));
 		Out.Facings[Each - 1] = Unit(Sum, { 0.0, 0.0, 1.0 });
 		Sew(Out, Ringed, Cols);
-		// (its lines across it as it now is: from the grass, slack as the rest (their middle let down to the lower end's
-		// height and bowed aside by 0.06 of the line's length, every other line the other way), to its seam's end and on
-		// over its silk, each of its points over it where it was laid out, Rise (the 12 mm cord's half-thickness and 6 mm)
-		// over it; to its edge, and under it on the ground; never under the ground. Down (its slump at its end: lying, its
-		// lines slack, made once), over the top of its silk there (the highest of its triangles facing up, as it stands
-		// within 1.4 cm of the point: where a fold or its under layer lies over the gore it was laid on, or stands up
-		// beside the line, over that), and where the straight between two would dip into its silk anywhere along it (every
-		// 2.5 cm: over a fold's crest), the two lifted clear of it, the nearer the more)
+		Out.Kept.Key.assign(KeyNow, KeyNow + std::size(KeyNow));
+		Out.Kept.Lies.swap(Lies);
+		Out.Kept.Crossing.swap(Crossing);
+		Out.Kept.Columns.resize(PerColumn * Cl.size());
+		std::memcpy(Out.Kept.Columns.data(), static_cast<const void*>(Cl.data()), sizeof(Column) * Cl.size());
+		// (the lines to its gathered hem: the lowest each one's middle may lie (LineLies), lying: high enough that both its
+		// lengths are Rope (the 12 mm cord's half and 3 mm) over the ground under them, bowed or straight (a review: on a
+		// slope falling away downwind a line had gone some 0.3 m into it))
 		Out.Across.clear();
 		Out.Over.clear();
-		if (!Strands.empty())
+		Out.MidLow.assign(static_cast<size_t>(Seams), -1e9);
+		for (int Sm = 0; Sm < Seams; ++Sm)
 		{
+			if (!LineBack(static_cast<size_t>(Sm), static_cast<size_t>(Seams))) continue;
+			const V3& E = Out.Points[static_cast<size_t>(4 * Sm)];
+			const V3 Way = Minus(E, Hn);
+			const double Flat = std::max(1e-9, std::hypot(Way.X, Way.Y)), Bow = (Sm % 2 == 0 ? 1.0 : -1.0) * 0.06 * Length(Way);
+			double Low = -1e9;
+			for (const double Aside : { 0.0, Bow })
+			{
+				const V3 Mid{ 0.5 * (Hn.X + E.X) - Way.Y / Flat * Aside, 0.5 * (Hn.Y + E.Y) + Way.X / Flat * Aside, 0.0 };
+				Low = std::max(Low, G.At(Mid.X, Mid.Y) + Rope);
+				for (int Q = 1; Q < 8 && Ground; ++Q)
+				{
+					const double T = Q / 8.0;
+					for (const V3* End : { &Hn, &E })
+					{
+						const double X = End->X + (Mid.X - End->X) * T, Y = End->Y + (Mid.Y - End->Y) * T, Z = std::max(End->Z, G.At(End->X, End->Y) + Rope);
+						Low = std::max(Low, Z + (G.At(X, Y) + Rope - Z) / T);
+					}
+				}
+			}
+			Out.MidLow[static_cast<size_t>(Sm)] = Low;
+		}
+		// (its lines across it as it now is (her note of 24 November 17:40Z, (3); and the reviews: they had sunk into its
+		// folds as it settled, then risen through them at its last make, floated over its folds, and ended buried under its
+		// edge). Each strand's path on its silk as it now is, laid over the top of whatever silk lies there (TopAt: a fold
+		// over it, a flipped gore, its under layer; within 0.4 m over it, not its far side still standing over it as it
+		// falls in), Rise over that, so that it lies on its silk and moves with it as it falls in, never in it. Drawn over
+		// its silk as its lines go slack (LineSlack: taut, none of it, at its seam's end on its hem; slack, from its edge
+		// where it comes onto its top to its other edge), LineSilk points evenly along it; over its far edge where its silk
+		// ends, and down to the ground 4 cm beyond. And from his harness as he lies across the grass to 4 cm outside where
+		// its silk ends at its first edge, bowed out by 0.07 of its length (Clear2 kept it clear of its near part), lying on
+		// the ground but where it rises to him, and up onto its silk's edge there. Then where the straight between two of
+		// its points would dip into its silk (over a fold's crest), the two lifted clear of it, the nearer the more; and
+		// always each point Rope over the ground, each span kept over it as its silk's edges are, both its ends lifted
+		// where the ground between stands higher)
+		if (!Strands.empty() && LineSlack(K) <= 0.0)
+		{
+			// (taut: each at its seam's end on its hem, as the rest)
+			for (const Strand& S : Strands)
+			{
+				Out.Across.push_back(S.Seam);
+				Out.Over.insert(Out.Over.end(), static_cast<size_t>(LineVia), Out.Points[static_cast<size_t>(4 * S.Seam)]);
+			}
+		}
+		else if (!Strands.empty())
+		{
+			const double Slack = LineSlack(K);
 			const size_t Lines = Strands.size();
-			const bool bDown = K >= 0.999;
-			std::vector<V3> Pts(Lines * static_cast<size_t>(LineVia));
-			double Lo[2] = { 1e9, 1e9 }, Hi[2] = { -1e9, -1e9 }, Farthest = 0.0;
+			// (each strand's path finely as its silk now is, from its seam's end on its hem round its near part to its edge
+			// and across to its other edge, and how far along it each point is; how far along it its line is drawn as slack
+			// as it is (over its far edge and down to the ground a nominal Drop more, all of it slack); and the way out over
+			// each of those edges)
+			constexpr double OutTo = 0.6, CellX = 0.15, CellY = 0.05, Near = 0.003, Above2 = 0.4, Drop = 0.3;
+			std::vector<V3> Fine(Lines * static_cast<size_t>(PathFine)), Ways(Lines * 2);
+			std::vector<double> FineArc(Fine.size(), 0.0);
+			std::vector<int> Upto(Lines, PathFine), Start(Lines, 0);
+			double Lo[2] = { std::min(1e9, Hn.X), std::min(1e9, Hn.Y) }, Hi[2] = { std::max(-1e9, Hn.X), std::max(-1e9, Hn.Y) }, Farthest = 0.0;
 			for (size_t Ln = 0; Ln < Lines; ++Ln)
 			{
 				const Strand& S = Strands[Ln];
-				for (int J = 1; J <= Last; ++J)
+				V3* F = &Fine[Ln * PathFine];
+				double* Fa = &FineArc[Ln * PathFine];
+				double Rs[PathFine];
+				for (int I = 0; I < PathFine; ++I)
 				{
-					V3& P = Pts[Ln * LineVia + static_cast<size_t>(J)];
-					P = SurfAt(Out.Points, nullptr, Ringed, Cols, S.R[J], S.C[J], nullptr);
-					Lo[0] = std::min(Lo[0], P.X); Hi[0] = std::max(Hi[0], P.X);
-					Lo[1] = std::min(Lo[1], P.Y); Hi[1] = std::max(Hi[1], P.Y);
-					Farthest = std::max(Farthest, S.R[J]);
+					double Cf = 0.0;
+					PathAt(S, PathT(I), Rs[I], Cf);
+					F[I] = SurfAt(Out.Points, nullptr, Ringed, Cols, Rs[I], Cf, nullptr);
 				}
-			}
-			// (down, its triangles facing up over its rings as far as its lines reach and three on, both its faces, each in
-			// the squares of a 15 cm grid over where its lines lie that it reaches over or near)
-			constexpr double Cell = 0.15, Near = 0.0142;
-			const int Gx = static_cast<int>((Hi[0] - Lo[0]) / Cell) + 1, Gy = static_cast<int>((Hi[1] - Lo[1]) / Cell) + 1;
-			struct Flat
-			{
-				double X0, X1, Y0, Y1, Ax, Ay, Wb[2], Wc[2], Least[3], Z0, Sx, Sy, Aside, Highest;
-			};
-			std::vector<Flat> Flats;
-			std::vector<int> Starts, Items;
-			if (bDown)
-			{
-				const int Rings2 = std::min(Ringed - 1, static_cast<int>(Farthest) + 3);
-				// (the squares its lines are over, as they are sampled below)
-				std::vector<unsigned char> Used(static_cast<size_t>(Gx * Gy), 0);
-				const auto Mark = [&](const V3& At) { Used[static_cast<size_t>(std::clamp(static_cast<int>((At.Y - Lo[1]) / Cell), 0, Gy - 1) * Gx + std::clamp(static_cast<int>((At.X - Lo[0]) / Cell), 0, Gx - 1))] = 1; };
-				for (size_t Ln = 0; Ln < Lines; ++Ln)
+				for (int I = 1; I < PathFine; ++I) Fa[I] = Fa[I - 1] + Length(Minus(F[I], F[I - 1]));
+				const double Reach2 = (Fa[PathFine - 1] + Drop) * Slack, From2 = Fa[PathNear] * Slack;
+				int& U = Upto[Ln];
+				U = PathNear + 1;
+				while (U < PathFine && Fa[U - 1] <= Reach2) ++U;
+				int& I0 = Start[Ln];
+				while (I0 + 1 < PathNear && Fa[I0 + 1] <= From2) ++I0;
+				for (int I = I0; I < U; ++I)
 				{
-					const V3* P = &Pts[Ln * LineVia];
-					for (int J = 1; J <= Last; ++J) Mark(P[J]);
-					for (int J = 1; J < Last; ++J)
+					Lo[0] = std::min(Lo[0], F[I].X); Hi[0] = std::max(Hi[0], F[I].X);
+					Lo[1] = std::min(Lo[1], F[I].Y); Hi[1] = std::max(Hi[1], F[I].Y);
+					Farthest = std::max(Farthest, Rs[I]);
+				}
+				EntryOut(Out.Points, S, Ways[2 * Ln]);
+				EdgeOut(Out.Points, S.Re, S.Se, Ways[2 * Ln + 1]);
+			}
+			Lo[0] -= OutTo; Lo[1] -= OutTo; Hi[0] += OutTo; Hi[1] += OutTo;
+			// (its triangles facing up over its rings as far as its lines are drawn and three on, both its faces, each in the
+			// squares of a 15 by 5 cm grid over where its lines lie that it reaches over or near: those its paths cross as far
+			// as they are drawn, those out over their edges, those its lines cross from his harness, and those between where
+			// it is drawn onto its silk from and its first edge)
+			constexpr double PerX = 1.0 / CellX, PerY = 1.0 / CellY;
+			const int Gx = static_cast<int>((Hi[0] - Lo[0]) * PerX) + 1, Gy = static_cast<int>((Hi[1] - Lo[1]) * PerY) + 1;
+			const auto CellOf = [&](double X, double Y) { return std::clamp(static_cast<int>((Y - Lo[1]) * PerY), 0, Gy - 1) * Gx + std::clamp(static_cast<int>((X - Lo[0]) * PerX), 0, Gx - 1); };
+			std::vector<unsigned char> Used(static_cast<size_t>(Gx * Gy), 0);
+			constexpr double Wide2 = 0.02;
+			const auto MarkTo = [&](double X0, double Y0, double X1, double Y1)
+			{
+				// (and those within Wide2 of it across: its line drawn straight between its points, off it a little)
+				const int Subs = std::max(1, static_cast<int>(std::hypot(X1 - X0, Y1 - Y0) / CellY));
+				for (int Q = 0; Q <= Subs; ++Q)
+				{
+					const double T = Q / static_cast<double>(Subs), X = X0 + (X1 - X0) * T, Y = Y0 + (Y1 - Y0) * T;
+					for (const double Dy : { -Wide2, Wide2 }) Used[static_cast<size_t>(CellOf(X, Y + Dy))] = 1;
+					Used[static_cast<size_t>(CellOf(X, Y))] = 1;
+				}
+			};
+			for (size_t Ln = 0; Ln < Lines; ++Ln)
+			{
+				const V3* F = &Fine[Ln * PathFine];
+				for (int I = Start[Ln]; I + 1 < Upto[Ln]; ++I) MarkTo(F[I].X, F[I].Y, F[I + 1].X, F[I + 1].Y);
+				if (Upto[Ln] == PathFine)
+				{
+					const V3& From = F[PathFine - 1];
+					const V3& Way = Ways[2 * Ln + 1];
+					MarkTo(From.X, From.Y, From.X + Way.X * (OutTo + 0.05), From.Y + Way.Y * (OutTo + 0.05));
+				}
+				const V3& In = F[PathNear];
+				V3 GrassWas = Hn;
+				for (int Q = 1; Q <= 12; ++Q)
+				{
+					// (and over its last third 6 cm either side: it is drawn to where it comes off its silk, not quite there)
+					const V3 B = GrassAt(Hn, In, Strands[Ln].Si, Q / 12.0);
+					MarkTo(GrassWas.X, GrassWas.Y, B.X, B.Y);
+					for (const double Dy : { -0.06, 0.06 })
+						if (Q > 8) MarkTo(GrassWas.X, GrassWas.Y + Dy, B.X, B.Y + Dy);
+					GrassWas = B;
+				}
+				// (and from where it is drawn onto its silk from, between its hem and where it comes on, out that way as far as
+				// it is slack; and all the way out from where it comes on)
+				const V3& Way0 = Ways[2 * Ln];
+				const double Out3 = std::min(OutTo + 0.05, (OutTo + 0.05) * Slack + 0.1);
+				MarkTo(In.X, In.Y, In.X + Way0.X * (OutTo + 0.05), In.Y + Way0.Y * (OutTo + 0.05));
+				for (int I = Start[Ln]; I <= std::min(Start[Ln] + 1, PathNear - 1); ++I)
+				{
+					const int Along2 = std::max(1, static_cast<int>(std::hypot(F[I + 1].X - F[I].X, F[I + 1].Y - F[I].Y) / CellY));
+					for (int U = 0; U < Along2; ++U)
 					{
-						const int Subs = std::max(2, static_cast<int>(std::hypot(P[J + 1].X - P[J].X, P[J + 1].Y - P[J].Y) / 0.025));
-						for (int Q = 1; Q < Subs; ++Q) Mark(Plus(P[J], Times(Minus(P[J + 1], P[J]), Q / static_cast<double>(Subs))));
+						const double Fx = F[I].X + (F[I + 1].X - F[I].X) * U / Along2, Fy = F[I].Y + (F[I + 1].Y - F[I].Y) * U / Along2;
+						const double Tx = In.X + Way0.X * Out3, Ty = In.Y + Way0.Y * Out3;
+						MarkTo(Fx, Fy, Fx + (Tx - Fx) * Slack, Fy + (Ty - Fy) * Slack);
 					}
 				}
+			}
+			// (how many of its squares are marked up to each: a box's count at a glance)
+			std::vector<int> Marked(static_cast<size_t>((Gx + 1) * (Gy + 1)), 0);
+			for (int J = 0; J < Gy; ++J)
+				for (int I = 0; I < Gx; ++I)
+					Marked[static_cast<size_t>((J + 1) * (Gx + 1) + I + 1)] = Used[static_cast<size_t>(J * Gx + I)] + Marked[static_cast<size_t>(J * (Gx + 1) + I + 1)]
+						+ Marked[static_cast<size_t>((J + 1) * (Gx + 1) + I)] - Marked[static_cast<size_t>(J * (Gx + 1) + I)];
+			// (whether any of a row's squares from I0 to I1 is marked)
+			const auto RowHas = [&Marked, Gx](int J, int I0, int I1)
+			{
+				const int* M = Marked.data();
+				return M[(J + 1) * (Gx + 1) + I1 + 1] - M[(J + 1) * (Gx + 1) + I0] - M[J * (Gx + 1) + I1 + 1] + M[J * (Gx + 1) + I0] > 0;
+			};
+			// (its quads, each its two triangles: where a point is on one, its corners' shares of it; how far out of it each
+			// share may go and the point still be within Near of it; and its height there, never over its highest corner)
+			struct Side3
+			{
+				double X0, X1, Y0, Y1, Ax, Ay, Wb[2], Wc[2], Least[3], Z0, Sx, Sy, Highest;
+			};
+			struct Flat
+			{
+				double X0, X1, Y0, Y1, Highest, Band;
+				Side3 Sides[2];
+				int Planes;
+			};
+			std::vector<Flat> Flats;
+			std::vector<int> Starts(static_cast<size_t>(Gx * Gy + 1), 0), Items;
+			{
 				struct Spans
 				{
 					int I0, I1, J0, J1;
 				};
 				std::vector<Spans> Found;
-				Flats.reserve(static_cast<size_t>(2 * Rings2 * Cols));
-				Found.reserve(Flats.capacity());
-				Starts.assign(static_cast<size_t>(Gx * Gy + 1), 0);
-				const size_t PerFace = static_cast<size_t>(2 * (Ringed - 1) * Cols + Cols);
+				const int Rings2 = std::min(Ringed - 1, static_cast<int>(Farthest) + 3);
+				Flats.reserve(static_cast<size_t>(Rings2 * Cols / 2));
+				Found.reserve(static_cast<size_t>(Rings2 * Cols / 2));
+				// (its outer face's, either way up: each triangle's two faces lie together, one of them facing up; and where
+				// each of its points falls on the grid)
 				const int* Tr = Out.Triangles.data();
-				for (size_t Face = 0; Face < 2; ++Face)
+				const size_t Verts = static_cast<size_t>((Rings2 + 1) * Cols);
+				std::vector<double> OnGrid(2 * Verts);
+				for (size_t P = 0; P < Verts; ++P)
 				{
-					for (size_t T = Face * PerFace; T < Face * PerFace + static_cast<size_t>(2 * Rings2 * Cols); ++T)
+					OnGrid[2 * P] = (Out.Points[P].X - Lo[0]) * PerX;
+					OnGrid[2 * P + 1] = (Out.Points[P].Y - Lo[1]) * PerY;
+				}
+				for (size_t Qd = 0; Qd < static_cast<size_t>(Rings2 * Cols); ++Qd)
+				{
+					// (Sew's two a quad: its corners A, B, B on and A on)
+					const int* T2 = Tr + 6 * Qd;
+					const size_t Ia = static_cast<size_t>(T2[0]), Ib = static_cast<size_t>(T2[1]), Ic = static_cast<size_t>(T2[2]), Id = static_cast<size_t>(T2[5]);
+					const double Gx0 = std::min({ OnGrid[2 * Ia], OnGrid[2 * Ib], OnGrid[2 * Ic], OnGrid[2 * Id] }) - Near * PerX;
+					const double Gx1 = std::max({ OnGrid[2 * Ia], OnGrid[2 * Ib], OnGrid[2 * Ic], OnGrid[2 * Id] }) + Near * PerX;
+					const double Gy0 = std::min({ OnGrid[2 * Ia + 1], OnGrid[2 * Ib + 1], OnGrid[2 * Ic + 1], OnGrid[2 * Id + 1] }) - Near * PerY;
+					const double Gy1 = std::max({ OnGrid[2 * Ia + 1], OnGrid[2 * Ib + 1], OnGrid[2 * Ic + 1], OnGrid[2 * Id + 1] }) + Near * PerY;
+					if (Gx1 < 0.0 || Gy1 < 0.0 || Gx0 > Gx || Gy0 > Gy) continue;
+					const int I0 = std::max(0, static_cast<int>(Gx0)), I1 = std::min(Gx - 1, static_cast<int>(Gx1));
+					int J0 = std::max(0, static_cast<int>(Gy0)), J1 = std::min(Gy - 1, static_cast<int>(Gy1));
+					while (J0 <= J1 && !RowHas(J0, I0, I1)) ++J0;
+					while (J1 >= J0 && !RowHas(J1, I0, I1)) --J1;
+					if (J0 > J1) continue;
+					Flat F;
+					F.Planes = 0;
+					F.X0 = F.Y0 = 1e9;
+					F.X1 = F.Y1 = F.Highest = -1e9;
+					for (int Sd = 0; Sd < 2; ++Sd)
 					{
-						const size_t Ia = static_cast<size_t>(Tr[3 * T]), Ib = static_cast<size_t>(Tr[3 * T + 1]), Ic = static_cast<size_t>(Tr[3 * T + 2]);
-						if (Out.Facings[Ia].Z + Out.Facings[Ib].Z + Out.Facings[Ic].Z <= 0.0) continue;
-						const V3& Pa = Out.Points[Ia];
-						const V3& Pb = Out.Points[Ib];
-						const V3& Pc = Out.Points[Ic];
-						const double X0 = std::min({ Pa.X, Pb.X, Pc.X }) - Near, X1 = std::max({ Pa.X, Pb.X, Pc.X }) + Near;
-						const double Y0 = std::min({ Pa.Y, Pb.Y, Pc.Y }) - Near, Y1 = std::max({ Pa.Y, Pb.Y, Pc.Y }) + Near;
-						if (X1 < Lo[0] || X0 > Hi[0] || Y1 < Lo[1] || Y0 > Hi[1]) continue;
+						const size_t Ja = static_cast<size_t>(T2[3 * Sd]), Jb = static_cast<size_t>(T2[3 * Sd + 1]), Jc = static_cast<size_t>(T2[3 * Sd + 2]);
+						if (Out.Facings[Ja].Z + Out.Facings[Jb].Z + Out.Facings[Jc].Z == 0.0) continue;
+						const V3& Pa = Out.Points[Ja];
+						const V3& Pb = Out.Points[Jb];
+						const V3& Pc = Out.Points[Jc];
 						const double D = (Pb.X - Pa.X) * (Pc.Y - Pa.Y) - (Pc.X - Pa.X) * (Pb.Y - Pa.Y);
 						if (std::fabs(D) < 1e-12) continue;
-						const int I0 = std::max(0, static_cast<int>((X0 - Lo[0]) / Cell)), I1 = std::min(Gx - 1, static_cast<int>((X1 - Lo[0]) / Cell));
-						const int J0 = std::max(0, static_cast<int>((Y0 - Lo[1]) / Cell)), J1 = std::min(Gy - 1, static_cast<int>((Y1 - Lo[1]) / Cell));
-						int Over = 0;
-						for (int J = J0; J <= J1; ++J)
-							for (int I = I0; I <= I1; ++I) Over += Used[static_cast<size_t>(J * Gx + I)];
-						if (Over == 0) continue;
-						// (where a point is on it, its corners' shares of it; how far out of it each share may go and the point
-						// still be within Near of it; and its height there, as steep as it is a centimetre either way of it at
-						// most, never over its highest corner)
-						const double Per = 1.0 / D, Out2 = -Near * std::fabs(Per);
 						const double Bx = Pb.X - Pa.X, By = Pb.Y - Pa.Y, Cx = Pc.X - Pa.X, Cy = Pc.Y - Pa.Y;
-						Flat F;
-						F.X0 = X0; F.X1 = X1; F.Y0 = Y0; F.Y1 = Y1; F.Ax = Pa.X; F.Ay = Pa.Y;
-						F.Wb[0] = Cy * Per; F.Wb[1] = -Cx * Per;
-						F.Wc[0] = -By * Per; F.Wc[1] = Bx * Per;
-						F.Least[0] = Out2 * std::sqrt((Cx - Bx) * (Cx - Bx) + (Cy - By) * (Cy - By));
-						F.Least[1] = Out2 * std::sqrt(Cx * Cx + Cy * Cy);
-						F.Least[2] = Out2 * std::sqrt(Bx * Bx + By * By);
-						F.Z0 = Pa.Z;
-						F.Sx = (Pb.Z - Pa.Z) * F.Wb[0] + (Pc.Z - Pa.Z) * F.Wc[0];
-						F.Sy = (Pb.Z - Pa.Z) * F.Wb[1] + (Pc.Z - Pa.Z) * F.Wc[1];
-						F.Aside = 0.01 * (std::fabs(F.Sx) + std::fabs(F.Sy));
-						F.Highest = std::max({ Pa.Z, Pb.Z, Pc.Z });
-						Flats.push_back(F);
-						Found.push_back({ I0, I1, J0, J1 });
-						for (int J = J0; J <= J1; ++J)
-							for (int I = I0; I <= I1; ++I) Starts[static_cast<size_t>(J * Gx + I + 1)] += Used[static_cast<size_t>(J * Gx + I)];
+						const double Bz = Pb.Z - Pa.Z, Cz = Pc.Z - Pa.Z, Nx3 = By * Cz - Bz * Cy, Ny3 = Bz * Cx - Bx * Cz;
+						// (none round a steep one, over 63 degrees: its height run on past its edge stands far over the silk
+						// beside it, where its layers gather at its hem and at their edges, and its lines had floated there)
+						const bool bSteep = Nx3 * Nx3 + Ny3 * Ny3 > 4.0 * D * D;
+						const double Per = 1.0 / D, Out2 = bSteep ? 0.0 : -Near * std::fabs(Per);
+						Side3& Pl = F.Sides[F.Planes++];
+						Pl.Ax = Pa.X; Pl.Ay = Pa.Y;
+						Pl.Wb[0] = Cy * Per; Pl.Wb[1] = -Cx * Per;
+						Pl.Wc[0] = -By * Per; Pl.Wc[1] = Bx * Per;
+						Pl.Least[0] = Out2 * std::sqrt((Cx - Bx) * (Cx - Bx) + (Cy - By) * (Cy - By));
+						Pl.Least[1] = Out2 * std::sqrt(Cx * Cx + Cy * Cy);
+						Pl.Least[2] = Out2 * std::sqrt(Bx * Bx + By * By);
+						Pl.Z0 = Pa.Z;
+						Pl.Sx = (Pb.Z - Pa.Z) * Pl.Wb[0] + (Pc.Z - Pa.Z) * Pl.Wc[0];
+						Pl.Sy = (Pb.Z - Pa.Z) * Pl.Wb[1] + (Pc.Z - Pa.Z) * Pl.Wc[1];
+						Pl.Highest = std::max({ Pa.Z, Pb.Z, Pc.Z });
+						Pl.X0 = std::min({ Pa.X, Pb.X, Pc.X }) - Near; Pl.X1 = std::max({ Pa.X, Pb.X, Pc.X }) + Near;
+						Pl.Y0 = std::min({ Pa.Y, Pb.Y, Pc.Y }) - Near; Pl.Y1 = std::max({ Pa.Y, Pb.Y, Pc.Y }) + Near;
+						F.X0 = std::min(F.X0, Pl.X0); F.X1 = std::max(F.X1, Pl.X1);
+						F.Y0 = std::min(F.Y0, Pl.Y0); F.Y1 = std::max(F.Y1, Pl.Y1);
+						F.Highest = std::max(F.Highest, Pl.Highest);
+					}
+					if (F.Planes == 0) continue;
+					Flats.push_back(F);
+					Found.push_back({ I0, I1, J0, J1 });
+					for (int J = J0; J <= J1; ++J)
+					{
+						if (!RowHas(J, I0, I1)) continue;
+						for (int I = I0; I <= I1; ++I) Starts[static_cast<size_t>(J * Gx + I + 1)] += Used[static_cast<size_t>(J * Gx + I)];
 					}
 				}
 				for (size_t Q = 1; Q < Starts.size(); ++Q) Starts[Q] += Starts[Q - 1];
 				Items.resize(static_cast<size_t>(Starts.back()));
+				// (each square's, highest first, in 64 bands of height (Band: the top of its own), so that a point's search
+				// stops at the first band no higher than what it has found)
+				double Zlo = 1e9, Zhi = -1e9;
+				for (const Flat& F : Flats)
+				{
+					Zlo = std::min(Zlo, F.Highest);
+					Zhi = std::max(Zhi, F.Highest);
+				}
+				const double Tall = std::max(1e-6, (Zhi - Zlo) / 63.0);
+				int Banded[65] = {};
+				std::vector<int> Order(Flats.size()), BandOf(Flats.size());
+				for (size_t F = 0; F < Flats.size(); ++F)
+				{
+					const int B = std::clamp(static_cast<int>((Zhi - Flats[F].Highest) / Tall), 0, 63);
+					Flats[F].Band = Zhi - B * Tall + 1e-9;
+					BandOf[F] = B;
+					++Banded[B + 1];
+				}
+				for (int B = 1; B < 65; ++B) Banded[B] += Banded[B - 1];
+				for (size_t F = 0; F < Flats.size(); ++F) Order[static_cast<size_t>(Banded[BandOf[F]]++)] = static_cast<int>(F);
 				std::vector<int> Next(Starts.begin(), Starts.end() - 1);
-				for (size_t F = 0; F < Found.size(); ++F)
-					for (int J = Found[F].J0; J <= Found[F].J1; ++J)
-						for (int I = Found[F].I0; I <= Found[F].I1; ++I)
-							if (Used[static_cast<size_t>(J * Gx + I)]) Items[static_cast<size_t>(Next[static_cast<size_t>(J * Gx + I)]++)] = static_cast<int>(F);
+				for (const int Fo : Order)
+				{
+					const Spans& Sp = Found[static_cast<size_t>(Fo)];
+					for (int J = Sp.J0; J <= Sp.J1; ++J)
+					{
+						if (!RowHas(J, Sp.I0, Sp.I1)) continue;
+						for (int I = Sp.I0; I <= Sp.I1; ++I)
+							if (Used[static_cast<size_t>(J * Gx + I)]) Items[static_cast<size_t>(Next[static_cast<size_t>(J * Gx + I)]++)] = Fo;
+					}
+				}
 			}
-			// (the top of its silk at a point: the highest of them there or within Near of it, as high as it is anywhere a
-			// centimetre either way of it; so that a line over a fold's flank, or beside where a fold stands up, is clear of
-			// it all round)
-			const auto TopAt = [&](double X, double Y)
+			// (the top of its silk at a point: the highest of it there or within Near of it, no more than Above2 over Below;
+			// none, -1e9; or, asked only whether it is any higher than Least, Least for no)
+			const auto TopAt = [&](double X, double Y, double Below, double Least = -1e9)
 			{
-				const int I = std::clamp(static_cast<int>((X - Lo[0]) / Cell), 0, Gx - 1), J = std::clamp(static_cast<int>((Y - Lo[1]) / Cell), 0, Gy - 1);
-				double Best = -1e9;
-				for (int Q = Starts[static_cast<size_t>(J * Gx + I)]; Q < Starts[static_cast<size_t>(J * Gx + I + 1)]; ++Q)
+				if (X < Lo[0] || X > Hi[0] || Y < Lo[1] || Y > Hi[1]) return Least;
+				const int Cn = CellOf(X, Y);
+				double Best = Least;
+				for (int Q = Starts[static_cast<size_t>(Cn)]; Q < Starts[static_cast<size_t>(Cn + 1)]; ++Q)
 				{
 					const Flat& F = Flats[static_cast<size_t>(Items[static_cast<size_t>(Q)])];
+					if (F.Band < Best) break;
 					if (X < F.X0 || X > F.X1 || Y < F.Y0 || Y > F.Y1) continue;
-					const double Dx = X - F.Ax, Dy = Y - F.Ay;
-					const double Wb = F.Wb[0] * Dx + F.Wb[1] * Dy, Wc = F.Wc[0] * Dx + F.Wc[1] * Dy;
-					if (Wb < F.Least[1] || Wc < F.Least[2] || 1.0 - Wb - Wc < F.Least[0]) continue;
-					Best = std::max(Best, std::min(F.Highest, F.Z0 + F.Sx * Dx + F.Sy * Dy + F.Aside));
+					for (int Sd = 0; Sd < F.Planes; ++Sd)
+					{
+						const Side3& Pl = F.Sides[Sd];
+						if (X < Pl.X0 || X > Pl.X1 || Y < Pl.Y0 || Y > Pl.Y1) continue;
+						const double Dx = X - Pl.Ax, Dy = Y - Pl.Ay;
+						const double Wb = Pl.Wb[0] * Dx + Pl.Wb[1] * Dy, Wc = Pl.Wc[0] * Dx + Pl.Wc[1] * Dy;
+						if (Wb < Pl.Least[1] || Wc < Pl.Least[2] || 1.0 - Wb - Wc < Pl.Least[0]) continue;
+						const double Z = std::min(Pl.Highest, Pl.Z0 + Pl.Sx * Dx + Pl.Sy * Dy);
+						if (Z <= Below + Above2) Best = std::max(Best, Z);
+					}
 				}
 				return Best;
 			};
 			Out.Over.resize(Lines * static_cast<size_t>(LineVia));
+			const double Hh = std::max(0.0, Hn.Z - G.At(Hn.X, Hn.Y));
+			// (along the straight from A to B, each 2 cm: the top of its silk there and Rise over it, or the ground and Rope
+			// over it; where its silk ends or begins between two (found to 3 mm), over its edge 1.5 cm out from it, as a
+			// cord's thickness hangs off it, and on the ground 3 cm out, none of the ground's nearer; added to Pts, A not,
+			// and, should Stop, only to where its silk first ends)
+			// (finely as it settles and lies, more coarsely as it falls in: its silk moving, its lines not yet lying on it)
+			const bool bFine = K >= 0.75 - 1e-9;
+			const double Pace = bFine ? 0.02 : 0.04;
+			const auto Drape = [&](const V3& A, const V3& B, bool bStop, std::vector<V3>& Pts)
+			{
+				const double Dx = B.X - A.X, Dy = B.Y - A.Y, Len = std::hypot(Dx, Dy);
+				if (Len < 1e-6) return;
+				const int N = std::max(1, static_cast<int>(std::ceil(Len / Pace)));
+				const auto TopOn = [&](double T) { return TopAt(A.X + Dx * T, A.Y + Dy * T, A.Z + (B.Z - A.Z) * T); };
+				const auto Ground2 = [&](double T) { const double X = A.X + Dx * T, Y = A.Y + Dy * T; return V3{ X, Y, G.At(X, Y) + Rope }; };
+				const size_t Mine = Pts.size();
+				double WasT = 0.0, WasTop = TopOn(0.0), Clear3 = -1.0;
+				for (int Q = 1; Q <= N; ++Q)
+				{
+					const double T = static_cast<double>(Q) / N;
+					double Top = TopOn(T);
+					// (a crack between its layers where it folds over, not its edge: silk again within 4 cm)
+					for (int Ahead = 1; Ahead <= 2 && Top < -1e8 && WasTop > -1e8; ++Ahead) Top = TopOn(T + 0.02 * Ahead / Len);
+					if ((Top > -1e8) != (WasTop > -1e8))
+					{
+						const bool bOff = WasTop > -1e8;
+						double In = bOff ? WasT : T, Out3 = bOff ? T : WasT, TopIn = bOff ? WasTop : Top;
+						for (int Halve = 0; Halve < 3; ++Halve)
+						{
+							const double M = 0.5 * (In + Out3), Tm = TopOn(M);
+							if (Tm > -1e8) { In = M; TopIn = Tm; }
+							else Out3 = M;
+						}
+						const double Edge = 0.5 * (In + Out3), Way = (bOff ? 1.0 : -1.0) / Len;
+						const V3 Lip{ A.X + Dx * (Edge + 0.015 * Way), A.Y + Dy * (Edge + 0.015 * Way), TopIn + Rise };
+						if (bOff)
+						{
+							Pts.push_back(Lip);
+							Pts.push_back(Ground2(Edge + 0.03 * Way));
+							if (bStop) return;
+							Clear3 = Edge + 0.03 * Way;
+						}
+						else
+						{
+							while (Pts.size() > Mine && (Pts.back().X - A.X) * Dx + (Pts.back().Y - A.Y) * Dy > (Edge - 0.03 / Len) * Len * Len) Pts.pop_back();
+							if (Edge - 0.03 / Len > 0.0) Pts.push_back(Ground2(Edge - 0.03 / Len));
+							Pts.push_back(Lip);
+						}
+					}
+					if (Top > -1e8) Pts.push_back({ A.X + Dx * T, A.Y + Dy * T, Top + Rise });
+					else if (T > Clear3) Pts.push_back(Ground2(T));
+					WasT = T;
+					WasTop = Top;
+				}
+			};
+			std::vector<V3> Route, Head, Cand;
+			std::vector<double> Arc, CandArc;
+			Route.reserve(PathFine + 40);
+			Cand.reserve(PathFine + 80);
+			constexpr int Want = LineVia - LineGrass + 2;
 			for (size_t Ln = 0; Ln < Lines; ++Ln)
 			{
 				const Strand& S = Strands[Ln];
-				V3* P = &Pts[Ln * LineVia];
-				for (int J = 1; J <= Last; ++J) P[J].Z = (bDown ? std::max(P[J].Z, TopAt(P[J].X, P[J].Y)) : P[J].Z) + Rise;
-				double Lift[LineVia] = {};
-				for (int J = 1; J < Last && bDown; ++J)
+				const V3* F = &Fine[Ln * PathFine];
+				// (its route over its silk as it now is: its fine path, Rise over the top of its silk there, from its seam's end
+				// on its hem round to its edge where it comes on, and across to its other edge; out over that edge to where
+				// its silk ends; and down to the ground beyond)
+				Route.clear();
+				size_t NearAt = 0, RouteOf[PathFine] = {};
+				bool Skipped[PathFine] = {};
+				for (int I = Start[Ln]; I < Upto[Ln]; ++I)
 				{
-					const int Subs = std::max(2, static_cast<int>(std::hypot(P[J + 1].X - P[J].X, P[J + 1].Y - P[J].Y) / 0.025));
-					for (int Q = 1; Q < Subs; ++Q)
+					if (!bFine && I > Start[Ln] + 1 && I != PathNear && I + 1 < Upto[Ln] && (I - Start[Ln]) % 2 == 1)
 					{
-						const double T = Q / static_cast<double>(Subs);
-						const V3 At = Plus(P[J], Times(Minus(P[J + 1], P[J]), T));
-						const double Short = TopAt(At.X, At.Y) + Rise - At.Z;
-						if (Short <= 0.0) continue;
-						const double Norm = (1.0 - T) * (1.0 - T) + T * T;
-						Lift[J] = std::max(Lift[J], Short * (1.0 - T) / Norm);
-						Lift[J + 1] = std::max(Lift[J + 1], Short * T / Norm);
+						Skipped[I] = true;
+						continue;
+					}
+					const V3 Here{ F[I].X, F[I].Y, TopAt(F[I].X, F[I].Y, F[I].Z, F[I].Z) + Rise };
+					if (I > Start[Ln] && bFine)
+					{
+						// (and half-way from the last, should its silk stand higher there: a crest between, a flipped gore's fold)
+						const V3& Back = Route.back();
+						double R = 0.0, Cf = 0.0;
+						PathAt(S, 0.5 * (PathT(I - 1) + PathT(I)), R, Cf);
+						const V3 Mid = SurfAt(Out.Points, nullptr, Ringed, Cols, R, Cf, nullptr);
+						const double Top = TopAt(Mid.X, Mid.Y, Mid.Z, Mid.Z) + Rise;
+						if (Top > 0.5 * (Back.Z + Here.Z) + 0.003) Route.push_back({ Mid.X, Mid.Y, Top });
+					}
+					if (I == PathNear) NearAt = Route.size();
+					RouteOf[I] = Route.size();
+					Route.push_back(Here);
+				}
+				const size_t ExitAt = Route.size() - 1;
+				const double* Fa = &FineArc[Ln * PathFine];
+				const double Reach2 = (Fa[PathFine - 1] + Drop) * Slack;
+				const bool bOff = Upto[Ln] == PathFine && Reach2 > Fa[PathFine - 1];
+				if (bOff)
+				{
+					const V3 Exit = Route.back();
+					Drape(Exit, Plus(Exit, Times(Ways[2 * Ln + 1], OutTo)), true, Route);
+				}
+				Arc.assign(Route.size(), 0.0);
+				for (size_t I = 1; I < Route.size(); ++I) Arc[I] = Arc[I - 1] + Length(Minus(Route[I], Route[I - 1]));
+				// (how far along its route each of its path's points comes: those passed over as it falls in, between their two)
+				double ArcOf[PathFine] = {};
+				for (int I = Start[Ln]; I < Upto[Ln]; ++I)
+				{
+					if (!Skipped[I]) ArcOf[I] = Arc[RouteOf[I]];
+				}
+				for (int I = Start[Ln] + 1; I + 1 < Upto[Ln]; ++I)
+				{
+					if (Skipped[I]) ArcOf[I] = ArcOf[I - 1] + (ArcOf[I + 1] - ArcOf[I - 1]) * (Fa[I] - Fa[I - 1]) / std::max(1e-12, Fa[I + 1] - Fa[I - 1]);
+				}
+				const auto RouteAt = [&](double A)
+				{
+					size_t I = 0;
+					while (I + 2 < Route.size() && Arc[I + 1] < A) ++I;
+					const double T = std::clamp((A - Arc[I]) / std::max(1e-12, Arc[I + 1] - Arc[I]), 0.0, 1.0);
+					return Plus(Route[I], Times(Minus(Route[I + 1], Route[I]), T));
+				};
+				// (drawn over its silk as far as its lines are slack: from its seam's end toward where it comes on, and as far
+				// along its route as that (over its far edge and down, a nominal Drop for all of that); and from there to the
+				// grass out over its first edge, as far as that)
+				double A1 = Arc.back();
+				if (bOff) A1 = Arc[ExitAt] + (Arc.back() - Arc[ExitAt]) * std::min(1.0, (Reach2 - Fa[PathFine - 1]) / Drop);
+				else
+				{
+					int I = 0;
+					while (I + 2 < Upto[Ln] && Fa[I + 1] < Reach2) ++I;
+					const double T = std::clamp((Reach2 - Fa[I]) / std::max(1e-12, Fa[I + 1] - Fa[I]), 0.0, 1.0);
+					A1 = ArcOf[I] + (ArcOf[I + 1] - ArcOf[I]) * T;
+				}
+				double A0 = Arc[NearAt];
+				{
+					const int I = Start[Ln];
+					const double T = std::clamp((Fa[PathNear] * Slack - Fa[I]) / std::max(1e-12, Fa[I + 1] - Fa[I]), 0.0, 1.0);
+					A0 = std::min({ A0, A1, ArcOf[I] + (ArcOf[I + 1] - ArcOf[I]) * T });
+				}
+				const V3 First = RouteAt(A0), Last = RouteAt(A1);
+				Head.clear();
+				const V3 Entry = Route[NearAt];
+				Drape(Entry, Plus(Entry, Times(Ways[2 * Ln], OutTo)), true, Head);
+				const V3 Outside = Head.empty() ? Entry : Head.back();
+				V3 Land = Plus(First, Times(Minus(Outside, First), Slack));
+				const double LandTop = TopAt(Land.X, Land.Y, Land.Z);
+				Land.Z = std::max(G.At(Land.X, Land.Y) + Rope, LandTop > -1e8 ? LandTop + Rise : -1e9);
+				// (the points it may go through: from there in to where it is drawn onto its silk from, each 2 cm, on its silk's
+				// top or the ground (as straight as it is taut); then its route)
+				Cand.clear();
+				Cand.push_back(Land);
+				Drape(Land, First, false, Cand);
+				if (Cand.size() > 1) Cand.pop_back();
+				{
+					const double Fx = First.X - Land.X, Fy = First.Y - Land.Y, F2 = std::max(1e-12, Fx * Fx + Fy * Fy);
+					for (size_t I = 1; I < Cand.size(); ++I)
+					{
+						const double T = std::clamp(((Cand[I].X - Land.X) * Fx + (Cand[I].Y - Land.Y) * Fy) / F2, 0.0, 1.0), Taut2 = Land.Z + (First.Z - Land.Z) * T;
+						Cand[I].Z += (1.0 - Slack) * std::max(0.0, Taut2 - Cand[I].Z);
 					}
 				}
-				for (int J = 1; J <= Last; ++J) P[J].Z += Lift[J];
-				P[LineVia - 1] = { P[Last].X, P[Last].Y + S.Inward * 0.05, 0.0 };
-				for (int J = 1; J < LineVia; ++J) P[J].Z = std::max(J + 1 < LineVia ? P[J].Z : -1e9, G.At(P[J].X, P[J].Y) + 0.015);
-				const V3 Way = Minus(P[1], Hn);
-				const double Flat = std::max(1e-9, std::hypot(Way.X, Way.Y)), Bow = (S.Seam % 2 == 0 ? 1.0 : -1.0) * 0.06 * Length(Way);
-				P[0] = { 0.5 * (Hn.X + P[1].X) - Way.Y / Flat * Bow, 0.5 * (Hn.Y + P[1].Y) + Way.X / Flat * Bow, std::min(Hn.Z, P[1].Z) };
+				Cand.push_back(First);
+				for (size_t I = 0; I < Route.size(); ++I)
+				{
+					if (Arc[I] > A0 + 1e-6 && Arc[I] < A1 - 1e-6) Cand.push_back(Route[I]);
+				}
+				Cand.push_back(Last);
+				// (its points, from where it comes onto the grass to its end: of those, where it turns most (over a fold's crest
+				// and down in its trough, up onto its edge and down off it), from its two ends, each next where the line through
+				// those so far stands farthest off it, its height counting thrice; evenly along them, were there no more of
+				// them than it has points)
+				V3 P[LineVia];
+				double Pos[Want];
+				const int Nc = static_cast<int>(Cand.size());
+				if (Nc <= Want)
+				{
+					CandArc.assign(Cand.size(), 0.0);
+					for (size_t I = 1; I < Cand.size(); ++I) CandArc[I] = CandArc[I - 1] + Length(Minus(Cand[I], Cand[I - 1]));
+					size_t I = 0;
+					for (int J = 0; J < Want; ++J)
+					{
+						const double A = CandArc.back() * J / (Want - 1.0);
+						while (I + 2 < Cand.size() && CandArc[I + 1] < A) ++I;
+						const double T = Cand.size() < 2 ? 0.0 : std::clamp((A - CandArc[I]) / std::max(1e-12, CandArc[I + 1] - CandArc[I]), 0.0, 1.0);
+						P[LineGrass - 2 + J] = Cand.size() < 2 ? Cand[0] : Plus(Cand[I], Times(Minus(Cand[I + 1], Cand[I]), T));
+						Pos[J] = static_cast<double>(I) + T;
+					}
+				}
+				else
+				{
+					// (each span between two kept, the one of those between that stands farthest off it, found once)
+					struct Span2
+					{
+						int A = 0, B = 0, Best = -1;
+						double Most = -1.0;
+					};
+					const auto Score = [&Cand](Span2& Sp)
+					{
+						const V3& A = Cand[static_cast<size_t>(Sp.A)];
+						const V3 Ab = Minus(Cand[static_cast<size_t>(Sp.B)], A);
+						const double Ab2 = std::max(1e-12, Ab.X * Ab.X + Ab.Y * Ab.Y + Ab.Z * Ab.Z);
+						Sp.Best = -1;
+						Sp.Most = -1.0;
+						for (int I = Sp.A + 1; I < Sp.B; ++I)
+						{
+							const V3 Ap = Minus(Cand[static_cast<size_t>(I)], A);
+							const double T = std::clamp((Ap.X * Ab.X + Ap.Y * Ab.Y + Ap.Z * Ab.Z) / Ab2, 0.0, 1.0);
+							const double Ox = Ap.X - Ab.X * T, Oy = Ap.Y - Ab.Y * T, Oz = Ap.Z - Ab.Z * T;
+							const double How = 9.0 * Oz * Oz + Ox * Ox + Oy * Oy + 1e-4 * Ab2;
+							if (How > Sp.Most) { Sp.Most = How; Sp.Best = I; }
+						}
+					};
+					Span2 Spans[Want];
+					int Kept[Want] = { 0, Nc - 1 }, Count = 2, Made = 1;
+					Spans[0].A = 0;
+					Spans[0].B = Nc - 1;
+					Score(Spans[0]);
+					while (Count < Want)
+					{
+						int Pick = -1;
+						for (int Sp = 0; Sp < Made; ++Sp)
+						{
+							if (Spans[Sp].Best >= 0 && (Pick < 0 || Spans[Sp].Most > Spans[Pick].Most)) Pick = Sp;
+						}
+						if (Pick < 0) break;
+						const Span2 Was2 = Spans[Pick];
+						Kept[Count++] = Was2.Best;
+						Spans[Pick].B = Was2.Best;
+						Score(Spans[Pick]);
+						Spans[Made].A = Was2.Best;
+						Spans[Made].B = Was2.B;
+						Score(Spans[Made]);
+						++Made;
+					}
+					std::sort(Kept, Kept + Count);
+					for (int J = 0; J < Want; ++J)
+					{
+						P[LineGrass - 2 + J] = Cand[static_cast<size_t>(Kept[std::min(Count - 1, J)])];
+						Pos[J] = Kept[std::min(Count - 1, J)];
+					}
+				}
+				// (across the grass from his harness as he lies to there, bowed out, on the ground but where it rises to him,
+				// over its silk should it cross any)
+				for (int J = 1; J + 1 < LineGrass; ++J)
+				{
+					const double T = static_cast<double>(J) / (LineGrass - 1);
+					const V3 On = GrassAt(Hn, Land, S.Si, T);
+					P[J - 1] = { On.X, On.Y, G.At(On.X, On.Y) + std::max(Rope, Hh * (1.0 - T) - 4.0 * T * (1.0 - T) * Hh) };
+					const double Top = TopAt(On.X, On.Y, P[J - 1].Z);
+					if (Top > -1e8) P[J - 1].Z = std::max(P[J - 1].Z, Top + Rise);
+				}
+				// (never in its silk: where the straight between two of its points would pass under one of the points it might
+				// have gone through (each Rise over its silk's top), both lifted, the nearer the more)
+				{
+					double Lift[LineVia] = {};
+					for (int J = 0; J + 1 < Want; ++J)
+					{
+						const V3& A = P[LineGrass - 2 + J];
+						const V3& B = P[LineGrass - 1 + J];
+						const double Bx = B.X - A.X, By = B.Y - A.Y, B2 = Bx * Bx + By * By;
+						if (B2 < 1e-10) continue;
+						for (int I = static_cast<int>(std::floor(Pos[J])) + 1; static_cast<double>(I) < Pos[J + 1] && I < Nc; ++I)
+						{
+							const V3& Q = Cand[static_cast<size_t>(I)];
+							const double T = std::clamp(((Q.X - A.X) * Bx + (Q.Y - A.Y) * By) / B2, 0.0, 1.0);
+							const double Short = Q.Z - (A.Z + (B.Z - A.Z) * T);
+							if (Short <= 0.0) continue;
+							const double Norm = (1.0 - T) * (1.0 - T) + T * T;
+							Lift[LineGrass - 2 + J] = std::max(Lift[LineGrass - 2 + J], Short * (1.0 - T) / Norm);
+							Lift[LineGrass - 1 + J] = std::max(Lift[LineGrass - 1 + J], Short * T / Norm);
+						}
+					}
+					for (int J = 0; J < LineVia; ++J) P[J].Z += Lift[J];
+				}
+				// (nor where the straight between two, as drawn, would pass under its silk's top (the edge of a layer over
+				// another between them, a crest across it): both lifted half Rise clear of it, the nearer the more. Looked at
+				// each 2 cm, from where it comes off the grass (each 1 cm where it comes up onto its silk, over the edges of
+				// its layers there))
+				{
+					double Lift[LineVia] = {};
+					const double Every = bFine ? 0.02 : 0.04;
+					for (int J = LineGrass - 3; J + 1 < LineVia; ++J)
+					{
+						const V3& A = P[J];
+						const V3& B = P[J + 1];
+						const int Subs = std::max(2, static_cast<int>(std::ceil(std::hypot(B.X - A.X, B.Y - A.Y) / (J < LineGrass + 3 && bFine ? 0.5 * Every : Every))));
+						for (int Q = 1; Q < Subs; ++Q)
+						{
+							const double T = Q / static_cast<double>(Subs), Z = A.Z + (B.Z - A.Z) * T, Clear3 = Z - 0.5 * Rise;
+							const double Short = TopAt(A.X + (B.X - A.X) * T, A.Y + (B.Y - A.Y) * T, Z, Clear3) - Clear3;
+							if (Short <= 0.0) continue;
+							const double Norm = (1.0 - T) * (1.0 - T) + T * T;
+							Lift[J] = std::max(Lift[J], Short * (1.0 - T) / Norm);
+							Lift[J + 1] = std::max(Lift[J + 1], Short * T / Norm);
+						}
+					}
+					for (int J = 0; J < LineVia; ++J) P[J].Z += Lift[J];
+				}
+				// (never under the ground: each point, and each span both its ends lifted where the ground between stands
+				// higher, the nearer the more)
+				for (int J = 0; J < LineVia; ++J) P[J].Z = std::max(P[J].Z, G.At(P[J].X, P[J].Y) + Rope);
+				if (Ground)
+				{
+					double Lift[LineVia] = {};
+					for (int J = -1; J + 1 < LineVia; ++J)
+					{
+						const V3& A = J < 0 ? Hn : P[J];
+						const V3& B = P[J + 1];
+						const int Subs = std::max(2, static_cast<int>(std::hypot(B.X - A.X, B.Y - A.Y) / 0.05));
+						for (int Q = 1; Q < Subs; ++Q)
+						{
+							const double T = Q / static_cast<double>(Subs);
+							const double Short = G.At(A.X + (B.X - A.X) * T, A.Y + (B.Y - A.Y) * T) + Rope - (A.Z + (B.Z - A.Z) * T);
+							if (Short <= 0.0) continue;
+							if (J < 0)
+							{
+								// (from his harness, which stays: the next point lifted, where the ground rises a fifth of the
+								// way on or more)
+								if (T >= 0.2) Lift[0] = std::max(Lift[0], Short / T);
+								continue;
+							}
+							const double Norm = (1.0 - T) * (1.0 - T) + T * T;
+							Lift[J] = std::max(Lift[J], Short * (1.0 - T) / Norm);
+							Lift[J + 1] = std::max(Lift[J + 1], Short * T / Norm);
+						}
+					}
+					for (int J = 0; J < LineVia; ++J) P[J].Z += Lift[J];
+				}
+				// (and drawn while its lines are not yet slack (LineLies: across the grass each of its first points from the
+				// straight between his harness, as he lies on the ground there, and where it comes onto its silk, toward these
+				// as slack as they are), never under the ground: each of those raised as much more as its share of slack takes
+				// it over the ground there and over it along the straights either side, the nearer the more; a review: on a
+				// field of hummocks and across a ditch they had cut 0.2 m into the ground as it fell in)
+				if (Ground && Slack < 1.0)
+				{
+					const V3 Harness{ Hn.X, Hn.Y, Hn.Z + G.At(Hn.X, Hn.Y) };
+					V3 Q[LineGrass + 2];
+					Q[0] = Harness;
+					for (int J = 1; J <= LineGrass; ++J)
+					{
+						const V3 Taut = Plus(Harness, Times(Minus(P[LineGrass], Harness), J / (LineGrass + 1.0)));
+						Q[J] = Plus(Taut, Times(Minus(P[J - 1], Taut), Slack));
+					}
+					Q[LineGrass + 1] = P[LineGrass];
+					double Need[LineGrass + 2] = {};
+					for (int J = 0; J <= LineGrass; ++J)
+					{
+						const V3& A = Q[J];
+						const V3& B = Q[J + 1];
+						const int Subs = std::max(2, static_cast<int>(std::hypot(B.X - A.X, B.Y - A.Y) / 0.05));
+						for (int Sq = 1; Sq <= Subs; ++Sq)
+						{
+							const double T = Sq / static_cast<double>(Subs);
+							const double Short = G.At(A.X + (B.X - A.X) * T, A.Y + (B.Y - A.Y) * T) + Rope - (A.Z + (B.Z - A.Z) * T);
+							if (Short <= 0.0) continue;
+							if (J == 0) { if (T >= 0.2) Need[1] = std::max(Need[1], Short / T); continue; }
+							if (J == LineGrass) { if (T <= 0.8) Need[J] = std::max(Need[J], Short / (1.0 - T)); continue; }
+							const double Norm = (1.0 - T) * (1.0 - T) + T * T;
+							Need[J] = std::max(Need[J], Short * (1.0 - T) / Norm);
+							Need[J + 1] = std::max(Need[J + 1], Short * T / Norm);
+						}
+					}
+					for (int J = 1; J <= LineGrass; ++J) P[J - 1].Z += Need[J] / std::max(Slack, 0.05);
+				}
 				Out.Across.push_back(S.Seam);
-				std::copy(P, P + LineVia, Out.Over.begin() + static_cast<std::ptrdiff_t>(Ln * LineVia));
+				std::copy(P, P + LineVia, Out.Over.begin() + static_cast<std::ptrdiff_t>(Ln * static_cast<size_t>(LineVia)));
 			}
 		}
+	}
+
+	double LineSlack(double Slump)
+	{
+		return Smooth((Slump - 0.3) / 0.5);
 	}
 
 	int LineLies(const SilkMesh& Silk, size_t Seam, const V3& Harness, double Slack, V3 (&Out)[LinePoints])
@@ -2341,20 +3025,23 @@ namespace LandAir
 		{
 			const double Flat = std::hypot(Way.X, Way.Y), Bow = (Seam % 2 == 0 ? 1.0 : -1.0) * 0.06 * Sl * Length(Way);
 			const V3 Aside = Flat > 1e-9 ? V3{ -Way.Y / Flat, Way.X / Flat, 0.0 } : V3{};
+			const double Low = Seam < Silk.MidLow.size() ? Silk.MidLow[Seam] : -1e9;
 			Out[0] = Harness;
-			Out[1] = { 0.5 * (Harness.X + E.X) + Aside.X * Bow, 0.5 * (Harness.Y + E.Y) + Aside.Y * Bow, 0.5 * (Harness.Z + E.Z) - 0.5 * Sl * std::fabs(E.Z - Harness.Z) };
+			Out[1] = { 0.5 * (Harness.X + E.X) + Aside.X * Bow, 0.5 * (Harness.Y + E.Y) + Aside.Y * Bow, std::max(Low, 0.5 * (Harness.Z + E.Z) - 0.5 * Sl * std::fabs(E.Z - Harness.Z)) };
 			Out[2] = E;
 			return 3;
 		}
-		// (across its silk: taut, evenly along the straight from his harness to its seam's point; lying, from his harness
-		// through its Over points; in between, each point between the two)
+		// (across its silk: across the grass from taut, straight from his harness to where it is drawn onto its silk from,
+		// to lying, through its first Over points; and on over its silk and its edge through the rest, as HeapShape laid
+		// them for its slump)
 		const V3* Via = &Silk.Over[Slot * static_cast<size_t>(LineVia)];
-		for (int K = 0; K < LinePoints; ++K)
+		Out[0] = Harness;
+		for (int K = 1; K <= LineGrass; ++K)
 		{
-			const V3 Taut = Plus(Harness, Times(Way, static_cast<double>(K) / (LinePoints - 1)));
-			const V3 Lies = K == 0 ? Harness : Via[K - 1];
-			Out[K] = Plus(Taut, Times(Minus(Lies, Taut), Sl));
+			const V3 Taut = Plus(Harness, Times(Minus(Via[LineGrass], Harness), K / (LineGrass + 1.0)));
+			Out[K] = Plus(Taut, Times(Minus(Via[K - 1], Taut), Sl));
 		}
+		for (int K = LineGrass + 1; K < LinePoints; ++K) Out[K] = Via[K - 1];
 		return LinePoints;
 	}
 
@@ -2382,6 +3069,8 @@ namespace LandAir
 		ToSlump = std::min(1.0, Key + SlumpStep);
 		if (ToSlump > FromSlump + 1e-9)
 		{
+			// (what it works out once as it lies, from the shape just made, should it not have it)
+			if (To.Kept.Key != From.Kept.Key) To.Kept = From.Kept;
 			HeapShape(C, ToSlump, Off, To, Ground);
 		}
 		else
@@ -2419,7 +3108,10 @@ namespace LandAir
 			Out.Facings[K] = Unit({ Fa.X + (Fb.X - Fa.X) * M, Fa.Y + (Fb.Y - Fa.Y) * M, Fa.Z + (Fb.Z - Fa.Z) * M }, Fa);
 		}
 		Out.Seams = From.Seams;
-		// (its lines across it, moved with it)
+		// (its lines across it, moved with it, and the lowest its other lines' middles lie)
+		Out.MidLow.resize(From.MidLow.size());
+		const bool bLow = bTo && To.MidLow.size() == From.MidLow.size();
+		for (size_t K = 0; K < From.MidLow.size(); ++K) Out.MidLow[K] = bLow ? From.MidLow[K] + (To.MidLow[K] - From.MidLow[K]) * M : From.MidLow[K];
 		Out.Across = From.Across;
 		Out.Over.resize(From.Over.size());
 		const bool bOver = bTo && To.Over.size() == From.Over.size() && To.Across == From.Across;

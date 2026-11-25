@@ -133,7 +133,9 @@ namespace
 	int32 ChuteMeshKey(int Key) { return (1 << 20) + Key; }
 	using LandAir::HangFeet;
 	using LandAir::LinesLong;
-	const FLinearColor ChuteSuit(0.30f, 0.26f, 0.19f), ChuteHead(0.22f, 0.15f, 0.10f), ChuteCord(0.70f, 0.68f, 0.62f);
+	// (his lines and risers olive drab cord, darker than her off-white silk, so that those across it read on it: a review
+	// of 24 November 17:40Z, after a second look, had found them near her silk's own colour from above)
+	const FLinearColor ChuteSuit(0.30f, 0.26f, 0.19f), ChuteHead(0.22f, 0.15f, 0.10f), ChuteCord(0.13f, 0.12f, 0.07f);
 
 	FVector Metres(const LandAir::V3& At, double U) { return FVector(At.X * U, At.Y * U, At.Z * U); }
 

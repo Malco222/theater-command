@@ -930,35 +930,46 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
     - *After a second look* (her note again, (3) and (2): its lines had crossed only the flap at its near end, by 0.2
       to 0.3 m, all running to one point; and its far end had stayed a neat dome, its seams running cleanly to a point
       at its tip):
-      - *Lines across its body*: it slid and slewed as it fell in, and two to four of the lines to its top's gores (on
-        dice of their own, `0x57AE` over the pilot's number, so that all its other draws fall as they did) run on past
-        their seam's end on its gathered hem, onto its top and across it at a slant over its near third to half, in a
-        loose curve (bowed along it, curled round it, a little wiggle), to the edge on the far side of its top's middle
-        from their seam (one at its middle to its narrow side), and over that edge and down under it. Each as far along
-        it as the line's length lets it lying slack (from his harness to its hem in the air, up his riser and along its
-        line: at most 1.6 times that, as a real canopy's lines are about as long as its flat width), none over a flipped
-        or tucked gore's near end nor under its flap, no two from seams side by side, and no more than six over its silk
-        in all with the flap's. Each is laid out on its silk's own rings and columns, its points where its silk turns
-        most along its way (over a fold's crest, down into its trough), so that it stays on its silk as that falls in and
-        sags into its folds. The rest run to its gathered hem as they did.
-      - *Lying on it, never in it*: once it lies still (the make at its end), each line's points are set on the top of
-        its silk there and 12 mm over it (the cord's half-thickness and 6 mm): the highest of its triangles facing up,
-        both faces, as it stands within 1.4 cm of the point (so that a line beside a fold standing up, or on a fold's
-        flank, is clear of it all round), found on a 15 cm grid of only the squares its lines lie over; and wherever the
-        straight between two points would dip into its silk (tried every 2.5 cm, over a fold's crest), both are lifted
-        clear, the nearer the more. Never under the ground. As it falls in its lines move with it on their rings.
-        LandBattleAir's `DownShape` draws each line through `LandAir::LineLies`' points (23 for a line across it, three
-        for the rest, a rod from each to the next), from taut to slack, the same points all the while it falls in.
+      - *Lines across its body*: it slid and slewed as it fell in, and one to four of the lines to its top's gores (two
+        to four on dice of their own, `0x57AE` over the pilot's number, so that all its other draws fall as they did; as
+        many of those as will lie so, two on most) were thrown over its near part. Each runs from his harness across the
+        grass, bowed out to one side of the rest, onto its top either over the edge of its near part on that side (its
+        first ring to its third) or over its near end aside of where its lines gather (0.2 m or more from it), and
+        across it at a slant over its near third (28 to 36 degrees off its wind line at the least as laid, 45 on the
+        mean; in a loose curve: bowed along it, curled round it, a little wiggle), down into its folds and over their
+        crests, to an edge and over it to the ground (on under there, hidden, back to its hem). As laid, 1 to 2.35 m of
+        each on its silk (to 2.55 m in later tries should fewer lie so; 3 m in a last try should none), 0.35 m or more
+        of that past 0.15 of its length (its body), none farther along than 0.45 of its length, none over a flipped or
+        tucked gore's near end nor under its flap, its grass clear of its near part, no two from seams side by side, no
+        more than six over its silk in all with the flap's, and from his harness to where it goes down off its far edge
+        no longer than a real line (`RealLines`, 1.33 times its spread across: a T-5's 22 ft lines and 3 ft of riser
+        under a canopy about 19 ft across in the air; `LinesLong`, the air's hang, draws them short). Each is laid out
+        on its silk's own rings and columns, so that it stays on its silk as that falls in. The rest run to its gathered
+        hem as they did.
+      - *Lying on it, never in it*: each make, each such line is drawn along its path over its silk as it is then
+        (finely from 0.75 of its fall): on the top of its silk there and 12 mm over it (the cord's half-thickness and 6
+        mm), the highest of its triangles facing up within 3 mm of the point (none round a steep one, whose height run
+        on past its edge had floated lines over its gathered hem), found on a grid of only the squares its lines lie
+        over; draped between its folds' crests where the straight would not dip into its silk (tried every 2 cm, 1 cm
+        near where it comes onto its silk, 4 cm earlier in its fall), its points kept where it turns most; never under
+        the ground, from his harness on. While its lines are slack only in part (`LineSlack`: taut to a slump of 0.3,
+        slack from 0.8) its grass is drawn between the straight and where it lies, lifted where that would dip under the
+        ground. LandBattleAir's `DownShape` draws each line through `LandAir::LineLies`' points (31 for a line across
+        it, three for the rest, a rod from each to the next), the same points all the while it falls in. His lines and
+        risers are olive drab cord, (0.13, 0.12, 0.07), darker than her off-white silk so that those across it read on
+        it (they had been near her silk's own colour), and chutes.py draws them only where the silk does not hide them,
+        as the scene's depth test does.
       - *Its far end broken up* (on dice of their own, `0xFA2D` over the pilot's number), from its tenth ring on, its
         ninth and those before it as they were (so its folds across it and its length are its own): its last two rings
         and its vent (its tip, where its seams meet) drawn over toward the side it slumps to, 0.22 to 0.38 of its
-        half-width (its width cap read without it); a crease across its dome on its eleventh ring, its air there let down
-        by up to 80 to 95% (most on its narrow side, the side it slumps from; 0.6 of that on the other), slanted 0.22 to
-        0.38 m along it edge to edge either way, the rings either side drawn in toward it; over its last two rings the
-        edge of its narrow side folded back under it, from a half to two thirds of its half-width out (slanting a little
-        along it), flat on the ground under the rest; and its seams kinked ring to ring (4.5 to 7 cm aside, in two waves
-        across it, both its layers alike so that they keep together at its edges). Its last ring never farther on than
-        its tip.
+        half-width (its width cap read without it); a crease across its dome on its eleventh ring, its air there let
+        down by up to 55 to 70% (most on its narrow side, the side it slumps from; 0.6 of that on the other; it had been
+        80 to 95%, a sawtooth at eye height with its inside showing along it), slanted 0.22 to 0.38 m along it edge to
+        edge either way, the rings either side drawn in 5 cm toward it (10 had folded its silk over there); over its
+        last two rings the edge of its narrow side folded back under it, from a half to two thirds of its half-width out
+        (slanting a little along it), flat on the ground under the rest; and its seams kinked ring to ring (4.5 to 7 cm
+        aside, in two waves across it, both its layers alike so that they keep together at its edges). Its last ring
+        never farther on than its tip.
     - Each point's facing, where a fold across it is, is the way its silk runs on from it to the next ring (from the
       ring before to the ring after shades a fold on one ring flat), so that a fold across it is a darker band and a
       lighter one; chutes.py lights each pixel of the silk by its facing there, as the scene does.
@@ -979,32 +990,44 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
       read 119 and 123, a pixel's own). The second pilot's: 0.19 to one side (0.04, then 0.11), three folds and two bands (one and none, then four
       and two), its far end 0.34 m over (0.01, then 0.17), two lines across (none, then three), luma 124 to 217 in
       chutes.py (127 to 217, then 121 to 213).
-    - After her second look it measures as well (e) its lines across its body: how long each lies on its silk past
-      0.15 of its length on from where its lines gather, how many 0.3 m or more, how high their middle stands over its
-      silk's top where they run over it, and the longest drawn as a share of its own length; and (f) its far end's
-      breakup: its vent off the middle of its far fifth (a share of its half-width), a crease across its dome (the
-      deepest its top dips along it, 16 cm or more in from its edges), its last two rings folded back under at an edge
-      (how much farther out its top layer reaches than its edge's seam), and its seams bending ring to ring over its
-      last four rings. Each pilot (and each of the verdict's four) has one to four lines 0.3 m or more across its body
-      (the verdict's four two at least), the longest 1 to 3 m, their middle within 4.5 cm of its top on the mean, and
-      none drawn over 1.65 of its length; and its far end folded under 0.1 m or more, creased 5 cm or more, and its vent
-      0.15 of its half-width off its middle or its seams bending 0.1 m; over the 300 two lines across its body on the
-      mean, the longest 1.5 to 2.5 m on the mean, floating 3 cm on the mean at most and 25 cm at the most; its vent off
-      0.22 on the mean (no more than 20 under 0.1), creased 9 cm, folded under 0.25 m and its seams bending 0.16 m on the
-      mean. Over the 300, against the code before: (e) one to three of its lines across its body 0.3 m or more (2.19 on
-      the mean; none before, on every one), the longest 1.21 to 2.95 m (2.04 on the mean), their middle 4.4 cm over its
-      silk on the mean at most (20 cm at the most, where a line bridges two crests), drawn 1.62 of their length at most;
-      its old measure's lines across its silk now 3 to 6 (4.5 on the mean; 1 to 4, 2.3), the longest 1.85 to 4.27 m
-      (0.20 to 0.30), none under it; (f) its vent 0.29 of its half-width off its middle on the mean (0.12; 14 under 0.1,
-      109 before), a crease 0.060 m deep at the least and 0.114 on the mean (0.004 and 0.048), folded under 0.15 m at
-      the least and 0.34 on the mean (0.00 and 0.01), its seams bending 0.071 m at the least and 0.214 on the mean
-      (0.025 and 0.107); (a) to (d) as they were but about the line to its tip, now 0.23 at the least (0.45 on the
-      mean; 0.09 and 0.31), its edges 5.7 cm off a smooth line on the mean (4.1), and its far end's lift 0.16 to 0.42 m
-      to one side (0.18 to 0.41). His: two lines across its body (2.38 m the longest; their middle 3.3 cm over it on the
-      mean, 10 cm at most), its vent 0.47 off (0.22), a crease 0.100 m (0.030), folded under 0.44 m (none), its seams
-      bending 0.250 m (0.088); luma 160 to 217 in chutes.py as before. The second pilot's: two lines across (2.16 m; 2.8
-      cm on the mean, 8 cm at most), its vent 0.27 off (0.18), a crease 0.113 m (0.084), folded under 0.35 m (none), its
-      seams bending 0.200 m (0.075); luma 123 to 217 in chutes.py (124 to 217).
+    - After her second look it measures as well (e) its lines across its body: how long each lies on its silk past 0.15
+      of its length on from where its lines gather, how many 0.3 m or more; for each laid across it how long it lies on
+      its silk, how steeply it crosses its wind line, how far along it reaches, how near it passes where the rest gather
+      on its way, how far from his harness it comes onto it, how high its middle stands over its silk's top (the exact
+      top, each triangle facing up) where it runs over it, and how long it is drawn against a real line (`RealLines`);
+      and (f) its far end's breakup: its vent off the middle of its far fifth (a share of its half-width), a crease
+      across its dome (the deepest its top dips along it, 16 cm or more in from its edges), its last two rings folded
+      back under at an edge (how much farther out its top layer reaches than its edge's seam), and its seams bending
+      ring to ring over its last four rings. Each pilot (and each of the verdict's four) has one to four lines 0.3 m or
+      more across its body (his and the second pilot's two at least), each laid across it 1 to 3 m on its silk, 18
+      degrees or more off its wind line, none past half its length, none within 0.1 m of where the rest gather, coming
+      onto it within his lines' length of his harness, its middle within 2.6 cm of its top on the mean, more than 4 cm
+      over it for an eighth of it at most and 25 cm at the most, and none drawn longer than a real line; and its far end
+      folded under 0.1 m or more, creased 5 cm or more, and its vent 0.15 of its half-width off its middle or its seams
+      bending 0.1 m. Over the 300: 1.8 lines across its body on the mean and none with none, the longest on its silk 1.3
+      to 2.4 m on the mean and over 2.6 m on a tenth at most, their least slant 35 degrees on the mean, their middle
+      within 2 cm of its top on the mean; its vent off 0.22 on the mean (no more than 20 under 0.1), creased 9 cm (the
+      neat dome before had measured 4.8), folded under 0.2 m and its seams bending 0.16 m on the mean. And on 60 of
+      them, as it settles (0.8 to 0.95 of its fall), none of his lines under its silk's top by 8 mm; and on the 11
+      fields, falling in and lying, none of his lines under the ground. Over the 300, against the code before her second
+      look and this round's first answer to it: (e) one to three of its lines across its body 0.3 m or more (1.92 on the
+      mean; none, then 2.19), 1.61 to 2.93 m of each on its silk (its longest 2.34 on the mean, 25 over 2.6 m; first
+      1.21 to 2.95, 2.04), 20 degrees off its wind line at the least (46 on the mean), their middle 1.5 cm over its silk
+      on the mean (2.1 at most on one pilot's mean; first 4.4) and 16 cm at the most (20), drawn 1.00 of a real line at
+      most (first, 1.62 of its own length, some 5.5 m); its old measure's lines across its silk 2 to 6 (4.2 on the mean;
+      1 to 4, then 3 to 6), none under it; (f) its vent 0.27 of its half-width off its middle on the mean (0.12, then
+      0.29; 18 under 0.1, 109 and 14), a crease 0.066 m deep at the least and 0.132 on the mean (0.004 and 0.048, then
+      0.060 and 0.114), folded under 0.15 m at the least and 0.34 on the mean (0.00 and 0.01), its seams bending 0.071 m
+      at the least and 0.214 on the mean (0.025 and 0.107); (a) to (d) as the first answer had them. His: two lines
+      across its body, 2.14 and 2.36 m on its silk (first, 2.38 m the longest), 42 degrees off its wind line at the
+      least, their middle 1.5 cm over it on the mean and 4.3 cm at most (3.3 and 10), drawn 0.89 of a real line; its
+      vent 0.46 off (0.22, then 0.47), a crease 0.121 m (0.030, then 0.100), folded under 0.44 m, its seams bending
+      0.250 m; luma 160 to 217 in chutes.py as before, his lines now darker than his silk and hidden where it hides
+      them. The second pilot's: two lines across, 2.41 and 2.43 m (2.16), 43 degrees, 1.8 cm on the mean and 5.1 at most
+      (2.8 and 8), drawn 0.82; its vent 0.25 off (0.27), a crease 0.147 m (0.113), folded under 0.35 m, its seams
+      bending 0.200 m; luma 123 to 217 in chutes.py (as the first answer). At eye height his far end's top stands 0.31 m
+      0.9 along it, 0.31 at 0.95 and 0.20 at 0.98 (0.44, 0.34 and 0.23 before her second look; 0.27, 0.31 and 0.18 at
+      the first answer), and by the time it lies 62 of its 5200 triangles are folded over (46, then 80).
   - Its own dice (`0xC47E1` as before; the notes' draws on `0xC47E3`; its lying folds on `0xC47E5`, drawn after all
     the rest; its look from above on `0xC47E7`, the pilot's number's own; its lines across it on `0x57AE` and its far
     end's breakup on `0xFA2D`, over the pilot's number): the planes fly as before, frame for frame.
