@@ -252,8 +252,13 @@ namespace LandEye
 		/** The dark rule (World::DarkNow; the art director, cut 4 fix 6: reject a shot over 30% under L 25): a shot whose
 		 * drawn picture stays over DarkLeave for DarkHold seconds, past its first quarter second (the frame drawn lags the
 		 * cut), is left, and no later shot stands within DarkClear metres of where it stood. After DarkRunMost such cuts
-		 * running the light is to blame, not the place: the rule rests until a shot holds. */
-		double DarkLeave = 0.30, DarkHold = 0.5, DarkClear = 6.0;
+		 * running the light is to blame, not the place: the rule rests until a picture reads no darker than DarkLight
+		 * (past its shot's first quarter second), which shows that the light is not. Half the leaving line, so that a
+		 * dim battle whose pictures hover about the line does not start the run again and again. (Until 25 November
+		 * the run started again at every cut made for another reason: under a light dark everywhere, a dusk or a
+		 * storm, two shots of three quarters of a second followed every ordinary cut all battle long. It never showed
+		 * because the scene's reading was blind: LandBattle.cpp ReadDark.) */
+		double DarkLeave = 0.30, DarkHold = 0.5, DarkClear = 6.0, DarkLight = 0.15;
 		int DarkRunMost = 2;
 		/** The whole mass (the production lead's plan for battles of thousands, 22 November: CD1): once a battle, between
 		 * MassFrom and MassTo battle seconds (in a battle too short for them, between 55% and 72% of it), one wide shot
