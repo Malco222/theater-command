@@ -1715,15 +1715,21 @@ the climate's look exactly as it did, byte for byte.
   `Host::Row` (as `Host::House` but with no gap kept round it), the suburbs' villas set back in their gardens, the
   works' sheds, chimneys and water tower on the industry, and **one landmark** by the heart (a spire, a dome or a
   station hall) seen from everywhere.
-- **Its kit is built here, not read** (35 slots, every one with a name of its own, `City...`, so no two instanced kinds
-  share an Unreal name): terraces of two to five storeys in four states (holed, gutted, half fallen, a stump), villas,
-  sheds, a warehouse, a church with its broken spire, a domed hall, a station, heaps, scatter, lone walls, shelled
-  trees, lamp posts and a car wreck. Each at three levels (near; the middle from 90 m; plain from 300 m).
-- **The damage rule** is the breach clip rule: broken, never cut away. Every wall's top steps by courses (75 mm), holes
+- **Its kit is built here, not read** (47 slots, every one with a name of its own, `City...`, so no two instanced kinds
+  share an Unreal name): terraces of two to five storeys in five states (holed, gutted, half fallen, a stump, and now
+  and then one untouched, its shutters closed and its glass in, where the city is least broken), villas, sheds, a
+  warehouse, a church with its broken spire, a domed hall, a station, heaps, scatter, lone walls, shelled trees, lamp
+  posts; and the streets' war: barricades of rubble and setts with sandbags and rails across them at the crossings,
+  barbed wire before them, steel hedgehogs, tram lines' poles (one main street in three, some knocked over, their wire
+  down), burnt-out cars, lorries and trams, and shells' strikes in the setts. Each at three levels (near; the middle
+  from 90 m; plain from 300 m) or two (near, then plain).
+- **The damage rule** is the breach clip rule: broken, never cut away. Every wall's top steps by courses (75 mm) and,
+  near, brick by brick (0.24 m: toothed, a stair where it falls steeply, as torn brickwork is), holes
   are blown through it in rows, floors hang where both walls still carry them, a burnt shell's joists stub out, the
   rooms inside show plaster off to the brick and soot up from the windows that burnt.
 - **Its ground:** dark setts in the core dusted with masonry, pale dust in the suburbs, ash and trodden earth in the
-  courtyards, worn grass in the parks, the city's dust over all of it; beyond the field the roofs run on under the haze,
+  courtyards, worn grass in the parks, gardens and open ground gone wild (tussocks in clumps, bare between), the city's
+  dust over all of it; beyond the field the roofs run on under the haze,
   so the city never ends in a hard edge in the middle of a field. Its air is smoke and brick dust (sight some 3,300 m).
 - **Trying it in the cloud:** `LAND_FIELD_TRIAL=city Tools/land_field/run.sh <a city field>.json`, with
   `LAND_FIELD_PICTURES=<folder>` for the pictures and `LAND_FIELD_EYE="x y angle [height]"` to stand the camera in a

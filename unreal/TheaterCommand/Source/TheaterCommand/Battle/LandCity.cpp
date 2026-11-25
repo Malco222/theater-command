@@ -46,7 +46,8 @@ namespace LandScape
 			SHoled = 0,
 			SGutted = 1,
 			SHalf = 2,
-			SStump = 3
+			SStump = 3,
+			SWhole = 4 // untouched: its roof on, its windows shuttered or glazed (its own slots, KRowWhole0)
 		};
 		enum Slot : int
 		{
@@ -66,7 +67,16 @@ namespace LandScape
 			KLamp = 32,     // a street lamp
 			KLampBent = 33, // a street lamp bent over
 			KWreck = 34,    // a burnt-out motor car
-			KSlots = 35
+			KRowWhole0 = 35, // a terrace's or a block's building untouched, 2 to 5 storeys (35 + storeys - 2)
+			KBarricade = 39, // a barricade across a street: rubble and torn-up setts, sandbags on its crown, rails through it
+			KHedgehog = 40, // a steel hedgehog: three girders crossed
+			KWire = 41,     // a coil of barbed wire on its pickets
+			KPole = 42,     // a tram's pole, its wire down and hanging
+			KPoleLean = 43, // a tram's pole knocked over to lean, its wire trailing
+			KLorry = 44,    // a burnt-out lorry
+			KTram = 45,     // a burnt-out tram
+			KStrike = 46,   // a shell's strike in a paved street: the setts torn up round a shallow hole and thrown about
+			KSlots = 47
 		};
 
 		enum Clut : int
@@ -355,6 +365,7 @@ namespace LandScape
 			int Storeys = 3, Bays = 3;
 			bool bShops = false;     // the ground floor's wide shop fronts (a main street's)
 			bool bCornice = true;
+			bool bShut = false;      // an untouched building's: its windows filled (shutters, glass, boards), its door shut
 			std::vector<std::pair<double, double>> Top; // (metres along, metres up), in order along it; none: the eaves plus a parapet
 			double Rag = 0.0;        // its broken top steps up and down by up to this, brick by brick
 			std::vector<Hole> Holes;
@@ -477,6 +488,7 @@ namespace LandScape
 						Piece(W1, (B + 1) * Bay, Z0, Z0 + H, true);
 						Piece(W0, W1, Z0, Z0 + Sill, true);
 						Piece(W0, W1, Z0 + Head, Z0 + H, true, true);
+						if (L.bShut && L.Lod <= 1) Infill(W0, W1, Z0 + Sill, Z0 + Head, K, B, bShop, bDoor);
 						// (its sill: a stone ledge under the window, proud of the face)
 						if (L.Lod == 0 && !bShop && !bDoor) Ledge(W0 - 0.1, W1 + 0.1, Z0 + Sill - 0.08, Z0 + Sill, 0.08);
 					}
@@ -562,14 +574,18 @@ namespace LandScape
 					return;
 				}
 				if (TopMin + L.Rag <= Z0 - 0.02 && std::max(TopAt(L, S0), TopAt(L, S1)) + L.Rag <= Z0) return;
-				// broken: brick by brick along the top (columns of some half a metre), and through a hole in rows too
-				const double Step = L.Lod == 0 ? 0.48 : L.Lod == 1 ? 1.1 : 2.4;
+				// broken: brick by brick along the top (near, columns a brick's length, 0.24 m; the middle level's 1.1 m), and
+				// through a hole in rows too
+				const double Step = L.Lod == 0 ? 0.24 : L.Lod == 1 ? 1.1 : 2.4;
 				const int Cols = std::max(1, static_cast<int>(std::ceil((S1 - S0) / Step)));
 				for (int C = 0; C < Cols; ++C)
 				{
 					const double A = S0 + (S1 - S0) * C / Cols, B = S0 + (S1 - S0) * (C + 1) / Cols;
 					const uint64_t Brick = Hash(L.Key ^ 0xB41C, static_cast<uint64_t>(std::lround(A * 20.0)), static_cast<uint64_t>(std::lround(Z0 * 10.0)));
-					const double Jag = L.Rag * (Unit(Brick) - 0.5) * 2.0;
+					// (the break wanders up and down over a metre or so, the same across the pieces it runs through, and each
+					// brick a course or so off it: toothed like real brickwork torn down, not a comb of bars)
+					const double Wander = Noise(0.5 * (A + B) / 1.3, 3.7, L.Key ^ 0xB41D) + 0.5 * Noise(0.5 * (A + B) / 0.45, 8.1, L.Key ^ 0xB41E);
+					const double Jag = L.Rag * (0.5 * Wander + 1.0 * (Unit(Brick) - 0.5));
 					// (courses: a broken top steps by whole courses, 0.075 m)
 					const double Top = std::floor((TopAt(L, 0.5 * (A + B)) + Jag) / 0.075) * 0.075;
 					const double Hi = std::min(Z1, Top);
@@ -580,7 +596,7 @@ namespace LandScape
 						continue;
 					}
 					// through the hole: rows of some 0.45 m, kept where outside it, run together up the column
-					const double RowStep = L.Lod == 0 ? 0.42 : 1.0;
+					const double RowStep = L.Lod == 0 ? 0.3 : 1.0;
 					const int Rows = std::max(1, static_cast<int>(std::ceil((Hi - Z0) / RowStep)));
 					double RunFrom = -1.0;
 					for (int R = 0; R <= Rows; ++R)
@@ -594,6 +610,83 @@ namespace LandScape
 							RunFrom = -1.0;
 						}
 					}
+				}
+			}
+
+			/** An untouched building's window or door filled, set back in its reveal: its shutters closed, its glass in its
+			 * frame (the sky's light on its upper panes), boards nailed over it, or the glass gone (dark); a shop's iron
+			 * shutter; a door. A building's shutters all one paint. */
+			void Infill(double S0, double S1, double Z0, double Z1, int Storey, int Bay, bool bShop, bool bDoor)
+			{
+				const WallLay& L = *Lay;
+				if (S1 - S0 < 0.1 || Z1 - Z0 < 0.1) return;
+				const V3d Up{ 0, 0, 1 };
+				const V3d V = Cross3(Up, L.T);
+				const double Sign = Dot3(V, L.Out) >= 0.0 ? 1.0 : -1.0;
+				// (into the wall from its face: Sign > 0, the wall runs from 0 to -Thick)
+				auto Set = [&](double Back, double Thin, double& V0, double& V1) {
+					V0 = Sign > 0.0 ? -(Back + Thin) : Back;
+					V1 = Sign > 0.0 ? -Back : Back + Thin;
+				};
+				const double U = Unit(Hash(L.Key ^ 0x5401, static_cast<uint64_t>(Storey * 16 + Bay)));
+				const double Paint = Unit(Hash(L.Key, 0x5402));
+				const Tone Shutter = Paint < 0.3 ? Rgb(84, 98, 80) : Paint < 0.55 ? Rgb(94, 104, 110) : Paint < 0.8 ? Rgb(100, 80, 62) : Rgb(132, 114, 80);
+				const Tone Frame = Mixed(P.Trim, Rgb(70, 66, 60), 0.25);
+				const int Kind = bDoor ? 4 : bShop ? 5 : U < 0.42 ? 0 : U < 0.8 ? 1 : U < 0.9 ? 2 : 3;
+				double V0 = 0.0, V1 = 0.0;
+				auto Panel = [&](double A, double B, double Za, double Zb, double Back, double Thin, const Tone& C, double Sky) {
+					Set(Back, Thin, V0, V1);
+					Block(W, L.A, L.T, V, Up, A, B, V0, V1, Za, Zb, false, [&](const V3d& Q, const V3d& N) {
+						const double Weather = 0.9 + 0.12 * Noise(Dot3(Q - L.A, L.T) / 0.7, Q.Z / 0.9, L.Key ^ 0x5403);
+						const Tone T = Varied(C, std::fabs(Dot3(N, L.Out)) > 0.5 ? Weather : 0.8, 0.0);
+						return Sky > 0.0 ? Mixed(T, Rgb(118, 126, 134), Sky * Clamp01((Q.Z - Za) / std::max(0.1, Zb - Za))) : T;
+					});
+				};
+				if (Kind == 0)
+				{
+					// shutters closed: two leaves, a crack of dark between
+					const double Mid = 0.5 * (S0 + S1);
+					Panel(S0, Mid - 0.015, Z0, Z1, 0.1, 0.04, Shutter, 0.0);
+					Panel(Mid + 0.015, S1, Z0, Z1, 0.1, 0.04, Shutter, 0.0);
+					Panel(Mid - 0.015, Mid + 0.015, Z0, Z1, 0.2, 0.03, Rgb(30, 28, 26), 0.0);
+				}
+				else if (Kind == 1)
+				{
+					// glass in its frame: dark, the sky's grey in its upper panes; a mullion and a transom near
+					Panel(S0, S1, Z0, Z1, 0.16, 0.04, Rgb(46, 52, 58), 0.45);
+					if (L.Lod == 0)
+					{
+						const double Mid = 0.5 * (S0 + S1), Tr = Z0 + 0.66 * (Z1 - Z0);
+						Panel(Mid - 0.04, Mid + 0.04, Z0, Z1, 0.1, 0.06, Frame, 0.0);
+						Panel(S0, S1, Tr - 0.04, Tr + 0.04, 0.1, 0.06, Frame, 0.0);
+						Panel(S0, S1, Z0, Z0 + 0.07, 0.1, 0.06, Frame, 0.0);
+					}
+				}
+				else if (Kind == 2)
+				{
+					// boarded: dark behind, planks across
+					Panel(S0, S1, Z0, Z1, 0.3, 0.04, Rgb(34, 31, 29), 0.0);
+					const int Planks = std::max(2, static_cast<int>((Z1 - Z0) / 0.45));
+					for (int K = 0; K < Planks; ++K)
+					{
+						const double Za = Z0 + (Z1 - Z0) * (K + 0.2) / Planks, Zb = Za + 0.6 * (Z1 - Z0) / Planks;
+						Panel(S0 - 0.05, S1 + 0.05, Za, Zb, 0.02, 0.03, Rgb(122, 106, 84), 0.0);
+					}
+				}
+				else if (Kind == 3)
+				{
+					// the glass blown in: the dark of the room behind
+					Panel(S0, S1, Z0, Z1, 0.9, 0.05, Rgb(28, 26, 25), 0.0);
+				}
+				else if (Kind == 4)
+				{
+					// a door, shut
+					Panel(S0, S1, Z0, Z1, 0.14, 0.06, Mixed(Shutter, Rgb(70, 54, 42), 0.6), 0.0);
+				}
+				else
+				{
+					// a shop's iron shutter rolled down
+					Panel(S0, S1, Z0, Z1, 0.12, 0.04, Rgb(98, 96, 92), 0.0);
 				}
 			}
 
@@ -682,6 +775,13 @@ namespace LandScape
 				}
 				break;
 			}
+			case SWhole:
+			{
+				// untouched: its walls to the eaves, its gables to the ridge, its roof on, its windows shut
+				TopLeft = { { 0.0, Eaves + 0.7 }, { HD, Ridge + 0.3 }, { Deep, Eaves + 0.7 } };
+				TopRight = TopLeft;
+				break;
+			}
 			case SGutted:
 			{
 				// a burnt shell: the walls standing, their tops broken a storey's height in places, every window sooted
@@ -724,7 +824,7 @@ namespace LandScape
 				break;
 			}
 			}
-			const double Rag = St == SHoled ? 0.0 : Lod == 2 ? 0.6 : 0.35;
+			const double Rag = (St == SHoled || St == SWhole) ? 0.0 : Lod == 2 ? 0.6 : 0.35;
 			Mason M(W, P);
 			// the front, on -y (a main street's shops at its foot)
 			WallLay F;
@@ -742,7 +842,8 @@ namespace LandScape
 			F.Face = Face;
 			F.Key = Key ^ 0xF0;
 			F.Lod = Lod;
-			F.bCornice = St == SHoled;
+			F.bCornice = St == SHoled || St == SWhole;
+			F.bShut = St == SWhole;
 			M.Build(F);
 			// the back, on +y, its face to the courtyard (from the far end, so its run's left is outward)
 			WallLay B = F;
@@ -807,12 +908,13 @@ namespace LandScape
 						// the hanging end: a slab tipped down from the broken edge
 						const double Edge = Fall > 0.0 ? X1 : X0, Dir = Fall > 0.0 ? 1.0 : -1.0;
 						const double Drop = R.Range(0.45, 0.85), Reach = R.Range(1.2, 2.4);
-						const V3d A0{ Edge, -HD + In, Z }, A1{ Edge, HD - In, Z };
+						// (from the front wall's inside to the back's, whichever end fell: across +y always, never out through the
+						// front into the street)
+						const V3d A0{ Edge, -HD + In, Z };
 						const V3d U = Norm3(V3d{ Dir * std::cos(Drop), 0.0, -std::sin(Drop) });
-						const V3d V0 = Norm3(V3d{ 0.0, -Dir, 0.0 });
-						const V3d Up = Cross3(U, V0);
-						(void)A1;
-						Block(W, A0, U, V0 * -1.0, Up * -1.0, 0.0, Reach, 0.0, Deep - 2.0 * In, 0.0, 0.22, true, [&](const V3d&, const V3d& Nn) {
+						const V3d Across{ 0.0, 1.0, 0.0 };
+						const V3d Up = Cross3(U, Across);
+						Block(W, A0, U, Across, Up, 0.0, Reach, 0.0, Deep - 2.0 * In, 0.0, 0.22, true, [&](const V3d&, const V3d& Nn) {
 							return Nn.Z > 0.3 ? Mixed(P.Timber, P.Dust, 0.4) : Varied(P.Inner, 0.7, 0.0);
 						});
 					}
@@ -841,16 +943,16 @@ namespace LandScape
 			Block(W, V3d{}, V3d{ 1, 0, 0 }, V3d{ 0, 1, 0 }, V3d{ 0, 0, 1 }, -HL + 0.2, HL - 0.2, -HD + 0.2, HD - 0.2, -0.3, 0.04, false,
 			      [&](const V3d&, const V3d& Nn) { return Nn.Z > 0.5 ? Mixed(P.Dust, P.Char, St == SHoled ? 0.15 : 0.45) : P.Inner; });
 			// the heap inside (a burnt shell's floors fallen, a half's, a stump's over all)
-			if (St != SHoled)
+			if (St != SHoled && St != SWhole)
 			{
 				const double Over = St == SStump ? 1.0 : St == SHalf ? 0.75 : 0.65;
 				const double High = St == SStump ? R.Range(2.4, 3.6) : R.Range(1.4, 2.4);
 				const double CX = St == SHalf ? Fall * HL * 0.35 : 0.0;
 				Heap(W, CX, 0.0, HL * Over, HD * 0.95, High, Key ^ 0x4EA9, P, Lod, St == SStump ? 46 : 26, St == SStump ? 6 : 4);
 			}
-			// The roof (a holed one): rafters bare where its slates or tiles are gone; its ridge along x. A stack on each
-			// gable.
-			if (St == SHoled)
+			// The roof (a holed one, or an untouched one's whole): rafters bare where its slates or tiles are gone; its ridge
+			// along x. A stack on each gable.
+			if (St == SHoled || St == SWhole)
 			{
 				const double Pitch = std::atan2(Ridge - Eaves, HD);
 				const double Slope = std::hypot(Ridge - Eaves, HD);
@@ -863,7 +965,7 @@ namespace LandScape
 					const V3d Down = Norm3(V3d{ 0.0, Side * std::cos(Pitch), -std::sin(Pitch) });
 					const V3d U{ 1, 0, 0 };
 					const V3d Nrm = Cross3(Side > 0 ? U : U * -1.0, Down) * (Side > 0 ? 1.0 : 1.0);
-					const bool bHoleHere = Side == static_cast<int>(HoleSide);
+					const bool bHoleHere = St == SHoled && Side == static_cast<int>(HoleSide);
 					const double Spacing = Lod == 0 ? 0.75 : Lod == 1 ? 1.5 : 99.0;
 					// the slates or tiles: in strips down the slope between the rafters, each strip cut back at the hole
 					const double Strip = Lod == 0 ? 1.5 : Lod == 1 ? 3.0 : Long;
@@ -891,7 +993,7 @@ namespace LandScape
 						Block(W, Top, U, Down, Nrm, X, X1, D0, D1, 0.0, 0.07, true, [&](const V3d& Q, const V3d& Nn) { return RoofInk(P, Q, Nn, Key); });
 					}
 					// the rafters under it, bare in the hole (some broken short)
-					if (Lod <= 1)
+					if (Lod <= 1 && St == SHoled)
 						for (double X = -HL + 0.3; X <= HL - 0.3; X += Spacing)
 						{
 							double Reach = Slope;
@@ -932,6 +1034,7 @@ namespace LandScape
 		void RowFar(Writer& W, const Paints& P, int Storeys, int St, uint64_t Key, double Long, double Deep)
 		{
 			const double HL = 0.5 * Long, HD = 0.5 * Deep, Eaves = EavesOf(Storeys);
+			if (St == SWhole) St = SHoled; // (far off, an untouched building and a holed one are one shape)
 			const Tone Face = Mixed(P.Face[Key % 3], Rgb(40, 38, 36), St == SHoled ? 0.22 : 0.4);
 			const Tone Top = Mixed(P.Dust, P.Core, 0.5);
 			Rng R(Key ^ 0x2EA7);
@@ -1704,6 +1807,278 @@ namespace LandScape
 			(void)R;
 		}
 
+		/** A ribbon of wire from A to B, Wide across (along Side), seen from both faces. */
+		void Wire(Writer& W, const V3d& A, const V3d& B, const V3d& Side, double Wide, const Tone& C)
+		{
+			const V3d D = Norm3(B - A);
+			const V3d S = Side * (0.5 * Wide);
+			V3d N = Norm3(Cross3(D, Side));
+			if (N.Z < 0.0) N = N * -1.0;
+			const V3d Nl = Norm3(V3d{ N.X, N.Y, std::fabs(N.Z) + 0.5 });
+			const V3d Nb = Norm3(V3d{ -N.X, -N.Y, std::fabs(N.Z) + 0.5 });
+			const V3d P0 = A - S, P1 = A + S, P2 = B + S, P3 = B - S;
+			const uint32_t I0 = W.Vert(P0.X, P0.Y, P0.Z, Nl.X, Nl.Y, Nl.Z, C), I1 = W.Vert(P1.X, P1.Y, P1.Z, Nl.X, Nl.Y, Nl.Z, C);
+			const uint32_t I2 = W.Vert(P2.X, P2.Y, P2.Z, Nl.X, Nl.Y, Nl.Z, C), I3 = W.Vert(P3.X, P3.Y, P3.Z, Nl.X, Nl.Y, Nl.Z, C);
+			W.Tri(I0, I2, I1);
+			W.Tri(I0, I3, I2);
+			const uint32_t J0 = W.Vert(P0.X, P0.Y, P0.Z, Nb.X, Nb.Y, Nb.Z, C), J1 = W.Vert(P1.X, P1.Y, P1.Z, Nb.X, Nb.Y, Nb.Z, C);
+			const uint32_t J2 = W.Vert(P2.X, P2.Y, P2.Z, Nb.X, Nb.Y, Nb.Z, C), J3 = W.Vert(P3.X, P3.Y, P3.Z, Nb.X, Nb.Y, Nb.Z, C);
+			W.Tri(J0, J1, J2);
+			W.Tri(J0, J2, J3);
+		}
+
+		/** A barricade across a street: a long heap of rubble and torn-up setts some 9 m along x, sandbags along its crown,
+		 * rails and beams thrust out of it toward -y (the side it faces). */
+		void Barricade(Writer& W, const Paints& P, uint64_t Key, int Lod)
+		{
+			const double RX = 4.6, RY = 1.35, High = 1.55;
+			Heap(W, 0.0, 0.0, RX, RY, High, Key ^ 0xBA1, P, Lod, Lod == 0 ? 34 : 0, Lod == 0 ? 3 : 0);
+			if (Lod >= 2) return;
+			auto Crown = [&](double X, double Y) {
+				const double T = std::min(1.0, std::hypot(X / RX, Y / RY));
+				return High * (1.0 - T * T * (0.6 + 0.4 * T)) * 0.82;
+			};
+			// sandbags, two courses along the crown, on its face side, bonded
+			const Tone Bag = Rgb(128, 116, 92), BagDim = Rgb(86, 78, 64);
+			for (int Row = 0; Row < 2; ++Row)
+			{
+				const int N = 8 - Row;
+				for (int K = 0; K < N; ++K)
+				{
+					const double X = -3.0 + K * 0.78 + Row * 0.39 + 0.1 * (Unit(Hash(Key, 40u + static_cast<uint64_t>(Row * 20 + K))) - 0.5);
+					const double Y = -0.35 + 0.08 * (Unit(Hash(Key, 80u + static_cast<uint64_t>(Row * 20 + K))) - 0.5);
+					const double Z = Crown(X, Y) - 0.06 + Row * 0.17;
+					Lump(W, X, Y, Z, 0.36, 0.13, Hash(Key, 120u + static_cast<uint64_t>(Row * 20 + K)), Bag, BagDim);
+				}
+			}
+			// rails torn from the tramway and beams, thrust out toward the enemy
+			const Tone Steel = Rgb(64, 60, 58);
+			for (int K = 0; K < 4; ++K)
+			{
+				const double X = -3.4 + 2.2 * K + 0.6 * (Unit(Hash(Key, 200u + static_cast<uint64_t>(K))) - 0.5);
+				const double Lean = 0.5 + 0.35 * Unit(Hash(Key, 210u + static_cast<uint64_t>(K)));
+				const double Reach = 2.0 + 1.0 * Unit(Hash(Key, 220u + static_cast<uint64_t>(K)));
+				const V3d From{ X, 0.4, 0.2 };
+				const V3d To{ X + 0.4 * (Unit(Hash(Key, 230u + static_cast<uint64_t>(K))) - 0.5), From.Y - Reach * std::cos(Lean), From.Z + Reach * std::sin(Lean) };
+				if (K % 2 == 0) Beam(W, From, To, 0.11, Steel);
+				else Beam(W, From, To, 0.18, Unit(Hash(Key, 240u + static_cast<uint64_t>(K))) < 0.5 ? P.Char : P.Timber);
+			}
+		}
+
+		/** A steel hedgehog: three girders 2.4 m long crossed square at their middles, standing on three ends (1.4 m high). */
+		void Hedgehog(Writer& W, uint64_t Key)
+		{
+			const Tone Rust = Mixed(Rgb(92, 66, 50), Rgb(58, 54, 52), 0.4 * Unit(Hash(Key, 1)));
+			const double R2 = std::sqrt(2.0), R3 = std::sqrt(3.0), R6 = std::sqrt(6.0), Half = 1.2;
+			const V3d Axes[3] = { { 1.0 / R2, 1.0 / R6, 1.0 / R3 }, { -1.0 / R2, 1.0 / R6, 1.0 / R3 }, { 0.0, -2.0 / R6, 1.0 / R3 } };
+			const V3d C{ 0.0, 0.0, Half / R3 - 0.03 };
+			for (const V3d& A : Axes)
+			{
+				Beam(W, C - A * Half, C + A * Half, 0.12, Rust);
+				// (its flange: an angle iron's second leg)
+				Beam(W, C - A * Half + V3d{ 0.0, 0.0, 0.05 }, C + A * Half + V3d{ 0.0, 0.0, 0.05 }, 0.05, Varied(Rust, 0.8, 0.0));
+			}
+			W.Box(C.X, C.Y, C.Z, 0.16, 0.16, 0.16, 0.4, Varied(Rust, 0.7, 0.0));
+		}
+
+		/** A coil of barbed wire some 6 m along x, 0.9 m across, on three iron pickets. */
+		void WireCoil(Writer& W, uint64_t Key, int Lod)
+		{
+			const Tone Iron = Rgb(60, 58, 56), Barb = Rgb(88, 78, 68);
+			for (int K = 0; K < 3; ++K)
+			{
+				const double X = -2.6 + 2.6 * K;
+				Beam(W, V3d{ X, 0.0, -0.3 }, V3d{ X + 0.05, 0.03, 1.15 }, 0.04, Iron);
+			}
+			if (Lod >= 2) return;
+			// the coil: a helix round x, its loops sagging and crushed here and there
+			const int Loops = 16, Seg = 8;
+			const double Long = 6.0, Rad = 0.46;
+			V3d Last{};
+			for (int I = 0; I <= Loops * Seg; ++I)
+			{
+				const double T = static_cast<double>(I) / Seg;
+				const double A = 2.0 * Pi * T;
+				const double Sag = 0.85 + 0.25 * Noise(T * 0.7, 0.5, Key ^ 0x31E);
+				const V3d Q{ -0.5 * Long + Long * T / Loops, Rad * Sag * std::cos(A), Rad * (0.05 + Sag * (1.0 + std::sin(A))) };
+				if (I > 0) Wire(W, Last, Q, V3d{ 1.0, 0.0, 0.0 }, 0.035, Barb);
+				Last = Q;
+			}
+		}
+
+		/** A tram's pole: an iron mast 8.5 m with its bracket arm over the street (along x), its span wire broken and hanging
+		 * to the setts; knocked over to lean, its wire trailing. */
+		void TramPole(Writer& W, uint64_t Key, int Lod, bool bLean)
+		{
+			const Tone Iron = Rgb(60, 62, 62), Copper = Rgb(70, 74, 66);
+			const double Tip = bLean ? 0.42 + 0.25 * Unit(Hash(Key, 2)) : 0.0; // (its lean, from upright)
+			const double Way = bLean ? (Unit(Hash(Key, 3)) < 0.5 ? 1.0 : -1.0) : 0.0; // (falling along y, either way)
+			auto Bend = [&](const V3d& Q) {
+				// (the mast turned about its foot by Tip toward Way y)
+				const double C = std::cos(Tip), S = std::sin(Tip);
+				return V3d{ Q.X, Q.Y * C + Way * Q.Z * S, Q.Z * C - Way * Q.Y * S };
+			};
+			Plain(W, -0.24, 0.24, -0.24, 0.24, -0.3, 0.5, Iron, Iron);
+			Beam(W, Bend(V3d{ 0, 0, 0.0 }), Bend(V3d{ 0, 0, 3.0 }), 0.24, Iron);
+			Beam(W, Bend(V3d{ 0, 0, 3.0 }), Bend(V3d{ 0, 0, 8.5 }), 0.17, Iron);
+			Beam(W, Bend(V3d{ 0, 0, 7.4 }), Bend(V3d{ 3.4, 0, 7.6 }), 0.09, Iron);
+			Beam(W, Bend(V3d{ 0, 0, 6.6 }), Bend(V3d{ 2.2, 0, 7.5 }), 0.05, Iron);
+			if (Lod >= 2) return;
+			// the span wire, broken at the arm's end: hanging in a curve to the setts and lying a few metres along them
+			const V3d From = Bend(V3d{ 3.4, 0.0, 7.55 });
+			const double Down = std::max(0.3, From.Z);
+			const int N = 14;
+			V3d Last = From;
+			for (int K = 1; K <= N; ++K)
+			{
+				const double T = static_cast<double>(K) / N;
+				const double Drift = 1.6 * T * T + 0.4 * Unit(Hash(Key, 10u + static_cast<uint64_t>(K))) * T;
+				const V3d Q{ From.X + Drift, From.Y + 0.6 * T * (bLean ? Way : 1.0), std::max(0.03, Down * (1.0 - T) * (1.0 - 0.3 * T)) };
+				Wire(W, Last, Q, V3d{ 0.0, 1.0, 0.0 }, 0.03, Copper);
+				Last = Q;
+			}
+			for (int K = 1; K <= 6; ++K)
+			{
+				const double A = 0.9 * K + 0.6 * Unit(Hash(Key, 40u + static_cast<uint64_t>(K)));
+				const V3d Q{ Last.X + 0.7 * std::cos(A), Last.Y + 0.7 * std::sin(A), 0.03 };
+				Wire(W, Last, Q, V3d{ 0.0, 0.0, 1.0 }, 0.03, Copper);
+				Last = Q;
+			}
+		}
+
+		/** A burnt-out lorry along x, its cab at +x: its cab's shell, its bed's frame with a few charred boards, its
+		 * wheels' rims, all rust and soot. */
+		void Lorry(Writer& W, uint64_t Key, int Lod)
+		{
+			const Tone Rust = Rgb(90, 62, 46), Black = Rgb(38, 35, 33), Ash = Rgb(112, 106, 98);
+			auto Ink = [&](const V3d& Q, const V3d& N) {
+				const double K = 0.5 + 0.5 * Noise(Q.X * 1.1, Q.Y * 1.1 + Q.Z, Key);
+				return N.Z > 0.5 ? Mixed(Black, Ash, 0.3 * K) : Mixed(Rust, Black, 0.55 * K);
+			};
+			const V3d O{}, U{ 1, 0, 0 }, V{ 0, 1, 0 }, Up{ 0, 0, 1 };
+			// the chassis, the bonnet, the cab
+			Block(W, O, U, V, Up, -3.2, 3.3, -0.55, 0.55, 0.55, 0.8, true, Ink);
+			Block(W, O, U, V, Up, 2.2, 3.4, -0.62, 0.62, 0.8, 1.55, false, Ink);
+			if (Lod == 0)
+			{
+				// (the cab's shell: its posts and roof, its glass and doors gone)
+				for (int K = 0; K < 4; ++K)
+				{
+					const double X = K < 2 ? 1.0 : 2.15, Y = K % 2 == 0 ? -1.0 : 1.0;
+					Block(W, V3d{ X, Y, 0.0 }, U, V, Up, -0.05, 0.05, -0.05, 0.05, 0.8, 2.35, false, Ink);
+				}
+				Block(W, O, U, V, Up, 0.95, 2.2, -1.05, 1.05, 2.3, 2.38, true, Ink);
+				Block(W, O, U, V, Up, 0.9, 1.0, -1.05, 1.05, 0.8, 1.6, false, Ink);
+				// (the bed: its floor half burnt through, a side board hanging, the boards charred)
+				Block(W, O, U, V, Up, -3.3, -1.4, -1.15, 1.15, 0.95, 1.02, true, Ink);
+				Block(W, O, U, V, Up, -3.3, 0.8, -1.15, -1.08, 1.0, 1.55, true, Ink);
+				Block(W, V3d{ 0.0, 1.15, 1.0 }, U, Norm3(V3d{ 0.0, 0.35, -1.0 }), Norm3(V3d{ 0.0, 1.0, 0.35 }), -3.3, 0.5, 0.0, 0.55, 0.0, 0.05, true, Ink);
+				for (int K = 0; K < 6; ++K)
+				{
+					const double X = K < 2 ? 2.7 : K < 4 ? -1.4 : -2.5, Y = K % 2 == 0 ? -0.98 : 0.98;
+					W.Box(X, Y, 0.46, 0.46, 0.1, 0.46, 0.0, Black);
+				}
+			}
+			else
+			{
+				Block(W, O, U, V, Up, 0.95, 2.2, -1.05, 1.05, 0.8, 2.35, false, Ink);
+				Block(W, O, U, V, Up, -3.3, 0.8, -1.15, 1.15, 0.8, 1.5, false, Ink);
+			}
+		}
+
+		/** A burnt-out tram along x, 11 m: its frame and pillars standing, its roof sagging and holed, its seats' iron, on
+		 * its trucks. */
+		void Tram(Writer& W, const Paints& P, uint64_t Key, int Lod)
+		{
+			const Tone Rust = Rgb(96, 66, 50), Black = Rgb(36, 33, 31), Paint = Rgb(122, 104, 70);
+			auto Ink = [&](const V3d& Q, const V3d& N) {
+				const double K = 0.5 + 0.5 * Noise(Q.X * 0.6, Q.Z * 1.4, Key ^ 0x7A3);
+				const Tone Side = Mixed(Mixed(Paint, Rust, 0.5 + 0.4 * K), Black, Smooth(1.6, 2.6, Q.Z) * 0.6);
+				return N.Z > 0.5 ? Mixed(Black, P.Dust, 0.25 * K) : N.Z < -0.5 ? Black : Side;
+			};
+			const V3d O{}, U{ 1, 0, 0 }, V{ 0, 1, 0 }, Up{ 0, 0, 1 };
+			const double HL = 5.5, HW = 1.15;
+			// the trucks and the floor, the waist panels below the windows
+			Block(W, O, U, V, Up, -3.8, -2.2, -0.8, 0.8, 0.1, 0.7, false, [&](const V3d&, const V3d&) { return Black; });
+			Block(W, O, U, V, Up, 2.2, 3.8, -0.8, 0.8, 0.1, 0.7, false, [&](const V3d&, const V3d&) { return Black; });
+			Block(W, O, U, V, Up, -HL, HL, -HW, HW, 0.7, 0.85, true, Ink);
+			Block(W, O, U, V, Up, -HL, HL, -HW, -HW + 0.06, 0.85, 1.75, false, Ink);
+			Block(W, O, U, V, Up, -HL, HL, HW - 0.06, HW, 0.85, 1.75, false, Ink);
+			if (Lod >= 2)
+			{
+				Block(W, O, U, V, Up, -HL, HL, -HW, HW, 1.75, 2.9, false, Ink);
+				return;
+			}
+			// its window pillars, a few bent; the ends' frames
+			for (int Side = -1; Side <= 1; Side += 2)
+				for (int K = 0; K <= 8; ++K)
+				{
+					const double X = -HL + 0.1 + (2.0 * HL - 0.2) * K / 8.0;
+					const double Bow = 0.12 * (Unit(Hash(Key, 300u + static_cast<uint64_t>(K * 2 + (Side > 0 ? 1 : 0)))) - 0.5);
+					Beam(W, V3d{ X, Side * (HW - 0.03), 1.75 }, V3d{ X + Bow, Side * (HW - 0.03 - std::fabs(Bow)), 2.8 }, 0.08, Mixed(Rust, Black, 0.5));
+				}
+			// the roof: sagging in its middle, burnt through in a run of panels
+			const int Panels = 8;
+			for (int K = 0; K < Panels; ++K)
+			{
+				if (Unit(Hash(Key, 400u + static_cast<uint64_t>(K))) < 0.35) continue;
+				const double X0 = -HL + 2.0 * HL * K / Panels, X1 = -HL + 2.0 * HL * (K + 1) / Panels;
+				const double Sag = 0.25 * std::sin(Pi * (K + 0.5) / Panels);
+				Block(W, V3d{ 0.0, 0.0, 2.85 - Sag }, U, V, Up, X0, X1, -HW - 0.05, HW + 0.05, 0.0, 0.05, true, Ink);
+			}
+			// the seats' iron frames, black
+			for (int K = 0; K < 6; ++K)
+			{
+				const double X = -3.6 + 1.45 * K;
+				Beam(W, V3d{ X, -0.9, 1.25 }, V3d{ X, 0.9, 1.25 }, 0.05, Black);
+			}
+			// the trolley pole, snapped and lying back along the roof
+			Beam(W, V3d{ 0.0, 0.0, 2.9 }, V3d{ -3.4, 0.3, 3.3 }, 0.06, Black);
+		}
+
+		/** A shell's strike in a paved street: a shallow hole's dark floor, its ragged lip of earth and broken setts, the
+		 * setts thrown out round it (some 5 m across in all). */
+		void Strike(Writer& W, const Paints& P, uint64_t Key, int Lod)
+		{
+			const Tone Floor = Rgb(52, 46, 40), Earth = Rgb(98, 86, 72), Sett = Rgb(92, 88, 84);
+			const int Round = Lod == 0 ? 16 : 10;
+			// the floor: a fan, dark, darkest at its middle (the hole seen from the street reads as its dark)
+			const uint32_t Mid = W.Vert(0.0, 0.0, 0.015, 0, 0, 1, Varied(Floor, 0.8, 0.0));
+			std::vector<uint32_t> In, Crest, Out;
+			for (int K = 0; K < Round; ++K)
+			{
+				const double A = 2.0 * Pi * K / Round;
+				const double Rg = 0.8 + 0.4 * Unit(Hash(Key, 10u + static_cast<uint64_t>(K)));
+				const double C = std::cos(A), S = std::sin(A);
+				In.push_back(W.Vert(1.0 * Rg * C, 1.0 * Rg * S, 0.03, -0.6 * C, -0.6 * S, 0.8, Floor));
+				Crest.push_back(W.Vert(1.35 * Rg * C, 1.35 * Rg * S, 0.16 + 0.12 * Unit(Hash(Key, 30u + static_cast<uint64_t>(K))), 0.0, 0.0, 1.0, Mixed(Earth, P.Dust, 0.3)));
+				Out.push_back(W.Vert(2.1 * Rg * C, 2.1 * Rg * S, -0.02, 0.35 * C, 0.35 * S, 0.94, Mixed(Earth, Sett, 0.5)));
+			}
+			for (int K = 0; K < Round; ++K)
+			{
+				const size_t A = static_cast<size_t>(K), B = static_cast<size_t>((K + 1) % Round);
+				W.Tri(Mid, In[A], In[B]);
+				W.Tri(In[A], Crest[B], In[B]);
+				W.Tri(In[A], Crest[A], Crest[B]);
+				W.Tri(Crest[A], Out[B], Crest[B]);
+				W.Tri(Crest[A], Out[A], Out[B]);
+			}
+			if (Lod >= 2) return;
+			// the setts torn up and thrown, thickest at the lip
+			for (int K = 0; K < 34; ++K)
+			{
+				const double A = 2.0 * Pi * Unit(Hash(Key, 100u + static_cast<uint64_t>(K)));
+				const double D = 1.2 + 2.0 * Unit(Hash(Key, 140u + static_cast<uint64_t>(K))) * Unit(Hash(Key, 180u + static_cast<uint64_t>(K)));
+				const double Z = D < 1.6 ? 0.18 : 0.06;
+				W.Box(D * std::cos(A), D * std::sin(A), Z, 0.09, 0.07, 0.06, A * 2.3, Varied(Sett, 0.85 + 0.3 * Unit(Hash(Key, 220u + static_cast<uint64_t>(K))), 0.0));
+			}
+			for (int K = 0; K < 5; ++K)
+			{
+				const double A = 2.0 * Pi * Unit(Hash(Key, 300u + static_cast<uint64_t>(K)));
+				Lump(W, 1.4 * std::cos(A), 1.4 * std::sin(A), 0.1, 0.16, 0.12, Hash(Key, 320u + static_cast<uint64_t>(K)), Mixed(Earth, P.Dust, 0.2), Varied(Earth, 0.6, 0.0));
+			}
+		}
+
 		// ------------------------------------------------------------------ the city itself
 
 		/** The city's streets between its blocks: a grid of its own (the core's old quarter on a tighter one, turned), cut
@@ -1845,6 +2220,9 @@ namespace LandScape
 				if (Q == 2 && StoreysAt(X, Y) >= 4 && std::hypot(X - CX, Y - CY) < 420.0) return Old;
 				return Main;
 			}
+			/** How wild a suburb's garden has grown since the war came, 0 to 1: tussocks in clumps, bare trodden ground between. */
+			double Wild(double X, double Y, double N2) const { return Smooth(-0.35, 0.45, Noise(X / 5.5, Y / 5.5, Seed ^ 0x6A7) + 0.25 * N2); }
+
 			/** How ruined the city is about a place, 0 to 1: the core and its edge toward the attack the worst, patchy. */
 			double Ruin(double X, double Y) const
 			{
@@ -1922,9 +2300,10 @@ namespace LandScape
 					}
 					if (Q == 1)
 					{
-						// a suburb's gardens: grass, beds and paths, a little trodden
+						// a suburb's gardens: grass grown long in clumps, beds and paths, bare trodden earth between the clumps
 						const double Bed = Smooth(0.2, 0.5, S.N2);
-						return Mixed(Mixed(Varied(Grass, 0.98 + 0.08 * S.N1, 0.0), Rgb(104, 90, 72), 0.4 * Bed), Pt.Dust, 0.7 * Lies);
+						const double Bare = std::max(1.0 - Wild(S.X, S.Y, S.N2), Smooth(0.05, 0.6, Noise(S.X / 14.0, S.Y / 14.0, Seed ^ 0x6A9)));
+						return Mixed(Mixed(Varied(Grass, 0.98 + 0.08 * S.N1, 0.0), Rgb(104, 90, 72), 0.4 * Bed + 0.35 * Bare), Pt.Dust, 0.7 * Lies);
 					}
 					// a block's courtyard and the yards behind: trodden earth and ash, the rubble's dust
 					const double Ash = Smooth(-0.3, 0.5, S.N1);
@@ -1939,7 +2318,9 @@ namespace LandScape
 				case KWorks: return Mixed(Rgb(116, 102, 84), Grass, 0.25);
 				default: break;
 				}
-				return Mixed(Varied(Grass, 1.0 + 0.07 * S.N1 + 0.03 * S.N2, 0.01 * S.Broad), Rgb(122, 112, 90), 0.15 + 0.15 * Smooth(0.2, 0.7, S.N1));
+				// (trodden and bare in broad patches, a dozen metres and more across)
+				const double Worn = Smooth(0.05, 0.6, Noise(S.X / 14.0, S.Y / 14.0, Seed ^ 0x6A9));
+				return Mixed(Varied(Grass, 1.0 + 0.07 * S.N1 + 0.03 * S.N2, 0.01 * S.Broad), Rgb(122, 108, 88), 0.15 + 0.15 * Smooth(0.2, 0.7, S.N1) + 0.3 * Worn);
 			}
 
 			Tone Far(const Spot& S, bool bWoods, double /*Gap*/) const override
@@ -1994,18 +2375,23 @@ namespace LandScape
 						if (Pick < 0.5) return Grown{ ClutOf(CBrick), 0.25 * Ru };
 						return Pick < 0.8 ? Grown{ ClutOf(CTiles), 0.2 * Ru } : Grown{ ClutOf(CWeed), 0.12 };
 					}
-					if (Pick < 0.55) return Grown{ ClutOf(CGrass), 1.0 };
-					if (Pick < 0.75) return Grown{ ClutOf(CWeed), 0.3 };
+					// (the gardens gone wild: tussocks thick in their clumps, thin between, the long grass gone to seed)
+					const double Clump = Wild(S.X, S.Y, S.N2);
+					if (Pick < 0.55) return Grown{ ClutOf(CGrass), 0.2 + 1.6 * Clump };
+					if (Pick < 0.75) return Grown{ ClutOf(CWeed), 0.08 + 0.7 * Clump };
 					if (Pick < 0.9) return Grown{ ClutOf(CBrick), 0.2 * Ru * (S.bNear ? 2.0 : 0.6) };
 					return Grown{ ClutOf(CTiles), 0.15 * Ru * (S.bNear ? 2.0 : 0.5) };
 				}
 				if (S.Kind == KWoods || S.Kind == KMarsh) return Pick < 0.7 ? Grown{ ClutOf(CGrass), 0.8 } : Grown{ ClutOf(CWeed), 0.3 };
-				if (Pick < 0.7) return Grown{ ClutOf(CGrass), 1.25 };
-				if (Pick < 0.9) return Grown{ ClutOf(CWeed), 0.3 };
+				// (the open ground about the city, untended since the war came: its grass in clumps and tussocks, weeds gone
+				// to seed, trodden bare between)
+				const double Clump = Wild(S.X, S.Y, S.N2);
+				if (Pick < 0.7) return Grown{ ClutOf(CGrass), 0.3 + 1.7 * Clump };
+				if (Pick < 0.9) return Grown{ ClutOf(CWeed), 0.1 + 0.5 * Clump };
 				return Grown{ ClutOf(CChunk), 0.03 };
 			}
 
-			bool Dress(LandField::Placed& Pl, const Spot& /*S*/, double U4, double U5, double U6, double U7) const override
+			bool Dress(LandField::Placed& Pl, const Spot& S, double U4, double U5, double U6, double U7) const override
 			{
 				const int K = static_cast<int>(Pl.Kind) - static_cast<int>(LandField::Base::Clut0);
 				switch (K)
@@ -2032,9 +2418,11 @@ namespace LandScape
 				case CGrass:
 				case CWeed:
 				{
-					Pl.Scale = static_cast<float>(0.75 + 0.5 * U4);
-					Pl.ScaleZ = static_cast<float>(0.7 + 0.6 * U5);
-					Pl.Tint = Tint(0.95 + 0.1 * U6, 0.95 + 0.1 * U7, 0.93);
+					// (tussocks of every size, most small, a few big; dry straw in patches, green in others: never a lawn)
+					Pl.Scale = static_cast<float>(0.6 + 0.95 * U4 * U4);
+					Pl.ScaleZ = static_cast<float>(0.65 + 0.8 * U5 * U5);
+					const double Dry = Smooth(-0.1, 0.6, Noise(S.X / 9.0, S.Y / 9.0, Seed ^ 0x6A8) + 0.3 * (U6 - 0.5));
+					Pl.Tint = Tint(Lerp(0.95 + 0.1 * U6, 1.1, Dry), Lerp(0.95 + 0.1 * U7, 1.02, Dry), Lerp(0.93, 0.78, Dry));
 					return true;
 				}
 				default: return false;
@@ -2151,11 +2539,26 @@ namespace LandScape
 				case KLamp: return "CityLamp";
 				case KLampBent: return "CityLampBent";
 				case KWreck: return "CityCarWreck";
+				case KRowWhole0: return "CityRow2Whole";
+				case KRowWhole0 + 1: return "CityRow3Whole";
+				case KRowWhole0 + 2: return "CityRow4Whole";
+				case KRowWhole0 + 3: return "CityRow5Whole";
+				case KBarricade: return "CityBarricade";
+				case KHedgehog: return "CityHedgehog";
+				case KWire: return "CityWireCoil";
+				case KPole: return "CityTramPole";
+				case KPoleLean: return "CityTramPoleLean";
+				case KLorry: return "CityLorryWreck";
+				case KTram: return "CityTramWreck";
+				case KStrike: return "CityShellStrike";
 				default: return nullptr;
 				}
 			}
 			bool KitBuilt(int K) const override { return K >= 0 && K < KSlots; }
-			bool KitLow(int K) const override { return K == KScatter; }
+			bool KitLow(int K) const override { return K == KScatter || K == KStrike; }
+
+			/** Whether a slot is a building (three levels, drawn as a house). */
+			static bool IsBuilding(int K) { return (K >= KRow0 && K < KVilla0 + 4) || (K >= KShed && K <= KStation) || K == KLoneWall || (K >= KRowWhole0 && K < KRowWhole0 + 4); }
 
 			/** A slot's three levels, built: near, the middle and plain. */
 			void Make(int K, int Lod, LandField::Mesh& Out) const
@@ -2173,6 +2576,14 @@ namespace LandScape
 				if (K >= KVilla0 && K < KVilla0 + 4)
 				{
 					Villa(W, Pt, K - KVilla0, Key, Lod, 10.4, 8.8);
+					return;
+				}
+				if (K >= KRowWhole0 && K < KRowWhole0 + 4)
+				{
+					const int Storeys = 2 + (K - KRowWhole0);
+					const bool bShops = Storeys >= 4 && Unit(Hash(Key, 0x5409)) < 0.6;
+					if (Lod == 2) RowFar(W, Pt, Storeys, SWhole, Key, FrontOf(Storeys), DeepOf(Storeys));
+					else RowHouse(W, Pt, Storeys, SWhole, Key, Lod, bShops, FrontOf(Storeys), DeepOf(Storeys));
 					return;
 				}
 				switch (K)
@@ -2195,6 +2606,14 @@ namespace LandScape
 				case KLamp: Lamp(W, false); break;
 				case KLampBent: Lamp(W, true); break;
 				case KWreck: Wreck(W, Key, Lod); break;
+				case KBarricade: Barricade(W, Pt, Key, Lod); break;
+				case KHedgehog: Hedgehog(W, Key); break;
+				case KWire: WireCoil(W, Key, Lod); break;
+				case KPole: TramPole(W, Key, Lod, false); break;
+				case KPoleLean: TramPole(W, Key, Lod, true); break;
+				case KLorry: Lorry(W, Key, Lod); break;
+				case KTram: Tram(W, Pt, Key, Lod); break;
+				case KStrike: Strike(W, Pt, Key, Lod); break;
 				default: W.Box(0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, Rgb(150, 146, 136)); break;
 				}
 			}
@@ -2205,8 +2624,7 @@ namespace LandScape
 				M.Mid = LandField::Mesh();
 				M.Far = LandField::Mesh();
 				Make(K, 0, M.Near);
-				const bool bBuilding = (K >= KRow0 && K < KVilla0 + 4) || (K >= KShed && K <= KStation) || K == KLoneWall;
-				if (bBuilding)
+				if (IsBuilding(K))
 				{
 					Make(K, 1, M.Mid);
 					Make(K, 2, M.Far);
@@ -2216,10 +2634,10 @@ namespace LandScape
 				}
 				else
 				{
-					// (the heaps, trees, lamps and wrecks: near, then plain)
+					// (the heaps, trees, lamps, wrecks and the street's defences: near, then plain)
 					Make(K, 2, M.Far);
-					M.FarFrom = K == KHeap ? 160.0f : K == KScatter ? 70.0f : 110.0f;
-					M.Class = K == KHeap ? LandField::BaseMesh::Draw::Big : K == KShellTree ? LandField::BaseMesh::Draw::Big : LandField::BaseMesh::Draw::Shrub;
+					M.FarFrom = K == KHeap ? 160.0f : K == KScatter ? 70.0f : K == KStrike ? 90.0f : K == KWire ? 60.0f : K == KBarricade || K == KTram ? 140.0f : 110.0f;
+					M.Class = (K == KHeap || K == KShellTree || K == KBarricade || K == KTram || K == KPole || K == KPoleLean) ? LandField::BaseMesh::Draw::Big : LandField::BaseMesh::Draw::Shrub;
 				}
 			}
 
@@ -2232,8 +2650,9 @@ namespace LandScape
 					M.SightAcross = Across;
 					M.SightTrunk = Trunk;
 				};
-				if ((K >= KRow0 && K < KVilla0 + 4) || (K >= KShed && K <= KStation) || K == KLoneWall) Stands(0.5f, 0.5f, 0.7f, 0.0f);
-				else if (K == KHeap) Stands(0.4f, 0.4f, 0.6f, 0.0f);
+				if (IsBuilding(K)) Stands(0.5f, 0.5f, 0.7f, 0.0f);
+				else if (K == KHeap || K == KBarricade) Stands(0.4f, 0.4f, 0.6f, 0.0f);
+				else if (K == KLorry || K == KTram) Stands(0.5f, 0.5f, 0.6f, 0.0f);
 				else if (K == KShellTree || K == KStump) Stands(0.5f, 0.5f, 0.1f, 0.3f);
 				else if (K == KWreck) Stands(0.5f, 0.5f, 0.55f, 0.0f);
 			}
@@ -2243,10 +2662,17 @@ namespace LandScape
 			/** A state for a building, by how ruined the city is there: no two side by side alike. */
 			int StateOf(double Ru, double U) const
 			{
+				// (now and then one untouched where the city is least broken, its shutters closed and its glass in: one in
+				// seven at the quiet edge, none in the worst of it)
+				const double Whole = std::clamp(0.36 - 0.42 * Ru, 0.0, 0.18);
+				if (U < Whole) return SWhole;
+				const double V = (U - Whole) / (1.0 - Whole);
 				// (at its worst: a quarter holed, a third shells, a fifth half down, a fifth stumps)
 				const double Holed = 0.62 - 0.4 * Ru, Gutted = Holed + 0.18 + 0.15 * Ru, Half = Gutted + 0.1 + 0.1 * Ru;
-				return U < Holed ? SHoled : U < Gutted ? SGutted : U < Half ? SHalf : SStump;
+				return V < Holed ? SHoled : V < Gutted ? SGutted : V < Half ? SHalf : SStump;
 			}
+			/** A slot for a terrace's or a block's building of so many storeys in a state. */
+			static int RowSlot(int Storeys, int St) { return St == SWhole ? KRowWhole0 + (Storeys - 2) : KRow0 + (Storeys - 2) * 4 + St; }
 
 			void Sites(Host& H) override
 			{
@@ -2410,11 +2836,11 @@ namespace LandScape
 										continue;
 									}
 									int St = StateOf(Ru, U);
-									int SlotK = KRow0 + (Storeys - 2) * 4 + St;
+									int SlotK = RowSlot(Storeys, St);
 									if (SlotK == LastSlot)
 									{
-										St = (St + 1 + static_cast<int>(U3 * 3.0)) % 4;
-										SlotK = KRow0 + (Storeys - 2) * 4 + St;
+										St = St == SWhole ? SHoled : (St + 1 + static_cast<int>(U3 * 3.0)) % 4;
+										SlotK = RowSlot(Storeys, St);
 									}
 									const double CXh = AX + TX * (S + 0.5 * Long) - NX * 0.5 * Deep, CYh = AY + TY * (S + 0.5 * Long) - NY * 0.5 * Deep;
 									// (its front, -y as built, to the street: the yaw that turns -y onto the outward normal)
@@ -2422,7 +2848,7 @@ namespace LandScape
 									if (H.Row(KitOf(SlotK), CXh, CYh, Yaw, Long, Deep))
 									{
 										++Built;
-										++Damaged;
+										if (St != SWhole) ++Damaged;
 										LastSlot = SlotK;
 										// (a fallen half's or a stump's rubble spills into the street before it)
 										if ((St == SHalf || St == SStump) && U3 < 0.7)
@@ -2506,19 +2932,146 @@ namespace LandScape
 							const double X = Ln[K].first + Nx * Off * Side, Y = Ln[K].second + Ny * Off * Side;
 							const int Q = Quarter(X, Y);
 							if (Q == 0) continue;
-							const double U = R.Next(), Yaw = std::atan2(Dy, Dx) + (Side > 0 ? 0.5 * Pi : -0.5 * Pi), Size = R.Range(0.85, 1.15);
+							// (a lamp's or a pole's arm, its +x, over the street: toward the lane's middle)
+							const double U = R.Next(), Yaw = std::atan2(Dy, Dx) + (Side > 0 ? -0.5 * Pi : 0.5 * Pi), Size = R.Range(0.85, 1.15);
 							if (!H.Free(X, Y, 0.8)) continue;
-							if (U < 0.3) H.Plant(KitOf(KLamp), X, Y, Yaw, 1.0, Size, Tint(1.0, 1.0, 1.0));
-							else if (U < 0.42) H.Plant(KitOf(KLampBent), X, Y, Yaw + R.Range(-0.6, 0.6), 1.0, 1.0, Tint(1.0, 1.0, 1.0));
-							else if (U < 0.62 && Q != 3) H.Plant(KitOf(U < 0.52 ? KShellTree : KStump), X, Y, Yaw, Size, Size, Tint(1.0, 1.0, 1.0));
+							if (U < 0.26) H.Plant(KitOf(KLamp), X, Y, Yaw, 1.0, Size, Tint(1.0, 1.0, 1.0));
+							else if (U < 0.36) H.Plant(KitOf(KLampBent), X, Y, Yaw + R.Range(-0.6, 0.6), 1.0, 1.0, Tint(1.0, 1.0, 1.0));
+							else if (U < 0.56 && Q != 3) H.Plant(KitOf(U < 0.46 ? KShellTree : KStump), X, Y, Yaw, Size, Size, Tint(1.0, 1.0, 1.0));
+							else if (U < 0.64 && Half > 5.0) H.Plant(KitOf(KPole), X, Y, Yaw, 1.0, 1.0, Tint(1.0, 1.0, 1.0));
+							else if (U < 0.66 && Half > 5.0) H.Plant(KitOf(KPoleLean), X, Y, Yaw, 1.0, 1.0, Tint(1.0, 1.0, 1.0));
 						}
 						const double U2 = R.Next(), Side2 = R.Next() < 0.5 ? -1.0 : 1.0;
-						if (U2 < 0.08)
+						if (U2 < 0.125)
 						{
-							const double X = Ln[K].first + Nx * (Half - 1.4) * Side2, Y = Ln[K].second + Ny * (Half - 1.4) * Side2;
-							const double Yaw = std::atan2(Dy, Dx) + R.Range(-0.4, 0.4);
-							if (Quarter(X, Y) > 0) H.Plant(KitOf(KWreck), X, Y, Yaw, 1.0, 1.0, Tint(1.0, 1.0, 1.0));
+							// (a burnt-out car, now and then a lorry, on the widest a tram)
+							const int Kind = U2 < 0.07 ? KWreck : U2 < 0.105 || Half < 5.5 ? KLorry : KTram;
+							const double In = Kind == KTram ? 2.0 : 1.6;
+							const double X = Ln[K].first + Nx * (Half - In) * Side2, Y = Ln[K].second + Ny * (Half - In) * Side2;
+							const double Turn = R.Range(-0.4, 0.4);
+							const double Yaw = std::atan2(Dy, Dx) + (Kind == KTram ? 0.25 * Turn : Turn);
+							if (Quarter(X, Y) > 0 && H.Free(X, Y, Kind == KWreck ? 2.2 : 3.0)) H.Plant(KitOf(Kind), X, Y, Yaw, 1.0, 1.0, Tint(1.0, 1.0, 1.0));
 						}
+						// (a shell's strike in the avenue's setts)
+						const double U3 = R.Next();
+						if (U3 < 0.14)
+						{
+							const double Across = R.Range(-0.7, 0.7) * Half;
+							const double Turn = R.Range(0.0, 2.0 * Pi);
+							const double X = Ln[K].first + Nx * Across, Y = Ln[K].second + Ny * Across;
+							if (Quarter(X, Y) > 0 && U3 < 0.14 * Ruin(X, Y) / 0.6 && H.Free(X, Y, 2.0, true)) H.Plant(KitOf(KStrike), X, Y, Turn, 1.0, 1.0, Tint(1.0, 1.0, 1.0));
+						}
+					}
+				}
+				// The core's and the works' own streets, between the blocks: lamps and tram poles at their kerbs, some bent or
+				// knocked over; burnt-out cars, lorries, now and then a tram; shells' strikes in the setts; and where the city is
+				// held, barricades across them at the crossings with wire before them, and steel hedgehogs.
+				{
+					const Grid* Streets[2] = { &Old, &Main };
+					const double Reach = std::max(Fd.Width(), Fd.Depth()) + 2.0 * B;
+					for (int Gi = 0; Gi < 2; ++Gi)
+					{
+						const Grid& G = *Streets[Gi];
+						const bool bMain = &G == &Main;
+						const int NU = static_cast<int>(Reach / G.PU) + 2, NV = static_cast<int>(Reach / G.PV) + 2;
+						const double Kerb = 0.5 * G.Street - 0.7;
+						for (int J = -NV; J <= NV; ++J)
+							for (int I = -NU; I <= NU; ++I)
+							{
+								double CXw, CYw;
+								G.ToWorld(I * G.PU, J * G.PV, CXw, CYw);
+								if (CXw < -B || CYw < -B || CXw > Fd.Width() + B || CYw > Fd.Depth() + B) continue;
+								// the crossing's: a barricade across one of its four streets, just out of it, facing out
+								{
+									const double U = R.Next();
+									const double Pick = R.Next();
+									const double Out = R.Range(0.5 * G.Street + 2.5, 0.5 * G.Street + 5.0);
+									const double Ang = G.Axis + 0.5 * Pi * std::floor(Pick * 4.0);
+									const double DX = std::cos(Ang), DY = std::sin(Ang);
+									const double X = CXw + DX * Out, Y = CYw + DY * Out;
+									const int Q = Quarter(X, Y);
+									const double Ru = Q == 2 || Q == 3 ? Ruin(X, Y) : 0.0;
+									if (&GridAt(X, Y) == &G && U < 0.11 * Ru && H.Free(X, Y, 3.2))
+									{
+										// (its -y, the side it faces, out along the street: the yaw that turns -y onto it)
+										const double Yaw = std::atan2(DX, -DY);
+										const double Fit = std::min(1.0, (G.Street - 0.6) / 9.2);
+										H.Plant(KitOf(KBarricade), X, Y, Yaw, Fit, 1.0, Tint(1.0, 1.0, 1.0));
+										const double WireU = R.Next();
+										const double Ahead = R.Range(3.5, 5.5);
+										if (WireU < 0.65)
+										{
+											const double WX = X + DX * Ahead, WY = Y + DY * Ahead;
+											if (H.Free(WX, WY, 1.2, true)) H.Plant(KitOf(KWire), WX, WY, Yaw + 0.15 * (WireU - 0.3), std::min(1.0, (G.Street - 1.0) / 6.0), 1.0, Tint(1.0, 1.0, 1.0));
+										}
+									}
+									else if (U > 1.0 - 0.06 * Ru && &GridAt(X, Y) == &G && bMain)
+									{
+										// (no barricade here: hedgehogs across the street instead, three to five, a little apart)
+										const int N = 3 + static_cast<int>(R.Next() * 3.0);
+										const double AX = -DY, AY = DX; // (across the street)
+										for (int K = 0; K < N; ++K)
+										{
+											const double Along = R.Range(-0.8, 0.8);
+											const double Turn = R.Range(0.0, 2.0 * Pi);
+											const double At = (K - 0.5 * (N - 1)) * 2.4;
+											const double HX = X + AX * At + DX * Along, HY = Y + AY * At + DY * Along;
+											if (std::fabs(At) < 0.5 * G.Street - 1.0 && H.Free(HX, HY, 1.0)) H.Plant(KitOf(KHedgehog), HX, HY, Turn, 1.0, 1.0, Tint(1.0, 1.0, 1.0));
+										}
+									}
+								}
+								// the two streets from this crossing to the next, along the grid's U and along its V
+								for (int Ax = 0; Ax < 2; ++Ax)
+								{
+									const double Len = Ax == 0 ? G.PU : G.PV;
+									const double Ang = G.Axis + (Ax == 0 ? 0.0 : 0.5 * Pi);
+									const double DX = std::cos(Ang), DY = std::sin(Ang), AX = -DY, AY = DX;
+									// (a tram line down one main street in three along the grid's U: its poles at both kerbs, all along)
+									const bool bTramLine = bMain && Ax == 0 && ((J % 3) + 3) % 3 == 0;
+									for (double T = 0.5 * G.Street + 4.0; T < Len - 0.5 * G.Street - 4.0; T += 15.0)
+									{
+										const double MX = CXw + DX * T, MY = CYw + DY * T;
+										const int Q = Quarter(MX, MY);
+										if ((Q != 2 && Q != 3) || &GridAt(MX, MY) != &G) continue;
+										const double Ru = Ruin(MX, MY);
+										// at the kerbs: lamps, tram poles on the main streets, a few bent or down
+										for (int Side = -1; Side <= 1; Side += 2)
+										{
+											const double U = R.Next();
+											const double Shift = R.Range(-3.0, 3.0);
+											const double X = MX + AX * Kerb * Side + DX * Shift, Y = MY + AY * Kerb * Side + DY * Shift;
+											// (the arm over the street: +x toward its middle)
+											const double Yaw = std::atan2(-AY * Side, -AX * Side);
+											int Kind = -1;
+											if (bTramLine) Kind = U < 0.82 ? KPole : U < 0.95 ? KPoleLean : -1;
+											else if (U < 0.22) Kind = KLamp;
+											else if (U < 0.29) Kind = KLampBent;
+											if (Kind < 0 || !H.Free(X, Y, 0.8)) continue;
+											const double Bend = Kind == KLampBent ? R.Range(-0.6, 0.6) : 0.0;
+											H.Plant(KitOf(Kind), X, Y, Yaw + Bend, 1.0, 1.0, Tint(1.0, 1.0, 1.0));
+										}
+										// in the street: a burnt-out car, a lorry, on a main street now and then a tram
+										{
+											const double U = R.Next();
+											const double Across = R.Range(-0.45, 0.45) * G.Street;
+											const double Turn = R.Range(-0.35, 0.35);
+											const int Kind = U < 0.05 ? KWreck : U < 0.075 ? KLorry : (U < 0.11 && bTramLine && Q == 2) ? KTram : -1;
+											const double X = MX + AX * Across, Y = MY + AY * Across;
+											if (Kind >= 0 && std::fabs(Across) < 0.5 * G.Street - (Kind == KWreck ? 1.0 : 1.4) && H.Free(X, Y, Kind == KWreck ? 2.2 : 3.0))
+												H.Plant(KitOf(Kind), X, Y, Ang + (Kind == KTram ? 0.2 * Turn : Turn), 1.0, 1.0, Tint(1.0, 1.0, 1.0));
+										}
+										// a shell's strike in the setts, more where the city is most broken
+										{
+											const double U = R.Next();
+											const double Across = R.Range(-0.35, 0.35) * G.Street;
+											const double Along = R.Range(-6.0, 6.0);
+											const double Turn = R.Range(0.0, 2.0 * Pi);
+											const double X = MX + AX * Across + DX * Along, Y = MY + AY * Across + DY * Along;
+											if (U < 0.3 * Ru && H.Free(X, Y, 2.0, true)) H.Plant(KitOf(KStrike), X, Y, Turn, 1.0, 1.0, Tint(1.0, 1.0, 1.0));
+										}
+									}
+								}
+							}
 					}
 				}
 				// Rubble lying low across the core's own streets and courtyards (a man steps over it).
