@@ -11,11 +11,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { launchRaid, raidTargets } from '../src/campaign/airwar';
 import { airAct } from '../src/campaign/airpages';
 import { troopCutOf } from '../src/campaign/airfought';
-import { AIRWAR } from '../src/campaign/air';
+import { AIRWAR, assessAir, canStrafe, cover, fighterReach } from '../src/campaign/air';
 import { createGame, setWar } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
+import { strafeWatch } from '../src/campaign/strafers';
 import type { Game } from '../src/campaign/types';
 import { SKY } from '../src/battle/air/book';
 import { AirSim, airBattle } from '../src/battle/air/sim';
@@ -563,5 +564,64 @@ describe('the fight a group carries after its air fight (18:14Z): read afresh at
     expect(s.outcome().strafers!.length).toBeGreaterThan(0);
     // Said only on the player's orders, never by the staff's go-downs.
     expect(said().length).toBe(3);
+  });
+});
+
+describe('the fuel to go down (the design director, 19:09Z, item 1: "reach is fuel"): a group that did not fight', () => {
+  afterEach(() => { strafeWatch.tell = undefined; });
+  /** The Soviet raid on the Polish troops at Wilno (round six's gate): its three fighter divisions 176 km out, 0.88 of their range. */
+  function wilno(k = 0) {
+    const g = startOpen(createGame(7, 'SOV'));
+    setWar(g, 'SOV', 'POL');
+    g.airFleets.find((f) => f.id === 14)!.base = g.regions.find((r) => r.name === 'Wilno')!.id;
+    g.seed = (7 + 7919 * k) >>> 0;
+    g.flags.airBattles = k;
+    flyKinds(['ground']);
+    const target = raidTargets(g, 'ground', 'SOV').find((x) => g.regions[x.id].name === 'Wilno')!.id;
+    return { g, target, ids: raidGroups(g, 'ground', target, 'SOV') };
+  }
+  it('the same raid, settled and flown, agree on who has the fuel to go down: the rule\'s reach (0.9 of the range) decides, and inside it the board\'s fuel never refuses one', () => {
+    const { g, target, ids } = wilno();
+    const a = assessAir(g, g.airFleets.filter((f) => ids.includes(f.id)), 'ground', target);
+    const ftr = a.att.filter((x) => x.ftr > 0);
+    const G = AIRWAR.ground.reach!;
+    expect(G).toBe(0.9);
+    expect(ftr.length).toBe(3);
+    for (const x of ftr) {
+      const R = fighterReach(g, x.f.nat, x.f.base);
+      expect(x.d / R).toBeGreaterThan(0.85);
+      expect(x.d / R).toBeLessThan(G);
+      expect(canStrafe(g, x)).toBe(true);
+    }
+    // Settled, with no defender up (setup: the Polish fighters stay on the ground): all three go down.
+    const quiet = loadGame(saveGame(g))!;
+    quiet.airFleets.find((f) => f.id === 14)!.ftr = 0;
+    let heard: { route: string; strafers: number[] }[] = [];
+    strafeWatch.tell = (x) => { heard.push(JSON.parse(JSON.stringify(x))); };
+    launchRaid(quiet, 'ground', target, ids, 'SOV');
+    const settled = heard.find((x) => x.route === 'settled')!.strafers;
+    expect([...settled].sort((x, y) => x - y)).toEqual(ftr.map((x) => x.f.id).sort((x, y) => x - y));
+    const R = fighterReach(g, 'SOV', ftr[0].f.base);
+    // Flown, the same raid with no defender up (setup: the defending fighters taken off the ticket), each group's board
+    // fuel SKY.fuel.full x cover(f x R, R) as the ticket gives it at that share f of its range (ticket.ts), the share swept
+    // up to the rule's own reach: every group the rule gives the reach goes down and flies all its passes, as the settled
+    // raid sends it; the board's fuel test (sim.ts fuelFor) holds on every one at its go-down.
+    for (const f of [0.5, 0.7, 0.8, 0.85, G]) {
+      const t = ticketOf(g, target, ids, 'SOV');
+      for (const x of t.def.forces) if (x.kind !== 'bmr') delete t.place.starts[x.corps];
+      const mine = t.att.forces.filter((x) => x.kind !== 'bmr').map((x) => x.corps);
+      for (const id of mine) t.place.starts[id].fuel = SKY.fuel.full * cover(f * R, R);
+      expect([...t.place.marks!.law.reach!].sort((x, y) => x - y)).toEqual([...settled].sort((x, y) => x - y));
+      const s = airBattle(t);
+      const S = s as unknown as { fuelFor(u: unknown): boolean; strafing: Map<number, { done: number }> };
+      const asked: boolean[] = [];
+      const own = S.fuelFor.bind(s);
+      S.fuelFor = (u) => { const ok = own(u); asked.push(ok); return ok; };
+      fight(s);
+      expect(asked.length).toBeGreaterThan(0);
+      expect(asked.every(Boolean)).toBe(true);
+      expect(s.outcome().strafers).toEqual([...settled].sort((x, y) => x - y));
+      for (const u of s.units.filter((x) => x.side === 'att' && x.air === 'ftr')) expect(S.strafing.get(u.id)?.done).toBe(TROOPS.strafe.passes);
+    }
   });
 });
