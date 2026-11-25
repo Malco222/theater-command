@@ -1297,6 +1297,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("carrierStrike"), Out.bCarrierStrike); // (release 2, harbourstrike.ts)
 	Object->TryGetBoolField(TEXT("wingByDate"), Out.bWingByDate); // (release 2, carriers.ts)
 	Object->TryGetBoolField(TEXT("settledTowns"), Out.bSettledTowns); // (release 2, buildings.ts)
+	Object->TryGetBoolField(TEXT("cityDefences"), Out.bCityDefences); // (release 2, citydefences.ts)
 	Object->TryGetBoolField(TEXT("r2Switches"), Out.bR2Switches);
 	Object->TryGetBoolField(TEXT("columnsOn"), Out.bColumnsOn);
 	Object->TryGetBoolField(TEXT("columnsCan"), Out.bColumnsCan);

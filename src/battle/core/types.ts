@@ -35,6 +35,30 @@ export const DT = 0.1;
 /** How the battle is won (the framework's table of battle types; the first slice plays 'field' and 'assault'). */
 export type BattleKind = 'field' | 'assault' | 'crossing' | 'sally' | 'relief' | 'rearguard' | 'breakout' | 'landing';
 
+/** A part of a blow's nerve weight m that the field spread's army ledger can read (step 1b; the form's choice 13). */
+export type NervePart = 'flank' | 'rear' | 'fire' | 'ambush' | 'air';
+
+/**
+ * The field spread (release 2; rules-builder/release2/field-spread/form.md): the battle's one draw, laid on the ticket by
+ * the campaign (src/campaign/spread.ts) only where the switch is on. The field never draws any of it. It reads each key
+ * only where the ticket carries it (sim.ts spentOf, shownBar, the ledger), so a ticket without one fights as before.
+ */
+export interface SpreadReckoning {
+  /**
+   * Step 1: each side's break point, the share of its power worn away at which it quits (in place of LAND.spent).
+   * Under the ledger, the point it quits at if every blow lands from the front.
+   */
+  W: Record<Side, number>;
+  /** The mask (choice 6 (A)): the level each side's bar is shown against to the other side's player, never a draw. Absent: data level. */
+  shown?: Record<Side, number>;
+  /** Step 1b: each side's level multiplier N, from organisation, morale, experience and the general, against the reference army. Present, blocks read the reference for their own nerve. */
+  N?: Record<Side, number>;
+  /** Step 1b: the move's factor, (Nd/Na)^(p/c). The attack's blows are multiplied by the fortune times it, and the defence's divided by it. */
+  move?: number;
+  /** Step 1b, choice 13: the army nerve ledger. Each side's residual draw, and which parts of m it reads; the parts it does not read stay at the block. */
+  ledger?: { draw: Record<Side, number>; m: Record<NervePart, boolean> };
+}
+
 /** The campaign's own reckoning of the fight: the field is balanced to it, so that the odds mean the same thing on both. */
 export interface Reckoning {
   /** The attack's and the defence's power, as the rules' assessment counts them (assess() in game.ts). */
@@ -56,6 +80,8 @@ export interface Reckoning {
    * the staff's band, where its bar stands. Absent, the card printed 'odds' itself.
    */
   seen?: number;
+  /** The field spread's draw (release 2, stage.json 'spread', bench-only): absent unless the switch is on. */
+  spread?: SpreadReckoning;
 }
 
 /** One corps (or ship group) as the campaign hands it to the field. */
@@ -434,8 +460,14 @@ export interface BreakCause {
   nearer: 'worn' | 'running';
   /** The share of its power worn away across the whole line: strength lost by every block, runners and fled too. */
   worn: number;
-  /** What an army of its side will stand worn (LAND.spent: 0.13 for an attack, 0.18 for a defence). */
+  /**
+   * What an army of its side will stand worn: LAND.spent (0.13 for an attack, 0.18 for a defence), or under the field
+   * spread its drawn break point (reckoning.spread.W). To the other side's player under the spread: the level his staff
+   * reads (the mask).
+   */
   spent: number;
+  /** Under the field spread's army ledger (step 1b): the ledger's share of its mark, which fills the bar in place of worn / spent. */
+  ledger?: number;
   /** The share of its power in blocks running or fled from the field, each counted whole as it started. */
   running: number;
   /** What it will stand running (LAND.breaks, a half). */
@@ -532,10 +564,14 @@ export interface BattleView<U extends UnitBase = UnitBase> {
   over: FieldResult | null;
   /**
    * How near each army is to breaking, 0 to 1, for the army bars (ruling 226(3)); a domain without one leaves it out.
-   * The player's own army is warned at three quarters ('nearBreak').
+   * The player's own army is warned at three quarters ('nearBreak'). Seen by a side (view(as)) under the field spread,
+   * the other side's is as that side's staff reads it (sim.ts shownBar).
    */
   breaking?: Record<Side, number>;
-  /** What drives each army's bar as it stands now (b496(2)): the same fields the result's brokeBy gives at the break. */
+  /**
+   * What drives each army's bar as it stands now (b496(2)): the same fields the result's brokeBy gives at the break. Seen
+   * by a side (view(as)) under the field spread, the other side's is as that side's staff reads it (sim.ts shownBar).
+   */
   breakingBy?: Record<Side, BreakCause>;
   /** Battle time of the first contact between the lines, null before it: until then the screens may run the clock faster (ruling 226(1)). */
   contact?: number | null;

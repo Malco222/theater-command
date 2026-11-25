@@ -20,7 +20,7 @@ import {
   passageWhy, sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
 } from './navy';
 import { lanesTo } from './resources';
-import { SIEGE, besieged, besiegerOf, breachOf, hitTown, planTownHit, siegeRules, siegeView, townHeld, townHitText, townShare, type TownHit } from './siege';
+import { SIEGE, besieged, besiegerOf, breachOf, hitTown, planTownHit, siegeRules, siegeView, townHeld, townHitText, townShare, townWorksPhrase, type TownHit } from './siege';
 import { dcOf } from './tech';
 import { townName } from './towns';
 import { cityHit, type CityHit } from './repairs';
@@ -404,7 +404,7 @@ export function planBombard(g: Game, f: Fleet, r: Region, what?: ShoreTarget, vi
     if (foes.some((c) => c.dug || c.kind === 'fort')) plan.lines.push({ label: 'Shelter', value: foes.some((c) => c.kind === 'fort') ? 'Fortress troops under concrete' : 'Troops dug in', effect: `Dug in they lose ${Math.round(B.troops.dug * 100)}% as much, in a fortress ${Math.round(B.troops.fort * 100)}%` });
   } else if (pick === 'town') {
     const v = siegeView(g, r.id)!;
-    plan.lines.push({ label: 'The town', value: `${townName(r)}, ${v.sizeWord.toLowerCase()}: troops inside fight ${Math.round((v.bonus - 1) * 100)}% stronger`, effect: `A weight of fire of ${SIEGE.bombard.shellFull} breaks down ${SIEGE.breach.shell}% of its works, less its share; never more than ${SIEGE.breach.most}% in all` });
+    plan.lines.push({ label: 'The town', value: `${townName(r)}, ${v.sizeWord.toLowerCase()}: troops inside fight ${Math.round((v.bonus - 1) * 100)}% stronger${townWorksPhrase(g, r)}`, effect: `A weight of fire of ${SIEGE.bombard.shellFull} breaks down ${SIEGE.breach.shell}% of its works, less its share; never more than ${SIEGE.breach.most}% in all` });
     if (town) plan.lines.push({ label: 'The shelling', value: town.works >= 0.5 ? `About ${Math.round(town.works)}% of the works broken down` : 'Little more can be broken', effect: townHitText(g, r, town, 'shells', false) });
   } else {
     plan.lines.push({ label: 'Industry', value: plural(r.fac, 'factory', 'factories'), effect: output > 0 ? `${Math.round(output * 100)}% of its output stopped for a month: ${tenthPct(plan.nation)} of ${g.nations[r.ctrl].adj} production` : 'Nothing to hit' });

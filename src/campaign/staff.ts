@@ -40,6 +40,7 @@ import { openGovernment } from './government';
 import { openFooting } from './footing';
 import { openWeather } from './weather';
 import { openAirVersion } from './airversion';
+import { cityStartLay } from './citydefences';
 import { openSecretWar } from './secretwar';
 import { drawMen, menLeft, menRules, openManpower } from './manpower';
 import { WORLD_FIRST, WORLD_MAP, acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oceanShares, overseasOf, shoreOf } from './world';
@@ -47,7 +48,7 @@ import { patronOfClient, stationed, tieWar } from './far';
 import { inTheWay, pacificGround, runQuays } from './pacific';
 import { EASTERN, addCorps, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
-import { ATOM_STAGE, BREAKUP_STAGE, CARRIERSTRIKE_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, SHADOWRELAY_STAGE, SHADOW_STAGE, TASKFORCE_STAGE, UNITS_STAGE, VOYAGELOG_STAGE, WAGONS_STAGE, WINCHANCE_STAGE, WINGBYDATE_STAGE, AIRNAMES_STAGE, FERRY_STAGE } from './stage';
+import { ATOM_STAGE, BREAKUP_STAGE, CARRIERSTRIKE_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, SHADOWRELAY_STAGE, SHADOW_STAGE, TASKFORCE_STAGE, UNITS_STAGE, VOYAGELOG_STAGE, WAGONS_STAGE, WINCHANCE_STAGE, WINGBYDATE_STAGE, AIRNAMES_STAGE, FERRY_STAGE, CITYDEFENCES_STAGE } from './stage';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
 import { openLegions } from './legions';
@@ -202,6 +203,8 @@ export function startOpen(g: Game, wide = true): Game {
   if (WINGBYDATE_STAGE) g.flags.wingByDate = 1;
   // Better air unit names (release 2, air.ts groupName): set before the air war opens, so the first day's groups take them.
   if (AIRNAMES_STAGE) g.flags.airNames = 1;
+  // City defences: searchlights, guns by night by what they see, towns their garrisons fortify (release 2, citydefences.ts).
+  if (CITYDEFENCES_STAGE) g.flags.cityDefences = 1;
   // The grand campaign is played on the wider world: it is attached before anything else is set up for it. (One
   // kept to the map of Europe is what a campaign saved before the world was drawn plays on as.)
   if (wide) attachWorld(g);
@@ -248,6 +251,8 @@ export function startOpen(g: Game, wide = true): Game {
   openFooting(g);
   openWeather(g);
   openAirVersion(g, majorsOf(g));
+  // (City defences: the searchlights and the guns the record reads at this date, over the start guns. Off, nothing.)
+  cityStartLay(g);
   openSecretWar(g);
   openManpower(g);
   numberDivisions(g);

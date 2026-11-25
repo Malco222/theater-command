@@ -38,13 +38,14 @@ import { airKnown, airMetWords, seaSeenWords } from './seasight';
 import { airfieldOpenTo } from './prizes';
 import { seaWhat, seaWhere } from './sea-words';
 import { onNet, railCut, railsAt } from './rails';
-import { besiegerOf, siegeRules, siegeView, townHeld, townHitText, type TownHit } from './siege';
+import { besiegerOf, siegeRules, siegeView, townHeld, townHitText, townWorksPhrase, type TownHit } from './siege';
 import { townName } from './towns';
 import { shipRule } from './tech';
 import { forecastLine, grounded, skyOf, skyRaidLine, weatherOn, whyNotSky, zoneName, zoneOfGroup, zoneOfRegion } from './weather';
 import { whyNotField, wrecked } from './airversion';
 import { wayWords } from './ferry';
 import { strafeSection, type StrafeSection } from './strafers';
+import { lightsAt } from './citydefences';
 import { fieldKnown, fieldRules, fieldView } from './fieldstate';
 import { band, bandNote, fogBits, fogged, knownDefence, knownLines, raidFogOn, rememberSkies, skyKnown } from './airfog';
 
@@ -632,6 +633,9 @@ function whatIsThere(g: Game, nat: string, kind: RaidKind, t: number, sight: Uin
   const k = raidFogOn(g) && g.regions[t] ? skyKnown(g, nat, t, sight) : null;
   const hide = k && !k.live ? fogBits(k) : null;
   const gunsBit = (): string => (hide ? hide.guns : gunsAt(g, t) ? `level ${gunsAt(g, t)} guns` : '');
+  // City defences: the searchlights follow the guns where the guns are named as they are; where the fog hides or hedges
+  // the guns, no lights are named (the fog's memory of a place keeps none). Switch off: lightsAt reads none.
+  const lightsBit = (): string => (hide ? '' : lightsAt(g, t) ? `level ${lightsAt(g, t)} searchlights` : '');
   if (kind === 'harbour') {
     const there = shipsInPort(g, t, nat);
     const seen = there.filter((f) => fleetKnown(g, f, nat) === 'exact');
@@ -644,10 +648,11 @@ function whatIsThere(g: Game, nat: string, kind: RaidKind, t: number, sight: Uin
   if (kind === 'town') {
     const v = siegeView(g, t)!;
     const who = sight[t] === SIGHT.none && !v.by ? 'its garrison not known' : v.inside ? `${plural(v.inside, 'corps', 'corps')} inside${v.guard > 0 ? ' with its guard' : ''}` : 'held by its guard alone';
-    return `${v.sizeWord}: ${who}. Troops inside fight ${Math.round((v.bonus - 1) * 100)}% stronger${v.broken > 0 ? `, ${Math.round(v.broken * 100)}% of its works broken` : ''}${v.by ? ', under siege' : ''}${gunsBit() ? `, ${gunsBit()}` : ''}`;
+    return `${v.sizeWord}: ${who}. Troops inside fight ${Math.round((v.bonus - 1) * 100)}% stronger${townWorksPhrase(g, r)}${v.broken > 0 ? `, ${Math.round(v.broken * 100)}% of its works broken` : ''}${v.by ? ', under siege' : ''}${gunsBit() ? `, ${gunsBit()}` : ''}${lightsBit() ? `, ${lightsBit()}` : ''}`;
   }
   if (kind === 'bomb' || kind === 'night') {
-    const bits = [r.fac > 0 ? plural(r.fac, 'factory', 'factories') : '', onNet(t) && !railCut(g, t) ? (railsAt(t).length >= 3 ? 'a railway junction' : 'a railway') : '', gunsBit(), hide ? hide.fighters : ''];
+    // City defences: the searchlights after the guns, with the switch on (lightsAt reads none with it off).
+    const bits = [r.fac > 0 ? plural(r.fac, 'factory', 'factories') : '', onNet(t) && !railCut(g, t) ? (railsAt(t).length >= 3 ? 'a railway junction' : 'a railway') : '', gunsBit(), lightsBit(), hide ? hide.fighters : ''];
     return bits.filter(Boolean).join(', ');
   }
   if (kind === 'line') {
@@ -1357,6 +1362,8 @@ export interface RaidReplay {
   won: boolean;
   level: string;
   result: string;
+  /** (City defences, a night raid with the switch on) The searchlights at the target as the raid's report read them. */
+  lights?: { level: number; cloud: boolean; lit: number };
 }
 
 /** The raids flown in one month (this month unless told otherwise), oldest first, as a viewer may know them: his own side's, and those flown against it. With nobody at the controls, all of them. */
@@ -1371,7 +1378,7 @@ export function raidReplays(g: Game, turn = g.turn, viewer: string | null = g.hu
   const mineToo = (nat: string): boolean => viewer === null || (!!nat && allied(g, nat, viewer));
   return g.airReports.filter((r) => r.turn === turn && (mineToo(r.attNat) || mineToo(r.defNat))).map((r) => {
     const p = r.zone >= 0 ? g.seas[r.zone] : g.regions[r.region];
-    return { id: r.id, turn: r.turn, kind: r.mission, region: r.region, zone: r.zone, place: r.place, x: p?.x ?? 0, y: p?.y ?? 0, attNat: r.attNat, defNat: r.defNat, attackers: side(r.att), defenders: side(r.def), won: r.won, level: r.level, result: r.result };
+    return { id: r.id, turn: r.turn, kind: r.mission, region: r.region, zone: r.zone, place: r.place, x: p?.x ?? 0, y: p?.y ?? 0, attNat: r.attNat, defNat: r.defNat, attackers: side(r.att), defenders: side(r.def), won: r.won, level: r.level, result: r.result, ...(r.lights ? { lights: { ...r.lights } } : {}) };
   });
 }
 

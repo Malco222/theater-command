@@ -61,6 +61,7 @@ import { PRIZES, type PrizeKind, type ScorchPolicy } from '../prizes';
 import { GOV, type GovView, type PromiseTarget, type PromiseTerms } from '../government';
 import { MANPOWER, menWords } from '../manpower';
 import { CIVIC, civicSum, settleLeft, settledFor, settledTownsOn, type CivicOffer, type PlotView } from '../buildings';
+import { LIGHTS_TOP, cityDefences, lightsAt } from '../citydefences';
 import { damageOf } from '../citydamage';
 import type { RepairView } from '../repairs';
 import { dealsOf, endTrade, housesOf, signTrade, tradePath, tradeRules, type TradeOffer, type TradeRow } from '../trade';
@@ -3398,7 +3399,11 @@ function provinceSlots(r: Region): string {
     : slot('work:field', plane, 'Airfields', wings.length > 0 || fl > 0, pipsOf(fl, flComing, 3), `${flying}${fl ? `. Level ${fl} fields: room for ${num(AIR.airfields.holds + fl * ARSENAL.works.field.holds)} aircraft` : ''}`, `Build level ${fl + flComing + 1}`);
   const aa = workLevel(g, 'aa', r.id), aaComing = coming('aa');
   const guns = slot('work:aa', slotIcon(GUN), 'Air defence', aa > 0, pipsOf(aa, aaComing, 3), aa ? `Level ${aa} guns: they stop ${Math.round(aa * ARSENAL.works.aa.cut * 100)}% of any bombing here` : 'No anti-aircraft guns', `Build level ${aa + aaComing + 1}`);
-  return `<h3>The province</h3><div class="slots">${industry}${works}${harbour}${field}${guns}</div>${afc?.field ? `<div class="acts"><button class="btn small" data-act="airfield" data-id="${r.id}" title="See the air groups based here and give them their orders.">Open the airfield</button></div>` : ''}`;
+  // City defences (release 2): the searchlights beside the guns, with the switch on only. (No picture of their own
+  // yet: the works' glyph, as for any work without one.)
+  const lt = cityDefences(g) ? lightsAt(g, r.id) : 0, ltComing = cityDefences(g) ? coming('lights') : 0;
+  const lights = cityDefences(g) ? slot('work:lights', slotIcon(GLYPH.works), 'Searchlights', lt > 0, pipsOf(lt, ltComing, LIGHTS_TOP), lt ? `Level ${lt} searchlights: by night, under a clear sky` : 'No searchlights', `Build level ${lt + ltComing + 1}`) : '';
+  return `<h3>The province</h3><div class="slots">${industry}${works}${harbour}${field}${guns}${lights}</div>${afc?.field ? `<div class="acts"><button class="btn small" data-act="airfield" data-id="${r.id}" title="See the air groups based here and give them their orders.">Open the airfield</button></div>` : ''}`;
 }
 
 /** What the player can raise, station or lay down in this region, and what is already on order there. */
@@ -4192,7 +4197,7 @@ function buildPane(): string {
       // A smaller power that began the war with no industry (ruling 213(e)): its sentence in place of the words about factories, and the row keeps its tag alone.
       const none = factoryTag(g, me) === 'No industry' ? list.find((o) => o.key === 'work:factory')?.why ?? null : null;
       const rows = none ? list.filter((o) => o.group === 'works').map((o) => (o.key === 'work:factory' ? offerButton(o, true, 'No industry') : offerButton(o, !own))).join('') : shelf('works', !own);
-      out += `<h3>Build works</h3><p class="sub" style="margin:0 0 7px">${own ? `Building at ${at(sel!.name)}.` : '<b style="color:var(--brass)">Click one of your own provinces on the map to build there.</b>'} ${none ? esc(none) : 'Factories go up in cities and add to your income every month.'} Shipyards go in ports. Anti-aircraft guns and airfields can go on any ground you hold.</p>${rows}`;
+      out += `<h3>Build works</h3><p class="sub" style="margin:0 0 7px">${own ? `Building at ${at(sel!.name)}.` : '<b style="color:var(--brass)">Click one of your own provinces on the map to build there.</b>'} ${none ? esc(none) : 'Factories go up in cities and add to your income every month.'} Shipyards go in ports. ${cityDefences(g) ? 'Anti-aircraft guns, searchlights and airfields' : 'Anti-aircraft guns and airfields'} can go on any ground you hold.</p>${rows}`;
     }
   }
 

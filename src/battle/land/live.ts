@@ -559,7 +559,9 @@ export class LiveBattle {
       this.lastView = Math.floor(t);
       this.views.push({
         t: r2(t), units: v.units.map((u) => landUnitOut(u as LandUnit, v.t, !this.me || this.sim.known(u as LandUnit), !!this.me && u.side === this.me, this.sim)), balance: v.balance, zones: v.zones,
-        ...(v.breaking ? { breaking: { att: r3(v.breaking.att), def: r3(v.breaking.def) } } : {}),
+        // (the bars as the player sees them: under the field spread the enemy's as his staff reads it, the mask; with
+        // nobody playing, or no spread, the true ones, as the view above read them)
+        ...(v.breaking ? { breaking: { att: r3(this.sim.shownBar('att', this.me)), def: r3(this.sim.shownBar('def', this.me)) } } : {}),
         ...(v.contact !== undefined ? { contact: v.contact } : {}),
         ...(v.plan ? { plan: Object.fromEntries(Object.entries(v.plan).filter(([, p]) => p?.phase).map(([s, p]) => [s, { phase: p!.phase, main: p!.main ?? [], startY: p!.startY ?? null }])) } : {}),
         ...(v.setup ? { setup: v.setup } : {}),

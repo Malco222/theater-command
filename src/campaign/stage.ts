@@ -180,3 +180,8 @@ export const FERRY_STAGE: boolean = staged('TC_FERRY', 'ferry');
 // while this is true carry the flag 'airNames' (air.ts groupName). Words only. Forced by TC_AIRNAMES.
 /** True where new grand campaigns open with the air arms' own numbers and names (stage.json 'airNames'). */
 export const AIRNAMES_STAGE: boolean = staged('TC_AIRNAMES', 'airNames');
+// City defences (release 2; Brian 24 November 2026 22:08Z; city defences, the design director's ruling of 25 Nov 2026
+// 02:23Z; citydefences.ts): the grand campaigns opened while this is true carry the flag 'cityDefences'. Forced by
+// TC_CITYDEFENCES.
+/** True where new grand campaigns open with searchlights, guns by night by what they see, and towns their garrisons fortify (stage.json 'cityDefences'). */
+export const CITYDEFENCES_STAGE: boolean = staged('TC_CITYDEFENCES', 'cityDefences');

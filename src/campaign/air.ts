@@ -38,7 +38,7 @@ import { groundRules } from './ground';
 import { RAILWAYS, bombFactories, bombRail, onNet, railBombChance, railCut, railsAt, ruinChance } from './rails';
 import { bombingFor, raidsMul, seat } from './difficulty';
 import { fuelAir } from './resources';
-import { SIEGE, besieged, besiegerOf, breachCeiling, breachOf, fieldCtrl, hitTown, planTownHit, siegeRules, townBonus, townHeld, townHitText, townShare, type TownHit } from './siege';
+import { SIEGE, besieged, besiegerOf, breachCeiling, breachOf, fieldCtrl, hitTown, planTownHit, siegeRules, townBonus, townHeld, townHitText, townShare, townWorksPhrase, type TownHit } from './siege';
 import { airfieldOpenTo, prizeOut } from './prizes';
 import { townName } from './towns';
 import { beyondEurope, farOn } from './world';
@@ -49,6 +49,7 @@ import { strafeOn, strafeWatch } from './strafers';
 import { cityForecast, cityHit, cityWorthOf, type CityHit } from './repairs';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
 import { airPiece, nightGunShare, whyNotField, wrecked } from './airversion';
+import { cityDefences, cityNight, lightsFloor, markNightRaid } from './citydefences';
 import { FIELD, burnedRoom, damageField, fieldKnown, fieldRules, fieldShut, fieldTier, planFieldHit, type FieldBlow, type FieldHit } from './fieldstate';
 import { sightOf } from './intel';
 import { raidFogOn, rememberSkies, staffScouts, staffWeigh } from './airfog';
@@ -2378,6 +2379,13 @@ export interface AirAssess {
    * holding the research, an assessment has no such key and is what it always was.
    */
   tough?: number[];
+  /**
+   * City defences (the design director's ruling of 25 Nov 2026 02:23Z), a night raid only and only with the switch on:
+   * the searchlights at the target. `level` their level, `cloud` true where cloud blinds them, `lit` (0 to 1) the
+   * share of the guns' levels firing by searchlight after the too-many-bombers cut (none without Fighter control's
+   * radar, none with no guns). Absent otherwise, so nothing is other than it was with the switch off.
+   */
+  lights?: { level: number; cloud: boolean; lit: number };
 }
 
 const SHIPS: ShipClass[] = ['bb', 'cv', 'ca', 'dd', 'ss'];
@@ -2571,6 +2579,9 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   // A raid flown on an order the defender's agent read (ruling 135(c)): every fighter in reach meets it in full,
   // with nothing lost for distance or for want of radar.
   const amb = !sea && !transit && ambushAt(g, target);
+  // City defences (the ruling of 25 Nov 2026 02:23Z, choice 4): searchlights give the night fighters a floor under a
+  // clear sky. 0 by day, under cloud, with no lights or with the switch off, and then the line below is as it was.
+  const floor = night ? lightsFloor(g, target, sky) : 0;
   for (const f of g.airFleets) {
     if (f.ftr <= 0 || f.mission !== 'support' || f.close || !atWar(g, f.nat, nat)) continue;
     // A group on its way to another field is met, as troops are, by any enemy fighter whose reach covers its leg (ferry.ts).
@@ -2584,7 +2595,10 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     const deck = f.ship !== undefined;
     if (sea && !deck) w *= C.seaCover;
     // (With the air campaigns on, the historian's dated row for the defender's nation, gated by Fighter control: b553(b), b558(2).)
-    if (night) w *= acOn(g) ? nightFighters(g, f.nat) : C.night.fighters;
+    if (night) {
+      const k = acOn(g) ? nightFighters(g, f.nat) : C.night.fighters;
+      w *= floor > 0 ? Math.max(k, floor) : k;
+    }
     if (!amb && !out.radar && !(deck && sea && d <= 0)) w *= AIR.radar.without;
     w *= unready;
     // Under cloud fewer of the defenders find the bombers.
@@ -2647,7 +2661,11 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   // Under cloud the guns bring down fewer of the bombers (weather, ruling 127): 1 under a clear sky.
   const gun = cloudGuns(sky, night);
   // By night the guns round a target bring down half as many (ruling 107(b), behind its switch): 1 by day, or off.
-  const aaGun = gun * nightGunShare(g, night);
+  // City defences (the design director's ruling of 25 Nov 2026 02:23Z, choices 1, 2 and 5): with the switch on, by
+  // night the guns count by what they can see, radar and searchlights, in place of 107(b)'s half (one cause, one price).
+  const cn = night && cityDefences(g) ? cityNight(g, target, out.B, sky) : null;
+  const aaGun = gun * (cn ? cn.share : nightGunShare(g, night));
+  if (cn) out.lights = { level: cn.lights, cloud: cn.cloud, lit: cn.litShare };
   // Crews the player's instructors trained keep their formation: the fighters bring down fewer of them (bombers.ts).
   // The guns' share is as it was. 0 until the player has sent a crew to the schools, and always for everyone else.
   out.drilled = out.B > 0 ? out.att.reduce((t, x) => t + x.bmr * trainedEdge(g, x.f), 0) / out.B : 0;
@@ -2788,13 +2806,27 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     });
   }
   const ring = known ? 'may ring' : 'ring';
-  if (out.aa && m === 'harbour') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ${ring} ${harbourOf(place)}`, effect: 'They bring down more of the bombers' });
+  // City defences, a night raid with the switch on: how the guns fire in the dark, and what they bring down against
+  // what they would by day (the UI director's words, section 3). Empty otherwise.
+  const dark = cn ? `By night they fire ${!cn.radar ? 'blind' : cn.lit > 0 ? 'by radar and searchlight' : 'by radar'}, and bring down about ${Math.round(cn.share * 100)}% as many bombers as they would by day.` : '';
+  if (out.aa && m === 'harbour') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ${ring} ${harbourOf(place)}`, effect: dark || 'They bring down more of the bombers' });
   if (m === 'town') {
     const r = g.regions[target], gone = breachOf(g, r);
-    out.lines.push({ label: 'The town', value: `Troops inside ${townName(r)} fight ${Math.round((townBonus(g, r) - 1) * 100)}% stronger${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ''}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling('raid')}% in all` });
+    out.lines.push({ label: 'The town', value: `Troops inside ${townName(r)} fight ${Math.round((townBonus(g, r) - 1) * 100)}% stronger${townWorksPhrase(g, r)}${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ''}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling('raid')}% in all` });
   }
-  if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ${ring} ${place}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
-  else if (out.aa) out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ${ring} the factories of ${place}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+  if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ${ring} ${place}`, effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+  else if (out.aa) out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ${ring} the factories of ${place}`, effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+  // City defences: the searchlights' line, a night raid with lights built and the switch on (the UI director's words,
+  // section 2). One line, the reading that governs: cloud, then no guns, then no Fighter control, then too many bombers.
+  if (cn && cn.lights > 0) {
+    const over = `Level ${cn.lights} searchlights over ${place}`, few = 'they help the night fighters a little.';
+    out.lines.push(cn.cloud
+      ? { label: 'Searchlights', value: `Cloud over ${place}`, effect: 'The searchlights cannot see the bombers through it.' }
+      : !cn.guns ? { label: 'Searchlights', value: over, effect: `There are no guns for them to light. They help the night fighters a little.` }
+        : !cn.radar ? { label: 'Searchlights', value: over, effect: "Without Fighter control's radar to lay the guns, they help only the night fighters, a little." }
+          : cn.sat < 1 ? { label: 'Searchlights', value: 'More bombers than the lights can hold', effect: `About ${Math.round(out.B).toLocaleString('en-US')} bombers over ${place}, and a beam holds one at a time: the lights do about ${Math.round(cn.sat * 100)}% of their work.` }
+            : { label: 'Searchlights', value: over, effect: cn.lit >= cn.guns ? `With radar laying the guns, they light every level of the guns, and ${few}` : `With radar laying the guns, they light ${cn.lit} of the ${cn.guns} levels of guns, and ${few}` });
+  }
   if (out.ships.length) {
     const pc = (x: number): string => `${Math.round(x * 100)}%`;
     if (out.surprise) out.lines.push({ label: 'Surprise', value: 'War was declared this month', effect: `The harbour is caught unready: its fighters and guns count ${pc(CARRIERS.harbour.unready)}, and the hits are multiplied by ${CARRIERS.harbour.surprise}` });
@@ -3131,6 +3163,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     if (acOn(g)) cut = bombLands(g, nat, r, cut, night, aimOf(g, fleets));
     const nation = total > 0 ? cut * (r.fac / total) : 0;
     raid(g, nat, r.ctrl, nation);
+    // City defences: the night raid's own mark where its bombs fell, for the computer's order of searchlights (switch on only).
+    if (night && through > 0) markNightRaid(g, target);
     // The air war: output is weighed by the province's own factories (ruling 227), so one with no industry has none to
     // stop, and the raid is judged on its railway alone.
     value += outputWorth(g, r, cut);
@@ -3331,6 +3365,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   if (fh) rep.field = { region: fh.region, shut: fh.shut, levels: fh.levels, ground: fh.ground };
   if (transit) rep.ferry = transit.to;
   if (strafed) rep.strafed = strafed;
+  // City defences: the searchlights' reading over a night raid, only with the switch on (absent otherwise).
+  if (a.lights) rep.lights = { ...a.lights };
   g.airReports.push(rep);
   storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' || m === 'airfield' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, guns, ...(battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {}) });
   // (Release 2, earned names for air groups under the switch 'nicknames', airnicks.ts: the missions completed and the
