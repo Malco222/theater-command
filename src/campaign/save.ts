@@ -87,6 +87,10 @@ export function saveGame(g: Game): string {
     atSea: g.atSea?.length ? g.atSea : undefined,
     // The air campaigns' memory (ruling 236.2): absent while the switch is off, so such a save is written as it always was.
     ac: g.ac,
+    // Better air unit names and the air groups' earned names (release 2): absent until a group is named under the switch,
+    // or a raid counted under the nicknames switch, so a save without them is written as it always was.
+    airNames: g.airNames,
+    airRates: g.airRates,
     // The submarine scene's record (release 2, ruling 241 D1): absent while its viewing setting is off, so such a save is written as it always was.
     subLook: g.subLook,
     // The sea patrol's record (release 2, Units decide, once it is live): absent otherwise, so such a save is written as it always was.
@@ -111,6 +115,8 @@ export function saveGame(g: Game): string {
     wrecks: g.flags.open === 1 ? g.wrecks : undefined,
     // Mines at sea (release 2, mines.ts): kept only with that switch on, so a save without it is written as it always was.
     mines: g.flags.open === 1 && g.flags.seaMines === 1 && g.mines?.length ? g.mines : undefined,
+    // A queue for a town (release 2, townqueue.ts): kept only with that switch on and something queued.
+    townQueue: g.flags.open === 1 && g.flags.townQueue === 1 && g.townQueue ? g.townQueue : undefined,
     headlines: g.headlines,
     reports: g.reports.slice(-KEEP_REPORTS),
   });
@@ -309,6 +315,8 @@ function readSave(text: string, promote: boolean): Game | null {
   // Corps at sea on a long passage (ruling 229, part 1): none in a save from before the Cape was sailed.
   if (Array.isArray(d.atSea) && d.atSea.length) g.atSea = d.atSea;
   if (d.ac && typeof d.ac === 'object') g.ac = d.ac;
+  if (d.airNames && typeof d.airNames === 'object') g.airNames = { at: {}, top: {}, ...d.airNames };
+  if (d.airRates && typeof d.airRates === 'object') g.airRates = d.airRates;
   if (Array.isArray(d.subLook)) g.subLook = d.subLook;
   if (d.patrolSunk && typeof d.patrolSunk === 'object') g.patrolSunk = d.patrolSunk;
   if (d.columns && typeof d.columns === 'object') g.columns = d.columns;
@@ -332,6 +340,8 @@ function readSave(text: string, promote: boolean): Game | null {
   // (Sea mines, release 2.) On a line of their own: set between the wrecks' if and its else, they took the else, and a
   // save with wrecks and no mines counted every kept report's wrecks again on top of the saved ones at each load.
   if (Array.isArray(d.mines)) g.mines = d.mines;
+  // (A queue for a town, release 2.) As saved; a save without it has nothing queued.
+  if (d.townQueue && typeof d.townQueue === 'object') g.townQueue = d.townQueue;
   if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.shoreReports = d.shoreReports ?? []; g.convoys = d.convoys ?? {}; }
   // A grand campaign saved before carriers had aircraft of their own: every carrier fleet is given its wings.
   if (g.flags.open === 1) openCarriers(g);

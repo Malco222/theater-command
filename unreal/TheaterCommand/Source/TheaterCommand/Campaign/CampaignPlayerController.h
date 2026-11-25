@@ -401,6 +401,8 @@ struct FTownBar
 	FText Title, Sub;
 	TArray<FTownPlot> Plots;
 	TArray<FTownOffer> Offers;
+	FString Best; // (release 2, build from the map) the line the staff would put up here next, or empty
+	FString Queued; // (release 2, a queue for a town) what is queued here, in a line, or empty
 	int32 Picked = INDEX_NONE; // the plot whose choices are laid out above the bar
 	int32 Revision = 0;
 };
@@ -799,6 +801,33 @@ public:
 	void PressPage(const FString& Action);
 	/** The rooms open to the player now, for the buttons that lead to them: ids and labels, in step. */
 	void GetPageLinks(TArray<FString>& OutIds, TArray<FString>& OutLabels) const;
+	/**
+	 * (Release 2; Brian, 25 November 2026: "I want the UI and user experience to feel seamless and easy to manage the
+	 * cities, recruitment, ect".) THE HOME FRONT: one board for every town, raising forces and everything on order,
+	 * under tc.UI.HomeFront (off until the art director passes the Mac's stills; -TheaterHomeFront turns it on for a
+	 * run). It is the rules' own room "home", laid out as a board. Off, no door leads to it and the game is as it was.
+	 */
+	static bool IsHomeFrontStyle();
+	/** (Release 2, tc.UI.Ease) The rooms and the province panel ease in and out instead of appearing and vanishing at once. */
+	static bool IsEaseStyle();
+	void OpenHomeFront();
+	bool IsHomeFrontOpen() const { return bPageOpen && Page.Home.bValid && IsHomeFrontStyle(); }
+	/** Which towns the board lists: 0 those that can take a building, 1 those building, 2 every town. */
+	int32 GetHomeFilter() const { return HomeFilter; }
+	void SetHomeFilter(int32 Filter);
+	/** The town whose other buildings are unfolded under its row, or none: a second press folds them away. */
+	int32 GetHomeUnfolded() const { return HomeUnfolded; }
+	void UnfoldHomeTown(int32 Region);
+	/** A town built in from the board keeps its row while the board stands, so the list does not jump under the hand. */
+	bool IsHomeKept(int32 Region) const { return HomeKept.Contains(Region); }
+	void BuildFromHome(int32 Region, const FString& Act);
+	/** How many towns the board lists at most (a great power has near two hundred), and the button that lists more. */
+	int32 GetHomeRows() const { return HomeRows; }
+	void ShowMoreHomeTowns();
+	/** How many times the board has been opened: its lists start from their heads each time. */
+	int32 GetHomeOpenings() const { return HomeOpenings; }
+	/** A town's own plan from the board: its card on the map where the town card is shown, and otherwise its room. */
+	void OpenTownFromHome(int32 Region);
 	// (Release 2, news at the map's edge; ruling 131: merge by hand) The month's seals on the map's edge, and a press of
 	// one: the month's card opened at its row (EdgeNews.cpp).
 	const FEdgeNewsBoard& GetEdgeNews() const { return EdgeNews; }
@@ -986,6 +1015,8 @@ public:
 	void ToggleHelp();
 	void PickTownPlot(int32 Index);
 	void OrderTownBuilding(const FString& Line);
+	/** (Release 2, a queue for a town) Gives one of the town's own acts for the town in view ("queue:<region>:<line>"), and says what came of it. */
+	void ActOnTown(const FString& Act);
 	/** The small map in the corner: its picture, the marks on it, and a jump to a place on it. */
 	UTexture2D* GetMinimapTexture() const;
 	/** Armies as (x, y, whose) with x and y from 0 to 1 and whose 0 for the player's, 1 for a friend's, 2 for an enemy's, 3 for others; and the part of the map on screen. */
@@ -1049,6 +1080,15 @@ public:
 	void ShowShipModel(const FString& Model, const FText& Name);
 	/** Picks up the next of the player's armies that can still move this month, and goes to it. */
 	void NextArmy();
+	/**
+	 * (Release 2, tc.UI.NextAll; the UI director's seamless plan, fix 4: one NEXT.) Once every army has its orders, Tab
+	 * goes on round the month's list, the rows under END THE MONTH, opening each one's screen in turn, each once, and
+	 * then says the month is done. The list never holds the month, as the rear never does. Off: Tab as before.
+	 * -TheaterNextAll turns it on for a run.
+	 */
+	static bool IsNextAllStyle();
+	/** (tc.UI.NextAll) The row of the month's list Tab opens next, or INDEX_NONE where it has been round them all or there are none. */
+	int32 NextToDoIndex() const;
 	/** How many of the player's armies still wait for an order this month: the count on the NEXT ARMY button. */
 	int32 ArmiesYetToMove() const;
 	/**
@@ -1543,6 +1583,18 @@ private:
 	bool bGeneralsOpen = false;
 	FOfficePage Page;
 	bool bPageOpen = false;
+	// (Release 2, THE HOME FRONT) The board's own state, kept while it stands: the list shown, the town unfolded, and the
+	// towns built in since it was opened.
+	int32 HomeFilter = 0, HomeUnfolded = INDEX_NONE, HomeRows = 40, HomeOpenings = 0;
+	TSet<int32> HomeKept;
+	// (Release 2, tc.UI.Ease: Esc steps back one screen at a time.) The pages this one was reached from by their own
+	// doors, the nearest last; and the town whose card was opened from THE HOME FRONT, whose Esc goes back to the board.
+	TArray<FString> PageTrail;
+	int32 TownFromHomeRegion = INDEX_NONE;
+	/** (tc.UI.Ease) Esc on a page: the page it was reached from, if there is one. */
+	bool StepBackPage();
+	/** (tc.UI.Ease) THE HOME FRONT again as it was left: the same towns listed, the same rows unfolded and kept. */
+	void ReturnToHomeFront();
 	void RefreshGenerals(bool bArmiesChanged);
 	FString PathAsked; // the path waiting for the player's yes, with its partner: "found:DEN"
 	FArsenal Arsenal;
@@ -1631,6 +1683,9 @@ private:
 	bool bRewatching = false; // the month is being watched again from its card
 	bool bHandStands = false; // (ruling 88) the army in hand has been told to stand this month: the rules keep the order, with the saved game
 	TArray<int32> RoundSeen; // the provinces the round of armies has been to since it last began
+	TArray<FString> ToDoSeen; // (release 2, tc.UI.NextAll) the screens of the month's list Tab has opened since its round last began
+	/** (tc.UI.NextAll) Tab past the armies: opens the next row of the month's list, or says the round is done. False where it did nothing. */
+	bool StepToDo();
 	FEndAsk EndAsk;
 	int32 EndAskedTurn = -1; // the month the question was last put: it is put once a month
 	bool bAskAtMonthsEnd = true; // (kept with the options)

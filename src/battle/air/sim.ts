@@ -6,7 +6,7 @@
 // them; bombers that hold their run over the target drop; morale breaks groups that bleed too much. When a group's
 // count drops by one, an 'air:lost' event says how the 3D side shows that aircraft going down.
 
-import { Rng } from '../../core/rng';
+import { hashString, Rng } from '../../core/rng';
 import { dist, bearing } from '../core/geometry';
 import { fieldRatio } from '../core/result';
 import type { BattleSim, BattleView, Command, FieldEvent, FieldResult, FieldTicket, Side, UnitState, Zone } from '../core/types';
@@ -16,11 +16,12 @@ import { aCraftOf, adjFor, oneOf, subjectOf, told, twoOf, upFirst } from './name
 import { enginesOf, escortRoles, fighterWay, passesOn, pickPass, type Pass, type Role, type When } from './doctrine';
 import { collideWords, drawFall, fallWords } from './falls';
 import { ShipBook, splitWings } from './ships';
+import { TroopBook, TROOPS, type MarkNews, type MarkWhat } from './troops';
 import { coolOf, crewOf, fateOf, fighterEngines, freshMemory, hitOf, kindOf, ramShare, seaAt, type FateMemory, type Scene } from './fates';
-import { fighterGuns, type GunKind } from './guns';
-import type { AirJob, AirOutcome, AirPlace, AirUnit, BomberTold, Fall, FallHow, Straggler } from './types';
+import { bomberGuns, fighterGuns, type GunKind } from './guns';
+import type { AirHitWho, AirJob, AirOutcome, AirPlace, AirUnit, BomberTold, Fall, FallHow, Straggler } from './types';
 import type { BomberSeat } from '../../campaign/types';
-import { afterWords, bombWorth, railChanceOf, ruinChanceOf, staffHow } from '../../campaign/airfought';
+import { afterWords, bombWorth, railChanceOf, ruinChanceOf, staffHow, troopCutOf } from '../../campaign/airfought';
 import type { VictoryLevel } from '../../core/ticket';
 export { peopleOf } from '../../campaign/airfought';
 
@@ -52,6 +53,18 @@ const flying = (u: AirUnit): boolean => !off(u) && u.job.do !== 'wait';
 const away = (u: AirUnit): boolean => u.job.do === 'home' || u.state === 'routing';
 /** An escort's role: close, top cover or the sweep (a loose escort). */
 const roleOf = (j: { close: boolean; top?: boolean }): Role => (j.close ? 'close' : j.top ? 'top' : 'sweep');
+/**
+ * The share of a raider fighter that counts on target, as the campaign counts it: the staff's raid weighs each fighter
+ * by how far into its range the target lies (assessAir's esc, which the ticket gave the group as its fuel).
+ */
+const reachOf = (u: AirUnit): number => Math.min(1, u.fuel0 / SKY.fuel.full);
+
+/**
+ * A fighter group's passes on the troops (a raid on troops, release 2): the passes it has completed, whether it is on
+ * one now and how far down the lane, the lane it is flying, and the bomber box it was escorting when it went down (it
+ * still counts over that box: tied).
+ */
+interface Strafing { done: number; run: boolean; p: number; from: [number, number]; to: [number, number]; box: number | null; over: boolean }
 
 // The names in a dispatch (names.ts), as the tests and the battle's pages have them from here.
 export { oneOf, subjectOf, told };
@@ -135,10 +148,26 @@ export class AirSim implements BattleSim<AirUnit> {
   /** Battle seconds each group last showed a hit it survived; the heaviest gun each fighter group carries. */
   private hitAt = new Map<number, number>();
   private gunOf = new Map<number, GunKind | null>();
+  /** The one gun's name each group carries, where all its guns are of one name (the hits' 'gun'); null where they are not. */
+  private oneGunOf = new Map<number, string | null>();
   /** The pass each fighter group is flying at each bomber group it is on ('fighter:bomber'). */
   private passes = new Map<string, Pass>();
+  /**
+   * R1 (the design director, 25 November 2026): the bomber box each fighter group was given as its quarry, whose pass
+   * was drawn then, not at contact; and how many passes have been drawn for each fighter and box, the label of the
+   * pass's own stream (drawPass).
+   */
+  private aimed = new Map<number, number>();
+  private passDraws = new Map<string, number>();
   /** This tick, what each group was owed and by whom ('flak' for the guns): who shot down whom. */
   private owedBy = new Map<number, Map<number | 'flak', number>>();
+  /**
+   * R5 (the design director, 25 November 2026: "no argmax, and no new draw on the rules' stream"): each group's ledger
+   * of credit, by creditor ('flak' for the guns). Each loss that falls on it credits every group that owed on it that
+   * tick its share of that loss, a fraction; the loss is booked to the one with the largest balance, which gives one
+   * back (creditor). Never a count.
+   */
+  private ledger = new Map<number, Map<number | 'flak', number>>();
   /** Each bomber group's gunners' kills: the enemy fighters whose loss was booked to it (ruling 227), for the campaign's record. */
   private gunKills = new Map<number, number>();
   private stragId = 1;
@@ -169,6 +198,29 @@ export class AirSim implements BattleSim<AirUnit> {
   /** A strike on ships (ships.ts, ruling 238): the ships under attack, and what the guns' toll is scaled by once carrier groups fly at their own heights. */
   private sea: ShipBook | null = null;
   private flakNorm = 1;
+  /**
+   * A raid on troops (release 2; the design director, 24 November 2026 22:28Z): the troops under the raid and what the
+   * campaign's own law has earned on them so far (troops.ts). The bombers count as they drop; the raid's fighters count
+   * as they complete their passes on the troops, and pay the ground fire the raid card expects of them as they fly
+   * those passes. Null for any other raid, and then nothing below is ever read or written.
+   */
+  private troops: TroopBook | null = null;
+  /** Each fighter group's passes on the troops; the fighters that have strafed so far, as the campaign counts them. */
+  private strafing = new Map<number, Strafing>();
+  private strafed = 0;
+  /** The raid's fighter groups ordered to stay with the bombers (or given any other order): they never go down on their own. */
+  private keepUp = new Set<number>();
+  /** The bomber box each of the raid's fighter groups was last escorting (it goes down once that box has bombed). */
+  private escorted = new Map<number, number>();
+  /** The ground fire each strafing group is owed this tick, from the passes it flew (paid in wear, as the guns' toll is). */
+  private fireDue = new Map<number, number>();
+  /** The ground fire owed for each fighter that flies a whole pass's share: the card's 'fire' over the fighters it weighed. */
+  private fireEach = 0;
+  /** With the strafers' rule on: the campaign groups charged the ground fire, and what it charged them. */
+  private firedOn = new Set<number>();
+  private fireOwed = 0;
+  /** The lane the passes run down: through the middle of the troops, along their road where they march. */
+  private lane = { x: 0, y: 0, dx: 0, dy: 1 };
   /** Battle seconds of the first contact, null before it (the view's contact, as land's). */
   private metAt: number | null = null;
   /** The defending groups whose staff has weighed its climb (once each: a group that has dived is never sent back up). */
@@ -261,6 +313,12 @@ export class AirSim implements BattleSim<AirUnit> {
       // Each wing's quarry, carriers first (the tactics panel's S2): where the 3D bends its run, and where its hits land.
       this.sea.aim(boxes);
     }
+    // A raid on troops: the army under it, its looks on a stream of their own that no count reads (fork 71; 67 is the
+    // ticket's, which laid the pieces), and the lane the fighters' passes run down.
+    if (this.place.marks) {
+      this.troops = new TroopBook(this.place.marks, this.rng.fork(71));
+      this.lane = laneOf(this.place.marks.pieces, this.place.marks.road);
+    }
     for (const u of this.units) {
       const B = u.air === 'bmr' ? this.place.bombers?.[u.corps] : undefined;
       // A carrier group's bombers split by kind fly as several boxes of one group: those are not known one by one.
@@ -278,6 +336,16 @@ export class AirSim implements BattleSim<AirUnit> {
     }
     this.deal();
     this.arm();
+    // The ground fire on the strafing fighters: the card's share of the raid's fighter losses ('fire', forecastAir: the
+    // ground fire's share of every fighter it weighed), owed by each fighter for each pass it flies, so a raid whose
+    // fighters all fly all their passes pays on average what the card said, and one whose fighters never go down none.
+    if (this.troops) {
+      const E = this.units.reduce((t, u) => t + (u.side === 'att' && u.air === 'ftr' ? u.n0 * reachOf(u) : 0), 0);
+      this.fireEach = E > 0 ? (this.place.forecast.fire ?? 0) / E : 0;
+      // (The strafers' rule, campaign/strafers.ts: each fighter that goes down pays the campaign's own share, as the card
+      // charged each one it expected to go down; those without the reach never go down.)
+      if (this.place.marks?.law.reach) this.fireEach = this.place.marks.law.fire;
+    }
     // Both sides start on the staff's plan; the player changes what he likes before or after he starts the clock.
     this.think('att', true);
     this.think('def', true);
@@ -399,13 +467,16 @@ export class AirSim implements BattleSim<AirUnit> {
       if (u.side !== side || off(u) || u.job.do === 'home' || u.job.do === 'wait' || u.state === 'routing') continue;
       if (u.air === 'bmr') { if (u.job.do !== 'route') u.job = { do: 'route' }; continue; }
       if (side === 'att') {
+        // (A group on its passes on the troops keeps at them: the staff sent it down.)
+        if (u.job.do === 'strafe') continue;
         if (!first && this.valid(u, u.job) && u.job.do !== 'patrol') continue;
         if (this.place.mission === 'superiority') { u.job = { do: 'hunt' }; continue; }
         // The escort, shared out over the bomber groups by their size, each group in the role its nation's doctrine gave
         // it that month: the raid's first escort group the first role, the second the next (ruling 237.2). A group whose
         // box is gone keeps its role with the next box.
         const boxes = this.units.filter((b) => b.side === 'att' && b.air === 'bmr' && !off(b));
-        if (!boxes.length) { u.job = { do: 'home' }; continue; }
+        // With no bombers to see through, a raid on troops sends its fighters down on the troops (once each).
+        if (!boxes.length) { if (this.mayStrafe(u)) this.goDown(u, null); else u.job = { do: 'home' }; continue; }
         const load = (b: AirUnit): number => this.units.filter((f) => f.job.do === 'escort' && f.job.on === b.id).reduce((s, f) => s + f.n, 0) / b.n;
         const b = [...boxes].sort((x, y) => load(x) - load(y) || x.id - y.id)[0];
         const role = u.job.do === 'escort' ? roleOf(u.job) : this.role(u);
@@ -448,6 +519,44 @@ export class AirSim implements BattleSim<AirUnit> {
         keep(e);
       }
     }
+    this.aimAll();
+  }
+
+  /**
+   * The bomber box a fighter group has been given as its quarry (its job, by the computer or by the player's order):
+   * one it is sent to intercept, while it is fighting. Null for any other job, and for a group gone, broken or homeward.
+   */
+  private quarryBox(u: AirUnit): AirUnit | null {
+    if (u.air !== 'ftr' || off(u) || away(u) || u.job.do !== 'intercept') return null;
+    const b = this.unit(u.job.on);
+    return b && b.air === 'bmr' && b.side !== u.side && flying(b) ? b : null;
+  }
+
+  /**
+   * R1: each fighter group given a bomber box as its quarry has the pass it will fly on it drawn then, once; again only
+   * when its quarry changes. Called wherever a job is given (think, the player's attack) and before contact.
+   */
+  private aimAll(): void {
+    for (const u of this.units) {
+      if (u.air !== 'ftr') continue;
+      const b = this.quarryBox(u);
+      if ((b?.id ?? null) === (this.aimed.get(u.id) ?? null)) continue;
+      if (!b) { this.aimed.delete(u.id); continue; }
+      this.aimed.set(u.id, b.id);
+      this.drawPass(u, b);
+    }
+  }
+
+  /**
+   * The pass a fighter group flies at a bomber box, by its doctrine against that bomber (doctrine.ts), from a stream of
+   * its own for that fighter, that box and that draw: a fork of the battle's pass stream, which is never drawn on
+   * itself, so when and in what order the passes are drawn moves no other throw. Never a count: it sets the beat of the
+   * passes (beat), what the dispatches tell of a ram, and between flak and the fighters who a box's loss is booked to.
+   */
+  private drawPass(d: AirUnit, b: AirUnit): void {
+    const key = `${d.id}:${b.id}`, n = this.passDraws.get(key) ?? 0;
+    this.passDraws.set(key, n + 1);
+    this.passes.set(key, pickPass(this.passRng.fork(hashString(`${key}:${n}`)), passesOn(d.nat, this.when, b.model, b.nat)));
   }
 
   /**
@@ -531,6 +640,7 @@ export class AirSim implements BattleSim<AirUnit> {
     for (const side of ['att', 'def'] as Side[]) if (this.ai[side] && this.t >= this.thinkAt) this.think(side);
     if (this.t >= this.thinkAt) this.thinkAt = this.t + SKY.think;
     this.scramble();
+    if (this.troops) this.strafeDue();
     for (const u of this.units) if (!off(u)) this.fly(u, dt);
     this.touch();
     this.wear(dt);
@@ -617,9 +727,14 @@ export class AirSim implements BattleSim<AirUnit> {
     const j = u.job;
     // In a fight, a group free to pick its enemy turns on the one it is fighting; an interceptor keeps after its quarry
     // and a close escort keeps its place by its bombers, fighting whatever comes at them.
-    const free = j.do === 'hunt' || j.do === 'patrol' || (j.do === 'escort' && !j.close);
+    // (A group strafing the troops that is jumped breaks off its pass and turns on its attackers.)
+    const free = j.do === 'hunt' || j.do === 'patrol' || j.do === 'strafe' || (j.do === 'escort' && !j.close);
     if (u.air === 'ftr' && u.contacts.length && free) { const e = this.unit(u.contacts[0])!; return [e.x, e.y, e]; }
     switch (j.do) {
+      case 'strafe': {
+        const s = this.strafing.get(u.id);
+        return s ? (s.run ? s.to : s.from) : [u.x, u.y];
+      }
       case 'route': return u.dropped || u.jettisoned ? [u.x, -5_000] : [T.x + u.lane, T.y];
       case 'home': return [u.homeX, u.homeY];
       case 'wait': return [u.x, u.y];
@@ -724,8 +839,135 @@ export class AirSim implements BattleSim<AirUnit> {
           this.say('air:bombs', u, `${told(this.called(u), u.strike === 'torpedo' ? '{N} [attacks|attack]' : '{N} [bombs|bomb]')} ${this.quarry() ?? this.place.name}: ${u.n} bombers over the target.`, { n: u.n }, C.bombs);
           this.bombsFall();
           if (this.sea) for (const x of this.sea.drop(this.droppedNow(), u.strike ?? 'bomb', this.t, u.corps)) this.say(x.what, u, x.text, x.extra);
+          // A raid on troops: what the bombs are seen to hit, as far as the men the law now books lost allow.
+          if (this.troops) this.marksHit(u, this.troops.land(this.droppedNow(), this.strafed, 'bomb', u.x, u.y));
         }
       }
+    }
+    if (u.job.do === 'strafe') this.pass(u);
+  }
+
+  // ---------------------------------------------------------------------------------------------------------------
+  // A raid on troops (release 2): the raid's fighters go down on the troops.
+
+  /** Whether a group of the raid may go down on the troops: a fighter of a raid on troops that has not done so already, and was given no other order. */
+  private mayStrafe(u: AirUnit): boolean {
+    return !!this.troops && u.side === 'att' && u.air === 'ftr' && !this.keepUp.has(u.id) && !this.strafing.get(u.id)?.over
+      // (The strafers' rule: only a group with the reach to strafe goes down on the troops.)
+      && (!this.troops.law.reach || this.troops.law.reach.includes(u.corps));
+  }
+
+  /**
+   * By default, as the staff's own raid counts every fighter that came through: each of the raid's fighter groups goes
+   * down on the troops once the bombers it escorts have bombed, turned back or gone (at once in a raid with no bombers),
+   * as soon as it is out of the fight. The staff's raid counts every fighter both in the fight with the defence and on
+   * the troops, so an escort that has fought itself out against the fighters still goes down on the troops (its fight
+   * with the defence is over, not its guns). One short of fuel, broken, or given another order does not, and so counts
+   * for less: a choice the campaign books.
+   */
+  private strafeDue(): void {
+    for (const u of this.units) {
+      if (!this.mayStrafe(u) || off(u)) continue;
+      if (u.job.do === 'escort') this.escorted.set(u.id, u.job.on);
+      if (!this.willStrafe(u) || u.job.do === 'strafe' || u.contacts.length) continue;
+      const box = this.escorted.get(u.id), b = box === undefined ? undefined : this.unit(box);
+      if (b && !off(b) && !away(b) && !b.dropped && !b.jettisoned) continue;
+      if (!this.fuelFor(u)) continue;
+      this.goDown(u, box ?? null);
+    }
+  }
+
+  /**
+   * Whether a group has the fuel left over the board to reach the troops and fly its passes: one that has not is short
+   * of fuel, and goes home as it is. (The board's fuel is time over it, as for every group: at none a group turns for
+   * home, bingo, and the way home is the campaign's reach, already weighed.)
+   */
+  private fuelFor(u: AirUnit): boolean {
+    if (u.fuel0 >= SKY.fuel.home) return true;
+    const L = this.lane, S = TROOPS.strafe;
+    const there = dist(u.x, u.y, L.x, L.y), passes = (S.passes - (this.strafing.get(u.id)?.done ?? 0)) * 2 * S.half;
+    return u.fuel >= (there + passes) / SKY.speed.ftr;
+  }
+
+  /**
+   * Whether a group of the raid is still to go down on the troops, or is on its passes: an escort, or one fought out
+   * and on its way home with fuel left (strafeDue); never one broken, out of fuel, on the ground, or held up.
+   */
+  private willStrafe(u: AirUnit): boolean {
+    if (!this.mayStrafe(u) || off(u) || u.state === 'routing' || u.job.do === 'wait') return false;
+    if (u.job.do === 'strafe' || u.job.do === 'escort') return true;
+    return u.job.do === 'home' && u.vig < SKY.spent && u.fuel > 0;
+  }
+
+  /** Down on the troops: the passes start from the end of the lane nearer the group; each group rakes a strip of its own. */
+  private goDown(u: AirUnit, box: number | null): void {
+    const S = TROOPS.strafe, L = this.lane;
+    const was = this.strafing.get(u.id);
+    u.job = { do: 'strafe' };
+    if (was) return;
+    const raid = this.units.filter((f) => f.side === 'att' && f.air === 'ftr');
+    const side = (raid.indexOf(u) - (raid.length - 1) / 2) * S.width * 3;
+    const a: [number, number] = [L.x - L.dx * S.half + L.dy * side, L.y - L.dy * S.half - L.dx * side];
+    const b: [number, number] = [L.x + L.dx * S.half + L.dy * side, L.y + L.dy * S.half - L.dx * side];
+    const near = dist(u.x, u.y, a[0], a[1]) <= dist(u.x, u.y, b[0], b[1]);
+    this.strafing.set(u.id, { done: 0, run: false, p: 0, from: near ? a : b, to: near ? b : a, box, over: false });
+  }
+
+  /**
+   * A strafing group's tick, after it has moved: down to the low band as it nears the troops; on the lane's start, its
+   * pass begins ('air:strafe'); down the lane it owes the ground fire its share of the pass it has flown; at the lane's
+   * end the pass counts its part of the group as strafed and its hits follow ('air:mark-hit'). Jumped, it breaks off:
+   * the pass is lost, and what the guns cost it stands.
+   */
+  private pass(u: AirUnit): void {
+    const s = this.strafing.get(u.id)!, S = TROOPS.strafe;
+    // Jumped: the pass is broken off. A group with fight left turns on its attackers (aimAt); one fought out runs for home.
+    if (u.contacts.length) { s.run = false; s.p = 0; if (u.vig < SKY.spent) u.job = { do: 'home' }; return; }
+    if (!s.run) {
+      if (dist(u.x, u.y, s.from[0], s.from[1]) <= SKY.flakR) u.to = 0;
+      if (u.band !== 0 || u.to !== 0 || dist(u.x, u.y, s.from[0], s.from[1]) > 1) return;
+      s.run = true; s.p = 0;
+      const len = dist(s.from[0], s.from[1], s.to[0], s.to[1]);
+      const words = s.done === 0 ? told(this.called(u), `{N} [goes|go] down to strafe the troops at ${this.place.name}.`) : '';
+      this.say('air:strafe', u, words, { from: [Math.round(s.from[0]), Math.round(s.from[1])], to: [Math.round(s.to[0]), Math.round(s.to[1])], width: S.width, dur: Math.round((len / SKY.speed.ftr / SKY.scale) * 10) / 10 });
+      return;
+    }
+    const len = Math.max(1, dist(s.from[0], s.from[1], s.to[0], s.to[1]));
+    const left = dist(u.x, u.y, s.to[0], s.to[1]), p = clamp01(1 - left / len);
+    const part = (u.n * reachOf(u)) / S.passes;
+    if (p > s.p) {
+      const owe = this.fireEach * part * (p - s.p);
+      this.fireDue.set(u.id, (this.fireDue.get(u.id) ?? 0) + owe); s.p = p;
+      if (this.troops!.law.reach) { this.firedOn.add(u.corps); this.fireOwed += owe; }
+    }
+    if (left > 1) return;
+    // The pass made: its part of the group counts on the troops, by the campaign's own law, and its hits follow.
+    s.done++; s.run = false; s.p = 0;
+    this.strafed += part;
+    const mid = [(s.from[0] + s.to[0]) / 2, (s.from[1] + s.to[1]) / 2];
+    this.marksHit(u, this.troops!.land(this.droppedNow(), this.strafed, 'strafe', mid[0], mid[1]));
+    if (s.done >= S.passes) {
+      s.over = true;
+      u.job = { do: 'home' };
+      this.say('air:strafed', u, told(this.called(u), '{N} [has|have] made [its|their] passes and [turns|turn] for home.'), { passes: s.done });
+      return;
+    }
+    // The next pass back up the lane, a strip over.
+    const ox = this.lane.dy * S.width, oy = -this.lane.dx * S.width;
+    const k = s.done % 2 ? 1 : -1;
+    [s.from, s.to] = [[s.to[0] + ox * k, s.to[1] + oy * k], [s.from[0] + ox * k, s.from[1] + oy * k]];
+  }
+
+  /**
+   * What a bomb pattern or a strafing pass is seen to hit (troops.ts land): one 'air:mark-hit' each, at the piece. The
+   * biggest hit of the release is told in a line; the rest the scene shows. Shown, never counted.
+   */
+  private marksHit(u: AirUnit, news: MarkNews[]): void {
+    const own = this.ticket.def.human;
+    const top = news.reduce<MarkNews | null>((m, x) => (x.big && x.men > 0 && (!m || x.men > m.men) ? x : m), null);
+    for (const x of news) {
+      const what = this.place.marks!.pieces.find((p) => p.id === x.piece)?.what ?? 'men';
+      this.say('air:mark-hit', u, x === top ? markWords(x, what, own) : '', { piece: x.piece, strike: x.strike, how: x.how, men: x.men, big: x.big, x: x.x, y: x.y });
     }
   }
 
@@ -733,6 +975,7 @@ export class AirSim implements BattleSim<AirUnit> {
   private touch(): void {
     const r = this.place.night ? SKY.contact.night : SKY.contact.day;
     const live = this.units.filter(flying);
+    this.aimAll();
     const before = new Map(live.map((u) => [u.id, new Set(u.contacts)]));
     for (const u of live) u.contacts = [];
     for (const a of live) {
@@ -753,7 +996,8 @@ export class AirSim implements BattleSim<AirUnit> {
         this.fired = true;
         if (before.get(a.id)?.has(d.id)) continue;
         // A new run at a bomber group: the fighters fly the pass their doctrine gives against that bomber (doctrine.ts).
-        if (a.air === 'bmr') this.passes.set(`${d.id}:${a.id}`, pickPass(this.passRng, passesOn(d.nat, this.when, a.model, a.nat)));
+        // At their quarry, the pass drawn when they were given it (R1); at any other box, one drawn now.
+        if (a.air === 'bmr' && !(this.aimed.get(d.id) === a.id && this.passes.has(`${d.id}:${a.id}`))) this.drawPass(d, a);
         // A new contact: the higher fighter group dives on the lower one and strikes first. A bomber box above a fighter
         // is simply in contact: bombers do not dive on fighters (the tactics panel's S0).
         const hi = a.band > d.band && a.air === 'ftr' ? a : d.band > a.band ? d : null;
@@ -763,8 +1007,12 @@ export class AirSim implements BattleSim<AirUnit> {
           // the height the climb gave (band 2). A dive from the height every staff flies at (band 1: after the climb's
           // dive, or caught short of the climb) is the group's own, priced as any other group's.
           if (hi.rise && hi.band <= 1) hi.rise = false;
-          hi.bounce = SKY.edge.bounceFor; hi.band = lo.band; hi.to = lo.band; hi.alt = SKY.bands.alt[lo.band];
-          if (!hi.rise) lo.mor = clamp01(lo.mor - SKY.morale.bounced);
+          // A dive on fighters down on their passes on the troops is drawn, never priced (as b418's climb): the staff's
+          // raid sends them down, and the card prices their passes in the ground fire alone.
+          const low = lo.job.do === 'strafe';
+          if (!low) hi.bounce = SKY.edge.bounceFor;
+          hi.band = lo.band; hi.to = lo.band; hi.alt = SKY.bands.alt[lo.band];
+          if (!hi.rise && !low) lo.mor = clamp01(lo.mor - SKY.morale.bounced);
           this.say('air:bounce', hi, `${told(this.called(hi), '{N} [dives|dive] on')} ${subjectOf(this.called(lo)).whom} from above.`, { on: lo.id });
         }
         for (const x of [a, d]) if (!(before.get(x.id)?.size)) {
@@ -818,7 +1066,10 @@ export class AirSim implements BattleSim<AirUnit> {
     const guns = B > 0 ? Math.min(F.foe, F.foeGuns ?? 0) : 0, toEscort = F.foe - guns;
     for (const u of att) { const k = A > 0 ? this.weight(u, u.n0) / A : 0; u.kit = { ftr: toEscort * k * full, bmr: 0 }; }
     for (const u of boxes) u.kit = { ftr: guns * (u.n0 / B) * full, bmr: 0 };
-    for (const u of def) { const k = D > 0 ? this.weight(u, u.n0) / D : 0; u.kit = { ftr: F.ftr * k * full, bmr: onBombers * k * full }; }
+    // (A raid on troops: of the raid's fighters lost, the card's 'fire' falls to the ground fire on their passes, dealt as
+    // they fly them (wear); the defending fighters carry the rest.)
+    const onFighters = Math.max(0, F.ftr - (F.fire ?? 0));
+    for (const u of def) { const k = D > 0 ? this.weight(u, u.n0) / D : 0; u.kit = { ftr: onFighters * k * full, bmr: onBombers * k * full }; }
     // A split defence (deal) fights from one pool: each group holds its weight's share of what the defence has left.
     this.pool = def.some((u) => u.def === 'escort') && D > 0 ? new Map(def.map((u) => [u.id, this.weight(u, u.n0)])) : null;
     for (const u of this.units) u.kit0 = u.kit.ftr + u.kit.bmr;
@@ -862,6 +1113,11 @@ export class AirSim implements BattleSim<AirUnit> {
    */
   private tied(f: AirUnit, b: AirUnit): boolean {
     if (f.air !== 'ftr' || f.side !== 'att') return false;
+    // An escort gone down on the troops (a raid on troops), on its passes or home from them, counts over the box it was
+    // escorting: the staff's raid counts every fighter both over its bombers and on the troops, so the field does not
+    // price the passes a second time in bombers.
+    const s = this.strafing.get(f.id);
+    if (s && s.box === b.id && (f.job.do === 'strafe' || (s.over && f.job.do === 'home'))) return true;
     if (f.job.do === 'escort') return f.job.on === b.id && f.contacts.some((i) => this.unit(i)?.def === 'escort');
     return f.job.do === 'home' && f.vig < SKY.spent && this.foughtFor.get(f.id) === b.id;
   }
@@ -910,7 +1166,8 @@ export class AirSim implements BattleSim<AirUnit> {
       this.owedBy.set(v.id, m);
     };
     for (const u of live) {
-      if (u.air !== 'ftr' || !u.contacts.length || u.kit0 <= 0 || away(u)) continue;
+      // (A raid on troops: a group fought out against the fighters that has gone down on the troops has no fight left to give.)
+      if (u.air !== 'ftr' || !u.contacts.length || u.kit0 <= 0 || away(u) || (u.job.do === 'strafe' && u.vig < SKY.spent)) continue;
       const F = foes(u, 'ftr'), Bs = foes(u, 'bmr');
       // On fighters: the more for coming down from above, the less for climbing or wavering.
       if (F.length && u.kit.ftr > 0) {
@@ -983,6 +1240,11 @@ export class AirSim implements BattleSim<AirUnit> {
         if (own !== null) holding.set(u.id, own);
       } else if (SKY.flak.fighters > 0) owe(u, 'flak', (u.n * P.gunLoss * SKY.flak.fighters * SKY.flak.band[u.band] * dt) / this.flakT);
     }
+    // A raid on troops: the ground fire on the fighters strafing them, for the share of their passes flown this tick.
+    if (this.fireDue.size) {
+      for (const u of live) { const k = this.fireDue.get(u.id); if (k) owe(u, 'flak', k); }
+      this.fireDue.clear();
+    }
     this.holdFire(holding, live);
     for (const b of live) if (b.air === 'bmr' && b.owed > 0) this.straggle(b);
     // Whole aircraft fall.
@@ -997,11 +1259,13 @@ export class AirSim implements BattleSim<AirUnit> {
   private fall(live: AirUnit[]): void {
     const P = this.place;
     const lost: Loss[] = [];
-    const hit: [AirUnit, number][] = [];
+    const hit: [AirUnit, number, Map<number | 'flak', number> | undefined][] = [];
     for (const u of live) {
       let k = u.owed;
       const owed = k;
       u.owed = 0;
+      // Who owed on it this tick, as it stood before any loss was booked: the shown hit's 'by' (R2).
+      const due = this.show && owed > 0 ? new Map(this.owedBy.get(u.id) ?? []) : undefined;
       for (; k > 0 && u.n > 0; k -= 1) {
         if (k < 1 && this.lossRng.next() >= k) break;
         // Which group brought it down, and whether it was a straggler (the box's next loss is its straggler's): never a count.
@@ -1022,10 +1286,10 @@ export class AirSim implements BattleSim<AirUnit> {
         u.figures = this.modelsAfter(u, s);
         lost.push({ u, fall, by, s, alt, fid: this.fid++, seat, gun, models: before - u.figures });
       }
-      if (this.show && owed > 0 && u.n > 0) hit.push([u, owed]);
+      if (this.show && owed > 0 && u.n > 0) hit.push([u, owed, due]);
     }
     if (lost.length) this.fated(lost);
-    for (const [u, owed] of hit) this.hitShown(u, owed);
+    for (const [u, owed, due] of hit) this.hitShown(u, owed, due);
   }
 
   /**
@@ -1133,6 +1397,8 @@ export class AirSim implements BattleSim<AirUnit> {
       air: u.air, engines, nat: u.nat, model: u.model, when: this.when,
       gun: v && v.air === 'ftr' ? this.heaviest(v) : null,
       flak: by === 'flak' ? (kinds[kinds.length - 1] as Scene['flak']) : null,
+      // (Ground fire on a fighter strafing the troops is the column's own light guns and small arms.)
+      ...(by === 'flak' && u.job.do === 'strafe' ? { flak: 'light' as const } : {}),
       pass: u.air === 'bmr' && typeof by === 'number' ? this.passes.get(`${by}:${u.id}`) ?? null : null,
       band, alt: L.alt,
       loaded: u.air === 'bmr' && u.dropped <= 0 && !u.jettisoned,
@@ -1166,15 +1432,46 @@ export class AirSim implements BattleSim<AirUnit> {
    * A hit one of its aircraft survives (Brian, 20 November: "not all planes that get hit go down"; fates.ts hitOf):
    * while a group is being hit, a chance of SKY.hit.k times what it was owed this tick, at most once each SKY.hit.gap
    * battle seconds. Shown only, and never told: holes, smoke, pieces torn off, or a bomber's engine fire put out.
+   * Whose hit it was ('by', and 'gun' where one gun's name covers all that group carries: AirHitWho) comes from what
+   * each enemy group owed on it this tick ('due'), by the same draw that decided the hit: no draw is added anywhere.
    */
-  private hitShown(u: AirUnit, owed: number): void {
+  private hitShown(u: AirUnit, owed: number, due?: Map<number | 'flak', number>): void {
     const H = SKY.hit;
     if (this.t - (this.hitAt.get(u.id) ?? -Infinity) < H.gap) return;
-    if (!this.hitRng.chance(Math.min(0.5, owed * H.k))) return;
+    // (The draw chance() makes: kept as a number, for under p it is spread evenly over the shares of who owed.)
+    const p = Math.min(0.5, owed * H.k), x = this.hitRng.next();
+    if (!(x < p)) return;
     this.hitAt.set(u.id, this.t);
     const h = hitOf(this.hitRng, u.air);
+    const by = due ? this.hitBy(due, x / p) : null;
+    const gun = typeof by === 'number' ? this.oneGun(by) : null;
+    const who: AirHitWho | null = by === null ? null : { by, ...(gun ? { gun } : {}) };
     // A fire put out leaves its propeller feathered on a bomber with more than one engine (the art director).
-    this.say('air:hit', u, '', { ...h, air: u.air, ...(h.mark === 'fireout' && enginesOf(u.model) > 1 ? { prop: 'feather' } : {}), slot: this.hitRng.int(Math.max(1, u.figures)), alt: u.alt });
+    this.say('air:hit', u, '', { ...h, air: u.air, ...(h.mark === 'fireout' && enginesOf(u.model) > 1 ? { prop: 'feather' } : {}), slot: this.hitRng.int(Math.max(1, u.figures)), alt: u.alt, ...(who ?? {}) });
+  }
+
+  /**
+   * The group whose fire a shown hit was (R2): of those that owed on the group this tick, the one in whose share of it
+   * 'f' (0 to 1) falls, the groups in the order of their ids and the guns last. Null when nobody owed (never, for a hit).
+   */
+  private hitBy(due: Map<number | 'flak', number>, f: number): number | 'flak' | null {
+    const all = [...due].filter(([, k]) => k > 0).sort(([a], [b]) => (a === 'flak' ? 1 : b === 'flak' ? -1 : a - b));
+    const sum = all.reduce((t, [, k]) => t + k, 0);
+    if (!all.length || sum <= 0) return null;
+    let x = f * sum;
+    for (const [by, k] of all) { x -= k; if (x < 0) return by; }
+    return all[all.length - 1][0];
+  }
+
+  /** The gun's name (guns.ts) where every gun a group carries that month has the one name; null where they differ. */
+  private oneGun(id: number): string | null {
+    if (!this.oneGunOf.has(id)) {
+      const v = this.unit(id);
+      const L = !v ? null : this.place.guns?.[v.nat]?.[v.air] ?? (v.air === 'ftr' ? fighterGuns(v.model, v.nat, this.when) : bomberGuns(v.model, v.nat, this.when));
+      const names = new Set((L?.guns ?? []).map((g) => g.gun));
+      this.oneGunOf.set(id, names.size === 1 ? [...names][0] : null);
+    }
+    return this.oneGunOf.get(id) ?? null;
   }
 
   /**
@@ -1267,13 +1564,29 @@ export class AirSim implements BattleSim<AirUnit> {
     return firing ? { holdIn: left } : {};
   }
 
-  /** The group that owed a group the most this tick takes the next aircraft it loses ('flak' for the guns). */
+  /**
+   * Who a group's next loss is booked to ('flak' for the guns): the fractional ledger (R5), never an argmax and never a
+   * draw. The loss credits each group that owed on it this tick its share of what was owed (a fraction, the shares
+   * summing to one); it is booked to the one of those with the largest balance (on a tie the lower id, the guns last),
+   * which gives one back. So over a battle each creditor's booked losses keep within about one of its share of them, and
+   * two equal groups on one box share its losses, where the largest debt alone gave one of them all.
+   */
   private creditor(u: AirUnit): number | 'flak' | null {
     const m = this.owedBy.get(u.id);
     if (!m || !m.size) return null;
-    let best: number | 'flak' = 'flak', most = -Infinity;
-    for (const [by, k] of m) if (k > most) { most = k; best = by; }
-    m.set(best, most - 1);
+    const due = [...m].filter(([, k]) => k > 0).sort(([a], [b]) => (a === 'flak' ? 1 : b === 'flak' ? -1 : a - b));
+    const all = due.reduce((t, [, k]) => t + k, 0);
+    if (!due.length || all <= 0) return null;
+    const L = this.ledger.get(u.id) ?? new Map<number | 'flak', number>();
+    this.ledger.set(u.id, L);
+    let best: number | 'flak' = due[0][0], most = -Infinity;
+    for (const [by, k] of due) {
+      const v = (L.get(by) ?? 0) + k / all;
+      L.set(by, v);
+      // (A share's rounding is no lead: within a millionth it is a tie.)
+      if (v > most + 1e-9) { most = v; best = by; }
+    }
+    L.set(best, L.get(best)! - 1);
     return best;
   }
 
@@ -1373,7 +1686,7 @@ export class AirSim implements BattleSim<AirUnit> {
 
   /**
    * Which bomber's gunners brought down a fighter whose loss is booked to a box known by name. The gunners' kills are
-   * the box's that owed them (ruling 227): the loss's creditor ('by', the group that owed it the most) is the box, and
+   * the box's that owed them (ruling 227): the loss's creditor ('by', booked by the ledger: creditor) is the box, and
    * the box is credited, one of its bombers by the battle's own stream. A loss booked to an escort or to the guns is
    * theirs, and no lot moves it. Returns the box and the seat, or null.
    */
@@ -1428,10 +1741,16 @@ export class AirSim implements BattleSim<AirUnit> {
       // ('quarry': an interceptor's from before the groups meet, an escort's only while it has turned on an attacker),
       // and how good its pilots are ('skill').
       const q = flying(u) && !away(u) ? this.after.get(u.id) : undefined;
+      // R1: the pass it will fly at the bomber box it has been given as its quarry, from then until it has another or none.
+      const box = this.quarryBox(u);
+      const pass = box && this.aimed.get(u.id) === box.id ? this.passes.get(`${u.id}:${box.id}`) : undefined;
       u.extra = {
         model: u.model, cool: coolOf(u.model), form: u.form, style: u.style, boxes: this.boxesOf(u), ammo: Math.round(ammo * 1000) / 1000,
         ...(u.job.do === 'escort' ? { role: roleOf(u.job), with: u.job.on } : {}),
+        // A raid on troops: a group on its passes flies them low ('strafe'), and 'run' is how far down this pass it is.
+        ...(u.job.do === 'strafe' ? { strike: 'strafe', run: Math.round((this.strafing.get(u.id)?.p ?? 0) * 1000) / 1000, passes: this.strafing.get(u.id)?.done ?? 0 } : {}),
         ...(q !== undefined ? { quarry: q } : {}),
+        ...(pass ? { pass } : {}),
         skill: this.skill.get(u.id) ?? SKY.pilots.base,
         ...(u.def ? { def: u.def } : {}),
         ...(u.side === 'att' && u.fuel0 < SKY.fuel.home ? { fuel: Math.round(clamp01(u.fuel / Math.max(1, u.fuel0)) * 1000) / 1000 } : {}),
@@ -1569,6 +1888,8 @@ export class AirSim implements BattleSim<AirUnit> {
     const fighting = this.units.some((u) => flying(u) && u.contacts.length > 0);
     const done = (u: AirUnit): boolean => off(u) || u.job.do === 'home' || u.state === 'routing' || (u.air === 'bmr' && (u.dropped > 0 || u.jettisoned));
     const bombers = att.filter((u) => u.air === 'bmr');
+    // (A raid on troops is not over while its fighters are still going down on them.)
+    if (this.troops && att.some((u) => !off(u) && u.job.do === 'strafe')) return false;
     return !fighting && (bombers.length ? bombers.every(done) : att.every(done));
   }
 
@@ -1596,13 +1917,15 @@ export class AirSim implements BattleSim<AirUnit> {
         if (c.side !== by) return false;
         this.gaveUp = by;
         for (const u of this.units) if (u.side === by && !off(u)) this.goHome(u);
+        this.keptUp(this.units.filter((u) => u.side === by));
         this.end(0);
         return true;
       }
-      case 'withdraw': { const us = mine(c.units); us.forEach((u) => this.goHome(u)); return us.length > 0; }
+      case 'withdraw': { const us = mine(c.units); us.forEach((u) => this.goHome(u)); this.keptUp(us); return us.length > 0; }
       case 'move': case 'hold': {
         const us = fighters(c.units);
         for (const u of us) u.job = c.do === 'move' ? { do: 'patrol', x: c.x, y: c.y } : { do: 'patrol', x: u.x, y: u.y };
+        this.keptUp(us);
         return us.length > 0;
       }
       case 'attack': {
@@ -1610,6 +1933,8 @@ export class AirSim implements BattleSim<AirUnit> {
         if (!e || e.side === by || !flying(e)) return false;
         const us = fighters(c.units);
         for (const u of us) u.job = { do: 'intercept', on: e.id };
+        this.keptUp(us);
+        this.aimAll();
         return us.length > 0;
       }
       case 'air:escort': {
@@ -1617,15 +1942,39 @@ export class AirSim implements BattleSim<AirUnit> {
         if (!b || b.side !== by || b.air !== 'bmr' || off(b)) return false;
         const us = fighters(c.units);
         for (const u of us) { u.job = { do: 'escort', on: b.id, close: c.close !== false }; u.to = c.close !== false ? b.band : u.to; }
+        this.keptUp(us);
         return us.length > 0;
       }
-      case 'air:hunt': { const us = fighters(c.units); us.forEach((u) => { u.job = { do: 'hunt' }; }); return us.length > 0; }
+      case 'air:hunt': { const us = fighters(c.units); us.forEach((u) => { u.job = { do: 'hunt' }; }); this.keptUp(us); return us.length > 0; }
+      // A raid on troops (release 2): send fighters down on the troops now, or ({ hold: true }) keep them up with the
+      // bombers, so that they never go down on their own. Nothing else is offered: the campaign books the troops by
+      // the bombers that drop and the fighters that strafe, not by which part of the column is hit.
+      case 'air:strafe': {
+        if (!this.troops) return false;
+        const us = fighters(c.units).filter((u) => u.side === 'att' && u.job.do !== 'home' && !this.strafing.get(u.id)?.over);
+        if (c.hold === true) {
+          for (const u of us) {
+            this.keepUp.add(u.id);
+            if (u.job.do !== 'strafe') continue;
+            const box = this.units.filter((b) => b.side === 'att' && b.air === 'bmr' && !off(b) && !away(b)).sort((a, b) => dist(u.x, u.y, a.x, a.y) - dist(u.x, u.y, b.x, b.y) || a.id - b.id)[0];
+            u.job = box ? { do: 'escort', on: box.id, close: true } : { do: 'patrol', x: SKY.target.x, y: SKY.target.y };
+            u.to = box ? box.band : 1;
+          }
+          return us.length > 0;
+        }
+        for (const u of us) { this.keepUp.delete(u.id); this.goDown(u, u.job.do === 'escort' ? u.job.on : this.strafing.get(u.id)?.box ?? null); }
+        return us.length > 0;
+      }
       case 'air:band': {
         const b = Number(c.band);
         if (b !== 0 && b !== 1 && b !== 2) return false;
         const us = mine(c.units).filter((u) => u.job.do !== 'wait');
-        // The player's own height order is priced as always, so it ends a staff's climb.
-        us.forEach((u) => { u.to = b as Band; u.climbT = 0; u.rise = false; });
+        // The player's own height order is priced as always, so it ends a staff's climb. Above the low band it takes a
+        // group off its passes on the troops.
+        us.forEach((u) => {
+          if (u.job.do === 'strafe' && b > 0) { u.job = { do: 'patrol', x: u.x, y: u.y }; this.keptUp([u]); }
+          u.to = b as Band; u.climbT = 0; u.rise = false;
+        });
         return us.length > 0;
       }
       case 'air:jettison': {
@@ -1635,6 +1984,11 @@ export class AirSim implements BattleSim<AirUnit> {
       }
       default: return false;
     }
+  }
+
+  /** A raid on troops: the raid's fighters given another order no longer go down on their own. */
+  private keptUp(us: AirUnit[]): void {
+    if (this.troops) for (const u of us) if (u.side === 'att') this.keepUp.add(u.id);
   }
 
   private goHome(u: AirUnit): void {
@@ -1654,12 +2008,12 @@ export class AirSim implements BattleSim<AirUnit> {
    * The view, with land's two army bars in land's shape: breaking (how near each side is to breaking off, 0 to 1; it
    * breaks at 1) and contact (battle seconds of the first contact, null before it), so the 3D top bar reads both alike.
    */
-  view(as?: Side): BattleView<AirUnit> & { breaking: Record<Side, number>; contact: number | null; ships?: ReturnType<ShipBook['view']> } {
+  view(as?: Side): BattleView<AirUnit> & { breaking: Record<Side, number>; contact: number | null; ships?: ReturnType<ShipBook['view']>; marks?: ReturnType<TroopBook['view']> } {
     const units = this.units.map((u) => ({ ...u, spotted: { att: this.sees('att', u), def: this.sees('def', u) } }))
       .filter((u) => !as || u.side === as || u.spotted[as]);
     const events = this.events;
     this.events = [];
-    return { t: this.t, limit: this.ticket.limit, units, balance: this.balance(), events, zones: this.zones, ai: { ...this.ai }, over: this.over, breaking: { att: this.nearBreak('att'), def: this.nearBreak('def') }, contact: this.metAt, ...(this.sea ? { ships: this.sea.view() } : {}) };
+    return { t: this.t, limit: this.ticket.limit, units, balance: this.balance(), events, zones: this.zones, ai: { ...this.ai }, over: this.over, breaking: { att: this.nearBreak('att'), def: this.nearBreak('def') }, contact: this.metAt, ...(this.sea ? { ships: this.sea.view() } : {}), ...(this.troops ? { marks: this.troops.view() } : {}) };
   }
 
   /** Every event so far, for the after-action card and replays. */
@@ -1701,7 +2055,20 @@ export class AirSim implements BattleSim<AirUnit> {
       }
     }
     for (const b of live) if (b.air === 'bmr' && b.side === 'att' && inPlay(b)) out.bmr += b.n * this.place.gunLoss * SKY.flak.band[b.band] * this.flakNorm * (1 - b.shot);
+    // A raid on troops: the ground fire still to come on the passes the raid's fighters have yet to fly.
+    if (this.troops) for (const u of live) out.ftr += this.fireEach * this.passesAhead(u);
     return out;
+  }
+
+  /**
+   * A raid on troops: the fighters a group is still expected to put on the troops, as passes' shares of it (its
+   * fighters now, as the campaign weighs them, times the passes left over the passes a group flies): those of a group on
+   * its passes, or of an escort that will go down once its bombers have bombed; none for one held up, gone home or done.
+   */
+  private passesAhead(u: AirUnit): number {
+    if (!this.willStrafe(u)) return 0;
+    const s = this.strafing.get(u.id), S = TROOPS.strafe;
+    return (u.n * reachOf(u) * (S.passes - (s?.done ?? 0) - (s?.run ? s.p : 0))) / S.passes;
   }
 
   /**
@@ -1741,6 +2108,16 @@ export class AirSim implements BattleSim<AirUnit> {
     return done + Math.max(0, coming - bmrToCome);
   }
 
+  /** A raid on troops: the fighters that have strafed, and those still expected to on the passes not yet completed. */
+  private strafedExpected(): number {
+    let n = this.strafed;
+    for (const u of this.units) {
+      const ahead = this.passesAhead(u), s = this.strafing.get(u.id);
+      n += ahead + (s?.run ? (u.n * reachOf(u) * s.p) / TROOPS.strafe.passes : 0) * (ahead > 0 ? 1 : 0);
+    }
+    return n;
+  }
+
   /** The bombers that have dropped on the target so far. */
   droppedNow(): number {
     return this.units.filter((u) => u.side === 'att' && u.air === 'bmr').reduce((t, u) => t + u.dropped, 0);
@@ -1775,6 +2152,7 @@ export class AirSim implements BattleSim<AirUnit> {
     const dropped = this.droppedNow();
     const worth = this.place.mission === 'superiority' ? 0
       : this.sea ? this.sea.value()
+      : this.troops ? this.troops.value(dropped, this.strafed)
       : L ? bombWorth(L, dropped) + 300 * ((this.railCut ? 1 : 0) + (this.ruined ? 1 : 0))
       : this.through0 > 0 ? R.value * Math.min(1.5, dropped / this.through0) : 0;
     const up = (s: Side): number => this.units.filter((u) => u.side === s && u.air === 'ftr' && flying(u)).reduce((t, u) => t + u.n, 0);
@@ -1809,6 +2187,9 @@ export class AirSim implements BattleSim<AirUnit> {
       pr = Math.min(1, R.rail * share); pf = Math.min(1, R.ruin * share); value = R.value * share;
       // A strike on ships: what has gone down already, and the card's worth for the bombers still to drop.
       if (this.sea) value = this.sea.value() + (this.through0 > 0 ? R.value * Math.min(1.5, Math.max(0, this.throughNow(bmrToCome) - this.droppedNow()) / this.through0) : 0);
+      // A raid on troops, by the campaign's own law: the bombers that have dropped and are still expected to, and the
+      // fighters that have strafed and are still expected to.
+      if (this.troops) value = this.troops.value(Math.max(this.droppedNow(), this.throughNow(bmrToCome)), this.strafedExpected());
     }
     const beats = (worth: number): number => { const x = Math.pow((foe + worth + 10) / (ftr + bmr + 10), R.k); return x / (1 + x); };
     return (1 - pr) * (1 - pf) * beats(value) + pr * (1 - pf) * beats(value + 300) + (1 - pr) * pf * beats(value + 300) + pr * pf * beats(value + 600);
@@ -1845,6 +2226,10 @@ export class AirSim implements BattleSim<AirUnit> {
       ...(this.sea ? { sunk: this.sea.sunk() } : {}),
       // Ruling 240: with damage control in play, the ships it kept afloat on the same throws (ships.ts kept()).
       ...(this.sea?.kept() ? { kept: this.sea.kept()! } : {}),
+      // A raid on troops: the fighters that strafed, and the organisation cut the field earned by the campaign's own law
+      // from them and the bombers that dropped. Fought to the end, the campaign books the cut from these same counts.
+      ...(this.troops ? { strafed: this.strafed, troops: { cut: troopCutOf(this.troops.law, att.reduce((s, u) => s + u.dropped, 0), this.strafed) } } : {}),
+      ...(this.troops?.law.reach ? { strafers: [...this.firedOn].sort((x, y) => x - y), strafeFire: this.fireOwed } : {}),
       ...(this.place.bombs ? { rolls: this.staff ? { ...(this.railCut ? { rail: 0 } : {}), ...(this.ruined ? { ruin: 0 } : {}) } : { ...this.rolls }, railCut: this.railCut, ruined: this.ruined } : {}),
     };
   }
@@ -1909,3 +2294,43 @@ export class AirSim implements BattleSim<AirUnit> {
 
 /** A battle from a ticket. */
 export const airBattle = (t: FieldTicket<AirPlace>, opts?: { show?: boolean; look?: number }): AirSim => new AirSim(t, opts);
+
+/**
+ * The lane a raid's fighters strafe down (a raid on troops): through the middle of the pieces on the ground, along the
+ * column's road where it marches, otherwise along the way the pieces lie longest (a camp's spread, a line of works).
+ * Laid from the pieces alone: no throw.
+ */
+function laneOf(pieces: { x: number; y: number }[], road: [number, number][] | null): { x: number; y: number; dx: number; dy: number } {
+  const T = SKY.target;
+  const n = pieces.length;
+  const x = n ? pieces.reduce((s, p) => s + p.x, 0) / n : T.x, y = n ? pieces.reduce((s, p) => s + p.y, 0) / n : T.y;
+  let dx = 0, dy = 1;
+  if (road && road.length > 1) { dx = road[road.length - 1][0] - road[0][0]; dy = road[road.length - 1][1] - road[0][1]; }
+  else if (n > 1) {
+    // The long axis of the pieces' spread.
+    let sxx = 0, syy = 0, sxy = 0;
+    for (const p of pieces) { sxx += (p.x - x) ** 2; syy += (p.y - y) ** 2; sxy += (p.x - x) * (p.y - y); }
+    const th = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+    if (sxx + syy > 0) { dx = Math.cos(th); dy = Math.sin(th); }
+  }
+  const d = Math.hypot(dx, dy) || 1;
+  return { x, y, dx: dx / d, dy: dy / d };
+}
+
+/** What each kind of piece is called in a dispatch. */
+const MARK_WORDS: Record<string, string> = {
+  men: 'infantry', wagon: 'horse-drawn wagons', lorry: 'lorries', halftrack: 'half-tracks', car: 'staff cars', gun: 'field guns', aa: 'anti-aircraft guns', tank: 'tanks',
+};
+
+/**
+ * The line for the biggest hit of a bomb pattern or a strafing pass, in plain words ("Bombs burst among the lorries:
+ * several are burning."); 'your' where the troops are the player's own.
+ */
+function markWords(x: MarkNews, what: MarkWhat, own: boolean): string {
+  const them = `${own ? 'your' : 'the'} ${MARK_WORDS[what] ?? 'troops'}`;
+  const first = x.strike === 'strafe' ? `Fighters rake ${them} with gunfire` : `Bombs burst among ${them}`;
+  const how = what === 'men'
+    ? (x.how === 'blast' ? 'many are hit' : 'the men scatter for cover')
+    : `${Math.round(x.men / (TROOPS.worth[what] ?? 1)) <= 1 ? 'one is' : 'several are'} ${x.how === 'burn' ? 'burning' : x.how === 'blast' ? 'thrown over' : 'knocked out'}`;
+  return `${first}: ${how}.`;
+}

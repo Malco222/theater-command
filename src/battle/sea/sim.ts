@@ -41,6 +41,16 @@ const BIG_GUNS = new Set<string>(['bb', 'ca']);
 const ARRIVE = 200;
 /** How far inside the field's edge a carrier keeps when it turns away from a battle line or takes its station (metres). */
 const EDGE_MARGIN = 1200;
+/** Where on each of a piece's ships the own-water rule looks whether a salvo's heads are past her, as shares of her length
+ *  from her middle: her bow, her middle and her stern (notPast). */
+const HULL = [-0.5, 0, 0.5];
+/** Where a salvo fired now at a ship at (x, y) on heading 'face' with way 'way' is aimed: where she will be when it lands. */
+const aimAt = (x: number, y: number, face: number, way: number): [number, number] => {
+  const F = SEA.field.size, ahead = way * SEA.torp.travel;
+  return [Math.round(clamp(x + Math.sin(face) * ahead, 2, F - 2)), Math.round(clamp(y + Math.cos(face) * ahead, 2, F - 2))];
+};
+/** A piece's ships ([x, y, heading] each: hullsOf) and its way, as they were when the tick's steering began (own water). */
+type Pose = { hulls: [number, number, number][]; way: number };
 /** Whether 'u' lies ahead of 'e's beam: it bears less than 90 degrees off her heading, so her own way carries her toward it. */
 const aheadOfBeam = (e: SeaUnit, u: SeaUnit): boolean => Math.abs(turn(e.face, bearing(e.x, e.y, u.x, u.y))) < Math.PI / 2;
 
@@ -86,8 +96,9 @@ interface Run { target: number; phase: 'in' | 'away'; until: number; away: numbe
  * not yet earned (loaded), owed by its side when it lands. 'dir' is the tracks' bearing, from the launcher's place at
  * the launch to the aim point (taken then, before the launcher turns away), and 't0' the tick it was launched (the battle
  * second of that tick): what the ships it runs at comb by (combing; the ship plan's R6). Neither is a number to tune, nor a look field.
+ * 'x0', 'y0': the launcher's place at the launch, where the tracks start (release 2's own water: ownWater).
  */
-interface Torp { at: number; side: Side; target: number; x: number; y: number; weight: number; from: number; drawn: number; dir: number; t0: number }
+interface Torp { at: number; side: Side; target: number; x: number; y: number; weight: number; from: number; drawn: number; dir: number; t0: number; x0: number; y0: number }
 /**
  * A side's battle line (the ship plan's R1, ruling 239's order at 23:20Z): its battleships and cruisers steaming one
  * course together, its rows as they drew up turned into columns in line ahead. 'hand' is the side of its bearing to
@@ -250,6 +261,30 @@ export class SeaSim implements BattleSim<SeaUnit> {
    */
   private readonly r6Step: number = 1;
   /**
+   * Release 2's own water (Brian, 25 November 12:52Z: "the friendly ships would pass though right in front of
+   * torpedoes. have more awareness to avoid friendly fire"; naval-battles/own-water-r2/form.md): captains mind their own
+   * side's torpedoes. A destroyer holds its salvo while one of its own ships would be in the tracks' way (clearAim), and
+   * every ship with way on keeps out of the water ahead of its own side's running salvoes (keepClear). On only with the
+   * ticket's ownWater (the campaign's switch, ticket.ts ownWaterOn); off, nothing below reads or writes anything.
+   */
+  private readonly ownWater: boolean;
+  /** The own-side salvo each ship keeps clear of, by her id (keepClear): held until its heads are past her or it lands. */
+  private readonly clearing = new Map<number, Torp>();
+  /** The pieces holding their salvo for a ship of their own in the way, by id: that ship's piece and the second it was
+   *  last found there (clearAim; the marks, and the look field heldFor). */
+  private readonly holding = new Map<number, { by: number; t: number }>();
+  /** The ships whose course keeping clear of an own salvo set this tick (keepClear; the look fields). */
+  private readonly clearSteered = new Set<number>();
+  /** The course each ship took up keeping clear of a salvo while others ran beside it, held while no own salvo's heads
+   *  would cross her on it (clearAway). */
+  private readonly clearHeading = new Map<number, number>();
+  /** Every piece's ships and way as the tick's steering began, while the pieces steer (clearAim), else null. */
+  private poses: Map<number, Pose> | null = null;
+  /** Ships turning back to their helm's course after keeping clear, until they are on it (crossed reads the line's). */
+  private readonly clearBack = new Set<number>();
+  /** Each piece's wake (own water: hullsOf): the places her leader has passed, newest first, one every length of hers. */
+  private readonly trail = new Map<number, [number, number][]>();
+  /**
    * R6 item (2), how a ship that combed regains her place (the design director, 19:03Z; naval-battles/r6/regain-form.md,
    * on the historian's record, historian/regain-station-record-1122.md). A build switch, as r6Step is: a private readonly
    * set by nothing, so no datum, ticket, flag or look field can move it. Off, no place is kept and the line helm is
@@ -379,6 +414,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     this.weight0.def += this.airLeft.def;
     for (const f of ticket.place.fleets) { this.fleetLoss.sunk[f.id] = none(); this.fleetLoss.burnt[f.id] = none(); this.fleetLoss.abandoned[f.id] = none(); }
     this.sail = ticket.place.sailors;
+    this.ownWater = ticket.place.ownWater === true;
     this.caps = sunkCaps(ticket.place.fleets, ticket.reckoning.odds);
     this.plainCaps = sunkCaps(ticket.place.fleets, ticket.reckoning.odds, true);
     this.ai = { att: !ticket.att.human, def: !ticket.def.human };
@@ -701,7 +737,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const tick = Math.round(this.t / DT);
     this.planLines();
     this.planRings();
+    if (this.ownWater) this.poses = new Map(this.units.filter(live).map((u) => [u.id, { hulls: this.hullsOf(u), way: u.extra.way }]));
     for (const u of this.units) if (live(u)) this.steer(u);
+    this.poses = null;
     this.combReach();
     if (tick % 10 === 0) { this.sample(); this.watchCarriers(); this.decide(); }
     this.handOwes();
@@ -1029,10 +1067,32 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // is already a turn away and stands; the field's edge, below, still wins.
       if (comb) { bare = want; want = combTo = this.combCourse(u, comb); foeId = -1; }
     }
+    // Her own side's tracks (release 2's own water): a ship with way on that the heads of one of her side's running
+    // salvoes would pass through keeps out of its water until they are past her, whatever she is doing: fighting, on a
+    // run, breaking off, sent somewhere by the player (the 1944 War Instructions: station rules "are not construed to
+    // prevent maneuvers to avoid torpedoes"). A comb of an enemy salvo (above) stands, and the field's edge (below) wins.
+    // Not while she combs an enemy salvo, nor while a carrier group turns away from a battle line (its own turn away, kept
+    // apart from her sisters, stands, as for the comb; the salvo she kept clear of is kept for after). A line ship keeping
+    // clear keeps her place in her line and works back to it after, as from a comb (holdPlace; R6 item 2).
+    const steered0 = this.clearSteered.has(u.id);
+    if (this.ownWater) {
+      const had = this.clearing.has(u.id);
+      const clear = comb || this.away[u.id] ? this.stopClear(u) : this.keepClear(u, u.state === 'routing' || o.kind === 'leave');
+      if (clear !== null) { want = clear; foeId = -1; this.clearSteered.add(u.id); } else this.clearSteered.delete(u.id);
+      const has = this.clearing.has(u.id);
+      if (!had && has) this.holdPlace(u); else if (had && !has && this.place.has(u.id)) this.regaining.add(u.id);
+    }
     // Stay on the field unless leaving it.
     if (u.state !== 'routing' && o.kind !== 'leave') {
       const m = 800;
       if (u.x < m || u.x > F.size - m || u.y < m || u.y > F.size - m) { want = bare = bearing(u.x, u.y, F.size / 2, F.size / 2); foeId = -1; edge = true; }
+    }
+    // A keep-clear the edge overrides did not set her course (as for the comb: combSteered). One just ended leaves her
+    // turning back to her helm's course: the crossed-T test reads her line's course until she is on it (clearBack).
+    if (edge) this.clearSteered.delete(u.id);
+    if (this.ownWater) {
+      if (this.clearSteered.has(u.id) || edge) this.clearBack.delete(u.id);
+      else if (steered0) this.clearBack.add(u.id);
     }
     // A comb the edge overrides is still held until its salvo lands, but did not set her course: the event tells the
     // course she steers, and the crossed-T test reads her own heading (crossed).
@@ -1049,9 +1109,14 @@ export class SeaSim implements BattleSim<SeaUnit> {
     u.face = norm(u.face + swing);
     u.x += Math.sin(u.face) * u.extra.way * DT;
     u.y += Math.cos(u.face) * u.extra.way * DT;
+    if (this.ownWater) {
+      this.lay(u);
+      if (this.clearBack.has(u.id) && Math.abs(turn(u.face, want)) < 1e-9) this.clearBack.delete(u.id);
+    }
     // Out by its own edge: gone home, to fight another day.
     if ((u.state === 'routing' || o.kind === 'leave') && (u.side === 'att' ? u.y < 300 : u.y > F.size - 300)) {
       u.state = 'withdrawn';
+      this.clearing.delete(u.id); this.clearSteered.delete(u.id); this.clearHeading.delete(u.id); this.holding.delete(u.id); this.clearBack.delete(u.id);
       this.say({ what: 'withdrawn', unit: u.id, side: u.side, text: `${this.told(u, true)} ${this.many(u) ? 'have broken off and make' : 'has broken off and makes'} for port.` });
     }
   }
@@ -1181,7 +1246,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
     // a comb neither trips it nor clears it (the design director, 05:17Z; without this, the prototype's line on p0 turned
     // away together about once a battle where none did before). Only while the comb sets her course: where the field's
     // edge overrides it she steers the edge's course, and that is read as any other (combSteered).
-    const gf = this.combSteered.has(g.id) ? L.course : g.face;
+    // So too while she keeps clear of her own side's tracks, and turns back after (release 2's own water: clearSteered,
+    // clearBack).
+    const gf = this.combSteered.has(g.id) || this.clearSteered.has(g.id) || this.clearBack.has(g.id) ? L.course : g.face;
     if (!broadside || Math.abs(turn(gf, bearing(g.x, g.y, ex, ey))) >= N.crossed) return 0;
     const foes = this.lineFoes(side);
     const off = (h: number): number => Math.abs(turn(this.lineCourse(ours, foes, h), them.course));
@@ -1581,6 +1648,228 @@ export class SeaSim implements BattleSim<SeaUnit> {
     return Math.hypot(x, y) < 1e-9 ? home : Math.atan2(x, y);
   }
 
+  // ---- Her own side's tracks (release 2's own water) -----------------------------------------------------------------
+
+  /** Where a salvo fired at a ship now is aimed: where she will be by the time it lands, on her course and way (launch). */
+  private aimOf(foe: SeaUnit): [number, number] {
+    return aimAt(foe.x, foe.y, foe.face, foe.extra.way);
+  }
+
+  /**
+   * When the heads of a salvo would pass through a ship on her present course and way: the seconds from now, or null if
+   * they never do (release 2's own water). The salvo runs from the tubes (x0, y0) to its aim point (x, y) in torp.travel
+   * seconds from t0, its tracks spreading as they go: its water is the fan from the tubes, where it is as narrow as
+   * the tubes, there as wide as the launcher's beam (tubes: half of it), to torp.radius either side of the aim point more
+   * (the zone the 3D game draws there). The piece is her ships as the 3D game lays them (hullsOf), each the whole of her
+   * from stern to bow, widened by half her beam, going on as she goes now (or on course 'face', for a course she might
+   * take: clearAway). The heads pass through her if some point of a hull is in the fan at the moment they come level with
+   * it, before they reach the aim point: for a point k of her length from her middle, where it lies along and across the
+   * tracks, when the heads reach it and where it then is are each straight-line in k, so the points that are met make one
+   * stretch of her, found exactly, and the soonest of them is at one of its ends. 'pose', her ships and way as the tick
+   * began (clearAim's, so that what a launcher reads does not hang on the order the pieces steer in). Geometry of the
+   * field's own numbers only: no new number, no dice.
+   */
+  private meets(u: SeaUnit, x0: number, y0: number, x: number, y: number, t0: number, tubes: number, face?: number, pose?: Pose): number | null {
+    const L = dist(x0, y0, x, y), T = SEA.torp.travel;
+    if (L < 1) return null;
+    const ux = (x - x0) / L, uy = (y - y0) / L, V = L / T, R = SEA.torp.radius;
+    const h = V * Math.max(0, this.t - t0), left = T - Math.max(0, this.t - t0);
+    const len = SEA.classes[u.extra.cls as SeaClass].len, beam = tubes + u.w / 2, way = pose ? pose.way : u.extra.way;
+    let best: number | null = null;
+    for (const [hx, hy, hf] of pose ? pose.hulls : this.hullsOf(u)) {
+      const hv = face ?? hf, vx = Math.sin(hv) * way, vy = Math.cos(hv) * way;
+      const va = vx * ux + vy * uy, vb = vx * uy - vy * ux, W = V - va;
+      if (W <= 1e-9) continue;
+      // Each as [at her middle, per length of her toward her bow].
+      const sx = Math.sin(hf) * len, sy = Math.cos(hf) * len;
+      const a0 = [(hx - x0) * ux + (hy - y0) * uy, sx * ux + sy * uy], b0 = [(hx - x0) * uy - (hy - y0) * ux, sx * uy - sy * ux];
+      const tau = [(a0[0] - h) / W, a0[1] / W];
+      const a = [a0[0] + va * tau[0], a0[1] + va * tau[1]], b = [b0[0] + vb * tau[0], b0[1] + vb * tau[1]];
+      const room = [(R * a[0]) / L + beam, (R * a[1]) / L];
+      // Every bound as f0 + f1 k <= 0: the heads yet to reach her, before the salvo lands, short of the aim point, inside
+      // the fan either side.
+      let lo = -0.5, hi = 0.5;
+      for (const [f0, f1] of [[-tau[0], -tau[1]], [tau[0] - left, tau[1]], [a[0] - L, a[1]], [b[0] - room[0], b[1] - room[1]], [-b[0] - room[0], -b[1] - room[1]]]) {
+        if (Math.abs(f1) < 1e-12) { if (f0 > 0) { lo = 1; break; } continue; }
+        if (f1 > 0) hi = Math.min(hi, -f0 / f1); else lo = Math.max(lo, -f0 / f1);
+      }
+      if (lo > hi) continue;
+      const soonest = Math.max(0, Math.min(tau[0] + tau[1] * lo, tau[0] + tau[1] * hi));
+      if (best === null || soonest < best) best = soonest;
+    }
+    return best;
+  }
+
+  /**
+   * Where a destroyer piece's salvo at a ship would be aimed, if she may launch it now, else null (release 2's own water;
+   * with it off, always where launch has always aimed: aimOf). Held when another ship of her side afloat, with her way as
+   * it is, would be in the tracks' way when the heads come level with her (meets, from the tubes now to the aim point).
+   * While the pieces steer, every ship, the target too, is read as the tick began (poses), so what a launcher reads does
+   * not hang on the order the pieces steer in, nor on which side steers first. Held, she runs on as before and launches
+   * the first second it is clear: a piece on a run keeps closing at flank (runCourse), a screen piece looks again each
+   * second (startRuns). The crews' rule in the record: a ship of one's own in the line of fire fouled the range, and the
+   * tubes waited.
+   */
+  private clearAim(u: SeaUnit, foe: SeaUnit): [number, number] | null {
+    if (!this.ownWater) return this.aimOf(foe);
+    const pf = this.poses?.get(foe.id);
+    const [x, y] = pf ? aimAt(pf.hulls[0][0], pf.hulls[0][1], pf.hulls[0][2], pf.way) : this.aimOf(foe);
+    // (The ship in the way, for the look field only: the one the heads would reach soonest, then the nearer the tubes.)
+    let by: SeaUnit | null = null, bt = Infinity, bd = Infinity;
+    for (const f of this.units) {
+      if (f === u || f.side !== u.side || !live(f)) continue;
+      const pose = this.poses?.get(f.id);
+      const tau = this.meets(f, u.x, u.y, x, y, this.t, u.w / 2, undefined, pose);
+      if (tau === null) continue;
+      const d = pose ? dist(u.x, u.y, pose.hulls[0][0], pose.hulls[0][1]) : dist(u.x, u.y, f.x, f.y);
+      if (tau < bt - 1e-9 || (Math.abs(tau - bt) <= 1e-9 && d < bd)) { by = f; bt = tau; bd = d; }
+    }
+    if (!by) { this.holding.delete(u.id); return [x, y]; }
+    // (A new hold, unless she was held at her last look: each tick on a run, each second on the screen.)
+    const was = this.holding.get(u.id);
+    if (!was || was.t < this.t - 1 - 1e-6) this.mark(`${u.side}:torpHeld`, 1);
+    this.holding.set(u.id, { by: by.id, t: this.t });
+    this.mark(`${u.side}:torpHeld:s`, this.runs.has(u.id) ? DT : 1);
+    return null;
+  }
+
+  /**
+   * The course a ship steers this tick to keep out of her own side's torpedo water, or null (release 2's own water). WHO:
+   * every ship with way on, of every class, whatever she is doing, from the tick after a salvo's launch (seen by every
+   * ship at once, as an enemy salvo is: runningAt), for any salvo of her side but her own whose heads would pass through
+   * her (meets). WHICH: the one she kept clear of last tick, while its heads are not yet past her; else the one they would
+   * reach soonest, then the one needing the smaller turn, then to starboard (as combSooner), never by unit id. HOW: square
+   * off its tracks on the side of them she lies (clearCourse), at her own speed, unless that would carry her into another
+   * own salvo's water (clearAway), until its heads are past every point of her column or it lands; then her helm as
+   * before. Marks only: turns begun and seconds held.
+   */
+  private keepClear(u: SeaUnit, out: boolean): number | null {
+    if (u.extra.way <= 0) { this.clearing.delete(u.id); this.clearHeading.delete(u.id); return null; }
+    const held = this.clearing.get(u.id);
+    if (held && held.at > this.t && this.notPast(u, held)) { this.mark(`${u.side}:clear:s`, DT); return this.clearAway(u, held, out); }
+    let best: Torp | null = null, bt = Infinity;
+    for (const s of this.torps) {
+      if (s.side !== u.side || s.from === u.id || s.weight <= 0 || s.t0 >= this.t || s.at <= this.t) continue;
+      const tau = this.meets(u, s.x0, s.y0, s.x, s.y, s.t0, (this.byId.get(s.from)?.w ?? 0) / 2);
+      if (tau === null) continue;
+      if (!best || tau < bt - 1e-9 || (Math.abs(tau - bt) <= 1e-9 && this.clearSooner(u, s, best))) { best = s; bt = tau; }
+    }
+    if (!best) { this.clearing.delete(u.id); this.clearHeading.delete(u.id); return null; }
+    if (best !== held) { this.mark(`${u.side}:clear`, 1); this.mark(`${u.side}:clear>${u.extra.cls}`, 1); this.clearHeading.delete(u.id); }
+    this.clearing.set(u.id, best);
+    this.mark(`${u.side}:clear:s`, DT);
+    return this.clearAway(u, best, out);
+  }
+
+  /**
+   * The course a ship keeping clear of salvo 's' steers (keepClear): square off its tracks on the side of them she lies
+   * (clearCourse), unless the heads of some other running salvo of her side would then cross her (two salvoes running
+   * side by side, she between them); then, in turn, along its tracks, square off on the other side, back up its tracks:
+   * the first of these that no own salvo's heads would cross, as she lies now at her own speed (meets, on that course).
+   * Once on one she holds it while none would cross her on it (a captain steadies on a clear course), judged again each
+   * tick as she swings: held while it has gone foul, the heads crossed her more often than a helm that sometimes goes
+   * from one hand to the other. A ship breaking off takes none that would carry her out over the field's side, as
+   * breakOffCourse never does. If every one is crossed,
+   * square off on her side, as with one salvo. The order is the field's own geometry, never a unit id (b402).
+   */
+  private clearAway(u: SeaUnit, s: Torp, out: boolean): number {
+    const side = this.clearCourse(u, s), F = SEA.field.size, m = 800;
+    const offSide = (c: number): boolean => out && ((u.x < m && Math.sin(c) < -1e-9) || (u.x > F - m && Math.sin(c) > 1e-9));
+    const ways = [side, norm(s.dir), norm(side + Math.PI), norm(s.dir + Math.PI)].filter((c) => !offSide(c));
+    const first = ways.length ? ways[0] : side;
+    const running = this.torps.filter((o) => o.side === u.side && o.from !== u.id && o.weight > 0 && o.t0 < this.t && o.at > this.t && this.notPast(u, o));
+    if (running.length < 2) { this.clearHeading.delete(u.id); return first; }
+    const clear = (c: number): boolean => running.every((o) => this.meets(u, o.x0, o.y0, o.x, o.y, o.t0, (this.byId.get(o.from)?.w ?? 0) / 2, c) === null);
+    const was = this.clearHeading.get(u.id);
+    if (was !== undefined && !offSide(was) && clear(was)) return was;
+    for (const c of ways) {
+      if (clear(c)) { this.clearHeading.set(u.id, c); return c; }
+    }
+    this.clearHeading.delete(u.id);
+    return first;
+  }
+
+  /** Keeps clear of nothing this tick (she combs, or her carrier group turns away): the course is let go, the salvo kept,
+   *  so that taking it up again after is no new turn. */
+  private stopClear(u: SeaUnit): null {
+    this.clearHeading.delete(u.id);
+    return null;
+  }
+
+  /** Whether a salvo's heads have yet to come level with some point of one of a piece's ships (keepClear). */
+  private notPast(u: SeaUnit, s: Torp): boolean {
+    const L = dist(s.x0, s.y0, s.x, s.y);
+    if (L < 1) return false;
+    const ux = (s.x - s.x0) / L, uy = (s.y - s.y0) / L, h = (L * Math.max(0, this.t - s.t0)) / SEA.torp.travel;
+    const len = SEA.classes[u.extra.cls as SeaClass].len;
+    return this.hullsOf(u).some(([hx, hy, hf]) => HULL.some((k) => {
+      const a = (hx + Math.sin(hf) * k * len - s.x0) * ux + (hy + Math.cos(hf) * k * len - s.y0) * uy;
+      return a >= h && a <= L;
+    }));
+  }
+
+  /**
+   * A piece's ships where the 3D game lays them (own water; SeaShow.cpp's columns): her leader at the piece's place on
+   * its heading, the rest of her ships afloat astern of him along the way he came, as far apart as the piece's length
+   * gives (pieces.ts: three lengths), each heading along her own stretch of it; where the wake runs out, straight on
+   * astern. Each as [x, y, heading].
+   */
+  private hullsOf(u: SeaUnit): [number, number, number][] {
+    const len = SEA.classes[u.extra.cls as SeaClass].len, N = u.extra.ships0;
+    const gap = N > 1 && u.d > len ? (u.d - len) / (N - 1) : 3 * len;
+    const out: [number, number, number][] = [[u.x, u.y, u.face]];
+    const wake = this.trail.get(u.id) ?? [];
+    let px = u.x, py = u.y, back = 0, i = 0, dir = u.face;
+    for (let k = 1; k < u.extra.ships; k++) {
+      const want = k * gap;
+      for (;;) {
+        if (i < wake.length) {
+          const [qx, qy] = wake[i], seg = dist(px, py, qx, qy);
+          if (seg > 1e-6) dir = bearing(qx, qy, px, py);
+          if (back + seg >= want) { const f = (want - back) / Math.max(seg, 1e-6); out.push([px + (qx - px) * f, py + (qy - py) * f, dir]); break; }
+          back += seg; px = qx; py = qy; i++;
+        } else {
+          out.push([px - Math.sin(dir) * (want - back), py - Math.cos(dir) * (want - back), dir]);
+          break;
+        }
+      }
+    }
+    return out;
+  }
+
+  /** Lays a point of a piece's wake once she has run a length of hers from the last, and lets go what lies further astern
+   *  than her rearmost ship (hullsOf). */
+  private lay(u: SeaUnit): void {
+    const len = SEA.classes[u.extra.cls as SeaClass].len;
+    let wake = this.trail.get(u.id);
+    if (!wake) { wake = []; this.trail.set(u.id, wake); }
+    if (wake.length && dist(u.x, u.y, wake[0][0], wake[0][1]) < len) return;
+    wake.unshift([u.x, u.y]);
+    let run = 0;
+    for (let i = 1; i < wake.length; i++) {
+      run += dist(wake[i - 1][0], wake[i - 1][1], wake[i][0], wake[i][1]);
+      if (run > u.d + len) { wake.length = i + 1; break; }
+    }
+  }
+
+  /** The course square off a salvo's tracks, on the side of them her middle lies; on them, the smaller turn, then to
+   *  starboard (keepClear). */
+  private clearCourse(u: SeaUnit, s: Torp): number {
+    const b = (u.x - s.x0) * Math.cos(s.dir) - (u.y - s.y0) * Math.sin(s.dir);
+    const right = norm(s.dir + Math.PI / 2), left = norm(s.dir - Math.PI / 2);
+    if (b > 1e-6) return right;
+    if (b < -1e-6) return left;
+    return Math.abs(turn(u.face, left)) < Math.abs(turn(u.face, right)) - 1e-6 ? left : right;
+  }
+
+  /** Of two salvoes whose heads would reach her at the same moment, whether she keeps clear of 'a' first: the smaller
+   *  turn, then the one further to starboard (keepClear; as combSooner). */
+  private clearSooner(u: SeaUnit, a: Torp, b: Torp): boolean {
+    const ta = turn(u.face, this.clearCourse(u, a)), tb = turn(u.face, this.clearCourse(u, b));
+    if (Math.abs(Math.abs(ta) - Math.abs(tb)) > 1e-6) return Math.abs(ta) < Math.abs(tb);
+    return ta > tb;
+  }
+
   // ---- Combing the tracks (the ship plan's R6) -----------------------------------------------------------------------
 
   /**
@@ -1658,6 +1947,17 @@ export class SeaSim implements BattleSim<SeaUnit> {
     return this.r6Step < 3 && this.groupAt[u.side];
   }
 
+  /** Her place in her line from its middle, as a turn off her line's course begins (a comb, R6 item 2; or keeping clear
+   *  of her own side's tracks), unless she holds one already that she has not yet worked back to: the point she held
+   *  before the first. Only for a line ship inside the line's keep (place). */
+  private holdPlace(u: SeaUnit): void {
+    const P = this.linePlans[u.side];
+    if (this.r6Back && !this.place.has(u.id) && this.lines[u.side] && P.t === this.t && P.members.includes(u)) {
+      const [cx, cy] = this.middle(P.members);
+      if (dist(u.x, u.y, cx, cy) <= SEA.ai.keep) this.place.set(u.id, [u.x - cx, u.y - cy]);
+    }
+  }
+
   /**
    * What a ship's comb this tick leaves behind (R6): the salvo she combs, kept for the next tick (combing, crossed); a
    * 'sea:comb' event each time she takes one, the first and each switch to the next, with the launcher ('from'), the
@@ -1684,11 +1984,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       if (!was) {
         // Her place in her line as her comb begins (R6 item 2), unless she holds one already from a comb she has not yet
         // worked back from: the point she held before the first.
-        const P = this.linePlans[side];
-        if (this.r6Back && !this.place.has(u.id) && this.lines[side] && P.t === this.t && P.members.includes(u)) {
-          const [cx, cy] = this.middle(P.members);
-          if (dist(u.x, u.y, cx, cy) <= SEA.ai.keep) this.place.set(u.id, [u.x - cx, u.y - cy]);
-        }
+        this.holdPlace(u);
         if (this.combLast[u.id] === s) this.mark(`${side}:combResume`, 1);
         else {
           this.mark(`${side}:combs`, 1);
@@ -1975,6 +2271,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.runs.delete(u.id); delete u.extra.run;
       // Off any comb too (R6): only a piece afloat steers, so nothing else ends it.
       this.combs.delete(u.id); this.combSteered.delete(u.id); this.place.delete(u.id); this.regaining.delete(u.id);
+      // And off keeping clear of her own side's tracks (own water).
+      this.clearing.delete(u.id); this.clearSteered.delete(u.id); this.clearHeading.delete(u.id); this.holding.delete(u.id); this.clearBack.delete(u.id);
       // A lone ship's line has just been said; a piece of several gets one line for the last of them.
       const all = `All ${u.extra.ships0} ${RULES_CLASSES[c].many} ${ofFleet(u.extra.fleet)}`;
       this.say({ what: u.state === 'gone' ? 'gone' : 'withdrawn', unit: u.id, side, text: u.extra.ships0 === 1 ? '' : u.state === 'gone' ? `${all} are lost.` : `${all} are out of the fight.` });
@@ -2436,7 +2734,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
             const d = dist(u.x, u.y, e.x, e.y);
             if (d <= fd) { fd = d; foe = e; }
           }
-          if (foe) this.launch(u, foe, null);
+          const aim = foe ? this.clearAim(u, foe) : null;
+          if (foe && aim) this.launch(u, foe, null, aim);
           continue;
         }
         // A run carries a full salvo: without one the piece chases with its guns, as destroyers that had fired off
@@ -2590,7 +2889,11 @@ export class SeaSim implements BattleSim<SeaUnit> {
         }
         return { want: bearing(u.x, u.y, foe.x, foe.y), speed: rear - d > SEA.ai.station ? SEA.classes.dd.speed * SEA.speeds.slow : flank };
       }
-      this.launch(u, foe, run);
+      // A ship of her own side in the tracks' way (release 2's own water): she holds her salvo and runs on in at her
+      // target, launching the first second the way is clear (clearAim).
+      const aim = this.clearAim(u, foe);
+      if (!aim) return { want: bearing(u.x, u.y, foe.x, foe.y), speed: flank };
+      this.launch(u, foe, run, aim);
     }
     if (u.state === 'routing' || told) { this.endRun(u, run, true); return null; }
     run.turned = Math.max(run.turned, Math.abs(turn(run.face, u.face)));
@@ -2614,6 +2917,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
   /** A run ends: after its launch it may run again torp.again seconds after it; broken off before, as soon as it is fit. */
   private endRun(u: SeaUnit, run: Run, done: boolean): void {
     this.runs.delete(u.id);
+    this.holding.delete(u.id);
     delete u.extra.run;
     // One that ran on through its own side's break turns for home with the rest once its run is over.
     if (this.broken === u.side && live(u) && u.state !== 'routing') u.state = 'routing';
@@ -2628,8 +2932,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
    * game; it lasts while the salvo runs). On a run, it then turns away; from station, it may launch again torp.again
    * seconds later.
    */
-  private launch(u: SeaUnit, foe: SeaUnit, run: Run | null): void {
-    const T = SEA.torp, F = SEA.field.size, w = this.bank[u.id];
+  private launch(u: SeaUnit, foe: SeaUnit, run: Run | null, aim?: [number, number]): void {
+    const T = SEA.torp, w = this.bank[u.id];
     // How full the bank was, for the 3D game to draw as many tracks (the ship plan's L3): none at an empty bank.
     const full = SEA.fire.rate * this.output(u) * this.day(u.side) * T.bank;
     const share = full > 0 ? Math.round(clamp(w / full, 0, 1) * 100) / 100 : 0;
@@ -2637,9 +2941,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
     // The part of the salvo its guns have not yet earned goes with it, owed by its side when it lands (loaded, advance).
     const drawn = Math.min(this.loaded[u.id], w);
     this.loaded[u.id] = 0;
-    const ahead = foe.extra.way * T.travel;
-    const x = Math.round(clamp(foe.x + Math.sin(foe.face) * ahead, 2, F - 2)), y = Math.round(clamp(foe.y + Math.cos(foe.face) * ahead, 2, F - 2));
-    this.torps.push({ at: this.t + T.travel, side: u.side, target: foe.id, x, y, weight: w, from: u.id, drawn, dir: bearing(u.x, u.y, x, y), t0: this.t });
+    const [x, y] = aim ?? this.aimOf(foe);
+    this.torps.push({ at: this.t + T.travel, side: u.side, target: foe.id, x, y, weight: w, from: u.id, drawn, dir: bearing(u.x, u.y, x, y), t0: this.t, x0: u.x, y0: u.y });
     this.zones.push({ id: ++this.zoneId, kind: 'torpedo', x, y, r: T.radius, until: this.t + T.travel, side: u.side, at: Math.round(this.t * 10) / 10, unit: u.id });
     // The line once a piece, on its first salvo: most carry little weight, and the scene shows every salvo's wakes, so a
     // miss is the scene's to show (the UI director, 22:55). Every salvo keeps its event and its sound, the later ones blank.
@@ -3075,6 +3378,18 @@ export class SeaSim implements BattleSim<SeaUnit> {
       if (r) { x.runPhase = r.phase; if (r.phase === 'away') x.runUntil = Math.round(r.until * 10) / 10; else delete x.runUntil; } else { delete x.runPhase; delete x.runUntil; }
       const cb = on ? this.combs.get(u.id) : undefined;
       if (cb) { x.combFrom = cb.from; x.combUntil = Math.round(cb.at * 10) / 10; } else { delete x.combFrom; delete x.combUntil; }
+      // Release 2's own water (only with it on), for the words on the player's own pieces (the UI director, 13:25Z):
+      // 'heldFor', the piece of her own side in the way of the salvo she holds (looked for each second at the most: a
+      // screen's launch), and 'heldForName', it as the log names a piece ("a cruiser of the Home Fleet": the field names no
+      // ship); 'clearFrom' and 'clearUntil', the launcher of the own salvo she keeps clear of and the second it lands, and
+      // 'clearFromName'; and 'ordered', with either, when she is under an order of the player's own, which stands.
+      if (this.ownWater) {
+        const hd = on ? this.holding.get(u.id) : undefined, hb = hd && hd.t >= this.t - 1 - 1e-9 ? this.byId.get(hd.by) : undefined;
+        if (hd && hb) { x.heldFor = hd.by; x.heldForName = this.told(hb); } else { delete x.heldFor; delete x.heldForName; }
+        const cl = on && this.clearSteered.has(u.id) ? this.clearing.get(u.id) : undefined, cb2 = cl ? this.byId.get(cl.from) : undefined;
+        if (cl && cb2) { x.clearFrom = cl.from; x.clearUntil = Math.round(cl.at * 10) / 10; x.clearFromName = this.told(cb2); } else { delete x.clearFrom; delete x.clearUntil; delete x.clearFromName; }
+        if ((x.heldFor !== undefined || x.clearFrom !== undefined) && this.orders.has(u.id)) x.ordered = true; else delete x.ordered;
+      }
       const at = on && L0[u.side] ? this.linePlans[u.side].members.indexOf(u) : -1;
       if (at >= 0) x.lineAt = at; else delete x.lineAt;
       const light = x.cls === 'dd' || x.cls === 'ca';

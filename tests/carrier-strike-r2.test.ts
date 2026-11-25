@@ -10,7 +10,8 @@ import stage from '../data/campaign/stage.json';
 import { setDesk } from '../src/campaign/depth';
 import { createGame } from '../src/campaign/game';
 import { carrierStrikeOn, setCarrierStrike, strikeHarbours, whyNotCarrierStrike } from '../src/campaign/harbourstrike';
-import { atSea, keptByHand, shipCount } from '../src/campaign/navy';
+import { atSea, baseTargets, inPassage, keptByHand, rebase, shipCount, voyageMonths } from '../src/campaign/navy';
+import { monthCard, monthMark } from '../src/campaign/monthcard';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { CARRIERSTRIKE_STAGE } from '../src/campaign/stage';
 import { startOpen } from '../src/campaign/staff';
@@ -89,6 +90,20 @@ describe('Pearl Harbor from Kure, at peace', () => {
     expect(row.buttons[0].label).toMatch(/^MOVE BASE TO /);
     expect(TC.act(row.buttons[0].act).ok).toBe(true);
   });
+  it('in passage to a new base, the move forward is barred, with the reason (release 2, the far chart)', () => {
+    const g = copy();
+    const mf = fleet(g, 'JAP', 'Mobile Fleet');
+    const far = baseTargets(g, mf).find((r) => voyageMonths(g, mf, r) > 0)!;
+    expect(rebase(g, mf, far)).toBe(true);
+    expect(inPassage(mf)).toBe(true);
+    TC.load(saveGame(g));
+    const moves = TC.page(`fleet:${mf.id}`)!.sections.flatMap((x) => x.rows.flatMap((r) => r.buttons)).filter((b) => /^MOVE BASE TO /.test(b.label));
+    expect(moves.length).toBeGreaterThan(0);
+    for (const b of moves) {
+      expect(b.ok).toBe(false);
+      expect(b.tip).toMatch(/is in passage to /);
+    }
+  });
 });
 
 describe('the strike, in the month war is declared', () => {
@@ -119,11 +134,33 @@ describe('the strike, in the month war is declared', () => {
     const g = loadGame(after)!;
     const mf = fleet(g, 'JAP', 'Mobile Fleet'), pearl = g.byName['Pearl Harbor'];
     const before = atPearl(g);
-    expect(orderCarrierStrikeFleet(g, mf.id, pearl.id)).toBeTruthy();
+    const done = orderCarrierStrikeFleet(g, mf.id, pearl.id)!;
+    expect(done).toBeTruthy();
+    const strikers = done.wings.filter((id) => (g.airFleets.find((w) => w.id === id)?.bmr ?? 0) > 0).length;
+    const mark = monthMark(g);
     month(g);
     expect(g.headlines.some((x) => /raid Pearl Harbor without warning/.test(x.text))).toBe(true);
     expect(atPearl(g)).toBeLessThan(before);
+    // The strike is booked on the fleets struck at anchor, for their staff's weighing of staying against moving (the
+    // design director's ruling of 04:33Z, 25 November 2026, 2): from the decks it was flown from.
+    const hit = g.fleets.filter((f) => f.nat === 'USA' && f.anchor?.some((e) => e.at === pearl.id && e.t === g.turn - 1));
+    expect(hit.length).toBeGreaterThan(0);
+    expect(hit.every((f) => f.anchor!.every((e) => e.from.length > 0 && e.from.every((o) => o.sea >= 0 && o.km > 0)))).toBe(true);
+    // Only the groups that carried bombs: their fighters reach no further than the bombers they guard.
+    expect(hit.every((f) => f.anchor!.every((e) => e.from.length <= strikers))).toBe(true);
+    // The month card names the place once (the playtest's #49): "Pearl Harbor", never "Pearl Harbor harbour".
+    const card = JSON.stringify(monthCard(g, mark));
+    expect(card).toMatch(/Pearl Harbor/);
+    expect(card).not.toMatch(/Harbor harbour/);
   }, 300000);
+  it('once at war, the fleets at anchor are named, or counted where only reported: never the same words twice', () => {
+    const g = loadGame(after)!;
+    const mf = fleet(g, 'JAP', 'Mobile Fleet'), pearl = g.byName['Pearl Harbor'];
+    const h = strikeHarbours(g, mf.id).find((x) => x.region === pearl.id)!;
+    expect(h.fleets.length).toBeGreaterThan(0);
+    expect(new Set(h.fleets).size).toBe(h.fleets.length);
+    for (const f of h.fleets) expect(f).toMatch(/^(the |[A-Z][a-z]+ ships reported$|(two|three|four|five) [A-Z][a-z]+ fleets reported$)/);
+  });
   it('the page offers STRIKE FROM THE AIR, and its act gives the order', () => {
     TC.load(after);
     const mf = fleet(sent, 'JAP', 'Mobile Fleet');

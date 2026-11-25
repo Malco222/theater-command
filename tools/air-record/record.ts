@@ -10,9 +10,11 @@
 // campaign never see them.
 //
 //   npx esbuild tools/air-record/record.ts --bundle --platform=node --format=esm --outfile=dist/air-record.mjs --log-level=warning
-//   node dist/air-record.mjs <out folder> [key]    (writes oahu.json, midway-fleet.json, bremen-b17.json; or the one key)
+//   node dist/air-record.mjs <out folder> [key]    (writes oahu.json, midway-fleet.json, bremen-b17.json, troops-1941.json; or the one key)
 
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { loadGame, saveGame } from '../../src/campaign/save';
+import { runTurnAI } from '../../src/campaign/turn';
 import { join } from 'node:path';
 import { createGame, setWar } from '../../src/campaign/game';
 import { planRaid, raidTargets } from '../../src/campaign/airwar';
@@ -27,7 +29,7 @@ import { deckMix, deckModels, layShips } from '../../src/battle/air/ships';
 import { onBoard, STAGES } from '../../src/battle/air/stages';
 import { cloudOf, skyWord } from '../../src/battle/air/sky';
 import { defenceOf, experience, leanOf, STYLES } from '../../src/battle/air/styles';
-import { airTicket, raidGroups, seaGround } from '../../src/battle/air/ticket';
+import { airTicket, flyKinds, raidGroups, seaGround } from '../../src/battle/air/ticket';
 import { bomberGuns, fighterGuns } from '../../src/battle/air/guns';
 import { seatsOf } from '../../src/campaign/bombers';
 import type { AirUnit, AirPlace } from '../../src/battle/air/types';
@@ -137,6 +139,41 @@ const RAIDS: DayRaid[] = [
     models: { USA: { ftr: 'Mustang', bmr: 'B17' }, GER: { ftr: 'Fw190', bmr: 'He111' } },
   },
 ];
+
+/**
+ * A raid on troops (release 2; Brian, 24 November 2026: "if a bomber group is bombing troops instead of a factory or
+ * town and they get intercepted than i want that playable"): no stand-in, the real thing. A free war the computer plays
+ * from September 1939 to the month named, then the raid on troops the raider's staff would send (raidGroups) at the
+ * enemy's troops where its fighters rise to meet it, with bombers and an escort that reaches the target with fuel to
+ * spare: the one with the most enemy fighters in reach, a column on the march first. The switch for the kind is turned on for the recording only.
+ */
+interface TroopRaid { key: string; nat: string; foe: string; seed: number; turn: number }
+
+const TROOP_RAIDS: TroopRaid[] = [{ key: 'troops-1941', nat: 'GER', foe: 'SOV', seed: 7, turn: 28 }];
+
+const wars = new Map<string, string>();
+function troopTicketOf(R: TroopRaid, seed: number): FieldTicket<AirPlace> {
+  const at = `${R.seed}:${R.turn}`;
+  if (!wars.has(at)) {
+    const w = startOpen(createGame(R.seed, null));
+    while (w.turn < R.turn) runTurnAI(w);
+    wars.set(at, saveGame(w));
+  }
+  const g = loadGame(wars.get(at)!)!;
+  g.flags.airBattles = (g.flags.airBattles ?? 0) + (seed % 997);
+  flyKinds(['ground']);
+  const offered = raidTargets(g, 'ground', R.nat).filter((x) => g.regions[x.id].units.some((c) => !c.dead && c.nat === R.foe)).map((x) => {
+    const ids = raidGroups(g, 'ground', x.id, R.nat);
+    return { ids, target: x.id, t: airTicket(g, 'ground', x.id, ids, R.nat).ticket };
+  }).filter((x) => x.t && x.t.att.forces.some((f) => f.kind === 'bmr') && x.t.def.forces.length
+    // (an escort with the reach to go down on the troops once its bombers have bombed)
+    && x.t.att.forces.some((f) => f.kind === 'ftr' && (x.t!.place.starts[f.corps]?.fuel ?? 0) >= SKY.fuel.full));
+  const men = (x: (typeof offered)[number]): number => x.t!.def.forces.reduce((a, f) => a + f.men, 0);
+  offered.sort((a, b) => (a.t!.place.marks?.posture === 'march' ? 0 : 1) - (b.t!.place.marks?.posture === 'march' ? 0 : 1) || men(b) - men(a) || a.target - b.target);
+  flyKinds([]);
+  if (!offered.length) throw new Error(`no intercepted raid on ${R.foe} troops for ${R.nat}`);
+  return offered[0].t!;
+}
 
 /** The stand-in day raid's ticket, turned into the record's. */
 function raidTicketOf(R: DayRaid, seed: number): FieldTicket<AirPlace> {
@@ -312,8 +349,8 @@ function skyOut(s: AirSim, me: Side, called: Record<number, string>): Record<str
 interface Fought { s: AirSim; t: FieldTicket<AirPlace>; views: Record<string, unknown>[] }
 
 /** One set piece fought out by the computer on both sides, recorded a view every `step` battle seconds. */
-function fight(P: SetPiece | DayRaid, seed: number, step: number): Fought {
-  const t = 'byStrike' in P ? ticketOf(P, seed) : raidTicketOf(P, seed);
+function fight(P: SetPiece | DayRaid | TroopRaid, seed: number, step: number): Fought {
+  const t = 'byStrike' in P ? ticketOf(P, seed) : 'foe' in P ? troopTicketOf(P, seed) : raidTicketOf(P, seed);
   // The player's seat is the raider's, as in play; the computer flies both sides for the recording.
   t.att.human = true; t.def.human = false;
   const s = new AirSim(t, { show: true });
@@ -323,9 +360,13 @@ function fight(P: SetPiece | DayRaid, seed: number, step: number): Fought {
   const views: Record<string, unknown>[] = [];
   const named = new Map<number, string>();
   let next = 0, events: unknown[] = [], contact: number | null = null;
+  // A raid on troops: each view of the sim carries the pieces changed since the one before, so those of the views not
+  // recorded are gathered into the next that is (the latest state of each).
+  const marks = new Map<number, unknown>();
   const take = (): void => {
     const v = s.view();
     events.push(...v.events);
+    for (const p of v.marks?.pieces ?? []) marks.set(p.id, p);
     for (const e of v.events) if (e.what === 'contact' && contact === null) contact = e.t;
     if (s.t + 1e-9 < next && !s.over) return;
     next += step;
@@ -338,8 +379,10 @@ function fight(P: SetPiece | DayRaid, seed: number, step: number): Fought {
       // (AirSim.view() fills these on the air branch since 2f3a4923, in land's shape; the bridge's viewOut passes them.)
       breaking: { att: r3(s.nearBreak('att')), def: r3(s.nearBreak('def')) }, contact,
       ...((v as { ships?: unknown }).ships ? { ships: (v as { ships?: unknown }).ships } : {}), sky,
+      ...(v.marks ? { marks: { ...v.marks, pieces: [...marks.values()] } } : {}),
     });
     events = [];
+    marks.clear();
   };
   take();
   let guard = 0;
@@ -348,7 +391,9 @@ function fight(P: SetPiece | DayRaid, seed: number, step: number): Fought {
 }
 
 /** How well a fight shows the record (the recording takes the luckiest of a run of battles, not a changed rule). */
-function likeRecord(P: SetPiece | DayRaid, f: Fought): number {
+function likeRecord(P: SetPiece | DayRaid | TroopRaid, f: Fought): number {
+  // A raid on troops: the bombs and the passes both on the troops, and the hardest fight on the way.
+  if ('foe' in P) { const o = f.s.outcome(); return o.dropped > 0 && (o.strafed ?? 0) > 0 ? f.s.units.reduce((a, u) => a + u.n0 - u.n, 0) : -1; }
   // A day raid: the bombs on the target and the hardest fight on the way (every aircraft lost, either side).
   if (!('byStrike' in P)) return f.s.outcome().dropped > 0 ? f.s.units.reduce((a, u) => a + u.n0 - u.n, 0) : -1;
   const last = f.views[f.views.length - 1] as { ships?: { pieces: { cls: string; sunk: unknown; name: string | null }[] } };
@@ -357,7 +402,7 @@ function likeRecord(P: SetPiece | DayRaid, f: Fought): number {
   return P.kind === 'harbour' ? down('bb') * 10 + (big ? 15 : 0) + down('dd') + down('ca') : down('cv') * 10 + (big ? 5 : 0) + down('bb') + down('ca');
 }
 
-function record(P: SetPiece | DayRaid, outDir: string, step = 1.0, tries = 60): void {
+function record(P: SetPiece | DayRaid | TroopRaid, outDir: string, step = 1.0, tries = 60): void {
   let best: Fought | null = null, bestScore = -1, bestSeed = 0;
   for (let k = 0; k < tries; k++) {
     const seed = 238 + k * 7919;
@@ -392,5 +437,5 @@ if (!process.env.VITEST) {
   const outDir = process.argv[2] ?? 'dist/air-record';
   mkdirSync(outDir, { recursive: true });
   const only = process.argv[3];
-  for (const P of [...PIECES, ...RAIDS]) if (!only || P.key === only) record(P, outDir);
+  for (const P of [...PIECES, ...RAIDS, ...TROOP_RAIDS]) if (!only || P.key === only) record(P, outDir);
 }

@@ -18,13 +18,16 @@ import type { Game } from './types';
 import { SHIP_AIR_TIP, airWar, carrierRules, closeRules, groupAt, overOcean } from './air';
 import type { GroupRow, RaidKind, RaidPlan, RaidTarget } from './airwar';
 import {
-  airGroupBases, airGroupDecks, airGroupJobs, airfieldAt, fleetView, humanUp, myAirGroups, orderAboard, orderAirBase, orderGroupJob, orderRaid, orderScout, orderSearch, previewRaid, raidMenu,
-  raidTargetsFor, searchOptionsFor, wingsOfFleet,
+  airFerryRoutes, airGroupBases, airGroupDecks, airGroupJobs, airfieldAt, fleetView, humanUp, myAirGroups, orderAboard, orderAirBase, orderFerryOff, orderFerryTo, orderGroupJob, orderRaid,
+  orderScout, orderSearch, previewRaid, raidMenu, raidTargetsFor, searchOptionsFor, wingsOfFleet,
 } from './turn';
+import { FERRY, ferryOn } from './ferry';
 import { afterCard, type AfterCard, type FoughtAir } from './airfought';
+import { band, raidFogOn } from './airfog';
 
 export interface PageButton { label: string; act: string; ok: boolean; tip: string; danger?: boolean }
-export interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[] }
+/** (Release 2) An air group's row may carry its role word, its short form and its earned name as its arm sets it (airwar.ts airWords). */
+export interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[]; role?: string; short?: string; called?: string }
 export interface Page { id: string; title: string; headline: string; note: string; top: PageButton[]; sections: { heading: string; text: string; rows: PageRow[] }[] }
 /** What came of something pressed: `open` is the page to show next, `fly` aircraft to draw leaving for their target, `report` the id of the air report just filed. */
 export interface AirActResult {
@@ -44,12 +47,14 @@ const craft = (x: { ftr: number; bmr: number }): string => [x.ftr >= 1 ? `${num(
 const KINDS: RaidKind[] = ['bomb', 'night', 'ground', 'line', 'town', 'superiority', 'strike', 'fleet', 'harbour', 'recon'];
 const isKind = (k: string): k is RaidKind => (KINDS as string[]).includes(k);
 const ids = (s: string | undefined): number[] => (s ? s.split('.').map(Number).filter((n) => Number.isFinite(n)) : []);
+/** Fog on raids (airfog.ts, its switch on): a reconnaissance flight's sight lasts the month flown and the next. */
+const SEEN_TWO = 'A few aircraft photograph one province and the ground beside it: it is seen whole this month and next month.';
 const BACK: PageButton = { label: 'BACK TO THE AIRFIELD', act: 'open:airfield', ok: true, tip: '' };
 
 /** A group's lines. On its airfield's own page the crowding is said once, in the page's head, so its rows leave it out (the UI director, build 1668). */
 export function groupLines(x: GroupRow, crowd = true): string[] {
   return [
-    `${craft(x)}${x.command ? `, of ${x.command}` : ''}${x.leader ? `. ${x.leader} commands` : ''}. Reaches ${num(x.range)} km. Readiness ${pct(x.ready)}.`,
+    `${craft(x)}${x.command ? `, of ${x.command}` : ''}${x.leader ? `. ${x.leader} commands` : ''}. Reaches ${num(x.range)} km. Readiness ${pct(x.ready)}.${x.pilots ? ` ${x.pilots}` : ''}${x.joined ? ` ${x.joined}` : ''}`,
     `${x.doing}.${crowd && x.crowd < 1 ? ` The airfield is crowded: only ${pct(x.crowd)} of it can fly.` : ''}`,
   ];
 }
@@ -60,6 +65,7 @@ function airfieldPage(g: Game, region: number): Page | null {
   const up = humanUp(g);
   const rows: PageRow[] = c.rows.map((x) => ({
     nat: x.nat, title: x.name, lines: groupLines(x, false),
+    ...(x.role ? { role: x.role } : {}), ...(x.short ? { short: x.short } : {}), ...(x.called ? { called: x.called } : {}),
     buttons: x.mine ? [{ label: 'ORDERS', act: `open:group:${x.id}`, ok: true, tip: 'Its standing orders, the raids it can fly, a reconnaissance, or a move to another airfield.' }] : [],
   }));
   return {
@@ -89,10 +95,12 @@ function groupPage(g: Game, id: number): Page | null {
   const deck = x.ship >= 0;
   const top: PageButton[] = [
     deck ? { label: 'BACK TO THE FLEET', act: `open:wings:${x.ship}`, ok: true, tip: '' } : BACK,
-    { label: 'SCOUT FROM THE AIR', act: `open:scout:${id}`, ok: up && !x.scouted, tip: x.scouted ? 'It has flown its reconnaissance this month.' : 'A few aircraft photograph one province: its armies are seen whole until the month ends.' },
+    { label: 'SCOUT FROM THE AIR', act: `open:scout:${id}`, ok: up && !x.scouted, tip: x.scouted ? 'It has flown its reconnaissance this month.' : raidFogOn(g) ? SEEN_TWO : 'A few aircraft photograph one province: its armies are seen whole until the month ends.' },
   ];
   if (carrierRules(g)) top.push({ label: 'SEARCH A SEA', act: `open:search:${id}`, ok: up && !x.scouted, tip: x.scouted ? 'It has flown its reconnaissance this month.' : 'A few aircraft quarter one sea for the month: enemy ships there may be reported, or identified. A fleet has to be found before it can be struck.' });
   if (!deck) top.push({ label: 'MOVE TO ANOTHER AIRFIELD', act: `open:rebase:${id}`, ok: up, tip: 'Settling in costs it some readiness for a month.' });
+  // On its way to another field by stages (release 2, ferry.ts): it can be called off, and stays where it has got to.
+  if (x.way) top.push({ label: 'CALL IT OFF', act: `ferryoff:${id}`, ok: up, tip: `It stays at ${x.baseName}, the field it has reached, and is back in the fight.` });
   // A carrier wing's own order (ruling 175(b)): ashore from its fleet, or back aboard. With one place to go the button gives the order; with several it opens the list.
   const mv = x.wingMove;
   if (mv?.order === 'ashore') {
@@ -105,7 +113,7 @@ function groupPage(g: Game, id: number): Page | null {
   }
   return {
     id: `group:${id}`, title: x.name.toUpperCase(), headline: `${craft(x)} ${deck ? 'aboard the' : x.ashore >= 0 ? 'ashore at' : 'at'} ${x.baseName}`,
-    note: `${groupLines(x).join(' ')}${x.ashore >= 0 ? ` A carrier wing${x.fleetName ? ` of the ${x.fleetName}` : ''}, ordered ashore: while it is here its carriers fight as empty carriers.` : ''}`,
+    note: `${x.schools ? `${x.schools} ` : ''}${groupLines(x).join(' ')}${x.ashore >= 0 ? ` A carrier wing${x.fleetName ? ` of the ${x.fleetName}` : ''}, ordered ashore: while it is here its carriers fight as empty carriers.` : ''}`,
     top,
     sections: [{ heading: 'STANDING ORDERS', text: 'What it does between raids.', rows: jobs }, { heading: 'RAIDS', text: 'One raid a month. A raid is flown the moment you order it, and the group is away until next month.', rows: raids }],
   };
@@ -123,7 +131,11 @@ function raidsPage(g: Game): Page | null {
   };
 }
 
-const lossLine = (p: RaidPlan): string => `Chance of success ${pct(p.success)}: ${p.verdict.toLowerCase()}. Likely losses: ${[p.bombers ? `${num(p.bomberLossN)} of ${num(p.bombers)} bombers (${pct(p.bomberLoss)})` : '', p.fighters ? `${num(p.fighterLossN)} of ${num(p.fighters)} fighters` : ''].filter(Boolean).join(', ') || 'none'}${p.foeLossN ? `, for about ${num(p.foeLossN)} enemy fighters` : ''}.`;
+const lossLine = (p: RaidPlan): string => (p.fog && !p.fog.live ? fogLossLine(p, p.fog) : `Chance of success ${pct(p.success)}: ${p.verdict.toLowerCase()}. Likely losses: ${[p.bombers ? `${num(p.bomberLossN)} of ${num(p.bombers)} bombers (${pct(p.bomberLoss)})` : '', p.fighters ? `${num(p.fighterLossN)} of ${num(p.fighters)} fighters` : ''].filter(Boolean).join(', ') || 'none'}${p.foeLossN ? `, for about ${num(p.foeLossN)} enemy fighters` : ''}.`);
+
+/** Fog on raids (airfog.ts, its switch on): out of sight the same line gives each figure as a band, low end to high. */
+const fogLossLine = (p: RaidPlan, f: NonNullable<RaidPlan['fog']>): string =>
+  `Chance of success ${band(f.success[0], f.success[1])}, not scouted. Likely losses: ${[p.bombers ? `${band(f.bomberLossN[0], f.bomberLossN[1], false)} of ${num(p.bombers)} bombers (${band(f.loss[0], f.loss[1])})` : '', p.fighters ? `${band(f.fighterLossN[0], f.fighterLossN[1], false)} of ${num(p.fighters)} fighters` : ''].filter(Boolean).join(', ') || 'none'}.`;
 
 /**
  * Every target of a raid as the sections of its page (Brian, 24 November 2026: "you cant bomb germany from london").
@@ -194,7 +206,8 @@ function planPage(g: Game, kind: RaidKind, target: number, picked: number[]): Pa
   const going = p.seats.filter((s) => s.picked), could = p.seats.filter((s) => !s.picked && !s.why), cannot = p.seats.filter((s) => s.why);
   return {
     id: `plan:${kind}:${target}:${p.picked.join('.')}`, title: p.title.toUpperCase(),
-    headline: p.why ?? `${p.verdict}: ${pct(p.success)}`,
+    // (Fog on raids: out of sight the forecast is a band, so the headline gives the band its note gives, not the high end alone.)
+    headline: p.why ?? (p.fog && !p.fog.live ? `Chance of success ${band(p.fog.success[0], p.fog.success[1])}: not scouted` : `${p.verdict}: ${pct(p.success)}`),
     note: p.why ? '' : [lossLine(p), ...p.effects, p.massed, p.offPatrol].filter(Boolean).join(' '),
     top: [
       { label: 'FLY THE RAID', act: `raid:${kind}:${target}:${p.picked.join('.')}`, ok: up && !p.why, tip: p.why ?? 'Flown at once. Every group that goes is away for the rest of the month.' },
@@ -202,8 +215,14 @@ function planPage(g: Game, kind: RaidKind, target: number, picked: number[]): Pa
     ],
     sections: [
       { heading: 'FLYING THE RAID', text: going.length ? '' : 'No group is picked.', rows: going.map(seat) },
+      // (Release 2, a raid on troops with the strafers' rule on, the UI director's words of 15:04Z: at the foot of the
+      // raid's forces, the groups likely to go down, a row each under the muted line; or the line for none. No colour:
+      // the rows carry no nation, so no flag or picture is set on them.)
+      ...(p.strafe && !p.why ? [{ heading: p.strafe.heading, text: p.strafe.names.length ? p.strafe.note : p.strafe.none, rows: p.strafe.names.map((n): PageRow => ({ nat: '', title: n, lines: [], buttons: [] })) }] : []),
       { heading: 'COULD JOIN IT', text: could.length ? '' : 'No other group can reach it this month.', rows: could.map(seat) },
-      { heading: 'RISING TO MEET THEM', text: p.meets.length ? '' : 'No enemy fighters are in reach.', rows: p.meets.map((m) => ({ nat: m.nat, title: m.name, lines: [`${num(m.ftr)} fighters ${m.afloat ? 'aboard the' : 'at'} ${m.baseName}: about ${num(m.able)} can meet the raid.`], buttons: [] })) },
+      // (Fog on raids: what the side knows of the target's defences, and the forecast's band.)
+      ...(p.fog && !p.why ? [{ heading: 'WHAT IS KNOWN OF ITS DEFENCES', text: [p.fog.fighters, p.fog.guns, p.fog.damage, p.fog.band].filter(Boolean).join('\n'), rows: [] as PageRow[] }] : []),
+      { heading: 'RISING TO MEET THEM', text: p.fog && !p.fog.live ? (p.meets.length ? 'Only the groups whose airfields are in sight are named: more may come.' : 'No enemy fighter is known for sure to be in reach. Scout it to see what is there.') : p.meets.length ? '' : 'No enemy fighters are in reach.', rows: p.meets.map((m) => ({ nat: m.nat, title: m.name, lines: [`${num(m.ftr)} fighters ${m.afloat ? 'aboard the' : 'at'} ${m.baseName}: about ${num(m.able)} can meet the raid.`], buttons: [] })) },
       { heading: 'THE BATTLE TICKET', text: p.lines.map((l) => `${l.label}: ${l.value}${l.effect ? ` (${l.effect})` : ''}`).join('\n'), rows: [] },
       { heading: 'CANNOT GO', text: '', rows: cannot.slice(0, 8).map(seat) },
     ].filter((s) => s.rows.length || s.text),
@@ -224,7 +243,7 @@ function scoutPage(g: Game, id: number): Page | null {
   if (sections.length === 1) sections[0].heading = 'PROVINCES';
   return {
     id: `scout:${id}`, title: `A RECONNAISSANCE  ·  ${x.name.toUpperCase()}`, headline: all.length ? `${all.length} province${all.length === 1 ? '' : 's'} it could photograph, ${sections.length > 1 ? 'by country' : 'nearest first'}` : x.scouted ? 'It has flown its reconnaissance this month' : 'Nothing in its reach is hidden',
-    note: 'A few aircraft photograph one province and the ground beside it: every army there is seen whole until the month ends. One flight a month for each group, beside its raid, and it keeps its patrol.',
+    note: `${raidFogOn(g) ? `${SEEN_TWO} Its fighters, its guns and the damage to it are seen too, and remembered after.` : 'A few aircraft photograph one province and the ground beside it: every army there is seen whole until the month ends.'} One flight a month for each group, beside its raid, and it keeps its patrol.`,
     top: [{ label: 'BACK', act: `open:group:${id}`, ok: true, tip: '' }], sections,
   };
 }
@@ -260,12 +279,29 @@ function rebasePage(g: Game, id: number): Page | null {
     buttons: [{ label: 'SHIP IT HERE', act: `airbase:${id}:${b.region}`, ok: up && !b.why, tip: b.why ?? SHIP_AIR_TIP }],
   }));
   const sections = [{ heading: 'AIRFIELDS', text: '', rows }];
-  if (over.length) sections.push({ heading: 'ACROSS THE OCEAN, BY SEA', text: SHIP_AIR_TIP, rows: over });
+  // With the switch 'ferry' (release 2, ferry.ts): every other airfield of his side's or his allies', with the way there
+  // by stages or crated by sea, the turns it takes and the enemy fighters known on the way. The fields across the ocean
+  // are among them, so the old section by sea is not shown beside it. Off, the page is as it was.
+  const far = ferryOn(g) ? farRows(g, x, rows.map((r) => r.title)) : [];
+  if (far.length) sections.push({ heading: 'FARTHER, BY STAGES', text: `It flies from field to field, up to ${FERRY.perMonth} hops a month, and is out of the fight until it gets there. A closed sky holds it where it is. Where enemy fighters are known within reach of the way it can be caught, and fights.`, rows: far });
+  else if (over.length) sections.push({ heading: 'ACROSS THE OCEAN, BY SEA', text: SHIP_AIR_TIP, rows: over });
   return {
     id: `rebase:${id}`, title: `A NEW AIRFIELD  ·  ${x.name.toUpperCase()}`, headline: `${rows.length} airfield${rows.length === 1 ? '' : 's'} it could move to, nearest first`,
     note: `${x.name} is based at ${x.baseName}. Aircraft can be based only where there is an airfield: engineers lay new ones out, and the treasury enlarges them. A group reaches farther into enemy country from a field nearer the front.`,
     top: [{ label: 'BACK', act: `open:group:${id}`, ok: true, tip: '' }], sections,
   };
+}
+
+/** The fields a group could be sent to by stages, those it can reach soonest first (ferry.ts): every one but those it can move to this month. */
+function farRows(g: Game, x: GroupRow, direct: string[]): PageRow[] {
+  const up = humanUp(g);
+  return airFerryRoutes(g, x.id).filter((r) => !direct.includes(r.name))
+    .sort((a, b) => (a.how === 'none' ? 1 : 0) - (b.how === 'none' ? 1 : 0) || a.turns - b.turns || a.hops.length - b.hops.length || a.name.localeCompare(b.name))
+    .map((r) => ({
+      nat: g.regions[r.to].ctrl, title: r.name,
+      lines: [r.words, ...(r.hops.length > 1 ? [`The way: ${r.hops.map((h) => `${g.regions[h.to].name} (${num(h.km)} km)`).join(', ')}.`] : r.hops.length ? [`One hop of ${num(r.hops[0].km)} km.`] : [])],
+      buttons: [{ label: 'SEND IT THERE', act: `ferry:${x.id}:${r.to}`, ok: up && r.how !== 'none', tip: r.why ?? (r.how === 'sea' ? SHIP_AIR_TIP : `It sets off at once. Settling in at ${r.name} costs it some readiness for a month.`) }],
+    }));
 }
 
 /** The fleets a carrier wing ashore could go back aboard. */
@@ -386,6 +422,17 @@ export function airAct(g: Game, action: string, fought?: FoughtAir): AirActResul
     const ok = orderAirBase(g, Number(part[1]), Number(part[2]));
     const where = to?.name ?? 'its new airfield';
     return { ok, note: ok ? (wing ? `The ${wing.name} flies ashore to ${where}.` : sea ? `The group is shipped across the ocean to ${where}.` : `The group moves to ${where}.`) : wing ? 'It cannot fly ashore there now.' : sea ? 'It cannot be shipped there now.' : 'It cannot move there now.', open: `group:${part[1]}` };
+  }
+  // By stages to a far field, and calling that off (release 2, ferry.ts; never offered with the switch off).
+  if (part[0] === 'ferry' && ferryOn(g)) {
+    const route = orderFerryTo(g, Number(part[1]), Number(part[2]));
+    const f = g.airFleets.find((y) => y.id === Number(part[1]));
+    const where = g.regions[Number(part[2])]?.name ?? 'that airfield';
+    return { ok: !!route, note: route ? (f?.way ? `${f.name} sets off for ${where}: ${route.words}` : `${f?.name ?? 'The group'} reaches ${where}.`) : 'There is no way there now.', open: `group:${part[1]}` };
+  }
+  if (part[0] === 'ferryoff' && ferryOn(g)) {
+    const ok = orderFerryOff(g, Number(part[1]));
+    return { ok, note: ok ? 'Called off: it stays at the field it has reached.' : 'It is not on its way anywhere.', open: `group:${part[1]}` };
   }
   if (part[0] === 'aboard') {
     const id = Number(part[1]), fleet = g.fleets.find((c) => c.id === Number(part[2]));

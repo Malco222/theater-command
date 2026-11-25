@@ -158,6 +158,11 @@ export const SHADOWRELAY_STAGE: boolean = staged('TC_SHADOWRELAY', 'shadowRelay'
 // the grand campaigns opened while it is true carry the flag 'seekOnce'. Forced by TC_SEEKONCE.
 /** True where new grand campaigns open with each fleet seeking battle at most once a month (stage.json 'seekOnce'). */
 export const SEEKONCE_STAGE: boolean = staged('TC_SEEKONCE', 'seekOnce');
+
+// A queue for a town (release 2; Brian 25 November 2026 13:41Z; the design director's ruling seamless-r2-1125.md part
+// B; townqueue.ts): the grand campaigns opened while it is true carry the flag 'townQueue'. Forced by TC_TOWNQUEUE.
+/** True where new grand campaigns open with building queues for the player's towns (stage.json 'townQueue'). */
+export const TOWNQUEUE_STAGE: boolean = staged('TC_TOWNQUEUE', 'townQueue');
 // The atomic project (release 2; Brian 25 November 2026 01:14Z, "lets do number 1"; the design director's ruling of
 // 01:27Z, design-director/atom-1125.md; atom.ts, data/campaign/atom.json): the grand campaigns opened while it is true
 // carry the flag 'atom'. Forced by TC_ATOM.
@@ -172,3 +177,11 @@ export const CARRIERSTRIKE_STAGE: boolean = staged('TC_CARRIERSTRIKE', 'carrierS
 // is true carry its flag. Forced by TC_WINGBYDATE.
 /** True where new grand campaigns open with a navy's carrier wing by date (stage.json 'wingByDate'). */
 export const WINGBYDATE_STAGE: boolean = staged('TC_WINGBYDATE', 'wingByDate');
+// Moving an air group to any airfield of its side's with one order (release 2; Brian 24 November 2026 22:08Z; ferry.ts):
+// the grand campaigns opened while this is true carry the flag 'ferry'. Forced by TC_FERRY.
+/** True where new grand campaigns open with air groups able to go to any friendly airfield by stages (stage.json 'ferry'). */
+export const FERRY_STAGE: boolean = staged('TC_FERRY', 'ferry');
+// Better air unit names (release 2; the design director's ruling of 25 November 2026 03:18Z): the grand campaigns opened
+// while this is true carry the flag 'airNames' (air.ts groupName). Words only. Forced by TC_AIRNAMES.
+/** True where new grand campaigns open with the air arms' own numbers and names (stage.json 'airNames'). */
+export const AIRNAMES_STAGE: boolean = staged('TC_AIRNAMES', 'airNames');

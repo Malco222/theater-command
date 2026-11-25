@@ -22,7 +22,7 @@
 import { carrierRules, harbourInReach, setMission, whyNotMission } from './air';
 import { fleetKnown, wingsOf } from './carriers';
 import { allied, atWar, theName } from './game';
-import { CLASSES, atSea, baseTargets, fleetName, fleetReach, sail, shipCount, shipList, surfaceShips } from './navy';
+import { CLASSES, atSea, baseTargets, fleetName, fleetReach, passageWhy, sail, shipCount, shipList, surfaceShips } from './navy';
 import type { AirFleet, Fleet, Game, Region, Ships } from './types';
 
 export const carrierStrikeOn = (g: Game): boolean => g.flags.open === 1 && g.flags.carrierStrike === 1;
@@ -117,11 +117,29 @@ export function strikeHarbours(g: Game, id: number, mayDeclare: (nat: string) =>
     const ships = exact ? there.reduce((s, x) => { for (const k of CLASSES) s[k] += x.ships[k]; return s; }, { bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 } as Ships) : null;
     out.push({
       region: r.id, name: r.name, holder: r.ctrl, atWar: war,
-      fleets: there.map((x) => (fleetKnown(g, x, viewer) === 'exact' ? fleetName(x) : `${g.nations[x.nat]?.adj ?? x.nat} ships reported`)),
+      fleets: anchorNames(g, there, viewer),
       ships, launch, forward: forward?.id ?? -1, why: whyNotCarrierStrike(g, id, r.id),
     });
   }
   return out.sort((a, b) => Number(b.atWar) - Number(a.atWar) || Number(b.launch >= 0) - Number(a.launch >= 0) || a.name.localeCompare(b.name));
+}
+
+const FLEETS_COUNTED = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+/**
+ * The fleets at anchor as the striker knows them: each identified fleet by name, and those only reported once a nation,
+ * counted ("American ships reported", "two American fleets reported"), never the same words twice (the playtest's #49).
+ */
+function anchorNames(g: Game, there: Fleet[], viewer: string): string[] {
+  const named: string[] = [], seen = new Map<string, number>();
+  for (const x of there) {
+    if (fleetKnown(g, x, viewer) === 'exact') named.push(fleetName(x));
+    else seen.set(x.nat, (seen.get(x.nat) ?? 0) + 1);
+  }
+  for (const [nat, n] of seen) {
+    const adj = g.nations[nat]?.adj ?? nat;
+    named.push(n === 1 ? `${adj} ships reported` : `${FLEETS_COUNTED[n] ?? n} ${adj} fleets reported`);
+  }
+  return named;
 }
 
 /** Why fleet `id` cannot be sent to strike harbour `region` from the air now, or null if it can. Read-only. */
@@ -131,6 +149,8 @@ export function whyNotCarrierStrike(g: Game, id: number, region: number): string
   const c = ownFleet(g, id);
   if (!c) return 'Only your own fleet can be given the order, in your own month.';
   if (c.ships.cv <= 0) return `${cap(fleetName(c))} has no carriers.`;
+  // (A fleet in passage to a new base does nothing on its way: release 2, the far chart.)
+  if (c.stance === 'passage') return passageWhy(g, c);
   const lead = leadOf(g, c);
   if (!lead) return `${cap(fleetName(c))} has no strike aircraft aboard.`;
   if (lead.flew === g.turn) return 'Its strike aircraft have flown this month.';

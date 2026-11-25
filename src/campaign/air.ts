@@ -23,15 +23,15 @@ import { clamp, tenthPct } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { allied, atWar, ensureSupply, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
-import { fighterMonth, fighterTypesOn, typeEdge } from './fighters';
-import { armsOf, intoPool, unitsDecide } from './units';
+import { fighterMonth, fighterTypesOn, lawK, typeEdge } from './fighters';
+import { armsOf, intoPool, unitsDecide, wayNow } from './units';
 import { SKY } from '../battle/air/book';
 import { dcOf, flakMul, hasTech, shipKit, shipRule, type GunStage, type ShipResearch } from './tech';
-import { NAVY, afloatWatch, aswKit, atSea, fleetsNamed, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, toughOf, wholeShares, zoneOf } from './navy';
+import { NAVY, afloatWatch, aswKit, atSea, fleetsNamed, passageWhy, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, toughOf, wholeShares, zoneOf } from './navy';
 import { patrolFigures, patrolMet, patrolOn, patrolReach, patrolStaff } from './seapatrol';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
 import { muster, theUnit, trainedEdge } from './bombers';
-import { storyAir, storyEdge } from './stories';
+import { grade, storyAir, storyEdge } from './stories';
 import { nameLosses, nameSide } from './hulls';
 import { loseStars, mendStars } from './stars';
 import { groundRules } from './ground';
@@ -44,21 +44,27 @@ import { townName } from './towns';
 import { beyondEurope, farOn } from './world';
 import { hopAims, hopsBind, skiesOn } from './pacific';
 import { stopDef } from './history';
-import { settleFought, type BombLaw, type FoughtAir } from './airfought';
+import { settleFought, type BombLaw, type FoughtAir, type TroopLaw } from './airfought';
+import { strafeOn, strafeWatch } from './strafers';
 import { cityForecast, cityHit, cityWorthOf, type CityHit } from './repairs';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
 import { airPiece, nightGunShare, whyNotField, wrecked } from './airversion';
 import { FIELD, burnedRoom, damageField, fieldKnown, fieldRules, fieldShut, fieldTier, planFieldHit, type FieldBlow, type FieldHit } from './fieldstate';
 import { sightOf } from './intel';
+import { raidFogOn, rememberSkies, staffScouts, staffWeigh } from './airfog';
 import { RESEARCH } from './research';
 import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretwar';
 import { armedAt, atomRaidWorth, strikeFlown } from './atom';
 import { acOn, aimOf, bombLands, campaignOrders, campaignResults, chainAt, gunnerRatio, inCampaign, nightFighters, recordField, skyFought, stockLoss } from './aircampaigns';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
-import { chartDist } from './wrap';
+import { chartDist, globeDist, globeLeg, mapDist, nearX } from './wrap';
 import { seaWhat, seaWhere } from './sea-words';
 import { baseField } from './bargains';
 import { flagName } from './flagnames';
+import { ferryOn, staffFerry } from './ferry';
+import { AIRNAMES, airBlocked, airNamesOn, nextNumber, type Label, type RungR2 } from './airnames';
+import { nicknamesOn } from './nicknames';
+import { airRaidFlown, airSupportFlown } from './airnicks';
 
 type Sched = [number, number, number][];
 interface NatSpec { quality: number; ftrRange: number; bmrRange: number }
@@ -154,7 +160,7 @@ export const AIRWAR = warData as unknown as {
   count: { squadron: Record<string, number>; later: Record<string, [number, number]>; guns: { base: number; light: number; heavy: number } };
   groups: { most: number; names: Record<string, { ftr: string; bmr: string }> };
   raids: { kinds: RaidKindRow[] };
-  ground: { intensity: number; fighters: number; scale: number; perDiv: number; max: number; str: number; floor: number; dug: number; cover: Record<string, number>; fire: number; value: number };
+  ground: { intensity: number; fighters: number; scale: number; perDiv: number; max: number; str: number; floor: number; dug: number; cover: Record<string, number>; fire: number; value: number; reach?: number };
   /** Bombing the line: see the note in the data. */
   line: { intensity: number; scale: number; most: number; value: number };
   recon: { aircraft: number; loss: number; ready: number };
@@ -165,6 +171,8 @@ export const AIRWAR = warData as unknown as {
   weight: { against: string; rows: Record<string, [number, number][]> };
   /** Ruling 227 (b433): what a won sky lends the land battle in the air war; see the note in the data. */
   sky: { land: number; attack: number; defence: number; own: number; radar: string };
+  /** Fog and reconnaissance on air raids (airfog.ts; off as shipped): see the note in the data. */
+  fog: { on: boolean; months: number; forget: number; stale: number; scouts: number; round: number; reads: Record<string, number>; gunsUnknown: number; words: string[] };
   success: { k: number; factory: number };
   ai: { escortReady: number; basing: { better: number; least: number; presence?: number; fields?: number; idle?: boolean }; raids: { share: number; least: number; loss: number; rail: number; ready: number; success: number; look: number; worth: number; sweeps: number; sky: number; skyWorth: number; sour?: { trade: number; dear: number; times: number; rest: number }; beach?: { groups: number; home: number; monthly: number; sky: number } }; back?: FightBack };
 };
@@ -494,7 +502,41 @@ export function joinPilots(g: Game, f: AirFleet, n: number, kind: 'ftr' | 'bmr',
   const inXp = kind === 'ftr' && how === 'pool' ? A.poolXp : 0;
   const h = kind === 'ftr' ? blend(hoursOf(g, f), f.ftr, inHours, n) : hoursOf(g, f);
   if (h === null) delete f.hours; else f.hours = h;
-  f.fxp = blend(fxpOf(g, f), had, inXp, n) ?? 0;
+  const was = fxpOf(g, f);
+  f.fxp = blend(was, had, inXp, n) ?? 0;
+  // The card's refit note (the UI director 24 Nov 18:10Z): who joined this month, and the experience before the first of them.
+  f.joined = f.joined?.on === g.turn ? { ...f.joined, n: f.joined.n + n } : { on: g.turn, n, was };
+}
+
+const FIGHTER_WAY: Record<'turn' | 'dive-zoom', string> = { turn: 'turning fight', 'dive-zoom': 'dive and climb' };
+
+/**
+ * Under Units decide, a group's pilots in words for its card (the UI director 24 Nov 18:10Z): the grade first, the
+ * part that changes with play, then the hours where its school is read; and, only in the month new pilots took the
+ * grade down a step, how many joined. Off, both are ''. No raw figure and no "not read": an unread clause is left out.
+ */
+export function pilotWords(g: Game, f: AirFleet): { pilots: string; joined: string } {
+  if (!unitsDecide(g)) return { pilots: '', joined: '' };
+  const xp = fxpOf(g, f), h = hoursOf(g, f), j = f.joined;
+  const pilots = `${grade(xp)} pilots${h !== null ? `, ${Math.round(h)} hours' training` : ''}.`;
+  const joined = j && j.on === g.turn && j.n >= 1 && xp < j.was && grade(xp) !== grade(j.was) ? `${Math.round(j.n)} new pilot${Math.round(j.n) === 1 ? '' : 's'} joined this month.` : '';
+  return { pilots, joined };
+}
+
+/**
+ * Under Units decide, the nation's schools and fighter doctrine, said first on each of its group pages (the UI
+ * director 24 Nov 18:10Z: no nation air force page): the carrier school on a carrier wing's, the flying schools on
+ * the rest. An unread school or doctrine leaves its sentence out; a change training in says when it is ready.
+ */
+export function schoolWords(g: Game, f: AirFleet): string {
+  const A = unitsDecide(g) ? armsOf(g, f.nat)?.air : undefined;
+  if (!A) return '';
+  const deck = deckBred(f), h = deck ? A.deck : A.school;
+  const school = h === null ? '' : deck ? `Your carrier school gives ${Math.round(h)} hours before combat.` : `Your flying schools give ${Math.round(h)} hours before combat.`;
+  const w = A.fighter;
+  const training = w && w.next !== undefined && w.ready !== undefined && g.turn < w.ready;
+  const doctrine = !w ? '' : training ? `Fighter doctrine: ${FIGHTER_WAY[w.id]}; ${FIGHTER_WAY[w.next!]} ready in ${turnToDate(w.ready!).label}.` : `Fighter doctrine: ${FIGHTER_WAY[wayNow(g, w)]}.`;
+  return [school, doctrine].filter(Boolean).join(' ');
 }
 
 /** Seeds every group's pilots as a grand campaign opens with Units decide (staff.ts startOpen, after the store). */
@@ -543,6 +585,59 @@ export function kmToSea(g: Game, f: AirFleet, z: number): number {
   if (!c) return Infinity;
   if (atSea(c)) return c.zone === z ? 0 : g.seas[c.zone].adj.includes(z) ? CARRIERS.range.next : Infinity;
   return c.base >= 0 ? seaKm(g, c.base, z) : Infinity;
+}
+
+/** A group on its way to another field by stages (ferry.ts): the field it took off from on this leg, and the one it is going to in the end. */
+export interface Transit { from: number; to: number }
+
+/**
+ * How far a group's fighters have to fly to meet aircraft on the leg between two fields (ferry.ts): to the nearest
+ * point of that straight leg on the chart, either field included, the way the reach of every fighter is measured (km):
+ * on the globe where an end of the leg or the group's own place is of the far side (wrap.ts globeLeg, as chartDist
+ * reads it; the join's read of r2-head-1125k, fault 1), else the map's straight line as it always was.
+ */
+export function legKm(g: Game, f: AirFleet, from: number, to: number): number {
+  return legKmAt(g, groupAt(g, f), from, to);
+}
+
+/**
+ * legKm from a place on the chart: a province, or a sea where region is -1 (ferry.ts reads its known fighters so).
+ * One field, one distance (the design director, 14:59Z; the reviews of the air follow-on, finding 1 and notes 2 and 3):
+ * - The rules' own distance from the place to a field of the leg is the one kmTo reads: km() from a province, whichever
+ *   chart either is on; seaKm from a sea, a carrier wing at sea being anywhere in its sea (a field on its shore at no
+ *   distance, not the sea's centre: North Atlantic against the Highlands read 444.0 km, kmTo 0).
+ * - From a province, where the nearest point of the leg is one of its ends, the distance is km() to that end (Moscow
+ *   against the leg Kirov to Yaroslavl read 248.763 km on the globe where km() reads 259.688 on the map), or to the
+ *   leg's other field where km() reads that one nearer: on the far chart the end nearest on the chart need not be the
+ *   nearer by km() (Singapore against Kuantan to Kuala Lumpur read 309.355 km, km() to Kuala Lumpur, where km() to
+ *   Kuantan is 289.260; the check of the third round). On the old chart the end nearest on the chart is always the
+ *   nearer by km(), so nothing moves there.
+ * - A point inside the leg is measured by the leg's own ruler (the globe's where an end of the leg or the place is of
+ *   the far side, else the map's straight line; from a sea, from the sea's centre), capped at the rules' distance to
+ *   each end: a leg never reads farther than either of its own fields (Manila against Formosa to Hong Kong read 904.052
+ *   km, km() to Formosa 902.923: the nearest point is found on the chart, not on the globe). On the old chart the cap
+ *   never binds for a province (the nearest point on the map's straight line is nearer than either end).
+ * - From a sea, where the sea's centre lies beyond an end the leg reads seaKm to the nearer of its two fields: the end
+ *   the sea's centre is nearest to on the chart need not be the nearer by seaKm, and a leg never reads farther than
+ *   either of its fields.
+ * Just inside an old-chart end of a leg that crosses to the far side the reading can still step down from the map's to
+ * the globe's: the far chart's two rulers (wrap.ts), not mended here.
+ */
+export function legKmAt(g: Game, p: { x: number; y: number; region: number; sea: number }, from: number, to: number): number {
+  const A = g.regions[from], B = g.regions[to];
+  const bx = nearX(g, B.x, A.x), px = nearX(g, p.x, A.x);
+  const dx = bx - A.x, dy = B.y - A.y, L = dx * dx + dy * dy;
+  const t = L > 0 ? clamp(((px - A.x) * dx + (p.y - A.y) * dy) / L, 0, 1) : 0;
+  const atEnd = t <= 0 || t >= 1;
+  // The rules' own distance to each field of the leg (kmTo's; seaKm takes the field, then the sea), the nearer of the two.
+  const ends = p.region >= 0 ? Math.min(km(g, p.region, from), km(g, p.region, to)) : p.sea >= 0 ? Math.min(seaKm(g, from, p.sea), seaKm(g, to, p.sea)) : Infinity;
+  if (atEnd && (p.region >= 0 || p.sea >= 0)) return ends;
+  const qx = A.x + t * dx, qy = A.y + t * dy;
+  const d = globeLeg(g, A, B, p.region, p.sea) ? globeDist(g, px, p.y, qx, qy) * AIR.kmPerUnit : Math.hypot(px - qx, p.y - qy) * AIR.kmPerUnit;
+  // From a sea, a point inside the leg keeps the sea centre's ruler, capped at seaKm to each end: the smallest change
+  // that keeps one field one distance. (The nearest shore of the sea to the leg, as kmTo reads a sea for a single
+  // field, would be truer: put to the design director, not built.)
+  return Math.min(d, ends);
 }
 
 /** Where a group flies from, for a map to draw: its airfield, or the sea (or harbour) its carriers are in. */
@@ -711,6 +806,24 @@ export function fightersOver(g: Game, region: number, against: string): number {
     n += f.ftr * cover(kmTo(g, f, region), reach(f, g).ftrRange) * crowding(g, f);
   }
   return n;
+}
+
+/**
+ * Fog on raids (airfog.ts): how far a nation's fighters reach, by its own table (a group of long-range fighters may reach
+ * farther), as reach() reads it for a group based at `base` where one is given: on the far side the far rows
+ * (far-air.json ftrReach) and the cover cap (jobs.cover) of a group based there (the join's read of r2-head-1125k,
+ * fault 2). With no base, or off the far side, Europe's dated row as before.
+ */
+export const fighterReach = (g: Game, nat: string, base?: number): number => reach(base === undefined ? { nat, name: '' } : { nat, name: '', base }, g).ftrRange;
+
+/**
+ * Fog on raids (airfog.ts, read only with its switch on): every enemy fighter group that guards a province's ground and
+ * has it within its reach, whatever it is doing this month and whatever the sky: what a side sees there when it looks,
+ * and what the high end of a forecast made out of sight assumes may rise. The fighters whole, not weighed for distance.
+ */
+export function fightersInReach(g: Game, region: number, against: string): AirFleet[] {
+  const holder = g.regions[region].ctrl;
+  return g.airFleets.filter((f) => f.ftr > 0 && atWar(g, f.nat, against) && guardsLand(g, f, region, holder) && cover(kmTo(g, f, region), reach(f, g).ftrRange) > 0);
 }
 
 /**
@@ -949,9 +1062,10 @@ export const closeStrikes = (side: CloseSide): number =>
  * its side flew (`sorties`, by group id: the field's own count where the battle was fought on the field, else the
  * strikes the card gave), pays 'ready' readiness, and is done for the week. A side that made no strike flies none.
  */
-export function bookCloseAir(g: Game, air: CloseAir | undefined, sorties?: Record<number, number>): void {
+export function bookCloseAir(g: Game, air: CloseAir | undefined, sorties?: Record<number, number>, region = -1): void {
   if (!air) return;
   const stamp = g.turn * 10 + g.week;
+  const flown: AirFleet[] = [];
   for (const [side, home] of [[air.att, false], [air.def, true]] as const) {
     if (!side.strikes && !sorties) continue;
     for (const k of side.groups) {
@@ -968,8 +1082,11 @@ export function bookCloseAir(g: Game, air: CloseAir | undefined, sorties?: Recor
       }
       f.ready = Math.max(AIR.ready.floor, f.ready - CLOSE.ready);
       f.closeAt = stamp;
+      flown.push(f);
     }
   }
+  // (Release 2, earned names for air groups under the switch 'nicknames': support flown over a battle is a mission completed.)
+  if (nicknamesOn(g)) airSupportFlown(g, flown, region);
 }
 
 /** True when enemy fighters still defend the sky over a coast and the invader has not won it: no invasion fleet can cross under them. */
@@ -1134,9 +1251,10 @@ export function foundAirFleet(g: Game, nat: string, r: Region, name: string, kin
   let unique = name;
   for (let k = 2; taken(unique); k++) unique = `${name} ${k}`;
   const f: AirFleet = {
-    id: g.nextAir++, nat, name: kind ? groupName(g, nat, kind, strength, r) : unique, base: r.id, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 },
+    id: g.nextAir++, nat, name: unique, base: r.id, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 },
     mission: 'support', target: -1, ready: 1, leader: null, moved: 0, lost: { ftr: 0, bmr: 0 },
   };
+  if (kind) f.name = groupName(g, nat, kind, strength, r, f);
   if (kind) { f.kind = kind; f.parent = unique; f.share = 1; }
   g.airFleets.push(f);
   return f;
@@ -1158,8 +1276,8 @@ const homeLost = (g: Game, nat: string): boolean => { const n = g.nations[nat]; 
  * and while its homeland is lost only the rows of its forces in exile, where it has them. Japan's navy names the
  * groups based on the Pacific islands, its army the rest (and all of them while the map cannot tell).
  */
-export function rungsOf(g: Game, nat: string, base: Region | null): Rung[] {
-  const ladder = (nat === 'JAP' && base && NAMES.navyBases.includes(base.name) ? NAMES.ladders.JAP_navy : null) ?? NAMES.ladders[nat] ?? [];
+export function rungsOf(g: Game, nat: string, base: Region | null, islands: string[] = NAMES.navyBases): Rung[] {
+  const ladder = (nat === 'JAP' && base && islands.includes(base.name) ? NAMES.ladders.JAP_navy : null) ?? NAMES.ladders[nat] ?? [];
   const now = ladder.filter((r) => (r.from ?? 1) <= g.turn && g.turn <= (r.until ?? Infinity));
   const exile = now.filter((r) => /in exile/.test(r.rung));
   return exile.length && homeLost(g, nat) ? exile : now.filter((r) => !/in exile/.test(r.rung));
@@ -1178,8 +1296,13 @@ export function nearestRung(rungs: Rung[], kind: 'ftr' | 'bmr', strength: number
   return best;
 }
 
-/** A form of name with its number: {n}, {nth}, {n+K}, {nth_fr} (1re, 1er before a régiment, else 2e), {nth_nl} (1e). */
-export function formName(form: string, n: number): string {
+/**
+ * A form of name with its number: {n}, {nth}, {n+K}, {nth_fr} (1re, 1er before a régiment, else 2e), {nth_nl} (1e).
+ * (Release 2, under the switch 'airNames': where an arm's list holds whole labels, "I./JG 26" or "II/5", the label
+ * stands for every number token.)
+ */
+export function formName(form: string, n: number | string): string {
+  if (typeof n === 'string') return form.replace(/\{n\+\d+\}|\{nth_fr\}|\{nth_nl\}|\{nth\}|\{n\}/g, n);
   return form
     .replace(/\{n\+(\d+)\}/g, (_, k: string) => String(n + Number(k)))
     .replace(/\{nth_fr\}/g, n === 1 ? (/R[ée]giment/i.test(form) ? '1er' : '1re') : `${n}e`)
@@ -1193,7 +1316,9 @@ export function formName(form: string, n: number): string {
  * country's ladder nearest its full strength, with the next number of that rung; where no rung is near, the plain
  * form ("3rd Fighter Group"), never another country's word. No two of a country's groups share a name.
  */
-function groupName(g: Game, nat: string, kind: 'ftr' | 'bmr', strength: number, base: Region | null): string {
+function groupName(g: Game, nat: string, kind: 'ftr' | 'bmr', strength: number, base: Region | null, grp?: AirFleet): string {
+  // (Release 2, the switch 'airNames': the arm's own numbers and words. Off, everything below is ruling 220's to the letter.)
+  if (airNamesOn(g)) return groupNameR2(g, nat, kind, strength, base, grp);
   const taken = (x: string): boolean => g.airFleets.some((f) => f.nat === nat && f.name === x);
   const rungs = rungsOf(g, nat, base);
   for (let left = rungs; left.length;) {
@@ -1211,6 +1336,73 @@ function groupName(g: Game, nat: string, kind: 'ftr' | 'bmr', strength: number, 
   let name: string;
   do { g.flags[key] = (g.flags[key] ?? 0) + 1; name = formName(AIRWAR.groups.names._default[kind], g.flags[key]); } while (taken(name));
   return name;
+}
+
+/**
+ * A new air group's name under the switch 'airNames' (release 2; the design director's rulings of 25 November 2026,
+ * airnames.ts; the historian's lists, air-unit-names-r2.json): the same rung as ruling 220 picks, with (a) the next
+ * number from the arm's own list in forming order, going on past its end; (b) the rung's role form where the arm said
+ * the role in its names; (c) for Japan's navy groups, the airfield's name at forming ({base}), a second group at the
+ * same field taking the navy's numbered form. Where no rung is near, the arm's own plain form (its 'fallback'; for an
+ * arm with none, the nearest rung of its own ladder however far), never another country's word. No name holds a
+ * blocked one. The positions are kept in g.airNames, apart from every other counter, and no dice are thrown. `grp`,
+ * where given, is told its short form and whether its name says its role (words for the card and the counter only).
+ */
+function groupNameR2(g: Game, nat: string, kind: 'ftr' | 'bmr', strength: number, base: Region | null, grp?: AirFleet): string {
+  const taken = (x: string): boolean => airBlocked(x) || g.airFleets.some((f) => f.nat === nat && f.name === x);
+  const tell = (name: string, form: { ftr: string; bmr: string }, short?: string): string => {
+    if (grp) {
+      grp.roleNamed = form.ftr !== form.bmr;
+      if (short) grp.short = short; else delete grp.short;
+    }
+    return name;
+  };
+  const navy = nat === 'JAP' && !!base && AIRNAMES.navyIslands.includes(base.name);
+  const arm = navy ? 'JAP_navy' : nat;
+  const rungs = rungsOf(g, nat, base, AIRNAMES.navyIslands);
+  const plain = (form: { ftr: string; bmr: string; numbers?: { ftr: Label[]; bmr: Label[] } }): string => {
+    const got = nextNumber(g, `${arm}:${kind}`, form.numbers?.[kind], (n) => formName(form[kind], n), taken);
+    return tell(got.name, form);
+  };
+  const named = (r: Rung & RungR2): string => {
+    const form = r.formR2 ?? r.form;
+    const f = form[kind];
+    const short = (n: Label, at = ''): string | undefined => (r.short?.[kind] ? formName(r.short[kind], n).replace(/\{base\}/g, at) : undefined);
+    // Japan's navy: the airfield's name at forming (the record's station where the province holds one); a second group
+    // at the same field takes the navy's numbered form (the historian: the record's numbered groups).
+    if (/\{base\}/.test(f) && base) {
+      const at = AIRNAMES.navyStations[base.name] ?? base.name;
+      const x = f.replace(/\{base\}/g, at);
+      if (!taken(x)) return tell(x, form, short('', at));
+      return plain(AIRNAMES.fallback[arm] ?? AIRWAR.groups.names._default);
+    }
+    // A rung with no number in its name (Poland's Brygada Pościgowa) is one formation.
+    if (!/\{n/.test(f)) return tell(f, form);
+    // (Germany's Gruppen: a label is passed over while a Geschwader-size group bears its Geschwader's number.)
+    const skip = r.skipIfTaken?.[kind];
+    const clash = (n: Label): boolean => !!skip && typeof n === 'string' && /\d+$/.test(n) && taken(formName(skip, Number(/\d+$/.exec(n)![0])));
+    const got = nextNumber(g, `${nat}:${kind}:${r.rung}`, r.numbers?.[kind], (n) => formName(f, n), (x) => taken(x), clash);
+    return tell(got.name, form, short(got.n));
+  };
+  const one = (r: Rung): boolean => { const f = ((r as Rung & RungR2).formR2 ?? r.form)[kind]; return !/\{n|\{base\}/.test(f) && taken(f); };
+  for (let left = rungs; left.length;) {
+    const r = nearestRung(left, kind, strength);
+    if (!r) break;
+    if (one(r)) { left = left.filter((x) => x !== r); continue; }
+    return named(r as Rung & RungR2);
+  }
+  const own = AIRNAMES.fallback[arm];
+  if (own) return plain(own);
+  // No plain form of its own: the rung of its own ladder nearest the group's strength, however far.
+  let best: Rung | null = null, bd = Infinity;
+  for (const r of rungs) {
+    const v = r[kind];
+    if (!(v > 0) || one(r)) continue;
+    const d = Math.abs(Math.log(Math.max(1, strength) / v));
+    if (d < bd) { bd = d; best = r; }
+  }
+  if (best) return named(best as Rung & RungR2);
+  return plain(AIRWAR.groups.names._default);
 }
 
 /**
@@ -1252,7 +1444,7 @@ export function splitFleet(g: Game, f: AirFleet): AirFleet[] {
     out.push(grp);
   });
   // The names are given once every group is on the list, so that no two of a nation's are alike.
-  if (out.length > 1) for (const grp of out) grp.name = groupName(g, f.nat, grp.kind!, Math.max(grp.est[grp.kind!], grp[grp.kind!]), g.regions[grp.base] ?? null);
+  if (out.length > 1) for (const grp of out) grp.name = groupName(g, f.nat, grp.kind!, Math.max(grp.est[grp.kind!], grp[grp.kind!]), g.regions[grp.base] ?? null, grp);
   return out;
 }
 
@@ -1321,7 +1513,23 @@ export const seedClass = (g: Game, r: Region): number =>
 
 export function whyNotBase(g: Game, f: AirFleet, r: Region, bySea = false): string | null {
   if (f.ship !== undefined) return 'It flies from the carriers of its fleet, and goes where they go.';
+  // (On its way to another field by stages, ferry.ts: the switch 'ferry' alone writes `way`, so off this is never read.)
+  if (f.way !== undefined) return `It is on its way to ${g.regions[f.way.to]?.name ?? 'another airfield'}: send it somewhere else from its page, or call it off.`;
   if (r.id === f.base) return 'It is already based there.';
+  const no = landsAt(g, f, r);
+  if (no) return no;
+  if (f.moved === g.turn) return 'It has already changed base this month.';
+  // Airfields as targets (fieldstate.ts): a shut runway takes nobody in and lets nobody out, and bombers need concrete.
+  if (g.flags.fields === 1 && fieldRules(g) && fieldShut(g, f.base)) return `Grounded: the runway at ${g.regions[f.base].name} is cratered until it is repaired.`;
+  const on = landsOn(g, f, r);
+  if (on) return on;
+  // (A group shipped across an ocean with its country's army goes in crates, however far: world.json 'overseas'.)
+  if (!bySea && km(g, f.base, r.id) > AIR.ferry) return 'Too far to move in one month.';
+  return null;
+}
+
+/** Why a group could not land on a region's airfields at all, whatever its own state: the ground, the field and when it was taken. */
+function landsAt(g: Game, f: AirFleet, r: Region): string | null {
   if (thornGround(g, r, f.nat)) return `${g.nations[r.owner].name} keeps its own air force: no group of its allies is based there.`;
   // An airfield lies outside the town, and goes with the country round it (prizes.ts): an army that holds the
   // field of an enemy province has the use of its airfield after a month, and a wrecked one serves nobody.
@@ -1336,17 +1544,23 @@ export function whyNotBase(g: Game, f: AirFleet, r: Region, bySea = false): stri
   }
   if (!hasAirfield(g, r.id)) return 'There is no airfield there. Engineers can lay one out, and the treasury can build one.';
   if (r.since >= g.turn) return 'Airfields taken this month are not yet in use.';
-  if (f.moved === g.turn) return 'It has already changed base this month.';
-  // Airfields as targets (fieldstate.ts): a shut runway takes nobody in and lets nobody out, and bombers need concrete.
-  if (g.flags.fields === 1 && fieldRules(g)) {
-    if (fieldShut(g, f.base)) return `Grounded: the runway at ${g.regions[f.base].name} is cratered until it is repaired.`;
-    if (fieldShut(g, r.id)) return `The runway at ${r.name} is cratered: no aircraft can land until it is repaired.`;
-    if (f.kind === 'bmr' && f.ashore === undefined && fieldTier(g, r.id) === 'strip') return `Bombers need a concrete airfield: ${r.name} has a field strip.`;
-  }
-  // (A group shipped across an ocean with its country's army goes in crates, however far: world.json 'overseas'.)
-  if (!bySea && km(g, f.base, r.id) > AIR.ferry) return 'Too far to move in one month.';
   return null;
 }
+
+/** Airfields as targets (fieldstate.ts): why a group could not land on this field's runway now, or null. */
+function landsOn(g: Game, f: AirFleet, r: Region): string | null {
+  if (!(g.flags.fields === 1 && fieldRules(g))) return null;
+  if (fieldShut(g, r.id)) return `The runway at ${r.name} is cratered: no aircraft can land until it is repaired.`;
+  if (f.kind === 'bmr' && f.ashore === undefined && fieldTier(g, r.id) === 'strip') return `Bombers need a concrete airfield: ${r.name} has a field strip.`;
+  return null;
+}
+
+/**
+ * Why a land group could not put down on a region's airfields on its way somewhere (ferry.ts): the friendly rule and the
+ * field's own state, exactly as for a move (whyNotBase), leaving out where the group is, how far it is and whether it has
+ * moved this month. Null where it could.
+ */
+export const whyNotStop = (g: Game, f: AirFleet, r: Region): string | null => landsAt(g, f, r) ?? landsOn(g, f, r);
 
 /**
  * True when a field in the wider world lies beyond a month's flying from a land group's base there and one of the two
@@ -1488,7 +1702,7 @@ function splitOff(g: Game, f: AirFleet, q: number): AirFleet {
   f.ftr -= grp.ftr; f.bmr -= grp.bmr;
   f.est = { ftr: f.est.ftr - grp.est.ftr, bmr: f.est.bmr - grp.est.bmr };
   const kind = grp.kind ?? (grp.bmr > grp.ftr ? 'bmr' : 'ftr');
-  grp.name = groupName(g, f.nat, kind, Math.max(grp.est[kind], grp[kind]), g.regions[grp.base] ?? null);
+  grp.name = groupName(g, f.nat, kind, Math.max(grp.est[kind], grp[kind]), g.regions[grp.base] ?? null, grp);
   g.airFleets.splice(g.airFleets.indexOf(f) + 1, 0, grp);
   return grp;
 }
@@ -1504,7 +1718,8 @@ function splitOff(g: Game, f: AirFleet, q: number): AirFleet {
 export function spreadAir(g: Game, nat: string): AirFleet[] {
   const moved: AirFleet[] = [];
   if (!airWar(g) || byHand(g, nat, 'air') || !g.nations[nat]?.alive) return moved;
-  const land = (f: AirFleet): boolean => f.nat === nat && f.ship === undefined && f.ashore === undefined && f.base >= 0 && !!g.regions[f.base];
+  // (A group on its way to another field by stages, ferry.ts, is left to go on: only the switch 'ferry' writes `way`.)
+  const land = (f: AirFleet): boolean => f.nat === nat && f.ship === undefined && f.ashore === undefined && f.base >= 0 && !!g.regions[f.base] && f.way === undefined;
   const mine = g.airFleets.filter(land);
   if (!mine.length) return moved;
   const front = frontOf(g, nat);
@@ -1642,6 +1857,9 @@ export function skyZone(g: Game, m: AirMission, target: number): number {
 export function whyNotMission(g: Game, f: AirFleet, m: AirMission, target: number): string | null {
   if (m === 'support' || m === 'rest') return null;
   if (!g.nations[f.nat].atWar.length) return 'The nation is at peace.';
+  // (A carrier's aircraft fly nothing while it is in passage to a new base: release 2, the far chart. Its fighters'
+  // standing cover over it, 'support', is not barred.)
+  { const c = carrierOf(g, f); if (c?.stance === 'passage') return passageWhy(g, c); }
   // (The sea patrol, release 2: a standing order the sky works on through the month, not a raid it bars.)
   if (m === 'seapatrol') return whyNotPatrol(g, f, target);
   // Weather (ruling 127): a mission needs an open sky at its base and at its target.
@@ -1980,7 +2198,9 @@ function firstOfKind(g: Game, nat: string): void {
         mission: 'support', target: -1, ready: first.ready, leader: null, moved: first.moved, lost: { ftr: 0, bmr: 0 }, kind, parent: r.name, share: 1,
       };
       if (first.raised) grp.raised = first.raised;
-      grp.name = groupName(g, first.nat, kind, want, base);
+      // (The group itself goes with the asking: under the air arms' own names it is told its short form and whether
+      // its name says its role, as every other group named there is. Off, nothing reads it.)
+      grp.name = groupName(g, first.nat, kind, want, base, grp);
       g.airFleets.splice(g.airFleets.indexOf(mine[mine.length - 1]) + 1, 0, grp);
       headline(g, 'info', `${grp.name} forms in ${base.name}, a new group of ${r.name}.`, first.nat, base.id);
     }
@@ -2013,7 +2233,7 @@ function growCommands(g: Game, nat: string): void {
           id: g.nextAir++, nat, name: '', base: first.base, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 },
           mission: 'rest', target: -1, ready: first.ready, leader: null, moved: first.moved, lost: { ftr: 0, bmr: 0 }, kind, parent: r.name, share: 1 / n,
         };
-        grp.name = groupName(g, nat, kind, Math.round(want / n), base);
+        grp.name = groupName(g, nat, kind, Math.round(want / n), base, grp);
         g.airFleets.splice(++at, 0, grp);
         headline(g, 'info', `${grp.name} forms in ${base.name}, a new group of ${r.name}.`, nat, base.id);
       }
@@ -2063,7 +2283,33 @@ export function airOnFall(g: Game, nat: string): void {
 
 // ---- An air campaign, weighed up -----------------------------------------------------------
 
+/**
+ * Fog on raids (airfog.ts, behind its switch): the defence of a target as one side knows it, for a forecast made on
+ * that side's knowledge in place of the truth. It is given only where a raid is weighed before it flies, by the raid
+ * card or by a staff; a raid that is flown is always priced on what is really there.
+ */
+export interface KnownDefence {
+  /** True for an enemy fighter group this side knows of for sure: its field is in the side's sight now. */
+  sure: (f: AirFleet) => boolean;
+  /** Fighters besides those, last seen in reach of the target and counted as all rising, and whose they were. */
+  extra: number;
+  extraNat: string;
+  /** The level of the guns round the target as this side counts them. */
+  aa: number;
+  /** The share of the town in ruins as this side last saw it (0 to 1). */
+  ruined: number;
+}
+
 export interface AirAssess {
+  /** Fog on raids: set only where the mission was weighed on one side's knowledge (KnownDefence), never on a raid flown. */
+  known?: KnownDefence;
+  /**
+   * Fog on raids: the fighters last seen in reach of the target that the weighing counts as all rising (KnownDefence's
+   * extra): how many, the share of them that meets the raid, one's fighting weight and whose they were. Set only with
+   * `known`, and only where some rise. The sky gate of a raid on troops reads it (skyWon, skyGate), so that the card's
+   * gate counts the fighters the card's own odds count.
+   */
+  unseen?: { n: number; w: number; each: number; nat: string };
   /** Why the mission cannot be flown at all, or null. */
   why: string | null;
   place: string;
@@ -2110,6 +2356,11 @@ export interface AirAssess {
    * aircraft's measured performance at the mission's height, in log units. Absent when the switch is off.
    */
   typeEdge?: number;
+  /**
+   * Under Units decide, the pilots' training on the raid card (the UI director 24 Nov 18:10Z), only where it moves
+   * the fight (k > 0) and every group on both sides has its hours read: "Pilots' training: ours 250 hours, theirs 350."
+   */
+  pilotsLine?: string;
   /**
    * Units decide, the fighters' own fight by day (sweep-height-form-1124.md, escort-height-form-1124.md): the defenders'
    * warning in time W (0 to 1), who is above in bands (x: 1 the attackers, 0 level, -1 the defenders; a sweep's 1 - 2W,
@@ -2271,7 +2522,7 @@ function escortAbove(g: Game, a: AirAssess, W: number): number {
   return wt > 0 ? sum / wt : 0;
 }
 
-export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: number): AirAssess {
+export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: number, known?: KnownDefence, transit?: Transit): AirAssess {
   const C = AIR.combat;
   // A strike on one fleet is fought over the sea that fleet is in.
   const quarry = m === 'fleet' ? g.fleets.find((x) => x.id === target) ?? null : null;
@@ -2283,6 +2534,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   const wx = weatherOn(g);
   const sky: Sky = wx ? (sea ? skyAtSea(g, zone) : skyAt(g, target)) : 'clear';
   const out: AirAssess = { why: null, place, att: [], def: [], E: 0, Epow: 0, B: 0, D: 0, Dpow: 0, radar: null, bomberLoss: 0, defence: 0, drilled: 0, aa: 0, guns: { light: 0, heavy: 0, all: 0 }, squadrons: 0, groups: 0, gunLoss: 0, lines: [], ships: [], flak: 0, spoil: 0, naval: 1, again: 1, surprise: false, sky, aim: cloudAim(sky, night) };
+  if (known) out.known = known;
   if (!fleets.length) { out.why = 'No air fleet has these orders.'; return out; }
   if (sky === 'closed') { out.why = `Closed sky this month: nothing flies over ${place}.`; return out; }
   if (m === 'fleet' && (!quarry || !atSea(quarry) || !surfaceShips(quarry))) { out.why = 'That fleet is not at sea.'; return out; }
@@ -2295,8 +2547,9 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   if (m === 'airfield' && g.regions[target]) out.surprise = warOpens(g, nat, g.regions[target].ctrl);
   const unready = out.surprise ? CARRIERS.harbour.unready : 1;
   for (const f of fleets) {
-    if ((wx && grounded(g, f)) || wrecked(g, f)) continue;
-    const d = sea ? kmToSea(g, f, zone) : kmTo(g, f, target);
+    // (A group on its way is over the leg it flies, and out of the fight only for anything else: ferry.ts.)
+    if (!transit && ((wx && grounded(g, f)) || wrecked(g, f))) continue;
+    const d = transit ? 0 : sea ? kmToSea(g, f, zone) : kmTo(g, f, target);
     const R = reach(f, g, raidJob(m));
     const esc = night ? 0 : cover(d, R.ftrRange);
     const crowd = crowding(g, f);
@@ -2319,17 +2572,20 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
       const c = radarAt(g, g.regions[id]);
       if (c && atWar(g, nat, c.nat)) { out.radar = c; break; }
     }
-  } else out.radar = radarAt(g, g.regions[target]);
+  } else out.radar = transit ? null : radarAt(g, g.regions[target]);
   // Who comes up is comesUp()'s (ruling 225): over troops and ships any enemy fighter in reach, over the land itself the
   // groups that guard that ground, and carrier fighters only where their fleet is.
   // A raid flown on an order the defender's agent read (ruling 135(c)): every fighter in reach meets it in full,
   // with nothing lost for distance or for want of radar.
-  const amb = !sea && ambushAt(g, target);
+  const amb = !sea && !transit && ambushAt(g, target);
   for (const f of g.airFleets) {
     if (f.ftr <= 0 || f.mission !== 'support' || f.close || !atWar(g, f.nat, nat)) continue;
-    if (!comesUp(g, f, m, target, zone)) continue;
+    // A group on its way to another field is met, as troops are, by any enemy fighter whose reach covers its leg (ferry.ts).
+    if (!transit && !comesUp(g, f, m, target, zone)) continue;
     if ((wx && grounded(g, f)) || wrecked(g, f)) continue;
-    const d = sea ? kmToSea(g, f, zone) : kmTo(g, f, target);
+    // (Fog on raids: weighed on one side's knowledge, only the groups it knows of for sure are counted by name.)
+    if (known && !known.sure(f)) continue;
+    const d = transit ? legKm(g, f, transit.from, target) : sea ? kmToSea(g, f, zone) : kmTo(g, f, target);
     let w = (amb ? (d <= reach(f, g).ftrRange ? AMBUSH() : 0) : cover(d, reach(f, g).ftrRange)) * crowding(g, f);
     // Carrier fighters are at home over the sea, and over their own fleet its lookouts warn them: they need no radar chain.
     const deck = f.ship !== undefined;
@@ -2347,12 +2603,40 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     out.Dpow += f.ftr * w * worth(g, f) * techMul(g, f.nat, 'radar');
     dPlain += f.ftr * w * worth(g, f);
   }
+  // Fog on raids: the fighters last seen in reach, counted as all rising. Nobody knows which groups they are now, so
+  // they come up with no loss for distance or a crowded field, at their nation's own quality and fighter research, fit
+  // to fly and with no commander named; the night, the want of radar, a surprise and the cloud tell on them as on any.
+  let unseenUp = 0;
+  if (known && known.extra > 0) {
+    let w = 1;
+    if (night) w *= acOn(g) ? nightFighters(g, known.extraNat) : C.night.fighters;
+    if (!amb && !out.radar) w *= AIR.radar.without;
+    w *= unready;
+    if (wx) w *= cloudMet(sky);
+    const each = reach({ nat: known.extraNat, name: '' }, g).quality * techMul(g, known.extraNat, 'fighters');
+    unseenUp = known.extra * w;
+    out.D += unseenUp;
+    out.Dpow += unseenUp * each * techMul(g, known.extraNat, 'radar');
+    dPlain += unseenUp * each;
+    if (unseenUp > 0) out.unseen = { n: known.extra, w, each, nat: known.extraNat };
+  }
   // The fighters' own types (fighters.ts): a small edge from measured performance, off as shipped.
-  if (fighterTypesOn(g) && !night && out.Epow > 0 && out.Dpow > 0) {
+  // (Fog on raids: with no group known by name there are no types to set against the escort's.)
+  if (fighterTypesOn(g) && !night && out.Epow > 0 && out.Dpow > 0 && !(known && !out.def.length)) {
     // Under Units decide each group brings its pilots' hours and its held level, for the pair (fighters.ts pilotsEdge).
     const pilots = (f: AirFleet) => (unitsDecide(g) ? { h: hoursOf(g, f), q: heldOf(g, f) } : {});
     const E = typeEdge(g, out.att.map((x) => ({ f: x.f, w: x.ftr * worth(g, x.f), ...pilots(x.f) })), out.def.map((x) => ({ f: x.f, w: x.f.ftr * x.w * worth(g, x.f), ...pilots(x.f) })), m);
     out.typeEdge = E;
+    // The raid card's pilots' line: the escort's mean hours against the defenders', each by the fighters that fight.
+    if (lawK(g) > 0) {
+      const mean = (xs: { f: AirFleet; w: number }[]): number | null => {
+        let s = 0, n = 0;
+        for (const x of xs) { if (x.w <= 0) continue; const h = hoursOf(g, x.f); if (h === null) return null; s += x.w * h; n += x.w; }
+        return n > 0 ? s / n : null;
+      };
+      const ours = mean(out.att.map((x) => ({ f: x.f, w: x.ftr }))), theirs = mean(out.def.map((x) => ({ f: x.f, w: x.f.ftr * x.w })));
+      if (ours !== null && theirs !== null) out.pilotsLine = `Pilots' training: ours ${Math.round(ours)} hours, theirs ${Math.round(theirs)}.`;
+    }
     out.Epow *= Math.exp(E / 2);
     out.Dpow *= Math.exp(-E / 2);
     dPlain *= Math.exp(-E / 2);
@@ -2377,12 +2661,13 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   out.drilled = out.B > 0 ? out.att.reduce((t, x) => t + x.bmr * trainedEdge(g, x.f), 0) / out.B : 0;
   out.bomberLoss = out.B > 0 ? Math.min(most, (L ? L.bombers * Math.pow(met, L.power) : C.bombers * met) * (1 - out.drilled) * I + (night ? C.night.flak : C.flak) * gun * I) : 0;
   // Guns round the factories bring down more of the bombers that come for them.
-  out.aa = m === 'bomb' || night || m === 'harbour' || m === 'town' ? gunsAt(g, target) : 0;
+  out.aa = m === 'bomb' || night || m === 'harbour' || m === 'town' ? (known ? known.aa : gunsAt(g, target)) : 0;
   if (out.aa && out.B > 0) out.bomberLoss = Math.min(most, out.bomberLoss + out.aa * WORKS.aa.flak * I * unready * aaGun);
   // The same defences as counts: the guns round a target on land, and the squadrons able to meet the raid.
   if (!sea && out.B > 0) out.guns = flakGuns(out.aa);
   out.groups = out.def.length;
   out.squadrons = out.def.reduce((n, x) => n + squadronsOf(x.f.nat, x.f.ftr * x.w, turnToDate(g.turn).year), 0);
+  if (known && unseenUp > 0) out.squadrons += squadronsOf(known.extraNat, unseenUp, turnToDate(g.turn).year);
   // Ships under attack: their own guns, what the fighter cover spoils, and what the crews are worth against ships.
   const shipGuns = out.ships.reduce((s, x) => s + SHIPS.reduce((n, c) => n + x.ships[c] * CARRIERS.flak.ships[c], 0), 0);
   // Ruling 240 (C1, C2): each fleet's guns count for the stage of its own navy's research, and for more again with
@@ -2441,7 +2726,9 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   const df = out.def.reduce((s, x) => s + x.f.ftr, 0);
   out.lines.push({
     label: 'Forces',
-    value: `${[af ? planes(af, 'fighter') : '', ab ? planes(ab, 'bomber') : ''].filter(Boolean).join(' and ')} against ${df ? planes(df, 'fighter') : 'no fighters'}`,
+    // (Fog on raids: weighed on one side's knowledge, only the groups it knows of for sure are named, and the fighters
+    // last seen near the place are said as last seen, not as there.)
+    value: `${[af ? planes(af, 'fighter') : '', ab ? planes(ab, 'bomber') : ''].filter(Boolean).join(' and ')} against ${known ? `${df ? planes(df, 'fighter') : 'no fighters'} known for sure${unseenUp > 0 ? `; about ${Math.round(known.extra).toLocaleString('en-US')} ${df ? 'more ' : ''}were last seen near it` : ''}` : df ? planes(df, 'fighter') : 'no fighters'}`,
     effect: out.D < df ? `About ${Math.round(out.D).toLocaleString('en-US')} of the defending fighters can meet the raids` : undefined,
   });
   // (A raid flown on an order the defender's agent read: the report says so, ruling 135(c).)
@@ -2462,9 +2749,14 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     out.lines.push({
       label: 'In range to intercept',
       value: `About ${planes(out.squadrons, 'fighter squadron')}`,
-      effect: `From ${list(out.def.map((x) => theUnit(x.f.name)))}: about ${Math.round(out.D).toLocaleString('en-US')} fighters can meet the raid.`,
+      effect: unseenUp > 0
+        ? `From ${list(out.def.map((x) => theUnit(x.f.name)))}, and the others last seen near it: about ${Math.round(out.D).toLocaleString('en-US')} fighters may meet the raid.`
+        : `From ${list(out.def.map((x) => theUnit(x.f.name)))}: about ${Math.round(out.D).toLocaleString('en-US')} fighters can meet the raid.`,
     });
-  } else out.lines.push({ label: 'In range to intercept', value: 'No enemy fighters' });
+  } else if (unseenUp > 0) {
+    // (Fog on raids: no group known for sure, but the forecast counts the fighters last seen near the place, all rising.)
+    out.lines.push({ label: 'In range to intercept', value: `About ${planes(out.squadrons, 'fighter squadron')}, not seen now`, effect: `Reckoned from the fighters last seen near it, all of them rising: about ${Math.round(out.D).toLocaleString('en-US')} fighters may meet the raid.` });
+  } else out.lines.push({ label: 'In range to intercept', value: known ? 'No enemy fighters known for sure' : 'No enemy fighters' });
   if (out.height && out.B > 0) {
     // An escorted raid: where the warning puts the defenders against the bombers, and where the escort's roles put it.
     const { W, x } = out.height, hx = Math.pow(out.height.h, Math.abs(x)).toFixed(1);
@@ -2488,7 +2780,8 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   if (out.guns.all) {
     out.lines.push({
       label: 'Flak',
-      value: `About ${out.guns.all.toLocaleString('en-US')} guns round ${place}`,
+      // (Fog on raids: weighed on one side's knowledge, the guns are its reckoning, not a sight of them.)
+      value: known ? `About ${out.guns.all.toLocaleString('en-US')} guns may stand round ${place}` : `About ${out.guns.all.toLocaleString('en-US')} guns round ${place}`,
       effect: `${out.guns.heavy ? `${out.guns.heavy.toLocaleString('en-US')} heavy and ${out.guns.light.toLocaleString('en-US')} light` : 'Light guns only'}. They may bring down ${Math.round(out.gunLoss * 100) >= 1 ? `about ${Math.round(out.gunLoss * 100)}%` : 'almost none'} of the bombers.`,
     });
   }
@@ -2502,13 +2795,14 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
       effect: `${list(packed.map((f) => f.name))} can fly only ${Math.round(least * 100)}% of ${packed.length === 1 ? 'its' : 'their'} aircraft from there`,
     });
   }
-  if (out.aa && m === 'harbour') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ring ${harbourOf(place)}`, effect: 'They bring down more of the bombers' });
+  const ring = known ? 'may ring' : 'ring';
+  if (out.aa && m === 'harbour') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ${ring} ${harbourOf(place)}`, effect: 'They bring down more of the bombers' });
   if (m === 'town') {
     const r = g.regions[target], gone = breachOf(g, r);
     out.lines.push({ label: 'The town', value: `Troops inside ${townName(r)} fight ${Math.round((townBonus(g, r) - 1) * 100)}% stronger${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ''}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling('raid')}% in all` });
   }
-  if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ring ${place}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
-  else if (out.aa) out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ring the factories of ${place}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+  if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ${ring} ${place}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+  else if (out.aa) out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ${ring} the factories of ${place}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
   if (out.ships.length) {
     const pc = (x: number): string => `${Math.round(x * 100)}%`;
     if (out.surprise) out.lines.push({ label: 'Surprise', value: 'War was declared this month', effect: `The harbour is caught unready: its fighters and guns count ${pc(CARRIERS.harbour.unready)}, and the hits are multiplied by ${CARRIERS.harbour.surprise}` });
@@ -2614,8 +2908,40 @@ function fieldBlow(g: Game, a: AirAssess, nat: string, target: number, through: 
   return { through, strafe, radar: a.radar ? a.radar.ground : 1, surprise: warOpens(g, nat, holder), foe: (n) => atWar(g, nat, n), up };
 }
 
-export function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFleet[], salt = '', battle?: FoughtAir): AirReport | null {
-  const a = assessAir(g, fleets, m, target);
+/**
+ * The sky's figure (air.json sky.win): the attacker's fighting weight over what the defender can put up, with the
+ * fight's own type edge (fighters.ts; absent when its switch is off) and, under Units decide, its height; 99 with no
+ * defender. The fight for the sky reads it on the defender's losses made good for the month; a raid on troops on the
+ * defenders still in the air over the target (skyWon).
+ */
+function skyHold(a: AirAssess, Epow: number, Dpow: number): number {
+  const te = a.typeEdge;
+  let hold = Dpow > 0 ? (te ? (Epow * Math.exp(te / 2)) / (Dpow * Math.exp(-te / 2)) : Epow / Dpow) : 99;
+  if (a.height && Dpow > 0) hold *= Math.pow(a.height.h, 2 * a.height.x);
+  return hold;
+}
+
+/**
+ * A raid on troops with the strafers' rule on (strafers.ts): whether the raid's side won the sky in the air fight just
+ * flown, read on the fighters of both sides as the fight left them (the design director, 16:04Z: "a group goes down only
+ * when it is free of the air fight. Settled: its side won the sky (the enemy's fighters beaten or gone)"). The rules'
+ * own test of a won sky is the fight for the sky's (fly(), superiority): at least sky.least fighters still over the
+ * target and sky.win (1.65) times what the defender can put up, by the same weights, type edge and height. That test
+ * reads the defender with his losses made good for the month; over the target, in the raid, nothing is made good, so
+ * here it reads the defenders still in the air (their losses not made good). With none left, none having risen or
+ * every one that rose lost, the sky is won.
+ */
+export function skyWon(g: Game, a: AirAssess): boolean {
+  let E = 0, Epow = 0, D = 0;
+  for (const x of a.att) { const n = x.f.ftr * x.esc * x.crowd; E += n; Epow += n * worth(g, x.f); }
+  for (const x of a.def) D += Math.min(x.f.est.ftr, x.f.ftr) * x.w * worth(g, x.f) * (a.height ? 1 : techMul(g, x.f.nat, 'radar'));
+  // (Fog on raids: a weighing on one side's knowledge counts the fighters last seen near the target as rising.)
+  if (a.unseen) D += a.unseen.n * a.unseen.w * a.unseen.each * (a.height ? 1 : techMul(g, a.unseen.nat, 'radar'));
+  return D <= 0 || (E >= AIR.sky.least && skyHold(a, Epow, D) >= AIR.sky.win);
+}
+
+export function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFleet[], salt = '', battle?: FoughtAir, transit?: Transit): AirReport | null {
+  const a = assessAir(g, fleets, m, target, undefined, transit);
   if (a.why) return null;
   // A fought battle that knew the bombers by name: each such group's roster is made up now, before any loss is booked,
   // exactly as the battle's ticket made it up on a copy (bombers.ts seatsOf), so the bombers the battle names are found
@@ -2691,7 +3017,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   // handed to the staff, all but those lost on the way in and those that had turned back.
   const bombed = fix ? fix.through()
     : Math.max(0, Math.min(a.B, a.B - lostB + (staff ? Math.min(lostB, battle?.lostAfter ?? 0) - staff.away : 0)));
-  const through = bombed * (night ? C.night.accuracy : dayAim(g, nat, m)) * techMul(g, nat, 'bombers') * a.aim;
+  // (A group caught on its way carries no bombs to drop: ferry.ts.)
+  const through = transit ? 0 : bombed * (night ? C.night.accuracy : dayAim(g, nat, m)) * techMul(g, nat, 'bombers') * a.aim;
 
   // What the bombers did.
   let result = '', value = 0, ground = 0, shipsSunk = 0, notable = false;
@@ -2701,6 +3028,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   let atomLine: { text: string; hit: boolean; tell: boolean } | null = null;
   // Airfields as targets (fieldstate.ts): what the bombs did to a field, where they hit one.
   let fh: FieldHit | null = null;
+  // (A raid on troops with the strafers' rule on, strafers.ts: the names of the groups that went down, for the report.)
+  let strafed: string[] | undefined;
   const bookGround = (hit: FieldHit): void => {
     for (const x of hit.losses) {
       const f = g.airFleets.find((y) => y.id === x.id);
@@ -2710,7 +3039,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     }
   };
   let struck: SeaSide[] | undefined;
-  if (m === 'fleet' || m === 'harbour') {
+  if (transit) result = '';
+  else if (m === 'fleet' || m === 'harbour') {
     // (The far side: a raid flown at a harbour is remembered, by who flew it and where, for the news that names it:
     // the entry of December 1941 speaks of Pearl Harbor only where it was raided. Rider b641 (e) to ruling 234.)
     if (m === 'harbour' && farOn(g)) g.flags[`harbour:${nat}:${g.regions[target].name}`] = g.turn;
@@ -2751,6 +3081,18 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       // Ships that are hit and not sunk limp home: the fleet is the less fit for sea.
       x.ready = Math.max(0, x.ready - Math.min(0.3, 0.05 + CARRIERS.strike.ready * (afloatBefore > 0 ? exp.hits / afloatBefore : 0)));
       x.struck = [g.turn, (x.struck && x.struck[0] === g.turn ? x.struck[1] : 0) + 1, atSea(x) ? x.zone : -1];
+      // (Release 2, the far chart: a strike at anchor is booked on the fleet, with where its strikers flew from as the
+      // fleet's side saw them, for its staff's weighing of staying against moving its base: navy.ts anchorLoss.)
+      if (m === 'harbour' && farOn(g)) {
+        const sunk = shipCount(struck![i].sunk) - struck![i].sunk.ss, had = shipCount(struck![i].ships) - struck![i].ships.ss;
+        // (Only the groups that carried bombs struck it: an escort's fighters reach no further than the bombers they guard.)
+        const from = a.att.filter((y) => y.bmr > 0).map((y) => {
+          const c = carrierOf(g, y.f), R = reach(y.f, g, raidJob(m));
+          return c && atSea(c) ? { sea: c.zone, field: -1, km: R.bmrRange } : { sea: -1, field: c ? c.base : y.f.base, km: R.bmrRange };
+        });
+        const w = a.att.reduce((s, y) => s + y.ftr + y.bmr, 0) * (airWeight(g, nat) ?? 1);
+        x.anchor = [...(x.anchor ?? []).filter((e) => e.t >= g.turn - 1), { t: g.turn, at: target, n: sunk, lost: had > 0 ? sunk / had : 0, w, from }];
+      }
       // It has been seen by those who struck it, and the strike gives away the decks it came from.
       (x.seen ??= {})[nat] = g.turn;
       for (const y of a.att) { const c = carrierOf(g, y.f); if (c && atSea(c)) (c.seen ??= {})[x.nat] = g.turn; }
@@ -2877,10 +3219,60 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     const G = AIRWAR.ground;
     const r = g.regions[target];
     const foes = r.units.filter((u) => !u.dead && atWar(g, nat, u.nat));
-    // Ground fire takes its share of the fighters that come down low.
-    a.att.forEach((x, i) => down(x.f, att[i], x.ftr * G.fire * luck(), false));
-    const low = a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd, 0);
+    // Ground fire takes its share of the fighters that come down low. Fought out (release 2), the fighters it brought
+    // down are among the field's own losses, booked above; handed to the staff partway, what the field had cost stands
+    // (booked above too) and the dice roll only the rest's share of the ground fire.
+    const rule = strafeOn();
+    // (The strafers' rule, strafers.ts: only the groups with the reach to strafe go down, those of their fighters the air
+    // fight left, and only they pay the ground fire; fought out, the field's strafers paid it there.)
+    const strafers: number[] = [];
+    // (The sky gate, the design director 16:04Z: settled, a group goes down only when its side won the sky in the air
+    // fight just flown, skyWon. Fought out, the field decides it group by group. Read before the ground fire, and no die
+    // is thrown for it, so every throw of the raid stays where it was.)
+    const won = rule && (!battle || staff) ? skyWon(g, a) : true;
+    let fired = 0;
+    if (rule) a.att.forEach((x, i) => {
+      // (The same-key rule, the design director 12:59Z question 4: the raid's own stream is thrown exactly as with the
+      // rule off, every group's ground-fire throw drawn and set aside, so no later throw of the raid moves; each group
+      // that goes down then throws its own ground fire on a stream keyed by its own id, so a group that no longer throws
+      // moves no one else's.)
+      if (!battle || staff) {
+        const k0 = Math.min(x.f.ftr, rng.roll(Math.max(0, x.ftr * G.fire * luck() * (staff ? staff.rest.ftr : 1))));
+        if (k0) rng.roll(k0 * saved(false));
+      }
+      const left = x.f.ftr * x.esc * x.crowd;
+      if (!(won && x.ftr > 0 && canStrafe(g, x)) || left <= 0) return;
+      strafers.push(x.f.id);
+      if (battle && !staff) return;
+      const own = airRng(g, `${m}:${target}:${nat}${salt}:low:${x.f.id}`);
+      const k = Math.min(x.f.ftr, own.roll(Math.max(0, left * G.fire * own.range(1 - C.luck, 1 + C.luck) * (staff ? staff.rest.ftr : 1))));
+      if (k) {
+        const p = airPool(g, x.f.nat), back = own.roll(k * saved(false));
+        x.f.ftr -= k; x.f.lost.ftr += k; att[i].lostFtr += k;
+        p.lostFtr += k; poolIn(g, x.f.nat, back, x.f); p.lostPilots += k - back;
+      }
+      fired += k;
+    });
+    else if (!battle) a.att.forEach((x, i) => down(x.f, att[i], x.ftr * G.fire * luck(), false));
+    else if (staff) a.att.forEach((x, i) => {
+      const k = Math.min(x.f.ftr, rng.roll(Math.max(0, x.ftr * G.fire * luck() * staff.rest.ftr)));
+      if (!k) return;
+      // (As down() books a loss, its pilots back through the pool's own door; down() itself would add the field's losses again.)
+      const p = airPool(g, x.f.nat), back = rng.roll(k * saved(false));
+      x.f.ftr -= k; x.f.lost.ftr += k; att[i].lostFtr += k;
+      p.lostFtr += k; poolIn(g, x.f.nat, back, x.f); p.lostPilots += k - back;
+    });
+    // The fighters that count on the troops: every one that came through; fought out, those that strafed on the field.
+    const low = fix?.strafed() ?? a.att.reduce((s, x) => s + (!rule || strafers.includes(x.f.id) ? x.f.ftr * x.esc * x.crowd : 0), 0);
     const cut = troopCut(r, foes, (through + low * G.fighters) * troopWeight(g, nat));
+    if (rule) {
+      const route = battle && !staff ? 'fought' : 'settled';
+      strafeWatch.tell?.({ route, target, nat, strafers: route === 'fought' ? [...(battle?.strafers ?? [])] : strafers, fire: route === 'fought' ? battle?.strafeFire ?? 0 : fired, weight: low, cut });
+      // (The words, the UI director 15:04Z: the report says who went down, by the same ids the hook hears, named as
+      // the report names its groups and in the raid's order. Nothing is drawn: a record only.)
+      const down = route === 'fought' ? battle?.strafers ?? [] : strafers;
+      strafed = a.att.flatMap((x, i) => (down.includes(x.f.id) ? [att[i].fleet] : []));
+    }
     let divs = 0;
     for (const c of foes) {
       const k = cut * (c.dug ? G.dug : 1);
@@ -2922,7 +3314,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
 
   // Has the sky been won? The attacker's surviving fighters against what the defender can put up once his losses are made good.
   let sky = false, hold = 0, held = false;
-  if (m === 'superiority') {
+  if (m === 'superiority' && !transit) {
     const Eafter = a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd, 0);
     const EpowAfter = a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd * worth(g, x.f), 0);
     // (The far side: no losses are made good on a field that is not fed, as none will be when its country's month
@@ -2939,11 +3331,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       const back = fedNow[i] && lost > 0 ? Math.min(lost, can) * (def[i].lostFtr / lost) : 0;
       Dnext += Math.min(x.f.est.ftr, x.f.ftr + back) * x.w * worth(g, x.f) * (a.height ? 1 : techMul(g, x.f.nat, 'radar'));
     });
-    // The same type edge as the fight (fighters.ts), not a new reading; absent when the switch is off.
-    const te = a.typeEdge;
-    hold = Dnext > 0 ? (te ? (EpowAfter * Math.exp(te / 2)) / (Dnext * Math.exp(-te / 2)) : EpowAfter / Dnext) : 99;
-    // (And the same height as the fight, under Units decide.)
-    if (a.height && Dnext > 0) hold *= Math.pow(a.height.h, 2 * a.height.x);
+    hold = skyHold(a, EpowAfter, Dnext);
     sky = Eafter >= AIR.sky.least && hold >= AIR.sky.win;
     if (sky) g.sky[target] = { nat, turn: g.turn };
     // Air campaigns (ruling 236.2): the battle for the sky over a province carries over from month to month.
@@ -2981,8 +3369,13 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   if (g.flags.open === 1) rep.worth = Math.round(value);
   if (city) rep.city = { region: city.region, added: city.added, now: city.now };
   if (fh) rep.field = { region: fh.region, shut: fh.shut, levels: fh.levels, ground: fh.ground };
+  if (transit) rep.ferry = transit.to;
+  if (strafed) rep.strafed = strafed;
   g.airReports.push(rep);
   storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' || m === 'airfield' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, guns, ...(battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {}) });
+  // (Release 2, earned names for air groups under the switch 'nicknames', airnicks.ts: the missions completed and the
+  // hard fights, read from what the raid has just recorded. Off, nothing is counted or written.)
+  if (nicknamesOn(g)) airRaidFlown(g, m, { odds: rep.odds, bombers: a.B, bombed, E: a.E, D: a.D, sky: sky || held }, a.att.map((x, i) => ({ f: x.f, side: att[i] })), a.def.map((x, i) => ({ f: x.f, side: def[i] })), sea ? -1 : target);
 
   // (Release 2, atom.ts; the UI director under ruling 230 4e) A raid that carried the atomic bomb reads as any raid in
   // its own line; the strike is told in a line of its own, plain, the same whoever struck whom.
@@ -2998,7 +3391,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   // Once the British and American air forces fight the same enemy side by side, the sky they win is the Allies'.
   const together = !!defNat && (nat === 'UK' || nat === 'USA') && ['UK', 'USA'].every((x) => g.nations[x]?.alive && g.nations[x].atWar.includes(defNat));
   let text: string;
-  if (m === 'superiority') text = `${who} ${a.att.length === 1 ? 'fights' : 'fight'} for the sky over ${a.place}: ${dLost} ${adj} aircraft destroyed, ${cost}. ${sky ? (together ? 'The Allied air forces now hold the sky there.' : `The ${g.nations[nat].adj} air force now holds the sky there.`) : held ? (nat === g.human ? 'The sky there is still yours.' : `The ${g.nations[nat].adj} air force still holds the sky there.`) : df(def) ? 'The defenders still hold their sky.' : 'No fighters came up to meet them.'}`;
+  if (transit) text = `${who}, on ${a.att.length === 1 ? 'its' : 'their'} way to ${g.regions[transit.to]?.name ?? 'another airfield'}, ${a.att.length === 1 ? 'is' : 'are'} met by ${adj} fighters near ${a.place}: ${dLost} ${adj} aircraft destroyed, ${cost}.`;
+  else if (m === 'superiority') text = `${who} ${a.att.length === 1 ? 'fights' : 'fight'} for the sky over ${a.place}: ${dLost} ${adj} aircraft destroyed, ${cost}. ${sky ? (together ? 'The Allied air forces now hold the sky there.' : `The ${g.nations[nat].adj} air force now holds the sky there.`) : held ? (nat === g.human ? 'The sky there is still yours.' : `The ${g.nations[nat].adj} air force still holds the sky there.`) : df(def) ? 'The defenders still hold their sky.' : 'No fighters came up to meet them.'}`;
   else if (m === 'fleet') text = `${who} ${a.att.length === 1 ? 'strikes' : 'strike'} the ${a.ships[0].name} ${seaAt}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else if (m === 'harbour') text = `${who} ${a.att.length === 1 ? 'raids' : 'raid'} ${harbourOf(a.place)}${a.surprise ? ' without warning' : ''}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else if (m === 'airfield') text = `${who} ${a.att.length === 1 ? 'bombs' : 'bomb'} the airfield at ${a.place}${a.surprise ? ' without warning' : ''}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} aircraft destroyed` : ''}.`;
@@ -3011,7 +3405,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   if (g.flags.open === 1 && m === 'superiority' && !sky && aLost + dLost === 0) return rep;
   // What changes something is told in full: the sky won, a ship sunk, a factory wrecked, a railway cut, a fleet or
   // a harbour struck. The same raid on the same place month after month goes into the month's summary line.
-  const full = sky || notable || shipsSunk > 0 || m === 'fleet' || m === 'harbour';
+  const full = !!transit || sky || notable || shipsSunk > 0 || m === 'fleet' || m === 'harbour';
   const brief = m === 'superiority' ? `a fight for the sky over ${a.place}`
     : m === 'town' ? `the defences of ${townName(g.regions[target])} bombed`
     : m === 'airfield' ? `the airfield at ${a.place} bombed`
@@ -3086,6 +3480,8 @@ export function airAI(g: Game, nat: string, ph?: PlanPhase | null, skies?: numbe
   // (Its ground support is decided afresh each month, once its fighters are based: closeStaff.)
   if (closeRules(g)) for (const f of mine) delete f.close;
   if (!n.alive || !n.atWar.length) return;
+  // Fog on raids (airfog.ts, its switch on): the staff notes what it sees of the enemy's air defence as its month opens.
+  if (raidFogOn(g)) rememberSkies(g, nat);
   // In the grand campaign history's air plan does not apply: the air groups patrol, and the staff plans raids of its own.
   // Ships come first: the carriers' wings, and a few of the land bombers, go for the fleets the staff has found.
   // (A landing plan holds the sky it lands under before anything the staff decides this month is flown: rider b631 (iv)
@@ -3145,7 +3541,16 @@ function baseByThreat(g: Game, nat: string, mine: AirFleet[], beaches: number[],
       raided.set(r.region, (raided.get(r.region) ?? 0) + sent * FB.raided);
     }
   }
-  const places = [...new Set([...troops, ...cities, ...raided.keys()])];
+  // (Release 2, the far chart: a harbour where a fleet struck at anchor stays, none being out of its strikers' reach, has
+  // the fighters first: it asks for its strikers' weight at the margin that holds the sky. navy.ts withdraws marks it;
+  // the design director's ruling of 04:33Z, 25 November 2026, 2. Nothing is marked off the far chart.)
+  const struck = new Map<number, number>();
+  for (const f of g.fleets) {
+    if (f.nat !== nat || f.base < 0 || atSea(f) || !((g.flags[`anc:${f.id}`] ?? -9) >= g.turn - 1)) continue;
+    const w = (f.anchor ?? []).filter((e) => e.t >= g.turn - 2 && e.at === f.base).reduce((s, e) => s + e.w, 0);
+    if (w > 0) struck.set(f.base, Math.max(struck.get(f.base) ?? 0, w));
+  }
+  const places = [...new Set([...troops, ...cities, ...raided.keys(), ...struck.keys()])];
   if (!places.length) return;
   const at = new Map(places.map((id, i) => [id, i]));
   const ask = new Float64Array(places.length);
@@ -3169,6 +3574,7 @@ function baseByThreat(g: Game, nat: string, mine: AirFleet[], beaches: number[],
   // The troops fighting the battles of the staff's main effort ask for the sky there (b447): the margin over the
   // enemy aircraft that can reach them that holds it by numbers (airwar.json sky 'own'), not their bare share.
   if (battles.length) for (const id of troops) if (battles.includes(id) || g.regions[id].nb.some((j) => battles.includes(j))) ask[at.get(id)!] *= Math.max(1, AIRWAR.sky.own);
+  for (const [id, w] of struck) ask[at.get(id)!] += w * Math.max(1, AIRWAR.sky.own);
   // Ruling 52(a): the fighters come up behind the army whether or not enemy aircraft are over it. Each stretch of
   // front asks for a standing share besides, by the divisions the nation has there: 'presence' of all that the
   // threat asks for, and all of the fighters where nothing threatens at all.
@@ -3184,7 +3590,7 @@ function baseByThreat(g: Game, nat: string, mine: AirFleet[], beaches: number[],
   const asked = ask.reduce((s, x) => s + x, 0);
   if (asked <= 0) return;
   const fighters = mine.filter((f) => f.kind === 'ftr' && f.ftr > 0 && !afloat(f));
-  const stays = (f: AirFleet): boolean => f.moved === g.turn || f.flew === g.turn || f.mission !== 'support' || posted(g, f) || watching(g, f) || !!held?.has(f.id) || beaches.some((t) => kmTo(g, f, t) <= reach(f, g).ftrRange);
+  const stays = (f: AirFleet): boolean => f.way !== undefined || f.moved === g.turn || f.flew === g.turn || f.mission !== 'support' || posted(g, f) || watching(g, f) || !!held?.has(f.id) || beaches.some((t) => kmTo(g, f, t) <= reach(f, g).ftrRange);
   const free = fighters.filter((f) => !stays(f));
   if (!free.length) return;
   const total = fighters.reduce((s, f) => s + f.ftr, 0);
@@ -3221,9 +3627,11 @@ function baseByThreat(g: Game, nat: string, mine: AirFleet[], beaches: number[],
     for (const [i, d] of nearOf(base)) { const c = cover(d, R); if (c > 0) v += Math.min(f.ftr * c, ask[i]); }
     return v;
   };
-  for (const f of fighters) if (stays(f)) meets(f, f.base, true);
+  // (A group on its way by stages, ferry.ts, counts where it is going.)
+  for (const f of fighters) if (stays(f)) meets(f, f.way?.to ?? f.base, true);
   // The airfields open to this nation's groups (whyNotBase, leaving out each group's own base and how far it can fly in a month).
-  const open = g.regions.filter((r) => whyNotBase(g, free[0], r, true) === null || r.id === free[0].base);
+  // (A province with no airfield is passed by before the longer question: whyNotBase is never null there.)
+  const open = g.regions.filter((r) => (hasAirfield(g, r.id) && whyNotBase(g, free[0], r, true) === null) || r.id === free[0].base);
   // Ruling 52(a), its second part: a move behind the army never takes a group out of reach of the enemy. A group
   // that can reach ground an enemy holds from where it stands goes only to a field from which it still can.
   const foes = P > 0 ? g.regions.filter((r) => atWar(g, nat, r.ctrl)).map((r) => r.id) : [];
@@ -3239,9 +3647,12 @@ function baseByThreat(g: Game, nat: string, mine: AirFleet[], beaches: number[],
     const engaged = P > 0 && foeAt(f.base) <= R;
     let best: { r: Region; v: number } | null = null, far: { r: Region; v: number } | null = null;
     const inFerry = (r: Region): boolean => r.id !== f.base && !overOcean(g, f, r) && km(g, f.base, r.id) <= AIR.ferry && fieldRoom(g, r.id, f);
+    // With the switch 'ferry' (ferry.ts) a field across an ocean is weighed too, as one beyond a month's flight: the
+    // group goes there by stages, or crated by sea, by the player's own order. Off, nothing across an ocean is weighed.
+    const ferry = ferryOn(g);
     for (const r of open) {
-      if (r.id === f.base || overOcean(g, f, r) || !fieldRoom(g, r.id, f)) continue;
-      const near = km(g, f.base, r.id) <= AIR.ferry;
+      if (r.id === f.base || (overOcean(g, f, r) && !ferry) || !fieldRoom(g, r.id, f)) continue;
+      const near = km(g, f.base, r.id) <= AIR.ferry && !overOcean(g, f, r);
       // (Ruling 52(a): a field beyond a month's flight is weighed too, to be reached by stages. Only for a group out of the fight.)
       if (!near && (P <= 0 || engaged)) continue;
       if (engaged && foeAt(r.id) > R) continue;
@@ -3250,6 +3661,8 @@ function baseByThreat(g: Game, nat: string, mine: AirFleet[], beaches: number[],
     }
     const need = here * K.better + K.least * f.ftr;
     if (best && best.v > need && rebaseAir(g, f, best.r)) { meets(f, best.r.id, true); continue; }
+    // A spare group sent where it is asked for by stages, with the player's order (ferry.ts): the same search and warning.
+    if (far && far.v > need && ferry && staffFerry(g, f, far.r)) { meets(f, far.r.id, true); continue; }
     if (far && far.v > need) {
       // Too far to fly in a month: it goes to the open field within a month's flight that lies nearest to it.
       let step: Region | null = null, sd = km(g, f.base, far.r.id);
@@ -3334,7 +3747,18 @@ function closeStaff(g: Game, mine: AirFleet[], battles: number[], back = false):
       if (left <= 0) break;
       if (f.ftr > left || f.close || f.mission !== 'support' || f.flew === g.turn || f.moved === g.turn || f.ready < CLOSE.least || can.some((x) => x.f === f)) continue;
       let to: Region | null = null, bv = 0;
-      for (const r of airBases(g, f)) { if (overOcean(g, f, r) || !fieldRoom(g, r.id, f)) continue; const v = over(f, r.id).length; if (v > bv) { bv = v; to = r; } }
+      // (The first field, in the chart's order, of those it could go to (airBases, less those across an ocean and the
+      // full ones) that covers the most battles. Asked in the cheapest order for the same field: a field beyond a
+      // month's flight is none of them (whyNotBase's last word, and one across an ocean is passed by anyway), and a
+      // field is asked whether the group could go there only when it would cover more battles than the best so far.)
+      const R = ftrR(f);
+      for (const r of g.regions) {
+        if (f.base >= 0 && km(g, f.base, r.id) > AIR.ferry) continue;
+        let v = 0;
+        for (const b of battles) if (cover(km(g, r.id, b), R) > 0) v++;
+        if (v <= bv || overOcean(g, f, r) || whyNotBase(g, f, r) !== null || !fieldRoom(g, r.id, f)) continue;
+        bv = v; to = r;
+      }
       if (to) far.push({ f, to, d: near(f) });
     }
     far.sort((a, b) => a.d - b.d || a.f.id - b.f.id);
@@ -3366,7 +3790,8 @@ function baseBombers(g: Game, nat: string, mine: AirFleet[], battles: number[]):
     for (const t of battles) v += cover(km(g, base, t), R);
     return v * f.bmr;
   };
-  const open = g.regions.filter((r) => whyNotBase(g, bombers[0], r, true) === null || r.id === bombers[0].base);
+  // (A province with no airfield is passed by before the longer question: whyNotBase is never null there.)
+  const open = g.regions.filter((r) => (hasAirfield(g, r.id) && whyNotBase(g, bombers[0], r, true) === null) || r.id === bombers[0].base);
   for (const f of bombers.sort((a, b) => b.bmr - a.bmr || a.id - b.id)) {
     const here = worth(f, f.base);
     const fields: { r: Region; v: number }[] = [];
@@ -3656,9 +4081,8 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null
       for (const [t, divs] of spots) {
         const fleets = fightersAt(base).filter((f) => f.ready >= R.ready && whyNotMission(g, f, 'superiority', t) === null);
         if (!fleets.length) continue;
-        const a = assessAir(g, fleets, 'superiority', t);
-        if (a.why || a.E < AIR.sky.least) continue;
-        const fc = forecastAir(g, a, 'superiority', t);
+        const { a, fc } = staffWeigh(g, nat, fleets, 'superiority', t);
+        if (!fc || a.E < AIR.sky.least) continue;
         if (fc.odds < AIR.sky.win * R.sky) continue;
         const v = R.skyWorth * Math.min(1, divs / 6) + fc.foeLoss - fc.ftrLoss;
         if (v > R.worth && (!best || v > best.v)) best = { t, fleets, v };
@@ -3671,9 +4095,8 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null
       if (hit.has(t)) continue;
       const fleets = mine.filter((f) => fit(f) && f.kind === 'ftr' && f.ftr > 0 && f.ready >= R.ready && f.ready >= AIRWAR.ai.escortReady && whyNotMission(g, f, 'superiority', t) === null);
       if (!fleets.length) continue;
-      const a = assessAir(g, fleets, 'superiority', t);
-      if (a.why || a.E < AIR.sky.least) continue;
-      const fc = forecastAir(g, a, 'superiority', t);
+      const { a, fc } = staffWeigh(g, nat, fleets, 'superiority', t);
+      if (!fc || a.E < AIR.sky.least) continue;
       if (fc.odds < AIR.sky.win * BP.sky) continue;
       const v = R.skyWorth + fc.foeLoss - fc.ftrLoss;
       if (v > R.worth && (!best || v > best.v)) best = { t, fleets, v };
@@ -3693,9 +4116,8 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null
     if (!bombers.length) return;
     const fleets = [...bombers];
     for (const base of new Set(bombers.map(homeOf))) fleets.push(...fightersAt(base).filter((e) => whyNotMission(g, e, 'line', t) === null));
-    const a = assessAir(g, fleets, 'line', t);
-    if (a.why) return;
-    const fc = forecastAir(g, a, 'line', t);
+    const { fc } = staffWeigh(g, nat, fleets, 'line', t);
+    if (!fc) return;
     if (fc.bomberLoss > rules.loss || fc.success < R.success || fc.cut < rivalsData.soften.raid) return;
     send('line', t, fleets, flown++);
   };
@@ -3709,6 +4131,23 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null
   // (The design director, 06:21Z: a staff chooses only among fields it knows, by the one gate every reader uses.)
   const known = fieldsOn ? sightOf(g, nat) : null;
   const fieldsByPlanes = fieldsOn ? [...parked.keys()].filter((id) => fieldKnown(g, nat, id, known!)).sort((a, b) => parked.get(b)! - parked.get(a)! || a - b) : [];
+  // The factories and junctions one bomber group weighs: its enemies' in its reach, the richest first.
+  const worksFor = (f: AirFleet): Region[] => g.regions
+    .filter((r) => !hit.has(r.id) && atWar(g, nat, r.ctrl) && (r.fac > 0 || railsAt(r.id).length >= 3) && whyNotMission(g, f, 'bomb', r.id) === null)
+    .sort((a, b) => b.fac + rules.rail * railsAt(b.id).length - (a.fac + rules.rail * railsAt(a.id).length) || a.id - b.id)
+    .slice(0, R.look);
+  // Fog on raids (airfog.ts, its switch on): before it weighs them, the staff photographs the targets it would weigh
+  // that it has never seen, or last saw too long ago, so many a month; then it weighs every target on what it knows.
+  if (raidFogOn(g)) {
+    const look: number[] = [];
+    const fields = new Set<number>();
+    for (const f of leads().sort((a, b) => b.bmr - a.bmr || a.id - b.id)) {
+      if (fields.has(homeOf(f))) continue;
+      fields.add(homeOf(f));
+      for (const r of worksFor(f)) if (!look.includes(r.id)) look.push(r.id);
+    }
+    staffScouts(g, nat, mine, look);
+  }
   // The bombers: so many raids a month as the staff's share of the groups fit to fly, taken to the nearest whole raid by the luck of the month.
   const most = Math.floor(leads().length * rules.share + rng.range(0, 1));
 
@@ -3724,9 +4163,8 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null
         if (soured(m, r.id)) return;
         // (The fight back: a staff never bombs the factories of its own country's ground the enemy has taken.)
         if (FB && (m === 'bomb' || m === 'night') && r.owner === nat) return;
-        const a = assessAir(g, fleets, m, r.id);
-        if (a.why) return;
-        const fc = forecastAir(g, a, m, r.id);
+        const { fc } = staffWeigh(g, nat, fleets, m, r.id);
+        if (!fc) return;
         if (fc.bomberLoss > rules.loss || fc.success < R.success || (m === 'line' && fc.cut < rivalsData.soften.raid)) return;
         // Factories stopped, a factory wrecked, a junction cut or an army shaken, against the aircraft it should cost.
         const railWorth = (m === 'bomb' || m === 'night') && r.fac <= 0 ? rules.rail : 1;
@@ -3738,10 +4176,7 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null
         const bar = FB ? FB.worth * Math.min(1, fleets.reduce((n, x) => n + x.bmr, 0) / FB.full) : R.worth;
         if (v > bar && (!pick.best || v > pick.best.v)) pick.best = { m, t: r.id, fleets, v };
       };
-      const works = g.regions
-        .filter((r) => !hit.has(r.id) && atWar(g, nat, r.ctrl) && (r.fac > 0 || railsAt(r.id).length >= 3) && whyNotMission(g, f, 'bomb', r.id) === null)
-        .sort((a, b) => b.fac + rules.rail * railsAt(b.id).length - (a.fac + rules.rail * railsAt(a.id).length) || a.id - b.id)
-        .slice(0, R.look);
+      const works = worksFor(f);
       for (const r of works) {
         weigh('bomb', r, [f, ...escorts.filter((e) => whyNotMission(g, e, 'bomb', r.id) === null)]);
         weigh('night', r, [f]);
@@ -3818,9 +4253,8 @@ export function fieldOrder(g: Game, nat: string, field: number): { groups: numbe
   let best: { m: 'bomb' | 'night'; t: number; fleets: AirFleet[]; v: number } | null = null;
   const weigh = (m: 'bomb' | 'night', r: Region, fleets: AirFleet[]): void => {
     if (S && g.turn < (g.flags[`rso:${nat}:${m}:${r.id}`] ?? 0)) return;
-    const a = assessAir(g, fleets, m, r.id);
-    if (a.why) return;
-    const fc = forecastAir(g, a, m, r.id);
+    const { fc } = staffWeigh(g, nat, fleets, m, r.id);
+    if (!fc) return;
     if (fc.bomberLoss > rules.loss || fc.success < R.success) return;
     const railWorth = r.fac <= 0 ? rules.rail : 1;
     const v = (fc.worth * railWorth + fc.foeLoss) * (you !== null && r.ctrl === you ? rules.focus ?? 1 : 1) - fc.ftrLoss - fc.bmrLoss;
@@ -3857,6 +4291,12 @@ export function airDeliveries(g: Game, nat: string): { ftr: number; bmr: number;
 
 /** What a mission is likely to do: the odds, the losses to expect on both sides, what gets done, and the chance it is a success. */
 export interface AirForecast {
+  /**
+   * A raid on troops with the strafers' rule on (strafers.ts): the fighters the card expects the ground fire to bring
+   * down (in ftrLoss already), and the groups it charges with it, those with the reach to strafe. Absent otherwise.
+   */
+  fire?: number;
+  strafers?: number[];
   /** Airfields as targets: what the bombs should do to the field (fieldstate.ts planFieldHit). */
   field?: { shut: boolean; levels: number; ground: number; grounded: number; room: number; built: number };
   /** The fighter odds going in. */
@@ -3893,6 +4333,292 @@ export interface AirForecast {
 export function foundShare(g: Game, a: AirAssess, nat: string): number {
   // A harbour does not move: only ships at sea have to be found.
   return a.ships.some((x) => atSea(x) && fleetKnown(g, x, nat) !== 'exact') ? CARRIERS.strike.report : 1;
+}
+
+/**
+ * A raid on troops with the strafers' rule on (strafers.ts): whether a group of the raid has the reach to go down on the
+ * troops, the troops lying within airwar.json ground.reach of its fighter range (G).
+ */
+export function canStrafe(g: Game, x: { f: AirFleet; d: number }): boolean {
+  return x.d <= (AIRWAR.ground.reach ?? AIR.range.fullAt) * reach(x.f, g).ftrRange;
+}
+
+/**
+ * The card's strafers (the strafers' rule): the exact expectation of what the staff's settled raid (fly(), no battle)
+ * charges, given the air fight the card itself expects (air: the escort's losses at even luck). The design director,
+ * 12:59Z question 4: "the card is the exact expectation of the settled raid; where a term is not linear in survivors,
+ * the card computes the expectation of the outcome, not the outcome at the expected count".
+ *
+ * The settled raid, group by group: the air fight takes k = min(F, roll(air x luck x share)) of the group's F fighters
+ * (share = its x.ftr over the raid's E; luck even between 1 - combat.luck and 1 + combat.luck, one throw for the raid);
+ * those left count (F - k) x esc x crowd; of those, a group with the reach to strafe pays ground.fire x its own luck
+ * (mean 1), and the rest weigh on the troops. A roll's mean is its argument and never passes the whole group, so
+ * E[k | luck] = min(F, air x luck x share), and over the luck that is the mean of a clipped line: not linear, which is
+ * where the card's old "even spread of losses, keep = 1 - air / E" went wrong (the clip at F, and losses counted on the
+ * whole group F against a share counted on F x esc x crowd). The ground fire and the weight are linear in what is left,
+ * so their means follow from E[k]. A group is named when it is more likely than not to have a fighter left; with the
+ * sky gate (16:04Z), more likely than not to win the sky and have a fighter left, and every figure is taken over the
+ * lucks on which the sky is won (skyGate).
+ */
+export function strafersExpected(g: Game, a: AirAssess, air: number): { ids: number[]; left: number; fire: number; weight: number; parts: StrafePart[]; gate?: SkyGate } {
+  const L = AIR.combat.luck, lo = 1 - L, hi = 1 + L, fire = AIRWAR.ground.fire;
+  // (The sky gate, the design director 16:04Z: in the settled raid a group goes down only when the sky is won, skyWon.
+  // Sure to be won on every luck, the card is as it was, to the last digit; sure to be lost, nobody goes down.)
+  const gate = skyGate(g, a, air);
+  const ids: number[] = [];
+  const parts: StrafePart[] = [];
+  let left = 0, weight = 0;
+  if (gate === 'lost') return { ids, left, fire: 0, weight, parts };
+  for (const x of a.att) {
+    if (!(x.ftr > 0) || !canStrafe(g, x)) continue;
+    const F = x.f.ftr, c = x.esc * x.crowd, m = a.E > 0 ? air * (x.ftr / a.E) : 0;
+    parts.push({ F, c, m, keep: 1 - c * fire });
+    if (gate !== 'won') {
+      // Won on part of the luck: the chance the sky is won and the group has a fighter left, and what it leaves then.
+      const l = gate.mean((u) => c * (F - Math.min(F, m * u)));
+      if (gate.mean((u) => Math.max(0, Math.min(1, F - m * u))) > 0.5) ids.push(x.f.id);
+      left += l;
+      weight += l * (1 - c * fire);
+      continue;
+    }
+    // E[min(F, m u)] for u even on [lo, hi]; and the chance a fighter is left, P(roll(m u) < F).
+    const lost = m <= 0 ? 0 : clipMean(m, F, lo, hi);
+    const some = m <= 0 ? 1 : chanceBelow(m, F, lo, hi);
+    const l = c * Math.max(0, F - lost);
+    if (some > 0.5) ids.push(x.f.id);
+    left += l;
+    weight += l * (1 - c * fire);
+  }
+  return gate === 'won' ? { ids, left, fire: left * fire, weight, parts } : { ids, left, fire: left * fire, weight, parts, gate };
+}
+
+/**
+ * The sky gate as the card weighs it (the design director, 16:04Z; skyWon): over the settled raid's three lucks, each
+ * even on [1 - combat.luck, 1 + combat.luck], the escort's (u: its air losses), the defenders' (their losses to the
+ * escort) and the bombers' (ub: the bombers lost, and so the defenders their gunners bring down, as gunsDown counts
+ * them), whether the sky is won after the air fight. The rolls' whole numbers are taken at their means, as the card
+ * takes them everywhere. 'won' or 'lost' where it is so on every luck; otherwise, for a given u and ub, the chance over
+ * the defenders' luck, in closed form (sky), and `mean`, the mean over the escort's luck of that chance (taken in closed
+ * form over the bombers' luck) times a term of the escort's luck.
+ */
+export interface SkyGate {
+  sky: (u: number, ub: number) => number;
+  /** The breaks over the bombers' luck, for a given u, between which sky is linear in ub. */
+  breaks: (u: number) => number[];
+  /** Over the escort's luck, the mean of f(u) x (the chance over the other two lucks that the sky is won). */
+  mean: (f: (u: number) => number) => number;
+  /** The same, of sum over ub of an integrand: E over (u, ub) of h(u, ub, sky), the bombers' luck split at its breaks. */
+  mean2: (h: (u: number, ub: number, p: number) => number, cuts: (u: number) => number[]) => number;
+}
+
+function skyGate(g: Game, a: AirAssess, air: number): 'won' | 'lost' | SkyGate {
+  const C = AIR.combat, lo = 1 - C.luck, hi = 1 + C.luck;
+  // The defenders as skyWon weighs them: q a fighter's weight over the target, s the group's share of their losses.
+  // (Fog on raids: the fighters last seen near the target, which the card's odds count as rising, are one more group
+  // here, fit to fly and taking their share of the defenders' losses, so the gate and the odds weigh one defence.)
+  const un = a.unseen;
+  const def = a.D > 0 ? [
+    ...a.def.map((x) => ({ F: x.f.ftr, est: x.f.est.ftr, q: x.w * worth(g, x.f) * (a.height ? 1 : techMul(g, x.f.nat, 'radar')), s: (x.f.ftr * x.w) / a.D })),
+    ...(un ? [{ F: un.n, est: un.n, q: un.w * un.each * (a.height ? 1 : techMul(g, un.nat, 'radar')), s: (un.n * un.w) / a.D }] : []),
+  ].filter((d) => d.F > 0 && d.q > 0 && d.s > 0) : [];
+  if (!def.length) return 'won';
+  const Dnow = (X: number): number => def.reduce((t, d) => t + Math.min(d.est, d.F - Math.min(d.F, X * d.s)) * d.q, 0);
+  const Xall = Math.max(...def.map((d) => d.F / d.s));
+  // The raid's fighters as the escort's luck u leaves them, as skyWon counts them and weighs them.
+  const att = a.att.map((x) => ({ F: x.f.ftr, c: x.esc * x.crowd, v: worth(g, x.f), m: a.E > 0 ? air * (x.ftr / a.E) : 0 }));
+  const Eleft = (u: number): number => att.reduce((t, x) => t + x.c * (x.F - Math.min(x.F, x.m * u)), 0);
+  const Epow = (u: number): number => att.reduce((t, x) => t + x.c * (x.F - Math.min(x.F, x.m * u)) * x.v, 0);
+  // hold = K x Epow / D (skyHold, its type edge and height); the sky is won when D <= K x Epow / win, or D is 0.
+  const K = skyHold(a, 1, 1);
+  const seen = new Map<number, number>();
+  const Xstar = (u: number): number => {
+    const was = seen.get(u);
+    if (was !== undefined) return was;
+    const X = Xfor(u);
+    seen.set(u, X);
+    return X;
+  };
+  const Xfor = (u: number): number => {
+    const thr = Eleft(u) >= AIR.sky.least ? (K * Epow(u)) / AIR.sky.win : 0;
+    if (Dnow(0) <= thr) return 0;
+    let x0 = 0, x1 = Xall;
+    for (let i = 0; i < 64; i++) { const mid = (x0 + x1) / 2; if (Dnow(mid) <= thr) x1 = mid; else x0 = mid; }
+    return x1;
+  };
+  // The defenders' losses: d x their luck, and the bombers' gunners' kills, gk x the bombers lost (gunsDown is linear
+  // in them; a raid on troops does not read the target there), the bombers lost B x min(most, bomberLoss x ub).
+  const se = Math.sqrt(a.Epow), sd = Math.sqrt(a.Dpow);
+  const share = se + sd > 0 ? se / (se + sd) : 0;
+  const d = C.fighters * intensity('ground') * Math.min(a.E, a.D) * clashOf(g, 'ground') * 2 * share;
+  const gk = gunsDown(g, a, false, 1, 'ground', -1), most = mostBomberLoss(g), slope = gk * a.B * a.bomberLoss;
+  const Gb = (ub: number): number => gk * a.B * Math.min(most, a.bomberLoss * ub);
+  const at = (X: number, ub: number): number => (d > 0 ? Math.max(0, Math.min(1, (hi - (X - Gb(ub)) / d) / (hi - lo))) : Gb(ub) >= X ? 1 : 0);
+  // On every luck: won where the worst (the escort's most losses, the defenders' and gunners' fewest) wins it.
+  if (d * lo + Gb(lo) >= Xstar(hi)) return 'won';
+  if (d * hi + Gb(hi) < Xstar(lo)) return 'lost';
+  const kink = slope > 0 && a.bomberLoss > 0 ? most / a.bomberLoss : Infinity;
+  const breaks = (u: number): number[] => {
+    const X = Xstar(u), out = [lo, hi];
+    if (kink > lo && kink < hi) out.push(kink);
+    // Where the chance reaches 0 or 1 (or the gunners alone decide it): Gb(ub) = X - d x hi, X - d x lo, X.
+    if (slope > 0) for (const y of [X - d * hi, X - d * lo, X]) { const ub = y / slope; if (ub > lo && ub < hi && ub < kink) out.push(ub); }
+    return out;
+  };
+  // The escort's luck, split where a group's loss reaches the whole group and where the fighters left pass sky.least.
+  const knots = [lo, hi];
+  for (const x of att) if (x.m > 0 && x.F / x.m > lo && x.F / x.m < hi) knots.push(x.F / x.m);
+  if ((Eleft(lo) >= AIR.sky.least) !== (Eleft(hi) >= AIR.sky.least)) {
+    let u0 = lo, u1 = hi;
+    for (let i = 0; i < 64; i++) { const mid = (u0 + u1) / 2; if (Eleft(mid) >= AIR.sky.least) u0 = mid; else u1 = mid; }
+    knots.push(u0);
+  }
+  knots.sort((x, y) => x - y);
+  // Composite Simpson's rule over u, 24 panels between each pair of knots; over ub, Simpson on each piece between the
+  // breaks, where the integrand is a quadratic (a line times a line), so that part is exact.
+  const N = 24;
+  const overU = (f: (u: number) => number): number => {
+    let sum = 0;
+    for (let i = 0; i + 1 < knots.length; i++) {
+      const u0 = knots[i], u1 = knots[i + 1];
+      if (!(u1 > u0)) continue;
+      const h = (u1 - u0) / N;
+      // (Just inside each end, so a step at a knot is read from the piece's own side.)
+      const ev = (k: number): number => f(k === 0 ? u0 + 1e-12 * (u1 - u0) : k === N ? u1 - 1e-12 * (u1 - u0) : u0 + k * h);
+      let t = ev(0) + ev(N);
+      for (let k = 1; k < N; k++) t += (k % 2 ? 4 : 2) * ev(k);
+      sum += (t * h) / 3;
+    }
+    return sum / (hi - lo);
+  };
+  const overB = (u: number, h: (ub: number) => number, more: number[]): number => {
+    const xs = [...breaks(u), ...more.filter((b) => b > lo && b < hi)].sort((x, y) => x - y);
+    let sum = 0;
+    for (let i = 0; i + 1 < xs.length; i++) {
+      const b0 = xs[i], b1 = xs[i + 1];
+      if (b1 > b0) sum += ((b1 - b0) / 6) * (h(b0) + 4 * h((b0 + b1) / 2) + h(b1));
+    }
+    return sum / (hi - lo);
+  };
+  const sky = (u: number, ub: number): number => at(Xstar(u), ub);
+  return {
+    sky, breaks,
+    mean: (f) => overU((u) => { const X = Xstar(u); return f(u) * overB(u, (ub) => at(X, ub), []); }),
+    mean2: (h, cuts) => overU((u) => { const X = Xstar(u); return overB(u, (ub) => h(u, ub, at(X, ub)), cuts(u)); }),
+  };
+}
+
+/**
+ * One group with the reach to strafe, as strafersExpected weighs it: F fighters, c = esc x crowd of them counting, m the
+ * air fight's loss to it at even luck, keep the share of a counting fighter's weight left after the ground fire.
+ */
+export interface StrafePart { F: number; c: number; m: number; keep: number }
+
+/**
+ * The card's cut on the troops with the strafers' rule on: the expectation of the settled raid's troopCut over the
+ * raid's luck (the design director, 12:59Z question 4: where a term is not linear the card gives the expectation of the
+ * outcome; the review of the air follow-on, finding 2). troopCut clips at ground.max, so it is not linear where the clip
+ * binds. The settled raid throws two independent lucks that move the weight on the troops, each even on
+ * [1 - combat.luck, 1 + combat.luck]: the bombers' (their losses, so those that get through) and the escort's (the air
+ * fight's losses, so the strafers left). Given them, the expected weight is linear in what gets through and in the
+ * strafers left, as the card's own figures read them: through(ub) = through x (1 - bomberLoss x ub) / (1 - bomberLoss),
+ * mean the card's through; strafers left E[F - min(F, m ue)] x c x keep for each group, mean strafersExpected's weight.
+ * So the expectation is a double integral of a clipped plane: taken exactly, in closed form over the bombers' luck and by
+ * Simpson's rule over the escort's between every kink, where the integrand is a quadratic. No dice are drawn.
+ * Where the clip cannot bind at the raid's best luck the cut is troopCut at the expected weight, the card's figure
+ * before this, to the last digit. The rolls' whole numbers and each strafer's own ground-fire luck are taken at their
+ * means (linear terms, except where they move the clip by a fraction of an aircraft).
+ */
+function troopCutExpected(g: Game, a: AirAssess, r: Region, foes: Corps[], nat: string, through: number, s: { weight: number; parts: StrafePart[]; gate?: SkyGate }): number {
+  const G = AIRWAR.ground, w = troopWeight(g, nat);
+  const linear = troopCut(r, foes, (through + s.weight * G.fighters) * w);
+  const divs = foes.reduce((t, c) => t + c.divs, 0);
+  if (divs <= 0 || w <= 0) return linear;
+  const L = AIR.combat.luck, lo = 1 - L, hi = 1 + L, bl = a.bomberLoss;
+  // The weight in bombers through plus strafers x ground.fighters: what the clip M stands at in those units.
+  const M = (G.max * (G.scale + G.perDiv * divs)) / w;
+  const S = (u: number): number => s.parts.reduce((t, p) => t + p.c * (p.F - Math.min(p.F, p.m * u)) * p.keep, 0) * G.fighters;
+  // through(ub) = T0 - beta x ub.
+  const T0 = bl < 1 ? through / (1 - bl) : through, beta = bl < 1 ? (through * bl) / (1 - bl) : 0;
+  if (T0 - beta * lo + S(lo) <= M) return linear;
+  // (The sky gate, 16:04Z: won on part of the luck only. The strafers weigh on the troops only where the sky is won;
+  // the bombers' luck moves both what gets through and the gunners' share in winning it, so the two lucks are taken
+  // together: over the bombers' luck exactly, piece by piece between the breaks of the gate and of the clip.)
+  const gate = s.gate;
+  if (gate) {
+    const clip = (y: number): number => Math.min(M, y);
+    const cuts = (u: number): number[] => (beta > 0 ? [(T0 + S(u) - M) / beta, (T0 - M) / beta] : []);
+    const sum = gate.mean2((u, ub, p) => p * clip(T0 - beta * ub + S(u)) + (1 - p) * clip(T0 - beta * ub), cuts);
+    return sum * (w / (G.scale + G.perDiv * divs)) * (G.cover[r.terrain] ?? 1);
+  }
+  // E over the bombers' luck of min(M, A - beta ub), in closed form.
+  const overB = (A: number): number => {
+    if (beta <= 0) return Math.min(M, A);
+    const c = Math.max(lo, Math.min(hi, (A - M) / beta));
+    return (M * (c - lo) + (A * (hi - c) - (beta * (hi * hi - c * c)) / 2)) / (hi - lo);
+  };
+  const h = (u: number): number => overB(T0 + S(u));
+  // Kinks over the escort's luck: where a group's loss reaches the whole group, and where the clip meets either edge of
+  // the bombers' luck (S is linear between the first kind, so the second kind is found on each piece).
+  const knots = [lo, hi];
+  for (const p of s.parts) if (p.m > 0 && p.F / p.m > lo && p.F / p.m < hi) knots.push(p.F / p.m);
+  knots.sort((x, y) => x - y);
+  const all = [...knots];
+  for (let i = 0; i + 1 < knots.length; i++) {
+    const u0 = knots[i], u1 = knots[i + 1];
+    if (u1 <= u0) continue;
+    const s0 = S(u0), s1 = S(u1);
+    if (s1 === s0) continue;
+    for (const b of [lo, hi]) {
+      const u = u0 + ((M + beta * b - T0 - s0) / (s1 - s0)) * (u1 - u0);
+      if (u > u0 && u < u1) all.push(u);
+    }
+  }
+  all.sort((x, y) => x - y);
+  let sum = 0;
+  for (let i = 0; i + 1 < all.length; i++) {
+    const u0 = all[i], u1 = all[i + 1];
+    if (u1 <= u0) continue;
+    sum += ((u1 - u0) / 6) * (h(u0) + 4 * h((u0 + u1) / 2) + h(u1));
+  }
+  return (sum / (hi - lo)) * (w / (G.scale + G.perDiv * divs)) * (G.cover[r.terrain] ?? 1);
+}
+
+/** The mean of min(F, m u) for u even on [lo, hi] (m > 0). */
+function clipMean(m: number, F: number, lo: number, hi: number): number {
+  if (m * hi <= F) return m * (lo + hi) / 2;
+  if (m * lo >= F) return F;
+  const u = F / m;
+  return ((m / 2) * (u * u - lo * lo) + F * (hi - u)) / (hi - lo);
+}
+
+/** The chance that roll(m u) < F for u even on [lo, hi] (m > 0, F whole): 1 below F - 1, F - y between, 0 from F. */
+function chanceBelow(m: number, F: number, lo: number, hi: number): number {
+  // P(roll(y) < F) = clamp(F - y, 0, 1) for whole F; integrate over y = m u, u even on [lo, hi].
+  const y0 = m * lo, y1 = m * hi;
+  if (y1 <= y0) return Math.max(0, Math.min(1, F - y0));
+  const prim = (y: number): number => (y <= F - 1 ? y : y >= F ? (F - 1) + 0.5 : (F - 1) + ((y - (F - 1)) - ((y - (F - 1)) ** 2) / 2));
+  return (prim(y1) - prim(y0)) / (y1 - y0);
+}
+
+/**
+ * The law fly() weighs a raid on troops by (airfought.ts TroopLaw), from the bombers that drop and the fighters that
+ * strafe. Null for any other raid, or where no enemy stands there. An air battle carries it (release 2: a raid on troops
+ * fought out), so the field earns the very cut the campaign books.
+ */
+export function troopLaw(g: Game, a: AirAssess, m: AirMission, target: number): TroopLaw | null {
+  if (m !== 'ground') return null;
+  const G = AIRWAR.ground, r = g.regions[target], nat = a.att[0]?.f.nat ?? '';
+  const divs = r.units.reduce((s, c) => s + (!c.dead && atWar(g, nat, c.nat) ? c.divs : 0), 0);
+  if (divs <= 0) return null;
+  const w = troopWeight(g, nat);
+  return {
+    scale: G.scale, perDiv: G.perDiv, max: G.max, cover: G.cover[r.terrain] ?? 1, divs,
+    // As fly() aims the bombers: the day's accuracy, their research and the weather on the day; then the nation's weight row.
+    bomber: dayAim(g, nat, m) * techMul(g, nat, 'bombers') * a.aim * w, fighter: G.fighters * w,
+    fire: G.fire, dug: G.dug, str: G.str, value: G.value,
+    // (The strafers' rule, strafers.ts: the groups with the reach to strafe.)
+    ...(strafeOn() ? { reach: a.att.filter((x) => x.ftr > 0 && canStrafe(g, x)).map((x) => x.f.id) } : {}),
+  };
 }
 
 /**
@@ -4000,6 +4726,7 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
   let town: TownHit | undefined;
   let city: number | undefined;
   let field: FieldHit | null = null;
+  let fire: number | undefined, strafers: number[] | undefined;
   if (m === 'superiority') {
     const based = g.airFleets.filter((f) => f.base === target && f.ship === undefined && atWar(g, f.nat, nat)).length;
     cut = based ? Math.min(AIR.damage.airfields.max, through / AIR.damage.airfields.scale) : 0;
@@ -4030,8 +4757,9 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
       if (r.fac <= 0) cut = 0;
     }
     // Damaged cities: the lasting damage the bombs should leave on the town, and what that is worth.
-    const pts = cityForecast(g, r, 'raid', through, gunsStop(a.aa ?? 0), m === 'night');
-    if (pts > 0) { city = pts; value += cityWorthOf(g, r, pts); }
+    // (Fog on raids: weighed on one side's knowledge, the town is as ruined as that side last saw it.)
+    const pts = cityForecast(g, r, 'raid', through, gunsStop(a.aa ?? 0), m === 'night', a.known?.ruined);
+    if (pts > 0) { city = pts; value += cityWorthOf(g, r, pts, a.known?.ruined); }
   } else if (m === 'strike') {
     cut = Math.min(AIR.damage.shipping.maxSink, AIR.damage.shipping.sink * (through / (through + AIR.damage.shipping.scale)));
     const afloat = g.fleets.reduce((s, f) => s + (f.zone === target && atSea(f) && atWar(g, nat, f.nat) ? surfaceShips(f) : 0), 0);
@@ -4060,8 +4788,8 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
     town = planTownHit(g, g.regions[target], 'raid', townShare('raid', through) * (a.aa ? 1 - a.aa * WORKS.aa.cut : 1));
     cut = town.share;
     value = town.share * town.divs * SIEGE.bombard.value;
-    const pts = cityForecast(g, g.regions[target], 'town', town.share);
-    if (pts > 0) { city = pts; value += cityWorthOf(g, g.regions[target], pts); }
+    const pts = cityForecast(g, g.regions[target], 'town', town.share, 0, false, a.known?.ruined);
+    if (pts > 0) { city = pts; value += cityWorthOf(g, g.regions[target], pts, a.known?.ruined); }
   } else if (m === 'line') {
     cut = lineWear(through);
     value = cut * g.regions[target].units.reduce((s, c) => s + (!c.dead && atWar(g, nat, c.nat) && worksOf(c) > 0 ? c.divs : 0), 0) * AIRWAR.line.value;
@@ -4069,9 +4797,21 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
     const G = AIRWAR.ground;
     const r = g.regions[target];
     const foes = r.units.filter((u) => !u.dead && atWar(g, nat, u.nat));
-    const fire = a.E * G.fire;
-    ftrLoss += fire;
-    cut = troopCut(r, foes, (through + Math.max(0, a.E - ftrLoss) * G.fighters) * troopWeight(g, nat));
+    if (strafeOn()) {
+      // (The strafers' rule, strafers.ts: the ground fire, and the fighters' weight on the troops, only on the fighters
+      // expected to be left after the air fight that have the reach to strafe, each group its share of the air's losses.)
+      const s = strafersExpected(g, a, ftrLoss);
+      ftrLoss += s.fire;
+      fire = s.fire; strafers = s.ids;
+      // (The cut clips at ground.max, so it is the expectation of the settled raid's cut over the raid's luck, ruling 4;
+      // where the clip cannot bind on any luck that is the cut at the expected weight, to the last digit.)
+      cut = troopCutExpected(g, a, r, foes, nat, through, s);
+      strafeWatch.tell?.({ route: 'card', target, nat, strafers: s.ids, fire: s.fire, weight: s.weight, cut });
+    } else {
+      const fire = a.E * G.fire;
+      ftrLoss += fire;
+      cut = troopCut(r, foes, (through + Math.max(0, a.E - ftrLoss) * G.fighters) * troopWeight(g, nat));
+    }
     value = cut * foes.reduce((s, c) => s + c.divs, 0) * G.value;
   }
   // The chance of success: a raid succeeds when it costs the enemy more than it costs the raiders. A cut railway
@@ -4098,6 +4838,7 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
   if (atomReach !== null) success = atomReach;
   const fc: AirForecast = { odds, bomberLoss: a.bomberLoss, cut, nation, rail, ruin, ftrLoss, bmrLoss, foeLoss, foeGuns, success, worth: value + 300 * (pr + pf), ships, hits, town };
   if (city !== undefined) fc.city = city;
+  if (fire !== undefined) { fc.fire = fire; fc.strafers = strafers; }
   if (field) fc.field = { shut: field.closed, levels: field.levels, ground: field.ground, grounded: field.grounded, room: field.room, built: field.built };
   return fc;
 }

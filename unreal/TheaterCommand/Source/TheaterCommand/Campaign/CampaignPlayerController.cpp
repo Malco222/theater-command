@@ -363,7 +363,7 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	{
 		if (Session->IsRunning() && !Session->GetView().CommandName.IsEmpty() && !Session->GetView().Human.IsEmpty())
 		{
-			Add(TEXT("depth"), TEXT("How deep you play"), TEXT("Which parts of the war are on your own desk and which your staff runs for you: research, building and trade, diplomacy, the secret service, the air war and the navy. The armies are always yours. Press to open YOUR STAFF and change the depth, or any one desk, in any month."), *Session->GetView().CommandName.ToUpper(), true);
+			Add(TEXT("depth"), TEXT("How deep you play"), TEXT("Which parts of the war are on your own desk and which your staff runs for you: research, recruitment, towns and trade, diplomacy, the secret service, the air war and the navy. The armies are always yours. Press to open YOUR STAFF and change the depth, or any one desk, in any month."), *Session->GetView().CommandName.ToUpper(), true);
 		}
 	}
 	// (Release 2) Earned nicknames and supply columns, each its own switch, kept by the campaign (nicknames.ts, columns.ts).
@@ -374,6 +374,9 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 		{
 			Add(TEXT("nicknames"), TEXT("Earned names"), TEXT("A corps that wins three hard fights (an attack carried at poor odds, a line held against the odds, or a win bought dear) is given a name by its own army, in its country's own way, and the name is lettered over its flag. Every country's corps can earn one. A name changes nothing in the war. It can be switched in any month."),
 				Now.bNickFlags ? TEXT("ON") : TEXT("OFF"), Now.bNickFlags);
+			// (Release 2, airnames.ts; Brian 25 November 2026) Air units named the way their own air force named them.
+			Add(TEXT("airnames"), TEXT("Air units' own names"), TEXT("Each new air group is named the way its own air force numbered and named its units: the numbers it really used, in its own words, and Japan's navy groups by the airfield they form at. Where the name does not say whether a group flies fighters or bombers, its card says so beside it. A name changes nothing in the war, and the groups you have keep theirs. It can be switched in any month."),
+				Now.bAirNames ? TEXT("ON") : TEXT("OFF"), Now.bAirNames);
 			// (Release 2, fleetattack.ts; Brian 23 November 2026 22:23Z) Fleets dropped on an enemy fleet attack it at once.
 			// (Release 2, marked.ts; Brian 24 November 2026 18:01Z) The marked army.
 			Add(TEXT("marked"), TEXT("The marked army"), TEXT("An enemy army that takes one of your towns is marked: it wears a red tag on its flagpole, lettered with the town, and its card says what it took, until you beat it (throw back its attack, or drive it off the field). Beating it, or its end, takes the mark off with a line in the month's news. No more than three are marked at once. A mark changes nothing in the war. It can be switched in any month."),
@@ -386,6 +389,9 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			// (Release 2, taskforce.ts; Brian 24 November 2026 18:24Z) A fleet with a standing job.
 			Add(TEXT("taskforcerule"), TEXT("Task forces"), TEXT("Send a fleet out on a job (a patrol, a raid, a submarine hunt or a convoy escort) and press MAKE IT A TASK FORCE on its page: that job becomes its standing order. Each month it comes into harbour to refit when worn, and goes back to the job when fit, until you give it another order. It can be switched in any month."),
 				Now.bTaskForce ? TEXT("ON") : TEXT("OFF"), Now.bTaskForce);
+			// (Release 2, teams.ts; Brian 21 November 2026 03:57Z, and his "Both" on 25 November) Machine-gun and mortar brigades.
+			Add(TEXT("teamsrule"), TEXT("Support teams"), TEXT("Machine-gun and mortar brigades can be raised like artillery, by you and by every other power. They never attack alone: they go in beside the corps they support. On the card the machine guns stiffen a defence against men on foot, and the mortars break up the works an attack goes in against. On the field each is a team that fires from behind the line. Turning it off stops new ones being raised; brigades already raised stay with their armies. It can be switched in any month."),
+				Now.bSupportTeams ? TEXT("ON") : TEXT("OFF"), Now.bSupportTeams);
 			// (Release 2, fleetwhy.ts) The admirals say why each fleet is where it is.
 			// (Release 2, rearguard.ts; Brian 24 November 2026 18:24Z) A small corps holds a province a month.
 			Add(TEXT("rearguardrule"), TEXT("Rearguards"), TEXT("A corps of two divisions or fewer (split one off a bigger corps) can be told to HOLD AS REARGUARD from its card: it stays where it stands until your next month while the rest of the army pulls back. An enemy army that attacks it there loses a week or two of its month, so it cannot follow as far, and with Units decide on it shields the troops falling back behind it from the pursuit. It can be switched in any month."),
@@ -404,6 +410,9 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			// (Release 2, the sea field's sailor rules: battle/sea/ticket.ts) Men in the water, and the call that decides who is saved.
 			Add(TEXT("sailorsrule"), TEXT("Sailors"), TEXT("When a ship goes down in a fleet action fought on the sea field, her men go into the water, and after the fight the side left holding the water picks up who it can. It works only in fleet actions fought live; those settled without the sea field are as before. It can be switched in any month."),
 				Now.bSailors ? TEXT("ON") : TEXT("OFF"), Now.bSailors);
+			// (Release 2, the sea field's own water: battle/sea/ticket.ts; Brian 25 November 2026 12:52Z) Friendly torpedoes.
+			Add(TEXT("ownwaterrule"), TEXT("Friendly torpedoes"), TEXT("In a fleet action fought on the sea field, a destroyer holds its torpedoes while one of its own side's ships is in their way, and fires once the way is clear; and every ship keeps out of the way of its own side's torpedoes until they have passed. It works only in fleet actions fought live; those settled without the sea field are as before. It can be switched in any month."),
+				Now.bOwnWater ? TEXT("ON") : TEXT("OFF"), Now.bOwnWater);
 			// (Release 2, mines.ts; Brian 24 November 2026 20:38Z) Minefields laid across a narrow sea or off an enemy harbour.
 			Add(TEXT("seaminesrule"), TEXT("Mines at sea"), TEXT("A fleet with destroyers, cruisers or submarines can lay a field of mines from its page with LAY MINES, across a narrow sea or off a harbour an enemy fleet sails from. Enemy ships at sea there, or sailing from a harbour on it, may lose a ship each month until their destroyers sweep it, and a field wears down over a few months. The computer's admirals lay fields too. It can be switched in any month: off, every field is gone."),
 				Now.bSeaMines ? TEXT("ON") : TEXT("OFF"), Now.bSeaMines);
@@ -432,6 +441,9 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			// (Release 2, buildings.ts; Brian 24 November 2026 18:12Z and 18:13Z) Conquered towns settle, after a short wait.
 			Add(TEXT("settledtownsrule"), TEXT("Conquered towns settle"), TEXT("A town taken from another country can put up every kind of building once it has been held three months: markets, schools, drill grounds, hospitals, administration, factories, shipyards and forts. Until then it can put up only an administration and a hospital, and its panel says how many months are left. Every country's conquests settle the same way. It can be switched in any month."),
 				Now.bSettledTowns ? TEXT("ON") : TEXT("OFF"), Now.bSettledTowns);
+			// (Release 2, townqueue.ts; Brian 25 November 2026 13:41Z: "easy to manage the cities") What each town builds next, in order.
+			Add(TEXT("townqueuerule"), TEXT("Building queues"), TEXT("Each of your towns can be given its next buildings in order. At the opening of your month, once a town's builders are free and the treasury can pay, the next on its list is ordered for you at that day's price, as if you had pressed BUILD yourself. One the treasury cannot pay for yet waits at the head of its town's list. Your staff never touches a queue. It can be switched in any month."),
+				Now.bTownQueue ? TEXT("ON") : TEXT("OFF"), Now.bTownQueue);
 			Add(TEXT("columns"), TEXT("Supply columns"), Now.bColumnsCan
 					? TEXT("Each month lorries carry the supplies from the railhead to the armies beyond it, and you see them on the roads. Enemy aircraft, and partisans on occupied ground, can catch them, and what burns on the road never reaches the front. It can be switched in the campaign's first month only.")
 					: TEXT("Each month lorries carry the supplies from the railhead to the armies beyond it, and you see them on the roads. Enemy aircraft, and partisans on occupied ground, can catch them. It was set as this campaign opened, and stays as it was set."),
@@ -667,34 +679,31 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		++Opening.Revision;
 		return; // (kept by the campaign, not with the options)
 	}
-	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("settledtownsrule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("sailorsrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule") || Id == TEXT("seekoncerule") || Id == TEXT("atomrule") || Id == TEXT("carrierstrikerule") || Id == TEXT("wingbydaterule"))
+	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("teamsrule") || Id == TEXT("settledtownsrule") || Id == TEXT("townqueuerule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("sailorsrule") || Id == TEXT("ownwaterrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule") || Id == TEXT("seekoncerule") || Id == TEXT("atomrule") || Id == TEXT("carrierstrikerule") || Id == TEXT("wingbydaterule") || Id == TEXT("airnames"))
 	{
 		// (Release 2) Earned names, fleet attacks and breaking corps up, in any month; supply columns, in the campaign's first month only (the rules say so if not).
 		if (FCampaignSession* Session = GetSession())
 		{
 			FString Note;
 			const FCampaignView& Now = Session->GetView();
-			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Id == TEXT("settledtownsrule") ? Now.bSettledTowns
-				: Id == TEXT("rearbridgesrule") ? Now.bRearBridges : Id == TEXT("shadowrule") ? Now.bShadowRule : Id == TEXT("voyagelogrule") ? Now.bVoyageLog : Id == TEXT("sailorsrule") ? Now.bSailors
+			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("airnames") ? Now.bAirNames : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Id == TEXT("teamsrule") ? Now.bSupportTeams : Id == TEXT("settledtownsrule") ? Now.bSettledTowns : Id == TEXT("townqueuerule") ? Now.bTownQueue
+				: Id == TEXT("rearbridgesrule") ? Now.bRearBridges : Id == TEXT("shadowrule") ? Now.bShadowRule : Id == TEXT("voyagelogrule") ? Now.bVoyageLog : Id == TEXT("sailorsrule") ? Now.bSailors : Id == TEXT("ownwaterrule") ? Now.bOwnWater
 				: Id == TEXT("seaminesrule") ? Now.bSeaMines : Id == TEXT("heavyseasrule") ? Now.bHeavySeas : Id == TEXT("shadowrelayrule") ? Now.bShadowRelay : Id == TEXT("seekoncerule") ? Now.bSeekOnce : Id == TEXT("atomrule") ? Now.bAtomBomb : Id == TEXT("carrierstrikerule") ? Now.bCarrierStrike : Id == TEXT("wingbydaterule") ? Now.bWingByDate : Now.bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
-				if (Id == TEXT("breakuprule"))
+				const bool bBreakUpRow = Id == TEXT("breakuprule");
+				if (bBreakUpRow)
 				{
-					PickedDivisions.Reset(); // (as 1.5.1's own row does: divisions picked under the old setting are let go)
+					PickedDivisions.Reset();
 				}
 				ShowWar(Session->GetView(), TArray<FCorpsMove>());
 				// (1.5.1, Brian's hand-check list: a fleet still in hand when the row is flipped is laid out afresh, so that its
 				// pointer, its "Drop ..." line and its first drop follow the new setting; its copy was refreshed only when it
-				// was picked up, and switched back on, its first drop sailed it to the sea instead of opening the ATTACK card)
-				if (FleetInHand != INDEX_NONE)
-				{
-					RefreshOrders();
-				}
-				// (1.5.1, Brian's hand-check list: an army still in hand when the row is flipped has its card laid out afresh,
-				// its division tiles and SPLIT OFF with it, as the fleet in hand is for "Fleets attack fleets"; before, the card
-				// kept the old setting until the army was put down and picked up again)
-				if (ArmyRegion != INDEX_NONE)
+				// was picked up, and switched back on, its first drop sailed it to the sea instead of opening the ATTACK card.
+				// And for "Break up corps": an army still in hand when the row is flipped has its card laid out afresh, its
+				// division tiles and SPLIT OFF with it; before, the card kept the old setting until the army was put down and
+				// picked up again)
+				if (FleetInHand != INDEX_NONE || (bBreakUpRow && ArmyRegion != INDEX_NONE))
 				{
 					RefreshOrders();
 				}
@@ -1420,6 +1429,7 @@ void ACampaignPlayerController::EnterCampaign()
 	WarPrompt = FWarPrompt();
 	EndAsk.bVisible = false;
 	RoundSeen.Reset();
+	ToDoSeen.Reset();
 	// (The code checker, 17 November.) The last month's newsreel and the first night's word belong to the campaign just
 	// left too: a loaded game has no reel to play again until its own month ends, and tells its own first night.
 	LastReel.Reset();
@@ -1770,6 +1780,165 @@ bool ACampaignPlayerController::IsTownCardStyle()
 	return bAsked || CVarTownCard.GetValueOnGameThread() != 0;
 }
 
+namespace
+{
+	// (Release 2; the UI director's seamless plan for Brian's 25 November ask, fix 4: one NEXT.) Tab past the armies
+	// goes round the month's list; off until the art director has passed the Mac's stills; -TheaterNextAll for a run.
+	TAutoConsoleVariable<int32> CVarNextAll(
+		TEXT("tc.UI.NextAll"), 0,
+		TEXT("1: once every army has its orders, Tab (NEXT ARMY) goes on round the month's list under END THE MONTH, opening each row's screen once; 0 as before (as -TheaterNextAll)."));
+}
+
+bool ACampaignPlayerController::IsNextAllStyle()
+{
+	static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterNextAll"));
+	return bAsked || CVarNextAll.GetValueOnGameThread() != 0;
+}
+
+int32 ACampaignPlayerController::NextToDoIndex() const
+{
+	const FCampaignSession* Session = GetSession();
+	if (!IsNextAllStyle() || !Session || !Session->GetView().bHumanUp || bWatching || Opening.bVisible)
+	{
+		return INDEX_NONE;
+	}
+	const TArray<FCampaignView::FToDo>& List = Session->GetView().ToDo;
+	for (int32 Index = 0; Index < List.Num(); ++Index)
+	{
+		if (!List[Index].Screen.IsEmpty() && !ToDoSeen.Contains(List[Index].Screen))
+		{
+			return Index;
+		}
+	}
+	return INDEX_NONE;
+}
+
+bool ACampaignPlayerController::StepToDo()
+{
+	const FCampaignSession* Session = GetSession();
+	if (!IsNextAllStyle() || !Session)
+	{
+		return false;
+	}
+	const int32 Index = NextToDoIndex();
+	if (Index == INDEX_NONE)
+	{
+		if (ToDoSeen.Num() == 0)
+		{
+			return false; // (nothing on the list: Tab says what it always said)
+		}
+		// (round them all: the next Tab begins the list again)
+		ToDoSeen.Reset();
+		Notify(TEXT("Every army has its orders, and you have been round this month's list. Press Enter to end the month."), 4.0);
+		return true;
+	}
+	// (a row's screen is opened once a round: two rows that open the same screen are one stop)
+	ToDoSeen.Add(Session->GetView().ToDo[Index].Screen);
+	PressToDo(Index);
+	return true;
+}
+
+namespace
+{
+	// (Release 2; Brian, 25 November 2026: "lets make the campaign map and playing of that feel less choppy and hard to
+	// manage. I want the UI and user experience to feel seamless and easy to manage the cities, recruitment, ect".) THE
+	// HOME FRONT, off until the art director has passed the Mac's stills of it; -TheaterHomeFront turns it on for a run.
+	TAutoConsoleVariable<int32> CVarHomeFront(
+		TEXT("tc.UI.HomeFront"), 0,
+		TEXT("1 shows THE HOME FRONT: a door on the top bar to one board for every town, raising forces and everything on order; 0 the game as before (as -TheaterHomeFront). The door is named by the rules when a campaign's rules are loaded, so set it before the campaign is begun or loaded."));
+}
+
+bool ACampaignPlayerController::IsHomeFrontStyle()
+{
+	static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterHomeFront"));
+	return bAsked || CVarHomeFront.GetValueOnGameThread() != 0;
+}
+
+namespace
+{
+	// (Release 2; Brian, 25 November 2026: "lets make the campaign map and playing of that feel less choppy".) Screens
+	// that ease in and out, off until the art director has passed the Mac's stills of them; -TheaterEase turns it on.
+	TAutoConsoleVariable<int32> CVarEase(
+		TEXT("tc.UI.Ease"), 0,
+		TEXT("1 eases the rooms (the arsenal, the ledger, the generals, research, diplomacy, the guide and every page) in and out over about an eighth of a second, and fades and slides the province panel in; 0 they appear and vanish at once, as before (as -TheaterEase)."));
+}
+
+bool ACampaignPlayerController::IsEaseStyle()
+{
+	static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterEase"));
+	return bAsked || CVarEase.GetValueOnGameThread() != 0;
+}
+
+void ACampaignPlayerController::OpenHomeFront()
+{
+	if (IsHomeFrontStyle())
+	{
+		OpenPage(TEXT("home"));
+	}
+}
+
+void ACampaignPlayerController::SetHomeFilter(int32 Filter)
+{
+	if (bPageOpen && Page.Home.bValid && Filter != HomeFilter)
+	{
+		CampaignSounds::Play(this, TEXT("click"), 0.5f);
+		HomeFilter = FMath::Clamp(Filter, 0, 2);
+		HomeUnfolded = INDEX_NONE;
+		HomeRows = 40;
+		++Page.Revision; // (the board is laid out again as it stands: nothing is asked of the rules)
+	}
+}
+
+void ACampaignPlayerController::ShowMoreHomeTowns()
+{
+	if (bPageOpen && Page.Home.bValid)
+	{
+		CampaignSounds::Play(this, TEXT("click"), 0.5f);
+		HomeRows += 40;
+		++Page.Revision;
+	}
+}
+
+void ACampaignPlayerController::OpenTownFromHome(int32 Region)
+{
+	if (!bPageOpen || !Page.Home.bValid)
+	{
+		return;
+	}
+	if (IsTownCardStyle())
+	{
+		// (tc.UI.TownCard) The town's card stands on the map: the board is put away, the view goes to the town, and its
+		// card is opened.
+		ClosePage();
+		ShowProvince(Region);
+		OpenTownCard();
+		TownFromHomeRegion = IsEaseStyle() && IsTownCardOpen() ? Region : INDEX_NONE; // (release 2, tc.UI.Ease: Esc goes back to the board)
+		return;
+	}
+	PressPage(FString::Printf(TEXT("open:town:%d"), Region));
+}
+
+void ACampaignPlayerController::UnfoldHomeTown(int32 Region)
+{
+	if (bPageOpen && Page.Home.bValid)
+	{
+		CampaignSounds::Play(this, TEXT("click"), 0.5f);
+		HomeUnfolded = HomeUnfolded == Region ? INDEX_NONE : Region;
+		++Page.Revision;
+	}
+}
+
+void ACampaignPlayerController::BuildFromHome(int32 Region, const FString& Act)
+{
+	if (bPageOpen && Page.Home.bValid)
+	{
+		// (the town keeps its row, now with what is going up and TAKE IT BACK, until the board is put away)
+		HomeKept.Add(Region);
+		HomeUnfolded = INDEX_NONE;
+		PressPage(Act);
+	}
+}
+
 void ACampaignPlayerController::OpenTownCard()
 {
 	if (Map.IsValid() && Map->GetSelectedRegion() != INDEX_NONE && Map->GetSelectedRegion() == TownBar.Region && TownBar.Plots.Num() > 0)
@@ -1788,6 +1957,7 @@ void ACampaignPlayerController::OpenTownCard()
 
 void ACampaignPlayerController::CloseTownCard()
 {
+	TownFromHomeRegion = INDEX_NONE; // (release 2, tc.UI.Ease)
 	if (bTownCardOpen)
 	{
 		bTownCardOpen = false;
@@ -1907,6 +2077,17 @@ void ACampaignPlayerController::OpenPage(const FString& Id)
 	Page = Session->Page(Id, SelectedRegion);
 	Page.Revision = Revision;
 	bPageOpen = Page.bValid;
+	PageTrail.Reset(); // (release 2, tc.UI.Ease: a page opened from outside its rooms begins a new way back)
+	TownFromHomeRegion = INDEX_NONE;
+	if (Id == TEXT("home"))
+	{
+		// (Release 2, THE HOME FRONT) Opened afresh: the towns that can take a building, none unfolded, none kept.
+		HomeFilter = 0;
+		HomeUnfolded = INDEX_NONE;
+		HomeRows = 40;
+		++HomeOpenings;
+		HomeKept.Reset();
+	}
 	if (bPageOpen && Id == TEXT("atom"))
 	{
 		// (Release 2, atom.ts; the UI director's marks.) THE ATOMIC PROJECT opened with a bomb in hand: the chip under END
@@ -1928,7 +2109,54 @@ void ACampaignPlayerController::ClosePage()
 		RejoinHeldBack(); // (closed without its order)
 	}
 	bPageOpen = false;
+	PageTrail.Reset(); // (release 2, tc.UI.Ease)
 	LessonPageChanged();
+}
+
+bool ACampaignPlayerController::StepBackPage()
+{
+	FCampaignSession* Session = GetSession();
+	if (!IsEaseStyle() || !Session || !bPageOpen || PageTrail.Num() == 0)
+	{
+		return false;
+	}
+	// (Release 2, tc.UI.Ease) Back through the door it came in by: the room it was reached from, read afresh. A room
+	// that no longer reads (what it was of has gone) is passed by for the one before it.
+	while (PageTrail.Num() > 0)
+	{
+		const FString Back = PageTrail.Pop();
+		FOfficePage Was = Session->Page(Back, SelectedRegion);
+		if (Was.bValid)
+		{
+			if (HeldBackSquadron != INDEX_NONE && Back != HeldBackCard)
+			{
+				RejoinHeldBack(); // (as a room's own door does: the split was for the card being left)
+			}
+			CampaignSounds::Play(this, TEXT("click"), 0.6f);
+			Was.Revision = Page.Revision + 1;
+			Page = MoveTemp(Was);
+			LessonPageChanged();
+			return true;
+		}
+	}
+	return false;
+}
+
+void ACampaignPlayerController::ReturnToHomeFront()
+{
+	// (Release 2, tc.UI.Ease) As OpenPage("home"), which begins the board afresh, but kept as he left it.
+	const int32 Filter = HomeFilter, Unfolded = HomeUnfolded, Rows = HomeRows, Openings = HomeOpenings;
+	const TSet<int32> Kept = HomeKept;
+	OpenPage(TEXT("home"));
+	if (bPageOpen && Page.Home.bValid)
+	{
+		HomeFilter = Filter;
+		HomeUnfolded = Unfolded;
+		HomeRows = Rows;
+		HomeOpenings = Openings; // (the same opening: each list keeps its place)
+		HomeKept = Kept;
+		++Page.Revision;
+	}
 }
 
 void ACampaignPlayerController::PressPage(const FString& Action)
@@ -2007,9 +2235,26 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 		// A door from one room to another: the raid planner from the airfield, and back.
 		CampaignSounds::Play(this, TEXT("click"), 0.6f);
 		const int32 Opened = Page.Revision + 1;
-		Page = Session->Page(Action.Mid(5), SelectedRegion);
+		const FString Left = Page.Id, Into = Action.Mid(5);
+		Page = Session->Page(Into, SelectedRegion);
 		Page.Revision = Opened;
 		bPageOpen = Page.bValid;
+		if (IsEaseStyle() && bPageOpen && Left != Into)
+		{
+			// (Release 2, tc.UI.Ease) The way back for Esc: a room's own BACK takes the last step off it, any other door adds one.
+			if (PageTrail.Num() > 0 && PageTrail.Last() == Into)
+			{
+				PageTrail.Pop();
+			}
+			else if (!Left.IsEmpty())
+			{
+				PageTrail.Add(Left);
+				if (PageTrail.Num() > 16)
+				{
+					PageTrail.RemoveAt(0);
+				}
+			}
+		}
 		LessonPageChanged();
 		return;
 	}
@@ -5802,6 +6047,10 @@ void ACampaignPlayerController::NextArmy()
 	// touched before the others, then the nearest; each is shown once before any is shown again.
 	if (Session->GetView().Round.All <= 0)
 	{
+		if (StepToDo())
+		{
+			return;
+		}
 		Notify(TEXT("Every army has its orders. Press Enter to end the month."), 4.0);
 		return;
 	}
@@ -5819,6 +6068,10 @@ void ACampaignPlayerController::NextArmy()
 	const int32 Next = Session->NextArmy(RoundSeen, From);
 	if (!Map->GetData().Regions.IsValidIndex(Next))
 	{
+		if (StepToDo())
+		{
+			return;
+		}
 		Notify(TEXT("Every army has its orders. Press Enter to end the month."), 4.0);
 		return;
 	}
@@ -5909,7 +6162,7 @@ void ACampaignPlayerController::Escape()
 			AtomBackAt = FPlatformTime::Seconds();
 			PressPage(Page.Card.Back.Act); // (release 2, atom.ts: Esc, as Enter, is BACK on a bomb raid's card: the bomb is kept)
 		}
-		else
+		else if (!StepBackPage()) // (release 2, tc.UI.Ease: back to the room it was reached from, where there is one)
 		{
 			ClosePage();
 		}
@@ -5924,7 +6177,13 @@ void ACampaignPlayerController::Escape()
 	}
 	else if (IsTownCardOpen())
 	{
+		// (release 2, tc.UI.Ease: a town opened from THE HOME FRONT goes back to the board, as he left it)
+		const bool bToBoard = IsEaseStyle() && TownFromHomeRegion != INDEX_NONE && TownFromHomeRegion == TownBar.Region;
 		CloseTownCard(); // (tc.UI.TownCard: Esc goes back one card, to the province)
+		if (bToBoard)
+		{
+			ReturnToHomeFront();
+		}
 	}
 	else if (AgentInHand != INDEX_NONE)
 	{
@@ -6037,9 +6296,15 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		Afterwards.RemoveAt(0);
 		Step();
 	}
-	else if (FCampaignSession* Answering = GetSession())
+	else if (ACampaignGameMode* AnsweringMode = GetMode())
 	{
-		Answering->Deliver();
+		// (Release 2, tc.Speed.NationsAside; the R2 Mac pass of 25 November 2026.) The rules' own session, not
+		// GetSession(), which is null until a war runs: the opening screen's countries are asked before any war, and
+		// with no war their answer sat unread until the next order (50 s on a warm launch, 576 s on the first).
+		if (FCampaignSession* Answering = AnsweringMode->GetSession())
+		{
+			Answering->Deliver();
+		}
 	}
 	// (Rules 84.3.3, trap 1.) The card lesson 1 lies on, once the opening flight is over and nothing else has the screen.
 	if (bOpeningCardOwed && BriefingAt <= 0.0 && !bWatching && !Newsreel.bOn && Announcements.Num() == 0 && !FaceOff.bVisible && !WarPrompt.bVisible && !Opening.bVisible && !IsAnswering())
@@ -12981,6 +13246,7 @@ void ACampaignPlayerController::FinishMonth()
 	}
 	const FCampaignView& View = Session->GetView();
 	RoundSeen.Reset(); // (the code checker, 17 November: a new month, and Tab's round of the armies begins again)
+	ToDoSeen.Reset(); // (release 2, tc.UI.NextAll: and its round of the month's list)
 	// (Release 2, map run 7: tc.Speed.MonthSpread. The new holders and the armies in the month's frame; the rest of the
 	// table a frame after, as an order's answer has it.)
 	ShowWar(View, TArray<FCorpsMove>(), nullptr, TheaterSpeed::MonthSpread());
@@ -13361,6 +13627,24 @@ void ACampaignPlayerController::OrderTownBuilding(const FString& Line)
 	Notify(Note.IsEmpty() ? FString(TEXT("That cannot be built now.")) : Note, 5.0);
 }
 
+void ACampaignPlayerController::ActOnTown(const FString& Act)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || TownBar.Region == INDEX_NONE)
+	{
+		return;
+	}
+	FString Note;
+	const int32 Where = TownBar.Region;
+	if (Session->Act(Act, Where, Note))
+	{
+		CampaignSounds::Play(this, TEXT("stamp"), 0.5f);
+		TownBar.Picked = INDEX_NONE;
+	}
+	RefreshRegionPanel(Where);
+	Notify(Note.IsEmpty() ? FString(TEXT("That cannot be queued now.")) : Note, 5.0);
+}
+
 void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 {
 	THEATER_SPEED_SCOPE(RefreshRegionPanel);
@@ -13568,6 +13852,8 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 				TownBar.bMine = Province.bPlotsMine;
 				TownBar.Plots = Province.TownPlots;
 				TownBar.Offers = Province.TownOffers;
+				TownBar.Best = Province.TownBest;
+				TownBar.Queued = Province.TownQueued;
 				TownBar.Title = FText::FromString(Province.Town.IsEmpty() ? Region.Name : Province.Town);
 				TownBar.Sub = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d building plot%s, %s"),
 					Province.TownKind == TEXT("capital") ? TEXT("The capital") : Province.TownKind == TEXT("city") ? TEXT("A city") : Province.TownKind == TEXT("town") ? TEXT("A town") : TEXT("A village"),

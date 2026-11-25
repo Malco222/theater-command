@@ -1355,6 +1355,11 @@ private:
 		double Wings = 0.0; // a wingspan of the bombers it was fired at: every size of it is in these
 		int32 Flashed = 0; // how many frames its flash has been drawn: one or two, and no more
 		bool bLight = false; // (release 2, the flak brief, 2c) light flak: pale, half the size, lower, and soon gone
+		// (The far side, seam-4, the mend of 25 November 2026.) The raid that fired it, by the province bombed and the
+		// province flown from: over the chart's seam a burst is brought round to ITS OWN raid's turn of the world, never
+		// to the eye's, so that it is never left hanging over a twin town with no bombers above it.
+		int32 Over = INDEX_NONE;
+		int32 From = INDEX_NONE;
 	};
 	TArray<FFlakBurst> FlakBursts;
 	int32 FlakFired = 0;
@@ -1722,6 +1727,33 @@ private:
 	// Pieces on the move, to know when one is set down; and where pieces were lately set down, for the dust.
 	TSet<TWeakObjectPtr<AArmyPiece>> OnTheMarch;
 	TArray<TPair<FVector, double>> SetDowns;
+	/**
+	 * (Release 2, armies with weight: Campaign/ArmyCarry.h.) Where a piece was lately set down with weight, for the dust
+	 * it raises: a low ring that runs out along the table and a cloud that rises behind it, more of both for a bigger
+	 * army, white on snow and pale on sand. Filled in place of SetDowns while tc.Map.ArmyWeight is on.
+	 */
+	struct FThud
+	{
+		FVector Where = FVector::ZeroVector;
+		double Began = 0.0;
+		float Much = 1.0f; // how much of an army landed (TheaterArmyCarry::Heft)
+		int32 Ground = 0; // 0 earth, 1 snow, 2 sand
+	};
+	TArray<FThud> Thuds;
+	/**
+	 * A piece sent to join an army already standing (it is taken off as it lands), the army it joins, and where it set
+	 * out from. Also where that army stood and when the piece is due: an army laid somewhere else since, or a piece
+	 * taken off before its time, is no landing, and nothing rocks.
+	 */
+	struct FJoining
+	{
+		TWeakObjectPtr<AArmyPiece> Sent;
+		TWeakObjectPtr<AArmyPiece> Joined;
+		FVector From = FVector::ZeroVector;
+		FVector Stood = FVector::ZeroVector;
+		double Due = 0.0;
+	};
+	TArray<FJoining> Joining;
 
 	/** The trees, in squares of country so that only those near the eye are drawn. */
 	UPROPERTY(Transient)

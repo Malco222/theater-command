@@ -103,7 +103,7 @@ function unitOut(u: SeaUnit): Record<string, unknown> {
   if (e.run !== undefined) extra.run = e.run;
   if (e.burnt) extra.burnt = e.burnt;
   // The look fields (the ship plan's B1): passed as the bridge passes extra, whole.
-  for (const k of ['foe', 'helm', 'lineAt', 'runPhase', 'runUntil', 'combFrom', 'combUntil', 'smoke', 'flight', 'cover'] as const) if (e[k] !== undefined) extra[k] = typeof e[k] === 'number' ? r3(e[k] as number) : e[k];
+  for (const k of ['foe', 'helm', 'lineAt', 'runPhase', 'runUntil', 'combFrom', 'combUntil', 'heldFor', 'heldForName', 'clearFrom', 'clearFromName', 'clearUntil', 'ordered', 'smoke', 'flight', 'cover'] as const) if (e[k] !== undefined) extra[k] = typeof e[k] === 'number' ? r3(e[k] as number) : e[k];
   const out: Record<string, unknown> = {
     id: u.id, side: u.side, kind: u.kind, name: u.name, nat: u.nat, x: r1(u.x), y: r1(u.y), face: r3(u.face), str: r3(u.str), mor: r3(u.mor), state: u.state,
     figures0: u.figures0, figures: u.figures, w: u.w, d: r1(u.d), act: u.act, speed: r1(u.speed), engaged: u.engaged ?? -1, loop: seaLoop(e.cls, u.act), extra,
@@ -117,7 +117,9 @@ function ticketOf(P: SetPiece, seed: number): SeaTicket {
   const water = P.sailors ? waterOf(P.sailors.sea, P.when.month) : null;
   if (P.sailors && !water) throw new Error(`no water band for ${P.sailors.sea}`);
   const early = P.sailors?.early ? P.att.concat(P.def).map((_, i) => i + 1).filter((id) => (id <= P.att.length ? 'att' : 'def') === P.sailors!.early) : undefined;
-  const t = plainTicket({ att: P.att, def: P.def, air: P.air, seed, human: null, zoneName: P.sea, title: P.title, ...(water ? { sailors: { water, ...(early ? { early } : {}) } } : {}) });
+  // With release 2's own water on (Brian, 25 November 12:52Z: captains mind their own side's torpedoes; the release 2
+  // assembler ships the switch on): set SEA_OWN_WATER=0 for the field as it was before it.
+  const t = plainTicket({ att: P.att, def: P.def, air: P.air, seed, human: null, zoneName: P.sea, title: P.title, ...(water ? { sailors: { water, ...(early ? { early } : {}) } } : {}), ownWater: process.env.SEA_OWN_WATER !== '0' });
   const a = NAVY[t.att.nat] ?? { nat: t.att.nat, adj: t.att.nat }, d = NAVY[t.def.nat] ?? { nat: t.def.nat, adj: t.def.nat };
   t.att = { ...t.att, adj: a.adj };
   t.def = { ...t.def, adj: d.adj };

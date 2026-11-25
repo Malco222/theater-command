@@ -420,13 +420,17 @@ describe('one war at the history stop, nobody playing', () => {
     // only: the American staff, its rule, the reckoning's bar and its dice are untouched, and so are the assertions.
     // (1) From month 56 Germany holds Corsica, with no corps on it: an island America's reckoning passes, so that "none
     // on an island" is a choice the staff makes. (2) After America's first refusal on France's mainland, Germany's field
-    // corps keep CUT of their strength, once: one fixed amount, never looped to a pass. Seed 46: refused at Calais in
-    // May 1944 (0.33 against 0.6), 0.65 after the cut, and it lands three corps at Bordeaux in July with Corsica open
-    // every month. (Seed 40 until the start guns of 1.5.1, ruling 124: the guns blunt the bombing, so Germany keeps
-    // more in reserve; seed 40's first refused beach fell from 0.49 to 0.32 and its Americans went to Sicily. Seeds 41
-    // to 52 are all refused at 0.32 to 0.40; seed 46 tells the story whole. The design director, 24 Nov 2026 22:58Z.)
+    // corps keep CUT of their strength, once: one fixed amount, never looped to a pass. Seed 18: America's corps are
+    // refused in Brittany in May 1944 (0.44 against 0.6), 0.75 after the cut, and it lands three corps at Calais in
+    // August with Corsica open every month.
+    // (Seed 40 until the start guns of 1.5.1, ruling 124: the guns blunt the bombing, so Germany keeps more in reserve;
+    // seed 40's first refused beach fell from 0.49 to 0.32 and its Americans went to Sicily. Then seed 46 until the
+    // 1.5.1 patch line came onto release 2 (25 Nov 2026): on that tree seed 46's Americans are refused in Brittany but
+    // go to Bordeaux in no month played, so of seeds 17 to 34 only 18 tells the story whole. The release 2 assembly
+    // measured the same first refusal on its own tree, 0.44 to 0.75, and moved to 18 in ba3a936c, so both lines are
+    // staged alike. The scanner is in r2-assembly/strength-83/.)
     const CUT = 0.25, ISLE = 'Corsica';
-    const g = startOpen(createGame(46, null));
+    const g = startOpen(createGame(18, null));
     expect(setStop(g, 3, true)).toBe(true);
     const landings: { turn: number; nat: string; to: Region; corps: number }[] = [];
     const refused = new Set<number>();

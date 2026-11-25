@@ -49,17 +49,21 @@ export function hitPoints(kind: HitKind, weight: number, stopped = 0, night = fa
     : kind === 'shell' ? shellPoints(weight) : kind === 'shellCity' ? shellCityPoints(weight) : siegeGunPoints(weight);
 }
 
-/** What lasting damage to a town is worth to whoever did it, as a raid's achievement is counted (in aircraft). */
-export function cityWorthOf(g: Game, r: Region, pts: number): number {
+/**
+ * What lasting damage to a town is worth to whoever did it, as a raid's achievement is counted (in aircraft).
+ * `ruined` (fog on raids, airfog.ts): the share of the town in ruins as the side weighing the raid last saw it, where
+ * it cannot see the town; left out, the town as it stands.
+ */
+export function cityWorthOf(g: Game, r: Region, pts: number, ruined?: number): number {
   if (!damageRules(g) || pts <= 0 || !DAMAGE.worth) return 0;
-  const room = Math.max(0, Math.min(pts, DAMAGE.most - damageOf(g, r) * 100));
+  const room = Math.max(0, Math.min(pts, DAMAGE.most - (ruined ?? damageOf(g, r)) * 100));
   return (room / 100) * wholePay(g, r) * DAMAGE.worth;
 }
 
-/** The points of damage a hit would do to this town, as a forecast shows them: no more than it has left to lose. */
-export function cityForecast(g: Game, r: Region, kind: HitKind, weight: number, stopped = 0, night = false): number {
+/** The points of damage a hit would do to this town, as a forecast shows them: no more than it has left to lose (`ruined` as for cityWorthOf). */
+export function cityForecast(g: Game, r: Region, kind: HitKind, weight: number, stopped = 0, night = false, ruined?: number): number {
   if (!damageRules(g)) return 0;
-  return Math.max(0, Math.min(hitPoints(kind, weight, stopped, night), DAMAGE.most - damageOf(g, r) * 100));
+  return Math.max(0, Math.min(hitPoints(kind, weight, stopped, night), DAMAGE.most - (ruined ?? damageOf(g, r)) * 100));
 }
 
 /** What one hit did to a town: the points added, where it now stands (percent), what it was worth to the attacker, and a sentence. */
@@ -289,7 +293,7 @@ export function repairAll(g: Game, nat: string): string[] {
 export const repairPays = (cost: number, lost: number): boolean => cost <= tenth(lost * DAMAGE.repair.months);
 
 /**
- * A computer nation's repairs for the month (and the player's staff, when he has handed it the building desk). It
+ * A computer nation's repairs for the month (and the player's staff, when he has handed it towns and trade). It
  * puts a share of its income by in a purse while it has damaged towns, and pays out of it for the towns whose damage
  * costs it most, keeping a reserve in hand. It buys only a repair that pays for itself within the price's own horizon
  * (repairPays). It does not rebuild on the front line: it leaves alone a town under siege, one beside ground its enemies
@@ -300,7 +304,7 @@ export function aiRepair(g: Game, nat: string): string[] {
   if (!damageRules(g) || !g.flags['dmg:any']) return [];
   const n = g.nations[nat];
   if (!n?.alive) return [];
-  if (nat === g.human && byHand(g, nat, 'build')) return [];
+  if (nat === g.human && byHand(g, nat, 'towns')) return [];
   const P = `rpp:${nat}`;
   const towns: { r: Region; cost: number; lost: number }[] = [];
   for (const r of g.regions) {

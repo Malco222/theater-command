@@ -53,9 +53,10 @@ function notNumbers(g: Game): string[] {
   return out;
 }
 /**
- * A staff-fought war of thirty months (seed 17), played once for each setting asked for and kept: its save. `on`
- * false is the game as shipped, every switch off; true has all three on from the first month. The switches are left
- * as the caller had them.
+ * A staff-fought war of thirty months (seed 23), played once for each setting asked for and kept: its save. `on` false
+ * is the game as shipped, every switch off; true has all three on from the first month. The switches are left as the
+ * caller had them. (Seed 17 until the computer's air forces fought back, airwar.json ai.back: in its war no staff still
+ * had a team on Damage control at month 30.)
  */
 const wars: { off?: string; on?: string } = {};
 function war(on: boolean): string {
@@ -64,7 +65,7 @@ function war(on: boolean): string {
     const kept = [R.stage.on, R.vt.on, R.dc.on] as const;
     set(on, on, on);
     try {
-      const g = grand(null, 17);
+      const g = grand(null, 23);
       while (g.turn < 30) runTurnAI(g);
       wars[key] = saveGame(g);
     } finally { set(...kept); }
@@ -894,8 +895,8 @@ describe('ruling 240, a staff-fought war with the switches on, and saves carried
     const bad = loadGame(text)!;
     bad.fleets[0].ready = NaN;
     expect(notNumbers(bad)).toEqual(['ready']);
-    // R8: no table names the rows, and a staff researches Damage control like any naval item. (Measured: Britain and
-    // the United States begin it in month 20 and hold it from month 28; Italy has a team on it from month 23.)
+    // R8: no table names the rows, and a staff researches Damage control like any naval item. (Measured, seed 23 with
+    // the fight back: Britain and the United States hold it by month 30, and Italy has a team on it.)
     const held = holding(g, 'damagecontrol');
     expect(held.length).toBeGreaterThan(0);
     expect(workingOn(g, 'damagecontrol').length).toBeGreaterThan(0);

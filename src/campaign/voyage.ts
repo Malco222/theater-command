@@ -11,12 +11,12 @@
 import data from '../../data/campaign/voyage.json';
 import { turnToDate } from '../core/ticket';
 import { seaWhere } from './sea-words';
-import type { Fleet, Game, Stance } from './types';
+import type { FleetStance, Fleet, Game } from './types';
 
 export const VOYAGE = data as unknown as { keep: number; show: number };
 
 /** One line of a fleet's log: the month, what it was doing at the month's end and where, and the actions it fought in it. */
-export interface VoyageEntry { t: number; s: Stance; z: number; p: string; f?: string[] }
+export interface VoyageEntry { t: number; s: FleetStance; z: number; p: string; f?: string[] }
 
 /** True where fleets keep a voyage log: the grand campaign, with the switch on. */
 export const voyageOn = (g: Game): boolean => g.flags.open === 1 && g.flags.voyageLog === 1;
@@ -62,6 +62,8 @@ function doing(g: Game, e: VoyageEntry): string {
     case 'raid': return `raiding shipping ${sea}`;
     case 'hunt': return `hunting submarines ${sea}`;
     case 'escort': return `escorting convoys ${sea}`;
+    // (Release 2, the far chart: on its way to a new base, the port it was making for.)
+    case 'passage': return `in passage to ${e.p}, ${sea}`;
     default: return `on patrol ${sea}`;
   }
 }

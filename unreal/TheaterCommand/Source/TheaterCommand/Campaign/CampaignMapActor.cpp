@@ -21,6 +21,9 @@ FLinearColor ACampaignEnvironment_DuskShade();
 #include "Campaign/CampaignTextures.h"
 #include "Campaign/FrontLine.h" // (release 2, the front you can read)
 #include "Campaign/EnemyMoves.h" // (release 2, the enemy's month near you)
+#include "Campaign/ShipWay.h" // (release 2, a fleet under way)
+#include "Campaign/ShipSmoke.h" // (release 2, funnel smoke)
+#include "Campaign/ArmyCarry.h" // (release 2, armies with weight)
 #include "TheaterCommand.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
@@ -131,6 +134,52 @@ namespace
 	TAutoConsoleVariable<int32> CVarOverSeam(
 		TEXT("tc.Far.OverSeam"), 1,
 		TEXT("With the far side on, 1 shows what lies within sight of the chart's seam (141 W) from both sides of it; 0 lays everything once, as before. Release 2."));
+
+	// (Release 2, a fleet under way: the art director's campaign map upgrade 1, 25 November 2026, on Brian's "I want to
+	// keep upleveling the graphics and smoothness of how they move and act to make it feel as real as possible" and
+	// "can we do that for the campaign map too?".) With ships that sail on, a fleet sent to another sea takes a ship's
+	// course (Campaign/ShipWay.h) and not the way's own corners. Off as it comes, until Brian has seen the Mac's film of
+	// the one beside the other; "-TheaterShipWay" turns it on for that film, switch or no switch. The rest are its
+	// measures, for the Mac to try without a build.
+	TAutoConsoleVariable<int32> CVarShipWay(
+		TEXT("tc.Map.ShipWay"), 0,
+		TEXT("1: a fleet that sails takes a ship's course (out on her turning circle, wide round the corners of her way, in on a circle, slow off the mark and round a tight turn, her wake along the water she has crossed); 0: corner to corner, as before. Release 2; off as it comes."));
+	TAutoConsoleVariable<float> CVarShipTurn(
+		TEXT("tc.Map.ShipTurn"), 13.0f,
+		TEXT("With tc.Map.ShipWay: the radius of a fleet's turning circle as she leaves and comes in, in map units."));
+	TAutoConsoleVariable<float> CVarShipSweep(
+		TEXT("tc.Map.ShipSweep"), 45.0f,
+		TEXT("With tc.Map.ShipWay: the radius she rounds a corner of her way on, out at sea, in map units."));
+	TAutoConsoleVariable<float> CVarShipBerth(
+		TEXT("tc.Map.ShipBerth"), 4.0f,
+		TEXT("With tc.Map.ShipWay: how far outside a corner of her way she passes, in map units."));
+	TAutoConsoleVariable<float> CVarShipHelm(
+		TEXT("tc.Map.ShipHelm"), 2.4f,
+		TEXT("With tc.Map.ShipWay: the fastest a fleet's head swings, in radians a second (less: she creeps round her turns and takes longer)."));
+	TAutoConsoleVariable<float> CVarShipPace(
+		TEXT("tc.Map.ShipPace"), 1.0f,
+		TEXT("With tc.Map.ShipWay: her time for a voyage, as a multiple of the 2.8 to 6.5 seconds its length asks."));
+
+	// (Release 2, funnel smoke: the art director's campaign map upgrade 3, 25 November 2026, on Brian's "I want this to
+	// visually wow people on how smooth and realistic and detailed grand it looks".) The ships of a fleet at sea smoke
+	// (Campaign/ShipSmoke.h): a pale wisp over each lying still, and under way a plume that streams astern along the
+	// water she has crossed, black while she works up to speed. Off as it comes, until Brian has seen the Mac's film of
+	// it; "-TheaterShipSmoke" turns it on for that film, switch or no switch. Read every frame: nothing is remade.
+	TAutoConsoleVariable<int32> CVarShipSmoke(
+		TEXT("tc.Map.ShipSmoke"), 0,
+		TEXT("1: the ships of a fleet at sea smoke from their funnels (a wisp lying still; under way a plume astern along her course, black as she works up to speed; none at anchor, in the hand, or for submarines); 0: no funnel smoke, as before."));
+	TAutoConsoleVariable<float> CVarShipSmokeMuch(
+		TEXT("tc.Map.ShipSmokeMuch"), 1.0f,
+		TEXT("With tc.Map.ShipSmoke: how thick the funnel smoke is, 0 (none) to 2."));
+	TAutoConsoleVariable<float> CVarShipSmokeLong(
+		TEXT("tc.Map.ShipSmokeLong"), 1.0f,
+		TEXT("With tc.Map.ShipSmoke: how far astern a ship's smoke streams under way, 0 (it stands over her) to 2 (twice as far)."));
+
+	bool ShipSmokeWanted()
+	{
+		static const bool bShipSmokeAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterShipSmoke"));
+		return bShipSmokeAsked || CVarShipSmoke.GetValueOnGameThread() != 0;
+	}
 
 	const TCHAR* SurfaceMaterialPath = TEXT("/Game/Campaign/Materials/M_MapSurface.M_MapSurface");
 	const TCHAR* SolidMaterialPath = TEXT("/Game/Campaign/Materials/M_Solid.M_Solid");
@@ -11462,11 +11511,22 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 					Travellers.Add(*Unit);
 				}
 			}
-			if (AArmyPiece* Courier = World->SpawnActor<AArmyPiece>(CarriedFrom ? *CarriedFrom : *From, Piece->GetActorRotation()))
+			if (AArmyPiece* Courier = World->SpawnActor<AArmyPiece>(CarriedFrom ? *CarriedFrom : *From, Piece->Upright()))
 			{
 				RoundPiece(Courier);
 				Courier->SetArmy(this, *Nation, Piece->GetRegionId(), Travellers);
 				Courier->MarchAlong(Road, true, CarriedFrom == nullptr);
+				if (AArmyPiece::CarriedWithWeight())
+				{
+					// (Release 2, armies with weight: the army it joins takes its weight as it lands. UpdateSmoke watches for it.)
+					FJoining Join;
+					Join.Sent = Courier;
+					Join.Joined = Piece;
+					Join.From = Road[0];
+					Join.Stood = Piece->GetRestLocation();
+					Join.Due = World->GetTimeSeconds() + Courier->MarchLasts();
+					Joining.Add(Join);
+				}
 			}
 		}
 	}
@@ -11946,6 +12006,52 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 	}
 	const FRotator Facing(0.0f, LastPieceYaw, 0.0f);
 
+	// (Release 2, a fleet under way: see CVarShipWay.) The way by water is laid as a ship's course and timed, on the
+	// map (map units; the map's own east and south, which are the world's +Y and -X: a quarter turn, the same hand), and
+	// handed to the piece as her times in the world. False where there is no course to sail: she sails as before.
+	static const bool bShipWayAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterShipWay"));
+	const bool bShipWay = bShipWayAsked || CVarShipWay.GetValueOnGameThread() != 0;
+	auto SailShipWay = [this](AArmyPiece* Piece, const TArray<FVector2D>& MapWay) -> bool
+	{
+		TheaterShipWay::FAsk Ask;
+		Ask.Way.reserve(static_cast<size_t>(MapWay.Num()));
+		for (const FVector2D& Point : MapWay)
+		{
+			Ask.Way.push_back(TheaterShipWay::FSpot{ Point.X, Point.Y });
+		}
+		// (A piece at rest faces the table, its bows at the table's yaw: she leaves so and comes to rest so. On the map
+		// a yaw is the angle from east round toward south.)
+		const double Yaw = FMath::DegreesToRadians(static_cast<double>(LastPieceYaw));
+		Ask.Bows = TheaterShipWay::FSpot{ FMath::Cos(Yaw), FMath::Sin(Yaw) };
+		Ask.Rest = Ask.Bows;
+		Ask.Turn = FMath::Max(CVarShipTurn.GetValueOnGameThread(), 0.0f);
+		Ask.Sweep = FMath::Max(CVarShipSweep.GetValueOnGameThread(), 0.0f);
+		Ask.Berth = FMath::Max(CVarShipBerth.GetValueOnGameThread(), 0.0f);
+		Ask.Step = 0.75; // (as closely as the way itself was asked of the water)
+		const TheaterShipWay::FCourse Course = TheaterShipWay::Plan(Ask, [this](TheaterShipWay::FSpot P) { return CoverAt(P.X, P.Y) <= 0.35f; });
+		if (Course.Points.size() < 2 || Course.Length <= 0.0)
+		{
+			return false;
+		}
+		const double Pace = FMath::Clamp(CVarShipPace.GetValueOnGameThread(), 0.25f, 4.0f);
+		const TheaterShipWay::FTimes Times = TheaterShipWay::Time(Course, TheaterShipWay::Seconds(Course.Length) * Pace, FMath::Max(CVarShipHelm.GetValueOnGameThread(), 0.2f));
+		const int32 Many = static_cast<int32>(Times.At.size());
+		TArray<FVector> Where;
+		TArray<FVector2D> Heads;
+		TArray<double> Ran;
+		Where.Reserve(Many);
+		Heads.Reserve(Many);
+		Ran.Reserve(Many);
+		for (size_t K = 0; K < Times.At.size(); ++K)
+		{
+			Where.Add(MapToWorld(Times.At[K].X, Times.At[K].Y, 0.02));
+			Heads.Add(FVector2D(-Times.Head[K].Y, Times.Head[K].X));
+			Ran.Add(Times.Ran[K] * UnitScale);
+		}
+		Piece->SailCourse(Where, Heads, Ran, Times.Tick, LastPieceYaw);
+		return Piece->IsSailing();
+	};
+
 	// ---- Fleets. One at sea lies in the middle of its sea; one in harbour lies off the coast of its base.
 	TSet<int32> Afloat;
 	TMap<FIntPoint, int32> Crowd; // how many pieces are already at a place: (1, sea) or (2, base)
@@ -12044,8 +12150,9 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 			if (bSail)
 			{
 				const FVector Now = Piece->GetActorLocation();
+				const TArray<FVector2D> MapWay = WaterWay(From, At);
 				TArray<FVector> Way;
-				for (const FVector2D& Point : WaterWay(From, At))
+				for (const FVector2D& Point : MapWay)
 				{
 					Way.Add(MapToWorld(Point.X, Point.Y, 0.02));
 				}
@@ -12056,7 +12163,12 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 					{
 						Way[0] = Now; // (down from the hand onto the water as it goes)
 					}
-					Piece->SailAlong(Way, LastPieceYaw);
+					// (Release 2, a fleet under way.) A ship's course for her, where it is asked for. Not for a fleet let
+					// go from the hand, which comes down onto the water as it goes, as before.
+					if (bCarried || !bShipWay || !SailShipWay(Piece, MapWay))
+					{
+						Piece->SailAlong(Way, LastPieceYaw);
+					}
 				}
 			}
 			Afloat.Add(Fleet.Id);
@@ -15744,8 +15856,38 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		for (FFrontFire& Fire : FrontFires) { Brought(Fire.At); }
 		for (FBattleSmoke& Battle : Battles) { Brought(Battle.Where); }
 		for (FBombSmoke& Smoke : BombSmokes) { Brought(Smoke.Root); }
-		for (FFlakBurst& Burst : FlakBursts) { Brought(Burst.At); }
+		// (THE FLAK BURSTS ARE NOT BROUGHT TO THE EYE. The art director ruled at 05:10Z that they must come round with
+		// the rest, so that when the eye wraps at the chart's edge (the controller's SetWrap) or the photographer jumps,
+		// the bursts in the air come round with their raid instead of hanging a world behind for the rest of their life.
+		// She is right about what has to happen; the eye is the wrong thing to measure it from. A raid is NOT drawn in
+		// the eye's turn: UpdateSorties counts the airfield beside the eye and then the target beside the AIRFIELD, so a
+		// raid from a near field to a far target is drawn up to a world from the eye, and the guns' own fire follows the
+		// raid there (RaidTurn and ToRaid below), as do the searchlights. A pass rounding bursts to the eye therefore
+		// moves them off their raid and onto the twin of the bombed town, which stands within sight of the seam with no
+		// bombers over it and no gun flashes under it: smoke in an empty sky, measured by a third read (eye at map x
+		// 4900, field 300, target -3000: the raid is drawn at -3000 and its bursts land at 6256, about 1,356 units from
+		// the eye and well inside the 1,700 a burst is drawn within).
+		// So each burst is brought round to the turn of ITS OWN RAID, named by the province bombed and the province
+		// flown from. That gives her what she asked for -- the eye wraps, the raid comes round a world, the bursts come
+		// with it in the same frame -- and it cannot part a burst from the fire that made it. A burst whose raid has
+		// gone home is left where it hangs and fades there, which is the only honest place for it.)
+		for (FFlakBurst& Burst : FlakBursts)
+		{
+			if (Burst.Over == INDEX_NONE)
+			{
+				continue;
+			}
+			const FFlight* Maker = Flights.FindByPredicate([&Burst](const FFlight& Flier)
+			{
+				return Flier.Sortie.Region == Burst.Over && Flier.Sortie.From == Burst.From && !Flier.At.IsZero();
+			});
+			if (Maker)
+			{
+				Burst.At.Y += FMath::RoundToDouble((Maker->At.Y - Burst.At.Y) / SeamWorld) * SeamWorld;
+			}
+		}
 		for (TPair<FVector, double>& Down : SetDowns) { Brought(Down.Key); }
+		for (FThud& Thud : Thuds) { Brought(Thud.Where); }
 		for (FVector4& Fire : ColumnFires)
 		{
 			Fire.Y += FMath::RoundToDouble((SeamBeside - Fire.Y) / SeamWorld) * SeamWorld;
@@ -16320,6 +16462,38 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			}
 		}
 	}
+	// (Release 2, armies with weight.) What a piece set down with weight raises: how much of an army it is, and what it
+	// lands on. Snow as the piece itself was told this month; sand where its province is desert.
+	const bool bWithWeight = AArmyPiece::CarriedWithWeight();
+	auto ThudOf = [this, Now](const AArmyPiece* Landed, double HowMuch)
+	{
+		FThud Thud;
+		Thud.Where = Landed->GetActorLocation();
+		Thud.Began = Now;
+		Thud.Much = static_cast<float>(TheaterArmyCarry::Heft(Landed->GetCorps().Num()) * HowMuch);
+		Thud.Ground = Landed->IsOnSnow() ? 1 : (Data.Regions.IsValidIndex(Landed->GetRegionId()) && Data.Regions[Landed->GetRegionId()].Terrain == TEXT("desert") ? 2 : 0);
+		return Thud;
+	};
+	// A piece sent to join an army already standing is taken off as it lands. It is not among the pieces below and
+	// raised no dust before: with weight, the army it joins rocks under it, and the dust is raised there.
+	for (int32 JoinIndex = Joining.Num() - 1; JoinIndex >= 0; --JoinIndex)
+	{
+		if (Joining[JoinIndex].Sent.IsValid())
+		{
+			continue;
+		}
+		if (AArmyPiece* Joined = Joining[JoinIndex].Joined.Get())
+		{
+			// (Only a landing: the piece came down in its time, and the army still stands where it was joined.)
+			const bool bLanded = Now >= Joining[JoinIndex].Due - 0.15 && FVector::DistSquared(Joined->GetRestLocation(), Joining[JoinIndex].Stood) < 1.0;
+			if (bWithWeight && bLanded && !Joined->IsMarching())
+			{
+				Thuds.Add(ThudOf(Joined, 0.85));
+				Joined->TakeWeight(Joined->GetActorLocation() - Joining[JoinIndex].From);
+			}
+		}
+		Joining.RemoveAtSwap(JoinIndex);
+	}
 	// The fires of armies in camp: a thin thread of smoke from each.
 	// And a puff of dust as a piece that has been moved is set down on the table again.
 	for (AArmyPiece* Piece : Pieces)
@@ -16340,7 +16514,14 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		else if (OnTheMarch.Contains(Key))
 		{
 			OnTheMarch.Remove(Key);
-			SetDowns.Emplace(Piece->GetActorLocation(), Now);
+			if (bWithWeight)
+			{
+				Thuds.Add(ThudOf(Piece, 1.0));
+			}
+			else
+			{
+				SetDowns.Emplace(Piece->GetActorLocation(), Now);
+			}
 		}
 	}
 	SetDowns.RemoveAll([Now](const TPair<FVector, double>& Down) { return Now - Down.Value > 1.6; });
@@ -16353,6 +16534,44 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			const double Angle = K * 0.698 + 0.3;
 			const FVector Out(FMath::Cos(Angle), FMath::Sin(Angle), 0.0);
 			Draw(Down.Key + Out * (2.6 + 3.4 * Age) * Unit + FVector(0.0, 0.0, (0.3 + 1.1 * Age) * Unit), (0.7 + 1.5 * Age) * Unit, Dusty, 0.5f * static_cast<float>(FMath::Pow(1.0 - Age, 1.4)));
+		}
+	}
+	// (Release 2, armies with weight.) And with weight: a low ring that runs out along the table from under the base as
+	// it lands, quick and soon gone, and a cloud that rises behind it and drifts off down the wind. More of both for a
+	// bigger army; white and soon fallen on snow, pale and long in the air on sand (Campaign/ArmyCarry.h).
+	Thuds.RemoveAll([Now](const FThud& Thud) { return Now - Thud.Began > 2.3; });
+	for (const FThud& Thud : Thuds)
+	{
+		if (FVector::DistSquared2D(Thud.Where, CameraFocus) > Reach * Reach)
+		{
+			continue;
+		}
+		const double Since = Now - Thud.Began;
+		// (the snow's own white is kept under the brightness at which a puff counts as a light by night: see DrawPuff)
+		const FLinearColor Raised = Thud.Ground == 1 ? FLinearColor(0.72f, 0.74f, 0.79f) : Thud.Ground == 2 ? FLinearColor(0.80f, 0.71f, 0.54f) : FLinearColor(0.62f, 0.56f, 0.45f);
+		const double Turned = FMath::Frac(Thud.Where.X * 0.0137 + Thud.Where.Y * 0.0071) * 0.7; // (no two rings set alike)
+		const TheaterArmyCarry::FDust Low = TheaterArmyCarry::Skirt(Since, Thud.Much);
+		if (Low.Thick > 0.0)
+		{
+			for (int32 Puffed = 0; Puffed < 8; ++Puffed)
+			{
+				const double Angle = Puffed * 0.7854 + 0.2 + Turned;
+				const FVector Out(FMath::Cos(Angle), FMath::Sin(Angle), 0.0);
+				Draw(Thud.Where + Out * (Low.Out * Unit) + FVector(0.0, 0.0, Low.High * Unit), Low.Size * Unit, Raised, static_cast<float>(Low.Thick));
+			}
+		}
+		const TheaterArmyCarry::FDust Cloud = TheaterArmyCarry::Billow(Since, Thud.Much, Thud.Ground);
+		if (Cloud.Thick > 0.0)
+		{
+			const double Aged = Since / TheaterArmyCarry::BillowLasts(Thud.Ground);
+			const FVector Drift = Wind * ((Thud.Ground == 2 ? 1.8 : 1.2) * Unit * Aged * Aged);
+			for (int32 Puffed = 0; Puffed < 9; ++Puffed)
+			{
+				const double Angle = Puffed * 0.698 + 0.3 + Turned;
+				const double Uneven = 0.85 + 0.3 * FMath::Frac(Puffed * 0.618 + Turned * 3.0);
+				const FVector Out(FMath::Cos(Angle), FMath::Sin(Angle), 0.0);
+				Draw(Thud.Where + Out * (Cloud.Out * Uneven * Unit) + FVector(0.0, 0.0, Cloud.High * Unit) + Drift, Cloud.Size * Unit, Raised, static_cast<float>(Cloud.Thick));
+			}
 		}
 	}
 	for (int32 K = 0; K < TownChimneys.Num(); ++K)
@@ -16378,6 +16597,115 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			continue;
 		}
 		Plume(WorksChimneys[K], K + 500);
+	}
+
+	// (Release 2, funnel smoke: the campaign map's upgrade 3, Campaign/ShipSmoke.h; tc.Map.ShipSmoke.) Every ship of a
+	// fleet at sea has steam up: a pale wisp over her lying still, and under way a plume that streams astern along the
+	// water she has crossed, black while she works up to speed. Near what the eye looks at only. The fleets under way
+	// are drawn first and those lying still after, while there is room in what the fleets may take of the table's smoke.
+	// Nothing is kept from frame to frame: each puff is where the clock says it is.
+	if (ShipSmokeWanted())
+	{
+		const double FunnelMuch = FMath::Clamp(static_cast<double>(CVarShipSmokeMuch.GetValueOnGameThread()), 0.0, 2.0);
+		const double FunnelLong = FMath::Clamp(static_cast<double>(CVarShipSmokeLong.GetValueOnGameThread()), 0.0, 2.0);
+		const int32 SmokeLevel = TheaterShipSmoke::Level(CameraDistance);
+		const bool bEachFunnel = TheaterShipSmoke::EachFunnel(SmokeLevel);
+		const FVector LeeWay = Wind.GetSafeNormal();
+		int32 FleetPuffs = 0;
+		TArray<AArmyPiece::FFunnelNow> FunnelsSeen;
+		for (int32 SmokePass = 0; SmokePass < 2 && FunnelMuch > 0.0; ++SmokePass)
+		{
+			for (const TPair<int32, TObjectPtr<AArmyPiece>>& FleetEntry : FleetPieces)
+			{
+				const AArmyPiece* Steamer = FleetEntry.Value.Get();
+				if (!Steamer || FVector::DistSquared2D(Steamer->GetActorLocation(), CameraFocus) > Reach * Reach)
+				{
+					continue;
+				}
+				const bool bSteamsOn = Steamer->IsSailing();
+				const int32 PlumePuffs = TheaterShipSmoke::Puffs(SmokeLevel, bSteamsOn);
+				double SteamPace = 0.0, SteamGather = 0.0;
+				if (bSteamsOn != (SmokePass == 0) || PlumePuffs <= 0 || !Steamer->FunnelsNow(FunnelsSeen, SteamPace, SteamGather))
+				{
+					continue;
+				}
+				const TheaterShipSmoke::FFire Steam = TheaterShipSmoke::Fire(SteamPace, SteamGather, FunnelMuch, FunnelLong);
+				// One plume for each funnel close to; from further off one for each ship, from the middle of her funnels.
+				// (Her funnels come ship by ship.)
+				for (int32 FunnelFirst = 0; FunnelFirst < FunnelsSeen.Num();)
+				{
+					int32 FunnelsOn = 1;
+					while (FunnelFirst + FunnelsOn < FunnelsSeen.Num() && FunnelsSeen[FunnelFirst + FunnelsOn].Ship == FunnelsSeen[FunnelFirst].Ship)
+					{
+						++FunnelsOn;
+					}
+					const int32 PlumesOn = bEachFunnel ? FunnelsOn : 1;
+					for (int32 PlumeIndex = 0; PlumeIndex < PlumesOn; ++PlumeIndex)
+					{
+						const AArmyPiece::FFunnelNow& PlumeOf = FunnelsSeen[FunnelFirst + PlumeIndex];
+						FVector PlumeTop = PlumeOf.Top;
+						if (!bEachFunnel)
+						{
+							for (int32 FunnelNext = 1; FunnelNext < FunnelsOn; ++FunnelNext)
+							{
+								PlumeTop += FunnelsSeen[FunnelFirst + FunnelNext].Top;
+							}
+							PlumeTop /= static_cast<double>(FunnelsOn);
+						}
+						// (two funnels' smoke is each a little less than one funnel's alone; run together it is a little more)
+						const double PlumeGirth = TheaterShipSmoke::Girth(PlumeOf.Class) * (FunnelsOn < 2 ? 1.0 : bEachFunnel ? 0.8 : 1.15);
+						const double PlumeLong = PlumeOf.Long;
+						if (PlumeGirth <= 0.0 || PlumeLong <= 0.0 || FleetPuffs + PlumePuffs > TheaterShipSmoke::MostPuffs)
+						{
+							continue;
+						}
+						const double PlumeSeed = FMath::Frac(FleetEntry.Key * 0.137 + (FunnelFirst + PlumeIndex) * 0.29);
+						for (int32 PuffIndex = 0; PuffIndex < PlumePuffs; ++PuffIndex)
+						{
+							const double PuffAge = TheaterShipSmoke::AgeOf(Now, PuffIndex, PlumePuffs, PlumeSeed);
+							// (Under way each puff is as thick and as dark as the fire that made it, its age ago, and
+							// not as the fire is now: the plume never changes colour all at once. ShipSmoke.h, Carries.)
+							TheaterShipSmoke::FFire PuffFire = Steam;
+							if (bSteamsOn)
+							{
+								double MadePace = 0.0, MadeGather = 0.0;
+								const double MadeKeeps = Steamer->SteamedAt(PuffAge * TheaterShipSmoke::Life, MadePace, MadeGather);
+								PuffFire = TheaterShipSmoke::Carries(Steam, TheaterShipSmoke::Fire(MadePace, MadeGather, FunnelMuch, FunnelLong), MadeKeeps);
+							}
+							const TheaterShipSmoke::FPuff OnePuff = TheaterShipSmoke::Puff(PuffFire, PuffAge, PlumePuffs, PlumeGirth);
+							++FleetPuffs;
+							if (OnePuff.Thick <= 0.004)
+							{
+								continue;
+							}
+							const double PuffBack = OnePuff.Astern * PlumeLong;
+							const FVector PuffAstern = Steamer->AsternBy(PlumeTop, PuffBack);
+							const double PuffSway = FMath::Sin(Now * 0.7 + PlumeSeed * 40.0 + PuffIndex * 1.7) * 0.25 * OnePuff.Size * PlumeLong * PuffAge;
+							const FVector PuffAt = PlumeTop + PuffAstern + FVector(0.0, 0.0, OnePuff.Rise * PlumeLong) + LeeWay * (OnePuff.Lee * PlumeLong) + Right * PuffSway;
+							const TheaterShipSmoke::FInk PuffInk = TheaterShipSmoke::Ink(PuffFire.Dark, PuffAge);
+							const FLinearColor PuffColour(static_cast<float>(PuffInk.R), static_cast<float>(PuffInk.G), static_cast<float>(PuffInk.B));
+							const double PuffSize = OnePuff.Size * PlumeLong;
+							if (OnePuff.Stretch > 1.0)
+							{
+								// The way the plume runs here: astern along the water she crossed, up, and down the wind. A puff
+								// is drawn out along it only by as much of that as lies across the eye's view: one that runs
+								// straight at the eye is round.
+								const FVector PuffFurther = Steamer->AsternBy(PlumeTop, PuffBack + 0.02 * PlumeLong) - PuffAstern;
+								const FVector PuffRuns = PuffFurther.GetSafeNormal() * OnePuff.RunAstern + FVector::UpVector * OnePuff.RunRise + LeeWay * OnePuff.RunLee;
+								const FVector PuffSeen = Right * FVector::DotProduct(PuffRuns, Right) + Up * FVector::DotProduct(PuffRuns, Up);
+								const double PuffShown = FMath::Min(PuffSeen.Size(), 1.0);
+								DrawSmear(PuffAt, PuffRuns, PuffSize * (1.0 + (OnePuff.Stretch - 1.0) * PuffShown), PuffSize, PuffColour, static_cast<float>(OnePuff.Thick));
+							}
+							else
+							{
+								Draw(PuffAt, PuffSize, PuffColour, static_cast<float>(OnePuff.Thick));
+							}
+						}
+					}
+					FunnelFirst += FunnelsOn;
+				}
+			}
+		}
 	}
 
 	// Battles: for a few seconds the guns flash, and dark smoke rolls up and drifts away.
@@ -16843,6 +17171,8 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				Burst.Born = Now - Ago;
 				Burst.Seed = Chance.RandRange(1, 1 << 20);
 				Burst.Wings = Wings;
+				Burst.Over = Flight.Sortie.Region; // (seam-4's mend: whose raid it is, for its turn of the world)
+				Burst.From = Flight.Sortie.From;
 				// (a burst that goes off now, within about a wingspan and a quarter of the leader, jolts the formation:
 				// up to three and a half degrees of roll and one and a half of nod, the nearer the more)
 				const double Near = 1.0 - FMath::Clamp(FVector::Distance(Burst.At, Flight.At) / (1.25 * Wings), 0.0, 1.0);
@@ -16959,6 +17289,8 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				Puffed.Seed = Dice.RandRange(1, 1 << 20);
 				Puffed.Wings = LightWings;
 				Puffed.bLight = true;
+				Puffed.Over = Flight.Sortie.Region; // (seam-4's mend: whose raid it is, for its turn of the world)
+				Puffed.From = Flight.Sortie.From;
 			};
 			if (Flight.NextFlak <= 0.0)
 			{
@@ -17775,7 +18107,9 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 				{
 					Piece->LookFrom(CameraFocus.Y, bOverSeam);
 				}
-				Piece->SetShadows(bAny && FVector::DistSquared2D(Piece->GetActorLocation(), CameraFocus) < ShadowReach * ShadowReach);
+				const bool bByFocus = FVector::DistSquared2D(Piece->GetActorLocation(), CameraFocus) < ShadowReach * ShadowReach;
+				Piece->SetShadows(bAny && bByFocus);
+				Piece->SetEye(CameraDistance, bByFocus); // (release 2, a fleet under way, second part: near the eye a fleet's ships heel and ride the swell; tc.Map.ShipRide)
 			}
 		};
 		for (AArmyPiece* Piece : Pieces)
@@ -18267,7 +18601,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 		{
 			if (Piece)
 			{
-				Piece->SetActorRotation(FRotator(0.0f, CameraYaw, 0.0f));
+				Piece->FaceEye(CameraYaw); // (armies with weight: one that leans keeps its lean; one that stands is turned as before)
 			}
 		}
 		for (const auto& Pair : FleetPieces)
@@ -18798,10 +19132,19 @@ void ACampaignMapActor::UpdateSky(float CameraDistance, const FVector& CameraFoc
 		// (Tuned by measure over Germany from playing height, 17 November 2026. Closed at rest: the ground (108, 106, 79)
 		// stands at (84, 81, 67), 78 parts in 100 as bright, and the sea (59, 154, 169) at (66, 108, 126). In the sky
 		// view the sheet brings the sea to (109, 133, 146). Cloud at rest takes the ground down a twentieth all told.)
-		const FLinearColor Sheet = FMath::Lerp(FLinearColor(0.6f, 0.66f, 0.76f), FLinearColor(0.107f, 0.138f, 0.223f), Moon);
-		const FLinearColor Puff = FMath::Lerp(FLinearColor(0.871f, 0.896f, 0.93f), FLinearColor(0.202f, 0.246f, 0.352f), Moon);
-		const FLinearColor Mist = FMath::Lerp(FLinearColor(0.617f, 0.658f, 0.701f), FLinearColor(0.15f, 0.17f, 0.21f), Moon);
-		const FLinearColor RainInk = FMath::Lerp(FLinearColor(0.776f, 0.823f, 0.888f), FLinearColor(0.24f, 0.26f, 0.31f), Moon);
+		// (The art director's ruling of 25 November 2026 04:54Z, art-director/reviews/map-winter-sky-ruling.md, on a 1.5
+		// still of France in January 1940: by day the lid was a cyan DYE over the land, not a pearl wash. She measured
+		// France inside the zone at red/green 0.67 to 0.76 with blue/green 1.19 to 1.30, against Belgium a step outside
+		// at 1.14 / 0.76, and ruled that washed land must keep its own hue direction and only be pulled toward neutral:
+		// red/green 0.88 to 1.02, blue/green 1.00 to 1.08. The old sheet stood at blue/green 1.15, which over
+		// green-olive land multiplies into water. These are her starting numbers at the same brightness, hers to judge
+		// again on the next pictures. By night the lerp is untouched: a cold blue lid by moonlight is right.)
+		const FLinearColor Sheet = FMath::Lerp(FLinearColor(0.66f, 0.665f, 0.70f), FLinearColor(0.107f, 0.138f, 0.223f), Moon);
+		const FLinearColor Puff = FMath::Lerp(FLinearColor(0.902f, 0.906f, 0.916f), FLinearColor(0.202f, 0.246f, 0.352f), Moon);
+		const FLinearColor Mist = FMath::Lerp(FLinearColor(0.645f, 0.658f, 0.680f), FLinearColor(0.15f, 0.17f, 0.21f), Moon);
+		// (snow lying under the lid is to read L150 to 175 at blue/green 1.02 to 1.05; for rain her word is that the
+		// present ink is near enough, so each weather keeps its own)
+		const FLinearColor RainInk = FMath::Lerp(bSnow ? FLinearColor(0.86f, 0.865f, 0.875f) : FLinearColor(0.776f, 0.823f, 0.888f), FLinearColor(0.24f, 0.26f, 0.31f), Moon);
 		const float Dim = FMath::Lerp(0.57f, 0.71f, Moon);
 		for (UMaterialInstanceDynamic* Each : Wearing)
 		{
@@ -18818,7 +19161,11 @@ void ACampaignMapActor::UpdateSky(float CameraDistance, const FVector& CameraFoc
 			Each->SetScalarParameterValue(TEXT("SkyView"), SkyViewNow);
 			Each->SetScalarParameterValue(TEXT("SkyTravel"), Travel);
 			Each->SetScalarParameterValue(TEXT("SkyDim"), Dim);
-			Each->SetScalarParameterValue(TEXT("SkyRain"), bSnow ? 0.5f : 0.32f);
+			// (Her fault 2, the same ruling: inside a 100 by 100 patch of washed land the spread of brightness is to be
+			// no more than a quarter of the patch's mean, where Touraine stood at 0.45. The falling weather is the loud
+			// part of that spread, so it is laid on at about three fifths of its old weight; its marks are softened and
+			// turned every way in MakeWeather. Hers to measure again.)
+			Each->SetScalarParameterValue(TEXT("SkyRain"), bSnow ? 0.3f : 0.2f);
 			// (the mist's bands are for where he plays: from high up they are gone before they can read as ruled lines)
 			Each->SetScalarParameterValue(TEXT("SkyMists"), 0.02f * (1.0f - FMath::SmoothStep(5000.0f, 9000.0f, CameraDistance)));
 			Each->SetVectorParameterValue(TEXT("RainFall"), RainFall);

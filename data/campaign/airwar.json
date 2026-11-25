@@ -56,7 +56,9 @@
     "dug": 0.6,
     "cover": { "plains": 1, "desert": 1, "hills": 0.85, "marsh": 0.85, "forest": 0.7, "mountain": 0.7, "urban": 0.6 },
     "fire": 0.015,
-    "value": 1500
+    "value": 1500,
+    "_reach": "Read only with the strafers' rule on (src/campaign/strafers.ts; the design director, 25 November 2026 05:12Z: the card, the settled raid and the fought raid charge the ground fire only on the fighters expected to be left after the air fight that have the reach to strafe). reach (G, flagged; one figure for every nation): a fighter group has the reach to go down on the troops when they lie within this share of its fighter range (air.json ftrRange and the dated range rows below, read by air.ts reach()), an escort radius that already holds about 15 to 20 minutes of fighting at the far end; a group farther out escorts its bombers and turns for home, adds no weight on the troops and is not shot at by the ground. The design director, 25 November 2026 13:35Z (historian/strafing-reach-1125.md): 0.9, because the cause is fuel: the strafers here are fighters carrying no bombs, and the record's strafers spent about 15 to 20 minutes low, flak cutting their passes short more than fuel did; the historian's sum gives 0.85 to 1.0 there. Flak is priced once, as ground fire on the strafers left (fire above): the reach is not cut again for it. A fighter carrying bombs takes 0.6 (200 miles against 350 with the tank) once the game tells fighter-bombers apart by a kit row (bomb racks) on the type: not this build. (air.json range.fullAt, the share of range at which an escort is at full effect, is another figure and is not this one.)",
+    "reach": 0.9
   },
   "recon": {
     "_note": "A reconnaissance flight. aircraft is how many of the group go. loss is the share of them lost when enemy fighters patrol the target, per unit of their cover there. ready is the readiness the group spends.",
@@ -93,6 +95,18 @@
     "defence": 0.09,
     "own": 1.5,
     "radar": "earlywarning"
+  },
+  "fog": {
+    "_note": "Fog and reconnaissance on air raids (release 2; Brian, 24 November 2026: 'you should be able to bomb a german city but you dont know what your up against without doing recon. If a squadron does a recon mission it should lift the fog of war for that area for 2 turns'; the design director's ruling of 22:10Z; src/campaign/airfog.ts). Off as shipped: a war has it with the flag rfog (setRaidFog, right after startOpen), and without the flag nothing here is read and the war plays as before. 'on' is what a new grand campaign would open with (raidFogShipped); false as shipped. With it on, a side sees the air defence of an enemy province (the enemy fighters in reach of its sky, its guns, the share of the town in ruins) only while it has the province in full sight, and remembers what it last saw there with the month (intel.airSeen). The raid card and every computer staff read that knowledge, never the truth; a raid flown is fought on the truth. The forecast is a band: its low end counts only the defence known for sure (the fighter groups whose own fields are in sight now, a carrier wing whose fleet is identified, and the guns last seen, since works stand where they are built; none where never seen); its high end adds every other fighter last seen in reach of the place, all of them rising (where the place itself was never seen, the most last seen in reach of any place within its holder's fighter reach of it), and the guns last seen, or the heaviest where none were ever seen. In sight the band is one figure, the true one, and the card's own figures are always the high end's. Any target in range can always be ordered: the fog hides, it never refuses. 'months': a reconnaissance flight gives full sight of the province and the ground beside it for this many months, the month flown and the next (Brian's '2 turns': his figure, not a guess). 'forget' (G): a sighting older than this many months is thrown away, and the place is unknown again. 'stale' (G): a staff flies a new reconnaissance over a target it is about to weigh when its last sight of it is this many months old or more, or it has never seen it. 'scouts' (G): the most such flights one staff flies in a month. 'round' (G): what is remembered of the fighters is kept to the nearest this many aircraft, since nobody counts them one by one. 'reads' (G for the opportunist; the ruling for the other two): where in the band each character of staff (rivals.json) reads a forecast, 0 the low end and 1 the high: a cautious staff the high end and a bold one the middle (the ruling), an opportunist between the two (G). 'gunsUnknown': the gun level the high end counts where the side has never seen the place: the heaviest that can be built (arsenal.json works.aa has three levels), so the high end holds whatever guns are there; not a guess. 'words': a gun level in plain words, from none built to level 3.",
+    "on": false,
+    "months": 2,
+    "forget": 12,
+    "stale": 3,
+    "scouts": 2,
+    "round": 10,
+    "reads": { "bold": 0.5, "cautious": 1, "opportunist": 0.75 },
+    "gunsUnknown": 3,
+    "words": ["none built", "light", "medium", "heavy"]
   },
   "success": {
     "_note": "The chance of success shown before a raid: a raid succeeds when it costs the enemy more than it costs you. k is how sharply the chance turns on the expected exchange. Set from 489 raids flown by four nations over six months: at 12 the raids given 10 to 25% won 15% of the time, those given 25 to 40% won 38%, and those given over 90% all won.",

@@ -13,6 +13,7 @@
 
 import type { VictoryLevel } from '../core/ticket';
 import { fleetsNamed, keptAfloat, keptAfloatPast, shipCount } from './navy';
+import { strafedLine } from './strafers';
 import type { AirFleet, AirReport, BomberRow, BomberShot, Game, SeaSide, ShipClass, Ships } from './types';
 
 export interface FoughtAir {
@@ -74,7 +75,48 @@ export interface FoughtAir {
    * boxes (ruling 227), for the group's record (stories.ts bombersFlew). Never a count: the losses are in 'lost'.
    */
   guns?: Record<number, number>;
+  /**
+   * A raid on troops fought out (release 2; the design director, 24 November 2026 22:28Z): the fighters that went down
+   * on the troops, each pass a group completed counting its part of the group (AirSim's strafing). fly() weighs them at
+   * the campaign's own figure (airwar.json ground.fighters) in place of every fighter that came through, and the
+   * fighters the ground fire brought down are already among 'lost'. Absent for any other raid.
+   */
+  strafed?: number;
+  /**
+   * With the strafers' rule on (strafers.ts): the groups that went down on the troops on the field and paid its ground
+   * fire, by campaign group id, and the fighters that fire brought down (among 'lost'). Absent otherwise.
+   */
+  strafers?: number[];
+  strafeFire?: number;
 }
+
+/**
+ * How a raid on troops is weighed, from the bombers that drop and the fighters that strafe: fly()'s own law for the
+ * raid (airwar.json "ground"; troopCut in air.ts), so the field can say as the bombs fall what the campaign will make of
+ * them, and books no more wreckage than the campaign books men. The organisation cut is
+ * min(max, (bomber x dropped + fighter x strafed) / (scale + perDiv x divs)) x cover.
+ */
+export interface TroopLaw {
+  scale: number; perDiv: number; max: number;
+  /** The cover the country gives (airwar.json ground.cover), and the enemy divisions in the province. */
+  cover: number; divs: number;
+  /** What one bomber that drops weighs (the day's aim, its research, the sky, its nation's weight row), and one fighter that strafes. */
+  bomber: number; fighter: number;
+  /** The share of the strafing fighters the ground fire brings down. */
+  fire: number;
+  /**
+   * With the strafers' rule on (strafers.ts): the groups with the reach to strafe, by campaign group id; only they go
+   * down on the troops, and each fighter of theirs that does pays 'fire'. Absent otherwise: every fighter may go down.
+   */
+  reach?: number[];
+  /** What troops dug in keep of the cut; the cut's share lost in men and guns; what a point of the cut on one division is worth. */
+  dug: number; str: number; value: number;
+}
+/** The organisation cut that many bombers dropping and that many fighters strafing earn. */
+export const troopCutOf = (L: TroopLaw, dropped: number, strafed: number): number =>
+  (L.divs > 0 ? Math.min(L.max, Math.max(0, L.bomber * dropped + L.fighter * strafed) / (L.scale + L.perDiv * L.divs)) * L.cover : 0);
+/** What that cut is worth on the campaign's scale (aircraft), as fly() values it. */
+export const troopWorth = (L: TroopLaw, dropped: number, strafed: number): number => troopCutOf(L, dropped, strafed) * L.divs * L.value;
 
 /**
  * How a raid's bombs are weighed, from the bombers that drop: fly()'s own law for a raid on a province (b397), so the
@@ -111,7 +153,7 @@ export const ruinChanceOf = (L: BombLaw, n: number): number => {
 export function settleFought(
   fought: FoughtAir,
   B: number,
-): { ftr: (f: AirFleet) => number; bmr: (f: AirFleet) => number; back: (f: AirFleet, k: number) => number; through: () => number } {
+): { ftr: (f: AirFleet) => number; bmr: (f: AirFleet) => number; back: (f: AirFleet, k: number) => number; through: () => number; strafed: () => number | null } {
   const row = (f: AirFleet): FoughtAir['lost'][number] => fought.lost[f.id] ?? { ftr: 0, bmr: 0, back: 0 };
   const whole = (n: number, most: number): number => Math.min(most, Math.max(0, Math.round(n)));
   return {
@@ -120,6 +162,8 @@ export function settleFought(
     back: (f, k) => Math.min(k, row(f).back),
     // The bombers that bomb: those that reached the release on the field, including any lost after it (b384(a)).
     through: () => Math.max(0, Math.min(B, fought.dropped)),
+    // A raid on troops: the fighters that strafed on the field (null where the battle counted none: every fighter that came through, as the staff's raid).
+    strafed: () => (fought.strafed === undefined ? null : Math.max(0, fought.strafed)),
   };
 }
 
@@ -323,6 +367,11 @@ export function afterCard(g: Game, rep: AirReport, fought: FoughtAir): AfterCard
   // The raid card's chance was the raider's: a defender reads the other side of it.
   const won = me === 'att' ? rep.won : !rep.won;
   const reckoning = fought.chance !== undefined ? reckoned(won, me === 'att' ? fought.chance : 1 - fought.chance) : undefined;
+  // (Release 2, a raid on troops with the strafers' rule on; the UI director's words of 15:04Z: the report says who went
+  // down, after what the bombers did and before the bill, to the side that flew it only. '' for anyone else, and for a
+  // report without the field; a raid on troops strikes no ships, so no kept lines stand between.)
+  const strafe = strafedLine(rep, g.human);
+  if (strafe) lines.splice((fought.staff ? 1 : 0) + (B > 0 ? 1 : 0), 0, strafe);
   return {
     lines, level: me === 'att' ? rep.level : FLIP[rep.level], ...(reckoning ? { reckoning } : {}),
     groups: [...rep.att.map(card('att')), ...rep.def.map(card('def'))],

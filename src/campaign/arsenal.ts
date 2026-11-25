@@ -936,13 +936,15 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
 
 /**
  * What a computer-run nation's staff orders from the arsenal in the grand campaign, beside the corps its factories
- * raise (economy.ts): guns for its bombed industry, and airfields behind its army.
+ * raise (economy.ts): guns for its bombed industry, and airfields behind its army. (Release 2, the building desk
+ * split: for the player the guns are towns and trade's, a work on the town and no corps, and the airfields
+ * recruitment's. 'guns' and 'fields' say which of the two a staff's month asks for.)
  */
-export function aiArsenal(g: Game, nat: string): void {
+export function aiArsenal(g: Game, nat: string, guns = true, fields = true): void {
   const n = g.nations[nat];
-  if (!budgeted(g) || byHand(g, nat, 'build') || !n.alive) return;
-  aiGuns(g, nat);
-  aiAirfields(g, nat);
+  if (!budgeted(g) || !n.alive) return;
+  if (guns && !byHand(g, nat, 'towns')) aiGuns(g, nat);
+  if (fields && !byHand(g, nat, 'build')) aiAirfields(g, nat);
 }
 
 /**
@@ -1012,7 +1014,8 @@ export function bareFront(g: Game, nat: string): [number, number][] {
     if (g.regions[c.reg].nb.some((j) => atWar(g, nat, g.regions[j].ctrl))) front.set(c.reg, (front.get(c.reg) ?? 0) + c.divs);
   }
   if (!front.size) return [];
-  const open = g.regions.filter((r) => r.id === fighters[0].base || whyNotBase(g, fighters[0], r, true) === null);
+  // (A province with no airfield is passed by before the longer question: whyNotBase is never null there.)
+  const open = g.regions.filter((r) => r.id === fighters[0].base || (hasAirfield(g, r.id) && whyNotBase(g, fighters[0], r, true) === null));
   return [...front.entries()].filter(([id]) => !open.some((r) => km(g, r.id, id) <= R));
 }
 

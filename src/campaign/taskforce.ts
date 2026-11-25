@@ -115,6 +115,8 @@ export function taskForcesMonth(g: Game, nat: string): void {
   for (const f of g.fleets) {
     if (f.nat !== nat || !f.task) continue;
     if (!shipCount(f.ships)) { delete f.task; continue; }
+    // (A task force in passage to a new base keeps on its way, and goes back to its job once it is in: release 2.)
+    if (f.stance === 'passage') continue;
     if (!g.nations[nat].atWar.length) continue;
     const job = jobWords(g, f.task);
     if (atSea(f) && f.ready < TASKFORCE.refit) {

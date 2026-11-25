@@ -125,7 +125,14 @@ export function foldCorps(g: Game, keep: Corps, gone: Corps): boolean {
   noteCorps(g, gone, 'cadre', reg, keep.id);
   removeCorps(g, gone);
   gone.str = 0; gone.ap = 0;
+  // (A corps a dated row had the loan of is a cadre under its own name, and its loan is over: nothing of it goes
+  // back anywhere, and raised again it is its own corps. A division is laid once, drawn.ts.)
+  // (And no row's time, when it is up, finds the corps raised again from that cadre: it would be sent off whole.)
+  if (gone.drew || gone.rowed) for (const k of Object.keys(g.flags)) if (k.startsWith('lent:') && g.flags[k] === gone.id) g.flags[k] = -1;
+  const lentAs = gone.rowed ? gone.name : null;
+  if (gone.rowed) { gone.name = gone.rowed.name; gone.hold = gone.rowed.hold; if (gone.rowed.stay) gone.stay = true; else delete gone.stay; }
+  delete gone.drew; delete gone.rowed;
   (n.cadres ??= []).push(gone);
-  if (keep.nat === g.human) headline(g, 'info', `${gone.name} is folded into ${keep.name} at ${g.regions[reg].name}: ${v.men.toLocaleString('en-US')} men in one corps${v.back > 0 ? `, ${v.back.toLocaleString('en-US')} sent back to the reserve` : ''}. Its cadre has gone home and can be raised again from the arsenal.`, keep.nat, reg);
+  if (keep.nat === g.human) headline(g, 'info', `${lentAs ?? gone.name} is folded into ${keep.name} at ${g.regions[reg].name}: ${v.men.toLocaleString('en-US')} men in one corps${v.back > 0 ? `, ${v.back.toLocaleString('en-US')} sent back to the reserve` : ''}. Its cadre has gone home and can be raised again from the arsenal.`, keep.nat, reg);
   return true;
 }

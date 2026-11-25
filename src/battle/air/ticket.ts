@@ -13,6 +13,7 @@ import { seatsOf } from '../../campaign/bombers';
 import { orderRaid } from '../../campaign/turn';
 import { weatherOn } from '../../campaign/weather';
 import type { FoughtAir } from '../../campaign/airfought';
+import { groundFlown } from '../../campaign/strafers';
 import type { AirFleet, AirMission, AirReport, BomberSeats, Game } from '../../campaign/types';
 import { hashString } from '../../core/rng';
 import { turnToDate } from '../../core/ticket';
@@ -23,6 +24,7 @@ import { bomberGuns, fighterGuns } from './guns';
 import { groundOf, type AirGround } from './ground';
 import { shipPlace } from './ships';
 import { cloudOf } from './sky';
+import { troopPlace } from './troops';
 import { onBoard, STAGES } from './stages';
 import { airStyles, STYLES } from './styles';
 import type { AirOutcome, AirPlace } from './types';
@@ -44,6 +46,27 @@ export const FOUGHT_KINDS: RaidKind[] = ['bomb', 'superiority'];
  */
 export const SHIP_KINDS: RaidKind[] = ['harbour', 'fleet'];
 
+/**
+ * The raids release 2 can fight out beside those, each behind a switch that is off until the kind has passed its gate
+ * (Brian, 24 November 2026: "i want every air battle playable"; "if a bomber group is bombing troops instead of a
+ * factory or town and they get intercepted than i want that playable"; the design director's rulings of 22:28Z,
+ * design-director/air-every-battle-1124.md). A raid on troops is the first. With none switched on, a raid is ticketed
+ * exactly as before.
+ */
+export const MORE_KINDS: RaidKind[] = ['ground'];
+let asked: RaidKind[] = [];
+/**
+ * The switch: the kinds of MORE_KINDS that are offered. The battle bridge sets them (TC.airKinds), a cloud run or a
+ * test can by TC_FLY=ground in its environment or (globalThis as any).TC_FLY = 'ground' (a comma list). Called with a
+ * list, it sets the bridge's; either way it answers the kinds now on.
+ */
+export function flyKinds(kinds?: readonly string[]): RaidKind[] {
+  if (kinds) { asked = MORE_KINDS.filter((k) => kinds.includes(k)); groundFlown(asked.includes('ground')); }
+  const G = globalThis as { TC_FLY?: unknown; process?: { env?: Record<string, string | undefined> } };
+  const forced = String(G.TC_FLY ?? G.process?.env?.TC_FLY ?? '').split(',').map((x) => x.trim());
+  return MORE_KINDS.filter((k) => asked.includes(k) || forced.includes(k));
+}
+
 const clampTo = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
 
 export interface AirTicketResult {
@@ -56,7 +79,8 @@ export interface AirTicketResult {
  * raid card passes them (absent: the staff's proposal). Returns why not when the raid cannot be fought.
  */
 export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[], nat: string | null = g.human, opts: { ships?: boolean } = {}): AirTicketResult {
-  if (!FOUGHT_KINDS.includes(kind) && !(opts.ships && SHIP_KINDS.includes(kind))) return { ticket: null, why: 'Only day raids and fights for the sky can be fought out so far: the staff settles a night raid.' };
+  const more = flyKinds().includes(kind);
+  if (!FOUGHT_KINDS.includes(kind) && !more && !(opts.ships && SHIP_KINDS.includes(kind))) return { ticket: null, why: 'Only day raids and fights for the sky can be fought out so far: the staff settles a night raid.' };
   if (nat === null) return { ticket: null, why: 'Nobody is at the controls.' };
   // (Release 2, atom.ts; the design director's ruling of 25 November.) A raid that carries the atomic bomb is not fought
   // out until its own scene, which ends at the release point, is built and passed (the 3D air thread's flyAtom): until
@@ -68,6 +92,10 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
   const m = kind as AirMission;
   const a = assessAir(g, fleets, m, target);
   if (a.why) return { ticket: null, why: a.why };
+  // A kind of release 2 is offered only where it can be opposed (the design director, 22:28Z, rule 2): enemy fighters
+  // may rise, or the guns round the target are more than light. Otherwise the staff flies it, and the card says why.
+  // (Until the raid card's band is built, by the fighters the assessment has rising: the 22:10Z fog ruling's to do.)
+  if (more && a.D <= 0 && a.aa <= 0) return { ticket: null, why: 'No enemy fighter is in reach to meet this raid, and the guns there are light: the staff flies it.' };
   const fc = forecastAir(g, a, m, target);
   const C = AIR.combat;
   const night = m === 'night';
@@ -189,15 +217,24 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     const seats = seatsOf(g, a.att.find((x) => x.f.id === f.corps)!.f, f.men, seed);
     if (seats) bombers[f.corps] = seats;
   }
+  // A raid on troops (release 2): the army under the raid, and the campaign's law for it (troops.ts). The card expects
+  // the ground fire to bring down its share of the fighters that go down on them (forecastAir), so the field is told
+  // how many of the raid's fighters lost are the ground fire's, and arms the defence with the rest.
+  const marks = more && m === 'ground' ? troopPlace(g, a, m, target, nat, seed) : null;
+  // (With the strafers' rule on, campaign/strafers.ts: the card's own ground fire, on the fighters it expects left after
+  // the air fight that have the reach to strafe.)
+  const fire = marks ? (armed.fire !== undefined ? armed.fire : Math.min(armed.ftrLoss, a.E * marks.law.fire)) : 0;
+  // The army's own light guns, for the picture, where the card counted none round the target (a raid with no bombers).
+  const lightGuns = marks ? marks.pieces.reduce((t, p) => t + (p.what === 'aa' ? p.n : 0), 0) : 0;
   const place: AirPlace = {
     kind, mission: m, target, name: a.place, night, nat, radar: !!a.radar,
     I: C.intensity[m as 'bomb' | 'night' | 'superiority'] ?? 1,
     clash: airWar(g) && m !== 'superiority' ? AIRWAR.losses.clash : 1,
     law: { bombers: L.bombers, power: L.power, most, escort, guns: a.defence },
     fighters: C.fighters, escortShare: C.escortShare, bomberDefence: C.bomberDefence,
-    gunLoss: a.gunLoss, flakGuns: { light: a.guns.light, heavy: a.guns.heavy },
+    gunLoss: a.gunLoss, flakGuns: { light: a.guns.light || lightGuns, heavy: a.guns.heavy },
     worth: { att: a.E > 0 ? a.Epow / a.E / hx : 1, def: a.D > 0 ? (a.Dpow / a.D) * hx : 1 },
-    forecast: { foe: armed.foeLoss, foeGuns: armed.foeGuns, ftr: armed.ftrLoss, bmr: armed.bmrLoss, through: a.B * (1 - a.bomberLoss), bomberLoss: a.bomberLoss },
+    forecast: { foe: armed.foeLoss, foeGuns: armed.foeGuns, ftr: armed.ftrLoss, bmr: armed.bmrLoss, through: a.B * (1 - a.bomberLoss), bomberLoss: a.bomberLoss, ...(marks ? { fire } : {}) },
     chance: fc.success,
     reckon: { k: AIRWAR.success.k, value: fc.worth - 300 * ((fc.rail ?? 0) + (fc.ruin ?? 0)), rail: fc.rail ?? 0, ruin: fc.ruin ?? 0 },
     bombs: bombLaw(g, a, m, target),
@@ -205,6 +242,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     from: fromOf(att.map((f) => !!carrierOf(g, a.att.find((x) => x.f.id === f.corps)!.f))),
     saved: { att: AIR.pilots.away, def: AIR.pilots.home },
     ...(ships ? { ships } : {}),
+    ...(marks ? { marks } : {}),
     // When it is fought, the aircraft each side's groups are, as the 3D game draws them (doctrine.ts), and their guns
     // that month (guns.ts).
     when,
@@ -227,7 +265,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     domain: 'air', kind: 'field',
     seed,
     turn: g.turn, date,
-    title: m === 'superiority' ? `The fight for the sky over ${a.place}` : m === 'harbour' ? `The raid on ${harbourOf(a.place)}` : quarry ? `The strike on the ${quarry.name}` : `The air battle over ${a.place}`,
+    title: m === 'superiority' ? `The fight for the sky over ${a.place}` : m === 'ground' ? `The raid on the troops at ${a.place}` : m === 'harbour' ? `The raid on ${harbourOf(a.place)}` : quarry ? `The strike on the ${quarry.name}` : `The air battle over ${a.place}`,
     place,
     att: side(nat, att, g.human === nat),
     def: side(defNat, def, g.human === defNat),
@@ -343,6 +381,8 @@ export function foughtAir(o: AirOutcome): FoughtAir {
   }
   return {
     lost, dropped: o.dropped, jettisoned: o.jettisoned, lostBefore: o.lostBefore, lostAfter: o.lostAfter, flew, chance: o.chance,
+    ...(o.strafed !== undefined ? { strafed: o.strafed } : {}),
+    ...(o.strafers ? { strafers: [...o.strafers], strafeFire: o.strafeFire ?? 0 } : {}),
     ...(o.gaveUp ? { gaveUp: o.gaveUp } : {}), ...(o.sunk ? { sunk: o.sunk } : {}), ...(o.kept ? { kept: o.kept } : {}), ...(o.staff ? { staff: o.staff } : {}), ...(o.rolls ? { rolls: o.rolls } : {}),
     ...(Object.keys(fell).length ? { fell, shot } : {}), ...(Object.keys(guns).length ? { guns } : {}),
   };

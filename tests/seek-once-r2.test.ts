@@ -200,6 +200,32 @@ describe('the order', () => {
   });
 });
 
+describe('the fleets that join an attack (1.5.1 fleet attack once a month, the design director\'s ruling A of 02:34Z)', () => {
+  for (const on of [true, false]) {
+    it(`${on ? 'on' : 'off'}: a fleet that joined ${on ? 'has sought battle this month and does not seek again at the meeting' : 'is marked as attacked only'}`, () => {
+      const g = britain(on);
+      const home = fleet(g, 'Home Fleet'), battle = fleet(g, 'Battle Fleet');
+      battle.zone = zoneOf(g, 'nsea');
+      battle.stance = 'patrol';
+      const other = g.fleets.find((f) => f.nat === 'UK' && f.id !== home.id && f.stance !== 'port' && f.ships.bb + f.ships.ca + f.ships.dd > 0)!;
+      other.zone = battle.zone;
+      other.stance = 'patrol';
+      const out = orderFleetAttack(g, home.id, battle.id)!;
+      expect(out.outcome).not.toBe('missed');
+      expect(seekers(out.report!)).toContain(other.name);
+      expect(other.attacked).toBe(g.turn);
+      expect(other.sought === g.turn).toBe(on);
+      expect(hasSought(g, other)).toBe(on);
+      // The month's meeting, the German fleet back at sea whole: off the joiner seeks battle again; on it does not.
+      backAtSea(g, { bb: 2, cv: 0, ca: 2, dd: 6, ss: 0 });
+      battle.zone = other.zone;
+      other.stance = 'patrol';
+      const again = seaBattles(g, 'UK').some((r) => seekers(r).includes(other.name));
+      expect(again).toBe(!on);
+    });
+  }
+});
+
 describe('through the bridge', () => {
   it('the view carries the switch, act and TC.seekOnce switch it', () => {
     const g = britain(false);

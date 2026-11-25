@@ -571,6 +571,16 @@ export interface Corps extends Storied {
   /** The numbers the divisions of the corps it belongs to carried, in order, before it was broken up (breakup.ts): no rejoining makes one bigger, and the parts go back in this order. */
   whole?: number[];
   /**
+   * (Release 2, the grand campaign: a division is laid once, drawn.ts.) The divisions a dated row brought into this
+   * corps from living corps, instead of laying them a second time: each one's name, its number, and the corps it came
+   * out of ('from': this corps' own id where the row took the whole corps, and the divisions are its own). 'conv'
+   * marks one formed out of another division (the 14th Panzer, out of the 4th Infantry): it never goes back. Read when
+   * the row's time with its campaign is up ('until'): each goes back to its corps, or stands on where it is.
+   */
+  drew?: { name: [string, string]; no: number; from: number; conv?: true }[];
+  /** (The same.) Its own name and standing orders from before a dated row took the whole corps under the row's name: it has them back when the row's time is up. */
+  rowed?: { name: string; hold: boolean; stay?: boolean };
+  /**
    * A rearguard (release 2, rearguard.ts): the month it was ordered to hold where it stands, the weeks of marching it
    * gave up for it (given back if it is stood down in the same month), and the province it holds (driven out of it, it
    * is a rearguard no longer). Gone at the start of its side's next month.
@@ -722,6 +732,11 @@ export type Ships = Record<ShipClass, number>;
  * be bound to a shipping lane as its escort, or sent to a sea to hunt submarines.
  */
 export type Stance = 'patrol' | 'raid' | 'port' | 'escort' | 'hunt';
+/**
+ * What a fleet is doing, its orders and one state no order gives: 'passage', on its way to a new base beyond a month's
+ * steaming (release 2, the far chart: the design director's ruling of 04:33Z, 25 November 2026; navy.ts, rebase).
+ */
+export type FleetStance = Stance | 'passage';
 
 export interface SeaZone {
   id: number;
@@ -785,7 +800,22 @@ export interface Fleet extends Storied {
   bookBase?: [base: number, port: string, home: number, station: number];
   /** The sea the fleet is in. A fleet in harbour is counted in its home sea but takes no part there. */
   zone: number;
-  stance: Stance;
+  stance: FleetStance;
+  /**
+   * A fleet in passage to a new base (release 2, the far chart; navy.ts, rebase): the base, port and home sea it left
+   * (`from`, `fromPort`, `fromHome`, where it is turned back to), the seas of its way in order (`way`), the month it set
+   * out on that way (`set`) and the month it comes in (`due`), and whether it is on its way back (`back`). `start`: the
+   * month it first set out, where a strait shut on the way has put it on another way since. Its base, port and home
+   * are the new harbour's from the month it sets out. Only while its stance is 'passage'.
+   */
+  passage?: { from: number; fromPort: string; fromHome: number; way: number[]; set: number; due: number; back?: true; start?: number };
+  /**
+   * Its air strikes at anchor this month and last (release 2, the far chart; the design director's ruling of 04:33Z, 25
+   * November 2026, 2; navy.ts anchorLoss): for each, the month (`t`), the harbour (`at`), the ships sunk (`n`) and
+   * their share of its surface ships (`lost`), the strikers' weight in the air (`w`), and where they flew from as its
+   * side saw them (`from`: the sea of their carriers, or -1 and the airfield, and how far their bombers reach in km).
+   */
+  anchor?: { t: number; at: number; n: number; lost: number; w: number; from: { sea: number; field: number; km: number }[] }[];
   /** Where a computer-run fleet goes when it has nothing better to do, and what it does there. */
   station: number;
   duty: Stance;
@@ -869,7 +899,7 @@ export interface Fleet extends Storied {
    * sea (`z`) or harbour (`p`), and the fleet actions it fought (`f`, a sentence each). A record only, apart from its
    * diary (`log`, stories.ts). Written only under that switch.
    */
-  voyage?: { t: number; s: Stance; z: number; p: string; f?: string[] }[];
+  voyage?: { t: number; s: FleetStance; z: number; p: string; f?: string[] }[];
 }
 
 /** A coast shelled from the sea: the troops on it, or the works of its city (the grand campaign). */
@@ -1477,6 +1507,49 @@ export interface AirFleet extends Storied {
   hours?: number;
   /** Its one experience counter, 0 to 1, written only under that switch. */
   fxp?: number;
+  /**
+   * Under that switch: the pilots who joined it in month `on`, how many, and its experience before the first of them
+   * (`was`), for the card's refit note (the UI director 24 Nov 18:10Z).
+   */
+  joined?: { on: number; n: number; was: number };
+  /**
+   * On its way to another airfield by stages (release 2, the switch 'ferry'; ferry.ts), written only under that switch:
+   * where it is going, the fields still to land at in order (the last is `to`), or `sea` when it goes crated by sea, and
+   * the month and the hops it has flown in it. Out of the fight while it is set. `base` is the field it has reached.
+   */
+  way?: { to: number; stops: number[]; sea?: boolean; at?: [number, number] };
+  /**
+   * (Release 2, better air unit names; the switch 'airNames') Written only as a group is named under that switch: the
+   * short form for the map counter, where its rung has one, and true where its name itself says fighters or bombers
+   * (so the role is not shown beside it). Words only; no rule reads them.
+   */
+  short?: string;
+  roleNamed?: boolean;
+  /**
+   * (Release 2, earned names under the switch 'nicknames') A group of an arm that gives the Guards title, once it has
+   * earned it: its number in the Guards series, and the name it bore before. Words only; no rule reads them.
+   */
+  guards?: number;
+  was?: string;
+  /**
+   * (Release 2, earned names for air groups under the switch 'nicknames'; airnicks.ts, Brian's answer of 25 November
+   * 2026 03:31Z) Its missions completed: the count (a hard fight counts double), the month it last completed one (one a
+   * month), whether that month's was already counted double, and its hard fights in all. Read by no rule but the naming.
+   */
+  done?: { n: number; at: number; x: number; h: number };
+  /**
+   * (Release 2, earned names under the switch 'nicknames'; airnicks.ts, the design director 12:59Z question 5) The place
+   * of its latest hard fight in this war: a region id, or -1 for one over no region (at sea). Written whenever a mission
+   * of its is hard; the city of a Guards title, and the place of a place name, is taken from it once, when the name is
+   * given. Absent until its first hard fight, and in a save from before it: no city then. Words only; no rule reads it.
+   */
+  hardAt?: number;
+  /**
+   * (The same) Its earned colours: the scheme it wears from its nation's palette (the 3D side's, data/campaign/
+   * air-colours.json 'count' per nation), the tier of marking reached (1 spinner, 2 nose band, 3 tail) and the month
+   * it was first earned. Words and paint only: no edge.
+   */
+  colours?: { scheme: number; tier: number; since: number };
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */
@@ -1529,6 +1602,8 @@ export interface AirReport {
   result: string;
   /** A raid fought out as an air battle (src/battle/air): the bombers that bombed, for its after card. */
   dropped?: number;
+  /** A group caught by enemy fighters on its way to another airfield (ferry.ts): the field it was flying to. Never set with that switch off. */
+  ferry?: number;
   /** The grand campaign: what the raid achieved, on the scale its losses are counted on (one aircraft is 1). */
   worth?: number;
   /** A strike on a fleet or a raid on a harbour: the fleets hit, as they were before it, and what each lost. */
@@ -1541,6 +1616,12 @@ export interface AirReport {
   city?: { region: number; added: number; now: number };
   /** Airfields as targets (behind its switch): what the bombs did to the field: whether its runway is shut, the levels burned now, the aircraft destroyed on the ground. */
   field?: { region: number; shut: boolean; levels: number; ground: number };
+  /**
+   * A raid on troops with the strafers' rule on (release 2, strafers.ts): the names of the raid's fighter groups that
+   * went down on the troops, as the report names them, in the raid's order; empty where none did. Written only with
+   * the switch on; a report without it (the switch off, or an older save) says nothing of strafing.
+   */
+  strafed?: string[];
 }
 
 /** Ruling 236.2: how a battle for the sky over one province stands, for the side fighting for it. */
@@ -1793,6 +1874,18 @@ export interface Game {
   atSea?: Voyage[];
   /** The air campaigns (ruling 236.2, the grand campaign with the switch on): absent while the switch is off. */
   ac?: AirWarMemory;
+  /**
+   * (Release 2, better air unit names; air.ts groupName under the switch 'airNames') The forming-order position of each
+   * nation's series of names ('at', keyed nation:kind:rung, or nation:day:rung, or nation:base:province) and the largest
+   * number handed out in it ('top'). Absent until a group is named under the switch. Words only.
+   */
+  airNames?: { at: Record<string, number>; top: Record<string, number> };
+  /**
+   * (Release 2, earned names for air groups under the switch 'nicknames'; airnicks.ts) Each air arm's running tally by
+   * kind of mission, nation:mission: aircraft that flew it and aircraft lost on it, for its running loss rate. Absent
+   * while that switch is off. Read by no rule but the naming.
+   */
+  airRates?: Record<string, [number, number]>;
   /** A neutral's bargains (bargains.ts; release 2): absent while the switch is off. */
   bargains?: BargainBook;
   /** The volunteer legions (legions.ts; release 2): absent while the switch is off. */
@@ -1827,6 +1920,13 @@ export interface Game {
    * many tank blocks they make, and the month; kept six months, the three latest.
    */
   captured?: Record<string, { from: string; n: number; turn: number }[]>;
+  /**
+   * A queue for a town (release 2, townqueue.ts; the design director's ruling seamless-r2-1125.md part B): by nation,
+   * the buildings the player has queued, oldest first, each the line of building, the province and the level it is to
+   * be raised to. Each is a press of BUILD made for him at the opening of his month. Kept only under the switch
+   * 'townQueue', and only while something is queued.
+   */
+  townQueue?: Record<string, { region: number; line: string; level: number }[]>;
   links: [number, number][];
   /** The chart's west edge. 0 on the map of Europe; further west (negative) once the wider world is attached (world.ts). */
   x0: number;
@@ -2000,6 +2100,17 @@ export interface Intel {
    * last met there, each with its month. Absent until the patrol is live.
    */
   seaSight?: Record<string, Record<number, SeaSight>>;
+  /**
+   * Fog on raids (airfog.ts; only with its switch on): the provinces each nation's aircraft have photographed and the
+   * month they did, by nation, then by province. A flight gives sight for the month flown and the next.
+   */
+  scoutBy?: Record<string, Record<number, number>>;
+  /**
+   * Fog on raids (airfog.ts; only with its switch on): what each nation last saw of the air defence of an enemy
+   * province, by nation, then by province: [the month, the enemy fighters in reach of its sky (to the nearest ten),
+   * the groups they were in, the level of its guns, the percent of the town in ruins].
+   */
+  airSeen?: Record<string, Record<number, number[]>>;
   /**
    * Cut railways as the player last knew them (rulings 113 and 114): the month, whether he saw the cut or has it by
    * the report of his own raid, agent or troops, and the cause where it was known. One record a province.

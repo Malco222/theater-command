@@ -77,6 +77,27 @@ public:
 	 */
 	void MarchAlong(const TArray<FVector>& Waypoints, bool bRemoveOnArrival, bool bLifted = true);
 	bool IsMarching() const { return bMarching; }
+	/** How long the march it is on (or was last on) takes, in seconds. */
+	double MarchLasts() const { return MarchTime; }
+	/**
+	 * (Release 2, armies with weight: Campaign/ArmyCarry.h.) Whether pieces are carried with weight: tc.Map.ArmyWeight,
+	 * or -TheaterArmyWeight on the command line. The map asks, for the dust a set-down raises.
+	 */
+	static bool CarriedWithWeight();
+	/** Whether snow lies where it stands (see SetOnSnow). */
+	bool IsOnSnow() const { return bOnSnow; }
+	/**
+	 * (Armies with weight.) Another piece has been set down on this one, having come the way Along points (flat on
+	 * the table; nothing, and no way is known): it rocks under the weight. Nothing with the switch off.
+	 */
+	void TakeWeight(const FVector& Along);
+	/**
+	 * (Armies with weight.) The map turns every army piece to face the eye, at this yaw. One that leans (carried, or
+	 * rocking after a set-down) keeps its lean and faces the new way; one that stands is turned as it always was.
+	 */
+	void FaceEye(float Yaw);
+	/** Upright, the way it faces on the table: its turn, less any lean it has for the moment. (For a piece made beside it.) */
+	FRotator Upright() const { return bHangs && bStoodKnown ? FRotator(0.0f, StoodYaw, 0.0f) : GetActorRotation(); }
 	/**
 	 * (Release 2, the far side.) The whole world's table goes round, and a piece is laid once, in one turn of it: from
 	 * West, Span wide, along the table's east (the world's +Y). Given that, a march or a sail between two places takes
@@ -107,6 +128,25 @@ public:
 	 * second and a half to three and a half.
 	 */
 	void SailAlong(const TArray<FVector>& Waypoints, float TableYaw);
+	/**
+	 * (Release 2, a fleet under way; Brian, 25 November 2026: "I want to keep upleveling the graphics and smoothness of
+	 * how they move and act to make it feel as real as possible", "can we do that for the campaign map too?") A fleet
+	 * sails a ship's course, laid and timed for her by the map (Campaign/ShipWay.h): out on her own turning circle,
+	 * wide round the corners of her way, in on a circle to lie as the table wants her; slow off the mark, slow round a
+	 * tight turn, carrying her way in. Her passage wake lies along the water her sterns have crossed. Given as her
+	 * times, in the world: where she is at each tick (Each seconds apart), the way her bows point there (a unit, in the
+	 * world's X and Y) and how far she has run. The last of it leaves her on the table's yaw. With fewer than two
+	 * ticks, or tables not of one length, it does nothing.
+	 */
+	void SailCourse(const TArray<FVector>& At, const TArray<FVector2D>& Head, const TArray<double>& Ran, double Each, float TableYaw);
+	/**
+	 * (Release 2, a fleet under way, second part: Campaign/ShipRide.h. Brian, 25 November 2026: "I want to keep upleveling
+	 * the graphics and smoothness of how they move and act to make it feel as real as possible".) The map tells each
+	 * piece, as the eye moves, how far the eye is from what it looks at and whether this piece is by that. Near enough,
+	 * each ship of a fleet heels outward as she turns and rides the swell; far off she lies level and costs nothing.
+	 * Only a fleet whose ships have meshes of their own takes any notice (tc.Map.ShipRide, when the piece was built).
+	 */
+	void SetEye(double EyeDistance, bool bByFocus);
 	/** The yaw every piece turns to, to face the eye: at once, or once a fleet under sail has come to rest. */
 	void FaceTable(float Yaw);
 	bool IsSailing() const { return bMarching && bSailing; }
@@ -154,6 +194,35 @@ public:
 	bool IsAtAnchor() const { return What == 1 && bAtAnchor; }
 	int32 GetFleetShips() const { return What == 1 ? Fleet.Ships() : 0; }
 	int32 GetFleetBase() const { return What == 1 ? Fleet.Base : INDEX_NONE; }
+	/**
+	 * (Release 2, funnel smoke: Campaign/ShipSmoke.h; the map draws it, tc.Map.ShipSmoke.) A funnel of one of her ships
+	 * as it stands now, in the world.
+	 */
+	struct FFunnelNow
+	{
+		FVector Top = FVector::ZeroVector; // the middle of its top
+		int32 Ship = 0; // which of her ships it is on, counted from nought
+		int32 Class = 2; // 0 battleship, 1 carrier, 2 cruiser, 3 destroyer
+		double Long = 0.0; // that ship's length, in the world
+	};
+	/**
+	 * Her funnels, and how she steams: her speed as a share of her full speed, and how fast it grows in shares a second
+	 * (both nought lying still, or let down from the hand). False, and nothing, for a piece that makes no smoke: one
+	 * that is no fleet, a fleet known only from a report or a glimpse, one hidden, carried in the hand or over the
+	 * table, or at anchor by her port. A submarine has no funnel.
+	 */
+	bool FunnelsNow(TArray<FFunnelNow>& OutFunnels, double& OutPace, double& OutGather) const;
+	/**
+	 * How she steamed Ago seconds ago, as FunnelsNow tells it for now (nought before her course began). Returned: how
+	 * much of that a puff made then still keeps, 1 out at sea and falling to 0 as her course ends; 0 for a piece not
+	 * under sail. See TheaterShipSmoke::Carries.
+	 */
+	double SteamedAt(double Ago, double& OutPace, double& OutGather) const;
+	/**
+	 * What must be added to a point of her, to find where it was when she was Back further astern (in the world's
+	 * measure) along the water she has crossed: round her turns on a course of her own, straight astern otherwise.
+	 */
+	FVector AsternBy(const FVector& Point, double Back) const;
 	const FString& GetNationTag() const { return NationTag; }
 	/** Its colours, as a ball in the world: what a town's name plate must not be drawn across. False while the piece is hidden. */
 	bool GetColours(FVector& OutMiddle, double& OutRadius) const;
@@ -290,6 +359,79 @@ private:
 	/** A place of the piece's own reckoning as it is shown: in the turn of the world nearest the eye, where the map has said so. */
 	FVector Shown(const FVector& Place) const;
 	float SailEndYaw = 0.0f; // the table's yaw it turns back to on arrival
+	// (Release 2, a fleet under way: see SailCourse.) Her times: where she is at each tick, the way her bows point
+	// there, and how far she has run, in the world. Empty when she is not on a course of her own.
+	TArray<FVector> SailAt;
+	TArray<FVector2D> SailHead;
+	TArray<double> SailRan;
+	double SailEach = 0.02;
+	float SailLaidYaw = 0.0f; // the table's yaw her course was laid to end on
+	TArray<FVector> WakeLaid; // her passage wake as it was built, straight astern
+	TArray<FVector> WakeBent; // and as it lies now, along the water her sterns have crossed
+	double WakeReach = 0.0; // how far astern of her middle the wake reaches, in her own units
+	double WakeStiff = 0.0; // and how far astern of her middle she is still herself (her ships, to their sterns)
+	bool bWakeBent = false;
+	void BendWake(double Ran, const FVector2D& Bows, double Progress);
+	void StraightenWake();
+	/**
+	 * (Release 2, a fleet under way, second part.) Each ship of a fleet in a small mesh of her own, about her own middle
+	 * on the water, so that she can heel in her turn and ride the swell while her wake stays flat in the body. Empty
+	 * unless tc.Map.ShipRide was on when the piece was built: then her ships are in the body's one mesh, as before.
+	 */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> Hulls;
+	/** How each of those ships lies and rides (one for each hull, in the same order). */
+	struct FHullRide
+	{
+		FVector Middle = FVector::ZeroVector; // her middle on the water, in the piece's own space
+		FVector2D Ahead = FVector2D(0.0, 1.0); // the way her bows point there (a unit)
+		double Long = 0.0, Beam = 0.0; // her length and beam, in the piece's own units
+		int32 Class = 2; // as Campaign/ShipRide.h counts them: 0 battleship, 1 carrier, 2 cruiser, 3 destroyer, 4 submarine
+		double HeelAngle = 0.0, HeelRate = 0.0; // her heel as it stands (radians, to port positive) and how fast it changes
+		double Phase = 0.0; // tells her from her sisters in the swell
+	};
+	TArray<FHullRide> HullRides;
+	double RideMuch = 0.0; // how much of the swell she shows, 0 to 1: it comes on as the eye comes near and dies as it leaves
+	bool bRideNear = false; // the eye is near enough to see her ride (see SetEye)
+	bool bHullsLevel = true; // every hull lies level, as it was built
+	bool bInHand = false; // carried in the hand: off the water
+	double SailFull = 0.0; // the furthest she goes in one tick of her course: her full speed
+	/**
+	 * A frame of her ships' riding. Turn is how fast her head swings (radians a second, to starboard positive) and Pace
+	 * her speed as a share of her full speed: what they heel by. False when there is nothing left to see: then every
+	 * hull lies level, and she need not be ticked for it.
+	 */
+	bool RideHulls(double Seconds, double Turn, double Pace);
+	void LevelHulls();
+	/** (Release 2, funnel smoke.) A funnel of one of her ships as her model was built, in the piece's own space: see FunnelsNow. */
+	struct FFunnel
+	{
+		FVector Top = FVector::ZeroVector;
+		int32 Ship = 0;
+		int32 Class = 2;
+		double Long = 0.0;
+	};
+	TArray<FFunnel> Funnels;
+	/**
+	 * (Release 2, armies with weight: Campaign/ArmyCarry.h.) A piece is held by its top and is heavy at its foot: as the
+	 * hand carries it its foot hangs back and swings on, and as it is set down it rocks once and is still. Never a
+	 * fleet, which has a ship's way of her own.
+	 */
+	bool bWeighty = false; // the march it is on is made with weight
+	bool bHangs = false; // it leans, or may be about to: it is ticked until it is still
+	double HangKept[8] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 }; // its hang, as TheaterArmyCarry::FHang keeps it and in that order
+	FVector2D CameAlong = FVector2D::ZeroVector; // the way it was last carried, flat on the table: the way it tips as it lands
+	FVector HandWas = FVector::ZeroVector, HandNow = FVector::ZeroVector; // where the hand held it a frame ago and holds it now (the point on the table under it)
+	float StoodYaw = 0.0f; // the way it faces on the table (the map turns every piece to the eye): kept while it leans
+	bool bStoodKnown = false;
+	/** The way it faces on the table: read from the piece while it stands upright, kept while it leans. */
+	float FacingNow();
+	/** Stands it at a place, leaning as its hang says. On the table it is lifted by what keeps the low edge of its base on it. */
+	void StandLeaning(const FVector& Place, bool bOnTable);
+	/** Upright again, with nothing left of its hang. (Its place is not touched.) */
+	void StandStraight();
+	/** A frame of its hang while it is not on the march: swaying in the hand, or rocking on the table after a set-down. False when it is still. */
+	bool Sway(double Seconds);
 	bool bSelected = false;
 	bool bHovered = false;
 

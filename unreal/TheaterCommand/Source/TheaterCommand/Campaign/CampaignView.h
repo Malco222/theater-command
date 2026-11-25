@@ -599,6 +599,12 @@ struct FRaidCard
 	// (Release 2.) The fighters at the raid's height, which side's aircraft are stronger, the pilots' training (under Units
 	// decide), and the words for the pointer; each empty where the rules give none.
 	FString Types, TypesEdge, Pilots, TypesTip;
+	// (Release 2, a raid on troops with the strafers' rule on; the UI director's words.) The fighter groups likely to go
+	// down and strafe: the heading, the muted line once and a name a row, or the line for none in place of both (the
+	// note then empty). bStrafe is false where the rules send none (the switch off, any other raid).
+	bool bStrafe = false;
+	FString StrafeHeading, StrafeNote, StrafeNone;
+	TArray<FString> StrafeNames;
 };
 
 /** A figure on the month's card: "3,000" over "lost". */
@@ -794,11 +800,120 @@ struct FLessonDoor
 	FString Level, Depth;
 };
 
+// ---- The home front board (release 2; Brian, 25 November 2026) ----------------------------------------------
+// (Brian: "I want the UI and user experience to feel seamless and easy to manage the cities, recruitment, ect".) One
+// room for every town, raising forces and everything on order, as the rules set it out (campaign-bridge.ts, homeBoard).
+
+/** A building that can be ordered in a town from the board: the staff's pick for the town, or one of the others. */
+struct FHomeBuild
+{
+	FString Line, Name, Label, Effect;
+	FString Why; // why BUILD is shut, where it is
+	FString Act; // the town plan's own act, "civic:<region>:<line>"
+	int32 Cost = 0, Months = 0;
+	bool bOk = false;
+};
+
+/** A plot of a town, as a mark on its row. */
+struct FHomePlot
+{
+	FString State; // "built", "going" or "free"
+	FString Line, Name;
+	int32 Level = 0;
+	int32 Months = 0; // months left, where something is going up
+};
+
+/** (Release 2, a queue for a town: townqueue.ts) A building queued in a town, in its order, with the press that takes it off. */
+struct FHomeQueued
+{
+	FString Line, Label, Act;
+};
+
+struct FHomeTown
+{
+	int32 Region = INDEX_NONE;
+	FString Town, Province, Size;
+	FString State; // "ready", "short" (only money is in the way), "going" or "done"
+	FString Note; // why nothing can go up, where nothing can
+	bool bOwn = true; // false on conquered ground
+	int32 Pays = 0;
+	TArray<FHomePlot> Plots;
+	bool bBest = false;
+	FHomeBuild Best;
+	TArray<FHomeBuild> More;
+	bool bGoing = false; // something is going up: its name, when it is due, and whether it can be taken back
+	int32 GoingId = INDEX_NONE, GoingMonths = 0;
+	FString GoingName, GoingDue, GoingAct;
+	bool bGoingCancel = false;
+	// (Release 2, a queue for a town; empty with that switch off) What is queued here, how the first stands
+	// ("Waits for 40 more.", "Goes up after the market hall."), and what could be queued next, the staff's pick first.
+	TArray<FHomeQueued> Queue;
+	FString Wait;
+	TArray<FHomeBuild> Then;
+};
+
+/** Something the arsenal offers that is raised and not built in a province: a corps, a wing, a ship. */
+struct FHomeRaise
+{
+	FString Key, Group, Label, Where, Note, Why, Act;
+	int32 Cost = 0, Months = 0;
+	bool bOk = false;
+};
+
+struct FHomeOrder
+{
+	int32 Id = INDEX_NONE, Region = INDEX_NONE;
+	FString What, Name, Where, Due, Act;
+	int32 Months = 0, Cost = 0;
+	bool bCancel = false;
+	float Share = 0.0f; // how far along it is, 0 to 1
+};
+
+struct FHomeTile
+{
+	FString Kind, Label, Figure, Sub;
+};
+
+// (Release 2, the desk split) Recruitment or towns and trade on the board's staff strip: who runs it, and the press that changes hands.
+struct FHomeDesk
+{
+	FString Name; // "RECRUITMENT", "TOWNS AND TRADE"
+	bool bOn = false; // the staff runs it
+	FString Act, Tip; // the press on the side that is not lit
+};
+
+struct FHomeBoard
+{
+	bool bValid = false;
+	FString Nation, Date;
+	bool bUp = false; // his month
+	int32 Money = 0, Net = 0;
+	TArray<FHomeTile> Tiles;
+	int32 Ready = 0, Going = 0, All = 0;
+	int32 Waits = 0; // (release 2, a queue for a town) towns whose first queued building waits for money
+	TArray<FHomeTown> Towns; // richest first, as the staff ranks them
+	TArray<FHomeRaise> Raise;
+	// ORDER AGAIN: his own orders of the last month he ordered in, at today's prices.
+	bool bAgain = false, bAgainOk = false;
+	FString AgainWhen, AgainText, AgainLeft, AgainWhy, AgainAct;
+	int32 AgainCost = 0;
+	TArray<FHomeOrder> Orders; // soonest ready first
+	// The desk that builds and raises: who runs it, the button that changes hands, and the share the staff may spend.
+	bool bStaff = false, bStaffOn = false;
+	FString StaffLine, StaffLabel, StaffAct, StaffTip;
+	int32 StaffCap = 0;
+	TArray<int32> StaffCaps;
+	// (Release 2, the desk split) The strip's heading and its two halves; where the rules send none, the one button above.
+	FString StaffHead;
+	TArray<FHomeDesk> StaffDesks;
+};
+
 struct FOfficePage
 {
 	bool bValid = false;
 	FRaidCard Card; // (ruling 54) set where the page is a raid being planned
 	FMonthCard Month; // (ruling 64) set where the page is the month's report
+	FHomeBoard Home; // (release 2) set where the page is the home front
 	FString Id;
 	FString Title;
 	FString Headline;
@@ -1216,16 +1331,19 @@ struct FCampaignView
 	TArray<FViewLane> Lanes;
 	TArray<FViewColumn> Columns; // (release 2, columns.ts) the month's supply columns the player can see
 	bool bNickFlags = false; // (release 2, nicknames.ts) the names corps earn are shown on their flags
+	bool bAirNames = false; // (release 2, airnames.ts) new air groups are named with their own air force's numbers and words
 	bool bMarkedOn = false; // (release 2, marked.ts) the armies that took his towns are marked in red
 	bool bFleetAttack = false; // (release 2, fleetattack.ts) a fleet dropped on an enemy fleet attacks it at once
 	bool bBreakUp = false; // (release 2, breakup.ts) divisions can be split off a corps in the tray, and put back
 	bool bTaskForce = false; // (release 2, taskforce.ts) a fleet can be made a task force: a standing job, refit, and back
 	bool bFleetWhy = false; // (release 2, fleetwhy.ts) the admirals give a reason for each fleet they order
 	bool bRearguard = false; // (release 2, rearguard.ts) a small corps can be ordered to hold as a rearguard
+	bool bSupportTeams = false; // (release 2, teams.ts) machine-gun and mortar brigades can be raised, by every power
 	bool bRearBridges = false; // (release 2, rearguard.ts) a rearguard lays charges on the bridges behind it (the switch as set)
 	bool bShadowRule = false; // (release 2, shadow.ts) a fleet of cruisers can shadow an enemy fleet and report where it goes
 	bool bVoyageLog = false; // (release 2, voyage.ts) each fleet keeps a voyage log on its page
 	bool bSailors = false; // (release 2, the sea field's sailor rules: battle/sea/ticket.ts) men go into the water when a ship goes down
+	bool bOwnWater = false; // (release 2, the sea field's own water: battle/sea/ticket.ts) captains mind their own side's torpedoes
 	bool bSeaMines = false; // (release 2, mines.ts) fleets can lay minefields at sea
 	bool bHeavySeas = false; // (release 2, heavyseas.ts) gales blow at sea: fleets slowed, convoys late, shadows lost
 	bool bShadowRelay = false; // (release 2, shadow.ts) a fresh squadron takes over a shadow whose fuel has run out (the switch as set)
@@ -1234,6 +1352,7 @@ struct FCampaignView
 	bool bCarrierStrike = false; // (release 2, harbourstrike.ts) a carrier fleet's page offers a strike on an enemy harbour (the switch as set)
 	bool bWingByDate = false; // (release 2, carriers.ts) a navy's carrier wing changes by date (the switch as set)
 	bool bSettledTowns = false; // (release 2, buildings.ts) a conquered town held three months can put up every building
+	bool bTownQueue = false; // (release 2, townqueue.ts) the player can queue the next buildings for his towns
 	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
 	// opening month only.
 	bool bR2Switches = false, bColumnsOn = false, bColumnsCan = false;
@@ -1991,6 +2110,13 @@ struct FTownOffer
 	int32 No = INDEX_NONE;
 	FString Name, Label, Effect, Blurb, Why;
 	int32 Level = 0, Has = 0, Cost = 0, Months = 0;
+	// (Release 2, a queue for a town) Where BUILD cannot be pressed for the builders or the money: the press that queues
+	// the line's next level, and that level's name. Empty with the queue switched off, or where nothing can be queued.
+	FString QueueAct, QueueLabel;
+	// The level that press queues (it can be a level above Level, behind what is going up or queued in the line), its
+	// price and months, and the name of the level it goes up after ('' for a first level). 0 and '' where nothing can be queued.
+	int32 QueueLevel = 0, QueueCost = 0, QueueMonths = 0;
+	FString QueueAfter;
 };
 
 struct FProvinceInfo
@@ -2018,6 +2144,8 @@ struct FProvinceInfo
 	// The same as things to draw.
 	TArray<FTownPlot> TownPlots;
 	TArray<FTownOffer> TownOffers;
+	// (Release 2, build from the map) The line the staff would put up here next, and what is queued here, in a line.
+	FString TownBest, TownQueued;
 	// The town as a fortress, and how its siege stands (the grand campaign): who stands round it, and plain lines.
 	FString SiegeBy;
 	bool bSiegeOwn = false; // the town is the player's own (a town of his besieged: its head is the one in red)

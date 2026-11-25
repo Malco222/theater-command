@@ -101,13 +101,16 @@ export const fieldWrecked = (g: Game, region: number): boolean => (g.flags.field
 
 /**
  * True for an air group grounded because its field cannot be flown from (never a carrier's wing): release 1, saboteurs
- * wrecked it this month; with airfields as targets, its runway is shut until repaired (fieldstate.ts fieldShut).
+ * wrecked it this month; with airfields as targets, its runway is shut until repaired (fieldstate.ts fieldShut). And a
+ * group on its way to another airfield by stages (release 2, ferry.ts): it is out of the fight until it gets there, so
+ * it meets no raid, flies none, and lends no land battle its aircraft. Only the switch 'ferry' writes `way`.
  */
-export const wrecked = (g: Game, f: AirFleet): boolean => f.ship === undefined && fieldShut(g, f.base);
+export const wrecked = (g: Game, f: AirFleet): boolean => f.ship === undefined && (f.way !== undefined || fieldShut(g, f.base));
 
 /** Why a group cannot fly for a wrecked or shut field, or null. */
 export function whyNotField(g: Game, f: AirFleet): string | null {
   if (!wrecked(g, f)) return null;
+  if (f.way !== undefined) return `On its way to ${g.regions[f.way.to]?.name ?? 'another airfield'}: out of the fight until it gets there.`;
   return g.flags.fields === 1 && fieldRules(g) ? `Grounded: the runway at ${g.regions[f.base].name} is cratered until it is repaired.` : `Grounded this month: saboteurs wrecked the field at ${g.regions[f.base].name}.`;
 }
 

@@ -47,7 +47,7 @@ import { patronOfClient, stationed, tieWar } from './far';
 import { inTheWay, pacificGround, runQuays } from './pacific';
 import { EASTERN, addCorps, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
-import { ATOM_STAGE, BREAKUP_STAGE, CARRIERSTRIKE_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, SHADOWRELAY_STAGE, SHADOW_STAGE, TASKFORCE_STAGE, UNITS_STAGE, VOYAGELOG_STAGE, WAGONS_STAGE, WINCHANCE_STAGE, WINGBYDATE_STAGE } from './stage';
+import { ATOM_STAGE, BREAKUP_STAGE, CARRIERSTRIKE_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, SHADOWRELAY_STAGE, SHADOW_STAGE, TASKFORCE_STAGE, TOWNQUEUE_STAGE, UNITS_STAGE, VOYAGELOG_STAGE, WAGONS_STAGE, WINCHANCE_STAGE, WINGBYDATE_STAGE, AIRNAMES_STAGE, FERRY_STAGE } from './stage';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
 import { openLegions } from './legions';
@@ -172,6 +172,8 @@ export function startOpen(g: Game, wide = true): Game {
   if (DUMPS_STAGE) g.flags.dumps = 1;
   // A fleet sent straight at an enemy fleet (release 2, fleetattack.ts).
   if (FLEETATTACK_STAGE) g.flags.fleetAttack = 1;
+  // An air group sent to any friendly airfield with one order, by stages (release 2, ferry.ts).
+  if (FERRY_STAGE) g.flags.ferry = 1;
   // Breaking a corps up into its divisions (release 2, breakup.ts).
   if (BREAKUP_STAGE) g.flags.breakUp = 1;
   // The marked army (release 2, marked.ts): the corps that takes a town of the player's is marked until he beats it.
@@ -193,11 +195,15 @@ export function startOpen(g: Game, wide = true): Game {
   if (HEAVYSEAS_STAGE) g.flags.heavySeas = 1;
   if (SHADOWRELAY_STAGE) g.flags.shadowRelay = 1;
   if (SEEKONCE_STAGE) g.flags.seekOnce = 1;
+  // A queue for a town (release 2; townqueue.ts).
+  if (TOWNQUEUE_STAGE) g.flags.townQueue = 1;
   // The atomic project (release 2; atom.ts).
   if (ATOM_STAGE) g.flags.atom = 1;
   // Carrier strikes on harbours by the player's own hand (release 2; harbourstrike.ts).
   if (CARRIERSTRIKE_STAGE) g.flags.carrierStrike = 1;
   if (WINGBYDATE_STAGE) g.flags.wingByDate = 1;
+  // Better air unit names (release 2, air.ts groupName): set before the air war opens, so the first day's groups take them.
+  if (AIRNAMES_STAGE) g.flags.airNames = 1;
   // The grand campaign is played on the wider world: it is attached before anything else is set up for it. (One
   // kept to the map of Europe is what a campaign saved before the world was drawn plays on as.)
   if (wide) attachWorld(g);
@@ -1357,11 +1363,16 @@ function frontsKept(g: Game, nat: string, real: Front[]): void {
       if (!elsewhere.has(e) && !(g.turn <= flag(g, `st:push:${nat}`) && flag(g, `st:pushed:${nat}:${e}`))) delete g.flags[k];
     }
   }
-  // (And the far-side word against an enemy who stands on no far-side front of this nation's now is forgotten.)
+  // (And the far-side word against an enemy who stands on no far-side front of this nation's now is forgotten. One walk
+  // over the flags for this and the marks below: the two kinds of key share no key, and neither reads the other's.)
   const word = `st:on:${nat}:`;
-  for (const k of Object.keys(g.flags)) if (k.startsWith(word) && k.endsWith(':far') && !seen.has(k.slice(word.length, -4))) delete g.flags[k];
   const mine = [`${MARK.on}:${nat}:`, `${MARK.rest}:${nat}:`, `${MARK.idle}:${nat}:`];
   for (const k of Object.keys(g.flags)) {
+    if (!k.startsWith('st:')) continue;
+    if (k.startsWith(word)) {
+      if (k.endsWith(':far') && !seen.has(k.slice(word.length, -4))) delete g.flags[k];
+      continue;
+    }
     const pre = mine.find((m) => k.startsWith(m));
     if (!pre) continue;
     // (A rest lasts its months whatever becomes of the front, and is forgotten when it is over.)

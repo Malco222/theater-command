@@ -7,7 +7,7 @@ import data from '../data/campaign/divisions.json';
 import setup from '../data/campaign/setup-1939.json';
 import { addCorps, createGame, men, removeCorps } from '../src/campaign/game';
 import { SIEGE } from '../src/campaign/siege';
-import { DIVISIONS, armyCard, corpsCard, divisionWords, divisionsOf, growCorps, mixLine, mixOf, namedDivisions, numberDivisions, ordinal } from '../src/campaign/armies';
+import { DIVISIONS, armyCard, corpsCard, divisionWords, divisionsOf, growCorps, mixLine, mixOf, namedDivisions, numberDivisions, numberSpokenFor, ordinal } from '../src/campaign/armies';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { armiesAt, armyAt, corpsDetail, orderFog, runTurnAI, sight } from '../src/campaign/turn';
@@ -147,8 +147,15 @@ describe('the numbers divisions carry', () => {
       const set = seen.get(key) ?? seen.set(key, new Set()).get(key)!;
       for (const d of divisionsOf(g, c)) { expect(set.has(d.no), `${key} ${d.no}`).toBe(false); set.add(d.no); }
     }
-    // Each run starts at 1 and has no gaps, but for the two nations whose first-day divisions carry their real numbers.
-    for (const [key, set] of seen) if (!/^(GER|POL):/.test(key)) expect(Math.max(...set), key).toBe(set.size);
+    // Each run starts at 1 and has no gaps, but for the two nations whose first-day divisions carry their real numbers,
+    // and but for a number whose name is another division's own: a row's, or a living named division's (the design
+    // director, 12:49Z, 25 November 2026: "a gap in the run is the record's manner too"). Britain's armour opens at
+    // the 3rd, the 1st and 2nd Armoured being the desert's rows.
+    for (const [key, set] of seen) if (!/^(GER|POL):/.test(key)) {
+      const [nat, kind] = key.split(':') as [string, Kind];
+      for (let n = 1; n <= Math.max(...set); n++) expect(set.has(n) || numberSpokenFor(g, nat, kind, n), `${key} ${n}`).toBe(true);
+    }
+    expect(seen.get('UK:arm')).toEqual(new Set([3]));
   });
 
   it('are the real ones of 1 September 1939 on the first day, and a stand-in never takes a real one (the design director, 18 November)', () => {
@@ -165,8 +172,13 @@ describe('the numbers divisions carry', () => {
     expect(nos('GER', 'XV Corps')).toEqual(['7th Panzer Division', '8th Panzer Division']);
     expect(nos('GER', 'XXII Corps')).toEqual(['2nd Panzer Division', '9th Panzer Division']);
     expect(nos('POL', 'Army Karpaty')).toEqual(['2nd Mountain Brigade', '3rd Mountain Brigade']);
+    // (The 11th Panzer is a row's own, the Balkans' of month 19, so the first stand-in above the record's 10 is the
+    // 12th: the design director's skip, 12:49Z, 25 November 2026.)
     const late = addCorps(g, 'GER', 'XXXIX Corps', 'arm', 1, g.byName['Berlin'].id, {});
-    expect(divisionsOf(g, late)[0].no).toBe(11);
+    expect(divisionsOf(g, late)[0].no).toBe(12);
+    expect(numberSpokenFor(g, 'GER', 'arm', 11)).toBe(true);
+    expect(numberSpokenFor(g, 'GER', 'arm', 15)).toBe(true);
+    expect(numberSpokenFor(g, 'GER', 'arm', 12)).toBe(false);
     for (const name of ['Berlin garrison', 'Hamburg garrison']) expect(parseInt(nos('GER', name)[0], 10)).toBeGreaterThanOrEqual(270);
     // (Warsaw's garrison opens inside the city as the Warsaw Defence Command, rider b566, with its row's numbers.)
     expect(parseInt(nos('POL', 'Warsaw Defence Command')[1], 10)).toBeGreaterThan(60);
@@ -205,6 +217,30 @@ describe('the numbers divisions carry', () => {
     }
     expect(g.corps.filter((c) => c.nat === 'GER' && !c.dead && (c.born ?? 0) > 1).length).toBeGreaterThan(0);
   }, 120_000);
+
+  // (The design director, 12:49Z, 25 November 2026: a stand-in passes over any number a dated row of its country names
+  // for that arm, or a living named division carries. Seed 5's XXXXVI Panzer Corps had taken the 15th Panzer Division
+  // in month 12, eight months before the real one landed at Tripoli.)
+  for (const seed of [1, 2]) it(`a stand-in never takes a name a row or a living division owns: no country names a stand-in twice in six years, seed ${seed}`, () => {
+    const g = open(null, seed);
+    // A stand-in is a division whose name is its number and its arm's words; a division named twice with a stand-in among the two.
+    const twice = (): string[] => {
+      const out: string[] = [];
+      for (const nat of Object.keys(g.nations)) {
+        const seen = new Map<string, boolean>();
+        for (const c of g.corps) if (c.nat === nat && !c.dead) for (const d of divisionsOf(g, c)) {
+          const standIn = d.name === `${ordinal(d.no)} ${divisionWords(c.nat, c.kind).name}`;
+          if (seen.has(d.name) && (standIn || seen.get(d.name))) out.push(`${nat} ${d.name} (${c.name})`);
+          seen.set(d.name, (seen.get(d.name) ?? false) || standIn);
+        }
+      }
+      return out;
+    };
+    while (g.turn <= 72) {
+      runTurnAI(g);
+      if (g.turn % 4 === 0) expect(twice(), `month ${g.turn}`).toEqual([]);
+    }
+  }, 900_000);
 
   it('give divisions that join a corps numbers of their own, and a corps that changes arm the new arm\'s', () => {
     const g = open();
