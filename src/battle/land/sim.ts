@@ -2710,7 +2710,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     let best: LandUnit | null = null, score = Infinity;
     // Support teams in battle (teamsRule; the design director, 25 November 20:03Z): a team fires on the target in its
     // reach its own weapon harms most (a machine gun does little to tanks, a mortar little close in: LAND.teams' armour
-    // and close), the nearest as every block reckons it among those it harms alike.
+    // and close), the nearest as every block reckons it among those it harms alike. Only where no order names a target:
+    // one the player names for a team stands (below), and the rule never re-aims a human seat (20:22Z).
     const T = this.teamsRule && u.team ? LAND.teams[u.team] : null;
     let harm = 0;
     for (const e of this.units) {
@@ -3620,6 +3621,10 @@ export class LandBattle implements BattleSim<LandUnit> {
    * Support teams in battle (teamsRule): of a force's own team block, the share that stands in a sum at the brink as
    * its division's line stands: `part` of each of its line blocks over their `whole`. Null where the block counts as
    * itself: the rule off, no team block, or one with no division of its own on the field.
+   * A team takes its state (fresh, worn, running) from its division's line, but its own men still leave the sums as
+   * they fall (the design director, 25 November 20:22Z: priced once, no ghost): what it has lost is worn, as any
+   * block's is, and only what is left of it stands as its division stands. A team wiped out is all worn and counts
+   * nothing in the running or the fresh, whatever its division.
    */
   private asItsLine(u: LandUnit, whole: (p: LandUnit) => number, part: (p: LandUnit) => number): number | null {
     if (!this.teamsRule || !u.team) return null;
@@ -3635,7 +3640,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     for (const u of this.units) {
       if (u.side !== s) continue;
       const k = this.asItsLine(u, weightOf, (p) => (running(p) ? weightOf(p) : 0));
-      if (k !== null) gone += weightOf(u) * k;
+      if (k !== null) gone += weightOf(u) * (u.str / u.str0) * k;
       else if (running(u)) gone += weightOf(u);
     }
     return gone / this.power[s];
@@ -3646,8 +3651,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     let worn = 0;
     for (const u of this.units) {
       if (u.side !== s) continue;
-      const k = this.asItsLine(u, (p) => p.power0, (p) => p.power0 * (1 - p.str / p.str0));
-      worn += u.power0 * (k ?? 1 - u.str / u.str0);
+      const k = this.asItsLine(u, (p) => p.power0, (p) => p.power0 * (1 - p.str / p.str0)), left = u.str / u.str0;
+      worn += u.power0 * (1 - left + (k === null ? 0 : left * k));
     }
     return worn / this.power[s];
   }
@@ -3706,7 +3711,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     for (const u of this.units) {
       if (u.side !== s) continue;
       const k = this.asItsLine(u, weightOf, (p) => (fighting(p) && this.fresh(p) ? weightOf(p) : 0));
-      if (k !== null) n += weightOf(u) * k;
+      if (k !== null) n += weightOf(u) * (u.str / u.str0) * k;
       else if (fighting(u) && this.fresh(u)) n += weightOf(u);
     }
     // A corps still coming up from next door has not been in the fight: it holds its army at the brink.

@@ -317,10 +317,12 @@ describe("support teams in battle: a team is its own division's, never a gun (th
       for (const p of line) p.str = p.str0 * 0.8;
       const lineWorn = line.reduce((a, p) => a + p.power0, 0) * 0.2, teamsWorn = mine.reduce((a, u) => a + u.power0, 0) * 0.2;
       expect(sums.wornShare('att') - worn0).toBeCloseTo((lineWorn + (rule ? teamsWorn : 0)) / power, 9);
-      // The team blocks themselves struck: on, that is not in the sum (their division's wear is); off, it is.
+      // The team blocks themselves struck, half their men down: those men are worn, on or off (priced once); on, the
+      // half left is worn as its division is, a fifth.
       const worn1 = sums.wornShare('att');
       for (const u of mine) u.str = u.str0 * 0.5;
-      expect(sums.wornShare('att') - worn1).toBeCloseTo(rule ? 0 : mine.reduce((a, u) => a + u.power0, 0) * 0.5 / power, 9);
+      const teamsPower = mine.reduce((a, u) => a + u.power0, 0);
+      expect(sums.wornShare('att') - worn1).toBeCloseTo((rule ? teamsPower * (0.5 + 0.5 * 0.2) - teamsWorn : teamsPower * 0.5) / power, 9);
       for (const u of mine) u.str = u.str0;
       // Its division running: on, its teams' weight runs with it; off, only the division's.
       const run0 = sums.brokenShare('att');
@@ -329,7 +331,22 @@ describe("support teams in battle: a team is its own division's, never a gun (th
       expect(sums.brokenShare('att') - run0).toBeCloseTo((lineW + (rule ? teamsW : 0)) / power, 9);
       // And no longer fresh with it.
       expect(sums.freshShare('att')).toBeLessThan(fresh0);
+      // No ghost: a team wiped out counts nothing in the running sum whatever its division (its men are all worn).
+      const run1 = sums.brokenShare('att'), worn2 = sums.wornShare('att');
+      for (const u of mine) u.str = 0;
+      expect(run1 - sums.brokenShare('att')).toBeCloseTo((rule ? teamsW : 0) / power, 9);
+      expect(sums.wornShare('att') - worn2).toBeCloseTo(teamsPower * (rule ? 1 - 0.2 : 1) / power, 9);
     }
+  });
+
+  it('on, a team wiped out counts nothing in the fresh sum, and one whole counts as its division does', () => {
+    const { units, sums } = field(ownTeams(campaign('normandy-1944')).ticket, true);
+    const team = units.find((u) => u.side === 'att' && u.team)!;
+    const whole = sums.freshShare('att');
+    expect(whole).toBeGreaterThan(0);
+    team.str = 0;
+    const power = units.filter((u) => u.side === 'att').reduce((a, u) => a + u.power0, 0);
+    expect(whole - sums.freshShare('att')).toBeCloseTo(team.power0 / power, 9);
   });
 
   it("leaves a battalion with no division of its own (a set piece's) as itself, on or off", () => {
@@ -368,5 +385,21 @@ describe("support teams in battle: a team is its own division's, never a gun (th
     expect(pick(true, 'mor', 300, 500)).toBe('foot');
     // Harmed alike, the nearer; and a tank where there is nothing else in reach.
     expect(pick(true, 'mg', 300, 5000)).toBe('tank');
+  });
+
+  it('a target an order names for a team stands, on or off: the rule chooses only where none is named', () => {
+    type T = U & { x: number; y: number; hid?: boolean; aim?: number; order?: { kind: string; target?: number } | null; path: unknown[] };
+    const t = ownTeams(campaign('normandy-1944')).ticket;
+    for (const rule of [true, false]) {
+      const { sim, units } = field(t, rule);
+      const all = units as T[];
+      const g = all.find((u) => u.side === 'att' && u.team === 'mg')!;
+      const tank = all.find((u) => u.side === 'def' && u.kind === 'arm')!, foot = all.find((u) => u.side === 'def' && u.kind === 'inf')!;
+      for (const e of all) if (e.side === 'def') { e.x = g.x; e.y = g.y + 9000; }
+      tank.y = g.y + 300; foot.y = g.y + 500; tank.hid = false; foot.hid = false;
+      delete g.aim;
+      g.order = { kind: 'attack', target: tank.id }; g.path = [];
+      expect((sim as unknown as { targetOf(u: T): T | null }).targetOf(g)).toBe(tank);
+    }
   });
 });
