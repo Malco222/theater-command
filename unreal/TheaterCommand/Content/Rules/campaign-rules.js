@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 605ba00e9 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ae4ff9d69 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -90329,7 +90329,7 @@
         by(b, side5, u, shaky);
         continue;
       }
-      const round3 = foes.find((f) => dist(f.x, f.y, u.home[0], u.home[1]) < leash2 && !outside(f) && mine4.some((m) => m.engaged === f.id && m !== u));
+      const round3 = foes.find((f) => dist(f.x, f.y, u.home[0], u.home[1]) < leash2 && !outside(f) && mine4.some((m) => !(b.teamsRule && m.team) && m.engaged === f.id && m !== u));
       if (round3) by(b, side5, u, round3);
     }
   }
@@ -96532,6 +96532,19 @@
        * page's ?relief, the bridge's { relief: true }); off, nothing below is read.
        */
       __publicField(this, "relief", false);
+      /**
+       * Support teams in battle (release 2, the Battle rules card's "teams"; the design director's ruling of 25 November
+       * 2026, 17:52Z, on the ground thread's own-teams-causes-1125.md). On, wherever team blocks are on the field (a
+       * campaign battle's own or built teams, a set piece's battalions):
+       *   - a team's nerve multiplier (LAND.teams' nerve, by its blow's aspect) weighs its own harm only (step). Off, as
+       *     it was: every striker's multiplier is added and the sum weighs all the harm on the block that tick, so a team
+       *     with 2% of its side's power doubled what everything landing with it cost in nerve; blocks ran early with
+       *     strength left, stopped being worn, and battles ran to the clock. The line's and the guns' are added as fitted,
+       *     and LAND.teams is untouched.
+       *   - the defence's staff never counts a team block firing from far back as a neighbour in a fight (ai.ts defend).
+       * A battle with no team block on the field is the same on or off. Off unless whoever opens the field turns it on.
+       */
+      __publicField(this, "teamsRule", false);
       /** The computer's tank blocks going round to a tank block's flank (ai.ts): where to, at whom, since when. */
       __publicField(this, "flanking", /* @__PURE__ */ new Map());
       /** Each block's tank or gun model, as the rules weigh it (armour.ts vehicleOf): null for the rest. */
@@ -98838,9 +98851,9 @@
           this.airLedger[u.side].withheld += raw2;
           kept3.set(t.id, (kept3.get(t.id) ?? 0) + raw2);
         }
-        const h = hurt2.get(t.id) ?? { dmg: 0, nerve: 0, from: [], blind: true };
-        h.dmg += blow3.dmg;
+        const h = hurt2.get(t.id) ?? { dmg: 0, nerve: 0, from: [], blind: true, team: 0, teamNerve: 0 };
         if (this.led && blow3.parts) {
+          h.dmg += blow3.dmg;
           const sp = nerveSplit(blow3.parts, this.led.on), pt = blow3.parts, w = h.pw ?? (h.pw = { flank: 0, rear: 0, fire: 0, ambush: 0 });
           h.nerve += sp.block;
           h.dm = (h.dm ?? 0) + blow3.dmg * sp.army;
@@ -98850,7 +98863,7 @@
           w.rear += blow3.dmg * (pt.aspect === "rear" ? pt.nm : 1);
           w.fire += blow3.dmg * pt.fire;
           w.ambush += blow3.dmg * pt.ambush;
-        } else h.nerve += blow3.nerve;
+        } else this.tally(h, u, blow3);
         if (!blind) h.blind = false;
         h.from.push([u, blow3.dmg]);
         hurt2.set(t.id, h);
@@ -98859,6 +98872,9 @@
           t.flankedAt = this.t;
           if (t.side === "att" ? this.ticket.att.human : this.ticket.def.human) this.say({ what: "flanked", unit: t.id, side: t.side, text: `${this.named(t)} is hit from the ${blow3.aspect === "rear" ? "rear" : "flank"}.`, x: t.x, y: t.y });
         }
+      }
+      if (this.teamsRule) {
+        for (const h of hurt2.values()) if (h.team > 0 && h.dmg > 0) h.nerve = ((h.dmg - h.team) * h.nerve + h.teamNerve) / h.dmg;
       }
       if (kept3) for (const [id, raw2] of kept3) {
         const h = hurt2.get(id), side5 = other2(this.unit(id).side);
@@ -99189,6 +99205,19 @@
       if (ws > 0) take3 = take3 * (1 - ws) + Math.min(take3, LAND3.cover[LAND3.wreck.cover]) * ws;
       if (t.kind === "arm" && LAND3.tanksClose.ground.includes(gt)) take3 *= LAND3.tanksClose.take;
       return take3;
+    }
+    /**
+     * One blow's harm and nerve added to what its target takes this tick (step's hurt; anything else that lands part of
+     * a blow on a block that tick must come through here too). The strikers' nerve multipliers are added, as fitted.
+     * Support teams in battle (teamsRule): a team's is not added to the others'; it is kept with its own harm (team,
+     * teamNerve), and step makes the one multiplier of them once every blow is in.
+     */
+    tally(h, u, blow3) {
+      h.dmg += blow3.dmg;
+      if (this.teamsRule && u.team) {
+        h.team += blow3.dmg;
+        h.teamNerve += blow3.dmg * blow3.nerve;
+      } else h.nerve += blow3.nerve;
     }
     /**
      * One block's blow on another this tick: its weight (dmg), its nerve's multiplier, whether it lands on the front and

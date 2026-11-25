@@ -56,16 +56,44 @@ ARMIES = {
     "GER_lmg34": {"base": "soldier_GER", "out": "soldier_GER_lmg34", "gun": "mg34",
                   "name": "Section machine gunner, GER, MG 34 (our own design)",
                   "date": ["1936-01", "1945-05"]},
+    "UK": {"base": "soldier_UK", "out": "soldier_UK_lmg", "gun": "bren",
+           "name": "Section machine gunner, UK, Bren (our own design)", "date": ["1938-01", "1945-05"]},
+    "SOV": {"base": "soldier_SOV", "out": "soldier_SOV_lmg", "gun": "dp",
+            "name": "Section machine gunner, SOV, DP (our own design)", "date": ["1928-01", "1945-05"]},
+    "JAP": {"base": "soldier_JAP", "out": "soldier_JAP_lmg", "gun": "type96",
+            "name": "Section machine gunner, JAP, Type 96 (our own design)", "date": ["1936-01", "1945-08"]},
+    "ITA": {"base": "soldier_ITA", "out": "soldier_ITA_lmg", "gun": "breda30",
+            "name": "Section machine gunner, ITA, Breda 30 (our own design)", "date": ["1930-01", "1945-05"]},
+    "FRA": {"base": "soldier_FRA", "out": "soldier_FRA_lmg", "gun": "fm2429",
+            "name": "Section machine gunner, FRA, FM 24/29 (our own design)", "date": ["1930-01", "1945-05"]},
 }
 
-WET = {"steel": 0.15, "bakelite": 0.22, "brass": 0.12}
+
+def guns():
+    """Every gun drawn: mg_guns' own and each army's in its own file (mg_gun_<key>.py, a function <key>() returning an
+    mg_guns.Gun)."""
+    import importlib
+    out = dict(mg_guns.GUNS)
+    for spec in ARMIES.values():
+        k = spec["gun"]
+        if k not in out:
+            try:
+                out[k] = getattr(importlib.import_module("mg_gun_" + k), k)
+            except ImportError:
+                pass
+    return out
+
+WET = {"steel": 0.15, "bakelite": 0.22, "brass": 0.12, "bullet": 0.12, "wood": 0.22}
 SHADE_FLOOR = 0.40           # (the file's floor: the bore and the cooling holes)
 SHADE_LOW = 0.56             # (the rifle's darkest shadowed steel, so the gun sits in the same range)
 
 # ---- where a fist holds the gun, in the weapon bone's frame (mg_guns.py's own measures)
+ARM_SLACK = 0.115                      # (fist to shoulder past the arm's two bones: the palm, and a little give)
+BRUSH_KEYS = 5                         # (a fall: a fist on the rifle for fewer keys than this only brushed it)
 HOLD_NEAR, HOLD_FAR = 0.030, 0.060     # (a fist this near the rifle holds it; this far, has let go; eased between)
 WRIST_X = (-0.13, 0.07)                # (the rifle's wrist, where his right fist holds it)
-DRUM_X = (0.03, 0.19)                  # (the belt drum hangs on the left here: a supporting hand goes just ahead of it)
+DRUM_X = (0.05, 0.17)                  # (the MG 42's belt drum hangs on the left here: a supporting hand goes just ahead
+                                       # of it; a gun says its own in grips["keep_out"], or None)
 # (the rifle's underside along it, as the file's rifle has it: the butt, the wrist and trigger guard, the fore-end and
 # barrel. A supporting fist keeps its height over this line on the gun's own underside.)
 RIFLE_UNDER = [(-0.33, -0.085), (-0.20, -0.078), (-0.13, -0.050), (-0.10, -0.044), (0.06, -0.044), (0.09, 0.006),
@@ -171,7 +199,7 @@ def write_gun(D, gun, new_paint, blk):
         world = g["P"] + Hw
         park = b - a - n
         # (parked points: a little ring inside the receiver, on the weapon bone; the spare triangles drawn on them)
-        cen = Hw + np.array((0.12, 0.0, mg_guns.BORE + 0.012))
+        cen = Hw + np.array(gun.grips.get("park", (0.12, 0.0, mg_guns.BORE + 0.012)), float)
         ring = [cen + 0.0015 * np.array((math.cos(2 * math.pi * k / max(park, 3)), 0.0,
                                          math.sin(2 * math.pi * k / max(park, 3)))) for k in range(park)]
         pts = list(world) + ring
@@ -261,12 +289,15 @@ class Fit:
         self.rifle = old.weapon_pts - self.man.H[self.wi]       # (the rifle's near points, the weapon's frame)
         g = gun.grips
         self.pg = np.array(g["pistol"]["at"], float)
-        self.pg_up = -unit(g["pistol"]["axis"])                  # (up the grip: where the thumb lies)
+        # (up the grip: where the thumb lies; a gun with a rifle's wrist and no pistol grip gives no axis, and the
+        # fist keeps the turn it had on the rifle)
+        self.pg_up = -unit(g["pistol"]["axis"]) if g["pistol"].get("axis") is not None else None
+        self.bore = float(getattr(gun, "bore", mg_guns.BORE))    # (the bore's height over the weapon bone's head)
+        self.heel_x = float(gun.mesh("near")[0][:, 0].min())     # (the butt's heel along the gun)
         und = []
         for (p0, p1) in g["under"]:
             und += [(float(p0[0]), float(p0[2])), (float(p1[0]), float(p1[2]))]
         und.sort()
-        und.append((0.735, mg_guns.BORE - 0.0235))
         self.under = und
         self.log = []
 
@@ -281,30 +312,94 @@ class Fit:
             return 0.0
         return 1.0 - fc.sm((d - HOLD_NEAR) / (HOLD_FAR - HOLD_NEAR))
 
-    def target(self, s, p, thumb, force_grip=False):
+    def target(self, s, p, thumb, force_grip=False, l_at=None, w_min=0.0, w0=None):
         """Where fist `s` (at p, the weapon's frame, its thumb along `thumb`) goes on the gun: the weight it holds
-        with, the fist's new place, and the turn of the hand (the weapon's frame)."""
-        w = 1.0 if force_grip else self.ease(self.near_rifle(p))
+        with, the fist's new place, and the turn of the hand (the weapon's frame). `l_at`: the supporting (left) fist
+        goes to this place along the gun (or (place, how much of it)), at the depth under it it held the rifle.
+        `w_min`: it holds at least this much whatever it did on the rifle (the hip hold: both fists on the gun).
+        `w0`: the weight it held the rifle with, if already known (else read from how near the rifle it is)."""
+        w0 = 1.0 if force_grip else (self.ease(self.near_rifle(p)) if w0 is None else float(w0))
+        w = max(w0, float(w_min))
         if w <= 0.0:
             return 0.0, p, np.eye(3)
-        if s == "r" and (force_grip or WRIST_X[0] <= p[0] <= WRIST_X[1]):
+        if s == "r" and (force_grip or WRIST_X[0] <= p[0] <= WRIST_X[1] or w_min > w0):
             q = self.pg
-            Rl = turn_between(thumb, self.pg_up, w)
+            Rl = turn_between(thumb, self.pg_up, w) if self.pg_up is not None else np.eye(3)
             return w, p + w * (q - p), Rl
         x = float(p[0])
         dz = lerp_line(self.under, x) - lerp_line(RIFLE_UNDER, x)
         q = p + np.array((0.0, 0.0, dz))
-        if s == "l" and DRUM_X[0] < x < DRUM_X[1]:
-            q[0] = DRUM_X[1] + 0.01
+        ko = self.gun.grips.get("keep_out", DRUM_X)
+        if s == "l" and ko and ko[0] < x < ko[1]:
+            q[0] = ko[1] + 0.01
             q[2] = p[2] + lerp_line(self.under, q[0]) - lerp_line(RIFLE_UNDER, x)
+            if self.gun.grips.get("keep_out_low") is not None:
+                q[2] = min(q[2], p[2] + self.gun.grips["keep_out_low"])
+        if s == "l" and l_at is not None:
+            xa, f = l_at if isinstance(l_at, tuple) else (l_at, 1.0)
+            # (as deep under the gun as it was under the rifle; a fist that was not on the rifle, just under the gun)
+            c = w0 / w
+            qa = np.array((xa, c * p[1], c * (p[2] + lerp_line(self.under, xa) - lerp_line(RIFLE_UNDER, x)) +
+                           (1.0 - c) * (lerp_line(self.under, xa) - 0.008)))
+            q = f * qa + (1.0 - f) * q
         return w, p + w * (q - p), np.eye(3)
 
-    def refit(self, clip, force_r=False, sides=("l", "r"), wclip=None):
+    def grasps(self, clip, sides, hold=None, final=False):
+        """How much each fist holds at each key of the rifleman's clip: (what it held the rifle with, what it holds at
+        least (`hold[s](t)`)). `final` (a fall): letting go is final. An arm shot away (its fist further from its
+        shoulder than the arm is long) holds nothing from then on; a fist kept on the gun by `hold` that has once let
+        go stays off; and a fist that only brushes the falling rifle for a few keys (under 0.3 s, not at the clip's
+        start or end) does not snatch at the gun."""
+        man = self.man
+        ts = fc.times_of(clip["long"])
+        base = {s: [] for s in sides}
+        extra = {s: [] for s in sides}
+        reach = {s: [] for s in sides}
+        for t in ts:
+            lq0, mv0 = man.locals_of(clip, t)
+            G0, X0 = man.fk(lq0, mv0)
+            for s in sides:
+                f = man.grip(G0, X0, s)
+                p = G0[self.wi].T @ (f - X0[self.wi])
+                base[s].append(self.ease(self.near_rifle(p)))
+                extra[s].append(float(hold[s](t)) if hold and s in hold else 0.0)
+                reach[s].append(float(np.linalg.norm(f - X0[man.b("upperarm_" + s)])))
+        if final:
+            n = len(ts)
+            for s in sides:
+                H = man.H
+                arm = float(np.linalg.norm(H[man.b("lowerarm_" + s)] - H[man.b("upperarm_" + s)]) +
+                            np.linalg.norm(H[man.b("hand_" + s)] - H[man.b("lowerarm_" + s)]))
+                gone = off = False
+                for i in range(n):
+                    gone = gone or reach[s][i] > arm + ARM_SLACK
+                    off = off or (i > 0 and extra[s][i] < 0.05)
+                    if gone:
+                        base[s][i] = 0.0
+                    if gone or off:
+                        extra[s][i] = 0.0
+                i = 0
+                while i < n:
+                    if base[s][i] <= 0.0:
+                        i += 1
+                        continue
+                    j = i
+                    while j < n and base[s][j] > 0.0:
+                        j += 1
+                    if i > 0 and j < n and j - i < BRUSH_KEYS and max(extra[s][i:j]) <= 0.0:
+                        base[s][i:j] = [0.0] * (j - i)
+                    i = j
+        return base, extra
+
+    def refit(self, clip, force_r=False, sides=("l", "r"), wclip=None, poles=None, l_at=None, hold=None, final=False):
         """The clip with each holding hand's arm keyed again (upperarm, lowerarm, hand), 15 a second: where each fist
         held the rifle is read from `clip`; the gun it goes to is `wclip`'s (the same clip with the gun's own keys
         changed: a burst's jump, a lift off the ground), else `clip`'s. Where a fist cannot reach its place on the gun
-        (an arm hanging straight with the gun in one hand), the gun comes to the fist instead, by the miss. Returns the
-        clip (wclip's other keys), the worst miss of a fist that holds fully (m), and which hands hold at all."""
+        (an arm hanging straight with the gun in one hand), the gun comes to the fist instead, by the miss. `poles`:
+        where each elbow points from its shoulder (the world's frame), else where it was. `hold[s](t)`: fist s holds
+        at least this much at t (and `l_at` may be a function of t giving (place, how much)). `final`: a fall, where
+        letting go is final (see grasps). Returns the clip (wclip's other keys), the worst miss of a fist that holds
+        fully (m), and which hands hold at all."""
         man = self.man
         wclip = wclip or clip
         ts = fc.times_of(clip["long"])
@@ -315,7 +410,8 @@ class Fit:
         worst = 0.0
         prev = {}
         par = man.par[self.wi]
-        for t in ts:
+        base, extra = self.grasps(clip, sides, hold, final)
+        for ti, t in enumerate(ts):
             lq0, mv0 = man.locals_of(clip, t)
             G0, X0 = man.fk(lq0, mv0)
             lqw, mvw = man.locals_of(wclip, t) if wclip is not clip else (lq0.copy(), mv0.copy())
@@ -326,7 +422,9 @@ class Fit:
                 f = man.grip(G0, X0, s)
                 p = G0[self.wi].T @ (f - X0[self.wi])
                 thumb = G0[self.wi].T @ G0[h] @ A["t0"]
-                w, q, Rl = self.target(s, p, thumb, force_grip=(force_r and s == "r"))
+                w, q, Rl = self.target(s, p, thumb, force_grip=(force_r and s == "r"),
+                                       l_at=(l_at(t) if callable(l_at) else l_at),
+                                       w_min=extra[s][ti], w0=base[s][ti])
                 if w > 0.0:
                     used[s] = True
                     aims[s] = (w, q, Rl)
@@ -346,15 +444,24 @@ class Fit:
                     Gh = Gw @ Rl @ Gw.T @ G[h]
                     fw = Xw + Gw @ q
                     T = fw - Gh @ (A["d0"] * 0.075 + A["n0"] * 0.022)
-                    pole = X[man.b("lowerarm_" + s)] - X[man.b("upperarm_" + s)]
+                    was = X[man.b("lowerarm_" + s)] - X[man.b("upperarm_" + s)]
+                    pole = was
+                    if poles and s in poles:
+                        # (a direction, or (direction, how much of it over where the elbow was) at this time)
+                        pv_ = poles[s](t) if callable(poles[s]) else poles[s]
+                        if isinstance(pv_, tuple) and len(pv_) == 2 and not np.isscalar(pv_[0]):
+                            pole = (1.0 - pv_[1]) * unit(was) + pv_[1] * unit(pv_[0])
+                        else:
+                            pole = np.asarray(pv_, float)
                     lq = man.arm(lq, mv, s, T, pole, Gh @ A["d0"], Gh @ A["t0"])
                     G2, X2 = man.fk(lq, mv)
                     miss[s] = (w, man.grip(G2, X2, s) - fw)
                 big = {s: m for s, m in miss.items() if np.linalg.norm(m[1]) > 0.006}
                 if not big:
                     break
+                # (the gun comes to a fist by as much as the fist holds: one that has all but let go hardly pulls it)
                 wsum = sum(m[0] for m in miss.values())
-                shift = shift + sum(m[0] * m[1] for m in miss.values()) / max(wsum, 1e-9)
+                shift = shift + sum(m[0] * m[1] for m in miss.values()) / max(wsum, 1.0)
             for s, (w, d) in miss.items() if aims else []:
                 if w >= 0.999:
                     worst = max(worst, float(np.linalg.norm(d)))
@@ -409,7 +516,7 @@ class Fit:
             G, X = man.fk(lq, mv)
             Gc, Xc = G[ch], X[ch]
             Gw = Gc @ Rw
-            mid_local = np.array(((lo + hi) / 2, 0.0, mg_guns.BORE))
+            mid_local = np.array(((lo + hi) / 2, 0.0, self.bore))
             rest = np.array((man.back_x - side - 0.006, 0.04, 1.34))   # (4 cm higher than the rifle: its butt where the rifle's was)
             target = Xc + Gc @ (rest - man.H[ch])
             Xw = target - Gw @ mid_local
@@ -513,12 +620,234 @@ class Fit:
         out["tracks"] = tracks
         return out, float(need.max())
 
+    def leap(self, clip):
+        """The most the gun or a hand moves between two keys of the clip (m)."""
+        man = self.man
+        ix = [self.wi, man.b("hand_l"), man.b("hand_r")]
+        prev, most = None, 0.0
+        for t in fc.times_of(clip["long"]):
+            G, X = gore.pose(man.rig, clip, t)
+            if prev is not None:
+                most = max(most, float(np.linalg.norm(X[ix] - prev, axis=1).max()))
+            prev = X[ix].copy()
+        return most
+
+    def by_rifle(self, clip, s, t, d0=0.15, d1=0.30):
+        """How near fist s still is to the rifle at t of the rifleman's clip: 1 within 15 cm, 0 by 30 (a hand thrown
+        clear in a fall, an arm shot away, has let go)."""
+        man = self.man
+        G, X = gore.pose(man.rig, clip, t)
+        p = G[self.wi].T @ (man.grip(G, X, s) - X[self.wi])
+        return 1.0 - fc.sm((self.near_rifle(p) - d0) / (d1 - d0))
+
+    def aimed(self, clip, t):
+        """Whether the rifleman has his rifle up in his shoulder, aimed, at time t of his own clip, and how he is then:
+        "stand", "kneel", "prone", or None. (The gunner never fires his gun like a rifle: standing and kneeling he holds
+        it at his hip, so where the rifleman's clip starts or ends aimed, the gunner's starts or ends in his hip hold.)"""
+        man = self.man
+        G, X = gore.pose(man.rig, clip, t)
+        heel = X[self.wi] + G[self.wi] @ np.array((-0.33, 0.0, 0.04))
+        if np.linalg.norm(heel - X[man.b("upperarm_r")]) > 0.20:
+            return None
+        if abs(math.degrees(math.asin(float(np.clip(G[self.wi][2, 0], -1, 1))))) > 12.0:
+            return None
+        z = float(X[man.b("pelvis")][2])
+        return "stand" if z > 0.75 else ("kneel" if z > 0.30 else "prone")
+
+    # ---- whole poses keyed again
+    def rebake(self, clip, fn):
+        """The clip keyed again 15 a second through fn(t, lq, mv) -> (lq, mv): each bone the clip keyed, or fn turned
+        or moved."""
+        man = self.man
+        ts = fc.times_of(clip["long"])
+        had = {tr["part"] for tr in clip["tracks"]}
+        moved = {tr["part"] for tr in clip["tracks"] if "move" in tr}
+        rot = {i: [] for i in range(man.nb)}
+        mov = {i: [] for i in range(man.nb)}
+        prev = {}
+        turned = set()
+        for t in ts:
+            lq, mv = man.locals_of(clip, t)
+            lq, mv = fn(t, lq, mv)
+            for i in range(man.nb):
+                q = fc.quat(lq[i])
+                if i in prev and float(q @ prev[i]) < 0:
+                    q = -q
+                prev[i] = q
+                if abs(abs(q[0]) - 1.0) > 1e-6:
+                    turned.add(i)
+                if np.abs(mv[i]).max() > 1e-5:
+                    moved.add(i)
+                rot[i].append([round(t, 4)] + [round(float(v), 5) for v in q])
+                mov[i].append([round(t, 4)] + [round(float(v), 4) for v in mv[i]])
+        tracks = []
+        for i in sorted(had | turned | moved):
+            tr = {"part": i, "part_name": man.rig.names[i], "rot": rot[i]}
+            if i in moved:
+                tr["move"] = mov[i]
+            tracks.append(tr)
+        out = dict(clip)
+        out["tracks"] = tracks
+        return out
+
+    def place_weapon(self, lq, mv, Gw, Xw):
+        man = self.man
+        p = man.par[self.wi]
+        G, X = man.fk(lq, mv)
+        lq[self.wi] = G[p].T @ Gw
+        mv[self.wi] = G[p].T @ (Xw - X[p]) - (man.H[self.wi] - man.H[p])
+        return lq, mv
+
+    def carry_hands(self, lq, mv, Gw_old, Ghands_old, Gw_new):
+        """Each hand turned with the gun (so it holds it as it did), its arm keyed again later by refit."""
+        man = self.man
+        G, X = man.fk(lq, mv)
+        for s, Gh in Ghands_old.items():
+            h = man.b("hand_" + s)
+            lq[h] = G[man.par[h]].T @ (Gw_new @ Gw_old.T @ Gh)
+        return lq
+
+    def prone_up(self, clip, alpha, weight=None):
+        """Lying behind the gun: his chest raised `alpha` degrees on his elbows about the small of his back (his head
+        turned back as much, so his eye stays on the sights), the gun brought level, its butt staying in his right
+        shoulder. `weight(t)` (0 to 1, default 1): how much of it at each time (coming down behind the gun)."""
+        man = self.man
+        sp, nk, hd = man.b("spine_01"), man.b("neck"), man.b("head")
+        ua = man.b("upperarm_r")
+        pivot = np.array((self.heel_x + 0.05, 0.0, self.bore))
+
+        def fn(t, lq, mv):
+            w = 1.0 if weight is None else float(weight(t))
+            if w <= 0.0:
+                return lq, mv
+            G, X = man.fk(lq, mv)
+            a = X[hd] - X[sp]
+            a[2] = 0.0
+            k = unit(np.cross(unit(a), np.array((0.0, 0.0, 1.0))))
+            lq[sp] = G[man.par[sp]].T @ fc.R_axis(k, alpha * w) @ G[sp]
+            for b_ in (nk, hd):
+                G1, _ = man.fk(lq, mv)
+                lq[b_] = G1[man.par[b_]].T @ fc.R_axis(k, -alpha * w / 2) @ G1[b_]
+            G3, X3 = man.fk(lq, mv)
+            Gw, Xw = G[self.wi], X[self.wi]
+            ax = Gw[:, 0]
+            flat = ax.copy()
+            flat[2] = 0.0
+            Gw2 = turn_between(ax, flat, w) @ Gw
+            Xw2 = Xw + Gw @ pivot + (X3[ua] - X[ua]) - Gw2 @ pivot
+            lq, mv = self.place_weapon(lq, mv, Gw2, Xw2)
+            lq = self.carry_hands(lq, mv, Gw, {s: G[man.b("hand_" + s)] for s in ("l", "r")}, Gw2)
+            return lq, mv
+        return self.rebake(clip, fn)
+
+    def hip(self, clip, lean, heel, side, bore_z, head_down=4.0, ref=None, weight=None, t_ref=0.0, delta=False):
+        """Firing from the hip: his legs as in `clip`, his body leant `lean` degrees forward into the gun from the
+        small of his back, his head upright again looking ahead; the gun level at his belt, its heel (`heel` x, the
+        root's frame) by his ribs and `side` out to his right, its butt under his right arm; each hand turned with the
+        gun (refit then brings the arms to it). The gun's place is set by his hips in `ref` (default `clip`) at
+        `t_ref`, and carried with them. `weight(t)` (0 to 1, default 1) blends the hold in and out from the clip's own
+        (into and out of a kneel, the first moment of a fall). `delta`: the gun is not carried with his hips but keeps
+        the clip's own motion of the rifle, set off by the difference between the hold and the rifle at `t_ref` (a fall:
+        the gun drops as the rifle did, from his hip)."""
+        man = self.man
+        sp, nk, hd = man.b("spine_01"), man.b("neck"), man.b("head")
+        pv = man.b("pelvis")
+        G0, X0 = man.fk(*man.locals_of(ref or clip, t_ref))
+        heel_l = np.array((self.heel_x, 0.0, self.bore))
+        Xw0 = np.array((heel, side, bore_z)) - heel_l
+        yax = np.array((0.0, 1.0, 0.0))
+        dR, dX = G0[self.wi].T, Xw0 - X0[self.wi]              # (the hold from the rifle at t_ref: the gun level)
+
+        def fn(t, lq, mv):
+            w = 1.0 if weight is None else float(weight(t))
+            G, X = man.fk(lq, mv)
+            lq[sp] = G[man.par[sp]].T @ fc.R_axis(yax, lean * w) @ G[sp]
+            G1, X1 = man.fk(lq, mv)
+            # (his head upright and looking ahead, a little down; his neck half way)
+            want = fc.R_axis(yax, head_down)
+            Hn = fc.qpow(want @ G1[hd].T, w) @ G1[hd]
+            Rn = fc.qpow(Hn @ G1[nk].T, 0.5) @ G1[nk]
+            lq[nk] = G1[man.par[nk]].T @ Rn
+            G2, _ = man.fk(lq, mv)
+            lq[hd] = G2[man.par[hd]].T @ Hn
+            # (the gun: where it is in `ref` at t 0, carried with his hips; blended from where the clip has it)
+            # (with his hips' place and the way they face, not their tilt: in a fall the gun does not swing with them)
+            f = (G[pv] @ G0[pv].T)[:, 0]
+            Rp = (fc.R_axis((0.0, 0.0, 1.0), math.degrees(math.atan2(f[1], f[0])))
+                  if math.hypot(f[0], f[1]) > 0.3 else np.eye(3))
+            Gw, Xw = G[self.wi], X[self.wi]
+            if delta:
+                # (the set-off shrinks as the rifle comes down to the ground, so the gun lands where the rifle did)
+                Gw2 = Gw @ fc.qpow(dR, w)
+                Xw2 = Xw + w * dX * float(np.clip(Xw[2] / max(X0[self.wi][2], 1e-6), 0.0, 1.0))
+            else:
+                Gw2 = fc.qpow(Rp @ Gw.T, w) @ Gw
+                Xw2 = (1.0 - w) * Xw + w * (X[pv] + Rp @ (Xw0 - X0[pv]))
+            lq, mv = self.place_weapon(lq, mv, Gw2, Xw2)
+            lq = self.carry_hands(lq, mv, Gw, {s: G[man.b("hand_" + s)] for s in ("l", "r")}, Gw2)
+            # (his fingers closed round what they hold: the grip, the folded legs)
+            for s in ("l", "r"):
+                A = man.side[s]
+                for bn, tgt in (("fingers_", fc.R_axis(np.cross(A["d0"], A["n0"]), fc.CURL)),
+                                ("thumb_", fc.R_axis(np.cross(A["thumb0"], A["n0"]), fc.THUMB))):
+                    i = man.b(bn + s)
+                    lq[i] = fc.qpow(tgt @ lq[i].T, w) @ lq[i]
+            return lq, mv
+        return self.rebake(clip, fn)
+
+    def legs_down(self, clip, spread=mg_guns.SPREAD, ground=0.0, weight=None):
+        """The bipod's legs keyed down to the ground about the hinge each key, splayed to an A: the feet `spread`
+        apart across the gun, ahead of the hinge as far as the legs' length leaves. `weight(t)` (0 folded to 1 down,
+        default 1): the legs swinging down as he goes down behind the gun."""
+        man = self.man
+        gun = self.gun
+        legs = {"l": (man.b(mg_guns.LEFT_LEG), -1.0), "r": (man.b(mg_guns.RIGHT_LEG), 1.0)}
+        e0 = {s: mg_guns.foot_of(gun, sg) for s, (bi, sg) in legs.items()}
+        rot = {s: [] for s in legs}
+        prev = {}
+        reach = []
+        for t in fc.times_of(clip["long"]):
+            lq, mv = man.locals_of(clip, t)
+            G, X = man.fk(lq, mv)
+            Gw, Xw = G[self.wi], X[self.wi]
+            fwd = Gw[:, 0].copy()
+            fwd[2] = 0.0
+            fwd = unit(fwd)
+            lat = np.cross(np.array((0.0, 0.0, 1.0)), fwd)          # (to the gun's left)
+            for s, (bi, sg) in legs.items():
+                Xb = Xw + Gw @ (man.H[bi] - man.H[self.wi])
+                L = float(np.linalg.norm(e0[s]))
+                vz = max((ground + 0.012) - Xb[2], -0.98 * L)
+                half = min(spread / 2.0, math.sqrt(max(0.0, L * L - vz * vz)))
+                f2 = L * L - vz * vz - half * half
+                if f2 < 0.02 ** 2:
+                    half = math.sqrt(max(0.0, L * L - vz * vz - 0.02 ** 2))
+                    f2 = 0.02 ** 2
+                v = fwd * math.sqrt(f2) + lat * (-sg) * half + np.array((0.0, 0.0, vz))
+                vw = Gw.T @ v
+                R = fc.frame_map(e0[s], np.array((0.0, sg, 0.0)), vw, Gw.T @ (lat * (-sg)))
+                if weight is not None:
+                    R = fc.qpow(R, float(weight(t)))
+                q = fc.quat(R)
+                if s in prev and float(q @ prev[s]) < 0:
+                    q = -q
+                prev[s] = q
+                rot[s].append([round(t, 4)] + [round(float(v_), 5) for v_ in q])
+                reach.append(half)
+        out = dict(clip)
+        tracks = [dict(tr) for tr in clip["tracks"] if tr["part"] not in [bi for bi, _ in legs.values()]]
+        for s, (bi, _) in legs.items():
+            tracks.append({"part": bi, "part_name": man.rig.names[bi], "rot": rot[s]})
+        tracks.sort(key=lambda tr: tr["part"])
+        out["tracks"] = tracks
+        return out, 2 * min(reach)
+
     def kick(self, clip, shots, deg=1.4, back=0.006):
         """The gun's jump at each shot of a burst: a little up about the butt and back into his shoulder, settling
         before the next (on top of the clip's own weapon keys, 15 a second)."""
         man = self.man
         ts = fc.times_of(clip["long"])
-        butt = np.array((-0.33, 0.0, mg_guns.BORE))
+        butt = np.array((self.heel_x + 0.02, 0.0, self.bore))
         rot, mov = [], []
         prev = None
         for t in ts:
@@ -569,36 +898,120 @@ def burst(t0, n, gap=0.1, cue="lmg_burst"):
             for k in range(n)]
 
 
+# (the standing hip hold: the gun's heel this far ahead of his root by his ribs, this far out to his right, its bore
+# this high; his lean into it; his elbows; the left fist on the folded legs this far along the gun)
+HIP = {"lean": 12.0, "heel": -0.03, "side": 0.215, "bore_z": 1.07, "l_at": 0.36,
+       "poles": {"r": (-0.35, 0.15, -1.0), "l": (0.10, -0.55, -1.0)}}
+# (behind the gun on its bipod: his chest up this many degrees on his elbows, the gun level, his elbows down on the
+# ground: the hinge 23 cm up, his eye 2.5 cm over the sights' line)
+PRONE_UP = 5.0
+PRONE_POLES = {"l": (0.0, -0.25, -1.0), "r": (0.0, 0.25, -1.0)}
+# (the kneeling hold is the same under-arm hold, lower: he never brings the gun up into his shoulder like a rifle
+# (Brian, 25 November 16:06Z: "a soldier would never shoot this like a rifle position"))
+KNEEL = {"lean": 14.0, "heel": -0.22, "side": 0.225, "bore_z": 0.68, "l_at": 0.36,
+         "poles": {"r": (-0.35, 0.15, -1.0), "l": (0.10, -0.55, -1.0)}}
+HOLDS = {"stand": HIP, "kneel": KNEEL}
+EASE = 0.35                  # (seconds a clip takes to come out of, or into, the hip hold where the rifleman's is aimed)
+EASE_FALL = 0.8              # (a fall: the gun leaves the hip hold this slowly, so it drops from his hip, not up to where
+                             # the rifle was thrown from)
+
+
+def bare(clip):
+    """The clip without the rifle's bolt and bipod keys (the gun's two legs ride those bones)."""
+    return dict(clip, tracks=[tr for tr in clip["tracks"] if tr["part_name"] not in ("bolt", "bipod")])
+
+
+def hip_fire(fit, c, H, shots):
+    """A firing loop from the hip hold H: the hold, the burst's jump, the arms to the gun."""
+    gg = fit.gun.grips
+    hp = fit.hip(c, H["lean"], H["heel"], H["side"] + gg.get("hip_side", 0.0), H["bore_z"])
+    wc, up = fit.lift(fit.kick(hp, shots, deg=1.8, back=0.008), c)
+    c2, worst, _ = fit.refit(c, force_r=True, wclip=wc, poles=H["poles"], l_at=gg.get("hip_l_at", H["l_at"]))
+    c2["events"] = burst(0.1, len(shots))
+    c2["weapon"] = "lmg"
+    return c2, worst, up
+
+
 def gun_clips(fit, clips, log):
     """Every clip of one file (the man's, or the twin's deaths) with the gun held, slung or laid."""
     out = {}
+    clips = {k: bare(c) for k, c in clips.items()}
+    prone = None
     for name, c in clips.items():
         wpn = c.get("weapon")
         if name in ("fire_stand", "fire_kneel"):
-            shots = [0.1 + 0.1 * k for k in range(5)]
-            wc, up = fit.lift(fit.kick(c, shots), c)
-            c2, worst, _ = fit.refit(c, force_r=True, wclip=wc)
-            c2["events"] = burst(0.1, 5)
-            c2["weapon"] = "lmg"
-            c2["from"] = (c.get("from", "") + "; mg_gunners.py: the hands on the gun, a five-round burst with the gun's "
-                          "jump, no bolt to work").strip("; ")
+            H = HIP if name == "fire_stand" else KNEEL
+            c2, worst, up = hip_fire(fit, c, H, [0.1 + 0.1 * k for k in range(5)])
+            c2["from"] = (c.get("from", "") + "; mg_gunners.py: firing from the hip, a five-round burst with the gun's "
+                          "jump: leant into it, the gun level, its butt under his right arm against his ribs, his right "
+                          "fist on the grip, his left on the folded legs (never in his shoulder like a rifle)").strip("; ")
             out[name] = c2
-            log.append((name, "burst", round(worst * 100, 1), round(up * 100, 1)))
-        elif name == "fire_prone":
-            src = retimed(clips["lmg_burst"], 1.4)
-            wc, up = fit.lift(src, src)
-            c2, worst, _ = fit.refit(src, force_r=True, wclip=wc)
-            c2["events"] = burst(0.1, 4)
-            c2["weapon"] = "lmg"
-            c2["loop"] = True
-            c2["from"] = "mg_gunners.py: lmg_burst slowed to 1.4 s (a shorter burst), the hands on the gun"
+            log.append((name, "hip burst", round(worst * 100, 1), round(up * 100, 1)))
+        elif name in ("lmg_burst", "fire_prone"):
+            if prone is None:
+                src = clips["lmg_burst"]
+                upc = fit.prone_up(src, PRONE_UP)
+                wc, up = fit.lift(upc, src)
+                c2, worst, _ = fit.refit(src, force_r=True, wclip=wc, poles=PRONE_POLES)
+                c2, apart = fit.legs_down(c2)
+                prone = (c2, worst, up, apart)
+                log.append(("lmg_burst", f"prone, level, feet {apart * 100:.0f} cm apart", round(worst * 100, 1),
+                            round(up * 100, 1)))
+            c2 = dict(prone[0])
+            if name == "fire_prone":
+                c2 = retimed(c2, 1.4)
+                c2["events"] = burst(0.1, 4)
+                c2["weapon"] = "lmg"
+                c2["loop"] = True
+                c2["from"] = ("mg_gunners.py: lmg_burst (his chest up on his elbows, the gun level on its bipod) slowed "
+                              "to 1.4 s, a shorter burst")
+            else:
+                c2["from"] = (clips["lmg_burst"].get("from", "") + "; mg_gunners.py: his chest up on his elbows, the gun "
+                              "level, its legs down to the ground splayed apart").strip("; ")
             out[name] = c2
-            log.append((name, "from lmg_burst", round(worst * 100, 1), round(up * 100, 1)))
         elif wpn in ("rifle", "lmg"):
-            wc, up = fit.lift(c, c)
-            c2, worst, used = fit.refit(c, force_r=(name == "lmg_burst"), wclip=wc)
+            L = c["long"]
+            s, e = fit.aimed(c, 0.0), fit.aimed(c, L)
+            ez = min(EASE_FALL if name.startswith("die_") else EASE, 0.7 * L)
+            kind = "held "
+            if e == "prone" and s != "prone" and not name.startswith("die_"):
+                # (coming down behind the gun: up on his elbows, the gun level, its legs swinging down, as lmg_burst)
+                wfn = lambda t, L=L: fc.sm((t - (L - 0.6)) / 0.5)
+                wc, up = fit.lift(fit.prone_up(c, PRONE_UP, weight=wfn), c)
+                c2, worst, used = fit.refit(c, wclip=wc, poles={k: (lambda t, v=v, wfn=wfn: (np.array(v), wfn(t)))
+                                                                for k, v in PRONE_POLES.items()})
+                c2, _ = fit.legs_down(c2, weight=wfn)
+                kind = "down behind the gun, held "
+            elif (s in HOLDS) != (e in HOLDS):
+                # (the rifleman's clip starts or ends with his rifle aimed in his shoulder: the gunner's starts or ends
+                # in his hip hold)
+                at_end = e in HOLDS
+                H = HOLDS[e if at_end else s]
+                wfn = ((lambda t, L=L, ez=ez: fc.sm((t - (L - ez)) / ez)) if at_end else
+                       (lambda t, ez=ez: 1.0 - fc.sm(t / ez)))
+                hp = fit.hip(c, H["lean"], H["heel"], H["side"] + fit.gun.grips.get("hip_side", 0.0), H["bore_z"],
+                             weight=wfn, t_ref=(L if at_end else 0.0), delta=True)
+                wc, up = fit.lift(hp, c)
+                la = fit.gun.grips.get("hip_l_at", H["l_at"])
+                c2, worst, used = fit.refit(c, wclip=wc, poles={k: (lambda t, v=v, wfn=wfn: (np.array(v), wfn(t)))
+                                                                for k, v in H["poles"].items()},
+                                            l_at=(lambda t, la=la, wfn=wfn: (la, wfn(t))),
+                                            hold={k: (lambda t, k=k, wfn=wfn, c=c: wfn(t) * fit.by_rifle(c, k, t))
+                                                  for k in ("l", "r")}, final=name.startswith("die_"))
+                kind = ("into" if at_end else "out of") + " the hip hold, held "
+                if name.startswith("die_"):
+                    # (a fall so violent that the hold's start makes the gun or a hand leap between keys (a blast, an
+                    # arm shot away) keeps the rifleman's start: he is thrown before the hold could be seen)
+                    wc0, up0 = fit.lift(c, c)
+                    p2, worst0, used0 = fit.refit(c, wclip=wc0, final=True)
+                    if fit.leap(c2) > fit.leap(p2) + 0.12:
+                        c2, worst, used, up = p2, worst0, used0, up0
+                        kind = "held (too violent a fall for the hip start) "
+            else:
+                wc, up = fit.lift(c, c)
+                c2, worst, used = fit.refit(c, wclip=wc, final=name.startswith("die_"))
             out[name] = c2
-            log.append((name, "held " + "".join(s for s in used if used[s]), round(worst * 100, 1), round(up * 100, 1)))
+            log.append((name, kind + "".join(s_ for s_ in used if used[s_]), round(worst * 100, 1), round(up * 100, 1)))
         elif wpn == "slung":
             out[name] = fit.slung(c)
             log.append((name, "slung", 0.0, 0.0))
@@ -628,27 +1041,29 @@ def gun_low(fit, clip, ts=None):
 
 
 def bipod_feet(fit, clip):
-    """lmg_burst: the bipod's feet over the ground (the legs' ends, each key)."""
+    """lmg_burst: the bipod's feet over the ground (each leg's lowest point, each key), and how far apart they stand."""
     man = fit.man
-    bi = man.b("bipod")
     M = man.D["near"]
     P = np.array(M["points"]).reshape(-1, 3)
     part = np.array(M["part"])
-    sel = part == bi
-    Pb = P[sel]
-    ends = Pb[np.argsort(Pb[:, 0])[:8]]                  # (the legs' ends lie rearmost along the bone at rest)
-    out = []
+    lows, apart = [], []
     for t in fc.times_of(clip["long"]):
         G, X = gore.pose(man.rig, clip, t)
-        W = X[bi] + (G[bi] @ (ends - man.H[bi]).T).T
-        out.append(float(W[:, 2].min()))
-    return min(out), max(out)
+        feet = []
+        for bn in (mg_guns.LEFT_LEG, mg_guns.RIGHT_LEG):
+            bi = man.b(bn)
+            Pb = P[part == bi]
+            W = X[bi] + (G[bi] @ (Pb - man.H[bi]).T).T
+            lows.append(float(W[:, 2].min()))
+            feet.append(W[np.argmin(W[:, 2])])
+        apart.append(float(np.linalg.norm((feet[0] - feet[1])[:2])))
+    return min(lows), max(lows), min(apart), max(apart)
 
 
 # ================================================================================================ the file
 def build(army, out_dir=STAGE, log=print):
     spec = ARMIES[army]
-    gun = mg_guns.GUNS[spec["gun"]]()
+    gun = guns()[spec["gun"]]()
     D = json.load(open(SHARED + spec["base"] + ".json"))
     Tw = json.load(open(SHARED + spec["base"] + "_gore.json"))
     D0 = json.loads(json.dumps(D))
@@ -668,12 +1083,13 @@ def build(army, out_dir=STAGE, log=print):
     D["new_paints"], D["colours"] = np_, cols
     Tw["new_paints"] = dict(Tw.get("new_paints", {}), **{k: np_[k] for k in new_paint})
     Tw["colours"] = dict(Tw.get("colours", {}), **{k: cols[k] for k in new_paint})
-    # (the bipod's bone to the gun's own hinge, so its legs swing down about it)
+    # (the legs' bones (the bipod's and the bolt's) to the gun's own hinge, so the legs swing down about it)
     names = [b["name"] for b in D["bones"]]
-    if gun.hinge is not None and "bipod" in names:
+    if gun.hinge is not None:
         Hw0 = np.array(D["bones"][names.index("weapon")]["head"], float)
         for X in (D, Tw):
-            X["bones"][names.index("bipod")]["head"] = [round(float(v), 4) for v in Hw0 + gun.hinge]
+            for bn in (mg_guns.LEFT_LEG, mg_guns.RIGHT_LEG):
+                X["bones"][names.index(bn)]["head"] = [round(float(v), 4) for v in Hw0 + gun.hinge]
     rep = write_gun(D, gun, new_paint, blk)
     copy_gun(Tw, D, blk)
     log(f"{spec['out']}: gun in the rifle's places: {rep}")
@@ -695,7 +1111,8 @@ def build(army, out_dir=STAGE, log=print):
              f"(mg_gunners.py, mg_guns.py; our own drawing). The gun's points and triangles are where the rifle's were "
              f"at every level; its spare places are parked inside the receiver. His hands hold the gun in every clip "
              f"where he held the rifle (right fist on the pistol grip, the other under the gun), fire_stand and "
-             f"fire_kneel fire five-round bursts, fire_prone is lmg_burst slowed to 1.4 s, and where the rifle rode "
+             f"fire_kneel fire five-round bursts from the hip (he never fires it from his shoulder like a rifle), "
+             f"fire_prone is lmg_burst slowed to 1.4 s, and where the rifle rode "
              f"slung the gun rides on his back, drum outward. Weapon: lmg (LandMen plays lmg_burst for a prone shot).")
     for X in (D, Tw):
         X["weapon"] = "lmg"
@@ -745,14 +1162,23 @@ def checks(D, Tw, fit, notes, tw_notes, D0, log=print):
         log(f"{L}: gun triangles {tb - ta}, wound against their facings {int(big.sum()) - wrong}, the other way {wrong}")
         if wrong > 0.02 * big.sum():
             bad.append(f"{L}: {wrong} gun triangles wound the wrong way")
+    kinds = {}
+    for n, k, _, _ in notes + tw_notes:
+        kinds.setdefault(k.split(",")[0].replace(" held l", "").replace(" held r", "").replace(" held lr", "").strip(), []).append(n)
+    for k, v in kinds.items():
+        if "hip" in k or "behind" in k:
+            log(f"{k}: {len(v)} ({', '.join(v[:40])})")
     worst = sorted(notes + tw_notes, key=lambda x: -x[2])[:8]
     log("worst misses (cm) of a fist holding fully: " + ", ".join(f"{n} {w}" for n, _, w, _ in worst))
     lifts = sorted(notes + tw_notes, key=lambda x: -x[3])[:10]
     log("gun raised off the ground (cm, most): " + ", ".join(f"{n} {u}" for n, _, _, u in lifts))
     if worst and worst[0][2] > 2.0:
         bad.append(f"fist misses up to {worst[0][2]} cm")
-    lo, hi = bipod_feet(fit, D["clips"]["lmg_burst"])
-    log(f"lmg_burst: the bipod's feet {lo * 100:.1f} to {hi * 100:.1f} cm over the ground")
+    lo, hi, a0, a1 = bipod_feet(fit, D["clips"]["lmg_burst"])
+    log(f"lmg_burst: the bipod's feet {lo * 100:.1f} to {hi * 100:.1f} cm over the ground, {a0 * 100:.0f} to "
+        f"{a1 * 100:.0f} cm apart")
+    if lo < -0.01 or hi > 0.03:
+        bad.append(f"the bipod's feet {lo * 100:.1f} to {hi * 100:.1f} cm over the ground")
     for nm in ("idle", "walk", "fire_stand", "fire_kneel", "fire_prone", "lmg_burst", "crawl", "go_prone", "cower",
                "wounded_waiting", "stretcher_front", "die_back_a", "die_prone_a", "die_forward_a"):
         if nm in D["clips"]:

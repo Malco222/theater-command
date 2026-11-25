@@ -18,15 +18,16 @@ const me: Side | null = meArg === 'none' ? null : (meArg as Side);
 // stretcher bearers off, as release 1.5 ships them; unset, on, as the rules start them. Deltas already written in the
 // run's folder are reused unless LAND_LIVE_FIGHT is set: set it whenever the rules or a switch changed.)
 const on = new Set((process.env.LAND_LIVE_SWITCHES ?? '').split(',').filter(Boolean));
-const opts: LiveOpts = { me, setup: false, ...(process.env.LAND_LIVE_BEARERS === '0' ? { bearers: false } : {}), ...(on.has('blast') ? { blast: true } : {}), ...(on.has('escort') ? { escort: true } : {}), ...(on.has('mech') ? { mech: true } : {}), ...(on.has('spg') ? { spg: true } : {}), ...(on.has('td') ? { td: true } : {}), ...(on.has('cars') ? { cars: true } : {}), ...(on.has('aa') ? { aa: true } : {}), ...(on.has('light') ? { light: true } : {}), ...(on.has('life') ? { life: true } : {}), ...(on.has('hatches') ? { hatches: true } : {}), ...(on.has('teamwork') ? { teamwork: true } : {}) };
+const opts: LiveOpts = { me, setup: false, ...(process.env.LAND_LIVE_BEARERS === '0' ? { bearers: false } : {}), ...(on.has('blast') ? { blast: true } : {}), ...(on.has('teams') ? { teams: true } : {}), ...(on.has('escort') ? { escort: true } : {}), ...(on.has('mech') ? { mech: true } : {}), ...(on.has('spg') ? { spg: true } : {}), ...(on.has('td') ? { td: true } : {}), ...(on.has('cars') ? { cars: true } : {}), ...(on.has('aa') ? { aa: true } : {}), ...(on.has('light') ? { light: true } : {}), ...(on.has('life') ? { life: true } : {}), ...(on.has('hatches') ? { hatches: true } : {}), ...(on.has('teamwork') ? { teamwork: true } : {}) };
 // (LAND_LIVE_CAMPAIGN=1: the set piece's ticket fought as a campaign battle, no set piece: its stand-in models, and the
 // self-propelled guns and tank destroyers the spg and td switches draw only there)
 // (LAND_LIVE_TICKET=<file>: a campaign battle's ticket file, {ticket, live} as the campaign hands it over (its sky and
 // place), fought instead of the set piece: the lorried infantry's seats, 23 November)
 const piece = PIECES.find((p) => p.key === key);
 const ticketFile = process.env.LAND_LIVE_TICKET ? JSON.parse(readFileSync(process.env.LAND_LIVE_TICKET, 'utf8')) : null;
-// (LAND_LIVE_SWITCHES=teams, a campaign battle's only: every infantry force with its own machine-gun and mortar
-// battalions, as the Battle rules card's "teams" row has the bridge make them: src/battle/land/own-teams.ts)
+// (LAND_LIVE_SWITCHES=teams: in a campaign battle every infantry force with its own machine-gun and mortar
+// battalions, as the Battle rules card's "teams" row has the bridge make them: src/battle/land/own-teams.ts; and in
+// every battle the rules' sim.teamsRule, through the options above)
 const own = <T extends Parameters<typeof ownTeamsLook>[0]>(t: T): T => (on.has('teams') ? (ownTeamsLook(t) as T) : t);
 const withOwn = ticketFile ? own(ticketFile as { ticket: Parameters<typeof liveTicket>[0]; live?: LiveOpts }) : null;
 const L = withOwn
