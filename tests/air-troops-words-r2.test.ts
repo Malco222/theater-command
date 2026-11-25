@@ -89,6 +89,12 @@ describe('the raid card: LIKELY TO GO DOWN AND STRAFE', () => {
     TC.load(saveGame(c.g));
     const card = TC.page(`plan:ground:${c.target}:${p.picked.join('.')}`).card;
     expect(card.strafe).toEqual({ heading: HEADING, note: '', names: [], none: NONE });
+    // With every German fighter grounded before the load (none can rise: the sky is won) the 3D card names the group,
+    // the muted line once above it: round four's list, still read through the bridge.
+    const w = saar(0);
+    for (const f of w.g.airFleets) if (f.nat === 'GER') f.ftr = 0;
+    TC.load(saveGame(w.g));
+    expect(TC.page(`plan:ground:${w.target}:${p.picked.join('.')}`).card.strafe).toEqual({ heading: HEADING, note: NOTE, names: ['Groupement de Chasse 3'], none: '' });
     // Three groups in reach: each a row, in the raid's order.
     const t = saar(0, 'three');
     const q = planRaid(t.g, 'ground', t.target, t.ids, 'FRA');

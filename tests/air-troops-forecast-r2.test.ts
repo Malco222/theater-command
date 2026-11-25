@@ -578,6 +578,44 @@ describe('the sky gate (the design director, 16:04Z): a group goes down only whe
     for (const id of [LORRAINE, 36]) expect(r.named[id] ?? 0).toBeLessThan(r.seeds / 2);
   });
 
+  it('fog on raids: the fighters last seen near the target, which the card\'s odds count as rising, are in its sky gate too', () => {
+    // (Round five's check: the gate read only the groups known by name, so a card whose odds counted 800 fighters last
+    // seen near the Eifel still named a strafer. A hand-made knowledge, as airfog.ts would give one end of its band.)
+    on();
+    const g = startOpen(createGame(7, 'FRA'));
+    setWar(g, 'FRA', 'GER');
+    const target = g.regions.find((r) => r.name === 'Eifel')!.id;
+    const fl = fleetsOf(g, [BOMBERS, LORRAINE]);
+    const card = (extra: number) => {
+      const a = assessAir(g, fl, 'ground', target, { sure: () => false, extra, extraNat: 'GER', aa: 0, ruined: 0 });
+      expect(a.why).toBeNull();
+      return { a, fc: forecastAir(g, a, 'ground', target) };
+    };
+    // No group known for sure and none last seen: on that knowledge nothing rises, the sky is won, the group is named.
+    const none = card(0);
+    expect(none.a.def.length).toBe(0);
+    expect(none.a.D).toBe(0);
+    expect(none.a.unseen).toBeUndefined();
+    expect(skyWon(g, none.a)).toBe(true);
+    expect(none.fc.strafers).toEqual([LORRAINE]);
+    expect(none.fc.fire!).toBeGreaterThan(0);
+    // 800 last seen near it: the odds count them as rising (no group by name), and the gate counts the same fighters:
+    // the sky is lost on every luck, nobody is named and no ground fire is charged.
+    const many = card(800);
+    expect(many.a.def.length).toBe(0);
+    expect(many.a.unseen?.n).toBe(800);
+    expect(many.a.D).toBeCloseTo(800 * many.a.unseen!.w, 9);
+    expect(skyWon(g, many.a)).toBe(false);
+    expect(many.fc.strafers).toEqual([]);
+    expect(many.fc.fire).toBe(0);
+    // A handful last seen: still won on every luck, and the card is the card of a won sky.
+    const few = card(20);
+    expect(few.a.unseen?.n).toBe(20);
+    expect(skyWon(g, few.a)).toBe(true);
+    expect(few.fc.strafers).toEqual([LORRAINE]);
+    expect(few.fc.fire!).toBeGreaterThan(0);
+  });
+
   it('switched off: the sky is not read, and every figure is as on the lane\'s switch off', () => {
     flyKinds([]);
     expect(strafeOn()).toBe(false);

@@ -2303,6 +2303,13 @@ export interface KnownDefence {
 export interface AirAssess {
   /** Fog on raids: set only where the mission was weighed on one side's knowledge (KnownDefence), never on a raid flown. */
   known?: KnownDefence;
+  /**
+   * Fog on raids: the fighters last seen in reach of the target that the weighing counts as all rising (KnownDefence's
+   * extra): how many, the share of them that meets the raid, one's fighting weight and whose they were. Set only with
+   * `known`, and only where some rise. The sky gate of a raid on troops reads it (skyWon, skyGate), so that the card's
+   * gate counts the fighters the card's own odds count.
+   */
+  unseen?: { n: number; w: number; each: number; nat: string };
   /** Why the mission cannot be flown at all, or null. */
   why: string | null;
   place: string;
@@ -2611,6 +2618,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     out.D += unseenUp;
     out.Dpow += unseenUp * each * techMul(g, known.extraNat, 'radar');
     dPlain += unseenUp * each;
+    if (unseenUp > 0) out.unseen = { n: known.extra, w, each, nat: known.extraNat };
   }
   // The fighters' own types (fighters.ts): a small edge from measured performance, off as shipped.
   // (Fog on raids: with no group known by name there are no types to set against the escort's.)
@@ -2927,6 +2935,8 @@ export function skyWon(g: Game, a: AirAssess): boolean {
   let E = 0, Epow = 0, D = 0;
   for (const x of a.att) { const n = x.f.ftr * x.esc * x.crowd; E += n; Epow += n * worth(g, x.f); }
   for (const x of a.def) D += Math.min(x.f.est.ftr, x.f.ftr) * x.w * worth(g, x.f) * (a.height ? 1 : techMul(g, x.f.nat, 'radar'));
+  // (Fog on raids: a weighing on one side's knowledge counts the fighters last seen near the target as rising.)
+  if (a.unseen) D += a.unseen.n * a.unseen.w * a.unseen.each * (a.height ? 1 : techMul(g, a.unseen.nat, 'radar'));
   return D <= 0 || (E >= AIR.sky.least && skyHold(a, Epow, D) >= AIR.sky.win);
 }
 
@@ -4391,7 +4401,13 @@ export interface SkyGate {
 function skyGate(g: Game, a: AirAssess, air: number): 'won' | 'lost' | SkyGate {
   const C = AIR.combat, lo = 1 - C.luck, hi = 1 + C.luck;
   // The defenders as skyWon weighs them: q a fighter's weight over the target, s the group's share of their losses.
-  const def = a.D > 0 ? a.def.map((x) => ({ F: x.f.ftr, est: x.f.est.ftr, q: x.w * worth(g, x.f) * (a.height ? 1 : techMul(g, x.f.nat, 'radar')), s: (x.f.ftr * x.w) / a.D })).filter((d) => d.F > 0 && d.q > 0 && d.s > 0) : [];
+  // (Fog on raids: the fighters last seen near the target, which the card's odds count as rising, are one more group
+  // here, fit to fly and taking their share of the defenders' losses, so the gate and the odds weigh one defence.)
+  const un = a.unseen;
+  const def = a.D > 0 ? [
+    ...a.def.map((x) => ({ F: x.f.ftr, est: x.f.est.ftr, q: x.w * worth(g, x.f) * (a.height ? 1 : techMul(g, x.f.nat, 'radar')), s: (x.f.ftr * x.w) / a.D })),
+    ...(un ? [{ F: un.n, est: un.n, q: un.w * un.each * (a.height ? 1 : techMul(g, un.nat, 'radar')), s: (un.n * un.w) / a.D }] : []),
+  ].filter((d) => d.F > 0 && d.q > 0 && d.s > 0) : [];
   if (!def.length) return 'won';
   const Dnow = (X: number): number => def.reduce((t, d) => t + Math.min(d.est, d.F - Math.min(d.F, X * d.s)) * d.q, 0);
   const Xall = Math.max(...def.map((d) => d.F / d.s));
