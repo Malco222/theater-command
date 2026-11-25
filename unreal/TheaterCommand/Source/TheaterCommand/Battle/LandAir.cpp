@@ -1285,12 +1285,14 @@ namespace LandAir
 		 * how sharply the ground crests about the cell (its points' most bend, the height a crest between two of them
 		 * can stand over the cell's flat face: a step or a bank's shoulder narrower than the cell, which half of it had
 		 * let the silk cut 8 mm into). Hug, which its silk is laid and kept on, is no higher than that and no higher than
-		 * the cell's highest corner raised by half that bend: a crest between two points stands over the higher of them
-		 * by at most half its bend (a ridge with straight sides, its peak half-way between them; a round crest by an eighth),
-		 * and a step between them stands no higher than the higher. At, the whole bend over its flat face, reads a
-		 * hedgerow bank 1 m high 0.74 m higher than it is and the bank 0.8 m high along it 0.8 m higher, and the silk laid
-		 * and kept on it had floated up to 2.4 m over the ground round them (a fourth review); its lines are still kept
-		 * over At.
+		 * the cell's top (CellTop): the highest a crest can stand along any side of the cell, the ground's slopes coming
+		 * in to it either side carried on to where they meet (a ridge with straight sides exactly; never under the side's
+		 * higher end, a step's top), but no less than an eighth of its bend over its highest corner (a round crest's, and
+		 * room for the edges kept over it at points 0.125 m apart, which a step's top between two of them had let cut
+		 * 6 mm into it), nor more than half its bend over it. At, the whole bend over its flat face, reads a hedgerow bank
+		 * 1 m high 0.74 m higher than it is and the bank 0.8 m high along it 0.8 m higher, and the silk laid and kept on it
+		 * had floated up to 2.4 m over the ground round them (a fourth review); half the bend over the highest corner had
+		 * still read a round crest 0.4 m high (a fifth); its lines are still kept over At.
 		 */
 		struct UnderGrid
 		{
@@ -1328,21 +1330,67 @@ namespace LandAir
 				CellBend.assign(static_cast<size_t>(Nx * Ny), 0.0);
 				CellTop.assign(static_cast<size_t>(Nx * Ny), 0.0);
 				const size_t Up = static_cast<size_t>(Nx);
+				// (the highest a crest can stand along one side of a cell, from A to B, with Before the point before A and
+				// After the point after B: no higher than both the ground's slope coming in to A carried on and its slope
+				// going out of B carried back (a ridge with straight sides exactly, a round crest a little over it), and
+				// never under the higher of A and B, as a step's top. Worked out only where the cell bends 2 cm or more:
+				// under that half its bend is a centimetre)
+				const auto Side = [](double Before, double A, double B, double After)
+				{
+					const double In = A - Before, Out = After - B;
+					double Top = std::max(std::min(A, B - Out), std::min(A + In, B));
+					if (In != Out)
+					{
+						const double D = (B - A - Out) / (In - Out);
+						if (D > 0.0 && D < 1.0) Top = std::max(Top, A + In * D);
+					}
+					return std::max(Top, std::max(A, B));
+				};
 				for (int J = 0; J + 1 < Ny; ++J)
 				{
 					for (int I = 0; I + 1 < Nx; ++I)
 					{
 						const size_t K = static_cast<size_t>(J * Nx + I);
 						CellBend[K] = std::max(std::max(Crest[K], Crest[K + 1]), std::max(Crest[K + Up], Crest[K + Up + 1]));
-						CellTop[K] = std::max(std::max(Z[K], Z[K + 1]), std::max(Z[K + Up], Z[K + Up + 1])) + 0.5 * CellBend[K];
+						const double High = std::max(std::max(Z[K], Z[K + 1]), std::max(Z[K + Up], Z[K + Up + 1]));
+						double Top = High + 0.5 * CellBend[K];
+						if (I > 0 && I + 2 < Nx && J > 0 && J + 2 < Ny && CellBend[K] > 0.02)
+						{
+							double Sides = Side(Z[K - 1], Z[K], Z[K + 1], Z[K + 2]);
+							Sides = std::max(Sides, Side(Z[K + Up - 1], Z[K + Up], Z[K + Up + 1], Z[K + Up + 2]));
+							Sides = std::max(Sides, Side(Z[K - Up], Z[K], Z[K + Up], Z[K + 2 * Up]));
+							Sides = std::max(Sides, Side(Z[K - Up + 1], Z[K + 1], Z[K + Up + 1], Z[K + 2 * Up + 1]));
+							Top = std::min(Top, std::max(Sides, High + 0.125 * CellBend[K]));
+						}
+						CellTop[K] = Top;
 					}
 				}
 			}
+			/** The highest the ground stands (CellTop) in the cells wholly within Within of X, Y (a square about it; none
+			 * at the grid's rim, read past the silk, whose tops are not worked out from the slopes past them). */
+			double TopNear(double X, double Y, double Within) const
+			{
+				if (Nx < 4 || Ny < 4) return Most;
+				const int I0 = std::clamp(static_cast<int>(std::ceil((X - Within - X0) / Step)), 1, Nx - 3), I1 = std::clamp(static_cast<int>(std::floor((X + Within - X0) / Step)) - 1, I0, Nx - 3);
+				const int J0 = std::clamp(static_cast<int>(std::ceil((Y - Within - Y0) / Step)), 1, Ny - 3), J1 = std::clamp(static_cast<int>(std::floor((Y + Within - Y0) / Step)) - 1, J0, Ny - 3);
+				double Top = -1e18;
+				for (int J = J0; J <= J1; ++J)
+					for (int I = I0; I <= I1; ++I) Top = std::max(Top, CellTop[static_cast<size_t>(J * Nx + I)]);
+				return Top;
+			}
+			/** Whether X, Y is past the grid's inner points (in a cell at its rim, read past the silk, whose rim has no
+			 * bend: a crest there between its rim and the points within is read as flat). */
+			bool Rim(double X, double Y) const
+			{
+				return X < X0 + Step || Y < Y0 + Step || X >= X0 + (Nx - 2) * Step || Y >= Y0 + (Ny - 2) * Step;
+			}
+			// (At and Hug: the cell cut toward 0 rather than floored, the same once clamped to the grid, and the most a make
+			// costs: each is read some 11,000 times a make)
 			double At(double X, double Y) const
 			{
 				if (Nx < 2 || Ny < 2) return 0.0;
 				const double U = (X - X0) / Step, V = (Y - Y0) / Step;
-				const int I = std::clamp(static_cast<int>(std::floor(U)), 0, Nx - 2), J = std::clamp(static_cast<int>(std::floor(V)), 0, Ny - 2);
+				const int I = std::clamp(static_cast<int>(U), 0, Nx - 2), J = std::clamp(static_cast<int>(V), 0, Ny - 2);
 				const double A = std::clamp(U - I, 0.0, 1.0), B = std::clamp(V - J, 0.0, 1.0);
 				const size_t K = static_cast<size_t>(J * Nx + I), Up = static_cast<size_t>(Nx);
 				const double Flat = (Z[K] * (1.0 - A) + Z[K + 1] * A) * (1.0 - B) + (Z[K + Up] * (1.0 - A) + Z[K + Up + 1] * A) * B;
@@ -1352,7 +1400,7 @@ namespace LandAir
 			{
 				if (Nx < 2 || Ny < 2) return 0.0;
 				const double U = (X - X0) / Step, V = (Y - Y0) / Step;
-				const int I = std::clamp(static_cast<int>(std::floor(U)), 0, Nx - 2), J = std::clamp(static_cast<int>(std::floor(V)), 0, Ny - 2);
+				const int I = std::clamp(static_cast<int>(U), 0, Nx - 2), J = std::clamp(static_cast<int>(V), 0, Ny - 2);
 				const double A = std::clamp(U - I, 0.0, 1.0), B = std::clamp(V - J, 0.0, 1.0);
 				const size_t K = static_cast<size_t>(J * Nx + I), Up = static_cast<size_t>(Nx);
 				const double Flat = (Z[K] * (1.0 - A) + Z[K + 1] * A) * (1.0 - B) + (Z[K + Up] * (1.0 - A) + Z[K + Up + 1] * A) * B;
@@ -2311,24 +2359,59 @@ namespace LandAir
 			// every edge is still kept over the ground, as lifting either end more only lifts it more. A review: lifting both
 			// ends of each edge by all its shortfall, edge after edge, had lifted the tip of its crown, an end of every edge
 			// of its last ring's fan, once for each of them: lying along a bank under one edge it had stood up to 6.7 m over
-			// the ground like a tent pole, and the silk round a hedgerow bank's crest had floated up to 2.4 m over it)
-			const double Over = G.Most + Clear;
-			std::vector<double> Lift(Each, 0.0);
-			auto Keep = [&Out, &G, &Lift, Clear, Over](size_t A, size_t B)
+			// the ground like a tent pole, and the silk round a hedgerow bank's crest had floated up to 2.4 m over it.
+			// But where that would lift an end more than Spare over its room (how much higher the ground stands within
+			// Near of it than under it), the lift is shared instead so that each end stands as little over its room as can
+			// be, the same at both, the end by the bank taking the more: a fifth review found the silk a metre clear of
+			// anything within 0.6 m of it beside the banks, its edges up to 2 m long across them at its far end lifted at
+			// their far ends as much as at their ends by the bank. It still stands up to some 0.9 m so where an edge's
+			// ends both lie off the bank, as it must to keep the edge over the crest: its points stay where they lie)
+			const double Over = G.Most + Clear, Near = 0.6, Spare = 0.1;
+			std::vector<double> Lift(Each, 0.0), Room;
+			const auto RoomOf = [&Out, &G, &Room, Near, Each](size_t P)
+			{
+				if (Room.empty()) Room.assign(Each, -1.0);
+				if (Room[P] < 0.0) Room[P] = std::max(0.0, G.TopNear(Out.Points[P].X, Out.Points[P].Y, Near) - G.Hug(Out.Points[P].X, Out.Points[P].Y));
+				return Room[P];
+			};
+			auto Keep = [&Out, &G, &Lift, &RoomOf, Clear, Over, Spare](size_t A, size_t B)
 			{
 				const V3& Pa = Out.Points[A];
 				const V3& Pb = Out.Points[B];
 				if (Pa.Z >= Over && Pb.Z >= Over) return;
 				const int Steps = 2 + static_cast<int>(std::hypot(Pb.X - Pa.X, Pb.Y - Pa.Y) / (0.5 * G.Step));
+				const auto ShortAt = [&](double T) { return G.Hug(Pa.X + (Pb.X - Pa.X) * T, Pa.Y + (Pb.Y - Pa.Y) * T) + Clear - (Pa.Z + (Pb.Z - Pa.Z) * T); };
 				double La = 0.0, Lb = 0.0;
 				for (int S = 1; S < Steps; ++S)
 				{
-					const double T = static_cast<double>(S) / Steps;
-					const double Short = G.Hug(Pa.X + (Pb.X - Pa.X) * T, Pa.Y + (Pb.Y - Pa.Y) * T) + Clear - (Pa.Z + (Pb.Z - Pa.Z) * T);
+					const double T = static_cast<double>(S) / Steps, Short = ShortAt(T);
 					if (Short <= 0.0) continue;
 					const double Share = Short / ((1.0 - T) * (1.0 - T) + T * T);
 					La = std::max(La, Share * (1.0 - T));
 					Lb = std::max(Lb, Share * T);
+				}
+				if (std::max(La, Lb) > Spare)
+				{
+					const double Ra = RoomOf(A), Rb = RoomOf(B);
+					if (La > Ra + Spare || Lb > Rb + Spare)
+					{
+						// (each end lifted its room and Even more, the same Even at both: the least that keeps each point
+						// along it over the ground. Should that be under no lift at one end, that end is left and the
+						// other lifted alone, as much as it takes)
+						double Even = -1e18, OnlyA = 0.0, OnlyB = 0.0;
+						for (int S = 1; S < Steps; ++S)
+						{
+							const double T = static_cast<double>(S) / Steps, Short = ShortAt(T);
+							if (Short <= 0.0) continue;
+							Even = std::max(Even, Short - Ra * (1.0 - T) - Rb * T);
+							OnlyA = std::max(OnlyA, Short / (1.0 - T));
+							OnlyB = std::max(OnlyB, Short / T);
+						}
+						La = Ra + Even;
+						Lb = Rb + Even;
+						if (La < 0.0) { La = 0.0; Lb = OnlyB; }
+						else if (Lb < 0.0) { La = OnlyA; Lb = 0.0; }
+					}
 				}
 				Lift[A] = std::max(Lift[A], La);
 				Lift[B] = std::max(Lift[B], Lb);
@@ -2416,6 +2499,14 @@ namespace LandAir
 			return std::min(G.At(X, Y), Read + 0.1);
 		};
 		Out.HarnessLow = LineGround(Hn.X, Hn.Y) + Rope;
+		// (and where they run out past the grid's inner points, over the edge of its silk: the ground as it is there too,
+		// should it stand higher (a review found one 1.2 mm in a bank's shoulder there, past its silk, read as flat))
+		const auto RimAt = [&](double X, double Y)
+		{
+			const double Was2 = G.At(X, Y);
+			if (!Ground || !G.Rim(X, Y)) return Was2;
+			return std::max(Was2, Ground(C.Landed.X + Fw.X * X + Rt.X * Y, C.Landed.Y + Fw.Y * X + Rt.Y * Y) - C.Landed.Z);
+		};
 		for (int Sm = 0; Sm < Seams; ++Sm)
 		{
 			if (!LineBack(static_cast<size_t>(Sm), static_cast<size_t>(Seams))) continue;
@@ -3034,7 +3125,7 @@ namespace LandAir
 				}
 				// (never under the ground: each point, and each span both its ends lifted where the ground between stands
 				// higher, the nearer the more)
-				for (int J = 0; J < LineVia; ++J) P[J].Z = std::max(P[J].Z, G.At(P[J].X, P[J].Y) + Rope);
+				for (int J = 0; J < LineVia; ++J) P[J].Z = std::max(P[J].Z, RimAt(P[J].X, P[J].Y) + Rope);
 				if (Ground)
 				{
 					double Lift[LineVia] = {};
@@ -3047,7 +3138,7 @@ namespace LandAir
 						{
 							const double T = Q / static_cast<double>(Subs);
 							const double Ux = A.X + (B.X - A.X) * T, Uy = A.Y + (B.Y - A.Y) * T;
-							const double Short = (J < 0 ? LineGround(Ux, Uy) : G.At(Ux, Uy)) + Rope - (A.Z + (B.Z - A.Z) * T);
+							const double Short = (J < 0 ? LineGround(Ux, Uy) : RimAt(Ux, Uy)) + Rope - (A.Z + (B.Z - A.Z) * T);
 							if (Short <= 0.0) continue;
 							if (J < 0)
 							{
@@ -3110,6 +3201,47 @@ namespace LandAir
 				}
 				Out.Across.push_back(S.Seam);
 				std::copy(P, P + LineVia, Out.Over.begin() + static_cast<std::ptrdiff_t>(Ln * static_cast<size_t>(LineVia)));
+			}
+		}
+		// (and over its silk as the scene moves them from the last make's toward these (SilkStep: each point straight
+		// from one to the other), where it hands that make's: where one slides over a crest on the way (a bank's, a
+		// ditch's lip), lifted here as much as the straight would pass under the ground the silk is laid on (Hug) there
+		// and Rope more. With its silk laid lower round a bank's crest (a fifth review), one had gone 4.7 mm into it
+		// between makes, its points sliding 0.7 m along it across the crest: each make keeps them over the ground, not
+		// the way between)
+		if (Ground && KeptWas.AcrossWas == Out.Across && KeptWas.OverWas.size() == Out.Over.size())
+		{
+			for (size_t Ln = 0; Ln < Out.Across.size(); ++Ln)
+			{
+				V3* B = &Out.Over[Ln * static_cast<size_t>(LineVia)];
+				const V3* A = &KeptWas.OverWas[Ln * static_cast<size_t>(LineVia)];
+				double Lift[LineVia] = {};
+				for (int J = LineGrass; J < LineVia; ++J)
+				{
+					const bool bMoves = std::hypot(B[J].X - A[J].X, B[J].Y - A[J].Y) > 0.05;
+					const bool bNext = J + 1 < LineVia && (bMoves || std::hypot(B[J + 1].X - A[J + 1].X, B[J + 1].Y - A[J + 1].Y) > 0.05);
+					for (int Q = 1; Q < 4 && (bMoves || bNext); ++Q)
+					{
+						const double T = Q / 4.0;
+						const V3 P0 = Plus(A[J], Times(Minus(B[J], A[J]), T));
+						if (bMoves)
+						{
+							const double Short = G.Hug(P0.X, P0.Y) + Rope - P0.Z;
+							if (Short > 0.0) Lift[J] = std::max(Lift[J], Short / T);
+						}
+						if (bNext)
+						{
+							const V3 Mid = Times(Plus(P0, Plus(A[J + 1], Times(Minus(B[J + 1], A[J + 1]), T))), 0.5);
+							const double Short = G.Hug(Mid.X, Mid.Y) + Rope - Mid.Z;
+							if (Short > 0.0)
+							{
+								Lift[J] = std::max(Lift[J], Short / T);
+								Lift[J + 1] = std::max(Lift[J + 1], Short / T);
+							}
+						}
+					}
+				}
+				for (int J = LineGrass; J < LineVia; ++J) B[J].Z += Lift[J];
 			}
 		}
 	}
@@ -3183,6 +3315,8 @@ namespace LandAir
 		{
 			// (what it works out once as it lies, from the shape just made, should it not have it)
 			if (To.Kept.Key != From.Kept.Key) To.Kept = From.Kept;
+			To.Kept.OverWas = From.Over;
+			To.Kept.AcrossWas = From.Across;
 			HeapShape(C, ToSlump, Off, To, Ground);
 		}
 		else

@@ -213,11 +213,14 @@ namespace LandAir
 		double HarnessLow = -1e9;
 		// (HeapShape's own: what it works out once for it as it lies, the same every make while his chute and where it
 		// lies are, kept for its next make: what that was worked out for, its lying shape before the ground, how much of a
-		// fold across it there is at each point, how its lines lie across it, and what each column round it shares)
+		// fold across it there is at each point, how its lines lie across it, and what each column round it shares; and,
+		// handed it by SilkStep for the one make it is moved toward from the last, that make's lines across it (Across and
+		// Over), which HeapShape keeps its own over the ground on the way from, and leaves empty)
 		struct LyingKept
 		{
 			std::vector<double> Key, Crossing, Laid, Columns;
-			std::vector<V3> Lies;
+			std::vector<V3> Lies, OverWas;
+			std::vector<int> AcrossWas;
 		};
 		LyingKept Kept;
 		void Clear();
