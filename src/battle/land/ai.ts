@@ -30,6 +30,12 @@ import type { LandUnit } from './units';
 const ok = (u: LandUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn' && u.state !== 'routing';
 const isFoot = (u: LandUnit): boolean => MOTION[u.kind] === 'foot';
 const isMobile = (u: LandUnit): boolean => u.kind === 'arm' || u.kind === 'mot';
+/**
+ * A block of the support teams the `teams` rule reads (sim.teamsRule; the sim's own ownArm): a machine-gun or a mortar
+ * team. A team of any other arm (a sniper pair, release 2) is never the rule's: on, the staff reads it as it does with
+ * the rule off.
+ */
+const ownArm = (u: LandUnit): boolean => u.team === 'mg' || u.team === 'mor';
 /** Close ground where tanks see little: they keep with their foot there and never hook (item 7). */
 const CLOSE: Ground[] = ['woods', 'buildings', 'industry', 'suburb'];
 
@@ -464,7 +470,7 @@ function planned(b: LandBattle, side: Side, s: Style, mine: LandUnit[], foes: La
   for (const g of guns) {
     // (Support teams in battle, sim.teamsRule: a team is never laid on the main effort's target. It fires on what its own
     // weapon harms most, the sim's targetOf: the design director, 25 November 20:03Z, mend 2.)
-    if (b.teamsRule && g.team) delete g.aim;
+    if (b.teamsRule && ownArm(g)) delete g.aim;
     else if (s.plan) { const t = mainNow(b, P); if (t) g.aim = t.id; else delete g.aim; }
     if (g.order?.kind !== 'withdraw') gunsUp(b, side, g, foes);
   }
@@ -487,7 +493,7 @@ function planned(b: LandBattle, side: Side, s: Style, mine: LandUnit[], foes: La
     // It waits under its own guns: an army with none on the field goes in as soon as it is on its start line.
     // (Support teams in battle, sim.teamsRule: a team is not a gun for the preparation, so an army whose only fire is its
     // own teams goes in as soon as it is on its start line: the design director, 25 November 20:03Z, mend 3.)
-    const wait = guns.some((g) => !(b.teamsRule && g.team)) ? s.wait : 0;
+    const wait = guns.some((g) => !(b.teamsRule && ownArm(g))) ? s.wait : 0;
     if ((P.arrived !== null && b.t >= P.arrived + wait) || b.t >= STYLE.latest * limit || !us.length) { P.went = b.t; P.phase = 'assault'; }
   }
   const going = P.went !== null;
@@ -638,7 +644,7 @@ function defend(b: LandBattle, side: Side, style: Style | null, mine: LandUnit[]
     if (shaky) { by(b, side, u, shaky); continue; }
     // (Support teams in battle, sim.teamsRule: a team block is no neighbour in a fight. It fires from far back, as the
     // guns do, so what it fires on has not come round anyone's flank: the design director, 25 November 17:52Z, mend T.)
-    const round = foes.find((f) => dist(f.x, f.y, u.home[0], u.home[1]) < leash && !outside(f) && mine.some((m) => !(b.teamsRule && m.team) && m.engaged === f.id && m !== u));
+    const round = foes.find((f) => dist(f.x, f.y, u.home[0], u.home[1]) < leash && !outside(f) && mine.some((m) => !(b.teamsRule && ownArm(m)) && m.engaged === f.id && m !== u));
     if (round) by(b, side, u, round);
   }
 }

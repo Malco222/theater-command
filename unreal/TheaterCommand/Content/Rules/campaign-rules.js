@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c9fff9a17 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 1ee5e25f3 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -90539,6 +90539,7 @@
   var ok = (u) => u.state !== "gone" && u.state !== "withdrawn" && u.state !== "routing";
   var isFoot2 = (u) => MOTION[u.kind] === "foot";
   var isMobile = (u) => u.kind === "arm" || u.kind === "mot";
+  var ownArm = (u) => u.team === "mg" || u.team === "mor";
   var CLOSE2 = ["woods", "buildings", "industry", "suburb"];
   var MAIN = 1e5;
   function thinkFor(b, side5) {
@@ -90858,7 +90859,7 @@
     for (const u of mine4) if (u.team === "snp") snipersUp(b, side5, u, mine4, foes);
     const role = (u) => P.role[u.id] ?? "pin";
     for (const g2 of guns2) {
-      if (b.teamsRule && g2.team) delete g2.aim;
+      if (b.teamsRule && ownArm(g2)) delete g2.aim;
       else if (s.plan) {
         const t2 = mainNow(b, P);
         if (t2) g2.aim = t2.id;
@@ -90878,7 +90879,7 @@
       const withTeams = (u) => u.power0 + (b.teamsRule ? b.ownTeamsPower(u) : 0);
       const all = stood.reduce((a, u) => a + withTeams(u), 0);
       if (P.arrived === null && stood.filter(there).reduce((a, u) => a + withTeams(u), 0) >= 0.75 * all) P.arrived = b.t;
-      const wait = guns2.some((g2) => !(b.teamsRule && g2.team)) ? s.wait : 0;
+      const wait = guns2.some((g2) => !(b.teamsRule && ownArm(g2))) ? s.wait : 0;
       if (P.arrived !== null && b.t >= P.arrived + wait || b.t >= STYLE.latest * limit || !us.length) {
         P.went = b.t;
         P.phase = "assault";
@@ -91028,7 +91029,7 @@
         by(b, side5, u, shaky);
         continue;
       }
-      const round3 = foes.find((f) => dist(f.x, f.y, u.home[0], u.home[1]) < leash2 && !outside(f) && mine4.some((m) => !(b.teamsRule && m.team) && m.engaged === f.id && m !== u));
+      const round3 = foes.find((f) => dist(f.x, f.y, u.home[0], u.home[1]) < leash2 && !outside(f) && mine4.some((m) => !(b.teamsRule && ownArm(m)) && m.engaged === f.id && m !== u));
       if (round3) by(b, side5, u, round3);
     }
   }
@@ -97418,7 +97419,7 @@
   var live4 = (u) => u.state !== "gone" && u.state !== "withdrawn";
   var fighting2 = (u) => live4(u) && u.state !== "routing";
   var weightOf = (u) => u.priced ?? u.power0;
-  var ownArm = (u) => u.team === "mg" || u.team === "mor";
+  var ownArm2 = (u) => u.team === "mg" || u.team === "mor";
   var INWARD = { south: [0, 1, 0], north: [0, -1, Math.PI], west: [1, 0, Math.PI / 2], east: [-1, 0, 1.5 * Math.PI] };
   function joinEdge(side5, toward, own) {
     if (toward === void 0 || !Number.isFinite(toward)) return side5 === "att" ? "south" : "north";
@@ -100299,7 +100300,7 @@
       }
       if (u.hid && u.order?.kind !== "attack" && !snp) reach3 = Math.min(reach3, this.ambushAt(u));
       let best = null, score = Infinity;
-      const T = this.teamsRule && ownArm(u) ? LAND3.teams[u.team] : null;
+      const T = this.teamsRule && ownArm2(u) ? LAND3.teams[u.team] : null;
       let harm = 0;
       for (const e of this.units) {
         if (e.side === u.side || !live4(e) || e.hid) continue;
@@ -100526,7 +100527,7 @@
      */
     tally(h, u, blow3) {
       h.dmg += blow3.dmg;
-      if (this.teamsRule && ownArm(u)) {
+      if (this.teamsRule && ownArm2(u)) {
         h.team += blow3.dmg;
         h.teamNerve += blow3.dmg * blow3.nerve;
       } else h.nerve += blow3.nerve;
@@ -101201,7 +101202,7 @@
      * Empty for every other block, and for a team block with no division of its own.
      */
     ownLine(u) {
-      if (!ownArm(u)) return [];
+      if (!ownArm2(u)) return [];
       const parent = this.teamParent.get(u.corps);
       return parent === void 0 ? [] : this.units.filter((p) => p.corps === parent && !p.team);
     }
@@ -101214,7 +101215,7 @@
       if (u.team || !this.teamParent.size) return 0;
       let n = 0;
       for (const t of this.units) {
-        if (!ownArm(t) || this.teamParent.get(t.corps) !== u.corps) continue;
+        if (!ownArm2(t) || this.teamParent.get(t.corps) !== u.corps) continue;
         const line = this.ownLine(t), whole2 = line.reduce((a, p) => a + p.power0, 0);
         if (whole2 > 0 && line.includes(u)) n += t.power0 * (u.power0 / whole2);
       }
@@ -101230,7 +101231,7 @@
      * nothing in the running or the fresh, whatever its division.
      */
     asItsLine(u, whole2, part) {
-      if (!this.teamsRule || !ownArm(u)) return null;
+      if (!this.teamsRule || !ownArm2(u)) return null;
       const line = this.ownLine(u);
       if (!line.length) return null;
       const all = line.reduce((a, p) => a + whole2(p), 0);
