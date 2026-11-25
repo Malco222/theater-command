@@ -3290,7 +3290,26 @@ int main(int Argc, char** Argv)
 			// (the game's pick once the field is laid, its snow known: LandBattle's PickWeather; the day as HideTheTable lays it)
 			FallAsked.SnowLying = G.SnowLying();
 			FallAsked.Look = G.LookWord();
-			const LandWeather::Weather W = LandWeather::Pick(FallAsked, LandWeather::Book());
+			// (LAND_FIELD_DAY_SET="day.snow.sky_dimmer=0.3,...": numbers over the pick's and the day's standing ones, as
+			// land-weather.json's over the game's)
+			std::map<std::string, double> DayAsked;
+			if (const char* Set = std::getenv("LAND_FIELD_DAY_SET"))
+			{
+				const std::string SetText = Set;
+				for (size_t At = 0; At < SetText.size();)
+				{
+					const size_t End = std::min(SetText.find(',', At), SetText.size()), Eq = SetText.find('=', At);
+					if (Eq < End) DayAsked[SetText.substr(At, Eq - At)] = std::atof(SetText.substr(Eq + 1, End - Eq - 1).c_str());
+					At = End + 1;
+				}
+			}
+			const LandWeather::Weather W = LandWeather::Pick(FallAsked, [&DayAsked](const char* Path, double& Out)
+			{
+				const auto It = DayAsked.find(Path);
+				if (It == DayAsked.end()) return false;
+				Out = It->second;
+				return true;
+			});
 			std::printf("falling: %s", W.Why.c_str());
 			if (W.Kind != WeatherFall::Kind::None) std::printf(" (%s at %.2f, the haze x%.2f, the light x%.2f, the ground %.2f wet)", WeatherFall::NameOf(W.Kind), W.Strength, W.HazeTimes, W.LightTimes, F.Rain);
 			std::printf("\n");
@@ -3313,7 +3332,29 @@ int main(int Argc, char** Argv)
 						Drops.WindX = Wind->A[0].N;
 						Drops.WindY = Wind->A[1].N;
 					}
-				Sk.Over = WeatherFallPicture::Over(WeatherFall::Recipe::Standing(), Drops);
+				// (LAND_FIELD_FALL_HIDE: the same day without its drops, to measure what they add)
+				// (LAND_FIELD_FALL_SET="strength_alpha=0.2,rain.near.alpha=0.3": numbers over the drops' standing ones, as the
+				// game's -TheaterFxSet=fall.... over land-weather.json's)
+				WeatherFall::Recipe Recipe = WeatherFall::Recipe::Standing();
+				if (const char* Set = std::getenv("LAND_FIELD_FALL_SET"))
+				{
+					std::map<std::string, double> Asked;
+					const std::string SetText = Set;
+					for (size_t At = 0; At < SetText.size();)
+					{
+						const size_t End = std::min(SetText.find(',', At), SetText.size()), Eq = SetText.find('=', At);
+						if (Eq < End) Asked[SetText.substr(At, Eq - At)] = std::atof(SetText.substr(Eq + 1, End - Eq - 1).c_str());
+						At = End + 1;
+					}
+					Recipe.ReadOver([&Asked](const char* Path, double& Out)
+					{
+						const auto It = Asked.find(Path);
+						if (It == Asked.end()) return false;
+						Out = It->second;
+						return true;
+					});
+				}
+				if (!std::getenv("LAND_FIELD_FALL_HIDE")) Sk.Over = WeatherFallPicture::Over(Recipe, Drops);
 			}
 		}
 		if (!LandFieldPicture::Paint(G, F, Sk, Key, Argv[2])) ++Failures;

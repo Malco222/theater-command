@@ -53,7 +53,10 @@ namespace WeatherFall
 	 * The recipe: the layers of each kind and the step every fall and wind is a whole number of (Step, metres a second;
 	 * the period, a layer's box over its step, is how long before every drop is back where it began), the least a drop
 	 * is drawn across (LeastPx, pixels: thinner, it is drawn that wide and as much fainter), MostDrops (a layer's mesh at
-	 * most), StrengthAlpha (at no strength the drops show this share of their alpha; at full, all of it), StrengthLength
+	 * most), StrengthAlpha (at no strength the drops show this share of their alpha; at full, all of it), rising with the
+	 * strength to the power StrengthAlphaCurve (over 1, a light rain fainter still: a downpour's drops are bigger, and a
+	 * light rain's streaks lift a third less off the ground than a downpour's, the art director's round 2 C); snow's
+	 * flakes SnowStrengthAlpha (a light snow's flakes each as plain to see, only fewer), StrengthLength
 	 * (at no strength a streak is this share of its length: a light rain's drops smaller and slower, its streaks shorter).
 	 */
 	struct Recipe
@@ -62,7 +65,9 @@ namespace WeatherFall
 		double RainStep = 1.0 / 6.0, SnowStep = 1.0 / 15.0;
 		double LeastPx = 1.25;
 		int MostDrops = 60000;
-		double StrengthAlpha = 0.35;
+		double StrengthAlpha = 0.0;
+		double StrengthAlphaCurve = 1.5;
+		double SnowStrengthAlpha = 0.7;
 		double StrengthLength = 0.3;
 
 		/** The recipe's own numbers (the art director's first round). */

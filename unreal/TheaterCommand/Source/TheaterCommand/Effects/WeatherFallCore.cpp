@@ -114,21 +114,28 @@ namespace WeatherFall
 		// and so on. Tools/land_weather counts them)
 		Recipe R;
 		R.Rain = {
-			Rained("near", 8.0, 2.0, 0.003, 0.55, 0.28, 1.1, 0.6, 1.6, 2),
-			Rained("middle", 22.0, 1.2, 0.006, 0.75, 0.22, 1.0, 3.0, 4.5, 0),
-			Rained("far", 64.0, 0.2, 0.02, 1.3, 0.14, 0.95, 8.0, 12.0, -1),
+			Rained("near", 8.0, 2.0, 0.003, 0.55, 0.45, 1.1, 0.6, 1.6, 2),
+			Rained("middle", 22.0, 1.2, 0.006, 0.75, 0.35, 1.0, 3.0, 4.5, 0),
+			Rained("far", 64.0, 0.2, 0.02, 1.3, 0.22, 0.95, 8.0, 12.0, -1),
 		};
 		// (the layers lean about 5 degrees apart in the same wind, the art director's R4: near gusts, far steadier)
 		R.Rain[0].WindShare = 1.25;
 		R.Rain[2].WindShare = 0.75;
 		R.MostDrops = 60000;
-		R.StrengthAlpha = 0.35;
+		// (a light rain's streaks shorter and a third fainter against the ground than a downpour's: the alpha with the
+		// strength's 1.5th power, each layer's alpha raised so a downpour's lift about where it was; the art director's
+		// round 2 C. A light snow's flakes each as plain, only fewer)
+		R.StrengthAlpha = 0.0;
+		R.StrengthAlphaCurve = 1.5;
+		R.SnowStrengthAlpha = 0.7;
 		R.StrengthLength = 0.3;
 		R.Snow = {
-			Snowed("near", 8.0, 2.0, 0.012, 0.9, 0.4, 1.0, 0.12, 2),
-			Snowed("middle", 22.0, 1.0, 0.02, 0.8, 3.0, 4.5, 0.15, 0),
+			Snowed("near", 8.0, 2.0, 0.03, 0.9, 0.4, 1.0, 0.12, 2),
+			Snowed("middle", 22.0, 1.0, 0.025, 0.8, 3.0, 4.5, 0.15, 0),
 			Snowed("far", 64.0, 0.2, 0.05, 0.55, 8.0, 12.0, 0.2, -1),
 		};
+		// (the flakes soft discs, the near ones 5 to 9 pixels in a 675-pixel picture and the middle ones 2 to 4, as the
+		// big soft flakes a lens sees near it: the art director's S3, round 2)
 		R.Snow[0].WindShare = 0.75;
 		R.Snow[2].WindShare = 0.45;
 		return R;
@@ -146,6 +153,8 @@ namespace WeatherFall
 		Num("snow_step", SnowStep);
 		Num("least_px", LeastPx);
 		Num("strength_alpha", StrengthAlpha);
+		Num("strength_alpha_curve", StrengthAlphaCurve);
+		Num("snow_strength_alpha", SnowStrengthAlpha);
 		Num("strength_length", StrengthLength);
 		double Most = MostDrops;
 		Num("most_drops", Most);
@@ -154,6 +163,8 @@ namespace WeatherFall
 		SnowStep = std::clamp(SnowStep, 0.005, 2.0);
 		LeastPx = std::clamp(LeastPx, 0.0, 8.0);
 		StrengthAlpha = std::clamp(StrengthAlpha, 0.0, 1.0);
+		StrengthAlphaCurve = std::clamp(StrengthAlphaCurve, 0.25, 4.0);
+		SnowStrengthAlpha = std::clamp(SnowStrengthAlpha, 0.0, 1.0);
 		StrengthLength = std::clamp(StrengthLength, 0.0, 1.0);
 		for (Layer& L : Rain) ReadLayer(Find, "rain", L);
 		for (Layer& L : Snow) ReadLayer(Find, "snow", L);
@@ -259,7 +270,8 @@ namespace WeatherFall
 		P.Lens[1] = static_cast<float>(R.LeastPx);
 		P.Lens[2] = K == Kind::Snow ? 1.0f : 0.0f;
 		P.Lens[3] = static_cast<float>(L.FarFade);
-		P.Opacity = static_cast<float>(L.Alpha * (R.StrengthAlpha + (1.0 - R.StrengthAlpha) * S));
+		const double Least = K == Kind::Snow ? R.SnowStrengthAlpha : R.StrengthAlpha, Curve = K == Kind::Snow ? 1.0 : R.StrengthAlphaCurve;
+		P.Opacity = static_cast<float>(L.Alpha * (Least + (1.0 - Least) * std::pow(S, Curve)));
 		P.Tone = static_cast<float>(L.Tone);
 		return P;
 	}

@@ -129,6 +129,18 @@ namespace LandWeather
 		{
 			return W;
 		}
+		// (falling snow switched apart from rain: off, none falls where it would, the day as drawn; on, no harder than
+		// pick.snow.most, the strength at which the field still reads, should the Mac find it at less than 1)
+		if (Forced.empty() && W.Kind == WeatherFall::Kind::Snow)
+		{
+			if (!A.bSnowFalls)
+			{
+				Weather Dry;
+				Dry.Why = W.Why + "; falling snow is off (-TheaterLandFallingSnow): none falls";
+				return Dry;
+			}
+			W.Strength = std::min(W.Strength, Num(Numbers, "pick.snow.most", 1.0));
+		}
 		// (a tropical downpour is heavier; rain over the desert lighter)
 		if (Forced.empty() && W.Kind == WeatherFall::Kind::Rain)
 		{
@@ -164,14 +176,18 @@ namespace LandWeather
 		}
 		else
 		{
+			// (the haze takes the lid's own grey, darker than the snow lying under it, so the grey lid stands over white
+			// ground at the horizon too: the art director's round 2 on S2. Even a light snow's haze mostly the lid's)
 			W.HazeTimes = 1.0 + Num(Numbers, "day.snow.haze_more", 0.6) * S;
-			W.HazeToward = Num(Numbers, "day.snow.haze_toward", 0.8) * S;
-			W.HazeInk[0] = Num(Numbers, "day.snow.haze_r", 0.45);
-			W.HazeInk[1] = Num(Numbers, "day.snow.haze_g", 0.47);
-			W.HazeInk[2] = Num(Numbers, "day.snow.haze_b", 0.52);
-			W.LightTimes = 1.0 - Num(Numbers, "day.snow.dimmer", 0.1) * S;
-			W.SkyTimes = 1.0 - Num(Numbers, "day.snow.sky_dimmer", 0.25) * S;
-			W.InkOverHaze = Num(Numbers, "day.snow.ink_over_haze", 1.75);
+			W.HazeToward = Num(Numbers, "day.snow.haze_toward", 1.0) * std::sqrt(S);
+			W.HazeInk[0] = Num(Numbers, "day.snow.haze_r", 0.38);
+			W.HazeInk[1] = Num(Numbers, "day.snow.haze_g", 0.40);
+			W.HazeInk[2] = Num(Numbers, "day.snow.haze_b", 0.45);
+			W.LightTimes = 1.0 - Num(Numbers, "day.snow.dimmer", 0.0) * S; // (the snow lying keeps its white: L205 to 220 near)
+			W.SkyTimes = 1.0 - Num(Numbers, "day.snow.sky_dimmer", 0.45) * S;
+			// (the flakes light discs, L225 to 240 against the lid, a wood or a hull: three times the darker haze's grey,
+			// the art director's S3)
+			W.InkOverHaze = Num(Numbers, "day.snow.ink_over_haze", 3.0);
 		}
 		W.HazeTimes = std::max(1.0, W.HazeTimes);
 		W.HazeToward = std::clamp(W.HazeToward, 0.0, 1.0);

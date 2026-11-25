@@ -29,6 +29,10 @@ namespace LandWeather
 		/** "-TheaterLandFall=rain,0.8" (or "snow,0.5", or "none"): the Mac's stand-in, whatever the day. */
 		std::string ForcedKind;
 		double ForcedStrength = -1.0;
+		/** Whether snow may fall ("-TheaterLandFallingSnow", the ship list's "fallingsnow" row, beside "falling"): rain
+		 * and snow pass the Mac apart (the art director, round 2), so falling snow has its own switch. Off: where snow
+		 * would fall none does, the day as drawn. A forced kind falls whatever this says. */
+		bool bSnowFalls = true;
 	};
 
 	/** The battle's weather, and the day's changes for it. */

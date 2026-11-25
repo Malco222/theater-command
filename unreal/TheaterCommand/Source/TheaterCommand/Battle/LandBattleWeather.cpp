@@ -6,8 +6,9 @@
 // ground, the hedges and the steel with a wet sheen, the rain heard (LandSound's rain bed). Looks only: nothing in any
 // fight reads it.
 //
-// "-TheaterLandFalling" turns it on (the ship list's "falling" row); "-TheaterLandFall=rain,0.8" (or "snow,0.5", a
-// strength alone, or "none") sets what falls whatever the day, for the Mac's stills; the numbers are
+// "-TheaterLandFalling" turns it on (the ship list's "falling" row), and "-TheaterLandFallingSnow" with it lets snow fall
+// too (its own row, "fallingsnow": rain and snow pass the Mac apart); "-TheaterLandFall=rain,0.8" (or "snow,0.5", a
+// strength alone, or "none") sets what falls whatever the day and either switch, for the Mac's stills; the numbers are
 // Content/Effects/land-weather.json's.
 
 #include "Battle/LandBattle.h"
@@ -98,6 +99,13 @@ namespace
 		FString Forced;
 		return FParse::Param(FCommandLine::Get(), TEXT("TheaterLandFalling")) || FParse::Value(FCommandLine::Get(), TEXT("TheaterLandFall="), Forced, false);
 	}
+
+	/** Whether snow may fall too ("-TheaterLandFallingSnow", the ship list's "fallingsnow" row): rain and snow pass the
+	 * Mac apart, so falling snow has its own switch, with "-TheaterLandFalling" (the art director, round 2). */
+	bool SnowFallingAsked()
+	{
+		return FParse::Param(FCommandLine::Get(), TEXT("TheaterLandFallingSnow"));
+	}
 }
 
 double ALandBattle::RainOnField(const FString& Word, const FString& Look)
@@ -142,6 +150,7 @@ void ALandBattle::PickWeather()
 		A.Look = S.Field->LookWord();
 	}
 	ForcedOf(A);
+	A.bSnowFalls = SnowFallingAsked();
 	S.Weather = LandWeather::Pick(A, BookOf(Fall.Get()));
 	const LandWeather::Weather& W = S.Weather;
 	if (W.Kind == WeatherFall::Kind::None)
@@ -184,9 +193,14 @@ void ALandBattle::MakeFall()
 	{
 		return;
 	}
-	// (the same battle, the same drops: the seed from the recording)
-	const std::string Head = S.RecText.substr(0, std::min<size_t>(S.RecText.size(), 4096));
-	const uint64 Seed = static_cast<uint64>(std::hash<std::string>{}(Head)) ^ (static_cast<uint64>(S.RecText.size()) * 0x9E3779B97F4A7C15ull);
+	// (the same battle, the same drops: the seed from the recording, by FNV-1a over its head, the same on every
+	// machine; std::hash is not, libc++'s and libstdc++'s differ)
+	uint64 Seed = 0xCBF29CE484222325ull;
+	for (size_t K = 0; K < std::min<size_t>(S.RecText.size(), 4096); ++K)
+	{
+		Seed = (Seed ^ static_cast<uint8>(S.RecText[K])) * 0x100000001B3ull;
+	}
+	Seed ^= static_cast<uint64>(S.RecText.size()) * 0x9E3779B97F4A7C15ull;
 	if (!Fall->Setup(Root, UnitsPerMetre, Seed))
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Land battle: the drops are not drawn (see above); the haze, the light and the wet ground are laid for the %s"), ANSI_TO_TCHAR(WeatherFall::NameOf(W.Kind)));
@@ -196,7 +210,8 @@ void ALandBattle::MakeFall()
 	const FVector Blowing = S.Rec.Weather.bWind ? WorldWay(S.Rec.Weather.WindX, S.Rec.Weather.WindY, 0.0) : WorldWay(2.6, 1.2, 0.0);
 	Fall->SetWind(Blowing.X, Blowing.Y);
 	// The drops' colour: the haze behind them as the day lights it, a little brighter (a drop catches the sky's light).
-	Fall->SetInk(FLinearColor(FallInk.R, FallInk.G, FallInk.B, 1.0f) * static_cast<float>(W.InkOverHaze));
+	const float InkTimes = static_cast<float>(W.InkOverHaze);
+	Fall->SetInk(FLinearColor(FallInk.R * InkTimes, FallInk.G * InkTimes, FallInk.B * InkTimes, 1.0f)); // (its alpha kept 1)
 	Fall->SetLight(1.0);
 	Fall->SetFall(W.Kind, W.Strength);
 	UE_LOG(LogTheater, Display, TEXT("Land battle: %s"), *Fall->Said());

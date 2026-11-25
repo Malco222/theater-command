@@ -142,6 +142,34 @@ namespace
 		Check(Pick("clear", 0.1, false, 0.0, "bocage", "0.6").Kind == WeatherFall::Kind::Rain, "-TheaterLandFall=0.6 elsewhere: rain");
 		Check(Pick("clear", 0.1, false, 0.0, "bocage", "Snow, 0.5").Kind == WeatherFall::Kind::Snow, "-TheaterLandFall=Snow, 0.5 read loosely");
 		Check(Pick("clear", 0.1, false, 0.0, "bocage", "rain,0").Kind == WeatherFall::Kind::None, "-TheaterLandFall=rain,0: none");
+		// Falling snow's own switch (-TheaterLandFallingSnow): off, none falls where snow would, rain as ever; a forced
+		// kind falls whatever it says; pick.snow.most caps a snow (the art director's round 2: rain and snow pass apart).
+		{
+			auto Switched = [](const std::string& Word, double Cover, double Lying, bool bSnowFalls, const std::string& Asking = "", const LandWeather::Book& Numbers = LandWeather::Book())
+			{
+				Asked A;
+				A.Word = Word;
+				A.Cover = Cover;
+				A.bDeck = true;
+				A.SnowLying = Lying;
+				A.bSnowFalls = bSnowFalls;
+				if (!Asking.empty()) LandWeather::ReadForced(Asking, A.ForcedKind, A.ForcedStrength);
+				return LandWeather::Pick(A, Numbers);
+			};
+			const LandWeather::Weather NoSnow = Switched("snow", 0.95, 0.8, false);
+			Check(NoSnow.Kind == WeatherFall::Kind::None && NoSnow.HazeTimes == 1.0 && NoSnow.SkyTimes == 1.0, "falling snow off: the snow months' deck lets none fall, the day as drawn");
+			Check(Switched("rain", 0.9, 0.5, false).Kind == WeatherFall::Kind::None, "falling snow off: rain's sky over snow lying, none falls");
+			Check(Switched("rain", 0.9, 0.0, false).Kind == WeatherFall::Kind::Rain, "falling snow off: rain falls as ever");
+			Check(Switched("clear", 0.1, 0.0, false, "snow,0.8").Kind == WeatherFall::Kind::Snow, "falling snow off: -TheaterLandFall=snow,0.8 snows still (the Mac's stills)");
+			const LandWeather::Weather Capped = Switched("snow", 1.0, 0.8, true, "", [](const char* Path, double& Out)
+			{
+				if (std::string(Path) == "pick.snow.most") { Out = 0.5; return true; }
+				return false;
+			});
+			Check(Capped.Kind == WeatherFall::Kind::Snow && std::fabs(Capped.Strength - 0.5) < 1e-9, Said("pick.snow.most 0.5 caps the heaviest snow (%.2f)", Capped.Strength));
+		}
+		// Snow's lid and haze: the haze the lid's own grey, darker than the snow lying; the sky darker the harder it snows.
+		Check(Snow.HazeToward > 0.75 && Snow.SkyTimes < 0.8 && Snow.LightTimes == 1.0, Said("heavy snow: the haze mostly the lid's grey (%.2f), the lid darker (%.2f), the snow lying as lit", Snow.HazeToward, Snow.SkyTimes));
 		// The field's wet ground, before the field knows its snow.
 		{
 			Asked A;
@@ -225,7 +253,7 @@ namespace
 		for (size_t K = 0; K < std::min(Read.Snow.size(), Standing.Snow.size()); ++K)
 			Check(SameLayer(Read.Snow[K], Standing.Snow[K]), "the file's snow layer " + Standing.Snow[K].Name + " is the standing one");
 		Check(std::fabs(Read.RainStep - Standing.RainStep) < 1e-6 && std::fabs(Read.SnowStep - Standing.SnowStep) < 1e-6 && Read.LeastPx == Standing.LeastPx &&
-			Read.StrengthAlpha == Standing.StrengthAlpha && Read.StrengthLength == Standing.StrengthLength && Read.MostDrops == Standing.MostDrops, "the file's steps, least pixels, strength alpha and length and most drops are the standing ones");
+			Read.StrengthAlpha == Standing.StrengthAlpha && Read.StrengthAlphaCurve == Standing.StrengthAlphaCurve && Read.SnowStrengthAlpha == Standing.SnowStrengthAlpha && Read.StrengthLength == Standing.StrengthLength && Read.MostDrops == Standing.MostDrops, "the file's steps, least pixels, strength alpha and length and most drops are the standing ones");
 		// The pick and the day: the file's numbers give what the standing ones give, everywhere.
 		int Differ = 0;
 		for (const char* Word : { "clear", "rain", "snow", "mud", "" })
@@ -250,11 +278,11 @@ namespace
 		Check(Differ == 0, Said("the file's pick and day give what the standing numbers give (%.0f skies differ)", Differ));
 		// Every number in the file is one the code reads (a misspelt path would be quietly left out).
 		static const char* const Known[] = { "pick.snow_lying_from", "pick.rain.from_cover", "pick.rain.full_cover", "pick.rain.least", "pick.rain.tropic_more", "pick.rain.dry_times",
-			"pick.snow.from_cover", "pick.snow.full_cover", "pick.snow.least", "pick.mud.from_cover", "pick.mud.least", "pick.mud.more", "day.rain.wet_least", "day.rain.haze_more",
+			"pick.snow.from_cover", "pick.snow.full_cover", "pick.snow.least", "pick.snow.most", "pick.mud.from_cover", "pick.mud.least", "pick.mud.more", "day.rain.wet_least", "day.rain.haze_more",
 			"day.rain.haze_toward", "day.rain.haze_curve", "day.rain.haze_r", "day.rain.haze_g", "day.rain.haze_b", "day.rain.dimmer", "day.rain.ground_rough_less", "day.rain.ground_specular_more",
 			"day.rain.thing_rough_less", "day.rain.thing_specular_more", "day.rain.steel_rough", "day.rain.steel_specular", "day.rain.ink_over_haze", "day.rain.sky_dimmer", "day.snow.haze_more",
 			"day.snow.haze_toward", "day.snow.haze_r", "day.snow.haze_g", "day.snow.haze_b", "day.snow.dimmer", "day.snow.sky_dimmer", "day.snow.ink_over_haze", "fall.rain_step", "fall.snow_step",
-			"fall.least_px", "fall.strength_alpha", "fall.strength_length", "fall.most_drops" };
+			"fall.least_px", "fall.strength_alpha", "fall.strength_alpha_curve", "fall.snow_strength_alpha", "fall.strength_length", "fall.most_drops" };
 		static const char* const LayerKeys[] = { "box_m", "density", "fall", "spread", "wind_share", "width_m", "length_m", "alpha", "tone", "near_from_m", "near_full_m", "far_fade", "flutter_m", "order", "off" };
 		int Unknown = 0;
 		for (const auto& [Key, Value] : Numbers)
