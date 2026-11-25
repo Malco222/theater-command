@@ -23,6 +23,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import { corpsInContact } from '../src/campaign/drawn';
 import { atWar, createGame, declareWar, relocate, rowOffers, startPhase, takeOffer } from '../src/campaign/game';
+import { setStop } from '../src/campaign/history';
 import { onLiveFront } from '../src/campaign/planfronts';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
@@ -199,6 +200,38 @@ describe('on, a dated row takes no corps standing in contact', () => {
     expect(corps(g, GARRISON)).toBe(src);
     expect(src.reg).toBe(line.id);
     expect(g.flags[`wait:${index(LESS)}`]).toBe(30);
+  });
+});
+
+describe("the dial: the rule acts at stops 3 to 5, and at the book's stops the book's rows keep their book", () => {
+  // The design director's ruling of 21:25Z, 25 November 2026: "at stops 1 and 2 the book's rows keep their book, as
+  // for every other piece. The contact rule acts at stops 3 to 5."
+  it.each([1, 2])('at stop %i, with the switch on, the row takes its corps out of the line in its month as with the switch off: no wait is written', (stop) => {
+    const g = open(3, null);
+    expect(setStop(g, stop, true)).toBe(true);
+    const src = corps(g, ARMY7)!;
+    relocate(g, src, inTheLine(g));
+    expect(inContact(g, src)).toBe(true);
+    expect(onLiveFront(g, 'JAP', src)).toBe(false);
+    month(g, 12);
+    expect(at(g, corps(g, D7)!)).toBe('Sapporo');
+    expect(corps(g, ARMY7)).toBeUndefined();
+    expect(g.flags[`wait:${index(D7)}`]).toBeUndefined();
+    expect(g.flags[`sent:${index(D7)}`]).toBe(1);
+  });
+
+  it.each([4, 5])('at stop %i it acts as at stop 3: the row waits and the corps keeps its name and its place', (stop) => {
+    const g = open(3, null);
+    expect(setStop(g, stop, true)).toBe(true);
+    const src = corps(g, ARMY7)!;
+    const line = inTheLine(g);
+    relocate(g, src, line);
+    expect(inContact(g, src)).toBe(true);
+    month(g, 12);
+    expect(corps(g, D7)).toBeUndefined();
+    expect(at(g, corps(g, ARMY7)!)).toBe(line.name);
+    expect(g.flags[`wait:${index(D7)}`]).toBe(12);
+    expect(g.flags[`sent:${index(D7)}`]).toBeUndefined();
   });
 });
 

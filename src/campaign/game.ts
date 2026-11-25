@@ -5688,10 +5688,13 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // 18th Division, whose row at Hainan waits while the 21st Army's 18th Division is in the line at Tungkun. As built
     // the Rangoon row found nobody to take and came whole from nobody, and the Hainan row, its corps come free, made a
     // second 18th Division beside it. `fromWaits`.)
+    // (At a stop that keeps a book, stops 1 and 2, the book's rows keep their book as every other piece does, and
+    // neither of the two is read: the contact rule acts at stops 3 to 5. Her ruling of 21:25Z, 25 November 2026.)
+    const inFight = g.flags.fromWait === 1 && !stopDef(g).book && !hisOffers(g, nat);
     let own = false;
     if (Array.isArray(o.from) && !ashore && row[1] === nat && farOn(g) && (g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name)
-      && (onLiveFront(g, nat, x) || (g.flags.fromWait === 1 && !hisOffers(g, nat) && x.reg !== reg?.id && corpsInContact(g, nat, x))))
-      || (g.flags.fromWait === 1 && !hisOffers(g, nat) && fromWaits(g, nat, o.from)))) {
+      && (onLiveFront(g, nat, x) || (inFight && x.reg !== reg?.id && corpsInContact(g, nat, x))))
+      || (inFight && fromWaits(g, nat, o.from)))) {
       if (o.adds > 0) own = true;
       else { g.flags[`wait:${i}`] = g.turn; return; }
     }

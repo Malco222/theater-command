@@ -15,6 +15,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import { corpsInContact } from '../src/campaign/drawn';
 import { createGame, declareWar, relocate, startPhase } from '../src/campaign/game';
+import { setStop } from '../src/campaign/history';
 import { startOpen } from '../src/campaign/staff';
 import type { Game, Region } from '../src/campaign/types';
 import setup from '../data/campaign/setup-1939.json';
@@ -31,8 +32,9 @@ const lose = (g: Game, name: string, to: string, away: string): Region => {
 /** Japan's corps that carry the 18th Division whole (not a detachment of it), by name and place. */
 const eighteenth = (g: Game): string[] => g.corps.filter((c) => c.nat === 'JAP' && !c.dead && [ARMY21, ARMY25, D18].includes(c.name)).map((c) => `${c.name}@${g.regions[c.reg].name}`).sort();
 /** Seed 3, the far side on, Japan's strike south gone in month 28, Rangoon Japan's, Singapore hers in month 35: the skeptics' case. */
-const war = (on: boolean): Game => {
+const war = (on: boolean, stop = 3): Game => {
   const g = startOpen(createGame(3, null));
+  if (stop !== 3) setStop(g, stop, true);
   if (on) g.flags.fromWait = 1;
   lose(g, 'Cam Ranh', 'JAP', 'Saigon');
   g.turn = 27; startPhase(g, 'JAP');
@@ -90,6 +92,17 @@ describe("switch on: the Rangoon row waits with the row that makes its corps", (
 describe('switch off: as before', () => {
   it('the Hainan row takes its corps out of the line in month 29, and the Rangoon row takes the 25th Army when it is free', () => {
     const g = war(false);
+    months(g, 29, 29);
+    expect(g.flags[`sent:${index(ARMY25)}`]).toBe(1);
+    expect(eighteenth(g)).toEqual([`${ARMY25}@Hainan`]);
+    months(g, 30, 41);
+    expect(eighteenth(g).length).toBe(1);
+  });
+});
+
+describe("switch on at the book's stops, 1 and 2: the book's rows keep their book (the design director's 21:25Z)", () => {
+  it.each([1, 2])('at stop %i neither row waits on contact: the Hainan row takes its corps out of the line in month 29, and one 18th Division stands', (stop) => {
+    const g = war(true, stop);
     months(g, 29, 29);
     expect(g.flags[`sent:${index(ARMY25)}`]).toBe(1);
     expect(eighteenth(g)).toEqual([`${ARMY25}@Hainan`]);
