@@ -195,10 +195,11 @@ describe('an ally\'s ships feed a port only where they could truly sail there wi
     }
   });
 
-  it('under true reach never feeds a besieged town through a sea shut to its holder, though a guest\'s ships could sail it: the same Tobruk with the sea shut to Italy and open to Germany (off: fed by paper, pinned)', () => {
+  it('under true reach never feeds a besieged town through a sea shut to its holder, though it is open to the guest inside: the same Tobruk with the sea shut to Italy and open to Germany (off: fed by paper, pinned)', () => {
     for (const on of [false, true]) {
       // The Soviet Union at war with Italy alone, its fleets across the Libyan Sea: closed to Italy, the holder, and
-      // open to Germany, whose corps is inside and whose ships could sail it.
+      // open to Germany, whose corps is inside. (Germany's own lanes do not reach the Libyan Sea here; Marseille, below,
+      // is a guest whose own ships do sail to the sea off the harbour.)
       const { g, r, c, libyan, pic } = tobruk(on, 'SOV', 'ITA');
       expect([pic.closed(libyan, 'ITA'), pic.closed(libyan, 'GER')]).toEqual([true, false]);
       // Off (today's answer, pinned): Germany's ships feed the town by paper. On: a sea shut to the holder is shut to
@@ -231,6 +232,36 @@ describe('an ally\'s ships feed a port only where they could truly sail there wi
         const eating = !on || k <= stores;
         expect([on, k, monthsShut(g, r), fedBySea(g, r), feedingSeas(g, r), garrisonFed(g, r), c.supplied, card(g, r.id)]).toEqual([on, k, on ? k : 0, !on, on ? [] : [biscay], eating, eating, !on]);
       }
+    }
+  });
+
+  /**
+   * France's Marseille with a British corps inside, three Italian corps round it: Italy at war with France alone, her
+   * fleets across the Western Mediterranean off the harbour, the Allied fleets in the eastern Mediterranean. The sea off
+   * the harbour is shut to France, the holder, and open to Britain, whose own lanes reach it from Gibraltar.
+   */
+  const marseille = (on: boolean) => {
+    const g = war(on);
+    declareWar(g, 'ITA', 'FRA');
+    patrol(g, 'ITA', 'wmed');
+    patrol(g, 'FRA', 'emed');
+    patrol(g, 'UK', 'emed');
+    const { r, cs: [c], pic } = besiege(g, 'Marseille', ['UK'], 'ITA', 3);
+    g.flags[`sgm:${r.id}`] = 99;
+    computeSupply(g);
+    return { g, r, c, wmed: zoneOf(g, 'wmed'), pic };
+  };
+
+  it('under true reach reads the holder\'s stores on the guest\'s ships, not the guest\'s own: Marseille, whose sea Britain\'s own ships reach and France\'s stores cannot cross (off: fed by paper, pinned)', () => {
+    for (const on of [false, true]) {
+      const { g, r, c, wmed, pic } = marseille(on);
+      expect([r.ctrl, r.owner, r.seas, feeders(g, r), g.nations.ITA.atWar]).toEqual(['FRA', 'FRA', [wmed], ['UK'], ['FRA']]);
+      expect([pic.closed(wmed, 'UK'), pic.closed(wmed, 'FRA')]).toEqual([false, true]);
+      // Britain's own ships sail to the sea off the harbour; carrying France's stores, they cannot.
+      expect([reaches(g, 'UK', 'wmed'), openSeas(g, 'UK', pic, undefined, undefined, undefined, 'FRA')[wmed]]).toEqual([1, 0]);
+      // Off (today's answer, pinned): fed by Britain's ships. On: the reach is the holder's, and no ship can bring the
+      // town France's stores, so it starves, and its card says so.
+      expect([on, fedBySea(g, r), feedingSeas(g, r), garrisonFed(g, r), c.supplied, card(g, r.id)]).toEqual([on, !on, on ? [] : [wmed], !on, !on, !on]);
     }
   });
 
@@ -268,6 +299,7 @@ describe('an ally\'s ships feed a port only where they could truly sail there wi
       ['Tobruk, the sea shut to the guest', (on) => tobruk(on, 'UK', 'none')],
       ['Tobruk, the sea shut to the holder', (on) => tobruk(on, 'SOV', 'ITA')],
       ['Tobruk taken by Britain', taken],
+      ['Marseille, the sea shut to the holder and open to the guest\'s own ships', marseille],
       ['Bordeaux, the way shut', (on) => { const b = bordeaux(on); b.g.flags[`sgm:${b.r.id}`] = 99; computeSupply(b.g); return b; }],
     ];
     for (const [name, make] of cases) for (const on of [false, true]) {
