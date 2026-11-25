@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ef0a9bc6 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 12f8aae0 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -97785,16 +97785,18 @@ ${standing5}`,
   };
   function r2Ship(ids2) {
     const s = game();
-    if (s.flags.open !== 1 || s.flags.r2Ship === 1) return null;
+    if (s.flags.open !== 1) return null;
     let took = 0;
     for (const id of Array.isArray(ids2) ? ids2 : []) {
       const turnOn = R2_SHIP[id];
+      const mark = "r2:" + id;
+      if (!turnOn || s.flags[mark] === 1) continue;
       try {
-        if (turnOn && turnOn(s)) took++;
+        if (turnOn(s)) took++;
       } catch {
       }
+      s.flags[mark] = 1;
     }
-    s.flags.r2Ship = 1;
     return took > 0 ? view2() : null;
   }
   globalThis.TC.r2Ship = r2Ship;
