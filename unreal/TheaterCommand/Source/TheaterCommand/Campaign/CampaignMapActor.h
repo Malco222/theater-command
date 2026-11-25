@@ -322,6 +322,15 @@ public:
 	double NearX(double X, double BesideX) const;
 	void RoundPiece(AArmyPiece* Piece) const;
 	/**
+	 * (Seam-4.) Where a thing that moves or changes each frame is shown: a place in the world's own measure, brought
+	 * into the turn of the world nearest what the eye looks at while both sides of the chart's seam are drawn
+	 * (OverSeam), so that a ship going down a little way over the seam is seen from this side of it. Otherwise the
+	 * place as it was given. (The same rule, each in its own measure: a raid, a train and a field's parked aircraft
+	 * count their place by NearX from the eye's; smoke and fire are brought round at the top of UpdateSmoke. What
+	 * stands still has its twin, LayOverSeam; the lights of the night have KeepLightsTwin; a piece has LookFrom.)
+	 */
+	FVector BesideEye(const FVector& Place) const;
+	/**
 	 * (Release 2, the far side: seam-2.) Whether what lies within sight of the chart's seam is shown from both sides of
 	 * it: the far side on, and tc.Far.OverSeam not 0. Then the screen counts its names, plates and badges in the turn of
 	 * the world nearest the eye (TheaterSpeed::RoundWorld).
@@ -1155,6 +1164,19 @@ private:
 	TArray<FVector> TownWindows; // the windows of the towns' houses, each as its place and the way it faces
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> LightsMesh; // those windows lit, at night
+	/**
+	 * (Seam-4.) The same lights again, a whole world to one side: the windows, the villages' lamps and the towns' glow
+	 * of the far end of the chart, seen by night from over the seam. The lights are one model of the whole world
+	 * whose light changes with the hour, so it is not laid in shares as the lines and the works are (a share would be
+	 * laid again at every change of the hour): its twin is the whole of it, filled from the model itself and moved
+	 * whole to the side the eye is on. It is made the first night the eye comes within sight of the seam, and is
+	 * hidden, and not filled, whenever the eye is not.
+	 */
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> LightsTwin;
+	bool bLightsTwinStale = true; // (the lights have changed, or been built again, since their twin was filled)
+	void KeepLightsTwin(const FVector& Focus);
+	void FillLightsTwin();
 	TArray<FVector> LightPoints;
 	TArray<FColor> LightColours;
 	float ShownNight = -1.0f;
@@ -1556,6 +1578,7 @@ private:
 		int32 Yours = 0; // how many of the row are his, at its head
 		bool bShown = false;
 		float Up = 0.0f; // how far its aircraft have come up out of the ground, 0 to 1
+		double Aside = 0.0; // (seam-4) how far east of where they were built they are shown, in the world's measure: a whole number of worlds
 	};
 	TArray<FParkedField> ParkedFields;
 	UPROPERTY()
