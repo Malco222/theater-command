@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0ae4cb8e 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 86e7183c 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -30585,15 +30585,17 @@
     }
     return false;
   }
+  var feedsBy = (g2, r, x, z, truly) => !closedTo(g2, z, x) && (!truly || garrisonOf(r).every((c) => c.nat === x || !closedTo(g2, z, c.nat)));
   function fedBySea(g2, r) {
-    return feeders(g2, r).some((id) => seaOpenAt(g2, id, r));
+    if (!trueReach(g2)) return feeders(g2, r).some((id) => seaOpenAt(g2, id, r));
+    return feeders(g2, r).some((x) => r.seas.some((z) => feedsBy(g2, r, x, z, true)));
   }
   var fed = (g2, r) => fedBySea(g2, r) || fedByBook(g2, r);
   var fedFrom = fed;
   var fedByBook = (g2, r) => besieged(g2, r) && bookFed(g2, r.name, r.ctrl, [...new Set(besiegers(g2, r).map(armyOf))]);
   function feedingSeas(g2, r) {
-    const who = feeders(g2, r);
-    return r.seas.filter((z) => who.some((id) => !closedTo(g2, z, id)));
+    const who = feeders(g2, r), truly = trueReach(g2);
+    return r.seas.filter((z) => who.some((id) => feedsBy(g2, r, id, z, truly)));
   }
   var strength = (cs) => cs.reduce((s, c) => s + c.divs * c.str, 0);
   function ringClosed(g2, r) {
