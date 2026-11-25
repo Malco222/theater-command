@@ -327,7 +327,8 @@ export function bloc(n: Nation): Bloc | null {
   return null;
 }
 
-/** (Supply keeps its friend tables while friendsKeyOf is the same: anything new read here must be named there too.) */
+/** (Supply keeps its friend tables, and its lanes' answers, while friendsKeyOf is the same: anything new read here must be
+ * named there too.) */
 export function allied(g: Game, a: string, b: string): boolean {
   return sameSide(g, a, b) || tiedPair(g, a, b);
 }
@@ -345,6 +346,7 @@ export function sameSide(g: Game, a: string, b: string): boolean {
   return ba !== null && ba === bloc(B);
 }
 
+/** (Supply keeps its lanes' answers while friendsKeyOf is the same: anything new read here must be named there too.) */
 export function atWar(g: Game, a: string, b: string): boolean {
   return g.nations[a].atWar.includes(b);
 }
@@ -860,11 +862,12 @@ export function moveCost(g: Game, c: Corps, to: Region, from = c.reg): number {
  * The seas each country's ships can use (openSeas) are kept too: with the seas they set out from (seaStarts, worked out
  * at every call), whether each strait would let them through (canPass, asked at every call), and the answer to every
  * "is this sea closed to them" the walk asked. While those are all the same, the walk would ask the same and find the
- * same. Every sea is looked at once a call (SeaPicture.state: its fleets at sea and their weight, the coasts that put
- * aircraft over it, its sky) and stamped with the call that found it changed; a kept answer is asked again when its sea
- * has changed since it was last found good, or when who is at war with the country, or its friend, among the nations in
- * the seas has changed. A country that loses its last port, or the shipyard ground it sails from, sets out from other
- * seas or none, and so walks again. TC_SUPPLY_CHECK=1 walks the seas afresh as well and stops on any difference.
+ * same. A sea a kept answer was had in is looked at whenever that answer is (SeaPicture.state: its fleets at sea and
+ * their weight, the coasts that put aircraft over it, its sky) and stamped with the call that found it changed; a kept
+ * answer is asked again when its sea has changed since it was last found good, or when anything allied() or atWar()
+ * reads has changed since (friendsKeyOf, which names every country's alliance, life and wars). A country that loses its
+ * last port, or the shipyard ground it sails from, sets out from other seas or none, and so walks again.
+ * TC_SUPPLY_CHECK=1 walks the seas afresh as well and stops on any difference.
  */
 /** The eastern railways as they stand this call: what each Soviet-owned step of the line costs, and whose home it is. */
 interface RailNow { step: Float64Array; home: Uint8Array }
@@ -876,9 +879,9 @@ interface RoadsSeen { mask: Uint8Array; friend: Uint8Array; at: number }
 interface SupplyDrawn extends RoadsSeen { seeds: number[]; heads: number[]; ok: Uint8Array; reach: Float32Array; east: boolean; rail: RailNow | null }
 /**
  * A country's sea lanes, with what its walk set out from, every answer it had on the way, and the call at which those
- * answers were last found good, with its friends and enemies then among the nations in the seas (rel, over names).
+ * answers were last found good, with every country's friends and wars then (fkey, friendsKeyOf).
  */
-interface LanesKept { starts: number[]; gates: Uint8Array; asked: Int16Array; shut: Uint8Array; open: Uint8Array; at: number; rel: Uint8Array; names: string }
+interface LanesKept { starts: number[]; gates: Uint8Array; asked: Int16Array; shut: Uint8Array; open: Uint8Array; at: number; fkey: string }
 /** The provinces a country's roads join to its capital (roadsHome), by holders (mask: 1 where a friend holds it). */
 interface HomeKept extends RoadsSeen { cap: number; linked: Uint8Array }
 interface SupplyBook {
@@ -899,9 +902,10 @@ const supplyHolders = new WeakMap<Game, { no: Map<string, number>; list: string[
 const supplyCheckEnv = (globalThis as { TC_SUPPLY_CHECK?: unknown }).TC_SUPPLY_CHECK ?? (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.TC_SUPPLY_CHECK;
 const supplyCheck = supplyCheckEnv !== undefined && !!supplyCheckEnv && supplyCheckEnv !== '0';
 /**
- * Everything allied() reads of the war, for every country: its alliance (bloc), whether it is alive and whom it is at
- * war with (far.ts tiedPair's tie), and whether the far side is on. While this is the same, so is every answer
- * allied() gives (a change to allied() must be followed here; TC_SUPPLY_CHECK asks every kept answer afresh).
+ * Everything allied() and atWar() read of the war, for every country: its alliance (bloc), whether it is alive and whom
+ * it is at war with (far.ts tiedPair's tie, and atWar itself), and whether the far side is on. While this is the same,
+ * so is every answer the two give (a change to either must be followed here; tests/friends-key-r2 records their reads,
+ * and TC_SUPPLY_CHECK asks every kept answer afresh).
  */
 export const friendsKeyOf = (g: Game): string => {
   let key = farOn(g) ? 'far' : 'near';
@@ -1074,8 +1078,10 @@ export function computeSupply(g: Game): void {
   const lanes = new Map<string, Uint8Array | null>();
   const seasNow = new SeaPicture(g);
   // Each sea as it stands this call, looked at once and set beside its state when last looked at: the call that found it
-  // changed is the sea's stamp. A kept answer about a sea not changed since it was last found good, for a nation whose
-  // friends and enemies are the same, is the answer closed() would give now (SeaPicture.state).
+  // changed is the sea's stamp. A kept answer about a sea not changed since it was last found good, while every
+  // country's friends and enemies are the same, is the answer closed() would give now (SeaPicture.state). A sea is
+  // looked at in every call that takes a kept answer about it, or makes one, so its stamp is later than an answer's
+  // call whenever the sea has been seen to change since.
   const looked = new Uint8Array(g.seas.length);
   const look = (z: number): void => {
     if (looked[z]) return;
@@ -1083,59 +1089,29 @@ export function computeSupply(g: Game): void {
     const now = seasNow.state(z), was = kept0.seaSeen[z];
     if (was === undefined || !sameSeaState(was, now)) { kept0.seaSeen[z] = now; kept0.seaStamp[z] = callNo; }
   };
-  // The nations closed() can ask about this call: those with a fleet, a coast or the sky in a sea that something could
-  // close (a sea whose state is null is open to everybody, whoever is at war). Every sea is looked at to find them.
-  // (partyKey names them; null if one were no nation, when no kept answer is taken on trust.)
-  let names: string[] | null = null, partyKey: string | null = null;
-  const party: number[] = [];
-  const partiesNow = (): void => {
-    if (names) return;
-    names = Object.keys(g.nations);
-    const no = new Map(names.map((n, i) => [n, i]));
-    const mark = new Uint8Array(names.length);
-    let known = true;
-    const note = (x: string): void => { const i = no.get(x); if (i === undefined) known = false; else mark[i] = 1; };
-    for (let z = 0; z < g.seas.length; z++) {
-      look(z);
-      const st = kept0.seaSeen[z];
-      if (!st) continue;
-      for (const f of st.fleets) note(f.nat);
-      for (const c of st.coasts) { note(c.ctrl); if (c.sky) note(c.sky); }
-    }
-    for (let i = 0; i < mark.length; i++) if (mark[i]) party.push(i);
-    partyKey = known ? `${names.join('|')}#${party.join(',')}` : null;
-  };
-  // Who of them is at war with a nation, and who is its friend, as closed() asks it: (atWar, allied).
-  const relOf = (id: string): Uint8Array => {
-    partiesNow();
-    const rel = new Uint8Array(party.length);
-    for (let i = 0; i < party.length; i++) { const x = names![party[i]]; rel[i] = (atWar(g, x, id) ? 1 : 0) | (allied(g, x, id) ? 2 : 0); }
-    return rel;
-  };
   const lanesKept = (id: string): Uint8Array => {
     const starts = seaStarts(g, id, seasNow, homeOf);
     const gates = new Uint8Array(g.gates.length);
     for (let i = 0; i < gates.length; i++) if (canPass(g, g.gates[i].a, g.gates[i].b, id)) gates[i] = 1;
     const kept = kept0.lanes.get(id);
-    let open: Uint8Array | null = null, rel: Uint8Array | null = null;
+    let open: Uint8Array | null = null;
     if (kept && sameBytes(kept.starts, starts) && sameBytes(kept.gates, gates)) {
-      rel = relOf(id);
-      const rels = partyKey !== null && kept.names === partyKey && sameBytes(kept.rel, rel);
+      // (closed() asks atWar() and allied() of the nations in a sea: both read only what friendsKeyOf names.)
+      const rels = kept.fkey === friendsKey;
       open = kept.open;
       for (let i = 0; i < kept.asked.length; i++) {
         const z = kept.asked[i];
         look(z);
         if ((!rels || kept0.seaStamp[z] > kept.at) && seasNow.closed(z, id) !== (kept.shut[i] === 1)) { open = null; break; }
       }
-      if (open) { kept.at = callNo; kept.rel = rel; kept.names = partyKey ?? ''; }
+      if (open) { kept.at = callNo; kept.fkey = friendsKey; }
     }
     if (!open) {
       const asked = new Int8Array(g.seas.length).fill(-1);
       open = openSeas(g, id, seasNow, asked, starts);
       const at: number[] = [];
       for (let z = 0; z < asked.length; z++) if (asked[z] >= 0) { at.push(z); look(z); }
-      rel ??= relOf(id);
-      kept0.lanes.set(id, { starts, gates, asked: Int16Array.from(at), shut: Uint8Array.from(at, (z) => asked[z]), open, at: callNo, rel, names: partyKey ?? '' });
+      kept0.lanes.set(id, { starts, gates, asked: Int16Array.from(at), shut: Uint8Array.from(at, (z) => asked[z]), open, at: callNo, fkey: friendsKey });
     }
     if (supplyCheck && !sameBytes(openSeas(g, id, seasNow), open)) throw new Error(`sea lanes kept for ${id} in month ${g.turn} differ from fresh ones`);
     return open;

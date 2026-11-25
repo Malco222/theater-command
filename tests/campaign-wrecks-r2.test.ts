@@ -112,4 +112,27 @@ describe('old wrecks (release 2)', () => {
     delete bare.wrecks;
     expect(loadGame(JSON.stringify(bare))?.wrecks?.[9]?.n).toEqual({ GER: Math.round(150 * 0.2 * 0.5), FRA: 75 });
   });
+
+  it('saved wrecks are not counted again from the reports at each load, with sea mines or without (the assembler, 24 November)', () => {
+    // (Navy round 4 set the mines' line between the wrecks' if and its else: a save with wrecks and no mines then
+    // added every kept report's wrecks on top of the saved ones at every load, and one with mines and no wrecks
+    // never got its wrecks back.)
+    const { g } = setUp();
+    g.flags.open = 1;
+    g.reports.push(report('Decisive victory', [unit('GER', 'arm', 1, 15000, 3000)], [unit('FRA', 'arm', 1, 12000, 6000)], 9, g.turn));
+    g.wrecks = { 9: { n: { GER: 15, FRA: 75 }, last: g.turn } };
+    delete g.mines;
+    const once = loadGame(saveGame(g))!;
+    expect(once.wrecks).toEqual(g.wrecks);
+    const twice = loadGame(saveGame(once))!;
+    expect(twice.wrecks).toEqual(g.wrecks);
+    // With mines laid the wrecks are kept the same way, and the mines come back as saved.
+    const mined = JSON.parse(saveGame(g));
+    mined.mines = [];
+    expect(loadGame(JSON.stringify(mined))?.wrecks).toEqual(g.wrecks);
+    expect(loadGame(JSON.stringify(mined))?.mines).toEqual([]);
+    // And a save with mines but no wrecks is still given its wrecks back from its reports.
+    delete mined.wrecks;
+    expect(loadGame(JSON.stringify(mined))?.wrecks?.[9]?.n).toEqual({ GER: Math.round(150 * 0.2 * 0.5), FRA: 75 });
+  });
 });

@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 4df1d296 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 169ae947 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -25427,9 +25427,9 @@
 
   // ../../data/campaign/airversion.json
   var airversion_default = {
-    _about: "The air version's open pieces (the design director's b482, item 3; the grand campaign only). Each has its own switch: 'on' sets it for new grand campaigns, and a campaign keeps the setting it began with (g.flags 'av:night', 'av:start', 'av:field'). Untouched means unchanged: with every switch off nothing here runs. 'nightGuns' (ruling 107(b)): by night the guns round a target bring down 'share' as many bombers as by day; the bombing they stop is the same. 'startGuns' (ruling 124): every great power opens a grand campaign with anti-aircraft guns round its capital and round the 'provinces' home provinces with the most factories (its own ground, held), player and computer alike: level 'early' in a campaign begun in 'earlyTo' or before, level 'late' in a later one. A province that has guns keeps the higher level. 'field' (ruling 151(b), WRECK THE AIRFIELD): an agent abroad, at war with the host, can wreck the field of a province where an air group of the host's side is based; the numbers are the factory's (intel.json missions.airfield). Every air group based there is grounded for the month the attempt comes off. The other side's services strike at the player's fields too: a plot is aimed at a field with chance 'enemyShare', where the player has an air group based on home ground; otherwise it divides as it always did. Brian switched 'field' on for new grand campaigns in release 2 (22 November); the night guns and the start guns stay off.",
+    _about: "The air version's open pieces (the design director's b482, item 3; the grand campaign only). Each has its own switch: 'on' sets it for new grand campaigns, and a campaign keeps the setting it began with (g.flags 'av:night', 'av:start', 'av:field'). Untouched means unchanged: with every switch off nothing here runs. 'nightGuns' (ruling 107(b)): by night the guns round a target bring down 'share' as many bombers as by day; the bombing they stop is the same. 'startGuns' (ruling 124): every great power opens a grand campaign with anti-aircraft guns round its capital and round the 'provinces' home provinces with the most factories (its own ground, held), player and computer alike: level 'early' in a campaign begun in 'earlyTo' or before, level 'late' in a later one. A province that has guns keeps the higher level. 'field' (ruling 151(b), WRECK THE AIRFIELD): an agent abroad, at war with the host, can wreck the field of a province where an air group of the host's side is based; the numbers are the factory's (intel.json missions.airfield). Every air group based there is grounded for the month the attempt comes off. The other side's services strike at the player's fields too: a plot is aimed at a field with chance 'enemyShare', where the player has an air group based on home ground; otherwise it divides as it always did. Brian switched 'field' on for new grand campaigns in release 2 (22 November) and the start guns on (24 November, 1.5.1 and release 2; a grand campaign saved before that gets them once as it loads, startGunsOnLoad); the night guns stay off.",
     nightGuns: { on: false, share: 0.5 },
-    startGuns: { on: false, early: 1, late: 2, earlyTo: 1940, provinces: 2 },
+    startGuns: { on: true, early: 1, late: 2, earlyTo: 1940, provinces: 2 },
     field: { on: true, enemyShare: 0.25 }
   };
 
@@ -25456,8 +25456,14 @@
     g2.flags[KEY.start] = 1;
     layStartGuns(g2, majors);
   }
-  function layStartGuns(g2, majors) {
-    const lv = startGunLevel(g2.turn);
+  function startGunsOnLoad(g2, majors) {
+    if (!AIRV.startGuns.on || g2.flags.open !== 1 || g2.flags[KEY.start] === 1) return false;
+    g2.flags[KEY.start] = 1;
+    layStartGuns(g2, majors, g2.flags.openFrom ?? 1);
+    return true;
+  }
+  function layStartGuns(g2, majors, began = g2.turn) {
+    const lv = startGunLevel(began);
     for (const nat of majors) for (const id of startGunSites(g2, nat)) g2.flags[`wk:aa:${id}`] = Math.max(g2.flags[`wk:aa:${id}`] ?? 0, lv);
   }
   var fieldWrecked = (g2, region) => g2.flags.fields === 1 && fieldRules(g2) ? fieldShut(g2, region) : g2.flags[`wreck:${region}`] === g2.turn;
@@ -60515,8 +60521,8 @@
         g2.scars[r.region] = { n: (was?.n ?? 0) + 1, last: Math.max(was?.last ?? r.turn, r.turn) };
       }
     if (d.wrecks && typeof d.wrecks === "object") g2.wrecks = d.wrecks;
-    if (Array.isArray(d.mines)) g2.mines = d.mines;
     else for (const r of g2.reports ?? []) wreckBump(g2, r);
+    if (Array.isArray(d.mines)) g2.mines = d.mines;
     if (Array.isArray(d.fleets)) {
       g2.fleets = d.fleets;
       g2.nextFleet = d.nextFleet;
@@ -90964,6 +90970,7 @@
     const loaded = loadGame(text);
     if (!loaded) return null;
     g = loaded;
+    startGunsLoaded(g);
     lessonsBegin(false);
     swapAsked = "";
     wreckAsked = "";
@@ -91041,6 +91048,9 @@
       if (fieldCalls.shipped?.()) fieldCalls.on?.(g2, true);
     } catch {
     }
+  }
+  function startGunsLoaded(g2) {
+    if (startGunsOnLoad(g2, majorsOf(g2))) headline(g2, "info", "Anti-aircraft guns now stand round each great power's capital and its two chief factory towns.", g2.human ?? void 0);
   }
   var repairView2 = (g2, region) => {
     try {

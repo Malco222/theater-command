@@ -70,9 +70,24 @@ export function openAirVersion(g: Game, majors: string[]): void {
   layStartGuns(g, majors);
 }
 
-/** The start guns themselves (ruling 124), for openAirVersion and for tests. A province keeps the higher level. */
-export function layStartGuns(g: Game, majors: string[]): void {
-  const lv = startGunLevel(g.turn);
+/**
+ * A grand campaign saved before the start guns were on (1.5.1; Brian, 24 November 2026 22:31Z, on the art director's
+ * card: "Yes, when I load a saved war") lays them once as it is loaded, for every great power, the player's and the
+ * computer's alike: the guns it would have opened with, at the level of the month the war began (openFrom, or the
+ * first month), round the capital and chief factory provinces each still owns and holds as it is loaded.
+ * A province that already has guns keeps the higher level. True when it laid them.
+ */
+export function startGunsOnLoad(g: Game, majors: string[]): boolean {
+  if (!AIRV.startGuns.on || g.flags.open !== 1 || g.flags[KEY.start] === 1) return false;
+  g.flags[KEY.start] = 1;
+  layStartGuns(g, majors, g.flags.openFrom ?? 1);
+  return true;
+}
+
+/** The start guns themselves (ruling 124), for openAirVersion, startGunsOnLoad and tests: at the level of the month
+ * the war began (the month in play, unless told). A province keeps the higher level. */
+export function layStartGuns(g: Game, majors: string[], began: number = g.turn): void {
+  const lv = startGunLevel(began);
   for (const nat of majors) for (const id of startGunSites(g, nat)) g.flags[`wk:aa:${id}`] = Math.max(g.flags[`wk:aa:${id}`] ?? 0, lv);
 }
 
