@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 8fe20a4cc 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of cb2c63454 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -31018,7 +31018,6 @@
     }
     return best;
   }
-  var natIndex = (g2, nat) => Object.keys(g2.nations).indexOf(nat);
   function pocketNat(g2, r) {
     if (g2.flags.sieges !== 1 || g2.flags[`pkt:${r.id}`] === void 0) return null;
     return Object.keys(g2.nations)[g2.flags[`pktn:${r.id}`] ?? -1] ?? null;
@@ -73935,20 +73934,11 @@
   function portKeep(g2, r) {
     return (fortRows(g2) ? portStores(g2, r) : null) ?? DESERT.stores;
   }
-  function handsChanged(g2, r) {
-    let at4 = Math.max(r.since, g2.flags[`hand:${r.id}`] ?? -1, g2.nations[r.ctrl]?.freedOn?.turn ?? -1);
-    const held3 = r.ctrl !== r.owner, back = r.prev === r.ctrl;
-    const vichy = r.vichy && (r.ctrl === "FRA" || r.ctrl === "VIC");
-    if ((held3 || back) && g2.flags.dom !== void 0) at4 = Math.max(at4, g2.flags.dom);
-    for (const n of Object.values(g2.nations)) {
-      if (!n.fellOn) continue;
-      if (back || held3 && (n.id === r.owner || n.fellOn.to === r.ctrl) || vichy && (n.id === "FRA" || n.id === "VIC")) at4 = Math.max(at4, n.fellOn.turn);
-    }
-    return at4;
-  }
+  var natIndex = (g2, nat) => Object.keys(g2.nations).indexOf(nat);
   function keptStoresRun(g2, r, drawn = false) {
     const last = g2.flags[storesKey(r.id)];
-    if (!r.overseas || !r.port || !worksKept(r) || last === void 0 || last <= handsChanged(g2, r)) return 0;
+    if (!r.overseas || !r.port || !worksKept(r) || last === void 0 || last <= r.since) return 0;
+    if (Object.keys(g2.nations)[g2.flags[storesByKey(r.id)] ?? -1] !== r.ctrl) return 0;
     return Math.min(portKeep(g2, r), Math.max(0, g2.turn - (drawn ? 0 : 1) - last));
   }
   function onPortStores(g2, c) {
@@ -74133,8 +74123,10 @@
   };
   var depotKeys = [];
   var storesKeys = [];
+  var storesByKeys = [];
   var depotKey = (id) => depotKeys[id] ?? (depotKeys[id] = "depot:" + id);
   var storesKey = (id) => storesKeys[id] ?? (storesKeys[id] = `stores:${id}`);
+  var storesByKey = (id) => storesByKeys[id] ?? (storesByKeys[id] = `stores:by:${id}`);
   function drawSupply(g2, id, pass, seeds, heads, wide3, long, deep, sand, rail2) {
     const size = g2.regions.length;
     const ok2 = new Uint8Array(size);
@@ -74336,6 +74328,7 @@
       return lanes2.get(id);
     };
     const truly = trueReach(g2);
+    let places = null;
     const asIf2 = /* @__PURE__ */ new Map();
     const carrying = (a, id, theirs) => {
       const key7 = a + ">" + id;
@@ -74395,7 +74388,11 @@
         if (!quay && r.theatre >= 0 && r.port && (quay = (mates ?? (mates = shippers(id))).some((a) => feeds(a, id, r)))) by2 = 3;
         if (!shut && r.overseas && r.port && worksKept(r)) {
           if (quay) {
-            if (!truly || (by2 === 1 ? forHolder(id, r) : by2 === 2 || mates.some((a) => feeds(a, id, r) && forHolder(a, r)))) g2.flags[storesKey(r.id)] = g2.turn;
+            if (!truly) g2.flags[storesKey(r.id)] = g2.turn;
+            else if (by2 === 1 ? forHolder(id, r) : by2 === 2 || mates.some((a) => feeds(a, id, r) && forHolder(a, r))) {
+              g2.flags[storesKey(r.id)] = g2.turn;
+              g2.flags[storesByKey(r.id)] = (places ?? (places = new Map(Object.keys(g2.nations).map((n, i) => [n, i])))).get(r.ctrl);
+            }
           } else if (g2.turn - (g2.flags[storesKey(r.id)] ?? -99) <= portKeep(g2, r)) quay = true;
         }
         if (!depot && !quay) continue;
