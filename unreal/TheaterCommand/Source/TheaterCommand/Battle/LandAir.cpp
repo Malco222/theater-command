@@ -1284,13 +1284,20 @@ namespace LandAir
 		 * edge kept over it. At is the grid's height there (between its points, as a flat cell would have it), raised by
 		 * how sharply the ground crests about the cell (its points' most bend, the height a crest between two of them
 		 * can stand over the cell's flat face: a step or a bank's shoulder narrower than the cell, which half of it had
-		 * let the silk cut 8 mm into).
+		 * let the silk cut 8 mm into). Hug, which its silk is laid and kept on, is no higher than that and no higher than
+		 * the cell's highest corner raised by half that bend: a crest between two points stands over the higher of them
+		 * by at most half its bend (a ridge with straight sides, its peak half-way between them; a round crest by an eighth),
+		 * and a step between them stands no higher than the higher. At, the whole bend over its flat face, reads a
+		 * hedgerow bank 1 m high 0.74 m higher than it is and the bank 0.8 m high along it 0.8 m higher, and the silk laid
+		 * and kept on it had floated up to 2.4 m over the ground round them (a fourth review); its lines are still kept
+		 * over At.
 		 */
 		struct UnderGrid
 		{
 			double X0 = 0.0, Y0 = 0.0, Step = 0.25, Most = -1e18;
 			int Nx = 0, Ny = 0;
-			std::vector<double> Z, Crest;
+			// (and each cell's, at its first corner: its corners' most bend, and its highest corner raised by half that)
+			std::vector<double> Z, Crest, CellBend, CellTop;
 			template <typename Fn>
 			void Read(double MinX, double MinY, double MaxX, double MaxY, const Fn& Field)
 			{
@@ -1318,6 +1325,18 @@ namespace LandAir
 						Most = std::max(Most, Here + Bend);
 					}
 				}
+				CellBend.assign(static_cast<size_t>(Nx * Ny), 0.0);
+				CellTop.assign(static_cast<size_t>(Nx * Ny), 0.0);
+				const size_t Up = static_cast<size_t>(Nx);
+				for (int J = 0; J + 1 < Ny; ++J)
+				{
+					for (int I = 0; I + 1 < Nx; ++I)
+					{
+						const size_t K = static_cast<size_t>(J * Nx + I);
+						CellBend[K] = std::max(std::max(Crest[K], Crest[K + 1]), std::max(Crest[K + Up], Crest[K + Up + 1]));
+						CellTop[K] = std::max(std::max(Z[K], Z[K + 1]), std::max(Z[K + Up], Z[K + Up + 1])) + 0.5 * CellBend[K];
+					}
+				}
 			}
 			double At(double X, double Y) const
 			{
@@ -1327,7 +1346,17 @@ namespace LandAir
 				const double A = std::clamp(U - I, 0.0, 1.0), B = std::clamp(V - J, 0.0, 1.0);
 				const size_t K = static_cast<size_t>(J * Nx + I), Up = static_cast<size_t>(Nx);
 				const double Flat = (Z[K] * (1.0 - A) + Z[K + 1] * A) * (1.0 - B) + (Z[K + Up] * (1.0 - A) + Z[K + Up + 1] * A) * B;
-				return Flat + std::max(std::max(Crest[K], Crest[K + 1]), std::max(Crest[K + Up], Crest[K + Up + 1]));
+				return Flat + CellBend[K];
+			}
+			double Hug(double X, double Y) const
+			{
+				if (Nx < 2 || Ny < 2) return 0.0;
+				const double U = (X - X0) / Step, V = (Y - Y0) / Step;
+				const int I = std::clamp(static_cast<int>(std::floor(U)), 0, Nx - 2), J = std::clamp(static_cast<int>(std::floor(V)), 0, Ny - 2);
+				const double A = std::clamp(U - I, 0.0, 1.0), B = std::clamp(V - J, 0.0, 1.0);
+				const size_t K = static_cast<size_t>(J * Nx + I), Up = static_cast<size_t>(Nx);
+				const double Flat = (Z[K] * (1.0 - A) + Z[K + 1] * A) * (1.0 - B) + (Z[K + Up] * (1.0 - A) + Z[K + Up + 1] * A) * B;
+				return std::min(Flat + CellBend[K], CellTop[K]);
 			}
 		};
 
@@ -2248,8 +2277,8 @@ namespace LandAir
 			Out.Points[P] = { Was[P].X + (Lies[P].X - Was[P].X) * Stream, Was[P].Y + (Lies[P].Y - Was[P].Y) * Stream, 0.0 };
 		}
 		// The ground under it, once (none: a flat field), and each point's height: from as it falls down onto it as it
-		// lies over it, flapping, never nearer it than Clear; then each edge kept over it (both its ends lifted where the
-		// ground between them stands higher than the edge would: a bank's or a rim's crest).
+		// lies over it, flapping, never nearer it than Clear; then each edge kept over it (its ends lifted where the ground
+		// between them stands higher than the edge would, a bank's or a rim's crest: the nearer end the more).
 		const V3 Fw = Ahead(C.HeapHeading), Rt = RightOf(C.HeapHeading);
 		UnderGrid G;
 		if (Ground)
@@ -2269,27 +2298,40 @@ namespace LandAir
 		for (size_t P = 0; P < Each; ++P)
 		{
 			V3& At = Out.Points[P];
-			const double LiesZ = Lies[P].Z + G.At(Lies[P].X, Lies[P].Y);
-			At.Z = std::max(Was[P].Z + (LiesZ - Was[P].Z) * Settled[P] + Flap[P], G.At(At.X, At.Y) + Clear);
+			const double LiesZ = Lies[P].Z + G.Hug(Lies[P].X, Lies[P].Y);
+			At.Z = std::max(Was[P].Z + (LiesZ - Was[P].Z) * Settled[P] + Flap[P], G.Hug(At.X, At.Y) + Clear);
 		}
 		if (Ground)
 		{
-			// (an edge wholly over the highest the grid reads, as a canopy still high in the air, is left as it is)
+			// (an edge wholly over the highest the grid reads, as a canopy still high in the air, is left as it is. Each
+			// edge's shortfall is worked out from its points as they were laid, not as its other edges have lifted them,
+			// and shared between its ends by how near each is to it: the least lift that clears it, short by S at T along
+			// the edge, is S (1 - T) / ((1 - T)^2 + T^2) at its near end and S T / the same at its far end, S at both for a
+			// shortfall at its middle. Each point is then lifted once, by the most any one of its edges asks of it, and
+			// every edge is still kept over the ground, as lifting either end more only lifts it more. A review: lifting both
+			// ends of each edge by all its shortfall, edge after edge, had lifted the tip of its crown, an end of every edge
+			// of its last ring's fan, once for each of them: lying along a bank under one edge it had stood up to 6.7 m over
+			// the ground like a tent pole, and the silk round a hedgerow bank's crest had floated up to 2.4 m over it)
 			const double Over = G.Most + Clear;
-			auto Keep = [&Out, &G, Clear, Over](size_t A, size_t B)
+			std::vector<double> Lift(Each, 0.0);
+			auto Keep = [&Out, &G, &Lift, Clear, Over](size_t A, size_t B)
 			{
-				V3& Pa = Out.Points[A];
-				V3& Pb = Out.Points[B];
+				const V3& Pa = Out.Points[A];
+				const V3& Pb = Out.Points[B];
 				if (Pa.Z >= Over && Pb.Z >= Over) return;
 				const int Steps = 2 + static_cast<int>(std::hypot(Pb.X - Pa.X, Pb.Y - Pa.Y) / (0.5 * G.Step));
-				double Short = 0.0;
+				double La = 0.0, Lb = 0.0;
 				for (int S = 1; S < Steps; ++S)
 				{
 					const double T = static_cast<double>(S) / Steps;
-					Short = std::max(Short, G.At(Pa.X + (Pb.X - Pa.X) * T, Pa.Y + (Pb.Y - Pa.Y) * T) + Clear - (Pa.Z + (Pb.Z - Pa.Z) * T));
+					const double Short = G.Hug(Pa.X + (Pb.X - Pa.X) * T, Pa.Y + (Pb.Y - Pa.Y) * T) + Clear - (Pa.Z + (Pb.Z - Pa.Z) * T);
+					if (Short <= 0.0) continue;
+					const double Share = Short / ((1.0 - T) * (1.0 - T) + T * T);
+					La = std::max(La, Share * (1.0 - T));
+					Lb = std::max(Lb, Share * T);
 				}
-				Pa.Z += Short;
-				Pb.Z += Short;
+				Lift[A] = std::max(Lift[A], La);
+				Lift[B] = std::max(Lift[B], Lb);
 			};
 			for (int R = 0; R < Ringed; ++R)
 			{
@@ -2299,9 +2341,10 @@ namespace LandAir
 					const size_t Ua = R + 1 < Ringed ? A + static_cast<size_t>(Cols) : Each - 1, Ub = R + 1 < Ringed ? B + static_cast<size_t>(Cols) : Each - 1;
 					Keep(A, B);
 					Keep(A, Ua);
-					Keep(A, Ub);
+					if (Ub != Ua) Keep(A, Ub);
 				}
 			}
+			for (size_t P = 0; P < Each; ++P) Out.Points[P].Z += Lift[P];
 		}
 		Out.Facings.assign(Each, { 0.0, 0.0, 1.0 });
 		Out.Colours.resize(Each * 3);

@@ -766,8 +766,9 @@ namespace
 	/** The fields a canopy is laid on to see none of it goes under the ground, in the canopy's own space (x the way it
 	 * falls from his feet, y to its right; metres over his feet): a slope of 1 in 4 rising and falling along the wind and
 	 * across it, a field of hummocks, a hedgerow bank 1 m high, a step 0.4 m up, a ditch 0.6 m deep, a sharp crest, a
-	 * crater's bowl and rim, and a bank along it under one edge. */
-	constexpr int GroundFields = 11;
+	 * crater's bowl and rim, and a bank along it under one edge; and (TipFields, past those, for its crown's tip lying:
+	 * GroundSweep) the same bank moved to 1 m left of its middle, 0.5 m left and 0.5 m right. */
+	constexpr int GroundFields = 11, TipFields = 14;
 	double FieldUnder(int Field, double X, double Y)
 	{
 		switch (Field)
@@ -786,7 +787,11 @@ namespace
 			const double R = std::hypot(X - 6.0, Y - 0.5);
 			return R < 1.5 ? -0.8 * (1.0 - R * R / 2.25) + 0.25 * R * R / 2.25 : R < 2.5 ? 0.25 * (2.5 - R) : 0.0;
 		}
-		default: return std::fabs(Y - 1.0) < 0.5 ? 0.4 + 0.4 * std::cos(3.14159265358979323846 * (Y - 1.0) / 0.5) : 0.0;
+		default:
+		{
+			const double Along = Field == 11 ? -1.0 : Field == 12 ? -0.5 : Field == 13 ? 0.5 : 1.0;
+			return std::fabs(Y - Along) < 0.5 ? 0.4 + 0.4 * std::cos(3.14159265358979323846 * (Y - Along) / 0.5) : 0.0;
+		}
 		}
 	}
 	/** The field as the board's ground (GroundFn, board metres) under a canopy that lies from Dn's Landed the way it
@@ -835,25 +840,37 @@ namespace
 	 * 12 mm cord: a third review found one 0.7 mm under there on hummocks), and the least. And at makes and between, on
 	 * each field, how far the points his lines across its silk go through across the grass stand over both the taut
 	 * straight from his harness to where it comes onto its silk and the ground there (Flung: a third review found them
-	 * flung 5 to 7 m up off a bank), the most and how many looks had one over 1.5 m. Pilots First, First + Every and on. */
+	 * flung 5 to 7 m up off a bank), the most and how many looks had one over 1.5 m, and how far they stand over the ground
+	 * alone once they are slack (Grass: from 0.8 of its fall, LineSlack). And lying (HeapShape at 0.8, 0.9 and 1.0 of its fall), on those fields and the bank moved (TipFields):
+	 * how far its crown's tip (its last point, a corner of each triangle of its last ring's fan) stands over the highest of
+	 * those triangles' other corners (Tip: a fourth review found it lifted once for each of them, up to 4.8 m over them
+	 * along the bank), the most and how many pilots had it over 0.3 m; and how far any of its points stands over the ground
+	 * (Silk), at 1.0. Pilots First, First + Every and on. */
 	struct GroundTally
 	{
 		int Under = 0, LinesUnder = 0, LinesUnderBetween = 0;
 		double Deepest = -1e9, AcrossLeast = 1e9, RestLeast = 1e9, BetweenLeast = 1e9;
 		int AcrossAt[3] = { -1, -1, -1 };    // (the pilot, field and step of its least, across)
-		double Flung[GroundFields], FlungSlump[GroundFields];
+		double Flung[GroundFields], FlungSlump[GroundFields], Grass[GroundFields];
 		int FlungPilot[GroundFields], FlungHigh[GroundFields];
+		double Tip[TipFields], Silk[TipFields];
+		int TipPilot[TipFields], TipHigh[TipFields];
 		GroundTally()
 		{
 			std::fill(Flung, Flung + GroundFields, -1e9);
 			std::fill(FlungSlump, FlungSlump + GroundFields, -1.0);
+			std::fill(Grass, Grass + GroundFields, -1e9);
 			std::fill(FlungPilot, FlungPilot + GroundFields, -1);
 			std::fill(FlungHigh, FlungHigh + GroundFields, 0);
+			std::fill(Tip, Tip + TipFields, -1e9);
+			std::fill(Silk, Silk + TipFields, -1e9);
+			std::fill(TipPilot, TipPilot + TipFields, -1);
+			std::fill(TipHigh, TipHigh + TipFields, 0);
 		}
 	};
 	void GroundSweep(int First, int Every, GroundTally& T)
 	{
-		SilkMesh M;
+		SilkMesh M, Lying;
 		for (int K = First; K < 300; K += Every)
 		{
 			const Chute Dn = SweepPilot(K);
@@ -891,7 +908,9 @@ namespace
 							for (int Pt = 1; Pt <= LineGrass; ++Pt)
 							{
 								const double TautZ = H.Z + (Way[LineGrass + 1].Z - H.Z) * Pt / (LineGrass + 1.0);
-								Highest = std::max(Highest, Way[Pt].Z - std::max(TautZ, FieldUnder(Field, Way[Pt].X, Way[Pt].Y)));
+								const double Grass = FieldUnder(Field, Way[Pt].X, Way[Pt].Y);
+								Highest = std::max(Highest, Way[Pt].Z - std::max(TautZ, Grass));
+								if (Q >= 64) T.Grass[Field] = std::max(T.Grass[Field], Way[Pt].Z - Grass);
 							}
 						}
 						if (!bMake)
@@ -917,6 +936,33 @@ namespace
 						T.FlungPilot[Field] = K;
 						T.FlungSlump[Field] = Slump;
 					}
+				}
+			}
+			for (int Field = 0; Field < TipFields; ++Field)
+			{
+				const GroundFn Board = FieldBoard(Field, Dn);
+				double Stick = -1e9;
+				for (int Sk = 16; Sk <= 20; Sk += 2)
+				{
+					HeapShape(Dn, Sk / 20.0, Off, Lying, Board);
+					const int Last = static_cast<int>(Lying.Points.size()) - 1;
+					double Fan = -1e9;
+					for (size_t I = 0; I + 2 < Lying.Triangles.size(); I += 3)
+					{
+						const int* Tr = &Lying.Triangles[I];
+						if (Tr[0] != Last && Tr[1] != Last && Tr[2] != Last) continue;
+						for (int J = 0; J < 3; ++J)
+							if (Tr[J] != Last) Fan = std::max(Fan, Lying.Points[static_cast<size_t>(Tr[J])].Z);
+					}
+					Stick = std::max(Stick, Lying.Points.back().Z - Fan);
+					if (Sk == 20)
+						for (const V3& Pt : Lying.Points) T.Silk[Field] = std::max(T.Silk[Field], Pt.Z - FieldUnder(Field, Pt.X, Pt.Y));
+				}
+				T.TipHigh[Field] += Stick > 0.3;
+				if (Stick > T.Tip[Field])
+				{
+					T.Tip[Field] = Stick;
+					T.TipPilot[Field] = K;
 				}
 			}
 		}
@@ -2033,8 +2079,20 @@ int main(int Argc, char** Argv)
 			// show. A third: looked at between makes too, as the scene moves them, one had gone 0.7 mm under on hummocks; and
 			// from his harness in a bank or a hummock (his man drawn flat at his feet's height) the grass of his lines across
 			// its silk had been flung 5 to 7 m up off the bank, 1.9 m off hummocks)
+			// (each field's bounds, a few centimetres over what each gives now (a fourth review: one bound of 1.75 m for all
+			// had let a cord stand 1.7 m up where they lie under 0.85 m): the grass points of his lines across its silk over
+			// both the taut straight and the ground (now 0.39 to 0.54 m on the slopes, the step, the sharp crest and the
+			// crater, 0.50 on hummocks, 0.72 across the ditch, 0.74 over the hedgerow bank, 1.25 along the bank), and once
+			// slack over the ground alone (0.31 to 0.42 m, 0.73 on the crater, 0.94 across the ditch, 1.46 over the hedgerow
+			// bank and 1.75 along the bank, where they come up onto its silk); and its silk lying over the ground (0.71 m on
+			// the slopes and hummocks, its far end's lift, 0.76 to 1.10 on the step, the ditch, the sharp crest and the
+			// crater, 1.63 over the hedgerow bank and 1.49 to 1.50 along the bank, wherever it lies: its edges bridging the
+			// banks)
 			GroundTally Swept;
-			double FlungMost = -1e9;
+			const double FlungMost[GroundFields] = { 0.57, 0.45, 0.43, 0.44, 0.53, 0.79, 0.42, 0.76, 0.42, 0.42, 1.31 };
+			const double GrassMost[GroundFields] = { 0.33, 0.33, 0.33, 0.33, 0.44, 1.53, 0.33, 0.99, 0.44, 0.77, 1.84 };
+			const double SilkMost[TipFields] = { 0.74, 0.74, 0.74, 0.74, 0.75, 1.71, 1.16, 0.80, 0.80, 0.94, 1.57, 1.57, 1.58, 1.58 };
+			int FlungOff = 0, TipOff = 0;
 			std::string FlungEach;
 			{
 				const int Threads = static_cast<int>(std::clamp(std::thread::hardware_concurrency(), 1u, 16u));
@@ -2053,11 +2111,22 @@ int main(int Argc, char** Argv)
 					for (int Field = 0; Field < GroundFields; ++Field)
 					{
 						Swept.FlungHigh[Field] += Tl.FlungHigh[Field];
+						Swept.Grass[Field] = std::max(Swept.Grass[Field], Tl.Grass[Field]);
 						if (Tl.Flung[Field] > Swept.Flung[Field] || (Tl.Flung[Field] == Swept.Flung[Field] && Tl.FlungPilot[Field] < Swept.FlungPilot[Field]))
 						{
 							Swept.Flung[Field] = Tl.Flung[Field];
 							Swept.FlungPilot[Field] = Tl.FlungPilot[Field];
 							Swept.FlungSlump[Field] = Tl.FlungSlump[Field];
+						}
+					}
+					for (int Field = 0; Field < TipFields; ++Field)
+					{
+						Swept.TipHigh[Field] += Tl.TipHigh[Field];
+						Swept.Silk[Field] = std::max(Swept.Silk[Field], Tl.Silk[Field]);
+						if (Tl.Tip[Field] > Swept.Tip[Field] || (Tl.Tip[Field] == Swept.Tip[Field] && Tl.TipPilot[Field] < Swept.TipPilot[Field]))
+						{
+							Swept.Tip[Field] = Tl.Tip[Field];
+							Swept.TipPilot[Field] = Tl.TipPilot[Field];
 						}
 					}
 					// (the first pilot of those as low, whatever the threads)
@@ -2071,13 +2140,22 @@ int main(int Argc, char** Argv)
 					GroundFields, Swept.Under, Swept.Deepest, Swept.LinesUnder, Swept.AcrossLeast, Swept.AcrossAt[0], Swept.AcrossAt[1], Swept.AcrossAt[2] / 20.0, Swept.RestLeast);
 				for (int Field = 0; Field < GroundFields; ++Field)
 				{
-					FlungMost = std::max(FlungMost, Swept.Flung[Field]);
-					char Each2[96];
-					std::snprintf(Each2, sizeof(Each2), "%s%d: %.3f (pilot %d, %.4f; %d over 1.5 m)", Field ? ", " : "", Field, Swept.Flung[Field], Swept.FlungPilot[Field], Swept.FlungSlump[Field], Swept.FlungHigh[Field]);
+					FlungOff += Swept.Flung[Field] > FlungMost[Field] || Swept.Grass[Field] > GrassMost[Field];
+					char Each2[128];
+					std::snprintf(Each2, sizeof(Each2), "%s%d: %.3f (pilot %d, %.4f; %d over 1.5 m; slack, over the ground alone %.3f)", Field ? ", " : "", Field, Swept.Flung[Field], Swept.FlungPilot[Field], Swept.FlungSlump[Field], Swept.FlungHigh[Field], Swept.Grass[Field]);
 					FlungEach += Each2;
 				}
 				std::printf("     and between makes (each 0.0125 of its fall, moved in place as the scene moves it): %d of his lines' middles more than 3 mm under the ground, those across its silk %.4f m over it at the lowest; the points those go through across the grass over both the taut straight from his harness and the ground, at makes and between, on each field at most %s\n",
 					Swept.LinesUnderBetween, Swept.BetweenLeast, FlungEach.c_str());
+				std::string TipEach;
+				for (int Field = 0; Field < TipFields; ++Field)
+				{
+					TipOff += Swept.Tip[Field] > 0.35 || Swept.Silk[Field] > SilkMost[Field];
+					char Each2[128];
+					std::snprintf(Each2, sizeof(Each2), "%s%d: %.3f (pilot %d; %d over 0.3 m; its silk %.3f over the ground)", Field ? ", " : "", Field, Swept.Tip[Field], Swept.TipPilot[Field], Swept.TipHigh[Field], Swept.Silk[Field]);
+					TipEach += Each2;
+				}
+				std::printf("     lying (0.8, 0.9 and 1.0 of its fall), its crown's tip over the other corners of its fan at most, and its silk over the ground at most at 1.0, on each field (11 to 13: the bank along it moved to 1 m and 0.5 m left of its middle and 0.5 m right) %s\n", TipEach.c_str());
 			}
 			int Nth = 0;
 			for (const auto& Each : All)
@@ -2312,7 +2390,8 @@ int main(int Argc, char** Argv)
 			Check(FallBad == 0, "chutes: falling in it blows downwind and down, longer along the wind, never back toward him nor rising (her verdict, (b))");
 			Check(SettleBad == 0, "chutes: as it settles falling in (0.8 to 0.95 of its fall) none of his lines is under its silk's top by 8 mm, those across it nor the rest (a review of 24 November 17:40Z, after a second look: they had sunk into its folds, then risen through them)");
 			Check(LinesUnder == 0 && Swept.LinesUnder == 0, "chutes: none of his lines is under the ground falling in or lying, those across his canopy nor the rest, drawn from his harness where the scene draws it, on the same fields (a review of 24 November 17:40Z, after a second look; the verdict's four and 300 pilots' numbers)");
-			Check(Swept.LinesUnderBetween == 0 && FlungMost <= 1.75, "chutes: between makes too, as the scene moves them, none of his lines' middles more than 3 mm under the ground; and his lines across its silk run from his harness along or over the grass to it, never flung up off it like a pole (a third review: from his harness in a bank they had stood 5 to 7 m up): the points they go through across the grass no more than 1.75 m over both the taut straight from his harness and the ground, at makes and between, on the same fields (300 pilots' numbers, each 0.0125 of the fall)");
+			Check(Swept.LinesUnderBetween == 0 && FlungOff == 0, "chutes: between makes too, as the scene moves them, none of his lines' middles more than 3 mm under the ground; and his lines across its silk run from his harness along or over the grass to it, never flung up off it like a pole (a third review: from his harness in a bank they had stood 5 to 7 m up): the points they go through across the grass over both the taut straight from his harness and the ground, and over the ground alone, no higher than each field's bound (a fourth review: one 1.75 m bound for all had let a cord stand 1.7 m up where they lie under 0.85 m), at makes and between, on the same fields (300 pilots' numbers, each 0.0125 of the fall)");
+			Check(TipOff == 0, "chutes: lying, his canopy's crown comes down to its tip, never stood up off it like a tent pole (a fourth review: lying along a bank under one edge its tip, an end of every edge of its last ring's fan, had been lifted once for each of them, up to 4.8 m over the rest of its fan and 6.5 m over the ground): its tip no more than 0.35 m over the other corners of its fan at 0.8, 0.9 and 1.0 of its fall, on the same fields and with the bank along it moved to 1 m and 0.5 m left of its middle and 0.5 m right; and its silk no higher over the ground than each field's bound (300 pilots' numbers)");
 			Check(UnderBad == 0 && Swept.Under == 0 && Floats < 0.08, "chutes: none of his canopy is under the ground falling in or lying, its points nor its triangles' edges, on a slope of 1 in 4 either way along the wind or across it, on hummocks, across a hedgerow bank, a step, a ditch, a sharp crest, a crater's rim or along a bank (the verdict's four; its points on 300 pilots' numbers too); and lying on a slope its underside on the ground, not floating (her verdict, (b))");
 		}
 

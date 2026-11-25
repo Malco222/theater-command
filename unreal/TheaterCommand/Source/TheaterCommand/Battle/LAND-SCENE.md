@@ -1181,9 +1181,18 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
     it (`Holes.TopAt`). `HeapShape` reads it once a make on a grid a quarter of a metre square under the silk (coarser
     over one still high in the air: 2,500 heights at most, 390 to 1,550 here, 750 on average, against 1,457 points a face), lays each point on it,
     and keeps every edge of the silk over it (a bank's, a ditch's side, a crest's or a crater's rim between two points
-    lifts both), the grid raised by how sharply the ground bends about each cell (a step narrower than a cell). The
-    review found its points on the ground but its triangles cutting 0.2 m into a bank, a ditch's sides, a sharp crest
-    and a crater's rim, and the scene's ground blind to holes.
+    lifts them, the nearer the more: each edge's shortfall worked out from its points as laid and shared between its
+    ends, the least lift that clears it, and each point lifted once, by the most any of its edges asks), the grid raised
+    by how sharply the ground bends about each cell (a step narrower than a cell), but for the silk never more than
+    half that bend over the cell's highest corner (a crest between two points stands no higher). The review found its
+    points on the ground but its triangles cutting 0.2 m into a bank, a ditch's sides, a sharp crest and a crater's rim,
+    and the scene's ground blind to holes. A fourth review found each edge lifting both its ends by all its shortfall,
+    edge after edge: its crown's tip, an end of every edge of its last ring's fan, was lifted once for each, and lying
+    along a bank under one edge it stood up to 6.7 m over the ground like a tent pole (4.8 m over the rest of its fan,
+    on 91 of 300 pilots more than 0.5 m); and the grid's whole bend, 0.74 m over a hedgerow bank 1 m high and 0.8 m over
+    the bank along it, had floated its silk up to 2.4 m over the ground round a hedgerow bank. Now its tip stands at most
+    0.30 m over the rest of its fan, with the bank along it or moved 0.5 m or 1 m either way, and its silk at most 1.63 m
+    over the ground round the hedgerow bank and 1.50 m along the bank (its edges bridging them).
   - *How it looks from above* (the art director's note of 24 November 17:40Z: from above both pilots' silk read as "a
     smooth cocoon or a gourd", an even outline and only lengthwise ridges). `HeapShape` lies on 13 rings now (it was
     11), a little over half a metre apart where it folds across, and on dice of their own (the pilot's number with
@@ -1400,12 +1409,22 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   numbers (their canopies' points too): the lines across its silk 0.015 m over it at the lowest (before this round's
   second review, 0.23 m under it); and for the 300, made as the scene makes them (`SilkStep`) and looked at each 0.0125
   of the fall, between makes as well: none of his lines' middles more than 3 mm under the ground there (those across
-  its silk 0.0148 m over it at the lowest; before the third review 0.0004 m under it on hummocks, 0.0007 at 45 fps),
-  and the points his lines across its silk go through across the grass no more than 1.75 m over both the taut
-  straight from his harness and the ground, at makes and between, on every field (now 0.39 to 0.54 m at most on the
-  slopes, the step and the sharp crest, 0.50 on hummocks, 0.46 on the crater, 0.72 across the ditch, 0.85 over the
-  hedgerow bank and 1.39 along the bank, where they come up onto a silk the grid's allowance for its crest lifts 0.7 m
-  over it; before the third review 7.0 m along the bank and 1.9 on hummocks, 4,400 looks over 1.5 m). At 45 fps his
+  its silk 0.0074 m over it at the lowest, across the ditch's lip as one runs down into it falling in (0.0148 before
+  the fourth review's mend, its silk laid differently; before the third review 0.0004 m under it on hummocks, 0.0007
+  at 45 fps),
+  and the points his lines across its silk go through across the grass over both the taut straight from his harness
+  and the ground, at makes and between, and once slack over the ground alone, no higher than each field's own bound, a
+  few centimetres over what it gives (over both: now 0.39 to 0.54 m at most on the slopes, the step, the sharp crest
+  and the crater, 0.50 on hummocks, 0.72 across the ditch, 0.74 over the hedgerow bank and 1.25 along the bank, where
+  they come up onto its silk; before the third review 7.0 m along the bank and 1.9 on hummocks, 4,400 looks over
+  1.5 m, and one bound of 1.75 m for all had let a cord stand 1.7 m up where they lie under 0.85 m (a fourth review);
+  over the ground alone 0.31 to 0.42 m, 0.73 on the crater, 0.94 across the ditch, 1.46 over the hedgerow bank and
+  1.75 along the bank). And lying (0.8, 0.9 and 1.0 of its fall) its crown's tip no more than 0.35 m over the other
+  corners of its fan, on every field and with the bank along it moved to 1 m and 0.5 m left of its middle and 0.5 m
+  right (now 0.30 at most; before the fourth review up to 5.1 m, 75 to 98 pilots of 300 over 0.3 m with the bank
+  along it), and its silk no higher over the ground than each field's bound (now 0.71 m on the slopes and hummocks,
+  its far end's lift, 0.76 to 1.10 on the step, the ditch, the sharp crest and the crater, 1.63 over the hedgerow bank,
+  1.49 to 1.50 along the bank; before, 2.39, and 4.9 to 7.1 along the bank). At 45 fps his
   lines as drawn move up to 0.52 m a frame between makes and 0.43 m at one (their run across the grass swinging as
   where they come onto its silk moves, at a slump of about 0.4): printed, not checked, being over the silk's 0.3 m. For
   the 300 (measured, not in the test) 0.56 m on the flat field, up to 0.63 m on the other fields but the bank's, and
