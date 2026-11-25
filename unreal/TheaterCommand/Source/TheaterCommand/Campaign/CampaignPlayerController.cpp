@@ -9702,11 +9702,22 @@ void ACampaignPlayerController::DescribeScreen(FString& OutOpen, FString& OutWor
 	{
 		TArray<FString> Ids;
 		for (const int32 Id : PickedCorps) { Ids.Add(FString::FromInt(Id)); }
-		// (1.5.1, the Mac's p7: a division's tile picked or let go on a card is a change in hand the step player can see)
+		// (1.5.1, the Mac's p7: a division's tile picked or let go on a card is a change in hand the step player can see.)
+		// (1.5.3: only the picks the tray shows lit are counted, as MakeCard in CampaignHUD.cpp lights a tile: on a card of
+		// the tray in view that can be broken up, among the tiles it lays out, twelve at most. A pick kept from a card that
+		// is no longer shown, such as another army's before this one was picked up, is not in hand.)
 		int32 Splitting = 0;
-		for (const TPair<int32, TSet<int32>>& Each : PickedDivisions)
+		if (Tray.bVisible)
 		{
-			Splitting += Each.Value.Num();
+			for (const FTrayCard& Card : Tray.Cards)
+			{
+				const TSet<int32>* Set = !Card.bLook && Card.bCanBreak ? PickedDivisions.Find(Card.CorpsId) : nullptr;
+				const int32 Tiles = Card.Parts.Num() > 0 ? FMath::Min(Card.Parts.Num(), 12) : FMath::Clamp(Card.Divisions, 1, 12);
+				for (int32 Slot = 0; Set && Slot < Tiles; ++Slot)
+				{
+					Splitting += Set->Contains(Slot) ? 1 : 0;
+				}
+			}
 		}
 		const FString Split = Splitting > 0 ? FString::Printf(TEXT(", %d division%s picked to split off"), Splitting, Splitting == 1 ? TEXT("") : TEXT("s")) : FString();
 		OutHand = FString::Printf(TEXT("army at %s: corps %s%s%s"), *Place(ArmyRegion), *FString::Join(Ids, TEXT(",")), bByRail ? TEXT(" (by rail)") : bBySea ? TEXT(" (by sea)") : TEXT(""), *Split);
