@@ -6001,12 +6001,14 @@ namespace LandKit
 		if (!Best) for (const Benches& B : All)
 		{
 			const double Dx = X - B.At.X, Dy = Y - B.At.Y, D = Dx * Dx + Dy * Dy;
-			if (D > 36.0 || D >= BestD)
+			// (to 8 m aft of her root: an overfull lorry's last men stand that far back in the rules, a row each 1.1 m, and
+			// had no seat; the nearest carrier's still, so a lorry close behind her keeps her own men)
+			if (D > 67.0 || D >= BestD)
 			{
 				continue;
 			}
 			const double A = Dx * B.Forward.X + Dy * B.Forward.Y, R = Dx * B.Right.X + Dy * B.Right.Y;
-			if (std::fabs(R) > 1.6 || A < -5.0 || A > 3.0)
+			if (std::fabs(R) > 1.6 || A < -8.0 || A > 3.0)
 			{
 				continue;
 			}
@@ -6021,7 +6023,8 @@ namespace LandKit
 		}
 		// (by his place: the drill's seat, two abreast 0.55 m either side, rows 0.6 m apart from 1.4 m forward of her root;
 		// a far block's men a row each 1.1 m from 0.5 m sit as near their rows as these give)
-		if (Row < 0)
+		const bool bByPlace = Row < 0;
+		if (bByPlace)
 		{
 			Row = std::max(0, static_cast<int>(std::lround((1.4 - Along) / 0.6)));
 			bRightSide = Across >= 0.0;
@@ -6041,7 +6044,20 @@ namespace LandKit
 		// (no bench left for him: kneeling in the bed's middle at her front, facing aft, a little to his own side)
 		const V3& Front = Best->Seat[0];
 		const double FrontAlong = (Front - Best->At).Dot(Best->Forward);
-		const double Back = 0.55 * static_cast<double>(Row - Count);
+		double Back = 0.55 * static_cast<double>(Row - Count);
+		if (bByPlace)
+		{
+			// (by his place, the men past her benches stand from her last bench's row to 8 m aft of her root: down the
+			// bed's middle in that order, the whole of them fitted between her first bench and her last, so none kneels
+			// in the air behind her tail and no two on one spot)
+			double RearAlong = FrontAlong;
+			for (int I = 0; I < Best->Left + Best->Righted; ++I)
+			{
+				RearAlong = std::min(RearAlong, (Best->Seat[I] - Best->At).Dot(Best->Forward));
+			}
+			const double From = 1.4 - 0.6 * (static_cast<double>(Count) - 0.5);
+			Back = (FrontAlong - RearAlong) * std::clamp((From - Along) / (From + 8.0), 0.0, 1.0);
+		}
 		const V3 At = Best->At + Best->Forward * (FrontAlong - Back) + Best->Right * (bRightSide ? 0.22 : -0.22);
 		Out.Floor = Front.Z - 0.5;
 		Out.At = V3(At.X, At.Y, Out.Floor);
