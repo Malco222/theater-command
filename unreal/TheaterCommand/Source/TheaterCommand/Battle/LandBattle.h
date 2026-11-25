@@ -476,6 +476,9 @@ private:
 		bool bNear = true;
 		/** Drawn only while her roof gun is manned (a German tank's MG 34, its cradle part). */
 		bool bWhileManned = false;
+		/** A wireless aerial's length from its mounting, metres (0: any other body): put away near the lens, and for
+		 * the whole of the film's ride on her (DrawArmour, LandEye::AerialShown). */
+		double AerialLong = 0.0;
 		double SootShown = 0.0;
 		/** TK1: whether its far level is a section of its own (a body the crowd merges has none), and whether her
 		 * instances draw it now (its sections hidden). TK3: the run its links were last posed for (-1e300: to be posed). */

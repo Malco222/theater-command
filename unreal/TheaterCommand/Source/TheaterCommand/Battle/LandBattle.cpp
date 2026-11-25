@@ -5048,6 +5048,15 @@ void ALandBattle::MakeBodies(int32 FromVehicle)
 			// (a German roof gun, the MG 34 in its cradle on the cupola's rail, is drawn only while her commander mans
 			// it: the crews' hatch and death clips are made without it; the Sherman's .50 stays on its post)
 			D.bWhileManned = LandKit::ShownWhileManned(Model, Body);
+			// (a wireless aerial's length from its mounting, its points being kept from there: DrawArmour puts it away
+			// near the lens)
+			if (Body.Name == "aerial")
+			{
+				for (size_t K = 2; K < Body.Near.Points.size(); K += 3)
+				{
+					D.AerialLong = FMath::Max(D.AerialLong, static_cast<double>(Body.Near.Points[K]));
+				}
+			}
 			D.bFarSection = bFarSection; // TK1
 			D.LinksRun = Body.Side < 0 ? Vehicle.RunLeft : Vehicle.RunRight; // TK3: links as made, posed once she runs
 		}
@@ -5076,6 +5085,15 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 		FarCrowd->SetHigh(S.General.bOn && !S.General.bFilm, S.MenLines / 1.8);
 		FarCrowd->Draw(All, S.Pose, EyeAt, [this](int32 K) { return HiddenVehicle(K); }); // TK1
 	}
+	// A wireless aerial near the lens is put away (Brian's picture of 25 November 16:35Z: the film riding behind a
+	// Sherman's turret, her own aerial 2 to 4 m before the lens, a thin dark line through the whole picture): none of
+	// it drawn within 3 m of the picture's eye, all of it from 6 m, between them that share of its length from its
+	// mounting; and none of hers while the film rides her, the film's picture being drawn (as the picture, or in its
+	// corner window, whose own lens counts as the picture's does). LandEye::AerialShown, played in the cloud test.
+	// "-TheaterLandAerialsNear": drawn whole at any distance, as before, for the Mac's with and without.
+	static const bool bAerialsNear = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandAerialsNear"));
+	const bool bOwnPicture = S.General.bOn && !S.General.bFilm;
+	const int RiddenTrack = (!bOwnPicture || bCornerLens) ? LandEye::RiddenBy(S.FilmPose) : -1;
 	// (the wrecks' soot steps spread over frames: at most this many points sent a frame, a body shown again sent at once)
 	int32 SootRoom = 40000; // TK1 (soot)
 	for (FBodyDrawn& D : BodiesDrawn)
@@ -5089,7 +5107,20 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 		const LandKit::Model& Model = V.Look();
 		const LandKit::Body& Body = Model.Bodies[static_cast<size_t>(D.Body)];
 		const bool bManned = !D.bWhileManned || static_cast<size_t>(D.Vehicle) >= S.RoofManned.size() || S.RoofManned[static_cast<size_t>(D.Vehicle)] != 0;
-		const bool bShown = V.Fade >= 0.5 && !HiddenVehicle(D.Vehicle) && bManned;
+		// (her aerial: how much of it is drawn this frame, 1 all of it)
+		double Aerial = 1.0;
+		if (D.AerialLong > 0.0 && !bAerialsNear && static_cast<size_t>(D.Body) < V.Bodies().size())
+		{
+			const LandKit::Place& Mounting = V.Bodies()[static_cast<size_t>(D.Body)];
+			const LandPlay::Vec AerialFoot(Mounting.At.X, Mounting.At.Y, Mounting.At.Z);
+			const bool bRidden = RiddenTrack >= 0 && static_cast<size_t>(D.Vehicle) < S.TrackOfVehicle.size() && S.TrackOfVehicle[static_cast<size_t>(D.Vehicle)] == RiddenTrack;
+			Aerial = LandEye::AerialShown(EyeAt, AerialFoot, D.AerialLong, bRidden);
+			if (bOwnPicture && bCornerLens)
+			{
+				Aerial = FMath::Min(Aerial, LandEye::AerialShown(S.FilmPose.Eye, AerialFoot, D.AerialLong, bRidden));
+			}
+		}
+		const bool bShown = V.Fade >= 0.5 && !HiddenVehicle(D.Vehicle) && bManned && Aerial > 0.0;
 		Mesh->SetVisibility(bShown);
 		if (!bShown)
 		{
@@ -5119,10 +5150,11 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 		// (in the general's view a far vehicle her own meshes draw is grown as her pieces would grow her, about the ground
 		// under her middle: a gun laid high, a manned roof gun's cradle)
 		const double Grow = FarCrowd.IsValid() ? FarCrowd->GrowOf(D.Vehicle) : 1.0;
-		if (Grow != 1.0 || !Mesh->GetRelativeScale3D().Equals(FVector::OneVector))
+		// (an aerial drawn in part: that share of its length, along its own upright, from its mounting)
+		if (Grow != 1.0 || Aerial != 1.0 || !Mesh->GetRelativeScale3D().Equals(FVector::OneVector))
 		{
 			const FVector Foot = World(V.Root.At.X, V.Root.At.Y, V.Root.At.Z);
-			Mesh->SetWorldTransform(FTransform(FQuat(Place.Q.X, Place.Q.Y, Place.Q.Z, Place.Q.W), Foot + (World(Place.At.X, Place.At.Y, Place.At.Z) - Foot) * Grow, FVector(Grow)));
+			Mesh->SetWorldTransform(FTransform(FQuat(Place.Q.X, Place.Q.Y, Place.Q.Z, Place.Q.W), Foot + (World(Place.At.X, Place.At.Y, Place.At.Z) - Foot) * Grow, FVector(Grow, Grow, Grow * Aerial)));
 		}
 		else
 		{

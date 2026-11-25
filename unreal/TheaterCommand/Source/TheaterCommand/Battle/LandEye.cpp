@@ -145,6 +145,23 @@ namespace LandEye
 		return std::abs(To.Dot(Right)) / Depth <= TanH && std::abs(To.Dot(Up)) / Depth <= TanV;
 	}
 
+	double AerialShown(const Vec& Eye, const Vec& Foot, double Long, bool bRidden)
+	{
+		if (bRidden) return 0.0;
+		// (the rod's nearest point to the eye: upright from its foot)
+		const double Up = std::clamp(Eye.Z - Foot.Z, 0.0, std::max(0.0, Long));
+		const double Far = (Eye - Vec(Foot.X, Foot.Y, Foot.Z + Up)).Length();
+		if (Far <= AerialAway) return 0.0;
+		if (Far >= AerialWhole) return 1.0;
+		const double U = (Far - AerialAway) / (AerialWhole - AerialAway);
+		return U * U * (3.0 - 2.0 * U);
+	}
+
+	int RiddenBy(const Pose& P)
+	{
+		return P.Shot == Kind::Tank ? P.Subject : -1;
+	}
+
 	double Director::Roll()
 	{
 		Dice += 0x9E3779B97F4A7C15ull;

@@ -87,6 +87,26 @@ namespace LandEye
 	/** Whether a point is in a pose's picture (its vertical lens, the picture Aspect wide for 1 high), with a margin. */
 	bool InPicture(const Pose& P, const Vec& At, double Margin = 1.0, double Aspect = 16.0 / 9.0);
 
+	/**
+	 * A vehicle's wireless aerial near the lens (Brian's picture of 25 November 2026, 16:35Z: the film riding behind a
+	 * Sherman's turret, her own aerial 2 to 4 m before the lens, a thin dark line through the whole picture from the
+	 * bottom to the top; the art director's stills of the desert had the same line). An aerial is a rod a thumb thick
+	 * and over 2 m long standing as high as the ride's own eye: the lens's 1.5 m from a thing does not keep it out of
+	 * the picture, and to keep the eye off it by enough would take the ride from behind the turret. So the scene puts
+	 * it away, as a film crew stows the aerial of the tank its camera rides: how much of a vehicle's aerial is drawn,
+	 * 1 the whole of it down to 0 not at all, by how far the picture's eye stands from the nearest point of it. Within
+	 * AerialAway none; from AerialWhole all of it; between them it is drawn that share of its length from its foot
+	 * (it runs out of its mounting as the eye draws off, eased at both ends, so nothing appears or goes at a stroke;
+	 * the longest in the kit, 2.5 m, never stands through more than 24 degrees of the picture, about half the height
+	 * of the film's near lenses). bRidden: the vehicle the film's ride is on (RiddenBy): none of hers for the whole
+	 * shot, however far back the ride stands. Foot: where it is mounted, a field point; Long: its length, taken as
+	 * standing upright (it leans and whips a hand or two).
+	 */
+	constexpr double AerialAway = 3.0, AerialWhole = 6.0;
+	double AerialShown(const Vec& Eye, const Vec& Foot, double Long, bool bRidden);
+	/** The track the film's ride is on in a pose (its Tank shot's subject), -1 in any other shot: AerialShown's bRidden. */
+	int RiddenBy(const Pose& P);
+
 	struct World
 	{
 		std::function<double(double X, double Y)> Height;

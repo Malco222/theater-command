@@ -1978,6 +1978,42 @@ int main(int argc, char** argv)
 		return 0;
 	}
 
+	// The tanks' wireless aerials near the lens (Brian's picture of 25 November, 16:35Z: the film riding behind a
+	// Sherman's turret, her own aerial a thin dark line through the whole picture). The recording says nothing of an
+	// aerial, so every tank is given the Sherman's own as her model has it: mounted 0.97 m behind her turret's middle
+	// and 0.48 m left of it, 2.5 m up, 2.27 m long, turning with the turret. Each frame of the film, of the aerials
+	// within AerialWhole of the lens: how much of the picture's height the one standing through most of it takes,
+	// drawn whole (as it was) and drawn as LandEye::AerialShown has the scene draw it.
+	struct WireCount
+	{
+		long Frames = 0, Near = 0, PutAway = 0, HalfWhole = 0, HalfShown = 0, RideWhole = 0;
+		double MostWhole = 0.0, MostShown = 0.0;
+	};
+	WireCount Wires;
+	const double WireBack = 0.97, WireLeft = 0.48, WireUp = 2.5, WireLong = 2.27;
+	// (the share of the picture's height a rod from A to B stands through, the part of it inside the picture's width;
+	// the picture 16 wide for 9 high, the lens's roll left out)
+	auto ThroughPicture = [](const LandEye::Pose& P, const Vec& A, const Vec& B)
+	{
+		const Vec Way = P.Look - P.Eye;
+		if (Way.Length() < 1e-6) return 0.0;
+		const Vec Fwd = Way.Unit();
+		Vec Right = Vec(Fwd.Y, -Fwd.X, 0.0);
+		Right = Right.Length() < 1e-6 ? Vec(1.0, 0.0, 0.0) : Right.Unit();
+		const Vec Up(Right.Y * Fwd.Z - Right.Z * Fwd.Y, Right.Z * Fwd.X - Right.X * Fwd.Z, Right.X * Fwd.Y - Right.Y * Fwd.X);
+		const double TanV = std::tan(P.Fov * 0.5 * 3.14159265358979323846 / 180.0), TanH = TanV * 16.0 / 9.0;
+		double Lo = 1e9, Hi = -1e9;
+		for (int K = 0; K <= 48; ++K)
+		{
+			const Vec To = A + (B - A) * (K / 48.0) - P.Eye;
+			const double Depth = To.Dot(Fwd);
+			if (Depth < 0.2 || std::abs(To.Dot(Right)) / Depth > TanH) continue;
+			const double V = std::clamp(To.Dot(Up) / Depth / TanV, -1.0, 1.0);
+			Lo = std::min(Lo, V);
+			Hi = std::max(Hi, V);
+		}
+		return Hi > Lo ? 0.5 * (Hi - Lo) : 0.0;
+	};
 	// (LAND_PLAY_ONLY_GEN: the general's view alone, for working on it; the film's counts after it are of nothing)
 	const bool bOnlyGen = std::getenv("LAND_PLAY_ONLY_GEN") != nullptr;
 	while (!bOnlyGen && Battle < Rec.End + 6.0)
@@ -2031,6 +2067,40 @@ int main(int argc, char** argv)
 		}
 		const double EyeMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - E0).count();
 		const long FrameSteps = Eye.Steps() - Steps0;
+		{
+			// (the tanks' wireless aerials near the lens)
+			const int Ridden = LandEye::RiddenBy(Pose);
+			double Whole = 0.0, Shown = 0.0;
+			bool bNear = false, bAway = false, bRideWhole = false;
+			for (size_t K = 0; K < Rec.Tracks.size(); ++K)
+			{
+				const LandFeed::Track& Tr = Rec.Tracks[K];
+				if (Tr.Role != "tank" || Tr.bTwin || Tr.Start() > Battle || (Tr.Out >= 0.0 && Battle > Tr.Out + 1.0)) continue;
+				const LandFeed::Spot S = LandFeed::SpotAt(Tr, Battle);
+				if (std::hypot(S.X - Pose.Eye.X, S.Y - Pose.Eye.Y) > LandEye::AerialWhole + 2.0) continue;
+				double Turret = S.F;
+				if (const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Battle); C && C->bAim) Turret = LandFeed::FacingTo(S.X, S.Y, C->AimX, C->AimY);
+				const double Sn = std::sin(Turret), Cs = std::cos(Turret);
+				const Vec Foot(S.X - WireBack * Sn - WireLeft * Cs, S.Y - WireBack * Cs + WireLeft * Sn, GroundAt(S.X, S.Y) + WireUp);
+				const double Beside = std::clamp(Pose.Eye.Z - Foot.Z, 0.0, WireLong);
+				if ((Pose.Eye - Vec(Foot.X, Foot.Y, Foot.Z + Beside)).Length() >= LandEye::AerialWhole) continue;
+				bNear = true;
+				const double Part = LandEye::AerialShown(Pose.Eye, Foot, WireLong, static_cast<int>(K) == Ridden);
+				bAway = bAway || Part < 1.0;
+				const double Through = ThroughPicture(Pose, Foot, Foot + Vec(0.0, 0.0, WireLong));
+				Whole = std::max(Whole, Through);
+				bRideWhole = bRideWhole || (static_cast<int>(K) == Ridden && Through > 0.5);
+				if (Part > 0.0) Shown = std::max(Shown, ThroughPicture(Pose, Foot, Foot + Vec(0.0, 0.0, WireLong * Part)));
+			}
+			++Wires.Frames;
+			Wires.Near += bNear ? 1 : 0;
+			Wires.PutAway += bAway ? 1 : 0;
+			Wires.HalfWhole += Whole > 0.5 ? 1 : 0;
+			Wires.HalfShown += Shown > 0.5 ? 1 : 0;
+			Wires.RideWhole += bRideWhole ? 1 : 0;
+			Wires.MostWhole = std::max(Wires.MostWhole, Whole);
+			Wires.MostShown = std::max(Wires.MostShown, Shown);
+		}
 		StepsByFrame.push_back(FrameSteps);
 		if (Pose.bCut && Eye.MassShot()) { MassSteps = FrameSteps; MassMs = EyeMs; }
 		if (Pose.bCut && std::getenv("LAND_PLAY_CUTS")) std::printf("  cut at %.2f (real %.2f) to %s on %d%s%s, the last left for %s\n", Battle, Real, LandEye::NameOf(Pose.Shot), Pose.Subject,
@@ -2759,6 +2829,56 @@ int main(int argc, char** argv)
 		100.0 * ES.ScreenMost, 100.0 * ScreenedShare, 100.0 * ES.ScreenLeave, 100.0 * LensScreenedLeave / std::max(1, LensLooks), 100.0 * ES.ScreenLeave, LongestScreened, LongestScreenedAt);
 	if (ScreenedShare > 0.05) Fault("the picture was screened by things more than 5% of the time");
 	if (LongestScreened > 1.0) Fault("a shot stayed screened by things for over a second");
+	double MostAnywhere = 0.0;
+	{
+		// (the rule's own figures: none of it within AerialAway of the rod's nearest point, all of it from AerialWhole,
+		// never less of it the farther off and never a step; none of the ridden tank's at any distance; the ride is
+		// the tank shot and no other)
+		const Vec Foot(10.0, 20.0, 2.5);
+		bool bRule = true;
+		double Was = 0.0, Step = 0.0;
+		for (int K = 0; K <= 900; ++K)
+		{
+			const double Far = 0.01 * K;
+			const double Now = LandEye::AerialShown(Foot + Vec(Far, 0.0, 1.0), Foot, WireLong, false);
+			if (Far < LandEye::AerialAway - 1e-9 && Now != 0.0) bRule = false;
+			if (Far > LandEye::AerialWhole + 1e-9 && Now != 1.0) bRule = false;
+			if (Far > LandEye::AerialAway + 0.5 && Far < LandEye::AerialWhole - 0.5 && !(Now > 0.02 && Now < 0.98)) bRule = false;
+			if (Now < Was) bRule = false;
+			Step = std::max(Step, Now - Was);
+			Was = Now;
+			if (LandEye::AerialShown(Foot + Vec(Far, 0.0, 1.0), Foot, WireLong, true) != 0.0) bRule = false;
+		}
+		// (over its tip and under its foot the nearest point is the tip and the foot)
+		const double Inside = LandEye::AerialAway - 0.1, Outside = LandEye::AerialWhole + 0.1;
+		if (LandEye::AerialShown(Foot + Vec(0.0, 0.0, WireLong + Inside), Foot, WireLong, false) != 0.0 || LandEye::AerialShown(Foot + Vec(0.0, 0.0, WireLong + Outside), Foot, WireLong, false) != 1.0) bRule = false;
+		if (LandEye::AerialShown(Foot + Vec(0.0, 0.0, -Inside), Foot, WireLong, false) != 0.0 || LandEye::AerialShown(Foot + Vec(0.0, 0.0, -Outside), Foot, WireLong, false) != 1.0) bRule = false;
+		LandEye::Pose Ride;
+		Ride.Shot = LandEye::Kind::Tank;
+		Ride.Subject = 7;
+		LandEye::Pose Beside = Ride;
+		Beside.Shot = LandEye::Kind::Track;
+		if (LandEye::RiddenBy(Ride) != 7 || LandEye::RiddenBy(Beside) != -1) bRule = false;
+		if (!bRule || Step > 0.006) Fault("the wireless aerial's rule is not as it says (none of it within AerialAway, all from AerialWhole, never less the farther off, no step, none of the ridden tank's, the ride the tank shot alone)");
+		// (and its picture, whatever tanks this recording's film came near: the longest aerial in the kit, 2.5 m,
+		// looked straight at from every distance out to 9 m and every height from a metre under its foot to a metre
+		// over its tip, through the narrowest of the near lenses, the general's 44 degrees)
+		for (int H = 1; H <= 180; ++H)
+		{
+			for (int Z = -4; Z <= 14; ++Z)
+			{
+				LandEye::Pose Lens;
+				Lens.Eye = Foot + Vec(0.05 * H, 0.0, 0.25 * Z);
+				Lens.Look = Foot + Vec(0.0, 0.0, std::clamp(0.25 * Z, 0.0, 2.5));
+				Lens.Fov = 44.0;
+				const double Part = LandEye::AerialShown(Lens.Eye, Foot, 2.5, false);
+				if (Part > 0.0) MostAnywhere = std::max(MostAnywhere, ThroughPicture(Lens, Foot, Foot + Vec(0.0, 0.0, 2.5 * Part)));
+			}
+		}
+	}
+	std::printf("\nwireless aerials (the Sherman's own stood on every tank, %.2f m long): the lens within %.0f m of one in %.1f%% of the film's frames; drawn whole, as they were, one stood through over half the picture's height in %ld frames (%.1f s; %ld of them the ridden tank's own), %.0f%% of it at the most; put away near the lens (none of one within %.0f m, none of the ridden tank's, in %ld frames) %ld frames, %.0f%% at the most; the longest in the kit, 2.5 m, looked at through a 44 degree lens from anywhere, %.0f%% at the most",
+		WireLong, LandEye::AerialWhole, 100.0 * Wires.Near / std::max(1L, Wires.Frames), Wires.HalfWhole, Wires.HalfWhole * Dt, Wires.RideWhole, 100.0 * Wires.MostWhole, LandEye::AerialAway, Wires.PutAway, Wires.HalfShown, 100.0 * Wires.MostShown, 100.0 * MostAnywhere);
+	if (Wires.MostShown > 0.6 || MostAnywhere > 0.6) Fault("a wireless aerial near the lens stands through most of the picture's height (it is to be put away there: LandEye::AerialShown)");
 	Film.Report("this run");
 	{
 		int Men = 0;
@@ -4266,8 +4386,11 @@ int main(int argc, char** argv)
 		// (and the dark's own hold, timed on the screen as the light's is: a shot dark for its first six tenths of a
 		// second and light after has been dark 0.35 s of the rule's counting, short of DarkHold, and is not left)
 		const int LeftBrief = LeftUnder([](double, double Held, bool) { return Held < 0.6 ? 0.6 : 0.05; }, 0.0);
-		std::printf("dark (the rule's rest, the same reading whatever the lens looks at): dark everywhere %d shots left; hovering about the leaving line %d; dark, light from 30 to 45 s, dark again %d; dark with no reading a second in six %d; dark but for each shot's first six tenths of a second %d; dark but for one reading in twenty %d; dark but for the openings' and the wides' pictures, read late as the scene reads, %d at the most; dark but for each shot's first %.2f s %d, its first %.2f s %d; light but for each shot's first six tenths of a second %d (it rests at %d running until a picture reads %.0f%% or lighter for %.2f s)\n",
-			LeftDusk, LeftHover, LeftBack, LeftGaps, LeftLag, LeftFlash, LeftWide, 0.25 + ES.DarkHold - 0.05, LeftShort, 0.25 + ES.DarkHold + 0.1, LeftLong, LeftBrief, ES.DarkRunMost, ES.DarkLight * 100.0, ES.DarkHold);
+		// (and the leaving line's own height: a picture that stays a little under it all battle, far over the light's
+		// line, is no dark picture, and no shot is left for it)
+		const int LeftUnderLine = LeftUnder([&ES](double, double, bool) { return ES.DarkLeave - 0.06; }, 0.25);
+		std::printf("dark (the rule's rest, the same reading whatever the lens looks at): dark everywhere %d shots left; hovering about the leaving line %d; dark, light from 30 to 45 s, dark again %d; dark with no reading a second in six %d; dark but for each shot's first six tenths of a second %d; dark but for one reading in twenty %d; dark but for the openings' and the wides' pictures, read late as the scene reads, %d at the most; dark but for each shot's first %.2f s %d, its first %.2f s %d; light but for each shot's first six tenths of a second %d; a little under the leaving line all battle %d (it rests at %d running until a picture reads %.0f%% or lighter for %.2f s)\n",
+			LeftDusk, LeftHover, LeftBack, LeftGaps, LeftLag, LeftFlash, LeftWide, 0.25 + ES.DarkHold - 0.05, LeftShort, 0.25 + ES.DarkHold + 0.1, LeftLong, LeftBrief, LeftUnderLine, ES.DarkRunMost, ES.DarkLight * 100.0, ES.DarkHold);
 		if (LeftDusk < 1) Fault("under a light dark everywhere the dark rule left no shot at all (the rule is not working)");
 		if (LeftDusk > ES.DarkRunMost) Fault("under a light dark everywhere the dark rule did not rest after its few shots (a dusk's film cut again and again)");
 		if (LeftHover > ES.DarkRunMost) Fault("under a light hovering about the dark rule's line its run started again without a picture plainly light");
@@ -4276,9 +4399,10 @@ int main(int argc, char** argv)
 		if (LeftLag > ES.DarkRunMost) Fault("the dark rule's run started again on a light reading that did not outlast a shot's first six tenths of a second (the last shot's picture come late, not its own)");
 		if (LeftFlash > ES.DarkRunMost) Fault("the dark rule's run started again on one light reading (a flash is not the light come back)");
 		if (LeftWide > ES.DarkRunMost) Fault("the dark rule's run started again on a wide's or an opening's light picture read late into the next shot (not that shot's own)");
-		if (LeftShort > ES.DarkRunMost) Fault("the dark rule's run started again on a light that held less than DarkHold (the light's hold is shorter than it says)");
-		if (LeftLong <= 2 * ES.DarkRunMost) Fault("the dark rule's run did not start again in shots plainly light for longer than DarkHold (the light's hold is longer than it says)");
-		if (LeftBrief > 0) Fault("the dark rule left a shot dark for less than DarkHold (the dark's hold is shorter than it says, or timed by the battle's clock, not the screen's)");
+		if (LeftShort > ES.DarkRunMost) Fault("the dark rule's run started again on a light that held less than DarkHold past a shot's first quarter second (the light's hold is shorter than it says, or is counted from the shot's start)");
+		if (LeftLong <= 2 * ES.DarkRunMost) Fault("the dark rule's run did not start again in shots plainly light for longer than DarkHold past their first quarter second (the light's hold is longer than it says)");
+		if (LeftBrief > 0) Fault("the dark rule left a shot dark for less than DarkHold past its first quarter second (the dark's hold is shorter than it says, timed by the battle's clock and not the screen's, or counted from the shot's start)");
+		if (LeftUnderLine > 0) Fault("the dark rule left a shot whose picture stayed under its leaving line (the line is lower than it says)");
 	}
 	RunCorn();
 	if (std::getenv("LAND_PLAY_STILLS")) RunStills();

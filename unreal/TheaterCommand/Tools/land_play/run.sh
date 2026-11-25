@@ -202,10 +202,12 @@ fi
 # no run here could tell. Held, in the file's code alone: every line of ReadDark() that names the frame's length, the
 # clock, the next ask's time or the last reading's time, so the ask and the staleness are measured on the clock that
 # is advanced by the frame's length; that the clock, the next ask's time and the last reading's time are written
-# nowhere else in the file but where a battle's reading begins, each set to nought there (a plain write or a step:
-# one through a pointer or a reference is not seen); that a stale reading is told as none, and that only a frame
-# that was read keeps the reading fresh; and in the tick, that it hands ReadDark the frame's length and that this is
-# the frame's length. Not held: the rest of ReadDark, and the frame grabber.)
+# nowhere else in the file but in StartDarkRead(), where a battle's reading begins, each set to nought there, once
+# (a plain write or a step on one line: one through a pointer or a reference, or one whose sign stands on the next
+# line, is not seen; which function a write stands in is held too: the three noughts put in the tick instead, the
+# clock begins again every frame and the rule is blind as it was); that a stale reading is told as none, and that
+# only a frame that was read keeps the reading fresh; and in the tick, that it hands ReadDark the frame's length and
+# that this is the frame's length. Not held: the rest of ReadDark, and the frame grabber.)
 code_of "$SRC/Battle/LandBattle.cpp" > "$CODE/LandBattle.cpp"
 DARK_BODY="$(sed -n '/^void ALandBattle::ReadDark(double Real)/,/^}/p' "$CODE/LandBattle.cpp" | sed -e 's/^[[:space:]]*//' | grep -v '^$' || true)"
 DARK_WANT="void ALandBattle::ReadDark(double Real)
@@ -217,15 +219,18 @@ if (DarkShare >= 0.0 && Now - DarkGotAt > 0.6)
 DarkGotAt = Now;"
 [ "$(printf '%s\n' "$DARK_BODY" | grep -E '(^|[^[:alnum:]_])(Real|Now|DarkClock|DarkAskAt|DarkGotAt)([^[:alnum:]_]|$)' || true)" = "$DARK_WANT" ] \
   || { echo "FAULT: LandBattle.cpp ReadDark() no longer keeps the dark reading's clock as it was held (DarkClock += Real, once; Now that clock; the next ask a quarter second on by it, and the reading stale after six tenths of a second by it, under the rule's own three quarters; the frame's length used for nothing else): measured against the frame's length, or on two clocks, the camera's dark rule is blind after its first frame. If the lines have only been written anew bring this pin up to date"; STATUS=1; }
-DARK_WRITES_WANT="DarkClock = 0.0;
+dark_writes() { sed -e 's/^[[:space:]]*//' | grep -E '(^|[^[:alnum:]_])(DarkClock|DarkAskAt|DarkGotAt)[[:space:]]*((<<|>>|[-+*/%&|^])?=([^=]|$)|\+\+|--)|(\+\+|--)[[:space:]]*(DarkClock|DarkAskAt|DarkGotAt)([^[:alnum:]_]|$)' || true; }
+DARK_START_WANT="DarkClock = 0.0;
 DarkAskAt = 0.0;
-DarkGotAt = 0.0;
-DarkClock += Real;
+DarkGotAt = 0.0;"
+DARK_READ_WANT="DarkClock += Real;
 DarkAskAt = Now + 0.25;
 DarkGotAt = Now;"
-DARK_WRITES="$(sed -e 's/^[[:space:]]*//' "$CODE/LandBattle.cpp" | grep -E '(^|[^[:alnum:]_])(DarkClock|DarkAskAt|DarkGotAt)[[:space:]]*((<<|>>|[-+*/%&|^])?=([^=]|$)|\+\+|--)|(\+\+|--)[[:space:]]*(DarkClock|DarkAskAt|DarkGotAt)([^[:alnum:]_]|$)' || true)"
-[ "$DARK_WRITES" = "$DARK_WRITES_WANT" ] \
-  || { echo "FAULT: LandBattle.cpp writes the dark reading's clock, its next ask's time or its last reading's time somewhere else, or otherwise, than it was held (the three set to 0.0 where a battle's reading begins, then in ReadDark 'DarkClock += Real;', 'DarkAskAt = Now + 0.25;' and 'DarkGotAt = Now;', each once and in that order in the file; read: '$(printf '%s' "$DARK_WRITES" | tr '\n' ' ')'): a second step of the clock runs it fast, and a second stamp keeps a stale reading fresh. If the lines have only been written anew bring this pin up to date"; STATUS=1; }
+DARK_START="$(sed -n '/^void ALandBattle::StartDarkRead()/,/^}/p' "$CODE/LandBattle.cpp" | dark_writes)"
+DARK_READ="$(printf '%s\n' "$DARK_BODY" | dark_writes)"
+DARK_WRITES="$(dark_writes < "$CODE/LandBattle.cpp")"
+[ "$DARK_START" = "$DARK_START_WANT" ] && [ "$DARK_READ" = "$DARK_READ_WANT" ] && [ "$(printf '%s\n' "$DARK_WRITES" | grep -c . || true)" = "6" ] \
+  || { echo "FAULT: LandBattle.cpp writes the dark reading's clock, its next ask's time or its last reading's time somewhere else, or otherwise, than it was held (in StartDarkRead(), where a battle's reading begins, the three set to 0.0, once each; in ReadDark() 'DarkClock += Real;', 'DarkAskAt = Now + 0.25;' and 'DarkGotAt = Now;', once each; and nowhere else in the file. Read: in StartDarkRead '$(printf '%s' "$DARK_START" | tr '\n' ' ')'; in ReadDark '$(printf '%s' "$DARK_READ" | tr '\n' ' ')'; in the file '$(printf '%s' "$DARK_WRITES" | tr '\n' ' ')'): a second step of the clock runs it fast, a second stamp keeps a stale reading fresh, and the clock set to nought in the tick begins again every frame, the rule blind as it was through release 1.5.1. If the lines have only been written anew bring this pin up to date"; STATUS=1; }
 [ "$(printf '%s\n' "$DARK_BODY" | grep -xF -A 2 "if (DarkShare >= 0.0 && Now - DarkGotAt > 0.6)" | tr '\n' ' ' || true)" = "if (DarkShare >= 0.0 && Now - DarkGotAt > 0.6) { DarkShare = -1.0; " ] \
   && [ "$(printf '%s\n' "$DARK_BODY" | grep -xF -B 1 "DarkGotAt = Now;" | head -n 1 || true)" = "DarkShare = static_cast<double>(Dark) / static_cast<double>((Ht - Skip) * Wd);" ] \
   || { echo "FAULT: LandBattle.cpp ReadDark() no longer tells the rule there is no reading once the last is stale (the line after the stale test's brace 'DarkShare = -1.0;'), or no longer stamps the reading's time straight after the reading itself is set ('DarkGotAt = Now;' under 'DarkShare = static_cast<double>(Dark) / static_cast<double>((Ht - Skip) * Wd);'): a frame that was not read would keep an old reading fresh. If the lines have only been written anew bring this pin up to date"; STATUS=1; }
@@ -235,6 +240,11 @@ DARK_TICK="$(sed -n '/^void ALandBattle::Tick(float DeltaSeconds)/,/^}/p' "$CODE
   && [ "$(printf '%s\n' "$DARK_TICK" | grep -cxF "ReadDark(Real);" || true)" = "1" ] \
   && [ "$(grep -cE '(^|[^[:alnum:]_:])ReadDark\(' "$CODE/LandBattle.cpp" || true)" = "1" ] \
   || { echo "FAULT: LandBattle.cpp's tick no longer hands ReadDark() the frame's length, once (in Tick: 'const double Real = FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.1);' the only Real, and 'ReadDark(Real);' the only call in the file): handed a running clock, or not called, the camera's dark rule reads wrongly or not at all. If the tick's lines have only been written anew bring this pin up to date"; STATUS=1; }
+# (A vehicle's wireless aerial near the lens is put away by the scene, which is not built here: held, in the file's
+# code alone, only that DrawArmour() still asks the camera's rule for it, LandEye::AerialShown, which this test plays.
+# Not held: what the scene does with the answer.)
+[ "$(sed -n '/^void ALandBattle::DrawArmour(const FVector& EyeWorld)/,/^}/p' "$CODE/LandBattle.cpp" | grep -c 'LandEye::AerialShown(' || true)" -ge 1 ] \
+  || { echo "FAULT: LandBattle.cpp DrawArmour() no longer asks LandEye::AerialShown how much of a vehicle's wireless aerial to draw: an aerial 2 to 4 m before the lens stands through the whole picture again, a thin dark line from its bottom to its top (Brian's picture of 25 November). If the function has only been named anew bring this pin up to date"; STATUS=1; }
 for F in "$@"; do
   case "$F" in *armies.json) continue ;; esac
   "$OUT/land_play_test" "$F" "$ROOT/Content/Data/Sound/mix.json" "$OUT" || STATUS=1
