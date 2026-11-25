@@ -1422,9 +1422,14 @@ export function cutOff(g: Game, f: Fleet): boolean {
   return !baseSeas(g, f).some((z) => d[z] >= 0);
 }
 
-/** The harbour a cut-off fleet would make for: the nearest friendly harbour it can steam to, or null with none. */
+/** The harbour a cut-off fleet would make for: its own where that stands on its side too, else the nearest friendly harbour it can steam to, or null with none. */
 export function harbourFor(g: Game, f: Fleet): Region | null {
   const d = seasFrom(g, f);
+  // (1.5.2, the release review) Its own harbour first, where it stands on both sides of the strait and the fleet can steam
+  // to its side (Spanish Morocco): sail() makes for its own where it can reach it. Before, a nearer or equal harbour of a
+  // lower number (Andalusia, with Spain an ally) took its base from it, with words that it "cannot reach" its own.
+  const own = f.base >= 0 ? g.regions[f.base] : null;
+  if (own && own.port && allied(g, f.nat, own.ctrl) && own.seas.some((z) => d[z] >= 0)) return own;
   let best: Region | null = null, bestAt = Infinity;
   for (const r of g.regions) {
     if (!r.port || !r.seas.length || !allied(g, f.nat, r.ctrl)) continue;

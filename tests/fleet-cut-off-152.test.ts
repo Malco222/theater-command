@@ -163,6 +163,29 @@ describe('a harbour on both sides of a shut strait', () => {
     expect(cutOff(g, f)).toBe(false);
   });
 
+  it('its own harbour is first even where an ally holds an equal harbour of a lower number on that side (the release review)', () => {
+    // Spain an ally, so Andalusia (a harbour on the Iberian Coast, numbered before Spanish Morocco) is friendly too: the
+    // fleet still comes in to its own base on its side, and is not moved to Andalusia with words that it cannot reach its own.
+    const g = startOpen(createGame(3, 'ITA'));
+    for (let k = 0; !humanUp(g) && k < 60; k++) stepAI(g);
+    const f = fleet(g, 'ITA', '2nd Fleet'), sm = g.byName['Spanish Morocco'], and = g.byName['Andalusia'];
+    const atl = zoneOf(g, 'iberia');
+    sm.ctrl = 'ITA';
+    and.ctrl = 'ITA';
+    expect(and.id).toBeLessThan(sm.id);
+    expect(and.seas).toContain(atl);
+    expect(rebase(g, f, sm)).toBe(true);
+    expect(sail(g, f, atl, 'patrol')).toBe(true);
+    if (!atWar(g, 'ITA', 'UK')) declareWar(g, 'ITA', 'UK');
+    expect(cutOff(g, f)).toBe(true);
+    expect(harbourFor(g, f)?.id).toBe(sm.id);
+    expect(cutOffHomeTip(g, f)).toMatch(/comes in to Spanish Morocco on its own side/);
+    expect(orderFleet(g, f.id, f.home, 'port')).toBe(true);
+    expect(f.base).toBe(sm.id);
+    expect(f.home).toBe(atl);
+    expect(cutOff(g, f)).toBe(false);
+  });
+
   it("the strait's holder, and a nation it is open to, use both its seas as before", () => {
     const { g, sm, med, atl } = morocco();
     const uk = g.fleets.find((x) => x.nat === 'UK' && fleetReach(g, x).includes(atl))!;
