@@ -89,6 +89,26 @@ namespace
 		return At;
 	}
 
+	/** A number from the mix, at a path of fields ("air.sameTakeGap"), or Default (as AirParts::MixNumber in
+	 * AirBattle.cpp, file-local there). */
+	double TroopsMixNumber(const TSharedPtr<FJsonObject>& Mix, const FString& Path, double Default)
+	{
+		TArray<FString> Steps;
+		Path.ParseIntoArray(Steps, TEXT("."));
+		TSharedPtr<FJsonObject> At = Mix;
+		for (int32 K = 0; At.IsValid() && K < Steps.Num(); ++K)
+		{
+			if (K == Steps.Num() - 1)
+			{
+				double Value = Default;
+				return At->TryGetNumberField(Steps[K], Value) ? Value : Default;
+			}
+			const TSharedPtr<FJsonObject>* Next = nullptr;
+			At = At->TryGetObjectField(Steps[K], Next) ? *Next : nullptr;
+		}
+		return Default;
+	}
+
 	/** A shape built at its true size: its points, facings and colours (sRGB bytes, as FMiniatureMesh makes them). */
 	struct FTroopShape
 	{
@@ -491,7 +511,8 @@ void AAirBattle::PlayTroops(const AirShow::Fx& E)
 		// A hit the rules counted, shown as its bomb or its rounds arrive (the core's MarkHit, at the piece on the ground;
 		// its state is the core's already, and DrawTroops lays its fire). Here only what happens at the moment: a vehicle
 		// set burning or wrecked has its fuel go up; a strafing pass's burn or wreck leaves its scorch (a bomb's crater
-		// is laid where it fell, with its BombHit); a block of men scattered.
+		// is laid where it fell, with its BombHit); a block of men scattered. A hit the rules call big (extra.big, the
+		// core's Part "big") goes up half as wide again and scorches twice the ground (the art director's to judge).
 		const int32 Index = S.Show.Marks().IndexOf(E.Key);
 		if (!TroopLooks.IsValidIndex(Index))
 		{
@@ -507,7 +528,7 @@ void AAirBattle::PlayTroops(const AirShow::Fx& E)
 		{
 			if (FBattleEffects* Kit = GroundKit())
 			{
-				const double Across = P.What == "lorry" ? 8.0 : 6.0;
+				const double Across = (P.What == "lorry" ? 8.0 : 6.0) * (E.Part == "big" ? 1.5 : 1.0);
 				const FVector Fuel = At + FVector(0.0, 0.0, 1.5 * U);
 				Kit->FuelBall(Fuel, static_cast<float>(Across));
 				NoteFuelBall(Fuel, Across);
@@ -515,7 +536,7 @@ void AAirBattle::PlayTroops(const AirShow::Fx& E)
 		}
 		if (E.What != "bomb" && (E.Text == "burn" || E.Text == "wreck" || E.Text == "blast"))
 		{
-			ScarLand(E.At.X, E.At.Y, 60.0);
+			ScarLand(E.At.X, E.At.Y, E.Part == "big" ? 120.0 : 60.0);
 		}
 		UE_LOG(LogTheater, Display, TEXT("Air battle: a hit on the column: %s %d, %s (%s), %d men; now %s."), *TroopsWide(P.What), P.Id, *TroopsWide(E.Text),
 			*TroopsWide(E.What), static_cast<int32>(E.Size), *TroopsWide(AirMarks::WordOf(P.Now)));
@@ -565,7 +586,9 @@ void AAirBattle::PlayTroops(const AirShow::Fx& E)
 		const double Whole = Recording->GetDuration();
 		Again = Cut > 0.0f ? Cut : (Whole > 0.0 && Whole < 10.0 ? Whole : 0.9);
 	}
-	GunHeardAt.Add(E.Key, RealT + FMath::Clamp(Again - 0.02, 0.3, 2.0));
+	// (never sooner than the mix's own gap after itself, as every other gun's: air.sameTakeGap)
+	Again = FMath::Clamp(Again - 0.02, FMath::Max(0.3, TroopsMixNumber(Mix, TEXT("air.sameTakeGap"), 0.15)), 2.0);
+	GunHeardAt.Add(E.Key, RealT + Again);
 	if (!Recording)
 	{
 		return;

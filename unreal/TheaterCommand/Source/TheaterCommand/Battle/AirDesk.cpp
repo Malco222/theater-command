@@ -145,23 +145,45 @@ namespace AirDesk
 		if (K) Ahead.erase(Ahead.begin(), Ahead.begin() + static_cast<std::ptrdiff_t>(K));
 	}
 
+	void Desk::Struck(const AirMarks::Column& Shown, double Cut)
+	{
+		if (!OnTroops()) return;
+		// The vehicles and guns wrecked, burning and damaged, and the men lost from the blocks, as the show has them now:
+		// each piece as the hits shown on it and the views' words after them leave it (AirShow::Show::Marks), so that the
+		// aim slip never counts a hit whose bomb or rounds are still on their way (the reviewer, 25 November: it had
+		// counted each as its view came). The cut so far, likewise (Show::MarksCut).
+		MarksWrecked = MarksBurning = MarksDamaged = MarksMenLost = 0;
+		for (const AirMarks::Piece& P : Shown.Pieces)
+		{
+			if (P.What == "men")
+			{
+				MarksMenLost += std::max(0, P.N - P.Men);
+				continue;
+			}
+			MarksWrecked += P.Now == AirMarks::State::Out ? 1 : 0;
+			MarksBurning += P.Now == AirMarks::State::Burn ? 1 : 0;
+			MarksDamaged += P.Now == AirMarks::State::Hit ? 1 : 0;
+		}
+		MarksCutNow = std::max(MarksCutNow, Cut);
+	}
+
+	bool Desk::ColumnTheirs() const
+	{
+		// (the column is the enemy's when its nation is theirs; his own when it is his; any other (an ally's, or none
+		// said) stands with the side whose ground it is, the defender's)
+		const std::string& Mine = MyIndex == 0 ? Sky.AttNat : Sky.DefNat;
+		const std::string& Theirs = MyIndex == 0 ? Sky.DefNat : Sky.AttNat;
+		if (!Sky.Marks.Nat.empty() && Sky.Marks.Nat == Mine) return false;
+		if (!Sky.Marks.Nat.empty() && Sky.Marks.Nat == Theirs) return true;
+		return MyIndex == 0;
+	}
+
 	void Desk::Read(const AirFeed::Frame& View)
 	{
 		HeadNow = View.Head;
 		bStarted = true;
-		// (release 2, a raid on troops: the pieces the view says changed, kept, and the organisation cut so far)
-		if (View.Marks.bGiven)
-		{
-			for (const AirMarks::Change& C : View.Marks.Pieces)
-			{
-				// (a piece that is out never changes again, as the scene keeps it: a later stale word is not counted)
-				const auto Was = MarksNow.find(C.Id);
-				if (Was != MarksNow.end() && Was->second == AirMarks::State::Out) continue;
-				MarksNow[C.Id] = C.To;
-				if (C.Men >= 0) MenNow[C.Id] = C.Men;
-			}
-			MarksCutNow = std::max(MarksCutNow, View.Marks.Cut);
-		}
+		// (release 2, a raid on troops: the view's marks are not read here, but from the show, as its pieces are drawn
+		// struck: Struck)
 		for (const auto& Pair : View.Head.Called) Called[Pair.first] = Pair.second;
 		for (const AirFeed::Label& L : View.Labels) LabelsNow[L.Id] = L;
 	}
@@ -212,8 +234,7 @@ namespace AirDesk
 		// a raid cuts 4% of an army's organisation at most)
 		if (OnTroops())
 		{
-			const bool bTheirs = Sky.Marks.Nat == (MyIndex == 0 ? Sky.DefNat : Sky.AttNat) || Sky.Marks.Nat.empty();
-			Out.Chance += std::string(" \xC2\xB7 ") + (bTheirs ? "their" : "your") + " column's organisation cut by " + Tenths(MarksCutNow) + " so far";
+			Out.Chance += std::string(" \xC2\xB7 ") + (ColumnTheirs() ? "their" : "your") + " column's organisation cut by " + Tenths(MarksCutNow) + " so far";
 		}
 		// The tug-of-war bar (it took the place of the strength fill and its start mark: the UI director, 14:47Z).
 		KnotShown = KnotEase(KnotShown, KnotOf(H, MyIndex, Winner()), Real);
@@ -256,24 +277,9 @@ namespace AirDesk
 		}
 		if (OnTroops())
 		{
-			// (release 2, a raid on troops: the vehicles and guns the views say are wrecked, burning and damaged, and the
-			// men lost from the blocks, as the rules count them; the column's own words, never the scene's)
-			int Wrecked = 0, Burning = 0, Damaged = 0, MenLost = 0;
-			for (const auto& Pair : MarksNow)
-			{
-				const int Index = Sky.Marks.IndexOf(Pair.first);
-				if (Index < 0) continue;
-				const AirMarks::Piece& P = Sky.Marks.Pieces[static_cast<size_t>(Index)];
-				if (P.What == "men") continue;
-				Wrecked += Pair.second == AirMarks::State::Out ? 1 : 0;
-				Burning += Pair.second == AirMarks::State::Burn ? 1 : 0;
-				Damaged += Pair.second == AirMarks::State::Hit ? 1 : 0;
-			}
-			for (const auto& Pair : MenNow)
-			{
-				const int Index = Sky.Marks.IndexOf(Pair.first);
-				if (Index >= 0) MenLost += std::max(0, Sky.Marks.Pieces[static_cast<size_t>(Index)].N - Pair.second);
-			}
+			// (release 2, a raid on troops: the vehicles and guns wrecked, burning and damaged, and the men lost from the
+			// blocks, as the rules count them and as the show has drawn them struck (Struck); never the scene's own)
+			const int Wrecked = MarksWrecked, Burning = MarksBurning, Damaged = MarksDamaged, MenLost = MarksMenLost;
 			std::string Done;
 			auto Add = [&Done](int N, const char* One, const char* Many)
 			{
@@ -284,7 +290,7 @@ namespace AirDesk
 			Add(Burning, "burning", "burning");
 			Add(Damaged, "damaged", "damaged");
 			Add(MenLost, "man lost", "men lost");
-			const bool bTheirs = Sky.Marks.Nat == (MyIndex == 0 ? Sky.DefNat : Sky.AttNat) || Sky.Marks.Nat.empty();
+			const bool bTheirs = ColumnTheirs();
 			Out.AimState = Done.empty() ? std::string(bTheirs ? "No hits on the column yet" : "No hits on your column yet")
 				: std::string(bTheirs ? "On the column so far: " : "On your column so far: ") + Done;
 		}
@@ -428,7 +434,7 @@ namespace AirDesk
 
 	std::string Desk::Strafe(const std::vector<int>& Ids, const std::vector<Tag>& Tags) const
 	{
-		if (!OnTroops()) return std::string();
+		if (!CanStrafe()) return std::string();
 		std::vector<int> Fighters;
 		for (const int Id : Ids)
 		{

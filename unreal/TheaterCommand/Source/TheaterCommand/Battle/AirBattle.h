@@ -395,8 +395,8 @@ private:
 		bool bScattered = false;
 	};
 	TArray<FTroopLook> TroopLooks;
-	/** The meshes, by model and look ("troops|<model>|<nation>|ok" and "|burnt", "troops|man|<nation>"): kept from the
-	 * collector. */
+	/** The meshes, by model and look ("troops|<model>|ok" and "troops|<model>|burnt", the model as the game names it,
+	 * "Matilda:UK" where it has its nation's paint; "troops|man|<nation>" for a block's riflemen): kept from the collector. */
 	UPROPERTY()
 	TMap<FString, TObjectPtr<UStaticMesh>> TroopStills;
 	/** The column's nation as the kit colours its guns' tracers. */

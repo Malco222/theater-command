@@ -3667,6 +3667,7 @@ void AAirBattle::Tick(float DeltaSeconds)
 	}
 	S.Desk.Reach(S.Show.Shown());
 	PlayEffects();
+	S.Desk.Struck(S.Show.Marks(), S.Show.MarksCut()); // (release 2: a raid on troops' column as drawn struck, for its words; returns at once on any other raid)
 	S.Desk.Write(Real, S.Show.Groups(), S.ClockTag, S.Words);
 	if (MetRealT < 0.0 && S.Desk.Head().Contact >= 0.0)
 	{

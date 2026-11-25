@@ -12064,6 +12064,40 @@ namespace
 	{
 		return (Kind == TEXT("bomb") || Kind == TEXT("superiority") || Kind == TEXT("ground")) && AAirBattle::CampaignLiveOn(Kind);
 	}
+
+	/**
+	 * (Release 2) The raids beyond the release 1.6 pair that he flies himself, told to the rules before they are asked
+	 * for a raid's battle in the air (the air rules thread's switch, raid-troops-ticket.md: "TC.airKinds([...]) on the
+	 * battle bridge; default none"; the reviewer, 25 November: the row had been read on this side only, so the rules were
+	 * never told that a raid on troops is flown). Each kind whose own row is on: today "ground" ("Fly raids on troops
+	 * yourself"). The pair are the rules' own FOUGHT_KINDS and are not named. Sent only while one of those rows is on,
+	 * and once more, with none, after the last goes off: with every such row off (as it ships) nothing is sent, and the
+	 * calls to the rules are as before. False where the rules could not be told (this base's rules have no TC.airKinds
+	 * yet, and answer "The rules have no function called airKinds"): a raid of such a kind is then not offered.
+	 */
+	bool TellFlownKinds(FCampaignSession& Session)
+	{
+		static FString Told; // (what the rules were last told: empty, their default, none)
+		const FString Kinds = AAirBattle::CampaignLiveOn(TEXT("ground")) ? FString(TEXT("\"ground\"")) : FString();
+		if (Kinds.IsEmpty() && Told.IsEmpty())
+		{
+			return true;
+		}
+		FString Reply, Error;
+		if (!Session.CallBattle(TEXT("airKinds"), TEXT("[[") + Kinds + TEXT("]]"), Reply, Error))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Campaign: the rules were not told which raids he flies himself ([%s]): %s"), *Kinds, *Error);
+			return false;
+		}
+		Told = Kinds;
+		return true;
+	}
+
+	/** (Release 2) A raid of a kind the rules fight out only when told (TellFlownKinds): any but the release 1.6 pair. */
+	bool IsToldKind(const FString& Kind)
+	{
+		return Kind != TEXT("bomb") && Kind != TEXT("superiority");
+	}
 }
 
 bool ACampaignPlayerController::CanFlyLive() const
@@ -12091,6 +12125,13 @@ bool ACampaignPlayerController::CanFlyLive() const
 		TSharedPtr<FJsonObject> LookAnswer;
 		const TSharedPtr<FJsonObject>* LookTicket = nullptr;
 		const FString IdsText = FString::JoinBy(Ids, TEXT(","), [](int32 Id) { return FString::FromInt(Id); });
+		// (release 2: the rules first told which raids beyond these two he flies himself; one of those not offered where
+		// they could not be told. With "Fly raids on troops yourself" off nothing is sent here)
+		if (Session && !TellFlownKinds(*Session) && IsToldKind(Kind))
+		{
+			UE_LOG(LogTheater, Display, TEXT("Campaign: FLY IT YOURSELF not offered for %s: the rules could not be told that a raid of this kind is flown (TC.airKinds); FLY THE RAID only"), *FlyOfferAct);
+			return false;
+		}
 		if (!Session || !Session->CallBattle(TEXT("airLook"), FString::Printf(TEXT("[\"%s\",%d,[%s]]"), *Kind, Target, *IdsText), LookText, LookError)
 			|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(LookText), LookAnswer) || !LookAnswer.IsValid()
 			|| !LookAnswer->TryGetObjectField(TEXT("ticket"), LookTicket) || !LookTicket || !LookTicket->IsValid())
@@ -12122,6 +12163,12 @@ void ACampaignPlayerController::FlyLive()
 	TArray<int32> Ids;
 	if (!ReadFlyAct(Page.Card.Fly.Act, Kind, Target, Ids))
 	{
+		return;
+	}
+	if (!TellFlownKinds(*Session) && IsToldKind(Kind))
+	{
+		// (release 2: told again as the battle opens; a raid of a kind the rules could not be told of is not opened)
+		Notify(TEXT("This raid cannot be flown in the air battle: FLY THE RAID sends your crews."), 6.0);
 		return;
 	}
 	CampaignSounds::Play(this, TEXT("stamp"), 0.6f);

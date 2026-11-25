@@ -56,6 +56,7 @@ namespace AirShow
 		Vec Ahead(double Hdg, double Gam = 0.0) { return Vec(std::sin(Hdg) * std::cos(Gam), std::cos(Hdg) * std::cos(Gam), std::sin(Gam)); }
 		Vec RightOf(double Hdg) { return Vec(std::cos(Hdg), -std::sin(Hdg), 0.0); }
 		bool Has(const std::vector<std::string>& List, const std::string& Word) { return std::find(List.begin(), List.end(), Word) != List.end(); }
+		bool Has(const std::vector<int>& List, int Key) { return std::find(List.begin(), List.end(), Key) != List.end(); }
 		/** A bomb's weight, as its BombHit's Size has it. */
 		double KgOf(const Thing& B) { return B.Size > 2.0 ? 500.0 : 250.0; }
 		/** A fighter's gun muzzle in its own frame (as FireGuns places them): the hub cannon at the spinner, the cowl pair
@@ -84,6 +85,8 @@ namespace AirShow
 		}
 		MarkHolds.clear();
 		MarkWords.clear();
+		MarkCuts.clear();
+		CutShown = 0.0;
 		Lanes.clear();
 		StrafeOwing.clear();
 		BombSerial = 0;
@@ -95,6 +98,8 @@ namespace AirShow
 	{
 		MarkFire = Clamp(V.Fire, 0.0, 1.0);
 		for (const AirMarks::Change& C : V.Pieces) MarkWords.push_back(MarkWord{ T, C });
+		// (the cut so far, let out once the hits it counts have been shown: TroopsFrame)
+		if (V.Cut > CutShown) MarkCuts.push_back(MarkCut{ T, V.Cut });
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
@@ -102,8 +107,10 @@ namespace AirShow
 
 	void Show::PlayMark(const Event& E)
 	{
-		// (told as any event is: its dispatch and its sound, Release; then held for what carries it)
-		Release(E);
+		// Held for what carries it, and told (its dispatch and its sound, Release) only as it is shown on its piece
+		// (ShowMark), as a ship's hit is told only as its bombs land (the reviewer, 25 November: the dispatch line and the
+		// sound had gone out the moment the event came, seconds before the bomb was down). A hit on no piece the column
+		// has is told at once: nothing will carry it.
 		MarkHold H;
 		H.E = E;
 		H.Since = AirT;
@@ -127,7 +134,11 @@ namespace AirShow
 					}
 				}
 		}
-		if (H.Index < 0) return;
+		if (H.Index < 0)
+		{
+			Release(E);
+			return;
+		}
 		MarkHolds.push_back(H);
 		Check.MarkHitsTold++;
 		// (a bomb in the air takes it at once where one has the fall left to be laid on its piece)
@@ -175,7 +186,7 @@ namespace AirShow
 	{
 		B.Serial = ++BombSerial;
 		double X = 0.0, Y = 0.0;
-		LandsAt(B, X, Y);
+		B.LandLeft = LandsAt(B, X, Y);
 		const double Blast = AirMarks::BlastOf(KgOf(B));
 		double Cx = X, Cy = Y;
 		// (clear of every piece by more than its blast, with a little to spare for the frames' own small errors; it is
@@ -195,6 +206,7 @@ namespace AirShow
 		// (its way across the ground for where it is to come down, in the fall it has left: a few metres a second at
 		// most across a fall of half a minute; none in its last moment, where the frames' own errors are centimetres)
 		const double T = FallLeft(B, B.WantX, B.WantY);
+		B.LandLeft = T;
 		if (T < 0.3) return;
 		const double F = (1.0 - std::exp(-BombDrag * T)) / BombDrag;
 		B.Vel.X = (B.WantX - B.At.X) / F;
@@ -216,17 +228,19 @@ namespace AirShow
 	bool Show::BindBomb(MarkHold& H, int At)
 	{
 		// The bomb that carries it: of the hit's own group first, then any, with the fall left to be laid on the piece,
-		// the one that need move least for it (metres a second across its fall).
+		// the one that need move least for it (metres a second across its fall). Each bomb comes down where it is laid
+		// (WantX, WantY: it is steered there all the way), with the fall it had left there as it was last steered
+		// (LandLeft): nothing is worked out again here, so a hit that waits costs next to nothing a frame.
 		Thing* Best = nullptr;
 		double BestCost = 1e18, BestX = 0.0, BestY = 0.0, BestMove = 0.0;
 		for (int Pass = 0; Pass < 2 && !Best; ++Pass)
 		{
 			for (Thing& B : Small)
 			{
-				if (B.Kind != ThingKind::Bomb || B.bTorpedo || B.Serial <= 0 || B.Carries >= 0) continue;
+				if (B.Kind != ThingKind::Bomb || B.bTorpedo || B.Serial <= 0 || !B.bWant || B.Carries >= 0) continue;
 				if (Pass == 0 && B.Group != H.E.Unit) continue;
-				double Lx = 0.0, Ly = 0.0;
-				const double Left = LandsAt(B, Lx, Ly);
+				const double Lx = B.WantX, Ly = B.WantY;
+				const double Left = B.LandLeft;
 				if (Left < BindLeast) continue;
 				double X = 0.0, Y = 0.0;
 				AirMarks::AimOn(Column, H.Index, H.E.How, AirMarks::BlastOf(KgOf(B)), static_cast<uint32_t>(B.Serial), X, Y);
@@ -246,6 +260,7 @@ namespace AirShow
 		Best->bWant = true;
 		Best->WantX = BestX;
 		Best->WantY = BestY;
+		Best->LandLeft = FallLeft(*Best, BestX, BestY);
 		Best->Carries = At;
 		H.Bomb = Best->Serial;
 		Check.MarkBombsLaid++;
@@ -270,12 +285,16 @@ namespace AirShow
 		F.Size = H.E.Men;
 		F.Id = Bomb;
 		F.Side = H.E.Side;
+		F.Part = H.E.bBig ? "big" : "";
 		Check.MarkHitsShown++;
+		// (and now it is told: its dispatch and its sound, in the frame its bomb or rounds arrive; F is not used after,
+		// as Release may add effects)
+		Release(H.E);
 		if (!bSeen) Check.MarkHitsUnseen++;
 		// (the piece as the hit leaves it, never down the list; a block of men thinned by the men it cost. The views'
 		// words, which come after, have the last say: MarkWords)
 		const int MenLeft = P.What == "men" && H.E.Men > 0 ? std::max(0, P.Men - H.E.Men) : -1;
-		AirMarks::Apply(P, AirMarks::StateAfter(H.E.How, P.What, P.Now), MenLeft);
+		AirMarks::Apply(P, AirMarks::StateAfter(H.E.How, P.Now), MenLeft);
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
@@ -338,6 +357,45 @@ namespace AirShow
 		C.LaneOf = -1;
 		C.LaneHold = -1;
 		C.bLaneGuns = false;
+	}
+
+	void Show::DropStrafe(Craft& C)
+	{
+		// (the reviewer, 25 November: a strafer shot down or gone mid-pass had kept its guns drawn and its claim on a
+		// piece; its role is left as the show has made it, a fall or the way home)
+		for (MarkHold& H : MarkHolds)
+			if (!H.bDone && H.Claimed == C.Key && H.Due < 0.0) H.Claimed = 0;
+		C.bLaneRun = false;
+		C.LaneOf = -1;
+		C.LaneHold = -1;
+		C.bLaneGuns = false;
+	}
+
+	int Show::MarkStrikes() const
+	{
+		// (the reviewer, 25 November: every held hit had kept the strike on, the x1 clock with it, while a strafe hit
+		// waited out a pass's lining up: 48.8 air s after the last bomb on the test's raid. A bomb hit only waiting for a
+		// bomb holds nothing; one whose bomb falls is held by the bomb itself as well. A strafe hit holds it while the
+		// strafer carrying it dives on its piece, and its rounds fly: not on his run in at height, where his lining up
+		// may turn him back and forth a while, which had flicked the strike on and off and held it 40 s)
+		int Count = 0;
+		for (const MarkHold& H : MarkHolds)
+		{
+			if (H.bDone) continue;
+			if (H.E.Strike != "strafe")
+			{
+				Count += H.Bomb > 0 ? 1 : 0;
+				continue;
+			}
+			bool bGoing = H.Due >= 0.0;
+			if (!bGoing && H.Claimed != 0)
+			{
+				const Craft* C = Find(H.Claimed);
+				bGoing = C && C->bLaneRun && C->Doing == Role::Dive && C->Step == Phase::Plunge;
+			}
+			Count += bGoing ? 1 : 0;
+		}
+		return Count;
 	}
 
 	void Show::PilotStrafe(Craft& C, double Dt)
@@ -515,7 +573,8 @@ namespace AirShow
 
 	void Show::StrafeGuns(double Dt)
 	{
-		std::set<int> Kept;
+		std::vector<int>& Kept = KeysNow;
+		Kept.clear();
 		for (const StrafeRun& R : Lanes)
 		{
 			for (int Key : R.Keys)
@@ -599,7 +658,7 @@ namespace AirShow
 						F.Mv = Row.Mv;
 						F.Tof = Tof > 0.0 ? Tof : 0.0;
 						F.Reach = Tof > 0.0 ? Len(End - B.At) : 0.0;
-						Kept.insert(GunKey);
+						Kept.push_back(GunKey);
 						if (Tof <= 0.0) continue;
 						// Every round of it strikes the ground, where it comes down and when (LandStray, Hit "ground"): off
 						// every piece but the one whose counted hit these rounds carry.
@@ -644,11 +703,11 @@ namespace AirShow
 		}
 		for (int Key : StrafeFiring)
 		{
-			if (Kept.count(Key)) continue;
+			if (Has(Kept, Key)) continue;
 			Emit(FxKind::GunStop, Vec(), std::string(), Key);
 			StrafeOwing.erase(Key);
 		}
-		StrafeFiring = Kept;
+		StrafeFiring.swap(Kept);
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
@@ -659,8 +718,10 @@ namespace AirShow
 		// Its light guns still standing, as many of them firing as the view says are manned (view.marks.fire), each on
 		// the nearest raider in its reach, in bursts of its own (AirMarks::BurstAt), its stream laid short of the lead as
 		// LandAir lays a ground gun's, so that the tracers fall behind. Drawn only: it never decides a loss.
-		std::set<int> Kept;
-		std::vector<size_t> Guns;
+		std::vector<int>& Kept = KeysNow;
+		std::vector<size_t>& Guns = FlakNow;
+		Kept.clear();
+		Guns.clear();
 		for (size_t K = 0; K < Column.Pieces.size(); ++K)
 			if (Column.Pieces[K].What == "aa" && Column.Pieces[K].Now != AirMarks::State::Out) Guns.push_back(K);
 		const size_t Manned = static_cast<size_t>(std::lround(MarkFire * static_cast<double>(Guns.size())));
@@ -692,11 +753,11 @@ namespace AirShow
 			F.Rate = 180.0;
 			F.Mv = 880.0;
 			F.Text = "column";
-			Kept.insert(Key);
+			Kept.push_back(Key);
 		}
-		for (int Key : MarkFiring) if (!Kept.count(Key)) Emit(FxKind::GunStop, Vec(), std::string(), Key);
+		for (int Key : MarkFiring) if (!Has(Kept, Key)) Emit(FxKind::GunStop, Vec(), std::string(), Key);
 		if (!Kept.empty()) Check.MarkGunFrames++;
-		MarkFiring = Kept;
+		MarkFiring.swap(Kept);
 	}
 
 	void Show::TroopsFrame(double Dt)
@@ -710,6 +771,14 @@ namespace AirShow
 			StrafeOwing.clear();
 			return;
 		}
+		// A strafer no longer flying its pass that did not end it (shot down and falling, gone home, taken into a fight:
+		// its role is no longer the dive): let go of it, its guns and its claim with it. One gone from the show
+		// altogether (StrafeGuns stops its guns) gives its claim back too, for the rest of its group's pass to carry.
+		for (const StrafeRun& R : Lanes)
+			for (int Key : R.Keys)
+				if (Craft* C = Find(Key); C && C->bLaneRun && C->Doing != Role::Dive) DropStrafe(*C);
+		for (MarkHold& H : MarkHolds)
+			if (!H.bDone && H.Claimed != 0 && H.Due < 0.0 && !Find(H.Claimed)) H.Claimed = 0;
 		// The held hits: a bomb hit bound to a bomb in the air (BindBomb; shown as it lands, BombDown), a strafe hit shown
 		// as its rounds land on its piece (StrafeGuns), each shown with none when nothing came to carry it in its time,
 		// or the battle's end is told.
@@ -757,6 +826,22 @@ namespace AirShow
 			AirMarks::Apply(P, W.C.To, W.C.Men);
 		}
 		MarkWords.resize(Left);
+		// The views' organisation cut, each from its battle time once every hit told up to that time has been shown (so
+		// the top bar never tells of a hit still in the air: AirDesk::Desk::Struck).
+		Left = 0;
+		for (size_t K = 0; K < MarkCuts.size(); ++K)
+		{
+			const MarkCut Cu = MarkCuts[K];
+			bool bWait = Cu.At > ShownT + 1e-9;
+			for (const MarkHold& H : MarkHolds) bWait = bWait || (!H.bDone && H.E.T <= Cu.At + 1e-9);
+			if (bWait)
+			{
+				MarkCuts[Left++] = Cu;
+				continue;
+			}
+			CutShown = std::max(CutShown, Cu.Cut);
+		}
+		MarkCuts.resize(Left);
 		StrafeGuns(Dt);
 		MarkGuns();
 	}

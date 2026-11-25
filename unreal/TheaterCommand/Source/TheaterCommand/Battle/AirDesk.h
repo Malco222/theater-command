@@ -106,6 +106,14 @@ namespace AirDesk
 		/** The battle shown has reached ShownT: the views up to it are read (the clock and the words follow what is
 		 * shown, not the view held in hand ahead of it). */
 		void Reach(double ShownT);
+		/**
+		 * (Release 2) A raid on troops: the column as the show has it now (AirShow::Show::Marks: each piece as the hits
+		 * shown on it and the views' words after them leave it) and the organisation cut so far as the show lets it out
+		 * (Show::MarksCut), for the aim slip and the top bar; given each frame after Reach. So the words never tell of a
+		 * hit before its bomb or rounds land on its piece (the reviewer, 25 November). Nothing where the raid is not on
+		 * troops.
+		 */
+		void Struck(const AirMarks::Column& Shown, double Cut);
 		/** A dispatch the show releases (FxKind::Dispatch): kept, at most a few, oldest out. */
 		void Say(const std::string& What, const std::string& Text, int Side, int Unit);
 		/** Ages the dispatches (real seconds) and writes the words for the groups as shown now. */
@@ -126,7 +134,7 @@ namespace AirDesk
 		 * (Release 2) A raid on troops (Brian, 24 November 2026: "if a bomber group is bombing troops instead of a
 		 * factory or town and they get intercepted than i want that playable"): his fighter groups among Units (by the
 		 * tags) sent down the column's road on a strafing pass, { do: 'air:strafe', units: [...] }. Empty where none of
-		 * them is a fighter group of his, or the raid is not on troops.
+		 * them is a fighter group of his, or he may not strafe it (CanStrafe).
 		 */
 		std::string Strafe(const std::vector<int>& Units, const std::vector<Tag>& Tags) const;
 		std::string HandOver() const;
@@ -154,6 +162,9 @@ namespace AirDesk
 		/** (Release 2) The raid is on an army's column (place.kind "ground", its pieces given in place.marks): the words
 		 * speak of the column, not "the target", and STRAFE THE COLUMN is offered his fighter groups. */
 		bool OnTroops() const { return Sky.PlaceKind == "ground" && Sky.Marks.Has(); }
+		/** (Release 2) STRAFE THE COLUMN is his to give: a raid on troops, and the column the enemy's (the reviewer, 25
+		 * November: a player defending his own column had been offered it). */
+		bool CanStrafe() const { return OnTroops() && ColumnTheirs(); }
 
 	private:
 		AirFeed::Sky Sky;
@@ -168,11 +179,12 @@ namespace AirDesk
 		std::vector<Dispatch> Said;
 		std::map<int, bool> EngagedOnce;       // air:engage shown once for each escort group (UI director, 21:19Z)
 		std::vector<AirFeed::Frame> Ahead;     // views taken, not yet reached
-		// (release 2, a raid on troops) the column's pieces as the views have said them (view.marks: only those changed
-		// are sent, so each is kept), the men left in each block said, and the organisation cut so far (view.marks.cut)
-		std::map<int, AirMarks::State> MarksNow;
-		std::map<int, int> MenNow;
+		// (release 2, a raid on troops) the column as the show has drawn it struck (Struck): its vehicles and guns
+		// wrecked, burning and damaged, the men lost from its blocks, and the organisation cut so far (view.marks.cut)
+		int MarksWrecked = 0, MarksBurning = 0, MarksDamaged = 0, MarksMenLost = 0;
 		double MarksCutNow = 0.0;
+		/** The column is the enemy's (its nation theirs; one of neither side's, or none said, the defender's). */
+		bool ColumnTheirs() const;
 		/** The column as the words name it: "the British I Corps" (its corps, place.marks.corps), else "the British column". */
 		std::string ColumnName() const;
 		/** A raid on troops' title, for the screen and the after card: "The raid on the British I Corps near Hampshire". */

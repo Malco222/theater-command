@@ -11,7 +11,11 @@
 //     hit shows on what it struck"), and no strafing round on a piece whose hit it does not carry;
 //   - a strafing pass keeps the fighter's g, its least turn and its roll rate, and pulls out above the ground;
 //   - a piece that is out never changes again (a stale word from a view is refused);
-//   - the pieces end as the views' last words have them.
+//   - the pieces end as the views' last words have them;
+//   - (the reviewer, 25 November) nothing tells of a hit before it is drawn: its dispatch comes in the frame of its
+//     MarkHit, no piece is shown struck before a hit on it is, and the organisation cut the screen shows waits for the
+//     hits it counts;
+//   - STRAFE THE COLUMN is offered only against the enemy's column.
 //
 // A recording with no marks has nothing to check here, and passes. With an out-dir it writes <key>-marks.csv, the
 // column and what came down on it, for Tools/air_show/marks_picture.py.
@@ -86,9 +90,10 @@ int main(int Argc, char** Argv)
 		return 2;
 	}
 	const AirMarks::Column& Given = Rec.Board.Marks;
-	if (!Given.Has())
+	if (!Given.Has() || Rec.Board.PlaceKind != "ground")
 	{
-		std::printf("== %s: no marks (not a raid on troops): nothing to check\n", Rec.Key.c_str());
+		// (marks on a raid of another kind are not laid either: AirFeed::Apply)
+		std::printf("== %s: no marks on a raid on troops (place.kind \"%s\"): nothing to check\n", Rec.Key.c_str(), Rec.Board.PlaceKind.c_str());
 		return 0;
 	}
 
@@ -106,13 +111,24 @@ int main(int Argc, char** Argv)
 	int ToldStrafes = 0, ToldHitsAll = 0;
 	std::map<int, AirMarks::State> LastWord;
 	std::map<int, int> LastMen;
+	// (and, for the cut: the battle time of each hit told, and each view's cut, in order)
+	std::vector<double> HitTimes;
+	std::vector<std::pair<double, double>> ViewCuts;
+	int ToldWithWords = 0;
 	for (const AirFeed::Frame& F : Rec.Views)
 	{
 		for (const AirShow::Event& E : F.Events)
 		{
-			if (E.What == "air:mark-hit") { ToldHits[E.Piece]++; ToldHitsAll++; }
+			if (E.What == "air:mark-hit")
+			{
+				ToldHits[E.Piece]++;
+				ToldHitsAll++;
+				HitTimes.push_back(E.T);
+				ToldWithWords += E.Text.empty() ? 0 : 1;
+			}
 			if (E.What == "air:strafe") ToldStrafes++;
 		}
+		if (F.Marks.bGiven) ViewCuts.emplace_back(F.Head.T, F.Marks.Cut);
 		for (const AirMarks::Change& C : F.Marks.Pieces)
 		{
 			const auto Was = LastWord.find(C.Id);
@@ -126,6 +142,12 @@ int main(int Argc, char** Argv)
 	std::vector<Seen> BombHits, MarkHits, Strikes, MarkGuns;
 	long Frame = 0;
 	int OutChanged = 0, StrafeGunFrames = 0;
+	// (nothing told before it is drawn: the mark-hit dispatches given in a frame with no MarkHit of theirs; a piece shown
+	// struck before any hit on it is drawn; the cut shown past what the hits drawn so far allow)
+	int WordsEarly = 0, WordsTold = 0, StruckEarly = 0, CutEarly = 0;
+	double CutMostOver = 0.0;
+	std::map<int, std::pair<AirMarks::State, int>> ShownWas;
+	std::set<int> HitDrawn;
 	std::map<int, AirMarks::State> WasOut;
 	std::map<int, int> OutMen;
 	const double Dt = 1.0 / Fps;
@@ -156,8 +178,15 @@ int main(int Argc, char** Argv)
 		Show.Advance(T);
 		++Frame;
 		bool bStrafeGun = false;
+		int HitsThisFrame = 0, WordsThisFrame = 0;
 		for (const AirShow::Fx& F : Show.Effects)
 		{
+			if (F.Kind == AirShow::FxKind::MarkHit)
+			{
+				++HitsThisFrame;
+				HitDrawn.insert(F.Key);
+			}
+			if (F.Kind == AirShow::FxKind::Dispatch && F.What == "air:mark-hit") ++WordsThisFrame;
 			Seen S{ Frame, Show.AirNow(), F };
 			if (F.Kind == AirShow::FxKind::BombHit) BombHits.push_back(S);
 			else if (F.Kind == AirShow::FxKind::MarkHit) MarkHits.push_back(S);
@@ -167,7 +196,33 @@ int main(int Argc, char** Argv)
 			else if (F.Kind == AirShow::FxKind::Gun && F.Text == "fixed" && F.Aim.Z < 50.0) bStrafeGun = true;
 		}
 		StrafeGunFrames += bStrafeGun ? 1 : 0;
+		WordsTold += WordsThisFrame;
+		WordsEarly += std::max(0, WordsThisFrame - HitsThisFrame);
 		Show.Effects.clear();
+		// (a piece with a hit told on it shown struck (its state or its men changed) before any hit on it is drawn)
+		for (const AirMarks::Piece& P : Show.Marks().Pieces)
+		{
+			const auto Was = ShownWas.find(P.Id);
+			const bool bChanged = Was != ShownWas.end() && (Was->second.first != P.Now || Was->second.second != P.Men);
+			if (bChanged && ToldHits.count(P.Id) && !HitDrawn.count(P.Id)) ++StruckEarly;
+			ShownWas[P.Id] = { P.Now, P.Men };
+		}
+		// (the cut shown: no more than the highest of the views shown whose hits told up to their time are all drawn)
+		{
+			const size_t Drawn = MarkHits.size();
+			double Allowed = 0.0;
+			for (const auto& VC : ViewCuts)
+			{
+				if (VC.first > Show.Shown() + 1e-9) break;
+				const size_t Upto = static_cast<size_t>(std::count_if(HitTimes.begin(), HitTimes.end(), [&VC](double Ht) { return Ht <= VC.first + 1e-9; }));
+				if (Upto <= Drawn) Allowed = std::max(Allowed, VC.second);
+			}
+			if (Show.MarksCut() > Allowed + 1e-12)
+			{
+				++CutEarly;
+				CutMostOver = std::max(CutMostOver, Show.MarksCut() - Allowed);
+			}
+		}
 		// (a piece that is out never changes again: its state and its men as they were when it went out)
 		for (const AirMarks::Piece& P : Show.Marks().Pieces)
 		{
@@ -300,6 +355,7 @@ int main(int Argc, char** Argv)
 	Desk.Begin(Rec.Board, Rec.Views.front().Head.Me);
 	for (const AirFeed::Frame& F : Rec.Views) Desk.Take(F);
 	Desk.Reach(EndT + 1.0);
+	Desk.Struck(Show.Marks(), Show.MarksCut());
 	AirDesk::Words W;
 	Desk.Write(0.0, Show.Groups(), std::string(), W);
 	// (a live recording keeps its after card in end.after, not at the top: read from there where the top has none; and
@@ -327,6 +383,19 @@ int main(int Argc, char** Argv)
 	for (size_t K = 0; K < Fighters.size(); ++K) Want += (K ? "," : "") + std::to_string(Fighters[K]);
 	Want += "]}";
 	const std::string Strafe = Desk.Strafe(All, W.Tags);
+	// (the other side's desk, his column under the raid: no STRAFE THE COLUMN, and nothing sent)
+	AirDesk::Desk Other;
+	Other.Begin(Rec.Board, Rec.Views.front().Head.Me == "def" ? "att" : "def");
+	for (const AirFeed::Frame& F : Rec.Views) Other.Take(F);
+	Other.Reach(EndT + 1.0);
+	Other.Struck(Show.Marks(), Show.MarksCut());
+	AirDesk::Words OtherW;
+	Other.Write(0.0, Show.Groups(), std::string(), OtherW);
+	std::vector<int> OtherAll;
+	for (const AirDesk::Tag& Tg : OtherW.Tags) OtherAll.push_back(Tg.Id);
+	const std::string OtherStrafe = Other.Strafe(OtherAll, OtherW.Tags);
+	const bool bCutEnd = !ViewCuts.empty() && std::fabs(Show.MarksCut() - std::max_element(ViewCuts.begin(), ViewCuts.end(),
+		[](const std::pair<double, double>& A, const std::pair<double, double>& B) { return A.second < B.second; })->second) < 1e-9;
 	const bool bWords = Desk.OnTroops() && Says(W.Title, "The raid on") && Says(W.AimTarget, Given.Under.empty() ? "column" : Given.Under.front().Name.c_str())
 		&& Says(W.Chance, "organisation cut") && (Says(W.AimState, "column so far") || Says(W.AimState, "No hits"));
 	std::printf("  words: title \"%s\"; top bar \"%s\"; aim \"%s\" / \"%s\"; card \"%s\" (%zu lines of the recording's, and one added)\n",
@@ -365,6 +434,13 @@ int main(int Argc, char** Argv)
 		{ "the after card speaks of the column, not \"the target\"", !bCardTarget && Says(Card.Title, "The raid on") && Says(Card.Lines.back(), "found the column"),
 		  bCardTarget ? "the target" : Card.Title + " / " + Card.Lines.back(), "the column" },
 		{ "STRAFE THE COLUMN sends his fighter groups only", Fighters.empty() ? Strafe.empty() : Strafe == Want, Strafe.empty() ? "(nothing)" : Strafe, Fighters.empty() ? "(nothing)" : Want },
+		{ "STRAFE THE COLUMN not offered over his own column (the other side's desk)", Desk.CanStrafe() != Other.CanStrafe() && !Other.CanStrafe() && OtherStrafe.empty(),
+		  std::string(Other.CanStrafe() ? "offered" : "not offered") + ", " + (OtherStrafe.empty() ? "nothing sent" : OtherStrafe) + "; top bar \"" + OtherW.Chance + "\"", "not offered, nothing sent" },
+		{ "no hit's dispatch before its MarkHit (told in the frame it is drawn)", WordsEarly == 0 && WordsTold == ToldWithWords,
+		  std::to_string(WordsEarly) + " early, " + std::to_string(WordsTold) + " told of " + std::to_string(ToldWithWords) + " with words", "0 early, all told" },
+		{ "no piece shown struck before a hit on it is drawn", StruckEarly == 0, std::to_string(StruckEarly), "0" },
+		{ "the organisation cut shown waits for the hits it counts", CutEarly == 0 && bCutEnd,
+		  std::to_string(CutEarly) + " frames ahead (most " + Num(CutMostOver * 100.0, 2) + " points); at the end " + Num(Show.MarksCut() * 100.0, 2) + "%", "0, and the views' last by the end" },
 	};
 	std::printf("== %s: raid on troops: %zu pieces, %d hits told, %d strafes, %ld frames at %.0f a second\n", Rec.Key.c_str(),
 	            Given.Pieces.size(), ToldHitsAll, ToldStrafes, Frame, Fps);

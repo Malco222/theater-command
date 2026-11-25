@@ -115,11 +115,12 @@ namespace AirMarks
 	bool ClearOf(const Column& C, double X, double Y, double Blast, double& OutX, double& OutY);
 	/** Where a counted hit's drawn bomb comes down on the piece at Index: inside its footprint for a wreck, a burn or a
 	 * blast; beside it, within its blast, for a near miss or men scattered; clear of every other piece by more than
-	 * Blast either way. Salt makes each bomb's spot its own. */
+	 * Blast either way, where any such spot is (else the spot tried farthest from them, still on it or beside it as
+	 * the hit says). Salt makes each bomb's spot its own. */
 	void AimOn(const Column& C, int Index, const std::string& How, double Blast, uint32_t Salt, double& OutX, double& OutY);
 	/** What a hit makes of a piece as it is shown (the event's how; never down the list): wreck and blast out, burn
-	 * burning, a near miss on a vehicle or a gun damaged and smoking, men scattered as they were. */
-	State StateAfter(const std::string& How, const std::string& What, State Now);
+	 * burning; a near miss and men scattered as they were, until a view's word says otherwise (view.marks). */
+	State StateAfter(const std::string& How, State Now);
 	/** A piece takes a state and the men left (-1: as they were): false where nothing changed. A piece that is out
 	 * never changes again. */
 	bool Apply(Piece& P, State To, int Men);
