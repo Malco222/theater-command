@@ -3737,7 +3737,7 @@ function foldCard(reg: number): string {
       // (The men in words from fold.ts foldWords, as the news and the 3D card say them: the UI director's point 4 of 26 November 2026.)
       w.over ? esc(w.over) : '',
       v.works !== undefined ? `It takes over the fieldworks ${esc(v.goneName)} stands in.` : '',
-      `${esc(v.goneName)} goes home as a cadre: it can be raised again from the arsenal for ${esc(fw.cadre(v, money(v.cadreCost)))}, in ${monthsWord(v.cadreMonths)}.`,
+      `${esc(v.goneName)} goes home as a cadre: it can be raised again from the arsenal for ${esc(fw.cadre(v, money(v.cadreCost)))}, in ${fw.months(v.cadreMonths, monthsWord(v.cadreMonths))}.`,
     ].filter(Boolean).join(' ');
     return `<div class="foldopt"><span class="grow"><b class="foldkeep">Keep ${esc(v.keepName)}</b><small>${bits}</small></span><button class="btn small go" data-act="fold" data-keep="${v.keep}" data-gone="${v.gone}" title="${esc(v.keepName)} takes in the men of ${esc(v.goneName)}. It cannot be undone.">Fold into ${esc(v.keepName)}</button></div>`;
   };

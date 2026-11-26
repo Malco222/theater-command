@@ -6838,7 +6838,7 @@ function foldPage(s: Game, reg: number): Page | null {
           // (The men in words from fold.ts foldWords, as the news and the page say them: the UI director's point 4 of 26 November 2026.)
           foldWords(s, s.human!, v).over ?? '',
           v.works !== undefined ? `It takes over the fieldworks ${v.goneName} stands in.` : '',
-          `${v.goneName} goes home as a cadre: it can be raised again from the arsenal for ${fw.cadre(v, shown(v.cadreCost).toLocaleString('en'))}, in ${v.cadreMonths} month${v.cadreMonths === 1 ? '' : 's'}.`,
+          `${v.goneName} goes home as a cadre: it can be raised again from the arsenal for ${fw.cadre(v, shown(v.cadreCost).toLocaleString('en'))}, in ${fw.months(v.cadreMonths, `${v.cadreMonths} month${v.cadreMonths === 1 ? '' : 's'}`)}.`,
           v.why ?? '',
         ].filter(Boolean),
         buttons: [{ label: `FOLD INTO ${v.keepName.toUpperCase()}`, act: `fold:${v.keep}:${v.gone}`, ok: !v.why, danger: true, tip: v.why ?? `${v.keepName} takes in the men of ${v.goneName}. It cannot be undone.` }],

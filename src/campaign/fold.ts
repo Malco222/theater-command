@@ -15,7 +15,7 @@ import { headline, men, removeCorps, worksOf } from './game';
 import { appoint, generalOf } from './commanders';
 import { MANPOWER, men1000, menScale, menWorth, returnMen } from './manpower';
 import { cadreTerms } from './economy';
-import { binds, riflesBack, riflesFold } from './rifles';
+import { binds, inWords, riflesBack, riflesFold } from './rifles';
 import { noteCorps } from './stories';
 import { atItsPost, postWords } from './pacific';
 
@@ -136,6 +136,9 @@ export interface FoldCardWords {
    * strength as it stands, or at a nation's own scale against the corps' own size, so a corps its row keeps small reads
    * whole at its full, as whyNotFold reads it ("already at full strength for its size"). */
   share: (str: number, c: Corps | undefined) => number;
+  /** The cadre's months, after "in": the speaker's own dress ('own', "5 months"), or at a nation's own scale in words
+   * to ten ("five months", "one month", "11 months"). */
+  months: (k: number, own: string) => string;
 }
 
 /**
@@ -143,15 +146,17 @@ export interface FoldCardWords {
  * scale of its own, the heading of each pair says each corps' men with "about", to the thousand, the figure foldWords
  * gives for that corps ("Central reserve: about 80,000 men, 60% of its strength."), and the cadre line says the men in
  * divisions' worth as line 8 says them, the treasury clause dropped where it is nothing ("... can be raised again from
- * the arsenal for two divisions' worth of men from the reserve"). The months stay as each card says them. Every other
- * nation as built, byte for byte ("for 0 from the treasury" there is a shipped line: her later-patch list).
+ * the arsenal for two divisions' worth of men from the reserve"). Her third read (04:58Z, point A) keeps the months
+ * clause, in words to ten ("..., in five months."). Every other nation as built, byte for byte, each card's months in
+ * its own dress ("for 0 from the treasury" and ", in 5 months." there are shipped lines: her later-patch list).
  */
 export function foldCardWords(nat: string): FoldCardWords {
   const per = menScale(nat);
-  if (per === null) return { men: (c) => `${men(c).toLocaleString('en-US')} men`, cadre: (v, cost) => `${cost} from the treasury and ${Math.round(v.cadreMen).toLocaleString('en-US')} men from the reserve`, share: (str) => str };
+  if (per === null) return { men: (c) => `${men(c).toLocaleString('en-US')} men`, cadre: (v, cost) => `${cost} from the treasury and ${Math.round(v.cadreMen).toLocaleString('en-US')} men from the reserve`, share: (str) => str, months: (_k, own) => own };
   return {
     men: (c) => `about ${men1000(c.divs * c.str * per)} men`,
     share: (str, c) => str / (c?.full ?? 1),
+    months: (k) => `${inWords(k)} month${k === 1 ? '' : 's'}`,
     cadre: (v, cost) => {
       // (A cadre of a corps its row keeps small can come back as part of a division's worth: said in men at the scale.)
       return `${v.cadreCost > 0 ? `${cost} from the treasury and ` : ''}${menWorth(per, v.cadreMen / MEN_PER_DIV)} from the reserve`;

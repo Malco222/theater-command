@@ -431,14 +431,14 @@ describe('the third read: the fold card at one scale', () => {
   it("1. China's 3D card: the pair's heading at her scale, and the cadre line in divisions' worth with no treasury clause", () => {
     const { text, row } = pair('CHN', 7, 'inf');
     expect(text).toBe('Central reserve: about 80,000 men, 60% of its strength. Chungking garrison: about 80,000 men, 60%.');
-    expect(row.lines).toContain("Chungking garrison goes home as a cadre: it can be raised again from the arsenal for two divisions' worth of men from the reserve, in 5 months.");
+    expect(row.lines).toContain("Chungking garrison goes home as a cadre: it can be raised again from the arsenal for two divisions' worth of men from the reserve, in five months.");
     expect(row.lines.join('\n')).not.toMatch(/15,000|18,000|30,000|from the treasury/);
   });
 
   it('2. a cadre whose treasury cost is not nothing (an artillery corps of China\'s): the treasury clause kept, before the men', () => {
     const { text, row } = pair('CHN', 7, 'art');
     expect(text).toBe('Central reserve: about 80,000 men, 60% of its strength. Chungking garrison: about 80,000 men, 60%.');
-    expect(row.lines).toContain("Chungking garrison goes home as a cadre: it can be raised again from the arsenal for 1,700 from the treasury and two divisions' worth of men from the reserve, in 5 months.");
+    expect(row.lines).toContain("Chungking garrison goes home as a cadre: it can be raised again from the arsenal for 1,700 from the treasury and two divisions' worth of men from the reserve, in five months.");
   });
 
   it("3. a cadre of one division and of three: \"one division's worth\", \"three divisions' worth\"", () => {
@@ -511,19 +511,19 @@ describe('a corps kept small: its cadre and its strength at one scale', () => {
     const c = chuchow(null);
     expect(c.text).toBe(`${GONE}: about 11,000 men, 60% of its strength. ${KEEP}: about 40,000 men, 60%.`);
     expect(c.rows.map((r) => r.lines[0])).toEqual(['About 18,000 men in one corps at 100% of its strength, green.', 'About 51,000 men in one corps at 76% of its strength, green.']);
-    expect(c.rows[1].lines).toContain(`${GONE} goes home as a cadre: it can be raised again from the arsenal for about 18,000 men from the reserve, in 5 months.`);
+    expect(c.rows[1].lines).toContain(`${GONE} goes home as a cadre: it can be raised again from the arsenal for about 18,000 men from the reserve, in five months.`);
     expect(c.note).toBe('Forms up at Chungking, for 50% of the price of a new corps. Takes about 18,000 men and 5,800 rifles.');
     expect(c.why).toBeNull();
     const short = chuchow(0.1);
-    expect(short.why).toBe(`The reserve has not the men: this takes about 18,000 men and less than half of a division's worth is left.${CLASS}`);
+    expect(short.why).toBe(`The reserve has not the men: this takes about 18,000 men and about 7,000 are left.${CLASS}`);
   });
 
   it('F2, the helpers: part of a division\'s worth in men at the scale, whole counts as line 8 says them', () => {
     const g = grand();
     expect(riflesTakes(g, 'CHN', 0.5)).toBe('Takes about 34,000 men and 10,700 rifles.');
     expect(riflesTakes(g, 'CHN', 3)).toBe("Takes three divisions' worth of men and 63,900 rifles.");
-    expect(noMenWords('CHN', 0.5, 0.2, 1.5644171779141105)).toBe(`The reserve has not the men: this takes about 34,000 men and less than half of a division's worth is left.${CLASS}`);
-    expect(noMenWords('CHN', 1.5, 1.2, 1.5644171779141105)).toBe(`The reserve has not the men: this takes about 101,000 men and about one division's worth is left.${CLASS}`);
+    expect(noMenWords('CHN', 0.5, 0.2, 1.5644171779141105)).toBe(`The reserve has not the men: this takes about 34,000 men and about 13,000 are left.${CLASS}`);
+    expect(noMenWords('CHN', 1.5, 1.2, 1.5644171779141105)).toBe(`The reserve has not the men: this takes about 101,000 men and about 80,000 are left.${CLASS}`);
     expect(noMenWords('CHN', 3, 0.2, 1.5644171779141105)).toBe(`The reserve has not the men: this takes three divisions' worth and less than half of one is left.${CLASS}`);
   });
 
@@ -531,5 +531,63 @@ describe('a corps kept small: its cadre and its strength at one scale', () => {
     const w = foldCardWords('JAP');
     expect(w.share(0.27, { full: 0.27 } as never)).toBe(0.27);
     expect(foldCardWords('CHN').share(0.162, { full: 0.27 } as never)).toBeCloseTo(0.6, 10);
+  });
+});
+
+// The UI director's third read of 26 November 2026, 04:58Z. A: the cadre line keeps its months clause, in words to ten,
+// for a nation with a scale of its own (", in five months."), from the one helper both cards read (fold.ts
+// foldCardWords.months); every other nation's card keeps its own dress (Japan's 3D card ", in 5 months."). C: in the
+// refusal the need and what is left take one measure: a need in men takes a remainder in men, with "about", to the
+// thousand, never the need's own figure or more, and "fewer than 1,000 are left" where it rounds to no thousand (the
+// form nearest her words, for her); a need in divisions' worth keeps point 6's forms.
+describe('the third read of 04:58Z: months in words, and the refusal in one measure', () => {
+  type Call = (...a: unknown[]) => unknown;
+  const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
+  const CLASS = ' About 105,000 men come of age each month in the land you still hold.';
+  const KEEP = '3rd War Area: 23rd Army Group and the New Fourth Army', GONE = '3rd War Area: 10th Army Group';
+
+  it("A. the helper's months: in words to ten at her scale, the speaker's own dress for every other nation (the page's wiring in ui/main.ts foldCard is read, not run)", () => {
+    const w = foldCardWords('CHN'), j = foldCardWords('JAP');
+    // The page's own dress is its monthsWord ("5 months"); the helper gives what the page prints after "in".
+    expect(w.months(5, '5 months')).toBe('five months');
+    expect(w.months(1, '1 month')).toBe('one month');
+    expect(w.months(10, '10 months')).toBe('ten months');
+    expect(w.months(11, '11 months')).toBe('11 months');
+    expect(j.months(5, '5 months')).toBe('5 months');
+    expect(j.months(1, '1 month')).toBe('1 month');
+    // The page's cadre line for China, whole, as foldCard puts it together.
+    const g = grand();
+    levyMen(g, 'CHN', 30);
+    const at = g.regions[g.nations.CHN.capital].name;
+    const a = addCorps(g, 'CHN', 'Central reserve', 'inf', 2, at, {}), b = addCorps(g, 'CHN', `${at} garrison`, 'inf', 2, at, {});
+    a.str = 0.6; b.str = 0.6;
+    const v = foldView(g, a, b);
+    expect(v.cadreMonths).toBe(5);
+    expect(`${v.goneName} goes home as a cadre: it can be raised again from the arsenal for ${w.cadre(v, '0')}, in ${w.months(v.cadreMonths, `${v.cadreMonths} months`)}.`)
+      .toBe("Chungking garrison goes home as a cadre: it can be raised again from the arsenal for two divisions' worth of men from the reserve, in five months.");
+  });
+
+  it("C. the 10th Army Group's cadre at Chuchow with about 9,000 men left: her sentence, on the live board", () => {
+    TC().start({ human: 'CHN', seed: 7, view: 'grand', world: true });
+    const g = loadGame((TC().save() as { text: string }).text)!;
+    const k = g.corps.find((c) => c.name === KEEP && c.nat === 'CHN')!, x = g.corps.find((c) => c.name === GONE && c.nat === 'CHN')!;
+    for (const c of [k, x]) { c.str = 0.6 * (c.full ?? 1); c.supplied = true; }
+    expect(foldCorps(g, k, x)).toBe(true);
+    g.flags['mp:CHN'] = 9000 / menScale('CHN')!;
+    TC().load(saveGame(g));
+    const o = (TC().arsenal(-1) as { offers: { key: string; why: string | null }[] }).offers.find((y) => y.key === `cadre:${x.id}`)!;
+    expect(o.why).toBe(`The reserve has not the men: this takes about 18,000 men and about 9,000 are left.${CLASS}`);
+  });
+
+  it("C. the edges through the function: never the need's figure, fewer than 1,000, and a whole count as built", () => {
+    const per = menScale('CHN')!, cls = 1.5644171779141105, need = 0.27;
+    expect(noMenWords('CHN', need, 9000 / per, cls)).toBe(`The reserve has not the men: this takes about 18,000 men and about 9,000 are left.${CLASS}`);
+    // About 17,600 left of about 18,090 would read "about 18,000", the need's own figure: it shows 1,000 less.
+    expect(noMenWords('CHN', need, 17600 / per, cls)).toBe(`The reserve has not the men: this takes about 18,000 men and about 17,000 are left.${CLASS}`);
+    expect(noMenWords('CHN', need, 300 / per, cls)).toBe(`The reserve has not the men: this takes about 18,000 men and fewer than 1,000 are left.${CLASS}`);
+    expect(noMenWords('CHN', need, 0, cls)).toBe(`The reserve has not the men: this takes about 18,000 men and fewer than 1,000 are left.${CLASS}`);
+    expect(noMenWords('CHN', 3, 0.2, cls)).toBe(`The reserve has not the men: this takes three divisions' worth and less than half of one is left.${CLASS}`);
+    expect(noMenWords('CHN', 3, 1.4, cls)).toBe(`The reserve has not the men: this takes three divisions' worth and about one is left.${CLASS}`);
+    expect(noMenWords('JAP', 0.27, 0, 1)).toBeNull();
   });
 });
