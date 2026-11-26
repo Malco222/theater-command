@@ -454,7 +454,8 @@ namespace
 
 	/**
 	 * Every battle model with mark places, worn by her own nation (a "_" file by the Americans and the Germans), and
-	 * the owners whose marks change with the month (the British flash, then star; none before the flash) or who wear
+	 * the owners whose marks change with the month (the British flash, then star; the flash before its month too:
+	 * Brian, 26 November 2026, "have the paint be on it regardless of the year") or who wear
 	 * another's kit: loaded with the marks off and on. Off must be as before; on, each body with a place gains marks
 	 * (none where the owner paints none) at both levels, every point within its lift of her own skin (the near level
 	 * within 12 mm, the far within 35 mm), facing out, its triangles wound to face out, in the owner's paint (by area).
@@ -475,7 +476,7 @@ namespace
 			if (Nation == "GER") return std::string("cross");
 			if (Nation == "USA") return std::string("white");
 			if (Nation == "SOV") return std::string("red");
-			if (Nation == "UK") return std::string(Key >= 1943 * 12 + 7 ? "white" : Key >= 1941 * 12 + 11 ? "flash" : "none");
+			if (Nation == "UK") return std::string(Key >= 1943 * 12 + 7 ? "white" : "flash");
 			if (Nation == "ITA") return std::string("rectangle");
 			if (Nation == "JAP") return std::string("yellow");
 			return std::string("none");
@@ -506,7 +507,8 @@ namespace
 			}
 			Cases.push_back({ Name, Own, 1944, 7, Expected(Own, 1944, 7) });
 		}
-		for (const Case& C : std::vector<Case>{ { "LightTank", "UK", 1942, 5, "flash" }, { "LightTank", "UK", 1941, 6, "none" }, { "Sexton", "UK", 1943, 2, "flash" },
+		for (const Case& C : std::vector<Case>{ { "LightTank", "UK", 1942, 5, "flash" }, { "LightTank", "UK", 1941, 6, "flash" }, { "Sexton", "UK", 1943, 2, "flash" },
+				 { "Sexton", "UK", 1940, 6, "flash" }, { "Sherman", "UK", 1940, 9, "flash" }, { "Sherman", "POL", 1939, 9, "flash" },
 				 { "Sherman", "UK", 1944, 7, "white" }, { "Sherman", "SOV", 1944, 7, "red" }, { "LightTank", "JAP", 1942, 1, "yellow" },
 				 { "LightTank", "ITA", 1942, 10, "rectangle" }, { "Truck", "SOV", 1943, 7, "red" } })
 		{

@@ -1582,9 +1582,11 @@ namespace LandKit
 		}
 
 		/** Which mark her owner painted in the battle's month: each nation's plain period marking, never a party emblem
-		 * (the art director's rule). The file's own "mark_months" rows for her nation first (the British: none, then the
-		 * recognition flash from November 1941, the Allies' white star from July 1943); "none" where her army painted none
-		 * that the art director has ruled on. */
+		 * (the art director's rule). The file's own "mark_months" rows for her nation first (the British: the recognition
+		 * flash, the Allies' white star from July 1943); "none" only where her army has no mark the art director has ruled
+		 * on. No month leaves her bare (Brian, 26 November 2026: "have the paint be on it regardless of the year", of a
+		 * British tank at Cairo with no markings): where her month's own row says none (the British before their flash of
+		 * November 1941), she wears the mark her army painted first after it. */
 		std::string MarkWorn(const std::string& Nation, int Year, int Month, const Json::Value& Months)
 		{
 			const int Key = Year * 12 + Month;
@@ -1593,6 +1595,7 @@ namespace LandKit
 				int Y = 0, M = 0;
 				return std::sscanf(Text.c_str(), "%d-%d", &Y, &M) == 2 ? Y * 12 + M : Otherwise;
 			};
+			auto NameOf = [](const std::string& Kind) { return Kind == "star" ? std::string("white star") : Kind; };
 			const Json::Value Rows = Months[Nation];
 			for (size_t I = 0; I < Rows.Count(); ++I)
 			{
@@ -1600,7 +1603,29 @@ namespace LandKit
 				if (KeyOf(Row["from"].Str(), -1) <= Key && Key <= KeyOf(Row["to"].Str(), 1 << 30))
 				{
 					const std::string Kind = Row["mark"].Str("none");
-					return Kind == "star" ? std::string("white star") : Kind;
+					if (Kind != "none")
+					{
+						return NameOf(Kind);
+					}
+					// (a bare month: the first mark her file gives after it; none there, her nation's own below)
+					int SoonestFrom = 1 << 30;
+					std::string NextKind;
+					for (size_t J = 0; J < Rows.Count(); ++J)
+					{
+						const Json::Value LaterRow = Rows.At(J);
+						const int LaterFrom = KeyOf(LaterRow["from"].Str(), -1);
+						const std::string LaterKind = LaterRow["mark"].Str("none");
+						if (LaterKind != "none" && LaterFrom > Key && LaterFrom < SoonestFrom)
+						{
+							SoonestFrom = LaterFrom;
+							NextKind = LaterKind;
+						}
+					}
+					if (!NextKind.empty())
+					{
+						return NameOf(NextKind);
+					}
+					break;
 				}
 			}
 			if (Nation == "GER")
@@ -1615,9 +1640,10 @@ namespace LandKit
 			{
 				return "red star";
 			}
-			if (Nation == "UK" || Nation == "CAN" || Nation == "AUS" || Nation == "NZL" || Nation == "SAF" || Nation == "IND" || (Nation == "POL" && Year >= 1940))
+			if (Nation == "UK" || Nation == "CAN" || Nation == "AUS" || Nation == "NZL" || Nation == "SAF" || Nation == "IND" || Nation == "POL")
 			{
-				return Key >= 1943 * 12 + 7 ? "white star" : Key >= 1941 * 12 + 11 ? "flash" : "none";
+				// (the flash from the war's first month, not only from November 1941, and the Poles' from 1939: no year bare)
+				return Key >= 1943 * 12 + 7 ? "white star" : "flash";
 			}
 			if (Nation == "ITA")
 			{
