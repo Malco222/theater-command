@@ -14,6 +14,7 @@ import data from '../../data/campaign/breakup.json';
 import { removeCorps } from './game';
 import { divisionsOf } from './armies';
 import { riflesJoin, riflesSplit } from './rifles';
+import { FAR_STAGE } from './stage';
 import { MEN_PER_DIV, type Corps, type Game } from './types';
 
 export const BREAKUP = data as unknown as { detached: string };
@@ -58,8 +59,20 @@ export function breakUp(g: Game, c: Corps, slots: number[]): Corps | null {
   const go = cards.filter((d) => picked.has(d.slot)), stay = cards.filter((d) => !picked.has(d.slot));
   const sum = (ds: typeof cards, f: (d: (typeof cards)[number]) => number): number => ds.reduce((n, d) => n + f(d), 0);
   // The men each part takes, as the division cards show them; together exactly the corps' own.
-  const goMen = sum(go, (d) => d.str), stayMen = c.str * c.divs - goMen;
-  const goXp = sum(go, (d) => d.xp * d.str) / Math.max(1e-9, goMen);
+  let goMen = sum(go, (d) => d.str), stayMen = c.str * c.divs - goMen;
+  let goXp = sum(go, (d) => d.xp * d.str) / Math.max(1e-9, goMen);
+  // A corps its row keeps small (its establishment, 'full', below 1; under the far switch): no part stands above its
+  // full, the design director's ruling 3 of 06:04Z, 26 November 2026: "Rifles follow the men who carry them and no part
+  // stands above its full: a part's full is its share of the parent's establishment; men and rifles past it stay with
+  // the part left behind." The division cards spread around the corps' strength, so the cards picked can hold more men
+  // than the part's full: those stay with the corps. Where the cards left behind would stand above theirs, the part
+  // takes the men past it, up to its own full (they bring their experience). Rifles follow in riflesSplit.
+  if (FAR_STAGE && c.full !== undefined && c.full < 1) {
+    const all = c.str * c.divs, to = Math.min(c.full * go.length, Math.max(goMen, all - c.full * stay.length));
+    if (to > goMen && stayMen > 1e-9) goXp = (goXp * goMen + ((c.xp * all - goXp * goMen) / stayMen) * (to - goMen)) / to;
+    goMen = to;
+    stayMen = all - goMen;
+  }
   const stayXp = stayMen > 1e-9 ? (c.xp * c.str * c.divs - goXp * goMen) / stayMen : c.xp;
   // Names: the divisions' own, kept with them wherever they go.
   const named = cards.map((d) => [d.name, d.short] as [string, string]);

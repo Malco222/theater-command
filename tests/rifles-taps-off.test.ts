@@ -9,6 +9,8 @@ import { addCorps, createGame } from '../src/campaign/game';
 import { foldCorps } from '../src/campaign/fold';
 import { levyMen, menLeft } from '../src/campaign/manpower';
 import { startOpen } from '../src/campaign/staff';
+import { breakUp, setBreakUp } from '../src/campaign/breakup';
+import { divisionsOf } from '../src/campaign/armies';
 
 describe('far off', () => {
   it('1. far off: no row, no draw, no carve, no level', () => {
@@ -44,6 +46,25 @@ describe('far off', () => {
     expect(foldCorps(g, a, c)).toBe(true);
     expect(a.str).toBe(1);
     expect(menLeft(g, nat) - m).toBeCloseTo(0.4, 12);
+    expect(Object.keys(g.flags).filter((k) => /^(sa|sam|rfa|rfo|rflm|rflc):/.test(k))).toEqual([]);
+  });
+
+  it("1. far off: a corps with an establishment below 1 (laid by hand) breaks up as built (the design director's ruling 3 of 06:04Z is under the far switch)", () => {
+    const g = startOpen(createGame(3, 'GER'));
+    g.phase = g.order.indexOf('GER');
+    setBreakUp(g, true);
+    // (On this chart two corps stand below 1, Kiev's fortified region in its town and Helsinki's garrison of one
+    // division, and neither can be broken up: here one is laid by hand.)
+    const c = g.corps.find((x) => x.nat === 'GER' && !x.dead && x.divs >= 3 && x.kind === 'inf' && x.town === undefined && x.joint === undefined && x.leave === undefined && !x.school)!;
+    c.full = 0.8;
+    c.str = 0.8;
+    const cards = divisionsOf(g, c), best = cards.reduce((a, b) => (b.str > a.str ? b : a), cards[0]);
+    expect(best.str).toBeGreaterThan(0.8 + 1e-6);
+    const men = c.str * c.divs, d0 = c.divs;
+    const p = breakUp(g, c, [best.slot])!;
+    // The card picked takes its own men, above the part's full, as built.
+    expect(p.str).toBe(best.str);
+    expect(c.str).toBe((men - best.str) / (d0 - 1));
     expect(Object.keys(g.flags).filter((k) => /^(sa|sam|rfa|rfo|rflm|rflc):/.test(k))).toEqual([]);
   });
 });

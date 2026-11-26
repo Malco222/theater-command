@@ -1203,6 +1203,81 @@ describe('the men', () => {
     }
   });
 
+  it("23. (her ruling 3 of 06:04Z) a small corps broken up and rejoined: no part above its full, the men and the rifles add up, and the round trip gives the corps back", () => {
+    // China's seven small corps are each of one division and cannot be broken up, so a field corps of 3 is given an
+    // establishment below 1 by hand (a corps of 3 or more). Its division cards spread around its strength (one stands at 0.92 where the corps
+    // stands at 0.8): as built the card picked took its men above the part's full (0.92 of 0.8), or left the corps
+    // behind above its own (0.851 of 0.8). Ruled: "a part's full is its share of the parent's establishment; men and
+    // rifles past it stay with the part left behind."
+    const g = grand('CHN');
+    g.phase = g.order.indexOf('CHN');
+    setBreakUp(g, true);
+    store(g, 1);
+    const field = (x: Corps): boolean => x.divs >= 3 && x.kind === 'inf' && x.full === undefined && x.town === undefined && x.joint === undefined && x.leave === undefined && !x.school;
+    const pool = corpsOf(g).filter(field);
+    expect(pool.length).toBeGreaterThan(1);
+    let k = 0;
+    // (full, strength, level, which card leaves)
+    for (const [full, str, lvl, pick] of [[0.8, 0.8, 0.8, 'best'], [0.8, 0.8, 0.8, 'worst'], [0.6, 0.5, 0.5, 'best'], [0.6, 0.4, 0.55, 'best'], [0.5, 0.45, 0.5, 'worst']] as const) {
+      const c = pool[k++ % pool.length];
+      c.full = full; c.str = str; c.xp = 0.4;
+      if (lvl < full) g.flags[`rfa:${c.id}`] = lvl; else delete g.flags[`rfa:${c.id}`];
+      const d0 = c.divs, men0 = c.str * c.divs, rifles0 = levelOf(g, c) * c.divs + stock(g), xp0 = c.xp * men0;
+      const cards = divisionsOf(g, c);
+      const card = cards.reduce((x, y) => ((pick === 'best' ? y.str > x.str : y.str < x.str) ? y : x), cards[0]);
+      const at = `${full}/${str}/${lvl}/${pick}`;
+      // (The card picked, or the cards left, stand above the full: the case the ruling is about.)
+      expect(pick === 'best' ? card.str : (men0 - card.str) / (d0 - 1), at).toBeGreaterThan(full + 1e-6);
+      const p = breakUp(g, c, [card.slot])!;
+      expect(p, at).not.toBeNull();
+      expect(p.full, at).toBe(full);
+      for (const x of [p, c]) {
+        expect(x.str, `${at} ${x.name}`).toBeLessThanOrEqual(full + 1e-12);
+        expect(levelOf(g, x), `${at} ${x.name}`).toBeLessThanOrEqual(full + 1e-12);
+        // (Rifles follow the men: no part holds fewer rifles than men. Shared by the men each part takes, each part to
+        // its full at most and the rest to the other: riflesSplit, as built.)
+        expect(levelOf(g, x), `${at} ${x.name}`).toBeGreaterThanOrEqual(x.str - 1e-12);
+        const y = x === c ? p : c, share = (z: Corps): number => (z.str * (lvl * d0)) / men0;
+        expect(levelOf(g, x), `${at} ${x.name}`).toBeCloseTo(Math.min(full, share(x)) + (Math.max(0, share(y) - full) * y.divs) / x.divs, 12);
+      }
+      expect(p.str * p.divs + c.str * c.divs, at).toBeCloseTo(men0, 12);
+      expect(levelOf(g, p) * p.divs + levelOf(g, c) * c.divs + stock(g), at).toBeCloseTo(rifles0, 12);
+      expect(p.xp * p.str * p.divs + c.xp * c.str * c.divs, at).toBeCloseTo(xp0, 12);
+      // Rejoined: the corps it began as.
+      expect(rejoin(g, p, c), at).toBe(true);
+      expect([c.divs, c.full], at).toEqual([d0, full]);
+      expect(c.str, at).toBeCloseTo(str, 12);
+      expect(levelOf(g, c), at).toBeCloseTo(lvl, 12);
+      expect(c.xp, at).toBeCloseTo(0.4, 12);
+      expect(divisionsOf(g, c).map((d) => d.name), at).toEqual(cards.map((d) => d.name));
+      expect(stock(g), at).toBe(1);
+      delete c.full;
+    }
+  });
+
+  it('23. (her ruling 3 of 06:04Z) a corps at establishment 1 breaks up as built: the cards picked take their own men', () => {
+    const g = grand('CHN');
+    g.phase = g.order.indexOf('CHN');
+    setBreakUp(g, true);
+    const field = (x: Corps): boolean => x.divs === 3 && x.kind === 'inf' && x.full === undefined && x.town === undefined && x.joint === undefined && x.leave === undefined && !x.school;
+    const [c, e] = corpsOf(g).filter(field);
+    e.full = 1;
+    for (const x of [c, e]) {
+      x.str = 0.8;
+      g.flags[`rfa:${x.id}`] = 0.8;
+      const cards = divisionsOf(g, x);
+      const best = cards.reduce((a, b) => (b.str > a.str ? b : a), cards[0]);
+      const stayMen = 0.8 * 3 - best.str;
+      // (The best card stands above the corps' strength; at establishment 1 it takes its own men, as built.)
+      expect(best.str).toBeGreaterThan(0.8 + 1e-6);
+      const p = breakUp(g, x, [best.slot])!;
+      expect(p.str).toBe(best.str);
+      expect(x.str).toBe(stayMen / 2);
+      expect(p.xp).toBe((best.xp * best.str) / best.str);
+      expect(levelOf(g, p)).toBeCloseTo(best.str, 12);
+    }
+  });
+
   it("24. China's month-17 row is at its est", () => {
     const g = startOpen(createGame(5, null));
     const told: string[] = [];
