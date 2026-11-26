@@ -1478,3 +1478,31 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    the kill tally under her port window (new on screen: the older file had none); her airscrews each turning on its own
    engine; past 1.5 km her light shape (2,000 triangles); and, in run 2 if it comes, a finer B-17 the guard holds back
    within 300 m (standing blades, a closed bay) so that N can be judged. Off: the picture exactly as before.
+64. **Oil and fuel at the hit, and contrails** (release 2; Brian, 26 November 2026: more of a film's dramatic detail in the
+   battles). The scene side of two of the effects kit's air parts (the effects thread's fe0997e89, on its line
+   d1e18fa5f: AirHit's Part, kit row `air_hit.spurt`; VapourMove and VapourStop, kit row `air_vapour`; both off in the
+   kit's recipe and turned on only by the overlays the rows lay). Every new call into the kit is guarded with requires(),
+   as AirParts::TrailStart is: on a kit without them the scene builds and the calls do nothing. Looks only: nothing the
+   rules count reads either row. Number 62 was skipped: 61 and 63 are other branches' and 62 may be held.
+   - The row **Oil and fuel at the hit** (FLandLive's rule `flyOilFilm`, off; `-TheaterAirOilFilm` on for a run,
+     `-TheaterAirNoOilFilm` off). On: the Hit case of PlayEffects hands the kit the strike's own Part (fuel, oil, coolant,
+     skin: the flight core's Fx Part) through AirParts::AirHit, and battle-fx-air-spurt.json is laid on both kits
+     (Effects and GroundFx) before their Begin: fuel a torn white vapour whipping back past the tail, oil a thin brown
+     spray, coolant a white glycol puff. Off: no Part, nothing laid, the call as it always was. The windscreen's oil film
+     and the cowling's smears are to join this row later.
+   - The row **Contrails** (`flyVapour`, off; `-TheaterAirVapour`, `-TheaterAirNoVapour`). On: battle-fx-air-vapour.json
+     laid on both kits; in Draw's plane loop, before it parts near shapes from far copies, every aircraft shown, not
+     falling, not on the ground, whose PlaneOut::Vapour is over 0 goes to the air's kit's VapourMove each frame: its place
+     and velocity, Vapour as the strength, its live engines (AirShow::ShapeOf, placed as Show::Local places a point, a
+     dead one left out, at most four), the laid sky's cover (AirSky::Day::CoverLaid: the kit's stand-in for humidity) and
+     its span. One that trailed the frame before and does not now is told VapourStop once. The scene holds only the last
+     frame's keys (in the battle's state), so a replay's clock sought back and a new battle leave nothing stale; the kit
+     drops its own pieces laid after the moment.
+     How Vapour is made (unchanged): AirShow.cpp's PlaneOut, `clamp((Z - TrailM) / 600, 0, 1)`, 0 falling, gone, on the
+     ground or with every engine dead; TrailM is the day's height from AirFeed::TrailHeight (by the weather zone, month and
+     latitude: north Europe 4,600 m in winter, 6,100 m spring and autumn, 7,600 m summer; the tropics and subtropics
+     9,000 m; elsewhere 6,000, 7,300, 8,500 m), with the historian. Before this row nothing in the scene drew it (the
+     flight core made it for the kit's trail to come), so nothing is drawn twice.
+     `-TheaterAirTrailM=<metres>` (development only, no row) puts the day's height for a run in place of the table's
+     (0: no trails); the log says both.
+   For the Mac: see the branch's NOTES (air-r2-fxparts) for the legs; the bar is 45 frames a second over the worst 5 s.
