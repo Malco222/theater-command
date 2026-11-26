@@ -38,7 +38,7 @@ const war = (): Game => {
 describe("the bridge's month card carries the line of a row that waits for another row to form", () => {
   it('a grey home line, its tip the same words', () => {
     const g = war();
-    const line = 'The 18th Division, due in Rangoon since April 1942, waits for the 25th Army (18th Division), which has not formed yet.';
+    const line = 'The 18th Division, due in Rangoon, has waited since April 1942 for the 25th Army (18th Division), which has not formed yet.';
     expect(rowsWaitingOnRows(g, 'JAP')).toEqual([line]);
     // (His month: the bridge picks the war up with Japan up next, and lays his card as the reports page shows it.)
     g.phase = g.order.indexOf('JAP');

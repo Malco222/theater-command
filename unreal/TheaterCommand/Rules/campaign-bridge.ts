@@ -825,9 +825,10 @@ function drawView(step = false) {
       // and why it cannot be ordered to ('' if it can).
       ...(c.nat === s.human && rearguardOn(s) ? { rear: isRearguard(s, c), rearWhy: c.rear ? '' : up ? whyNotRearguardOf(s, c.id) ?? '' : 'It is not your month.' } : {}),
       ...(c.nat === s.human || (s.human && c.joint === s.human) ? cardOf(s, c) : {}),
-      // (Release 2, the telling, arrivalwaits.ts: the UI director's words of 21:49Z, 25 November 2026, section 2.) A
-      // corps of the player's at the front that a waiting dated arrival is to be formed from: the whole line for its
-      // card's muted note ('An arrival due in Paotow since December 1942, ...'). Only where there is one.
+      // (Release 2, the telling, arrivalwaits.ts: the UI director's words of 21:49Z, 25 November 2026, section 2, its
+      // month as section 7 case 8 gives it.) A corps of the player's at the front that a waiting dated arrival is to be
+      // formed from: the whole line for its card's muted note ('An arrival due in Paotow, ..., and has waited for it
+      // since December 1942. ...'). Only where there is one.
       ...(c.nat === s.human ? (() => { const w = arrivalWaitOf(s, c); return w ? { arrivalWait: w.whole } : {}; })() : {}),
     }); }),
     // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.

@@ -61,7 +61,7 @@ describe('one corps: the 25th Army (18th Division) for Hainan, from the 21st Arm
     const c = corps(g, ARMY21);
     expect(arrivalWaitOf(g, c)).toEqual({
       short: 'An arrival waits for it',
-      whole: 'An arrival due in Hainan since November 1941, the 25th Army (18th Division), is to be formed from this corps. It forms the month after this corps leaves the front.',
+      whole: 'An arrival due in Hainan, the 25th Army (18th Division), is to be formed from this corps, and has waited for it since November 1941. It forms the month after this corps leaves the front.',
     });
     relocate(g, c, g.byName['Hiroshima']);
     expect(arrivalWaitOf(g, c)).toBeNull();
@@ -87,7 +87,7 @@ describe('the corps it is formed from has not formed yet: the 18th Division at R
     expect(told(g, 32)).toEqual(['The 18th Division is due in Rangoon this month, formed from the 25th Army (18th Division), which has not formed yet. The arrival waits for it.']);
     expect(told(g, 33)).toEqual([]);
     expect(g.flags[`rowFront:${i}`]).toBeUndefined();
-    const line = 'The 18th Division, due in Rangoon since April 1942, waits for the 25th Army (18th Division), which has not formed yet.';
+    const line = 'The 18th Division, due in Rangoon, has waited since April 1942 for the 25th Army (18th Division), which has not formed yet.';
     expect(rowsWaitingOnRows(g, 'JAP')).toContain(line);
     expect(monthCard(g, markFor(g), 'JAP').waits).toContain(line);
     // Its corps comes, at Hainan in the line: the Rangoon row waits on it there, and the corps carries the line now.
@@ -97,7 +97,7 @@ describe('the corps it is formed from has not formed yet: the 18th Division at R
     const a = corps(g, ARMY25);
     expect(g.regions[a.reg].name).toBe('Hainan');
     expect(rowsWaitingOnRows(g, 'JAP')).not.toContain(line);
-    expect(arrivalWaitOf(g, a)?.whole).toBe('An arrival due in Rangoon since April 1942, the 18th Division, is to be formed from this corps. It forms the month after this corps leaves the front.');
+    expect(arrivalWaitOf(g, a)?.whole).toBe('An arrival due in Rangoon, the 18th Division, is to be formed from this corps, and has waited for it since April 1942. It forms the month after this corps leaves the front.');
     expect(g.flags[`rowFront:${i}`]).toBe(1);
     // No second headline for the same wait.
     expect(g.headlines.filter((x) => x.text.startsWith('The 18th Division is due in'))).toHaveLength(1);
@@ -111,7 +111,7 @@ describe('the corps it is formed from has not formed yet: the 18th Division at R
     addRow([32, 'JAP', 'Test Army', 'inf', 1, 'Rangoon', { from: [ARMY25, CHEKIANG] }]);
     for (let t = 29; t <= 32; t++) month(g, t);
     expect(told(g, 32)).toContain('The Test Army is due in Rangoon this month, formed from the 25th Army (18th Division) and the 13th Army (Chekiang landing force), which have not formed yet. The arrival waits for them.');
-    expect(rowsWaitingOnRows(g, 'JAP')).toContain('The Test Army, due in Rangoon since April 1942, waits for the 25th Army (18th Division) and the 13th Army (Chekiang landing force), which have not formed yet.');
+    expect(rowsWaitingOnRows(g, 'JAP')).toContain('The Test Army, due in Rangoon, has waited since April 1942 for the 25th Army (18th Division) and the 13th Army (Chekiang landing force), which have not formed yet.');
   });
 
   it('both causes at once: one at the front, one not formed yet', () => {
@@ -129,7 +129,7 @@ describe('several corps: the Mongolia Garrison Army (3rd Tank Division) at Paoto
     const g = at40();
     month(g, 40);
     expect(told(g, 40)).toContain('The Mongolia Garrison Army (3rd Tank Division) is due in Paotow this month, formed from four of your corps. The 13th Tank Regiment is at the front in Hankow, so the arrival waits, and forms the month after that corps leaves the front.');
-    expect(arrivalWaitOf(g, corps(g, T13))?.whole).toBe('An arrival due in Paotow since December 1942, the Mongolia Garrison Army (3rd Tank Division), is to be formed from this corps. It forms the month after this corps leaves the front.');
+    expect(arrivalWaitOf(g, corps(g, T13))?.whole).toBe('An arrival due in Paotow, the Mongolia Garrison Army (3rd Tank Division), is to be formed from this corps, and has waited for it since December 1942. It forms the month after this corps leaves the front.');
     expect(arrivalWaitOf(g, corps(g, T8))).toBeNull();
     relocate(g, corps(g, T13), g.byName['Mukden']);
     month(g, 41);
@@ -141,7 +141,7 @@ describe('several corps: the Mongolia Garrison Army (3rd Tank Division) at Paoto
     relocate(g, corps(g, T8), g.byName['Kaifeng']);
     month(g, 40);
     expect(told(g, 40)).toContain('The Mongolia Garrison Army (3rd Tank Division) is due in Paotow this month, formed from four of your corps. The 8th Tank Regiment in Kaifeng and the 13th Tank Regiment in Hankow are at the front, so the arrival waits, and forms the month after both leave the front.');
-    expect(arrivalWaitOf(g, corps(g, T13))?.whole).toBe('An arrival due in Paotow since December 1942, the Mongolia Garrison Army (3rd Tank Division), is to be formed from this corps. It forms the month after this corps and the 8th Tank Regiment leave the front.');
+    expect(arrivalWaitOf(g, corps(g, T13))?.whole).toBe('An arrival due in Paotow, the Mongolia Garrison Army (3rd Tank Division), is to be formed from this corps, and has waited for it since December 1942. It forms the month after this corps and the 8th Tank Regiment leave the front.');
     relocate(g, corps(g, T8), g.byName['Mukden']);
     relocate(g, corps(g, T13), g.byName['Mukden']);
     month(g, 41);

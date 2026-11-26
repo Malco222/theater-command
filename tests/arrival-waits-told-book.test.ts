@@ -25,9 +25,9 @@ import setup from '../data/campaign/setup-1939.json';
 /** The UI director's sentences these tests pin, in one place (her section 7 may change them). */
 const WORDS = {
   begins: 'The 25th Army (18th Division) is due in Hainan this month, formed from your 21st Army (18th Division), which is at the front in Tungkun. The arrival waits, and forms the month after that corps leaves the front.',
-  standing: 'An arrival due in Hainan since November 1941, the 25th Army (18th Division), is to be formed from this corps. It forms the month after this corps leaves the front.',
+  standing: 'An arrival due in Hainan, the 25th Army (18th Division), is to be formed from this corps, and has waited for it since November 1941. It forms the month after this corps leaves the front.',
   chain: 'The 18th Division is due in Rangoon this month, formed from the 25th Army (18th Division), which has not formed yet. The arrival waits for it.',
-  card: 'The 18th Division, due in Rangoon since April 1942, waits for the 25th Army (18th Division), which has not formed yet.',
+  card: 'The 18th Division, due in Rangoon, has waited since April 1942 for the 25th Army (18th Division), which has not formed yet.',
 };
 
 const ARMY21 = '21st Army (18th Division)', ARMY25 = '25th Army (18th Division)', D18 = '18th Division';

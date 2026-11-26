@@ -26,7 +26,7 @@ import type { Corps, Game } from '../src/campaign/types';
 /** The UI director's sentences these tests pin, in one place (her section 7 may change them). */
 const WORDS = {
   begins: 'The Test Army is due in Magdeburg this month, formed from your Test Corps, which is at the front in the Grenzmark. The arrival waits, and forms the month after that corps leaves the front.',
-  standing: 'An arrival due in Magdeburg since October 1939, the Test Army, is to be formed from this corps. It forms the month after this corps leaves the front.',
+  standing: 'An arrival due in Magdeburg, the Test Army, is to be formed from this corps, and has waited for it since October 1939. It forms the month after this corps leaves the front.',
 };
 
 const ROWS = (setup as any).expeditions as any[];

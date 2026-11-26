@@ -37,7 +37,7 @@ describe('the old chart tells as the far side does', () => {
     expect(g.flags[`wait:${i}`]).toBe(2);
     // (The Grenzmark takes "the" as every headline gives it: data/campaign/places.json, game.ts `theWords`.)
     expect(tellings(g)).toEqual(['The Test Army is due in Magdeburg this month, formed from your Test Corps, which is at the front in the Grenzmark. The arrival waits, and forms the month after that corps leaves the front.']);
-    expect(arrivalWaitOf(g, held)).toEqual({ short: 'An arrival waits for it', whole: 'An arrival due in Magdeburg since October 1939, the Test Army, is to be formed from this corps. It forms the month after this corps leaves the front.' });
+    expect(arrivalWaitOf(g, held)).toEqual({ short: 'An arrival waits for it', whole: 'An arrival due in Magdeburg, the Test Army, is to be formed from this corps, and has waited for it since October 1939. It forms the month after this corps leaves the front.' });
     month(g, 3);
     expect(tellings(g)).toHaveLength(1);
     relocate(g, held, g.byName.Bavaria);

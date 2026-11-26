@@ -83,7 +83,7 @@ describe('a save in the middle of a wait', () => {
     const i = index(ARMY25);
     const back = loadGame(saveGame(g))!;
     expect([back.flags[`rowTold:${i}`], back.flags[`rowFront:${i}`], back.flags[`rowAt:${i}`]]).toEqual([27, 1, back.byName['Hainan'].id]);
-    expect(arrivalWaitOf(back, corps(back, ARMY21))?.whole).toBe('An arrival due in Hainan since November 1941, the 25th Army (18th Division), is to be formed from this corps. It forms the month after this corps leaves the front.');
+    expect(arrivalWaitOf(back, corps(back, ARMY21))?.whole).toBe('An arrival due in Hainan, the 25th Army (18th Division), is to be formed from this corps, and has waited for it since November 1941. It forms the month after this corps leaves the front.');
     month(back, 35);
     expect(back.headlines.filter((h) => h.text.startsWith('The 25th Army (18th Division) is due in'))).toHaveLength(1);
     relocate(back, corps(back, ARMY21), back.byName['Hiroshima']);
