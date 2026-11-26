@@ -514,6 +514,9 @@ struct FWarPrompt
 	FString Tag; // the country war would be declared on
 	FString Name; // its name as it reads in a sentence
 	int32 Region = INDEX_NONE; // where the army in hand was being sent, to carry on there once war is declared
+	// (Release 2; Brian, 26 November 2026 03:51Z) the fleet the fleet in hand was set down on: its attack card opens once
+	// war is declared
+	int32 Fleet = INDEX_NONE;
 	FText Title;
 	FText Body;
 	FText Warning; // (rules version 73) set out in red under the body: before a landing, that the sea behind the beach could be closed
@@ -696,8 +699,12 @@ public:
 	 * nothing, if that country is not one he is at peace with and could go to war with this month.
 	 */
 	bool OfferWar(int32 RegionId, bool bMarching = true);
-	/** The same question, about a country by its tag. Region is where the army in hand goes on to afterwards, or INDEX_NONE. */
-	bool OfferWarOn(const FString& Tag, int32 Region);
+	/**
+	 * The same question, about a country by its tag. Region is where the army in hand goes on to afterwards, or
+	 * INDEX_NONE. Fleet is the fleet of that country the fleet in hand was set down on, whose attack card opens once war
+	 * is declared, or INDEX_NONE.
+	 */
+	bool OfferWarOn(const FString& Tag, int32 Region, int32 Fleet = INDEX_NONE);
 
 	/** The same question about the country whose territory is selected, asked from the territory panel. */
 	void OfferWarOnSelected();
@@ -1184,9 +1191,28 @@ public:
 	void OrderFleetTo(int32 Zone);
 	/**
 	 * (Release 2, fleetattack.ts) The fleet in hand set down on an enemy fleet: the attack card, with the odds first, as
-	 * an army's face-off. False where fleet attacks are off, and the caller does what it did before.
+	 * an army's face-off. False where fleet attacks are off, and the caller does what it did before. With Said, the line
+	 * the split of the ships left behind gives (or its refusal) is handed back to be told with the caller's own, instead
+	 * of being told at once.
 	 */
-	bool AttackFleetWith(int32 Target);
+	bool AttackFleetWith(int32 Target, FString* Said = nullptr);
+	/**
+	 * (Release 2; Brian, 26 November 2026 03:51Z: "i can't drag my fleet on top of another fleet to start a battle".) The
+	 * fleet in hand set down, right-clicked, or clicked on a fleet that is neither his nor an enemy's nor an ally's. Where
+	 * war can be declared on its country this month and the lit ships could then be sent at it (the rules' reading on a
+	 * copy of the war with the war declared and the ships left behind split off, FCampaignSession::WarFleetAttack): the
+	 * question of war, as an army set down across a frontier at peace asks it, and the attack card after a yes. Otherwise
+	 * he is told why. True either way, and nothing else is ordered. False only for an ally's fleet (or with fleet attacks
+	 * off), where the caller gives the sea order as before.
+	 */
+	bool FleetOnFleetAtPeace(const AArmyPiece* Piece);
+	/**
+	 * (Release 2) The fleet in hand set down, or right-clicked, on another fleet's figure: an enemy's opens the attack
+	 * card (AttackFleetWith), any other country's goes to FleetOnFleetAtPeace. True where it was answered there, and the
+	 * caller orders nothing more; false where the caller gives the sea order (his own other fleet, an ally's, fleet
+	 * attacks off).
+	 */
+	bool FleetOrderOnFleet(const AArmyPiece* Aimed);
 	/** (Release 2: splitting a stack.) A ship's card in the fleet tray clicked: it is left behind, or comes along again. */
 	void ToggleShip(int32 Index);
 	/** (Release 2: splitting a stack.) ALL, NONE or HALF of the army's corps, or of the fleet's ships, go with the next order: 1, 0 or 2. */
@@ -1194,9 +1220,15 @@ public:
 	/**
 	 * (Release 2: splitting a stack.) The ships left behind are split off from the fleet in hand as a squadron of their
 	 * own, where it is and under its order, so that only the lit ships go. True where the order may go ahead (nothing
-	 * was left behind, or the split was made); false where every ship was left behind or the split was refused.
+	 * was left behind, or the split was made); false where every ship was left behind or the split was refused. With
+	 * Said, the line it would tell (the split made, or why not) is handed back instead of told.
 	 */
-	bool SplitOffStaying(const FString& ForCard = FString());
+	bool SplitOffStaying(const FString& ForCard = FString(), FString* Said = nullptr);
+	/**
+	 * (Release 2) The fleet tray's ships left behind, as the rules take them ("bb.1,ca.2", empty where none are), and
+	 * how many ships are left behind out of OutAll in the tray.
+	 */
+	int32 ShipsLeftBehind(FString& OutSpec, int32& OutAll) const;
 	/**
 	 * (Release 2; the pre-check's read of 24 November) A split made for a card (the attack's odds, the shelling's
 	 * question) is taken back if the card is closed without its order: the ships left behind rejoin the fleet.
@@ -1452,6 +1484,13 @@ public:
 	 * eye through its colours. Says which province the order went to, and which province's ground lay behind the pointer.
 	 */
 	bool RightClickOnFigure(int32 CorpsId, int32& OutAimed, int32& OutGround);
+	/**
+	 * (Release 2, for the step player.) A right-click on a fleet's figure with a fleet in hand, as the mouse gives it: an
+	 * enemy's opens the attack card, one at peace with him asks whether he means war (or he is told why not), and an
+	 * ally's sends the fleet in hand to that fleet's sea (to its port, the port's order, where it lies in harbour). False,
+	 * and nothing done, where that fleet has no figure, no other fleet is in hand, or a card already lies over the table.
+	 */
+	bool RightClickOnFleetFigure(int32 FleetId);
 	/** On the approach order's card: another way up is picked. */
 	void PickApproach(int32 Index);
 	/** True while a card, a page or a screen lies over the table and its clicks do not reach the map. */

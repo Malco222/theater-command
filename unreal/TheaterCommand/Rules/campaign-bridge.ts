@@ -122,7 +122,7 @@ import { scrambleCalls } from './scramble-demo'; // (release 2, the scramble off
 import { formationOffers, whyNotAnswerOffers, type RowOffer } from '../../../src/campaign/turn';
 import { DIV_WORD, askDecline, askForm, asideLines, cardRowOf, headOf, noteOf, offerCalls, offerLines, offersLook, type OffersLook } from './offers-look'; // (release 2, the whole world: formations offered out of the player's own corps, ruling B8)
 import { fleetOptions, fleetView, orderBombard, orderEscort, orderFleetAttackNow, orderMerge, orderSplit, previewBombard, previewFleetAttack, whyNotSplit } from '../../../src/campaign/turn';
-import { fleetAttackOn, setFleetAttack } from '../../../src/campaign/fleetattack';
+import { fleetAttackOn, setFleetAttack, whyNotFleetAttack } from '../../../src/campaign/fleetattack';
 import { breakUp as breakCorps, breakUpOn, rejoin as rejoinCorps, rejoinTargets, setBreakUp, whyNotBreakUp, whyNotRejoin } from '../../../src/campaign/breakup';
 import { setTaskForce, taskForceOn, taskLine } from '../../../src/campaign/taskforce';
 import { fleetWhy, fleetWhyOn, setFleetWhy } from '../../../src/campaign/fleetwhy';
@@ -5862,6 +5862,60 @@ function heroesPage(s: Game): Page | null {
 
 const SHIP_WORD: Record<string, [string, string]> = { bb: ['battleship', 'battleships'], cv: ['carrier', 'carriers'], ca: ['cruiser', 'cruisers'], dd: ['destroyer', 'destroyers'], ss: ['submarine', 'submarines'] };
 
+/**
+ * (Release 2; Brian, 26 November 2026 03:51Z: "i can't drag my fleet on top of another fleet to start a battle".) The
+ * fleets in sight of countries at peace with the player that he could declare war on this month (an ally's are not
+ * among them), each with the rules' reason fleet `id` could not be sent at it even once at war, or '' where it could.
+ * The sights' quick hint, read on the war as it stands (whyNotFleetAttack's asAtWar): the drop itself asks
+ * warFleetAttack, which reads the war declared on a copy, before war is offered.
+ */
+function peaceFleets(s: Game, id: number): { id: number; why: string }[] {
+  const me = s.human;
+  if (!me) return [];
+  const can = new Set(declarable(s));
+  if (!can.size) return [];
+  const out: { id: number; why: string }[] = [];
+  for (const k of fleetsInSight(s)) {
+    const t = s.fleets.find((x) => x.id === k.id);
+    if (!t || t.nat === me || !can.has(t.nat) || allied(s, me, t.nat) || atWar(s, me, t.nat)) continue;
+    out.push({ id: t.id, why: whyNotFleetAttack(s, id, t.id, true) ?? '' });
+  }
+  return out;
+}
+
+/** The ships left behind in the 3D fleet tray, as 'bb.1,ca.2': ship class to count. */
+function shipsLeftBehind(spec: string): Record<string, number> {
+  const take: Record<string, number> = {};
+  for (const bit of spec.split(',')) { const [cls, n] = bit.split('.'); if (cls && Number(n) > 0) take[cls] = (take[cls] ?? 0) + Number(n); }
+  return take;
+}
+
+/**
+ * (Release 2; Brian, 26 November 2026 03:51Z.) Fleet `id` set down on fleet `target` of a country at peace with him:
+ * why it could not be sent at those ships once war on that country is declared, or '' where it could. Read on a copy
+ * of the campaign on which the war has been declared as DECLARE WAR declares it (orderDeclare: the friends that come
+ * in with it, the side he then stands with, so the straits that open or shut to him), and on which the ships left
+ * behind in the tray (`staying`, as 'bb.1,ca.2') have been split off, as the card does before it asks. So war is put to
+ * him only where the attack card that follows could be fought. Nothing in the war is changed. `declare` is false where
+ * war cannot be declared on that country this month (or he is at war with it already: `why` is then the card's own).
+ * `ok` is false where it could not be read.
+ */
+function warFleetAttack(id: number, target: number, staying = '') {
+  const s = game();
+  const me = s.human;
+  const t = s.fleets.find((x) => x.id === target);
+  if (!me || !t || t.nat === me) return { ok: false, declare: false, why: '' };
+  if (atWar(s, me, t.nat)) return { ok: true, declare: false, why: whyNotFleetAttack(s, id, target) ?? '' };
+  if (!humanUp(s) || allied(s, me, t.nat) || !declarable(s).includes(t.nat)) return { ok: true, declare: false, why: '' };
+  const war = loadGame(saveGame(s));
+  if (!war || !orderDeclare(war, t.nat)) return { ok: false, declare: true, why: '' };
+  const take = shipsLeftBehind(staying);
+  if (Object.keys(take).length && orderSplit(war, id, take) < 0) {
+    return { ok: true, declare: true, why: whyNotSplit(war, id, take) ?? 'Those ships cannot be split off now.' };
+  }
+  return { ok: true, declare: true, why: whyNotFleetAttack(war, id, target) ?? '' };
+}
+
 /** One of the player's fleets in hand: its card, and everything it could be told to do this month. Null where the rules keep no such navy. */
 function fleetInHand(id: number) {
   const s = game();
@@ -5888,6 +5942,10 @@ function fleetInHand(id: number) {
         const f = s.fleets.find((x) => x.id === id);
         return { cut: f ? cutOffLine(s, f) : '', homeTip: f ? cutOffHomeTip(s, f) : '' };
       })(),
+      // (Release 2; Brian, 26 November 2026 03:51Z) The fleets of countries at peace with him that he could declare war
+      // on this month, each with why it could not be sent at them even at war (empty where it could): set down on one,
+      // the question of war is asked first, and only where the attack could then be made.
+      peace: o && fleetAttackOn(s) ? peaceFleets(s, id) : [],
       wings: wingsOfFleet(s, id).map((w) => ({ id: w.id, label: w.label, aircraft: Math.round(w.aircraft), doing: w.doing, flew: w.flew })),
     };
   } catch {
@@ -8411,8 +8469,7 @@ function act(action: string, region = -1, fought?: FoughtAir) {
   } else if (part[0] === 'fleetsplitmany') {
     // (Release 2: splitting a stack; Brian 23 November 2026 22:23Z.) The ships left behind in the 3D tray, as 'bb.1,ca.2':
     // split off as a squadron of their own, where the fleet is and under its order, so that only the lit ships go.
-    const take: Record<string, number> = {};
-    for (const bit of (part[2] ?? '').split(',')) { const [cls, n] = bit.split('.'); if (cls && Number(n) > 0) take[cls] = (take[cls] ?? 0) + Number(n); }
+    const take = shipsLeftBehind(part[2] ?? '');
     const made = orderSplit(s, Number(part[1]), take);
     ok = made >= 0;
     const left = Object.entries(take).map(([c, n]) => `${n} ${SHIP_WORD[c]?.[n === 1 ? 0 : 1] ?? c}`).join(', ');
@@ -9254,18 +9311,23 @@ function find(name: string) {
   const region = pick(s.regions, (r) => r.name);
   const sea = pick(s.seas, (z) => z.name);
   // (a corps of another country, by the name the player knows it by: for a right-click on its figure)
-  let seenId = -1, seenReg = -1;
+  let seenId = -1, seenReg = -1, seenFleet = -1;
   if (!corps && !fleet && !group && !region && !sea && me) { // (the whole picture is read only where nothing else answers to the name)
     try {
-      const seen = pick((view() as unknown as { corps: { id: number; nat: string; name: string; reg: number }[] }).corps.filter((c) => c.nat !== me), (c) => c.name);
+      const seenAll = view() as unknown as { corps: { id: number; nat: string; name: string; reg: number }[]; fleets: { id: number; nat: string; name: string }[] };
+      const seen = pick(seenAll.corps.filter((c) => c.nat !== me), (c) => c.name);
       if (seen) { seenId = seen.id; seenReg = seen.reg; }
+      // (Release 2; Brian, 26 November 2026 03:51Z) And a fleet of another country, by the name it is known by on the
+      // table ("Battle Fleet", or "German ships reported"): for a right-click on its figure with a fleet in hand.
+      const ship = seen ? undefined : pick(seenAll.fleets.filter((f) => f.nat !== me), (f) => f.name);
+      if (ship) seenFleet = ship.id;
     } catch { /* (nothing seen of that name) */ }
   }
 
   return {
     region: region ? region.id : -1, sea: sea ? s.seas.indexOf(sea) : -1,
     corps: corps ? corps.id : seenId, corpsRegion: corps ? corps.reg : seenReg,
-    fleet: fleet ? fleet.id : -1, group: group ? group.id : -1, groupShip: group && group.ship !== undefined ? group.ship : -1, groupBase: group ? group.base : -1,
+    fleet: fleet ? fleet.id : seenFleet, group: group ? group.id : -1, groupShip: group && group.ship !== undefined ? group.ship : -1, groupBase: group ? group.base : -1,
   };
 }
 
@@ -9276,7 +9338,7 @@ function find(name: string) {
 const battleTable = battleCalls({ game, attack: playerOrder(attack), raid: (k, t, ids, f) => playerOrder(act)(`raid:${k}:${t}:${ids.join('.')}`, -1, f) });
 (globalThis as Record<string, unknown>).TC = {
   digest, find,
-  raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, school: schoolFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
+  raidsFlown, fleetInHand, warFleetAttack, briefing, sack: sackGeneral, drafts: draftsFor, school: schoolFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
   land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(sayWhyInside(rail, 'said', (r) => !r.moved.length, (s, cs, [ids, to]) => railTip(ids, to).no || stayLine(s, cs)), 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, nationsBook, start, save, peek, peekChart, load, view, reach: reachHand, marchPlan: lookOut(marchPlanOf), nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(sayWhyInside(goOut(move), 'note', (r) => !r.moved.length, garrisonOrPlace), 'march'), previewAttack: lookOut(preview), attack: playerOrder(goOut(attack)), takeOutlook: lookOut(takeOutlook), take: playerOrder(goOut(take), 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach: approachHand, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: lookOut(leadOf),
   // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
   lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard,

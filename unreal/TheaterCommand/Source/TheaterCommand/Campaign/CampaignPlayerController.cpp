@@ -78,19 +78,13 @@ namespace
 		return Next;
 	}
 
-	/**
-	 * (Release 2, carried from the 1.5.1 pre-check of 24 November 20:24Z, r15-151-fleetwar 3e098f1f.) A fleet the player's
-	 * fleet in hand may be set on: one of a nation at war with his, as an army is set only on an army he is at war with
-	 * (WhyNoAttackOn). An ally's or a neutral's fleet under the pointer is only sea: a drop or a right-click there sails his
-	 * fleet to it, as with fleet attacks off.
-	 */
-	bool IsEnemyFleet(const AArmyPiece* Piece, const FCampaignView& View)
+	/** Whether the nation Tag is at war with the player (View.Wars holds every pair at war, two by two). */
+	bool AtWarWithHuman(const FString& Tag, const FCampaignView& View)
 	{
-		if (!Piece || !Piece->IsFleet() || Piece->GetForceId() == INDEX_NONE || Piece->GetNationTag() == View.Human)
+		if (Tag.IsEmpty() || View.Human.IsEmpty() || Tag == View.Human)
 		{
 			return false;
 		}
-		const FString& Tag = Piece->GetNationTag();
 		for (int32 Index = 0; Index + 1 < View.Wars.Num(); Index += 2)
 		{
 			if ((View.Wars[Index] == View.Human && View.Wars[Index + 1] == Tag) || (View.Wars[Index + 1] == View.Human && View.Wars[Index] == Tag))
@@ -99,6 +93,22 @@ namespace
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * (Release 2, carried from the 1.5.1 pre-check of 24 November 20:24Z, r15-151-fleetwar 3e098f1f.) A fleet the player's
+	 * fleet in hand may be set on: one of a nation at war with his, as an army is set only on an army he is at war with
+	 * (WhyNoAttackOn). An ally's fleet under the pointer is only sea: a drop or a right-click there sails his fleet to it,
+	 * as with fleet attacks off. (Release 2; Brian, 26 November 2026 03:51Z) Any other country's goes to
+	 * FleetOnFleetAtPeace: the question of war, or why not.
+	 */
+	bool IsEnemyFleet(const AArmyPiece* Piece, const FCampaignView& View)
+	{
+		if (!Piece || !Piece->IsFleet() || Piece->GetForceId() == INDEX_NONE || Piece->GetNationTag() == View.Human)
+		{
+			return false;
+		}
+		return AtWarWithHuman(Piece->GetNationTag(), View);
 	}
 }
 
@@ -7074,9 +7084,8 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		{
 			// (Release 2, fleetattack.ts) A right-click on an enemy fleet with a fleet in hand is the order to attack it, as on
 			// an enemy army with an army in hand: the card, odds first. Where fleet attacks are off it is a sea order, as before.
-			const FCampaignSession* Now = GetSession();
-			const bool bOnEnemyFleet = FleetInHand != INDEX_NONE && Now && IsEnemyFleet(AimedPiece, Now->GetView());
-			if (!(bOnEnemyFleet && AttackFleetWith(AimedPiece->GetForceId())))
+			// (Release 2; Brian, 26 November 2026 03:51Z) And on a fleet at peace with him: the question of war, as for an army.
+			if (!FleetOrderOnFleet(AimedPiece))
 			{
 				// (the order itself is RightClickOn, so that the playtester's hook gives exactly the order the mouse gives)
 				RightClickOn(AimedRegion, (FleetInHand != INDEX_NONE && bOnTable && bPointerOnWater) ? SeaNear(PointerMap) : INDEX_NONE, bOnTable);
@@ -7239,9 +7248,10 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				// enemy coast its guns reach (the shelling card). Off the table it goes back where it lay, still in hand.
 				// (The carried piece goes back either way: the map moves it once the order is given.)
 				HeldFleetPiece->ReturnToRest();
-				const FCampaignSession* Now = GetSession();
-				const bool bOnEnemyFleet = Now && IsEnemyFleet(AimedPiece, Now->GetView());
-				if (!(bOnEnemyFleet && AttackFleetWith(AimedPiece->GetForceId())) && bOnTable)
+				// (Release 2; Brian, 26 November 2026 03:51Z: "i can't drag my fleet on top of another fleet to start a battle".)
+				// Let go over the fleet of a country at peace with him: the question of war, as an army set down across a
+				// frontier at peace asks it, and the attack card after a yes. It was plain sea before, and the drop said nothing.
+				if (!FleetOrderOnFleet(AimedPiece) && bOnTable)
 				{
 					RightClickOn(AimedRegion, bPointerOnWater ? SeaNear(PointerMap) : INDEX_NONE, bOnTable);
 				}
@@ -7358,6 +7368,18 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			{
 				// (Release 2) Over a fleet of a nation at war with his that it can be sent at: the sights. Over one out of reach: the bar.
 				Pointer = FleetHand.Attack.Contains(AimedPiece->GetForceId()) ? EMouseCursor::Crosshairs : EMouseCursor::SlashedCircle;
+			}
+			else if (Held && FleetHand.bFleetAttack && AimedPiece && AimedPiece->IsFleet() && AimedPiece->GetForceId() != INDEX_NONE
+				&& AimedPiece->GetForceId() != FleetInHand && !AimedPiece->GetNationTag().IsEmpty() && AimedPiece->GetNationTag() != Now->GetView().Human
+				&& !Now->GetView().Allied.Contains(AimedPiece->GetNationTag()))
+			{
+				// (Release 2; Brian, 26 November 2026 03:51Z) Over the fleet of a country at peace: the sights where war can be
+				// declared on it and the fleet in hand could then be sent at it, as over a frontier at peace with an army in
+				// hand (let go there, the question of war comes first); the bar where it could not (let go, he is told why).
+				// FleetHand.Peace is the rules' quick reading at peace until a drop there has read the war declared, which is
+				// kept in its place (FleetOnFleetAtPeace).
+				const FString* Why = FleetHand.Peace.Find(AimedPiece->GetForceId());
+				Pointer = (Why && Why->IsEmpty()) ? EMouseCursor::Crosshairs : EMouseCursor::SlashedCircle;
 			}
 			else if (Held && bPointerOnWater)
 			{
@@ -8092,6 +8114,33 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 							break;
 						}
 					}
+					// (Release 2; Brian, 26 November 2026 03:51Z) Or a fleet here of a country at peace with him: set down on it, the
+					// fleet does not sail. Where the sights stand over it, war is asked first and the attack card follows; over
+					// any other (the bar), he is told why and nothing moves. An ally's fleet is only sea, and is not named.
+					const FCampaignView& Seen = Session->GetView();
+					for (int32 Pass = 0; Pass < 2 && Attack.IsEmpty(); ++Pass)
+					{
+						for (const FViewFleet& Other : Seen.Fleets)
+						{
+							if (Other.Zone != Sea || Other.Id == Held->Id || Other.Nation.IsEmpty() || Other.Nation == Seen.Human || Seen.Allied.Contains(Other.Nation)
+								|| AtWarWithHuman(Other.Nation, Seen))
+							{
+								continue;
+							}
+							const FString* Why = FleetHand.Peace.Find(Other.Id);
+							const bool bSights = Why && Why->IsEmpty();
+							if (Pass == 0 && !bSights)
+							{
+								continue;
+							}
+							const FCampaignNation* Whose = Map->GetData().FindNation(Other.Nation);
+							const FString Country = Whose ? WithThe(Whose->Name) : Other.Nation;
+							Attack = bSights
+								? FString::Printf(TEXT("\nDrop %s on %s: %s is at peace with you, so war is asked first, then the attack card."), *Held->Name, *Other.Name, *Country)
+								: FString::Printf(TEXT("\nSet down on %s, %s does not sail: %s is at peace with you."), *Other.Name, *Held->Name, *Country);
+							break;
+						}
+					}
 				}
 				// (1.5.3, the 1.5.2 review) A fleet cut off beyond a shut strait is not told a sea is too far: over a sea no gate
 				// bars, its line says why, as a right-click there answers it. Over a barred sea the gate's red line says why, as the
@@ -8474,7 +8523,7 @@ bool ACampaignPlayerController::PickUpFleet(int32 FleetId)
 	return true;
 }
 
-bool ACampaignPlayerController::AttackFleetWith(int32 Target)
+bool ACampaignPlayerController::AttackFleetWith(int32 Target, FString* Said)
 {
 	if (FleetInHand == INDEX_NONE || Target == INDEX_NONE || !FleetHand.bValid || !FleetHand.bFleetAttack)
 	{
@@ -8485,12 +8534,115 @@ bool ACampaignPlayerController::AttackFleetWith(int32 Target)
 	// peace, already sent this month) the card says why, in a sentence, and SEND THEM IN is shut.
 	// (Only the lit ships go in: those left behind in the tray are split off first, and stay where they are.)
 	const FString Card = FString::Printf(TEXT("fleetattack:%d:%d"), FleetInHand, Target);
-	if (!SplitOffStaying(Card))
+	if (!SplitOffStaying(Card, Said))
 	{
 		return true;
 	}
 	CampaignSounds::Play(this, TEXT("ship_horn"), 0.4f);
 	OpenPage(Card);
+	return true;
+}
+
+bool ACampaignPlayerController::FleetOnFleetAtPeace(const AArmyPiece* Piece)
+{
+	const FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || !Piece || !Piece->IsFleet() || Piece->GetForceId() == INDEX_NONE || FleetInHand == INDEX_NONE
+		|| !FleetHand.bValid || !FleetHand.bFleetAttack)
+	{
+		return false;
+	}
+	const FCampaignView& View = Session->GetView();
+	const FString& Tag = Piece->GetNationTag();
+	// (an ally's fleet is only sea, as the pre-check of 24 November ruled: the fleet sails to it; an enemy's has its card)
+	if (Tag.IsEmpty() || View.Human.IsEmpty() || Tag == View.Human || View.Allied.Contains(Tag) || IsEnemyFleet(Piece, View))
+	{
+		return false;
+	}
+	const int32 Target = Piece->GetForceId();
+	const FCampaignNation* Nation = Map->GetData().FindNation(Tag);
+	const FString Name = Nation ? HeadThe(Nation->Name) : Tag;
+	// (FleetHand.Peace lists the fleets in sight of the countries war can be declared on this month.)
+	const FString* Hint = FleetHand.Peace.Find(Target);
+	bool bDeclare = Hint != nullptr;
+	FString Why = Hint ? *Hint : FString();
+	if (bDeclare)
+	{
+		// Every ship left behind in the tray: nothing would sail, so no war is put to him for it (the line the split gives).
+		FString Staying;
+		int32 All = 0;
+		const int32 Left = ShipsLeftBehind(Staying, All);
+		if (Left > 0 && Left >= All)
+		{
+			Notify(TEXT("Every ship is left behind: click the cards of the ships that are to sail, or ALL."), 6.0);
+			return true;
+		}
+		// The rules' answer, read on a copy of the war with the war declared as DECLARE WAR declares it and the ships left
+		// behind split off as the card splits them: a declaration moves the reach too (straits open or shut with it), so
+		// the sights' quick reading at peace is not the answer. Kept for the sights from now on.
+		FCampaignSession* Rules = GetSession();
+		FString Read;
+		bool bCan = false;
+		if (Rules && Rules->WarFleetAttack(FleetInHand, Target, Staying, Read, bCan))
+		{
+			bDeclare = bCan;
+			Why = Read;
+			FleetHand.Peace.Add(Target, bCan ? Read : FString(TEXT("-")));
+		}
+	}
+	// A country at peace with him that war can be declared on, and ships the lit ones in hand could be sent at once it is
+	// declared: as an army set down across its frontier, the question of war first. Nothing moves.
+	if (bDeclare && Why.IsEmpty() && OfferWarOn(Tag, INDEX_NONE, Target))
+	{
+		return true;
+	}
+	// Otherwise he is told why, and nothing moves either, as an army set down where war cannot be declared: even at war
+	// those ships could not be sent at them now (the rules' reason), or war cannot be declared on that country this
+	// month (his month not open, or one he neither borders nor can land on). A war is never offered for a battle the
+	// card would then refuse.
+	Notify(bDeclare && !Why.IsEmpty()
+		? FString::Printf(TEXT("%s is at peace with you, and even at war your fleet could not be sent at those ships now. %s"), *Name, *Why)
+		: FString::Printf(TEXT("%s is not at war with you, so its fleet cannot be attacked, and war cannot be declared on it this month."), *Name), 9.0);
+	return true;
+}
+
+bool ACampaignPlayerController::FleetOrderOnFleet(const AArmyPiece* Aimed)
+{
+	const FCampaignSession* Now = GetSession();
+	if (FleetInHand == INDEX_NONE || !Now || !Aimed || !Aimed->IsFleet() || Aimed->GetForceId() == FleetInHand)
+	{
+		return false;
+	}
+	// An enemy's fleet: the attack card (false where fleet attacks are off). Any other country's: FleetOnFleetAtPeace.
+	return IsEnemyFleet(Aimed, Now->GetView()) ? AttackFleetWith(Aimed->GetForceId()) : FleetOnFleetAtPeace(Aimed);
+}
+
+bool ACampaignPlayerController::RightClickOnFleetFigure(int32 FleetId)
+{
+	const AArmyPiece* Figure = Map.IsValid() ? Map->FindFleetPiece(FleetId) : nullptr;
+	const FCampaignSession* Now = GetSession();
+	if (!Figure || !Now || FleetInHand == INDEX_NONE || FleetInHand == FleetId)
+	{
+		return false;
+	}
+	// (a card already over the table takes no click: the step says so, as order-province does)
+	if (IsTableBusy())
+	{
+		return false;
+	}
+	if (!FleetOrderOnFleet(Figure))
+	{
+		// What the mouse gives over a fleet that is only sea: over one in harbour the pointer is on its port, so the port's
+		// order; over one at sea the order to that fleet's sea.
+		const FViewFleet* There = Now->GetView().Fleets.FindByPredicate([FleetId](const FViewFleet& Each) { return Each.Id == FleetId; });
+		if (There && There->Stance == TEXT("port") && There->Base != INDEX_NONE)
+		{
+			RightClickOn(There->Base, INDEX_NONE, true);
+		}
+		else
+		{
+			RightClickOn(INDEX_NONE, There ? There->Zone : INDEX_NONE, true);
+		}
+	}
 	return true;
 }
 
@@ -8941,6 +9093,13 @@ void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
 			// (Release 2) With a fleet in hand, a click on an enemy fleet is the order to attack it: the card, odds first.
 			if (FleetInHand != INDEX_NONE && FleetInHand != Piece->GetForceId() && GetSession() && IsEnemyFleet(Piece, GetSession()->GetView())
 				&& AttackFleetWith(Piece->GetForceId()))
+			{
+				return;
+			}
+			// (Release 2; Brian, 26 November 2026 03:51Z) And on the fleet of a country at peace that the sights stand over:
+			// the question of war, as a drop there gives it. (Any other fleet is looked at, as before.)
+			const FString* PeaceWhy = FleetInHand != INDEX_NONE && FleetInHand != Piece->GetForceId() ? FleetHand.Peace.Find(Piece->GetForceId()) : nullptr;
+			if (PeaceWhy && PeaceWhy->IsEmpty() && FleetOnFleetAtPeace(Piece))
 			{
 				return;
 			}
@@ -9760,24 +9919,55 @@ void ACampaignPlayerController::PickGoing(int32 Mode)
 	}
 }
 
-bool ACampaignPlayerController::SplitOffStaying(const FString& ForCard)
+int32 ACampaignPlayerController::ShipsLeftBehind(FString& OutSpec, int32& OutAll) const
 {
-	FCampaignSession* Session = GetSession();
-	if (!Session || FleetInHand == INDEX_NONE || FleetStaying.Num() == 0)
-	{
-		return true;
-	}
+	OutSpec.Reset();
+	OutAll = 0;
 	TMap<FString, int32> Stay;
-	int32 Staying = 0, All = 0;
+	int32 Staying = 0;
 	for (const FShipCard& Card : Tray.Ships)
 	{
-		All += Card.Count;
+		OutAll += Card.Count;
 		if (FleetStaying.Contains(Card.Index))
 		{
 			Stay.FindOrAdd(Card.Class) += Card.Count;
 			Staying += Card.Count;
 		}
 	}
+	TArray<FString> Parts;
+	for (const TPair<FString, int32>& Each : Stay)
+	{
+		if (Each.Value > 0)
+		{
+			Parts.Add(FString::Printf(TEXT("%s.%d"), *Each.Key, Each.Value));
+		}
+	}
+	OutSpec = FString::Join(Parts, TEXT(","));
+	return Staying;
+}
+
+bool ACampaignPlayerController::SplitOffStaying(const FString& ForCard, FString* Said)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || FleetInHand == INDEX_NONE || FleetStaying.Num() == 0)
+	{
+		return true;
+	}
+	// (With Said, the line is handed back to be told with the caller's own: ConfirmWar's war declared, for one.)
+	const auto Tell = [this, Said](const FString& Line, double Seconds)
+	{
+		if (Said)
+		{
+			*Said = Line;
+		}
+		else
+		{
+			Notify(Line, Seconds);
+		}
+	};
+	FString Spec;
+	int32 All = 0;
+	const int32 Staying = ShipsLeftBehind(Spec, All);
 	if (Staying <= 0)
 	{
 		FleetStaying.Reset();
@@ -9785,22 +9975,17 @@ bool ACampaignPlayerController::SplitOffStaying(const FString& ForCard)
 	}
 	if (Staying >= All)
 	{
-		Notify(TEXT("Every ship is left behind: click the cards of the ships that are to sail, or ALL."), 6.0);
+		Tell(TEXT("Every ship is left behind: click the cards of the ships that are to sail, or ALL."), 6.0);
 		return false;
-	}
-	TArray<FString> Parts;
-	for (const TPair<FString, int32>& Each : Stay)
-	{
-		Parts.Add(FString::Printf(TEXT("%s.%d"), *Each.Key, Each.Value));
 	}
 	FString Note, Next;
 	TArray<FSortie> Sorties;
 	FActExtras Extras;
-	const bool bOk = Session->Act(FString::Printf(TEXT("fleetsplitmany:%d:%s"), FleetInHand, *FString::Join(Parts, TEXT(","))), INDEX_NONE, Note, &Sorties, &Next, &Extras);
+	const bool bOk = Session->Act(FString::Printf(TEXT("fleetsplitmany:%d:%s"), FleetInHand, *Spec), INDEX_NONE, Note, &Sorties, &Next, &Extras);
 	if (!bOk)
 	{
 		// (the pre-check's read of 24 November: a refused split keeps the picks, so he can change them and try again)
-		Notify(Note.IsEmpty() ? FString(TEXT("Those ships cannot be split off now.")) : Note, 6.0);
+		Tell(Note.IsEmpty() ? FString(TEXT("Those ships cannot be split off now.")) : Note, 6.0);
 		return false;
 	}
 	FleetStaying.Reset();
@@ -9814,7 +9999,7 @@ bool ACampaignPlayerController::SplitOffStaying(const FString& ForCard)
 	ShowWar(Session->GetView(), TArray<FCorpsMove>());
 	if (!Note.IsEmpty())
 	{
-		Notify(Note, 6.0);
+		Tell(Note, 6.0);
 	}
 	return true;
 }
@@ -11723,7 +11908,7 @@ bool ACampaignPlayerController::OfferWar(int32 RegionId, bool bMarching)
 	return OfferWarOn(Tag, Across && Across->IsWar() ? RegionId : INDEX_NONE);
 }
 
-bool ACampaignPlayerController::OfferWarOn(const FString& Tag, int32 Region)
+bool ACampaignPlayerController::OfferWarOn(const FString& Tag, int32 Region, int32 Fleet)
 {
 	FCampaignSession* Session = GetSession();
 	if (!Session || !Map.IsValid())
@@ -11741,6 +11926,7 @@ bool ACampaignPlayerController::OfferWarOn(const FString& Tag, int32 Region)
 	WarPrompt.bVisible = true;
 	WarPrompt.Tag = Tag;
 	WarPrompt.Region = Region;
+	WarPrompt.Fleet = Fleet;
 	WarPrompt.Title = FText::FromString(FString::Printf(TEXT("Declare war on %s?"), *Name));
 	// What it would mean, as the rules foresee it: where the country stands, its friends, and what follows.
 	const FWarPlan Plan = Session->PlanWar(Tag, WarPrompt.Region);
@@ -11753,14 +11939,17 @@ bool ACampaignPlayerController::OfferWarOn(const FString& Tag, int32 Region)
 		{
 			Body += TEXT("\n\u2022  ") + Line;
 		}
-		Body += Region != INDEX_NONE ? TEXT("\n\nThis cannot be taken back. Say no, and your army stays where it is.") : TEXT("\n\nThis cannot be taken back.");
+		Body += Region != INDEX_NONE ? TEXT("\n\nThis cannot be taken back. Say no, and your army stays where it is.")
+			: Fleet != INDEX_NONE ? TEXT("\n\nThis cannot be taken back. Say yes, and the card to send your fleet at its ships comes next, with the odds. Say no, and your fleet stays where it is.")
+			: TEXT("\n\nThis cannot be taken back.");
 		WarPrompt.Body = FText::FromString(Body);
 	}
 	else
 	{
 		WarPrompt.Body = FText::FromString(FString::Printf(
 			TEXT("%s is at peace with you. If you declare war, its army will fight you from this month, and it will throw in its lot with your enemies. ")
-			TEXT("Your armies on its border can attack as soon as war is declared.\n\nThis cannot be taken back."), *HeadThe(Name)));
+			TEXT("Your armies on its border can attack as soon as war is declared.%s\n\nThis cannot be taken back."), *HeadThe(Name),
+			Fleet != INDEX_NONE ? TEXT(" Say yes, and the card to send your fleet at its ships comes next, with the odds.") : TEXT("")));
 	}
 	if (WarPrompt.Region != INDEX_NONE)
 	{
@@ -11840,7 +12029,15 @@ void ACampaignPlayerController::ConfirmWar()
 	RefreshOrders();
 	// (Rules 84.2.5; the UI director, 17 November: one voice after a press.) A war that brings another at once says so on
 	// the same paper, in the rules' words: "Britain stands by Canada. Britain declares war on the United States: ..."
-	Notify(Answered.IsEmpty() ? FString::Printf(TEXT("War is declared on %s."), *Name) : FString::Printf(TEXT("War is declared on %s. %s"), *Name, *Answered), Answered.IsEmpty() ? 6.0 : 11.0);
+	const FString WarLine = Answered.IsEmpty() ? FString::Printf(TEXT("War is declared on %s."), *Name) : FString::Printf(TEXT("War is declared on %s. %s"), *Name, *Answered);
+	const double WarFor = Answered.IsEmpty() ? 6.0 : 11.0;
+	// (Release 2) A fleet set down on this country's fleet goes on to the attack card below: its line is told there, on
+	// the same paper as what the split of the ships left behind says, so the one does not wipe out the other.
+	const bool bFleetNext = Asked.Fleet != INDEX_NONE && FleetInHand != INDEX_NONE && !Asked.bFromOffice;
+	if (!bFleetNext)
+	{
+		Notify(WarLine, WarFor);
+	}
 	CampaignSounds::Play(this, TEXT("siren"), 0.5f);
 	const FReachRegion* Onward = Asked.Region != INDEX_NONE && ArmyRegion != INDEX_NONE ? FindReach(Asked.Region) : nullptr;
 	if (Onward && !Onward->IsWar())
@@ -11851,6 +12048,17 @@ void ACampaignPlayerController::ConfirmWar()
 	if (!FaceOff.bVisible)
 	{
 		RefreshRegionPanel(SelectedRegion);
+	}
+	if (bFleetNext)
+	{
+		// (Release 2; Brian, 26 November 2026 03:51Z.) The fleet in hand was set down on this country's fleet. Now they are
+		// at war, the card a drop on an enemy fleet gives: the odds first, and SEND THEM IN or the rules' reason it cannot.
+		FString Split;
+		if (!FaceOff.bVisible)
+		{
+			AttackFleetWith(Asked.Fleet, &Split);
+		}
+		Notify(Split.IsEmpty() ? WarLine : WarLine + TEXT(" ") + Split, Split.IsEmpty() ? WarFor : FMath::Max(WarFor, 9.0));
 	}
 	if (Asked.bFromOffice && !FaceOff.bVisible)
 	{

@@ -800,7 +800,13 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 		}
 		else if (Fleet != INDEX_NONE)
 		{
-			Player.PickUpFleet(Fleet);
+			if (!Player.PickUpFleet(Fleet))
+			{
+				// (release 2: a name can now be another country's fleet, for order-unit; it is not picked up, and the step
+				// is MISSING as a name that answered nothing was)
+				bMissing = true;
+				Note = TEXT("no fleet of the player's of that name: another country's fleet is not picked up");
+			}
 		}
 		else
 		{
@@ -831,7 +837,23 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 	{
 		// A right-click on the figure of an army seen on the table (an enemy's, for an attack), with what is in hand.
 		int32 Aimed = INDEX_NONE, Ground = INDEX_NONE;
-		if (!Find(Step.Target) || Corps == INDEX_NONE)
+		const bool bNamed = Find(Step.Target);
+		if (bNamed && Corps == INDEX_NONE && Fleet != INDEX_NONE)
+		{
+			// (Release 2; Brian, 26 November 2026 03:51Z) Or on a fleet's figure, with a fleet in hand: an enemy's opens the
+			// attack card, one of a country at peace asks whether he means war, an ally's is only sea.
+			if (!Player.RightClickOnFleetFigure(Fleet))
+			{
+				bMissing = true;
+				Note = Player.IsTableBusy() ? TEXT("a card lies over the table: the click does not reach that fleet's figure")
+					: TEXT("that fleet has no figure on the table, or no other fleet is in hand");
+			}
+			else if (Player.IsTableBusy())
+			{
+				Note = TEXT("the order went to that fleet's figure; a card lies over the table");
+			}
+		}
+		else if (!bNamed || Corps == INDEX_NONE)
 		{
 			bMissing = true;
 			Note = TEXT("no corps of that name");

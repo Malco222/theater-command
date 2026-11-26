@@ -531,7 +531,8 @@ namespace
 		// ahead after every order, 2 to 14 ms of the frame after.)
 		static const TSet<FString> Questions = { TEXT("previewAttack"), TEXT("takeOutlook"), TEXT("reach"), TEXT("marchPlan"), TEXT("railTip"), TEXT("lead"),
 			TEXT("stands"), TEXT("province"), TEXT("railShow"), TEXT("garrisonWhy"), TEXT("gateLeft"),
-			TEXT("bargainsLook") }; // R2 bargains hook: the map's look at the bargains (changes nothing; Campaign/BargainCalls.cpp)
+			TEXT("bargainsLook"), // R2 bargains hook: the map's look at the bargains (changes nothing; Campaign/BargainCalls.cpp)
+			TEXT("warFleetAttack") }; // (release 2) a fleet set down on a fleet at peace: read on a copy, the save as it was
 		return Questions.Contains(Function);
 	}
 
@@ -5130,6 +5131,22 @@ static void ReadSorties(const TArray<TSharedPtr<FJsonValue>>& List, TArray<FSort
 	}
 }
 
+bool FCampaignSession::WarFleetAttack(int32 FleetId, int32 Target, const FString& Staying, FString& OutWhy, bool& bOutDeclare)
+{
+	OutWhy.Reset();
+	bOutDeclare = false;
+	TSharedPtr<FJsonObject> Object;
+	bool bOk = false;
+	if (!CallRules(TEXT("warFleetAttack"), FString::Printf(TEXT("[%d,%d,%s]"), FleetId, Target, *JsonQuote(Staying)), Object) || !Object.IsValid()
+		|| !Object->TryGetBoolField(TEXT("ok"), bOk) || !bOk)
+	{
+		return false;
+	}
+	Object->TryGetBoolField(TEXT("declare"), bOutDeclare);
+	Object->TryGetStringField(TEXT("why"), OutWhy);
+	return true;
+}
+
 FFleetHand FCampaignSession::FleetInHand(int32 FleetId)
 {
 	FFleetHand Out;
@@ -5150,6 +5167,23 @@ FFleetHand FCampaignSession::FleetInHand(int32 FleetId)
 	Object->TryGetStringField(TEXT("held"), Out.Held);
 	Object->TryGetStringField(TEXT("cut"), Out.Cut);
 	Object->TryGetStringField(TEXT("homeTip"), Out.HomeTip);
+	// (Release 2; Brian, 26 November 2026 03:51Z) The fleets of countries at peace he could declare war on, each with why
+	// it could not be sent at them even at war (empty where it could).
+	const TArray<TSharedPtr<FJsonValue>>* PeaceRows = nullptr;
+	if (Object->TryGetArrayField(TEXT("peace"), PeaceRows))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *PeaceRows)
+		{
+			const TSharedPtr<FJsonObject>* Row = nullptr;
+			int32 Id = INDEX_NONE;
+			FString Why;
+			if (Value.IsValid() && Value->TryGetObject(Row) && (*Row)->TryGetNumberField(TEXT("id"), Id))
+			{
+				(*Row)->TryGetStringField(TEXT("why"), Why);
+				Out.Peace.Add(Id, Why);
+			}
+		}
+	}
 	const TArray<TSharedPtr<FJsonValue>>* Attack = nullptr;
 	if (Object->TryGetArrayField(TEXT("attack"), Attack))
 	{

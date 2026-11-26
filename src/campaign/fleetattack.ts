@@ -91,8 +91,16 @@ const ownFleet = (g: Game, id: number): Fleet | null => {
   return f && f.nat === g.human && g.order[g.phase] === f.nat ? f : null;
 };
 
-/** Why fleet `id` cannot be sent at enemy fleet `target` now, or null if it can. Read-only. */
-export function whyNotFleetAttack(g: Game, id: number, target: number): string | null {
+/**
+ * Why fleet `id` cannot be sent at enemy fleet `target` now, or null if it can. Read-only.
+ * (Release 2; Brian, 26 November 2026 03:51Z: "i can't drag my fleet on top of another fleet to start a battle".) With
+ * `asAtWar`, the war line alone is skipped: the rest is read on the war as it stands, at peace. That is the sights' quick
+ * hint over the fleet of a country at peace, not the answer: a declaration changes the reach too (a closed strait lets
+ * through only a country at war with nobody, an open one is shut to its holder's enemies, and he may come to stand
+ * with a side whose straits then open), so the question of war is put only on the reading of a copy on which the war
+ * has been declared (the bridge's warFleetAttack).
+ */
+export function whyNotFleetAttack(g: Game, id: number, target: number, asAtWar = false): string | null {
   if (!fleetAttackOn(g)) return 'Fleets are sent straight at the enemy only where that is switched on.';
   const f = ownFleet(g, id);
   if (!f) return 'Only your own fleet can be given the order, in your own month.';
@@ -108,7 +116,7 @@ export function whyNotFleetAttack(g: Game, id: number, target: number): string |
   if (cutOff(g, f)) return `${cap(fleetName(f))} is cut off beyond a shut strait: send it to harbour on its side first.`;
   const t = g.fleets.find((x) => x.id === target);
   if (!t || !shipCount(t.ships) || fleetKnown(g, t, f.nat) === 'none') return 'No such enemy fleet is known.';
-  if (!atWar(g, f.nat, t.nat)) return `${g.nations[t.nat]?.name ?? t.nat} is not at war with ${g.nations[f.nat].name}.`;
+  if (!asAtWar && !atWar(g, f.nat, t.nat)) return `${g.nations[t.nat]?.name ?? t.nat} is not at war with ${g.nations[f.nat].name}.`;
   if (surfaceShips(t) <= 0) return 'Submarines are not brought to a fleet action: send ships to hunt them in their sea.';
   if (!groundOf(g, f, t)) {
     // (1.5.3, playtest #25) A fleet only reported keeps its name and its port to itself: the sea it is in, or that it is in harbour.
