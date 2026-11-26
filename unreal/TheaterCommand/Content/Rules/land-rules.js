@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of f17a01a8 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 91a49214 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -13259,6 +13259,29 @@
       const no = this.sim.placeManyWhy(us, list.map((p) => p.slice(1)));
       return no ? { ...no, who: this.whoIs(no.id) } : null;
     }
+    /**
+     * The ground that bars a block from standing at a place in the setup step, for the screen's sentence when the rules
+     * refuse it there (sim.standWhy's water line): a bridge under any of it, else the water (a blown bridge is in the
+     * river), else the ground under its middle, which it can hardly cross (a marsh, bare rock or a bunker, to wheels,
+     * tracks and guns). Null where there is no such block or place. Words only: no rule reads it.
+     */
+    barredBy(id, x, y) {
+      const u = this.sim.units.find((v) => v.id === id), f = this.sim.field;
+      if (!u || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+      const hw = u.w / 2, hd = u.d / 2, nx = Math.max(1, Math.ceil(2 * hw / (f.cell / 2))), ny = Math.max(1, Math.ceil(2 * hd / (f.cell / 2)));
+      let wet = false;
+      for (let i = 0; i <= nx; i++) for (let j = 0; j <= ny; j++) {
+        const c = Math.floor((x - hw + 2 * hw * i / nx) / f.cell), r = Math.floor((y - hd + 2 * hd * j / ny) / f.cell);
+        if (c < 0 || r < 0 || c >= f.cols || r >= f.rows) continue;
+        const k = GROUNDS[f.ground[r * f.cols + c]];
+        if (k === "bridge") return "bridge";
+        wet = wet || k === "water" || k === "blown";
+      }
+      const g = groundAt(f, Math.min(Math.max(x, 5), f.w - 5), Math.min(Math.max(y, 5), f.h - 5));
+      if (g === "bridge") return "bridge";
+      if (wet || g === "water" || g === "blown") return "water";
+      return g === "marsh" || g === "rock" || g === "bunker" ? g : null;
+    }
     /** Places several of the player's blocks as one act in the setup step, each [id, x, y, face?]: all of them or none. */
     placeMany(list) {
       if (this.canPlaceMany(list) !== null) return false;
@@ -13343,15 +13366,16 @@
   var DUG = "It is dug in where it stands.";
   var DRAWN2 = { line: "in a line", two: "in two lines", wedge: "in a wedge", column: "in a column" };
   var COUNTED = ["None", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"];
+  var BARRED = { water: "in the water", bridge: "on a bridge", marsh: "in a marsh", rock: "on bare rock", bunker: "on a bunker" };
   var theName = (who) => /^\d/.test(who) ? `The ${who}` : who;
-  function cannotGo(who, why) {
+  function cannotGo(who, why, on) {
     if (!who) return why;
     const name = theName(who);
     if (why === DUG) return `${name} is dug in where it stands.`;
     if (why === "Outside your ground.") return `${name} cannot go there: it would stand outside your ground.`;
     if (why === "Another block stands there.") return `${name} cannot go there: another unit already stands there.`;
     if (why === "Off the field.") return `${name} cannot go there: it would stand off the field.`;
-    if (why === "Not on water, a bridge or ground it cannot stand on.") return `${name} cannot go there: it cannot stand on water, a bridge or ground like that.`;
+    if (why === "Not on water, a bridge or ground it cannot stand on.") return `${name} cannot go there: it cannot stand ${on ? BARRED[on] : "on water or on a bridge"}.`;
     return `${name} cannot go there. ${why}`;
   }
   globalThis.TC = {
@@ -13493,7 +13517,8 @@
       const l = need(), rows = Array.isArray(list) ? list.filter((p) => Array.isArray(p)).map((p) => p.map(Number)) : [];
       const no = l.canPlaceMany(rows);
       const ok2 = no === null && l.placeMany(rows);
-      return { ok: ok2, why: ok2 ? "" : no ? cannotGo(no.who, no.why) : "Not now: the battle has begun.", ...no && no.id >= 0 ? { id: no.id, who: no.who } : {} };
+      const at = no ? rows.find((p) => p[0] === no.id) : void 0;
+      return { ok: ok2, why: ok2 ? "" : no ? cannotGo(no.who, no.why, at ? l.barredBy(no.id, at[1], at[2]) : null) : "Not now: the battle has begun.", ...no && no.id >= 0 ? { id: no.id, who: no.who } : {} };
     },
     landDrawUp(kind, ids) {
       const k = FORMATIONS.find((f) => f === kind);
