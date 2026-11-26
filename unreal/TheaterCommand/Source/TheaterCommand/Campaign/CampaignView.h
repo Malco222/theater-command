@@ -273,6 +273,11 @@ struct FGlanceAir
 	bool bCanAdd = false; // the next level of guns is offered here
 	FString AddKey, AddSize, AddWhy; // the arsenal's key ("work:aa"), "level 2", and why it cannot be ordered now (empty when it can)
 	int32 AddCost = 0, AddMonths = 0;
+	// (City defences, the switch on) The searchlights built here: their level, and the shelf's row as the rules word
+	// it ("Searchlights level 2: every level of guns is lit by night, under a clear sky."). Level 0 and an empty
+	// line with none built, and with the switch off, when the rules send no lights at all.
+	int32 Lights = 0;
+	FString LightsLine;
 };
 
 /** (Release 2; Brian, 23 November: "what units that city can build".) One order the arsenal would raise, base, lay down or build in this very town. */

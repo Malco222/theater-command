@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b51211d91 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c8d4f78f3 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -116401,7 +116401,12 @@
       guns: guns2,
       radar: radarLays(s, id),
       going,
-      line
+      line,
+      // (The UI director, 26 Nov 2026, 03:34Z: the 3D shelf's own row, in the form of the fighters' row.) The same line
+      // with its capital and a full stop, "Searchlights level 2: every level of guns is lit by night, under a clear
+      // sky.", for the shelf to draw as it comes: one source of words for the glance and the shelf. Empty with none
+      // built; the no-guns line ends in its own full stop and takes no second.
+      shelf: line ? `Searchlights ${line}${line.endsWith(".") ? "" : "."}` : ""
     };
   }
   function cityMarks(s, r) {
@@ -121683,7 +121688,12 @@ ${standing6}`,
             guns: dn.guns,
             gunsFigure: unknown ? "Unknown" : dn.guns > 0 ? `Level ${dn.guns}` : "No",
             gunsNoun: unknown || dn.guns > 0 ? "AA guns" : "AA guns built",
-            gunsTail: unknown ? `· ${dn.gunsTail}` : when ? `· ${when}` : dn.guns > 0 ? `· and ${S3} light` : `· only ${S3} light`,
+            // (City defences, the switch on, the raid planned by night: the UI director, 26 Nov 2026, 03:34Z and 03:36Z.
+            // No still can read a tip, so where the target has searchlights the tail ends with their level, after the
+            // guns' own words whatever they are, "seen two months ago" and "not scouted" among them: the lights are read
+            // as they truly are in every state of the fog (the design director, 25 Nov 2026 19:44Z), so they take no
+            // hedge. By day, with no lights and with the switch off, lightsAt reads none and the tail is as it was.)
+            gunsTail: (unknown ? `· ${dn.gunsTail}` : when ? `· ${when}` : dn.guns > 0 ? `· and ${S3} light` : `· only ${S3} light`) + (kind === "night" && lightsAt(s, target) > 0 ? ` · searchlights level ${lightsAt(s, target)}` : ""),
             gunsTip,
             day: one2(dn.day),
             night: one2(dn.night),

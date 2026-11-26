@@ -4,7 +4,7 @@
 // nothing of it is offered, billed, written or read.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import cd from '../data/campaign/citydefences.json';
-import { assessAir, fly, type AirAssess, type KnownDefence } from '../src/campaign/air';
+import { assessAir, fly, standingGuns, type AirAssess, type KnownDefence } from '../src/campaign/air';
 import { setRaidFog, weighKnown } from '../src/campaign/airfog';
 import { AC } from '../src/campaign/aircampaigns';
 import { setAirPiece } from '../src/campaign/airversion';
@@ -1159,6 +1159,8 @@ describe('city defences in the bridge (slice 5)', () => {
     expect(l.lit).toBe(0);
     expect(l.line).toBe('level 2: there are no guns built here for them to light. They help the night fighters a little.');
     expect(l.line).not.toMatch(/0 of the 0/);
+    // The 3D shelf's row (the UI director, 26 Nov 2026, 03:34Z): the same line with its capital, and one full stop.
+    expect((l as unknown as { shelf: string }).shelf).toBe('Searchlights level 2: there are no guns built here for them to light. They help the night fighters a little.');
   });
 
   it('the AIR DEFENCE shelf\'s searchlights line has a twin for one level of guns, for every level lit, and for one of several', () => {
@@ -1169,8 +1171,10 @@ describe('city defences in the bridge (slice 5)', () => {
       g.flags[`wk:aa:${id}`] = guns;
       g.flags[`wk:lights:${id}`] = lights;
       TC().load(saveGame(g));
-      const l = (TC().province(id) as { glance: { air: Record<string, unknown> | null } }).glance.air!.lights as { level: number; lit: number; guns: number; line: string };
+      const l = (TC().province(id) as { glance: { air: Record<string, unknown> | null } }).glance.air!.lights as { level: number; lit: number; guns: number; line: string; shelf: string };
       expect([l.level, l.guns, l.lit]).toEqual([lights, guns, Math.min(lights, guns)]);
+      // The 3D shelf's row is the glance's own line, with a capital and a full stop (the UI director, 26 Nov 2026, 03:34Z).
+      expect(l.shelf).toBe(`Searchlights ${l.line}.`);
       return l.line;
     };
     // One level of guns: there is nothing to count, whatever the lights' level.
@@ -1570,6 +1574,50 @@ describe('city defences under fog on raids: the searchlights take the guns\' hed
       expect(month(lights(end.a))).toBe(month(guns));
     }
     expect(lights(s.hi.a)).toBe('With radar laying the guns, they light every level of the guns built here when seen two months ago, and they help the night fighters a little.');
+  });
+});
+
+// The UI director, 26 Nov 2026, 03:34Z and 03:36Z: no still can read a tip, so the 3D raid card says the target's
+// searchlights on the guns figure's small tail, and the town card's shelf gives built searchlights a row of their own.
+describe('city defences on the 3D cards: the searchlights where a still can see them', () => {
+  const S = standingGuns().toLocaleString('en-US');
+  /** Britain's card for a raid on the Ruhr, with the guns and searchlights set there; `seen` the guns' level as last seen, the given months ago. */
+  const tail = (o: { on?: boolean; kind?: 'night' | 'bomb'; guns?: number; lights?: number; fog?: boolean; seen?: [number, number] }): string => {
+    const g = britain(o.on ?? true);
+    const t = g.byName.Ruhr.id;
+    if (o.guns) g.flags[`wk:aa:${t}`] = o.guns; else delete g.flags[`wk:aa:${t}`];
+    if (o.lights) g.flags[`wk:lights:${t}`] = o.lights; else delete g.flags[`wk:lights:${t}`];
+    if (o.fog) setRaidFog(g, true);
+    if (o.seen) ((g.intel.airSeen ??= {}).UK ??= {})[t] = [g.turn - o.seen[1], 0, 0, o.seen[0], 0];
+    const f = g.airFleets.find((x) => x.nat === 'UK' && x.bmr > 0 && x.ship === undefined)!;
+    TC().load(saveGame(g));
+    const page = TC().page(`plan:${o.kind ?? 'night'}:${t}:${f.id}`) as { card: { ways: { gunsTail: string; gunsFigure: string } } };
+    return page.card.ways.gunsTail;
+  };
+
+  it('a raid planned by night on a target with searchlights: the guns\' tail ends with their level', () => {
+    expect(tail({ guns: 3, lights: 2 })).toBe(`\u00B7 and ${S} light \u00B7 searchlights level 2`);
+    expect(tail({ guns: 1, lights: 3 })).toBe(`\u00B7 and ${S} light \u00B7 searchlights level 3`);
+    // Searchlights and no guns built: the tail's own words for a bare target, then the lights.
+    expect(tail({ lights: 1 })).toBe(`\u00B7 only ${S} light \u00B7 searchlights level 1`);
+  });
+
+  it('by day, with no searchlights, and with the switch off, the tail is as it was', () => {
+    expect(tail({ guns: 3, lights: 2, kind: 'bomb' })).toBe(`\u00B7 and ${S} light`);
+    expect(tail({ guns: 3 })).toBe(`\u00B7 and ${S} light`);
+    expect(tail({})).toBe(`\u00B7 only ${S} light`);
+    // The switch off: the mark of a level left in the save reads as none, by night too.
+    expect(tail({ on: false, guns: 3, lights: 2 })).toBe(`\u00B7 and ${S} light`);
+    expect(tail({ on: false, guns: 3, lights: 2, fog: true })).toBe('\u00B7 not scouted');
+  });
+
+  it('under fog on raids the lights follow the guns\' own words, unhedged: seen some months ago, and not scouted', () => {
+    // (The lights are read as they truly are in every state of the fog: the design director, 25 Nov 2026 19:44Z.)
+    expect(tail({ guns: 3, lights: 2, fog: true, seen: [2, 2] })).toBe('\u00B7 seen two months ago \u00B7 searchlights level 2');
+    expect(tail({ guns: 3, lights: 2, fog: true })).toBe('\u00B7 not scouted \u00B7 searchlights level 2');
+    // By day under the same fog, no tail of theirs.
+    expect(tail({ guns: 3, lights: 2, fog: true, seen: [2, 2], kind: 'bomb' })).toBe('\u00B7 seen two months ago');
+    expect(tail({ guns: 3, lights: 2, fog: true, kind: 'bomb' })).toBe('\u00B7 not scouted');
   });
 });
 
