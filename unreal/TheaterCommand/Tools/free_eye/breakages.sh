@@ -34,8 +34,8 @@ add "ceiling, hard" \
 	'const double Above = EyeNow().Z - Set.EyeMost;' \
 	'const double Above = EyeNow().Z - Set.EyeMost - 50.0;'
 add "box, soft" \
-	'if (bBox) WantRelV = InBox(RefAt + BoxLead + WantRelV + Up) - RefAt - BoxLead - Up;' \
-	'if (bBox) WantRelV = WantRelV + BoxLead - BoxLead + Up - Up;'
+	'WantRelV = Vec{ Hold(P.X, Lo.X, Hi.X), Hold(P.Y, Lo.Y, Hi.Y), Hold(P.Z, Lo.Z, Hi.Z) } - RefAt - Up;' \
+	'WantRelV = Vec{ P.X, P.Y, P.Z } - RefAt - Up; (void)Hold; (void)Lo; (void)Hi;'
 add "box, hard" \
 	'const Vec Kept = InBox(Pv);' \
 	'const Vec Kept = Pv;'
@@ -59,8 +59,8 @@ add "lift not led" \
 	'const double Goal = LiftGoal > 0.0 ? LiftGoal + Lead : 0.0;' \
 	'const double Goal = LiftGoal > 0.0 ? LiftGoal + 0.0 * Lead : 0.0;'
 add "lift unheld (a step)" \
-	'Held(LiftZ, SwingLift, Goal, Goal > LiftZ ? Set.LiftRise : Set.LiftSettle, 1e9, Set.LiftPush * FeelNow, Set.LiftPush * FeelNow, Dt);' \
-	'Held(LiftZ, SwingLift, Goal, Goal > LiftZ ? Set.LiftRise : Set.LiftSettle, 1e9, Set.LiftPush * FeelNow, Set.LiftPush * FeelNow, Dt); LiftZ = Goal;'
+	'Set.LiftPush * FeelNow, Dt, LiftGoal > 0.0 ? GoalRate : 0.0);' \
+	'Set.LiftPush * FeelNow, Dt, LiftGoal > 0.0 ? GoalRate : 0.0); LiftZ = Goal;'
 # Lock, carry, let go, teleport (rules 3 to 6).
 add "cut distance" \
 	'if (std::max(Off.Length(), Stop.Length()) > Set.CutBeyond) return true;' \
@@ -84,11 +84,11 @@ add "lock takes again without a rise" \
 	'const bool bRiseIn = In.bLock && (!bInLockLast || In.AnchorId != InIdLast);' \
 	'const bool bRiseIn = In.bLock && (!bLocked || In.AnchorId != InIdLast);'
 add "teleport" \
-	'bTeleport = (AnchorNow - AnchorLast).Length() > Set.TeleportBeyond + Speed * Dt * 3.0;' \
-	'bTeleport = (AnchorNow - AnchorLast).Length() > Set.TeleportBeyond * 100.0 + Speed * Dt * 3.0;'
+	'bTeleport = Jumped(AnchorNow - AnchorLast, Known, !bFed && !bMeasureNext);' \
+	'bTeleport = Jumped(AnchorNow - AnchorLast, Known, !bFed && !bMeasureNext) && false;'
 add "teleport on a fast anchor's hitch" \
-	'bTeleport = (AnchorNow - AnchorLast).Length() > Set.TeleportBeyond + Speed * Dt * 3.0;' \
-	'bTeleport = (AnchorNow - AnchorLast).Length() > Set.TeleportBeyond + Speed * 0.0 * Dt * 3.0;'
+	'const double Slack = Set.TeleportBeyond + Known.Length() * Dt * 3.0;' \
+	'const double Slack = Set.TeleportBeyond + 0.0 * Known.Length() * Dt * 3.0;'
 add "pan's lock rule" \
 	'else if (bLocked && bHand && !Set.bPanKeepsLock)' \
 	'else if (bLocked && bHand && Set.bPanKeepsLock && !Set.bPanKeepsLock)'
@@ -213,8 +213,8 @@ add "FeelArm dropped from the offset's holds" \
 	'const double Feel = std::max(ArmNow, Set.FeelArm);' \
 	'const double Feel = std::max(ArmNow, Set.FeelArm * 0.0);'
 add "held stop from 4x the brake" \
-	'(Toward > W * Dist || Toward >= 0.9 * std::sqrt(2.0 * Brake * Dist)))' \
-	'(Toward > W * Dist || Toward >= 0.9 * std::sqrt(8.0 * Brake * Dist)))'
+	'Closing >= 0.9 * std::sqrt(2.0 * Brake * Dist)' \
+	'Closing >= 0.9 * std::sqrt(8.0 * Brake * Dist)'
 add "held, even brake set on its want never" \
 	'if (std::abs(Step) >= Dist && (Slow < Brake || std::abs(Sw) <= Brake * Dt))' \
 	'if (std::abs(Step) >= Dist && Slow < 0.0)'
@@ -312,23 +312,21 @@ add "a glide through the anchor's clearance" \
 	'return Nearest(Off + EyeBy, Stop + EyeBy) < Clear;' \
 	'return Nearest(Off + EyeBy, Stop + EyeBy) < 0.0;'
 add "a teleport keeps the offset's swing" \
-	'SwingRel = Vec{};
-			SwingH = SwingT = SwingS = SwingLift = 0.0;
-			bMeasureNext = false;
-			++CutCount;' \
-	'SwingH = SwingT = SwingS = SwingLift = 0.0;
-			bMeasureNext = false;
-			++CutCount;'
+	'bCutNow = true;
+			SwingRel = Vec{};
+			SwingLift = 0.0;' \
+	'bCutNow = true;
+			SwingLift = 0.0;'
 add "a teleport's slack one frame of speed" \
-	'Set.TeleportBeyond + Speed * Dt * 3.0;' \
-	'Set.TeleportBeyond + Speed * Dt * 1.0;'
+	'const double Slack = Set.TeleportBeyond + Known.Length() * Dt * 3.0;' \
+	'const double Slack = Set.TeleportBeyond + Known.Length() * Dt * 1.0;'
 add "a cut keeps the lift" \
 	'LiftZ = LiftGoal;' \
 	'LiftZ = std::max(LiftZ, LiftGoal);'
 # Ride and steady height (rules 7 and 8).
 add "ride on the frame of a skip" \
-	'if (bLocked && In.bRide && !bLockNow && !bTeleport && bHeadingGood && bAnchorHeadingGood)' \
-	'if (bLocked && In.bRide && !bTeleport && bHeadingGood && bAnchorHeadingGood)'
+	'if (bLocked && In.bRide && !bLockNow && bHeadingGood && bAnchorHeadingGood)' \
+	'if (bLocked && In.bRide && bHeadingGood && bAnchorHeadingGood)'
 add "ride does not turn where he sits" \
 	'WantRelV = TurnedBy(WantRelV, Turned);' \
 	'WantRelV = TurnedBy(WantRelV, 0.0 * Turned);'
@@ -343,8 +341,8 @@ add "the lift settles at the wrong rate" \
 	'Goal > LiftZ ? Set.LiftRise : Set.LiftSettle' \
 	'Goal > LiftZ ? Set.LiftRise : Set.LiftSettle * 2.0'
 add "the lift's push not by the boom" \
-	'Set.LiftPush * FeelNow, Set.LiftPush * FeelNow, Dt);' \
-	'Set.LiftPush * (FeelNow * 0.0 + 10.0), Set.LiftPush * (FeelNow * 0.0 + 10.0), Dt);'
+	'Set.LiftPush * FeelNow, Set.LiftPush * FeelNow, Dt, LiftGoal' \
+	'Set.LiftPush * (FeelNow * 0.0 + 10.0), Set.LiftPush * (FeelNow * 0.0 + 10.0), Dt, LiftGoal'
 add "the hard floor at FloorClear" \
 	'const double Under = FloorAt(InWorld, E.X, E.Y) + Set.FloorHard - E.Z;' \
 	'const double Under = FloorAt(InWorld, E.X, E.Y) + Set.FloorClear - E.Z;'
@@ -362,14 +360,126 @@ add "the anchor's clearance kept unlocked" \
 	'const double Clear = bLocked && std::isfinite(In.AnchorClear)' \
 	'const double Clear = std::isfinite(In.AnchorClear)'
 add "a box's corners not sorted" \
-	'const Vec BoxLo{ std::min(In.BoxMin.X, In.BoxMax.X),' \
-	'const Vec BoxLo{ (In.BoxMin.X),'
+	'Vec{ std::min(In.BoxMin.X, In.BoxMax.X),' \
+	'Vec{ (In.BoxMin.X),'
 add "the box not led by the push" \
-	'const double LeadTakes = std::max(2.0 / std::max(Set.Ease, 1e-3), RefVel.Length()' \
-	'const double LeadTakes = std::max(2.0 / std::max(Set.Ease, 1e-3), 0.0 * RefVel.Length()'
+	'BoxBy / (2.0 * std::max(Set.GlidePush' \
+	'0.0 * BoxBy / (2.0 * std::max(Set.GlidePush'
 add "his descent sinks under the floor" \
 	'if (WantRelV.Z < WantZWas && WantRelV.Z < Least) WantRelV.Z = std::min(WantZWas, Least);' \
 	'if (WantRelV.Z < WantZWas && WantRelV.Z < Least - 1e9) WantRelV.Z = std::min(WantZWas, Least);'
+
+# What review round 2 found: pace changes, the measure frame, the box carried and not finite, the lift's climb,
+# the point brake, an anchor not finite, Begin again, and the gaps it named.
+add "a teleport stops his turn, tilt and zoom" \
+	'SwingRel = Vec{};
+			SwingLift = 0.0;
+			bMeasureNext = false;' \
+	'SwingRel = Vec{};
+			SwingLift = 0.0;
+			SwingH = SwingT = SwingS = 0.0;
+			bMeasureNext = false;'
+add "no ride on a teleport's frame" \
+	'if (bLocked && In.bRide && !bLockNow && bHeadingGood && bAnchorHeadingGood)' \
+	'if (bLocked && In.bRide && !bLockNow && !bTeleport && bHeadingGood && bAnchorHeadingGood)'
+add "a pace change taken as a jump" \
+	'std::max(3.0, Set.PaceJump)' \
+	'std::max(3.0, 0.0 * Set.PaceJump)'
+add "a step across the way taken as movement" \
+	'return Across > Slack || Along < -Slack ||' \
+	'return Across > 1e300 || Along < -1e300 ||'
+add "the anchor's movement forgotten in a pause" \
+	'if (Moved.Length() > 0.0)' \
+	'if (true)'
+add "the frame's movement forgotten in a pause" \
+	'if (FrameVel.Length() > 0.0)' \
+	'if (true)'
+add "the measure frame's jump let through" \
+	'bMeasureNext ? WasVel :' \
+	'bMeasureNext ? WasVel * 100.0 :'
+add "the box's walls taken as still" \
+	'const Vec LoBy = RefVel - LoVel, HiBy = RefVel - HiVel;' \
+	'const Vec LoBy = RefVel + LoVel * 0.0, HiBy = RefVel + HiVel * 0.0;'
+add "the box's walls taken as riding" \
+	'const Vec LoBy = RefVel - LoVel, HiBy = RefVel - HiVel;' \
+	'const Vec LoBy = LoVel * 0.0, HiBy = HiVel * 0.0;'
+add "a box first given taken as still" \
+	'(BoxHi - BoxHiLast) * (1.0 / Dt) : RefVel;' \
+	'(BoxHi - BoxHiLast) * (1.0 / Dt) : Vec{};'
+add "a box's last bit counted a stop" \
+	'if (Out > 1e-9 * std::max(1.0, Pv.Length())) ++HardStopCount;' \
+	'if (Out > 0.0) ++HardStopCount;'
+add "a box not finite dropped" \
+	'const bool bBox = In.bBox && (bBoxGood || bBoxKnown);' \
+	'const bool bBox = In.bBox && bBoxGood && (bBoxGood || bBoxKnown);'
+add "a box not finite left standing" \
+	'BoxLoLast + BoxLoVel * Dt' \
+	'BoxLoLast + BoxLoVel * 0.0 * Dt'
+add "the held spring blind to its want's speed" \
+	'const double Closing = Toward - Away;' \
+	'const double Closing = Toward - 0.0 * Away;'
+add "the held cap blind to its want's speed" \
+	'StopFrom + std::max(Away, 0.0)' \
+	'StopFrom + 0.0 * std::max(Away, 0.0)'
+add "the lift's lead capped" \
+	'const double Lead = GoalRate * 2.0 / std::max(Set.LiftRise, 1e-3);' \
+	'const double Lead = std::min(GoalRate * 2.0 / std::max(Set.LiftRise, 1e-3), 1.0);'
+add "a hard lift stops the eye dead" \
+	'SwingLift = std::max({ SwingLift, Carried, 0.0 });' \
+	'SwingLift = std::max({ SwingLift, 0.0 * Carried, 0.0 });'
+add "a hard lift carries a step" \
+	'GoalRate, GoalRateWas, FeelNow' \
+	'GoalRate, GoalRate + 0.0 * GoalRateWas, FeelNow'
+add "the point brake for a swing across its way" \
+	'Toward > 0.9 * Swing.Length() &&' \
+	'Toward > 0.0 * Swing.Length() &&'
+add "an anchor not finite stands still (fed)" \
+	'AnchorLast + (bFed ? In.AnchorVel : RefVel) * Dt;' \
+	'AnchorLast + (bFed ? In.AnchorVel * 0.0 : RefVel) * Dt;'
+add "an anchor not finite stands still (measured)" \
+	'AnchorLast + (bFed ? In.AnchorVel : RefVel) * Dt;' \
+	'AnchorLast + (bFed ? In.AnchorVel : RefVel * 0.0) * Dt;'
+add "Begin keeps the pivot's chord" \
+	'bPivotEndGood = bChordGood = false;
+		bBoxKnown' \
+	'bBoxKnown'
+add "Begin keeps the frame's id and movement" \
+	'bFrameIdKnown = bFrameMoving = false;
+		FrameMoving = Vec{};' \
+	'(void)0;'
+add "a measured carry never too far" \
+	'else if (TooFar(SwingRel))' \
+	'else if (false && TooFar(SwingRel))'
+add "the ceiling's stop leaves the floor" \
+	'SwingRel.Z = std::min(SwingRel.Z, 0.0);
+				++HardStopCount;
+			}
+			FloorHold();' \
+	'SwingRel.Z = std::min(SwingRel.Z, 0.0);
+				++HardStopCount;
+			}'
+add "lock input kept on a lock not taken" \
+	'bInLockLast = In.bLock && (bAnchorGood || bLocked || !bRiseIn);' \
+	'bInLockLast = In.bLock;'
+add "steady height ignored when fed" \
+	'Set.SteadyZ > 0.0 ? SteadyVel : In.AnchorVel.Z' \
+	'Set.SteadyZ > 1e300 ? SteadyVel : In.AnchorVel.Z'
+add "the ceiling lets a tilt down through" \
+	'if (BoomNow * std::sin(TGoal) > Room)' \
+	'if (BoomNow * std::sin(TGoal) > Room + 1e300)'
+add "Begin's cut not counted" \
+	'if (bCutNow) ++CutCount;' \
+	'if (bCutNow && false) ++CutCount;'
+add "a lift on no time not counted" \
+	'++HardLiftCount;
+				Compose(false);' \
+	'Compose(false);'
+add "the clearance blind to the floor's lift" \
+	'E.Z = std::max(E.Z, FloorAt(InWorld, E.X, E.Y) + Set.FloorClear);' \
+	'E.Z = std::max(E.Z, -1e300 + 0.0 * FloorAt(InWorld, E.X, E.Y));'
+add "the clearance's push lands on its edge" \
+	'- Along + 1e-9);' \
+	'- Along + 0.0);'
 
 ONLY=("$@")
 RESULTS=()

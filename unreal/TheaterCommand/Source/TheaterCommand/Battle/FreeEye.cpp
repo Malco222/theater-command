@@ -37,14 +37,18 @@ namespace FreeEye
 		 * give way slows at its own hardest. Where a hold acts the step is a trapezoid of the swings, so the place measured
 		 * frame to frame changes its speed by no more than the push, on any frames; where none acts it is the spring's
 		 * own exact step, which never runs past where it is wanted even over a long frame. */
-		void Held(double& X, double& Swing, double Want, double W, double Fastest, double Push, double Brake, double Dt)
+		void Held(double& X, double& Swing, double Want, double W, double Fastest, double Push, double Brake, double Dt, double WantRate = 0.0)
 		{
+			// (a want that itself moves at WantRate, the floor's lift under a climbing floor, is closed on and stopped short
+			// of by the speed relative to it: X may go as much faster than the stop allows as the want draws away)
 			// (coming in near as fast as the brake can still stop it, or faster than the spring's own step takes without
 			// running past, it is braked evenly onto its want instead, no harder than the brake, and set on it on the
 			// frame it gets there: a stiff spring held to its fastest otherwise brakes too late and runs past)
 			const double Left = Want - X, Dist = std::abs(Left);
 			const double Toward = Left > 0.0 ? Swing : Left < 0.0 ? -Swing : 0.0;
-			if (Dist > 1e-11 && Toward > 0.0 && (Toward > W * Dist || Toward >= 0.9 * std::sqrt(2.0 * Brake * Dist)))
+			const double Away = Left > 0.0 ? WantRate : Left < 0.0 ? -WantRate : 0.0;
+			const double Closing = Toward - Away;
+			if (Dist > 1e-11 && Toward > 0.0 && Closing > 0.0 && (Closing > W * Dist || Closing >= 0.9 * std::sqrt(2.0 * Brake * Dist)))
 			{
 				const double Slow = std::min(Toward * Toward / (2.0 * Dist), Brake);
 				const double Sw = Swing * (std::max(0.0, Toward - Slow * Dt) / Toward);
@@ -65,7 +69,7 @@ namespace FreeEye
 			Spring(X1, Sw, Want, W, Dt);
 			const double Free = Sw;
 			const double StopFrom = std::sqrt(2.0 * Brake * std::abs(Want - X));
-			const double Cap = std::max(std::min(Fastest, StopFrom), std::abs(Swing) - Brake * Dt);
+			const double Cap = std::max(std::min(Fastest, StopFrom + std::max(Away, 0.0)), std::abs(Swing) - Brake * Dt);
 			const double Up = Swing >= 0.0 ? Push : Brake, Down = Swing >= 0.0 ? Brake : Push;
 			Sw = std::clamp(Sw, Swing - Down * Dt, Swing + Up * Dt);
 			Sw = std::clamp(Sw, -Cap, Cap);
@@ -89,7 +93,9 @@ namespace FreeEye
 			const Vec Left = Want - X;
 			const double Dist = Left.Length();
 			const double Toward = Dist > 0.0 ? (Swing.X * Left.X + Swing.Y * Left.Y + Swing.Z * Left.Z) / Dist : 0.0;
-			if (Dist > Rest && Toward > 0.0 && (Toward > W * Dist || Toward >= std::sqrt(2.0 * Push * Dist) - Push * Dt))
+			// (only a swing that points at the want, near enough: one mostly across the way would be braked by its part
+			// toward it alone and circle the want for a minute in the last digits)
+			if (Dist > Rest && Toward > 0.9 * Swing.Length() && (Toward > W * Dist || Toward >= std::sqrt(2.0 * Push * Dist) - Push * Dt))
 			{
 				// (the brake that stops it on the want, no harder than the push)
 				const double Fast = Swing.Length();
@@ -209,20 +215,21 @@ namespace FreeEye
 		WantRelV = RelV;
 		SwingRel = Vec{};
 		LiftZ = SwingLift = 0.0;
-		LiftGoalLast = 0.0;
+		LiftGoalLast = LiftRateLast = 0.0;
 		bLiftGoalKnown = false;
 		bLocked = false;
 		LockId = -1;
-		AnchorVelLast = Vec{};
+		AnchorMoving = Vec{};
+		bAnchorMoving = false;
 		bMeasureNext = bCoast = false;
 		FrameLast = RefAt;
-		FrameVelLast = Vec{};
-		bFrameVelKnown = false;
-		bFrameIdKnown = false;
+		bFrameIdKnown = bFrameMoving = false;
+		FrameMoving = Vec{};
 		bInLockLast = false;
 		InIdLast = -1;
 		bAnchorHeadingGood = false;
 		bPivotEndGood = bChordGood = false;
+		bBoxKnown = bBoxWas = false;
 		bFirst = true;
 		Compose(false);
 	}
@@ -265,13 +272,27 @@ namespace FreeEye
 		}
 		const int StopsWas = HardStopCount;
 
-		// The frame: kept from its last good place; its speed measured while its id holds. A step further than a
-		// teleport (TeleportBeyond and three frames of its own speed) is a new frame as well, not a speed: a raid's
-		// middle jumps when a group joins it or leaves it, and that is no speed to carry. (Its first step after Begin is
-		// judged against Begin's frame, with no speed yet to allow for.)
+		// Rule 6's test of a thing that may have jumped: its step this frame against the speed it is known to have. Where
+		// that speed is only measured (a frame, an anchor whose velocity is not fed), the battle's pace may have changed
+		// since (paused, or 0.5, to 10 on a hitch): a step along its last measured way may be up to PaceJump times as
+		// long, a step across that way or back may not.
+		auto Jumped = [this, Dt](const Vec& Step, const Vec& Known, bool bMeasured)
+		{
+			const double Slack = Set.TeleportBeyond + Known.Length() * Dt * 3.0;
+			if (!bMeasured || !(Known.Length() > 0.0)) return Step.Length() > Slack;
+			const Vec Way = Known.Unit();
+			const double Along = Step.X * Way.X + Step.Y * Way.Y + Step.Z * Way.Z;
+			const double Across = (Step - Way * Along).Length();
+			return Across > Slack || Along < -Slack || Along > Set.TeleportBeyond + Known.Length() * Dt * std::max(3.0, Set.PaceJump);
+		};
+
+		// The frame: kept from its last good place; its speed measured while its id holds. A step that jumped (above,
+		// against its last movement, kept through a pause) is a new frame as well, not a speed: a raid's middle jumps
+		// when a group joins it or leaves it, and that is no speed to carry. (Its first step after Begin is judged
+		// against Begin's frame, with no speed yet to allow for.)
 		const Vec FrameAt = In.Frame.Finite() ? In.Frame : FrameLast;
 		const Vec FrameStep = FrameAt - FrameLast;
-		const bool bFrameJump = FrameStep.Length() > Set.TeleportBeyond + (bFrameVelKnown ? FrameVelLast.Length() * Dt * 3.0 : 0.0);
+		const bool bFrameJump = Jumped(FrameStep, bFrameIdKnown && bFrameMoving ? FrameMoving : Vec{}, true);
 		const bool bFrameNew = bFrameJump || (bFrameIdKnown && In.FrameId != FrameIdLast);
 		const Vec FrameVel = bFrameNew ? Vec{} : FrameStep * (1.0 / Dt);
 
@@ -317,14 +338,16 @@ namespace FreeEye
 		Vec AnchorNow = AnchorLast;
 		if (bLocked)
 		{
-			AnchorNow = bAnchorGood ? In.Anchor : AnchorLast;
 			const bool bFed = In.bAnchorVel && In.AnchorVel.Finite();
-			// (not on the frame its speed is first measured: nothing yet says how fast it goes, and a fast one over a
-			// hitch is no teleport; a step that was one shows as a speed no glide can take up, and cuts there)
-			if (!bLockNow && !bMeasureNext)
+			// (an anchor not finite this frame is the last good one carried on at its velocity, fed or as last measured, so
+			// the reference does not stand still while the thing flies on and then jump to catch it up)
+			AnchorNow = bAnchorGood ? In.Anchor : AnchorLast + (bFed ? In.AnchorVel : RefVel) * Dt;
+			if (!bLockNow)
 			{
-				const double Speed = (bFed ? In.AnchorVel : AnchorVelLast).Length();
-				bTeleport = (AnchorNow - AnchorLast).Length() > Set.TeleportBeyond + Speed * Dt * 3.0;
+				// (against its own velocity where it is fed; on the frame its speed is first measured, against the speed the
+				// pivot had, the view it was taken from; else against its last measured movement)
+				const Vec Known = bFed ? In.AnchorVel : bMeasureNext ? WasVel : bAnchorMoving ? AnchorMoving : Vec{};
+				bTeleport = Jumped(AnchorNow - AnchorLast, Known, !bFed && !bMeasureNext);
 			}
 			const bool bFresh = bLockNow || bTeleport;
 			const double SteadyWas = SteadyRefZ;
@@ -350,7 +373,14 @@ namespace FreeEye
 			{
 				bVelKnown = false;
 			}
-			AnchorVelLast = bFed ? In.AnchorVel : bFresh ? Vec{} : (AnchorNow - AnchorLast) * (1.0 / Dt);
+			// (its last movement, kept through a pause and a teleport, forgotten on a new lock)
+			if (bLockNow) bAnchorMoving = false;
+			const Vec Moved = bFed ? In.AnchorVel : bFresh ? Vec{} : (AnchorNow - AnchorLast) * (1.0 / Dt);
+			if (Moved.Length() > 0.0)
+			{
+				AnchorMoving = Moved;
+				bAnchorMoving = true;
+			}
 			AnchorLast = AnchorNow;
 		}
 		else
@@ -359,11 +389,14 @@ namespace FreeEye
 			NewVel = FrameVel;
 			bVelKnown = !bFrameNew;
 		}
+		if (FrameVel.Length() > 0.0)
+		{
+			FrameMoving = FrameVel;
+			bFrameMoving = true;
+		}
 		FrameLast = FrameAt;
 		FrameIdLast = In.FrameId;
 		bFrameIdKnown = true;
-		FrameVelLast = FrameVel;
-		bFrameVelKnown = !bFrameNew;
 
 		// The glide's push as the boom stands now, and the anchor's clearance.
 		const double FeelWas = std::max(ArmOf(S), Set.FeelArm);
@@ -437,9 +470,11 @@ namespace FreeEye
 		}
 		else if (bTeleport)
 		{
+			// (the picture jumps with it, but his own turn, tilt and zoom go on as they were, and the ride still turns
+			// the view with its heading: it is the same thing, only elsewhere)
 			bCutNow = true;
 			SwingRel = Vec{};
-			SwingH = SwingT = SwingS = SwingLift = 0.0;
+			SwingLift = 0.0;
 			bMeasureNext = false;
 			++CutCount;
 		}
@@ -485,7 +520,7 @@ namespace FreeEye
 		// where he wants to sit in her frame turns with her too. His offset itself follows that on its spring: turned at
 		// once, an offset of some hundreds of metres (mid-glide onto her) would be flung sideways.
 		const bool bHeadingGood = std::isfinite(In.AnchorHeading);
-		if (bLocked && In.bRide && !bLockNow && !bTeleport && bHeadingGood && bAnchorHeadingGood)
+		if (bLocked && In.bRide && !bLockNow && bHeadingGood && bAnchorHeadingGood)
 		{
 			const double Turned = WrapNear(In.AnchorHeading - AnchorHeadingLast, 0.0);
 			H += Turned;
@@ -515,19 +550,42 @@ namespace FreeEye
 			const double Least = FloorAt(InWorld, WantEye.X, WantEye.Y) + Set.FloorClear - (WantEye.Z - WantRelV.Z);
 			if (WantRelV.Z < WantZWas && WantRelV.Z < Least) WantRelV.Z = std::min(WantZWas, Least);
 		}
-		const bool bBox = In.bBox && In.BoxMin.Finite() && In.BoxMax.Finite();
-		const Vec BoxLo{ std::min(In.BoxMin.X, In.BoxMax.X), std::min(In.BoxMin.Y, In.BoxMax.Y), std::min(In.BoxMin.Z, In.BoxMax.Z) };
-		const Vec BoxHi{ std::max(In.BoxMin.X, In.BoxMax.X), std::max(In.BoxMin.Y, In.BoxMax.Y), std::max(In.BoxMin.Z, In.BoxMax.Z) };
+		// The pivot's box: a box with a corner not finite is the last good one, moved on at its walls' last speeds; those
+		// speeds are measured frame to frame (a box carried with the raid moves with it), a box first given taken as riding
+		// with the reference (a still one is known still from the next frame).
+		const bool bBoxGood = In.BoxMin.Finite() && In.BoxMax.Finite();
+		const bool bBox = In.bBox && (bBoxGood || bBoxKnown);
+		const Vec BoxLo = !bBoxGood ? BoxLoLast + BoxLoVel * Dt : Vec{ std::min(In.BoxMin.X, In.BoxMax.X), std::min(In.BoxMin.Y, In.BoxMax.Y), std::min(In.BoxMin.Z, In.BoxMax.Z) };
+		const Vec BoxHi = !bBoxGood ? BoxHiLast + BoxHiVel * Dt : Vec{ std::max(In.BoxMin.X, In.BoxMax.X), std::max(In.BoxMin.Y, In.BoxMax.Y), std::max(In.BoxMin.Z, In.BoxMax.Z) };
+		const Vec LoVel = bBox && bBoxWas ? (BoxLo - BoxLoLast) * (1.0 / Dt) : RefVel;
+		const Vec HiVel = bBox && bBoxWas ? (BoxHi - BoxHiLast) * (1.0 / Dt) : RefVel;
+		if (bBox)
+		{
+			BoxLoLast = BoxLo;
+			BoxHiLast = BoxHi;
+			BoxLoVel = LoVel;
+			BoxHiVel = HiVel;
+			bBoxKnown = true;
+		}
+		bBoxWas = bBox;
 		auto InBox = [&BoxLo, &BoxHi](const Vec& P)
 		{
 			return Vec{ std::clamp(P.X, BoxLo.X, BoxHi.X), std::clamp(P.Y, BoxLo.Y, BoxHi.Y), std::clamp(P.Z, BoxLo.Z, BoxHi.Z) };
 		};
-		// (held where the reference will be by the time his offset's spring has taken up its movement, 2 / Ease and this
-		// frame on, or as long as his offset's push takes to match its speed where that is longer: a reference running
-		// at a still wall is met by his offset running back, not stopped on the wall)
-		const double LeadTakes = std::max(2.0 / std::max(Set.Ease, 1e-3), RefVel.Length() / (2.0 * std::max(Set.GlidePush * std::max(ArmNow, Set.FeelArm), 1e-9)));
-		const Vec BoxLead = RefVel * (LeadTakes + Dt);
-		if (bBox) WantRelV = InBox(RefAt + BoxLead + WantRelV + Up) - RefAt - BoxLead - Up;
+		// (each wall held where it will stand against the reference by the time his offset's spring has taken up their
+		// difference of speeds, 2 / Ease and this frame on, or as long as his offset's push takes to match it where that
+		// is longer: a reference running at a still wall is met by his offset running back, not stopped on the wall; a
+		// wall that moves with the reference is held exactly where it stands)
+		const Vec LoBy = RefVel - LoVel, HiBy = RefVel - HiVel;
+		const double BoxBy = std::max(LoBy.Length(), HiBy.Length());
+		if (bBox)
+		{
+			const double LeadTakes = std::max(2.0 / std::max(Set.Ease, 1e-3), BoxBy / (2.0 * std::max(Set.GlidePush * std::max(ArmNow, Set.FeelArm), 1e-9)));
+			const Vec P = RefAt + WantRelV + Up;
+			const Vec Lo = BoxLo - LoBy * (LeadTakes + Dt), Hi = BoxHi - HiBy * (LeadTakes + Dt);
+			auto Hold = [](double At, double Least, double Most) { return Least <= Most ? std::clamp(At, Least, Most) : 0.5 * (Least + Most); };
+			WantRelV = Vec{ Hold(P.X, Lo.X, Hi.X), Hold(P.Y, Lo.Y, Hi.Y), Hold(P.Z, Lo.Z, Hi.Z) } - RefAt - Up;
+		}
 		{
 			// (the eye under the sky's ceiling: a steep far view is held short of it first, then his offset is held down
 			// by the highest the boom's end stands on its way from where it is to where it is wanted, so the pivot makes
@@ -574,8 +632,10 @@ namespace FreeEye
 			auto Keeps = [&](double AtZoom)
 			{
 				const double Length = ArmOf(AtZoom);
+				// (and the pivot gone where it goes with the boom still as it is: a tilt the ceiling holds back may stay so)
 				const Vec A = EyeOff(From, H, T, Length), M = EyeOff(By, H, T, Length), B = EyeOff(To, WantH, WantT, Length);
-				return std::min(Nearest(A, M), Nearest(M, B)) >= Clear * 1.05;
+				const Vec Held = EyeOff(To, H, T, Length);
+				return std::min({ Nearest(A, M), Nearest(M, B), Nearest(M, Held) }) >= Clear * 1.05;
 			};
 			if (!Keeps(SGoal))
 			{
@@ -593,7 +653,7 @@ namespace FreeEye
 		// comes in, only as far as the pivot where it is and where its swing takes it leaves room)
 		double TGoal = WantT;
 		{
-			const double PivotZ = RefAt.Z + RelV.Z + LiftZ + std::max(SwingRel.Z, 0.0) * (SwingRel.Z / (2.0 * GlidePush));
+			const double PivotZ = RefAt.Z + std::max(RelV.Z + std::max(SwingRel.Z, 0.0) * (SwingRel.Z / (2.0 * GlidePush)), WantRelV.Z) + LiftZ;
 			const double Room = Set.EyeMost - PivotZ;
 			const double Sn = std::sin(T);
 			if (Sn > 1e-9 && ArmOf(SGoal) * Sn > Room) SGoal = std::min(SGoal, std::max(S, ZoomOf(Room / Sn)));
@@ -607,7 +667,7 @@ namespace FreeEye
 		// harder than one alone (their pulls on the eye add up: the boom turning while it grows is pushed sideways too).
 		// Inside a box his offset may run as fast as the reference it has to stand against at a wall.
 		const double Feel = std::max(ArmNow, Set.FeelArm);
-		const double Fastest = Set.GlideFastest * Feel + (bBox ? RefVel.Length() : 0.0);
+		const double Fastest = Set.GlideFastest * Feel + (bBox ? BoxBy : 0.0);
 		HeldVec(RelV, SwingRel, WantRelV, Set.Ease, Fastest, Set.GlidePush * Feel, Dt, 1e-10 * Feel);
 		const double FastH = std::max(Set.TurnFastest * Rad, 1e-6), FastT = std::max(Set.TiltFastest * Rad, 1e-6);
 		const double FastS = std::max(Set.ZoomFastest, 1e-6);
@@ -657,9 +717,13 @@ namespace FreeEye
 		}
 		const double LiftGoal = std::max(0.0, Highest + Set.FloorClear - Eye0.Z);
 		// (a goal climbing, a crest coming up under him or his own descent, is led by the spring's own lag at that rate,
-		// so the eye keeps its clearance instead of trailing it by a metre; led no more than the clearance itself)
-		const double GoalRate = bLiftGoalKnown && !bCutNow ? (LiftGoal - LiftGoalLast) / Dt : 0.0;
-		const double Lead = std::min(std::max(GoalRate, 0.0) * 2.0 / std::max(Set.LiftRise, 1e-3), Set.FloorClear);
+		// so the eye keeps its clearance instead of trailing it, and the spring is let climb as fast as the goal does on
+		// top of what it may still stop from: held to a stop on a goal that runs away from it, it would trail a floor
+		// rising faster than some 25 m/s by the whole clearance, put clear at once on every frame)
+		const double GoalRate = bLiftGoalKnown && !bCutNow ? std::max((LiftGoal - LiftGoalLast) / Dt, 0.0) : 0.0;
+		const double Lead = GoalRate * 2.0 / std::max(Set.LiftRise, 1e-3);
+		const double GoalRateWas = LiftRateLast;
+		LiftRateLast = GoalRate;
 		LiftGoalLast = LiftGoal;
 		bLiftGoalKnown = true;
 		if (bCutNow)
@@ -671,7 +735,7 @@ namespace FreeEye
 		{
 			// (not on the first frame after Begin, which is the director's shot exactly; it starts on the next)
 			const double Goal = LiftGoal > 0.0 ? LiftGoal + Lead : 0.0;
-			Held(LiftZ, SwingLift, Goal, Goal > LiftZ ? Set.LiftRise : Set.LiftSettle, 1e9, Set.LiftPush * FeelNow, Set.LiftPush * FeelNow, Dt);
+			Held(LiftZ, SwingLift, Goal, Goal > LiftZ ? Set.LiftRise : Set.LiftSettle, 1e9, Set.LiftPush * FeelNow, Set.LiftPush * FeelNow, Dt, LiftGoal > 0.0 ? GoalRate : 0.0);
 		}
 		if (LiftZ < 0.0)
 		{
@@ -680,19 +744,18 @@ namespace FreeEye
 		}
 
 		// The hard caps, last: nothing here moves the view unless a cap moved (or, by a centimetre or two, his offset's
-		// spring came in on a ceiling-held height while moving sideways). Where two meet, the higher wins: the floor (the eye is never under the ground or a wave), then the ceiling, then the
-		// anchor's clearance, then the pivot's box. The clearance pushes the eye out away from her and never down (under
+		// spring came in on a ceiling-held height while moving sideways). Where two meet, the higher wins: the floor (the
+		// eye is never under the ground or a wave), then the ceiling, then the anchor's clearance, then the pivot's box. The clearance pushes the eye out away from her and never down (under
 		// a ship a push down would put the eye in the sea), the floor taken again wherever that push took it.
 		auto EyeNow = [this, &Boom]() { return RefAt + RelV + Vec{ 0.0, 0.0, LiftZ } + Boom; };
 		if (bBox)
 		{
 			const Vec Pv = RefAt + RelV + Vec{ 0.0, 0.0, LiftZ };
 			const Vec Kept = InBox(Pv);
-			if ((Kept - Pv).Length() > 0.0)
-			{
-				RelV += Kept - Pv;
-				++HardStopCount;
-			}
+			// (a last bit's rounding of a want held at a wall that moves with the reference is no stop)
+			const double Out = (Kept - Pv).Length();
+			RelV += Kept - Pv;
+			if (Out > 1e-9 * std::max(1.0, Pv.Length())) ++HardStopCount;
 		}
 		bool bLiftedHard = false;
 		auto FloorHold = [&]()
@@ -701,8 +764,12 @@ namespace FreeEye
 			const double Under = FloorAt(InWorld, E.X, E.Y) + Set.FloorHard - E.Z;
 			if (Under > 0.0)
 			{
+				// (the eye put clear goes on up at the speed it was carried, where the floor's goal has climbed that fast
+				// over this frame and the last, a climb and not a step, and its push can stop that within the boom's feel:
+				// a floor that stops rising does not stop the eye dead)
 				LiftZ += Under;
-				SwingLift = std::max(SwingLift, 0.0);
+				const double Carried = std::min({ SwingLift + Under / Dt, GoalRate, GoalRateWas, FeelNow * std::sqrt(2.0 * std::max(Set.LiftPush, 0.0)) });
+				SwingLift = std::max({ SwingLift, Carried, 0.0 });
 				bLiftedHard = true;
 			}
 		};

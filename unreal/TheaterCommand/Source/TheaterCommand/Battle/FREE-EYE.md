@@ -12,9 +12,10 @@ C++, no engine types; `#include "Battle/FreeEye.h"`. The ground battle keeps Lan
    `SlideAhead` (picture widths and heights, the way the VIEW should go) with `Aspect`; wheel notches or pinch steps into
    `Zoom` (+ in); `Turn` and `Tilt` in degrees this frame (+ clockwise, + further down). `Frame` and `FrameId` every frame
    (air: the raid's middle; sea: a still (0,0,0)). Give a NEW `FrameId` whenever the frame shifts rather than moves (a
-   group joins the raid or leaves it and its middle steps): the core carries the view across a new id, and across a
-   step further than `TeleportBeyond`, but rides a smaller step with the same id as the frame's own movement, a jump
-   in the picture. Optionally `bBox` with the pivot's box.
+   group joins the raid or leaves it and its middle steps): the core carries the view across a new id. A step with the
+   same id it rides as the frame's own movement where it fits the frame's speed last seen (kept through a pause; a
+   change of pace up to `PaceJump` times it ahead fits), and carries one further than `TeleportBeyond` beyond that;
+   a smaller jump is ridden, a jump in the picture. Optionally `bBox` with the pivot's box.
 2. Call `Pose P = Free.Update(In, RealSeconds, &World)` (the scene's member `FreeEye::Eye Free;`) on REAL seconds (not the battle clock; paused it still flies).
    `World::Floor(X, Y)` returns the ground or the drawn sea under the eye, without margin (the core adds FloorClear);
    a wave that moves is asked again each frame. Null is a flat floor at `Settings::FloorFlat`.
@@ -38,8 +39,8 @@ While locked, feed EVERY frame: `bLock = true`, `AnchorId` (a squadron, an aircr
 zero when paused) with `bAnchorVel = true` (or false: the core measures it), and `AnchorHeading` (for `bRide`).
 `In.AnchorClear` (an Input, not a Setting) keeps the eye off it: about a wingspan for an aircraft, half a ship's
 length for a ship. A new `AnchorId` is a skip (Tab, Shift+Tab); give a new id too when the anchor itself changes (a
-squadron's middle when a member joins or falls), since the core rides any step under `TeleportBeyond` of the same id
-rigidly. A lock glides, unless its glide would take the pivot further than `CutBeyond`, last longer than
+squadron's middle when a member joins or falls), since the core rides any step of the same id within `TeleportBeyond`
+of its own movement rigidly. A lock glides, unless its glide would take the pivot further than `CutBeyond`, last longer than
 `GlideLongest` (an aircraft some hundreds of m/s faster than the view, or 3 km off on the drone's short boom), or run
 the eye through the anchor's clearance (met head on, passing through the eye): then it cuts. Stop sending `bLock` (or
 send `bLetGo` once) to let go: the view keeps its place and speed and comes to rest in the frame, braked at the
@@ -79,7 +80,7 @@ anchor: only the floor, the ceiling (`EyeMost`), the pivot's box and the anchor'
   at 0.8, not 0.5): at the asked values the boom's growth flings the eye harder than the 1,200 deg/s/s it is held to.
   The header gives the arithmetic.
 - Where two caps meet the floor wins, then the ceiling, then the anchor's clearance, then the box. Looking straight up
-  at a ship from the water the floor and her clearance fight and the hard rules act on most frames (counted); the
-  picture is still held to the kick.
+  at a ship from the water the floor and her clearance fight and the hard rules act on some frames (counted: some
+  hundreds in twenty seconds); the picture is still held to the kick.
 - A long boom swung under the floor (looking up from 1.4 km away, or a far view tilted up or zoomed out low over the
   ground) is put clear at once: no spring climbs that in time. His own descent (Rise) stops softly at FloorClear.
