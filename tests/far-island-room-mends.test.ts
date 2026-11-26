@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { frontWatch, runAI } from '../src/campaign/ai';
 import { addCorps, createGame, declareWar, removeCorps } from '../src/campaign/game';
 import { troopshipsWanted } from '../src/campaign/desks';
+import { canRaise, deliver } from '../src/campaign/economy';
+import { roomLeft } from '../src/campaign/islands';
 import { landingForce } from '../src/campaign/staff';
 import { followKey, frontsClear, sailedKey } from '../src/campaign/planfronts';
 import { startOpen } from '../src/campaign/staff';
@@ -64,5 +66,28 @@ describe("the player's building desk and a crossing to an island", () => {
     expect(troopshipsWanted(g, 'JAP', { from: quay, to: saipan })).toBe(1);
     // Ground that is no island: the quay's corps, never fewer than a landing force, as it always was.
     expect(troopshipsWanted(g, 'JAP', { from: quay, to: at(g, 'Manila') })).toBe(Math.min(5, Math.max(landingForce(), 1)));
+  }, 300000);
+});
+
+describe('a new corps raised on an island (the design director, 21:37Z, 26 November 2026, 4: the island refuses only new corps)', () => {
+  it('is raised there only where it fits in men at the strength it forms at, and elsewhere where it does not', () => {
+    const g = startOpen(createGame(3, null));
+    const isle = ['Okinawa', 'Formosa', 'Taihoku', 'Kyushu'].map((nm) => at(g, nm)).find((r) => r && canRaise(g, 'JAP', r) && roomLeft(g, r, 'JAP') < 5)!;
+    expect(isle).toBeDefined();
+    for (const u of [...isle.units, ...(isle.garr ?? [])]) removeCorps(g, u);
+    // (One division's worth of room left: the island's room less one division.)
+    const room = roomLeft(g, isle, 'JAP');
+    const there = addCorps(g, 'JAP', 'There', 'inf', room - 1, isle.id, {});
+    there.str = 1;
+    expect(roomLeft(g, isle, 'JAP')).toBeCloseTo(1, 9);
+    const n = g.nations.JAP;
+    n.queue.push({ id: 9901, what: 'corps', kind: 'inf', divs: 2, name: 'Two Divisions', region: isle.id, ordered: g.turn - 3, eta: g.turn, cost: 0 } as any);
+    n.queue.push({ id: 9902, what: 'corps', kind: 'inf', divs: 1, name: 'One Division', region: isle.id, ordered: g.turn - 3, eta: g.turn, cost: 0 } as any);
+    deliver(g, 'JAP');
+    const two = g.corps.find((c) => c.name === 'Two Divisions' && !c.dead)!, one = g.corps.find((c) => c.name === 'One Division' && !c.dead)!;
+    expect(two).toBeDefined();
+    expect(g.regions[two.reg].name, isle.name).not.toBe(isle.name);
+    expect(g.regions[one.reg].name).toBe(isle.name);
+    expect(roomLeft(g, isle, 'JAP')).toBeCloseTo(0, 9);
   }, 300000);
 });
