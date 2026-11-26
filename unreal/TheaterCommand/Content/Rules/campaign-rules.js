@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 336c05879 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 86d25c39f 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -81167,7 +81167,7 @@
     const f = g2.fleets.find((x) => x.id === id);
     return f && f.nat === g2.human && g2.order[g2.phase] === f.nat ? f : null;
   };
-  function whyNotFleetAttack(g2, id, target) {
+  function whyNotFleetAttack(g2, id, target, asAtWar = false) {
     if (!fleetAttackOn(g2)) return "Fleets are sent straight at the enemy only where that is switched on.";
     const f = ownFleet(g2, id);
     if (!f) return "Only your own fleet can be given the order, in your own month.";
@@ -81179,7 +81179,7 @@
     if (cutOff(g2, f)) return `The ${f.name} is cut off beyond a shut strait: send it to harbour on its side first.`;
     const t = g2.fleets.find((x) => x.id === target);
     if (!t || !shipCount(t.ships) || fleetKnown(g2, t, f.nat) === "none") return "No such enemy fleet is known.";
-    if (!atWar(g2, f.nat, t.nat)) return `${g2.nations[t.nat]?.name ?? t.nat} is not at war with ${g2.nations[f.nat].name}.`;
+    if (!asAtWar && !atWar(g2, f.nat, t.nat)) return `${g2.nations[t.nat]?.name ?? t.nat} is not at war with ${g2.nations[f.nat].name}.`;
     if (surfaceShips(t) <= 0) return "Submarines are not brought to a fleet action: send ships to hunt them in their sea.";
     if (!groundOf3(g2, f, t)) {
       return atSea(t) ? `${cap12(fleetName(t))} is ${seaWhere(g2.seas[t.zone].name)}, out of reach of ${fleetName(f)} from ${f.port}.` : `${t.port} is out of reach of ${fleetName(f)} from ${f.port}.`;
@@ -127326,6 +127326,42 @@ ${note4}`;
     };
   }
   var SHIP_WORD = { bb: ["battleship", "battleships"], cv: ["carrier", "carriers"], ca: ["cruiser", "cruisers"], dd: ["destroyer", "destroyers"], ss: ["submarine", "submarines"] };
+  function peaceFleets(s, id) {
+    const me = s.human;
+    if (!me) return [];
+    const can2 = new Set(declarable(s));
+    if (!can2.size) return [];
+    const out = [];
+    for (const k of fleetsInSight(s)) {
+      const t = s.fleets.find((x) => x.id === k.id);
+      if (!t || t.nat === me || !can2.has(t.nat) || allied(s, me, t.nat) || atWar(s, me, t.nat)) continue;
+      out.push({ id: t.id, why: whyNotFleetAttack(s, id, t.id, true) ?? "" });
+    }
+    return out;
+  }
+  function shipsLeftBehind(spec2) {
+    const take3 = {};
+    for (const bit of spec2.split(",")) {
+      const [cls, n] = bit.split(".");
+      if (cls && Number(n) > 0) take3[cls] = (take3[cls] ?? 0) + Number(n);
+    }
+    return take3;
+  }
+  function warFleetAttack(id, target, staying = "") {
+    const s = game();
+    const me = s.human;
+    const t = s.fleets.find((x) => x.id === target);
+    if (!me || !t || t.nat === me) return { ok: false, declare: false, why: "" };
+    if (atWar(s, me, t.nat)) return { ok: true, declare: false, why: whyNotFleetAttack(s, id, target) ?? "" };
+    if (!humanUp(s) || allied(s, me, t.nat) || !declarable(s).includes(t.nat)) return { ok: true, declare: false, why: "" };
+    const war = loadGame(saveGame(s));
+    if (!war || !orderDeclare(war, t.nat)) return { ok: false, declare: true, why: "" };
+    const take3 = shipsLeftBehind(staying);
+    if (Object.keys(take3).length && orderSplit(war, id, take3) < 0) {
+      return { ok: true, declare: true, why: whyNotSplit(war, id, take3) ?? "Those ships cannot be split off now." };
+    }
+    return { ok: true, declare: true, why: whyNotFleetAttack(war, id, target) ?? "" };
+  }
   function fleetInHand(id) {
     const s = game();
     try {
@@ -127365,6 +127401,10 @@ ${note4}`;
           const f = s.fleets.find((x) => x.id === id);
           return { cut: f ? cutOffLine(s, f) : "", homeTip: f ? cutOffHomeTip(s, f) : "" };
         })(),
+        // (Release 2; Brian, 26 November 2026 03:51Z) The fleets of countries at peace with him that he could declare war
+        // on this month, each with why it could not be sent at them even at war (empty where it could): set down on one,
+        // the question of war is asked first, and only where the attack could then be made.
+        peace: o && fleetAttackOn(s) ? peaceFleets(s, id) : [],
         wings: wingsOfFleet(s, id).map((w) => ({ id: w.id, label: w.label, aircraft: Math.round(w.aircraft), doing: w.doing, flew: w.flew }))
       };
     } catch {
@@ -129851,11 +129891,7 @@ ${standing6}`,
       note4 = ok2 ? `${fleetView(s, made2)?.name ?? "A new fleet"} is formed from ${fleetView(s, Number(part[1]))?.name ?? "the fleet"}.` : whyNotSplit(s, Number(part[1]), { [part[2]]: Number(part[3]) }) ?? "Those ships cannot be split off now.";
       return { ok: ok2, note: note4, fly: fly2, flies: [], open: `fleet:${part[1]}`, made: made2, view: view2() };
     } else if (part[0] === "fleetsplitmany") {
-      const take3 = {};
-      for (const bit of (part[2] ?? "").split(",")) {
-        const [cls, n] = bit.split(".");
-        if (cls && Number(n) > 0) take3[cls] = (take3[cls] ?? 0) + Number(n);
-      }
+      const take3 = shipsLeftBehind(part[2] ?? "");
       const made2 = orderSplit(s, Number(part[1]), take3);
       ok2 = made2 >= 0;
       const left = Object.entries(take3).map(([c, n]) => `${n} ${SHIP_WORD[c]?.[n === 1 ? 0 : 1] ?? c}`).join(", ");
@@ -130686,14 +130722,17 @@ ${standing6}`,
     const group = pick4(s.airFleets.filter((f) => (!me || f.nat === me) && f.ftr + f.bmr > 0), (f) => f.name);
     const region = pick4(s.regions, (r) => r.name);
     const sea = pick4(s.seas, (z) => z.name);
-    let seenId = -1, seenReg = -1;
+    let seenId = -1, seenReg = -1, seenFleet = -1;
     if (!corps && !fleet && !group && !region && !sea && me) {
       try {
-        const seen2 = pick4(view2().corps.filter((c) => c.nat !== me), (c) => c.name);
+        const seenAll = view2();
+        const seen2 = pick4(seenAll.corps.filter((c) => c.nat !== me), (c) => c.name);
         if (seen2) {
           seenId = seen2.id;
           seenReg = seen2.reg;
         }
+        const ship2 = seen2 ? void 0 : pick4(seenAll.fleets.filter((f) => f.nat !== me), (f) => f.name);
+        if (ship2) seenFleet = ship2.id;
       } catch {
       }
     }
@@ -130702,7 +130741,7 @@ ${standing6}`,
       sea: sea ? s.seas.indexOf(sea) : -1,
       corps: corps ? corps.id : seenId,
       corpsRegion: corps ? corps.reg : seenReg,
-      fleet: fleet ? fleet.id : -1,
+      fleet: fleet ? fleet.id : seenFleet,
       group: group ? group.id : -1,
       groupShip: group && group.ship !== void 0 ? group.ship : -1,
       groupBase: group ? group.base : -1
@@ -130714,6 +130753,7 @@ ${standing6}`,
     find: find2,
     raidsFlown,
     fleetInHand,
+    warFleetAttack,
     briefing,
     sack: sackGeneral,
     drafts: draftsFor,
