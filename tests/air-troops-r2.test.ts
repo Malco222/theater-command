@@ -848,12 +848,12 @@ describe('what ended a group\'s strafing, as the battle knows it (the UI directo
     // Kept in the save.
     expect(loadGame(saveGame(one.g))!.airReports.at(-1)!.strafeEnd).toEqual(one.rep.strafeEnd);
     const two = flown(0, { fuel: 450, who: [GC1, GC3] });
-    // (On this seed Groupement de Chasse 2 does not go down either: nobody went down, so the line for nobody leads.)
+    // (On this seed Groupement de Chasse 2 does not go down either: nobody went down, and the k line stands alone, 26 Nov 02:06Z answer 2.)
     expect(two.o.strafers).toEqual([]);
-    expect(two.line).toBe('No fighter group went down to strafe. Groupement de Chasse 1 and Groupement de Chasse 3 were too short of fuel to go down and turned for home.');
-    // All three: none went down, so the line for nobody, and then theirs.
+    expect(two.line).toBe('Groupement de Chasse 1 and Groupement de Chasse 3 were too short of fuel to go down and turned for home.');
+    // All three: none went down, and theirs is the only line (answer 2).
     const three = flown(0, { fuel: 450, who: [GC1, GC2, GC3] });
-    expect(three.line).toBe('No fighter group went down to strafe. Groupement de Chasse 1, Groupement de Chasse 2 and Groupement de Chasse 3 were too short of fuel to go down and turned for home.');
+    expect(three.line).toBe('Groupement de Chasse 1, Groupement de Chasse 2 and Groupement de Chasse 3 were too short of fuel to go down and turned for home.');
   });
 
   it('the new case: a group that went down and that bingo turned for home before it could do any harm; one, two, three', () => {

@@ -572,7 +572,7 @@ describe('what ended a group\'s strafing short: the forms and the order (the UI 
   });
   it('one, two, three or more; a name in its own language and an English one, at the head of a sentence and inside a list', () => {
     for (const [key, W] of [['short', SHORT], ['fuel', FUEL], ['caught', CAUGHT]] as const) {
-      const lead = key === 'short' ? `${NOBODY} ` : '';
+      const lead = ''; // (No line for nobody before k: the k line alone, the UI director 26 Nov 02:06Z, answer 2.)
       expect(strafedLine(rep([], { [key]: ['Groupement de Chasse 3'] }), 'FRA')).toBe(`${lead}Groupement de Chasse 3 ${W[0]}`);
       expect(strafedLine(rep([], { [key]: ['2nd Fighter Group'] }), 'FRA')).toBe(`${lead}The 2nd Fighter Group ${W[0]}`);
       expect(strafedLine(rep([], { [key]: ['2nd Fighter Group', 'JG 26'] }), 'FRA')).toBe(`${lead}The 2nd Fighter Group and JG 26 ${W[1]}`);
