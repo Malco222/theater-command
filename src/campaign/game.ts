@@ -3142,8 +3142,9 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       if (watch > 0) { prisoners += watchMen; defU.push({ name: `Town guard of ${townName(target)}`, nat: target.ctrl, kind: 'inf', divs: Math.round(watch * 10) / 10, men: watchMen, lost: watchMen, fate: 'surrendered', guard: true }); }
       for (const c of attackers) c.ap = Math.max(0, c.ap - SIEGE.assault.ap);
       fall(g, target, attNat, 'storm');
-      // (City defences: a town whose guns fought the stormers' tanks loses a level of them with it.)
-      flakOut = flakLostWithTown(g, target, flakAt, townName(target));
+      // (City defences: a town whose guns fought the stormers' tanks loses a level of them with it. The report's lines
+      // are printed as they stand, so the town is named here as running text names it: "of the Valdai".)
+      flakOut = flakLostWithTown(g, target, flakAt, placeName(townName(target)));
     }
     // (The fortress rows: where a fortress crew went into its works, the guard goes in with it and the town holds.)
     else if (inField && !intoWorks) {

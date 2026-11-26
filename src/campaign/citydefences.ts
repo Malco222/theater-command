@@ -380,7 +380,9 @@ export const flakFog = (): { label: string; value: string; effect: string } =>
  * the capture rules every town has. Surrender, starvation and handover keep the guns. Returns the result line for the
  * battle's report (the UI director's words, section 6), or null. `level` is townFlak as the storm began where the
  * storm's assessment carried the guns' line, else 0; 0 (no tanks, no garrison, no guns, the switch off) does nothing,
- * and so does either switch off (city defences or its sub-switch, flakGround).
+ * and so does either switch off (city defences or its sub-switch, flakGround). `town` is the town's name as running
+ * text names it, with its article where it takes one ("the Valdai"): the caller gives it through placeName, because
+ * a report's lines are printed as they stand.
  */
 export function flakLostWithTown(g: Game, r: Region, level: number, town: string): { label: string; value: string } | null {
   // (Held back with the sub-switch off, as townFlak is: nothing is lost and no mark is written.)

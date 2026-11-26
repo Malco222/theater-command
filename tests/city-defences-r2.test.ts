@@ -11,17 +11,18 @@ import { setAirPiece } from '../src/campaign/airversion';
 import { raidTargets } from '../src/campaign/airwar';
 import { cityNight, cityNightShare, flakCut, flakCutMost, flakGround, flakLostWithTown, isFlakLine, lightsFloor, setFlakGround, townFlak, townFlakCut, townWorksAt, townWorksMonth, townWorksWorth } from '../src/campaign/citydefences';
 import { SIEGE, besieged, fieldWalls, garrison, ringClosed, siegeMonth, siegeView, storesOf, townBonus } from '../src/campaign/siege';
-import { townSize } from '../src/campaign/towns';
+import { townName, townSize } from '../src/campaign/towns';
 import { beginHuman, humanUp, orderMove, orderStorm, runTurnAI, stepAI, stormOutlook } from '../src/campaign/turn';
 import { techOf } from '../src/campaign/tech';
 import { WEATHER, setWeather, zoneOfRegion } from '../src/campaign/weather';
 import stage from '../data/campaign/stage.json';
+import places from '../data/campaign/places.json';
 import { ARSENAL, aiArsenal, offers, workLevel, worksUpkeep, type Offer } from '../src/campaign/arsenal';
 import { loadGame, saveGame } from '../src/campaign/save';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 import { CITYDEF, LIGHTS_TOP, START_LAID, WORKS_TOP, cityDefences, cityDefencesOn, layStartGunsFromRecord, lightsAt, openCityDefences, setCityDefences } from '../src/campaign/citydefences';
 import { cancelBuild, deliver, ledger, upkeepTotal } from '../src/campaign/economy';
-import { assess, capture, createGame, endPhase, relocate } from '../src/campaign/game';
+import { assess, capture, createGame, endPhase, placeName, relocate } from '../src/campaign/game';
 import { cityOrders } from '../src/campaign/orders';
 import { GUARD_TOP } from '../src/campaign/guard';
 import { startOpen } from '../src/campaign/staff';
@@ -406,6 +407,22 @@ describe('city defences: the guns by night (slice 2)', () => {
     expect(a.gunLoss).toBeCloseTo((0.01 + 3 * 0.012 * share) * 0.7, 12);
     expect(line(a, 'Flak')!.effect).toContain(`about ${Math.round(a.gunLoss * 100)}%`);
   });
+
+  // (The air rules thread, 26 Nov 2026: a town raid's guns line names the town, and the Searchlights line names the
+  // province. The two never meet on one card: only the mission 'night' flies by night, so only its forecast reads the
+  // night's defences. If a town raid ever flies by night, this fails, and the Searchlights line should then name the
+  // town as the guns line does.)
+  it('prints the Searchlights line on a night raid only: a raid on the town or on the factories by day carries none', () => {
+    const r = ruhrByNight({ guns: 2, lights: 2, radar: true });
+    const night = r.a();
+    expect(line(night, 'Searchlights')).toBeDefined();
+    expect(night.lights).toBeDefined();
+    for (const m of ['town', 'bomb'] as const) {
+      const day = assessAir(r.g, [r.f], m, r.t);
+      expect(day.lines.some((l) => l.label === 'Searchlights' || /searchlight/i.test(`${l.value} ${l.effect ?? ''}`)), m).toBe(false);
+      expect(day.lights, m).toBeUndefined();
+    }
+  });
 });
 
 describe('city defences off: the night raid is as it was (slice 2)', () => {
@@ -775,6 +792,31 @@ describe('city defences: the town\'s guns against the tanks (slice 4)', () => {
     one.inside!.str = 0.2; one.inside!.org = 0.2;
     expect(orderStorm(one.g, one.town.id)!.taken).toBe(true);
     expect(`wk:aa:${one.town.id}` in one.g.flags).toBe(false);
+  });
+
+  // (The assembler's review of 26 Nov 2026, item 5: a report's lines are printed as they stand, so the line names the
+  // town as running text does. The Valdai, the Ohio Valley, the Dakotas, the Canary Islands, the Azores, the Pampas
+  // and Mosquitia take the article and have no town's name of their own.)
+  it('names the lost guns\' town with its article where the place takes one: "of the Valdai"', () => {
+    const { g } = lodzStorm(true);
+    expect(townName(g.byName['Valdai'])).toBe('Valdai');
+    expect(placeName(townName(g.byName['Valdai']))).toBe('the Valdai');
+    expect(placeName(townName(g.byName['Lodz']))).toBe('Lodz');
+    // No place that takes the article stands within a storm of Germany in September 1939, so for one storm Lodz is
+    // put on the article list, and taken off it again whatever happens.
+    const the = (places as { the: string[] }).the;
+    expect(the).not.toContain('Lodz');
+    the.push('Lodz');
+    try {
+      const t = lodzStorm(true, { guns: 2 });
+      t.inside!.str = 0.2; t.inside!.org = 0.2;
+      const rep = orderStorm(t.g, t.town.id)!;
+      expect(rep.taken).toBe(true);
+      expect(rep.lines).toContainEqual({ label: 'Anti-aircraft guns', value: 'The anti-aircraft guns of the Lodz fought the tanks over open sights, and one level of them was lost with the town.' });
+    } finally {
+      the.splice(the.indexOf('Lodz'), 1);
+    }
+    expect(the).not.toContain('Lodz');
   });
 
   // (The design director, 25 Nov 2026 12:18Z: the gun level is lost only where the flak line was on the card.)
