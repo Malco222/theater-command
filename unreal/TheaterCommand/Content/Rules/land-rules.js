@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 4558ca549 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 183c5cc81 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -2203,7 +2203,7 @@
       return;
     }
     if (near.length) {
-      if (u.order?.kind === "move" && !near.some((f) => dist(f.x, f.y, u.order.x, u.order.y) < K)) return;
+      if (u.order?.kind === "move" && !near.some((f) => b.gapAt(u, u.order.x, u.order.y, f) < K)) return;
       const spot2 = b.sniperSpot(u, [u.x, u.y - dir * 400], u.y);
       const gap = near.reduce((m, f) => Math.min(m, b.gap(u, f)), Infinity);
       const [x, y] = spot2 ?? [u.x, u.y - dir * (K - gap + 50)];
@@ -8445,6 +8445,7 @@
   var inRiver = (g) => g === "water" || g === "blown";
   var live2 = (u) => u.state !== "gone" && u.state !== "withdrawn";
   var fighting2 = (u) => live2(u) && u.state !== "routing";
+  var passesFriends = (_b, u) => u.team === "snp";
   var weightOf = (u) => u.priced ?? u.power0;
   var INWARD = { south: [0, 1, 0], north: [0, -1, Math.PI], west: [1, 0, Math.PI / 2], east: [-1, 0, 1.5 * Math.PI] };
   function joinEdge(side, toward, own) {
@@ -10677,7 +10678,9 @@
     /**
      * Where a sniper team of the computer's goes next (ai.ts snipersUp): hiding ground within 'step' metres of it toward
      * 'to', never ahead of 'front' (its own leading foot, measured along its side's way), and at least 'keep' metres from
-     * every found enemy block; the furthest forward first, then the nearest. Null where there is none.
+     * every found enemy block by the battle's own gap (as the drills' 'near' reads it: by the middles, a team backed off
+     * to a spot still read near and was sent again each second, 26 Nov); the furthest forward first, then the nearest. Null
+     * where there is none.
      */
     sniperSpot(u, to, front, step = 400, keep = LAND.snipers.keep) {
       const dir = u.side === "att" ? 1 : -1, cell = this.field.cell, k = Math.max(1e-6, Math.hypot(to[0] - u.x, to[1] - u.y));
@@ -10687,7 +10690,7 @@
         const x = Math.round(clamp(u.x + (to[0] - u.x) * a / k - (to[1] - u.y) * c / k, 5, this.field.w - 5));
         const y = Math.round(clamp(u.y + (to[1] - u.y) * a / k + (to[0] - u.x) * c / k, 5, this.field.h - 5));
         if (Math.hypot(x - u.x, y - u.y) > step || dir * y > dir * front || !this.sniperGround(x, y)) continue;
-        if (foes.some((e) => dist(e.x, e.y, x, y) < keep)) continue;
+        if (foes.some((e) => this.gapAt(u, x, y, e) < keep)) continue;
         const sc = dir * y * 1e3 - Math.hypot(x - u.x, y - u.y);
         if (sc <= score || this.wet(u, x, y, false)) continue;
         score = sc;
@@ -10776,7 +10779,7 @@
       const K = LAND.snipers.keep, dir = u.side === "att" ? 1 : -1;
       const near = this.units.filter((f) => f.side !== u.side && ok2(f) && !f.hid && f.kind !== "fort" && this.gap(u, f) < K);
       if (near.length) {
-        if (u.order?.kind === "move" && !near.some((f) => dist(f.x, f.y, u.order.x, u.order.y) < K)) return;
+        if (u.order?.kind === "move" && !near.some((f) => this.gapAt(u, u.order.x, u.order.y, f) < K)) return;
         const spot2 = this.sniperSpot(u, [u.x, u.y - dir * 400], u.y);
         const gap = near.reduce((m, f) => Math.min(m, this.gap(u, f)), Infinity);
         const [x, y] = spot2 ?? [u.x, u.y - dir * (K - gap + 50)];
@@ -11246,6 +11249,7 @@
         const pl = a.w / 2 + b.w / 2 * c + b.d / 2 * s - Math.abs(lat);
         const pd = a.d / 2 + b.w / 2 * s + b.d / 2 * c + (a.side === b.side ? 0 : LAND.apart) - Math.abs(dep);
         if (pl <= 0 || pd <= 0) continue;
+        if (a.side === b.side && (passesFriends(this, a) || passesFriends(this, b))) continue;
         if (a.side !== b.side && this.inOverrun(a, b)) continue;
         if (a.side === b.side && (this.narrows(a, a.x, a.y) || this.narrows(b, b.x, b.y))) {
           const into = (u, ox, oy) => u.pressing !== void 0 && ox * Math.sin(u.pressing) + oy * Math.cos(u.pressing) > 0;
@@ -11305,6 +11309,16 @@
       if (u.aim !== void 0) {
         const a = this.unit(u.aim);
         if (a && live2(a) && a.side !== u.side && !a.hid && this.gap(u, a) <= reach) return a;
+      }
+      if (snp) {
+        const holds = (id) => {
+          const e = id === void 0 ? void 0 : this.unit(id);
+          if (!e || !live2(e) || e.side === u.side || e.hid) return null;
+          const d = this.gap(u, e);
+          return d <= reach && this.sniperSees(u, e, d) ? e : null;
+        };
+        const kept = (u.order?.kind === "attack" ? holds(u.order.target) : null) ?? holds(u.engaged);
+        if (kept) return kept;
       }
       if (u.hid && u.order?.kind !== "attack" && !snp) reach = Math.min(reach, this.ambushAt(u));
       let best = null, score = Infinity;
@@ -11504,6 +11518,10 @@
     /** Metres between two blocks' edges, roughly. */
     gap(a, b) {
       return Math.max(0, dist(a.x, a.y, b.x, b.y) - (Math.max(a.w, a.d) + Math.max(b.w, b.d)) / 4);
+    }
+    /** The gap 'a' would have to 'b' standing at (x, y), by the same measure (gap). */
+    gapAt(a, x, y, b) {
+      return Math.max(0, dist(x, y, b.x, b.y) - (Math.max(a.w, a.d) + Math.max(b.w, b.d)) / 4);
     }
     /**
      * What a block takes of a blow for the ground it stands on (its cover, the shelter of wrecks beside men on foot, tanks
