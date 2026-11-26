@@ -41,7 +41,8 @@ namespace UnitTable
 	/**
 	 * The country's own mark from the art director's table, bottom layer first. Empty where the game draws its mark by
 	 * hand, or it has none. Where the table dates a mark (the Commonwealth's wartime roundels, with the red taken out
-	 * in the Pacific and in Burma), this is the one that stands in the campaign's month.
+	 * in the Pacific and in Burma), this is the one that stands in the campaign's month (with one look, the last of
+	 * them in every month: see OneLook).
 	 */
 	TArray<FInsigniaLayer> Insignia(const FString& Tag);
 	/**
@@ -76,6 +77,23 @@ namespace UnitTable
 	 * before the mark changed is not handed out after.
 	 */
 	int32 MarkEra(const FString& Tag);
+	/**
+	 * (Brian, 26 November 2026: "have the paint be on it regardless of the year".) One look for the whole war. With
+	 * tc.Map.OneLook (or "-TheaterOneLook") nothing the table paints changes with the date: a country whose mark the
+	 * table dates wears the last of its dated marks from the first month to the last, and its own rudder stripes with
+	 * it (MarkEra then answers that one in every month); a machine that comes into service later wears the coat of
+	 * the one it follows; and a mark that came in with a date is drawn as the one it followed. The table's "one_look"
+	 * says which coats and which marks. Off as it comes: the looks change by the month, as before.
+	 */
+	bool OneLook();
+	/**
+	 * With one look on, the coat a sculpted model wears whatever its own file says: the colours laid over the file's,
+	 * by the file's numbers for its paints, and the ink of its side number where bOutInk says the table gives one.
+	 * False, with nothing given, where one look is off or the table says nothing of the model.
+	 */
+	bool OneLookCoat(const FString& Model, TMap<int32, FLinearColor>& OutPaints, FLinearColor& OutInk, bool& bOutInk);
+	/** With one look on, the mark that is drawn in place of this one, where the table names one; else the mark itself. */
+	FString OneLookMark(const FString& Mark);
 	/** (Brian, the same day: "make the camoflage reflect their terrian".) The second colour of its camouflage, for the patches. False where it has one coat. */
 	bool Paint2(const FString& Tag, FLinearColor& Out);
 	/**

@@ -657,7 +657,8 @@ int32 FMiniatureMesh::SchemeOf(const FString& Name)
 		Probe.Sculpted(Kind, Whose, FVector::ZeroVector, 1.0, 0.0, true);
 	}
 	const TArray<int32>* Froms = SchemeMonths().Find(Kind);
-	return Froms ? SchemeStanding(*Froms) : 0;
+	// (one look for the whole war: no scheme by the month, as Sculpted paints it)
+	return Froms && !UnitTable::OneLook() ? SchemeStanding(*Froms) : 0;
 }
 
 bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVector& Where, double Metre, double Turn, bool bFar, const TArray<FLinearColor>* Kit)
@@ -1133,10 +1134,13 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 	const int32 Era = UnitTable::MarkEra(Tag);
 	// (and by whether it is whitewashed for the snow: a vehicle or a gun only, never a figure, an aircraft or a piece of scenery)
 	const bool bWash = UnitTable::Wash() && !bFigure && !Raw->bAircraft && !Raw->bPiece && !Raw->bShip;
-	// (and, an aircraft with paint by date, by which of its schemes stands in the painter's month: 0 its own colours)
-	const int32 Livery = Raw->bAircraft ? SchemeStanding(Raw->SchemeFrom) : 0;
+	// (and, an aircraft with paint by date, by which of its schemes stands in the painter's month: 0 its own colours.
+	// With one look for the whole war no scheme stands by the month: Brian, 26 November 2026, paint never by the year)
+	const int32 Livery = Raw->bAircraft && !UnitTable::OneLook() ? SchemeStanding(Raw->SchemeFrom) : 0;
+	// (and by whether it is painted with one look for the whole war: see UnitTable::OneLook)
 	const FString Key = (Era > 0 ? FString::Printf(TEXT("%s|%s|%d"), *Which, *Tag, Era) : Which + TEXT("|") + Tag) + (bWash ? TEXT("|wash") : TEXT(""))
-		+ (UnitTable::CloseMarks() ? TEXT("|close") : TEXT("")) + (Livery > 0 ? FString::Printf(TEXT("|scheme%d"), Livery) : FString());
+		+ (UnitTable::CloseMarks() ? TEXT("|close") : TEXT("")) + (Livery > 0 ? FString::Printf(TEXT("|scheme%d"), Livery) : FString())
+		+ (UnitTable::OneLook() ? TEXT("|one") : TEXT(""));
 	FMiniatureMesh* Model = Painted.Find(Key);
 	if (!Model)
 	{
@@ -1187,6 +1191,31 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				PlanePaints[3] = Paint * 0.6f;
 				PlanePaints[4] = Paint * 0.6f;
 				PlanePaints[15] = FMath::Lerp(Paint, PlanePaints[11], 0.5f);
+			}
+		}
+		// (Brian, 26 November 2026: "have the paint be on it regardless of the year". One look for the whole war: a
+		// machine that comes into service later wears the coat of the one it follows, where the art director's table
+		// gives it one, laid over its own file's colours by their numbers; and its side number is in that coat's ink.
+		// The Mustang in the Warhawk's olive drab, the Fw 190 in the Bf 109's greens. See UnitTable::OneLook.)
+		FLinearColor SideInk = Raw->NumberInk;
+		if (Raw->bAircraft)
+		{
+			TMap<int32, FLinearColor> CoatLaid;
+			FLinearColor InkLaid = SideInk;
+			bool bInkLaid = false;
+			if (UnitTable::OneLookCoat(Name, CoatLaid, InkLaid, bInkLaid))
+			{
+				for (const TPair<int32, FLinearColor>& OneOver : CoatLaid)
+				{
+					if (PlanePaints.IsValidIndex(OneOver.Key))
+					{
+						PlanePaints[OneOver.Key] = OneOver.Value;
+					}
+				}
+				if (bInkLaid)
+				{
+					SideInk = InkLaid;
+				}
 			}
 		}
 		// (the whitewash of winter, where it is asked for: its streaks are a few to the vehicle's length)
@@ -1376,7 +1405,10 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		{
 			const int32 Number = 1 + static_cast<int32>(GetTypeHash(Tag + Name) % 14);
 			// (its number in its scheme's ink where the standing scheme gives one: white on olive drab, black on bare metal)
-			const FLinearColor NumberInk = Livery > 0 && Raw->Schemes.IsValidIndex(Livery - 1) && Raw->Schemes[Livery - 1].bInk ? Raw->Schemes[Livery - 1].Ink : Raw->NumberInk;
+			if (Livery > 0 && Raw->Schemes.IsValidIndex(Livery - 1) && Raw->Schemes[Livery - 1].bInk)
+			{
+				SideInk = Raw->Schemes[Livery - 1].Ink;
+			}
 			for (const FRaw::FMark& Mark : Raw->PlaneMarks)
 			{
 				// (A dominion flying a British machine wears the British marks the model names, until its own wartime
@@ -1499,7 +1531,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 					}
 					if (Mark.Tag == TEXT("#"))
 					{
-						Fresh.PaintedNumerals(At, Mark.Radius, Number, Facing, NumberInk);
+						Fresh.PaintedNumerals(At, Mark.Radius, Number, Facing, SideInk);
 					}
 					else
 					{
@@ -1732,8 +1764,12 @@ void FMiniatureMesh::Submarine(const FVector& Where, double Length, const FLinea
 	Rod(P.At(0.2, 0.0, 0.05), P.At(0.28, 0.0, 0.06), 0.008 * Length, Gunmetal, 5);
 }
 
-void FMiniatureMesh::WingMarking(const FVector& Where, double Radius, const FString& Tag, double Turn)
+void FMiniatureMesh::WingMarking(const FVector& Where, double Radius, const FString& TagAsked, double Turn)
 {
+	// (One look for the whole war: a mark that came in with a date is drawn as the one it followed, where the art
+	// director's table says so. The American star and bar is the star in its disc, with its red centre and no bars,
+	// on every machine and in every year. See UnitTable::OneLook.)
+	const FString Tag = UnitTable::OneLookMark(TagAsked);
 	auto Paint = [](const TCHAR* Hex) { return FLinearColor(FColor::FromHex(Hex)); };
 	const FLinearColor White = Paint(TEXT("F2F0E8")), Red = Paint(TEXT("C8102E")), Blue = Paint(TEXT("1F3A93")), Black = Paint(TEXT("141414")),
 		Yellow = Paint(TEXT("F2C200")), Green = Paint(TEXT("1E8A44")), Orange = Paint(TEXT("F47B20"));
