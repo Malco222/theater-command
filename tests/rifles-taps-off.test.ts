@@ -49,6 +49,23 @@ describe('far off', () => {
     expect(Object.keys(g.flags).filter((k) => /^(sa|sam|rfa|rfo|rflm|rflc):/.test(k))).toEqual([]);
   });
 
+  it("1. far off: the fold's news says no rifles, with men sent back or none (the UI director's sixth read, point 3, is under the rifles switch)", () => {
+    // (With the far side off China is not on the chart: Germany, a nation the rows would never name, as the fold's
+    // speaker; the sentence is the one any nation without a store or a scale of its own reads.)
+    const g = startOpen(createGame(3, 'GER'));
+    const nat = 'GER', capName = g.regions[g.nations[nat].capital].name;
+    levyMen(g, nat, 20);
+    const last = (): string => g.headlines[g.headlines.length - 1].text;
+    const a = addCorps(g, nat, 'Kept corps', 'inf', 2, capName, {}), c = addCorps(g, nat, 'Folded corps', 'inf', 2, capName, {});
+    a.str = c.str = 0.3;
+    expect(foldCorps(g, a, c)).toBe(true);
+    expect(last()).toBe(`Folded corps is folded into Kept corps at ${capName}: 18,000 men in one corps. Its cadre has gone home and can be raised again from the arsenal.`);
+    const d = addCorps(g, nat, 'Second kept corps', 'inf', 2, capName, {}), e = addCorps(g, nat, 'Second folded corps', 'inf', 2, capName, {});
+    d.str = e.str = 0.6;
+    expect(foldCorps(g, d, e)).toBe(true);
+    expect(last()).toBe(`Second folded corps is folded into Second kept corps at ${capName}: 30,000 men in one corps, 6,000 sent back to the reserve. Its cadre has gone home and can be raised again from the arsenal.`);
+  });
+
   it("1. far off: a corps with an establishment below 1 (laid by hand) breaks up as built (the design director's ruling 3 of 06:04Z is under the far switch)", () => {
     const g = startOpen(createGame(3, 'GER'));
     g.phase = g.order.indexOf('GER');

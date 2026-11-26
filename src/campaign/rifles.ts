@@ -156,16 +156,32 @@ export function openRifles(g: Game): void {
  * (Its corps carry no level of their own, as its drafts are not held to one: each reads its full, so the moved men's
  * rifles all pass the kept corps' full and the emptied corps' worn part is its full above its strength. No level flag
  * is written for it.)
+ * Returns what it gave the store, in divisions' worth (0 for a nation that keeps none), for the fold's news.
  */
-export function riflesFold(g: Game, keep: Corps, gone: Corps, from: number): void {
-  if (!carries(g, keep.nat)) return;
+export function riflesFold(g: Game, keep: Corps, gone: Corps, from: number): number {
+  if (!carries(g, keep.nat)) return 0;
   const worn = Math.max(0, levelOf(g, gone) - gone.str) * gone.divs;
+  let gave = 0;
   if (from > 0 && keep.divs > 0) {
     const full = keep.full ?? 1, lvl = levelOf(g, keep) + from / keep.divs;
     setLevel(g, keep, Math.min(full, lvl));
-    if (lvl > full) riflesBack(g, keep.nat, (lvl - full) * keep.divs);
+    if (lvl > full) { riflesBack(g, keep.nat, (lvl - full) * keep.divs); gave += (lvl - full) * keep.divs; }
   }
-  if (worn > 0) riflesBack(g, keep.nat, worn);
+  if (worn > 0) { riflesBack(g, keep.nat, worn); gave += worn; }
+  return gave;
+}
+
+/**
+ * Rifles given to the store, for a sentence: at the store line's own measure, to the hundred (n100, as riflesView's
+ * "Rifles in store ... 21,000" says the store), so the sentence and the store agree; where that reads 0, the exact
+ * count, in words to ten ("one", "seven", "30"). Null for a nation that keeps no store, or where not one whole rifle
+ * was given. The UI director's sixth read of 26 November 2026, 18:55Z, point 3 (the fold's news).
+ */
+export function storeRifles(g: Game, nat: string, divs: number): string | null {
+  if (!carries(g, nat) || !(divs > 0)) return null;
+  const x = divs * riflesRow(g, nat)!.perDiv;
+  if (Math.round(x / 100) > 0) return n100(x);
+  return Math.round(x) > 0 ? inWords(Math.round(x)) : null;
 }
 
 /**
