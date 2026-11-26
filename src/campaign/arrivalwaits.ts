@@ -418,5 +418,7 @@ export function setFromWait(g: Game, on: boolean): boolean {
   if (g.flags.open !== 1) return false;
   if (on) { g.flags.fromWait = 1; return true; }
   delete g.flags.fromWait;
+  // (The battle record is the switch's own: a war switched off holds none, and on again starts from an empty one.)
+  delete g.lastBattle;
   return true;
 }
