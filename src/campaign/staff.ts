@@ -56,6 +56,7 @@ import { openBargains } from './bargains';
 import { openLegions } from './legions';
 import { openQuality } from './units';
 import type { PlanFront } from './planfronts';
+import { BEATREACH_STAGE } from './stage';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
 
@@ -200,6 +201,8 @@ export function startOpen(g: Game, wide = true): Game {
   if (HEAVYSEAS_STAGE) g.flags.heavySeas = 1;
   if (SHADOWRELAY_STAGE) g.flags.shadowRelay = 1;
   if (SEEKONCE_STAGE) g.flags.seekOnce = 1;
+  // A moved fleet's beat in its new base's reach (release 2; navy.ts beatReachOn).
+  if (BEATREACH_STAGE) g.flags.beatReach = 1;
   // A queue for a town (release 2; townqueue.ts).
   if (TOWNQUEUE_STAGE) g.flags.townQueue = 1;
   // The atomic project (release 2; atom.ts).

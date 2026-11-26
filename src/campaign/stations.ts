@@ -98,7 +98,7 @@ import { DEFENCE, allied, atWar, friendlyUnits, hasRoom, hostileUnits, limitAtta
 import { HISTORY, bookDate, onBook, stopDef, theatreOf } from './history';
 import { lineShut } from './line';
 import { appoint, generalOf } from './commanders';
-import { NAVY, canPass, fleetReach, landCorps, onOwnShipping, rebase, whyNotLand, zoneOf } from './navy';
+import { NAVY, beatOnMove, beatReachOn, canPass, fleetReach, landCorps, onOwnShipping, rebase, whyNotLand, zoneOf } from './navy';
 import { blocked } from './rivers';
 import { arrive, besieged, fieldCtrl, takeField } from './siege';
 import { islandOf } from './islands';
@@ -1016,7 +1016,8 @@ export function bookFleets(g: Game, nat: string): { fleet: string; zone: string;
       if (f.bookBase && g.turn === to + 1) {
         const [base, port, home, station] = f.bookBase;
         const r = base >= 0 ? g.regions[base] : null;
-        if (r && rebase(g, f, r, true)) { f.port = port; f.home = home; f.zone = home; f.station = station; }
+        // (The beat it had there, in reach of that base, as on any move of base with the beat-in-reach switch on.)
+        if (r && rebase(g, f, r, true)) { f.port = port; f.home = home; f.zone = home; f.station = beatReachOn(g) ? beatOnMove(g, f, station, null) : station; }
         delete f.bookBase;
       }
       continue;

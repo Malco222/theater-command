@@ -2585,6 +2585,7 @@ export function rebase(g: Game, f: Fleet, r: Region, instant = false): boolean {
   const way = !instant && farOn(g) ? voyageWay(g, f, r) : null;
   if (!instant && farOn(g) && !way) return false;
   const was = inPassage(f) && f.passage ? { base: f.passage.from, port: f.passage.fromPort, home: f.passage.fromHome } : { base: f.base, port: f.port, home: f.home };
+  const beat = f.station;
   f.base = r.id;
   f.port = r.name;
   f.home = sea;
@@ -2595,9 +2596,60 @@ export function rebase(g: Game, f: Fleet, r: Region, instant = false): boolean {
     f.stance = 'port';
     delete f.passage;
   }
+  // (Its beat the one it had while that lies in reach of its new base, else its new home sea: the one rule for every
+  // move of base, beatOnMove, under its own switch (beatReachOn). A staff that moved it for a job writes the job's beat
+  // after, by the same function.)
+  beatAfterMove(g, f, beat);
   g.supplyDirty = true;
   syncWings(g);
   return true;
+}
+
+/**
+ * A fleet's beat after its staff moves its base for a job: one rule for every such move (the design director, 20:02Z
+ * and 20:19Z). The beat follows the job the base moved for and always lies within the new base's reach (fleetReach
+ * from its new base in calm weather; a raider's own). `was` is the beat before the move; `job` the move's seas, best
+ * first, and whether the beat it left is kept while it lies in reach (a quay: the crossing's seas, quay to beach, kept;
+ * standing forward: the enemy seas by its reading, not kept); null for a move with no seas of its own. Returns the old
+ * beat where kept and in reach, else the job's first sea in reach, else the old beat if in reach, else the new home
+ * sea. Each caller asks it under its own switch and writes f.station with it; with every switch off nothing calls it.
+ */
+export function beatOnMove(g: Game, f: Fleet, was: number, job: { seas: readonly number[]; keep: boolean } | null): number {
+  const reach = new Set(fleetReach(g, f, true, f.duty === 'raid'));
+  if (job?.keep && reach.has(was)) return was;
+  const z = job?.seas.find((x) => reach.has(x));
+  if (z !== undefined) return z;
+  return reach.has(was) ? was : f.home;
+}
+
+/**
+ * A fleet's beat after any move of its base (rebase, turnBack), with the beat-in-reach switch on: the one rule
+ * (beatOnMove, no job of its own). Where the beat it had is out of the new base's reach, a tie that held it there lapses
+ * with it (rider b598(2): a tie lapses once its beat is out of reach, and from then its admiral places it as any other
+ * fleet), so a tied fleet is never held to a new home sea nobody tied it to. Nothing with the switch off.
+ */
+function beatAfterMove(g: Game, f: Fleet, beat: number): void {
+  if (!beatReachOn(g)) return;
+  const now = beatOnMove(g, f, beat, null);
+  if (f.tied && now !== beat) f.tied = false;
+  f.station = now;
+}
+
+/**
+ * True where every move of a fleet's base gives it its beat by that one rule (beatOnMove), so its beat lies within its
+ * new base's reach (the design director, 20:02Z, 2, and 21:09Z (a): in the 24 wars a cover move left the beat out of
+ * reach 453 times in 529, a withdrawal 94 in 138, the other moves, a fleet whose base fell or a navy escaping, 141 in
+ * 574). rebase and turnBack read it for every move (beatAfterMove; a tie whose beat is out of reach lapses with it),
+ * and so does a fleet of the book's coming home (stations.ts); a staff that moved a fleet for a job (a landing's cover,
+ * standing forward, a quay) writes the job's beat after, by the same function. It acts on both charts. Its own switch (stage.json 'beatReach'): off,
+ * every beat is as shipped and the whole save the same. The grand campaign, with the switch on.
+ */
+export const beatReachOn = (g: Game): boolean => g.flags.open === 1 && g.flags.beatReach === 1;
+
+/** Turns the beat-in-reach rule on or off in a campaign under way (beatReachOn). */
+export function setBeatReach(g: Game, on: boolean): void {
+  if (on) g.flags.beatReach = 1;
+  else delete g.flags.beatReach;
 }
 
 // ---- A base move is a voyage (release 2, the far chart) ----------------------------------------------------------
@@ -2699,11 +2751,13 @@ export function turnBack(g: Game, f: Fleet): boolean {
   if (!r?.port || !r.seas.length || !allied(g, f.nat, r.ctrl)) return false;
   const way = voyageWay(g, f, r);
   if (!way) return false;
-  const to = { base: f.base, port: f.port, home: f.home };
+  const to = { base: f.base, port: f.port, home: f.home }, beat = f.station;
   f.base = r.id;
   f.port = p.fromPort;
   f.home = r.seas.includes(p.fromHome) ? p.fromHome : r.seas[0];
   delete f.lane;
+  // (Its beat in reach of the harbour it turns back to, as on any move of base: beatAfterMove.)
+  beatAfterMove(g, f, beat);
   if (way.length > NAVY.range) setOut(g, f, way, to, !p.back);
   else {
     delete f.passage;
@@ -2855,6 +2909,7 @@ export function struckLine(g: Game, f: Fleet): string {
 function withdraws(g: Game, f: Fleet): boolean {
   if (!anchorStrikes(g, f).length || g.flags[`withArmy:${f.id}`]) return false;
   const to = safeHarbour(g, f), from = f.port;
+  // (Its beat the one it had while that lies in reach of its new harbour, else its new home sea: rebase, beatReachOn.)
   if (to && strikeMoves(g, f, to) && rebase(g, f, to)) {
     headline(g, 'info', `${cap(fleetName(f))} withdraws from ${from}, struck at anchor there, to ${to.name}, out of the strikers' reach.`, f.nat, to.id);
     return true;
@@ -2898,12 +2953,13 @@ export function foesOf(g: Game, nat: string): string[] {
  * The seas on which a fleet meets its country's enemy: a coast its enemy holds, an enemy fleet its side knows of there,
  * at sea or in harbour, or a lane of its enemy's that carries something laid (laneCounts).
  */
-function foeSeaSet(g: Game, f: Fleet): Set<number> {
-  const foes = new Set(foesOf(g, f.nat)), at = new Set<number>();
+function foeSeaSet(g: Game, f: Fleet): Map<number, number> {
+  const foes = new Set(foesOf(g, f.nat)), at = new Map<number, number>();
   if (!foes.size) return at;
-  g.seas.forEach((s, z) => { if (s.coast.some((id) => foes.has(g.regions[id].ctrl))) at.add(z); });
-  for (const x of g.fleets) if (foes.has(x.nat) && x.zone >= 0 && shipCount(x.ships) > 0 && fleetKnown(g, x, f.nat) !== 'none') at.add(x.zone);
-  for (const rt of seaRoutes(g)) if (foes.has(rt.to) && laneCounts(rt)) for (const z of rt.zones) at.add(z);
+  const add = (z: number): void => { at.set(z, (at.get(z) ?? 0) + 1); };
+  g.seas.forEach((s, z) => { for (const id of s.coast) if (foes.has(g.regions[id].ctrl)) add(z); });
+  for (const x of g.fleets) if (foes.has(x.nat) && x.zone >= 0 && shipCount(x.ships) > 0 && fleetKnown(g, x, f.nat) !== 'none') add(x.zone);
+  for (const rt of seaRoutes(g)) if (foes.has(rt.to) && laneCounts(rt)) for (const z of rt.zones) add(z);
   return at;
 }
 
@@ -2912,21 +2968,41 @@ function foeSeaSet(g: Game, f: Fleet): Set<number> {
  * (fleetReach) in calm weather: the enemy seas in reach (those holding an enemy coast, fleet or lane), and how many seas
  * out it first meets one (1 on the harbour's own sea). Nothing in reach is { seas: 0, out: 0 }.
  */
-function foeReach(g: Game, nat: string, r: Region, at: Set<number>): { seas: number; out: number } {
+function foeReach(g: Game, nat: string, r: Region, at: Map<number, number>): { seas: number; out: number } {
   const o = { seas: 0, out: 0 };
   if (!at.size) return o;
-  const d = new Int16Array(g.seas.length).fill(-1), q: number[] = [];
-  for (const z of r.seas) if (d[z] < 0) { d[z] = 1; q.push(z); }
-  for (let i = 0; i < q.length; i++) {
-    if (at.has(q[i])) { o.seas++; if (!o.out) o.out = d[q[i]]; }
-    if (d[q[i]] >= NAVY.range) continue;
-    for (const j of g.seas[q[i]].adj) if (d[j] < 0 && canPass(g, q[i], j, nat)) { d[j] = d[q[i]] + 1; q.push(j); }
-  }
+  for (const { z, d } of reachOf(g, nat, r)) if (at.has(z)) { o.seas++; if (!o.out) o.out = d; }
   return o;
 }
 
+/** The seas in a fleet's reach from a harbour in calm weather, nearest first, each with how many seas out it lies (1 on the harbour's own). */
+function reachOf(g: Game, nat: string, r: Region): { z: number; d: number }[] {
+  const d = new Int16Array(g.seas.length).fill(-1), q: number[] = [];
+  for (const z of r.seas) if (d[z] < 0) { d[z] = 1; q.push(z); }
+  for (let i = 0; i < q.length; i++) {
+    if (d[q[i]] >= NAVY.range) continue;
+    for (const j of g.seas[q[i]].adj) if (d[j] < 0 && canPass(g, q[i], j, nat)) { d[j] = d[q[i]] + 1; q.push(j); }
+  }
+  return q.map((z) => ({ z, d: d[z] }));
+}
+
+/**
+ * The seas a fleet that stands forward would take its beat from at its new harbour, best first, by the reading that
+ * picked the harbour (the design director, 20:02Z, 1): of the seas in its reach from there, those that count most of
+ * the enemy (each enemy coast on it, each known enemy fleet in it, each enemy lane through it), then the fewer seas out,
+ * then the chart's order. A fleet stands forward to reach its war, and a beat left behind is a war it no longer reaches.
+ */
+function forwardBeats(g: Game, nat: string, r: Region, at: Map<number, number>): number[] {
+  return reachOf(g, nat, r).filter(({ z }) => (at.get(z) ?? 0) > 0)
+    .sort((a, b) => at.get(b.z)! - at.get(a.z)! || a.d - b.d || a.z - b.z).map(({ z }) => z);
+}
+
+
 /** For the tests and the readings: how much of the enemy a fleet would have in its reach from a harbour (foeReach). */
 export const enemyInReach = (g: Game, f: Fleet, r: Region): { seas: number; out: number } => foeReach(g, f.nat, r, foeSeaSet(g, f));
+
+/** For the tests and the readings: the beat a fleet standing forward to a harbour would take there (forwardBeat), or -1. */
+export const beatFrom = (g: Game, f: Fleet, r: Region): number => forwardBeats(g, f.nat, r, foeSeaSet(g, f))[0] ?? -1;
 
 /**
  * The farthest a fleet stands forward on this rule alone: one month's voyage (voyageMonths 1), the game's own turn and
@@ -3007,7 +3083,11 @@ export function forwardHarbour(g: Game, f: Fleet): Region | null {
  */
 function standsForward(g: Game, f: Fleet): boolean {
   const to = forwardHarbour(g, f), from = f.port;
-  if (!to || !rebase(g, f, to)) return false;
+  if (!to) return false;
+  const job = forwardBeats(g, f.nat, to, foeSeaSet(g, f)), was = f.station;
+  if (!rebase(g, f, to)) return false;
+  // (Its beat moves with its base, to the sea there that counts most of the enemy: the design director, 20:02Z, 1.)
+  f.station = beatOnMove(g, f, was, { seas: job, keep: false });
   headline(g, 'info', `${cap(fleetName(f))} moves its base from ${from} to ${to.name}: no enemy lies within its reach from ${from}.`, f.nat, to.id);
   return true;
 }
@@ -6115,6 +6195,8 @@ function coverBases(g: Game, nat: string, orders?: { fleet: string }[]): { cover
   // Back to the base it had (release 2, the far chart: the design director's ruling of 04:33Z, 25 November 2026, 1(a)):
   // a fleet still in passage from it to its cover base turns back from where it is; one in passage from elsewhere comes
   // in first, and is read the month after. True where it moved.
+  // (Its beat the one it had while that lies in reach of the base it goes back to, else its home sea there: rebase and
+  // turnBack, beatReachOn.)
   const goBack = (f: Fleet, r: Region | undefined): boolean => {
     if (!inPassage(f)) { forget(f); return !!r && r.id !== f.base && rebase(g, f, r); }
     if (f.passage?.from !== r?.id) return false;
@@ -6145,8 +6227,11 @@ function coverBases(g: Game, nat: string, orders?: { fleet: string }[]): { cover
     for (const f of can.filter((x) => !covers.has(x.id)).sort((a, b) => fleetPower(g, b) - fleetPower(g, a) || a.id - b.id)) {
       const r = coverBase(g, f, z);
       if (!r) continue;
-      const from = f.base;
+      const from = f.base, beat = f.station;
       if (!rebase(g, f, r)) continue;
+      // (Its beat the one it had while that lies in reach of its cover base, else the beach's sea, as a fleet moved for a
+      // quay keeps its beat: beatReachOn, the one rule of beatOnMove.)
+      if (beatReachOn(g)) f.station = beatOnMove(g, f, beat, { seas: [z], keep: true });
       if (was(f) === undefined) g.flags[`fl:cover:${f.id}`] = from + 1;
       g.flags[`fl:coverAt:${f.id}`] = r.id + 1;
       covers.add(f.id);
@@ -6362,8 +6447,8 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
       // spend more time on station. The move takes the month in harbour, as any move of base does.)
       const to = nearerPort(g, f);
       if (to) {
-        const from = f.port;
-        if (rebase(g, f, to)) { headline(g, 'info', `${cap(fleetName(f))} moves its base from ${from} to ${to.name}, nearer its hunting ground ${seaWhere(g.seas[f.station].name)}.`, nat, to.id); say(`It shifts its base to ${to.name}, nearer its hunting ground ${where(f.station)}.`); continue; }
+        const from = f.port, hunt = f.station;
+        if (rebase(g, f, to)) { headline(g, 'info', `${cap(fleetName(f))} moves its base from ${from} to ${to.name}, nearer its hunting ground ${seaWhere(g.seas[hunt].name)}.`, nat, to.id); say(`It shifts its base to ${to.name}, nearer its hunting ground ${where(hunt)}.`); continue; }
       }
       if (sail(g, f, f.station, 'raid')) say(`A raider, it hunts the enemy's merchant ships ${where(f.station)}.`);
       else home(`Its hunting ground ${where(f.station)} is out of its reach, so it waits in harbour.`);

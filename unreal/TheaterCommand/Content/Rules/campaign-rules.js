@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 24c5babd1 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 2327e9ec0 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -1379,6 +1379,8 @@
     shadowRelay: false,
     _seekOnce: "A fleet seeks battle once a month (release 2; the design director's ruling of 25 November 2026, 02:38Z, on the navy thread's finding that a fleet could seek more than once: in every allied nation's month-end meeting, and at month's end after an order of attack that missed or struck a harbour; src/campaign/navy.ts). Each fleet on the seeking side of a fleet action, by the player's order or in any nation's month-end meeting, the player's and the computer's alike, is marked with the month; a marked fleet is left out of every later meeting that month and cannot be sent at the enemy again. An order of attack counts whether it finds its quarry or misses. Defenders are never marked: a fleet that fought can still be found and fought. Off: nothing is marked and every war is the war without it.",
     seekOnce: false,
+    _beatReach: "A moved fleet's beat in reach (release 2; the design director's rulings of 25 November 2026, 20:02Z, 2, and 21:09Z (a); src/campaign/navy.ts beatReachOn, beatOnMove). On every move of a fleet's base (a withdrawal from a harbour struck at anchor, a landing's cover and the way back, a base that fell, a navy escaping, the book's moves, the player's own) the fleet keeps the beat it had while that lies within its new base's reach; otherwise its beat becomes the beach's sea for a cover, or its new home sea, and a tie that held it to the old beat lapses. Both charts. In 24 computer wars a cover move left the beat out of reach 453 times in 529, a withdrawal 94 in 138, the other moves 141 in 574. Off: every beat is as before and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'beatReach' (switchable in any month). Forced by TC_BEATREACH=1 or 0.",
+    beatReach: false,
     _townQueue: "A queue for a town (release 2; Brian 25 November 2026 13:41Z, 'easy to manage the cities, recruitment, ect'; the design director's ruling seamless-r2-1125.md part B; src/campaign/townqueue.ts). The player lines up what each of his towns builds next; each queued building is a press of BUILD made for him at the opening of his month, straight after his staff's month, at that day's price and through BUILD's own checks. One the treasury cannot pay for waits at the head of its town's queue; one refused for any other reason comes off with a line saying why; a lost town's queue goes, unpaid. The staff never touches it. Off: nothing of it is read or written and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'townQueue' (switchable in any month from OPTIONS). Forced by TC_TOWNQUEUE=1 or 0.",
     townQueue: false,
     _atomBomb: "The atomic project (release 2; Brian 25 November 2026 01:14Z, 'lets do number 1'; the design director's ruling of 01:27Z; src/campaign/atom.ts, data/campaign/atom.json). Three rows of the Industry branch, then atomic plants that draw a share of a nation's earnings every month for years toward one fixed bill: a large industry finishes them, a small one never. Then a bomb or two, carried by an ordinary bombing raid on an enemy city that is not a capital: the city in ruins and a weight on that country's will to fight through the surrender rules. Spies, bombing and capture set the plants back. The same rules for every country; the book's stops hold the computer to the record's clock. Off: the rows leave the tree and nothing is drawn. On: the grand campaigns opened from now on carry the flag 'atom' (switchable in any month from OPTIONS). Forced by TC_ATOM=1 or 0.",
@@ -1448,6 +1450,7 @@
   var HEAVYSEAS_STAGE = staged("TC_HEAVYSEAS", "heavySeas");
   var SHADOWRELAY_STAGE = staged("TC_SHADOWRELAY", "shadowRelay");
   var SEEKONCE_STAGE = staged("TC_SEEKONCE", "seekOnce");
+  var BEATREACH_STAGE = staged("TC_BEATREACH", "beatReach");
   var TOWNQUEUE_STAGE = staged("TC_TOWNQUEUE", "townQueue");
   var ATOM_STAGE = staged("TC_ATOM", "atomBomb");
   var CARRIERSTRIKE_STAGE = staged("TC_CARRIERSTRIKE", "carrierStrike");
@@ -47864,6 +47867,7 @@
     if (HEAVYSEAS_STAGE) g2.flags.heavySeas = 1;
     if (SHADOWRELAY_STAGE) g2.flags.shadowRelay = 1;
     if (SEEKONCE_STAGE) g2.flags.seekOnce = 1;
+    if (BEATREACH_STAGE) g2.flags.beatReach = 1;
     if (TOWNQUEUE_STAGE) g2.flags.townQueue = 1;
     if (ATOM_STAGE) g2.flags.atom = 1;
     if (CARRIERSTRIKE_STAGE) g2.flags.carrierStrike = 1;
@@ -58383,9 +58387,9 @@
       if (!g2.nations[f.nat]?.alive) continue;
       const ours2 = nats.has(f.nat) || [...nats].some((x) => allied(g2, x, f.nat)) && [...enemies].some((e) => atWar(g2, f.nat, e));
       if (!ours2 || ![...enemies].some((e) => atWar(g2, f.nat, e))) continue;
-      const reachOf5 = cover(kmTo(g2, f, region), reach(f, g2).ftrRange) * crowding(g2, f);
-      if (reachOf5 <= 0) continue;
-      const planes3 = f.ftr * reachOf5;
+      const reachOf6 = cover(kmTo(g2, f, region), reach(f, g2).ftrRange) * crowding(g2, f);
+      if (reachOf6 <= 0) continue;
+      const planes3 = f.ftr * reachOf6;
       out.W += planes3 * (0.5 + 0.5 * f.ready) * fighterTech(g2, f) * fuelAir(g2, f.nat);
       const lose3 = Math.min(f.ftr, Math.round(planes3 * CLOSE.loss * (underFoe ? CLOSE.enemySky : 1)));
       out.groups.push({ id: f.id, name: f.name, nat: f.nat, planes: Math.round(planes3), lose: lose3 });
@@ -67275,7 +67279,7 @@
             f.port = port;
             f.home = home;
             f.zone = home;
-            f.station = station2;
+            f.station = beatReachOn(g2) ? beatOnMove(g2, f, station2, null) : station2;
           }
           delete f.bookBase;
         }
@@ -69000,6 +69004,7 @@
     const way = !instant && farOn(g2) ? voyageWay(g2, f, r) : null;
     if (!instant && farOn(g2) && !way) return false;
     const was = inPassage(f) && f.passage ? { base: f.passage.from, port: f.passage.fromPort, home: f.passage.fromHome } : { base: f.base, port: f.port, home: f.home };
+    const beat = f.station;
     f.base = r.id;
     f.port = r.name;
     f.home = sea;
@@ -69010,9 +69015,28 @@
       f.stance = "port";
       delete f.passage;
     }
+    beatAfterMove(g2, f, beat);
     g2.supplyDirty = true;
     syncWings(g2);
     return true;
+  }
+  function beatOnMove(g2, f, was, job) {
+    const reach3 = new Set(fleetReach(g2, f, true, f.duty === "raid"));
+    if (job?.keep && reach3.has(was)) return was;
+    const z = job?.seas.find((x) => reach3.has(x));
+    if (z !== void 0) return z;
+    return reach3.has(was) ? was : f.home;
+  }
+  function beatAfterMove(g2, f, beat) {
+    if (!beatReachOn(g2)) return;
+    const now = beatOnMove(g2, f, beat, null);
+    if (f.tied && now !== beat) f.tied = false;
+    f.station = now;
+  }
+  var beatReachOn = (g2) => g2.flags.open === 1 && g2.flags.beatReach === 1;
+  function setBeatReach(g2, on2) {
+    if (on2) g2.flags.beatReach = 1;
+    else delete g2.flags.beatReach;
   }
   function voyageWay(g2, f, r) {
     const prev = new Int16Array(g2.seas.length).fill(-2);
@@ -69075,11 +69099,12 @@
     if (!r?.port || !r.seas.length || !allied(g2, f.nat, r.ctrl)) return false;
     const way = voyageWay(g2, f, r);
     if (!way) return false;
-    const to = { base: f.base, port: f.port, home: f.home };
+    const to = { base: f.base, port: f.port, home: f.home }, beat = f.station;
     f.base = r.id;
     f.port = p.fromPort;
     f.home = r.seas.includes(p.fromHome) ? p.fromHome : r.seas[0];
     delete f.lane;
+    beatAfterMove(g2, f, beat);
     if (way.length > NAVY.range) setOut(g2, f, way, to, !p.back);
     else {
       delete f.passage;
@@ -69198,35 +69223,44 @@
     return [.../* @__PURE__ */ new Set([...at4, ...STAND_TO.on(g2) ? STAND_TO.against(g2, nat) : []])];
   }
   function foeSeaSet(g2, f) {
-    const foes = new Set(foesOf2(g2, f.nat)), at4 = /* @__PURE__ */ new Set();
+    const foes = new Set(foesOf2(g2, f.nat)), at4 = /* @__PURE__ */ new Map();
     if (!foes.size) return at4;
+    const add = (z) => {
+      at4.set(z, (at4.get(z) ?? 0) + 1);
+    };
     g2.seas.forEach((s, z) => {
-      if (s.coast.some((id) => foes.has(g2.regions[id].ctrl))) at4.add(z);
+      for (const id of s.coast) if (foes.has(g2.regions[id].ctrl)) add(z);
     });
-    for (const x of g2.fleets) if (foes.has(x.nat) && x.zone >= 0 && shipCount(x.ships) > 0 && fleetKnown(g2, x, f.nat) !== "none") at4.add(x.zone);
-    for (const rt of seaRoutes(g2)) if (foes.has(rt.to) && laneCounts(rt)) for (const z of rt.zones) at4.add(z);
+    for (const x of g2.fleets) if (foes.has(x.nat) && x.zone >= 0 && shipCount(x.ships) > 0 && fleetKnown(g2, x, f.nat) !== "none") add(x.zone);
+    for (const rt of seaRoutes(g2)) if (foes.has(rt.to) && laneCounts(rt)) for (const z of rt.zones) add(z);
     return at4;
   }
   function foeReach(g2, nat, r, at4) {
     const o = { seas: 0, out: 0 };
     if (!at4.size) return o;
+    for (const { z, d } of reachOf2(g2, nat, r)) if (at4.has(z)) {
+      o.seas++;
+      if (!o.out) o.out = d;
+    }
+    return o;
+  }
+  function reachOf2(g2, nat, r) {
     const d = new Int16Array(g2.seas.length).fill(-1), q = [];
     for (const z of r.seas) if (d[z] < 0) {
       d[z] = 1;
       q.push(z);
     }
     for (let i = 0; i < q.length; i++) {
-      if (at4.has(q[i])) {
-        o.seas++;
-        if (!o.out) o.out = d[q[i]];
-      }
       if (d[q[i]] >= NAVY.range) continue;
       for (const j of g2.seas[q[i]].adj) if (d[j] < 0 && canPass(g2, q[i], j, nat)) {
         d[j] = d[q[i]] + 1;
         q.push(j);
       }
     }
-    return o;
+    return q.map((z) => ({ z, d: d[z] }));
+  }
+  function forwardBeats(g2, nat, r, at4) {
+    return reachOf2(g2, nat, r).filter(({ z }) => (at4.get(z) ?? 0) > 0).sort((a, b) => at4.get(b.z) - at4.get(a.z) || a.d - b.d || a.z - b.z).map(({ z }) => z);
   }
   var FORWARD_MONTHS = 1;
   var holdTo = (g2, f, ahead2 = 0) => {
@@ -69266,7 +69300,10 @@
   }
   function standsForward(g2, f) {
     const to = forwardHarbour(g2, f), from2 = f.port;
-    if (!to || !rebase(g2, f, to)) return false;
+    if (!to) return false;
+    const job = forwardBeats(g2, f.nat, to, foeSeaSet(g2, f)), was = f.station;
+    if (!rebase(g2, f, to)) return false;
+    f.station = beatOnMove(g2, f, was, { seas: job, keep: false });
     headline(g2, "info", `${cap9(fleetName(f))} moves its base from ${from2} to ${to.name}: no enemy lies within its reach from ${from2}.`, f.nat, to.id);
     return true;
   }
@@ -71256,8 +71293,9 @@
       for (const f of can2.filter((x) => !covers2.has(x.id)).sort((a, b) => fleetPower(g2, b) - fleetPower(g2, a) || a.id - b.id)) {
         const r = coverBase(g2, f, z);
         if (!r) continue;
-        const from2 = f.base;
+        const from2 = f.base, beat = f.station;
         if (!rebase(g2, f, r)) continue;
+        if (beatReachOn(g2)) f.station = beatOnMove(g2, f, beat, { seas: [z], keep: true });
         if (was(f) === void 0) g2.flags[`fl:cover:${f.id}`] = from2 + 1;
         g2.flags[`fl:coverAt:${f.id}`] = r.id + 1;
         covers2.add(f.id);
@@ -71414,10 +71452,10 @@
         }
         const to = nearerPort(g2, f);
         if (to) {
-          const from2 = f.port;
+          const from2 = f.port, hunt2 = f.station;
           if (rebase(g2, f, to)) {
-            headline(g2, "info", `${cap9(fleetName(f))} moves its base from ${from2} to ${to.name}, nearer its hunting ground ${seaWhere(g2.seas[f.station].name)}.`, nat, to.id);
-            say(`It shifts its base to ${to.name}, nearer its hunting ground ${where(f.station)}.`);
+            headline(g2, "info", `${cap9(fleetName(f))} moves its base from ${from2} to ${to.name}, nearer its hunting ground ${seaWhere(g2.seas[hunt2].name)}.`, nat, to.id);
+            say(`It shifts its base to ${to.name}, nearer its hunting ground ${where(hunt2)}.`);
             continue;
           }
         }
@@ -93736,7 +93774,7 @@
     return [u.x + a * rx + l * fx, u.y + a * ry + l * fy];
   };
   var bearing2 = (x0, y0, x1, y1) => Math.atan2(x1 - x0, y1 - y0);
-  var reachOf2 = (u, ux, uy) => {
+  var reachOf3 = (u, ux, uy) => {
     const [fx, fy] = fwd(u.face), [rx, ry] = right(u.face), c = Math.abs(ux * fx + uy * fy), s = Math.abs(ux * rx + uy * ry);
     return Math.min(c > 1e-6 ? u.d / 2 / c : Infinity, s > 1e-6 ? u.w / 2 / s : Infinity);
   };
@@ -98251,7 +98289,7 @@
       const b = this.b, u = sq.u, F2 = DR.teamwork.fpl, own = b.unit(fl.own), e = b.unit(fl.on), f = b.field;
       if (!own || !e) return null;
       const vx = e.x - own.x, vy = e.y - own.y, D2 = Math.hypot(vx, vy) || 1, ux = vx / D2, uy = vy / D2, px = uy, py = -ux;
-      const oe = reachOf2(own, ux, uy), G5 = Math.max(0, D2 - oe - reachOf2(e, -ux, -uy));
+      const oe = reachOf3(own, ux, uy), G5 = Math.max(0, D2 - oe - reachOf3(e, -ux, -uy));
       const R2 = DR.rounds.indirect.mortar, sig = R2[0] + R2[1] * Math.hypot(g2.x - own.x, g2.y - own.y);
       const lo = Math.max(F2.fpf[0], 1.5 * sig, G5 - F2.reach), hi = Math.min(F2.fpf[1], G5);
       if (hi < lo) return null;
@@ -110218,7 +110256,7 @@
   var flying2 = (u) => !off(u) && u.job.do !== "wait";
   var away = (u) => u.job.do === "home" || u.state === "routing";
   var roleOf = (j) => j.close ? "close" : j.top ? "top" : "sweep";
-  var reachOf3 = (u) => Math.min(1, u.fuel0 / SKY.fuel.full);
+  var reachOf4 = (u) => Math.min(1, u.fuel0 / SKY.fuel.full);
   var AirSim = class {
     constructor(ticket, opts = {}) {
       __publicField(this, "domain", "air");
@@ -110537,7 +110575,7 @@
       this.deal();
       this.arm();
       if (this.troops) {
-        const E = this.units.reduce((t, u) => t + (u.side === "att" && u.air === "ftr" ? u.n0 * reachOf3(u) : 0), 0);
+        const E = this.units.reduce((t, u) => t + (u.side === "att" && u.air === "ftr" ? u.n0 * reachOf4(u) : 0), 0);
         this.fireEach = E > 0 ? (this.place.forecast.fire ?? 0) / E : 0;
         if (this.place.marks?.law.reach) this.fireEach = this.place.marks.law.fire;
       }
@@ -111166,7 +111204,7 @@
       }
       const len = Math.max(1, dist(s.from[0], s.from[1], s.to[0], s.to[1]));
       const left = dist(u.x, u.y, s.to[0], s.to[1]), p = clamp013(1 - left / len);
-      const part = u.n * reachOf3(u) * s.k / S3.passes;
+      const part = u.n * reachOf4(u) * s.k / S3.passes;
       if (p > s.p) {
         const owe = this.fireEach * part * (p - s.p);
         this.fireDue.set(u.id, (this.fireDue.get(u.id) ?? 0) + owe);
@@ -112393,8 +112431,8 @@
     passesAhead(u) {
       if (!this.willStrafe(u)) return 0;
       const s = this.strafing.get(u.id), S3 = TROOPS.strafe;
-      if (this.troops.law.reach) return u.n * reachOf3(u) * (this.carries(u) * (S3.passes - (s?.done ?? 0) - (s?.run ? 1 : 0)) + (s?.run ? s.k * (1 - s.p) : 0)) / S3.passes;
-      return u.n * reachOf3(u) * (S3.passes - (s?.done ?? 0) - (s?.run ? s.p : 0)) / S3.passes;
+      if (this.troops.law.reach) return u.n * reachOf4(u) * (this.carries(u) * (S3.passes - (s?.done ?? 0) - (s?.run ? 1 : 0)) + (s?.run ? s.k * (1 - s.p) : 0)) / S3.passes;
+      return u.n * reachOf4(u) * (S3.passes - (s?.done ?? 0) - (s?.run ? s.p : 0)) / S3.passes;
     }
     /**
      * HAND IT TO THE STAFF: what was fought stays fought, and the rest goes to the rules' own dice (the design director,
@@ -112434,7 +112472,7 @@
       let n = this.strafed;
       for (const u of this.units) {
         const ahead2 = this.passesAhead(u), s = this.strafing.get(u.id);
-        n += ahead2 + (s?.run ? u.n * reachOf3(u) * s.k * s.p / TROOPS.strafe.passes : 0) * (ahead2 > 0 ? 1 : 0);
+        n += ahead2 + (s?.run ? u.n * reachOf4(u) * s.k * s.p / TROOPS.strafe.passes : 0) * (ahead2 > 0 ? 1 : 0);
       }
       return n;
     }
@@ -122982,6 +123020,8 @@
       shadowRelay: s.flags.open === 1 && s.flags.shadowRelay === 1,
       // (Release 2, navy.ts) Whether a fleet seeks battle at most once a month, by order or at a month's end.
       seekOnce: seekOnceOn(s),
+      // (Release 2, navy.ts) Whether a fleet moved to withdraw or to cover a landing keeps a beat in its new base's reach.
+      beatReach: beatReachOn(s),
       // (Release 2, buildings.ts) Whether a conquered town can put up every kind of building once it has settled.
       settledTowns: settledTownsOn(s),
       // (Release 2, townqueue.ts) Whether the player can queue the next buildings for his towns.
@@ -124387,7 +124427,7 @@
   }
   var monthsOf4 = marchMonths;
   var inMonths3 = aboutMonths;
-  function reachOf4(ids2) {
+  function reachOf5(ids2) {
     const s = game();
     const merged = /* @__PURE__ */ new Map();
     if (humanUp(s)) {
@@ -129330,6 +129370,12 @@ ${standing6}`,
       note4 = part[0] === "seaminesrule" ? seaMinesOn(s) ? "Mines at sea are on: a fleet with destroyers, cruisers or submarines can lay a field from its page, across a narrow sea or off an enemy harbour." : "Mines at sea are off: every field is gone." : part[0] === "heavyseasrule" ? heavySeasOn(s) ? "Heavy seas are on: gales blow under a closed sky at sea, mostly in winter. Ships can sail into a gale but not on through it, and convoys through one are late." : "Heavy seas are off: no gale blows at sea." : shadowRelayOn(s) ? "The shadow relay is on: a shadow's fuel lasts three months on station, and then a fresh cruiser fleet from harbour takes over without losing contact." : on2 ? "The shadow relay will work once shadowing is on." : "The shadow relay is off: shadows stay on station as long as they keep contact.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
     }
+    if (part[0] === "beatreachrule") {
+      setBeatReach(s, part[1] === "on");
+      ok2 = true;
+      note4 = beatReachOn(s) ? "A moved fleet's beat in reach is on: whenever a fleet's base moves, it patrols a sea it can reach from its new base." : "A moved fleet's beat in reach is off: a moved fleet keeps the beat it had, wherever its new base is.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
+    }
     if (part[0] === "seekoncerule") {
       setSeekOnce(s, part[1] === "on");
       ok2 = true;
@@ -130718,7 +130764,7 @@ ${standing6}`,
     peekChart,
     load,
     view: view2,
-    reach: lookOut(reachOf4),
+    reach: lookOut(reachOf5),
     marchPlan: lookOut(marchPlanOf),
     nextArmy: nextArmyOf,
     stand: standOf,
@@ -130845,6 +130891,11 @@ ${standing6}`,
     setSeekOnce(s, !!on2);
     return { on: seekOnceOn(s) };
   };
+  globalThis.TC.beatReach = (on2) => {
+    const s = game();
+    setBeatReach(s, !!on2);
+    return { on: beatReachOn(s) };
+  };
   globalThis.TC.wingByDate = (on2) => {
     const s = game();
     setWingByDate(s, !!on2);
@@ -130950,6 +131001,10 @@ ${standing6}`,
     seekoncerule: (s) => {
       setSeekOnce(s, true);
       return seekOnceOn(s);
+    },
+    beatreachrule: (s) => {
+      setBeatReach(s, true);
+      return beatReachOn(s);
     },
     fleetwhyrule: (s) => {
       setFleetWhy(s, true);
