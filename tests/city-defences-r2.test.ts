@@ -12,6 +12,7 @@ import { planRaid, raidTargets } from '../src/campaign/airwar';
 import { cityNight, cityNightShare, flakCut, flakCutMost, flakGround, flakLostWithTown, isFlakLine, lightsFloor, setFlakGround, townFlak, townFlakCut, townWorksAt, townWorksMonth, townWorksWorth } from '../src/campaign/citydefences';
 import { SIEGE, besieged, fieldWalls, garrison, ringClosed, siegeMonth, siegeView, storesOf, townBonus } from '../src/campaign/siege';
 import { townName, townSize } from '../src/campaign/towns';
+import { atSea } from '../src/campaign/navy';
 import { beginHuman, humanUp, orderMove, orderStorm, runTurnAI, stepAI, stormOutlook } from '../src/campaign/turn';
 import { techOf } from '../src/campaign/tech';
 import { WEATHER, setWeather, zoneOfRegion } from '../src/campaign/weather';
@@ -1735,6 +1736,100 @@ describe('city defences: the raid card names its place as the news does, the swi
     // Each case is met on this map: places named with their article, some of them past 24 with it, and places too
     // long as shipped.
     expect([named > 0, grown > 0, target > 0]).toEqual([true, true, true]);
+  });
+});
+
+// The air rules' present card (round eight and its part 8b, merged into this row's branch 26 Nov 2026) beside this
+// row's own lines. The UI director's rule of 26 Nov 2026 04:32Z: "the raid card's place names ... take the news's
+// article wherever they print. Where the line is new in release 2 (the gun count's Flak forms ...), always, with no
+// guard ... Where the line is shipped (the harbour's \"Level 2 guns ring the harbour of ...\", like the factories'
+// form), under your row's switch, off as shipped." The Flak forms and the harbour's line are the air rules' own; these
+// tests pin the seam, so that neither side can drift from the other unseen.
+describe('city defences on the air rules\' present card: one card names its place one way, the switch on', () => {
+  const card = (a: AirAssess, label: string): string[] => a.lines.filter((l) => l.label === label).map((l) => l.value);
+  /** The same lines whole: what each says and what it does, as the card prints the pair. */
+  const whole = (a: AirAssess, label: string): string[] => a.lines.filter((l) => l.label === label).map((l) => `${l.value} | ${l.effect ?? ''}`);
+  /** The name with no article before it. */
+  const bareName = (name: string): RegExp => new RegExp(`(?<!the )${name}`);
+  const fogs: [string, KnownDefence | undefined][] = [['in sight', undefined], ['seen', knownAs(2, 2, 2)], ['never scouted', knownAs(3, -1)]];
+
+  it('a factories card, by night and by day, in sight and under fog: the guns, the Flak and the searchlights name the Ruhr alike', () => {
+    for (const [fog, k] of fogs) {
+      for (const kind of ['night', 'bomb'] as const) {
+        const on = ruhrByNight({ guns: 2, lights: 2, radar: true }), off = ruhrByNight({ guns: 2, lights: 2, radar: true, on: false });
+        const a = assessAir(on.g, [on.f], kind, on.t, k), b = assessAir(off.g, [off.f], kind, off.t, k);
+        const guns = card(a, 'Anti-aircraft guns'), flak = card(a, 'Flak'), lights = whole(a, 'Searchlights');
+        expect([fog, kind, guns.length, flak.length, lights.length]).toEqual([fog, kind, 1, 1, kind === 'night' ? 1 : 0]);
+        // What each line says and what it does: no bare name in either half.
+        for (const l of [...whole(a, 'Anti-aircraft guns'), ...whole(a, 'Flak'), ...lights]) expect([fog, kind, l, bareName('Ruhr').test(l)]).toEqual([fog, kind, l, false]);
+        expect(guns[0]).toContain('the factories of the Ruhr');
+        // Three hundred bombers are more than two levels of lights can hold, and that form names the place in its
+        // second half ("About 300 bombers over the Ruhr, ..."); the level form names it in its first (below).
+        if (kind === 'night') expect(lights[0]).toContain(' over the Ruhr');
+        // The Flak line names the place only under fog ("built here" in sight), and then as the guns line does.
+        expect([fog, kind, /guns built round the Ruhr,/.test(flak[0])]).toEqual([fog, kind, k !== undefined]);
+        // The switch off: the shipped guns line prints as shipped, bare; the Flak line, new in release 2, always
+        // takes the article (her rule), so it reads the same on and off.
+        expect(card(b, 'Anti-aircraft guns')[0]).toContain('the factories of Ruhr');
+        expect(card(b, 'Flak')).toEqual(flak);
+        expect(card(b, 'Searchlights')).toEqual([]);
+      }
+    }
+    // The three forms whole, the switch on, by night.
+    const r = ruhrByNight({ guns: 2, lights: 2, radar: true });
+    expect(card(assessAir(r.g, [r.f], 'night', r.t, knownAs(2, 2, 2)), 'Anti-aircraft guns')).toEqual(['Level 2 guns ringed the factories of the Ruhr when seen two months ago']);
+    expect(card(assessAir(r.g, [r.f], 'night', r.t, knownAs(3, -1)), 'Anti-aircraft guns')).toEqual(['Not scouted, so reckoned at the worst: level 3 guns round the factories of the Ruhr']);
+    expect(card(assessAir(r.g, [r.f], 'night', r.t), 'Anti-aircraft guns')).toEqual(['Level 2 guns ring the factories of the Ruhr']);
+    // The searchlights' level form, with a raid the lights can hold, and their words under cloud.
+    for (const [fog, k] of fogs) {
+      const few = ruhrByNight({ guns: 2, lights: 2, radar: true, bombers: 100 }), dull = ruhrByNight({ guns: 2, lights: 2, radar: true, cloud: true });
+      expect([fog, card(assessAir(few.g, [few.f], 'night', few.t, k), 'Searchlights').map((l) => l.replace(/^.*(?= over )/, ''))]).toEqual([fog, [' over the Ruhr']]);
+      expect([fog, card(assessAir(dull.g, [dull.f], 'night', dull.t, k), 'Searchlights')]).toEqual([fog, ['Cloud over the Ruhr']]);
+    }
+  });
+
+  it('a harbour card in a place that takes the article: every guns line, the Flak line and the sky name it alike', () => {
+    const harbour = (on: boolean): { g: Game; f: AirFleet; t: number } => {
+      const r = ruhrByNight({ on });
+      const cot = r.g.byName.Cotentin;
+      r.g.fleets.find((x) => x.nat === 'GER' && !atSea(x))!.base = cot.id;
+      r.g.flags[`wk:aa:${cot.id}`] = 2;
+      setWeather(r.g, true);
+      return { g: r.g, f: r.f, t: cot.id };
+    };
+    for (const [fog, k] of fogs) {
+      const on = harbour(true), off = harbour(false);
+      const a = assessAir(on.g, [on.f], 'harbour', on.t, k), b = assessAir(off.g, [off.f], 'harbour', off.t, k);
+      const guns = card(a, 'Anti-aircraft guns'), flak = card(a, 'Flak');
+      // Every guns line on the card, however many the air rules print there (two today, the harbour's and the
+      // factories'; the UI director has asked for the factories' to come off a harbour card).
+      expect([fog, guns.length >= 1, flak.length]).toEqual([fog, true, 1]);
+      for (const l of [...guns, ...flak]) expect([fog, l, bareName('Cotentin').test(l)]).toEqual([fog, l, false]);
+      expect(guns.some((l) => l.includes('the harbour of the Cotentin'))).toBe(true);
+      expect([fog, /guns built round the harbour of the Cotentin,/.test(flak[0])]).toEqual([fog, k !== undefined]);
+      // The switch off: the shipped guns lines bare, the new Flak line as with it on.
+      for (const l of card(b, 'Anti-aircraft guns')) expect([fog, l, /the (harbour|factories) of Cotentin/.test(l)]).toEqual([fog, l, true]);
+      expect(card(b, 'Flak')).toEqual(flak);
+    }
+    // And the card's sky line, this row's own: the same name.
+    const on = harbour(true), off = harbour(false);
+    expect(planRaid(on.g, 'harbour', on.t, undefined, 'UK').sky).toMatch(/ over the harbour of the Cotentin[.:]/);
+    expect(planRaid(off.g, 'harbour', off.t, undefined, 'UK').sky).toMatch(/ over the harbour of Cotentin[.:]/);
+  });
+
+  it('a raid on the town names the town on the guns line and the Flak line, the same with the switch on and off', () => {
+    for (const [fog, k] of fogs) {
+      const on = ruhrByNight({ guns: 2, lights: 2, radar: true }), off = ruhrByNight({ guns: 2, lights: 2, radar: true, on: false });
+      const a = assessAir(on.g, [on.f], 'town', on.t, k), b = assessAir(off.g, [off.f], 'town', off.t, k);
+      const town = townName(on.g.regions[on.t]);
+      expect(town).not.toBe('Ruhr');
+      expect([fog, card(a, 'Anti-aircraft guns')]).toEqual([fog, card(b, 'Anti-aircraft guns')]);
+      expect([fog, card(a, 'Flak')]).toEqual([fog, card(b, 'Flak')]);
+      expect(card(a, 'Anti-aircraft guns')).toHaveLength(1);
+      expect(card(a, 'Anti-aircraft guns')[0]).toContain(town);
+      for (const l of [...card(a, 'Anti-aircraft guns'), ...card(a, 'Flak')]) expect([fog, l, /Ruhr/.test(l)]).toEqual([fog, l, false]);
+      if (k !== undefined) expect(card(a, 'Flak')[0]).toContain(`guns built round ${town},`);
+    }
   });
 });
 
