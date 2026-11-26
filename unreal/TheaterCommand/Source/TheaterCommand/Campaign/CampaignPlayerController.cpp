@@ -531,7 +531,15 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	if (const FCampaignSession* Session = GetSession())
 	{
 		const FString Sea = Session->GetSubScene();
-		Add(TEXT("subscene"), TEXT("The month at sea"), TEXT("As a month opens, a short scene of its war at sea, where it holds one: a convoy attacked, a U-boat hunted. Every such month, only the months you lose ships at sea, or never. Any key or click ends it."), Sea == TEXT("all") ? TEXT("EVERY MONTH") : Sea == TEXT("mine") ? TEXT("MY LOSSES ONLY") : TEXT("NEVER"), Sea == TEXT("all") || Sea == TEXT("mine"));
+		// (Release 2, the shore guns' scene: with -TheaterSeaShore=1, ship row `shorescene`, OFF until the Mac's 45 fps and
+		// the art director, the month's scene can be a coast shelled, and the row names it; the UI director, 26 Nov
+		// 13:42Z, ui-director/sea-shore-scene-UI-MARKS.md section 4. Off: the row as shipped.)
+		int32 SeaShore = 0;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaShore="), SeaShore);
+		const TCHAR* const SeaWords = SeaShore != 0
+			? TEXT("As a month opens, a short scene of its war at sea, where it holds one: a convoy attacked, a U-boat hunted, a coast shelled. Every such month, only the months you lose ships at sea, or never. Any key or click ends it.")
+			: TEXT("As a month opens, a short scene of its war at sea, where it holds one: a convoy attacked, a U-boat hunted. Every such month, only the months you lose ships at sea, or never. Any key or click ends it.");
+		Add(TEXT("subscene"), TEXT("The month at sea"), SeaWords, Sea == TEXT("all") ? TEXT("EVERY MONTH") : Sea == TEXT("mine") ? TEXT("MY LOSSES ONLY") : TEXT("NEVER"), Sea == TEXT("all") || Sea == TEXT("mine"));
 	}
 	Add(TEXT("askend"), TEXT("Ask before a month ends with idle armies"), TEXT("When armies at the front have not moved and have no orders, END THE MONTH asks once before it ends the month. Armies in the rear are never counted."), bAskAtMonthsEnd ? TEXT("ON") : TEXT("OFF"), bAskAtMonthsEnd);
 	Add(TEXT("adviser"), TEXT("The adviser"), TEXT("A staff officer who points out the first steps of a campaign."), bAdviserWanted ? TEXT("ON") : TEXT("OFF"), bAdviserWanted);
