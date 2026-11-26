@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Battle/LandEye.h"
 #include "Effects/BattleEffects.h"
 #include "GameFramework/Actor.h"
 
@@ -696,9 +697,13 @@ private:
 	 * costs the same on the Mac however small the copy, so it asks closely only while there is a shot to decide on,
 	 * about once a second otherwise, and not at all while the film's shot is not the picture drawn (a result card,
 	 * the night's light, the general's own view, a look aside, the stills' walk) or the rule does not judge it (an
-	 * opening, a wide). ReadDark is its three calls in their order, each frame after the film's eye: Tick with the
-	 * screen's clock, Back for every frame come back with the time it was asked for (FDarkAsk, sent with the ask),
-	 * then Ask. BindDark binds the grabber to the picture, again when its size has changed and stood. The battle's
+	 * opening, a wide); only a trial's fixed pace, "-TheaterLandDarkEvery=" over 0, asks then too, as the reading
+	 * did until 26 November, and none of what it asks for then is read. The reader is held here by value, so this
+	 * header takes LandEye.h itself (plain C++, all of it inside its own namespaces): the campaign's files take
+	 * this header without LandBattleState.h, which is what brings LandEye.h to the battle's own files. ReadDark is
+	 * the reader's three calls in their order, each frame after the film's eye: Tick with the screen's clock, Back
+	 * for every frame come back with the time it was asked for (FDarkAsk, sent with the ask), then Ask. BindDark
+	 * binds the grabber to the picture, again when its size has changed and stood. The battle's
 	 * end line says the frames asked for, come back and read, and what an ask cost, and warns where under half of
 	 * those asked for came back. "-TheaterLandDarkIdle=" and "-TheaterLandDarkEvery=" are the Mac's trials. */
 	TSharedPtr<FFrameGrabber> DarkGrab;

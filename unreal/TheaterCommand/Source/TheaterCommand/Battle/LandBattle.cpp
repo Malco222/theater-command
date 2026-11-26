@@ -7301,7 +7301,8 @@ void ALandBattle::ReadDark()
 	// shot he is looking about in and bar its place, or take the field for the light come back; nor while the stills'
 	// walk has the lens; nor in an opening or a wide, which the rule never judges. While it is not wanted no frame is
 	// asked for (every ask costs: LandEye::DarkReader), and when it is wanted again the reader begins afresh, as at a
-	// cut: nothing asked for before then is read.
+	// cut: nothing asked for before then is read. (Only a trial's fixed pace, "-TheaterLandDarkEvery=" over 0, asks
+	// whatever is on the picture, as the reading did until 26 November: none of what it asks for then is read.)
 	const bool bWanted = FMath::Abs(LookAside.X) <= 1.0 && FMath::Abs(LookAside.Y) <= 1.0 && !bWalkPanOn
 		&& !S.bCard && !(S.bGeneralEye && !S.General.bFilm) && !S.NightNow.bNight && S.NightNow.Dark <= 0.0 && S.NightNow.Black <= 0.0
 		&& S.Eye.DarkJudged();
@@ -9958,9 +9959,9 @@ void ALandBattle::EndPlay(const EEndPlayReason::Type Reason)
 	if (State.IsValid())
 	{
 		const FLandBattleState& S = *State;
-		UE_LOG(LogTheater, Display, TEXT("Land battle: ended at %.0f s: %d rounds played, %d blasts paired; shots heard %d, takes %d, out of hearing %d, dropped %d (on the screen %d); cracks %d, landings %d, falls %d; %d cuts (%d left for a dark picture; the picture read %d times, %d frames back of %d asked, an ask about %.1f ms by %d of them)"),
+		UE_LOG(LogTheater, Display, TEXT("Land battle: ended at %.0f s: %d rounds played, %d blasts paired; shots heard %d, takes %d, out of hearing %d, dropped %d (on the screen %d); cracks %d, landings %d, falls %d; %d cuts (%d left for a dark picture; the picture read %d times, %d frames back of %d asked, an ask about %.1f ms by %d of them; %d times a reading came between that the dark rule never saw)"),
 			S.Battle, S.Play.RoundsPlayed(), S.Play.BlastsPaired(), S.Mix.ShotsHeard, S.Mix.ShotTakes, S.Mix.ShotsOutOfHearing, S.Mix.ShotsDropped, S.Mix.ShotsOnScreenDropped,
-			S.Mix.Cracks, S.Mix.Landings, S.Mix.Falls, S.Eye.Cuts(), S.Eye.DarkCuts(), DarkReader.Reads(), DarkReader.Backs(), DarkReader.Asks(), DarkReader.AskCostMs(), DarkReader.AskCostSamples());
+			S.Mix.Cracks, S.Mix.Landings, S.Mix.Falls, S.Eye.Cuts(), S.Eye.DarkCuts(), DarkReader.Reads(), DarkReader.Backs(), DarkReader.Asks(), DarkReader.AskCostMs(), DarkReader.AskCostSamples(), S.Eye.DarkPassedOver());
 		if (DarkReader.Asks() >= 8 && DarkReader.Backs() * 2 < DarkReader.Asks())
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Land battle: the dark reading was all but blind: %d frames back of %d asked, so the camera's dark rule had little or nothing to go on"), DarkReader.Backs(), DarkReader.Asks());

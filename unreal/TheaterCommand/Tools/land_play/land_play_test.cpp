@@ -4317,12 +4317,18 @@ int main(int argc, char** argv)
 			double Step = 1.0 / 60.0;
 			/** The picture's true share is looked at so often for the longest dark stretch (0: every frame). */
 			double TruthEvery = 0.0;
+			/** Whether the player holds the shot (Director::Hold), by how old it is and its number. Unset: never. */
+			std::function<bool(double Held, int Shot)> Hold;
 			LandEye::DarkReader::Settings Reader;
 		};
 		struct DarkPlayed
 		{
 			int Shots = 0, Left = 0, Asks = 0, Backs = 0, Reads = 0, Astray = 0, AsksUnwanted = 0, Again = 0, WrongLeft = 0;
 			int Looked = 0, Over = 0;
+			/** Shots the rule chose to leave for a dark picture once a hold on them was let go: within the time one more
+			 * frame takes to be asked for and come back (LagMost and three frames), and later than that; and how often
+			 * the rule let go of what it had counted for a reading it never saw (Director::DarkPassedOver). */
+			int HeldLeft = 0, HeldLate = 0, Passed = 0;
 			double Longest = 0.0, LongestAt = 0.0, Seconds = 0.0, Wanted = 0.0, Bound = 0.0;
 		};
 		auto PlayDark = [&](const DarkSetup& Su) -> DarkPlayed
@@ -4352,12 +4358,12 @@ int main(int argc, char** argv)
 			};
 			auto ShareOf = [&Su](const Frame& F) { return F.bAside ? Su.AsideShare : Su.Light(F.P, F.R, F.Held, F.bJudged, F.Shot); };
 			Frame Ring[3];
-			int Drawn = 0, Shot = 0, SpanAsks = 0;
+			int Drawn = 0, Shot = 0, SpanAsks = 0, LeftWas = 0;
 			std::vector<Asked> Pending;
 			size_t Head = 0;
 			std::vector<Vec> LeftAt;
-			double B = 0.0, R = 0.0, CutAt = 0.0, Stretch = 0.0, TruthAt = -1e18;
-			bool bOverWas = false, bWantedWas = false;
+			double B = 0.0, R = 0.0, CutAt = 0.0, Stretch = 0.0, TruthAt = -1e18, LetGoAt = -1.0;
+			bool bOverWas = false, bWantedWas = false, bHeldWas = false;
 			// (the longest a shot may stand dark, past its first half second, with the rule free to leave it: the idle
 			// pace to the next ask, two more asks, the last one's way back, and the frames between)
 			Out.Bound = RS.Idle + 2.0 * std::max(RS.Often, Su.LagMost) + Su.LagMost + (6 + Su.Behind) * Su.Step + Su.TruthEvery;
@@ -4366,9 +4372,22 @@ int main(int argc, char** argv)
 				B += Su.Step * (B < Contact - 10.0 ? 2.0 : 0.5);
 				R += Su.Step;
 				PlaceMovers(B);
+				// (a hold on the shot, as a key holds it in the scene; when it is let go)
+				const bool bHold = Su.Hold && Su.Hold(R - CutAt, Shot);
+				if (bHeldWas && !bHold) LetGoAt = R;
+				bHeldWas = bHold;
+				Dl.Hold(bHold);
 				const LandEye::Pose P = Dl.Update(B, R, Su.Step);
+				// (the rule's choice to leave, counted the frame it is made: the cut itself may come a few frames on,
+				// while the next shot is chosen)
+				if (Dl.DarkCuts() != LeftWas)
+				{
+					LeftWas = Dl.DarkCuts();
+					if (LetGoAt >= 0.0) ++(R - LetGoAt <= Su.LagMost + 3.0 * Su.Step + 1e-9 ? Out.HeldLeft : Out.HeldLate);
+				}
 				if (P.bCut)
 				{
+					LetGoAt = -1.0;
 					++Shot;
 					++Out.Shots;
 					CutAt = R;
@@ -4445,6 +4464,7 @@ int main(int argc, char** argv)
 				}
 			}
 			Out.Left = Dl.DarkCuts();
+			Out.Passed = Dl.DarkPassedOver();
 			Out.Backs = Reader.Backs();
 			Out.Reads = Reader.Reads();
 			return Out;
@@ -4457,13 +4477,14 @@ int main(int argc, char** argv)
 			Day.Light = [&DarkOf](const LandEye::Pose& P, double, double, bool bJudged, int) { return bJudged ? DarkOf(P) : 0.0; };
 			Day.TruthEvery = 0.1;
 			const DarkPlayed D = Played(PlayDark(Day));
-			std::printf("dark (a stand-in for the drawn frame's share under L 25, read by the scene's reader): %d shots, %d left for a dark picture; looks over %.0f%% %.1f%%, the longest stretch past a shot's first half second %.2f s (battle %.1f s; at the most %.2f); %d places within %.0f m of a dark one taken again; %d asks in %.0f screen seconds, %.2f a second (four a second until 26 November), %d back, %d read\n",
-				D.Shots, D.Left, ES.DarkLeave * 100.0, 100.0 * D.Over / std::max(1, D.Looked), D.Longest, D.LongestAt, D.Bound, D.Again, ES.DarkClear, D.Asks, D.Seconds, D.Asks / std::max(1.0, D.Seconds), D.Backs, D.Reads);
+			std::printf("dark (a stand-in for the drawn frame's share under L 25, read by the scene's reader): %d shots, %d left for a dark picture; looks over %.0f%% %.1f%%, the longest stretch past a shot's first half second %.2f s (battle %.1f s; at the most %.2f); %d places within %.0f m of a dark one taken again; %d asks in %.0f screen seconds, %.2f a second (four a second until 26 November), %d back, %d read, %d never seen by the rule\n",
+				D.Shots, D.Left, ES.DarkLeave * 100.0, 100.0 * D.Over / std::max(1, D.Looked), D.Longest, D.LongestAt, D.Bound, D.Again, ES.DarkClear, D.Asks, D.Seconds, D.Asks / std::max(1.0, D.Seconds), D.Backs, D.Reads, D.Passed);
 			if (D.Longest > D.Bound) Fault("a shot held a dark picture past the dark rule");
 			if (D.Again > 0) Fault("a shot stood again where one was left for a dark picture");
 			if (D.WrongLeft > 0) Fault("a shot was left for a dark picture that was not dark");
 			if (D.Asks > 2.0 * D.Seconds) Fault("the dark reader asked for the frame more than twice a screen second over a day's film (its idle pace is not kept: every ask costs)");
 			if (D.Asks < 0.2 * D.Seconds || D.Reads * 10 < D.Asks * 8) Fault("the dark reader hardly asked or hardly read over a day's film (the rule has nothing to go on)");
+			if (D.Passed > 0) Fault("in a day's film, every frame back alone, the dark rule let go of readings for one it never saw (it does not count the readings' numbers as the reader gives them)");
 		}
 		// The rule alone, under lights the stand-in above never gives (no recording is fought at dusk): a reading that
 		// is the same whatever the lens looks at, as a dusk's or a storm's is. Dark everywhere, the rule leaves its
@@ -4476,8 +4497,10 @@ int main(int argc, char** argv)
 		// (Light: the reading at a screen second, of a shot so many screen seconds old, of a picture the rule judges or
 		// of an opening's or a wide's, which it does not. Asked for every Every screen seconds, 0 every frame, the first
 		// at Phase; the director has it Lag screen seconds after it was asked for, stamped with when it was asked for
-		// and numbered, and holds it until the next. No reader here: these are the rule's own holds, whatever feeds it.)
-		auto LeftUnder = [&](const std::function<double(double, double, bool)>& Light, double Every, double Lag = 0.0, double Phase = 0.0) -> int
+		// and numbered, and holds it until the next; Unseen: so many readings' numbers passed over before each, as
+		// when frames come back together within one frame of the game and the rule sees the last of them only. No
+		// reader here: these are the rule's own holds, whatever feeds it.)
+		auto LeftUnder = [&](const std::function<double(double, double, bool)>& Light, double Every, double Lag = 0.0, double Phase = 0.0, int Unseen = 0) -> int
 		{
 			LandEye::World Wl = EW;
 			LandEye::DarkReading Read, Asked;
@@ -4493,7 +4516,7 @@ int main(int argc, char** argv)
 				if (R >= BackAt)
 				{
 					Read = Asked;
-					Read.Serial = ++Serial;
+					Read.Serial = (Serial += 1 + Unseen);
 					BackAt = 1e18;
 				}
 				if (R >= Next)
@@ -4505,7 +4528,7 @@ int main(int argc, char** argv)
 					else
 					{
 						Read = Asked;
-						Read.Serial = ++Serial;
+						Read.Serial = (Serial += 1 + Unseen);
 					}
 				}
 				B += Dt * (B < Contact - 10.0 ? 2.0 : 0.5);
@@ -4562,8 +4585,11 @@ int main(int argc, char** argv)
 		const int LeftTwoLight = LeftUnder([](double, double Held, bool) { return Held >= 0.3 && Held < 1.0 ? 0.05 : 0.6; }, 0.6, 0.0, 0.3);
 		const int LeftFlicker = LeftUnder([N = 0](double R, double, bool) mutable { ++N; return R >= 30.0 && R < 40.0 && N % 2 ? 0.05 : 0.6; }, 0.25);
 		const int LeftEveryOther = LeftUnder([N = 0](double, double, bool) mutable { return ++N % 2 ? 0.6 : 0.05; }, 0.25);
-		std::printf("dark (the rule's rest, the same reading whatever the lens looks at): dark everywhere %d shots left; hovering about the leaving line %d; dark, light from 30 to 45 s, dark again %d; dark with no reading a second in six %d; dark but for each shot's first six tenths of a second %d; dark but for one reading in twenty %d; dark but for the openings' and the wides' pictures, read late as the scene reads, %d at the most; dark but for each shot's first %.2f s %d, its first %.2f s %d; light but for each shot's first six tenths of a second %d; a little under the leaving line all battle %d; dark everywhere, read once a second %d; no more than two dark readings on end %d; dark but for two light readings in each shot %d; dark, every other reading light from 30 to 40 s %d; every other reading dark all battle %d (it rests at %d running until a picture reads %.0f%% or lighter in %d readings on end, %.2f s from the first to the last)\n",
-			LeftDusk, LeftHover, LeftBack, LeftGaps, LeftLag, LeftFlash, LeftWide, 0.25 + ES.DarkHold - 0.05, LeftShort, 0.25 + ES.DarkHold + 0.1, LeftLong, LeftBrief, LeftUnderLine, LeftSlow, LeftTwo, LeftTwoLight, LeftFlicker, LeftEveryOther, ES.DarkRunMost, ES.DarkLight * 100.0, ES.DarkReads, ES.DarkHold);
+		// (and a reading the rule never saw between two it did, two frames back within one frame of the game: what it
+		// said is not known, so the dark ones about it are not on end, and no shot is left on them)
+		const int LeftUnseen = LeftUnder([](double, double, bool) { return 0.6; }, 0.25, 0.0, 0.0, 1);
+		std::printf("dark (the rule's rest, the same reading whatever the lens looks at): dark everywhere %d shots left; hovering about the leaving line %d; dark, light from 30 to 45 s, dark again %d; dark with no reading a second in six %d; dark but for each shot's first six tenths of a second %d; dark but for one reading in twenty %d; dark but for the openings' and the wides' pictures, read late as the scene reads, %d at the most; dark but for each shot's first %.2f s %d, its first %.2f s %d; light but for each shot's first six tenths of a second %d; a little under the leaving line all battle %d; dark everywhere, read once a second %d; no more than two dark readings on end %d; dark but for two light readings in each shot %d; dark, every other reading light from 30 to 40 s %d; every other reading dark all battle %d; dark, with a reading the rule never saw before each %d (it rests at %d running until a picture reads %.0f%% or lighter in %d readings on end, %.2f s from the first to the last)\n",
+			LeftDusk, LeftHover, LeftBack, LeftGaps, LeftLag, LeftFlash, LeftWide, 0.25 + ES.DarkHold - 0.05, LeftShort, 0.25 + ES.DarkHold + 0.1, LeftLong, LeftBrief, LeftUnderLine, LeftSlow, LeftTwo, LeftTwoLight, LeftFlicker, LeftEveryOther, LeftUnseen, ES.DarkRunMost, ES.DarkLight * 100.0, ES.DarkReads, ES.DarkHold);
 		if (LeftDusk < 1) Fault("under a light dark everywhere the dark rule left no shot at all (the rule is not working)");
 		if (LeftDusk > ES.DarkRunMost) Fault("under a light dark everywhere the dark rule did not rest after its few shots (a dusk's film cut again and again)");
 		if (LeftHover > ES.DarkRunMost) Fault("under a light hovering about the dark rule's line its run started again without a picture plainly light");
@@ -4581,6 +4607,7 @@ int main(int argc, char** argv)
 		if (LeftTwoLight > ES.DarkRunMost) Fault("the dark rule's run started again on two light readings (it wants DarkReads on end)");
 		if (LeftFlicker > ES.DarkRunMost) Fault("the dark rule's run started again on light readings with dark ones between them (a dark reading lets go of the light counted)");
 		if (LeftEveryOther > 0) Fault("the dark rule left a shot on dark readings with light ones between them (a light reading lets go of the dark counted)");
+		if (LeftUnseen > 0) Fault("the dark rule left a shot on dark readings with one it never saw between each two (frames back together within one frame of the game: a reading passed over may have been a light one)");
 		// The reader and the rule together, as the scene runs them, under the same made lights: at sixty frames a
 		// second and at ten, with frames back late, lost, a frame or two behind the ask, a flash on one of them, and
 		// the reading not wanted for a while (a card, his own view, a look aside) with another picture on the screen.
@@ -4594,7 +4621,8 @@ int main(int argc, char** argv)
 			auto Late = [](int N, int) { const double L[5] = { 0.03, 0.10, 0.20, 0.30, 0.40 }; return L[N % 5]; };
 			const double Steps[2] = { 1.0 / 60.0, 0.1 };
 			int DuskLeft[2], TurnsLeft[2], TurnsWrong = 0, FlashLeft[2], BlipLeft = 0, CardLeft = 0, FadesLeft[2], LostLeft[2], LostWrong = 0, LostTurns = 0, FieldLeft = 0;
-			double TurnsLong = 0.0, TurnsBound = 0.0, FadesLong[2], FadesBound[2], DuskAsks = 0.0;
+			int SlowDusk[2], SlowLeft[2], SlowWrong = 0, SlowLost = 0, SlowLostWrong = 0, HeldLeft[2], HeldLate = 0, HeldWrong = 0, PairsLeft = 0, PairsPassed[2];
+			double TurnsLong = 0.0, TurnsBound = 0.0, FadesLong[2], FadesBound[2], DuskAsks = 0.0, SlowLong = 0.0, SlowBound = 0.0;
 			for (int I = 0; I < 2; ++I)
 			{
 				// (dark everywhere: the rule's few shots, then its rest, by the reader's own asks)
@@ -4651,6 +4679,50 @@ int main(int argc, char** argv)
 				L.Light = Dusk;
 				L.Lag = I == 0 ? std::function<double(int, int)>([](int, int K) { return K == 0 ? -1.0 : 0.05; }) : std::function<double(int, int)>([](int, int K) { return K == 2 ? -1.0 : 0.05; });
 				LostLeft[I] = Played(PlayDark(L)).Left;
+				// (a slow machine: every frame back 0.45 s after its ask, later than the next ask is made. Under a
+				// light dark everywhere the rule leaves its few shots and rests; with every other shot dark it goes
+				// on leaving the dark ones, and no light one. The first cut's reader dropped each reading before the
+				// next came, and no shot was ever left: 26 November's review.)
+				DarkSetup Sd;
+				Sd.Light = Dusk;
+				Sd.Lag = [](int, int) { return 0.45; };
+				Sd.LagMost = 0.45;
+				Sd.Behind = 2;
+				Sd.Step = Steps[I];
+				SlowDusk[I] = Played(PlayDark(Sd)).Left;
+				DarkSetup St = Sd;
+				St.Light = Turns;
+				const DarkPlayed Sp = Played(PlayDark(St));
+				SlowLeft[I] = Sp.Left;
+				SlowWrong += Sp.WrongLeft;
+				if (Sp.Longest - Sp.Bound > SlowLong - SlowBound || I == 0) { SlowLong = Sp.Longest; SlowBound = Sp.Bound; }
+				// (a shot held by the player from its first third of a second to its second second, every other shot
+				// dark: read at the idle pace while it cannot be left, a dark one has two readings counted as the
+				// hold is let go, the last of them three quarters of a second old; the next is asked for at once and
+				// the shot left when it is back. The first cut's reader dropped that last one as the pace tightened,
+				// the rule let go of both, and the shot stood half a second more.)
+				DarkSetup H;
+				H.Light = Turns;
+				H.Hold = [](double Held, int) { return Held >= 0.3 && Held < 2.0; };
+				H.Step = Steps[I];
+				const DarkPlayed Hp = Played(PlayDark(H));
+				HeldLeft[I] = Hp.HeldLeft;
+				HeldLate += Hp.HeldLate;
+				HeldWrong += Hp.WrongLeft;
+				// (frames back two at a time: every other ask's frame a flash, light, and so late that it is back
+				// within the same frame of the game as the dark one asked for after it. The rule is shown the last
+				// reading only, so it sees dark ones alone; their numbers tell it one came between, and no shot is
+				// left on them.)
+				DarkSetup Pr;
+				Pr.Light = Dusk;
+				const double Gap = std::ceil(Pr.Reader.Often / Steps[I] - 1e-6) * Steps[I];
+				Pr.Flash = [](int K, int, double Share) { return K % 2 == 0 ? 0.02 : Share; };
+				Pr.Lag = [Gap](int, int K) { return K % 2 == 0 ? Gap + 0.05 : 0.05; };
+				Pr.LagMost = Gap + 0.05;
+				Pr.Step = Steps[I];
+				const DarkPlayed Pp = Played(PlayDark(Pr));
+				PairsLeft += Pp.Left;
+				PairsPassed[I] = Pp.Passed;
 			}
 			{
 				// (one frame in three lost where every other shot is dark; and the film's picture dark everywhere while
@@ -4669,10 +4741,21 @@ int main(int argc, char** argv)
 				C.LagMost = 0.15;
 				C.Behind = 2;
 				FieldLeft = Played(PlayDark(C)).Left;
+				// (and both at once on a slow machine: ten frames a second, each frame back a fifth of a second after
+				// its ask, one in three lost, every other shot dark)
+				DarkSetup Sl;
+				Sl.Light = Turns;
+				Sl.Lag = [](int N, int) { return N % 3 == 0 ? -1.0 : 0.2; };
+				Sl.LagMost = 0.2;
+				Sl.Step = 0.1;
+				const DarkPlayed Sp = Played(PlayDark(Sl));
+				SlowLost = Sp.Left;
+				SlowLostWrong = Sp.WrongLeft;
 			}
-			std::printf("dark (the reader and the rule together, at 60 frames a second and at 10): dark everywhere %d and %d shots left (%.2f asks a screen second at 60); every other shot dark, frames back up to 0.40 s late, %d and %d left, %d of them light, the longest dark stretch %.2f s of %.2f allowed; dark but for a flash on one frame of each span %d and %d; light but for one dark frame of each span %d in both; light, with a dark picture up two seconds in seven while the reading is not wanted, %d in both; shots that turn dark as they go %d and %d left, the longest dark stretch %.2f s of %.2f and %.2f of %.2f; dark with each span's first frame lost %d, its third %d; every other shot dark with one frame in three lost %d left, %d of them light; dark, with a light picture up two seconds in seven %d; frames read that were not the shot's own %d, asks made while the reading was not wanted %d\n",
+			std::printf("dark (the reader and the rule together, at 60 frames a second and at 10): dark everywhere %d and %d shots left (%.2f asks a screen second at 60); every other shot dark, frames back up to 0.40 s late, %d and %d left, %d of them light, the longest dark stretch %.2f s of %.2f allowed; dark but for a flash on one frame of each span %d and %d; light but for one dark frame of each span %d in both; light, with a dark picture up two seconds in seven while the reading is not wanted, %d in both; shots that turn dark as they go %d and %d left, the longest dark stretch %.2f s of %.2f and %.2f of %.2f; dark with each span's first frame lost %d, its third %d; every other shot dark with one frame in three lost %d left, %d of them light; dark, with a light picture up two seconds in seven %d; every frame back 0.45 s late, dark everywhere %d and %d, every other shot dark %d and %d left, %d of them light, the longest dark stretch %.2f s of %.2f; at 10 frames a second with frames 0.2 s late and one in three lost %d left, %d of them light; every other shot dark and each shot held to its second second, %d and %d left as soon as one more frame was back after the hold was let go, %d later, %d of them light; dark but for every other frame, light and back together with the next, %d in both (the rule let go %d and %d times); frames read that were not the shot's own %d, asks made while the reading was not wanted %d\n",
 				DuskLeft[0], DuskLeft[1], DuskAsks, TurnsLeft[0], TurnsLeft[1], TurnsWrong, TurnsLong, TurnsBound, FlashLeft[0], FlashLeft[1], BlipLeft, CardLeft, FadesLeft[0], FadesLeft[1], FadesLong[0], FadesBound[0], FadesLong[1], FadesBound[1],
-				LostLeft[0], LostLeft[1], LostTurns, LostWrong, FieldLeft, DarkAstray, DarkUnwanted);
+				LostLeft[0], LostLeft[1], LostTurns, LostWrong, FieldLeft, SlowDusk[0], SlowDusk[1], SlowLeft[0], SlowLeft[1], SlowWrong, SlowLong, SlowBound, SlowLost, SlowLostWrong,
+				HeldLeft[0], HeldLeft[1], HeldLate, HeldWrong, PairsLeft, PairsPassed[0], PairsPassed[1], DarkAstray, DarkUnwanted);
 			for (int I = 0; I < 2; ++I)
 			{
 				if (DuskLeft[I] < 1 || DuskLeft[I] > ES.DarkRunMost) Fault("read by the scene's reader, under a light dark everywhere, the dark rule left no shot or did not rest");
@@ -4681,7 +4764,16 @@ int main(int argc, char** argv)
 				if (FadesLeft[I] <= 2 * ES.DarkRunMost) Fault("read by the scene's reader, shots that turned dark as they went were not left (the idle pace finds nothing)");
 				if (FadesLong[I] > FadesBound[I]) Fault("read by the scene's reader, a shot that turned dark as it went stood dark longer than the idle pace allows");
 				if (LostLeft[I] < 1 || LostLeft[I] > ES.DarkRunMost) Fault("with a frame of each span lost the dark rule left no shot, or did not rest (a lost frame must only delay it)");
+				if (SlowDusk[I] < 1 || SlowDusk[I] > ES.DarkRunMost) Fault("with every frame back 0.45 s late, under a light dark everywhere, the dark rule left no shot or did not rest (a slow machine must only delay it)");
+				if (SlowLeft[I] <= 2 * ES.DarkRunMost) Fault("with every frame back 0.45 s late the dark rule stopped leaving dark shots where every other shot was light (a reading dropped for its age before the next one is back blinds the rule on a slow machine)");
+				if (PairsPassed[I] < 10) Fault("the test's film of frames back two at a time brought hardly any back together (it does not test what it says)");
+				if (HeldLeft[I] <= 2 * ES.DarkRunMost) Fault("dark shots held by the player were not left once the hold was let go and one more frame was back (the readings counted while it was held)");
 			}
+			if (SlowWrong > 0 || SlowLostWrong > 0 || HeldWrong > 0) Fault("read by the scene's reader on a slow machine, or with shots held, a light shot was left for a dark picture");
+			if (SlowLong > SlowBound) Fault("with every frame back 0.45 s late a dark shot stood longer than the rule allows");
+			if (SlowLost <= 2 * ES.DarkRunMost) Fault("at ten frames a second, with frames a fifth of a second late and one in three lost, the dark rule stopped leaving dark shots (the rule blind on a slow machine)");
+			if (PairsLeft > 0) Fault("read by the scene's reader, the dark rule left a shot on dark frames with a light one between each two that came back together with the next (the rule is shown the last reading only: one passed over lets go of what was counted)");
+			if (HeldLate > 0) Fault("a dark shot held by the player was left later than one more frame takes to come back after the hold was let go (a reading dropped as the pace tightened, and all of them counted again)");
 			if (DuskAsks > 2.0) Fault("the dark reader asked more than twice a screen second while the rule rested under a dusk (nothing was left to decide)");
 			if (TurnsWrong > 0 || LostWrong > 0) Fault("read by the scene's reader, a light shot was left for a dark picture (the last shot's frame come late, or a lost frame, counted against it)");
 			if (TurnsLong > TurnsBound) Fault("read by the scene's reader with frames back late, a dark shot stood longer than the rule allows");
@@ -4797,6 +4889,8 @@ int main(int argc, char** argv)
 				Bench Bn;
 				Bn.Rd.Begin(RS);
 				Check(Run(Bn, 3, 0.2, true, 100.0, true, false, 0.05, 1) == 0 && Run(Bn, 1, 0.2, true, 100.0, true, false, 0.05, 1) == 1, "no ask before a span's third frame after its first");
+				// (and that ask, made before five frames have been timed, is not taken for a cost: its frames before are not all there)
+				Check(Run(Bn, 4, 0.2, true, 100.0, true, false, 0.05, 1) == 0 && Bn.Rd.AskCostSamples() == 0, "no cost taken of an ask made before five frames have been timed");
 			}
 			{
 				// The pace by what is read and what the rule can do with it.
@@ -4814,7 +4908,7 @@ int main(int argc, char** argv)
 					Bn.Rd.Begin(RS);
 					Run(Bn, 240, F, true, 100.0, C.bCanLeave, C.bRunOn, C.Share, 2);
 					const size_t N = Bn.AskTimes.size();
-					Check(N >= 3 && std::abs(Bn.AskTimes[N - 1] - Bn.AskTimes[N - 2] - C.Want) < 2.0 * F, C.What);
+					Check(N >= 3 && std::abs(Bn.AskTimes[N - 1] - Bn.AskTimes[N - 2] - C.Want) < 2.0 * F && Bn.Rd.Every() == C.Want, C.What);
 				}
 			}
 			{
@@ -4835,21 +4929,37 @@ int main(int argc, char** argv)
 				Check(Bn.AskTimes.size() > Had && Bn.AskTimes[Had] - (Before + 121.0 * F) >= RS.First - 1e-6, "the first ask a quarter second after the reading is wanted again");
 			}
 			{
-				// Stale: the frames stop coming back; the reading is dropped once it is older than the pace and Late.
+				// A reading stands while its span lasts, however old (never dropped for its age): the frames stop coming
+				// back for three seconds and more, the reading stands, and the asks go on at its own pace.
 				Bench Bn;
 				Bn.Rd.Begin(RS);
 				Run(Bn, 30, F, true, 100.0, true, false, 0.05, 2);
-				const double At = Bn.Rd.Last().At;
-				Check(Bn.Rd.Last().Share >= 0.0, "a reading before the frames stop");
-				bool bHeldTill = true, bGone = false;
+				const LandEye::DarkReading Had = Bn.Rd.Last();
+				Check(Had.Share == 0.05 && Had.Serial == 1, "a reading before the frames stop");
+				bool bStood = true;
+				int Asks = 0;
 				for (int I = 0; I < 200; ++I)
 				{
-					Run(Bn, 1, F, true, 100.0, true, false, 0.05, -1);
-					const double Age = Bn.T - At;
-					if (Age < RS.Idle + RS.Late - 2.0 * F && Bn.Rd.Last().Share < 0.0) bHeldTill = false;
-					if (Age > RS.Idle + RS.Late + 2.0 * F) bGone = Bn.Rd.Last().Share < 0.0;
+					Asks += Run(Bn, 1, F, true, 100.0, true, false, 0.05, -1);
+					bStood = bStood && Bn.Rd.Last().Share == Had.Share && Bn.Rd.Last().Serial == Had.Serial && Bn.Rd.Last().At == Had.At;
 				}
-				Check(bHeldTill && bGone, "a reading dropped as stale once no frame has come back for the pace and Late, and not before");
+				Check(bStood, "a reading standing while its span lasts, however long no frame comes back (never dropped for its age)");
+				Check(Asks == 3, "the asks going on at the reading's own pace while no frame comes back");
+				// (nor does a pace that tightens drop it: a dark picture the rule cannot leave, a held shot, is asked
+				// for at the idle pace; the hold let go 0.65 s after the last ask, the reading stands as it was and
+				// the next ask is made at once, the close pace being past already)
+				Bench Hd;
+				Hd.Rd.Begin(RS);
+				Run(Hd, 100, F, true, 100.0, false, false, 0.6, 2);
+				const LandEye::DarkReading Dark = Hd.Rd.Last();
+				const size_t AsksHad = Hd.AskTimes.size();
+				int Waited = 0;
+				while (AsksHad > 0 && Hd.T - Hd.AskTimes[AsksHad - 1] < 0.65 && Waited < 100) { Run(Hd, 1, F, true, 100.0, false, false, 0.6, 2); ++Waited; }
+				Check(AsksHad == 2 && Dark.Share == 0.6 && Dark.Serial == 2 && Hd.AskTimes.size() == AsksHad, "a dark picture the rule cannot leave asked for at the idle pace, and read");
+				const int AtOnce = Run(Hd, 1, F, true, 100.0, true, false, 0.6, 2);
+				Check(AtOnce == 1 && Hd.Rd.Last().Share == Dark.Share && Hd.Rd.Last().Serial == Dark.Serial, "a reading still standing as the pace tightens (a held shot let go), the next ask made at once");
+				Run(Hd, 3, F, true, 100.0, true, false, 0.6, 2);
+				Check(Hd.Rd.Last().Serial == Dark.Serial + 1 && Hd.Rd.Last().Share == 0.6, "and the next reading following it");
 				// (and an empty frame is counted back and not read; one stamped no later than the last read is not read)
 				Bench Em;
 				Em.Rd.Begin(RS);
@@ -4872,7 +4982,7 @@ int main(int argc, char** argv)
 				Bench Nv;
 				Nv.Rd.Begin(Fixed);
 				Check(Run(Nv, 600, F, true, 100.0, true, false, 0.05, 2) == 0, "a fixed pace of nought never asks");
-				// (a slow fixed pace: the reading stands from one ask to the next, stale only past that pace and Late)
+				// (a slow fixed pace: the reading stands from one ask to the next)
 				Fixed.Fixed = 2.0;
 				Bench Sl;
 				Sl.Rd.Begin(Fixed);
@@ -4883,7 +4993,7 @@ int main(int argc, char** argv)
 					Run(Sl, 1, F, true, 100.0, true, false, 0.05, 2);
 					bStood = bStood && Sl.Rd.Last().Share >= 0.0;
 				}
-				Check(bStood, "at a slow fixed pace the reading stands from one ask to the next");
+				Check(bStood && Sl.Rd.Every() == 2.0, "at a slow fixed pace the reading stands from one ask to the next, and the pace told is the fixed one");
 			}
 			{
 				// The picture's size: bound again only once another size has stood half a second.
@@ -4925,19 +5035,42 @@ int main(int argc, char** argv)
 				}
 			}
 			{
-				// (and no cost is taken where the asks stand closer than eight frames: each one's frames are the next one's)
-				LandEye::DarkReader::Settings Close = RS;
-				Close.Fixed = 0.1;
+				// (an ask that costs nothing, on frames uneven by half their length either way: about nought still.
+				// The ask falls due in a long frame more often than in a short one; counted among the frames before,
+				// as the first cut counted it, that frame made an ask look 1.2 ms cheaper than it was.)
+				LandEye::DarkReader::Settings Even = RS;
+				Even.Fixed = 0.25;
 				LandEye::DarkReader Rd;
-				Rd.Begin(Close);
+				Rd.Begin(Even);
 				double T = 100.0;
-				for (int I = 0; I < 600; ++I)
+				uint32_t Dice = 2463534242u;
+				for (int I = 0; I < 200000; ++I)
 				{
-					T += 0.02;
+					Dice = Dice * 1664525u + 1013904223u;
+					T += (1.0 / 60.0) * (0.5 + ((Dice >> 8) % 10001u) / 10000.0);
 					Rd.Tick(T, T, true, 100.0, true, false);
 					Rd.Ask();
 				}
-				Check(Rd.Asks() >= 100 && Rd.AskCostSamples() == 0, "no cost taken where the asks stand closer than eight frames");
+				Check(Rd.AskCostSamples() >= 10000 && std::abs(Rd.AskCostMs()) < 0.5, "an ask that costs nothing measured as about nought on uneven frames (the frame it is made in left out)");
+			}
+			{
+				// (and no cost is taken where the asks stand closer than nine frames, each one's four frames after
+				// being among the next one's four before: none at eight frames apart, one for every ask at nine)
+				for (int Pass = 0; Pass < 2; ++Pass)
+				{
+					LandEye::DarkReader::Settings Close = RS;
+					Close.Fixed = Pass == 0 ? 0.16 : 0.18;
+					LandEye::DarkReader Rd;
+					Rd.Begin(Close);
+					for (int I = 0; I < 900; ++I)
+					{
+						const double T = 100.0 + 0.02 * (I + 1);
+						Rd.Tick(T, T, true, 100.0, true, false);
+						Rd.Ask();
+					}
+					if (Pass == 0) Check(Rd.Asks() >= 110 && Rd.AskCostSamples() == 0, "no cost taken where the asks stand eight frames apart");
+					else Check(Rd.Asks() >= 99 && Rd.AskCostSamples() >= Rd.Asks() - 2, "a cost taken for every ask where they stand nine frames apart");
+				}
 			}
 			std::printf("dark (the reader alone): %d of its bench's checks failed\n", Bad);
 			if (Bad > 0) Fault("the dark reader's own bench (its spans, its pace, the trial's fixed pace, the picture's size, an ask's cost)");

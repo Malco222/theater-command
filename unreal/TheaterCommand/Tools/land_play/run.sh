@@ -243,15 +243,21 @@ fi
 # scene does (its film passes and its bench); what no run here can tell is whether the scene makes the reader's calls
 # as the test makes them. So those lines of LandBattle.cpp are held, in the file's code alone:
 # in ReadDark(), each once and in this order, the reader's clock handed the screen's clock, the wall's, whether the
-# reading is wanted and the director's three answers; every frame come back handed on with the time its ask carried;
-# the ask, made only when the reader says so and stamped with the same screen's clock; and the line that says when
+# reading is wanted and the director's three answers; every frame come back that carries its ask handed on with the
+# time that ask carried (the loop over the frames left only by the one 'continue;' for a frame with no ask, and the
+# payload, FDarkAsk, keeping the time it is made with); the ask, made only when the reader says so and stamped with
+# the same screen's clock; and the line that says when
 # a reading is wanted (not while a look aside, the stills' walk, a card, the general's own view or the night's light
 # is on the picture, nor in a shot the rule does not judge). That the reader's Tick, Back, Ask, Resized, Begin and
 # Built are called nowhere else in the file (and the reader named no more often than its calls and its read
-# answers come to, so none is made through a pointer or a reference to it), and the grabber asked nowhere else; that it is never stopped in
+# answers come to, its type's name 'LandEye::DarkReader' apart, so none is made through a pointer or a reference to
+# it, however the member is spelt out), and the grabber asked nowhere else; that it is never stopped in
 # ReadDark() (stopped between asks it does not start again: it is simply not asked) and started only where it is
 # bound; that the rule is given the reader's last reading; that the reading stays off unless asked for; and in the
 # tick, that ReadDark() is called once, after the line that updates the film's eye with the same screen's clock.
+# And that LandBattle.h, which holds the reader by value, takes LandEye.h itself: the campaign's files take that
+# header with no other of the battle's, and without it they do not compile (26 November's review; no run here
+# builds them).
 # The test's own film pass is held to the same call. Not held: the rest of these functions, the frame grabber, the
 # share of a frame that is dark; and what the engine's preprocessor makes of the lines, which are read here as text.
 # Through release 1.5.1 the scene kept the reading's clock itself, measured it against a frame's length, asked for a
@@ -270,6 +276,26 @@ if (DarkGrab->IsCapturingFrames() && DarkReader.Ask())
 DarkGrab->CaptureThisFrame(MakeShared<FDarkAsk, ESPMode::ThreadSafe>(S.Real));"
 [ "$DARK_CALLS" = "$DARK_CALLS_WANT" ] \
   || { echo "FAULT: LandBattle.cpp ReadDark() no longer makes the dark reader's calls as they were held, each once and in this order (the size asked; 'DarkReader.Tick(S.Real, LandParts::Seconds(), bWanted, S.Eye.ShotBegan(), S.Eye.DarkCanLeave(), S.Eye.DarkRun() > 0);'; the frames taken; each one's ask read from its payload; 'DarkReader.Back(Asked->At, Share);'; 'if (DarkGrab->IsCapturingFrames() && DarkReader.Ask())'; the ask stamped 'MakeShared<FDarkAsk, ESPMode::ThreadSafe>(S.Real)'. Read: '$(printf '%s' "$DARK_CALLS" | tr '\n' ' ')'): in another order, on another clock or with another stamp the reader reads the last shot's picture as this one's, or nothing, and no run here can tell. If the lines have only been written anew bring this pin up to date, and the test's film pass with them"; STATUS=1; }
+DARK_ASK_WANT="struct FDarkAsk : IFramePayload
+{
+double At = 0.0;
+explicit FDarkAsk(double InAt) : At(InAt) {}
+};"
+[ "$(sed -n '/^[[:space:]]*struct FDarkAsk : IFramePayload$/,/^[[:space:]]*};$/p' "$CODE/LandBattle.cpp" | flat)" = "$DARK_ASK_WANT" ] \
+  && [ "$(tr -c '[:alnum:]_' '\n' < "$CODE/LandBattle.cpp" | grep -cx 'FDarkAsk' || true)" = "5" ] \
+  && [ "$(printf '%s\n' "$DARK_BODY" | grep -cxF 'for (FCapturedFrameData& Frame : Frames)' || true)" = "1" ] \
+  && [ "$(printf '%s\n' "$DARK_BODY" | grep -xF -A 1 'TArray<FCapturedFrameData> Frames = DarkGrab->GetCapturedFrames();' | tail -n 1 || true)" = "for (FCapturedFrameData& Frame : Frames)" ] \
+  && [ "$(printf '%s\n' "$DARK_BODY" | tr -c '[:alnum:]_' '\n' | grep -cx 'Frames' || true)" = "2" ] \
+  && [ "$(printf '%s\n' "$DARK_BODY" | grep -cE '(^|[^[:alnum:]_])continue([^[:alnum:]_]|$)' || true)" = "1" ] \
+  && [ "$(printf '%s\n' "$DARK_BODY" | grep -cE '(^|[^[:alnum:]_])(break|goto)([^[:alnum:]_]|$)' || true)" = "0" ] \
+  && [ "$(printf '%s\n' "$DARK_BODY" | grep -cE '(^|[^[:alnum:]_])return([^[:alnum:]_]|$)' || true)" = "2" ] \
+  && [ "$(printf '%s\n' "$DARK_BODY" | grep -xF -B 1 'DarkReader.Back(Asked->At, Share);' | head -n 1 || true)" = "}" ] \
+  && [ "$(printf '%s\n' "$DARK_BODY" | grep -xF -A 3 'if (!Asked)' | tr '\n' ' ' || true)" = "if (!Asked) { continue; } " ] \
+  || { echo "FAULT: LandBattle.cpp no longer carries an ask's time to its frame and back as it was held (the payload 'struct FDarkAsk : IFramePayload { double At = 0.0; explicit FDarkAsk(double InAt) : At(InAt) {} };', named five times in the file; in ReadDark() one loop 'for (FCapturedFrameData& Frame : Frames)' straight after the frames are taken and over all of them, left only by the one 'continue;' for a frame that carries no ask, no 'break', and 'return;' only in the two places before the reader's Tick; 'DarkReader.Back(Asked->At, Share);' standing after the share's own block, not inside it): a time altered on the way, or a frame not handed on, and the reader reads another shot's picture, or none, with every run here passing. If the lines have only been written anew bring this pin up to date"; STATUS=1; }
+[ "$(grep -cxF '#include "Battle/LandEye.h"' "$SRC/Battle/LandBattle.h" || true)" = "1" ] \
+  && [ "$(grep -nxF '#include "Battle/LandEye.h"' "$SRC/Battle/LandBattle.h" | cut -d: -f1 || true)" -lt "$(grep -nxF '#include "LandBattle.generated.h"' "$SRC/Battle/LandBattle.h" | cut -d: -f1 || true)" ] \
+  && [ "$(grep -cE '^[[:space:]]*LandEye::DarkReader DarkReader;$' "$SRC/Battle/LandBattle.h" || true)" = "1" ] \
+  || { echo "FAULT: LandBattle.h no longer takes LandEye.h itself, before its generated header ('#include \"Battle/LandEye.h\"', once), or no longer holds the dark reader by value ('LandEye::DarkReader DarkReader;'): the header names LandEye::DarkReader and LandEye::Settings, and the campaign's files (CampaignGameMode.cpp, CampaignHUD.cpp, CampaignPlayerController.cpp) and the generated code take it without LandBattleState.h, so without the line they do not compile on the Mac, and nothing here builds them. If the reader is held another way now bring this pin up to date"; STATUS=1; }
 DARK_WANTED_WANT="const bool bWanted = FMath::Abs(LookAside.X) <= 1.0 && FMath::Abs(LookAside.Y) <= 1.0 && !bWalkPanOn && !S.bCard && !(S.bGeneralEye && !S.General.bFilm) && !S.NightNow.bNight && S.NightNow.Dark <= 0.0 && S.NightNow.Black <= 0.0 && S.Eye.DarkJudged(); "
 [ "$(printf '%s\n' "$DARK_BODY" | grep -F -A 2 "const bool bWanted" | tr '\n' ' ' || true)" = "$DARK_WANTED_WANT" ] \
   && [ "$(printf '%s\n' "$DARK_BODY" | grep -cE '(^|[^[:alnum:]_])bWanted([^[:alnum:]_]|$)' || true)" = "2" ] \
@@ -278,12 +304,12 @@ dark_count() { grep -cE "$1" "$CODE/LandBattle.cpp" || true; }
 [ "$(dark_count '(^|[^[:alnum:]_])DarkReader\.Tick\(')" = "1" ] && [ "$(dark_count '(^|[^[:alnum:]_])DarkReader\.Back\(')" = "1" ] && [ "$(dark_count '(^|[^[:alnum:]_])DarkReader\.Ask\(')" = "1" ] \
   && [ "$(dark_count '(^|[^[:alnum:]_])DarkReader\.Resized\(')" = "1" ] && [ "$(dark_count '(^|[^[:alnum:]_])DarkReader\.Begin\(')" = "1" ] && [ "$(dark_count '(^|[^[:alnum:]_])DarkReader\.Built\(')" = "1" ] \
   && [ "$(dark_count 'CaptureThisFrame\(')" = "1" ] && [ "$(dark_count 'StartCapturingFrames\(')" = "1" ] && [ "$(dark_count 'StopCapturingFrames\(')" = "2" ] \
-  && [ "$(grep -oE '(^|[^[:alnum:]_:])DarkReader([^[:alnum:]_]|$)' "$CODE/LandBattle.cpp" | grep -c . || true)" = "18" ] \
+  && [ "$(sed -e 's/LandEye::DarkReader//g' "$CODE/LandBattle.cpp" | tr -c '[:alnum:]_' '\n' | grep -cx 'DarkReader' || true)" = "18" ] \
   && [ "$(printf '%s\n' "$DARK_BODY" | grep -cE 'StopCapturingFrames\(|StartCapturingFrames\(|Shutdown\(' || true)" = "0" ] \
   && [ "$(sed -n '/^void ALandBattle::StartDarkRead(const LandEye::Settings& Rule)/,/^}/p' "$CODE/LandBattle.cpp" | flat | grep -cxF "DarkReader.Begin(Pace);" || true)" = "1" ] \
   && [ "$(sed -n '/^void ALandBattle::BindDark()/,/^}/p' "$CODE/LandBattle.cpp" | flat | grep -cE '^(DarkGrab->StartCapturingFrames\(\);|DarkReader\.Built\(Size\.X, Size\.Y\);|DarkGrab->StopCapturingFrames\(\);)$' || true)" = "3" ] \
   && [ "$(sed -n '/^void ALandBattle::StopDarkRead()/,/^}/p' "$CODE/LandBattle.cpp" | flat | grep -cxF "DarkGrab->StopCapturingFrames();" || true)" = "1" ] \
-  || { echo "FAULT: LandBattle.cpp calls the dark reader, or the frame grabber, somewhere else or otherwise than it was held (the reader's Tick, Back, Ask and Resized once each, in ReadDark(); its Begin once, in StartDarkRead(); its Built once, in BindDark(), where alone the grabber is started; the grabber asked once, in ReadDark(), and stopped only in BindDark() and StopDarkRead(), never in ReadDark(); the reader named 18 times in the file, these calls and its answers read for the rule and the logs, so that none is made through another name): a second Tick or Ask in a frame runs the reader's clock twice, and a grabber stopped between asks does not start again. If the lines have only been written anew bring this pin up to date"; STATUS=1; }
+  || { echo "FAULT: LandBattle.cpp calls the dark reader, or the frame grabber, somewhere else or otherwise than it was held (the reader's Tick, Back, Ask and Resized once each, in ReadDark(); its Begin once, in StartDarkRead(); its Built once, in BindDark(), where alone the grabber is started; the grabber asked once, in ReadDark(), and stopped only in BindDark() and StopDarkRead(), never in ReadDark(); the reader named 18 times in the file apart from its type's name 'LandEye::DarkReader', these calls and its answers read for the rule and the logs, so that none is made through another name): a second Tick or Ask in a frame runs the reader's clock twice, and a grabber stopped between asks does not start again. If the lines have only been written anew bring this pin up to date"; STATUS=1; }
 [ "$(grep -cF "EyeWorld.DarkLast = [Self]() { return Self.IsValid() ? Self->DarkReader.Last() : LandEye::DarkReading(); };" "$CODE/LandBattle.cpp" || true)" = "1" ] \
   && [ "$(grep -cE '(^|[^[:alnum:]_])DarkLast([^[:alnum:]_]|$)' "$CODE/LandBattle.cpp" || true)" = "1" ] \
   && [ "$(sed -n '/^void ALandBattle::StartDarkRead(const LandEye::Settings& Rule)/,/^}/p' "$CODE/LandBattle.cpp" | flat | grep -cxF 'if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterLandDarkRead")) || FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoDarkRead")))' || true)" = "1" ] \

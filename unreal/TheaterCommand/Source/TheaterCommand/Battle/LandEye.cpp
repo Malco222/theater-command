@@ -181,7 +181,7 @@ namespace LandEye
 
 	void DarkReader::Tick(double InNow, double Wall, bool bInWanted, double ShotAt, bool bInCanLeave, bool bInRunOn)
 	{
-		// (what an ask costs: the four frames after it against the four before)
+		// (what an ask costs: the four frames after it against the four before the frame it was made in)
 		if (bTicked)
 		{
 			const double Long = Wall - WallWas;
@@ -195,11 +195,11 @@ namespace LandEye
 					bSample = false;
 				}
 			}
-			Ring[RingN % 4] = Long;
-			RingN = RingN < 4 ? RingN + 1 : 4 + (RingN + 1) % 4;
+			Ring[RingAt] = Long;
+			RingAt = (RingAt + 1) % 5;
+			RingN = std::min(RingN + 1, 5);
 		}
 		WallWas = Wall;
-		Step = bTicked ? std::max(0.0, InNow - Now) : 0.0;
 		Now = InNow;
 		bTicked = true;
 		bCanLeave = bInCanLeave;
@@ -230,10 +230,8 @@ namespace LandEye
 		{
 			OpenAt = Now;
 		}
-		if (Read.Share >= 0.0 && Now - Read.At > Every() + std::max(Set.Late, 4.0 * Step))
-		{
-			Read.Share = -1.0;
-		}
+		// (the reading stands for the rest of its span, however old: the rule counts it once and times its holds by
+		// the asks, so nothing is dropped here for its age; LandEye.h says what dropping it did)
 	}
 
 	void DarkReader::Back(double InAskedAt, double Share)
@@ -264,9 +262,10 @@ namespace LandEye
 			bDue = bWanted && OpenAt >= 0.0 && (AskedAt < OpenAt || Now - AskedAt >= Every() - 1e-6);
 		}
 		if (!bDue) return false;
-		// (a sample of the ask's cost where the last ask is eight frames gone: its four after, then four clean before)
-		bSample = RingN >= 4 && SinceAsk >= 8;
-		Before = Ring[0] + Ring[1] + Ring[2] + Ring[3];
+		// (a sample of the ask's cost where the last ask is nine frames gone: its four after, then four clean ones
+		// before, the frame this ask is made in, the newest, left out)
+		bSample = RingN >= 5 && SinceAsk >= 9;
+		Before = Ring[0] + Ring[1] + Ring[2] + Ring[3] + Ring[4] - Ring[(RingAt + 4) % 5];
 		After = 0.0;
 		SinceAsk = 0;
 		AskedAt = Now;
@@ -540,7 +539,7 @@ namespace LandEye
 		DarkSince = DarkTill = LightSince = LightTill = -1.0;
 		DarkN = LightN = 0;
 		DarkSerial = 0;
-		DarkLeft = DarkRunNow = 0;
+		DarkLeft = DarkRunNow = DarkPassed = 0;
 		bAskedUnfit = false;
 		bAsked = bAskedBuilding = bShotAsked = false;
 		Houses.clear();
@@ -4204,6 +4203,15 @@ namespace LandEye
 			}
 			else if (Read.Serial != DarkSerial)
 			{
+				// (a reading the rule never saw came between, two frames back within one frame of the game: what it
+				// said is not known, a light one between two dark as likely as not, so what was counted is let go
+				// before this one is counted)
+				if (Read.Serial != DarkSerial + 1)
+				{
+					if (DarkN > 0 || LightN > 0) ++DarkPassed;
+					DarkSince = DarkTill = LightSince = LightTill = -1.0;
+					DarkN = LightN = 0;
+				}
 				DarkSerial = Read.Serial;
 				if (Read.Share > Set.DarkLeave)
 				{

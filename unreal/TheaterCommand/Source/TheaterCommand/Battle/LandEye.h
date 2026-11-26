@@ -146,6 +146,15 @@ namespace LandEye
 	 * Frames are told apart by the time each was asked for, which the scene sends with the ask and gets back with
 	 * the frame; none is matched by counting.
 	 *
+	 * A reading stands until a newer one is read or its span ends. It is never dropped for its age, and no frame of
+	 * the span is refused for coming back late: the rule counts each reading once, by its number, and times its
+	 * holds by when the frames were ASKED for, so a reading can do nothing by standing long, and a slow machine
+	 * whose frames come back half a second after the ask is judged like any other. (The first cut, 26 November,
+	 * dropped a reading once it was older than the pace and 0.35 s. Its review showed what that did: where the
+	 * frames came back 0.37 s late or more, every reading was dropped before the next one came, the rule let go of
+	 * what it had counted each time, and a shot dark from end to end was never left; and a pace that tightened in
+	 * mid shot, a held shot let go, dropped a reading that was not old at all.)
+	 *
 	 * Each frame of the game, in this order, after Director::Update: Tick, then Back for every frame come back,
 	 * then Ask.
 	 */
@@ -154,7 +163,8 @@ namespace LandEye
 	public:
 		struct Settings
 		{
-			/** Seconds between asks while there is something to decide, and while there is not. */
+			/** Seconds between asks while there is something to decide, and while there is not (so a shot that turns
+			 * dark as it goes is found within the idle pace, and left once the rule has its readings of it). */
 			double Often = 0.25, Idle = 1.0;
 			/** A span's first ask: not before it is so many seconds and so many frames old. */
 			double First = 0.25;
@@ -162,9 +172,6 @@ namespace LandEye
 			/** The rule's own two lines (LandEye::Settings::DarkLeave, DarkLight): over the first a picture is dark,
 			 * at or under the second plainly light. */
 			double Leave = 0.30, Light = 0.15;
-			/** A reading is stale, and dropped, once it is older than the pace then kept and this (or four frames,
-			 * if they are longer): the frames have stopped coming back. */
-			double Late = 0.35;
 			/** For a trial on the Mac: over 0, ask every so many seconds whatever is on the picture, as the reading
 			 * did until 26 November; 0, never ask (the grabber bound and idle); under 0, the reader's own pace. */
 			double Fixed = -1.0;
@@ -196,10 +203,12 @@ namespace LandEye
 		int Asks() const { return AskN; }
 		int Backs() const { return BackN; }
 		int Reads() const { return ReadN; }
-		/** What an ask costs, milliseconds: the four frames after each ask against the four before it, wherever no
-		 * other ask stood within eight frames before or four after; the middle one of those differences (the cost
-		 * may be spread over more than one frame, and a frame's length is uneven by itself; AskCostSamples of them,
-		 * 0 where there is none). */
+		/** What an ask costs, milliseconds: the four frames after each ask against the four before the frame it was
+		 * made in, wherever no other ask stood within nine frames before or four after; the middle one of those
+		 * differences (the cost may be spread over more than one frame, and a frame's length is uneven by itself;
+		 * AskCostSamples of them, 0 where there is none). The frame the ask was made in is left out of both: an ask
+		 * falls due in a long frame more often than in a short one, so with it the frames before would count as
+		 * longer than they are and the cost as less than it is. */
 		double AskCostMs() const;
 		int AskCostSamples() const { return static_cast<int>(Costs.size()); }
 
@@ -207,7 +216,7 @@ namespace LandEye
 		Settings Set;
 		DarkReading Read;
 		long Serial = 0;
-		double Now = 0.0, Step = 0.0;
+		double Now = 0.0;
 		bool bTicked = false, bWanted = false, bCanLeave = true, bRunOn = false;
 		/** The span: the shot it is of, when it began, how many frames old it is, and from when its frames may be
 		 * asked for (-1 not yet); when the newest frame read in it was asked for. */
@@ -217,10 +226,10 @@ namespace LandEye
 		int AskN = 0, BackN = 0, ReadN = 0;
 		int BuiltWide = 0, BuiltHigh = 0, SeenWide = 0, SeenHigh = 0;
 		double SeenAt = 0.0;
-		/** What an ask costs: the wall clock at the last frame, the last four frames' lengths, the frames since the
-		 * last ask, and the sample being taken. */
-		double WallWas = 0.0, Ring[4] = { 0.0, 0.0, 0.0, 0.0 }, Before = 0.0, After = 0.0;
-		int RingN = 0, SinceAsk = 1000;
+		/** What an ask costs: the wall clock at the last frame, the last five frames' lengths (RingAt the oldest,
+		 * written next), the frames since the last ask, and the sample being taken. */
+		double WallWas = 0.0, Ring[5] = { 0.0, 0.0, 0.0, 0.0, 0.0 }, Before = 0.0, After = 0.0;
+		int RingAt = 0, RingN = 0, SinceAsk = 1000;
 		bool bSample = false;
 		std::vector<float> Costs;
 	};
@@ -463,7 +472,10 @@ namespace LandEye
 		 * has stood since it came back: dark (or light) from one reading to another DarkHold seconds or more after
 		 * it, in DarkReads readings or more with none between them that says otherwise. So a reading never acts alone,
 		 * however long the next one is in coming (a frame lost, a slow machine, the reader's idle pace); and a reading
-		 * asked for before the shot's first quarter second is not that shot's to be judged by, however late it comes. */
+		 * asked for before the shot's first quarter second is not that shot's to be judged by, however late it comes.
+		 * None between them: the rule is shown the last reading only, so where a reading's number is not the next
+		 * after the last one counted, one came between that the rule never saw (two frames back within one frame of
+		 * the game), and what was counted is let go, since what that one said is not known. */
 		double DarkLeave = 0.30, DarkHold = 0.5, DarkClear = 6.0, DarkLight = 0.15;
 		int DarkRunMost = 2, DarkReads = 3;
 		/** The whole mass (the production lead's plan for battles of thousands, 22 November: CD1): once a battle, between
@@ -605,6 +617,10 @@ namespace LandEye
 		/** Shots left for a dark picture (World::DarkLast), and those running now (the rule rests at DarkRunMost). */
 		int DarkCuts() const { return DarkLeft; }
 		int DarkRun() const { return DarkRunNow; }
+		/** How often the rule let go of readings it had counted because one came between that it never saw (two
+		 * frames back within one frame of the game; it is shown the last reading only). None in an ordinary battle:
+		 * a machine where they are many has its frames back in bunches, and the rule hardly works there. */
+		int DarkPassedOver() const { return DarkPassed; }
 		/** For the reading's clock (DarkReader::Tick, after Update): when the shot now held began, on the screen
 		 * clock Update is given; whether the dark rule judges it (not an opening, not a wide); and whether the rule
 		 * may leave a shot for a dark picture as things stand (it is not resting, and his hand does not hold the
@@ -801,7 +817,7 @@ namespace LandEye
 		double DarkSince = -1.0, DarkTill = -1.0, LightSince = -1.0, LightTill = -1.0;
 		int DarkN = 0, LightN = 0;
 		long DarkSerial = 0;
-		int DarkLeft = 0, DarkRunNow = 0;
+		int DarkLeft = 0, DarkRunNow = 0, DarkPassed = 0;
 		bool bAskedUnfit = false;
 		/** A cut's second, less choosy pass (no fit found in the middle of the battle). */
 		bool bLoose = false;
