@@ -386,34 +386,57 @@ namespace LandSteppe
 		// (the black fallow in July: its harrowed top dried grey-brown, fresh-turned earth darker, damp darker still, the
 		// rises dusty; weeds coming green through it; the headland rolled and paler; the balk dusty grass)
 		// (chernozem's greys: red over green by some 8, not the loess's pink)
-		const Tone FreshEarth = Rgb(106, 98, 85);
-		const Tone HarrowTop = Rgb(112, 104, 90);
-		const Tone DampEarth = Rgb(82, 76, 66);
-		const Tone DustEarth = Rgb(128, 120, 104);
-		const Tone WeedGreen = Rgb(94, 112, 58); // (goosefoot, thistle and couch: greener and darker than the pasture's buff)
+		// (the art director's ruling 2, 25 November: the earth darker, never paler, and greyer, not yellower: harrowed earth
+		// in the sun about 142, 128, 106 as the painter lights it, L 128 to 132, where it read 156, 141, 115. Fresh-turned
+		// earth a shade darker still, but fresh plough is the darkest field by its few weed patches more than by its earth
+		// (ruling 3: 28 to 30 under the pasture on the map). The rises' dust no paler than about L 132 lit, the dampest
+		// about L 113: none under L 105, where the furrows' troughs, to come, take the paint)
+		// (26 November: those numbers are what the eye sees, and in the game it sees this paint under the ground's surface
+		// (M_LandSurface, M_LandPlough), which lifts a man's bare earth some 11 L: the earth a tenth darker, so that with
+		// the surface a weedy fallow's lit earth reads L 132 (142, 133, 106) and about 121 without it; the damp a little
+		// less dark, the dampest fresh earth about L 107 with the surface; and, to keep fresh plough 28 to 30 under the
+		// pasture on the map, every state's weed patches a tenth more of the ground: Cover)
+		// (the second review: it read 140, 131, 103 lit, a little olive against 142, 128, 106: its green a shade down, its
+		// red and blue a shade up, the same lightness)
+		const Tone FreshEarth = Rgb(84, 75, 68); // (was 83, 77, 67; before the surface 94, 87, 76: HarrowTop 95, 88, 77, DampEarth 78, 72, 63, DustEarth 108, 100, 88)
+		const Tone HarrowTop = Rgb(85, 76, 69);
+		const Tone DampEarth = Rgb(70, 62, 56);
+		const Tone DustEarth = Rgb(97, 88, 79);
+		// (the weed patches: couch, goosefoot and thistle grown thick, as light as the pasture, so a patch reads as weeds
+		// come back on the dark earth: no darker blot on it; ruling 3, fresh plough the darkest field by its few patches.
+		// The second review: at 122, 132, 78 they read as lawn, the pasture's own lime laid flat. Now goosefoot's and
+		// wormwood's grey-green, the pasture's lightness but not its yellow-green (the ground's surface reads it as weeds
+		// over earth, part sward, part soil), and thinner and thicker by stretches, the earth showing through)
+		const Tone WeedGreen = Rgb(126, 129, 90);
+		const Tone Strewn = Rgb(100, 101, 82); // (the weeds strewn thin: goosefoot's mealy grey-green, last year's dead stalks)
 		const Tone OldStubble = Rgb(150, 138, 100);
 		const Tone Balk = Rgb(120, 120, 74);
 
-		/** Weeds' share of the ground for a state: fresh ploughed few, an old fallow half and more. */
-		double Cover(double State, double Line, double Side, bool& OutFresh, bool& OutStubble)
+		/**
+		 * Weed patches' share of the ground for a state: fresh ploughed fewest, an old fallow half and more; OutFresh how much
+		 * of the place is fresh ploughed and OutStubble how much last year's stubble (half worked: Worked's side of the line).
+		 * (Fresh plough the darkest field by its few patches, 28 to 30 under the pasture on the map: ruling 3.)
+		 */
+		double Cover(double State, double Worked, double& OutFresh, double& OutStubble)
 		{
-			OutStubble = false;
+			OutStubble = 0.0;
+			// (the second review: every state was some 57 to 61% weeds on the map and fresh plough only 0.9 L the darkest:
+			// fresh plough fewer patches, an old fallow many more; fresh 28 to 30 under the pasture, the rest lighter)
 			if (State < 0.35)
 			{
-				OutFresh = true;
-				return 0.28;
+				OutFresh = 1.0;
+				return 0.52;
 			}
 			if (State < 0.75)
 			{
-				OutFresh = false;
-				return 0.3 + 0.25 * (State - 0.35) / 0.4; // (0.3 to 0.55)
+				OutFresh = 0.0;
+				return 0.68 + 0.14 * (State - 0.35) / 0.4; // (0.68 to 0.82)
 			}
 			// Half worked: the line straight along the furrows, 30 to 70% across; the near part fresh, the far part weedy or stubble.
-			const double At = 0.3 + 0.4 * Line;
-			OutFresh = Side < At;
-			if (OutFresh) return 0.18;
-			OutStubble = State > 0.875;
-			return OutStubble ? 0.35 : 0.55; // (a third of the ground and more left bare: a man in it sees earth)
+			OutFresh = Worked;
+			const bool bStubble = State > 0.875;
+			if (bStubble) OutStubble = 1.0 - Worked;
+			return Worked * 0.4 + (1.0 - Worked) * (bStubble ? 0.55 : 0.76); // (a quarter of the ground and more left bare: a man in it sees earth)
 		}
 		/** Where a noise of spread about 0.3 is passed by a share Cover of the ground (the logistic's stand-in for the normal's
 		 * quantile: one log, where Tukey's lambda took two powers, and the clutter asks it of every thing on a fallow). */
@@ -422,69 +445,105 @@ namespace LandSteppe
 			const double P = std::clamp(1.0 - Cover, 0.02, 0.98);
 			return 0.3 * std::log(P / (1.0 - P)) / 1.702;
 		}
-		Tone EarthOf(bool bFresh, bool bStubble, double Wet)
+		Tone EarthOf(double Fresh, double Stubble, double Wet)
 		{
-			Tone E = bStubble ? Mix(HarrowTop, OldStubble, 0.6) : bFresh ? FreshEarth : HarrowTop;
-			E = Mix(E, DampEarth, 0.5 * Smooth(0.0, 1.2, Wet));
+			Tone E = Mix(Mix(HarrowTop, FreshEarth, Fresh), Mix(HarrowTop, OldStubble, 0.6), Stubble);
+			E = Mix(E, DampEarth, 0.35 * Smooth(0.0, 1.2, Wet));
 			return Mix(E, DustEarth, 0.4 * Smooth(0.0, -1.2, Wet));
 		}
-		double WeedShare(const FallowSpot& S, bool& OutFresh, bool& OutStubble)
+		/**
+		 * The weeds' share at a place: the patches where the weed noise passes the state's threshold (greener in the
+		 * hollows, where the damp lies), and between them the weeds strewn thin (seedlings come up even among fresh
+		 * plough's clods: so the earth seen bare runs 15 m at most), rising and falling with the fine noise (no cut: its
+		 * slope spreads it over 7 m and more). The patches' cut spread over 6.4
+		 * m (and Soft more), measured in metres by the noise's own slope there: one and a half of the near mesh's points, so
+		 * the mesh cannot draw an outline in its squares and diagonals.
+		 */
+		double WeedShare(const FallowSpot& S, double& OutFresh, double& OutStubble, double& OutStrewn)
 		{
-			const double C = Cover(S.State, S.Line, S.Side, OutFresh, OutStubble);
-			const double T = Threshold(C);
-			// (greener in the hollows, where the damp lies)
-			return Smooth(T - 0.08 - S.Soft, T + 0.08 + S.Soft, S.Weed + 0.15 * S.Wet);
+			const double C = Cover(S.State, S.Worked, OutFresh, OutStubble);
+			const double Half = 3.2 + S.Soft;
+			OutStrewn = 0.35 * Smooth(-0.68, -0.06, S.Sprig);
+			return Smooth(-Half, Half, (S.Weed + 0.15 * S.Wet - Threshold(C)) / std::max(S.Grade, 0.004));
 		}
+		/** The headland where the plough turned and the balk outside the plough, each spread over 7 m and more. */
+		double Headland(const FallowSpot& S) { return Smooth(S.Head + 3.5 + S.Soft, S.Head - 3.5 - S.Soft, S.In); }
+		double BalkShare(const FallowSpot& S) { return Smooth(3.2 + S.Soft, -3.2 - S.Soft, S.In); }
 	}
 
 	Tone FallowColour(const FallowSpot& S)
 	{
-		bool bFresh = false, bStubble = false;
-		const double W = WeedShare(S, bFresh, bStubble);
-		Tone C = EarthOf(bFresh, bStubble, S.Wet);
+		double Fresh = 0.0, Stubble = 0.0, Thin = 0.0;
+		const double W = WeedShare(S, Fresh, Stubble, Thin);
+		Tone C = EarthOf(Fresh, Stubble, S.Wet);
 		// (the drill bands along the furrows, faint, only on the bare earth; the mottle as FieldColour's)
 		C = Vary(C, 1.0 + 0.04 * S.Lands * (1.0 - W));
 		// The headland where the plough turned: rolled, paler, weedier, over its own width in from the plough's edge.
-		const double H = Smooth(S.Head + 2.0, S.Head - 2.0, S.In);
+		const double H = Headland(S);
 		C = Mix(C, DustEarth, 0.2 * H);
+		// (the weeds strewn thin between the patches, greyer than the patches: no bare earth over 15 m unbroken)
+		C = Mix(C, Strewn, 0.7 * Thin);
 		// (the weeds' green over the earth, the earth always showing through: the clutter stands the plants on it)
-		C = Mix(C, WeedGreen, 0.6 * (W + (1.0 - W) * 0.2 * H));
+		// (thinner and thicker by stretches some 7 m across, so a patch is no flat floor of one green)
+		C = Mix(C, WeedGreen, std::min(1.0, 0.85 * (1.0 + 0.2 * S.N2)) * (W + (1.0 - W) * 0.2 * H));
 		C = Vary(C, 1.0 + 0.04 * S.N2 + 0.05 * S.Broad);
 		// The balk: dusty grass and weeds from the field's edge to where the plough began.
 		const Tone B = Vary(Balk, 1.0 + 0.04 * S.N2 + 0.05 * S.Broad);
-		return Mix(C, B, Smooth(1.2, -1.2, S.In));
+		return Mix(C, B, BalkShare(S));
 	}
 
-	double FallowGreen(const FallowSpot& S)
+	double FallowGreen(const FallowSpot& S, double* OutPatch)
 	{
-		bool bFresh = false, bStubble = false;
-		const double W = WeedShare(S, bFresh, bStubble);
-		const double H = Smooth(S.Head + 2.0, S.Head - 2.0, S.In);
+		double Fresh = 0.0, Stubble = 0.0, Thin = 0.0;
+		const double Patch = WeedShare(S, Fresh, Stubble, Thin);
+		if (OutPatch) *OutPatch = Patch;
+		const double W = std::max(Patch, Thin);
+		const double H = Headland(S);
 		const double G = W + (1.0 - W) * 0.2 * H;
-		return G + (1.0 - G) * Smooth(1.2, -1.2, S.In);
+		return G + (1.0 - G) * BalkShare(S);
 	}
 
-	Tone FarFallowColour(double State, double Line, double Side, double N1, double Broad, double Gap)
+	double FurrowShare(const FallowSpot& S)
 	{
-		bool bFresh = false, bStubble = false;
-		const double C0 = Cover(State, Line, Side, bFresh, bStubble);
-		// (the near paint's mean: its earth, its weeds' share; the headland a little paler on the whole)
-		Tone C = Mix(EarthOf(bFresh, bStubble, 0.0), WeedGreen, 0.6 * C0);
+		double Fresh = 0.0, Stubble = 0.0, Thin = 0.0;
+		const double Patch = WeedShare(S, Fresh, Stubble, Thin);
+		// (fresh ploughed 1; an old fallow's furrows grown over and slumped, some three fifths (a
+		// man in one sees them to 30 m: row 5); half worked, the line's fresh side 1 and
+		// its far side as an old fallow's, or a third where it is last year's stubble)
+		// (the second review: at three fifths a man saw them half as strong as asked; an old fallow's furrows now four
+		// fifths, stubble's near a half, the strewn weeds hiding them less)
+		double Worked = 0.8;
+		if (S.State < 0.35) Worked = 1.0;
+		else if (S.State >= 0.75) Worked = S.Worked + (1.0 - S.Worked) * (S.State > 0.875 ? 0.45 : 0.8);
+		// (the weeds strewn thin between the patches hide the furrows a little: at most a tenth)
+		return Worked * (1.0 - Patch) * (1.0 - 0.3 * Thin) * (1.0 - Headland(S)) * (1.0 - BalkShare(S));
+	}
+
+	Tone FarFallowColour(double State, double Line, double Side, double N1, double Broad, double Gap, double Blur)
+	{
+		double Fresh = 0.0, Stubble = 0.0;
+		const double At = 0.3 + 0.4 * Line;
+		const double C0 = Cover(State, Smooth(At + Blur, At - Blur, Side), Fresh, Stubble);
+		// (the near paint's mean: its earth, its weeds' share and the weeds strewn between; the headland a little paler on
+		// the whole)
+		Tone C = Mix(EarthOf(Fresh, Stubble, 0.0), Strewn, 0.7 * 0.35 * 0.85);
+		C = Mix(C, WeedGreen, 0.85 * C0);
 		C = Mix(C, DustEarth, 0.02);
 		// (fresh earth far off: the weeds along its furrows and its headland's dust lift it; no dark slab at the haze)
-		if (bFresh) C = Mix(C, Balk, 0.2);
+		C = Mix(C, Balk, 0.2 * Fresh);
 		C = Vary(C, 1.0 + 0.06 * N1 + 0.05 * Broad);
-		return Mix(C, Balk, 0.5 * Smooth(7.0, 1.0, Gap));
+		return Mix(C, Balk, 0.5 * Smooth(14.0, 1.0, Gap));
 	}
 
 	Tone FallowGrazing(double Broad) { return Vary(Mix(Balk, Grass, 0.5), 1.0 + 0.05 * Broad); }
 
-	Tone WorksColour(double Dig, double N1, double N2, double Broad)
+	Tone WorksColour(double Dig, double N1, double Mottle, double Broad)
 	{
-		// (the earth thrown up dried grey-brown, fresh spoil darker; between, the grass trodden and dusty)
-		const Tone Dug = Mix(Rgb(92, 82, 66), Rgb(118, 106, 86), Smooth(-0.3, 0.4, N2));
+		// (the earth thrown up dried grey-brown, fresh spoil darker; between, the grass trodden and dusty; the spoil's
+		// tone spread by its round mottle, never cut)
+		const Tone Dug = Mix(Rgb(92, 82, 66), Rgb(118, 106, 86), Smooth(-0.6, 0.6, Mottle));
 		const Tone Trod = Mix(Mix(Strip, DryGrass, 0.4), Rgb(126, 116, 88), 0.3 + 0.3 * Smooth(-0.2, 0.5, N1));
-		return Vary(Mix(Trod, Dug, Dig), 1.0 + 0.05 * N2 + 0.05 * Broad);
+		return Vary(Mix(Trod, Dug, Dig), 1.0 + 0.05 * Mottle + 0.05 * Broad);
 	}
 
 	Tone RoughColour(double N1, double N2)

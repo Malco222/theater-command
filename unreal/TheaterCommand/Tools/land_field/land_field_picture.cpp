@@ -159,7 +159,8 @@ namespace LandFieldPicture
 		{
 			MatGround,
 			MatLeaves,
-			MatBlades
+			MatBlades,
+			MatSoil // a ground tile under the game's ground surface (LAND_FIELD_SURFACE): its paint kept as sRGB, made up in Shade
 		};
 
 		/**
@@ -272,6 +273,270 @@ namespace LandFieldPicture
 			return A;
 		}
 
+		// ------------------------------------------------------------------ the game's ground surface (M_LandSurface)
+
+		/**
+		 * One of the ground's detail pictures (Tools/land_look/T_LandGrain.png, T_LandBump.png, T_LandPatch.png,
+		 * make_ground_textures.py) as the game reads it: plain numbers (not sRGB), wrapping, with its smaller pictures made
+		 * at load by 2 x 2 averages (as the engine's simple-average mips), read between pixels and between sizes.
+		 */
+		struct Mipped
+		{
+			std::vector<std::vector<float>> MipPx; // RGBA, 0..1, the full picture first
+			std::vector<int> MipSide;
+			bool Ok() const { return !MipPx.empty(); }
+			int MipWidth() const { return MipSide.empty() ? 0 : MipSide[0]; }
+
+			void ReadAt(int L, double U, double V, float Out[4]) const
+			{
+				const int S = MipSide[L];
+				const std::vector<float>& Px = MipPx[L];
+				const double X = (U - std::floor(U)) * S - 0.5, Y = (V - std::floor(V)) * S - 0.5;
+				const double FX0 = std::floor(X), FY0 = std::floor(Y);
+				const float FX = static_cast<float>(X - FX0), FY = static_cast<float>(Y - FY0);
+				const int X0 = (static_cast<int>(FX0) % S + S) % S, Y0 = (static_cast<int>(FY0) % S + S) % S;
+				const int X1 = (X0 + 1) % S, Y1 = (Y0 + 1) % S;
+				const float* A = &Px[(static_cast<size_t>(Y0) * S + X0) * 4];
+				const float* B = &Px[(static_cast<size_t>(Y0) * S + X1) * 4];
+				const float* C = &Px[(static_cast<size_t>(Y1) * S + X0) * 4];
+				const float* D = &Px[(static_cast<size_t>(Y1) * S + X1) * 4];
+				for (int Q = 0; Q < 4; ++Q) Out[Q] = (A[Q] + (B[Q] - A[Q]) * FX) * (1.0f - FY) + (C[Q] + (D[Q] - C[Q]) * FX) * FY;
+			}
+			/** At a size (Lod 0 the full picture, 1 the half...), between the two nearest sizes. */
+			void ReadBetween(double U, double V, double Lod, float Out[4]) const
+			{
+				const int Top = static_cast<int>(MipPx.size()) - 1;
+				Lod = std::clamp(Lod, 0.0, static_cast<double>(Top));
+				const int L0 = static_cast<int>(std::floor(Lod)), L1 = std::min(L0 + 1, Top);
+				const float F = static_cast<float>(Lod - L0);
+				ReadAt(L0, U, V, Out);
+				if (F <= 0.0f || L1 == L0) return;
+				float Two[4];
+				ReadAt(L1, U, V, Two);
+				for (int Q = 0; Q < 4; ++Q) Out[Q] += (Two[Q] - Out[Q]) * F;
+			}
+		};
+
+		Mipped LoadMipped(const std::string& Path)
+		{
+			Mipped Out;
+			const std::string Cmd = "convert '" + Path + "' -depth 8 RGBA:- 2>/dev/null";
+			FILE* P = popen(Cmd.c_str(), "r");
+			if (!P) return Out;
+			std::vector<uint8_t> Buf;
+			uint8_t Chunk[65536];
+			size_t Got;
+			while ((Got = std::fread(Chunk, 1, sizeof(Chunk), P)) > 0) Buf.insert(Buf.end(), Chunk, Chunk + Got);
+			pclose(P);
+			const size_t Side = static_cast<size_t>(std::lround(std::sqrt(static_cast<double>(Buf.size() / 4))));
+			if (Side == 0 || Side * Side * 4 != Buf.size() || (Side & (Side - 1)) != 0) return Out;
+			std::vector<float> Full(Buf.size());
+			for (size_t K = 0; K < Buf.size(); ++K) Full[K] = Buf[K] / 255.0f;
+			Out.MipPx.push_back(std::move(Full));
+			Out.MipSide.push_back(static_cast<int>(Side));
+			while (Out.MipSide.back() > 1)
+			{
+				const int S = Out.MipSide.back(), H = S / 2;
+				const std::vector<float>& Up = Out.MipPx.back();
+				std::vector<float> Down(static_cast<size_t>(H) * H * 4);
+				for (int Y = 0; Y < H; ++Y)
+					for (int X = 0; X < H; ++X)
+						for (int Q = 0; Q < 4; ++Q)
+							Down[(static_cast<size_t>(Y) * H + X) * 4 + Q] =
+								0.25f * (Up[(static_cast<size_t>(2 * Y) * S + 2 * X) * 4 + Q] + Up[(static_cast<size_t>(2 * Y) * S + 2 * X + 1) * 4 + Q] +
+										 Up[(static_cast<size_t>(2 * Y + 1) * S + 2 * X) * 4 + Q] + Up[(static_cast<size_t>(2 * Y + 1) * S + 2 * X + 1) * 4 + Q]);
+				Out.MipPx.push_back(std::move(Down));
+				Out.MipSide.push_back(H);
+			}
+			return Out;
+		}
+
+		/**
+		 * LAND_FIELD_SURFACE=1: the ground tiles (near, far, the ring; not the tiles' built pieces, the houses, the plants
+		 * or the men, which keep M_MapSurface in the game) painted as M_LandSurface paints them (build_content.py,
+		 * build_land_surface) over their vertex paint: the grain, the broad lie, the tussocks, the trodden places, the
+		 * lean, with the material's numbers and the one the game changes when it starts (TopLight 0.08, LandBattle.cpp;
+		 * LAND_FIELD_SURFACE_TOPLIGHT=t as the game's -TheaterLandTopLight=t). The pictures from Tools/land_look, or LAND_SURFACE_DIR. Unset (or the pictures not read): as before, to the byte.
+		 */
+		struct SurfaceSet
+		{
+			bool bSurfaceOn = false;
+			Mipped GrainPic, BumpPic, PatchPic;
+			double TopLight = 0.08;
+			int MostAniso = 8;
+			/** The furrows on ploughland (M_LandPlough: the tiles' Mesh::Uvs, LandField::Furrows): on unless
+			 * LAND_FIELD_FURROWS=0 (the game without M_LandPlough); LAND_FIELD_FURROW_DIAL="period trough depth lean
+			 * fade-start fade-end" sets the material's numbers as the art director's Mac pass would. */
+			bool bFurrows = true;
+			LandField::FurrowDial Dial;
+		};
+		const SurfaceSet& SurfaceAsked()
+		{
+			static const SurfaceSet S = [] {
+				SurfaceSet Out;
+				const char* E = std::getenv("LAND_FIELD_SURFACE");
+				if (!E || std::atoi(E) <= 0) return Out;
+				std::string Dir;
+				if (const char* D = std::getenv("LAND_SURFACE_DIR")) Dir = D;
+				else
+				{
+					Dir = __FILE__;
+					const size_t Cut = Dir.rfind("land_field/");
+					Dir = Cut == std::string::npos ? std::string("Tools/land_look") : Dir.substr(0, Cut) + "land_look";
+				}
+				Out.GrainPic = LoadMipped(Dir + "/T_LandGrain.png");
+				Out.BumpPic = LoadMipped(Dir + "/T_LandBump.png");
+				Out.PatchPic = LoadMipped(Dir + "/T_LandPatch.png");
+				Out.bSurfaceOn = Out.GrainPic.Ok() && Out.BumpPic.Ok() && Out.PatchPic.Ok();
+				if (const char* T = std::getenv("LAND_FIELD_SURFACE_TOPLIGHT")) Out.TopLight = std::clamp(std::atof(T), 0.0, 1.0);
+				if (const char* Fw = std::getenv("LAND_FIELD_FURROWS")) Out.bFurrows = std::atoi(Fw) > 0;
+				if (const char* Dl = std::getenv("LAND_FIELD_FURROW_DIAL"))
+				{
+					LandField::FurrowDial& D = Out.Dial;
+					std::sscanf(Dl, "%lf %lf %lf %lf %lf %lf", &D.Period, &D.Trough, &D.Depth, &D.Lean, &D.FadeStart, &D.FadeEnd);
+				}
+				if (Out.bSurfaceOn)
+					std::printf("  the furrows on ploughland (M_LandPlough over the tiles' Uvs): %s, period %.2f m, trough %.2f, depth %.2f, lean %.3f m, fade %.0f to %.0f m\n",
+					            Out.bFurrows ? "on" : "off (LAND_FIELD_FURROWS=0)", Out.Dial.Period, Out.Dial.Trough, Out.Dial.Depth, Out.Dial.Lean, Out.Dial.FadeStart, Out.Dial.FadeEnd);
+				std::printf("  the ground's surface (M_LandSurface over the tiles' paint, LAND_FIELD_SURFACE): %s from %s, TopLight %.2f\n",
+				            Out.bSurfaceOn ? "ON" : "NOT read, off", Dir.c_str(), Out.TopLight);
+				return Out;
+			}();
+			return S;
+		}
+
+		/**
+		 * M_LandSurface at one sample of a ground tile. Raw: the vertex paint as the mesh holds it (sRGB, 0..1,
+		 * between the corners); Nm: the mesh's normal (unit, the field's frame); P: the place (the field's metres);
+		 * Depth: along the view (metres); Major, Minor: the picture's pixel on the ground (the longer way as a vector, the
+		 * shorter as a length, metres), which pick the pictures' sizes and the taps along the longer way (as a graphics
+		 * chip's anisotropic filter, at most MostAniso). Out: the base colour (linear) and the normal the light sees.
+		 * The engine's world is the field's x and y swapped, in centimetres (LandParts::FromField, 100 a metre): the
+		 * material's metres (R, G) are the field's (y, x).
+		 * Way: the tile's two numbers there (Mesh::Uvs between the corners: ploughland's furrows, M_LandPlough; zero for
+		 * none); StepR, StepD how far the place moves one picture pixel right and one down (the material's ddx, ddy).
+		 */
+		void SurfaceShade(const SurfaceSet& S, const double Raw[3], const V3& Nm, const V3& P, double Depth, const V3& Major, double Minor, const float Way[2], const V3& StepR,
+						  const V3& StepD, float Out[3], V3& Lit)
+		{
+			const double WX = P.Y, WY = P.X; // the engine's X and Y, metres
+			const double MajorLen = std::hypot(Major.X, Major.Y);
+			const int Reads = std::clamp(static_cast<int>(std::ceil(MajorLen / std::max(Minor, 1e-6))), 1, S.MostAniso);
+			const double Step = MajorLen / Reads;
+			const double GrainSide = S.GrainPic.MipWidth(), BumpSide = S.BumpPic.MipWidth(), PatchSide = S.PatchPic.MipWidth();
+			auto LodOf = [Step](double TexelsPerMetre) { return std::max(0.0, std::log2(std::max(Step * TexelsPerMetre, 1e-9))); };
+			const double LodGA = LodOf(0.5 * GrainSide), LodGB = LodOf(0.365 * GrainSide);
+			const double LodBA = LodOf(0.5 * BumpSide), LodBB = LodOf(0.365 * BumpSide);
+			const double LodPA = LodOf(0.025 * PatchSide), LodPB = LodOf(0.0103 * PatchSide);
+			float GA[4] = {}, GB[4] = {}, BA[4] = {}, BB[4] = {}, PA[4] = {}, PB[4] = {};
+			for (int I = 0; I < Reads; ++I)
+			{
+				const double T = (I + 0.5) / Reads - 0.5;
+				const double X = WX + Major.Y * T, Y = WY + Major.X * T; // (the major way in the engine's frame)
+				float Got[4];
+				auto Add = [&Got](float Sum[4]) { for (int Q = 0; Q < 4; ++Q) Sum[Q] += Got[Q]; };
+				S.GrainPic.ReadBetween(X * 0.5, Y * 0.5, LodGA, Got);
+				Add(GA);
+				S.GrainPic.ReadBetween(Y * 0.365 + 0.31, X * 0.365 + 0.57, LodGB, Got);
+				Add(GB);
+				S.BumpPic.ReadBetween(X * 0.5, Y * 0.5, LodBA, Got);
+				Add(BA);
+				S.BumpPic.ReadBetween(Y * 0.365 + 0.31, X * 0.365 + 0.57, LodBB, Got);
+				Add(BB);
+				S.PatchPic.ReadBetween(X * 0.025, Y * 0.025, LodPA, Got);
+				Add(PA);
+				S.PatchPic.ReadBetween(Y * 0.0103 + 0.43, X * 0.0103 + 0.11, LodPB, Got);
+				Add(PB);
+			}
+			for (float* Sum : { GA, GB, BA, BB, PA, PB })
+				for (int Q = 0; Q < 4; ++Q) Sum[Q] /= static_cast<float>(Reads);
+			auto Sat = [](double V) { return std::clamp(V, 0.0, 1.0); };
+			auto Mixed = [](double A, double B, double T) { return A + (B - A) * T; };
+			// The two readings of the grain, mixed by the lie's warmth, pushed back out from 0.5 (GrainRestore).
+			const double Lead = PA[1] * 0.4 + 0.3, Restore = 1.3;
+			double GrainNow[3];
+			for (int Q = 0; Q < 3; ++Q) GrainNow[Q] = (Mixed(GA[Q], GB[Q], Lead) - 0.5) * Restore + 0.5;
+			const double GrassLum = GrainNow[0], SoilLum = GrainNow[1], GrassHue = GrainNow[2];
+			// Only where the surface faces up; fading with the depth (DetailFadeStart 12 m, DetailFadeEnd 140 m, DetailFar 0.35).
+			const double Skyward = Nm.Z;
+			const double Up = Sat((Skyward - 0.55) * 4.0);
+			const double Fade = Sat((Depth - 12.0) / (140.0 - 12.0));
+			const double Strength = 1.0 * Mixed(1.0, 0.35, Fade) * Up;
+			// Grass or soil from the paint itself; the trodden places on grass (Wear 1).
+			const double Green = Sat((Raw[1] - Raw[0]) * 12.0 + 0.6);
+			const double Wear = Sat(PA[2] * 1.0) * Green * Up;
+			const double Grassy = Green * (1.0 - Wear);
+			// The broad lie (PatchValue 0.8, PatchWarmth 1, PatchStrength 1), snow's exception (PatchSnow 0.85), tussocks
+			// (TussockBroad 0.5, TussockDark -0.4, TussockCool -0.3), PatchHue (0.35, 0.1, -0.45).
+			const double PatchR = 0.5 * (PA[0] + PB[0]), PatchG = 0.5 * (PA[1] + PB[1]);
+			const double PatchValue = (PatchR - 0.5) * 0.8, PatchWarm = (PatchG - 0.5) * 1.0;
+			const double Snowy = Sat((Raw[2] - 0.7) * 8.0);
+			const double Unsnowed = Snowy * -0.85 + 1.0;
+			const double PatchOn = 1.0 * Up * Unsnowed;
+			const double Lush = Sat(PB[1] * -4.0 + 3.0);
+			const double Clumps = PA[3] + PB[3] * 0.5;
+			const double Tussock = Sat(Clumps * Lush) * Grassy * PatchOn;
+			const double ValueShift = PatchValue * PatchOn + Tussock * -0.4;
+			const double WarmShift = PatchWarm * PatchOn + Tussock * -0.3;
+			const double PatchHue[3] = { 0.35, 0.1, -0.45 }, GrainHue[3] = { 0.3, 0.1, -0.35 }, WornColour[3] = { 0.17, 0.14, 0.085 };
+			// The grain's brightness and hue (SoilWarmth 1.6; a sward's own hue twice over).
+			const double Lum = Mixed(SoilLum, GrassLum, Grassy);
+			const double Factor = Mixed(1.0, Lum * 2.0, Strength);
+			const double Hue = Mixed((SoilLum - 0.5) * 1.6, (GrassHue - 0.5) * 2.0, Grassy);
+			const double Worn = Wear * 0.6; // WornMix
+			const double TopLit = 1.0 + Sat(Skyward) * S.TopLight;
+			// The furrows on ploughland (M_LandPlough's furrow_term: LandField::Furrows, its specification), where the tile
+			// carries them; nothing (times 1, no lean) where it does not.
+			const LandField::FurrowLook Furrow = S.bFurrows ? LandField::Furrows(P.X, P.Y, Way[0], Way[1], Depth, StepR.X, StepR.Y, StepD.X, StepD.Y, Up, 1.0 - Grassy, SoilLum, PatchValue, S.Dial)
+														  : LandField::FurrowLook();
+			for (int Q = 0; Q < 3; ++Q)
+			{
+				const double Broad = (ValueShift + 1.0) * (PatchHue[Q] * WarmShift + 1.0);
+				const double Tinted = GrainHue[Q] * (Hue * Strength) + 1.0;
+				const double Base = Mixed(std::pow(std::max(Raw[Q], 0.0), 2.2), WornColour[Q], Worn);
+				// (the engine keeps a base colour within 0..1)
+				Out[Q] = static_cast<float>(std::clamp(Base * Broad * Tinted * Factor * Furrow.Times * TopLit, 0.0, 1.0));
+			}
+			// The lean: the soil's (blue, alpha) or the sward's (red, green), the turned reading's turned back, restored,
+			// DetailBump 0.8, flattened to DetailBumpFar 0.15 by the fade, only facing up; added to the mesh's normal.
+			const double LeanAX = Mixed(BA[2] * 2.0 - 1.0, BA[0] * 2.0 - 1.0, Grassy), LeanAY = Mixed(BA[3] * 2.0 - 1.0, BA[1] * 2.0 - 1.0, Grassy);
+			const double LeanBX = Mixed(BB[3] * 2.0 - 1.0, BB[1] * 2.0 - 1.0, Grassy), LeanBY = Mixed(BB[2] * 2.0 - 1.0, BB[0] * 2.0 - 1.0, Grassy);
+			const double Scale = Restore * 0.8 * Mixed(1.0, 0.15, Fade) * Up;
+			const double LeanX = Mixed(LeanAX, LeanBX, Lead) * Scale, LeanY = Mixed(LeanAY, LeanBY, Lead) * Scale; // the engine's X, Y
+			Lit = Unit({ Nm.X + LeanY + Furrow.LeanX, Nm.Y + LeanX + Furrow.LeanY, Nm.Z });
+		}
+
+		/** The ground a picture's pixel covers at a sample (the plane of the sample's face, one picture pixel, Down
+		 * samples, each way): the longer way as a vector and the shorter's length, along the ground (x and y only, as the
+		 * material reads the pictures by the world's x and y). */
+		void Footprint(const View& V, double SX, double SY, double Down, const V3& P, const V3& N, V3& Major, double& Minor, V3* OutR = nullptr, V3* OutD = nullptr)
+		{
+			auto Hit = [&](double X, double Y) {
+				V3 From = V.Eye, Way = V.Fwd;
+				if (V.bOrtho) From = V.FromSample(X, Y, 0.0);
+				else Way = V.RayOf(X, Y);
+				const double Facing = Dot(Way, N);
+				const double T = std::fabs(Facing) < 1e-6 ? 1e6 : Dot(P - From, N) / Facing;
+				return From + Way * std::clamp(T, 0.0, 1e6);
+			};
+			const V3 A = Hit(SX + Down, SY) - P, B = Hit(SX, SY + Down) - P;
+			if (OutR) *OutR = A;
+			if (OutD) *OutD = B;
+			const double LA = std::hypot(A.X, A.Y), LB = std::hypot(B.X, B.Y);
+			Major = LA >= LB ? V3{ A.X, A.Y, 0.0 } : V3{ B.X, B.Y, 0.0 };
+			const double Most = 1e4;
+			const double LM = std::max(LA, LB);
+			if (LM > Most) Major = Major * (Most / LM);
+			Minor = std::min(std::min(LA, LB), Most);
+		}
+
+		/** LAND_FIELD_PICTURES="eye,oblique,map" (any of them): only those painted. Unset: all three. */
+		bool WantPicture(const char* Which)
+		{
+			const char* E = std::getenv("LAND_FIELD_PICTURES");
+			return !E || std::string(E).find(Which) != std::string::npos;
+		}
+
 		struct Draw
 		{
 			const LandField::Mesh* M = nullptr;
@@ -288,6 +553,8 @@ namespace LandFieldPicture
 			bool bDepthOnly = false;
 			std::vector<float> Depth, Albedo, Normal;
 			std::vector<uint8_t> Mat;
+			/** Under the game's surface: the ground's two numbers a sample (Mesh::Uvs, ploughland's furrows), between its corners. */
+			std::vector<float> Plough;
 			void Init(int InW, int InH, bool bOnlyDepth)
 			{
 				W = InW;
@@ -300,6 +567,7 @@ namespace LandFieldPicture
 					Albedo.assign(N * 3, 0.0f);
 					Normal.assign(N * 3, 0.0f);
 					Mat.assign(N, 0);
+					if (SurfaceAsked().bSurfaceOn) Plough.assign(N * 2, 0.0f);
 				}
 			}
 		};
@@ -375,6 +643,11 @@ namespace LandFieldPicture
 						T.Normal[K * 3 + Q] = static_cast<float>(W0 * A.N[Q] + W1 * B.N[Q] + W2 * C.N[Q]);
 					}
 					T.Mat[K] = Mat;
+					if (Mat == MatSoil && !T.Plough.empty())
+					{
+						T.Plough[K * 2] = static_cast<float>(W0 * A.U + W1 * B.U + W2 * C.U);
+						T.Plough[K * 2 + 1] = static_cast<float>(W0 * A.V + W1 * B.V + W2 * C.V);
+					}
 				}
 			}
 		}
@@ -428,12 +701,20 @@ namespace LandFieldPicture
 							O.U = M.Uvs[K * 2];
 							O.V = M.Uvs[K * 2 + 1];
 						}
+						else if (D.Mat == MatSoil) // (a ground tile under the game's surface: its furrows' two numbers, or none)
+						{
+							const bool bWay = M.Uvs.size() == 2 * N;
+							O.U = bWay ? M.Uvs[K * 2] : 0.0f;
+							O.V = bWay ? M.Uvs[K * 2 + 1] : 0.0f;
+						}
 						if (!T.bDepthOnly)
 						{
 							const LandField::Rgb8 Cl = M.Colours[K];
 							O.C[0] = LinearOf[Cl.R] * D.Tint[0];
 							O.C[1] = LinearOf[Cl.G] * D.Tint[1];
 							O.C[2] = LinearOf[Cl.B] * D.Tint[2];
+							if (D.Mat == MatSoil) // (M_LandSurface reads the paint as the mesh holds it, and makes it linear itself)
+								for (int Ch = 0; Ch < 3; ++Ch) O.C[Ch] = (Ch == 0 ? Cl.R : Ch == 1 ? Cl.G : Cl.B) / 255.0f;
 							O.N[0] = static_cast<float>(Nm.X);
 							O.N[1] = static_cast<float>(Nm.Y);
 							O.N[2] = static_cast<float>(Nm.Z);
@@ -567,15 +848,17 @@ namespace LandFieldPicture
 				const double R = 0.5 * std::sqrt((T.X1 - T.X0) * (T.X1 - T.X0) + (T.Y1 - T.Y0) * (T.Y1 - T.Y0) + (T.ZMax - T.ZMin) * (T.ZMax - T.ZMin));
 				return Cull.Sees(C, R + 30.0);
 			};
+			// (the ground tiles themselves on the game's ground surface when it is asked for; their built pieces never)
+			const uint8_t TileMat = SurfaceAsked().bSurfaceOn ? MatSoil : MatGround;
 			for (const LandField::Tile& T : G.Tiles())
 			{
 				if (!Boxed(T)) continue;
 				const double DX = std::max({ 0.0, T.X0 - Eye.X, Eye.X - T.X1 }), DY = std::max({ 0.0, T.Y0 - Eye.Y, Eye.Y - T.Y1 });
-				Add(bAllNear || std::hypot(DX, DY) < NearTiles ? T.Near : T.Far, MatGround);
+				Add(bAllNear || std::hypot(DX, DY) < NearTiles ? T.Near : T.Far, TileMat);
 				Add(T.Built, MatGround);
 			}
 			for (const LandField::Tile& T : G.Ring())
-				if (Boxed(T)) Add(T.Near, MatGround);
+				if (Boxed(T)) Add(T.Near, TileMat);
 			auto Place = [&](const LandField::Placed& P) {
 				const LandField::BaseMesh& Bm = G.BaseOf(P.Kind);
 				const double Dist = bAllNear ? 1e9 : std::hypot(P.X - Eye.X, P.Y - Eye.Y, P.Z - Eye.Z);
@@ -662,7 +945,19 @@ namespace LandFieldPicture
 			double CosAz = (std::sin(Decl) - SinAlt * std::sin(Lat)) / std::max(1e-9, std::cos(Alt) * std::cos(Lat));
 			double Az = std::acos(std::clamp(CosAz, -1.0, 1.0));
 			if (HourAngle > 0.0) Az = 2.0 * Pi - Az;
-			const double Up = std::max(Alt, 4.0 * Pi / 180.0);
+			double Up = std::max(Alt, 4.0 * Pi / 180.0);
+			// LAND_FIELD_SUN="AZ ALT": the sun put where asked (degrees from north, clockwise; degrees up), as to light the
+			// furrows across or along; unset, the battle's own morning sun as before
+			if (const char* E = std::getenv("LAND_FIELD_SUN"))
+			{
+				double AzDeg = 0.0, UpDeg = 0.0;
+				if (std::sscanf(E, "%lf %lf", &AzDeg, &UpDeg) == 2)
+				{
+					Az = AzDeg * Pi / 180.0;
+					Up = std::clamp(UpDeg, 2.0, 89.0) * Pi / 180.0;
+					std::printf("  the sun put at %.0f degrees from north, %.0f degrees up (LAND_FIELD_SUN)\n", AzDeg, UpDeg);
+				}
+			}
 			L.Sun = { std::sin(Az) * std::cos(Up), std::cos(Az) * std::cos(Up), std::sin(Up) };
 			std::printf("  sun %.1f degrees up, %.0f degrees from north (solar time %.2f h)\n", Alt * 180.0 / Pi, Az * 180.0 / Pi, Solar);
 			// A clear July morning with some cumulus: a warm sun, a blue sky, a pale blue-grey haze turning warm toward the sun.
@@ -797,13 +1092,28 @@ namespace LandFieldPicture
 						{
 							const V3 P = V.FromSample(X + 0.5, Y + 0.5, T.Depth[K]);
 							V3 N = Unit({ T.Normal[K * 3], T.Normal[K * 3 + 1], T.Normal[K * 3 + 2] });
-							const uint8_t Mat = T.Mat[K];
+							uint8_t Mat = T.Mat[K];
 							const V3 Ray = Unit(P - V.Eye);
+							// (the paint, and the normal the light sees: a ground tile under the game's surface has both made here)
+							float Alb[3] = { T.Albedo[K * 3], T.Albedo[K * 3 + 1], T.Albedo[K * 3 + 2] };
+							V3 LitNormal = N;
+							double Raw[3] = { -1.0, -1.0, -1.0 };
+							if (Mat == MatSoil)
+							{
+								for (int C = 0; C < 3; ++C) Raw[C] = Alb[C];
+								V3 Major, StepR, StepD;
+								double Minor = 0.0;
+								Footprint(V, X + 0.5, Y + 0.5, Down, P, N, Major, Minor, &StepR, &StepD);
+								const float Way[2] = { T.Plough.empty() ? 0.0f : T.Plough[K * 2], T.Plough.empty() ? 0.0f : T.Plough[K * 2 + 1] };
+								SurfaceShade(SurfaceAsked(), Raw, N, P, T.Depth[K], Major, Minor, Way, StepR, StepD, Alb, LitNormal);
+								Mat = MatGround;
+							}
 							// A face seen from behind (a blade's back, a leaf turned away) is lit as its front.
 							// (Not a blade or a crop's leaf lit from above, its normal leaning up on both faces: the game draws
 							// whichever face looks at the eye with that normal, so a tall crop's leaf over the eye is lit, not
 							// black; the art director's black squares on the near gaoliang, 23 November.)
 							if (Mat != MatGround && Dot(N, Ray) > 0.0 && !V.bOrtho && !(Mat == MatBlades && N.Z > 0.5)) N = N * -1.0;
+							if (Raw[0] < 0.0) LitNormal = N; // (not under the game's surface: the light sees the face's own normal, turned as above)
 							double Lit = 1.0;
 							for (const Shadow* S : Shadows)
 							{
@@ -834,20 +1144,21 @@ namespace LandFieldPicture
 							{
 								// (a plant's paint only, never bare earth, sand or snow: its green well over its blue; the grass at
 								// LAND_FIELD_SHEEN, the game's 0.06, ripe grain, its red well over its green, at 11 of its 6)
-								const double SR = std::pow(std::max(0.0, static_cast<double>(T.Albedo[K * 3 + 0])), 1.0 / 2.2);
-								const double SG = std::pow(std::max(0.0, static_cast<double>(T.Albedo[K * 3 + 1])), 1.0 / 2.2), SB = std::pow(std::max(0.0, static_cast<double>(T.Albedo[K * 3 + 2])), 1.0 / 2.2);
+								// (under the game's surface, the paint itself, as the material reads it)
+								const double SR = Raw[0] >= 0.0 ? Raw[0] : std::pow(std::max(0.0, static_cast<double>(Alb[0])), 1.0 / 2.2);
+								const double SG = Raw[1] >= 0.0 ? Raw[1] : std::pow(std::max(0.0, static_cast<double>(Alb[1])), 1.0 / 2.2), SB = Raw[2] >= 0.0 ? Raw[2] : std::pow(std::max(0.0, static_cast<double>(Alb[2])), 1.0 / 2.2);
 								const double Plant = std::clamp((SG - SB) / (SG + 0.02) * 5.0 - 1.5, 0.0, 1.0) * (Mat == MatGround ? std::clamp((N.Z - 0.55) * 4.0, 0.0, 1.0) : 1.0);
 								const double Ripe = std::clamp((SR / (SG + 0.01) - 0.9) * 3.3, 0.0, 1.0);
 								Swept = 1.0 + Plant * Ai.Sheen * (1.0 + Ripe * 5.0 / 6.0) * 2.0 * (AirAt(P.Y / 150.0, P.X / 150.0, 1) - 0.5);
 							}
-							const double NL = Dot(N, L.Sun);
+							const double NL = Dot(LitNormal, L.Sun);
 							// Leaves and blades let light through and scatter it: their lit side wraps round, and their shade is lighter.
 							double Diffuse = Mat == MatGround ? std::max(0.0, NL) : std::clamp((NL + 0.45) / 1.45, 0.0, 1.0) * (Mat == MatLeaves ? 0.9 : 0.95);
-							const double SkyK = Mat == MatGround ? 0.55 + 0.45 * N.Z : 0.7 + 0.3 * N.Z;
-							const double BounceK = 0.5 - 0.5 * N.Z;
+							const double SkyK = Mat == MatGround ? 0.55 + 0.45 * LitNormal.Z : 0.7 + 0.3 * LitNormal.Z;
+							const double BounceK = 0.5 - 0.5 * LitNormal.Z;
 							for (int C = 0; C < 3; ++C)
 							{
-								const double A = T.Albedo[K * 3 + C] * Swept;
+								const double A = Alb[C] * Swept;
 								Out[C] = A * (L.SunCol[C] * Diffuse * Lit + L.Sky[C] * SkyK + L.Bounce[C] * BounceK);
 							}
 							if (bHaze)
@@ -1029,9 +1340,30 @@ namespace LandFieldPicture
 			if (const char* P = std::getenv("LAND_FIELD_EYE_PITCH")) { Pitch = -std::atof(P); bHigh = true; }
 			std::printf("  eye at %.0f, %.0f, %.1f m up, looking %.0f degrees from north\n", Eye.X, Eye.Y, Eye.Z - G.At(Eye.X, Eye.Y).Z, std::fmod(450.0 - Yaw * 180.0 / Pi, 360.0));
 			if (bHigh) std::printf("  eye pitch %.1f degrees\n", Pitch);
+			// (under the game's surface: the furrows' way and strength at the ground point nearest the eye, Mesh::Uvs)
+			if (SurfaceAsked().bSurfaceOn)
+				for (const LandField::Tile& Tl : G.Tiles())
+				{
+					if (Eye.X < Tl.X0 || Eye.X >= Tl.X1 || Eye.Y < Tl.Y0 || Eye.Y >= Tl.Y1 || Tl.Near.Uvs.size() != 2 * Tl.Near.Points()) continue;
+					size_t Best = 0;
+					double BestD = 1e18;
+					for (size_t K = 0; K < Tl.Near.Points(); ++K)
+					{
+						const double Dd = std::hypot(Tl.Near.Positions[K * 3] - Eye.X, Tl.Near.Positions[K * 3 + 1] - Eye.Y);
+						if (Dd < BestD)
+						{
+							BestD = Dd;
+							Best = K;
+						}
+					}
+					const double WU = Tl.Near.Uvs[Best * 2], WV = Tl.Near.Uvs[Best * 2 + 1];
+					std::printf("  the furrows at the eye's nearest ground point (%.1f m off): way %.3f, %.3f, strength %.2f, %.0f degrees from north\n", BestD, WU, WV, std::hypot(WU, WV),
+					            std::hypot(WU, WV) > 1e-6 ? std::fmod(450.0 - std::atan2(WV, WU) * 180.0 / Pi, 360.0) : 0.0);
+				}
 			const View V = Looking(Eye, Yaw, Pitch * Pi / 180.0, 62.0, W, H);
 			const V3 Ahead{ std::cos(Yaw), std::sin(Yaw), 0.0 };
-			if (!bHigh) bOk &= Picture(G, L, V, Eye + Ahead * 45.0, 120.0, Eye + Ahead * 520.0, 1400.0, 70.0, true, Dir + "/" + Key + "-field-eye.png");
+			if (!WantPicture("eye")) {}
+			else if (!bHigh) bOk &= Picture(G, L, V, Eye + Ahead * 45.0, 120.0, Eye + Ahead * 520.0, 1400.0, 70.0, true, Dir + "/" + Key + "-field-eye.png");
 			else
 			{
 				// A raised eye (as the oblique picture): the fine shadow round where the centre of the view meets the ground,
@@ -1052,7 +1384,7 @@ namespace LandFieldPicture
 			const double Yaw = std::atan2(TY - EY, TX - EX);
 			const View V = Looking(Eye, Yaw, -9.0 * Pi / 180.0, 60.0, W, H);
 			const V3 Ahead{ std::cos(Yaw), std::sin(Yaw), 0.0 };
-			bOk &= Picture(G, L, V, Eye + Ahead * 150.0 - V3{ 0, 0, 30.0 }, 320.0, Eye + Ahead * 800.0, 2000.0, 70.0, true, Dir + "/" + Key + "-field-oblique.png");
+			if (WantPicture("oblique")) bOk &= Picture(G, L, V, Eye + Ahead * 150.0 - V3{ 0, 0, 30.0 }, 320.0, Eye + Ahead * 800.0, 2000.0, 70.0, true, Dir + "/" + Key + "-field-oblique.png");
 		}
 		// (c) The whole field and its band from straight above, north up.
 		{
@@ -1066,7 +1398,7 @@ namespace LandFieldPicture
 			V.Half = 0.5 * (X1 - X0);
 			V.W = 3200;
 			V.H = static_cast<int>(std::lround(3200.0 * (Y1 - Y0) / (X1 - X0) / 2.0)) * 2;
-			bOk &= Picture(G, L, V, V3{}, 0.0, { V.Eye.X, V.Eye.Y, 0.0 }, std::max(X1 - X0, Y1 - Y0) + 200.0, 0.0, false, Dir + "/" + Key + "-field-map.png");
+			if (WantPicture("map")) bOk &= Picture(G, L, V, V3{}, 0.0, { V.Eye.X, V.Eye.Y, 0.0 }, std::max(X1 - X0, Y1 - Y0) + 200.0, 0.0, false, Dir + "/" + Key + "-field-map.png");
 		}
 		return bOk;
 	}

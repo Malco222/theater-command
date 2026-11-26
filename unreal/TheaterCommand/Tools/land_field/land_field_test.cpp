@@ -26,6 +26,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace
@@ -1076,6 +1077,50 @@ int main(int Argc, char** Argv)
 		}
 		std::printf("  digest: tiles %016llx, ring %016llx, bases %016llx, instances %016llx\n", static_cast<unsigned long long>(Tiles), static_cast<unsigned long long>(Ring),
 		            static_cast<unsigned long long>(Bases), static_cast<unsigned long long>(Things));
+	}
+	// Ploughland's furrows (the near ground's two numbers a point, Mesh::Uvs: the plough's way times the furrows' strength):
+	// on the steppe with the word, every near tile carries them at every point, within -1 to 1, and no triangle has two
+	// ways in it (a fallow's edge zero, so two fields' ways never mix across a square); the far level and the ring none;
+	// without the word, no ground mesh any.
+	{
+		const bool bFurrows = F.Tried("ploughland") && LookLaid == "steppe";
+		size_t Carrying = 0, Furrowed = 0, BadSize = 0, BadValue = 0, Mixed = 0, Others = 0, Seams = 0;
+		std::map<std::tuple<float, float, float>, std::pair<float, float>> SeenAt; // (a point two tiles share: the same numbers in both)
+		for (const LandField::Tile& Tl : G.Tiles())
+		{
+			const LandField::Mesh& M = Tl.Near;
+			Others += Tl.Far.Uvs.size() + Tl.Built.Uvs.size();
+			if (M.Uvs.empty()) continue;
+			++Carrying;
+			if (M.Uvs.size() != 2 * M.Points())
+			{
+				++BadSize;
+				continue;
+			}
+			for (size_t K = 0; K < M.Points(); ++K)
+			{
+				const float U = M.Uvs[2 * K], V = M.Uvs[2 * K + 1];
+				if (!std::isfinite(U) || !std::isfinite(V) || std::hypot(U, V) > 1.0001f) ++BadValue;
+				else if (U != 0.0f || V != 0.0f) ++Furrowed;
+				const auto Was = SeenAt.emplace(std::make_tuple(M.Positions[3 * K], M.Positions[3 * K + 1], M.Positions[3 * K + 2]), std::make_pair(U, V));
+				if (!Was.second && Was.first->second != std::make_pair(U, V)) ++Seams;
+			}
+			for (size_t Tr = 0; Tr + 2 < M.Triangles.size(); Tr += 3)
+				for (int A = 0; A < 3; ++A)
+				{
+					const size_t P0 = M.Triangles[Tr + static_cast<size_t>(A)], P1 = M.Triangles[Tr + static_cast<size_t>((A + 1) % 3)];
+					const double U0 = M.Uvs[2 * P0], V0 = M.Uvs[2 * P0 + 1], U1 = M.Uvs[2 * P1], V1 = M.Uvs[2 * P1 + 1];
+					const double L0 = std::hypot(U0, V0), L1 = std::hypot(U1, V1);
+					if (L0 > 1e-6 && L1 > 1e-6 && U0 * U1 + V0 * V1 < 0.999 * L0 * L1) ++Mixed;
+				}
+		}
+		for (const LandField::Tile& Tl : G.Ring()) Others += Tl.Near.Uvs.size() + Tl.Far.Uvs.size();
+		if (bFurrows)
+			Check(Carrying == G.Tiles().size() && Furrowed > 0 && BadSize == 0 && BadValue == 0 && Mixed == 0 && Others == 0 && Seams == 0,
+				  "ploughland: every near tile carries the furrows' way at every point, one way to a triangle, the same where two tiles meet, none on the far ground",
+				  Fmt("%.0f of the tiles, %.0f points furrowed, ", static_cast<double>(Carrying), static_cast<double>(Furrowed)) + Fmt("%.0f wrong sizes, %.0f out of range, ", static_cast<double>(BadSize), static_cast<double>(BadValue))
+					  + Fmt("%.0f edges with two ways, %.0f numbers elsewhere, ", static_cast<double>(Mixed), static_cast<double>(Others)) + Fmt("%.0f shared points that disagree", static_cast<double>(Seams)));
+		else Check(Carrying == 0 && Others == 0, "no ground mesh carries furrows (the word is off, or not the steppe)", Fmt("%.0f tiles", static_cast<double>(Carrying)));
 	}
 	// The bocage's farmhouses built to the vehicles' detail (release 2, the trial "houses", LandHouse), and their barns and
 	// byres: each kind a kit slot drawn as a building, near, its middle level from 90 m and plain from 300 m; every one
@@ -3228,6 +3273,24 @@ int main(int Argc, char** Argv)
 		Check(EdgeUnder <= EdgeTests / 200 && DeepWant > 0.0 && std::fabs(DeepSum / DeepWant - 1.0) < 0.15,
 			"a dug hole's wall stands over the ground's cut edge, and its bowl goes as deep as dug",
 			Fmt("%.0f of %.0f edge points with the wall under 5 mm over the ground; depth %.2f of what was dug", static_cast<double>(EdgeUnder), static_cast<double>(EdgeTests), DeepWant > 0.0 ? DeepSum / DeepWant : 0.0));
+		// (ploughland, on trial: a dug tile's parts keep the furrows' two numbers at every point, those the cuts made
+		// too; asked only where the near ground carries them)
+		size_t PloughTiles = 0, PloughParts = 0, PloughBad = 0;
+		for (size_t Ti = 0; Ti < G.Tiles().size(); ++Ti)
+		{
+			if (G.Tiles()[Ti].Near.Uvs.empty() || !Ground.IsSplit(static_cast<int>(Ti))) continue;
+			++PloughTiles;
+			for (int P = 0; P < LandCrater::Dug::Split * LandCrater::Dug::Split; ++P)
+			{
+				const LandField::Mesh& Pm = Ground.PartOf({ static_cast<int>(Ti), P });
+				if (Pm.Empty()) continue;
+				++PloughParts;
+				if (Pm.Uvs.size() != 2 * Pm.Points()) ++PloughBad;
+			}
+		}
+		if (PloughTiles > 0)
+			Check(PloughBad == 0, "ploughland: a dug tile's parts keep the furrows' way at every point, the cuts' new points too",
+				  Fmt("%.0f dug tiles, %.0f parts, ", static_cast<double>(PloughTiles), static_cast<double>(PloughParts)) + Fmt("%.0f parts without", static_cast<double>(PloughBad)));
 	}
 
 	// Hedge cutters (release 2; Brian, 22 November 14:19Z, "Let's do 1 and 2": bladed Shermans punch a gap through a
