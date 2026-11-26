@@ -10578,7 +10578,7 @@ void ALandBattle::PlayArmourEvents()
 			if (Out.bBreechPuff && FromEye < 150.0)
 			{
 				const FVector Back = WorldWay(BreechWay.X, BreechWay.Y, 0.0).GetSafeNormal(0.01, FVector::UpVector);
-				Effects->Steam(PuffId, World(Breech.X, Breech.Y, Breech.Z), (Back + FVector::UpVector).GetSafeNormal(), 0.15f, 0.6f, TEXT("breech"));
+				Effects->Steam(PuffId, World(Breech.X, Breech.Y, Breech.Z), (Back + FVector::UpVector).GetSafeNormal(), 0.25f, 0.6f, TEXT("breech"));
 			}
 			// (her commander's place is a quarter metre under the hatch's rim: the fumes rise from the rim)
 			if (Out.bHatchFumes && FromEye < 150.0)

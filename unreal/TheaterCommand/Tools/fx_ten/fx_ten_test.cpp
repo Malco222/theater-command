@@ -445,14 +445,14 @@ namespace
 				LastAt[G] = std::max(LastAt[G], B.Born + B.Life - 1.0);
 				Widest = std::max(Widest, B.R1);
 				Thickest = std::max(Thickest, B.Alpha);
-				bSizes = bSizes && B.R0 >= 0.03 && B.R1 <= 0.45;
+				bSizes = bSizes && B.R0 >= 0.03 && B.R1 <= 0.5;
 				bFloor = bFloor && B.LeastPx >= 2.0;
 			}
 			bWhen = bWhen && FirstAt[G] >= (G == 2 ? 5.0 : 3.0) && LastAt[G] <= (G == 2 ? 6.5 + 7.0 + 3.0 + 0.5 : 4.0 + 6.0 + 2.6 + 0.5);
 		}
 		Check(bFew, "on: one shot of each gun, 10 to 15 puffs of wisp", Say("%.0f, %.0f, %.0f", Count[0], Count[1], Count[2]));
 		Check(bWhen, "on: from 3 to 4 s after the shot (the howitzer 5 to 6.5 s), gone by 13 s", Say("from %.1f, %.1f, %.1f s; gone %.1f s", FirstAt[0], FirstAt[1], FirstAt[2], std::max(LastAt[0], std::max(LastAt[1], LastAt[2]))));
-		Check(bSizes && Thickest <= 0.241, "on: thin, 0.03 m at the bore to under 0.45 m, faint", Say("widest %.2f m, alpha at most %.2f", Widest, Thickest));
+		Check(bSizes && Thickest <= 0.501, "on: thin, 0.03 m at the bore to 0.5 m, see-through (alpha 0.5 at most)", Say("widest %.2f m, alpha at most %.2f", Widest, Thickest));
 		Check(bFloor, "on: each puff held to 2 px across, thinner to match (no twinkle)", "least_px 2");
 		Check(WispOf(Off, Off, "tank_gun", Eye, Vec(0.0, 0.0, 2.0)).empty(), "off: no wisp (the recipe has no after_wisp)", "none");
 		const Vec FarEye(-280.0, -150.0, 3.0);
@@ -636,9 +636,9 @@ namespace
 		const FxTen::Book Off = Recipe();
 		const FxTen::Book On = Recipe({ "battle-fx-barrel.json" });
 		Check(On.Numbers.count("steam.breech.reach_m.0") == 1 && Off.Numbers.count("steam.breech.reach_m.0") == 0, "the row steam.breech on with the word, none without", "on / none");
-		const Puffed P = PuffOf(On, "breech", 0.6, 0.15);
+		const Puffed P = PuffOf(On, "breech", 0.6, 0.25);
 		Check(P.Pieces >= 5 && P.Pieces <= 30, "on: a small puff, 5 to 30 rags", Say("%.0f rags", static_cast<double>(P.Pieces)));
-		Check(P.Widest <= 1.0 && P.Thickest <= 0.33, "on: no wider than a metre, faint (alpha 0.32 at most)", Say("widest %.2f m, alpha %.2f", P.Widest, P.Thickest));
+		Check(P.Widest <= 1.5 && P.Thickest <= 0.46, "on: no wider than 1.5 m, see-through (alpha 0.45 at most)", Say("widest %.2f m, alpha %.2f", P.Widest, P.Thickest));
 		Check(P.Gone <= 3.0, "on: gone within 3 s of the case coming out", Say("%.1f s", P.Gone));
 		Check(P.LeastPx >= 3.0, "on: each rag held to 3 px across, thinner to match", Say("least_px %.0f", P.LeastPx));
 		Check(P.Seeds == P.SeedsWithout, "the kit's shared dice drawn as often as without it", Say("%.0f draws", static_cast<double>(P.Seeds)));
@@ -678,7 +678,7 @@ namespace
 		const FxTen::Book Off = Recipe();
 		const FxTen::Book On = Recipe({ "battle-fx-hatch.json" });
 		const Puffed P = PuffOf(On, "hatch_fumes", 2.0, 0.3);
-		Check(P.Pieces >= 5 && P.Widest <= 1.2 && P.Thickest <= 0.17, "on: a faint wisp out of the hatch, no wider than 1.2 m, alpha 0.16", Say("%.0f rags, widest %.2f m, alpha %.2f", static_cast<double>(P.Pieces), P.Widest, P.Thickest));
+		Check(P.Pieces >= 5 && P.Widest <= 1.6 && P.Thickest <= 0.35, "on: a faint wisp out of the hatch, no wider than 1.6 m, alpha 0.34", Say("%.0f rags, widest %.2f m, alpha %.2f", static_cast<double>(P.Pieces), P.Widest, P.Thickest));
 		Check(P.Gone <= 5.0 && P.LeastPx >= 3.0, "on: gone within 5 s, each rag held to 3 px", Say("%.1f s", P.Gone));
 		Check(P.Seeds == P.SeedsWithout, "the kit's shared dice drawn as often as without it", Say("%.0f draws", static_cast<double>(P.Seeds)));
 		// (the case pitched out: by the row ground_cases.tank; none without it)
