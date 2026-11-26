@@ -129,7 +129,8 @@ namespace
 	}
 
 	// ---- The picture (P4): the disc alone against the sky, as M_Highlight and M_ScrewHaze draw it (light of its own, the
-	// point's colour made linear, laid over what is behind by the point's alpha), seen 30 degrees off its shaft.
+	// point's colour bytes taken as they are, as linear light: neither ink has M_MapSurface's Power 2.2, build_content.py;
+	// laid over what is behind by the point's alpha), seen 30 degrees off its shaft.
 	double Lin(double S) { return S <= 0.04045 ? S / 12.92 : std::pow((S + 0.055) / 1.055, 2.4); }
 	double Srgb(double L) { L = std::clamp(L, 0.0, 1.0); return 255.0 * (L <= 0.0031308 ? L * 12.92 : 1.055 * std::pow(L, 1.0 / 2.4) - 0.055); }
 
@@ -148,7 +149,7 @@ namespace
 			F.Y.push_back(D.Points[K].Y);
 			F.Z.push_back(D.Points[K].Z);
 			F.Alpha.push_back(D.Alpha[K] / 255.0);
-			F.Tone.push_back(Lin(D.Green[K] / 255.0));
+			F.Tone.push_back(D.Green[K] / 255.0);
 		}
 		F.Triangles.assign(D.Triangles.begin(), D.Triangles.begin() + static_cast<std::ptrdiff_t>(D.Front));
 		F.Round = static_cast<int>(D.Points.size() / 4);
@@ -372,7 +373,9 @@ int main(int Argc, char** Argv)
 		}
 	}
 	Check(Models >= 40 && Screwed >= 38, "every aircraft read", std::to_string(Models) + " aircraft, " + std::to_string(Screwed) + " with airscrews");
-	Check(StillBefore > 0, "before the row, the far shapes drew still blades (what the row takes out)", std::to_string(StillBefore) + " triangles");
+	// (not a test of the row: that the files as filed carry still blades in their far meshes at all, without which P2's
+	// "none left" would say nothing; the row's own proof is P2, and this test does not build without StripScrews)
+	Check(StillBefore > 0, "the far meshes as filed hold still blades for P2 to take out", std::to_string(StillBefore) + " triangles");
 
 	// ---- P4: the disc at the battle's real scale.
 	std::printf("The discs' pictures (P4), the B-17's 1.76 m airscrew, 3 blades, at 1,008 pixels a radian\n");
@@ -387,6 +390,9 @@ int main(int Argc, char** Argv)
 			const double Was = MostChange(Old, M, R, PerRadian), Is = MostChange(Now, M, R, PerRadian);
 			Check(Is >= 30.0, "near disc at " + std::to_string(static_cast<int>(M)) + " m changes 30 levels or more a frame at 60 fps",
 			      std::to_string(static_cast<int>(std::lround(Is))) + " levels (the old disc " + std::to_string(static_cast<int>(std::lround(Was))) + ")");
+			// (and the measure tells them apart: the old disc, the row off, falls short of the mark)
+			Check(Was < 30.0, "the old disc at " + std::to_string(static_cast<int>(M)) + " m falls short of it (what the row mends)",
+			      std::to_string(static_cast<int>(std::lround(Was))) + " levels");
 		}
 		for (const double M : { 434.0, 832.0 })
 		{

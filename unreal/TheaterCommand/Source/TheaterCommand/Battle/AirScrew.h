@@ -122,10 +122,13 @@ namespace AirScrew
 	/** How much of what is behind the near disc hides at a point (0 to 1): Ahead its share of the way from the blade it
 	 * is ahead of to the next (0 at a blade's edge); Ring 1 at half the radius, 2 at nine tenths. */
 	double SmearAlpha(double Ahead, int Ring);
-	/** The far haze's colour and how much it hides at each ring (0 at the hub's ring and the tips'). */
+	/** The far haze's colour and how much it hides at each ring (0 at the hub's ring and the tips'); the near smear's
+	 * colour. Both inks (M_Highlight, M_ScrewHaze) light a point with its colour's bytes as they are, not made linear
+	 * as M_MapSurface makes them (build_content.py): 34 shows as a mid grey (0.13), so the smear is near black (8, 0.03)
+	 * for its turn to show against the sky (the old disc's 30 changed the picture by 11 to 13 levels a frame). */
 	constexpr unsigned char HazeRgb[3] = { 34, 34, 36 };
 	constexpr unsigned char HazeAlpha[4] = { 0, 70, 60, 0 };
-	constexpr unsigned char SmearRgb[3] = { 30, 30, 32 };
+	constexpr unsigned char SmearRgb[3] = { 8, 8, 8 };
 	constexpr double DiscRings[4] = { 0.12, 0.5, 0.9, 1.0 };
 	constexpr int NearRound = 48, HazeRound = 24;
 }
