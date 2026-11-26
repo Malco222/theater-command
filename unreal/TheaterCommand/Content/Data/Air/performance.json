@@ -3926,10 +3926,12 @@
     "B-17",
     "B-17G",
     "Flying Fortress",
-    "Fortress"
+    "Fortress",
+    "B17Fine"
    ],
    "models": [
     "B17",
+    "B17Fine",
     "B-17",
     "Flying Fortress",
     "Fortress"

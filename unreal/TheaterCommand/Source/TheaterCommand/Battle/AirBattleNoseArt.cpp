@@ -59,7 +59,12 @@ namespace
 			std::string Why;
 			if (!AirNoseArt::ReadPanel(S.NoseArtPanelsText, Kind, Read, Why))
 			{
-				Read = AirNoseArt::Panel();
+				// (the finer B-17's panel is in a file of its own, read only while the Battle rules card's Finer B-17 is
+				// on: off, this text is empty and nothing is read from it)
+				if (S.NoseArtFinePanelsText.empty() || !AirNoseArt::ReadPanel(S.NoseArtFinePanelsText, Kind, Read, Why))
+				{
+					Read = AirNoseArt::Panel();
+				}
 			}
 			Found = S.NoseArtPanels.emplace(Kind, std::move(Read)).first;
 		}
@@ -298,6 +303,20 @@ void AAirBattle::DrawNoseArt(const FVector& EyeAt)
 			return;
 		}
 		S.NoseArtPanelsText.assign(reinterpret_cast<const char*>(Panels.GetData()), static_cast<size_t>(Panels.Num()));
+		// (the finer B-17's own panel, laid on her newer skin by Tools/pack_nose_art.py --fine: only while she flies; not
+		// read, she flies bare and the rest wear theirs)
+		if (S.B17FineOn == 1)
+		{
+			TArray<uint8> FinePanels;
+			if (FFileHelper::LoadFileToArray(FinePanels, *(Folder / TEXT("panels-fine.json"))))
+			{
+				S.NoseArtFinePanelsText.assign(reinterpret_cast<const char*>(FinePanels.GetData()), static_cast<size_t>(FinePanels.Num()));
+			}
+			else
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Air battle: nose art: Content/Data/NoseArt/panels-fine.json could not be read, so the finer B-17s fly bare."));
+			}
+		}
 		S.NoseArt.Begin(S.NoseArtList, S.SkyPlace.Seed, S.Board.Bombers);
 		UE_LOG(LogTheater, Display, TEXT("Air battle: nose art: %d paintings; the board names the seats of %d bomber groups."),
 			static_cast<int32>(S.NoseArtList.Painted().size()), static_cast<int32>(S.Board.Bombers.size()));
@@ -382,7 +401,20 @@ void AAirBattle::DrawNoseArt(const FVector& EyeAt)
 		}
 		const double Away = FVector::Dist(Mesh->GetComponentLocation(), EyeAt) / U;
 		const bool bOnShape = !Made.bTwoShapes || Made.bNear;
-		Strength = FMath::Clamp((NoseArtSizeM * PixelsPerMetreAt1 / FMath::Max(Away, 0.1) - 4.0) / 3.0, 0.0, 1.0);
+		// (the finer B-17's panel is smaller than the older one's, 0.61 m high against 1.35 (panels-fine.json): faded by its
+		// own height, so that it too fades under about 4 px; every other aircraft by NoseArtSizeM as before)
+		double HighM = NoseArtSizeM;
+		FString Kind;
+		FVector Middle = FVector::ZeroVector;
+		double Fit = 1.0;
+		if (Made.bFine && State.IsValid() && ShapeFrameOf(Made.Shape, Kind, Middle, Fit))
+		{
+			if (const AirNoseArt::Panel* Own = PanelOf(*State, TCHAR_TO_UTF8(*Kind)))
+			{
+				HighM = Own->HighM * Fit;
+			}
+		}
+		Strength = FMath::Clamp((HighM * PixelsPerMetreAt1 / FMath::Max(Away, 0.1) - 4.0) / 3.0, 0.0, 1.0);
 		return Mesh->IsVisible() && bOnShape && (Key == Ridden || Away < NoseArtNearM) && Strength > 0.0;
 	};
 	// Made when first shown (at most one painting read a frame: each is a small picture, and twenty near at once would

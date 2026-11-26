@@ -209,6 +209,9 @@ private:
 		FString Shape;
 		bool bTwoShapes = false;
 		bool bNearMade = false;
+		/** It is the finer B-17 (Content/Models/B17Fine.json, the rule "b17Fine"): its close-up copy counts toward the
+		 * most a battle makes (B17FineNearMost). */
+		bool bFine = false;
 		bool bNear = false;
 		/** It casts its shadow (made casting; AirParts::ShadowFarM). */
 		bool bShadow = true;
@@ -978,6 +981,35 @@ private:
 	/** The close view on, riding aircraft Key of squadron Group, chosen by him (kept until he steps or it is gone). */
 	void RideOn(int32 Group, int32 Key);
 	FString ModelFor(const FString& Model, const FString& Nation, bool bFighter) const;
+	/** The Battle rules card's "Finer B-17" (rule "b17Fine"), read once as a battle begins into its state's B17FineOn and
+	 * the flight core's AirShow::SetFineB17; off when the file is not in the build. */
+	void B17FineRead();
+	/** The most close-up shapes of the finer B-17 a battle makes (-TheaterAirB17FineNear=N, 8 unless asked), and whether
+	 * this aircraft may go to its close-up shape now: any aircraft but a finer B-17, one whose close-up shape is made,
+	 * or one while fewer than the most are made. */
+	static int32 B17FineNearMost();
+	bool B17FineNearRoom(const FPlaneMade& Made);
+	/** Whether the log has said the most finer B-17 close-up shapes are made, this battle. */
+	bool bB17FineHeldSaid = false;
+	/**
+	 * The timing eye (development only: "-TheaterAirTimeEye=box", "=far" or "=both" on the command line; no row,
+	 * no option, nothing changes without the word). For the Mac's timing run, which wants no hands: from two seconds
+	 * after the battle begins until it ends, whatever else would move the camera, the eye is held on the largest bomber
+	 * group still up: "box" rides a bomber in its middle from behind and above as the close view rides a bomber (her
+	 * neighbours' close-up shapes filling the picture), "far" stands a kilometre from the group's middle, level with it
+	 * and abeam, looking at it; "both" is box for two minutes, then far. The box's rider counts as ridden for the
+	 * close-up copies' bound (B17FineNearRoom), as the close view's does. Every five seconds one line, "Air battle: time eye ...", with the speed log's frames a
+	 * second and worst frame (TheaterSpeed::LastWindow; the eye turns the speed log on) and the counts of the shapes
+	 * drawn; once the battle is over the run quits, as the picture run does. Set after AimEye, each frame.
+	 */
+	void TimeEyeAim(double Real);
+	/** (the timing eye's: the bomber ridden and her group, when it began, its way ahead eased, its next line, its quit) */
+	int32 TimeEyeKey = -1;
+	int32 TimeEyeGroup = -1;
+	double TimeEyeFrom = -1.0;
+	FVector TimeEyeAhead = FVector::ZeroVector;
+	double TimeEyeLogAt = -1.0;
+	bool bTimeEyeQuit = false;
 	/** The key of an aircraft's shape in AirParts::Shapes (its near shape, and its far one under "|far"), the shapes
 	 * made the first time they are asked for (once a run: they are kept from raid to raid). */
 	FString ShapeFor(const FString& Model, const FString& Nation, bool bFighter, double Span, bool bTorpedo);
