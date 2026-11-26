@@ -690,7 +690,8 @@ private:
 	/** The dark reading for the camera director's dark rule (LandEye::World::DarkNow; the art director, cut 4 fix 6 and
 	 * cut 5: a shot over 30% darker than L 25 of 255 is left): the drawn frame copied at 64 x 36 four times a real second
 	 * by the engine's frame grabber, which waits on nothing, and the share of it under L 25 (-1 until the first comes
-	 * back, or with no game viewport, as in the editor). "-TheaterLandNoDarkRead" leaves it off (the rule never asked).
+	 * back, or with no game viewport, as in the editor). Off unless "-TheaterLandDarkRead" asks for it (1.5.2: its cost on
+	 * the Mac was over the patch's bar); "-TheaterLandNoDarkRead" leaves it off either way (the rule never asked).
 	 * ReadDark takes the frame's length, as its neighbours do, and keeps the reading's own clock from it (DarkClock,
 	 * against which the next ask and the last reading's age are measured: a reading is stale, and the rule told
 	 * there is none, once no frame has been read for six tenths of a second). DarkAsks and DarkBacks count the

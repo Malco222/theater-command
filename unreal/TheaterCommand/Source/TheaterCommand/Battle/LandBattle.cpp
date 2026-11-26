@@ -7198,8 +7198,12 @@ void ALandBattle::StartDarkRead()
 	DarkReads = 0;
 	DarkAsks = 0;
 	DarkBacks = 0;
-	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoDarkRead")))
+	// (1.5.2: off unless "-TheaterLandDarkRead" asks for it. Brian's Mac, B3 Normandy, 25 Nov: the reading cost 1 to
+	// 2 fps at 40 and 60 s against a run without it, over the patch's bar of under 1, and the rule left no shot dark
+	// in that day battle. "-TheaterLandNoDarkRead" still leaves it off.)
+	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterLandDarkRead")) || FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoDarkRead")))
 	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the dark reading off (on only with -TheaterLandDarkRead): the camera's dark rule not asked"));
 		return;
 	}
 	// (the game's own viewport: a packaged game or -game; none in the editor's play, where the rule is not asked)
