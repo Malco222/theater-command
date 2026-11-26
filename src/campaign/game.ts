@@ -679,9 +679,10 @@ export const natIndex = (g: Game, nat: string): number => Object.keys(g.nations)
  * picture writes the holder's place (`stores:by:<id>`, natIndex) beside the month, whoever's ships carried them. Stores
  * whose record names another nation were never his, however the port came to him (a battle, a fall, a hand-back, a
  * treaty or the last act), and stores with no record (filled with true reach off, or in a save from before the record)
- * charge nothing until the holder's own next fill writes one: the conservative reading. A port captured in or after
- * the month of the fill (Region.since) charges nothing either: a port lost and retaken by battle since its holder last
- * filled it, and stores a new holder filled in the very month he took the port.
+ * charge nothing until the holder's own next fill writes one: the conservative reading. A port that has changed
+ * hands since the fill charges nothing either: a port lost and retaken by battle since its holder last filled it. By
+ * the order of events, not the month (keptStoresHis): stores a new holder filled after taking the port are his, in the
+ * very month he took it too.
  */
 export function keptStoresRun(g: Game, r: Region, drawn = false): number {
   if (!r.overseas || !r.port || !worksKept(r) || !keptStoresHis(g, r)) return 0;
@@ -693,13 +694,22 @@ export function keptStoresRun(g: Game, r: Region, drawn = false): number {
  * director's ruling of 22:08Z, 25 November 2026: "one town, one larder, one reading: the window feeds only the holder
  * who filled it, as the guard charges only that holder"): the guard charges by it (keptStoresRun), and the supply
  * picture's window opens the quay by it (computeSupply), as does a fortress crew's living on the port's stores
- * (onPortStores). A captor whose own ships fill the port in the very month he takes it has a fill no later than his
- * capture, which reads as not his until his next month's fill. A since moved by a hand-over to the nation that already
- * held the port is no capture (keptStoresHolder).
+ * (onPortStores). Whether the fill came after the capture goes by the order of events, never by the month (the design
+ * director's ruling of 26 November 2026, 03:36Z: "a fill made before the capture in that month is the old holder's; a
+ * fill made after it is the captor's"). The fill records the port's last change of hands as it stood when the stores
+ * were filled (`stores:at:<id>`, Region.since at the fill), and a taking by battle strikes that record (capture). So the
+ * stores are the holder's where the record still reads the port's present since: nothing has changed hands since the
+ * fill. A captor whose own ships fill the port in the very month he takes it has such a record, and the stores are his
+ * from that fill; stores filled earlier that month, before he took it, name the old holder and are not. A record from
+ * before the order was kept (no `stores:at`) reads by the month, as it did: his only where the fill's month is later
+ * than the capture's. A since moved by a hand-over to the nation that already held the port is no capture
+ * (keptStoresHolder).
  */
 export function keptStoresHis(g: Game, r: Region): boolean {
   const last = g.flags[storesKey(r.id)];
-  return last !== undefined && (last > r.since || g.flags[storesHeldKey(r.id)] === r.since) && Object.keys(g.nations)[g.flags[storesByKey(r.id)] ?? -1] === r.ctrl;
+  if (last === undefined || Object.keys(g.nations)[g.flags[storesByKey(r.id)] ?? -1] !== r.ctrl) return false;
+  const at = g.flags[storesAtKey(r.id)];
+  return (at !== undefined ? at === r.since : last > r.since) || g.flags[storesHeldKey(r.id)] === r.since;
 }
 /**
  * A treaty, a cession or an annexation that hands a port to the nation already holding it moves Region.since though
@@ -1057,6 +1067,9 @@ const storesKey = (id: number): string => (storesKeys[id] ??= `stores:${id}`);
 const storesByKey = (id: number): string => (storesByKeys[id] ??= `stores:by:${id}`);
 // (The month a hand-over to the nation already holding the port moved Region.since: keptStoresHolder. "stores:" too.)
 const storesHeldKey = (id: number): string => `stores:held:${id}`;
+// (The Region.since the port had when its stores were filled, under true reach: keptStoresHis. "stores:" too.)
+const storesAtKeys: string[] = [];
+const storesAtKey = (id: number): string => (storesAtKeys[id] ??= `stores:at:${id}`);
 
 /** One country's supply picture from its stores outward over the provinces its roads may pass, and its lines' lengths. */
 function drawSupply(g: Game, id: string, pass: Uint8Array, seeds: number[], heads: number[], wide: boolean, long: string[], deep: Uint8Array, sand: Uint8Array, rail: RailNow): { ok: Uint8Array; reach: Float32Array; east: boolean } {
@@ -1365,6 +1378,9 @@ export function computeSupply(g: Game): void {
             // Under true reach the fill records whose stores they are: the holder's, whoever's ships carried them.
             g.flags[storesKey(r.id)] = g.turn;
             g.flags[storesByKey(r.id)] = (places ??= new Map(Object.keys(g.nations).map((n, i) => [n, i]))).get(r.ctrl)!;
+            // (And the port's last change of hands as it stood at the fill, so that a fill made after a capture in the
+            // very month of the capture reads as the captor's: keptStoresHis.)
+            g.flags[storesAtKey(r.id)] = r.since;
           }
         }
         // (Under true reach the kept stores feed only the holder who filled them, the guard's own reading: keptStoresHis.)
@@ -3507,6 +3523,10 @@ export function capture(g: Game, r: Region, nat: string): void {
   const owner = g.nations[r.owner];
   r.ctrl = owner.alive && allied(g, nat, r.owner) ? r.owner : nat;
   r.since = g.turn;
+  // (A taking strikes the record of when the port's stores were filled, which only true reach writes: a fill made before this
+  // taking is never read as made after it, even where the port is back with its filler inside the month. The taker's
+  // own next fill writes the record afresh. keptStoresHis.)
+  if (g.flags[storesAtKey(r.id)] !== undefined) delete g.flags[storesAtKey(r.id)];
   // And in whose turn of the month it fell, so that the alarm can tell a fall the player has seen from one since he
   // last ended his month (danger.ts homeAlarms; the design director's ruling of 17 November, by the order of play).
   // Read by nothing that moves a die.
