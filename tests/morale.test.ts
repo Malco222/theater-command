@@ -126,6 +126,8 @@ describe('morale in the grand campaign', () => {
     const target = g.regions.find((r) => r.ctrl === 'POL' && r.units.some((u) => u.nat === 'POL') && r.nb.some((j) => g.regions[j].units.some((u) => u.nat === 'GER' && u.kind !== 'fort')))!;
     const att = target.nb.flatMap((j) => g.regions[j].units).filter((u) => u.nat === 'GER' && u.kind !== 'fort').slice(0, 2);
     const set = (a: number, d: number): void => { for (const c of att) c.mor = a; for (const c of target.units) c.mor = d; };
+    // (The town's guard is spent, so the corps alone defend: a guard beside them (ruling 232) has no morale of its own.)
+    g.flags[`guard:${target.id}`] = 100;
     set(0.5, 0.5);
     const even = assess(g, att, target);
     expect(even.lines.find((l) => l.label === 'Morale')!.effect).toBeUndefined();

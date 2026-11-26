@@ -17,7 +17,7 @@ import { menSpare } from './manpower';
 import { ARSENAL, aiArsenal, liftView, offers, orderOffer, type Wing } from './arsenal';
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
-import { monthsFor, staffTeams, techById, techOf, teamsOf } from './tech';
+import { monthsFor, spyTeamsOf, staffTeams, techById, techOf, teamsOf } from './tech';
 import { TRADE, bestPartner, dealsOf, endTrade, housesFull, housesOf, signTrade, tradeRules, wealthOf } from './trade';
 import { DIPLOMACY, canCourt, court, courtable, envoysWord, freeCourt, receptive, step } from './diplomacy';
 import { INTEL, abroad, agentsOf, atWork, intelRules, mostAgents, recruit, sendAgent, setFog, setMission, threat, whyNotMission, whyNotRecruit, whyNotSend } from './intel';
@@ -297,7 +297,7 @@ function spies(g: Game, nat: string): string | null {
   const did: string[] = [];
   const war = n.atWar.filter((e) => g.nations[e]?.alive);
   // One recruit a month while the service has room: all it can run in a war, a guard or two in peace.
-  const want = war.length ? mostAgents(nat) : Math.min(mostAgents(nat), Math.max(1, S.guards));
+  const want = war.length ? mostAgents(nat, g) : Math.min(mostAgents(nat, g), Math.max(1, S.guards));
   if (agentsOf(g, nat).length < want && whyNotRecruit(g, nat) === null && allowance(g, nat) >= INTEL.agents.cost && n.pp - INTEL.agents.cost >= PRODUCTION.aiReserve) {
     const a = recruit(g, nat);
     if (a) { g.flags['dk:alw'] = Math.max(0, allowance(g, nat) - INTEL.agents.cost); did.push(`recruited agent ${a.name}`); }
@@ -444,6 +444,8 @@ export function staffMonth(g: Game): void {
 export function handOver(g: Game, desk: DeskId, staff: boolean, now = false): boolean {
   if (!setDesk(g, desk, staff)) return false;
   const nat = g.human;
+  // Handed the navy afresh, the admirals take every fleet, those he had kept under his own orders too (1.5.1).
+  if (desk === 'navy' && staff) for (const f of g.fleets) delete f.ordered;
   if (staff && now && nat !== null && g.nations[nat]?.alive && !deskRan(g, desk)) runDesk(g, nat, desk);
   return true;
 }
@@ -519,7 +521,7 @@ function stateOf(g: Game, nat: string, desk: DeskId): string {
   const n = g.nations[nat];
   switch (desk) {
     case 'research': {
-      const s = techOf(g, nat), teams = teamsOf(g, nat);
+      const s = techOf(g, nat), teams = teamsOf(g, nat) + spyTeamsOf(g, nat);
       if (!s) return '';
       const at = s.work.map((w) => `${techById(w.id)?.name ?? w.id} (${months(Math.max(1, Math.ceil(w.left)))})`);
       return at.length ? `${s.work.length} of ${teams} team${teams === 1 ? '' : 's'} at work: ${some(at, 4)}.` : `No research team has work.`;
@@ -557,7 +559,7 @@ function stateOf(g: Game, nat: string, desk: DeskId): string {
     }
     case 'spies': {
       const all = agentsOf(g, nat), out = all.filter((a) => abroad(g, a)).length;
-      return all.length ? `${all.length} of ${mostAgents(nat)} agents: ${out} abroad, ${all.length - out} at home.` : `No agents yet. The service can run ${mostAgents(nat)}.`;
+      return all.length ? `${all.length} of ${mostAgents(nat, g)} agents: ${out} abroad, ${all.length - out} at home.` : `No agents yet. The service can run ${mostAgents(nat, g)}.`;
     }
     case 'air': {
       // Carrier wings are counted apart: they are aboard their fleets, at no airfield (ruling 176(b)).

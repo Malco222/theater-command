@@ -1,0 +1,368 @@
+{
+  "about": "The colours of each army's men in the ground battles, by the soldier files' paint names (tunic, trousers, boots, lower, straps, helmet, pack, skin, wood, steel, coat, coat_dark, leather, blanket, hoof). sRGB hex as the eye sees new cloth in daylight; Battle/LandMen multiplies each by the file's per-point shade (wear, seams) and the face's skin tone. These are about-values from the regulations' named shades and from surviving kit as museums photograph it (faded, so a little lighter than new), started from the art director's sheet already in the game (CampaignSoldiers.cpp KitFor: US olive cloth 120,114,76; German field grey 5F665C). NOT CHECKED: the historian and the art director should check every value and its note before release. standIn: the soldier file drawn for an army that has none of its own yet. helmets: 'file' picks the soldier file's helmet finishes by date, season, front and share; 'own' keeps the file's own helmet, painted 'helmet'.",
+  "checked": false,
+  "armies": {
+    "USA": {
+      "about": "US infantry, Normandy, summer 1944: M1941 field jacket over the wool shirt, wool trousers, canvas leggings over russet service shoes, khaki webbing, the M1 helmet in olive drab. Drawn with the Polish soldier file (the nearest cut: ankle boots, gaiters, round helmet, a haversack) until an American file existed; since 21 Nov the soldiers thread's American files draw him (rifleman, BAR gunner, squad leader, bazooka team), with their own helmet finishes for 1944 (nets, burlap scrim, hedgerow leaves, road dust), picked by date, season and front.",
+      "standIn": "POL",
+      "helmets": "file",
+      "paints": {
+        "tunic": { "rgb": "7A7350", "about": "M1941 field jacket, cotton poplin in olive drab shade 3: a light khaki-olive that faded paler with washing; the art director's olive cloth (120,114,76) kept, a touch warmer." },
+        "trousers": { "rgb": "615A42", "about": "Wool serge trousers, olive drab shade 33: a darker brown-olive than the jacket, as photographs of men in the jacket show." },
+        "boots": { "rgb": "5A4030", "about": "Type II/III service shoes, russet roughout leather dubbed and worn dark. (In the Polish file the eyes share this paint.)" },
+        "lower": { "rgb": "5A4F36", "about": "M1938 dismounted leggings, khaki duck canvas, as worn in the field: dubbed, wet and mud-stained to a dark drab. The pale A99D76 stood out too bright in the 21 Nov stills (the art director), so the soldiers thread darkened all six American files to 5A4F36 and this matches them." },
+        "straps": { "rgb": "958B65", "about": "Cotton web gear (M1923 cartridge belt, M1928 haversack straps, suspenders): khaki in 1944, turning towards olive drab no. 7 late in the year." },
+        "helmet": { "rgb": "50513A", "about": "M1 helmet, painted olive drab with a grit finish, dull; often netted in Normandy (not drawn). Art director: 4F5234." },
+        "pack": { "rgb": "8C8360", "about": "M1928 haversack and its carrier, khaki canvas." },
+        "skin": { "rgb": "C49A78", "about": "Skin, sunburnt by July; each face's tone multiplies it." },
+        "wood": { "rgb": "5E4128", "about": "Walnut rifle stock, oiled (the M1 rifle; the file's rifle is a generic bolt-action)." },
+        "steel": { "rgb": "3B3D3A", "about": "Parkerized steel, a dull grey-green; also the canteen, the shovel blade and the buckles." },
+        "coat": { "rgb": "5E5641", "about": "Wool overcoat, olive drab shade 33 (not worn in July; for a cold-weather file)." },
+        "coat_dark": { "rgb": "4A4434", "about": "The overcoat's shadowed panels and collar." },
+        "leather": { "rgb": "2B2622", "about": "Composition soles and heels, near black." },
+        "blanket": { "rgb": "8C8460", "about": "The canteen's canvas cover, khaki (the file's felt is painted with this)." },
+        "hoof": { "rgb": "3A3028", "about": "Horses' hooves (not used by the men)." }
+      }
+    },
+    "GER": {
+      "about": "German infantry, Normandy, summer 1944: field-grey M1943 blouse and trousers, black leather boots (ankle boots and gaiters by then for many; the file draws marching boots), black leather belt, Y-straps and pouches, the steel helmet in the soldier file's 1944 finishes (wire and foliage, net and scrim, camouflage and plain by their shares).",
+      "helmets": "file",
+      "paints": {
+        "tunic": { "rgb": "5E6253", "about": "M1943 field blouse, field grey (Feldgrau): by 1944 the wool and its dyes ran from grey-green to a browner grey; the game's field grey 5F665C taken a little browner." },
+        "trousers": { "rgb": "5C5F51", "about": "M1943 trousers, field grey; as the blouse, mixed lots." },
+        "boots": { "rgb": "1E1C1A", "about": "Blackened leather boots. (In the German file the eyes share this paint.)" },
+        "lower": { "rgb": "6A6A58", "about": "Canvas ankle gaiters, field grey (not used by the German file, which draws marching boots)." },
+        "straps": { "rgb": "262220", "about": "Black leather belt, Y-straps and cartridge pouches." },
+        "helmet": { "rgb": "4D5249", "about": "Steel helmet, rough field-grey paint; shown only where the file's finishes do not cover the date." },
+        "pack": { "rgb": "6E6B52", "about": "Bread bag and A-frame canvas, field grey to olive." },
+        "skin": { "rgb": "C49A78", "about": "Skin; each face's tone multiplies it." },
+        "wood": { "rgb": "5A3E27", "about": "Rifle stock, walnut or laminated beech, oiled." },
+        "steel": { "rgb": "2A2C2F", "about": "Blued and phosphated steel; also the canister and the shovel (painted field grey-green in life, near enough at a distance)." },
+        "coat": { "rgb": "5E6253", "about": "Greatcoat, field grey (not worn in July)." },
+        "coat_dark": { "rgb": "4A4E42", "about": "The greatcoat's collar and shadowed panels." },
+        "leather": { "rgb": "2A2520", "about": "Hobnailed leather soles." },
+        "blanket": { "rgb": "6B5640", "about": "The water bottle's brown felt cover." },
+        "hoof": { "rgb": "3A3028", "about": "Horses' hooves (not used by the men)." }
+      }
+    },
+    "SOV": {
+      "about": "Soviet rifleman, Kursk salient, July 1943 (Prokhorovka): the M1943 gymnastyorka with its stand collar and shoulder boards in summer khaki cotton, faded by the sun, breeches (sharovary) of the same, tarpaulin kirza boots, a brown leather or canvas belt, the canvas veshmeshok on his back, the SSh-40 helmet in green paint (the soldier file's finishes: plain, summer dust, mud, the rare red star). Drawn with the soldiers thread's own Soviet file (soldier_SOV), the man as made for the summer.",
+      "helmets": "file",
+      "paints": {
+        "tunic": { "rgb": "7B7748", "about": "M1943 gymnastyorka, summer khaki cotton: an olive-khaki new, washed and sun-faded paler and yellower within weeks; taken between the two." },
+        "trousers": { "rgb": "6C6943", "about": "Sharovary breeches, khaki cotton or wool: a little darker than the shirt, which faded faster." },
+        "boots": { "rgb": "26211D", "about": "Kirza boots, rubberised tarpaulin uppers, near black and dull. (In the Soviet file the eyes share this paint.)" },
+        "lower": { "rgb": "2C2824", "about": "The boots' shafts to below the knee (kirza), as dark as the feet; puttees and ankle boots for others, not drawn." },
+        "straps": { "rgb": "5B4A33", "about": "Belt and ammunition pouches, brown leather or canvas substitute; the veshmeshok's straps." },
+        "helmet": { "rgb": "4E5A3A", "about": "SSh-40 steel helmet, dull green paint; shown only where the file's finishes do not cover the date." },
+        "pack": { "rgb": "7A7154", "about": "Veshmeshok (the drawstring duffel bag) and the gas-mask bag, khaki canvas, faded." },
+        "skin": { "rgb": "BDA08E", "about": "Skin, sunburnt by July; each face's tone multiplies it." },
+        "wood": { "rgb": "6B4429", "about": "Rifle stock, birch stained and shellacked a reddish brown (the Mosin; the file's rifle is a generic bolt-action)." },
+        "steel": { "rgb": "34363A", "about": "Blued steel; also the canteen, the entrenching spade and the buckles." },
+        "coat": { "rgb": "6B6352", "about": "Shinel greatcoat, grey-brown wool (not worn in July; rolled over the shoulder by many, not drawn)." },
+        "coat_dark": { "rgb": "504A3D", "about": "The greatcoat's collar and shadowed panels." },
+        "leather": { "rgb": "3A2E25", "about": "Leather and rubber soles." },
+        "blanket": { "rgb": "675D4E", "about": "The canteen's cloth cover." },
+        "hoof": { "rgb": "3A3028", "about": "Horses' hooves (not used by the men)." }
+      }
+    },
+    "ITA": {
+      "about": "Italian infantry (soldier_ITA, the soldiers thread's own file): grey-green (grigio-verde) wool. Cloth, helmet and skin from the art director (unit table; med-asia 3D art calls); every other paint stands in from the German row until the art director rules it.",
+      "helmets": "file",
+      "paints": {
+        "tunic": { "rgb": "73806C", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
+        "trousers": { "rgb": "73806C", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
+        "boots": { "rgb": "1E1C1A", "about": "stand-in: from the German row, not yet ruled for the Italians" },
+        "lower": { "rgb": "6A6A58", "about": "stand-in: from the German row, not yet ruled for the Italians" },
+        "straps": { "rgb": "262220", "about": "stand-in: from the German row, not yet ruled for the Italians" },
+        "helmet": { "rgb": "66705C", "about": "Art director (med-asia 3D art calls)." },
+        "pack": { "rgb": "6E6B52", "about": "stand-in: from the German row, not yet ruled for the Italians" },
+        "skin": { "rgb": "C49A78", "about": "Art director (med-asia 3D art calls)." },
+        "wood": { "rgb": "5A3E27", "about": "stand-in: from the German row, not yet ruled for the Italians" },
+        "steel": { "rgb": "2A2C2F", "about": "stand-in: from the German row, not yet ruled for the Italians" },
+        "coat": { "rgb": "5E6253", "about": "stand-in: from the German row, not yet ruled for the Italians" },
+        "coat_dark": { "rgb": "4A4E42", "about": "stand-in: from the German row, not yet ruled for the Italians" },
+        "leather": { "rgb": "2A2520", "about": "stand-in: from the German row, not yet ruled for the Italians" },
+        "blanket": { "rgb": "6B5640", "about": "stand-in: from the German row, not yet ruled for the Italians" },
+        "hoof": { "rgb": "3A3028", "about": "stand-in: from the German row, not yet ruled for the Italians" }
+      }
+    },
+    "ITA_desert": {
+      "about": "The Italian's desert dress (soldier_ITA_desert: the sahariana, picked on the desert front): the soldier file's own colours as the soldiers thread made them; NOT yet ruled by the art director (a stand-in row). Coat and hoof from the Italian row.",
+      "helmets": "file",
+      "paints": {
+        "tunic": { "rgb": "B8A57A", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "trousers": { "rgb": "AE9A70", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "boots": { "rgb": "4A3626", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "lower": { "rgb": "A6936B", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "straps": { "rgb": "6E5A3E", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "helmet": { "rgb": "B39E73", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "pack": { "rgb": "A69777", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "skin": { "rgb": "BDA08E", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "wood": { "rgb": "6B4429", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "steel": { "rgb": "34363A", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "coat": { "rgb": "5E6253", "about": "stand-in: the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "coat_dark": { "rgb": "4A4E42", "about": "stand-in: the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "leather": { "rgb": "3A2E25", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "blanket": { "rgb": "8A7A5C", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "hoof": { "rgb": "3A3028", "about": "stand-in: the soldier file's own colour (soldiers thread), not yet ruled by the art director" }
+      }
+    },
+    "SOV_winter": {
+      "about": "The Soviet's quilted winter dress and felt boots (soldier_SOV_winter, picked from November to March): the soldier file's own colours as the soldiers thread made them; NOT yet ruled by the art director (a stand-in row). Coat and hoof from the Soviet row.",
+      "helmets": "file",
+      "paints": {
+        "tunic": { "rgb": "7B7748", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "trousers": { "rgb": "6C6943", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "boots": { "rgb": "8C867B", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "lower": { "rgb": "8C867B", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "straps": { "rgb": "5B4A33", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "helmet": { "rgb": "6B6647", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "pack": { "rgb": "7A7154", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "skin": { "rgb": "BDA08E", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "wood": { "rgb": "6B4429", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "steel": { "rgb": "34363A", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "coat": { "rgb": "6B6352", "about": "stand-in: the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "coat_dark": { "rgb": "504A3D", "about": "stand-in: the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "leather": { "rgb": "3A2E25", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "blanket": { "rgb": "7D7466", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "hoof": { "rgb": "3A3028", "about": "stand-in: the soldier file's own colour (soldiers thread), not yet ruled by the art director" }
+      }
+    },
+    "SOV_snow": {
+      "about": "The Soviet's white snow suit (soldier_SOV_snow, picked from November to March): the soldier file's own colours as the soldiers thread made them; NOT yet ruled by the art director (a stand-in row). Coat and hoof from the Soviet row.",
+      "helmets": "file",
+      "paints": {
+        "tunic": { "rgb": "E1E3DF", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "trousers": { "rgb": "D9DBD7", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "boots": { "rgb": "8C867B", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "lower": { "rgb": "8C867B", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "straps": { "rgb": "5B4A33", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "helmet": { "rgb": "E1E3DF", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "pack": { "rgb": "7A7154", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "skin": { "rgb": "BDA08E", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "wood": { "rgb": "6B4429", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "steel": { "rgb": "34363A", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "coat": { "rgb": "6B6352", "about": "stand-in: the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "coat_dark": { "rgb": "504A3D", "about": "stand-in: the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "leather": { "rgb": "3A2E25", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "blanket": { "rgb": "E1E3DF", "about": "the soldier file's own colour (soldiers thread), not yet ruled by the art director" },
+        "hoof": { "rgb": "3A3028", "about": "stand-in: the soldier file's own colour (soldiers thread), not yet ruled by the art director" }
+      }
+    },
+    "JAP": {
+      "about": "Japanese infantry (soldier_JAP, the soldiers thread's own file): khaki Type 98 wool or tropical cotton. Cloth from the art director; every other paint stands in from the American row until the art director rules it.",
+      "helmets": "file",
+      "paints": {
+        "tunic": { "rgb": "A08856", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
+        "trousers": { "rgb": "A08856", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
+        "boots": { "rgb": "5A4030", "about": "stand-in: from the American row, not yet ruled for the Japanese" },
+        "lower": { "rgb": "5A4F36", "about": "stand-in: from the American row, not yet ruled for the Japanese" },
+        "straps": { "rgb": "958B65", "about": "stand-in: from the American row, not yet ruled for the Japanese" },
+        "helmet": { "rgb": "50513A", "about": "stand-in: from the American row, not yet ruled for the Japanese" },
+        "pack": { "rgb": "8C8360", "about": "stand-in: from the American row, not yet ruled for the Japanese" },
+        "skin": { "rgb": "C49A78", "about": "stand-in: from the American row, not yet ruled for the Japanese" },
+        "wood": { "rgb": "5E4128", "about": "stand-in: from the American row, not yet ruled for the Japanese" },
+        "steel": { "rgb": "3B3D3A", "about": "stand-in: from the American row, not yet ruled for the Japanese" },
+        "coat": { "rgb": "5E5641", "about": "stand-in: from the American row, not yet ruled for the Japanese" },
+        "coat_dark": { "rgb": "4A4434", "about": "stand-in: from the American row, not yet ruled for the Japanese" },
+        "leather": { "rgb": "2B2622", "about": "stand-in: from the American row, not yet ruled for the Japanese" },
+        "blanket": { "rgb": "8C8460", "about": "stand-in: from the American row, not yet ruled for the Japanese" },
+        "hoof": { "rgb": "3A3028", "about": "stand-in: from the American row, not yet ruled for the Japanese" }
+      }
+    },
+    "CHN": {
+      "about": "Chinese National Revolutionary Army infantry (soldier_CHN, the soldiers thread's own file): blue-grey cotton. Cloth from the art director; every other paint stands in from the American row until the art director rules it.",
+      "helmets": "file",
+      "paints": {
+        "tunic": { "rgb": "7F8A96", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
+        "trousers": { "rgb": "7F8A96", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
+        "boots": { "rgb": "5A4030", "about": "stand-in: from the American row, not yet ruled for the Chinese" },
+        "lower": { "rgb": "5A4F36", "about": "stand-in: from the American row, not yet ruled for the Chinese" },
+        "straps": { "rgb": "958B65", "about": "stand-in: from the American row, not yet ruled for the Chinese" },
+        "helmet": { "rgb": "50513A", "about": "stand-in: from the American row, not yet ruled for the Chinese" },
+        "pack": { "rgb": "8C8360", "about": "stand-in: from the American row, not yet ruled for the Chinese" },
+        "skin": { "rgb": "C49A78", "about": "stand-in: from the American row, not yet ruled for the Chinese" },
+        "wood": { "rgb": "5E4128", "about": "stand-in: from the American row, not yet ruled for the Chinese" },
+        "steel": { "rgb": "3B3D3A", "about": "stand-in: from the American row, not yet ruled for the Chinese" },
+        "coat": { "rgb": "5E5641", "about": "stand-in: from the American row, not yet ruled for the Chinese" },
+        "coat_dark": { "rgb": "4A4434", "about": "stand-in: from the American row, not yet ruled for the Chinese" },
+        "leather": { "rgb": "2B2622", "about": "stand-in: from the American row, not yet ruled for the Chinese" },
+        "blanket": { "rgb": "8C8460", "about": "stand-in: from the American row, not yet ruled for the Chinese" },
+        "hoof": { "rgb": "3A3028", "about": "stand-in: from the American row, not yet ruled for the Chinese" }
+      }
+    },
+    "FRA": {
+      "about": "French infantry, 1940: khaki wool. Its own soldier file (soldier_FRA, the soldiers thread 23 Nov 00:11Z: the Polish body in the Adrian M26 helmet, with its finishes by date, season and front: plain, road dust May-June 1940, horizon blue to June 1940, mud, desert sand), in this army's cloth from the art director's unit table. Every other paint stands in from the American row.",
+      "helmets": "file",
+      "paints": {
+        "tunic": { "rgb": "7A7250", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
+        "trousers": { "rgb": "7A7250", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
+        "boots": { "rgb": "5A4030", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "lower": { "rgb": "5A4F36", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "straps": { "rgb": "958B65", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "helmet": { "rgb": "50513A", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "pack": { "rgb": "8C8360", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "skin": { "rgb": "C49A78", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "wood": { "rgb": "5E4128", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "steel": { "rgb": "3B3D3A", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "coat": { "rgb": "5E5641", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "coat_dark": { "rgb": "4A4434", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "leather": { "rgb": "2B2622", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "blanket": { "rgb": "8C8460", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "hoof": { "rgb": "3A3028", "about": "stand-in: from the American row, not yet ruled for this army" }
+      }
+    },
+    "UK": {
+      "about": "British infantry: khaki serge battledress. Its own soldier file (soldier_UK, the soldiers thread 23 Nov 00:11Z: the Polish body in the Brodie Mk II helmet, with its finishes by date, season and front: plain, net, net and scrim, net and leaves in the west's summer 1944, desert sand and dust, mud, whitewash in the winter of 1944-45), in this army's cloth from the art director's unit table. Every other paint stands in from the American row.",
+      "helmets": "file",
+      "paints": {
+        "tunic": { "rgb": "8B7B52", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
+        "trousers": { "rgb": "8B7B52", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
+        "boots": { "rgb": "5A4030", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "lower": { "rgb": "5A4F36", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "straps": { "rgb": "958B65", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "helmet": { "rgb": "50513A", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "pack": { "rgb": "8C8360", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "skin": { "rgb": "C49A78", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "wood": { "rgb": "5E4128", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "steel": { "rgb": "3B3D3A", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "coat": { "rgb": "5E5641", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "coat_dark": { "rgb": "4A4434", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "leather": { "rgb": "2B2622", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "blanket": { "rgb": "8C8460", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "hoof": { "rgb": "3A3028", "about": "stand-in: from the American row, not yet ruled for this army" }
+      }
+    },
+    "UK@desert": {
+      "about": "British infantry on the desert front (\"UK@desert\": LandMen takes army@front first): khaki drill shirt and shorts. The British soldier file (soldier_UK, its Brodie helmet in desert sand or dust; no soldier_UK_desert yet, so the drill is painted on the battledress body); the drill colour the art director's (23:42Z); every other paint stands in from the American row.",
+      "helmets": "file",
+      "paints": {
+        "tunic": { "rgb": "B8A37A", "about": "Art director 22 Nov 23:42Z: sandy khaki drill, a touch paler than the first A8946A; written with extra colour for the grade, so checked in the first game stills." },
+        "trousers": { "rgb": "B8A37A", "about": "As the shirt (art director 23:42Z)." },
+        "boots": { "rgb": "5A4030", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "lower": { "rgb": "5A4F36", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "straps": { "rgb": "958B65", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "helmet": { "rgb": "50513A", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "pack": { "rgb": "8C8360", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "skin": { "rgb": "C49A78", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "wood": { "rgb": "5E4128", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "steel": { "rgb": "3B3D3A", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "coat": { "rgb": "5E5641", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "coat_dark": { "rgb": "4A4434", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "leather": { "rgb": "2B2622", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "blanket": { "rgb": "8C8460", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "hoof": { "rgb": "3A3028", "about": "stand-in: from the American row, not yet ruled for this army" }
+      }
+    },
+    "ROM": {
+      "about": "Romanian infantry: khaki-brown wool. STAND-IN: no soldier file of its own yet, so the Polish body (soldier_POL) in this army's cloth from the art director's unit table; its own plain helmet painted \"helmet\" (no other army's badges). Every other paint stands in from the American row.",
+      "standIn": "POL",
+      "helmets": "own",
+      "paints": {
+        "tunic": { "rgb": "7E7852", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
+        "trousers": { "rgb": "7E7852", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
+        "boots": { "rgb": "5A4030", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "lower": { "rgb": "5A4F36", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "straps": { "rgb": "958B65", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "helmet": { "rgb": "50513A", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "pack": { "rgb": "8C8360", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "skin": { "rgb": "C49A78", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "wood": { "rgb": "5E4128", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "steel": { "rgb": "3B3D3A", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "coat": { "rgb": "5E5641", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "coat_dark": { "rgb": "4A4434", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "leather": { "rgb": "2B2622", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "blanket": { "rgb": "8C8460", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "hoof": { "rgb": "3A3028", "about": "stand-in: from the American row, not yet ruled for this army" }
+      }
+    },
+    "HUN": {
+      "about": "Hungarian infantry: khaki-brown wool. STAND-IN: no soldier file of its own yet, so the German body (soldier_GER) in this army's cloth from the art director's unit table; its own plain helmet painted \"helmet\" (no other army's badges). Every other paint stands in from the German row.",
+      "standIn": "GER",
+      "helmets": "own",
+      "paints": {
+        "tunic": { "rgb": "7C7650", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
+        "trousers": { "rgb": "7C7650", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
+        "boots": { "rgb": "1E1C1A", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "lower": { "rgb": "6A6A58", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "straps": { "rgb": "262220", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "helmet": { "rgb": "4D5249", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "pack": { "rgb": "6E6B52", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "skin": { "rgb": "C49A78", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "wood": { "rgb": "5A3E27", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "steel": { "rgb": "2A2C2F", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "coat": { "rgb": "5E6253", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "coat_dark": { "rgb": "4A4E42", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "leather": { "rgb": "2A2520", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "blanket": { "rgb": "6B5640", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "hoof": { "rgb": "3A3028", "about": "stand-in: from the German row, not yet ruled for this army" }
+      }
+    },
+    "FIN": {
+      "about": "Finnish infantry: grey-green wool. STAND-IN: no soldier file of its own yet, so the German body (soldier_GER) in this army's cloth from the art director's unit table; its own plain helmet painted \"helmet\" (no other army's badges). Every other paint stands in from the German row.",
+      "standIn": "GER",
+      "helmets": "own",
+      "paints": {
+        "tunic": { "rgb": "767B76", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
+        "trousers": { "rgb": "767B76", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
+        "boots": { "rgb": "1E1C1A", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "lower": { "rgb": "6A6A58", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "straps": { "rgb": "262220", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "helmet": { "rgb": "4D5249", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "pack": { "rgb": "6E6B52", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "skin": { "rgb": "C49A78", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "wood": { "rgb": "5A3E27", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "steel": { "rgb": "2A2C2F", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "coat": { "rgb": "5E6253", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "coat_dark": { "rgb": "4A4E42", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "leather": { "rgb": "2A2520", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "blanket": { "rgb": "6B5640", "about": "stand-in: from the German row, not yet ruled for this army" },
+        "hoof": { "rgb": "3A3028", "about": "stand-in: from the German row, not yet ruled for this army" }
+      }
+    },
+    "USA@pacific": {
+      "about": "US infantry and Marines on the Pacific front (\"USA@pacific\": LandMen takes army@front first): the American files in the art director's sage-green herringbone twill (23:42Z). Every other paint as the American row.",
+      "helmets": "file",
+      "paints": {
+        "tunic": { "rgb": "667050", "about": "Art director 22 Nov 23:42Z: sage-green herringbone twill (HBT), green above red, not the olive-khaki wool; written with extra colour for the grade, so checked in the first game stills." },
+        "trousers": { "rgb": "667050", "about": "As the jacket, HBT (art director 23:42Z)." },
+        "boots": { "rgb": "5A4030", "about": "Type II/III service shoes, russet roughout leather dubbed and worn dark. (In the Polish file the eyes share this paint.)" },
+        "lower": { "rgb": "5A4F36", "about": "M1938 dismounted leggings, khaki duck canvas, as worn in the field: dubbed, wet and mud-stained to a dark drab. The pale A99D76 stood out too bright in the 21 Nov stills (the art director), so the soldiers thread darkened all six American files to 5A4F36 and this matches them." },
+        "straps": { "rgb": "958B65", "about": "Cotton web gear (M1923 cartridge belt, M1928 haversack straps, suspenders): khaki in 1944, turning towards olive drab no. 7 late in the year." },
+        "helmet": { "rgb": "50513A", "about": "M1 helmet, painted olive drab with a grit finish, dull; often netted in Normandy (not drawn). Art director: 4F5234." },
+        "pack": { "rgb": "8C8360", "about": "M1928 haversack and its carrier, khaki canvas." },
+        "skin": { "rgb": "C49A78", "about": "Skin, sunburnt by July; each face's tone multiplies it." },
+        "wood": { "rgb": "5E4128", "about": "Walnut rifle stock, oiled (the M1 rifle; the file's rifle is a generic bolt-action)." },
+        "steel": { "rgb": "3B3D3A", "about": "Parkerized steel, a dull grey-green; also the canteen, the shovel blade and the buckles." },
+        "coat": { "rgb": "5E5641", "about": "Wool overcoat, olive drab shade 33 (not worn in July; for a cold-weather file)." },
+        "coat_dark": { "rgb": "4A4434", "about": "The overcoat's shadowed panels and collar." },
+        "leather": { "rgb": "2B2622", "about": "Composition soles and heels, near black." },
+        "blanket": { "rgb": "8C8460", "about": "The canteen's canvas cover, khaki (the file's felt is painted with this)." },
+        "hoof": { "rgb": "3A3028", "about": "Horses' hooves (not used by the men)." }
+      }
+    },
+    "_default": {
+      "about": "Any army with no row of its own (LandMen falls back to this; never an unpainted man): STAND-IN, the Polish body (soldier_POL) in plain khaki, the British row's paints (the art director's UK cloth 8B7B52), its own plain helmet. Give the army its own row to replace it.",
+      "standIn": "POL",
+      "helmets": "own",
+      "paints": {
+        "tunic": { "rgb": "8B7B52", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
+        "trousers": { "rgb": "8B7B52", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
+        "boots": { "rgb": "5A4030", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "lower": { "rgb": "5A4F36", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "straps": { "rgb": "958B65", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "helmet": { "rgb": "50513A", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "pack": { "rgb": "8C8360", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "skin": { "rgb": "C49A78", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "wood": { "rgb": "5E4128", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "steel": { "rgb": "3B3D3A", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "coat": { "rgb": "5E5641", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "coat_dark": { "rgb": "4A4434", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "leather": { "rgb": "2B2622", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "blanket": { "rgb": "8C8460", "about": "stand-in: from the American row, not yet ruled for this army" },
+        "hoof": { "rgb": "3A3028", "about": "stand-in: from the American row, not yet ruled for this army" }
+      }
+    }
+  }
+}

@@ -22,9 +22,11 @@ import {
 } from './air';
 import { allied, atWar, headline } from './game';
 import { INTEL, agentsOf, atWork, fogOn } from './intel';
-import { CLASSES, FLEETS, airOver, atSea, fleetPower, fleetReach, fleetsOf, sail, seaSide, shipCount, shipList, surfaceShips } from './navy';
+import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetPower, fleetReach, fleetsOf, keptByHand, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
 import { RES, needOf } from './resources';
 import type { AirFleet, AirMission, Fleet, Game, Region, Ships } from './types';
+import { weatherOn, whyNotSky, zoneOfSea } from './weather';
+import { inCampaign } from './aircampaigns';
 
 type WingKind = 'ftr' | 'bmr';
 const KINDS: WingKind[] = ['ftr', 'bmr'];
@@ -437,7 +439,11 @@ export function searchOf(g: Game, nat: string, z: number): number {
   }
   w += airOver(g, z, nat) * S.air;
   const me = g.human;
-  if (me && (nat === me || allied(g, nat, me)) && g.intel?.sea?.[z] === g.turn) w += S.flight;
+  let flown = !!me && (nat === me || allied(g, nat, me)) && g.intel?.sea?.[z] === g.turn;
+  // A computer staff's search counts for its side as the player's does for his (ruling 52), once for a sea.
+  const by = g.intel?.seaBy;
+  if (!flown && by) for (const k in by) if (by[k][z] === g.turn && (k === nat || allied(g, k, nat))) { flown = true; break; }
+  if (flown) w += S.flight;
   return w;
 }
 
@@ -582,6 +588,8 @@ export function whyNotSearch(g: Game, f: AirFleet, z: number): string | null {
   if (f.ftr + f.bmr <= 0) return 'It has no aircraft fit to fly.';
   if (f.scouted === g.turn) return 'It has flown its reconnaissance this month.';
   if (!g.nations[f.nat].atWar.length) return 'The nation is at peace.';
+  // Weather (ruling 127): no search flies from or over a closed sky.
+  if (weatherOn(g)) { const why = whyNotSky(g, f, zoneOfSea(g, z)); if (why) return why; }
   const R = airRange(f, g);
   return kmToSea(g, f, z) <= (f.bmr > 0 ? R.bmr : R.ftr) ? null : 'That sea is out of its range.';
 }
@@ -634,10 +642,72 @@ export function searchSea(g: Game, id: number, z: number, nat: string | null = g
 
 // ---- The computer's admirals and air staff at sea -------------------------------------------------------
 
+/**
+ * A computer staff's searches of the sea (ruling 52): flown as the player's are, a few aircraft of one group
+ * quartering one sea for the month at the same cost in readiness, and counted the same in its side's search of
+ * that sea. The staff looks where its own war points it, and at nothing it could not know: first a sea where enemy
+ * ships are reported and not identified; then the seas where its side's ships, cargoes or coasts were attacked
+ * since last month; then the seas off its own harbours and its fleets' stations, taken in turn. A sea its side
+ * has in full view already is left alone. So many searches a month and no more (carriers.json ai.searches), by
+ * the nearest group that can fly one, and never by a group the flight would leave unfit to raid.
+ */
+function staffSearch(g: Game, nat: string): void {
+  const most = CARRIERS.ai.searches ?? 0;
+  if (!(most > 0) || !g.intel) return;
+  const S = CARRIERS.search;
+  const ours = (k: string): boolean => k === nat || allied(g, k, nat);
+  const wanted: number[] = [];
+  const want = (z: number | undefined): void => { if (z !== undefined && g.seas[z] && !wanted.includes(z)) wanted.push(z); };
+  for (const x of g.fleets) if (atSea(x) && shipCount(x.ships) > 0 && atWar(g, nat, x.nat) && fleetFound(g, x, nat) === 'report') want(x.zone);
+  for (const f of g.fleets) if (ours(f.nat) && f.struck && f.struck[0] >= g.turn - 1) want(f.struck[2]);
+  for (let i = g.seaReports.length - 1; i >= 0 && g.seaReports[i].turn >= g.turn - 1; i--) if (ours(g.seaReports[i].attNat) || ours(g.seaReports[i].defNat)) want(g.seaReports[i].zone);
+  for (let i = g.shoreReports.length - 1; i >= 0 && g.shoreReports[i].turn >= g.turn - 1; i--) if (ours(g.shoreReports[i].defNat)) want(g.shoreReports[i].zone);
+  for (const rt of NAVY.convoys) {
+    const m = g.convoys[rt.id];
+    if (ours(rt.to) && m && m.turn >= g.turn - 1 && m.tons > 0) want(zoneOf(g, rt.zones[g.turn % rt.zones.length]));
+  }
+  const round = new Set<number>();
+  for (const f of fleetsOf(g, nat)) if (shipCount(f.ships) > 0) { round.add(f.station); round.add(f.home); }
+  for (const r of g.regions) if (r.port && r.ctrl === nat && r.owner === nat) for (const z of r.seas) round.add(z);
+  const beat = [...round].filter((z) => !!g.seas[z]).sort((a, b) => a - b);
+  for (let i = 0; i < beat.length; i++) want(beat[(i + g.turn) % beat.length]);
+  const by = ((g.intel.seaBy ??= {})[nat] ??= {});
+  for (const k of Object.keys(by)) if (by[+k] !== g.turn) delete by[+k];
+  const ready = AIRWAR.ai.raids.ready;
+  const groups = airFleetsOf(g, nat).filter((f) => f.ftr + f.bmr > 0 && f.scouted !== g.turn && !(f.ready >= ready && f.ready - S.ready < ready));
+  let flown = Object.keys(by).length;
+  for (const z of wanted) {
+    if (flown >= most || !groups.length) break;
+    if (by[z] === g.turn || searchOf(g, nat, z) >= S.find * openness(g, z)) continue;
+    let best: AirFleet | null = null, bd = 0;
+    for (const f of groups) {
+      if (f.scouted === g.turn || whyNotSearch(g, f, z)) continue;
+      const d = kmToSea(g, f, z);
+      if (!best || d < bd || (d === bd && f.id < best.id)) { best = f; bd = d; }
+    }
+    if (!best) continue;
+    best.scouted = g.turn;
+    best.ready = Math.max(AIR.ready.floor, best.ready - S.ready);
+    by[z] = g.turn;
+    flown++;
+  }
+}
+
+/** True where a strike on this sea would cost an enemy of this nation trade: his convoys cross it, or his coasters run under his own shore (air.ts counts it so). */
+function tradeIn(g: Game, nat: string, z: number): boolean {
+  const sea = g.seas[z];
+  if (NAVY.convoys.some((c) => atWar(g, nat, c.to) && c.zones.includes(sea.key))) return true;
+  return sea.coast.some((id) => { const r = g.regions[id]; return r.port && r.owner === r.ctrl && atWar(g, nat, r.ctrl); });
+}
+
 interface Blow { m: AirMission; t: number; fleets: AirFleet[]; v: number }
 
-/** The best strike on ships one bomber group could fly from where it is, with these fighters to go with it if fighters will come up. `sure` flies only at a fleet that is identified. */
-function bestBlow(g: Game, nat: string, lead: AirFleet, escorts: AirFleet[], hit: Set<string>, sure = false): Blow | null {
+/**
+ * The best strike on ships one bomber group could fly from where it is, with these fighters to go with it if fighters
+ * will come up. `sure` flies only at a fleet that is identified. With `trade`, the enemy's cargoes are weighed beside
+ * his warships (ruling 52): a strike at the shipping in a sea his convoys cross or his coasters work.
+ */
+function bestBlow(g: Game, nat: string, lead: AirFleet, escorts: AirFleet[], hit: Set<string>, sure = false, trade = false): Blow | null {
   const A = CARRIERS.ai;
   let best: Blow | null = null;
   const weigh = (m: AirMission, t: number): void => {
@@ -662,6 +732,7 @@ function bestBlow(g: Game, nat: string, lead: AirFleet, escorts: AirFleet[], hit
     if (k === 'exact' || (k === 'report' && !sure)) weigh('fleet', x.id);
   }
   for (const r of ports) if (shipsInPort(g, r, nat).length) weigh('harbour', r);
+  if (trade) for (const z of g.seas) if (tradeIn(g, nat, z.id)) weigh('strike', z.id);
   return best;
 }
 
@@ -677,9 +748,12 @@ export function seaStaff(g: Game, nat: string, what: 'all' | 'decks' | 'land' = 
   const his = what === 'decks' ? byHand(g, nat, 'navy') : what === 'land' ? byHand(g, nat, 'air') : nat === g.human;
   if (!carrierRules(g) || his || !g.nations[nat]?.alive || !g.nations[nat].atWar.length) return;
   const A = CARRIERS.ai, R = AIRWAR.ai.raids;
+  // The searches first (ruling 52): what they find can be struck this month. The player's own reconnaissance stays his.
+  if (nat !== g.human) staffSearch(g, nat);
+  const trade = !!A.trade;
   const hit = new Set<string>();
   let flown = what === 'land' ? 100 : 0;
-  const fit = (f: AirFleet | undefined): f is AirFleet => !!f && f.flew !== g.turn && f.mission === 'support' && f.ready >= A.ready;
+  const fit = (f: AirFleet | undefined): f is AirFleet => !!f && f.flew !== g.turn && f.mission === 'support' && f.ready >= A.ready && !inCampaign(g, f);
   const send = (b: Blow): void => {
     const rep = fly(g, nat, b.m, b.t, b.fleets, `:sea${flown++}`);
     hit.add(`${b.m}:${b.t}`);
@@ -691,10 +765,10 @@ export function seaStaff(g: Game, nat: string, what: 'all' | 'decks' | 'land' = 
     const lead = wingOf(g, c.id, 'bmr'), cap = wingOf(g, c.id, 'ftr');
     if (!fit(lead) || lead.bmr < 6) continue;
     const escorts = fit(cap) && cap.ftr > 0 ? [cap] : [];
-    const here = bestBlow(g, nat, lead, escorts, hit);
+    const here = bestBlow(g, nat, lead, escorts, hit, false, trade);
     if (here) { send(here); continue; }
     // In harbour with nothing in reach: a sortie, into a sea where its side would be much the stronger with it there.
-    if (atSea(c) || !(A.sortie > 0) || c.duty === 'raid' || c.ready < FLEETS.ai.ready) continue;
+    if (atSea(c) || !(A.sortie > 0) || c.duty === 'raid' || c.ready < FLEETS.ai.ready || keptByHand(g, c)) continue;
     const power = fleetPower(g, c);
     const keep = { zone: c.zone, stance: c.stance };
     let at = -1, plan: Blow | null = null;
@@ -719,7 +793,7 @@ export function seaStaff(g: Game, nat: string, what: 'all' | 'decks' | 'land' = 
   for (const lead of leads) {
     if (most <= 0) break;
     const escorts = airFleetsOf(g, nat).filter((x) => x.kind === 'ftr' && x.ftr > 0 && fit(x) && homeOf(x) === homeOf(lead));
-    const b = bestBlow(g, nat, lead, escorts, hit, true);
+    const b = bestBlow(g, nat, lead, escorts, hit, true, trade);
     if (!b) continue;
     send(b);
     most--;

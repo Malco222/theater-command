@@ -1,0 +1,994 @@
+{
+  "what": "The battle mix: how every approved battle sound is blended by unit, distance and how hot the fight is, so a battle plays like a war film. Numbers are the sound director's to tune; the 3D game reads them. Spec in plain words: battle-mix.md beside this file.",
+  "version": 5,
+  "changes": "v5 (21 Nov, release 2; the 3D game's second air sound patch, sound/air-r2/): rounds striking a plane (air.roundsHit, silent until Brian marks round seven's hits Good); close flak in every view (air.closeView.closeFlak); big moments dip the rest in the air battle (big, air.bigDuck); dead engines thin the drones (air.engineLost); the battle's music driven by the air battle's own meter (music._air). Land (the ground battle sound thread): a new top-level `land` block, which touches no existing row. No number changed. v4's changes: mix-v4.json beside this file. After the review (21 Nov, 19:40Z), no number changed: air.roundsPassing.reach (new, 1000 m: rounds crack past beyond the guns' convergence); a fighter's fixed guns of one kind are one take (air.gunsByCalibre._wing); close flak is always heard (air.closeView.closeFlak._always); formation loops in air.loopsFamily, as written here; the master limiter's knee hard (buses.master._knee). Land block updated 21 Nov 19:25Z by the ground sound thread: land.mgClose.endFade 0.04 replaces tail, tailFade and farTail, and land.cracks.runFade 0.04 replaces runTail (the MG recordings fire on after a burst's last round, so the 0.3 s tail was about eight more rounds at full level). Land block updated 21 Nov 19:36Z by the ground sound thread: land.garand.reloadFromClips and reloadPieces (the reload heard from the clip recordings), and land.smgCue (the squad leader's Thompson burst, MP 38 takes standing in until a real Thompson is recorded). Land block updated 21 Nov 19:39Z by the ground sound thread: land.smgCue.leaderRoles (officer, leader), and the Garand reload and the leader's Thompson switch on by themselves at the first clip cue (notes only; the code default matches). The master limiter's detector (21 Nov 19:50Z): digital, 5 ms look-ahead (buses.master._detector); no number changed. 21 Nov 19:50Z: limits.worldTotal 64 (was 40; limits._worldTotal says why), and the ground sound thread's land block of 19:46Z: land.bodyCues.field_gun_breech null (no recording; the gun's case clangs anyway). Land block updated 21 Nov 20:12Z by the ground sound thread: land.bodyCues.medic_tend null (the medic's cue, silent until a real take passes) and land.armourStrikes (rounds on a tank's armour; its list is empty, so nothing changes until round eight's steel hits pass). 21 Nov 20:50Z: air.closeView.masterDb 7.5 (was 3.1): the game's chase view measured 4.4 dB under the -12 LUFS the close view was set for (air.closeView._masterDb says how). Land block updated 21 Nov 20:54Z by the ground sound thread: five silent land.bodyCues for the GI's bazooka team and the loader's carbine (bazooka_fire, rocket_loaded, wire_contact, helmet_tap, rifle_shot), each with a note, so no clip cue asks for a missing take; no sound changes. 21 Nov 21:50Z: the master limiter's attack near instant (buses.master.limiterAttackMs 0.02, limiterLookAheadMs 1, limiterAnalogDetector false, limiterReleaseMs 500 (was 120)): with a 1 ms attack the Mac's runs still reached 0.00 dBFS (buses.master._detector says why). Land block updated 21 Nov 21:51Z by the ground sound thread (round eight, Brian's stamps of 21:41Z): crack_woods_01 joins land.cracks.single; ricochet_whine_01..03 join land.groundStrikes.whines; land.armourStrikes.smallArms = steel_hit_01..03; new land.landings (mortar_impact_01/02 middle, mortar_impact_far_01/02 far) and land.engines (Panzer IV and Tiger driving on panzer_engine_loop); incoming_shell and ricochet Cut, so land.incoming stays empty (land.incoming._round8). 21 Nov 22:05Z: round seven stamped by Brian (21:40Z): b17_interior_loop Good, so riding a B-17 plays it open at +2 dB in place of its drone through the filter (air.closeView.bed.interior, interiorGainDb); plane_hit and hmg_burst_long Cut (air.roundsHit stays silent). Land block updated 21 Nov 23:40Z by the ground sound thread: five silent land.bodyCues for the GI thread's new clips (radio_squelch, radio_talk; thompson_mag_out, thompson_mag_in, thompson_cock), each null with a note, so no clip cue asks for a missing take; no sound changes. 22 Nov 04:20Z: round nine stamped by Brian (03:40Z): real B-17s replace the studio library's. Riding a B-17 plays one of two recordings from inside one (air.closeView.bed.interior B-17, a list now, one per ridden bomber), and a B-17 formation's engines are three B-17s filmed flying over (air.loops B-17); levels unchanged (-20.0 LUFS). Land block updated 22 Nov 05:40Z by the ground sound thread: land.tankMg (a tank's machine guns by army, and the Sherman's roof .50 on gunner_burst), and land.mgClose.parts gains gunner_burst and maxim_burst (_parts says why); no take from outside the approved pack. 22 Nov (patch 0021, the Bremen r2d film): the close view's guns stand out of the ridden engine: air.closeView.masterDb 7.5 -> 9.5 and bed.gainDb 6 -> 1 (the notes say why); a gunner's twin mount is heard as one take (gunsByCalibre._wing); notes corrected where the code differs (masterDbByCameraDistance, closeView._notBuilt). Land block updated 22 Nov 12:46Z by the ground sound thread: land.mgClose.moreParts (maxim_burst's first two bursts, so a crowded Soviet section's burst plays from one of them instead of a copy already sounding; _moreParts says why); nothing else changes. Land block updated 22 Nov 19:09Z by the ground sound thread: land.mgClose.moreParts gains mg42_burst_01 and mg42_burst_02 (stretches of firing measured from each take's rounds, so a crowded German MG plays another stretch instead of a copy; the Kursk fault), and land.voices (the ground battle's pooled players: pool false, warm 256, most 384; off until the 3D pre-check and a Mac sound-on comparison pass, so nothing in the game changes yet). Land block updated 22 Nov 20:42Z by the ground sound thread: land.voices.pool true (the 3D pre-check passed the ground battle's pooled players; _pool and _sizes say how); warm 256 and most 384 unchanged; the air block is untouched. Land block updated 22 Nov 21:46Z by the ground sound thread: land.voices.most 768 (was 384; the camera's 2,000-man recording filled all 384 on one join; _sizes says how); nothing else changes, and the air block is untouched.",
+  "made": "2026-11-21",
+  "files": "/mnt/project-files/sound/battle-pack/wav/",
+  "units": "metres of the battlefield (the sims' x, y), seconds, decibels. 0 dB = the file as made.",
+  "listener": {
+    "at": "the ground point the camera looks at, raised by heightFactor x the camera's height above it",
+    "heightFactor": 0.6,
+    "facing": "the camera's yaw, so left on screen is heard on the left"
+  },
+  "buses": {
+    "bed": {"gainDb": 0, "note": "layer 1: the battle's air, near and far (beds crossfade by intensity)"},
+    "loops": {
+      "gainDb": -6,
+      "note": "layer 2: engines, marching, a unit's own fight loop. v2: -6, so an engine ticking over beside the listener sits about 10 dB under a shot at the same distance (at 0 it was level with the blasts when the camera looked at a tank)"
+    },
+    "close": {"gainDb": 0, "note": "layer 3: shots, bursts, impacts, footsteps, falls, placed at the unit"},
+    "voices": {
+      "gainDb": 6,
+      "calmGainDb": 0,
+      "liftWithMeter": [0.3, 0.5],
+      "duckCloseDb": -4,
+      "note": "layer 4: orders and cries, one per side at once, never cut off; while a line speaks the close layer dips 4 dB, as a film keeps its words clear. v2: lifted to gainDb only as the fight thickens (calmGainDb below the meter's 0.3, gainDb from 0.5): in a lull a shout at +6 was as loud as a shell landing at 25 m"
+    },
+    "big": {"gainDb": 0, "note": "layer 5: big moments, always play, duck the rest"},
+    "music": {"gainDb": 0, "note": "the player's music setting still scales this"},
+    "master": {
+      "limiterCeilingDb": -1.5,
+      "limiterReleaseMs": 500,
+      "limiterAttackMs": 0.02,
+      "limiterLookAheadMs": 1,
+      "limiterAnalogDetector": false,
+      "note": "a limiter on the whole battle so stacked blasts never clip. v3: ceiling -1.5 because the limiter works on samples (as UE's submix limiter does) and between samples the air battle's close view reached -0.8 dBTP; -1.5 keeps the true peak under -1. If the engine's limiter looks between samples, -1.0 dBTP instead",
+      "_knee": "the limiter's knee is hard (0 dB): the engine's default 10 dB knee began pressing 5 dB under the ceiling",
+      "_detector": "21 Nov 21:50Z: attack 0.02 ms (about one sample), look-ahead 1 ms, digital detector, release 500 ms. The Mac's first runs with the limiter really on (Normandy 497bc3d3, air 1c9a8633) still reached 0.00 dBFS: a gun crack's first peak lasts about 0.1 ms and a 1 ms attack hardly rose before it passed. With the attack instant the one leak left is the release during the look-ahead, 40 x lookAhead / release dB (digital): 1 ms and 500 ms leak 0.08 dB. A digital 500 ms release is the analog ~110 ms curve (the 120 ms digital before was 4.6 times faster than meant). Modelled on the Bremen and Normandy films: sound/limiter-model/README.md. Both scenes' limiters read these four."
+    }
+  },
+  "distance": {
+    "rolloff": 0.75,
+    "_how": "full = no loss up to here; past it the level falls rolloff x the inverse-distance law (4.5 dB a doubling), tapering to nothing over the last 40% before silent. lpf = [distance, low-pass Hz] points: far sounds lose their top, as in air. reverb = [distance, send 0..1]: far sounds are wetter. farTakesFrom: beyond this play the family's far takes instead of the close ones, at the level the close take would have had (add closeLUFS - farLUFS from sound-list.json: the pack's far takes are already quieter).",
+    "small_arms": {
+      "full": 25,
+      "silent": 700,
+      "farTakesFrom": 250,
+      "lpf": [[80, 20000], [400, 4500], [700, 2200]],
+      "reverb": [[0, 0.08], [700, 0.5]]
+    },
+    "mg": {
+      "full": 40,
+      "silent": 1200,
+      "farTakesFrom": 500,
+      "lpf": [[100, 20000], [600, 4000], [1200, 1800]],
+      "reverb": [[0, 0.08], [1200, 0.55]],
+      "note": "an MG 42 at 300 m is still its own rip: far takes only past 500 m"
+    },
+    "big_guns": {
+      "full": 80,
+      "silent": 4000,
+      "farTakesFrom": 500,
+      "lpf": [[200, 20000], [2000, 3000], [4000, 900]],
+      "reverb": [[0, 0.12], [4000, 0.6]]
+    },
+    "explosions": {
+      "full": 30,
+      "silent": 5000,
+      "farTakesFrom": 150,
+      "lpf": [[150, 20000], [2500, 2500], [5000, 700]],
+      "reverb": [[0, 0.12], [5000, 0.6]]
+    },
+    "engines": {
+      "full": 15,
+      "silent": 600,
+      "lpf": [[40, 20000], [300, 5000], [600, 2500]],
+      "reverb": [[0, 0.02], [600, 0.25]]
+    },
+    "lorries": {
+      "full": 12,
+      "silent": 400,
+      "lpf": [[30, 20000], [250, 5000], [400, 2500]],
+      "reverb": [[0, 0.02], [400, 0.25]]
+    },
+    "body": {
+      "full": 5,
+      "silent": 60,
+      "lpf": [[15, 20000], [60, 6000]],
+      "reverb": [[0, 0.02], [60, 0.15]],
+      "note": "footsteps, kit, knees, falls: heard only zoomed in"
+    },
+    "voices": {"full": 10, "silent": 150, "lpf": [[30, 20000], [150, 5000]], "reverb": [[0, 0.03], [150, 0.3]]},
+    "aircraft": {
+      "full": 100,
+      "silent": 6000,
+      "lpf": [[300, 20000], [3000, 3500], [6000, 1500]],
+      "reverb": [[0, 0.02], [6000, 0.3]],
+      "doppler": true
+    },
+    "ships": {
+      "full": 200,
+      "silent": 15000,
+      "lpf": [[500, 20000], [6000, 3000], [15000, 1000]],
+      "reverb": [[0, 0.05], [15000, 0.55]]
+    },
+    "fire": {"full": 10, "silent": 300, "lpf": [[30, 20000], [300, 4000]], "reverb": [[0, 0.02], [300, 0.2]]},
+    "air_guns": {
+      "full": 50,
+      "silent": 1500,
+      "lpf": [[100, 20000], [600, 4000], [1500, 1800]],
+      "reverb": [[0, 0], [1500, 0]],
+      "note": "guns fired in the air: no echo (nothing to echo from) and no far takes (the pack's far bursts are heard across ground); past about 1.5 km the engines bury them"
+    },
+    "air_far": {
+      "full": 100,
+      "silent": 14000,
+      "lpf": [[300, 20000], [3000, 3500], [6000, 1500], [12000, 800]],
+      "reverb": [[0, 0.02], [6000, 0.3]],
+      "doppler": true,
+      "note": "a formation's engine loops at every distance: the aircraft family's curve, heard out to 14 km instead of fading out by 6. Under 3.6 km it is the aircraft family exactly (aircraft starts its fade there)"
+    },
+    "horizon": {
+      "full": 800,
+      "silent": 40000,
+      "lpf": [[800, 12000], [3000, 2600], [8000, 1100], [15000, 650], [30000, 400]],
+      "reverb": [[0, 0.15], [15000, 0.75]],
+      "note": "guns and blasts past the battle's edge; the far beds were built with it (sound/tools/soundscape.py)"
+    }
+  },
+  "flashToBang": {
+    "_how": "Sound travels at 343 m/s: a gun or blast farther than `from` is heard after its flash, by distance / 343 s, never more than maxSeconds, divided by the battle clock's speed (x4 before contact).",
+    "families": ["big_guns", "explosions", "ships"],
+    "from": 150,
+    "metresPerSecond": 343,
+    "maxSeconds": 3.0,
+    "air": {
+      "_how": "Only for flash-to-bang in the air battle, for every family in flashToBang.families (flak bursts and the planes lost that play an explosion take, as explosions; the flak guns as big_guns; a plane_down plays in family aircraft and is not delayed): a sound's delay is its distance over the speed of sound in the air it crosses, read off this table (linear between rows, held at the ends) at the mean of the sound's height and the listener's, in metres above the sea. ISA standard air: 15 C at the sea, 6.5 C colder a kilometre. Doppler stays at metresPerSecond. The rest of flashToBang stands: none within `from`, never more than maxSeconds.",
+      "metresPerSecondByHeight": [[0, 340], [1800, 333], [4500, 323], [7200, 311]]
+    }
+  },
+  "places": {
+    "_how": "The reverb a sound is sent to, by the ground under the unit making it (cover). Return level 1.0 (send x 1.0 comes back at the same energy).",
+    "open": {
+      "reverb": "outdoor",
+      "decaySeconds": 1.8,
+      "preDelayMs": 60,
+      "damping": 0.5,
+      "note": "long, thin tail: the fight rolling off over fields"
+    },
+    "woods": {
+      "reverb": "woods",
+      "decaySeconds": 0.9,
+      "preDelayMs": 15,
+      "damping": 0.8,
+      "lpfHz": 7000,
+      "note": "dense and dull"
+    },
+    "buildings": {
+      "reverb": "street",
+      "decaySeconds": 1.1,
+      "preDelayMs": 25,
+      "damping": 0.3,
+      "slapbackMs": [70, 140],
+      "note": "hard echo off walls: why a town fight sounds closer and harsher"
+    },
+    "water": {
+      "reverb": "water",
+      "decaySeconds": 2.6,
+      "preDelayMs": 90,
+      "damping": 0.4,
+      "note": "guns roll across open water"
+    },
+    "sea_far": {
+      "reverb": "sea_far",
+      "decaySeconds": 4.0,
+      "preDelayMs": 140,
+      "damping": 0.55,
+      "note": "a gun far off over open water"
+    },
+    "horizon": {
+      "reverb": "horizon",
+      "decaySeconds": 3.2,
+      "preDelayMs": 120,
+      "damping": 0.6,
+      "note": "guns beyond the hills"
+    }
+  },
+  "intensity": {
+    "_how": "How hot the fight is round the listener, 0 to 1, worked out every 0.25 s. heat = sum over shots and blasts heard in the last `window` seconds of weight x closeness (1 at the listener, 0 at `radius`), plus perBlockFighting for each block in act 'fight' within blockRadius. target = min(1, heat / fullAt). The meter rises toward target with time constant `rise` and falls with `fall` (a fight calms slowly, as in a film).",
+    "window": 6,
+    "radius": 800,
+    "blockRadius": 600,
+    "weights": {"small_arms": 1, "mg": 2, "big_guns": 4, "explosions": 6, "big": 10},
+    "perBlockFighting": 3,
+    "fullAt": 270,
+    "_fullAt": "v4, 21 Nov: 270, was 60. The ground scene's Normandy cloud run (277 s of battle) measured raw heat after contact at p10 148, p50 207, p90 272, p99 298; the quiet approach 60 to 120. At 60 the meter sat at 1.00 for most of the fight and could not tell a lull from the thick of it. At 270 the approach reads 0.2 to 0.45, the fight 0.55 to 1, and the music's thickOfIt (0.6) and lull (0.3) both happen. Shells and mortars drive it (explosions 28%, mg 22%, big_guns 17%, big 16%, blocks 12%, small_arms 6%)",
+    "rise": 1.5,
+    "fall": 10,
+    "zoomedOut": "above 400 m camera height also blend in the share of all blocks fighting anywhere (0..1), weight 0.5, so a wide view of a big battle still roars"
+  },
+  "beds": {
+    "_how": "Layer 1. Each bed's gain follows intensity: silent below `in`, full (gainDb) from `full` to `hold`, gone above `out`. Equal-power crossfades, never faster than 2 s. Not placed: they surround the listener (spread 100%).",
+    "list": [
+      {
+        "name": "rifles_far_loop",
+        "in": 0.02,
+        "full": 0.1,
+        "hold": 0.35,
+        "out": 0.6,
+        "gainDb": -8,
+        "note": "a fight somewhere off in the distance"
+      },
+      {"name": "battle_far_loop", "in": 0.15, "full": 0.35, "hold": 0.7, "out": 0.9, "gainDb": -5},
+      {"name": "battle_loop", "in": 0.5, "full": 0.8, "hold": 1.0, "out": 1.01, "gainDb": -4, "note": "the thick of it"},
+      {
+        "name": "front_rumble_loop",
+        "in": 0.0,
+        "full": 0.0,
+        "hold": 1.0,
+        "out": 1.01,
+        "gainDb": -6,
+        "note": "the war beyond this battle, guns 3 to 14 km off; never leaves, so a land battle has a low floor that never goes silent (art director's grit direction, 19 Nov: the quiet floor never more than about 12 dB under the peaks). Measured 47% of its energy under 150 Hz, 5.4 dB loud to quiet"
+      },
+      {
+        "name": "air_battle_far_loop",
+        "air": true,
+        "in": 0.02,
+        "full": 0.15,
+        "hold": 1.0,
+        "out": 1.01,
+        "gainDb": -12,
+        "note": "the far air bed: bomber streams, passes, bursts and flak 2 to 6.5 km off. -12 under air.masterDbByCameraDistance (+8 at 1,500 m, +12 at 2,600 m where the camera starts). Under the strategy camera at 1,500 m, -12 hides no plane lost and no flak burst, and 4 of 260 gun bursts; at -8 it hid 2 of 9 planes lost, at -4 3 of 9 (air-battles/feel/mix-v3/mix-v3-air-patch.md section 4). Past about 5 km it covers single losses: from there the raid is one far sound (sound thread, 19 Nov 07:55Z)"
+      }
+    ],
+    "beforeContact": "until the first contact only rifles_far_loop at -14 dB and front_rumble_loop at its own gain play, after the battle's first few seconds: the war somewhere else. (v2's far salvo every 15 to 30 s, far_guns_01..03, is gone: the rumble holds it)",
+    "place": {
+      "_how": "Under the battle beds: the air of the place itself (approved by Brian 18 Nov 15:52Z). Not placed (spread 100%). Picked by the ground round the listener; crossfaded over `crossfade` s when it changes. Loudest before contact, sinking toward atFullDb as the meter climbs, because a war film lets the wind be heard only in the lulls.",
+      "crossfade": 3,
+      "byCover": {"open": "wind_loop", "woods": "woods_loop", "buildings": "wind_loop", "water": null},
+      "coverRadius": 60,
+      "wind_loop": {"gainDb": 0, "atFullDb": -10, "buildingsDb": -6},
+      "woods_loop": {"gainDb": 0, "atFullDb": -10},
+      "rain": {
+        "take": "rain_loop",
+        "when": "the battle's weather is rain",
+        "gainDb": 0,
+        "atFullDb": -4,
+        "_note": "rain plays on top of the place's bed, and stays heard through the fight"
+      }
+    },
+    "_air": "A row with \"air\": true plays only in an air battle, by the air battle's meter (air.intensity); a row without it never plays in an air battle. A row with a `status` does not play until the status is removed.",
+    "_land": "A row without \"air\": true is a land battle's bed (sea battles have sea.beds)."
+  },
+  "variety": {
+    "_how": "Every one-shot gets a small random pitch and level so no shot is a copy of the last, and never the same take twice running.",
+    "pitchPercent": {
+      "small_arms": 3,
+      "mg": 3,
+      "big_guns": 4,
+      "explosions": 5,
+      "body": 4,
+      "engines": 0,
+      "voices": 0,
+      "sea": 3,
+      "aircraft": 2
+    },
+    "levelDb": 2,
+    "neverSameTakeTwice": true
+  },
+  "limits": {
+    "_how": "At most this many of a family at once; when full, the farthest and quietest is dropped first. Voices are never cut: a new line waits for the last to end.",
+    "small_arms_close": 10,
+    "small_arms_far": 6,
+    "mg": 6,
+    "big_guns": 4,
+    "explosions": 5,
+    "engines": 8,
+    "body": 6,
+    "voicesPerSide": 1,
+    "worldTotal": 64,
+    "_worldTotal": "64 from 21 Nov (was 40): the engine now plays 128 voices (the Mac's log line, the ground scene's second film), and at 40 that film dropped 892 of its 3,725 shots, all off screen. 64 one-shots with the engine loops, the beds and the music stay under about 90 of the 128. Brian's ear on the next film judges whether the far fire is now too busy.",
+    "sameLoopShare": "units on the same loop within 80 m of each other share one playing loop, placed at their middle, 1.5 dB louder per extra unit up to +4.5 dB"
+  },
+  "music": {
+    "_how": "Battle music (mood 'battle': advance, trench_line) steps aside when the fighting is thick and comes back at the turning points, as a film score does. Levels are dB under the player's music setting; every change is a fade of `fade` seconds.",
+    "beforeContact": {
+      "db": 0,
+      "piece": "zero_hour",
+      "loop": true,
+      "_piece": "Zero Hour loops until first contact; it waits on A, the dominant of The Advance's D minor"
+    },
+    "onContact": {
+      "db": -8,
+      "fade": 3,
+      "fromBeforeContact": {
+        "crossfade": 3,
+        "into": ["advance", "trench_line"],
+        "_how": "at first contact Zero Hour crossfades over 3 s into the battle's piece, then onContact's -8 dB"
+      }
+    },
+    "thickOfIt": {"whenIntensityOver": 0.6, "db": -18, "fade": 4},
+    "lull": {"whenIntensityUnderFor": [0.3, 15], "db": -8, "fade": 6},
+    "nearBreak": {"db": -4, "fade": 3, "note": "either side at three quarters: the swing of the battle"},
+    "enemyRouting": {"db": 0, "fade": 3},
+    "ownBroken": {"db": -30, "fade": 2, "note": "falls away; the defeat stinger follows"},
+    "end": {
+      "battleSoundsFade": 4,
+      "stingerAfter": 1.0,
+      "stinger": {"won": "battle_won", "lost": "battle_lost"},
+      "stingerDucksAllDb": -10,
+      "musicBackAfterStinger": 1.0,
+      "_stinger": "The Field Is Ours and The Line Gives Way, both on The Final Salute (approved 19 Nov 12:59 to 13:00Z). They replace the pack's victory and defeat, an American band call and Taps that played for every nation; those two stay in the pack for nothing else"
+    },
+    "files": "/mnt/project-files/music/game-wav/ (battle_won.wav, battle_lost.wav, zero_hour.wav; long_front.wav joins the war-map list after silent_front and standing_to: music/README.md, 'Into the 3D game' step 4)",
+    "_air": "v5, the air battle (the 3D game's second air patch): Zero Hour from the scene's start; at first contact (the flight core's first contact) it crossfades into the battle's piece at onContact.db; thickOfIt and lull by the air battle's own meter (air.intensity, eased by intensity.rise and fall); nearBreak while either side's bar is at 0.75 or more; a big moment dips it by big.duckDb.music; enemyRouting and ownBroken not yet. At the over line the battle's sounds come down stingerDucksAllDb over battleSoundsFade and the stinger, won or lost by the battle's stamp for the player's side, begins stingerAfter later; the map's music returns musicBackAfterStinger after it ends. The 3D game needs zero_hour, battle_won and battle_lost in Music/Score (music/game-wav/)"
+  },
+  "big": {
+    "_how": "Layer 5: always plays, ducks the rest for a moment (attack, hold, release).",
+    "names": [
+      "tank_knocked_out",
+      "tank_knocked_out_02",
+      "tank_knocked_out_03",
+      "magazine_explosion",
+      "building_collapse",
+      "bridge_blown",
+      "plane_down",
+      "aircraft_break_up",
+      "ship_sinking",
+      "torpedo_hit"
+    ],
+    "alsoWhenCloserThan": {
+      "shell_impact_near": 60,
+      "shell_impact_near_02": 60,
+      "shell_impact_near_03": 60,
+      "explosion_debris": 60,
+      "grenade_blast": 20,
+      "grenade_blast_02": 20,
+      "grenade_blast_03": 20,
+      "bomb_stick_01": 120
+    },
+    "_landings": "for a shell, mortar bomb, grenade or bomb landing, impacts.bySize.bigWithin decides instead (the same 60 m for every shell)",
+    "duckDb": {"bed": -6, "loops": -4, "close": -4, "music": -6},
+    "attackMs": 50,
+    "holdMs": 800,
+    "releaseMs": 1500
+  },
+  "impacts": {
+    "_how": "A shell, mortar bomb, grenade or bomb landing. Matches the art director's explosion sheet (art-director/explosions/explosions-look.md, 'Inside it' item 4): the flash, then the bang; near hits a sharp crack, a deep thump and earth coming down; far hits a low rumble only; a shell within 60 m is a big moment. The band is the hit's distance from the listener. Flash then bang past 150 m comes from flashToBang, the level and air from distance.explosions.",
+    "near": {
+      "within": 60,
+      "bus": "big",
+      "takes": ["explosion_debris", "shell_impact_near_02", "shell_impact_near"],
+      "_sound": "the crack and thump of a close take, then earth coming down (debris, below)"
+    },
+    "debris": {
+      "_how": "earth and stones landing 0.9 to 3 s after a near hit, when the picture's clods land (thickest 1.5 to 2.5 s): the falling part of shell_impact_near_02 (2.3 to 4.9 s into it) starts `after` s after the flash, at the hit's level and place. Under shell_impact_near it is laid on top. shell_impact_near_02 itself plays only to cutAt (cutFade s fade) and its own falling part is moved up the same way. explosion_debris has its own earth in its first 2 s.",
+      "for": ["shell_impact_near", "shell_impact_near_02"],
+      "take": "shell_impact_near_02",
+      "from": 2.3,
+      "to": 4.9,
+      "after": [0.6, 0.9],
+      "db": 12,
+      "fadeIn": 0.15,
+      "_db": "lifted 12 dB over its natural level: at 0 the falling earth sat under the bed and an idling engine (measured on the 105 mm test clip), so it is brought up as film sound does",
+      "cutAt": {"shell_impact_near_02": 2.3},
+      "cutFade": 0.3,
+      "afterBySize": {
+        "howitzer_105": [1.2, 1.5],
+        "howitzer_150": [1.2, 1.5],
+        "_why": "the effects kit's debris shower lands 1.2 to 3.3 s after a 105 mm's flash, so the falling earth starts at about 1.2 s for the big guns, to be heard as it is seen (art director, 19 Nov 03:15Z); every other size keeps `after`"
+      }
+    },
+    "middle": {"within": 150, "takes": ["shell_impact_near", "shell_impact_near_03"]},
+    "far": {
+      "takes": ["shell_impact_far", "explosion_far_01", "explosion_far_02"],
+      "_sound": "a low rumble only: takes recorded far off (no crack left), heard distance / 343 s after the flash"
+    },
+    "incoming": {
+      "_how": "the rush a shell makes in the last moment before it lands (the art sheet's -0.8 s). Played only where a real recording exists.",
+      "artillery": null,
+      "mortar": null,
+      "tankGun": null,
+      "bomb": {"take": "bomb_release", "endsAt": "the bomb's landing", "within": 400},
+      "_why": "No real recording of a shell coming in has been found yet. The two found are the film convention's long falling whistle, not the sound of a shell, so the moment is the crack and the blast, as tank and anti-tank guns are on the sheet. bomb_release is a real falling bomb (approved)."
+    },
+    "bySize": {
+      "_how": "db is added to the take's level, bigWithin is how near a landing counts as a big moment. Same recordings for every calibre (the pack has no per-calibre takes); a bigger shell is louder and heard farther. Bombs land as bomb_stick_01 when a stick falls.",
+      "grenade": {"db": 0, "bigWithin": 20, "takes": ["grenade_blast", "grenade_blast_02", "grenade_blast_03"]},
+      "mortar": {"db": -4, "bigWithin": 60},
+      "field_gun": {"db": -2, "bigWithin": 60},
+      "howitzer_105": {"db": 0, "bigWithin": 60},
+      "howitzer_150": {"db": 2, "bigWithin": 60},
+      "bomb_250kg": {"db": 4, "bigWithin": 120, "stick": "bomb_stick_01"},
+      "bomb_500kg": {"db": 5, "bigWithin": 180, "stick": "bomb_stick_01"}
+    },
+    "salvo": {
+      "_how": "a battery's shells never land in step (as the art sheet asks): 0.2 to 1.5 s apart, and never the same take twice running",
+      "gap": [0.2, 1.5]
+    }
+  },
+  "shellShock": {
+    "_how": "Rare. A blast within `within` metres of the listener while the camera is lower than `cameraBelow`: every world sound (not music, not the desk) goes dull for a moment, as if your ears were hit. No ringing tone: nothing made up.",
+    "within": 25,
+    "cameraBelow": 80,
+    "lpfHz": 600,
+    "downMs": 100,
+    "holdMs": 1200,
+    "backMs": 2500,
+    "worldDb": -6,
+    "notMoreThanOnceIn": 90
+  },
+  "fireModel": {
+    "_how": "The sims fight blocks against blocks with no single shots, so the screen makes the shots: a block in act 'fight' fires these, timed here. Rates are per block; wavering x0.6, routing stops firing. Close takes inside the family's farTakesFrom, far takes beyond.",
+    "inf": {
+      "rifle": {
+        "every": [0.5, 1.6],
+        "close": "byNation.rifle",
+        "far": ["rifle_shot_01", "rifle_shot_02", "rifle_shot_03", "rifle_shot_04"]
+      },
+      "mg": {"every": [3, 7], "close": "byNation.mg", "far": ["bren_far_01", "bren_far_02", "bren_far_03"]},
+      "smg": {"every": [4, 9], "onlyWhenEnemyWithin": 120, "close": "byNation.smg", "far": []},
+      "grenade": {
+        "every": [15, 40],
+        "onlyWhenEnemyWithin": 40,
+        "takes": ["grenade_throw"],
+        "then": {"after": [1.6, 2.4], "takes": ["grenade_blast", "grenade_blast_02", "grenade_blast_03"]}
+      },
+      "bolt": {"afterRifleWhenCloserThan": 30, "chance": 0.3, "byNation": "byNation.bolt"}
+    },
+    "arm": {
+      "gun": {
+        "every": [6, 12],
+        "close": ["tank_gun_01", "tank_gun_02"],
+        "far": ["far_guns_01", "far_guns_02", "far_guns_03"],
+        "then": {"after": [0.6, 0.9], "takes": ["tank_shell_case"], "onlyCloserThan": 40}
+      },
+      "mg": {"every": [3, 8], "close": ["tank_mg_burst"], "far": ["bren_far_01", "bren_far_02", "bren_far_03"]}
+    },
+    "art": {
+      "gun": {
+        "every": [6, 20],
+        "close": ["field_gun_fire", "field_gun_fire_02", "artillery_fire_01"],
+        "far": ["far_guns_01", "far_guns_02", "far_guns_03"],
+        "impact": {
+          "after": [2, 5],
+          "at": "the engaged block, or the zone it shells",
+          "close": ["shell_impact_near", "shell_impact_near_02", "shell_impact_near_03"],
+          "far": ["shell_impact_far", "explosion_far_01", "explosion_far_02"]
+        }
+      }
+    },
+    "incoming": {
+      "_how": "an enemy block firing on a block within `within` of the listener: the crack of rounds going past",
+      "within": 40,
+      "every": [2, 5],
+      "takes": ["bullet_crack", "bullets_incoming_01", "bullets_incoming_02", "ricochet_01"]
+    },
+    "townFight": {
+      "loop": "street_battle",
+      "drops": ["mg_town_01", "mg_town_02", "mg_town_03"],
+      "every": [4, 12],
+      "atFullIntensity": [1.5, 5]
+    }
+  },
+  "byNation": {
+    "rifle": {
+      "GER": ["kar98_shot"],
+      "ITA": ["kar98_shot"],
+      "POL": ["kar98_shot"],
+      "FIN": ["kar98_shot"],
+      "JAP": ["kar98_shot"],
+      "CHN": ["kar98_shot"],
+      "FRA": ["kar98_shot"],
+      "SOV": ["kar98_shot"],
+      "UK": ["enfield_shot"],
+      "CAN": ["enfield_shot"],
+      "AUS": ["enfield_shot"],
+      "USA": ["garand_shot"],
+      "*": ["kar98_shot"],
+      "_note": "the real Mauser stands in for every bolt rifle without its own recording; the American takes garand_clip_ping after every 8th shot, then garand_reload"
+    },
+    "bolt": {"GER": ["bolt_k98"], "SOV": ["bolt_mosin"], "UK": ["bolt_enfield", "bolt_enfield_02"], "*": ["bolt_k98"]},
+    "mg": {
+      "GER": ["mg42_burst_01", "mg42_burst_02"],
+      "SOV": ["maxim_burst"],
+      "UK": ["lmg_burst_01", "lmg_burst_02", "lmg_burst_03"],
+      "*": ["lmg_burst_01", "lmg_burst_02", "lmg_burst_03", "machine_gun"]
+    },
+    "smg": {
+      "GER": ["mp40_burst_01", "mp40_burst_02"],
+      "ITA": ["mp40_burst_01", "mp40_burst_02"],
+      "SOV": ["ppsh_burst_01", "ppsh_burst_02"],
+      "*": ["mp40_burst_01", "mp40_burst_02"]
+    },
+    "orders": {
+      "UK": ["order_english_01..17", "order_go", "order_move", "order_charge"],
+      "USA": ["order_english_01..17", "order_go", "order_move", "order_charge"],
+      "CAN": "UK",
+      "AUS": "UK",
+      "GER": ["german_schnell", "german_los"],
+      "SOV": ["russian_order_01..04"],
+      "CHN": ["chinese_soldiers_shout"],
+      "*": [],
+      "_note": "no real Italian, French, Polish or Japanese voices yet: those armies are silent rather than given someone else's language"
+    },
+    "cheer": {"SOV": ["soviet_cheer"], "*": ["victory_cry"]}
+  },
+  "loops": {
+    "_how": "What a unit plays while it does what it does (replaces the 'loop' names in src/battle/core/cues.ts, which still carry names of the rejected made-up set).",
+    "inf": {
+      "march": ["marching_loop", "marching_loop_02"],
+      "run": ["marching_loop"],
+      "fight": null,
+      "drops": {
+        "march": {"takes": ["kit_rattle_01", "kit_rattle_02", "kit_rattle_03"], "every": [3, 8], "family": "body"}
+      }
+    },
+    "mtn": "inf",
+    "eng": "inf",
+    "fort": "inf",
+    "cav": "inf",
+    "arm": {
+      "idle": {"USA": "tank_idle_sherman_loop", "UK": "tank_idle_sherman_loop", "*": "tank_idle_loop"},
+      "march": {"USA": "tank_sherman_drive_loop", "UK": "tank_sherman_drive_loop", "*": "tank_loop"},
+      "light": "light_tank_loop",
+      "fight": "same as idle",
+      "start": "tank_start"
+    },
+    "mot": {
+      "idle": {"GER": "halftrack_idle_loop", "USA": "halftrack_idle_loop", "*": "lorry_idle_loop"},
+      "march": {"GER": "halftrack_drive_loop", "USA": "halftrack_drive_loop", "*": "lorry_drive_loop"}
+    },
+    "art": {"march": "lorry_drive_loop", "fight": null},
+    "_fightNote": "a block in a fight keeps its engine loop but carries no fight loop of its own: the fight is its shots (fireModel) plus the shared beds. That is what lets near and far blend instead of every block playing the same battle_loop."
+  },
+  "events": {
+    "contact": {"attacker": ["whistle_long"], "then": "one order from the attacker's nation", "music": "onContact"},
+    "flanked": {"the flanked side": "one order (urgent)"},
+    "wavering": null,
+    "routing": {"the routing block stops firing": true, "the winners near it": "byNation.cheer, chance 0.5"},
+    "rallied": {"the block": "one order"},
+    "gone": {
+      "close": ["body_fall_01", "body_fall_02", "body_fall_03", "body_fall_04", "body_fall_05", "body_fall_rubble"],
+      "cryChance": 0.25,
+      "cry": ["body_fall_cry_01", "body_fall_cry_02", "body_fall_cry_03", "body_fall_cry_04", "body_fall_cry_05"],
+      "cryOnlyCameraBelow": 60,
+      "note": "Brian chose 'Sometimes' for a cry"
+    },
+    "broken": {"winner": "byNation.cheer", "music": "enemyRouting or ownBroken"},
+    "nearBreak": {"music": "nearBreak"},
+    "objective": {"the taker": "byNation.cheer"},
+    "end": {"music": "end"}
+  },
+  "rename": {
+    "_how": "Names still in the battle code that are not real sounds (they belonged to the rejected made-up set, or Brian cut them). Left side: the name in the code. Right side: what to play, or null for silence.",
+    "land (src/battle/core/cues.ts)": {
+      "battle": null,
+      "bugle": null,
+      "rifles": "fireModel",
+      "machine_gun": "byNation.mg",
+      "battle_loop": "beds (not a unit loop)",
+      "order_march": "byNation.orders",
+      "order_attack": "byNation.orders",
+      "order_cancel": null
+    },
+    "air (src/battle/air/book.ts)": {
+      "explosion": ["plane_explode", "explosion_far_01", "explosion_far_02"],
+      "fighter_loop": "fighter_engine_loop",
+      "fighter_pass_02": ["spitfire_pass", "fw190_pass", "p47_pass", "p51_pass"],
+      "flak_barrage_loop": {"drops": ["flak_heavy_fire_01", "flak_light_fire"], "every": [0.8, 2.5]},
+      "parachutes": "parachute_open"
+    },
+    "sea (src/battle/sea/cues.ts)": {
+      "ship_loop": {"destroyer": "destroyer_wash_loop", "transport": "ship_steam_engine_loop", "*": "ship_engine_loop"},
+      "ship_horn": null
+    },
+    "campaign map (CampaignSounds.cpp)": {
+      "horses": null,
+      "hammer": "hammer",
+      "ship_horn": null,
+      "bugle": null,
+      "_note": "hammer: a real anvil, approved 18 Nov 15:51Z. horses and ship_horn: Brian cut two rounds of takes, so silent"
+    }
+  },
+  "air": {
+    "loops": {
+      "_how": "each formation's own engines, by its model",
+      "B-17": "b17_formation_drone_loop",
+      "B-24": "b24_drone_loop",
+      "fourEngined": "bomber_heavy_loop",
+      "twinEngined": "bomber_medium_loop",
+      "Ju 87": "stuka_drone_loop",
+      "Me 262": "jet_engine_loop",
+      "fighter": "fighter_engine_loop",
+      "onTheGround": "aero_engine_idle_loop",
+      "_note": "fourEngined (Lancaster, Halifax, Pe-8 and the rest): no recording of their own, the formation drone; twinEngined (He 111, Ju 88, Do 17, Wellington, B-25, SM.79): the B-25's engines. B-17 (22 Nov, Brian's Good of 03:41Z, round nine): three B-17s flying over in formation with five P-51s, filmed from the ground (U.S. Air Force video, 2018, public domain), in place of a studio library's take (craigsmith G07-18, b17_drone_loop, left in the folder and no longer played); the same loudness, -20.0 LUFS. Its engine comb is weak, at 21 Hz (the P-51s' engines are in it too); the old take's is at 24 Hz"
+    },
+    "flak": {
+      "_how": "Inside the flak ring. The bursts: each AirFlak call the 3D game makes plays `burst` at its point, delayed by flashToBang so the bang follows its flash, with soundEvery as before. The guns: a gun on the ground fires every `every` seconds under each box while flak fires at it (`fire`, family big_guns). burstAfter is no longer used in the air battle.",
+      "fire": ["flak_heavy_fire_01", "flak_light_fire"],
+      "every": [0.8, 2.5],
+      "burst": ["flak_burst_01"],
+      "burstAfter": [1.5, 4],
+      "soundEvery": 0.6,
+      "_soundEvery": "bursts closer than this are not all heard: only the nearest plays (the picture keeps them all)",
+      "fireFamily": "big_guns",
+      "burstFamily": "explosions",
+      "cue": "picture",
+      "_cue": "v3: the bursts come only from the picture (AirFlak), never from the clock; the clock plays only the guns on the ground. They follow big_guns' distance rule (silent at 4 km), so from bomber height they are never heard on a raid at 4,500 m or higher; on a raid at 1,800 m some are within 4 km."
+    },
+    "bedsByIntensity": "the air battle's bed is beds.list's air row (air_battle_far_loop), by air.intensity; the formation engine loops are loops (air.loops), not beds",
+    "passes": "a fighter group passing within 300 m of the listener plays one pass take for each pass, up to passesPerGroup at once, the plane's own take by passByPlane, +1.5 dB, Doppler on; planes passing together (under sameTakeGap apart) share one take, as the same recording laid on itself a few hundredths of a second apart combs",
+    "passByPlane": {
+      "Fw 190": "fw190_pass",
+      "P-47": "p47_pass",
+      "P-51": "p51_pass",
+      "Spitfire": "spitfire_pass",
+      "Hurricane": "spitfire_pass",
+      "Bf 109": "spitfire_pass",
+      "Fw190": "fw190_pass",
+      "Mustang": "p51_pass",
+      "Warhawk": "p51_pass",
+      "Bf109": "spitfire_pass",
+      "Yak": "spitfire_pass",
+      "Zero": "fw190_pass",
+      "Wildcat": "fw190_pass",
+      "Hellcat": "p47_pass",
+      "*": "fighter_pass",
+      "_why": "no Bf 109 recording: the Spitfire's single V12 is the nearest real engine to its Daimler-Benz V12; fighter_pass is a twin-engined P-38 and B-25 sped up, for planes with nothing nearer",
+      "_gameNames": "v4: the 3D game's own model names beside the real ones, each by its engine: radials (the Zero's Sakae, the Wildcat's Twin Wasp, both fourteen cylinders as the Fw 190's BMW 801) the Fw 190; the Hellcat the P-47 (the same R-2800); V12s the Spitfire (the Bf 109 and the Yak) or the P-51 (the Warhawk's Allison, the engine of the first Mustangs). A plain Fighter:<nation> is fighter_pass"
+    },
+    "guns": "dogfight as the groups fight (distance family aircraft); the guns themselves by gunsByCalibre (distance family air_guns)",
+    "gunsByPlane": {
+      "P-51": "plane_guns",
+      "P-47": "plane_guns",
+      "Spitfire": "plane_guns",
+      "Hurricane": "plane_guns",
+      "Fw 190": "plane_guns",
+      "Bf 109": "gunner_burst",
+      "bomber gunners": "gunner_burst",
+      "*": "plane_guns",
+      "_why": "the short form. Where the air battle sends each gun kind's firing, gunsByCalibre wins: a Bf 109 is then its machine guns plus the cannon. (Corrected 18 Nov 21:00Z: the pack does have a cannon, flak_light_fire's burst; see gunsByCalibre.)"
+    },
+    "gunsByCalibre": {
+      "_how": "What plays while a gun kind fires in the air (the air battle sends each fighter group's rate of fire, each turret firing). Bursts are laid end to end while it fires, family air_guns, the same take never under 0.15 s after itself. `part` (cannon) and `partByTake` (heavy, one stretch for each take) play only that stretch of a take, faded over fadeOut at its end: the rest is the ground's echo, which the sky does not have.",
+      "rifle": {
+        "takes": ["mg42_burst_01", "mg42_burst_02"],
+        "wingOfFourOrMore": "both takes together, the second 30 ms later",
+        "_what": "MG 17, .303 Browning, 7.7 mm, MG 15, MG 81: a real MG 42, whose 1,200 rounds a minute is their rate (its uploader added a few layers)"
+      },
+      "heavy": {
+        "wing": "plane_guns",
+        "turret": "gunner_burst",
+        "handHeld": "gunner_burst",
+        "_what": ".50 Browning, 12.7 mm, MG 131, Berezin: real heavy machine guns",
+        "partByTake": {"plane_guns": [0, 0.85], "gunner_burst": [0, 0.85]},
+        "fadeOut": 0.08,
+        "_partByTake": "Both takes are one public-domain M2 range recording: about 0.85 s of firing, then the range's echo. Above 2 kHz the last clear shots are at about 0.6 s (plane_guns, one faint one at 0.73) and 0.75 s (gunner_burst); both ring out by about 0.85 s. Bursts laid end to end then repeat every 0.85 s instead of every 1.7 to 1.9 s. At the join the gap between shots is 0.15 to 0.28 s (plane_guns) and about 0.15 s (gunner_burst); inside the takes shots are 0.13 to 0.31 s and 0.03 to 0.15 s apart, so the join is no longer than the take's own longest gap."
+      },
+      "cannon": {
+        "take": "flak_light_fire",
+        "part": [0, 0.68],
+        "fadeOut": 0.08,
+        "_what": "MG FF, MG 151/20, Hispano, ShVAK, the Zero's Type 99: a real 35 mm anti-aircraft cannon's burst, six rounds at about 600 a minute (the 20 mm guns' rate), without the roll after it. Heavier than a 20 mm; the nearest real cannon in the pack"
+      },
+      "handHeldRifle": {
+        "takes": ["mg42_burst_01", "mg42_burst_02"],
+        "_what": "a single hand-held rifle-calibre gun (MG 15, MG 81, Vickers K): one take at a time"
+      },
+      "_heard": "v4, as the 3D game plays it (every gun seen firing is heard): a gun's next take is due as its part ends, or as the take ends where it plays whole (under 10 s), never sooner than 0.3 s; a take laid at the muzzle goes along with the aircraft while it plays; the engine has 128 voices (it had 32) and the ridden plane's own guns, then guns within 300 m of the camera, are the last it drops. Each air_guns take is bright to 100 m and darkens to 1.8 kHz at 1.5 km (the lpf's first and last points; before v4 the game took the second point as the near one and cut every gun inside 600 m at 4 kHz)",
+      "_wing": "a fighter's fixed guns of one kind (its wing .50s, its cannon) are heard as one take, at the square root of how many fire (10 log10 N dB: real guns firing out of step add as their power). One take per barrel laid on the same frame added in step, +12 dB for four and +18 for eight, locked together into the limiter. A gunner's twin mount (two guns side by side in one turret or window, fired together) is one take too, at the square root of how many fire (22 Nov, patch 0021: a B-17's twin turrets laid two takes in step, +6 dB; the Bremen r2d film's 10 s wall at 116-127 s). Other turret and hand-held guns stay one take each. rifle.wingOfFourOrMore is not built"
+    },
+    "engineLost": {
+      "take": null,
+      "drone": "the bomber's own drone drops by 10 x log10(engines left / engines): -1.2 dB on three of four, -3 dB on two of four, -3 dB on one of two",
+      "_why": "no real recording of an aero engine cutting out or coughing: silent apart from the drone dropping",
+      "_built": "v5, as the 3D game plays it: the ridden plane's own drone, and each formation's drone by the engines still turning against the most it has flown with (10 log10 of the share: planes lost thin it as much as engines), never under -10 dB"
+    },
+    "windmilling": {"take": null, "_why": "no real recording of a windmilling propeller: silent"},
+    "sameTakeGap": 0.15,
+    "_sameTakeGap": "two of the same take never start less than 0.15 s apart (later one waits or drops): closer, they comb",
+    "roundsPassing": {
+      "within": 40,
+      "takes": ["bullet_crack"],
+      "_why": "in the air there is no ground for rounds to glance off, so no ricochets (bullets_incoming_*); rounds passing the listener crack. No real recording of rounds striking a plane yet",
+      "_heard": "v4, as the 3D game plays it: a gun not the ridden plane's whose line of fire passes within `within` metres of the camera, more than 30 m out from its muzzle, cracks at the nearest point of that line, every 0.12 to 0.3 s while it fires. After the review: by the firing aircraft, not each barrel (its converging guns crack as one), and the same take never again inside sameTakeGap, whoever fires it",
+      "reach": 1000,
+      "_reach": "metres past the muzzle the rounds still crack past the camera: the guns' line is aimed at their convergence (about 300 m), but the rounds fly on; without it, fire from farther than the convergence never cracked"
+    },
+    "roundsHit": {
+      "within": 60,
+      "every": 0.08,
+      "takes": [],
+      "family": "air_guns",
+      "_how": "Rounds striking a plane (the flight core's Hit effect) within `within` metres of the camera, no closer together than `every` seconds, one of `takes` at the strike; a strike on the ridden plane (within three quarters of its span of it) at the camera, unplaced, as its own guns are",
+      "_waiting": "Brian Cut round seven's plane_hit_01 to plane_hit_04 (21 Nov 21:40Z), so takes stays empty and strikes stay silent until another real recording of rounds striking an airframe passes his ear (sound/wanted/air-candidates.md); then it is listed here and copied into Sounds/Real, with no code change"
+    },
+    "groupLoopDb": 1.5,
+    "_groupLoopDb": "a formation's engines within 80 m share one loop at +1.5 dB whatever the count: the drone is the bed under the guns, not over them",
+    "noBedNoEcho": "at the bombers' height there is nothing to echo from: no reverb send and no ground bed. Outside the close view the far air bed (beds.list, air: true) is the only bed; in the close view the ridden plane's drone (closeView.bed) lies over it. The far bed keeps the open-place echo the soundscape tool gave it (a send of 0.08 to 0.2 at 2 to 6.5 km; the sound thread's review).",
+    "intensity": {
+      "_how": "The air battle's meter, for its beds: the share of the battle's groups fighting (act 'fight' with someone in contact), worked out every 0.25 s, rising over intensity.rise and falling over intensity.fall. The land meter's shots-heard term is left out: a raid's guns are heard far off from every camera, so the meter follows the fight, not the camera."
+    },
+    "limits": {
+      "explosionsYield": ["flak_burst_01", "grenade_blast"],
+      "_explosionsYield": "When the explosions family is full: anything else (a plane lost) pushes out the farthest playing flak burst first, however near it is; a new flak burst can push out only a farther flak burst, never anything else, or it is dropped. A plane lost never gives way to a flak burst. In this folder's v2 renders the limit cost 4 or 5 of the 11 planes lost in each of the five views (2 to 4 pushed out by flak bursts, 1 or 2 refused at the limit, and on the fighters one more pushed out by a plane lost; with the camera at 3 km, 3 refused); in v3, none. Its cost: with planes lost keeping their places, 3 or 4 more flak bursts are refused in each view and 2 to 5 fewer are heard, for 2 more planes lost heard on the map and 2 more in the close view (variants/noyield.json; mix-v3-air-patch.md section 3). An explosions limit of 6 or 7 in the air battle wins the flak back (in the close view all but one) but costs a plane lost heard on the map, and at 7 one in the close view too, the plane_down 283 m off (variants/exp6.json, exp7.json); the sound thread kept 5.",
+      "cutFade": 0.3,
+      "_cutFade": "A sound pushed out by any limit in the air battle (explosions, worldTotal) fades over this many seconds from the moment it is pushed out, instead of stopping dead or playing on: the same 0.3 s as impacts.debris.cutFade. worldTotal never pushes out the ridden plane's own guns or a big moment.",
+      "bomberDronesFirst": 4,
+      "_bomberDronesFirst": "Of the `engines` loops, the 4 nearest bomber drones within the silent distance of the family the loops use (air.loopsFamily: air_far, 14 km) always keep their place: a vic's shared loop or a straggler's own. The rest go to the nearest of everything else. Under v2, with the camera on the dogfight, the fighters' loops kept 2 more of the boxes' drones silent (7 of 18 box loops played; 9 with this rule) and the drones' level was -52.2 dB against -40.3 with it (v3)."
+    },
+    "passesPerGroup": 3,
+    "_passesPerGroup": "How many pass takes one fighter group may play at once. The sound thread took 3 in its review (19 Nov 07:10Z): 40 m behind it catches 5 of 7 passes, against 4 at 2 and 3 at 1.",
+    "masterDbByCameraDistance": [[300, 0], [1500, 8], [2600, 12]],
+    "_masterDbByCameraDistance": "While an air battle plays, added to the world buses (bed, loops, close, big; not music) on top of the battle's own master gain and before the master limiter, by the camera's distance from the middle of the nearest flying group (as built: the code measures that, not the point the camera looks at) (metres, straight line, linear between rows, held at the ends), slewed with a 0.33 s time constant. Nothing up to 300 m, then evenly to +8 dB at 1,500 m and +12 dB at 2,600 m, where the air battle's camera starts (it zooms from 120 m to 20 km), and held beyond. So the camera's first view is as loud as the 1,500 m view, and pulling back to 20 km loses about 3 LU. The close view uses closeView.masterDb instead.",
+    "closeView": {
+      "status": "BUILT for release 2 (21 Nov, the sound director's air sound patch to the 3D game): masterDb over the whole battle; the ridden plane's own engines as the bed at the eye; its own guns at the eye, never dropped; rounds cracking past; the master limiter. Waits for the Mac build and Brian's ear",
+      "listener": "at the camera, facing where it looks (in place of the ground point raised by heightFactor)",
+      "bed": {
+        "take": "the ridden plane's own air.loops entry",
+        "placed": false,
+        "gainDb": 1,
+        "_gainDb": "the ridden plane's engines over the battle's master, unplaced. 1 from 22 Nov (patch 0021; was 6): the engine under the guns, 3 dB under the Bremen r2d film's level once masterDb's +2 is counted (see _masterDb). It reaches every ridden fighter, and every ridden bomber with no interior take (through lpfHz), which go 3 dB down too; a B-17 with its interior takes uses interiorGainDb and rises 2 dB with the master.",
+        "lpfHz": 200,
+        "_why": "the ridden plane's engines as the bed under everything; unplaced, low-passed as heard through the airframe, ducked as a bed by a big moment (big.duckDb.bed)",
+        "_lpfHz": "a bomber's engines only, heard through its airframe. A fighter's chase view is behind it in the open air: its engine is heard unfiltered",
+        "interior": {
+          "B-17": ["b17_interior_whiteman_loop", "b17_interior_sioux_loop"],
+          "_how": "a bomber recorded from inside, by its air.loops name: ridden, it plays this take open (no lpfHz) at interiorGainDb in place of its own drone through the filter. A list gives one take per ridden bomber, by its key, so two bombers ridden in turn are heard from inside two aircraft; a take not yet in the game gives way to the next. A model not listed, or none of its takes in the game, keeps the filtered drone",
+          "_B-17": "22 Nov (Brian's Goods of 03:40Z, round nine): two real recordings from inside a B-17, U.S. Air Force video (public domain): Wings Over Whiteman, 2017 (in flight, its engines at the old take's speed, 17 Hz) and the Commemorative Air Force's B-17 at Sioux City, 2022 (13 Hz, about a quarter slower: throttled back, or perhaps not yet in the air). They replace a studio library's take (craigsmith G07-06, b17_interior_loop, left in the folder and no longer played)"
+        },
+        "interiorGainDb": 2,
+        "_interiorGainDb": "as loud as the bed it replaced: b17_drone_loop through a one-pole 200 Hz low-pass at +6 dB measured -18.2 LUFS, the interior takes -20.0 LUFS, so +2 (-18.0). Both of 22 Nov's interior takes are at -20.0 LUFS too (peaks -7.2 and -6.9 dBFS), so +2 holds. The new drone (b17_formation_drone_loop) through the filter at +6 dB measures -15.6 LUFS, 2.6 dB over the old: it is heard only if neither interior take is in the game"
+      },
+      "ownGuns": {
+        "dry": true,
+        "exemptFrom": ["sameTakeGap", "limits"],
+        "level": "the air_guns distance rule, as any gun at that distance",
+        "gainDb": 0,
+        "_why": "the ridden plane's own guns are the nearest guns in the scene and never the ones dropped (without the exemption 46 of its 70 bursts were dropped under v3, 53 under v2). They play at the level any gun at that distance plays: the inside sketch's rule (+8 dB at 2 m, -6 dB a doubling) put them about 8 dB under an enemy gun at the same 12.6 m. At +3 (variants/own3.json) planes lost heard fell from 2 to 0 and other bombers' bursts heard from 2.6 to 1.9 a second."
+      },
+      "closeFlak": {
+        "within": 100,
+        "take": "grenade_blast",
+        "_why": "a burst within 100 m of the camera plays grenade_blast, a real close blast without debris, as a stand-in until a close flak burst recording is found (the wanted list); flak_burst_01 is a far burst. Within 20 m it is a big moment by big.alsoWhenCloserThan, as on the ground.",
+        "_built": "v5: plays in every view, not only riding: any burst within `within` of the camera",
+        "_always": "a burst within `within` is always heard: flak.soundEvery keeps only the farther bursts from crowding"
+      },
+      "bus": {
+        "compressor": {
+          "thresholdDb": -18,
+          "ratio": 2,
+          "attackMs": 10,
+          "releaseMs": 150,
+          "kneeDb": 9,
+          "makeupDb": 0,
+          "detection": "rms"
+        },
+        "_how": "one compressor on the world buses (bed, loops, close, big; not music), after their gains and the big moments' duck, before closeView.masterDb and the master limiter (buses.master.limiterCeilingDb, -1.5 dBFS). kneeDb is the knee's whole width (the renders used ffmpeg's acompressor with knee=2.82, a factor, which is 9 dB)."
+      },
+      "masterDb": 9.5,
+      "_masterDb": "a fixed gain over the battle's master in the close view, in place of masterDbByCameraDistance. A game sets a gain; it does not measure a mix twice. 9.5 from 22 Nov (patch 0021; was 7.5 from 21 Nov 20:50Z, 3.1 before). The Bremen r2d film (22 Nov, 0001-0018) measured the chase view (behind a Fw 190) at -13.7 LUFS, 2.7 LU over the first chase film's -16.4, but the bursts had not risen: between attacks +4.4 dB, bursts (P95 of 400 ms loudness) +0.1, so they stood 5.1 LU over the bed against 9.4. In the chase the ridden engine is 70% of the sound between attacks and 29% of a burst, and every burst already reaches the limiter's ceiling. So the master goes up 2 dB and the bed down 5 (bed.gainDb 6 -> 1): the engine 3 dB under the film, everything else 2 dB over. Re-mixed from the film through the game's limiter: chase -14.1 LUFS, bursts 7.2 LU over the bed, the limiter more than 0.5 dB down 3.5% of the time. Louder bursts are not to be had: the master's extra 2 dB brings the bursts about 0.5 dB. What the film showed of the gain chain (22 Nov): no +12 dB per-sound limit bites (a big-moment duck takes the ridden engine down the full 6 dB from an ask of +13.5); every unplaced sound comes out about 6 dB under what the code asks (an engine-wide headroom stage, not identified), and a mono take at the eye is split 0.5 a channel, so it sits about 6 dB under the one stereo take (air_battle_far_loop) for the same ask. The ridden engine plays at about -15.6 LUFS at +13.5.",
+      "width": 1.0,
+      "_width": "every sound panned at this share of its true angle. The close view's camera is outside the plane, so nothing smears where a sound is, as a fuselage would for an ear inside: the full angle. Measured left/right correlation: 0.99 at the inside sketch's 0.4 (v2), 0.96 at 0.6, 0.93 at 0.8, 0.89 at 1.0 (clip 2: 0.90)",
+      "_notBuilt": "read by no code (22 Nov audit), so changing them changes nothing: ownGuns.gainDb, ownGuns.dry, ownGuns.exemptFrom, ownGuns.level (the ridden plane's own guns play at the eye at the square root of their barrels times the master, re-laid no sooner than 0.3 s or sameTakeGap); bus.compressor (no compressor is built: the only dynamics is the master limiter); width; bed.placed and bed.take (as their text says, built in code)."
+    },
+    "loopsFamily": "air_far",
+    "_loopsFamily": "Every formation engine loop (air.loops: bomber drones, stragglers, fighter groups) uses this distance family at every distance, with no switch (the sound thread's item 4).",
+    "bigDuck": {
+      "within": 1000,
+      "_within": "In the air battle a big moment farther than this many metres from the listener still plays, but does not duck the rest (the sound thread's review, call 3): a far plane lost that cannot be heard over the fight round the camera no longer ducks it.",
+      "_built": "v5: built in the air battle. A big moment is one of big.names, or a take nearer than its big.alsoWhenCloserThan; it plays at full and dips the bed, loops, close and music layers by big.duckDb"
+    }
+  },
+  "sea": {
+    "beds": [
+      {"name": "sea_day_loop", "always": true, "gainDb": -10},
+      {"name": "sea_battle_loop", "in": 0.3, "full": 0.6, "gainDb": -6},
+      {
+        "name": "naval_guns_far_loop",
+        "in": 0.0,
+        "full": 0.0,
+        "hold": 0.4,
+        "out": 0.7,
+        "gainDb": -8,
+        "note": "another fight beyond this one, salvos 6 to 18 km off; near silent between salvos, so it rides on sea_day_loop; gives way as this fight thickens"
+      }
+    ],
+    "note": "ships' guns and blasts roll across water: place 'water' reverb on everything at sea"
+  },
+  "land": {
+    "_what": "The ground battle's own rows (the ground battle sound designer, 21 Nov 2026, release 2), for Brian's ask that the Normandy battle feel as intense as watching Saving Private Ryan: close cracks and snaps, every gun heard, louder and more intense when the camera is low and close. The film is a feel reference only: nothing is taken from it. Read by LandSound (the 3D game's ground battle); every number has a default in its code, so a mix without this block plays as v4 did. Only real recordings: a list left empty keeps its moment silent until a real take passes Brian's ear.",
+    "closeView": {
+      "_how": "Down among the men the whole battle is louder: every world sound (the battle beds, engines, shots, blasts, voices; not the place's wind, not the music) is lifted by dB read off this table by the camera's height over the ground (linear between rows, held at the ends). The master limiter (buses.master) keeps the stack under its ceiling.",
+      "dbByCameraHeight": [[0, 3.0], [4, 3.0], [20, 1.5], [80, 0.0]],
+      "_why": "Brian on the air battle, 21 Nov 16:20Z: 'when you behind the plane view make it louder and more intense'; asked again for the ground battle (louder and more intense when the camera is low and close). +3 dB, as the air's closeView (+3.1)."
+    },
+    "cracks": {
+      "_how": "A rifle or machine-gun round whose line passes within `within` metres of the ear cracks there, before the shot itself is heard from the muzzle (a bullet outruns its sound; its shock wave cracks where it passes). within and the shortest gap between two cracks are read off the tables by the camera's height over the ground; only shooters more than fromShooterMoreThan off. Level dbAt0 + dbPerMetre x the miss distance. A machine-gun burst passing near is a run: a stretch of one `run` recording (take, from, length of its firing part) as long as the burst, faded out over its last runFade seconds (the recording runs on with more rounds passing, so no tail), no closer together than runGap. One a burst: the burst's other rounds are in the run.",
+      "withinByCameraHeight": [[0, 25], [4, 20], [20, 12], [80, 12]],
+      "gapByCameraHeight": [[0, 0.08], [4, 0.1], [20, 0.25]],
+      "fromShooterMoreThan": 25,
+      "single": ["bullet_crack", "crack_woods_01"],
+      "run": [["bullets_incoming_01", 0.03, 1.53], ["bullets_incoming_02", 0.02, 2.14]],
+      "runGap": 0.6,
+      "dbAt0": -2,
+      "dbPerMetre": -0.3,
+      "_why": "v4 cracked only within 12 m at most 4 times a second, wherever the camera was: on the Normandy run 146 cracks in 277 s. Down among the men (the eye is the ear under 4 m) the zone is 20 to 25 m and the gap 0.08 to 0.1 s: rounds passing within 25 m crack loud enough to make a man duck.",
+      "runFade": 0.04,
+      "_single": "crack_woods_01 from 21 Nov (round eight, Brian's Good at 21:41Z): one rifle round heard close in woods, the crack and the woods answering (trip2000, CC0), beside bullet_crack's crack alone; at the page's level, peak -1 dBFS as bullet_crack's -1.5"
+    },
+    "groundStrikes": {
+      "_how": "A rifle or machine-gun round that missed and struck the ground within `within` metres of the ear, the camera lower than cameraBelow: the strike in the earth (one of `dirt`, heard as it lands) and, whineChance of the time but no closer together than whineGap, a ricochet whining off: a piece of `whines` (take, from, cut) or a whole `ricochet` take. One a burst.",
+      "within": 12,
+      "cameraBelow": 20,
+      "dirt": [],
+      "_dirt": "empty, so the earth's strike is silent, until a real recording of rounds striking earth passes Brian's ear (being looked for)",
+      "whineChance": 0.3,
+      "whineGap": 0.35,
+      "whines": [
+        ["bullets_incoming_01", 0.17, 0.26],
+        ["bullets_incoming_01", 0.574, 0.3],
+        ["bullets_incoming_01", 0.88, 0.13],
+        ["bullets_incoming_01", 1.01, 0.24],
+        ["bullets_incoming_01", 1.338, 0.2],
+        ["bullets_incoming_02", 0.008, 0.24],
+        ["bullets_incoming_02", 0.25, 0.18],
+        ["bullets_incoming_02", 0.556, 0.3],
+        ["bullets_incoming_02", 0.986, 0.34],
+        ["bullets_incoming_02", 1.336, 0.22],
+        ["bullets_incoming_02", 1.71, 0.23],
+        ["bullets_incoming_02", 2.058, 0.24],
+        "ricochet_whine_01",
+        "ricochet_whine_02",
+        "ricochet_whine_03"
+      ],
+      "_whines": "single ricochets cut at their own onsets (measured: each rises 10 dB or more within 10 ms) out of rakurka's Incoming Ricochets (approved as bullets_incoming_01/02): twelve whines from one approved recording, so the same one is rarely heard twice. From 21 Nov (round eight, Good at 21:41Z): Benboncan's three ricochet whines (CC BY 4.0), whole, each falling in pitch (about 700 to 500 Hz, and 1.1 kHz). Each opened with a 2 ms tick 17 to 20 dB over its whine (the strike: here the earth's or the steel's own take is the strike), so each starts just after it, and its first 0.3 s sits at the median of the twelve (-26.6 dB; as recorded they were 8 to 14 dB under). ricochet_02 and 03 (the strike with a short whine) were Cut: `ricochet` keeps ricochet_01",
+      "ricochet": ["ricochet_01"],
+      "db": -4
+    },
+    "mgClose": {
+      "_how": "The land battle's close machine-gun takes by army (over byNation.mg). Every round fired is heard and no more: a burst plays from its take's first shot for its rounds / rate seconds (LandPlay.BurstOf: an MG 42 1,200 a minute in bursts of 7 to 10, the Americans' M1919 and BAR about 8 a second in 5 or 6), faded out over endFade (at most half a round's gap) so it is silent when the next round would come: the recording keeps firing after the burst's last round, so a tail cut from it would only be more rounds. parts: each take's firing (seconds; measured where the take is within 20 dB of its loudest). A take whose firing is shorter than the burst gives way to one long enough; if none is, the whole take plays.",
+      "GER": ["mg42_burst_01", "mg42_burst_02", "mg_town_01", "mg_town_02", "mg_town_03"],
+      "_GER": "mg_town_01..03 (Lubini's WW2 machine guns, approved for towns) fire a round about every 50 ms, the MG 42's 1,200 a minute, each round sharp; mg42_burst_01 swells about every 160 ms (its uploader layered it). All five play, for Brian's ear to choose.",
+      "parts": {
+        "mg42_burst_01": [0.08, 1.19],
+        "mg42_burst_02": [0.01, 0.59],
+        "mg_town_01": [0.04, 1.92],
+        "mg_town_02": [0.03, 1.26],
+        "mg_town_03": [0.03, 0.93],
+        "lmg_burst_01": [0.03, 0.35],
+        "lmg_burst_02": [0.02, 0.71],
+        "lmg_burst_03": [0.02, 0.63],
+        "machine_gun": [0.02, 2.25],
+        "tank_mg_burst": [0.02, 0.97],
+        "bren_far_01": [0.06, 2.5],
+        "bren_far_02": [0.05, 2.41],
+        "bren_far_03": [0.24, 2.82],
+        "gunner_burst": [0.0, 1.18],
+        "maxim_burst": [1.85, 2.71]
+      },
+      "moreParts": {
+        "maxim_burst": [[0.03, 0.66], [0.9, 1.6]],
+        "mg42_burst_01": [[0.31, 1.19], [0.5, 1.19]],
+        "mg42_burst_02": [[0.19, 0.59]]
+      },
+      "_moreParts": "A take's other stretches of firing, besides its part: where a close burst finds its recording crowded (every pitch near it already sounding a copy that instant) and no other take on its list is free, it plays from one of these before it is heard in a copy. maxim_burst's first two bursts (rounds at 0.05 to 0.54 and 0.92 to 1.48 s, measured 22 Nov) hold 5 and 6 rounds about 100 ms apart: room for a Soviet section's burst of 6 at 10 a second (0.6 s), not a Maxim's 8 (0.8 s), which keeps the part. The Soviet list has only this take, so in Prokhorovka two bursts nearer than the far takes (500 m) were heard only in a copy already sounding; with these they play from the Maxim's first or second burst. The German tank row holds mg42_burst_01 and 02, and 02 fires for less than her burst of 9 (0.6 s), so a crowded 01 had nowhere to go: Kursk (seed 11) hid one nearer than 500 m. Each stretch here starts at a round (rounds measured 22 Nov: 01 every 40 to 80 ms, peaks at 0.339 and 0.504 s; 02 at 0.212 s) and runs to its part's end: 01 from its 6th and 9th rounds (0.88 and 0.69 s, room for her 0.6 s burst), 02 from its 5th (0.40 s, an infantry MG 42 burst of up to 8).",
+      "_parts": "maxim_burst fires in three short bursts with silences between (rounds at 0.05 to 0.54, 0.92 to 1.48 and 1.87 to 2.59 s): its part is the last and longest, seven rounds about 120 ms apart, so a cut burst (a Soviet section's 6 or 8, a tank's DT 7, at 10 a second) plays from its first round with no silence in it. Without a part it played whole, 18 rounds for a burst of 6.",
+      "endFade": 0.04
+    },
+    "voices": {
+      "_how": "The one-shot takes' players (the game's audio components), pooled: made once and reused for take after take, not one spawned and destroyed for every take, and a cut take's fade kept with its voice, not a timer for each (the production study of 22 Nov, section 5, item 9: 0.4 to 1.2 ms a frame at 235 s). warm are made before the battle; more are made as needed up to most; with every one sounding, the take nearest its end gives way. pool false (or the game's -TheaterLandVoicesSpawned) spawns one for each take, as before.",
+      "pool": true,
+      "_pool": "true from 22 Nov 20:45Z: the 3D pre-check passed 8a8aac63 (compile and link on 5.8's headers, the player's reuse read against the engine's spawn: a short take out of hearing gets no voice, as before). The Mac's sound-on run compares it with -TheaterLandVoicesSpawned; set false to go back.",
+      "warm": 256,
+      "most": 768,
+      "_sizes": "Takes sounding at once, measured by the cloud test (each take's whole length at its pitch, or its cut and fade, and 50 ms more for the game to hear its player stop): Normandy 1944 106, Prokhorovka 140, the live 1,989-man Normandy battle 303 (its mass wide), Kursk seed 11 313, Normandy seed 11 281, the camera's 2,000-man normandy-1944-platoons-seed11-cam 347 on one join and over 384 on another (the 3D pre-check, 22 Nov 21:30Z: the framing moves which takes are in hearing). warm covers the content battles; most is twice the largest seen, a voice past warm made once when first needed (as the old path spawned without a limit)."
+    },
+    "tankMg": {
+      "_how": "A tank's machine guns, by army, over mgClose and byNation.mg: a close burst whose shooter is a tank plays her army's row (LandPlay.TankMg names which of her guns fired it, as Noise.Mount); roof is the gun on her commander's hatch, where it differs from her others. Each row is the pack's recordings nearest her guns' rate, measured 22 Nov (each round's time in the take's firing; the median gap between rounds): the pack has no MG 34, M1919, DT or Besa yet.",
+      "GER": ["mg42_burst_01", "mg42_burst_02"],
+      "_GER": "The MG 34 (800 to 900 a minute; LandPlay: 9 rounds at 15 a second): Lubini's two takes whose rounds come 67 and 57 ms apart on average (about 900 and 1,050 a minute), not the three town takes at 49 ms (1,200 a minute, the MG 42's own). The same 7.92 mm round. Her hatch gun is an MG 34 too: this row. mg42_burst_02's firing (0.58 s) is a shade shorter than her burst (0.6 s), so it gives way to 01: in the 1,989-man Normandy recording all 59 close German tank bursts played 01, the same-take rule pitching the copies apart.",
+      "USA": ["tank_mg_burst", "machine_gun"],
+      "_USA": "The coaxial and hull-gunner's M1919 .30 (400 to 600 a minute; 6 rounds at 8 a second): the M240G takes, rounds 92 to 95 ms apart (about 640 a minute), the slowest rifle-calibre gun in the pack. Only the two whose firing outlasts her burst (0.75 s) are on the row: lmg_burst_01 to 03 fire for 0.32, 0.69 and 0.61 s, and a take shorter than a burst plays whole when the give-way picks run out.",
+      "UK": ["tank_mg_burst", "machine_gun", "lmg_burst_02", "lmg_burst_03"],
+      "_UK": "The Besa (450 to 850 a minute; 7 rounds at 13 a second, 0.54 s): the M240G takes, lmg_burst_02 and 03 among them (their firing is longer than her burst).",
+      "SOV": ["maxim_burst"],
+      "_SOV": "The DT (about 600 a minute; 7 rounds at 10 a second): the Maxim, the same 7.62 mm rimmed round, rounds 92 to 137 ms apart (about 500 a minute) in bursts of three to seven.",
+      "*": ["tank_mg_burst", "machine_gun"],
+      "roof": {
+        "USA": ["gunner_burst"],
+        "_USA": "The Sherman's .50 M2 on the commander's hatch (450 to 600 a minute; LandPlay 6 rounds at 8 a second): a real M2 Browning (public domain, approved in the pack as the bomber gunner's), rounds about 120 ms apart (500 a minute)."
+      }
+    },
+    "garand": {
+      "_how": "An American rifleman's M1 Garand: after every clipEvery-th round, within `within` metres of the ear, the empty clip pings out pingAfter s after the shot. The reload is heard from the GI's reload clip once the soldier files have one (reloadFromClips: from the first \"garand_reload\" cue heard; until then, for the interim GI with no reload clip, reloadAfterPing s after the ping): its \"garand_reload\" cue (0.95 s into the clip, as the new clip goes in) plays reloadPieces of the reload take, each [from, cut, delay after the cue]: the clip pressed in at once, and the operating rod slamming home 0.33 s after the cue (the recording has the two 2.5 s apart; the slam's onset is 2.744 s into it). With reloadFromClips false the reload always comes reloadAfterPing s after the ping.",
+      "clipEvery": 8,
+      "ping": "garand_clip_ping",
+      "pingAfter": 0.12,
+      "reload": "garand_reload",
+      "reloadAfterPing": 0.45,
+      "within": 60,
+      "_why": "the recording's riflemen fire 3.4 s apart or more nine times in ten (p10 3.4 s, median 5.4 s), so the 3.2 s reload sits in the gap",
+      "reloadFromClips": true,
+      "reloadPieces": [[0.14, 0.3, 0.0], [2.66, 0.45, 0.246]]
+    },
+    "shouts": {
+      "_how": "In the thick of it (the meter at meterFrom or more) a man of a side firing within `within` metres of the ear calls out, one of his army's byNation.orders less `exclude`, from where he fired: every gapAtLow seconds (a random time in the range) as the meter reaches meterFrom, down to gapAtFull at 1. An army with fewer than fewLines lines waits at least fewLinesGap (two German lines heard every 5 s would be heard as a loop). A man down within onFallWithin of the ear: onFallChance that a comrade calls out 0.6 to 1.2 s later. One voice a side at a time, never cut off (limits.voicesPerSide). An army with no real voices stays silent.",
+      "within": 100,
+      "meterFrom": 0.35,
+      "gapAtLow": [10, 18],
+      "gapAtFull": [4, 8],
+      "fewLines": 4,
+      "fewLinesGap": 25,
+      "onFallWithin": 40,
+      "onFallChance": 0.4,
+      "exclude": ["order_charge"],
+      "db": 0
+    },
+    "incoming": {
+      "_how": "A shell (`artillery`) or mortar bomb (`mortar`) landing within `within` metres of the ear is heard in its last moment, the take ending as it lands. Only real recordings of one coming in, as impacts.incoming says; none is listed yet, so the moment stays the flash and the blast.",
+      "within": 150,
+      "artillery": [],
+      "mortar": [],
+      "_round8": "21 Nov: the four rushes cut from the Australian War Memorial's Vietnam tape (round eight) were Cut by Brian at 21:41Z, so none is listed: a shell still lands with its flash and blast only"
+    },
+    "sameTake": {
+      "_how": "The same piece of a take is never laid over itself: never again within 0.15 s, or within its own length when shorter (an 80 ms crack cannot overlap a copy of itself 80 ms later). It is held back at most mostHold s; when it would be held longer it starts on time instead, at a pitch repitchPercent or more from the last copy (no longer a copy).",
+      "mostHold": 0.05,
+      "repitchPercent": 4,
+      "_why": "On the Normandy run v4's rule held 690 takes back, one of them 2.5 s after its flash (a battery's mortars firing together, all on the one mortar_fire take): a shot heard seconds after it is seen."
+    },
+    "bodyCues": {
+      "_how": "A soldier clip's cue and the take it plays; null plays nothing. Also the vehicles' own one-shot cues (hatch, start, brake, squeal, breech): field_gun_breech has no recording yet, and the gun's case already clangs out after its shot (fireModel arm.gun.then), so it is silent.",
+      "rifle_drop": null,
+      "_rifle_drop": "german_drop_weapon is a German voice calling 'Drop the gun!' (Freesound 443444), for a surrender: a dying man's rifle falling is not a voice. Silent until a real take of a rifle falling is found.",
+      "field_gun_breech": null,
+      "medic_tend": null,
+      "_medic_tend": "The medic kneeling over a wounded man (the GI clip's 3.5 s 'tend' loop, cue at its start): wants something quiet, cloth, a pouch flap, a low voice. Silent until a real take passes Brian's ear (on the wanted list).",
+      "bazooka_fire": null,
+      "_bazooka_fire": "The bazooka gunner's launch (clip cue at 0.4 s of fire_stand/kneel/prone). Silent on the clip because the round's own shot (weapon 'at') already plays at that moment, a tank gun 8 dB under, as the stand-in; a real bazooka or Panzerschreck launch (whoosh, motor running away downrange) replaces that stand-in when one passes Brian's ear.",
+      "rocket_loaded": null,
+      "_rocket_loaded": "the loader sliding the rocket into the tube (4.6 s of load_bazooka): silent until a real take passes Brian's ear (on the wanted list).",
+      "wire_contact": null,
+      "_wire_contact": "the loader twisting the firing wire onto its contact, a small metal click (5.6 s): silent until a real take passes Brian's ear (on the wanted list).",
+      "helmet_tap": null,
+      "_helmet_tap": "the loader slapping the gunner's helmet, the ready signal (7.0 s): silent until a real take passes Brian's ear (on the wanted list).",
+      "rifle_shot": null,
+      "_rifle_shot": "A clip's own rifle cue (the loader's carbine): silent, because the round's own shot already plays the rifle; a clip cue would double it.",
+      "radio_squelch": null,
+      "_radio_squelch": "The radio man's handset (soldier_USA_radio, radio_call at 1.5 s): an SCR-300's squelch hiss as he keys it. radio.wav in the pack is Morse code, not a voice set's hiss, so it is not used. Silent until a real take passes Brian's ear (on the wanted list).",
+      "radio_talk": null,
+      "_radio_talk": "The radio man calling a fire mission into the handset (radio_call at 1.95 s): a man's voice, muffled through the handset. Silent until a real take passes Brian's ear: an American voice calling a fire mission, not from a film (on the wanted list).",
+      "thompson_mag_out": null,
+      "_thompson_mag_out": "The squad leader's Thompson magazine coming out (reload_stand/kneel/prone at 0.5 s). Silent until a real take of a Thompson's (or a like submachine gun's) magazine change passes Brian's ear (on the wanted list).",
+      "thompson_mag_in": null,
+      "_thompson_mag_in": "The new magazine slapped home (reload at 2.0 s). Silent, as thompson_mag_out.",
+      "thompson_cock": null,
+      "_thompson_cock": "The Thompson's cocking handle pulled back (reload at 2.42 s). Silent, as thompson_mag_out."
+    },
+    "smgCue": {
+      "_how": "The squad leader's Thompson (soldier_USA_nco): his fire clip calls `cue` on its first round of a burst of `rounds` (the soldier file: 4 at about 700 a minute). Heard as one take from byNation.smg for his army (the MP 38 takes stand in until a real Thompson is recorded, about 620 a minute), cut at the measured start of round rounds+1 (onsets, seconds into each take) less a fade of half a round's gap, so every round he fires is heard and no more. A take with no more rounds than that plays whole. Once an army's first burst is heard, a rifle round fired by one of leaderRoles of that army plays no rifle take: his fire clip plays for each of his rounds, so its burst carries the sound and it is not heard twice.",
+      "cue": "thompson_burst",
+      "rounds": 4,
+      "onsets": {
+        "mp40_burst_01": [0.006, 0.09, 0.193, 0.292, 0.382, 0.464],
+        "mp40_burst_02": [0.006, 0.104, 0.196, 0.315]
+      },
+      "leaderRoles": ["officer", "leader"]
+    },
+    "armourStrikes": {
+      "_how": "A rifle or machine-gun round that glances off a tank or other vehicle: a take from smallArms (the ring of the steel it struck) at db, and whineChance of the time a ricochet's whine off it (a piece of groundStrikes.whines, 2 dB under). None listed: the glance plays a ricochet take as before.",
+      "smallArms": ["steel_hit_01", "steel_hit_02", "steel_hit_03"],
+      "_smallArms": "from 21 Nov (round eight, Good at 21:41Z): a round striking steel plate and ringing (cedarstudios '.45 targetside metal', CC0), 0.6 s each, peak -1 dBFS as ricochet_01",
+      "db": -4,
+      "whineChance": 0.3
+    },
+    "landings": {
+      "_how": "A size's own recordings for a landing past the near band (impacts.near.within, 60 m): `middle` to impacts.middle.within (150 m), `far` past it, in place of the shells' impacts.middle / impacts.far takes; inside 60 m it lands as the shells do (impacts.near, with the earth coming down). Level: impacts.bySize's db for the size, as before. A size not listed, or a band with no takes, keeps the shells' takes.",
+      "mortar": {
+        "middle": ["mortar_impact_01", "mortar_impact_02"],
+        "far": ["mortar_impact_far_01", "mortar_impact_far_02"],
+        "_why": "21 Nov (round eight, Good at 21:41Z): Nanashi's M224 60 mm bombs landing (CC BY 4.0), the same size as the American M2 mortar of 1944: at medium distance (85 to 88% under 120 Hz; peak -1 dBFS, -23.4 and -24.7 LUFS, the shells' middle takes -21.2 and -22.4) and distant (a thud, nothing over about 3 kHz; set to -25.5 LUFS, as shell_impact_far and explosion_far_01)"
+      }
+    },
+    "engines": {
+      "_how": "A vehicle's engine loop by her model's name: for the cue her clip plays (tank_idle_loop standing, tank_loop driving) the take named here. A model or cue not listed plays its own cue's take.",
+      "Panzer IV": {"tank_loop": "panzer_engine_loop"},
+      "Tiger": {"tank_loop": "panzer_engine_loop"},
+      "_why": "21 Nov (round eight, Good at 21:41Z): a StuG III G driving at a Finnish battle show, 2014 (MKFI, public domain): its Maybach HL120 petrol V12 is the Panzer IV's own engine. tank_loop, which both German tanks drove on before, is a Soviet T-34's diesel. At -20 LUFS, as every tank loop in the pack. Commons' 360p transcode carries it to 16 kHz, as tank_loop and tank_sherman_drive_loop do (measured), so the original file is not needed.",
+      "_Tiger": "the Tiger's HL230 is the larger Maybach V12; no recording of one has been found, and the HL120 is the nearest real engine to it (the T-34 diesel was further). Hers until one is found.",
+      "_idle": "standing still both keep tank_idle_loop (the T-34 idling): the StuG recording is driving only. A Maybach idling is on the wanted list."
+    }
+  }
+}

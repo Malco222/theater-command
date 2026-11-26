@@ -107,6 +107,38 @@ for (const [a, b, river, x, y] of CV.crossings) {
   if (!riverAt.has(river)) { problems.push(`crossing ${a}-${b} on a river not kept (${CV.rivers[river].name})`); continue; }
   crossings.push([to(a), to(b), riverAt.get(river), x, y]);
 }
+// A river whose foot the final chart cut back to the sea's shore (more-rivers-net.mjs), short of crossings it still
+// has, runs on through them, nearest first: a bridge stands on its river. (The St Lawrence below Quebec: the chart's
+// coast takes the estuary from 33 units above its last crossing; the art director and the 3D builder, 18 November.)
+const OFF = 2;
+const offLine = (pts, x, y) => {
+  let d = Infinity;
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const [ax, ay] = pts[i], [bx, by] = pts[i + 1], L2 = (bx - ax) ** 2 + (by - ay) ** 2;
+    const t = L2 ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / L2)) : 0;
+    d = Math.min(d, Math.hypot(ax + t * (bx - ax) - x, ay + t * (by - ay) - y));
+  }
+  return d;
+};
+const K = Math.cos((50 * Math.PI) / 180) * 40;
+const llOf = ([x, y]) => [Math.round((71.4 - y / 40) * 10000) / 10000, Math.round((x / K - 11) * 10000) / 10000];
+keep.forEach(([r], k) => {
+  const away = crossings.filter((c) => c[2] === k && offLine(r.pts, c[3], c[4]) > OFF).map((c) => [c[3], c[4]]);
+  if (!away.length) return;
+  const pts = [...r.pts], ll = r.ll ? [...r.ll] : undefined;
+  while (away.length) {
+    const foot = pts[pts.length - 1], head = pts[0];
+    let at = 0;
+    away.forEach((p, i) => { if (Math.hypot(p[0] - foot[0], p[1] - foot[1]) < Math.hypot(away[at][0] - foot[0], away[at][1] - foot[1])) at = i; });
+    const p = away.splice(at, 1)[0];
+    if (Math.hypot(p[0] - head[0], p[1] - head[1]) < Math.hypot(p[0] - foot[0], p[1] - foot[1])) { problems.push(`a crossing of the ${r.name} lies off its line nearer its head (${p})`); continue; }
+    if (offLine(pts, p[0], p[1]) <= OFF) continue;
+    pts.push(p);
+    ll?.push(llOf(p));
+  }
+  keep[k][0] = { ...r, pts, ...(ll ? { ll } : {}) };
+  console.log(`the ${r.name} runs on through ${pts.length - r.pts.length} crossing(s) past the foot the chart gave it`);
+});
 const rivers = { rivers: keep.map(([r]) => r), crossings };
 
 // Names: unique on the whole map.

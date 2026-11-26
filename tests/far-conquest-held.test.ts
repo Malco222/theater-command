@@ -5,7 +5,8 @@
 // so neither the history campaigns nor the grand campaign's wars in Europe move by a single die.
 import { describe, expect, it } from 'vitest';
 import { wantsOut } from '../src/campaign/ai';
-import { createGame, setWar } from '../src/campaign/game';
+import { createGame, relocate, setWar } from '../src/campaign/game';
+import { fieldCtrl } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
 import { beyondEurope, worldOn } from '../src/campaign/world';
@@ -32,6 +33,8 @@ describe('an army on ground it has taken beyond Europe', () => {
     expect(worldOn(g)).toBe(true);
     const c = holding(g, 'MEX', true);
     expect(wantsOut(g, c)).toBe(false);
+    // Mexico's army still stands in the field round the town Britain took: a besieged conqueror holds it too.
+    expect(fieldCtrl(g, g.regions[c.reg])).toBe('MEX');
     // Shaken but not broken: it stays.
     c.org = 0.4;
     expect(wantsOut(g, c)).toBe(false);
@@ -48,6 +51,28 @@ describe('an army on ground it has taken beyond Europe', () => {
     g.nations.UK.atWar = g.nations.UK.atWar.filter((x) => x !== 'MEX');
     g.nations.MEX.atWar = g.nations.MEX.atWar.filter((x) => x !== 'UK');
     // No land road from Mexico to Paris: the host rule sends it home, as before.
+    expect(wantsOut(g, c)).toBe(true);
+  });
+
+  it('keeps its siege of a town that still holds: the field is its own though the province is not (ruling 224, b387)', () => {
+    const g = wide();
+    expect(g.flags.sieges).toBe(1);
+    const r = g.regions.find((x) => x.owner === 'MEX' && x.ctrl === 'MEX' && beyondEurope(x) && !x.units.length)!;
+    const c = g.corps.find((x) => x.nat === 'UK' && !x.dead && g.regions[x.reg].owner === 'UK')!;
+    setWar(g, 'UK', 'MEX');
+    relocate(g, c, r);
+    c.supplied = true;
+    c.org = 1;
+    expect(g.regions[c.reg]).toBe(r);
+    expect(r.ctrl).toBe('MEX');
+    expect(fieldCtrl(g, r)).toBe('UK');
+    expect(wantsOut(g, c)).toBe(false);
+    // Broken, it comes off as a conqueror would.
+    c.org = 0.25;
+    expect(wantsOut(g, c)).toBe(true);
+    // Without the siege rules the field is the province's: the host rule sends it home, as before.
+    c.org = 1;
+    g.flags.sieges = 0;
     expect(wantsOut(g, c)).toBe(true);
   });
 

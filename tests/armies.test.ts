@@ -4,8 +4,10 @@
 // them changes a battle.
 import { describe, expect, it } from 'vitest';
 import data from '../data/campaign/divisions.json';
+import setup from '../data/campaign/setup-1939.json';
 import { addCorps, createGame, men, removeCorps } from '../src/campaign/game';
-import { DIVISIONS, armyCard, corpsCard, divisionWords, divisionsOf, mixLine, mixOf, numberDivisions, ordinal } from '../src/campaign/armies';
+import { SIEGE } from '../src/campaign/siege';
+import { DIVISIONS, armyCard, corpsCard, divisionWords, divisionsOf, growCorps, mixLine, mixOf, numberDivisions, ordinal } from '../src/campaign/armies';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { armiesAt, armyAt, corpsDetail, orderFog, runTurnAI, sight } from '../src/campaign/turn';
@@ -48,7 +50,7 @@ describe('the divisions of a corps', () => {
     expect(ds).toHaveLength(c.divs);
     ds.forEach((d, i) => {
       expect(d.slot).toBe(i);
-      expect(d.no).toBe(c.dn! + i);
+      expect(d.no).toBe(c.nos?.[i] ?? c.dn! + i);
       expect(d.name).toBe(`${ordinal(d.no)} Panzer Division`);
       expect(d.short).toBe(`${ordinal(d.no)} Panzer`);
       expect(d.kind).toBe('arm');
@@ -117,8 +119,82 @@ describe('the numbers divisions carry', () => {
       const set = seen.get(key) ?? seen.set(key, new Set()).get(key)!;
       for (const d of divisionsOf(g, c)) { expect(set.has(d.no), `${key} ${d.no}`).toBe(false); set.add(d.no); }
     }
-    // Each run starts at 1 and has no gaps.
-    for (const [key, set] of seen) expect(Math.max(...set), key).toBe(set.size);
+    // Each run starts at 1 and has no gaps, but for the two nations whose first-day divisions carry their real numbers.
+    for (const [key, set] of seen) if (!/^(GER|POL):/.test(key)) expect(Math.max(...set), key).toBe(set.size);
+  });
+
+  it('are the real ones of 1 September 1939 on the first day, and a stand-in never takes a real one (the design director, 18 November)', () => {
+    const g = open();
+    const nos = (nat: string, name: string): string[] => divisionsOf(g, g.corps.find((c) => c.nat === nat && c.name === name)!).map((d) => d.name);
+    // (The 3D game's field names Corps Wodrig's divisions the 1st and the 12th, as the record does.)
+    expect(nos('GER', 'Corps Wodrig')).toEqual(['1st Infantry Division', '12th Infantry Division']);
+    expect(nos('GER', 'XII Corps')).toEqual(['15th Infantry Division', '34th Infantry Division', '52nd Infantry Division', '79th Infantry Division']);
+    expect(nos('GER', 'XVIII Corps')).toEqual(['3rd Mountain Division', '2nd Mountain Division', '1st Mountain Division']);
+    expect(nos('POL', 'Army Lodz')).toEqual(['2nd Infantry Division', '10th Infantry Division', '28th Infantry Division', '30th Infantry Division']);
+    // Guderian's corps had the 10th Panzer from mid-September; the light divisions carry their panzer numbers of that
+    // winter (the historian); the garrisons no field division held are stand-ins above the 269th.
+    expect(nos('GER', 'XIX Corps')).toEqual(['3rd Panzer Division', '10th Panzer Division']);
+    expect(nos('GER', 'XV Corps')).toEqual(['7th Panzer Division', '8th Panzer Division']);
+    expect(nos('GER', 'XXII Corps')).toEqual(['2nd Panzer Division', '9th Panzer Division']);
+    expect(nos('POL', 'Army Karpaty')).toEqual(['2nd Mountain Brigade', '3rd Mountain Brigade']);
+    const late = addCorps(g, 'GER', 'XXXIX Corps', 'arm', 1, g.byName['Berlin'].id, {});
+    expect(divisionsOf(g, late)[0].no).toBe(11);
+    for (const name of ['Berlin garrison', 'Hamburg garrison']) expect(parseInt(nos('GER', name)[0], 10)).toBeGreaterThanOrEqual(270);
+    // (Warsaw's garrison opens inside the city as the Warsaw Defence Command, rider b566, with its row's numbers.)
+    expect(parseInt(nos('POL', 'Warsaw Defence Command')[1], 10)).toBeGreaterThan(60);
+    // A corps renamed at the start for the record's command is still its setup row's corps.
+    const rowName = (c: Corps): string => SIEGE.startIn?.find((s) => s.nat === c.nat && s.name === c.name)?.corps ?? c.name;
+    // No stand-in takes a number the record holds for its nation's arm, placed or spare.
+    const real = new Set<string>();
+    for (const c of g.corps) {
+      const row = c.nat === 'GER' || c.nat === 'POL' ? ((setup as any).corps as any[]).find((r) => r[0] === c.nat && r[1] === rowName(c)) : null;
+      for (const n of row?.[5]?.nos ?? []) if (n) real.add(`${c.nat}:${c.kind}:${n}`);
+    }
+    for (const [nat, arms] of Object.entries(DIVISIONS.record)) for (const [kind, ns] of Object.entries(arms)) for (const n of ns ?? []) real.add(`${nat}:${kind}:${n}`);
+    for (const c of g.corps) {
+      const row = ((setup as any).corps as any[]).find((r) => r[0] === c.nat && r[1] === rowName(c));
+      divisionsOf(g, c).forEach((d, i) => {
+        if (row?.[5]?.nos?.[i]) expect(d.no, `${c.name} ${i}`).toBe(row[5].nos[i]);
+        else expect(real.has(`${c.nat}:${c.kind}:${d.no}`), `${c.nat} ${c.name}: ${d.name}`).toBe(false);
+      });
+    }
+  });
+
+  it('never name a division twice in a country, from the first day and through two years of war', () => {
+    const g = open(null, 5);
+    const twice = (): string[] => {
+      const out: string[] = [];
+      for (const nat of Object.keys(g.nations)) {
+        const seen = new Set<string>();
+        for (const c of g.corps) if (c.nat === nat && !c.dead) for (const d of divisionsOf(g, c)) { if (seen.has(d.name)) out.push(`${nat} ${d.name} (${c.name})`); seen.add(d.name); }
+      }
+      return out;
+    };
+    expect(twice()).toEqual([]);
+    while (g.turn <= 24) {
+      runTurnAI(g);
+      if (g.turn % 4 === 0) expect(twice(), `month ${g.turn}`).toEqual([]);
+    }
+    expect(g.corps.filter((c) => c.nat === 'GER' && !c.dead && (c.born ?? 0) > 1).length).toBeGreaterThan(0);
+  }, 120_000);
+
+  it('give divisions that join a corps numbers of their own, and a corps that changes arm the new arm\'s', () => {
+    const g = open();
+    const wodrig = g.corps.find((c) => c.nat === 'GER' && c.name === 'Corps Wodrig')!;
+    const before = g.flags['dn:GER:inf'];
+    growCorps(g, wodrig, 2, 'inf');
+    const after = divisionsOf(g, wodrig).map((d) => d.no);
+    expect(after).toEqual([1, 12, before + 1, before + 2]);
+    const xiv = g.corps.find((c) => c.nat === 'GER' && c.name === 'XIV Corps')!;
+    const xi = g.corps.find((c) => c.nat === 'GER' && c.name === 'XI Corps')!;
+    growCorps(g, xi, 1, 'mot');
+    const mot = divisionsOf(g, xi);
+    expect(mot.every((d) => d.name.endsWith('Motorised Division'))).toBe(true);
+    expect(mot.every((d) => d.no > 29)).toBe(true);
+    expect(mot.map((d) => d.no).filter((n) => divisionsOf(g, xiv).some((d) => d.no === n))).toEqual([]);
+    // A save keeps the list.
+    const back = loadGame(saveGame(g))!;
+    expect(divisionsOf(back, back.corps.find((c) => c.id === wodrig.id)!).map((d) => d.no)).toEqual(after);
   });
 
   it('go on from the last one raised, and are never handed out again when a corps is lost', () => {

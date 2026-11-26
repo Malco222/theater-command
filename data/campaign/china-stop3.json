@@ -1,0 +1,38 @@
+{
+ "_about": "Ruling 221 (the design director, 17 November 2026, 18:39Z) on the Pacific planner's paper 20, what Szechwan costs Japan when history is loose: the data that turns on its five switches, for the rules builder to lift into the game's files at step 13, when Japan and China are on the chart. Until then the game loads none of it. The blocks are keyed by the data file each belongs in, as the far-side rig lays a seats file (objects by key, lists appended), so the rig can take this file as it stands. H: a setup row marked 'stay' keeps its hold when a general offensive's release frees the ground it stands on, at every stop; the mark goes on paper 17's eight Japanese garrison rows, listed in '_stay' as [nation, row name, province] (they are the Pacific seat builder's rows, so the mark is laid on them, not here). L: China's ground takes the long supply line as the Soviet Union's does (east.json 'lineOwners'), counted from Japan's frontier and from the harbours it holds, with none of the Russian winter, at the stops without the book ('lineStops'). S: a computer staff reckons that line in its sums of strength as it reckons the winter ('lineReckon'). F: troops lifted off the coast of a country their own is fighting are landed at the nearest harbour their country holds on that ground, not taken home ('nearRefuge'), at every stop and for a player's army too; it reaches every country's refuge, so history's hashes and the grand wars were run with it on. R: China among the staffs that will not be ringed and that rest worn corps (rivals.json 'ring.staffs' and 'relief.staffs'), at every stop.",
+ "east": {
+  "lineOwners": ["CHN"],
+  "lineStops": [3, 4, 5],
+  "lineReckon": true,
+  "nearRefuge": true
+ },
+ "rivals": {
+  "ring": { "staffs": ["CHN"] },
+  "relief": { "staffs": ["CHN"] }
+ },
+ "_stay": [
+  ["JAP", "North China Area Army reserve (27th Division)", "Peiping"],
+  ["JAP", "Mongolia Garrison Army (26th Division)", "Tatung"],
+  ["JAP", "Tsingtao garrison (independent mixed brigades)", "Tsingtao"],
+  ["JAP", "13th Army (15th Division, Nanking)", "Nanking"],
+  ["JAP", "Shanghai garrison (independent mixed brigades)", "Shanghai"],
+  ["JAP", "21st Army detachment (Swatow)", "Swatow"],
+  ["JAP", "Amoy naval garrison", "Amoy"],
+  ["JAP", "Hainan garrison (naval landing forces)", "Hainan"]
+ ],
+ "_b423": "Ruling b423 (the design director, 18 November 2026, 01:13Z), a rider on 221: at stops 3 to 5 the dated rows that serve only the book's operations come held and stayed. They are the record's rows for the South Kwangsi landing (the 5th Division, brought to Formosa in month 2), Hong Kong (the 38th Division), the coast landings of 1941 (three forces) and the strike south (the 25th Army's 5th and 18th Divisions, which JAP:south takes when it is built). At stops 1 and 2 nothing changes: the book's landings use them. A hold binds Japan's staff, never a player's own corps (b417). The rows are named in 'setup-1939'.bookOnly as [nation, row name]; game.ts reads it where a dated row is raised.",
+ "setup-1939": {
+  "bookOnly": {
+   "stops": [3, 4, 5],
+   "rows": [
+    ["JAP", "21st Army (5th Division)"],
+    ["JAP", "38th Division (Canton)"],
+    ["JAP", "23rd Army (48th Division)"],
+    ["JAP", "13th Army (Chekiang landing force)"],
+    ["JAP", "13th Army (Wenchow detachment)"],
+    ["JAP", "25th Army (5th Division)"],
+    ["JAP", "25th Army (18th Division)"]
+   ]
+  }
+ }
+}

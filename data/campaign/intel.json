@@ -33,7 +33,7 @@
     ]
   },
   "missions": {
-    "_about": "caught is the chance each month that the agent is found out while on this work; for sabotage it is the chance on the night of the attempt. success is the chance an attempt comes off. gain is the experience a success earns.",
+    "_about": "caught is the chance each month that the agent is found out while on this work; for sabotage it is the chance on the night of the attempt. success is the chance an attempt comes off. gain is the experience a success earns. bbPlans and cvPlans steal a great power's plans of battleships or of carriers, and (rider b542) bomberPlans, jetPlans, rocketPlans and guidedPlans its plans of four-engined bombers, jet fighters, rocket artillery and guided weapons: each tried once like an act of sabotage (arsenal.json, plans). A smaller nation's Intelligence branch (tech.json) makes its agents harder to catch and its thefts surer.",
     "watch": {
       "caught": 0.03
     },
@@ -57,7 +57,50 @@
       "months": 3,
       "cut": 0.5
     },
+    "airfield": {
+      "caught": 0.18,
+      "success": 0.45,
+      "gain": 2
+    },
+    "orders": {
+      "caught": 0.14,
+      "success": 0.45,
+      "gain": 1
+    },
+    "bbPlans": {
+      "caught": 0.2,
+      "success": 0.3,
+      "gain": 3
+    },
+    "cvPlans": {
+      "caught": 0.2,
+      "success": 0.3,
+      "gain": 3
+    },
+    "bomberPlans": {
+      "caught": 0.2,
+      "success": 0.3,
+      "gain": 3
+    },
+    "jetPlans": {
+      "caught": 0.2,
+      "success": 0.3,
+      "gain": 3
+    },
+    "rocketPlans": {
+      "caught": 0.2,
+      "success": 0.3,
+      "gain": 3
+    },
+    "guidedPlans": {
+      "caught": 0.2,
+      "success": 0.3,
+      "gain": 3
+    },
     "guard": {
+      "caught": 0
+    },
+    "hunt": {
       "caught": 0
     }
   },
@@ -76,8 +119,9 @@
     "lieLow": 2
   },
   "caught": {
-    "_about": "A neutral that catches a spy thinks worse of the side that sent it: its opinion moves this far away from that side.",
-    "opinion": 6
+    "_about": "A neutral that catches a spy thinks worse of the side that sent it: its opinion moves this far away from that side. 'war' (Brian, 18 November): the chance that a great power at peace with the thief, catching a spy at its plans (any of the six thefts), declares war on the spy's country.",
+    "opinion": 6,
+    "war": 0.4
   },
   "battle": {
     "_about": "An agent at work in a province has mapped its defences: the agent's own side attacks it this much harder.",
@@ -165,5 +209,10 @@
     "Inkwell",
     "Jackdaw",
     "Keystone"
-  ]
+  ],
+  "secret": {
+    "_about": "The secret war (rulings 151(c), 135 and 153; the grand campaign only), each half behind its own switch: 'on' for new grand campaigns, kept with each campaign in g.flags ('sw:hunt', 'sw:orders'). HUNTERS: with it on, the other side's services work through real agents. A plot that would have struck at once (enemy.chance, the same rate in sum) instead puts a hidden agent on the province it means to strike, and it strikes 'lead' months later, where a guard can still stop it. The player's agent at home can HUNT ENEMY AGENTS: each month it uncovers each hidden agent in its own province with chance 'here', and in a province beside it with 'near', each rank above the first adding 'skill'. An uncovered agent can be ARRESTED, which ends it; nothing more is shown. No agent is turned. ORDERS: STEAL THE ORDERS, for an agent abroad at war with the host, in a province where a bomber group of the host's side is based (its numbers in missions.orders, a higher rank better at both). On a success the strongest bomber group there that could fly has next month's order written now: the target its staff would pick today, by day or by night, with the fighters on the field by day. The staff flies it in its month if it still can, and it lapses if not. Fighters that meet a raid whose order was read meet it at 'ambush' of full strength, with no loss for want of radar or for distance inside their reach.",
+    "hunters": { "on": false, "lead": 2, "here": 0.5, "near": 0.25, "skill": 0.1 },
+    "orders": { "on": false, "ambush": 1 }
+  }
 }

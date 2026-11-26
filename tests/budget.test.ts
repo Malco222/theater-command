@@ -4,6 +4,8 @@
 import { describe, expect, it } from 'vitest';
 import budget from '../data/campaign/budget.json';
 import { BUDGET, PRODUCTION, aiProduction, budgeted, corpsUpkeep, income, ledger, orderCorps, provinceYield, upkeep, upkeepTotal } from '../src/campaign/economy';
+import { layStartGuns } from '../src/campaign/airversion';
+import { worksUpkeep } from '../src/campaign/arsenal';
 import { addCorps, createGame, homeLost, startPhase } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -12,6 +14,8 @@ import type { Game } from '../src/campaign/types';
 
 const grand = (seed = 3, human: string | null = null): Game => startOpen(createGame(seed, human));
 const sum = (xs: { amount: number }[]): number => xs.reduce((s, l) => s + l.amount, 0);
+/** The start guns (1.5.1, ruling 124) taken off, for a test that measures something else. */
+const clearGuns = (g: Game): void => { for (const k of Object.keys(g.flags)) if (k.startsWith('wk:aa:')) delete g.flags[k]; };
 
 describe('the budget data', () => {
   it('prices every kind of ground, every kind of corps and every class of ship', () => {
@@ -145,9 +149,22 @@ describe('upkeep', () => {
 
   it('is halved for a nation at peace', () => {
     const g = grand();
+    // (Italy's start guns cleared: their upkeep is the works' own and is not halved at peace; the next test prices them)
+    clearGuns(g);
     const peace = upkeepTotal(g, 'ITA');
     g.nations.ITA.atWar.push('FRA');
     expect(upkeepTotal(g, 'ITA')).toBeCloseTo(peace / BUDGET.upkeep.peace, 9);
+  });
+
+  it('prices the start guns: 0.15 a month for a great power whose war began in 1939 or 1940, 0.30 for a later start', () => {
+    // 1.5.1 (ruling 124; the design director, 24 Nov 2026 22:58Z): every great power opens with guns round its capital
+    // and its two chief factory towns, level 1 in an early start and level 2 in a later one, at the works' own upkeep.
+    const guns = (h: Game): number => worksUpkeep(h, 'ITA').find((l) => l.key === 'works:aa')?.amount ?? 0;
+    expect(guns(grand())).toBeCloseTo(0.15, 9);
+    const later = grand();
+    clearGuns(later);
+    layStartGuns(later, ['ITA'], 17); // (a war begun in 1941)
+    expect(guns(later)).toBeCloseTo(0.3, 9);
   });
 
   it('comes out of the month\'s income before anything else is paid for', () => {

@@ -6,13 +6,14 @@
   "mines": { "most": 2, "attack": 0.12, "march": 1 },
   "breach": { "perDiv": 0.25, "most": 0.5 },
   "works": { "most": 2 },
+  "named": { "_about": "What a province's works are, by level, as the engineers' job, the province's card, the arsenal and the attack card name them (ruling 145(b), words only: no rule reads them). Level 3 is ordered from the treasury alone.", "1": "barbed wire, gun pits and an anti-tank ditch", "2": "pillboxes and dragon's teeth", "3": "a line of concrete forts", "mines": "minefields and booby traps" },
   "jobs": {
     "bridge": { "label": "Rebuild the bridges", "blurb": "Every bridge that is down on this province's rivers is rebuilt by next month, and tanks, lorries and guns can cross again." },
     "rail": { "label": "Relay the railway", "blurb": "The track torn up or bombed in this province is relaid by next month. Trains run through again, and the armies beyond are fed from a railhead that much nearer." },
     "plant": { "label": "Rebuild a factory", "blurb": "One factory wrecked by bombing is put back to work by next month and earns again." },
-    "works": { "label": "Fortify the province", "blurb": "Bunkers, wire and gun pits: the province's fortifications rise one level, as far as level 2. Heavier works are ordered from the treasury." },
+    "works": { "label": "Fortify the province", "blurb": "Barbed wire, gun pits and an anti-tank ditch, then pillboxes and dragon's teeth: the province's fortifications rise one level, as far as level 2. A line of concrete forts is ordered from the treasury." },
     "airfield": { "label": "Lay out an airfield", "blurb": "Runways, dispersal pens and a fuel dump: by next month air groups can be based in this province, or more of them if it has an airfield already. Each month's work serves 500 more aircraft, as far as two levels; a larger airfield is ordered from the treasury. An airfield costs a little to keep up." },
-    "mines": { "label": "Lay minefields and traps", "blurb": "Mines and booby traps on every road in. Each level takes 12% off any attack on the province and costs the enemy a move to enter it, until his own engineers clear lanes. Two levels at most." },
+    "mines": { "label": "Lay minefields and traps", "blurb": "Minefields and booby traps on every road in. Each level takes 12% off any attack on the province and costs the enemy a move to enter it, until his own engineers clear lanes. Two levels at most." },
     "demolish": { "label": "Demolish the fortifications", "blurb": "The works here are blown up, one level a month, so that nobody can use them." }
   },
   "start": { "nations": ["GER", "SOV", "FRA", "UK", "ITA"], "corps": 2 },

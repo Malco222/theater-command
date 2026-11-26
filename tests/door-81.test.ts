@@ -6,8 +6,9 @@
 // For a computer-led America (open.json, 'descent.door'). A player's America is never moved by it.
 // 1. On its own side of the ocean America's staff has no list of shores and no build-up figure.
 // 2. An enemy whose home is on that side is its first business: no quiet year, the landing force brought to the quay
-//    by rail at once and kept from the ocean run, the landing made the month the force is ready, under every test of
-//    the landing card, within a landing's range of America's own home harbours.
+//    by rail at once and kept from the ocean run, the landing made the month the force is ready and its shipping carries
+//    it (ruling 234 rider b630), under every test of the landing card, within a landing's range of America's own home
+//    harbours.
 // 3. When he is beaten the force takes ship for home, and the army goes on across the ocean as before.
 // 4. First business is not only business (ruling 80): a frontier made by a landing does not shut the door on the
 //    army that sails, and the force on that side is the landing force, fed only against the enemy army next to it.
@@ -24,7 +25,7 @@ import { beyondEurope, enemyAtTheDoor, neighbourByLand, overseasOf } from '../sr
 import open from '../data/campaign/open.json';
 import grand from '../data/campaign/grand.json';
 
-const SEP_40 = 13, FEB_42 = 30, END = 37;
+const SEP_40 = 13, FEB_42 = 30, END = 40;
 const R = (g: Game, name: string): Region => { const r = g.byName[name]; expect(r, name).toBeDefined(); return r; };
 const field = (g: Game, nat: string): Corps[] => g.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng');
 /** A country of the Americas joins the Axis and declares war on the United States. */
@@ -40,9 +41,19 @@ const standingIn = (g: Game, nat: string): number => field(g, 'USA').filter((c) 
  */
 const snap: Record<number, string> = {};
 const landings: { turn: number; nat: string; to: string; owner: string; corps: number; warned: boolean; wave: boolean }[] = [];
-const months: { turn: number; inCol: number; inVen: number; abroadOnOwnSide: number; across: number; col: boolean; ven: boolean; ashoreFlags: number; atWarWithGermany: boolean; atWar: boolean; door: boolean; sails: boolean }[] = [];
+const months: { turn: number; lift: number; inCol: number; inVen: number; abroadOnOwnSide: number; across: number; col: boolean; ven: boolean; ashoreFlags: number; atWarWithGermany: boolean; atWar: boolean; door: boolean; sails: boolean }[] = [];
 {
-  const g = startOpen(createGame(25, null));
+  // Seed 25 until the ship candidate of ruling 233, whose rules (the works rule taken over, b629; the record garrisons;
+  // the boats rows) moved the war again: in seed 25 three French corps now stand in the Saar in September 1940, so
+  // France's date lapses and America's list opens Nantes that month. Of seeds 1 to 30 under the ship candidate, 1, 2,
+  // 3, 4, 5, 7, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 22, 23, 27 and 28 tell this story in full (in 9 the French
+  // stand in the Saar too, and in 6, 8, 19, 20, 24, 26, 29 and 30 fewer than three staffs would choose an enemy across
+  // the sea when asked for the quay). Seed 1 is the first; in it France has fallen by September 1940. On release 1's
+  // tree (rider b640) the record's shipping (ruling 234 rider b630: America's carries 2 corps a month until January
+  // 1942) holds the landing force of three at home until turn 29 in every seed tried, 1 to 5, and the design director
+  // restated the story to it (16:25Z on b640): the landing the month the shipping carries the force its forecast asks
+  // for, and Colombia beaten within three months of that. Seed 1 is kept.
+  const g = startOpen(createGame(1, null));
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, owner: e.to.owner, corps: e.force.length, warned: e.warned, wave: e.wave }); };
   while (g.turn < END) {
     const t = g.turn;
@@ -52,6 +63,7 @@ const months: { turn: number; inCol: number; inVen: number; abroadOnOwnSide: num
     const us = field(g, 'USA');
     months.push({
       turn: t,
+      lift: g.nations.USA.sealift,
       inCol: standingIn(g, 'COL'),
       inVen: standingIn(g, 'VEN'),
       abroadOnOwnSide: us.filter((c) => beyondEurope(c.reg) && g.regions[c.reg].owner !== 'USA').length,
@@ -73,6 +85,8 @@ const before = (): Game => loadGame(snap[SEP_40])!;
 const declared = (): Game => loadGame(snap[SEP_40 + 100])!;
 const month = (turn: number) => months.find((m) => m.turn === turn)!;
 const fellOn = (key: 'col' | 'ven'): number => months.find((m) => !m[key])?.turn ?? 0;
+/** The first month from Colombia's declaration in which America's shipping carries a force of `corps` (a landing sails whole). */
+const shipped = (corps: number): number => months.find((m) => m.turn >= SEP_40 && m.lift >= corps)?.turn ?? 0;
 
 describe('the rule is written for America (open.json, descent.door)', () => {
   it('names the United States and nobody else', () => {
@@ -226,7 +240,9 @@ describe('an enemy whose home is on that side is the first business (rulings 75b
     const quay = doorQuay(g, 'USA')!;
     expect(quay).not.toBeNull();
     expect(quay.owner === 'USA' && !quay.overseas).toBe(true);
-    // He is landed on within three months and beaten within five, and the force is home again two months after.
+    // He is beaten within three months, and the force is home again two months after. (Under ruling 232 the corps
+    // in the Canal Zone take Panama City with the field, its guard beside the police, so he can fall in the month he
+    // declares with no American corps ever standing on his ground; before the ruling a landing came first.)
     let landed = 0, fell = 0;
     for (let i = 0; i < 5 && !fell; i++) {
       const t = g.turn;
@@ -234,9 +250,9 @@ describe('an enemy whose home is on that side is the first business (rulings 75b
       if (!landed && standingIn(g, 'PAN')) landed = t;
       if (!g.nations.PAN.alive) fell = t;
     }
-    expect(landed).toBeGreaterThan(0);
-    expect(landed - SEP_40).toBeLessThanOrEqual(3);
     expect(fell).toBeGreaterThan(0);
+    expect(fell - SEP_40).toBeLessThanOrEqual(3);
+    if (landed) expect(landed).toBeLessThanOrEqual(fell);
     runTurnAI(g);
     runTurnAI(g);
     expect(field(g, 'USA').filter((c) => beyondEurope(c.reg) && g.regions[c.reg].owner !== 'USA').length).toBe(0);
@@ -253,20 +269,25 @@ describe('an enemy whose home is on that side is the first business (rulings 75b
 describe('Colombia declares war in September 1940: the war with nobody playing', () => {
   const first = landings.find((l) => l.nat === 'USA' && l.owner === 'COL');
 
-  it('America lands on Colombia\'s shore within three months, with the whole force and under the landing card\'s tests', () => {
+  it('America lands on Colombia\'s shore the month its shipping carries the force, with the whole force and under the landing card\'s tests', () => {
     expect(first).toBeDefined();
+    // (Within three months where the shipping already carries it; with the record's, America's 2 corps a month carry the
+    // force of three from January 1942, and not before: the director's restatement of 16:25Z on b640.)
+    const ships = shipped(first!.corps);
+    expect(ships).toBeGreaterThan(0);
     expect(first!.turn).toBeGreaterThan(SEP_40);
-    expect(first!.turn).toBeLessThanOrEqual(SEP_40 + 3);
+    expect(first!.turn).toBeLessThanOrEqual(Math.max(SEP_40 + 3, ships));
+    expect(month(first!.turn).lift).toBeGreaterThanOrEqual(first!.corps);
     expect(first!.corps).toBe(3);
     expect(first!.wave).toBe(false);
     // (No landing of America's on that shore was made against its own forecast's warning.)
     for (const l of landings.filter((x) => x.nat === 'USA' && beyondEurope(R(before(), x.to).id))) expect(l.warned, `${l.to} in month ${l.turn}`).toBe(false);
   });
 
-  it('Colombia falls within eight months (Version 76: October 1942; Versions 77 to 80: never attacked)', () => {
+  it('Colombia falls within eight months, or three of the month its shipping carries the force (Version 76: October 1942; Versions 77 to 80: never attacked)', () => {
     const fell = fellOn('col');
     expect(fell).toBeGreaterThan(0);
-    expect(fell).toBeLessThanOrEqual(SEP_40 + 8);
+    expect(fell).toBeLessThanOrEqual(Math.max(SEP_40 + 8, shipped(first!.corps) + 3));
   });
 
   it('the force comes home when he is beaten: six months on, no American corps stands abroad on that side of the water', () => {
@@ -279,11 +300,13 @@ describe('Colombia declares war in September 1940: the war with nobody playing',
     expect(later.ashoreFlags).toBe(0);
   });
 
-  it('and the army crosses the ocean as it did: the first corps is across within three months of the war with Germany', () => {
+  it('and the army crosses the ocean as it did: the first corps is across within three months of the war with Germany, or of Colombia\'s fall', () => {
+    // (With the record's shipping the force for Colombia sails in January 1942, after the war with Germany has begun, and
+    // the army at home crosses once he is beaten: the director's restatement of 16:25Z on b640.)
     const war = months.find((m) => m.atWarWithGermany)!.turn;
     const across = months.find((m) => m.across > 0)?.turn ?? 0;
     expect(across).toBeGreaterThan(0);
-    expect(across).toBeLessThanOrEqual(war + 3);
+    expect(across).toBeLessThanOrEqual(Math.max(war, fellOn('col')) + 3);
   });
 });
 
@@ -303,9 +326,10 @@ describe('first business is not only business (ruling 80)', () => {
   });
 
   it('a force ashore on its own side is short only against the enemy army next to it, never against a lodgment\'s fifteen divisions', () => {
-    // The month after the landing: three corps ashore at Cali, far fewer than fifteen divisions, and not short.
+    // The month after the landing: three corps ashore at Cali, far fewer than fifteen divisions, and not short. (The
+    // landing comes the month the shipping carries the force: January 1942 with the record's.)
     const g = declared();
-    while (!g.flags['st:lodged:USA'] && g.turn < SEP_40 + 6) runTurnAI(g);
+    while (!g.flags['st:lodged:USA'] && g.turn < END) runTurnAI(g);
     const lod = lodgment(g, 'USA');
     expect(lod).not.toBeNull();
     expect(beyondEurope(lod!.at.id)).toBe(true);

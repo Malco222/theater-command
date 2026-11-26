@@ -11,10 +11,11 @@ import { addCorps, assess, createGame, declareWar } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import {
-  TRAITS, alertNation, costMul, eliteCount, eliteIn, eliteOf, eliteRule, openTraits, priceOf, traitAttack, traitDefence, traitDrafts,
+  TRAITS, alertNation, costMul, eliteCount, eliteIn, eliteOf, eliteRule, levyRule, openTraits, priceOf, traitAttack, traitDefence, traitDrafts,
   traitFleet, traitMoney, traitNames, traitRule, traitSeaLoss, traitSealift, traitsMonth, traitsOf, whyNoElite,
 } from '../src/campaign/traits';
 import { TECH } from '../src/campaign/tech';
+import { beyondEurope } from '../src/campaign/world';
 import { runTurnAI } from '../src/campaign/turn';
 import { KIND, type Corps, type Game } from '../src/campaign/types';
 
@@ -54,6 +55,8 @@ describe('the data', () => {
         const rules = ['attack', 'defence', 'income', 'incomeMul', 'oil', 'relocate', 'drafts', 'cost', 'sealift', 'alert', 'partisans', 'fleet', 'seaLoss'].filter((k) => (t as any)[k] !== undefined);
         expect(t.builtin ? rules.length === 0 && !!t.rule : rules.length > 0 && !t.rule, `${nat}.${t.id}`).toBe(true);
         expect(traitRule(t).length, `${nat}.${t.id}`).toBeGreaterThan(10);
+        // A levy on a row the game already has carries its words by hand: they end with the levy's own sentence.
+        if (t.builtin && t.levy) expect(t.rule!.endsWith(` ${levyRule(t.levy)}`), `${nat}.${t.id}`).toBe(true);
       }
       const u = row.unit;
       if (!u) continue;
@@ -277,18 +280,25 @@ describe('in the books', () => {
     expect(traitMoney(g, 'ROM').flat).toBe(0);
   });
 
-  it('keeps a quarter of the Soviet factories an enemy has overrun at work in the east', () => {
+  it('keeps half the Soviet factories an enemy has overrun at work in the east, beside the works there (ruling 228)', () => {
     const g = grand('SOV');
     expect(traitMoney(g, 'SOV').flat).toBe(0);
     declareWar(g, 'GER', 'SOV');
+    // At war the works of the Urals and Siberia earn 10 a month, about a fifth of Soviet industry.
+    expect(traitMoney(g, 'SOV').lines).toEqual([{ key: 'trait:urals', label: 'Factories to the east', amount: 10, count: undefined }]);
     const kiev = g.byName['Kiev'], minsk = g.byName['Minsk'];
     kiev.ctrl = 'GER'; minsk.ctrl = 'GER';
     const m = traitMoney(g, 'SOV');
-    expect(m.lines).toEqual([{ key: 'trait:urals', label: 'Factories to the east', amount: (kiev.fac + minsk.fac) * 0.25, count: kiev.fac + minsk.fac }]);
+    expect(m.lines).toEqual([{ key: 'trait:urals', label: 'Factories to the east', amount: 10 + (kiev.fac + minsk.fac) * 0.5, count: kiev.fac + minsk.fac }]);
     expect(ledger(g, 'SOV').gross).toBeCloseTo(income(g, 'SOV'), 9);
     // Ground given up to a country it is not at war with earns nothing.
     g.byName['Odessa'].ctrl = 'ROM';
     expect(traitMoney(g, 'SOV').flat).toBeCloseTo(m.flat);
+    // The 10 stands for works beyond the edge of the map: on a chart that shows Soviet factories there, they earn as
+    // provinces and the sum is not paid. What is kept of the overrun factories is paid either way.
+    const far = g.regions.find((r) => beyondEurope(r))!;
+    far.owner = 'SOV'; far.fac = 3;
+    expect(traitMoney(g, 'SOV').flat).toBeCloseTo(m.flat - 10);
   });
 
   it('raises American earnings once the United States is at war', () => {
@@ -354,15 +364,17 @@ describe('what things cost', () => {
 describe('the rest', () => {
   it('counts the merchant fleets into the shipping, once', () => {
     const g = grand('NOR');
-    expect(traitSealift('NOR')).toBe(2);
-    expect(g.nations.NOR.sealift).toBe(2);
-    expect(g.nations.GRE.sealift).toBe(2);
-    expect(g.nations.DEN.sealift).toBe(1);
+    // (Ruling 234, rider b630: Norway's and Greece's fleets sailed for the Allies and carried one force of their own at
+    // most; Denmark moved none by sea before the occupation.)
+    expect(traitSealift('NOR')).toBe(1);
+    expect(g.nations.NOR.sealift).toBe(1);
+    expect(g.nations.GRE.sealift).toBe(1);
+    expect(g.nations.DEN.sealift).toBe(0);
     expect(g.nations.GER.sealift).toBe(4);
     openTraits(g);
     startOpen(g);
-    expect(g.nations.NOR.sealift).toBe(2);
-    expect(loadGame(saveGame(g))!.nations.NOR.sealift).toBe(2);
+    expect(g.nations.NOR.sealift).toBe(1);
+    expect(loadGame(saveGame(g))!.nations.NOR.sealift).toBe(1);
   });
 
   it('lets nobody catch Poland by surprise', () => {

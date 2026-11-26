@@ -10,7 +10,7 @@ import { RESEARCH, foundBureau, setTeams, techMul } from '../src/campaign/resear
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import {
-  TECH, gateOf, hasTech, idleTeams, locked, monthsFor, paraCount, staffPick, startResearch, stopResearch, teamsOf, techById, techOf, techRule,
+  TECH, gateOf, hasTech, idleTeams, locked, monthsFor, paraCount, spyTeamsOf, staffPick, startResearch, stopResearch, teamsOf, techById, techOf, techRule,
   techTick, techTraits, techView, treeLevel, whyNoPara, whyNotResearch, winterReady,
 } from '../src/campaign/tech';
 import { priceOf, traitAttack, traitDrafts } from '../src/campaign/traits';
@@ -33,11 +33,11 @@ function research(g: Game, nat: string, id: string): void {
 }
 
 describe('the data', () => {
-  it('is a tree: five branches, four steps, and nothing needs what comes after it', () => {
+  it('is a tree: five branches of four steps and the Intelligence branch of three, and nothing needs what comes after it', () => {
     const ids = TECH.techs.map((t) => t.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(TECH.branches.map((b) => b.id)).toEqual(['land', 'air', 'naval', 'industry', 'doctrine']);
-    for (const b of TECH.branches) for (const tier of [1, 2, 3, 4]) expect(TECH.techs.some((t) => t.branch === b.id && t.tier === tier), `${b.id} step ${tier}`).toBe(true);
+    expect(TECH.branches.map((b) => b.id)).toEqual(['land', 'air', 'naval', 'industry', 'doctrine', 'intel']);
+    for (const b of TECH.branches) for (const tier of b.id === 'intel' ? [1, 2, 3] : [1, 2, 3, 4]) expect(TECH.techs.some((t) => t.branch === b.id && t.tier === tier), `${b.id} step ${tier}`).toBe(true);
     for (const t of TECH.techs) {
       expect(TECH.branches.some((b) => b.id === t.branch), t.id).toBe(true);
       expect([1, 2, 3, 4], t.id).toContain(t.tier);
@@ -58,8 +58,17 @@ describe('the data', () => {
 
   it('gives every technology something to do, with numbers that are sane and orders that exist', () => {
     for (const t of TECH.techs) {
-      const does = ['field', 'unlock', 'slots', 'winterKit', 'sealift', 'attack', 'defence', 'drafts', 'cost', 'fleet', 'seaLoss', 'oil', 'weapons'].filter((k) => (t as any)[k] !== undefined);
+      const does = ['field', 'unlock', 'slots', 'winterKit', 'sealift', 'attack', 'defence', 'drafts', 'cost', 'fleet', 'seaLoss', 'oil', 'weapons', 'spy'].filter((k) => (t as any)[k] !== undefined);
       expect(does.length, t.id).toBeGreaterThan(0);
+      // The Intelligence branch works for the secret service alone, and nothing else does (rider b542).
+      expect(t.spy !== undefined, t.id).toBe(t.branch === 'intel');
+      if (t.spy) {
+        const x = t.spy;
+        expect(Object.keys(x).length, t.id).toBe(1);
+        if (x.caught !== undefined) { expect(x.caught, t.id).toBeGreaterThanOrEqual(0.7); expect(x.caught, t.id).toBeLessThan(1); }
+        for (const k of ['rest', 'agents'] as const) if (x[k] !== undefined) expect(x[k], t.id).toBe(1);
+        for (const k of ['theft', 'guard'] as const) if (x[k] !== undefined) { expect(x[k], t.id).toBeGreaterThan(0); expect(x[k], t.id).toBeLessThanOrEqual(0.15); }
+      }
       if (t.field) expect(FIELDS, t.id).toContain(t.field);
       for (const k of t.unlock ?? []) expect(k, t.id).toMatch(ORDERS);
       for (const m of [t.attack, t.defence, t.drafts, t.fleet]) if (m !== undefined) { expect(m, t.id).toBeGreaterThan(1); expect(m, t.id).toBeLessThanOrEqual(1.25); }
@@ -146,7 +155,9 @@ describe('research', () => {
     expect(techOf(g, 'GER')!.work).toEqual([]);
     expect(idleTeams(g, 'GER')).toBe(2);
     expect(techOf(g, 'UK')!.work.length).toBe(2);
-    expect(techOf(g, 'HUN')!.work.length).toBe(1);
+    // Hungary's one team, and its secret service's team on the Intelligence branch (rider b542).
+    expect(techOf(g, 'HUN')!.work.map((w) => !!w.spy)).toEqual([false, true]);
+    expect(techOf(g, 'HUN')!.work[1].id).toBe('agents');
     expect(idleTeams(g, 'UK')).toBe(0);
   });
 
@@ -279,7 +290,11 @@ describe('the staffs', () => {
       expect(s, n.id).toBeDefined();
       s.done.forEach((id, k) => { for (const need of techById(id)!.needs) expect(s.done.indexOf(need), `${n.id}: ${id} before ${need}`).toBeLessThan(k); });
       expect(new Set(s.done).size, n.id).toBe(s.done.length);
-      if (n.alive) expect(s.work.length, n.id).toBe(Math.min(teamsOf(g, n.id), s.work.length + (staffPick(g, n.id) ? 1 : 0), teamsOf(g, n.id)));
+      // The ordinary teams, and a smaller nation's spy team on the Intelligence branch (rider b542).
+      const own = s.work.filter((w) => !w.spy).length, spy = s.work.filter((w) => w.spy).length;
+      if (n.alive) expect(own, n.id).toBe(Math.min(teamsOf(g, n.id), own + (staffPick(g, n.id) ? 1 : 0)));
+      if (n.alive) expect(spy, n.id).toBe(Math.min(spyTeamsOf(g, n.id), spy + (staffPick(g, n.id, g.turn, true) ? 1 : 0)));
+      expect(s.work.filter((w) => w.spy).every((w) => techById(w.id)!.branch === 'intel'), n.id).toBe(true);
     }
     // Forty months in, a great power still standing has more than it began with and a third team.
     for (const nat of ['UK', 'SOV', 'GER']) {
@@ -381,7 +396,10 @@ describe('what a technology gives', () => {
     g.nations.TUR.pp = 300;
     const offer = (key: string) => offers(g, 'TUR', cap).find((o) => o.key === key)!;
     expect(gateOf('corps:arm')!.id).toBe('tanks');
-    for (const [key, tech, name] of [['corps:arm', 'tanks', 'Tank arm'], ['corps:mot', 'motor', 'Motorised infantry'], ['ship:cv', 'carriers', 'Carrier aviation'], ['para', 'airborne', 'Airborne forces']]) {
+    // (A smaller nation's carriers wait on a great power's plans, not on its own research: ruling 235.)
+    expect(offer('ship:cv').why).toMatch(/^Your shipyards hold no plans of aircraft carriers/);
+    expect(offer('ship:cv').tech).toBeUndefined();
+    for (const [key, tech, name] of [['corps:arm', 'tanks', 'Tank arm'], ['corps:mot', 'motor', 'Motorised infantry'], ['para', 'airborne', 'Airborne forces']]) {
       expect(offer(key).tech, key).toBe(tech);
       expect(offer(key).why, key).toBe(`Needs the technology ${name}. Open Research to begin it.`);
       expect(orderOffer(g, 'TUR', key, cap), key).toBeNull();

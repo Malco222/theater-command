@@ -12,6 +12,7 @@ import { openSmallAir, restoreWorks } from './arsenal';
 import { resetRailheads } from './rails';
 import { openAirWar, openWorldAir } from './air';
 import { openCarriers } from './carriers';
+import { openFleetRows } from './navy';
 import { openSieges } from './siege';
 import { FAIR } from './difficulty';
 import { rollFromMemory } from './liberation';
@@ -20,6 +21,7 @@ import { openTrade } from './trade';
 import { numberDivisions } from './armies';
 import mapData from '../generated/campaign-map.json';
 import { WORLD_REGIONS, WORLD_STAGES, attachWorld, settleNewGround } from './world';
+import { openWinter } from './winter';
 import type { Corps, Game, General } from './types';
 
 /** A save is laid over the map it was played on, region by region. */
@@ -82,6 +84,12 @@ export function saveGame(g: Game): string {
     passings: g.passings.length ? g.passings : undefined,
     // Corps at sea on a long passage: left out while there are none, so a save with none is written as it always was.
     atSea: g.atSea?.length ? g.atSea : undefined,
+    // The air campaigns' memory (ruling 236.2): absent while the switch is off, so such a save is written as it always was.
+    ac: g.ac,
+    // Scarred ground (release 1.5's looks): the grand campaign's own; a historical save is written as it always was,
+    // and is given its scars back from its reports when loaded.
+    scars: g.flags.open === 1 ? g.scars : undefined,
+    captured: g.flags.open === 1 ? g.captured : undefined,
     headlines: g.headlines,
     reports: g.reports.slice(-KEEP_REPORTS),
   });
@@ -235,14 +243,30 @@ export function loadGame(text: string): Game | null {
   g.passings = Array.isArray(d.passings) ? d.passings : rollFromMemory(g);
   // Corps at sea on a long passage (ruling 229, part 1): none in a save from before the Cape was sailed.
   if (Array.isArray(d.atSea) && d.atSea.length) g.atSea = d.atSea;
+  if (d.ac && typeof d.ac === 'object') g.ac = d.ac;
+  // Scarred ground: as saved, or for a save without it (release 1's own), from the battles its reports still hold.
+  if (d.captured && typeof d.captured === 'object') g.captured = d.captured;
+  if (d.scars && typeof d.scars === 'object') g.scars = d.scars;
+  else
+    for (const r of g.reports ?? []) {
+      if (r.yielded) continue;
+      const was = (g.scars ??= {})[r.region];
+      g.scars[r.region] = { n: (was?.n ?? 0) + 1, last: Math.max(was?.last ?? r.turn, r.turn) };
+    }
   if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.shoreReports = d.shoreReports ?? []; g.convoys = d.convoys ?? {}; }
   // A grand campaign saved before carriers had aircraft of their own: every carrier fleet is given its wings.
   if (g.flags.open === 1) openCarriers(g);
+  // And one saved before the fleet rows had the grand campaign's own fields: Force H takes its beat on the Western
+  // Mediterranean, once, while it still stands as the history row had it (ruling 233 rider b564).
+  if (g.flags.open === 1) openFleetRows(g);
   // And one saved before towns were garrisoned and besieged goes on under those rules.
   openSieges(g);
   // A campaign saved on an earlier stage of the wider chart: the ground drawn since stands as on the first day,
   // with the garrisons and squadrons that belong on it.
   if (wide(d) && grown) settleNewGround(g, saved);
+  // A grand campaign saved before the Winter War had its place (ruling 228, 1b): the Mannerheim Line is laid as a new
+  // campaign lays it, and one saved after the war's months is marked late (winter.ts, openWinter).
+  if (g.flags.open === 1) openWinter(g, true);
   // Trade agreements; a grand campaign saved before there were any signs history's when it is loaded.
   g.trade = Array.isArray(d.trade) ? d.trade : [];
   openTrade(g);

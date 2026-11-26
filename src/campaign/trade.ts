@@ -5,6 +5,7 @@
 // Every number is in data/campaign/trade.json. In the history campaigns trade stays the flat sum of diplomacy.json.
 
 import data from '../../data/campaign/trade.json';
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import diplomacyData from '../../data/campaign/diplomacy.json';
 import { civicHouses, civicSum } from './buildings';
 import { govMul } from './government';
@@ -13,6 +14,7 @@ import { atWar, bloc, headline } from './game';
 import { canPass, closedTo, seaRisk, zoneOf } from './navy';
 import { WORLD, worldOn } from './world';
 import type { Game, Nation, Region, TradeDeal } from './types';
+import { mapDist } from './wrap';
 
 export const TRADE = data as unknown as {
   base: number; scale: number; far: number; farLeast: number; colony: number; transit: { toll: number; most: number };
@@ -435,7 +437,7 @@ export function tradePath(g: Game, d: TradeDeal): [number, number][] {
     for (const id of g.seas[z].coast) {
       const r = g.regions[id];
       if (!r.port || r.ctrl !== nat) continue;
-      const dist = home ? Math.hypot(r.x - home.x, r.y - home.y) : 0;
+      const dist = home ? mapDist(g, r.x, r.y, home.x, home.y) : 0;
       if (dist < far) { far = dist; best = r; }
     }
     return best;

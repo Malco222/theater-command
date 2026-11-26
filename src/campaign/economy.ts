@@ -6,6 +6,7 @@ import { byHand } from './depth';
 import data from '../../data/campaign/production.json';
 import budgetData from '../../data/campaign/budget.json';
 import arsenalData from '../../data/campaign/arsenal.json';
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import setup from '../../data/campaign/setup-1939.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import { STACK, type Build, type Corps, type Game, type Kind, type Region, type ShipClass, type Terrain } from './types';
@@ -29,7 +30,8 @@ import { prizeIncome, prizeOut, prizeRules } from './prizes';
 import { govMul } from './government';
 import { MANPOWER, drawMen, menSpare, raisable, returnMen } from './manpower';
 import { raiseMorale } from './morale';
-import { WORLD_MAP, armyIdle, peaceFooting, warFooting, warWorkLeft } from './world';
+import { WORLD_MAP, armyIdle, peaceFooting, shoreOf, warFooting, warWorkLeft } from './world';
+import { footLabel, footLineStays, footShare } from './footing';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -90,6 +92,14 @@ export const firstCorpsNumber = (nat: string): number => PRODUCTION.firstCorpsNu
 export const BUDGET = budgetData as unknown as {
   scale: number; capital: number;
   land: Record<Terrain, number>; port: number; oil: number; occupied: number; overseas: number;
+  /**
+   * Rider b462 to ruling 231: the share of what a colony on the far side of the world pays that reaches its own
+   * country's treasury, by part; 'home' names the colony-marked provinces out there that are part of their country's
+   * own economy and pay it as home ground does (Korea, Formosa, Karafuto).
+   */
+  farColony: { land: number; port: number; oil: number; fac: number; home: string[] };
+  /** Ruling b466: the share at which a country's own home ground on the far side counts, for its pay and for lines. */
+  farHome: Record<string, number>;
   /** Ruling 214: a factor on the land and harbour pay of the provinces a smaller power owned on the first day. */
   landFactor: Record<string, number>;
   upkeep: { corps: Record<Kind, number>; ships: Record<ShipClass, number>; air: { ftr: number; bmr: number }; peace: number };
@@ -137,6 +147,25 @@ export function landShare(r: Region, always = false): number {
   return shares.get(r.id) ?? 1;
 }
 
+const FAR_HOME = new Set(BUDGET.farColony.home);
+/**
+ * True for ground that pays its own country as a colony does, and whose factories form no corps for it: ground with
+ * the colony mark, but for the few provinces that were part of their country's own economy (budget.json,
+ * 'farColony.home'). Where its corps are raised and its works built is another matter (canRaise, arsenal.ts).
+ */
+export const colonyPurse = (r: Region): boolean => !!r.overseas && !FAR_HOME.has(r.name);
+/** True for such ground on the far side of the world (world.ts shoreOf 2). None while the far side's switch is off. */
+export const farColony = (r: Region): boolean => colonyPurse(r) && shoreOf(r) === 2;
+/**
+ * The share at which a province counts (ruling b466): 1 everywhere but on a country's own home ground on the far side
+ * of the world, where budget.json's 'farHome' names a share for it. It is one factor on the whole of what the ground
+ * pays (factories, land, harbour and an oilfield's money) and on the factories a staff counts its lines by, as the
+ * colony's tenth is. The old chart's Soviet Union already carries the Soviet war economy, so her ground beyond it
+ * would be counted twice. It goes with the ground, as ruling 214's land factor does: a conqueror's share is reckoned
+ * on the same count. An oilfield's oil is another matter (resources.ts, ruling 194).
+ */
+export const farShare = (r: Region): number => (!r.overseas && shoreOf(r) === 2 ? BUDGET.farHome[r.owner] ?? 1 : 1);
+
 /**
  * What a province gives the nation that holds it. Conquered ground and colonies give less than the home country.
  * `whole` leaves a siege out of account: what the province is worth to its holder once the roads are open again.
@@ -146,17 +175,25 @@ export function landShare(r: Region, always = false): number {
 export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = false, bare = false): Yield {
   const own = r.owner === nat;
   // A factory wrecked by bombing earns nothing until engineers rebuild it (the grand campaign only).
-  const works = workingFactories(g, r);
+  // (A country's own home ground on the far side of the world counts at its share, every part of its pay: ruling b466.)
+  const share = farShare(r);
+  const works = workingFactories(g, r) * share;
   if (!budgeted(g)) { const fac = own ? works : works * PRODUCTION.occupiedIncome; return { land: 0, port: 0, oil: 0, fac, capital: 0, total: fac }; }
   // An administration set up on conquered ground makes it pay more of what it is worth.
   const lift = own ? 0 : hallShare(g, r);
-  const fac = own ? works : works * (PRODUCTION.occupiedIncome + lift);
-  const k = !own ? BUDGET.occupied + lift : r.overseas ? BUDGET.overseas : 1;
+  // A colony on the far side of the world keeps its purse: a tenth of what it pays reaches its own country (rider
+  // b462 to ruling 231: India's purse paid for India's army, which comes by its rows). The colonies of the old chart
+  // and of the Americas pay as they always have, and so does ground a conqueror has taken.
+  // (An ally that keeps such a colony for its fallen country is no conqueror: the Indies in Britain's keeping after
+  // May 1940 are no more a purse of London's than India is, and pay her a tenth of a keeper's share.)
+  const far = farColony(r) && (own || allied(g, nat, r.owner)) ? BUDGET.farColony : null;
+  const fac = (own ? works : works * (PRODUCTION.occupiedIncome + lift)) * (far?.fac ?? 1);
+  const k = !own ? BUDGET.occupied + lift : colonyPurse(r) ? BUDGET.overseas : 1;
   const worth = bare || !budgeted(g) ? 1 : landFactor(r);
-  const land = BUDGET.land[r.terrain] * k * worth * landShare(r, bare);
+  const land = BUDGET.land[r.terrain] * k * worth * landShare(r, bare) * (far?.land ?? 1) * share;
   // A harbour blocked pays nothing until it is mended (prizes.ts), and an oilfield alight pays only for the wells still at work.
-  const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k * worth : 0;
-  const oil = r.oil ? BUDGET.oil * k * (whole ? 1 : 1 - fieldOut(g, r)) : 0;
+  const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k * worth * (far?.port ?? 1) * share : 0;
+  const oil = r.oil ? BUDGET.oil * k * (whole ? 1 : 1 - fieldOut(g, r)) * (far?.oil ?? 1) * share : 0;
   const capital = own && g.nations[nat]?.capital === r.id ? BUDGET.capital : 0;
   // With an enemy army round its town a province sends its holder next to nothing: the roads out are cut.
   if (!whole && nat === r.ctrl && besieged(g, r)) {
@@ -191,7 +228,7 @@ export interface Ledger {
   provinces: ({ id: number; name: string } & Yield)[];
 }
 
-const KIND_LABEL: Record<Kind, string> = { inf: 'Infantry', mtn: 'Mountain troops', cav: 'Cavalry', mot: 'Motorized troops', art: 'Artillery', eng: 'Engineers', arm: 'Armour', fort: 'Fortress troops' };
+const KIND_LABEL: Record<Kind, string> = { inf: 'Infantry', mtn: 'Mountain troops', cav: 'Cavalry', mot: 'Motorised troops', art: 'Artillery', eng: 'Engineers', arm: 'Armour', fort: 'Fortress troops' };
 const SHIP_LABEL: Record<ShipClass, string> = { bb: 'Battleships', cv: 'Carriers', ca: 'Cruisers', dd: 'Destroyers', ss: 'Submarines' };
 
 /** What it costs each month to keep one corps of this kind and size in being. */
@@ -255,7 +292,7 @@ export function ledger(g: Game, nat: string): Ledger {
   const trade = budget ? tradeIncome(g, nat) : partners * DIPLOMACY.tradeIncome;
   const towns = budget ? civicSum(g, nat, keepsStores(g, nat)) : null;
   const civic = towns ? towns.commerce + towns.farms + towns.tax : 0;
-  const peace = n.atWar.length ? warFooting(g, nat) ?? 1 : peaceFooting(g, nat) ?? PRODUCTION.peaceIncome;
+  const peace = footShare(g, nat, n.atWar.length ? warFooting(g, nat) ?? 1 : peaceFooting(g, nat) ?? PRODUCTION.peaceIncome);
   const sea = seaIncomeLoss(g, nat), air = airIncomeLoss(g, nat), tech = techMul(g, nat, 'industry');
   // What its armies hold outside towns they have not yet taken: factory districts, oilfields and quays.
   const prizes = prizeIncome(g, nat);
@@ -286,7 +323,8 @@ export function ledger(g: Game, nat: string): Ledger {
   ];
   const changes: LedgerLine[] = [
     // (At war, a country that climbs to full war work by steps says how far it has come and how long it has to go.)
-    { key: 'peace', label: n.atWar.length ? (peace >= 1 ? 'At war: all of industry on war work' : `At war: ${Math.round(peace * 100)} in 100 of industry on war work so far, all of it in ${warWorkLeft(g, nat) === 1 ? 'a month' : `${warWorkLeft(g, nat)} months`}`) : peaceFooting(g, nat) === null ? 'At peace: industry at half speed' : `At peace: ${Math.round(peace * 100)} in 100 of industry on war work`, amount: before * (peace - 1) },
+    // (With the nation's footing switched on the line names the footing, and it never drops out: footing.ts, rider 2 of ruling 172.)
+    { key: 'peace', label: footLabel(g, nat, peace, n.atWar.length ? (peace >= 1 ? 'At war: all of industry on war work' : `At war: ${Math.round(peace * 100)} in 100 of industry on war work so far, all of it in ${warWorkLeft(g, nat) === 1 ? 'a month' : `${warWorkLeft(g, nat)} months`}`) : peaceFooting(g, nat) === null ? 'At peace: industry at half speed' : `At peace: ${Math.round(peace * 100)} in 100 of industry on war work`), amount: before * (peace - 1) },
     { key: 'sea', label: 'Cargoes sunk at sea', amount: afterSea - atPeace },
     { key: 'air', label: 'Bombing of industry', amount: afterAir - afterSea },
     { key: 'tech', label: tech >= 1 ? 'Better production methods' : 'Production methods behind the times', amount: afterAir * (tech - 1) },
@@ -300,7 +338,7 @@ export function ledger(g: Game, nat: string): Ledger {
   const floor = BUDGET.debt.floor * Math.max(1, gross);
   return {
     nat, budget, scale: BUDGET.scale, treasury: n.pp,
-    income: lines.filter((l) => l.amount > 1e-9), changes: changes.filter((l) => Math.abs(l.amount) > 1e-9),
+    income: lines.filter((l) => l.amount > 1e-9), changes: changes.filter((l) => Math.abs(l.amount) > 1e-9 || footLineStays(g, l.key)),
     gross, upkeep: costs, upkeepTotal, net: gross - upkeepTotal,
     debt: budget && n.pp < 0 ? Math.min(1, -n.pp / floor) : 0,
     provinces,
@@ -325,7 +363,7 @@ export function income(g: Game, nat: string): number {
     // The level of the campaign adds to the player's earnings, or to his rivals': at the fair level, nothing.
     const gift = traitMoney(g, nat);
     // Factories short of steel, coal and rubber stand idle part of the month.
-    return (sum * (n.atWar.length ? warFooting(g, nat) ?? 1 : peaceFooting(g, nat) ?? PRODUCTION.peaceIncome) + trade + gift.flat) * (1 - seaIncomeLoss(g, nat)) * (1 - airIncomeLoss(g, nat)) * techMul(g, nat, 'industry') * incomeMul(g, nat) * gift.mul * supIncome(g, nat) * govMul(g, nat, 'income');
+    return (sum * footShare(g, nat, n.atWar.length ? warFooting(g, nat) ?? 1 : peaceFooting(g, nat) ?? PRODUCTION.peaceIncome) + trade + gift.flat) * (1 - seaIncomeLoss(g, nat)) * (1 - airIncomeLoss(g, nat)) * techMul(g, nat, 'industry') * incomeMul(g, nat) * gift.mul * supIncome(g, nat) * govMul(g, nat, 'income');
   }
   let fac = 0;
   for (const r of g.regions) if (r.ctrl === nat) fac += r.owner === nat ? r.fac : r.fac * PRODUCTION.occupiedIncome;
@@ -360,6 +398,7 @@ function roman(n: number): string {
   return out;
 }
 
+/** A new corps' name. (A name is a name: "XIV Motorized Corps" keeps the spelling the order of battle uses, though the labels say "Motorised".) */
 export function corpsName(nat: string, kind: Kind, no: number): string {
   const arm = PRODUCTION.armourName[nat] ?? PRODUCTION.armourName._default;
   const word = kind === 'arm' ? `${arm} ` : kind === 'mot' ? 'Motorized ' : kind === 'mtn' ? 'Mountain ' : kind === 'art' ? 'Artillery ' : kind === 'eng' ? 'Engineer ' : '';
@@ -536,7 +575,7 @@ export function deliver(g: Game, nat: string): void {
       const vs = new Set(r.fort?.vs ?? []);
       vs.add(r.owner);
       for (const j of r.nb) vs.add(g.regions[j].owner);
-      r.fort = { lv: Math.min(3, (r.fort?.lv ?? 0) + 1), vs: [...vs] };
+      r.fort = { lv: Math.min(3, (r.fort?.lv ?? 0) + 1), vs: [...vs], by: nat };
       if (nat === g.human) headline(g, 'info', `The new fortifications at ${r.name} are finished.`, nat, r.id);
       continue;
     }
@@ -550,7 +589,7 @@ export function deliver(g: Game, nat: string): void {
       if (i < 0) continue;
       const c = n.cadres!.splice(i, 1)[0];
       reform(g, c, at);
-      if (nat === g.human) headline(g, 'info', `${c.name} has been raised again round its cadre at ${at.name}, and is ready for orders.`, nat, at.id);
+      if (nat === g.human) headline(g, 'info', `${c.name} has been raised again round its cadre at ${at.name}, and is ready for orders.`, nat, at.id, { ready: 'corps', unit: c.id });
       continue;
     }
     // The player's new corps are as well trained as the instructors he has sent home can make them.
@@ -559,10 +598,10 @@ export function deliver(g: Game, nat: string): void {
     if (b.elite) c.elite = b.elite;
     const old = b.revive !== undefined ? fallenOf(g, b.revive) : undefined;
     if (old && old.heir === undefined) inherit(g, c, old.id);
-    if (nat === g.human) headline(g, 'info', old ? `${b.name} is raised again at ${at.name}, ${g.turn - old.turn} months after it was lost at ${g.regions[old.reg].name}. It carries the old colours and is ready for orders.` : `${b.name} has finished forming at ${at.name} and is ready for orders.`, nat, at.id);
+    if (nat === g.human) headline(g, 'info', old ? `${b.name} is raised again at ${at.name}, ${g.turn - old.turn} months after it was lost at ${g.regions[old.reg].name}. It carries the old colours and is ready for orders.` : `${b.name} has finished forming at ${at.name} and is ready for orders.`, nat, at.id, { ready: 'corps', unit: c.id });
   }
   const line = airLine(air);
-  if (line) headline(g, 'info', line.text, nat, line.region);
+  if (line) headline(g, 'info', line.text, nat, line.region, { ready: 'air' });
 }
 
 /**
@@ -597,6 +636,18 @@ export function gunsWanted(g: Game, nat: string): boolean {
   return false;
 }
 
+/**
+ * The factories a computer staff counts its lines by: those of the home country alone. A colony's never add a line
+ * (rider b462 to ruling 231: with the far side on, India's fourteen and three more gave Britain five lines for three,
+ * and India's army comes by its rows). Korea's, Formosa's and Karafuto's count with Japan's own (budget.json), and
+ * the Soviet Union's beyond the old chart at their share (ruling b466, 'farHome').
+ */
+export function lineFactories(g: Game, nat: string): number {
+  let home = 0;
+  for (const r of g.regions) if (isHome(g, nat, r) && !colonyPurse(r)) home += r.fac * farShare(r);
+  return home;
+}
+
 /** The computer's factory policy: keep a reserve for replacements, spend the rest on new corps. */
 export function aiProduction(g: Game, nat: string): void {
   const n = g.nations[nat];
@@ -606,8 +657,7 @@ export function aiProduction(g: Game, nat: string): void {
   if (byHand(g, nat, 'build') || !n.alive || n.capital < 0 || (nat !== g.human && !canBuildYet(g, nat))) return;
   const cap = g.regions[n.capital];
   if (!isHome(g, nat, cap)) return;
-  let home = 0;
-  for (const r of g.regions) if (isHome(g, nat, r)) home += r.fac;
+  const home = lineFactories(g, nat);
   // In the grand campaign a staff orders nothing its treasury could not keep in the field afterwards.
   const keep = (b: Build): number => (b.what === 'corps' ? corpsUpkeep(b.kind!, b.divs!) : 0);
   let spare = budgeted(g) ? income(g, nat) - upkeepTotal(g, nat) - n.queue.reduce((t, b) => t + keep(b), 0) : Infinity;

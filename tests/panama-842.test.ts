@@ -173,7 +173,11 @@ describe('who resents a shut gate', () => {
     expect(wouldResent(g, 'UK', 'FRA')).toBe(false);
     expect(wouldResent(g, 'UK', 'GER')).toBe(false);
     expect(wouldResent(g, 'UK', 'UK')).toBe(false);
-    // Gibraltar shut: Ireland and Greece, whose agreement it stops, move toward the Axis.
+    // Gibraltar shut: Ireland and Greece, whose agreement it stops, move toward the Axis. (Their agreement by sea is
+    // made here: since Iran's oil came on the map (the realism audit, item 14) Greece's first deal is with Iran,
+    // overland, and Ireland's with Latvia.)
+    endTrade(g, 'IRN', 'GRE');
+    expect(signTrade(g, 'IRL', 'GRE', new Map(), true)?.seas).toContain(13);
     const gib = gateOf(g, /Gibraltar/);
     expect(gateQuestion(g, gib)!.resent.map((r) => r.nat).sort()).toEqual(['GRE', 'IRL']);
     orderGate(g, gib, true);

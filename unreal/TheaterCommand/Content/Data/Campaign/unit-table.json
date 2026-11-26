@@ -1,0 +1,6979 @@
+{
+ "about": "Ruling 78(f): the one table the 3D game draws its models from. src is own (the country's own model), shared (another country's, by the record; 'of' says whose) or generic. A tag not listed here takes _default. insignia (18 November, Brian's ask for every country's own mark): layers lowest first in a square -1..1: ring [r0, r1], tri [r, turn degrees], star [r, inner, points], rect [u0, u1, v0, v1], each with c (hex); it goes wherever a model's marks say the owner's own; insignia_checked False until the historian confirms it. fin {dir h or v, bands}: the flag's stripes on the rudder. marking_months [{from YYYY-MM, insignia, fin}]: a dominion's wartime roundel and fin flash from that month (fin as above, dir v from the leading edge). On land vehicles an insignia is drawn only inside its disc, radius 1: side bars and anything else beyond it are for aircraft. paint2 is the coat's second colour (the models' upper2 blotches); ground says the home ground it follows; winter_wash: a worn white wash over the coat when the battle's ground is snow. src captured (18 November 2026, Brian's rule for small nations' battleships and carriers): nothing shows until the country holds a great power's plans, by capture or by a spy; then it shows that great power's model named in captured_models[plans].models, in its own hull grey, flying its own ensign (and jack on a battleship). with_plans (ruling 235, b542) on a small nation's bomber or fighter: once it builds four-engined bombers or jet fighters, it draws captured_models[heavybombers or jets].models[the great power capitalPlans names], in its own paint and marking. captured_models keys are the rules' capitalPlans keys; column says which column each serves. Colours are hex. Art director, 16 November 2026. with_tech {tech id: model} shows that model once the country has researched it. swaps {swap name: [[from month YYYY-MM or null for the start, the file's choice], ...]} picks a model's swap by date. carrier_fighter, torpedo_bomber, dive_bomber and carrier_paint are for after release 1, as is a model named under after_release_1.",
+ "_default": {
+  "soldier": {
+   "src": "generic",
+   "model": "dome"
+  },
+  "cloth": "807A56",
+  "tank": {
+   "src": "generic",
+   "model": "LightTank, MediumTank once medium tanks are researched"
+  },
+  "gun": {
+   "src": "generic",
+   "model": "Gun75"
+  },
+  "carrier": {
+   "src": "generic",
+   "model": "Truck"
+  },
+  "fighter": {
+   "src": "generic",
+   "model": "Fighter",
+   "with_plans": "jets"
+  },
+  "bomber": {
+   "src": "generic",
+   "model": "Bomber",
+   "with_plans": "heavybombers"
+  },
+  "paint": "60664A",
+  "marking": "a plain ring of two or three of the flag's colours",
+  "battleship": {
+   "src": "captured",
+   "model": null,
+   "plans": "bb",
+   "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+  },
+  "cruiser": {
+   "src": "generic",
+   "model": "Cruiser"
+  },
+  "destroyer": {
+   "src": "generic",
+   "model": "Destroyer"
+  },
+  "ship_carrier": {
+   "src": "captured",
+   "model": null,
+   "plans": "cv",
+   "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+  },
+  "submarine": {
+   "src": "generic",
+   "model": "Submarine"
+  },
+  "hull": "74808C",
+  "carrier_fighter": {
+   "src": "generic",
+   "model": "CarrierFighter"
+  },
+  "torpedo_bomber": {
+   "src": "generic",
+   "model": "TorpedoBomber"
+  },
+  "dive_bomber": {
+   "src": "generic",
+   "model": "DiveBomber"
+  }
+ },
+ "captured_models": {
+  "bb": {
+   "column": "battleship",
+   "models": {
+    "GER": "Battleship_GER",
+    "UK": "Battleship_UK",
+    "USA": "Battleship_USA",
+    "FRA": "Battleship_FRA",
+    "ITA": "Battleship_ITA",
+    "JAP": "Battleship_JAP",
+    "SOV": "Battleship"
+   }
+  },
+  "cv": {
+   "column": "ship_carrier",
+   "models": {
+    "USA": "Carrier_USA",
+    "JAP": "Carrier_JAP",
+    "UK": "Carrier",
+    "GER": "Carrier",
+    "ITA": "Carrier",
+    "FRA": "Carrier",
+    "SOV": "Carrier"
+   }
+  },
+  "heavybombers": {
+   "column": "bomber",
+   "models": {
+    "USA": "B17",
+    "UK": "Lancaster",
+    "GER": "He111",
+    "SOV": "Bomber",
+    "ITA": "Bomber",
+    "JAP": "Bomber",
+    "FRA": "Bomber"
+   }
+  },
+  "jets": {
+   "column": "fighter",
+   "models": {
+    "GER": "Me262",
+    "UK": "Spitfire",
+    "USA": "Mustang",
+    "SOV": "Yak",
+    "JAP": "Zero",
+    "ITA": "Fighter",
+    "FRA": "Fighter"
+   }
+  }
+ },
+ "card_names": {
+  "LightTank": "Light tank",
+  "MediumTank": "Medium tank",
+  "Gun75": "Field gun",
+  "Truck": "Lorry",
+  "Fighter": "Fighter",
+  "Bomber": "Bomber",
+  "Battleship": "Battleship",
+  "Cruiser": "Cruiser",
+  "Destroyer": "Destroyer",
+  "Carrier": "Aircraft carrier",
+  "Submarine": "Submarine",
+  "CarrierFighter": "Carrier fighter",
+  "TorpedoBomber": "Torpedo bomber",
+  "DiveBomber": "Dive bomber",
+  "soldier": "Infantry, Cavalry, Engineers: the corps' own names, as today"
+ },
+ "countries": {
+  "GER": {
+   "name": "Germany",
+   "soldier": {
+    "src": "own",
+    "model": "stahl"
+   },
+   "cloth": "5F665C",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "own",
+    "model": "PanzerIV, Panther 1944",
+    "swaps": {
+     "gun": [
+      [
+       null,
+       "short"
+      ],
+      [
+       "1942-03",
+       "long"
+      ]
+     ],
+     "paint": [
+      [
+       null,
+       "grey"
+      ],
+      [
+       "1943-02",
+       "yellow"
+      ]
+     ]
+    }
+   },
+   "gun": {
+    "src": "own",
+    "model": "leFH18"
+   },
+   "carrier": {
+    "src": "own",
+    "model": "Hanomag"
+   },
+   "fighter": {
+    "src": "own",
+    "model": "Bf109, Fw190 1942, Me262 once jet fighters are researched",
+    "with_tech": {
+     "jets": "Me262"
+    }
+   },
+   "bomber": {
+    "src": "own",
+    "model": "He111",
+    "with_tech": {
+     "verylongrange": "Amerikabomber"
+    }
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "4E5459",
+   "paint_name": "as built",
+   "winter_wash": true,
+   "marking": "as built",
+   "battleship": {
+    "src": "own",
+    "model": "own layout"
+   },
+   "cruiser": {
+    "src": "own",
+    "model": "own layout"
+   },
+   "destroyer": {
+    "src": "own",
+    "model": "own layout (123 m)"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "own",
+    "model": "own layout (67 m)"
+   },
+   "hull": "6A7278",
+   "hull_name": "as built"
+  },
+  "UK": {
+   "name": "United Kingdom",
+   "soldier": {
+    "src": "own",
+    "model": "brodie"
+   },
+   "cloth": "8B7B52",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "own",
+    "model": "Matilda, Sherman 1943",
+    "from_1943_of": "USA"
+   },
+   "gun": {
+    "src": "own",
+    "model": "25pdr"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "own",
+    "model": "Hurricane, Spitfire 1940"
+   },
+   "bomber": {
+    "src": "own",
+    "model": "Bomber until 1942, then Lancaster"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "carrier_paint": "the Fleet Air Arm's greys over Sky",
+   "paint": "65704E",
+   "paint_name": "as built",
+   "marking": "as built",
+   "battleship": {
+    "src": "own",
+    "model": "own layout"
+   },
+   "cruiser": {
+    "src": "own",
+    "model": "own layout"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7A848C",
+   "hull_name": "as built"
+  },
+  "USA": {
+   "name": "United States",
+   "soldier": {
+    "src": "own",
+    "model": "pot"
+   },
+   "cloth": "78724C",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "own",
+    "model": "LightTank, Sherman 1942"
+   },
+   "gun": {
+    "src": "own",
+    "model": "Howitzer105"
+   },
+   "carrier": {
+    "src": "own",
+    "model": "M3Halftrack"
+   },
+   "fighter": {
+    "src": "own",
+    "model": "Warhawk, Mustang 1944"
+   },
+   "bomber": {
+    "src": "own",
+    "model": "B17",
+    "with_tech": {
+     "verylongrange": "B29"
+    }
+   },
+   "carrier_fighter": {
+    "src": "own",
+    "model": "CarrierFighter, Hellcat 1943"
+   },
+   "torpedo_bomber": {
+    "src": "own",
+    "model": "TorpedoBomber, Avenger 1942"
+   },
+   "dive_bomber": {
+    "src": "own",
+    "model": "DiveBomber, Dauntless 1941"
+   },
+   "carrier_paint": "blue-grey over light grey to early 1943; the three blues over white 1943 to mid-1944; overall sea blue from mid-1944",
+   "paint": "565C3A",
+   "paint_name": "as built",
+   "marking": "as built",
+   "battleship": {
+    "src": "own",
+    "model": "own layout"
+   },
+   "cruiser": {
+    "src": "own",
+    "model": "own layout"
+   },
+   "destroyer": {
+    "src": "own",
+    "model": "own layout (flush deck)"
+   },
+   "ship_carrier": {
+    "src": "own",
+    "model": "own layout"
+   },
+   "submarine": {
+    "src": "own",
+    "model": "own layout (95 m)"
+   },
+   "hull": "5F6E80",
+   "hull_name": "as built"
+  },
+  "SOV": {
+   "name": "Soviet Union",
+   "soldier": {
+    "src": "own",
+    "model": "soviet"
+   },
+   "cloth": "7B7748",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "own",
+    "model": "LightTank, T34 1941, T34-85 1944"
+   },
+   "gun": {
+    "src": "own",
+    "model": "ZiS3"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "own",
+    "model": "Fighter, Yak 1942"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "4F5E3E",
+   "paint_name": "as built",
+   "winter_wash": true,
+   "marking": "as built",
+   "battleship": {
+    "src": "generic",
+    "model": "Battleship"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "565E6A",
+   "hull_name": "as built"
+  },
+  "FRA": {
+   "name": "France",
+   "soldier": {
+    "src": "own",
+    "model": "adrian"
+   },
+   "cloth": "7A7250",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "own",
+    "model": "CharB1"
+   },
+   "gun": {
+    "src": "own",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "5E6A48",
+   "paint_name": "as built",
+   "marking": "as built",
+   "battleship": {
+    "src": "own",
+    "model": "own layout"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "8E9AA6",
+   "hull_name": "as built"
+  },
+  "VIC": {
+   "name": "Vichy France",
+   "soldier": {
+    "src": "shared",
+    "model": "adrian",
+    "of": "FRA"
+   },
+   "cloth": "7A7250",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "shared",
+    "model": "CharB1",
+    "of": "FRA"
+   },
+   "gun": {
+    "src": "shared",
+    "model": "Gun75",
+    "of": "FRA"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "5E6A48",
+   "paint_name": "as built",
+   "marking": "as built",
+   "battleship": {
+    "src": "shared",
+    "model": "own layout",
+    "of": "FRA"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "8E9AA6",
+   "hull_name": "as built"
+  },
+  "FFR": {
+   "name": "Free France",
+   "later": true,
+   "soldier": {
+    "src": "shared",
+    "model": "adrian",
+    "of": "FRA"
+   },
+   "cloth": "7A7250",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "shared",
+    "model": "CharB1",
+    "of": "FRA"
+   },
+   "gun": {
+    "src": "shared",
+    "model": "Gun75",
+    "of": "FRA"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "5E6A48",
+   "paint_name": "as built",
+   "marking": "as built",
+   "battleship": {
+    "src": "shared",
+    "model": "own layout",
+    "of": "FRA"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "8E9AA6",
+   "hull_name": "as built"
+  },
+  "ITA": {
+   "name": "Italy",
+   "soldier": {
+    "src": "own",
+    "model": "round"
+   },
+   "cloth": "73806C",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "own",
+    "model": "M13"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "8A7F5E",
+   "paint_name": "as built",
+   "marking": "as built",
+   "battleship": {
+    "src": "own",
+    "model": "own layout"
+   },
+   "cruiser": {
+    "src": "own",
+    "model": "own layout"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "A2A8A6",
+   "hull_name": "as built"
+  },
+  "JAP": {
+   "name": "Japan",
+   "later": true,
+   "soldier": {
+    "src": "own",
+    "model": "cap"
+   },
+   "cloth": "A08856",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "own",
+    "model": "Type97"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "own",
+    "model": "Zero"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "after_release_1": "Nell, Betty 1941"
+   },
+   "carrier_fighter": {
+    "src": "own",
+    "model": "Zero"
+   },
+   "torpedo_bomber": {
+    "src": "own",
+    "model": "Kate"
+   },
+   "dive_bomber": {
+    "src": "own",
+    "model": "DiveBomber, Val 1940"
+   },
+   "carrier_paint": "pale grey early; dark green over grey from 1942 to 1943",
+   "paint": "988256",
+   "paint_name": "as built",
+   "marking": "as built",
+   "battleship": {
+    "src": "own",
+    "model": "own layout"
+   },
+   "cruiser": {
+    "src": "own",
+    "model": "own layout"
+   },
+   "destroyer": {
+    "src": "own",
+    "model": "own layout"
+   },
+   "ship_carrier": {
+    "src": "own",
+    "model": "own layout"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "5C6266",
+   "hull_name": "as built"
+  },
+  "POL": {
+   "name": "Poland",
+   "soldier": {
+    "src": "own",
+    "model": "round"
+   },
+   "cloth": "7C7450",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "own",
+    "model": "7TP"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "66684A",
+   "paint_name": "as built",
+   "marking": "as built",
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
+  "CAN": {
+   "name": "Canada",
+   "soldier": {
+    "src": "shared",
+    "model": "brodie",
+    "of": "UK"
+   },
+   "cloth": "8B7B52",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "shared",
+    "model": "Matilda, Sherman 1943",
+    "of": "UK",
+    "from_1943_of": "USA"
+   },
+   "gun": {
+    "src": "shared",
+    "model": "25pdr",
+    "of": "UK"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "shared",
+    "model": "Hurricane, Spitfire 1940",
+    "of": "UK"
+   },
+   "bomber": {
+    "src": "shared",
+    "model": "Bomber until 1942, then Lancaster",
+    "of": "UK"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "65704E",
+   "paint_name": "as built",
+   "marking": "as built",
+   "battleship": {
+    "src": "shared",
+    "model": "own layout",
+    "of": "UK"
+   },
+   "cruiser": {
+    "src": "shared",
+    "model": "own layout",
+    "of": "UK"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7A848C",
+   "hull_name": "as built"
+  },
+  "AUS": {
+   "name": "Australia",
+   "later": true,
+   "soldier": {
+    "src": "shared",
+    "model": "brodie",
+    "of": "UK"
+   },
+   "cloth": "8B7B52",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "shared",
+    "model": "Matilda",
+    "of": "UK"
+   },
+   "gun": {
+    "src": "shared",
+    "model": "25pdr",
+    "of": "UK"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "shared",
+    "model": "Hurricane, Spitfire 1940",
+    "of": "UK"
+   },
+   "bomber": {
+    "src": "shared",
+    "model": "Bomber until 1942, then Lancaster",
+    "of": "UK"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "65704E",
+   "paint_name": "as built",
+   "marking": "as built",
+   "marking_months": [
+    {
+     "from": "1942-06",
+     "insignia": [
+      {
+       "ring": [
+        0.0,
+        1.0
+       ],
+       "c": "1F3F8F"
+      },
+      {
+       "ring": [
+        0.0,
+        0.5
+       ],
+       "c": "F2EEE2"
+      }
+     ],
+     "words": "in the Pacific, red taken out: blue, white",
+     "fin": {
+      "dir": "v",
+      "bands": [
+       "F2EEE2",
+       "1F3F8F"
+      ],
+      "words": "white, blue from the leading edge"
+     }
+    }
+   ],
+   "battleship": {
+    "src": "shared",
+    "model": "own layout",
+    "of": "UK"
+   },
+   "cruiser": {
+    "src": "shared",
+    "model": "own layout",
+    "of": "UK"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7A848C",
+   "hull_name": "as built"
+  },
+  "NZL": {
+   "name": "New Zealand",
+   "later": true,
+   "soldier": {
+    "src": "shared",
+    "model": "brodie",
+    "of": "UK"
+   },
+   "cloth": "8B7B52",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "shared",
+    "model": "Matilda, Sherman 1943",
+    "of": "UK",
+    "from_1943_of": "USA"
+   },
+   "gun": {
+    "src": "shared",
+    "model": "25pdr",
+    "of": "UK"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "shared",
+    "model": "Hurricane, Spitfire 1940",
+    "of": "UK"
+   },
+   "bomber": {
+    "src": "shared",
+    "model": "Bomber until 1942, then Lancaster",
+    "of": "UK"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "65704E",
+   "paint_name": "as built",
+   "marking": "as built",
+   "marking_months": [
+    {
+     "from": "1942-12",
+     "insignia": [
+      {
+       "ring": [
+        0.0,
+        1.0
+       ],
+       "c": "1F3F8F"
+      },
+      {
+       "ring": [
+        0.0,
+        0.5
+       ],
+       "c": "F2EEE2"
+      }
+     ],
+     "words": "red taken out: blue, white",
+     "fin": {
+      "dir": "v",
+      "bands": [
+       "F2EEE2",
+       "1F3F8F"
+      ],
+      "words": "white, blue from the leading edge"
+     }
+    },
+    {
+     "from": "1943-01",
+     "insignia": [
+      {
+       "ring": [
+        0.0,
+        1.0
+       ],
+       "c": "1F3F8F"
+      },
+      {
+       "rect": [
+        -2.05,
+        -0.95,
+        -0.3,
+        0.3
+       ],
+       "c": "F2EEE2"
+      },
+      {
+       "rect": [
+        0.95,
+        2.05,
+        -0.3,
+        0.3
+       ],
+       "c": "F2EEE2"
+      },
+      {
+       "ring": [
+        0.0,
+        0.5
+       ],
+       "c": "F2EEE2"
+      }
+     ],
+     "words": "blue, white with white side bars",
+     "fin": {
+      "dir": "v",
+      "bands": [
+       "F2EEE2",
+       "1F3F8F"
+      ],
+      "words": "white, blue from the leading edge"
+     }
+    }
+   ],
+   "battleship": {
+    "src": "shared",
+    "model": "own layout",
+    "of": "UK"
+   },
+   "cruiser": {
+    "src": "shared",
+    "model": "own layout",
+    "of": "UK"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7A848C",
+   "hull_name": "as built"
+  },
+  "SAF": {
+   "name": "South Africa",
+   "later": true,
+   "soldier": {
+    "src": "shared",
+    "model": "brodie",
+    "of": "UK"
+   },
+   "cloth": "8B7B52",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "shared",
+    "model": "Matilda, Sherman 1943",
+    "of": "UK",
+    "from_1943_of": "USA"
+   },
+   "gun": {
+    "src": "shared",
+    "model": "25pdr",
+    "of": "UK"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "shared",
+    "model": "Hurricane, Spitfire 1940",
+    "of": "UK"
+   },
+   "bomber": {
+    "src": "shared",
+    "model": "Bomber until 1942, then Lancaster",
+    "of": "UK"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "65704E",
+   "paint_name": "as built",
+   "marking": "as built",
+   "marking_months": [
+    {
+     "from": "1942-01",
+     "insignia": [
+      {
+       "ring": [
+        0.0,
+        1.0
+       ],
+       "c": "1F3F8F"
+      },
+      {
+       "ring": [
+        0.0,
+        0.62
+       ],
+       "c": "F2EEE2"
+      },
+      {
+       "ring": [
+        0.0,
+        0.3
+       ],
+       "c": "E27A1F"
+      }
+     ],
+     "words": "orange in place of red",
+     "fin": {
+      "dir": "v",
+      "bands": [
+       "E27A1F",
+       "F2EEE2",
+       "1F3F8F"
+      ],
+      "words": "orange, white, blue from the leading edge"
+     }
+    }
+   ],
+   "battleship": {
+    "src": "shared",
+    "model": "own layout",
+    "of": "UK"
+   },
+   "cruiser": {
+    "src": "shared",
+    "model": "own layout",
+    "of": "UK"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7A848C",
+   "hull_name": "as built"
+  },
+  "IND": {
+   "name": "India",
+   "later": true,
+   "soldier": {
+    "src": "shared",
+    "model": "brodie",
+    "of": "UK"
+   },
+   "cloth": "8B7B52",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "shared",
+    "model": "Matilda, Sherman 1943",
+    "of": "UK",
+    "from_1943_of": "USA"
+   },
+   "gun": {
+    "src": "shared",
+    "model": "25pdr",
+    "of": "UK"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "shared",
+    "model": "Hurricane, Spitfire 1940",
+    "of": "UK"
+   },
+   "bomber": {
+    "src": "shared",
+    "model": "Bomber until 1942, then Lancaster",
+    "of": "UK"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "65704E",
+   "paint_name": "as built",
+   "marking": "as built",
+   "marking_months": [
+    {
+     "from": "1942-06",
+     "insignia": [
+      {
+       "ring": [
+        0.0,
+        1.0
+       ],
+       "c": "1F3F8F"
+      },
+      {
+       "ring": [
+        0.0,
+        0.5
+       ],
+       "c": "F2EEE2"
+      }
+     ],
+     "words": "Burma, red painted out: blue, white",
+     "fin": {
+      "dir": "v",
+      "bands": [
+       "F2EEE2",
+       "1F3F8F"
+      ],
+      "words": "white, blue from the leading edge"
+     }
+    },
+    {
+     "from": "1943-07",
+     "insignia": [
+      {
+       "ring": [
+        0.0,
+        1.0
+       ],
+       "c": "1C2C55"
+      },
+      {
+       "ring": [
+        0.0,
+        0.45
+       ],
+       "c": "8FB0D0"
+      }
+     ],
+     "words": "Burma: dark blue with a light blue middle",
+     "fin": {
+      "dir": "v",
+      "bands": [
+       "8FB0D0",
+       "1C2C55"
+      ],
+      "words": "light blue, dark blue from the leading edge"
+     }
+    }
+   ],
+   "battleship": {
+    "src": "shared",
+    "model": "own layout",
+    "of": "UK"
+   },
+   "cruiser": {
+    "src": "shared",
+    "model": "own layout",
+    "of": "UK"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "generic",
+    "model": "Carrier"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7A848C",
+   "hull_name": "as built"
+  },
+  "BEL": {
+   "name": "Belgium",
+   "soldier": {
+    "src": "shared",
+    "model": "adrian",
+    "of": "FRA"
+   },
+   "cloth": "857A56",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "5E6446",
+   "paint_name": "olive",
+   "paint2": "4A3E30",
+   "paint2_name": "dark brown",
+   "ground": "farm and forest",
+   "marking": "as built",
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "74808C",
+   "hull_name": "mid blue-grey"
+  },
+  "NED": {
+   "name": "Netherlands",
+   "soldier": {
+    "src": "generic",
+    "model": "dome"
+   },
+   "cloth": "6E7B6A",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "5E6A62",
+   "paint_name": "grey-green",
+   "paint2": "4A4436",
+   "paint2_name": "umber",
+   "ground": "polder",
+   "marking": "as built",
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "9AA2A4",
+   "hull_name": "pale grey"
+  },
+  "LUX": {
+   "name": "Luxembourg",
+   "soldier": {
+    "src": "generic",
+    "model": "fieldcap"
+   },
+   "cloth": "747A7E",
+   "cloth_name": "slate grey",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "4C5840",
+   "paint_name": "dark green",
+   "paint2": "5A4A36",
+   "paint2_name": "brown",
+   "ground": "Ardennes forest",
+   "marking": [
+    "C8102E",
+    "F2EEE2",
+    "74ACDF"
+   ],
+   "marking_words": "red, white, sky",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "C8102E"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "74ACDF"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: red, white, sky; no air arm in the war",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "C8102E",
+     "F2EEE2",
+     "74ACDF"
+    ],
+    "words": "red, white, sky"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "74808C",
+   "hull_name": "mid blue-grey"
+  },
+  "DEN": {
+   "name": "Denmark",
+   "soldier": {
+    "src": "generic",
+    "model": "fieldcap"
+   },
+   "cloth": "7E7A5C",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "5A6A44",
+   "paint_name": "grass green",
+   "paint2": "4A3E30",
+   "paint2_name": "brown",
+   "ground": "farmland",
+   "marking": "as built",
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "74808C",
+   "hull_name": "mid blue-grey"
+  },
+  "NOR": {
+   "name": "Norway",
+   "soldier": {
+    "src": "generic",
+    "model": "peaked"
+   },
+   "cloth": "70786E",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "4E5A42",
+   "paint_name": "pine green",
+   "paint2": "3A3A30",
+   "paint2_name": "black-brown",
+   "ground": "northern forest and snow",
+   "winter_wash": true,
+   "marking": "as built",
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "9AA2A4",
+   "hull_name": "pale grey"
+  },
+  "SWE": {
+   "name": "Sweden",
+   "soldier": {
+    "src": "generic",
+    "model": "dome"
+   },
+   "cloth": "767C78",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "56604A",
+   "paint_name": "green",
+   "paint2": "6E5A3E",
+   "paint2_name": "brown",
+   "ground": "northern forest and snow",
+   "winter_wash": true,
+   "marking": "as built",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "F2C200"
+    },
+    {
+     "ring": [
+      0.0,
+      0.92
+     ],
+     "c": "006AA7"
+    },
+    {
+     "rect": [
+      -0.524,
+      -0.056,
+      0.018,
+      0.083
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      -0.485,
+      -0.095,
+      0.083,
+      0.187
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      -0.511,
+      -0.446,
+      0.187,
+      0.343
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      -0.4,
+      -0.374,
+      0.187,
+      0.265
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      -0.323,
+      -0.257,
+      0.187,
+      0.395
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      -0.368,
+      -0.212,
+      0.33,
+      0.363
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      -0.205,
+      -0.179,
+      0.187,
+      0.265
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      -0.134,
+      -0.069,
+      0.187,
+      0.343
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      0.056,
+      0.524,
+      0.018,
+      0.083
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      0.095,
+      0.485,
+      0.083,
+      0.187
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      0.069,
+      0.134,
+      0.187,
+      0.343
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      0.179,
+      0.205,
+      0.187,
+      0.265
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      0.257,
+      0.323,
+      0.187,
+      0.395
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      0.212,
+      0.368,
+      0.33,
+      0.363
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      0.374,
+      0.4,
+      0.187,
+      0.265
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      0.446,
+      0.511,
+      0.187,
+      0.343
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      -0.234,
+      0.234,
+      -0.512,
+      -0.447
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      -0.195,
+      0.195,
+      -0.447,
+      -0.343
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      -0.221,
+      -0.156,
+      -0.343,
+      -0.187
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      -0.111,
+      -0.085,
+      -0.343,
+      -0.265
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      -0.033,
+      0.033,
+      -0.343,
+      -0.135
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      -0.078,
+      0.078,
+      -0.2,
+      -0.168
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      0.085,
+      0.111,
+      -0.343,
+      -0.265
+     ],
+     "c": "F2C200"
+    },
+    {
+     "rect": [
+      0.156,
+      0.221,
+      -0.343,
+      -0.187
+     ],
+     "c": "F2C200"
+    }
+   ],
+   "insignia_checked": false,
+   "insignia_words": "three gold crowns, two over one, on a blue disc with a thin gold edge; no rudder stripes",
+   "insignia_confidence": "medium",
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "5E666A",
+   "hull_name": "dark grey"
+  },
+  "FIN": {
+   "name": "Finland",
+   "soldier": {
+    "src": "shared",
+    "model": "stahl",
+    "of": "GER"
+   },
+   "cloth": "767B76",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "4C5840",
+   "paint_name": "dark green",
+   "paint2": "262A22",
+   "paint2_name": "black",
+   "ground": "northern forest and snow",
+   "winter_wash": true,
+   "marking": "as built",
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "74808C",
+   "hull_name": "mid blue-grey"
+  },
+  "EST": {
+   "name": "Estonia",
+   "soldier": {
+    "src": "generic",
+    "model": "dome"
+   },
+   "cloth": "7E6E50",
+   "cloth_name": "earth brown",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "5E6A62",
+   "paint_name": "grey-green",
+   "paint2": "4A4436",
+   "paint2_name": "umber",
+   "ground": "forest and bog",
+   "winter_wash": true,
+   "marking": [
+    "1F3F8F",
+    "1A1A1A",
+    "F2EEE2"
+   ],
+   "marking_words": "blue, black, white",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "1F3F8F"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "1A1A1A"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "F2EEE2"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: blue, black, white; the historian could not give its wartime mark surely",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "1F3F8F",
+     "1A1A1A",
+     "F2EEE2"
+    ],
+    "words": "blue, black, white"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "9AA2A4",
+   "hull_name": "pale grey"
+  },
+  "LAT": {
+   "name": "Latvia",
+   "soldier": {
+    "src": "generic",
+    "model": "peaked"
+   },
+   "cloth": "807A56",
+   "cloth_name": "olive khaki",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "5E6446",
+   "paint_name": "olive",
+   "paint2": "4A3E30",
+   "paint2_name": "dark brown",
+   "ground": "forest and bog",
+   "winter_wash": true,
+   "marking": [
+    "C8102E",
+    "F2EEE2",
+    "C8102E"
+   ],
+   "marking_words": "red, white, red",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "C8102E"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "C8102E"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: red, white, red; its 1918 to 1940 mark was a fire cross, which the game never shows",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "C8102E",
+     "F2EEE2",
+     "C8102E"
+    ],
+    "words": "red, white, red"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
+  "LIT": {
+   "name": "Lithuania",
+   "soldier": {
+    "src": "generic",
+    "model": "fieldcap"
+   },
+   "cloth": "6E7B6A",
+   "cloth_name": "grey-green",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "4C5840",
+   "paint_name": "dark green",
+   "paint2": "5A4A36",
+   "paint2_name": "brown",
+   "ground": "forest and farmland",
+   "winter_wash": true,
+   "marking": [
+    "F2C200",
+    "1E7A3C",
+    "C8102E"
+   ],
+   "marking_words": "yellow, green, red",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "F2C200"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "1E7A3C"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "C8102E"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: yellow, green, red; the historian could not give its wartime mark surely",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "F2C200",
+     "1E7A3C",
+     "C8102E"
+    ],
+    "words": "yellow, green, red"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "74808C",
+   "hull_name": "mid blue-grey"
+  },
+  "IRL": {
+   "name": "Ireland",
+   "soldier": {
+    "src": "generic",
+    "model": "peaked"
+   },
+   "cloth": "6E7B6A",
+   "cloth_name": "grey-green",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "5A6040",
+   "paint_name": "olive",
+   "paint2": "5A4A36",
+   "paint2_name": "brown",
+   "ground": "grassland",
+   "marking": "as built",
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "5E666A",
+   "hull_name": "dark grey"
+  },
+  "SUI": {
+   "name": "Switzerland",
+   "soldier": {
+    "src": "generic",
+    "model": "peaked"
+   },
+   "cloth": "6C746C",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "5E6A5A",
+   "paint_name": "alpine green",
+   "paint2": "6E6A5E",
+   "paint2_name": "rock grey",
+   "ground": "Alps",
+   "marking": "as built",
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "74808C",
+   "hull_name": "mid blue-grey"
+  },
+  "ESP": {
+   "name": "Spain",
+   "soldier": {
+    "src": "generic",
+    "model": "dome"
+   },
+   "cloth": "7E7850",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "7E7050",
+   "paint_name": "meseta earth",
+   "paint2": "5E6446",
+   "paint2_name": "olive",
+   "ground": "dry plateau",
+   "marking": "as built",
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "9AA2A4",
+   "hull_name": "pale grey"
+  },
+  "POR": {
+   "name": "Portugal",
+   "soldier": {
+    "src": "generic",
+    "model": "peaked"
+   },
+   "cloth": "76786A",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "6C6444",
+   "paint_name": "brown olive",
+   "paint2": "4E4636",
+   "paint2_name": "umber",
+   "ground": "cork and olive groves",
+   "marking": "as built",
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
+  "HUN": {
+   "name": "Hungary",
+   "soldier": {
+    "src": "shared",
+    "model": "stahl",
+    "of": "GER"
+   },
+   "cloth": "7C7650",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "5C6240",
+   "paint_name": "green",
+   "paint2": "7A6A48",
+   "paint2_name": "ochre",
+   "ground": "plain and hills",
+   "winter_wash": true,
+   "marking": "as built",
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "74808C",
+   "hull_name": "mid blue-grey"
+  },
+  "SVK": {
+   "name": "Slovakia",
+   "soldier": {
+    "src": "generic",
+    "model": "dome"
+   },
+   "cloth": "7A7452",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "545E46",
+   "paint_name": "forest green",
+   "paint2": "5A4A36",
+   "paint2_name": "brown",
+   "ground": "Carpathian forest",
+   "winter_wash": true,
+   "marking": [
+    "F2EEE2",
+    "1F3F8F",
+    "C8102E"
+   ],
+   "marking_words": "white, blue, red",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "1F3F8F"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "C8102E"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: white, blue, red; a red double-cross mark and, from 1941, Axis yellow bands; its exact form is not known",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "F2EEE2",
+     "1F3F8F",
+     "C8102E"
+    ],
+    "words": "white, blue, red"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "74808C",
+   "hull_name": "mid blue-grey"
+  },
+  "ROM": {
+   "name": "Romania",
+   "soldier": {
+    "src": "generic",
+    "model": "peaked"
+   },
+   "cloth": "7E7852",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "6A6648",
+   "paint_name": "olive khaki",
+   "paint2": "4E4232",
+   "paint2_name": "brown",
+   "ground": "plain and Carpathians",
+   "winter_wash": true,
+   "marking": "as built",
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "9AA2A4",
+   "hull_name": "pale grey"
+  },
+  "YUG": {
+   "name": "Yugoslavia",
+   "soldier": {
+    "src": "generic",
+    "model": "dome"
+   },
+   "cloth": "77775A",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "6C6A50",
+   "paint_name": "stone olive",
+   "paint2": "4E4636",
+   "paint2_name": "brown",
+   "ground": "mountain forest",
+   "marking": "as built",
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
+  "BUL": {
+   "name": "Bulgaria",
+   "soldier": {
+    "src": "generic",
+    "model": "fieldcap"
+   },
+   "cloth": "7A6E52",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "5E6446",
+   "paint_name": "olive",
+   "paint2": "7A6A4A",
+   "paint2_name": "ochre",
+   "ground": "Balkan hills",
+   "marking": "as built",
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
+  "GRE": {
+   "name": "Greece",
+   "soldier": {
+    "src": "generic",
+    "model": "peaked"
+   },
+   "cloth": "7E7A52",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "76705A",
+   "paint_name": "rock khaki",
+   "paint2": "56604A",
+   "paint2_name": "olive",
+   "ground": "rocky mountains",
+   "marking": "as built",
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "74808C",
+   "hull_name": "mid blue-grey"
+  },
+  "TUR": {
+   "name": "Turkey",
+   "soldier": {
+    "src": "generic",
+    "model": "dome"
+   },
+   "cloth": "7E7654",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "7A7452",
+   "paint_name": "steppe khaki",
+   "paint2": "5A5038",
+   "paint2_name": "dark earth",
+   "ground": "Anatolian steppe",
+   "marking": "as built",
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "5E666A",
+   "hull_name": "dark grey"
+  },
+  "IRQ": {
+   "name": "Iraq",
+   "soldier": {
+    "src": "generic",
+    "model": "sun"
+   },
+   "cloth": "B0A47E",
+   "cloth_name": "pale drill",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "A08A5E",
+   "paint_name": "sand",
+   "paint2": "7A6446",
+   "paint2_name": "brown",
+   "ground": "desert",
+   "marking": [
+    "1A1A1A",
+    "F2EEE2",
+    "1E7A3C"
+   ],
+   "marking_words": "black, white, green",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "1A1A1A"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "1E7A3C"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: black, white, green; the historian could not give its wartime mark surely",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "1A1A1A",
+     "F2EEE2",
+     "1E7A3C"
+    ],
+    "words": "black, white, green"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "9AA2A4",
+   "hull_name": "pale grey"
+  },
+  "IRN": {
+   "name": "Iran",
+   "soldier": {
+    "src": "generic",
+    "model": "fieldcap"
+   },
+   "cloth": "A69262",
+   "cloth_name": "khaki drill",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "8E8460",
+   "paint_name": "khaki",
+   "paint2": "6A5C42",
+   "paint2_name": "earth",
+   "ground": "dry plateau",
+   "marking": [
+    "1E7A3C",
+    "F2EEE2",
+    "C8102E"
+   ],
+   "marking_words": "roundel green, white, red",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "1E7A3C"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "C8102E"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "roundel green, white, red",
+   "insignia_confidence": "medium-high",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "1E7A3C",
+     "F2EEE2",
+     "C8102E"
+    ],
+    "words": "green, white, red"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
+  "CHN": {
+   "name": "China",
+   "later": true,
+   "soldier": {
+    "src": "generic",
+    "model": "fieldcap"
+   },
+   "cloth": "7F8A96",
+   "cloth_name": "as built",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "5E6A62",
+   "paint_name": "grey-green",
+   "paint2": "6A5A42",
+   "paint2_name": "earth",
+   "ground": "hills and paddies",
+   "marking": "as built",
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "74808C",
+   "hull_name": "mid blue-grey"
+  },
+  "MEX": {
+   "name": "Mexico",
+   "soldier": {
+    "src": "shared",
+    "model": "adrian",
+    "of": "FRA"
+   },
+   "cloth": "A69262",
+   "cloth_name": "khaki drill",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "7A7450",
+   "paint_name": "scrub khaki",
+   "paint2": "5A5A3C",
+   "paint2_name": "olive",
+   "ground": "dry scrub and highland",
+   "marking": [
+    "1E7A3C",
+    "F2EEE2",
+    "C8102E"
+   ],
+   "marking_words": "triangle green, white, red (which way the point faces is not confirmed)",
+   "insignia": [
+    {
+     "tri": [
+      1.0,
+      180
+     ],
+     "c": "1E7A3C"
+    },
+    {
+     "tri": [
+      0.62,
+      180
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "tri": [
+      0.28,
+      180
+     ],
+     "c": "C8102E"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "triangle green, white, red (which way the point faces is not confirmed)",
+   "insignia_confidence": "low",
+   "fin": {
+    "dir": "v",
+    "bands": [
+     "1E7A3C",
+     "F2EEE2",
+     "C8102E"
+    ],
+    "words": "green, white, red"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
+  "CUB": {
+   "name": "Cuba",
+   "soldier": {
+    "src": "generic",
+    "model": "sun"
+   },
+   "cloth": "B0A47E",
+   "cloth_name": "pale drill",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "465038",
+   "paint_name": "deep green",
+   "paint2": "5A4A36",
+   "paint2_name": "brown",
+   "ground": "tropical farmland",
+   "marking": [
+    "1F3F8F",
+    "F2EEE2",
+    "C8102E"
+   ],
+   "marking_words": "blue, white, red",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "1F3F8F"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "C8102E"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: blue, white, red; the historian could not give its wartime mark surely",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "1F3F8F",
+     "F2EEE2",
+     "1F3F8F",
+     "F2EEE2",
+     "1F3F8F"
+    ],
+    "words": "blue, white, blue, white, blue"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "9AA2A4",
+   "hull_name": "pale grey"
+  },
+  "HAI": {
+   "name": "Haiti",
+   "soldier": {
+    "src": "generic",
+    "model": "fieldcap"
+   },
+   "cloth": "807A56",
+   "cloth_name": "olive khaki",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "3E4834",
+   "paint_name": "jungle green",
+   "paint2": "2C3026",
+   "paint2_name": "black-green",
+   "ground": "tropical hills",
+   "marking": [
+    "1F3F8F",
+    "C8102E",
+    "1F3F8F"
+   ],
+   "marking_words": "blue, red, blue",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "1F3F8F"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "C8102E"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "1F3F8F"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: blue, red, blue; no air arm in the war",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "1F3F8F",
+     "C8102E"
+    ],
+    "words": "blue, red"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "74808C",
+   "hull_name": "mid blue-grey"
+  },
+  "DOM": {
+   "name": "Dominican Republic",
+   "soldier": {
+    "src": "generic",
+    "model": "dome"
+   },
+   "cloth": "A69262",
+   "cloth_name": "khaki drill",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "4C5840",
+   "paint_name": "dark green",
+   "paint2": "6A5A42",
+   "paint2_name": "earth",
+   "ground": "tropical hills",
+   "marking": [
+    "1F3F8F",
+    "F2EEE2",
+    "C8102E"
+   ],
+   "marking_words": "blue, white, red",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "1F3F8F"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "C8102E"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: blue, white, red; the historian could not give its wartime mark surely",
+   "fin": {
+    "dir": "v",
+    "bands": [
+     "1F3F8F",
+     "F2EEE2",
+     "C8102E"
+    ],
+    "words": "blue, white, red"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
+  "GUA": {
+   "name": "Guatemala",
+   "soldier": {
+    "src": "generic",
+    "model": "sun"
+   },
+   "cloth": "807A56",
+   "cloth_name": "olive khaki",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "3E4834",
+   "paint_name": "jungle green",
+   "paint2": "2C3026",
+   "paint2_name": "black-green",
+   "ground": "jungle and volcano",
+   "marking": [
+    "74ACDF",
+    "F2EEE2",
+    "74ACDF"
+   ],
+   "marking_words": "sky, white, sky",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "74ACDF"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "74ACDF"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: sky, white, sky; the historian could not give its wartime mark surely",
+   "fin": {
+    "dir": "v",
+    "bands": [
+     "74ACDF",
+     "F2EEE2",
+     "74ACDF"
+    ],
+    "words": "sky, white, sky"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "74808C",
+   "hull_name": "mid blue-grey"
+  },
+  "ELS": {
+   "name": "El Salvador",
+   "soldier": {
+    "src": "generic",
+    "model": "fieldcap"
+   },
+   "cloth": "A69262",
+   "cloth_name": "khaki drill",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "5A6040",
+   "paint_name": "olive",
+   "paint2": "5A4A36",
+   "paint2_name": "brown",
+   "ground": "volcanic farmland",
+   "marking": [
+    "1F3F8F",
+    "F2EEE2",
+    "1F3F8F"
+   ],
+   "marking_words": "blue, white, blue",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "1F3F8F"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "1F3F8F"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: blue, white, blue; the historian could not give its wartime mark surely",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "1F3F8F",
+     "F2EEE2",
+     "1F3F8F"
+    ],
+    "words": "blue, white, blue"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "5E666A",
+   "hull_name": "dark grey"
+  },
+  "HON": {
+   "name": "Honduras",
+   "soldier": {
+    "src": "generic",
+    "model": "dome"
+   },
+   "cloth": "B0A47E",
+   "cloth_name": "pale drill",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "3E4834",
+   "paint_name": "jungle green",
+   "paint2": "5A4A36",
+   "paint2_name": "brown",
+   "ground": "jungle",
+   "marking": [
+    "1F3F8F",
+    "F2EEE2",
+    "1F3F8F"
+   ],
+   "marking_words": "blue, white, blue",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "1F3F8F"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "1F3F8F"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: blue, white, blue; the historian could not give its wartime mark surely",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "1F3F8F",
+     "F2EEE2",
+     "1F3F8F"
+    ],
+    "words": "blue, white, blue"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
+  "NIC": {
+   "name": "Nicaragua",
+   "soldier": {
+    "src": "generic",
+    "model": "sun"
+   },
+   "cloth": "807A56",
+   "cloth_name": "olive khaki",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "4C5840",
+   "paint_name": "dark green",
+   "paint2": "2C3026",
+   "paint2_name": "black-green",
+   "ground": "jungle and lakes",
+   "marking": [
+    "1F3F8F",
+    "F2EEE2",
+    "1F3F8F"
+   ],
+   "marking_words": "blue, white, blue",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "1F3F8F"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "1F3F8F"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: blue, white, blue; the historian could not give its wartime mark surely",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "1F3F8F",
+     "F2EEE2",
+     "1F3F8F"
+    ],
+    "words": "blue, white, blue"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "9AA2A4",
+   "hull_name": "pale grey"
+  },
+  "COS": {
+   "name": "Costa Rica",
+   "soldier": {
+    "src": "generic",
+    "model": "fieldcap"
+   },
+   "cloth": "A69262",
+   "cloth_name": "khaki drill",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "465038",
+   "paint_name": "deep green",
+   "paint2": "5A4A36",
+   "paint2_name": "brown",
+   "ground": "jungle",
+   "marking": [
+    "1F3F8F",
+    "F2EEE2",
+    "C8102E"
+   ],
+   "marking_words": "blue, white, red",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "1F3F8F"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "C8102E"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: blue, white, red; no air arm in the war",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "1F3F8F",
+     "F2EEE2",
+     "C8102E",
+     "F2EEE2",
+     "1F3F8F"
+    ],
+    "words": "blue, white, red, white, blue"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "74808C",
+   "hull_name": "mid blue-grey"
+  },
+  "PAN": {
+   "name": "Panama",
+   "soldier": {
+    "src": "generic",
+    "model": "dome"
+   },
+   "cloth": "B0A47E",
+   "cloth_name": "pale drill",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "3E4834",
+   "paint_name": "jungle green",
+   "paint2": "2C3026",
+   "paint2_name": "black-green",
+   "ground": "jungle",
+   "marking": [
+    "1F3F8F",
+    "F2EEE2",
+    "C8102E"
+   ],
+   "marking_words": "blue, white, red",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "1F3F8F"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "C8102E"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: blue, white, red; no air arm in the war",
+   "fin": {
+    "dir": "v",
+    "bands": [
+     "1F3F8F",
+     "F2EEE2",
+     "C8102E"
+    ],
+    "words": "blue, white, red"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
+  "COL": {
+   "name": "Colombia",
+   "soldier": {
+    "src": "generic",
+    "model": "fieldcap"
+   },
+   "cloth": "807A56",
+   "cloth_name": "olive khaki",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "465038",
+   "paint_name": "deep green",
+   "paint2": "5A4A36",
+   "paint2_name": "brown",
+   "ground": "jungle and Andes",
+   "marking": [
+    "F2C200",
+    "1F3F8F",
+    "C8102E"
+   ],
+   "marking_words": "roundel yellow, blue, red",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "F2C200"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "1F3F8F"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "C8102E"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "roundel yellow, blue, red",
+   "insignia_confidence": "medium",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "F2C200",
+     "F2C200",
+     "1F3F8F",
+     "C8102E"
+    ],
+    "words": "yellow, yellow, blue, red"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "5E666A",
+   "hull_name": "dark grey"
+  },
+  "VEN": {
+   "name": "Venezuela",
+   "soldier": {
+    "src": "generic",
+    "model": "peaked"
+   },
+   "cloth": "A69262",
+   "cloth_name": "khaki drill",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "5A6040",
+   "paint_name": "llanos olive",
+   "paint2": "7A6A48",
+   "paint2_name": "ochre",
+   "ground": "llanos",
+   "marking": [
+    "F2C200",
+    "1F3F8F",
+    "C8102E"
+   ],
+   "marking_words": "roundel yellow, blue, red",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "F2C200"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "1F3F8F"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "C8102E"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "roundel yellow, blue, red",
+   "insignia_confidence": "low-medium",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "F2C200",
+     "1F3F8F",
+     "C8102E"
+    ],
+    "words": "yellow, blue, red"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "74808C",
+   "hull_name": "mid blue-grey"
+  },
+  "ECU": {
+   "name": "Ecuador",
+   "soldier": {
+    "src": "generic",
+    "model": "sun"
+   },
+   "cloth": "B0A47E",
+   "cloth_name": "pale drill",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "4C5840",
+   "paint_name": "dark green",
+   "paint2": "2C3026",
+   "paint2_name": "black-green",
+   "ground": "jungle and Andes",
+   "marking": [
+    "F2C200",
+    "1F3F8F",
+    "C8102E"
+   ],
+   "marking_words": "roundel yellow, blue, red",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "F2C200"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "1F3F8F"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "C8102E"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "roundel yellow, blue, red",
+   "insignia_confidence": "low-medium",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "F2C200",
+     "F2C200",
+     "1F3F8F",
+     "C8102E"
+    ],
+    "words": "yellow, yellow, blue, red"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "9AA2A4",
+   "hull_name": "pale grey"
+  },
+  "PER": {
+   "name": "Peru",
+   "soldier": {
+    "src": "shared",
+    "model": "adrian",
+    "of": "FRA"
+   },
+   "cloth": "A69262",
+   "cloth_name": "khaki drill",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "8A7A5A",
+   "paint_name": "highland earth",
+   "paint2": "5E5640",
+   "paint2_name": "olive",
+   "ground": "Andes and desert coast",
+   "marking": [
+    "C8102E",
+    "F2EEE2",
+    "C8102E"
+   ],
+   "marking_words": "roundel red, white, red",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "C8102E"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "C8102E"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "roundel red, white, red",
+   "insignia_confidence": "medium-high",
+   "fin": {
+    "dir": "v",
+    "bands": [
+     "C8102E",
+     "F2EEE2",
+     "C8102E"
+    ],
+    "words": "red, white, red"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
+  "BRA": {
+   "name": "Brazil",
+   "soldier": {
+    "src": "generic",
+    "model": "sun"
+   },
+   "cloth": "6F7450",
+   "cloth_name": "jungle olive",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "3E4834",
+   "paint_name": "jungle green",
+   "paint2": "2C3026",
+   "paint2_name": "black-green",
+   "ground": "jungle",
+   "marking": [],
+   "marking_words": "nested five-pointed star, green, yellow, blue round a white centre (as on its P-47s in Italy)",
+   "insignia": [
+    {
+     "star": [
+      1.0,
+      0.382,
+      5
+     ],
+     "c": "1E7A3C"
+    },
+    {
+     "star": [
+      0.78,
+      0.382,
+      5
+     ],
+     "c": "F2C200"
+    },
+    {
+     "star": [
+      0.56,
+      0.382,
+      5
+     ],
+     "c": "1F3F8F"
+    },
+    {
+     "star": [
+      0.32,
+      0.382,
+      5
+     ],
+     "c": "F2EEE2"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "nested five-pointed star, green, yellow, blue round a white centre (as on its P-47s in Italy)",
+   "insignia_confidence": "low-medium",
+   "fin": {
+    "dir": "v",
+    "bands": [
+     "1E7A3C",
+     "F2C200"
+    ],
+    "words": "green, yellow"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "9AA2A4",
+   "hull_name": "pale grey"
+  },
+  "BOL": {
+   "name": "Bolivia",
+   "soldier": {
+    "src": "generic",
+    "model": "dome"
+   },
+   "cloth": "7E6E50",
+   "cloth_name": "earth brown",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "8E7E5C",
+   "paint_name": "altiplano earth",
+   "paint2": "6A5A42",
+   "paint2_name": "brown",
+   "ground": "Altiplano",
+   "marking": [
+    "C8102E",
+    "F2C200",
+    "1E7A3C"
+   ],
+   "marking_words": "roundel red, yellow, green",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "C8102E"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2C200"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "1E7A3C"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "roundel red, yellow, green",
+   "insignia_confidence": "medium",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "C8102E",
+     "F2C200",
+     "1E7A3C"
+    ],
+    "words": "red, yellow, green"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "74808C",
+   "hull_name": "mid blue-grey"
+  },
+  "PAR": {
+   "name": "Paraguay",
+   "soldier": {
+    "src": "generic",
+    "model": "fieldcap"
+   },
+   "cloth": "B0A47E",
+   "cloth_name": "pale drill",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "7A7450",
+   "paint_name": "scrub khaki",
+   "paint2": "5A5A3C",
+   "paint2_name": "olive",
+   "ground": "Chaco scrub",
+   "marking": [
+    "C8102E",
+    "F2EEE2",
+    "1F3F8F"
+   ],
+   "marking_words": "roundel red, white, blue",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "C8102E"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "1F3F8F"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "roundel red, white, blue",
+   "insignia_confidence": "medium-low",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "C8102E",
+     "F2EEE2",
+     "1F3F8F"
+    ],
+    "words": "red, white, blue"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "74808C",
+   "hull_name": "mid blue-grey"
+  },
+  "URU": {
+   "name": "Uruguay",
+   "soldier": {
+    "src": "generic",
+    "model": "dome"
+   },
+   "cloth": "A69262",
+   "cloth_name": "khaki drill",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "646A48",
+   "paint_name": "grass olive",
+   "paint2": "6E5C40",
+   "paint2_name": "earth",
+   "ground": "grassland",
+   "marking": [
+    "1F3F8F",
+    "F2EEE2",
+    "F2C200"
+   ],
+   "marking_words": "blue, white, yellow",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "1F3F8F"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "F2C200"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: blue, white, yellow; the historian could not give its wartime mark surely",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "F2EEE2",
+     "1F3F8F",
+     "F2EEE2",
+     "1F3F8F",
+     "F2EEE2"
+    ],
+    "words": "white, blue, white, blue, white"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "5E666A",
+   "hull_name": "dark grey"
+  },
+  "ARG": {
+   "name": "Argentina",
+   "soldier": {
+    "src": "generic",
+    "model": "peaked"
+   },
+   "cloth": "807A56",
+   "cloth_name": "olive khaki",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "6E6E4C",
+   "paint_name": "pampas olive",
+   "paint2": "7A6446",
+   "paint2_name": "earth",
+   "ground": "pampas",
+   "marking": [
+    "74ACDF",
+    "F2EEE2",
+    "74ACDF"
+   ],
+   "marking_words": "roundel sky blue, white, sky blue",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "74ACDF"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "74ACDF"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "roundel sky blue, white, sky blue",
+   "insignia_confidence": "medium-high",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "74ACDF",
+     "F2EEE2",
+     "74ACDF"
+    ],
+    "words": "sky, white, sky"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "74808C",
+   "hull_name": "mid blue-grey"
+  },
+  "CHL": {
+   "name": "Chile",
+   "soldier": {
+    "src": "shared",
+    "model": "stahl",
+    "of": "GER"
+   },
+   "cloth": "747A7E",
+   "cloth_name": "slate grey",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "7E7658",
+   "paint_name": "khaki",
+   "paint2": "56604A",
+   "paint2_name": "olive",
+   "ground": "desert north, forest south",
+   "marking": [
+    "C8102E",
+    "1F3F8F"
+   ],
+   "marking_words": "white star on a blue disc with a red ring",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "C8102E"
+    },
+    {
+     "ring": [
+      0.0,
+      0.8
+     ],
+     "c": "1F3F8F"
+    },
+    {
+     "star": [
+      0.72,
+      0.382,
+      5
+     ],
+     "c": "F2EEE2"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "white star on a blue disc with a red ring",
+   "insignia_confidence": "low-medium",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "F2EEE2",
+     "C8102E"
+    ],
+    "words": "white, red"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "5E666A",
+   "hull_name": "dark grey"
+  },
+  "THA": {
+   "name": "Thailand",
+   "later": true,
+   "soldier": {
+    "src": "shared",
+    "model": "adrian",
+    "of": "FRA"
+   },
+   "cloth": "6F7450",
+   "cloth_name": "jungle olive",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "3E4834",
+   "paint_name": "jungle green",
+   "paint2": "5A4A36",
+   "paint2_name": "brown",
+   "ground": "jungle and paddies",
+   "marking": [
+    "C8102E",
+    "F2EEE2",
+    "1F3F8F"
+   ],
+   "marking_words": "roundel red, white, blue (from the 1920s)",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "C8102E"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "1F3F8F"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "roundel red, white, blue (from the 1920s)",
+   "insignia_confidence": "medium",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "C8102E",
+     "F2EEE2",
+     "1F3F8F",
+     "1F3F8F",
+     "F2EEE2",
+     "C8102E"
+    ],
+    "words": "red, white, blue, blue, white, red"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
+  "MAN": {
+   "name": "Manchukuo",
+   "later": true,
+   "soldier": {
+    "src": "shared",
+    "model": "cap",
+    "of": "JAP"
+   },
+   "cloth": "7E6E50",
+   "cloth_name": "earth brown",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "8A7A52",
+   "paint_name": "khaki",
+   "paint2": "4F5A3A",
+   "paint2_name": "green",
+   "ground": "Manchurian plain",
+   "winter_wash": true,
+   "marking": [
+    "F2C200",
+    "C8102E",
+    "1F3F8F"
+   ],
+   "marking_words": "yellow, red, blue",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "F2C200"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "C8102E"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "1F3F8F"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: yellow, red, blue; the historian could not give its wartime mark surely",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "F2C200"
+    ],
+    "words": "yellow"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "9AA2A4",
+   "hull_name": "pale grey"
+  },
+  "MGL": {
+   "name": "Mongolia",
+   "later": true,
+   "soldier": {
+    "src": "shared",
+    "model": "soviet",
+    "of": "SOV"
+   },
+   "cloth": "6E7B6A",
+   "cloth_name": "grey-green",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "7A7452",
+   "paint_name": "steppe khaki",
+   "paint2": "5A5038",
+   "paint2_name": "dark earth",
+   "ground": "steppe",
+   "winter_wash": true,
+   "marking": [
+    "C8102E",
+    "F2C200",
+    "C8102E"
+   ],
+   "marking_words": "red, yellow, red",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "C8102E"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2C200"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "C8102E"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: red, yellow, red; its few aircraft carried Soviet stars; a ring keeps it from reading as Soviet",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "C8102E"
+    ],
+    "words": "red"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
+  "AFG": {
+   "name": "Afghanistan",
+   "later": true,
+   "soldier": {
+    "src": "generic",
+    "model": "peaked"
+   },
+   "cloth": "747A7E",
+   "cloth_name": "slate grey",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "847A5A",
+   "paint_name": "mountain khaki",
+   "paint2": "5E5640",
+   "paint2_name": "olive",
+   "ground": "dry mountains",
+   "marking": [
+    "1A1A1A",
+    "C8102E",
+    "1E7A3C"
+   ],
+   "marking_words": "black, red, green",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "1A1A1A"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "C8102E"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "1E7A3C"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: black, red, green; the historian could not give its wartime mark surely",
+   "fin": {
+    "dir": "v",
+    "bands": [
+     "1A1A1A",
+     "C8102E",
+     "1E7A3C"
+    ],
+    "words": "black, red, green"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "74808C",
+   "hull_name": "mid blue-grey"
+  },
+  "NEP": {
+   "name": "Nepal",
+   "later": true,
+   "soldier": {
+    "src": "generic",
+    "model": "dome"
+   },
+   "cloth": "6F7450",
+   "cloth_name": "jungle olive",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "4C5840",
+   "paint_name": "dark green",
+   "paint2": "5A4A36",
+   "paint2_name": "brown",
+   "ground": "Himalayan forest",
+   "marking": [
+    "1F3F8F",
+    "C8102E",
+    "F2EEE2"
+   ],
+   "marking_words": "blue, red, white",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "1F3F8F"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "C8102E"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "F2EEE2"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: blue, red, white; no air arm in the war",
+   "fin": {
+    "dir": "v",
+    "bands": [
+     "C8102E",
+     "1F3F8F"
+    ],
+    "words": "red, blue"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
+  "SAU": {
+   "name": "Saudi Arabia",
+   "later": true,
+   "soldier": {
+    "src": "generic",
+    "model": "fieldcap"
+   },
+   "cloth": "A69262",
+   "cloth_name": "khaki drill",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "AE9A70",
+   "paint_name": "pale sand",
+   "paint2": "8C7650",
+   "paint2_name": "earth",
+   "ground": "desert",
+   "marking": [
+    "1E7A3C",
+    "F2EEE2",
+    "1E7A3C"
+   ],
+   "marking_words": "green, white, green",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "1E7A3C"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "1E7A3C"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: green, white, green; no air arm of note in the war",
+   "fin": {
+    "dir": "v",
+    "bands": [
+     "1E7A3C",
+     "F2EEE2"
+    ],
+    "words": "green, white"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "5E666A",
+   "hull_name": "dark grey"
+  },
+  "YEM": {
+   "name": "Yemen",
+   "later": true,
+   "soldier": {
+    "src": "generic",
+    "model": "sun"
+   },
+   "cloth": "7E6E50",
+   "cloth_name": "earth brown",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "9A8460",
+   "paint_name": "ochre sand",
+   "paint2": "6A5C42",
+   "paint2_name": "earth",
+   "ground": "desert mountains",
+   "marking": [
+    "C8102E",
+    "F2EEE2",
+    "C8102E"
+   ],
+   "marking_words": "red, white, red",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "C8102E"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "F2EEE2"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "C8102E"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: red, white, red; no air arm in the war",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "C8102E"
+    ],
+    "words": "red"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
+  "LBR": {
+   "name": "Liberia",
+   "later": true,
+   "soldier": {
+    "src": "generic",
+    "model": "sun"
+   },
+   "cloth": "A69262",
+   "cloth_name": "khaki drill",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "3E4834",
+   "paint_name": "jungle green",
+   "paint2": "2C3026",
+   "paint2_name": "black-green",
+   "ground": "jungle",
+   "marking": [
+    "C8102E",
+    "1F3F8F",
+    "F2EEE2"
+   ],
+   "marking_words": "red, blue, white",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "C8102E"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "1F3F8F"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "F2EEE2"
+    }
+   ],
+   "insignia_checked": true,
+   "insignia_words": "plain ring of the flag's colours: red, blue, white; no air arm in the war",
+   "fin": {
+    "dir": "h",
+    "bands": [
+     "C8102E",
+     "F2EEE2",
+     "C8102E",
+     "F2EEE2",
+     "C8102E"
+    ],
+    "words": "red, white, red, white, red"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "9AA2A4",
+   "hull_name": "pale grey"
+  }
+ }
+}

@@ -61,7 +61,13 @@
     "form": {
      "ftr": "No. {n} Group",
      "bmr": "No. {n} Group"
-    }
+    },
+    "numbers": {
+     "ftr": [9, 10, 11, 12, 13, 14, 82, 83, 84, 85, 88],
+     "bmr": [1, 2, 3, 4, 5, 7, 8, 6],
+     "abroad": [6]
+    },
+    "_numbers": "Release 1.5.2: the record numbered Britain's groups by role (the historian's read row, historian/air-names-roles-1125.md section 4, 25 November 2026 13:04Z, mark L): a new fighter group takes the first free number of its list, a new bomber group of its. 'abroad': a number the record gave another country's group (No. 6 to Canada), last in its list and taken only while no living air group of any nation carries it ('so leave 6 to Canada while Canada holds it'). Where a kind's list runs out, the next name takes the lowest whole number above every number in both lists that is free: never a number of the other kind."
    }
   ],
   "CAN": [

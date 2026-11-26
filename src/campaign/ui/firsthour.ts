@@ -293,7 +293,8 @@ function noteHtml(d: NonNullable<ReturnType<typeof onDesk>>, slip: boolean): str
     return `<div class="${cls}" data-note="${CLOSING.id}"><div class="tc-note__head"><span class="tc-label">Staff note</span><span class="tc-micro"></span><button class="tc-btn--quiet fh-quiet" data-act="fhclose">Close</button></div><h4>${esc(CLOSING.head)}</h4><p>${esc(closingWords())}</p></div>`;
   }
   const l = d.lesson!;
-  const w = lessonWords(g, l, 'browser', page.tucked('build') ? ' under STAFF' : '');
+  // (Lesson 10 moves on once the BUILD page is open: its note then asks for the artillery corps.)
+  const w = lessonWords(g, l, 'browser', page.tucked('build') ? ' under STAFF' : '', l.id === 'build' && page.ui.tab === 'build');
   const done = stamped?.id === l.id;
   return `<div class="${cls}${done ? ' is-done' : ''}" data-note="${l.id}"${done ? ' data-act="fhsend" title="Click to put it away now"' : ''}><div class="tc-note__head"><span class="tc-label">Staff note</span><span class="tc-micro">${l.n} of ${LESSONS.length}</span>${done ? '' : '<button class="tc-btn--quiet fh-quiet" data-act="fhlater" title="Put this note away. It waits in the GUIDE.">Later</button>'}</div><h4>${esc(w.head)}</h4><p>${esc(w.text)}</p>${w.deed ? `<div class="tc-deed"><i>${done ? TICK : ''}</i><span>${esc(w.deed)}</span></div>` : ''}${done ? '<span class="tc-stamp tc-stamp--won tc-stamp--sm fh-stamp">Done</span>' : ''}</div>`;
 }

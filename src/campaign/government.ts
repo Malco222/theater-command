@@ -20,6 +20,7 @@
 // data/campaign/government.json. The historical scenarios have none of this. Both interfaces read government()
 // and give the orders through turn.ts.
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/government.json';
 import { Rng, hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
@@ -35,6 +36,7 @@ import { agentCost, agentsOf, homeBase, mostAgents, oddsBand, INTEL } from './in
 import { armyOf } from './joint';
 import { prizeOf, prizesInReach, townName, townSize, type Prize, type TownSize } from './towns';
 import { dealsOf, whyNoTrade } from './trade';
+import { LADDER_GONE, footTrust, replacesLadder } from './footing';
 
 export type FormId = 'democracy' | 'oneparty' | 'authoritarian';
 /** What a minister or a decree can change: multipliers on income, replacements, the price of new corps, research, trade and the class of men that comes of age each month. */
@@ -343,6 +345,7 @@ export function whyNotDecree(g: Game, nat: string, track: string, step: number):
   if (!st) return 'Only your own government takes your decrees, in the grand campaign.';
   const t = GOV.tracks.find((x) => x.id === track);
   if (!t || !t.steps[step]) return 'There is no such decree.';
+  if (t.id === 'economy' && replacesLadder(g)) return LADDER_GONE;
   const at = st.steps[track] ?? 0;
   if (step === at) return 'That is the law already.';
   if (step === at - 1) return null;
@@ -661,7 +664,7 @@ function draw(g: Game, nat: string, st: GovState): Directive | null {
       options.push({ ...base, kind: 'build', from: nat, target: civicCount(g, nat) + 1, due: g.turn + D.build.months, capital: D.build.capital, money: 0,
         title: 'Build up a town', text: `The war cabinet wants the country built up: order a new building in one of your towns by the end of ${date(g.turn + D.build.months)}. The cheapest today is the ${site.label.toLowerCase()} at ${site.town}, for ${moneyShown(site.cost)}.` });
     }
-    if (quiet && agentsOf(g, nat).length < mostAgents(nat) && homeBase(g, nat) >= 0 && INTEL.agents.cost <= spare) {
+    if (quiet && agentsOf(g, nat).length < mostAgents(nat, g) && homeBase(g, nat) >= 0 && INTEL.agents.cost <= spare) {
       options.push({ ...base, kind: 'agent', from: nat, target: agentsOf(g, nat).length + 1, due: g.turn + D.agent.months, capital: D.agent.capital, money: 0,
         title: 'Recruit an agent', text: `The war cabinet wants eyes abroad: recruit an agent for the secret service by the end of ${date(g.turn + D.agent.months)}. One costs ${agentCost().toLocaleString('en-US')} to find and train.` });
     }
@@ -963,7 +966,8 @@ function termsAt(g: Game, nat: string, r: Region, months: number, read = promise
   // Within a band a shorter day pays a little more: the longest is no longer always the right pick.
   const longest = P.months[P.months.length - 1], haste = 1 + (P.haste * (longest - months)) / Math.max(1, longest - P.months[0]);
   const capital = band.capital ? Math.max(1, Math.round(band.capital * size * haste)) : 0, money = round1(income(g, nat) * band.money * size * haste);
-  const due = g.turn + months - 1, trust = round1(band.trust * swing * haste), price = round1(band.price * swing), back = round1(band.price * P.back * swing);
+  // (What taking it back costs is reckoned from the price as the vow keeps it, rounded, as closeVow charges it.)
+  const due = g.turn + months - 1, trust = round1(band.trust * swing * haste), price = round1(band.price * swing), back = round1(price * P.back);
   const parts = [`the cabinet's trust rises ${trust}`];
   if (capital) parts.push(`it votes ${capital} political capital`);
   if (money) parts.push(`${moneyShown(money)} for the treasury`);
@@ -1269,11 +1273,12 @@ export function govMonth(g: Game, nat: string): void {
     ['The capital under siege', n.capital >= 0 && g.regions[n.capital].ctrl === nat && besieged(g, g.regions[n.capital]) ? -T.ringed : 0],
   ];
   // What his ministers and decrees cost in trust is felt in full under every form of government.
-  const own = govAdd(st, 'trust');
+  // (And, with the nation's footing switched on, what holding the country to rearmament or all-out war costs: ruling 172.)
+  const own = govAdd(st, 'trust'), foot = footTrust(g, nat);
   const drift = (restOf(st) - st.trust) * T.drift;
   const news = causes.reduce((s, c) => s + c[1], 0);
-  st.last = [...causes.map(([label, x]) => ({ label, amount: x * form.swing })), { label: 'Ministers and decrees', amount: own }, { label: drift < 0 ? 'Yesterday\'s good news fades' : 'Yesterday\'s bad news fades', amount: drift }].filter((c) => Math.abs(c.amount) >= 0.05);
-  st.trust = clamp(st.trust + news * form.swing + own + drift, 0, 100);
+  st.last = [...causes.map(([label, x]) => ({ label, amount: x * form.swing })), { label: 'Ministers and decrees', amount: own }, { label: 'The nation\'s footing', amount: foot }, { label: drift < 0 ? 'Yesterday\'s good news fades' : 'Yesterday\'s bad news fades', amount: drift }].filter((c) => Math.abs(c.amount) >= 0.05);
+  st.trust = clamp(st.trust + news * form.swing + own + foot + drift, 0, 100);
   st.mark = { held, home, caps, report: lastReport(g) };
   // A decree that takes political capital to keep lapses a step when there is none left to pay for it.
   for (let guard = 0; guard < 4; guard++) {
@@ -1520,7 +1525,8 @@ export function government(g: Game, nat: string | null = g.human): GovView | nul
     id: s.id, name: s.name, minister: mv(ministerIn(st, s.id)),
     options: GOV.ministers.filter((m) => (m.seat === s.id || m.seat === '*') && m.id !== ministerIn(st, s.id).id).map((m) => ({ ...mv(m), why: whyNotAppoint(g, nat, s.id, m.id) })),
   }));
-  const tracks: TrackView[] = GOV.tracks.map((t) => {
+  // (With the nation's footing switched on the economy is set under the arsenal, and the cabinet keeps the call-up: ruling 172.)
+  const tracks: TrackView[] = GOV.tracks.filter((t) => !(t.id === 'economy' && replacesLadder(g))).map((t) => {
     const at = st.steps[t.id] ?? 0;
     return { id: t.id, name: t.name, at, steps: t.steps.map((x, i) => ({ id: x.id, name: x.name, text: x.text, cost: x.cost ?? 0, on: i === at, why: i === at ? null : whyNotDecree(g, nat, t.id, i) })) };
   });

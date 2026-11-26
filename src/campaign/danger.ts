@@ -539,7 +539,7 @@ export function homeAlarms(g: Game, nat: string | null = g.human, seen?: Uint8Ar
     else {
       const v = siegeView(g, r.id);
       const left = v?.left ?? 0;
-      s1 = `${who} ${many ? 'are' : 'is'} round ${town}, ${v?.bySea ? 'which ships still feed' : left > 0 ? `which has stores for ${monthsWord(left)}` : 'whose stores are gone'}.`;
+      s1 = `${who} ${many ? 'are' : 'is'} round ${town}, ${v?.bySea ? 'which ships still feed' : v?.byBook ? 'which is fed across the lake' : left > 0 ? `which has stores for ${monthsWord(left)}` : 'whose stores are gone'}.`;
     }
     const named = reachIds.map((id) => (id === cap ? `${g.regions[id].name}, your capital` : g.regions[id].name));
     const s2 = !named.length ? '' : named.length === 1 ? `Next month ${many ? 'they' : 'it'} can reach ${named[0]}.`

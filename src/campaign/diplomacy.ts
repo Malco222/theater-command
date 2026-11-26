@@ -4,11 +4,12 @@
 // own moves are events that fire only if their conditions still hold.
 // The numbers and the events live in data/campaign/diplomacy.json.
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/diplomacy.json';
 import relationsData from '../../data/campaign/relations.json';
 import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
-import { addCorps, allied, atWar, bloc, capture, declareWar, endVoyages, headline, newsName, patronPress, relocate, removeCorps, standsByWhom, theName, warning } from './game';
+import { addCorps, allied, atWar, bloc, capture, declareWar, endVoyages, headline, newsName, patronPress, relocate, removeCorps, standsByWhom, theName, theWords, warning } from './game';
 import { leagueMonth, ownPath, playersOwn, spared, standsWith } from './league';
 import { turnToDate } from '../core/ticket';
 import { alertNation, traitsMonth } from './traits';
@@ -20,6 +21,9 @@ import { mayJoin, stopDef, stopOf } from './history';
 import { hashString } from '../core/rng';
 import worldData from '../../data/campaign/world.json';
 import { pressData, warWorkMonth, worldMonth } from './world';
+import { mapDist2 } from './wrap';
+import { footingMonth } from './footing';
+import { weatherMonth } from './weather';
 import { guarantorsOf, type Guarantor } from './guarantees';
 
 export interface DiploEvent {
@@ -38,6 +42,18 @@ export interface DiploEvent {
   join?: { bloc: 'allies' | 'axis'; nations: string[]; minOpinion: number };
   /** Pairs that go to war when the event fires: the first of each declares on the second. */
   war?: [string, string][];
+  /**
+   * 'war': the event's words are the news of the first war it brings. The declaration is told in them, under the
+   * declarer's flag, in place of the plain line ("one story, one band": the UI director's words for Rashid Ali).
+   */
+  tell?: 'war';
+  /** Its news is a band of its own, under this nation's flag, for that nation's player and its friends: the first sentence is its head. */
+  band?: string;
+  /**
+   * Countries of the event whose computer-run corps keep to their own ground from the day it fires: a declaration,
+   * not a front (Turkey, February 1945; ruling 228, b528). A player's country is never bound.
+   */
+  stay?: string[];
   /** Countries that have stood aside until now and enter the story here, at this place on the alignment track. */
   wake?: { nations: string[]; align: Align };
   /**
@@ -49,8 +65,10 @@ export interface DiploEvent {
   /**
    * A country that ends, its ground shared out. Each share is [who takes it, the regions]: the first taker on the
    * list still in the war gets every named region the country still holds. Ground someone else already holds stays theirs.
+   * 'marchIn': the takers march in as the terms are made (Iraq and Iran, 1941), so in the grand campaign a share goes
+   * to its taker whether or not its army stood there before.
    */
-  partition?: { nation: string; shares: [string[], string[]][]; occupied?: boolean };
+  partition?: { nation: string; shares: [string[], string[]][]; occupied?: boolean; marchIn?: boolean };
   /** The history campaigns, by the month the seat is taken, whose card states this event as the stake: only there does it fire on the country the player leads (league.ts, spared). */
   stake?: number[];
   /** Pairs of nations that make peace: each hands back the other's ground and takes its troops home. */
@@ -544,6 +562,31 @@ function joinBloc(g: Game, n: Nation, b: 'allies' | 'axis'): boolean {
 
 // ---- Events: history as data ------------------------------------------------------------
 
+/**
+ * Ruling 233, rider b612: the leavings in play. For every country an event can still take out of the war by terms
+ * (a partition) on grounds the event itself names ('anyHeld' or 'allHeld'), those grounds, read from the event. Not an
+ * event that cannot fire in this game: one of the other mode, one that has fired or is past its last month, or one
+ * that spares the country the player leads (rulings 99 and 103).
+ */
+export function leavings(g: Game): { nation: string; grounds: string[] }[] {
+  const open = g.flags.open === 1;
+  const out: { nation: string; grounds: string[] }[] = [];
+  for (const e of DIPLOMACY.events) {
+    if (!e.partition || (e.mode && (e.mode === 'open') !== open) || g.flags[`event:${e.id}`] !== undefined || g.turn > (e.to ?? 999) || spared(g, e.partition.nation, e.stake)) continue;
+    const test = (e.if ?? []).find((c) => c.startsWith('anyHeld:') || c.startsWith('allHeld:'));
+    if (test) out.push({ nation: e.partition.nation, grounds: test.slice(test.indexOf(':') + 1).split(',').slice(1) });
+  }
+  return out;
+}
+
+/** Ruling 233, rider b612: true while this country's leaving is in play and an enemy of its holds or stands on a ground its leaving event names. */
+export function leavingThreat(g: Game, nation: string): boolean {
+  return leavings(g).some((L) => L.nation === nation && L.grounds.some((nm) => {
+    const r = g.byName[nm];
+    return !!r && (atWar(g, nation, r.ctrl) || r.units.some((u) => !u.dead && u.kind !== 'fort' && atWar(g, nation, u.nat)));
+  }));
+}
+
 /** Tests one condition of an event, written as "key:arguments". */
 export function holds(g: Game, cond: string): boolean {
   const i = cond.indexOf(':');
@@ -558,6 +601,11 @@ export function holds(g: Game, cond: string): boolean {
     // 'computer:ITA,47': the same, and in a history campaign the Italy of a player who took his seat in any month
     // but the 47th (July 1943, whose card states Rome's fall as the stake) is spared too (ruling 103).
     case 'computer': return !spared(g, a[0], a.slice(1).map(Number));
+    // 'stop:1,2': the campaign is played at one of these stops of the history dial (a history campaign is at stop 3).
+    case 'stop': return a.map(Number).includes(stopOf(g));
+    // 'by:21': no later than this month. In the grand campaign an event's calendar otherwise only says when it may
+    // first happen; an event that keeps history's calendar at the book's stops says here when its moment has passed.
+    case 'by': return g.turn <= Number(a[0]);
     case 'fallen': return !N(a[0])?.alive;
     case 'peace': return !N(a[0])?.atWar.includes(a[1]);
     case 'atPeace': return !N(a[0])?.atWar.length;
@@ -581,6 +629,14 @@ export function holds(g: Game, cond: string): boolean {
     // 'since:event:x,2': that flag was raised at least two months ago.
     case 'since': return !!g.flags[a[0]] && g.turn - g.flags[a[0]] >= Number(a[1] ?? 1);
     case 'war': return !!N(a[0]) && !!N(a[1]) && atWar(g, a[0], a[1]);
+    // No army of that alliance on the country's ground or on ground bordering it (Turkey, 1945: b528).
+    case 'noArmyNear': {
+      const near = new Set<number>();
+      for (const r of g.regions) if (r.owner === a[1]) { near.add(r.id); for (const j of r.nb) near.add(j); }
+      return !g.corps.some((c) => !c.dead && c.kind !== 'fort' && near.has(c.reg) && !!N(c.nat) && bloc(N(c.nat)!) === a[0]);
+    }
+    // An army of that alliance stands on the country's home ground (b528: the Allies on German soil).
+    case 'armyOn': return g.corps.some((c) => !c.dead && c.kind !== 'fort' && g.regions[c.reg].owner === a[1] && !g.regions[c.reg].overseas && !!N(c.nat) && bloc(N(c.nat)!) === a[0]);
     case 'dormant': return !!N(a[0])?.dormant;
     // "anyHeld:allies,Oran,Algiers": some place on the list is in the hands of that bloc.
     case 'allHeld': return a.slice(1).every((nm) => { const r = g.byName[nm]; return !!r && !!N(r.ctrl) && bloc(N(r.ctrl)!) === a[0]; });
@@ -594,13 +650,13 @@ export function holds(g: Game, cond: string): boolean {
 }
 
 /** Sends a corps standing on ground its country has just given up back to the nearest home region with room. */
-function withdraw(g: Game, nat: string, from: Region): void {
+export function withdraw(g: Game, nat: string, from: Region): void {
   for (const c of [...from.units]) {
     if (c.nat !== nat) continue;
     let best: Region | null = null, bd = 1e12;
     for (const r of g.regions) {
       if (r.owner !== nat || r.ctrl !== nat || r.units.length >= STACK) continue;
-      const d = (r.x - from.x) ** 2 + (r.y - from.y) ** 2;
+      const d = mapDist2(g, r.x, r.y, from.x, from.y);
       if (d < bd) { bd = d; best = r; }
     }
     if (best) relocate(g, c, best); else removeCorps(g, c);
@@ -624,7 +680,7 @@ export function signPeace(g: Game, a: string, b: string): boolean {
   return true;
 }
 
-function transfer(g: Game, r: Region, to: string): void {
+export function transfer(g: Game, r: Region, to: string): void {
   r.owner = to; r.ctrl = to; r.cap = false; r.since = g.turn;
   g.supplyDirty = true;
 }
@@ -654,7 +710,11 @@ function fire(g: Game, e: DiploEvent): boolean {
     if (playersOwn(g, e.cede.from)) {
       const to = g.nations[e.cede.to], lost = e.cede.regions.filter((nm) => g.byName[nm]?.owner === e.cede!.from);
       if (!to?.alive || !lost.length) return false;
-      headline(g, 'event', `${to.name} demands ${lost.length === 1 ? lost[0] : `${lost.slice(0, -1).join(', ')} and ${lost[lost.length - 1]}`}. ${g.nations[e.cede.from].name} gives up nothing without a fight.`, e.cede.from);
+      // (In a war the two are already fighting the demand is peace terms refused: the UI director's words, ruling 228.)
+      const asked = lost.length === 1 ? lost[0] : `${lost.slice(0, -1).join(', ')} and ${lost[lost.length - 1]}`, from = g.nations[e.cede.from];
+      headline(g, 'event', atWar(g, e.cede.from, e.cede.to)
+        ? `${theName(to, true)} offers peace for ${asked}. ${theName(from, true)} will not sign its ground away, and the war goes on.`
+        : `${theName(to, true)} demands ${asked}. ${theName(from, true)} gives up nothing without a fight.`, e.cede.from);
       return true;
     }
     for (const name of e.cede.regions) {
@@ -722,8 +782,8 @@ function fire(g: Game, e: DiploEvent): boolean {
     if (any) {
       did = true;
       g.supplyDirty = true;
-      headline(g, 'event', e.text, e.enter.nations[0]);
-      told = true;
+      // (An event whose words are its war's own news tells them with the declaration, below.)
+      if (e.tell !== 'war') { headline(g, 'event', e.text, e.enter.nations[0]); told = true; }
     }
   }
   if (e.war) {
@@ -733,12 +793,20 @@ function fire(g: Game, e: DiploEvent): boolean {
       // In free play no event drags a country at peace into the war: that decision is its own.
       if (g.flags.open === 1 && !B.atWar.length) continue;
       // An entry whose countries were on their side already tells its news with the first war it brings.
-      if (e.enter && !told && !allied(g, a, b)) { headline(g, 'event', e.text, e.enter.nations[0]); told = true; }
+      if (e.enter && !told && !allied(g, a, b) && e.tell !== 'war') { headline(g, 'event', e.text, e.enter.nations[0]); told = true; }
+      const at = g.headlines.length;
       declareWar(g, a, b);
       did = did || A.atWar.includes(b);
+      // The declaration's own line is told in the event's words.
+      if (e.tell === 'war' && !told && A.atWar.includes(b)) {
+        const plain = theWords(`${theName(A, true)} declares war on ${theName(B)}.`);
+        const h = g.headlines.slice(at).find((x) => x.kind === 'war' && x.nat === a && x.text === plain);
+        if (h) { h.text = theWords(e.text); told = true; }
+      }
     }
     if (!did) return false;
   }
+  for (const id of e.stay ?? []) if (!barred.has(id) && g.nations[id]?.alive) g.flags[`stay:${id}`] = g.turn;
   if (e.partition) {
     const X = g.nations[e.partition.nation];
     if (!X?.alive) return false;
@@ -749,7 +817,7 @@ function fire(g: Game, e: DiploEvent): boolean {
     const home = g.regions.filter((r) => r.owner === X.id && (!open || !r.overseas));
     const live = (id: string): boolean => !!g.nations[id]?.alive && g.nations[id].atWar.length > 0;
     const stake = (id: string): number => home.reduce((s, r) => s + (r.ctrl === id ? 1 : 0) + (r.units.some((u) => u.nat === id && u.kind !== 'fort') ? 1 : 0), 0);
-    const first = (list: string[]): string | undefined => list.find((id) => live(id) && (!open || stake(id) > 0));
+    const first = (list: string[]): string | undefined => list.find((id) => live(id) && (!open || !!e.partition!.marchIn || stake(id) > 0));
     const held = new Set(g.regions.filter((r) => r.ctrl === X.id).map((r) => r.id));
     for (const c of g.corps.filter((c) => c.nat === X.id)) removeCorps(g, c);
     endVoyages(g, X.id);
@@ -828,7 +896,8 @@ function fire(g: Game, e: DiploEvent): boolean {
     if (at) addCorps(g, row[0], row[1], row[2] as any, row[3], at.id, { hold: 1 });
   }
   if (!told) {
-    headline(g, 'event', e.text, e.annex?.by ?? e.cede?.to ?? e.liberate?.to[0] ?? e.join?.nations[0] ?? e.partition?.nation);
+    headline(g, 'event', e.text, e.band ?? e.annex?.by ?? e.cede?.to ?? e.liberate?.to[0] ?? e.join?.nations[0] ?? e.partition?.nation);
+    if (e.band) g.headlines[g.headlines.length - 1].head = e.text.match(/^[^.!?]+/)?.[0];
     if (e.past && g.turn > 1) Object.assign(g.headlines[g.headlines.length - 1], { turn: g.turn - 1, week: 4 });
   }
   for (const [id, d] of Object.entries(e.opinion ?? {})) {
@@ -853,7 +922,7 @@ export const fireEvent = (g: Game, id: string): boolean => { const e = DIPLOMACY
 
 export function monthlyDiplomacy(g: Game): void {
   // The last act of the grand campaign: no alliances, no courting, no treaties, and history's calendar is closed.
-  if ((g.flags.dom ?? 0) > 0) { warWorkMonth(g); traitsMonth(g); techMonth(g); return; }
+  if ((g.flags.dom ?? 0) > 0) { warWorkMonth(g); footingMonth(g); weatherMonth(g); traitsMonth(g); techMonth(g); return; }
   const m = momentum(g);
   // A gate its holder has shut: the neutrals whose trade it turned back move a point a month away from his side (ruling 177(a)).
   const sore = soreMonth(g);
@@ -869,6 +938,9 @@ export function monthlyDiplomacy(g: Game): void {
   // The wider world: the dominions follow their mother country, and a great industry that has gone to war turns over a little more of itself.
   worldMonth(g);
   warWorkMonth(g);
+  // The nation's footing: each climb takes its step, staffs decide, all-out war wears the will (ruling 172; switched off, nothing).
+  footingMonth(g);
+  weatherMonth(g);
   // The grand campaign: now and then a circle of small countries founds the League, or another joins it.
   leagueMonth(g);
   traitsMonth(g);

@@ -7,6 +7,7 @@ import budget from '../data/campaign/budget.json';
 import { AIR, airUpkeep, assessAir, crowding, forecastAir, hasAirfield } from '../src/campaign/air';
 import { ARSENAL, aiArsenal, canStation, factoriesBuilt, isCity, offers, orderOffer, workLevel, yardLevel, type Offer } from '../src/campaign/arsenal';
 import { techOf } from '../src/campaign/tech';
+import { grantPlans } from '../src/campaign/plans';
 import { BUDGET, PRODUCTION, cancelBuild, canRaiseKind, deliver, income, isHome, ledger, needsOf, orderCorps, raiseSite, upkeepTotal } from '../src/campaign/economy';
 import { DUG_IN, GUNS, addCorps, assess, createGame } from '../src/campaign/game';
 import { fleetsOf, shipCount } from '../src/campaign/navy';
@@ -157,10 +158,15 @@ describe('heavy equipment needs industry', () => {
 });
 
 describe('artillery', () => {
-  /** A Polish province on the German border, with a Polish garrison in it and German infantry next door. */
+  /**
+   * A Polish province on the German border, with a Polish garrison in it and German infantry next door. Its town's
+   * guard is spent, so the corps alone defend: under ruling 232 a guard would stand beside them behind its walls, and
+   * these tests weigh the guns against the corps.
+   */
   const front = (g: Game): { target: Region; from: Region } => {
     const target = g.regions.find((r) => r.ctrl === 'POL' && r.units.some((c) => c.nat === 'POL') && r.nb.some((j) => g.regions[j].ctrl === 'GER' && g.regions[j].owner === 'GER'))!;
     const from = g.regions[target.nb.find((j) => g.regions[j].ctrl === 'GER' && g.regions[j].owner === 'GER')!];
+    g.flags[`guard:${target.id}`] = 100;
     return { target, from };
   };
 
@@ -326,6 +332,8 @@ describe('anti-aircraft guns', () => {
 
   it('can be built on any ground a nation holds, level by level, and cost upkeep to man', () => {
     const g = grand(3, 'GER');
+    // (1.5.1: the start guns stand at Berlin, the Ruhr and Bohemia, and the ledger's line counts every level Germany holds; this test counts from bare ground)
+    for (const k of Object.keys(g.flags)) if (k.startsWith('wk:aa:')) delete g.flags[k];
     rich(g, 'GER');
     const r = g.byName['Hamburg'];
     const before = upkeepTotal(g, 'GER');
@@ -388,6 +396,9 @@ describe('ships and shipyards', () => {
     expect(yardLevel(g, port)).toBe(1);
     expect(offer(g, 'POL', 'ship:dd').why).toBeNull();
     expect(offer(g, 'POL', 'ship:ca').why).toMatch(/level 2/);
+    // (Ruling 235: a smaller navy lays down a battleship only on a great power's plans, and then only in a great yard.)
+    expect(offer(g, 'POL', 'ship:bb').why).toMatch(/great powers/);
+    expect(grantPlans(g, 'POL', 'bb', 'GER', 'taken')).toBe(true);
     expect(offer(g, 'POL', 'ship:bb').why).toMatch(/level 3/);
     expect(orderOffer(g, 'POL', 'ship:bb')).toBeNull();
     arrive(g, 'POL', orderOffer(g, 'POL', 'work:yard', port.id));
@@ -496,7 +507,8 @@ describe('ordering', () => {
     for (let t = 0; t < 30; t++) runTurnAI(g);
     for (const [id, n] of Object.entries(g.nations)) {
       expect(Number.isFinite(n.pp), id).toBe(true);
-      for (const b of n.queue) expect(['corps', 'fort', 'work', 'civic']).toContain(b.what);
+      // (Ships and wings too since rulings 68(b) and 70(a): a computer staff has a programme of its own, programme-68.test.ts.)
+      for (const b of n.queue) expect(['corps', 'fort', 'work', 'civic', 'ship', 'air']).toContain(b.what);
     }
     for (const k of Object.keys(g.flags).filter((x) => x.startsWith('wk:aa:'))) expect(g.flags[k]).toBeLessThanOrEqual(3);
     expect(PRODUCTION.builds.art).toBeUndefined();

@@ -3,7 +3,7 @@
 // junctions by day or night, against the armies on a live front, and fighters for the sky over it. A raid's losses
 // are counted by the record (ruling 227): in 1939 a quarter to well over half of the bombers that go without escort
 // into a strong patrol, and far fewer of those that are escorted. The historical scenarios keep the air war they always had.
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import airwar from '../data/campaign/airwar.json';
 import levels from '../data/campaign/difficulty.json';
 import { AIR, AIRWAR, airAI, airFleetsOf, airRange, airWar, assessAir, cover, fly, forecastAir, km } from '../src/campaign/air';
@@ -16,8 +16,8 @@ import type { AirFleet, AirReport, Game } from '../src/campaign/types';
 
 const grand = (human: string | null = 'FRA', level = 'colonel', seed = 3): Game => { const g = startOpen(createGame(seed, human)); setLevel(g, level); return g; };
 const R = AIRWAR.ai.raids;
-/** The bombers that flew a raid on land or on shipping: strikes on a fleet or a harbour are the sea staff's, with rules of their own (carriers.test.ts). */
-const bombers = (r: AirReport): number => (r.mission === 'fleet' || r.mission === 'harbour' ? 0 : r.att.reduce((s, x) => s + x.bmr, 0));
+/** The bombers that flew a raid on land: strikes on a fleet, a harbour or shipping at sea are the sea staff's, with rules of their own (carriers.test.ts, air-staff-52.test.ts). */
+const bombers = (r: AirReport): number => (r.mission === 'fleet' || r.mission === 'harbour' || r.mission === 'strike' ? 0 : r.att.reduce((s, x) => s + x.bmr, 0));
 /** Plays so many months with the player giving no orders, and returns the raids flown in them. */
 function months(g: Game, n: number): AirReport[] {
   const from = g.airReports.length;
@@ -159,6 +159,9 @@ describe('what a raid costs in the grand campaign', () => {
 });
 
 describe('the computer\'s air staff', () => {
+  // (Release 1.5's staff doctrine, with the fight back off (airwar.json ai.back): the fight back has its own tests, air-fight-back.test.ts.)
+  beforeAll(() => { AIRWAR.ai.back!.on = false; });
+  afterAll(() => { AIRWAR.ai.back!.on = true; });
   it('flies raids of its own at every level, at once, and the groups that went are away for the month', () => {
     for (const id of ['cadet', 'captain', 'colonel', 'general', 'marshal']) {
       const g = grand('FRA', id);
@@ -176,13 +179,14 @@ describe('the computer\'s air staff', () => {
           const f = g.airFleets.find((y) => y.id === x.id)!;
           expect(f.flew).toBe(g.turn);
           expect(f.mission).toBe(r.mission);
-          expect(f.target).toBe(r.region);
+          // (A strike at sea is aimed at a sea, ruling 52: its target is the sea's own number.)
+          expect(f.target).toBe(r.region >= 0 ? r.region : r.zone);
         }
       }
       // No group flies twice, and the staff does not hit one place twice in a month.
       const flew = raids.flatMap((r) => r.att.map((x) => x.id));
       expect(new Set(flew).size).toBe(flew.length);
-      expect(new Set(raids.map((r) => r.region)).size).toBe(raids.length);
+      expect(new Set(raids.map((r) => `${r.region}:${r.zone}`)).size).toBe(raids.length);
       // The rest stay on patrol, and a second call in the month sends nobody else out on a second raid.
       expect(airFleetsOf(g, 'GER').filter((f) => f.flew !== g.turn).every((f) => f.mission === 'support')).toBe(true);
       const n = raids.length;

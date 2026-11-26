@@ -4,18 +4,21 @@
     "effects": "'field' raises one of the eight branches of research.json by a level for good, worth that branch's 'per' wherever the branch counts (tanks, infantry weapons, doctrine, fighters, bombers, navy, radar, war production). 'unlock' lists the orders that cannot be placed without the technology ('corps:arm', 'corps:mot', 'ship:cv', 'para'). 'slots' adds research teams. 'winterKit' ends the eastern winter's penalty for the nation's troops. 'sealift' adds shipping for that many more corps a month. 'attack', 'defence' with 'when', 'drafts', 'cost', 'fleet' and 'seaLoss' work exactly as they do for a national ability in traits.json.",
     "start": "What each nation has researched when the war begins. A campaign begun in a later year gives every nation the months of research in between, chosen as its own staff would.",
     "slots": "Research teams each nation begins with.",
+    "spy": "Ruling 235's rider b542 (Brian, 18 November: a smaller nation's 'tech tree is more around spying efforts'). Every nation but the seven great powers (arsenal.json plans.great) has 'spyTeams' more teams, its secret service's laboratory, that work the Intelligence branch alone; its other teams keep to the rest of the tree, and a computer nation's spy team takes the branch in order. A player's great power may research the branch with its own teams; a computer great power does not. A technology's 'spy' is what it does for the nation's agents (intel.ts): 'caught' multiplies the chance of being caught, 'rest' takes months off the time an agent lies low after an attempt (never below one; a journey is already a single month), 'theft' adds to the chance a theft of plans comes off, 'agents' adds to how many the service can run, 'guard' adds to the chance its guards stop a plot. Four technologies (arsenal.json plans.techs) a smaller nation cannot research: it gains them with a great power's plans.",
     "units": "Formations the tree unlocks beyond the ordinary kinds: 'para' is an airborne corps, raised like infantry, 'most' at once in the field and on order.",
     "ai": "How a computer-run nation chooses: the lowest of step times 'tier', plus the branch's place in its order of preference times 'branch', plus 'early' for every year a technology is ahead of its time, less 'teams' for one that adds a research team, less 'guns' for Anti-tank guns while it is at war with an army that has tanks, plus 'later' for one in 'skip' (what a computer-run nation has no use for, taken only when nothing else is open), less 'fuel' for one that makes oil while the nation's stock of it is running down (the months in resources.json), less 'winter' for winter equipment when the advisers are the player's own and a winter in the east is in sight (Version 67: he is at war with the Soviet Union or his ground touches Soviet ground and he is no ally; a computer-run nation keeps history's order). 'order' is each nation's preference among the branches."
   },
   "months": [0, 5, 8, 11, 14],
   "early": 0.5,
   "slots": { "_default": 1, "GER": 2, "UK": 2, "FRA": 2, "SOV": 2, "ITA": 2, "USA": 2 },
+  "spyTeams": 1,
   "branches": [
     { "id": "land", "label": "Land", "text": "Tanks, guns and the infantry's weapons." },
     { "id": "air", "label": "Air", "text": "Fighters, bombers and the radar that guides them." },
     { "id": "naval", "label": "Naval", "text": "Fleets, convoys and landings from the sea." },
     { "id": "industry", "label": "Industry", "text": "Factories, manpower and the laboratories themselves." },
-    { "id": "doctrine", "label": "Doctrine", "text": "How the army is taught to fight." }
+    { "id": "doctrine", "label": "Doctrine", "text": "How the army is taught to fight." },
+    { "id": "intel", "label": "Intelligence", "text": "Agents, their cover and the theft of the great powers' plans." }
   ],
   "eras": ["", "Before the war", "1940 to 1941", "1942 to 1943", "1944 to 1945"],
   "techs": [
@@ -68,7 +71,12 @@
     { "id": "winterkit", "branch": "doctrine", "tier": 3, "year": 1942, "needs": [], "name": "Winter equipment", "text": "Padded uniforms, felt boots, oils that do not freeze and engines that start in the cold.", "winterKit": true },
     { "id": "combined", "branch": "doctrine", "tier": 3, "year": 1942, "needs": ["mobile", "staff"], "name": "Battle groups", "text": "Tanks, infantry, guns and engineers put together for the task in hand under whoever is on the spot.", "field": "doctrine" },
     { "id": "amphibious", "branch": "doctrine", "tier": 3, "year": 1943, "needs": ["landingcraft"], "name": "Amphibious assault", "text": "Navy, army and air force rehearsed to one timetable, from the bombardment to the beach.", "attack": 1.2, "when": { "landing": true } },
-    { "id": "deep", "branch": "doctrine", "tier": 4, "year": 1944, "needs": ["combined"], "name": "Deep operations", "text": "Whole armies fed through a breach one behind another, aimed at what lies far behind the front.", "field": "doctrine" }
+    { "id": "deep", "branch": "doctrine", "tier": 4, "year": 1944, "needs": ["combined"], "name": "Deep operations", "text": "Whole armies fed through a breach one behind another, aimed at what lies far behind the front.", "field": "doctrine" },
+    { "id": "agents", "branch": "intel", "tier": 1, "year": 1939, "needs": [], "name": "Trained agents", "text": "Schools for the service's people: tradecraft, wireless and the habits that keep an agent alive.", "spy": { "caught": 0.85 } },
+    { "id": "cover", "branch": "intel", "tier": 2, "year": 1940, "needs": ["agents"], "name": "Cover identities", "text": "Papers, trades and histories ready made. After an attempt an agent becomes someone else and is back at work a month sooner.", "spy": { "rest": 1 } },
+    { "id": "microfilm", "branch": "intel", "tier": 2, "year": 1941, "needs": ["agents"], "name": "Microfilm", "text": "A drawing office's plans photographed in an hour and carried out in a matchbox.", "spy": { "theft": 0.1 } },
+    { "id": "couriers", "branch": "intel", "tier": 3, "year": 1942, "needs": ["cover"], "name": "Courier networks", "text": "Safe houses and couriers across the frontiers: the service can run more people abroad.", "spy": { "agents": 1 } },
+    { "id": "counterintel", "branch": "intel", "tier": 3, "year": 1942, "needs": ["agents"], "name": "Counter-intelligence", "text": "Watchers, informers and a card index of every foreigner: the other side's saboteurs are found sooner.", "spy": { "guard": 0.1 } }
   ],
   "start": {
     "GER": ["tanks", "motor", "monoplanes", "mediumbombers", "staff", "airborne", "machinetools", "fleetsubs"],

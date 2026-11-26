@@ -25,6 +25,7 @@ describe('the sentence on the railway\'s row', () => {
   it('says no guns guard the line, and what guns of each level stop', () => {
     const g = grand();
     const berlin = g.byName['Berlin'];
+    guns(g, berlin, 0); // (1.5.1: the start guns stand at Berlin, Germany's capital; this test needs bare ground)
     expect(onNet(berlin.id)).toBe(true);
     expect(guardSays(g, berlin.id)).toMatchObject({ level: 0, coming: 0, ready: null, stops: 0, line: 'No guns guard the railway here.' });
     guns(g, berlin, 1);
@@ -73,6 +74,7 @@ describe('GUARD THE LINE: the build page\'s order by a second door', () => {
   it('offers level 1 where no guns stand, at the build page\'s own cost and months', () => {
     const g = grand();
     const berlin = g.byName['Berlin'];
+    guns(g, berlin, 0); // (1.5.1: the start guns stand at Berlin, Germany's capital; this test needs bare ground)
     g.nations.GER.pp = 500;
     const o = offers(g, 'GER', berlin.id).find((x) => x.key === 'work:aa')!;
     expect(guardSays(g, berlin.id)!.order).toEqual({ head: 'Guard the line', text: 'build level 1 guns', level: 1, cost: o.cost, months: o.months, why: null, poor: false });
@@ -83,6 +85,7 @@ describe('GUARD THE LINE: the build page\'s order by a second door', () => {
   it('is one order with two doors: placed from the build page it shows on the railway, building and then standing', () => {
     const g = grand();
     const berlin = g.byName['Berlin'];
+    guns(g, berlin, 0); // (1.5.1: the start guns stand at Berlin, Germany's capital; this test needs bare ground)
     g.nations.GER.pp = 500;
     const b = orderArsenal(g, 'work:aa', berlin.id)!;
     expect(b).toMatchObject({ what: 'work', item: 'aa', region: berlin.id, eta: g.turn + 2 });
@@ -115,6 +118,7 @@ describe('GUARD THE LINE: the build page\'s order by a second door', () => {
   it('says why where the treasury cannot cover it, and offers nothing on an ally\'s ground', () => {
     const g = grand();
     const berlin = g.byName['Berlin'];
+    guns(g, berlin, 0); // (1.5.1: the start guns stand at Berlin, Germany's capital; this test needs bare ground)
     g.nations.GER.pp = 0;
     expect(guardSays(g, berlin.id)!.order).toMatchObject({ head: 'Guard the line', why: 'The treasury cannot cover it.', poor: true });
     expect(guardSays(g, berlin.id, 'ITA')!.order).toBeNull();
@@ -126,6 +130,7 @@ describe('the guard signs beside the track', () => {
   it('gives the guarded stretches alone for the lit railways, and every stretch for a route under the pointer', () => {
     const g = grand();
     const berlin = g.byName['Berlin'], saxony = g.byName['Saxony'], hamburg = g.byName['Hamburg'];
+    guns(g, berlin, 0); // (1.5.1: the start guns stand at Berlin, Germany's capital; this test needs bare ground)
     const none = g.regions.find((r) => !onNet(r.id))!;
     guns(g, saxony, 2);
     const route = [berlin.id, saxony.id, hamburg.id, none.id, saxony.id];
@@ -190,6 +195,7 @@ describe('a line cut by bombing says whether guns stood there', () => {
   it('with the order following the cut: guns can be ordered while the line lies broken', () => {
     const g = grand();
     const berlin = g.byName['Berlin'];
+    guns(g, berlin, 0); // (1.5.1: the start guns stand at Berlin, Germany's capital; this test needs bare ground)
     g.nations.GER.pp = 500;
     expect(cutRail(g, berlin.id, 'bombed', 'UK')).toBe(true);
     expect(guardSays(g, berlin.id)!.order).toMatchObject({ head: 'Guard the line', why: null });

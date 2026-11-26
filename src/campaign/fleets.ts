@@ -12,16 +12,17 @@ import type { TicketLine } from '../core/ticket';
 import fleetData from '../../data/campaign/fleets.json';
 import { AIRWAR, carrierRules, raid as stopOutput } from './air';
 import { bareBrief, bareLine, bareOf, deckWorth, fleetKnown, moveWings, seaPicture, wingCards, wingShare, wingsAshore, type WingCard } from './carriers';
-import { allied, atWar, headline, routineNews } from './game';
+import { allied, atWar, headline, routineNews, worksFor } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
-  CLASSES, FLEETS, NAVY, atSea, escort, fit, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, laneLoss, quality, screenGap, seaRng,
+  CLASSES, FLEETS, NAVY, atSea, escort, fit, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, keptByHand, laneLoss, openFleetRows, quality, screenGap, seaRng,
   sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
 } from './navy';
 import { lanesTo } from './resources';
 import { SIEGE, besieged, besiegerOf, breachOf, hitTown, planTownHit, siegeRules, siegeView, townHeld, townHitText, townShare, type TownHit } from './siege';
 import { townName } from './towns';
 import type { Corps, Fleet, Game, Region, ShipClass, Ships, ShoreReport, Stance } from './types';
+import { skyAtSea, skyBattleLine, zoneOfSea } from './weather';
 
 // Read straight from the data, so that nothing here depends on the order the modules are loaded in.
 const B = (fleetData as unknown as typeof FLEETS).bombard;
@@ -82,6 +83,8 @@ export interface FleetCard {
   bare: string;
   /** The same line in few words, for a card with one short line. */
   bareBrief: string;
+  /** Weather (ruling 143(e)): at sea under a closed sky, "The sky is closed over the North Sea this month: no aircraft will fly for either side." Only then. */
+  sky?: string;
 }
 
 const gunsRaw = (s: Ships): number => CLASSES.reduce((n, c) => n + s[c] * B.guns[c], 0);
@@ -122,6 +125,7 @@ export function fleetCard(g: Game, f: Fleet): FleetCard {
     wings: wingCards(g, f), decks: wingShare(g, f),
     aboard: wingCards(g, f).reduce((s, w) => s + w.aircraft, 0), deckRoom: wingCards(g, f).reduce((s, w) => s + w.est, 0) + bareOf(f, 'ftr') + bareOf(f, 'bmr'),
     ashore: wingsAshore(g, f.id).map((w) => ({ id: w.id, name: w.name, kind: w.kind === 'bmr' ? 'bmr' as const : 'ftr' as const, label: w.kind === 'bmr' ? 'Strike aircraft' : 'Carrier fighters', at: g.regions[w.base].name, aircraft: w.ftr + w.bmr })), bare: bareLine(g, f), bareBrief: bareBrief(g, f),
+    ...(atSea(f) && skyAtSea(g, f.zone) === 'closed' ? { sky: skyBattleLine(g, zoneOfSea(g, f.zone), `the ${g.seas[f.zone].name}`)! } : {}),
   };
 }
 
@@ -340,7 +344,7 @@ export function planBombard(g: Game, f: Fleet, r: Region, what?: ShoreTarget, vi
   const town = siegeRules(g) && townHeld(g, r) ? planTownHit(g, r, 'shell', townShare('shell', guns)) : null;
   const total = g.regions.reduce((s, x) => s + (x.ctrl === r.ctrl ? x.fac : 0), 0);
   const output = r.fac > 0 ? Math.min(B.city.max, guns / B.city.scale) : 0;
-  const fort = r.fort?.lv ?? 0;
+  const fort = r.fort && worksFor(g, r, r.ctrl) ? r.fort.lv : 0;
   const plan: ShorePlan = {
     why: whyNotBombard(g, f, r, what ?? (can.troops || can.city || can.town ? pick : undefined), viewer), fleet: f.id, region: r.id, what: pick, can, town, guns,
     cut: shellCut(r, foes, guns), corps: foes.length, divs: foes.reduce((s, c) => s + c.divs, 0),
@@ -469,6 +473,8 @@ export function detach(g: Game, f: Fleet, take: Partial<Ships>, name?: string): 
   };
   if (f.stance === 'escort' && f.lane !== undefined) sq.lane = f.lane;
   if (f.shelled !== undefined) sq.shelled = f.shelled;
+  // A squadron split from a fleet that attacked this month has attacked with it (the 1.5.1 patch, fleetattack.ts).
+  if (f.attacked !== undefined) sq.attacked = f.attacked;
   if (f.seen) sq.seen = { ...f.seen };
   if (f.struck) sq.struck = [f.struck[0], f.struck[1], f.struck[2]];
   g.fleets.push(sq);
@@ -496,6 +502,7 @@ export function merge(g: Game, a: Fleet, b: Fleet): boolean {
   for (const c of CLASSES) { b.ships[c] += a.ships[c]; b.lost[c] += a.lost[c]; }
   if (!b.admiral && a.admiral) b.admiral = a.admiral;
   if (a.shelled !== undefined && (b.shelled ?? -1) < a.shelled) b.shelled = a.shelled;
+  if (a.attacked !== undefined && (b.attacked ?? -1) < a.attacked) b.attacked = a.attacked;
   b.fought = Math.max(b.fought, a.fought);
   for (const [k, t] of Object.entries(a.seen ?? {})) if ((b.seen?.[k] ?? -99) < t) (b.seen ??= {})[k] = t;
   if (a.struck && (!b.struck || b.struck[0] < a.struck[0] || (b.struck[0] === a.struck[0] && b.struck[1] < a.struck[1]))) b.struck = [a.struck[0], a.struck[1], a.struck[2]];
@@ -512,10 +519,12 @@ export const mergeTargets = (g: Game, f: Fleet): Fleet[] => g.fleets.filter((x) 
 
 /**
  * At the opening of a grand campaign the commands tied to a station on their own side's shipping lane are already
- * sailing with the convoys. This covers the player's navy too, which no computer admiral orders about.
+ * sailing with the convoys. This covers the player's navy too, which no computer admiral orders about. First the
+ * fleets already formed take what their rows say for the grand campaign (Force H's beat, ruling 233 rider b564).
  */
 export function openEscorts(g: Game): void {
   if (!seaWar(g)) return;
+  openFleetRows(g);
   for (const f of g.fleets) {
     if (!f.tied || !atSea(f) || f.stance !== 'patrol') continue;
     const rt = seaRoutes(g).find((r) => r.zones.includes(f.zone) && (r.to === f.nat || allied(g, r.to, f.nat)) && whyNotEscort(g, f, r.id) === null);
@@ -551,8 +560,9 @@ export function shoreAI(g: Game, nat: string): void {
       continue;
     }
     // A fleet lying in harbour with the guns for it puts to sea for the month to shell such a coast, but only into
-    // a sea where its side would be much the stronger with it there. Raiders keep to their own work.
-    if (f.duty === 'raid' || !(FLEETS.ai.sortie > 0)) continue;
+    // a sea where its side would be much the stronger with it there. Raiders keep to their own work, and a fleet the
+    // player keeps in harbour by his own order stays there (1.5.1).
+    if (f.duty === 'raid' || !(FLEETS.ai.sortie > 0) || keptByHand(g, f)) continue;
     const mine = fleetPower(g, f);
     let at = -1, best: Region | null = null, bv = 0;
     for (const z of fleetReach(g, f)) {

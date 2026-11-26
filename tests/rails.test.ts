@@ -319,7 +319,8 @@ describe('the railhead', () => {
   function fromBerlin(): { g: Game; d: Int16Array } {
     const g = grand();
     ensureSupply(g);
-    const ok = g.supply.GER, berlin = g.byName['Berlin'];
+    // A copy: the picture computeSupply hands out may be kept for its next call, and is never written into.
+    const ok = (g.supply.GER = Uint8Array.from(g.supply.GER)), berlin = g.byName['Berlin'];
     for (let i = 0; i < ok.length; i++) if (ok[i] === 2) ok[i] = 1;
     ok[berlin.id] = 2;
     sever(g, berlin);
@@ -383,6 +384,8 @@ describe('the railhead', () => {
     expect(from, 'a frontier province far from Berlin').toBeDefined();
     const target = g.regions[from.nb.find((j) => g.regions[j].ctrl === 'POL')!];
     clear(from); clear(target);
+    // (Both towns' guards are spent, so the corps alone defend: a guard beside them (ruling 232) needs no railway.)
+    g.flags[`guard:${from.id}`] = 100; g.flags[`guard:${target.id}`] = 100;
     const a = corps(g, 'GER', 'inf', from), p = corps(g, 'POL', 'inf', target);
     const far = assess(g, [a], target).A;
     expect(line(g, [a], target, 'Railhead')).toEqual([`Attackers as far as ${d[from.id]} provinces by road beyond their nearest working railway. Attack cut to as little as ${Math.round(RAILWAYS.railhead[1][1] * 100)}% until engineers bring the line forward`]);

@@ -15,22 +15,25 @@
 // standing orders; raidKinds(), raidTargets() and planRaid() are the planner; launchRaid() flies it; scout()
 // is a reconnaissance flight; groupBases() says where a group could move. The engine is air.ts.
 
+import type { FoughtAir } from './airfought';
 import { tenthPct } from '../core/math';
 import { Rng, hashString } from '../core/rng';
 import type { TicketLine } from '../core/ticket';
 import type { AirFleet, AirMission, AirReport, Game } from './types';
 import {
-  AIR, AIRWAR, afloat, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, cover, crowding,
-  fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, whyNotBase, whyNotMission, whyNotShipAir,
+  AIR, AIRWAR, CLOSE, afloat, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding,
+  fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, smallOn, whyNotBase, whyNotMission, whyNotShipAir,
 } from './air';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
-import { DEFENCE, allied, atWar, headline, worksOf } from './game';
+import { DEFENCE, allied, atWar, headline, placeName, placeOwns, worksOf } from './game';
 import { SIGHT, corpsKnown, sightOf } from './intel';
 import { CLASSES, NAVY, atSea, shipList, surfaceShips } from './navy';
 import { airfieldOpenTo } from './prizes';
 import { onNet, railCut, railsAt } from './rails';
 import { besiegerOf, siegeRules, siegeView, townHeld, townHitText, type TownHit } from './siege';
 import { townName } from './towns';
+import { forecastLine, grounded, skyOf, skyRaidLine, weatherOn, whyNotSky, zoneName, zoneOfGroup, zoneOfRegion } from './weather';
+import { whyNotField, wrecked } from './airversion';
 
 export type RaidKind = 'bomb' | 'night' | 'ground' | 'line' | 'town' | 'superiority' | 'strike' | 'fleet' | 'harbour' | 'recon';
 
@@ -47,8 +50,10 @@ function placeOf(g: Game, kind: RaidKind, target: number, viewer: string | null 
     if (!t) return 'a fleet';
     return fleetKnown(g, t, viewer) === 'exact' ? `the ${t.name}` : `${g.nations[t.nat].adj} ships in the ${g.seas[t.zone].name}`;
   }
-  if (kind === 'harbour') return `the harbour of ${g.regions[target]?.name ?? ''}`;
-  if (kind === 'town') return g.regions[target] ? `the defences of ${townName(g.regions[target])}` : '';
+  // (The place with its article: "the harbour of the Highlands", the UI director, 25 November 2026, 15:04Z.)
+  if (kind === 'harbour') { const p = g.regions[target]?.name ?? ''; return /\bHarbou?r$/.test(p) ? p : `the harbour of ${placeName(p)}`; }
+  // (The town with its article where the map's list gives it one: "the defences of the Ohio Valley", 15:42Z.)
+  if (kind === 'town') return g.regions[target] ? `the defences of ${placeName(townName(g.regions[target]))}` : '';
   return g.regions[target]?.name ?? '';
 }
 /** The kind of raid a group's orders are, for naming what it flew against. */
@@ -178,6 +183,8 @@ export interface GroupRow {
   /** The share of it that can fly from its airfield: under 1 where the field is crowded. */
   crowd: number;
   mine: boolean;
+  /** Weather (ruling 143): only when the sky over its airfield is closed, why it is grounded and next month's chances. */
+  sky?: string[];
 }
 
 /** The bomber group a fighter group is ordered to stick with, if that group still flies. */
@@ -192,23 +199,29 @@ export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human):
   const deck = afloat(f), at = groupAt(g, f);
   const fleet = deck ? carrierOf(g, f) : f.ashore !== undefined ? g.fleets.find((c) => c.id === f.ashore) ?? null : null;
   const own = f.nat === viewer;
-  const doing = away ? `Flew against ${place} this month: back ${deck ? 'aboard' : 'at its airfield'} next month`
-    : isOffensive(f.mission) ? `Ordered against ${place}: flies when the month ends`
+  // (The place with its article, as the campaign's line says it: "Ordered against the Midlands". The UI director,
+  // 25 November 2026, 14:06Z.)
+  const doing = away ? `Flew against ${placeName(place)} this month: back ${deck ? 'aboard' : 'at its airfield'} next month`
+    : isOffensive(f.mission) ? `Ordered against ${placeName(place)}: flies when the month ends`
     : f.mission === 'rest' ? 'Resting and refitting'
     : kind === 'bmr' ? (deck ? 'Ranged on deck, ready for a strike' : 'Supporting the armies, and ready for a raid')
+    // (Ground support, air.json 'close': it is held for the armies and meets no raid, so its row must not say it is on patrol.)
+    : f.close && !deck ? 'On ground support: on call over its own side\'s battles within its reach, and meets no raid'
     : with_ ? `On patrol, and sticking with the ${with_.name} as its escort`
-    : deck ? (fleet && !atSea(fleet) ? `In harbour at ${fleet.port}: on patrol over its fleet` : 'On patrol over its fleet: meets any raid on the ships in its sea') : 'On patrol: meets any raid within its reach';
+    : deck ? (fleet && !atSea(fleet) ? `In harbour at ${placeName(fleet.port)}: on patrol over its fleet` : 'On patrol over its fleet: meets any raid on the ships in its sea') : 'On patrol: meets any raid within its reach';
   return {
     id: f.id, nat: f.nat, name: f.name, command: f.parent && f.parent !== f.name ? f.parent : '', kind,
     ftr: f.ftr, bmr: f.bmr, aircraft: f.ftr + f.bmr, est: f.est.ftr + f.est.bmr, ready: f.ready,
     leader: f.leader?.name ?? null, level: f.leader?.level ?? 0, base: deck ? -1 : f.base, baseName: homeName(g, f),
     port: deck && fleet && !atSea(fleet) ? fleet.base : -1, ashore: f.ashore ?? -1, fleetName: f.ashore !== undefined ? fleet?.name ?? '' : '',
-    where: deck ? `Aboard the ${homeName(g, f)}` : f.ashore !== undefined ? `Ashore at ${g.regions[f.base].name}` : `At ${g.regions[f.base].name}`,
+    where: deck ? `Aboard the ${homeName(g, f)}` : f.ashore !== undefined ? `Ashore at ${placeName(g.regions[f.base].name)}` : `At ${placeName(g.regions[f.base].name)}`,
     wingMove: !own ? null : deck ? { order: 'ashore', price: PRICE_ASHORE, why: whyNoShore(g, f) } : f.ashore !== undefined ? { order: 'aboard', price: PRICE_ABOARD, why: whyNoDeck(g, f) } : null,
     ship: f.ship ?? -1, sea: at.sea, x: at.x, y: at.y,
     doing, job: away || isOffensive(f.mission) ? 'raid' : f.mission === 'rest' ? 'rest' : with_ ? 'escort' : 'patrol',
     escorts: with_ ? with_.id : -1, flew: f.flew === g.turn, scouted: f.scouted === g.turn,
     range: kind === 'bmr' ? R.bmr : kind === 'ftr' ? R.ftr : Math.max(R.ftr, R.bmr), crowd: crowding(g, f), mine: f.nat === viewer,
+    // Weather (ruling 127, 143): a grounded group's card says why, and next month's chances.
+    ...(grounded(g, f) ? { sky: [whyNotSky(g, f, -1)!, forecastLine(g, zoneOfGroup(g, f), g.turn + 1, 'Next month')] } : wrecked(g, f) ? { sky: [whyNotField(g, f)!] } : {}),
   };
 }
 
@@ -240,7 +253,7 @@ export function airfieldCard(g: Game, region: number, viewer: string | null = g.
   const build = built < E
     ? `An engineer corps standing here can ${field ? 'enlarge it' : 'lay one out'} in a month, as far as ${E} levels built. The treasury builds larger ones from the arsenal.`
     : 'It is as large as field engineers can make it. The treasury builds larger ones from the arsenal.';
-  if (!field) return { region, name: r.name, field: null, note: `There is no airfield at ${r.name}: no aircraft can be based here.`, build, aboard: '', hidden: false, rows: [] };
+  if (!field) return { region, name: r.name, field: null, note: `There is no airfield at ${placeName(r.name)}: no aircraft can be based here.`, build, aboard: '', hidden: false, rows: [] };
   const hidden = field.groups < 0;
   const rows = hidden ? [] : g.airFleets.filter((f) => f.base === region && !afloat(f) && flying(f)).map((f) => groupRow(g, f, viewer));
   const used = rows.reduce((s, x) => s + x.aircraft, 0);
@@ -267,7 +280,7 @@ export function groupJobs(g: Game, id: number, nat: string | null = g.human): Gr
   const f = mine(g, id, nat);
   if (!f) return [];
   const R = airRange(f, g), kind = kindOf(f);
-  const deck = carrierOf(g, f), home = deck ? `the ${deck.name}` : g.regions[f.base].name;
+  const deck = carrierOf(g, f), home = deck ? `the ${deck.name}` : placeName(g.regions[f.base].name);
   const away = f.flew === g.turn && isOffensive(f.mission);
   const gone = away ? `It has flown its raid this month, and is back ${deck ? 'aboard' : 'at its airfield'} next month.` : null;
   const out: GroupJob[] = [];
@@ -287,7 +300,7 @@ export function groupJobs(g: Game, id: number, nat: string | null = g.human): Gr
         forecast: `Meets any raid on the ships in the sea its fleet is in or the harbour it lies in, and any raid on troops on coasts within ${num(R.ftr)} km of it. It also keeps the enemy's coastal bombers off the fleet month by month. About ${num(f.ftr)} fighters can go up.`,
       }
       : {
-        key: 'patrol', label: 'Patrol the sky', on: idle && !with_, why: gone,
+        key: 'patrol', label: 'Patrol the sky', on: idle && !with_ && !f.close, why: gone,
         forecast: `Meets any raid within ${num(R.ftr)} km of ${home}, at full effect to ${far}: on troops and ships anywhere in that reach, and on the towns and works of ${plural(under, 'province')} it guards. About ${num(f.ftr * crowding(g, f))} fighters can go up.`,
       });
     const bombers = airFleetsOf(g, f.nat).filter((b) => b.id !== f.id && kindOf(b) !== 'ftr' && b.bmr > 0 && apart(g, f, b) <= R.ftr);
@@ -303,6 +316,12 @@ export function groupJobs(g: Game, id: number, nat: string | null = g.human): Gr
     }
     if (!bombers.length) out.push({ key: 'escort', label: 'Escort a bomber group', on: false, why: `No bomber group is based within ${num(R.ftr)} km of ${home}. Fighters can still be picked for any raid when it is planned.`, forecast: '' });
   }
+  // Close air support (Brian's ask of 2026-11-18, air.json 'close'): a land fighter group flies over its own side's
+  // battles in reach, in place of meeting raids and escorting.
+  if (closeRules(g) && kind !== 'bmr' && !deck) out.push({
+    key: 'close', label: 'Ground support', on: idle && !!f.close, why: gone,
+    forecast: `Flies over your own battles within ${num(R.ftr)} km of ${home}, at full effect to ${far}, strafing and bombing the enemy's troops: one battle a week, and only while its readiness is ${pct(CLOSE.least)} or more. Each battle costs it ${pct(CLOSE.ready)} readiness and some of its aircraft, twice as many where the enemy holds the sky. While it does this it is off air defence: it meets no raid and escorts no bomber.`,
+  });
   const R2 = AIR.ready;
   out.push({ key: 'rest', label: 'Rest and refit', on: f.mission === 'rest', why: null, forecast: deck
     ? `Stands down: it regains ${pct(R2.rest)} readiness a month in place of ${pct(R2.support)}. It does not fly, and does not meet raids. New aircraft come aboard only while the fleet lies in harbour.`
@@ -310,12 +329,29 @@ export function groupJobs(g: Game, id: number, nat: string | null = g.human): Gr
   return out;
 }
 
-/** Gives one of a nation's air groups its standing order: 'patrol', 'escort:<bomber group id>' or 'rest'. */
+/**
+ * Why a group on a standing bombing campaign has no raid of its own to pick (the playtester's finding 4 of 1.5.1; the UI
+ * director's words, 25 November 2026, 05:45Z): it flies with the campaign by night or by day, and the standing order
+ * that frees it is named by its button and its row as the group's page shows them ('Support the armies', or for a
+ * carrier wing 'Stand ready for a strike'). Null for any other group.
+ */
+export function campaignWhy(g: Game, id: number, nat: string | null = g.human): string | null {
+  const f = mine(g, id, nat);
+  if (!f || f.flew === g.turn || (f.mission !== 'night' && f.mission !== 'bomb')) return null;
+  const place = placeOf(g, 'bomb', f.target, nat);
+  const free = groupJobs(g, id, nat).find((j) => j.key === 'patrol');
+  if (!place || !free) return null;
+  return `It flies with the ${f.mission === 'night' ? 'night' : 'day'} campaign over ${placeName(place)}. To give it a raid of its own, first press GIVE THIS ORDER on '${free.label}', which takes it out of the campaign.`;
+}
+
+/** Gives one of a nation's air groups its standing order: 'patrol', 'escort:<bomber group id>', 'close' (ground support, where its switch is on) or 'rest'. */
 export function setGroupJob(g: Game, id: number, key: string, nat: string | null = g.human): boolean {
   const f = mine(g, id, nat);
   const job = f ? groupJobs(g, id, nat).find((j) => j.key === key) : undefined;
   if (!f || !job || job.why) return false;
-  if (key === 'rest') { delete f.escorts; return setMission(g, f, 'rest'); }
+  if (key === 'rest') { delete f.escorts; delete f.close; return setMission(g, f, 'rest'); }
+  if (key === 'close') { delete f.escorts; f.close = true; return setMission(g, f, 'support'); }
+  delete f.close;
   if (key === 'patrol') delete f.escorts; else f.escorts = Number(key.split(':')[1]);
   return setMission(g, f, 'support');
 }
@@ -375,6 +411,8 @@ function whyNotSeat(g: Game, f: AirFleet, kind: RaidKind, target: number): strin
     const r = g.regions[target];
     if (!r) return 'Pick a province.';
     if (f.scouted === g.turn) return 'It has flown its reconnaissance this month.';
+    // Weather (ruling 127): no camera flies from or over a closed sky.
+    if (weatherOn(g)) { const why = whyNotSky(g, f, zoneOfRegion(g, target)); if (why) return why; }
     if (!atWar(g, f.nat, r.ctrl)) return 'Only ground held by a nation you are at war with is photographed.';
     const R = airRange(f, g);
     return kmTo(g, f, target) <= (f.bmr > 0 ? R.bmr : R.ftr) ? null : 'It is out of range.';
@@ -436,13 +474,22 @@ function reachable(g: Game, nat: string, kind: RaidKind): Map<number, AirFleet[]
   return out;
 }
 
+/** Weather (ruling 127): why nothing can fly at all when every group that could is under a closed sky, or null. */
+function allGrounded(g: Game, nat: string): string | null {
+  if (!weatherOn(g)) return null;
+  const fs = able(g, nat).filter((f) => f.flew !== g.turn);
+  if (!fs.length || !fs.every((f) => grounded(g, f))) return null;
+  const zs = [...new Set(fs.map((f) => zoneOfGroup(g, f)))];
+  return zs.length === 1 ? `Grounded this month: the sky is closed over ${zoneName(zs[0])}.` : 'Grounded this month: the sky is closed over every airfield you fly from.';
+}
+
 /** The planner's menu: every kind of raid, with the number of targets a group could still fly against this month. */
 export function raidKinds(g: Game, nat: string | null = g.human): RaidKindView[] {
   if (!airWar(g) || nat === null) return [];
   const peace = !g.nations[nat].atWar.length;
   return AIRWAR.raids.kinds.map((k) => {
     const n = peace ? 0 : reachable(g, nat, k.key as RaidKind).size;
-    return { key: k.key as RaidKind, label: k.label, short: k.short, blurb: k.blurb, targets: n, why: peace ? 'The nation is at peace.' : n ? null : 'No group that can still fly this month has a target in reach.' };
+    return { key: k.key as RaidKind, label: k.label, short: k.short, blurb: k.blurb, targets: n, why: peace ? 'The nation is at peace.' : n ? null : allGrounded(g, nat) ?? 'No group that can still fly this month has a target in reach.' };
   });
 }
 
@@ -563,7 +610,9 @@ export function raidTargets(g: Game, kind: RaidKind, nat: string | null = g.huma
     const flies = can.filter((f) => (lead < 0 ? needs !== 'bmr' || f.bmr > 0 : f.id === lead));
     const from = (flies.length ? flies : can).reduce((a, b) => (distTo(g, b, kind, t) < distTo(g, a, kind, t) ? b : a));
     const d = distTo(g, from, kind, t);
-    const far = Math.round(d) > 0 ? `${num(d)} km` : sea ? (from.ship !== undefined ? 'carriers in these waters' : 'based on these shores') : from.ship !== undefined ? 'carriers off this coast' : 'based at the target';
+    let far = Math.round(d) > 0 ? `${num(d)} km` : sea ? (from.ship !== undefined ? 'carriers in these waters' : 'based on these shores') : from.ship !== undefined ? 'carriers off this coast' : 'based at the target';
+    // Weather (ruling 127, 143): a target under cloud says so after its distance.
+    if (weatherOn(g) && skyOf(g, skyZone(g, kind as AirMission, t)) === 'cloud') far += ' · cloud';
     const known = quarry && fleetKnown(g, quarry, nat) !== 'exact' ? 'report' : 'exact';
     const name = kind === 'fleet' ? placeOf(g, kind, t, nat).replace(/^the /, '') : p.name;
     out.push({ id: t, sea, zone, known, name, holder: quarry ? quarry.nat : sea ? '' : g.regions[t].ctrl, x: p.x, y: p.y, km: d, far, groups: can.length, what: whatIsThere(g, nat, kind, t, sight) });
@@ -604,6 +653,11 @@ export interface RaidPlan {
   title: string;
   /** Why it cannot be flown as picked, or null. */
   why: string | null;
+  /**
+   * A fight for the sky sent with too few fighters over the target to hold any sky (release 1.5.2, airwar.json
+   * ai.back.small): the card's line that says so, with the figures. Left out otherwise.
+   */
+  tooFew?: string;
   /** Every group of the nation, those that can go first, nearest first. */
   seats: RaidSeat[];
   /** The groups going: the ones asked for that can, and the escorts ordered to stick with them. */
@@ -648,6 +702,8 @@ export interface RaidPlan {
   offPatrol: string;
   /** Bombing the line: the months the raid should take off the fieldworks there. */
   wear?: number;
+  /** Weather (ruling 127, 143): the card's one line for the sky over the target. Only in a campaign with weather. */
+  sky?: string;
 }
 
 export interface RaidFigures {
@@ -660,18 +716,24 @@ export interface RaidFigures {
 }
 
 const VERDICT: [number, string][] = [[0.8, 'Very likely to succeed'], [0.6, 'Likely to succeed'], [0.4, 'It could go either way'], [0.2, 'Likely to fail'], [0, 'Very likely to fail']];
+/**
+ * The same chance, worded for the fight alone, for a fight for the sky sent with too few fighters to hold any sky
+ * (release 1.5.2, airwar.json ai.back.small): its chance of success is the chance the fight costs the enemy more than
+ * it costs you, and the sky itself cannot be won on the numbers sent, so the words claim the fight and no more.
+ */
+const FIGHT_VERDICT: [number, string][] = [[0.8, 'Very likely to win the air fight'], [0.6, 'Likely to win the air fight'], [0.4, 'The air fight could go either way'], [0.2, 'Likely to lose the air fight'], [0, 'Very likely to lose the air fight']];
 
 function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeof forecastAir>, nat: string): string[] {
   const out: string[] = [];
   const place = placeOf(g, kind, target);
   if (kind === 'bomb' || kind === 'night') {
     const r = g.regions[target];
-    out.push(r.fac > 0 ? `Should stop about ${pct(fc.cut)} of ${place}'s output for a month: ${tenthPct(fc.nation)} of ${g.nations[r.ctrl].adj} production.` : `There is no industry at ${place}: the bombers go for its rail yards.`);
-    if (fc.rail) out.push(`About a ${pct(fc.rail)} chance of cutting the railway through ${place}, which stays cut until engineers relay it.`);
+    out.push(r.fac > 0 ? `Should stop about ${pct(fc.cut)} of ${placeOwns(place)} output for a month: ${tenthPct(fc.nation)} of ${g.nations[r.ctrl].adj} production.` : `There is no industry at ${placeName(place)}: the bombers go for its rail yards.`);
+    if (fc.rail) out.push(`About a ${pct(fc.rail)} chance of cutting the railway through ${placeName(place)}, which stays cut until engineers relay it.`);
     if (fc.ruin) out.push(`About a ${pct(fc.ruin)} chance of wrecking a factory outright.`);
   } else if (kind === 'superiority') {
     out.push(`Fighter odds ${fc.odds >= 9 ? 'overwhelming' : `${fc.odds.toFixed(1)} to 1`} going in. The sky is won when your fighters end the month with ${AIR.sky.win} times what the defender can still put up.`);
-    if (fc.cut > 0) out.push(`The air groups based at ${place} should lose about ${pct(fc.cut)} of their readiness, and aircraft on the ground.`);
+    if (fc.cut > 0) out.push(`The air groups based at ${placeName(place)} should lose about ${pct(fc.cut)} of their readiness, and aircraft on the ground.`);
   } else if (kind === 'strike') {
     out.push(`Warships caught at sea there could lose up to ${pct(fc.cut)} of their number, and merchant ships in those waters will be sunk.`);
   } else if (kind === 'fleet' || kind === 'harbour') {
@@ -687,12 +749,12 @@ function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeo
     const most = Math.max(0, ...g.regions[target].units.filter((u) => !u.dead && atWar(g, nat, u.nat)).map(worksOf));
     const took = Math.min(fc.cut, most), left = Math.max(0, most - fc.cut);
     out.push(took >= 0.05
-      ? `Should take about ${monthsOf(took)} off the fieldworks at ${place}, which would leave ${left < 0.05 ? 'nothing of them' : `${monthsOf(left)} of work in them`}. An army attacking this month meets that much less of a prepared line.`
-      : `Too few bombers would get through to break up the works at ${place}.`);
+      ? `Should take about ${monthsOf(took)} off the fieldworks at ${placeName(place)}, which would leave ${left < 0.05 ? 'nothing of them' : `${monthsOf(left)} of work in them`}. An army attacking this month meets that much less of a prepared line.`
+      : `Too few bombers would get through to break up the works at ${placeName(place)}.`);
     out.push('The men in the works are not hurt, and they dig the works back a month at a time: bomb in the month you attack.');
   } else if (kind === 'ground') {
     const dug = g.regions[target].units.some((u) => !u.dead && u.dug && atWar(g, nat, u.nat));
-    out.push(`The troops at ${place} should lose about ${pct(fc.cut)} of their organisation${dug ? ' (less where they are dug in)' : ''}, and some of their men and guns. They fight the weaker for it until they have rested: attack while it lasts.`);
+    out.push(`The troops at ${placeName(place)} should lose about ${pct(fc.cut)} of their organisation${dug ? ' (less where they are dug in)' : ''}, and some of their men and guns. They fight the weaker for it until they have rested: attack while it lasts.`);
   }
   return out;
 }
@@ -740,6 +802,13 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   if (!airWar(g) || nat === null) { plan.why = 'Raids are planned only in the grand campaign.'; return plan; }
   if (!(kind === 'strike' ? g.seas[target] : kind === 'fleet' ? quarry : g.regions[target])) { plan.why = kind === 'strike' ? 'Pick a sea.' : kind === 'fleet' ? 'Pick a fleet.' : 'Pick a province.'; return plan; }
   if (!g.nations[nat].atWar.length) { plan.why = 'The nation is at peace.'; return plan; }
+  // Weather (ruling 127): the sky over the target, known before the order; under a closed sky the card cannot open.
+  if (weatherOn(g)) {
+    const z = skyZone(g, kind as AirMission, target);
+    const line = skyRaidLine(g, z, place);
+    if (line) plan.sky = line;
+    if (skyOf(g, z) === 'closed') { plan.why = `Closed sky this month: nothing flies over ${zoneName(z)}.`; return plan; }
+  }
   if (quarry && fleetKnown(g, quarry, nat) === 'none') { plan.why = 'No fleet has been found there. Search that sea first: a fleet has to be found before it can be struck.'; return plan; }
   if ((kind === 'ground' || kind === 'line') && !troopsSeen(g, nat, target, sightOf(g, nat))) { plan.why = 'No enemy troops have been seen there.'; return plan; }
   const fleets = airFleetsOf(g, nat).filter((f) => flying(f) || f.est.ftr + f.est.bmr > 0);
@@ -790,7 +859,7 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
     const lost = n * risk;
     if (f.ftr > 0) plan.fighterLossN = Math.round(lost); else plan.bomberLossN = Math.round(lost);
     plan.bomberLoss = f.ftr > 0 ? 0 : risk;
-    plan.effects = [`Every army at ${place} and in the provinces beside it is identified, corps by corps. The report is exact this month and goes stale after.`, `The ${f.name} still flies its raid and keeps its patrol: this takes only ${n} aircraft.`];
+    plan.effects = [`Every army at ${placeName(place)} and in the provinces beside it is identified, corps by corps. The report is exact this month and goes stale after.`, `The ${f.name} still flies its raid and keeps its patrol: this takes only ${n} aircraft.`];
     return plan;
   }
 
@@ -808,6 +877,17 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   plan.fighterLossN = Math.round(fc.ftrLoss);
   plan.foeLossN = Math.round(fc.foeLoss);
   plan.effects = effectsOf(g, kind, target, fc, nat);
+  // (Release 1.5.2: a fight for the sky sent with fewer fighters over the target than hold a sky, air.json sky.least,
+  // cannot win it whatever the odds. The card says so in a line of its own, and words its chance for the fight alone.)
+  // (With no fighters going it is a raid on the airfields and no fight for the sky at all: the card stands as it was.
+  // A group holding less than one fighter, which the card shows as 0, is sending none.
+  // With nobody to come up there is no air fight to word a chance for: the verdict says so, in the group card's words.)
+  if (kind === 'superiority' && smallOn(g) && a.E < AIR.sky.least && Math.round(plan.fighters) > 0) {
+    const over = Math.floor(a.E), sent = Math.round(plan.fighters);
+    // (Words ruled by the UI director, 04:55Z: the short line where every fighter sent can be over the target.)
+    plan.tooFew = `Too few fighters to hold this sky: it takes at least ${AIR.sky.least} fighters still over the target at the end, and you are sending ${sent > over ? `${sent}, of which only ${over} can be over it` : over}.`;
+    plan.verdict = a.D <= 0 ? 'No fighters will come up' : FIGHT_VERDICT.find(([least]) => fc.success >= least)![1];
+  }
   plan.figures = figuresOf(g, kind, target, fc, nat);
   // (The guns stop part of the bombing of industry and of a town; over a harbour they only bring bombers down.)
   plan.guns = { level: a.aa, loss: a.gunLoss, lossN: Math.min(plan.bomberLossN, Math.round(a.B * a.gunLoss)), stop: a.aa && kind !== 'harbour' ? gunsStop(a.aa) : 0 };
@@ -826,7 +906,7 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
     }
   }
   const off = going.filter((f) => f.ftr > 0 && f.mission === 'support' && kindOf(f) !== 'bmr');
-  if (off.length) plan.offPatrol = `${list(off.map((f) => `the ${f.name}`))} ${off.length === 1 ? 'leaves its patrol' : 'leave their patrols'} for the rest of the month: the sky over ${list([...new Set(off.map((f) => (afloat(f) ? `the ${homeName(g, f)}` : g.regions[f.base].name)))])} has that much less cover until next month.`;
+  if (off.length) plan.offPatrol = `${list(off.map((f) => `the ${f.name}`))} ${off.length === 1 ? 'leaves its patrol' : 'leave their patrols'} for the rest of the month: the sky over ${list([...new Set(off.map((f) => (afloat(f) ? `the ${homeName(g, f)}` : placeName(g.regions[f.base].name))))])} has that much less cover until next month.`;
   if (off.some(afloat)) plan.offPatrol += ` A fleet whose fighters are away is open to the enemy's strike until they are back.`;
   return plan;
 }
@@ -970,13 +1050,13 @@ export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number
  * away for the rest of the month (it flies no second raid and meets no raid on its own sky) and is back at its airfield,
  * on patrol or on escort as it was, when the nation's next month begins. Null if the raid cannot be flown as picked.
  */
-export function launchRaid(g: Game, kind: RaidKind, target: number, ids: number[], nat: string | null = g.human): AirReport | null {
+export function launchRaid(g: Game, kind: RaidKind, target: number, ids: number[], nat: string | null = g.human, fought?: FoughtAir): AirReport | null {
   if (kind === 'recon' || nat === null) return null;
   const plan = planRaid(g, kind, target, ids, nat);
   if (plan.why) return null;
   const fleets = plan.picked.map((id) => g.airFleets.find((f) => f.id === id)!);
   const m = missionOf(kind);
-  const rep = fly(g, nat, m, target, fleets, `:${(g.flags.airBattles ?? 0) + 1}`);
+  const rep = fly(g, nat, m, target, fleets, `:${(g.flags.airBattles ?? 0) + 1}`, fought, true);
   if (!rep) return null;
   for (const f of fleets) { f.mission = m; f.target = target; f.flew = g.turn; }
   return rep;
@@ -1054,7 +1134,7 @@ export function scout(g: Game, id: number, target: number, nat: string | null = 
   g.intel.scout = kept;
   const foes = r.units.filter((u) => !u.dead && atWar(g, f.nat, u.nat));
   const seen = foes.length ? `${plural(foes.length, 'corps', 'corps')}, ${plural(foes.reduce((s, c) => s + c.divs, 0), 'division')}${foes.some((c) => c.dug) ? ', dug in' : ''}` : 'no troops there';
-  const text = `Aircraft of the ${f.name} photographed ${r.name}: ${seen}.${lost ? ` ${plural(lost, 'aircraft', 'aircraft')} did not come back.` : ''}`;
+  const text = `Aircraft of the ${f.name} photographed ${placeName(r.name)}: ${seen}.${lost ? ` ${plural(lost, 'aircraft', 'aircraft')} did not come back.` : ''}`;
   if (f.nat === g.human) headline(g, 'info', text, f.nat, r.id);
   return { ok: true, text, lost };
 }

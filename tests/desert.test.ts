@@ -2,7 +2,7 @@
 // the desert has one road and no water, and an army there is only as strong as the port behind it.
 import { describe, expect, it } from 'vitest';
 import {
-  DEFENCE, DESERT, addCorps, armySize, assess, capitulate, capture, collapseScore, computeSupply, convoyDrag, createGame, declareWar, digsLate, endPhase,
+  DEFENCE, DESERT, FIELD_DICE, addCorps, armySize, assess, capitulate, capture, collapseScore, computeSupply, convoyDrag, createGame, declareWar, digsLate, endPhase,
   fieldArmy, inDesert, lineDrag, lineStrength, moveCost, railMove, railReach, removeCorps, resolveBattle, startPhase, worksOf, worksShare,
 } from '../src/campaign/game';
 import { runAI, theatrePhases } from '../src/campaign/ai';
@@ -377,6 +377,32 @@ describe('open desert', () => {
     else expect(rising.cut).toBe(Math.round(100 * (DESERT.open + (1 - DESERT.open) * worksShare(1))));
   });
 
+  it('a position driven round for want of guns does not turn the day\'s luck against the attack as well (b420)', () => {
+    // Sidi Barrani, December 1940: finished works, too few anti-tank guns. The cut is the whole of what the works are
+    // judged worth against tanks, so the dice stay the field's, and no prepared-line share is counted.
+    const w40 = camp(1940);
+    w40.g.turn = january(1941) - 1;
+    w40.camps.dug = true; w40.camps.dugFor = 3;
+    const tanks = assess(w40.g, [w40.armour], w40.target);
+    expect(tanks.lines.find((l) => l.label === 'Open desert')!.value).toBe('Dug in, but with too few anti-tank guns the position can be driven round');
+    expect(tanks.prepared).toBe(0);
+    expect(tanks.dice).toEqual(FIELD_DICE);
+    // Men on foot do not drive round anything: against them the same works still turn the luck.
+    const foot = addCorps(w40.g, 'UK', 'Desert foot', 'inf', 2, 'Mersa Matruh', {});
+    const marching = assess(w40.g, [foot], w40.target);
+    expect(marching.prepared).toBeGreaterThan(0);
+    expect(marching.dice[0]).toBeLessThan(FIELD_DICE[0]);
+    // A box (1941, Halfaya's guns beside the camps) keeps its luck in full against the tanks.
+    const w41 = camp(1941);
+    w41.camps.dug = true; w41.camps.dugFor = 3;
+    const guns = addCorps(w41.g, 'ITA', 'Halfaya guns', 'art', 3, 'Sidi Barrani', {});
+    guns.supplied = true; guns.dug = true; guns.dugFor = 3;
+    const box = assess(w41.g, [w41.armour], w41.target);
+    expect(box.lines.some((l) => l.label === 'Open desert')).toBe(false);
+    expect(box.prepared).toBeGreaterThan(0);
+    expect(box.dice[0]).toBeLessThan(FIELD_DICE[0]);
+  });
+
   it('in the grand campaign the open desert digs a month slow: half after two whole months, three quarters after three, finished after four', () => {
     const g = startOpen(createGame(1, null));
     declareWar(g, 'ITA', 'UK');
@@ -549,6 +575,8 @@ describe('the Libya convoys', () => {
     expect(fed).toBeGreaterThan(0.05);
     expect(fed).toBeLessThan(0.5);
     // A starved island sinks less.
+    // (On a copy: the picture computeSupply hands out may be kept for its next call, and is never written into.)
+    g.supply.UK = Uint8Array.from(g.supply.UK);
     g.supply.UK[g.byName['Malta'].id] = 0;
     convoyWar(g, 'ITA');
     const starved = g.convoys.libya.loss!;

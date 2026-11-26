@@ -40,6 +40,11 @@ export interface Lesson {
   after?: string;
   /** Months since the campaign was taken over before it is due. With `after`, either one is enough. */
   months?: number;
+  /**
+   * Its sentences once the page it sends the player to is open (lesson 10, the ARSENAL): the note moves on to the step
+   * it asks for there, since a note never asks for what is already done (the UI director, build 1640).
+   */
+  there?: string;
 }
 export interface Tip { id: string; text: string; when: string }
 export interface LessonGroup { from: number; label: string; plain: string }
@@ -275,8 +280,11 @@ export function namedWords(s: string, game: string, under = ''): string {
   return out;
 }
 
-/** A lesson's heading, sentences and deed line as one game says them, filled in from the campaign in hand. */
-export function lessonWords(g: Game, l: Lesson, game: string, under = ''): { head: string; text: string; deed: string } {
+/**
+ * A lesson's heading, sentences and deed line as one game says them, filled in from the campaign in hand. `open`: the
+ * page the lesson sends the player to is open now, and a lesson with words for that ('there') says them instead.
+ */
+export function lessonWords(g: Game, l: Lesson, game: string, under = '', open = false): { head: string; text: string; deed: string } {
   const at = pickupPlace(g), s = siegeOf(g);
   const fill = (t: string): string => t
     .split('{place}').join(at >= 0 ? placeThe(g.regions[at].name) : 'the front')
@@ -284,5 +292,5 @@ export function lessonWords(g: Game, l: Lesson, game: string, under = ''): { hea
     // (A province named for its city is not named twice, and with no siege the note reads the design director's words of
     // 18 November, 01:34Z: "The province is not yours until its city falls." Where the town has a name of its own, it is said.)
     .split('{city}').join(s && s.city !== s.province ? placeThe(s.city) : 'its city');
-  return { head: l.head, text: fill(namedWords(l.text, game, under)), deed: namedWords(l.deed, game, under) };
+  return { head: l.head, text: fill(namedWords(open && l.there ? l.there : l.text, game, under)), deed: namedWords(l.deed, game, under) };
 }

@@ -103,8 +103,8 @@ describe('a theatre that opens in its own month', () => {
 describe('the Atlantic Wall and the harbour off the beach', () => {
   it('the works of May 1944 face the sea: a landing from England meets them, an army already ashore does not', () => {
     const g = at(JUNE_44);
-    expect(R(g, 'Calais').fort).toEqual({ lv: 2, vs: ['UK'] });
-    expect(R(g, 'Normandy').fort).toEqual({ lv: 1, vs: ['UK'] });
+    expect(R(g, 'Calais').fort).toEqual({ lv: 2, vs: ['UK'], by: 'GER' });
+    expect(R(g, 'Normandy').fort).toEqual({ lv: 1, vs: ['UK'], by: 'GER' });
     expect(works(g, [named(g, UK_I)!], 'Calais')).toMatch(/head-on/);
     // The same corps, once it stands on French ground next door.
     const ashore = addCorps(g, 'UK', 'A corps already ashore', 'inf', 3, 'Somme', {});
@@ -129,7 +129,7 @@ describe('the Atlantic Wall and the harbour off the beach', () => {
     expect(g.flags[`harbour:${R(g, 'Normandy').id}`]).toBe(JUNE_44);
     expect(told(g, /D-Day, 6 June 1944/)).toEqual([JUNE_44]);
     // The works left facing the sea are no use to the men who came from it: the beachhead faces inland.
-    expect(R(g, 'Normandy').fort).toEqual({ lv: 1, vs: ['FRA'] });
+    expect(R(g, 'Normandy').fort).toEqual({ lv: 1, vs: ['FRA'], by: 'UK' });
   });
 
   it('a saved game keeps the harbour, and a new war does not have it', () => {

@@ -1,0 +1,212 @@
+{
+  "_about": "The names of the battleships and carriers, for the card that marks one lost (Brian's memorial card, asked for by the 3D builder 19 November 2026). A record only: nothing here changes a fight, a count or a die. A ship gone by any way (a fight, bombers, a submarine, a fleet scuttled for want of a port) is never named again. 'navies' gives each nation's battleships ('bb') and carriers ('cv') in the order of the record, each with her name, her crew in wartime (the men aboard), the month she joins (the campaign's turn: 1 is September 1939, 28 December 1941; none for a ship afloat at the start), and the fleet she began with ('fleet', the fleet rows' own names in navy.json, world.json and far-world.json). A light carrier unit of two ships ('pair': the arrivals' 'light carriers Independence and Princeton') is one carrier in the counts and goes down as one, both names and both crews. When a nation's battleship or carrier goes down, the ship named is one still afloat of the fleet that lost her if it has one, any afloat of her nation if not, and none (a name of null) once the record runs out; and of her crew a share is lost that is one of the real ones of her class ('share': each the men lost of the men aboard when a ship of the class went down in the war, 1939 to 1945). Both draws are the game's own and always the same for the same fight, but are made apart from the war's dice. 'crew' is the crew of a ship of the class the record has no name for. Escort carriers are named one for each the game counts in the Escort Carrier Fleet. Wyoming, a gunnery training ship from 1931, stands in for the fourth battleship the game gives the American Atlantic Fleet. Rows are only ever added at the end of a list, never moved or put between others: a lost ship is kept by her place in the list (the flag hull:nation:class:place), so a moved row would rename ships in saved games. 'later' gives a change from a month on, in the order of the months: a new name (Marat is Petropavlovsk from May 1943) or a move to another fleet (Ark Royal from the Home Fleet to Force H); a ship lost after it goes down under her name of that month. 'type' marks a ship whose type is not her class's: Hood, Renown and Repulse were battlecruisers, counted by the game as battleships. Caio Duilio and Andrea Doria were being rebuilt in September 1939 (back in July and October 1940), but stay afloat from the start, because the game's 1st Fleet has four battleships from the first month. Draft by the rules thread from the standard figures; checked by the historian on 19 November 2026 (historian/memorial-roster-check.md), corrections made.",
+  "_shares": {
+    "bb": "Royal Oak 835/1234, Hood 1415/1418, Bretagne 1012/1193, Conte di Cavour 17/1236 (Taranto, settled in shallow water), Bismarck 2100/2200, Barham 862/1311, Prince of Wales 327/1612, Repulse 508/1181, Arizona 1177/1512, Oklahoma 429/1398, Hiei 188/1360, Kirishima 212/1360, Roma 1393/2021, Scharnhorst 1932/1968, Musashi 1023/2399, Fuso 1620/1630, Yamashiro 1626/1636, Kongo 1200/1437, Tirpitz 1000/1900, Yamato 3055/3332, Marat 326/1286, Mutsu 1121/1474 (blew up in harbour, 1943)",
+    "cv": "Courageous 519/1260, Glorious 1207/1245 (her own; 1,519 with Ardent and Acasta), Ark Royal 1/1580, Eagle 131/1160, Hermes 307/664, Lexington 216/2951, Shoho 631/834, Ryujo 120/924, Akagi 267/1630, Kaga 811/1708, Soryu 711/1103, Hiryu 389/1100, Yorktown 141/2270, Wasp 193/2247, Hornet 140/2200, Taiho 1650/2150, Shokaku 1272/1965, Hiyo 247/1224, Zuikaku 842/1700, Princeton 108/1569, Shinano 1435/2515, Liscome Bay 644/916, Gambier Bay 131/860, St. Lo 143/889, Unryu 1238/1384, Bismarck Sea 318/923, Chiyoda all hands"
+  },
+  "share": {
+    "bb": [0.68, 1.0, 0.85, 0.01, 0.95, 0.66, 0.2, 0.43, 0.78, 0.31, 0.14, 0.16, 0.69, 0.98, 0.43, 0.99, 0.99, 0.84, 0.53, 0.92, 0.25, 0.76],
+    "cv": [0.41, 0.97, 0.001, 0.11, 0.46, 0.07, 0.76, 0.13, 0.16, 0.47, 0.64, 0.35, 0.06, 0.09, 0.06, 0.77, 0.65, 0.2, 0.5, 0.07, 0.57, 0.7, 0.15, 0.16, 0.89, 0.34, 1.0]
+  },
+  "crew": { "bb": 1500, "cv": 1800 },
+  "navies": {
+    "UK": {
+      "bb": [
+        { "name": "Nelson", "crew": 1361, "fleet": "Home Fleet" },
+        { "name": "Rodney", "crew": 1361, "fleet": "Home Fleet" },
+        { "name": "Hood", "crew": 1418, "fleet": "Home Fleet", "type": "battlecruiser" },
+        { "name": "Repulse", "crew": 1181, "fleet": "Home Fleet", "type": "battlecruiser" },
+        { "name": "Royal Oak", "crew": 1234, "fleet": "Home Fleet" },
+        { "name": "Royal Sovereign", "crew": 1146, "fleet": "Home Fleet" },
+        { "name": "Ramillies", "crew": 1146, "fleet": "Home Fleet" },
+        { "name": "Warspite", "crew": 1184, "fleet": "Mediterranean Fleet" },
+        { "name": "Barham", "crew": 1311, "fleet": "Mediterranean Fleet" },
+        { "name": "Malaya", "crew": 1184, "fleet": "Mediterranean Fleet" },
+        { "name": "Valiant", "crew": 1184, "from": 4, "fleet": "Home Fleet", "later": [{ "from": 11, "fleet": "Force H" }] },
+        { "name": "Resolution", "crew": 1146, "fleet": "Home Fleet", "later": [{ "from": 11, "fleet": "Force H" }] },
+        { "name": "Renown", "crew": 1200, "type": "battlecruiser" },
+        { "name": "Revenge", "crew": 1146 },
+        { "name": "King George V", "crew": 1422, "from": 16, "fleet": "Home Fleet" },
+        { "name": "Queen Elizabeth", "crew": 1184, "from": 17 },
+        { "name": "Prince of Wales", "crew": 1612, "from": 21, "fleet": "Home Fleet" },
+        { "name": "Duke of York", "crew": 1556, "from": 27 },
+        { "name": "Anson", "crew": 1556, "from": 34 },
+        { "name": "Howe", "crew": 1556, "from": 36 }
+      ],
+      "cv": [
+        { "name": "Courageous", "crew": 1260, "fleet": "Home Fleet" },
+        { "name": "Furious", "crew": 1218, "fleet": "Home Fleet" },
+        { "name": "Glorious", "crew": 1245, "fleet": "Mediterranean Fleet" },
+        { "name": "Ark Royal", "crew": 1580, "fleet": "Home Fleet", "later": [{ "from": 11, "fleet": "Force H" }] },
+        { "name": "Eagle", "crew": 1160, "fleet": "China Fleet", "later": [{ "from": 9, "fleet": "Mediterranean Fleet" }] },
+        { "name": "Hermes", "crew": 664 },
+        { "name": "Illustrious", "crew": 1299, "from": 10, "fleet": "Home Fleet" },
+        { "name": "Formidable", "crew": 1229, "from": 16, "fleet": "Mediterranean Fleet" },
+        { "name": "Victorious", "crew": 1229, "from": 21, "fleet": "Home Fleet" },
+        { "name": "Indomitable", "crew": 1392, "from": 31, "fleet": "China Fleet" },
+        { "name": "Indefatigable", "crew": 2300, "from": 57 },
+        { "name": "Implacable", "crew": 2300, "from": 60 }
+      ]
+    },
+    "GER": {
+      "bb": [
+        { "name": "Scharnhorst", "crew": 1968, "fleet": "Battle Fleet" },
+        { "name": "Gneisenau", "crew": 1968, "fleet": "Battle Fleet" },
+        { "name": "Bismarck", "crew": 2200, "from": 21, "fleet": "Battle Fleet" },
+        { "name": "Tirpitz", "crew": 2608, "from": 30, "fleet": "Battle Fleet" }
+      ]
+    },
+    "FRA": {
+      "bb": [
+        { "name": "Dunkerque", "crew": 1381, "fleet": "Atlantic Fleet" },
+        { "name": "Strasbourg", "crew": 1302, "fleet": "Atlantic Fleet" },
+        { "name": "Provence", "crew": 1193, "fleet": "Mediterranean Fleet" },
+        { "name": "Bretagne", "crew": 1193, "fleet": "Mediterranean Fleet" },
+        { "name": "Lorraine", "crew": 1193, "fleet": "Mediterranean Fleet" },
+        { "name": "Courbet", "crew": 1108 },
+        { "name": "Paris", "crew": 1108 },
+        { "name": "Richelieu", "crew": 1569, "from": 8 }
+      ],
+      "cv": [
+        { "name": "Béarn", "crew": 875, "fleet": "Atlantic Fleet" }
+      ]
+    },
+    "ITA": {
+      "bb": [
+        { "name": "Conte di Cavour", "crew": 1236, "fleet": "1st Fleet" },
+        { "name": "Giulio Cesare", "crew": 1236, "fleet": "1st Fleet" },
+        { "name": "Caio Duilio", "crew": 1198, "fleet": "1st Fleet" },
+        { "name": "Andrea Doria", "crew": 1198, "fleet": "1st Fleet" },
+        { "name": "Littorio", "crew": 1830, "from": 12, "fleet": "1st Fleet" },
+        { "name": "Vittorio Veneto", "crew": 1830, "from": 12, "fleet": "1st Fleet" },
+        { "name": "Roma", "crew": 2021, "from": 34 }
+      ]
+    },
+    "SOV": {
+      "bb": [
+        { "name": "Marat", "crew": 1286, "fleet": "Baltic Fleet", "later": [{ "from": 45, "name": "Petropavlovsk" }] },
+        { "name": "Oktyabrskaya Revolyutsiya", "crew": 1286, "fleet": "Baltic Fleet" },
+        { "name": "Parizhskaya Kommuna", "crew": 1286, "fleet": "Black Sea Fleet", "later": [{ "from": 45, "name": "Sevastopol" }] }
+      ]
+    },
+    "USA": {
+      "bb": [
+        { "name": "Arizona", "crew": 1512, "fleet": "Pacific Fleet" },
+        { "name": "Oklahoma", "crew": 1398, "fleet": "Pacific Fleet" },
+        { "name": "Nevada", "crew": 1398, "fleet": "Pacific Fleet" },
+        { "name": "Pennsylvania", "crew": 1358, "fleet": "Pacific Fleet" },
+        { "name": "California", "crew": 1480, "fleet": "Pacific Fleet" },
+        { "name": "Tennessee", "crew": 1480, "fleet": "Pacific Fleet" },
+        { "name": "Colorado", "crew": 1500, "fleet": "Pacific Fleet" },
+        { "name": "Maryland", "crew": 1500, "fleet": "Pacific Fleet" },
+        { "name": "West Virginia", "crew": 1500, "fleet": "Pacific Fleet" },
+        { "name": "Idaho", "crew": 1323, "fleet": "Pacific Fleet" },
+        { "name": "Mississippi", "crew": 1323, "fleet": "Pacific Fleet" },
+        { "name": "New Mexico", "crew": 1323, "fleet": "Pacific Fleet" },
+        { "name": "Arkansas", "crew": 1650, "fleet": "Atlantic Fleet" },
+        { "name": "New York", "crew": 1530, "fleet": "Atlantic Fleet" },
+        { "name": "Texas", "crew": 1530, "fleet": "Atlantic Fleet" },
+        { "name": "Wyoming", "crew": 1063, "fleet": "Atlantic Fleet" },
+        { "name": "North Carolina", "crew": 2339, "from": 20, "fleet": "Atlantic Fleet", "later": [{ "from": 35, "fleet": "Pacific Fleet" }] },
+        { "name": "Washington", "crew": 2339, "from": 21, "fleet": "Atlantic Fleet", "later": [{ "from": 37, "fleet": "Pacific Fleet" }] },
+        { "name": "South Dakota", "crew": 2354, "from": 37, "fleet": "Pacific Fleet" },
+        { "name": "Indiana", "crew": 2354, "from": 41, "fleet": "Pacific Fleet" },
+        { "name": "Massachusetts", "crew": 2354, "from": 43, "fleet": "Pacific Fleet" },
+        { "name": "Alabama", "crew": 2354, "from": 48, "fleet": "Pacific Fleet" },
+        { "name": "Iowa", "crew": 2788, "from": 53, "fleet": "Pacific Fleet" },
+        { "name": "New Jersey", "crew": 2788, "from": 53, "fleet": "Pacific Fleet" },
+        { "name": "Wisconsin", "crew": 2788, "from": 64, "fleet": "Pacific Fleet" },
+        { "name": "Missouri", "crew": 2788, "from": 66, "fleet": "Pacific Fleet" }
+      ],
+      "cv": [
+        { "name": "Lexington", "crew": 2951, "fleet": "Pacific Fleet" },
+        { "name": "Saratoga", "crew": 2791, "fleet": "Pacific Fleet" },
+        { "name": "Yorktown", "crew": 2270, "fleet": "Pacific Fleet" },
+        { "name": "Enterprise", "crew": 2217, "fleet": "Pacific Fleet" },
+        { "name": "Ranger", "crew": 2461, "fleet": "Atlantic Fleet" },
+        { "name": "Wasp", "crew": 2247, "from": 8, "fleet": "Atlantic Fleet", "later": [{ "from": 35, "fleet": "Pacific Fleet" }] },
+        { "name": "Hornet", "crew": 2200, "from": 31, "fleet": "Pacific Fleet" },
+        { "name": "Essex", "crew": 2600, "from": 45, "fleet": "Pacific Fleet" },
+        { "name": "Yorktown", "crew": 2600, "from": 47, "fleet": "Pacific Fleet" },
+        { "name": "Lexington", "crew": 2600, "from": 48, "fleet": "Pacific Fleet" },
+        { "name": "Independence and Princeton", "crew": 3138, "from": 48, "fleet": "Pacific Fleet", "pair": true },
+        { "name": "Bunker Hill", "crew": 2600, "from": 50, "fleet": "Pacific Fleet" },
+        { "name": "Belleau Wood and Cowpens", "crew": 3138, "from": 51, "fleet": "Pacific Fleet", "pair": true },
+        { "name": "Monterey", "crew": 1569, "from": 52, "fleet": "Pacific Fleet" },
+        { "name": "Intrepid", "crew": 2600, "from": 53, "fleet": "Pacific Fleet" },
+        { "name": "Langley and Cabot", "crew": 3138, "from": 53, "fleet": "Pacific Fleet", "pair": true },
+        { "name": "Hornet", "crew": 2600, "from": 55, "fleet": "Pacific Fleet" },
+        { "name": "Wasp", "crew": 2600, "from": 57, "fleet": "Pacific Fleet" },
+        { "name": "Bataan and San Jacinto", "crew": 3138, "from": 57, "fleet": "Pacific Fleet", "pair": true },
+        { "name": "Franklin", "crew": 2600, "from": 59, "fleet": "Pacific Fleet" },
+        { "name": "Hancock", "crew": 2600, "from": 62, "fleet": "Pacific Fleet" },
+        { "name": "Ticonderoga", "crew": 2600, "from": 63, "fleet": "Pacific Fleet" },
+        { "name": "Bennington", "crew": 2600, "from": 66, "fleet": "Pacific Fleet" },
+        { "name": "Randolph", "crew": 2600, "from": 66, "fleet": "Pacific Fleet" },
+        { "name": "Shangri-La", "crew": 2600, "from": 68, "fleet": "Pacific Fleet" },
+        { "name": "Bon Homme Richard", "crew": 2600, "from": 70, "fleet": "Pacific Fleet" },
+        { "name": "Liscome Bay", "crew": 916, "from": 51, "fleet": "Escort Carrier Fleet" },
+        { "name": "Coral Sea", "crew": 860, "from": 51, "fleet": "Escort Carrier Fleet", "later": [{ "from": 61, "name": "Anzio" }] },
+        { "name": "Corregidor", "crew": 860, "from": 51, "fleet": "Escort Carrier Fleet" },
+        { "name": "Gambier Bay", "crew": 860, "from": 58, "fleet": "Escort Carrier Fleet" },
+        { "name": "St. Lo", "crew": 889, "from": 62, "fleet": "Escort Carrier Fleet" },
+        { "name": "Ommaney Bay", "crew": 860, "from": 62, "fleet": "Escort Carrier Fleet" }
+      ]
+    },
+    "JAP": {
+      "bb": [
+        { "name": "Nagato", "crew": 1368, "fleet": "Combined Fleet" },
+        { "name": "Mutsu", "crew": 1474, "fleet": "Combined Fleet" },
+        { "name": "Fuso", "crew": 1630, "fleet": "Combined Fleet" },
+        { "name": "Yamashiro", "crew": 1636, "fleet": "Combined Fleet" },
+        { "name": "Ise", "crew": 1376, "fleet": "Combined Fleet" },
+        { "name": "Hyuga", "crew": 1376, "fleet": "Combined Fleet" },
+        { "name": "Kirishima", "crew": 1360, "fleet": "Mobile Fleet" },
+        { "name": "Kongo", "crew": 1437, "fleet": "2nd Fleet" },
+        { "name": "Haruna", "crew": 1437, "fleet": "2nd Fleet" },
+        { "name": "Hiei", "crew": 1360, "from": 5, "fleet": "Mobile Fleet" },
+        { "name": "Yamato", "crew": 2767, "from": 28 },
+        { "name": "Musashi", "crew": 2399, "from": 36 }
+      ],
+      "cv": [
+        { "name": "Hosho", "crew": 550, "fleet": "Combined Fleet" },
+        { "name": "Akagi", "crew": 1630, "fleet": "Mobile Fleet" },
+        { "name": "Kaga", "crew": 1708, "fleet": "Mobile Fleet" },
+        { "name": "Soryu", "crew": 1103, "fleet": "Mobile Fleet" },
+        { "name": "Hiryu", "crew": 1100, "fleet": "Mobile Fleet" },
+        { "name": "Ryujo", "crew": 924, "fleet": "3rd Fleet" },
+        { "name": "Zuiho", "crew": 785, "from": 16 },
+        { "name": "Shokaku", "crew": 1660, "from": 25, "fleet": "Mobile Fleet" },
+        { "name": "Zuikaku", "crew": 1660, "from": 25, "fleet": "Mobile Fleet" },
+        { "name": "Shoho", "crew": 834, "from": 29 },
+        { "name": "Junyo", "crew": 1224, "from": 33 },
+        { "name": "Hiyo", "crew": 1224, "from": 35 },
+        { "name": "Ryuho", "crew": 989, "from": 39 },
+        { "name": "Chiyoda", "crew": 800, "from": 50 },
+        { "name": "Chitose", "crew": 800, "from": 53 },
+        { "name": "Taiho", "crew": 2150, "from": 55 },
+        { "name": "Unryu", "crew": 1595, "from": 60 },
+        { "name": "Amagi", "crew": 1595, "from": 60 },
+        { "name": "Katsuragi", "crew": 1595, "from": 62 },
+        { "name": "Shinano", "crew": 2515, "from": 63 }
+      ]
+    },
+    "BRA": {
+      "bb": [
+        { "name": "Minas Geraes", "crew": 1087, "fleet": "Brazilian Fleet" },
+        { "name": "São Paulo", "crew": 1087, "fleet": "Brazilian Fleet" }
+      ]
+    },
+    "ARG": {
+      "bb": [
+        { "name": "Rivadavia", "crew": 1215, "fleet": "Sea Fleet" },
+        { "name": "Moreno", "crew": 1215, "fleet": "Sea Fleet" }
+      ]
+    },
+    "CHL": {
+      "bb": [
+        { "name": "Almirante Latorre", "crew": 1167, "fleet": "Chilean Fleet" }
+      ]
+    }
+  }
+}

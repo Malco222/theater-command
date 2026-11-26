@@ -5,19 +5,23 @@
 // same list. The numbers live in data/campaign/arsenal.json. The historical scenarios offer only the four
 // classic corps and fortifications, as they always did.
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import { byHand } from './depth';
 import data from '../../data/campaign/arsenal.json';
-import { AIRWAR, airFleetsOf, airPool, airWar, airfieldsHold, carrierRules, foundAirFleet, hasAirfield } from './air';
+import { worksName } from './rivers';
+import { AIRWAR, airFleetsOf, airPool, airRange, airWar, airfieldsHold, carrierRules, cover, foundAirFleet, hasAirfield, km, whyNotBase } from './air';
 import { syncWings } from './carriers';
 import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
 import { govMul } from './government';
-import { BUDGET, PRODUCTION, budgeted, cadreTerms, cadresOf, canRaise, corpsCost, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCadre, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, whyNoCadre, type LedgerLine } from './economy';
+import { BUDGET, PRODUCTION, budgeted, cadreTerms, income, upkeepTotal, cadresOf, canRaise, corpsCost, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCadre, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, whyNoCadre, type LedgerLine } from './economy';
 import { TECH, locked, paraCount, whyNoPara } from './tech';
 import { eliteCount, eliteOf, eliteRule, priceOf, whyNoElite } from './traits';
-import { atWar, headline } from './game';
+import { allied, atWar, headline, theName } from './game';
 import { majorsOf } from './diplomacy';
+import { stopOf } from './history';
 import { turnToDate } from '../core/ticket';
 import { NAVY, fleetsOf, foundFleet, liftLeft, shipCount } from './navy';
+import { onPlans, whyNoPlans } from './plans';
 import { MEN_PER_DIV, type AirFleet, type Build, type Fleet, type Game, type Kind, type Region, type ShipClass } from './types';
 
 export type Wing = 'ftr' | 'bmr';
@@ -41,11 +45,15 @@ export const ARSENAL = data as unknown as {
   };
   yards: Record<string, number>;
   guns: { soften: number; softenMost: number; thicken: number; thickenMost: number };
+  /** The computer staffs' own orders (see the note in the data): 'programme' is their ships and aircraft (rulings 68(b) and 70(a)). */
+  ai?: { programme?: { fromStop: number; bled: number; share: number; each: Record<string, number>; rate?: { ship: number; air: number } } };
   /** Ruling 213(d) and the works rates of 218(d): a smaller power's aircraft works and the record's aircraft from abroad (see the note in the data). */
   smallAir: {
     perPoint: number;
     works: Record<string, { ftr: number | null; bmr: number | null; rate: [number | null, number | null]; earlier?: { until: number; rate: [number | null, number | null] } }>;
     gifts: [number, string, number, 'ftr' | 'bmr' | 'mixed', string[]][];
+    /** Wings bought abroad (Brian's rule of 21 November 2026; see the note in the data). Absent: nothing is sold. */
+    abroad?: { on: boolean; price: number; months: Record<Wing, number> };
   };
 };
 
@@ -143,13 +151,65 @@ function worksOpensAt(g: Game, nat: string, wing: Wing): number | null {
   return Math.max(from, g.turn + 1, w.earlier && !(w.earlier.rate[wing === 'ftr' ? 0 : 1] ?? 0) ? w.earlier.until + 1 : 0);
 }
 
+// ---- Wings bought abroad (Brian, 21 November 2026: every battle mechanic applies to all playable nations) ----------
+
+/** The data's terms for a wing bought abroad (read at call time, so a probe can set them), or undefined where there are none. */
+export const ABROAD = (): { on: boolean; price: number; months: Record<Wing, number> } | undefined => SMALL().abroad;
+
+/**
+ * True where a smaller power's wings may be bought abroad: the grand campaign, the data's switch on, and in release 1
+ * the PLAYER'S own order only (his nation, and he runs his building himself). No staff buys abroad, a player's own
+ * staff included, so a war fought by staffs alone, or by a player who gives no orders, is the war it was.
+ */
+export const abroadRules = (g: Game, nat: string): boolean => budgeted(g) && ABROAD()?.on === true && !greatPower(g, nat) && byHand(g, nat, 'build');
+
+/**
+ * The great power that would sell a smaller power its wings (the design director, 21 November 2026): one that stands,
+ * is not at war with the buyer and is not allied to a country at war with the buyer (Germany held back Finland's
+ * orders in the Winter War). An ally of the buyer before any other, then the nearest, capital to capital. Null: none will.
+ */
+export function sellerOf(g: Game, nat: string): string | null {
+  const me = g.nations[nat];
+  if (!me?.alive) return null;
+  const foes = Object.keys(g.nations).filter((x) => x !== nat && g.nations[x].alive && atWar(g, nat, x));
+  const home = g.regions[me.capital];
+  let best: string | null = null, rank = Infinity;
+  for (const x of majorsOf(g)) {
+    const n = g.nations[x];
+    if (x === nat || !n?.alive || n.dormant || atWar(g, x, nat) || foes.some((e) => allied(g, x, e))) continue;
+    const cap = g.regions[n.capital];
+    const far = home && cap ? Math.hypot(cap.x - home.x, cap.y - home.y) : 1e9;
+    const k = (allied(g, x, nat) ? 0 : 1e12) + far;
+    if (k < rank) { rank = k; best = x; }
+  }
+  return best;
+}
+
+/** Who sells a smaller power this kind of wing this month: only a kind its own works do not build, and only where abroadRules holds. */
+export const boughtFrom = (g: Game, nat: string, wing: Wing): string | null => (abroadRules(g, nat) && whyNoWorks(g, nat, wing) !== null ? sellerOf(g, nat) : null);
+
+/** The months a wing bought abroad takes: the data's for its kind, after any wing of that kind already on order (218(d): one at a time). */
+function abroadMonths(g: Game, nat: string, wing: Wing): number {
+  const busy = Math.max(0, ...g.nations[nat].queue.filter((b) => b.what === 'air' && b.item === wing).map((b) => b.eta - g.turn));
+  return busy + (ABROAD()?.months[wing] ?? ARSENAL.air[wing].months);
+}
+
+/** Why a smaller power that may buy abroad finds no seller, in words: every great power is at war with it or stands with its enemies. */
+const noSeller = (g: Game, nat: string): string => `No great power will sell aircraft to ${theName(g.nations[nat])} now: each is at war with it or allied to its enemies.`;
+/**
+ * A group's name in the lines about a bought wing: 'the' before a name in English, which opens with an English
+ * ordinal ('the 1st Fighter Group'); a name in its own language stays bare ('1. Hava Alayı', 'Regimiento Aéreo 1').
+ * The UI director, 21 November (ui-director/words-bought-wings.md).
+ */
+export const theGroupName = (name: string): string => (/^\d+(?:st|nd|rd|th) /.test(name) ? `the ${name}` : name);
+
 /**
  * The short tag on a province's offer card for a wing a smaller power's works do not build this month (ruling
  * 213(d)): "No aircraft industry", "Builds no bombers", or the month it opens, "Fighters from July 1942". Null when
  * the wing can be built.
  */
 export function aircraftTag(g: Game, nat: string, wing: Wing): string | null {
-  if (!budgeted(g) || greatPower(g, nat) || whyNoWorks(g, nat, wing) === null) return null;
+  if (!budgeted(g) || greatPower(g, nat) || whyNoWorks(g, nat, wing) === null || boughtFrom(g, nat, wing) !== null) return null;
   const w = SMALL().works[nat];
   if (!w || (w.ftr === null && w.bmr === null)) return 'No aircraft industry';
   const at = worksOpensAt(g, nat, wing);
@@ -163,7 +223,7 @@ export function aircraftTag(g: Game, nat: string, wing: Wing): string | null {
  */
 export function worksOpening(g: Game, nat: string): string | null {
   if (!budgeted(g) || greatPower(g, nat)) return null;
-  const why = (['ftr', 'bmr'] as Wing[]).map((w) => whyNoWorks(g, nat, w));
+  const why = (['ftr', 'bmr'] as Wing[]).map((w) => (boughtFrom(g, nat, w) !== null ? null : whyNoWorks(g, nat, w)));
   if (why.some((x) => x === null)) return null;
   const w = SMALL().works[nat];
   if (!w || (w.ftr === null && w.bmr === null)) return why[0];
@@ -280,7 +340,7 @@ export function smallAirMonth(g: Game): void {
     }
     if (to === g.human && made.length) {
       const from = giver === to ? 'from its own works' : `from ${g.nations[giver].name}`;
-      headline(g, 'info', `${cap(made.join(' and '))} arrive ${from} and form on the airfield at ${r.name}.`, to, r.id);
+      headline(g, 'info', `${cap(made.join(' and '))} arrive ${from} and form on the airfield at ${r.name}.`, to, r.id, { ready: 'air' });
     }
   });
   // The month a works opens: one plain line for its own player, never for a works that stands on the first day.
@@ -409,6 +469,8 @@ export interface Offer {
   tech?: string;
   /** The men it takes from the reserve (the grand campaign): set for a new corps. */
   men?: number;
+  /** A wing bought abroad: the great power that sells it. */
+  from?: string;
 }
 
 const POOR = 'The treasury cannot cover it.';
@@ -502,15 +564,23 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
     // Ruling 213(d): a smaller power builds aircraft where the record had a works, from the month it opened, at its rate.
     const small = budgeted(g) && !greatPower(g, nat);
     const none = small ? whyNoWorks(g, nat, wing) : null;
-    const built = small ? none === null : industry(g, nat, spec.factories);
+    // (Brian, 21 November 2026) A wing its own works do not build this month may be bought abroad, on the player's own order.
+    const abroad = small && none !== null && abroadRules(g, nat);
+    const seller = abroad ? sellerOf(g, nat) : null;
+    const built = small ? none === null || seller !== null : industry(g, nat, spec.factories);
     const at = built ? stationSite(g, nat, sel) : -1;
     const joins = at >= 0 ? fleetAt(g, nat, at, wing) : null;
-    const cost = priceOf(g, nat, `air:${wing}`, spec.cost);
+    const home = priceOf(g, nat, `air:${wing}`, spec.cost);
+    const cost = seller ? Math.round(home * ABROAD()!.price) : home;
+    const where = at < 0 ? '' : joins ? `Joins ${joins.name} at ${g.regions[at].name}.` : airWar(g) ? `Forms a new air group on the airfield at ${g.regions[at].name}.` : `Founds a new air fleet on the airfields of ${g.regions[at].name}.`;
     out.push({
-      key: `air:${wing}`, group: 'air', label: spec.label, blurb: spec.blurb, size: `${spec.count} ${wing === 'ftr' ? 'fighters' : 'bombers'}`, cost, months: small && built ? worksMonths(g, nat, wing) : spec.months,
+      key: `air:${wing}`, group: 'air', label: spec.label, blurb: spec.blurb, size: `${spec.count} ${wing === 'ftr' ? 'fighters' : 'bombers'}`, cost, months: seller ? abroadMonths(g, nat, wing) : small && built ? worksMonths(g, nat, wing) : spec.months,
       upkeep: spec.count * BUDGET.upkeep.air[wing], at,
-      note: at < 0 ? '' : joins ? `Joins ${joins.name} at ${g.regions[at].name}.` : airWar(g) ? `Forms a new air group on the airfield at ${g.regions[at].name}.` : `Founds a new air fleet on the airfields of ${g.regions[at].name}.`,
-      why: none ?? (!built ? `Needs an aircraft industry: a home province with ${spec.factories} factories.` : at < 0 ? 'Needs airfields to fly from. Build airfields in a province first.' : poor(cost)),
+      note: seller && at >= 0 ? `Bought from ${theName(g.nations[seller])}. ${joins ? `Joins ${theGroupName(joins.name)} at ${g.regions[at].name}.` : where}` : where,
+      why: seller ? (at < 0 ? 'Needs airfields to fly from. Build airfields in a province first.' : poor(cost))
+        : abroad ? noSeller(g, nat)
+        : none ?? (!built ? `Needs an aircraft industry: a home province with ${spec.factories} factories.` : at < 0 ? 'Needs airfields to fly from. Build airfields in a province first.' : poor(cost)),
+      ...(seller ? { from: seller } : {}),
     });
   }
 
@@ -521,13 +591,15 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
     const full = hull === 'tp' && liftBought(g, nat) >= ARSENAL.lift.most;
     const cost = priceOf(g, nat, `ship:${hull}`, spec.cost);
     const one = hull === 'tp' ? '' : NAVY.classes[hull].one, many = hull === 'tp' ? '' : NAVY.classes[hull].many;
-    const held = gate(`ship:${hull}`);
+    // (Brian, 18 November: the smaller nations lay down battleships and carriers only on a great power's plans, plans.ts.)
+    const noPlans = whyNoPlans(g, nat, hull);
+    const held = noPlans || onPlans(g, nat, hull) ? null : gate(`ship:${hull}`);
     out.push({
       ...(held ? { tech: held.tech } : {}),
       key: `ship:${hull}`, group: 'navy', label: spec.label, blurb: spec.blurb, size: hull === 'tp' ? 'lift for one more corps a month' : plural(spec.count, one, many), cost, months: spec.months,
       upkeep: hull === 'tp' ? 0 : spec.count * BUDGET.upkeep.ships[hull], at,
       note: at < 0 ? '' : hull === 'tp' ? `Built at ${g.regions[at].name}.` : fleet ? `Laid down at ${g.regions[at].name}. Joins the ${fleet.name}.` : `Laid down at ${g.regions[at].name}. Forms a new fleet there.`,
-      why: held?.why ?? (at < 0 ? `Needs a shipyard of level ${spec.yard} in one of your home ports.` : full ? 'The nation has all the troopships its ports can handle.' : poor(cost)),
+      why: noPlans ?? held?.why ?? (at < 0 ? `Needs a shipyard of level ${spec.yard} in one of your home ports.` : full ? 'The nation has all the troopships its ports can handle.' : poor(cost)),
     });
   }
 
@@ -567,11 +639,11 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
   return out;
 }
 
-const FORT_BLURB = 'Defenders behind works fight far harder, and the works face every direction. A line only helps if the enemy has to come through it.';
+const FORT_BLURB = 'Defenders behind works fight far harder, and the works face every direction: barbed wire, gun pits and an anti-tank ditch, then pillboxes and dragon\'s teeth, then a line of concrete forts. A line only helps if the enemy has to come through it.';
 
 function fortOffer(g: Game, nat: string, r: Region, cost: number, why: string | null): Omit<Offer, 'poor'> {
   const lv = (r.fort?.lv ?? 0) + g.nations[nat].queue.filter((b) => b.what === 'fort' && b.region === r.id).length + 1;
-  return { key: 'work:fort', group: 'works', label: 'Fortifications', blurb: FORT_BLURB, size: `level ${lv}`, cost, months: PRODUCTION.fort.months, upkeep: 0, at: r.id, note: `${r.name} has ${r.fort ? `level ${r.fort.lv}` : 'none'}${lv - 1 > (r.fort?.lv ?? 0) ? `, level ${lv - 1} building` : ''}.`, why };
+  return { key: 'work:fort', group: 'works', label: 'Fortifications', blurb: FORT_BLURB, size: `level ${lv}`, cost, months: PRODUCTION.fort.months, upkeep: 0, at: r.id, note: `Level ${lv} is ${worksName(lv)}. ${r.name} has ${r.fort ? `level ${r.fort.lv}` : 'none'}${lv - 1 > (r.fort?.lv ?? 0) ? `, level ${lv - 1} building` : ''}.`, why };
 }
 
 /** Places an order from the list of offers. The price is paid now; what was ordered arrives when its months are up. */
@@ -588,7 +660,7 @@ export function orderOffer(g: Game, nat: string, key: string, sel = -1): Build |
   const r = g.regions[o.at];
   n.pp -= o.cost;
   const b: Build = { id: g.nextBuild++, what: group as 'air' | 'ship' | 'work', item, name: '', region: o.at, ordered: g.turn, eta: g.turn + o.months, cost: o.cost };
-  if (group === 'air') { b.count = ARSENAL.air[item as Wing].count; b.name = `${o.label} for ${r.name}`; }
+  if (group === 'air') { b.count = ARSENAL.air[item as Wing].count; b.name = o.from ? `${o.label} from ${theName(g.nations[o.from])} for ${r.name}` : `${o.label} for ${r.name}`; if (o.from) b.from = o.from; }
   else if (group === 'ship') { b.count = ARSENAL.ships[item as Hull].count; b.name = `${o.label} at ${r.name}`; }
   else b.name = `${o.label}${item === 'factory' ? '' : `, ${o.size},`} at ${r.name}`;
   n.queue.push(b);
@@ -626,9 +698,12 @@ export function airLine(list: AirDelivery[]): { text: string; region: number } |
 export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery[]): void {
   const n = g.nations[nat];
   const r = g.regions[b.region];
-  const tell = (text: string): void => { if (nat === g.human) headline(g, 'info', text, nat, r.id); };
+  // (release 1.5.1: a unit handed over is tagged as ready, so that an interface can say so plainly; Brian, 24 Nov 18:30Z)
+  const tell = (text: string, ready?: 'air' | 'ship'): void => { if (nat === g.human) headline(g, 'info', text, nat, r.id, ready ? { ready } : undefined); };
   if (b.what === 'air') {
-    const tellAir = (d: AirDelivery): void => { if (nat !== g.human) return; if (air) air.push(d); else headline(g, 'info', d.text, nat, d.region); };
+    // (A wing bought abroad keeps its own line: the month's one line speaks of the factories.)
+    const seller = b.from && g.nations[b.from] ? theName(g.nations[b.from]) : '';
+    const tellAir = (d: AirDelivery): void => { if (nat !== g.human) return; if (air && !seller) air.push(d); else headline(g, 'info', d.text, nat, d.region, { ready: 'air' }); };
     const wing = b.item as Wing, count = b.count ?? ARSENAL.air[wing].count;
     const word = `${count} ${wing === 'ftr' ? 'fighters' : 'bombers'}`;
     // The wing goes where it was ordered for; if that ground is lost, to the strongest fleet the nation has left.
@@ -636,11 +711,11 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
     let f = canStation(g, nat, r) || r.ctrl === nat ? fleetAt(g, nat, r.id, wing) : null;
     if (!f && r.ctrl === nat && (!war || hasAirfield(g, r.id))) {
       f = foundAirFleet(g, nat, r, `${r.name} Air Command`, war ? wing : undefined, count);
-      tellAir({ text: war ? `A new air group, the ${f.name}, forms on the airfield at ${r.name} with ${word}.` : `A new air fleet, ${f.name}, forms on the airfields of ${r.name} with ${word}.`, region: r.id, wing, count, fleet: f.name, base: r.name, new: true, war });
+      tellAir({ text: seller ? `${cap(word)} (${theGroupName(f.name)}) arrive from ${seller} and form on the airfield at ${r.name}.` : war ? `A new air group, the ${f.name}, forms on the airfield at ${r.name} with ${word}.` : `A new air fleet, ${f.name}, forms on the airfields of ${r.name} with ${word}.`, region: r.id, wing, count, fleet: f.name, base: r.name, new: true, war });
     } else {
       // The air war: the wing goes to the strongest group of its own kind.
       f ??= strongest(airFleetsOf(g, nat).filter((x) => x.ship === undefined && x.ashore === undefined && (!war || x.kind === wing)));
-      if (f) tellAir({ text: `${cap(word)} from the factories join ${f.name} at ${g.regions[f.base].name}.`, region: f.base, wing, count, fleet: f.name, base: g.regions[f.base].name, new: false, war });
+      if (f) tellAir({ text: seller ? `${cap(word)} from ${seller} join ${theGroupName(f.name)} at ${g.regions[f.base].name}.` : `${cap(word)} from the factories join ${f.name} at ${g.regions[f.base].name}.`, region: f.base, wing, count, fleet: f.name, base: g.regions[f.base].name, new: false, war });
     }
     if (!f) {
       // No air fleet and nowhere to found one: the machines wait in reserve.
@@ -658,7 +733,7 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
     if (hull === 'tp') {
       n.sealift += count;
       g.flags[`wk:tp:${nat}`] = (g.flags[`wk:tp:${nat}`] ?? 0) + 1;
-      tell(`New troopships are ready: the nation can now move ${plural(n.sealift, 'corps', 'corps')} by sea each month.`);
+      tell(`New troopships are ready: the nation can now move ${plural(n.sealift, 'corps', 'corps')} by sea each month.`, 'ship');
       return;
     }
     let f = joinsFleet(g, nat, hull, r.id);
@@ -668,7 +743,7 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
     // A new carrier joins with its aircraft aboard (the grand campaign).
     const decks = hull === 'cv' && carrierRules(g);
     if (decks) syncWings(g);
-    tell(`${cap(plural(count, `new ${NAVY.classes[hull].one}`, `new ${NAVY.classes[hull].many}`))} ${count === 1 ? 'joins' : 'join'} the ${f.name}${decks ? ', with fighters and strike aircraft aboard' : ''}.`);
+    tell(`${cap(plural(count, `new ${NAVY.classes[hull].one}`, `new ${NAVY.classes[hull].many}`))} ${count === 1 ? 'joins' : 'join'} the ${f.name}${decks ? ', with fighters and strike aircraft aboard' : ''}.`, 'ship');
     return;
   }
   const what = b.item as Work;
@@ -693,13 +768,91 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
 // ---- The computer's use of it -----------------------------------------------------------------------
 
 /**
- * A computer-run nation in the grand campaign puts guns on its industry once it has been bombed: one level at a
- * time on the province with the most factories that is not yet fully defended. It buys nothing else from the
- * arsenal: its fleets and air forces grow on history's programmes.
+ * What a computer-run nation's staff orders from the arsenal in the grand campaign, beside the corps its factories
+ * raise (economy.ts): guns for its bombed industry, and airfields behind its army.
  */
 export function aiArsenal(g: Game, nat: string): void {
   const n = g.nations[nat];
   if (!budgeted(g) || byHand(g, nat, 'build') || !n.alive) return;
+  aiGuns(g, nat);
+  aiAirfields(g, nat);
+}
+
+/**
+ * A computer staff lays out airfields behind its army (ruling 52(a); the air war of the grand campaign). Where a
+ * stretch of its front lies beyond the reach of every airfield its fighters could use, it orders a field from the
+ * arsenal in the province of its own that would cover most of the divisions standing there: one behind the line for
+ * choice, one in it where it holds nothing else. It waits until its front has stood out of reach so many months
+ * running (airwar.json ai.basing 'fields': a field is no answer to a campaign that is over in a month), except
+ * where a war begins with the front already out of reach: that field is ordered in the war's first month. One on order
+ * at a time, paid for as its guns are, above the staff's reserve. The fighters come up by the staff's own basing rule
+ * once the field is open (air.ts, baseByThreat). A player's own production desk orders none: that is his to decide.
+ */
+function aiAirfields(g: Game, nat: string): void {
+  const n = g.nations[nat];
+  const wait = AIRWAR.ai.basing.fields;
+  if (!airWar(g) || wait === undefined || nat === g.human) return;
+  if (n.queue.some((b) => b.what === 'work' && b.item === 'field')) return;
+  const key = `bf:${nat}`;
+  const bare = bareFront(g, nat);
+  if (!bare.length) { delete g.flags[key]; return; }
+  // (The month it was first seen so, kept one up so that the campaign's first month is not a nought.)
+  const since = g.flags[key] ?? (g.flags[key] = g.turn + 1);
+  // A front that begins a war out of reach of every field is not waited on: the staff knew where the war would open.
+  const fresh = bare.some(([id]) => g.regions[id].nb.some((j) => {
+    const e = g.regions[j].ctrl;
+    const began = atWar(g, nat, e) ? g.flags[`war:${nat}:${e}`] ?? g.flags[`war:${e}:${nat}`] : undefined;
+    return began !== undefined && g.turn - began <= 1;
+  }));
+  if (!fresh && g.turn + 1 - since < wait) return;
+  const R = fighterReach(g, nat);
+  let best: Region | null = null, bv = 0;
+  for (const r of g.regions) {
+    if (r.ctrl !== nat || hasAirfield(g, r.id)) continue;
+    let v = 0;
+    for (const [id, divs] of bare) v += divs * cover(km(g, r.id, id), R);
+    if (v <= 0) continue;
+    // (A field in the front line is the first thing an enemy advance takes.)
+    if (!r.nb.some((j) => atWar(g, nat, g.regions[j].ctrl))) v *= 2;
+    if (v > bv) { best = r; bv = v; }
+  }
+  if (!best) return;
+  const o = offers(g, nat, best.id).find((x) => x.key === 'work:field');
+  if (o && o.why === null && n.pp >= o.cost + PRODUCTION.aiReserve) orderOffer(g, nat, 'work:field', best.id);
+}
+
+/** The land fighter groups a nation has, and the shortest reach among them. */
+const landFighters = (g: Game, nat: string) => airFleetsOf(g, nat).filter((f) => f.kind === 'ftr' && f.ftr > 0 && f.ship === undefined);
+const fighterReach = (g: Game, nat: string): number => Math.min(...landFighters(g, nat).map((f) => airRange(f, g).ftr));
+
+/**
+ * The stretches of a nation's front that no airfield open to its fighter groups can reach: each province where its
+ * field corps stand beside ground an enemy holds, with the divisions it has there. Empty when it is at peace or has
+ * no fighters.
+ */
+export function bareFront(g: Game, nat: string): [number, number][] {
+  const n = g.nations[nat];
+  if (!n?.alive || !n.atWar.length) return [];
+  const fighters = landFighters(g, nat);
+  if (!fighters.length) return [];
+  const R = Math.min(...fighters.map((f) => airRange(f, g).ftr));
+  // The front: its field corps beside ground an enemy holds, by their divisions.
+  const front = new Map<number, number>();
+  for (const c of g.corps) {
+    if (c.nat !== nat || c.dead || c.kind === 'fort' || c.kind === 'eng') continue;
+    if (g.regions[c.reg].nb.some((j) => atWar(g, nat, g.regions[j].ctrl))) front.set(c.reg, (front.get(c.reg) ?? 0) + c.divs);
+  }
+  if (!front.size) return [];
+  const open = g.regions.filter((r) => r.id === fighters[0].base || whyNotBase(g, fighters[0], r, true) === null);
+  return [...front.entries()].filter(([id]) => !open.some((r) => km(g, r.id, id) <= R));
+}
+
+/**
+ * A computer-run nation in the grand campaign puts guns on its industry once it has been bombed: one level at a
+ * time on the province with the most factories that is not yet fully defended.
+ */
+function aiGuns(g: Game, nat: string): void {
+  const n = g.nations[nat];
   const raided = g.raids[nat];
   if (!raided || g.turn - raided.turn > 2) return;
   if (n.queue.some((b) => b.what === 'work' && b.item === 'aa')) return;
@@ -712,6 +865,98 @@ export function aiArsenal(g: Game, nat: string): void {
   const o = offers(g, nat, best.id).find((x) => x.key === 'work:aa');
   if (o && o.why === null && n.pp >= o.cost + PRODUCTION.aiReserve) orderOffer(g, nat, 'work:aa', best.id);
 }
+
+/** The aircraft a nation has bought over its air force's own establishment, with the wings on order, and that establishment, by kind. */
+function airBought(g: Game, nat: string): { over: Record<Wing, number>; base: Record<Wing, number> } {
+  const over = { ftr: 0, bmr: 0 }, base = { ftr: 0, bmr: 0 };
+  for (const f of airFleetsOf(g, nat)) {
+    if (f.ship !== undefined || f.ashore !== undefined) continue;
+    for (const w of ['ftr', 'bmr'] as Wing[]) { const x = f.extra?.[w] ?? 0; over[w] += x; base[w] += Math.max(0, f.est[w] - x); }
+  }
+  for (const b of g.nations[nat].queue) if (b.what === 'air' && (b.item === 'ftr' || b.item === 'bmr')) over[b.item] += b.count ?? ARSENAL.air[b.item].count;
+  return { over, base };
+}
+
+/**
+ * What a computer staff's programme would order next, by its character and its war (rulings 68(b) and 70(a)), as
+ * the arsenal's own keys in the order it wants them:
+ *  - destroyers when its own routes are bled: a convoy route that feeds it lost 'bled' of its cargo last month;
+ *  - fighters first while its factories are being bombed;
+ *  - submarines against an enemy who lives by sea: it is at war with a nation a convoy route feeds, and has a
+ *    fleet of submarines out raiding to send them to;
+ *  - a carrier for a carrier power: a navy that has carriers already;
+ *  - and wings of fighters and of bombers, the kind it has bought least of first, until what it has bought stands
+ *    at 'share' of its air force's own establishment (as a player's own building staff, depth.json 'machines').
+ * Never more than 'each' of a kind on order at a time. Whether the yards, the factories, the technology and the
+ * treasury allow it is the arsenal's to say, as for a player.
+ */
+export function programmeWants(g: Game, nat: string): string[] {
+  const P = ARSENAL.ai?.programme, n = g.nations[nat];
+  if (!P || !n?.alive || !n.atWar.length) return [];
+  const room = (what: 'ship' | 'air', item: string): boolean => n.queue.filter((b) => b.what === what && b.item === item).length < (P.each[item] ?? 0);
+  const out: string[] = [];
+  const fleets = fleetsOf(g, nat);
+  const bled = (id: string): number => { const m = g.convoys[id]; return m && m.turn >= g.turn - 1 ? m.loss ?? 0 : 0; };
+  if (room('ship', 'dd') && NAVY.convoys.some((c) => c.to === nat && bled(c.id) >= P.bled)) out.push('ship:dd');
+  const A = airBought(g, nat);
+  const can = (w: Wing): boolean => room('air', w) && A.over[w] + ARSENAL.air[w].count <= P.share * A.base[w];
+  const raid = g.raids[nat];
+  if (raid && g.turn - raid.turn <= 2 && can('ftr')) out.push('air:ftr');
+  if (room('ship', 'ss') && fleets.some((f) => f.duty === 'raid' && f.ships.ss > 0) && NAVY.convoys.some((c) => g.nations[c.to]?.alive && atWar(g, nat, c.to))) out.push('ship:ss');
+  if (room('ship', 'cv') && fleets.some((f) => f.ships.cv > 0)) out.push('ship:cv');
+  const fill = (w: Wing): number => A.over[w] / Math.max(1, A.base[w]);
+  for (const w of (fill('ftr') <= fill('bmr') ? ['ftr', 'bmr'] : ['bmr', 'ftr']) as Wing[]) if (can(w) && !out.includes(`air:${w}`)) out.push(`air:${w}`);
+  return out;
+}
+
+/**
+ * A computer staff's programme at sea and in the air (rulings 68(b) and 70(a)): the grand campaign, from the stop
+ * of the history dial the data names (arsenal.json ai.programme; below it history's schedules are the whole of
+ * its building, as the book). It orders ships and wings from the arsenal as a player does, at his prices and
+ * under his rules, and pays for them in two ways:
+ *  - its share. While there is something the arsenal would build for it, the staff sets aside 'rate' of the
+ *    month's income for its navy and as much for its air force, never taking the treasury below its reserve and
+ *    never holding more than the dearest thing it wants costs. What is set aside is spent on nothing else.
+ *  - idle money: what the treasury holds over the price of a corps of infantry and the reserve, or over the
+ *    reserve alone while it can raise no corps for want of men (money without men).
+ * It comes after the corps, the guns and the works; one order a month for the navy and one for the air force, the
+ * first of what it wants (programmeWants) that the arsenal allows and the treasury could keep.
+ */
+export function aiProgramme(g: Game, nat: string): void {
+  const P = ARSENAL.ai?.programme, n = g.nations[nat];
+  if (!P || !budgeted(g) || nat === g.human || !n?.alive || !n.atWar.length || stopOf(g) < P.fromStop) return;
+  const wants = programmeWants(g, nat);
+  if (!wants.length) return;
+  const men = menSpare(g, nat) >= (specOf(g, 'inf')?.divs ?? 1);
+  const keep = PRODUCTION.aiReserve + (men ? corpsCost(g, nat, 'inf') : 0);
+  const inc = income(g, nat);
+  let spare = inc - upkeepTotal(g, nat);
+  // What the arsenal would build for it: an order it could place, or one that waits only for the money.
+  const list = offers(g, nat).filter((o) => o.at >= 0 && (o.why === null || o.poor));
+  for (const arm of ['ship', 'air'] as const) {
+    const mine = wants.filter((k) => k.startsWith(`${arm}:`)).map((k) => list.find((o) => o.key === k)).filter((o): o is Offer => !!o);
+    const key = purseKey(nat, arm);
+    let purse = g.flags[key] ?? 0;
+    if (mine.length) {
+      const put = Math.min(Math.max(...mine.map((o) => o.cost)) - purse, (P.rate?.[arm] ?? 0) * inc, n.pp - PRODUCTION.aiReserve);
+      if (put > 0) { n.pp -= put; purse += put; }
+    }
+    for (const o of mine) {
+      if (spare < o.upkeep * BUDGET.debt.aiMargin) continue;
+      const set = purse >= o.cost;
+      if (!set && n.pp < o.cost + keep) continue;
+      // (What was set aside comes back to the treasury to pay for the order it was kept for.)
+      if (set) n.pp += o.cost;
+      if (orderOffer(g, nat, o.key, o.at)) { if (set) purse -= o.cost; spare -= o.upkeep; break; }
+      if (set) n.pp -= o.cost;
+    }
+    if (purse > 0.005) g.flags[key] = Math.round(purse * 100) / 100; else delete g.flags[key];
+  }
+}
+
+const purseKey = (nat: string, arm: 'ship' | 'air'): string => `pg:${nat}:${arm}`;
+/** What a computer staff has set aside for its navy and for its air force and not yet spent (aiProgramme). */
+export const programmePurse = (g: Game, nat: string): { ship: number; air: number } => ({ ship: g.flags[purseKey(nat, 'ship')] ?? 0, air: g.flags[purseKey(nat, 'air')] ?? 0 });
 
 /** The coast watch's and the diggers' numbers (open.json, 'coast'): staff.ts keeps them, ai.ts hands them over. */
 export interface FortRules { works: number; dig?: { orders: number; top: number; capital: number; keep: number } }

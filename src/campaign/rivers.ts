@@ -12,12 +12,17 @@
 // cannot cross.
 
 import riverData from '../generated/campaign-rivers.json';
-import worldRivers from '../generated/world-americas-rivers.json';
+import americasRivers from '../generated/world-americas-rivers.json';
+import wholeRivers from '../generated/world-whole-rivers.json';
+import { FAR_STAGE } from './stage';
 import data from '../../data/campaign/engineering.json';
 import { Rng, hashString } from '../core/rng';
 import { KIND, type Corps, type Game, type Kind, type Region } from './types';
 import { barred, groundRules, whyBarred } from './ground';
+import { straitOpen } from './history';
 import { allied, atWar, headline } from './game';
+import { tieBars, whyTieBars } from './far';
+import { halted } from './history';
 
 export interface River { name: string; /** The course in map units. */ pts: [number, number][]; /** The same course as [latitude, longitude]. */ ll: [number, number][] }
 /** A river between two neighbouring regions (a is the lower id), and where on the map its bridge stands. */
@@ -31,10 +36,17 @@ export const ENGINEERING = data as unknown as {
   mines: { most: number; attack: number; march: number };
   breach: { perDiv: number; most: number };
   works: { most: number };
+  named: Record<'1' | '2' | '3' | 'mines', string>;
   jobs: Record<string, JobText>;
   start: { nations: string[]; corps: number };
   ai: { most: number; reserve: number };
 };
+
+/**
+ * What a province's works are at a level, in words (ruling 145(b)): 1 "barbed wire, gun pits and an anti-tank ditch",
+ * 2 "pillboxes and dragon's teeth", 3 "a line of concrete forts". Empty for none. Words only: no rule reads them.
+ */
+export const worksName = (lv: number): string => (lv >= 1 ? ENGINEERING.named[String(Math.min(3, Math.floor(lv))) as '1' | '2' | '3'] : '');
 
 /** The rivers and crossings of the map of Europe. */
 export const RIVERS = (riverData as unknown as { rivers: River[] }).rivers;
@@ -43,7 +55,7 @@ export const CROSSINGS: Crossing[] = (riverData as unknown as { crossings: numbe
  * Those of the wider world (tools/build-rivers.mjs world). Its provinces are numbered on from Europe's and its
  * rivers follow Europe's in the list, so a crossing is found by its two provinces on either map.
  */
-const WIDE = worldRivers as unknown as { rivers: River[]; crossings: number[][] };
+const WIDE = (FAR_STAGE ? wholeRivers : americasRivers) as unknown as { rivers: River[]; crossings: number[][] };
 const ALL_RIVERS: River[] = [...RIVERS, ...WIDE.rivers];
 export const WORLD_CROSSINGS: Crossing[] = WIDE.crossings.map(([a, b, river, x, y]) => ({ a, b, river: river + RIVERS.length, x, y }));
 const ALL_CROSSINGS: Crossing[] = [...CROSSINGS, ...WORLD_CROSSINGS];
@@ -81,14 +93,23 @@ export function downBetween(g: Game, a: number, b: number): boolean {
 /** Whether a corps of this kind cannot cross: anything on wheels or tracks, while the bridges are down. */
 export const noCrossing = (g: Game, kind: Kind, from: number, to: number): boolean => WHEELS.has(kind) && downBetween(g, from, to);
 
-/** Whether a corps cannot go from where it stands (or from another region) into a neighbour: ground too steep, or bridges down. */
-export const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => barred(g, c, to) || noCrossing(g, c.kind, from, to.id);
+/**
+ * Whether a corps cannot go from where it stands (or from another region) into a neighbour: ground too steep, or
+ * bridges down. On the far side, also a strike from a client's ground into a war the client is not in (far.ts). And
+ * ground a computer staff does not go into by the book (b512(h), history.json 'restraint'). And, for a country whose
+ * war is a declaration and not a front, any ground but its own (diplomacy.json 'stay', Turkey in 1945). And a strait
+ * that is shut to it (straitOpen).
+ */
+export const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => barred(g, c, to) || noCrossing(g, c.kind, from, to.id) || tieBars(g, c, to, from) || halted(g, c.nat, to.name) || keepsHome(g, c, to) || !straitOpen(g, c, g.regions[from], to);
+
+/** True where a computer-run country whose war is only declared (diplomacy.json 'stay') would send a corps off its own ground. */
+export const keepsHome = (g: Game, c: Corps, to: Region): boolean => !!g.flags[`stay:${c.nat}`] && c.nat !== g.human && to.owner !== c.nat;
 
 /** The plain reason a corps cannot make that move, for either interface to show, or null if it can. */
 export function whyBlocked(g: Game, c: Corps, to: Region, from = c.reg): string | null {
   const high = whyBarred(g, c, to);
   if (high) return high;
-  if (!noCrossing(g, c.kind, from, to.id)) return null;
+  if (!noCrossing(g, c.kind, from, to.id)) return whyTieBars(g, c, to, from);
   const x = crossingOf(from, to.id)!;
   return `The bridges over the ${riverName(x)} between ${g.regions[from].name} and ${to.name} are down. ${c.name} cannot cross until engineers rebuild them.`;
 }

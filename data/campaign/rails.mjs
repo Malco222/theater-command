@@ -20,6 +20,12 @@ export const ADD = [
   // Paris to Lyon by Dijon, Dresden to Breslau, Hamburg to Hanover, Bucharest to the sea.
   ['Paris', 'Aube'], ['Aube', 'Burgundy'], ['Burgundy', 'Lyon'], ['Dresden', 'Lower Silesia'], ['Hamburg', 'Hanover'],
   ['Bucharest', 'Dobruja'],
+  // The Brenner railway (ruling 233, noted 10:33Z; historian/brenner-railway-233.md): Munich, Kufstein and Innsbruck
+  // over the pass to Bolzano, Trento and Verona, open the whole war. Bavaria to Tyrol and Alto Adige to Veneto were
+  // laid already; the pass itself was not. And Verona to Brescia and Milan, the main line since 1857.
+  // (Styria to Friuli, the Pontebbana, was ruled in only if Carinthia lay inside our Styria. It does not: Villach,
+  // Tarvisio and Udine all lie in Friuli on this map and Klagenfurt in Slovenia, so it is not laid.)
+  ['Tyrol', 'Alto Adige'], ['Lombardy', 'Veneto'],
 ];
 /** Lines the tool lays that were never there: [region, region]. */
 export const CUT = [

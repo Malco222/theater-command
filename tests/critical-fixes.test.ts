@@ -65,7 +65,8 @@ function warsawCutOff(corps = 2): { g: Game; warsaw: Region; poles: Corps[] } {
   const g = playing('GER');
   const warsaw = g.byName['Warsaw'];
   for (const j of warsaw.nb) if (g.regions[j].ctrl !== 'GER') hand(g, g.regions[j], 'GER');
-  for (const u of [...warsaw.units]) removeCorps(g, u);
+  // (Warsaw's Defence Command, inside the town from the first month under ruling 232 (b566), goes with the rest.)
+  for (const u of [...warsaw.units, ...garrisonOf(warsaw)]) removeCorps(g, u);
   const poles: Corps[] = [];
   for (let k = 0; k < corps; k++) poles.push(addCorps(g, 'POL', `Army Warsaw ${k + 1}`, 'inf', 2, warsaw.id, {}));
   g.supplyDirty = true;

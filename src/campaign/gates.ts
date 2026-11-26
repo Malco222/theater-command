@@ -21,7 +21,7 @@
  */
 import { turnToDate } from '../core/ticket';
 import { allied, atWar, theName } from './game';
-import { NAVY, canPass, gateHolder, gateShutSince, seaAt, seaBorders } from './navy';
+import { NAVY, baseSeas, canPass, gateHolder, gateShutSince, seaAt, seaBorders } from './navy';
 import type { Fleet, Game, Gate } from './types';
 
 export interface GateView {
@@ -159,7 +159,7 @@ export function gateBar(g: Game, f: Fleet, zone: number): { gate: GateView; line
   const walk = (free: boolean): { d: Int16Array; via: Int16Array } => {
     const d = new Int16Array(g.seas.length).fill(-1), via = new Int16Array(g.seas.length).fill(-1);
     const q: number[] = [];
-    for (const z of f.base >= 0 ? g.regions[f.base].seas : [f.home]) if (d[z] < 0) { d[z] = 1; q.push(z); }
+    for (const z of baseSeas(g, f)) if (d[z] < 0) { d[z] = 1; q.push(z); }
     for (let i = 0; i < q.length; i++) {
       if (d[q[i]] >= NAVY.range) continue;
       for (const j of g.seas[q[i]].adj) {

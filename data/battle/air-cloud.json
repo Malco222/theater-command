@@ -1,0 +1,923 @@
+{
+ "_about": "The chance that a raid day had a cloud deck (5/8 or more, broken to overcast, hiding most of the ground) under the bombers, by place and month (January first), with the deck's base and tops in metres above the sea (by place; three zones change them by season under `seasons`, months counted from 0 = January). Raid days were chosen days, so the numbers sit below plain climatology where commanders could wait for weather. Take the first box that holds the target; no boxes overlap. Anywhere else uses the fallback. Read by src/battle/air/sky.ts; shown, never counted.",
+ "_review": "Researched 19 Nov 2026 (wartime operational records first, climatology where none exist; values rounded to 0.05). Reviewed by the historian 19 Nov 08:08Z (/mnt/project-files/historian/air-cloud-review.md): Eastern Front and Volga-Urals rows raised, Greece's winter raised, the year rule moved to October 1943, Oslo to Fennoscandia, seasonal heights for three zones. Sources and pinned raid days: /mnt/project-files/air-battles/cloud/air-cloud-table.md.",
+ "fallback": {
+  "months": [0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35],
+  "base_m": [400, 1500],
+  "tops_m": [1500, 3500]
+ },
+ "adjust": [
+  {
+   "zone": "Northwest and central Europe",
+   "before": 1943.75,
+   "add": -0.1,
+   "_why": "Before routine radar bombing day raids over north-west Europe waited for clear weather more often than the late-war figures the table rests on. The change came in autumn 1943: Emden, 27 Sep 1943, the first H2S pathfinder-led mission; Wilhelmshaven, 3 Nov 1943, the first H2X mission; most Eighth Air Force missions bombed blind that winter (the historian, 19 Nov 08:08Z). `before` is a date as the year plus the month over 12 (1943.75 = 1 October 1943, turn 50)."
+  }
+ ],
+ "zones": [
+  {
+   "zone": "Arctic coast, North Cape, Kola, Barents and Norwegian Seas, Svalbard, Jan Mayen, north Iceland coast",
+   "box": {"latS": 66, "latN": 81, "lonW": -25, "lonE": 45},
+   "months": [0.6, 0.55, 0.5, 0.55, 0.6, 0.55, 0.55, 0.6, 0.65, 0.65, 0.65, 0.6],
+   "base_m": [150, 800],
+   "tops_m": [600, 2000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Norwegian Atlantic coast, northern British isles (Orkney, Shetland, Caithness), Faroes and Iceland (box 1 of 2: south of 61N, west of 9E)",
+   "box": {"latS": 58, "latN": 61, "lonW": -25, "lonE": 9},
+   "months": [0.7, 0.7, 0.65, 0.6, 0.55, 0.5, 0.5, 0.55, 0.6, 0.65, 0.7, 0.7],
+   "base_m": [300, 1000],
+   "tops_m": [1500, 3000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Norwegian Atlantic coast (box 2 of 2: 61-66N)",
+   "box": {"latS": 61, "latN": 66, "lonW": -25, "lonE": 14},
+   "months": [0.7, 0.7, 0.65, 0.6, 0.55, 0.5, 0.5, 0.55, 0.6, 0.65, 0.7, 0.7],
+   "base_m": [300, 1000],
+   "tops_m": [1500, 3000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Fennoscandian interior (box 2 of 2: Oslo, the Oslofjord and Varmland, east of the mountains)",
+   "box": {"latS": 58, "latN": 61, "lonW": 9, "lonE": 14},
+   "months": [0.7, 0.6, 0.45, 0.45, 0.35, 0.3, 0.3, 0.3, 0.4, 0.55, 0.7, 0.75],
+   "base_m": [300, 1200],
+   "tops_m": [800, 2500],
+   "confidence": "low"
+  },
+  {
+   "zone": "Fennoscandian interior, Baltic, Gulf of Finland, Leningrad, Karelia, White Sea (Sweden, Finland, Estonia, Arkhangelsk)",
+   "box": {"latS": 58, "latN": 66, "lonW": 14, "lonE": 45},
+   "months": [0.7, 0.6, 0.45, 0.45, 0.35, 0.3, 0.3, 0.3, 0.4, 0.55, 0.7, 0.75],
+   "base_m": [300, 1200],
+   "tops_m": [800, 2500],
+   "confidence": "low"
+  },
+  {
+   "zone": "Northwest and central Europe (Britain, Ireland, France north of 44N, Low Countries, Germany, Denmark, Poland west of 19E, Czech lands, Austria north of 48N) (box 1 of 2: north of 48N)",
+   "box": {"latS": 48, "latN": 58, "lonW": -11, "lonE": 19},
+   "months": [0.7, 0.65, 0.6, 0.55, 0.5, 0.45, 0.4, 0.45, 0.5, 0.6, 0.7, 0.75],
+   "base_m": [300, 1500],
+   "tops_m": [1000, 3000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Northwest and central Europe (box 2 of 2: France 44-48N)",
+   "box": {"latS": 44, "latN": 48, "lonW": -11, "lonE": 7},
+   "months": [0.7, 0.65, 0.6, 0.55, 0.5, 0.45, 0.4, 0.45, 0.5, 0.6, 0.7, 0.75],
+   "base_m": [300, 1500],
+   "tops_m": [1000, 3000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Northern Alps and Alpine foreland (Swiss plateau, Lake Constance, Tyrol, Salzburg, Carinthia, Upper Styria)",
+   "box": {"latS": 46.5, "latN": 48, "lonW": 7, "lonE": 15},
+   "months": [0.75, 0.7, 0.65, 0.55, 0.5, 0.45, 0.4, 0.45, 0.5, 0.6, 0.75, 0.8],
+   "base_m": [500, 1500],
+   "tops_m": [1500, 3500],
+   "confidence": "low"
+  },
+  {
+   "zone": "Po valley, Danube basin and northern Balkans (Turin, Milan, Venice, Trieste, Graz, Wiener Neustadt, Budapest, Zagreb, Belgrade, Sarajevo, Bucharest, Ploesti, Sofia) (box 1 of 3: Po valley)",
+   "box": {"latS": 44, "latN": 46.5, "lonW": 7, "lonE": 15},
+   "months": [0.5, 0.45, 0.45, 0.25, 0.2, 0.15, 0.1, 0.1, 0.15, 0.4, 0.55, 0.55],
+   "base_m": [200, 1200],
+   "tops_m": [1000, 3700],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Po valley, Danube basin and northern Balkans (box 2 of 3: Danube basin)",
+   "box": {"latS": 43.7, "latN": 48, "lonW": 15, "lonE": 29.5},
+   "months": [0.5, 0.45, 0.45, 0.25, 0.2, 0.15, 0.1, 0.1, 0.15, 0.4, 0.55, 0.55],
+   "base_m": [200, 1200],
+   "tops_m": [1000, 3700],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Po valley, Danube basin and northern Balkans (box 3 of 3: Serbia, Bulgaria)",
+   "box": {"latS": 42, "latN": 43.7, "lonW": 19, "lonE": 29.5},
+   "months": [0.5, 0.45, 0.45, 0.25, 0.2, 0.15, 0.1, 0.1, 0.15, 0.4, 0.55, 0.55],
+   "base_m": [200, 1200],
+   "tops_m": [1000, 3700],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Italy south of 44N, Sicily, Sardinia, Corsica, Malta and the Dalmatian coast south of 43.7N (box 1 of 3: central and north)",
+   "box": {"latS": 37.5, "latN": 44, "lonW": 7.5, "lonE": 15},
+   "months": [0.35, 0.3, 0.25, 0.2, 0.15, 0.05, 0.05, 0.05, 0.1, 0.15, 0.3, 0.35],
+   "base_m": [500, 1500],
+   "tops_m": [2000, 4500],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Italy south of 44N, Sicily, Sardinia, Corsica, Malta and the Dalmatian coast south of 43.7N (box 2 of 3: south and Dalmatia)",
+   "box": {"latS": 35.5, "latN": 43.7, "lonW": 15, "lonE": 19},
+   "months": [0.35, 0.3, 0.25, 0.2, 0.15, 0.05, 0.05, 0.05, 0.1, 0.15, 0.3, 0.35],
+   "base_m": [500, 1500],
+   "tops_m": [2000, 4500],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Italy south of 44N, Sicily, Sardinia, Corsica, Malta and the Dalmatian coast south of 43.7N (box 3 of 3: Sicily south, Malta)",
+   "box": {"latS": 35.5, "latN": 37.5, "lonW": 11.5, "lonE": 15},
+   "months": [0.35, 0.3, 0.25, 0.2, 0.15, 0.05, 0.05, 0.05, 0.1, 0.15, 0.3, 0.35],
+   "base_m": [500, 1500],
+   "tops_m": [2000, 4500],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Atlantic Iberia and the Basque coast (Galicia, Asturias, Cantabria, Leon, Burgos, Navarre, Bayonne)",
+   "box": {"latS": 42, "latN": 44, "lonW": -10, "lonE": -1},
+   "months": [0.4, 0.35, 0.3, 0.3, 0.25, 0.2, 0.2, 0.2, 0.2, 0.3, 0.35, 0.4],
+   "base_m": [200, 600],
+   "tops_m": [1000, 2500],
+   "confidence": "low"
+  },
+  {
+   "zone": "Iberia (Meseta, Mediterranean coast, Andalusia, Portugal, Gibraltar, Balearics) and southern France south of 44N (Toulouse, Marseille, Toulon, Nice) (box 1 of 2: west)",
+   "box": {"latS": 36, "latN": 42, "lonW": -10, "lonE": -1},
+   "months": [0.25, 0.25, 0.2, 0.15, 0.1, 0.05, 0.05, 0.05, 0.05, 0.15, 0.25, 0.3],
+   "base_m": [600, 1500],
+   "tops_m": [2000, 4500],
+   "confidence": "low"
+  },
+  {
+   "zone": "Iberia (box 2 of 2: east and south France)",
+   "box": {"latS": 37.5, "latN": 44, "lonW": -1, "lonE": 7.5},
+   "months": [0.25, 0.25, 0.2, 0.15, 0.1, 0.05, 0.05, 0.05, 0.05, 0.15, 0.25, 0.3],
+   "base_m": [600, 1500],
+   "tops_m": [2000, 4500],
+   "confidence": "low"
+  },
+  {
+   "zone": "Atlantic Morocco and far-western Algeria (Tangier, Rabat, Casablanca, Fez, Oujda, Tlemcen)",
+   "box": {"latS": 33, "latN": 36, "lonW": -9.5, "lonE": -1},
+   "months": [0.35, 0.3, 0.25, 0.2, 0.1, 0.05, 0.05, 0.05, 0.05, 0.15, 0.25, 0.35],
+   "base_m": [500, 1500],
+   "tops_m": [2500, 6000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Maghreb Tell coast and Tunisia (Oran, Algiers, Bone, Bizerte, Tunis, Cape Bon, Sfax, Gabes)",
+   "box": {"latS": 33, "latN": 37.5, "lonW": -1, "lonE": 11.5},
+   "months": [0.35, 0.3, 0.25, 0.2, 0.1, 0.05, 0.05, 0.05, 0.05, 0.15, 0.25, 0.35],
+   "base_m": [500, 1500],
+   "tops_m": [2500, 6000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Libya-Egypt littoral (Tripolitania, Cyrenaica, Western Desert, Nile Delta, Cairo)",
+   "box": {"latS": 29, "latN": 33.5, "lonW": 11.5, "lonE": 32},
+   "months": [0.15, 0.15, 0.1, 0.1, 0.05, 0.05, 0, 0, 0.05, 0.05, 0.1, 0.15],
+   "base_m": [600, 2000],
+   "tops_m": [2000, 4500],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Levant, Suez Canal, Sinai, Mesopotamia, Cyprus and the Iranian plateau south of 36N (winter-rain belt)",
+   "box": {"latS": 29, "latN": 36, "lonW": 32, "lonE": 63},
+   "months": [0.2, 0.2, 0.2, 0.15, 0.05, 0, 0, 0, 0, 0.05, 0.1, 0.2],
+   "base_m": [1000, 3000],
+   "tops_m": [3000, 6000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Caucasus and Transcaucasia (Grozny, Mozdok, Sochi, Batumi, Tbilisi, Yerevan, Baku, Trabzon, Kars)",
+   "box": {"latS": 40, "latN": 44, "lonW": 37, "lonE": 50},
+   "months": [0.4, 0.4, 0.35, 0.25, 0.2, 0.15, 0.1, 0.1, 0.15, 0.2, 0.35, 0.4],
+   "base_m": [400, 1500],
+   "tops_m": [2000, 4500],
+   "confidence": "low"
+  },
+  {
+   "zone": "Anatolian plateau, Turkish Black Sea coast west of 37E, upper Mesopotamia (Aleppo, Mosul), and by estimate north-west Iran and the Caspian south shore (Tabriz, Gilan, Mazandaran, Ashgabat) (box 1 of 2: plateau, upper Mesopotamia, north Iran)",
+   "box": {"latS": 36, "latN": 40, "lonW": 30, "lonE": 60},
+   "months": [0.3, 0.25, 0.2, 0.15, 0.1, 0.05, 0.05, 0.05, 0.05, 0.1, 0.15, 0.25],
+   "base_m": [800, 2000],
+   "tops_m": [2000, 4500],
+   "confidence": "low"
+  },
+  {
+   "zone": "Anatolian plateau, Turkish Black Sea coast west of 37E, upper Mesopotamia (box 2 of 2: Black Sea coast west of 37E)",
+   "box": {"latS": 40, "latN": 42, "lonW": 30, "lonE": 37},
+   "months": [0.3, 0.25, 0.2, 0.15, 0.1, 0.05, 0.05, 0.05, 0.05, 0.1, 0.15, 0.25],
+   "base_m": [800, 2000],
+   "tops_m": [2000, 4500],
+   "confidence": "low"
+  },
+  {
+   "zone": "Greece, Albania, the Aegean, Crete, the Dodecanese, Istanbul and western Anatolia",
+   "box": {"latS": 34.5, "latN": 42, "lonW": 19, "lonE": 30},
+   "months": [0.35, 0.35, 0.2, 0.1, 0.05, 0.05, 0.05, 0.05, 0.05, 0.1, 0.2, 0.35],
+   "base_m": [600, 1500],
+   "tops_m": [2500, 5000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Eastern Front South (Galicia, southern Poland, Ukraine, Crimea, Kuban, Don and lower Volga steppe, Saratov, Orenburg, north Caspian) (box 1 of 2: north of 48N)",
+   "box": {"latS": 48, "latN": 52, "lonW": 19, "lonE": 60},
+   "months": [0.55, 0.5, 0.35, 0.2, 0.15, 0.1, 0.1, 0.1, 0.15, 0.3, 0.55, 0.6],
+   "base_m": [200, 1000],
+   "tops_m": [1000, 3000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Eastern Front South (box 2 of 2: Black Sea and Caspian steppe)",
+   "box": {"latS": 44, "latN": 48, "lonW": 29.5, "lonE": 60},
+   "months": [0.55, 0.5, 0.35, 0.2, 0.15, 0.1, 0.1, 0.1, 0.15, 0.3, 0.55, 0.6],
+   "base_m": [200, 1000],
+   "tops_m": [1000, 3000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Volga-Urals (Kazan, Kuibyshev, Syzran, Ulyanovsk, Ufa, Perm)",
+   "box": {"latS": 52, "latN": 60, "lonW": 45, "lonE": 60},
+   "months": [0.5, 0.4, 0.3, 0.25, 0.2, 0.2, 0.2, 0.2, 0.25, 0.45, 0.6, 0.6],
+   "base_m": [200, 1000],
+   "tops_m": [1000, 2500],
+   "confidence": "low"
+  },
+  {
+   "zone": "Eastern Front North (Baltic states, Belarus, Poland north of 52N east of 19E, East Prussia, Smolensk, Moscow, Gorky)",
+   "box": {"latS": 52, "latN": 58, "lonW": 19, "lonE": 45},
+   "months": [0.65, 0.55, 0.45, 0.3, 0.25, 0.25, 0.25, 0.25, 0.3, 0.5, 0.7, 0.75],
+   "base_m": [200, 1000],
+   "tops_m": [1200, 3000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Arabian Sea monsoon coast (Dhofar-Mahra khareef) and Socotra",
+   "box": {"latS": 12, "latN": 18.5, "lonW": 51.5, "lonE": 57},
+   "months": [0.05, 0.05, 0.05, 0.05, 0.05, 0.2, 0.5, 0.5, 0.2, 0.05, 0.05, 0.05],
+   "base_m": [100, 500],
+   "tops_m": [600, 1200],
+   "confidence": "low"
+  },
+  {
+   "zone": "Sahel, Sudan belt, Eritrean and Yemeni highlands (Dakar, Khartoum, Asmara, Keren, Gondar, Sana'a)",
+   "box": {"latS": 12, "latN": 18.5, "lonW": -17.6, "lonE": 45},
+   "months": [0.05, 0.05, 0.05, 0.05, 0.1, 0.1, 0.25, 0.3, 0.2, 0.05, 0.05, 0.05],
+   "base_m": [1000, 3500],
+   "tops_m": [3000, 6500],
+   "confidence": "low"
+  },
+  {
+   "zone": "Ethiopian highlands (Addis Ababa, Dessie, Dire Dawa, Harar, Jimma) - added by the integrator",
+   "box": {"latS": 5, "latN": 12, "lonW": 34, "lonE": 43},
+   "months": [0.15, 0.2, 0.15, 0.2, 0.2, 0.35, 0.5, 0.45, 0.4, 0.15, 0.1, 0.1],
+   "base_m": [2600, 3500],
+   "tops_m": [4000, 6500],
+   "confidence": "low"
+  },
+  {
+   "zone": "Sahara and Arabian interior (true desert; Persian Gulf, Aden) (box 1 of 3: western Sahara)",
+   "box": {"latS": 18.5, "latN": 33, "lonW": -17, "lonE": 11.5},
+   "months": [0.05, 0.05, 0.05, 0.05, 0.05, 0, 0, 0, 0, 0, 0.05, 0.05],
+   "base_m": [2500, 4500],
+   "tops_m": [4000, 6500],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Sahara and Arabian interior (box 2 of 3: eastern Sahara and Arabia)",
+   "box": {"latS": 18.5, "latN": 29, "lonW": 11.5, "lonE": 63},
+   "months": [0.05, 0.05, 0.05, 0.05, 0.05, 0, 0, 0, 0, 0, 0.05, 0.05],
+   "base_m": [2500, 4500],
+   "tops_m": [4000, 6500],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Sahara and Arabian interior (box 3 of 3: south Arabia, Aden)",
+   "box": {"latS": 12, "latN": 18.5, "lonW": 45, "lonE": 51.5},
+   "months": [0.05, 0.05, 0.05, 0.05, 0.05, 0, 0, 0, 0, 0, 0.05, 0.05],
+   "base_m": [2500, 4500],
+   "tops_m": [4000, 6500],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Northern Kyushu and Shimonoseki strait (Yawata, Kokura, Fukuoka, Omura, Sasebo, Nagasaki, Omuta, Kumamoto)",
+   "box": {"latS": 32.6, "latN": 37, "lonW": 129.5, "lonE": 131.2},
+   "months": [0.65, 0.65, 0.55, 0.45, 0.5, 0.65, 0.6, 0.6, 0.55, 0.45, 0.65, 0.65],
+   "base_m": [500, 1500],
+   "tops_m": [2500, 5000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Japan Pacific side and inner Japan (Kanto, Tokai, Kansai, Inland Sea, Shikoku, southern Kyushu) (box 1 of 4: southern Kyushu)",
+   "box": {"latS": 30, "latN": 32.6, "lonW": 129.5, "lonE": 142.5},
+   "months": [0.5, 0.65, 0.5, 0.4, 0.4, 0.6, 0.65, 0.6, 0.6, 0.5, 0.5, 0.45],
+   "base_m": [600, 1500],
+   "tops_m": [3000, 6000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Japan Pacific side and inner Japan (box 2 of 4: Inland Sea, Kansai, Nagoya)",
+   "box": {"latS": 32.6, "latN": 35.2, "lonW": 131.2, "lonE": 142.5},
+   "months": [0.5, 0.65, 0.5, 0.4, 0.4, 0.6, 0.65, 0.6, 0.6, 0.5, 0.5, 0.45],
+   "base_m": [600, 1500],
+   "tops_m": [3000, 6000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Japan Sea side of Japan and South Sakhalin (Hokuriku, San'in, Niigata, Akita, Aomori, Hakodate, Sapporo, Karafuto) (box 1 of 5: San'in and Wakasa)",
+   "box": {"latS": 35.2, "latN": 37, "lonW": 131.2, "lonE": 136.4},
+   "months": [0.75, 0.7, 0.55, 0.45, 0.45, 0.55, 0.55, 0.45, 0.5, 0.5, 0.6, 0.75],
+   "base_m": [300, 1000],
+   "tops_m": [1500, 4000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Japan Sea side of Japan and South Sakhalin (box 2 of 5: Hokuriku)",
+   "box": {"latS": 36, "latN": 37, "lonW": 136.4, "lonE": 137.7},
+   "months": [0.75, 0.7, 0.55, 0.45, 0.45, 0.55, 0.55, 0.45, 0.5, 0.5, 0.6, 0.75],
+   "base_m": [300, 1000],
+   "tops_m": [1500, 4000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Japan Pacific side and inner Japan (box 3 of 4: Kanto, Gifu)",
+   "box": {"latS": 35.2, "latN": 36, "lonW": 136.4, "lonE": 142.5},
+   "months": [0.5, 0.65, 0.5, 0.4, 0.4, 0.6, 0.65, 0.6, 0.6, 0.5, 0.5, 0.45],
+   "base_m": [600, 1500],
+   "tops_m": [3000, 6000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Japan Pacific side and inner Japan (box 4 of 4: north Kanto, Nagano)",
+   "box": {"latS": 36, "latN": 37, "lonW": 137.7, "lonE": 142.5},
+   "months": [0.5, 0.65, 0.5, 0.4, 0.4, 0.6, 0.65, 0.6, 0.6, 0.5, 0.5, 0.45],
+   "base_m": [600, 1500],
+   "tops_m": [3000, 6000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Pacific Tohoku (Sendai, Fukushima, Morioka, Kamaishi, Hachinohe, Misawa)",
+   "box": {"latS": 37, "latN": 40.7, "lonW": 140.4, "lonE": 142.5},
+   "months": [0.55, 0.55, 0.5, 0.45, 0.5, 0.65, 0.7, 0.6, 0.55, 0.45, 0.45, 0.5],
+   "base_m": [300, 1500],
+   "tops_m": [1000, 5000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Eastern Hokkaido and Kunashiri (Obihiro, Kushiro, Nemuro, Abashiri)",
+   "box": {"latS": 41.5, "latN": 44.6, "lonW": 142.5, "lonE": 146},
+   "months": [0.45, 0.45, 0.45, 0.45, 0.55, 0.7, 0.7, 0.65, 0.5, 0.4, 0.4, 0.45],
+   "base_m": [150, 1000],
+   "tops_m": [600, 4000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Japan Sea side of Japan and South Sakhalin (box 3 of 5: Niigata to Akita)",
+   "box": {"latS": 37, "latN": 40.7, "lonW": 136.7, "lonE": 140.4},
+   "months": [0.75, 0.7, 0.55, 0.45, 0.45, 0.55, 0.55, 0.45, 0.5, 0.5, 0.6, 0.75],
+   "base_m": [300, 1000],
+   "tops_m": [1500, 4000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Japan Sea side of Japan and South Sakhalin (box 4 of 5: Aomori, Hokkaido west, Sakhalin west)",
+   "box": {"latS": 40.7, "latN": 50, "lonW": 136.7, "lonE": 142.5},
+   "months": [0.75, 0.7, 0.55, 0.45, 0.45, 0.55, 0.55, 0.45, 0.5, 0.5, 0.6, 0.75],
+   "base_m": [300, 1000],
+   "tops_m": [1500, 4000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Japan Sea side of Japan and South Sakhalin (box 5 of 5: Sakhalin east)",
+   "box": {"latS": 44.6, "latN": 50, "lonW": 142.5, "lonE": 145},
+   "months": [0.75, 0.7, 0.55, 0.45, 0.45, 0.55, 0.55, 0.45, 0.5, 0.5, 0.6, 0.75],
+   "base_m": [300, 1000],
+   "tops_m": [1500, 4000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Kurils, Kamchatka and Sea of Okhotsk (Paramushiro, Shimushu, Matsuwa, Etorofu, Petropavlovsk)",
+   "box": {"latS": 44.6, "latN": 60, "lonW": 145, "lonE": 165},
+   "months": [0.7, 0.7, 0.65, 0.7, 0.75, 0.8, 0.8, 0.7, 0.6, 0.65, 0.7, 0.7],
+   "base_m": [150, 600],
+   "tops_m": [700, 3700],
+   "confidence": "low"
+  },
+  {
+   "zone": "Aleutians, Bering Sea and Alaska Peninsula (Attu, Kiska, Amchitka, Adak, Dutch Harbor, Cold Bay, Kodiak) (box 1 of 2: west of 180)",
+   "box": {"latS": 50, "latN": 62, "lonW": 165, "lonE": 180},
+   "months": [0.75, 0.75, 0.75, 0.7, 0.8, 0.85, 0.8, 0.85, 0.8, 0.75, 0.75, 0.75],
+   "base_m": [150, 600],
+   "tops_m": [600, 3000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Aleutians, Bering Sea and Alaska Peninsula (box 2 of 2: east of 180)",
+   "box": {"latS": 50, "latN": 62, "lonW": -180, "lonE": -150},
+   "months": [0.75, 0.75, 0.75, 0.7, 0.8, 0.85, 0.8, 0.85, 0.8, 0.75, 0.75, 0.75],
+   "base_m": [150, 600],
+   "tops_m": [600, 3000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Korea, Manchuria, North China, Mongolia and the Amur (dry continental winter) (box 1 of 2: north of 37N)",
+   "box": {"latS": 37, "latN": 53.6, "lonW": 100, "lonE": 136.7},
+   "months": [0.25, 0.25, 0.3, 0.3, 0.35, 0.4, 0.55, 0.45, 0.3, 0.25, 0.3, 0.25],
+   "base_m": [800, 2000],
+   "tops_m": [2500, 5000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Korea, Manchuria, North China, Mongolia and the Amur (box 2 of 2: Korea south, North China)",
+   "box": {"latS": 34, "latN": 37, "lonW": 100, "lonE": 129.5},
+   "months": [0.25, 0.25, 0.3, 0.3, 0.35, 0.4, 0.55, 0.45, 0.3, 0.25, 0.3, 0.25],
+   "base_m": [800, 2000],
+   "tops_m": [2500, 5000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Lower Yangtze, east-central China, Jeju and the East China Sea (Shanghai, Nanking, Hankow, Changsha, Hangchow, Foochow)",
+   "box": {"latS": 26, "latN": 34, "lonW": 110, "lonE": 127},
+   "months": [0.55, 0.55, 0.55, 0.5, 0.5, 0.55, 0.4, 0.3, 0.4, 0.4, 0.45, 0.45],
+   "base_m": [500, 1500],
+   "tops_m": [2500, 5000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Sichuan Basin and Guizhou (Chongqing, Chengdu B-29 bases, Guiyang, Zhaotong)",
+   "box": {"latS": 26, "latN": 34, "lonW": 102, "lonE": 110},
+   "months": [0.85, 0.8, 0.7, 0.6, 0.55, 0.6, 0.45, 0.4, 0.55, 0.75, 0.8, 0.85],
+   "base_m": [400, 1500],
+   "tops_m": [1500, 3500],
+   "confidence": "medium",
+   "seasons": [
+    {
+     "months": [4, 5, 6, 7, 8],
+     "base_m": [600, 1500],
+     "tops_m": [3000, 6000],
+     "_why": "summer convective cloud; the winter fog and stratus hid Chungking (the historian, M)"
+    }
+   ]
+  },
+  {
+   "zone": "North Formosa and the Pescadores north of 24N (Kiirun, Taihoku, Shinchiku)",
+   "box": {"latS": 24, "latN": 26, "lonW": 119.5, "lonE": 122.5},
+   "months": [0.7, 0.75, 0.75, 0.5, 0.5, 0.45, 0.3, 0.35, 0.4, 0.65, 0.7, 0.7],
+   "base_m": [400, 1200],
+   "tops_m": [1500, 3000],
+   "confidence": "low"
+  },
+  {
+   "zone": "South and central Formosa south of 24N (Kagi, Tainan, Takao, Okayama, Heito)",
+   "box": {"latS": 21.5, "latN": 24, "lonW": 119.5, "lonE": 122.5},
+   "months": [0.3, 0.35, 0.35, 0.5, 0.5, 0.45, 0.3, 0.35, 0.4, 0.25, 0.3, 0.3],
+   "base_m": [400, 1200],
+   "tops_m": [1500, 3000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Ryukyus and Sakishima (Okinawa, Ie Shima, Kerama, Amami, Miyako, Ishigaki, Daito) - added by the integrator (box 1 of 2: Okinawa, Amami, Daito)",
+   "box": {"latS": 22, "latN": 30, "lonW": 127, "lonE": 134},
+   "months": [0.6, 0.6, 0.6, 0.55, 0.55, 0.5, 0.35, 0.35, 0.4, 0.4, 0.5, 0.55],
+   "base_m": [500, 1200],
+   "tops_m": [1500, 4000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Ryukyus and Sakishima (box 2 of 2: Sakishima)",
+   "box": {"latS": 22, "latN": 26, "lonW": 122.5, "lonE": 127},
+   "months": [0.6, 0.6, 0.6, 0.55, 0.55, 0.5, 0.35, 0.35, 0.4, 0.4, 0.5, 0.55],
+   "base_m": [500, 1200],
+   "tops_m": [1500, 4000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Bonin and Volcano Islands (Chichi Jima, Haha Jima, Iwo Jima) - added by the integrator",
+   "box": {"latS": 22, "latN": 30, "lonW": 134, "lonE": 145},
+   "months": [0.5, 0.45, 0.45, 0.5, 0.55, 0.4, 0.3, 0.35, 0.35, 0.4, 0.45, 0.5],
+   "base_m": [500, 1200],
+   "tops_m": [1500, 4000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Central Burma Dry Zone and upper Chindwin (Mandalay, Meiktila, Magwe, Shwebo, Kalewa)",
+   "box": {"latS": 19.5, "latN": 24, "lonW": 94, "lonE": 96.5},
+   "months": [0.05, 0.05, 0.05, 0.1, 0.2, 0.35, 0.4, 0.4, 0.35, 0.25, 0.1, 0.05],
+   "base_m": [900, 1500],
+   "tops_m": [3000, 5000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Assam valley, North Burma hills and the Hump (Chabua, Dinjan, Imphal, Kohima, Myitkyina, Bhamo, Tengchong)",
+   "box": {"latS": 24, "latN": 28.5, "lonW": 89.5, "lonE": 99},
+   "months": [0.15, 0.2, 0.3, 0.4, 0.6, 0.8, 0.85, 0.85, 0.75, 0.45, 0.2, 0.15],
+   "base_m": [300, 1200],
+   "tops_m": [4000, 9000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Yunnan plateau and the eastern Hump (Kunming, Yunnanyi, Paoshan, Mengtze, Lijiang, Simao) (box 1 of 2: west and north)",
+   "box": {"latS": 22, "latN": 28.5, "lonW": 99, "lonE": 102},
+   "months": [0.15, 0.15, 0.15, 0.2, 0.35, 0.55, 0.6, 0.55, 0.55, 0.45, 0.25, 0.2],
+   "base_m": [2300, 3000],
+   "tops_m": [4000, 6000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Yunnan plateau and the eastern Hump (box 2 of 2: Kunming, Mengtze)",
+   "box": {"latS": 23, "latN": 26, "lonW": 102, "lonE": 104.5},
+   "months": [0.15, 0.15, 0.15, 0.2, 0.35, 0.55, 0.6, 0.55, 0.55, 0.45, 0.25, 0.2],
+   "base_m": [2300, 3000],
+   "tops_m": [4000, 6000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Bay of Bengal monsoon coasts (Calcutta, Kharagpur B-29 bases, Dacca, Chittagong, Arakan, Rangoon, Tenasserim, Shan west, Andamans, Nicobars) (box 1 of 3: Bengal, Arakan, Andamans)",
+   "box": {"latS": 6.5, "latN": 24, "lonW": 86, "lonE": 94},
+   "months": [0.1, 0.05, 0.1, 0.15, 0.35, 0.65, 0.7, 0.7, 0.6, 0.4, 0.15, 0.1],
+   "base_m": [300, 900],
+   "tops_m": [2500, 6000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Bay of Bengal monsoon coasts (box 2 of 3: Lower Burma, Tenasserim)",
+   "box": {"latS": 6.5, "latN": 19.5, "lonW": 94, "lonE": 98.8},
+   "months": [0.1, 0.05, 0.1, 0.15, 0.35, 0.65, 0.7, 0.7, 0.6, 0.4, 0.15, 0.1],
+   "base_m": [300, 900],
+   "tops_m": [2500, 6000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Bay of Bengal monsoon coasts (box 3 of 3: Shan west, Lashio)",
+   "box": {"latS": 19.5, "latN": 24, "lonW": 96.5, "lonE": 99},
+   "months": [0.1, 0.05, 0.1, 0.15, 0.35, 0.65, 0.7, 0.7, 0.6, 0.4, 0.15, 0.1],
+   "base_m": [300, 900],
+   "tops_m": [2500, 6000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Tonkin and northern Indochina (crachin): Hanoi, Haiphong, Lang Son, Nanning, Luang Prabang",
+   "box": {"latS": 19.5, "latN": 23, "lonW": 102, "lonE": 108.5},
+   "months": [0.65, 0.75, 0.75, 0.6, 0.35, 0.45, 0.4, 0.45, 0.4, 0.35, 0.35, 0.4],
+   "base_m": [150, 800],
+   "tops_m": [1500, 3000],
+   "confidence": "medium",
+   "seasons": [
+    {
+     "months": [4, 5, 6, 7, 8, 9],
+     "base_m": [400, 1000],
+     "tops_m": [4000, 8000],
+     "_why": "summer monsoon cloud is towering, not crachin (the historian, M)"
+    }
+   ]
+  },
+  {
+   "zone": "South China coast, Guangxi and Hainan (Hong Kong, Canton, Swatow, Amoy, Kweilin, Liuchow) (box 1 of 2: north of 23N)",
+   "box": {"latS": 23, "latN": 26, "lonW": 104.5, "lonE": 119.5},
+   "months": [0.4, 0.55, 0.6, 0.55, 0.5, 0.5, 0.35, 0.35, 0.35, 0.3, 0.3, 0.35],
+   "base_m": [400, 1000],
+   "tops_m": [1500, 3000],
+   "confidence": "low"
+  },
+  {
+   "zone": "South China coast, Guangxi and Hainan (box 2 of 2: coast and Hainan)",
+   "box": {"latS": 18, "latN": 23, "lonW": 108.5, "lonE": 117},
+   "months": [0.4, 0.55, 0.6, 0.55, 0.5, 0.5, 0.35, 0.35, 0.35, 0.3, 0.3, 0.35],
+   "base_m": [400, 1000],
+   "tops_m": [1500, 3000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Annam coast of central Vietnam (Hue, Tourane, Qui Nhon, Nha Trang, Cam Ranh Bay)",
+   "box": {"latS": 10.5, "latN": 17.5, "lonW": 107.5, "lonE": 110},
+   "months": [0.45, 0.4, 0.35, 0.25, 0.2, 0.2, 0.2, 0.25, 0.35, 0.5, 0.55, 0.55],
+   "base_m": [300, 900],
+   "tops_m": [1500, 3500],
+   "confidence": "low"
+  },
+  {
+   "zone": "Thailand, Cambodia, Laos, the Shan States east of 99E and Cochinchina (Bangkok, Chiang Mai, Phnom Penh, Vientiane, Saigon) (box 1 of 2: south of 19.5N)",
+   "box": {"latS": 7.5, "latN": 19.5, "lonW": 98.8, "lonE": 107.5},
+   "months": [0.2, 0.15, 0.1, 0.15, 0.3, 0.45, 0.45, 0.55, 0.55, 0.45, 0.2, 0.15],
+   "base_m": [400, 900],
+   "tops_m": [2500, 6000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Thailand, Cambodia, Laos, the Shan States east of 99E and Cochinchina (box 2 of 2: north Thailand, Kengtung)",
+   "box": {"latS": 19.5, "latN": 22, "lonW": 99, "lonE": 102},
+   "months": [0.2, 0.15, 0.1, 0.15, 0.3, 0.45, 0.45, 0.55, 0.55, 0.45, 0.2, 0.15],
+   "base_m": [400, 900],
+   "tops_m": [2500, 6000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "India west coast (Konkan, Goa, Malabar: Bombay, Goa, Mangalore, Cochin)",
+   "box": {"latS": 8, "latN": 21, "lonW": 66, "lonE": 77.2},
+   "months": [0.05, 0.05, 0.05, 0.05, 0.15, 0.65, 0.8, 0.75, 0.55, 0.25, 0.1, 0.05],
+   "base_m": [300, 900],
+   "tops_m": [3000, 6000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Ceylon and south-east India (Colombo, Trincomalee, Madras, Bangalore, Madurai)",
+   "box": {"latS": 5.5, "latN": 14, "lonW": 77.2, "lonE": 86},
+   "months": [0.15, 0.1, 0.1, 0.2, 0.4, 0.4, 0.35, 0.35, 0.35, 0.45, 0.45, 0.3],
+   "base_m": [500, 900],
+   "tops_m": [2500, 6000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Indian interior and northwest (Deccan, central India, Ganges plain, Sind: Delhi, Nagpur, Hyderabad, Karachi, Patna, Vizagapatam) (box 1 of 3: north and west)",
+   "box": {"latS": 21, "latN": 30, "lonW": 66, "lonE": 86},
+   "months": [0.05, 0.05, 0.05, 0.05, 0.1, 0.35, 0.55, 0.55, 0.4, 0.15, 0.05, 0.05],
+   "base_m": [600, 1200],
+   "tops_m": [3000, 6000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Indian interior and northwest (box 2 of 3: north Bengal, Bihar north)",
+   "box": {"latS": 24, "latN": 30, "lonW": 86, "lonE": 89.5},
+   "months": [0.05, 0.05, 0.05, 0.05, 0.1, 0.35, 0.55, 0.55, 0.4, 0.15, 0.05, 0.05],
+   "base_m": [600, 1200],
+   "tops_m": [3000, 6000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Indian interior and northwest (box 3 of 3: Deccan east)",
+   "box": {"latS": 14, "latN": 21, "lonW": 77.2, "lonE": 86},
+   "months": [0.05, 0.05, 0.05, 0.05, 0.1, 0.35, 0.55, 0.55, 0.4, 0.15, 0.05, 0.05],
+   "base_m": [600, 1200],
+   "tops_m": [3000, 6000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Philippines north of 6.5N (Luzon, Clark Field, Manila, Visayas, Leyte, northern Mindanao)",
+   "box": {"latS": 6.5, "latN": 21, "lonW": 117, "lonE": 127},
+   "months": [0.25, 0.2, 0.15, 0.1, 0.25, 0.4, 0.45, 0.55, 0.5, 0.45, 0.35, 0.3],
+   "base_m": [450, 900],
+   "tops_m": [3000, 6000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Equatorial Indies (Malaya, Singapore, Sumatra, Borneo, Celebes, Moluccas, southern Mindanao and Sulu) (box 1 of 2: equatorial belt)",
+   "box": {"latS": -6, "latN": 6.5, "lonW": 95, "lonE": 130},
+   "months": [0.35, 0.3, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.4, 0.45, 0.5, 0.55],
+   "base_m": [300, 900],
+   "tops_m": [2500, 5000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Equatorial Indies (box 2 of 2: Kelantan, Songkhla, north Borneo)",
+   "box": {"latS": 6.5, "latN": 7.5, "lonW": 98.8, "lonE": 117},
+   "months": [0.35, 0.3, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.4, 0.45, 0.5, 0.55],
+   "base_m": [300, 900],
+   "tops_m": [2500, 5000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Java, the Lesser Sundas and Timor (Batavia, Surabaya, Bali, Koepang, Dili)",
+   "box": {"latS": -11, "latN": -6, "lonW": 105, "lonE": 130},
+   "months": [0.4, 0.4, 0.35, 0.25, 0.2, 0.2, 0.15, 0.1, 0.1, 0.15, 0.25, 0.35],
+   "base_m": [450, 900],
+   "tops_m": [3000, 6000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Northern Australia (Darwin, Arnhem Land, Kimberley, Cape York, Cairns, Townsville)",
+   "box": {"latS": -20, "latN": -11, "lonW": 120, "lonE": 154},
+   "months": [0.55, 0.55, 0.45, 0.25, 0.15, 0.1, 0.05, 0.05, 0.05, 0.1, 0.25, 0.45],
+   "base_m": [450, 900],
+   "tops_m": [3000, 6000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "New Guinea, the Bismarcks and the Solomons (Port Moresby, Lae, Wewak, Hollandia, Biak, Rabaul, Guadalcanal, Bougainville)",
+   "box": {"latS": -11, "latN": 0, "lonW": 130, "lonE": 163},
+   "months": [0.5, 0.5, 0.5, 0.45, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.45, 0.5],
+   "base_m": [600, 900],
+   "tops_m": [3000, 6000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Micronesia trade-wind belt (Marianas, Carolines, Palau, Marshalls, Gilberts, Wake, Nauru) (box 1 of 2: north of the equator)",
+   "box": {"latS": 0, "latN": 22, "lonW": 130, "lonE": 180},
+   "months": [0.25, 0.25, 0.2, 0.15, 0.15, 0.2, 0.35, 0.45, 0.45, 0.35, 0.25, 0.25],
+   "base_m": [500, 700],
+   "tops_m": [1800, 3000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Micronesia trade-wind belt (box 2 of 2: Nauru, Ocean Island)",
+   "box": {"latS": -2, "latN": 0, "lonW": 163, "lonE": 180},
+   "months": [0.25, 0.25, 0.2, 0.15, 0.15, 0.2, 0.35, 0.45, 0.45, 0.35, 0.25, 0.25],
+   "base_m": [500, 700],
+   "tops_m": [1800, 3000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "South-west Pacific islands and eastern Coral Sea (New Hebrides, New Caledonia, Santa Cruz, Fiji, Ellice) (box 1 of 2: south of 11S)",
+   "box": {"latS": -23, "latN": -11, "lonW": 154, "lonE": 180},
+   "months": [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.25, 0.25, 0.25, 0.25, 0.25],
+   "base_m": [500, 900],
+   "tops_m": [2000, 4000],
+   "confidence": "low"
+  },
+  {
+   "zone": "South-west Pacific islands and eastern Coral Sea (box 2 of 2: Santa Cruz, Ellice)",
+   "box": {"latS": -11, "latN": -2, "lonW": 163, "lonE": 180},
+   "months": [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.25, 0.25, 0.25, 0.25, 0.25],
+   "base_m": [500, 900],
+   "tops_m": [2000, 4000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Hawaii, Midway and Johnston (subtropical North Pacific)",
+   "box": {"latS": 16, "latN": 30, "lonW": -180, "lonE": -154},
+   "months": [0.3, 0.3, 0.3, 0.25, 0.2, 0.2, 0.2, 0.2, 0.2, 0.25, 0.3, 0.3],
+   "base_m": [450, 1100],
+   "tops_m": [1500, 2500],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Pacific islands east of the dateline (Samoa, Tonga, eastern Fiji, Canton, Palmyra, Christmas Island)",
+   "box": {"latS": -23, "latN": 16, "lonW": -180, "lonE": -155},
+   "months": [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.25, 0.25, 0.25, 0.25, 0.25],
+   "base_m": [500, 900],
+   "tops_m": [2000, 4000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Temperate and arid southern Australia (Perth, Adelaide, Melbourne, Sydney, Brisbane, Tasmania)",
+   "box": {"latS": -44, "latN": -20, "lonW": 112, "lonE": 154},
+   "months": [0.2, 0.2, 0.25, 0.3, 0.4, 0.4, 0.4, 0.4, 0.35, 0.35, 0.3, 0.25],
+   "base_m": [600, 1200],
+   "tops_m": [1800, 3000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Northeastern United States, Great Lakes and eastern Canada (New York, Washington, Chicago, Montreal, Halifax, Gander)",
+   "box": {"latS": 38, "latN": 52, "lonW": -95, "lonE": -52},
+   "months": [0.5, 0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.25, 0.25, 0.3, 0.45, 0.5],
+   "base_m": [400, 1200],
+   "tops_m": [1500, 3500],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Southeastern United States and Gulf coast north of 27N (Norfolk, Atlanta, Jacksonville, New Orleans, Houston)",
+   "box": {"latS": 27, "latN": 38, "lonW": -100, "lonE": -75},
+   "months": [0.4, 0.4, 0.35, 0.25, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.3, 0.35],
+   "base_m": [400, 1200],
+   "tops_m": [1500, 3500],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Central America and the Panama Canal",
+   "box": {"latS": 7, "latN": 17, "lonW": -92, "lonE": -77},
+   "months": [0.15, 0.1, 0.1, 0.15, 0.3, 0.4, 0.4, 0.4, 0.45, 0.5, 0.45, 0.3],
+   "base_m": [450, 900],
+   "tops_m": [3000, 6000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Caribbean (Antilles, Bahamas, south Florida, Venezuelan and Colombian coast, Trinidad) (box 1 of 2: north of 17N)",
+   "box": {"latS": 17, "latN": 27, "lonW": -85, "lonE": -59},
+   "months": [0.15, 0.15, 0.15, 0.2, 0.35, 0.3, 0.25, 0.25, 0.3, 0.3, 0.25, 0.15],
+   "base_m": [500, 900],
+   "tops_m": [1800, 3000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Caribbean (box 2 of 2: south of 17N)",
+   "box": {"latS": 10, "latN": 17, "lonW": -77, "lonE": -59},
+   "months": [0.15, 0.15, 0.15, 0.2, 0.35, 0.3, 0.25, 0.25, 0.3, 0.3, 0.25, 0.15],
+   "base_m": [500, 900],
+   "tops_m": [1800, 3000],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Pacific coast of North America (San Diego, Los Angeles, San Francisco, Oregon, Seattle, Vancouver)",
+   "box": {"latS": 32, "latN": 42, "lonW": -126, "lonE": -117.05},
+   "months": [0.5, 0.45, 0.4, 0.3, 0.3, 0.3, 0.25, 0.25, 0.2, 0.3, 0.45, 0.5],
+   "base_m": [400, 1200],
+   "tops_m": [2000, 4500],
+   "confidence": "medium",
+   "seasons": [
+    {
+     "months": [4, 5, 6, 7, 8],
+     "base_m": [150, 500],
+     "tops_m": [400, 1200],
+     "_why": "the summer marine layer (the historian, M)"
+    }
+   ]
+  },
+  {
+   "zone": "Pacific coast of North America (box 3 of 3: Oregon, Puget Sound and Vancouver, west of the Cascades)",
+   "box": {"latS": 42, "latN": 50, "lonW": -126, "lonE": -121},
+   "months": [0.5, 0.45, 0.4, 0.3, 0.3, 0.3, 0.25, 0.25, 0.2, 0.3, 0.45, 0.5],
+   "base_m": [400, 1200],
+   "tops_m": [2000, 4500],
+   "confidence": "medium",
+   "seasons": [
+    {
+     "months": [4, 5, 6, 7, 8],
+     "base_m": [150, 500],
+     "tops_m": [400, 1200],
+     "_why": "the summer marine layer (the historian, M)"
+    }
+   ]
+  },
+  {
+   "zone": "Pacific coast of North America (box 2 of 3: San Diego and its back country)",
+   "box": {"latS": 32, "latN": 34.5, "lonW": -117.05, "lonE": -116.4},
+   "months": [0.5, 0.45, 0.4, 0.3, 0.3, 0.3, 0.25, 0.25, 0.2, 0.3, 0.45, 0.5],
+   "base_m": [400, 1200],
+   "tops_m": [2000, 4500],
+   "confidence": "medium",
+   "seasons": [
+    {
+     "months": [4, 5, 6, 7, 8],
+     "base_m": [150, 500],
+     "tops_m": [400, 1200],
+     "_why": "the summer marine layer (the historian, M)"
+    }
+   ]
+  },
+  {
+   "zone": "Pacific coast of Peru and northern Chile (stratocumulus deck) (box 1 of 4: north coast, Trujillo, Chiclayo)",
+   "box": {"latS": -10, "latN": -4, "lonW": -82, "lonE": -78.3},
+   "months": [0.4, 0.35, 0.3, 0.35, 0.55, 0.8, 0.85, 0.85, 0.8, 0.7, 0.6, 0.5],
+   "base_m": [300, 700],
+   "tops_m": [800, 1300],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Pacific coast of Peru and northern Chile (box 2 of 4: Lima, Callao, Pisco)",
+   "box": {"latS": -15, "latN": -10, "lonW": -82, "lonE": -76},
+   "months": [0.4, 0.35, 0.3, 0.35, 0.55, 0.8, 0.85, 0.85, 0.8, 0.7, 0.6, 0.5],
+   "base_m": [300, 700],
+   "tops_m": [800, 1300],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Pacific coast of Peru and northern Chile (box 3 of 4: south coast below Arequipa)",
+   "box": {"latS": -18, "latN": -15, "lonW": -82, "lonE": -72.5},
+   "months": [0.4, 0.35, 0.3, 0.35, 0.55, 0.8, 0.85, 0.85, 0.8, 0.7, 0.6, 0.5],
+   "base_m": [300, 700],
+   "tops_m": [800, 1300],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Pacific coast of Peru and northern Chile (box 4 of 4: Arica to Coquimbo)",
+   "box": {"latS": -30, "latN": -18, "lonW": -82, "lonE": -69},
+   "months": [0.4, 0.35, 0.3, 0.35, 0.55, 0.8, 0.85, 0.85, 0.8, 0.7, 0.6, 0.5],
+   "base_m": [300, 700],
+   "tops_m": [800, 1300],
+   "confidence": "medium"
+  },
+  {
+   "zone": "Amazon basin and tropical interior of South America (box 1 of 4: north of 4S)",
+   "box": {"latS": -4, "latN": 7, "lonW": -80, "lonE": -45},
+   "months": [0.5, 0.55, 0.55, 0.5, 0.4, 0.3, 0.25, 0.25, 0.35, 0.35, 0.4, 0.5],
+   "base_m": [600, 1000],
+   "tops_m": [3000, 6000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Amazon basin and tropical interior of South America (box 2 of 4: Brazil and Bolivia south of 4S)",
+   "box": {"latS": -15, "latN": -4, "lonW": -70, "lonE": -45},
+   "months": [0.5, 0.55, 0.55, 0.5, 0.4, 0.3, 0.25, 0.25, 0.35, 0.35, 0.4, 0.5],
+   "base_m": [600, 1000],
+   "tops_m": [3000, 6000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Amazon basin and tropical interior of South America (box 3 of 4: Peruvian Amazon, Loreto, Ucayali)",
+   "box": {"latS": -10, "latN": -4, "lonW": -78.3, "lonE": -70},
+   "months": [0.5, 0.55, 0.55, 0.5, 0.4, 0.3, 0.25, 0.25, 0.35, 0.35, 0.4, 0.5],
+   "base_m": [600, 1000],
+   "tops_m": [3000, 6000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Amazon basin and tropical interior of South America (box 4 of 4: south-east Peru, Cuzco, Madre de Dios)",
+   "box": {"latS": -15, "latN": -10, "lonW": -76, "lonE": -70},
+   "months": [0.5, 0.55, 0.55, 0.5, 0.4, 0.3, 0.25, 0.25, 0.35, 0.35, 0.4, 0.5],
+   "base_m": [600, 1000],
+   "tops_m": [3000, 6000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Brazil's northeast coast (Natal, Recife, Fortaleza, Salvador)",
+   "box": {"latS": -15, "latN": 0, "lonW": -45, "lonE": -34},
+   "months": [0.15, 0.15, 0.25, 0.3, 0.4, 0.4, 0.4, 0.4, 0.2, 0.15, 0.1, 0.1],
+   "base_m": [500, 900],
+   "tops_m": [2000, 3000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Temperate south-east South America (Buenos Aires, Montevideo, Rio de Janeiro, Sao Paulo, Porto Alegre)",
+   "box": {"latS": -42, "latN": -15, "lonW": -66, "lonE": -38},
+   "months": [0.2, 0.2, 0.25, 0.25, 0.35, 0.45, 0.4, 0.35, 0.35, 0.3, 0.25, 0.25],
+   "base_m": [400, 1000],
+   "tops_m": [1500, 3000],
+   "confidence": "low"
+  }
+ ]
+}

@@ -1,0 +1,1970 @@
+// The general's controls on a live ground battle (release 2; Brian, 22 November 2026: "im the general who controls their
+// deployment and who to attack and move on a map with tactics"; "i also want the game play to be smooth, fun, and
+// realistic"). The mock-up he saw (general-controls-mockup.html): click a unit to pick it up, Shift-click to add more;
+// click the ground and they go there, click an enemy and they attack it; drag on the ground for a box round several, a
+// right-drag for a line; before the battle, drag his units about his own ground; Space pauses (orders still go), 1 2 3
+// the speeds, H hold, R fall back, Tab his next unit, C the film, Esc the map again.
+//
+// ALandBattle's part that turns the screen's pointer into the clipboard's words (LandCommand) and the clipboard's orders
+// into the rules' (OrderLive), and puts each block's tag, its route and his drag on the screen for SLandBattleScreen to
+// draw. Every order is shown the moment it is given (the screen runs a couple of battle seconds behind the rules, so
+// the battle itself only shows it a moment later): a mark where he clicked, the route, the tag's RADIO chip.
+
+#include "Battle/LandBattle.h"
+#include "Battle/LandBattleScreen.h"
+#include "Battle/LandLive.h"
+
+#include "Battle/LandBattleState.h"
+#include "Battle/LandFell.h"
+#include "Battle/LandScript.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
+#include "Engine/World.h"
+#include "HAL/FileManager.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+#include "Misc/Paths.h"
+#include "TheaterCommand.h"
+#include "UnrealClient.h"
+
+#include <algorithm>
+#include <cmath>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace
+{
+	std::string NarrowOf(const FString& Text)
+	{
+		const FTCHARToUTF8 Utf8(*Text);
+		return std::string(Utf8.Get(), static_cast<size_t>(Utf8.Length()));
+	}
+
+	FString WideOf(const std::string& Text)
+	{
+		return FString(UTF8_TO_TCHAR(Text.c_str()));
+	}
+
+	/** How high over the ground a block's tag hangs on its stalk, metres. */
+	constexpr double TagLift = 14.0;
+	/** A press that moves this far, pixels, is a drag. */
+	constexpr double DragPixels = 6.0;
+	/** A second click this soon (real seconds) and this near (pixels) where an order went sends them at the double. */
+	constexpr double TwiceSeconds = 0.4, TwicePixels = 12.0;
+	/** Half a smoke screen laid at a click, metres (a platoon's 2-inch mortars and grenades screen a front of about 150 m;
+	 * a line dragged sets its own). */
+	constexpr double SmokeHalfWidth = 80.0;
+
+	/** Whether the rules' cell under a place is woods (a block standing there at the start is hidden). */
+	bool WoodsAt(const LandFeed::Field& F, double X, double Y)
+	{
+		if (F.Cols <= 0 || F.Rows <= 0 || F.Cell <= 0.0 || F.Ground.size() < static_cast<size_t>(F.Cols) * static_cast<size_t>(F.Rows))
+		{
+			return false;
+		}
+		const int Col = FMath::Clamp(static_cast<int>(std::floor(X / F.Cell)), 0, F.Cols - 1);
+		const int Row = FMath::Clamp(static_cast<int>(std::floor(Y / F.Cell)), 0, F.Rows - 1);
+		const size_t Kind = F.Ground[static_cast<size_t>(Row) * static_cast<size_t>(F.Cols) + static_cast<size_t>(Col)];
+		return Kind < F.Grounds.size() && F.Grounds[Kind] == "woods";
+	}
+
+	/** The woods' edges within a box (x0, y0, x1, y1, field metres): where a woods cell meets one that is not, along a
+	 * row or column of cells, joined into runs. Two points a stretch. */
+	std::vector<std::pair<double, double>> WoodsEdges(const LandFeed::Field& F, const double* Box)
+	{
+		std::vector<std::pair<double, double>> Out;
+		if (F.Cols <= 0 || F.Rows <= 0 || F.Cell <= 0.0 || F.Ground.size() < static_cast<size_t>(F.Cols) * static_cast<size_t>(F.Rows))
+		{
+			return Out;
+		}
+		auto Woods = [&F](int Col, int Row)
+		{
+			if (Col < 0 || Row < 0 || Col >= F.Cols || Row >= F.Rows)
+			{
+				return false;
+			}
+			const size_t Kind = F.Ground[static_cast<size_t>(Row) * static_cast<size_t>(F.Cols) + static_cast<size_t>(Col)];
+			return Kind < F.Grounds.size() && F.Grounds[Kind] == "woods";
+		};
+		const int C0 = FMath::Max(0, static_cast<int>(std::floor(Box[0] / F.Cell))), C1 = FMath::Min(F.Cols - 1, static_cast<int>(std::floor(Box[2] / F.Cell)));
+		const int R0 = FMath::Max(0, static_cast<int>(std::floor(Box[1] / F.Cell))), R1 = FMath::Min(F.Rows - 1, static_cast<int>(std::floor(Box[3] / F.Cell)));
+		// (the lines between rows: a run along x where the cell below and the cell above differ)
+		for (int Row = R0; Row <= R1 + 1; ++Row)
+		{
+			int Start = -1;
+			for (int Col = C0; Col <= C1 + 1; ++Col)
+			{
+				const bool bEdge = Col <= C1 && Woods(Col, Row - 1) != Woods(Col, Row);
+				if (bEdge && Start < 0) Start = Col;
+				if (!bEdge && Start >= 0)
+				{
+					Out.push_back({ Start * F.Cell, Row * F.Cell });
+					Out.push_back({ Col * F.Cell, Row * F.Cell });
+					Start = -1;
+				}
+			}
+		}
+		// (the lines between columns: a run along y)
+		for (int Col = C0; Col <= C1 + 1; ++Col)
+		{
+			int Start = -1;
+			for (int Row = R0; Row <= R1 + 1; ++Row)
+			{
+				const bool bEdge = Row <= R1 && Woods(Col - 1, Row) != Woods(Col, Row);
+				if (bEdge && Start < 0) Start = Row;
+				if (!bEdge && Start >= 0)
+				{
+					Out.push_back({ Col * F.Cell, Start * F.Cell });
+					Out.push_back({ Col * F.Cell, Row * F.Cell });
+					Start = -1;
+				}
+			}
+		}
+		return Out;
+	}
+
+	FVector2D ViewSize()
+	{
+		FVector2D Size(1600.0, 900.0);
+		if (GEngine && GEngine->GameViewport)
+		{
+			GEngine->GameViewport->GetViewportSize(Size);
+		}
+		return FVector2D(FMath::Max(1.0, Size.X), FMath::Max(1.0, Size.Y));
+	}
+}
+
+// ---- The screen and the ground ---------------------------------------------------------------------------------
+
+bool ALandBattle::PixelOf(double X, double Y, double Lift, FVector2D& OutPixel) const
+{
+	// Through the battle's own eye as it stands this frame (not the view the renderer drew last frame), so a tag stays on
+	// its block while the camera moves.
+	if (!Eye || !State.IsValid())
+	{
+		return false;
+	}
+	const UCameraComponent* Lens = Eye->GetCameraComponent();
+	const FVector Local = Lens->GetComponentTransform().InverseTransformPositionNoScale(World(X, Y, GroundZ(X, Y) + Lift));
+	if (Local.X <= 10.0)
+	{
+		return false;
+	}
+	const FVector2D View = ViewSize();
+	const double HalfTan = FMath::Tan(FMath::DegreesToRadians(static_cast<double>(Lens->FieldOfView) * 0.5));
+	const double Across = Local.Y / (Local.X * HalfTan);
+	const double Up = Local.Z / (Local.X * HalfTan) * (View.X / View.Y);
+	OutPixel = FVector2D((Across + 1.0) * 0.5 * View.X, (1.0 - Up) * 0.5 * View.Y);
+	return true;
+}
+
+bool ALandBattle::GroundUnder(const FVector2D& Pixel, double& OutX, double& OutY) const
+{
+	if (!Eye || !State.IsValid() || !State->Field)
+	{
+		return false;
+	}
+	const UCameraComponent* Lens = Eye->GetCameraComponent();
+	const FVector2D View = ViewSize();
+	const double HalfTan = FMath::Tan(FMath::DegreesToRadians(static_cast<double>(Lens->FieldOfView) * 0.5));
+	const double Across = (Pixel.X / View.X * 2.0 - 1.0) * HalfTan;
+	const double Up = (1.0 - Pixel.Y / View.Y * 2.0) * HalfTan * (View.Y / View.X);
+	const FTransform& Frame = Lens->GetComponentTransform();
+	const FVector WayWorld = Frame.TransformVectorNoScale(FVector(1.0, Across, Up)).GetSafeNormal();
+	const FVector FromWorld = Frame.GetLocation();
+	// (the field's own axes: x east is the world's Y, y north the world's X; metres)
+	const FVector From(FromWorld.Y / UnitsPerMetre, FromWorld.X / UnitsPerMetre, FromWorld.Z / UnitsPerMetre);
+	const FVector Way(WayWorld.Y, WayWorld.X, WayWorld.Z);
+	const LandField::Ground& Field = *State->Field;
+	auto Over = [&](double Along)
+	{
+		const FVector At = From + Way * Along;
+		return At.Z - Field.HeightAt(At.X, At.Y);
+	};
+	if (Over(0.0) <= 0.0)
+	{
+		return false;
+	}
+	// Along the ray in steps that grow with the distance, then halved down onto the ground.
+	double Before = 0.0, Along = 1.0;
+	bool bHit = false;
+	while (Along < 9000.0)
+	{
+		if (Over(Along) <= 0.0)
+		{
+			bHit = true;
+			break;
+		}
+		Before = Along;
+		Along += FMath::Clamp(Along * 0.015, 0.75, 20.0);
+	}
+	if (!bHit)
+	{
+		return false;
+	}
+	for (int32 K = 0; K < 14; ++K)
+	{
+		const double Mid = (Before + Along) * 0.5;
+		(Over(Mid) > 0.0 ? Before : Along) = Mid;
+	}
+	const FVector At = From + Way * Along;
+	const LandFeed::Field& Ground = State->Rec.Ground;
+	if (At.X < 0.0 || At.Y < 0.0 || At.X > Ground.W || At.Y > Ground.H)
+	{
+		return false;
+	}
+	OutX = At.X;
+	OutY = At.Y;
+	return true;
+}
+
+double ALandBattle::ReachAt(const FVector2D& Pixel) const
+{
+	double X = 0.0, Y = 0.0;
+	if (!Eye || !GroundUnder(Pixel, X, Y))
+	{
+		return 20.0;
+	}
+	const double Far = (World(X, Y, GroundZ(X, Y)) - Eye->GetCameraComponent()->GetComponentLocation()).Size() / UnitsPerMetre;
+	const double HalfTan = FMath::Tan(FMath::DegreesToRadians(static_cast<double>(Eye->GetCameraComponent()->FieldOfView) * 0.5));
+	const double PerPixel = 2.0 * Far * HalfTan / ViewSize().X;
+	return FMath::Clamp(PerPixel * 24.0, 3.0, 150.0);
+}
+
+// ---- Each frame --------------------------------------------------------------------------------------------------
+
+void ALandBattle::ShowGeneral()
+{
+	if (!State.IsValid())
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	FLandGeneralShown& G = S.General;
+	G.bOn = S.Rec.bLive && S.Rec.Me >= 0;
+	G.Marks.clear();
+	G.Routes.clear();
+	G.RoomEdge.clear();
+	G.WoodsEdge.clear();
+	G.Comers.clear();
+	if (!G.bOn)
+	{
+		G.FoeHidden.clear();
+		return;
+	}
+	LandFell::Phase("general: the clipboard");
+	G.Clipboard.Update(S.Rec, S.Battle);
+	// (the enemy's hidden from him: kept off the screen in the film too, so it never gives the ambush away)
+	G.FoeHidden.clear();
+	for (const LandCommand::Tag& T : G.Clipboard.Tags())
+	{
+		if (!T.bMine && T.bHidden && T.Says != LandCommand::Chip::Gone)
+		{
+			G.FoeHidden.push_back(T.Block);
+		}
+	}
+	std::sort(G.FoeHidden.begin(), G.FoeHidden.end());
+	const FVector2D View = ViewSize();
+	G.ViewW = View.X;
+	G.ViewH = View.Y;
+	if (G.bFilm)
+	{
+		return;
+	}
+	LandFell::Phase("general: the tags and routes");
+	const std::vector<LandCommand::Tag>& Tags = G.Clipboard.Tags();
+	// (each unit's ground washed from high up, fading as the eye comes down: full at 300 m over the ground, gone by 150 m)
+	const double EyeOver = S.Pose.Eye.Z - S.Rec.Ground.HeightAt(S.Pose.Eye.X, S.Pose.Eye.Y);
+	G.PrintInk = FMath::Clamp((EyeOver - 150.0) / 150.0, 0.0, 1.0) * 0.25;
+	auto OnView = [&View](const FVector2D& P, double Margin) { return P.X > -Margin && P.Y > -Margin && P.X < View.X + Margin && P.Y < View.Y + Margin; };
+	// A line along the ground, a point every few metres so it lies over the rises: broken where it goes behind the eye.
+	auto Along = [this](std::vector<std::pair<double, double>>& Into, double X0, double Y0, double X1, double Y1, double Lift)
+	{
+		const double Long = FMath::Sqrt((X1 - X0) * (X1 - X0) + (Y1 - Y0) * (Y1 - Y0));
+		const int32 Steps = FMath::Clamp(static_cast<int32>(Long / 20.0), 1, 60);
+		for (int32 K = Into.empty() ? 0 : 1; K <= Steps; ++K)
+		{
+			const double F = static_cast<double>(K) / Steps;
+			FVector2D P;
+			if (PixelOf(X0 + (X1 - X0) * F, Y0 + (Y1 - Y0) * F, Lift, P))
+			{
+				Into.push_back({ P.X, P.Y });
+			}
+		}
+	};
+	for (const LandCommand::Tag& T : Tags)
+	{
+		// (gone; or the enemy's, hidden in woods and not yet found: nothing of it shows)
+		if (T.Says == LandCommand::Chip::Gone || (!T.bMine && T.bHidden))
+		{
+			continue;
+		}
+		FLandGeneralShown::Mark M;
+		M.Block = T.Block;
+		FVector2D Top, Foot;
+		if (PixelOf(T.X, T.Y, TagLift, Top) && PixelOf(T.X, T.Y, 0.4, Foot) && OnView(Top, 120.0))
+		{
+			M.X = Top.X;
+			M.Y = Top.Y;
+			M.FootX = Foot.X;
+			M.FootY = Foot.Y;
+			if (T.bChosen)
+			{
+				// (the ring round a block in hand: its ground's corners, across its facing and along it)
+				const double S1 = FMath::Sin(T.Face), C1 = FMath::Cos(T.Face);
+				const double Hw = FMath::Max(T.W, 20.0) * 0.5, Hd = FMath::Max(T.D, 12.0) * 0.5;
+				const double Corner[4][2] = { { -Hw, -Hd }, { Hw, -Hd }, { Hw, Hd }, { -Hw, Hd } };
+				M.bCorners = true;
+				for (int32 K = 0; K < 4; ++K)
+				{
+					const double Cx = T.X + Corner[K][0] * C1 + Corner[K][1] * S1, Cy = T.Y - Corner[K][0] * S1 + Corner[K][1] * C1;
+					FVector2D P;
+					M.bCorners = M.bCorners && PixelOf(Cx, Cy, 0.5, P);
+					M.Corners[K * 2] = P.X;
+					M.Corners[K * 2 + 1] = P.Y;
+				}
+			}
+			if (G.PrintInk > 0.01 && T.bKnown && T.W > 1.0 && T.D > 1.0)
+			{
+				// (its real frontage and depth on the ground, across its facing and along it)
+				const double Sn = FMath::Sin(T.Face), Cs = FMath::Cos(T.Face);
+				const double Pw = T.W * 0.5, Pd = T.D * 0.5;
+				const double Edge[4][2] = { { -Pw, -Pd }, { Pw, -Pd }, { Pw, Pd }, { -Pw, Pd } };
+				M.bPrint = true;
+				for (int32 K = 0; K < 4; ++K)
+				{
+					const double Cx = T.X + Edge[K][0] * Cs + Edge[K][1] * Sn, Cy = T.Y - Edge[K][0] * Sn + Edge[K][1] * Cs;
+					FVector2D P;
+					M.bPrint = M.bPrint && PixelOf(Cx, Cy, 0.3, P);
+					M.Print[K * 2] = P.X;
+					M.Print[K * 2 + 1] = P.Y;
+				}
+			}
+			G.Marks.push_back(M);
+		}
+		// His own firing into cover: a line to where they fire (reconnaissance by fire).
+		if (T.bMine && T.bSearch)
+		{
+			FLandGeneralShown::Route R;
+			R.Block = T.Block;
+			R.Says = T.Says == LandCommand::Chip::Radio ? LandCommand::Chip::Yours : T.Says;
+			R.bAttack = true;
+			R.bChosen = T.bChosen;
+			Along(R.Points, T.X, T.Y, T.SearchX, T.SearchY, 0.6);
+			if (R.Points.size() >= 2)
+			{
+				G.Routes.push_back(std::move(R));
+			}
+			continue;
+		}
+		// His orders' routes: those in hand, and those he has taken in hand (his staff's own are not drawn: too many).
+		if (!T.bMine || T.OrderKind.empty() || T.OrderKind == "hold" || T.OrderKind == "smoke" || (!T.bChosen && T.Says == LandCommand::Chip::Staff))
+		{
+			continue;
+		}
+		FLandGeneralShown::Route R;
+		R.Block = T.Block;
+		R.Says = T.Says;
+		R.bAttack = T.OrderKind == "attack";
+		R.bBack = T.OrderKind == "withdraw";
+		R.bChosen = T.bChosen;
+		double Ex = T.OrderX, Ey = T.OrderY;
+		if (R.bAttack && T.OrderTarget >= 0)
+		{
+			if (const LandCommand::Tag* Foe = G.Clipboard.TagOf(T.OrderTarget))
+			{
+				Ex = Foe->X;
+				Ey = Foe->Y;
+			}
+		}
+		double Px = T.X, Py = T.Y;
+		for (const std::pair<double, double>& Corner : T.Path)
+		{
+			Along(R.Points, Px, Py, Corner.first, Corner.second, 0.6);
+			Px = Corner.first;
+			Py = Corner.second;
+		}
+		Along(R.Points, Px, Py, Ex, Ey, 0.6);
+		if (R.Points.size() >= 2)
+		{
+			G.Routes.push_back(std::move(R));
+		}
+	}
+	// His ground, while he stands his blocks on it; and the woods on and near it, where a block starts hidden.
+	if (G.Clipboard.Deploying())
+	{
+		LandFell::Phase("general: his ground and the woods");
+		const double* Room = G.Clipboard.Room();
+		if (!G.bWoodsMade)
+		{
+			G.bWoodsMade = true;
+			const double Near[4] = { Room[0] - 150.0, Room[1] - 150.0, Room[2] + 150.0, Room[3] + 150.0 };
+			G.WoodsField = WoodsEdges(S.Rec.Ground, Near);
+		}
+		for (size_t K = 0; K + 1 < G.WoodsField.size(); K += 2)
+		{
+			// (a stretch cut in pieces of a cell or two, so it lies over the rises; those behind the eye left out)
+			const std::pair<double, double>& A = G.WoodsField[K];
+			const std::pair<double, double>& B = G.WoodsField[K + 1];
+			const double Long = FMath::Sqrt((B.first - A.first) * (B.first - A.first) + (B.second - A.second) * (B.second - A.second));
+			const int32 Steps = FMath::Clamp(static_cast<int32>(Long / 40.0), 1, 40);
+			FVector2D Was;
+			bool bWas = PixelOf(A.first, A.second, 0.6, Was);
+			for (int32 Step = 1; Step <= Steps; ++Step)
+			{
+				const double F = static_cast<double>(Step) / Steps;
+				FVector2D Now;
+				const bool bNow = PixelOf(A.first + (B.first - A.first) * F, A.second + (B.second - A.second) * F, 0.6, Now);
+				if (bWas && bNow && OnView(Was, 400.0) && OnView(Now, 400.0))
+				{
+					G.WoodsEdge.push_back({ Was.X, Was.Y });
+					G.WoodsEdge.push_back({ Now.X, Now.Y });
+				}
+				Was = Now;
+				bWas = bNow;
+			}
+		}
+		Along(G.RoomEdge, Room[0], Room[1], Room[2], Room[1], 0.5);
+		Along(G.RoomEdge, Room[2], Room[1], Room[2], Room[3], 0.5);
+		Along(G.RoomEdge, Room[2], Room[3], Room[0], Room[3], 0.5);
+		Along(G.RoomEdge, Room[0], Room[3], Room[0], Room[1], 0.5);
+	}
+	// The corps coming up from next door (neighbours join the fight, release 2): a chip over the place on the field's edge
+	// where it will walk on when that is in sight, else just inside the screen's edge on the way to it, like the arrow at
+	// a map's margin pointing to the next sheet.
+	if (!G.Clipboard.Neighbours().empty() && Eye)
+	{
+		LandFell::Phase("general: the neighbours coming");
+		const UCameraComponent* Lens = Eye->GetCameraComponent();
+		const FTransform& Frame = Lens->GetComponentTransform();
+		const double HalfTan = FMath::Tan(FMath::DegreesToRadians(static_cast<double>(Lens->FieldOfView) * 0.5));
+		// (clear of the bars at the top, the desk and the order bar at the bottom, and wide enough for the chip at the sides)
+		const double Left = 140.0, Right = FMath::Max(Left + 1.0, View.X - 140.0), Top = 112.0, Bottom = FMath::Max(Top + 1.0, View.Y * 0.70);
+		const FVector2D Mid((Left + Right) * 0.5, (Top + Bottom) * 0.5);
+		for (const LandCommand::Neighbour& N : G.Clipboard.Neighbours())
+		{
+			FLandGeneralShown::Comer C;
+			C.What = N;
+			const FVector Local = Frame.InverseTransformPositionNoScale(World(N.X, N.Y, GroundZ(N.X, N.Y) + 2.0));
+			FVector2D P(Mid);
+			const bool bAhead = Local.X > 10.0;
+			if (bAhead)
+			{
+				P = FVector2D((Local.Y / (Local.X * HalfTan) + 1.0) * 0.5 * View.X, (1.0 - Local.Z / (Local.X * HalfTan) * (View.X / View.Y)) * 0.5 * View.Y);
+			}
+			C.bThere = bAhead && P.X >= Left && P.X <= Right && P.Y >= Top && P.Y <= Bottom;
+			if (!C.bThere)
+			{
+				// (from the screen's middle toward it, stopped at the margin: behind the eye, its way across and down)
+				FVector2D Way = bAhead ? P - Mid : FVector2D(Local.Y, -Local.Z);
+				if (Way.SizeSquared() < 1e-6)
+				{
+					Way = FVector2D(0.0, 1.0);
+				}
+				Way.Normalize();
+				const double ToX = Way.X > 1e-6 ? (Right - Mid.X) / Way.X : Way.X < -1e-6 ? (Left - Mid.X) / Way.X : 1e12;
+				const double ToY = Way.Y > 1e-6 ? (Bottom - Mid.Y) / Way.Y : Way.Y < -1e-6 ? (Top - Mid.Y) / Way.Y : 1e12;
+				P = Mid + Way * FMath::Min(ToX, ToY);
+				C.WayX = Way.X;
+				C.WayY = Way.Y;
+			}
+			// (two corps on the same stretch of margin: the later one a row lower)
+			for (const FLandGeneralShown::Comer& Was : G.Comers)
+			{
+				if (FMath::Abs(Was.X - P.X) < 220.0 && FMath::Abs(Was.Y - P.Y) < 44.0)
+				{
+					P.Y = Was.Y + 46.0;
+				}
+			}
+			C.X = P.X;
+			C.Y = P.Y;
+			G.Comers.push_back(std::move(C));
+		}
+	}
+	// His despatch riders (the rider ahead, release 2): where each is on the screen; a despatch read out for 15 s, or till
+	// his rider has gone (his corps come up).
+	G.RiderMarks.clear();
+	bool bReadStill = false;
+	for (const LandFeed::Rider& R : G.Clipboard.Riders())
+	{
+		FVector2D P;
+		bReadStill = bReadStill || R.Corps == G.RiderRead;
+		if (PixelOf(R.X, R.Y, 2.5, P) && OnView(P, 40.0))
+		{
+			G.RiderMarks.push_back({ R.Corps, P.X, P.Y, R.Says });
+		}
+	}
+	if (!bReadStill || RealT - G.RiderReadAt > 15.0)
+	{
+		G.RiderRead = -1;
+	}
+	// The mark answering his last order, a second and a bit.
+	LandFell::Phase("general: the ping");
+	FVector2D Ping;
+	G.bPingOn = RealT - G.PingAt < 1.2 && PixelOf(G.PingFieldX, G.PingFieldY, 0.5, Ping);
+	if (G.bPingOn)
+	{
+		G.PingX = Ping.X;
+		G.PingY = Ping.Y;
+		G.PingAge = RealT - G.PingAt;
+	}
+	// What a click would do under a still pointer (the battle moves under it).
+	if (GeneralButton < 0 && G.PointerX >= 0.0)
+	{
+		LandFell::Phase("general: under the still pointer");
+		GeneralMove(FVector2D(G.PointerX, G.PointerY), G.Hover);
+	}
+}
+
+// ---- The pointer ----------------------------------------------------------------------------------------------
+
+void ALandBattle::GeneralPress(const FVector2D& Pixel, int32 Button, bool bShift, int32 OnTag)
+{
+	(void)bShift;
+	if (!State.IsValid() || !State->General.bOn || State->General.bFilm)
+	{
+		return;
+	}
+	FLandGeneralShown& G = State->General;
+	GeneralDownAt = Pixel;
+	GeneralButton = Button;
+	bGeneralMoved = false;
+	GeneralCarry = -1;
+	// In the setup step a press on one of his blocks (or its tag) picks it up to carry.
+	if (Button == 0 && G.Clipboard.Deploying())
+	{
+		int32 Block = -1;
+		const LandCommand::Tag* On = OnTag >= 0 ? G.Clipboard.TagOf(OnTag) : nullptr;
+		double X = 0.0, Y = 0.0;
+		if (On && On->bOrderable)
+		{
+			Block = OnTag;
+		}
+		else if (GroundUnder(Pixel, X, Y))
+		{
+			Block = G.Clipboard.MineAt(X, Y, ReachAt(Pixel) * 0.5);
+		}
+		if (const LandCommand::Tag* Carried = Block >= 0 ? G.Clipboard.TagOf(Block) : nullptr)
+		{
+			GeneralCarry = Block;
+			GeneralCarryFace = Carried->Face;
+		}
+	}
+}
+
+void ALandBattle::GeneralMove(const FVector2D& Pixel, int32 OnTag)
+{
+	if (!State.IsValid() || !State->General.bOn || State->General.bFilm)
+	{
+		return;
+	}
+	FLandGeneralShown& G = State->General;
+	LandCommand::General& Clip = G.Clipboard;
+	G.PointerX = Pixel.X;
+	G.PointerY = Pixel.Y;
+	G.Hover = OnTag;
+	double X = 0.0, Y = 0.0;
+	const bool bGround = GroundUnder(Pixel, X, Y);
+	if (GeneralButton < 0)
+	{
+		// What a click would do here, said by the pointer.
+		const double Reach = bGround ? ReachAt(Pixel) : 0.0;
+		const LandCommand::Tag* On = OnTag >= 0 ? Clip.TagOf(OnTag) : nullptr;
+		const int32 Mine = On ? (On->bOrderable ? OnTag : -1) : bGround ? Clip.MineAt(X, Y, Reach * 0.5) : -1;
+		const int32 Foe = On ? (!On->bMine ? OnTag : -1) : bGround ? Clip.EnemyAt(X, Y, Reach) : -1;
+		const std::vector<int> Hand = Clip.Chosen();
+		G.bGapAt = false;
+		// (an armed tool no one in hand still has, put down)
+		if ((G.Armed == "gap" && Clip.Cutter() < 0) || (G.Armed == "smoke" && Clip.Smokers().empty()))
+		{
+			G.Armed.clear();
+		}
+		if (Clip.Deploying())
+		{
+			G.Would = Mine >= 0 ? "DRAG TO MOVE IT" : "";
+		}
+		else if (Mine >= 0)
+		{
+			G.Would = "PICK UP";
+		}
+		else if (G.Armed.empty() && bGround && Clip.RiderAt(X, Y, FMath::Max(Reach * 0.6, 15.0)) >= 0)
+		{
+			G.Would = "READ HIS DESPATCH";
+		}
+		else if (Hand.empty())
+		{
+			G.Would = "";
+		}
+		else if (G.Armed == "gap")
+		{
+			// (the cutters: the gap snaps to the hedge nearest the pointer, shown where it would be cut)
+			double Gx = 0.0, Gy = 0.0;
+			FVector2D At;
+			G.bGapAt = bGround && HedgeNear(X, Y, FMath::Max(Reach, 30.0), Gx, Gy) && PixelOf(Gx, Gy, 0.8, At);
+			G.GapAtX = At.X;
+			G.GapAtY = At.Y;
+			G.Would = !bGround ? "" : G.bGapAt ? "CUT A GAP HERE" : "NO HEDGE HERE";
+		}
+		else if (G.Armed == "smoke")
+		{
+			G.Would = bGround ? "LAY SMOKE HERE, OR DRAG ITS LINE" : "";
+		}
+		else if (Foe >= 0)
+		{
+			const bool bGuns = std::all_of(Hand.begin(), Hand.end(), [&Clip](int Id) { const LandCommand::Tag* T = Clip.TagOf(Id); return T && T->Kind == "art"; });
+			G.Would = bGuns || G.Armed == "fire" ? "FIRE ON IT" : "ATTACK";
+		}
+		else
+		{
+			// (FIRE ON armed over the ground: reconnaissance by fire, into the wood or hedge there)
+			G.Would = !bGround ? "" : G.Armed == "fire" ? (WoodsAt(State->Rec.Ground, X, Y) ? "FIRE INTO THE WOODS" : "FIRE INTO THE COVER")
+				: G.Armed == "double" ? "GO AT THE DOUBLE" : "GO HERE";
+		}
+		return;
+	}
+	G.Would.clear();
+	if ((Pixel - GeneralDownAt).Size() > DragPixels)
+	{
+		bGeneralMoved = true;
+	}
+	if (!bGeneralMoved)
+	{
+		return;
+	}
+	if (GeneralCarry >= 0)
+	{
+		// The block carried: its ground where it would stand, and whether it may.
+		const LandCommand::Tag* T = Clip.TagOf(GeneralCarry);
+		G.bCarry = T && bGround;
+		G.Carried = GeneralCarry;
+		if (G.bCarry)
+		{
+			G.bCarryOk = Clip.MayStand(GeneralCarry, X, Y);
+			G.bCarryWoods = G.bCarryOk && WoodsAt(State->Rec.Ground, X, Y);
+			G.Would = G.bCarryWoods ? "HIDE IN THE WOODS" : G.bCarryOk ? "" : "NOT ON YOUR GROUND";
+			const double S1 = FMath::Sin(GeneralCarryFace), C1 = FMath::Cos(GeneralCarryFace);
+			const double Hw = FMath::Max(T->W, 20.0) * 0.5, Hd = FMath::Max(T->D, 12.0) * 0.5;
+			const double Corner[4][2] = { { -Hw, -Hd }, { Hw, -Hd }, { Hw, Hd }, { -Hw, Hd } };
+			for (int32 K = 0; K < 4; ++K)
+			{
+				FVector2D P;
+				G.bCarry = G.bCarry && PixelOf(X + Corner[K][0] * C1 + Corner[K][1] * S1, Y - Corner[K][0] * S1 + Corner[K][1] * C1, 0.5, P);
+				G.Corners[K * 2] = P.X;
+				G.Corners[K * 2 + 1] = P.Y;
+			}
+		}
+	}
+	else if (GeneralButton == 0 && G.Armed == "smoke")
+	{
+		// (smoke armed: the left drag draws the smoke's line on the ground, not a box)
+		double X0 = 0.0, Y0 = 0.0;
+		G.bSmoke = bGround && GroundUnder(GeneralDownAt, X0, Y0);
+		G.SmokeEnds[0] = GeneralDownAt.X;
+		G.SmokeEnds[1] = GeneralDownAt.Y;
+		G.SmokeEnds[2] = Pixel.X;
+		G.SmokeEnds[3] = Pixel.Y;
+	}
+	else if (GeneralButton == 0)
+	{
+		G.bBox = true;
+		G.Box[0] = GeneralDownAt.X;
+		G.Box[1] = GeneralDownAt.Y;
+		G.Box[2] = Pixel.X;
+		G.Box[3] = Pixel.Y;
+	}
+	else if (GeneralButton == 1 && !Clip.Chosen().empty())
+	{
+		// The line drawn on the ground, and where each block in hand would stand along it.
+		double X0 = 0.0, Y0 = 0.0;
+		G.bLine = bGround && GroundUnder(GeneralDownAt, X0, Y0);
+		G.Ghosts.clear();
+		if (G.bLine)
+		{
+			G.LineEnds[0] = GeneralDownAt.X;
+			G.LineEnds[1] = GeneralDownAt.Y;
+			G.LineEnds[2] = Pixel.X;
+			G.LineEnds[3] = Pixel.Y;
+			for (const LandCommand::Ghost& One : Clip.LineUp(X0, Y0, X, Y))
+			{
+				FVector2D P;
+				if (PixelOf(One.X, One.Y, 0.5, P))
+				{
+					G.Ghosts.push_back({ P.X, P.Y });
+				}
+			}
+		}
+	}
+}
+
+void ALandBattle::GeneralRelease(const FVector2D& Pixel, int32 Button, bool bShift, int32 OnTag)
+{
+	if (!State.IsValid() || !State->General.bOn || State->General.bFilm || Button != GeneralButton)
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	FLandGeneralShown& G = S.General;
+	LandCommand::General& Clip = G.Clipboard;
+	const bool bMoved = bGeneralMoved;
+	const FVector2D DownAt = GeneralDownAt;
+	const int32 Carry = GeneralCarry;
+	GeneralButton = -1;
+	bGeneralMoved = false;
+	GeneralCarry = -1;
+	const bool bBox = G.bBox, bLine = G.bLine, bSmokeLine = G.bSmoke;
+	G.bBox = G.bLine = G.bCarry = G.bSmoke = false;
+	G.Ghosts.clear();
+	double X = 0.0, Y = 0.0;
+	const bool bGround = GroundUnder(Pixel, X, Y);
+
+	// A block carried in the setup step and set down: placed where it may stand (the rules have the last word).
+	if (Carry >= 0)
+	{
+		if (!bMoved)
+		{
+			Clip.Pick(Carry, bShift);
+		}
+		else if (bGround && Clip.MayStand(Carry, X, Y))
+		{
+			PlaceLive(Carry, X, Y, GeneralCarryFace);
+		}
+		else
+		{
+			S.Note = "IT MUST STAND ON YOUR OWN GROUND";
+			S.NoteAge = 0.0;
+		}
+		return;
+	}
+	// Smoke armed, a line dragged: those in hand with smoke lay it along the line.
+	if (Button == 0 && bMoved && bSmokeLine)
+	{
+		double X0 = 0.0, Y0 = 0.0;
+		if (bGround && GroundUnder(DownAt, X0, Y0))
+		{
+			GiveSmoke(X0, Y0, X, Y);
+		}
+		return;
+	}
+	// A box round several: his blocks whose stalks stand inside it.
+	if (Button == 0 && bMoved && bBox)
+	{
+		const double L = FMath::Min(DownAt.X, Pixel.X), R = FMath::Max(DownAt.X, Pixel.X);
+		const double T = FMath::Min(DownAt.Y, Pixel.Y), B = FMath::Max(DownAt.Y, Pixel.Y);
+		std::vector<int> Inside;
+		for (const FLandGeneralShown::Mark& M : G.Marks)
+		{
+			if (M.FootX >= L && M.FootX <= R && M.FootY >= T && M.FootY <= B)
+			{
+				Inside.push_back(M.Block);
+			}
+		}
+		Clip.Choose(Inside, bShift);
+		return;
+	}
+	// A line drawn with the right button: the blocks in hand spread along it.
+	if (Button == 1 && bMoved)
+	{
+		double X0 = 0.0, Y0 = 0.0;
+		if (bLine && bGround && GroundUnder(DownAt, X0, Y0))
+		{
+			TArray<FVector2D> Points;
+			for (const LandCommand::Ghost& One : Clip.LineUp(X0, Y0, X, Y))
+			{
+				Points.Add(FVector2D(One.X, One.Y));
+			}
+			GiveGeneral(WideOf(Clip.Line(X0, Y0, X, Y)), TEXT("line"), -1, Points, (X0 + X) * 0.5, (Y0 + Y) * 0.5);
+		}
+		return;
+	}
+	if (bMoved)
+	{
+		return;
+	}
+
+	// A click. The left button on one of his blocks (or its tag) picks it up; otherwise, with blocks in hand, either button
+	// gives the order: an enemy there is attacked (guns alone, or "fire on" armed, fire on it), open ground is gone to.
+	const double Reach = bGround ? ReachAt(Pixel) : 0.0;
+	const LandCommand::Tag* On = OnTag >= 0 ? Clip.TagOf(OnTag) : nullptr;
+	const int32 Mine = On ? (On->bOrderable ? OnTag : -1) : bGround ? Clip.MineAt(X, Y, Reach * 0.5) : -1;
+	if (Button == 0 && Mine >= 0)
+	{
+		Clip.Pick(Mine, bShift);
+		return;
+	}
+	// (his despatch rider: a click reads out what his corps coming up brings, and when; Brian, 22 November 12:48Z)
+	const int Rider = Button == 0 && G.Armed.empty() && bGround ? Clip.RiderAt(X, Y, FMath::Max(Reach * 0.6, 15.0)) : -1;
+	if (Rider >= 0)
+	{
+		G.RiderRead = G.RiderRead == Clip.Riders()[static_cast<size_t>(Rider)].Corps ? -1 : Clip.Riders()[static_cast<size_t>(Rider)].Corps;
+		G.RiderReadAt = RealT;
+		return;
+	}
+	const std::vector<int> Hand = Clip.Chosen();
+	if (Hand.empty() || Clip.Deploying())
+	{
+		// (nothing to order: a double click on the ground glides the view there)
+		const bool bTwiceHere = RealT - GeneralClickAt < TwiceSeconds && (Pixel - GeneralClickWhere).Size() < TwicePixels;
+		if (bGround && bTwiceHere)
+		{
+			S.GeneralIn.bGoTo = true;
+			S.GeneralIn.GoTo = LandPlay::Vec(X, Y, 0.0);
+			S.GeneralIn.bFollow = false;
+			GeneralClickAt = -10.0;
+		}
+		else
+		{
+			GeneralClickAt = RealT;
+			GeneralClickWhere = Pixel;
+		}
+		return;
+	}
+	// (the cutters armed: the tank with them goes to the hedge nearest the click and punches a gap in it; Brian, 22
+	// November 14:19Z)
+	if (G.Armed == "gap" && bGround)
+	{
+		double Gx = 0.0, Gy = 0.0;
+		const int Cutter = Clip.Cutter();
+		if (Cutter < 0 || !HedgeNear(X, Y, FMath::Max(Reach, 30.0), Gx, Gy))
+		{
+			S.Note = Cutter < 0 ? "NO TANK WITH HEDGE CUTTERS IN HAND" : "CLICK ON A HEDGE TO CUT A GAP IN IT";
+			S.NoteAge = 0.0;
+			return;
+		}
+		GiveGeneral(WideOf(Clip.Cut(Gx, Gy)), TEXT("gap"), -1, { FVector2D(Gx, Gy) }, Gx, Gy, { Cutter });
+		G.Armed.clear();
+		G.bGapAt = false;
+		return;
+	}
+	// (smoke armed, a click: a screen across the front at the point, square to the way those laying it look at it)
+	if (G.Armed == "smoke" && bGround)
+	{
+		double Cx = 0.0, Cy = 0.0;
+		const std::vector<int> Layers = Clip.Smokers();
+		for (int Id : Layers)
+		{
+			const LandCommand::Tag* T = Clip.TagOf(Id);
+			Cx += T ? T->X : X;
+			Cy += T ? T->Y : Y;
+		}
+		if (!Layers.empty())
+		{
+			Cx /= static_cast<double>(Layers.size());
+			Cy /= static_cast<double>(Layers.size());
+		}
+		double Dx = X - Cx, Dy = Y - Cy;
+		const double Long = FMath::Sqrt(Dx * Dx + Dy * Dy);
+		if (Long < 1.0)
+		{
+			// (on top of them: across the field, facing the enemy's side)
+			Dx = 0.0;
+			Dy = Clip.Side() == 1 ? -1.0 : 1.0;
+		}
+		else
+		{
+			Dx /= Long;
+			Dy /= Long;
+		}
+		const double Half = SmokeHalfWidth;
+		GiveSmoke(X + Dy * Half, Y - Dx * Half, X - Dy * Half, Y + Dx * Half);
+		return;
+	}
+	const int32 Foe = On ? (!On->bMine ? OnTag : -1) : bGround ? Clip.EnemyAt(X, Y, Reach) : -1;
+	if (Foe >= 0)
+	{
+		const LandCommand::Tag* Target = Clip.TagOf(Foe);
+		const bool bGuns = std::all_of(Hand.begin(), Hand.end(), [&Clip](int Id) { const LandCommand::Tag* T = Clip.TagOf(Id); return T && T->Kind == "art"; });
+		const bool bFire = bGuns || G.Armed == "fire";
+		const std::string Command = bFire ? Clip.FireOn(Foe) : Clip.Attack(Foe);
+		if (Command.empty())
+		{
+			S.Note = "ONLY GUNS FIRE ON IT FROM WHERE THEY STAND";
+			S.NoteAge = 0.0;
+			return;
+		}
+		GiveGeneral(WideOf(Command), bFire ? TEXT("fire") : TEXT("attack"), Foe, TArray<FVector2D>(), Target ? Target->X : X, Target ? Target->Y : Y);
+		G.Armed.clear();
+		return;
+	}
+	if (!bGround)
+	{
+		return;
+	}
+	// (FIRE ON armed, a click on the ground: they stand and fire into the cover there, to flush out what hides in it; the
+	// historian's check, 22 November)
+	if (G.Armed == "fire")
+	{
+		GiveGeneral(WideOf(Clip.FireInto(X, Y)), TEXT("fire"), -1, TArray<FVector2D>(), X, Y);
+		G.Armed.clear();
+		return;
+	}
+	// (a second click where the last order went sends them at the double; or "at the double" armed)
+	const bool bTwice = RealT - GeneralClickAt < TwiceSeconds && (Pixel - GeneralClickWhere).Size() < TwicePixels;
+	const bool bRun = G.Armed == "double" || bTwice;
+	// (each block to the point and its place in the group, as the rules send them: the group keeps its shape)
+	TArray<FVector2D> Points;
+	double Cx = 0.0, Cy = 0.0;
+	for (int Id : Hand)
+	{
+		const LandCommand::Tag* T = Clip.TagOf(Id);
+		Cx += T ? T->X : X;
+		Cy += T ? T->Y : Y;
+	}
+	Cx /= static_cast<double>(Hand.size());
+	Cy /= static_cast<double>(Hand.size());
+	for (int Id : Hand)
+	{
+		const LandCommand::Tag* T = Clip.TagOf(Id);
+		Points.Add(Hand.size() > 1 && T ? FVector2D(X + T->X - Cx, Y + T->Y - Cy) : FVector2D(X, Y));
+	}
+	GiveGeneral(WideOf(Clip.Move(X, Y, bRun)), TEXT("move"), -1, Points, X, Y);
+	GeneralClickAt = bTwice ? -10.0 : RealT;
+	GeneralClickWhere = Pixel;
+	G.Armed.clear();
+}
+
+void ALandBattle::GiveGeneral(const FString& Command, const FString& Kind, int32 Target, const TArray<FVector2D>& Points, double PingX, double PingY, const TArray<int32>& Only)
+{
+	if (Command.IsEmpty() || !State.IsValid() || !Live.IsValid())
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	FLandGeneralShown& G = S.General;
+	std::vector<int> Ids = G.Clipboard.Chosen();
+	if (Only.Num() > 0)
+	{
+		Ids.assign(Only.GetData(), Only.GetData() + Only.Num());
+	}
+	if (Kind == TEXT("staff"))
+	{
+		Ids.erase(std::remove_if(Ids.begin(), Ids.end(), [&G](int Id) { const LandCommand::Tag* T = G.Clipboard.TagOf(Id); return !T || !T->bTaken; }), Ids.end());
+	}
+	OrderLive(Command);
+	// (while the film has the camera, its next cut goes to the men he has just ordered, as a war film cuts from the radio
+	// call to the men it sends: the camera thread, 22 November; never from his own view, or it would fire on the film's
+	// return)
+	if (G.bFilm && !Ids.empty())
+	{
+		S.Eye.Lean(Ids.front());
+	}
+	std::vector<std::pair<double, double>> At;
+	for (const FVector2D& P : Points)
+	{
+		At.push_back({ P.X, P.Y });
+	}
+	// (shown on its tags until the screen reaches the views that carry it: the rules' time now, a piece and a view on)
+	G.Clipboard.Sent(Ids, Kind == TEXT("fire") ? std::string("attack") : Kind == TEXT("gap") ? std::string("move") : NarrowOf(Kind), At, Target, S.Rec.Fought + 2.0);
+	G.PingFieldX = PingX;
+	G.PingFieldY = PingY;
+	G.PingAt = RealT;
+	G.bPingAttack = Kind == TEXT("attack") || Kind == TEXT("fire");
+}
+
+bool ALandBattle::HedgeNear(double X, double Y, double Reach, double& OutX, double& OutY) const
+{
+	if (!State.IsValid() || !State->Field)
+	{
+		return false;
+	}
+	std::vector<const std::vector<std::pair<double, double>>*> Lines;
+	for (const LandField::HedgeLine& H : State->Field->Hedges())
+	{
+		// (what cutters go through: a hedgerow, a lane's bank, a garden's hedge; not a stone wall, not a wood's edge)
+		if (H.Kind == 0 || H.Kind == 1 || H.Kind == 3)
+		{
+			Lines.push_back(&H.Points);
+		}
+	}
+	return LandCommand::NearestOnLines(Lines, X, Y, Reach, OutX, OutY);
+}
+
+void ALandBattle::GiveSmoke(double X0, double Y0, double X1, double Y1)
+{
+	if (!State.IsValid())
+	{
+		return;
+	}
+	FLandGeneralShown& G = State->General;
+	const std::vector<int> Layers = G.Clipboard.Smokers();
+	if (Layers.empty())
+	{
+		State->Note = "NO SMOKE LEFT WITH THOSE IN HAND";
+		State->NoteAge = 0.0;
+		G.Armed.clear();
+		return;
+	}
+	TArray<int32> Only;
+	for (int Id : Layers)
+	{
+		Only.Add(Id);
+	}
+	// (they lay it from where they stand: no route, the ring where the screen's middle falls)
+	GiveGeneral(WideOf(G.Clipboard.SmokeLine(X0, Y0, X1, Y1)), TEXT("smoke"), -1, TArray<FVector2D>(), (X0 + X1) * 0.5, (Y0 + Y1) * 0.5, Only);
+	G.Armed.clear();
+}
+
+// ---- His view ---------------------------------------------------------------------------------------------------
+
+void ALandBattle::GeneralView(double Real)
+{
+	if (!State.IsValid())
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	FLandGeneralShown& G = S.General;
+	if (!S.Rec.bLive || S.Rec.Me < 0)
+	{
+		return;
+	}
+	if (!S.bGeneralEye)
+	{
+		// Begun once his blocks are on the clipboard: over his ground (or his blocks, the setup step skipped), facing the
+		// enemy's side, high enough to see the whole of his line.
+		const std::vector<LandCommand::Tag>& Tags = G.Clipboard.Tags();
+		if (Tags.empty())
+		{
+			return;
+		}
+		double X = 0.0, Y = 0.0;
+		int Mine = 0;
+		if (G.Clipboard.Deploying())
+		{
+			const double* Room = G.Clipboard.Room();
+			X = 0.5 * (Room[0] + Room[2]);
+			Y = 0.5 * (Room[1] + Room[3]);
+			Mine = 1;
+		}
+		else
+		{
+			for (const LandCommand::Tag& T : Tags)
+			{
+				if (T.bMine && T.Says != LandCommand::Chip::Gone)
+				{
+					X += T.X;
+					Y += T.Y;
+					++Mine;
+				}
+			}
+		}
+		if (Mine == 0)
+		{
+			X = S.Rec.Ground.W * 0.5;
+			Y = S.Rec.Ground.H * 0.5;
+			Mine = 1;
+		}
+		const double Heading = G.Clipboard.Side() == 1 ? UE_DOUBLE_PI : 0.0;
+		LandFell::Phase("general: his eye begun");
+		S.bGeneralEye = S.GeneralEye.Begin(S.Rec, S.EyeWorld, LandPlay::Vec(X / Mine, Y / Mine, 0.0), Heading, 250.0);
+		if (!S.bGeneralEye)
+		{
+			return;
+		}
+	}
+	LandGeneralEye::Input& In = S.GeneralIn;
+	// (the Mac's check of his top view, -TheaterLandTopViewAt=<battle seconds>: pressed there, a still 4 s on (into the
+	// -TheaterLandScript folder, if one is given), pressed again 4 s later and a still of the view back as it was 4 s
+	// after that; each step's tilt and height in the log)
+	if (TopCheckAt < -1.0)
+	{
+		double At = -1.0;
+		TopCheckAt = FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTopViewAt="), At) ? At : -1.0;
+	}
+	if (TopCheckAt >= 0.0 && TopCheckStep < 4 && !G.bFilm && S.Battle >= TopCheckAt + 4.0 * TopCheckStep)
+	{
+		if (TopCheckStep == 0 || TopCheckStep == 2)
+		{
+			In.bTopView = true;
+		}
+		else
+		{
+			ScriptStill(TopCheckStep == 1 ? TEXT("top-view") : TEXT("top-view-back"));
+		}
+		UE_LOG(LogTheater, Display, TEXT("Land battle (top view check): step %d at %.1f s of battle: tilt %.1f degrees, top view %s, own tilt %s, the eye %.0f m over what it looks at"),
+			TopCheckStep, S.Battle, S.GeneralEye.TiltDegrees(), S.GeneralEye.TopView() ? TEXT("on") : TEXT("off"), S.GeneralEye.OwnTilt() ? TEXT("on") : TEXT("off"),
+			S.Pose.Eye.Z - S.Pose.Look.Z);
+		++TopCheckStep;
+	}
+	In.Turn += S.GeneralTurnHeld * 75.0 * Real;
+	// (Shift with W or S held: his own tilt, 50 degrees a second)
+	In.Tilt += S.GeneralTiltHeld * 50.0 * Real;
+	if (In.PanRight != 0.0 || In.PanAhead != 0.0 || In.EdgeRight != 0.0 || In.EdgeAhead != 0.0 || In.SlideRight != 0.0 || In.SlideAhead != 0.0 || In.bGoTo)
+	{
+		In.bFollow = false;
+	}
+	if (!G.bFilm)
+	{
+		LandFell::Phase("general: his eye moved", In.bGoTo ? 1 : 0);
+		S.Pose = S.GeneralEye.Update(In, Real, S.Battle);
+	}
+	if (S.bEyeSwitched)
+	{
+		S.Pose.bCut = true;
+		S.bEyeSwitched = false;
+	}
+	// (this frame's moves spent; the keys held stay held)
+	In.SlideRight = In.SlideAhead = In.Zoom = In.Turn = In.Tilt = 0.0;
+	In.bGoTo = false;
+	In.bTopView = false;
+	In.GoBlock = -1;
+}
+
+// ---- His words --------------------------------------------------------------------------------------------------
+
+void ALandBattle::GeneralDo(const FString& Word)
+{
+	if (!State.IsValid() || !State->General.bOn)
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	FLandGeneralShown& G = S.General;
+	LandCommand::General& Clip = G.Clipboard;
+	const bool bHand = !Clip.Chosen().empty();
+	auto Say = [&S](const char* Words)
+	{
+		S.Note = Words;
+		S.NoteAge = 0.0;
+	};
+	if (Word == TEXT("film"))
+	{
+		S.bEyeSwitched = S.bEyeSwitched || !G.bFilm;
+		G.bFilm = true;
+		// (the film as it chooses: any ride let go)
+		S.Eye.Ride(-1);
+		Say("THE FILM HAS THE CAMERA: ESC BRINGS THE MAP BACK");
+	}
+	else if (Word == TEXT("map"))
+	{
+		S.bEyeSwitched = S.bEyeSwitched || G.bFilm;
+		G.bFilm = false;
+		S.Eye.Ride(-1);
+	}
+	else if (Word == TEXT("topview"))
+	{
+		// (O or TOP VIEW: his view swings to look down on the field from about 100 m up; again, back as it was)
+		S.GeneralIn.bTopView = true;
+		if (!S.GeneralEye.TopView())
+		{
+			Say("TOP VIEW: O AGAIN GOES BACK. SHIFT+W OR S, OR OPTION AND TWO FINGERS, TILTS THE VIEW");
+		}
+	}
+	else if (Word.StartsWith(TEXT("follow:")))
+	{
+		// (a unit's card clicked twice: the view glides to it and keeps it in the middle till he moves the view)
+		S.GeneralIn.GoBlock = FCString::Atoi(*Word.Mid(7));
+		S.GeneralIn.bFollow = true;
+	}
+	else if (Word == TEXT("begin"))
+	{
+		BeginFight();
+	}
+	else if (Word == TEXT("clear"))
+	{
+		G.Armed.clear();
+		Clip.Clear();
+		G.bBox = G.bLine = G.bCarry = G.bSmoke = G.bGapAt = false;
+		GeneralButton = -1;
+		GeneralCarry = -1;
+	}
+	else if (Word == TEXT("letgo"))
+	{
+		// (the pointer lost mid-drag: nothing given, nothing carried)
+		G.bBox = G.bLine = G.bCarry = G.bSmoke = false;
+		G.Ghosts.clear();
+		GeneralButton = -1;
+		bGeneralMoved = false;
+		GeneralCarry = -1;
+	}
+	else if (Word == TEXT("next") || Word == TEXT("back"))
+	{
+		// (Tab: his next unit in hand, and the view glides to it)
+		const int Picked = Clip.Next(Word == TEXT("back"));
+		if (Picked >= 0)
+		{
+			S.GeneralIn.GoBlock = Picked;
+			S.GeneralIn.bFollow = false;
+		}
+	}
+	// (ALL FALL BACK is for his whole army, so it is answered before "pick up a unit first": with nothing in hand it was
+	// refused, and the button for the whole army did nothing until a unit was picked up. The R2 Mac pass of 25 November 2026.)
+	else if (Word == TEXT("allback"))
+	{
+		// ALL FALL BACK (release 1.5; Brian, 23 November 14:47Z): asked once, on the screen, before it is given.
+		if (!G.bAllBack && !Clip.Deploying())
+		{
+			G.bAllBackAsk = true;
+		}
+	}
+	else if (Word == TEXT("allback:no"))
+	{
+		G.bAllBackAsk = false;
+	}
+	else if (Word == TEXT("allback:yes"))
+	{
+		// His whole army goes back behind the ground it started from; the rules end the battle as his retreat when the last
+		// unit is out. Nothing is left in his hand: the army takes no new orders after it (a refusal gives the button back).
+		G.bAllBackAsk = false;
+		if (!G.bAllBack && !Clip.Deploying())
+		{
+			G.bAllBack = true;
+			G.Armed.clear();
+			Clip.Clear();
+			G.bBox = G.bLine = G.bCarry = G.bSmoke = G.bGapAt = false;
+			OrderLive(TEXT("{\"do\":\"land:fallBack\"}"));
+			Say("YOUR WHOLE ARMY FALLS BACK: THE BATTLE ENDS WHEN THE LAST UNIT IS BEHIND THE GROUND IT STARTED FROM");
+		}
+	}
+	else if (!bHand)
+	{
+		Say("PICK UP A UNIT FIRST: CLICK ONE OF YOURS");
+	}
+	else if (Word == TEXT("double") || Word == TEXT("fire"))
+	{
+		// (any unit may fire into cover; on an enemy unit, only guns fire from where they stand)
+		G.Armed = G.Armed == NarrowOf(Word) ? std::string() : NarrowOf(Word);
+	}
+	else if (Word == TEXT("gap"))
+	{
+		if (Clip.Cutter() < 0)
+		{
+			Say("NO TANK WITH HEDGE CUTTERS IN HAND");
+		}
+		else
+		{
+			G.Armed = G.Armed == "gap" ? std::string() : std::string("gap");
+			Say(G.Armed.empty() ? "" : "CLICK ON A HEDGE: THE TANK WITH CUTTERS PUNCHES A GAP THROUGH IT");
+		}
+	}
+	else if (Word == TEXT("smoke"))
+	{
+		if (Clip.Smokers().empty())
+		{
+			Say("NO SMOKE LEFT WITH THOSE IN HAND");
+		}
+		else
+		{
+			G.Armed = G.Armed == "smoke" ? std::string() : std::string("smoke");
+			Say(G.Armed.empty() ? "" : "CLICK WHERE THE SMOKE GOES, OR DRAG A LINE FOR IT");
+		}
+	}
+	else if (Word == TEXT("wait"))
+	{
+		// (hold until relieved, release 2: those in hand on foot dig in and wait for a corps coming up from next door; the
+		// rules take one a corps and say why for the rest. The warning in the UI director's words, as the order card has it)
+		const std::vector<int> Foot = Clip.Waiters();
+		if (Foot.empty())
+		{
+			Say("ONLY MEN ON FOOT DIG IN TO WAIT FOR HELP");
+		}
+		else
+		{
+			TArray<int32> Only;
+			for (int Id : Foot)
+			{
+				Only.Add(Id);
+			}
+			GiveGeneral(WideOf(Clip.Wait()), TEXT("hold"), -1, TArray<FVector2D>(), 0.0, 0.0, Only);
+			G.PingAt = -10.0;
+			Say("THEY DIG IN TO WAIT FOR HELP. IF HELP HAS NOT COME BY ITS TIME, THEY BREAK SOONER");
+		}
+	}
+	else if (Word == TEXT("patrol"))
+	{
+		// (night patrol, release 2: while he places his army, one of his blocks on foot goes out the night before; the
+		// rules take one a night and say why where they refuse)
+		const std::vector<int> Foot = Clip.Waiters();
+		if (Foot.empty())
+		{
+			Say("ONLY MEN ON FOOT GO OUT ON PATROL");
+		}
+		else
+		{
+			OrderLive(FString::Printf(TEXT("{\"do\":\"land:patrol\",\"unit\":%d}"), Foot.front()));
+			Say("THEIR PATROL GOES OUT TONIGHT, BEFORE THE BATTLE: IT MAY FIND A HIDDEN POST, OR BE CAUGHT");
+		}
+	}
+	else if (Word == TEXT("hold"))
+	{
+		GiveGeneral(WideOf(Clip.Hold()), TEXT("hold"), -1, TArray<FVector2D>(), 0.0, 0.0);
+		G.PingAt = -10.0;
+	}
+	else if (Word == TEXT("fallback"))
+	{
+		// (back toward his own edge of the field)
+		TArray<FVector2D> Points;
+		for (int Id : Clip.Chosen())
+		{
+			const LandCommand::Tag* T = Clip.TagOf(Id);
+			Points.Add(FVector2D(T ? T->X : 0.0, Clip.Side() == 0 ? 0.0 : S.Rec.Ground.H));
+		}
+		GiveGeneral(WideOf(Clip.FallBack()), TEXT("withdraw"), -1, Points, 0.0, 0.0);
+		G.PingAt = -10.0;
+	}
+	else if (Word == TEXT("ride"))
+	{
+		// Ride with this unit (Brian's yes, 22 November): the film takes the camera and stays with the unit in his hand
+		// (the first, if he holds several), cutting among its men or tanks; it lets go of itself when none of them is
+		// left standing, and ESC brings the map back.
+		const int Block = Clip.Chosen().front();
+		S.bEyeSwitched = S.bEyeSwitched || !G.bFilm;
+		G.bFilm = true;
+		S.Eye.Ride(Block);
+		Say("THE FILM RIDES WITH THEM: ESC BRINGS THE MAP BACK");
+	}
+	else if (Word == TEXT("staff"))
+	{
+		const std::string Command = Clip.ToStaff();
+		if (Command.empty())
+		{
+			Say("YOUR STAFF ALREADY RUNS IT");
+		}
+		else
+		{
+			GiveGeneral(WideOf(Command), TEXT("staff"), -1, TArray<FVector2D>(), 0.0, 0.0);
+			G.PingAt = -10.0;
+		}
+	}
+}
+
+// ---- What he cannot see ----------------------------------------------------------------------------------------
+
+bool ALandBattle::HiddenMan(int32 Man) const
+{
+	if (!State.IsValid() || State->General.FoeHidden.empty() || Man < 0 || static_cast<size_t>(Man) >= State->TrackOfMan.size())
+	{
+		return false;
+	}
+	const int Track = State->TrackOfMan[static_cast<size_t>(Man)];
+	return Track >= 0 && static_cast<size_t>(Track) < State->Rec.Tracks.size() && State->General.Hides(State->Rec.Tracks[static_cast<size_t>(Track)].Block);
+}
+
+bool ALandBattle::HiddenVehicle(int32 Vehicle) const
+{
+	if (!State.IsValid() || State->General.FoeHidden.empty() || Vehicle < 0 || static_cast<size_t>(Vehicle) >= State->TrackOfVehicle.size())
+	{
+		return false;
+	}
+	const int Track = State->TrackOfVehicle[static_cast<size_t>(Vehicle)];
+	return Track >= 0 && static_cast<size_t>(Track) < State->Rec.Tracks.size() && State->General.Hides(State->Rec.Tracks[static_cast<size_t>(Track)].Block);
+}
+
+// ---- The general's walk pressed in code (-TheaterLandScript=<folder>) -------------------------------------------
+// The Mac's builder has no hand on the mouse, so Brian's own steps are pressed through his pointer here, as his hand
+// would press them (GeneralPress, GeneralMove, GeneralRelease, GeneralDo): two units carried into the woods before the
+// battle, the battle begun, a unit sent forward, one sent at an enemy he can see, one firing into a hedge or a wood, a
+// unit's plate held up. Where a place is off the screen the order is given directly, and the log says so. A still of
+// each step goes into the folder; then three minutes at the battle's own pace (its frame times in the log every 10 s),
+// the rest at four times, the after card's still, and the game quits (or, for a campaign battle opened with FIGHT IT
+// YOURSELF, CONTINUE is pressed and the campaign takes the result). LandScript.h makes the choices; the cloud test
+// (land_command_test.cpp, command-check.ts) makes the same ones and has the rules take them.
+
+void ALandBattle::ScriptStill(const TCHAR* Name)
+{
+	if (ScriptFolder.IsEmpty())
+	{
+		return;
+	}
+	IFileManager::Get().MakeDirectory(*ScriptFolder, true);
+	const FString File = FPaths::Combine(ScriptFolder, Key + TEXT("-general-") + Name + TEXT(".png"));
+	FScreenshotRequest::RequestScreenshot(File, true, false);
+	++ScriptStills;
+	UE_LOG(LogTheater, Display, TEXT("Land battle (script): still %s at %.1f s of battle"), *File, State.IsValid() ? State->Battle : 0.0);
+}
+
+void ALandBattle::ScriptNext(int32 Step)
+{
+	ScriptStep = Step;
+	ScriptAt = RealT;
+}
+
+void ALandBattle::TickScript()
+{
+	if (ScriptFolder.IsEmpty() || ScriptStep >= 99 || !State.IsValid())
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	FLandGeneralShown& G = S.General;
+	LandCommand::General& Clip = G.Clipboard;
+	const double Since = RealT - ScriptAt;
+	auto Say = [](const FString& Words)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle (script): %s"), *Words);
+	};
+	auto NameOf = [&Clip](int32 Block)
+	{
+		const LandCommand::Tag* T = Clip.TagOf(Block);
+		return T ? FString::Printf(TEXT("%s (block %d)"), *WideOf(T->Name), Block) : FString::Printf(TEXT("block %d"), Block);
+	};
+	auto Used = [this]()
+	{
+		std::vector<int> Out;
+		for (const int32 Block : ScriptUsed)
+		{
+			Out.push_back(Block);
+		}
+		return Out;
+	};
+	// (a tag on the screen: where his tags hang this frame, else where it would)
+	auto TagPixel = [this, &G, &Clip](int32 Block, FVector2D& Out)
+	{
+		for (const FLandGeneralShown::Mark& M : G.Marks)
+		{
+			if (M.Block == Block)
+			{
+				Out = FVector2D(M.X, M.Y);
+				return true;
+			}
+		}
+		const LandCommand::Tag* T = Clip.TagOf(Block);
+		return T && PixelOf(T->X, T->Y, TagLift, Out);
+	};
+	// (a field place on the screen, clear of the top bar and his cards, and the ground under it that place)
+	auto OnScreen = [this](double X, double Y, FVector2D& Out)
+	{
+		const FVector2D View = ViewSize();
+		double Gx = 0.0, Gy = 0.0;
+		return PixelOf(X, Y, 0.0, Out) && Out.X > 24.0 && Out.X < View.X - 24.0 && Out.Y > 90.0 && Out.Y < View.Y * 0.74
+			&& GroundUnder(Out, Gx, Gy) && FMath::Sqrt((Gx - X) * (Gx - X) + (Gy - Y) * (Gy - Y)) < 6.0;
+	};
+	auto GlideTo = [&S](double X, double Y)
+	{
+		S.GeneralIn.bGoTo = true;
+		S.GeneralIn.GoTo = LandPlay::Vec(X, Y, 0.0);
+		S.GeneralIn.bFollow = false;
+	};
+	// (his click on a unit's tag: it alone in hand)
+	auto PickUp = [this, &TagPixel](int32 Block)
+	{
+		FVector2D At(-1.0, -1.0);
+		TagPixel(Block, At);
+		GeneralPress(At, 0, false, Block);
+		GeneralRelease(At, 0, false, Block);
+	};
+	if (RealT - ScriptAt > 1500.0)
+	{
+		Say(FString::Printf(TEXT("step %d waited 25 minutes; the walk ends and the game quits"), ScriptStep));
+		QuitAt = RealT + 1.0;
+		ScriptStep = 99;
+		return;
+	}
+
+	switch (ScriptStep)
+	{
+	case 0:
+		// His screen up, his tags on it, a few seconds for the first picture to settle.
+		if (!G.bOn || Clip.Tags().empty() || G.Marks.empty())
+		{
+			if (Since > 180.0)
+			{
+				Say(TEXT("his screen never came up (is it a battle with a side of his own?); the walk ends"));
+				ScriptStep = 99;
+			}
+			return;
+		}
+		Say(FString::Printf(TEXT("the walk begins: %d of his units, %d tags on the screen, %s; stills into %s"), static_cast<int32>(std::count_if(Clip.Tags().begin(), Clip.Tags().end(), [](const LandCommand::Tag& T) { return T.bMine; })),
+			static_cast<int32>(G.Marks.size()), Clip.Deploying() ? TEXT("the setup step open") : TEXT("no setup step"), *ScriptFolder));
+		ScriptNext(Clip.Deploying() ? 1 : 20);
+		ScriptAt -= 3.0;
+		return;
+
+	// ---- The setup step: two of his units carried into the woods ----
+	case 1:
+	{
+		if (Since < 3.0)
+		{
+			return;
+		}
+		if (ScriptUsed.Num() == 0)
+		{
+			ScriptStill(TEXT("01-deploy"));
+		}
+		std::vector<LandScript::Point> Taken;
+		for (const FVector2D& P : ScriptTaken)
+		{
+			Taken.push_back({ P.X, P.Y });
+		}
+		int32 Block = LandScript::Mine(Clip, "inf", Used());
+		Block = Block >= 0 ? Block : LandScript::Mine(Clip, "", Used());
+		double X = 0.0, Y = 0.0;
+		if (Block < 0 || !LandScript::WoodsFor(Clip, S.Rec.Ground, Block, Taken, X, Y))
+		{
+			Say(Block < 0 ? FString(TEXT("no unit of his left to carry")) : TEXT("no woods on his ground for ") + NameOf(Block) + TEXT(": none carried"));
+			ScriptNext(5);
+			return;
+		}
+		ScriptUnit = Block;
+		ScriptX = X;
+		ScriptY = Y;
+		const LandCommand::Tag* T = Clip.TagOf(Block);
+		GlideTo((T->X + X) * 0.5, (T->Y + Y) * 0.5);
+		ScriptNext(2);
+		return;
+	}
+	case 2:
+	{
+		if (Since < 3.0)
+		{
+			return;
+		}
+		FVector2D From, To;
+		bScriptByHand = TagPixel(ScriptUnit, From) && OnScreen(ScriptX, ScriptY, To) && (To - From).Size() > 12.0;
+		if (bScriptByHand)
+		{
+			ScriptPixel = To;
+			GeneralPress(From, 0, false, ScriptUnit);
+			GeneralMove((From + To) * 0.5, -1);
+			GeneralMove(To, -1);
+			Say(FString::Printf(TEXT("%s carried by his pointer toward the woods at %.0f, %.0f: the pointer says \"%s\""), *NameOf(ScriptUnit), ScriptX, ScriptY, *WideOf(G.Would)));
+			if (ScriptUsed.Num() == 0)
+			{
+				ScriptStill(TEXT("02-carry-into-woods"));
+			}
+		}
+		ScriptNext(3);
+		return;
+	}
+	case 3:
+	{
+		// (the place followed on the screen, should the view still be settling)
+		FVector2D Now;
+		if (bScriptByHand && PixelOf(ScriptX, ScriptY, 0.0, Now))
+		{
+			ScriptPixel = Now;
+		}
+		if (bScriptByHand && Since < 0.6)
+		{
+			// (held there, whatever the real pointer does meanwhile)
+			GeneralMove(ScriptPixel, -1);
+			return;
+		}
+		const LandCommand::Tag* T = Clip.TagOf(ScriptUnit);
+		if (bScriptByHand)
+		{
+			GeneralRelease(ScriptPixel, 0, false, -1);
+			Say(FString::Printf(TEXT("%s set down by his pointer in the woods at %.0f, %.0f"), *NameOf(ScriptUnit), ScriptX, ScriptY));
+		}
+		else
+		{
+			PlaceLive(ScriptUnit, ScriptX, ScriptY, T ? T->Face : 0.0);
+			Say(FString::Printf(TEXT("%s set down directly in the woods at %.0f, %.0f (the place was off the screen)"), *NameOf(ScriptUnit), ScriptX, ScriptY));
+		}
+		ScriptUsed.Add(ScriptUnit);
+		ScriptTaken.Add(FVector2D(ScriptX, ScriptY));
+		ScriptNext(ScriptUsed.Num() < 2 ? 1 : 4);
+		return;
+	}
+	case 4:
+		if (Since < 3.0)
+		{
+			return;
+		}
+		for (int32 K = 0; K < ScriptUsed.Num(); ++K)
+		{
+			const LandCommand::Tag* T = Clip.TagOf(ScriptUsed[K]);
+			const double Off = T ? FMath::Sqrt((T->X - ScriptTaken[K].X) * (T->X - ScriptTaken[K].X) + (T->Y - ScriptTaken[K].Y) * (T->Y - ScriptTaken[K].Y)) : -1.0;
+			Say(FString::Printf(TEXT("%s: %s"), *NameOf(ScriptUsed[K]), Off >= 0.0 && Off < 20.0 ? TEXT("the rules placed it there") : TEXT("NOT where it was set down: the rules refused it (their words are in the line above)")));
+		}
+		ScriptStill(TEXT("03-in-the-woods"));
+		ScriptNext(5);
+		return;
+	case 5:
+		if (Since < 1.0)
+		{
+			return;
+		}
+		// (the night patrol's button stands only while men on foot are in his hand: one picked up, as his click on its
+		// card would, where none is; the Mac's walk of 23 November 00:39Z had placed them all and put them down)
+		if (FLandLive::RuleNow(TEXT("patrol")) && FLandLive::RuleNow(TEXT("hide")) && Clip.Waiters().empty())
+		{
+			const int32 OnFoot = LandScript::Mine(Clip, "inf", {});
+			if (OnFoot >= 0)
+			{
+				Clip.Pick(OnFoot, false);
+				Say(FString::Printf(TEXT("%s taken in hand for the night patrol"), *NameOf(OnFoot)));
+			}
+		}
+		ScriptNext(8);
+		return;
+	case 8:
+		if (Since < 1.0)
+		{
+			return;
+		}
+		// (the night patrol's button, pressed as his click would press it, while he places his army: the Mac's
+		// click-through of the Battle rules card's night patrol, 22 November)
+		if (!FLandLive::RuleNow(TEXT("patrol")) || !FLandLive::RuleNow(TEXT("hide")))
+		{
+			Say(Screen.IsValid() && Screen->PressDrawn(TEXT("general:patrol"))
+				? FString(TEXT("SEND A PATROL TONIGHT was on his screen with night patrol switched off: A FAULT"))
+				: FString(TEXT("night patrol (or forest ambushes) switched off on the Battle rules card: no SEND A PATROL TONIGHT button, as it should be")));
+		}
+		else if (Screen.IsValid() && Screen->PressDrawn(TEXT("general:patrol")))
+		{
+			Say(TEXT("SEND A PATROL TONIGHT pressed (his click on the button)"));
+		}
+		else
+		{
+			Say(Clip.Waiters().empty() ? FString(TEXT("no SEND A PATROL TONIGHT button: no men on foot left in his hand"))
+				: FString(TEXT("SEND A PATROL TONIGHT NOT on his screen though night patrol is on and men on foot are in hand: A FAULT")));
+		}
+		ScriptNext(7);
+		return;
+	case 7:
+		if (Since < 2.0)
+		{
+			return;
+		}
+		ScriptStill(TEXT("03b-patrol"));
+		GeneralDo(TEXT("begin"));
+		Say(TEXT("the battle begun (his BEGIN)"));
+		ScriptNext(6);
+		return;
+	case 6:
+		if (Clip.Deploying())
+		{
+			if (Since > 30.0)
+			{
+				Say(TEXT("the setup step still open 30 s after BEGIN; the walk goes on"));
+				ScriptNext(20);
+			}
+			return;
+		}
+		if (Since < 5.0)
+		{
+			return;
+		}
+		for (const int32 Block : ScriptUsed)
+		{
+			const LandCommand::Tag* T = Clip.TagOf(Block);
+			Say(FString::Printf(TEXT("%s: %s"), *NameOf(Block), T && T->bHidden ? TEXT("hidden from the enemy, the forest mark on its tag") : TEXT("NOT hidden")));
+		}
+		ScriptStill(TEXT("04-battle-begun"));
+		ScriptNext(20);
+		return;
+
+	// ---- The battle: a unit sent forward ----
+	case 20:
+	{
+		if (S.Battle < 6.0 || Clip.Deploying())
+		{
+			return;
+		}
+		int32 Block = LandScript::Mine(Clip, "inf", Used());
+		Block = Block >= 0 ? Block : LandScript::Mine(Clip, "", Used());
+		double X = 0.0, Y = 0.0;
+		if (Block < 0 || !LandScript::Forward(Clip, S.Rec.Ground, Block, 120.0, X, Y))
+		{
+			Say(TEXT("no unit of his to send forward; on to the attack"));
+			ScriptNext(30);
+			return;
+		}
+		ScriptUnit = Block;
+		ScriptX = X;
+		ScriptY = Y;
+		const LandCommand::Tag* T = Clip.TagOf(Block);
+		GlideTo((T->X + X) * 0.5, (T->Y + Y) * 0.5);
+		ScriptNext(21);
+		return;
+	}
+	case 21:
+	{
+		if (Since < 3.0)
+		{
+			return;
+		}
+		PickUp(ScriptUnit);
+		FVector2D To;
+		ScriptGiven = S.Battle;
+		if (OnScreen(ScriptX, ScriptY, To))
+		{
+			GeneralMove(To, -1);
+			const FString Would = WideOf(G.Would);
+			GeneralPress(To, 0, false, -1);
+			GeneralRelease(To, 0, false, -1);
+			Say(FString::Printf(TEXT("%s picked up and sent by his click to %.0f, %.0f (the pointer said \"%s\")"), *NameOf(ScriptUnit), ScriptX, ScriptY, *Would));
+		}
+		else
+		{
+			GiveGeneral(WideOf(Clip.Move(ScriptX, ScriptY, false)), TEXT("move"), -1, TArray<FVector2D>({ FVector2D(ScriptX, ScriptY) }), ScriptX, ScriptY);
+			Say(FString::Printf(TEXT("%s sent directly to %.0f, %.0f (the place was off the screen)"), *NameOf(ScriptUnit), ScriptX, ScriptY));
+		}
+		ScriptUsed.Add(ScriptUnit);
+		ScriptNext(22);
+		return;
+	}
+	case 22:
+		if (Since < 1.5)
+		{
+			return;
+		}
+		ScriptStill(TEXT("05-move-order"));
+		ScriptNext(23);
+		return;
+	case 23:
+	{
+		const LandCommand::Tag* T = Clip.TagOf(ScriptUnit);
+		if (T && T->OrderIn < 0.0 && T->OrderKind == "move")
+		{
+			Say(FString::Printf(TEXT("%s: the order reached it %.0f s of battle after he gave it (the radio's delay)"), *NameOf(ScriptUnit), S.Battle - ScriptGiven));
+			ScriptNext(30);
+		}
+		else if (Since > 40.0)
+		{
+			Say(FString::Printf(TEXT("%s: the move not seen to arrive in 40 s (its order \"%s\", on the air %.0f s)"), *NameOf(ScriptUnit), T ? *WideOf(T->OrderKind) : TEXT("?"), T ? T->OrderIn : -1.0));
+			ScriptNext(30);
+		}
+		return;
+	}
+
+	// ---- One sent at an enemy he can see ----
+	case 30:
+	{
+		int32 Block = LandScript::Mine(Clip, "arm", Used());
+		Block = Block >= 0 ? Block : LandScript::Mine(Clip, "inf", Used());
+		Block = Block >= 0 ? Block : LandScript::Mine(Clip, "", Used());
+		const LandCommand::Tag* T = Block >= 0 ? Clip.TagOf(Block) : nullptr;
+		const int32 Foe = T ? LandScript::Foe(Clip, T->X, T->Y) : -1;
+		if (Foe < 0)
+		{
+			if (Since > 120.0 || !T)
+			{
+				Say(T ? FString(TEXT("no enemy seen in two minutes: no attack")) : FString(TEXT("no unit of his left to attack with")));
+				ScriptNext(40);
+			}
+			return;
+		}
+		ScriptUnit = Block;
+		ScriptFoe = Foe;
+		const LandCommand::Tag* F = Clip.TagOf(Foe);
+		GlideTo((T->X + F->X) * 0.5, (T->Y + F->Y) * 0.5);
+		ScriptNext(31);
+		return;
+	}
+	case 31:
+	{
+		if (Since < 3.0)
+		{
+			return;
+		}
+		PickUp(ScriptUnit);
+		FVector2D At(-1.0, -1.0);
+		TagPixel(ScriptFoe, At);
+		GeneralMove(At, ScriptFoe);
+		const FString Would = WideOf(G.Would);
+		GeneralPress(At, 0, false, ScriptFoe);
+		GeneralRelease(At, 0, false, ScriptFoe);
+		Say(FString::Printf(TEXT("%s picked up and sent by his click at %s (the pointer said \"%s\")"), *NameOf(ScriptUnit), *NameOf(ScriptFoe), *Would));
+		ScriptUsed.Add(ScriptUnit);
+		ScriptNext(32);
+		return;
+	}
+	case 32:
+		if (Since < 1.5)
+		{
+			return;
+		}
+		ScriptStill(TEXT("06-attack"));
+		ScriptNext(40);
+		return;
+
+	// ---- One firing into cover: FIRE ON, then a click on a hedge or a wood ----
+	case 40:
+	{
+		int32 Block = LandScript::Mine(Clip, "inf", Used());
+		Block = Block >= 0 ? Block : LandScript::Mine(Clip, "", Used());
+		Block = Block >= 0 ? Block : (ScriptUsed.Num() > 0 ? ScriptUsed.Last() : -1);
+		std::vector<std::vector<LandScript::Point>> Hedges;
+		if (S.Field)
+		{
+			for (const LandField::HedgeLine& H : S.Field->Hedges())
+			{
+				// (the kinds handed to the rules: a hedgerow, a bank, a garden's hedge, a wall)
+				if (H.Kind == 0 || H.Kind == 1 || H.Kind == 3 || H.Kind == 4)
+				{
+					Hedges.push_back(H.Points);
+				}
+			}
+		}
+		double X = 0.0, Y = 0.0;
+		const LandScript::Cover Kind = Block >= 0 ? LandScript::CoverFor(Clip, S.Rec.Ground, Hedges, Block, X, Y) : LandScript::Cover::None;
+		if (Kind == LandScript::Cover::None && (Block < 0 || !LandScript::Forward(Clip, S.Rec.Ground, Block, 150.0, X, Y)))
+		{
+			Say(TEXT("no unit and no cover to fire into; on to the plate"));
+			ScriptNext(50);
+			return;
+		}
+		Say(FString::Printf(TEXT("%s will fire into %s at %.0f, %.0f"), *NameOf(Block), Kind == LandScript::Cover::Hedge ? TEXT("a hedge") : Kind == LandScript::Cover::Woods ? TEXT("a wood") : TEXT("open ground (no cover ahead of it)"), X, Y));
+		ScriptUnit = Block;
+		ScriptX = X;
+		ScriptY = Y;
+		const LandCommand::Tag* T = Clip.TagOf(Block);
+		GlideTo((T->X + X) * 0.5, (T->Y + Y) * 0.5);
+		ScriptNext(41);
+		return;
+	}
+	case 41:
+	{
+		if (Since < 3.0)
+		{
+			return;
+		}
+		PickUp(ScriptUnit);
+		GeneralDo(TEXT("fire"));
+		FVector2D To;
+		bScriptByHand = OnScreen(ScriptX, ScriptY, To);
+		ScriptGiven = S.Battle;
+		if (bScriptByHand)
+		{
+			ScriptPixel = To;
+			GeneralMove(To, -1);
+			Say(FString::Printf(TEXT("FIRE ON armed for %s; over the cover the pointer says \"%s\""), *NameOf(ScriptUnit), *WideOf(G.Would)));
+			ScriptStill(TEXT("07-fire-on-cover"));
+		}
+		ScriptNext(42);
+		return;
+	}
+	case 42:
+	{
+		FVector2D Now;
+		if (bScriptByHand && PixelOf(ScriptX, ScriptY, 0.0, Now))
+		{
+			ScriptPixel = Now;
+		}
+		if (bScriptByHand && Since < 0.6)
+		{
+			GeneralMove(ScriptPixel, -1);
+			return;
+		}
+		if (bScriptByHand)
+		{
+			GeneralPress(ScriptPixel, 0, false, -1);
+			GeneralRelease(ScriptPixel, 0, false, -1);
+			Say(FString::Printf(TEXT("%s fires into the cover at %.0f, %.0f by his click"), *NameOf(ScriptUnit), ScriptX, ScriptY));
+		}
+		else
+		{
+			GiveGeneral(WideOf(Clip.FireInto(ScriptX, ScriptY)), TEXT("fire"), -1, TArray<FVector2D>(), ScriptX, ScriptY);
+			G.Armed.clear();
+			Say(FString::Printf(TEXT("%s fires into the cover at %.0f, %.0f, given directly (the place was off the screen)"), *NameOf(ScriptUnit), ScriptX, ScriptY));
+		}
+		if (!ScriptUsed.Contains(ScriptUnit))
+		{
+			ScriptUsed.Add(ScriptUnit);
+		}
+		ScriptNext(43);
+		return;
+	}
+	case 43:
+		if (Since < 2.0)
+		{
+			return;
+		}
+		ScriptStill(TEXT("08-fire-into-cover"));
+		ScriptNext(50);
+		return;
+
+	// ---- A unit's plate held up, as his pointer would hover over its tag ----
+	case 50:
+	{
+		int32 Block = -1;
+		for (const int32 Each : ScriptUsed)
+		{
+			const LandCommand::Tag* T = Clip.TagOf(Each);
+			if (Block < 0 && T && T->Ratio > 0 && LandScript::Standing(*T))
+			{
+				Block = Each;
+			}
+		}
+		Block = Block >= 0 ? Block : LandScript::Mine(Clip, "", {});
+		if (Block < 0)
+		{
+			ScriptNext(52);
+			return;
+		}
+		ScriptUnit = Block;
+		G.ShowPlate = Block;
+		S.GeneralIn.GoBlock = Block;
+		S.GeneralIn.bFollow = false;
+		ScriptNext(51);
+		return;
+	}
+	case 51:
+	{
+		if (Since < 3.0)
+		{
+			return;
+		}
+		const LandCommand::Tag* T = Clip.TagOf(ScriptUnit);
+		if (T)
+		{
+			Say(FString::Printf(TEXT("the plate of %s: \"%s\", of the %s, about %d men, drawn 1:%d"), *NameOf(ScriptUnit), *WideOf(T->Name).ToUpper(), *WideOf(T->Parent), T->Men >= 0 ? T->Men : T->Men0, T->Ratio));
+		}
+		ScriptStill(TEXT("09-plate"));
+		ScriptNext(52);
+		return;
+	}
+	case 52:
+		if (Since < 0.5)
+		{
+			return;
+		}
+		G.ShowPlate = -1;
+		GeneralDo(TEXT("clear"));
+		Say(TEXT("the walk's steps done; three minutes now at the battle's own pace (the frame times are the \"Land battle:\" lines every 10 s)"));
+		ScriptNext(60);
+		return;
+
+	// ---- Three minutes at its own pace, the rest at four times, the after card ----
+	case 60:
+		if (Since < 30.0)
+		{
+			return;
+		}
+		ScriptStill(TEXT("10-mid-battle"));
+		ScriptNext(61);
+		ScriptAt -= 30.0;
+		return;
+	case 61:
+		if (Since < 180.0 && !S.bCard)
+		{
+			return;
+		}
+		Say(TEXT("three minutes held at the battle's own pace; the rest at four times, to the after card"));
+		SetSpeed(4.0);
+		ScriptNext(70);
+		return;
+	case 70:
+		if (!S.bCard)
+		{
+			return;
+		}
+		ScriptNext(71);
+		return;
+	case 71:
+		if (Since < 1.5)
+		{
+			return;
+		}
+		ScriptStill(TEXT("11-after-card"));
+		if (HandBack)
+		{
+			// (a campaign battle he opened with FIGHT IT YOURSELF: CONTINUE pressed as his hand would, and the campaign's
+			// attack card takes the result; the game goes on, for the map's own steps after it)
+			Say(FString::Printf(TEXT("the walk done: %d stills; CONTINUE, back to the campaign"), ScriptStills));
+			ScriptStep = 99;
+			Press(TEXT("continue"));
+			return;
+		}
+		Say(FString::Printf(TEXT("the walk done: %d stills; the game quits"), ScriptStills));
+		QuitAt = RealT + 3.0;
+		ScriptStep = 99;
+		return;
+	default:
+		return;
+	}
+}

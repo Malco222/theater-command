@@ -1,0 +1,190 @@
+{
+ "file": "tally-sheet.rgba",
+ "cell_px": 64,
+ "span": 1.25,
+ "uv": {
+  "BOMB": {
+   "dark": [
+    0.0,
+    0.0,
+    0.5,
+    0.1
+   ],
+   "light": [
+    0.5,
+    0.0,
+    1.0,
+    0.1
+   ]
+  },
+  "KILL-GER": {
+   "dark": [
+    0.0,
+    0.1,
+    0.5,
+    0.2
+   ],
+   "light": [
+    0.5,
+    0.1,
+    1.0,
+    0.2
+   ]
+  },
+  "KILL-JAP": {
+   "dark": [
+    0.0,
+    0.2,
+    0.5,
+    0.3
+   ],
+   "light": [
+    0.5,
+    0.2,
+    1.0,
+    0.3
+   ]
+  },
+  "KILL-ITA": {
+   "dark": [
+    0.0,
+    0.3,
+    0.5,
+    0.4
+   ],
+   "light": [
+    0.5,
+    0.3,
+    1.0,
+    0.4
+   ]
+  },
+  "KILL-UK": {
+   "dark": [
+    0.0,
+    0.4,
+    0.5,
+    0.5
+   ],
+   "light": [
+    0.5,
+    0.4,
+    1.0,
+    0.5
+   ]
+  },
+  "KILL-SOV": {
+   "dark": [
+    0.0,
+    0.5,
+    0.5,
+    0.6
+   ],
+   "light": [
+    0.5,
+    0.5,
+    1.0,
+    0.6
+   ]
+  },
+  "KILL-USA": {
+   "dark": [
+    0.0,
+    0.6,
+    0.5,
+    0.7
+   ],
+   "light": [
+    0.5,
+    0.6,
+    1.0,
+    0.7
+   ]
+  },
+  "KILL-FRA": {
+   "dark": [
+    0.0,
+    0.7,
+    0.5,
+    0.8
+   ],
+   "light": [
+    0.5,
+    0.7,
+    1.0,
+    0.8
+   ]
+  },
+  "KILL-BLOSSOM": {
+   "dark": [
+    0.0,
+    0.8,
+    0.5,
+    0.9
+   ],
+   "light": [
+    0.5,
+    0.8,
+    1.0,
+    0.9
+   ]
+  },
+  "KILL-PLANE": {
+   "dark": [
+    0.0,
+    0.9,
+    0.5,
+    1.0
+   ],
+   "light": [
+    0.5,
+    0.9,
+    1.0,
+    1.0
+   ]
+  }
+ },
+ "tint": {
+  "BOMB": "multiply by the row's tin",
+  "tins": [
+   "D4AA30",
+   "DCB443",
+   "C99F2A",
+   "D8B03A"
+  ]
+ },
+ "victims": {
+  "GER": "KILL-GER",
+  "JAP": "KILL-JAP",
+  "ITA": "KILL-ITA",
+  "SOV": "KILL-SOV",
+  "USA": "KILL-USA",
+  "UK": "KILL-UK",
+  "CAN": "KILL-UK",
+  "AUS": "KILL-UK",
+  "NZL": "KILL-UK",
+  "SAF": "KILL-UK",
+  "IND": "KILL-UK",
+  "FRA": "KILL-FRA",
+  "VIC": "KILL-FRA",
+  "FFR": "KILL-FRA",
+  "*": "KILL-PLANE"
+ },
+ "own": {
+  "SOV": "KILL-SOV",
+  "JAP": "KILL-BLOSSOM"
+ },
+ "fade": {
+  "oldest": 0.67,
+  "oldest_kill": 0.85,
+  "rule": "the newest mark at full strength, each older one a step paler: the first bomb at 0.67 of the newest's contrast (draw it at that opacity over the skin). Kills fade within each row, the front one oldest, but only to 0.85, so a red disc never reads pink nor a blue disc lose its blue. Never so far that a mark drops out of the count"
+ },
+ "finish": {
+  "light_from_L": 50.0,
+  "rule": "the finish under the panel, not the aircraft's name: test the paint she wears at `panel.middle` (the middle of the panel's first block), camouflage, mottle and her owner's colours included: her paint `panel.under` there, and when that is `upper`, mixed `panel.blend` of the way to her `upper2` (with a plain machine's owner's colours for each where the owner gives them). Light when its lightness L* is at least this. `panel.colour` and `panel.finish` are the answer for her own paint. Use the decals' dark or light set to match, for the whole panel"
+ },
+ "about": "Each mark of a bomber's record (tallies.py; the art director's ruling of 2026-11-20, art-director/battles/bomber-tallies-ruling.md) in a square cell, for a dark finish and a light one: uv is [u0, v0, u1, v1] with v from the top of the sheet. Draw a cell as a quad on her skin, middle at the slot, half-width span times the slot's radius, upright on her side, turned by the slot's lean (`hand`). A bomb: multiply by its row's tin. tally-sheet-proof.png shows each on olive drab and on bare metal, at full strength and at the oldest mark's fade (a bomb 0.67, a kill 0.85).",
+ "width": 128,
+ "height": 640,
+ "made": "Tools/tally_sheet.py from the modeller's tally-sheet.png (256x1280), halved 1 time(s): plain RGBA bytes, rows from the top"
+}

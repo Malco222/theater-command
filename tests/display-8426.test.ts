@@ -118,6 +118,8 @@ describe('the guns rule where he reads it first (log b357)', () => {
     const { to, inf } = found!;
     const far = g.regions.find((x) => x.ctrl === 'POL' && x.owner === 'POL' && x !== to && !to.nb.includes(x.id) && x.units.length < 3)!;
     for (const u of [...to.units]) relocate(g, u, far);
+    // (The town's guard is spent: a city's guard beside the guns (ruling 232) means they are not alone.)
+    g.flags[`guard:${to.id}`] = 100;
     addCorps(g, 'POL', 'Polish test artillery', 'art', 2, to.id, {});
     const fogged = attackOutlook(g, [inf], to)!;
     expect(fogged.exact).toBe(false);

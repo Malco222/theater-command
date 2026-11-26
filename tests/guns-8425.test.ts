@@ -125,6 +125,8 @@ describe('guns never go forward alone (Version 84.2.5, ruling 211(a))', () => {
     const { to, inf } = front(g);
     const polRear = rear(g, 'POL', [to, g.regions[inf.reg]]);
     for (const u of [...to.units]) relocate(g, u, polRear);
+    // (The town's guard is spent: a city's guard beside the guns (ruling 232) means they are not alone.)
+    g.flags[`guard:${to.id}`] = 100;
     const gun = gunCorps(g, 'POL', to, 'Polish test artillery');
     const a = previewAttack(g, [inf], to)!;
     expect(a).not.toBeNull();

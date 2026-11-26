@@ -1,0 +1,21 @@
+{
+  "_about": "How a computer's fighter defence meets a raid (the tactics panel's air brief, item 5; the design director's ruling 239 and its rider of 20:58Z). A style is a temperament, not a weapon: it moves where the defence's weight falls, never how much (217, b418). escort: the share of the defence's weight dealt to the raid's escort, in whole groups. climb: bands above the raid's highest box the staff climbs to when radar warns it in time; drawn, never priced. A split defence fights from one pool (ruling 239, 21:10Z): a group's role says only where it flies. A human defender has no style. Read by src/battle/air/styles.ts.",
+  "styles": {
+    "bold": { "escort": 0.5, "climb": 1 },
+    "methodical": { "escort": 0.35, "climb": 1 },
+    "mass": { "escort": 0, "climb": 0 }
+  },
+  "_cap": "ahead: metres toward the raid a fleet's own fighter cover starts (the Pearl Harbor and Midway thread's S1).",
+  "cap": { "ahead": 4000 },
+  "_pick": "Stops 4 and 5, from the ticket's facts, never the nation: raw (experience under 'raw' and no early warning) flies mass; an escort weighing at least 'escort' x the defence flies bold; otherwise methodical. 'free': the escortRoles hook, an escort weighing at least 'free' x the defence sweeps first.",
+  "pick": { "raw": 0.3, "escort": 1.0, "free": 1.0 },
+  "_lean": "Stops 1 to 3: the air column of the one lean table (ruling 239.1 as amended 20:58Z; the land branch lays the table, and this copy must equal its air column). _default: methodical, but mass while raw.",
+  "lean": {
+    "GER": "methodical", "UK": "methodical", "CAN": "methodical", "AUS": "methodical", "NZL": "methodical", "SAF": "methodical", "IND": "methodical",
+    "USA": "methodical", "ITA": "methodical", "FRA": "methodical", "SOV": "mass", "JAP": "bold", "JPN": "bold",
+    "_default": "methodical"
+  },
+  "_path": "Growth at stops 1 to 3, never by date: the first step at leaders' experience 'first.xp' or holding 'first.tech'; the second at experience 'second.xp' and holding 'second.tech'.",
+  "path": { "SOV": ["mass", "methodical", "bold"] },
+  "grow": { "first": { "xp": 0.6, "tech": "earlywarning" }, "second": { "xp": 0.9, "tech": "gci" } }
+}

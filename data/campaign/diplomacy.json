@@ -89,12 +89,44 @@
       "text": "German troops gather on the Danube and Sofia is pressed to choose a side."
     },
     {
-      "id": "belgrade-coup", "from": 20, "to": 20,
+      "id": "belgrade-coup", "from": 20, "to": 20, "past": true,
       "if": ["alive:YUG", "atPeace:YUG", "notInBloc:YUG", "alive:GER", "alive:GRE", "flag:war:ITA:GRE"],
       "text": "Officers in Belgrade overthrow the regent for leaning toward the Axis, and crowds cheer the young King. Berlin now counts Yugoslavia an enemy."
     },
     {
-      "id": "italy-east", "from": 23, "to": 24, "mode": "history",
+      "id": "rashid-ali", "from": 20, "to": 21, "mode": "open",
+      "_note": "Ruling 228(3c), the historian's realism audit item 11: Iraq's coup of 1 April 1941 and its war with Britain, at stops 1 and 2 only. Iraq leaves its leaning to Britain and goes to war with her on its own account, in no alliance: Germany sent a few aircraft but never counted Iraq an ally, and an Iraq in the Axis would be a front of Germany's own that held up the attack in the east. The declaration is told in the event's own words (the UI director's, ruling 228 section 4).",
+      "if": ["stop:1,2", "by:21", "alive:IRQ", "atPeace:IRQ", "notInBloc:IRQ", "alive:UK", "war:UK,GER"],
+      "enter": {"nations": ["IRQ"], "align": "independent"},
+      "war": [["IRQ", "UK"]],
+      "tell": "war",
+      "text": "Rashid Ali takes Iraq into war with Britain. He and four army colonels have seized power in Baghdad, the Regent has fled, and Iraqi troops with guns hold the plateau above the RAF station at Habbaniya. He looks to Berlin and Rome for help. While Iraq is against Britain, no oil comes by the Gulf route."
+    },
+    {
+      "id": "iraq-armistice", "from": 22, "to": 22, "mode": "open", "past": true,
+      "_note": "Ruling 228(3c): the armistice of 31 May 1941. Britain holds Iraq by turn 22 in every history war: Iraq is out of the war and its ground in British hands, the British columns from Basra and Transjordan marching in as the terms are made.",
+      "if": ["stop:1,2", "by:22", "alive:IRQ", "war:IRQ,UK", "flag:event:rashid-ali"],
+      "partition": {"nation": "IRQ", "shares": [[["UK"], ["Iraq", "Baghdad", "Rutbah"]]], "marchIn": true},
+      "text": "Iraq has signed an armistice at Baghdad. Rashid Ali has fled to Iran, the Regent is back, and British troops hold Mosul and Kirkuk."
+    },
+    {
+      "id": "iran-1941", "from": 24, "to": 24, "mode": "open",
+      "_note": "Ruling 228(3a, 3b): Britain and the Soviet Union enter Iran together in August 1941, at stops 1 and 2. Iran's army stops fighting within four days; the Soviet zone is Iran (Tabriz), the British Kermanshah. The Persian Corridor opens with it (resources.json).",
+      "if": ["stop:1,2", "alive:IRN", "notInBloc:IRN", "war:UK,GER", "war:SOV,GER"],
+      "partition": {"nation": "IRN", "shares": [[["SOV"], ["Iran"]], [["UK"], ["Kermanshah"]]], "marchIn": true},
+      "band": "SOV",
+      "text": "British and Soviet troops have entered Iran. The Shah would not send his Germans home or let supplies through, and his army stopped fighting within four days. The Red Army holds Tabriz and the north, and the British hold Kermanshah and the south-west. Aid for the Soviet Union can now come through Iran as well as round the North Cape."
+    },
+    {
+      "id": "iran-1941-staffs", "from": 1, "to": 99, "mode": "open",
+      "_note": "Ruling 228(3b): at stops 3 to 5 the British and Soviet staffs enter Iran once both are at war with Germany and Iran is not with the Axis, for the road was the reason they went in. A player's own Britain or Soviet Union goes in by its player's hand.",
+      "if": ["stop:3,4,5", "computer:UK", "computer:SOV", "alive:IRN", "notInBloc:IRN", "war:UK,GER", "war:SOV,GER"],
+      "partition": {"nation": "IRN", "shares": [[["SOV"], ["Iran"]], [["UK"], ["Kermanshah"]]], "marchIn": true},
+      "band": "SOV",
+      "text": "British and Soviet troops have entered Iran. The Shah would not send his Germans home or let supplies through, and his army stopped fighting within four days. The Red Army holds Tabriz and the north, and the British hold Kermanshah and the south-west. Aid for the Soviet Union can now come through Iran as well as round the North Cape."
+    },
+    {
+      "id": "italy-east", "from": 22, "to": 24, "mode": "history",
       "if": ["alive:ITA", "alive:SOV", "inBloc:ITA,axis", "flag:war:GER:SOV"],
       "war": [["ITA", "SOV"]],
       "text": "Rome follows Berlin into the war in the east and promises an Italian army for the Russian front."
@@ -142,6 +174,54 @@
       "text": "German submarines have sunk Brazilian ships within sight of the coast, and crowds fill the streets of Rio. Brazil declares war on the Axis and joins the Allies."
     },
     {
+      "id": "bolivia-war", "from": 44, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:BOL", "war:USA,GER", "peace:BOL,GER", "openTo:BOL,allies"],
+      "enter": { "nations": ["BOL"], "align": "allies" },
+      "war": [["BOL", "GER"]],
+      "text": "Bolivia, whose tin already goes to the Allied factories, declares war on the Axis and joins the Allies."
+    },
+    {
+      "id": "colombia-war", "from": 51, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:COL", "war:USA,GER", "peace:COL,GER", "openTo:COL,allies"],
+      "enter": { "nations": ["COL"], "align": "allies" },
+      "war": [["COL", "GER"]],
+      "text": "German submarines have sunk Colombian ships in the Caribbean. Colombia declares war on Germany and joins the Allies."
+    },
+    {
+      "id": "americas-war-1945", "from": 66, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "war:USA,GER"],
+      "enter": { "nations": ["ECU", "PAR", "PER", "URU", "VEN"], "align": "allies" },
+      "war": [["ECU", "GER"], ["PAR", "GER"], ["PER", "GER"], ["URU", "GER"], ["VEN", "GER"]],
+      "text": "Ecuador, Paraguay, Peru, Uruguay and Venezuela declare war on the Axis: only a country at war by March has a seat at the founding conference of the United Nations."
+    },
+    {
+      "id": "turkey-war-1945", "from": 66, "to": 66, "mode": "open",
+      "_note": "Ruling 228 item 17, b528: a declaration, not a front. Turkey declared on 23 February 1945 to sit at the founding conference, with Germany beaten and no Axis army near its frontier; no Turkish soldier fought. At stops 1 and 2 it fires in that month if no Axis army stands on Turkish ground or ground bordering it; a computer Turkey's corps then keep to Turkish ground ('stay'). A player's Turkey is never moved.",
+      "if": ["stop:1,2", "by:66", "alive:GER", "alive:TUR", "peace:TUR,GER", "openTo:TUR,allies", "noArmyNear:axis,TUR"],
+      "enter": { "nations": ["TUR"], "align": "allies" },
+      "war": [["TUR", "GER"], ["TUR", "JAP"]],
+      "tell": "war",
+      "stay": ["TUR"],
+      "text": "Turkey declares war on Germany and Japan. No Turkish army will march: the declaration buys Ankara a seat at the founding conference of the United Nations."
+    },
+    {
+      "id": "turkey-war-late", "from": 66, "to": 99, "mode": "open",
+      "_note": "b528 at stops 3 to 5: the same declaration, from February 1945 in the first month when, as well, Allied armies stand on Germany's home ground (the reason the record gives).",
+      "if": ["stop:3,4,5", "alive:GER", "alive:TUR", "peace:TUR,GER", "openTo:TUR,allies", "noArmyNear:axis,TUR", "armyOn:allies,GER"],
+      "enter": { "nations": ["TUR"], "align": "allies" },
+      "war": [["TUR", "GER"], ["TUR", "JAP"]],
+      "tell": "war",
+      "stay": ["TUR"],
+      "text": "Turkey declares war on Germany and Japan. No Turkish army will march: the declaration buys Ankara a seat at the founding conference of the United Nations."
+    },
+    {
+      "id": "argentina-war", "from": 67, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:ARG", "war:USA,GER", "peace:ARG,GER", "openTo:ARG,allies"],
+      "enter": { "nations": ["ARG"], "align": "allies" },
+      "war": [["ARG", "GER"]],
+      "text": "Argentina, the last of the American republics to break with the Axis, declares war on Germany and joins the Allies."
+    },
+    {
       "id": "usa-italy", "from": 28, "to": 99, "mode": "open",
       "if": ["alive:USA", "alive:ITA", "war:USA,GER", "war:ITA,UK", "peace:USA,ITA"],
       "war": [["USA", "ITA"]],
@@ -180,7 +260,7 @@
       "text": "With Africa lost, a quarter of a million men gone into captivity at Tunis and the bombers over Sicily and Rome, the Italian army has no heart left for this war. Its divisions will not fight as they did."
     },
     {
-      "id": "mussolini-falls", "from": 48, "to": 70,
+      "id": "mussolini-falls", "from": 48, "to": 70, "past": true,
       "if": ["alive:ITA", "computer:ITA,47", "anyHeld:allies,Sicily,Sardinia,Calabria,Apulia,Naples,Rome"],
       "text": "The Fascist Grand Council has voted against Mussolini. The King has dismissed him and had him arrested, and Marshal Badoglio forms a government. \"The war goes on,\" says Rome, and nobody believes it."
     },
@@ -319,7 +399,7 @@
       "text": "After sixty-three days the Warsaw rising is over. The Home Army has laid down its arms, some two hundred thousand of the city's people are dead, and what is left of Warsaw is being blown up street by street. The Red Army watched from across the river."
     },
     {
-      "id": "slovak-rising", "from": 61, "to": 61, "mode": "history",
+      "id": "slovak-rising", "from": 61, "to": 61, "mode": "history", "past": true,
       "if": ["alive:SVK", "war:GER,SOV", "allHeld:allies,Lwow"],
       "text": "Slovakia has risen. Part of the Slovak army and thousands of partisans hold the mountains round Banska Bystrica against the German divisions sent in to disarm them, and the Red Army is fighting its way toward them through the Dukla Pass."
     },

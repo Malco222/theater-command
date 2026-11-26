@@ -42,6 +42,18 @@ const builtField = (g: Game, r: Region): number => g.flags[`wk:field:${r.id}`] ?
 /** The weight of engineers in a force: its engineer divisions at the strength they stand at. */
 export const sappers = (cs: Corps[]): number => cs.reduce((s, c) => s + (c.kind === 'eng' && !c.dead ? c.divs * c.str * (c.supplied ? 1 : 0.5) : 0), 0);
 
+/** Why no field engineers could lay out or enlarge an airfield in this province (`by`: the corps that would, which is not in the way of itself). */
+function fieldWhy(g: Game, r: Region, by?: Corps): string | null {
+  if (!airWar(g)) return 'Airfields are laid out only in the grand campaign.';
+  if (builtField(g, r) >= AIRWAR.fields.engineers) return `The airfield here is as large as field engineers can make it: it serves ${airfieldsHold(g, r.id).toLocaleString('en-US')} aircraft. A larger one is ordered from the treasury.`;
+  const laying = r.units.find((u) => u !== by && !u.dead && u.job?.what === 'airfield' && u.job.reg === r.id);
+  if (laying) return `${laying.name} is already laying out an airfield here.`;
+  return null;
+}
+
+/** True when an engineer corps of this nation with no other work, standing in this province, could be set to lay out an airfield there (the rule of whyNot). */
+export const fieldCanBeLaid = (g: Game, nat: string, r: Region): boolean => groundRules(g) && allied(g, nat, r.ctrl) && !fieldWhy(g, r);
+
 function whyNot(g: Game, c: Corps, key: JobKind): string | null {
   const r = g.regions[c.reg];
   const E = ENGINEERING;
@@ -53,12 +65,7 @@ function whyNot(g: Game, c: Corps, key: JobKind): string | null {
   const other = REPAIRS[key] && (key !== 'plant' || ruinedAt(g, r) <= 1) ? r.units.find((u) => u !== c && !u.dead && u.job?.what === key && u.job.reg === r.id) : undefined;
   if (other) return `${other.name} is already ${REPAIRS[key]} here.`;
   if (key === 'works' && (r.fort?.lv ?? 0) >= E.works.most) return `The works here are at level ${r.fort?.lv ?? 0}: as strong as field engineers can make them. Heavier fortifications are ordered from the treasury.`;
-  if (key === 'airfield') {
-    if (!airWar(g)) return 'Airfields are laid out only in the grand campaign.';
-    if (builtField(g, r) >= AIRWAR.fields.engineers) return `The airfield here is as large as field engineers can make it: it serves ${airfieldsHold(g, r.id).toLocaleString('en-US')} aircraft. A larger one is ordered from the treasury.`;
-    const laying = r.units.find((u) => u !== c && !u.dead && u.job?.what === 'airfield' && u.job.reg === r.id);
-    if (laying) return `${laying.name} is already laying out an airfield here.`;
-  }
+  if (key === 'airfield') { const why = fieldWhy(g, r, c); if (why) return why; }
   if (key === 'mines' && minesAt(g, r) >= E.mines.most) return 'The minefields here are as thick as they can be laid.';
   if (key === 'demolish' && !r.fort) return 'There are no fortifications here to demolish.';
   return null;
@@ -123,7 +130,7 @@ export function engineersMonth(g: Game, nat: string): void {
       if (rebuildFactory(g, r) && mine) { const left = ruinedAt(g, r); headline(g, 'info', `${c.name} has put a bombed factory at ${r.name} back to work${left ? `: ${left} still ${left > 1 ? 'lie' : 'lies'} in ruins` : ''}.`, nat, r.id); }
     } else if (job.what === 'works') {
       if ((r.fort?.lv ?? 0) < ENGINEERING.works.most) {
-        r.fort = { lv: (r.fort?.lv ?? 0) + 1, vs: facing(g, r) };
+        r.fort = { lv: (r.fort?.lv ?? 0) + 1, vs: facing(g, r), by: c.nat };
         if (mine) headline(g, 'info', `${c.name} has finished fortifying ${r.name}: fortifications, level ${r.fort.lv}.`, nat, r.id);
       }
     } else if (job.what === 'airfield') {
@@ -137,7 +144,7 @@ export function engineersMonth(g: Game, nat: string): void {
       g.flags[mineKey(r)] = lv;
       if (mine) headline(g, 'info', `${c.name} has laid minefields and booby traps round ${r.name}${lv > 1 ? ', two belts deep' : ''}.`, nat, r.id);
     } else if (job.what === 'demolish' && r.fort) {
-      r.fort = r.fort.lv <= 1 ? null : { lv: r.fort.lv - 1, vs: r.fort.vs };
+      r.fort = r.fort.lv <= 1 ? null : { ...r.fort, lv: r.fort.lv - 1 };
       if (mine) headline(g, 'info', `${c.name} has demolished ${r.fort ? 'part of the fortifications' : 'the fortifications'} at ${r.name}.`, nat, r.id);
     }
   }

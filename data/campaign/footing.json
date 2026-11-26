@@ -1,0 +1,65 @@
+{
+  "_about": "The nation's footing (ruling 172 and its two riders, Brian's yes of 17 November 2026; the grand campaign only). One lever for the share of a country's industry on war work, four footings. 'peace': what a country at peace has (half of industry, or its own peace table on the wider world). 'rearm': at peace only; the share climbs 'rearm.lift' above the peace figure, 'step' a month. 'war': what every country at war has, no order and no price (a country whose industry climbs to war by steps, the United States, keeps its climb). 'allout': at war for 'needs.longMonths' months of the war cabinet's own test or with home ground lost; a second shift, the share climbs from all of industry to 'allout.share', 'step' a month. Stepping down is at once and free, and no footing can be raised again for 'wait' months after a step down. 'cost' is political capital to order, 'hold' is political capital each month to hold it; the month there is not enough the footing slips a step. 'trust' is what the player's war cabinet loses each month, where it sits. All-out war wears the will to fight by 'allout.wear' a month, never more than 'allout.most' of itself in all; it is its own count above what shortage takes, and mends at 'allout.mend' a month once the country is off all-out war. 'on' switches the lever on for new grand campaigns (a campaign keeps the setting it began with, in g.flags.footing). 'staffs' lets the computer's countries use the lever: by the book at the stops that keep one ('book', months from September 1939 = 1; 'never' for a country that did not step up; 'rearm' for a country that rearmed at peace from that month, with its own lift), by judgment at the others ('judge': at war a staff steps down within 'margin' of its limit; at peace it rearms only at 'rearmStops', with cause, and never a country in 'peaceKept', which keeps its peace table at the stops of judgment). Untouched means unchanged: a country that never touches the lever earns exactly what it earned before.",
+  "on": false,
+  "staffs": false,
+  "step": 0.037,
+  "wait": 6,
+  "rearm": {
+    "lift": 0.25,
+    "cost": 8,
+    "hold": 0.5,
+    "trust": -0.5
+  },
+  "allout": {
+    "share": 1.25,
+    "cost": 12,
+    "hold": 1.5,
+    "trust": -1.2,
+    "wear": 0.004166666666666667,
+    "most": 0.1,
+    "mend": 0.008333333333333333,
+    "amberAt": 0.05
+  },
+  "names": {
+    "peace": "Peacetime economy",
+    "rearm": "Rearmament",
+    "war": "War footing",
+    "allout": "All-out war"
+  },
+  "judge": {
+    "margin": 0.2,
+    "rearmStops": [
+      4,
+      5
+    ],
+    "peaceKept": [
+      "SOV"
+    ]
+  },
+  "book": {
+    "UK": {
+      "allout": 13
+    },
+    "SOV": {
+      "allout": "invaded",
+      "rearm": 1,
+      "lift": 0.25
+    },
+    "GER": {
+      "allout": 42
+    },
+    "ITA": {
+      "allout": "never"
+    },
+    "FRA": {
+      "allout": "never"
+    },
+    "USA": {
+      "allout": "never"
+    }
+  },
+  "tips": {
+    "door": "Only part of your industry works for war at peace. Rearmament puts more of it there before the shooting starts, for political capital each month. Set it under the arsenal.",
+    "allout": "All-out war is now yours to order: a second shift in the factories, paid in political capital and the people's patience. Set it under the arsenal."
+  }
+}

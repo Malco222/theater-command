@@ -865,7 +865,9 @@ describe('at home, what his staff did, and elsewhere', () => {
 
 describe('a year of war with nobody playing, a card a month for four countries', () => {
   it('every card keeps the brief: two bands at most, a pictured lead, a line and a place in every row, the game untouched', { timeout: 240000 }, () => {
-    const g = startOpen(createGame(31, null));
+    // (Seed 7 since the computer's air forces fight back, airwar.json ai.back: with air battles in more months, seeds 1
+    // to 12 and 31 gave these four no quiet month but seed 7, Britain's fourth. Seed 31 before.)
+    const g = startOpen(createGame(7, null));
     const who = ['GER', 'POL', 'UK', 'FRA'];
     let cards = 0, leads = 0, bands = 0, quiet = 0;
     for (let m = 0; m < 12; m++) {

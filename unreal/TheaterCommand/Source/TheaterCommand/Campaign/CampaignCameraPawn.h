@@ -1,0 +1,132 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/Pawn.h"
+#include "CampaignCameraPawn.generated.h"
+
+class UCameraComponent;
+class USpringArmComponent;
+
+/**
+ * The player's eye over the campaign table. It always looks at a point on the
+ * table (the focus) from a distance (the zoom) and a compass direction (the
+ * yaw). Zoomed out it looks almost straight down, like someone leaning over
+ * the map; zoomed in it drops toward the table to look across at the pieces.
+ *
+ * Every change is eased, so the view glides instead of jumping.
+ */
+UCLASS()
+class THEATERCOMMAND_API ACampaignCameraPawn : public APawn
+{
+	GENERATED_BODY()
+
+public:
+	ACampaignCameraPawn();
+
+	virtual void Tick(float DeltaSeconds) override;
+
+	/** The camera's focus stays within this distance of the middle of the table. */
+	void SetBounds(const FVector2D& InHalfExtent) { HalfExtent = InHalfExtent; bBoxed = false; }
+
+	/** The same as a box that need not lie evenly round the middle of the table: the whole-world map, with today's map near one end of it. */
+	void SetBoundsBox(const FVector2D& InMin, const FVector2D& InMax) { BoundsMin = InMin; BoundsMax = InMax; bBoxed = true; }
+	/**
+	 * Holds the point looked at short of the north and south bounds, so that what lies beyond the map's edge (the
+	 * table) fills no more than this share of the screen's height at any height and tilt of the eye: 0.2 for a fifth.
+	 */
+	void SetEdgeHold(float North, float South) { HoldNorth = North; HoldSouth = South; }
+
+	/**
+	 * A world that runs right round (the whole-world map): the eye's place from west to east is kept between these
+	 * two, and when it passes one it comes in again at the other. The table shows the same ground at both, so
+	 * nothing is seen to happen.
+	 */
+	void SetWrap(double InWest, double InEast) { WrapWest = InWest; WrapEast = InEast; bWraps = InEast > InWest; }
+
+	/** For pictures of the whole world: lets the eye be sent higher than the player can take it. */
+	void SetTopZoom(float InTop) { TopZoom = InTop; }
+
+	/** Slides the focus: X to the viewer's right, Y away from the viewer, each -1 to 1. */
+	void Pan(const FVector2D& Input, float DeltaSeconds);
+
+	/** Moves the focus at once by a distance on the table, for dragging the map by hand. */
+	void PanWorld(const FVector& Delta);
+
+	/** Positive zooms out. One step is one notch of a mouse wheel. */
+	void ZoomBy(float Steps);
+
+	void RotateBy(float Degrees);
+	void TiltBy(float Degrees);
+
+	/** Sets the compass direction the view faces and any extra tilt. Takes effect at the next GoTo or eases in. */
+	void SetHeading(float YawDegrees, float TiltDegrees = 0.0f);
+
+	/** The look of a newsreel: black and white, grainy, dark at the corners. */
+	void SetNewsreel(bool bOn);
+	/** The lens at night: by moonlight the colour drains and turns blue. By lamplight, and by day, it is as it was. */
+	void SetNight(float Night, bool bLamplight);
+
+	/** While hurried the view travels several times faster, for following the other nations' month. */
+	void SetHurry(bool bInHurry) { bHurry = bInHurry; }
+	/** A slower, deliberate travel for a moment at the front: how fast the view closes on where it is sent (about 2.5 takes a second); 0 gives it back its usual quickness. */
+	void SetGlide(float Speed) { Glide = FMath::Max(Speed, 0.0f); }
+
+	/** Sends the view to a place on the table. Zoom is 0 (closest) to 1 (furthest); negative leaves it alone. */
+	void GoTo(const FVector& WorldFocus, float InZoom = -1.0f, bool bImmediately = false);
+
+	const FVector& GetFocus() const { return TargetFocus; }
+	float GetZoom() const { return TargetZoom; }
+	float GetDistance() const;
+	float GetYaw() const { return Yaw; }
+	float GetTilt() const { return TargetTilt; } // (the extra tilt asked for, as SetHeading takes it)
+	float GetPitch() const;
+	float GetHorizontalFov() const;
+
+	UPROPERTY(EditAnywhere, Category = "Camera")
+	float MinDistance = 750.0f;
+
+	/** How high above the table the point being looked at is, and the flattest the view may go (degrees below level). Changed only for looking at models. */
+	float FocusHeight = 0.0f;
+	void SetLens(float FieldOfViewDegrees);
+	float FlattestPitch = -22.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Camera")
+	float MaxDistance = 30000.0f;
+
+	/** How strongly the far and near parts of the view fall out of focus. This is what makes the table read as a model. */
+	UPROPERTY(EditAnywhere, Category = "Camera")
+	float MiniatureStrength = 13.0f;
+
+private:
+	void ApplyView();
+
+	UPROPERTY(VisibleAnywhere, Category = "Camera")
+	TObjectPtr<USceneComponent> Root;
+
+	UPROPERTY(VisibleAnywhere, Category = "Camera")
+	TObjectPtr<USpringArmComponent> Arm;
+
+	UPROPERTY(VisibleAnywhere, Category = "Camera")
+	TObjectPtr<UCameraComponent> Camera;
+
+	FVector2D HalfExtent = FVector2D(8500.0, 7500.0);
+	FVector2D BoundsMin = FVector2D::ZeroVector, BoundsMax = FVector2D::ZeroVector;
+	bool bBoxed = false;
+	float HoldNorth = 0.0f, HoldSouth = 0.0f;
+	float TopZoom = 1.0f; // the highest the eye may be sent (the wheel never takes it past 1)
+	double WrapWest = 0.0, WrapEast = 0.0;
+	bool bWraps = false;
+	FVector Focus = FVector::ZeroVector;
+	FVector TargetFocus = FVector::ZeroVector;
+	float Zoom = 0.62f;
+	float TargetZoom = 0.62f;
+	float Yaw = 0.0f;
+	float TargetYaw = 0.0f;
+	float Tilt = 0.0f;
+	float TargetTilt = 0.0f;
+	float NightKept = 0.0f;
+	bool bLampKept = false;
+	bool bFilm = false;
+	bool bHurry = false;
+	float Glide = 0.0f;
+};

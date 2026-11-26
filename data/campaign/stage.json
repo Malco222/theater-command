@@ -1,0 +1,4 @@
+{
+  "_about": "How far the grand campaign's chart reaches. 'far' false: Europe and the Americas with their cities, as the cities version plays them. 'far' true: the whole world, with the Pacific and the globe laid after them (step 13 and the globe's stage) and the countries that live there. One line, flipped by the rules builder when the far side ships; until then nothing of the far side is read, so no campaign and no war moves. A test of the far side turns it on for its own file alone (src/campaign/stage.ts).",
+  "far": false
+}

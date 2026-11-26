@@ -16,13 +16,15 @@
 // from the player's railhead.
 
 import railData from '../generated/campaign-rails.json';
-import worldRails from '../generated/world-americas-rails.json';
+import americasRails from '../generated/world-americas-rails.json';
+import wholeRails from '../generated/world-whole-rails.json';
+import { FAR_STAGE } from './stage';
 import data from '../../data/campaign/railways.json';
 import { Rng, hashString } from '../core/rng';
 import { KIND, type Corps, type Game, type Region } from './types';
 import { groundRules } from './ground';
 import { downBetween } from './rivers';
-import { EASTERN, allied, atWar, headline, inDesert } from './game';
+import { allied, atWar, headline, inDesert, lineOwner } from './game';
 import { besieged } from './siege';
 import { junctionOpenTo, worksBurnt } from './prizes';
 
@@ -40,7 +42,7 @@ export const RAILWAYS = data as unknown as {
 /** The lines of the map of Europe. */
 export const RAIL_LINKS: RailLink[] = (railData as unknown as { links: number[][] }).links.map(([a, b, x, y]) => ({ a, b, x, y }));
 /** Those of the wider world (tools/build-rails.mjs world), whose provinces are numbered on from Europe's. */
-export const WORLD_RAIL_LINKS: RailLink[] = (worldRails as unknown as { links: number[][] }).links.map(([a, b, x, y]) => ({ a, b, x, y }));
+export const WORLD_RAIL_LINKS: RailLink[] = ((FAR_STAGE ? wholeRails : americasRails) as unknown as { links: number[][] }).links.map(([a, b, x, y]) => ({ a, b, x, y }));
 const ALL_LINKS: RailLink[] = [...RAIL_LINKS, ...WORLD_RAIL_LINKS];
 /** The lines on a game's map: Europe's, and the wider world's where the campaign is played on it. */
 export const railLinks = (g: Game): RailLink[] => (g.flags.world === 1 ? ALL_LINKS : RAIL_LINKS);
@@ -211,13 +213,38 @@ export function railBombChance(g: Game, target: number, through: number, gunsSto
 }
 
 /**
+ * How many bombing raids, by day or by night, a side has flown on a province this month already: the number of the
+ * raid about to be flown there, 0 for the first. Read from the month's air reports (fly() files each raid's report
+ * after its dice).
+ */
+export function raidsBefore(g: Game, by: string, target: number): number {
+  let n = 0;
+  for (let i = g.airReports.length - 1; i >= 0 && g.airReports[i].turn >= g.turn; i--) {
+    const r = g.airReports[i];
+    if (r.turn === g.turn && r.region === target && r.attNat === by && (r.mission === 'bomb' || r.mission === 'night')) n++;
+  }
+  return n;
+}
+
+/**
+ * A bombing raid's own throw (patch 1.5.2, the design director 25 Nov 04:24Z #2): keyed on the raid's number, so that
+ * each raid on a province in a month throws afresh and the chance its card shows is true. The first keeps the key it
+ * always had.
+ */
+function raidThrow(g: Game, what: string, target: number, by: string): number {
+  const n = raidsBefore(g, by, target);
+  return new Rng(hashString(`${what}:${g.seed}:${g.turn}:${target}:${by}${n ? `:${n}` : ''}`)).next();
+}
+
+/**
  * A raid on a province's rail yards and junctions. Returns true if the line is cut. `guns` is the level of the
  * anti-aircraft guns that stand there: it is kept with the cut for the page to say (the rule is in `gunsStop`).
+ * `roll`, from 0 to 1, stands in for the dice: an air battle's own throw, so the line its field showed cut is cut.
  */
-export function bombRail(g: Game, by: string, target: number, through: number, gunsStop = 0, guns?: number): boolean {
+export function bombRail(g: Game, by: string, target: number, through: number, gunsStop = 0, guns?: number, roll?: number): boolean {
   const p = railBombChance(g, target, through, gunsStop);
   if (p <= 0) return false;
-  if (!(new Rng(hashString(`railbomb:${g.seed}:${g.turn}:${target}:${by}`)).next() < p && cutRail(g, target, 'bombed', by))) return false;
+  if (!((roll ?? raidThrow(g, 'railbomb', target, by)) < p && cutRail(g, target, 'bombed', by))) return false;
   if (guns !== undefined) g.flags[gunsKey(target)] = Math.max(0, Math.round(guns)) + 1;
   return true;
 }
@@ -283,7 +310,7 @@ export function railheadAt(g: Game, nat: string, region: number): Railhead {
   if (!groundRules(g)) return AT_HOME;
   const r = g.regions[region];
   if (inDesert(r)) return AT_HOME;
-  if (EASTERN.deepOwners.includes(r.owner) && !EASTERN.deepOwners.includes(nat)) return AT_HOME;
+  if (lineOwner(g, r.owner) && !lineOwner(g, nat)) return AT_HOME;
   const road = railheads(g, nat)?.[region] ?? 0;
   if (road <= 0) return AT_HOME;
   for (const [far, attack, defence] of RAILWAYS.railhead) if (road <= far) return { road, attack, defence };
@@ -310,10 +337,10 @@ export function ruinChance(g: Game, r: Region, stopped: number): number {
   return Math.min(0.95, stopped * U.chance);
 }
 
-/** A heavy raid on a province's industry. Returns true if a factory is wrecked. */
-export function bombFactories(g: Game, by: string, r: Region, stopped: number): boolean {
+/** A heavy raid on a province's industry. Returns true if a factory is wrecked. `roll`, as for bombRail, stands in for the dice. */
+export function bombFactories(g: Game, by: string, r: Region, stopped: number, roll?: number): boolean {
   const p = ruinChance(g, r, stopped);
-  if (p <= 0 || new Rng(hashString(`ruin:${g.seed}:${g.turn}:${r.id}:${by}`)).next() >= p) return false;
+  if (p <= 0 || (roll ?? raidThrow(g, 'ruin', r.id, by)) >= p) return false;
   g.flags[ruinKey(r.id)] = ruinedAt(g, r) + 1;
   return true;
 }

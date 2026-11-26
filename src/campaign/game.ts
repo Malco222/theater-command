@@ -2,29 +2,34 @@
 // battle is auto-resolved, and how a nation falls. The same battle maths will sit under
 // the playable 3D battles later, so that skipping a battle and fighting it are the same fight.
 
+import { mapDist2 } from './wrap';
 import mapData from '../generated/campaign-map.json';
 import nationsData from '../../data/campaign/nations.json';
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import setup from '../../data/campaign/setup-1939.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
-import { BUDGET, PRODUCTION, budgeted, canBuildYet, corpsName, deliver, firstCorpsNumber, gunsWanted, income, specOf, upkeepTotal } from './economy';
-import { DIPLOMACY, RELATIONS, alarm, alarmed, homeOpinion, pcIncome, sneakOn, wouldSurprise } from './diplomacy';
+import { BUDGET, PRODUCTION, budgeted, canBuildYet, corpsName, deliver, farShare, firstCorpsNumber, gunsWanted, income, specOf, upkeepTotal } from './economy';
+import { DIPLOMACY, RELATIONS, alarm, alarmed, homeOpinion, leavingThreat, majorsOf, pcIncome, sneakOn, wouldSurprise } from './diplomacy';
 import { ownPath } from './league';
 import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
-import { AIR, airOnFall, airUpkeep, setupAir, skyByNumbers, skyOnLand, skyOver } from './air';
+import { AIR, airOnFall, airUpkeep, bookCloseAir, closeEdge, closeOf, closeRules, closeStrikes, ratedAir, setupAir, skyByNumbers, skyOnLand, skyOver, type CloseAir } from './air';
 import { syncWings } from './carriers';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { locked, techTick, winterReady } from './tech';
+import { liftDates } from './lift';
 import { fuelAir, fuelMet, fuelSlows, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
 import { crown } from './domination';
-import { afterFall, recordFall, retaken, standsFreed } from './liberation';
+import { afterFall, recordFall, rememberWars, retaken, standsFreed } from './liberation';
 import { honour } from './guarantees';
 import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, moraleWord, nerve, raiseMorale, restedDrafts, restedMonth, restedOrg } from './morale';
 import { civicDrafts, civicSum, hospitalNear, hospitalWorth } from './buildings';
 import { tradeTick } from './trade';
-import { numberCorps } from './armies';
+import { growCorps, numberCorps } from './armies';
+import { drawHeld, layDrawn, loanOver } from './laidonce';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
+import { plansOnCapture } from './plans';
 import { armyOf, jointHold, jointMonth } from './joint';
 import { SeaPicture, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
@@ -35,25 +40,39 @@ import defenceData from '../../data/campaign/defence.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot, whyBarred } from './ground';
 import { SUPPORT, antiTank, assaultFire, footShare, machineGuns, mortars, snipedIn, tollFor, tollOf, whoPaid, type Faced, type Facing } from './support';
-import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName } from './rivers';
+import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName, worksName } from './rivers';
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
 import { answersOf, beyondEurope, patronOf, pressData, protectorOf, shipsItsOwn, worldOn } from './world';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
+import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
-import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, dropSieges, fall, fieldCtrl, garrisonOf, guardAfter, guardMen, guardOf, guardPower, inPocket, joinTown, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
+import { SIEGE, apOutOfTown, guardForce, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld, whyNotTakeField } from './siege';
 import { TOWNS, townName, townSize } from './towns';
+import { WEATHER, skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
+import { stopOf } from './history';
+import { clientWar, tiedPair } from './far';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
-  deepOwners: string[]; mud: number[]; lineDefence: number; stepFresh: number; stepConverted: number; convertAfter: number; badWeather: number;
+  deepOwners: string[];
+  /**
+   * Ruling 221 (the Pacific planner's paper 20). 'lineOwners': owners whose ground takes the long line as the Soviet
+   * Union's does (its drag, its thin drafts and rest, no railheads of the invader's own), counted from the invader's
+   * frontier and from the harbours it holds on that ground, with none of the Russian winter; read only at the dial's
+   * stops in 'lineStops' (every stop if it is not given). 'lineReckon': a staff reckons that line in its sums of
+   * strength, as it reckons the winter. 'nearRefuge': troops lifted off the coast of a country their own is fighting
+   * are landed at the nearest harbour their country holds on that country's ground, not taken home.
+   */
+  lineOwners?: string[]; lineStops?: number[]; lineReckon?: boolean; nearRefuge?: boolean;
+  mud: number[]; lineDefence: number; stepFresh: number; stepConverted: number; convertAfter: number; badWeather: number;
   bands: [number, number][]; drag: [number, number][]; roads: number; winter: { months: number[]; attack: number; defence: number; attrition: number; rest: number; hardy: string[] };
-  mobilisation: Record<string, { perMonth: number[]; after: number; divs: number; kind: Kind; xp: number; name: string; works?: [number, string, number][] }>;
+  mobilisation: Record<string, { perMonth: number[]; after: number; divs: number; kind: Kind; xp: number; name: string; trim?: { stops: number[]; cut: number; from?: number }; works?: [number, string, number][] }>;
   works?: [number, string, number, string[], string, { taken?: boolean; port?: boolean; vs?: string[] }?][];
 };
 /** Rules for campaigning in the desert. See data/campaign/desert.json. */
@@ -78,7 +97,7 @@ export function regionOf(r: any): Region {
     id: r.id, name: r.name, owner: r.owner, ctrl: r.owner, first: r.owner, terrain: r.terrain, vp: r.vp, fac: r.fac,
     // A depot on the coast is a harbour too. One inland feeds an army but takes no ships.
     cap: !!r.flags.cap, port: !!r.flags.port || (!!r.flags.depot && (r.seas ?? []).length > 0),
-    fort: r.flags.fort ? { lv: r.flags.fort[0], vs: r.flags.fort.slice(1) } : null,
+    fort: r.flags.fort ? { lv: r.flags.fort[0], vs: r.flags.fort.slice(1), by: r.owner } : null,
     vichy: !!r.flags.vichy, sov: !!r.flags.sov, oil: !!r.flags.oil, overseas: !!r.flags.col, theatre: k >= 0 && THEATRE_LIST[k].opens === undefined ? k : -1,
     x: r.x, y: r.y, nb: r.nb, polys: r.polys, units: [], seas: r.seas ?? [], since: 0, prev: null,
   };
@@ -149,6 +168,10 @@ export function addCorps(g: Game, nat: string, name: string, kind: Kind, divs: n
     general: null, hold: !!o.hold, dyle: o.dyle ?? null, supplied: true, fought: false, dead: false,
   };
   if (o.airborne) c.airborne = true;
+  if (o.stay) c.stay = true;
+  // The fullest the row ever gets (the planner's paper 18, ruled 16:32Z on 17 November 2026): a garrison of a brigade
+  // is a row of one division that never fills past its own size, for player and computer alike.
+  if (o.est !== undefined && o.est < 1) c.full = o.est;
   // Where and when it was raised: the first lines of its record.
   c.born = g.turn;
   if (reg.owner === nat) c.home = reg.id;
@@ -213,6 +236,13 @@ export function theWords(text: string, before = ''): string {
 export function placeName(name: string, start = false): string {
   return PLACES.the.includes(name) ? `${start ? 'The' : 'the'} ${name}` : name;
 }
+/**
+ * A place's name owning something, as theWords sets it: "the Ruhr's output", "the Midlands' output" (a plural name of
+ * the list owns with the apostrophe alone), "Warsaw's output".
+ */
+export function placeOwns(name: string, start = false): string {
+  return PLACES.the.includes(name) ? `${placeName(name, start)}${/s$/.test(name) ? "'" : "'s"}` : `${name}'s`;
+}
 
 export function headline(g: Game, kind: Headline['kind'], text: string, nat?: string, region?: number, tag?: NewsTag): void {
   g.headlines.push({ turn: g.turn, week: newsWeek(g), text: theWords(text), kind, nat, region, ...tag });
@@ -237,7 +267,7 @@ export function newsWeek(g: Game): number {
 }
 
 /** The two tags on news of fighting (Version 80, display only): the arm that fought, and who had the better and the worse of it. */
-export type NewsTag = Pick<Headline, 'arm' | 'won' | 'lost'>;
+export type NewsTag = Pick<Headline, 'arm' | 'won' | 'lost' | 'ready' | 'unit'>;
 
 /** News the player must not miss: a warning with a short title, set out as a card of its own in the month's news. */
 export function warning(g: Game, title: string, text: string, nat?: string, region?: number, about?: string): void {
@@ -292,6 +322,15 @@ export function bloc(n: Nation): Bloc | null {
 }
 
 export function allied(g: Game, a: string, b: string): boolean {
+  return sameSide(g, a, b) || tiedPair(g, a, b);
+}
+
+/**
+ * True for one country, or two members of one alliance. 'allied' is this and, on the far side of the world, a client
+ * and its patron while their tie holds (far.ts): the two stand on each other's ground as allies do, and are members
+ * of no alliance together, so what asks about membership (who may declare war on whom) asks this.
+ */
+export function sameSide(g: Game, a: string, b: string): boolean {
   if (a === b) return true;
   const A = g.nations[a], B = g.nations[b];
   if (!A || !B) return false;
@@ -334,7 +373,8 @@ export function sidesAtPeace(g: Game): void {
 
 export function declareWar(g: Game, a: string, b: string): void {
   const A = g.nations[a], B = g.nations[b];
-  if (!A.alive || !B.alive || atWar(g, a, b) || allied(g, a, b)) return;
+  if (!A.alive || !B.alive || atWar(g, a, b) || sameSide(g, a, b)) return;
+  const tied = tiedPair(g, a, b); // a client turning on its patron, or the patron on it (far.ts): read before the war is set
   // The grand campaign: a blow against a country at peace is a surprise this month, and when the player strikes a
   // country outside both blocs the neutral world takes note. Both are read off before anything changes.
   const sneak = wouldSurprise(g, a, b);
@@ -344,6 +384,8 @@ export function declareWar(g: Game, a: string, b: string): void {
   // A country outside every alliance that is struck down is a fright to its friends: the month such pacts are made.
   if (g.flags.open === 1 && bloc(B) === null) g.flags[`shock:${b}`] = g.turn;
   setWar(g, a, b);
+  // (Ruling 232, rider b606: a ring the record manned in the month its country was first attacked is manned before the attacker's battles.)
+  manRings(g, b);
   if (sneak) g.flags[`sneak:${a}:${b}`] = g.turn;
   A.offStart[b] = g.turn;
   g.flags[`war:${a}:${b}`] = g.turn;
@@ -378,6 +420,7 @@ export function declareWar(g: Game, a: string, b: string): void {
   }
   // Britain may stand by its dominions, one way only (ruling 211(b)): six times in ten she goes to war the same month.
   standsBy(g, a, b);
+  clientWar(g, a, b, tied); // the far side: war on a client is war on its patron, and a tie broken parts the two
   // A guarantee the card names is kept (ruling 229, part 3): its computer-run guarantors declare war the same day.
   honour(g, a, b, sideWas);
   if (A.blitz && !g.flags[`tempo:${a}:${g.turn}`]) {
@@ -489,6 +532,40 @@ function reactionMoves(g: Game, aggressor: string, victim: string): void {
 }
 
 export const hostileUnits = (g: Game, r: Region, nat: string): Corps[] => r.units.filter((u) => atWar(g, u.nat, nat));
+
+/** Who dug a place's works: the nation that built them; the works on the map from the first day are their country's. */
+export const worksBy = (r: Region): string => r.fort?.by ?? r.owner;
+/**
+ * True where a place's works count for `nat` (ruling 232 rider b624): works count only for the nation that dug them
+ * and its side, never for its enemy against that nation's own attacks. A ring that has taken the ground behind a
+ * city's lines does not stand in them backwards against the city's relief. Every nation, every stop.
+ */
+export const worksFor = (g: Game, r: Region, nat: string): boolean => !!r.fort && (sideOf(g, nat, worksBy(r)) || (!!r.fort.held && sideOf(g, nat, r.fort.held)));
+const sideOf = (g: Game, nat: string, of: string): boolean => nat === of || allied(g, nat, of);
+/** True where a place's works count for whoever stands against `attNat` there: the army in its field, or with none, its holder. */
+/**
+ * Works taken over (the variant put to the design director beside b624): a side that has held a place outright from one
+ * month's end to the next (the place in its hands, no enemy army standing in it, no siege) takes over the works there
+ * too (fort.held): Tobruk's Italian perimeter held by Britain in 1941, the French Mareth Line held by the Axis in 1943.
+ * The works still count for the side that dug them, the day it takes them back (Kiev and Zhitomir in 1943). A ring
+ * in a city's field never holds the place outright while the city's own garrison holds the town, so it never takes the
+ * city's lines over (the Moscow case).
+ */
+export function worksMonth(g: Game): void {
+  for (const r of g.regions) {
+    const key = `wkh:${r.id}`;
+    const holder = r.ctrl;
+    const outright = !!r.fort && !worksFor(g, r, holder) && !r.units.some((u) => !u.dead && atWar(g, u.nat, holder)) && !besieged(g, r);
+    if (!outright) { if (g.flags[key] !== undefined) delete g.flags[key]; continue; }
+    if (g.flags[key] === undefined) { g.flags[key] = g.turn; continue; }
+    if (g.turn > g.flags[key]) { r.fort = { ...r.fort!, held: holder }; delete g.flags[key]; }
+  }
+}
+export function worksAgainst(g: Game, r: Region, attNat: string): boolean {
+  if (!r.fort) return false;
+  const foes = hostileUnits(g, r, attNat);
+  return foes.length ? foes.some((u) => worksFor(g, r, u.nat)) : worksFor(g, r, r.ctrl);
+}
 export const friendlyUnits = (g: Game, r: Region, nat: string): Corps[] => r.units.filter((u) => allied(g, u.nat, nat));
 
 /** The army at home and on the Continent, in divisions. Troops in the colonies are not there to defend the homeland, and do not count. */
@@ -537,6 +614,68 @@ export function weather(g: Game): { mud: boolean; winter: boolean; text: string 
   return { mud: false, winter: false, text: 'Clear campaigning weather.' };
 }
 
+/**
+ * The ground's weather over a province this month, in the 3D game's words (release 1.5, from release 2; looks only):
+ * 'mud' in the eastern thaw, 'snow' in its zone's snow months, else under the skies switch 'rain' (a closed sky) or
+ * 'clear'; '' where there is none to tell. Nothing in the war reads it.
+ */
+export function groundWeather(g: Game, r: Region): string {
+  const zone = WEATHER.zones[zoneOfRegion(g, r.id)];
+  const m = turnToDate(g.turn).month;
+  if (zone && (zone.key === 'nrus' || zone.key === 'srus') && weather(g).mud) return 'mud';
+  if (zone && zone.snow.includes(m + 1)) return 'snow';
+  if (!weatherOn(g)) return '';
+  const sky = skyAt(g, r.id);
+  return sky === 'closed' ? 'rain' : sky === 'clear' ? 'clear' : '';
+}
+
+/**
+ * Worn uniforms (release 2's wearMonth, in release 1.5 for its looks): a corps' weeks in the line since it was last
+ * rested or formed. A month fought, attacked, cut off or facing the enemy counts four weeks; a month marching counts
+ * the weeks it marched; a quiet month away from the front clears them. Read only by the battle card's ticket.
+ */
+function wornMonth(g: Game, c: Corps): void {
+  const r = g.regions[c.reg];
+  const facing = !!r && (r.units.some((u) => !u.dead && u.nat !== c.nat && atWar(g, u.nat, c.nat))
+    || r.nb.some((j) => { const o = g.regions[j].ctrl; return !!o && o !== c.nat && atWar(g, o, c.nat); }));
+  const marched = c.town !== undefined || c.joint !== undefined ? 0 : Math.max(0, c.apMax - c.ap);
+  const weeks = c.kind === 'fort' || c.born === g.turn ? 0 : c.fought || c.pressed || !c.supplied || facing ? 4 : marched;
+  if (weeks <= 0) delete c.line;
+  else c.line = (c.line ?? 0) + weeks;
+}
+
+/**
+ * Captured kit (release 2, in release 1.5 for its looks): after a fought battle won heavily over an army with tanks, the
+ * winner keeps a few of them (1 to 3 tank blocks to be drawn as the loser's model in the 3D game), at even odds for a
+ * heroic win or a rout of the attack, and a third for a decisive win; kept six months, the three latest for each nation.
+ */
+function capturedKit(g: Game, rep: BattleReport, target: Region): void {
+  const attWon = rep.level.endsWith('victory');
+  const heavy = rep.level === 'Heroic victory' || rep.level === 'Decisive defeat' ? 50 : rep.level === 'Decisive victory' ? 33 : 0;
+  if (!heavy) return;
+  const losers = (attWon ? rep.defenders : rep.attackers).filter((u) => u.kind === 'arm' && u.divs > 0);
+  if (!losers.length) return;
+  const throwOf = (rep.id * 7919 + target.id * 104729 + g.turn * 31) % 100;
+  if (throwOf >= heavy) return;
+  const winner = attWon ? rep.attNat : rep.defNat;
+  const from = losers.reduce((a, b) => (b.divs > a.divs ? b : a)).nat;
+  if (from === winner) return;
+  const n = Math.min(3, Math.max(1, Math.round(losers.reduce((s2, u) => s2 + u.divs, 0))));
+  const book = (g.captured ??= {});
+  book[winner] = [...(book[winner] ?? []).filter((k) => g.turn - k.turn < 6).slice(-2), { from, n, turn: g.turn }];
+}
+
+/**
+ * Whose ground takes the long line in this war: the Soviet Union's at every stop, and that of the owners in east.json
+ * 'lineOwners' at the dial's stops in 'lineStops' (ruling 221, L). The Russian winter stays the Soviet Union's alone.
+ */
+export function lineOwners(g: Game): string[] {
+  const more = EASTERN.lineOwners ?? [];
+  if (!more.length || (EASTERN.lineStops && !EASTERN.lineStops.includes(stopOf(g)))) return EASTERN.deepOwners;
+  return [...EASTERN.deepOwners, ...more];
+}
+export const lineOwner = (g: Game, o: string): boolean => lineOwners(g).includes(o);
+
 /** True when this corps is campaigning on Soviet ground in winter without the equipment for it. */
 export function frozen(g: Game, nat: string, r: Region): boolean {
   return weather(g).winter && EASTERN.deepOwners.includes(r.owner) && !EASTERN.winter.hardy.includes(nat) && !winterReady(g, nat);
@@ -558,7 +697,8 @@ export function lineDrag(g: Game, c: Corps, to: Region): number {
     for (const [max, extra] of DESERT.drag) if (length <= max) return extra;
     return 0;
   }
-  if (!EASTERN.deepOwners.includes(to.owner) || EASTERN.deepOwners.includes(c.nat)) return 0;
+  const long = lineOwners(g);
+  if (!long.includes(to.owner) || long.includes(c.nat)) return 0;
   if (allied(g, c.nat, to.ctrl) && to.since < g.turn) return 0;
   ensureSupply(g);
   const reach = g.reach[c.nat];
@@ -602,6 +742,66 @@ export function moveCost(g: Game, c: Corps, to: Region, from = c.reg): number {
 
 // ---- Supply -------------------------------------------------------------------------
 
+/**
+ * Each country's last supply picture, kept with what it was drawn from (the map-speed lane's month-end profile, 24 Nov
+ * 2026: the picture was drawn for every country at every country's turn, and almost every time came out the same). A
+ * picture is drawn again only when something it is drawn from has changed: which provinces its roads may run through,
+ * where its stores are and the head start each gives in the desert, and, for a picture reaching into the east, how the
+ * railways there stand. The stores of the ports overseas, which corps are fed, the garrisons and the railheads are worked
+ * out at every call as before. Nothing it gives differs from drawing every picture afresh: TC_SUPPLY_CHECK=1 draws every
+ * kept picture again and stops the run on any difference.
+ * - Each picture keeps the railways it was drawn with, not the last call's: a country with no corps for a while is not
+ *   looked at, and its picture must not outlive a railway that changed meanwhile.
+ * - The railways and the desert are worked out once a call, and the very arrays that key the kept pictures are the ones
+ *   the pictures are drawn from (reachInto, desertLines), so a rule that moves a step cannot miss the key.
+ * - The roads between provinces are not keyed: they change only when the wider world is attached (attachWorld), which
+ *   also adds provinces, and a new number of provinces starts the book afresh.
+ * - A kept picture is handed out again as the same arrays: nothing may write into g.supply or g.reach in place.
+ */
+/** The eastern railways as they stand this call: what each Soviet-owned step of the line costs, and whose home it is. */
+interface RailNow { step: Float64Array; home: Uint8Array }
+interface SupplyDrawn { pass: Uint8Array; from: string; ok: Uint8Array; reach: Float32Array; east: boolean; rail: RailNow | null }
+interface SupplyBook { size: number; wide: boolean; long: string; deep: Uint8Array; sand: Uint8Array; rail: RailNow; drawn: Map<string, SupplyDrawn> }
+const supplyBooks = new WeakMap<Game, SupplyBook>();
+const supplyCheckEnv = (globalThis as { TC_SUPPLY_CHECK?: unknown }).TC_SUPPLY_CHECK ?? (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.TC_SUPPLY_CHECK;
+const supplyCheck = supplyCheckEnv !== undefined && !!supplyCheckEnv && supplyCheckEnv !== '0';
+const sameBytes = (a: ArrayLike<number>, b: ArrayLike<number>): boolean => {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+};
+
+/** One country's supply picture from its stores outward over the provinces its roads may pass, and its lines' lengths. */
+function drawSupply(g: Game, id: string, pass: Uint8Array, seeds: number[], heads: number[], wide: boolean, long: string[], deep: Uint8Array, sand: Uint8Array, rail: RailNow): { ok: Uint8Array; reach: Float32Array; east: boolean } {
+  const size = g.regions.length;
+  const ok = new Uint8Array(size);
+  const q: number[] = [];
+  let east = false, desert = false;
+  for (const at of seeds) {
+    // In the grand campaign the table also remembers where the stores are: the railheads are counted from there.
+    ok[at] = wide ? 2 : 1; q.push(at);
+    if (deep[at]) east = true;
+    if (sand[at]) desert = true;
+  }
+  for (let i = 0; i < q.length; i++) {
+    for (const j of g.regions[q[i]].nb) {
+      if (ok[j] || !pass[j]) continue;
+      ok[j] = 1; q.push(j);
+      if (deep[j]) east = true;
+      if (sand[j]) desert = true;
+    }
+  }
+  // A country with no supplied ground inside the Soviet Union has no line there to measure, and one with none in
+  // the desert or overseas has none there: both tables stay empty, as the long way round would leave them.
+  const reach = east ? reachInto(g, id, ok, long, deep, rail) : new Float32Array(size);
+  if (desert) {
+    const head = new Float32Array(size).fill(-1);
+    for (let i = 0; i < heads.length; i += 2) head[heads[i]] = heads[i + 1];
+    desertLines(g, ok, head, sand, reach);
+  }
+  return { ok, reach, east };
+}
+
 export function computeSupply(g: Game): void {
   const active = new Set(g.corps.map((c) => c.nat));
   // The seas each nation's supply ships can still use, worked out once: an ally's overseas ports feed its friends too.
@@ -623,6 +823,7 @@ export function computeSupply(g: Game): void {
   const size = g.regions.length;
   const holders: string[] = [], holderNo = new Map<string, number>();
   const road = new Int16Array(size), deep = new Uint8Array(size), sand = new Uint8Array(size);
+  const long = lineOwners(g);
   // The provinces that can be anybody's source of supply at all, in order: a port, or a capital, a big industrial
   // province or a depot standing on its owner's own ground. Every other province only carries the line.
   const sources: number[] = [];
@@ -631,18 +832,39 @@ export function computeSupply(g: Game): void {
     let k = holderNo.get(who);
     if (k === undefined) { k = holders.length; holderNo.set(who, k); holders.push(who); }
     road[r.id] = k;
-    if (EASTERN.deepOwners.includes(r.owner)) deep[r.id] = 1;
-    if (inDesert(r)) sand[r.id] = 1;
+    if (long.includes(r.owner)) deep[r.id] = 1;
+    // Desert ground (2) costs a step of the line; the coast overseas (1) only carries it. Either is the desert's table.
+    sand[r.id] = (r.overseas ? 1 : 0) | (sandRules(r) ? 2 : 0);
     if (r.port || (r.ctrl === r.owner && (r.cap || r.fac >= 3 || !!g.flags['depot:' + r.id]))) sources.push(r.id);
   }
+  // What each step of the long line costs this month, on Soviet-owned ground: a region held long enough has had its
+  // track relaid (in the grand campaign, unless the line there is torn up), and mud and winter lengthen every step.
+  const w = weather(g), bad = w.mud || w.winter ? EASTERN.badWeather : 1;
+  const step = new Float64Array(size), home = new Uint8Array(size);
+  for (let j = 0; j < size; j++) {
+    if (!deep[j]) continue;
+    const r = g.regions[j];
+    if (EASTERN.deepOwners.includes(r.owner)) home[j] = 1;
+    step[j] = (g.turn - lineSince(g, j, r.since) >= EASTERN.convertAfter && !railCut(g, j) ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
+  }
+  // The pictures kept from the last call hold while the chart, the rules, the long line's owners and the desert are the
+  // same; those reaching into the east hold only while every eastern step costs what it did when they were drawn.
+  let book = supplyBooks.get(g);
+  const longKey = `${long.join('|')}/${DESERT.step}`;
+  if (!book || book.size !== size || book.wide !== wide || book.long !== longKey || !sameBytes(book.deep, deep) || !sameBytes(book.sand, sand)) {
+    book = { size, wide, long: longKey, deep, sand, rail: { step, home }, drawn: new Map() };
+    supplyBooks.set(g, book);
+  }
+  // The railways now: the same object as the last call's while nothing on them has changed, so most checks are one look.
+  let rail = book.rail;
+  if (!sameBytes(rail.step, step) || !sameBytes(rail.home, home)) book.rail = rail = { step, home };
+  const railHolds = (then: RailNow | null): boolean => !then || then === rail || (sameBytes(then.step, rail.step) && sameBytes(then.home, rail.home));
   for (const id of active) {
     const friend = new Uint8Array(holders.length);
     for (let k = 0; k < holders.length; k++) if (allied(g, id, holders[k])) friend[k] = 1;
-    const ok = new Uint8Array(size);
-    const q: number[] = [];
     // Where the supply comes from, and in the desert how much of a head start each base gives: [province, start].
+    const seeds: number[] = [];
     const heads: number[] = [];
-    let east = false, desert = false;
     const sunk = convoyDrag(g, id);
     // A nation with ships can also be fed through any friendly port its supply ships can still reach.
     const open = lanesOf(id);
@@ -669,29 +891,27 @@ export function computeSupply(g: Game): void {
       if (!depot && !quay) continue;
       // A pocket that has eaten its stores feeds nobody (the grand campaign): its depot is a name, and no ship comes in.
       if (field && r.ctrl === id && pocketDry(g, r, id)) continue;
-      // In the grand campaign the table also remembers where the stores are: the railheads are counted from there.
-      ok[r.id] = wide ? 2 : 1; q.push(r.id);
+      seeds.push(r.id);
       heads.push(r.id, depot || !r.overseas ? 0 : (DESERT.ports[r.name] ?? DESERT.port) + sunk);
-      if (deep[r.id]) east = true;
-      if (sand[r.id]) desert = true;
     }
-    for (let i = 0; i < q.length; i++) {
-      for (const j of g.regions[q[i]].nb) {
-        if (ok[j] || !friend[road[j]]) continue;
-        ok[j] = 1; q.push(j);
-        if (deep[j]) east = true;
-        if (sand[j]) desert = true;
+    // The provinces this country's roads may pass, and its picture: the one kept, if nothing it was drawn from moved.
+    const pass = new Uint8Array(size);
+    for (let j = 0; j < size; j++) pass[j] = friend[road[j]];
+    const from = `${seeds.join(',')}/${heads.join(',')}`;
+    const kept = book.drawn.get(id);
+    if (kept && kept.from === from && railHolds(kept.rail) && sameBytes(kept.pass, pass)) {
+      if (supplyCheck) {
+        const fresh = drawSupply(g, id, pass, seeds, heads, wide, long, deep, sand, rail);
+        if (!sameBytes(fresh.ok, kept.ok) || !sameBytes(fresh.reach, kept.reach)) throw new Error(`supply picture kept for ${id} in month ${g.turn} differs from a fresh one`);
       }
+      g.supply[id] = kept.ok;
+      g.reach[id] = kept.reach;
+      continue;
     }
-    g.supply[id] = ok;
-    // A country with no supplied ground inside the Soviet Union has no line there to measure, and one with none in
-    // the desert or overseas has none there: both tables stay empty, as the long way round would leave them.
-    g.reach[id] = east ? reachInto(g, id, ok) : new Float32Array(size);
-    if (desert) {
-      const head = new Float32Array(size).fill(-1);
-      for (let i = 0; i < heads.length; i += 2) head[heads[i]] = heads[i + 1];
-      desertLines(g, ok, head, g.reach[id]);
-    }
+    const drawn = drawSupply(g, id, pass, seeds, heads, wide, long, deep, sand, rail);
+    g.supply[id] = drawn.ok;
+    g.reach[id] = drawn.reach;
+    book.drawn.set(id, { pass, from, ...drawn, rail: drawn.east ? rail : null });
   }
   // An army at peace is fed by its own country wherever it stands.
   for (const c of g.corps) c.supplied = !g.nations[c.nat].atWar.length || !!g.supply[c.nat]?.[c.reg];
@@ -713,7 +933,7 @@ export function convoyDrag(g: Game, id: string): number {
  * nearest working base, a step for every region of desert on the way. Written into the same
  * table as the line inside the Soviet Union; the two never overlap.
  */
-function desertLines(g: Game, ok: Uint8Array, head: Float32Array, out: Float32Array): void {
+function desertLines(g: Game, ok: Uint8Array, head: Float32Array, sand: Uint8Array, out: Float32Array): void {
   const d = new Float32Array(g.regions.length).fill(1e6);
   const q: number[] = [];
   for (let i = 0; i < head.length; i++) if (head[i] >= 0) { d[i] = head[i]; q.push(i); }
@@ -721,34 +941,35 @@ function desertLines(g: Game, ok: Uint8Array, head: Float32Array, out: Float32Ar
     const a = q[i];
     for (const j of g.regions[a].nb) {
       if (!ok[j]) continue;
-      const far = d[a] + (sandRules(g.regions[j]) ? DESERT.step : 0);
+      const far = d[a] + (sand[j] & 2 ? DESERT.step : 0);
       if (far < d[j] - 1e-6) { d[j] = far; q.push(j); }
     }
   }
-  for (const r of g.regions) if (inDesert(r) && ok[r.id] && d[r.id] < 1e6) out[r.id] = d[r.id];
+  for (let i = 0; i < d.length; i++) if (sand[i] && ok[i] && d[i] < 1e6) out[i] = d[i];
 }
 
 /**
  * The length of a nation's supply line in every region it can reach inside the Soviet Union,
  * counted from the frontier railheads. Regions held long enough to relay the track count for less.
+ * (Ruling 221, L: on the ground of the other owners of the long line it is counted from the harbours the invader
+ * holds there as well, where its ships bring the stores in.)
  */
-function reachInto(g: Game, id: string, ok: Uint8Array): Float32Array {
+function reachInto(g: Game, id: string, ok: Uint8Array, long: string[], deep: Uint8Array, rail: RailNow): Float32Array {
   const d = new Float32Array(g.regions.length);
-  if (EASTERN.deepOwners.includes(id)) return d; // at home on their own railways
-  const deep = (r: Region): boolean => EASTERN.deepOwners.includes(r.owner);
-  const w = weather(g);
-  const bad = w.mud || w.winter ? EASTERN.badWeather : 1;
+  if (long.includes(id)) return d; // at home on their own railways
+  // Off Soviet ground (ruling 221, L), a harbour the invader holds on the long line's ground is a railhead too.
+  const quay = (j: number): boolean => ok[j] === 2 && !rail.home[j];
   d.fill(1e6);
   const q: number[] = [];
-  for (const r of g.regions) if (ok[r.id] && !deep(r)) { d[r.id] = 0; q.push(r.id); }
+  for (let j = 0; j < d.length; j++) if (ok[j] && (!deep[j] || quay(j))) { d[j] = 0; q.push(j); }
   for (let i = 0; i < q.length; i++) {
     const a = q[i];
     for (const j of g.regions[a].nb) {
-      const r = g.regions[j];
-      if (!ok[j] || !deep(r)) continue;
-      // In the grand campaign a line the defenders tore up is not relaid by time alone: engineers must do it.
-      // And a line burned under a scorched earth order is converted only from the month it was made good.
-      const step = (g.turn - lineSince(g, j, r.since) >= EASTERN.convertAfter && !railCut(g, j) ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
+      if (!ok[j] || !deep[j]) continue;
+      // The step's cost (computeSupply): in the grand campaign a line the defenders tore up is not relaid by time
+      // alone, engineers must do it; and a line burned under a scorched earth order is converted only from the month
+      // it was made good.
+      const step = rail.step[j];
       if (d[a] + step < d[j] - 1e-6) { d[j] = d[a] + step; q.push(j); }
     }
   }
@@ -822,7 +1043,7 @@ export function limitAttackers(g: Game, corps: Corps[], target: Region): Corps[]
     // Attacked from several sides at once a defence cannot cover every road: each side's roads carry more (the grand campaign).
     if (new Set(corps.filter((c) => !blocked(g, c, target)).map((c) => c.reg)).size >= DEFENCE.frontage.sides) cap += DEFENCE.frontage.extra;
     // Guns fire over the heads of the infantry: against works, a few artillery corps join without taking room on the roads.
-    if (target.fort || hostileUnits(g, target, armyOf(corps[0])).some((u) => u.dug)) {
+    if (worksAgainst(g, target, armyOf(corps[0])) || hostileUnits(g, target, armyOf(corps[0])).some((u) => u.dug)) {
       for (const c of ranked) if (c.kind === 'art' && guns.length < DEFENCE.frontage.guns && !blocked(g, c, target)) guns.push(c);
     }
   }
@@ -929,11 +1150,12 @@ export const monthsUnfed = (org = 1): number => Math.max(1, Math.ceil(org / UNFE
 function airOf(g: Game, nats: Set<string>, enemies: Set<string>): number {
   let s = 0;
   // An air force short of fuel flies fewer sorties (the grand campaign).
-  for (const id of nats) s += g.nations[id].air * fuelAir(g, id);
+  // (A country whose air force the fight back raised as air groups fights with them, and its rating no longer counts: air.ts ratedAir.)
+  for (const id of nats) s += ratedAir(g, id) * fuelAir(g, id);
   for (const n of Object.values(g.nations)) {
     // An ally at war with the same enemy lends a share of its air force, if it has airfields on the map to fly from.
     if (!n.alive || nats.has(n.id) || n.capital < 0) continue;
-    if ([...nats].some((a) => allied(g, a, n.id)) && [...enemies].some((e) => atWar(g, n.id, e))) s += n.air * 0.25;
+    if ([...nats].some((a) => allied(g, a, n.id)) && [...enemies].some((e) => atWar(g, n.id, e))) s += ratedAir(g, n.id) * 0.25;
   }
   return s;
 }
@@ -962,11 +1184,21 @@ export interface Assessment {
   /** True where the defenders are guns with no fighting corps in front of them, caught in the field (ruling 146, the grand campaign): they are overrun, and the odds say so. */
   overrun?: boolean;
   /**
+   * The town's guard fighting beside the field army, in divisions' worth (ruling 232, the grand campaign): where no
+   * garrison stands in the town, the guard is in this battle behind its walls, and the town falls with the field.
+   */
+  guard?: number;
+  /**
    * What the attack faces (the grand campaign; null everywhere else): the defence's anti-tank strength and what it is
    * made of, who pays (what each arm in the attack loses, as a multiple of the usual share), and the facts the battle
    * card tells before the attack and after.
    */
   faced: Faced | null;
+  /**
+   * Close air support (the grand campaign, air.json 'close'): the air edge after it, and each side's on-call air, its
+   * share of that side's strength, its air strikes and the groups that fly them. Unset where nobody is on call.
+   */
+  air?: CloseAir;
 }
 
 /** How an attack arrives: over land, or (sea) from landing craft at that share of its strength. */
@@ -986,7 +1218,115 @@ export interface AttackOpts {
    * grand campaign): the defenders that much more tired, their works worn by that many months. A staff planning two waves reads it.
    */
   after?: { blows: number; wear: number };
+  /**
+   * Close air support flown over a battle fought on the field (the land field's bill): the air strikes each group
+   * flew, by group id. Unset, each group flies the strikes the battle card gave its side.
+   */
+  closeSorties?: Record<number, number>;
+  /**
+   * The battle was fought out on the field by the player (src/battle): the ratio it came to stands in for the day's
+   * luck, and the rules apply their own losses, retreats and prisoners from it. Absent, the dice roll as always.
+   */
+  fought?: number;
+  /** With 'fought': what the field cost each corps and each side, so the bill speaks as the field did (ruling 226(6)). */
+  field?: FieldBill;
 }
+
+/** The share of its strength the attacking army loses at the ratio R, and the defence's (the rules' own, as before). */
+export const attackLoss = (R: number): number => clamp(0.14 / R, 0.02, 0.2);
+export const defenceLoss = (R: number): number => clamp(0.07 + 0.1 * R, 0.06, 0.45);
+
+/**
+ * What a battle fought on the field cost, for the campaign's bill (ruling 226(6)). 'corps': the share of its strength
+ * each corps lost on the field, by corps id: each side's bill falls on its corps as the field had it. 'att' and 'def':
+ * the share each side lost on the field. 'whole': the battle was fought to its end; handed to the staff, only the part
+ * before is the field's, and the bill for the whole day is never less than it. 'broke': the side whose army broke on
+ * the field (routed or driven from it). Where that side lost the day, the rules settle the pursuit (b464): it pays
+ * what the rules charge for the same result at the staff's roll, the odds SEND THEM IN draws (b476(2)), or the field's
+ * loss where that is larger.
+ * 'pulled': the side that withdrew its army after the armies met, and how near breaking it stood (its bar, 0 to 1).
+ * Where that side lost the day it pays the rules' bill for that defeat (at the staff's roll) times the bar squared, or
+ * its field loss where that is larger (b474): an army that pulls out early gets away for little more than it had lost; one on the point of
+ * breaking could not get away at all, and pays the whole.
+ */
+export interface FieldBill {
+  corps: Record<number, number>; att: number; def: number; whole: boolean; broke?: 'att' | 'def'; pulled?: { side: 'att' | 'def'; bar: number };
+  /** Close air support flown on the field: the strikes each group flew, by group id, booked as AttackOpts.closeSorties. */
+  air?: Record<number, number>;
+}
+
+/**
+ * How far a side's bill may stand from what the field cost it: the after card's headline and its field line are one
+ * measure and must agree within a fifth (the design director, after the UI director's slice 3 review). Held a little
+ * inside the fifth, so the whole numbers the card prints agree too.
+ */
+export const FIELD_HOLD = 1.15;
+
+/** Scales a side's planned loss shares so its whole bill stands within FIELD_HOLD of the field's (1 with no field). */
+function fieldScale(cs: Corps[], planned: number[], share: number | undefined, whole: boolean): number {
+  if (share === undefined) return 1;
+  const m = cs.map((c) => men(c)), tot = m.reduce((a, b) => a + b, 0);
+  const now = tot > 0 ? cs.reduce((a, _c, i) => a + m[i] * planned[i], 0) / tot : 0;
+  if (now <= 1e-9) return 1;
+  const want = Math.max(share / FIELD_HOLD, whole ? Math.min(now, share * FIELD_HOLD) : now);
+  return want / now;
+}
+
+/**
+ * The scale for a side whose army broke on the field and lost the day (b464): the field settles the clash, the rules the
+ * pursuit. Its whole bill is the rules' own as SEND THEM IN charges it, at the staff's roll ('plain': each corps' share
+ * with no field split, b476(2)), or the field's ('share') where that is larger. It still falls on its corps as the field had it ('part': each
+ * corps' share with the split, before the scale), each held to 'cap' and then times 'mul': where the corps the field hit
+ * hardest reaches its cap, the rest of the bill falls on the others, so the side's whole bill is still the rules'.
+ */
+function pursuitScale(cs: Corps[], part: number[], plain: number[], cap: number, mul: number, share: number, of = 1): number {
+  const m = cs.map((c) => men(c)), tot = m.reduce((a, b) => a + b, 0);
+  if (tot <= 0 || mul <= 0) return 1;
+  // 'of': the part of the rules' bill it pays; all of it for a pursuit, the bar squared for a withdrawal (b474).
+  const want = Math.max(share / mul, of * (cs.reduce((a, _c, i) => a + m[i] * Math.min(cap, plain[i]), 0) / tot)) * tot;
+  // The bill rises with the scale until each corps reaches its cap: a straight line between caps, so a few steps find it.
+  let k = 1;
+  for (let n = 0; n <= cs.length + 1; n++) {
+    let held = 0, free = 0;
+    cs.forEach((_c, i) => { if (k * part[i] >= cap) held += m[i] * cap; else free += m[i] * part[i]; });
+    if (free <= 1e-12) break;
+    const next = Math.max(0, (want - held) / free);
+    if (Math.abs(next - k) < 1e-9) break;
+    k = next;
+  }
+  // (release 1.5) Where the field's loss fell on one corps, that corps' part can pass its cap at the first step, so the
+  // steps above stop with nothing left to scale and the side paid that corps' cap, more than its whole bill (an army
+  // that fell back after half a minute at Gazala, 6.9% lost on the field and a bill of 6.9%, was booked 17.5%). Where
+  // the bill is short of every corps at its cap and the steps did not reach it, it is found exactly: the corps passing
+  // their caps in turn, each one's part a straight line until it does.
+  const billAt = (s: number) => cs.reduce((a, _c, i) => a + m[i] * Math.min(cap, s * part[i]), 0);
+  const most = cs.reduce((a, _c, i) => a + (part[i] > 0 ? m[i] * cap : 0), 0), near = 1e-9 * Math.max(1, want);
+  if (want < most - near && Math.abs(billAt(k) - want) > near) {
+    const order = cs.map((_c, i) => i).filter((i) => part[i] > 0).sort((x, y) => cap / part[x] - cap / part[y]);
+    let held = 0, free = order.reduce((a, i) => a + m[i] * part[i], 0);
+    for (const i of order) {
+      const at = cap / part[i];
+      const s = free > 1e-12 ? Math.max(0, (want - held) / free) : at;
+      if (s <= at) { k = s; break; }
+      held += m[i] * cap;
+      free -= m[i] * part[i];
+      k = at;
+    }
+  }
+  return k;
+}
+
+/**
+ * Each corps' part of its side's bill as the field had it: its field loss over the side's, weighted by men, so the
+ * side's total is unchanged. 1 for every corps where the field gave nothing to go on.
+ */
+function splitWeights(cs: Corps[], split: Record<number, number> | undefined): number[] {
+  if (!split) return cs.map(() => 1);
+  const m = cs.map((c) => men(c)), tot = m.reduce((a, b) => a + b, 0);
+  const mean = tot > 0 ? cs.reduce((a, c, i) => a + m[i] * (split[c.id] ?? 0), 0) / tot : 0;
+  return cs.map((c) => (mean > 1e-6 && split[c.id] !== undefined ? Math.min(3, split[c.id] / mean) : 1));
+}
+
 
 /** Works out both sides' strength for an attack. Auto-resolve and the odds preview share it. */
 export function assess(g: Game, attackers: Corps[], target: Region, opts: AttackOpts = {}): Assessment {
@@ -999,11 +1339,15 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const lines: TicketLine[] = [];
   const aN = new Set(attackers.map((c) => c.nat)), dN = new Set(defenders.map((c) => c.nat));
   if (town && !dN.size) dN.add(target.ctrl);
+  // (Ruling 232 rider b624: a place's works count only where they stand with the side that dug them.)
+  const served = !!target.fort && (dN.size ? [...dN].some((d) => worksFor(g, target, d)) : worksFor(g, target, target.ctrl));
   const defHasArmor = defenders.some((d) => d.kind === 'arm');
   // Open desert has no flanks: infantry on foot outside prepared works can be driven round by anything on wheels or tracks.
   const openDesert = !town && target.terrain === DESERT.terrain && !target.fort && attackers.some((c) => KIND[c.kind].mobile);
   let turned = false, turnedTo = 1, fewGuns = false;
   const tempo = [...dN].some((d) => freshOffensive(g, attNat, d)) || freshOffensive(g, attNat, target.ctrl);
+  // (pAll and pFaced: the attack's weight, and the part of it the fortress works face, for the town guard's walls.)
+  let pAll = 0, pFaced = 0;
   let A = 0, fortFaced = 0, armorShock = false, armorStuck = false, armorAlone = 0, aloneOver = 1, longest = 0, lineMul = 1, cold = false, coldDef = false, dugIn = 0;
   const sources = new Set<number>();
   for (const c of attackers) sources.add(c.reg);
@@ -1038,7 +1382,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const facing: Facing | null = wide && !town ? {
     works: (d) => (d.dug && d.supplied ? worksShare(worksNow(d)) : 0),
     guns: gunsD, mines: mineLv, sappers: sap,
-    fort: target.fort && !opts.sally && attackers.some((c) => target.fort!.vs.includes(g.regions[c.reg].owner)) ? target.fort.lv : 0,
+    fort: served && !opts.sally && attackers.some((c) => target.fort!.vs.includes(g.regions[c.reg].owner)) ? target.fort!.lv : 0,
     foot: armsA ? armsA.foot : 0, tanks: armsA ? armsA.tanks : 0,
   } : null;
   const at = facing ? antiTank(g, attackers, defenders, target, facing) : null;
@@ -1110,7 +1454,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     // What the guns and the engineers between them leave of the works. With neither, the works count in full, as they always did.
     const eased = breach ? 1 - (1 - soften) * (1 - breach) : soften;
     // (In an assault on the town itself the works ring it: they are counted with the town, for its defenders.)
-    if (target.fort && !town && !opts.sally && target.fort.vs.includes(from.owner)) { p /= eased ? 1 + (FORT_MUL[target.fort.lv] - 1) * (1 - eased) : FORT_MUL[target.fort.lv]; fortFaced++; }
+    pAll += p;
+    if (served && target.fort && !town && !opts.sally && target.fort.vs.includes(from.owner)) { pFaced += p; p /= eased ? 1 + (FORT_MUL[target.fort.lv] - 1) * (1 - eased) : FORT_MUL[target.fort.lv]; fortFaced++; }
     // The player's honoured corps, a corps fighting for the place it was raised in, and one that has its old enemy in front of it.
     const proud = storyAttack(g, c, target, defenders);
     if (proud !== 1) { p *= proud; proudA = Math.max(proudA, proud); }
@@ -1124,7 +1469,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const flank = Math.min(1.3, 1 + 0.1 * (sources.size - 1));
   A *= flank;
   // What the town is worth to those inside it, after the guns and the engineers of this assault have done their work.
-  const walls = town ? townBonus(g, target, breach ? 1 - (1 - soften) * (1 - breach) : soften) : 1;
+  const walls = town ? townBonus(g, target, breach ? 1 - (1 - soften) * (1 - breach) : soften, served) : 1;
   let D = 0, thin = 1, readyD = 0, dugD = 0, worksD = 0, tiredD = 0, tiredMost = 0;
   for (const d of defenders) {
     // In the streets the country round about counts for nothing: the town is the ground.
@@ -1145,9 +1490,12 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (frozen(g, d.nat, target)) { p *= 1 - (1 - EASTERN.winter.defence) * cmdWinter(g, d); coldDef = true; }
     // A dug-in box is not driven round (ruling 146, the Historian's third fix): the cut falls only on men on foot who
     // have not dug in, and in the grand campaign it fades as their works are finished, where the guns make it a box.
+    // (A position driven round for want of guns is judged no help in strength, so its works do not turn the day's
+    // luck against the attack either: they would count twice. The design director's b420, the historian's b418.)
+    let unboxed = false;
     if (openDesert && !KIND[d.kind].mobile && d.kind !== 'fort') {
       const box = !d.dug ? 0 : !wide ? 1 : boxed ? worksShare(worksNow(d)) : 0;
-      if (d.dug && !boxed) fewGuns = true;
+      if (d.dug && !boxed) { fewGuns = true; unboxed = true; }
       if (box < 1) { const cut = DESERT.open + (1 - DESERT.open) * box; p *= cut; turned = true; turnedTo = Math.min(turnedTo, cut); }
     }
     const dl = lineStrength(g, d).mul;
@@ -1167,7 +1515,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     cmdD += p * lead;
     D += p * lead;
     // Works grow with the months spent on them: a line held since the spring is not one occupied last month.
-    if (d.dug && d.supplied) readyD += p * lead * worksShare(worksNow(d));
+    if (d.dug && d.supplied && !unboxed) readyD += p * lead * worksShare(worksNow(d));
     if (d.dug) { dugD += p * lead; worksD += p * lead * worksNow(d); }
     if (blows > 0) { tiredD += p * lead * blows; tiredMost = Math.max(tiredMost, blows); }
   }
@@ -1179,8 +1527,12 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const prepared = wide && !town && D > 0 ? Math.min(1, readyD / D) * (1 - soften) * (1 - mortar) * (1 - caught) * (1 - pierced) : 0;
   const dice: [number, number] = town ? [SIEGE.assault.dice[0], SIEGE.assault.dice[1]]
     : prepared > 0 ? [FIELD_DICE[0] + (DEFENCE.prepared.dice[0] - FIELD_DICE[0]) * prepared, FIELD_DICE[1] + (DEFENCE.prepared.dice[1] - FIELD_DICE[1]) * prepared] : FIELD_DICE;
-  // The town's own guard stands with whoever is inside.
-  const watch = town ? guardPower(g, target) * walls : 0;
+  // The town's own guard stands with whoever is inside. Where nobody is inside, it fights beside the army in the field,
+  // behind its walls, and the town falls with the field (ruling 232): the fortress works, where they already stand
+  // against every attacker, are not counted for it twice.
+  const guarded = !town && !opts.sally && defenders.length > 0 ? guardInField(g, target, attNat, attackers) : 0;
+  const guardWalls = guarded > 0 ? fieldWalls(g, target, breach ? 1 - (1 - soften) * (1 - breach) : soften, pAll > 0 ? 1 - pFaced / pAll : 1) : 1;
+  const watch = town ? guardPower(g, target) * walls : guarded > 0 ? guardPower(g, target) * guardWalls : 0;
   if (watch > 0) { rawD += watch; cmdD += watch; D += watch; }
   const aAir = airOf(g, aN, dN), dAir = airOf(g, dN, aN);
   let airEdge = (aAir - dAir) / (aAir + dAir + 1);
@@ -1193,6 +1545,29 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const skyLost = byNumbers === 'def' || (S.both && sky !== null && !skyWon && [...dN].some((n) => allied(g, n, sky)));
   if (skyWon) airEdge = Math.min(1, airEdge + S.land);
   if (skyLost) airEdge = Math.max(-1, airEdge - S.land);
+  // Weather (ruling 127): a closed sky over the battle grounds both air forces, and cloud halves what they lend.
+  const wxSky = weatherOn(g) ? skyAt(g, target.id) : 'clear';
+  if (wxSky !== 'clear') airEdge *= skySupport(wxSky);
+  // Close air support (Brian's ask of 2026-11-18): each side's fighter groups on ground support within reach of the
+  // battle add to its side of the air edge. Only this term reaches past the sky's clamp at 1 (the design director's
+  // b536): ground attack paid most where the sky was already won. Off, or with nobody on call, nothing here changes.
+  let close: CloseAir | undefined;
+  // (Who holds the sky is said from the air war alone: the groups on call over the battle do not change it.)
+  const skyEdge = airEdge;
+  if (closeRules(g)) {
+    const att = closeOf(g, aN, dN, target.id, skyLost), def = closeOf(g, dN, aN, target.id, skyWon);
+    if (att.groups.length || def.groups.length) {
+      const cA = closeEdge(att.W), cD = closeEdge(def.W);
+      const e = airEdge + cA - cD;
+      // (Each side's share is what its own on-call air adds to its strength, against the edge without it.)
+      att.share = cA > 0 ? Math.max(0, 1 - (1 + S.attack * (e - cA)) / (1 + S.attack * e)) : 0;
+      def.share = cD > 0 ? Math.max(0, 1 - (1 - S.defence * (e + cD)) / (1 - S.defence * e)) : 0;
+      att.strikes = closeStrikes(att);
+      def.strikes = closeStrikes(def);
+      airEdge = e;
+      close = { edge: e, att, def };
+    }
+  }
   A *= 1 + S.attack * airEdge;
   D *= 1 - S.defence * airEdge;
   D = Math.max(D, 0.01);
@@ -1202,18 +1577,25 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     const broken = breachOf(g, target), place = townName(target);
     lines.push({ label: 'Forces', value: `${attackers.length} corps, ${sum(attackers)} men, against ${defenders.length ? `${defenders.length} corps, ${sum(defenders)} men` : watch > 0 ? 'no army' : '0 corps, 0 men'}${watch > 0 ? `${defenders.length ? ', and' : ':'} the town guard of about ${guardMen(g, target).toLocaleString('en-US')}` : ''}` });
     lines.push({
-      label: 'The town', value: `${TOWNS.words[townSize(g, target)]} of ${place}${target.fort ? `, with fortress works of level ${target.fort.lv}` : ''}`,
+      // ("Panama City, Panama's capital", not "Capital of Panama City"; "Lodz, a city", not "City of Lodz": the UI director,
+      // builds 1668 and 1678.)
+      label: 'The town', value: `${townSize(g, target) === 'capital' ? `${place}, ${theWords(`${theName(g.nations[target.owner])}'s`)} capital` : `${place}, a ${TOWNS.words[townSize(g, target)].toLowerCase()}`}${target.fort ? `, with fortress works of level ${target.fort.lv}${served ? '' : `, dug by ${theName(g.nations[worksBy(target)])}: they give its defenders no cover`}` : ''}`,
       effect: `Its defenders fight ${Math.round((walls - 1) * 100)}% stronger in the streets${broken > 0 ? `: bombardment has already broken down ${Math.round(broken * 100)}% of its works` : ''}`,
     });
   } else {
-    lines.push({ label: 'Forces', value: `${attackers.length} corps, ${sum(attackers)} men, against ${defenders.length} corps, ${sum(defenders)} men` });
+    lines.push({ label: 'Forces', value: `${attackers.length} corps, ${sum(attackers)} men, against ${defenders.length} corps, ${sum(defenders)} men${guarded > 0 ? `, and the town guard of about ${guardMen(g, target).toLocaleString('en-US')}` : ''}` });
     lines.push({ label: 'Terrain', value: target.terrain[0].toUpperCase() + target.terrain.slice(1), effect: TERRAIN_DEF[target.terrain] > 1 ? `Defenders fight ${Math.round((TERRAIN_DEF[target.terrain] - 1) * 100)}% stronger` : 'Open ground, no help to the defender' });
     // The grand campaign: what winning here does and does not win.
     if (opts.sally) lines.push({ label: 'The sortie', value: `The garrison of ${townName(target)} comes out against the army round it`, effect: 'Win, and the siege is raised. Lose, and the garrison goes back inside the weaker for it' });
     else if (sally.power > 0) lines.push({ label: 'The garrison', value: `The garrison of ${townName(target)} sallies out as the relief comes up: ${sally.corps} corps`, effect: `It adds ${Math.round(SIEGE.sortie * 100)}% of its strength to the attack` });
+    else if (guarded > 0) lines.push({
+      label: 'The town', value: `${townName(target)} is held by its own guard: ${guardWorth(guarded)}, behind its walls`,
+      effect: `The guard fights beside the army, ${Math.round((guardWalls - 1) * 100)}% stronger behind the walls. Win, and the town falls with the country round it`,
+    });
     else if (siegeRules(g) && !allied(g, attNat, target.ctrl) && townHeld(g, target)) lines.push({
       label: 'The town', value: garrisonOf(target).length ? `${townName(target)} is garrisoned` : `${townName(target)} is held by its own guard`,
-      effect: 'Winning here wins the country round it. The town must then be stormed or starved out, unless it opens its gates',
+      effect: driveOut(g) && garrisonOf(target).length ? 'Winning here wins the country round it. The garrison holds the town after: it must then be stormed or starved out'
+        : 'Winning here wins the country round it. The town must then be stormed or starved out, unless it opens its gates',
     });
   }
   if (wide && defenders.length) {
@@ -1277,13 +1659,14 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     });
   }
   if (mineLv) lines.push({
-    label: 'Minefields', value: mineLv > 1 ? 'Two belts of mines and booby traps on every road in' : 'Mines and booby traps on every road in',
+    label: 'Minefields', value: mineLv > 1 ? 'Two belts of minefields and booby traps on every road in' : 'Minefields and booby traps on every road in',
     effect: mined === 1 ? 'The engineers clear lanes: the mines cost the attack nothing' : `Attack cut to ${Math.round(mined * 100)}%${sap ? ', the engineers clearing what lanes they can' : ''}`,
   });
   if (breach && target.fort && fortFaced) lines.push({ label: 'Engineers', value: 'Assault engineers go in with the attack', effect: `They breach the works: the fortifications count for ${Math.round(breach * 100)}% less` });
   if (breach && town) lines.push({ label: 'Engineers', value: 'Assault engineers go in with the attack', effect: `They blow in the barricades: the town counts for ${Math.round(breach * 100)}% less` });
   if (target.fort && !town) {
-    lines.push({ label: 'Fortifications', value: `Level ${target.fort.lv}`, effect: fortFaced === attackers.length ? `Attacked head-on: the attack is cut to ${Math.round(100 / FORT_MUL[target.fort.lv])}% strength` : fortFaced > 0 ? 'Partly outflanked: only the corps attacking head-on are slowed' : 'Outflanked: the works face the other way' });
+    if (!served) lines.push({ label: 'Fortifications', value: `Level ${target.fort.lv}: ${worksName(target.fort.lv)}, dug by ${theName(g.nations[worksBy(target)])}`, effect: 'Works count only for the side that dug them: no help to the defence here' });
+    else lines.push({ label: 'Fortifications', value: `Level ${target.fort.lv}: ${worksName(target.fort.lv)}`, effect: fortFaced === attackers.length ? `Attacked head-on: the attack is cut to ${Math.round(100 / FORT_MUL[target.fort.lv])}% strength` : fortFaced > 0 ? 'Partly outflanked: only the corps attacking head-on are slowed' : 'Outflanked: the works face the other way' });
   }
   // (The guns thicken the line of the corps beside them: where they stand alone there is nobody to say it of.)
   const beside = thicken > 0 && defenders.some((d) => d.kind !== 'art');
@@ -1338,7 +1721,11 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   }
   const aUns = attackers.filter((c) => !c.supplied).length, dUns = defenders.filter((c) => !c.supplied).length;
   lines.push({ label: 'Supply', value: `${aUns ? `${aUns} attacking corps cut off` : 'Attackers in supply'}; ${dUns ? `${dUns} defending corps cut off` : 'defenders in supply'}`, effect: aUns || dUns ? 'Corps that are cut off fight at half strength' : undefined });
-  lines.push({ label: 'Air', value: byNumbers ? `The ${byNumbers === 'att' ? 'attacker' : 'defender'}'s air force holds the sky here by its numbers` : skyWon || skyLost ? `The ${g.nations[sky!].adj} air force has won the sky here` : airEdge > 0.15 ? 'Attacker holds the sky' : airEdge < -0.15 ? 'Defender holds the sky' : 'Contested', effect: Math.abs(airEdge) > 0.05 ? `${airEdge > 0 ? 'Attack' : 'Defence'} strengthened by about ${Math.round(Math.abs(airEdge) * S.attack * 100)}%` : undefined });
+  const wxLine = wxSky !== 'clear' ? skyBattleLine(g, zoneOfRegion(g, target.id), target.name) : null;
+  if (wxLine) lines.push({ label: 'The sky', value: wxLine });
+  const onCall = (n: number, who: string): string => (n ? `; ${n === 1 ? 'an air strike' : `${n} air strikes`} on call for the ${who}` : '');
+  const closeWords = close ? onCall(close.att.strikes, 'attack') + onCall(close.def.strikes, 'defence') : '';
+  if (wxSky !== 'closed') lines.push({ label: 'Air', value: (byNumbers ? `The ${byNumbers === 'att' ? 'attacker' : 'defender'}'s air force holds the sky here by its numbers` : skyWon || skyLost ? `The ${g.nations[sky!].adj} air force has won the sky here` : skyEdge > 0.15 ? 'Attacker holds the sky' : skyEdge < -0.15 ? 'Defender holds the sky' : 'Contested') + closeWords, effect: Math.abs(airEdge) > 0.05 ? `${airEdge > 0 ? 'Attack' : 'Defence'} strengthened by about ${Math.round(Math.abs(airEdge) * S.attack * 100)}%` : undefined });
   const gens = commandersIn(g, attackers), dgens = commandersIn(g, defenders);
   if (gens || dgens) {
     const up = rawA > 0 ? Math.round((cmdA / rawA - 1) * 100) : 0, dup = rawD > 0 ? Math.round((cmdD / rawD - 1) * 100) : 0;
@@ -1450,9 +1837,10 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // Guns caught alone in the field are overrun (ruling 146, the grand campaign): with no infantry or tanks in front
   // of them they make no stand, whatever the figures say. The odds are at least what the worst of the day's luck
   // still makes a decisive win, so the forecast is certain and the battle is fought on the same ticket.
-  const overrun = gunsRule(g) && !town && defenders.some((c) => c.kind === 'art') && defenders.every((c) => c.kind === 'art' || c.kind === 'eng');
+  // (The town's guard fighting beside them (ruling 232) stands in front of them.)
+  const overrun = gunsRule(g) && !town && !guarded && defenders.some((c) => c.kind === 'art') && defenders.every((c) => c.kind === 'art' || c.kind === 'eng');
   if (overrun) lines.push(GUNS_OVERRUN);
-  return { A, D, odds: overrun ? Math.max(A / D, OVERRUN_ODDS / dice[0]) : A / D, lines, defenders, dice, prepared, works, wear, weight, tired, faced, ...(overrun ? { overrun } : {}) };
+  return { A, D, odds: overrun ? Math.max(A / D, OVERRUN_ODDS / dice[0]) : A / D, lines, defenders, dice, prepared, works, wear, weight, tired, faced, ...(overrun ? { overrun } : {}), ...(guarded > 0 ? { guard: guarded } : {}), ...(close ? { air: close } : {}) };
 }
 
 function reportUnit(c: Corps): ReportUnit {
@@ -1667,10 +2055,13 @@ function walkIn(g: Game, attackers: Corps[], target: Region, opts: AttackOpts, a
   // In the grand campaign the country is won, and the town with it only if nobody holds it.
   const got = arrive(g, target, attNat);
   if (!got) closeRound(g, target, attackers);
+  // (Ruling 232: an army that gave up the field without a fight left its guard behind the walls, to be stormed or starved.)
+  const lines = a.guard && !got ? a.lines.map((l) => l.label === 'The town' ? { label: 'The town', value: `${townName(target)} is held by its own guard`, effect: 'The army gave up the field without a fight, so the guard never fought beside it: the town must now be stormed or starved out' }
+    : l.label === 'Forces' ? { ...l, value: l.value.replace(/, and the town guard of about [\d,]+$/, '') } : l) : a.lines;
   g.flags.battles = Math.max(g.flags.battles ?? 0, g.reports.length) + 1;
   const rep: BattleReport = {
     id: g.flags.battles, turn: g.turn, week, region: target.id, regionName: target.name, attNat, defNat: gone[0].nat,
-    attackers: attU, defenders: gone, lines: [...a.lines, { label: 'Orders', value: 'The defenders gave ground before the attack', effect: 'No battle was fought' }],
+    attackers: attU, defenders: gone, lines: [...lines, { label: 'Orders', value: 'The defenders gave ground before the attack', effect: 'No battle was fought' }],
     aPower: a.A, dPower: a.D, odds: a.odds, level: 'Close victory', taken: true, attLost: 0, defLost: 0, prisoners: 0, yielded: true,
   };
   if (!got) rep.siege = true;
@@ -1746,10 +2137,12 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const defNat = defenders[0]?.nat ?? target.ctrl;
   const AN = g.nations[attNat];
   // An enemy's capital, for the records of the corps that take it: known before the fight, since its fall may end the war with him.
-  // (Where its town is held, winning the field outside it does not take the capital: storming the town does.)
-  const enemyCapital = target.cap && atWar(g, attNat, target.owner) && (town || !sieges || !townHeld(g, target));
+  // (Where its town is held, winning the field outside it does not take the capital: storming the town does. Where
+  // only its guard holds it and the guard fights in this battle (ruling 232), the field takes it.)
+  const inField = !town && (a.guard ?? 0) > 0;
+  const enemyCapital = target.cap && atWar(g, attNat, target.owner) && (town || inField || !sieges || !townHeld(g, target));
   const relief = sieges && !town && allied(g, attNat, target.ctrl);
-  const watchMen = town ? guardMen(g, target) : 0, watch = town ? guardOf(g, target) : 0;
+  const watchMen = town || inField ? guardMen(g, target) : 0, watch = town || inField ? guardOf(g, target) : 0;
   for (const d of new Set(defenders.map((c) => c.nat))) {
     const first = AN.lastFight[d] === undefined;
     if (first || g.turn - AN.lastFight[d] >= 3) AN.offStart[d] = AN.offStart[d] !== undefined && g.turn - AN.offStart[d] <= 1 ? AN.offStart[d] : g.turn;
@@ -1773,23 +2166,40 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   // A lone gun corps attacked is overrun (ruling 146, the grand campaign): guns with nothing in front of them make
   // no stand in the field. The dice are thrown all the same, so the luck of the battles after it is what it was.
   const overrun = !!a.overrun;
-  const R = a.odds * dice.range(a.dice[0], a.dice[1]);
+  // The staff's roll is thrown on the field too: it sets the odds an army beaten on the field is billed at (b476(2)), and
+  // the luck of the battles after it is what it would have been had the staff settled this one.
+  const rolled = a.odds * dice.range(a.dice[0], a.dice[1]);
+  const R = opts.fought ?? rolled;
   const attU = attackers.map(reportUnit), defU = defenders.map(reportUnit);
   const attGens = attackers.map((c) => generalOf(g, c)), defGens = defenders.map((c) => generalOf(g, c));
   const mobile = attackers.some((c) => KIND[c.kind].mobile);
-  const defFrac = clamp(0.07 + 0.1 * R, 0.06, 0.45);
+  const defFrac = defenceLoss(R);
   // Fighting from house to house costs the attackers more.
   // Men who go at trenches pay for it, and the men in them are harder to hit (the grand campaign).
   const ready = town ? 0 : a.prepared;
-  const attFrac = clamp(0.14 / R, 0.02, 0.2) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
+  const attFrac = attackLoss(R) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
   let attLost = 0, defLost = 0, prisoners = 0;
   // True if the field is won but the town holds out (the grand campaign), and if it gave itself up at the summons.
   let held = false, gates = false;
   // The share of its men each corps loses in this fight: what its morale makes of the day.
   const bled = new Map<number, number>();
+  const attW = splitWeights(attackers, opts.field?.corps), defW = splitWeights(defenders, opts.field?.corps);
+  // Fought on the field, each side's whole bill is held near what the field cost it (ruling 226(6)); an army that broke
+  // on the field and lost the day pays the rules' bill for that result, or the field's if larger (b464).
+  const attPart = (c: Corps, i: number, w = attW[i]): number => attFrac * w * tollFor(a.faced?.toll, c) * cmdLoss(g, c);
+  // The bill an army beaten on the field pays is the rules' own at the staff's roll, the odds SEND THEM IN uses, never
+  // the field's: the dice set the odds and the player's hand the result (the design director, b476(2)).
+  const attPlain = (c: Corps): number => attackLoss(rolled) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready) * tollFor(a.faced?.toll, c) * cmdLoss(g, c);
+  // An army that pulled out after contact and lost the day pays that bill times its bar squared, or its field loss (b474).
+  const pulled = (s: 'att' | 'def'): number | null => (opts.field?.pulled?.side === s ? Math.min(1, Math.max(0, opts.field.pulled.bar)) ** 2 : null);
+  const attOut = pulled('att');
+  const attK = !opts.field ? 1
+    : opts.field.broke === 'att' && R < 1.2 ? pursuitScale(attackers, attackers.map((c, i) => attPart(c, i)), attackers.map((c) => attPlain(c)), 0.6, 1, opts.field.att)
+      : attOut !== null && R < 1.2 ? pursuitScale(attackers, attackers.map((c, i) => attPart(c, i)), attackers.map((c) => attPlain(c)), 0.6, 1, opts.field.att, attOut)
+      : fieldScale(attackers, attackers.map((c, i) => Math.min(0.6, attFrac * attW[i] * tollFor(a.faced?.toll, c) * cmdLoss(g, c))), opts.field.att, opts.field.whole);
   attackers.forEach((c, i) => {
     const before = men(c);
-    c.str *= 1 - Math.min(0.6, attFrac * tollFor(a.faced?.toll, c) * cmdLoss(g, c));
+    c.str *= 1 - Math.min(0.6, attFrac * attW[i] * attK * tollFor(a.faced?.toll, c) * cmdLoss(g, c));
     c.org = clamp(c.org - (0.1 + 0.08 / R) * cmdSteady(g, c) * nerve(c), 0, 1);
     c.xp = Math.min(1, c.xp + 0.05);
     c.fought = true;
@@ -1802,10 +2212,19 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const stood = win ? 1 : HELD_LOSS;
   // Men on foot driven out of open desert by a mobile enemy do not all get away.
   const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[R >= 2 ? 1 : 0] : 1;
+  const defPart = (c: Corps, i: number, w = defW[i]): number => defFrac * w * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
+  // The same result at the staff's roll (b476(2)).
+  const caughtRolled = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[rolled >= 2 ? 1 : 0] : 1;
+  const defPlain = (c: Corps): number => defenceLoss(rolled) * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caughtRolled) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
+  const defOut = pulled('def');
+  const defK = !opts.field ? 1
+    : opts.field.broke === 'def' && win ? pursuitScale(defenders, defenders.map((c, i) => defPart(c, i)), defenders.map((c) => defPlain(c)), 0.8, a.weight, opts.field.def)
+      : defOut !== null && win ? pursuitScale(defenders, defenders.map((c, i) => defPart(c, i)), defenders.map((c) => defPlain(c)), 0.8, a.weight, opts.field.def, defOut)
+      : fieldScale(defenders, defenders.map((c, i) => Math.min(0.8, defPart(c, i)) * a.weight), opts.field.def, opts.field.whole);
   defenders.forEach((c, i) => {
     const before = men(c);
     // (The grand campaign: a light blow costs the defence in proportion to its weight. Everywhere else the weight is 1.)
-    c.str *= 1 - Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * a.weight;
+    c.str *= 1 - Math.min(0.8, defK * defFrac * defW[i] * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * a.weight;
     c.org = clamp(c.org - clamp(0.18 + 0.14 * R, 0.2, 0.75) * stood * cmdSteady(g, c) * nerve(c) * a.weight, 0, 1);
     c.xp = Math.min(1, c.xp + 0.04);
     c.fought = true;
@@ -1838,14 +2257,15 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       const N = g.nations[c.nat];
       const away = !overrun && c.str >= 0.15 && N.seaSupply && target.port && target.owner !== c.nat && N.capital >= 0 && seaOpenAt(g, c.nat, target);
       // The grand campaign: beaten in the field with no way out, a corps falls back into the town if there is room,
-      // and nobody leaves his own capital while it can still be held.
-      if (!town && !overrun && sieges && c.str >= 0.15 && (to ? target.cap && c.nat === target.owner : !away) && canShelter(g, c, target)) {
+      // and nobody leaves his own capital while it can still be held. Under ruling 232 a beaten field army never goes
+      // into the town: it falls back to open country, or with nowhere to go and no ship to lift it, lays down its arms.
+      if (!town && !overrun && sieges && !driveOut(g) && c.str >= 0.15 && (to ? target.cap && c.nat === target.owner : !away) && canShelter(g, c, target)) {
         target.units.splice(target.units.indexOf(c), 1);
         joinTown(g, target, c);
         defU[i].fate = 'sheltered';
         tallySiege(g, 'sheltered');
       }
-      else if (to) { place(g, c, to); c.ap = 0; defU[i].fate = 'retreated'; }
+      else if (to) { place(g, c, to); c.ap = 0; defU[i].fate = 'retreated'; if (driveOut(g)) defU[i].to = to.id; }
       else if (away) {
         // Backs to the sea: the navy takes off what it can.
         const dest = refuge(g, c, target);
@@ -1856,6 +2276,8 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       } else {
         const left = men(c);
         defU[i].fate = c.str < 0.15 ? 'destroyed' : 'surrendered';
+        // (Ruling 232: with no ground of its side to go to and no ship to lift it, a beaten field army lays down its arms.)
+        if (driveOut(g) && !town && !overrun && c.str >= 0.15) defU[i].cut = true;
         defU[i].lost += left;
         prisoners += left;
         storyFallen(g, c, c.str < 0.15 ? 'destroyed' : 'surrendered', attNat, target.id);
@@ -1869,6 +2291,13 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       for (const c of attackers) c.ap = Math.max(0, c.ap - SIEGE.assault.ap);
       fall(g, target, attNat, 'storm');
     }
+    else if (inField) {
+      // Ruling 232: the guard fought beside the field army and is taken with it. The town falls, and the province
+      // changes hands, in this one order.
+      prisoners += watchMen;
+      defU.push({ name: `Town guard of ${townName(target)}`, nat: target.ctrl, kind: 'inf', divs: Math.max(0.1, Math.round(watch * 10) / 10), men: watchMen, lost: watchMen, fate: 'surrendered', guard: true });
+      fall(g, target, attNat, 'field');
+    }
     else {
       // A town with only its guard may open its gates to the army that has just won the field outside.
       const walls = sieges && !relief && townHeld(g, target);
@@ -1880,13 +2309,18 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     const spent = !town && a.prepared >= DEFENCE.prepared.spentAt && a.prepared > 0;
     for (const c of attackers) c.ap = spent ? 0 : Math.max(0, c.ap - (town ? SIEGE.assault.ap : 1));
     if (town) tallySiege(g, 'repulsed');
-    if (town && watch > 0) {
-      // The guard has its losses too, and they are not made good while the siege lasts.
-      const share = clamp((SIEGE.assault.guardHit / 100) * Math.min(1.2, R), 0.05, 0.6);
+    if ((town || inField) && watch > 0) {
+      // The guard has its losses too, and they are not made good while the siege lasts. (Beside the field army, ruling
+      // 232, it pays as it would for a storm thrown back.)
+      // (Where the battle was fought on the field, the guard stood on it as a block of its own: it pays the share its
+      // side lost there, as the corps beside it are held to (ruling 226(6)), so the after card's headline and its field
+      // line agree (b464).)
+      const onField = inField && opts.field ? (opts.field.corps[guardForce(target)] !== undefined ? opts.field.def : null) : null;
+      const share = onField !== null ? clamp(onField, 0, 1) : clamp((SIEGE.assault.guardHit / 100) * Math.min(1.2, R), 0.05, 0.6);
       const lost = Math.round(watchMen * share);
       guardAfter(g, target, share);
       defLost += lost;
-      defU.push({ name: `Town guard of ${townName(target)}`, nat: target.ctrl, kind: 'inf', divs: Math.round(watch * 10) / 10, men: watchMen, lost, fate: '', guard: true });
+      defU.push({ name: `Town guard of ${townName(target)}`, nat: target.ctrl, kind: 'inf', divs: inField ? Math.max(0.1, Math.round(watch * 10) / 10) : Math.round(watch * 10) / 10, men: watchMen, lost, fate: '', guard: true });
     }
   }
   // Battles are numbered through the whole war, so a saved game carries the count on.
@@ -1897,6 +2331,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     attLost, defLost, prisoners,
   };
   if (town) rep.town = true;
+  if (inField) rep.guarded = true;
   if (held) rep.siege = true;
   if (gates) rep.gates = true;
   if (relief) rep.relief = true;
@@ -1907,8 +2342,22 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   if (a.faced) {
     const lost = { foot: 0, tanks: 0, guns: 0 };
     for (const u of attU) lost[u.kind === 'arm' ? 'tanks' : u.kind === 'art' ? 'guns' : 'foot'] += u.lost;
-    const said = whoPaid(a.faced, lost, true);
-    rep.paid = { att: said.text, def: whoPaid(a.faced, lost, false).text, ...(said.sign ? { sign: said.sign } : {}) };
+    // Fought on the field, how the cost fell is read from each corps' share of its own men, as its row gives it, never
+    // from men lost alone (ruling 226(6), b464(6)). "Evenly" only where no corps lost more than a quarter again the share
+    // another did; a corps is named only where its share stands a quarter clear of the next and it lost the most men
+    // too, so "paid most of it" holds either way. Otherwise, as with one corps on a side (the UI director, slice 3), the
+    // line says nothing of how the cost fell.
+    const fell = ((us: typeof attU): { most?: string; quiet: boolean } => {
+      if (!opts.field) return { quiet: false };
+      if (us.length < 2) return { quiet: true };
+      const of = (u: (typeof us)[number]): number => (u.men > 0 ? u.lost / u.men : 0);
+      const by = [...us].sort((x, y) => of(y) - of(x)), top = by[0];
+      if (of(top) <= 0) return { quiet: true };
+      if (of(top) <= 1.25 * of(by[by.length - 1])) return { quiet: false };
+      return of(top) >= 1.25 * of(by[1]) && us.every((u) => u === top || u.lost < top.lost) ? { most: top.name, quiet: false } : { quiet: true };
+    })(attU);
+    const said = whoPaid(a.faced, lost, true, fell.most, fell.quiet);
+    rep.paid = { att: said.text, def: whoPaid(a.faced, lost, false, fell.most, fell.quiet).text, ...(said.sign ? { sign: said.sign } : {}) };
     // The first time a line of the player's, or one he attacks, takes a third or more out of the tanks' shock, his staff says what did it.
     if (a.faced.shock !== null && a.faced.shock <= 2 / 3 && (attNat === g.human || defNat === g.human) && !g.flags['tip:antitank']) {
       g.flags['tip:antitank'] = g.turn;
@@ -1920,7 +2369,19 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     g.flags['tip:guns'] = g.turn;
     headline(g, 'info', `Your staff on the loss of ${target.name}: the line was dug in and it still broke. Artillery standing in a line makes every corps beside it fight up to ${Math.round(GUNS.thickenMost * 100)}% stronger, and the enemy's staff thinks twice before attacking guns. An artillery corps behind each threatened sector would help the next one hold.`, defNat, target.id);
   }
+  // Close air support: the groups that flew over the battle pay for it, once (air.json 'close').
+  if (a.air) { bookCloseAir(g, a.air, opts.closeSorties); rep.air = { att: a.air.att.strikes, def: a.air.def.strikes }; }
   g.reports.push(rep);
+  // (scarred ground, looks only: one more battle fought over this region, this month; a walk-in where the defenders
+  // gave ground fought none, so it leaves none)
+  const scar = (g.scars ??= {})[target.id];
+  const muddy = groundWeather(g, target) === 'mud';
+  g.scars[target.id] = { n: (scar?.n ?? 0) + 1, last: g.turn, ...(scar?.mudN ? { mudN: scar.mudN, mudLast: scar.mudLast } : {}) };
+  // (mud memory: a battle fought in the thaw leaves its ruts on the field for the next battle there)
+  if (muddy) { g.scars[target.id].mudN = (scar?.mudN ?? 0) + 1; g.scars[target.id].mudLast = g.turn; }
+  // (captured kit, looks only: a heavy win over an army with tanks leaves some of them in the winner's hands, a few of
+  // them to be fielded in its paint; a fixed throw of the battle's own numbers, so no die of the war's is spent)
+  capturedKit(g, rep, target);
   // The generals' luck on the main fronts is counted off the main fronts' own battles, for the same reason.
   if (aside) g.flags.asideBattles = (g.flags.asideBattles ?? 0) + 1;
   if (late) { g.flags.lateBattles = (g.flags.lateBattles ?? 0) + 1; g.flags[`fought:${target.theatre}`] = (g.flags[`fought:${target.theatre}`] ?? 0) + 1; }
@@ -2032,6 +2493,8 @@ export function capture(g: Game, r: Region, nat: string): void {
   if (r.cap && r.owner === old) headline(g, 'fall', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id, { arm: 'land', won: nat, lost: old });
   // Overseas the prizes are the ports: whoever holds them feeds the army that fights there.
   else if (r.overseas && r.port && r.vp > 0 && atWar(g, nat, old)) headline(g, 'battle', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id, { arm: 'land', won: nat, lost: old });
+  // (Brian, 18 November: ground a great power owns, taken from it in war, gives a smaller taker its capital-ship plans.)
+  plansOnCapture(g, r, nat, old);
   checkCollapse(g, old, nat);
   // The grand campaign: ground of France's taken back from Vichy goes to a freed France. (A fallen country whose
   // capital its conqueror's enemies now hold comes back at the month's end, ruling 229 part 2: turn.ts.)
@@ -2109,7 +2572,7 @@ function ownNearest(g: Game, c: Corps): Region | null {
   }
   const from = g.regions[c.reg];
   let best: Region | null = null, bd = Infinity;
-  for (const r of g.regions) if (mine(r)) { const d = (r.x - from.x) ** 2 + (r.y - from.y) ** 2; if (d < bd) { bd = d; best = r; } }
+  for (const r of g.regions) if (mine(r)) { const d = mapDist2(g, r.x, r.y, from.x, from.y); if (d < bd) { bd = d; best = r; } }
   return best;
 }
 
@@ -2275,6 +2738,9 @@ export interface NoTrain {
   at?: number;
 }
 
+/** What a garrison that would ride this month once out of its town is told (whyNoTrain): a hand is told it only where it holds for every corps (whyNoTrainFor). */
+const TRAIN_FIELD = 'A garrison does not take the train: TAKE THE FIELD first.';
+
 /** A reason that is news he can act on: its opening takes the emphasis. */
 const news = (code: NoTrain['code'], strong: string, rest: string, at: number): NoTrain => ({ code, line: `${strong} ${rest}`, strong, at });
 
@@ -2296,20 +2762,42 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
   const open = (r: Region): boolean => (allied(g, c.nat, r.ctrl) && !besieged(g, r)) || junctionOpenTo(g, c.nat, r);
   const mended = (r: number): string => (hastyLeft(g, r) > 0 ? `the railwaymen have it running, in ${turnToDate(g.turn + hastyLeft(g, r)).label}, or engineers relay it sooner` : 'engineers relay the track');
   if (c.kind === 'fort') return { code: 'fort', line: 'Fortress troops do not go by train.' };
-  if (c.town) return { code: 'town', line: `${c.name} is shut in the town at ${from.name}. No train leaves a siege.`, at: from.id };
   // The test is four weeks of movement in hand. A corps that has moved, fought or worked has spent part of its month;
   // one slowed for want of fuel opens its month with three and has spent nothing (ruling 118(c); the art director's
-  // lines). A fast corps with five may march a week and still ride.
-  if (c.ap < 4) return {
+  // lines). A fast corps with five may march a week and still ride. (A garrison has not moved: it is answered below.
+  // The 1.5.3 review: on the eve of war no month passes, and a corps brought out of its town then has spent nothing,
+  // though it has no move until the war opens. It is told so, as is any corps on the eve with less than a train takes.)
+  if (!c.town && c.ap < 4) return {
     code: 'spent',
-    line: c.ap < c.apMax ? `No train for ${c.name} this month: it has spent part of its month, and the railway takes a whole one.`
+    line: c.ap < c.apMax && g.flags.eve === 1 ? `No train for ${c.name} before the war opens: the railway takes a whole month of movement, and it has less.`
+      : c.ap < c.apMax ? `No train for ${c.name} this month: it has spent part of its month, and the railway takes a whole one.`
       : fuelSlows(g, c) ? `No train for ${c.name} this month: short of fuel, it has less than the whole month a train takes.`
       : `No train for ${c.name} this month: the railway takes a whole month of movement, and it has less.`,
   };
   if (sandRules(from)) return { code: 'desert', line: 'No railway crosses the desert.', at: from.id };
+  // (A garrison in a town under siege is shut in. One in a town nobody besieges takes the field first, and rides from
+  // the country outside: it is answered below.)
+  if (c.town && besieged(g, from)) return { code: 'town', line: `${c.name} is shut in the town at ${from.name}. No train leaves a siege.`, at: from.id };
   if (besieged(g, from) && !junctionOpenTo(g, c.nat, from)) return news('siege', `${from.name} is under siege.`, 'No train leaves it.', from.id);
   if (net && !onNet(from.id)) return { code: 'noline', line: `No railway runs through ${from.name}: ${c.name} goes by road.`, at: from.id };
   if (net && railCut(g, from.id)) return news('cut', `The railway at ${from.name} is cut${cutAside(g, from.id)}.`, `No train leaves until ${mended(from.id)}.`, from.id);
+  // (The 1.5.3 review: coming out costs a move (apOutOfTown) and a train takes four, so a garrison is sent to TAKE THE
+  // FIELD only where that would put it on a train this month. Where the field outside is full it cannot come out, and is
+  // told so (whyNotTakeField), as garrisonLine tells it. On the eve of war, when no month passes, any other is told to
+  // come out now and ride when the war opens, as a corps brought out then has its whole month; after that, that out of
+  // the town it can ride next month. Its province's own railway is answered first, as above: no railway in the desert
+  // or off the lines, and none while the line is cut, so that the way out of the town is never promised a train its
+  // province does not have.)
+  if (c.town) {
+    const field = whyNotTakeField(g, c);
+    return {
+      code: 'town',
+      line: field ? `A garrison does not take the train. ${field}` : apOutOfTown(g, c) >= 4 ? TRAIN_FIELD
+        : g.flags.eve === 1 ? 'A garrison does not take the train: TAKE THE FIELD now, and it can go by rail when the war opens.'
+        : 'A garrison does not take the train. Out of the town, it can go by rail next month.',
+      at: from.id,
+    };
+  }
   if (to === undefined || to === c.reg || !g.regions[to]) return null;
   const dest = g.regions[to];
   if (sandRules(dest)) return { code: 'desert', line: 'No railway crosses the desert.', at: to };
@@ -2389,13 +2877,17 @@ export function whyNoTrainFor(g: Game, corps: Corps[], to?: number): NoTrain | n
     const dest = to === undefined ? undefined : g.regions[to];
     return dest && !roomForAll(g, dest, corps) ? { code: 'room', line: `${dest.name} has no room for ${corps.length === 1 ? 'another corps' : `${corps.length} more corps`}.`, at: dest.id } : null;
   }
-  const no = whys[first]!;
+  // (The 1.5.3 review.) TAKE THE FIELD is said only where it would put every corps of the hand on a train: beside a
+  // corps of the garrison that would not, that one's reason is given (it can ride next month, or the field is full).
+  const other = whys.findIndex((w) => !!w && w.line !== TRAIN_FIELD);
+  const lead = other < 0 ? first : other;
+  const no = whys[lead]!;
   if (whys.every(Boolean)) {
     // (Where none can ride for want of a whole month, it is said once of the army: "No train for the American army
     // this month: it has spent part of its month, ...", the one voice of 84.2.6.)
     if (corps.length < 2 || !whys.every((w) => w!.code === 'spent' && w!.line.startsWith('No train for '))) return no;
     const { who, many } = forceWords(g, corps);
-    const rest = no.line.slice(no.line.indexOf(' this month:'));
+    const rest = no.line.slice(`No train for ${corps[lead].name}`.length);
     return { ...no, line: `No train for ${who}${many ? rest.replace(': it has spent part of its month', ': they have spent part of their month').replace(': short of fuel, it has', ': short of fuel, they have').replace(', and it has less', ', and they have less') : rest}` };
   }
   const names = corps.filter((_, i) => whys[i]).map((c) => c.name);
@@ -2631,6 +3123,8 @@ export function capitulate(g: Game, nat: string, by: string): void {
   X.alive = false;
   X.fellOn = { turn: g.turn, week: g.week, to: by, how: 'beaten' };
   recordFall(g, nat, by, 'beaten');
+  // (Who it was at war with is kept: a freed country takes those wars up again, and its conquerors' allies finish theirs.)
+  rememberWars(g, nat);
   // In the last act of the grand campaign nobody signs an armistice: a fallen France is simply conquered. So is a
   // France that had been liberated and falls a second time.
   const armistice = nat === 'FRA' && !g.flags.dom && !X.freedOn;
@@ -2765,15 +3259,35 @@ const OPEN_CALLUP = 1;
 export const callUpHeld = (g: Game, nat: string): boolean => g.flags.open === 1 && nat === g.human && g.flags[`mph:${nat}`] === 1;
 
 /**
+ * True while a nation is at war with a great power: what starts a call-up and keeps it running (ruling 228, 1a). A war
+ * with a small country, Finland's in the winter of 1939, calls up nobody.
+ */
+const greatWar = (g: Game, nat: string): boolean => { const big = majorsOf(g); return g.nations[nat].atWar.some((e) => big.includes(e)); };
+
+/**
  * A country's standing call-up as it stands (the grand campaign): whether the player holds it, and the corps the next
  * wave would raise at most, of how many divisions each. Null for a country that has none, or is not yet at war.
  */
 export function standingCallUp(g: Game, nat: string): { held: boolean; corps: number; divs: number } | null {
   const plan = EASTERN.mobilisation[nat], n = g.nations[nat];
-  if (g.flags.open !== 1 || !plan || !n?.alive || !n.atWar.length) return null;
+  if (g.flags.open !== 1 || !plan || !n?.alive || !greatWar(g, nat)) return null;
   const began = g.flags[`mobilised:${nat}`];
   const wave = began === undefined ? 0 : g.turn + 1 - began - (g.flags[`mphn:${nat}`] ?? 0);
-  return { held: callUpHeld(g, nat), corps: plan.perMonth[wave] ?? plan.after, divs: plan.divs };
+  return { held: callUpHeld(g, nat), corps: Math.floor((plan.perMonth[wave] ?? plan.after) * (1 - callUpCut(g, nat)) + (g.flags[`mtr:${nat}`] ?? 0) + 1e-9), divs: plan.divs };
+}
+
+/** Watches the call-up (measures only; moves nothing): each month, the corps the plan and the reserve allowed before the trim, and those raised. */
+export const callUpWatch: { tell: ((e: { nat: string; turn: number; wave: number; want: number; raised: number; divs: number }) => void) | null } = { tell: null };
+
+/**
+ * The one trim of the free call-up (ruling 228, rider b481; sized on the tree that ships, b627): the share of the corps
+ * a nation's call-up would raise each month that are not raised, at the dial's stops its plan names (the grand
+ * campaign only). Their men stay in the reserve, where the depots' drafts can still reach them. The call-up only: the
+ * factories are never touched. 0 where there is no trim, the stop is not one of its, or the month is before its 'from'.
+ */
+export function callUpCut(g: Game, nat: string): number {
+  const t = EASTERN.mobilisation[nat]?.trim;
+  return g.flags.open === 1 && t && t.cut > 0 && t.stops.includes(stopOf(g)) && g.turn >= (t.from ?? 0) ? Math.min(1, t.cut) : 0;
 }
 
 /**
@@ -2790,11 +3304,24 @@ export function holdCallUp(g: Game, nat: string, hold: boolean): boolean {
   return true;
 }
 
-/** A nation with a mobilisation plan raises a wave of new corps every month once it is at war. */
+/**
+ * The share of its home industry a nation still holds, as the standing call-up reckons it (the grand campaign): 1 with
+ * every home factory in hand, 0 with none, or for a nation that never had one. Home ground on the far side of the
+ * world counts at its share here as it does for money and for lines (ruling b475, economy.ts farShare): the Soviet
+ * Union's works beyond the old chart are never lost, and counted whole they held a wave at 0.81 to 0.84 of its size
+ * where the old chart's reckoning cut it to 0.61 to 0.68.
+ */
+export function industryHeld(g: Game, nat: string): number {
+  let own = 0, held = 0;
+  for (const r of g.regions) if (r.owner === nat && !r.overseas) { const f = r.fac * farShare(r); own += f; if (r.ctrl === nat) held += f; }
+  return own > 0 ? held / own : 0;
+}
+
+/** A nation with a mobilisation plan raises a wave of new corps every month once it is at war with a great power. */
 function mobilise(g: Game, nat: string): void {
   const plan = EASTERN.mobilisation[nat];
   const n = g.nations[nat];
-  if (!plan || !n.atWar.length) return;
+  if (!plan || !greatWar(g, nat)) return;
   const key = `mobilised:${nat}`;
   if (g.flags[key] === undefined) g.flags[key] = g.turn;
   const month = g.turn - g.flags[key];
@@ -2804,14 +3331,14 @@ function mobilise(g: Game, nat: string): void {
   if (held) g.flags[`mphn:${nat}`] = waited + 1;
   // The grand campaign: once the first waves are in, the standing call-up is only as large as the industry the
   // nation still holds can arm. A country that has lost half its factories raises half the corps.
-  if (g.flags.open === 1 && wave >= plan.perMonth.length) {
-    let own = 0, held = 0;
-    for (const r of g.regions) if (r.owner === nat && !r.overseas) { own += r.fac; if (r.ctrl === nat) held += r.fac; }
-    count = own > 0 ? Math.round(count * Math.pow(held / own, OPEN_CALLUP)) : 0;
-  }
+  if (g.flags.open === 1 && wave >= plan.perMonth.length) count = Math.round(count * Math.pow(industryHeld(g, nat), OPEN_CALLUP));
   // The grand campaign: every corps of the call-up is filled from the reserve of men, and when that is spent the waves stop.
   // The first waves take whatever there is; the standing call-up after them takes only what the armies in the field do not need.
   if (g.flags.open === 1) count = Math.min(count, wave < plan.perMonth.length ? raisable(g, nat, plan.divs) : Math.max(0, Math.floor(menSpare(g, nat) / plan.divs)));
+  // The one trim (b481, b627): a share of the corps the month would raise are not raised, the fraction carried to the next month.
+  const want = count;
+  const cut = held ? 0 : callUpCut(g, nat);
+  if (cut > 0 && count > 0) { const want = count * (1 - cut) + (g.flags[`mtr:${nat}`] ?? 0); count = Math.floor(want + 1e-9); g.flags[`mtr:${nat}`] = Math.max(0, want - count); }
   // Held, the wave is not raised: its men go to the corps in the field as this month's extra drafts (startPhase).
   if (held) { g.flags[`mphw:${nat}`] = Math.min(plan.perMonth[wave] ?? plan.after, raisable(g, nat, plan.divs)) * plan.divs; count = 0; }
   else if (g.flags[`mphw:${nat}`] !== undefined) delete g.flags[`mphw:${nat}`];
@@ -2819,6 +3346,7 @@ function mobilise(g: Game, nat: string): void {
   // The grand campaign: a computer's staff whose line has met dug-in troops forms one corps of each month's wave as
   // massed guns, until it has its share of them (the same share its factories would be asked for).
   const guns = g.flags.open === 1 && nat !== g.human && count > 0 && !locked(g, nat, 'corps:art') && gunsWanted(g, nat) ? specOf(g, 'art') : null;
+  let raisedNow = 0;
   for (let k = 0; k < count; k++) {
     // Form up in the industrial towns still held, emptiest first, away from the fighting.
     let best: Region | null = null, bs = 1e9;
@@ -2832,8 +3360,10 @@ function mobilise(g: Game, nat: string): void {
     const c = asGuns ? addCorps(g, nat, corpsName(nat, 'art', n.corpsNo++), 'art', guns.divs, best.id, { xp: plan.xp })
       : addCorps(g, nat, `${ordinal(n.corpsNo++)} ${plan.name}`, plan.kind, plan.divs, best.id, { xp: plan.xp });
     c.org = 0.7;
+    raisedNow++;
     drawMen(g, nat, asGuns ? guns.divs : plan.divs);
   }
+  callUpWatch.tell?.({ nat, turn: g.turn, wave, want, raised: raisedNow, divs: plan.divs });
   if (count > 0 && month === 0) headline(g, 'event', `${n.name} orders general mobilisation.`, nat);
   // Behind the front, the people dig: anti-tank ditches and gun lines around the great cities.
   // In free play nobody waits for history's calendar: the lines round a city are dug as soon as the enemy is three marches from it.
@@ -2851,7 +3381,7 @@ function mobilise(g: Game, nat: string): void {
     const r = g.byName[place];
     const due = when === month || (g.flags.open === 1 && month >= 1 && month < when && !!r && close(r));
     if (!due || !r || r.ctrl !== nat || (r.fort?.lv ?? 0) >= lv) continue;
-    r.fort = { lv, vs: r.fort?.vs ?? [nat] };
+    r.fort = { lv, vs: r.fort?.vs ?? [nat], by: nat };
     headline(g, 'event', `Defence lines are dug around ${r.name}.`, nat, r.id);
   }
 }
@@ -2893,7 +3423,41 @@ export function refuge(g: Game, c: Corps, from: Region): Region {
     const r = g.byName[nm];
     if (r && r.id !== from.id && allied(g, c.nat, r.ctrl) && !hostileUnits(g, r, c.nat).length && friendlyUnits(g, r, c.nat).length < STACK && seaOpenAt(g, c.nat, r)) return r;
   }
+  // Ruling 221 (F): troops lifted off the coast of a country their own is fighting are landed at the nearest harbour
+  // their country holds on that country's ground, with no enemy in it, room and the sea open: the war they came for
+  // goes on. Without it they are taken home, and from an island home nothing ever ships them back (paper 20, finding 3).
+  // It is a rule of the grand campaign, at every stop of its dial: history's campaigns lift their troops off as they
+  // were measured to (with the far side's switch on the row is laid for every game, and four wars in 24 of the 1939
+  // campaign played differently from May 1941 until this asked: tests/far-history-same.test.ts).
+  if (EASTERN.nearRefuge && g.flags.open === 1 && from.owner !== c.nat && atWar(g, c.nat, from.owner)) {
+    const near = nearHarbour(g, c.nat, from);
+    if (near) return near;
+  }
   return g.regions[g.nations[c.nat].capital];
+}
+
+/**
+ * The nearest harbour a nation holds on the ground of the country it stands in, other than where it stands, with no
+ * enemy in it, room for one more corps and the sea open to its ships (ruling 221, F); 'fits' narrows the choice.
+ */
+export function nearHarbour(g: Game, nat: string, from: Region, fits: (r: Region) => boolean = () => true): Region | null {
+  return g.regions
+    .filter((r) => r.port && r.id !== from.id && r.owner === from.owner && r.ctrl === nat && !hostileUnits(g, r, nat).length && friendlyUnits(g, r, nat).length < STACK && seaOpenAt(g, nat, r) && fits(r))
+    .sort((a, b) => Math.hypot(a.x - from.x, a.y - from.y) - Math.hypot(b.x - from.x, b.y - from.y) || a.id - b.id)[0] ?? null;
+}
+
+/**
+ * A corps with no road back to its own side is taken out by sea (the director's ruling of 18:59Z, under 221 F): to
+ * the harbour given, at an evacuation's cost, with the news. The line's march home calls it (ai.ts lineHome).
+ */
+export function takeOut(g: Game, c: Corps, to: Region): void {
+  const from = g.regions[c.reg], N = g.nations[c.nat];
+  place(g, c, to);
+  c.str *= 0.75; c.org = Math.min(c.org, 0.3); c.ap = 0; c.hold = false;
+  if (!g.flags[`evac:${g.turn}`]) {
+    g.flags[`evac:${g.turn}`] = 1;
+    headline(g, 'event', `${N.adj} troops at ${from.name}, with no road back to their own lines, are taken out by sea to ${to.name}, without their heavy equipment.`, c.nat, from.id, { arm: 'land', lost: c.nat });
+  }
 }
 
 /**
@@ -2946,6 +3510,38 @@ function roomNear(g: Game, nat: string, at: Region): Region | null {
     }
   }
   return null;
+}
+
+/**
+ * Ruling b423 (a rider on 221): a dated row that serves only an operation of the book comes held and stayed where the
+ * war does not follow the book, at the stops its list names ('bookOnly' in setup-1939.json; the far side lays the
+ * list, china-stop3.json). A hold binds a staff, never a player's own corps.
+ */
+function bookOnly(g: Game, nat: string, name: string): boolean {
+  const list = (setup as { bookOnly?: { stops: number[]; rows: [string, string][] } }).bookOnly;
+  return !!list && nat !== g.human && list.stops.includes(stopOf(g)) && list.rows.some(([n, nm]) => n === nat && nm === name);
+}
+
+/**
+ * Ruling 233, rider b612 (4): the book's rows. At the book's stops of the history dial a computer's staff is sent the
+ * roster's dated formations for a scripted theatre's ground where the roster's 'book' list names its country and the
+ * ground's owner (Germany's for Italy, 1943: the moves into Italy are history's own, and at those stops the staff
+ * makes history's moves). Free play at the looser stops sends none of them, as before, and the player never: his army
+ * is his own business. By the record the moves answered the landing (Sicily, and Mussolini's fall): each row waits
+ * until the ground's owner has had its leaving in play with an enemy on one of the grounds its leaving event names
+ * (the ward's trigger, staff.ts), and then comes at its date, or at once if the date has passed. A quiet ally draws
+ * no corps from the other fronts.
+ */
+type BookRows = { stops: number[]; scripted: [string, string][]; from?: Record<string, string[]> };
+const BOOK = (setup as unknown as { book?: BookRows }).book;
+function bookRow(g: Game, nat: string, reg: Region | undefined): boolean {
+  return !!BOOK && !!reg && nat !== g.human && BOOK.stops.includes(stopOf(g)) && BOOK.scripted.some(([n, owner]) => n === nat && owner === reg.owner);
+}
+/** True while a book row still waits: the enemy has never yet stood on a ground its ally's leaving event names. The month he first does is kept. */
+function bookWaits(g: Game, owner: string): boolean {
+  const key = `book:${owner}`;
+  if (g.flags[key] === undefined && leavingThreat(g, owner)) g.flags[key] = g.turn;
+  return g.flags[key] === undefined;
 }
 
 /** True where the war an expedition row names is on: '*' as the second name is a war with anyone. */
@@ -3057,7 +3653,11 @@ function landVoyages(g: Game, nat: string): void {
 function expeditions(g: Game, nat: string): void {
   const gone: Corps[] = [];
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
-    const o = row[6] ?? {};
+    const booked = g.flags.open === 1 && row[1] === nat && bookRow(g, nat, g.byName[row[5]]);
+    // (Nothing is counted twice, b609: a division the roster already names elsewhere is not added again. The corps that
+    // holds it, where it still lives, is broken up into the row: the book's 'from' list, read as a row's own.)
+    const o0 = booked && BOOK!.from?.[row[2]] ? { ...(row[6] ?? {}), from: [...(row[6]?.from ?? []), ...BOOK!.from[row[2]]] } : row[6] ?? {};
+    const o = bookOnly(g, nat, row[2]) ? { ...o0, hold: 1, stay: 1 } : o0;
     // (A country's own call-up counted from its war's start waits for no book month in the grand campaign: ruling 229, part 3.)
     const fromWar = g.flags.open === 1 && !!o.war && o.after !== undefined;
     if (row[1] !== nat || (!fromWar && g.turn < row[0])) return;
@@ -3068,7 +3668,9 @@ function expeditions(g: Game, nat: string): void {
       const id = g.flags[`lent:${i}`];
       if (o.until && g.turn >= o.until && id > 0) {
         const c = g.corps.find((x) => x.id === id && x.nat === nat);
-        if (c) gone.push(c);
+        // (A division is laid once: what the row drew from living corps goes back to them where they stand together,
+        // or stands on where it is; only what it raised new leaves. laidonce.ts.)
+        if (c && loanOver(g, i, c)) gone.push(c);
         g.flags[`lent:${i}`] = -1;
       }
       return;
@@ -3083,7 +3685,7 @@ function expeditions(g: Game, nat: string): void {
       // Free play. An invasion force history put together for a landing of its own planning is nobody's to send.
       // A formation raised for a war waits for that war, however late it comes, and then has its half year.
       const k = reg ? THEATRE_OF.get(reg.name) ?? -1 : -1;
-      if (k >= 0 && THEATRE_LIST[k].scripted && row[0] >= (THEATRE_LIST[k].opens ?? 0)) return;
+      if (k >= 0 && THEATRE_LIST[k].scripted && row[0] >= (THEATRE_LIST[k].opens ?? 0) && (!booked || bookWaits(g, reg!.owner))) return;
       if (o.war) {
         if (!warOn(g, o.war)) return;
         // And it waits for its own country to be in that war: no army turns up in a war its country is not fighting.
@@ -3129,9 +3731,9 @@ function expeditions(g: Game, nat: string): void {
       if (o.until) g.flags[`lent:${i}`] = old.id;
       // The new divisions come at full strength; the corps they join is as rested as it was.
       old.str = (old.str * old.divs + row[4]) / (old.divs + row[4]);
-      old.divs += row[4];
+      // (They carry numbers of their own, never those of the corps beside it: armies.ts.)
+      growCorps(g, old, row[4], row[3]);
       old.name = row[2];
-      old.kind = row[3];
       g.supplyDirty = true;
       if (o.news) headline(g, 'event', o.news, nat, old.reg);
       return;
@@ -3144,7 +3746,14 @@ function expeditions(g: Game, nat: string): void {
       for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
       g.supplyDirty = true;
     }
-    const c = addCorps(g, nat, row[2], row[3], g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4], reg.id, fell ? { ...o, hold: undefined } : o);
+    // (A division is laid once, the grand campaign: a read row draws the divisions living corps of its country hold,
+    // and raises none of them a second time. laidonce.ts, data/campaign/laidonce.json.)
+    const held = drawHeld(g, nat, row, reg, g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4]);
+    if (held.line) headline(g, 'info', held.line, nat, reg.id);
+    if (held.n <= 0) return;
+    const c = addCorps(g, nat, row[2], row[3], held.n, reg.id, fell ? { ...o, hold: undefined } : o);
+    if (o.str !== undefined) c.str = o.str;
+    layDrawn(g, i, c, held.drawn);
     if (g.flags.open === 1 && UNLESS.has(row[2])) {
       g.flags[`came:${i}`] = g.turn;
       // (A row standing in for this one, landed already, goes with it: the same men cannot stand in two places.)
@@ -3203,7 +3812,7 @@ function desertWorks(g: Game, nat: string, closing = false): void {
     // Nothing to do where the works already stand as the row wants them: the same level, facing the same way, the harbour built.
     const faces = o?.vs ?? r.fort?.vs ?? [r.owner];
     if ((r.fort?.lv ?? 0) === lv && (!o?.vs || (r.fort?.vs ?? []).join() === o.vs.join()) && (!o?.port || r.port)) continue;
-    r.fort = lv > 0 ? { lv, vs: [...faces] } : null;
+    r.fort = lv > 0 ? { lv, vs: [...faces], by: nat } : null;
     // A harbour built off an open beach: from now on ships can land troops and stores there.
     if (o?.port && !r.port) { r.port = true; g.flags[`harbour:${r.id}`] = g.turn; g.supplyDirty = true; }
     headline(g, 'event', news, nat, r.id);
@@ -3298,10 +3907,16 @@ export function startPhase(g: Game, nat: string): void {
   const n = g.nations[nat];
   fadeWorks(g, nat);
   if (!n.alive) return;
+  // Shipping by the record's dates (ruling 234, rider b630).
+  liftDates(g, nat);
   // Reinforcements from the pre-war mobilisation, and the armies and fronts formed later from men already under arms.
   for (const row of [...(setup as any).reinforcements, ...((setup as any).formations ?? [])]) {
     if (row[0] !== g.turn || row[1] !== nat) continue;
+    // A row marked 'open' is the open grand campaign's alone (ruling 233, rider b609(a)): the history campaign's roster stays the book's.
+    if (row[6]?.open && g.flags.open !== 1) continue;
     let reg = g.byName[row[5]];
+    // A row for ground this campaign's chart does not carry (a far-side row on the older chart) never comes.
+    if (!reg) continue;
     if (!allied(g, nat, reg.ctrl)) reg = g.regions[n.capital];
     if (!reg || !allied(g, nat, reg.ctrl)) continue;
     if (g.flags.open === 1 && row[3] !== 'fort') {
@@ -3309,7 +3924,9 @@ export function startPhase(g: Game, nat: string): void {
       if (reg.ctrl !== nat && !sharesWar(g, nat, reg.ctrl) && n.capital >= 0 && g.regions[n.capital].ctrl === nat) reg = g.regions[n.capital];
       reg = roomNear(g, nat, reg) ?? reg;
     }
-    addCorps(g, nat, row[2], row[3], row[4], reg.id, row[6] ?? {});
+    const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, row[6] ?? {});
+    // A row by date reads its strength as a first-day row does (ruled 16:32Z, 17 November 2026; no row of Europe's book says one).
+    if (row[6]?.str !== undefined) c.str = row[6].str;
   }
   expeditions(g, nat);
   // Corps whose long passage ends this month come ashore after the month's arrival rows (ruling 229, part 1).
@@ -3348,7 +3965,8 @@ export function startPhase(g: Game, nat: string): void {
   const credit = BUDGET.debt.floor * Math.max(1, earned);
   const owed = budgeted(g) && n.pp < 0 ? Math.min(1, -n.pp / credit) : 0;
   // What the player's decrees take to keep can outrun what comes in (the grand campaign): the capital in hand pays for it.
-  const pcNet = pcIncome(nat, g) + civicSum(g, nat).pc + govCapital(g, nat);
+  // (And, with the nation's footing switched on, what holding rearmament or all-out war takes: ruling 172.)
+  const pcBase = pcIncome(nat, g) + civicSum(g, nat).pc + govCapital(g, nat), pcNet = pcBase + footHold(g, nat, pcBase);
   n.pc = Math.max(0, Math.min(Math.max(n.pc, DIPLOMACY.pcCap), n.pc + (g.flags.open === 1 ? pcNet : Math.max(0, pcNet))));
   const perDiv = PRODUCTION.replacementCost;
   const tempo = freshOffensive(g, nat);
@@ -3365,7 +3983,7 @@ export function startPhase(g: Game, nat: string): void {
   // A hospital in a resting corps' province, or beside it, sends more of its men back and rests it better.
   const ward = (c: Corps): { drafts: number; org: number } => (restedMonth(g, c) ? hospitalWorth(hospitalNear(g, c, (h) => h === nat || allied(g, h, nat))) : { drafts: 1, org: 0 });
   // A corps that has spent the whole month out of the line takes in its drafts faster (the grand campaign).
-  const want = army.map((c) => (c.supplied && !(c.lean && nat === g.human) && !shutIn(g, c) && !inPocket(g, c) ? Math.min((1 - c.str) * c.divs, 0.2 * drafts * restedDrafts(g, c) * ward(c).drafts * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0));
+  const want = army.map((c) => (c.supplied && !(c.lean && nat === g.human) && !shutIn(g, c) && !inPocket(g, c) ? Math.min(Math.max(0, (c.full ?? 1) - c.str) * c.divs, 0.2 * drafts * restedDrafts(g, c) * ward(c).drafts * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0));
   const asked = want.reduce((s, x) => s + x, 0);
   // The month's class comes of age and joins the reserve, and the men the armies ask for are taken from it (the
   // grand campaign): a nation whose reserve is spent makes good only what the class allows.
@@ -3412,6 +4030,8 @@ export function startPhase(g: Game, nat: string): void {
         return;
       }
     }
+    // (worn uniforms, looks only: its weeks in the line; a quiet month away from the front clears them)
+    wornMonth(g, c);
     c.fought = false;
     if (c.blows !== undefined) delete c.blows;
     if (c.gaveWay) delete c.gaveWay;
@@ -3463,12 +4083,22 @@ export function startPhase(g: Game, nat: string): void {
   checkCollapse(g, nat, n.atWar[0] ?? nat);
 }
 
-/** The Red Army moves into eastern Poland once the Polish front is breaking, as the 1939 pact arranged. */
+/**
+ * The Red Army moves into eastern Poland once the Polish front is breaking, as the 1939 pact arranged. In the grand
+ * campaign, if Poland has already fallen and the pact has handed its zone over, the Red Army marches into it all the
+ * same (the design director's b502): the same corps to the same six places, so the zone is never handed over empty.
+ * (The historical scenarios are left as they were.)
+ */
 export function sovietEvent(g: Game): void {
-  if (g.flags.sovietMove || !g.nations.POL.alive || !g.nations.SOV.alive || g.turn > 3) return;
-  if (atWar(g, 'SOV', 'GER') || !atWar(g, 'GER', 'POL')) return;
-  const lost = g.regions.filter((r) => r.owner === 'POL' && r.ctrl !== 'POL').length;
-  if (lost < 5) return;
+  if (g.flags.sovietMove || !g.nations.SOV.alive || g.turn > 3 || atWar(g, 'SOV', 'GER')) return;
+  const fallen = !g.nations.POL.alive;
+  if (fallen) {
+    if (g.flags.open !== 1 || !g.regions.some((r) => r.sov && r.owner === 'POL' && r.ctrl === 'SOV')) return;
+  } else {
+    if (!atWar(g, 'GER', 'POL')) return;
+    const lost = g.regions.filter((r) => r.owner === 'POL' && r.ctrl !== 'POL').length;
+    if (lost < 5) return;
+  }
   g.flags.sovietMove = 1;
   g.week = 3;
   for (const r of g.regions) {
@@ -3476,11 +4106,27 @@ export function sovietEvent(g: Game): void {
     for (const c of [...r.units]) if (c.nat === 'POL') removeCorps(g, c);
     r.ctrl = 'SOV';
   }
+  // In the grand campaign, with Poland still standing, the pact's line holds all the same: ground east of it that the
+  // German army has already overrun is handed over as the Red Army comes in, and the Germans there fall back west of
+  // the line, as they gave up Brest and the approaches to Lwow in September 1939. (Ruling 232 lets the German army
+  // sweep the whole zone in its first month while Warsaw holds out, rider b566; without this the Red Army found its
+  // six places in German hands and stayed at home, and the Winter War was never fought in earnest.) The design
+  // director's b571: only where a computer-run power keeps the pact. A player's ground and a player's corps are never
+  // moved by it: with a player's Germany the zone stays as he left it.
+  if (!fallen && g.flags.open === 1) {
+    const mine = (r: Region): boolean => g.human !== null && (r.ctrl === g.human || [...r.units, ...garrisonOf(r)].some((c) => c.nat === g.human));
+    const over = g.regions.filter((r) => r.sov && r.owner === 'POL' && r.ctrl !== 'SOV' && r.ctrl !== 'POL' && !atWar(g, 'SOV', r.ctrl) && !mine(r));
+    for (const r of over) {
+      for (const c of [...r.units, ...garrisonOf(r)]) if (c.nat === 'POL') removeCorps(g, c);
+      r.ctrl = 'SOV';
+    }
+    for (const r of over) for (const c of [...r.units, ...garrisonOf(r)]) if (c.nat !== 'SOV') sendHome(g, c);
+  }
   const fronts = g.corps.filter((c) => c.nat === 'SOV' && !c.hold);
   const dest = ['Wilno', 'Brest', 'Lwow', 'Volhynia', 'Bialystok', 'Polesie'];
   fronts.forEach((c, i) => { const r = g.byName[dest[i % dest.length]]; if (r.ctrl === 'SOV') place(g, c, r); });
   g.supplyDirty = true;
   headline(g, 'event', 'The Red Army crosses into eastern Poland under the pact with Germany.', 'SOV');
   g.week = 4;
-  checkCollapse(g, 'POL', 'GER');
+  if (!fallen) checkCollapse(g, 'POL', 'GER');
 }

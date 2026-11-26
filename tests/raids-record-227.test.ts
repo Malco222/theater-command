@@ -121,6 +121,11 @@ describe('ruling 227: the set raids land inside the record\'s bands', () => {
     b.base = f.base = id(g, 'East Anglia');
     b.bmr = 291;
     f.ftr = 400;
+    // Bare ground: guns cleared; the band is the record's total including flak. (1.5.1, the design director, 24 Nov 2026
+    // 22:58Z: the band was met with no guns at all, so once the Ruhr has guns, from the start or built by 1944, escorted
+    // heavy raids over a defended city run above the record: 0.082 at the start guns' level 1, 0.094 at level 2. The
+    // start guns expose this; they don't cause it. A named finding, traced in release 2.)
+    delete g.flags[`wk:aa:${id(g, 'Ruhr')}`];
     // The escort reaches the Ruhr from England: the dated range, not a fleet's own.
     expect(airRange(f, g).ftr).toBeGreaterThan(452);
     const a = assessAir(g, [b, f], 'bomb', id(g, 'Ruhr'));

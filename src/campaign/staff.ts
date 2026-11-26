@@ -10,18 +10,20 @@ import { deterred } from './league';
 import { openTraits } from './traits';
 import { openTech } from './tech';
 import { openStores } from './resources';
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import openData from '../../data/campaign/open.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import { hashString, Rng } from '../core/rng';
 import { turnToDate } from '../core/ticket';
-import { holds } from './diplomacy';
+import { holds, leavings, majorsOf } from './diplomacy';
 import { concertFor, landingsFor, nerveOf, seat, type Landings } from './difficulty';
 import { DOMINATION, dominating } from './domination';
-import { bookIf, leanFor, leash, moodMul, stopDef } from './history';
+import { bookIf, leanFor, leash, moodMul, stopDef, stopOf } from './history';
+import { lineShut } from './line';
 import { openAirWar, openWorldAir, skyDenies } from './air';
 import { openSmallAir } from './arsenal';
 import { openCarriers } from './carriers';
-import { fieldCtrl, openSieges } from './siege';
+import { fieldCtrl, openSieges, raiseGarrisons, startGarrisons } from './siege';
 import { agentsOf, atWork, knowsBooks } from './intel';
 import { startEngineers } from './engineers';
 import { openMorale } from './morale';
@@ -31,9 +33,15 @@ import { NAVY, canPass, closedTo, seaPath, seaRisk } from './navy';
 import { openEscorts } from './fleets';
 import { openTrade } from './trade';
 import { openGovernment } from './government';
+import { openFooting } from './footing';
+import { openWeather } from './weather';
+import { openAirVersion } from './airversion';
+import { openSecretWar } from './secretwar';
 import { openManpower } from './manpower';
-import { acrossOcean, attachWorld, beyondEurope, neighbourByLand, overseasOf } from './world';
-import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, weather } from './game';
+import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, overseasOf, shoreOf } from './world';
+import { tieWar } from './far';
+import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor } from './game';
+import { openWinter, winterOver } from './winter';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
@@ -59,6 +67,23 @@ export interface Op {
   landings?: PlanPhase['landings'];
   staging?: Record<string, number>;
   join?: 'allies' | 'axis';
+  /**
+   * A war for a strip of frontier (the Winter War): while it is the staff's only war, only the troops within this many
+   * marches of the front take part, and the rest of the army stays where it stands.
+   */
+  near?: number;
+  /** The ground such a war is fought for: while it is the staff's only war, the army attacks and steps only there. */
+  aims?: string[];
+  /** The news that follows the declaration, in the same line: the month card tells one story. */
+  news?: string;
+  /** The works and the peace of the Winter War (winter.ts). */
+  works?: Record<string, [number, ...string[]]>;
+  peace?: { cede: string[]; from: number; by: number; after: number; chance: number };
+  /**
+   * By the book (a stop that dates this choice), the front it is meant for opens no general offensive while it waits:
+   * not out of impatience, not on a staff's temper row (ruling 215(b): Japan's offensive of 1944 in China).
+   */
+  wait?: boolean;
 }
 
 /**
@@ -76,9 +101,10 @@ const OPEN = openData as unknown as {
   /** A staff grows bolder the longer its front is quiet: months of quiet, and what each stage does. */
   impatience: { after: number[]; ratio: number[]; odds: number[]; effort: number; floor: number; any: number; local: number[]; locals: number };
   /** The second front: when a staff with shipping and no land front crosses the sea, and with what. */
-  descent: Landings & { after: number; abroad?: number; hold?: number; feed?: number; strength?: unknown; heed?: { mainland: boolean; island: boolean; wave: boolean }; front?: number; door?: string[]; planned?: Record<string, Planned> };
+  descent: Landings & { after: number; abroad?: number; lead?: number; day?: boolean; wait?: boolean; afresh?: boolean; room?: boolean; joint?: boolean; stands?: boolean; hold?: number; feed?: number; strength?: unknown; heed?: { mainland: boolean; island: boolean; wave: boolean }; front?: number; door?: string[]; planned?: Record<string, Planned> };
   /** The coast watch: the share of its field corps a staff will keep in the harbours of its homeland, the fewest it keeps, and the most in one harbour. */
-  coast?: { share: number; least: number; each: number; works: number; dig?: { orders: number; top: number; capital: number; keep: number } };
+  coast?: { share: number; least: number; each: number; works: number; dig?: { orders: number; top: number; capital: number; keep: number } };  /** Ruling 233, rider b612: the ward. The stops of the dial at which a computer staff guards the capital of an ally whose leaving is in play, and the corps it keeps there. */
+  ward?: { stops: number[]; corps: number };
 };
 
 /** True in a free-play war: the computer's nations make their own decisions. */
@@ -89,16 +115,24 @@ export const isOpen = (g: Game): boolean => g.flags.open === 1;
  * attack on Poland is already under way. Later in the war each staff finds its fronts as history left them.
  */
 export function startOpen(g: Game, wide = true): Game {
+  // (Ruling 232, rider b606: the garrisons that are the ruling's own join the roster before anything is counted from it.)
+  raiseGarrisons(g);
   g.flags.open = 1;
   // The grand campaign is played on the wider world: it is attached before anything else is set up for it. (One
   // kept to the map of Europe is what a campaign saved before the world was drawn plays on as.)
   if (wide) attachWorld(g);
+  // The Mannerheim Line across the Karelian isthmus, while Finland holds it (ruling 228, 1b).
+  openWinter(g);
   if (g.turn === 1) {
     g.flags['st:on:GER:POL'] = 1;
     g.flags['st:gain:GER'] = 1;
   }
-  // (Begun after the first day: the rows whose men history's corps already brought do not come again.)
-  else carriedRows(g);
+  // (Begun after the first day: the rows whose men history's corps already brought do not come again. The month it
+  // opens is kept: its navies, the player's included, open with the record's ships of that month, rider b639.)
+  else {
+    carriedRows(g);
+    g.flags.openFrom = g.turn;
+  }
   startEngineers(g);
   openTraits(g);
   openTech(g);
@@ -113,8 +147,14 @@ export function startOpen(g: Game, wide = true): Game {
   openEscorts(g);
   openTrade(g);
   openGovernment(g);
+  openFooting(g);
+  openWeather(g);
+  openAirVersion(g, majorsOf(g));
+  openSecretWar(g);
   openManpower(g);
   numberDivisions(g);
+  // (After the numbers: a garrison keeps its divisions' numbers under the record's name for the command. Ruling 232, b566.)
+  startGarrisons(g);
   // On the wider map the picture is drawn once here, so that a campaign saved on its first day comes back as it was.
   if (wide) computeSupply(g);
   // The grand campaign counts its railheads with the supply picture: draw it afresh under these rules.
@@ -259,12 +299,14 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
   }
 
   const wx = weather(g);
+  const long = lineOwners(g);
   const out: Front[] = [];
   for (const [comp, f] of found) {
     // Works only stop an attack that comes from the country they were built against: the best way in is what counts.
     const works = (e: Region): number => {
       if (!e.fort) return 1;
       let best = 99;
+      if (!worksAgainst(g, e, nat)) return 1;
       for (const j of e.nb) if (f.ours.has(j)) best = Math.min(best, e.fort.vs.includes(g.regions[j].owner) ? FORT_MUL[e.fort.lv] : 1);
       return best === 99 ? 1 : best;
     };
@@ -306,12 +348,28 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
     let atk = 0, fixed = 0;
     // Deep in Russia in the bad months an army that has not learned the country attacks at a fraction of its strength.
     const deep = edge.filter((id) => EASTERN.deepOwners.includes(g.regions[id].owner)).length * 2 >= edge.length;
-    const season = deep && !EASTERN.winter.hardy.includes(nat) ? (wx.winter ? EASTERN.winter.attack : wx.mud ? 0.8 : 1) : 1;
+    let season = deep && !EASTERN.winter.hardy.includes(nat) ? (wx.winter ? EASTERN.winter.attack : wx.mud ? 0.8 : 1) : 1;
+    // Ruling 221 (S): where the long line runs on ground the Russian winter does not reach, a staff reckons it as it
+    // reckons the winter: the strength its corps would have one province past the line they hold, averaged along the edge.
+    if (EASTERN.lineReckon && !long.includes(nat)) {
+      const reach = g.reach[nat];
+      const far = edge.filter((id) => long.includes(g.regions[id].owner) && !EASTERN.deepOwners.includes(g.regions[id].owner));
+      if (reach && far.length) {
+        let sum = 0;
+        for (const id of far) {
+          let best = Infinity;
+          for (const j of g.regions[id].nb) if (f.ours.has(j)) best = Math.min(best, reach[j]);
+          const len = (best === Infinity ? 0 : best) + EASTERN.stepFresh;
+          sum += (EASTERN.bands.find(([max]) => len <= max) ?? EASTERN.bands[EASTERN.bands.length - 1])[1];
+        }
+        season *= sum / far.length;
+      }
+    }
     for (const c of g.corps) {
       if (c.dead || side[c.reg] !== 1 || !f.areas.has(label[c.reg]) || !allied(g, nat, c.nat) || !fights(c.nat)) continue;
       const r = g.regions[c.reg];
       if (c.kind === 'fort' || c.hold) {
-        if (f.ours.has(c.reg)) fixed += defP(g, c, r) * (r.fort ? FORT_MUL[r.fort.lv] : 1);
+        if (f.ours.has(c.reg)) fixed += defP(g, c, r) * (r.fort && worksFor(g, r, c.nat) ? FORT_MUL[r.fort.lv] : 1);
         // A garrison on the front itself would go in with the rest; one further back stays where it is.
         if (c.kind === 'fort' || c.nat !== nat || !close[c.reg]) continue;
       }
@@ -359,7 +417,7 @@ function axis(g: Game, nat: string, f: Front, placed = false): string[] {
   const N = g.regions.length;
   const cost = new Float32Array(N).fill(1e9);
   const from = new Int16Array(N).fill(-1);
-  const step = (r: Region): number => 1 + (GOING[r.terrain] ?? 0) + (r.fort && r.fort.vs.includes(nat) ? 2.5 * r.fort.lv : 0) + 0.2 * r.units.length;
+  const step = (r: Region): number => 1 + (GOING[r.terrain] ?? 0) + (r.fort && r.fort.vs.includes(nat) && worksAgainst(g, r, nat) ? 2.5 * r.fort.lv : 0) + 0.2 * r.units.length;
   const open: number[] = [];
   const doors = f.edge.filter((id) => f.depth[id] === 1);
   // With the army in the field, the road starts where the army is: a thrust cannot be launched out of a corner
@@ -460,6 +518,15 @@ const flag = (g: Game, k: string): number => g.flags[k] ?? 0;
 const onKey = (nat: string, e: string, where: string): string => `st:on:${nat}:${e}${where}`;
 
 /** The month this nation's offensive against the enemies on a front began, or 0 if there is none. */
+/**
+ * Whether this nation's staff is on the attack against `e` in a war it began itself, its offensive against `e` still
+ * on (ruling 139, the design director's b519(m)). A war is its own when the last declaration between the two was its.
+ */
+export function onTheAttack(g: Game, nat: string, e: string): boolean {
+  const mine = flag(g, `war:${nat}:${e}`);
+  return mine > 0 && mine >= flag(g, `war:${e}:${nat}`) && flag(g, onKey(nat, e, '')) > 0;
+}
+
 function onSince(g: Game, nat: string, f: Front, where = ''): number {
   let t = 0;
   for (const e of f.enemies) { const v = flag(g, onKey(nat, e, where)); if (v && (!t || v < t)) t = v; }
@@ -623,6 +690,8 @@ function sector(g: Game, nat: string, f: Front, least: number, beside?: Region):
     const t = g.regions[id];
     // Behind strong works there is no way in; a place nobody holds is walked into, not attacked.
     if (f.depth[id] !== 1 || (beside && !beside.nb.includes(id)) || !atWar(g, nat, fieldCtrl(g, t)) || !hostileUnits(g, t, nat).length) continue;
+    // (By the book, no main effort goes for ground beyond the record's line: line.ts.)
+    if (lineShut(g, nat, t)) continue;
     const doors = t.nb.filter((j) => (ours.has(j) || (beside && j === beside.id)) && allied(g, nat, fieldCtrl(g, g.regions[j])));
     if (!doors.length) continue;
     const front: Corps[] = [], back: Corps[] = [];
@@ -830,10 +899,20 @@ function cond(g: Game, nat: string, c: string, real: Front[]): boolean {
 /** Whom an operation would still add to this nation's enemies: the living, not on its own side, not yet at war with it. */
 const targets = (g: Game, nat: string, op: Op): string[] => (op.declare ?? []).filter((e) => g.nations[e]?.alive && !g.nations[e].dormant && !allied(g, nat, e) && !atWar(g, nat, e));
 
-/** The front a new war would open, weighed before it is declared. */
+/**
+ * A great offensive against an enemy the nation is at war with already (it declares on nobody and is no side-show):
+ * the enemies it names in its own conditions ('war:ME,HIM') who are still fighting. Empty for every other choice.
+ */
+const inWar = (g: Game, nat: string, op: Op): string[] => (op.side || (op.declare ?? []).length ? [] : (op.if ?? [])
+  .filter((c) => c.startsWith(`war:${nat},`)).map((c) => c.slice(nat.length + 5)).filter((e) => g.nations[e]?.alive && atWar(g, nat, e)));
+
+/** The front a new war would open, weighed before it is declared; for a great offensive in a war already on, its front as it stands. */
 export function prospect(g: Game, nat: string, op: Op, skip: FrontOpts['skip']): Front | null {
   const extra = new Set(targets(g, nat, op));
-  if (!extra.size) return null;
+  if (!extra.size) {
+    const foes = inWar(g, nat, op);
+    return foes.length ? fronts(g, nat, { skip, busy: (f) => onSince(g, nat, f) > 0 }).find((f) => f.enemies.some((e) => foes.includes(e))) ?? null : null;
+  }
   return fronts(g, nat, { extra, skip, busy: (f) => onSince(g, nat, f) > 0 }).find((f) => f.enemies.some((e) => extra.has(e))) ?? null;
 }
 
@@ -884,6 +963,9 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
   const planned = (f: Front): boolean => list.some((op) => meant(op, f) && !flag(g, `st:done:${nat}:${op.id}`) && g.turn <= (op.to ?? 999)
     && (op.if ?? []).filter((c) => c !== 'quiet').every((c) => cond(g, nat, c, real)));
   const hurried = (op: Op): boolean => real.some((f) => meant(op, f) && boldness(g, nat, f) > 0);
+  // By the book, a front that waits on a dated choice carrying 'wait' opens no general offensive (ruling 215(b)).
+  const waits = (f: Front): boolean => list.some((op) => op.wait && meant(op, f) && !flag(g, `st:done:${nat}:${op.id}`) && g.turn <= (op.to ?? 999)
+    && leash(g, nat, op.id).kind === 'dated' && (bookIf(nat, op.id) ?? op.if ?? []).filter((c) => c !== 'quiet').every((c) => cond(g, nat, c, real)));
 
   for (const f of real) {
     const since = onSince(g, nat, f);
@@ -903,7 +985,7 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
       const none = T.attackAt >= 50;
       const eager = !k ? usual : none ? (k >= I.after.length ? I.any : usual) : Math.max(I.floor, usual * I.ratio[k - 1]);
       // (A front where the last offensive was one in name only waits for more strength, or for patience to run out.)
-      if (f.ratio >= eager && !(!k && shy(g, nat, f))) {
+      if (f.ratio >= eager && !(!k && shy(g, nat, f)) && !waits(f)) {
         setOn(g, nat, f, g.turn);
         g.flags[`st:gain:${nat}`] = g.turn;
         if (f.ratio < usual) {
@@ -925,7 +1007,8 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
   const book = !!stopDef(g).book;
   const go = (k: number, beside = false): void => {
     const op = list[k];
-    const who = targets(g, nat, op);
+    // (A great offensive in a war already on is opened against the enemies it names.)
+    const who = (op.declare ?? []).length ? targets(g, nat, op) : inWar(g, nat, op);
     const last = list[flag(g, `st:goOp:${nat}`) - 1];
     if (book && last?.landings && !op.landings && g.turn - flag(g, `st:go:${nat}`) === 1) { g.flags[`st:landAt:${nat}`] = flag(g, `st:go:${nat}`); g.flags[`st:landOp:${nat}`] = flag(g, `st:goOp:${nat}`); }
     g.flags[`st:done:${nat}:${op.id}`] = g.turn;
@@ -1096,6 +1179,11 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
   const watch = coastWatch(g, nat);
   for (const [name, count] of Object.entries(watch)) phase.staging = { ...(phase.staging ?? {}), [name]: Math.max(phase.staging?.[name] ?? 0, count) };
   if (Object.keys(watch).length) phase.watch = Object.keys(watch);
+  // Ruling 233, riders b612 and b627: the ward. The capital of an ally whose leaving is in play is guarded by a corps
+  // of the field army, named once and kept until the ward ends (ai.ts, keepWards): it is no watched harbour, which is
+  // sent a fresh corps each month and only where a train can carry it the whole way into a town with room.
+  const ward = wards(g, nat);
+  if (ward.length) phase.ward = Object.fromEntries(ward.map((name) => [name, OPEN.ward!.corps]));
   // So does a staff opening a second front, at home and on a far shore: and while its men ashore still have a front, all its ships can carry.
   for (const slot of [0, 1]) {
     const quay = seaBase(g, nat, slot);
@@ -1110,11 +1198,26 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
     const want = lod?.short ? Math.max(sea.L.force, Math.min(n.sealift, STACK)) : more ? Math.max(sea.L.force, Math.min(STRENGTH!.wave, STACK)) : sea.L.force;
     phase.staging = { ...(phase.staging ?? {}), [quay.name]: Math.max(phase.staging?.[quay.name] ?? 0, want) };
   }
+  // A war for a strip of frontier (an op with 'near', the Winter War): while it is the staff's only war, only the troops
+  // near the front take part. The army facing the great powers stays where it stands. Only that war: once its story is
+  // over (the peace made, or the great war has swallowed it), a later war with the same country is fought in full.
+  const wars = new Set([...n.atWar, ...declare]);
+  const small = wars.size ? list.find((op) => op.near !== undefined && flag(g, `st:done:${nat}:${op.id}`) > 0 && !(op.peace && winterOver(g)) && [...wars].every((e) => (op.declare ?? []).includes(e))) : undefined;
+  if (small) {
+    phase.near = small.near;
+    const aims = (small.aims ?? []).filter((nm) => g.byName[nm] && wars.has(g.byName[nm].ctrl));
+    // (Its own ground the enemy has taken is won back all the same: the aims limit how far into his country it goes.)
+    const home = g.regions.filter((r) => r.owner === nat && wars.has(r.ctrl)).map((r) => r.name);
+    if (small.aims) { phase.targets = [...new Set([...aims, ...home])]; phase.main = aims.length ? aims : home; phase.strict = true; delete phase.haltOrder; }
+  }
   // A force kept ready for a stroke still to come.
   for (const op of list) {
     if (!op.staging || flag(g, `st:done:${nat}:${op.id}`) || g.turn > (op.to ?? 999)) continue;
     phase.staging = { ...(phase.staging ?? {}), ...op.staging };
   }
+  // By the book, ground beyond the record's line is named in none of the staff's orders (line.ts).
+  const open = (nm: string): boolean => !g.byName[nm] || !lineShut(g, nat, g.byName[nm]);
+  for (const k of ['targets', 'objectives', 'axis', 'haltOrder'] as const) if (phase[k]?.some((nm) => !open(nm))) phase[k] = phase[k]!.filter(open);
   return phase;
 }
 
@@ -1129,6 +1232,40 @@ function inTouch(g: Game, nat: string, e: string, among?: Uint8Array): boolean {
     if (r.units.some((u) => u.nat === nat && !u.dead)) return true;
   }
   return false;
+}
+
+/**
+ * Ruling 233, rider b612: the ward. A computer staff at the dial's looser stops guards the capital of an ally whose own
+ * leaving is in play: an enemy holds or stands on a place that ally's leaving event names (diplomacy.ts, leavings), and
+ * the capital can be reached overland from this staff's own through its side's ground. That is the record's reason
+ * (Italy in the summer of 1943). One guard, not one from every partner: it is kept by the strongest army among the
+ * ally's partners on the Continent that are run by a computer or not, and if that is the player the choice is his.
+ * Returns the capitals this staff guards.
+ */
+export function wards(g: Game, nat: string): string[] {
+  const W = OPEN.ward, n = g.nations[nat];
+  if (!W || !isOpen(g) || !W.stops.includes(stopOf(g)) || nat === g.human || !n?.alive || n.capital < 0 || n.seaSupply || !n.atWar.length) return [];
+  const out: string[] = [];
+  let on: Uint8Array | null = null;
+  for (const L of leavings(g)) {
+    const A = g.nations[L.nation];
+    if (!A?.alive || A.id === nat || A.capital < 0 || !allied(g, nat, A.id)) continue;
+    const cap = g.regions[A.capital];
+    if (cap.ctrl !== A.id || out.includes(cap.name)) continue;
+    if (!L.grounds.some((nm) => { const r = g.byName[nm]; return !!r && (atWar(g, A.id, r.ctrl) || hostileUnits(g, r, A.id).length > 0); })) continue;
+    const keeper = Object.values(g.nations)
+      .filter((x) => x.id !== A.id && x.alive && !x.dormant && !x.seaSupply && x.capital >= 0 && x.atWar.length > 0 && allied(g, x.id, A.id))
+      .sort((a, b) => b.armyPeak - a.armyPeak || (a.id < b.id ? -1 : 1))[0];
+    if (keeper?.id !== nat) continue;
+    if (!on) {
+      on = new Uint8Array(g.regions.length);
+      const list = [n.capital];
+      on[n.capital] = 1;
+      for (let i = 0; i < list.length; i++) for (const j of g.regions[list[i]].nb) if (!on[j] && (g.regions[j].ctrl === nat || allied(g, nat, g.regions[j].ctrl))) { on[j] = 1; list.push(j); }
+    }
+    if (on[cap.id]) out.push(cap.name);
+  }
+  return out;
 }
 
 /** The ground a nation holds in one piece with its capital, nearest first, and a mark on each province of it. Nothing for a capital off the map. */
@@ -1268,6 +1405,44 @@ export function opensOn(g: Game, nat: string, r: Region): boolean {
   return !!lapse && entered(g, lapse);
 }
 /**
+ * True for a mainland harbour of a staff's list whose month has not come and comes within 'lead' months (open.json,
+ * 'descent.lead'; ruling 233(q)). The staff plans for it: the enemy across the sea is chosen for it, the quay, the
+ * force gathered there, the beach named and its strength tried. It lands not before the month (`opensOn`). By the
+ * book the invasion army gathered in Britain through the first half of 1944.
+ */
+export function opensSoon(g: Game, nat: string, r: Region): boolean {
+  const lead = OPEN.descent?.lead ?? 0;
+  const P = lead > 0 ? planned(g, nat) : null;
+  const from = P?.from?.[r.owner];
+  if (!P || from === undefined || !dated(g) || r.overseas || !r.nb.length || ownShore(g, nat, r)) return false;
+  return P.open.includes(r.owner) && !P.not?.includes(r.name) && g.turn < from && g.turn >= from - lead && !opensOn(g, nat, r);
+}
+/** True for a mainland harbour of a staff's list in the very month history's list opens it (at the stops where the dates hold). */
+export function opensNow(g: Game, nat: string, r: Region): boolean {
+  const P = planned(g, nat);
+  return !!P && dated(g) && !r.overseas && r.nb.length > 0 && P.open.includes(r.owner) && !P.not?.includes(r.name) && P.from?.[r.owner] === g.turn;
+}
+/**
+ * True in the month history's list opens a mainland shore this enemy holds, for a staff that has planned for it since
+ * the first month of the lead (open.json, 'descent.day'; ruling 233(u)): the list picked the day, and the staff lands
+ * that month without the monthly dice where every test passes. Asked once a month for each army of a staff with that
+ * enemy across the sea (`sfx` names the army): the month the lead begins it is noted that the plan stood.
+ */
+export function onTheDay(g: Game, nat: string, you: string, sfx: string): boolean {
+  const D = OPEN.descent, lead = D?.lead ?? 0;
+  const P = D?.day && lead > 0 && dated(g) ? planned(g, nat) : null;
+  const key = `st:led:${nat}${sfx}`;
+  let m = 0;
+  if (P?.from) for (const r of harbours(g, you)) {
+    const f = P.from[r.owner];
+    if (f === undefined || r.overseas || !r.nb.length || !P.open.includes(r.owner) || P.not?.includes(r.name) || ownShore(g, nat, r)) continue;
+    if (g.turn >= f - lead && g.turn <= f && (!m || f < m)) m = f;
+  }
+  if (m && g.turn === m - lead) g.flags[key] = m;
+  else if (flag(g, key) && flag(g, key) < g.turn) delete g.flags[key];
+  return m === g.turn && flag(g, key) === m;
+}
+/**
  * The build-up (open.json, 'descent.planned', 'with'): a staff with history's list opens no front of its own on a
  * mainland until this many of its field corps stand across the ocean: the landing force, and as many again to
  * follow it in before the enemy's reserves arrive. An island taken whole and a colony overseas need no such army.
@@ -1327,7 +1502,8 @@ export const neighbourAcrossTheWater = (g: Game, nat: string, e: string): boolea
  * whose landing the harbour is, where it is one. A staff that waits behind its allies (Version 79, ruling 60:
  * Canada, the island's guard) goes on from its base not before 'joinFrom', and only behind one of the allies named
  * under 'behind': into that ally's landing, a harbour he holds, or one where his field corps stand in it or next to
- * it. That holds at the stops of the history dial where history's dates do.
+ * it. That holds at the stops of the history dial where history's dates do, and there, with the whole world on the
+ * chart, a colony across an ocean is shut to such a staff for good (ruling 231, 3, and its rider b462).
  */
 export function joinsOn(g: Game, nat: string, r: Region, by?: string): boolean {
   const P = planned(g, nat);
@@ -1339,7 +1515,16 @@ export function joinsOn(g: Game, nat: string, r: Region, by?: string): boolean {
     if (P?.join && !P.join.includes(r.owner)) return false;
     return behindToStay(g, nat, r, W.behind ?? []);
   }
-  if (!P || r.overseas || ownShore(g, nat, r)) return true;
+  // A colony overseas is open always (ruling 60(b)1). Not to a staff that waits behind its allies, once the whole
+  // world is on the chart (ruling 231, 3, and its rider b462): the island's guard holds against it at the stops where
+  // history's dates hold, and a colony across an ocean stays shut to it for good. Canada's corps cross only to
+  // Britain, and go on from it as below, to the continent, not before 1943 and behind a British or an American
+  // landing; her army never went to Africa as a formation. (On the older chart a colony near an enemy was a rare
+  // thing. With Italy's Horn of Africa on it there is one from June 1940, and Canada's army sailed for Tripoli and
+  // Alexandria.) A colony on its own side of the ocean is open to it as ever: no ocean is crossed for it.
+  const guard = !!P?.behind && dated(g) && farOn(g);
+  if (!P || ownShore(g, nat, r)) return true;
+  if (r.overseas) return !guard || shoreOf(r) === shoreOf(g.nations[nat].capital);
   if (P.join && !P.join.includes(r.owner)) return false;
   if (!P.behind || !dated(g) || based(P, r)) return true;
   const B = P.behind;
@@ -1445,10 +1630,35 @@ export function seaFoe(g: Game, nat: string, slot = 0): { foe: string; L: Landin
   const key = `st:foe:${nat}`, at = `st:foeAt:${nat}`;
   const home = homeGround(g, nat);
   const from = [...new Set(home.list.map((id) => g.regions[id]).filter((r) => r.port && r.owner === nat && !r.overseas).flatMap((r) => r.seas))];
-  // (A staff with history's list of shores looks only at those of his harbours it may open on this month.)
-  const inReach = (e: string): boolean => from.length > 0 && seaHops(g, from, harbours(g, e).filter((r) => opensOn(g, nat, r))) <= NAVY.landing.range;
+  // (A staff with history's list of shores looks only at those of his harbours it may open on this month, or within the lead: `opensSoon`.)
+  const inReach = (e: string): boolean => from.length > 0 && seaHops(g, from, harbours(g, e).filter((r) => opensOn(g, nat, r) || opensSoon(g, nat, r))) <= NAVY.landing.range;
   const kept = ids[flag(g, key) - 1];
-  if (kept && g.nations[kept].alive && atWar(g, nat, kept)) {
+  // (History's list has an order, ruling 233(j): when the month comes for a later shore of the list, the home army
+  // turns to the enemy who holds it nearest the home ports, unless it has men ashore with a front to hold. France
+  // in June 1944, though Italy still stands; and Germany on the Channel, not Italy at Marseille. It turns 'lead'
+  // months before the shore's month, ruling 233(q): the invasion army gathered in Britain through the first half of
+  // 1944, and a landing takes a season to mount. It lands not before the month (`opensOn`). The army abroad keeps
+  // the first: see `abroad`.)
+  const P = planned(g, nat);
+  const dueOf = new Map<string, number>();
+  /** The month of the latest shore of the list an enemy holds a harbour on, within a landing of the home ports, with the hops to it taken off as a fraction: later first, then nearer. Nothing until 'lead' months before it. */
+  const due = (e: string): number => {
+    if (!P?.from || !dated(g) || !from.length) return 0;
+    let m = dueOf.get(e);
+    if (m !== undefined) return m;
+    m = 0;
+    for (const r of harbours(g, e)) {
+      const f = P.from[r.owner];
+      if (f === undefined || f < Math.floor(m) || g.turn < f - (D.lead ?? 0) || r.overseas || !r.nb.length || !P.open.includes(r.owner) || P.not?.includes(r.name)) continue;
+      const hops = seaHops(g, from, [r]);
+      if (hops <= NAVY.landing.range) m = Math.max(m, f + 1 - (hops + 1) / (NAVY.landing.range + 2));
+    }
+    dueOf.set(e, m);
+    return m;
+  };
+  const turnsTo = (e: string): boolean => { const x = g.nations[e]; return e !== kept && !!x?.alive && x.capital >= 0 && due(e) > (kept ? due(kept) : 0) && !inTouch(g, nat, e, home.on); };
+  const later = !!kept && !!P?.from && !lodgment(g, nat) && n.atWar.some(turnsTo);
+  if (kept && g.nations[kept].alive && atWar(g, nat, kept) && !later) {
     if (g.turn - flag(g, at) < 12 || lodgment(g, nat)) return { foe: kept, L: D, second: true };
     if (inReach(kept) && !inTouch(g, nat, kept, home.on)) { g.flags[at] = g.turn; return { foe: kept, L: D, second: true }; }
   }
@@ -1459,7 +1669,7 @@ export function seaFoe(g: Game, nat: string, slot = 0): { foe: string; L: Landin
     const x = g.nations[e];
     if (!x?.alive || x.capital < 0) continue;
     // (Nor does a staff beyond the old chart wait a year for an enemy on its own side of the ocean: he is its first business. Version 81.)
-    const q = e === claim ? 999 : neighbourAcrossTheWater(g, nat, e) ? 500 + quietWith(g, nat, e) : quietWith(g, nat, e);
+    const q = e === claim ? 999 : later && turnsTo(e) ? 900 + due(e) : neighbourAcrossTheWater(g, nat, e) ? 500 + quietWith(g, nat, e) : quietWith(g, nat, e);
     if (q > bq && !inTouch(g, nat, e, home.on) && inReach(e)) { bq = q; best = e; }
   }
   if (!best) { delete g.flags[key]; return null; }
@@ -1472,8 +1682,10 @@ export function seaFoe(g: Game, nat: string, slot = 0): { foe: string; L: Landin
  * The army overseas. A nation with shipping whose troops stand idle on a far shore (friendly ground not in one
  * piece with its capital, with no enemy on it or next to it) crosses from a port there against an enemy it has not
  * fought for a season. The quay and the enemy are chosen together, by how lightly the harbours in reach are held,
- * from the ports with a landing force of its own within three marches, and looked at again every three months.
- * While the men it put ashore still have a front to hold, the same quay feeds them.
+ * from the ports with a landing force of its own within three marches (of two that are equal, the one it stands at:
+ * ruling 233(y)), and looked at again every three months.
+ * While the men it put ashore still have a front to hold, the same quay feeds them. With no lane open from any of
+ * those ports it waits where it was, or at the port nearest his harbours (open.json, 'descent.wait').
  */
 function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
   const D = OPEN.descent, n = g.nations[nat];
@@ -1488,7 +1700,7 @@ function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
   const foes = [...n.atWar].sort().filter((e) => { const x = g.nations[e]; return !!x?.alive && x.capital >= 0 && quietWith(g, nat, e) >= (D.abroad ?? 3); });
   if (!foes.length) return drop();
   // (A staff with history's list of shores looks only at those: it does not go elsewhere because elsewhere is clear.)
-  const shores = foes.map((e) => harbours(g, e).filter((r) => opensOn(g, nat, r)));
+  const shores = foes.map((e) => harbours(g, e).filter((r) => opensOn(g, nat, r) || opensSoon(g, nat, r)));
   if (!shores.some((s) => s.length)) return drop();
   const home = homeGround(g, nat).on;
   // Each far shore in turn: a piece of friendly ground away from home. One with the enemy on it or next to it has work of its own.
@@ -1513,7 +1725,8 @@ function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
   }
   if (!idle.length) return drop();
   const shut = g.seas.map((z) => closedTo(g, z.id, nat));
-  let best: { foe: string; quay: Region } | null = null, bw = 0, bs = Infinity;
+  let best: { foe: string; quay: Region } | null = null, bw = 0, bs = Infinity, bh = -1;
+  let near: { foe: string; quay: Region } | null = null, bd = Infinity;
   for (const p of idle) {
     if (!room(p)) continue;
     // The corps that could be on this quay within the season: those there now, and those within three marches that would not leave a place empty.
@@ -1529,10 +1742,27 @@ function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
       for (const j of r.nb) if (d[j] < 0 && allied(g, nat, g.regions[j].ctrl)) { d[j] = d[r.id] + 1; q.push(j); }
     }
     if (spare < D.force) continue;
+    // (Ruling 233(y), open.json `descent.stands`: of two quays equal in worth and in seas the army names the one it
+    // stands at, the port with more of its own corps on the quay, then with more of them within the marches. Before,
+    // the first port of the list won: in May 1944 America's army, four corps in Cornwall and two in Kent, named Kent;
+    // the four were sent elsewhere, and for three months the two were one short of a landing force.)
+    const stands = D.stands ? 100 * p.units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng').length + spare : 0;
     foes.forEach((e, k) => {
       const w = quayWorth(g, nat, p, shores[k], shut);
-      if (w.worth > bw + 1e-9 || (w.worth > 0 && Math.abs(w.worth - bw) <= 1e-9 && w.seas < bs)) { best = { foe: e, quay: p }; bw = w.worth; bs = w.seas; }
+      const even = w.worth > 0 && Math.abs(w.worth - bw) <= 1e-9;
+      if (w.worth > bw + 1e-9 || (even && (w.seas < bs || (w.seas === bs && stands > bh)))) { best = { foe: e, quay: p }; bw = w.worth; bs = w.seas; bh = stands; }
+      // Seas between this quay and the nearest of his harbours, by the shortest way round, whoever holds them.
+      const d = shores[k].length ? seaHops(g, p.seas, shores[k]) : Infinity;
+      if (d < bd) { bd = d; near = { foe: e, quay: p }; }
     });
+  }
+  // (Ruling 233(r): with no lane open from any quay the army waits, as the home army does (`seaBase`): at the quay
+  // it had, or at the one nearest his harbours by the shortest way round. Its beach is named from there and its own
+  // fleets stand on the way to it, which is how a closed sea is opened. Before, the plan was dropped the month the
+  // lane shut, no beach was named, and the admirals, who cover a named crossing, sent nothing.)
+  if (!best && D.wait) {
+    if (foe && quay && foes.includes(foe) && shores[foes.indexOf(foe)].length && idle.includes(quay) && room(quay)) return { foe, quay };
+    if (near !== null && bd <= NAVY.landing.range) best = near;
   }
   if (!best) return drop();
   const got = best as { foe: string; quay: Region };
@@ -1548,20 +1778,36 @@ function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
  * open to its ships (while it has men ashore, the one with an open lane to them). With no lane open from any home
  * port the force waits where it was, or at the port nearest his harbours by the shortest way round. The choice is
  * kept while its lane stays open and looked at again every half year. For the army on a far shore: see `abroad`.
+ *
+ * Ruling 233(x) (open.json `descent.afresh`, `descent.room`): the choice is made afresh the month the staff's
+ * target changes (another enemy, or another shore of history's list), and a home port where its allies' corps leave
+ * no room for the force is passed over while another port serves, as the army abroad's quay already is. (Before,
+ * Britain kept Cornwall, its quay for Sardinia, when it turned to France, and stood there short of its force beside
+ * the Americans in 13 wars of 48 on the list's day: the invasion of France was mounted from every harbour of the
+ * south coast, not from one.)
  */
 export function seaBase(g: Game, nat: string, slot = 0): Region | null {
   const sea = seaFoe(g, nat, slot);
   if (!sea) return null;
   if (slot) return abroad(g, nat)?.quay ?? null;
   const you = sea.foe;
-  const key = `st:quay:${nat}`, at = `st:quayAt:${nat}`;
+  const key = `st:quay:${nat}`, at = `st:quayAt:${nat}`, tk = `st:quayFor:${nat}`;
   const lod = sea.second ? lodgment(g, nat) : null;
-  const shores = lod?.short ? [lod.at] : harbours(g, you);
+  // (The quay is chosen for the harbours the staff may land on, this month or within the lead: a staff with
+  // history's list is not sent to face a shore that is no part of it because that shore is clear. Britain's force
+  // gathered opposite Norway, once German fighters covered France. Ruling 233(q).)
+  const listed = sea.second ? harbours(g, you).filter((r) => opensOn(g, nat, r) || opensSoon(g, nat, r)) : [];
+  const shores = lod?.short ? [lod.at] : listed.length ? listed : harbours(g, you);
   const shut = g.seas.map((z) => closedTo(g, z.id, nat));
+  const D = OPEN.descent;
+  // (The target the quay was chosen for: the enemy, and the countries of the list's shores it may land on or plan for.)
+  const target = D.afresh ? 1 + (hashString(`${you}:${[...new Set(listed.map((r) => r.owner))].sort().join(',')}`) % 1000000) : 0;
+  const room = (p: Region): boolean => !D.room || STACK - friendlyUnits(g, p, nat).filter((u) => u.nat !== nat).length >= sea.L.force;
   const kept = g.regions[flag(g, key) - 1];
-  const fresh = !!kept && kept.ctrl === nat && g.turn - flag(g, at) < 6;
-  if (fresh && quayWorth(g, nat, kept, shores, shut).worth > 0) return kept;
+  const fresh = !!kept && kept.ctrl === nat && g.turn - flag(g, at) < 6 && (!target || flag(g, tk) === target);
+  if (fresh && room(kept) && quayWorth(g, nat, kept, shores, shut).worth > 0) return kept;
   let best: Region | null = null, bw = 0, bs = Infinity;
+  let full: Region | null = null, fw = 0, fs = Infinity;
   let near: Region | null = null, bd = Infinity;
   for (const id of homeGround(g, nat).list) {
     const r = g.regions[id];
@@ -1570,16 +1816,36 @@ export function seaBase(g: Game, nat: string, slot = 0): Region | null {
     const d = seaHops(g, r.seas, shores);
     if (d < bd) { bd = d; near = r; }
     const w = quayWorth(g, nat, r, shores, shut);
+    if (!room(r)) { if (w.worth > fw + 1e-9 || (w.worth > 0 && Math.abs(w.worth - fw) <= 1e-9 && w.seas < fs)) { full = r; fw = w.worth; fs = w.seas; } continue; }
     if (w.worth > bw + 1e-9 || (w.worth > 0 && Math.abs(w.worth - bw) <= 1e-9 && w.seas < bs)) { best = r; bw = w.worth; bs = w.seas; }
   }
+  // (No port with room serves: the full one that does, as before.)
+  best ??= full;
   if (!best) {
     if (fresh) return kept;
-    if (!near || bd > NAVY.landing.range) { delete g.flags[key]; return null; }
+    if (!near || bd > NAVY.landing.range) { delete g.flags[key]; delete g.flags[tk]; return null; }
     best = near;
   }
   g.flags[key] = best.id + 1;
   g.flags[at] = g.turn;
+  if (target) g.flags[tk] = target;
   return best;
+}
+
+/**
+ * The joint crossing (ruling 233(w); open.json `descent.joint`; computer staffs only): the corps of a staff's
+ * computer-run allies that stand ready at its quay with no orders of their own from it, the strongest first. Their
+ * own staff has named no crossing from that harbour, for its home army or its army abroad, and they are at war with
+ * the enemy across the water. Where the staff's own corps at the quay are fewer than its force they fill it up and
+ * sail in it (ai.ts `crossSea`). Never a player's corps, and never for a player's staff.
+ */
+export function quayGuests(g: Game, nat: string, quay: Region, you: string): Corps[] {
+  if (!OPEN.descent.joint || g.flags.open !== 1 || g.human === nat) return [];
+  const named = (id: string): boolean => ['', ':o'].some((sfx) => flag(g, `st:quay:${id}${sfx}`) - 1 === quay.id);
+  return quay.units
+    .filter((u) => u.nat !== nat && u.nat !== g.human && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne && !u.hold && !u.town && u.joint === undefined && u.leave === undefined
+      && u.supplied && u.str >= 0.7 && u.ap >= u.apMax && !!g.nations[u.nat]?.alive && allied(g, nat, u.nat) && atWar(g, u.nat, you) && !named(u.nat))
+    .sort((a, b) => b.divs * b.str - a.divs * a.str || a.id - b.id);
 }
 
 /**
@@ -1894,6 +2160,13 @@ export function afterDeclaring(g: Game, nat: string): void {
   const list = ops(nat);
   const op = flag(g, `st:go:${nat}`) === g.turn ? list[flag(g, `st:goOp:${nat}`) - 1] : null;
   const n = g.nations[nat];
+  // The op's own news follows its declaration in the same line, so that the month card tells one story (ruling 228, the UI director's words).
+  if (op?.news) for (const e of op.declare ?? []) {
+    if (g.flags[`war:${nat}:${e}`] !== g.turn || !g.nations[e]) continue;
+    const said = `${theName(n, true)} declares war on ${theName(g.nations[e])}.`;
+    const h = [...g.headlines].reverse().find((x) => x.turn === g.turn && x.kind === 'war' && x.nat === nat && x.text === said);
+    if (h) h.text = `${h.text} ${op.news}`;
+  }
   // In the last act there are no sides left to take.
   if (dominating(g)) return;
   if (!op?.join || !n.alive || n.align === 'allies' || n.align === 'axis') return;
@@ -2000,6 +2273,7 @@ export function stalemates(g: Game): [string, string][] {
     const B = g.nations[b];
     if (!(A.id < b) || !B?.alive || B.dormant) continue;
     if (me !== null && (A.id === me || b === me || atWar(g, me, A.id) || atWar(g, me, b))) continue;
+    if (tieWar(g, A.id, b)) continue; // the far side: a client makes no separate peace while its patron fights on (far.ts)
     const sa = sideOf(g, A.id), sb = sideOf(g, b);
     const since = Math.max(lastBattle(sa, sb), massed(sa, sb), massed(sb, sa), flag(g, `war:${A.id}:${b}`), flag(g, `war:${b}:${A.id}`), 1);
     if (g.turn - since < S.after || !free(A.id, sb) || !free(b, sa)) continue;

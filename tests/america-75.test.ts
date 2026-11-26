@@ -38,7 +38,7 @@ import grand from '../data/campaign/grand.json';
 import open from '../data/campaign/open.json';
 import setup from '../data/campaign/setup-1939.json';
 
-const DEC_41 = 28, JAN_42 = 29, OCT_42 = 38, JUN_43 = 46;
+const DEC_41 = 28, JAN_42 = 29, MAR_43 = 43, JUN_43 = 46;
 /** A grand campaign on the wider world as it opens. */
 const wide = (seed = 1, human: string | null = null): Game => startOpen(createGame(seed, human));
 const field = (g: Game, nat: string): Corps[] => g.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng');
@@ -50,13 +50,15 @@ const war: Record<number, string> = {};
 const landings: { turn: number; nat: string; to: string; warned: boolean; island: boolean; wave: boolean }[] = [];
 const guard: number[] = [];
 {
-  // Seed 4 since Version 84.2.5: with guns no longer going forward alone (ruling 211(a)) seed 3's staffs make no
-  // landing before June 1943. (Seed 3 since Version 76, when seed 2's made none on the chart with Latin America.)
-  const g = wide(4);
+  // Seed 5 since ruling 233 rider b564: with Force H on the Western Mediterranean seed 4's Britain takes Sardinia in
+  // 1942, its America builds its army up there, and in October 1942 its staff sends no corps over. (Seed 4 since
+  // Version 84.2.5: with guns no longer going forward alone (ruling 211(a)) seed 3's staffs make no landing before
+  // June 1943. Seed 3 since Version 76, when seed 2's made none on the chart with Latin America.)
+  const g = wide(5);
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, warned: e.warned, island: e.to.nb.length === 0, wave: e.wave }); };
   while (g.turn < JUN_43) {
     runTurnAI(g);
-    if ([JAN_42, OCT_42, JUN_43].includes(g.turn)) war[g.turn] = saveGame(g);
+    if ([DEC_41, JAN_42, MAR_43, JUN_43].includes(g.turn)) war[g.turn] = saveGame(g);
     if (g.turn > JAN_42) guard.push(atHome(g, 'USA').length);
   }
   landingWatch.tell = null;
@@ -206,8 +208,8 @@ describe('the army sent across the ocean', () => {
       // Never a shore the enemy holds: the ocean run puts nobody ashore against a defence.
       expect(p.units.some((u) => atWar(g, 'USA', u.nat))).toBe(false);
     }
-    // The harbour where the army is built up is one Britain holds. (In this war since Version 84 it is Gibraltar,
-    // which the staff reckons the better placed of Britain's harbours that winter.)
+    // The harbour where the army is built up is one Britain holds. (In this war, seed 5's since ruling 233 rider b564,
+    // it is Cornwall.)
     expect(run.to[0].ctrl).toBe('UK');
   });
 
@@ -235,11 +237,22 @@ describe('the army sent across the ocean', () => {
   it('ships nobody over a crossing too dangerous for its staff', () => {
     const O = WORLD.overseas.USA;
     const sail = (risk: number): Region[] => {
-      // October 1942: a month in this war with danger on the way to the harbour where the army is built up, and no more
-      // than the staff will bear. (In January 1942, since Version 84 moved the wars, that harbour is Gibraltar, and no
-      // enemy is at work on the way to it. Since ruling 227 moved them again, so it is in January 1943, and from then
-      // on in this war the staff sends no corps over in the month.)
-      const g = at(OCT_42);
+      // March 1943: a month in this war with danger on the way to the harbour where the army is built up, and no more
+      // than the staff will bear. (Since ruling 233 riders b598, b601 and b603 the Bordeaux flotilla hunts the Western
+      // Approaches and not the Iberian Coast, so in October 1942 the way to Gibraltar, that month's harbour, carries no
+      // danger. Seed 5's war scanned month by month from turn 26 to 46: danger at turns 28 to 33, on the way to
+      // Cornwall by the Western Approaches, and at 40 to 46, on the way to Sardinia; none at 34 to 39. January 1942
+      // until the ship candidate of ruling 233 (the works rule taken over, b629; the record garrisons; the boats rows):
+      // scanned again on it, the danger lies at turn 28 (Cornwall) and 35 to 45 (Cornwall and the West Country) and
+      // 46 (Sardinia), and from 29 to 34 the harbour is Gibraltar, with none; so December 1941. December 1942 since the
+      // computer's air forces fight back (airwar.json ai.back): scanned again, from 28 to 39 and at 46 the harbour is
+      // Gibraltar, with none on the way, and from 40 to 45 it is Cornwall, with danger under the staff's bar. September
+      // 1942 since 1.5.1's start guns moved the war: scanned again, from 29 to 34 and 40 to 45 the harbour is Gibraltar,
+      // with none on the way, at 28 and from 35 to 39 it is Cornwall, with danger under the staff's bar, and at 46 Sardinia.
+      // March 1943 since 1.5.2's small air arms (an arm too small to hold any sky fights over its army) moved the war:
+      // scanned again, from 28 to 33 and from 40 to 46 the harbour is Cornwall, with danger under the staff's bar, and
+      // from 34 to 39 it is Gibraltar, with none on the way; turn 43 stands in the middle of the later run.)
+      const g = at(MAR_43);
       const before = new Set(across(g, 'USA').map((c) => c.id));
       // A month's sailing banked and a fit corps on the quay.
       const run = oceanRuns(g, 'USA')[0];
@@ -500,6 +513,9 @@ describe('a harbour the player takes from the sea', () => {
   it('is a second front his allies\' staffs know of', () => {
     const g = playing('UK', 5);
     // An empty German harbour within a landing's range of a British quay, and a corps on that quay.
+    // (Since ruling 52 Germany's fighters stand over its own coast from the first month, and no invasion fleet
+    // crosses under them: the sky over its harbours is taken as won here. That rule is crossing-72's business.)
+    for (const r of g.regions) if (r.port && r.ctrl === 'GER') g.sky[r.id] = { nat: 'UK', turn: g.turn };
     let done = false;
     for (const from of g.regions.filter((r) => r.port && r.ctrl === 'UK' && r.owner === 'UK' && !r.overseas)) {
       const c = addCorps(g, 'UK', 'Landing Corps', 'inf', 2, from.id, {});

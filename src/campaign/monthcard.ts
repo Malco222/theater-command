@@ -35,13 +35,17 @@ import { turnToDate } from '../core/ticket';
 import { staffRuns, type DeskId } from './depth';
 import { CAPITAL_BESIEGED, fallWarning, withinReach } from './danger';
 import { NO_LAST_MONTH, ROME_HOLDS, majorsOf, stakeDue, stakeWarning } from './diplomacy';
-import { ARSENAL, workLevel } from './arsenal';
+import { ARSENAL, workLevel, yardLevel } from './arsenal';
 import { BUDGET, PRODUCTION, ledger } from './economy';
 import { allied, atWar, men, theName } from './game';
+import { loweredOf, loweredShort, loweredSum } from './air';
 import { CLASSES, NAVY, shipCount, shipList } from './navy';
 import { cityOrders } from './orders';
 import { besieged, garrisonOf, guardMen } from './siege';
 import { prizeOf, townName, townSize } from './towns';
+import { skyView, type SkyView } from './weather';
+import { menRules, raisable } from './manpower';
+import { bureauCost } from './research';
 import { MEN_PER_DIV, type AirReport, type Game, type Headline, type SeaSide, type ShipClass, type Ships } from './types';
 
 export type CardTone = 'good' | 'bad' | 'warn' | 'plain';
@@ -205,6 +209,12 @@ export interface MonthCard {
   foot: string;
   /** At home: what was delivered, what was researched, anything else of his own, and next month's deliveries. */
   home: CardHome[];
+  /**
+   * The line when men run out (ruling 133(d)(1)): the reserve cannot fill a corps of one division and the treasury
+   * holds more than three months' income. The first line AT HOME, with OPEN THE ARSENAL beside it; the first month
+   * and then every third while it lasts (menOutLine).
+   */
+  menOut?: string;
   research: string[];
   /** Other news of home, each cut to a line or two of whole words; and the same lines whole, for a hover. */
   also: string[];
@@ -215,6 +225,12 @@ export interface MonthCard {
   letters: CardLetter[];
   /** Lines of the month's news that are not on the card. They are all in the newsreel. */
   more: number;
+  /**
+   * THE SKY (weather, rulings 127 and 143(b)): after the rows of news and before AT HOME, never a warning. Closed zones
+   * where he flies or fights first, a line each; cloud on one line; then one line for the clear sky, always. Only in a
+   * campaign with weather.
+   */
+  sky?: SkyView;
 }
 
 const num = (n: number): string => Math.round(n).toLocaleString('en-US');
@@ -298,18 +314,25 @@ const keepsPoint = (whole: string, cut: string): boolean => {
  * there; but a line that loses its point when cut is not cut: it stays in the newsreel and the next is tried in
  * its place. Returns what is shown, each with its place in the list it came from.
  */
-export function fitFoot(items: string[], per: number, lines: number, most: number): { text: string; at: number }[] {
+export function fitFoot(items: string[], per: number, lines: number, most: number, shorts: (string | undefined)[] = []): { text: string; at: number }[] {
   const out: { text: string; at: number }[] = [];
   let left = lines;
   for (let i = 0; i < items.length && out.length < most && left > 0; i++) {
     const whole = `${items[i].replace(/\s+/g, ' ').trim().replace(/[.]$/, '')}.`;
     const need = linesAt(whole, per);
     if (need <= left) { out.push({ text: whole, at: i }); left -= need; continue; }
+    // (A line with a short form of its own, as the UI director words it, gives that where the whole will not fit.)
+    const short = shorts[i];
+    if (short && linesAt(short, per) <= left) { out.push({ text: short, at: i }); left -= linesAt(short, per); continue; }
+    // (Where a line has a short form, it is never shown cut: the UI director, 25 November 2026, 15:04Z.)
+    if (short) continue;
     const cut = wholeWords(whole, per, left);
     if (keepsPoint(whole, cut)) { out.push({ text: cut, at: i }); left = 0; }
   }
   return out;
 }
+/** A line of news that an air command, or a new group of one, forms (air.ts airUpkeep and growCommands). */
+const AIR_FORMS = /^.+ forms in [^,]+(?:, a new group of .+)?\.$/;
 /** The room the foot boxes have, in letters to a line: at home beside a sign and from the box's edge, elsewhere, and what a staff line may run to in all. */
 const FOOT_ROOM = { home: 30, homeWide: 35, elsewhere: 36, staff: 44 };
 const DESK_WORD: Record<string, string> = { research: 'Research', build: 'Build', diplomacy: 'Diplomacy', spies: 'Spies', air: 'Air', navy: 'Navy' };
@@ -574,7 +597,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       if (!prize) return '';
       if (prize.capitalOf && prize.capitalOf !== me) return gone ? '' : `The seat of ${theName(g.nations[prize.capitalOf])}'s government is in your hands.`;
       if (prize.factories > 0) return gone ? `Its ${plural(prize.factories, 'factory', 'factories')} ${prize.factories === 1 ? 'is' : 'are'} lost to you.` : `Its ${plural(prize.factories, 'factory', 'factories')} now ${prize.factories === 1 ? 'works' : 'work'} for you.`;
-      if (prize.oil > 0) return gone ? 'Its oil is lost to you.' : 'Its oil now flows to your depots.';
+      // (A field on colony ground gives nothing at home, to owner or conqueror: resources.ts fieldOverseas.)
+      if (prize.oil > 0 && !reg!.overseas) return gone ? 'Its oil is lost to you.' : 'Its oil now flows to your depots.';
       if (prize.harbour) return gone ? 'Its harbour is closed to your ships.' : 'Its harbour is open to your ships.';
       return '';
     };
@@ -607,6 +631,12 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       row.line = r.relief ? (r.taken ? (att ? 'The siege is raised.' : 'Their relief broke your siege.') : (att ? 'The relief was thrown back.' : 'Their relief was thrown back.')) : (r.taken ? (att ? 'The garrison broke the ring.' : 'The garrison broke your ring.') : (att ? 'The sally was thrown back.' : 'Their sally was thrown back.'));
       row.head = r.taken ? `The siege of ${place} is raised` : `The siege of ${place} holds`;
       row.follows = r.taken ? (att ? 'The town is free of its besiegers.' : 'The ring round the town is broken.') : (att ? 'The town is still cut off.' : 'The ring round the town stands.');
+    } else if (r.fellBack && (r.fellBack === 'att') === att && (att ? !r.taken : r.taken)) {
+      // His general's ALL FALL BACK (release 1.5): called off on the field, the army kept to fight another day.
+      row.tag = 'LOST'; row.tone = 'bad';
+      row.line = 'Your army fell back to fight another day.';
+      row.head = att ? `The attack on ${place} is called off` : `${place} is given up`;
+      row.follows = att ? 'The attack gained no ground, and the army got away.' : worth(true) || 'The front falls back.';
     } else if (att) {
       row.tag = r.taken ? 'WON' : 'LOST'; row.tone = r.taken ? 'good' : 'bad';
       row.line = r.taken
@@ -1162,6 +1192,12 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     for (const l of c.lines) if (l.unit && l.months === 1) group(coming, l.mark, `${l.label}|${l.plural}|next month`, l.stands, true);
   }
   card.home = [...done, ...coming].map((x) => { if (x.bare) return x; const [one, many, tail] = x.text.split('|'); return { ...x, text: `${x.count === 1 ? one : many} ${tail}` }; });
+  // Weather (ruling 143(b)): THE SKY, this month's and next month's chances, and last month's grounded groups.
+  const sky = skyView(g, me);
+  if (sky) card.sky = sky;
+  // The line when men run out (ruling 133(d)(1)).
+  const menOut = menOutLine(g, me);
+  if (menOut && menOutDue(g, me)) card.menOut = menOut;
   const news: Headline[] = [];
   for (const h of hs) {
     if (used.has(h) || !mine(h.nat)) continue;
@@ -1188,7 +1224,15 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   // A march that halts wants his orders and comes first; armies that arrive at one place are one line; and where
   // the town held, the staff speaks of the battle there and not of its loss.
   const held = new Set(ranked.filter((x) => x.row.tag === 'HELD' || x.row.tag === 'BESIEGED').map((x) => x.row.place));
-  const said: { text: string; full: string; hs: Headline[] }[] = [];
+  const said: { text: string; full: string; hs: Headline[]; short?: string }[] = [];
+  // (Several commands' establishments lowered in a month are one line, summed from their own lines, which the reports
+  // keep; with one, its own line. The UI director, 25 November 2026, 05:45Z. It is the foot's first line, ahead of
+  // the air commands that form: the UI director, 14:06Z.)
+  const lowered = news.filter((x) => loweredOf(x.text));
+  const sum = loweredSum(lowered.map((x) => x.text));
+  if (sum) said.push({ text: sum.text, full: sum.text, hs: lowered, short: sum.short });
+  // (One command's own line has its short form too, "Luftflotte 1 cut back: 200 aircraft struck off": 15:04Z.)
+  else for (const h of lowered) said.push({ text: first(h.text), full: h.text, hs: [h], short: loweredShort(h.text) ?? undefined });
   for (const h of news.filter((x) => / has halted at .+ on its march to /.test(x.text))) said.push({ text: first(h.text), full: h.text, hs: [h] });
   const arrivals = new Map<string, Headline[]>();
   for (const h of news) { const m = /^(.+) has arrived at (.+)\.$/.exec(h.text); if (m) arrivals.set(m[2], [...(arrivals.get(m[2]) ?? []), h]); }
@@ -1203,8 +1247,21 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const dir = /^A directive from ([^:]+): /.exec(h.text), title = dir ? N.gov?.dir?.title : undefined;
     said.push({ text: dir && title ? `A directive from ${dir[1]}: ${title}` : first(fixed), full: fixed, hs: [h] });
   }
-  if (signed < slots) for (const f of fitFoot(said.map((s) => s.text), opts.whole ? Infinity : signed ? FOOT_ROOM.home : FOOT_ROOM.homeWide, slots * 2 - taken, Math.min(3, slots - signed))) {
-    card.also.push(f.text); card.alsoFull.push(said[f.at].full);
+  const fit = (): { text: string; at: number }[] => fitFoot(said.map((s) => s.text), opts.whole ? Infinity : signed ? FOOT_ROOM.home : FOOT_ROOM.homeWide, slots * 2 - taken, Math.min(3, slots - signed), said.map((s) => s.short));
+  let fitted = signed < slots ? fit() : [];
+  // (The air commands that form in a month, where their lines do not all fit, are one line: "4 air commands formed",
+  // given as the UI director words it, with no full stop. The UI director, 25 November 2026, 14:06Z. A line the card
+  // would show cut counts as not fitting: where a summed form exists, a cut line is never shown, 15:04Z.)
+  const forms = said.filter((s) => s.hs.length === 1 && AIR_FORMS.test(s.hs[0].text));
+  let formed: string | null = null;
+  if (forms.length > 1 && forms.some((s) => !fitted.some((f) => said[f.at] === s && !f.text.endsWith('…')))) {
+    formed = `${forms.length} air commands formed`;
+    said.splice(said.indexOf(forms[0]), 1, { text: formed, full: forms.map((s) => s.full).join(' '), hs: forms.flatMap((s) => s.hs) });
+    for (const s of forms.slice(1)) said.splice(said.indexOf(s), 1);
+    fitted = fit();
+  }
+  for (const f of fitted) {
+    card.also.push(formed !== null && f.text === `${formed}.` ? formed : f.text); card.alsoFull.push(said[f.at].full);
     for (const h of said[f.at].hs) used.add(h);
   }
 
@@ -1232,4 +1289,47 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   card.more = hs.filter((h) => !used.has(h)).length;
   for (const x of [...card.bands, ...card.rows, ...(card.lead ? [card.lead] : [])]) x.when = dateWords(x);
   return card;
+}
+
+// ---- The line when men run out (ruling 133(d)(1), `fl-men-out`) -------------------------------------------------
+
+/** What money alone still buys, by the rules: everything in the arsenal that takes no men from the reserve. */
+export function moneyBuys(g: Game, nat: string): string[] {
+  const n = g.nations[nat];
+  const out = ['anti-aircraft guns', 'fortifications', 'factories', 'airfields', 'aircraft'];
+  if (g.regions.some((r) => r.owner === nat && r.ctrl === nat && yardLevel(g, r) > 0)) out.push('warships');
+  if (n && bureauCost(n) !== null) out.push('design teams');
+  return out;
+}
+
+/**
+ * The line when men run out (ruling 133(d)(1)): "The reserve of men is empty and 153,343 lies unspent. Money alone
+ * still buys: anti-aircraft guns, fortifications, factories, airfields, aircraft, warships and design teams." Null
+ * while the reserve can still fill a corps of one division, or the treasury holds no more than three months' income.
+ * The grand campaign only. Words: it changes nothing.
+ */
+export function menOutLine(g: Game, nat: string): string | null {
+  const n = g.nations[nat];
+  if (!n?.alive || !menRules(g) || raisable(g, nat, 1) >= 1) return null;
+  const L = ledger(g, nat);
+  if (L.gross <= 0 || L.treasury <= 3 * L.gross) return null;
+  const buys = moneyBuys(g, nat);
+  const list = buys.length > 1 ? `${buys.slice(0, -1).join(', ')} and ${buys[buys.length - 1]}` : buys[0];
+  return `The reserve of men is empty and ${Math.floor(L.treasury * BUDGET.scale + 1e-6).toLocaleString('en-US')} lies unspent. Money alone still buys: ${list}.`;
+}
+
+/** The line is said the first month the men are out and then every third (the month card marks it seen: cardSeen). */
+const menOutDue = (g: Game, nat: string): boolean => { const from = g.flags[`menout:${nat}`]; return from === undefined || (g.turn - from) % 3 === 0; };
+
+/**
+ * The page has shown the player this month's card: marks what is said once or in turn, so that both games say it
+ * alike. THE SKY's tip (ruling 143(g)) and the line when men run out (133(d)(1)). Never called in a war nobody plays.
+ */
+export function cardSeen(g: Game, card: MonthCard): void {
+  if (card.sky?.tip) g.flags['wx:tip'] = g.turn;
+  const me = card.viewer;
+  if (!me) return;
+  const key = `menout:${me}`;
+  if (!menOutLine(g, me)) delete g.flags[key];
+  else if (card.menOut && g.flags[key] === undefined) g.flags[key] = g.turn;
 }

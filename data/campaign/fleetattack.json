@@ -1,0 +1,8 @@
+{
+  "_about": "A fleet sent straight at an enemy fleet (the 1.5.1 patch; Brian, 23 November 2026 22:23Z: 'choosing to attack someone by dragging my unit on top of theirs', as an army attacks). The player's own order, in his month, fought at once on the figures every fleet action uses (navy.ts fleetAction): ships, guns, air from the coasts, training, readiness and admirals. The odds an admiral of the computer's wants before he offers battle (navy.json battle.seek) are his caution, not a rule of the sea: the player may attack at any odds, and is told them first. In the 1.5.1 patch it is on in every grand campaign; switched off in OPTIONS ('Fleets attack fleets', the flag 'fleetAttack' 0), nothing of it is read and every war is the war without it.",
+  "_once": "A fleet attacks once a month: it has been sent at the enemy and will not be sent again until the next.",
+  "_atSea": "An enemy at sea is attacked where he is: in a sea the fleet can reach this month. He stands with every fleet of his side patrolling that sea. A raider has to be caught first (navy.json battle.catchRaider). Outweighed by battle.evadeAt or more, he may make for port (battle.evade), and the attacker holds the sea.",
+  "_harbour": "An enemy in harbour can be attacked there, from a sea of that harbour's coast the fleet can reach. Every fleet of his side in that harbour fights. Ships at anchor cannot manoeuvre: their weight counts at 'atAnchor'. The harbour's coastal batteries add 'gunsPerLevel' for each level of its fortress, where its works serve the side that holds it. A fleet in harbour cannot make for port: it is there. These two figures are the thread's proposal, to the design director.",
+  "atAnchor": 0.75,
+  "gunsPerLevel": 6
+}
