@@ -25,7 +25,7 @@ import { turnToDate, type TicketLine } from '../core/ticket';
 import type { AirFleet, AirMission, AirReport, Game } from './types';
 import type { FoughtAir } from './airfought';
 import {
-  AIR, AIRWAR, CLOSE, afloat, pilotWords, schoolWords, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding, fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, whyNotBase, whyNotMission, whyNotShipAir, flakGuns, noneSeen, seenAgo, squadronsOf, standingGuns, type AirForecast,
+  AIR, AIRWAR, CLOSE, afloat, pilotWords, schoolWords, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding, fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, whyNotBase, whyNotMission, whyNotShipAir, flakGuns, noneSeen, seenAgo, squadronsOf, standingGuns, strafeNone, type AirForecast,
 } from './air';
 import { damageRules } from './citydamage';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
@@ -1124,7 +1124,8 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   // player's own card; a staff's plan, and so any raid on the player, carries none.)
   if (kind === 'ground' && fc.strafers && nat === g.human) {
     const ids = fc.strafers;
-    plan.strafe = strafeSection(a.att.filter((x) => ids.includes(x.f.id)).map((x) => x.f.name));
+    // (Naming none, its line says why: the first cause that is true, strafeNone.)
+    plan.strafe = strafeSection(a.att.filter((x) => ids.includes(x.f.id)).map((x) => x.f.name), ids.length ? 'fought' : strafeNone(g, a));
   }
   // (The guns stop part of the bombing of industry and of a town; over a harbour they only bring bombers down.)
   plan.guns = { level: a.aa, loss: a.gunLoss, lossN: Math.min(plan.bomberLossN, Math.round(a.B * a.gunLoss)), stop: a.aa && kind !== 'harbour' ? gunsStop(a.aa) : 0 };
@@ -1408,6 +1409,8 @@ export function raidReplays(g: Game, turn = g.turn, viewer: string | null = g.hu
     return { id: s.id ?? f?.id ?? -1, name: s.fleet, nat: s.nat, base, baseName: r?.name ?? '', x: r?.x ?? 0, y: r?.y ?? 0, ftr: s.ftr, bmr: s.bmr, lostFtr: s.lostFtr, lostBmr: s.lostBmr };
   });
   const mineToo = (nat: string): boolean => viewer === null || (!!nat && allied(g, nat, viewer));
+  // (The report's own result sentence, to both sides: the UI director, 21:22Z, h, "Only the raider's report card prints
+  // the A5 line by itself. Every other reader of the raid's result keeps i's line ... and the 3D raid list".)
   return g.airReports.filter((r) => r.turn === turn && (mineToo(r.attNat) || mineToo(r.defNat))).map((r) => {
     const p = r.zone >= 0 ? g.seas[r.zone] : g.regions[r.region];
     return { id: r.id, turn: r.turn, kind: r.mission, region: r.region, zone: r.zone, place: r.place, x: p?.x ?? 0, y: p?.y ?? 0, attNat: r.attNat, defNat: r.defNat, attackers: side(r.att), defenders: side(r.def), won: r.won, level: r.level, result: r.result, ...(r.lights ? { lights: { ...r.lights } } : {}) };
