@@ -158,6 +158,33 @@ export interface Man {
   /** An anti-tank team lying hidden, a tank closed up (fighting alone among enemy foot). */
   hidden?: boolean;
   buttoned?: boolean;
+  /**
+   * A tank's machine guns, seen firing (Drill.tankmg; none of these is written while it is off). Her mark: where the man
+   * worth a burst stood when she last looked (mgAt), whose man he is (mgOn: his block's id, his k and his j, -1 for a
+   * key man: she keeps the same man from think to think while he is worth a burst), what she holds him as (mgAs: 1 a
+   * threat to 4 a rattle, as Drill.mgWorth; 5 once her spell at him is over, when she looks afresh), and the aim she
+   * laid her turret on for him (mgAim: kept while the mark stays within DR.tankmg.lay degrees of it, so her aim is not
+   * sent afresh for his every step). Her turret: the point her aim was laid on at her last think (mgWas) and the
+   * battle time it has come round to it (mgLay: her coaxial waits for that). Her rhythm: the battle time of her next
+   * burst (mgNext) and of her last (mgT), the bursts left in her spell (mgRun) and her spells so far (mgSpells: the
+   * dice for the next one's length). Her ammunition: the rounds left for her coaxial and hull guns (mgLeft) and for a
+   * roof gun with belts of its own (mgRoof), counted down from her model's stock and never below the last tenth of it
+   * (Drill.mgKept: the belts the crew keeps for close defence). The gun picked for the burst she is
+   * firing (mgG: Drill.round names it on the round).
+   */
+  mgAt?: [number, number];
+  mgOn?: [number, number, number];
+  mgAs?: number;
+  mgAim?: [number, number];
+  mgWas?: [number, number];
+  mgLay?: number;
+  mgNext?: number;
+  mgT?: number;
+  mgRun?: number;
+  mgSpells?: number;
+  mgLeft?: number;
+  mgRoof?: number;
+  mgG?: 'coax' | 'hull' | 'roof';
   /** Battle time his current bit (a rush, a halt, a burst) ends. */
   until: number;
   /** Where his slot in the line was when he chose his spot: he keeps the spot until his slot moves away from it. */
@@ -216,11 +243,64 @@ export interface Man {
   due?: number;
   /** A tank's machine guns on the enemy's foot (the drill book: against infantry mostly machine guns). */
   coax?: true;
+  /**
+   * Tanks with minds of their own (release 2, Drill.tankmind): what this tank's own commander has in hand. None while
+   * the switch is off.
+   * ph, fast, shaken: his block's phase as he has taken it up (rolling on fast, or shaken, with it), and `at`, the battle
+   * time he takes up its new one (till then she goes on with what she was at).
+   * h: the way she is going, and `turn`, the battle time she takes up her block's way once it has turned about under her.
+   * rev: she is backing; keep: the battle time before which she may not change direction again (her own least time);
+   * wait: the order she holds, standing, till then, [its speed, its spot].
+   * stop, go: her halt to fire on the advance, the battle times she stops (cleared once she has) and drives on; from:
+   * when it began.
+   * fire: the battle time her next round goes (post: it counts toward her firing post's shots).
+   * still: the battle time since which she has stood; ease: the battle time she stops to wait for her place to come
+   * up to her, once told to (till then she rolls on slowly).
+   * Looking and posts (mindLook, mindGaze, mindPost, mindSit): hull, the bearing her hull stands on while she stands
+   * (toward the main threat, a little her own way; none for a gun fixed in her hull, which turns to her aim as
+   * before); look, what her gun watches while it has no target, [the battle time the look ends, the far point's x and
+   * y, its kind: 0 none yet, 1 her sector round the platoon, 2 her side on the march, 3 dead ahead]. sit: hull down,
+   * she is backing down behind her firing place or sitting there ('down'), or coming up to it to fire ('up'); place:
+   * that firing place; rise: the battle time of her next move down or up, her own moment. posted: her firing post's
+   * number and since when she has been at it; shift: the battle time she leaves it for her next after a near miss or
+   * a hit.
+   * The other vehicles and the guns (mindOut, mindOff, mindVolley, mindTick; they have no commander's mind beyond
+   * these): off, the battle time she moves off once told to, her own moment; to, the order she then takes, [its spot,
+   * its speed]; slot: where her place was when she was last left be (so the plain drill gives her order again while
+   * she waits); still is the battle time since which she has been left standing; fire is also a gun's own moment in
+   * her battery's salvo, and lag the seconds it came after the plain drill's (her next round is due by the plain
+   * drill's clock all the same).
+   * rb: coming on, where she began backing toward the enemy (mindStep turns her about once she has backed far enough).
+   */
+  mind?: {
+    ph?: Phase; fast?: boolean; shaken?: boolean; at?: number;
+    h?: number; turn?: number;
+    rev?: true; keep?: number; wait?: [number, number, number];
+    stop?: number; go?: number; from?: number;
+    fire?: number; post?: true;
+    still?: number; ease?: number;
+    hull?: number; look?: [number, number, number, number];
+    sit?: 'down' | 'up'; place?: [number, number]; rise?: number; posted?: [number, number]; shift?: number;
+    off?: number; to?: [number, number, number]; slot?: [number, number]; lag?: number;
+    rb?: [number, number];
+  };
   /** A tank's commander struck up in his hatch (BOOK.tankMg): the battle time; she fights buttoned up from then. */
   cmdDown?: number;
   /** Hatches (Drill.hatches): the battle time her commander drops inside (his own moment after what alarmed him), and the time he comes up again if nothing more does. */
   shutAt?: number;
   shutTo?: number;
+  /**
+   * When the leader falls (Drill.leaders): his squad's leader down, the battle time his own moment comes to go on
+   * (holdTo: till then he starts no walk, run or rush; Drill.hesitate), and the time he stops what he was at, his own
+   * moment too (downAt; Drill.ownMoment): a man caught on the move drops where he is, one who looks to the fallen leader
+   * comes off his sights. One of the men nearest the fallen leader looks his way: where he lies, and from when to when
+   * ([x, y, from, to]; Drill.glance). The man who has taken charge of the squad (acting): he is given lead with it, but
+   * the 3D game is still sent what he was (view).
+   */
+  holdTo?: number;
+  downAt?: number;
+  look?: [number, number, number, number];
+  acting?: true;
   /**
    * Stretcher bearers (release 2; LandBattle.bearers): the battle time he fell wounded, not killed (wd), lying for the
    * bearers or, a light case (light), for his dressing; the time a light case is back in the line (back); the carry that
@@ -247,6 +327,14 @@ export interface Man {
   lagTo?: number;
   /** Squad life: battle time at which a man lying or kneeling who must get up and go gets up, his own moment (Drill.rises). */
   riseAt?: number;
+  /**
+   * Experience you can see (Drill.seasoned): the battle time he goes to ground as fire first comes at his squad on the
+   * march, his own moment (a veteran at once, a green man once his freeze is over), and, once he is down, the time he
+   * stays down till; and the time a green man held till his moment stops dead where he is (his freeze begins).
+   */
+  dropAt?: number;
+  dropTo?: number;
+  stopAt?: number;
   /** Squad life: one of his squad's sentries now (he kneels watching, and looks the widest way about him). */
   sentry?: true;
   /**
@@ -432,6 +520,7 @@ const DR = data as unknown as {
     platoon: Record<string, { squads: number; hq: number }> & { step: number; rows: number };
   };
   tanks: { post: number; back: number; shots: [number, number] };
+  tankmg: { reach: { open: number; cover: number; at: number; mg: number; rattle: number; near: number; scan: number }; low: number; last: number; lastReach: number; open: [number, number]; gap: [number, number]; pace: [number, number]; spell: [number, number]; lowSpell: [number, number]; pause: [number, number]; lowPause: number; lastPause: number; apart: number; rattleShare: number; hullArc: number; coaxArc: number; lay: number; turn: number; roofShare: number; hullShare: number; scale: number; models: Record<string, { coax: number; hull: number; roof: number; per: number; stock: number; roofStock?: number }> };
   life: {
     rush: { spread: number; wave: number; len: [number, number]; roll: number; knee: number; sprint: number; upright: number };
     drift: { across: number; along: number; every: [number, number] };
@@ -442,8 +531,10 @@ const DR = data as unknown as {
     pause: { every: [number, number]; for: [number, number]; gun: [number, number]; gunFor: [number, number] };
     ready: [number, number];
   };
+  leaders: { hold: [number, number]; train: [number, number, number]; floor: number; first: number; most: number; drop: [number, number]; knee: number; glance: { men: [number, number]; oneIn: number; within: number; after: [number, number]; for: [number, number]; rate: number } };
   hatch: { near: [number, number, number]; own: [number, number]; drop: [number, number]; quick: [number, number, number]; quiet: [number, number, number]; burst: number; mates: [number, number, number] };
   blast: { hold: number; anchor: number; most: Record<Calibre, number>; lying: number; kneeling: number };
+  seasoned: { grade: [number, number]; step: [number, number]; least: number; inside: number; freeze: [number, number]; quick: number; notice: number; cower: number; drop: number; knee: number; stride: number; rounds: { after: [number, number]; duck: [number, number]; bent: number; low: [number, number]; quiet: number }; rush: { close: [number, number]; long: number } };
   escort: {
     near: number; men: number; reach: number; gap: number; file: number; side: number; moving: number; pace: [number, number];
     clear: { ahead: number; behind: number; half: number; out: number; enemyAhead: number; crush: number; crushHalf: number; dodge: number; within: number };
@@ -462,6 +553,17 @@ const DR = data as unknown as {
     kit: Record<'cars' | 'bikes', { models: Record<string, string>; axisStand: string; stand: string }>;
     sw: Record<string, Record<string, Record<string, string>>>;
     most: number; ahead: number; side: number; back: number; run: number; every: number;
+  };
+  tankmind: {
+    react: [number, number]; quick: [number, number, number]; roll: [number, number]; straight: number; way: number; back: number;
+    halt: { reach: number; rare: number; soon: number; ahead: number; len: [number, number]; lay: [number, number]; see: number; fall: number; edge: number; apart: number };
+    top: number; pair: { own: number; len: [number, number]; pace: number; gather: number; rare: number }; shot: { first: [number, number]; fresh: number; pause: [number, number] }; keep: [number, number];
+    hull: number; fixed: string[];
+    watch: { reach: [number, number]; cone: number; first: number; hold: [number, number]; far: number; side: [number, number]; rear: number };
+    post: { cover: string[]; open: number; down: number; pace: number; idle: [number, number]; see: [number, number]; rise: number; near: number; jump: number; rest: [number, number] };
+    out: { spot: [number, number]; start: [number, number]; pace: [number, number]; trail: number; far: number; sight: number; arc: [number, number] };
+    lean: [number, number, number]; volley: { own: number; apart: number };
+    wait: { turn: number; own: number; pace: number; far: number }; weave: { side: [number, number]; len: [number, number] };
   };
 };
 export const DRILL = DR;
@@ -619,6 +721,22 @@ interface Squad {
   of?: number;
   /** A block's armoured cars, its AA vehicles or its jeeps and motorcycles (release 2, LandBattle.cars, aa, light; Drill.addEscorts): vehicles only, drawn with it. */
   esc?: 'cars' | 'aa' | 'light';
+  /**
+   * Tanks with minds of their own (Drill.tankmind; mindBlock): the pace the block is really making, for its tanks'
+   * drill (its pace, less where the rules jostle it to and fro); the battle time its fight began (the think it was
+   * first fighting after some seconds out of one: each tank then opens fire at her own moment), and when it was last
+   * fighting.
+   */
+  made?: number;
+  fightAt?: number;
+  foughtAt?: number;
+  /**
+   * Tank minds (mindBlock): the shells fired at it that have not landed, or landed since its last think, [x, y, the
+   * model struck or -1, the battle time it lands] each (a near miss or a hit moves a tank to her next post: mindPost);
+   * and the number of the last round looked at for them.
+   */
+  hits?: number[];
+  hitN?: number;
   fo: Man[] | null;
   foWith?: number;
   foOn?: number;
@@ -628,6 +746,12 @@ interface Squad {
   since: number;
   /** Squad life: how long the phase before this one lasted (a block whose phase flickers is not given fresh lags, Drill.lags). */
   lastFor?: number;
+  /**
+   * Experience you can see (Drill.seasoned): the battle time the first drawn round of a spell of fire lands at it, and
+   * the time the last one so far lands (a spell ends once no round has landed for DR.seasoned.rounds.quiet seconds).
+   */
+  fireAt?: number;
+  fireLast?: number;
   nextThink: number;
   /** Strength last step, and the share of strength it is losing a second (smoothed). */
   lastStr: number;
@@ -682,6 +806,15 @@ interface Squad {
   officerAt: number;
   /** Advancing by leapfrog (slow going) rather than rolling (fast): switched with a margin, so it does not flicker. */
   leap: boolean;
+  /**
+   * When the leader falls (Drill.leaders): its squads that have lost their leader and are not yet led again. Each: the
+   * leader who fell (by), the men who were with him as he fell (men), the rifleman at his elbow (mate); the battle
+   * time he fell (at) and the time the next man takes charge (next); and whether its first man is up again (up) and
+   * it has a leader again (led).
+   */
+  holds?: { by: Man; men: Man[]; mate?: Man; at: number; next: number; up?: true; led?: true }[];
+  /** When the leader falls: a key man fell this step, and his men join another section: its leaders are looked at again (Drill.oneLeader). */
+  recheck?: true;
   /** Its men on their feet this step, worked out once (Drill.memo). */
   memo?: Memo;
   /** Its men when it was drawn up (key men and the rest of their sections): the whole its strength is a share of. */
@@ -904,7 +1037,8 @@ export class Drill {
    * A tank's machine guns, seen firing (release 2; Brian, 25 November 2026, 15:55Z: "i never see the machine guns on
    * the tanks firing"; 15:56Z: "i dont want it to be all the time as thats unrealistic with ammo"): each tank her own
    * machine-gun mind: short bursts at targets worth the rounds, spells and pauses at her own pace and moment, the guns
-   * her model carries, and a stock of rounds that each burst draws down, so she eases off as it runs low. Looks only
+   * her model carries, and a stock of rounds that each burst draws down, so she eases off as it runs low; its last
+   * tenth she keeps for close defence (mgTenth: the design director, 25 November 2026, 22:22Z). Looks only
    * (the drill's own dice). It needs neither squad life nor the drill book; where the book is on as well, this takes
    * the place of the book's tank bursts. Off unless asked (DR.tankmg).
    */
@@ -927,6 +1061,24 @@ export class Drill {
    * picked up in turn with the last covering, and moved one at a time when shelled. Looks only (DR.teamwork). Off unless asked.
    */
   readonly teamwork: boolean;
+  /**
+   * Wounded and knocked-down men (release 2; Brian, 25 November 2026, 16:14Z: "im not seeing multiple soliders being
+   * taken out by an explosion if they are in the blast radius"): a shell burst gathers the losses its block is owed
+   * and is placed so that the men nearest it are the ones taken; of a block's fallen a share lie wounded and not
+   * dead (view()'s wd with no cy, with or without the bearers rule); living men inside the stun ring are knocked
+   * down and held a few seconds (kd). Looks only (the drill's own dice): the rules' losses stay as booked. It needs
+   * the burst rule (blast) for the bursts; the wounded share works without it. Off unless asked (DR.wounded).
+   */
+  readonly wounded: boolean;
+  /**
+   * Every man his own pace (release 2; Brian, 25 November 2026, 17:30Z: "it looks like they are all jogging at the
+   * same speed"; 16:24Z: "the soldiers of a squad keep zig zaging at the same time"): each man on foot moves at a
+   * pace a little his own and steps off at his own moment, sprints across the open under fire and dashes the short
+   * bound between cover, comes on slower under a gun or a load, tires after a long run; and a squad steers by its
+   * march and its track over some seconds, not by one step of its block, so its men no longer swerve together.
+   * Looks only (the drill's own dice): the rules never read it. Off unless asked (DR.paces).
+   */
+  readonly paces: boolean;
   /** Squad life: the men taking up their block's phase this think (their lag just over), as on a fresh phase. */
   private readonly freshNow = new Set<Man>();
   private readonly sup = new Suppression();
@@ -934,7 +1086,7 @@ export class Drill {
   private tankMemo: { t: number; at: Partial<Record<Side, [number, number][]>> } = { t: -1, at: {} };
   private readonly priMemo = new Map<number, { t: number; men: Man[] }>();
 
-  constructor(b: LandBattle, opts: { sections?: boolean; platoons?: boolean; book?: boolean; life?: boolean; hatches?: boolean; seasoned?: boolean; leaders?: boolean; tankmind?: boolean; tankmg?: boolean; exits?: boolean; teamwork?: boolean; scale?: number } = {}) {
+  constructor(b: LandBattle, opts: { sections?: boolean; platoons?: boolean; book?: boolean; life?: boolean; hatches?: boolean; seasoned?: boolean; leaders?: boolean; tankmind?: boolean; tankmg?: boolean; exits?: boolean; wounded?: boolean; paces?: boolean; teamwork?: boolean; scale?: number } = {}) {
     this.b = b;
     this.seed = b.ticket.seed;
     this.sections = !!opts.sections || !!opts.platoons;
@@ -947,6 +1099,8 @@ export class Drill {
     this.tankmg = !!opts.tankmg;
     this.exits = !!opts.exits;
     this.teamwork = !!opts.teamwork;
+    this.wounded = !!opts.wounded;
+    this.paces = !!opts.paces;
     this.byBook = opts.book ?? (this.platoons || this.life);
     this.scale = opts.scale !== undefined && Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : null;
     for (const u of b.units) { this.squads.set(u.id, this.make(u)); this.addMech(u); this.addEscorts(u); }
@@ -1244,6 +1398,8 @@ export class Drill {
       const s = this.escortSpot(sq, i, own, ahead), d = Math.hypot(s[0] - m.x, s[1] - m.y);
       m.aim = sq.esc === 'cars' && e && near < 1200 ? [e.x, e.y] : undefined;
       m.buttoned = (sq.esc === 'cars' && near < 400) || undefined;
+      // (tank minds: each her own place, her own moment to move off and to halt, her own aim: mindOut)
+      if (this.tankmind) { this.mindOut(sq, m, i, s, e, near); return; }
       if (d > 5) { m.spot = s; m.slotAt = s; m.pose = 'drive'; m.v = clamp(sq.speed * 1.2 + d * 0.25, 3, 12); m.until = t + 1; }
       else if (m.pose === 'drive' || m.pose === 'reverse') { m.spot = [m.x, m.y]; m.slotAt = s; m.v = 0; m.pose = 'halt'; }
     });
@@ -1721,6 +1877,231 @@ export class Drill {
    * posts, up to about 20 m from the place the rules lay her wreck, their own mark for its shelter; wreckSpot).
    */
   // ---- When the leader falls (Drill.leaders): its helpers stand just above falls(), below this line ----
+  // Brian, 25 November 2026, 15:11Z ("do those 3 ideas"): "When the leader falls: the squad hesitates a few seconds,
+  // then the next man takes charge." Looks only: the drill never chooses who falls and never keeps a man from falling;
+  // it acts out what follows, with its own dice (salts 191 to 198). And never the squad as one man: the men nearest
+  // him look his way each in his own moment, a man caught on the move drops in his own (each at his own step of the
+  // drill: ownMoment), those firing fire on, and they go on one after another, the next man first. The man who takes
+  // charge is marked in the drill only (Man.acting): the soldier the 3D game draws is never swapped (view).
+
+  /**
+   * A man has just fallen (falls: a key man, before his men join another section; thin: one of the rest). Where he led
+   * a squad (a rifle section's key man, a platoon squad's or its headquarters' leader, or the man who took charge after
+   * one), the men who were with him are noted (Squad.holds) and hesitate (DR.leaders): for 'hold' seconds by the
+   * squad's own dice, longer for green men and shorter for veterans ('train'), each stays where he is till his own
+   * moment: the next man's near the end of it, the rest after him a few at a time ('most'). Two or three of the men
+   * nearest him look his way (fewer of a squad cut down: 'oneIn'); men on the move drop; men firing fire on. Nothing
+   * is done to any of them in the step he falls: each looks or drops at a moment of his own after it (ownMoment). Not
+   * in a rout, nor riding or mounting, nor where 'floor' of them or fewer are left: then the next man takes charge at
+   * the block's next think.
+   */
+  private leaderFell(sq: Squad, m: Man): void {
+    const u = sq.u, t = this.b.t, H = DR.leaders, key = m.j === undefined;
+    // (a key man's men join another section next, regroup: who leads each group is looked at again once they have)
+    if (key && sq.tier >= 1) sq.recheck = true;
+    if (!(key ? m.hasSec && m.role === 'rifle' : m.lead) || !live(u) || this.b.over) return;
+    const g = grp(m), men = sq.men.filter((x) => x !== m && x.j !== undefined && x.fell === undefined && !x.job && grp(x) === g);
+    if (!men.length) return;
+    // (men already hesitating for the leader before him, the next man fallen too: they hesitate afresh, for this one)
+    for (const o of sq.holds ?? []) o.men = o.men.filter((x) => x !== m && !men.includes(x));
+    const mate = men.filter((x) => !x.pr && !x.lead && x.role !== 'mg').sort((a, c) => a.j! - c.j! || a.n - c.n)[0];
+    const quiet = sq.phase === 'flee' || !fighting(u) || men.length <= H.floor || !sq.down || sq.boarding !== undefined || sq.hop !== undefined;
+    const now = Math.round(t * 10);
+    const len = quiet ? 0 : (H.hold[0] + (H.hold[1] - H.hold[0]) * roll(this.seed, u.id, m.n, now, 191)) * H.train[this.band(u)];
+    // The next man is up 'first' seconds before the end of it, and never sooner than half a second (one think of the
+    // drill) after the last man caught on the move is down ('drop' at the most): no man is up again while his mates
+    // are still dropping, nor down and up again in one movement. Veterans, whose hesitation is short, are up then.
+    const next = quiet ? t : t + Math.max(H.drop[1] + 0.5, len - H.first);
+    (sq.holds ??= []).push({ by: m, men, mate, at: t, next });
+    if (quiet) return;
+    const held = men.filter((x) => !x.pr && !VEHICLE.has(x.role) && !CREWED.has(x.role) && x.role !== 'holder' && x.role !== 'officer' && x.role !== 'crew' && !CARRIED.has(x.pose) && !(x.aid !== undefined && t < x.until));
+    // (one of them held for the leader before him and not held now, gone to tend this one: held no more)
+    for (const x of men) if (x.holdTo !== undefined && !held.includes(x)) { x.holdTo = undefined; x.downAt = undefined; }
+    // Two or three of the men nearest him look his way (never the gun, which keeps to its work), and never more than
+    // one man in 'oneIn' of those held (one at least): a squad cut down to a few men does not turn to stare as one.
+    const G = H.glance, n = Math.min(G.men[0] + Math.floor((G.men[1] - G.men[0] + 1) * roll(this.seed, u.id, m.n, now, 192)), Math.max(1, Math.floor(held.length / G.oneIn)));
+    const far = (x: Man): number => Math.hypot(x.x - m.x, x.y - m.y);
+    const look = held.filter((x) => x.role !== 'mg' && far(x) < G.within).sort((a, c) => far(a) - far(c) || a.n - c.n).slice(0, n);
+    // Each man's own moment to go on: after the next man, in the order of their own dice, 'most' of the squad at the
+    // most (one man at least) each half second, one think of the drill: never the squad, nor half of it, in one instant.
+    const per = Math.max(1, Math.round(held.length * H.most));
+    const turn = new Map(held.map((x) => [x, roll(this.seed, u.id, x.n, now, 193)] as const));
+    [...held].sort((a, c) => turn.get(a)! - turn.get(c)! || a.n - c.n).forEach((x, i) => { x.holdTo = next + 0.5 * (1 + Math.floor(i / per)); });
+    // And each man's own moment to stop what he was at (ownMoment), none of them in this step. The men who look: the
+    // nearest first, the others after him. The rest of those caught on the move: in the order of their own dice. Each
+    // has his own share of the time for it ('after', 'drop') and his own moment within that share, so a few men never
+    // look or drop in one same instant.
+    for (const x of held) { x.downAt = undefined; x.look = undefined; }
+    look.forEach((x, i) => {
+      const from = t + G.after[0] + (G.after[1] - G.after[0]) * (i + roll(this.seed, u.id, x.n, now, 194)) / look.length;
+      x.look = [m.x, m.y, from, from + G.for[0] + (G.for[1] - G.for[0]) * roll(this.seed, u.id, x.n, now, 195)];
+      x.downAt = from;
+    });
+    const order = new Map(held.map((x) => [x, roll(this.seed, u.id, x.n, now, 196)] as const));
+    const moving = held.filter((x) => x.look === undefined && MOVING.has(x.pose)).sort((a, c) => order.get(a)! - order.get(c)! || a.n - c.n);
+    moving.forEach((x, i) => { x.downAt = t + H.drop[0] + (H.drop[1] - H.drop[0]) * (i + roll(this.seed, u.id, x.n, now, 198)) / moving.length; });
+  }
+
+  /**
+   * When the leader falls, each step (walk): a held man's own moment to stop what he was at has come (Man.downAt). One
+   * of the men who look to the fallen leader comes off his sights to look (glance); one caught on the move drops where
+   * he is. At his own step of the drill, not at its next think: so the men of a squad stop one after another, never
+   * together.
+   */
+  private ownMoment(sq: Squad, m: Man): void {
+    const t = this.b.t;
+    if (t < m.downAt! - 1e-6) return;
+    m.downAt = undefined;
+    if (m.holdTo === undefined) return;
+    if (m.look !== undefined && t < m.look[3]) this.goDown(sq, m, true);
+    else if (MOVING.has(m.pose)) this.goDown(sq, m);
+  }
+
+  /**
+   * When the leader falls: a man stops where he is. One caught on the move drops flat or behind what is there (lowPose),
+   * a share 'knee' of them only to a knee. One who looks to the fallen leader (glance) is off his sights for it,
+   * kneeling up, or lying if he lay.
+   */
+  private goDown(sq: Squad, m: Man, look = false): void {
+    const lying = LYING.has(m.pose);
+    if (MOVING.has(m.pose)) { m.v = 0; m.spot = [m.x, m.y]; m.cover = this.shelter(m.x, m.y, groundOf(this.b.field, m.x, m.y), this.threatDir(sq), true, false).kind; }
+    m.aim = undefined;
+    if (look) m.pose = WATCHING.has(m.pose) ? m.pose : lying ? 'hide' : 'wait';
+    else m.pose = m.role !== 'mg' && roll(this.seed, sq.u.id, m.n, Math.round(this.b.t * 10), 197) < DR.leaders.knee ? 'wait' : this.lowPose(m);
+  }
+
+  /**
+   * When the leader falls, each think of a block with a squad hesitating: the men still held, each with what he was
+   * at, to be looked at again once the block's drill has run (stayDown). A man whose own moment has come goes on,
+   * taking the block's phase up as on its first think: the next man first (takeCharge), the rest after him, never the
+   * squad in one instant. A man caught on the move drops at his own moment, between thinks (ownMoment). A rout ends
+   * it at once for all. One whom something else has got up meanwhile (his block gone on without him: the leash; a
+   * vehicle in his path) is held no more. `lagging`: the men squad life holds back this think (lags); the first man up
+   * is taken off it.
+   */
+  private hesitate(sq: Squad, lagging: [Man, Partial<Man>][] | null): [Man, Partial<Man>][] | null {
+    const t = this.b.t, broke = sq.phase === 'flee';
+    let kept: [Man, Partial<Man>][] | null = null, done = false;
+    for (const h of sq.holds!) {
+      if (!h.men.length) { done = true; continue; }
+      const due = broke || t >= h.next - 1e-6;
+      if (due && !h.up) {
+        // First on his feet: the man who leads them now where he is one of those held, else the next man; where neither
+        // is (no one fit to lead yet; he was not held), the first of them in the squad's order.
+        h.up = true;
+        const first = this.takeCharge(sq, h).find((x) => x.holdTo !== undefined) ?? h.men.filter((x) => x.holdTo !== undefined && x.fell === undefined).sort((a, c) => a.j! - c.j! || a.n - c.n)[0];
+        if (first) {
+          first.holdTo = undefined; first.downAt = undefined; first.lagTo = undefined; this.freshNow.add(first);
+          const i = lagging ? lagging.findIndex(([x]) => x === first) : -1;
+          if (i >= 0) lagging!.splice(i, 1);
+          for (const x of h.men) if (x.holdTo !== undefined) x.holdTo = Math.max(x.holdTo, t + 0.05);
+        }
+      } else if (due && !h.led) this.takeCharge(sq, h);
+      let on = false;
+      for (const x of h.men) {
+        if (x.holdTo === undefined) continue;
+        const out = x.fell !== undefined || !!x.job;
+        if (out || broke || t >= x.holdTo - 1e-6) { x.holdTo = undefined; x.downAt = undefined; if (!out) this.freshNow.add(x); continue; }
+        // (till his moment to drop, which comes in walk (ownMoment), he goes on with the stride he was in, no new one:
+        // stayDown; one who has stopped of himself meanwhile has no drop to make)
+        if (x.downAt !== undefined) { if (!MOVING.has(x.pose) && x.look === undefined) x.downAt = undefined; }
+        else if (MOVING.has(x.pose) && x.pose !== 'crawl' && x.pose !== 'creep') { x.holdTo = undefined; continue; }
+        on = true;
+        (kept ??= []).push([x, { pose: x.pose, v: x.v, spot: x.spot, cover: x.cover, aim: x.aim, until: x.until, slotAt: x.slotAt, el: x.el, rapid: x.rapid, hidden: x.hidden, rushed: x.rushed, shot: x.shot, sentry: x.sentry }]);
+      }
+      // Done with once it is led again and no man of it is held (or none of it is left).
+      if (!on && (h.led || !h.men.some((x) => x.fell === undefined))) { h.men = []; done = true; }
+    }
+    if (done) { const left = sq.holds!.filter((h) => h.men.length); sq.holds = left.length ? left : undefined; }
+    return kept;
+  }
+
+  /**
+   * When the leader falls, once the block's drill has run: a man still held whom it told to get up and go stays as he
+   * was (he starts no move; one shuffling clear of a mate finishes his shuffle), and so does one looking to the fallen
+   * leader, from the moment his look begins till it ends. What else it gave him he takes: he fires on, breaks off for a
+   * fresh clip, ducks as fire comes.
+   */
+  private stayDown(kept: [Man, Partial<Man>][]): void {
+    const t = this.b.t;
+    for (const [m, was] of kept) if (MOVING.has(m.pose) || MOVING.has(was.pose!) || (m.look !== undefined && m.downAt === undefined && t < m.look[3])) Object.assign(m, was);
+  }
+
+  /**
+   * When the leader falls: the hesitation over, the next man takes charge. The fallen leader's buddy, the rifleman at
+   * his elbow (teamOf), if he is a plain rifleman on his feet; else the squad's plain rifleman first in its order.
+   * Never one who keeps by a weapon, a scout, a stretcher bearer, a man on a carry, in a vehicle or tending a fallen
+   * comrade. Chosen only now, so a man hit meanwhile is not. Where the squad has a leader on his feet already (it has
+   * joined another section under its leader; its own leader, a light case, is back), he leads and no one is marked;
+   * else the next man is marked (lead and acting) and the squad forms on him. Returned: who should be first on his
+   * feet, the leader where he is one of them, then the next man. With no one fit to lead yet, none: asked again next think.
+   */
+  private takeCharge(sq: Squad, h: NonNullable<Squad['holds']>[number]): Man[] {
+    const t = this.b.t, left = h.men.filter((x) => x.fell === undefined);
+    if (!left.length) { h.led = true; return []; }
+    const can = (x: Man): boolean => x.fell === undefined && !x.job && x.role === 'rifle' && !x.pr && !x.scout && !x.br && !x.lead && !CARRIED.has(x.pose) && !(x.aid !== undefined && t < x.until);
+    let heir = h.mate && can(h.mate) ? h.mate : undefined;
+    if (!heir) for (const x of h.men) if (can(x) && (!heir || x.j! < heir.j! || (x.j === heir.j && x.n < heir.n))) heir = x;
+    const boss = this.leaderOf(sq, grp(heir ?? left[0]));
+    if (!boss && !heir) return [];
+    h.led = true;
+    if (!boss && heir) { heir.lead = true; heir.acting = true; sq.memo = undefined; }
+    return [...(boss && left.includes(boss) ? [boss] : []), ...(heir ? [heir] : [])];
+  }
+
+  /**
+   * When the leader falls: who leads a group now (grp), if anyone on his feet does: its rifle key man (his own squad),
+   * else a man marked lead, one who was made its leader before one who took charge. `but`: not counting this man.
+   */
+  private leaderOf(sq: Squad, g: number, but?: Man): Man | undefined {
+    const key = g % 8 === 0 ? this.memo(sq).keyOf.get((g - (g % 8)) / 8) : undefined;
+    if (key && key !== but && key.hasSec && key.role === 'rifle') return key;
+    let act: Man | undefined;
+    for (const x of sq.men) {
+      if (!x.lead || x === but || x.fell !== undefined || grp(x) !== g) continue;
+      if (!x.acting) return x;
+      if (!act || x.n < act.n) act = x;
+    }
+    return act;
+  }
+
+  /**
+   * When the leader falls: never two leaders in one group. A man who took charge steps down (his marks cleared, the
+   * squad formed afresh) where his group has its own leader on his feet (it joined another section; the leader is
+   * back), or another who took charge before him in the block's order. Asked only when groups change: a key man fell
+   * and his men joined another section (falls), or a light case is back on his feet (rise).
+   */
+  private oneLeader(sq: Squad): void {
+    sq.recheck = undefined;
+    for (const m of sq.men) {
+      if (!m.acting || m.fell !== undefined) continue;
+      const o = this.leaderOf(sq, grp(m), m);
+      if (o && (!o.acting || o.n < m.n)) { m.lead = undefined; m.acting = undefined; sq.memo = undefined; }
+    }
+  }
+
+  /**
+   * When the leader falls, with the stretcher bearers on: a light case is back on his feet (rise). The squad's own
+   * leader takes it back: the man who took charge steps down, with no second hesitation. One who had himself taken
+   * charge comes back a plain man where another leads the squad by now.
+   */
+  private leaderBack(sq: Squad, m: Man): void {
+    if (m.acting && (!m.lead || this.leaderOf(sq, grp(m), m))) { m.lead = undefined; m.acting = undefined; }
+    this.oneLeader(sq);
+  }
+
+  /**
+   * When the leader falls: where a man still and watching looks now (walk). One of the men nearest the fallen leader
+   * turns to him for a second or two from his own moment (Man.look), quicker than a man scans his arc ('rate'); before
+   * and after it, as he was: [the way he wants to face, how far he may turn this step].
+   */
+  private glance(m: Man, want: number | undefined, turn: number, rate: number): [number | undefined, number] {
+    const t = this.b.t, [x, y, from, to] = m.look!;
+    if (t >= to) { m.look = undefined; return [want, turn]; }
+    if (t < from) return [want, turn];
+    return [bearing(m.x, m.y, x, y), Math.min(rate, DR.leaders.glance.rate * DT)];
+  }
+
   private falls(sq: Squad): void {
     const u = sq.u, t = this.b.t;
     for (const m of sq.men) {
@@ -1748,8 +2129,10 @@ export class Drill {
       m.spot = [m.x, m.y];
       if (this.b.bearers && !sq.esc) this.hurt(sq, m);
       this.aid(sq, m);
+      if (this.leaders) this.leaderFell(sq, m);
       if (sq.tier >= 1) this.regroup(sq, m);
     }
+    if (this.leaders && sq.recheck) this.oneLeader(sq);
     if (sq.tier >= 1) this.thin(sq);
   }
 
@@ -1976,6 +2359,7 @@ export class Drill {
         this.killRound(tu, sq, m, undefined, false, v);
         m.pose = 'down'; m.spot = [m.x, m.y];
         this.aid(sq, m);
+        if (this.leaders) this.leaderFell(sq, m);
         if (n <= 0 || !cand.length) return;
       }
     }
@@ -2008,6 +2392,7 @@ export class Drill {
       m.spot = [m.x, m.y];
       if (b.bearers) this.hurt(sq, m);
       this.aid(sq, m);
+      if (this.leaders) this.leaderFell(sq, m);
     }
     sq.memo = undefined;
   }
@@ -2049,6 +2434,7 @@ export class Drill {
         const to = this.nearest(this.memo(sq).keys.filter((x) => !VEHICLE.has(x.role) && !CREWED.has(x.role)), m)?.[0];
         if (to) { m.sec = to.k; m.sub = undefined; m.lead = undefined; }
       }
+      if (this.leaders) this.leaderBack(sq, m);
       sq.memo = undefined;
       n--;
     }
@@ -2177,6 +2563,208 @@ export class Drill {
   private pinScale(u: LandUnit): number { return 1 / DR.xp.pinned[this.band(u)]; }
   private band(u: LandUnit): 0 | 1 | 2 { return u.xp < DR.xp.raw ? 0 : u.xp >= DR.xp.veteran ? 2 : 1; }
   // ---- Experience you can see (Drill.seasoned): its helpers follow this line ----
+  /**
+   * Experience you can see: a block's training read as a grade, 0 green to 1 veteran, in a straight line between the
+   * two ends of DR.seasoned.grade. By its experience alone, never its nation or the date. Its own reading of it: band()
+   * keeps its three bands for the rest of the drill.
+   */
+  private grade(u: LandUnit): number { const [lo, hi] = DR.seasoned.grade; return clamp((u.xp - lo) / (hi - lo), 0, 1); }
+
+  /** Experience: what a squad's gaps are multiplied by (DR.seasoned.step): green men bunch up, veterans spread out. */
+  private gaps(u: LandUnit): number { const [a, b] = DR.seasoned.step; return a + (b - a) * this.grade(u); }
+
+  /**
+   * Experience: the metres between the men of a section in its wedge, its key man standing ka metres across his block
+   * and the wedge's longer arm `ranks` men long. Bunched, never under DR.seasoned.least (the men still keep SPACE.men
+   * apart); opened out, only as far as leaves its outer man DR.seasoned.inside metres inside the leash (45 m: leash).
+   */
+  private stepOf(sq: Squad, ka: number, ranks: number): number {
+    const E = DR.seasoned, S = DR.sections.space, k = this.gaps(sq.u);
+    if (k <= 1) return Math.max(Math.min(S, E.least), S * k);
+    return Math.min(S * k, Math.max(S, (sq.u.w / 2 + 45 - E.inside - Math.abs(ka)) / Math.max(1, ranks)));
+  }
+
+  /** Experience: whether first fire can catch this man: on his own feet in an infantry block on foot, not one who keeps by a weapon, an officer or a tank. */
+  private afoot(sq: Squad, m: Man): boolean {
+    const u = sq.u;
+    return !sq.esc && sq.of === undefined && sq.down && sq.boarding === undefined && MOTION[u.kind] === 'foot' && u.kind !== 'cav'
+      && m.esc === undefined && !m.pr && !VEHICLE.has(m.role) && !CREWED.has(m.role) && m.role !== 'holder' && m.role !== 'officer';
+  }
+
+  /**
+   * Experience: seconds before a man takes up going to ground as fire first comes at his squad on the march (lags,
+   * 'ground' from the march; `lag` is squad life's own for him), by his block's grade. A green man DR.seasoned.freeze
+   * [least, most], his own length by his own dice. A veteran whose block goes on by bounds under DR.seasoned.quick, so
+   * he is never held (drop puts him down at his own moment); one whose block halts to fight or is pinned keeps squad
+   * life's own, so a veteran squad never takes its firing places as one. The grades between in a straight line. A
+   * section's key man is never held, whatever he carries: where he is its gun (lags counts only a rifleman its leader)
+   * he would stand frozen with his loaders beside him in his pose, a whole gun section as one.
+   */
+  private slow(sq: Squad, m: Man, lag: number, was: Phase): number {
+    if ((was !== 'column' && was !== 'deploy') || !this.afoot(sq, m)) return lag;
+    if (m.j === undefined) return Math.min(lag, DR.seasoned.quick);
+    const E = DR.seasoned, g = this.grade(sq.u), r = roll(this.seed, sq.u.id, m.n, Math.round(this.b.t * 2), 182);
+    return (1 - g) * (E.freeze[0] + (E.freeze[1] - E.freeze[0]) * r) + g * (sq.phase === 'bound' ? E.quick * r : lag);
+  }
+
+  /**
+   * Experience: fire first comes at a squad on the march (lags: its block leaves the march to go by bounds, to fight,
+   * or pinned). Each man is given his own moment to go down (dropAt: now for one not held, else as his lag ends; drop
+   * acts on it), and one held is to stop dead where he is at a moment of his own (stopAt: a third at once, the rest
+   * within DR.seasoned.notice seconds; freeze), so a squad's men are not seen to halt as one. He is frozen for the green
+   * share of his wait only (slow): the share of it that is squad life's own moment (his block halts to fight or is
+   * pinned) he first goes on as he was, as with squad life alone, so a veteran is never seen to freeze. A squad's leader
+   * and a section's key man are never held (lags, slow): he is seen going down first, his men after him one by one. Any
+   * other new order ends a freeze.
+   */
+  private caught(sq: Squad, m: Man, first: boolean): void {
+    const t = this.b.t;
+    if (!first || !this.afoot(sq, m)) {
+      // (a new order before his moment came: he is frozen no longer, and takes it up from a knee)
+      if (m.dropAt !== undefined && m.dropTo === undefined && t < m.dropAt + 1 && m.v === 0 && (m.pose === 'idle' || m.pose === 'cower')) m.pose = 'wait';
+      m.dropAt = m.dropTo = m.stopAt = undefined;
+      return;
+    }
+    m.dropAt = m.lagTo ?? t; m.dropTo = m.stopAt = undefined;
+    if (m.lagTo === undefined) return;
+    // (green: the freeze in his wait, as slow made it; own: the rest. Under a quarter second either counts for nothing.)
+    const E = DR.seasoned, n = Math.round(t * 2), green = (1 - this.grade(sq.u)) * (E.freeze[0] + (E.freeze[1] - E.freeze[0]) * roll(this.seed, sq.u.id, m.n, n, 182));
+    const own = m.lagTo - t - green;
+    if (green >= 0.25) m.stopAt = t + Math.max(own < 0.25 ? 0 : own, E.notice * Math.max(0, 1.5 * roll(this.seed, sq.u.id, m.n, n, 185) - 0.5));
+  }
+
+  /**
+   * Experience: how a frozen man is seen, crouched where he is ('cower') or stock still on his feet ('idle'). One man
+   * in every DR.seasoned.cower of a squad crouches, the others stand: by their places in the squad and not by dice. A
+   * group thinned out till that would have all its men who can freeze alike (those still on their feet, not its
+   * leader, nor those who keep by its gun: they take the gun's pose, pairs) takes it by their order among those left
+   * instead: the first stands, the second crouches. So two or more such men are never all given one pose, however few
+   * are left; and with its leader and its key man never frozen, no squad stands frozen all in one pose.
+   */
+  private stock(sq: Squad, m: Man): Pose {
+    const C = DR.seasoned.cower, low = (x: Man): boolean => (x.j ?? 0) % C === 1;
+    let n = 0, at = 0, lows = 0;
+    for (const o of this.memo(sq).bySec.get(grp(m)) ?? []) { if (o.lead) continue; if (o === m) at = n; if (low(o)) lows++; n++; }
+    return (n > 1 && (lows === 0 || lows === n) ? at % C === 1 : low(m)) ? 'cower' : 'idle';
+  }
+
+  /**
+   * Experience: a man held till his moment under first fire (caught) freezes where he stands, stock still or crouched
+   * (stock). One already down stays as he is. lags then holds him so till his moment.
+   */
+  private freeze(sq: Squad, m: Man): void {
+    const t = this.b.t;
+    m.stopAt = undefined;
+    if (!MOVING.has(m.pose)) return;
+    m.v = 0; m.spot = [m.x, m.y]; m.aim = undefined; m.until = t;
+    m.pose = this.stock(sq, m);
+  }
+
+  /**
+   * Experience: a man caught on the march by his squad's first fire (caught) goes to ground once his moment has come,
+   * and stays down DR.seasoned.drop seconds before his squad's fire and movement takes him on: true while he is at it.
+   * He goes down on a knee or flat by his own dice, firing if the enemy is in reach of his rifle, else watching. One
+   * still on his feet who goes to a knee, and the gun, run on a stride or three first (each his own, up to
+   * DR.seasoned.stride seconds more than a step; arrive puts him down), so even a squad of veterans is never down in one
+   * movement. Its leader drops to a knee where he stands.
+   */
+  private drop(sq: Squad, m: Man, e: LandUnit | null, close: boolean, dir: [number, number]): boolean {
+    const t = this.b.t, u = sq.u, E = DR.seasoned, gun = m.role === 'mg';
+    // Not his moment yet (held: lags puts him back as he was), or a moment long past (his block did something else then).
+    if (t < m.dropAt! - 1e-6) return false;
+    if (m.dropTo === undefined ? t > m.dropAt! + 1 : t >= m.dropTo - 1e-6) { m.dropAt = m.dropTo = m.stopAt = undefined; return false; }
+    if (m.dropTo !== undefined && !MOVING.has(m.pose)) {
+      // Down: he brings his rifle up once he has something to fire at.
+      if (close && !m.aim && (m.pose === 'wait' || m.pose === 'hide')) { m.aim = this.aimFor(sq, m, e); if (m.aim) m.pose = gun ? 'lmg_burst' : m.pose === 'wait' ? 'fire_kneel' : 'fire_prone'; }
+      return true;
+    }
+    const first = m.dropTo === undefined, lead = !!m.lead || (m.j === undefined && !gun);
+    const knee = lead || (!gun && roll(this.seed, u.id, m.n, 183) < E.knee);
+    const own = first && !lead ? DT + E.stride * roll(this.seed, u.id, m.n, Math.round(t * 2), 184) : 0;
+    if (first) m.dropTo = t + own + E.drop;
+    m.el = 1; m.until = m.dropTo!;
+    const dx = m.spot[0] - m.x, dy = m.spot[1] - m.y, d = Math.hypot(dx, dy), on = Math.min(d, m.v * own);
+    if (first && !lead && (knee || gun) && MOVING.has(m.pose) && m.pose !== 'crawl' && on >= 0.05) {
+      // On a stride or three, then down (arrive: on a knee, the gun lying by it).
+      const p = this.leash(sq, [m.x + (dx / d) * on, m.y + (dy / d) * on], -4);
+      m.spot = p; m.cover = this.shelter(p[0], p[1], groundOf(this.b.field, p[0], p[1]), dir, true, false).kind; m.aim = undefined;
+      return true;
+    }
+    m.v = 0; m.spot = [m.x, m.y]; m.cover = this.shelter(m.x, m.y, groundOf(this.b.field, m.x, m.y), dir, true, false).kind;
+    m.aim = close ? this.aimFor(sq, m, e) : undefined;
+    m.pose = m.aim ? (gun ? 'lmg_burst' : knee ? 'fire_kneel' : 'fire_prone') : knee ? 'wait' : 'hide';
+    return true;
+  }
+
+  /**
+   * Experience: a drawn round is on its way at this squad, landing at battle time l (round). The first of a spell of
+   * fire is marked (fireAt, the earliest landing of it) and the latest landing kept (fireLast); a spell is over once no
+   * round has landed for DR.seasoned.rounds.quiet seconds, and the next round then counts as a first round again.
+   */
+  private incoming(sq: Squad, l: number): void {
+    if (sq.fireLast === undefined || l > sq.fireLast + DR.seasoned.rounds.quiet) sq.fireAt = l;
+    else if (l < sq.fireAt! && this.b.t < sq.fireAt!) sq.fireAt = l;
+    if (sq.fireLast === undefined || l > sq.fireLast) sq.fireLast = l;
+  }
+
+  /**
+   * Experience: the first drawn rounds land at a squad still on the march, before its block itself reacts (advance, not
+   * under fire; follow has just given him his marching step). Each man on foot makes one short reaction at a moment of
+   * his own within DR.seasoned.rounds.after of the first round landing, its leader first (and a section's key man
+   * whatever he carries: he ducks, never frozen, so a gun section does not stop as one). A share of the men equal to
+   * their grade duck: down where they are (on a knee or flat by their own dice) for 'duck' seconds; a share 'bent' of
+   * those then go on bent low for 'low' seconds, each his own spell, the others as they marched, so a squad neither
+   * gets up nor straightens up as one. The rest stop frozen where they stand (stock; shorter the higher the grade),
+   * then go on. Worked out from the mark alone each think, so it ends by itself and comes once to a spell of fire; a
+   * man the block has left outside its leash is not held, so no one is left behind.
+   */
+  private flinch(sq: Squad, m: Man, dir: [number, number]): void {
+    const t = this.b.t, u = sq.u, E = DR.seasoned, R = E.rounds;
+    // (back on the march and not held: a moment under first fire still to come is off)
+    if (m.dropAt !== undefined && m.lagTo === undefined) m.dropAt = m.dropTo = m.stopAt = undefined;
+    if (sq.fireAt === undefined || t < sq.fireAt - 1e-6 || !this.afoot(sq, m)) return;
+    if (t >= sq.fireAt + R.after[1] + Math.max(R.duck[1] + R.low[1], E.freeze[1])) return;
+    const g = this.grade(u), n = Math.round(sq.fireAt * 10), lead = !!m.lead || m.j === undefined;
+    const ducks = lead || roll(this.seed, u.id, m.n, n, 187) < g, r = roll(this.seed, u.id, m.n, n, 188);
+    const at = sq.fireAt + (lead ? 0 : R.after[0] + (R.after[1] - R.after[0]) * roll(this.seed, u.id, m.n, n, 186));
+    const len = ducks ? R.duck[0] + (R.duck[1] - R.duck[0]) * r : (1 - g) * (E.freeze[0] + (E.freeze[1] - E.freeze[0]) * r);
+    if (t < at - 1e-6) return;
+    if (t >= at + len - 1e-6) {
+      // His moment is over: a share of those who ducked go on bent low for a spell of their own, then as the rest go.
+      if (ducks && (m.pose === 'walk' || m.pose === 'run') && roll(this.seed, u.id, m.n, n, 181) < R.bent && t < at + len + R.low[0] + (R.low[1] - R.low[0]) * roll(this.seed, u.id, m.n, n, 189)) m.pose = 'advance';
+      return;
+    }
+    const p: [number, number] = [m.x, m.y];
+    if (this.leash(sq, p, -6) !== p) return;
+    m.v = 0; m.spot = p; m.until = t + 0.5;
+    if (ducks) {
+      m.cover = this.shelter(m.x, m.y, groundOf(this.b.field, m.x, m.y), dir, true, false).kind;
+      m.pose = m.role !== 'mg' && (lead || roll(this.seed, u.id, m.n, 183) < E.knee) ? 'wait' : 'hide';
+    } else m.pose = this.stock(sq, m);
+  }
+
+  /**
+   * Experience: fire and movement by the block's grade (rushOf): where in his army's lengths of rush a man's own falls
+   * (at, and the part of the range his dice then move him over: a green man toward the long end, a veteran toward the
+   * short), and what the time over which a squad's teams rise is multiplied by (close: a green squad's teams get up
+   * closer together, a veteran squad's further apart). On the rolling advance (advance) the same: a green squad's teams
+   * drop closer together and each man's spell down leans short (so his rush long), a veteran's the other way.
+   */
+  private rushBy(u: LandUnit): { at: number; part: number; close: number } {
+    const E = DR.seasoned.rush, g = this.grade(u);
+    return { at: E.long * (1 - g), part: 1 - E.long, close: E.close[0] + (E.close[1] - E.close[0]) * g };
+  }
+
+  /**
+   * Experience: a man on the move would go down within the room two men keep (SPACE.men) of a mate already down. A
+   * bunched squad's men go down closer together in time, so on the rolling advance (advance) he goes on a step or two
+   * first, and goes down at his next think: bunched, never piled up.
+   */
+  private piled(sq: Squad, m: Man): boolean {
+    if (!MOVING.has(m.pose)) return false;
+    for (const o of this.memo(sq).up) if (o !== m && !MOVING.has(o.pose) && Math.hypot(o.x - m.x, o.y - m.y) < SPACE.men) return true;
+    return false;
+  }
   private nums(u: LandUnit): Nums {
     const s = this.b.style[u.side];
     return DR.style[s && this.b.ai[u.side] ? s.id : 'plain'];
@@ -2414,8 +3002,12 @@ export class Drill {
   private rushOf(sq: Squad, m: Man, n: number, bk: { rush: number; slot: number; cyc: number }, bound: Bound): [number, number] {
     const L = DR.life.rush, u = sq.u, [ti, nT] = this.teamOf(sq, m), wave = bound === 'wave';
     const lo = wave ? 0.7 : L.len[0], hi = wave ? 1 : L.len[1];
-    const len = bk.rush * (lo + (hi - lo) * roll(this.seed, u.id, m.n, n, 103));
-    const W = Math.max(0, Math.min(wave ? L.wave : L.spread * bk.slot, bk.cyc - bk.rush * hi - 0.35));
+    // (experience: a green squad's teams rise closer together and rush longer, a veteran squad's spread out and rush
+    // shorter; a man's rush never longer than his army's longest, and the teams' rises still inside the squad's own turn)
+    const E = this.seasoned ? this.rushBy(u) : null, r = roll(this.seed, u.id, m.n, n, 103);
+    const len = bk.rush * (lo + (hi - lo) * (E ? E.at + E.part * r : r));
+    let W = Math.max(0, Math.min(wave ? L.wave : L.spread * bk.slot, bk.cyc - bk.rush * hi - 0.35));
+    if (E) W = Math.max(0, Math.min(W * E.close, bk.cyc - bk.rush * (lo + (hi - lo) * (E.at + E.part)) - 0.35));
     const ord = nT <= 1 || (bound === 'body' && m.role === 'mg') ? 0 : (ti + Math.floor(roll(this.seed, u.id, grp(m), n, 101) * nT)) % nT;
     return [(ord / Math.max(1, nT)) * W + 0.3 * roll(this.seed, u.id, m.n, n, 102), len];
   }
@@ -2454,15 +3046,21 @@ export class Drill {
         let lag = lo + (hi - lo) * r * (kind === 'ground' && this.band(u) === 0 ? R.raw : 1);
         if (kind === 'up') lag = lo + (hi - lo) * ((ti + 0.6 * r) / Math.max(1, nT));
         else if (kind === 'back') lag = m.role === 'mg' ? hi : lo + (hi - lo) * 0.8 * r;
+        // (experience: going to ground under first fire by the block's grade, a green man slow to it, a veteran at once)
+        else if (kind === 'ground' && this.seasoned) lag = this.slow(sq, m, lag, was);
         // Leaders act at once (a rout has none).
         if (kind !== 'break' && (m.lead || (m.j === undefined && m.role !== 'mg'))) lag = Math.min(lag, 0.2);
         if (lag >= 0.25) m.lagTo = t + lag;
+        // (experience: caught on the march by its first fire, each man is given his own moment to go down)
+        if (this.seasoned) this.caught(sq, m, kind === 'ground' && (was === 'column' || was === 'deploy'));
       }
     }
     let held: [Man, Partial<Man>][] | null = null;
     for (const m of up) {
       if (m.lagTo === undefined) continue;
       if (t >= m.lagTo - 1e-6) { m.lagTo = undefined; this.freshNow.add(m); continue; }
+      // (experience: a man held under first fire stops dead at his own moment, and is held so)
+      if (this.seasoned && m.stopAt !== undefined && t >= m.stopAt - 1e-6) this.freeze(sq, m);
       (held ??= []).push([m, { pose: m.pose, v: m.v, spot: m.spot, cover: m.cover, aim: m.aim, until: m.until, slotAt: m.slotAt, el: m.el, rapid: m.rapid, hidden: m.hidden, rushed: m.rushed, shot: m.shot, sentry: m.sentry }]);
     }
     return held;
@@ -2543,7 +3141,9 @@ export class Drill {
   private drift(sq: Squad, m: Man): [number, number] {
     const D = DR.life.drift, u = sq.u;
     const T = D.every[0] + (D.every[1] - D.every[0]) * roll(this.seed, u.id, m.n, 126), ph = (this.b.t / T + roll(this.seed, u.id, m.n, 127)) * Math.PI * 2;
-    return [D.across * Math.sin(ph * 0.73 + 6.3 * roll(this.seed, u.id, m.n, 128)), D.along * Math.sin(ph)];
+    // (experience: a bunched squad's men drift less, a spread one's more, as their gaps)
+    const k = this.seasoned ? this.gaps(u) : 1;
+    return [D.across * k * Math.sin(ph * 0.73 + 6.3 * roll(this.seed, u.id, m.n, 128)), D.along * k * Math.sin(ph)];
   }
 
   /**
@@ -2623,7 +3223,7 @@ export class Drill {
     ph = sq.phase;
     sq.ran = u.state === 'routing' || (sq.ran && u.state === 'wavering' && t - sq.since < 8);
     if (ph === 'gone') return;
-    if (u.kind === 'arm') { this.tanks(sq); return; }
+    if (u.kind === 'arm') { this.tanks(sq); if (this.tankmg) this.mgThink(sq); return; }
     if (u.kind === 'art') { if (u.team === 'snp') this.snipers(sq); else if (u.team) this.teams(sq); else this.guns(sq); return; }
     if (sq.boarding !== undefined) { this.board(sq); return; }
     // Men in lorries: getting down, a man at a time over each tailboard; the block's phase takes them once the last is
@@ -2633,6 +3233,8 @@ export class Drill {
     if ((u.kind === 'mot' || u.kind === 'cav') && !sq.down) { this.mounted(sq); return; }
     // Squad life: each man takes a fresh phase up in his own moment; till then he goes on with what he was at.
     const held = this.life ? this.lags(sq, was) : null;
+    // (when the leader falls: the men of a squad hesitating start no move till each man's own moment)
+    const stay = this.leaders && sq.holds ? this.hesitate(sq, held) : null;
     switch (ph) {
       case 'column': this.column(sq); break;
       case 'deploy': this.advance(sq, false); break;
@@ -2648,6 +3250,7 @@ export class Drill {
       default: break;
     }
     if (held) for (const [m, snap] of held) Object.assign(m, snap);
+    if (stay) this.stayDown(stay);
     this.ambush(sq);
     this.officer(sq);
     for (const m of sq.men) if (m.fell === undefined && !m.job && MOVING.has(m.pose) && Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 0.3) this.arrive(sq, m);
@@ -2752,14 +3355,17 @@ export class Drill {
       return [ka + Math.cos(ang) * r, kl + Math.sin(ang) * r * 0.8];
     }
     const ph = sq.phase;
-    if (m.scout && (ph === 'deploy' || ph === 'bound' || ph === 'column')) return [ka + (i % 2 ? 5 : -5) + m.jx * 0.3, kl + S.ahead + m.jy * 0.4];
+    // (experience: a green section's scouts keep closer to each other, a veteran section's further apart)
+    if (m.scout && (ph === 'deploy' || ph === 'bound' || ph === 'column')) return [ka + (i % 2 ? 5 : -5) * (this.seasoned ? this.gaps(sq.u) : 1) + m.jx * 0.3, kl + S.ahead + m.jy * 0.4];
     // Its automatic weapon at the end of the wedge's outer arm (toward the block's flank, a second gun inward); the rest
     // alternately either side of the key man, inner arm first.
     const outer = key?.team === 1 ? -1 : 1, rest = mates.filter((x) => x.role !== 'mg');
     let side: number, rank: number;
     if (m.role === 'mg') { const g = mates.filter((x) => x.role === 'mg').indexOf(m); side = g % 2 ? -outer : outer; rank = Math.ceil(rest.length / 2) + 1; }
     else { const r = Math.max(0, rest.indexOf(m)); side = r % 2 ? outer : -outer; rank = Math.floor(r / 2) + 1; }
-    return [ka + side * rank * S.space + m.jx * 0.25, kl - rank * S.space * 0.35 + m.jy * 0.3];
+    // (experience: the step between its men by the block's grade: green men bunch up, veterans spread out)
+    const step = this.seasoned ? this.stepOf(sq, ka, Math.ceil(rest.length / 2) + 1) : S.space;
+    return [ka + side * rank * step + m.jx * 0.25, kl - rank * step * 0.35 + m.jy * 0.3];
   }
 
   /**
@@ -2985,7 +3591,8 @@ export class Drill {
     const R = reach ?? DR.xp.seek[this.band(u)] * (u.kind === 'arm' || u.kind === 'art' ? 2 : 1);
     const going = m.role === 'tank' ? 'tracks' : m.role === 'gun' ? 'guns' : m.role === 'lorry' ? 'wheels' : 'foot';
     const pace = LAND.pace[going];
-    const sep = m.role === 'tank' ? 16 : m.role === 'gun' ? 18 : m.role === 'lorry' ? 10 : CREWED.has(m.role) ? DR.teams.sep : 3.5;
+    // (experience: the room a man on foot keeps from his mates by his block's grade, never under the room between men)
+    const sep = m.role === 'tank' ? 16 : m.role === 'gun' ? 18 : m.role === 'lorry' ? 10 : CREWED.has(m.role) ? DR.teams.sep : this.seasoned ? Math.max(SPACE.men, 3.5 * this.gaps(u)) : 3.5;
     const cand: [number, number][] = [p];
     const a0 = roll(this.seed, u.id, m.n, 7) * Math.PI * 2;
     // Settling into a line (not a rush): he looks further, to the wood's edge or the houses behind the line or beside it,
@@ -3097,8 +3704,8 @@ export class Drill {
    * Keeps a man (a tank, a lorry) at a place that moves with his block: he heads a little ahead of it, so he keeps its
    * pace and never stops short; one left behind closes up faster. When the block halts he reaches it and settles.
    */
-  private follow(sq: Squad, m: Man, s: [number, number], pose: Pose, mul = 1): void {
-    const v = sq.speed, on = v > 0.4, [hx, hy] = fwd(sq.heading);
+  private follow(sq: Squad, m: Man, s: [number, number], pose: Pose, mul = 1, way = sq.heading): void {
+    const v = sq.speed, on = v > 0.4, [hx, hy] = fwd(way);
     const off = Math.hypot(s[0] - m.x, s[1] - m.y), behind = (s[0] - m.x) * hx + (s[1] - m.y) * hy;
     // He heads for a point a second and a half ahead of his place (or of himself, where he is ahead of it), so he never
     // runs onto it while the block moves; behind his place he closes up, ahead of it he eases off, and well ahead of it
@@ -3199,8 +3806,12 @@ export class Drill {
         // Squad life: each man comes to the ready at his own distance from the enemy (its scouts first), not the line as one.
         const ready = this.life && e ? this.readyNow(sq, m, gapE) : close;
         this.follow(sq, m, s, dbl ? 'run' : ready ? 'advance' : 'walk');
+        // (experience: the first rounds landing at a squad still on the march: each man ducks or stops a moment, then goes on)
+        if (this.seasoned && !dbl) this.flinch(sq, m, dir);
         continue;
       }
+      // (experience: caught on the march by its first fire, each man goes to ground at his own moment and stays down a spell)
+      if (this.seasoned && m.dropAt !== undefined && this.drop(sq, m, e, close, dir)) continue;
       if (m.role === 'officer' && sq.leap) {
         // The officer goes with whichever team is moving, crouched, a few paces behind it.
         this.follow(sq, m, s, 'creep'); m.aim = undefined; m.el = undefined;
@@ -3277,11 +3888,13 @@ export class Drill {
         if (life && bound !== 'wave') {
           // Squad life: his squad's turn to drop comes team by team over DR.life.rush.roll seconds, each man down a spell
           // of his own: never a whole squad down and up as one.
-          ph = (ph - this.teamShare(sq, m) * DR.life.rush.roll + 600) % 6;
-          drop = 1.2 + roll(this.seed, u.id, m.n, Math.floor((t - this.turnFor(sq, m, bound) * 2 + 600) / 6), 107);
+          // (experience: a green squad's teams drop closer together and stay down less, a veteran squad's spread out, rushBy)
+          const E = this.seasoned ? this.rushBy(u) : null, r = roll(this.seed, u.id, m.n, Math.floor((t - this.turnFor(sq, m, bound) * 2 + 600) / 6), 107);
+          ph = (ph - this.teamShare(sq, m) * (E ? Math.min(DR.life.rush.roll * E.close, 6) : DR.life.rush.roll) + 600) % 6;
+          drop = 1.2 + (E ? 1 - E.at - E.part * r : r);
         }
         const gain = (s[0] - m.x) * hx + (s[1] - m.y) * hy, behind = gain > 12;
-        if (ph < drop && m.role !== 'officer' && !behind) {
+        if (ph < drop && m.role !== 'officer' && !behind && !(this.seasoned && this.piled(sq, m))) {
           if (m.pose !== 'fire_prone' && m.pose !== 'lmg_burst' && m.pose !== 'fire_kneel') { m.spot = [m.x, m.y]; m.cover = 'none'; }
           // (squad life: for so short a halt some only drop to a knee, fire and are up again)
           const knee = life && roll(this.seed, u.id, m.n, 110) < DR.life.rush.knee;
@@ -3780,8 +4393,10 @@ export class Drill {
     const u = sq.u, t = this.b.t;
     if (u.kind === 'mot') {
       sq.veh.forEach((v, i) => {
-        const s = toWorld(u, sq.heading, 0, u.d / 2 - 8 - i * 18);
+        // (tank minds: each her own place in the column, and her own moment to move off: mindLean, mindOff)
+        const s0 = toWorld(u, sq.heading, 0, u.d / 2 - 8 - i * 18), s = this.tankmind ? this.mindLean(sq, v, s0, sq.heading, i) : s0;
         this.follow(sq, v, s, 'drive'); v.until = t + 1;
+        if (this.tankmind) this.mindOff(sq, v, i === 0);
       });
       for (const m of this.up(sq)) { m.pose = 'mounted'; m.aim = undefined; m.cover = 'none'; } // aboard: carried in his lorry (walk)
       return;
@@ -4060,12 +4675,14 @@ export class Drill {
         const s = toWorld(u, u.face, (i - 0.5) * 20, -u.d / 2 - (sq.close ? 30 : 40));
         this.follow(sq, v, s, 'drive', 1.2); return;
       }
-      const s = toWorld(u, u.face, (i - (sq.veh.length - 1) / 2) * 24, -u.d / 2 - 110);
+      const s0 = toWorld(u, u.face, (i - (sq.veh.length - 1) / 2) * 24, -u.d / 2 - 110), s = this.tankmind ? this.mindLean(sq, v, s0, u.face) : s0;
       if (Math.hypot(s[0] - v.slotAt[0], s[1] - v.slotAt[1]) > 25 || t < 0.2) {
         const best = this.seek(sq, v, s, this.threatDir(sq), sq.veh, 30);
         v.spot = [best.x, best.y]; v.slotAt = s; v.cover = best.kind; v.pose = 'drive'; v.v = Math.min(16, Math.max(6, sq.speed * 1.3));
       } else if (Math.hypot(v.x - v.spot[0], v.y - v.spot[1]) < 1.5) { v.pose = 'parked'; v.v = 0; }
     });
+    // (tank minds: each lorry her own place in the row, above, and her own moment to move off: mindLean, mindOff)
+    if (this.tankmind) for (const v of sq.veh) this.mindOff(sq, v);
   }
 
   /**
@@ -4140,7 +4757,641 @@ export class Drill {
    * wreckOffset), so she is never far from it; knocked out, she burns where she stood (falls, wreckSpot).
    */
   // ---- Tanks with minds of their own (Drill.tankmind): its helpers stand just above tanks(), below this line ----
-  private tanks(sq: Squad): void {
+
+  /**
+   * Tank minds: the phase this tank's commander is acting on. When his block's phase changes (or it goes from rolling
+   * on fast to leapfrogging, or is shaken) he takes it up at his own moment, DR.tankmind.react seconds later (a veteran
+   * crew sooner, 'quick'); the platoon leader, its first tank, at once. Till then she goes on with what she was at:
+   * her old phase's drill is still run for her each think, so a tank driving with her block keeps her moving place. A
+   * change gone again before his moment comes he never takes up.
+   */
+  private mindPhase(sq: Squad, m: Man, lead: boolean): Phase {
+    const T = DR.tankmind, u = sq.u, t = this.b.t, M = (m.mind ??= {});
+    const fast = (sq.made ?? sq.speed) >= T.roll[M.fast ? 0 : 1], shaken = u.state === 'wavering';
+    if (M.ph === undefined || (sq.phase === M.ph && fast === !!M.fast && shaken === !!M.shaken)) M.at = undefined;
+    else if (M.at === undefined) M.at = lead ? t : t + (T.react[0] + (T.react[1] - T.react[0]) * roll(this.seed, u.id, m.n, Math.round(t * 2), 301)) * T.quick[this.band(u)];
+    if (M.ph === undefined || (M.at !== undefined && t >= M.at - 1e-6)) {
+      // (a new phase: whatever she had timed for the old one is dropped)
+      if (M.ph !== sq.phase) M.stop = M.go = M.fire = undefined;
+      M.ph = sq.phase; M.fast = fast; M.shaken = shaken; M.at = undefined;
+    }
+    return M.ph;
+  }
+
+  /**
+   * Tank minds: the way this tank is going. Coming on with a block that goes steadily (straight over the last seconds:
+   * mindBlock, and making DR.tankmind.way metres a second or more), it is the way the block has made over those
+   * seconds, not its last step's: a block the rules shove a little aside each step does not swing her from side to
+   * side. And she keeps her way when her block's turns about under her (the rules jostle it back in a fight, or it
+   * gives a little ground): she takes the new way up at her own moment (DR.tankmind.react, her own dice), and never
+   * sooner than her own least time since she last changed direction (mindStep), so a jostle shorter than that never
+   * turns her and no platoon goes into reverse as one. A lesser turn she follows as it comes, and in any phase but
+   * coming on her block's last step is her way, as the plain drill's.
+   */
+  private mindWay(sq: Squad, m: Man): number {
+    const T = DR.tankmind, M = m.mind!, t = this.b.t, on = M.ph === 'deploy' || M.ph === 'bound';
+    const H = on && sq.net >= T.way && (sq.made ?? 0) >= sq.speed - 1e-9 ? Math.atan2(sq.wx, sq.wy) : sq.heading;
+    if (M.h === undefined || !on || Math.cos(H - M.h) > 0) { M.turn = undefined; return (M.h = H); }
+    if (M.turn === undefined) M.turn = Math.max(M.keep ?? 0, t + (T.react[0] + (T.react[1] - T.react[0]) * roll(this.seed, sq.u.id, m.n, Math.round(t * 2), 302)) * T.quick[this.band(sq.u)]);
+    if (t >= M.turn - 1e-6) { M.turn = undefined; return (M.h = H); }
+    return M.h;
+  }
+
+  /** Tank minds: a tank's top speed: closing up after a halt she may go a little faster than the plain drill's catch-up (DR.tankmind.top). */
+  private mindTop(sq: Squad): number { return Math.max(tankTop(sq), DR.tankmind.top); }
+
+  /**
+   * Tank minds, every step (walk): what her commander has timed for this step, to the step and not to her block's half
+   * second. His own moment to take up his block's new phase or way comes: her drill is run for her at that step
+   * (tanks, for her alone). Her halt to fire begins: she stops where she is. She keeps her direction: forward or
+   * backing, she may change only once her own least time since her last change is up (DR.tankmind.keep), and stands
+   * meanwhile, her order held; a reverse she is ordered into (falling back, backing out of a firing post) is real and
+   * taken at once, and so is her block's call back inside its leash. Coming on she does not back toward the enemy: she
+   * turns about. And her round goes, if she still stands with her gun laid and her block still fights. Returns her
+   * top speed.
+   */
+  private mindStep(sq: Squad, m: Man): number {
+    const M = m.mind, t = this.b.t;
+    if (!M) return this.mindTop(sq);
+    // (a block's cars, AA vehicles, jeeps and motorcycles have no commander's mind: only their own moment to move off)
+    if (sq.esc) { this.mindTick(sq, m); return this.mindTop(sq); }
+    // Her commander's own moment, come between two thinks of her block (he takes up its new phase, or its way turned
+    // about, or stops her to wait for her place to come up; or her moment to back down behind her firing place, to
+    // come up to it, or, standing, to leave her post after a near miss): her drill is run for her now, at her own step.
+    const stood = M.still !== undefined;
+    if ((M.at !== undefined && t >= M.at - 1e-6) || (M.turn !== undefined && t >= M.turn - 1e-6) || (M.ease !== undefined && t >= M.ease - 1e-6) || (M.rise !== undefined && t >= M.rise - 1e-6) || (stood && M.shift !== undefined && t >= M.shift - 1e-6)) {
+      const ease = M.ease, rise = M.rise, shift = M.shift;
+      this.tanks(sq, m);
+      if (ease !== undefined && M.ease === ease) M.ease = undefined;
+      if (rise !== undefined && M.rise === rise && t >= rise - 1e-6) M.rise = undefined;
+      if (stood && shift !== undefined && M.shift === shift && t >= shift - 1e-6) M.shift = undefined;
+    }
+    if (M.stop !== undefined && t >= M.stop - 1e-6) {
+      M.stop = undefined;
+      // (stopped short of the cover she was making for, she is not in it)
+      if (MOVING.has(m.pose)) { if (Math.hypot(m.spot[0] - m.x, m.spot[1] - m.y) > 2) m.cover = 'none'; m.pose = 'halt'; m.v = 0; m.spot = [m.x, m.y]; }
+    }
+    // (the order she holds while she may not yet change direction: taken up again once she may, unless another has come)
+    if (M.wait) {
+      if (m.pose !== 'halt' || m.v !== 0 || m.spot[0] !== M.wait[1] || m.spot[1] !== M.wait[2]) M.wait = undefined;
+      else if (t >= (M.keep ?? 0) - 1e-6) { m.pose = 'drive'; m.v = M.wait[0]; M.wait = undefined; }
+    }
+    if (m.v > 0 && m.pose === 'drive') {
+      // (as walk's own switch: a place close behind her she backs into)
+      const dx = m.spot[0] - m.x, dy = m.spot[1] - m.y, d = Math.hypot(dx, dy);
+      let back = d > 0.3 && d < 30 && Math.abs(wrap(Math.atan2(dx, dy) - m.face)) > 1.9;
+      // Coming on, she backs no further than DR.tankmind.back metres toward the enemy, her rear to him (nor with none
+      // about): her nose turned away from her way, she turns about where she stands and drives on. (walk backs a tank
+      // into a place under 30 m behind her: set further off on the same line, she pivots to it.) Counted from where she
+      // began to back (rb), so a place kept a few metres behind her tail as she backs does not keep her backing.
+      const on = back && (M.ph === 'bound' || M.ph === 'deploy') && (!m.aim || dx * (m.aim[0] - m.x) + dy * (m.aim[1] - m.y) > 0);
+      M.rb = on ? M.rb ?? [m.x, m.y] : undefined;
+      if (on && (d > DR.tankmind.back || Math.hypot(m.x - M.rb![0], m.y - M.rb![1]) > DR.tankmind.back)) { m.spot = [m.x + (dx / d) * 31, m.y + (dy / d) * 31]; back = false; }
+      if (back !== !!M.rev) {
+        // (left outside her block's leash she may not stand: its call back in is taken at once, as an order to reverse is)
+        const p: [number, number] = [m.x, m.y];
+        if (t >= (M.keep ?? 0) - 1e-6 || this.leash(sq, p) !== p) { M.rev = back || undefined; M.keep = t + this.mindKeep(sq, m); }
+        else { M.wait = [m.v, m.spot[0], m.spot[1]]; m.pose = 'halt'; m.v = 0; }
+      }
+    } else if (m.v > 0 && m.pose === 'reverse' && !M.rev) { M.rev = true; M.keep = t + this.mindKeep(sq, m); }
+    if (M.rb && m.v === 0 && !M.wait) M.rb = undefined;
+    const still = m.v === 0 && !MOVING.has(m.pose);
+    if (!still) M.still = undefined; else if (M.still === undefined) M.still = t;
+    if (M.fire !== undefined && t >= M.fire - 1e-6) {
+      if (still && m.aim && sq.u.engaged !== undefined && live(sq.u)) { m.shot = t; m.pose = 'fire'; if (M.post) m.shots = (m.shots ?? 0) + 1; }
+      M.fire = undefined; M.post = undefined;
+    }
+    return this.mindTop(sq);
+  }
+
+  /** Tank minds: this tank's own least time in one direction, forward or backing (DR.tankmind.keep). */
+  private mindKeep(sq: Squad, m: Man): number { const K = DR.tankmind.keep; return K[0] + (K[1] - K[0]) * roll(this.seed, sq.u.id, m.n, 303); }
+
+  /**
+   * Tank minds, once a think for the block. The pace it is really making, for its tanks' drill: its pace, less where
+   * the rules jostle it to and fro (by how straight its way over the last seconds was, the ground made against the way
+   * gone, under DR.tankmind.straight: a block shoved back and forth at 4 m a second that gains 2 is coming on slowly,
+   * and its tanks leapfrog). The shells fired at it since its last think. And when its fight began: the think it is
+   * first fighting after DR.tankmind.shot.fresh seconds or more out of one.
+   */
+  private mindBlock(sq: Squad): void {
+    const t = this.b.t, K = sq.track;
+    let gone = 0;
+    for (let i = 2; i < K.length; i += 2) gone += Math.hypot(K[i] - K[i - 2], K[i + 1] - K[i - 1]);
+    sq.made = sq.speed * (gone > 1 ? Math.min(1, (sq.net * (K.length / 2 - 1) * DT) / gone / DR.tankmind.straight) : 1);
+    // The shells fired at it since its last think (a tank's, a launcher's, a gun's, a mortar's), each kept till it has
+    // landed and a think has looked at it (mindPost: a near miss or a hit moves a tank to her next post).
+    let H: number[] | undefined;
+    if (sq.hits) for (let i = 0; i < sq.hits.length; i += 4) if (sq.hits[i + 3] > t - 0.5 + 1e-6) (H ??= []).push(sq.hits[i], sq.hits[i + 1], sq.hits[i + 2], sq.hits[i + 3]);
+    for (let i = this.shots.length - 1; i >= 0 && this.shots[i].n > (sq.hitN ?? 0); i--) {
+      const r = this.shots[i];
+      if (r.on === sq.u.id && !r.m && (r.w === 'tank' || r.w === 'at' || r.w === 'gun' || r.w === 'mortar')) (H ??= []).push(r.x, r.y, r.r === 'miss' ? -1 : r.ok ?? -1, r.l);
+    }
+    sq.hits = H; sq.hitN = this.fired;
+    if (sq.u.engaged === undefined) return;
+    if (sq.foughtAt === undefined || t - sq.foughtAt > DR.tankmind.shot.fresh) sq.fightAt = t;
+    sq.foughtAt = t;
+  }
+
+  /**
+   * Tank minds: the battle time this tank's next round is due. Her own period (the plain drill's: 6 to 10 s at armour,
+   * BOOK.tank.every at foot with the drill book), each pause her own share of it, fresh after every round
+   * (DR.tankmind.shot.pause), so her shots are never evenly spaced; and, her block's fight just begun, not before her
+   * own moment to open (shot.first), so a platoon never fires its first volley as one. 'slow': her period stretched
+   * by this much (rolling on fast she halts to fire less often than she fires in a fight: DR.tankmind.halt.rare).
+   */
+  private mindDue(sq: Squad, m: Man, e: LandUnit, slow = 1): number {
+    const S = DR.tankmind.shot, u = sq.u, at = sq.fightAt ?? 0;
+    const open = at + S.first[0] + (S.first[1] - S.first[0]) * roll(this.seed, u.id, m.n, Math.round(at * 2), 304);
+    if (m.shot === undefined) return open;
+    const r = roll(this.seed, u.id, m.n, 306), B = BOOK.tank.every, every = this.byBook && e.kind !== 'arm' ? B[0] + (B[1] - B[0]) * r : 6 + 4 * r;
+    return Math.max(open, m.shot + every * slow * (S.pause[0] + (S.pause[1] - S.pause[0]) * roll(this.seed, u.id, m.n, Math.round(m.shot * 10), 305)));
+  }
+
+  /**
+   * Tank minds: a halted tank's round. She fires from her halt: never before she has stood DR.tankmind.halt.lay seconds
+   * with her gun laid, and at the step her round falls due, her own (mindStep fires it), not on her block's half
+   * second. 'post': it counts toward the shots she fires from her firing post. Always false: nothing fires on the think.
+   */
+  private mindShot(sq: Squad, m: Man, e: LandUnit | null, post = false, slow = 1): boolean {
+    const M = m.mind!, t = this.b.t, H = DR.tankmind.halt;
+    if (!e || sq.u.engaged === undefined || M.fire !== undefined || M.still === undefined) return false;
+    const laid = M.still + H.lay[0] + (H.lay[1] - H.lay[0]) * roll(this.seed, sq.u.id, m.n, Math.round(M.still * 10), 308);
+    const at = Math.max(this.mindDue(sq, m, e, slow), laid, t);
+    if (at < t + 0.5) { M.fire = at; M.post = post || undefined; }
+    return false;
+  }
+
+  /**
+   * Tank minds: whether this tank may begin a halt to fire now. Pairs cover each other (the first and second tank, the
+   * third and fourth; a last odd tank goes with the pair before hers): never while her partner stands, never more than
+   * half the platoon standing at once, and not within DR.tankmind.halt.apart seconds of a mate's stop.
+   */
+  private mindTurn(tanks: Man[], i: number): boolean {
+    const H = DR.tankmind.halt, t = this.b.t, n = tanks.length;
+    const pair = (j: number): number => (n > 1 && j === n - 1 && j % 2 === 0 ? (j >> 1) - 1 : j >> 1);
+    let standing = 0;
+    for (let j = 0; j < n; j++) {
+      const O = tanks[j].mind;
+      if (j === i || !O || O.go === undefined || t >= O.go - 1e-6) continue;
+      if (pair(j) === pair(i) || t - (O.from ?? t) < H.apart) return false;
+      standing++;
+    }
+    return standing < Math.max(1, n >> 1);
+  }
+
+  /**
+   * Tank minds: coming on fast with her block (the rolling advance). Move, halt briefly to fire, move on: with the
+   * enemy in reach and a round due she presses on a little ahead of her place, stops at her own moment, lays, fires
+   * from the halt and drives on, closing up after. Her block's pace is the rules' and does not wait for her: the halt
+   * is bought by letting her fall behind her place, never more than DR.tankmind.halt.fall metres and never to her
+   * block's leash, so she begins only a halt she can afford, and the longest of her wish that she can. Pairs cover
+   * each other (mindTurn): some of the platoon are always moving while others shoot.
+   */
+  private mindRoll(sq: Squad, m: Man, tanks: Man[], i: number, s: [number, number], e: LandUnit | null, bound: boolean, h: number): void {
+    const u = sq.u, b = this.b, t = b.t, H = DR.tankmind.halt, M = m.mind!, V = sq.speed, [hx, hy] = fwd(h);
+    const near = e ? b.gap(u, e) : Infinity, on = bound && !!e && u.engaged !== undefined && near < H.reach;
+    // Her place is never outside her block's leash (kept behind its own foot on close ground it may lie far behind the
+    // box): she would stand waiting for it till the leash took her, and be dragged along its edge after.
+    s = this.leash(sq, s, -H.edge);
+    if (M.go !== undefined) {
+      // In her halt (mindStep stopped her, and fires her round at its step): standing, her gun laid, till it is time to go
+      // on; cut short where her block has picked up its pace and would leave her outside its leash.
+      const left = V * (M.go - t) + (V * V) / (2 * TANK_GAIN), p: [number, number] = [m.x - hx * left, m.y - hy * left];
+      if (on && t < M.go - 1e-6 && !MOVING.has(m.pose) && this.leash(sq, p, -H.edge / 2) === p) { m.v = 0; m.pose = 'halt'; m.aim = this.tankAim(sq, m, e); return; }
+      M.stop = M.go = M.fire = undefined;
+    }
+    let ahead = 0;
+    if (on) {
+      const due = this.mindDue(sq, m, e!, H.rare), lag = (s[0] - m.x) * hx + (s[1] - m.y) * hy, k = Math.round(t * 2);
+      if (due - t < H.soon) {
+        ahead = H.ahead;
+        // Her own step of this half second to stop at, her own time laying, her own wish for the halt's length.
+        const d0 = Math.floor(5 * roll(this.seed, u.id, m.n, k, 307)) * DT, lay = H.lay[0] + (H.lay[1] - H.lay[0]) * roll(this.seed, u.id, m.n, k, 308);
+        if (due <= t + d0 + lay && this.mindTurn(tanks, i)) {
+          const wish = H.len[0] + (H.len[1] - H.len[0]) * roll(this.seed, u.id, m.n, k, 309);
+          // (she drives on again on a think: the halt's length is that many half seconds less her own step)
+          for (let j = Math.round((d0 + wish) / 0.5); 0.5 * j - d0 >= H.len[0] - 1e-6; j--) {
+            // What it costs her: the ground her block makes while she stands, and while she gathers way again.
+            const len = 0.5 * j - d0, cost = V * len + (V * V) / (2 * TANK_GAIN), p: [number, number] = [m.x - hx * cost, m.y - hy * cost];
+            if (lag + cost > H.fall || this.leash(sq, p, -H.edge) !== p) continue;
+            M.stop = M.from = t + d0; M.fire = M.stop + Math.min(lay, len - H.see); M.go = t + 0.5 * j;
+            break;
+          }
+        }
+      }
+    }
+    const to: [number, number] = ahead ? [s[0] + hx * ahead, s[1] + hy * ahead] : s, was = m.v > 0 && MOVING.has(m.pose);
+    this.follow(sq, m, to, 'drive', 1, h);
+    if (m.v > 0 && MOVING.has(m.pose)) this.mindWeave(sq, m, h);
+    // Told to stand and wait for her place to come up (she is well ahead of it: her block keeps her behind its foot, or
+    // has checked), she stops at her own moment, not in her platoon's instant (its leader at once): rolling on slowly
+    // meanwhile.
+    if (m.v === 0 && was && V > 0.4 && i > 0) {
+      const R = DR.tankmind.react;
+      if (M.ease === undefined) M.ease = t + (R[0] + (R[1] - R[0]) * roll(this.seed, u.id, m.n, Math.round(t * 2), 312)) * DR.tankmind.quick[this.band(u)];
+      if (t < M.ease - 1e-6) { m.pose = 'drive'; m.v = Math.max(1.5, V * 0.6); m.spot = this.leash(sq, [m.x + hx * 12, m.y + hy * 12], -H.edge); m.until = t + 1; }
+    } else M.ease = undefined;
+    // (waiting on for it, the pairs take turns to roll on slowly: mindWait)
+    if (m.v === 0 && V > 0.4 && M.go === undefined) this.mindWait(sq, m, tanks, i, to, h);
+    // Closing up (after a halt, or pressing on for her next) she may go a little faster than the plain drill's catch-up.
+    if (m.v > 0 && (to[0] - m.x) * hx + (to[1] - m.y) * hy > (ahead ? 2 : 6)) m.v = Math.min(V * 1.4, this.mindTop(sq));
+    // Her gun: laid on her target once her halt is set, and where she stands waiting for the line to come up to her
+    // (her round may go from there too); else toward the enemy, as the plain drill.
+    if (on && (M.go !== undefined || !MOVING.has(m.pose))) { m.aim = this.tankAim(sq, m, e); if (M.go === undefined) this.mindShot(sq, m, e, false, H.rare); }
+    else m.aim = e && near < 900 ? [e.x, e.y] : undefined;
+  }
+
+  /**
+   * Tank minds: coming on slowly, the pairs leapfrog by the style's clock (tankRush, tankHalt). Within each pair one
+   * tank drives on to her next firing place (the best cover near the bound's end: go and seek) while her partner
+   * stands covering, then the other way about; the second pair a quarter of the clock after the first, so the four
+   * move off one after another. A last odd tank goes with the pair before hers, in its second tank's turn. Each has
+   * her own lean on the clock and her own length of drive each turn (DR.tankmind.pair), and drives fast enough to be
+   * in her place before her turn to cover comes; not there by then, she stands where she is (her own step of the half
+   * second: mindStep), where her block's leash and her place allow. Standing, she fires from her halt at her own
+   * step (mindShot). And the platoon never all stands: a tank with no mate on the move goes on, her turn or not.
+   */
+  private mindBound(sq: Squad, m: Man, tanks: Man[], i: number, s: [number, number], e: LandUnit | null, dir: [number, number], N: Nums, h: number): void {
+    const u = sq.u, t = this.b.t, T = DR.tankmind, P = T.pair, M = m.mind!, n = tanks.length, v = Math.max(1, sq.made ?? sq.speed), cyc = N.tankRush + N.tankHalt;
+    const odd = n > 1 && i === n - 1 && i % 2 === 0, pair = odd ? (i >> 1) - 1 : i >> 1, turn = odd ? 1 : i % 2;
+    const at = t + 100 * cyc - (pair % 2) * cyc / 4 - turn * cyc / 2 + (roll(this.seed, u.id, m.n, 310) * 2 - 1) * P.own, c = Math.floor(at / cyc);
+    const left = N.tankRush * (P.len[0] + (P.len[1] - P.len[0]) * roll(this.seed, u.id, m.n, c, 311)) - (at - c * cyc);
+    const going = MOVING.has(m.pose), [hx, hy] = fwd(h);
+    if (left > 0 || (n > 1 && !tanks.some((o) => o !== m && o.v > 0 && MOVING.has(o.pose)))) {
+      M.stop = undefined;
+      if (!going || t >= m.until) {
+        const span = left > 0 ? left : N.tankRush * P.len[0];
+        this.go(sq, m, [s[0] + hx * v * cyc * 0.45, s[1] + hy * v * cyc * 0.45], 'drive', v * cyc / N.tankRush, t + span, dir);
+        m.v = clamp(Math.hypot(m.spot[0] - m.x, m.spot[1] - m.y) / Math.max(1, span - P.gather), m.v, Math.max(m.v, P.pace));
+      }
+      m.aim = e ? [e.x, e.y] : undefined;
+      return;
+    }
+    // Her turn to cover. In her place (or standing already): her gun laid, her round at her own step.
+    if (!going || Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 2) {
+      m.v = 0; m.spot = [m.x, m.y]; m.pose = 'halt'; m.aim = this.tankAim(sq, m, e);
+      // (she fires less often than in a fight, pair.rare; a block shoved about at a fast pace as seldom as one rolling
+      // on at it, halt.rare: so about as many rounds are drawn as before)
+      this.mindShot(sq, m, e, false, sq.speed >= T.roll[1] ? T.halt.rare : P.rare);
+      return;
+    }
+    // Not there yet: she stands where she is, at her own step of this half second, unless that would leave her at her
+    // block's leash or far behind her place (then she drives on to it).
+    const p: [number, number] = [m.x, m.y];
+    if (M.stop === undefined && this.leash(sq, p, -T.halt.edge) === p && (s[0] - m.x) * hx + (s[1] - m.y) * hy < T.halt.fall) M.stop = t + Math.floor(5 * roll(this.seed, u.id, m.n, Math.round(t * 2), 307)) * DT;
+  }
+
+  /**
+   * Tank minds: rolling on with her block she steers a little to one side of her way and back again, her own amount and
+   * her own time (DR.tankmind.weave), so a platoon's hulls are never dead parallel for long. The point she steers for
+   * is moved across her way, by her own share of its distance from her (a few degrees whatever her pace); her place
+   * and her pace stay as they were.
+   */
+  private mindWeave(sq: Squad, m: Man, h: number): void {
+    const W = DR.tankmind.weave, id = sq.u.id, [rx, ry] = right(h);
+    const side = W.side[0] + (W.side[1] - W.side[0]) * roll(this.seed, id, m.n, 314), len = W.len[0] + (W.len[1] - W.len[0]) * roll(this.seed, id, m.n, 315);
+    const d = Math.hypot(m.spot[0] - m.x, m.spot[1] - m.y) * side * Math.sin(2 * Math.PI * (this.b.t / len + roll(this.seed, id, m.n, 316)));
+    m.spot = [m.spot[0] + rx * d, m.spot[1] + ry * d];
+  }
+
+  /**
+   * Tank minds: on the fast advance, standing to wait for her place to come up to her (her block keeps its tanks behind
+   * its own foot on close ground, or has checked), the platoon does not all stand: its pairs take turns to roll on
+   * slowly (DR.tankmind.wait), one tank of each pair at a time (a last odd tank with the pair before hers, in its second
+   * tank's turn), each with her own lean on the turn; at no more than half her block's pace (so her place still comes
+   * up to her), never more than wait.far metres beyond where she would begin to wait, nor out of her block's leash; and
+   * only while her block goes steadily on (mindBlock).
+   */
+  private mindWait(sq: Squad, m: Man, tanks: Man[], i: number, s: [number, number], h: number): void {
+    const W = DR.tankmind.wait, n = tanks.length, t = this.b.t, V = sq.speed, [hx, hy] = fwd(h);
+    // (only behind a block going steadily on: one the rules shove to and fro may leap off the other way)
+    if (n < 2 || (sq.made ?? 0) < V - 1e-9 || (m.x - s[0]) * hx + (m.y - s[1]) * hy > 8 + 1.5 * V + W.far) return;
+    const odd = i === n - 1 && i % 2 === 0, turn = odd ? 1 : i % 2;
+    const at = t + 100 * W.turn - turn * W.turn / 2 - W.own * roll(this.seed, sq.u.id, m.n, 313);
+    if (at % W.turn >= W.turn / 2) return;
+    const p = this.leash(sq, [m.x + hx * 12, m.y + hy * 12], -DR.tankmind.halt.edge);
+    if ((p[0] - m.x) * hx + (p[1] - m.y) * hy < 2) return;
+    m.pose = 'drive'; m.v = Math.min(W.pace, V / 2); m.spot = p; m.until = t + 1;
+  }
+
+  // (Tank minds, step two: looking, firing posts, the other vehicles and the guns.)
+
+  /**
+   * Tank minds: whether her gun is fixed in her hull (no turret: DR.tankmind.fixed), as far as the drill can know her
+   * model: a tank destroyer's or an outrider's own, else her block's where the rules name one (a set piece's blocks). A
+   * stand-in the 3D game alone picks for a campaign battle the drill is never told: she counts as turreted.
+   */
+  private mindFixed(sq: Squad, m: Man): boolean { return DR.tankmind.fixed.includes(m.ml ?? (sq.esc ? '' : this.b.vehicle(sq.u) ?? '')); }
+
+  /**
+   * Tank minds: what her gun watches while she has nothing to lay on. One look at a time: a far point on one bearing of
+   * her arc ('mid', give or take 'half'), held her own DR.tankmind.watch.hold seconds, then another; the first only her
+   * own moment after she had nothing to lay on (watch.first), so a platoon's guns never swing off together. A look she
+   * holds she finishes, whatever she is asked next: every new point is a row sent to the 3D game, so not more often
+   * than every few seconds. kind 1 her sector, 2 her side on the march, 3 dead ahead (kept before her nose as she
+   * turns, twice as long). Returns the point, none till her watch begins.
+   */
+  private mindGaze(sq: Squad, m: Man, kind: 1 | 2 | 3, mid: number, half: number): [number, number] | undefined {
+    const W = DR.tankmind.watch, M = m.mind!, t = this.b.t, id = sq.u.id, k = Math.round(t * 2);
+    let L = M.look;
+    if (!L) L = M.look = [t + W.first * roll(this.seed, id, m.n, k, 323), 0, 0, 0];
+    const ahead = L[3] === 3 && (kind !== 3 || Math.abs(wrap(bearing(m.x, m.y, L[1], L[2]) - mid)) > 0.2);
+    if (t < L[0] - 1e-6 && !ahead) return L[3] ? [L[1], L[2]] : undefined;
+    const hold = (W.hold[0] + (W.hold[1] - W.hold[0]) * roll(this.seed, id, m.n, k, 322)) * (kind === 3 ? 2 : 1);
+    const [fx, fy] = fwd(mid + (roll(this.seed, id, m.n, k, 324) * 2 - 1) * half), f = this.b.field;
+    // (the point is kept on the field: nearer than watch.far where the field ends that way)
+    let d = W.far;
+    if (fx > 1e-6) d = Math.min(d, (f.w - 1 - m.x) / fx); else if (fx < -1e-6) d = Math.min(d, (1 - m.x) / fx);
+    if (fy > 1e-6) d = Math.min(d, (f.h - 1 - m.y) / fy); else if (fy < -1e-6) d = Math.min(d, (1 - m.y) / fy);
+    d = Math.max(20, d);
+    L = M.look = [t + hold, Math.round((m.x + fx * d) * 10) / 10, Math.round((m.y + fy * d) * 10) / 10, kind];
+    return [L[1], L[2]];
+  }
+
+  /**
+   * Tank minds, once a think for each tank, after her drill: her hull and her gun apart. Her hull, standing: toward her
+   * block's main threat, her thickest armour to him, a little her own way at each firing post (DR.tankmind.hull);
+   * halted a moment on the fast advance, on her way. A gun fixed in her hull (mindFixed) turns with it to her aim, as
+   * before (halted with nothing to lay on, her hull is her gun: on her own slice of watch.cone about the threat, as
+   * assault guns are sited), and so do tanks on the road, routing or backing off. Her gun: on her target where her
+   * drill laid it (her block fights; or, coming on, the enemy is within watch.reach; or, in a fight's place or pinned,
+   * he is). Else she watches her own arc (mindGaze). Halted and not fighting, the platoon covers all round between
+   * its tanks: the last of three or more the rear half, the others an equal share each of the front half (two tanks
+   * or one, of all round), across the line as they stand; with the enemy within reach the front shares close to
+   * watch.cone about him, each still her own slice. On the road and on the approach, alternate tanks left and right,
+   * the last of three or more the rear. Routing or backing off, with nothing to watch, her gun comes back dead ahead
+   * (a point ahead is sent: the 3D game holds the last aim it was given).
+   */
+  private mindLook(sq: Squad, m: Man, tanks: Man[], i: number, e: LandUnit | null): void {
+    const M = m.mind;
+    if (!M) return;
+    const T = DR.tankmind, W = T.watch, u = sq.u, ph = M.ph ?? sq.phase, n = tanks.length;
+    const coming = ph === 'deploy' || ph === 'bound', halted = !coming && ph !== 'column' && ph !== 'flee' && ph !== 'fallback';
+    const fixed = this.mindFixed(sq, m);
+    // (off her firing place's drill, whatever she had timed there is dropped)
+    if (!halted) M.sit = M.place = M.rise = M.shift = undefined;
+    const gap = e ? this.b.gap(u, e) : Infinity;
+    const lay = ph === 'fallback' ? !!e : ph !== 'column' && ph !== 'flee' && !!e && (u.engaged !== undefined || (halted ? (ph === 'fight' || ph === 'pinned') && gap <= W.reach[0] : gap <= W.reach[1]));
+    const lean = (roll(this.seed, u.id, m.n, m.post ?? 0, 321) * 2 - 1) * T.hull, front = e ? bearing(u.x, u.y, e.x, e.y) : u.face;
+    // (her place across the line among the first f tanks: the leftmost the leftmost share)
+    const [rx, ry] = right(front), at = (o: Man): number => (o.x - u.x) * rx + (o.y - u.y) * ry;
+    const rank = (f: number): number => { let r = 0; for (let j = 0; j < f; j++) if (tanks[j] !== m && (at(tanks[j]) < at(m) || (at(tanks[j]) === at(m) && j < i))) r++; return r; };
+    if (!(coming || halted) || (fixed && (lay || !halted))) M.hull = undefined;
+    else if ((ph === 'deploy' || (ph === 'bound' && M.fast)) && M.go !== undefined) M.hull = M.h ?? sq.heading;
+    // (a gun fixed in her hull, halted with nothing to lay on: her hull is her gun, on her own slice of the front; no aim)
+    else if (fixed) M.hull = wrap(front + ((rank(n) + 0.5) / n - 0.5) * W.cone + lean);
+    else M.hull = wrap((e ? bearing(m.x, m.y, e.x, e.y) : u.face) + lean);
+    if (fixed) { M.look = undefined; if (!lay && halted) m.aim = undefined; return; }
+    if (lay) { M.look = undefined; return; }
+    let p: [number, number] | undefined;
+    if (ph === 'flee' || ph === 'fallback') p = this.mindGaze(sq, m, 3, m.face, 0);
+    else if (!halted) {
+      const way = M.h ?? sq.heading;
+      if (n >= 3 && i === n - 1) p = this.mindGaze(sq, m, 2, way + Math.PI, W.rear);
+      else p = this.mindGaze(sq, m, 2, way + (i % 2 ? 1 : -1) * (W.side[0] + W.side[1]) / 2, (W.side[1] - W.side[0]) / 2);
+    } else if (n >= 3 && i === n - 1) p = this.mindGaze(sq, m, 1, front + Math.PI, Math.PI / 2);
+    else {
+      const f = n >= 3 ? n - 1 : n, span = gap <= W.reach[0] ? W.cone : n >= 3 ? Math.PI : 2 * Math.PI;
+      p = this.mindGaze(sq, m, 1, front + ((rank(f) + 0.5) / f - 0.5) * span, span / (2 * f));
+    }
+    if (p) { m.aim = p; M.fire = undefined; }
+  }
+
+  /**
+   * Tank minds: hull down. A halted tank whose firing place has cover to sit behind (DR.tankmind.post.cover: a crest,
+   * a wood's or a house's corner) backs down behind it, straight back post.down metres, at her own moment. In a
+   * fight: post.see seconds after her round from this stand, her own each time, and only where the wait for her next
+   * round is long enough for the trip down and up again (so she fires as many). From a place in the open she backs
+   * down only by her own chance each round (post.open: none as shipped, for there is nothing there to sit behind and
+   * the to and fro reads as a flick). Not fighting and the enemy far: her own share of post.idle seconds after she
+   * came to stand. With the enemy near and no fight yet she stays up. True once she backs.
+   */
+  private mindSit(sq: Squad, m: Man, e: LandUnit | null): boolean {
+    const M = m.mind!, T = DR.tankmind, P = T.post, u = sq.u, t = this.b.t, fight = u.engaged !== undefined && !!e;
+    M.rise = undefined;
+    if (M.sit || M.fire !== undefined || M.still === undefined) return false;
+    let at: number;
+    if (fight) {
+      if (m.shot === undefined || m.shot < M.still) return false;
+      if (!P.cover.includes(m.cover) && roll(this.seed, u.id, m.n, Math.round(m.shot * 10), 1, 326) >= P.open) return false;
+      at = m.shot + P.see[0] + (P.see[1] - P.see[0]) * roll(this.seed, u.id, m.n, Math.round(m.shot * 10), 326);
+      if (this.mindDue(sq, m, e!) - Math.max(t, at) < 2 * (P.down / P.pace + 0.7) + T.halt.lay[1] + 1) return false;
+    } else if (P.cover.includes(m.cover) && (!e || this.b.gap(u, e) > T.watch.reach[0])) at = M.still + P.idle[0] + (P.idle[1] - P.idle[0]) * roll(this.seed, u.id, m.n, Math.round(M.still * 10), 325);
+    else return false;
+    // (her own step of the half second: mindStep runs her drill again then)
+    if (t < at - 1e-6) { if (at < t + 0.5) M.rise = at; return false; }
+    // Straight back along her hull where it is on the enemy, so she does not swing as she backs; inside her block's leash.
+    const dir = this.threatDir(sq), [fx, fy] = fwd(m.face), back = fx * dir[0] + fy * dir[1] > 0.8 ? [fx, fy] : dir;
+    const p = this.leash(sq, [m.x - back[0] * P.down, m.y - back[1] * P.down], -4);
+    if (Math.hypot(p[0] - m.x, p[1] - m.y) < P.down - 0.5) return false;
+    M.sit = 'down'; M.place = [m.x, m.y];
+    m.spot = p; m.pose = 'reverse'; m.v = P.pace; m.until = t + 8;
+    if (fight) m.aim = undefined;
+    return true;
+  }
+
+  /**
+   * Tank minds: a halted tank at her firing post, each think she is at her place (before the plain drill's own). A
+   * shell that strikes her, or lands within DR.tankmind.post.near metres of her (her own chance to take it as her
+   * cue, post.jump), moves her to her next post once she has been post.rest seconds at this one: she goes her own
+   * moment after (react, quick), by the plain drill's shift (mindShift), open to every style while its block fights.
+   * And hull down (mindSit): sitting behind her place she comes up to it at her own moment. In a fight, in time to
+   * lay and fire her next round when it falls due; her block's fight begun with her down, her own moment after it
+   * began. Not fighting, her own share of post.rise seconds after the enemy came within reach; while he is far she
+   * stays down. True while she sits down behind her place or is on her way down or up: the plain drill leaves her be.
+   */
+  private mindPost(sq: Squad, m: Man, e: LandUnit | null, posts: boolean, calm: boolean): boolean {
+    const M = m.mind!, T = DR.tankmind, P = T.post, u = sq.u, t = this.b.t, post = m.post ?? 0, k = Math.round(t * 2);
+    if (!M.posted || M.posted[0] !== post) M.posted = [post, t];
+    if (!posts) M.shift = undefined;
+    else if (M.shift !== undefined) { if (t - M.shift > 4) M.shift = undefined; }
+    else if (sq.hits && t - M.posted[1] >= P.rest[0] + (P.rest[1] - P.rest[0]) * roll(this.seed, u.id, m.n, post, 329)) {
+      const H = sq.hits;
+      for (let j = 0; j < H.length; j += 4) {
+        if (H[j + 3] > t + 1e-6) continue; // (not landed yet)
+        if (H[j + 2] !== m.k && (Math.hypot(H[j] - m.x, H[j + 1] - m.y) >= P.near || roll(this.seed, u.id, m.n, Math.round(H[j] * 10), Math.round(H[j + 3] * 10), 327) >= P.jump)) continue;
+        M.shift = t + (T.react[0] + (T.react[1] - T.react[0]) * roll(this.seed, u.id, m.n, k, 328)) * T.quick[this.band(u)];
+        break;
+      }
+    }
+    // (up at her place again, or sent elsewhere meanwhile: her sitting is over)
+    if (M.sit && (M.sit === 'up' || !calm || Math.abs(Math.hypot(m.spot[0] - M.place![0], m.spot[1] - M.place![1]) - P.down) > 0.6)) M.sit = M.place = M.rise = undefined;
+    const fight = u.engaged !== undefined && !!e;
+    if (!M.sit) return calm && !fight && this.mindSit(sq, m, e);
+    // Down behind her place. A near miss there: out to her next post from where she sits.
+    if (M.shift !== undefined && t >= M.shift - 1e-6) { M.sit = M.place = M.rise = undefined; return false; }
+    m.v = 0; m.pose = 'halt';
+    let at = Infinity;
+    if (fight) {
+      at = this.mindDue(sq, m, e!) - (P.down / P.pace + 0.7 + T.halt.lay[1] + 1);
+      if (m.shot === undefined || m.shot < (sq.fightAt ?? 0)) at = Math.max(at, (sq.fightAt ?? t) + T.react[1] * T.quick[this.band(u)] * roll(this.seed, u.id, m.n, Math.round((sq.fightAt ?? t) * 2), 330));
+    } else if (e && this.b.gap(u, e) <= T.watch.reach[0]) at = M.rise ?? t + P.rise * roll(this.seed, u.id, m.n, k, 330);
+    // (coming up is her commander's order, as backing down was: taken at once, her least time in one direction or no)
+    if (t >= at - 1e-6) { M.sit = 'up'; M.rise = undefined; m.spot = [M.place![0], M.place![1]]; m.pose = 'drive'; m.v = P.pace; m.until = t + 8; M.rev = undefined; M.keep = t + this.mindKeep(sq, m); }
+    else M.rise = fight ? (at < t + 0.5 ? at : undefined) : at < Infinity ? at : undefined;
+    m.aim = fight || !e ? undefined : [e.x, e.y];
+    return true;
+  }
+
+  /** Tank minds: whether her own moment to leave her firing post for her next has come (a near miss or a hit: mindPost). */
+  private mindShift(m: Man): boolean {
+    const M = m.mind!;
+    if (M.shift === undefined || this.b.t < M.shift - 1e-6) return false;
+    M.shift = undefined;
+    return true;
+  }
+
+  /**
+   * Tank minds: an armoured car, an AA vehicle, a jeep or a motorcycle, each half second, in place of the plain
+   * drill's drive. Her own place, a little off the plain drill's (DR.tankmind.out.spot), and while her block drives
+   * her own share of out.trail seconds of its pace further back, closed up when it halts: so each stops at her own
+   * moment. Standing, she drives after her place only once it has moved off her own slack from her (out.start), and
+   * then at her own moment (react, quick: mindTick moves her off at her own step); the same when her place leaps (the
+   * screen called in or sent out), going on as she was till then. On the move she keeps pace with her place (follow)
+   * or, far from it or her block halted, drives straight for it and halts there. Standing, her nose is toward the
+   * threat her own way (up to twice a tank's lean: she has no thick front to show him). A car's turret lays on her
+   * own point of the enemy block within out.sight, and further off watches her own flank; an AA vehicle's gun,
+   * standing, watches her own share of all round (mindGaze), and comes back dead ahead on the move. Jeeps and
+   * motorcycles have no aim, as before.
+   */
+  private mindOut(sq: Squad, m: Man, i: number, s: [number, number], e: LandUnit | null, near: number): void {
+    const T = DR.tankmind, O = T.out, own = Object.getPrototypeOf(sq.u) as LandUnit, t = this.b.t, id = own.id, M = (m.mind ??= {}), V = sq.speed;
+    const r = (...ns: number[]): number => roll(this.seed, id, m.n, ...ns);
+    const [rx, ry] = right(own.face), [fx, fy] = fwd(own.face), a = (r(331) * 2 - 1) * O.spot[0], l = (r(332) * 2 - 1) * O.spot[1] - (V > 0.4 ? V * O.trail * r(1, 334) : 0);
+    s = [s[0] + rx * a + fx * l, s[1] + ry * a + fy * l];
+    const d = Math.hypot(s[0] - m.x, s[1] - m.y), going = m.v > 0 && MOVING.has(m.pose), pace = O.pace[0] + (O.pace[1] - O.pace[0]) * r(334);
+    const straight = clamp((V * 1.2 + d * 0.25) * pace, 3, 12);
+    if (!going && d <= O.start[0] + (O.start[1] - O.start[0]) * r(335)) M.off = M.to = undefined;
+    else if (M.off === undefined && (!going || Math.hypot(s[0] - m.slotAt[0], s[1] - m.slotAt[1]) > O.far)) M.off = t + (T.react[0] + (T.react[1] - T.react[0]) * r(Math.round(t * 2), 333)) * T.quick[this.band(own)];
+    if (M.off !== undefined) {
+      // Her own moment not yet come: she goes on as she was, the order kept for her step (mindTick).
+      if (t < M.off - 1e-6) M.to = [s[0], s[1], straight];
+      else { M.off = M.to = undefined; m.spot = s; m.slotAt = s; m.pose = 'drive'; m.v = straight; m.until = t + 1; }
+    } else if (!going) m.slotAt = s;
+    else if (d > O.far || V <= 0.4) {
+      if (d <= 1.5) { m.spot = [m.x, m.y]; m.v = 0; m.pose = 'halt'; } else { m.spot = s; m.pose = 'drive'; m.v = straight; m.until = t + 1; }
+      m.slotAt = s;
+    } else this.follow(sq, m, s, 'drive', pace);
+    M.hull = fighting(own) ? wrap((e ? bearing(m.x, m.y, e.x, e.y) : own.face) + (r(321) * 2 - 1) * T.hull * 2) : undefined;
+    if (sq.esc === 'cars') {
+      if (e && near < O.sight) { M.look = undefined; m.aim = toWorld(e, e.face, (r(0, 339) - 0.5) * e.w * 0.7, (r(1, 339) - 0.5) * e.d * 0.7); }
+      else m.aim = this.mindGaze(sq, m, 2, own.face + (i % 2 ? 1 : -1) * (O.arc[0] + O.arc[1]) / 2, (O.arc[1] - O.arc[0]) / 2);
+    } else if (sq.esc === 'aa') {
+      const n = sq.men.length;
+      m.aim = m.v > 0 && MOVING.has(m.pose) ? this.mindGaze(sq, m, 3, m.face, 0) : this.mindGaze(sq, m, 1, own.face + ((i + 0.5) / n) * 2 * Math.PI, Math.PI / n);
+    }
+  }
+
+  /**
+   * Tank minds: a lorry's, a carrier's, a tractor's or a gun's own place, a little off the plain drill's
+   * (DR.tankmind.lean, metres across and along). In column ('col' her number in it, none where they stand in a row)
+   * each keeps lean's third number of seconds of her block's pace further behind the one ahead, and up to as much
+   * again of her own: the column strings out at speed and closes up at the halt, each rolling on to her place and
+   * stopping at her own moment.
+   */
+  private mindLean(sq: Squad, v: Man, s: [number, number], way: number, col = -1): [number, number] {
+    const L = DR.tankmind.lean, id = sq.u.id, [rx, ry] = right(way), [fx, fy] = fwd(way);
+    const a = (roll(this.seed, id, v.n, 336) * 2 - 1) * L[0];
+    const l = (roll(this.seed, id, v.n, 337) * 2 - 1) * L[1] - (col >= 0 && sq.speed > 0.4 ? sq.speed * L[2] * (col + roll(this.seed, id, v.n, 1, 337)) : 0);
+    return [s[0] + rx * a + fx * l, s[1] + ry * a + fy * l];
+  }
+
+  /**
+   * Tank minds: a lorry, a carrier, a tractor or a gun told to drive from standing moves off at her own moment
+   * (DR.tankmind.react, quick; 'lead', the first of a column, at once), never all in one instant. Called once the
+   * plain drill has given her order: till her moment she stands as she stood, her order kept for her own step
+   * (mindTick), and her place as it was when she was last left be, so the plain drill gives the order again.
+   */
+  private mindOff(sq: Squad, v: Man, lead = false): void {
+    const T = DR.tankmind, t = this.b.t, M = (v.mind ??= {});
+    // (first seen: standing where the battle opens, she is as one left standing)
+    if (!M.slot) { M.slot = [v.x, v.y]; if ((v.went ?? 0) <= 0.05) M.still = t; }
+    if (!(v.v > 0 && MOVING.has(v.pose))) { M.still ??= t; M.off = M.to = undefined; M.slot = [v.slotAt[0], v.slotAt[1]]; return; }
+    if (M.still !== undefined) {
+      if (M.off === undefined) M.off = lead ? t : t + (T.react[0] + (T.react[1] - T.react[0]) * roll(this.seed, sq.u.id, v.n, Math.round(t * 2), 333)) * T.quick[this.band(sq.u)];
+      if (t < M.off - 1e-6) {
+        M.to = [v.spot[0], v.spot[1], v.v];
+        v.v = 0; v.spot = [v.x, v.y]; v.pose = v.role === 'gun' ? 'towed' : 'parked'; v.slotAt = [M.slot[0], M.slot[1]];
+        return;
+      }
+    }
+    M.still = M.off = M.to = undefined; M.slot = [v.slotAt[0], v.slotAt[1]];
+  }
+
+  /**
+   * Tank minds: a battery limbered up. Self-propelled guns, and guns each behind her own tractor ('own'), keep each
+   * her own place in the column (mindLean) and move off gun by gun (mindOff), her tractor with her. Guns in one train
+   * behind the battery's one tractor go as one, as before: they are one vehicle's tow.
+   */
+  private mindTow(sq: Squad, guns: Man[], own: boolean): void {
+    const u = sq.u, h = sq.heading;
+    guns.forEach((g, i) => {
+      if (!own && !g.ml) return;
+      this.follow(sq, g, this.mindLean(sq, g, toWorld(u, h, 0, -10 - i * (own ? 26 : 18)), h, i), 'towed');
+      if (g.v === 0) g.pose = 'towed';
+      this.mindOff(sq, g, i === 0);
+    });
+  }
+
+  /**
+   * Tank minds: a battery's salvo as a ripple, whatever its style. A gun the plain drill would fire on this half second
+   * fires at her own moment instead: within DR.tankmind.volley.own seconds, her own each time, and never within
+   * volley.apart seconds of another gun of her battery (mindTick fires her at her own step). The drill book's ranging
+   * gun ('solo') fires alone, as before. Her wait is not added to her next round's: that falls due by the plain drill's
+   * clock, so a battery fires about as many. Wraps the plain drill's rule and gives the one to use.
+   */
+  private mindVolley(sq: Squad, guns: Man[], plain: (g: Man, i: number) => boolean, solo?: Man): (g: Man, i: number) => boolean {
+    const V = DR.tankmind.volley, t = this.b.t, k = Math.round(t * 2);
+    return (g, i) => {
+      // (the ranging gun fires alone, at once: a mate's round timed within volley.apart of it waits that long)
+      if (g === solo) {
+        if (!plain(g, i)) return false;
+        for (const o of guns) if (o !== g && o.mind?.fire !== undefined && Math.abs(o.mind.fire - t) < V.apart) o.mind.fire = t + V.apart;
+        return true;
+      }
+      if (g.mind?.fire !== undefined || g.hidden) return false;
+      // (her round is due by the plain drill's own clock, as if her last had gone when it was called for: as many rounds)
+      const last = g.shot;
+      if (last !== undefined && g.mind?.lag) g.shot = last - g.mind.lag;
+      const due = plain(g, i);
+      g.shot = last;
+      if (!due) return false;
+      let at = t + V.own * roll(this.seed, sq.u.id, g.n, k, 338);
+      for (let n = 0, again = true; again && n < 8; n++) {
+        again = false;
+        for (const o of guns) {
+          if (o === g) continue;
+          for (const ot of [o.mind?.fire, o.shot]) if (ot !== undefined && Math.abs(at - ot) < V.apart - 1e-6) { at = ot + V.apart; again = true; }
+        }
+      }
+      const M = (g.mind ??= {});
+      M.fire = at; M.lag = at - t; g.due = undefined;
+      return false;
+    };
+  }
+
+  /**
+   * Tank minds, every step (walk; mindStep for a block's cars and AA vehicles): what one of the other vehicles or a
+   * gun has timed for this step. Her own moment to move off comes: she takes up the order kept for her (mindOff,
+   * mindOut). A gun's own moment in her battery's salvo: she fires, if she still stands in her place with her gun
+   * laid, her crew up and her block still fighting (mindVolley).
+   */
+  private mindTick(sq: Squad, m: Man): void {
+    const M = m.mind!, t = this.b.t;
+    if (M.to && M.off !== undefined && t >= M.off - 1e-6) {
+      m.spot = [M.to[0], M.to[1]]; m.v = M.to[2]; m.pose = m.role === 'gun' ? 'towed' : 'drive'; m.until = t + 1;
+      M.to = M.still = undefined;
+    }
+    // (a car at her place on the road: never left driving on the spot)
+    if (sq.esc && m.v > 0 && m.pose === 'drive' && Math.hypot(m.spot[0] - m.x, m.spot[1] - m.y) < 0.05) { m.v = 0; m.pose = 'halt'; }
+    if (m.role === 'gun' && M.fire !== undefined && t >= M.fire - 1e-6) {
+      if (m.v === 0 && !m.hidden && m.aim && (m.pose === 'deployed' || m.pose === 'fire') && sq.phase === 'battery' && sq.u.engaged !== undefined && live(sq.u)) { m.shot = t; m.pose = 'fire'; }
+      M.fire = undefined;
+    }
+  }
+
+  private tanks(sq: Squad, only?: Man): void {
     const u = sq.u, b = this.b, t = b.t, N = this.nums(u), e = this.threat(u), dir = this.threatDir(sq), ph = sq.phase, h = sq.heading;
     const tanks = this.up(sq).filter((m) => m.role === 'tank');
     const lone = u.aloneAt !== undefined && t - u.aloneAt < 2;
@@ -4151,7 +5402,12 @@ export class Drill {
     const [fx, fy] = fwd(u.face);
     let behind = Infinity;
     if (close && foot.length) for (const f of foot) behind = Math.min(behind, (f.x - u.x) * fx + (f.y - u.y) * fy + f.d / 2 - 15);
+    if (this.tankmind && !only) this.mindBlock(sq);
     tanks.forEach((m, i) => {
+      // (tank minds: one tank's drill run at her commander's own moment, between two thinks of her block: mindStep)
+      if (only && m !== only) return;
+      // (tank minds: each commander acts on his block's phase and its way as he has taken them up, at his own moment)
+      const ph = this.tankmind ? this.mindPhase(sq, m, i === 0) : sq.phase, h = this.tankmind ? this.mindWay(sq, m) : sq.heading;
       // (hatches: each commander by his own nerve, alarm and hatchNow; else the block's as one, the enemy inside 120 m)
       if (!this.hatches) m.buttoned = lone || (e !== null && b.gap(u, e) < 120) || m.cmdDown !== undefined || b.closed(u) || undefined;
       else if (lone || (e !== null && b.gap(u, e) < DR.hatch.near[this.band(u)] * (DR.hatch.own[0] + (DR.hatch.own[1] - DR.hatch.own[0]) * roll(this.seed, u.id, m.n, 173)))) this.alarm(sq, m, t);
@@ -4168,7 +5424,9 @@ export class Drill {
         // Backing off, guns still on the enemy.
         this.follow(sq, m, s, 'reverse'); m.aim = e ? [e.x, e.y] : undefined; return;
       }
-      if (ph === 'deploy' || (ph === 'bound' && v >= 3.5)) {
+      if (ph === 'deploy' || (ph === 'bound' && (this.tankmind ? !!m.mind!.fast : v >= 3.5))) {
+        // (tank minds: move, halt briefly to fire, move on, each her own moment, pairs covering each other)
+        if (this.tankmind) { this.mindRoll(sq, m, tanks, i, s, e, ph === 'bound', h); return; }
         // All on, a tank halting a moment to fire where one is in reach: for a shot (1.5 s of each 4, her own), and never
         // while she is behind her place, or she would fall far behind a block going on at 10 m a second.
         const [hx, hy] = fwd(h), lag = (s[0] - m.x) * hx + (s[1] - m.y) * hy, at = t + roll(this.seed, u.id, m.n, 41) * 4;
@@ -4178,6 +5436,8 @@ export class Drill {
         return;
       }
       if (ph === 'bound') {
+        // (tank minds: within each pair one covers while her partner moves, then the other way about)
+        if (this.tankmind) { this.mindBound(sq, m, tanks, i, s, e, dir, N, h); return; }
         // Slow going: the pairs leapfrog.
         const pair = m.k < 2 ? 0 : 1, cyc = N.tankRush + N.tankHalt, off = pair ? cyc / 2 : 0;
         const moving = (t + off + 100 * cyc) % cyc < N.tankRush;
@@ -4192,8 +5452,9 @@ export class Drill {
       // Halted: in a fight, holding, shaken. Her firing place near her own: hull-down where the ground gives one. In a
       // fight she fights from alternate posts (every army but a mass): a few shots from one, then out of sight backward,
       // across behind the line and up again at the next, to one side of her own place and then the other.
-      const shaken = ph === 'pinned' || u.state === 'wavering';
-      const posts = N.scoot > 0 && !shaken && !lone && u.engaged !== undefined;
+      const shaken = ph === 'pinned' || (this.tankmind ? !!m.mind!.shaken : u.state === 'wavering');
+      // (tank minds: every style's tanks may shift posts while their block fights, on a near miss or a hit: mindPost)
+      const posts = (N.scoot > 0 || this.tankmind) && !shaken && !lone && u.engaged !== undefined;
       if (!posts && m.cyc) { m.cyc = undefined; m.post = 0; }
       const T = DR.tanks, [rx, ry] = right(u.face), off = [0, 1, 0, -1][(m.post ?? 0) % 4] * (m.k % 2 ? 1 : -1) * T.post;
       const want: [number, number] = shaken ? [s[0] - dir[0] * 25, s[1] - dir[1] * 25] : [s[0] + rx * off, s[1] + ry * off];
@@ -4225,20 +5486,27 @@ export class Drill {
       if (m.pose === 'reverse' && t < m.until) return;
       if (m.pose === 'reverse') { m.spot = [m.slotAt[0], m.slotAt[1]]; const best = this.seek(sq, m, m.slotAt, dir, sq.men); m.spot = [best.x, best.y]; m.cover = best.kind; m.pose = 'drive'; m.v = 3; m.until = t + 4; return; }
       if (Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) > 1.5) return;
+      // (tank minds: her firing post's own cues, and hull down behind it: mindPost)
+      if (this.tankmind && this.mindPost(sq, m, e, posts, !shaken && !lone)) return;
       m.v = 0;
       if (!e || (u.engaged === undefined && b.gap(u, e) > 600)) { m.pose = 'halt'; m.aim = e ? [e.x, e.y] : undefined; return; }
       m.aim = this.tankAim(sq, m, e);
       // Her shots from this post told, and the last of them seen go: out of sight backward, to move to her next.
       const need = T.shots[0] + Math.floor(roll(this.seed, u.id, m.n, m.post ?? 0, 23) * (T.shots[1] - T.shots[0] + 1));
-      if (posts && (m.shots ?? 0) >= need && m.shot !== undefined && t - m.shot >= 1.5) {
+      if (posts && ((N.scoot > 0 && (m.shots ?? 0) >= need && m.shot !== undefined && t - m.shot >= 1.5) || (this.tankmind && this.mindShift(m)))) {
         m.cyc = 'back'; m.spot = this.leash(sq, [m.x - dir[0] * T.back, m.y - dir[1] * T.back], -4); m.pose = 'reverse'; m.v = 2.5; m.until = t + 8;
         return;
       }
-      if (u.engaged !== undefined && this.tankShot(sq, m, e, N)) { m.pose = 'fire'; m.shots = (m.shots ?? 0) + 1; }
+      // (tank minds: behind cover she backs down between her rounds: mindSit)
+      if (this.tankmind && this.mindSit(sq, m, e)) return;
+      // (tank minds: her round goes at her own step, from her halt: mindShot)
+      if (u.engaged !== undefined && (this.tankmind ? this.mindShot(sq, m, e, true) : this.tankShot(sq, m, e, N))) { m.pose = 'fire'; m.shots = (m.shots ?? 0) + 1; }
       else m.pose = 'halt';
     });
     // A tank that has just fired shows it a moment (the 3D plays the round by its stamp).
     for (const m of tanks) if (m.pose === 'halt' && m.shot !== undefined && t - m.shot < 1.5) m.pose = 'fire';
+    // (tank minds: her hull and her gun apart, and her own arc to watch while she has nothing to lay on: mindLook)
+    if (this.tankmind) tanks.forEach((m, i) => { if (!only || m === only) this.mindLook(sq, m, tanks, i, e); });
   }
 
   /**
@@ -4272,6 +5540,8 @@ export class Drill {
     const own = sq.tier >= 1 && sq.veh.length > 1;
     if (sq.phase === 'limbered' || sq.phase === 'flee' || sq.phase === 'fallback') {
       guns.forEach((g, i) => { g.aim = undefined; this.follow(sq, g, toWorld(u, h, 0, -10 - i * (own ? 26 : 18)), 'towed'); if (g.v === 0) g.pose = 'towed'; });
+      // (tank minds: gun by gun, each her own place in the column and her own moment to move off: mindTow)
+      if (this.tankmind) this.mindTow(sq, guns, own);
       if (own) guns.forEach((g) => { if (g.ml) return; const v = this.lorryOf(sq, g); this.follow(sq, v, toWorld(g, g.face, 0, 7), 'drive'); });
       else if (tractor) { this.follow(sq, tractor, toWorld(u, h, 0, 8), 'drive'); }
       this.spotter(sq, null, false); // the pair stays where it is, watching, till the guns fire again
@@ -4279,7 +5549,7 @@ export class Drill {
     }
     sq.veh.forEach((tr, i) => {
       if (!own && i > 0) return;
-      const s = toWorld(u, u.face, own ? (i - (sq.veh.length - 1) / 2) * 16 : 0, -u.d / 2 - 50);
+      const s0 = toWorld(u, u.face, own ? (i - (sq.veh.length - 1) / 2) * 16 : 0, -u.d / 2 - 50), s = this.tankmind ? this.mindLean(sq, tr, s0, u.face) : s0;
       if (Math.hypot(s[0] - tr.slotAt[0], s[1] - tr.slotAt[1]) > 20) { tr.spot = s; tr.slotAt = s; tr.pose = 'drive'; tr.v = 4; } else if (Math.hypot(tr.x - tr.spot[0], tr.y - tr.spot[1]) < 2) { tr.pose = 'parked'; tr.v = 0; }
     });
     const firing = u.engaged !== undefined && !!e;
@@ -4294,6 +5564,8 @@ export class Drill {
       else if (N.salvo === 'ripple') { const i0 = sq.ripple % Math.max(1, guns.length); sq.ripple++; sq.salvoAt = t + N.gunEvery / Math.max(1, guns.length); fireNow = (_g, i) => i === i0; }
       else { sq.salvoAt = t + 0.5; fireNow = (g) => g.shot === undefined || t - g.shot >= N.gunEvery * (0.7 + 0.3 * roll(this.seed, u.id, g.n, Math.floor(t / 10))); }
     }
+    // (tank minds: the salvo as a ripple, each gun her own moment: mindVolley)
+    if (this.tankmind) fireNow = this.mindVolley(sq, guns, fireNow, ranging?.[0]);
     guns.forEach((g, i) => {
       const [a, l] = this.slot(sq, g, 'line');
       const s = toWorld(u, u.face, a, l);
@@ -4306,6 +5578,8 @@ export class Drill {
       g.aim = !e ? undefined : ranging?.[0] === g ? ranging[1] : this.liftAim(sq, g, e, 'gun');
       g.buttoned = direct || undefined; // over open sights
     });
+    // (tank minds: a tractor or a gun told to move moves off at her own moment: mindOff)
+    if (this.tankmind) for (const v of [...sq.veh, ...guns]) this.mindOff(sq, v);
     this.spotter(sq, e, firing && !!e && b.gap(u, e) > DR.ranges.fo);
   }
 
@@ -5072,7 +6346,10 @@ export class Drill {
           if (dd > 0.01 && dd < 1.2) { const s = Math.min(dd, DR.teamwork.seat.slide * DT) / dd; m.x += (fx - m.x) * s; m.y += (fy - m.y) * s; m.spot = [m.x, m.y]; }
         }
       }
-      if (m.role === 'tank') m.v = Math.min(m.v, tankTop(sq));
+      // (tank minds: what her commander has timed for this step is done first, mindStep; it gives her top speed)
+      if (m.role === 'tank') { const top = this.tankmind ? this.mindStep(sq, m) : tankTop(sq); m.v = Math.min(m.v, top); }
+      // (tank minds: a lorry's, a tractor's or a gun's own moment to move off, a gun's own moment in her salvo: mindTick)
+      else if (this.tankmind && m.mind) this.mindTick(sq, m);
       const veh = m.role === 'tank' || m.role === 'lorry' || m.role === 'gun';
       const rate = (m.role === 'tank' ? TURN.tank : veh ? TURN.wheels : m.pose === 'ride' ? TURN.ride : TURN.foot) * DT;
       // On foot across hedged fields, he makes for the gate in the hedge ahead of him first (never through the bank).
@@ -5151,9 +6428,13 @@ export class Drill {
           if (e) want = bearing(m.x, m.y, e.x, e.y);
           // Squad life: a man watching looks his own way round his arc, turning as a man looks, not as he snaps to a target.
           if (this.life && want !== undefined && WATCHING.has(m.pose) && !veh && !CREWED.has(m.role) && m.role !== 'holder') { want += this.scan(sq, m); turn = Math.min(rate, DR.life.scan.rate * DT); }
+          // (when the leader falls: one of the men nearest him looks his way a moment)
+          if (this.leaders && m.look) [want, turn] = this.glance(m, want, turn, rate);
         }
         // (Men in lorries: a lorry standing never pivots where she stands; the 3D game faces her the way she drove, and her
         // men get down behind her as it shows her)
+        // (tank minds: a standing tank's hull is toward her block's main threat, her gun free: mindLook)
+        if (this.tankmind && m.mind?.hull !== undefined) want = m.mind.hull;
         if (want !== undefined && !(this.b.trucks && m.role === 'lorry')) m.face = turnTo(m.face, want, turn);
       }
       // Never far from his block: the block is the truth (the rules' box, and a margin round it). Left outside it, where
@@ -5226,6 +6507,8 @@ export class Drill {
           continue;
         }
       }
+      // (when the leader falls: a held man stops what he was at, to drop or to look his way, at his own moment)
+      if (this.leaders && m.downAt !== undefined) this.ownMoment(sq, m);
       step(m);
     }
     // The spotter's pair, with another block: up to its place at a run, the last stretch crawling, then watching.
@@ -5281,6 +6564,8 @@ export class Drill {
     if (!live(u)) return;
     for (const m of sq.veh.length ? [...sq.men, ...sq.veh] : sq.men) {
       if (m.k < 100 ? !this.stands(sq, m) : m.fell !== undefined) continue;
+      // (a tank's machine guns, seen firing: her own bursts by her own timers, at her own mark)
+      if (this.tankmg && m.mgAt) this.tankMgFire(sq, m);
       if (m.shot !== undefined && m.shot !== m.fired) {
         m.fired = m.shot;
         const w: Weapon | undefined = m.role === 'tank' ? 'tank' : m.role === 'gun' ? 'gun' : m.role === 'mortar' ? 'mortar' : m.pose === 'throw_grenade' ? 'grenade' : m.role === 'at' ? 'at' : undefined;
@@ -5383,9 +6668,11 @@ export class Drill {
     const l = Math.round((t + range / R.speed[w]) * 10) / 10, k0 = Math.round(t * 10);
     // (hatches: a round at a tank sends her commander down as it lands, and by their experience her mates')
     if (this.hatches && v.role === 'tank' && !tq.esc) for (const x of alive) if (x.role === 'tank') this.alarm(tq, x, l, x !== v);
+    // (experience: the first rounds landing at a squad are marked: its men still on the march react to them, flinch)
+    if (this.seasoned) this.incoming(tq, l);
     const base: Round = { t: Math.round(t * 10) / 10, l, by: u.id, k: m.k, w, on: on.id, x: 0, y: 0, r: 'miss' };
     if (m.j !== undefined) base.j = m.j;
-    if (w === 'mg' && m.role === 'tank') base.g = this.tankGun(u, m, aim, k0);
+    if (w === 'mg' && m.role === 'tank') base.g = this.tankmg ? m.mgG : this.tankGun(u, m, aim, k0);
     const [lx, ly] = range > 0.01 ? [(v.x - m.x) / range, (v.y - m.y) / range] : fwd(m.face);
     // Everything is placed where it will be when the round lands (at l): what it is fired at, and every vehicle near.
     const fly = l - t;
@@ -5456,12 +6743,326 @@ export class Drill {
 
   // ---- A tank's machine guns, seen firing (Drill.tankmg): its helpers stand just above mgKill(), below this line ----
   /**
+   * The model each tank block is drawn with, where whoever starts the 3D battle has told the drill (drawnAs). In a
+   * set piece that is the model the rules weigh her as; in a campaign battle the 3D game draws the nearest model it
+   * has (live.ts standInModel, and captured kit), which the rules never hear of.
+   */
+  private readonly mgDrawn = new Map<number, string>();
+
+  /**
+   * Tells the drill the model a tank block is drawn with (the header's `model`), before the battle's first step, so
+   * that her machine guns and her stock of rounds are those of the tank the player sees (mgRow). Looks only; nothing
+   * is kept while the switch is off. Not told, she is read as the model the rules weigh her as.
+   */
+  drawnAs(id: number, model: string | null): void {
+    if (this.tankmg && model) this.mgDrawn.set(id, model);
+  }
+
+  /**
+   * Her model's row (DR.tankmg.models): the guns she carries, the rounds a drawn burst shows, her stock. The model she
+   * is drawn with where it is not her block's (a tank destroyer among the tanks, Man.ml), else the model her block is
+   * drawn with where the drill was told it (drawnAs), else her block's by the rules in this battle, else the plain row
+   * '_'. By her model alone: the nation list (BOOK.tankMg.roof) is never read on this path.
+   */
+  private mgRow(sq: Squad, m: Man): (typeof DR)['tankmg']['models'][string] {
+    const M = DR.tankmg.models;
+    return M[m.ml ?? this.mgDrawn.get(sq.u.id) ?? this.b.vehicle(sq.u) ?? '_'] ?? M._;
+  }
+
+  /**
+   * The share of her rounds she has left (1 full, 0 none); her stock is counted out from her model's row the first
+   * time it is asked. Of the belts her coaxial and hull guns share; for a model with a roof gun only, and belts of its
+   * own for it, of those.
+   */
+  private mgShare(sq: Squad, m: Man): number {
+    const R = this.mgRow(sq, m);
+    if (m.mgLeft === undefined) { m.mgLeft = R.stock; if (R.roofStock !== undefined) m.mgRoof = R.roofStock; }
+    return R.stock > 0 ? m.mgLeft / R.stock : R.roofStock ? (m.mgRoof ?? 0) / R.roofStock : 0;
+  }
+
+  /**
+   * Her last tenth (the design director's ruling of 25 November 2026, 22:22Z: "crews kept their last belts for close
+   * defence"): the rounds of a stock she never fires below, its `last` share in whole rounds (none of a stock of none:
+   * a model with no rounds has nothing to keep). A burst that would cross it leaves her belts at it; a burst fired from
+   * it takes nothing from them (mgSpend).
+   */
+  private mgKept(stock: number): number { return Math.ceil(stock * DR.tankmg.last - 1e-9); }
+
+  /**
+   * Whether she is at her last tenth: the belts her share is counted from (mgShare) down to what she keeps (mgKept).
+   * There she fires only at a threat within lastReach, a burst a spell, `lastPause` times her pause between them. A
+   * model with no rounds at all never is (she has no gun to fire).
+   */
+  private mgTenth(sq: Squad, m: Man): boolean {
+    const R = this.mgRow(sq, m);
+    return R.stock > 0 ? (m.mgLeft ?? R.stock) <= this.mgKept(R.stock) : R.roofStock ? (m.mgRoof ?? R.roofStock) <= this.mgKept(R.roofStock) : false;
+  }
+
+  /** A number of hers between a least and a most, by the drill's own dice (the salts 211 to 219 are this switch's). */
+  private mgIn(r: [number, number], ...ns: number[]): number { return r[0] + (r[1] - r[0]) * roll(this.seed, ...ns); }
+
+  /**
+   * Whether x, a man or a tank of enemy block e, d metres from a tank of block u, is worth a burst from her, and how
+   * much: 1 a threat (an anti-tank man within reach.at, a machine gun that is firing within reach.mg), 2 a man moving or in the
+   * open within reach.open, 3 a man in cover or dug in within reach.cover, 4 a tank with her commander up within
+   * reach.rattle (a rattle on her armour: mgMark and mgMan let it through only now and then), 0 not worth the rounds.
+   * `f` is the share of her rounds left: under `low` her reaches halve and she leaves tanks alone; `tenth`, at her last
+   * tenth of them (mgTenth), only a threat within lastReach. Never a gun, a lorry, a man aboard one, a hidden man or a
+   * closed-up tank; and until her block is in the fight, only what is within reach.near of her. `kill`: a man the rules
+   * have just taken (mgKillBy): the rules found him in her fire, so his cover is not asked, nor whether her block is in
+   * the fight: only her reach (reach.open, halved with her rounds low; lastReach at her last tenth).
+   */
+  private mgWorth(u: LandUnit, e: LandUnit, x: Man, d: number, f: number, tenth: boolean, kill = false): 0 | 1 | 2 | 3 | 4 {
+    const T = DR.tankmg, R = T.reach, k = f < T.low ? 0.5 : 1;
+    if (x.pose === 'mounted' || (!kill && (x.hidden || (u.engaged === undefined && d >= R.near)))) return 0;
+    if (x.role === 'tank') return !kill && !x.buttoned && x.cmdDown === undefined && f >= T.low && d < R.rattle ? 4 : 0;
+    if (VEHICLE.has(x.role)) return 0;
+    if (kill) return d < (tenth ? T.lastReach : R.open * k) ? 2 : 0;
+    const firing = x.pose === 'fire' || SMALL_ARMS.has(x.pose);
+    const threat = (x.role === 'at' && d < R.at * k) || ((x.role === 'mg' || x.role === 'hmg') && firing && d < R.mg * k);
+    if (tenth) return threat && d < T.lastReach ? 1 : 0;
+    if (threat) return 1;
+    const open = (x.went ?? 0) > 0.5 || (!e.dug && (x.cover === 'none' || x.cover === 'field'));
+    return open && d < R.open * k ? 2 : d < R.cover * k ? 3 : 0;
+  }
+
+  /**
+   * The enemy's blocks a tank of this block might find a mark in, read at most once a think for the whole block (only
+   * when one of her tanks looks afresh): those whose
+   * ground comes within reach.scan of her block's own; hidden blocks never. The rest are passed over unread.
+   */
+  private mgNear(sq: Squad): Squad[] {
+    const u = sq.u, S = DR.tankmg.reach.scan + Math.hypot(u.w, u.d) / 2, out: Squad[] = [];
+    for (const e of this.b.units) {
+      if (e.side === u.side || !live(e) || e.hid || Math.hypot(e.x - u.x, e.y - u.y) - Math.hypot(e.w, e.d) / 2 > S) continue;
+      const eq = this.squads.get(e.id);
+      if (eq) out.push(eq);
+    }
+    return out;
+  }
+
+  /**
+   * Whether a burst at man x of enemy block eq would be fired at him: his block in sight, and his place his own
+   * block's ground as Drill.round reads it (blockAt: where two blocks' ground overlaps, a point is the first block's,
+   * and a round at a man of the other there is fired at the first one's nearest model, not at him). Such a man is no
+   * mark: a tank that took him could never fire, and would hold him in her sights for nothing.
+   */
+  private mgCan(u: LandUnit, eq: Squad, x: Man): boolean { return !eq.u.hid && this.blockAt(u.side, [x.x, x.y])?.id === eq.u.id; }
+
+  /** Whether her ten-second window now allows a rattle on a tank's armour (rattleShare of them do, by her own dice). */
+  private mgRattle(u: LandUnit, m: Man): boolean { return roll(this.seed, u.id, m.n, Math.floor(this.b.t / 10), 216) < DR.tankmg.rattleShare; }
+
+  /**
+   * The mark tank m finds from her own place when she looks afresh: of the men standing in the blocks near (mgNear),
+   * within her widest reach, whom a burst can be fired at (mgCan), those of the best class there is (mgWorth), and of
+   * them the one nearest her: the man, his class and his block. A tank with her commander up only where there is
+   * nothing else, and only in rattleShare of her own ten-second windows. No dice but the rattle's.
+   */
+  private mgMark(sq: Squad, m: Man, f: number, near: Squad[]): [Man, number, Squad] | undefined {
+    const u = sq.u, R = DR.tankmg.reach, far = Math.max(R.open, R.cover, R.at, R.mg, R.rattle) ** 2, tenth = this.mgTenth(sq, m);
+    let best: Man | undefined, of: Squad | undefined, cls = 5, dd = Infinity;
+    for (const eq of near) for (const x of this.memo(eq).stand) {
+      const dx = x.x - m.x, dy = x.y - m.y, d2 = dx * dx + dy * dy;
+      if (d2 >= far || (d2 >= dd && cls === 1)) continue;
+      const c = this.mgWorth(u, eq.u, x, Math.sqrt(d2), f, tenth);
+      if (c && (c < cls || (c === cls && d2 < dd)) && this.mgCan(u, eq, x)) { best = x; of = eq; cls = c; dd = d2; }
+    }
+    return best && of && (cls < 4 || this.mgRattle(u, m)) ? [best, cls, of] : undefined;
+  }
+
+  /**
+   * The man her mark names (Man.mgOn) as he is now: the man, what he is worth to her this instant (mgWorth; a rattle
+   * only in a window that allows one) and his block. None where he no longer stands, is worth nothing now, or cannot
+   * be fired at (mgCan).
+   */
+  private mgMan(sq: Squad, m: Man, f: number): [Man, number, Squad] | undefined {
+    const on = m.mgOn, eq = on && this.squads.get(on[0]);
+    const x = on && eq && live(eq.u) ? this.memo(eq).stand.find((y) => y.k === on[1] && (y.j ?? -1) === on[2]) : undefined;
+    if (!eq || !x || !this.mgCan(sq.u, eq, x)) return undefined;
+    const c = this.mgWorth(sq.u, eq.u, x, Math.hypot(x.x - m.x, x.y - m.y), f, this.mgTenth(sq, m));
+    return c && (c < 4 || this.mgRattle(sq.u, m)) ? [x, c, eq] : undefined;
+  }
+
+  /**
+   * Each tank's own machine-gun mind, after her block's think (tanks()): only the tanks of an armoured block (never its
+   * armoured cars, AA vehicles, jeeps or carriers, nor a battery's self-propelled guns). While her block fights on and
+   * she has rounds she has a mark, and she keeps the same man from think to think while he is worth a burst at all, so
+   * her turret is not thrown from man to man. She looks afresh (mgMark: the best class, then the nearest) only where
+   * she has no man; or holds him as less than a threat, and then takes another only if he is of a better class than
+   * she holds hers as (threats first); or her spell at him is over, when the best there is now is her next. Each new
+   * man: her first burst at him comes after her own delay (`open`). No mark any more: her spell is over, and her guns
+   * rest a pause. Her turret: with a mark, and her block's target neither armour nor a gun (there the main gun keeps
+   * the turret), her aim is laid on the mark, so the 3D game brings the turret round before the coaxial fires; it is
+   * laid afresh only once the mark has swung `lay` degrees off it. Whenever her aim (hers or the main gun's) has swung
+   * more than the coaxial's arc since her last think, the coaxial waits the time the turret takes to come round, at
+   * `turn` degrees a second (mgLay). The drill book's own gate for her bursts (coax) is shut here each think, so
+   * fire() never fires a tank by both paths.
+   */
+  private mgThink(sq: Squad): void {
+    const u = sq.u, t = this.b.t, T = DR.tankmg, deg = 180 / Math.PI;
+    // (what rides with a block, were it ever thought here, has no machine-gun mind, and no burst by the book either)
+    const own = !sq.esc && sq.of === undefined && u.kind === 'arm', e = own ? this.threat(u) : null, main = !!e && (e.kind === 'arm' || (e.kind === 'art' && !e.team));
+    let near: Squad[] | undefined;
+    for (const m of sq.men) {
+      if (m.role !== 'tank') continue;
+      m.coax = undefined;
+      if (!own || !this.stands(sq, m)) { if (m.mgAt) m.mgAt = m.mgOn = undefined; continue; }
+      const f = this.mgShare(sq, m), was = m.mgOn, can = fighting(u) && ((m.mgLeft ?? 0) > 0 || (m.mgRoof ?? 0) > 0);
+      let mark = can && was ? this.mgMan(sq, m, f) : undefined, as = mark ? m.mgAs ?? 5 : 5;
+      if (mark && as < 5) as = Math.min(as, mark[1]);
+      if (can && as > 1) {
+        const x = this.mgMark(sq, m, f, (near ??= this.mgNear(sq)));
+        if (x && (!mark || x[1] < as)) { mark = x; as = x[1]; }
+      }
+      if (!mark) {
+        if (m.mgRun) { m.mgRun = 0; m.mgNext = Math.max(m.mgNext ?? 0, t + this.mgPause(u, m, f, this.mgTenth(sq, m))); }
+        m.mgAt = m.mgOn = m.mgAs = m.mgAim = undefined;
+      } else {
+        const [x, c, eq] = mark, j = x.j ?? -1;
+        m.mgAt = [x.x, x.y]; m.mgAs = Math.min(as, c);
+        if (!was || was[0] !== eq.u.id || was[1] !== x.k || was[2] !== j) { m.mgOn = [eq.u.id, x.k, j]; m.mgNext = Math.max(m.mgNext ?? 0, t + this.mgIn(T.open, u.id, m.n, Math.round(t * 10), 213)); }
+        if (main) m.mgAim = undefined;
+        else {
+          const a = m.mgAim, br = bearing(m.x, m.y, x.x, x.y);
+          if (!a || Math.abs(wrap(bearing(m.x, m.y, a[0], a[1]) - br)) * deg > T.lay) m.mgAim = [x.x, x.y];
+          m.aim = m.mgAim;
+        }
+      }
+      // (her turret: where her aim is laid after this think, hers or the main gun's, else along her bow; swung more than
+      // the coaxial's arc from where it was laid at her last think, both seen from where she stands now, it takes its
+      // time to come round, and her coaxial waits for it)
+      const w = m.mgWas, now = m.aim ? bearing(m.x, m.y, m.aim[0], m.aim[1]) : m.face, off = Math.abs(wrap(now - (w ? bearing(m.x, m.y, w[0], w[1]) : m.face))) * deg;
+      if (off > T.coaxArc) m.mgLay = Math.max(m.mgLay ?? 0, t) + off / T.turn;
+      m.mgWas = m.aim ? [m.aim[0], m.aim[1]] : undefined;
+    }
+  }
+
+  /**
+   * How long her guns rest after a spell (`pause`, her own draw; `lowPause` times as long once her rounds are low, and
+   * `lastPause` times as long at her last tenth of them: the same draw of hers, only longer).
+   */
+  private mgPause(u: LandUnit, m: Man, f: number, tenth: boolean): number {
+    const T = DR.tankmg;
+    return (tenth ? T.lastPause : f < T.low ? T.lowPause : 1) * this.mgIn(T.pause, u.id, m.n, Math.round(this.b.t * 10), 215);
+  }
+
+  /**
+   * Which of her machine guns fires at a mark now, by her model's row, picked before she fires. The commander's on the
+   * roof: only with him up in his hatch (firing never brings him up nor keeps him up; one struck never mans it again)
+   * and rounds in its belts (where it has belts of its own, more than the tenth of them it keeps, mgKept, unless she
+   * is at her last tenth, mgTenth: then it fires from what is kept, as her other guns do). The hull gunner's: only with the mark within hullArc degrees of her bow. The coaxial: only
+   * with the mark within coaxArc degrees of where her turret is laid (her aim), and only with the turret there: once
+   * it has had its time to come round (mgLay, set where her aim swung at her last think), and her aim not moved since
+   * that think (a main gun's round between thinks lays it on what it struck). Where the roof gun and another bear,
+   * the roof gun takes roofShare of the bursts; where the hull gun and the coaxial both bear, the hull gunner takes
+   * hullShare. None bears: none (she does not fire this time). `kill`, for the burst that takes a man the rules took
+   * (mgKillBy): that burst is made in the dead man's block's turn of the step, and her own turn may yet come, so only
+   * what will still hold when the step is done: the hull gun well inside its arc (8 degrees: she may yet turn a
+   * little), else the coaxial inside its own by what a metre and a half of her own going would swing it, and only
+   * where her block has no think left this step (a think may lay her turret elsewhere); never the roof gun (her
+   * commander may yet go down this step). No dice.
+   */
+  private mgGun(sq: Squad, m: Man, at: [number, number], kill = false): 'coax' | 'hull' | 'roof' | undefined {
+    const u = sq.u, t = this.b.t, T = DR.tankmg, R = this.mgRow(sq, m), k0 = Math.round(t * 10), deg = 180 / Math.PI;
+    const br = bearing(m.x, m.y, at[0], at[1]), belts = (m.mgLeft ?? 0) > 0, ab = m.aim ? bearing(m.x, m.y, m.aim[0], m.aim[1]) : 0;
+    const hull = !!R.hull && belts && Math.abs(wrap(br - m.face)) * deg <= T.hullArc - (kill ? 8 : 0);
+    // (her turret is on her aim: it has had its time to come round, and her aim stands where her last think left it)
+    const w = m.mgWas, laid = !!m.aim && !!w && m.aim[0] === w[0] && m.aim[1] === w[1] && t >= (m.mgLay ?? 0);
+    if (kill) return hull ? 'hull' : R.coax && belts && laid && sq.nextThink > t && (Math.abs(wrap(br - ab)) + Math.atan2(1.5, Math.hypot(at[0] - m.x, at[1] - m.y))) * deg <= T.coaxArc ? 'coax' : undefined;
+    // (hatches: closed as hatchNow has it this step, whichever of the two is asked first)
+    const shut = !!m.buttoned || m.cmdDown !== undefined || (this.hatches && m.shutAt !== undefined && t >= m.shutAt && t < m.shutTo!);
+    const roof = !!R.roof && !shut && (R.roofStock !== undefined ? (m.mgRoof ?? 0) > this.mgKept(R.roofStock) || ((m.mgRoof ?? 0) > 0 && this.mgTenth(sq, m)) : belts);
+    const coax = !!R.coax && belts && laid && Math.abs(wrap(br - ab)) * deg <= T.coaxArc;
+    if (roof && (!(hull || coax) || roll(this.seed, u.id, m.n, k0, 218) < T.roofShare)) return 'roof';
+    if (hull && (!coax || roll(this.seed, u.id, m.n, k0, 219) < T.hullShare)) return 'hull';
+    return coax ? 'coax' : undefined;
+  }
+
+  /**
+   * A burst drawn from her stock: the rounds it shows (`per`) times `scale`, from the belts of the gun that fired it,
+   * never below the last tenth of them (mgKept): the burst that would cross it leaves her belts at it. A burst fired at
+   * her last tenth (mgTenth) takes nothing: those are the belts the crew keeps for close defence.
+   */
+  private mgSpend(sq: Squad, m: Man, g: 'coax' | 'hull' | 'roof'): void {
+    const R = this.mgRow(sq, m), n = R.per * DR.tankmg.scale;
+    if (this.mgTenth(sq, m)) return;
+    if (g === 'roof' && R.roofStock !== undefined) m.mgRoof = Math.max(this.mgKept(R.roofStock), (m.mgRoof ?? 0) - n);
+    else m.mgLeft = Math.max(this.mgKept(R.stock), (m.mgLeft ?? 0) - n);
+  }
+
+  /**
+   * Her burst, by her own timers (each step, from fire(), while she has a mark): none before her next burst is due, and
+   * none while she shows her main gun firing. She opens a spell only once `apart` seconds have passed since any other
+   * tank of her block fired, so no platoon opens as one; held back so, she waits a time of her own (`open` again, her
+   * own draw), so its tanks do not open one after another at an even beat either. Her man is found by name (mgMan) and
+   * weighed again from where she stands now, with the rounds she has now: gone, or not worth it this instant, she
+   * holds her fire and tries again after her block has thought again (mgWait: the think keeps him or finds another).
+   * Then her gun (mgGun); none bearing, she tries again likewise (that is when her turret may be laid afresh). A spell
+   * is `spell` bursts (`lowSpell` with her rounds low; one at her last tenth, mgTenth, and the burst that brings her
+   * to it ends her spell), `gap` seconds apart times her own pace; after its last her
+   * guns rest a pause, and at her next think she looks afresh for the best mark there is (mgAs 5). Each burst is one
+   * round at the place her man stands now, as the drill book's: w 'mg', g its gun.
+   */
+  private tankMgFire(sq: Squad, m: Man): void {
+    const u = sq.u, t = this.b.t, T = DR.tankmg;
+    if (!m.mgAt || t < (m.mgNext ?? 0) || m.pose === 'fire') return;
+    // (no tank opens a spell within `apart` seconds of a burst from another tank of her block: a platoon never opens as
+    // one, and the tank held back waits her own time, not the same second as every other)
+    if (!m.mgRun && sq.men.some((x) => x !== m && x.mgT !== undefined && t - x.mgT < T.apart)) { m.mgNext = t + this.mgIn(T.open, u.id, m.n, Math.round(t * 10), 212); return; }
+    const f = this.mgShare(sq, m), v = this.mgMan(sq, m, f)?.[0], g = v && this.mgGun(sq, m, [v.x, v.y]);
+    if (!v || !g) { m.mgNext = this.mgWait(sq, m); return; }
+    if (!m.mgRun) { m.mgRun = this.mgTenth(sq, m) ? 1 : Math.round(this.mgIn(f < T.low ? T.lowSpell : T.spell, u.id, m.n, m.mgSpells ?? 0, 214)); m.mgSpells = (m.mgSpells ?? 0) + 1; }
+    m.mgRun--;
+    this.mgSpend(sq, m, g);
+    const low = this.mgShare(sq, m), last = this.mgTenth(sq, m);
+    if (low < T.low) m.mgRun = Math.min(m.mgRun, T.lowSpell[1] - 1);
+    if (last) m.mgRun = 0;
+    m.mgNext = t + (m.mgRun > 0 ? this.mgIn(T.pace, u.id, m.n, 211) * this.mgIn(T.gap, u.id, m.n, Math.round(t * 10), 217) : this.mgPause(u, m, low, last));
+    if (!m.mgRun) m.mgAs = 5;
+    m.mgG = g; m.mgT = t;
+    this.round(sq, m, 'mg', [v.x, v.y]);
+  }
+
+  /**
+   * When she tries again, a burst due and no man or no gun to fire it: once her block has thought again, at a moment
+   * of her own in the half second after it (her own dice), so the tanks of a block that wait do not all fire in the
+   * step of their block's think.
+   */
+  private mgWait(sq: Squad, m: Man): number { return sq.nextThink + 0.5 * roll(this.seed, sq.u.id, m.n, Math.round(this.b.t * 10), 212); }
+
+  /**
+   * The burst that took a man the rules gave to a tank block's machine guns (mgKill): from the tank of that block
+   * nearest him that has rounds, is not showing her main gun firing, has not fired this step, has him within her
+   * reach (mgWorth, as he stood) and has her hull gun or her coaxial bearing on him (mgGun); charged to her stock as
+   * any burst, and her next burst put off by her usual gap. Where no tank of the block can fire it, he went to the
+   * main gun of the tank nearest him (`s`, as killRound found her): a shell's round, no burst.
+   */
+  private mgKillBy(tq: Squad, vq: Squad, v: Man, s: Man | undefined): [Man | undefined, Weapon] {
+    const u = tq.u, t = this.b.t, T = DR.tankmg;
+    let best: Man | undefined, dd = Infinity;
+    if (!tq.esc && tq.of === undefined) for (const x of this.standing(tq)) {
+      const d = Math.hypot(x.x - v.x, x.y - v.y);
+      if (x.role !== 'tank' || x.pose === 'fire' || x.mgT === t || d >= dd) continue;
+      if (this.mgWorth(u, vq.u, v, d, this.mgShare(tq, x), this.mgTenth(tq, x), true) && this.mgGun(tq, x, [v.x, v.y], true)) { best = x; dd = d; }
+    }
+    const g = best && this.mgGun(tq, best, [v.x, v.y], true);
+    if (!best || !g) return [s, s ? 'tank' : 'rifle'];
+    this.mgSpend(tq, best, g);
+    best.mgG = g; best.mgT = t;
+    best.mgNext = Math.max(best.mgNext ?? 0, t + this.mgIn(T.pace, u.id, best.n, 211) * this.mgIn(T.gap, u.id, best.n, Math.round(t * 10), 217));
+    return [best, 'mg'];
+  }
+
+  /**
    * Whether the man (model k, or a section's man as the block's count of losses) a tank block took off the enemy's
-   * foot went to her machine guns, not her main gun's shells (BOOK.tankMg.kill: more in the open). The drill book only;
+   * foot went to her machine guns, not her main gun's shells (BOOK.tankMg.kill: more in the open). The drill book only,
+   * or the tanks' own machine-gun minds (Drill.tankmg: the same answer with the book on or off; which tank fires the
+   * burst, and whether one can, is settled where it is drawn, mgKillBy, never here: the fight's code asks this, and its
+   * answer hangs only on what it is asked with, never on a tank's rounds or the order of the asking);
    * fixed by the blocks and the count, never the battle's dice. Looks only: the rules took him either way.
    */
   mgKill(by: LandUnit, t: LandUnit, k: number): boolean {
-    if (!this.byBook || by.kind !== 'arm' || !FOOT_KINDS.includes(t.kind) || t.kind === 'fort') return false;
+    if (!(this.byBook || this.tankmg) || by.kind !== 'arm' || !FOOT_KINDS.includes(t.kind) || t.kind === 'fort') return false;
     const close = CLOSE.includes(groundOf(this.b.field, t.x, t.y)) || t.dug;
     return roll(this.seed, by.id, t.id, k, 97) < (close ? BOOK.tankMg.kill.cover : BOOK.tankMg.kill.open);
   }
@@ -5508,6 +7109,8 @@ export class Drill {
       for (const x of from) { const d = Math.hypot(x.x - at[0], x.y - at[1]); if (d < dd) { dd = d; s = x; } }
     }
     if (!p && s) w = s.role === 'hmg' || s.role === 'tank' ? 'mg' : v.role === 'tank' ? (s.role === 'at' ? 'at' : 'grenade') : s.role === 'mg' ? 'mg' : 'rifle';
+    // (a tank's machine guns, seen firing: the burst from a tank of the block that can fire it, else her main gun's round)
+    if (this.tankmg && tq && !p && !crush && by?.kind === 'arm') [s, w] = this.mgKillBy(tq, vq, v, s);
     // (infantry with tanks: run over by an enemy tank, her tracks the round: no shot, no burst)
     if (crush) { s = crush; w = 'track'; }
     const r: Round = { t: Math.round(t * 10) / 10, l: Math.round(t * 10) / 10, w, on: vq.u.id, ok: v.k, x: Math.round(at[0] * 10) / 10, y: Math.round(at[1] * 10) / 10, r: 'kill' };
@@ -5517,9 +7120,9 @@ export class Drill {
     if (s) {
       r.k = s.k;
       if (s.j !== undefined) r.j = s.j;
-      if (w === 'mg' && s.role === 'tank' && by) r.g = this.tankGun(by, s, at, Math.round(t * 10));
+      if (w === 'mg' && s.role === 'tank' && by) r.g = this.tankmg ? s.mgG : this.tankGun(by, s, at, Math.round(t * 10));
       // Its shot is seen: a tank's, a gun's, a launcher's or a grenade's stamp (small arms are in the firing already).
-      if (((w !== 'rifle' && w !== 'mg') || by?.team === 'snp') && w !== 'track' && !mate) { s.shot = t; s.fired = t; s.aim = [v.x, v.y]; if (s.role === 'gun' || s.role === 'mortar') s.pose = 'fire'; }
+      if (((w !== 'rifle' && w !== 'mg') || by?.team === 'snp') && w !== 'track' && !mate) { s.shot = t; s.fired = t; s.aim = this.tankmg && s.mgT === t ? s.aim : [v.x, v.y]; if (s.role === 'gun' || s.role === 'mortar') s.pose = 'fire'; }
     }
     if (VEHICLE.has(v.role)) {
       const fc: Face = w === 'gun' || w === 'mortar' ? 'top' : s ? this.faceOf(v, s.x, s.y) : 'front', [a, h] = this.spotOn(v, vq.u.id, v.n, Math.round(t * 10), 9);
@@ -5533,8 +7136,9 @@ export class Drill {
     const b = this.b, out: MenBlock[] = [];
     const r1 = (v: number): number => Math.round(v * 10) / 10, r2 = (v: number): number => Math.round(v * 100) / 100;
     const one = (m: Man): MenOut => {
-      // A rifle section's key man is its leader (the 3D game gives him his army's leader's weapon).
-      const o: MenOut = { k: m.k, r: (m.hasSec && m.role === 'rifle') || m.lead ? 'leader' : m.role, x: r1(m.x), y: r1(m.y), f: r2(wrap(m.face)), p: m.pose, v: MOVING.has(m.pose) || CARRIED.has(m.pose) ? r1(m.went ?? 0) : 0, c: m.cover };
+      // A rifle section's key man is its leader (the 3D game gives him his army's leader's weapon). A man who took charge
+      // after his leader fell (acting) is still sent as what he was: a man's role never changes once he has been seen.
+      const o: MenOut = { k: m.k, r: (m.hasSec && m.role === 'rifle') || (m.lead && !m.acting) ? 'leader' : m.role, x: r1(m.x), y: r1(m.y), f: r2(wrap(m.face)), p: m.pose, v: MOVING.has(m.pose) || CARRIED.has(m.pose) ? r1(m.went ?? 0) : 0, c: m.cover };
       if (m.j !== undefined) o.j = m.j;
       if (m.aim) o.a = [r1(m.aim[0]), r1(m.aim[1])];
       if (m.shot !== undefined) o.s = r1(m.shot);

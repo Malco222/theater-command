@@ -149,6 +149,16 @@ namespace
 		// part changes results and is the fight's own. Off until a Mac off/on line and the art director pass it;
 		// -TheaterLandRuleTeamwork turns it on for a run. Name and line: the UI director's, 25 November 17:55Z.)
 		{ TEXT("teamwork"), TEXT("Gun crews at work"), TEXT("How machine gun and mortar crews are drawn: siting the gun, feeding the belt, each man in his own time. Looks only: no result changes."), TEXT("TheaterLandNoTeamwork"), false, TEXT("TheaterLandRuleTeamwork") },
+		// (Wounded and knocked-down men, release 2: Brian, 25 November 16:14Z, "im not seeing multiple soliders being
+		// taken out by an explosion if they are in the blast radius". The drill's, looks only: the rules' losses stay
+		// as booked and a battle ends the same with it on or off (tests/land-wounded). It works with the bearers rule
+		// off. Off until a Mac off/on line and the art director pass it; -TheaterLandRuleWounded turns it on for a run.)
+		{ TEXT("wounded"), TEXT("Wounded and knocked-down men"), TEXT("A shell burst takes the men near it together: those closest are killed, those a little further out fall wounded, and men beyond are knocked off their feet and get up again. Some men hit by bullets fall wounded too. The numbers lost do not change. Off: men fall one at a time and every fallen man is dead."), TEXT("TheaterLandNoWounded"), false, TEXT("TheaterLandRuleWounded") },
+		// (Every man his own pace, release 2: Brian, 25 November 17:30Z, "it looks like they are all jogging at the
+		// same speed", and 16:24Z, "the soldiers of a squad keep zig zaging at the same time". The drill's, looks
+		// only: a battle ends the same with it on or off (tests/land-paces). Off until a Mac off/on line and the art
+		// director pass it; -TheaterLandRulePaces turns it on for a run.)
+		{ TEXT("paces"), TEXT("Every man his own pace"), TEXT("Each soldier moves at his own pace and sets off at his own moment. Riflemen sprint across open ground under fire, gunners and carriers come on slower under their loads, tired men slow down, and the men of a squad no longer swerve together. Off: every man of a squad jogs at the squad's one speed and turns when it turns."), TEXT("TheaterLandNoPaces"), false, TEXT("TheaterLandRulePaces") },
 		// (release 2: Brian, 23 November 07:01Z, yes to half-tracks carrying armoured infantry; looks only, starting off
 		// until the Mac holds 45 fps with it and the art director has passed it; -TheaterLandRuleMech turns it on for a run)
 		{ TEXT("mech"), TEXT("Armoured infantry"), TEXT("An armoured unit's riflemen ride behind its tanks in their army's half-tracks or lorries, and get down to fight near the enemy. Off: the tanks go alone."), TEXT("TheaterLandNoMech"), false, TEXT("TheaterLandRuleMech") },
