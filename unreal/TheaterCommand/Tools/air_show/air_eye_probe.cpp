@@ -264,7 +264,7 @@ int main(int Argc, char** Argv)
 	for (; Frame < 400000; ++Frame)
 	{
 		double Delta = bHeldFrame ? 0.0 : 1.0 / 60.0;
-		bool bLongFrame = false;
+		bool bLongFrame = false, bShotFrame = false;
 		if (!bHeldFrame)
 		{
 			if (LongNext == Frame) for (Long& L : Longs) if (L.Kind == "appear" && !L.bDone) { Delta = L.Ms / 1000.0; L.bDone = true; bLongFrame = true; break; }
@@ -273,11 +273,18 @@ int main(int Argc, char** Argv)
 				if (L.bDone) continue;
 				if ((L.Kind == "real" && RealT >= L.At) || (L.Kind == "battle" && BattleT >= L.At)) { Delta = L.Ms / 1000.0; L.bDone = true; bLongFrame = true; break; }
 			}
-			if (!bLongFrame && ShotMs > 0.0 && ShotNext < ShotTimes.size() && RealT >= ShotTimes[ShotNext]) { Delta = ShotMs / 1000.0; bLongFrame = true; ++ShotNext; }
+			if (!bLongFrame && ShotMs > 0.0 && ShotNext < ShotTimes.size() && RealT >= ShotTimes[ShotNext]) { Delta = ShotMs / 1000.0; bLongFrame = true; bShotFrame = true; ++ShotNext; }
 			if (!bLongFrame && LongMix > 0.0 && RealT >= LongMixNext) { static const double Ms[3] = { 100.0, 150.0, 220.0 }; Delta = Ms[LongMixK++ % 3] / 1000.0; bLongFrame = true; LongMixNext += LongMix; }
 		}
 		// --- AAirBattle::Tick: the clock, Feed, the clamp
+#if defined(ROWS)
+		// (the raid camera's row on, SHOTHOLD=1: a picture's stall, here the picture's own frame, has its step held to a
+		// sixtieth of a second, as AAirBattle::Tick holds the two frames after a picture is asked for in a picture run)
+		static const bool gShotHold = std::getenv("SHOTHOLD") && std::string(std::getenv("SHOTHOLD")) == "1";
+		const double Real = bHeldFrame ? 0.0 : gFix && gShotHold && bShotFrame ? std::min(std::clamp(Delta, 0.0, 0.1), 1.0 / 60.0) : std::clamp(Delta, 0.0, 0.1);
+#else
 		const double Real = bHeldFrame ? 0.0 : std::clamp(Delta, 0.0, 0.1);
+#endif
 		RealT += Delta;
 		Clock.bQuestion = false;
 		Clock.bFlyover = bFlying;

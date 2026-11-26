@@ -3672,7 +3672,29 @@ void AAirBattle::Tick(float DeltaSeconds)
 	}
 	// (1.5.1: nothing moves while the opening is held behind its black frame, WarmTick)
 	const bool bHeld = bBegun && State.IsValid() && State->bWarming;
-	const double Real = bHeld ? 0.0 : FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.1);
+	double Real = bHeld ? 0.0 : FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.1);
+	// (the raid camera's row on, in a picture run only (-TheaterAirBattleShots): the two frames after a picture is asked
+	// for have their step held to a sixtieth of a second, so that the stall of the picture's taking, in whichever of the
+	// two it lands, does not throw the battle and the camera forward a tenth of a second at once (x10 before the meeting,
+	// a whole battle second). Not yet seen on the Mac)
+	if (!ShotFolder.IsEmpty() && bBegun && State.IsValid() && State->Show.Smooth() && State->bSteadyEye)
+	{
+		FAirBattleState& Held = *State;
+		if (Held.ShotsSeen < 0)
+		{
+			Held.ShotsSeen = ShotsTaken;
+		}
+		if (ShotsTaken != Held.ShotsSeen)
+		{
+			Held.ShotsSeen = ShotsTaken;
+			Held.ShotHold = 2;
+		}
+		if (Held.ShotHold > 0)
+		{
+			Real = FMath::Min(Real, 1.0 / 60.0);
+			--Held.ShotHold;
+		}
+	}
 	RealT += Real;
 	if (QuitAt >= 0.0 && RealT >= QuitAt)
 	{

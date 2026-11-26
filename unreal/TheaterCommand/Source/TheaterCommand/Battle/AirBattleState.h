@@ -123,6 +123,9 @@ struct FAirBattleState
 	double JumpDt = 0.0;
 	uint64 JumpFrame = 0;
 	int32 JumpBallCuts = 0, JumpRun = 0;
+	/** With it on, in a picture run (-TheaterAirBattleShots): the pictures asked for as last seen (AAirBattle::Tick; -1
+	 * not yet), and how many frames more have their step held to a sixtieth of a second after one. */
+	int32 ShotsSeen = -1, ShotHold = 0;
 	bool bFlying = false;
 	bool bFlyTried = false;     // looked for once, when the battle's first groups stand
 	double FlyT = 0.0;
