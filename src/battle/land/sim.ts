@@ -618,7 +618,11 @@ export class LandBattle implements BattleSim<LandUnit> {
     // they are on this ticket as team blocks, the blocks share out the power before that term: the teams on the field
     // are the term. Priced but not on the ticket, or not priced: A and A / odds, as it always was.)
     const priced = ticket.reckoning.teamFire && [...ticket.att.forces, ...ticket.def.forces].some(isOwnTeam) ? ticket.reckoning.teamFire : undefined;
-    const A = ticket.reckoning.A / (priced ? Math.max(1e-6, priced.att) : 1), D = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds) / (priced ? Math.max(1e-6, priced.def) : 1);
+    // (Sniper teams, release 2 behind `snipers`: the card's term for the pairs (Reckoning.snipers) likewise, where the
+    // pairs are on this ticket (withSnipers): the pairs and their pins on the field are the term.)
+    const sniped = ticket.reckoning.snipers && [...ticket.att.forces, ...ticket.def.forces].some((f) => f.kind === 'snp') ? ticket.reckoning.snipers : undefined;
+    const A = ticket.reckoning.A / (priced ? Math.max(1e-6, priced.att) : 1) / (sniped ? Math.max(1e-6, sniped.att) : 1);
+    const D = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds) / (priced ? Math.max(1e-6, priced.def) : 1) / (sniped ? Math.max(1e-6, sniped.def) : 1);
     this.power = { att: A, def: D };
     this.teamParent = ownTeamParents(ticket);
     const att = makeBlocks('att', ticket.att, A, 1, undefined, ticket.turn);

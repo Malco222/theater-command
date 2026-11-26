@@ -87,6 +87,12 @@ export interface Reckoning {
    * would take it off twice. Absent with the switch off: the field is laid at A and A / odds, as it always was.
    */
   teamFire?: { att: number; def: number };
+  /**
+   * Sniper teams on the card (release 2, behind `snipers`; campaign/snipercard.ts): what each side's strength was
+   * multiplied by for the sniper pairs, already in A, D and odds. The field lays its blocks at the power before it when
+   * the pairs are on the ticket (sim.ts), as it does for the teams' term.
+   */
+  snipers?: { att: number; def: number };
   /** The field spread's draw (release 2, stage.json 'spread', bench-only): absent unless the switch is on. */
   spread?: SpreadReckoning;
 }

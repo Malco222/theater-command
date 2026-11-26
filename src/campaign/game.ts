@@ -49,6 +49,7 @@ import rivalsData from '../../data/campaign/rivals.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot, whyBarred } from './ground';
 import { SUPPORT, antiTank, assaultFire, footShare, machineGuns, mortars, snipedIn, tollFor, tollOf, whoPaid, type Faced, type Facing } from './support';
 import { teamFire, teamFireLine, teamFireOn, type TeamFire } from './teamfire';
+import { sniperCard, sniperCardLine, sniperCardOn, type SniperCard } from './snipercard';
 import { isTeam, TEAMS, teamsIn } from './teams';
 import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName, worksName } from './rivers';
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
@@ -1754,6 +1755,12 @@ export interface Assessment {
    * Unset with the switch off, in a fight that is not a field battle, and where neither side brings teams.
    */
   teamFire?: TeamFire;
+  /**
+   * Sniper teams (release 2, behind `snipers`; snipercard.ts): what each side's strength was multiplied by for the sniper
+   * pairs on the field, already in A, D and odds. The field is laid at the power before it (Reckoning.snipers). Unset with
+   * the switch off, in a fight that is not a field battle, and where neither side has foot to give pairs.
+   */
+  snipers?: SniperCard;
 }
 
 /** How an attack arrives: over land, or (sea) from landing craft at that share of its strength. */
@@ -2170,6 +2177,16 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     odds: A / D, terrain: target.terrain, fort: served && target.fort && fortFaced > 0 ? target.fort.lv : 0,
   }) : null;
   if (teamFx) { A *= teamFx.att; D = Math.max(D * teamFx.def, 0.01); }
+  // Sniper teams (release 2, behind `snipers`, off: snipercard.ts; the design director, 26 November 01:49Z and 02:32Z).
+  // The same field battles and the same weights as the teams' term, each corps with its nation (its doctrine's share of
+  // foot for pairs): each side's pairs at their worth after the lines meet, and its foot slowed by the other's pins for
+  // their part of the fight. Its own key, never the teams'.
+  const snpFx = sniperCardOn(g) && land && !town && !opts.sally && defenders.length > 0 ? sniperCard({
+    att: attackers.filter((c) => !(wide && (barred(g, c, target) || noCrossing(g, c.kind, c.reg, target.id)))).map((c) => [c.kind, corpsBase(g, c) * KIND[c.kind].atk, c.nat]),
+    def: defenders.map((d) => [d.kind, corpsBase(g, d) * KIND[d.kind].def * (1 + 0.25 * Math.min(1, worksOf(d))), d.nat]),
+    guard: guarded > 0 ? guardPower(g, target) * 1.25 : 0,
+  }) : null;
+  if (snpFx) { A *= snpFx.att; D = Math.max(D * snpFx.def, 0.01); }
 
   const sum = (cs: Corps[]) => cs.reduce((s, c) => s + men(c), 0).toLocaleString('en-US');
   if (town) {
@@ -2287,6 +2304,9 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // (Support teams, release 2 behind `teams`: what each side's own machine guns and mortars do to the odds, in whole points.)
   const teamLine = teamFx ? teamFireLine(teamFx) : null;
   if (teamLine) lines.push(teamLine);
+  // (Sniper teams, release 2 behind `snipers`: what the pairs on both sides do to the odds, in whole points.)
+  const snpLine = snpFx ? sniperCardLine(snpFx) : null;
+  if (snpLine) lines.push(snpLine);
   if (dugIn && !wide) lines.push({ label: 'Dug in', value: dugIn === defenders.length ? 'The defenders have had a month to dig in' : `${dugIn} of the ${defenders.length} defending corps have had a month to dig in`, effect: `Troops in fieldworks defend ${Math.round((DUG_IN - 1) * 100)}% stronger` });
   // How old the works are, and what this blow takes off them whether it carries the ground or not (the grand campaign).
   const works = wide && !town && dugD > 0 ? worksD / dugD : 0;
@@ -2496,7 +2516,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const overrun = gunsRule(g) && !town && !guarded && defenders.some((c) => c.kind === 'art' || isTeam(c)) && defenders.every((c) => c.kind === 'art' || c.kind === 'eng' || isTeam(c));
   if (overrun) lines.push(GUNS_OVERRUN);
   if (overrun) dice = today;
-  return { A, D, odds: overrun ? Math.max(A / D, OVERRUN_ODDS / dice[0]) : A / D, lines, defenders, dice, ...(dice !== today ? { luck: today } : {}), prepared, works, wear, weight, tired, faced, ...(overrun ? { overrun } : {}), ...(guarded > 0 ? { guard: guarded } : {}), ...(close ? { air: close } : {}), ...(teamFx ? { teamFire: teamFx } : {}) };
+  return { A, D, odds: overrun ? Math.max(A / D, OVERRUN_ODDS / dice[0]) : A / D, lines, defenders, dice, ...(dice !== today ? { luck: today } : {}), prepared, works, wear, weight, tired, faced, ...(overrun ? { overrun } : {}), ...(guarded > 0 ? { guard: guarded } : {}), ...(close ? { air: close } : {}), ...(teamFx ? { teamFire: teamFx } : {}), ...(snpFx ? { snipers: snpFx } : {}) };
 }
 
 function reportUnit(c: Corps): ReportUnit {
