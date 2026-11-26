@@ -188,6 +188,9 @@ export function waitedOn(g: Game, i: number, at: number | undefined): WaitedOn |
     // line stands. The sceptic's T2-3.)
     const id = g.flags[idKey(i, k)];
     if (!x && id !== undefined && g.corps.some((c) => c.id === id && !c.dead)) return null;
+    // (A corps standing under the name with another id is not the one he was told of: one raised again from the memorial
+    // wall under its old name was never at the front. Nothing true is said of it here; today's line stands.)
+    if (x && id !== undefined && x.id !== id) return null;
     // (Gone from the board, it is "lost" only where the memorial wall says so: a corps of the row's nation and that name
     // written there (stories.ts `storyFallen`: destroyed, surrendered or starved) in or after the month the row was told
     // (`rowTold`). Gone for any other cause, taken by another row, folded, broken up, lent, drawn on, stood down, struck
