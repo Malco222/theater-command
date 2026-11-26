@@ -65,7 +65,8 @@ namespace LandFieldMap
 		for (std::size_t K = 0; K < Of.Grounds.size(); ++K)
 		{
 			const std::string& Word = Of.Grounds[K];
-			Words[K] = Word == "woods" ? Paint::Woods : Word == "water" ? Paint::Water
+			// (a blown bridge is river again: the rules count it in the water)
+			Words[K] = Word == "woods" ? Paint::Woods : Word == "water" || Word == "blown" ? Paint::Water
 				: Word == "buildings" || Word == "industry" || Word == "suburb" ? Paint::Building : Paint::Ground;
 			Crossing[K] = Word == "bridge";
 		}

@@ -93,7 +93,7 @@ int main()
 	F.Cell = 25.0;
 	F.Cols = 120;
 	F.Rows = 80;
-	F.Grounds = { "open", "woods", "water", "buildings", "road", "marsh", "bridge" };
+	F.Grounds = { "open", "woods", "water", "buildings", "road", "marsh", "bridge", "blown" };
 	F.Ground.assign(static_cast<size_t>(F.Cols) * static_cast<size_t>(F.Rows), 0);
 	F.Storeys.assign(F.Ground.size(), 0);
 	auto Set = [&F](int Col, int Row, std::uint8_t Kind) { F.Ground[static_cast<size_t>(Row) * static_cast<size_t>(F.Cols) + static_cast<size_t>(Col)] = Kind; };
@@ -101,8 +101,9 @@ int main()
 	for (int Row = 0; Row < F.Rows; ++Row) Set(60, Row, 2);
 	for (int Row = 40; Row < 46; ++Row) for (int Col = 100; Col < 106; ++Col) Set(Col, Row, 3);
 	for (int Col = 0; Col < F.Cols; ++Col) if (Col != 60) Set(Col, 70, 4);
-	// (one bridge over the river, at 500 to 525 north)
+	// (one bridge over the river, at 500 to 525 north, and one blown, at 1250 to 1275)
 	Set(60, 20, 6);
+	Set(60, 50, 7);
 	F.Storeys[static_cast<size_t>(60) * static_cast<size_t>(F.Cols) + 40] = 2;
 	for (const bool bTurn : { false, true })
 	{
@@ -143,6 +144,7 @@ int main()
 		Check(PaintAt(P, In, 1512.5, 1000.0) == Paint::Water, "the river where it lies" + Which);
 		Check(PaintAt(P, In, 1512.5, 512.5) == Paint::Ground, "a bridge wins over the water under its square: plain ground" + Which);
 		Check(PaintAt(P, In, 1512.5, 400.0) == Paint::Water && PaintAt(P, In, 1512.5, 625.0) == Paint::Water, "the river runs on each side of its bridge" + Which);
+		Check(PaintAt(P, In, 1512.5, 1262.5) == Paint::Water, "a blown bridge is river again" + Which);
 	}
 	Check(Paints(F, Frame()).Runs.empty() && Paints(LandFeed::Field(), Wide).Runs.empty(), "no frame or no field: nothing painted");
 

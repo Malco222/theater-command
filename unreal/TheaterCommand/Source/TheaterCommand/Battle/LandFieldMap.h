@@ -78,8 +78,8 @@ namespace LandFieldMap
 
 	/**
 	 * The field painted small. A square over a bridge is plain ground, so each crossing shows as a gap in its river
-	 * (the UI director, 26 November 2026, 05:35Z); else it is water where any of the field's cells under it is water (a
-	 * river one cell wide stays whole); else buildings where any is built on; else woods where at least half are woods.
+	 * (the UI director, 26 November 2026, 05:35Z); else it is water where any of the field's cells under it is water or a
+	 * blown bridge (a river one cell wide stays whole); else buildings where any is built on; else woods where at least half are woods.
 	 * Roads are not drawn. Made once a battle: the ground does not change while it is fought.
 	 */
 	Painted Paints(const LandFeed::Field& Of, const Frame& In, double Square = 3.0);
