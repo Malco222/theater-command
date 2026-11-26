@@ -55,8 +55,13 @@ export interface Scene {
   /** The rules' fighter pilot who flies again, and whose ground it is over. */
   back: boolean;
   over: Fall['over'];
-  /** Crew aboard (bombers: crewOf, by the model and the month), who may be seen to get out. */
+  /**
+   * Crew aboard (bombers: crewOf, by the model and the month; with 'bailouts' by the kit the group flies), who may be
+   * seen to get out. A fighter 1; with 'bailouts' the two-seat Fulmar 2 (SKY.fall.fighterCrews, hole H-FULMAR).
+   */
   crew: number;
+  /** Release 2's 'bailouts' (sim.ts airLooks), on for this battle; absent means off, and the fall is as it always was. */
+  bailouts?: boolean;
   /** A loss of its own tight box moments before, close by, or a fighter that was attacking the box ('foe'), that may strike it. */
   near: { fid: number; how: FallHow; foe?: boolean } | null;
 }
@@ -98,12 +103,17 @@ export function ramShare(nat: string, w: { year: number; month: number }, engine
 /**
  * The crew aboard a bomber, for who is seen to get out (book.ts SKY.fall.crews; the historian): two in a dive bomber,
  * three in a torpedo bomber, five in a He 111 (four before 1941), seven in a G4M or a Lancaster, ten in a B-17 (nine
- * from mid-1944). `month` counts from 0.
+ * from mid-1944). `month` counts from 0. Given the kit the group flies (its guns' mark; release 2, 'bailouts'), by the
+ * kit and never the date (SKY.fall.crewsByKit; the design director's D4): a He 111P four, a He 111H five, every B-17
+ * ten. The model guard keeps a kit read for its own model only (a test's D3A on a 1939 German ticket is still two).
  */
-export function crewOf(model: string, w: { year: number; month: number }): number {
-  const F = SKY.fall, d = w.year + w.month / 12;
+export function crewOf(model: string, w: { year: number; month: number }, kit?: string): number {
+  const F = SKY.fall;
+  const plain = (): number => F.crews[model] ?? F.crews[model.split(':')[0]] ?? F.crews.Bomber;
+  if (kit !== undefined) return F.crewsByKit.find((c) => c.model === model && c.mark === kit)?.crew ?? plain();
+  const d = w.year + w.month / 12;
   const dated = F.crewsDated.find((c) => c.model === model && d >= (c.from ?? -Infinity) && d < (c.to ?? Infinity));
-  return dated?.crew ?? F.crews[model] ?? F.crews[model.split(':')[0]] ?? F.crews.Bomber;
+  return dated?.crew ?? plain();
 }
 
 /**
@@ -158,6 +168,65 @@ export function weightsOf(sc: Scene, mem: FateMemory): number[] {
 
 const range = (rng: Rng, [a, b]: readonly [number, number] | [number, number]): number => a + rng.next() * (b - a);
 
+/**
+ * The look stream's fork for who gets out where today's rules show no one, or show it another way (release 2,
+ * 'bailouts' only). Forked after every look-stream die of the fall is thrown, and forking never moves its parent, so
+ * every other look is what it was with the switch off. No other fork of the look stream takes 83.
+ */
+export const GOT = 83;
+const SAVED = (h: FallHow): boolean => (SKY.fate.saved as readonly string[]).includes(h);
+
+/**
+ * The canopies' moments: R times the first `thrown` men's (`ours` of them seen) and `more` the `extra` men past them.
+ * Low down there is no time: a canopy that would open after the end opens just before it.
+ */
+function timesOf(R: Rng, more: Rng | undefined, thrown: number, ours: number, extra: number, how: FallHow, upTo: number): number[] {
+  const F = SKY.fate, at0: number[] = [];
+  if (!thrown && !extra) return at0;
+  const first = how === 'spin' || how === 'wing' || how === 'tail' ? F.chute.spin : F.chute.first;
+  let at = range(thrown ? R : more!, first);
+  const open = (): void => { at0.push(Math.round(Math.min(at, Math.max(0.5, upTo - 0.5)) * 10) / 10); };
+  for (let i = 0; i < thrown; i++) { if (i < ours) open(); at += range(R, F.chute.gap); }
+  for (let i = 0; i < extra; i++) { open(); at += range(more!, F.chute.gap); }
+  return at0;
+}
+
+/**
+ * Men jumping at p each, by the look stream's own dice form (five always thrown, the sixth and after on a fork 53 of
+ * their own), on G: so a smaller crew is the first of the same men, and round 2's damage record can scale each man's
+ * share here without touching the look stream.
+ */
+export function jumps(G: Rng, crew: number, p: number, how: FallHow, upTo: number): { chutes: number; at: number[] } {
+  const DICE = SKY.fall.crew;
+  let thrown = 0, ours = 0, extra = 0;
+  const more = crew > DICE ? G.fork(53) : undefined;
+  for (let i = 0; i < DICE; i++) if (G.chance(p)) { thrown++; if (i < crew) ours++; }
+  for (let i = DICE; i < crew; i++) if (more!.chance(p)) extra++;
+  return { chutes: ours + extra, at: timesOf(G, more, thrown, ours, extra, how, upTo) };
+}
+
+/**
+ * Release 2, 'bailouts': how one man of a fighter not brought back by the rules gets out, by the one rule across every
+ * way down (the design director, 26 November 2026: D1, D3, D11), on G, whoever's ground it is over. From a glide over
+ * land he jumps at out.glide times outBand (hole H-GLIDE-JUMP, 0 as shipped); otherwise he rides it down and climbs
+ * out at ftrLand (H-FTR-LAND). In a way his pilot could get out of, under a parachute at pilotOut times outBand
+ * (H-FTR-OUT); in a breakup or a collision at out times outBand (D11). From an explosion, or with the pilot hit, never.
+ * `landed`: the look stream's own climb-out die, already thrown for a pilot over the enemy's ground in a glide (as with
+ * the switch off): it stands for him if he does not jump (the design's section 4.3), so only over his own ground, and
+ * for a second man, is the climb-out drawn on G.
+ */
+function oneOut(G: Rng, sc: Scene, how: FallHow, landed?: boolean): 'chute' | 'out' | null {
+  const F = SKY.fate, band = F.outBand[sc.band];
+  if (how === 'glide') {
+    const jump = sc.sea ? 0 : Math.min(0.95, (F.out.glide ?? 0) * band);
+    if (jump > 0 && G.chance(jump)) return 'chute';
+    return (landed ?? G.chance(F.ftrLand)) ? 'out' : null;
+  }
+  const p = SAVED(how) ? F.pilotOut[how as keyof typeof F.pilotOut] : how === 'breakup' || how === 'collide' ? F.out[how] ?? 0 : 0;
+  const q = Math.min(0.95, p * band);
+  return q > 0 && G.chance(q) ? 'chute' : null;
+}
+
 /** One fate. 'pair' forces a collision with the loss it names (the sim pairs a fighter with the bomber it attacked). */
 export function fateOf(rng: Rng, sc: Scene, mem: FateMemory, pair?: { fid: number; cause: 'ram' }): Fate {
   const F = SKY.fate;
@@ -203,15 +272,17 @@ export function fateOf(rng: Rng, sc: Scene, mem: FateMemory, pair?: { fid: numbe
   const upTo = boom ?? dur;
   const DICE = SKY.fall.crew;
   // 'thrown': the canopies this stream times; 'ours' of them are seen; 'extra' more are the men past the fifth.
-  let chutes = 0, out = 0, thrown = 0, ours = 0, extra = 0;
+  let chutes = 0, out = 0, thrown = 0, ours = 0, extra = 0, lost = 0;
   let more: Rng | undefined;
   if (sc.air === 'ftr') {
     if (sc.back) chutes = 1;
-    else if (sc.over === 'enemy' && (F.saved as readonly string[]).includes(how)) chutes = rng.chance(F.captured[how as keyof typeof F.captured] ?? 0.5) ? 1 : 0;
-    if (how === 'glide' && !sc.back && sc.over === 'enemy') out = rng.chance(0.6) ? 1 : 0;
+    else if (sc.over === 'enemy' && SAVED(how)) chutes = rng.chance(F.pilotOut[how as keyof typeof F.pilotOut] ?? 0.5) ? 1 : 0;
+    if (how === 'glide' && !sc.back && sc.over === 'enemy') out = rng.chance(F.ftrLand) ? 1 : 0;
     thrown = ours = chutes;
   } else if (how === 'glide') {
-    out = sc.crew - rng.int(Math.max(1, Math.ceil(sc.crew / 3)));
+    // One die: the men lost in the landing.
+    lost = rng.int(Math.max(1, Math.ceil(sc.crew / 3)));
+    out = sc.crew - lost;
   } else {
     const p = Math.min(0.95, (F.out[how] ?? 0) * F.outBand[sc.band]);
     if (sc.crew > DICE) more = rng.fork(53);
@@ -219,14 +290,41 @@ export function fateOf(rng: Rng, sc: Scene, mem: FateMemory, pair?: { fid: numbe
     for (let i = DICE; i < sc.crew; i++) if (more!.chance(p)) extra++;
     chutes = ours + extra;
   }
-  const chuteAt: number[] = [];
-  if (thrown || extra) {
-    const first = how === 'spin' || how === 'wing' || how === 'tail' ? F.chute.spin : F.chute.first;
-    let at = range(thrown ? rng : more!, first);
-    // Low down there is no time: a canopy that would open after the end opens just before it.
-    const open = (): void => { chuteAt.push(Math.round(Math.min(at, Math.max(0.5, upTo - 0.5)) * 10) / 10); };
-    for (let i = 0; i < thrown; i++) { if (i < ours) open(); at += range(rng, F.chute.gap); }
-    for (let i = 0; i < extra; i++) { open(); at += range(more!, F.chute.gap); }
+  let chuteAt: number[] = timesOf(rng, more, thrown, ours, extra, how, upTo);
+  // Release 2, 'bailouts' (the design director, 26 November 2026): a parachute for every man who got out, whether or
+  // not he flies again, by one getting-out rule across every way down. Every die above is thrown as with the switch
+  // off; what this changes is drawn on G alone, so the look stream and every other look are as they were. Looks only:
+  // whether a fighter pilot flies again stays the count's ('back', drawn on the rules' own stream before the look).
+  if (sc.bailouts) {
+    if (sc.air === 'ftr') {
+      // The pilot: brought back, as above; not brought back, by the one rule, whoever's ground it is over (D1, D3, D11).
+      // A second man (the two-seat Fulmar, crew 2: D8) gets out by the same rule after the pilot's draws, whether or
+      // not the pilot is brought back (the count holds only the pilot).
+      const G = rng.fork(GOT);
+      // Over the enemy's ground a pilot who rides a glide down keeps the look stream's climb-out die thrown above.
+      const men = sc.back ? [] : [oneOut(G, sc, how, how === 'glide' && sc.over === 'enemy' ? out === 1 : undefined)];
+      for (let i = 1; i < sc.crew; i++) men.push(oneOut(G, sc, how));
+      const kept = sc.back ? chuteAt : [];
+      const up = men.filter((m) => m === 'chute').length;
+      chutes = kept.length + up;
+      out = men.filter((m) => m === 'out').length;
+      // Each canopy on G after the one before it (the brought-back pilot's stays where the look stream put it).
+      chuteAt = [...kept];
+      if (up) {
+        const cap = Math.max(0.5, upTo - 0.5), first = how === 'spin' || how === 'wing' || how === 'tail' ? F.chute.spin : F.chute.first;
+        let at = kept.length ? kept[kept.length - 1] + range(G, F.chute.gap) : range(G, first);
+        for (let i = 0; i < up; i++) { chuteAt.push(Math.round(Math.min(at, cap) * 10) / 10); at += range(G, F.chute.gap); }
+      }
+    } else if (how === 'glide') {
+      // The bomber's glide reads the one rule from its own entry (out.glide, hole H-GLIDE-JUMP; never over the sea,
+      // H-GLIDE-SEA): who jumps on the way down, and the landing keeps whoever stayed, less those lost in it.
+      const p = sc.sea ? 0 : Math.min(0.95, (F.out.glide ?? 0) * F.outBand[sc.band]);
+      if (p > 0) {
+        const got = jumps(rng.fork(GOT), sc.crew, p, how, upTo);
+        chutes = got.chutes; chuteAt = got.at;
+        out = Math.max(0, sc.crew - got.chutes - lost);
+      }
+    }
   }
   // Which way it rolls, and a look number that is not the last one shown for this way down.
   let roll: 1 | -1 = rng.chance(0.5) ? 1 : -1;

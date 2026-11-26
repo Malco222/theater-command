@@ -124,6 +124,13 @@ export class AirSim implements BattleSim<AirUnit> {
    * never moves its parent), and the tests run every battle with it on and off and find the same result.
    */
   readonly show: boolean;
+  /**
+   * Release 2's 'bailouts' (airLooks below), read once when the battle opens, so a battle keeps its switch to the end.
+   * Looks only: on, every 'air:lost' carries its 'crew', a parachute shows for every man who got out whether or not he
+   * flies again, one getting-out rule runs across every way down, and a bomber's crew follows the kit it flies. Off, as
+   * shipped, every battle is what it was.
+   */
+  readonly bailouts: boolean;
   private when: When;
   private stragRng: Rng;
   private passRng: Rng;
@@ -259,10 +266,11 @@ export class AirSim implements BattleSim<AirUnit> {
     dive: new Map<number, { at: number; from: number; to: number; edge: number }>(),
   };
 
-  constructor(ticket: FieldTicket<AirPlace>, opts: { show?: boolean; look?: number } = {}) {
+  constructor(ticket: FieldTicket<AirPlace>, opts: { show?: boolean; look?: number; bailouts?: boolean } = {}) {
     this.ticket = ticket;
     this.place = ticket.place;
     this.show = opts.show ?? true;
+    this.bailouts = opts.bailouts ?? airLooks().includes('bailouts');
     this.look = Math.max(1, opts.look ?? SKY.look.all);
     this.when = ticket.place.when ?? { year: 1939, month: 8 };
     this.rng = new Rng(ticket.seed);
@@ -1382,14 +1390,15 @@ export class AirSim implements BattleSim<AirUnit> {
       // stream (the historian). Seen falling a moment first, so the eye can follow it down onto this one (the art director).
       const near = u.air === 'bmr' && !s && u.state === 'steady' && !this.place.night
         ? this.recent.find((r) => r.box === u.id && !r.used && this.t - r.t >= F.near.min) : undefined;
-      const fate = fateOf(this.lookRng, this.sceneOf(L, near), this.fates, other ? { fid: other.fid, cause: 'ram' } : undefined);
+      const sc = this.sceneOf(L, near);
+      const fate = fateOf(this.lookRng, sc, this.fates, other ? { fid: other.fid, cause: 'ram' } : undefined);
       // A loss strikes at most one other (a fighter falling through a box it fired on is listed once for each box).
       if (fate.how === 'struck' && near) for (const r of this.recent) if (r.fid === near.fid) r.used = true;
       if (u.air === 'bmr' && !s) this.recent.push({ box: u.id, fid: L.fid, how: fate.how, t: this.t, used: false });
       // A fighter going down while it attacks a box may fall through it (never one that collided: it is already locked to its bomber).
       if (u.air === 'ftr' && fate.how !== 'collide') for (const f of u.fire) this.recent.push({ box: f.on, fid: L.fid, how: fate.how, t: this.t, used: false, foe: true });
       falls.set(L, {
-        ...L.fall, ...fate, kind: kindOf(fate.how), fid: L.fid, ...(meant.has(L) ? { meant: true as const } : {}),
+        ...L.fall, ...fate, kind: kindOf(fate.how), fid: L.fid, ...(this.bailouts ? { crew: sc.crew } : {}), ...(meant.has(L) ? { meant: true as const } : {}),
         captured: L.fall.back || L.fall.over !== 'enemy' ? 0 : fate.chutes + (fate.out ?? 0),
       });
     }
@@ -1452,9 +1461,16 @@ export class AirSim implements BattleSim<AirUnit> {
       sea: this.place.ships && !this.place.ships.law.harbour ? true : seaAt(this.place.ground, at.x, at.y),
       night: !!this.place.night,
       back: L.fall.back, over: L.fall.over,
-      crew: u.air === 'bmr' ? crewOf(u.model, this.when) : 1,
+      // With 'bailouts' a bomber's crew is by the kit its group flies (D4), and a fighter's by its model (the Fulmar 2, D8).
+      crew: u.air === 'bmr' ? crewOf(u.model, this.when, this.bailouts ? this.kitOf(u) : undefined) : this.bailouts ? SKY.fall.fighterCrews[u.model] ?? 1 : 1,
       near: near ? { fid: near.fid, how: near.how, ...(near.foe ? { foe: true } : {}) } : null,
+      ...(this.bailouts ? { bailouts: true } : {}),
     };
+  }
+
+  /** The mark a bomber group flies (guns.ts), as oneGun reads its loadout: what its crew follows with 'bailouts' on. */
+  private kitOf(u: AirUnit): string {
+    return (this.place.guns?.[u.nat]?.bmr ?? bomberGuns(u.model, u.nat, this.when)).mark;
   }
 
   /** The heaviest gun a fighter group carries that month (guns.ts), for the way what it shoots down goes. */
@@ -2488,7 +2504,27 @@ export class AirSim implements BattleSim<AirUnit> {
 }
 
 /** A battle from a ticket. */
-export const airBattle = (t: FieldTicket<AirPlace>, opts?: { show?: boolean; look?: number }): AirSim => new AirSim(t, opts);
+export const airBattle = (t: FieldTicket<AirPlace>, opts?: { show?: boolean; look?: number; bailouts?: boolean }): AirSim => new AirSim(t, opts);
+
+/**
+ * Release 2's further looks of the air battle, each behind its own switch, off as shipped (the design director's
+ * standing line on release 2 work). Today 'bailouts' (the owner, 26 November 2026: "if a fighter gets shot down the
+ * pilot can bail out and there will be a parachute"; "for a bomber have the max number of people on the plane and then
+ * have a certain amount bail out"; the design director's rulings of the same day). Looks only: no count moves.
+ */
+export const MORE_LOOKS = ['bailouts'] as const;
+let looksAsked: string[] = [];
+/**
+ * The switch, as flyKinds (ticket.ts): called with a list, sets the bridge's (TC.airLooks; an empty list switches them
+ * all off); either way answers the looks now on. A cloud run or a test can by TC_LOOKS=bailouts in its environment or
+ * (globalThis as any).TC_LOOKS = 'bailouts' (a comma list). A battle reads it once, when it opens.
+ */
+export function airLooks(names?: readonly string[]): string[] {
+  if (names) looksAsked = MORE_LOOKS.filter((k) => names.includes(k));
+  const G = globalThis as { TC_LOOKS?: unknown; process?: { env?: Record<string, string | undefined> } };
+  const forced = String(G.TC_LOOKS ?? G.process?.env?.TC_LOOKS ?? '').split(',').map((x) => x.trim());
+  return MORE_LOOKS.filter((k) => looksAsked.includes(k) || forced.includes(k));
+}
 
 /**
  * The lane a raid's fighters strafe down (a raid on troops): through the middle of the pieces on the ground, along the

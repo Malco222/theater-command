@@ -118,6 +118,13 @@
 //                                   rearguard and the stragglers cost, in the same place: "As the Polish army withdrew
 //                                   under fire, it lost 4,644 more men in the rearguard and as stragglers." (b474)
 //                                   Where an army broke on the field, also brokeBy: why it broke, as below (b496(2)).
+//   TC.airLooks([names])         -> { looks }: release 2's further looks of the air battle, each behind its own switch,
+//                                   all off until switched on here (src/battle/air/sim.ts MORE_LOOKS; today 'bailouts').
+//                                   With a list, those looks are on for every air battle opened from then on (an empty
+//                                   list switches them all off); with none, it only answers which are on. 'bailouts':
+//                                   every 'air:lost' carries 'crew' (the men the look draws from), a parachute shows for
+//                                   every man who got out whether or not he flies again, one getting-out rule runs
+//                                   across every way down, and a bomber's crew follows its kit. Looks only.
 //   TC.airLook(kind, target, ids) -> { ticket } for the raid the raid card shows, or { ticket: null, why } where it
 //                                   cannot be fought out (src/battle/air FOUGHT_KINDS: 'bomb', 'superiority'; and the
 //                                   kinds TC.airKinds has switched on)
@@ -506,7 +513,7 @@ import { LAND, MOTION, type Kind } from '../../../src/battle/land/rules';
 import type { LandUnit } from '../../../src/battle/land/units';
 import { STORIES } from '../../../src/campaign/stories';
 import { SKY } from '../../../src/battle/air/book';
-import { AirSim } from '../../../src/battle/air/sim';
+import { AirSim, airLooks } from '../../../src/battle/air/sim';
 import { airTicket, flyKinds, foughtAir } from '../../../src/battle/air/ticket';
 import type { AirOutcome, AirUnit } from '../../../src/battle/air/types';
 import { afterLost, type AfterCard, type FoughtAir } from '../../../src/campaign/airfought';
@@ -972,6 +979,9 @@ export function battleCalls(h: BattleHooks) {
     },
     airKinds(kinds?: string[]) {
       return { kinds: flyKinds(Array.isArray(kinds) ? kinds.map(String) : undefined) };
+    },
+    airLooks(names?: string[]) {
+      return { looks: airLooks(Array.isArray(names) ? names.map(String) : undefined) };
     },
     airLook(kind: string, target: number, ids: number[]) {
       const t = airTicket(h.game(), kind as RaidKind, target, ids);

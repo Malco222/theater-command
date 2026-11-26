@@ -308,7 +308,9 @@ function startBattle(r: Raid): void {
   const t = r.ticket;
   // Shown, never counted (ruling 237): the stragglers and escorts the UI director worded reach the dispatches.
   // The page draws every model on a flat map: it keeps its own budget (SKY.look.page), apart from the 3D game's.
-  const sim = new AirSim(t, { show: true, look: SKY.look.page });
+  // Release 2's 'bailouts' looks (sim.ts airLooks): ?bailouts in the page's address turns them on for this page.
+  const bailouts = new URLSearchParams(globalThis.location?.search ?? '').has('bailouts');
+  const sim = new AirSim(t, { show: true, look: SKY.look.page, ...(bailouts ? { bailouts: true } : {}) });
   S.sim = sim; S.raid = r; S.screen = 'battle';
   const sc = S.scene;
   sc.me = t.att.human ? 'att' : 'def';

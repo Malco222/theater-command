@@ -219,6 +219,22 @@ export const SKY = {
       { model: 'He111', to: 1941, crew: 4 },
       { model: 'B17', from: 1944 + 6 / 12, crew: 9 },
     ] as { model: string; from?: number; to?: number; crew: number }[],
+    /**
+     * Release 2, 'bailouts' (sim.ts airLooks): crews that differ by the kit the group flies (its guns' mark, guns.ts
+     * bomberGuns), read in place of crewsDated, never the calendar (the design director's D4, 26 November 2026). The
+     * He 111P, three gun positions, flew with four (the historian, air-fates-check.md section 6, H: "4 in 1940, 5 from
+     * 1941-42 with an extra gunner"); the He 111H's beam guns carried the fifth (the rules thread's reading, put to the
+     * historian as H4: hole H-HE111). Every other mark takes 'crews'. The B-17's "often 9" is a practice no kit in the
+     * game carries (hole H-B17), so every B-17 mark is 10. The mark itself is still picked by the month in guns.ts: that
+     * calendar is the guns', named on the known list, not cured here.
+     */
+    crewsByKit: [{ model: 'He111', mark: 'He 111P', crew: 4 }] as { model: string; mark: string; crew: number }[],
+    /**
+     * Release 2, 'bailouts': fighters that carry more than their pilot, by the model the 3D game draws (read in sim.ts
+     * sceneOf). The Fleet Air Arm's two-seat Fulmar, pilot and observer: 2 until the historian confirms (hole H-FULMAR,
+     * H5; mark G, a game placeholder, not the historian's; the design director's D8). Every other fighter is 1.
+     */
+    fighterCrews: { Fulmar: 2 } as Record<string, number>,
   },
 
   /**
@@ -283,8 +299,20 @@ export const SKY = {
     again: [0, 0.35, 0.6, 0.85],
     /** The ways a fighter pilot the rules save can get out of under a parachute. */
     saved: ['flamer', 'burn', 'wing', 'tail', 'spin'] as const,
-    /** A lost fighter pilot over enemy ground seen to get out (taken prisoner), by the way down. */
-    captured: { flamer: 0.4, burn: 0.5, wing: 0.45, tail: 0.5, spin: 0.6 },
+    /**
+     * A fighter pilot the rules do not bring back, seen to get out under a parachute, by the way down (the pilot's
+     * share of getting out). Over the enemy's ground he is taken prisoner (the fall's own 'captured' says so). Release 2,
+     * 'bailouts' (sim.ts airLooks): the same share over his own ground too, times 'outBand' by height on either ground,
+     * drawn on the look stream's own fork (fates.ts GOT): the design director's D1 and D3, 26 November 2026. Hole
+     * H-FTR-OUT (the historian's H2, by the way down and by height); mark G, a game placeholder, not the historian's.
+     */
+    pilotOut: { flamer: 0.4, burn: 0.5, wing: 0.45, tail: 0.5, spin: 0.6 },
+    /**
+     * A fighter pilot the rules do not bring back who rode it down climbs out after the forced landing or the ditching
+     * (fates.ts, today's 0.6, moved here unchanged). Over the enemy's ground as ever; release 2, 'bailouts': over his own
+     * ground too (D1). Hole H-FTR-LAND (the historian's H3); mark G, a game placeholder, no source.
+     */
+    ftrLand: 0.6,
     /** A burning one blows apart on the way down: the chance, times 'loaded' with bombs aboard, and when, as a share of its fall. */
     boom: { burn: 0.12, flamer: 0.35, loaded: 2, at: [0.2, 0.65] as [number, number] },
     /** Air seconds after the hit before the fire shows: an engine smokes first; a flamer goes up at once. */
@@ -294,8 +322,18 @@ export const SKY = {
       explode: [40, 70], flamer: [70, 110], burn: [60, 110], wing: [50, 80], tail: [60, 90], pilot: [120, 170], spin: [45, 70],
       glide: [12, 25], breakup: [40, 70], struck: [45, 80], collide: [45, 80],
     } as Record<string, [number, number]>,
-    /** Each of a bomber's crew seen to get out, by the way down, times 'outBand' by height (low down there is no time). */
+    /**
+     * Each of a bomber's crew seen to get out, by the way down, times 'outBand' by height (low down there is no time).
+     * Release 2, 'bailouts': the one getting-out rule across every way down (the design director's ruling and D11):
+     * - 'glide' is hole H-GLIDE-JUMP: each man's share of jumping from a controlled glide over land, read like every
+     *   other way down, times 'outBand' by height. Shipped 0, its value today, so nobody jumps and the glide is die for
+     *   die as today. Over the sea the ditching stays as today (hole H-GLIDE-SEA). If the historian's answer to H1 does
+     *   not fit outBand's shape (0.3, 1, 1.1), it goes back to the design director before any second height table is made.
+     * - a fighter pilot the rules do not bring back gets out of a breakup or a collision at 'breakup' and 'collide'
+     *   (0.1 each) times 'outBand', on either ground (D11; mark G, a game placeholder).
+     */
     out: { explode: 0, flamer: 0.2, burn: 0.55, wing: 0.2, tail: 0.3, pilot: 0.35, spin: 0.35, glide: 0, breakup: 0.1, struck: 0.25, collide: 0.1 } as Record<string, number>,
+    /** By height, low, middle, high. Release 2, 'bailouts': read for a fighter pilot's getting out too, on either ground (D3; mark G, until the historian's H2 by height). */
     outBand: [0.3, 1, 1.1],
     /** Air seconds after the hit the first canopy opens (later out of a spin, held there by the forces), and between canopies. */
     chute: { first: [2, 6] as [number, number], spin: [4, 10] as [number, number], gap: [1.5, 4] as [number, number] },
