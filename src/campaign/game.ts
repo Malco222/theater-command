@@ -55,7 +55,7 @@ import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, rai
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled, willBurn } from './prizes';
 import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, shoreOf, worldOn } from './world';
 import { FAR_STAGE } from './stage';
-import { formedLine, rowDone, tellWait, waitedOn } from './arrivalwaits';
+import { formedLine, joinedLine, notFormedLine, rowDone, tellWait, waitedOn } from './arrivalwaits';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -5806,7 +5806,10 @@ function expeditions(g: Game, nat: string, take?: number): void {
     if (old) {
       if (asks) { offerMade(g, nat, i, o); return; }
       g.flags[`sent:${i}`] = 1;
-      rowDone(g, i);
+      // (The telling: a told row of the player's that waited on the front says how it joined, after its news or, with
+      // none, in a line of its own: arrivalwaits.ts `joinedLine`, which clears its flags as `rowDone` does. Read before
+      // the corps it joins takes its name. The UI director's section 8 point 3.)
+      const joined = joinedLine(g, i, was, old.name, g.regions[old.reg].name);
       // Corps broken up to find the divisions are struck off, and a corps only lent to the campaign is remembered.
       if (Array.isArray(o.from) && !own) for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
       if (o.until) g.flags[`lent:${i}`] = old.id;
@@ -5820,7 +5823,8 @@ function expeditions(g: Game, nat: string, take?: number): void {
       if (read) joinNames(g, old, row, row[4], read);
       old.name = row[2];
       g.supplyDirty = true;
-      if (o.news) headline(g, 'event', o.news, nat, old.reg);
+      if (o.news) headline(g, 'event', joined?.after ? `${o.news} ${joined.after}` : o.news, nat, old.reg);
+      else if (joined?.alone) headline(g, 'info', joined.alone, nat, old.reg);
       return;
     }
     if (!reg || !allied(g, nat, reg.ctrl)) return;
@@ -5876,7 +5880,11 @@ function expeditions(g: Game, nat: string, take?: number): void {
       // broken up to find its divisions, and it found them elsewhere. Regrouping what stands is the staff's own business.)
       if (!formsAny(claims, n)) {
         g.flags[`sent:${i}`] = 1;
+        // (The telling: a told row of the player's is told it will not form, where the rule still holds it: the UI
+        // director's section 8 point 3. Read before its flags go.)
+        const none = inFight ? notFormedLine(g, i, reg.name) : null;
         rowDone(g, i);
+        if (none) headline(g, 'info', none, nat, reg.id);
         keepCounted(claims);
         const share = takenShare(g, i);
         if (share !== undefined) { delete g.flags[`takecut:${i}`]; if (g.flags[`cut:${i}`] === share) delete g.flags[`cut:${i}`]; cutStays(share); }

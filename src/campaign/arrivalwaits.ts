@@ -189,6 +189,35 @@ export function formedLine(g: Game, i: number, was: WaitedOn | null, own: boolea
 }
 
 /**
+ * The words the month a told row joins a corps already landed (`joins`, game.ts `expeditions`): `alone` where the row
+ * has no news of its own (today nothing is said then), `after` said after its news (section 4). The UI director's
+ * section 8 point 3, 02:10Z, 26 November 2026: "{Row} has joined {the Old Corps} in {place}, formed from your {Test
+ * Corps}, now that it has left the front." (with points 1's and 2's endings where those are the true case). `joined` is
+ * the name of the corps it joins, read before the row renames it; `place` where that corps stands. Clears the row's
+ * telling flags. Null where the telling has nothing to say, and today's words stand.
+ */
+export function joinedLine(g: Game, i: number, was: WaitedOn | null, joined: string, place: string): { alone: string | null; after: string | null } | null {
+  const row = ROWS()[i];
+  rowDone(g, i);
+  if (!row || !g.human || row[1] !== g.human || !was) return null;
+  const tail = formedTail(was, row[2]);
+  return tail ? { alone: `${named(row[2], true)} has joined ${named(joined)} in ${place}, ${tail}`, after: `The arrival is ${tail}` } : null;
+}
+
+/**
+ * The words the month a told row is closed because every division it names already stands (game.ts `expeditions`,
+ * drawn.ts `formsAny`; today it is closed with no headline). The UI director's section 8 point 3, 02:10Z, 26 November
+ * 2026: "{The 18th Division}, due in {Rangoon}, will not form: every division of it already stands with your forces."
+ * The card and report lines stop that month: the caller clears the row's flags (`rowDone`) after reading this. Null for
+ * a row he was never told of, or not his.
+ */
+export function notFormedLine(g: Game, i: number, place: string): string | null {
+  const row = ROWS()[i];
+  if (!row || !g.human || row[1] !== g.human || g.flags[toldKey(i)] === undefined) return null;
+  return `${named(row[2], true)}, due in ${place}, will not form: every division of it already stands with your forces.`;
+}
+
+/**
  * The words after "{Row} has arrived in {place}, " and after "The arrival is ": how the row is formed, true of the month
  * it forms (sections 4 and 8), or null where nothing true is to be said and today's line stands. `name` is the formed
  * row's own name, for "your corps of that name".
