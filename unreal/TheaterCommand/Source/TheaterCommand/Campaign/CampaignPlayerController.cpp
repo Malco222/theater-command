@@ -1294,6 +1294,15 @@ void ACampaignPlayerController::ToggleRail()
 	RefreshOrders();
 	if (bByRail)
 	{
+		// (The 1.5.3 review.) A hand that is all garrison is told the rules' reason by rail, judged for the hand as a whole
+		// (GarrisonByRail), as BY SEA tells it the reason by sea; the march's line only where the rules give none.
+		const FString Garrison = GarrisonSays();
+		if (!Garrison.IsEmpty())
+		{
+			const FString Train = GarrisonByRail(ArmyRegion);
+			Notify(Train.IsEmpty() ? Garrison + GarrisonWhere() : Train, 8.0);
+			return;
+		}
 		Notify(Reach.Num() > 0 ? TEXT("By rail: right-click any ground tinted blue. It takes the corps' whole month.")
 			: TEXT("None of these corps can go by rail this month: it takes a whole month's moves."), 5.0);
 	}
@@ -6429,10 +6438,10 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			const FApproachPlan GarrisonRoad = (!GarrisonTip.IsEmpty() && !bComesOut) ? GarrisonApproach(TipRegion) : FApproachPlan();
 			if (!GarrisonTip.IsEmpty() && !bComesOut && !GarrisonRoad.bOk)
 			{
-				// (a garrison in hand is promised no march; BY SEA it is told the rules' reason by sea, as a right-click
-				// answers it there: OrderTo, the 1.5.3 review)
-				const FString Aboard = bBySea ? GarrisonAboard() : FString();
-				Line += TEXT("\n") + (Aboard.IsEmpty() ? GarrisonTip + GarrisonWhere() : Aboard);
+				// (a garrison in hand is promised no march; BY SEA or BY RAIL it is told the rules' reason by sea or by rail,
+				// as a right-click answers it there: OrderTo, the 1.5.3 review)
+				const FString Instead = bBySea ? GarrisonAboard() : bByRail ? GarrisonByRail(TipRegion) : FString();
+				Line += TEXT("\n") + (Instead.IsEmpty() ? GarrisonTip + GarrisonWhere() : Instead);
 			}
 			else if (ArmyRegion != INDEX_NONE && TipRegion != ArmyRegion)
 			{
@@ -7987,19 +7996,23 @@ bool ACampaignPlayerController::PickUpArmyIn(int32 RegionId)
 	ArmyRegion = RegionId;
 	AdviserSaw(0);
 	PickedCorps = MoveTemp(Orderable);
+	HandStaysSaid.Reset();
 	RefreshOrders();
 	if (bNewInHand)
 	{
-		// (Rules 84.2.4; the playtester's case 2.) A garrison in hand says at once how it comes out of its town.
+		// (Rules 84.2.4; the playtester's case 2.) A garrison in hand says at once how it comes out of its town. (The 1.5.3
+		// review: a corps RefreshOrders took out of the hand, as one that went in this month beside an older garrison, is
+		// named after it, as TrayTownOrder says it, so that this notice does not hide it.)
 		const FString Garrison = GarrisonSays();
+		const FString Stays = HandStaysSaid.IsEmpty() ? FString() : TEXT(" ") + HandStaysSaid;
 		if (!Garrison.IsEmpty() && ComesOut())
 		{
 			// (release 2, Brian, 24 November 2026: no press first; an order to march or attack brings them out)
-			Notify(TEXT("They are inside the town. Send them anywhere they can go this month: they come out of it as the order goes."), 8.0);
+			Notify(TEXT("They are inside the town. Send them anywhere they can go this month: they come out of it as the order goes.") + Stays, Stays.IsEmpty() ? 8.0 : 10.0);
 		}
 		else if (!Garrison.IsEmpty())
 		{
-			Notify(Garrison + GarrisonWhere(), 10.0);
+			Notify(Garrison + GarrisonWhere() + Stays, 10.0);
 		}
 	}
 	if (bNewInHand)
@@ -8132,11 +8145,14 @@ void ACampaignPlayerController::SplitOffDivisions(int32 CorpsId)
 		ShowWar(Session->GetView(), TArray<FCorpsMove>());
 	}
 	// (a refused split keeps the picks, so they can be changed and tried again)
-	if (!Note.IsEmpty())
-	{
-		Notify(Note, 6.0);
-	}
+	HandStaysSaid.Reset();
 	RefreshOrders();
+	// (The 1.5.3 review.) A corps RefreshOrders took out of the hand: its reason follows the note, as TrayTownOrder says it.
+	const FString Told = HandStaysSaid.IsEmpty() ? Note : Note.IsEmpty() ? HandStaysSaid : Note + TEXT(" ") + HandStaysSaid;
+	if (!Told.IsEmpty())
+	{
+		Notify(Told, HandStaysSaid.IsEmpty() ? 6.0 : 9.0);
+	}
 }
 
 void ACampaignPlayerController::RejoinCorps(int32 CorpsId, int32 IntoId)
@@ -8155,11 +8171,14 @@ void ACampaignPlayerController::RejoinCorps(int32 CorpsId, int32 IntoId)
 		CampaignSounds::Play(this, TEXT("stamp"), 0.5f);
 		ShowWar(Session->GetView(), TArray<FCorpsMove>());
 	}
-	if (!Note.IsEmpty())
-	{
-		Notify(Note, 6.0);
-	}
+	HandStaysSaid.Reset();
 	RefreshOrders();
+	// (The 1.5.3 review.) A corps RefreshOrders took out of the hand: its reason follows the note, as TrayTownOrder says it.
+	const FString Told = HandStaysSaid.IsEmpty() ? Note : Note.IsEmpty() ? HandStaysSaid : Note + TEXT(" ") + HandStaysSaid;
+	if (!Told.IsEmpty())
+	{
+		Notify(Told, HandStaysSaid.IsEmpty() ? 6.0 : 9.0);
+	}
 }
 
 void ACampaignPlayerController::ToggleCorps(int32 CorpsId)
@@ -9045,6 +9064,18 @@ FString ACampaignPlayerController::GarrisonAboard() const
 	return InTown.Num() > 0 ? Session->WhyNotBySea(InTown, ArmyRegion) : FString();
 }
 
+FString ACampaignPlayerController::GarrisonByRail(int32 RegionId) const
+{
+	// (The 1.5.3 review. The rules judge the hand as a whole: TAKE THE FIELD only where every corps of it would ride once
+	// out, or the reason of one that would not, or its province's own railway: railTip in campaign-bridge.ts.)
+	FCampaignSession* Session = GetSession();
+	if (!Session || ArmyRegion == INDEX_NONE || RegionId == INDEX_NONE || PickedCorps.Num() == 0)
+	{
+		return FString();
+	}
+	return Session->RailTip(PickedCorps, RegionId).No;
+}
+
 FString ACampaignPlayerController::StaysAshore() const
 {
 	FCampaignSession* Session = GetSession();
@@ -9300,6 +9331,14 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 			// answered with the rules' reason by sea (GarrisonAboard), the line the BY SEA notice gave, not the march's.
 			const FString Aboard = GarrisonAboard();
 			Notify(Aboard.IsEmpty() ? Garrison + GarrisonWhere() : Aboard, 10.0);
+			return;
+		}
+		if (!Garrison.IsEmpty() && bByRail)
+		{
+			// (The 1.5.3 review.) BY RAIL likewise: no train takes a garrison, and a right-click is answered with the rules'
+			// reason by rail (GarrisonByRail), the line the pointer gave, not the march's.
+			const FString Train = GarrisonByRail(RegionId);
+			Notify(Train.IsEmpty() ? Garrison + GarrisonWhere() : Train, 10.0);
 			return;
 		}
 		if (!Garrison.IsEmpty() && !ComesOutTo(RegionId) && !GarrisonApproach(RegionId).bOk)

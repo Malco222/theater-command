@@ -1386,6 +1386,12 @@ private:
 	/** (The 1.5.3 review; the playtest's find 17.) The rules' reason the corps of the hand inside a town take no ship (bySeaWhy); empty where none is in hand. */
 	FString GarrisonAboard() const;
 	/**
+	 * (The 1.5.3 review.) BY RAIL, the rules' reason a hand that is all garrison takes no train to a place, judged for the
+	 * hand as a whole (railTip); asked of the hand's own province, why no train takes it from there. Empty where the
+	 * rules give none.
+	 */
+	FString GarrisonByRail(int32 RegionId) const;
+	/**
 	 * (The 1.5.3 review.) By sea, a hand of corps in the field and of the town's garrison: the sentence that names those
 	 * of the garrison, which stay in the town, and the rules' reason (GarrisonAboard). Empty for a hand that is all
 	 * garrison or has none of it.
