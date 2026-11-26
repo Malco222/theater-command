@@ -426,3 +426,34 @@ describe('the raid report: too little fight left to do any harm (A5)', () => {
     expect(little).toBeGreaterThan(0);
   });
 });
+
+// The UI director, 25 November 2026 21:22Z, g: "A name in its own language is bare ("Groupement de Chasse 3", "JG 26");
+// an English one takes "the", "The" at the head of a sentence. That is theGroupName ... The lane's report lines take it:
+// A6, A5 (strafers.ts:70, today bare: "2nd Fighter Group went down and strafed."), and j and k". Each line with an English
+// name and a name in its own language, at the head of a sentence and inside a list; then from a settled raid with one
+// group renamed in English (setup: its name only).
+describe('the report lines name their groups by the lane\'s one rule (the UI director, 21:22Z, g)', () => {
+  const rep = (strafed: string[], little: string[]) => ({ mission: 'ground', attNat: 'FRA', strafed, ...(little.length ? { strafeLittle: { names: little } } : {}) });
+  it('the forms, both kinds of name, at the head of a sentence and inside a list', () => {
+    expect(strafedLine(rep(['2nd Fighter Group'], []), 'FRA')).toBe('The 2nd Fighter Group went down and strafed.');
+    expect(strafedLine(rep(['JG 26'], []), 'FRA')).toBe('JG 26 went down and strafed.');
+    expect(strafedLine(rep(['2nd Fighter Group', 'JG 26'], []), 'FRA')).toBe('The 2nd Fighter Group and JG 26 went down and strafed.');
+    expect(strafedLine(rep(['JG 26', '2nd Fighter Group', '3rd Fighter Aviation Division'], []), 'FRA')).toBe('JG 26, the 2nd Fighter Group and the 3rd Fighter Aviation Division went down and strafed.');
+    expect(strafedLine(rep(['2nd Fighter Group'], ['2nd Fighter Group']), 'FRA')).toBe(`The 2nd Fighter Group ${LITTLE}`);
+    expect(strafedLine(rep(['Groupement de Chasse 3'], ['Groupement de Chasse 3']), 'FRA')).toBe(`Groupement de Chasse 3 ${LITTLE}`);
+    expect(strafedLine(rep(['JG 26', '2nd Fighter Group'], ['JG 26', '2nd Fighter Group']), 'FRA')).toBe(`JG 26 and the 2nd Fighter Group ${LITTLE}`);
+    expect(strafedLine(rep(['Groupement de Chasse 3', '2nd Fighter Group'], ['2nd Fighter Group']), 'FRA')).toBe(`Groupement de Chasse 3 went down and strafed. The 2nd Fighter Group ${LITTLE}`);
+  });
+  it('a settled raid: Groupement de Chasse 1 renamed in English, the 646 edge raid (one group with a fighter\'s weight, two with less)', () => {
+    on();
+    const c = saar(0, 'three');
+    const d = c.g.airFleets.find((f) => f.id === 3)!;
+    d.ftr = 646; d.est.ftr = Math.max(d.est.ftr, 646);
+    c.g.airFleets.find((f) => f.id === GC1)!.name = '1st Fighter Group';
+    const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+    expect(r.strafeLittle).toEqual({ names: ['1st Fighter Group', 'Groupement de Chasse 2'] });
+    expect(strafedLine(r, 'FRA')).toBe(`Groupement de Chasse 3 went down and strafed. The 1st Fighter Group and Groupement de Chasse 2 ${LITTLE}`);
+    // The report keeps the names as the groups have them: the rule is the line's.
+    expect(r.strafed).toContain('1st Fighter Group');
+  });
+});

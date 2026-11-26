@@ -13,6 +13,7 @@ import type { BattleSim, BattleView, Command, FieldEvent, FieldResult, FieldTick
 import { DT } from '../core/types';
 import { SKY, type Band } from './book';
 import { aCraftOf, adjFor, oneOf, subjectOf, told, twoOf, upFirst } from './names';
+import { theGroupName } from '../../campaign/groupname';
 import { enginesOf, escortRoles, fighterWay, passesOn, pickPass, type Pass, type Role, type When } from './doctrine';
 import { collideWords, drawFall, fallWords } from './falls';
 import { ShipBook, splitWings } from './ships';
@@ -410,6 +411,16 @@ export class AirSim implements BattleSim<AirUnit> {
   called(u: AirUnit): string {
     const adj = adjFor(u.name, this.adjOf(u));
     return adj ? `${adj} ${u.name}` : u.name;
+  }
+
+  /**
+   * A group of the raid on troops in the strafers' lines (the UI director, 25 November 2026 21:22Z, g): its name by
+   * theGroupName, the enemy's nation word after its "the" as called() places it ('the American 2nd Fighter Group',
+   * 'French Groupement de Chasse 3'). Not capitalised: the line does that at the head of a sentence.
+   */
+  private groupName(u: AirUnit): string {
+    const adj = adjFor(u.name, this.adjOf(u)), name = theGroupName(u.name);
+    return !adj ? name : name.startsWith('the ') ? `the ${adj} ${u.name}` : `${adj} ${u.name}`;
   }
 
   /**
@@ -1941,8 +1952,12 @@ export class AirSim implements BattleSim<AirUnit> {
         for (const u of us) {
           this.keepUp.delete(u.id);
           // (The strafers' rule: a group that carries nothing as it is sent down, or is gone for the raid, turns for home,
-          // and the order is answered in place of a silent yes: the UI director, 19:10Z A6.)
-          if (!this.goDown(u, u.job.do === 'escort' ? u.job.on : this.strafing.get(u.id)?.box ?? null)) this.say('air:no-strafe', u, told(this.called(u), '{N} [has|have] no fight left to strafe with and [turns|turn] for home.'));
+          // and the order is answered in place of a silent yes: the UI director, 19:10Z A6; the group named by her one
+          // rule for this lane, 21:22Z g, theGroupName: "Groupement de Chasse 3 has ...", "The 2nd Fighter Group has ...".)
+          if (!this.goDown(u, u.job.do === 'escort' ? u.job.on : this.strafing.get(u.id)?.box ?? null)) {
+            const many = subjectOf(this.called(u)).many;
+            this.say('air:no-strafe', u, `${upFirst(this.groupName(u))} ${many ? 'have' : 'has'} no fight left to strafe with and ${many ? 'turn' : 'turns'} for home.`);
+          }
         }
         return us.length > 0;
       }

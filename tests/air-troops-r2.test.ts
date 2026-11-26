@@ -757,3 +757,39 @@ describe('the go-down waits for the end of the air fight (the design director, 1
     for (const u of raid) expect(['home', 'strafe']).toContain(u.job.do);
   });
 });
+
+// The UI director, 25 November 2026 21:22Z, g: "A name in its own language is bare ("Groupement de Chasse 3", "JG 26");
+// an English one takes "the", "The" at the head of a sentence. That is theGroupName (arsenal.ts:236). The lane's report
+// lines take it: A6, A5 ... Groupement de Chasse 3 has no fight left to strafe with and turns for home." A6 is said by the
+// battle as it answers the order, so it is printed here from a fought battle: round five's edge raid (309 German
+// fighters), Groupement de Chasse 3 sent ahead to hunt so that it meets 2. Jagddivision alone and reads 0, then ordered
+// down; once under its own name, once renamed in English (setup: the group's name only).
+describe('A6 names its group by the lane\'s one rule (the UI director, 21:22Z, g)', () => {
+  const GC3 = 10;
+  function a6(name: string | null): string[] {
+    const g = startOpen(createGame(7, 'FRA'));
+    setWar(g, 'FRA', 'GER');
+    g.airFleets.find((f) => f.id === 36)!.base = g.regions.find((r) => r.name === 'Verdun')!.id;
+    g.airFleets.find((f) => f.id === 9)!.base = g.regions.find((r) => r.name === 'Namur')!.id;
+    const d = g.airFleets.find((f) => f.id === 3)!;
+    d.ftr = 309; d.est.ftr = Math.max(d.est.ftr, 309);
+    if (name) g.airFleets.find((f) => f.id === GC3)!.name = name;
+    const target = raidTargets(g, 'ground', 'FRA').find((x) => g.regions[x.id].name === 'Saar')!.id;
+    const s = airBattle(ticketOf(g, target, [38, GC3, 36, 9], 'FRA')) as AirSim;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const S = s as any;
+    const unit = s.units.find((u) => u.side === 'att' && u.corps === GC3)!;
+    if (name) expect(unit.name).toBe(name);
+    s.ai.att = true; s.ai.def = true;
+    expect(s.command({ do: 'air:hunt', units: [unit.id] }, 'att')).toBe(true);
+    let guard = 0;
+    while (!s.over && !S.met.get(unit.id)?.size && guard++ < 40_000) s.step();
+    expect(S.carries(unit)).toBe(0);
+    expect(s.command({ do: 'air:strafe', units: [unit.id] }, 'att')).toBe(true);
+    return s.history().filter((e) => e.what === 'air:no-strafe').map((e) => e.text ?? '');
+  }
+  it('a name in its own language bare, an English one with "The" at the head of the sentence', () => {
+    expect(a6(null)).toEqual(['Groupement de Chasse 3 has no fight left to strafe with and turns for home.']);
+    expect(a6('2nd Fighter Group')).toEqual(['The 2nd Fighter Group has no fight left to strafe with and turns for home.']);
+  });
+});

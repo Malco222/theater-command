@@ -18,6 +18,8 @@
 // fall only on the fighters left with the reach to strafe (tests/air-troops-r2.test.ts says so). With it off nothing here
 // is read and every raid is priced, settled and fought as on d06286d4.
 
+import { theGroupName } from './groupname';
+
 let flown = false;
 
 /** Lane (a)'s switch, as flyKinds (battle/air/ticket.ts) last set it: whether a raid on troops can be fought out. */
@@ -84,6 +86,10 @@ const list = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.sli
 // (A sentence opens with a capital, the group named as the news names it: the UI director, 19:17Z.)
 const cap = (x: string): string => x.charAt(0).toUpperCase() + x.slice(1);
 
+// (The groups of one line, each named by the UI director's one rule for this lane, 21:22Z g, theGroupName: a name in its
+// own language bare, "Groupement de Chasse 3", "JG 26"; an English one with "the", "The" at the head of the sentence.)
+const named = (xs: string[]): string => cap(list(xs.map(theGroupName)));
+
 /**
  * The raid report's line on who went down, as `reader` reads it: only a raid on troops whose report kept its strafers
  * (the switch on when it was flown), and only for the side that flew it. '' otherwise: for the defender, whom her words
@@ -97,7 +103,7 @@ export function strafedLine(rep: { mission: string; attNat: string; strafed?: st
   if (!rep.strafed.length) return STRAFE_WORDS.nobody;
   const little = rep.strafeLittle?.names ?? [];
   const full = rep.strafed.filter((n) => !little.includes(n)), few = rep.strafed.filter((n) => little.includes(n));
-  return [full.length ? `${cap(list(full))} went down and strafed.` : '', few.length ? `${cap(list(few))} ${STRAFE_WORDS.little}` : ''].filter(Boolean).join(' ');
+  return [full.length ? `${named(full)} went down and strafed.` : '', few.length ? `${named(few)} ${STRAFE_WORDS.little}` : ''].filter(Boolean).join(' ');
 }
 
 /**
