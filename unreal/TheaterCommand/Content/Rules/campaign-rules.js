@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b9ac0284e 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c06e0f7bc 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -99873,9 +99873,27 @@
        * what it is fighting, as before.
        *
        * It moves every battle (guns hold too), so it has its own row and its own gate, and `teams` goes on only with it on
-       * (live.ts). Off unless whoever opens the field turns it on.
+       * (live.ts). It goes on only with standRule, below. Off unless whoever opens the field turns it on.
        */
       __publicField(this, "faceRule", false);
+      /**
+       * A stand is kept (release 2, the Battle rules card's "stand"; the art director's number of 26 November 2026 00:50Z
+       * and the design director's ruling of 01:02Z).
+       *
+       * Off, as it always was: a block on an attack order closes "until it is well in reach, then stands and fights", and
+       * that is asked afresh every tick with no memory of the tick before. With its target hovering at that edge the block
+       * stands for a tick and wheels to what it fights, marches for a tick and wheels back to its way, and so on: a rock of
+       * a few degrees several times a second, or a wide swing every few seconds (counted at its gate: the reversals of a
+       * block's wheel within 5 s of the one before). Ruled a fault, for every block on an attack order.
+       *
+       * On: a block that has stood to fight its target stands while that target is within its hold, and closes again only
+       * when the target is further off than that. No new figure: the hold is the stand's own (lanePoint: half way from
+       * where a block closes to the end of its reach, how far off its target a block may stand and still fight).
+       *
+       * It moves every battle, so it has its own row and its own gate, and `facing` and `teams` go on only with it on
+       * (live.ts). Off unless whoever opens the field turns it on.
+       */
+      __publicField(this, "standRule", false);
       /** faceRule: of the enemies that struck each block this tick, the costliest, what its blow cost face on, and whether it landed on the front. */
       __publicField(this, "costliest", /* @__PURE__ */ new Map());
       /** Each own team block's parent force (own-teams.ts ownTeamParents), by the forces' ids: read once from the ticket. */
@@ -103146,13 +103164,16 @@
           u.path = [];
         } else {
           const want = this.closeTo(u);
-          const at4 = this.gap(u, t) > want || this.wet(u, u.x, u.y) ? this.lanePoint(u, t, want) : null;
+          const far = this.standRule && u.stoodFor === t.id ? want + (reachOf(u) - want) / 2 : want;
+          const at4 = this.gap(u, t) > far || this.wet(u, u.x, u.y) ? this.lanePoint(u, t, want) : null;
           if (at4) {
             u.path = this.route(u, at4[0], at4[1]);
             to = u.path[0];
+            if (this.standRule) u.stoodFor = void 0;
           } else {
             u.path = [];
             to = null;
+            if (this.standRule) u.stoodFor = t.id;
           }
         }
       } else if (u.order && u.path.length) {

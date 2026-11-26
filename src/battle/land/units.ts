@@ -178,6 +178,8 @@ export interface LandUnit extends UnitBase {
   standFace?: number;
   /** It came to its stand still out of reach of its target, which had stepped back: it closes straight on it. */
   closing?: boolean;
+  /** (sim.standRule) The target it has stood to fight: it stands while that target is within its hold. Never set with the rule off. */
+  stoodFor?: number;
   /**
    * Guns told to fire on one block and stay put (ai.ts, the computer's main effort; ruling 239(6), the player's order
    * too): they strike it whenever it is in their reach, before whatever else is nearest.

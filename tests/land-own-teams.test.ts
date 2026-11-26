@@ -157,10 +157,12 @@ describe("support teams in battle: a team's fire shakes by its own harm (sim.tea
     const t = campaign('normandy-1944');
     expect(new LandBattle(t).teamsRule).toBe(false);
     expect(liveTicket(t, { me: null }).sim.teamsRule).toBe(false);
-    // (it works only with "Units face the fire that hurts most" on: the design director, 25 November 21:54Z; tests/land-facing.test.ts)
+    // (it works only with "Units face the fire that hurts most" on, the design director, 25 November 21:54Z, and that one
+    // only with "Units keep their stand" on, 26 November 01:02Z; tests/land-facing.test.ts, tests/land-stand.test.ts)
     expect(liveTicket(t, { me: null, teams: true }).sim.teamsRule).toBe(false);
-    expect(liveTicket(t, { me: null, teams: true, facing: true }).sim.teamsRule).toBe(true);
-    expect(liveTicket(ticketOf(PIECES[0], 11, null), { me: null, teams: true, facing: true }, PIECES[0].key).sim.teamsRule).toBe(true);
+    expect(liveTicket(t, { me: null, teams: true, facing: true }).sim.teamsRule).toBe(false);
+    expect(liveTicket(t, { me: null, teams: true, facing: true, stand: true }).sim.teamsRule).toBe(true);
+    expect(liveTicket(ticketOf(PIECES[0], 11, null), { me: null, teams: true, facing: true, stand: true }, PIECES[0].key).sim.teamsRule).toBe(true);
   });
 
   it('changes nothing in a battle with no team block on the field', () => {

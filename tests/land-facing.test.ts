@@ -95,17 +95,29 @@ describe('units face the fire that hurts most: the switch', () => {
     const t = small();
     expect(new LandBattle(t).faceRule).toBe(false);
     expect(liveTicket(t, { me: null }).sim.faceRule).toBe(false);
-    expect(liveTicket(t, { me: null, facing: true }).sim.faceRule).toBe(true);
-    expect(liveTicket(ticketOf(PIECES[0], 11, null), { me: null, facing: true }, PIECES[0].key).sim.faceRule).toBe(true);
+    expect(liveTicket(t, { me: null, facing: true, stand: true }).sim.faceRule).toBe(true);
+    expect(liveTicket(ticketOf(PIECES[0], 11, null), { me: null, facing: true, stand: true }, PIECES[0].key).sim.faceRule).toBe(true);
   });
 
-  it('support teams in battle works only with it on: `teams` alone turns on nothing', () => {
+  it('works only with units keeping their stand: `facing` alone turns on nothing', () => {
+    // The design director, 26 November 2026, 01:02Z: a block that rocks between standing and marching rocks further
+    // when it also turns to what costs it most, so this rule goes on only with the stand kept (tests/land-stand.test.ts).
     const t = small();
-    const alone = liveTicket(t, { me: null, teams: true }).sim, both = liveTicket(t, { me: null, teams: true, facing: true }).sim;
-    expect([alone.teamsRule, alone.faceRule]).toEqual([false, false]);
-    expect([both.teamsRule, both.faceRule]).toEqual([true, true]);
-    // (and `facing` alone is its own rule: no team rule rides on it)
-    expect(liveTicket(t, { me: null, facing: true }).sim.teamsRule).toBe(false);
+    const alone = liveTicket(t, { me: null, facing: true }).sim, both = liveTicket(t, { me: null, facing: true, stand: true }).sim;
+    expect([alone.faceRule, alone.standRule, alone.teamsRule]).toEqual([false, false, false]);
+    expect([both.faceRule, both.standRule, both.teamsRule]).toEqual([true, true, false]);
+    // (and the stand alone is its own rule: this one does not ride on it)
+    const stand = liveTicket(t, { me: null, stand: true }).sim;
+    expect([stand.faceRule, stand.standRule]).toEqual([false, true]);
+  });
+
+  it('support teams in battle works only with both on: `teams` alone, or with one of them, turns on no team rule', () => {
+    const t = small();
+    const rules = (o: { teams?: boolean; facing?: boolean; stand?: boolean }): boolean[] => { const s = liveTicket(t, { me: null, ...o }).sim; return [s.teamsRule, s.faceRule, s.standRule]; };
+    expect(rules({ teams: true })).toEqual([false, false, false]);
+    expect(rules({ teams: true, facing: true })).toEqual([false, false, false]);
+    expect(rules({ teams: true, stand: true })).toEqual([false, false, true]);
+    expect(rules({ teams: true, facing: true, stand: true })).toEqual([true, true, true]);
   });
 });
 

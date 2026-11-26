@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of b9ac0284e 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of c06e0f7bc 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -9977,9 +9977,27 @@
        * what it is fighting, as before.
        *
        * It moves every battle (guns hold too), so it has its own row and its own gate, and `teams` goes on only with it on
-       * (live.ts). Off unless whoever opens the field turns it on.
+       * (live.ts). It goes on only with standRule, below. Off unless whoever opens the field turns it on.
        */
       __publicField(this, "faceRule", false);
+      /**
+       * A stand is kept (release 2, the Battle rules card's "stand"; the art director's number of 26 November 2026 00:50Z
+       * and the design director's ruling of 01:02Z).
+       *
+       * Off, as it always was: a block on an attack order closes "until it is well in reach, then stands and fights", and
+       * that is asked afresh every tick with no memory of the tick before. With its target hovering at that edge the block
+       * stands for a tick and wheels to what it fights, marches for a tick and wheels back to its way, and so on: a rock of
+       * a few degrees several times a second, or a wide swing every few seconds (counted at its gate: the reversals of a
+       * block's wheel within 5 s of the one before). Ruled a fault, for every block on an attack order.
+       *
+       * On: a block that has stood to fight its target stands while that target is within its hold, and closes again only
+       * when the target is further off than that. No new figure: the hold is the stand's own (lanePoint: half way from
+       * where a block closes to the end of its reach, how far off its target a block may stand and still fight).
+       *
+       * It moves every battle, so it has its own row and its own gate, and `facing` and `teams` go on only with it on
+       * (live.ts). Off unless whoever opens the field turns it on.
+       */
+      __publicField(this, "standRule", false);
       /** faceRule: of the enemies that struck each block this tick, the costliest, what its blow cost face on, and whether it landed on the front. */
       __publicField(this, "costliest", /* @__PURE__ */ new Map());
       /** Each own team block's parent force (own-teams.ts ownTeamParents), by the forces' ids: read once from the ticket. */
@@ -13250,13 +13268,16 @@
           u.path = [];
         } else {
           const want = this.closeTo(u);
-          const at = this.gap(u, t) > want || this.wet(u, u.x, u.y) ? this.lanePoint(u, t, want) : null;
+          const far = this.standRule && u.stoodFor === t.id ? want + (reachOf(u) - want) / 2 : want;
+          const at = this.gap(u, t) > far || this.wet(u, u.x, u.y) ? this.lanePoint(u, t, want) : null;
           if (at) {
             u.path = this.route(u, at[0], at[1]);
             to = u.path[0];
+            if (this.standRule) u.stoodFor = void 0;
           } else {
             u.path = [];
             to = null;
+            if (this.standRule) u.stoodFor = t.id;
           }
         }
       } else if (u.order && u.path.length) {
@@ -15229,8 +15250,9 @@
       if (opts.bocage) sim.bocage = true;
       if (opts.phones !== false) sim.phones = true;
       if (opts.bearers !== false) sim.bearers = true;
-      if (opts.facing === true) sim.faceRule = true;
-      if (opts.teams === true && opts.facing === true) sim.teamsRule = true;
+      if (opts.stand === true) sim.standRule = true;
+      if (opts.facing === true && opts.stand === true) sim.faceRule = true;
+      if (opts.teams === true && opts.facing === true && opts.stand === true) sim.teamsRule = true;
       if (opts.blast === true) sim.blast = true;
       if (opts.escort === true) sim.escort = true;
       if (opts.pierce === true) sim.pierce = true;
@@ -15593,6 +15615,7 @@
         bearers: opts?.bearers !== false,
         teams: opts?.teams === true,
         facing: opts?.facing === true,
+        stand: opts?.stand === true,
         patrol: opts?.patrol !== false,
         captured: opts?.captured !== false,
         worn: opts?.worn !== false,
@@ -15629,7 +15652,7 @@
      */
     landStartTicket(ticketOrLook, opts) {
       const sw = opts;
-      if (sw?.teams === true && sw?.facing === true) ticketOrLook = ownTeamsLook(ticketOrLook);
+      if (sw?.teams === true && sw?.facing === true && sw?.stand === true) ticketOrLook = ownTeamsLook(ticketOrLook);
       const look = "ticket" in ticketOrLook && ticketOrLook.ticket ? ticketOrLook : null;
       const ticket = look ? look.ticket : ticketOrLook;
       const o = { ...look?.live ?? {}, ...opts ?? {} };
@@ -15652,6 +15675,7 @@
         bearers: o.bearers !== false,
         teams: o.teams === true,
         facing: o.facing === true,
+        stand: o.stand === true,
         patrol: o.patrol !== false,
         captured: o.captured !== false,
         worn: o.worn !== false,

@@ -436,9 +436,16 @@ export interface LiveOpts {
    * Units face the fire that hurts most (release 2, the Battle rules card's "facing"; the design director's ruling of
    * 25 November 21:54Z; the rules' sim.faceRule): a block is held to its facing only by the enemy whose blows cost it
    * most after its cover, and turns to meet another that costs it more. NOT looks only: it changes every fight. Support
-   * teams in battle works only with it on (the same ruling). Off unless true.
+   * teams in battle works only with it on (the same ruling). It works only with "stand" on. Off unless true.
    */
   facing?: boolean;
+  /**
+   * A stand is kept (release 2, the Battle rules card's "stand"; the design director's ruling of 26 November 01:02Z;
+   * the rules' sim.standRule): a block that has stood to fight its target stands while the target is within its hold,
+   * and does not rock between its way and what it fights when the target hovers at the edge of its reach. NOT looks
+   * only: it changes every fight. "facing" and "teams" work only with it on (the same ruling). Off unless true.
+   */
+  stand?: boolean;
   /** Shell blasts (release 2, looks only; sim.blast): one burst takes the men near it together. Off unless true. */
   blast?: boolean;
   /** Infantry with tanks (release 2, looks only; sim.escort): foot advance behind their tanks, never under them. Off unless true. */
@@ -622,9 +629,11 @@ export class LiveBattle {
     if (opts.bocage) sim.bocage = true;
     if (opts.phones !== false) sim.phones = true;
     if (opts.bearers !== false) sim.bearers = true;
-    if (opts.facing === true) sim.faceRule = true;
-    // (Support teams in battle works only with "facing" on: the design director, 25 November 21:54Z.)
-    if (opts.teams === true && opts.facing === true) sim.teamsRule = true;
+    if (opts.stand === true) sim.standRule = true;
+    // ("facing" works only with "stand" on: the design director, 26 November 01:02Z.)
+    if (opts.facing === true && opts.stand === true) sim.faceRule = true;
+    // (Support teams in battle works only with "facing" on, and so with "stand": 25 November 21:54Z and 26 November 01:02Z.)
+    if (opts.teams === true && opts.facing === true && opts.stand === true) sim.teamsRule = true;
     if (opts.blast === true) sim.blast = true;
     if (opts.escort === true) sim.escort = true;
     if (opts.pierce === true) sim.pierce = true;
