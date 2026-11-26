@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6ccad44e 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 70e93027 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -68852,7 +68852,59 @@
       ready: [0.6, 2.4]
     },
     tankmg: {
-      _about: "A tank's machine guns, seen firing (release 2; Brian, 25 November 2026, 15:55Z: 'i never see the machine guns on the tanks firing'; 15:56Z: 'i dont want it to be all the time as thats unrealistic with ammo'). Looks only (ruling 217), the drill's own dice; on only where asked (Drill tankmg: the 3D game's switch)."
+      _about: "A tank's machine guns, seen firing (release 2; Brian, 25 November 2026, 15:55Z: 'i never see the machine guns on the tanks firing'; 15:56Z: 'i dont want it to be all the time as thats unrealistic with ammo'). Looks only (ruling 217), the drill's own dice; on only where asked (Drill tankmg: the 3D game's switch). Each tank has her own machine-gun mind (15:57Z: 'i want everything to see like it has its own mind'), by her model's row here and never by her nation or the date. reach: metres from the tank herself within which a man is worth a burst: 'at' an anti-tank man and 'mg' a machine gun that is firing (the threats, taken first), 'open' a man moving or in the open, 'cover' a man in cover or dug in (only that close), 'rattle' an enemy tank with her commander up in his hatch (a rattle on her armour: only when there is nothing else, and in 'rattleShare' of her ten-second windows); never a gun, a lorry, a man aboard one or a hidden man; 'near': until her block is in the fight she fires only at what is within this of her; 'scan': a block whose ground is further than this from her own block's is not looked at (the search is at most once a think, each tank from her own place: the nearest man of the best class there). A man standing where two blocks' ground overlaps, whom a round could not be fired at (the drill fires a round at the block a point lies in, the first of two), is no mark. She keeps the same man from think to think while he is worth a burst at all, so her turret is not thrown from man to man: she looks afresh only where she has none, where she holds him as less than a threat and a man of a better class shows (threats first), and when her spell at him is over. Rhythm, each tank her own: 'pace' [least, most] is her own factor on her gaps for the whole battle; 'open' the seconds [least, most] she takes before her first burst at each new man; a spell is 'spell' [least, most] bursts, 'gap' seconds [least, most] apart times her pace; then her guns rest 'pause' seconds [least, most]; she opens a spell only once 'apart' seconds have passed since any other tank of her block fired, so a platoon never opens as one, and a tank held back so waits a time of her own ('open' again, her own draw) before she tries, so its tanks do not open one after another at an even beat either; no burst while she shows her main gun firing. Ammunition: a model's row says which guns she carries (coax beside the main gun, hull the bow gunner's, roof the commander's: 1 she has it, 0 she has none), 'per' the rounds one drawn burst shows in the 3D game, 'stock' the rounds stowed for her coaxial and hull guns, and 'roofStock' the roof gun's own where it is of another calibre (left out, it shares the stock). Each drawn burst takes 'per' times 'scale' rounds from the stock of the gun that fired it: 'scale' is a time-compression choice, not a record (counted one for one no tank runs low inside one battle: the least share left in Prokhorovka, seed 11, is then 0.81; at 15 the busiest ease off late in the fight, the light models first). Below 'low' of her stock her reaches halve, her spells are 'lowSpell' bursts and her pauses 'lowPause' times as long; her last tenth: the stock never falls below its 'last' share (0.10 (G: a guess, flagged)); the burst that would take it lower leaves it there, and a roof gun's own belts are kept the same way. The design director (25 November 2026, 22:22Z) accepted this as crew behaviour, not a patch: crews kept their last belts for close defence. So at her last tenth she fires only at a threat (an anti-tank man, a firing machine gun) within 'lastReach' metres, one burst a spell, her pause 'lastPause' times as long (3 (G: a guess, flagged): longer than 'lowPause', so a tank at her last belts is seen firing seldom), and those bursts take nothing from her stock; a man the rules give to her machine guns may still be drawn taken by her burst there, within 'lastReach', and that takes nothing either. A roof gun with belts of its own fires from their last tenth only once she is at hers. A tank that began with rounds is never at nothing (a model whose row gives none has nothing to keep). The burst's length and 'scale' are the drill's facts and are not changed for this (the director refused both). Which gun, picked before she fires: the roof gun only with her commander up (firing never brings him up or keeps him up, and one struck never mans it again; where another gun bears too it takes 'roofShare' of the bursts); the hull gun only with the mark within 'hullArc' degrees of her bow; the coaxial only with the mark within 'coaxArc' degrees of where her turret is laid, and only once the turret has had time to come round; where both of those bear the hull gunner takes 'hullShare'; where none bears, or her man is not worth the rounds that instant, she does not fire, and tries again at a moment of her own after her block's next think. Her turret is laid on her mark while her block's target is neither armour nor a gun (then the main gun keeps it), and laid afresh only once the mark has swung 'lay' degrees off it. 'turn': the degrees a battle second her turret is taken to come round at: whenever her aim has swung more than 'coaxArc' since her last think, the coaxial waits the swing over 'turn' seconds, so it never fires from a turret still on its way (the 3D game turns a turret 15 degrees a second of the screen's clock where the model gives none, and the screen shows a battle second as two, so about 30 a battle second; 20 leaves room for a slower turret). A man the rules give to a tank block's machine guns (book.tankMg.kill; under this switch with the drill book on or off) is drawn taken by a burst from the nearest tank of the block that has rounds, has him within her 'open' reach and has her hull gun or her coaxial bearing on him, charged to her stock like any burst; where no tank can fire it, he is drawn taken by a main gun's round. A turretless model (no coax, no hull gun) fires only her roof gun, hatch open; a model with no gun in her row fires none; '_' is the row for a model not listed. Her row is the model her block is drawn with where the drill has been told it (Drill.drawnAs: in a campaign battle the 3D game draws the nearest model it has, not always the one the rules weigh), else the model the rules weigh her as. The stock figures are approximate stowage from general knowledge (the plain models' and the what-if designs' are guesses for their class): they only set the ratios between models, and the historian is to confirm each.",
+      reach: { open: 350, cover: 120, at: 250, mg: 300, rattle: 250, near: 200, scan: 450 },
+      low: 0.35,
+      last: 0.1,
+      lastReach: 150,
+      open: [0.5, 3],
+      gap: [2, 4.5],
+      pace: [0.8, 1.25],
+      spell: [2, 4],
+      lowSpell: [1, 2],
+      pause: [10, 24],
+      lowPause: 2,
+      lastPause: 3,
+      apart: 1,
+      rattleShare: 0.25,
+      hullArc: 25,
+      coaxArc: 6,
+      lay: 3,
+      turn: 20,
+      roofShare: 0.33,
+      hullShare: 0.5,
+      scale: 15,
+      models: {
+        Sherman: { coax: 1, hull: 1, roof: 1, per: 6, stock: 4750, roofStock: 300 },
+        Tiger: { coax: 1, hull: 1, roof: 0, per: 9, stock: 4800 },
+        Panther: { coax: 1, hull: 1, roof: 1, per: 9, stock: 4800 },
+        PanzerIV: { coax: 1, hull: 1, roof: 1, per: 9, stock: 3150 },
+        "PanzerIV:short": { coax: 1, hull: 1, roof: 0, per: 9, stock: 3150 },
+        StuG3: { coax: 0, hull: 0, roof: 1, per: 9, stock: 600 },
+        T34: { coax: 1, hull: 1, roof: 0, per: 7, stock: 2900 },
+        "T34-85": { coax: 1, hull: 1, roof: 0, per: 7, stock: 1950 },
+        KV1: { coax: 1, hull: 1, roof: 0, per: 7, stock: 3e3 },
+        SU85: { coax: 0, hull: 0, roof: 0, per: 0, stock: 0 },
+        M10: { coax: 0, hull: 0, roof: 1, per: 6, stock: 0, roofStock: 300 },
+        Matilda: { coax: 1, hull: 0, roof: 0, per: 7, stock: 2925 },
+        CharB1: { coax: 1, hull: 1, roof: 0, per: 7, stock: 5100 },
+        M13: { coax: 1, hull: 1, roof: 0, per: 7, stock: 2592 },
+        Semovente: { coax: 0, hull: 0, roof: 1, per: 7, stock: 1104 },
+        L3: { coax: 0, hull: 1, roof: 0, per: 7, stock: 2170 },
+        Type97: { coax: 0, hull: 1, roof: 0, per: 7, stock: 3825 },
+        "Type97:47": { coax: 0, hull: 1, roof: 0, per: 7, stock: 3825 },
+        "7TP": { coax: 1, hull: 0, roof: 0, per: 7, stock: 3960 },
+        LightTank: { coax: 1, hull: 0, roof: 0, per: 7, stock: 945 },
+        MediumTank: { coax: 1, hull: 1, roof: 0, per: 7, stock: 3e3 },
+        AssaultGun: { coax: 0, hull: 0, roof: 1, per: 7, stock: 600 },
+        WhatIf_BreakthroughTank: { coax: 1, hull: 1, roof: 0, per: 7, stock: 4e3 },
+        WhatIf_TankHunterCar: { coax: 0, hull: 0, roof: 1, per: 7, stock: 600 },
+        WhatIf_FlameTank: { coax: 1, hull: 0, roof: 0, per: 7, stock: 2e3 },
+        WhatIf_AmphibiousTank: { coax: 1, hull: 0, roof: 0, per: 7, stock: 1e3 },
+        WhatIf_SnowTank: { coax: 1, hull: 0, roof: 0, per: 7, stock: 1e3 },
+        WhatIf_GliderTank: { coax: 1, hull: 0, roof: 0, per: 7, stock: 1e3 },
+        _: { coax: 1, hull: 1, roof: 0, per: 7, stock: 3e3 }
+      }
     },
     exits: {
       _about: "Men who leave the field are seen leaving (release 2; Brian, 25 November 2026, 17:11Z: 'some soldiers freeze and then disapear'). Looks only (ruling 217), the drill's own dice; on only where asked (Drill exits: the 3D game's switch). The men of a routing block run on past the field's edge. The men of a block that has left the fight (fled off the field, or withdrawn at its out line) stay drawn, each going for his own edge: a withdrawn block's man gets up and turns in his own moment, 0 to 'rise' battle seconds after it left, and runs at his own 'pace' [least, most] metres a battle second; vehicles drive at their block's pace. Each is dropped from the list once 'past' metres beyond his edge, or 'cap' battle seconds after his block left.",
@@ -69310,7 +69362,8 @@
        * A tank's machine guns, seen firing (release 2; Brian, 25 November 2026, 15:55Z: "i never see the machine guns on
        * the tanks firing"; 15:56Z: "i dont want it to be all the time as thats unrealistic with ammo"): each tank her own
        * machine-gun mind: short bursts at targets worth the rounds, spells and pauses at her own pace and moment, the guns
-       * her model carries, and a stock of rounds that each burst draws down, so she eases off as it runs low. Looks only
+       * her model carries, and a stock of rounds that each burst draws down, so she eases off as it runs low; its last
+       * tenth she keeps for close defence (mgTenth: the design director, 25 November 2026, 22:22Z). Looks only
        * (the drill's own dice). It needs neither squad life nor the drill book; where the book is on as well, this takes
        * the place of the book's tank bursts. Off unless asked (DR.tankmg).
        */
@@ -69361,6 +69414,13 @@
       /** Each block's figures at the drill's last step while it fought, and the battle time each block left the fight. */
       __publicField(this, "leftFig", /* @__PURE__ */ new Map());
       __publicField(this, "leftAt", /* @__PURE__ */ new Map());
+      // ---- A tank's machine guns, seen firing (Drill.tankmg): its helpers stand just above mgKill(), below this line ----
+      /**
+       * The model each tank block is drawn with, where whoever starts the 3D battle has told the drill (drawnAs). In a
+       * set piece that is the model the rules weigh her as; in a campaign battle the 3D game draws the nearest model it
+       * has (live.ts standInModel, and captured kit), which the rules never hear of.
+       */
+      __publicField(this, "mgDrawn", /* @__PURE__ */ new Map());
       this.b = b;
       this.seed = b.ticket.seed;
       this.sections = !!opts.sections || !!opts.platoons;
@@ -71237,6 +71297,7 @@
       if (ph === "gone") return;
       if (u.kind === "arm") {
         this.tanks(sq);
+        if (this.tankmg) this.mgThink(sq);
         return;
       }
       if (u.kind === "art") {
@@ -74508,6 +74569,7 @@
       if (!live2(u)) return;
       for (const m of sq.veh.length ? [...sq.men, ...sq.veh] : sq.men) {
         if (m.k < 100 ? !this.stands(sq, m) : m.fell !== void 0) continue;
+        if (this.tankmg && m.mgAt) this.mgFire(sq, m);
         if (m.shot !== void 0 && m.shot !== m.fired) {
           m.fired = m.shot;
           const w = m.role === "tank" ? "tank" : m.role === "gun" ? "gun" : m.role === "mortar" ? "mortar" : m.pose === "throw_grenade" ? "grenade" : m.role === "at" ? "at" : void 0;
@@ -74615,7 +74677,7 @@
       }
       const base = { t: Math.round(t * 10) / 10, l, by: u.id, k: m.k, w, on: on.id, x: 0, y: 0, r: "miss" };
       if (m.j !== void 0) base.j = m.j;
-      if (w === "mg" && m.role === "tank") base.g = this.tankGun(u, m, aim, k0);
+      if (w === "mg" && m.role === "tank") base.g = this.tankmg ? m.mgG : this.tankGun(u, m, aim, k0);
       const [lx, ly] = range2 > 0.01 ? [(v.x - m.x) / range2, (v.y - m.y) / range2] : fwd(m.face);
       const fly2 = l - t;
       if (w === "gun" && !m.buttoned || w === "mortar") {
@@ -74686,14 +74748,338 @@
       if (heavy) this.duck(x, y);
       this.book({ ...base, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 });
     }
-    // ---- A tank's machine guns, seen firing (Drill.tankmg): its helpers stand just above mgKill(), below this line ----
+    /**
+     * Tells the drill the model a tank block is drawn with (the header's `model`), before the battle's first step, so
+     * that her machine guns and her stock of rounds are those of the tank the player sees (mgRow). Looks only; nothing
+     * is kept while the switch is off. Not told, she is read as the model the rules weigh her as.
+     */
+    drawnAs(id, model) {
+      if (this.tankmg && model) this.mgDrawn.set(id, model);
+    }
+    /**
+     * Her model's row (DR.tankmg.models): the guns she carries, the rounds a drawn burst shows, her stock. The model she
+     * is drawn with where it is not her block's (a tank destroyer among the tanks, Man.ml), else the model her block is
+     * drawn with where the drill was told it (drawnAs), else her block's by the rules in this battle, else the plain row
+     * '_'. By her model alone: the nation list (BOOK.tankMg.roof) is never read on this path.
+     */
+    mgRow(sq, m) {
+      const M2 = DR.tankmg.models;
+      return M2[m.ml ?? this.mgDrawn.get(sq.u.id) ?? this.b.vehicle(sq.u) ?? "_"] ?? M2._;
+    }
+    /**
+     * The share of her rounds she has left (1 full, 0 none); her stock is counted out from her model's row the first
+     * time it is asked. Of the belts her coaxial and hull guns share; for a model with a roof gun only, and belts of its
+     * own for it, of those.
+     */
+    mgShare(sq, m) {
+      const R2 = this.mgRow(sq, m);
+      if (m.mgLeft === void 0) {
+        m.mgLeft = R2.stock;
+        if (R2.roofStock !== void 0) m.mgRoof = R2.roofStock;
+      }
+      return R2.stock > 0 ? m.mgLeft / R2.stock : R2.roofStock ? (m.mgRoof ?? 0) / R2.roofStock : 0;
+    }
+    /**
+     * Her last tenth (the design director's ruling of 25 November 2026, 22:22Z: "crews kept their last belts for close
+     * defence"): the rounds of a stock she never fires below, its `last` share in whole rounds (none of a stock of none:
+     * a model with no rounds has nothing to keep). A burst that would cross it leaves her belts at it; a burst fired from
+     * it takes nothing from them (mgSpend).
+     */
+    mgKept(stock) {
+      return Math.ceil(stock * DR.tankmg.last - 1e-9);
+    }
+    /**
+     * Whether she is at her last tenth: the belts her share is counted from (mgShare) down to what she keeps (mgKept).
+     * There she fires only at a threat within lastReach, a burst a spell, `lastPause` times her pause between them. A
+     * model with no rounds at all never is (she has no gun to fire).
+     */
+    mgTenth(sq, m) {
+      const R2 = this.mgRow(sq, m);
+      return R2.stock > 0 ? (m.mgLeft ?? R2.stock) <= this.mgKept(R2.stock) : R2.roofStock ? (m.mgRoof ?? R2.roofStock) <= this.mgKept(R2.roofStock) : false;
+    }
+    /** A number of hers between a least and a most, by the drill's own dice (the salts 211 to 219 are this switch's). */
+    mgIn(r, ...ns) {
+      return r[0] + (r[1] - r[0]) * roll(this.seed, ...ns);
+    }
+    /**
+     * Whether x, a man or a tank of enemy block e, d metres from a tank of block u, is worth a burst from her, and how
+     * much: 1 a threat (an anti-tank man within reach.at, a machine gun that is firing within reach.mg), 2 a man moving or in the
+     * open within reach.open, 3 a man in cover or dug in within reach.cover, 4 a tank with her commander up within
+     * reach.rattle (a rattle on her armour: mgMark and mgMan let it through only now and then), 0 not worth the rounds.
+     * `f` is the share of her rounds left: under `low` her reaches halve and she leaves tanks alone; `tenth`, at her last
+     * tenth of them (mgTenth), only a threat within lastReach. Never a gun, a lorry, a man aboard one, a hidden man or a
+     * closed-up tank; and until her block is in the fight, only what is within reach.near of her. `kill`: a man the rules
+     * have just taken (mgKillBy): the rules found him in her fire, so his cover is not asked, nor whether her block is in
+     * the fight: only her reach (reach.open, halved with her rounds low; lastReach at her last tenth).
+     */
+    mgWorth(u, e, x, d, f, tenth2, kill = false) {
+      const T = DR.tankmg, R2 = T.reach, k = f < T.low ? 0.5 : 1;
+      if (x.pose === "mounted" || !kill && (x.hidden || u.engaged === void 0 && d >= R2.near)) return 0;
+      if (x.role === "tank") return !kill && !x.buttoned && x.cmdDown === void 0 && f >= T.low && d < R2.rattle ? 4 : 0;
+      if (VEHICLE.has(x.role)) return 0;
+      if (kill) return d < (tenth2 ? T.lastReach : R2.open * k) ? 2 : 0;
+      const firing = x.pose === "fire" || SMALL_ARMS.has(x.pose);
+      const threat2 = x.role === "at" && d < R2.at * k || (x.role === "mg" || x.role === "hmg") && firing && d < R2.mg * k;
+      if (tenth2) return threat2 && d < T.lastReach ? 1 : 0;
+      if (threat2) return 1;
+      const open2 = (x.went ?? 0) > 0.5 || !e.dug && (x.cover === "none" || x.cover === "field");
+      return open2 && d < R2.open * k ? 2 : d < R2.cover * k ? 3 : 0;
+    }
+    /**
+     * The enemy's blocks a tank of this block might find a mark in, read at most once a think for the whole block (only
+     * when one of her tanks looks afresh): those whose
+     * ground comes within reach.scan of her block's own; hidden blocks never. The rest are passed over unread.
+     */
+    mgNear(sq) {
+      const u = sq.u, S3 = DR.tankmg.reach.scan + Math.hypot(u.w, u.d) / 2, out = [];
+      for (const e of this.b.units) {
+        if (e.side === u.side || !live2(e) || e.hid || Math.hypot(e.x - u.x, e.y - u.y) - Math.hypot(e.w, e.d) / 2 > S3) continue;
+        const eq = this.squads.get(e.id);
+        if (eq) out.push(eq);
+      }
+      return out;
+    }
+    /**
+     * Whether a burst at man x of enemy block eq would be fired at him: his block in sight, and his place his own
+     * block's ground as Drill.round reads it (blockAt: where two blocks' ground overlaps, a point is the first block's,
+     * and a round at a man of the other there is fired at the first one's nearest model, not at him). Such a man is no
+     * mark: a tank that took him could never fire, and would hold him in her sights for nothing.
+     */
+    mgCan(u, eq, x) {
+      return !eq.u.hid && this.blockAt(u.side, [x.x, x.y])?.id === eq.u.id;
+    }
+    /** Whether her ten-second window now allows a rattle on a tank's armour (rattleShare of them do, by her own dice). */
+    mgRattle(u, m) {
+      return roll(this.seed, u.id, m.n, Math.floor(this.b.t / 10), 216) < DR.tankmg.rattleShare;
+    }
+    /**
+     * The mark tank m finds from her own place when she looks afresh: of the men standing in the blocks near (mgNear),
+     * within her widest reach, whom a burst can be fired at (mgCan), those of the best class there is (mgWorth), and of
+     * them the one nearest her: the man, his class and his block. A tank with her commander up only where there is
+     * nothing else, and only in rattleShare of her own ten-second windows. No dice but the rattle's.
+     */
+    mgMark(sq, m, f, near2) {
+      const u = sq.u, R2 = DR.tankmg.reach, far = Math.max(R2.open, R2.cover, R2.at, R2.mg, R2.rattle) ** 2, tenth2 = this.mgTenth(sq, m);
+      let best, of2, cls = 5, dd = Infinity;
+      for (const eq of near2) for (const x of this.memo(eq).stand) {
+        const dx = x.x - m.x, dy = x.y - m.y, d2 = dx * dx + dy * dy;
+        if (d2 >= far || d2 >= dd && cls === 1) continue;
+        const c = this.mgWorth(u, eq.u, x, Math.sqrt(d2), f, tenth2);
+        if (c && (c < cls || c === cls && d2 < dd) && this.mgCan(u, eq, x)) {
+          best = x;
+          of2 = eq;
+          cls = c;
+          dd = d2;
+        }
+      }
+      return best && of2 && (cls < 4 || this.mgRattle(u, m)) ? [best, cls, of2] : void 0;
+    }
+    /**
+     * The man her mark names (Man.mgOn) as he is now: the man, what he is worth to her this instant (mgWorth; a rattle
+     * only in a window that allows one) and his block. None where he no longer stands, is worth nothing now, or cannot
+     * be fired at (mgCan).
+     */
+    mgMan(sq, m, f) {
+      const on = m.mgOn, eq = on && this.squads.get(on[0]);
+      const x = on && eq && live2(eq.u) ? this.memo(eq).stand.find((y) => y.k === on[1] && (y.j ?? -1) === on[2]) : void 0;
+      if (!eq || !x || !this.mgCan(sq.u, eq, x)) return void 0;
+      const c = this.mgWorth(sq.u, eq.u, x, Math.hypot(x.x - m.x, x.y - m.y), f, this.mgTenth(sq, m));
+      return c && (c < 4 || this.mgRattle(sq.u, m)) ? [x, c, eq] : void 0;
+    }
+    /**
+     * Each tank's own machine-gun mind, after her block's think (tanks()): only the tanks of an armoured block (never its
+     * armoured cars, AA vehicles, jeeps or carriers, nor a battery's self-propelled guns). While her block fights on and
+     * she has rounds she has a mark, and she keeps the same man from think to think while he is worth a burst at all, so
+     * her turret is not thrown from man to man. She looks afresh (mgMark: the best class, then the nearest) only where
+     * she has no man; or holds him as less than a threat, and then takes another only if he is of a better class than
+     * she holds hers as (threats first); or her spell at him is over, when the best there is now is her next. Each new
+     * man: her first burst at him comes after her own delay (`open`). No mark any more: her spell is over, and her guns
+     * rest a pause. Her turret: with a mark, and her block's target neither armour nor a gun (there the main gun keeps
+     * the turret), her aim is laid on the mark, so the 3D game brings the turret round before the coaxial fires; it is
+     * laid afresh only once the mark has swung `lay` degrees off it. Whenever her aim (hers or the main gun's) has swung
+     * more than the coaxial's arc since her last think, the coaxial waits the time the turret takes to come round, at
+     * `turn` degrees a second (mgLay). The drill book's own gate for her bursts (coax) is shut here each think, so
+     * fire() never fires a tank by both paths.
+     */
+    mgThink(sq) {
+      const u = sq.u, t = this.b.t, T = DR.tankmg, deg = 180 / Math.PI;
+      const own = !sq.esc && sq.of === void 0 && u.kind === "arm", e = own ? this.threat(u) : null, main = !!e && (e.kind === "arm" || e.kind === "art" && !e.team);
+      let near2;
+      for (const m of sq.men) {
+        if (m.role !== "tank") continue;
+        m.coax = void 0;
+        if (!own || !this.stands(sq, m)) {
+          if (m.mgAt) m.mgAt = m.mgOn = void 0;
+          continue;
+        }
+        const f = this.mgShare(sq, m), was = m.mgOn, can2 = fighting(u) && ((m.mgLeft ?? 0) > 0 || (m.mgRoof ?? 0) > 0);
+        let mark = can2 && was ? this.mgMan(sq, m, f) : void 0, as = mark ? m.mgAs ?? 5 : 5;
+        if (mark && as < 5) as = Math.min(as, mark[1]);
+        if (can2 && as > 1) {
+          const x = this.mgMark(sq, m, f, near2 ?? (near2 = this.mgNear(sq)));
+          if (x && (!mark || x[1] < as)) {
+            mark = x;
+            as = x[1];
+          }
+        }
+        if (!mark) {
+          if (m.mgRun) {
+            m.mgRun = 0;
+            m.mgNext = Math.max(m.mgNext ?? 0, t + this.mgPause(u, m, f, this.mgTenth(sq, m)));
+          }
+          m.mgAt = m.mgOn = m.mgAs = m.mgAim = void 0;
+        } else {
+          const [x, c, eq] = mark, j = x.j ?? -1;
+          m.mgAt = [x.x, x.y];
+          m.mgAs = Math.min(as, c);
+          if (!was || was[0] !== eq.u.id || was[1] !== x.k || was[2] !== j) {
+            m.mgOn = [eq.u.id, x.k, j];
+            m.mgNext = Math.max(m.mgNext ?? 0, t + this.mgIn(T.open, u.id, m.n, Math.round(t * 10), 213));
+          }
+          if (main) m.mgAim = void 0;
+          else {
+            const a = m.mgAim, br = bearing2(m.x, m.y, x.x, x.y);
+            if (!a || Math.abs(wrap(bearing2(m.x, m.y, a[0], a[1]) - br)) * deg > T.lay) m.mgAim = [x.x, x.y];
+            m.aim = m.mgAim;
+          }
+        }
+        const w = m.mgWas, now = m.aim ? bearing2(m.x, m.y, m.aim[0], m.aim[1]) : m.face, off2 = Math.abs(wrap(now - (w ? bearing2(m.x, m.y, w[0], w[1]) : m.face))) * deg;
+        if (off2 > T.coaxArc) m.mgLay = Math.max(m.mgLay ?? 0, t) + off2 / T.turn;
+        m.mgWas = m.aim ? [m.aim[0], m.aim[1]] : void 0;
+      }
+    }
+    /**
+     * How long her guns rest after a spell (`pause`, her own draw; `lowPause` times as long once her rounds are low, and
+     * `lastPause` times as long at her last tenth of them: the same draw of hers, only longer).
+     */
+    mgPause(u, m, f, tenth2) {
+      const T = DR.tankmg;
+      return (tenth2 ? T.lastPause : f < T.low ? T.lowPause : 1) * this.mgIn(T.pause, u.id, m.n, Math.round(this.b.t * 10), 215);
+    }
+    /**
+     * Which of her machine guns fires at a mark now, by her model's row, picked before she fires. The commander's on the
+     * roof: only with him up in his hatch (firing never brings him up nor keeps him up; one struck never mans it again)
+     * and rounds in its belts (where it has belts of its own, more than the tenth of them it keeps, mgKept, unless she
+     * is at her last tenth, mgTenth: then it fires from what is kept, as her other guns do). The hull gunner's: only with the mark within hullArc degrees of her bow. The coaxial: only
+     * with the mark within coaxArc degrees of where her turret is laid (her aim), and only with the turret there: once
+     * it has had its time to come round (mgLay, set where her aim swung at her last think), and her aim not moved since
+     * that think (a main gun's round between thinks lays it on what it struck). Where the roof gun and another bear,
+     * the roof gun takes roofShare of the bursts; where the hull gun and the coaxial both bear, the hull gunner takes
+     * hullShare. None bears: none (she does not fire this time). `kill`, for the burst that takes a man the rules took
+     * (mgKillBy): that burst is made in the dead man's block's turn of the step, and her own turn may yet come, so only
+     * what will still hold when the step is done: the hull gun well inside its arc (8 degrees: she may yet turn a
+     * little), else the coaxial inside its own by what a metre and a half of her own going would swing it, and only
+     * where her block has no think left this step (a think may lay her turret elsewhere); never the roof gun (her
+     * commander may yet go down this step). No dice.
+     */
+    mgGun(sq, m, at4, kill = false) {
+      const u = sq.u, t = this.b.t, T = DR.tankmg, R2 = this.mgRow(sq, m), k0 = Math.round(t * 10), deg = 180 / Math.PI;
+      const br = bearing2(m.x, m.y, at4[0], at4[1]), belts = (m.mgLeft ?? 0) > 0, ab = m.aim ? bearing2(m.x, m.y, m.aim[0], m.aim[1]) : 0;
+      const hull = !!R2.hull && belts && Math.abs(wrap(br - m.face)) * deg <= T.hullArc - (kill ? 8 : 0);
+      const w = m.mgWas, laid = !!m.aim && !!w && m.aim[0] === w[0] && m.aim[1] === w[1] && t >= (m.mgLay ?? 0);
+      if (kill) return hull ? "hull" : R2.coax && belts && laid && sq.nextThink > t && (Math.abs(wrap(br - ab)) + Math.atan2(1.5, Math.hypot(at4[0] - m.x, at4[1] - m.y))) * deg <= T.coaxArc ? "coax" : void 0;
+      const shut = !!m.buttoned || m.cmdDown !== void 0 || this.hatches && m.shutAt !== void 0 && t >= m.shutAt && t < m.shutTo;
+      const roof = !!R2.roof && !shut && (R2.roofStock !== void 0 ? (m.mgRoof ?? 0) > this.mgKept(R2.roofStock) || (m.mgRoof ?? 0) > 0 && this.mgTenth(sq, m) : belts);
+      const coax = !!R2.coax && belts && laid && Math.abs(wrap(br - ab)) * deg <= T.coaxArc;
+      if (roof && (!(hull || coax) || roll(this.seed, u.id, m.n, k0, 218) < T.roofShare)) return "roof";
+      if (hull && (!coax || roll(this.seed, u.id, m.n, k0, 219) < T.hullShare)) return "hull";
+      return coax ? "coax" : void 0;
+    }
+    /**
+     * A burst drawn from her stock: the rounds it shows (`per`) times `scale`, from the belts of the gun that fired it,
+     * never below the last tenth of them (mgKept): the burst that would cross it leaves her belts at it. A burst fired at
+     * her last tenth (mgTenth) takes nothing: those are the belts the crew keeps for close defence.
+     */
+    mgSpend(sq, m, g2) {
+      const R2 = this.mgRow(sq, m), n = R2.per * DR.tankmg.scale;
+      if (this.mgTenth(sq, m)) return;
+      if (g2 === "roof" && R2.roofStock !== void 0) m.mgRoof = Math.max(this.mgKept(R2.roofStock), (m.mgRoof ?? 0) - n);
+      else m.mgLeft = Math.max(this.mgKept(R2.stock), (m.mgLeft ?? 0) - n);
+    }
+    /**
+     * Her burst, by her own timers (each step, from fire(), while she has a mark): none before her next burst is due, and
+     * none while she shows her main gun firing. She opens a spell only once `apart` seconds have passed since any other
+     * tank of her block fired, so no platoon opens as one; held back so, she waits a time of her own (`open` again, her
+     * own draw), so its tanks do not open one after another at an even beat either. Her man is found by name (mgMan) and
+     * weighed again from where she stands now, with the rounds she has now: gone, or not worth it this instant, she
+     * holds her fire and tries again after her block has thought again (mgWait: the think keeps him or finds another).
+     * Then her gun (mgGun); none bearing, she tries again likewise (that is when her turret may be laid afresh). A spell
+     * is `spell` bursts (`lowSpell` with her rounds low; one at her last tenth, mgTenth, and the burst that brings her
+     * to it ends her spell), `gap` seconds apart times her own pace; after its last her
+     * guns rest a pause, and at her next think she looks afresh for the best mark there is (mgAs 5). Each burst is one
+     * round at the place her man stands now, as the drill book's: w 'mg', g its gun.
+     */
+    mgFire(sq, m) {
+      const u = sq.u, t = this.b.t, T = DR.tankmg;
+      if (!m.mgAt || t < (m.mgNext ?? 0) || m.pose === "fire") return;
+      if (!m.mgRun && sq.men.some((x) => x !== m && x.mgT !== void 0 && t - x.mgT < T.apart)) {
+        m.mgNext = t + this.mgIn(T.open, u.id, m.n, Math.round(t * 10), 212);
+        return;
+      }
+      const f = this.mgShare(sq, m), v = this.mgMan(sq, m, f)?.[0], g2 = v && this.mgGun(sq, m, [v.x, v.y]);
+      if (!v || !g2) {
+        m.mgNext = this.mgWait(sq, m);
+        return;
+      }
+      if (!m.mgRun) {
+        m.mgRun = this.mgTenth(sq, m) ? 1 : Math.round(this.mgIn(f < T.low ? T.lowSpell : T.spell, u.id, m.n, m.mgSpells ?? 0, 214));
+        m.mgSpells = (m.mgSpells ?? 0) + 1;
+      }
+      m.mgRun--;
+      this.mgSpend(sq, m, g2);
+      const low2 = this.mgShare(sq, m), last = this.mgTenth(sq, m);
+      if (low2 < T.low) m.mgRun = Math.min(m.mgRun, T.lowSpell[1] - 1);
+      if (last) m.mgRun = 0;
+      m.mgNext = t + (m.mgRun > 0 ? this.mgIn(T.pace, u.id, m.n, 211) * this.mgIn(T.gap, u.id, m.n, Math.round(t * 10), 217) : this.mgPause(u, m, low2, last));
+      if (!m.mgRun) m.mgAs = 5;
+      m.mgG = g2;
+      m.mgT = t;
+      this.round(sq, m, "mg", [v.x, v.y]);
+    }
+    /**
+     * When she tries again, a burst due and no man or no gun to fire it: once her block has thought again, at a moment
+     * of her own in the half second after it (her own dice), so the tanks of a block that wait do not all fire in the
+     * step of their block's think.
+     */
+    mgWait(sq, m) {
+      return sq.nextThink + 0.5 * roll(this.seed, sq.u.id, m.n, Math.round(this.b.t * 10), 212);
+    }
+    /**
+     * The burst that took a man the rules gave to a tank block's machine guns (mgKill): from the tank of that block
+     * nearest him that has rounds, is not showing her main gun firing, has not fired this step, has him within her
+     * reach (mgWorth, as he stood) and has her hull gun or her coaxial bearing on him (mgGun); charged to her stock as
+     * any burst, and her next burst put off by her usual gap. Where no tank of the block can fire it, he went to the
+     * main gun of the tank nearest him (`s`, as killRound found her): a shell's round, no burst.
+     */
+    mgKillBy(tq, vq, v, s) {
+      const u = tq.u, t = this.b.t, T = DR.tankmg;
+      let best, dd = Infinity;
+      if (!tq.esc && tq.of === void 0) for (const x of this.standing(tq)) {
+        const d = Math.hypot(x.x - v.x, x.y - v.y);
+        if (x.role !== "tank" || x.pose === "fire" || x.mgT === t || d >= dd) continue;
+        if (this.mgWorth(u, vq.u, v, d, this.mgShare(tq, x), this.mgTenth(tq, x), true) && this.mgGun(tq, x, [v.x, v.y], true)) {
+          best = x;
+          dd = d;
+        }
+      }
+      const g2 = best && this.mgGun(tq, best, [v.x, v.y], true);
+      if (!best || !g2) return [s, s ? "tank" : "rifle"];
+      this.mgSpend(tq, best, g2);
+      best.mgG = g2;
+      best.mgT = t;
+      best.mgNext = Math.max(best.mgNext ?? 0, t + this.mgIn(T.pace, u.id, best.n, 211) * this.mgIn(T.gap, u.id, best.n, Math.round(t * 10), 217));
+      return [best, "mg"];
+    }
     /**
      * Whether the man (model k, or a section's man as the block's count of losses) a tank block took off the enemy's
-     * foot went to her machine guns, not her main gun's shells (BOOK.tankMg.kill: more in the open). The drill book only;
+     * foot went to her machine guns, not her main gun's shells (BOOK.tankMg.kill: more in the open). The drill book only,
+     * or the tanks' own machine-gun minds (Drill.tankmg: the same answer with the book on or off; which tank fires the
+     * burst, and whether one can, is settled where it is drawn, mgKillBy, never here: the fight's code asks this, and its
+     * answer hangs only on what it is asked with, never on a tank's rounds or the order of the asking);
      * fixed by the blocks and the count, never the battle's dice. Looks only: the rules took him either way.
      */
     mgKill(by2, t, k) {
-      if (!this.byBook || by2.kind !== "arm" || !FOOT_KINDS.includes(t.kind) || t.kind === "fort") return false;
+      if (!(this.byBook || this.tankmg) || by2.kind !== "arm" || !FOOT_KINDS.includes(t.kind) || t.kind === "fort") return false;
       const close3 = CLOSE3.includes(groundOf3(this.b.field, t.x, t.y)) || t.dug;
       return roll(this.seed, by2.id, t.id, k, 97) < (close3 ? BOOK2.tankMg.kill.cover : BOOK2.tankMg.kill.open);
     }
@@ -74740,6 +75126,7 @@
         }
       }
       if (!p && s) w = s.role === "hmg" || s.role === "tank" ? "mg" : v.role === "tank" ? s.role === "at" ? "at" : "grenade" : s.role === "mg" ? "mg" : "rifle";
+      if (this.tankmg && tq && !p && !crush && by2?.kind === "arm") [s, w] = this.mgKillBy(tq, vq, v, s);
       if (crush) {
         s = crush;
         w = "track";
@@ -74751,11 +75138,11 @@
       if (s) {
         r.k = s.k;
         if (s.j !== void 0) r.j = s.j;
-        if (w === "mg" && s.role === "tank" && by2) r.g = this.tankGun(by2, s, at4, Math.round(t * 10));
+        if (w === "mg" && s.role === "tank" && by2) r.g = this.tankmg ? s.mgG : this.tankGun(by2, s, at4, Math.round(t * 10));
         if (w !== "rifle" && w !== "mg" && w !== "track" && !mate) {
           s.shot = t;
           s.fired = t;
-          s.aim = [v.x, v.y];
+          s.aim = this.tankmg && s.mgT === t ? s.aim : [v.x, v.y];
           if (s.role === "gun" || s.role === "mortar") s.pose = "fire";
         }
       }
