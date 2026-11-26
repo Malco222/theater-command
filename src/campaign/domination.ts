@@ -17,6 +17,7 @@
 //   dom:laid   how many countries laid down their arms that month, with no great power left to stand beside
 import data from '../../data/campaign/domination.json';
 import { airOnFall } from './air';
+import { nationDone } from './arrivalwaits';
 import { handedOver, holdersNow } from './buildings';
 import { DIPLOMACY, majorsOf } from './diplomacy';
 import { ledger } from './economy';
@@ -183,6 +184,7 @@ function heir(g: Game, r: Region, gone: string): string | null {
 /** A nation whose homeland lies beyond the map cannot be conquered on it: it takes its forces home and is out of the war. */
 function leave(g: Game, n: Nation): void {
   for (const c of g.corps.filter((c) => c.nat === n.id)) removeCorps(g, c);
+  nationDone(g, n.id); // (the telling's flags of its rows go with it: no dead data in a lost war)
   endVoyages(g, n.id);
   fleetsOnFall(g, n.id);
   airOnFall(g, n.id);
@@ -286,6 +288,7 @@ function layDown(g: Game, n: Nation, to: string): void {
   n.fellOn = { turn: g.turn, week: g.week, to, how: 'terms' };
   delete n.freedOn;
   for (const c of g.corps.filter((c) => c.nat === n.id)) removeCorps(g, c);
+  nationDone(g, n.id); // (the telling's flags of its rows go with it: no dead data in a lost war)
   endVoyages(g, n.id);
   fleetsOnFall(g, n.id);
   airOnFall(g, n.id);

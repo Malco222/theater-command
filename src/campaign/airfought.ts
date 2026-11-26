@@ -89,6 +89,10 @@ export interface FoughtAir {
    */
   strafers?: number[];
   strafeFire?: number;
+  /** With the strafers' rule on: by campaign group id, the fighters its passes counted on the troops (the report's words). */
+  strafedBy?: Record<number, number>;
+  /** With the strafers' rule on, only when not empty: by campaign group id, what ended its strafing short as the battle knows it (the report's words). */
+  strafeEnd?: Record<number, 'short' | 'fuel' | 'caught'>;
 }
 
 /**

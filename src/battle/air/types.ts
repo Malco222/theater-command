@@ -289,6 +289,62 @@ export interface AirAim {
   answer?: { box: number; on: number };
 }
 
+/**
+ * What the 3D game reads to lay out and ease a group's flight (the 3D air thread's shown-only asks after the owner's
+ * Epirus battle, 26 November 2026: "no count to move"), in its view extra beside AirAim. Each key is absent unless it
+ * is true that tick. Built in sim.ts shownMore() at the end of each tick, after every group has moved and settled, from
+ * what the rules hold then; the few things it needs from the tick before (each group's point and height, the second a
+ * group left the ground, a dive's start) are kept in AirSim.shownKept, which no rule reads. Shown, never counted: no
+ * throw is drawn for it and the battle never reads it back.
+ *
+ * Units: metres in the battle's own frame (the frame of the view's x and y: x east, y north, the raid coming on from
+ * y = 0), heights in metres as the bridge's 'alt' gives them, and seconds on the view's clock (the view's t: battle
+ * seconds, ten views a second; one battle second is SKY.scale air seconds).
+ *
+ * - 'fight', on a fighter group in a fight: its knot, the fighter groups of both sides joined to it by contact
+ *   (a contact both groups hold), one fighter-to-fighter contact leading to the next. A bomber box is never walked
+ *   through, so a box in contact with two knots links neither to the other: they are two fights. A fighter group in
+ *   contact with an enemy box and with no enemy fighter is a knot of its own (a fight of one); one in contact with
+ *   nothing (no contact both hold) is in no fight. A bomber box carries no 'fight' (its own 'hold', the fighter group
+ *   its guns hold fire for, is shown()'s and stays as it is). 'id' is the lowest group id in the knot, so it stays
+ *   while that group is in it: when two knots join, the joined fight takes the lower of the two ids; when one splits,
+ *   the part with the lowest group keeps the id and the other part takes its own lowest. 'x', 'y' the centre, the
+ *   mean of its groups' points (fighters only). 'vx', 'vy' the centre's speed in metres a battle second: how far the
+ *   centre of these same groups moved since the tick before, over the tick (0.1 s). On a fight's first tick, and on
+ *   any tick a group joins or leaves it, that is still the move of the groups in it now, from where they were a tick
+ *   before, so a group joining makes no jump in vx, vy (the centre x, y itself does jump then). 'groups' the ids of
+ *   the knot's fighter groups, both sides, in rising order: the same list on every group of the fight. 'boxes' the
+ *   ids, in rising order, of every enemy bomber box in contact (a contact both hold) with any group of the knot, and
+ *   'box' the lowest of them: the box the knot is working on. Both absent when the knot touches no box.
+ * - 'rise', on a group scrambled late, from the tick it is scrambled until the tick its climb ends: 'x', 'y' its
+ *   field (where it waited on the ground), 'at' the view second it was scrambled, 'from' the ground (0 m: the bridge's
+ *   'alt' for a group on the ground), 'to' the height of the band it is climbing to, and 'over' the seconds from 'at'
+ *   to the first view at that height, by the rules' own climb (SKY.bands.climb air seconds a band). The rules put it
+ *   on the low band at once (1,800 m, in the scramble's own view) and climb it one band from there; 'over' is that
+ *   climb's length on the view's clock, so a take-off at 'at' and a climb ending at at + over meets the rules' group
+ *   at its height when they have it there.
+ * - 'hold', on a fighter group whose job is a patrol, flying, that is making for no enemy this tick: the patrol's
+ *   point, where it is or is bound for (its job's x, y). Absent the tick it makes for an enemy or is given a quarry.
+ *   A scrambled group patrols the target while it climbs, so it may carry 'rise' and 'hold' at once.
+ * - 'bounce', on a group that has dived from above on an enemy (top cover coming down, or the dive that ends a
+ *   staff's climb): 'from' its height the view before the dive, 'to' the band it dived to (one band lower: groups
+ *   more than a band apart never meet), 'at' the view second of the dive. The rules change its height at once, in
+ *   that view (sim.ts touch()): they hold no time for the drop itself, so 'over' is 0, always; how to spread the
+ *   drop is the 3D's. 'edge' and 'left' are the rules' own clock for the dive (u.bounce): SKY.edge.bounceFor air
+ *   seconds on the view's clock, and what is left of it. For top cover that clock is the time it strikes harder,
+ *   "diving from a higher band". For the dive that ends a staff's climb the clock runs the same, but the rules
+ *   price that dive level for as long as the group is still on its staff's climb (drawn, never priced: place_()),
+ *   so there 'edge' and 'left' say how long the dive is told, not an edge in the fight. Present from the dive
+ *   while the clock runs; a dive that starts no clock (on fighters down on their passes on the troops) shows only
+ *   in the view of the dive, with 'edge' and 'left' 0.
+ */
+export interface AirShown {
+  fight?: { id: number; x: number; y: number; vx: number; vy: number; groups: number[]; box?: number; boxes?: number[] };
+  rise?: { x: number; y: number; at: number; from: number; to: number; over: number };
+  hold?: { x: number; y: number };
+  bounce?: { from: number; to: number; at: number; over: 0; edge: number; left: number };
+}
+
 /** The exact result the rules apply (FieldResult.extra.air): each campaign group's losses, and the bombs dropped. */
 export interface AirOutcome {
   /** Each campaign group: what it lost, its downed fighter pilots who fly again, and the aircraft it sent up. */
@@ -335,6 +391,18 @@ export interface AirOutcome {
    */
   strafers?: number[];
   strafeFire?: number;
+  /**
+   * With the strafers' rule on: by campaign group id, the fighters its completed passes counted on the troops ('strafed'
+   * group by group), for the report's words (the UI director, 19:10Z A5). A group is here only once it has finished a
+   * pass, which the report's words read too (the UI director, 26 November 2026 02:06Z, answer 4). Absent otherwise.
+   */
+  strafedBy?: Record<number, number>;
+  /**
+   * With the strafers' rule on, and only when not empty: by campaign group id, what ended a group's strafing short as the
+   * battle knows it (sim.ts ended): 'short', bingo before its go-down; 'fuel', bingo after it; 'caught', a defending
+   * fighter group ended its passes. For the report's words (the UI director, 21:22Z j and k, 21:28Z). Absent otherwise.
+   */
+  strafeEnd?: Record<number, 'short' | 'fuel' | 'caught'>;
 }
 
 /**

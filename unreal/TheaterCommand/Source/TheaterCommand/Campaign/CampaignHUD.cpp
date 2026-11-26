@@ -10858,6 +10858,28 @@ namespace
 						: FString(TEXT("Light flak alone: it brings down a few bombers but stops none of a raid."))))
 				];
 				Inside->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)[Meter(Air.Stop / 100.0f, BrightBrass)];
+				// (City defences; the UI director, 26 November 2026, 03:34Z.) Built searchlights take a row of the shelf, in
+				// the form of the fighters' row: after the guns' meter and before the fighters, since they work on the guns.
+				// The line is the rules' own (glance.air.lights.shelf). None built, or the switch off: no row. There is no
+				// searchlights sign drawn yet (glance-lights.png or order-lights.png), so until there is the row takes the
+				// guns' sign.
+				if (Air.Lights > 0 && !Air.LightsLine.IsEmpty())
+				{
+					const FString LightsSign(GlanceSignBrush(TEXT("lights")) ? TEXT("lights") : TEXT("aa"));
+					Inside->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 1.0f, 6.0f, 0.0f)
+						[
+							SignBox(LightsSign, Cream, 12.0f)
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f)
+						[
+							SNew(STextBlock).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Cream).AutoWrapText(true)
+							.Text(FText::FromString(Air.LightsLine))
+						]
+					];
+				}
 				if (Air.bWatch)
 				{
 					Inside->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)

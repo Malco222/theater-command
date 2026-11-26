@@ -806,6 +806,13 @@ namespace
 			Air->TryGetStringField(TEXT("foe"), Out.Air.Foe);
 			Air->TryGetStringField(TEXT("sky"), Out.Air.Sky);
 			Air->TryGetStringField(TEXT("skyBy"), Out.Air.SkyBy);
+			// (City defences: the rules send "lights" only with the switch on.) The searchlights' level and the shelf's row.
+			const TSharedPtr<FJsonObject>* LightsObject = nullptr;
+			if (Air->TryGetObjectField(TEXT("lights"), LightsObject) && LightsObject && (*LightsObject).IsValid())
+			{
+				(*LightsObject)->TryGetNumberField(TEXT("level"), Out.Air.Lights);
+				(*LightsObject)->TryGetStringField(TEXT("shelf"), Out.Air.LightsLine);
+			}
 			const TSharedPtr<FJsonObject>* AddObject = nullptr;
 			if (Air->TryGetObjectField(TEXT("add"), AddObject) && AddObject && (*AddObject).IsValid())
 			{
@@ -1335,6 +1342,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("fleetWhy"), Out.bFleetWhy); // (release 2, fleetwhy.ts)
 	Object->TryGetBoolField(TEXT("rearguard"), Out.bRearguard); // (release 2, rearguard.ts)
 	Object->TryGetBoolField(TEXT("supportTeams"), Out.bSupportTeams); // (release 2, teams.ts)
+	Object->TryGetBoolField(TEXT("fromWait"), Out.bFromWait); // (release 2, arrivalwaits.ts)
 	Object->TryGetBoolField(TEXT("rearBridges"), Out.bRearBridges); // (release 2, rearguard.ts)
 	Object->TryGetBoolField(TEXT("shadow"), Out.bShadowRule); // (release 2, shadow.ts)
 	Object->TryGetBoolField(TEXT("voyageLog"), Out.bVoyageLog); // (release 2, voyage.ts)

@@ -274,6 +274,11 @@ struct FGlanceAir
 	bool bCanAdd = false; // the next level of guns is offered here
 	FString AddKey, AddSize, AddWhy; // the arsenal's key ("work:aa"), "level 2", and why it cannot be ordered now (empty when it can)
 	int32 AddCost = 0, AddMonths = 0;
+	// (City defences, the switch on) The searchlights built here: their level, and the shelf's row as the rules word
+	// it ("Searchlights level 2: every level of guns is lit by night, under a clear sky."). Level 0 and an empty
+	// line with none built, and with the switch off, when the rules send no lights at all.
+	int32 Lights = 0;
+	FString LightsLine;
 };
 
 /** (Release 2; Brian, 23 November: "what units that city can build".) One order the arsenal would raise, base, lay down or build in this very town. */
@@ -1356,6 +1361,7 @@ struct FCampaignView
 	bool bFleetWhy = false; // (release 2, fleetwhy.ts) the admirals give a reason for each fleet they order
 	bool bRearguard = false; // (release 2, rearguard.ts) a small corps can be ordered to hold as a rearguard
 	bool bSupportTeams = false; // (release 2, teams.ts) machine-gun and mortar brigades can be raised, by every power
+	bool bFromWait = false; // (release 2, arrivalwaits.ts) a dated arrival formed from corps in the field waits while they are at the front
 	bool bRearBridges = false; // (release 2, rearguard.ts) a rearguard lays charges on the bridges behind it (the switch as set)
 	bool bShadowRule = false; // (release 2, shadow.ts) a fleet of cruisers can shadow an enemy fleet and report where it goes
 	bool bVoyageLog = false; // (release 2, voyage.ts) each fleet keeps a voyage log on its page

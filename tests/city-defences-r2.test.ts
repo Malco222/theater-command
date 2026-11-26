@@ -4,11 +4,11 @@
 // nothing of it is offered, billed, written or read.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import cd from '../data/campaign/citydefences.json';
-import { assessAir, fly, type AirAssess, type KnownDefence } from '../src/campaign/air';
+import { assessAir, fly, standingGuns, type AirAssess, type KnownDefence } from '../src/campaign/air';
 import { setRaidFog, weighKnown } from '../src/campaign/airfog';
 import { AC } from '../src/campaign/aircampaigns';
 import { setAirPiece } from '../src/campaign/airversion';
-import { raidTargets } from '../src/campaign/airwar';
+import { planRaid, raidTargets } from '../src/campaign/airwar';
 import { cityNight, cityNightShare, flakCut, flakCutMost, flakGround, flakLostWithTown, isFlakLine, lightsFloor, setFlakGround, townFlak, townFlakCut, townWorksAt, townWorksMonth, townWorksWorth } from '../src/campaign/citydefences';
 import { SIEGE, besieged, fieldWalls, garrison, ringClosed, siegeMonth, siegeView, storesOf, townBonus } from '../src/campaign/siege';
 import { townName, townSize } from '../src/campaign/towns';
@@ -22,7 +22,7 @@ import { loadGame, saveGame } from '../src/campaign/save';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 import { CITYDEF, LIGHTS_TOP, START_LAID, WORKS_TOP, cityDefences, cityDefencesOn, layStartGunsFromRecord, lightsAt, openCityDefences, setCityDefences } from '../src/campaign/citydefences';
 import { cancelBuild, deliver, ledger, upkeepTotal } from '../src/campaign/economy';
-import { assess, capture, createGame, endPhase, placeName, relocate } from '../src/campaign/game';
+import { assess, capture, createGame, endPhase, placeName, relocate, theWords } from '../src/campaign/game';
 import { cityOrders } from '../src/campaign/orders';
 import { GUARD_TOP } from '../src/campaign/guard';
 import { startOpen } from '../src/campaign/staff';
@@ -266,6 +266,14 @@ function ruhrByNight(o: Night = {}): { g: Game; t: number; f: AirFleet; a: () =>
 /** The built guns' own term in a night raid with no fighters: the bombers lost less the standing flak's (0.01 x 0.7). */
 const gunsTerm = (a: AirAssess, cloud = 1): number => a.gunLoss - 0.01 * cloud * 0.7;
 const line = (a: AirAssess, label: string) => a.lines.find((l) => l.label === label);
+/**
+ * An assessment over the Ruhr with the guns line's place read bare, as the switch-off game prints it. With the switch
+ * on that one line names its place as the news does, "the factories of the Ruhr" (the UI director, 26 Nov 2026
+ * 04:10Z): words only, so everything else of a switch-on assessment must still equal the switch-off one.
+ */
+// (Pass 2, with 1.5.2 joined: 1.5.2 names every place in the air words with its article, so the switch-off game already
+// prints "the factories of the Ruhr"; the line as printed is the bare reading.)
+const bareRuhr = (a: AirAssess): AirAssess => a;
 
 describe('city defences: the guns by night (slice 2)', () => {
   it('gives the worked figures of the ruling: 300 bombers, level 3 guns, a clear sky', () => {
@@ -356,7 +364,11 @@ describe('city defences: the guns by night (slice 2)', () => {
     expect(gunsTerm(both.a())).toBeCloseTo(0.0189, 9);
     // By day the switch moves nothing: the guns are worth their day figure.
     const day = ruhrByNight({ guns: 3, lights: 3, radar: true }), off = ruhrByNight({ guns: 3, lights: 3, radar: true, on: false });
-    expect(assessAir(day.g, [day.f], 'bomb', day.t)).toEqual(assessAir(off.g, [off.f], 'bomb', off.t));
+    // (Its one difference is the guns line's place, named with its article: the UI director, 26 Nov 2026 04:10Z.)
+    const byDay = assessAir(day.g, [day.f], 'bomb', day.t), byDayOff = assessAir(off.g, [off.f], 'bomb', off.t);
+    expect(line(byDay, 'Anti-aircraft guns')!.value).toBe('Level 3 guns ring the factories of the Ruhr');
+    expect(line(byDayOff, 'Anti-aircraft guns')!.value).toBe('Level 3 guns ring the factories of the Ruhr');
+    expect(bareRuhr(byDay)).toEqual(byDayOff);
   });
 
   it('words the searchlights line in each of its forms, and the guns by night in theirs', () => {
@@ -1159,6 +1171,8 @@ describe('city defences in the bridge (slice 5)', () => {
     expect(l.lit).toBe(0);
     expect(l.line).toBe('level 2: there are no guns built here for them to light. They help the night fighters a little.');
     expect(l.line).not.toMatch(/0 of the 0/);
+    // The 3D shelf's row (the UI director, 26 Nov 2026, 03:34Z): the same line with its capital, and one full stop.
+    expect((l as unknown as { shelf: string }).shelf).toBe('Searchlights level 2: there are no guns built here for them to light. They help the night fighters a little.');
   });
 
   it('the AIR DEFENCE shelf\'s searchlights line has a twin for one level of guns, for every level lit, and for one of several', () => {
@@ -1169,8 +1183,10 @@ describe('city defences in the bridge (slice 5)', () => {
       g.flags[`wk:aa:${id}`] = guns;
       g.flags[`wk:lights:${id}`] = lights;
       TC().load(saveGame(g));
-      const l = (TC().province(id) as { glance: { air: Record<string, unknown> | null } }).glance.air!.lights as { level: number; lit: number; guns: number; line: string };
+      const l = (TC().province(id) as { glance: { air: Record<string, unknown> | null } }).glance.air!.lights as { level: number; lit: number; guns: number; line: string; shelf: string };
       expect([l.level, l.guns, l.lit]).toEqual([lights, guns, Math.min(lights, guns)]);
+      // The 3D shelf's row is the glance's own line, with a capital and a full stop (the UI director, 26 Nov 2026, 03:34Z).
+      expect(l.shelf).toBe(`Searchlights ${l.line}.`);
       return l.line;
     };
     // One level of guns: there is nothing to count, whatever the lights' level.
@@ -1573,6 +1589,164 @@ describe('city defences under fog on raids: the searchlights take the guns\' hed
   });
 });
 
+// The UI director, 26 Nov 2026, 03:34Z and 03:36Z: no still can read a tip, so the 3D raid card says the target's
+// searchlights on the guns figure's small tail, and the town card's shelf gives built searchlights a row of their own.
+describe('city defences on the 3D cards: the searchlights where a still can see them', () => {
+  const S = standingGuns().toLocaleString('en-US');
+  /** Britain's card for a raid on the Ruhr, with the guns and searchlights set there; `seen` the guns' level as last seen, the given months ago. */
+  const tail = (o: { on?: boolean; kind?: 'night' | 'bomb'; guns?: number; lights?: number; fog?: boolean; seen?: [number, number] }): string => {
+    const g = britain(o.on ?? true);
+    const t = g.byName.Ruhr.id;
+    if (o.guns) g.flags[`wk:aa:${t}`] = o.guns; else delete g.flags[`wk:aa:${t}`];
+    if (o.lights) g.flags[`wk:lights:${t}`] = o.lights; else delete g.flags[`wk:lights:${t}`];
+    if (o.fog) setRaidFog(g, true);
+    if (o.seen) ((g.intel.airSeen ??= {}).UK ??= {})[t] = [g.turn - o.seen[1], 0, 0, o.seen[0], 0];
+    const f = g.airFleets.find((x) => x.nat === 'UK' && x.bmr > 0 && x.ship === undefined)!;
+    TC().load(saveGame(g));
+    const page = TC().page(`plan:${o.kind ?? 'night'}:${t}:${f.id}`) as { card: { ways: { gunsTail: string; gunsFigure: string } } };
+    return page.card.ways.gunsTail;
+  };
+
+  it('a raid planned by night on a target in sight with searchlights: the guns\' tail says their level, in place of the standing guns\' words', () => {
+    // (The UI director, 26 Nov 2026 03:53Z: the tip already says the standing guns, and the tail is short.)
+    expect(tail({ guns: 3, lights: 2 })).toBe('\u00B7 searchlights level 2');
+    expect(tail({ guns: 1, lights: 3 })).toBe('\u00B7 searchlights level 3');
+    // Searchlights and no guns built, a bare target: the same.
+    expect(tail({ lights: 1 })).toBe('\u00B7 searchlights level 1');
+    // It fits the 25 characters the tail holds.
+    expect(tail({ guns: 3, lights: 3 }).length).toBeLessThanOrEqual(25);
+  });
+
+  it('by day, with no searchlights, and with the switch off, the tail is as it was', () => {
+    expect(tail({ guns: 3, lights: 2, kind: 'bomb' })).toBe(`\u00B7 and ${S} light`);
+    expect(tail({ guns: 3 })).toBe(`\u00B7 and ${S} light`);
+    expect(tail({})).toBe(`\u00B7 only ${S} light`);
+    // The switch off: the mark of a level left in the save reads as none, by night too.
+    expect(tail({ on: false, guns: 3, lights: 2 })).toBe(`\u00B7 and ${S} light`);
+    expect(tail({ on: false, guns: 3, lights: 2, fog: true })).toBe('\u00B7 not scouted');
+  });
+
+  it('under fog on raids the lights follow the guns\' own words, unhedged: seen some months ago, and not scouted', () => {
+    // (The lights are read as they truly are in every state of the fog: the design director, 25 Nov 2026 19:44Z.)
+    expect(tail({ guns: 3, lights: 2, fog: true, seen: [2, 2] })).toBe('\u00B7 seen two months ago \u00B7 searchlights level 2');
+    expect(tail({ guns: 3, lights: 2, fog: true })).toBe('\u00B7 not scouted \u00B7 searchlights level 2');
+    // By day under the same fog, no tail of theirs.
+    expect(tail({ guns: 3, lights: 2, fog: true, seen: [2, 2], kind: 'bomb' })).toBe('\u00B7 seen two months ago');
+    expect(tail({ guns: 3, lights: 2, fog: true, kind: 'bomb' })).toBe('\u00B7 not scouted');
+  });
+});
+
+// The UI director, 26 Nov 2026 04:10Z: "with your row's switch on, the raid card's guns line and weather line take the
+// news's article too ... with it off, both print as shipped, so the switch-off game does not change. One guarded call
+// each, words only." So the card's three lines name the place alike: the guns, the searchlights, the sky.
+describe('city defences: the raid card names its place as the news does, the switch on', () => {
+  it('the guns line takes the article in each of its forms, and prints as shipped with the switch off', () => {
+    const on = ruhrByNight({ guns: 2, lights: 2, radar: true }), off = ruhrByNight({ guns: 2, lights: 2, radar: true, on: false });
+    expect(line(on.a(), 'Anti-aircraft guns')!.value).toBe('Level 2 guns ring the factories of the Ruhr');
+    expect(line(off.a(), 'Anti-aircraft guns')!.value).toBe('Level 2 guns ring the factories of the Ruhr');
+    // A raid on the town itself is not this row's to name (the air rules' line names the town there): the switch leaves
+    // its guns line as it finds it, and that line never speaks of factories.
+    const town = (r: { g: Game; f: AirFleet; t: number }): string => line(assessAir(r.g, [r.f], 'town', r.t), 'Anti-aircraft guns')!.value;
+    expect(town(on)).toBe(town(off));
+    expect(town(on)).toMatch(/^Level 2 guns ring (?!the factories of )/);
+    // Under fog on raids: seen at a level some months ago, and never scouted.
+    const known = (aa: number, seen: number, ago?: number): KnownDefence => ({ sure: () => true, extra: 0, extraNat: 'GER', aa, ruined: 0, seen, ago });
+    const seen = known(2, 2, 2), never = known(3, -1);
+    const fog = (r: { g: Game; f: AirFleet; t: number }, k: KnownDefence): string => line(assessAir(r.g, [r.f], 'night', r.t, k), 'Anti-aircraft guns')!.value;
+    expect(fog(on, seen)).toBe('Level 2 guns ringed the factories of the Ruhr when seen two months ago');
+    expect(fog(off, seen)).toBe('Level 2 guns ringed the factories of the Ruhr when seen two months ago');
+    expect(fog(on, never)).toBe('Not scouted, so reckoned at the worst: level 3 guns round the factories of the Ruhr');
+    expect(fog(off, never)).toBe('Not scouted, so reckoned at the worst: level 3 guns round the factories of the Ruhr');
+  });
+
+  it('the weather line takes it too, and prints as shipped with the switch off', () => {
+    const on = ruhrByNight({ guns: 2, lights: 2, cloud: true }), off = ruhrByNight({ guns: 2, lights: 2, cloud: true, on: false });
+    for (const kind of ['night', 'bomb'] as const) {
+      expect(planRaid(on.g, kind, on.t, undefined, 'UK').sky).toBe('Cloud over the Ruhr: fewer bombs hit, and fewer bombers are found.');
+      expect(planRaid(off.g, kind, off.t, undefined, 'UK').sky).toBe('Cloud over Ruhr: fewer bombs hit, and fewer bombers are found.');
+    }
+    // The card's three lines then agree on the name.
+    const a = on.a();
+    expect(line(a, 'Searchlights')!.value).toBe('Cloud over the Ruhr');
+    expect(line(a, 'Anti-aircraft guns')!.value).toBe('Level 2 guns ring the factories of the Ruhr');
+  });
+
+  it('a place the news names bare reads the same on and off, the whole assessment', () => {
+    const on = ruhrByNight({ radar: true }), off = ruhrByNight({ radar: true, on: false });
+    const bare = (g: Game): number => g.regions.find((r) => r.ctrl === 'GER' && !(places as { the: string[] }).the.includes(r.name) && (g.flags[`wk:aa:${r.id}`] ?? 0) > 0)!.id;
+    const t = bare(on.g);
+    expect(bare(off.g)).toBe(t);
+    expect(placeName(on.g.regions[t].name)).toBe(on.g.regions[t].name);
+    const a = assessAir(on.g, [on.f], 'bomb', t), b = assessAir(off.g, [off.f], 'bomb', t);
+    expect(line(a, 'Anti-aircraft guns')!.value).toBe(`Level ${on.g.flags[`wk:aa:${t}`]} guns ring the factories of ${on.g.regions[t].name}`);
+    expect(a).toEqual(b);
+  });
+
+  it('the weather line reads a place inside a phrase as the news does: an airfield raid and a harbour raid (the independent read of 26 Nov 2026)', () => {
+    const lines: Record<string, string | undefined> = {};
+    for (const on of [true, false]) {
+      const r = ruhrByNight({ guns: 2, lights: 2, cloud: true, on });
+      // An airfield raid on the Ruhr, under the Ruhr's cloud.
+      expect([on, planRaid(r.g, 'airfield', r.t, undefined, 'UK').sky]).toEqual([on, 'Cloud over the airfield at the Ruhr: fewer bombs hit, and fewer bombers are found.']);
+      // A harbour raid on the Cotentin, under whatever sky it has this month.
+      lines[`${on}`] = planRaid(r.g, 'harbour', r.g.byName.Cotentin.id, undefined, 'UK').sky;
+    }
+    // (Pass 2, with 1.5.2 joined: 1.5.2 already names the harbour "the harbour of the Cotentin", 27 characters, so the
+    // line reads "the target" on and off alike, as 1.5.2 shipped it; the switch changes nothing here.)
+    expect(lines.false).toMatch(/ over the target[.:]/);
+    expect(lines.true).toBe(lines.false);
+    // The news's own reading of the same words.
+    expect(theWords('British bombers raid the harbour of Cotentin.')).toBe('British bombers raid the harbour of the Cotentin.');
+  });
+
+  it('the longest form, a closed sky over a harbour whose place takes the article, prints whole with the switch on and as shipped with it off (the UI director, 26 Nov 2026 05:01Z)', () => {
+    // ("Judge the room on the phrase as shipped, before the article ... A switch should never make the card say less.")
+    for (const on of [true, false]) {
+      const r = ruhrByNight({ on });
+      const c = r.g.byName.Cotentin.id, i = zoneOfRegion(r.g, c);
+      keptSky.push([i, WEATHER.zones[i].odds]);
+      WEATHER.zones[i].odds = Array.from({ length: 12 }, () => [0, 0, 10] as [number, number, number]);
+      setWeather(r.g, true);
+      const plan = planRaid(r.g, 'harbour', c, undefined, 'UK');
+      // (Pass 2, with 1.5.2 joined: 1.5.2's own place is "the harbour of the Cotentin", over 24, so "the target" on and off
+      // alike, as 1.5.2 shipped it: the switch never makes the card say less than the game without it.)
+      expect([on, plan.sky]).toEqual([on, 'Closed sky over the target: nothing flies there this month.']);
+      // The reason the card cannot open names the zone, on and off alike.
+      expect([on, plan.why]).toEqual([on, planRaid(r.g, 'bomb', c, undefined, 'UK').why]);
+      expect(plan.why).toMatch(/^Closed sky this month: nothing flies over /);
+    }
+  });
+
+  it('the line\'s room is judged on the shipped place, so the switch never turns a named place into "the target"', () => {
+    // (weather.ts prints "the target" for a place over 24 characters. A bare province never comes near it: the longest
+    // articled name is 18, 22 with "the ". A phrase can: "the harbour of Cotentin" is 23 and prints its name, and with
+    // the switch on it still does, as "the harbour of the Cotentin", 27. A place over 24 as shipped reads "the target"
+    // on and off alike.)
+    const the = (places as { the: string[] }).the;
+    for (const name of the) expect(placeName(name).length).toBeLessThanOrEqual(24);
+    const on = ruhrByNight({ cloud: true }), off = ruhrByNight({ cloud: true, on: false });
+    let named = 0, grown = 0, target = 0;
+    for (const name of the) {
+      const r = on.g.byName[name];
+      if (!r) continue;
+      for (const kind of ['bomb', 'airfield', 'harbour'] as const) {
+        const a = planRaid(on.g, kind, r.id, undefined, 'UK').sky, b = planRaid(off.g, kind, r.id, undefined, 'UK').sky;
+        expect([name, kind, b === undefined]).toEqual([name, kind, false]);
+        if (b!.includes('the target')) { expect([name, kind, a]).toEqual([name, kind, b]); target++; continue; }
+        // (Pass 2, with 1.5.2 joined: where 1.5.2 already names the place with its article, an airfield's or a harbour's
+        // phrase, the switch prints it as off does; a province's own line takes the article with the switch, as before.)
+        expect([name, kind, a]).toEqual([name, kind, b!.includes(`the ${name}`) ? b : b!.replace(name, `the ${name}`)]);
+        named++;
+        if (/ over (.+?)[.:]/.exec(a!)![1].length > 24) grown++;
+      }
+    }
+    // Each case is met on this map: places named with their article, some of them past 24 with it, and places too
+    // long as shipped.
+    // (Pass 2, with 1.5.2 joined: a phrase past 24 with its article is already "the target" in 1.5.2, so none grows.)
+    expect([named > 0, grown, target > 0]).toEqual([true, 0, true]);
+  });
+});
+
 // The ferry leg stays as it was, in the design director's terms of 19:44Z: a group met on its ferry leg meets no city
 // defences, "provided a ferry leg never crosses an enemy city's guns. Where it can, those guns reach it." In these
 // rules it cannot: ferry.ts meets the group as a fight for the sky by day, and no built guns count on that mission.
@@ -1585,7 +1759,8 @@ describe('city defences and the ferry leg (ferry.ts): no raid on a town', () => 
       const a = assessAir(on.g, [on.f], 'night', on.t, undefined, leg);
       expect('lights' in a).toBe(false);
       expect(line(a, 'Searchlights')).toBeUndefined();
-      expect(a).toEqual(assessAir(off.g, [off.f], 'night', off.t, undefined, leg));
+      // (Priced as with the switch off: the guns line's place alone reads with its article, words only.)
+      expect(bareRuhr(a)).toEqual(assessAir(off.g, [off.f], 'night', off.t, undefined, leg));
     }
     // The ferry's own leg (a 'superiority' flight with its transit) reports no searchlights.
     const r = ruhrByNight({ guns: 3, lights: 3, radar: true, fighters: true, ac: true });

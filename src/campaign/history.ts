@@ -8,9 +8,10 @@
 
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/history.json';
+import wholeMap from '../generated/world-whole.json';
 import { hashString, Rng } from '../core/rng';
 import { turnToDate } from '../core/ticket';
-import type { Game } from './types';
+import type { Game, Region } from './types';
 import { unitsDecide } from './units';
 
 export interface Stop {
@@ -187,6 +188,49 @@ export function raisedQuality(g: Game, c: { name: string; raised?: string }): nu
 }
 /** The month the book was closed in a theatre, or 0. */
 export const bookClosed = (g: Game, theatre: string): number => g.flags[`hist:off:${theatre}`] ?? 0;
+
+/**
+ * The first province of the far side, read from the whole chart as world.ts reads it (FAR_FIRST: the same figure, as
+ * wrap.ts reads it). world.ts imports game.ts, and this file must not reach it.
+ */
+const WHOLE = wholeMap as unknown as { first: number; stages: number[] };
+const FAR_FROM = WHOLE.first + WHOLE.stages[1];
+
+/**
+ * The book a dated row reads, by the ground it is due on: its own place (`row[5]`), never where its corps stands nor
+ * the place it is shifted to. Reading A, the design director's 22:12Z of 25 November 2026: "two books by ground, behind
+ * your one function. Far-side ground reads the Pacific's book, as the stations and posted rows read it today, so a row
+ * and the staffs beside it read one book. The old chart reads the west's, on which every later book there hangs."
+ * Ground on the far side of the world (world.ts `shoreOf` 2, the far side on) reads the stations' theatre, the
+ * Pacific's; every other ground, the old chart's and the Americas', the west's. The player's rows read it as a
+ * computer's do. Null for a place not known.
+ */
+export function rowBook(g: Game, place: Region | undefined): string | null {
+  if (!place) return null;
+  const far = g.flags.world === 1 && g.regions.length > FAR_FROM && place.id >= FAR_FROM;
+  return far ? RAISED()?.theatre ?? null : 'west';
+}
+
+/**
+ * True where the contact rule ("a date never lifts a corps out of a fight", her 18:47Z and 19:47Z) acts on a dated row
+ * due on `place`. The design director's 22:05Z of 25 November 2026: "One sentence, one scope: the contact rule acts
+ * where the stop is 3 to 5 OR the row's theatre's book is closed." At stops 3 to 5 it always acts; at a stop that keeps
+ * a book (1 and 2), only where the row's book (`rowBook`) is closed, read as the stations read it (`bookClosed`, the
+ * flag claims.ts `closeBook` writes with the theatres that hang on it: the Pacific's hangs on the west's). Burma
+ * follows the Pacific's book because its ground is far-side ground, which reads the Pacific's (`rowBook`): there is
+ * no 'burma' theatre, and none hangs on the Pacific's (logic-6). A row that
+ * reads no book (`rowBook` null: its place not known, or far-side ground with no stations table laid) keeps no book,
+ * and the rule acts: the design director's answer 4 of 00:43Z, 26 November 2026, "A row that reads no book keeps no
+ * book: the contact rule acts (forces, never a book that is not there)." The three doors read it here: game.ts
+ * `expeditions()` (the far side's and the old chart's take) and drawn.ts `heldAlready` (the draw). A book for every
+ * row or ground (her known-list item, after the 24 wars: China's and East Africa's own books, the north's and
+ * Finland's) would change this one place, `rowBook`.
+ */
+export function contactRuleActs(g: Game, place: Region | undefined): boolean {
+  if (!stopDef(g).book) return true;
+  const book = rowBook(g, place);
+  return book === null || bookClosed(g, book) > 0;
+}
 
 /** How the dial bears on one of the great choices this month. */
 export interface Leash {

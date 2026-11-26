@@ -45,7 +45,7 @@ import { beyondEurope, farOn } from './world';
 import { hopAims, hopsBind, skiesOn } from './pacific';
 import { stopDef } from './history';
 import { settleFought, type BombLaw, type FoughtAir, type TroopLaw } from './airfought';
-import { strafeOn, strafeWatch } from './strafers';
+import { strafeOn, strafeWatch, type WhyNone } from './strafers';
 import { cityForecast, cityHit, cityWorthOf, type CityHit } from './repairs';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
 import { airPiece, nightGunShare, whyNotField, wrecked } from './airversion';
@@ -3067,16 +3067,22 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     const Seen = (ago: number): string => { const w = seenAgo(ago); return `${w.charAt(0).toUpperCase()}${w.slice(1)}`; };
     const seen = known ? known.seen ?? -1 : -1;
     const counts = m === 'bomb' || night || m === 'harbour' || m === 'town';
+    // (The UI director's answer of 26 Nov 2026 02:06Z, 1: under fog the Flak line names the place the guns line beside it
+    // names, so one card never reads as two sets of guns: a town raid round {Leipzig}, a harbour raid round {the harbour
+    // of Bremen}, the factories as today, round {Rhineland}. Her rule of 26 Nov 2026 04:32Z: the place takes the news's
+    // article wherever it prints, and this line is new in release 2, so always, with no guard: round {the Ruhr}, round
+    // {the harbour of the Cotentin}; a place without one is unchanged, round {Kent}. The town's name is as it is.)
+    const flakAt = m === 'town' ? townName(g.regions[target]) : m === 'harbour' ? harbourOf(placeName(place)) : placeName(place);
     const flakWords = (): string => {
       // (Her 21:22Z marks, case e: the clause, where it knows of guns built there, on the line, an airfield raid and a
       // fight for the sky flown with bombers (they hit its airfields) as on troops.)
       const not = m === 'ground' ? 'troops in the field' : m === 'line' ? 'the line' : m === 'airfield' ? 'the airfield' : m === 'superiority' ? 'the airfields' : '';
       if (!counts) return not && (known ? seen > 0 : gunsAt(g, target) > 0) ? `Only the ${S} light guns every target has: the guns built here guard the town, not ${not}.` : Only;
       if (!out.guns.all) return !known ? Only : seen === 0 ? noneSeen(known.ago ?? 0) : `None reckoned built: ${only}`;
-      if (known && seen < 0) return `Not scouted, so reckoned at the worst: about ${n(out.guns.all)} guns built round ${placeName(place)}, ${split}`;
+      if (known && seen < 0) return `Not scouted, so reckoned at the worst: about ${n(out.guns.all)} guns built round ${flakAt}, ${split}`;
       // (Her 21:22Z marks, case c: a place seen at a level, the month is the hedge, leading the line: "Seen two months
       // ago: about 720 guns built round Rhineland, ...".)
-      return known ? `${Seen(known.ago ?? 0)}: about ${n(out.guns.all)} guns built round ${placeName(place)}, ${split}` : `About ${n(out.guns.all)} guns built here, ${split}`;
+      return known ? `${Seen(known.ago ?? 0)}: about ${n(out.guns.all)} guns built round ${flakAt}, ${split}` : `About ${n(out.guns.all)} guns built here, ${split}`;
     };
     out.lines.push({
       label: 'Flak',
@@ -3100,18 +3106,28 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   // on the Flak line. Seen at a level: "Level 2 guns ringed the factories of Rhineland when seen two months ago"; never
   // scouted: "Not scouted, so reckoned at the worst: level 3 guns round the factories of Rhineland". In sight, as before.
   // The searchlights' hedge below reads the same `known`.)
-  const aaLine = (round: string): string => !known ? `Level ${out.aa} guns ring ${round}`
+  // (City defences, the switch on: the factories' place takes its article as the news gives it, "the factories of the
+  // Ruhr", so that the card's lines agree with the Searchlights line below; with the switch off the line prints as
+  // shipped. The UI director, 26 Nov 2026 04:10Z. A town raid's line names its town and is left as it is. The guard
+  // is laid here on the line's maker, not at its two calls below, so that it joins clean beside the air rules' own
+  // change to the town's call.)
+  const works = `the factories of ${place}`, worksNamed = cityDefences(g) ? `the factories of ${placeName(place)}` : works;
+  const aaLine = (at: string, round = at === works ? worksNamed : at): string => !known ? `Level ${out.aa} guns ring ${round}`
     : (known.seen ?? -1) < 0 ? `Not scouted, so reckoned at the worst: level ${out.aa} guns round ${round}`
       : `Level ${out.aa} guns ringed ${round} when ${seenAgo(known.ago ?? 0)}`;
   // City defences, a night raid with the switch on: how the guns fire in the dark, and what they bring down against
   // what they would by day (the UI director's words, section 3). Empty otherwise.
   const dark = cn ? `By night they fire ${!cn.radar ? 'blind' : cn.lit > 0 ? 'by radar and searchlight' : 'by radar'}, and bring down about ${Math.round(cn.share * 100)}% as many bombers as they would by day.` : '';
-  if (out.aa && m === 'harbour') out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(harbourOf(place)), effect: dark || 'They bring down more of the bombers' });
+  // (The harbour's guns line is shipped, so its place takes the news's article only under city defences' switch, off as
+  // shipped: "Level 2 guns ring the harbour of the Cotentin". The UI director, 26 Nov 2026 04:32Z.)
+  if (out.aa && m === 'harbour') out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(harbourOf(cityDefences(g) ? placeName(place) : place)), effect: dark || 'They bring down more of the bombers' });
   if (m === 'town') {
     const r = g.regions[target], gone = breachOf(g, r);
     out.lines.push({ label: 'The town', value: `Troops inside ${placeName(townName(r))} fight ${Math.round((townBonus(g, r) - 1) * 100)}% stronger${townWorksPhrase(g, r)}${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ''}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling('raid')}% in all` });
   }
-  if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(placeName(place)), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+  // (The town's guns name the town, as the card's town line does, in all three forms: the UI director's answer of 25 Nov
+  // 2026 22:29Z, question 1, "Level {2} guns ring {Metz}". One card names one place.)
+  if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(townName(g.regions[target])), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
   else if (out.aa) out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(`the factories of ${placeName(place)}`), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
   // City defences: the searchlights' line, a night raid with lights built and the switch on (the UI director's words,
   // section 2). One line, the reading that governs: cloud, then no guns, then no Fighter control, then too many bombers.
@@ -3122,17 +3138,20 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   // ruled one hedge for both lines (25 Nov 2026 22:24Z), and the words are the UI director's (22:27Z and 22:30Z): the
   // guns are "built here", or "can be built here" where never scouted, and counts are in words.
   if (cn && cn.lights > 0) {
-    const over = `Level ${cn.lights} searchlights over ${placeName(place)}`, few = 'they help the night fighters a little.';
+    // (The place takes its article as the news gives it, "over the Ruhr", "over the Saar"; a name without one stays
+    // bare, "over Kent": the UI director, 26 Nov 2026 03:59Z.)
+    const where = placeName(place);
+    const over = `Level ${cn.lights} searchlights over ${where}`, few = 'they help the night fighters a little.';
     const never = !!known && (known.seen ?? -1) < 0;
     const when = known && !never ? ` when ${seenAgo(known.ago ?? 0)}` : '';
     const none = !known ? 'There are no guns built here for them to light.' : never ? 'No guns are reckoned built here for them to light.' : `There were no guns built here for them to light${when}.`;
     const radar = never ? 'Not scouted, so reckoned at the worst: with radar laying the guns' : 'With radar laying the guns';
     const built = never ? 'guns that can be built here' : `guns built here${when}`;
     out.lines.push(cn.cloud
-      ? { label: 'Searchlights', value: `Cloud over ${placeName(place)}`, effect: 'The searchlights cannot see the bombers through it.' }
+      ? { label: 'Searchlights', value: `Cloud over ${where}`, effect: 'The searchlights cannot see the bombers through it.' }
       : !cn.guns ? { label: 'Searchlights', value: over, effect: `${none} They help the night fighters a little.` }
         : !cn.radar ? { label: 'Searchlights', value: over, effect: "Without Fighter control's radar to lay the guns, they help only the night fighters, a little." }
-          : cn.sat < 1 ? { label: 'Searchlights', value: 'More bombers than the lights can hold', effect: `About ${Math.round(out.B).toLocaleString('en-US')} bombers over ${placeName(place)}, and a beam holds one at a time: the lights do about ${Math.round(cn.sat * 100)}% of their work.` }
+          : cn.sat < 1 ? { label: 'Searchlights', value: 'More bombers than the lights can hold', effect: `About ${Math.round(out.B).toLocaleString('en-US')} bombers over ${where}, and a beam holds one at a time: the lights do about ${Math.round(cn.sat * 100)}% of their work.` }
             : { label: 'Searchlights', value: over, effect: cn.lit >= cn.guns ? `${radar}, they light every level of ${never ? '' : 'the '}${built}, and ${few}` : `${radar}, they light ${upToTen(cn.lit)} of the ${upToTen(cn.guns)} levels of ${built}, and ${few}` });
   }
   if (out.ships.length) {
@@ -3371,6 +3390,12 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   let fh: FieldHit | null = null;
   // (A raid on troops with the strafers' rule on, strafers.ts: the names of the groups that went down, for the report.)
   let strafed: string[] | undefined;
+  // (And those of them that went down with under one fighter's weight on the troops: the UI director, 19:10Z A5.)
+  let strafeLittle: AirReport['strafeLittle'];
+  // (And, fought out, those whose strafing fuel or a catch ended short, as the battle knows it: 21:22Z j and k, 21:28Z.)
+  let strafeEnd: AirReport['strafeEnd'];
+  // (And, fought out, the fighter groups of the raid that did not go down for no cause of their own: 26 Nov 03:59Z, 2.)
+  let strafeStayed: string[] | undefined;
   const bookGround = (hit: FieldHit): void => {
     for (const x of hit.losses) {
       const f = g.airFleets.find((y) => y.id === x.id);
@@ -3622,6 +3647,44 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       // the report names its groups and in the raid's order. Nothing is drawn: a record only.)
       const down = route === 'fought' ? battle?.strafers ?? [] : strafers;
       strafed = a.att.flatMap((x, i) => (down.includes(x.f.id) ? [att[i].fleet] : []));
+      // (A5, the UI director 19:10Z and 19:17Z; the design director 19:09Z item 3, "the words never say more than the
+      // weight was, counted in the game's own unit": a group that went down with a weight on the troops under one
+      // fighter's, the weight the raid booked for it (settled, its fighters left x esc x crowd x carry, as `low` weighs it;
+      // fought, what its passes counted), is told as having too little fight left to do any harm. Alone: they were all
+      // that reached the troops, no bomber's weight and no other strafer's.)
+      const booked = (x: AirAssess['att'][number]): number => (route === 'fought' ? battle?.strafedBy?.[x.f.id] ?? 0 : x.f.ftr * x.esc * x.crowd * carry);
+      // (j, k and the new case, the UI director 21:22Z and 21:28Z: "A group that went down takes the line of what ended
+      // its pass, as the battle knows it; the A5 line only where neither fuel nor a jump ended it", a group in one line
+      // only. Fought out only: the battle's strafeEnd, by group, 'short' (bingo before its go-down: it never went down),
+      // 'fuel' (bingo after it) or 'caught'; a group that did a fighter's harm or more strafed, whatever ended it. Settled,
+      // or handed to the staff, no fuel and no catch is known, so none of these lines is made. The fuel and caught lines
+      // are kept for a group ended before it finished any pass (the UI director, 26 November 2026 02:06Z, answer 3). A
+      // group that FINISHED a pass before fuel or a catch ended its strafing is read by the weight of its passes, as A5
+      // reads it (her refinement of answer 4, 26 November 2026 03:59Z: "The test is the weight of its passes, not what
+      // ended them"): under one fighter's weight, the A5 line, whether or not bingo or a catch came after; a fighter's
+      // weight or more, "went down and strafed". The battle books a group in strafedBy only as a pass of its finishes, so
+      // its key there is "finished a pass", and booked() is the weight of its passes. Which sentence only: nothing booked
+      // moves.)
+      const ends = route === 'fought' ? battle?.strafeEnd ?? {} : {};
+      const passed = (x: AirAssess['att'][number]): boolean => route === 'fought' && !!battle?.strafedBy && Object.prototype.hasOwnProperty.call(battle.strafedBy, x.f.id);
+      const end: NonNullable<AirReport['strafeEnd']> = {};
+      const little: string[] = [];
+      // (The UI director, 26 November 2026 03:59Z, 2: "Where a group that did not go down has no cause line of its own, it
+      // takes a plain line after the cause lines". Fought out only, where the battle knows who went down and why not: a
+      // fighter group of the raid (fighters flying with it) that did not go down, with no strafeEnd of its own. Settled,
+      // or handed to the staff, none is named, so "No fighter group went down to strafe." stands there as before, "as in
+      // your settled cases".)
+      const stayed: string[] = [];
+      a.att.forEach((x, i) => {
+        const went = down.includes(x.f.id), why = ends[x.f.id];
+        if (went && booked(x) >= 1) return;
+        if ((why === 'short' && !went) || ((why === 'fuel' || why === 'caught') && !(went && passed(x)))) (end[why] ??= []).push(att[i].fleet);
+        else if (went) little.push(att[i].fleet);
+        else if (route === 'fought' && !why && x.ftr > 0) stayed.push(att[i].fleet);
+      });
+      if (Object.keys(end).length) strafeEnd = end;
+      if (stayed.length) strafeStayed = stayed;
+      if (little.length) strafeLittle = { names: little, ...(little.length === strafed.length && !end.fuel && !end.caught && !(through > 0) ? { alone: true as const } : {}) };
     }
     let divs = 0;
     for (const c of foes) {
@@ -3632,8 +3695,12 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     }
     value += cut * divs * G.value;
     const whom = foes.length === 1 ? foes[0].name : `the ${foes.length} corps`;
-    result = cut > 0
+    // (The strafers' rule, the UI director 19:17Z and 21:22Z, i: where the harm rounds to nothing, a line that says the
+    // outcome only, true beside any report and on either side: the cut printing as 0%, "The raids did the troops little
+    // harm."; the cut nothing at all, "The raids did the troops no harm.". Off, as shipped.)
+    result = (rule ? Math.round(cut * 100) > 0 : cut > 0)
       ? `The raids cut the organisation of ${whom} at ${placeName(r.name)} by ${sharePct(cut)}${foes.some((c) => c.dug) ? ', less where they are dug in' : ''}. They fight the weaker for it until they have rested.`
+      : rule ? (cut > 0 ? 'The raids did the troops little harm.' : 'The raids did the troops no harm.')
       : foes.length && through + low > 0 ? `The raids did not cut the organisation of ${whom} at ${placeName(r.name)}.` : 'The aircraft found little to hit.';
   } else {
     const S = AIR.damage.shipping;
@@ -3729,6 +3796,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   if (strafed) rep.strafed = strafed;
   // City defences: the searchlights' reading over a night raid, only with the switch on (absent otherwise).
   if (a.lights) rep.lights = { ...a.lights };
+  if (strafeLittle) rep.strafeLittle = strafeLittle;
+  if (strafeEnd) rep.strafeEnd = strafeEnd;
+  if (strafeStayed) rep.strafeStayed = strafeStayed;
   g.airReports.push(rep);
   storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' || m === 'airfield' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, guns, ...(battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {}) });
   // (Release 2, earned names for air groups under the switch 'nicknames', airnicks.ts: the missions completed and the
@@ -4960,6 +5030,20 @@ export function strafersExpected(g: Game, a: AirAssess, air: number): { ids: num
     weight += l * keep;
   }
   return { ids, left, fire: left * carry * fire, weight, parts };
+}
+
+/**
+ * Why the card names no likely strafer, the first cause that is true (the UI director, 19:10Z and 19:17Z; strafers.ts
+ * WhyNone): no fighter group with the raid; else none with the reach to strafe (canStrafe); else none carries any of
+ * its fight (strafeCarry 0: the defenders' weight at or above the raid's fighters'); else the air fight the card expects
+ * leaves none of them more likely than not a fighter (strafersExpected).
+ */
+export function strafeNone(g: Game, a: AirAssess): WhyNone {
+  const ftr = a.att.filter((x) => x.ftr > 0);
+  if (!ftr.length) return 'alone';
+  if (!ftr.some((x) => canStrafe(g, x))) return 'reach';
+  if (!(strafeCarry(a) > 0)) return 'odds';
+  return 'fought';
 }
 
 /**

@@ -25,11 +25,11 @@ import { turnToDate, type TicketLine } from '../core/ticket';
 import type { AirFleet, AirMission, AirReport, Game } from './types';
 import type { FoughtAir } from './airfought';
 import {
-  AIR, AIRWAR, CLOSE, afloat, pilotWords, schoolWords, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding, fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, smallOn, whyNotBase, whyNotMission, whyNotShipAir, flakGuns, noneSeen, seenAgo, squadronsOf, standingGuns, type AirForecast,
+  AIR, AIRWAR, CLOSE, afloat, pilotWords, schoolWords, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding, fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, smallOn, whyNotBase, whyNotMission, whyNotShipAir, flakGuns, noneSeen, seenAgo, squadronsOf, standingGuns, strafeNone, type AirForecast,
 } from './air';
 import { damageRules } from './citydamage';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
-import { DEFENCE, allied, atWar, headline, placeName, placeOwns, worksOf } from './game';
+import { DEFENCE, allied, atWar, headline, theWords, placeName, placeOwns, worksOf } from './game';
 import { raidCardLines } from './fighters';
 import { SIGHT, corpsKnown, sightOf } from './intel';
 import { CLASSES, NAVY, aswKit, atSea, shipList, surfaceShips } from './navy';
@@ -45,7 +45,7 @@ import { forecastLine, grounded, skyOf, skyRaidLine, weatherOn, whyNotSky, zoneN
 import { whyNotField, wrecked } from './airversion';
 import { wayWords } from './ferry';
 import { strafeSection, type StrafeSection } from './strafers';
-import { lightsAt } from './citydefences';
+import { cityDefences, lightsAt } from './citydefences';
 import { fieldKnown, fieldRules, fieldView } from './fieldstate';
 import { band, bandNote, fogBits, fogged, knownDefence, knownLines, raidFogOn, rememberSkies, skyKnown } from './airfog';
 
@@ -1045,7 +1045,14 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   // Weather (ruling 127): the sky over the target, known before the order; under a closed sky the card cannot open.
   if (weatherOn(g)) {
     const z = skyZone(g, kind as AirMission, target);
-    const line = skyRaidLine(g, z, place);
+    // (City defences, the switch on: the place takes its article as the news gives it, "Cloud over the Ruhr", as the
+    // card's Searchlights line names it; with the switch off the line prints as shipped. The UI director, 26 Nov 2026
+    // 04:10Z. The line is made on the shipped place, so its room is judged as shipped and the switch never turns a
+    // named place into "the target"; then the place inside it is read by the news's own rule (theWords), which
+    // reaches a name inside a phrase, "Clear sky over the harbour of the Cotentin.", "Cloud over the airfield at
+    // the Ruhr", where a bare name's article could not: the independent read of 26 Nov 2026.)
+    const shipped = skyRaidLine(g, z, place);
+    const line = shipped && cityDefences(g) ? shipped.replace(`over ${place}`, () => `over ${theWords(place, 'over ')}`) : shipped;
     if (line) plan.sky = line;
     if (skyOf(g, z) === 'closed') { plan.why = `Closed sky this month: nothing flies over ${zoneName(z)}.`; return plan; }
   }
@@ -1159,7 +1166,8 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   // player's own card; a staff's plan, and so any raid on the player, carries none.)
   if (kind === 'ground' && fc.strafers && nat === g.human) {
     const ids = fc.strafers;
-    plan.strafe = strafeSection(a.att.filter((x) => ids.includes(x.f.id)).map((x) => x.f.name));
+    // (Naming none, its line says why: the first cause that is true, strafeNone.)
+    plan.strafe = strafeSection(a.att.filter((x) => ids.includes(x.f.id)).map((x) => x.f.name), ids.length ? 'fought' : strafeNone(g, a));
   }
   // (The guns stop part of the bombing of industry and of a town; over a harbour they only bring bombers down.)
   plan.guns = { level: a.aa, loss: a.gunLoss, lossN: Math.min(plan.bomberLossN, Math.round(a.B * a.gunLoss)), stop: a.aa && kind !== 'harbour' ? gunsStop(a.aa) : 0 };
@@ -1443,6 +1451,8 @@ export function raidReplays(g: Game, turn = g.turn, viewer: string | null = g.hu
     return { id: s.id ?? f?.id ?? -1, name: s.fleet, nat: s.nat, base, baseName: r?.name ?? '', x: r?.x ?? 0, y: r?.y ?? 0, ftr: s.ftr, bmr: s.bmr, lostFtr: s.lostFtr, lostBmr: s.lostBmr };
   });
   const mineToo = (nat: string): boolean => viewer === null || (!!nat && allied(g, nat, viewer));
+  // (The report's own result sentence, to both sides: the UI director, 21:22Z, h, "Only the raider's report card prints
+  // the A5 line by itself. Every other reader of the raid's result keeps i's line ... and the 3D raid list".)
   return g.airReports.filter((r) => r.turn === turn && (mineToo(r.attNat) || mineToo(r.defNat))).map((r) => {
     const p = r.zone >= 0 ? g.seas[r.zone] : g.regions[r.region];
     return { id: r.id, turn: r.turn, kind: r.mission, region: r.region, zone: r.zone, place: r.place, x: p?.x ?? 0, y: p?.y ?? 0, attNat: r.attNat, defNat: r.defNat, attackers: side(r.att), defenders: side(r.def), won: r.won, level: r.level, result: r.result, ...(r.lights ? { lights: { ...r.lights } } : {}) };

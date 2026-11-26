@@ -101,9 +101,13 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
   const goods = (h: MonthCard['home'][number]): string => it(`<span class="sg">${monthSign(h.sign, 15, h.next ? DIM : BRASS)}</span>`, `${h.bare ? '' : `<b>${h.count}</b>`}<span class="gt">${esc(h.text)}${h.place ? ` <small>${esc(h.place)}</small>` : ''}</span>`, h.next ? ' gd next' : h.bare ? ' gd bare' : ' gd');
   // (What is ready first, then research, then what next month brings, then the other news of home. Deliveries
   // that find no line are counted in one; news that finds none is in the Newsreel.)
-  const homeAll: { html: string; ready: number; next: number }[] = [
+  const homeAll: { html: string; ready: number; next: number; waits?: boolean }[] = [
     // (The line when men run out comes first, with its door: ruling 133(d)(1).)
     ...(card.menOut ? [{ html: it('', `<span>${esc(card.menOut)} <button class="tb" data-act="openarsenal" title="The arsenal: what money alone can buy">OPEN THE ARSENAL</button></span>`, ' also'), ready: 0, next: 0 }] : []),
+    // (The telling, muted: an arrival that waits only for another to form, arrivalwaits.ts. First among the home lines,
+    // after the men's line, never cut and never counted: it is not news of the Newsreel. The UI director's section 8
+    // point 4, 02:10Z, 26 November 2026; the bridge's card, campaign-bridge.ts `shownCard`, by the same rule.)
+    ...(card.waits ?? []).map((t) => ({ html: it(card.home.length + card.research.length ? '<span class="sg"></span>' : '', `<span>${esc(t)}</span>`, ' also next'), ready: 0, next: 0, waits: true })),
     ...card.home.filter((h) => !h.next).map((h) => ({ html: goods(h), ready: h.count, next: 0 })),
     ...card.research.map((t) => ({ html: it(`<span class="sg">${monthSign('star', 13, BRASS)}</span>`, `<span>Research complete: ${esc(t)}</span>`), ready: 0, next: 0 })),
     ...card.home.filter((h) => h.next).map((h) => ({ html: goods(h), ready: 0, next: h.count })),
@@ -111,13 +115,16 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
     ...card.also.map((t, i) => ({ html: it(card.home.length + card.research.length ? '<span class="sg"></span>' : '', `<span title="${esc(card.alsoFull[i] ?? t)}">${esc(t)}</span>`, ' also'), ready: 0, next: 0 })),
   ];
   let homeOver = 0;
-  let home = homeAll.slice(0, lines).map((x) => x.html);
-  if (homeAll.length > lines) {
-    const hid = homeAll.slice(lines - 1);
+  // (The box takes every waits line, and the line that counts what is over after them: `homeRoom` is `lines` but
+  // where the waits lines would fill it. With none it is `lines`, as before.)
+  const homeRoom = card.waits?.length ? Math.max(lines, (card.menOut ? 1 : 0) + card.waits.length + 1) : lines;
+  let home = homeAll.slice(0, homeRoom).map((x) => x.html);
+  if (homeAll.length > homeRoom) {
+    const hid = homeAll.slice(homeRoom - 1);
     const ready = hid.reduce((n, x) => n + x.ready, 0), next = hid.reduce((n, x) => n + x.next, 0);
     const said = [ready ? `${ready} more ready` : '', next ? `${next} due next month` : ''].filter(Boolean).join(' · ');
-    if (said) home = [...homeAll.slice(0, lines - 1).map((x) => x.html), `<div class="mc-it over"><span>${said}</span></div>`];
-    homeOver = (said ? hid : homeAll.slice(lines)).filter((x) => !x.ready && !x.next).length;
+    if (said) home = [...homeAll.slice(0, homeRoom - 1).map((x) => x.html), `<div class="mc-it over"><span>${said}</span></div>`];
+    homeOver = (said ? hid : homeAll.slice(homeRoom)).filter((x) => !x.ready && !x.next && !x.waits).length;
   }
   // (A desk's first line carries its button, and the first lines of the desks come first.)
   const firsts = card.staff.filter((s, i) => card.staff.findIndex((x) => x.desk === s.desk) === i);

@@ -5,7 +5,7 @@
 //
 // Mouse: left picks your own pieces (drag round several, Shift adds); right orders. An escort: right on a boat, or on
 // the faded mark where one was last seen, to hunt her; on a wreck to pick up survivors; on the water to steam there and
-// search. A boat: right on a ship to attack her. The wheel zooms. Keys: Space pause, 1 2 3 4 speed, arrows look round,
+// search. A boat: right on a ship to attack her. The wheel zooms. Keys: Space pause, 1 2 3 4 speed, arrows turn the view,
 // F follow the convoy, Tab next piece, Esc put down, K the key, S star shell (escorts), G deck gun (boats).
 //
 // The clock (the playtest's question b, and the rules owner's calls on bugs 7 to 10 and round 3's 9 to 19): the
@@ -30,17 +30,17 @@ import { againstStaff, foughtOf, ranksOf, restFrom, staffNights, type StaffNight
 import { CONVOY_BATTLE } from '../../campaign/navy';
 import { CONVOY } from '../convoy/numbers';
 import { CONVOY_PRACTICE, convoyPracticeTicket, type ConvoyPractice } from '../convoy/practice';
-import { afterDusk, ConvoySim, namesOf } from '../convoy/sim';
+import { afterDusk, capital, ConvoySim, countWords, namesOf, sharesOf } from '../convoy/sim';
 import type { ConvoyCommand, ConvoyOverExtra, ConvoySpot, ConvoyTicket, ConvoyUnit, Echo } from '../convoy/types';
 import type { FieldEvent, FieldResult, Side, Zone } from '../core/types';
 
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const cap = (k: string): string => `<span class="tc-key">${k}</span>`;
 const hhmm = (sec: number): string => `${Math.floor(sec / 3600)}:${String(Math.floor((sec % 3600) / 60)).padStart(2, '0')}`;
-/** A count and its noun, singular or plural: '1 torpedo', '3 torpedoes'. */
-const nof = (k: number, one: string, many: string): string => `${k} ${k === 1 ? one : many}`;
-/** How often: 'once', 'twice', '5 times'. */
-const times = (k: number): string => k === 1 ? 'once' : k === 2 ? 'twice' : `${k} times`;
+/** A count and its noun, singular or plural, one to ten in words (the UI director, round 5): 'one torpedo', 'three torpedoes', '12 hits'. */
+const nof = (k: number, one: string, many: string): string => `${countWords(k)} ${k === 1 ? one : many}`;
+/** How often: 'once', 'twice', 'five times', '12 times'. */
+const times = (k: number): string => k === 1 ? 'once' : k === 2 ? 'twice' : `${countWords(k)} times`;
 /** Metres as the screens write them (3,200 m). */
 const metres = (m: number): string => `${Math.round(m).toLocaleString('en-GB')} m`;
 /** A short while of the night, for a last-seen mark: '40 s', '2 min 05 s'. */
@@ -253,7 +253,7 @@ function begin(seed: number): void {
         <button class="tc-btn tc-btn--sm nunfold" data-unfold title="Show the orders">Orders</button>
       </aside>
     </div>
-    <footer class="nkeys tc-muted"><span class="ncam" data-cam></span> · Click: pick up (drag or Shift for more) · Right-click: order · Wheel: zoom · ${cap('←↑↓→')} look round · ${cap('F')} the convoy · ${cap('Tab')} next · ${cap('Esc')} put down · ${cap('Space')} pause · ${cap('1')}–${cap('4')} speed · ${cap('K')} key</footer>
+    <footer class="nkeys tc-muted"><span class="ncam" data-cam></span> · Click: pick up (drag or Shift for more) · Right-click: order · Wheel: zoom · ${cap('←↑↓→')} turn the view · ${cap('F')} the convoy · ${cap('Tab')} next · ${cap('Esc')} put down · ${cap('Space')} pause · ${cap('1')}–${cap('4')} speed · ${cap('K')} key</footer>
     <div class="nask" data-ask hidden>
       <section class="tc-panel askcard" role="dialog" aria-modal="true" aria-labelledby="ask-q">
         <h2 class="tc-title-3" id="ask-q">Hand the rest of the night to the staff?</h2>
@@ -372,10 +372,10 @@ function banner(text: string, ms = TAG_MS, back = false): void {
   S.tag = { text, until: now + ms, at: now, ...(back ? { clock: true } : {}) };
 }
 
-/** A banner of new contacts, up from now: every one counted, the last two told named, each once ('2 NEW CONTACTS · ESCORT 3 HAS BOAT 1 · ESCORT 5 HAS BOAT 2'). */
+/** A banner of new contacts, up from now: every one counted, the last two told named, each once ('TWO NEW CONTACTS · ESCORT 3 HAS BOAT 1 · ESCORT 5 HAS BOAT 2'). */
 const contactsText = (all: string[]): string => {
   const names = all.filter((c, i) => all.lastIndexOf(c) === i);
-  return all.length === 1 ? `A NEW CONTACT · ${all[0]}` : `${all.length} NEW CONTACTS · ${names.slice(-2).join(' · ')}`;
+  return all.length === 1 ? `A NEW CONTACT · ${all[0]}` : `${countWords(all.length).toUpperCase()} NEW CONTACTS · ${names.slice(-2).join(' · ')}`;
 };
 const contactsTag = (all: string[], now: number): State['tag'] => ({ text: contactsText(all), until: now + TAG_MS, contacts: all, joined: all.map(() => now), at: now });
 
@@ -383,7 +383,7 @@ const contactsTag = (all: string[], now: number): State['tag'] => ({ text: conta
  * A new contact in a running fight (the rules owner's (a): a line in the log and a banner, no slow-down), never left
  * out of the banners. One takes the place of a banner of the clock given back ('BACK TO ×300'); behind a banner of news
  * it waits for that to go (nextTag). While a banner of new contacts is up the next joins it rather than replacing it, so
- * that at speed none flickers past unread: 'A NEW CONTACT · ESCORT 3 HAS BOAT 1', then '2 NEW CONTACTS · ESCORT 3 HAS
+ * that at speed none flickers past unread: 'A NEW CONTACT · ESCORT 3 HAS BOAT 1', then 'TWO NEW CONTACTS · ESCORT 3 HAS
  * BOAT 1 · ESCORT 5 HAS BOAT 2' (every contact counted, the last two named, the rest in the log). It goes TAG_MS after
  * it first went up, however many join it; a contact after that, or in its last TAG_SEEN, has a banner of its own.
  */
@@ -420,8 +420,8 @@ function atDawn(): boolean {
   return now >= S.dawnAt;
 }
 
-/** Minutes in words: 'a minute', '5 minutes'. */
-const minutes = (m: number): string => m <= 1 ? 'a minute' : `${m} minutes`;
+/** Minutes in words: 'a minute', 'five minutes', '12 minutes'. */
+const minutes = (m: number): string => m <= 1 ? 'a minute' : `${countWords(m)} minutes`;
 
 /**
  * A cause to slow the clock. One that is the same as a slow-down in force (her boat's, or the same salvo's hits) keeps
@@ -743,17 +743,19 @@ function detailOf(ps: ConvoyUnit[], staff: boolean): string {
     const left = S.units.filter((u) => u.kind === 'ss' && u.side === 'att' && u.state === 'withdrawn').length;
     const coming = Math.max(0, S.pack - up - lost - left);
     const first = up === 0 && lost + left === 0;
-    const where = up > 0 ? `${nof(up, 'of your boats is', 'of your boats are')} up with the convoy.` : first ? 'None of your boats is up with the convoy yet.' : 'None of your boats is up with the convoy now.';
-    const more = !coming ? '' : first ? ` ${coming === 1 ? 'Your boat is' : `All ${coming} are`} on the way and will come up during the night.` : ` ${nof(coming, 'more is', 'more are')} on the way and will come up during the night.`;
+    const where = up > 0 ? `${capital(nof(up, 'of your boats is', 'of your boats are'))} up with the convoy.` : first ? 'None of your boats is up with the convoy yet.' : 'None of your boats is up with the convoy now.';
+    const more = !coming ? '' : first ? ` ${coming === 1 ? 'Your boat is' : `All ${countWords(coming)} are`} on the way and will come up during the night.` : ` ${capital(nof(coming, 'more is', 'more are'))} on the way and will come up during the night.`;
     // (true on every night: what a captain left to himself does when found, and what an Attack order makes of it)
     const radar = !!S.t!.place.kit[S.t!.def.nat]?.radar;
     // (the sim's own rules, round 3 (ii) and (iii): a boat found and not hunted ducks to periscope depth and keeps on)
     const pressed = ' An Attack order makes a captain stay up while she is only held; forced down by an escort closing, she keeps at periscope depth to attack submerged if the convoy comes within reach, and comes up to press in as soon as no escort holds her and none is in her sight. Ordered up from deep while an escort holds her or is in her sight, she comes up only to periscope depth and does the same.';
     const habit = (radar ? ' Left to themselves, your captains close the convoy, fire and turn away to reload. The escorts\' radar finds a boat on the surface far out: a boat found dives to periscope depth and keeps closing at her slower dived speed, and comes up again once no escort holds her and none is in her sight (one that cannot get in submerged first draws off out of the escorts\' sight); she goes deep only when an escort hunts her, and then lies quiet a long while.'
-      : ' Left to themselves, your captains close the convoy, fire and turn away to reload; a boat an escort finds dives to periscope depth and keeps closing, and goes deep only when an escort hunts her.') + pressed;
+      : ' Left to themselves, your captains close the convoy, fire and turn away to reload; a boat an escort finds dives to periscope depth and keeps closing, and goes deep only when an escort hunts her.') + pressed
+      // (C1 (a): every rise to the surface but one forced by damage waits for her look round)
+      + ' A boat takes one look round at periscope depth before she surfaces, unless damage forces her up or she is called back up before she reaches it.';
     return `<p class="tc-muted">${where}${more}${habit} Pick one up to give her orders.</p>`;
   }
-  if (ps.length > 1) return `<p class="tc-muted">${nof(ps.length, S.side === 'def' ? 'escort' : 'boat', S.side === 'def' ? 'escorts' : 'boats')} picked. An order goes to every one of them.</p>`;
+  if (ps.length > 1) return `<p class="tc-muted">${capital(nof(ps.length, S.side === 'def' ? 'escort' : 'boat', S.side === 'def' ? 'escorts' : 'boats'))} picked. An order goes to every one of them.</p>`;
   return `<p class="tc-muted">${pieceWords(ps[0])}</p>`;
 }
 
@@ -765,14 +767,15 @@ function detailOf(ps: ConvoyUnit[], staff: boolean): string {
 function depthWords(u: ConvoyUnit): string {
   const keel = u.extra.keel ?? 0, at = metres(keel);
   if (u.extra.dive === 'surfaced') return keel <= 0 ? 'On the surface' : `Coming up to the surface, now at ${at}`;
-  if (u.extra.dive === 'periscope') return keel < CONVOY.boat.scope - 1 ? `Diving to periscope depth, now at ${at}` : keel > CONVOY.boat.scope + 1 ? `Coming up to periscope depth, now at ${at}` : `At periscope depth, ${at}`;
+  // (up from below for her look round before she surfaces, C1 (a): said as the log says it, 'comes up to periscope depth to look round')
+  if (u.extra.dive === 'periscope') return keel < CONVOY.boat.scope - 1 ? `Diving to periscope depth, now at ${at}` : keel > CONVOY.boat.scope + 1 ? `Coming up to periscope depth${u.extra.rise ? ' to look round' : ''}, now at ${at}` : `At periscope depth, ${at}`;
   return keel < CONVOY.boat.deep - 2 ? `Going deep${u.extra.doing === 'deep' ? ' to lie quiet' : ''}, now at ${at}` : `Deep, at ${at}`;
 }
 
 /** From now to a battle second, in words: 'in a minute', 'in 12 minutes', 'in 2 hours and 15 minutes'. */
 const inMinutes = (at: number): string => {
   const m = Math.max(1, Math.ceil((at - S.sim!.t) / 60));
-  if (m < 90) return m === 1 ? 'in a minute' : `in ${m} minutes`;
+  if (m < 90) return m === 1 ? 'in a minute' : `in ${countWords(m)} minutes`;
   const h = Math.floor(m / 60), r = m % 60;
   return `in ${nof(h, 'hour', 'hours')}${r ? ` and ${nof(r, 'minute', 'minutes')}` : ''}`;
 };
@@ -793,19 +796,27 @@ function pieceWords(u: ConvoyUnit): string {
       : x.doing === 'up' ? (x.doomed ? 'Forced to the surface too badly hurt to dive again; her crew will have to abandon her' : 'Forced to the surface; her crew are trying to make good the damage, and she may dive again once it is repaired')
       : x.doing === 'gun' ? (x.doomed ? 'Forced to the surface too badly hurt to dive again; her crew fight her deck gun until they must abandon her' : 'Forced to the surface and fighting her deck gun while her damage is repaired') : '';
     const aim = nameOf(x.aim as number | undefined);
-    // (the rules owner, round 3, (iii): an Attack order forced down by an escort closing keeps her at periscope depth, to
-    // attack dived where the convoy comes within reach, and up again as soon as no escort holds her and none is in her
-    // sight (turning away to reload under an order to fire her gun, as soon as none is in her sight); round 5, D: one
-    // whose rise to attack on the surface stopped at periscope depth for an escort does the same, and is said why she
-    // stopped, never 'forced down')
-    const stopped = x.stopped === 'an escort holds her' ? 'an escort held her' : x.stopped === 'an escort is in her sight' ? 'she had an escort in her sight' : '';
+    // (the rules owner, round 3, (iii): an Attack order at periscope depth keeps her there, to attack dived where the
+    // convoy comes within reach, and up again as soon as no escort holds her and none is in her sight (turning away to
+    // reload under an order to fire her gun, as soon as none is in her sight). Said by what keeps her there now, in the
+    // present and only while it does (the UI director, round 5, 3): held, an escort in her sight, else nothing but her
+    // look round (C1 (a)), with how she came down where an escort closing forced her. 'Keeps to periscope depth', true on
+    // her way there as well as there (the UI director, round 6, 1); her look done, nothing but the gate's next tick (2))
+    const free = x.doing === 'close' ? 'no escort holds her and none is in her sight' : 'no escort is in her sight';
+    const press = x.order === 'attack' ? 'press in' : 'fire her gun', holders = x.doing === 'close' ? (x.heard ?? []).length : 0;
+    const stays = `so she keeps to periscope depth${x.order === 'attack' ? ', attacks submerged if the convoy comes within her reach,' : ''} and comes up to ${press} as soon as ${free}.`;
+    const none = x.doing === 'close' ? 'holds her or is in her sight now' : 'is in her sight now';
     const kept = (x.order === 'attack' || x.order === 'gun') && x.dive === 'periscope' && (x.doing === 'close' || x.doing === 'away')
-      ? ` ${stopped ? `She comes up only to periscope depth, since ${stopped}: she keeps there` : 'An escort closing forced her down: she keeps at periscope depth'}${x.order === 'attack' ? ', attacks submerged if the convoy comes within her reach,' : ''} and comes up to ${x.order === 'attack' ? 'press in' : 'fire her gun'} as soon as ${x.doing === 'close' ? 'no escort holds her and none is in her sight' : 'no escort is in her sight'}.` : '';
+      ? ` ${holders ? `${holders === 1 ? 'An escort holds' : `${capital(countWords(holders))} escorts hold`} her, ${stays}` : x.sees ? `She has an escort in her sight, ${stays}`
+        : `${x.duck ? `An escort closing forced her down. None ${none}` : `No escort ${none}`}, so she ${x.looked ? '' : 'takes one look round at periscope depth and '}comes ${x.duck ? 'back ' : ''}up to ${press}.`}` : '';
+    // (any other rise to the surface held at periscope depth for her look round, C1 (a): her own with nothing else keeping
+    // her down. A Surface order's says it in the order while she is still below (the UI director, round 6, 3))
+    const look = !kept && x.order !== 'surface' && x.look ? ' She takes one look round at periscope depth before she surfaces.' : '';
     const ord = (x.order === 'attack' ? `Ordered to attack${aim ? ` ${aim}` : ''} on the surface.` : x.order === 'under' ? `Ordered to attack${aim ? ` ${aim}` : ''} submerged.`
       : x.order === 'gun' ? `Ordered to fire her deck gun${aim ? ` at ${aim}` : ''}.` : x.order === 'dive' ? 'Ordered to periscope depth.' : x.order === 'deep' ? 'Ordered deep.'
-      : x.order === 'surface' ? 'Ordered to stay on the surface.' : x.order === 'evade' ? 'Ordered to evade.' : '') + kept;
+      : x.order === 'surface' ? (x.rise ? 'Ordered to the surface: she takes one look round at periscope depth first.' : 'Ordered to stay on the surface.') : x.order === 'evade' ? 'Ordered to evade.' : '') + kept + look;
     const heard = (x.heard ?? []).map((id) => nameOf(id)).filter(Boolean), held = (x.heard ?? []).length;
-    const by = !held ? '' : heard.length === held ? ` ${namesOf(heard)} ${held === 1 ? 'holds' : 'hold'} her.` : ` ${nof(held, 'escort holds', 'escorts hold')} her.`;
+    const by = !held ? '' : heard.length === held ? ` ${namesOf(heard)} ${held === 1 ? 'holds' : 'hold'} her.` : ` ${capital(nof(held, 'escort holds', 'escorts hold'))} her.`;
     // (down of her captain's own accord with an order standing: when she goes back to it, unless an escort hears her first)
     const surfaceOrder = x.order === 'attack' || x.order === 'gun';
     // (held, the wait starts again each time she is heard: said as how long she must go unheard)
@@ -813,7 +824,7 @@ function pieceWords(u: ConvoyUnit): string {
     const up = typeof x.upAt !== 'number' ? '' : surfaceOrder ? ` Her captain keeps her down while the escorts are about: ${held ? `she comes up to carry out the order once no escort has heard her for ${quiet}` : `unless one hears her again, she comes up to carry out the order ${inMinutes(x.upAt)}`}.`
       : x.order === 'dive' ? ` Her captain keeps her deep while the escorts are about: ${held ? `she comes back up to periscope depth once no escort has heard her for ${quiet}` : `unless one hears her again, she comes back up to periscope depth ${inMinutes(x.upAt)}`}.`
       : (x.tubes ?? 0) === 0 ? '' : held ? ` She takes up the attack again once no escort has heard her for ${quiet}.` : ` Unless an escort hears her again, she takes up the attack again ${inMinutes(x.upAt).replace(/^in /, 'within ')}.`;
-    return `${depthWords(u)}.${doing ? ` ${doing}.` : ''}${ord ? ` ${ord}` : ''}${by}${up}${abandoned(u) ? '' : ` ${nof(x.tubes ?? 0, 'torpedo', 'torpedoes')} in the tubes.`}`;
+    return `${depthWords(u)}.${doing ? ` ${doing}.` : ''}${ord ? ` ${ord}` : ''}${by}${up}${abandoned(u) ? '' : ` ${x.tubes ? capital(nof(x.tubes, 'torpedo', 'torpedoes')) : 'No torpedoes'} in the tubes.`}`;
   }
   // (the boat it holds; else the one its hunt is after, kept by name once it has lost her; else the one it was sent after)
   const e = x.echo, held = e ? nameOf(e.on) || 'a boat' : '', prey = nameOf(x.prey as number | undefined), chase = nameOf(x.chase as number | undefined);
@@ -835,7 +846,7 @@ function pieceWords(u: ConvoyUnit): string {
   const giveUp = typeof x.giveUp === 'number' ? x.giveUp : undefined;
   const until = giveUp === undefined ? '' : d === 'search' && !held ? ` Unless it finds ${boat ? 'her' : 'a boat'}, it gives up and goes back to its station ${inMinutes(giveUp)}.`
     : ` It must give up the hunt and go back ${inMinutes(giveUp)}.`;
-  return `${phase}.${holding}${until}${x.ships > 1 ? ` ${x.ships} ships.` : ''}`;
+  return `${phase}.${holding}${until}${x.ships > 1 ? ` ${capital(countWords(x.ships))} ships.` : ''}`;
 }
 
 // ---- Handing the night to the staff -----------------------------------------------------------------------------------
@@ -884,7 +895,7 @@ function handToStaff(): void {
 function winnerWords(over: FieldResult, mv: number, ships: number, lostB: number, lostE: number): string {
   const how = /Heroic|Crushing/.test(over.level) ? 'An overwhelming win' : /Decisive/.test(over.level) ? 'A clear win' : /Pyrrhic/.test(over.level) ? 'A costly win' : 'A close win';
   const through = over.winner === 'def' && over.level === 'Close defeat' && mv <= ships / 20;
-  const bits = [mv === 0 ? `none of the ${ships} ships sunk` : `${mv} of ${ships} ships sunk`, lostB === 0 ? 'no boats lost' : `${nof(lostB, 'boat', 'boats')} lost`];
+  const bits = [mv === 0 ? `none of the ${countWords(ships)} ships sunk` : `${countWords(mv)} of ${countWords(ships)} ships sunk`, lostB === 0 ? 'no boats lost' : `${nof(lostB, 'boat', 'boats')} lost`];
   if (lostE) bits.push(`${nof(lostE, 'escort', 'escorts')} lost`);
   return `${through ? 'The convoy got through' : `${how} for the ${over.winner === 'att' ? 'pack' : 'escorts'}`}: ${bits.length > 2 ? `${bits.slice(0, -1).join(', ')} and ${bits[bits.length - 1]}` : bits.join(', ')}.`;
 }
@@ -924,7 +935,7 @@ function commandOf(x: ConvoyOverExtra, night: number): { who: 'mine' | 'staff' |
   if (handed !== undefined && spans.length === 1 && spans[0][0] === min(handed)) return { who, words: `You commanded your ${we} until ${afterDusk(handed)}, and the staff from then to dawn.` };
   const when = (m: number): string => m === 0 ? 'dusk' : m === end && night >= S.sim!.limit - 60 ? 'dawn' : hhmm(m * 60);
   // ('the first minute', 'the last 3 minutes', 'the first hour and 5 minutes')
-  const span = (m: number): string => lengthOf(m * 60).replace(/^1 /, '');
+  const span = (m: number): string => lengthOf(m * 60).replace(/^one /, '');
   const yours = his.length > 1 ? 'the rest' : his[0][0] === 0 ? `the first ${span(his[0][1])}` : his[0][1] === end ? `the last ${span(his[0][1] - his[0][0])}` : 'the rest';
   return { who, words: `The staff steered your ${we} ${andOf(spans.map(([a, b]) => `from ${when(a)} to ${when(b)}`))}; you had ${yours}.` };
 }
@@ -947,7 +958,7 @@ function after(): void {
   const st = x.handed ? x.staff?.tally : undefined;
   const dice = (parts: [number, number, string, string][]): string => {
     if (!st || parts.every(([all]) => all === 0)) return '';
-    const of = parts.filter(([all]) => all > 0).map(([all, k, one, many]) => k === 0 ? `none of the ${many}` : k === all ? (all === 1 ? `the ${one}` : `all ${all} ${many}`) : `${k} of the ${many}`);
+    const of = parts.filter(([all]) => all > 0).map(([all, k, one, many]) => k === 0 ? `none of the ${many}` : k === all ? (all === 1 ? `the ${one}` : `all ${countWords(all)} ${many}`) : `${countWords(k)} of the ${many}`);
     return `; the staff's dice for the rest of the night gave ${andOf(of)}`;
   };
   const facts = [
@@ -994,7 +1005,7 @@ function versus(parts: [number, string, string][], n: number, lead: (k: number) 
   const nz = parts.filter(([k]) => k > 0);
   if (!nz.length) return '';
   const [[k0, full], ...rest] = nz;
-  return andOf([`${full} ${lead(k0)}`, ...rest.map(([k, , short]) => `${short} in ${k}`)]);
+  return andOf([`${full} ${lead(k0)}`, ...rest.map(([k, , short]) => `${short} in ${countWords(k)}`)]);
 }
 
 /** The night's place among the staff's nights by the ships sunk, 0 to 1 as the pack reads it: the booked swing's own (calibrate.ts foughtOf on the night's ranks). */
@@ -1028,9 +1039,9 @@ function rankWords(t: ConvoyTicket, x: ConvoyOverExtra, staff: StaffNights, cmd:
   const escortsCount = lostE > 0 || a.dd.same < n;
   const mine = cmd.who === 'mine', pack = S.side === 'att';
   // (the first count names the staff's nights; the later ones say only how many)
-  const first = (k: number): string => mine ? `the staff's ${pack ? 'pack' : 'escorts'} did in ${k === n ? 'every one' : k} of the ${n} times ${pack ? 'it' : 'they'} fought this night`
-    : `in ${k === n ? 'every one' : k} of the ${n} times the staff fought this night`;
-  const later = (k: number): string => k === n ? `in all ${n}` : `in ${k}`;
+  const first = (k: number): string => mine ? `the staff's ${pack ? 'pack' : 'escorts'} did in ${k === n ? 'every one' : countWords(k)} of the ${countWords(n)} times ${pack ? 'it' : 'they'} fought this night`
+    : `in ${k === n ? 'every one' : countWords(k)} of the ${countWords(n)} times the staff fought this night`;
+  const later = (k: number): string => k === n ? `in all ${countWords(n)}` : `in ${countWords(k)}`;
   const subject = pack ? (mine ? 'Your pack' : 'Your boats') : 'Your escorts';
   // (one subject through the sentence: 'Your boats sank …; they lost …', 'Your pack sank …; it lost …')
   const it = pack && mine ? 'it' : 'they';
@@ -1058,25 +1069,23 @@ function rankWords(t: ConvoyTicket, x: ConvoyOverExtra, staff: StaffNights, cmd:
  * foughtOf on the night's ranks, unchanged) and so where the night falls among the staff's nights by the ships sunk,
  * which is what sets the tonnage booked: the share of the usual tonnage, and the boats and escorts lost booked the same
  * way, by their own counts, where the month expects any. Where staff nights sank as many ships as this one, it says so,
- * and that the lot placed it among them, high or low (words only: the booking is the ranks' own).
+ * and that a lot settles the tie, the share saying where it fell (words only: the booking is the ranks' own).
  */
 function campaignWords(t: ConvoyTicket, x: ConvoyOverExtra, staff: StaffNights): string {
   const a = againstStaff(t, x.counts, staff), n = Math.max(1, a.n);
   const ranks = ranksOf(t, x.counts, staff), fought = foughtOf(t, ranks);
   const { low, high } = CONVOY_BATTLE.swing;
-  // (in whole per cent, but never rounded to the high or the low that only a night past every staff night's books: a
-  // night that ties the best of them at 119.6% reads '119.6%', not '120%')
-  const raw = fought.swing * 100, hi = high * 100, lo = low * 100, tenth = Math.round(raw * 10) / 10;
-  const near = (raw < hi && Math.round(raw) >= hi) || (raw > lo && Math.round(raw) <= lo);
-  const pct = !near ? String(Math.round(raw)) : (tenth >= hi ? Math.floor(raw * 10) / 10 : tenth <= lo ? Math.ceil(raw * 10) / 10 : tenth).toFixed(1);
+  // (never printed as a bound it did not reach (the UI director, round 5, 5): sharesOf)
+  const pc = sharesOf(fought.swing, high, low);
   // (the place is the booked swing's own, held to the counts: never one of the better nights for a side whose count most of the staff's nights matched or beat)
   const lean = leanOf(t, x, staff);
   const who = S.side === 'att' ? 'the pack, by the ships it sank' : 'the escorts, by the ships they lost';
   const place = lean === S.side ? `one of the better nights the staff could have had for ${who}` : lean ? `one of the worse nights the staff could have had for ${who}` : `an ordinary night for ${who}, about as the staff would have fought it`;
-  const tons = `the month would book ${pct}% of the tonnage a convoy usually loses (${Math.round(high * 100)}% after a night that sinks more ships than every one of the staff's nights, ${Math.round(low * 100)}% after one that sinks fewer than every one).`;
-  // (tied: where the lot put the night among the staff's nights it ties, 0 to 1, from the rank it booked)
-  const fell = a.mv.same > 0 ? (ranks.mv * a.n - a.mv.less) / a.mv.same : 0;
-  const tie = a.mv.same > 0 ? ` ${S.side === 'att' ? 'The pack sank' : 'The escorts lost'} as many ships as ${a.mv.same === n ? 'every one' : a.mv.same === 1 ? 'one' : a.mv.same} of the staff's ${n} nights; the tie is settled by lot, and this time it fell ${fell >= 0.5 ? 'high' : 'low'}: ${tons}` : '';
+  // (the staff's nights by one name, the verdict's (the UI director, round 5, 2))
+  const tons = `the month would book ${pc.share}% of the tonnage a convoy usually loses (${pc.high}% after a night that sinks more ships than every one of the ${countWords(n)} times the staff fought it, ${pc.low}% after one that sinks fewer than every one).`;
+  // (tied: the lot settles where the night falls among the staff's nights it ties, and 'this time' carries the chance;
+  // the share beside it says where the lot put it, never 'high' or 'low' (the UI director, round 5, 1))
+  const tie = a.mv.same > 0 ? ` ${S.side === 'att' ? 'The pack sank' : 'The escorts lost'} as many ships as in ${a.mv.same === n ? 'every one' : countWords(a.mv.same)} of the ${countWords(n)} times the staff fought this night, and a lot settles the tie: this time ${tons}` : '';
   // Boats and escorts lost: booked at the lower or the higher of the two whole counts around what the month expects, by
   // the same ranks. A practice card expects none, so there is nothing to book.
   const booked = (side: Side): string => {
@@ -1085,7 +1094,7 @@ function campaignWords(t: ConvoyTicket, x: ConvoyOverExtra, staff: StaffNights):
     const lo = fs.reduce((k, f) => k + Math.floor(f.expect), 0), hi = fs.reduce((k, f) => k + Math.ceil(f.expect), 0);
     const got = fs.reduce((k, f) => k + ((side === 'att' ? fought.ss[f.id] : fought.dd[f.id]) ?? 0), 0);
     const what = side === 'att' ? ['boat', 'boats'] : ['escort', 'escorts'];
-    return `${nof(got, what[0], what[1])} lost${lo === hi ? '' : ` (the dice allow ${lo} or ${hi})`}`;
+    return `${nof(got, what[0], what[1])} lost${lo === hi ? '' : ` (the dice allow ${countWords(lo)} or ${countWords(hi)})`}`;
   };
   const bits = [booked('att'), booked('def')].filter(Boolean);
   const lost = bits.length ? ` Its boats and escorts lost, placed the same way by their own counts, would book ${andOf(bits)}.`
@@ -1432,8 +1441,9 @@ function paintClock(): void {
     const v = Math.min(S.chosen, ...S.slows.map((o) => o.to)), held = S.slows.filter((o) => o.to === v).sort((p, q) => end(q) - end(p))[0];
     const w = watching ? 'The staff are steering: the clock keeps your speed.'
       : v < S.chosen && held ? (held.on !== undefined ? `Slowed to ×${v} for ${nameOf(held.on)}, until ${hhmm(held.most)} at most; orders add time.` : `Slowed to ×${v} ${held.how.toLowerCase()}, then back to ×${S.chosen}.`)
-      : S.chosen <= 10 ? '' : S.rush ? 'Slows to ×10 at the first contact.'
-      : S.side === 'def' ? 'Slows for new contacts after a quiet spell, your hunts and hits.' : 'Slows when your boats fire, or are found, attacked or lost.';
+      // (running at his speed: said, since a banner of news may cover 'BACK TO ×300' (the UI director, round 5, 4))
+      : S.chosen <= 10 ? '' : `At ×${S.chosen}. ${S.rush ? 'Slows to ×10 at the first contact.'
+      : S.side === 'def' ? 'Slows for new contacts after a quiet spell, your hunts and hits.' : 'Slows when your boats fire, or are found, attacked or lost.'}`;
     if (note.textContent !== w) note.textContent = w;
   }
 }
@@ -1459,7 +1469,7 @@ function paintBar(): void {
   // (Release 2, once the sea patrol is live: what the player's side last saw, with its month, in his panel's words: the
   // boats last seen on the route's seas, and where he holds boats the aircraft they last met.)
   const seen = (t.place.card?.sight ?? []).map((w) => ` · <span class="nw">${esc(w)}</span>`).join('');
-  app.querySelector('[data-facts]')!.innerHTML = (k ? `${facts} · <span class="nw">of about ${Math.round(k.sailed)} convoys this month, ${Math.round(k.sighted)} sighted, ${Math.round(k.attacked)} attacked${by > 0 ? `, by about ${by < 10 ? by.toFixed(1) : Math.round(by)} boats each` : ''}${k.watched !== undefined ? `, aircraft watching about ${Math.round(k.watched * 100)}% of its waters` : ''}${k.sunk !== undefined ? `, losing about ${k.sunk < 10 ? k.sunk.toFixed(1) : Math.round(k.sunk)} ships each${k.torps !== undefined && k.sunk >= k.torps - 0.01 ? ', as many as their torpedoes sink on an average night' : ''}` : ''}</span>` : facts) + seen;
+  app.querySelector('[data-facts]')!.innerHTML = (k ? `${facts} · <span class="nw">of about ${countWords(Math.round(k.sailed))} convoys this month, ${countWords(Math.round(k.sighted))} sighted, ${countWords(Math.round(k.attacked))} attacked${by > 0 ? `, by about ${by < 10 ? by.toFixed(1) : Math.round(by)} boats each` : ''}${k.watched !== undefined ? `, aircraft watching about ${Math.round(k.watched * 100)}% of its waters` : ''}${k.sunk !== undefined ? `, losing about ${k.sunk < 10 ? k.sunk.toFixed(1) : Math.round(k.sunk)} ships each${k.torps !== undefined && k.sunk >= k.torps - 0.01 ? ', as many as their torpedoes sink on an average night' : ''}` : ''}</span>` : facts) + seen;
   app.querySelector('[data-score]')!.innerHTML = score;
   app.querySelector('[data-log]')!.innerHTML = log;
   app.querySelector('[data-cam]')!.innerHTML = cam;

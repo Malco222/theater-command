@@ -11,14 +11,16 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { launchRaid, raidTargets } from '../src/campaign/airwar';
 import { airAct } from '../src/campaign/airpages';
 import { troopCutOf } from '../src/campaign/airfought';
-import { AIRWAR } from '../src/campaign/air';
+import { AIRWAR, assessAir, canStrafe, cover, fighterReach } from '../src/campaign/air';
 import { createGame, setWar } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
+import { resultFor, strafeWatch, strafedLine } from '../src/campaign/strafers';
 import type { Game } from '../src/campaign/types';
 import { SKY } from '../src/battle/air/book';
 import { AirSim, airBattle } from '../src/battle/air/sim';
+import type { FieldEvent } from '../src/battle/core/types';
 import { airTicket, flyKinds, foughtAir, raidGroups } from '../src/battle/air/ticket';
 import { TROOPS } from '../src/battle/air/troops';
 import { battleCalls } from '../unreal/TheaterCommand/Rules/battle-bridge';
@@ -85,8 +87,15 @@ describe('the switch (off by default, bit for bit as before)', () => {
       expect(rb.strafed).toEqual([]);
       expect('strafed' in ra).toBe(false);
       delete rb.strafed;
-      expect(JSON.stringify(rb)).toBe(JSON.stringify(ra));
-      expect(saveGame(b.g)).toBe(saveGame(a.g));
+      // (Changed in round seven, the UI director 19:17Z, reading 4, and 21:22Z, i: with the switch on, where the cut prints
+      // as 0% the report says "The raids did the troops little harm." in place of "... by 0%", and so does the raid's
+      // headline, which carries the report's sentence. That sentence apart too, as off.)
+      const nil = (x: string): string => x.replace(/The raids cut the organisation of [^.]* by less than 1%\. They fight the weaker for it until they have rested\./g, 'The raids did the troops little harm.');
+      // (Pass 2, with 1.5.2 joined: a cut that rounds to nothing prints "by less than 1%", 1.5.2's sharePct.)
+      expect(ra.result).toMatch(/^The raids cut the organisation of .* by less than 1%/);
+      expect(rb.result).toBe('The raids did the troops little harm.');
+      expect(JSON.stringify(rb)).toBe(nil(JSON.stringify(ra)));
+      expect(saveGame(b.g)).toBe(nil(saveGame(a.g)));
     }
     // A raid with a fighter group out of reach to strafe (Groupement de Chasse 1 moved to Namur, 216 km off, beyond
     // 0.9 of its 220 km, the design director's reach of 13:35Z; it stood at Belfort, 190 km off, beyond the old 0.6,
@@ -496,5 +505,630 @@ describe('the fight a group carries after its air fight (18:14Z): read afresh at
     expect(passes[0].add).toBeCloseTo((passes[0].n * reachOf(unit)) / TROOPS.strafe.passes, 9);
     expect(passes.length).toBe(TROOPS.strafe.passes);
     for (const p of passes.slice(1)) { expect(p.k).toBeCloseTo(after, 12); expect(p.add).toBeCloseTo((p.n * reachOf(unit) * after) / TROOPS.strafe.passes, 9); }
+  });
+
+  // The design director, 25 November 2026 19:09Z, item 2: "'A group with none goes home' is decided at the go-down: a
+  // group that reads 0 there turns for home and is gone for the raid, and no later share brings it back ... Add a test:
+  // a group sent home at 0 never strafes later in that raid." Round five's edge raid (309 German fighters): Groupement de
+  // Chasse 3 alone is outweighed by 2. Jagddivision (it reads 0), and the raid's groups together are not (each reads
+  // about 0.35 once all have met it).
+  it('a group sent home at 0 at its go-down never strafes later in that raid: not when its share rises, not on the staff\'s later ticks, not on the player\'s later order (19:09Z, item 2)', () => {
+    const { s, S, unit, passes } = raid(309);
+    const foe = s.units.find((u) => u.side === 'def' && u.air === 'ftr')!;
+    const others = s.units.filter((u) => u.side === 'att' && u.air === 'ftr' && u.id !== unit.id);
+    s.ai.att = true; s.ai.def = true;
+    // Groupement de Chasse 3 is sent ahead to hunt (the player's order), and meets the German group alone, before the
+    // raid's other groups: outweighed, it reads 0.
+    expect(s.command({ do: 'air:hunt', units: [unit.id] }, 'att')).toBe(true);
+    let guard = 0;
+    while (!s.over && !S.metBy.get(unit.id)?.size && guard++ < 40_000) s.step();
+    expect([...S.metBy.get(unit.id)]).toEqual([foe.id]);
+    for (const u of others) expect(S.metBy.get(u.id)).toBeUndefined();
+    expect(S.carries(unit)).toBe(0);
+    // Its go-down, by the player's order: it reads 0 there, turns for home and is gone for the raid. The order is answered
+    // (the UI director, 19:10Z A6), once, to the side that flies it as the battle's other lines are.
+    // ({Group} by the lane's one rule, theGroupName, the UI director 21:22Z g: a name in its own language bare.)
+    const A6 = 'Groupement de Chasse 3 has no fight left to strafe with and turns for home.';
+    const said = (): FieldEvent[] => s.history().filter((e) => e.what === 'air:no-strafe');
+    expect(said()).toEqual([]);
+    expect(s.command({ do: 'air:strafe', units: [unit.id] }, 'att')).toBe(true);
+    expect(unit.job.do).toBe('home');
+    expect(S.strafing.get(unit.id)).toBeUndefined();
+    expect(said().map((e) => [e.text, e.unit, e.side])).toEqual([[A6, unit.id, 'att']]);
+    // (Setup: its kill ledger spent, as a group's that has fought itself out, so that every other thing the staff asks
+    // before it sends a group down, strafeDue, can hold for it on the ticks below.)
+    unit.vig = SKY.spent / 2;
+    // Its share rises: the computer flies the raid on, the raid's other groups meet the same German group, and its
+    // weight is shared among them.
+    while (!s.over && !others.some((u) => S.metBy.get(u.id)?.has(foe.id)) && guard++ < 40_000) { s.step(); expect(unit.job.do).not.toBe('strafe'); }
+    const risen = S.carries(unit);
+    expect(risen).toBeGreaterThan(0);
+    // The player's later order, its share above 0: another order first, then down to strafe. It turns for home again.
+    expect(s.command({ do: 'air:hunt', units: [unit.id] }, 'att')).toBe(true);
+    expect(unit.job.do).toBe('hunt');
+    expect(s.command({ do: 'air:strafe', units: [unit.id] }, 'att')).toBe(true);
+    expect(unit.job.do).toBe('home');
+    expect(said().map((e) => e.text)).toEqual([A6, A6]);
+    // And sent down again on its way home: the same answer.
+    expect(s.command({ do: 'air:strafe', units: [unit.id] }, 'att')).toBe(true);
+    expect(unit.job.do).toBe('home');
+    expect(said().length).toBe(3);
+    // The staff's later ticks, to the end of the raid: never sent down again.
+    let most = risen;
+    while (!s.over && guard++ < 40_000) { s.step(); most = Math.max(most, S.carries(unit)); expect(unit.job.do).not.toBe('strafe'); }
+    expect(s.over).toBeTruthy();
+    expect(most).toBeGreaterThan(0.3);
+    // Never a pass, never charged the ground fire, never among the field's strafers; the raid's other groups strafe.
+    expect(passes).toEqual([]);
+    expect(S.strafing.get(unit.id)).toBeUndefined();
+    expect(s.outcome().strafers).not.toContain(GC3);
+    expect(s.outcome().strafers!.length).toBeGreaterThan(0);
+    // Said only on the player's orders, never by the staff's go-downs.
+    expect(said().length).toBe(3);
+  });
+});
+
+describe('the fuel to go down (the design director, 19:09Z, item 1: "reach is fuel"): a group that did not fight', () => {
+  afterEach(() => { strafeWatch.tell = undefined; });
+  /** The Soviet raid on the Polish troops at Wilno (round six's gate): its three fighter divisions 176 km out, 0.88 of their range. */
+  function wilno(k = 0) {
+    const g = startOpen(createGame(7, 'SOV'));
+    setWar(g, 'SOV', 'POL');
+    g.airFleets.find((f) => f.id === 14)!.base = g.regions.find((r) => r.name === 'Wilno')!.id;
+    g.seed = (7 + 7919 * k) >>> 0;
+    g.flags.airBattles = k;
+    flyKinds(['ground']);
+    const target = raidTargets(g, 'ground', 'SOV').find((x) => g.regions[x.id].name === 'Wilno')!.id;
+    return { g, target, ids: raidGroups(g, 'ground', target, 'SOV') };
+  }
+  it('the same raid, settled and flown, agree on who has the fuel to go down: the rule\'s reach (0.9 of the range) decides, and inside it the board\'s fuel never refuses one', () => {
+    const { g, target, ids } = wilno();
+    const a = assessAir(g, g.airFleets.filter((f) => ids.includes(f.id)), 'ground', target);
+    const ftr = a.att.filter((x) => x.ftr > 0);
+    const G = AIRWAR.ground.reach!;
+    expect(G).toBe(0.9);
+    expect(ftr.length).toBe(3);
+    for (const x of ftr) {
+      const R = fighterReach(g, x.f.nat, x.f.base);
+      expect(x.d / R).toBeGreaterThan(0.85);
+      expect(x.d / R).toBeLessThan(G);
+      expect(canStrafe(g, x)).toBe(true);
+    }
+    // Settled, with no defender up (setup: the Polish fighters stay on the ground): all three go down.
+    const quiet = loadGame(saveGame(g))!;
+    quiet.airFleets.find((f) => f.id === 14)!.ftr = 0;
+    let heard: { route: string; strafers: number[] }[] = [];
+    strafeWatch.tell = (x) => { heard.push(JSON.parse(JSON.stringify(x))); };
+    launchRaid(quiet, 'ground', target, ids, 'SOV');
+    const settled = heard.find((x) => x.route === 'settled')!.strafers;
+    expect([...settled].sort((x, y) => x - y)).toEqual(ftr.map((x) => x.f.id).sort((x, y) => x - y));
+    const R = fighterReach(g, 'SOV', ftr[0].f.base);
+    // Flown, the same raid with no defender up (setup: the defending fighters taken off the ticket), each group's board
+    // fuel SKY.fuel.full x cover(f x R, R) as the ticket gives it at that share f of its range (ticket.ts), the share swept
+    // up to the rule's own reach: every group the rule gives the reach goes down and flies all its passes, as the settled
+    // raid sends it; the board's fuel test (sim.ts fuelFor) holds on every one at its go-down.
+    for (const f of [0.5, 0.7, 0.8, 0.85, G]) {
+      const t = ticketOf(g, target, ids, 'SOV');
+      for (const x of t.def.forces) if (x.kind !== 'bmr') delete t.place.starts[x.corps];
+      const mine = t.att.forces.filter((x) => x.kind !== 'bmr').map((x) => x.corps);
+      for (const id of mine) t.place.starts[id].fuel = SKY.fuel.full * cover(f * R, R);
+      expect([...t.place.marks!.law.reach!].sort((x, y) => x - y)).toEqual([...settled].sort((x, y) => x - y));
+      const s = airBattle(t);
+      const S = s as unknown as { fuelFor(u: unknown): boolean; strafing: Map<number, { done: number }> };
+      const asked: boolean[] = [];
+      const own = S.fuelFor.bind(s);
+      S.fuelFor = (u) => { const ok = own(u); asked.push(ok); return ok; };
+      fight(s);
+      expect(asked.length).toBeGreaterThan(0);
+      expect(asked.every(Boolean)).toBe(true);
+      expect(s.outcome().strafers).toEqual([...settled].sort((x, y) => x - y));
+      for (const u of s.units.filter((x) => x.side === 'att' && x.air === 'ftr')) expect(S.strafing.get(u.id)?.done).toBe(TROOPS.strafe.passes);
+    }
+  });
+});
+
+// The design director, 25 November 2026 20:55Z, on the fight's half of ruling 1 (C1): "Bingo is where the settled raid
+// prices the fight's fuel: a group turns for home with what it takes to get there. So a group within the rule's reach that
+// turned at bingo is not asked for fuel again at its go-down; asking twice counts the fight twice. Beyond the reach, fuel
+// is asked as before." Two raids whose defence outlasts each group's kill ledger, with groups near the rule's reach: the
+// Soviet raid on Wilno (the gate's: three fighter divisions at 0.88 of their range) and the British raid on Frankfurt from
+// Alsace (No. 11 Group at 0.89, against 2. Jagddivision set to 20). Fought as the gate flies them, every group the settled
+// raid sends down goes down; bingo is as it is, so a group may still turn for home short of fuel on its passes.
+describe('the fuel to go down after a fight (the design director, 20:55Z, C1): a group within the rule\'s reach is not asked for fuel again at its go-down', () => {
+  afterEach(() => { strafeWatch.tell = undefined; });
+  type Raid = { nat: string; wars: string[]; target: string; ids?: number[]; move: Record<number, string>; def?: [number, number][] };
+  const WILNO: Raid = { nat: 'SOV', wars: ['POL'], target: 'Wilno', move: { 14: 'Wilno' } };
+  const FRANKFURT: Raid = { nat: 'UK', wars: ['GER'], target: 'Frankfurt', ids: [35, 5], move: { 5: 'Alsace', 35: 'Alsace' }, def: [[3, 20]] };
+  const SAAR200: Raid = { nat: 'FRA', wars: ['GER'], target: 'Saar', ids: [38, 10, 36, 9], move: { 36: 'Verdun', 9: 'Namur' } };
+  /** The raid as the gate sets it up, the k-th battle's own luck. */
+  function setUp(r: Raid, k: number) {
+    const g = startOpen(createGame(7, r.nat));
+    for (const w of r.wars) setWar(g, r.nat, w);
+    for (const [id, at] of Object.entries(r.move)) g.airFleets.find((f) => f.id === +id)!.base = g.regions.find((x) => x.name === at)!.id;
+    for (const [id, n] of r.def ?? []) { const d = g.airFleets.find((f) => f.id === id)!; d.ftr = n; d.est.ftr = Math.max(d.est.ftr, n); }
+    g.seed = (7 + 7919 * k) >>> 0;
+    g.flags.airBattles = k;
+    flyKinds(['ground']);
+    const target = raidTargets(g, 'ground', r.nat).find((x) => g.regions[x.id].name === r.target)!.id;
+    return { g, target, ids: r.ids ?? raidGroups(g, 'ground', target, r.nat) };
+  }
+  /** Settled with no battle: the groups the staff's own raid sends down. */
+  function settled(r: Raid, k: number): number[] {
+    const { g, target, ids } = setUp(r, k);
+    const heard: { route: string; strafers: number[] }[] = [];
+    strafeWatch.tell = (x) => { heard.push(JSON.parse(JSON.stringify(x))); };
+    launchRaid(g, 'ground', target, ids, r.nat);
+    return [...heard.find((x) => x.route === 'settled')!.strafers].sort((x, y) => x - y);
+  }
+  /** Fought to the end by the computer on both sides: the groups that went down (began a pass) and the field's strafers. */
+  function flown(r: Raid, k: number) {
+    const { g, target, ids } = setUp(r, k);
+    const t = ticketOf(g, target, ids, r.nat);
+    const s = airBattle(t);
+    const S = s as unknown as { strafing: Map<number, { done: number }> };
+    fight(s);
+    const down = s.units.filter((u) => u.side === 'att' && u.air === 'ftr' && (S.strafing.get(u.id)?.done ?? 0) >= 1).map((u) => u.corps).sort((x, y) => x - y);
+    return { s, t, down, strafers: s.outcome().strafers ?? [] };
+  }
+
+  it('Wilno, fought as the gate flies it: the three Soviet fighter divisions go down on every seed, as the settled raid sends them', () => {
+    const want = settled(WILNO, 0);
+    expect(want.length).toBe(3);
+    for (const k of [0, 1, 2]) {
+      const f = flown(WILNO, k);
+      expect([...f.t.place.marks!.law.reach!].sort((x, y) => x - y)).toEqual(want);
+      expect(f.down).toEqual(want);
+      expect([...f.strafers].sort((x, y) => x - y)).toEqual(want);
+      // Each says so in the battle's own words.
+      for (const u of f.s.units.filter((x) => x.side === 'att' && want.includes(x.corps))) {
+        expect(f.s.history().some((e) => e.what === 'air:strafe' && e.unit === u.id && /goes down to strafe the troops at Wilno\.$/.test(e.text ?? ''))).toBe(true);
+      }
+    }
+  });
+
+  it('the British raid on Frankfurt from Alsace (No. 11 Group near the edge of its reach): it goes down on every seed, as the settled raid sends it', () => {
+    const want = settled(FRANKFURT, 0);
+    expect(want).toEqual([5]);
+    for (const k of [0, 1]) {
+      const f = flown(FRANKFURT, k);
+      expect(f.down).toEqual(want);
+      expect([...f.strafers].sort((x, y) => x - y)).toEqual(want);
+    }
+  });
+
+  it('with the rule on, a group without the rule\'s reach never goes down, and is never asked for fuel to go down (Groupement de Chasse 1 at Namur, 0.98 of its range)', () => {
+    const want = settled(SAAR200, 0);
+    expect(want).not.toContain(9);
+    for (const k of [0, 1]) {
+      const { g, target, ids } = setUp(SAAR200, k);
+      const t = ticketOf(g, target, ids, 'FRA');
+      expect(t.place.marks!.law.reach).not.toContain(9);
+      const s = airBattle(t);
+      const S = s as unknown as { fuelFor(u: { corps: number }): boolean; strafing: Map<number, { done: number }> };
+      const asked: number[] = [];
+      const own = S.fuelFor.bind(s);
+      S.fuelFor = (u) => { asked.push(u.corps); return own(u); };
+      const far = s.units.find((u) => u.side === 'att' && u.corps === 9)!;
+      fight(s, () => { expect(far.job.do).not.toBe('strafe'); });
+      expect(asked).not.toContain(9);
+      expect(S.strafing.get(far.id)).toBeUndefined();
+      expect(s.outcome().strafers).not.toContain(9);
+      expect([...s.outcome().strafers!].sort((x, y) => x - y)).toEqual(want);
+    }
+  });
+});
+
+// The design director, 25 November 2026 16:04Z: a group goes down when it is "Fought: no enemy fighter is engaging that
+// group, and it has the reach and the fuel". think()'s branch for a raid with no bombers left on the board (sim.ts) once
+// sent a group down while a German group was still engaging it (round seven's check). The Saar with the French bombers
+// cut to one (setup), lost before the target, against 2. Jagddivision at 750: both French escorts are still engaged
+// as the last bomber goes. Under the strafers' rule neither begins its go-down until it is free of the air fight; it
+// fights on meanwhile, and goes down, or home with no fight left (19:09Z, item 2), once free.
+describe('the go-down waits for the end of the air fight (the design director, 16:04Z): think\'s branch for a raid with no bombers left', () => {
+  it('a group never begins its go-down while a defending fighter group is in contact with it, and is never left without a job', () => {
+    const g = startOpen(createGame(7, 'FRA'));
+    setWar(g, 'FRA', 'GER');
+    g.airFleets.find((f) => f.id === 36)!.base = g.regions.find((r) => r.name === 'Verdun')!.id;
+    const d = g.airFleets.find((f) => f.id === 3)!;
+    d.ftr = 750; d.est.ftr = Math.max(d.est.ftr, 750);
+    const ids = [38, 10, 36];
+    for (const id of ids) { const f = g.airFleets.find((q) => q.id === id)!; if (f.bmr > 0) f.bmr = 1; }
+    g.seed = (911 + 7907 * 14) >>> 0;
+    g.flags.airBattles = 84;
+    const target = raidTargets(g, 'ground', 'FRA').find((x) => g.regions[x.id].name === 'Saar')!.id;
+    const s = airBattle(ticketOf(g, target, ids, 'FRA'));
+    const S = s as unknown as { goDown(u: AirSim['units'][number], box: number | null): boolean; strafing: Map<number, { over: boolean }> };
+    const raid = s.units.filter((u) => u.side === 'att' && u.air === 'ftr');
+    const downs: { id: number; contacts: number }[] = [];
+    const go = S.goDown.bind(s);
+    S.goDown = (u, box) => { downs.push({ id: u.id, contacts: u.contacts.length }); return go(u, box); };
+    // The case is real: the last bomber leaves the board while the raid's escorts are engaged.
+    let engagedAsBombersGo = 0, gone = false;
+    fight(s, (sim) => {
+      if (gone) return;
+      if (sim.units.some((b) => b.side === 'att' && b.air === 'bmr' && b.n > 0 && b.job.do !== 'home')) return;
+      gone = true;
+      engagedAsBombersGo = raid.filter((u) => u.contacts.length > 0).length;
+    });
+    expect(gone).toBe(true);
+    expect(engagedAsBombersGo).toBeGreaterThan(0);
+    expect(downs.length).toBeGreaterThan(0);
+    for (const x of downs) expect(x.contacts).toBe(0);
+    // Each ends the raid with a job: on its way home, or down on the troops.
+    for (const u of raid) expect(['home', 'strafe']).toContain(u.job.do);
+  });
+});
+
+// The UI director, 25 November 2026 21:22Z, g: "A name in its own language is bare ("Groupement de Chasse 3", "JG 26");
+// an English one takes "the", "The" at the head of a sentence. That is theGroupName (arsenal.ts:236). The lane's report
+// lines take it: A6, A5 ... Groupement de Chasse 3 has no fight left to strafe with and turns for home." A6 is said by the
+// battle as it answers the order, so it is printed here from a fought battle: round five's edge raid (309 German
+// fighters), Groupement de Chasse 3 sent ahead to hunt so that it meets 2. Jagddivision alone and reads 0, then ordered
+// down; once under its own name, once renamed in English (setup: the group's name only).
+describe('A6 names its group by the lane\'s one rule (the UI director, 21:22Z, g)', () => {
+  const GC3 = 10;
+  function a6(name: string | null): string[] {
+    const g = startOpen(createGame(7, 'FRA'));
+    setWar(g, 'FRA', 'GER');
+    g.airFleets.find((f) => f.id === 36)!.base = g.regions.find((r) => r.name === 'Verdun')!.id;
+    g.airFleets.find((f) => f.id === 9)!.base = g.regions.find((r) => r.name === 'Namur')!.id;
+    const d = g.airFleets.find((f) => f.id === 3)!;
+    d.ftr = 309; d.est.ftr = Math.max(d.est.ftr, 309);
+    if (name) g.airFleets.find((f) => f.id === GC3)!.name = name;
+    const target = raidTargets(g, 'ground', 'FRA').find((x) => g.regions[x.id].name === 'Saar')!.id;
+    const s = airBattle(ticketOf(g, target, [38, GC3, 36, 9], 'FRA')) as AirSim;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const S = s as any;
+    const unit = s.units.find((u) => u.side === 'att' && u.corps === GC3)!;
+    if (name) expect(unit.name).toBe(name);
+    s.ai.att = true; s.ai.def = true;
+    expect(s.command({ do: 'air:hunt', units: [unit.id] }, 'att')).toBe(true);
+    let guard = 0;
+    while (!s.over && !S.metBy.get(unit.id)?.size && guard++ < 40_000) s.step();
+    expect(S.carries(unit)).toBe(0);
+    expect(s.command({ do: 'air:strafe', units: [unit.id] }, 'att')).toBe(true);
+    return s.history().filter((e) => e.what === 'air:no-strafe').map((e) => e.text ?? '');
+  }
+  it('a name in its own language bare, an English one with "The" at the head of the sentence', () => {
+    expect(a6(null)).toEqual(['Groupement de Chasse 3 has no fight left to strafe with and turns for home.']);
+    expect(a6('2nd Fighter Group')).toEqual(['The 2nd Fighter Group has no fight left to strafe with and turns for home.']);
+  });
+});
+
+// The UI director, 25 November 2026 21:22Z, j and k, and 21:28Z (k after the fuel rulings, and the new case): "{Group}
+// went down to strafe, but was caught by enemy fighters before it could do any harm."; "{Group} was too short of fuel to
+// go down and turned for home." (a group with the reach that bingo turned for home before it went down); "{Group} went
+// down to strafe, but ran short of fuel and turned for home before it could do any harm." (one that went down and was
+// turned for home by bingo before it finished a pass); two "{A} and {B} ...", three or more "{A}, {B} and {C} ...". "A
+// group that went down takes the line of what ended its pass, as the battle knows it; the A5 line only where neither fuel
+// nor a jump ended it." Each printed from a fought battle, the Saar with all three French fighter groups at Lorraine and
+// the bombers, the computer on both sides, booked back through fly():
+// - too short of fuel to go down: setup, the named groups' board fuel set to 450 s on the ticket (as round seven's
+//   unfought fuel test sets it), so bingo comes while they still escort the bombers;
+// - ran short after going down: setup, the board fuel set to 1,000 s (or 980 s), so bingo comes on the way down or just
+//   as the first pass begins;
+// - caught: no setup but the defence (2. Jagddivision at 700, as the edge raids set it) and the player's order at the
+//   start sending the named groups down at once, before the air fight; on seeds 2 to 5 the German fighters catch them.
+describe('what ended a group\'s strafing, as the battle knows it (the UI director, 21:22Z j and k, 21:28Z)', () => {
+  const GC1 = 9, GC3 = 10, GC2 = 36;
+  const NAMES: Record<number, string> = { [GC1]: 'Groupement de Chasse 1', [GC2]: 'Groupement de Chasse 2', [GC3]: 'Groupement de Chasse 3' };
+  function flown(k: number, opts: { def?: number; fuel?: number; order?: boolean; who: number[] }) {
+    const g = startOpen(createGame(7, 'FRA'));
+    setWar(g, 'FRA', 'GER');
+    for (const id of [GC1, GC2]) g.airFleets.find((f) => f.id === id)!.base = g.regions.find((x) => x.name === 'Lorraine')!.id;
+    if (opts.def !== undefined) { const d = g.airFleets.find((f) => f.id === 3)!; d.ftr = opts.def; d.est.ftr = Math.max(d.est.ftr, opts.def); }
+    g.seed = (7 + 7919 * k) >>> 0;
+    g.flags.airBattles = k;
+    const target = raidTargets(g, 'ground', 'FRA').find((x) => g.regions[x.id].name === 'Saar')!.id;
+    const ids = [38, GC1, GC2, GC3];
+    const t = ticketOf(g, target, ids, 'FRA');
+    if (opts.fuel !== undefined) for (const id of opts.who) t.place.starts[id].fuel = opts.fuel;
+    const s = airBattle(t) as AirSim;
+    const S = s as unknown as { strafing: Map<number, { done: number }> };
+    const mine = s.units.filter((u) => u.side === 'att' && opts.who.includes(u.corps));
+    s.ai.att = true; s.ai.def = true;
+    if (opts.order) expect(s.command({ do: 'air:strafe', units: mine.map((u) => u.id) }, 'att')).toBe(true);
+    let guard = 0;
+    while (!s.over && guard++ < 20_000) s.step();
+    expect(s.over).toBeTruthy();
+    const o = s.outcome();
+    const rep = launchRaid(g, 'ground', target, ids, 'FRA', foughtAir(o))!;
+    return { g, s, S, o, rep, mine, line: strafedLine(rep, 'FRA') };
+  }
+  const bingo = (s: AirSim, u: AirSim['units'][number]) => s.history().find((e) => e.what === 'air:bingo' && e.unit === u.id);
+  const firstStrafe = (s: AirSim, u: AirSim['units'][number]) => s.history().find((e) => e.what === 'air:strafe' && e.unit === u.id);
+
+  it('k: a group with the reach that bingo turns for home before its go-down; one, two, three', () => {
+    const one = flown(0, { fuel: 450, who: [GC3] });
+    expect(one.o.strafeEnd).toEqual({ [GC3]: 'short' });
+    expect(one.S.strafing.get(one.mine[0].id)).toBeUndefined();
+    // The battle's own bingo line stands as it is.
+    expect(bingo(one.s, one.mine[0])!.text).toMatch(/is short of fuel and turns for home\.$/);
+    expect(one.rep.strafeEnd).toEqual({ short: [NAMES[GC3]] });
+    expect(one.line).toBe('Groupement de Chasse 1 and Groupement de Chasse 2 went down and strafed. Groupement de Chasse 3 was too short of fuel to go down and turned for home.');
+    // Kept in the save.
+    expect(loadGame(saveGame(one.g))!.airReports.at(-1)!.strafeEnd).toEqual(one.rep.strafeEnd);
+    const two = flown(0, { fuel: 450, who: [GC1, GC3] });
+    // (On this seed Groupement de Chasse 2 does not go down either, with no cause line of its own: it is named after the k line, 26 Nov 03:59Z, 2.)
+    expect(two.o.strafers).toEqual([]);
+    expect(two.line).toBe('Groupement de Chasse 1 and Groupement de Chasse 3 were too short of fuel to go down and turned for home. Groupement de Chasse 2 did not go down to strafe.');
+    // All three: none went down, and theirs is the only line (answer 2).
+    const three = flown(0, { fuel: 450, who: [GC1, GC2, GC3] });
+    expect(three.line).toBe('Groupement de Chasse 1, Groupement de Chasse 2 and Groupement de Chasse 3 were too short of fuel to go down and turned for home.');
+  });
+
+  it('the new case: a group that went down and that bingo turned for home before it could do any harm; one, two, three', () => {
+    const one = flown(0, { fuel: 1000, who: [GC3] });
+    const u = one.mine[0];
+    expect(one.o.strafeEnd).toEqual({ [GC3]: 'fuel' });
+    // It went down (began its first pass), then bingo: no pass made, nothing booked on the troops.
+    expect(firstStrafe(one.s, u)!.t).toBeLessThanOrEqual(bingo(one.s, u)!.t);
+    expect(one.S.strafing.get(u.id)!.done).toBe(0);
+    expect(one.o.strafedBy?.[GC3] ?? 0).toBe(0);
+    expect(bingo(one.s, u)!.text).toMatch(/is short of fuel and turns for home\.$/);
+    expect(one.rep.strafeEnd).toEqual({ fuel: [NAMES[GC3]] });
+    expect(one.line).toBe('Groupement de Chasse 1 and Groupement de Chasse 2 went down and strafed. Groupement de Chasse 3 went down to strafe, but ran short of fuel and turned for home before it could do any harm.');
+    const two = flown(0, { fuel: 1000, who: [GC1, GC3] });
+    expect(two.line).toBe('Groupement de Chasse 2 went down and strafed. Groupement de Chasse 1 and Groupement de Chasse 3 went down to strafe, but ran short of fuel and turned for home before they could do any harm.');
+    const three = flown(0, { fuel: 1000, who: [GC1, GC2, GC3] });
+    expect(three.line).toBe('Groupement de Chasse 1, Groupement de Chasse 2 and Groupement de Chasse 3 went down to strafe, but ran short of fuel and turned for home before they could do any harm.');
+    // A group whose bingo came after a fighter's harm or more strafed: its line is the strafers' (Wilno's divisions,
+    // the British raid: the battle knows their bingo, the report says they strafed).
+    const late = flown(0, { fuel: 1100, who: [GC3] });
+    expect(late.o.strafeEnd).toEqual({ [GC3]: 'fuel' });
+    expect(late.o.strafedBy![GC3]).toBeGreaterThanOrEqual(1);
+    expect('strafeEnd' in late.rep).toBe(false);
+    expect(late.line).toBe('Groupement de Chasse 1, Groupement de Chasse 2 and Groupement de Chasse 3 went down and strafed.');
+  });
+
+  it('j: a group caught by enemy fighters on its way down or its passes before it could do any harm; one, two, three', () => {
+    const one = flown(2, { def: 700, order: true, who: [GC3] });
+    expect(one.o.strafeEnd).toEqual({ [GC3]: 'caught' });
+    expect(one.o.strafedBy?.[GC3] ?? 0).toBe(0);
+    expect(one.rep.strafeEnd).toEqual({ caught: [NAMES[GC3]] });
+    expect(one.line).toBe('Groupement de Chasse 3 went down to strafe, but was caught by enemy fighters before it could do any harm. Groupement de Chasse 1 and Groupement de Chasse 2 did not go down to strafe.');
+    const two = flown(2, { def: 700, order: true, who: [GC1, GC3] });
+    expect(two.line).toBe('Groupement de Chasse 1 and Groupement de Chasse 3 went down to strafe, but were caught by enemy fighters before they could do any harm. Groupement de Chasse 2 did not go down to strafe.');
+    const three = flown(2, { def: 700, order: true, who: [GC1, GC2, GC3] });
+    expect(three.line).toBe('Groupement de Chasse 1, Groupement de Chasse 2 and Groupement de Chasse 3 went down to strafe, but were caught by enemy fighters before they could do any harm.');
+    // Beside groups that strafed, the strafers first: seed 4, Groupement de Chasse 3 caught, the other two not.
+    const mixed = flown(4, { def: 700, order: true, who: [GC1, GC2, GC3] });
+    expect(mixed.line).toBe('Groupement de Chasse 1 and Groupement de Chasse 2 went down and strafed. Groupement de Chasse 3 went down to strafe, but was caught by enemy fighters before it could do any harm.');
+    // The defender reads none of it, as before.
+    expect(strafedLine(mixed.rep, 'GER')).toBe('');
+  });
+
+  it('as built (no setup), the Saar: nothing ended short, no field in the outcome or the report', () => {
+    const f = flown(0, { who: [] });
+    expect('strafeEnd' in f.o).toBe(false);
+    expect('strafeEnd' in f.rep).toBe(false);
+    expect(saveGame(f.g).includes('"strafeEnd"')).toBe(false);
+  });
+});
+
+// The UI director, 26 November 2026 02:06Z, answer 4: "The strafed line. It finished a pass, so it went down and strafed,
+// the first true cause in the order; the harm line after it says how little that did. "before it could do any harm" would
+// not be true of a group that made its passes." And answer 3: "went down to strafe, but ..." stays for a group fuel or a
+// catch ended before it finished any pass. Which sentence only: what the battle booked on the troops, its strafeEnd and
+// every draw are as they were. A fought battle, the Saar with all three French fighter groups and the bombers, the
+// computer on both sides; setup: Groupement de Chasse 3 cut to one aircraft, so its passes book under one fighter's
+// weight, and its board fuel set on the ticket so that bingo comes after one or two passes.
+describe('a group that finished a pass before bingo is read by the weight of its passes (the UI director, 26 Nov 02:06Z, answer 4, refined 03:59Z, 1)', () => {
+  const GC1 = 9, GC3 = 10, GC2 = 36;
+  function small(k: number, fuel: number) {
+    const g = startOpen(createGame(7, 'FRA'));
+    setWar(g, 'FRA', 'GER');
+    for (const id of [GC1, GC2]) g.airFleets.find((f) => f.id === id)!.base = g.regions.find((x) => x.name === 'Lorraine')!.id;
+    g.airFleets.find((f) => f.id === GC3)!.ftr = 1;
+    g.seed = (7 + 7919 * k) >>> 0;
+    g.flags.airBattles = k;
+    const target = raidTargets(g, 'ground', 'FRA').find((x) => g.regions[x.id].name === 'Saar')!.id;
+    const ids = [38, GC1, GC2, GC3];
+    const t = ticketOf(g, target, ids, 'FRA');
+    t.place.starts[GC3].fuel = fuel;
+    const s = airBattle(t) as AirSim;
+    const S = s as unknown as { strafing: Map<number, { done: number }> };
+    const u = s.units.find((x) => x.side === 'att' && x.corps === GC3)!;
+    s.ai.att = true; s.ai.def = true;
+    let guard = 0;
+    while (!s.over && guard++ < 20_000) s.step();
+    expect(s.over).toBeTruthy();
+    const o = s.outcome();
+    const rep = launchRaid(g, 'ground', target, ids, 'FRA', foughtAir(o))!;
+    return { o, rep, done: S.strafing.get(u.id)?.done ?? 0, line: strafedLine(rep, 'FRA') };
+  }
+  it('one pass or two made, then bingo, under one fighter\'s weight: the A5 line, not the fuel line', () => {
+    for (const [fuel, passes] of [[1050, 1], [1100, 2]] as const) {
+      const f = small(1, fuel);
+      expect(f.o.strafeEnd, `${fuel}`).toEqual({ [GC3]: 'fuel' });
+      expect(f.done, `${fuel}`).toBe(passes);
+      expect(f.o.strafedBy![GC3], `${fuel}`).toBeGreaterThan(0);
+      expect(f.o.strafedBy![GC3], `${fuel}`).toBeLessThan(1);
+      expect('strafeEnd' in f.rep, `${fuel}`).toBe(false);
+      expect(f.rep.strafeLittle, `${fuel}`).toEqual({ names: ['Groupement de Chasse 3'] });
+      expect(f.line, `${fuel}`).toBe('Groupement de Chasse 1 and Groupement de Chasse 2 went down and strafed. Groupement de Chasse 3 went down to strafe, but had too little fight left to do any harm.');
+    }
+  });
+  it('bingo as its first pass begins, no pass made: the fuel line stands (answer 3)', () => {
+    const f = small(1, 1000);
+    expect(f.o.strafeEnd).toEqual({ [GC3]: 'fuel' });
+    expect(f.done).toBe(0);
+    expect(f.o.strafedBy?.[GC3]).toBeUndefined();
+    expect(f.rep.strafeEnd).toEqual({ fuel: ['Groupement de Chasse 3'] });
+    expect(f.line).toBe('Groupement de Chasse 1 and Groupement de Chasse 2 went down and strafed. Groupement de Chasse 3 went down to strafe, but ran short of fuel and turned for home before it could do any harm.');
+  });
+  it('all three passes made under one fighter\'s weight, neither fuel nor a catch: the A5 line, as built (not her answer 4\'s case)', () => {
+    const f = small(1, 1150);
+    expect('strafeEnd' in f.o).toBe(false);
+    expect(f.done).toBe(3);
+    expect(f.o.strafedBy![GC3]).toBeLessThan(1);
+    expect(f.rep.strafeLittle).toEqual({ names: ['Groupement de Chasse 3'] });
+    expect(f.line).toBe('Groupement de Chasse 1 and Groupement de Chasse 2 went down and strafed. Groupement de Chasse 3 went down to strafe, but had too little fight left to do any harm.');
+  });
+});
+
+// The UI director, 26 November 2026 03:59Z, 1 (refining her answer 4 of 02:06Z): "Make them even the A5 way. The test is
+// the weight of its passes, not what ended them: a group whose finished passes were all under one fighter's weight reads
+// "{Group} went down to strafe, but had too little fight left to do any harm." whether or not bingo or a catch came
+// after; a group that made a pass with weight reads "went down and strafed"." The weight of its passes is what the
+// battle booked for it (strafedBy), as A5 reads it. Which sentence only: what the battle booked, its strafeEnd and every
+// draw are as they were. Fought battles at the Saar, the computer on both sides; setups: Groupement de Chasse 3's size,
+// its board fuel, and where the defending group (2. Jagddivision) starts on the board and how many fighters it has, so
+// that bingo or the catch comes after a pass.
+describe('the weight of its passes decides, not what ended them (the UI director, 26 Nov 03:59Z, 1)', () => {
+  const GC1 = 9, GC3 = 10, GC2 = 36, JD2 = 3;
+  const LITTLE = 'went down to strafe, but had too little fight left to do any harm.';
+  function raid(k: number, o: { ids?: number[]; size?: number; fuel?: number; def?: number; defAt?: [number, number]; defWait?: boolean; order?: boolean }) {
+    const g = startOpen(createGame(7, 'FRA'));
+    setWar(g, 'FRA', 'GER');
+    for (const id of [GC1, GC2]) g.airFleets.find((f) => f.id === id)!.base = g.regions.find((x) => x.name === 'Lorraine')!.id;
+    if (o.def !== undefined) { const d = g.airFleets.find((f) => f.id === JD2)!; d.ftr = o.def; d.est.ftr = Math.max(d.est.ftr, o.def); }
+    if (o.size !== undefined) g.airFleets.find((f) => f.id === GC3)!.ftr = o.size;
+    g.seed = (7 + 7919 * k) >>> 0;
+    g.flags.airBattles = k;
+    const target = raidTargets(g, 'ground', 'FRA').find((x) => g.regions[x.id].name === 'Saar')!.id;
+    const ids = o.ids ?? [38, GC1, GC2, GC3];
+    const t = ticketOf(g, target, ids, 'FRA');
+    if (o.fuel !== undefined) t.place.starts[GC3].fuel = o.fuel;
+    if (o.defAt) { t.place.starts[JD2].x = o.defAt[0]; t.place.starts[JD2].y = o.defAt[1]; }
+    if (o.defWait !== undefined) t.place.starts[JD2].wait = o.defWait;
+    const s = airBattle(t) as AirSim;
+    const S = s as unknown as { strafing: Map<number, { done: number }> };
+    const u = s.units.find((x) => x.side === 'att' && x.corps === GC3)!;
+    if (o.order) expect(s.command({ do: 'air:strafe', units: [u.id] }, 'att')).toBe(true);
+    fight(s);
+    const out = s.outcome();
+    const rep = launchRaid(g, 'ground', target, ids, 'FRA', foughtAir(out))!;
+    return { g, o: out, rep, done: S.strafing.get(u.id)?.done ?? 0, line: strafedLine(rep, 'FRA') };
+  }
+  it('passes under one fighter\'s weight, then bingo: the A5 line, not the strafed line', () => {
+    for (const [fuel, passes] of [[1050, 1], [1100, 2]] as const) {
+      const f = raid(1, { size: 1, fuel });
+      expect(f.o.strafeEnd, `${fuel}`).toEqual({ [GC3]: 'fuel' });
+      expect(f.done, `${fuel}`).toBe(passes);
+      expect(f.o.strafedBy![GC3], `${fuel}`).toBeGreaterThan(0);
+      expect(f.o.strafedBy![GC3], `${fuel}`).toBeLessThan(1);
+      expect('strafeEnd' in f.rep, `${fuel}`).toBe(false);
+      expect(f.rep.strafeLittle, `${fuel}`).toEqual({ names: ['Groupement de Chasse 3'] });
+      expect(f.line, `${fuel}`).toBe(`Groupement de Chasse 1 and Groupement de Chasse 2 went down and strafed. Groupement de Chasse 3 ${LITTLE}`);
+      // The harm line is the raid's own result sentence, unchanged: the bombers and the other two reached the troops.
+      expect(resultFor(f.rep, 'FRA'), `${fuel}`).toBe(f.rep.result);
+    }
+  });
+  it('passes under one fighter\'s weight, then caught: the A5 line, not the strafed line', () => {
+    // The defence starts farther out (y 125,000 on the board, waiting) and comes in after Groupement de Chasse 3, sent
+    // down at the start, has made two passes.
+    const f = raid(0, { size: 1, def: 300, defAt: [50_000, 125_000], defWait: true, order: true });
+    expect(f.o.strafeEnd).toEqual({ [GC3]: 'caught' });
+    expect(f.done).toBe(2);
+    expect(f.o.strafedBy![GC3]).toBeGreaterThan(0);
+    expect(f.o.strafedBy![GC3]).toBeLessThan(1);
+    expect('strafeEnd' in f.rep).toBe(false);
+    expect(f.rep.strafeLittle).toEqual({ names: ['Groupement de Chasse 3'] });
+    expect(f.line).toBe(`Groupement de Chasse 1 and Groupement de Chasse 2 went down and strafed. Groupement de Chasse 3 ${LITTLE}`);
+    expect(resultFor(f.rep, 'FRA')).toBe('The raids did the troops little harm.');
+  });
+  it('a pass with a fighter\'s weight or more, then bingo: the strafed line, as before', () => {
+    const f = raid(0, { fuel: 1100 });
+    expect(f.o.strafeEnd).toEqual({ [GC3]: 'fuel' });
+    expect(f.o.strafedBy![GC3]).toBeGreaterThanOrEqual(1);
+    expect('strafeEnd' in f.rep).toBe(false);
+    expect(f.rep.strafeLittle).toBeUndefined();
+    expect(f.line).toBe('Groupement de Chasse 1, Groupement de Chasse 2 and Groupement de Chasse 3 went down and strafed.');
+  });
+  it('the only aircraft that reached the troops a group with too little fight left, caught after its passes: the A5 line alone on the raider\'s card (19:17Z and 21:22Z h)', () => {
+    // Groupement de Chasse 3 of one aircraft flies alone (no bombers, no other group); the defence starts far out
+    // (y 140,000, in the air) and catches it after two passes.
+    const f = raid(0, { ids: [GC3], size: 1, fuel: 1100, def: 50, defAt: [50_000, 140_000], defWait: false });
+    expect(f.o.strafeEnd).toEqual({ [GC3]: 'caught' });
+    expect(f.done).toBe(2);
+    expect(f.o.strafedBy![GC3]).toBeLessThan(1);
+    expect(f.rep.strafeLittle).toEqual({ names: ['Groupement de Chasse 3'], alone: true });
+    expect(f.line).toBe(`Groupement de Chasse 3 ${LITTLE}`);
+    // The raider's card leaves the result sentence out; every other reader keeps it.
+    expect(resultFor(f.rep, 'FRA')).toBe('');
+    expect(resultFor(f.rep, 'GER')).toBe(f.rep.result);
+    expect(f.rep.result).toBe('The raids did the troops little harm.');
+    expect(loadGame(saveGame(f.g))!.airReports.at(-1)!.strafeLittle).toEqual(f.rep.strafeLittle);
+  });
+  it('ended by bingo before it finished any pass: the fuel line stands (answer 3, as built)', () => {
+    const f = raid(1, { size: 1, fuel: 1000 });
+    expect(f.done).toBe(0);
+    expect(f.rep.strafeEnd).toEqual({ fuel: ['Groupement de Chasse 3'] });
+    expect(f.line).toBe('Groupement de Chasse 1 and Groupement de Chasse 2 went down and strafed. Groupement de Chasse 3 went down to strafe, but ran short of fuel and turned for home before it could do any harm.');
+  });
+});
+
+// The UI director, 26 November 2026 03:59Z, 2: "Name it. Where a group that did not go down has no cause line of its own,
+// it takes a plain line after the cause lines: "{The 3rd Fighter Group} did not go down to strafe." (two: "{A} and {B} did
+// not go down to strafe."). "No fighter group went down to strafe." stays only where no group has a line at all, as in
+// your settled cases." Fought out, the battle knows who went down and why not, and the report keeps the raid's fighter
+// groups that did not go down with no strafeEnd of their own (strafeStayed). Fought battles at the Saar, the computer on
+// both sides; setups: where the French groups fly from (Groupement de Chasse 1 and 2 at Namur, beyond the rule's reach),
+// board fuel, Groupement de Chasse 3's size, where the defence starts, and one group copied under a new id and name so
+// the raid has four fighter groups.
+describe('a fighter group that did not go down, with no cause line of its own, is named last (the UI director, 26 Nov 03:59Z, 2)', () => {
+  const GC1 = 9, GC3 = 10, GC2 = 36, JD2 = 3, G4 = 900;
+  const STAYED = 'did not go down to strafe.';
+  function raid(k: number, o: { at?: [number, string][]; copy?: boolean; ids?: number[]; fuel?: [number[], number]; size?: number; def?: number; defAt?: [number, number]; defWait?: boolean; order?: boolean }) {
+    const g = startOpen(createGame(7, 'FRA'));
+    setWar(g, 'FRA', 'GER');
+    if (o.copy) { const f = g.airFleets.find((x) => x.id === GC2)!; g.airFleets.push({ ...structuredClone(f), id: G4, name: '4th Fighter Group' }); }
+    for (const [id, n] of o.at ?? [[GC1, 'Lorraine'], [GC2, 'Lorraine']]) g.airFleets.find((f) => f.id === id)!.base = g.regions.find((x) => x.name === n)!.id;
+    if (o.def !== undefined) { const d = g.airFleets.find((f) => f.id === JD2)!; d.ftr = o.def; d.est.ftr = Math.max(d.est.ftr, o.def); }
+    if (o.size !== undefined) g.airFleets.find((f) => f.id === GC3)!.ftr = o.size;
+    g.seed = (7 + 7919 * k) >>> 0;
+    g.flags.airBattles = k;
+    const target = raidTargets(g, 'ground', 'FRA').find((x) => g.regions[x.id].name === 'Saar')!.id;
+    const ids = o.ids ?? [38, GC1, GC2, GC3];
+    const t = ticketOf(g, target, ids, 'FRA');
+    if (o.fuel) for (const id of o.fuel[0]) t.place.starts[id].fuel = o.fuel[1];
+    if (o.defAt) { t.place.starts[JD2].x = o.defAt[0]; t.place.starts[JD2].y = o.defAt[1]; }
+    if (o.defWait !== undefined) t.place.starts[JD2].wait = o.defWait;
+    const s = airBattle(t) as AirSim;
+    if (o.order) expect(s.command({ do: 'air:strafe', units: s.units.filter((x) => x.side === 'att' && x.corps === GC3).map((x) => x.id) }, 'att')).toBe(true);
+    fight(s);
+    const out = s.outcome();
+    const rep = launchRaid(g, 'ground', target, ids, 'FRA', foughtAir(out))!;
+    return { g, o: out, rep, line: strafedLine(rep, 'FRA') };
+  }
+  it('one strafes, one stays up with the bombers (beyond the rule\'s reach): named after the strafers, and kept in the save', () => {
+    const f = raid(0, { at: [[GC1, 'Namur'], [GC2, 'Lorraine']] });
+    expect(f.o.strafers).toEqual([GC3, GC2]);
+    expect(f.rep.strafeStayed).toEqual(['Groupement de Chasse 1']);
+    expect(f.line).toBe(`Groupement de Chasse 2 and Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 ${STAYED}`);
+    expect(strafedLine(f.rep, 'GER')).toBe('');
+    expect(loadGame(saveGame(f.g))!.airReports.at(-1)!.strafeStayed).toEqual(f.rep.strafeStayed);
+  });
+  it('two with no line beside one that strafed', () => {
+    const f = raid(0, { at: [[GC1, 'Namur'], [GC2, 'Namur']] });
+    expect(f.rep.strafeStayed).toEqual(['Groupement de Chasse 1', 'Groupement de Chasse 2']);
+    expect(f.line).toBe(`Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 and Groupement de Chasse 2 ${STAYED}`);
+  });
+  it('two too short of fuel to go down, and a third with no line of its own', () => {
+    const f = raid(0, { fuel: [[GC1, GC3], 450] });
+    expect(f.o.strafers).toEqual([]);
+    expect(f.rep.strafeStayed).toEqual(['Groupement de Chasse 2']);
+    expect(f.line).toBe(`Groupement de Chasse 1 and Groupement de Chasse 3 were too short of fuel to go down and turned for home. Groupement de Chasse 2 ${STAYED}`);
+  });
+  it('three with no line beside one too short of fuel (three names, joined as the report joins them)', () => {
+    const f = raid(0, { copy: true, at: [[GC1, 'Namur'], [GC2, 'Namur'], [G4, 'Namur']], ids: [38, GC1, GC2, GC3, G4], fuel: [[GC3], 450] });
+    expect(f.rep.strafeEnd).toEqual({ short: ['Groupement de Chasse 3'] });
+    expect(f.rep.strafeStayed).toEqual(['Groupement de Chasse 1', 'Groupement de Chasse 2', '4th Fighter Group']);
+    expect(f.line).toBe(`Groupement de Chasse 3 was too short of fuel to go down and turned for home. Groupement de Chasse 1, Groupement de Chasse 2 and the 4th Fighter Group ${STAYED}`);
+  });
+  it('a pass with weight, then caught: the strafed line; the two that did not go down are named after it', () => {
+    const f = raid(0, { size: 10, def: 646, defAt: [50_000, 125_000], defWait: true, order: true });
+    expect(f.o.strafeEnd).toEqual({ [GC3]: 'caught' });
+    expect(f.o.strafedBy![GC3]).toBeGreaterThanOrEqual(1);
+    expect('strafeEnd' in f.rep).toBe(false);
+    expect(f.rep.strafeLittle).toBeUndefined();
+    expect(f.line).toBe(`Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 and Groupement de Chasse 2 ${STAYED}`);
+  });
+  it('every fighter group with a line of its own: no plain line, no field', () => {
+    const f = raid(0, {});
+    expect('strafeStayed' in f.rep).toBe(false);
+    expect(f.line).toBe('Groupement de Chasse 1, Groupement de Chasse 2 and Groupement de Chasse 3 went down and strafed.');
+    expect(saveGame(f.g).includes('"strafeStayed"')).toBe(false);
   });
 });

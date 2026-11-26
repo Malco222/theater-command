@@ -48,6 +48,7 @@ import { menRules, raisable } from './manpower';
 import { bureauCost } from './research';
 import { MEN_PER_DIV, type AirReport, type Game, type Headline, type SeaSide, type ShipClass, type Ships } from './types';
 import { seaSaid, seaWhere } from './sea-words';
+import { rowsWaitingOnRows } from './arrivalwaits';
 
 export type CardTone = 'good' | 'bad' | 'warn' | 'plain';
 /** The eight pictures both builds have (art-director/raid-card/targets). */
@@ -232,6 +233,11 @@ export interface MonthCard {
    * campaign with weather.
    */
   sky?: SkyView;
+  /**
+   * The telling (arrivalwaits.ts): a muted line for each of his dated arrivals that waits only for another arrival to
+   * form, every month it waits. Absent where there is none.
+   */
+  waits?: string[];
 }
 
 const num = (n: number): string => Math.round(n).toLocaleString('en-US');
@@ -1205,6 +1211,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   // The line when men run out (ruling 133(d)(1)).
   const menOut = menOutLine(g, me);
   if (menOut && menOutDue(g, me)) card.menOut = menOut;
+  const waits = rowsWaitingOnRows(g, me);
+  if (waits.length) card.waits = waits;
   const news: Headline[] = [];
   for (const h of hs) {
     if (used.has(h) || !mine(h.nat)) continue;
