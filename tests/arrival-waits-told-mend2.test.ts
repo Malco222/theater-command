@@ -27,6 +27,26 @@ const said = (g: Game, t: number): string[] => g.headlines.filter((h) => h.turn 
 const tel = (g: Game, i: number): string[] => Object.keys(g.flags).filter((k) => /^row[A-Za-z]+:/.test(k) && k.split(':')[1] === String(i));
 const open = (): Game => { const g = startOpen(createGame(1, 'GER')); g.flags.fromWait = 1; return g; };
 
+describe('T2-3: a corps of the mask renamed while the row waits is not lost', () => {
+  it('renamed the month the row forms by an earlier row that joins it: today\'s bare line, never "which has been lost"', () => {
+    const g = open();
+    const held = addCorps(g, 'GER', 'Test Corps', 'inf', 2, g.byName.Grenzmark.id, {});
+    // (The earlier row, in the order the rule reads them: it joins the Test Corps in month 3 and renames it.)
+    ROWS.push([3, 'GER', 'Test Corps (reinforced)', 'inf', 1, 'Bavaria', { joins: 'Test Corps' }]); added++;
+    ROWS.push([2, 'GER', 'Test Army', 'inf', 2, 'Magdeburg', { from: ['Test Corps'] }]); added++;
+    const i = ROWS.length - 1;
+    month(g, 2);
+    expect(said(g, 2)).toEqual(['The Test Army is due in Magdeburg this month, formed from your Test Corps, which is at the front in the Grenzmark. The arrival waits, and forms the month after that corps leaves the front.']);
+    relocate(g, held, g.byName.Bavaria);
+    month(g, 3);
+    expect(held.name).toBe('Test Corps (reinforced)');
+    expect(held.dead).toBe(false);
+    expect(g.flags[`sent:${i}`]).toBe(1);
+    expect(said(g, 3).filter((t) => /Test Army/.test(t))).toEqual(['Test Army has arrived in Magdeburg.']);
+    expect(tel(g, i)).toEqual([]);
+  });
+});
+
 describe('T2-4: a told row that joins a corps in another province', () => {
   it('its corps at the front in the province the row is due in, the Old Corps in Magdeburg: never "now that it stands there"', () => {
     const g = open();

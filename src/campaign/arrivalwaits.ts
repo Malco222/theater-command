@@ -15,7 +15,9 @@
  *   rowFront:<i>  which of the row's named corps were at the front in any month it waited, a bit mask over the order of
  *                 its `from`, kept across the waiting months; none where it only ever waited for another row. The
  *                 formed headline names them.
- * All three are cleared wherever the row is sent or struck (`rowDone`), and only there (the switch turned off keeps
+ *   rowId:<i>:<k> the id of the corps at the front that bit k of rowFront names, so that a corps renamed while the row
+ *                 waits is known under its new name and never called lost (the sceptic's T2-3).
+ * All of them are cleared wherever the row is sent or struck (`rowDone`), and only there (the switch turned off keeps
  * them until then). With the switch off none is ever written and nothing prints.
  */
 import setup from '../../data/campaign/setup-1939.json';
@@ -28,6 +30,7 @@ const ROWS = (): any[][] => (setup as any).expeditions as any[][] ?? [];
 const toldKey = (i: number): string => `rowTold:${i}`;
 const atKey = (i: number): string => `rowAt:${i}`;
 const frontKey = (i: number): string => `rowFront:${i}`;
+const idKey = (i: number, k: number): string => `rowId:${i}:${k}`;
 
 /**
  * The article a name takes in the telling's own sentences: none where it opens with "the", is an "X Force" or is
@@ -125,7 +128,7 @@ export function tellWait(g: Game, i: number, at: Region | undefined): void {
   // gets section 4's headline. The UI director's section 7, case 6: "It closes the wait he was told of, and it is true:
   // the corps did leave the front.")
   let mask = g.flags[frontKey(i)] ?? 0;
-  for (const c of front) mask |= 1 << from.indexOf(c.name);
+  for (const c of front) { const k = from.indexOf(c.name); mask |= 1 << k; g.flags[idKey(i, k)] = c.id; }
   if (mask) g.flags[frontKey(i)] = mask; else delete g.flags[frontKey(i)];
   g.flags[atKey(i)] = at.id;
   if (g.flags[toldKey(i)] !== undefined) return;
@@ -144,6 +147,7 @@ export function tellWait(g: Game, i: number, at: Region | undefined): void {
  */
 export function rowDone(g: Game, i: number): void {
   delete g.flags[toldKey(i)]; delete g.flags[atKey(i)]; delete g.flags[frontKey(i)];
+  fromOf(ROWS()[i]).forEach((_, k) => { delete g.flags[idKey(i, k)]; });
 }
 
 /**
@@ -165,10 +169,15 @@ export function waitedOn(g: Game, i: number, at: number | undefined): WaitedOn |
   const row = ROWS()[i];
   const from = fromOf(row);
   const here = present(g, row[1], from);
-  const front = from.filter((_, k) => (mask & (1 << k)) !== 0);
   const out: WaitedOn = { count: here.length, one: here.length === 1 ? here[0].name : null, left: [], stands: [], lost: [] };
-  for (const name of front) {
+  for (const [k, name] of from.entries()) {
+    if ((mask & (1 << k)) === 0) continue;
     const x = here.find((c) => c.name === name);
+    // (A corps not standing under its name is lost only where no living corps has its id: one renamed while the row
+    // waits, by a row that joins it or otherwise, stands under its new name, and nothing true is said of it here; today's
+    // line stands. The sceptic's T2-3.)
+    const id = g.flags[idKey(i, k)];
+    if (!x && id !== undefined && g.corps.some((c) => c.id === id && !c.dead)) return null;
     // (The rule's own test for the front, the forming place not set apart: game.ts `atFrontNow`.)
     if (!x) out.lost.push(name);
     else if (!atFrontNow(g, row[1], x)) out.left.push(name);
