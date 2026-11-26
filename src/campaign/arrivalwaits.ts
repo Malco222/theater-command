@@ -154,14 +154,24 @@ export function rowDone(g: Game, i: number): void {
  * What a row that waited on the front is formed from, read before its corps are taken (game.ts `expeditions`): how many
  * of its named corps stand, the one where it is one; and of the names that were at the front in any of its waiting
  * months (`rowFront`), those that stand and have left the front (`left`), those at the front in the very province the
- * row forms in (`stands`), and those no longer on the board (`lost`).
+ * row forms in (`stands`), and those no longer on the board and written on the memorial wall since the row was told
+ * (`lost`).
  */
 export interface WaitedOn { count: number; one: string | null; left: string[]; stands: string[]; lost: string[] }
 
 /**
+ * True where the memorial wall (stories.ts `storyFallen`, `g.stories.fallen`) holds a corps of `nat` named `name` that
+ * fell in or after the month `since` (the month the row was told: `rowTold`). An older entry of the same name is another
+ * corps, or the same one before the telling: it says nothing of this wait.
+ */
+const onWall = (g: Game, nat: string, name: string, since: number | undefined): boolean =>
+  since !== undefined && (g.stories?.fallen ?? []).some((f) => f.nat === nat && f.name === name && f.turn >= since);
+
+/**
  * Read in `expeditions` once a row has passed both statements, before it takes its corps: null unless it waited on the
  * front in any of its waiting months (`rowFront`), or where a corps of those is still at the front away from `at`, the
- * province the row forms in (nothing true to say of it: today's line stands).
+ * province the row forms in, or where a corps of those is gone from the board and not on the memorial wall since the row
+ * was told (nothing true to say of it: today's line stands).
  */
 export function waitedOn(g: Game, i: number, at: number | undefined): WaitedOn | null {
   const mask = g.flags[frontKey(i)];
@@ -178,6 +188,12 @@ export function waitedOn(g: Game, i: number, at: number | undefined): WaitedOn |
     // line stands. The sceptic's T2-3.)
     const id = g.flags[idKey(i, k)];
     if (!x && id !== undefined && g.corps.some((c) => c.id === id && !c.dead)) return null;
+    // (Gone from the board, it is "lost" only where the memorial wall says so: a corps of the row's nation and that name
+    // written there (stories.ts `storyFallen`: destroyed, surrendered or starved) in or after the month the row was told
+    // (`rowTold`). Gone for any other cause, taken by another row, folded, broken up, lent, drawn on, stood down, struck
+    // with its nation, it was not lost, and nothing true is said of it here: today's line stands. A corps the wall leaves
+    // out, a fortress crew, gets today's line too: the safe side. Round 2's T2-1 and T2-2.)
+    if (!x && !onWall(g, row[1], name, g.flags[toldKey(i)])) return null;
     // (The rule's own test for the front, the forming place not set apart: game.ts `atFrontNow`.)
     if (!x) out.lost.push(name);
     else if (!atFrontNow(g, row[1], x)) out.left.push(name);
