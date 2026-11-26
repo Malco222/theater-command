@@ -236,7 +236,11 @@ export const fromWaitOn = (g: Game): boolean => g.flags.open === 1 && g.flags.fr
  * a row that takes named corps whole waits from the next month it comes due (`expeditions` reads the flag each month).
  * Off deletes the flag, as a war that never had it, and the telling's own flags with it (`rowTold:`, `rowAt:`,
  * `rowFront:`), so a later "on" starts clean: a row waiting this month forms next month wherever its corps stand, with
- * today's headline. The rule's own `wait:<i>` stays: it is the month its half year is counted from, as before.
+ * today's headline. The rule's own `wait:<i>` stays: it is the month its half year is counted from, as before. The
+ * design director's answer 2 of 00:43Z, 26 November 2026: "Keep the rule's own wait marker. Off acts from the month it
+ * is turned off, and what already happened stays in the save, as everywhere." (tests/from-wait-switch-r2: a war never
+ * switched on is the whole save of off; tests/from-wait-switch-war: a war switched off mid-war plays by off from that
+ * month with its past kept.)
  */
 export function setFromWait(g: Game, on: boolean): boolean {
   if (g.flags.open !== 1) return false;

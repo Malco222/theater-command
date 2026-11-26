@@ -14,6 +14,7 @@ import { FROMWAIT_ROW, fromWaitOn, setFromWait } from '../src/campaign/arrivalwa
 import { addCorps, createGame, startPhase } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
+import { runTurnAI } from '../src/campaign/turn';
 import type { Corps, Game } from '../src/campaign/types';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 
@@ -157,6 +158,28 @@ describe('off and on in a running war', () => {
     expect(g.flags[`wait:${second}`]).toBe(3);
     expect(g.flags[`rowTold:${second}`]).toBe(3);
   });
+
+  // The design director's answer 2 of 00:43Z, 26 November 2026: "Keep the rule's own wait marker. Off acts from the
+  // month it is turned off, and what already happened stays in the save, as everywhere. Two tests: a war never
+  // switched on is the whole save of off; a war switched off mid-war plays by off from that month with its past kept."
+  // The second, a far-side war, is tests/from-wait-switch-war.test.ts.
+  it('a war never switched on is the whole save of off: the setter turned on and off before any row waits leaves the save byte-equal to the untouched war', () => {
+    const war = (): Game => startOpen(createGame(1, 'GER'));
+    const untouched = war(), quick = war(), later = war();
+    // On and off at once; and on for the war's first months, off before any row has waited.
+    expect(setFromWait(quick, true) && setFromWait(quick, false)).toBe(true);
+    expect(setFromWait(later, true)).toBe(true);
+    for (let t = 1; t < 4; t++) { runTurnAI(untouched); runTurnAI(quick); runTurnAI(later); }
+    expect(Object.keys(later.flags).filter((k) => k.startsWith('wait:')).sort()).toEqual(Object.keys(untouched.flags).filter((k) => k.startsWith('wait:')).sort());
+    expect(telFlags(later)).toEqual([]);
+    expect(setFromWait(later, false)).toBe(true);
+    for (let t = 4; t < 7; t++) { runTurnAI(untouched); runTurnAI(quick); runTurnAI(later); }
+    expect(untouched.turn).toBe(7);
+    const text = saveGame(untouched);
+    expect(text).not.toMatch(/fromWait|rowTold|rowAt|rowFront/);
+    expect(saveGame(quick)).toBe(text);
+    expect(saveGame(later)).toBe(text);
+  }, 1800000);
 
   it('with the switch never touched the save holds no new key', () => {
     const { g } = board(false);
