@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 2a7564b7b 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 5c4c3fc79 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -69356,6 +69356,13 @@
   }
   var r23 = (x) => Math.round(x * 100) / 100;
   var convoyField = {};
+  var NUMBER_SAID = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+  var countSaid = (k, one2, many) => `${k <= 10 ? NUMBER_SAID[k] : k} ${k === 1 ? one2 : many}`;
+  function nightSaid(ships) {
+    if (ships === void 0) return "";
+    if (ships === 0) return " On the night you fought, the convoy lost no ships; all of that tonnage went down elsewhere on the route.";
+    return ` On the night you fought, the convoy lost ${countSaid(ships, "ship", "ships")}.`;
+  }
   function convoyMeeting(g2, nat, route) {
     const { zones, raid: raid2, guard, raiders, escorts, G: G5, L: L2, side: side5, Lo } = routeForces(g2, nat, route);
     const hunt2 = /* @__PURE__ */ new Map();
@@ -69591,6 +69598,8 @@
       g2.convoys[route.id] = { turn: g2.turn, raid: raid2, guard, tons, total: (g2.convoys[route.id]?.total ?? 0) + tons, share: route.share * L2, loss: L2, subsLost, escortsLost };
       if (swing !== void 0) g2.convoys[route.id].swing = swing;
       if (night) g2.convoys[route.id].fought = night.clamped ? "clamped" : "field";
+      const mv2 = night?.fought.mv;
+      if (mv2 !== void 0 && Number.isInteger(mv2) && mv2 >= 0) g2.convoys[route.id].nightShips = mv2;
       if (cover3) g2.convoys[route.id].byEscorts = Object.values(byEscorts ?? {}).reduce((a, b) => a + b, 0);
       if (count4) g2.convoys[route.id].count = countRecord(count4, month3?.sunk, side5?.torps, side5?.fired, routeWatched(g2, nat, zones), work2?.met);
       if (cover3 && patrolOn(g2)) {
@@ -69599,8 +69608,9 @@
       }
       if (at4) lookConvoy(g2, nat, route.id, zones, raiders, escorts, at4, tons, cover3 && { cover: cover3, lost: byEscorts ?? {} });
       storyConvoy(g2, raiders, escorts, tons, raid2 > 0);
-      if (tons > 0 && g2.human && (g2.human === nat || atWar(g2, g2.human, nat))) {
-        headline(g2, "info", `${cap10(route.name)}: ${tons.toLocaleString("en-US")} tons of shipping sunk this month${subsLost ? `, ${subsLost} ${subsLost === 1 ? "submarine" : "submarines"} destroyed` : ""}.`, nat, void 0, { arm: "sea", lost: nat });
+      const nightShips = g2.convoys[route.id].nightShips;
+      if (tons > 0 && g2.human && (g2.human === nat || atWar(g2, g2.human, nat) || nightShips !== void 0)) {
+        headline(g2, "info", `${cap10(route.name)}: ${tons.toLocaleString("en-US")} tons of shipping sunk this month${subsLost ? `, ${subsLost} ${subsLost === 1 ? "submarine" : "submarines"} destroyed` : ""}.${nightSaid(nightShips)}`, nat, void 0, { arm: "sea", lost: nat });
       }
     }
   }

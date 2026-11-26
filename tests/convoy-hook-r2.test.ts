@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import stage from '../data/campaign/stage.json';
 import { createGame } from '../src/campaign/game';
-import { CONVOY_BATTLE, NAVY, convoyField, convoyMeeting, convoyRules, convoyWar, navalUpkeep, type ConvoyFought, type ConvoyMeeting } from '../src/campaign/navy';
+import { CONVOY_BATTLE, NAVY, convoyField, convoyMeeting, convoyRules, convoyWar, navalUpkeep, zoneOf, type ConvoyFought, type ConvoyMeeting } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { CONVOY_STAGE } from '../src/campaign/stage';
@@ -119,6 +119,113 @@ describe('a fought night', () => {
     const inNight = new Set([...m.raiders.map((r) => r.id), ...m.escorts.map((e) => e.id)]);
     for (const f of a.fleets) if (!inNight.has(f.id)) expect(ships(b, f.id)).toBe(ships(a, f.id));
   });
+
+  it('W5b: books a fought night\'s own ships on the month as a fact no rule reads', () => {
+    const plain = fight(() => ({ swing: 1.1, ss: {}, dd: {} }));
+    const told = fight(() => ({ swing: 1.1, ss: {}, dd: {}, mv: 3 }));
+    expect(plain.b.convoys.atlantic.nightShips).toBeUndefined();
+    expect(told.b.convoys.atlantic.nightShips).toBe(3);
+    // (record only: every fleet, and the month's own record but for the night's ships, as the same night without them)
+    expect(navies(told.b)).toBe(navies(plain.b));
+    const { nightShips, ...month } = told.b.convoys.atlantic;
+    expect(nightShips).toBe(3);
+    expect(month).toEqual(plain.b.convoys.atlantic);
+    // (a month nobody fought keeps no such figure)
+    expect(told.a.convoys.atlantic.nightShips).toBeUndefined();
+  });
+
+  it('W5b, W5c: the month headline tells the night\'s ships from the month\'s tons as booked, only in a month a night was fought', () => {
+    const head = `${atlantic.name[0].toUpperCase()}${atlantic.name.slice(1)}: `;
+    const said = (night: boolean, mv?: number): string => {
+      const g = seat('UK');
+      const h0 = g.headlines.length;
+      if (night) convoyField.fought = (x) => (x.route === 'atlantic' ? { swing: 1, ss: {}, dd: {}, ...(mv === undefined ? {} : { mv }) } : undefined);
+      navalUpkeep(g, 'UK');
+      convoyField.fought = undefined;
+      const lines = g.headlines.slice(h0).map((h) => h.text).filter((t) => t.startsWith(head) && t.includes('tons of shipping sunk this month'));
+      expect(lines.length).toBe(1);
+      return lines[0];
+    };
+    const tonsOf = (t: string): string => t.slice(head.length).split(' tons')[0];
+    const second = (t: string): string => t.slice(t.indexOf('. On the night you fought'));
+    const none = said(false);
+    expect(none).not.toContain('night you fought');
+    // (a seam that books no ships for the night says nothing of them: release 1's line)
+    expect(said(true)).not.toContain('night you fought');
+    // (the UI director's final lines, W5c (a) and (f), the some-lost one bare (the design director, 13:16Z): the figure is
+    // the first sentence's alone, and no rest is named)
+    const zero = said(true, 0);
+    expect(zero).toMatch(/ tons of shipping sunk this month(, [a-z0-9]+ submarines? destroyed)?\. On the night you fought, the convoy lost no ships; all of that tonnage went down elsewhere on the route\.$/);
+    expect(second(zero)).not.toContain(tonsOf(zero));
+    const one = said(true, 1);
+    expect(one).toMatch(/\. On the night you fought, the convoy lost one ship\.$/);
+    expect(second(one)).not.toContain(tonsOf(one));
+    expect(said(true, 3)).toMatch(/\. On the night you fought, the convoy lost three ships\.$/);
+    expect(said(true, 10)).toMatch(/ the convoy lost ten ships\.$/);
+    expect(said(true, 12)).toMatch(/ the convoy lost 12 ships\.$/);
+    // (nothing of where the night's ships fall in the month's tons, which no rule holds: the design director, 13:16Z)
+    for (const t of [zero, one, said(true, 12)]) expect(t).not.toMatch(/other nights|in all|counted in|among/);
+    // (a seam that hands back no whole count books none, and says nothing of the night)
+    for (const bad of [2.5, -1, Number.NaN]) expect(said(true, bad)).not.toContain('night you fought');
+    // (the month after: no night, no figure, release 1's line)
+    const g = seat('UK');
+    convoyField.fought = (x) => (x.route === 'atlantic' ? { swing: 1, ss: {}, dd: {}, mv: 3 } : undefined);
+    navalUpkeep(g, 'UK');
+    convoyField.fought = undefined;
+    expect(g.convoys.atlantic.nightShips).toBe(3);
+    const h1 = g.headlines.length;
+    navalUpkeep(g, 'UK');
+    expect(g.convoys.atlantic.nightShips).toBeUndefined();
+    expect(g.headlines.slice(h1).some((h) => h.text.includes('night you fought'))).toBe(false);
+  }, 60_000);
+
+  it('W5b: an ally whose escorts fought the night reads it in the month headline too', () => {
+    const g = seat('CAN');
+    const f = g.fleets.find((x) => x.nat === 'CAN' && x.ships.dd > 0)!;
+    f.stance = 'escort'; f.lane = 'atlantic'; f.zone = zoneOf(g, 'natl');
+    const ahead = convoyAhead(g).filter((a) => a.meeting.route === 'atlantic');
+    expect(ahead.length).toBe(1);
+    const played: ConvoyPlayed = new Map(ahead.map((a) => [a.key, { meeting: a.meeting, fought: { swing: 1.1, ss: {}, dd: {}, mv: 3 } }]));
+    const h0 = g.headlines.length;
+    convoyCloseWith(g, played);
+    expect(g.convoys.atlantic.nightShips).toBe(3);
+    const lines = g.headlines.slice(h0).map((h) => h.text).filter((t) => t.includes('night you fought'));
+    expect(lines.length).toBe(1);
+    expect(lines[0]).toMatch(/\. On the night you fought, the convoy lost three ships\.$/);
+  }, 60_000);
+
+  it('W5d 2: the headline\'s first sentence is release 1\'s in every month, its boats destroyed in figures, a night fought or not', () => {
+    const said = (mv?: number): { line: string; subs: number } => {
+      const g = seat('UK');
+      const h0 = g.headlines.length;
+      convoyField.fought = (x) => (x.route === 'atlantic' ? { swing: 1, ss: Object.fromEntries(x.raiders.map((r) => [r.id, run(r.expect)[1]])), dd: {}, ...(mv === undefined ? {} : { mv }) } : undefined);
+      navalUpkeep(g, 'UK');
+      convoyField.fought = undefined;
+      const lines = g.headlines.slice(h0).map((h) => h.text).filter((t) => t.includes('tons of shipping sunk this month'));
+      expect(lines.length).toBe(1);
+      return { line: lines[0], subs: g.convoys.atlantic.subsLost };
+    };
+    const told = said(2), plain = said();
+    // (a count a word could say, so that figures and words would differ)
+    expect(told.subs).toBeGreaterThan(0);
+    expect(told.subs).toBeLessThanOrEqual(10);
+    expect(plain.subs).toBe(told.subs);
+    const k = told.subs, noun = k === 1 ? 'submarine' : 'submarines';
+    expect(told.line.endsWith(`, ${k} ${noun} destroyed. On the night you fought, the convoy lost two ships.`)).toBe(true);
+    expect(plain.line).toContain(`, ${k} ${noun} destroyed.`);
+    expect(plain.line).not.toContain('night you fought');
+    // (no night at all, the switch on or off: the same figures)
+    for (const on of [true, false]) {
+      const g = seat('UK', 1, on);
+      const h0 = g.headlines.length;
+      navalUpkeep(g, 'UK');
+      const j = g.convoys.atlantic.subsLost;
+      const lines = g.headlines.slice(h0).map((h) => h.text).filter((t) => t.includes('tons of shipping sunk this month'));
+      expect(lines.length).toBe(1);
+      expect(j).toBeGreaterThan(0);
+      expect(lines[0].endsWith(` tons of shipping sunk this month, ${j} ${j === 1 ? 'submarine' : 'submarines'} destroyed.`)).toBe(true);
+    }
+  }, 60_000);
 
   it('holds a count outside its run into it, and then reads as a bare close result', () => {
     const { b, m } = fight((x) => ({ swing: 1.6, ss: Object.fromEntries(x.raiders.map((r) => [r.id, 99])), dd: {} }));

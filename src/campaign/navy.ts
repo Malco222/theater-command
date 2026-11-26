@@ -4842,14 +4842,31 @@ function routeWatched(g: Game, nat: string, zones: number[]): number | undefined
 }
 const r2 = (x: number): number => Math.round(x * 100) / 100;
 
-/** A night the player fought, as the rules take it: the swing, and boats and destroyers lost by fleet id. A fleet left out rolls its dice. */
-export interface ConvoyFought { swing: number; ss: Record<number, number>; dd: Record<number, number> }
+/** A night the player fought, as the rules take it: the swing, and boats and destroyers lost by fleet id. A fleet left out rolls its dice. 'mv', the convoy's ships the night sank as fought (a whole count): booked on the route's month as a fact the month's headline reads (W5b; the design director, 26 November 12:04Z, Q1), and read by no rule. */
+export interface ConvoyFought { swing: number; ss: Record<number, number>; dd: Record<number, number>; mv?: number }
 
 /**
  * The seam: set by the screen around the month's close (convoyhand.ts), unset otherwise. Asked once a route-month,
  * while the convoy battle is on; undefined leaves the month to the staff's dice.
  */
 export const convoyField: { fought?: (m: ConvoyMeeting) => ConvoyFought | undefined } = {};
+
+const NUMBER_SAID = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+/** A count in words to ten, figures from 11 (the UI director, W5b): 'one ship', 'three ships', '12 ships'. */
+const countSaid = (k: number, one: string, many: string): string => `${k <= 10 ? NUMBER_SAID[k] : k} ${k === 1 ? one : many}`;
+/**
+ * The month headline's second sentence where the player fought a night on the route (W5b; the design director, 26
+ * November 12:04Z, Q2 and Q3): the night's own ships sunk, as booked (nightShips), and nothing of where they fall in the
+ * month's tons, which no rule holds (13:16Z: what the player reads is true by rule, so the bare count). Where the night
+ * lost none, all of the month's tons went down elsewhere on the route, true by fact; 'elsewhere', for the tons include
+ * raiders that are not boats. Empty in a month with no night fought, so the headline is release 1's. The UI director's
+ * final lines (W5c (a), (f), 26 November 12:34Z), the some-lost one bare by the design director's 13:16Z ruling.
+ */
+function nightSaid(ships: number | undefined): string {
+  if (ships === undefined) return '';
+  if (ships === 0) return ' On the night you fought, the convoy lost no ships; all of that tonnage went down elsewhere on the route.';
+  return ` On the night you fought, the convoy lost ${countSaid(ships, 'ship', 'ships')}.`;
+}
 
 /** The nights booked into one nation's month, by route: what the field gave, which fleets it covers, and whether any of it had to be held into the dice's run. */
 export type ConvoyNights = Map<string, { fought: ConvoyFought; ss: Set<number>; dd: Set<number>; clamped: boolean; expect?: Map<number, number> }>;
@@ -5208,6 +5225,10 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>,
     // (Record only, and only with the convoy battle on: the month's swing, and whether a fought night set it.)
     if (swing !== undefined) g.convoys[route.id].swing = swing;
     if (night) g.convoys[route.id].fought = night.clamped ? 'clamped' : 'field';
+    // (Record only, with a night fought: its own ships sunk, as fought, a whole count; the month's headline tells it
+    // apart (W5b, Q1). A seam that hands back anything else books nothing of it.)
+    const mv = night?.fought.mv;
+    if (mv !== undefined && Number.isInteger(mv) && mv >= 0) g.convoys[route.id].nightShips = mv;
     // (Record only, and only with Units decide: the boats the convoy's escorts sank, of subsLost.)
     if (cover) g.convoys[route.id].byEscorts = Object.values(byEscorts ?? {}).reduce((a, b) => a + b, 0);
     // (Record only, with Units decide and the route's count laid: the convoys' side of the month, as the boats stood after the hunt.)
@@ -5216,9 +5237,14 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>,
     if (cover && patrolOn(g)) { const ps = g.patrolSunk?.[nat]; g.convoys[route.id].byAircraft = ps?.turn === g.turn ? zones.reduce((a, z) => a + (ps.seas[z] ?? 0), 0) : 0; }
     if (at) lookConvoy(g, nat, route.id, zones, raiders, escorts, at, tons, cover && { cover, lost: byEscorts ?? {} });
     storyConvoy(g, raiders, escorts, tons, raid > 0);
-    // The monthly figures are news only to the nations fighting over the route.
-    if (tons > 0 && g.human && (g.human === nat || atWar(g, g.human, nat))) {
-      headline(g, 'info', `${cap(route.name)}: ${tons.toLocaleString('en-US')} tons of shipping sunk this month${subsLost ? `, ${subsLost} ${subsLost === 1 ? 'submarine' : 'submarines'} destroyed` : ''}.`, nat, undefined, { arm: 'sea', lost: nat });
+    // The monthly figures are news only to the nations fighting over the route, and to a player who fought a night on it
+    // (an ally's escorts in its guard: W5b, Q3, the review of 26 November). A month that books no tons has no headline,
+    // a night fought or not.
+    // (The first sentence is release 1's in every month, a night fought or not, figures and all: the UI director's W5d 2,
+    // withdrawing W5c (b), for the design director's Q3 and the saves.)
+    const nightShips = g.convoys[route.id].nightShips;
+    if (tons > 0 && g.human && (g.human === nat || atWar(g, g.human, nat) || nightShips !== undefined)) {
+      headline(g, 'info', `${cap(route.name)}: ${tons.toLocaleString('en-US')} tons of shipping sunk this month${subsLost ? `, ${subsLost} ${subsLost === 1 ? 'submarine' : 'submarines'} destroyed` : ''}.${nightSaid(nightShips)}`, nat, undefined, { arm: 'sea', lost: nat });
     }
   }
 }
