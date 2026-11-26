@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <vector>
 
 /**
@@ -210,6 +211,7 @@ namespace LandScape
 				// Solomons' and Burma's laterite red)
 				bMainland = F.Lon < 106.0 && F.Lat > 4.0;
 				bPlumeTrial = F.Tried("kunai");
+				bCanopy = !bIsland && F.Tried("canopy");
 				bSand = bIsland && F.Tried("islandsand");
 				bClay = F.Lon > 140.0 && F.Lon < 151.5 && F.Lat < -2.0 && F.Lat > -11.0;
 				// The dry season (the kunai straw, the tracks hard): south of the line May to October, north of it
@@ -237,6 +239,8 @@ namespace LandScape
 							Grid[(static_cast<size_t>(J) * static_cast<size_t>(GNX) + static_cast<size_t>(I)) * Chans + static_cast<size_t>(C)] = static_cast<float>(Chan(GX0 + I * GStep, GY0 + J * GStep, C));
 				}
 			Look Which() const override { return bIsland ? Look::Island : Look::Jungle; }
+			// (on trial "canopy" the jungle a second step down the budget's ladder: draw distances in the game only)
+			int DrawStep() const override { return bCanopy ? 2 : Region::DrawStep(); }
 
 			// ------------------------------------------------------------------ noise with no lattice showing
 
@@ -302,6 +306,42 @@ namespace LandScape
 			}
 			/** The kunai's thin spots (0 to 1), its trodden paths (0 to 1, a metre wide), its burns (0 to 1, black ash). */
 			double ThinAt(double X, double Y) const { return Smooth(-0.38, -0.55, Read(X, Y, 1)); }
+			/** On trial "canopy": the woods gathered into clumps (1 a clump's heart, 0.25-0.75 its rim, under 0.25 a
+			 * clearing: kClearing), from the grid's 62 m channel 6, the broad breakup that already lightens the floor where
+			 * it runs high (Breakup), so the clearings fall where the floor is lighter; no new channel, no draw. Patches 25-60
+			 * m across. Held at full heart past 70 m out (the band's wall, seen from afar, closes the view) and in the woods'
+			 * outer 12 m, easing to free at 25 m in, so no clearing opens within some 20 m of the woods' edge: a small wood
+			 * keeps its body, never a ring of trees round a hole, and its face stands whole (its roof thinned there instead:
+			 * EdgeFace). The thresholds from a quantile count of the woods' ground within 70 m of the field on a 2 m raster
+			 * (Panama City; San Jose's the same field): kClumpLo at the 44th centile of -channel 6, kClumpHi at the 72nd, so the
+			 * woods there, with the holds, are 58% heart (0.75 and over), 12% rim and 30% clearing (under 0.25); clearings
+			 * median 28 m across, 0.4% of their area in slivers under 9 m (25 Nov 2026). */
+			double ClumpAt(double X, double Y, double Edge) const
+			{
+				const double Out = Outside(X, Y);
+				if (Out > 70.0) return 1.0;
+				double H = Smooth(kClumpLo, kClumpHi, -Read(X, Y, 6));
+				H = std::max(H, Smooth(40.0, 70.0, Out));
+				return std::max(H, Smooth(25.0, 12.0, Edge));
+			}
+			/** On trial "canopy": islands of trees in the open kunai (0 to 1; an island where it is 0.5 or more), the same
+			 * channel's far tail on the heart's side, its edge sharp (Isle 0.5 at the 95th centile of the open kunai's ground:
+			 * 4.9% of it, some 230 islands, median 26 m across); its outer tail (0.02 and more) a few metres round each. */
+			double IsleAt(double X, double Y) const { return Smooth(kIsleLo, kIsleHi, -Read(X, Y, 6)); }
+			/** On trial "canopy": a yard's or a garden's groves of bananas and palms (0 to 1), the grid's 62 m channel 6 (the
+			 * woods' clumps' own, so a grove is 25-60 m across, not the spacing of two palms), a grove (0.5 and more) on 35% of
+			 * the yards' ground and the mean kGroveMean. */
+			double YardGrove(double X, double Y) const { return Smooth(kYardLo, kYardHi, -Read(X, Y, 6)); }
+			/** On trial "canopy": the floor's shade (and its clutter's) under the canopy, 1 in a clearing to kCanopyShade / kLitter
+			 * at a heart (a ramp some 12 m wide over the rim), so a heart's floor is kCanopyShade of a clearing's; a yard's under
+			 * its groves to kYardShade. 1 elsewhere and off the trial. */
+			double CanopyShade(const Spot& S) const
+			{
+				if (!bCanopy) return 1.0;
+				if (S.Kind == KWoods) return Eaten(S.X, S.Y) ? 1.0 : Lerp(1.0, kCanopyShade / kLitter, Smooth(0.25, 0.75, ClumpAt(S.X, S.Y, S.Edge)));
+				if (S.Kind == KVillage || S.Kind == KYard) return Lerp(1.0, kYardShade, YardGrove(S.X, S.Y));
+				return 1.0;
+			}
 			double TrodAt(double X, double Y) const
 			{
 				const double Mask = Smooth(-0.15, 0.0, Read(X, Y, 4));
@@ -422,6 +462,8 @@ namespace LandScape
 				T = Mixed(T, Mixed(Rgb(118, 110, 64), Red, Clamp01(0.4 + 0.4 * S.N2)), 0.65 * ThinAt(S.X, S.Y));
 				T = Mixed(T, Mixed(Rgb(150, 104, 70), Rgb(146, 134, 92), Clamp01(0.4 + 0.4 * S.N1)), 0.85 * TrodAt(S.X, S.Y));
 				T = Mixed(T, Mixed(Rgb(38, 36, 33), Rgb(70, 67, 60), Clamp01(0.35 + 0.5 * S.N2)), BurnAt(S.X, S.Y));
+				// (on trial "canopy" the shade under an island of trees in it)
+				if (bCanopy) T = Varied(T, Lerp(1.0, kGroveShade, Smooth(0.2, 0.7, IsleAt(S.X, S.Y))), 0.0);
 				return Varied(T, 1.0 + 0.04 * S.Broad, 0.01);
 			}
 
@@ -461,7 +503,9 @@ namespace LandScape
 					// a swept bare-earth plaza round the houses, gardens and grass between them
 					const Tone Swept = bClay ? Rgb(170, 138, 92) : Rgb(170, 116, 78), Garden_ = Rgb(108, 122, 54);
 					const double Bare = S.bNear ? 0.9 : Smooth(-0.2, 0.45, S.N1);
-					return Varied(Breakup(Mixed(Garden_, Swept, Bare), S.X, S.Y, 0.7), 1.0, 0.02);
+					const Tone Yard = Varied(Breakup(Mixed(Garden_, Swept, Bare), S.X, S.Y, 0.7), 1.0, 0.02);
+					// (on trial "canopy" the shade of its groves of bananas and palms on it)
+					return bCanopy ? Varied(Yard, CanopyShade(S), 0.0) : Yard;
 				}
 				case KWater: return Varied(Rgb(108, 100, 70), 1.0 + 0.04 * S.N1, 0.0); // (brown-green river water)
 				case KMarsh: return Varied(Mixed(Rgb(56, 48, 38), Rgb(72, 84, 42), 0.4 + 0.4 * S.N1), 1.0 + 0.06 * S.N2, 0.0);
@@ -475,7 +519,11 @@ namespace LandScape
 					const double Fine = Read(S.X, S.Y, 5);
 					T = Mixed(T, Damp, 0.35 * Smooth(0.1, 0.5, -Fine));
 					T = Mixed(T, Moss, 0.35 * Smooth(0.15, 0.55, Fine));
-					return Varied(Breakup(T, S.X, S.Y, 0.8), 1.0 + 0.05 * S.Broad, 0.02);
+					const Tone Floor = Varied(Breakup(T, S.X, S.Y, 0.8), 1.0 + 0.05 * S.Broad, 0.02);
+					if (!bCanopy) return Floor;
+					// (on trial "canopy": a clearing's floor the kunai's, the litter dark in the shade under a clump's heart)
+					const double Hc = ClumpAt(S.X, S.Y, S.Edge);
+					return Varied(Mixed(Floor, KunaiGround(S), Smooth(0.35, 0.15, Hc)), CanopyShade(S), 0.0);
 				}
 				default: break;
 				}
@@ -685,9 +733,13 @@ namespace LandScape
 				case KWoods:
 				{
 					if (Eaten(S.X, S.Y)) return KunaiGrow(S, Pick);
+					// (on trial "canopy": a clearing the kunai's, the ferns thinner in a clump's dark heart)
+					const double Hc = bCanopy ? ClumpAt(S.X, S.Y, S.Edge) : 1.0;
+					if (bCanopy && Hc < kClearing) return KunaiGrow(S, Pick);
+					const double Fern = bCanopy ? 1.0 - 0.4 * Smooth(0.5, 0.9, Hc) : 1.0;
 					// the floor: ferns and gingers, saplings and rattan, leaf litter thick over it; a wall of it at the forest's edge
 					const double Edge = Smooth(12.0, 3.0, S.Edge);
-					if (Pick < 0.4) return Grown{ B::Clut1, 0.95 + 0.6 * Edge };
+					if (Pick < 0.4) return Grown{ B::Clut1, (0.95 + 0.6 * Edge) * Fern };
 					if (Pick < 0.54) return Grown{ B::Clut2, 0.45 + 0.4 * Edge };
 					if (Pick < 0.96) return Grown{ B::Clut3, 1.0 };
 					return Grown{ B::Stone, 0.25 };
@@ -731,6 +783,8 @@ namespace LandScape
 				using B = LandField::Base;
 				const int C = S.Crop >= 0 ? S.Crop : -1;
 				const bool bBurnt = !bIsland && S.Kind != KWoods && S.Kind != KLane && BurnAt(S.X, S.Y) > 0.5;
+				// (on trial "canopy" the floor's growth as dark as the floor it stands on, so no fern glows in the shade: 1 off it)
+				const double Shade = CanopyShade(S);
 				auto Size = [&P](double Sc, double Sz) {
 					P.Scale = static_cast<float>(Sc);
 					P.ScaleZ = static_cast<float>(Sz);
@@ -747,11 +801,16 @@ namespace LandScape
 					const double Straw = Clamp01(Dry + 0.35 * (U6 - 0.5));
 					P.Tint = S.Kind == KMarsh ? Tint(0.82, 1.0, 0.86) : Tint(0.97 + 0.08 * Straw, 1.0, 0.9 + 0.08 * U7);
 					// (on trial, one clump in six its plumed twin, drawn in Poppies' slot, which the jungle never lays: KunaiClump)
-					if (bPlumeTrial)
+					// (on trial "canopy", a fifth of all the clumps, 0.24 of the five in six that would take no plume, drawn only
+					// within 30 m: the same clump in Flowers' slot, which the jungle never lays; with "kunai" or without it, the
+					// same clumps: code-cost's KunaiNear)
+					if (bPlumeTrial || bCanopy)
 					{
 						const uint64_t QX = static_cast<uint64_t>(static_cast<int64_t>(std::lround(P.X * 4.0f)));
 						const uint64_t QY = static_cast<uint64_t>(static_cast<int64_t>(std::lround(P.Y * 4.0f)));
-						if (Unit(Hash(Seed ^ 0x6B1Eull, QX, QY)) < 1.0 / 6.0) P.Kind = B::Poppies;
+						const bool bPlume = Unit(Hash(Seed ^ 0x6B1Eull, QX, QY)) < 1.0 / 6.0;
+						if (bPlume && bPlumeTrial) P.Kind = B::Poppies;
+						else if (!bPlume && bCanopy && Unit(Hash(Seed ^ 0x7417ull, QX, QY)) < 0.24) P.Kind = B::Flowers;
 					}
 					return true;
 				}
@@ -759,21 +818,21 @@ namespace LandScape
 				{
 					if (bIsland) Size(0.9 + 0.6 * U4, 0.32 + 0.22 * U5); // (an island's creepers, low)
 					else Size(0.65 + 0.75 * U4, 0.7 + 0.7 * U5);
-					const double L = 0.8 + 0.4 * U6;
+					const double L = (0.8 + 0.4 * U6) * Shade;
 					P.Tint = bIsland ? Tint(1.05 * L, 1.1 * L, 0.85 * L) : Tint(0.95 * L, L, 0.9 * L);
 					return true;
 				}
 				case B::Clut2:
 				{
 					Size(0.8 + 0.4 * U4, 0.65 + 0.8 * U5);
-					const double L = 0.85 + 0.3 * U6;
+					const double L = (0.85 + 0.3 * U6) * Shade;
 					P.Tint = Tint(L, L, L * (0.9 + 0.1 * U7));
 					return true;
 				}
 				case B::Clut3:
 				{
 					Size(0.8 + 0.7 * U4, 1.0);
-					const double L = 0.8 + 0.4 * U6;
+					const double L = (0.8 + 0.4 * U6) * Shade;
 					P.Tint = Tint(L * (1.0 + 0.1 * U7), L, L * 0.95);
 					return true;
 				}
@@ -975,6 +1034,8 @@ namespace LandScape
 				const double Lump[5][5] = { { 0.0, 0.0, 0.9, 2.1, 1.0 }, { 0.9, 0.5, 2.0, 1.4, 1.1 }, { -0.8, -0.6, 2.1, 1.4, 1.2 }, { -0.2, 0.4, 3.3, 1.3, 1.0 }, { 0.6, -0.4, 3.8, 1.0, 0.8 } };
 				for (int K = 0; K < 5; ++K)
 					Blob(F, V3{ Lump[K][0], Lump[K][1], Lump[K][2] }, Lump[K][3], Lump[K][3], Lump[K][4], 4, 6, Hash(Seed, 0x7C1E, static_cast<uint64_t>(K)), Mixed(Lit, Rgb(96, 124, 56), 0.15 * K), Under);
+				// (on trial "canopy" its middle level its own far one, not the kit file's boulder: the grey boulders seen from 60 m)
+				if (bCanopy) M.Mid = M.Far;
 			}
 
 			/** The undergrowth's far level, the kit's a stub: five low lumps of leaves spread unevenly, as wide as its near. */
@@ -1091,6 +1152,7 @@ namespace LandScape
 				const double Lump[6][6] = { { -3.4, 0.0, 3.0, 3.6, 1.1, 3.2 }, { 3.2, -0.1, 3.6, 3.6, 1.1, 3.6 }, { -0.2, -0.2, 8.2, 4.4, 1.1, 3.4 },
 											{ -3.8, -0.2, 12.6, 3.2, 1.0, 3.0 }, { 3.6, -0.2, 11.8, 3.4, 1.0, 3.4 }, { 0.0, 0.0, 3.4, 2.6, 1.2, 2.8 } };
 				for (int K = 0; K < 6; ++K) Blob(F, V3{ Lump[K][0], Lump[K][1], Lump[K][2] }, Lump[K][3], Lump[K][4], Lump[K][5], 4, 6, Hash(Seed, 0xC17C, static_cast<uint64_t>(K)), Mixed(Lit, Rgb(92, 120, 54), 0.1 * K), Under);
+				if (bCanopy) M.Mid = M.Far; // (as the thicket's)
 			}
 
 			/** A fallen trunk rotting on the forest floor, along x, 6 m long and half sunk: mossy on its top, a broken branch or
@@ -1329,6 +1391,7 @@ namespace LandScape
 					M.Paint = 1;
 					M.FarFrom = K == KBamboo ? 80.0f : 60.0f;
 					Sight(0.55f, 0.45f, 0.8f, 0.2f);
+					if (bCanopy && K == KBanana) M.Class = LandField::BaseMesh::Draw::Shrub; // (on trial "canopy": culled and its shadow cut at the shrubs')
 					break;
 				case KUnder:
 					if (bRead) UnderFar(M);
@@ -1349,6 +1412,7 @@ namespace LandScape
 					M.Paint = 1;
 					M.FarFrom = 70.0f;
 					Sight(0.5f, 0.5f, 0.92f, 0.0f);
+					if (bCanopy) M.Class = LandField::BaseMesh::Draw::Shrub; // (on trial "canopy", as the banana)
 					break;
 				case KGrass:
 				if (bIsland)
@@ -1359,6 +1423,7 @@ namespace LandScape
 					Sight(0.5f, 0.5f, 0.85f, 0.0f);
 					break;
 				}
+				if (bCanopy) M.Class = LandField::BaseMesh::Draw::Shrub; // (on trial "canopy" the kunai's tufts, as the banana)
 				[[fallthrough]];
 				case KReeds:
 				M.Paint = 2;
@@ -1458,6 +1523,13 @@ namespace LandScape
 
 			bool OwnClutter(LandField::Base B, LandField::BaseMesh& M) const override
 			{
+				// (on trial "canopy" a fifth of the kunai's clumps, drawn only within 30 m, in Flowers' slot: the clump as Clut0's)
+				if (B == LandField::Base::Flowers && bCanopy)
+				{
+					KunaiClump(M, !bPlumeTrial);
+					M.FarFrom = 30.0f;
+					return true;
+				}
 				if (B != LandField::Base::Poppies || !bPlumeTrial) return false;
 				KunaiClump(M, true);
 				return true;
@@ -1742,6 +1814,25 @@ namespace LandScape
 							const double Sz = R.Range(SzLo, SzHi);
 							Put(H, Kind, AX, AY, Room, Yw, Sc, Sz, Tn);
 						};
+						// (on trial "canopy" its new plants from a second stream of the cell's own, made only on the trial, so the
+						// first stream's draws stay where they were: R2's own place in the cell, and a thing stood there)
+						std::optional<Rng> R2;
+						if (bCanopy) R2.emplace(Hash(Key0 ^ 0xCA90ull, static_cast<uint64_t>(I), static_cast<uint64_t>(J)));
+						double QX = X, QY = Y;
+						auto Elsewhere2 = [&R2, &QX, &QY, X0, Y0]() {
+							const double A = R2->Next();
+							const double Bq = R2->Next();
+							QX = X0 + A * Cell;
+							QY = Y0 + Bq * Cell;
+						};
+						auto Chance2 = [&R2](double P) { return R2->Next() < P; };
+						auto Stand2 = [&H, &R2, &Leaf](B Kind, double AX, double AY, double Room, double ScLo, double ScHi, double SzLo, double SzHi, double LLo, double LHi, double Warm) {
+							const double Yw = R2->Range(0.0, 2.0 * Pi);
+							const double Sc = R2->Range(ScLo, ScHi);
+							const double Sz = R2->Range(SzLo, SzHi);
+							const double Lf = R2->Range(LLo, LHi);
+							Put(H, Kind, AX, AY, Room, Yw, Sc, Sz, Leaf(Lf, Warm));
+						};
 						if (bIsland)
 						{
 							const double W = Shore(X, Y);
@@ -1837,14 +1928,57 @@ namespace LandScape
 						}
 						// ---- the jungle
 						const double Warm = R.Range(-0.04, 0.06);
+						// (on trial "canopy" a yard's and a garden's bananas and palms gathered into groves, as many in all: 1 off it)
+						const double FGrove = bCanopy ? 0.15 + 0.85 * YardGrove(X, Y) / kGroveMean : 1.0;
+						// (on trial "canopy", from R2: an island of trees in the kunai, its core a few canopy trees over a
+						// sub-canopy and undergrowth, its rim thickets and bananas; a clearing's bananas, young palms and
+						// saplings, thicker toward its rim)
+						auto Island = [&](double Isle) {
+							const double Core = Smooth(0.6, 0.95, Isle), Rim = 1.0 - Core; // (Isle 0.5 and more)
+							Elsewhere2();
+							const double U2 = R2->Next();
+							if (U2 < IsleGiant * Core) Stand2(B::Kit1, QX, QY, 1.6, 0.8, 1.05, 0.9, 1.15, 0.85, 1.05, Warm);
+							else if (U2 < (IsleGiant + IsleCanopy) * Core) Stand2(B::Kit0, QX, QY, 1.0, 1.0, 1.5, 1.0, 1.4, 0.82, 1.05, Warm);
+							Elsewhere2();
+							if (Chance2(IsleSub)) Stand2(B::Kit0, QX, QY, 0.5, 0.5, 0.9, 0.5, 0.95, 0.85, 1.1, 0.0);
+							Elsewhere2();
+							if (Chance2(IsleThicket * Rim)) Stand2(B::Kit15, QX, QY, 0.5, 0.8, 1.3, 0.8, 1.35, 0.85, 1.12, Warm);
+							Elsewhere2();
+							if (Chance2(IsleUnder)) Stand2(B::Kit7, QX, QY, 0.5, 1.2, 2.2, 1.2, 2.4, 0.85, 1.1, 0.0);
+							Elsewhere2();
+							if (Chance2(IsleBanana * Rim)) Stand2(B::Kit5, QX, QY, 0.5, 0.8, 1.3, 0.85, 1.5, 0.85, 1.05, 0.0);
+						};
+						auto Glade = [&](double Hc) {
+							const double Margin = 0.3 + 0.7 * Smooth(0.05, kClearing, Hc);
+							Elsewhere2();
+							if (Chance2(GladeBanana * Margin)) Stand2(B::Kit5, QX, QY, 0.5, 0.8, 1.3, 0.85, 1.5, 0.85, 1.05, 0.0);
+							Elsewhere2();
+							if (Chance2(GladeYoung * Margin)) Stand2(B::Kit4, QX, QY, 0.5, 0.4, 0.7, 0.45, 0.8, 0.85, 1.0, 0.0);
+							Elsewhere2();
+							if (Chance2(GladeUnder * Margin)) Stand2(B::Kit7, QX, QY, 0.5, 1.0, 1.8, 1.0, 2.0, 0.85, 1.1, 0.0);
+							Elsewhere2();
+							if (Chance2(GladeSapling * Margin)) Stand2(B::Kit0, QX, QY, 0.5, 0.3, 0.5, 0.3, 0.55, 0.85, 1.1, 0.0);
+							// (the rim's skirt run on a few metres into the clearing, so the clump meets it with leaves, not bare boles)
+							const double Skirt = Smooth(0.12, kClearing, Hc);
+							Elsewhere2();
+							if (Chance2(SkirtThicket * Skirt)) Stand2(B::Kit15, QX, QY, 0.5, 0.8, 1.3, 0.8, 1.35, 0.85, 1.12, Warm);
+							Elsewhere2();
+							if (Chance2(SkirtUnder * Skirt)) Stand2(B::Kit7, QX, QY, 0.5, 1.2, 2.2, 1.2, 2.4, 0.85, 1.1, 0.0);
+						};
 						// the kunai: clumps of it standing over the sea of grass in patches, none on its paths, its burns
 						// or where it thins; now and then a clump of trees and undergrowth with a tree in it, or a wild palm
-						auto KunaiHere = [&]() {
+						auto KunaiHere = [&](double FClear) {
 							if (BurnAt(X, Y) > 0.5) return;
+							// (on trial "canopy": islands of trees standing in it, the lone clump gone, a wild palm only on an
+							// island's fringe, so no pole stands alone on the plain; in a woods' clearing the tufts FClear of the
+							// plain's; each factor 1 off the trial)
+							const double Isle = bCanopy ? IsleAt(X, Y) : 0.0;
+							const double FTuft = bCanopy ? 1.0 - Isle : 1.0, FLone = bCanopy ? 0.0 : 1.0;
+							const double FPalm = bCanopy ? (Isle >= 0.02 ? 1.5 : 0.0) : 1.0;
 							const double Clumps = Organic(X, Y, 24.0, Seed ^ 0xC14);
-							const double Want = (Clumps > -0.05 ? 0.85 : 0.25) * (1.0 - ThinAt(X, Y)) * (1.0 - TrodAt(X, Y));
+							const double Want = (Clumps > -0.05 ? 0.85 : 0.25) * (1.0 - ThinAt(X, Y)) * (1.0 - TrodAt(X, Y)) * FTuft * FClear;
 							if (R.Next() < Want) Tuft(B::Kit6, X, Y, 0.6, 1.2, 1.8, 0.4, 0.56, Tint(1.15 + 0.08 * Dry, 0.95, 1.0)); // (tan-green, not lime, from above)
-							if (R.Next() < 0.008)
+							if (R.Next() < 0.008 * FLone)
 							{
 								Stand(B::Kit0, X, Y, 0.8, 0.55, 0.95, 0.6, 1.0, 0.85, 1.12, Warm);
 								for (int K = 0; K < 4; ++K)
@@ -1855,18 +1989,20 @@ namespace LandScape
 								}
 							}
 							Elsewhere();
-							if (R.Next() < 0.01) Stand(B::Kit2, PX, PY, 0.5, 0.85, 1.1, 0.8, 1.1, 0.9, 1.1, 0.0);
+							if (R.Next() < 0.01 * FPalm) Stand(B::Kit2, PX, PY, 0.5, 0.85, 1.1, 0.8, 1.1, 0.9, 1.1, 0.0);
+							if (bCanopy && Isle >= 0.5) Island(Isle);
 						};
 						switch (S.Kind)
 						{
 						case KVillage:
 						case KYard:
-							// bananas and young palms round the houses, an old palm or two
-							if (R.Next() < 0.35) Stand(B::Kit5, X, Y, 0.6, 0.8, 1.25, 0.8, 1.3, 0.85, 1.1, 0.0);
+							// bananas and young palms round the houses, an old palm or two (on trial "canopy" gathered into groves,
+							// about as many in all)
+							if (R.Next() < 0.35 * FGrove) Stand(B::Kit5, X, Y, 0.6, 0.8, 1.25, 0.8, 1.3, 0.85, 1.1, 0.0);
 							Elsewhere();
-							if (R.Next() < 0.12) Stand(B::Kit4, PX, PY, 0.5, 0.8, 1.1, 0.8, 1.15, 0.9, 1.1, 0.0);
+							if (R.Next() < 0.12 * FGrove) Stand(B::Kit4, PX, PY, 0.5, 0.8, 1.1, 0.8, 1.15, 0.9, 1.1, 0.0);
 							Elsewhere();
-							if (R.Next() < 0.06) Stand(B::Kit2, PX, PY, 0.5, 0.85, 1.1, 0.85, 1.15, 0.9, 1.1, 0.0);
+							if (R.Next() < 0.06 * FGrove) Stand(B::Kit2, PX, PY, 0.5, 0.85, 1.1, 0.85, 1.15, 0.9, 1.1, 0.0);
 							continue;
 						case KMarsh:
 							for (int K = 0; K < 2; ++K)
@@ -1881,22 +2017,47 @@ namespace LandScape
 						{
 							if (Eaten(X, Y))
 							{
-								KunaiHere();
+								KunaiHere(1.0);
 								continue;
 							}
 							// the rainforest: one roof of big crowns 21-28 m up, merging, with the emergent giants standing
 							// above it (34-42 m); slim sub-canopy trees, bananas and young palms; at its edge a curtain of
 							// climbers from the canopy to the ground before a wall of thickets
 							const bool bEdge = S.Edge < 10.0, bDeep = Outside(X, Y) > 70.0;
+							// (on trial "canopy" the woods in clumps: a clearing the kunai's, with bananas and young palms; in a
+							// clump's heart more and bigger canopy trees, their crowns overlapping and darker, little under them;
+							// on its rim a skirt of thickets and undergrowth and a middle storey. Every factor is 1 off the trial,
+							// and every draw of R stays where it was: only what it is weighed against changes)
+							const double Hc = bCanopy ? ClumpAt(X, Y, S.Edge) : 1.0;
+							if (bCanopy && Hc < kClearing)
+							{
+								KunaiHere(GladeTuft);
+								Glade(Hc);
+								continue;
+							}
+							const double Hh = bCanopy ? Smooth(0.5, 0.9, Hc) : 1.0; // (1 a heart, 0 a rim)
+							// (the woods' face, its outer 22 m or so, held whole by ClumpAt, its roof a little thinner than a heart's:
+							// EdgeFace's crowns in the outer 10 m, EdgeBack's behind them; its middle storey a rim's)
+							const double Face = bCanopy && !bDeep ? Smooth(28.0, 22.0, S.Edge) : 0.0;
+							const double Hr = bCanopy ? std::min(Hh, Smooth(12.0, 25.0, S.Edge)) : 1.0;
+							const double Roof = Lerp(EdgeFace, EdgeBack, Smooth(10.0, 14.0, S.Edge));
+							const double FGiant = bCanopy ? Lerp(GiantRim, GiantHeart, Hh) / 0.08 : 1.0;
+							const double FCanopy = bCanopy ? Lerp(Lerp(GiantRim + CanopyRim, (bDeep ? GiantHeart + CanopyDeep : GiantHeart + CanopyHeart), Hh), Roof, Face) / 0.48 : 1.0;
+							const double FScLo = bCanopy ? Lerp(1.0, ScLoHeart / 1.6, Hh) : 1.0, FScHi = bCanopy ? Lerp(1.0, ScHiHeart / 2.1, Hh) : 1.0;
+							const double FSzLo = bCanopy ? Lerp(1.0, SzLoHeart / 1.3, Hh) : 1.0, FSzHi = bCanopy ? Lerp(1.0, SzHiHeart / 1.7, Hh) : 1.0;
+							const double FLLo = bCanopy ? Lerp(1.0, LeafLoHeart / 0.85, Hh) : 1.0, FLHi = bCanopy ? Lerp(1.0, LeafHiHeart / 1.12, Hh) : 1.0;
 							const double U = R.Next();
-							if (U < 0.08) Stand(B::Kit1, X, Y, 1.6, 0.95, 1.25, 1.05, 1.3, 0.85, 1.12, Warm);
-							else if (U < 0.48) Stand(B::Kit0, X, Y, 1.0, 1.6, 2.1, 1.3, 1.7, 0.85, 1.12, Warm);
+							if (U < 0.08 * FGiant) Stand(B::Kit1, X, Y, 1.6, 0.95, 1.25, 1.05, 1.3, 0.85 * FLLo, 1.12 * FLHi, Warm);
+							else if (U < 0.48 * FCanopy) Stand(B::Kit0, X, Y, 1.0, 1.6 * FScLo, 2.1 * FScHi, 1.3 * FSzLo, 1.7 * FSzHi, 0.85 * FLLo, 1.12 * FLHi, Warm);
 							// (deep in the band, seen only from afar: the canopy and its sub-canopy alone)
 							Elsewhere();
-							if (R.Next() < (bEdge ? 1.0 : bDeep ? 0.35 : 0.75))
+							const double FSub = !bCanopy || bEdge ? 1.0 : bDeep ? SubDeep / 0.35 : Lerp(SubRim, SubHeart, Hr) / 0.75;
+							const double FSubSc = bCanopy && !bEdge ? Lerp(1.0 / 0.42 * 0.6, 1.0, Hr) : 1.0, FSubScHi = bCanopy && !bEdge ? Lerp(1.0 / 0.85, 1.0, Hr) : 1.0;
+							const double FSubSz = bCanopy && !bEdge ? Lerp(0.6 / 0.45, 1.0, Hr) : 1.0, FSubSzHi = bCanopy && !bEdge ? Lerp(1.0 / 0.95, 1.0, Hr) : 1.0;
+							if (R.Next() < (bEdge ? 1.0 : bDeep ? 0.35 : 0.75) * FSub)
 							{
 								if (bEdge) Stand(B::Kit0, PX, PY, 0.5, 0.3, 0.6, 0.32, 0.65, 0.85, 1.1, 0.0);
-								else Stand(B::Kit0, PX, PY, 0.5, 0.42, 0.85, 0.45, 0.95, 0.85, 1.1, 0.0);
+								else Stand(B::Kit0, PX, PY, 0.5, 0.42 * FSubSc, 0.85 * FSubScHi, 0.45 * FSubSz, 0.95 * FSubSzHi, 0.85, 1.1, 0.0);
 							}
 							if (bDeep && !bEdge) continue;
 							if (bEdge)
@@ -1918,7 +2079,10 @@ namespace LandScape
 										// (only where the woods run deep behind it: a lone clump on the plain takes none)
 										const Spot Behind = H.At(X + GX * 15.0, Y + GY * 15.0);
 										const double Back = std::max(0.0, S.Edge - 1.5);
-										if (Behind.Kind == KWoods && Behind.Edge > 6.0) Put(H, B::Kit14, X - GX * Back, Y - GY * Back, 0.5, std::atan2(GX, -GY), Sc, Sz, Leaf(Lf, Warm));
+										// (on trial "canopy" not before a clearing either: the curtain hangs from a roof behind it, and on the
+										// face's thinner roof only CurtainFace of them, from R2, so the face is not a wall of climbers)
+										const bool bRoof = !bCanopy || (ClumpAt(X + GX * 15.0, Y + GY * 15.0, Behind.Edge) >= kClearing && Chance2(CurtainFace));
+										if (Behind.Kind == KWoods && Behind.Edge > 6.0 && bRoof) Put(H, B::Kit14, X - GX * Back, Y - GY * Back, 0.5, std::atan2(GX, -GY), Sc, Sz, Leaf(Lf, Warm));
 									}
 								}
 								for (int K = 0; K < 2; ++K)
@@ -1932,17 +2096,31 @@ namespace LandScape
 							else
 							{
 								Elsewhere();
-								if (R.Next() < 0.3) Stand(B::Kit15, PX, PY, 0.5, 0.7, 1.1, 0.7, 1.2, 0.85, 1.12, Warm);
+								const double FThicket = bCanopy ? Lerp(ThicketRim, ThicketHeart, Hh) / 0.3 : 1.0;
+								if (R.Next() < 0.3 * FThicket) Stand(B::Kit15, PX, PY, 0.5, 0.7, 1.1, 0.7, 1.2, 0.85, 1.12, Warm);
 							}
+							// (on trial "canopy" no banana or young palm in a heart, more on a rim; the woods' outer edge as it was)
+							const double FBanana = bCanopy && !bEdge ? Lerp(BananaRim, 0.0, Hh) / 0.35 : 1.0;
+							const double FUnder = bCanopy && !bEdge ? Lerp(1.0, UnderHeart, Hh) / 0.8 : 1.0;
+							const double FYoung = bCanopy && !bEdge ? Lerp(YoungRim, 0.0, Hh) / 0.16 : 1.0;
 							Elsewhere();
-							if (R.Next() < (bEdge ? 0.4 : 0.35)) Stand(B::Kit5, PX, PY, 0.5, 0.8, 1.35, 0.85, 1.5, 0.85, 1.05, 0.0);
+							if (R.Next() < (bEdge ? 0.4 : 0.35) * FBanana) Stand(B::Kit5, PX, PY, 0.5, 0.8, 1.35, 0.85, 1.5, 0.85, 1.05, 0.0);
 							Elsewhere();
-							if (R.Next() < (bEdge ? 0.6 : 0.8)) Stand(B::Kit7, PX, PY, 0.5, 1.2, 2.2, 1.2, 2.4, 0.85, 1.1, 0.0);
+							if (R.Next() < (bEdge ? 0.6 : 0.8) * FUnder) Stand(B::Kit7, PX, PY, 0.5, 1.2, 2.2, 1.2, 2.4, 0.85, 1.1, 0.0);
 							Elsewhere();
-							if (R.Next() < 0.16) Stand(B::Kit4, PX, PY, 0.5, 0.35, 0.55, 0.35, 0.6, 0.85, 0.95, 0.0);
+							if (R.Next() < 0.16 * FYoung) Stand(B::Kit4, PX, PY, 0.5, 0.35, 0.55, 0.35, 0.6, 0.85, 0.95, 0.0);
 							// (bamboo on the mainland; elsewhere a fallen trunk rotting on the floor)
 							Elsewhere();
 							if (R.Next() < (bMainland ? 0.04 : 0.12)) Stand(B::Kit13, PX, PY, bMainland ? 1.2 : 0.8, 0.8, 1.2, 0.8, 1.2, 0.95, 1.05, 0.0);
+							// (on trial "canopy" the rim's skirt to the ground, facing its clearing: one more thicket and undergrowth)
+							if (bCanopy && !bEdge && Hh < 1.0)
+							{
+								const double Rim = 1.0 - Hh;
+								Elsewhere2();
+								if (Chance2(SkirtThicket * Rim)) Stand2(B::Kit15, QX, QY, 0.5, 0.8, 1.3, 0.8, 1.35, 0.85, 1.12, Warm);
+								Elsewhere2();
+								if (Chance2(SkirtUnder * Rim)) Stand2(B::Kit7, QX, QY, 0.5, 1.2, 2.2, 1.2, 2.4, 0.85, 1.1, 0.0);
+							}
 							continue;
 						}
 						default: break;
@@ -1954,7 +2132,7 @@ namespace LandScape
 							const double Side = R.Next();
 							if (Side >= Inward(S))
 							{
-								KunaiHere();
+								KunaiHere(1.0);
 								continue;
 							}
 						}
@@ -1988,13 +2166,13 @@ namespace LandScape
 							if (R.Next() < 0.012) Stand(B::Kit0, PX, PY, 0.8, 0.7, 1.1, 0.7, 1.1, 0.85, 1.12, Warm);
 							break;
 						case Garden:
-							if (R.Next() < 0.45) Stand(B::Kit5, X, Y, 0.5, 0.8, 1.2, 0.8, 1.3, 0.85, 1.1, 0.0);
+							if (R.Next() < 0.45 * FGrove) Stand(B::Kit5, X, Y, 0.5, 0.8, 1.2, 0.8, 1.3, 0.85, 1.1, 0.0);
 							Elsewhere();
-							if (R.Next() < 0.1) Stand(B::Kit4, PX, PY, 0.5, 0.8, 1.1, 0.8, 1.15, 0.9, 1.1, 0.0);
+							if (R.Next() < 0.1 * FGrove) Stand(B::Kit4, PX, PY, 0.5, 0.8, 1.1, 0.8, 1.15, 0.9, 1.1, 0.0);
 							Elsewhere();
 							if (R.Next() < 0.25) Tuft(B::Kit6, PX, PY, 0.6, 0.7, 1.0, 0.4, 0.55, Tint(1.1, 0.97, 0.95));
 							break;
-						default: KunaiHere(); break;
+						default: KunaiHere(1.0); break;
 						}
 					}
 			}
@@ -2049,6 +2227,30 @@ namespace LandScape
 			bool bIsland = false;
 			/** The plumed kunai on trial (Field::Tried("kunai")): one clump in six with its plume, the rest without (KunaiClump). */
 			bool bPlumeTrial = false;
+			/** The woods gathered into clumps with clearings, islands of trees in the kunai, groves in the yards, shade
+			 * painted under the canopy and the jungle's cost cut, on trial (Field::Tried("canopy")), the jungle only (ClumpAt). */
+			bool bCanopy = false;
+			/** On trial "canopy": the floor's value at a clump's full heart against a clearing's (the plans asked 0.62 and 0.78;
+			 * the painter casts every shadow and the Mac few, so this one number is the Mac's to calibrate); kLitter the leaf
+			 * litter's own value against the kunai ground's in paint (85 against 114, measured), so the litter is shaded by
+			 * kCanopyShade / kLitter; the shade under an island in the kunai, and under a yard's grove. */
+			static constexpr double kCanopyShade = 0.68, kLitter = 0.77, kGroveShade = 0.82, kYardShade = 0.90;
+			/** On trial "canopy": ClumpAt under this a clearing (kunai); the channel's thresholds (ClumpAt, IsleAt, YardGrove). */
+			static constexpr double kClearing = 0.25;
+			/** On trial "canopy": the woods' chances on a clump's rim and at its heart (plan-speed's table; Plants): the giant's
+			 * and the canopy tree's (its share of U over the giant's; in the band past 70 m CanopyDeep), its size at a heart, the
+			 * sub-canopy's, the thicket's, the banana's, the undergrowth's, the young palm's; the rim's skirt; an island's; a
+			 * clearing's. */
+			static constexpr double GiantRim = 0.04, GiantHeart = 0.10, CanopyRim = 0.25, CanopyHeart = 0.54, CanopyDeep = 0.42;
+			static constexpr double ScLoHeart = 1.6, ScHiHeart = 2.4, SzLoHeart = 1.25, SzHiHeart = 2.0, LeafLoHeart = 0.75, LeafHiHeart = 1.05;
+			/** On trial "canopy": the woods' face's crowns (giant and canopy tree, of U) in its outer 10 m and behind them to
+			 * some 25 m in, and the share of its climbers' curtains hung (Plants). */
+			static constexpr double EdgeFace = 0.39, EdgeBack = 0.25, CurtainFace = 0.7;
+			static constexpr double SubRim = 0.9, SubHeart = 0.30, SubDeep = 0.18, ThicketRim = 0.55, ThicketHeart = 0.15;
+			static constexpr double BananaRim = 0.45, UnderHeart = 0.9, YoungRim = 0.2, SkirtThicket = 0.35, SkirtUnder = 0.5;
+			static constexpr double IsleGiant = 0.03, IsleCanopy = 0.45, IsleSub = 0.15, IsleThicket = 1.0, IsleUnder = 0.8, IsleBanana = 0.6;
+			static constexpr double GladeBanana = 0.35, GladeYoung = 0.08, GladeUnder = 0.15, GladeSapling = 0.10, GladeTuft = 0.6;
+			static constexpr double kClumpLo = -0.06, kClumpHi = 0.24, kIsleLo = 0.57, kIsleHi = 0.63, kYardLo = 0.30, kYardHi = 0.375, kGroveMean = 0.35;
 			/** Warm coral sand and a dark wet band at the water on trial (Field::Tried("islandsand")), the islands only. */
 			bool bSand = false;
 			bool bMainland = false, bClay = false;
