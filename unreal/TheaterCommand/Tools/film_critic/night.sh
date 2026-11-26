@@ -245,7 +245,9 @@ END=$(date +%s)
   echo "]}"
 } > "$OUT/night.json"
 played=$(ls "$OUT"/*/result.json 2> /dev/null | wc -l | xargs)
-if [ "$MISSING" = 0 ] && [ "$played" -gt 0 ]; then
+if [ "$FORCE" = 1 ] || [ -n "$ONLY" ]; then
+  :   # a trial someone asked for: tonight's own run still happens (it skips the scenes the trial already played)
+elif [ "$MISSING" = 0 ] && [ "$played" -gt 0 ]; then
   touch "$OUT/DONE"
   let_sleep
   hold_for_pull
