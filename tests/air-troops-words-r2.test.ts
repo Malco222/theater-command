@@ -279,7 +279,7 @@ describe('the raid report: who went down', () => {
       const told = heard.filter((x) => x.route === 'fought');
       expect(told.length).toBe(1);
       expect([...rep.strafed!].sort()).toEqual(names([...(o.strafers ?? [])]).sort());
-      const line = rep.strafed!.length ? `${rep.strafed!.join(' and ')} went down and strafed.` : NOBODY;
+      const line = rep.strafed!.length ? `${rep.strafed!.join(' and ')} went down and strafed. Groupement de Chasse 1 did not go down to strafe.` : NOBODY;
       expect(strafedLine(rep, 'FRA')).toBe(line);
       // The after card: after what the bombers did and before the bill, to the side that flew it.
       const card = afterCard(f.g, rep, fought);
