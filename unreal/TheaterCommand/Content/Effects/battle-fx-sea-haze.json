@@ -1,0 +1,29 @@
+{
+ "what": "The AA haze (release 2, item 11 part 3, behind the sea scene's -TheaterSeaAAHaze=1; the owner, 26 November: more of the dramatic things). Laid over battle-fx.json for that battle alone (FBattleEffects::LayOver): each number here is new, nothing of the recipe's is replaced, and without this file every row is as it ships. The record: a fleet under air attack fired through its own smoke; the photographs of Santa Cruz, the Philippine Sea and Okinawa show a grey haze hanging about the ships at the height of a raid, the 5-inch's muzzle smoke and the light guns' puffs, thinning within seconds. Here: the 5-inch's (Muzzle 'ship_aa') smoke lingers about 10 s (linger.gun.by.ship_aa: thick_s, then its tail as linger.gun's, gone by gone_s); one light-AA smoke puff in smoke_hang_one_in hangs smoke_hang_s (6 to 10 s) and spreads to smoke_hang_wide its width (air_guns.aa40, aa25). The naval rows (linger.gun.by.naval_heavy, naval_medium, naval_light) are not touched. sea_haze.most: at most that many puffs hang at once (past it, a new one lives its own short life); sea_haze.shed_from: past that share of the room (game.max_puffs, as RoomGate counts it) none more hang and those hanging fade out first. Colour: the guns' own smoke_colour, grey; no brown. Cordite and the US and Japanese smokeless powders of the war gave a grey-white smoke; the brown of black powder or of a mixed charge is not supported by the record for these guns, so none is asked here (the historian to rule).",
+ "sea_haze": {
+  "most": 250,
+  "shed_from": 0.8
+ },
+ "linger": {
+  "gun": {
+   "by": {
+    "ship_aa": {
+     "thick_s": 2,
+     "gone_s": 10
+    }
+   }
+  }
+ },
+ "air_guns": {
+  "aa40": {
+   "smoke_hang_one_in": 4,
+   "smoke_hang_s": [6, 10],
+   "smoke_hang_wide": 1.6
+  },
+  "aa25": {
+   "smoke_hang_one_in": 8,
+   "smoke_hang_s": [6, 10],
+   "smoke_hang_wide": 1.6
+  }
+ }
+}

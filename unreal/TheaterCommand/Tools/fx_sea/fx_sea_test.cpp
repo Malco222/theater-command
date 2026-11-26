@@ -22,6 +22,7 @@
 #include "Effects/TheaterFxCore.h"
 #undef private
 #include "../fx_lamps/fx_lamps_recipe.h"
+#include "Battle/ShipGuns.h"
 
 namespace
 {
@@ -869,6 +870,219 @@ namespace
 		std::string Got;
 		Check(DiceUntouched(Book, [&](Battle& Z) { Z.ShipRide(0.0, 1, Pose(0.0)); Z.AirGunShip(11, 1); for (int F = 0; F < 40; ++F) { Z.ShipRide(F / 4.0, 1, Pose(F / 4.0)); Z.DeckBrass(F / 4.0, 1, ToWorld(Pose(F / 4.0), Vec(-20.0, -8.0, 12.5)), Vec(-1.0, 0.0, 0.0), "aa40", 2); } }, Got), "no draw on the shared seed", Got);
 	}
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// E. The AA haze (item 11 part 3): the overlay battle-fx-sea-haze.json
+
+	/** The fleet of two-lines.json (Content/Data/SeaBattles): Britain's 3 battleships, 4 cruisers and 8 destroyers in a
+	 * line 400 m apart, Germany's 2, 5 and 15 in another 1,500 m off, their guns as ShipGuns fits them in June 1944, every
+	 * AA gun firing up at a raid overhead for Seconds; drawn at 10 frames a second from 400 m off Britain's line, 30 m
+	 * up, looking along it. */
+	struct Barrage
+	{
+		int Ships = 0, LightMounts = 0, Streams = 0, HeavyBarrels = 0;
+		int MostHanging = 0, MostHazeEnds = 0, ShedFrames = 0, ShedLeft = 0, Hung = 0, LateHangs = 0;
+		double MostRoom = 0.0, HangLeast = 1e9, HangMost = 0.0, LingerMost = 0.0, SmokeMost = 0.0, Ms = 0.0;
+		int Tails = 0;
+		uint64_t Seeds = 0;
+		std::vector<std::string> After;
+	};
+	Barrage Fleet(const JsonRecipe& Book, double Seconds, int Only = 0)
+	{
+		Barrage R;
+		Battle X;
+		Open(X, Book);
+		struct Gun
+		{
+			int Key = 0;
+			Vec At;
+			const ShipGuns::Piece* P = nullptr;
+			double Next = 0.0;
+		};
+		std::vector<Gun> Light, Heavy;
+		const char* Sides[2] = { "UK", "GER" };
+		const int Fit[2][3] = { { 3, 4, 8 }, { 2, 5, 15 } };
+		const char* Classes[3] = { "bb", "ca", "dd" };
+		int Ship = 0;
+		for (int S = 0; S < 2; ++S)
+		{
+			int InLine = 0;
+			for (int C = 0; C < 3; ++C)
+			{
+				for (int N = 0; N < Fit[S][C]; ++N, ++Ship, ++InLine)
+				{
+					if (Only > 0 && Ship >= Only)
+					{
+						continue;
+					}
+					++R.Ships;
+					const Vec Mid(400.0 * InLine, 1500.0 * S, 0.0);
+					const ShipGuns::Battery B = ShipGuns::BatteryOf(Sides[S], Classes[C], 1944, 6);
+					const double Deck = ShipGuns::DeckOf(Classes[C]);
+					int Stream = 0, Spot = 0;
+					for (const ShipGuns::Mount& M : B.Mounts)
+					{
+						for (int K = 0; K < M.Count; ++K, ++Spot)
+						{
+							const Vec At = Mid + Vec(-60.0 + 7.0 * (Spot % 18), (Spot % 2 == 0 ? 1.0 : -1.0) * 6.0, Deck + 2.0);
+							if (M.Gun->bHeavy)
+							{
+								if (M.Gun->bLow)
+								{
+									continue;
+								}
+								for (int Br = 0; Br < M.Gun->Barrels; ++Br)
+								{
+									Heavy.push_back({ 0, At + Vec(0.0, 0.5 * Br, 0.0), M.Gun, 0.37 * Br + 0.11 * Spot });
+								}
+								R.HeavyBarrels += M.Gun->Barrels;
+							}
+							else
+							{
+								++R.LightMounts;
+								for (int Br = 0; Br < M.Gun->Barrels; ++Br)
+								{
+									Light.push_back({ ShipGuns::StreamKey(Ship, Stream++ % 60), At + Vec(0.0, 0.3 * Br, 0.0), M.Gun, 0.0 });
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		R.Streams = static_cast<int>(Light.size());
+		const Vec Eye(2800.0, -400.0, 30.0);
+		const Vec Look(2800.0, 400.0, 150.0);
+		double Spent = 0.0;
+		for (int F = 0; F <= static_cast<int>(Seconds * 10.0); ++F)
+		{
+			const double T = F / 10.0;
+			const auto T0 = std::chrono::steady_clock::now();
+			for (const Gun& G : Light)
+			{
+				// (each laid on a raid overhead, swinging slowly)
+				const double Swing = 0.4 * std::sin(0.2 * T + 0.1 * G.Key);
+				X.AirGun(T, G.Key, G.At, G.At + Vec(std::cos(Swing), std::sin(Swing), 1.6) * 2000.0, Vec(), G.P->Kind, G.P->Rate, G.P->Mv, "");
+			}
+			for (Gun& G : Heavy)
+			{
+				while (G.Next <= T)
+				{
+					X.Muzzle(G.Next, G.At, Vec(0.4, 0.2, 0.9), "ship_aa", "water");
+					G.Next += 60.0 / std::max(G.P->Rate, 1.0);
+				}
+			}
+			const double Room = static_cast<double>(X.RoomGate()) / std::max(1, X.MaxPuffs);
+			R.MostRoom = std::max(R.MostRoom, Room);
+			X.Draw(T, FxLamps::Looking(Eye, Look));
+			Spent += Since(T0);
+			int Hanging = 0;
+			for (const Bit& B : X.Bits)
+			{
+				if (B.bHaze && T >= B.Born && T < B.Born + B.Life && T < B.CutAt)
+				{
+					++Hanging;
+					if (B.bTail)
+					{
+						R.LingerMost = std::max(R.LingerMost, B.Life);
+					}
+					else
+					{
+						R.HangLeast = std::min(R.HangLeast, B.Life);
+						R.HangMost = std::max(R.HangMost, B.Life);
+					}
+					R.LateHangs += Room >= 0.8 && B.Born > T - 0.1 ? 1 : 0;
+				}
+				R.Tails += B.bTail && B.Born > T - 0.1 && B.Born <= T ? 1 : 0;
+				if (!B.bTail && !B.bHaze && B.Form == Bit::Shape::Puff && B.Drag == 4.0 && B.Windage == 1.0)
+				{
+					R.SmokeMost = std::max(R.SmokeMost, B.Life); // (a light gun's smoke puff, as AirRound lays it)
+				}
+			}
+			R.MostHanging = std::max(R.MostHanging, Hanging);
+			R.MostHazeEnds = std::max(R.MostHazeEnds, static_cast<int>(X.HazeEnds.size()));
+			if (Room >= 0.8)
+			{
+				++R.ShedFrames;
+				R.ShedLeft = std::max(R.ShedLeft, Hanging);
+			}
+		}
+		R.Ms = Spent / (Seconds * 10.0 + 1.0);
+		R.Hung = static_cast<int>(X.HazeHangs);
+		// (40 s after the guns stop, every piece of the barrage gone: an unrelated shell and muzzle, printed)
+		X.Draw(Seconds + 40.0, FxLamps::Looking(Eye, Look));
+		X.Draw(Seconds + 40.1, FxLamps::Looking(Eye, Look));
+		const size_t From = X.Bits.size();
+		X.Shell(Seconds + 41.0, Vec(300.0, 40.0, 0.0), "how105", "water", false);
+		X.Muzzle(Seconds + 41.5, Vec(280.0, 60.0, 9.0), Vec(0.3, 0.2, 0.9), "naval_medium", "water");
+		for (size_t I = From; I < X.Bits.size(); ++I)
+		{
+			R.After.push_back(Print(X.Bits[I]));
+		}
+		R.Seeds = X.Seeds;
+		return R;
+	}
+
+	void Haze(const JsonRecipe& Book, const JsonRecipe& On)
+	{
+		std::printf("\nE. The AA haze: the overlay battle-fx-sea-haze.json laid over the recipe, the 37 ships of two-lines.json firing every AA gun for 60 s, seen from 400 m\n");
+		const Barrage Off = Fleet(Book, 60.0);
+		const Barrage Hz = Fleet(On, 60.0);
+		std::printf("    the fleet: %d ships, %d light AA mounts (%d barrels, each a stream), %d heavy AA barrels (Muzzle ship_aa)\n", Off.Ships, Off.LightMounts, Off.Streams, Off.HeavyBarrels);
+		std::printf("    off: the room at most %.2f full; a light gun's smoke at most %.2f s; %d lingering pieces of the 5-inch\n", Off.MostRoom, Off.SmokeMost, Off.Tails);
+		std::printf("    on:  the room at most %.2f full; %d hanging at most at once (%d counted); %d frames past 4/5 of the room\n", Hz.MostRoom, Hz.MostHanging, Hz.MostHazeEnds, Hz.ShedFrames);
+		std::printf("    time: the barrage's frame (every gun and the draw) %.2f ms off, %.2f ms on, on this box\n", Off.Ms, Hz.Ms);
+		const double SmokeS = Book.Get("air_guns.aa40.smoke_s", 0.0) * 1.2;
+		Check(Off.MostHanging == 0 && Off.Tails == 0 && Off.SmokeMost <= SmokeS + 1e-9 && Off.Hung == 0, "off: no puff hangs, the 5-inch's smoke does not linger, the light guns' smoke as its rows", Say("%.0f hanging; %.0f lingering; the longest light-gun puff %.2f s (the rows' most %.2f)", Off.MostHanging, Off.Tails, Off.SmokeMost, SmokeS));
+		Check(Hz.HangLeast >= 6.0 - 1e-9 && Hz.HangMost <= 10.0 + 1e-9 && Hz.HangMost > 6.0, "on: a light gun's hanging puff lives 6 to 10 s", Say("%.2f to %.2f s", Hz.HangLeast, Hz.HangMost));
+		Check(Hz.LingerMost > 6.0 && Hz.LingerMost <= On.Get("linger.gun.by.ship_aa.gone_s", 0.0) + 1e-9, "on: the 5-inch's smoke lingers, gone within linger.gun.by.ship_aa's 10 s", Say("the longest %.2f s", Hz.LingerMost));
+		Check(Hz.MostHanging <= 250 && Hz.MostHazeEnds <= 250 && Hz.MostHanging >= 200, "on: at most 250 hanging at once through the barrage (sea_haze.most)", Say("%.0f at most (%.0f counted)", Hz.MostHanging, Hz.MostHazeEnds));
+		Check(Hz.LateHangs == 0 && Hz.ShedLeft == 0, "on: past 4/5 of the room none hangs anew, and those hanging are shed first", Say("%.0f frames past 4/5; then %.0f new hanging, %.0f still hanging", Hz.ShedFrames, Hz.LateHangs, Hz.ShedLeft));
+		Check(Off.Seeds == Hz.Seeds && Off.After == Hz.After && !Off.After.empty(), "on: no draw on the shared seed; a shell and a muzzle after it the same to the bit", Say("%.0f pieces compared", static_cast<double>(Off.After.size())) + (Off.Seeds == Hz.Seeds ? "; the shared seed the same" : "; the shared seed MOVED"));
+		{
+			// (each of her clouds keeps puffs of its own: the 5-inch fired eight times in the same place, which of each
+			// cloud's puffs stay, as a pattern, not all the same; and a ship's medium gun (its smoke lingers by its own row) after them as without them)
+			auto Clouds = [&](const JsonRecipe& Rb, int Shots, std::vector<std::string>& Kept, std::string& After)
+			{
+				Battle Z;
+				Open(Z, Rb);
+				for (int K = 0; K < Shots; ++K)
+				{
+					const size_t From = Z.Bits.size();
+					Z.Muzzle(1.0 + 3.0 * K, Vec(280.0, 60.0, 9.0), Vec(0.3, 0.2, 0.9), "ship_aa", "water");
+					std::string Pattern;
+					for (size_t I = From; I < Z.Bits.size(); ++I)
+					{
+						Pattern += Z.Bits[I].bTail ? 'x' : '.';
+					}
+					Kept.push_back(Pattern);
+				}
+				const size_t From = Z.Bits.size();
+				Z.Muzzle(1.0 + 3.0 * Shots, Vec(250.0, 30.0, 9.0), Vec(0.3, 0.2, 0.3), "naval_medium", "water");
+				for (size_t I = From; I < Z.Bits.size(); ++I)
+				{
+					After += Print(Z.Bits[I]);
+				}
+			};
+			std::vector<std::string> Kept, KeptOff;
+			std::string After, AfterOff;
+			Clouds(On, 8, Kept, After);
+			Clouds(Book, 8, KeptOff, AfterOff);
+			int Differ = 0;
+			for (size_t K = 1; K < Kept.size(); ++K)
+			{
+				Differ += Kept[K] != Kept[0] && Kept[K].find('x') != std::string::npos ? 1 : 0;
+			}
+			Check(Differ >= 5 && !After.empty() && After == AfterOff, "on: each of her clouds keeps puffs of its own; another gun's smoke after them as without the overlay", Say("%.0f of 7 later clouds keep other puffs than the first", Differ) + (After == AfterOff ? "; the medium gun's muzzle the same" : "; the medium gun's muzzle MOVED"));
+		}
+		{
+			// (shedding seen: the same overlay with the room cut to 900, four ships)
+			JsonRecipe Small = On;
+			Small.Numbers["game.max_puffs"] = 900.0;
+			const Barrage Sm = Fleet(Small, 30.0, 4);
+			Check(Sm.ShedFrames > 0 && Sm.LateHangs == 0 && Sm.ShedLeft == 0 && Sm.MostHanging > 0, "a room of 900: hanging puffs shed as it passes 4/5, none hung past it", Sm.ShedFrames > 0 ? Say("%.0f frames past 4/5 (at most %.2f full); %.0f hanging at most before", Sm.ShedFrames, Sm.MostRoom, Sm.MostHanging) : Say("the room never passed 4/5 (%.2f): no shedding seen", Sm.MostRoom));
+		}
+	}
 }
 
 int main(int Argc, char** Argv)
@@ -888,6 +1102,12 @@ int main(int Argc, char** Argv)
 	Wash(Book);
 	OilLane(Book);
 	Brass(Book);
+	JsonRecipe On = Book;
+	if (!FxLamps::LoadRecipe(Argv[2], On))
+	{
+		return 2;
+	}
+	Haze(Book, On);
 	std::printf("\n%d checks, %d failed\n%s\n", Checks, Failed, Failed == 0 ? "ALL CHECKS PASSED" : "SOME CHECKS FAILED");
 	std::printf("time: the cost checks %s\n", bTimeFailed ? "FAILED" : "passed");
 	return Failed == 0 && !bTimeFailed ? 0 : 1;

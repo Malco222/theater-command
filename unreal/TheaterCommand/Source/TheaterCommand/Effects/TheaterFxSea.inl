@@ -16,6 +16,10 @@
 		DeckCases.clear();
 		DeckKill.clear();
 		DeckRounds = 0;
+		HazeEnds.clear();
+		HazeHangs = 0;
+		HazeLingers = 0;
+		HazeLingerWas = 0;
 	}
 
 	double Battle::SeaTable(const char* Name, double CalibreMm, double Usual) const
@@ -1044,4 +1048,113 @@
 		// (drawn near only: whole within within_m of the eye, gone by gone_m)
 		const double Far = bEyeKnown ? (LastEye - B.From).Length() : 0.0;
 		B.Alpha = B.DeckFull * Clamp01((Feel.Gone - Far) / std::max(Feel.Gone - Feel.Within, 1.0));
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// Item 11 part 3: the AA haze, an overlay alone (battle-fx-sea-haze.json, the sea scene's -TheaterSeaAAHaze=1). A
+	// fleet's AA smoke hung about her as a haze through an air attack: the 5-inch's muzzle smoke lingers (its own row,
+	// linger.gun.by.ship_aa) and one light-AA smoke puff in smoke_hang_one_in hangs smoke_hang_s (air_guns.aa40, aa25).
+	// At most sea_haze.most hang at once; past sea_haze.shed_from of the room (game.max_puffs, as RoomGate counts it)
+	// none more hang and those hanging go first, fading out. Without the overlay's keys every hook here does nothing.
+
+	bool Battle::HazeRoom(double Now)
+	{
+		const double Most = SafeNum(Num("sea_haze.most", 0.0), 0.0, 1.0e5, 0.0);
+		if (!(Most > 0.0))
+		{
+			return true; // (no cap asked: as the rows say)
+		}
+		HazeEnds.erase(std::remove_if(HazeEnds.begin(), HazeEnds.end(), [Now](double End) { return !(End > Now) || End > Now + 600.0; }), HazeEnds.end());
+		const double From = SafeNum(Num("sea_haze.shed_from", 0.8), 0.1, 1.0, 0.8);
+		return static_cast<double>(HazeEnds.size()) < Most && static_cast<double>(RoomGate()) < From * std::max(1, MaxPuffs);
+	}
+
+	void Battle::HazeHang(Bit& B, const AirRow& Row, double T)
+	{
+		if (Row.HangOneIn <= 0)
+		{
+			return;
+		}
+		// (which puff hangs: by the rule's own count, no dice, so nothing else of the gun moves)
+		const uint64_t N = ++HazeHangs;
+		if ((N - 1) % static_cast<uint64_t>(Row.HangOneIn) != 0 || !HazeRoom(T))
+		{
+			return;
+		}
+		const double Lot = static_cast<double>(Mix64(N * 0x9E3779B97F4A7C15ull ^ 0x4A2E5ull) >> 11) * (1.0 / 9007199254740992.0);
+		B.Life = Row.HangA + (Row.HangB - Row.HangA) * Lot;
+		B.R1 *= Row.HangWide; // (a puff that hangs spreads further as it goes thin)
+		B.bHaze = true;
+		HazeEnds.push_back(B.Born + B.Life);
+	}
+
+	bool Battle::HazeCountIn(const char* Gun)
+	{
+		// (Muzzle, just before LingerFrom: a ship's AA gun's smoke, with the overlay laid, has the linger rule count on
+		// a count of its own, so the rest of the field's staying puffs are those they would have been, and each of her
+		// clouds still keeps puffs of its own, not the same ones over and over)
+		if (!Gun || std::strcmp(Gun, "ship_aa") != 0 || !Has("sea_haze.most"))
+		{
+			return false;
+		}
+		HazeLingerWas = LingerNo;
+		LingerNo = HazeLingers ^ 0x5EA4A2Eull;
+		return true;
+	}
+
+	void Battle::HazeGate(size_t First, const char* Gun, bool bCounted)
+	{
+		// (Muzzle, just after LingerFrom: a ship's AA gun's smoke that its row made linger, held to the cap. Each puff
+		// past the cap, or with the room past shed_from, goes back to its own short life as laid. The linger rule's count
+		// put back as it was: HazeCountIn)
+		if (bCounted)
+		{
+			HazeLingers = LingerNo ^ 0x5EA4A2Eull;
+			LingerNo = HazeLingerWas;
+		}
+		if (!Gun || std::strcmp(Gun, "ship_aa") != 0 || !Has("sea_haze.most"))
+		{
+			return;
+		}
+		for (size_t I = First; I < Bits.size(); ++I)
+		{
+			Bit& B = Bits[I];
+			if (!B.bTail)
+			{
+				continue;
+			}
+			if (HazeRoom(B.Born))
+			{
+				B.bHaze = true;
+				HazeEnds.push_back(B.Born + B.Life);
+			}
+			else
+			{
+				B.Life = B.LookLife;
+				B.Hold = B.LookHold;
+				B.bTail = false;
+			}
+		}
+	}
+
+	void Battle::HazeShed(double Now)
+	{
+		if (HazeEnds.empty())
+		{
+			return;
+		}
+		const double From = SafeNum(Num("sea_haze.shed_from", 0.8), 0.1, 1.0, 0.8);
+		if (!(static_cast<double>(RoomGate()) >= From * std::max(1, MaxPuffs)))
+		{
+			return;
+		}
+		for (Bit& B : Bits)
+		{
+			if (B.bHaze)
+			{
+				B.CutAt = std::min(B.CutAt, Now + TrailCutFade); // (fading out as a trail's cut piece does)
+				B.bHaze = false;
+			}
+		}
+		HazeEnds.clear();
 	}

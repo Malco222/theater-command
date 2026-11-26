@@ -369,6 +369,7 @@ namespace TheaterFx
 		// DeckAx and its other way DeckFa), 4 a case gone over her side, falling to the sea. All in her frame: X toward
 		// her bow, Y to port, Z up from her waterline amidships. Each frame (ShipRide's pose, at Draw) its world place is
 		// written to From (or, a case, At1 and At2), so the draw finds it on her wherever she has turned and heeled)
+		bool bHaze = false; // (release 2: a puff of the AA haze overlay, counted against sea_haze.most and shed first)
 		uint32_t DeckShip = 0, DeckId = 0;
 		uint8_t DeckMode = 0;
 		Vec DeckP, DeckV, DeckAx, DeckFa;
@@ -909,6 +910,10 @@ namespace TheaterFx
 			double Rate = 800.0, Mps = 870.0, Flash = 0.45, Strike = 0.8, Drag = 0.36, Drop = 9.81, TracerS = 2.4, Spread = 0.004;
 			double SmokeS = 0.8, SmokeAlpha = 0.1, Lamp = 0.0, FlashLeastPx = 0.0; // (FlashLeastPx: the flash never under this on the screen, a twinkle far off)
 			int OneIn = 5, SmokeEvery = 3, Licks = 0;
+			// (release 2, the AA haze overlay: one smoke puff in HangOneIn hangs HangA to HangB seconds, HangWide as wide at
+			// its end; 0: none, as ever)
+			int HangOneIn = 0;
+			double HangA = 0.0, HangB = 0.0, HangWide = 1.0;
 			// (the close view, art director 04:40Z: a heavy machine gun's flicker gains CloseLicks side licks and a lamp of
 			// CloseLamp when the eye is within LicksWithin metres of it; every round drops its spent case and belt link
 			// from the chute under the gun, CaseM long and CaseD across, a link LinkM, when the eye is within CasesWithin
@@ -2126,5 +2131,14 @@ namespace TheaterFx
 		};
 		void DeckCaseStep(Bit& B, const ShipPose& Pose, double Now, const CaseFeel& Feel); // (a case thrown, lying, rolling, or gone over her side)
 		void SeaClear();
+		// (release 2, the AA haze overlay, battle-fx-sea-haze.json: the hanging puffs' ends, for their cap; the count of
+		// smoke puffs the hang rule has seen, its own; and the three hooks: AirRound's smoke, Muzzle's linger, Draw's shed)
+		std::vector<double> HazeEnds;
+		uint64_t HazeHangs = 0, HazeLingers = 0, HazeLingerWas = 0;
+		bool HazeRoom(double Now);
+		void HazeHang(Bit& B, const AirRow& Row, double T);
+		bool HazeCountIn(const char* Gun);
+		void HazeGate(size_t First, const char* Gun, bool bCounted);
+		void HazeShed(double Now);
 	};
 }

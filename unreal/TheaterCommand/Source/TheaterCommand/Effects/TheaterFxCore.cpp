@@ -3804,7 +3804,9 @@ namespace TheaterFx
 		if (Bits.size() > First)
 		{
 			const double Foot = Height(At.X, At.Y);
+			const bool bHazeCount = HazeCountIn(GunIn); // (release 2: the AA haze overlay's ship AA smoke counts its own staying puffs; nothing without it)
 			LingerFrom(First, LingerOf("gun", GunIn ? GunIn : "rifle"), Now, Vec(At.X, At.Y, Foot), 0.65, std::max(At.Z - Foot, 1.0));
+			HazeGate(First, GunIn, bHazeCount); // (release 2: the AA haze overlay's cap on a ship's AA smoke that hangs; nothing without it)
 		}
 		if (bLook)
 		{
@@ -6072,6 +6074,14 @@ namespace TheaterFx
 			R.SmokeEvery = static_cast<int>(SafeNum(Num(P + "smoke_every", 3.0), 1.0, 1.0e6, 3.0));
 			R.SmokeS = SafeNum(Num(P + "smoke_s", 0.8), 0.0, 60.0, 0.8);
 			R.SmokeAlpha = SafeNum(Num(P + "smoke_alpha", 0.1), 0.0, 1.0, 0.1);
+			if (Has(P + "smoke_hang_one_in"))
+			{
+				// (release 2, the AA haze overlay alone sets these: see HazeHang)
+				R.HangOneIn = static_cast<int>(SafeNum(Num(P + "smoke_hang_one_in", 0.0), 0.0, 1.0e6, 0.0));
+				R.HangA = SafeNum(Num(P + "smoke_hang_s.0", 6.0), 0.1, 120.0, 6.0);
+				R.HangB = SafeNum(Num(P + "smoke_hang_s.1", R.HangA), R.HangA, 120.0, R.HangA);
+				R.HangWide = SafeNum(Num(P + "smoke_hang_wide", 1.0), 0.5, 4.0, 1.0);
+			}
 			R.Licks = static_cast<int>(SafeNum(Num(P + "licks", 0.0), 0.0, 16.0, 0.0)); // (held to 16: a wild recipe value asked a billion licks a shot, the fuzz of 22 November)
 			R.Lamp = SafeNum(Num(P + "lamp", 0.0), 0.0, 100.0, 0.0);
 			R.FlashLeastPx = SafeNum(Num(P + "flash_least_px", Num("air_guns.flash_least_px", 0.0)), 0.0, 100.0, 0.0);
@@ -6569,6 +6579,7 @@ namespace TheaterFx
 			B.Hold = 0.15;
 			B.Heart = 0.6;
 			B.Rim = 0.0;
+			HazeHang(B, Row, T); // (release 2: the AA haze overlay's one puff in N that hangs; none without it)
 			Bits.push_back(B);
 		}
 		if (bTracer)
@@ -16747,6 +16758,7 @@ namespace TheaterFx
 		UpWas = Eye.Up;
 		bEyeWas = true;
 		Run(Now);
+		HazeShed(Now); // (release 2: the AA haze overlay's hanging puffs, shed first as the room fills; none without it)
 		DeckPlace(Now); // (release 2's sea items: what lies in a ship's frame to where she is now; no ship told of, nothing)
 		CutTrails();
 		// (Bit::Serial: what was made since the last Draw lies at the end of Bits in the order it was made; numbered so

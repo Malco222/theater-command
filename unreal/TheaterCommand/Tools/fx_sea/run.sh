@@ -33,7 +33,8 @@ for CC in g++ clang++; do
   if [ "$CC" = "clang++" ]; then EXTRA="-Wunreachable-code-aggressive"; TAG=clang; fi
   $CC $FLAGS $EXTRA -I"$SRC" -c "$SRC/Effects/TheaterFxCore.cpp" -o "$OUT/core_$TAG.o"
   $CC $FLAGS $EXTRA -I"$SRC" -c "$SRC/Battle/LandJson.cpp" -o "$OUT/json_$TAG.o"
-  $CC $FLAGS $EXTRA -I"$SRC" "$HERE/fx_sea_test.cpp" "$OUT/core_$TAG.o" "$OUT/json_$TAG.o" -o "$OUT/fx_sea_test_$TAG"
+  $CC $FLAGS $EXTRA -I"$SRC" -c "$SRC/Battle/ShipGuns.cpp" -o "$OUT/guns_$TAG.o"
+  $CC $FLAGS $EXTRA -I"$SRC" "$HERE/fx_sea_test.cpp" "$OUT/core_$TAG.o" "$OUT/json_$TAG.o" "$OUT/guns_$TAG.o" -o "$OUT/fx_sea_test_$TAG"
   mkdir -p "$OUT/$TAG"
   echo "== fx_sea_test, $CC"
   "$OUT/fx_sea_test_$TAG" "$RECIPE" "$HAZE" "$OUT/$TAG" | tee "$OUT/$TAG/test.txt" || STATUS=1
