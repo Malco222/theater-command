@@ -4174,38 +4174,42 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		Crowd.PlaceAsPosed(Man, X, Y, Z, Facing); // (his height as last posed: no ground asked a man a frame)
 		// (skinned only when in the picture, or close by: a man out of the picture keeps the pose he had)
 		const LandPlay::Vec At(X, Y, Z + 0.9);
-		const bool bOwnLooked = (At - EyeAt).Length() < 6.0 || LandParts::InPicture(S.Pose, Aspect, At, 1.15);
+		bool bOwnLooked = (At - EyeAt).Length() < 6.0 || LandParts::InPicture(S.Pose, Aspect, At, 1.15);
 		const double FilmFar = bFilmLens ? (At - FilmEye).Length() : 0.0;
-		const bool bInFilm = bFilmLens && (FilmFar < 6.0 || LandParts::InPicture(S.FilmPose, 16.0 / 9.0, At, 1.15));
-		bool bLooked = bOwnLooked || bInFilm;
-		bool bMovedOn = false;
+		bool bInFilm = bFilmLens && (FilmFar < 6.0 || LandParts::InPicture(S.FilmPose, 16.0 / 9.0, At, 1.15));
 		// (release 2, on trial "leave") A man leaving with his block, out of the picture: hidden for good, so he walks
 		// out of frame and is never seen to go. And a man out of the picture whose body was last drawn where the
 		// picture now looks (the camera turned or cut back to ground he has left since): drawn again, where he is
-		// now, so no body stands frozen at the old place until he next comes into the picture.
-		if (bLeaveWalk && bShown && !bLooked && Crowd.Leaving(Man))
+		// now, so no body stands frozen at the old place until he next comes into the picture. (Out of the picture:
+		// out of his own and, while the film's corner window is up, out of the film's too.)
+		if (bLeaveWalk && bShown && !bOwnLooked && !bInFilm && Crowd.Leaving(Man))
 		{
 			Crowd.LeftUnseen(Man);
 			bShown = false;
 		}
-		if (bLeaveWalk && bShown && !bLooked && D.bDrawnAt)
+		if (bLeaveWalk && bShown && !bOwnLooked && !bInFilm && D.bDrawnAt)
 		{
 			const LandPlay::Vec Old(D.DrawnAt[0], D.DrawnAt[1], D.DrawnAt[2]);
-			if ((Old - At).Length() > 0.5 && ((Old - EyeAt).Length() < 6.0 || LandParts::InPicture(S.Pose, Aspect, Old, 1.15)
-				|| (bFilmLens && ((Old - FilmEye).Length() < 6.0 || LandParts::InPicture(S.FilmPose, 16.0 / 9.0, Old, 1.15)))))
+			if ((Old - At).Length() > 0.5)
 			{
-				bLooked = true;
-				bMovedOn = true;
-				++MenMovedOn;
+				const bool bOldOwn = (Old - EyeAt).Length() < 6.0 || LandParts::InPicture(S.Pose, Aspect, Old, 1.15);
+				const bool bOldFilm = !bOldOwn && bFilmLens && ((Old - FilmEye).Length() < 6.0 || LandParts::InPicture(S.FilmPose, 16.0 / 9.0, Old, 1.15));
+				if (bOldOwn || bOldFilm)
+				{
+					bOwnLooked = bOldOwn;
+					bInFilm = bOldFilm;
+					++MenMovedOn;
+				}
 			}
+		}
+		const bool bLooked = bOwnLooked || bInFilm;
+		// (his own picture's count is his own picture's still; where he was last drawn is kept for either lens)
+		if (bShown && bOwnLooked)
+		{
+			++MenInPicture;
 		}
 		if (bShown && bLooked)
 		{
-			// (the men in his own picture, or drawn again there by "leave"; not those in the film's corner alone)
-			if (bOwnLooked || bMovedOn)
-			{
-				++MenInPicture;
-			}
 			D.bDrawnAt = true;
 			D.DrawnAt[0] = At.X;
 			D.DrawnAt[1] = At.Y;
