@@ -1,7 +1,8 @@
 // The battle card's support teams, told through the bridge (release 2; src/campaign/teamfire.ts, TC.teamFire).
 //
 // One row of the 3D game's Battle rules card has two readers. The field brings every infantry force its own machine-gun
-// and mortar teams when the rows `teams` and `facing` are both on (land-bridge.ts landStartTicket), and the campaign's
+// and mortar teams when the rows `teams`, `facing` and `stand` are all on (land-bridge.ts landStartTicket; the design
+// director, 25 November 2026 21:54Z and 26 November 01:02Z), and the campaign's
 // battle card must price those teams exactly then, or the card and the field part. The 3D game tells the rules how the
 // two rows stand when a war opens, when one is read in and when a row is clicked: TC.teamFire(on)
 // (FCampaignSession::SyncBattleRules). These tests hold that call by the design director's rule that a switch off is the
@@ -137,16 +138,17 @@ describe('both rows on: the card and the field carry the same teams', () => {
     expect(look.ticket.reckoning.A).toBeCloseTo(plain.ticket.reckoning.A * k.att, 6);
     expect(look.ticket.reckoning.D).toBeCloseTo(plain.ticket.reckoning.D * k.def, 6);
     expect(look.ticket.seed).toBe(plain.ticket.seed);
-    // the field, as the 3D game's land rules lay it with both rows on (land-bridge.ts landStartTicket): the teams are
-    // there, both rules are on, and the blocks share out the power before the term, so it is never taken off twice
+    // the field, as the 3D game's land rules lay it with all three rows on (land-bridge.ts landStartTicket): the teams are
+    // there, the three rules are on, and the blocks share out the power before the term, so it is never taken off twice
     const laid = ownTeamsLook(look) as Look;
     expect(laid.ticket.att.forces.some(isOwnTeam)).toBe(true);
     expect(laid.ticket.def.forces.some(isOwnTeam)).toBe(true);
-    const on = liveTicket(laid.ticket, { me: null, teams: true, facing: true }).sim;
+    const on = liveTicket(laid.ticket, { me: null, teams: true, facing: true, stand: true }).sim;
     expect(on.teamsRule).toBe(true);
     expect(on.faceRule).toBe(true);
+    expect(on.standRule).toBe(true);
     const power = (s: unknown): { att: number; def: number } => (s as { power: { att: number; def: number } }).power;
-    const bare = liveTicket((ownTeamsLook(plain) as Look).ticket, { me: null, teams: true, facing: true }).sim;
+    const bare = liveTicket((ownTeamsLook(plain) as Look).ticket, { me: null, teams: true, facing: true, stand: true }).sim;
     expect(power(on).att).toBeCloseTo(power(bare).att, 6);
     expect(power(on).def).toBeCloseTo(power(bare).def, 6);
   });
@@ -161,6 +163,10 @@ describe('both rows on: the card and the field carry the same teams', () => {
     const alone = liveTicket(look.ticket, { me: null, teams: true }).sim;
     expect(alone.teamsRule).toBe(false);
     expect(alone.faceRule).toBe(false);
+    // and with `facing` beside it but no `stand`, neither (the design director, 26 November 01:02Z)
+    const two = liveTicket(look.ticket, { me: null, teams: true, facing: true }).sim;
+    expect(two.teamsRule).toBe(false);
+    expect(two.faceRule).toBe(false);
     expect(look.ticket.att.forces.some(isOwnTeam)).toBe(false);
   });
 });

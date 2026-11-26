@@ -20490,7 +20490,7 @@ namespace
 					.OnClicked_Lambda([this, Index]()
 					{
 						FLandLive::FlipRule(Index);
-						// (release 2, teamfire.ts: the campaign's battle card follows the rows `teams` and `facing` at once)
+						// (release 2, teamfire.ts: the campaign's battle card follows the rows `teams`, `facing` and `stand` at once)
 						if (FCampaignSession* Rules = Controller.IsValid() ? Controller->GetSession() : nullptr)
 						{
 							Rules->SyncBattleRules();

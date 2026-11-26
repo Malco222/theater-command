@@ -409,7 +409,7 @@ public:
 	void SetSubScene(const FString& Setting);
 	/**
 	 * (Release 2, teamfire.ts) The Battle rules card's rows the campaign's battle card must follow. Every infantry force's
-	 * own teams are on the field only with the rows `teams` and `facing` both on (FLandLive::RuleNow), and the card prices
+	 * own teams are on the field only with the rows `teams`, `facing` and `stand` all on (FLandLive::RuleNow), and the card prices
 	 * them only then (TC.teamFire): told to the rules after every start and every load, and here when a row is clicked
 	 * with a war running. Off, the rules delete their key, so the saved war is the one it always was.
 	 */

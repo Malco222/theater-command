@@ -6081,8 +6081,9 @@ void FCampaignSession::TellBattleRules()
 	{
 		return;
 	}
-	// (the field brings every infantry force its own teams only with both rows on, so the card prices them only then)
-	const bool bOn = FLandLive::RuleNow(TEXT("teams")) && FLandLive::RuleNow(TEXT("facing"));
+	// (the field brings every infantry force its own teams only with all three rows on, `teams`, `facing` and `stand`,
+	// so the card prices them only then: the design director, 25 November 21:54Z and 26 November 01:02Z)
+	const bool bOn = FLandLive::RuleNow(TEXT("teams")) && FLandLive::RuleNow(TEXT("facing")) && FLandLive::RuleNow(TEXT("stand"));
 	FString Json, Error;
 	if (!Host->Call(TEXT("teamFire"), bOn ? TEXT("[true]") : TEXT("[false]"), Json, Error))
 	{
@@ -6091,7 +6092,7 @@ void FCampaignSession::TellBattleRules()
 	}
 	if (bOn)
 	{
-		UE_LOG(LogTheater, Display, TEXT("Battle rules card: support teams are priced on the battle card (teams and facing both on)"));
+		UE_LOG(LogTheater, Display, TEXT("Battle rules card: support teams are priced on the battle card (teams, facing and stand all on)"));
 	}
 }
 
