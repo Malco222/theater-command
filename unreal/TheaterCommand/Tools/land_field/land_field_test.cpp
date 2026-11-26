@@ -983,6 +983,7 @@ int main(int Argc, char** Argv)
 	}
 	std::printf("  %d parcels in the field and its band, mean %.0f m across; %d lanes, %.1f km; %.1f km of banks and walls; %d gates; %d hedges opened by the recording's vehicles\n", T.Parcels, T.ParcelMean, T.Lanes,
 	            T.LaneKm, T.HedgeKm, T.Gates, T.WayGaps);
+	if (!T.LaneShape.empty()) std::printf("  %s\n", T.LaneShape.c_str());
 	std::printf("  village: %d houses, barns and byres (%d damaged), church %s, %d farmsteads\n", T.Houses, T.Damaged, T.bChurch ? "yes" : "no", T.Farmsteads);
 	{
 		// What the fields grow, by their ground in the field (a 4 m sample): mid-July, the harvest barely begun (the

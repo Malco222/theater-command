@@ -9,6 +9,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <deque>
 #include <functional>
@@ -283,6 +284,124 @@ namespace LandField
 			for (size_t K = 0; K < L.size(); ++K)
 				if (Keep[K]) Out.push_back(L[K]);
 			return Out;
+		}
+
+		/**
+		 * A line's corners rounded (the lanes' trial "roadline"): each corner a curve (a quadratic Bezier, Chaikin's own
+		 * limit) between two points cut back along its sides, as far as half of either side and no farther than keeps the
+		 * curve within Dev[K] metres of the corner (the curve's middle lies Cut * sin(half the turn) / 2 from it). A real
+		 * right angle so rounds over some 30 m; a gentle bend between corners far apart becomes one long even curve. The
+		 * ends kept.
+		 */
+		Line RoundCorners(const Line& P, const std::vector<double>& Dev)
+		{
+			if (P.size() < 3) return P;
+			Line Out{ P.front() };
+			for (size_t K = 1; K + 1 < P.size(); ++K)
+			{
+				const V2 In = P[K] - P[K - 1], Ou = P[K + 1] - P[K];
+				const double LI = Len(In), LO = Len(Ou);
+				if (LI < 1e-9 || LO < 1e-9) continue;
+				const V2 UI = In * (1.0 / LI), UO = Ou * (1.0 / LO);
+				const double HalfSin = std::sqrt(std::max(0.0, 0.5 * (1.0 - Dot(UI, UO))));
+				double Cut = 0.5 * std::min(LI, LO);
+				if (HalfSin > 1e-6) Cut = std::min(Cut, 2.0 * Dev[K] / HalfSin);
+				const V2 A = P[K] - UI * Cut, B = P[K] + UO * Cut;
+				const int N = std::max(2, static_cast<int>(std::ceil(Cut)));
+				for (int Q = 0; Q <= N; ++Q)
+				{
+					const double T = static_cast<double>(Q) / N;
+					const V2 X = A * ((1.0 - T) * (1.0 - T)) + P[K] * (2.0 * T * (1.0 - T)) + B * (T * T);
+					if (Len(X - Out.back()) > 1e-6) Out.push_back(X);
+				}
+			}
+			if (Len(P.back() - Out.back()) > 1e-6) Out.push_back(P.back());
+			return Out;
+		}
+
+		/** The nearest of some points (a lane's road cells' centres) to P, metres. */
+		double NearestOf(const Line& Pts, V2 P)
+		{
+			double Best = std::numeric_limits<double>::infinity();
+			for (const V2& Q : Pts) Best = std::min(Best, Len(P - Q));
+			return Best;
+		}
+
+		/**
+		 * A lane's shape for the log (the lanes' trial "roadline" measures it either way): its jogs (a turn of more than
+		 * 20 degrees from its heading and back within 10 degrees of it within 60 m, the heading over 10 m), its turning
+		 * per 25 m (mean and worst, degrees), how far its points in the field (every half metre) lie from the nearest centre
+		 * of its own road cells (mean and worst, metres), and how far its cells' centres lie beside it (mean and worst).
+		 */
+		std::string LaneShapeOf(const Line& P, const Line& Cells, double FW, double FH)
+		{
+			const Line Q = Resample(P, 5.0);
+			const size_t N = Q.size();
+			std::vector<double> Head(N, 0.0);
+			for (size_t K = 0; K < N; ++K)
+			{
+				const V2 D = Q[std::min(K + 1, N - 1)] - Q[K > 0 ? K - 1 : 0];
+				Head[K] = std::atan2(D.Y, D.X);
+			}
+			auto Turned = [&Head](size_t A, size_t B) {
+				double T = Head[B] - Head[A];
+				while (T > Pi) T -= 2.0 * Pi;
+				while (T < -Pi) T += 2.0 * Pi;
+				return std::fabs(T) * 180.0 / Pi;
+			};
+			double TurnSum = 0.0, TurnWorst = 0.0;
+			int TurnN = 0;
+			for (size_t K = 0; K + 5 < N; ++K)
+			{
+				const double T = Turned(K, K + 5);
+				TurnSum += T;
+				TurnWorst = std::max(TurnWorst, T);
+				++TurnN;
+			}
+			int Jogs = 0;
+			for (size_t K = 0; K + 1 < N;)
+			{
+				bool bOut = false;
+				size_t Back = 0;
+				for (size_t J = K + 1; J < N && J <= K + 12; ++J)
+				{
+					const double T = Turned(K, J);
+					if (T > 20.0) bOut = true;
+					else if (bOut && T < 10.0)
+					{
+						Back = J;
+						break;
+					}
+				}
+				if (Back)
+				{
+					++Jogs;
+					K = Back;
+				}
+				else ++K;
+			}
+			const Line R = Resample(P, 0.5);
+			double OffSum = 0.0, OffWorst = 0.0;
+			int OffN = 0;
+			for (const V2& X : R)
+			{
+				if (X.X < 0.0 || X.Y < 0.0 || X.X > FW || X.Y > FH || Cells.empty()) continue;
+				const double D = NearestOf(Cells, X);
+				OffSum += D;
+				OffWorst = std::max(OffWorst, D);
+				++OffN;
+			}
+			double AbeamSum = 0.0, AbeamWorst = 0.0;
+			for (const V2& X : Cells)
+			{
+				const double D = NearestOf(R, X);
+				AbeamSum += D;
+				AbeamWorst = std::max(AbeamWorst, D);
+			}
+			char Buf[320];
+			std::snprintf(Buf, sizeof Buf, "%.2f km, %d jogs, turning per 25 m mean %.1f worst %.0f deg, off its cells mean %.1f worst %.1f m, its cells beside it mean %.1f worst %.1f m",
+			              LineLength(P) / 1000.0, Jogs, TurnN ? TurnSum / TurnN : 0.0, TurnWorst, OffN ? OffSum / OffN : 0.0, OffWorst, Cells.empty() ? 0.0 : AbeamSum / static_cast<double>(Cells.size()), AbeamWorst);
+			return Buf;
 		}
 
 		/** The line moved sideways by D (left of its way, + to the left), each point along the mean of its sides' normals. */
@@ -623,6 +742,8 @@ namespace LandField
 		bool bTone = false;
 		/** The steppe's fallows (and the rules' works on it) as ploughland (on trial, "ploughland"): FallowAt, LandSteppe::FallowColour. */
 		bool bPlough = false;
+		/** The lanes' staircases straightened before their smoothing (on trial, "roadline"): MakeLanes. */
+		bool bRoadLine = false;
 		struct RegionHost;
 		/** A place as a region sees it (the parcel, its edges, the lanes and ways; with LandField's noises if bNoise). */
 		LandScape::Spot SpotAt(double X, double Y, bool bNoise) const;
@@ -1240,6 +1361,7 @@ namespace LandField
 		bWet = PlainFx == 4 && Fd.Weather == "mud" && !Fd.Trial.empty() && Fd.Tried("wet"); // (its look, on trial)
 		bTone = !Fd.Trial.empty() && Fd.Tried("fieldtone"); // (each field its own tone: on trial)
 		bPlough = Sp && !Fd.Trial.empty() && Fd.Tried("ploughland"); // (the steppe's fallows as ploughland: on trial)
+		bRoadLine = !Fd.Trial.empty() && Fd.Tried("roadline"); // (the lanes' staircases straightened: on trial)
 		std::vector<uint8_t> RgOf(Fd.Grounds.size(), RgOpen), RoadOf(Fd.Grounds.size(), 0);
 		FxOfCell.assign(Fd.Grounds.size(), 0);
 		for (size_t K = 0; K < Fd.Grounds.size(); ++K)
@@ -1494,6 +1616,43 @@ namespace LandField
 			if (Path.size() < 4 && (bLooseA || bLooseB)) continue;
 			Line L;
 			for (const int P : Path) L.push_back({ (P % C + 0.5) * Fd.Cell, (P / C + 0.5) * Fd.Cell });
+			const Line RoadMid = L; // (its road cells' centres: the log's measure, and the trial "roadline"'s limit)
+			size_t Lead = 0;      // (the points laid before its first cell: two where it runs out through the band)
+			// (on trial, "roadline": the rules' water and marsh, which the drawn road may not cross off its own cells: the
+			// region never lays a lane there, so the road would vanish)
+			auto WetAt = [this](V2 P) {
+				if (P.X < 0.0 || P.Y < 0.0 || P.X > FW || P.Y > FH) return false;
+				const int Gd = Fd.Ground[static_cast<size_t>(CellAt(P.X, P.Y))];
+				if (Gd < 0 || static_cast<size_t>(Gd) >= Fd.Grounds.size()) return false;
+				const std::string& G = Fd.Grounds[static_cast<size_t>(Gd)];
+				return G == "water" || G == "blown" || G == "marsh";
+			};
+			// (on trial, "roadline": how far a line strays from its own road cells, both ways: the worst of its points in the
+			// field, every half metre, from the nearest of its cells' centres (Afar), and the worst of its cells' centres from
+			// the line (Abeam: where a column marching on the cells is drawn beside the road); true if neither passes its
+			// limit and no point lies on the water or the marsh. Where it strays goes into At if asked: the points beyond
+			// AfarLim or on the wet, and the cells beyond AbeamLim.)
+			auto SpanOff = [&](const Line& X, double AfarLim, double AbeamLim, double& Afar, double& Abeam, Line* At) {
+				Afar = Abeam = 0.0;
+				bool bSodden = false;
+				const Line D = Resample(X, 0.5);
+				for (const V2& P : D)
+				{
+					if (P.X < 0.0 || P.Y < 0.0 || P.X > FW || P.Y > FH) continue;
+					const double O = NearestOf(RoadMid, P);
+					const bool bW = WetAt(P);
+					Afar = std::max(Afar, O);
+					bSodden = bSodden || bW;
+					if (At && (O > AfarLim || bW)) At->push_back(P);
+				}
+				for (const V2& C0 : RoadMid)
+				{
+					const double B0 = NearestOf(D, C0);
+					Abeam = std::max(Abeam, B0);
+					if (At && B0 > AbeamLim) At->push_back(C0);
+				}
+				return Afar <= AfarLim && Abeam <= AbeamLim && !bSodden;
+			};
 			// Out through the band: a lane that reaches the field's edge goes on beyond it.
 			for (int End = 0; End < 2; ++End)
 			{
@@ -1509,6 +1668,7 @@ namespace LandField
 				{
 					L.insert(L.begin(), Edge);
 					L.insert(L.begin(), Far);
+					Lead = 2;
 				}
 				else
 				{
@@ -1516,7 +1676,180 @@ namespace LandField
 					L.push_back(Far);
 				}
 			}
-			L = Resample(Chaikin(L, 3), 2.0);
+			// The rules' roads in the cells step: straight for a few cells, then one cell aside, so a road a little off the
+			// grid's axes is a staircase of 25 m jogs, which three passes of Chaikin only round (a zig-zag from above: Brian's
+			// Prokhorovka, 25 November). On trial ("roadline"): the staircase straightened first. Its corners are found on
+			// the cells' centres evened over two cells either way (Simplify, within 15 m), so a cell's step aside goes into
+			// a straight run and a real corner (the road turning) stays; each run between them is laid as the straight line
+			// that best fits its own cells, each corner where its runs' lines meet; then each corner rounded (RoundCorners):
+			// a right angle over some 30 m, a gentle bend between corners far apart as one even curve. The ends stay where
+			// they are (other lanes meet there), the line still crosses the field's edge where the band's run starts, and a
+			// bridge's cell, and the cells either side of it, keep the line through their middles; so does the village (its
+			// streets drawn as today: its houses front them, and Brian's steps are the roads between). Where the line so laid
+			// would lie more than 21.5 m from its own cells' centres, or leave one of its cells' centres more than 15.5 m
+			// beside it (a staircase's step cell lies some 15 m from any smooth line through it: today's line leaves them up
+			// to 16.3 m), or cross the rules' water or marsh, the run it strays by is split where its cells bend most and the
+			// line laid again; at the last, as before.
+			if (bRoadLine && RoadMid.size() >= 2)
+			{
+				const double Cs = Fd.Cell / 25.0;
+				std::vector<char> Pin(L.size(), 0);
+				std::vector<double> Dev(L.size(), 6.0 * Cs);
+				Pin.front() = Pin.back() = 1;
+				if (Lead > 0)
+				{
+					Pin[1] = 1;
+					Dev[1] = 1.5 * Cs;
+				}
+				if (L.size() > Lead + RoadMid.size())
+				{
+					Pin[L.size() - 2] = 1;
+					Dev[L.size() - 2] = 1.5 * Cs;
+				}
+				// (the village's own streets as today: its houses front them, and its lanes meet there at the angles they did;
+				// each of its cells kept, its corners rounded as Chaikin rounds them)
+				if (Fd.bTown)
+					for (size_t Q = 0; Q < RoadMid.size(); ++Q)
+						if (std::hypot(RoadMid[Q].X - Fd.TownX, RoadMid[Q].Y - Fd.TownY) < Fd.TownR)
+						{
+							Pin[Lead + Q] = 1;
+							Dev[Lead + Q] = 1e9;
+						}
+				for (size_t K = 0; K < Path.size(); ++K)
+				{
+					const int Gd = Fd.Ground[static_cast<size_t>(Path[K])];
+					if (Gd < 0 || static_cast<size_t>(Gd) >= Fd.Grounds.size() || Fd.Grounds[static_cast<size_t>(Gd)] != "bridge") continue;
+					for (size_t Q = K > 0 ? K - 1 : 0; Q <= std::min(K + 1, Path.size() - 1); ++Q)
+					{
+						Pin[Lead + Q] = 1;
+						Dev[Lead + Q] = 0.5 * Cs;
+					}
+				}
+				// Each run between the corners kept (and the pinned points) as the straight line that best fits its cells (the
+				// least squares across it; through its pinned end where it has one, through both where both are pinned), and
+				// each corner kept where its two runs' lines meet (the mean of its place on each where they would meet far off).
+				auto Fit = [&L, &Pin](size_t A, size_t B, V2& At, V2& Way) {
+					if (B == A + 1 || (Pin[A] && Pin[B]))
+					{
+						At = L[A];
+						Way = Unit2(L[B] - L[A]);
+						return;
+					}
+					V2 Mid{ 0.0, 0.0 };
+					if (Pin[A] || Pin[B]) Mid = Pin[A] ? L[A] : L[B];
+					else
+					{
+						for (size_t K = A; K <= B; ++K) Mid = Mid + L[K];
+						Mid = Mid * (1.0 / static_cast<double>(B - A + 1));
+					}
+					double XX = 0.0, XY = 0.0, YY = 0.0;
+					for (size_t K = A; K <= B; ++K)
+					{
+						const V2 D = L[K] - Mid;
+						XX += D.X * D.X;
+						XY += D.X * D.Y;
+						YY += D.Y * D.Y;
+					}
+					const double Ang = 0.5 * std::atan2(2.0 * XY, XX - YY);
+					At = Mid;
+					Way = { std::cos(Ang), std::sin(Ang) };
+					if (Dot(Way, L[B] - L[A]) < 0.0) Way = Way * -1.0;
+				};
+				// (the corners are found on the cells' centres evened over two cells either way, which takes the steps out,
+				// the steps of a staircase's sides kept as corners otherwise)
+				Line Even(L);
+				{
+					std::vector<size_t> Left(L.size(), 0), Right(L.size(), 0);
+					for (size_t K = 1; K < L.size(); ++K) Left[K] = Pin[K] ? 0 : Left[K - 1] + 1;
+					for (size_t K = L.size() - 1; K-- > 0;) Right[K] = Pin[K] ? 0 : Right[K + 1] + 1;
+					for (size_t K = 0; K < L.size(); ++K)
+					{
+						const size_t H = std::min({ Left[K], Right[K], static_cast<size_t>(2) });
+						if (H == 0) continue;
+						V2 Sum{ 0.0, 0.0 };
+						for (size_t Q = K - H; Q <= K + H; ++Q) Sum = Sum + L[Q];
+						Even[K] = Sum * (1.0 / static_cast<double>(2 * H + 1));
+					}
+				}
+				Line Straight;
+				std::vector<char> Keep(Pin);
+				for (size_t A = 0, B = 1; B < L.size(); ++B)
+					if (Pin[B])
+					{
+						SimplifyInto(Even, A, B, 0.6 * Fd.Cell, Keep);
+						A = B;
+					}
+				for (int Trip = 0;; ++Trip)
+				{
+					std::vector<size_t> At;
+					for (size_t K = 0; K < L.size(); ++K)
+						if (Keep[K]) At.push_back(K);
+					std::vector<V2> RunAt(At.size() - 1), RunWay(At.size() - 1);
+					for (size_t Run = 0; Run + 1 < At.size(); ++Run) Fit(At[Run], At[Run + 1], RunAt[Run], RunWay[Run]);
+					Line Kept;
+					std::vector<double> KeptDev;
+					for (size_t Run = 0; Run < At.size(); ++Run)
+					{
+						const size_t K = At[Run];
+						V2 P = L[K];
+						if (!Pin[K])
+						{
+							const V2 A0 = RunAt[Run - 1], D0 = RunWay[Run - 1], A1 = RunAt[Run], D1 = RunWay[Run];
+							const V2 On0 = A0 + D0 * Dot(P - A0, D0), On1 = A1 + D1 * Dot(P - A1, D1);
+							const double Den = D0.X * D1.Y - D0.Y * D1.X;
+							P = (On0 + On1) * 0.5;
+							if (std::fabs(Den) > 0.05)
+							{
+								const V2 Q = A1 - A0;
+								const V2 X = A0 + D0 * ((Q.X * D1.Y - Q.Y * D1.X) / Den);
+								if (Len(X - L[K]) < 0.6 * Fd.Cell) P = X;
+							}
+						}
+						Kept.push_back(P);
+						KeptDev.push_back(Dev[K]);
+					}
+					Straight = Resample(RoundCorners(Kept, KeptDev), 2.0);
+					double Afar = 0.0, Abeam = 0.0;
+					Line Strays;
+					if (SpanOff(Straight, 21.5 * Cs, 15.5 * Cs, Afar, Abeam, &Strays)) break;
+					// (each run a stray lies by, the stray taken to its nearest cell, split where its evened cells lie
+					// farthest from its chord: a corner kept there, and only there)
+					bool bSplit = false;
+					for (const V2& X : Strays)
+					{
+						if (Trip >= 24) break;
+						size_t Nigh = 0;
+						for (size_t Q = 1; Q < RoadMid.size(); ++Q)
+							if (Len(RoadMid[Q] - X) < Len(RoadMid[Nigh] - X)) Nigh = Q;
+						const size_t K = Lead + Nigh;
+						const size_t Run = static_cast<size_t>(std::upper_bound(At.begin(), At.end(), K) - At.begin());
+						if (Run == 0 || Run >= At.size()) continue;
+						const size_t A = At[Run - 1], B = At[Run];
+						size_t SplitAt = 0;
+						double FarD = -1.0;
+						for (size_t Q = A + 1; Q < B; ++Q)
+						{
+							double T;
+							const double D = SegDist(Even[Q], Even[A], Even[B], T);
+							if (D > FarD)
+							{
+								FarD = D;
+								SplitAt = Q;
+							}
+						}
+						if (SplitAt == 0 || Keep[SplitAt]) continue;
+						Keep[SplitAt] = 1;
+						bSplit = true;
+					}
+					if (!bSplit)
+					{
+						Straight = Resample(Chaikin(L, 3), 2.0);
+						break;
+					}
+				}
+				L = Straight;
+			}
+			else L = Resample(Chaikin(L, 3), 2.0);
 			// Wander: long slow bends of up to a dozen metres either way over some 250 m (within the rules' road cells
 			// and the ones beside them), and a few metres over some 80 m; none at the ends (they meet other lanes), and
 			// little in the village, whose houses front the lane.
@@ -1531,8 +1864,77 @@ namespace LandField
 				const double Amp = 2.5 * std::min({ 1.0, S / 40.0, (Total - S) / 40.0 });
 				double Bend = 12.0 * Smooth(0.0, 1.0, std::min({ 1.0, S / 110.0, (Total - S) / 110.0 }));
 				if (Fd.bTown) Bend *= Smooth(Fd.TownR * 0.9, Fd.TownR * 1.5, std::hypot(L[K].X - Fd.TownX, L[K].Y - Fd.TownY));
-				W[K] = L[K] + Perp(Way) * Wanders * (Amp * Noise(S / 80.0, Index * 7.31, Seed ^ 0xE1) + Bend * Noise(S / 260.0, Index * 3.77 + 0.5, Seed ^ 0xE2));
+				W[K] = Perp(Way) * Wanders * (Amp * Noise(S / 80.0, Index * 7.31, Seed ^ 0xE1) + Bend * Noise(S / 260.0, Index * 3.77 + 0.5, Seed ^ 0xE2));
 			}
+			// (on trial, "roadline": the wander kept within the rules' road cells and the ones beside them, its line no
+			// farther than 23.5 m from the nearest of its own cells' centres in the field and off the water and the marsh;
+			// scaled down where it would be, the least of the scales within 40 m taken and then evened over 30 m either way,
+			// so it eases off and back; none within 40 m of a bridge's cell. Then the whole line measured, every half metre
+			// and both ways: where it lies more than 24 m from its cells, or leaves a cell's centre more than 16.5 m beside
+			// it (a column on the cells drawn off the road: no farther than today's line leaves one), or touches the wet,
+			// the wander within 50 m is halved, up to six times, and at the last taken off.)
+			std::vector<double> Scale(L.size(), 1.0);
+			if (bRoadLine && RoadMid.size() >= 2)
+			{
+				const double Lim = 0.94 * Fd.Cell, Cs = Fd.Cell / 25.0;
+				Line Bridges;
+				for (size_t K = 0; K < Path.size(); ++K)
+				{
+					const int Gd = Fd.Ground[static_cast<size_t>(Path[K])];
+					if (Gd >= 0 && static_cast<size_t>(Gd) < Fd.Grounds.size() && Fd.Grounds[static_cast<size_t>(Gd)] == "bridge") Bridges.push_back(RoadMid[K]);
+				}
+				std::vector<double> Most(L.size(), 1.0);
+				for (size_t K = 0; K < L.size(); ++K)
+				{
+					const V2 P = L[K];
+					if (P.X < 0.0 || P.Y < 0.0 || P.X > FW || P.Y > FH) continue;
+					if (!Bridges.empty() && NearestOf(Bridges, P) < 40.0)
+					{
+						Most[K] = 0.0;
+						continue;
+					}
+					auto Keeps = [&](double F) { return NearestOf(RoadMid, P + W[K] * F) <= Lim && !WetAt(P + W[K] * F); };
+					if (Keeps(1.0)) continue;
+					double Lo = 0.0, Hi = 1.0;
+					for (int It = 0; It < 12; ++It)
+					{
+						const double Mid = 0.5 * (Lo + Hi);
+						(Keeps(Mid) ? Lo : Hi) = Mid;
+					}
+					Most[K] = Lo;
+				}
+				const int N = static_cast<int>(L.size());
+				auto Settle = [&]() {
+					std::vector<double> Least(L.size(), 1.0);
+					for (int K = 0; K < N; ++K)
+						for (int Q = std::max(0, K - 20); Q <= std::min(N - 1, K + 20); ++Q) Least[static_cast<size_t>(K)] = std::min(Least[static_cast<size_t>(K)], Most[static_cast<size_t>(Q)]);
+					for (int K = 0; K < N; ++K)
+					{
+						double Sum = 0.0;
+						int Num = 0;
+						for (int Q = std::max(0, K - 15); Q <= std::min(N - 1, K + 15); ++Q, ++Num) Sum += Least[static_cast<size_t>(Q)];
+						Scale[static_cast<size_t>(K)] = Sum / Num;
+					}
+				};
+				Settle();
+				for (int Trip = 0;; ++Trip)
+				{
+					Line F(L.size());
+					for (size_t K = 0; K < L.size(); ++K) F[K] = L[K] + W[K] * Scale[K];
+					Line Strays;
+					double Afar = 0.0, Abeam = 0.0;
+					if (SpanOff(Resample(F, 2.0), 24.0 * Cs, 16.5 * Cs, Afar, Abeam, &Strays)) break;
+					if (Trip == 6)
+					{
+						std::fill(Scale.begin(), Scale.end(), 0.0);
+						break;
+					}
+					for (size_t K = 0; K < L.size(); ++K)
+						if (NearestOf(Strays, L[K]) < 50.0 * Cs) Most[K] *= 0.5;
+					Settle();
+				}
+			}
+			for (size_t K = 0; K < L.size(); ++K) W[K] = bRoadLine ? L[K] + W[K] * Scale[K] : L[K] + W[K];
 			Lane Ln;
 			Ln.P = Resample(W, 2.0);
 			bool bVillage = false;
@@ -1541,6 +1943,7 @@ namespace LandField
 			Ln.Half = bVillage ? 2.6 : 2.0 + 0.4 * Unit(Hash(Seed, 0x1A4E, static_cast<uint64_t>(Index)));
 			if (Sp) Ln.Half = (bVillage ? 3.4 : 2.8) + 0.8 * Unit(Hash(Seed, 0x1A4E, static_cast<uint64_t>(Index))); // (wide, rutted, unfenced)
 			if (Rg) Ln.Half = Rg->LaneHalf(bVillage, Unit(Hash(Seed, 0x1A4E, static_cast<uint64_t>(Index))));
+			if (bRoadLine) Count.LaneShape += std::string(Count.LaneShape.empty() ? "lanes' shape (trial roadline): " : "; ") + "lane " + std::to_string(Index) + " " + LaneShapeOf(Ln.P, RoadMid, FW, FH);
 			Lanes.push_back(std::move(Ln));
 			++Index;
 		}
@@ -3158,6 +3561,19 @@ namespace LandField
 				}
 				Hs.push_back(std::move(H));
 			}
+		// (on trial, "roadline": a lane bank's own distance from the lanes' floors, not its 2 m pixel's, which lies up to 1.4 m
+		// nearer or farther: along a lane that runs aslant the raster the pixels' test cut its banks every few metres)
+		auto LaneEdgeAt = [this](V2 P) {
+			double Edge = 1e6;
+			if (const std::vector<uint32_t>* Near = LGrid.At(P.X, P.Y))
+				for (const uint32_t Id : *Near)
+				{
+					const LaneSeg& S = LSegs[Id];
+					double T;
+					Edge = std::min(Edge, SegDist(P, S.A, S.B, T) - Lanes[static_cast<size_t>(S.Lane)].Half);
+				}
+			return Edge;
+		};
 		// What closes each hedge's points.
 		for (Hedge& H : Hs)
 		{
@@ -3181,7 +3597,7 @@ namespace LandField
 					// None in the village, the yards or the water, and none across another lane.
 					const uint8_t G = Rgn[Px];
 					if (G == RgVillage || G == RgYard || G == RgWater || G == RgMarsh) H.Keep[K] = 0;
-					if (LaneD[Px] < LaneWall + 0.35) H.Keep[K] = 0;
+					if ((bRoadLine ? LaneEdgeAt(P) : LaneD[Px]) < LaneWall + 0.35) H.Keep[K] = 0;
 					const int32_t B = H.Beyond[K];
 					if (B >= 0)
 					{

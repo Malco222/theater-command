@@ -498,6 +498,7 @@ namespace LandField
 		double ParcelMean = 0.0;  // their mean size across, metres (square root of the mean area)
 		int Lanes = 0;
 		double LaneKm = 0.0;
+		std::string LaneShape;    // each lane's jogs, turning and distance from its road cells, for the log (one line)
 		double HedgeKm = 0.0;     // banks and walls, after the gaps
 		int Gates = 0;
 		int Haycocks = 0;         // the mown meadows' cocks of hay
