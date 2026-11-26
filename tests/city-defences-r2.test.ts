@@ -1835,9 +1835,10 @@ describe('city defences on the air rules\' present card: one card names its plac
       expect([fog, /guns built round the harbour of the Cotentin,/.test(flak[0])]).toEqual([fog, k !== undefined]);
       // The switch off: the shipped guns lines bare, the new Flak line as with it on.
       for (const l of card(b, 'Anti-aircraft guns')) expect([fog, l, /the (harbour|factories) of Cotentin/.test(l)]).toEqual([fog, l, true]);
-      // The harbour's own shipped line is there with the switch off, and the switch neither adds a guns line nor drops one.
+      // The harbour's own line is there once, with the switch off as shipped and with it on. (The count of guns lines
+      // is not compared on and off: the factories' line is to come off a harbour card under the switch.)
       expect([fog, card(b, 'Anti-aircraft guns').filter((l) => l.includes('the harbour of Cotentin')).length]).toEqual([fog, 1]);
-      expect([fog, card(b, 'Anti-aircraft guns').length]).toEqual([fog, guns.length]);
+      expect([fog, guns.filter((l) => l.includes('the harbour of the Cotentin')).length]).toEqual([fog, 1]);
       expect(card(b, 'Flak')).toEqual(flak);
     }
     // And the card's sky line, this row's own: the same name.
