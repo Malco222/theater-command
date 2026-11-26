@@ -252,6 +252,39 @@ describe('the fight, the climb from the ground, the patrol point and the dive, i
     expect(seen.sizes.has(3)).toBe(true);
   });
 
+  it('two hops: the lowest group reaches the other attacker only through the defender, and the fight holds all three', () => {
+    // Two attacking fighter groups and one defending fighter group: attackers never touch each other (touch() pairs an
+    // attacker only with a defending fighter), so from the lowest group the walk reaches the other attacker by two
+    // fighter-to-fighter contacts, through the defender.
+    const tk = made([
+      { side: 'att', kind: 'ftr', x: 49_000, y: 1_000, band: 1 }, { side: 'att', kind: 'ftr', x: 51_000, y: 1_000, band: 1 },
+      { side: 'def', kind: 'ftr', x: 50_000, y: 40_000, band: 1 },
+    ], { mission: 'superiority', radar: true });
+    const s = new AirSim(tk, { show: true });
+    s.ai.att = true; s.ai.def = true;
+    const w = new Watch('two-hops', s);
+    const [a1, a2] = s.units.filter((u) => u.side === 'att').sort((a, b) => a.id - b.id), d = s.units.find((u) => u.side === 'def')!;
+    expect(a1.id).toBeLessThan(a2.id);
+    expect(a1.id).toBeLessThan(d.id);
+    const held = (a: AirUnit, b: AirUnit): boolean => !off(a) && !off(b) && a.contacts.includes(b.id) && b.contacts.includes(a.id);
+    let both = 0;
+    while (!s.over) {
+      s.step(); w.look(s);
+      const at = `two-hops at ${s.t}`;
+      // The attackers are never in contact with each other, only each with the defender.
+      expect(a1.contacts, at).not.toContain(a2.id);
+      expect(a2.contacts, at).not.toContain(a1.id);
+      if (!held(a1, d) || !held(a2, d)) continue;
+      const ids = [a1.id, a2.id, d.id].sort((a, b) => a - b);
+      const f = shownOf(a1).fight;
+      expect(f, at).toMatchObject({ id: a1.id, groups: ids });
+      for (const g of [a2, d]) expect(shownOf(g).fight, at).toEqual(f);
+      both++;
+    }
+    expect(both).toBeGreaterThan(10);
+    expect(w.seen.sizes.has(3)).toBe(true);
+  });
+
   it('a late scramble: rise from the scramble to the first view at its height, while it holds the target as its patrol', () => {
     const { s, seen } = watched('scramble', made([{ side: 'att', kind: 'bmr', x: 50_000, y: 1_000, band: 1 }, { side: 'def', kind: 'ftr', x: 50_000, y: 85_000, band: 0, wait: true }]));
     const sc = s.history().find((e) => e.what === 'air:scramble')!;
