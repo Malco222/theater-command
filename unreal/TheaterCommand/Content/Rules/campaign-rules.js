@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of dab26f1d 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 38f50824 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -68878,7 +68878,42 @@
       _about: "When the leader falls (release 2; Brian, 25 November 2026, 15:11Z: 'do those 3 ideas'). Looks only (ruling 217), the drill's own dice; on only where asked and only with squad life (Drill leaders: the 3D game's switch)."
     },
     tankmind: {
-      _about: "Tanks with minds of their own (release 2; Brian, 25 November 2026, 15:57Z: 'i dont want the tanks and vehicles doing the exact same thing as each other. i want everything to see like it has its own mind'). Looks only (ruling 217), the drill's own dice; on only where asked (Drill tankmind: the 3D game's switch)."
+      _about: [
+        "Tanks with minds of their own (release 2; Brian, 25 November 2026, 15:57Z: 'i dont want the tanks and vehicles doing the exact same thing as each other. i want everything to see like it has its own mind'). Looks only (ruling 217), the drill's own dice; on only where asked (Drill tankmind: the 3D game's switch).",
+        "Timing and movement (Brian, 15:56Z: 'should the tanks be moving or was that the real tactic?': the real drill was move, halt briefly to fire, move on, one of a pair covering while the other moves). Times are battle seconds (the 3D game plays the fight at half the battle's clock, so a 2 s halt shows as 4 s). The block's place and pace stay the rules': a tank only falls behind her place and catches up.",
+        "react: seconds [least, most] each tank's commander takes to take up his block's new phase, his own each time; the platoon leader (its first tank) at once; till then she goes on with what she was at (and, told to stand and wait for her place to come up to her on the fast advance, she rolls on slowly that long: no platoon stops in one instant). quick: times this by her crew's training [raw, regular, veteran] (the block's experience, never its nation). The same wait, by her own dice, before she turns about when her block's way turns about under her (the rules jostle it back in a fight): a jostle shorter than it never turns her. roll: metres a battle second at which a tank counts her block as rolling on fast: she leaves the fast drill below the first, and takes it up at the second (two numbers, so a block near the pace does not send her to and fro). straight: the pace is the block's own where its way over the last three seconds was at least this straight (the ground it made over the way it went); less straight than that (the rules jostle a block to and fro in a fight), it counts for that much less, so a block shoved about that gains little ground is coming on slowly and its tanks leapfrog. way: coming on with a block that goes that straight, a tank's way is the way the block has made over those three seconds, where it makes this many metres a second or more that way, not the way of its last step (the rules shove a block a little aside from step to step: she is not swung from side to side with it). back: coming on, a tank backs no further than this many metres toward the enemy, her rear to him, nor with no enemy about: her nose turned away from her way (a block shoved about turns its tanks round), she turns about where she stands and drives on, where the plain drill would have her back along with her block for as long as it goes slowly.",
+        "halt: move, halt briefly to fire, move on, on the fast advance. reach: metres from the enemy within which she halts to fire. rare: rolling on fast she halts to fire this many times less often than she fires in a fight (her period between rounds times this), which keeps the rounds she fires on the fast advance about as many as before (a block shoved to and fro at a fast pace, its tanks leapfrogging, fires as seldom). soon: seconds before her round is due at which she presses on 'ahead' metres before her place, to buy her halt. len: seconds [least, most] she stands, her own wish each time (she takes the longest she can afford, never under the least). lay: seconds [least, most] she stands laying her gun before her round goes, on the advance and at any halt (so no round is fired in the moment she stops); see: the least seconds she stands on after it, to see it strike. fall: the most metres a halt may leave her behind her place, counting the ground her block makes while she stands and while she gathers way again (no halt she cannot afford is begun); edge: metres she keeps inside her block's leash at the end of it. apart: seconds between two halts beginning in one platoon. A tank never halts while her partner stands (pairs: first and second tank, third and fourth; a last odd tank with the pair before hers), and never more than half the platoon stands at once.",
+        "top: the fastest a tank closes up on her place after a halt, metres a battle second (the plain drill's is 12; her block's own pace where the rules drive it faster).",
+        "pair: where the block goes slowly the pairs leapfrog by the style's clock (style tankRush, tankHalt), one tank of each pair driving on to her next firing place while her partner stands covering, then the other way about, the second pair a quarter of the clock after the first. own: each tank's own lean on that clock, seconds either way, so no two move off together; len: her drive's length as a share of the style's tankRush [least, most], fresh each turn. She drives fast enough to be in her next firing place before her turn to cover comes: the way to it over her drive's seconds less 'gather' (the second she takes to gather way), never under the plain drill's pace for the bound and never over 'pace' metres a second unless that is faster. Not there when her turn to cover comes, she stands where she is (halt.edge and halt.fall as on the fast advance). And a platoon never all stands while it comes on: a tank with no mate on the move drives on, her turn to cover or not. rare: covering, she fires this many times less often than in a fight (her period between rounds times this): she now stands in every turn to cover, where the plain drill drove her on through many of them, and this keeps the rounds drawn about as many as before.",
+        "shot: her firing rhythm. first: seconds [least, most] after her block's fight begins before she may open, her own, so a platoon never fires its first volley as one; fresh: a fight counts as begun again after this many seconds out of one. pause: each pause between her rounds is her own share [least, most] of her period (the plain drill's 6 to 10 s at armour, the drill book's at foot), fresh after every round: about as many rounds as before, never evenly spaced.",
+        "keep: seconds [least, most] a tank keeps her direction, forward or backing, before she may change it again, her own (a driver does not go from forward to reverse and back each half second): she stands till then. A reverse she is ordered into (falling back, backing out of a firing post) is taken at once, and so is her block's call back inside its leash where it has left her outside.",
+        "Looking, posts, the other vehicles and the guns (step two). hull: a standing tank's hull is turned toward her block's main threat, her thickest armour to him, and her turret is free to lay on her own target or to watch her arc; 'hull' is how far to one side of him she may stand it, radians, her own at each firing post (halted to fire a moment on the fast advance she keeps her hull on her way; waiting there for her place to come up, it is turned to the threat as any standing tank's). fixed: the models whose gun is fixed in the hull (no turret): they turn their hull to fire as before, and watch no arcs with a turret; halted with nothing to lay on, each stands her hull on her own slice of watch.cone about the threat, across the line as they stand (her hull is her gun), and is sent no aim. The drill knows a model's name where the rules name it (a set piece's blocks, tank destroyers); a stand-in the 3D game alone picks for a campaign battle it cannot know.",
+        "watch: turrets watching their own arcs, when a tank has nothing to lay on. reach: metres [halted, on the move] from the enemy (the plain drill's own distances): coming on, a tank whose block is not fighting lays on him within the second and watches her arc beyond it; halted in a fight's place or pinned, she lays on him within the first though her block is not fighting just then. Halted and not fighting (holding, resting, on the start line): the platoon covers all round between its tanks, the last tank of three or more the rear half and the others an equal share each of the front half (two tanks or one share all round), across the line as they stand; with the enemy within the first reach the front shares close to 'cone' radians about him, each still her own slice. Each looks at one bearing of her share for 'hold' seconds [least, most], her own each time, then at another, and takes up her watch only her own share of 'first' seconds after she has nothing to lay on (so a platoon's guns never swing off together). far: metres out the point she looks at is sent (the 3D game lays the turret on a point). On the march in column and on the approach: alternate tanks watch left and right, between 'side' radians [least, most] off her way, and the last tank of three or more the rear, within 'rear' radians of dead astern. Where nothing is to be watched (routing, backing off with no enemy about) the gun comes back dead ahead: a point ahead is sent, since the 3D game holds the last aim it was given.",
+        "post: hull down in defence, any style. A tank halted with her block (holding, in a fight) whose firing place has cover of one of the kinds in 'cover' to sit behind sits back from it: 'down' metres straight back, at 'pace' metres a second, comes up to fire and backs down again, each at her own moment. Not fighting and the enemy far, she backs down her own share of 'idle' seconds [least, most] after she came to stand; the enemy come within watch.reach she comes up her own share of 'rise' seconds later. In a fight she backs down 'see' seconds [least, most] after her round, her own each time, where the wait for her next is long enough for the trip down and up, and comes up in time to lay and fire it at her own moment (the rounds she fires stay as many); her block's fight begun with her down, she comes up her own moment (react, quick) after it began. open: her chance each round to back down so from a place with no such cover (0, never: there is nothing there to sit behind, and the to and fro in the open reads as the flick this build calms; above 0 she backs off and comes up again in the open too). near: a shell landing within this many metres of her is a near miss; jump: her chance to take one as her cue to shift to her next post (a hit on her always is); rest: seconds [least, most] she must have been at a post before a near miss or a hit moves her, her own at each post. The shift itself is the plain drill's (back out of sight, across behind the line, up at the next post), now open to every style when its block defends or is halted in a fight; a style with no posts of its own (scoot 0) shifts only on these cues.",
+        "out: armoured cars, AA vehicles, jeeps and motorcycles (the vehicle-only squads). spot: each keeps her own place, up to these metres [across, along] off the plain drill's. start: metres [least, most] her place must have moved off from her before she drives after it, her own (the plain drill's is 5 for all), and she moves off her own moment (react, quick) after that, as she does when her place leaps (the screen called in or sent out); pace: her own share [least, most] of the plain drill's pace when closing up; trail: while her block drives she keeps up to this many seconds of its pace further back, her own share, and closes up when it halts, so each stops at her own moment; far: beyond this many metres from her place she drives straight for it, nearer she keeps pace with it. sight: a car's turret lays on her own point of the enemy block within this many metres (the plain drill's distance; one point for all before); further off she watches her own flank, between 'arc' radians [least, most] off her block's front, as a tank watches (watch.hold, watch.far). An AA vehicle's gun, standing, watches her own share of all round, and on the move comes back dead ahead. Jeeps and motorcycles are given no aim, as before. Standing, each turns her nose toward the threat her own way (up to twice 'hull').",
+        "lean: lorries, the armoured infantry's carriers, a battery's tractors and its guns on the move (self-propelled, or each behind her own tractor) keep each her own place, up to these metres [across, along] off the plain drill's, and each moves off from standing at her own moment (react, quick), never all in one instant; the first of a column at once. The third number: in column each keeps this many seconds of the block's pace further behind the one ahead (and up to as much again, her own share), so the column strings out at speed and closes up at the halt, each rolling on to her place and stopping at her own moment. The men aboard ride as before. volley: a battery's guns fire as a ripple whatever its style: each gun her own moment within 'own' seconds of the order, never within 'apart' seconds of another gun of her battery (the ranging gun of the drill book's mission fires alone as before).",
+        "wait: on the fast advance a tank well ahead of her place (her block keeps its tanks behind its own foot on close ground, or has checked) waits for it to come up to her; the platoon does not all stand while it waits. Its pairs take turns to roll on slowly, one tank of each pair at a time: 'turn' seconds for a pair's whole turn (half each), 'own' seconds of her own lean on it, so no two move off together; 'pace' metres a battle second, and never more than half her block's pace, so her place still comes up to her; and never more than 'far' metres further ahead of her place than where the plain drill has her stop to wait, nor out of her block's leash; and only while her block goes steadily on (one the rules shove to and fro may leap off another way, and she waits standing, as before). weave: rolling on with her block, a tank does not hold her hull dead parallel to her mates': she steers a little to one side of her way and back again, up to her own 'side' radians [least, most] off it (the point she steers for moved across her way by that share of its distance from her), once every her own 'len' seconds [least, most]. back (above) also counts the ground she has already backed: coming on, once she has backed that many metres toward the enemy she turns about, however near the place she backs to."
+      ],
+      react: [0.3, 1.5],
+      quick: [1.25, 1, 0.6],
+      roll: [2.8, 3.5],
+      straight: 0.8,
+      way: 1,
+      back: 8,
+      halt: { reach: 600, rare: 2.3, soon: 4, ahead: 8, len: [1.5, 2.5], lay: [1, 1.4], see: 0.3, fall: 30, edge: 8, apart: 1.2 },
+      top: 12.5,
+      pair: { own: 0.6, len: [0.85, 1.1], pace: 8, gather: 1, rare: 1.4 },
+      shot: { first: [0.3, 3], fresh: 4, pause: [0.75, 1.25] },
+      keep: [1.5, 3.5],
+      hull: 0.25,
+      fixed: ["StuG3", "SU85", "Semovente"],
+      watch: { reach: [600, 900], cone: 1.6, first: 4, hold: [5, 10], far: 600, side: [0.35, 1.3], rear: 0.6 },
+      post: { cover: ["crest", "woods", "building", "rock", "works"], open: 0, down: 5, pace: 4, idle: [4, 12], see: [1, 2.2], rise: 4, near: 12, jump: 0.6, rest: [8, 14] },
+      out: { spot: [6, 8], start: [5, 11], pace: [0.9, 1.25], trail: 0.8, far: 25, sight: 1200, arc: [0.3, 1.7] },
+      lean: [1.5, 3.5, 0.35],
+      volley: { own: 1.2, apart: 0.7 },
+      wait: { turn: 6, own: 1, pace: 1.5, far: 60 },
+      weave: { side: [0.04, 0.09], len: [14, 24] }
     },
     blast: {
       _about: "Shell blasts (release 2; Brian, 23 November 05:04Z: 'explosions on the ground should be able to take out multiple people if they are close to it'). Looks only, the rules' counts untouched (Drill.thin): with LandBattle.blast on, the men a block loses to a gun's or a tank's high explosive wait up to 'hold' battle seconds for one burst, or until as many are due as one shell of the class takes ('most', a realistic few: men of a section stand 5 to 10 m apart); a 'shell' event that took a key man within 'anchor' seconds is that burst. The men nearest it fall, within shells.ts REACH of it; a man lying down counts his distance over 'lying', kneeling over 'kneeling' (a burst finds him less: fragments fly up and out).",
@@ -69660,6 +69695,10 @@
         const s = this.escortSpot(sq, i, own, ahead2), d = Math.hypot(s[0] - m.x, s[1] - m.y);
         m.aim = sq.esc === "cars" && e && near2 < 1200 ? [e.x, e.y] : void 0;
         m.buttoned = sq.esc === "cars" && near2 < 400 || void 0;
+        if (this.tankmind) {
+          this.mindOut(sq, m, i, s, e, near2);
+          return;
+        }
         if (d > 5) {
           m.spot = s;
           m.slotAt = s;
@@ -71716,8 +71755,8 @@
      * Keeps a man (a tank, a lorry) at a place that moves with his block: he heads a little ahead of it, so he keeps its
      * pace and never stops short; one left behind closes up faster. When the block halts he reaches it and settles.
      */
-    follow(sq, m, s, pose, mul2 = 1) {
-      const v = sq.speed, on = v > 0.4, [hx, hy] = fwd(sq.heading);
+    follow(sq, m, s, pose, mul2 = 1, way = sq.heading) {
+      const v = sq.speed, on = v > 0.4, [hx, hy] = fwd(way);
       const off2 = Math.hypot(s[0] - m.x, s[1] - m.y), behind2 = (s[0] - m.x) * hx + (s[1] - m.y) * hy;
       const lead2 = on ? v * 1.5 + clamp6(-behind2, 0, 10) : 0;
       m.spot = [s[0] + hx * lead2, s[1] + hy * lead2];
@@ -72568,9 +72607,10 @@
       const u = sq.u, t = this.b.t;
       if (u.kind === "mot") {
         sq.veh.forEach((v, i) => {
-          const s = toWorld(u, sq.heading, 0, u.d / 2 - 8 - i * 18);
+          const s0 = toWorld(u, sq.heading, 0, u.d / 2 - 8 - i * 18), s = this.tankmind ? this.mindLean(sq, v, s0, sq.heading, i) : s0;
           this.follow(sq, v, s, "drive");
           v.until = t + 1;
+          if (this.tankmind) this.mindOff(sq, v, i === 0);
         });
         for (const m of this.up(sq)) {
           m.pose = "mounted";
@@ -72947,7 +72987,7 @@
           this.follow(sq, v, s2, "drive", 1.2);
           return;
         }
-        const s = toWorld(u, u.face, (i - (sq.veh.length - 1) / 2) * 24, -u.d / 2 - 110);
+        const s0 = toWorld(u, u.face, (i - (sq.veh.length - 1) / 2) * 24, -u.d / 2 - 110), s = this.tankmind ? this.mindLean(sq, v, s0, u.face) : s0;
         if (Math.hypot(s[0] - v.slotAt[0], s[1] - v.slotAt[1]) > 25 || t < 0.2) {
           const best = this.seek(sq, v, s, this.threatDir(sq), sq.veh, 30);
           v.spot = [best.x, best.y];
@@ -72960,6 +73000,7 @@
           v.v = 0;
         }
       });
+      if (this.tankmind) for (const v of sq.veh) this.mindOff(sq, v);
     }
     /**
      * The anti-tank team's ambush: once enemy tanks come within range of a block holding or fighting where it stands, its
@@ -73053,7 +73094,717 @@
      * wreckOffset), so she is never far from it; knocked out, she burns where she stood (falls, wreckSpot).
      */
     // ---- Tanks with minds of their own (Drill.tankmind): its helpers stand just above tanks(), below this line ----
-    tanks(sq) {
+    /**
+     * Tank minds: the phase this tank's commander is acting on. When his block's phase changes (or it goes from rolling
+     * on fast to leapfrogging, or is shaken) he takes it up at his own moment, DR.tankmind.react seconds later (a veteran
+     * crew sooner, 'quick'); the platoon leader, its first tank, at once. Till then she goes on with what she was at:
+     * her old phase's drill is still run for her each think, so a tank driving with her block keeps her moving place. A
+     * change gone again before his moment comes he never takes up.
+     */
+    mindPhase(sq, m, lead2) {
+      const T = DR.tankmind, u = sq.u, t = this.b.t, M2 = m.mind ?? (m.mind = {});
+      const fast = (sq.made ?? sq.speed) >= T.roll[M2.fast ? 0 : 1], shaken = u.state === "wavering";
+      if (M2.ph === void 0 || sq.phase === M2.ph && fast === !!M2.fast && shaken === !!M2.shaken) M2.at = void 0;
+      else if (M2.at === void 0) M2.at = lead2 ? t : t + (T.react[0] + (T.react[1] - T.react[0]) * roll(this.seed, u.id, m.n, Math.round(t * 2), 301)) * T.quick[this.band(u)];
+      if (M2.ph === void 0 || M2.at !== void 0 && t >= M2.at - 1e-6) {
+        if (M2.ph !== sq.phase) M2.stop = M2.go = M2.fire = void 0;
+        M2.ph = sq.phase;
+        M2.fast = fast;
+        M2.shaken = shaken;
+        M2.at = void 0;
+      }
+      return M2.ph;
+    }
+    /**
+     * Tank minds: the way this tank is going. Coming on with a block that goes steadily (straight over the last seconds:
+     * mindBlock, and making DR.tankmind.way metres a second or more), it is the way the block has made over those
+     * seconds, not its last step's: a block the rules shove a little aside each step does not swing her from side to
+     * side. And she keeps her way when her block's turns about under her (the rules jostle it back in a fight, or it
+     * gives a little ground): she takes the new way up at her own moment (DR.tankmind.react, her own dice), and never
+     * sooner than her own least time since she last changed direction (mindStep), so a jostle shorter than that never
+     * turns her and no platoon goes into reverse as one. A lesser turn she follows as it comes, and in any phase but
+     * coming on her block's last step is her way, as the plain drill's.
+     */
+    mindWay(sq, m) {
+      const T = DR.tankmind, M2 = m.mind, t = this.b.t, on = M2.ph === "deploy" || M2.ph === "bound";
+      const H = on && sq.net >= T.way && (sq.made ?? 0) >= sq.speed - 1e-9 ? Math.atan2(sq.wx, sq.wy) : sq.heading;
+      if (M2.h === void 0 || !on || Math.cos(H - M2.h) > 0) {
+        M2.turn = void 0;
+        return M2.h = H;
+      }
+      if (M2.turn === void 0) M2.turn = Math.max(M2.keep ?? 0, t + (T.react[0] + (T.react[1] - T.react[0]) * roll(this.seed, sq.u.id, m.n, Math.round(t * 2), 302)) * T.quick[this.band(sq.u)]);
+      if (t >= M2.turn - 1e-6) {
+        M2.turn = void 0;
+        return M2.h = H;
+      }
+      return M2.h;
+    }
+    /** Tank minds: a tank's top speed: closing up after a halt she may go a little faster than the plain drill's catch-up (DR.tankmind.top). */
+    mindTop(sq) {
+      return Math.max(tankTop(sq), DR.tankmind.top);
+    }
+    /**
+     * Tank minds, every step (walk): what her commander has timed for this step, to the step and not to her block's half
+     * second. His own moment to take up his block's new phase or way comes: her drill is run for her at that step
+     * (tanks, for her alone). Her halt to fire begins: she stops where she is. She keeps her direction: forward or
+     * backing, she may change only once her own least time since her last change is up (DR.tankmind.keep), and stands
+     * meanwhile, her order held; a reverse she is ordered into (falling back, backing out of a firing post) is real and
+     * taken at once, and so is her block's call back inside its leash. Coming on she does not back toward the enemy: she
+     * turns about. And her round goes, if she still stands with her gun laid and her block still fights. Returns her
+     * top speed.
+     */
+    mindStep(sq, m) {
+      const M2 = m.mind, t = this.b.t;
+      if (!M2) return this.mindTop(sq);
+      if (sq.esc) {
+        this.mindTick(sq, m);
+        return this.mindTop(sq);
+      }
+      const stood = M2.still !== void 0;
+      if (M2.at !== void 0 && t >= M2.at - 1e-6 || M2.turn !== void 0 && t >= M2.turn - 1e-6 || M2.ease !== void 0 && t >= M2.ease - 1e-6 || M2.rise !== void 0 && t >= M2.rise - 1e-6 || stood && M2.shift !== void 0 && t >= M2.shift - 1e-6) {
+        const ease = M2.ease, rise2 = M2.rise, shift = M2.shift;
+        this.tanks(sq, m);
+        if (ease !== void 0 && M2.ease === ease) M2.ease = void 0;
+        if (rise2 !== void 0 && M2.rise === rise2 && t >= rise2 - 1e-6) M2.rise = void 0;
+        if (stood && shift !== void 0 && M2.shift === shift && t >= shift - 1e-6) M2.shift = void 0;
+      }
+      if (M2.stop !== void 0 && t >= M2.stop - 1e-6) {
+        M2.stop = void 0;
+        if (MOVING.has(m.pose)) {
+          if (Math.hypot(m.spot[0] - m.x, m.spot[1] - m.y) > 2) m.cover = "none";
+          m.pose = "halt";
+          m.v = 0;
+          m.spot = [m.x, m.y];
+        }
+      }
+      if (M2.wait) {
+        if (m.pose !== "halt" || m.v !== 0 || m.spot[0] !== M2.wait[1] || m.spot[1] !== M2.wait[2]) M2.wait = void 0;
+        else if (t >= (M2.keep ?? 0) - 1e-6) {
+          m.pose = "drive";
+          m.v = M2.wait[0];
+          M2.wait = void 0;
+        }
+      }
+      if (m.v > 0 && m.pose === "drive") {
+        const dx = m.spot[0] - m.x, dy = m.spot[1] - m.y, d = Math.hypot(dx, dy);
+        let back = d > 0.3 && d < 30 && Math.abs(wrap(Math.atan2(dx, dy) - m.face)) > 1.9;
+        const on = back && (M2.ph === "bound" || M2.ph === "deploy") && (!m.aim || dx * (m.aim[0] - m.x) + dy * (m.aim[1] - m.y) > 0);
+        M2.rb = on ? M2.rb ?? [m.x, m.y] : void 0;
+        if (on && (d > DR.tankmind.back || Math.hypot(m.x - M2.rb[0], m.y - M2.rb[1]) > DR.tankmind.back)) {
+          m.spot = [m.x + dx / d * 31, m.y + dy / d * 31];
+          back = false;
+        }
+        if (back !== !!M2.rev) {
+          const p = [m.x, m.y];
+          if (t >= (M2.keep ?? 0) - 1e-6 || this.leash(sq, p) !== p) {
+            M2.rev = back || void 0;
+            M2.keep = t + this.mindKeep(sq, m);
+          } else {
+            M2.wait = [m.v, m.spot[0], m.spot[1]];
+            m.pose = "halt";
+            m.v = 0;
+          }
+        }
+      } else if (m.v > 0 && m.pose === "reverse" && !M2.rev) {
+        M2.rev = true;
+        M2.keep = t + this.mindKeep(sq, m);
+      }
+      if (M2.rb && m.v === 0 && !M2.wait) M2.rb = void 0;
+      const still = m.v === 0 && !MOVING.has(m.pose);
+      if (!still) M2.still = void 0;
+      else if (M2.still === void 0) M2.still = t;
+      if (M2.fire !== void 0 && t >= M2.fire - 1e-6) {
+        if (still && m.aim && sq.u.engaged !== void 0 && live2(sq.u)) {
+          m.shot = t;
+          m.pose = "fire";
+          if (M2.post) m.shots = (m.shots ?? 0) + 1;
+        }
+        M2.fire = void 0;
+        M2.post = void 0;
+      }
+      return this.mindTop(sq);
+    }
+    /** Tank minds: this tank's own least time in one direction, forward or backing (DR.tankmind.keep). */
+    mindKeep(sq, m) {
+      const K2 = DR.tankmind.keep;
+      return K2[0] + (K2[1] - K2[0]) * roll(this.seed, sq.u.id, m.n, 303);
+    }
+    /**
+     * Tank minds, once a think for the block. The pace it is really making, for its tanks' drill: its pace, less where
+     * the rules jostle it to and fro (by how straight its way over the last seconds was, the ground made against the way
+     * gone, under DR.tankmind.straight: a block shoved back and forth at 4 m a second that gains 2 is coming on slowly,
+     * and its tanks leapfrog). The shells fired at it since its last think. And when its fight began: the think it is
+     * first fighting after DR.tankmind.shot.fresh seconds or more out of one.
+     */
+    mindBlock(sq) {
+      const t = this.b.t, K2 = sq.track;
+      let gone = 0;
+      for (let i = 2; i < K2.length; i += 2) gone += Math.hypot(K2[i] - K2[i - 2], K2[i + 1] - K2[i - 1]);
+      sq.made = sq.speed * (gone > 1 ? Math.min(1, sq.net * (K2.length / 2 - 1) * DT / gone / DR.tankmind.straight) : 1);
+      let H;
+      if (sq.hits) {
+        for (let i = 0; i < sq.hits.length; i += 4) if (sq.hits[i + 3] > t - 0.5 + 1e-6) (H ?? (H = [])).push(sq.hits[i], sq.hits[i + 1], sq.hits[i + 2], sq.hits[i + 3]);
+      }
+      for (let i = this.shots.length - 1; i >= 0 && this.shots[i].n > (sq.hitN ?? 0); i--) {
+        const r = this.shots[i];
+        if (r.on === sq.u.id && !r.m && (r.w === "tank" || r.w === "at" || r.w === "gun" || r.w === "mortar")) (H ?? (H = [])).push(r.x, r.y, r.r === "miss" ? -1 : r.ok ?? -1, r.l);
+      }
+      sq.hits = H;
+      sq.hitN = this.fired;
+      if (sq.u.engaged === void 0) return;
+      if (sq.foughtAt === void 0 || t - sq.foughtAt > DR.tankmind.shot.fresh) sq.fightAt = t;
+      sq.foughtAt = t;
+    }
+    /**
+     * Tank minds: the battle time this tank's next round is due. Her own period (the plain drill's: 6 to 10 s at armour,
+     * BOOK.tank.every at foot with the drill book), each pause her own share of it, fresh after every round
+     * (DR.tankmind.shot.pause), so her shots are never evenly spaced; and, her block's fight just begun, not before her
+     * own moment to open (shot.first), so a platoon never fires its first volley as one. 'slow': her period stretched
+     * by this much (rolling on fast she halts to fire less often than she fires in a fight: DR.tankmind.halt.rare).
+     */
+    mindDue(sq, m, e, slow = 1) {
+      const S3 = DR.tankmind.shot, u = sq.u, at4 = sq.fightAt ?? 0;
+      const open2 = at4 + S3.first[0] + (S3.first[1] - S3.first[0]) * roll(this.seed, u.id, m.n, Math.round(at4 * 2), 304);
+      if (m.shot === void 0) return open2;
+      const r = roll(this.seed, u.id, m.n, 306), B3 = BOOK2.tank.every, every = this.byBook && e.kind !== "arm" ? B3[0] + (B3[1] - B3[0]) * r : 6 + 4 * r;
+      return Math.max(open2, m.shot + every * slow * (S3.pause[0] + (S3.pause[1] - S3.pause[0]) * roll(this.seed, u.id, m.n, Math.round(m.shot * 10), 305)));
+    }
+    /**
+     * Tank minds: a halted tank's round. She fires from her halt: never before she has stood DR.tankmind.halt.lay seconds
+     * with her gun laid, and at the step her round falls due, her own (mindStep fires it), not on her block's half
+     * second. 'post': it counts toward the shots she fires from her firing post. Always false: nothing fires on the think.
+     */
+    mindShot(sq, m, e, post2 = false, slow = 1) {
+      const M2 = m.mind, t = this.b.t, H = DR.tankmind.halt;
+      if (!e || sq.u.engaged === void 0 || M2.fire !== void 0 || M2.still === void 0) return false;
+      const laid = M2.still + H.lay[0] + (H.lay[1] - H.lay[0]) * roll(this.seed, sq.u.id, m.n, Math.round(M2.still * 10), 308);
+      const at4 = Math.max(this.mindDue(sq, m, e, slow), laid, t);
+      if (at4 < t + 0.5) {
+        M2.fire = at4;
+        M2.post = post2 || void 0;
+      }
+      return false;
+    }
+    /**
+     * Tank minds: whether this tank may begin a halt to fire now. Pairs cover each other (the first and second tank, the
+     * third and fourth; a last odd tank goes with the pair before hers): never while her partner stands, never more than
+     * half the platoon standing at once, and not within DR.tankmind.halt.apart seconds of a mate's stop.
+     */
+    mindTurn(tanks, i) {
+      const H = DR.tankmind.halt, t = this.b.t, n = tanks.length;
+      const pair2 = (j) => n > 1 && j === n - 1 && j % 2 === 0 ? (j >> 1) - 1 : j >> 1;
+      let standing5 = 0;
+      for (let j = 0; j < n; j++) {
+        const O = tanks[j].mind;
+        if (j === i || !O || O.go === void 0 || t >= O.go - 1e-6) continue;
+        if (pair2(j) === pair2(i) || t - (O.from ?? t) < H.apart) return false;
+        standing5++;
+      }
+      return standing5 < Math.max(1, n >> 1);
+    }
+    /**
+     * Tank minds: coming on fast with her block (the rolling advance). Move, halt briefly to fire, move on: with the
+     * enemy in reach and a round due she presses on a little ahead of her place, stops at her own moment, lays, fires
+     * from the halt and drives on, closing up after. Her block's pace is the rules' and does not wait for her: the halt
+     * is bought by letting her fall behind her place, never more than DR.tankmind.halt.fall metres and never to her
+     * block's leash, so she begins only a halt she can afford, and the longest of her wish that she can. Pairs cover
+     * each other (mindTurn): some of the platoon are always moving while others shoot.
+     */
+    mindRoll(sq, m, tanks, i, s, e, bound3, h) {
+      const u = sq.u, b = this.b, t = b.t, H = DR.tankmind.halt, M2 = m.mind, V = sq.speed, [hx, hy] = fwd(h);
+      const near2 = e ? b.gap(u, e) : Infinity, on = bound3 && !!e && u.engaged !== void 0 && near2 < H.reach;
+      s = this.leash(sq, s, -H.edge);
+      if (M2.go !== void 0) {
+        const left = V * (M2.go - t) + V * V / (2 * TANK_GAIN), p = [m.x - hx * left, m.y - hy * left];
+        if (on && t < M2.go - 1e-6 && !MOVING.has(m.pose) && this.leash(sq, p, -H.edge / 2) === p) {
+          m.v = 0;
+          m.pose = "halt";
+          m.aim = this.tankAim(sq, m, e);
+          return;
+        }
+        M2.stop = M2.go = M2.fire = void 0;
+      }
+      let ahead2 = 0;
+      if (on) {
+        const due = this.mindDue(sq, m, e, H.rare), lag = (s[0] - m.x) * hx + (s[1] - m.y) * hy, k = Math.round(t * 2);
+        if (due - t < H.soon) {
+          ahead2 = H.ahead;
+          const d0 = Math.floor(5 * roll(this.seed, u.id, m.n, k, 307)) * DT, lay3 = H.lay[0] + (H.lay[1] - H.lay[0]) * roll(this.seed, u.id, m.n, k, 308);
+          if (due <= t + d0 + lay3 && this.mindTurn(tanks, i)) {
+            const wish = H.len[0] + (H.len[1] - H.len[0]) * roll(this.seed, u.id, m.n, k, 309);
+            for (let j = Math.round((d0 + wish) / 0.5); 0.5 * j - d0 >= H.len[0] - 1e-6; j--) {
+              const len = 0.5 * j - d0, cost = V * len + V * V / (2 * TANK_GAIN), p = [m.x - hx * cost, m.y - hy * cost];
+              if (lag + cost > H.fall || this.leash(sq, p, -H.edge) !== p) continue;
+              M2.stop = M2.from = t + d0;
+              M2.fire = M2.stop + Math.min(lay3, len - H.see);
+              M2.go = t + 0.5 * j;
+              break;
+            }
+          }
+        }
+      }
+      const to = ahead2 ? [s[0] + hx * ahead2, s[1] + hy * ahead2] : s, was = m.v > 0 && MOVING.has(m.pose);
+      this.follow(sq, m, to, "drive", 1, h);
+      if (m.v > 0 && MOVING.has(m.pose)) this.mindWeave(sq, m, h);
+      if (m.v === 0 && was && V > 0.4 && i > 0) {
+        const R2 = DR.tankmind.react;
+        if (M2.ease === void 0) M2.ease = t + (R2[0] + (R2[1] - R2[0]) * roll(this.seed, u.id, m.n, Math.round(t * 2), 312)) * DR.tankmind.quick[this.band(u)];
+        if (t < M2.ease - 1e-6) {
+          m.pose = "drive";
+          m.v = Math.max(1.5, V * 0.6);
+          m.spot = this.leash(sq, [m.x + hx * 12, m.y + hy * 12], -H.edge);
+          m.until = t + 1;
+        }
+      } else M2.ease = void 0;
+      if (m.v === 0 && V > 0.4 && M2.go === void 0) this.mindWait(sq, m, tanks, i, to, h);
+      if (m.v > 0 && (to[0] - m.x) * hx + (to[1] - m.y) * hy > (ahead2 ? 2 : 6)) m.v = Math.min(V * 1.4, this.mindTop(sq));
+      if (on && (M2.go !== void 0 || !MOVING.has(m.pose))) {
+        m.aim = this.tankAim(sq, m, e);
+        if (M2.go === void 0) this.mindShot(sq, m, e, false, H.rare);
+      } else m.aim = e && near2 < 900 ? [e.x, e.y] : void 0;
+    }
+    /**
+     * Tank minds: coming on slowly, the pairs leapfrog by the style's clock (tankRush, tankHalt). Within each pair one
+     * tank drives on to her next firing place (the best cover near the bound's end: go and seek) while her partner
+     * stands covering, then the other way about; the second pair a quarter of the clock after the first, so the four
+     * move off one after another. A last odd tank goes with the pair before hers, in its second tank's turn. Each has
+     * her own lean on the clock and her own length of drive each turn (DR.tankmind.pair), and drives fast enough to be
+     * in her place before her turn to cover comes; not there by then, she stands where she is (her own step of the half
+     * second: mindStep), where her block's leash and her place allow. Standing, she fires from her halt at her own
+     * step (mindShot). And the platoon never all stands: a tank with no mate on the move goes on, her turn or not.
+     */
+    mindBound(sq, m, tanks, i, s, e, dir, N, h) {
+      const u = sq.u, t = this.b.t, T = DR.tankmind, P = T.pair, M2 = m.mind, n = tanks.length, v = Math.max(1, sq.made ?? sq.speed), cyc = N.tankRush + N.tankHalt;
+      const odd = n > 1 && i === n - 1 && i % 2 === 0, pair2 = odd ? (i >> 1) - 1 : i >> 1, turn2 = odd ? 1 : i % 2;
+      const at4 = t + 100 * cyc - pair2 % 2 * cyc / 4 - turn2 * cyc / 2 + (roll(this.seed, u.id, m.n, 310) * 2 - 1) * P.own, c = Math.floor(at4 / cyc);
+      const left = N.tankRush * (P.len[0] + (P.len[1] - P.len[0]) * roll(this.seed, u.id, m.n, c, 311)) - (at4 - c * cyc);
+      const going = MOVING.has(m.pose), [hx, hy] = fwd(h);
+      if (left > 0 || n > 1 && !tanks.some((o) => o !== m && o.v > 0 && MOVING.has(o.pose))) {
+        M2.stop = void 0;
+        if (!going || t >= m.until) {
+          const span2 = left > 0 ? left : N.tankRush * P.len[0];
+          this.go(sq, m, [s[0] + hx * v * cyc * 0.45, s[1] + hy * v * cyc * 0.45], "drive", v * cyc / N.tankRush, t + span2, dir);
+          m.v = clamp6(Math.hypot(m.spot[0] - m.x, m.spot[1] - m.y) / Math.max(1, span2 - P.gather), m.v, Math.max(m.v, P.pace));
+        }
+        m.aim = e ? [e.x, e.y] : void 0;
+        return;
+      }
+      if (!going || Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 2) {
+        m.v = 0;
+        m.spot = [m.x, m.y];
+        m.pose = "halt";
+        m.aim = this.tankAim(sq, m, e);
+        this.mindShot(sq, m, e, false, sq.speed >= T.roll[1] ? T.halt.rare : P.rare);
+        return;
+      }
+      const p = [m.x, m.y];
+      if (M2.stop === void 0 && this.leash(sq, p, -T.halt.edge) === p && (s[0] - m.x) * hx + (s[1] - m.y) * hy < T.halt.fall) M2.stop = t + Math.floor(5 * roll(this.seed, u.id, m.n, Math.round(t * 2), 307)) * DT;
+    }
+    /**
+     * Tank minds: rolling on with her block she steers a little to one side of her way and back again, her own amount and
+     * her own time (DR.tankmind.weave), so a platoon's hulls are never dead parallel for long. The point she steers for
+     * is moved across her way, by her own share of its distance from her (a few degrees whatever her pace); her place
+     * and her pace stay as they were.
+     */
+    mindWeave(sq, m, h) {
+      const W2 = DR.tankmind.weave, id = sq.u.id, [rx, ry] = right(h);
+      const side5 = W2.side[0] + (W2.side[1] - W2.side[0]) * roll(this.seed, id, m.n, 314), len = W2.len[0] + (W2.len[1] - W2.len[0]) * roll(this.seed, id, m.n, 315);
+      const d = Math.hypot(m.spot[0] - m.x, m.spot[1] - m.y) * side5 * Math.sin(2 * Math.PI * (this.b.t / len + roll(this.seed, id, m.n, 316)));
+      m.spot = [m.spot[0] + rx * d, m.spot[1] + ry * d];
+    }
+    /**
+     * Tank minds: on the fast advance, standing to wait for her place to come up to her (her block keeps its tanks behind
+     * its own foot on close ground, or has checked), the platoon does not all stand: its pairs take turns to roll on
+     * slowly (DR.tankmind.wait), one tank of each pair at a time (a last odd tank with the pair before hers, in its second
+     * tank's turn), each with her own lean on the turn; at no more than half her block's pace (so her place still comes
+     * up to her), never more than wait.far metres beyond where she would begin to wait, nor out of her block's leash; and
+     * only while her block goes steadily on (mindBlock).
+     */
+    mindWait(sq, m, tanks, i, s, h) {
+      const W2 = DR.tankmind.wait, n = tanks.length, t = this.b.t, V = sq.speed, [hx, hy] = fwd(h);
+      if (n < 2 || (sq.made ?? 0) < V - 1e-9 || (m.x - s[0]) * hx + (m.y - s[1]) * hy > 8 + 1.5 * V + W2.far) return;
+      const odd = i === n - 1 && i % 2 === 0, turn2 = odd ? 1 : i % 2;
+      const at4 = t + 100 * W2.turn - turn2 * W2.turn / 2 - W2.own * roll(this.seed, sq.u.id, m.n, 313);
+      if (at4 % W2.turn >= W2.turn / 2) return;
+      const p = this.leash(sq, [m.x + hx * 12, m.y + hy * 12], -DR.tankmind.halt.edge);
+      if ((p[0] - m.x) * hx + (p[1] - m.y) * hy < 2) return;
+      m.pose = "drive";
+      m.v = Math.min(W2.pace, V / 2);
+      m.spot = p;
+      m.until = t + 1;
+    }
+    // (Tank minds, step two: looking, firing posts, the other vehicles and the guns.)
+    /**
+     * Tank minds: whether her gun is fixed in her hull (no turret: DR.tankmind.fixed), as far as the drill can know her
+     * model: a tank destroyer's or an outrider's own, else her block's where the rules name one (a set piece's blocks). A
+     * stand-in the 3D game alone picks for a campaign battle the drill is never told: she counts as turreted.
+     */
+    mindFixed(sq, m) {
+      return DR.tankmind.fixed.includes(m.ml ?? (sq.esc ? "" : this.b.vehicle(sq.u) ?? ""));
+    }
+    /**
+     * Tank minds: what her gun watches while she has nothing to lay on. One look at a time: a far point on one bearing of
+     * her arc ('mid', give or take 'half'), held her own DR.tankmind.watch.hold seconds, then another; the first only her
+     * own moment after she had nothing to lay on (watch.first), so a platoon's guns never swing off together. A look she
+     * holds she finishes, whatever she is asked next: every new point is a row sent to the 3D game, so not more often
+     * than every few seconds. kind 1 her sector, 2 her side on the march, 3 dead ahead (kept before her nose as she
+     * turns, twice as long). Returns the point, none till her watch begins.
+     */
+    mindGaze(sq, m, kind, mid, half) {
+      const W2 = DR.tankmind.watch, M2 = m.mind, t = this.b.t, id = sq.u.id, k = Math.round(t * 2);
+      let L3 = M2.look;
+      if (!L3) L3 = M2.look = [t + W2.first * roll(this.seed, id, m.n, k, 323), 0, 0, 0];
+      const ahead2 = L3[3] === 3 && (kind !== 3 || Math.abs(wrap(bearing2(m.x, m.y, L3[1], L3[2]) - mid)) > 0.2);
+      if (t < L3[0] - 1e-6 && !ahead2) return L3[3] ? [L3[1], L3[2]] : void 0;
+      const hold3 = (W2.hold[0] + (W2.hold[1] - W2.hold[0]) * roll(this.seed, id, m.n, k, 322)) * (kind === 3 ? 2 : 1);
+      const [fx, fy] = fwd(mid + (roll(this.seed, id, m.n, k, 324) * 2 - 1) * half), f = this.b.field;
+      let d = W2.far;
+      if (fx > 1e-6) d = Math.min(d, (f.w - 1 - m.x) / fx);
+      else if (fx < -1e-6) d = Math.min(d, (1 - m.x) / fx);
+      if (fy > 1e-6) d = Math.min(d, (f.h - 1 - m.y) / fy);
+      else if (fy < -1e-6) d = Math.min(d, (1 - m.y) / fy);
+      d = Math.max(20, d);
+      L3 = M2.look = [t + hold3, Math.round((m.x + fx * d) * 10) / 10, Math.round((m.y + fy * d) * 10) / 10, kind];
+      return [L3[1], L3[2]];
+    }
+    /**
+     * Tank minds, once a think for each tank, after her drill: her hull and her gun apart. Her hull, standing: toward her
+     * block's main threat, her thickest armour to him, a little her own way at each firing post (DR.tankmind.hull);
+     * halted a moment on the fast advance, on her way. A gun fixed in her hull (mindFixed) turns with it to her aim, as
+     * before (halted with nothing to lay on, her hull is her gun: on her own slice of watch.cone about the threat, as
+     * assault guns are sited), and so do tanks on the road, routing or backing off. Her gun: on her target where her
+     * drill laid it (her block fights; or, coming on, the enemy is within watch.reach; or, in a fight's place or pinned,
+     * he is). Else she watches her own arc (mindGaze). Halted and not fighting, the platoon covers all round between
+     * its tanks: the last of three or more the rear half, the others an equal share each of the front half (two tanks
+     * or one, of all round), across the line as they stand; with the enemy within reach the front shares close to
+     * watch.cone about him, each still her own slice. On the road and on the approach, alternate tanks left and right,
+     * the last of three or more the rear. Routing or backing off, with nothing to watch, her gun comes back dead ahead
+     * (a point ahead is sent: the 3D game holds the last aim it was given).
+     */
+    mindLook(sq, m, tanks, i, e) {
+      const M2 = m.mind;
+      if (!M2) return;
+      const T = DR.tankmind, W2 = T.watch, u = sq.u, ph = M2.ph ?? sq.phase, n = tanks.length;
+      const coming2 = ph === "deploy" || ph === "bound", halted2 = !coming2 && ph !== "column" && ph !== "flee" && ph !== "fallback";
+      const fixed2 = this.mindFixed(sq, m);
+      if (!halted2) M2.sit = M2.place = M2.rise = M2.shift = void 0;
+      const gap = e ? this.b.gap(u, e) : Infinity;
+      const lay3 = ph === "fallback" ? !!e : ph !== "column" && ph !== "flee" && !!e && (u.engaged !== void 0 || (halted2 ? (ph === "fight" || ph === "pinned") && gap <= W2.reach[0] : gap <= W2.reach[1]));
+      const lean = (roll(this.seed, u.id, m.n, m.post ?? 0, 321) * 2 - 1) * T.hull, front = e ? bearing2(u.x, u.y, e.x, e.y) : u.face;
+      const [rx, ry] = right(front), at4 = (o) => (o.x - u.x) * rx + (o.y - u.y) * ry;
+      const rank2 = (f) => {
+        let r = 0;
+        for (let j = 0; j < f; j++) if (tanks[j] !== m && (at4(tanks[j]) < at4(m) || at4(tanks[j]) === at4(m) && j < i)) r++;
+        return r;
+      };
+      if (!(coming2 || halted2) || fixed2 && (lay3 || !halted2)) M2.hull = void 0;
+      else if ((ph === "deploy" || ph === "bound" && M2.fast) && M2.go !== void 0) M2.hull = M2.h ?? sq.heading;
+      else if (fixed2) M2.hull = wrap(front + ((rank2(n) + 0.5) / n - 0.5) * W2.cone + lean);
+      else M2.hull = wrap((e ? bearing2(m.x, m.y, e.x, e.y) : u.face) + lean);
+      if (fixed2) {
+        M2.look = void 0;
+        if (!lay3 && halted2) m.aim = void 0;
+        return;
+      }
+      if (lay3) {
+        M2.look = void 0;
+        return;
+      }
+      let p;
+      if (ph === "flee" || ph === "fallback") p = this.mindGaze(sq, m, 3, m.face, 0);
+      else if (!halted2) {
+        const way = M2.h ?? sq.heading;
+        if (n >= 3 && i === n - 1) p = this.mindGaze(sq, m, 2, way + Math.PI, W2.rear);
+        else p = this.mindGaze(sq, m, 2, way + (i % 2 ? 1 : -1) * (W2.side[0] + W2.side[1]) / 2, (W2.side[1] - W2.side[0]) / 2);
+      } else if (n >= 3 && i === n - 1) p = this.mindGaze(sq, m, 1, front + Math.PI, Math.PI / 2);
+      else {
+        const f = n >= 3 ? n - 1 : n, span2 = gap <= W2.reach[0] ? W2.cone : n >= 3 ? Math.PI : 2 * Math.PI;
+        p = this.mindGaze(sq, m, 1, front + ((rank2(f) + 0.5) / f - 0.5) * span2, span2 / (2 * f));
+      }
+      if (p) {
+        m.aim = p;
+        M2.fire = void 0;
+      }
+    }
+    /**
+     * Tank minds: hull down. A halted tank whose firing place has cover to sit behind (DR.tankmind.post.cover: a crest,
+     * a wood's or a house's corner) backs down behind it, straight back post.down metres, at her own moment. In a
+     * fight: post.see seconds after her round from this stand, her own each time, and only where the wait for her next
+     * round is long enough for the trip down and up again (so she fires as many). From a place in the open she backs
+     * down only by her own chance each round (post.open: none as shipped, for there is nothing there to sit behind and
+     * the to and fro reads as a flick). Not fighting and the enemy far: her own share of post.idle seconds after she
+     * came to stand. With the enemy near and no fight yet she stays up. True once she backs.
+     */
+    mindSit(sq, m, e) {
+      const M2 = m.mind, T = DR.tankmind, P = T.post, u = sq.u, t = this.b.t, fight2 = u.engaged !== void 0 && !!e;
+      M2.rise = void 0;
+      if (M2.sit || M2.fire !== void 0 || M2.still === void 0) return false;
+      let at4;
+      if (fight2) {
+        if (m.shot === void 0 || m.shot < M2.still) return false;
+        if (!P.cover.includes(m.cover) && roll(this.seed, u.id, m.n, Math.round(m.shot * 10), 1, 326) >= P.open) return false;
+        at4 = m.shot + P.see[0] + (P.see[1] - P.see[0]) * roll(this.seed, u.id, m.n, Math.round(m.shot * 10), 326);
+        if (this.mindDue(sq, m, e) - Math.max(t, at4) < 2 * (P.down / P.pace + 0.7) + T.halt.lay[1] + 1) return false;
+      } else if (P.cover.includes(m.cover) && (!e || this.b.gap(u, e) > T.watch.reach[0])) at4 = M2.still + P.idle[0] + (P.idle[1] - P.idle[0]) * roll(this.seed, u.id, m.n, Math.round(M2.still * 10), 325);
+      else return false;
+      if (t < at4 - 1e-6) {
+        if (at4 < t + 0.5) M2.rise = at4;
+        return false;
+      }
+      const dir = this.threatDir(sq), [fx, fy] = fwd(m.face), back = fx * dir[0] + fy * dir[1] > 0.8 ? [fx, fy] : dir;
+      const p = this.leash(sq, [m.x - back[0] * P.down, m.y - back[1] * P.down], -4);
+      if (Math.hypot(p[0] - m.x, p[1] - m.y) < P.down - 0.5) return false;
+      M2.sit = "down";
+      M2.place = [m.x, m.y];
+      m.spot = p;
+      m.pose = "reverse";
+      m.v = P.pace;
+      m.until = t + 8;
+      if (fight2) m.aim = void 0;
+      return true;
+    }
+    /**
+     * Tank minds: a halted tank at her firing post, each think she is at her place (before the plain drill's own). A
+     * shell that strikes her, or lands within DR.tankmind.post.near metres of her (her own chance to take it as her
+     * cue, post.jump), moves her to her next post once she has been post.rest seconds at this one: she goes her own
+     * moment after (react, quick), by the plain drill's shift (mindShift), open to every style while its block fights.
+     * And hull down (mindSit): sitting behind her place she comes up to it at her own moment. In a fight, in time to
+     * lay and fire her next round when it falls due; her block's fight begun with her down, her own moment after it
+     * began. Not fighting, her own share of post.rise seconds after the enemy came within reach; while he is far she
+     * stays down. True while she sits down behind her place or is on her way down or up: the plain drill leaves her be.
+     */
+    mindPost(sq, m, e, posts, calm) {
+      const M2 = m.mind, T = DR.tankmind, P = T.post, u = sq.u, t = this.b.t, post2 = m.post ?? 0, k = Math.round(t * 2);
+      if (!M2.posted || M2.posted[0] !== post2) M2.posted = [post2, t];
+      if (!posts) M2.shift = void 0;
+      else if (M2.shift !== void 0) {
+        if (t - M2.shift > 4) M2.shift = void 0;
+      } else if (sq.hits && t - M2.posted[1] >= P.rest[0] + (P.rest[1] - P.rest[0]) * roll(this.seed, u.id, m.n, post2, 329)) {
+        const H = sq.hits;
+        for (let j = 0; j < H.length; j += 4) {
+          if (H[j + 3] > t + 1e-6) continue;
+          if (H[j + 2] !== m.k && (Math.hypot(H[j] - m.x, H[j + 1] - m.y) >= P.near || roll(this.seed, u.id, m.n, Math.round(H[j] * 10), Math.round(H[j + 3] * 10), 327) >= P.jump)) continue;
+          M2.shift = t + (T.react[0] + (T.react[1] - T.react[0]) * roll(this.seed, u.id, m.n, k, 328)) * T.quick[this.band(u)];
+          break;
+        }
+      }
+      if (M2.sit && (M2.sit === "up" || !calm || Math.abs(Math.hypot(m.spot[0] - M2.place[0], m.spot[1] - M2.place[1]) - P.down) > 0.6)) M2.sit = M2.place = M2.rise = void 0;
+      const fight2 = u.engaged !== void 0 && !!e;
+      if (!M2.sit) return calm && !fight2 && this.mindSit(sq, m, e);
+      if (M2.shift !== void 0 && t >= M2.shift - 1e-6) {
+        M2.sit = M2.place = M2.rise = void 0;
+        return false;
+      }
+      m.v = 0;
+      m.pose = "halt";
+      let at4 = Infinity;
+      if (fight2) {
+        at4 = this.mindDue(sq, m, e) - (P.down / P.pace + 0.7 + T.halt.lay[1] + 1);
+        if (m.shot === void 0 || m.shot < (sq.fightAt ?? 0)) at4 = Math.max(at4, (sq.fightAt ?? t) + T.react[1] * T.quick[this.band(u)] * roll(this.seed, u.id, m.n, Math.round((sq.fightAt ?? t) * 2), 330));
+      } else if (e && this.b.gap(u, e) <= T.watch.reach[0]) at4 = M2.rise ?? t + P.rise * roll(this.seed, u.id, m.n, k, 330);
+      if (t >= at4 - 1e-6) {
+        M2.sit = "up";
+        M2.rise = void 0;
+        m.spot = [M2.place[0], M2.place[1]];
+        m.pose = "drive";
+        m.v = P.pace;
+        m.until = t + 8;
+        M2.rev = void 0;
+        M2.keep = t + this.mindKeep(sq, m);
+      } else M2.rise = fight2 ? at4 < t + 0.5 ? at4 : void 0 : at4 < Infinity ? at4 : void 0;
+      m.aim = fight2 || !e ? void 0 : [e.x, e.y];
+      return true;
+    }
+    /** Tank minds: whether her own moment to leave her firing post for her next has come (a near miss or a hit: mindPost). */
+    mindShift(m) {
+      const M2 = m.mind;
+      if (M2.shift === void 0 || this.b.t < M2.shift - 1e-6) return false;
+      M2.shift = void 0;
+      return true;
+    }
+    /**
+     * Tank minds: an armoured car, an AA vehicle, a jeep or a motorcycle, each half second, in place of the plain
+     * drill's drive. Her own place, a little off the plain drill's (DR.tankmind.out.spot), and while her block drives
+     * her own share of out.trail seconds of its pace further back, closed up when it halts: so each stops at her own
+     * moment. Standing, she drives after her place only once it has moved off her own slack from her (out.start), and
+     * then at her own moment (react, quick: mindTick moves her off at her own step); the same when her place leaps (the
+     * screen called in or sent out), going on as she was till then. On the move she keeps pace with her place (follow)
+     * or, far from it or her block halted, drives straight for it and halts there. Standing, her nose is toward the
+     * threat her own way (up to twice a tank's lean: she has no thick front to show him). A car's turret lays on her
+     * own point of the enemy block within out.sight, and further off watches her own flank; an AA vehicle's gun,
+     * standing, watches her own share of all round (mindGaze), and comes back dead ahead on the move. Jeeps and
+     * motorcycles have no aim, as before.
+     */
+    mindOut(sq, m, i, s, e, near2) {
+      const T = DR.tankmind, O = T.out, own = Object.getPrototypeOf(sq.u), t = this.b.t, id = own.id, M2 = m.mind ?? (m.mind = {}), V = sq.speed;
+      const r = (...ns) => roll(this.seed, id, m.n, ...ns);
+      const [rx, ry] = right(own.face), [fx, fy] = fwd(own.face), a = (r(331) * 2 - 1) * O.spot[0], l = (r(332) * 2 - 1) * O.spot[1] - (V > 0.4 ? V * O.trail * r(1, 334) : 0);
+      s = [s[0] + rx * a + fx * l, s[1] + ry * a + fy * l];
+      const d = Math.hypot(s[0] - m.x, s[1] - m.y), going = m.v > 0 && MOVING.has(m.pose), pace2 = O.pace[0] + (O.pace[1] - O.pace[0]) * r(334);
+      const straight = clamp6((V * 1.2 + d * 0.25) * pace2, 3, 12);
+      if (!going && d <= O.start[0] + (O.start[1] - O.start[0]) * r(335)) M2.off = M2.to = void 0;
+      else if (M2.off === void 0 && (!going || Math.hypot(s[0] - m.slotAt[0], s[1] - m.slotAt[1]) > O.far)) M2.off = t + (T.react[0] + (T.react[1] - T.react[0]) * r(Math.round(t * 2), 333)) * T.quick[this.band(own)];
+      if (M2.off !== void 0) {
+        if (t < M2.off - 1e-6) M2.to = [s[0], s[1], straight];
+        else {
+          M2.off = M2.to = void 0;
+          m.spot = s;
+          m.slotAt = s;
+          m.pose = "drive";
+          m.v = straight;
+          m.until = t + 1;
+        }
+      } else if (!going) m.slotAt = s;
+      else if (d > O.far || V <= 0.4) {
+        if (d <= 1.5) {
+          m.spot = [m.x, m.y];
+          m.v = 0;
+          m.pose = "halt";
+        } else {
+          m.spot = s;
+          m.pose = "drive";
+          m.v = straight;
+          m.until = t + 1;
+        }
+        m.slotAt = s;
+      } else this.follow(sq, m, s, "drive", pace2);
+      M2.hull = fighting(own) ? wrap((e ? bearing2(m.x, m.y, e.x, e.y) : own.face) + (r(321) * 2 - 1) * T.hull * 2) : void 0;
+      if (sq.esc === "cars") {
+        if (e && near2 < O.sight) {
+          M2.look = void 0;
+          m.aim = toWorld(e, e.face, (r(0, 339) - 0.5) * e.w * 0.7, (r(1, 339) - 0.5) * e.d * 0.7);
+        } else m.aim = this.mindGaze(sq, m, 2, own.face + (i % 2 ? 1 : -1) * (O.arc[0] + O.arc[1]) / 2, (O.arc[1] - O.arc[0]) / 2);
+      } else if (sq.esc === "aa") {
+        const n = sq.men.length;
+        m.aim = m.v > 0 && MOVING.has(m.pose) ? this.mindGaze(sq, m, 3, m.face, 0) : this.mindGaze(sq, m, 1, own.face + (i + 0.5) / n * 2 * Math.PI, Math.PI / n);
+      }
+    }
+    /**
+     * Tank minds: a lorry's, a carrier's, a tractor's or a gun's own place, a little off the plain drill's
+     * (DR.tankmind.lean, metres across and along). In column ('col' her number in it, none where they stand in a row)
+     * each keeps lean's third number of seconds of her block's pace further behind the one ahead, and up to as much
+     * again of her own: the column strings out at speed and closes up at the halt, each rolling on to her place and
+     * stopping at her own moment.
+     */
+    mindLean(sq, v, s, way, col = -1) {
+      const L3 = DR.tankmind.lean, id = sq.u.id, [rx, ry] = right(way), [fx, fy] = fwd(way);
+      const a = (roll(this.seed, id, v.n, 336) * 2 - 1) * L3[0];
+      const l = (roll(this.seed, id, v.n, 337) * 2 - 1) * L3[1] - (col >= 0 && sq.speed > 0.4 ? sq.speed * L3[2] * (col + roll(this.seed, id, v.n, 1, 337)) : 0);
+      return [s[0] + rx * a + fx * l, s[1] + ry * a + fy * l];
+    }
+    /**
+     * Tank minds: a lorry, a carrier, a tractor or a gun told to drive from standing moves off at her own moment
+     * (DR.tankmind.react, quick; 'lead', the first of a column, at once), never all in one instant. Called once the
+     * plain drill has given her order: till her moment she stands as she stood, her order kept for her own step
+     * (mindTick), and her place as it was when she was last left be, so the plain drill gives the order again.
+     */
+    mindOff(sq, v, lead2 = false) {
+      const T = DR.tankmind, t = this.b.t, M2 = v.mind ?? (v.mind = {});
+      if (!M2.slot) {
+        M2.slot = [v.x, v.y];
+        if ((v.went ?? 0) <= 0.05) M2.still = t;
+      }
+      if (!(v.v > 0 && MOVING.has(v.pose))) {
+        M2.still ?? (M2.still = t);
+        M2.off = M2.to = void 0;
+        M2.slot = [v.slotAt[0], v.slotAt[1]];
+        return;
+      }
+      if (M2.still !== void 0) {
+        if (M2.off === void 0) M2.off = lead2 ? t : t + (T.react[0] + (T.react[1] - T.react[0]) * roll(this.seed, sq.u.id, v.n, Math.round(t * 2), 333)) * T.quick[this.band(sq.u)];
+        if (t < M2.off - 1e-6) {
+          M2.to = [v.spot[0], v.spot[1], v.v];
+          v.v = 0;
+          v.spot = [v.x, v.y];
+          v.pose = v.role === "gun" ? "towed" : "parked";
+          v.slotAt = [M2.slot[0], M2.slot[1]];
+          return;
+        }
+      }
+      M2.still = M2.off = M2.to = void 0;
+      M2.slot = [v.slotAt[0], v.slotAt[1]];
+    }
+    /**
+     * Tank minds: a battery limbered up. Self-propelled guns, and guns each behind her own tractor ('own'), keep each
+     * her own place in the column (mindLean) and move off gun by gun (mindOff), her tractor with her. Guns in one train
+     * behind the battery's one tractor go as one, as before: they are one vehicle's tow.
+     */
+    mindTow(sq, guns2, own) {
+      const u = sq.u, h = sq.heading;
+      guns2.forEach((g2, i) => {
+        if (!own && !g2.ml) return;
+        this.follow(sq, g2, this.mindLean(sq, g2, toWorld(u, h, 0, -10 - i * (own ? 26 : 18)), h, i), "towed");
+        if (g2.v === 0) g2.pose = "towed";
+        this.mindOff(sq, g2, i === 0);
+      });
+    }
+    /**
+     * Tank minds: a battery's salvo as a ripple, whatever its style. A gun the plain drill would fire on this half second
+     * fires at her own moment instead: within DR.tankmind.volley.own seconds, her own each time, and never within
+     * volley.apart seconds of another gun of her battery (mindTick fires her at her own step). The drill book's ranging
+     * gun ('solo') fires alone, as before. Her wait is not added to her next round's: that falls due by the plain drill's
+     * clock, so a battery fires about as many. Wraps the plain drill's rule and gives the one to use.
+     */
+    mindVolley(sq, guns2, plain2, solo) {
+      const V = DR.tankmind.volley, t = this.b.t, k = Math.round(t * 2);
+      return (g2, i) => {
+        if (g2 === solo) {
+          if (!plain2(g2, i)) return false;
+          for (const o of guns2) if (o !== g2 && o.mind?.fire !== void 0 && Math.abs(o.mind.fire - t) < V.apart) o.mind.fire = t + V.apart;
+          return true;
+        }
+        if (g2.mind?.fire !== void 0 || g2.hidden) return false;
+        const last = g2.shot;
+        if (last !== void 0 && g2.mind?.lag) g2.shot = last - g2.mind.lag;
+        const due = plain2(g2, i);
+        g2.shot = last;
+        if (!due) return false;
+        let at4 = t + V.own * roll(this.seed, sq.u.id, g2.n, k, 338);
+        for (let n = 0, again = true; again && n < 8; n++) {
+          again = false;
+          for (const o of guns2) {
+            if (o === g2) continue;
+            for (const ot of [o.mind?.fire, o.shot]) if (ot !== void 0 && Math.abs(at4 - ot) < V.apart - 1e-6) {
+              at4 = ot + V.apart;
+              again = true;
+            }
+          }
+        }
+        const M2 = g2.mind ?? (g2.mind = {});
+        M2.fire = at4;
+        M2.lag = at4 - t;
+        g2.due = void 0;
+        return false;
+      };
+    }
+    /**
+     * Tank minds, every step (walk; mindStep for a block's cars and AA vehicles): what one of the other vehicles or a
+     * gun has timed for this step. Her own moment to move off comes: she takes up the order kept for her (mindOff,
+     * mindOut). A gun's own moment in her battery's salvo: she fires, if she still stands in her place with her gun
+     * laid, her crew up and her block still fighting (mindVolley).
+     */
+    mindTick(sq, m) {
+      const M2 = m.mind, t = this.b.t;
+      if (M2.to && M2.off !== void 0 && t >= M2.off - 1e-6) {
+        m.spot = [M2.to[0], M2.to[1]];
+        m.v = M2.to[2];
+        m.pose = m.role === "gun" ? "towed" : "drive";
+        m.until = t + 1;
+        M2.to = M2.still = void 0;
+      }
+      if (sq.esc && m.v > 0 && m.pose === "drive" && Math.hypot(m.spot[0] - m.x, m.spot[1] - m.y) < 0.05) {
+        m.v = 0;
+        m.pose = "halt";
+      }
+      if (m.role === "gun" && M2.fire !== void 0 && t >= M2.fire - 1e-6) {
+        if (m.v === 0 && !m.hidden && m.aim && (m.pose === "deployed" || m.pose === "fire") && sq.phase === "battery" && sq.u.engaged !== void 0 && live2(sq.u)) {
+          m.shot = t;
+          m.pose = "fire";
+        }
+        M2.fire = void 0;
+      }
+    }
+    tanks(sq, only) {
       const u = sq.u, b = this.b, t = b.t, N = this.nums(u), e = this.threat(u), dir = this.threatDir(sq), ph = sq.phase, h = sq.heading;
       const tanks = this.up(sq).filter((m) => m.role === "tank");
       const lone = u.aloneAt !== void 0 && t - u.aloneAt < 2;
@@ -73063,33 +73814,40 @@
       const [fx, fy] = fwd(u.face);
       let behind2 = Infinity;
       if (close3 && foot.length) for (const f of foot) behind2 = Math.min(behind2, (f.x - u.x) * fx + (f.y - u.y) * fy + f.d / 2 - 15);
+      if (this.tankmind && !only) this.mindBlock(sq);
       tanks.forEach((m, i) => {
+        if (only && m !== only) return;
+        const ph2 = this.tankmind ? this.mindPhase(sq, m, i === 0) : sq.phase, h2 = this.tankmind ? this.mindWay(sq, m) : sq.heading;
         if (!this.hatches) m.buttoned = lone || e !== null && b.gap(u, e) < 120 || m.cmdDown !== void 0 || void 0;
         else if (lone || e !== null && b.gap(u, e) < DR.hatch.near[this.band(u)] * (DR.hatch.own[0] + (DR.hatch.own[1] - DR.hatch.own[0]) * roll(this.seed, u.id, m.n, 173))) this.alarm(sq, m, t);
         m.coax = this.byBook && !!e && FOOT_KINDS.includes(e.kind) && u.engaged !== void 0 && b.gap(u, e) < 600 || void 0;
         const n = sq.u.figures0 - 1 - m.k;
         const [wa, wl] = wreckOffset(u.id, n, u.w, u.d);
-        if (ph === "flee") {
+        if (ph2 === "flee") {
           m.aim = void 0;
           this.follow(sq, m, toWorld(u, u.face, wa, wl), "drive", 1.1);
           return;
         }
-        if (ph === "column") {
+        if (ph2 === "column") {
           m.aim = void 0;
-          this.follow(sq, m, toWorld(u, h, 0, u.d / 2 - 10 - i * 22), "drive");
+          this.follow(sq, m, toWorld(u, h2, 0, u.d / 2 - 10 - i * 22), "drive");
           return;
         }
         let l = wl;
         if (behind2 < Infinity) l = Math.min(l, behind2);
         const s = toWorld(u, u.face, wa, l);
-        if (ph === "fallback") {
+        if (ph2 === "fallback") {
           this.follow(sq, m, s, "reverse");
           m.aim = e ? [e.x, e.y] : void 0;
           return;
         }
-        if (ph === "deploy" || ph === "bound" && v >= 3.5) {
-          const [hx, hy] = fwd(h), lag = (s[0] - m.x) * hx + (s[1] - m.y) * hy, at4 = t + roll(this.seed, u.id, m.n, 41) * 4;
-          const halt = ph === "bound" && e && b.gap(u, e) < 600 && lag < 6 && at4 % 4 < 1.5 && roll(this.seed, u.id, m.n, Math.floor(at4 / 4)) < 0.25;
+        if (ph2 === "deploy" || ph2 === "bound" && (this.tankmind ? !!m.mind.fast : v >= 3.5)) {
+          if (this.tankmind) {
+            this.mindRoll(sq, m, tanks, i, s, e, ph2 === "bound", h2);
+            return;
+          }
+          const [hx, hy] = fwd(h2), lag = (s[0] - m.x) * hx + (s[1] - m.y) * hy, at4 = t + roll(this.seed, u.id, m.n, 41) * 4;
+          const halt = ph2 === "bound" && e && b.gap(u, e) < 600 && lag < 6 && at4 % 4 < 1.5 && roll(this.seed, u.id, m.n, Math.floor(at4 / 4)) < 0.25;
           if (halt) {
             m.spot = [m.x, m.y];
             m.v = 0;
@@ -73101,12 +73859,16 @@
           }
           return;
         }
-        if (ph === "bound") {
+        if (ph2 === "bound") {
+          if (this.tankmind) {
+            this.mindBound(sq, m, tanks, i, s, e, dir, N, h2);
+            return;
+          }
           const pair2 = m.k < 2 ? 0 : 1, cyc = N.tankRush + N.tankHalt, off3 = pair2 ? cyc / 2 : 0;
           const moving = (t + off3 + 100 * cyc) % cyc < N.tankRush;
           if (moving) {
             if (m.pose !== "drive" && m.pose !== "reverse" || t >= m.until) {
-              const [hx, hy] = fwd(h);
+              const [hx, hy] = fwd(h2);
               this.go(sq, m, [s[0] + hx * v * cyc * 0.45, s[1] + hy * v * cyc * 0.45], "drive", v * cyc / N.tankRush, t + N.tankRush, dir);
             }
             m.aim = e ? [e.x, e.y] : void 0;
@@ -73118,8 +73880,8 @@
           }
           return;
         }
-        const shaken = ph === "pinned" || u.state === "wavering";
-        const posts = N.scoot > 0 && !shaken && !lone && u.engaged !== void 0;
+        const shaken = ph2 === "pinned" || (this.tankmind ? !!m.mind.shaken : u.state === "wavering");
+        const posts = (N.scoot > 0 || this.tankmind) && !shaken && !lone && u.engaged !== void 0;
         if (!posts && m.cyc) {
           m.cyc = void 0;
           m.post = 0;
@@ -73172,6 +73934,7 @@
           return;
         }
         if (Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) > 1.5) return;
+        if (this.tankmind && this.mindPost(sq, m, e, posts, !shaken && !lone)) return;
         m.v = 0;
         if (!e || u.engaged === void 0 && b.gap(u, e) > 600) {
           m.pose = "halt";
@@ -73180,7 +73943,7 @@
         }
         m.aim = this.tankAim(sq, m, e);
         const need = T.shots[0] + Math.floor(roll(this.seed, u.id, m.n, m.post ?? 0, 23) * (T.shots[1] - T.shots[0] + 1));
-        if (posts && (m.shots ?? 0) >= need && m.shot !== void 0 && t - m.shot >= 1.5) {
+        if (posts && (N.scoot > 0 && (m.shots ?? 0) >= need && m.shot !== void 0 && t - m.shot >= 1.5 || this.tankmind && this.mindShift(m))) {
           m.cyc = "back";
           m.spot = this.leash(sq, [m.x - dir[0] * T.back, m.y - dir[1] * T.back], -4);
           m.pose = "reverse";
@@ -73188,12 +73951,16 @@
           m.until = t + 8;
           return;
         }
-        if (u.engaged !== void 0 && this.tankShot(sq, m, e, N)) {
+        if (this.tankmind && this.mindSit(sq, m, e)) return;
+        if (u.engaged !== void 0 && (this.tankmind ? this.mindShot(sq, m, e, true) : this.tankShot(sq, m, e, N))) {
           m.pose = "fire";
           m.shots = (m.shots ?? 0) + 1;
         } else m.pose = "halt";
       });
       for (const m of tanks) if (m.pose === "halt" && m.shot !== void 0 && t - m.shot < 1.5) m.pose = "fire";
+      if (this.tankmind) tanks.forEach((m, i) => {
+        if (!only || m === only) this.mindLook(sq, m, tanks, i, e);
+      });
     }
     /**
      * Whether this tank fires now (each about every 6 to 10 s while her block fights; the drill book: at foot, a round
@@ -73227,6 +73994,7 @@
           this.follow(sq, g2, toWorld(u, h, 0, -10 - i * (own ? 26 : 18)), "towed");
           if (g2.v === 0) g2.pose = "towed";
         });
+        if (this.tankmind) this.mindTow(sq, guns2, own);
         if (own) guns2.forEach((g2) => {
           if (g2.ml) return;
           const v = this.lorryOf(sq, g2);
@@ -73240,7 +74008,7 @@
       }
       sq.veh.forEach((tr, i) => {
         if (!own && i > 0) return;
-        const s = toWorld(u, u.face, own ? (i - (sq.veh.length - 1) / 2) * 16 : 0, -u.d / 2 - 50);
+        const s0 = toWorld(u, u.face, own ? (i - (sq.veh.length - 1) / 2) * 16 : 0, -u.d / 2 - 50), s = this.tankmind ? this.mindLean(sq, tr, s0, u.face) : s0;
         if (Math.hypot(s[0] - tr.slotAt[0], s[1] - tr.slotAt[1]) > 20) {
           tr.spot = s;
           tr.slotAt = s;
@@ -73271,6 +74039,7 @@
           fireNow = (g2) => g2.shot === void 0 || t - g2.shot >= N.gunEvery * (0.7 + 0.3 * roll(this.seed, u.id, g2.n, Math.floor(t / 10)));
         }
       }
+      if (this.tankmind) fireNow = this.mindVolley(sq, guns2, fireNow, ranging?.[0]);
       guns2.forEach((g2, i) => {
         const [a, l] = this.slot(sq, g2, "line");
         const s = toWorld(u, u.face, a, l);
@@ -73290,6 +74059,7 @@
         g2.aim = !e ? void 0 : ranging?.[0] === g2 ? ranging[1] : this.liftAim(sq, g2, e, "gun");
         g2.buttoned = direct || void 0;
       });
+      if (this.tankmind) for (const v of [...sq.veh, ...guns2]) this.mindOff(sq, v);
       this.spotter(sq, e, firing && !!e && b.gap(u, e) > DR.ranges.fo);
     }
     /**
@@ -73490,7 +74260,10 @@
           m.v = 0;
           m.spot = [m.x, m.y];
         }
-        if (m.role === "tank") m.v = Math.min(m.v, tankTop(sq));
+        if (m.role === "tank") {
+          const top = this.tankmind ? this.mindStep(sq, m) : tankTop(sq);
+          m.v = Math.min(m.v, top);
+        } else if (this.tankmind && m.mind) this.mindTick(sq, m);
         const veh = m.role === "tank" || m.role === "lorry" || m.role === "gun";
         const rate2 = (m.role === "tank" ? TURN.tank : veh ? TURN.wheels : m.pose === "ride" ? TURN.ride : TURN.foot) * DT;
         const via = !veh && MOVING.has(m.pose) && this.b.gates.length ? this.via(sq, m) : null;
@@ -73569,6 +74342,7 @@
               turn2 = Math.min(rate2, DR.life.scan.rate * DT);
             }
           }
+          if (this.tankmind && m.mind?.hull !== void 0) want = m.mind.hull;
           if (want !== void 0 && !(this.b.trucks && m.role === "lorry")) m.face = turnTo(m.face, want, turn2);
         }
         if (m.role === "lorry" && (sq.hop !== void 0 || sq.left !== void 0 && t < sq.left + HOP.clear && sq.phase !== "flee")) return;
