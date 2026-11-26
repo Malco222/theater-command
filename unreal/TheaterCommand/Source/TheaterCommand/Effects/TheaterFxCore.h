@@ -365,6 +365,35 @@ namespace TheaterFx
 		Vec FarAt;
 	};
 
+	/** Effects (R2), item 7 of the owner's film details (26 November, "do 2-11"): what a ground gun's crew lets out of
+	 * her as the spent case comes out after a shot (her model's case_clang), by what she is. The land scene asks it in
+	 * PlayArmourEvents; it is plain so the cloud test holds it. A towed gun (kind "gun") with a breech: a puff at the
+	 * breech. An open-topped self-propelled gun (kind "tank" with a loader's place, crew.loader: the M7, the Hummel,
+	 * the Sexton, the SU-76, the M10): a puff at her breech where her model has one, and her case thrown over her
+	 * side. A closed tank (kind "tank", no loader's place) kept her cases inside: with her hatch open (HatchOpen over
+	 * 0.5) and a hatch to let it out (her commander's place), every second or third shot by her count a faint wisp of
+	 * fumes out of it (shots 2, 5, 7, 10, 12 ...), and one shot in eight, only when she is stopped, a case pitched out
+	 * of it. Each part only with its own word. Shot counts her shots from 1. */
+	struct AfterShot
+	{
+		bool bBreechPuff = false; // -TheaterLandBarrelSmoke
+		bool bOverSide = false;   // -TheaterLandCasesOut
+		bool bHatchFumes = false; // -TheaterLandHatchFumes
+		bool bHatchCase = false;  // -TheaterLandHatchFumes
+	};
+	struct AfterShotAsk
+	{
+		std::string Kind;              // her model's kind: tank, gun, carrier, car, aa
+		bool bBreech = false;          // her model has a breech socket
+		bool bLoader = false;          // and a crew.loader socket (an open fighting compartment)
+		bool bHatch = false;           // and a commander socket (a hatch over her turret)
+		double HatchOpen = 0.0;        // her hatch now, 0 shut to 1 open
+		bool bStopped = false;
+		int Shot = 0;
+		bool bBarrelSmoke = false, bHatchFumes = false, bCasesOut = false; // the words given
+	};
+	AfterShot AfterShotOf(const AfterShotAsk& Ask);
+
 	class Battle
 	{
 	public:
@@ -1129,6 +1158,7 @@ namespace TheaterFx
 			Rgb Shadow;
 			double ShadowK = 0.0, SideShade = 0.0, Cap = 0.0, CapWide = 2.0, CapFrom = 0.62; // (SideShade: how far a rag thrown to the plume's side away from the sun goes to the shadow colour all over)
 			Span CapLife{ 3.0, 6.0 };
+			double LeastPx = 0.0; // (Effects (R2), a breech's puff and a hatch's fumes: least_px, a small rag held to so many pixels across, thinner to match; none in the shipped rows)
 		};
 		/** The fire.tongues row: a burning thing's flames as ragged tongues at seats of its own (see FireTongues). */
 		struct TongueRow

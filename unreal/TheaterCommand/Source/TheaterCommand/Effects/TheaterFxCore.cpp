@@ -5479,6 +5479,26 @@ namespace TheaterFx
 		Bits.push_back(B);
 	}
 
+	AfterShot AfterShotOf(const AfterShotAsk& Ask)
+	{
+		AfterShot Out;
+		if (Ask.Kind == "gun")
+		{
+			Out.bBreechPuff = Ask.bBarrelSmoke && Ask.bBreech;
+		}
+		else if (Ask.Kind == "tank" && Ask.bLoader)
+		{
+			Out.bBreechPuff = Ask.bBarrelSmoke && Ask.bBreech;
+			Out.bOverSide = Ask.bCasesOut;
+		}
+		else if (Ask.Kind == "tank" && Ask.bHatch && Ask.HatchOpen > 0.5 && Ask.bHatchFumes && Ask.Shot > 0)
+		{
+			Out.bHatchFumes = Ask.Shot % 5 == 2 || Ask.Shot % 5 == 0;
+			Out.bHatchCase = Ask.bStopped && Ask.Shot % 8 == 0;
+		}
+		return Out;
+	}
+
 	const Battle::DustRow& Battle::DustRowOf(const std::string& Ground)
 	{
 		for (const DustRow& R : DustRows)
@@ -10079,6 +10099,7 @@ namespace TheaterFx
 		R.Alpha = Safe(Num(P + "alpha", 0.9), 0.0, 1.0, 0.9);
 		R.Waver = Safe(Num(P + "waver", 0.25), 0.0, 1.0, 0.25);
 		R.Rough = Safe(Num(P + "rough", 0.35), 0.0, 0.6, 0.35);
+		R.LeastPx = Safe(Num(P + "least_px", 0.0), 0.0, 20.0, 0.0);
 		R.Lance = Safe(Num(P + "lance", 0.0), 0.0, 1.0, 0.0);
 		R.LanceLife = Safe(Num(P + "lance_life_s", 0.3), 0.05, 5.0, 0.3);
 		R.LanceLong = Safe(Num(P + "lance_long", 3.5), 1.0, 12.0, 3.5);
@@ -10141,6 +10162,7 @@ namespace TheaterFx
 		B.HeartEnd = 0.1;
 		B.Inner = 0.5;
 		B.Rough = R.Rough;
+		B.LeastPx = R.LeastPx;
 		B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
 		B.Turn = D.U(0.0, 2.0 * Pi);
 		// (the art director on the first cut, 15:40Z: "give the rags a visible cool shadow side, about 0.75 to 0.8 of

@@ -88,6 +88,7 @@ struct FLandBattleState
 	 * a closed tank's hatch fumes and the odd case (-TheaterLandHatchFumes), cases over an open gun's side
 	 * (-TheaterLandCasesOut); read in Open. ShotsOf: each vehicle's shots so far, counted at her case_clang. */
 	bool bBarrelSmoke = false;
+	TMap<int32, int32> ShotsOf;
 	/** Effects (R2): the fighters on call over the field, -TheaterLandAirSupport (LandAir; the scene's FlyOver,
 	 * Battle/LandBattleAir.cpp): the plan, and what the effects kit has been told of it. */
 	struct FAirSupport

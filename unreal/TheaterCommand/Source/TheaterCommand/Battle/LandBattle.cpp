@@ -10534,6 +10534,39 @@ void ALandBattle::PlayArmourEvents()
 		FString Fx = LandParts::Wide(E.Fx);
 		const FVector At = World(E.At.X, E.At.Y, E.At.Z);
 		const FVector Up = WorldWay(E.Facing.X, E.Facing.Y, E.Facing.Z).GetSafeNormal(0.01, FVector::UpVector);
+		// Effects (R2), item 7 of Brian's film details (26 November): as her spent case comes out after a shot (case_clang,
+		// left to the mix below), what her crew lets out of her, by what she is (TheaterFx::AfterShotOf): a towed gun's or
+		// an open gun's breech puffs; an open gun's loader heaves the case over her side; a closed tank with her hatch
+		// open lets a faint wisp of fumes out every second or third shot, and now and then, stopped, a case is pitched
+		// out. Only near the eye: every vehicle's beats come here.
+		if (Effects && S.bBarrelSmoke && E.Fx == "case_clang" && E.Vehicle >= 0
+			&& static_cast<size_t>(E.Vehicle) < S.Armour->Vehicles().size())
+		{
+			const LandKit::Vehicle& V = S.Armour->Vehicles()[static_cast<size_t>(E.Vehicle)];
+			const int32 Shot = ++S.ShotsOf.FindOrAdd(E.Vehicle);
+			const double FromEye = FVector(E.At.X - S.Pose.Eye.X, E.At.Y - S.Pose.Eye.Y, E.At.Z - S.Pose.Eye.Z).Size();
+			LandKit::V3 Breech, BreechWay, Loader, LoaderWay, Hatch, HatchWay;
+			TheaterFx::AfterShotAsk Ask;
+			Ask.Kind = V.Look().Kind;
+			Ask.bBreech = V.SocketNow("breech", Breech, BreechWay);
+			Ask.bLoader = V.SocketNow("crew.loader", Loader, LoaderWay);
+			Ask.bHatch = V.SocketNow("commander", Hatch, HatchWay);
+			Ask.HatchOpen = V.HatchOpen;
+			Ask.bStopped = !V.bMoving;
+			Ask.Shot = Shot;
+			Ask.bBarrelSmoke = S.bBarrelSmoke;
+			const TheaterFx::AfterShot Out = FromEye < 300.0 ? TheaterFx::AfterShotOf(Ask) : TheaterFx::AfterShot();
+			// (her own numbers in the kit: E.Key's, +100000 and +200000 and LandBurn's are taken; a vehicle is either a gun
+			// with a breech or a closed tank, so the breech puff and the hatch fumes share this one)
+			const int32 PuffId = static_cast<int32>((static_cast<uint32>(E.Key) + 300000u) & 0x7FFFFFFFu);
+			// (a breech socket faces out of the breech, back toward the loader: the puff goes that way and up; a small thing,
+			// so only within 150 m of the eye)
+			if (Out.bBreechPuff && FromEye < 150.0)
+			{
+				const FVector Back = WorldWay(BreechWay.X, BreechWay.Y, 0.0).GetSafeNormal(0.01, FVector::UpVector);
+				Effects->Steam(PuffId, World(Breech.X, Breech.Y, Breech.Z), (Back + FVector::UpVector).GetSafeNormal(), 0.15f, 0.6f, TEXT("breech"));
+			}
+		}
 		// (the round's: her gun's flash and blast dust, the strike's sparks and burst, small arms' rattle; the mix's: the
 		// spent case; her moving dust is drawn from her each frame; the crew and the gun's fittings make no effect)
 		if (Fx.Contains(TEXT("muzzle")) || Fx.Contains(TEXT("spark")) || Fx.Contains(TEXT("rattle")) || Fx.Contains(TEXT("case")) || Fx == TEXT("hit")

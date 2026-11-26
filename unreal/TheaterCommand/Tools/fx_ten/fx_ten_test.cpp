@@ -12,6 +12,8 @@
 //   C. the barrel's wisp (-TheaterLandBarrelSmoke, battle-fx-barrel.json): a thin, faint wisp from 3 to 4 s after the
 //      shot, held to 2 px; none past 300 m; one a gun at once; its own dice and its own room: twelve guns and forty
 //      lay every piece as before with it, forty hold 16 wisps at most.
+//   D. the breech's puff (the same word and overlay, steam.breech): who puffs (AfterShotOf), and a small grey-brown
+//      puff gone in under 3 s, held to 3 px.
 //
 //     Tools/fx_ten/run.sh [out folder]
 //     fx_ten_test <Content/Effects folder> <out folder>
@@ -546,6 +548,98 @@ namespace
 		std::printf("     time: the densest frame's Draw, %.3f ms on (%zu pieces), %.3f ms off (%zu pieces); a frame's mean %.3f ms on, %.3f ms off\n", FOn.DensestMs, FOn.MostBits, FOff.DensestMs, FOff.MostBits, FOn.MeanMs, FOff.MeanMs);
 		std::printf("     on the screen (1600 px, 42 degrees): a wisp puff 0.03 to %.2f m is %.1f to %.1f px at 40 m, %.1f to %.1f px at 300 m (held to 2)\n", Widest, Px(0.06, 40.0), Px(2.0 * Widest, 40.0), Px(0.06, 300.0), Px(2.0 * Widest, 300.0));
 	}
+
+	// ----------------------------------------------------------------------------------------------------------------
+	// D. The breech's puff
+
+	TheaterFx::AfterShotAsk Ask(const char* Kind, bool bBreech, bool bLoader, bool bHatch, double HatchOpen, bool bStopped, int Shot, bool bBarrel, bool bFumes, bool bOut)
+	{
+		TheaterFx::AfterShotAsk A;
+		A.Kind = Kind;
+		A.bBreech = bBreech;
+		A.bLoader = bLoader;
+		A.bHatch = bHatch;
+		A.HatchOpen = HatchOpen;
+		A.bStopped = bStopped;
+		A.Shot = Shot;
+		A.bBarrelSmoke = bBarrel;
+		A.bHatchFumes = bFumes;
+		A.bCasesOut = bOut;
+		return A;
+	}
+
+	/** A Steam of Kind at the eye's 25 m: its pieces over Seconds + 4 s, how many, the widest, the thickest, when the last goes. */
+	struct Puffed
+	{
+		size_t Pieces = 0;
+		double Widest = 0.0, Thickest = 0.0, Gone = 0.0, LeastPx = 1e9;
+		uint64_t Seeds = 0, SeedsWithout = 0;
+	};
+
+	Puffed PuffOf(const FxTen::Book& Book, const char* Kind, double Seconds, double Across)
+	{
+		Puffed P;
+		for (int Pass = 0; Pass < 2; ++Pass)
+		{
+			Kit K(Book);
+			const Battle::View V = FxTen::Looking(Vec(-20.0, -15.0, 2.0), Vec(0.0, 0.0, 1.5));
+			K.Fx.Draw(0.0, V);
+			std::vector<uint64_t> Seen;
+			for (int Frame = 1; Frame <= 180; ++Frame)
+			{
+				const double Now = Frame / 30.0;
+				if (Frame == 15 && Pass == 0)
+				{
+					K.Fx.Steam(Now, 7, Vec(0.0, 0.0, 1.5), Vec(-0.7, 0.0, 0.7), Across, Seconds, Kind);
+				}
+				K.Fx.Draw(Now, V);
+				for (const Bit& B : K.Fx.Bits)
+				{
+					const uint64_t H = FxTen::PieceHash(B);
+					if (std::find(Seen.begin(), Seen.end(), H) == Seen.end())
+					{
+						Seen.push_back(H);
+						P.Widest = std::max(P.Widest, B.R1);
+						P.Thickest = std::max(P.Thickest, B.Alpha);
+						P.Gone = std::max(P.Gone, B.Born + B.Life - 0.5);
+						P.LeastPx = std::min(P.LeastPx, B.LeastPx);
+					}
+				}
+			}
+			if (Pass == 0)
+			{
+				P.Pieces = Seen.size();
+				P.Seeds = K.Fx.Seeds;
+			}
+			else
+			{
+				P.SeedsWithout = K.Fx.Seeds;
+			}
+		}
+		return P;
+	}
+
+	void BreechPuff()
+	{
+		std::printf("D. The breech's puff (-TheaterLandBarrelSmoke, battle-fx-barrel.json: steam.breech)\n");
+		using TheaterFx::AfterShotOf;
+		Check(AfterShotOf(Ask("gun", true, true, false, 0.0, true, 1, true, false, false)).bBreechPuff, "a towed gun with a breech, the word given: a puff", "puff");
+		Check(!AfterShotOf(Ask("gun", true, true, false, 0.0, true, 1, false, true, true)).bBreechPuff, "the same without the word: none", "none");
+		Check(AfterShotOf(Ask("tank", true, true, false, 0.0, true, 1, true, false, false)).bBreechPuff, "an open self-propelled gun with a breech: a puff", "puff");
+		Check(!AfterShotOf(Ask("tank", false, true, false, 0.0, true, 1, true, false, false)).bBreechPuff, "an open gun with no breech in her model: none", "none");
+		Check(!AfterShotOf(Ask("tank", true, false, true, 1.0, true, 1, true, false, false)).bBreechPuff, "a closed tank: none (her breech is inside)", "none");
+		Check(!AfterShotOf(Ask("car", true, false, true, 1.0, true, 1, true, true, true)).bBreechPuff, "an armoured car: nothing at all", "none");
+		const FxTen::Book Off = Recipe();
+		const FxTen::Book On = Recipe({ "battle-fx-barrel.json" });
+		Check(On.Numbers.count("steam.breech.reach_m.0") == 1 && Off.Numbers.count("steam.breech.reach_m.0") == 0, "the row steam.breech on with the word, none without", "on / none");
+		const Puffed P = PuffOf(On, "breech", 0.6, 0.15);
+		Check(P.Pieces >= 5 && P.Pieces <= 30, "on: a small puff, 5 to 30 rags", Say("%.0f rags", static_cast<double>(P.Pieces)));
+		Check(P.Widest <= 1.0 && P.Thickest <= 0.33, "on: no wider than a metre, faint (alpha 0.32 at most)", Say("widest %.2f m, alpha %.2f", P.Widest, P.Thickest));
+		Check(P.Gone <= 3.0, "on: gone within 3 s of the case coming out", Say("%.1f s", P.Gone));
+		Check(P.LeastPx >= 3.0, "on: each rag held to 3 px across, thinner to match", Say("least_px %.0f", P.LeastPx));
+		Check(P.Seeds == P.SeedsWithout, "the kit's shared dice drawn as often as without it", Say("%.0f draws", static_cast<double>(P.Seeds)));
+		std::printf("     on the screen (1600 px, 42 degrees): the puff %.2f m across its widest rag is %.0f px at 25 m, %.0f px at 150 m (the scene's gate)\n", 2.0 * P.Widest, Px(2.0 * P.Widest, 25.0), Px(2.0 * P.Widest, 150.0));
+	}
 }
 
 int main(int Argc, char** Argv)
@@ -559,6 +653,7 @@ int main(int Argc, char** Argv)
 	FlakKinds();
 	SeaCases();
 	BarrelWisp();
+	BreechPuff();
 	std::printf("fx_ten_test: %d checks, %d failed\n", Checks, Failed);
 	if (Failed == 0)
 	{

@@ -64,5 +64,29 @@
     "colour_old": [154, 156, 158]
    }
   }
+ },
+ "steam": {
+  "breech": {
+   "_how": "A breech opening after the shot: a small soft puff of grey-brown powder smoke pushed out back and up, gone in a second or two; no jet, no white.",
+   "reach_m": [0.5, 0.9],
+   "across_m": 0.15,
+   "by_width": 0.7,
+   "cone_deg": 50,
+   "gap_m": 0.0,
+   "every_s": 0.06,
+   "roar": 0.2,
+   "least": 0.35,
+   "mouth": 0.9,
+   "rag": 0.6,
+   "rise_mps": 0.5,
+   "windage": 0.8,
+   "alpha": 0.32,
+   "waver": 0.3,
+   "rough": 0.45,
+   "least_px": 3,
+   "life_s": [1.0, 1.8],
+   "colour": [120, 114, 108],
+   "colour_old": [137, 132, 127]
+  }
  }
 }
