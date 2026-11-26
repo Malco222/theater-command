@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 336c05879 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of eb9cc21f9 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -51433,7 +51433,7 @@
     if (capital3) parts2.push(`it votes ${capital3} political capital`);
     if (money4) parts2.push(`${moneyShown(money4)} for the treasury`);
     const reward = parts2.length > 1 ? `${parts2.slice(0, -1).join(", ")} and ${parts2[parts2.length - 1]}` : parts2[0];
-    const oddsWord = odds2 >= 10 ? "better than 10 to 1" : `${odds2 >= 1 ? round1(odds2) : Math.round(odds2 * 100) / 100} to 1`;
+    const oddsWord2 = odds2 >= 10 ? "better than 10 to 1" : `${odds2 >= 1 ? round1(odds2) : Math.round(odds2 * 100) / 100} to 1`;
     const where = depth <= 1 ? "beside your ground or your troops" : `${depth === 2 ? "two" : depth === 3 ? "three" : "four"} provinces from your ground and your troops`;
     const past = read2.then !== null, when = !past ? "" : read2.then === g2.turn ? ", as it did when the month opened" : `, as it did in ${date(read2.then)}`;
     return {
@@ -51452,7 +51452,7 @@
       price,
       back,
       reward,
-      text: `${band2.name}. With your corps within ${P.reach} provinces brought up, the attack card reads ${oddsWord} against ${townName(r)}${when}. It ${past ? "lay" : "lies"} ${where}${past ? " then" : ""}, and you allow yourself ${monthsWord(months4)}, this one counted, to the end of ${date(due)}. Kept: ${reward}. Broken: its trust falls ${price}.`
+      text: `${band2.name}. With your corps within ${P.reach} provinces brought up, the attack card reads ${oddsWord2} against ${townName(r)}${when}. It ${past ? "lay" : "lies"} ${where}${past ? " then" : ""}, and you allow yourself ${monthsWord(months4)}, this one counted, to the end of ${date(due)}. Kept: ${reward}. Broken: its trust falls ${price}.`
     };
   }
   function promiseTerms(g2, nat, region, months4) {
@@ -65245,9 +65245,9 @@
         if (s === SIGHT.none) continue;
         const k = mine4 ? null : sortKnown(g2, row2.list, viewer);
         const all = !k || !k.report.length && !k.none.length;
-        const identified = k ? k.exact.length + k.report.length : row2.corps;
-        const known = all ? "full" : s === SIGHT.full || identified > 0 ? "partial" : "count";
-        out.push({ reg: r.id, nat, sight: s, corps: row2.corps, divs: all ? row2.divs : null, mine: mine4, known, identified, est: all ? { lo: row2.divs, hi: row2.divs } : armyBand(g2, r.id, nat, row2.list, viewer, s === SIGHT.full) });
+        const identified2 = k ? k.exact.length + k.report.length : row2.corps;
+        const known = all ? "full" : s === SIGHT.full || identified2 > 0 ? "partial" : "count";
+        out.push({ reg: r.id, nat, sight: s, corps: row2.corps, divs: all ? row2.divs : null, mine: mine4, known, identified: identified2, est: all ? { lo: row2.divs, hi: row2.divs } : armyBand(g2, r.id, nat, row2.list, viewer, s === SIGHT.full) });
       }
     }
     return out;
@@ -68200,6 +68200,31 @@
     if (!sailReach(g2, c.nat) || whyNotQuay(g2, c, to, rides) || sailWay(g2, c.nat, g2.regions[c.reg], to)) return null;
     return sailLeg(g2, c, to, rides);
   }
+  var FIELD_FIRST = ": TAKE THE FIELD first.";
+  function garrisonAboard(g2, c, air2 = false) {
+    const from2 = g2.regions[c.reg], no = air2 ? "A garrison does not emplane" : "A garrison does not take ship", go = air2 ? "take off" : "embark";
+    if (!air2 && besieged(g2, from2)) return `${c.name} is shut in the town at ${from2.name}. No ship leaves a siege.`;
+    const field4 = whyNotTakeField(g2, c);
+    if (field4) return `${no}. ${field4}`;
+    if (g2.flags.eve === 1) return `${no}: TAKE THE FIELD now, and it can ${go} when the war opens.`;
+    return apOutOfTown(g2, c) >= Math.min(4, c.apMax) ? `${no}${FIELD_FIRST}` : `${no}. Out of the town, it can ${go} next month.`;
+  }
+  function garrisonsAboard(g2, cs, air2 = false) {
+    const lines2 = cs.map((c) => garrisonAboard(g2, c, air2));
+    return lines2.find((l) => !l.endsWith(FIELD_FIRST)) ?? lines2[0];
+  }
+  function whyNotShipAll(g2, cs, to) {
+    const whys = cs.map((c) => whyNotShip(g2, c, to)).filter((w) => !!w);
+    return whys.find((w) => !w.endsWith(FIELD_FIRST)) ?? whys[0] ?? null;
+  }
+  var noLift = (g2, nat, n) => {
+    const left = liftLeft(g2, nat);
+    return left >= n ? null : left ? `There is shipping for only ${left} more corps this month.` : "All the shipping is in use this month.";
+  };
+  function harbourWrecked(g2, p) {
+    const out = prizeOut(g2, p, "harbour");
+    return out > 0 ? `The harbour of ${placeName2(p.name)} is wrecked: no ship will use it for ${out === 1 ? "a month" : `${out} months`} more.` : null;
+  }
   function whyNotShip(g2, c, to, rides = false) {
     const why = whyNotQuay(g2, c, to, rides);
     if (why) return why;
@@ -68213,15 +68238,16 @@
   function whyNotQuay(g2, c, to, rides = false) {
     const n = g2.nations[c.nat], from2 = g2.regions[c.reg];
     if (n.sealift <= 0) return `${n.name} has no shipping to move an army by sea.`;
-    if (c.kind === "fort" || c.ap < Math.min(4, c.apMax)) return "Only a corps that has not moved this month can embark.";
+    if (c.town !== void 0) return !from2.port ? `${placeName2(from2.name, true)} has no port: troops are shipped from one port to another.` : harbourWrecked(g2, from2) ?? (!rides && ownShips !== c.nat ? noLift(g2, c.nat, 1) : null) ?? garrisonAboard(g2, c);
+    if (c.kind === "fort" || c.ap < Math.min(4, c.apMax)) return c.kind !== "fort" && g2.flags.eve === 1 ? `No ship for ${c.name} before the war opens: the voyage takes a whole month of movement, and it has less.` : "Only a corps that has not moved this month can embark.";
     if (to.id === from2.id) return `They are in ${placeName2(to.name)} already.`;
     for (const p of [to, from2]) if (!p.port) return `${placeName2(p.name, true)} has no port: troops are shipped from one port to another.`;
     if (!allied(g2, c.nat, to.ctrl)) return `${to.name} is not in friendly hands.`;
     if (thornGround(g2, to, c.nat)) return `${g2.nations[to.owner].name} keeps its own army: no corps of its allies is shipped there.`;
     if (lineShut(g2, c.nat, to)) return `By the book, ${to.name} lies beyond the record's line this month.`;
     for (const p of [from2, to]) {
-      const out = prizeOut(g2, p, "harbour");
-      if (out > 0) return `The harbour of ${placeName2(p.name)} is wrecked: no ship will use it for ${out === 1 ? "a month" : `${out} months`} more.`;
+      const wrecked2 = harbourWrecked(g2, p);
+      if (wrecked2) return wrecked2;
     }
     if (hostileUnits(g2, to, c.nat).length) {
       if (siegeRules(g2) && !harbourOpen(g2, to)) return `The enemy holds the quays of ${to.name}: nothing can be run into the town by sea.`;
@@ -68298,7 +68324,9 @@
     if (airborne(cs)) {
       if (cs.some((c) => c.nat !== nat || c.reg !== from2.id)) return "An airborne force takes off from one place.";
       if (!allied(g2, nat, from2.ctrl)) return "Airborne troops take off from friendly airfields.";
-      if (cs.some((c) => c.ap < Math.min(4, c.apMax))) return "Only corps that have not moved this month can emplane.";
+      const indoors = cs.filter((c) => c.town !== void 0);
+      if (indoors.length) return garrisonsAboard(g2, indoors, true);
+      if (cs.some((c) => c.ap < Math.min(4, c.apMax))) return g2.flags.eve === 1 ? "No airborne assault goes in before the war opens." : "Only corps that have not moved this month can emplane.";
       if (allied(g2, nat, to.ctrl) || !atWar(g2, nat, to.ctrl)) return `${to.name} is not enemy ground.`;
       if (stationBars(g2, nat, to)) return whyStationBars(g2, nat, to);
       if (!from2.seas.some((z) => to.seas.includes(z))) return `${to.name} is out of reach: the transport aircraft can cross one sea, from a coast on it to another.`;
@@ -68309,12 +68337,17 @@
     if (n.sealift <= 0) return `${n.name} has no shipping for a landing.`;
     if (cs.some((c) => c.nat !== nat && !sailsWith(g2, nat, c) || c.reg !== from2.id)) return "A landing force sails from one port.";
     if (!from2.port) return "A landing force has to embark at a port.";
-    if (cs.some((c) => c.kind === "fort" || c.ap < Math.min(4, c.apMax))) return "Only corps that have not moved this month can embark.";
+    const liftShort = () => ownShips !== nat ? noLift(g2, nat, cs.length - riding(g2, cs).length) : null;
+    const inside2 = cs.filter((c) => c.town !== void 0);
+    if (inside2.length) return liftShort() ?? garrisonsAboard(g2, inside2);
+    if (cs.some((c) => c.kind === "fort")) return "Only corps that have not moved this month can embark.";
+    if (cs.some((c) => c.ap < Math.min(4, c.apMax))) return g2.flags.eve === 1 ? "No landing is made before the war opens." : "Only corps that have not moved this month can embark.";
     if (!to.seas.length) return `${to.name} has no coast.`;
     if (allied(g2, nat, to.ctrl) || cs.some((c) => !atWar(g2, c.nat, to.ctrl))) return `${to.name} is not enemy ground.`;
     for (const c of cs) if (stationBars(g2, c.nat, to)) return whyStationBars(g2, c.nat, to);
     if (cs.length > STACK) return `No more than ${STACK} corps can go ashore in one place.`;
-    if (ownShips !== nat && liftLeft(g2, nat) < cs.length - riding(g2, cs).length) return liftLeft(g2, nat) ? `There is shipping for only ${liftLeft(g2, nat)} more corps this month.` : "All the shipping is in use this month.";
+    const short = liftShort();
+    if (short) return short;
     if (!shipsFor(g2, cs, to)) return shoreLiftWhy(n, shoreLift(g2, nat, to), worthOf2(cs));
     if (!seaPath(g2, nat, from2, to, { max: NAVY.landing.range, surprise: surpriseOn(g2, nat, to) })) return laneWhy(g2, nat, from2, to, laneBar(g2, nat, from2, to, surpriseOn(g2, nat, to)));
     if (!surpriseOn(g2, nat, to) && skyDenies(g2, nat, to.id)) return `${g2.nations[to.ctrl].adj} fighters still hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.`;
@@ -71112,7 +71145,8 @@
       return l.length === 1 ? l[0] : `${l.slice(0, -1).join(", ")} and ${l[l.length - 1]}`;
     };
     const where = at4 ? `at ${at4.port}` : seaWhere(zone.name);
-    const A = sum3(mine4) + airA, D2 = Math.max(1, (at4 ? sum3(met2) * at4.anchor + at4.shore : sum3(met2)) + airD);
+    const powA = sum3(mine4), powD = sum3(met2);
+    const A = powA + airA, D2 = Math.max(1, (at4 ? powD * at4.anchor + at4.shore : powD) + airD);
     const att = mine4.map(sideOf4), def = met2.map(sideOf4);
     markSought(g2, mine4);
     const played = seaField.fought?.({ turn: g2.turn, zone: z, nat, mine: mine4.map((f) => f.id), met: met2.map((f) => f.id), A, D: D2, airA, airD });
@@ -71137,8 +71171,9 @@
       return t;
     };
     const ships = (fs) => fs.reduce((s, x) => s + shipCount(x.ships), 0);
+    const sent = ships(att);
     const lines2 = [
-      { label: "Forces", value: `${ships(att)} ships against ${ships(def)}`, effect: `Fleet strength ${Math.round(sum3(mine4))} against ${Math.round(sum3(met2))} before the battle` }
+      { label: "Forces", value: `${sent} ship${sent === 1 ? "" : "s"} against ${ships(def)}`, effect: `Fleet strength ${Math.round(powA)} against ${Math.round(powD)} before the battle` }
     ];
     if (airA > 0.5 || airD > 0.5) lines2.push({ label: "Air", value: airA > airD ? "The attacker has the stronger air cover from the coast" : airD > airA ? "The defender has the stronger air cover from the coast" : "Even", effect: `Worth ${Math.round(airA)} to the attacker and ${Math.round(airD)} to the defender` });
     const flag3 = (fs) => fs.filter((f) => f.admiral).map((f) => `${f.admiral.name}${f.admiral.level > 1 ? ` (level ${f.admiral.level})` : ""}`).join(", ") || "no admiral named";
@@ -71177,7 +71212,7 @@
     if (at4) {
       rep.port = at4.port;
       const n = airA > 0.5 || airD > 0.5 ? 2 : 1;
-      lines2.splice(n, 0, { label: "In harbour", value: `The ${names(met2)} ${met2.length === 1 ? "was" : "were"} caught at anchor at ${at4.port}`, effect: `Ships at anchor fight at ${Math.round(at4.anchor * 100)}% of their weight` });
+      lines2.splice(n, 0, { label: "In harbour", value: `${cap9(names(met2))} ${met2.length === 1 ? "was" : "were"} caught at anchor at ${at4.port}`, effect: `Ships at anchor fight at ${Math.round(at4.anchor * 100)}% of their weight` });
       if (at4.shore > 0) lines2.splice(n + 1, 0, { label: "Shore batteries", value: `The guns of ${at4.port} fire on the attackers`, effect: `Worth ${Math.round(at4.shore)} to the defence` });
     }
     g2.seaReports.push(rep);
@@ -74149,7 +74184,11 @@
     const r = g2.regions[cs[0].reg], town = townName(r), one2 = cs.length === 1;
     const who = one2 ? `${cs[0].name} is ${(r.garr?.length ?? 0) > 1 ? "in " : ""}the garrison of ${town}` : `They are the garrison of ${town}`;
     const shut = g2.flags.sieges === 1 && r.units.some((u) => !u.dead && atWar(g2, u.nat, r.ctrl));
-    return shut ? `${who}, shut in by the army round it. Order a sortie against that army.` : `${who}. Order ${one2 ? "it" : "them"} to take the field first.`;
+    if (shut) return `${who}, shut in by the army round it. Order a sortie against that army.`;
+    const full = whyNotTakeField(g2, cs[0]);
+    if (full?.startsWith("There is no room in the field")) return `${who}. ${full}`;
+    if (cs.every((c) => c.town === g2.turn)) return g2.flags.eve === 1 ? `${who}. Order ${one2 ? "it" : "them"} to take the field now, and ${one2 ? "it" : "they"} can march when the war opens.` : `${who}. ${one2 ? "It" : "They"} went in this month, and can march out next month.`;
+    return `${who}. Order ${one2 ? "it" : "them"} to take the field first.`;
   }
   function whyNotOrderGarrison(g2, region) {
     const r = g2.regions[region];
@@ -78864,6 +78903,7 @@
     takeWorks(g2, c, to);
     return true;
   }
+  var TRAIN_FIELD = "A garrison does not take the train: TAKE THE FIELD first.";
   var news2 = (code, strong, rest, at4) => ({ code, line: `${strong} ${rest}`, strong, at: at4 });
   function cutAside(g2, r) {
     const why = cutCause(g2, r), on2 = cutOn(g2, r);
@@ -78874,15 +78914,23 @@
     const open3 = (r) => allied(g2, c.nat, r.ctrl) && !besieged(g2, r) || junctionOpenTo(g2, c.nat, r);
     const mended = (r) => hastyLeft(g2, r) > 0 ? `the railwaymen have it running, in ${turnToDate(g2.turn + hastyLeft(g2, r)).label}, or engineers relay it sooner` : "engineers relay the track";
     if (c.kind === "fort") return { code: "fort", line: "Fortress troops do not go by train." };
-    if (c.town) return { code: "town", line: besieged(g2, from2) ? `${c.name} is shut in the town at ${from2.name}. No train leaves a siege.` : "A garrison does not take the train: TAKE THE FIELD first.", at: from2.id };
-    if (c.ap < 4) return {
+    if (!c.town && c.ap < 4) return {
       code: "spent",
-      line: c.ap < c.apMax ? `No train for ${c.name} this month: it has spent part of its month, and the railway takes a whole one.` : fuelSlows(g2, c) ? `No train for ${c.name} this month: short of fuel, it has less than the whole month a train takes.` : `No train for ${c.name} this month: the railway takes a whole month of movement, and it has less.`
+      line: c.ap < c.apMax && g2.flags.eve === 1 ? `No train for ${c.name} before the war opens: the railway takes a whole month of movement, and it has less.` : c.ap < c.apMax ? `No train for ${c.name} this month: it has spent part of its month, and the railway takes a whole one.` : fuelSlows(g2, c) ? `No train for ${c.name} this month: short of fuel, it has less than the whole month a train takes.` : `No train for ${c.name} this month: the railway takes a whole month of movement, and it has less.`
     };
     if (sandNoRail(from2)) return { code: "desert", line: "No railway crosses the desert.", at: from2.id };
+    if (c.town && besieged(g2, from2)) return { code: "town", line: `${c.name} is shut in the town at ${from2.name}. No train leaves a siege.`, at: from2.id };
     if (besieged(g2, from2) && !junctionOpenTo(g2, c.nat, from2)) return news2("siege", `${from2.name} is under siege.`, "No train leaves it.", from2.id);
     if (net && !onNet(from2.id)) return { code: "noline", line: `No railway runs through ${from2.name}: ${c.name} goes by road.`, at: from2.id };
     if (net && railCut(g2, from2.id)) return news2("cut", `The railway at ${from2.name} is cut${cutAside(g2, from2.id)}.`, `No train leaves until ${mended(from2.id)}.`, from2.id);
+    if (c.town) {
+      const field4 = whyNotTakeField(g2, c);
+      return {
+        code: "town",
+        line: field4 ? `A garrison does not take the train. ${field4}` : apOutOfTown(g2, c) >= 4 ? TRAIN_FIELD : g2.flags.eve === 1 ? "A garrison does not take the train: TAKE THE FIELD now, and it can go by rail when the war opens." : "A garrison does not take the train. Out of the town, it can go by rail next month.",
+        at: from2.id
+      };
+    }
     if (to === void 0 || to === c.reg || !g2.regions[to]) return null;
     const dest = g2.regions[to];
     if (sandNoRail(dest)) return { code: "desert", line: "No railway crosses the desert.", at: to };
@@ -78947,11 +78995,13 @@
       const dest = to === void 0 ? void 0 : g2.regions[to];
       return dest && !roomForAll(g2, dest, corps) ? { code: "room", line: roomRefusal(g2, dest, corps) ?? roomSays(g2, dest) ?? `${dest.name} has no room for ${corps.length === 1 ? "another corps" : `${corps.length} more corps`}.`, at: dest.id } : null;
     }
-    const no = whys[first2];
+    const other4 = whys.findIndex((w) => !!w && w.line !== TRAIN_FIELD);
+    const lead2 = other4 < 0 ? first2 : other4;
+    const no = whys[lead2];
     if (whys.every(Boolean)) {
       if (corps.length < 2 || !whys.every((w) => w.code === "spent" && w.line.startsWith("No train for "))) return no;
       const { who: who2, many } = forceWords(g2, corps);
-      const rest = no.line.slice(no.line.indexOf(" this month:"));
+      const rest = no.line.slice(`No train for ${corps[lead2].name}`.length);
       return { ...no, line: `No train for ${who2}${many ? rest.replace(": it has spent part of its month", ": they have spent part of their month").replace(": short of fuel, it has", ": short of fuel, they have").replace(", and it has less", ", and they have less") : rest}` };
     }
     const names = corps.filter((_, i) => whys[i]).map((c) => c.name);
@@ -81002,7 +81052,13 @@
   var STEPS2 = 40;
   var zero = () => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
   var pct9 = (x) => `${Math.round(x * 100)}%`;
-  var oneDp = (x) => x >= 9.95 ? "more than 10" : x.toFixed(1);
+  var oddsWord = (x) => x >= 9.95 ? "more than 10" : x < 0.05 ? "less than 0.1" : x.toFixed(1);
+  function oddsSwing(low2, high) {
+    const worst = oddsWord(low2), best = oddsWord(high);
+    if (worst === best) return `${/^\d/.test(worst) ? `About ${worst}` : `${worst[0].toUpperCase()}${worst.slice(1)}`} to 1 all day`;
+    if (worst === "less than 0.1") return `No better than ${best} to 1 all day`;
+    return `Between ${worst} and ${best} to 1 as the day goes`;
+  }
   function shares2(r) {
     const won = r >= 1, edge4 = won ? r : 1 / r;
     const hard = clamp(0.14 + 0.08 * edge4, 0.18, 0.5), light = clamp(0.16 / edge4, 0.03, 0.14);
@@ -81109,14 +81165,15 @@
       theirs: [lossAt(g2, met2, worst.theirs, Math.floor), lossAt(g2, met2, best.theirs, Math.ceil)]
     };
     const n = (fs) => fs.reduce((s, x) => s + shipCount(x.ships), 0);
-    plan.lines.push({ label: "Forces", value: `${n(mine4)} ships against ${n(met2)}`, effect: `Fleet strength ${Math.round(ours2.ships)} against ${Math.round(theirs.ships)}` });
+    const sent = n(mine4);
+    plan.lines.push({ label: "Forces", value: `${sent} ${sent === 1 ? "ship" : "ships"} against ${n(met2)}`, effect: `Fleet strength ${Math.round(ours2.ships)} against ${Math.round(theirs.ships)}` });
     if (airA > 0.5 || airD > 0.5) plan.lines.push({ label: "Air", value: airA > airD ? "You have the stronger air cover from the coast" : airD > airA ? "The enemy has the stronger air cover from the coast" : "Even", effect: `Worth ${Math.round(airA)} against ${Math.round(airD)}` });
-    plan.lines.push({ label: "Odds", value: `${oneDp(mid)} to 1`, effect: `Between ${oneDp(ends[0])} and ${oneDp(ends[1])} to 1 as the day goes` });
+    plan.lines.push({ label: "Odds", value: `${oddsWord(mid)} to 1`, effect: oddsSwing(ends[0], ends[1]) });
     if (reported) plan.lines.push({ label: "Not identified", value: unseen.replace(" there", " in this sea"), effect: "Not in these figures" });
     plan.lines.push({ label: "Search", value: search });
     const worn = mine4.filter((x) => x.ready < 0.8);
     if (worn.length) plan.lines.push({ label: "Readiness", value: `${worn.map((x) => x.name).join(", ")} not fully fit for sea`, effect: "A fleet in need of refit fights below its strength" });
-    plan.notes.push(offers2 ? `Your admiral will offer battle: he wants ${B3.seek} to 1 and has ${oneDp(mid)}.` : `At these odds your admiral will not offer battle: he wants ${B3.seek} to 1 and has ${oneDp(mid)}. An enemy who is patrolling and thinks himself strong enough will come to you.`);
+    plan.notes.push(offers2 ? `Your admiral will offer battle: he wants ${B3.seek} to 1 and has ${oddsWord(mid)}.` : `At these odds your admiral will not offer battle: he wants ${B3.seek} to 1 and has ${oddsWord(mid)}. An enemy who is patrolling and thinks himself strong enough will come to you.`);
     if (plan.declines) plan.notes.push(plan.declines.who === "theirs" ? `Outweighed ${B3.evadeAt} to 1 or more, the enemy declines battle about ${pct9(B3.evade)} of the time and makes for port, which leaves you the sea.` : `Outweighed ${B3.evadeAt} to 1 or more, your fleet declines battle about ${pct9(B3.evade)} of the time and makes for port.`);
     plan.notes.push(`Ships that are raiding and not patrolling have to be caught first: about ${pct9(B3.catchRaider)} of the time each month.`);
     if (viewer !== null && fogOn(g2, viewer)) plan.notes.push("What your side has not found is not in these figures.");
@@ -81143,16 +81200,24 @@
   var cap12 = (s) => s[0].toUpperCase() + s.slice(1);
   var zero2 = () => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
   var pct10 = (x) => `${Math.round(x * 100)}%`;
-  var oneDp2 = (x) => x >= 9.95 ? "more than 10" : x.toFixed(1);
   var sum2 = (g2, fs) => fs.reduce((s, x) => s + fleetPower(g2, x), 0);
   var shipsIn = (fs) => fs.reduce((s, x) => s + shipCount(x.ships), 0);
   var listNames = (fs) => {
     const l = fs.map(fleetName);
     return l.length === 1 ? l[0] : `${l.slice(0, -1).join(", ")} and ${l[l.length - 1]}`;
   };
+  function foeWords(g2, fs, named5) {
+    const known = fs.filter(named5).map(fleetName);
+    const unknown = [...new Set(fs.filter((x) => !named5(x)).map((x) => `those ${g2.nations[x.nat].adj} ships`))];
+    const l = [...known, ...unknown];
+    return { text: l.length === 1 ? l[0] : `${l.slice(0, -1).join(", ")} and ${l[l.length - 1]}`, one: l.length === 1 && !unknown.length };
+  }
+  var identified = (g2, viewer) => (x) => fleetKnown(g2, x, viewer) === "exact";
   var SWING2 = [0.8, 1.2];
   var STEPS3 = 40;
   var VERDICT3 = [[0.8, "Very likely to win"], [0.6, "Likely to win"], [0.4, "It could go either way"], [0.2, "Likely to lose"], [0, "Very likely to lose"]];
+  var HEAVY2 = ["bb", "cv"];
+  var HEAVY_RISK = 0.2;
   function groundOf3(g2, f, t) {
     const reach3 = fleetReach(g2, f);
     if (atSea(t)) return reach3.includes(t.zone) ? { harbour: false, zone: t.zone, port: null, shore: 0, anchor: 1 } : null;
@@ -81171,17 +81236,19 @@
     if (!fleetAttackOn(g2)) return "Fleets are sent straight at the enemy only where that is switched on.";
     const f = ownFleet(g2, id);
     if (!f) return "Only your own fleet can be given the order, in your own month.";
-    if (!shipCount(f.ships)) return `The ${f.name} has no ships.`;
+    if (!shipCount(f.ships)) return `${cap12(fleetName(f))} has no ships.`;
     if (surfaceShips(f) <= 0) return "Submarines fight no fleet action: they raid shipping, and escorts hunt them.";
-    if (f.attacked === g2.turn) return `The ${f.name} has already been sent at the enemy this month.`;
-    if (hasSought(g2, f)) return `The ${f.name} has already sought battle this month: a fleet seeks battle once a month.`;
+    if (f.attacked === g2.turn) return `${cap12(fleetName(f))} has already been sent at the enemy this month.`;
+    if (hasSought(g2, f)) return `${cap12(fleetName(f))} has already sought battle this month: a fleet seeks battle once a month.`;
     if (f.stance === "passage") return passageWhy(g2, f);
-    if (cutOff(g2, f)) return `The ${f.name} is cut off beyond a shut strait: send it to harbour on its side first.`;
+    if (cutOff(g2, f)) return `${cap12(fleetName(f))} is cut off beyond a shut strait: send it to harbour on its side first.`;
     const t = g2.fleets.find((x) => x.id === target);
     if (!t || !shipCount(t.ships) || fleetKnown(g2, t, f.nat) === "none") return "No such enemy fleet is known.";
     if (!atWar(g2, f.nat, t.nat)) return `${g2.nations[t.nat]?.name ?? t.nat} is not at war with ${g2.nations[f.nat].name}.`;
     if (surfaceShips(t) <= 0) return "Submarines are not brought to a fleet action: send ships to hunt them in their sea.";
     if (!groundOf3(g2, f, t)) {
+      const foe = foeWords(g2, [t], identified(g2, f.nat));
+      if (!foe.one) return `${cap12(foe.text)} are ${atSea(t) ? seaWhere(g2.seas[t.zone].name) : "in harbour"}, out of reach of ${fleetName(f)} from ${f.port}.`;
       return atSea(t) ? `${cap12(fleetName(t))} is ${seaWhere(g2.seas[t.zone].name)}, out of reach of ${fleetName(f)} from ${f.port}.` : `${t.port} is out of reach of ${fleetName(f)} from ${f.port}.`;
     }
     return null;
@@ -81250,6 +81317,8 @@
       seekAt: B3.seek,
       enough: false,
       likely: { ours: zero2(), theirs: zero2() },
+      expected: { ours: zero2(), theirs: zero2() },
+      risk: { ours: [], theirs: [] },
       range: { ours: [zero2(), zero2()], theirs: [zero2(), zero2()] },
       lines: [],
       notes: []
@@ -81284,24 +81353,31 @@
       return out;
     };
     plan.likely = { ours: each3(lo), theirs: each3(lt) };
+    plan.expected = { ours: lo, theirs: lt };
+    const atRisk = (s, l) => HEAVY2.filter((c) => l[c] === 0 && s[c] >= HEAVY_RISK);
+    plan.risk = { ours: atRisk(lo, plan.likely.ours), theirs: atRisk(lt, plan.likely.theirs) };
     const worst = shares2(plan.odds.low), best = shares2(plan.odds.high);
     plan.range = {
       ours: [lossAt(g2, mine4, best.ours, Math.floor), lossAt(g2, mine4, worst.ours, Math.ceil)],
       theirs: [lossAt(g2, met2, worst.theirs, Math.floor), lossAt(g2, met2, best.theirs, Math.ceil)]
     };
-    plan.lines.push({ label: "Forces", value: `${shipsIn(mine4)} ships against ${shipsIn(met2)}`, effect: `Fleet strength ${Math.round(ours2.ships)} against ${Math.round(theirs.ships)}` });
+    const ourShips = shipsIn(mine4);
+    plan.lines.push({ label: "Forces", value: `${ourShips} ${ourShips === 1 ? "ship" : "ships"} against ${shipsIn(met2)}`, effect: `Fleet strength ${Math.round(ours2.ships)} against ${Math.round(theirs.ships)}` });
     if (at4.harbour) {
-      plan.lines.push({ label: "In harbour", value: `${cap12(listNames(met2))} at anchor at ${at4.port}`, effect: `Ships at anchor fight at ${pct10(at4.anchor)} of their weight` });
-      if (at4.shore > 0) plan.lines.push({ label: "Shore batteries", value: `The guns of ${at4.port}`, effect: `Worth ${Math.round(at4.shore)} to the defence` });
+      const port = identified(g2, viewer)(t) ? at4.port : null;
+      plan.lines.push({ label: "In harbour", value: `${cap12(listNames(met2))} at anchor ${port ? `at ${port}` : "in harbour"}`, effect: `Ships at anchor fight at ${pct10(at4.anchor)} of their weight` });
+      if (at4.shore > 0) plan.lines.push({ label: "Shore batteries", value: port ? `The guns of ${port}` : "The harbour's guns", effect: `Worth ${Math.round(at4.shore)} to the defence` });
     }
     if (airA > 0.5 || airD > 0.5) plan.lines.push({ label: "Air", value: airA > airD ? "You have the stronger air cover from the coast" : airD > airA ? "The enemy has the stronger air cover from the coast" : "Even", effect: `Worth ${Math.round(airA)} against ${Math.round(airD)}` });
-    plan.lines.push({ label: "Odds", value: `${oneDp2(mid)} to 1`, effect: `Between ${oneDp2(plan.odds.low)} and ${oneDp2(plan.odds.high)} to 1 as the day goes` });
+    plan.lines.push({ label: "Odds", value: `${oddsWord(mid)} to 1`, effect: oddsSwing(plan.odds.low, plan.odds.high) });
     if (reported) plan.lines.push({ label: "Not identified", value: unseen, effect: "Not in these figures" });
     if (!at4.harbour) plan.lines.push({ label: "Search", value: seaPicture(g2, at4.zone, f.nat).word });
     const worn = mine4.filter((x) => x.ready < 0.8);
     if (worn.length) plan.lines.push({ label: "Readiness", value: `${worn.map((x) => x.name).join(", ")} not fully fit for sea`, effect: "A fleet in need of refit fights below its strength" });
-    plan.notes.push(plan.enough ? `Your admiral would have offered battle at these odds anyway: this fights it now, not at the month's end.` : `Your admiral would not offer battle at these odds (he wants ${B3.seek} to 1 and has ${oneDp2(mid)}): it is your order, and it will be carried out.`);
-    if (plan.found < 1) plan.notes.push(`${cap12(fleetName(t))} is not patrolling, so it has to be found first: about ${pct10(plan.found)} of the time. Not found, your fleet patrols ${seaWhere(sea.name)}.`);
+    plan.notes.push(plan.enough ? `Your admiral would have offered battle at these odds anyway: this fights it now, not at the month's end.` : `Your admiral would not offer battle at these odds (he wants ${B3.seek} to 1 and has ${oddsWord(mid)}): it is your order, and it will be carried out.`);
+    const foe = foeWords(g2, [t], identified(g2, viewer));
+    if (!at4.harbour && !foe.one) plan.notes.push(`${cap12(foe.text)} may not be patrolling. If not, they have to be found first: about ${pct10(B3.catchRaider)} of the time. Not found, your fleet patrols ${seaWhere(sea.name)}.`);
+    else if (plan.found < 1) plan.notes.push(`${cap12(foe.text)} is not patrolling, so it has to be found first: about ${pct10(plan.found)} of the time. Not found, your fleet patrols ${seaWhere(sea.name)}.`);
     if (plan.slips > 0) plan.notes.push(`Outweighed ${B3.evadeAt} to 1 or more, the enemy makes for port about ${pct10(plan.slips)} of the time, which leaves you the sea.`);
     if (at4.harbour) plan.notes.push("A fleet in harbour cannot make for port: it is there, and it fights where it lies.");
     if (mine4.length > 1) plan.notes.push(`${cap12(listNames(mine4.slice(1)))}, already patrolling ${seaWhere(sea.name)}, ${mine4.length === 2 ? "joins" : "join"} the attack.`);
@@ -81313,6 +81389,8 @@
     if (whyNotFleetAttack(g2, id, target)) return null;
     const f = ownFleet(g2, id), t = g2.fleets.find((x) => x.id === target);
     const at4 = groundOf3(g2, f, t);
+    const named5 = new Set(theirsAt(g2, f, t, at4).filter(identified(g2, f.nat)).map((x) => x.id));
+    const foes = (fs) => foeWords(g2, fs, (x) => named5.has(x.id));
     if (!sail(g2, f, at4.zone, "patrol")) return null;
     f.attacked = g2.turn;
     markSought(g2, [f]);
@@ -81324,7 +81402,8 @@
     let met2 = theirsAt(g2, f, t, at4).filter((x) => surfaceShips(x) > 0);
     if (!at4.harbour) {
       if (t.stance !== "patrol" && !rng.chance(NAVY.battle.catchRaider)) {
-        const text = `${cap12(fleetName(f))} searched ${seaWhere(zone.name)} for ${fleetName(t)} and did not find it.`;
+        const foe = foes([t]);
+        const text = `${cap12(fleetName(f))} searched ${seaWhere(zone.name)} for ${foe.text} and did not find ${foe.one ? "it" : "them"}.`;
         headline(g2, "event", text, f.nat);
         return { outcome: "missed", report: null, text };
       }
@@ -81332,7 +81411,8 @@
       const A = sum2(g2, mine4) + airA2, D2 = Math.max(1, sum2(g2, met2) + airD2);
       if (A >= NAVY.battle.evadeAt * D2 && rng.chance(NAVY.battle.evade)) {
         for (const x of met2) sail(g2, x, x.home, "port");
-        const text = `${cap12(listNames(met2))} ${met2.length === 1 ? "declines" : "decline"} battle ${seaWhere(zone.name)} and ${met2.length === 1 ? "makes" : "make"} for port.`;
+        const foe = foes(met2);
+        const text = `${cap12(foe.text)} ${foe.one ? "declines" : "decline"} battle ${seaWhere(zone.name)} and ${foe.one ? "makes" : "make"} for port.`;
         headline(g2, "event", text, met2[0].nat, void 0, { arm: "sea", won: f.nat, lost: met2[0].nat });
         return { outcome: "declined", report: null, text };
       }
@@ -88221,7 +88301,10 @@
       out.held = `${passageWhy(g2, f)} ${out.ports.length ? "A harbour is open to it now: it can make for one." : "It can be scuttled."}`;
       out.scuttle = true;
     } else if (inPassage(f)) out.held = `${passageWhy(g2, f)} It can be turned back to ${f.passage?.fromPort ?? "the harbour it left"}.`;
-    else if (held3) out.held = `The ${f.name} was sent at the enemy this month: it stays where the battle left it until next month.`;
+    else if (held3) {
+      const named5 = fleetName(f);
+      out.held = `${named5[0].toUpperCase()}${named5.slice(1)} was sent at the enemy this month: it stays where the battle left it until next month.`;
+    }
     return out;
   }
   function lanesToGuard(g2) {
@@ -122634,13 +122717,18 @@
           town: !!c.town,
           men: men(c),
           // (Rules 84.2.4; the UI director, 17 November.) A corps of his own inside a town: the rules' refusal, naming the town, for its card.
-          garrison: c.town && c.nat === s.human ? (() => {
+          // (The 1.5.3 patch, the playtest's find 18: one that went in this month is told when it can march, not to take the field.)
+          garrison: c.town && c.nat === s.human ? stayLine(s, [c]) : "",
+          // (The 1.5.3 patch, the playtest's finds 14 and 15.) And the moves it has once out, as an order brings it out (apForOrders:
+          // all but one of its month, none if it went in this month, and none while it may not come out). `ap` stays the
+          // rules' own, 0 inside the town.
+          ...c.town && c.nat === s.human ? { apOut: (() => {
             try {
-              return garrisonLine(s, [c]);
+              return apForOrders(s, c);
             } catch {
-              return "";
+              return 0;
             }
-          })() : "",
+          })() } : {},
           // Its story so far: how seasoned it is, the name the army gives it, and the honours on its colours.
           xp: Math.round(c.xp * 100),
           grade: grade(c.xp),
@@ -123693,7 +123781,7 @@
     const settle2 = () => {
       const back = looks ? inside2 : inside2.filter((x, i) => !wentOut(s, x, out[i]));
       backInside(back);
-      return back.length;
+      return back;
     };
     let result;
     try {
@@ -123703,11 +123791,95 @@
       throw e;
     }
     const put2 = settle2();
-    if (!looks && put2 > 0 && result && typeof result === "object" && "view" in result) result.view = view2();
+    if (!looks && put2.length > 0 && result && typeof result === "object" && "view" in result) result.view = view2();
+    const answer = !looks && put2.length > 0 && result && typeof result === "object" ? result : null;
+    if (answer && typeof answer.note === "string" && (put2.length < inside2.length || Array.isArray(answer.moved) && answer.moved.length > 0 || !!answer.report)) {
+      const stay = leftInTown(put2.map((x) => x.c), put2.length === 1 ? "It could not go with the rest." : "They could not go with the rest.");
+      answer.note = answer.note ? `${answer.note} ${stay}` : stay;
+    }
     return result;
   }
   var lookOut = (fn) => (...a) => comeOut(a[0], () => fn(...a), true);
   var goOut = (fn) => (...a) => comeOut(a[0], () => fn(...a), false);
+  var garrisonHand = (s, ids2) => {
+    const inside2 = insideOf(s, ids2);
+    try {
+      return inside2.length && inside2.length === corpsById(s, ids2).length ? inside2 : [];
+    } catch {
+      return [];
+    }
+  };
+  var afield = (cs) => {
+    const field4 = cs.filter((c) => c.town === void 0);
+    return field4.length && field4.length < cs.length ? field4 : cs;
+  };
+  function leftInTown(stay, why) {
+    if (!stay.length) return "";
+    const names = stay.map((c) => shortName2(c.name));
+    return `${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} stay` : `${names[0]} stays`} in the town.${why ? ` ${why}` : ""}`;
+  }
+  function stayLine(s, cs) {
+    if (!cs.length) return "";
+    try {
+      return garrisonLine(s, cs);
+    } catch {
+      return "";
+    }
+  }
+  function sayWhyInside(fn, key8, idle, why = (s, cs) => stayLine(s, cs)) {
+    return (...a) => {
+      const out = fn(...a);
+      try {
+        const s = game();
+        const cs = garrisonHand(s, a[0]);
+        const said = out && typeof out === "object" ? out[key8] : void 0;
+        if (cs.length && said === "" && idle(out)) out[key8] = why(s, cs, a);
+      } catch {
+      }
+      return out;
+    };
+  }
+  var comesOutTo = (hand2, to) => hand2.out.length > 0 && hand2.regions.some((r) => r.id === to);
+  function garrisonOrPlace(s, cs, a) {
+    return comesOutTo(reachHand(a[0]), a[1]) ? "" : stayLine(s, cs);
+  }
+  function approachHand(ids2, to) {
+    const plan = lookOut(approach2)(ids2, to);
+    try {
+      const s = game();
+      const cs = plan.ok ? [] : garrisonHand(s, ids2);
+      if (cs.length) {
+        const hand2 = reachHand(ids2);
+        const why = !hand2.out.length || plan.none === "" && !comesOutTo(hand2, to) ? stayLine(s, cs) : "";
+        if (why) return { ...plan, rows: [], none: why };
+      }
+    } catch {
+    }
+    return plan;
+  }
+  function staysWhy(s, ids2, out) {
+    const inside2 = insideOf(s, ids2);
+    const left = inside2.filter((c) => !out.includes(c.id));
+    if (!left.length) return "";
+    const xs = inside2.map((c) => insideNow(s, c));
+    const done = [];
+    let why = "";
+    try {
+      for (const x of xs) {
+        const no = whyNotLeaveTown(s, x.c);
+        if (no !== null || !orderTakeField(s, x.c)) {
+          why = no ?? "";
+          break;
+        }
+        done.push(x);
+      }
+    } catch {
+      why = "";
+    } finally {
+      backInside(done);
+    }
+    return why || stayLine(s, [left[left.length - 1]]);
+  }
   function flightLights(l) {
     const out = {};
     if (l.level > 0) out.sl = l.level;
@@ -124509,6 +124681,18 @@
     }
     return { regions: [...merged.values()], danger: [...danger], far, standing: standing6, standingTo, spent };
   }
+  function reachHand(ids2) {
+    const s = game();
+    const inside2 = insideOf(s, ids2);
+    let out = [];
+    const seen2 = comeOut(ids2, () => {
+      out = inside2.filter((c) => c.town === void 0 && !c.dead && c.ap > 0).map((c) => c.id);
+      return reachOf5(ids2);
+    }, true);
+    const stuck = humanUp(s) && !out.length ? garrisonHand(s, ids2) : [];
+    const mixed = humanUp(s) && inside2.length > 0 && !stuck.length && inside2.length < corpsById(s, ids2).length;
+    return { ...seen2, out, why: stayLine(s, stuck), stays: mixed ? staysWhy(s, ids2, out) : "" };
+  }
   function roundOf(s) {
     try {
       const c = roundCount(s);
@@ -125166,9 +125350,11 @@
     const paid = report?.paid && !report.yielded ? { text: report.paid.att, sign: report.paid.sign ?? "" } : null;
     return { report: namedReport(s, report), siege: false, fell: false, stands: "", marched: 0, note: report ? battleNote(s, report) : why ?? "", price: report ? priceLine(s, report) : "", paid, moved: [], view: view2() };
   }
-  function garrisonWhy(region) {
+  function garrisonWhy(region, ids2) {
     try {
-      return { why: whyNotOrderGarrison(game(), region) ?? "" };
+      const s = game();
+      const hand2 = insideOf(s, ids2).filter((c) => c.reg === region && !c.dead);
+      return { why: hand2.length ? stayLine(s, hand2) : whyNotOrderGarrison(s, region) ?? "" };
     } catch {
       return { why: "" };
     }
@@ -125746,8 +125932,10 @@
       moved.push({ id: c.id, path: [to] });
       went.push(c.name);
     }
-    const place3 = s.regions[to]?.name ?? "", left = asked4.length - went.length;
-    const said = went.length ? `${went.length === 1 ? `${went[0]} goes` : `${went.length} corps go`} to ${place3} by rail: there this month, the whole month spent.${left ? ` ${left === 1 ? "One corps stays" : `${left} corps stay`} behind: ${place3} has no room for more.` : ""}` : "";
+    const inside2 = asked4.filter((c) => c.town !== void 0 && !moved.some((m) => m.id === c.id));
+    const place3 = s.regions[to]?.name ?? "", left = asked4.length - inside2.length - went.length;
+    const stay = inside2.length ? ` ${leftInTown(inside2, whyNoTrain(s, inside2[0])?.line ?? "")}` : "";
+    const said = went.length ? `${went.length === 1 ? `${went[0]} goes` : `${went.length} corps go`} to ${place3} by rail: there this month, the whole month spent.${left ? ` ${left === 1 ? "One corps stays" : `${left} corps stay`} behind: ${place3} has no room for more.` : ""}${stay}` : "";
     return { moved, said, view: view2() };
   }
   function trainWho(s, cs, line, army2, armyIds) {
@@ -125773,7 +125961,8 @@
     const none4 = { can: false, strong: "", line: "", tracks: [], reach: [], dots: [], tint: [], bars: [], ringed: [] };
     try {
       if (!humanUp(s) || onEve(s)) return none4;
-      const cs = corpsById(s, ids2).filter((c) => !c.dead && canOrder(s, c));
+      const all = corpsById(s, ids2).filter((c) => !c.dead && canOrder(s, c));
+      const cs = afield(all), stay = all.filter((c) => !cs.includes(c));
       if (!cs.length) return none4;
       const walked = new Set(march3);
       const reach3 = [...railReachFor(s, cs)];
@@ -125806,6 +125995,7 @@
         }
       } catch {
       }
+      if (said?.can && stay.length) line = `${line} ${leftInTown(stay, whyNoTrain(s, stay[0])?.line ?? "")}`;
       return {
         can: !!said?.can,
         strong: said?.strong ?? "",
@@ -125825,11 +126015,17 @@
     const s = game();
     const none4 = { ride: "", relay: "", no: "", strong: "", cutHere: false };
     try {
-      const cs = corpsById(s, ids2).filter((c) => !c.dead && canOrder(s, c) && c.reg !== to);
+      const home = humanUp(s) ? garrisonHand(s, ids2) : [];
+      if (home.length && home.every((c) => c.reg === to)) {
+        const no2 = whyNoTrainFor(s, home);
+        return no2 ? { ...none4, no: no2.line, strong: no2.strong ?? "" } : none4;
+      }
+      const all = corpsById(s, ids2).filter((c) => !c.dead && canOrder(s, c) && c.reg !== to);
+      const cs = afield(all), stay = all.filter((c) => !cs.includes(c));
       if (!cs.length || !s.regions[to] || !humanUp(s)) return none4;
       if (railReachFor(s, cs).has(to)) {
         const said = rideLines(s, cs, to, "Right-click");
-        return { ...none4, ride: said.line, relay: said.relay };
+        return { ...none4, ride: stay.length ? `${said.line} ${leftInTown(stay, "")}` : said.line, relay: said.relay };
       }
       const no = whyNoTrainFor(s, cs, to);
       return no ? { ...none4, no: no.line, strong: no.strong ?? "", cutHere: no.code === "cut" && no.at === to } : none4;
@@ -125842,7 +126038,7 @@
     const ports = /* @__PURE__ */ new Set();
     let beaches = [];
     if (humanUp(s) && !onEve(s)) seaReading(s, () => {
-      const cs = corpsById(s, ids2).filter((c) => canOrder(s, c));
+      const cs = afield(corpsById(s, ids2).filter((c) => canOrder(s, c)));
       for (const c of cs) for (const r of s.regions) if (r.port && r.id !== c.reg && whyNotShip(s, c, r) === null) ports.add(r.id);
       beaches = landingTargets(s, cs).map((r) => r.id);
     });
@@ -125851,18 +126047,9 @@
   function bySeaWhy(ids2, to) {
     const s = game();
     const r = s.regions[to];
-    const cs = corpsById(s, ids2).filter((c) => canOrder(s, c));
+    const cs = afield(corpsById(s, ids2).filter((c) => canOrder(s, c)));
     if (!r || !cs.length) return { why: "" };
-    return seaReading(s, () => {
-      if (allied(s, cs[0].nat, r.ctrl)) {
-        for (const c of cs) {
-          const why = whyNotShip(s, c, r);
-          if (why) return { why };
-        }
-        return { why: "" };
-      }
-      return { why: whyNotLand(s, cs, r) ?? "" };
-    });
+    return seaReading(s, () => ({ why: (allied(s, cs[0].nat, r.ctrl) ? whyNotShipAll(s, cs, r) : whyNotLand(s, cs, r)) ?? "" }));
   }
   function ship(ids2, to) {
     const s = game();
@@ -125875,7 +126062,7 @@
   }
   function landingPlan(ids2, to) {
     const s = game();
-    const cs = corpsById(s, ids2).filter((c) => canOrder(s, c));
+    const cs = afield(corpsById(s, ids2).filter((c) => canOrder(s, c)));
     const p = previewLanding(s, cs, to);
     const lines2 = [];
     if (!p.why) {
@@ -125920,7 +126107,7 @@ ${next.text}` : ""}` : next ? next.also : "";
   }
   function landOn(ids2, to) {
     const s = game();
-    const cs = corpsById(s, ids2).filter((c) => canOrder(s, c));
+    const cs = afield(corpsById(s, ids2).filter((c) => canOrder(s, c)));
     const before = new Map(cs.map((c) => [c.id, c.reg]));
     const r = orderLand(s, cs, to);
     const moved = cs.filter((c) => !c.dead && c.reg !== before.get(c.id)).map((c) => ({ id: c.id, path: [c.reg] }));
@@ -127380,6 +127567,11 @@ ${note4}`;
     const f = s.fleets.find((x) => x.id === id);
     return `Every sea in its reach lies beyond the shut strait. ${f && cutOffHomeTip(s, f) ? "RETURN TO HARBOUR takes it to a harbour on its side." : "No friendly harbour on its side can take it, so it stays at sea."}`;
   }
+  function fleetRuleNote(s, id) {
+    const f = s.fleets.find((x) => x.id === id);
+    if (!f || !cutOff(s, f)) return " A fleet reaches three seas from its base, and can be given one order a month.";
+    return harbourFor(s, f) ? " It can be given one order a month." : "";
+  }
   function fleetPage(s, id) {
     const card = s.flags.open === 1 ? fleetView(s, id) : null;
     if (!card || card.nat !== s.human) return null;
@@ -127444,11 +127636,12 @@ ${note4}`;
     const targets2 = (o?.attack ?? []).map((t) => {
       const p = previewFleetAttack(s, id, t);
       const them = p?.theirs.fleets.find((x) => x.id === t);
-      const where = p ? p.where === "harbour" ? `In harbour at ${p.port}.` : `At sea, ${seaWhere(p.zoneName)}.` : "";
+      const where = p ? p.where === "harbour" ? `In harbour${them?.known === "exact" ? ` at ${p.port}` : ""}.` : `At sea, ${seaWhere(p.zoneName)}.` : "";
       return {
         nat: them?.nat ?? "",
         title: them?.name ?? "An enemy fleet",
-        lines: [where, p?.odds ? `${p.verdict}: ${p.odds.mid >= 9.95 ? "more than 10" : p.odds.mid.toFixed(1)} to 1.` : "Its strength is not known."].filter(Boolean),
+        // (1.5.3) Hopeless odds read "less than 0.1 to 1", not "0.0 to 1", as on the card.
+        lines: [where, p?.odds ? `${p.verdict}: ${oddsWord(p.odds.mid)} to 1.` : "Its strength is not known."].filter(Boolean),
         buttons: [{ label: "ATTACK", act: `open:fleetattack:${id}:${t}`, ok: up, tip: "Shows the odds first. Or drop the fleet on theirs on the map." }]
       };
     });
@@ -127515,7 +127708,7 @@ ${note4}`;
     }] : [];
     const joins = (o?.merge ?? []).map((other4) => {
       const f = fleetView(s, other4);
-      return { nat: card.nat, title: f?.name ?? "A fleet", lines: [f ? `${f.ships} ships. ${f.doing}.` : ""], buttons: [{ label: "JOIN IT", act: `fleetmerge:${id}:${other4}`, ok: up, tip: "The two become one fleet under the other's flag and orders." }] };
+      return { nat: card.nat, title: f?.name ?? "A fleet", lines: [f ? `${f.ships} ship${f.ships === 1 ? "" : "s"}. ${f.doing}.` : ""], buttons: [{ label: "JOIN IT", act: `fleetmerge:${id}:${other4}`, ok: up, tip: "The two become one fleet under the other's flag and orders." }] };
     });
     const gap = card.screen.gap > 0 ? ` ${cap1(card.screen.word)}: it has ${card.screen.have} destroyers where its heavy ships need ${card.screen.need}.` : "";
     const who = whoSails(s, id);
@@ -127531,7 +127724,7 @@ ${note4}`;
       headline: `${card.doing}`,
       // (Release 2, the far chart: struck at anchor this month or last, the card says so first, and where is out of reach.)
       // (1.5.2) Cut off beyond a shut strait: the cut-off line heads the note.
-      note: `${cutOffNote(s, id)}${fl && struckLine(s, fl) ? `${struckLine(s, fl)} ` : ""}${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ""}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? " Its guns have spoken this month." : ""} A fleet reaches three seas from its base, and can be given one order a month.${why ? ` ${why}` : ""}${task ? ` ${task}` : ""}${who ? ` ${who}` : ""}`,
+      note: `${cutOffNote(s, id)}${fl && struckLine(s, fl) ? `${struckLine(s, fl)} ` : ""}${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ""}${card.ships} ship${card.ships === 1 ? "" : "s"}, readiness ${share(card.ready)}.${gap}${card.shelled ? " Its guns have spoken this month." : ""}${fleetRuleNote(s, id)}${why ? ` ${why}` : ""}${task ? ` ${task}` : ""}${who ? ` ${who}` : ""}`,
       top: [
         // (Release 2, the far chart: a fleet in passage to a new base is turned back by the same order.)
         // (1.5.2's #37 and 1.5.1's held fleet, both: the reason it is held comes first, else it says if it is the order now.)
@@ -127575,17 +127768,27 @@ ${note4}`;
     const p = previewFleetAttack(s, id, target);
     if (!p) return null;
     const share = (x) => `${Math.round(x * 100)}%`;
-    const odds2 = (x) => x >= 9.95 ? "more than 10" : x.toFixed(1);
     const lost = (x) => {
       const parts2 = ["bb", "cv", "ca", "dd", "ss"].filter((c) => (x[c] ?? 0) > 0).map((c) => `${x[c]} ${SHIP_WORD[c][x[c] === 1 ? 0 : 1]}`);
-      return parts2.length ? parts2.join(", ") : "nothing";
+      return parts2.length ? listOf7(parts2) : "nothing";
+    };
+    const likely = (x, heavy) => {
+      const list6 = lost(x);
+      if (!heavy.length) return list6;
+      const warn = `${listOf7(heavy.map((c) => `a ${SHIP_WORD[c][0]}`))} may well go down`;
+      return list6 === "nothing" ? `Probably nothing, but ${warn}` : `${list6}, and ${warn}`;
+    };
+    const range2 = (r, own) => {
+      const few = lost(r[0]), most = lost(r[1]);
+      if (few === most) return `${own ? "You lose" : "He loses"} ${few} however the day goes.`;
+      return own ? `At best you lose ${few}; at worst ${most}.` : `At the least he loses ${few}; at the most ${most}.`;
     };
     const them = p.theirs.fleets.find((x) => x.id === target);
     const name = them?.name ?? "the enemy fleet";
-    const where = p.where === "harbour" ? `in harbour at ${p.port}` : seaWhere(p.zoneName);
+    const where = p.where === "harbour" ? `in harbour${them?.known === "exact" ? ` at ${p.port}` : ""}` : seaWhere(p.zoneName);
     const side5 = (fs, own) => fs.map((x) => ({
       nat: x.nat,
-      title: `${x.name}${x.count >= 0 ? `  ·  ${x.count} ships` : x.size ? `  ·  ${x.size.toLowerCase()}` : ""}`,
+      title: `${x.name}${x.count >= 0 ? `  ·  ${x.count} ${x.count === 1 ? "ship" : "ships"}` : x.size ? `  ·  ${x.size.toLowerCase()}` : ""}`,
       lines: [
         x.ships ? ["bb", "cv", "ca", "dd", "ss"].filter((c) => x.ships[c] > 0).map((c) => `${x.ships[c]} ${SHIP_WORD[c][x.ships[c] === 1 ? 0 : 1]}`).join(", ") : "Reported, not identified: its ships and strength are not known.",
         own ? `${x.admiral ? `${x.admiral} commands. ` : ""}Readiness ${share(x.ready ?? 1)}.` : "",
@@ -127593,15 +127796,33 @@ ${note4}`;
       ].filter(Boolean),
       buttons: []
     }));
+    if (!them) {
+      const why = p.why ?? "No such enemy fleet is known.";
+      return {
+        id: `fleetattack:${id}:${target}`,
+        title: "ATTACK THE ENEMY FLEET?",
+        headline: why,
+        note: `${card.name} against the enemy fleet.`,
+        top: [
+          { label: "SEND THEM IN", act: `fleetattack:${id}:${target}`, ok: false, tip: why, danger: false },
+          { label: "CALL IT OFF", act: `goto:fleet:${id}`, ok: true, tip: "The fleet stays where it is, in your hand." }
+        ],
+        sections: [
+          { heading: "YOUR SHIPS", text: "", rows: side5(p.ours.fleets.filter((x) => x.id === id), true) },
+          { heading: "THE ODDS", text: "Nothing of his strength is known: the odds cannot be given.", rows: [] }
+        ].filter((x) => x.rows.length || x.text)
+      };
+    }
     const ticket = p.lines.map((l) => ({ nat: "", title: l.label, lines: [l.value, l.effect ?? ""].filter(Boolean), buttons: [] }));
     const losses = p.odds ? [
-      { nat: card.nat, title: "You are likely to lose", lines: [lost(p.likely.ours), `Between ${lost(p.range.ours[0])} and ${lost(p.range.ours[1])} as the day goes.`], buttons: [] },
-      { nat: them?.nat ?? "", title: "He is likely to lose", lines: [lost(p.likely.theirs), `Between ${lost(p.range.theirs[0])} and ${lost(p.range.theirs[1])} as the day goes.`], buttons: [] }
+      { nat: card.nat, title: "You are likely to lose", lines: [likely(p.likely.ours, p.risk.ours), range2(p.range.ours, true)], buttons: [] },
+      { nat: them?.nat ?? "", title: "He is likely to lose", lines: [likely(p.likely.theirs, p.risk.theirs), range2(p.range.theirs, false)], buttons: [] }
     ] : [];
     return {
       id: `fleetattack:${id}:${target}`,
       title: `ATTACK ${name.toUpperCase()}?`,
-      headline: p.why ? p.why : p.odds ? `${p.verdict}: ${odds2(p.odds.mid)} to 1, about ${share(p.win)} to win` : "Its strength is not known",
+      // (1.5.3) The odds as the card's own lines say them: "more than 10", and "less than 0.1", not "0.0" (seaplan.ts).
+      headline: p.why ? p.why : p.odds ? `${p.verdict}: ${oddsWord(p.odds.mid)} to 1, about ${share(p.win)} to win` : "Its strength is not known",
       note: `${card.name} against ${name}, ${where}. ${p.where === "harbour" ? "Ships at anchor cannot manoeuvre, and the harbour's guns fire on the attackers." : "Fought at once, on the ships, guns, air cover, training and readiness of both sides."}`,
       top: [
         { label: "SEND THEM IN", act: `fleetattack:${id}:${target}`, ok: !p.why, tip: p.why ?? "The fleet sails at once and the battle is fought now. The side that loses makes for its home port.", danger: !p.why && p.win < 0.4 },
@@ -130742,7 +130963,7 @@ ${standing6}`,
     roll: roll3,
     stance,
     railReach: railReach2,
-    rail: playerOrder(rail, "rail"),
+    rail: playerOrder(sayWhyInside(rail, "said", (r) => !r.moved.length, (s, cs, [ids2, to]) => railTip(ids2, to).no || stayLine(s, cs)), "rail"),
     railShow,
     railTip,
     province,
@@ -130781,7 +131002,7 @@ ${standing6}`,
     peekChart,
     load,
     view: view2,
-    reach: lookOut(reachOf5),
+    reach: reachHand,
     marchPlan: lookOut(marchPlanOf),
     nextArmy: nextArmyOf,
     stand: standOf,
@@ -130792,7 +131013,7 @@ ${standing6}`,
     stageAgent,
     stageCaught,
     agentWhy,
-    move: playerOrder(goOut(move), "march"),
+    move: playerOrder(sayWhyInside(goOut(move), "note", (r) => !r.moved.length, garrisonOrPlace), "march"),
     previewAttack: lookOut(preview),
     attack: playerOrder(goOut(attack)),
     takeOutlook: lookOut(takeOutlook),
@@ -130802,7 +131023,7 @@ ${standing6}`,
     gateAsk,
     gateOrder,
     gateLeft: gateLeftOf,
-    approach: approach2,
+    approach: approachHand,
     garrisonWhy,
     sallyLook,
     sally: playerOrder(sally2),
