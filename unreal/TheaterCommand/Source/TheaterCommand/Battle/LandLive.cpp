@@ -169,6 +169,15 @@ namespace
 		// stop lands, the Mac holds 45 fps, the art director and a playtest pass it (ruling 217); -TheaterAirRuleDefend turns
 		// it on for a run. The campaign reads it (AAirBattle::DefendOn), as flyLive; it is never sent to the land rules.)
 		{ TEXT("flyDefend"), TEXT("Scramble your fighters"), TEXT("When an enemy raid on your ground meets your fighters, the month stops on a SCRAMBLE card: take it and you fly your fighters against the raid in the battle in the air. Off: your staff meets every enemy raid."), TEXT("TheaterAirNoRuleDefend"), false, TEXT("TheaterAirRuleDefend") },
+		// (Oil and fuel at the hit, release 2: Brian, 26 November 2026, more of a film's dramatic detail in the battles. On: a
+		// strike that finds fuel, oil or coolant (the battle's own Hit, its Part) throws its spray from the hole, the effects
+		// kit's air_hit.spurt, its look laid over the recipe as the air battle begins (battle-fx-air-spurt.json, on both of
+		// the battle's kits); the windscreen's oil film and the cowling's smears join this row later. Looks only: nothing the
+		// rules count reads it. Off until the Mac holds 45 fps with it and the art director has passed it, then this row flips
+		// to on in one line; -TheaterAirOilFilm turns it on for a run, -TheaterAirNoOilFilm off. NOT a fly-it-yourself row:
+		// its key begins "fly" only so that FLandLive::Start passes it over with the air battles' other switches. The air
+		// battle reads it once a battle (AirBattle.cpp's AirRowsRead); it is never sent to the land rules.)
+		{ TEXT("flyOilFilm"), TEXT("Oil and fuel at the hit"), TEXT("In the battle in the air, rounds that hole a fuel tank, an oil line or a radiator throw a spray of fuel, oil or glycol from the hole. Off: every strike on an aircraft looks the same."), TEXT("TheaterAirNoOilFilm"), false, TEXT("TheaterAirOilFilm") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }

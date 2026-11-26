@@ -281,6 +281,24 @@ namespace AirParts
 		}
 	}
 
+	/** Rounds striking an aircraft, with what they found there (the effects kit's AirHit Part, fe0997e89 on the effects line
+	 * d1e18fa5f; Brian, 26 November: more of a film's dramatic detail): Part the Hit's own ("fuel", "oil", "coolant";
+	 * "skin" draws the strike as before). With the kit's air_hit.spurt on (battle-fx-air-spurt.json, laid by the row
+	 * flyOilFilm) the spray that leaves the hole. No Part (the row off), or an older kit: the call made as it always was. */
+	template <typename TKit>
+	static void AirHit(TKit* Kit, double Now, const FVector& At, const FVector& Normal, const FVector& Velocity, const FString& Kind, const FString& Part)
+	{
+		if constexpr (requires(TKit* K) { K->AirHit(0.0, FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector, FString(), FString()); })
+		{
+			if (!Part.IsEmpty())
+			{
+				Kit->AirHit(Now, At, Normal, Velocity, Kind, Part);
+				return;
+			}
+		}
+		Kit->AirHit(Now, At, Normal, Velocity, Kind);
+	}
+
 	/** A gun firing, with its aircraft's nation where the kit takes it (the art director's G2, 15:38Z: Allied streams
 	 * red-orange, German and Italian pale yellow-white, Japanese near white, Soviet green; the effects thread's call,
 	 * the nation last, as KitNation names it: us, gb, de, it, jp, su). An older kit draws its one colour. */
@@ -808,6 +826,21 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 	return true;
 }
 
+// (Release 2, the effects kit's air parts of 26 November; Brian: more of a film's dramatic detail in the battles.) The Battle
+// rules card's rows for them, read once a battle as it opens, before its kits begin, into its state (each -1 until read).
+// Said only when on: off, the battle and its log are as before, to the byte.
+static void AirRowsRead(FAirBattleState& S)
+{
+	if (S.OilFilmOn < 0)
+	{
+		S.OilFilmOn = FLandLive::RuleNow(TEXT("flyOilFilm")) ? 1 : 0;
+		if (S.OilFilmOn == 1)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Air battle: oil and fuel at the hit: on (the Battle rules card's row flyOilFilm, or -TheaterAirOilFilm): each strike's Part to the effects kit, battle-fx-air-spurt.json laid on both kits."));
+		}
+	}
+}
+
 bool AAirBattle::Open(const FString& Why)
 {
 	UWorld* Here = GetWorld();
@@ -946,7 +979,12 @@ bool AAirBattle::Open(const FString& Why)
 	// The effects: the kit's own, drawn out to the air distance, on the air clock (its mesh, the one it hangs on Root,
 	// drawn behind the clouds while the eye is under them: DrawSky).
 	const TArray<TObjectPtr<USceneComponent>> BeforeAir = Root->GetAttachChildren();
+	AirRowsRead(S); // (the rows of the kit's air parts: their looks are laid over the recipe before each kit begins)
 	Effects = MakeUnique<FBattleEffects>();
+	if (S.OilFilmOn == 1)
+	{
+		Effects->LayOver(TEXT("battle-fx-air-spurt.json")); // (the kit's spray at the hit, air_hit.spurt: the row flyOilFilm)
+	}
 	if (!Effects->Begin(Root, UnitsPerMetre, [this](const FVector& Point)
 		{
 			return FVector(Point.X, Point.Y, Stage && Stage->IsRaised() ? Stage->GroundZ(Point) : 0.0);
@@ -982,6 +1020,10 @@ bool AAirBattle::Open(const FString& Why)
 		// while the air fight lies over them: its mesh is the one it hangs on Root.
 		TArray<TObjectPtr<USceneComponent>> Before = Root->GetAttachChildren();
 		GroundFx = MakeUnique<FBattleEffects>();
+		if (S.OilFilmOn == 1)
+		{
+			GroundFx->LayOver(TEXT("battle-fx-air-spurt.json")); // (a strike KitAt hands this kit sprays as the other's does)
+		}
 		if (GroundFx->Begin(Root, UnitsPerMetre, [this](const FVector& Point)
 			{
 				return FVector(Point.X, Point.Y, Stage && Stage->IsRaised() ? Stage->GroundZ(Point) : 0.0);
@@ -6216,7 +6258,10 @@ void AAirBattle::PlayEffects()
 			MarkStrike(E); // (kept on the aircraft it struck, and laid on its skin while it is near: AirBattleMarks.cpp)
 			if (FBattleEffects* Kit = KitAt(At))
 			{
-				Kit->AirHit(Now, At, WorldVector(E.Normal.X, E.Normal.Y, E.Normal.Z).GetSafeNormal(), WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), AirParts::Wide(E.What));
+				// (with the row flyOilFilm, what the rounds found there, fuel, oil, coolant or skin: the kit's spray at the hit,
+				// air_hit.spurt; off, no Part and the call as it always was)
+				AirParts::AirHit(Kit, Now, At, WorldVector(E.Normal.X, E.Normal.Y, E.Normal.Z).GetSafeNormal(), WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), AirParts::Wide(E.What),
+					S.OilFilmOn == 1 ? AirParts::Wide(E.Part) : FString());
 			}
 			// Rounds striking a plane, heard near the eye (mix.json air.roundsHit: within `within` metres, no closer together
 			// than `every`). A strike on the ridden aircraft is heard at the eye, unplaced, as its own guns are. Until the

@@ -159,6 +159,12 @@ struct FAirBattleState
 	std::string UnitColoursKind;
 	std::set<std::string> UnitColoursLogged;
 
+	/** The effects kit's air parts of 26 November (Brian: more of a film's dramatic detail in the battles), each behind its
+	 * row on the Battle rules card, read once as the battle opens, before its kits begin (AAirBattle::AirRowsRead): -1 not
+	 * yet read, 0 off (every frame as before), 1 on. OilFilmOn, the row "flyOilFilm": a strike's Part (fuel, oil, coolant)
+	 * handed to the kit's AirHit, and battle-fx-air-spurt.json laid on both kits. Looks only. */
+	int OilFilmOn = -1;
+
 	/** His side's own groups of one kind, as shown now. */
 	std::vector<int> MineOf(bool bFighter) const
 	{
