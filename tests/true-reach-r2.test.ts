@@ -40,6 +40,9 @@ const reaches = (g: Game, nat: string, key: string): number => openSeas(g, nat, 
 /** Malta held by Britain, Italy at war with Britain and her fleet across the central Mediterranean, Norway in the war with Germany only. */
 const malta = (on: boolean) => {
   const g = war(on);
+  // (The first day at peace: Britain's ships fill Malta's stores, and on, the draw writes whose they are, as a campaign
+  // opened with true reach draws its first picture: game.ts keptStoresHis.)
+  computeSupply(g);
   declareWar(g, 'ITA', 'UK');
   declareWar(g, 'GER', 'NOR');
   patrol(g, 'ITA', 'central');
@@ -351,16 +354,18 @@ describe('an ally\'s ships feed a port only where they could truly sail there wi
     g.supplyDirty = false;
     expect(setTrueReach(g, false)).toBe(true);
     expect([trueReach(g), g.flags.trueReach, g.supplyDirty]).toEqual([false, undefined, true]);
-    // The reading follows the gate: Malta by Norway is fed under Units decide alone, and not once the sub-flag is set
-    // (the fortress then lives on the stores of the last month a ship came in, and goes hungry).
+    // The reading follows the gate: Malta by Norway is fed under Units decide alone, and not once the sub-flag is set.
+    // (The stores of the last month a ship came in were filled with true reach off, so no record says whose they are:
+    // under true reach they feed no one until the holder's own next fill writes one, the guard's own reading, the
+    // design director's 22:08Z of 25 November 2026, game.ts keptStoresHis. The fortress goes hungry at once.)
     const m = malta(false);
     for (let k = 0; k < 4; k++) { m.g.turn++; computeSupply(m.g); }
-    expect([m.g.turn, m.c.supplied, m.g.flags[`stores:${m.r.id}`]]).toEqual([5, true, 5]);
+    expect([m.g.turn, m.c.supplied, m.g.flags[`stores:${m.r.id}`], m.g.flags[`stores:by:${m.r.id}`]]).toEqual([5, true, 5, undefined]);
     expect(setTrueReach(m.g, true)).toBe(true);
     const keep = portKeep(m.g, m.r);
     for (let k = 1; k <= keep + 1; k++) {
       m.g.turn++; computeSupply(m.g);
-      expect([m.g.turn, m.c.supplied, m.g.flags[`stores:${m.r.id}`]]).toEqual([5 + k, k <= keep, 5]);
+      expect([m.g.turn, m.c.supplied, m.g.flags[`stores:${m.r.id}`]]).toEqual([5 + k, false, 5]);
     }
   });
 
