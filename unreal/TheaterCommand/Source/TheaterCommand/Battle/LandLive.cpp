@@ -213,6 +213,21 @@ namespace
 		// stop lands, the Mac holds 45 fps, the art director and a playtest pass it (ruling 217); -TheaterAirRuleDefend turns
 		// it on for a run. The campaign reads it (AAirBattle::DefendOn), as flyLive; it is never sent to the land rules.)
 		{ TEXT("flyDefend"), TEXT("Scramble your fighters"), TEXT("When an enemy raid on your ground meets your fighters, the month stops on a SCRAMBLE card: take it and you fly your fighters against the raid in the battle in the air. Off: your staff meets every enemy raid."), TEXT("TheaterAirNoRuleDefend"), false, TEXT("TheaterAirRuleDefend") },
+		// (The raid camera holds steady, release 2: Brian, 26 November 2026 04:11Z, watching a raid, "the bombing video
+		// camera is super choppy", "the german planes kept hopping forward like it was buffering". The strategy camera
+		// goes with the aircraft it is on (AirDesk::Overview) instead of taking its crowd's middle whole, which jumped the
+		// whole picture about 90 times a real minute at x1 on Bremen; a scroll of the zoom is eased. Looks only: nothing
+		// the rules count reads it. Off until the Mac and the art director pass it, then this row flips to on in one line;
+		// -TheaterAirSteadyEye turns it on for a run, -TheaterAirNoSteadyEye off. The air battle reads it once as a battle
+		// opens (AAirBattle::BeginReplay, BeginLiveCall); it is never sent to the land rules.)
+		{ TEXT("flySteadyEye"), TEXT("The raid camera holds steady"), TEXT("In the battle in the air, the camera over the raid goes smoothly with the aircraft it is on, and a scroll of the zoom glides instead of stepping. Off: the camera as it was, re-aimed on the crowd's middle in small jerks."), TEXT("TheaterAirNoSteadyEye"), false, TEXT("TheaterAirSteadyEye") },
+		// (Each bomber keeps her place in her box, release 2: Brian, 25 November 2026 13:27Z, "the bomber is shaking in the
+		// video too like the fighter". Each bomber keeps her slot as her box loses others, only the gaps closed up, and her
+		// place is eased on to her slot's; a straggler drops back from where she fell out (AirShow::Show::SetBoxKeep).
+		// Looks only: the rules' counts are untouched (the show draws what they decided). Off until the Mac and the art
+		// director pass it, then this row flips to on in one line; -TheaterAirBoxKeep turns it on for a run,
+		// -TheaterAirNoBoxKeep off. The air battle reads it once as a battle opens; it is never sent to the land rules.)
+		{ TEXT("flyBoxKeep"), TEXT("Each bomber keeps her place in her box"), TEXT("In the battle in the air, each bomber keeps her own place in her box as it loses others, and closes up gently instead of weaving across it. Off: the bombers renumber their places at each loss and weave to them, as before."), TEXT("TheaterAirNoBoxKeep"), false, TEXT("TheaterAirBoxKeep") },
 		// (Japan's own tank and gun, release 2: the Japan and Pacific thread's finding of 25 November, that Japan fought
 		// in a borrowed light tank and a German howitzer. Looks only, a campaign battle's only, off until the art
 		// director and a Mac reading pass them; -TheaterLandRuleJapan turns it on for a run.)
@@ -370,7 +385,7 @@ bool FLandLive::Start(const FString& InKey, int32 InSeed, const FString& InMe, b
 		const FString RuleKey(LandRuleTable[R].Key);
 		if (RuleKey.StartsWith(TEXT("fly"), ESearchCase::CaseSensitive) || RuleKey.Equals(TEXT("noseArt"), ESearchCase::CaseSensitive) || RuleKey.Equals(TEXT("unitColours"), ESearchCase::CaseSensitive))
 		{
-			continue; // (the air battles' own switches, on the same card: flyLive, flyTroops, flyDefend, noseArt, unitColours and those to come; the campaign and the air battle read them, the land rules never do)
+			continue; // (the air battles' own switches, on the same card: flyLive, flyTroops, flyDefend, flySteadyEye, flyBoxKeep, noseArt, unitColours and those to come; the campaign and the air battle read them, the land rules never do)
 		}
 		const bool bOn = RuleNow(LandRuleTable[R].Key);
 		Switches += FString::Printf(TEXT(",\"%s\":%s"), LandRuleTable[R].Key, bOn ? TEXT("true") : TEXT("false"));

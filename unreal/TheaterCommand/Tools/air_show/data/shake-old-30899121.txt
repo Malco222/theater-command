@@ -1,0 +1,34 @@
+raid-steps.json | frames 60, clock 1, views live, flown as release 1.5 (AIR_SMOOTH_OLD), battle 200 to 260 s | 7800 frames over 130.0 real s
+  the flying, by model, what it is about and the clock's speed. HI: what a 0.4 s parabola leaves; BAND: the 0.4 s
+  parabola less the 1.5 s one (about 0.5 to 3 Hz). rms/peak. The chase camera riding it: px on the 1440 picture.
+    model      about               n    sec | place HI m      place BAND m    | head BND pitch BD | bank HI deg    bank BAND deg  | roll jumps  | chase tip HI    chase tip BAND  mid BAND
+    He111      box x1             58   6577 | 0.0001/0.004    0.0077/0.251    | 0.004    0.013    | 0.005/0.77     0.099/6.41     |   0.0   0.0 | 0.028/4.22      0.483/31.86     0.099   
+    He111      straggle x1         2     17 | 0.0002/0.002    0.0421/0.120    | 0.055    0.021    | 0.067/0.77     1.339/6.41     |  21.5  14.3 | 0.335/4.05      6.443/31.75     1.091   
+    Spitfire   formation x1       79   6975 | 0.0005/0.014    0.0608/1.407    | 0.040    0.096    | 0.531/4.83     1.160/22.30    | 525.9 477.5 | 2.714/24.98     5.147/94.39     1.049   
+    Spitfire   fight x1           85   2478 | 0.0018/0.040    0.3844/3.188    | 0.335    0.274    | 0.199/5.36     3.784/40.36    |  17.4  13.4 | 0.723/20.62     14.323/143.04    4.475   
+  each bomber type in its box: swings of bank over 1 deg (a bomber's air minute; middle, largest), banked over 5 deg, over 50 m
+  from her slot, the most banked in her place (3 air s after taking it; closing up apart); torpedo planes before their run
+    He111        6747 bomber air s: swings 0.98 a bomber's air minute, middle 29.0, largest 40.0 deg; banked over 5 deg 11.0%, over 50 m off 7.9%; most bank 20.0 deg in her box, 0.0 closing up
+  the strategy camera, as it was (the hard rings): bombers on its picture 6.17 px rms, 29.52 at the 99th percentile, 110.5 at most (0.4 s), 9.73 rms, 45.23 at the 99th (1.2 s);
+    fighters 4.09 px rms, 19.85 at the 99th (0.4 s), 6.37 rms (1.2 s); look jumps of 20 px 17.4 a real minute while it holds its crowd
+    (2 s and more after a change of its groups or its anchor, 92% of the time), 21.0 in all; eye steps over 2% 0; the look 0 m off
+    what it is after in the middle, 10 m at the 95th percentile (holding its crowd), 15 px on the picture
+  the strategy camera's distance for a crowd of 11.2, 22.6 and 31.6 m spans: 459.0, 926.2 and 832.5 m (as it was 459.0, 926.2 and 832.5)
+  (flown as release 1.5 flew it, AIR_SMOOTH_OLD: reported, not judged)
+raid-steps.json | frames mac, clock 4, views live, flown as release 1.5 (AIR_SMOOTH_OLD), battle 200 to 260 s | 1130 frames over 32.5 real s
+  the flying, by model, what it is about and the clock's speed. HI: what a 0.4 s parabola leaves; BAND: the 0.4 s
+  parabola less the 1.5 s one (about 0.5 to 3 Hz). rms/peak. The chase camera riding it: px on the 1440 picture.
+    model      about               n    sec | place HI m      place BAND m    | head BND pitch BD | bank HI deg    bank BAND deg  | roll jumps  | chase tip HI    chase tip BAND  mid BAND
+    He111      box x4             58   1512 | 0.0022/0.082    0.4227/3.759    | 0.129    0.070    | 0.040/2.75     0.777/13.58    |   7.3   1.3 | 0.217/15.14     3.908/68.33     1.077   
+    He111      straggle x4         2      5 | 0.0125/0.062    2.4681/4.984    | 0.951    0.092    | 0.518/2.90     6.072/13.60    | 262.7 105.1 | 2.643/12.82     29.209/65.83     8.054   
+    Spitfire   formation x4       79   1651 | 0.0179/0.279    1.9401/23.330   | 0.607    0.668    | 1.013/14.14    2.906/42.48    | 1424.8 1167.7 | 5.138/74.43     11.839/158.33    5.463   
+    Spitfire   fight x4           67    526 | 0.0996/1.104    16.4860/53.899   | 4.312    2.444    | 1.577/18.97    19.077/112.15   | 283.0 115.9 | 6.576/86.02     69.578/505.95    32.525  
+  each bomber type in its box: swings of bank over 1 deg (a bomber's air minute; middle, largest), banked over 5 deg, over 50 m
+  from her slot, the most banked in her place (3 air s after taking it; closing up apart); torpedo planes before their run
+    He111        6731 bomber air s: swings 0.89 a bomber's air minute, middle 30.9, largest 40.0 deg; banked over 5 deg 9.7%, over 50 m off 6.7%; most bank 20.0 deg in her box, 0.0 closing up
+  the strategy camera, as it was (the hard rings): bombers on its picture 13.88 px rms, 69.39 at the 99th percentile, 138.6 at most (0.4 s), 21.73 rms, 97.89 at the 99th (1.2 s);
+    fighters 7.75 px rms, 39.65 at the 99th (0.4 s), 10.30 rms (1.2 s); look jumps of 20 px 104.1 a real minute while it holds its crowd
+    (2 s and more after a change of its groups or its anchor, 81% of the time), 92.1 in all; eye steps over 2% 0; the look 0 m off
+    what it is after in the middle, 21 m at the 95th percentile (holding its crowd), 31 px on the picture
+  the strategy camera's distance for a crowd of 11.2, 22.6 and 31.6 m spans: 459.0, 926.2 and 832.5 m (as it was 459.0, 926.2 and 832.5)
+  (flown as release 1.5 flew it, AIR_SMOOTH_OLD: reported, not judged)

@@ -1410,3 +1410,33 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    the MC.202's or SM.79's cross), the marking on its own plain patch and the pattern round it; a short hitch the first time a coloured model appears (its
    file read once a battle); the frame rate as before.
    (Joined onto wave 1 on 25 November; numbered 59, after the wave-2 plan's 55 to 58.)
+
+60. **The raid camera holds steady, and each bomber keeps her place in her box** (release 2; Brian, 25 November 2026
+   13:27Z: "the bomber is shaking in the video too like the fighter", and 26 November 04:11Z, watching a raid: "the
+   bombing video camera is super choppy", "the german planes kept hopping forward like it was buffering"). Two rows of
+   the Battle rules card, each usable without the other, both off until the Mac and the art director pass them; each
+   read once as a battle opens (AAirBattle::BeginReplay, BeginLiveCall), never sent to the land rules (FLandLive::Start
+   leaves every row whose key starts with "fly" out). Looks only: nothing the rules count reads either.
+   **The raid camera holds steady** (FLandLive's rule `flySteadyEye`; `-TheaterAirSteadyEye` on for a run,
+   `-TheaterAirNoSteadyEye` off; FAirBattleState::bSteadyEye). On, and flying smooth: the strategy camera is
+   AirDesk::Overview's (soft rings, the look carried with the knot it is on, the framing eased; AimEye's three places:
+   the start afresh after a ride, the crowd and framing, the look); a scroll of the wheel or trackpad glides to its zoom
+   over about a second (AirDesk::Overview::ZoomEase, the framing's own ease) instead of stepping 15% in one frame; in a
+   picture run only (`-TheaterAirBattleShots`) the two frames after a picture is asked for step no more than a
+   sixtieth of a second (not yet seen on the Mac). Off: AimEye's hard rings and Zoom as they were, to the byte. Over
+   Bremen's B-17s at x1 the old camera's look jumped 20 px and more 92.6 times a real minute through the battle (106.6
+   in the fight); on, 0.0.
+   **Each bomber keeps her place in her box** (FLandLive's rule `flyBoxKeep`; `-TheaterAirBoxKeep` on for a run,
+   `-TheaterAirNoBoxKeep` off; AirShow::Show::SetBoxKeep, on by default in the flight core so its tests fly it). On, and
+   flying smooth: each bomber keeps her slot as her box loses others and only the gaps close up, by the least moves;
+   her place is eased on to her slot's; every bomber in her box banks no more than RallyBankMost and rolls eased; a
+   straggler drops back from where she fell out. Off: the bombers fly as 30899121 flew them, to the byte (the He 111s
+   weaving 0.94 times a bomber's air minute, banked over 5 degrees 9.8% of the time; on, 0.00 and 0.0%).
+   The log: as a battle opens, "Air battle: the strategy camera is ..." names the camera in use and each row on or off;
+   with the camera's row on, the 5 s "Air battle sky" line ends "The raid camera: the zoom N m, the eye N m off, N jumps
+   of the picture over 20 px." The cloud tests (run.sh): air_smooth_probe's report and air_eye_probe's strategy camera,
+   frame by frame, to the byte with both rows off (30899121's), each alone on and both on (2464374bb's for that half);
+   air_zoom_test, the zoom's glide.
+   Look for (`-TheaterAirSteadyEye -TheaterAirBoxKeep`, then each alone, then neither): a raid watched as a player
+   watches it, no zooming and no resizing of the window, the picture going with the bombers without a jump; the
+   bombers holding their boxes level; then a scroll of the zoom gliding; the opening log line and the sky line's jumps.

@@ -260,6 +260,77 @@ namespace AirDesk
 	bool CrowdOf(const std::vector<AirShow::PlaneOut>& Planes, const std::vector<int>& Groups, double Reach, int& Anchor, AirShow::Vec& Middle);
 
 	/**
+	 * The strategy camera's look and framing, flying smooth (AirShow::Show::SetSmooth; Brian, 25 November 13:27Z: "the
+	 * bomber is shaking in the video too like the fighter"). Measured (Tools/air_show/air_smooth_probe --shake, the
+	 * Hampshire raid's minute about its first contact): the look took the plain middle of the aircraft within 350 m of
+	 * the crowd's middle, that middle the plain middle of those within 1200 m of CrowdOf's anchor, and any step of it
+	 * under 150 m was the eye's step in that frame; so each time an aircraft crossed one of the rings the whole picture
+	 * jumped: by 20 pixels and more beyond its glide 14 to 18 times a real minute at x1 and 52 to 64 at x4 (in the
+	 * raid's busiest forty seconds 100 to 120 and 320 to 410), the He 111s shaking 5 to 6 pixels rms on the 1440
+	 * picture at x1 and 12 at x4 (14 to 37 in the busy seconds); and the framing took the crowd's middle span, so a
+	 * crowd of He 111s and Spitfires flipped the eye between 926 and 459 m. Here:
+	 * - every ring is soft, an aircraft's weight in it falling from 1 to 0 over Soft metres either side of it, and an
+	 *   aircraft that falls, lands, is hidden or leaves the groups looked at fades out of it over FadeS real seconds
+	 *   (one coming in fades in);
+	 * - the crowd's middle is held on the crowd it is on while any of it is still about it, each aircraft's weight in
+	 *   its ring eased in and out over RingS real seconds: a change of CrowdOf's anchor within the crowd moves it no more
+	 *   than the aircraft move, and it goes to another crowd only when the anchor does;
+	 * - the look is on a knot of the crowd: the middle of its aircraft about a point, each by how near it is (Near: a
+	 *   half at the knot's width, as far as they fly in KnotS real seconds, within Tight and Reach), that point carried
+	 *   by their travel and drawn on to that middle over CentreEase real seconds, so that it stays on the knot it is on,
+	 *   a few aircraft or one, and goes over to a bigger one near it without a step;
+	 * - the look goes with that knot, its aircraft's travel and its middle's own drift up to DriftLeast metres a real
+	 *   second and DriftShare of their speed, that speed eased over CarryEase real seconds; the rest of a step (a move to
+	 *   another crowd, or the knot's aircraft all gone) is eased, critically damped over about LookEase real seconds, so
+	 *   that neither the look nor its speed steps;
+	 * - the framing is by the crowd's mean span by weight (TypeAwayOf), eased the same way over AwayEase.
+	 * Off (release 1.5's flying), the scene keeps its own camera as it was.
+	 */
+	class Overview
+	{
+	public:
+		static constexpr double Reach = 1200.0, Tight = 350.0, Soft = 100.0, FadeS = 1.0, RingS = 1.0, LookEase = 1.0, AwayEase = 1.0, CentreEase = 1.5;
+		static constexpr double DriftLeast = 50.0, DriftShare = 0.5, KnotS = 2.5, PaceEase = 1.0, CarryEase = 0.13;
+		struct Aim
+		{
+			bool bFound = false;     // the groups have aircraft up to look at
+			AirShow::Vec Focus;      // where the look would be
+			double Span = 0.0;       // the crowd's mean span, metres (0: none)
+			double TypeAway = 800.0; // the eye's distance at the player's own 800 m, eased
+		};
+		/** This frame's aim on the aircraft of the groups Picked, Real seconds after the last; Anchor as CrowdOf's. bCut:
+		 * a cut, and the look and the framing start afresh. */
+		Aim Step(const std::vector<AirShow::PlaneOut>& Planes, const std::vector<int>& Picked, double Real, int& Anchor, bool bCut);
+		/** Where the look is drawn this frame, from where it was (Was): going with the knot Wanted (Step's Focus) is the
+		 * middle of, and eased on to it. A look set otherwise since its last (a picture's, a cut's) starts from where it
+		 * is. */
+		AirShow::Vec Look(const AirShow::Vec& Was, const AirShow::Vec& Wanted, double Real);
+		/**
+		 * The eye's distance at the player's own 800 m for a crowd of this span (metres): its aircraft about 45 pixels
+		 * across at 1920, 70 from 25 m, through the 55 degree lens, as the scene framed them; the 45 eased into the 70
+		 * between 24 and 26 m. Within 250 and 1500 m.
+		 */
+		static double TypeAwayOf(double Span);
+		/** An aircraft's weight about the look's knot, Far metres from its point in a knot Radius metres wide: nearly 1
+		 * within half of it, a half at it, falling off as the fourth power beyond, never quite 0. */
+		static double Near(double Far, double Radius);
+		/** The player's zoom (Shown, the scene's distance at his own 800 m, and Vel its speed) eased on to where his wheel
+		 * or trackpad has asked for it (Want) over Real seconds, as the framing is (AwayEase, critically damped): a scroll
+		 * never steps the picture in one frame (the raid camera's row, AAirBattle::Zoom). */
+		static void ZoomEase(double& Shown, double& Vel, double Want, double Real);
+
+	private:
+		std::map<int, double> Fade;      // each aircraft's share of its weight, 0 to 1
+		std::map<int, double> InMid, InClose; // and its weight in the crowd's ring and about the look's knot, eased (RingS)
+		std::map<int, double> Weight;    // and its whole weight in the knot, last frame
+		std::map<int, AirShow::Vec> Prev; // and where it was last frame
+		AirShow::Vec Carry, CarryVel, Centre, LastFocus, LastMid, Off, OffVel, Given;
+		bool bStarted = false, bGiven = false, bMid = false, bFocus = false;
+		int LastAnchor = -1; // the anchor last frame
+		double Away = -1.0, AwayVel = 0.0, Pace = 0.0, Radius = Tight;
+	};
+
+	/**
 	 * The tug-of-war bar's knot (the air thread's rule, passed by the UI director 21 November 14:47Z): the running form
 	 * of the result the battle is judged by. x is the view's sky.score.ratio, (aircraft the defender lost + what the
 	 * bombs were worth + 10) / (aircraft the raider lost + 10), and the knot is x / (1 + x) from the raider's flag; a

@@ -106,6 +106,26 @@ struct FAirBattleState
 	 * black above and below, which draws back over the glide (FlyBars, 1 to 0).
 	 */
 	AirDesk::Flyover Fly;
+	/** The strategy camera's look and framing, flying smooth (AirShow::Show::SetSmooth; AAirBattle::AimEye). */
+	AirDesk::Overview Over;
+	/** The Battle rules card's "The raid camera holds steady" (FLandLive's rule "flySteadyEye", off until the Mac and the
+	 * art director pass it), read once as the battle opens: on, and flying smooth, the strategy camera is Over's;
+	 * off, AimEye's as it was (30899121's), to the byte. */
+	bool bSteadyEye = false;
+	/** With it on, where the player's wheel or trackpad has asked his zoom to go (AAirBattle::Zoom; -1 nowhere, the zoom
+	 * at rest) and the zoom's speed on its way there (AirDesk::Overview::ZoomEase, in AimEye). */
+	double ZoomWant = -1.0, ZoomVel = 0.0;
+	/** With it on, the strategy camera's jumps of the picture over 20 px since the log's last 5 s sky line (AimEye,
+	 * SteadyEyeSky), and what they are judged from: its eye and look the last two frames, the last frame's real seconds,
+	 * the engine's frame and the fuel ball cuts when last measured, and how many frames in a row it has measured. */
+	int32 OverJumps = 0;
+	FVector JumpEye[2] = { FVector::ZeroVector, FVector::ZeroVector }, JumpLook[2] = { FVector::ZeroVector, FVector::ZeroVector };
+	double JumpDt = 0.0;
+	uint64 JumpFrame = 0;
+	int32 JumpBallCuts = 0, JumpRun = 0;
+	/** With it on, in a picture run (-TheaterAirBattleShots): the pictures asked for as last seen (AAirBattle::Tick; -1
+	 * not yet), and how many frames more have their step held to a sixtieth of a second after one. */
+	int32 ShotsSeen = -1, ShotHold = 0;
 	bool bFlying = false;
 	bool bFlyTried = false;     // looked for once, when the battle's first groups stand
 	double FlyT = 0.0;

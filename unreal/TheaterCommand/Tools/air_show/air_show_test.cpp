@@ -3288,9 +3288,10 @@ int main(int Argc, char** Argv)
 			                   "cumulus 1/1, broken a third of the sun, closed a tenth or less, whole over the top" });
 		}
 
-		// This battle flown again under a deck, twice. First at 3,500 to 4,500 m, not a day's height but a test's (laid
-		// for a band of 6,500 m), so that about half its losses begin above it and half under it, with its hole over the
-		// middle of where they begin, over the sea. Then the lowest band's deck (laid 900 to 1,500 m, put at 2,400 to 3,000 m over a band of
+		// This battle flown again under a deck, twice. First 1,000 m thick with its top at the middle of the heights its
+		// losses began at (4,500 m at most), not a day's height but a test's (laid for a band of 6,500 m), so that about
+		// half its losses begin above it and half under it, with its hole over the middle of where they begin, over the
+		// sea. Then the lowest band's deck (laid 900 to 1,500 m, put at 2,400 to 3,000 m over a band of
 		// 1,800 m) round the 3,800 m peak, whose tiles near it are lifted over the laid top. The eye is the main run's,
 		// the deck drawn out to the scene's reach. Every end is judged against the drawn top puffs found tile by tile, not
 		// through the deck's own lookup: an end in the deck lies in a drawn tile, between its foot and 150 m under its
@@ -3461,9 +3462,13 @@ int main(int Argc, char** Argv)
 		std::sort(FallXs.begin(), FallXs.end());
 		std::sort(FallYs.begin(), FallYs.end());
 		std::sort(FallZs.begin(), FallZs.end());
+		// (its top at the middle of the heights where they began, no higher than 4,500 m and no lower than 1,500, its
+		// base 1,000 m under it: laid at 3,500 to 4,500 m whatever the battle, 3 of Oahu's 54 losses began above it,
+		// and as the bombers flew their places smooth 1 or none, so that none came down through its hole)
+		const double TestTop = FallZs.empty() ? 4500.0 : std::clamp(FallZs[FallZs.size() / 2], 1500.0, 4500.0);
 		AirSky::Day TestDay = Deck;
-		TestDay.Base = 3500.0;
-		TestDay.Top = 4500.0;
+		TestDay.Base = TestTop - 1000.0;
+		TestDay.Top = TestTop;
 		AirSky::Placing TestAt = SkyAt;
 		TestAt.Band = 6500.0;
 		TestAt.LowBand = 0.0;

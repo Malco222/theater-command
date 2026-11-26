@@ -661,6 +661,44 @@ static bool AirOldFlying()
 	return bAsked;
 }
 
+// (release 2: Brian, 26 November 2026 04:11Z, "the bombing video camera is super choppy") The Battle rules card's "The
+// raid camera holds steady" (FLandLive's rule "flySteadyEye"; -TheaterAirSteadyEye on, -TheaterAirNoSteadyEye off), read
+// once as a battle opens. On, and flying smooth, the strategy camera is AirDesk::Overview's (AimEye); off, as it was.
+static bool SteadyEyeOn()
+{
+	return FLandLive::RuleNow(TEXT("flySteadyEye"));
+}
+
+// (release 2: Brian, 25 November 13:27Z, "the bomber is shaking in the video too like the fighter") The Battle rules
+// card's "Each bomber keeps her place in her box" (FLandLive's rule "flyBoxKeep"; -TheaterAirBoxKeep on,
+// -TheaterAirNoBoxKeep off), read once as a battle opens into AirShow::Show::SetBoxKeep: on, and flying smooth, each
+// bomber keeps her slot and her place is eased on to it; off, the bombers fly as they did.
+static bool BoxKeepOn()
+{
+	return FLandLive::RuleNow(TEXT("flyBoxKeep"));
+}
+
+// (the two rows, in the log as a battle opens: the camera in use and each row's state, for the Mac's check)
+static void LogRows(const FAirBattleState& S)
+{
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the strategy camera is %s (\"The raid camera holds steady\", flySteadyEye, %s); \"Each bomber keeps her place in her box\" (flyBoxKeep) %s%s."),
+		S.Show.Smooth() && S.bSteadyEye ? TEXT("AirDesk::Overview's, held steady, the zoom eased") : TEXT("the old one, the crowd's middle in hard rings"), S.bSteadyEye ? TEXT("on") : TEXT("off"),
+		S.Show.BoxKeep() ? TEXT("on") : TEXT("off"), S.Show.Smooth() ? TEXT("") : TEXT("; flying as release 1.5 (-TheaterAirOldFlying), so neither row flies"));
+}
+
+// (the raid camera's row on: its part of the log's 5 s sky line, the player's zoom, the eye's distance and the strategy
+// camera's jumps of the picture over 20 px since the last; off, nothing, the line as it was)
+static FString SteadyEyeSky(FAirBattleState& S, double Distance, double Away)
+{
+	if (!(S.Show.Smooth() && S.bSteadyEye))
+	{
+		return FString();
+	}
+	const FString Part = FString::Printf(TEXT(" The raid camera: the zoom %.0f m, the eye %.0f m off, %d jumps of the picture over 20 px."), Distance, Away, S.OverJumps);
+	S.OverJumps = 0;
+	return Part;
+}
+
 void AAirBattle::ReplayWhenReady(const FString& Key)
 {
 	PendingReplay = Key;
@@ -707,6 +745,9 @@ bool AAirBattle::BeginReplay(const FString& Key)
 	S.Show = AirShow::Show(S.Recording.Seed ? S.Recording.Seed : 238);
 	AirFeed::Apply(S.Board, S.Show);
 	S.Show.SetSmooth(!AirOldFlying());
+	S.Show.SetBoxKeep(BoxKeepOn());
+	S.bSteadyEye = SteadyEyeOn();
+	LogRows(S);
 	S.SkyPlace = AirFeed::PlacingOf(S.Board, S.Recording.Views.front().Groups, S.Recording.Seed);
 	S.Desk.Begin(S.Board, S.Recording.Views.front().Head.Me);
 	S.Card = S.Desk.CardOf(S.Recording.Card);
@@ -759,6 +800,9 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 	::UnitTable::SetMonth(S.Board.Year, S.Board.Month + 1); // (its aircraft wear the paint of its month; the feed's months count from 0)
 	AirFeed::Apply(S.Board, S.Show);
 	S.Show.SetSmooth(!AirOldFlying());
+	S.Show.SetBoxKeep(BoxKeepOn());
+	S.bSteadyEye = SteadyEyeOn();
+	LogRows(S);
 	S.SkyPlace = AirFeed::PlacingOf(S.Board, First.Groups, 0);
 	S.Desk.Begin(S.Board, First.Head.Me);
 	// (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z: "i want every air battle playable". With the Battle
@@ -3374,9 +3418,9 @@ void AAirBattle::DrawSky()
 		}
 		else if (Done - SkyClockAt >= 5.0)
 		{
-			UE_LOG(LogTheater, Log, TEXT("Air battle sky, %.1f s, on the graphics chip: %d table lays, %.2f ms a lay, %.2f MB sent; %d shadow paints, %.2f ms a paint; the slowest %.2f ms (this thread's most in a frame); %d puffs laid, the nearest %.0f m off, laid again past %.1f m."),
+			UE_LOG(LogTheater, Log, TEXT("Air battle sky, %.1f s, on the graphics chip: %d table lays, %.2f ms a lay, %.2f MB sent; %d shadow paints, %.2f ms a paint; the slowest %.2f ms (this thread's most in a frame); %d puffs laid, the nearest %.0f m off, laid again past %.1f m.%s"),
 				Done - SkyClockAt, SkyLays, SkyLays > 0 ? SkyPaintSeconds * 1000.0 / SkyLays : 0.0, SkyLayBytes / 1.0e6, SkyShadePaints,
-				SkyShadePaints > 0 ? SkySendSeconds * 1000.0 / SkyShadePaints : 0.0, SkySlowest * 1000.0, Laid.Laid(), Laid.Nearest(), Laid.Slack());
+				SkyShadePaints > 0 ? SkySendSeconds * 1000.0 / SkyShadePaints : 0.0, SkySlowest * 1000.0, Laid.Laid(), Laid.Nearest(), Laid.Slack(), *SteadyEyeSky(S, Distance, StrategyAway));
 			SkyLays = 0;
 			SkyShadePaints = 0;
 			SkyLayBytes = 0.0;
@@ -3456,9 +3500,9 @@ void AAirBattle::DrawSky()
 	else if (Done - SkyClockAt >= 5.0)
 	{
 		const int32 Turns = FMath::Max(1, SkyNearTurns + SkyBothTurns);
-		UE_LOG(LogTheater, Log, TEXT("Air battle sky, %.1f s: %d near turns, %d far; painting %.2f ms a turn (%s), sending %.2f ms, the slowest %.2f ms (this thread's most in a frame); %d at once, %d frames a turn still painting; the rooms' line %.0f m."),
+		UE_LOG(LogTheater, Log, TEXT("Air battle sky, %.1f s: %d near turns, %d far; painting %.2f ms a turn (%s), sending %.2f ms, the slowest %.2f ms (this thread's most in a frame); %d at once, %d frames a turn still painting; the rooms' line %.0f m.%s"),
 			Done - SkyClockAt, SkyNearTurns, SkyBothTurns, SkyPaintSeconds * 1000.0 / Turns, bSkyAtOnce ? TEXT("here") : TEXT("aside"), SkySendSeconds * 1000.0 / Turns,
-			SkySlowest * 1000.0, SkyAtOnce, SkyLate, SkyLine);
+			SkySlowest * 1000.0, SkyAtOnce, SkyLate, SkyLine, *SteadyEyeSky(S, Distance, StrategyAway));
 		SkyNearTurns = 0;
 		SkyBothTurns = 0;
 		SkyAtOnce = 0;
@@ -3630,7 +3674,29 @@ void AAirBattle::Tick(float DeltaSeconds)
 	}
 	// (1.5.1: nothing moves while the opening is held behind its black frame, WarmTick)
 	const bool bHeld = bBegun && State.IsValid() && State->bWarming;
-	const double Real = bHeld ? 0.0 : FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.1);
+	double Real = bHeld ? 0.0 : FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.1);
+	// (the raid camera's row on, in a picture run only (-TheaterAirBattleShots): the two frames after a picture is asked
+	// for have their step held to a sixtieth of a second, so that the stall of the picture's taking, in whichever of the
+	// two it lands, does not throw the battle and the camera forward a tenth of a second at once (x10 before the meeting,
+	// a whole battle second). Not yet seen on the Mac)
+	if (!ShotFolder.IsEmpty() && bBegun && State.IsValid() && State->Show.Smooth() && State->bSteadyEye)
+	{
+		FAirBattleState& Held = *State;
+		if (Held.ShotsSeen < 0)
+		{
+			Held.ShotsSeen = ShotsTaken;
+		}
+		if (ShotsTaken != Held.ShotsSeen)
+		{
+			Held.ShotsSeen = ShotsTaken;
+			Held.ShotHold = 2;
+		}
+		if (Held.ShotHold > 0)
+		{
+			Real = FMath::Min(Real, 1.0 / 60.0);
+			--Held.ShotHold;
+		}
+	}
 	RealT += Real;
 	if (QuitAt >= 0.0 && RealT >= QuitAt)
 	{
@@ -6739,6 +6805,12 @@ void AAirBattle::AimEye(double Real)
 			Lens->SetFieldOfView(62.0f);
 			Lens->PostProcessSettings.bOverride_MotionBlurAmount = true;
 			Lens->PostProcessSettings.MotionBlurAmount = 0.12f;
+			// (flying smooth, the strategy camera starts afresh when it is back, a cut: the aircraft it went with have
+			// flown on meanwhile, AirDesk::Overview; only with the raid camera row on, S.bSteadyEye: off, as it was)
+			if (S.Show.Smooth() && S.bSteadyEye)
+			{
+				bLookSet = false;
+			}
 			return;
 		}
 		S.bClose = false;
@@ -6786,7 +6858,26 @@ void AAirBattle::AimEye(double Real)
 	// one nearest it. The art director on a1acb552's frames, 22 November 08:13Z: Bremen's B-17s 145 to 290 pixels,
 	// Pearl 01's and Midway 04's 10 to 25 pixel specks off the middle of the picture)
 	double CrowdSpan = 0.0;
-	if (AirDesk::CrowdOf(S.Show.Planes(), Picked, 1200.0, FocusAnchor, Crowd))
+	// (flying smooth: its rings soft, the look going with the aircraft it is on, the framing by their mean span, all of
+	// it AirDesk::Overview's, which Tools/air_show/air_smooth_probe --shake plays as here; the hard rings jumped the
+	// whole picture each time an aircraft crossed one, Brian's "the bomber is shaking", 25 November 13:27Z; only with
+	// the raid camera row on, S.bSteadyEye: off, the hard rings below as they were, to the byte)
+	double OverAway = -1.0;
+	if (S.Show.Smooth() && S.bSteadyEye)
+	{
+		const AirDesk::Overview::Aim OverAim = S.Over.Step(S.Show.Planes(), Picked, Real, FocusAnchor, !bLookSet);
+		if (OverAim.bFound)
+		{
+			Focus = OverAim.Focus;
+			CrowdSpan = OverAim.Span;
+		}
+		else if (Count > 0)
+		{
+			Focus = Sum * (1.0 / Count);
+		}
+		OverAway = OverAim.TypeAway;
+	}
+	else if (AirDesk::CrowdOf(S.Show.Planes(), Picked, 1200.0, FocusAnchor, Crowd))
 	{
 		Focus = Crowd;
 		std::vector<double> Spans;
@@ -6837,7 +6928,19 @@ void AAirBattle::AimEye(double Real)
 		Focus = Sum * (1.0 / Count);
 	}
 	FVector Wanted = World(Focus.X, Focus.Y, Focus.Z);
-	const double TypeAway = CrowdSpan > 0.0 ? FMath::Clamp(CrowdSpan * 1920.0 / ((CrowdSpan >= 25.0 ? 70.0 : 45.0) * 2.0 * FMath::Tan(FMath::DegreesToRadians(27.5))), 250.0, 1500.0) : 800.0;
+	const double TypeAway = OverAway > 0.0 ? OverAway : CrowdSpan > 0.0 ? FMath::Clamp(CrowdSpan * 1920.0 / ((CrowdSpan >= 25.0 ? 70.0 : 45.0) * 2.0 * FMath::Tan(FMath::DegreesToRadians(27.5))), 250.0, 1500.0) : 800.0;
+	// (the raid camera's row on, and flying smooth: the player's zoom eased on to where his scroll asked, AAirBattle::Zoom;
+	// at rest once there)
+	if (S.Show.Smooth() && S.bSteadyEye && S.ZoomWant > 0.0)
+	{
+		AirDesk::Overview::ZoomEase(Distance, S.ZoomVel, S.ZoomWant, Real);
+		if (FMath::Abs(Distance - S.ZoomWant) < 0.05 && FMath::Abs(S.ZoomVel) < 0.05)
+		{
+			Distance = S.ZoomWant;
+			S.ZoomWant = -1.0;
+			S.ZoomVel = 0.0;
+		}
+	}
 	double Away = Distance * TypeAway / 800.0, Down = Pitch, Heading = Yaw;
 	StrategyAway = Away;
 	StrategySpan = CrowdSpan;
@@ -7059,7 +7162,15 @@ void AAirBattle::AimEye(double Real)
 	// (the look carried with the crowd as it moves, and only a jump to another crowd eased: eased all the way, at the
 	// clock's x10 the look trailed the raid by a kilometre and more, and the strategy pictures before the meeting showed
 	// empty sky, the art director on 2b177386's Pearl 01, Midway 01 and Bremen 01, 22 November 04:16Z)
-	if (bLookSet && !bOnShip && !bOnGuns && !bOnChutes)
+	if (bLookSet && !bOnShip && !bOnGuns && !bOnChutes && S.Show.Smooth() && S.bSteadyEye)
+	{
+		// (flying smooth: carried with the aircraft it is on and eased on to the rest, AirDesk::Overview::Look; in the
+		// show's metres, Wanted being World(Focus) here)
+		const AirShow::Vec LookWas(LookAt.Y / U, LookAt.X / U, LookAt.Z / U);
+		const AirShow::Vec LookNow = S.Over.Look(LookWas, Focus, Real);
+		LookAt = World(LookNow.X, LookNow.Y, LookNow.Z);
+	}
+	else if (bLookSet && !bOnShip && !bOnGuns && !bOnChutes)
 	{
 		const FVector Moved = Wanted - LookWanted;
 		if (Moved.Size() < 150.0 * U)
@@ -7100,12 +7211,51 @@ void AAirBattle::AimEye(double Real)
 		if (!bOnShip && !bOnGuns && !bOnChutes)
 		{
 			Distance = FMath::Clamp(Distance * Away / FMath::Max(Was, 1.0), 120.0, 20000.0);
+			// (the raid camera's row on: a zoom on its way is given up, the eye stays drawn back)
+			if (S.Show.Smooth() && S.bSteadyEye)
+			{
+				S.ZoomWant = -1.0;
+				S.ZoomVel = 0.0;
+			}
 		}
 		AirParts::TellCut(GetWorld());
 		++BallCuts;
 		UE_LOG(LogTheater, Display, TEXT("Air battle: the overview drawn back off a fuel ball's flash, %.0f m off to %.0f (rule 13, cut %d)."), Was, Away, BallCuts);
 	}
 	Eye->SetActorLocationAndRotation(From, (LookAt - From).Rotation());
+	// (the raid camera's row on: the strategy camera's jumps for the log's 5 s sky line, SteadyEyeSky: a frame whose eye
+	// or look moves more than 20 px on a 1920 picture through the 55 degree lens at its distance, beyond its last frame's
+	// own motion; a cut (a ride, a fuel ball's), a picture's own framing or the glide starts it afresh)
+	if (S.Show.Smooth() && S.bSteadyEye)
+	{
+		const bool bCount = !(S.bFlying && S.GlideT >= 0.0) && !bOnShip && !bOnGuns && !bOnChutes && Real > 0.0 && Away > 1.0;
+		if (!bCount || S.JumpFrame + 1 != GFrameCounter || S.JumpBallCuts != BallCuts)
+		{
+			S.JumpRun = 0;
+		}
+		if (bCount)
+		{
+			if (S.JumpRun >= 2 && S.JumpDt > 0.0)
+			{
+				const double K = Real / S.JumpDt;
+				const double Wide = 2.0 * Away * U * FMath::Tan(FMath::DegreesToRadians(27.5));
+				const double EyeHop = (From - S.JumpEye[0] - (S.JumpEye[0] - S.JumpEye[1]) * K).Size();
+				const double LookHop = (LookAt - S.JumpLook[0] - (S.JumpLook[0] - S.JumpLook[1]) * K).Size();
+				if (FMath::Max(EyeHop, LookHop) * 1920.0 / Wide > 20.0)
+				{
+					++S.OverJumps;
+				}
+			}
+			S.JumpEye[1] = S.JumpEye[0];
+			S.JumpEye[0] = From;
+			S.JumpLook[1] = S.JumpLook[0];
+			S.JumpLook[0] = LookAt;
+			S.JumpDt = Real;
+			S.JumpRun = FMath::Min(S.JumpRun + 1, 2);
+		}
+		S.JumpFrame = GFrameCounter;
+		S.JumpBallCuts = BallCuts;
+	}
 	if (S.bFlying && S.GlideT >= 0.0)
 	{
 		// The glide from the flyover's last eye into the strategy view, eased in and out; the film's frame draws back.
@@ -7147,6 +7297,15 @@ UTexture2D* AAirBattle::FlagPicture(const FString& Tag)
 
 void AAirBattle::Zoom(float Steps)
 {
+	// (the raid camera's row on, and flying smooth: the scroll sets where the zoom is going, from where it was already
+	// going, and AimEye eases it there, AirDesk::Overview::ZoomEase; a notch landed whole in one frame, the picture
+	// stepping 15% at each. Off, as it was)
+	if (State.IsValid() && State->Show.Smooth() && State->bSteadyEye)
+	{
+		const double From = State->ZoomWant > 0.0 ? State->ZoomWant : Distance;
+		State->ZoomWant = FMath::Clamp(From * FMath::Pow(0.85, static_cast<double>(Steps)), 120.0, 20000.0);
+		return;
+	}
 	Distance = FMath::Clamp(Distance * FMath::Pow(0.85, static_cast<double>(Steps)), 120.0, 20000.0);
 }
 
