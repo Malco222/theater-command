@@ -12,7 +12,28 @@ import { roomLeft } from '../src/campaign/islands';
 import { landingForce } from '../src/campaign/staff';
 import { followKey, frontsClear, sailedKey } from '../src/campaign/planfronts';
 import { startOpen } from '../src/campaign/staff';
+import { saveGame } from '../src/campaign/save';
+import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
 import type { Corps, Game, Region } from '../src/campaign/types';
+import '../unreal/TheaterCommand/Rules/campaign-bridge';
+
+type Call = (...a: unknown[]) => any;
+const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
+/** A whole-world war with a player, at his first month (seed 3). */
+function war(human: string): Game {
+  const g = startOpen(createGame(3, human));
+  for (let k = 0; !humanUp(g) && k < 400; k++) stepAI(g);
+  beginHuman(g);
+  return g;
+}
+/** A corps of infantry put down for the test, with its month in hand. */
+function corps(g: Game, nat: string, name: string, where: Region, divs = 1, str = 1): Corps {
+  const c = addCorps(g, nat, name, 'inf', divs, where.id, {});
+  c.str = str;
+  c.ap = c.apMax;
+  return c;
+}
+const clear = (g: Game, r: Region): void => { for (const u of [...r.units, ...(r.garr ?? [])]) removeCorps(g, u); };
 
 const at = (g: Game, name: string): Region => g.byName[name];
 type Told = { what: string; force: string[]; to: string; why?: string };
@@ -89,5 +110,28 @@ describe('a new corps raised on an island (the design director, 21:37Z, 26 Novem
     expect(g.regions[two.reg].name, isle.name).not.toBe(isle.name);
     expect(g.regions[one.reg].name).toBe(isle.name);
     expect(roomLeft(g, isle, 'JAP')).toBeCloseTo(0, 9);
+  }, 300000);
+});
+
+describe("a group sent by rail onto an island that has no room for it (the UI director, 15:02Z, section 3, and 21:37Z 26 November 2026)", () => {
+  it("is told the island's line once for the whole group: the group's men, the too-large corps first, the rest counted, and no rail reason before it", () => {
+    const g = war('JAP');
+    const formosa = at(g, 'Formosa'), taihoku = at(g, 'Taihoku');
+    clear(g, formosa);
+    corps(g, 'JAP', 'Garrison', formosa, 1, 20000 / 15000);
+    const a = corps(g, 'JAP', 'Taihoku First', taihoku, 2), b = corps(g, 'JAP', 'Taihoku Second', taihoku, 2);
+    const big = corps(g, 'JAP', 'Formosa Big', taihoku, 4), big2 = corps(g, 'JAP', 'Formosa Bigger', taihoku, 4);
+    TC().load(saveGame(g));
+    expect(TC().railTip([a.id], formosa.id).no).toBe('Formosa has room for 3 divisions, about 45,000 men, and 20,000 of yours are there: only 25,000 more can go, and you are sending 30,000.');
+    expect(TC().railTip([a.id, b.id], formosa.id).no).toBe('Formosa has room for 3 divisions, about 45,000 men, and 20,000 of yours are there: only 25,000 more can go, and you are sending 60,000.');
+    expect(TC().railTip([b.id, big.id], formosa.id).no).toBe('Formosa has room for 3 divisions, about 45,000 men. Formosa Big has 60,000: too many for the island.');
+    expect(TC().railTip([big.id, big2.id], formosa.id).no).toBe('Formosa has room for 3 divisions, about 45,000 men. Formosa Big has 60,000: too many for the island. One more of the corps you are sending is too large for Formosa as well.');
+    // A rail reason is still a rail reason, and is said as it always was: a corps with its month spent.
+    b.ap = 0;
+    TC().load(saveGame(g));
+    expect(TC().railTip([b.id, big.id], formosa.id).no).toMatch(/^No train for Taihoku Second this month/);
+    const small = corps(g, 'JAP', 'Small', taihoku);
+    TC().load(saveGame(g));
+    expect(TC().railTip([b.id, small.id], formosa.id).no).toMatch(/^Taihoku Second cannot go by rail, so nobody rides\. No train for Taihoku Second this month/);
   }, 300000);
 });

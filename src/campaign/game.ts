@@ -3889,6 +3889,14 @@ export function forceWords(g: Game, corps: Corps[]): { who: string; many: boolea
 export function whyNoTrainFor(g: Game, corps: Corps[], to?: number): NoTrain | null {
   const whys = corps.map((c) => whyNoTrain(g, c, to));
   const first = whys.findIndex(Boolean);
+  const isle = to === undefined ? undefined : g.regions[to];
+  // (On an island of the Pacific, where every corps that cannot ride is stopped by the island's room alone, room is no
+  // reason of the railway's: the island's own line is said once for the whole group, the too-large line first and the
+  // rest counted, and what he sends is the group's men: the UI director, 15:02Z 25 November 2026, section 3, and 21:37Z
+  // 26 November 2026, 3. Other ground, and the far side off: as it always was.)
+  if (first >= 0 && isle && islandOf(g, isle) && whys.every((w) => !w || (w.code === 'room' && w.at === isle.id))) {
+    return { code: 'room', line: roomRefusal(g, isle, corps) ?? whys[first]!.line, at: isle.id };
+  }
   if (first < 0) {
     const dest = to === undefined ? undefined : g.regions[to];
     return dest && !roomForAll(g, dest, corps) ? { code: 'room', line: roomRefusal(g, dest, corps) ?? roomSays(g, dest) ?? `${dest.name} has no room for ${corps.length === 1 ? 'another corps' : `${corps.length} more corps`}.`, at: dest.id } : null;
