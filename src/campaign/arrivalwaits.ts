@@ -12,8 +12,9 @@
  * Its own flags (numbers only, saved with the game; none begins with "wait", so a tool may leave them out by prefix):
  *   rowTold:<i>   the month the wait began, told once in a headline: also the cards' "has waited since {month}"
  *   rowAt:<i>     the province the row is due in (where it forms, after `rowPlace`), for the cards' readers
- *   rowFront:<i>  which of the row's named corps were at the front in the latest month it waited, a bit mask over the
- *                 order of its `from`; none where it waited only for another row. The formed headline names them.
+ *   rowFront:<i>  which of the row's named corps were at the front in any month it waited, a bit mask over the order of
+ *                 its `from`, kept across the waiting months; none where it only ever waited for another row. The
+ *                 formed headline names them.
  * All three are cleared wherever the row is sent or struck (`rowDone`). With the switch off none is ever written and
  * nothing prints.
  */
@@ -53,16 +54,25 @@ const holdsNow = (g: Game, nat: string, from: string[], at: number | undefined):
 
 // ---- 1. The month the wait begins: one headline, once ------------------------------------------------------------
 
+/** The verb for one name or several: "{C}, which has not formed yet" / "{C} and {D}, which have not formed yet". */
+const hasOrHave = (xs: unknown[]): string => (xs.length === 1 ? 'has' : 'have');
+
 /**
- * The headline the month a row's wait begins (section 1), or null where the UI director's words do not cover the case
- * (both causes at once with more than one of either; a row with nothing to name).
+ * The headline the month a row's wait begins (section 1, and section 7 case 2 for both causes with more than one of
+ * either), or null where there is nothing to name.
  */
 export function waitBeginsLine(g: Game, nat: string, rowName: string, place: string, from: string[], front: Corps[], unformed: string[]): string | null {
   const head = `${named(rowName, true)} is due in ${place} this month`;
   const n = present(g, nat, from).length;
   if (front.length && unformed.length) {
-    if (front.length !== 1 || unformed.length !== 1) return null;
-    return `${head}. ${named(front[0].name, true)} is at the front in ${placeOf(g, front[0])}, and ${named(unformed[0])}, which it is also formed from, has not formed yet, so the arrival waits for both.`;
+    // (Section 7, case 2: "{A} in {X} and {B} in {Y} are at the front, and {C}, which it is also formed from, has not
+    // formed yet, so the arrival waits for all of them." "both" where there are two in all; "{C} and {D} ... have not
+    // formed yet".)
+    const at = front.length === 1
+      ? `${named(front[0].name, true)} is at the front in ${placeOf(g, front[0])}`
+      : `${join(front.map((c, k) => `${named(c.name, k === 0)} in ${placeOf(g, c)}`))} are at the front`;
+    const all = front.length + unformed.length === 2 ? 'both' : 'all of them';
+    return `${head}. ${at}, and ${join(unformed.map((x) => named(x)))}, which it is also formed from, ${hasOrHave(unformed)} not formed yet, so the arrival waits for ${all}.`;
   }
   if (unformed.length) {
     return unformed.length === 1
@@ -87,7 +97,10 @@ export function tellWait(g: Game, i: number, at: Region | undefined): void {
   if (!row || g.flags.fromWait !== 1 || !g.human || row[1] !== g.human || !at) return;
   const nat = row[1] as string, from = fromOf(row);
   const { front, unformed } = holdsNow(g, nat, from, at.id);
-  let mask = 0;
+  // (Kept across the waiting months, not replaced: a row that waited on the front and then only for another row still
+  // gets section 4's headline. The UI director's section 7, case 6: "It closes the wait he was told of, and it is true:
+  // the corps did leave the front.")
+  let mask = g.flags[frontKey(i)] ?? 0;
   for (const c of front) mask |= 1 << from.indexOf(c.name);
   if (mask) g.flags[frontKey(i)] = mask; else delete g.flags[frontKey(i)];
   g.flags[atKey(i)] = at.id;
@@ -114,7 +127,7 @@ export interface WaitedOn { count: number; one: string | null; front: string[] }
 
 /**
  * Read in `expeditions` once a row has passed both statements, before it takes its corps: null unless it waited on the
- * front in its latest waiting month (`rowFront`). How many of its named corps stand, the one where it is one, and the
+ * front in any of its waiting months (`rowFront`). How many of its named corps stand, the one where it is one, and the
  * names that were at the front.
  */
 export function waitedOn(g: Game, i: number): WaitedOn | null {
@@ -146,7 +159,8 @@ export function formedLine(g: Game, i: number, was: WaitedOn | null, own: boolea
     if (!front.length || front.length !== here.length) return null;
     const alone = front.length === 1
       ? `${head} without your ${front[0].name}, which is at the front in ${placeOf(g, front[0])} and stays a corps of its own.`
-      : `${head} without ${join(front.map((x) => `your ${x.name}`))}, which are at the front in ${join(front.map((x) => placeOf(g, x)))} and stay corps of their own.`;
+      // (Two corps in one province name the place once: the UI director's section 7, case 7.)
+      : `${head} without ${join(front.map((x) => `your ${x.name}`))}, which are at the front in ${join([...new Set(front.map((x) => placeOf(g, x)))])} and stay corps of their own.`;
     return { alone, after: null };
   }
   if (!was || !was.count || !was.front.length) return null;
@@ -178,20 +192,26 @@ function waiting(g: Game, nat: string): { i: number; row: any[]; at: number; sin
 
 /**
  * The standing line for a corps of the player's at the front that a waiting row is to be formed from (section 2, its
- * month as section 7 case 8 gives it: "has waited for it since {month}"): `short` for the tray card ("An arrival waits for it"), `whole` for its hover, the record card and the 3D corps card's
- * muted note. Read from the board as it stands: the line goes the moment the corps leaves the front. Null otherwise.
+ * month as section 7 case 8 gives it: "has waited for it since {month}"; and section 7 case 2 for a row that also
+ * waits for another row to form): `short` for the tray card ("An arrival waits for it"), `whole` for its hover, the
+ * record card and the 3D corps card's muted note. Read from the board as it stands: the line goes the moment the corps
+ * leaves the front. Null otherwise.
  */
 export function arrivalWaitOf(g: Game, c: Corps): { short: string; whole: string } | null {
   if (c.dead || g.flags.fromWait !== 1 || c.nat !== g.human) return null;
   for (const w of waiting(g, c.nat)) {
     if (!w.from.includes(c.name)) continue;
     const { front, unformed } = holdsNow(g, c.nat, w.from, w.at);
-    // (A row that also waits for another row to form: the UI director's words do not cover it; no line.)
-    if (!front.includes(c) || unformed.length) continue;
+    if (!front.includes(c)) continue;
     const others = front.filter((x) => x !== c).map((x) => named(x.name));
+    const since = turnToDate(w.since).label;
+    const due = `An arrival due in ${g.regions[w.at].name}, ${named(w.row[2])}, is to be formed from this corps`;
     const who = others.length ? `${join(['this corps', ...others])} leave` : 'this corps leaves';
-    const whole = theWords(`An arrival due in ${g.regions[w.at].name}, ${named(w.row[2])}, is to be formed from this corps, and has waited for it since ${turnToDate(w.since).label}. It forms the month after ${who} the front.`);
-    return { short: 'An arrival waits for it', whole };
+    const rest = join(unformed.map((x) => named(x)));
+    const whole = !unformed.length
+      ? `${due}, and has waited for it since ${since}. It forms the month after ${who} the front.`
+      : `${due} and from ${rest}, which ${hasOrHave(unformed)} not formed yet, and has waited for it since ${since}. It forms once ${who} the front and ${rest} ${hasOrHave(unformed)} formed.`;
+    return { short: 'An arrival waits for it', whole: theWords(whole) };
   }
   return null;
 }
@@ -207,7 +227,7 @@ export function rowsWaitingOnRows(g: Game, nat: string | null): string[] {
     const { front, unformed } = holdsNow(g, nat, w.from, w.at);
     if (front.length || !unformed.length) continue;
     // (Its month as the UI director's section 7, case 8, gives it: "has waited since {month}".)
-    out.push(theWords(`${named(w.row[2], true)}, due in ${g.regions[w.at].name}, has waited since ${turnToDate(w.since).label} for ${join(unformed.map((x) => named(x)))}, which ${unformed.length === 1 ? 'has' : 'have'} not formed yet.`));
+    out.push(theWords(`${named(w.row[2], true)}, due in ${g.regions[w.at].name}, has waited since ${turnToDate(w.since).label} for ${join(unformed.map((x) => named(x)))}, which ${hasOrHave(unformed)} not formed yet.`));
   }
   return out;
 }
