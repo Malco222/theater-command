@@ -23,6 +23,8 @@ struct TArray : std::vector<T>
 	int32 Num() const { return static_cast<int32>(this->size()); }
 	bool IsValidIndex(int32 Index) const { return Index >= 0 && Index < Num(); }
 	void Add(const T& One) { this->push_back(One); }
+	T* GetData() { return this->data(); }
+	const T* GetData() const { return this->data(); }
 };
 
 struct FVector
@@ -103,7 +105,7 @@ struct FMath
 struct FRawShip
 {
 	TArray<FVector> Points, Facings;
-	TArray<int32> Paints;
+	TArray<int32> Paints, Triangles;
 	TArray<float> Worn; // (the file's "shade")
 	bool bShip = true;
 	TArray<int32> Salt, Wear, Soot;

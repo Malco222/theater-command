@@ -7,7 +7,9 @@ loop over a file's points, against the engine's stand-ins (paint_shim.h):
   old_ship_branch.inc   the reference's `if (Raw->bShip && Raw->PaintColours.Num() > 0) { ... }`, byte for byte;
   new_ship_branch.inc   the tree's own, byte for byte;
   new_ship_palette.inc  the tree's own palette set before the loop (`ShipPaintCore::Palette ShipColours;` and the
-                        `if (Raw->bShip) { ... }` after it), byte for byte.
+                        `if (Raw->bShip) { ... }` after it), byte for byte;
+  new_ship_runs.inc     the tree's own run marks set before the loop, under the skin (`std::vector<uint8_t> ShipRuns;`
+                        and the `if (Raw->bShip && ShipPaint.bRustRamp ...) { ... }` after it), byte for byte.
 
 A block is found by its first line and runs to its closing brace (strings, characters and comments skipped). Each must
 be found exactly once, or nothing is written and the cut fails.
@@ -20,6 +22,8 @@ import sys
 
 HEAD = "if (Raw->bShip && Raw->PaintColours.Num() > 0)"
 PALETTE = "ShipPaintCore::Palette ShipColours;"
+RUNS = "std::vector<uint8_t> ShipRuns;"
+RUNS_IF = "if (Raw->bShip && ShipPaint.bRustRamp"
 
 
 def close_of(text, start):
@@ -60,15 +64,24 @@ def block(text, head, what):
     return text[start:close_of(text, start)] + "\n"
 
 
-def palette(text):
-    found = text.count(PALETTE)
+def declared(text, decl, cond, what):
+    """A declaration's line and the `if` block that follows it, with nothing but the declaration between them."""
+    found = text.count(decl)
     if found != 1:
-        raise SystemExit(f"extract_paint: the tree's palette: '{PALETTE}' found {found} times (one wanted)")
-    start = text.rfind("\n", 0, text.find(PALETTE)) + 1
-    after = text.find("if (Raw->bShip)", start)
+        raise SystemExit(f"extract_paint: {what}: '{decl}' found {found} times (one wanted)")
+    start = text.rfind("\n", 0, text.find(decl)) + 1
+    after = text.find(cond, start)
     if after < 0 or text[start:after].count(";") != 1:
-        raise SystemExit("extract_paint: the tree's palette: its `if (Raw->bShip)` does not follow it")
+        raise SystemExit(f"extract_paint: {what}: its `{cond}` does not follow it")
     return text[start:close_of(text, after)] + "\n"
+
+
+def palette(text):
+    return declared(text, PALETTE, "if (Raw->bShip)", "the tree's palette")
+
+
+def runs(text):
+    return declared(text, RUNS, RUNS_IF, "the tree's run marks")
 
 
 def main():
@@ -81,6 +94,7 @@ def main():
         "old_ship_branch.inc": block(old, HEAD, "the reference (55419eb6)"),
         "new_ship_branch.inc": block(new, HEAD, "the tree's own"),
         "new_ship_palette.inc": palette(new),
+        "new_ship_runs.inc": runs(new),
     }
     if "ShipPaintCore" in parts["old_ship_branch.inc"] or "FMath::Lerp(Coat, Raw->Rust, 0.55f * Worn / 100.0f);" not in parts["old_ship_branch.inc"]:
         raise SystemExit("extract_paint: the reference is not the one-colour rust of 55419eb6")

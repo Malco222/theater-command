@@ -1247,6 +1247,29 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				ShipColours.Soot = { Raw->PaintColours[8].R, Raw->PaintColours[8].G, Raw->PaintColours[8].B, Raw->PaintColours[8].A };
 			}
 		}
+		// (under the sea battle's skin only: which of her stained points lie at the foot of a run with its body above them,
+		// in her own up axis, the file's z; only those take the rust's film. Battle/ShipPaintCore's BodyAbove, from the same
+		// wear and paints the ship branch hands the core, the file's own triangles, and each point's facing, so the underside
+		// of a plate never takes the film of its top)
+		std::vector<uint8_t> ShipRuns;
+		if (Raw->bShip && ShipPaint.bRustRamp && Raw->PaintColours.Num() > 0)
+		{
+			std::vector<ShipPaintCore::RunPoint> Runs(static_cast<size_t>(Raw->Points.Num()));
+			for (int32 K = 0; K < Raw->Points.Num(); ++K)
+			{
+				const int32 Kind = FMath::Clamp(Raw->Paints[K], 0, Raw->PaintColours.Num() - 1);
+				ShipPaintCore::RunPoint& Run = Runs[static_cast<size_t>(K)];
+				Run.X = Raw->Points[K].X;
+				Run.Y = Raw->Points[K].Y;
+				Run.Z = Raw->Points[K].Z;
+				Run.FX = Raw->Facings[K].X;
+				Run.FY = Raw->Facings[K].Y;
+				Run.FZ = Raw->Facings[K].Z;
+				Run.Wear = Raw->Wear.IsValidIndex(K) ? FMath::Clamp(Raw->Wear[K], 0, 100) : 0;
+				Run.bPainted = Raw->ShipPainted.IsValidIndex(Kind) && Raw->ShipPainted[Kind];
+			}
+			ShipRuns = ShipPaintCore::BodyAbove(Runs, Raw->Triangles.GetData(), static_cast<size_t>(Raw->Triangles.Num()));
+		}
 		// (painted metal chips: upper and under surfaces, nose, spinner, guns, legs, a bomb. Glass, rubber, scribed lines and soot do not.)
 		static const bool bPlaneMetal[18] = { true, true, true, true, true, false, false, true, false, false, false, false, false, true, true, false, false, false };
 		for (int32 K = 0; K < Raw->Points.Num(); ++K)
@@ -1274,6 +1297,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				At.Y = Raw->Points[K].Y;
 				At.Z = Raw->Points[K].Z;
 				At.bDeckWood = Raw->ShipPlanks.IsValidIndex(Kind) && Raw->ShipPlanks[Kind];
+				At.bBodyAbove = static_cast<size_t>(K) < ShipRuns.size() && ShipRuns[static_cast<size_t>(K)] != 0;
 				const ShipPaintCore::Linear Coat = ShipPaintCore::Paint(At, ShipColours, ShipPaint);
 				Fresh.Add(Raw->Points[K], Raw->Facings[K], FLinearColor(Coat.R, Coat.G, Coat.B, Coat.A).ToFColor(true));
 				continue;
