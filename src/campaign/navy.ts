@@ -630,18 +630,48 @@ function crossing(g: Game, cs: Corps[], path: number[], surprise: boolean, landi
   return lost;
 }
 
+/** The end of garrisonAboard's line for a garrison that would get aboard this month once out of its town. */
+const FIELD_FIRST = ': TAKE THE FIELD first.';
+
 /**
  * Why a corps inside its town takes no ship (1.5.3; the playtest's find 17), in the railway's own form (whyNoTrain): a
  * garrison has not moved, and is never told it has. Shut in, it is told so. (The 1.5.3 review.) Otherwise it is sent
  * to TAKE THE FIELD only where that would get it aboard this month: coming out costs a move (apOutOfTown), and a ship
- * takes a corps with its whole month. (On the eve of war a corps brought out has its whole month when the war opens.)
- * Any other is told that out of the town it can embark next month.
+ * takes a corps with its whole month. Where the field outside is full it cannot come out, and is told so
+ * (whyNotTakeField). On the eve of war no month passes, and a corps brought out then has no move until the war opens,
+ * when it has its whole month: it is told to come out now and embark then. Any other is told that out of the town it
+ * can embark next month. Airborne troops are told the same of the transport aircraft (`air`).
  */
-function garrisonAboard(g: Game, c: Corps): string {
-  const from = g.regions[c.reg];
-  if (besieged(g, from)) return `${c.name} is shut in the town at ${from.name}. No ship leaves a siege.`;
-  return (g.flags.eve === 1 || apOutOfTown(g, c) >= Math.min(4, c.apMax)) && whyNotTakeField(g, c) === null ? 'A garrison does not take ship: TAKE THE FIELD first.' : 'A garrison does not take ship. Out of the town, it can embark next month.';
+function garrisonAboard(g: Game, c: Corps, air = false): string {
+  const from = g.regions[c.reg], no = air ? 'A garrison does not emplane' : 'A garrison does not take ship', go = air ? 'take off' : 'embark';
+  if (!air && besieged(g, from)) return `${c.name} is shut in the town at ${from.name}. No ship leaves a siege.`;
+  const field = whyNotTakeField(g, c);
+  if (field) return `${no}. ${field}`;
+  if (g.flags.eve === 1) return `${no}: TAKE THE FIELD now, and it can ${go} when the war opens.`;
+  return apOutOfTown(g, c) >= Math.min(4, c.apMax) ? `${no}${FIELD_FIRST}` : `${no}. Out of the town, it can ${go} next month.`;
 }
+
+/**
+ * (The 1.5.3 review.) The line for the corps of a hand inside their town, by ship or by air: TAKE THE FIELD only where it
+ * would get every one of them aboard this month; beside one it would not, that one's line (it can go next month, or
+ * the field is full), as whyNoTrainFor judges a hand for the train.
+ */
+function garrisonsAboard(g: Game, cs: Corps[], air = false): string {
+  const lines = cs.map((c) => garrisonAboard(g, c, air));
+  return lines.find((l) => !l.endsWith(FIELD_FIRST)) ?? lines[0];
+}
+
+/** Why corps in hand cannot all be shipped to a friendly port: the first refusal, a garrison's judged for the hand as a landing's is (garrisonsAboard). Null where every one can. */
+export function whyNotShipAll(g: Game, cs: Corps[], to: Region): string | null {
+  const whys = cs.map((c) => whyNotShip(g, c, to)).filter((w): w is string => !!w);
+  return whys.find((w) => !w.endsWith(FIELD_FIRST)) ?? whys[0] ?? null;
+}
+
+/** The shipping left for so many corps this month: the sentence where there is too little, or null. */
+const noLift = (g: Game, nat: string, n: number): string | null => {
+  const left = liftLeft(g, nat);
+  return left >= n ? null : left ? `There is shipping for only ${left} more corps this month.` : 'All the shipping is in use this month.';
+};
 
 /** A harbour blocked and its quays blown up takes no ship until it is mended (prizes.ts): the sentence, or null where it is whole. */
 function harbourWrecked(g: Game, p: Region): string | null {
@@ -656,8 +686,11 @@ export function whyNotShip(g: Game, c: Corps, to: Region): string | null {
   // (1.5.3; the playtest's find 17.) A garrison has not moved: it is told what it is and how it comes out, as the railway
   // tells it. (The 1.5.3 review.) Its own harbour is answered first: one in a town with no port is told so, as a landing
   // force is (whyNotLand), and one whose harbour is wrecked is told for how long, never that it can embark next month.
-  if (c.town !== undefined) return !from.port ? `${placeName(from.name, true)} has no port: troops are shipped from one port to another.` : harbourWrecked(g, from) ?? garrisonAboard(g, c);
-  if (c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return 'Only a corps that has not moved this month can embark.';
+  // And the shipping: with none left this month it is told so, never to take the field for a ship that does not sail.
+  if (c.town !== undefined) return !from.port ? `${placeName(from.name, true)} has no port: troops are shipped from one port to another.` : harbourWrecked(g, from) ?? noLift(g, c.nat, 1) ?? garrisonAboard(g, c);
+  // (The 1.5.3 review. On the eve of war no month passes: a corps brought out of its town then has moved nowhere, though
+  // it has no move until the war opens.)
+  if (c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return c.kind !== 'fort' && g.flags.eve === 1 ? `No ship for ${c.name} before the war opens: the voyage takes a whole month of movement, and it has less.` : 'Only a corps that has not moved this month can embark.';
   // (The place at fault is named, so a refused order by sea says what is wrong with it: the UI director, build 1638.)
   if (to.id === from.id) return `They are in ${placeName(to.name)} already.`;
   for (const p of [to, from]) if (!p.port) return `${placeName(p.name, true)} has no port: troops are shipped from one port to another.`;
@@ -757,7 +790,11 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (airborne(cs)) {
     if (cs.some((c) => c.nat !== nat || c.reg !== from.id)) return 'An airborne force takes off from one place.';
     if (!allied(g, nat, from.ctrl)) return 'Airborne troops take off from friendly airfields.';
-    if (cs.some((c) => c.ap < Math.min(4, c.apMax))) return 'Only corps that have not moved this month can emplane.';
+    // (The 1.5.3 review.) A garrison has not moved: it is answered first, as one asked to take ship is.
+    const indoors = cs.filter((c) => c.town !== undefined);
+    if (indoors.length) return garrisonsAboard(g, indoors, true);
+    // (On the eve of war no month passes, and no assault goes in: one brought out of its town then has moved nowhere.)
+    if (cs.some((c) => c.ap < Math.min(4, c.apMax))) return g.flags.eve === 1 ? 'No airborne assault goes in before the war opens.' : 'Only corps that have not moved this month can emplane.';
     if (allied(g, nat, to.ctrl) || !atWar(g, nat, to.ctrl)) return `${to.name} is not enemy ground.`;
     if (!from.seas.some((z) => to.seas.includes(z))) return `${to.name} is out of reach: the transport aircraft can cross one sea, from a coast on it to another.`;
     if (g.flags[dropKey(g, nat)]) return 'The transport aircraft can carry one airborne assault a month.';
@@ -767,13 +804,16 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (n.sealift <= 0) return `${n.name} has no shipping for a landing.`;
   if (cs.some((c) => (c.nat !== nat && !sailsWith(g, nat, c)) || c.reg !== from.id)) return 'A landing force sails from one port.';
   if (!from.port) return 'A landing force has to embark at a port.';
-  const inside = cs.find((c) => c.town !== undefined);
-  if (inside) return garrisonAboard(g, inside);
-  if (cs.some((c) => c.kind === 'fort' || c.ap < Math.min(4, c.apMax))) return 'Only corps that have not moved this month can embark.';
+  // (The 1.5.3 review.) A garrison in the force: the shipping is answered first, then the hand's way out of the town.
+  const inside = cs.filter((c) => c.town !== undefined);
+  if (inside.length) return noLift(g, nat, cs.length) ?? garrisonsAboard(g, inside);
+  if (cs.some((c) => c.kind === 'fort')) return 'Only corps that have not moved this month can embark.';
+  if (cs.some((c) => c.ap < Math.min(4, c.apMax))) return g.flags.eve === 1 ? 'No landing is made before the war opens.' : 'Only corps that have not moved this month can embark.';
   if (!to.seas.length) return `${to.name} has no coast.`;
   if (allied(g, nat, to.ctrl) || cs.some((c) => !atWar(g, c.nat, to.ctrl))) return `${to.name} is not enemy ground.`;
   if (cs.length > STACK) return `No more than ${STACK} corps can go ashore in one place.`;
-  if (liftLeft(g, nat) < cs.length) return liftLeft(g, nat) ? `There is shipping for only ${liftLeft(g, nat)} more corps this month.` : 'All the shipping is in use this month.';
+  const short = noLift(g, nat, cs.length);
+  if (short) return short;
   if (!seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise: surpriseOn(g, nat, to) })) return laneWhy(g, nat, from, to, laneBar(g, nat, from, to, surpriseOn(g, nat, to)));
   // Troopships cannot cross under an enemy sky. Only surprise, or winning the sky over the beach, gets them there.
   if (!surpriseOn(g, nat, to) && skyDenies(g, nat, to.id)) return `${g.nations[to.ctrl].adj} fighters still hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.`;

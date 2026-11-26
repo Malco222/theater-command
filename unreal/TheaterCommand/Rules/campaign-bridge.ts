@@ -92,7 +92,7 @@ import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
 import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, riversOf } from '../../../src/campaign/rivers';
 import { cutRail, railCut, railLinks, railNote, railsAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { INTEL as SERVICE, cutSays, cutsKnown } from '../../../src/campaign/intel';
-import { baseTargets, cutOff, cutOffHomeTip, cutOffLine, fleetReach, harbourFor, landingTargets, seaAt as seaUnder, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
+import { baseTargets, cutOff, cutOffHomeTip, cutOffLine, fleetReach, harbourFor, landingTargets, seaAt as seaUnder, whyNotLand, whyNotShip, whyNotShipAll } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
 import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, forecastAir, gunsAt as gunsRound, km as airKm, moveTargets, overOcean, whyNotMission } from '../../../src/campaign/air';
@@ -1037,10 +1037,10 @@ function comeOut<R>(ids: unknown, call: () => R, looks: boolean): R {
     done.push(x);
   }
   const out = inside.map((x) => ({ reg: x.c.reg, ap: x.c.ap }));
-  const settle = (): number => {
+  const settle = (): Inside[] => {
     const back = looks ? inside : inside.filter((x, i) => !wentOut(s, x, out[i]));
     backInside(back);
-    return back.length;
+    return back;
   };
   let result: R;
   try { result = call(); } catch (e) { settle(); throw e; }
@@ -1048,7 +1048,15 @@ function comeOut<R>(ids: unknown, call: () => R, looks: boolean): R {
   // (The 1.5 pre-check, 24 Nov 19:11Z.) An order's answer carries the picture of the war drawn inside the call, with
   // the garrison still out; the 3D game takes it as the map's (TakeView). Where any corps was put back (a refusal, or
   // one the order left behind), the picture is drawn again, with it inside its town and its moves as they were.
-  if (!looks && put > 0 && result && typeof result === 'object' && 'view' in result) (result as { view: unknown }).view = view();
+  if (!looks && put.length > 0 && result && typeof result === 'object' && 'view' in result) (result as { view: unknown }).view = view();
+  // (The 1.5.3 review.) Where the order went and left corps of the town behind (one with a move fewer for coming out,
+  // that could not keep up), the answer's note names them as they stay in the town, so that they are not left without
+  // a word.
+  const answer = !looks && put.length > 0 && result && typeof result === 'object' ? (result as { note?: unknown; moved?: unknown; report?: unknown }) : null;
+  if (answer && typeof answer.note === 'string' && (put.length < inside.length || (Array.isArray(answer.moved) && answer.moved.length > 0) || !!answer.report)) {
+    const stay = leftInTown(put.map((x) => x.c), put.length === 1 ? 'It could not go with the rest.' : 'They could not go with the rest.');
+    answer.note = answer.note ? `${answer.note} ${stay}` : stay;
+  }
   return result;
 }
 /** A call that only looks, made with the garrison in hand as if out: put back after. */
@@ -3328,12 +3336,18 @@ function railShow(ids: number[], march: number[], army = '', armyIds: number[] =
  * The words under the pointer for a province beyond the march of the army in hand (the art director's railway brief,
  * section 8): the rules' one line where a train would take it there; or why none will, with the opening that takes
  * the emphasis where the reason is a break he can act on, and whether that reason is a cut at this very province (so
- * that the cut is said once).
+ * that the cut is said once). (The 1.5.3 review.) A hand that is all garrison asked of its own province, as the BY RAIL
+ * notice asks it (ToggleRail in the 3D game), is told why no train takes it from there, judged whole.
  */
 function railTip(ids: number[], to: number) {
   const s = game();
   const none = { ride: '', relay: '', no: '', strong: '', cutHere: false };
   try {
+    const home = humanUp(s) ? garrisonHand(s, ids) : [];
+    if (home.length && home.every((c) => c.reg === to)) {
+      const no = whyNoTrainFor(s, home);
+      return no ? { ...none, no: no.line, strong: no.strong ?? '' } : none;
+    }
     // (The 1.5.3 review.) The field army is judged alone, as railShow judges it; the ride names the garrison that stays.
     const all = corpsById(s, ids).filter((c) => !c.dead && canOrder(s, c) && c.reg !== to);
     const cs = afield(all), stay = all.filter((c) => !cs.includes(c));
@@ -3363,18 +3377,15 @@ function seaReach(ids: number[]) {
 /**
  * (The UI director, 18 November 2026; ruling 204.) Why the chosen corps cannot go by sea to a place the by-sea offer
  * leaves out: the first test the place fails, in the rules' own words (to friendly ground, the first corps that
- * cannot be shipped there; to any other, the landing). Empty where the rules have nothing against it.
+ * cannot be shipped there; to any other, the landing). Empty where the rules have nothing against it. (The 1.5.3
+ * review: a hand that is all garrison is judged whole, as the landing and the train judge it: whyNotShipAll.)
  */
 function bySeaWhy(ids: number[], to: number): { why: string } {
   const s = game();
   const r = s.regions[to];
   const cs = afield(corpsById(s, ids).filter((c) => canOrder(s, c))); // (the 1.5.3 review, as seaReach)
   if (!r || !cs.length) return { why: '' };
-  if (allied(s, cs[0].nat, r.ctrl)) {
-    for (const c of cs) { const why = whyNotShip(s, c, r); if (why) return { why }; }
-    return { why: '' };
-  }
-  return { why: whyNotLand(s, cs, r) ?? '' };
+  return { why: (allied(s, cs[0].nat, r.ctrl) ? whyNotShipAll(s, cs, r) : whyNotLand(s, cs, r)) ?? '' };
 }
 
 /** Ships the chosen corps to a friendly port. */

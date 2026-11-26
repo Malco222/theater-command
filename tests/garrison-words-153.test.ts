@@ -23,9 +23,15 @@
 // the desert or off the railway is told there is no railway there, one whose railway is cut is told so, and one whose
 // harbour is wrecked is told for how long, never that out of the town it can ride or embark. And each part of the test
 // that sends a garrison to TAKE THE FIELD for a ship has a case of its own: a full field outside, and the eve of war.
+// The fifth review: a line is true when it is followed. Where the field outside is full a garrison is told so, by rail
+// and by sea, never that it can go next month; with the shipping all in use it is told that first. On the eve of war
+// no month passes: a garrison is told to take the field now and go when the war opens, and once out it is told it
+// has no move until then, never that it has moved. A hand that is all garrison is sent to take the field only where
+// every corps of it would go once out, by rail, by sea and by air; BY RAIL the 3D game asks the railway's reason for
+// the hand at its own province; and an order that leaves a corps of the town behind names it.
 import { describe, expect, it } from 'vitest';
-import { allied, createGame, hostileUnits, relocate, whyNoTrain } from '../src/campaign/game';
-import { whyNotLand, whyNotShip } from '../src/campaign/navy';
+import { allied, createGame, hostileUnits, relocate, whyNoTrain, whyNoTrainFor } from '../src/campaign/game';
+import { liftLeft, useLift, whyNotLand, whyNotShip } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { besieged, garrison, takeField } from '../src/campaign/siege';
 import { wreckPrize } from '../src/campaign/prizes';
@@ -58,6 +64,8 @@ interface Bridge {
   work(action: string): { ok: boolean; note: string };
   approach(ids: number[], to: number): { ok: boolean; none: string; rows: Row[] };
   bySeaWhy(ids: number[], to: number): { why: string };
+  evePlanGo(): { ok: boolean };
+  endMonth(): unknown;
 }
 const TC = (globalThis as Record<string, unknown>).TC as Bridge;
 
@@ -278,7 +286,8 @@ describe('find 18: a garrison that went in this month says when it can march, an
     expect(w.apOut).toBe(0);
     // (The third review.) Brought out on the eve, it has its whole month when the war opens, as every corps in the
     // field has (startPhase): it is told to take the field, as in 1.5.2, and is not spent, as no hand is on the eve.
-    const line = 'Warsaw Defence Command is the garrison of Warsaw. Order it to take the field first.';
+    // (The fifth review.) Out on the eve it has no move until the war opens: it is told that it marches then.
+    const line = 'Warsaw Defence Command is the garrison of Warsaw. Order it to take the field now, and it can march when the war opens.';
     expect(w.garrison).toBe(line);
     expect(TC.garrisonWhy(w.reg).why).toBe(line);
     expect(TC.garrisonWhy(w.reg, [w.id]).why).toBe(line);
@@ -298,7 +307,7 @@ describe('find 18: a garrison that went in this month says when it can march, an
       expect(army).toMatchObject({ spent: false, why: '', out: [] });
     }
     // So with the train: brought out now, it rides when the war opens.
-    expect(TC.railTip([w.id], near.reg).no).toBe('A garrison does not take the train: TAKE THE FIELD first.');
+    expect(TC.railTip([w.id], near.reg).no).toBe('A garrison does not take the train: TAKE THE FIELD now, and it can go by rail when the war opens.');
     expect(saved()).toBe(t0);
     // The order it is told of is there to be given on the eve.
     expect(TC.work(`field:${w.id}`)).toMatchObject({ ok: true });
@@ -618,7 +627,7 @@ describe('the fourth review: the province\'s own railway and harbour come first,
     expect(whyNotShip(g, d, bremen)).toBe(wrecked);
   });
 
-  it('with a month longer than a train\'s, a garrison whose field outside is full is told next month, not to take the field', () => {
+  it('(the fifth review) a garrison whose field outside is full is told so by rail and by sea, never to take the field nor that it can go next month', () => {
     const g = playing();
     const hamburg = g.byName['Hamburg'], bremen = g.byName['Bremen'];
     const c = inside(g, hamburg, EARLIER);
@@ -630,9 +639,18 @@ describe('the fourth review: the province\'s own railway and harbour come first,
       relocate(g, x, hamburg);
     }
     expect(ours()).toBe(STACK);
-    expect(whyNotShip(g, c, bremen)).toBe(NO_SHIP);
-    expect(whyNoTrain(g, c)!.line).toBe(NO_TRAIN);
+    // The field's block, as garrisonLine gives it: next month it is just as full, and taking the field is refused.
+    const full = `There is no room in the field at ${hamburg.name} for another corps.`;
+    for (const apMax of [5, 4]) {
+      c.apMax = apMax;
+      expect(whyNotShip(g, c, bremen)).toBe(`A garrison does not take ship. ${full}`);
+      expect(whyNoTrain(g, c)!.line).toBe(`A garrison does not take the train. ${full}`);
+    }
     expect(takeField(g, c)).toBe(false);
+    TC.load(saveGame(g));
+    expect(TC.bySeaWhy([c.id], hamburg.id).why).toBe(`A garrison does not take ship. ${full}`);
+    expect(TC.railTip([c.id], bremen.id).no).toBe(`A garrison does not take the train. ${full}`);
+    expect(TC.work(`field:${c.id}`)).toMatchObject({ ok: false, note: full });
   });
 
   it('on the eve of war a garrison that went in this month is sent to take the field for a ship, where its nation has shipping', () => {
@@ -647,9 +665,177 @@ describe('the fourth review: the province\'s own railway and harbour come first,
     expect(c.apMax).toBe(4);
     expect(whyNotShip(g, c, danzig)).toBe('Poland has no shipping to move an army by sea.');
     g.nations.POL.sealift = 1; // (Poland moved no army by sea: shipping is lent here, so that the garrison is the reason)
-    expect(whyNotShip(g, c, danzig)).toBe('A garrison does not take ship: TAKE THE FIELD first.');
+    // (The fifth review.) Brought out on the eve, it has no move until the war opens: it is told to come out now, and
+    // that it embarks then.
+    expect(whyNotShip(g, c, danzig)).toBe('A garrison does not take ship: TAKE THE FIELD now, and it can embark when the war opens.');
     // Once the war has opened, one that went in this month has no move once out: it embarks next month.
     g.flags.eve = 0;
     expect(whyNotShip(g, c, danzig)).toBe(NO_SHIP);
+    g.flags.eve = 1;
+    // Followed on the eve, it is out of the town with no move: it is told so, never that it has moved.
+    expect(takeField(g, c)).toBe(true);
+    expect(c.ap).toBe(0);
+    expect(whyNotShip(g, c, danzig)).toBe(`No ship for ${c.name} before the war opens: the voyage takes a whole month of movement, and it has less.`);
+    expect(whyNoTrain(g, c)!.line).toBe(`No train for ${c.name} before the war opens: the railway takes a whole month of movement, and it has less.`);
+    const coast = g.regions.find((r) => r.ctrl === 'GER' && r.seas.length > 0)!;
+    expect(whyNotLand(g, [c], coast)).toBe('No landing is made before the war opens.');
+  });
+});
+
+describe('the fifth review: each line is true when it is followed', () => {
+  it('with all its nation\'s shipping in use this month, a garrison is told so first, by ship and for a landing', () => {
+    const g = playing();
+    const hamburg = g.byName['Hamburg'], bremen = g.byName['Bremen'];
+    const c = inside(g, hamburg, EARLIER);
+    const d = inside(g, hamburg, EARLIER);
+    c.apMax = 5;
+    d.apMax = 5;
+    const coast = g.regions.find((r) => r.ctrl === 'POL' && r.seas.length > 0)!;
+    expect(whyNotShip(g, c, bremen)).toBe('A garrison does not take ship: TAKE THE FIELD first.');
+    expect(whyNotLand(g, [c, d], coast)).toBe('A garrison does not take ship: TAKE THE FIELD first.');
+    // Shipping for one more corps: a landing force of two is told so.
+    useLift(g, 'GER', liftLeft(g, 'GER') - 1);
+    expect(whyNotLand(g, [c, d], coast)).toBe('There is shipping for only 1 more corps this month.');
+    // None left: taking the field would put it on no ship this month.
+    useLift(g, 'GER', 1);
+    expect(liftLeft(g, 'GER')).toBe(0);
+    const none = 'All the shipping is in use this month.';
+    expect(whyNotShip(g, c, bremen)).toBe(none);
+    expect(whyNotLand(g, [c], coast)).toBe(none);
+    TC.load(saveGame(g));
+    expect(TC.bySeaWhy([c.id], hamburg.id).why).toBe(none);
+    expect(TC.bySeaWhy([c.id, d.id], coast.id).why).toBe(none);
+    // Out of the town, with its moves, the reason is the same: the line named the real block.
+    expect(takeField(g, c)).toBe(true);
+    expect(c.ap).toBe(4);
+    expect(whyNotShip(g, c, bremen)).toBe(none);
+    expect(whyNotLand(g, [c], coast)).toBe(none);
+  });
+
+  it('on the eve of war a garrison is told to take the field now and go when the war opens; followed, it is never told it has moved, and when the war opens it rides (Poland, seed 31)', () => {
+    TC.start({ view: 'grand', human: 'POL', from: 1, seed: 31 });
+    expect(TC.view().eve).toBe(true);
+    // (The staff's plan places the army, so that Poland stands when the war opens.) A corps sent into a town on the eve
+    // has gone in this month, as Warsaw's Defence Command has.
+    expect(TC.evePlanGo()).toMatchObject({ ok: true });
+    const id = TC.view().corps.find((x) => x.name === 'Lublin reserve')!.id;
+    expect(TC.work(`garrison:${id}`)).toMatchObject({ ok: true });
+    const g = loadGame(saved())!;
+    const c = g.corps.find((x) => x.id === id)!, r = g.regions[c.reg];
+    expect(c.town).toBe(g.turn);
+    const there = r.nb.find((j) => g.regions[j].ctrl === 'POL')!;
+    const line = `${c.name} is ${(r.garr?.length ?? 0) > 1 ? 'in ' : ''}the garrison of ${townName(r)}. Order it to take the field now, and it can march when the war opens.`;
+    expect(TC.garrisonWhy(r.id, [id]).why).toBe(line);
+    expect(seen(id)).toMatchObject({ garrison: line, noOrders: line });
+    expect(TC.reach([id])).toMatchObject({ regions: [], spent: false, why: line, out: [] });
+    expect(TC.move([id], there).note).toBe(line);
+    const train = 'A garrison does not take the train: TAKE THE FIELD now, and it can go by rail when the war opens.';
+    expect(TC.railTip([id], there).no).toBe(train);
+    expect(TC.rail([id], there).said).toBe(train);
+    // Followed on the eve: it takes the field, with no move until the war opens. Nothing says it has moved or spent its month.
+    expect(TC.work(`field:${id}`)).toMatchObject({ ok: true });
+    expect(seen(id)).toMatchObject({ town: false, ap: 0 });
+    const wait = `No train for ${c.name} before the war opens: the railway takes a whole month of movement, and it has less.`;
+    expect(TC.railTip([id], there).no).toBe(wait);
+    expect(TC.rail([id], there)).toMatchObject({ moved: [], said: '' });
+    expect(TC.reach([id])).toMatchObject({ regions: [], spent: false, why: '', stays: '' });
+    // The war opens: it has its whole month, as every corps in the field has. It marches, and it rides.
+    TC.endMonth();
+    expect(TC.view()).toMatchObject({ eve: false, humanUp: true, turn: 1 });
+    expect(seen(id)).toMatchObject({ town: false, ap: 4 });
+    const t0 = saved();
+    const walk = TC.reach([id]).regions.find((x) => !x.attack)!;
+    expect(walk).toBeDefined();
+    expect(TC.move([id], walk.id).moved.map((m) => m.id)).toEqual([id]);
+    TC.load(t0);
+    const ride = TC.railReach([id]).regions.find((x) => /^Right-click: by rail to /.test(TC.railTip([id], x).ride))!;
+    expect(ride).toBeDefined();
+    expect(TC.rail([id], ride).moved.map((m) => m.id)).toEqual([id]);
+  });
+
+  it('a hand that is all garrison is sent to take the field only where every corps of it would go once out, whichever is picked first', () => {
+    const g = playing();
+    const hamburg = g.byName['Hamburg'];
+    const long = inside(g, hamburg, EARLIER);
+    const short = inside(g, hamburg, EARLIER);
+    long.apMax = 5; // (a month longer than a train's: once out it still has a whole one)
+    expect(short.apMax).toBe(4);
+    const coast = g.regions.find((r) => r.ctrl === 'POL' && r.seas.length > 0)!;
+    const far = g.byName['Ruhr'].id, port = g.byName['Bremen'].id;
+    TC.load(saveGame(g));
+    // Alone, the longer is sent to take the field: that puts it on a train and aboard this month.
+    expect(whyNoTrainFor(g, [long], far)!.line).toBe('A garrison does not take the train: TAKE THE FIELD first.');
+    expect(whyNotLand(g, [long], coast)).toBe('A garrison does not take ship: TAKE THE FIELD first.');
+    // Beside the shorter, whichever leads the hand, every answer is the shorter's: out of the town, next month.
+    for (const hand of [[long, short], [short, long]]) {
+      const ids = hand.map((c) => c.id);
+      expect(whyNoTrainFor(g, hand, far)!.line).toBe(NO_TRAIN);
+      expect(whyNoTrainFor(g, hand)!.line).toBe(NO_TRAIN);
+      expect(whyNotLand(g, hand, coast)).toBe(NO_SHIP);
+      expect(TC.railTip(ids, far).no).toBe(NO_TRAIN);
+      expect(TC.rail(ids, far).said).toBe(NO_TRAIN);
+      expect(TC.bySeaWhy(ids, hamburg.id).why).toBe(NO_SHIP);
+      expect(TC.bySeaWhy(ids, port).why).toBe(NO_SHIP);
+      expect(TC.bySeaWhy(ids, coast.id).why).toBe(NO_SHIP);
+    }
+    // Followed: out of the town now, the shorter has less than a train takes this month; next month both ride.
+    expect(takeField(g, long)).toBe(true);
+    expect(takeField(g, short)).toBe(true);
+    expect(whyNoTrainFor(g, [long, short])!.code).toBe('spent');
+    long.ap = long.apMax;
+    short.ap = short.apMax;
+    expect(whyNoTrainFor(g, [long, short])).toBeNull();
+    expect(whyNotLand(g, [long, short], coast) ?? '').not.toMatch(/garrison|moved/);
+  });
+
+  it('an airborne corps inside its town is told it is a garrison, not that it has moved', () => {
+    const g = playing();
+    const r = g.byName['Hamburg'];
+    const a = inside(g, r, EARLIER);
+    const b = inside(g, r, EARLIER);
+    a.airborne = true;
+    b.airborne = true;
+    const coast = g.regions.find((x) => x.ctrl === 'POL' && x.seas.length > 0)!;
+    expect(whyNotLand(g, [a], coast)).toBe('A garrison does not emplane. Out of the town, it can take off next month.');
+    a.apMax = 5;
+    expect(whyNotLand(g, [a], coast)).toBe('A garrison does not emplane: TAKE THE FIELD first.');
+    // A hand is judged whole, as by ship.
+    expect(whyNotLand(g, [a, b], coast)).toBe('A garrison does not emplane. Out of the town, it can take off next month.');
+    // Followed, it is out with its whole month: the moves are no reason.
+    expect(takeField(g, a)).toBe(true);
+    expect(whyNotLand(g, [a], coast) ?? '').not.toMatch(/garrison|moved/);
+  });
+
+  it('BY RAIL, a hand that is all garrison asked of its own province is told the railway\'s reason, judged whole (the 3D game\'s BY RAIL notice)', () => {
+    const g = playing();
+    const hamburg = g.byName['Hamburg'];
+    const long = inside(g, hamburg, EARLIER);
+    const short = inside(g, hamburg, EARLIER);
+    long.apMax = 5;
+    TC.load(saveGame(g));
+    expect(TC.railTip([long.id], hamburg.id).no).toBe('A garrison does not take the train: TAKE THE FIELD first.');
+    expect(TC.railTip([long.id, short.id], hamburg.id).no).toBe(NO_TRAIN);
+    expect(TC.railTip([short.id, long.id], hamburg.id).no).toBe(NO_TRAIN);
+    // A field corps asked of its own province is answered as before: nothing.
+    const f = bring(g, hamburg);
+    TC.load(saveGame(g));
+    expect(TC.railTip([f.id], hamburg.id).no).toBe('');
+    expect(TC.railTip([f.id, long.id], hamburg.id).no).toBe('');
+  });
+
+  it('an order that goes and leaves a corps of the town behind names it as it stays (a march onto enemy ground with no army)', () => {
+    const g = playing();
+    const rhine = g.byName['Rhineland'], alsace = g.byName['Alsace'];
+    const c = inside(g, rhine, EARLIER);
+    const f = bring(g, rhine);
+    f.ap = f.apMax;
+    for (const u of alsace.units.filter((u) => !u.dead)) relocate(g, u, g.byName['Lyon'] ?? g.regions[g.nations.FRA.capital]);
+    TC.load(saveGame(g));
+    // Four moves off: the field corps gets there; the garrison, with a move fewer for coming out, does not.
+    expect(TC.reach([f.id]).regions.find((x) => x.id === alsace.id)).toMatchObject({ attack: false });
+    const went = TC.move([f.id, c.id], alsace.id);
+    expect(went.moved.map((m) => m.id)).toEqual([f.id]);
+    expect(went.note).toContain(`${c.name} stays in the town. It could not go with the rest.`);
+    expect(corpsIn(saved(), c.id)).toMatchObject({ reg: rhine.id, town: EARLIER });
   });
 });

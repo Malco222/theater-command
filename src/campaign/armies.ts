@@ -293,10 +293,11 @@ export function whyNotOrder(g: Game, c: Corps): string | null {
  * them"). A garrison takes no marching orders, and the sentence names the cure: TAKE THE FIELD, or a sortie where an
  * enemy army stands round the town. One corps is named; several are "They". The corps are of one province.
  * (The 1.5.3 patch; the 1.5.1 playtest's find 18.) Corps that all went in this month come out with no move
- * (apOutOfTown), so taking the field is no way to march: they are told when they can. (The 1.5.3 review.) Not on the
- * eve of war: a corps brought out then has its whole month when the war opens, as every corps in the field has, so
- * Warsaw's Defence Command is told to take the field. And where the field outside has no room for another corps,
- * TAKE THE FIELD is refused: the sentence gives the rules' reason (whyNotTakeField), not that order.
+ * (apOutOfTown), so taking the field is no way to march: they are told when they can. (The 1.5.3 review.) On the eve
+ * of war no month passes, and a corps brought out then has no move until the war opens, when it has its whole month
+ * as every corps in the field has: Warsaw's Defence Command is told to take the field now, and that it marches when
+ * the war opens. And where the field outside has no room for another corps, TAKE THE FIELD is refused: the sentence
+ * gives the rules' reason (whyNotTakeField), not that order.
  */
 export function garrisonLine(g: Game, cs: Corps[]): string {
   const r = g.regions[cs[0].reg], town = townName(r), one = cs.length === 1;
@@ -305,7 +306,7 @@ export function garrisonLine(g: Game, cs: Corps[]): string {
   if (shut) return `${who}, shut in by the army round it. Order a sortie against that army.`;
   // (room outside as siege.ts whyNotTakeField counts it, and its sentence)
   if (r.units.filter((u) => allied(g, u.nat, cs[0].nat) && u.kind !== 'eng').length >= STACK) return `${who}. There is no room in the field at ${r.name} for another corps.`;
-  if (g.flags.eve !== 1 && cs.every((c) => c.town === g.turn)) return `${who}. ${one ? 'It' : 'They'} went in this month, and can march out next month.`;
+  if (cs.every((c) => c.town === g.turn)) return g.flags.eve === 1 ? `${who}. Order ${one ? 'it' : 'them'} to take the field now, and ${one ? 'it' : 'they'} can march when the war opens.` : `${who}. ${one ? 'It' : 'They'} went in this month, and can march out next month.`;
   return `${who}. Order ${one ? 'it' : 'them'} to take the field first.`;
 }
 /** Why the player's corps inside the town of a province take no marching orders, in the rules' sentence; null where he has none inside. */
