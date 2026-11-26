@@ -10,7 +10,7 @@
 // A desk's month ends in one line of news, tagged with the desk so that an interface can offer to take it back.
 
 import { DEPTH, DESKS, capOf, capPct, deskDef, deskRan, depthRules, markRan, setCap, setDesk, staffRuns, type DeskId, type DepthDef } from './depth';
-import { allied, atWar, bloc, headline, shoreRoom } from './game';
+import { allied, atWar, bloc, headline, men as menOfCorps, shoreRoom } from './game';
 import { turnToDate } from '../core/ticket';
 import { BUDGET, PRODUCTION, aiProduction, aiTeams, armyWorn, gunsWanted, income, specOf, upkeepTotal } from './economy';
 import { menSpare } from './manpower';
@@ -31,9 +31,10 @@ import { staysOut } from './history';
 import { shoreAI } from './fleets';
 import { seaStaff } from './carriers';
 import { gatherMonth } from './readiness';
-import { STACK, type AirReport, type Build, type Game, type Nation, type Region } from './types';
+import { MEN_PER_DIV, STACK, type AirReport, type Build, type Game, type Nation, type Region } from './types';
 import { aiRepair } from './repairs';
 import { aiFieldRepair } from './fieldstate';
+import { fitWave, islandOf, roomLeft } from './islands';
 
 const listAnd = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 /** A list cut to its first few, with the rest counted. */
@@ -146,14 +147,29 @@ function shipping(g: Game, nat: string): void {
   const plan = plannedCrossing(g, nat);
   if (!plan) return;
   const lift = liftView(g, nat);
-  const quay = plan.from.units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne);
-  const force = quay.length;
-  // (An island of the Pacific takes its room in men and no more: no troopship is laid down for a corps that could not
-  // land, those of the quay that fit counted in their order. game.ts shoreRoom, islands.ts `fitWave`.)
-  const want = Math.min(STACK, shoreRoom(g, plan.to, nat, quay), Math.max(landingForce(), force));
+  const want = troopshipsWanted(g, nat, plan);
   if (lift.room <= 0 || lift.lift + lift.building.length >= want) return;
   const o = offers(g, nat).find((x) => x.key === 'ship:tp');
   if (o && o.why === null && o.at >= 0 && n.pp >= o.cost + PRODUCTION.aiReserve) orderOffer(g, nat, o.key, o.at);
+}
+
+/**
+ * How many corps' worth of troopships the building staff wants for the player's planned crossing: the corps on the
+ * quay, never fewer than a staff sends ashore in a landing and never more than can go ashore in one place. An island of
+ * the Pacific takes its room in men and no more: those of the quay that fit, counted in their order (game.ts
+ * shoreRoom, islands.ts `fitWave`), and a corps of one division for each whole division's worth still left beside
+ * them, so that shipping is laid down ahead of the troops as it was when the room was counted in corps (the room read
+ * for planning as the staffs read it, `roomLeft`). Other ground, and the far side off: as it always was.
+ */
+export function troopshipsWanted(g: Game, nat: string, plan: { from: Region; to: Region }): number {
+  const quay = plan.from.units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne);
+  const force = quay.length;
+  let lands = shoreRoom(g, plan.to, nat, quay);
+  if (islandOf(g, plan.to)) {
+    const wave = fitWave(g, plan.to, nat, quay), men = wave.reduce((k, c) => k + menOfCorps(c), 0);
+    lands = wave.length + Math.floor((roomLeft(g, plan.to, nat) * MEN_PER_DIV - men + 1e-6) / MEN_PER_DIV);
+  }
+  return Math.min(STACK, lands, Math.max(landingForce(), force));
 }
 
 /** The staff's word on the crossing the player has named as his plan. */

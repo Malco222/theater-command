@@ -5,7 +5,9 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { frontWatch, runAI } from '../src/campaign/ai';
-import { addCorps, createGame, declareWar } from '../src/campaign/game';
+import { addCorps, createGame, declareWar, removeCorps } from '../src/campaign/game';
+import { troopshipsWanted } from '../src/campaign/desks';
+import { landingForce } from '../src/campaign/staff';
 import { followKey, frontsClear, sailedKey } from '../src/campaign/planfronts';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
@@ -40,5 +42,27 @@ describe("a computer staff's shore that takes none of its force (the design dire
     listen();
     runAI(g, 'JAP');
     expect(told.filter((t) => t.force[0] === 'South Seas Detachment' && t.to === 'Rabaul')).toEqual([]);
+  }, 300000);
+});
+
+describe("the player's building desk and a crossing to an island", () => {
+  it('lays down troopships ahead of the troops: an empty quay wants shipping for the room, as it did when the room was counted in corps', () => {
+    const g = startOpen(createGame(3, null));
+    const wake = at(g, 'Wake'), saipan = at(g, 'Saipan'), quay = at(g, 'Kwajalein'), pearl = at(g, 'Pearl Harbor');
+    for (const r of [wake, saipan]) for (const u of [...r.units, ...(r.garr ?? [])]) removeCorps(g, u);
+    for (const u of [...quay.units]) removeCorps(g, u);
+    expect(landingForce()).toBeGreaterThanOrEqual(2);
+    // The quay empty: Wake's room of one division, Saipan's of two.
+    expect(troopshipsWanted(g, 'JAP', { from: quay, to: wake })).toBe(1);
+    expect(troopshipsWanted(g, 'USA', { from: pearl.units.length ? { ...pearl, units: [] } : pearl, to: saipan })).toBe(2);
+    // One corps of one division on the quay: it and a division's worth more for Saipan.
+    addCorps(g, 'JAP', 'One', 'inf', 1, quay.id, {});
+    expect(troopshipsWanted(g, 'JAP', { from: quay, to: saipan })).toBe(2);
+    // A corps of two divisions on the quay takes Saipan's whole room: shipping for it alone.
+    for (const u of [...quay.units]) removeCorps(g, u);
+    addCorps(g, 'JAP', 'Two', 'inf', 2, quay.id, {});
+    expect(troopshipsWanted(g, 'JAP', { from: quay, to: saipan })).toBe(1);
+    // Ground that is no island: the quay's corps, never fewer than a landing force, as it always was.
+    expect(troopshipsWanted(g, 'JAP', { from: quay, to: at(g, 'Manila') })).toBe(Math.min(5, Math.max(landingForce(), 1)));
   }, 300000);
 });
