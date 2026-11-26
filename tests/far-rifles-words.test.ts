@@ -106,6 +106,15 @@ describe('the order', () => {
     expect(noRifles(g, 'CHN', 3)).toMatch(/ and 1,000 are in store\. /);
     store(g, 949);
     expect(noRifles(g, 'CHN', 3)).toMatch(/ and 900 are in store\. /);
+    // A store just short of the need never reads the need: 63,850 to 63,899.99 read 63,800 (the sceptic's S1).
+    for (const r of [63850, 63899, 63899.99]) {
+      store(g, r);
+      expect(noRifles(g, 'CHN', 3)).toBe('Not enough rifles: this corps takes 63,900 and 63,800 are in store. 8,300 come in each month, so it can be ordered in one month.');
+    }
+    store(g, 63849);
+    expect(noRifles(g, 'CHN', 3)).toMatch(/ and 63,800 are in store\. /);
+    store(g, 63900);
+    expect(noRifles(g, 'CHN', 3)).toBeNull();
     // Nothing coming in: the way out.
     const kept = RIFLES.roads.splice(0);
     undo.push(() => { RIFLES.roads.splice(0, RIFLES.roads.length, ...kept); });

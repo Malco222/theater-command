@@ -307,7 +307,10 @@ export function noRifles(g: Game, nat: string, divs: number): string | null {
   const per = riflesRow(g, nat)!.perDiv, need = divs * per, stock = stockOf(g, nat, 'rifles') * per, inflow = inflowOf(g, nat).total;
   const comes = Math.round(inflow / 100) > 0, months = comes ? Math.ceil((need - stock) / inflow) : 0;
   const when = comes ? ` ${n100(inflow)} come in each month, so it can be ordered in ${inWords(months)} month${months === 1 ? '' : 's'}.` : ' No rifles are coming in: it can be ordered only once a road runs again or an arsenal is back in your hands.';
-  return `Not enough rifles: this corps takes ${n100(need)} and ${n100(stock)} are in store.${when}`;
+  // (The store to the hundred, but never shown at the need: a store just short of it reads the hundred below, so the
+  // cost and the store add up.)
+  const held = Math.max(0, Math.min(Math.round(stock / 100) * 100, Math.round(need / 100) * 100 - 100));
+  return `Not enough rifles: this corps takes ${n100(need)} and ${n0(held)} are in store.${when}`;
 }
 
 /**
