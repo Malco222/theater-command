@@ -650,6 +650,23 @@ is for the scenes). The battle still decides every loss; the guns only show the 
 - The cloud test checks every stream is from her own decks and in reach, at most 1 frame in 5 on the plane, some
   hits and some bursts, and nothing with no ships (Bremen). It prints each ship's guns and the guns that fired.
 
+## Flak by its size; no field-gun case at sea (release 2, off until passed)
+
+Brian, 26 November ("do 2-11"), items 3 and 11 of the film details.
+
+- `-TheaterAirFlakKinds`: read once, in the effects wrapper's `FBattleEffects::Begin` (the one place every kit's
+  overlays are laid), so it reaches every kit alike: this scene's `Kit->AirFlak(Now, At, AirParts::Wide(E.What))`
+  (the `FxKind::Flak` case), the sea scene's `Effects->AirFlak(S.BattleT, FlakLater[K].Where, FlakLater[K].Kind)`
+  (its ships' heavy guns' bursts, booked in its `FxKind::Flak` case) and the wrapper's own test barrage
+  (`-TheaterBlastTest`, case 6). It lays `battle-fx-flak.json`: a `medium` burst (37 to 40 mm) 6 to 8 m, dark grey,
+  gone in about 5 s, lingering to 9 s; a `light` one (a 20 mm self-destruct) a small grey puff 3 to 4 m, gone in
+  about 3 s, lingering to 5.5 s. Without it, light and medium burst as heavy, as before. Heavy is as before with it.
+  Bremen sends medium and heavy, Midway and Oahu light as well.
+- `-TheaterSeaNoFalseCases`: read in `ASeaBattle::OpenOn` before its kit's `Begin`. The big turrets fire by the
+  howitzer's row in the default seed mode, and that row threw a 0.4 m field-gun case on the water 2.5 m behind the
+  muzzle (within 40 m of the eye), left lying while the ship steamed on. The word lays `battle-fx-sea-cases.json`
+  (`ground_cases.not_on: ["water"]`): no gun on "water" throws one. Every other piece is as before.
+
 ## Bomb bays and sticks (release 1)
 
 Brian, 21 November 05:44Z: "add working doors in release 1", "have a realistic number of bombs drop from them as well

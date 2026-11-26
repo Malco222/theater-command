@@ -2120,3 +2120,65 @@ because the lamps went to the strongest flashes alone.
   - Every default lamp of a scripted land and sea fight, held to the kit before the rule byte for byte.
 - Preview: `FX_GUN=naval_heavy` on the sea shot.
 - Notes for the sea scene: `/mnt/project-files/sea-storm-night/effects-lamps-for-sea.md`.
+
+## The film details, first batch: flak by its size, no false brass at sea, gun smoke after the shot, spent cases (release 2, each behind its launch word)
+
+Brian, 26 November: "i like the debris coming off the planes when hit", "lets try to add more visual dramatic things
+like that", then "do 2-11". This batch is the part the kit can make alone (the plan's item 3 part 1, item 7 parts 1
+to 4, item 11 part 1). Every new row is in an overlay recipe laid over `fx.json` only when its launch word is given,
+as `fx-film.json` is; the shipped `fx.json` is unchanged. Without the words every piece is laid as before.
+
+| Word | Overlay (`tools/battle-fx/`, and `Content/Effects/battle-` + the same name) | Read in |
+|---|---|---|
+| `-TheaterAirFlakKinds` | `fx-flak.json` | the wrapper's `FBattleEffects::Begin`, for every kit (the air scene's, the sea scene's) |
+| `-TheaterSeaNoFalseCases` | `fx-sea-cases.json` | `ASeaBattle::OpenOn`, before its kit's `Begin` |
+| `-TheaterLandBarrelSmoke` | `fx-barrel.json` | `ALandBattle::Open`, beside `-TheaterLandGunFlash` |
+| `-TheaterLandHatchFumes` | `fx-hatch.json` | the same |
+| `-TheaterLandCasesOut` | `fx-cases-out.json` | the same |
+
+- **Flak by its size** (`air_flak.medium`, `air_flak.light`, `linger.flak.by.<kind>`). Today only `heavy` has a row,
+  so light and medium burst as heavy. Medium: a 37 to 40 mm burst, 6 to 8 m, dark grey, gone in about 5 s and
+  lingering to 9 s. Light: a 20 mm self-destruct burst, a small grey puff 3 to 4 m (grey, not white), gone in about
+  3 s and lingering to 5.5 s. `AirFlak` asks `LingerOf("flak", kind)` only where `linger.flak.by.<kind>.gone_s` is in
+  the recipe: asked by a name with no row, `LingerOf` gives no linger at all, so heavy is still asked by no name.
+  Colours written to land (`game_curve.py write`): medium 68,68,66 lands 40,40,38 and greys to 129,127,124 (lands
+  135,132,128); light 88,88,87 lands 70,70,68, greying to 139,138,136 (lands 150,148,145).
+- **No false brass at sea** (`ground_cases.not_on: ["water"]`). The sea scene's big turrets fire by the howitzer's row
+  in its default seed mode, and that row threw a 0.4 m field-gun case on the water 2.5 m behind the muzzle (within
+  40 m of the eye), left where it fell as the ship steamed on. `CaseRowOf` now takes the ground the gun stands on
+  (every sea `Muzzle` passes "water"; a ground with no switch of its own is passed as it is) and gives no case on a
+  ground the list names. Without the key: as before.
+- **The barrel's wisp** (`muzzle.<gun>.after_wisp`, tank gun, anti-tank gun, howitzer). Laid last in `Muzzle`
+  (`AfterWisp`): a thin wisp from the bore, 10 to 15 puffs 0.03 m at the mouth to 0.26 to 0.5 m, alpha 0.38 to 0.5
+  and thinner as the barrel cools (`cool`), from 3 to 4 s after the shot for 4 to 6 s (the howitzer 5 to 6.5 s, for
+  5 to 7 s), rising 0.35 to 0.6 m/s and leaning on the wind. Only within `within_m` (300) of the eye, `per_gun` (1)
+  from one gun's place (`same_gun_m`, 3 m) and `most` (16) on the field at once, and only while the screen is under
+  two fifths full. Each puff is held to `least_px` (2) across and thinner to match. Its own dice from the place and
+  the moment. It has a room of its own: its pieces (`Bit::bWisp`, at most 16 x 15) are left out of `RoomAsked` and
+  `RoomSeen`, so no gate that reads how full the room is changes for them; in forty guns firing for five minutes
+  every piece laid without the word is laid with it.
+- **The breech's puff** (`steam.breech`): a `Steam` row, grey-brown (written 120,114,108, lands 120,112,102), 0.8 to
+  1.3 m from a 0.25 m breech, 1 to 1.8 s rags, alpha 0.45, held to 3 px. The land scene calls it at a towed gun's or an open
+  self-propelled gun's `case_clang`, at her `breech` socket, back toward her loader. `steam.<row>.least_px` is new
+  for every steam row (0, none, unless a row gives it).
+- **Hatch fumes** (`steam.hatch_fumes`): a faint pale grey wisp (127,126,124, lands 132,130,127; alpha 0.34) rising
+  0.6 to 1.1 m from a closed tank's open hatch on two shots in five by her count.
+- **Cases thrown by a crew** (`Battle::ThrowCase(Now, At, Away, Kind, Key)`, rows `ground_cases.spg` and
+  `ground_cases.tank`): a case through `CaseRowOf` and `GroundCase`, so within `within_m` of the eye, under
+  `most_lying` and the screen's three fifths as the towed guns' are; its length within `case_long_m`, at the row's
+  `odds` against its own dice (from Key, the place and the moment). `spg`: 0.37 to 0.45 m, thrown 1.5 to 3 m/s, lying
+  180 to 300 s, odds 0.7. `tank`: one pitched out of a hatch, 0.35 to 0.5 m, lying 180 to 240 s.
+- Who does what at a `case_clang` is `TheaterFx::AfterShotOf` (plain): a towed gun (kind `gun`) with a breech, a puff;
+  an open self-propelled gun (kind `tank` with a `crew.loader` socket) a puff if her model has a breech, and her case
+  over the side; a closed tank (kind `tank`, no loader's place, a `commander` socket) with her hatch open over half,
+  fumes on her shots 2, 5, 7, 10, 12 ... and one shot in eight, stopped, a case.
+- Test: `unreal/TheaterCommand/Tools/fx_ten/run.sh` (g++ and clang++, the strict flags, `-ffp-contract=off`). The dump
+  of five scripted fights (land guns, a broadside close on the water, a flak barrage of every kind, turrets far off,
+  guns on sand) with the shipped recipe is held to `golden-default.sha256`, printed by the kit before this batch. The
+  test (67 checks) has each part on and off: it fires when it should and only then, its sizes and lives, its own
+  dice (the kit's shared `Seeds` as before), every piece without it laid the same with it, and its cap in the densest
+  case (a six-minute barrage of all three flak kinds, forty guns firing for five minutes, a battery of six open guns
+  for five minutes).
+- Preview: `./fxpreview recipe.txt out ten <flak|wisp|breech|spg|hatch|sea> <frames> [WxH]` (`FX_FLAK`, `FX_DIST`,
+  `FX_GUN`, `FX_TEN_OFF=1` for the land words not given). Lay an overlay by flattening it after `fx.json` into the same
+  recipe (`flatten.py fx.json; flatten.py fx-barrel.json`): a later line wins.
