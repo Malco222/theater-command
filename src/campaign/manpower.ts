@@ -335,8 +335,8 @@ export function reserveLevelWords(nat: string, level: number, divs: number, star
  * and about 9,000 are left"), never the need's own figure or more, and where it rounds to no
  * thousand at all "fewer than 1,000 are left" (the form nearest her words: never "about 0"). Her fourth read of 26
  * November 2026, 06:02Z, point 2: "Not 1,000 less. Where what is left would round to the need's own figure, both go to
- * the hundred" ("this takes about 18,100 men and about 17,600 are left" for 18,090 and 17,600; a need that is a whole
- * thousand at the hundred reads as it, "about 6,000 men"); where they would still read the same at the hundred, the
+ * the hundred" ("this takes about 18,000 men and about 17,600 are left" for 18,090 and 17,600, her own sentence: the
+ * need to the hundred taken downward, so 6,030 reads "about 6,000 men" and a 17,9xx "about 17,900"); where they would still read the same at the hundred, the
  * ten, then the man without "about" (the form nearest her rule, for her word); a need itself under 1,000 men goes by
  * the hundred rule. The need is the order's own men (the design director's ruling 4 of 06:04Z: the floor of a tenth
  * of a division guards a divide only, raisable), so a cadre under a tenth reads as its card does ("about 6,000 men").
@@ -350,8 +350,8 @@ export function noMenWords(nat: string, divs: number, left: number, cls: number)
   // half" would be untrue, so it says "less than one is left". China's engineer corps, corps:eng, is such an order: with
   // half a division's worth to just under one left, this is its live refusal.)
   // (Part of a division's worth is said in men, so what is left is said in men too: to the thousand where the two
-  // thousands differ, else both to the hundred, the ten or the man, the first at which they differ. Rounding keeps the
-  // order, so what is left never reads as the need or more.)
+  // thousands differ, else both to the hundred, the ten or the man, the first at which what is left reads below the
+  // need, so what is left never reads as the need or more.)
   // (The need is the order's own men; a tenth of a division stands in only for an order of nothing, as in raisable.)
   const held = divs > 0 ? divs : Math.max(0.1, divs);
   if (Number.isInteger(divs)) {
@@ -365,8 +365,11 @@ export function noMenWords(nat: string, divs: number, left: number, cls: number)
     takes = `${menWorth(per, held, false)} and ${have >= 1 ? `about ${f(have * 1000)} are left` : 'fewer than 1,000 are left'}`;
   } else {
     for (const unit of [100, 10]) {
-      const a = Math.round(n / unit), b = Math.round(m / unit);
-      if (a !== b) { takes = `about ${f(a * unit)} men and ${b >= 1 ? `about ${f(b * unit)} are left` : `fewer than ${f(unit)} are left`}`; break; }
+      // (At the hundred the need is taken downward, her own figures: 18,090 reads "about 18,000", 6,030 "about 6,000", a
+      // 17,9xx "about 17,900"; what is left at its nearest. Where what is left would then read as the need or more, the
+      // ten; at the ten both to their nearest, which keeps the order.)
+      const a = unit === 100 ? Math.floor(n / unit + 1e-9) : Math.round(n / unit), b = Math.round(m / unit);
+      if (b < a) { takes = `about ${f(a * unit)} men and ${b >= 1 ? `about ${f(b * unit)} are left` : `fewer than ${f(unit)} are left`}`; break; }
     }
     if (!takes) {
       const a = Math.round(n), b = Math.max(0, Math.min(Math.floor(m + 1e-6), a - 1));

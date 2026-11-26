@@ -615,7 +615,7 @@ describe('the third read of 04:58Z: months in words, and the refusal in one meas
     expect(x.note).toBe('Forms up at Chungking, for 50% of the price of a new corps. Takes about 6,000 men and 1,900 rifles.');
     expect(ningpo(5000).why).toBe(`The reserve has not the men: this takes about 6,000 men and about 5,000 are left.${CLASS}`);
     // Wenchow's garrison (0.05, 3,350 men) through the function, with 3,000 and 2,000 left: its own need, never the floor's 7,000.
-    expect(noMenWords('CHN', 0.05, 3000 / menScale('CHN')!, 1.5644171779141105)).toBe(`The reserve has not the men: this takes about 3,400 men and about 3,000 are left.${CLASS}`);
+    expect(noMenWords('CHN', 0.05, 3000 / menScale('CHN')!, 1.5644171779141105)).toBe(`The reserve has not the men: this takes about 3,300 men and about 3,000 are left.${CLASS}`);
     expect(noMenWords('CHN', 0.05, 2000 / menScale('CHN')!, 1.5644171779141105)).toBe(`The reserve has not the men: this takes about 3,000 men and about 2,000 are left.${CLASS}`);
   });
 
@@ -623,8 +623,9 @@ describe('the third read of 04:58Z: months in words, and the refusal in one meas
     const per = menScale('CHN')!, cls = 1.5644171779141105, need = 0.27;
     expect(noMenWords('CHN', need, 9000 / per, cls)).toBe(`The reserve has not the men: this takes about 18,000 men and about 9,000 are left.${CLASS}`);
     // About 17,600 left of 18,090 would read "about 18,000", the need's own figure: both go to the hundred (her fourth
-    // read, point 2; re-pinned in round 5 from round 4's "about 17,000 are left", 1,000 less).
-    expect(noMenWords('CHN', need, 17600 / per, cls)).toBe(`The reserve has not the men: this takes about 18,100 men and about 17,600 are left.${CLASS}`);
+    // read, point 2; re-pinned in round 5 from round 4's "about 17,000 are left", 1,000 less), the need to the hundred
+    // taken downward, her own sentence for this case word for word (round 5's mender, F1: not "about 18,100").
+    expect(noMenWords('CHN', need, 17600 / per, cls)).toBe(`The reserve has not the men: this takes about 18,000 men and about 17,600 are left.${CLASS}`);
     expect(noMenWords('CHN', need, 300 / per, cls)).toBe(`The reserve has not the men: this takes about 18,000 men and fewer than 1,000 are left.${CLASS}`);
     expect(noMenWords('CHN', need, 0, cls)).toBe(`The reserve has not the men: this takes about 18,000 men and fewer than 1,000 are left.${CLASS}`);
     expect(noMenWords('CHN', 3, 0.2, cls)).toBe(`The reserve has not the men: this takes three divisions' worth and less than half of one is left.${CLASS}`);
@@ -674,7 +675,10 @@ describe('the third read of 04:58Z: months in words, and the refusal in one meas
   // to the hundred ... (the need also to the hundred if it is not a whole thousand ...)". Where they would still read the
   // same at the hundred, the ten, then the man without "about": the form nearest her rule, for her word.
   it("W2. the hundred, on the live boards: Chuchow at 17,600, 9,000 and 499 left; Taichow at 5,800, 5,000 and 6,029", () => {
-    expect(chuchowWhy(17600)).toBe(`The reserve has not the men: this takes about 18,100 men and about 17,600 are left.${CLASS}`);
+    // Her bold sentence for this live case, word for word: "this takes about 18,000 men and about 17,600 are left". The
+    // need to the hundred is taken downward (18,090 -> 18,000, 6,030 -> 6,000, any 17,9xx -> 17,900, her three figures);
+    // where what is left at the hundred would then read as the need or more, the ten (18,090 with 18,060 left).
+    expect(chuchowWhy(17600)).toBe(`The reserve has not the men: this takes about 18,000 men and about 17,600 are left.${CLASS}`);
     expect(chuchowWhy(9000)).toBe(`The reserve has not the men: this takes about 18,000 men and about 9,000 are left.${CLASS}`);
     expect(chuchowWhy(499)).toBe(`The reserve has not the men: this takes about 18,000 men and fewer than 1,000 are left.${CLASS}`);
     expect(ningpo(5800).why).toBe(`The reserve has not the men: this takes about 6,000 men and about 5,800 are left.${CLASS}`);
@@ -684,12 +688,12 @@ describe('the third read of 04:58Z: months in words, and the refusal in one meas
 
   it('W2. the edges through the function: the ten, the man, a need under 1,000 men, and whole counts as built', () => {
     const per = menScale('CHN')!, cls = 1.5644171779141105;
-    expect(noMenWords('CHN', 0.27, 18000 / per, cls)).toBe(`The reserve has not the men: this takes about 18,100 men and about 18,000 are left.${CLASS}`);
+    expect(noMenWords('CHN', 0.27, 18000 / per, cls)).toBe(`The reserve has not the men: this takes about 18,090 men and about 18,000 are left.${CLASS}`);
     expect(noMenWords('CHN', 0.27, 18060 / per, cls)).toBe(`The reserve has not the men: this takes about 18,090 men and about 18,060 are left.${CLASS}`);
     expect(noMenWords('CHN', 0.27, 18088 / per, cls)).toBe(`The reserve has not the men: this takes 18,090 men and 18,088 are left.${CLASS}`);
     expect(noMenWords('CHN', 0.27, 17400 / per, cls)).toBe(`The reserve has not the men: this takes about 18,000 men and about 17,000 are left.${CLASS}`);
-    expect(noMenWords('CHN', 0.01, 300 / per, cls)).toBe(`The reserve has not the men: this takes about 700 men and about 300 are left.${CLASS}`);
-    expect(noMenWords('CHN', 0.01, 30 / per, cls)).toBe(`The reserve has not the men: this takes about 700 men and fewer than 100 are left.${CLASS}`);
+    expect(noMenWords('CHN', 0.01, 300 / per, cls)).toBe(`The reserve has not the men: this takes about 600 men and about 300 are left.${CLASS}`);
+    expect(noMenWords('CHN', 0.01, 30 / per, cls)).toBe(`The reserve has not the men: this takes about 600 men and fewer than 100 are left.${CLASS}`);
     expect(noMenWords('CHN', 1, 0.7, cls)).toBe(`The reserve has not the men: this takes one division's worth and less than one is left.${CLASS}`);
     expect(noMenWords('CHN', 3, 1.4, cls)).toBe(`The reserve has not the men: this takes three divisions' worth and about one is left.${CLASS}`);
     expect(noMenWords('JAP', 0.09, 0, 1)).toBeNull();
