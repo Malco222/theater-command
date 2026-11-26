@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6739cdcac 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ecf572af6 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -64909,6 +64909,22 @@
      */
     spent: { att: 0.13, def: 0.18 },
     /**
+     * The refits that ride with "Only the hits that land shake a unit" (sim.hitsShake), read in place of the values they
+     * name only while it is on (the design director, 26 November 13:36Z); off, the values above stand, byte for byte, and
+     * since hitsShake needs "Attackers stay where they stop to fight" (stand), only with both on. Each fitted by the method
+     * and record of the value it replaces, with stand and hitsShake on:
+     * - take.marsh 1.23, in place of hold.take.marsh 1.32 (DD 13:47Z). Its record, ruling 226 mark 4: the plain attack
+     *   (select all, right-click the nearest, Space) at 1.1 to 1.4 on marsh carries the ground within 4 points of its
+     *   card, about 2 in the attack's favour. Over 800 battles: 1.22 +1.2, 1.23 +1.7, 1.24 +3.3; 1.32 +10.4 (the old sum
+     *   had marsh blocks breaking mid-fight; with each blow's nerve on its own harm they stand, and the held marsh gave
+     *   the attack more than its card).
+     * spent is not refitted (DD 14:08Z): with it on, its record (each side's losses within a fifth of the campaign's
+     * bill, winners and losers alike, b356) holds on every set, and its drift is below one step of the knob.
+     */
+    shaken: {
+      take: { marsh: 1.23 }
+    },
+    /**
      * But not while more than this share of its power stands fresh or has not fought: one worn block never takes a fresh
      * army with it (ruling 226(2), b476(1)).
      */
@@ -74517,7 +74533,11 @@
     holdTake(u, t) {
       const p = this.ticket.place, H = LAND2.hold;
       const streets = streetsOf(p);
-      return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 && t.joined === void 0 ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * this.flankHold;
+      return this.takeOf(p.terrain) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 && t.joined === void 0 ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * this.flankHold;
+    }
+    /** The held defence's share of the damage on its ground: hold.take, or its refit while hitsShake is on (LAND.shaken). */
+    takeOf(terrain) {
+      return (this.hitsShake ? LAND2.shaken.take[terrain] : void 0) ?? LAND2.hold.take[terrain] ?? 0.4;
     }
     say(e) {
       const ev = { t: Math.round(this.t * 10) / 10, ...e };
