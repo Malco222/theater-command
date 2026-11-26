@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 88c40891 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of a21b0487 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -8044,6 +8044,41 @@
        * (live.ts). Off unless whoever opens the field turns it on.
        */
       __publicField(this, "standRule", false);
+      /**
+       * What it chose it keeps while that still holds (the design director, 26 November 2026 01:28Z: one rule with the
+       * stand above, on the same row and switch, read only from the game's own facts, with no new figure). Three more
+       * choices a block made afresh every tick with no memory of the tick before, and so turned back and forth between.
+       * Each has its own key here so the rule's gate can count them alone and together; all are on with the rule, and none
+       * is read with it off.
+       *
+       * way: on its way round ground it cannot enter (over a bridge), a block makes for the furthest turning point it can
+       * walk straight to. Shoved a step to one side at the bridge's end it lost that line and turned for the nearer point,
+       * found the line again a step on and turned back, and so on for as long as a friend stood beside it. On: while it is
+       * still at the turning point before the one it chose (the march's own 6 m, where a block on a way takes a turning
+       * point as reached) it goes on for the one it chose; further off it falls back to the nearer one, makes for that
+       * until it is at it or that is out of its sight too, and while that nearer point is still under its own box it
+       * steps to it as it faces the one it chose, with no wheel to a way of a few metres.
+       *
+       * beside: a block on the march slides a friend in its way aside and slides aside itself, by the side the friend lies
+       * across its front. A friend dead ahead lies now a hair to its left and now a hair to its right as the block's own
+       * heading wavers, so the two were slid one way and the other tick by tick. On: the side it slid to pass that friend
+       * the tick before is the side it slides now, while the two still overlap and the ground still lets them. And the
+       * place of its stand before its target: a friend it stood aside for holds the same ground still (where it is, or the
+       * stand its own attack has it make for), whether a tick finds that friend halted or stepping (one that waits and
+       * steps by turns held the one ground one tick and the other, or none, the next, and the stand hopped between two
+       * places 30 m and more apart).
+       *
+       * back: a block that has carried out a move order and is then eased a few metres off its place by its friends is
+       * sent there again by its general. It wheeled to that way of a few metres, marched it and wheeled back to its line's
+       * facing. On: a move order sent again to the place it already holds (the place of the move it last carried out, and
+       * still under its own box) is the same order, so it steps back to it as it faces: no wheel.
+       *
+       * step: the same of a block on an attack order that has stood to fight. Eased a few metres off its stand with its
+       * target at the edge of its hold, it wheeled to that way of a few metres, marched it and wheeled back to what it
+       * fights. On: while its stand is still under its own box it steps back to it as it faces what it fights, and its
+       * stand is kept the while.
+       */
+      __publicField(this, "standKeeps", { way: true, beside: true, back: true, step: true });
       /** faceRule: of the enemies that struck each block this tick, the costliest, what its blow cost face on, and whether it landed on the front. */
       __publicField(this, "costliest", /* @__PURE__ */ new Map());
       /** Each own team block's parent force (own-teams.ts ownTeamParents), by the forces' ids: read once from the ticket. */
@@ -8241,6 +8276,15 @@
       /** By how it moves: the cells within a few of ground it can hardly cross or not at all (a river, rock, marsh). */
       __publicField(this, "hardNear", {});
       __publicField(this, "ashore", null);
+      /**
+       * Nobody stands in anybody else: where two blocks' ground overlaps they are eased apart along the shallower way, a
+       * few metres a second, onto ground they can stand on. Blocks side by side in a line, or one behind the other, are
+       * left alone; enemies keep a few metres between their fronts. For the screens and the models as much as for the
+       * fight: two divisions never share one patch of ground.
+       */
+      /** standKeeps.beside: by pair of friends, the way across the first's front they last slid apart, and the count of the tick they did. */
+      __publicField(this, "sides", /* @__PURE__ */ new Map());
+      __publicField(this, "spreads", 0);
       /** The player's group attacks' 'together' groups, numbered above the computer's (ai.ts uses block ids and 100000). */
       __publicField(this, "groupIds", 2e5);
       /** Tank blocks the card counted as covered by their foot (item 7): set when the armies are made. */
@@ -9562,6 +9606,14 @@
           }
         }
       }
+      if (this.standRule) {
+        const h = u.heldAt;
+        if (this.standKeeps.back && o.kind === "move" && h && h[0] === o.x && h[1] === o.y && this.under(u, o.x, o.y)) u.stepsBack = true;
+        else {
+          u.stepsBack = void 0;
+          u.heldAt = void 0;
+        }
+      }
       u.order = o;
       u.keepFace = o.face ?? null;
       delete u.aim;
@@ -9571,6 +9623,11 @@
       const t = o.kind === "attack" && o.target !== void 0 ? this.unit(o.target) : void 0;
       const at = t ? this.lanePoint(u, t, this.closeTo(u)) : [o.x, o.y];
       u.path = at ? this.route(u, at[0], at[1]) : [];
+    }
+    /** A point under the block's own box, as it faces. */
+    under(u, x, y) {
+      const [fx, fy] = ahead(u.face), [rx, ry] = ahead(u.face + Math.PI / 2), dx = x - u.x, dy = y - u.y;
+      return Math.abs(dx * rx + dy * ry) <= u.w / 2 && Math.abs(dx * fx + dy * fy) <= u.d / 2;
     }
     /** How near a block closes on what it attacks before it stands and fights: well inside its reach. */
     closeTo(u) {
@@ -9611,6 +9668,23 @@
           continue;
         }
         if (k < 0) return [[u.x, u.y]];
+        if (this.standRule && this.standKeeps.way) {
+          const at = (i) => dist(u.x, u.y, pts[i][0], pts[i][1]) <= 6;
+          if (w.back !== void 0) {
+            const p = pts[w.back];
+            if (w.back > k || !this.dry(m, u.x, u.y, p[0], p[1])) w.back = void 0;
+            else if (!at(w.back)) k = w.back;
+            else {
+              k = Math.max(k, Math.min(w.back + 1, pts.length - 1));
+              w.back = void 0;
+            }
+          }
+          if (w.back === void 0 && w.at !== void 0 && k < w.at) {
+            if (w.at < pts.length && at(w.at - 1)) k = w.at;
+            else w.back = k;
+          }
+          w.at = k;
+        }
         const way = pts.slice(k);
         if (w.whole && this.dry(m, end[0], end[1], x, y) && (end[0] !== x || end[1] !== y)) way.push([x, y]);
         return way;
@@ -10359,12 +10433,6 @@
       this.judge();
       this.drill?.step();
     }
-    /**
-     * Nobody stands in anybody else: where two blocks' ground overlaps they are eased apart along the shallower way, a
-     * few metres a second, onto ground they can stand on. Blocks side by side in a line, or one behind the other, are
-     * left alone; enemies keep a few metres between their fronts. For the screens and the models as much as for the
-     * fight: two divisions never share one patch of ground.
-     */
     spread() {
       const us = this.units.filter((u) => fighting2(u) && u.kind !== "fort");
       const can = (u, ux, uy, push) => {
@@ -10381,6 +10449,7 @@
           u.y = clamp(u.y + uy * push, 5, this.field.h - 5);
         }
       };
+      const keep = this.standRule && this.standKeeps.beside, now = keep ? ++this.spreads : 0;
       for (let i = 0; i < us.length; i++) for (let j = i + 1; j < us.length; j++) {
         const a = us[i], b = us[j];
         const dx = b.x - a.x, dy = b.y - a.y;
@@ -10415,10 +10484,17 @@
           }
         }
         if (a.side === b.side && (a.pressing !== void 0 || b.pressing !== void 0) && !this.narrows(a, a.x, a.y) && !this.narrows(b, b.x, b.y)) {
-          const sl = Math.sign(lat) || (a.id < b.id ? 1 : -1), p = Math.min(pl / 2, (Math.max(a.speed, b.speed) + LAND.spread) * DT);
+          const p = Math.min(pl / 2, (Math.max(a.speed, b.speed) + LAND.spread) * DT);
+          let sl = Math.sign(lat) || (a.id < b.id ? 1 : -1);
+          const pair = keep ? `${a.id}:${b.id}` : "", was = keep ? this.sides.get(pair) : void 0;
+          if (was && was.n === now - 1) {
+            const ks = Math.sign(rx * was.x + ry * was.y);
+            if (ks !== 0 && can(a, -rx * ks, -ry * ks, p) && can(b, rx * ks, ry * ks, p)) sl = ks;
+          }
           if (can(a, -rx * sl, -ry * sl, p) && can(b, rx * sl, ry * sl, p)) {
             go(a, -rx * sl, -ry * sl, p);
             go(b, rx * sl, ry * sl, p);
+            if (keep) this.sides.set(pair, { x: rx * sl, y: ry * sl, n: now });
             if (a.pressing !== void 0 && b.pressing !== void 0) {
               const wa2 = this.toGo(a) > this.toGo(b) || this.toGo(a) === this.toGo(b) && a.id > b.id;
               (wa2 ? a : b).yieldTo = (wa2 ? b : a).id;
@@ -10878,13 +10954,28 @@
       if (u.waits) this.endWait(u, "broke");
       else if (this.repay.length) this.landNow(u);
     }
+    /**
+     * The way a halted block wants to face, or null for as it faces: the facing its line was given, unless what it meets
+     * is well off that; what it meets is the enemy it is fighting, or (faceRule) the one whose blow cost it most this tick.
+     */
+    facing(u) {
+      const e = u.engaged !== void 0 ? this.unit(u.engaged) : void 0;
+      let want = u.keepFace;
+      const top = this.faceRule ? this.costliest.get(u.id) : void 0, by2 = top ? this.unit(top.by) : void 0;
+      const meet = by2 && live2(by2) ? by2 : e;
+      if (meet && !u.pinned) {
+        const off = Math.abs(turn(u.keepFace ?? u.face, bearing(u.x, u.y, meet.x, meet.y)));
+        if (u.keepFace === null || off > Math.PI / 3) want = bearing(u.x, u.y, meet.x, meet.y);
+      }
+      return want;
+    }
     move(u) {
       const k = u.kind;
       u.pressing = void 0;
       if (u.ovr && this.drive(u)) return;
       const gave = u.yieldTo !== void 0 ? this.unit(u.yieldTo) : void 0;
       u.yieldTo = void 0;
-      let to = null, run = false;
+      let to = null, run = false, sidle = false;
       if (u.state === "routing") {
         to = [u.x, u.side === "att" ? -50 : this.field.h + 50];
         run = true;
@@ -10911,7 +11002,10 @@
           if (at) {
             u.path = this.route(u, at[0], at[1]);
             to = u.path[0];
-            if (this.standRule) u.stoodFor = void 0;
+            if (this.standRule) {
+              sidle = this.standKeeps.step && u.stoodFor === t.id && !!u.stand && at[0] === u.stand[0] && at[1] === u.stand[1] && u.path.length === 1 && this.under(u, at[0], at[1]);
+              if (!sidle) u.stoodFor = void 0;
+            }
           } else {
             u.path = [];
             to = null;
@@ -10945,14 +11039,9 @@
       if (!to) {
         u.speed = 0;
         const e = u.engaged !== void 0 ? this.unit(u.engaged) : void 0;
-        let want = u.keepFace;
-        const top2 = this.faceRule ? this.costliest.get(u.id) : void 0, by2 = top2 ? this.unit(top2.by) : void 0;
-        const meet = by2 && live2(by2) ? by2 : e;
-        if (meet && !u.pinned) {
-          const off2 = Math.abs(turn(u.keepFace ?? u.face, bearing(u.x, u.y, meet.x, meet.y)));
-          if (u.keepFace === null || off2 > Math.PI / 3) want = bearing(u.x, u.y, meet.x, meet.y);
-        }
+        const want = this.facing(u);
         if (u.order?.kind === "move" && !u.path.length) {
+          if (this.standRule) u.heldAt = [u.order.x, u.order.y];
           u.order = null;
         }
         if (want !== null && Math.abs(turn(u.face, want)) > 0.02) {
@@ -10978,14 +11067,21 @@
         }
       }
       const off = turn(u.face, head);
-      if (!run && !wading && Math.abs(off) > 0.6) {
+      const fell = this.standRule && this.standKeeps.way && !run && u.path.length > 1 && to === u.path[0] ? this.ways.get(u.id) : void 0;
+      const via = !!fell && fell.back !== void 0 && fell.pts[fell.back] === to && this.under(u, to[0], to[1]);
+      const back = this.standRule && !run && (sidle || via || u.stepsBack === true && u.order?.kind === "move");
+      if (!run && !wading && !back && Math.abs(off) > 0.6) {
         this.turnTo(u, head);
         u.speed = 0;
         u.act = "turn";
         return;
       }
       if (run) u.face = head;
-      else this.turnTo(u, head);
+      else if (!back) this.turnTo(u, head);
+      else {
+        const want = via ? bearing(u.x, u.y, u.path[1][0], u.path[1][1]) : sidle ? this.facing(u) : u.keepFace;
+        if (want !== null) this.turnTo(u, want);
+      }
       const m = MOTION[k];
       const g = groundAt(this.field, u.x, u.y);
       let pace = LAND.pace[m][g];
@@ -11027,6 +11123,7 @@
       if (d <= Math.max(6, stepLen + 0.01)) {
         u.path.shift();
         if (!u.path.length && u.order?.kind === "move") {
+          if (this.standRule) u.heldAt = [u.order.x, u.order.y];
           u.order = null;
           u.speed = 0;
         }
@@ -11115,9 +11212,11 @@
       }
       const face = bearing(p[0], p[1], t.x, t.y), [sx, sy] = ahead(face + Math.PI / 2);
       const fit = (q) => off(q[0], q[1]) <= hold && !this.wet(u, q[0], q[1]) && !this.units.some((e) => e.side !== u.side && live2(e) && dist(e.x, e.y, q[0], q[1]) < (Math.max(e.w, e.d) + Math.max(u.w, u.d)) / 2);
+      const asides = [];
       for (let k = 0; k < 4; k++) {
         const f = this.claimed(u, p[0], p[1], face);
         if (!f) break;
+        asides.push({ id: f.id, st: f.st });
         const lat = (p[0] - f.x) * sx + (p[1] - f.y) * sy, mine = (u.x - f.x) * sx + (u.y - f.y) * sy;
         const side = Math.abs(lat) >= 1 ? Math.sign(lat) : Math.sign(mine) || Math.sign(lane) || (u.id < f.id ? -1 : 1);
         const by2 = (u.w + f.w) / 2 + LAND.room;
@@ -11128,6 +11227,7 @@
         p = q;
       }
       if (old && kept && this.claimed(u, p[0], p[1], face)) return there(old);
+      if (this.standRule) u.standBy = asides.length ? asides : void 0;
       u.stand = p;
       u.standFor = key;
       u.standFace = face;
@@ -11142,10 +11242,18 @@
       const [fx, fy] = ahead(face), [rx, ry] = ahead(face + Math.PI / 2), mine = dist(u.x, u.y, x, y);
       for (const f of this.units) {
         if (f === u || f.side !== u.side || !fighting2(f)) continue;
-        let at = f.speed <= 0.5 ? [f.x, f.y] : null;
-        if (!at && f.order?.kind === "attack" && f.stand) {
-          const theirs = dist(f.x, f.y, f.stand[0], f.stand[1]);
-          if (theirs < mine || theirs === mine && f.id < u.id) at = f.stand;
+        const was = this.standRule && this.standKeeps.beside ? u.standBy?.find((b) => b.id === f.id) : void 0;
+        let at = was ? !was.st ? [f.x, f.y] : f.order?.kind === "attack" && f.stand ? f.stand : null : null, st = !!was && was.st;
+        if (!at) {
+          st = false;
+          if (f.speed <= 0.5) at = [f.x, f.y];
+          else if (f.order?.kind === "attack" && f.stand) {
+            const theirs = dist(f.x, f.y, f.stand[0], f.stand[1]);
+            if (theirs < mine || theirs === mine && f.id < u.id) {
+              at = f.stand;
+              st = true;
+            }
+          }
         }
         if (!at) continue;
         const dx = at[0] - x, dy = at[1] - y;
@@ -11153,7 +11261,7 @@
         const c = Math.abs(Math.cos(f.face - face)), s = Math.abs(Math.sin(f.face - face));
         const pl = u.w / 2 + f.w / 2 * c + f.d / 2 * s + LAND.room / 2 - Math.abs(dx * rx + dy * ry);
         const pd = u.d / 2 + f.w / 2 * s + f.d / 2 * c - Math.abs(dx * fx + dy * fy);
-        if (pl > 0 && pd > 0) return { id: f.id, x: at[0], y: at[1], w: f.w };
+        if (pl > 0 && pd > 0) return { id: f.id, x: at[0], y: at[1], w: f.w, st };
       }
       return null;
     }
