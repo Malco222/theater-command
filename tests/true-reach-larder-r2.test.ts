@@ -18,14 +18,15 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_SUPPLY_CHECK = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { addCorps, allied, capitulate, capture, computeSupply, createGame, declareWar, keptStoresHis, keptStoresRun, natIndex, onPortStores, portKeep, setTrueReach, trueReach } from '../src/campaign/game';
+import { addCorps, allied, capitulate, capture, computeSupply, createGame, declareWar, keptStoresHis, keptStoresRun, natIndex, onPortStores, portKeep, removeCorps, setTrueReach, startPhase, trueReach } from '../src/campaign/game';
+import { portStores, storesLeft } from '../src/campaign/fortrows';
 import { finishMonthEnd } from '../src/campaign/finish';
 import { liberate } from '../src/campaign/liberation';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { zoneOf } from '../src/campaign/navy';
-import { arrive, besieged, garrison, garrisonFed, invest, monthsShut, ringClosed, siegeMonth, siegeView, storesOf } from '../src/campaign/siege';
+import { arrive, besieged, garrison, garrisonFed, garrisonOf, invest, lift, monthsShut, ringClosed, siegeMonth, siegeView, storesOf } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
-import type { Game, Region } from '../src/campaign/types';
+import type { Corps, Game, Region } from '../src/campaign/types';
 
 /** A war nobody plays, the old chart's first day, with Units decide; true reach's sub-flag as asked (and the fortress rows). */
 const war = (on: boolean, forts = false): Game => {
@@ -243,11 +244,11 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
       at(g, r, 8, 1);
       expect([on, portKeep(g, r), storesOf(g, r), opened(g, r, 'ITA')]).toEqual([on, 2, 4, on ? 2 : 0]);
       // Gibraltar under the fortress rows keeps the historian's sixteen months of its garrison's stores: the stores
-      // ran seven months before month 9, and the town holds four.
+      // ran seven months before month 9. On, the town's stores are the row's sixteen (one figure, F1); off, its own four.
       const f = war(on, true);
       const gib = f.byName['Gibraltar'];
       at(f, gib, 9, 1);
-      expect([on, portKeep(f, gib), keptStoresRun(f, gib), storesOf(f, gib), opened(f, gib, 'ESP')]).toEqual([on, 16, 7, 4, on ? 4 : 0]);
+      expect([on, portKeep(f, gib), keptStoresRun(f, gib), storesOf(f, gib), opened(f, gib, 'ESP')]).toEqual([on, 16, 7, on ? 16 : 4, on ? 7 : 0]);
     }
   });
 
@@ -740,6 +741,105 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
         crew.supplied = true;
         expect([on, by, since, keptStoresHis(g, gib), onPortStores(g, crew)]).toEqual([on, by, since, his, on ? his : true]);
       }
+    }
+  });
+
+  /**
+   * Gibraltar with the fortress rows and true reach as asked: its crew and a British corps in the town, Britain's ships
+   * fill the stores in month 1, the sea then shuts for everyone and Britain's months 2 to 5 live on the kept stores. In
+   * Spain's month 5, after Britain's, the card is read and Spain closes round the town.
+   */
+  function gibraltar(on: boolean): { g: Game; r: Region; crew: Corps; inf: Corps; card: string } {
+    const g = war(on, true);
+    const r = g.byName['Gibraltar'];
+    const crew = g.corps.find((c) => !c.dead && c.nat === 'UK' && c.name === 'Gibraltar garrison')!;
+    const inf = addCorps(g, 'UK', 'Gibraltar test', 'inf', 1, 'Gibraltar', {});
+    expect(garrison(g, inf)).toBe(true);
+    computeSupply(g);
+    expect([on, g.turn, g.flags[`stores:${r.id}`], filler(g, r), portStores(g, r), portKeep(g, r), storesOf(g, r)]).toEqual([on, 1, 1, on ? 'UK' : undefined, 16, 16, on ? 16 : 4]);
+    for (const n of Object.values(g.nations)) { n.seaSupply = false; n.sealift = 0; }
+    for (let t = 2; t <= 5; t++) {
+      g.turn = t;
+      startPhase(g, 'UK');
+      // Every corps there is fed from the kept stores; the crew eats its own clock, and the corps beside it none.
+      expect([on, t, crew.supplied, inf.supplied, onPortStores(g, crew), storesLeft(g, crew), g.flags[`eaten:${inf.id}`]]).toEqual([on, t, true, true, true, 17 - t, undefined]);
+    }
+    g.phase = g.order.indexOf('ESP');
+    expect(g.order.indexOf('ESP')).toBeGreaterThan(g.order.indexOf('UK'));
+    const card = siegeView(g, r.id)!.lines.at(-1)!;
+    declareWar(g, 'ESP', 'UK');
+    round(g, 'ESP', r, 6);
+    expect(arrive(g, r, 'ESP')).toBe(false);
+    expect([on, besieged(g, r), ringClosed(g, r), garrisonOf(r).includes(inf)]).toEqual([on, true, true, true]);
+    return { g, r, crew, inf, card };
+  }
+
+  it('F1, one figure at a fortress row port (the design director, 22:08Z): Gibraltar four months unfed, the siege opens with twelve of the row\'s sixteen months left, and the card, the siege and the crew\'s own clock read the same (off: the town\'s own four and the old card, pinned)', () => {
+    const hungry: Record<string, number> = {};
+    for (const on of [false, true]) {
+      const { g, r, crew, inf, card } = gibraltar(on);
+      // The card the moment before the siege: on, the row's sixteen less the four months eaten, in the UI director's words
+      // (the months in words to ten and in digits above, W1).
+      expect([on, card]).toEqual([on, on
+        ? 'Closely invested, its stores would feed the defenders for 12 months, and for as long as ships can reach its harbour. Four months of its stores have been eaten with no ship coming in.'
+        : 'Closely invested, its stores would feed the defenders for 4 months, and for as long as ships can reach its harbour.']);
+      // The siege opens with the four months charged against the same sixteen: the besieged card, its `left` and the
+      // crew's own clock all read twelve. Off, the town's own four, nothing charged, and the crew on its sixteen.
+      const v = siegeView(g, r.id)!;
+      expect([on, monthsShut(g, r), storesOf(g, r), g.flags[`sgs:${r.id}`], v.stores, v.left, v.lines.find((l) => l.startsWith('Closely invested')), storesLeft(g, crew)]).toEqual([on,
+        on ? 4 : 0, on ? 16 : 4, on ? 16 : undefined, on ? 16 : 4, on ? 12 : 4,
+        `Closely invested. Its stores will feed the defenders ${on ? '12 more months' : '4 more months'}; after that they go hungry.`, 12]);
+      // Britain's months under siege: the crew eats its own clock, the corps beside it the siege's, one larder each and
+      // never both, and on the two count down together.
+      for (let t = 6; t <= 18 && !hungry[String(on)]; t++) {
+        g.turn = t;
+        startPhase(g, 'UK');
+        const shut = t - 5 + (on ? 4 : 0);
+        expect([on, t, monthsShut(g, r), inf.supplied, g.flags[`eaten:${inf.id}`]]).toEqual([on, t, shut, shut <= (on ? 16 : 4), undefined]);
+        if (!crew.dead) {
+          expect([on, t, crew.supplied, storesLeft(g, crew)]).toEqual([on, t, false, 17 - t]);
+          if (on) expect([t, siegeView(g, r.id)!.left]).toEqual([t, storesLeft(g, crew)]);
+        }
+        if (!inf.supplied) hungry[String(on)] = t;
+      }
+    }
+    // Off, the town's four months after the window's: hungry in month 10. On, sixteen in all from the month the sea shut.
+    expect(hungry).toEqual({ false: 10, true: 18 });
+  });
+
+  it('F2: a fortified port overseas with no fortress row keeps its own stores, with the fortress rows and true reach on or off: Malta and Tobruk', () => {
+    for (const name of ['Malta', 'Tobruk']) {
+      const seen: number[] = [];
+      for (const on of [false, true]) {
+        for (const forts of [false, true]) {
+          const g = war(on, forts);
+          const r = g.byName[name];
+          expect([name, on, forts, r.overseas, r.port, !!r.fort, portStores(g, r)]).toEqual([name, on, forts, true, true, true, null]);
+          seen.push(storesOf(g, r));
+          invest(g, r, 'GER');
+          expect([name, on, forts, g.flags[`sgs:${r.id}`], storesOf(g, r)]).toEqual([name, on, forts, undefined, seen[0]]);
+        }
+      }
+      expect([name, seen]).toEqual([name, name === 'Malta' ? [4, 4, 4, 4] : [3, 3, 3, 3]]);
+    }
+  });
+
+  it('F3: the crew gone in mid siege does not starve the garrison at once: the siege keeps the figure it opened with (the window, with no siege, follows the living rows)', () => {
+    for (const on of [false, true]) {
+      const { g, r, crew, inf } = gibraltar(on);
+      for (let t = 6; t <= 7; t++) { g.turn = t; startPhase(g, 'UK'); }
+      expect([on, monthsShut(g, r), inf.supplied, crew.dead]).toEqual([on, on ? 6 : 2, true, false]);
+      // The crew is lost (a storm, or its own stores run out): no living row stands at the port.
+      removeCorps(g, crew);
+      expect([on, portStores(g, r), portKeep(g, r)]).toEqual([on, null, 2]);
+      // On, the siege still reads its sixteen: ten months are left and the garrison eats in month 8. Off, the town's four.
+      expect([on, storesOf(g, r), siegeView(g, r.id)!.left, garrisonFed(g, r)]).toEqual([on, on ? 16 : 4, on ? 10 : 2, true]);
+      g.turn = 8;
+      startPhase(g, 'UK');
+      expect([on, monthsShut(g, r), inf.supplied, siegeView(g, r.id)!.left]).toEqual([on, on ? 7 : 3, true, on ? 9 : 1]);
+      // Once the siege is raised the town reads its own figure again, as the window does with no row left.
+      lift(g, r);
+      expect([on, g.flags[`sgs:${r.id}`], storesOf(g, r), portKeep(g, r)]).toEqual([on, undefined, 4, 2]);
     }
   });
 });
