@@ -686,6 +686,11 @@ def make(army, outdir, log=print):
             if x["kind"] == "chips":
                 x["_recipe"] = {"name": r["name"], "paint": r.get("paint", []), "base": r.get("base")}
     D["helmets"] = [variety.helmet_entry(D, r, inks) for r in UF.RECIPES[army]]
+    # (no "from" or "to" month, whatever variety.py writes: Brian's standing rule, 26 November 2026, a man's
+    # markings and paint never hang on the year; finishes_any_year.py)
+    for h in D["helmets"]:
+        h.pop("from", None)
+        h.pop("to", None)
     D["inks"] = inks.list
     D["marks"]["roof"] = roof(D)
     D["name"] = f"soldier_{army}"
