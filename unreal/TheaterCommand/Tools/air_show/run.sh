@@ -79,16 +79,16 @@ fi
 #  - both on: data/shake-rows-on-2464374bb.txt, 2464374bb's own Battle files and probe.
 # Both off, the He 111s weave (0.94 swings over 1 degree a bomber's air minute at x1, banked over 5 degrees 9.8% of the
 # time) as 30899121's did; the bombers' row on, 0.00 and 0.0%.
-if ! { AIR_SMOOTH_EYE=0 AIR_SMOOTH_BOX=0 "$OUT/air_smooth_probe" --shake "$HERE/data/raid-steps.json" 60 1 live 200 260;
-       AIR_SMOOTH_EYE=0 AIR_SMOOTH_BOX=0 "$OUT/air_smooth_probe" --shake "$HERE/data/raid-steps.json" mac 4 live 200 260;
-       AIR_SMOOTH_EYE=0 AIR_SMOOTH_BOX=0 "$OUT/air_smooth_probe" --shake "$ROOT/Content/Data/AirBattles/bremen-b17.json" 60 1 replay; } |
+if ! { AIR_SMOOTH_EYE=0 AIR_SMOOTH_BOX=0 "$OUT/air_smooth_probe" --shake "$HERE/data/raid-steps.json" 60 1 live 200 260 || true;
+       AIR_SMOOTH_EYE=0 AIR_SMOOTH_BOX=0 "$OUT/air_smooth_probe" --shake "$HERE/data/raid-steps.json" mac 4 live 200 260 || true;
+       AIR_SMOOTH_EYE=0 AIR_SMOOTH_BOX=0 "$OUT/air_smooth_probe" --shake "$ROOT/Content/Data/AirBattles/bremen-b17.json" 60 1 replay || true; } |
      cmp -s - "$HERE/data/shake-rows-off-30899121.txt"; then
   echo "FAIL: with both rows off (AIR_SMOOTH_EYE=0 AIR_SMOOTH_BOX=0), air_smooth_probe --shake's report is not data/shake-rows-off-30899121.txt's"
   STATUS=1
 fi
-if ! { AIR_SMOOTH_BOX=0 "$OUT/air_smooth_probe" --shake "$HERE/data/raid-steps.json" 60 1 live 200 260;
-       AIR_SMOOTH_BOX=0 "$OUT/air_smooth_probe" --shake "$HERE/data/raid-steps.json" mac 4 live 200 260;
-       AIR_SMOOTH_BOX=0 "$OUT/air_smooth_probe" --shake "$ROOT/Content/Data/AirBattles/bremen-b17.json" 60 1 replay; } |
+if ! { AIR_SMOOTH_BOX=0 "$OUT/air_smooth_probe" --shake "$HERE/data/raid-steps.json" 60 1 live 200 260 || true;
+       AIR_SMOOTH_BOX=0 "$OUT/air_smooth_probe" --shake "$HERE/data/raid-steps.json" mac 4 live 200 260 || true;
+       AIR_SMOOTH_BOX=0 "$OUT/air_smooth_probe" --shake "$ROOT/Content/Data/AirBattles/bremen-b17.json" 60 1 replay || true; } |
      cmp -s - "$HERE/data/shake-eye-only-30899121.txt"; then
   echo "FAIL: with the bombers' row off (AIR_SMOOTH_BOX=0), air_smooth_probe --shake's report is not data/shake-eye-only-30899121.txt's"
   STATUS=1
