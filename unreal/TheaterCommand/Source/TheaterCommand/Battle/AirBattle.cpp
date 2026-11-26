@@ -162,6 +162,41 @@ namespace AirParts
 			}
 			double Ms() const { return 1000.0 * (FPlatformTime::Seconds() - Began); }
 		};
+
+		/** (the press's work before Open: BeginReplay's or BeginLiveCall's own steps, done in the press's frame ahead of Open,
+		 * and so ahead of the black under the row flyCurtainFirst) Their steps, and whose they are (empty: none since the
+		 * last Open). */
+		static FSteps& BeforeOpen()
+		{
+			static FSteps Steps;
+			return Steps;
+		}
+		static FString& BeforeOpenOf()
+		{
+			static FString Of;
+			return Of;
+		}
+		static void BeginBeforeOpen(const FString& Of)
+		{
+			BeforeOpen() = FSteps();
+			BeforeOpenOf() = Of;
+		}
+		/** Said as Open is reached (once a press; the scene made later under the black does not say it again). */
+		static void SayBeforeOpen()
+		{
+			if (BeforeOpenOf().IsEmpty())
+			{
+				return;
+			}
+			FSteps& Steps = BeforeOpen();
+			Steps.Step(TEXT("on to Open"));
+			if (TheaterSpeed::IsLogging())
+			{
+				UE_LOG(LogTheater, Display, TEXT("Air hitch: before Open (%s), frame %lld, %.0f ms in all, in the press's frame before the black can go up; each step in ms: %s."),
+					*BeforeOpenOf(), static_cast<long long>(GFrameCounter), Steps.Ms(), *Steps.Line);
+			}
+			BeforeOpenOf().Reset();
+		}
 	}
 }
 
@@ -729,6 +764,7 @@ void AAirBattle::ReplayWhenReady(const FString& Key)
 
 bool AAirBattle::BeginReplay(const FString& Key)
 {
+	AirParts::Hitch::BeginBeforeOpen(TEXT("BeginReplay ") + Key); // (the hitch's naming lines: this work's ms, said as Open is reached)
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterAirBattleShots="), ShotFolder);
 	// (the builder's film of a picture run: "-TheaterAirBattleRideHold=40" stays on each ride 40 s after its picture)
 	float Hold = 0.5f;
@@ -736,7 +772,9 @@ bool AAirBattle::BeginReplay(const FString& Key)
 	RideHold = FMath::Clamp(static_cast<double>(Hold), 0.5, 300.0);
 	const FString File = FPaths::ProjectContentDir() / TEXT("Data/AirBattles") / Key + TEXT(".json");
 	FString Text;
-	if (!FFileHelper::LoadFileToString(Text, *File))
+	const bool bRead = FFileHelper::LoadFileToString(Text, *File);
+	AirParts::Hitch::BeforeOpen().Step(TEXT("the recording read from disk"));
+	if (!bRead)
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Air battle: no recorded battle %s (is Content/Data/AirBattles staged with the build?)"), *File);
 		if (!ShotFolder.IsEmpty())
@@ -749,7 +787,9 @@ bool AAirBattle::BeginReplay(const FString& Key)
 	SkyFinish(false); // (a turn of the clouds painted aside on a battle begun before: done before its state goes)
 	State = MakeShared<FAirBattleState>();
 	std::string Error;
-	if (!AirFeed::ReadRecording(AirParts::Narrow(Text), State->Recording, Error))
+	const bool bParsed = AirFeed::ReadRecording(AirParts::Narrow(Text), State->Recording, Error);
+	AirParts::Hitch::BeforeOpen().Step(TEXT("ReadRecording"));
+	if (!bParsed)
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Air battle: %s: %s"), *File, *AirParts::Wide(Error));
 		State.Reset();
@@ -815,8 +855,11 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 	{
 		return false;
 	}
+	AirParts::Hitch::BeginBeforeOpen(TEXT("BeginLiveCall TC.") + Function); // (the hitch's naming lines: this work's ms, said as Open is reached)
 	FString Reply, Error;
-	if (!Session->CallBattle(Function, ArgumentsJson, Reply, Error))
+	const bool bCalled = Session->CallBattle(Function, ArgumentsJson, Reply, Error);
+	AirParts::Hitch::BeforeOpen().Step(*(TEXT("the bridge's TC.") + Function));
+	if (!bCalled)
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Air battle: TC.%s failed: %s"), *Function, *Error);
 		return false;
@@ -858,10 +901,12 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 		NoteShip(ShipNames, CapitalShips, Ship);
 	}
 	S.Desk.Take(First);
+	AirParts::Hitch::BeforeOpen().Step(TEXT("the answer read, the show and the desk"));
 	S.BattleT = S.FedT = First.Head.T;
 	// (the bridge's battle opens paused: it is run here a battle second at a time, ahead of what is shown)
 	FString Ignored;
 	Session->CallBattle(TEXT("battleSpeed"), TEXT("[1]"), Ignored, Error);
+	AirParts::Hitch::BeforeOpen().Step(TEXT("the bridge's TC.battleSpeed"));
 	if (!Open(TEXT("live")))
 	{
 		return false;
@@ -893,6 +938,7 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 
 bool AAirBattle::Open(const FString& Why)
 {
+	AirParts::Hitch::SayBeforeOpen();
 	UWorld* Here = GetWorld();
 	if (!Here || !State.IsValid())
 	{
