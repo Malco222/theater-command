@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Battle/ShipLooks.h"
 #include "Battle/ShipIce.h" // S6 hook (ship ice)
+#include "Battle/ShipPaintCore.h" // (the ship detail plan, round 1)
 #include "Effects/BattleEffects.h"
 
 #include <functional>
@@ -86,6 +87,15 @@ public:
 	/** S6 hook (ship ice; the sea battle's, before its ships are laid, under -TheaterSeaIce=1): the frost each hull is glazed by
 	 * as LayShip lays her (Battle/ShipIce). Never set, as in every air battle, Pearl Harbor and Midway: none, the hulls as made. */
 	void SetFrost(const ShipIce::Frost& Given) { Frost = Given; }
+	/** The ship detail plan's round 1 (the sea battle's, after RaiseSea and before its ships are laid, under its own
+	 * switches): how the battle modeller's ships are painted point by point as LayShip lays them, and her halves if she
+	 * breaks (Battle/ShipPaintCore: the files' shade, the rust ramp, the wooden deck held); on this stage's own steel ink,
+	 * as ShipPaintCore::SteelOf gives it and nothing more, the ships' top light (Given.TopLight above 0, with or without the
+	 * first look; none with the first look alone) and M_MapSurface's own Wear (FirstLookWear above 0: its two-size blot
+	 * mottle, laid out in metres, R1.4's first look; with the light alone, a Wear too small to show a mottle, so the top
+	 * light can show), with its chips held off. Never called by the air scene, Pearl Harbor or Midway: their ships are
+	 * painted, and their steel inked, as made. */
+	void SetShipPaint(const ShipPaintCore::Options& Given, float FirstLookWear);
 	/**
 	 * A ship under way (the fleet action's, each frame): where she is on the board (metres), her heading (radians
 	 * clockwise from north, the board's), her heel (degrees, plus: her starboard side down) and her pitch on the swell
@@ -316,6 +326,8 @@ private:
 	FVector2D SeaGrade = FVector2D(1.08, 0.87);
 	/** S6 hook (ship ice): the frost the sea battle set (SetFrost); none by default. */
 	ShipIce::Frost Frost;
+	/** The ships' paint the sea battle asked for (SetShipPaint); today's by default. */
+	ShipPaintCore::Options ShipPaint;
 
 	TMap<int32, FShip> Ships;
 	/** How each hit on a ship looks, and the details of her end (Battle/Fates). */

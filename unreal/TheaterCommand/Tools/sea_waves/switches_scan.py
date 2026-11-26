@@ -62,6 +62,12 @@ TABLE = [
     ("TheaterSeaCoast", "off", "off", "extra", "14", False),
     ("TheaterSeaTurrets=", "0, 1 (1 after the Mac check)", "0", "own", "16", False),
     ("TheaterSeaStepDown=", "0; 1 whenever the tier is 1 or more", "0", "1", "15", False),
+    # (the ship detail plan, round 1: the ships at sea, review pictures until the art director's Mac check, and the reel's two)
+    ("TheaterSeaShipLight=", "0 or off; 1 or on (the file's shade on each point, the ships' top light 0.10); or a top light from 0.0 to 0.30 to at most four places (0.08, 0.12, the map's 0.26); anything else refused, off", "0", "review", "R1.3", True),
+    ("TheaterSeaShipSkin=", "0, 1 (the rust ramp and the ruled salt, M_MapSurface's own wear on the sea's steel ink)", "0", "review", "R1.4", True),
+    ("TheaterSeaShipShade=", "0, 1 (occlusion, 0.3 m contact shadows, shadow quality 3)", "0", "review", "R1.3", True),
+    ("TheaterSeaReel=", "off, or shots by their planned names (with -TheaterSeaBattleShots=)", "off", "review", "R1.1", True),
+    ("TheaterSeaRideStrip=", "off, or key,from,seconds (with -TheaterSeaBattleShots=)", "off", "review", "R1.1", True),
 ]
 # The bench's own (step 0): measuring only, it draws nothing differently, so it is no look switch and not on the line.
 MEASURE = [("TheaterSeaBench=", "drop,span (seconds; Tools/sea_bench.sh)", "0", "Step 0", True)]

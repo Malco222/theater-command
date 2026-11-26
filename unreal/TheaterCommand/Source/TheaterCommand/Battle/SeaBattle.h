@@ -8,6 +8,7 @@
 #include "Battle/SeaFrames.h" // (the release 2 ocean, step 0: the frames by thread)
 #include "Battle/SeaLookSwitches.h" // (the release 2 ocean, step 0: the sea's look in force)
 #include "Battle/SeaMarksPool.h" // (the release 2 ocean, step 1(a): DrawMarks' meshes kept)
+#include "Battle/SeaReel.h" // (the ship detail plan, R1.1: the BEFORE reel's measured shots)
 #include "Battle/HeavyWeather.h" // S6 hook (heavy weather: bow spray and ship ice)
 #include "Battle/SeaNight.h" // (the release 2 ocean, step 11: night fighting's looks, -TheaterSeaNightFight=)
 #include "Battle/SeaDayCore.h" // (the release 2 ocean, step 11: the battle's light from its field, -TheaterSeaDay=field)
@@ -362,6 +363,31 @@ private:
 	 * meshes made afresh every frame. */
 	bool bMarksPool = false;
 	SeaMarksPool::Shape FoamShape, MarksShape;
+	/** (the ship detail plan, round 1) -TheaterSeaShipShade=1: occlusion, contact shadows and shadow quality 3 at sea, the
+	 * console's own values kept (KeptShipShade) and given back however the scene ends (EndPlay), and the sun's own contact
+	 * shadow (KeptShipContact, below 0 when none is kept) given back with the room. */
+	bool bShipShade = false;
+	TArray<TPair<FString, FString>> KeptShipShade;
+	float KeptShipContact = -1.0f;
+	bool bKeptShipContactInWorld = false;
+	/** (the ship detail plan, R1.1: the BEFORE reel, Battle/SeaReel.h; review pictures only, with -TheaterSeaBattleShots=,
+	 * never in the month's scene) -TheaterSeaReel=: only the shots named (ReelShots) taken, each held after its picture until
+	 * ReelHoldUntil (battle seconds) and measured over its frames (ReelHeld, said as the reel moves on), each ship's laying
+	 * timed (ReelLaidMs, summed at the end). -TheaterSeaRideStrip=: one shot following ReelRide's ship, a picture and a line
+	 * every frame (RideFrame, the next one's number). Both off: none of this is touched. */
+	bool bReel = false;
+	bool bRideStrip = false;
+	std::vector<std::string> ReelShots;
+	SeaReel::Ride ReelRide;
+	SeaReel::Held ReelHeld;
+	std::vector<float> ReelLaidMs;
+	double ReelHoldUntil = -1.0;
+	int32 RideFrame = 0;
+	void ReelPlan();
+	void ReelCount(double Took);
+	void ReelLaid(int32 Key, const FString& Class, const FString& Nation, double Ms);
+	void ReelSayShot(const FShot& Shot);
+	void RideStripFrame();
 	TArray<FOilLater> OilLater;
 	TArray<FFlakLater> FlakLater;
 	TArray<FLater> Later;

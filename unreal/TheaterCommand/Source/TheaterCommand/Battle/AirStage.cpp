@@ -375,12 +375,14 @@ namespace StageParts
 	 * where the game has it, else the kit's code-built miniature (near only), fitted to her size where it is to be
 	 * (FitHull, NamedHull), and the stretch that took. False where there is none, or no far one.
 	 */
-	static bool HullModel(const FStageShip& Given, bool bFar, double U, FMiniatureMesh& Model, FString& OutFile, FVector& OutStretch)
+	static bool HullModel(const FStageShip& Given, bool bFar, double U, FMiniatureMesh& Model, FString& OutFile, FVector& OutStretch,
+		const ShipPaintCore::Options& Paint = ShipPaintCore::Options())
 	{
 		OutFile = ShipFileOf(Given);
 		OutStretch = FVector::OneVector;
 		{
 			TGuardValue<uint8> Painted(Model.Finish, 128); // (ships are painted metal: the kit's; the modeller's say so point by point)
+			TGuardValue<ShipPaintCore::Options> Painting(FMiniatureMesh::ShipPaint, Paint); // (today's unless the sea battle asked: SetShipPaint)
 			if (!OutFile.IsEmpty() && !Model.Sculpted(OutFile, Given.Nation, FVector::ZeroVector, U, 0.0, bFar))
 			{
 				OutFile.Empty();
@@ -1744,6 +1746,39 @@ void AAirStage::BuildWorks()
 // ---------------------------------------------------------------------------------------------------------------
 // The ships.
 
+void AAirStage::SetShipPaint(const ShipPaintCore::Options& Given, float FirstLookWear)
+{
+	ShipPaint = Given;
+	if (!SteelInk)
+	{
+		return;
+	}
+	// (Battle/ShipPaintCore's SteelOf, and only what it gives: with every switch off, nothing. The material lifts what faces
+	// the sky only where its Wear is on, so the Wear is set whenever a top light is asked: the skin's first look, whose blot
+	// mottle lies seven metres across on the ship's own metres where the map's pieces take theirs in the table's measure; or,
+	// with the light alone, a Wear too small for its mottle to be seen. The TopLight set is the light asked over that Wear,
+	// so the lift is the same either way (1 + the light x the metal), and with the skin and no light it is none, never the
+	// material's own 0.26, which the sea has never drawn. The chips are held off, since this material's chip is bare metal,
+	// dark and glossy, never the matt dark of rust)
+	const ShipPaintCore::Steel SteelSet = ShipPaintCore::SteelOf(Given, FirstLookWear);
+	if (SteelSet.TopLight >= 0.0f)
+	{
+		SteelInk->SetScalarParameterValue(TEXT("TopLight"), SteelSet.TopLight);
+	}
+	if (SteelSet.Wear > 0.0f)
+	{
+		SteelInk->SetScalarParameterValue(TEXT("Wear"), SteelSet.Wear);
+	}
+	if (SteelSet.bBlots)
+	{
+		SteelInk->SetScalarParameterValue(TEXT("BlotTiling"), 1.0f / (7.0f * static_cast<float>(UnitsPerMetre)));
+	}
+	if (SteelSet.bChipsOff)
+	{
+		SteelInk->SetScalarParameterValue(TEXT("ChipAt"), ShipPaintCore::SeaChipAt);
+	}
+}
+
 void AAirStage::SetShips(const TArray<FStageShip>& Given)
 {
 	for (const FStageShip& Ship : Given)
@@ -1822,7 +1857,7 @@ void AAirStage::LayShip(const FStageShip& Given)
 	{
 		FMiniatureMesh Model;
 		const FString Name = FString(StageParts::KindOf(Given.Class)) + TEXT(":") + Given.Nation;
-		if (!StageParts::HullModel(Given, false, UnitsPerMetre, Model, Ship.File, Ship.Stretch))
+		if (!StageParts::HullModel(Given, false, UnitsPerMetre, Model, Ship.File, Ship.Stretch, ShipPaint))
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Stage: no model for %s; ship %d is not drawn."), *Name, Given.Id);
 			Ships.Remove(Given.Id);
@@ -1899,7 +1934,7 @@ void AAirStage::LayShip(const FStageShip& Given)
 			FMiniatureMesh Far;
 			FString FarFile;
 			FVector FarStretch;
-			if (StageParts::HullModel(Given, true, UnitsPerMetre, Far, FarFile, FarStretch) && FarFile == Ship.File)
+			if (StageParts::HullModel(Given, true, UnitsPerMetre, Far, FarFile, FarStretch, ShipPaint) && FarFile == Ship.File)
 			{
 				// (her guns out of the far one too, where it says its points' parts; else it keeps them stowed, and her guns
 				// drawn on their own show only near)
@@ -2109,7 +2144,7 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now, const 
 		FMiniatureMesh Model;
 		FString File;
 		FVector Stretch;
-		StageParts::HullModel(Ship->Given, false, UnitsPerMetre, Model, File, Stretch);
+		StageParts::HullModel(Ship->Given, false, UnitsPerMetre, Model, File, Stretch, ShipPaint);
 		if (File.IsEmpty())
 		{
 			StageParts::InStagePaint(Model, Ship->Given.Nation); // (as she was drawn whole: the stage's Measure 1 on the kit's miniature)

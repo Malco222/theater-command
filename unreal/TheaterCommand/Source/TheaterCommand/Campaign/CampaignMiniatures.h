@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 
+namespace ShipPaintCore { struct Options; }
+
 /**
  * Small models for the army pieces, made in code: a rifleman, a tank, a field
  * gun, a lorry, a horseman, a mountain soldier by his rock, a bunker.
@@ -145,6 +147,11 @@ struct FMiniatureMesh
 	 * "loads", torpedo and bombs: the Kate, the Devastator, the Nell, the Betty) is drawn with its torpedo and without its
 	 * bombs. Otherwise such a model is drawn with its bombs, as every aircraft on the campaign map is. */
 	static bool bTorpedoLoad;
+	/** Set by the sea battle's stage while it lays a ship (AAirStage::LayShip through its HullModel, from the sea battle's own
+	 * switches; the ship detail plan's round 1): how a battle model's ship is painted point by point (Battle/ShipPaintCore:
+	 * the file's shade, the rust ramp). As made, today's paint: the campaign map, Pearl Harbor, Midway and the air battles
+	 * never set it, and a model painted under it is kept apart from today's (its cache key says so). */
+	static ShipPaintCore::Options ShipPaint;
 
 	/**
 	 * A real vehicle, built from its measurements: "PanzerIV", "T34", "Sherman", "Matilda". Metre is the size
