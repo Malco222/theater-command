@@ -180,10 +180,14 @@ for asked, drawn in one["marks"].items():
     check(drawn not in one["marks"], "%s: the mark drawn in its place is not itself drawn as another" % asked)
     print("  %s (%s) is drawn as %s (as %s)" % (asked, ", ".join(sorted(carried.get(asked, []))), drawn, ", ".join(sorted(carried.get(drawn, [])))))
 american = sorted(tag for tag in carried if tag and tag.startswith("USA"))
-check(sorted(set(one["marks"].get(tag, tag) for tag in american)) == ["USA"],
-      "with one look every American machine carries the one mark (the marks carried are %s)" % ", ".join(american))
-check(re.search(r'Tag == TEXT\("USA"\)\)\s*\{\s*Disc\(1\.0, Paint\(TEXT\("1B2A5C"\)\)\);\s*Star\(0\.95, White\);\s*Disc\(0\.2, Red\);', painter) is not None,
-      "the American mark is the white star in its blue disc with the red centre, a fifth of the disc and no wider, and no bars")
+check(sorted(set(one["marks"].get(tag, tag) for tag in american)) == ["USA-BAR"],
+      "with one look every American machine carries the one mark, the star and bar (the marks carried are %s)" % ", ".join(american))
+barred = re.search(r'Tag == TEXT\("USA-BAR"\)\)\s*\{(.*?)\n\t\}', painter, re.S)
+check(barred is not None
+      and re.search(r'Bar\(-0\.3, -2\.05, 0\.3, 2\.05, Navy\);\s*\+\+Layer;\s*Bar\(-0\.24, -1\.98, 0\.24, 1\.98, White\);', barred.group(1)) is not None
+      and re.search(r'Disc\(1\.0, Navy\);\s*Star\(0\.95, White\);', barred.group(1)) is not None
+      and "Red" not in barred.group(1) and "Disc(0.2" not in barred.group(1),
+      "the American mark is the white star in its blue disc with a white bar each side, edged in blue, and no red anywhere")
 
 # ---------------------------------------------------------------- Germany's tanks: grey in every year
 print("German tanks on the map")
