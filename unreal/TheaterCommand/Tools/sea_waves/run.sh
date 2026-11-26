@@ -38,7 +38,10 @@
 #     against them through day_shim.h, holds seed mode to them bit for bit and field mode to the plan's section 6 (the
 #     sun or the moon as the key, the exposure, the night grade, no step over a tenth for a minute of sun, the engine's fog
 #     line integral, the vis fit from every planned eye, every lookout's sighting in every recording and stand-in, the
-#     night met by light, the day colours, the water), its log in OUT/day.
+#     night met by light, the day colours, the water), its log in OUT/day;
+#   - step 11, the effects kit's sea lamps: lamps_extract cuts the sea battle's detection of them (SeaParts' RuleOf,
+#     HasSeaLamps, AskSeaLamps and NavalRow) out of SeaBattle.cpp, and sea_lamps_test runs it on a mock kit of every
+#     setter shape and on the naval rows by calibre and kind, in OUT/lamps.
 # Usage: Tools/sea_waves/run.sh   (SEA_WAVES_OUT: where the test writes; default $TMPDIR/sea_waves)
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -204,6 +207,17 @@ if [ -x "$OUT/sea_day_test" ]; then
     return "${PIPESTATUS[0]}"
   }
   step "sea_day_test (${#DAYS[@]} recordings and stand-ins)" day_test
+fi
+# Step 11: the effects kit's sea lamps, as the sea battle detects them (Battle/SeaBattle.cpp's SeaParts), on a mock kit of
+# every setter shape, cut from the game's own lines
+LAMPS="$OUT/lamps"
+rm -rf "$LAMPS"
+step "lamps_extract (the sea lamps' detection cut out of SeaBattle.cpp)" python3 -I -B "$HERE/lamps_extract.py" "$SRC" "$LAMPS"
+if [ -f "$LAMPS/lamps_cut.inc" ]; then
+  step "sea_lamps_test (build)" $CXX ${SEA_WAVES_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$LAMPS" "$HERE/sea_lamps_test.cpp" -o "$LAMPS/sea_lamps_test"
+fi
+if [ -x "$LAMPS/sea_lamps_test" ]; then
+  step "sea_lamps_test (10 kit shapes, 11 guns)" "$LAMPS/sea_lamps_test"
 fi
 echo "written in $OUT"
 if [ "$STATUS" -eq 0 ]; then

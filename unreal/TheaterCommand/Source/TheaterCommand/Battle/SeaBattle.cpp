@@ -65,6 +65,7 @@
 #include <cctype>
 #include <map>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -1463,19 +1464,38 @@ namespace SeaParts
 	 * (SetLampRule(LampRule::Sea()): three lamps, by the eye, a salvo one lamp) and the naval guns' muzzle rows, which
 	 * light her own hull. Where the kit has them: a kit from before that head has neither, and the scene keeps today's
 	 * rows and lamps; field mode asks for them (the release 2 ocean plan, step 11), so by default nothing changes. The
-	 * rule's type is read off the kit's own SetLampRule, so this builds on the kit before and after. */
+	 * rule's type is read off the kit's own SetLampRule, whether it takes the rule by reference or by value, is noexcept
+	 * or returns something, and the kit counts as having the lamps only when that setter takes the type's own Sea():
+	 * a setter of any other shape reads as none, and the scene keeps today's, so this builds on the kit before and
+	 * after. */
 	template <typename TSetter>
-	struct RuleOf;
-	template <typename TOwner, typename TRule>
-	struct RuleOf<void (TOwner::*)(const TRule&)>
+	struct RuleOf
 	{
-		using Type = TRule;
+		using Type = void;
+	};
+	template <typename TOwner, typename TResult, typename TRule>
+	struct RuleOf<TResult (TOwner::*)(TRule)>
+	{
+		using Type = std::remove_cvref_t<TRule>;
+	};
+	template <typename TOwner, typename TResult, typename TRule>
+	struct RuleOf<TResult (TOwner::*)(TRule) noexcept>
+	{
+		using Type = std::remove_cvref_t<TRule>;
 	};
 
 	template <typename TKit>
 	static constexpr bool HasSeaLamps()
 	{
-		return requires { &TKit::SetLampRule; };
+		if constexpr (requires { &TKit::SetLampRule; })
+		{
+			using FRule = typename RuleOf<decltype(&TKit::SetLampRule)>::Type;
+			if constexpr (!std::is_void_v<FRule>)
+			{
+				return requires(TKit* K) { K->SetLampRule(FRule::Sea()); };
+			}
+		}
+		return false;
 	}
 
 	template <typename TKit>
@@ -1496,15 +1516,16 @@ namespace SeaParts
 	}
 
 	/** A ship's main guns' muzzle row by calibre (mm), as the effects head sets its bands: 280 mm and up a capital
-	 * ship's, 150 mm and up a cruiser's, a destroyer's below; a cruiser whose guns are 127 to 149 mm (a light
-	 * cruiser's 5.25-inch or 14 cm) takes the cruiser's row, so the flash's reach fits her hull. */
+	 * ship's, 150 mm and up a cruiser's, a destroyer's below; a cruiser ("ca") whose guns are 127 to 149 mm (a light
+	 * cruiser's 5.25-inch or 14 cm) takes the cruiser's row, so the flash's reach fits her hull. Every other small gun,
+	 * a destroyer escort's 5-inch, a carrier's 5-inch or a boat's deck gun, takes the destroyer's. */
 	static const TCHAR* NavalRow(double CalibreMm, const std::string& What)
 	{
 		if (CalibreMm >= 280.0)
 		{
 			return TEXT("naval_heavy");
 		}
-		return CalibreMm >= 150.0 || (What != "dd" && CalibreMm >= 127.0) ? TEXT("naval_medium") : TEXT("naval_light");
+		return CalibreMm >= 150.0 || (What == "ca" && CalibreMm >= 127.0) ? TEXT("naval_medium") : TEXT("naval_light");
 	}
 }
 
