@@ -620,6 +620,18 @@ function drawUp(mine: LandUnit[], side: Side, f: LandField, cx: number, lo?: num
     }
     return false;
   };
+  /**
+   * The sniper pairs' own row (the design director, 26 November 05:02Z), drawn up once every other row stands, so it
+   * shifts no other block: where the guns' row stands (230 m behind the front line), or GAP behind the hindmost row
+   * where that row stands further back. Kept inside the field.
+   */
+  const pairsUp = (): void => {
+    if (!pairs.length) return;
+    const rear = Math.max(0, ...mine.filter((u) => u.team !== 'snp').map((u) => dir * (front - u.y) + u.d / 2));
+    const deep = Math.max(...pairs.map((u) => u.d));
+    const y = front - dir * Math.max(230, rear + GAP + deep / 2);
+    place(pairs, Math.min(f.h - deep / 2, Math.max(deep / 2, y)), false);
+  };
   // A defence of four blocks or more in its line keeps a quarter of them back as a reserve, centred between its tanks
   // on the wings (b407). Each is the last division of whichever corps has most in the line, so every corps' first
   // divisions stand in the line. Where the tanks could not stand on the wings and are centred behind the line, the
@@ -639,7 +651,7 @@ function drawUp(mine: LandUnit[], side: Side, f: LandField, cx: number, lo?: num
     const wide = place(lines[1], front - dir * 110, true);
     if (held.length) { place(held, front - dir * (wide || !lines[1].length ? 110 : 170), false); for (const u of held) u.reserve = 'held'; }
     place(lines[2], front - dir * 230, false);
-    if (pairs.length) place(pairs, front - dir * 290, false);
+    pairsUp();
     return;
   }
   // In its lanes (b492(3)): each line cut into rows no wider than the room, the front ones full and the rest behind.
@@ -661,7 +673,6 @@ function drawUp(mine: LandUnit[], side: Side, f: LandField, cx: number, lo?: num
   cut(held, wide || !lines[1].length ? 110 : 170);
   for (const u of held) u.reserve = 'held';
   cut(lines[2], 230);
-  cut(pairs, 290);
   const deep = (us: LandUnit[]): number => Math.max(...us.map((u) => u.d));
   const steps = (gap: number): number[] => {
     const ys: number[] = [];
@@ -676,4 +687,5 @@ function drawUp(mine: LandUnit[], side: Side, f: LandField, cx: number, lo?: num
   let ys = steps(GAP);
   for (let gap = GAP - 5; gap >= 10 && past(ys); gap -= 5) ys = steps(gap);
   rows.forEach((r, i) => place(r.us, ys[i], r.wings));
+  pairsUp();
 }
