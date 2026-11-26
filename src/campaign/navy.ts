@@ -4809,16 +4809,16 @@ const NUMBER_SAID = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven'
 const countSaid = (k: number, one: string, many: string): string => `${k <= 10 ? NUMBER_SAID[k] : k} ${k === 1 ? one : many}`;
 /**
  * The month headline's second sentence where the player fought a night on the route (W5b; the design director, 26
- * November 12:04Z, Q2 and Q3): the night's own ships sunk, as booked (nightShips), against the month's tons the first
- * sentence gives, never split between the night and the rest, for nothing books the split. It names no rest, so it
- * holds where the night was all of the month; the tons it points at include raiders that are not boats, so they went
- * down 'elsewhere on the route', not on other nights. Empty in a month with no night fought, so the headline is release
- * 1's. The UI director's final lines (W5c (a), (f), 26 November 12:34Z).
+ * November 12:04Z, Q2 and Q3): the night's own ships sunk, as booked (nightShips), and nothing of where they fall in the
+ * month's tons, which no rule holds (13:16Z: what the player reads is true by rule, so the bare count). Where the night
+ * lost none, all of the month's tons went down elsewhere on the route, true by fact; 'elsewhere', for the tons include
+ * raiders that are not boats. Empty in a month with no night fought, so the headline is release 1's. The UI director's
+ * final lines (W5c (a), (f), 26 November 12:34Z), the some-lost one bare by the design director's 13:16Z ruling.
  */
 function nightSaid(ships: number | undefined): string {
   if (ships === undefined) return '';
   if (ships === 0) return ' On the night you fought, the convoy lost no ships; all of that tonnage went down elsewhere on the route.';
-  return ` On the night you fought, the convoy lost ${countSaid(ships, 'ship', 'ships')}; ${ships === 1 ? 'it is' : 'they are'} counted in that tonnage.`;
+  return ` On the night you fought, the convoy lost ${countSaid(ships, 'ship', 'ships')}.`;
 }
 
 /** The nights booked into one nation's month, by route: what the field gave, which fleets it covers, and whether any of it had to be held into the dice's run. */

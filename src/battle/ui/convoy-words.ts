@@ -41,9 +41,9 @@ export function leanOf(t: ConvoyTicket, x: ConvoyOverExtra, staff: StaffNights):
  * night lost no ship too, and where it fell: all of it lost elsewhere on the route (W5b: the design director's 06:32Z
  * ruling (a), the campaign keeps the lot; firsttimer-8's share over a convoy that lost nothing is so read as the
  * month's, not the night's; 'elsewhere', for the booked tons include raiders that are not boats: W5c (f)); where the
- * night lost ships and drew no lot, the month's share counts them among it (the design director's 12:04Z Q4: a practice
- * card has no month, so 'among it' is said, true of any month). The UI director's final lines, W5c (c), (d), (e), 26
- * November 12:34Z, and W5d, 13:03Z. A night fought in a campaign ('inCampaign', set by the screen that offers it, none yet: 217(5)) says
+ * night lost ships and drew no lot, the month's share is said bare, as in round 7: a share of tonnage does not hold the
+ * night's ships by any rule, so nothing says they lie in it (the design director, 13:16Z). The UI director's final
+ * lines, W5c (c), (d), (e), 26 November 12:34Z, and W5d, 13:03Z. A night fought in a campaign ('inCampaign', set by the screen that offers it, none yet: 217(5)) says
  * what the month books, with no 'would' and no practice sentence; a card that books says the boats and escorts it
  * books, the night's own, so that no 'it' is left pointing at the tonnage.
  */
@@ -89,9 +89,9 @@ export function campaignWords(t: ConvoyTicket, x: ConvoyOverExtra, staff: StaffN
   const though = lean && lean !== winner ? `, though ${winner === 'att' ? 'the pack' : 'the escorts'} won it` : '';
   const share = `${pc.share}% of the tonnage a convoy usually loses`;
   // (tied: a lot settles where the night falls among the staff's nights it ties, and the share says where it fell; untied:
-  // the month's share, the night's own ships among it, 'with this night's ship among it' for one: W5c (d))
+  // the month's share, bare (the design director, 13:16Z))
   const tons = a.mv.same > 0
     ? `${side === 'att' ? 'the pack sank' : 'the escorts lost'} as many ships as in ${a.mv.same === n ? 'every one' : countWords(a.mv.same)} of the ${countWords(n)} times the staff fought this night, and a draw among the tied nights set the month's share at ${share}`
-    : `the month ${inCampaign ? 'books' : 'would book'} ${share}, with this night's ${x.counts.mv === 1 ? 'ship' : nof(x.counts.mv, 'ship', 'ships')} among it`;
+    : `the month ${inCampaign ? 'books' : 'would book'} ${share}`;
   return `${inCampaign ? 'This night counts as' : 'In a campaign this night would count as'} ${place}${though}: ${tons}.${books}`;
 }

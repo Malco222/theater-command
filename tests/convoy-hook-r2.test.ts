@@ -152,17 +152,19 @@ describe('a fought night', () => {
     expect(none).not.toContain('night you fought');
     // (a seam that books no ships for the night says nothing of them: release 1's line)
     expect(said(true)).not.toContain('night you fought');
-    // (the UI director's final lines, W5c (a) and (f): the figure is the first sentence's alone, and no rest is named)
+    // (the UI director's final lines, W5c (a) and (f), the some-lost one bare (the design director, 13:16Z): the figure is
+    // the first sentence's alone, and no rest is named)
     const zero = said(true, 0);
     expect(zero).toMatch(/ tons of shipping sunk this month(, [a-z0-9]+ submarines? destroyed)?\. On the night you fought, the convoy lost no ships; all of that tonnage went down elsewhere on the route\.$/);
     expect(second(zero)).not.toContain(tonsOf(zero));
     const one = said(true, 1);
-    expect(one).toContain('. On the night you fought, the convoy lost one ship; it is counted in that tonnage.');
+    expect(one).toMatch(/\. On the night you fought, the convoy lost one ship\.$/);
     expect(second(one)).not.toContain(tonsOf(one));
-    expect(said(true, 3)).toContain('. On the night you fought, the convoy lost three ships; they are counted in that tonnage.');
-    expect(said(true, 10)).toContain('the convoy lost ten ships; they are counted in that tonnage.');
-    expect(said(true, 12)).toContain('the convoy lost 12 ships; they are counted in that tonnage.');
-    for (const t of [zero, one, said(true, 12)]) expect(t).not.toMatch(/other nights|in all/);
+    expect(said(true, 3)).toMatch(/\. On the night you fought, the convoy lost three ships\.$/);
+    expect(said(true, 10)).toMatch(/ the convoy lost ten ships\.$/);
+    expect(said(true, 12)).toMatch(/ the convoy lost 12 ships\.$/);
+    // (nothing of where the night's ships fall in the month's tons, which no rule holds: the design director, 13:16Z)
+    for (const t of [zero, one, said(true, 12)]) expect(t).not.toMatch(/other nights|in all|counted in|among/);
     // (a seam that hands back no whole count books none, and says nothing of the night)
     for (const bad of [2.5, -1, Number.NaN]) expect(said(true, bad)).not.toContain('night you fought');
     // (the month after: no night, no figure, release 1's line)
@@ -189,7 +191,7 @@ describe('a fought night', () => {
     expect(g.convoys.atlantic.nightShips).toBe(3);
     const lines = g.headlines.slice(h0).map((h) => h.text).filter((t) => t.includes('night you fought'));
     expect(lines.length).toBe(1);
-    expect(lines[0]).toContain('. On the night you fought, the convoy lost three ships; they are counted in that tonnage.');
+    expect(lines[0]).toMatch(/\. On the night you fought, the convoy lost three ships\.$/);
   }, 60_000);
 
   it('W5d 2: the headline\'s first sentence is release 1\'s in every month, its boats destroyed in figures, a night fought or not', () => {
@@ -209,7 +211,7 @@ describe('a fought night', () => {
     expect(told.subs).toBeLessThanOrEqual(10);
     expect(plain.subs).toBe(told.subs);
     const k = told.subs, noun = k === 1 ? 'submarine' : 'submarines';
-    expect(told.line).toContain(`, ${k} ${noun} destroyed. On the night you fought, the convoy lost two ships; they are counted in that tonnage.`);
+    expect(told.line.endsWith(`, ${k} ${noun} destroyed. On the night you fought, the convoy lost two ships.`)).toBe(true);
     expect(plain.line).toContain(`, ${k} ${noun} destroyed.`);
     expect(plain.line).not.toContain('night you fought');
     // (no night at all, the switch on or off: the same figures)
