@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6def924b7 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 8d96660e2 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -76241,7 +76241,7 @@
         }
         for (const c of attackers2) c.ap = Math.max(0, c.ap - SIEGE.assault.ap);
         fall(g2, target, attNat, "storm");
-        flakOut = flakLostWithTown(g2, target, flakAt, townName(target));
+        flakOut = flakLostWithTown(g2, target, flakAt, placeName2(townName(target)));
       } else if (inField2 && !intoWorks) {
         prisoners += watchMen;
         defU.push({ name: `Town guard of ${townName(target)}`, nat: target.ctrl, kind: "inf", divs: Math.max(0.1, Math.round(watch2 * 10) / 10), men: watchMen, lost: watchMen, fate: "surrendered", guard: true });
