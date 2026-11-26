@@ -50,7 +50,7 @@ import { inTheWay, pacificGround, runQuays } from './pacific';
 import { roomAt } from './islands';
 import { EASTERN, addCorps, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
-import { ATOM_STAGE, BREAKUP_STAGE, CARRIERSTRIKE_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, SHADOWRELAY_STAGE, SHADOW_STAGE, TASKFORCE_STAGE, TOWNQUEUE_STAGE, TRUEREACH_STAGE, UNITS_STAGE, VOYAGELOG_STAGE, WAGONS_STAGE, WINCHANCE_STAGE, WINGBYDATE_STAGE, AIRNAMES_STAGE, FERRY_STAGE, CITYDEFENCES_STAGE, OFFERS_STAGE } from './stage';
+import { ATOM_STAGE, BREAKUP_STAGE, CARRIERSTRIKE_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, SHADOWRELAY_STAGE, SHADOW_STAGE, TASKFORCE_STAGE, TOWNQUEUE_STAGE, TRUEREACH_STAGE, UNITS_STAGE, VOYAGELOG_STAGE, WAGONS_STAGE, WINCHANCE_STAGE, WINGBYDATE_STAGE, AIRNAMES_STAGE, FERRY_STAGE, CITYDEFENCES_STAGE, FLAKGROUND_STAGE, OFFERS_STAGE } from './stage';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
 import { openLegions } from './legions';
@@ -214,6 +214,8 @@ export function startOpen(g: Game, wide = true): Game {
   if (AIRNAMES_STAGE) g.flags.airNames = 1;
   // City defences: searchlights, guns by night by what they see, towns their garrisons fortify (release 2, citydefences.ts).
   if (CITYDEFENCES_STAGE) g.flags.cityDefences = 1;
+  // The town's guns against tanks, held back behind its own sub-switch (citydefences.ts flakGround): only with city defences.
+  if (CITYDEFENCES_STAGE && FLAKGROUND_STAGE) g.flags.flakGround = 1;
   // The grand campaign is played on the wider world: it is attached before anything else is set up for it. (One
   // kept to the map of Europe is what a campaign saved before the world was drawn plays on as.)
   if (wide) attachWorld(g);

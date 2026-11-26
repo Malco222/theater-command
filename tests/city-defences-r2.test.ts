@@ -2,26 +2,27 @@
 // 02:23Z). One switch, 'cityDefences'. Slice 1: the switch, the data and the searchlights work: offered straight after
 // the guns, by the guns' own rule, at 2 / 3 / 5, in a month, billed 0.015 a level, to level 3; and with the switch off
 // nothing of it is offered, billed, written or read.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import cd from '../data/campaign/citydefences.json';
 import { assessAir, fly, type AirAssess, type KnownDefence } from '../src/campaign/air';
 import { setRaidFog, weighKnown } from '../src/campaign/airfog';
 import { AC } from '../src/campaign/aircampaigns';
 import { setAirPiece } from '../src/campaign/airversion';
 import { raidTargets } from '../src/campaign/airwar';
-import { cityNight, cityNightShare, flakCut, flakCutMost, flakLostWithTown, isFlakLine, townFlak, townFlakCut, townWorksAt, townWorksMonth, townWorksWorth } from '../src/campaign/citydefences';
+import { cityNight, cityNightShare, flakCut, flakCutMost, flakGround, flakLostWithTown, isFlakLine, lightsFloor, setFlakGround, townFlak, townFlakCut, townWorksAt, townWorksMonth, townWorksWorth } from '../src/campaign/citydefences';
 import { SIEGE, besieged, fieldWalls, garrison, ringClosed, siegeMonth, siegeView, storesOf, townBonus } from '../src/campaign/siege';
-import { townSize } from '../src/campaign/towns';
+import { townName, townSize } from '../src/campaign/towns';
 import { beginHuman, humanUp, orderMove, orderStorm, runTurnAI, stepAI, stormOutlook } from '../src/campaign/turn';
 import { techOf } from '../src/campaign/tech';
 import { WEATHER, setWeather, zoneOfRegion } from '../src/campaign/weather';
 import stage from '../data/campaign/stage.json';
+import places from '../data/campaign/places.json';
 import { ARSENAL, aiArsenal, offers, workLevel, worksUpkeep, type Offer } from '../src/campaign/arsenal';
 import { loadGame, saveGame } from '../src/campaign/save';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 import { CITYDEF, LIGHTS_TOP, START_LAID, WORKS_TOP, cityDefences, cityDefencesOn, layStartGunsFromRecord, lightsAt, openCityDefences, setCityDefences } from '../src/campaign/citydefences';
 import { cancelBuild, deliver, ledger, upkeepTotal } from '../src/campaign/economy';
-import { assess, capture, createGame, endPhase, relocate } from '../src/campaign/game';
+import { assess, capture, createGame, endPhase, placeName, relocate } from '../src/campaign/game';
 import { cityOrders } from '../src/campaign/orders';
 import { GUARD_TOP } from '../src/campaign/guard';
 import { startOpen } from '../src/campaign/staff';
@@ -406,6 +407,22 @@ describe('city defences: the guns by night (slice 2)', () => {
     expect(a.gunLoss).toBeCloseTo((0.01 + 3 * 0.012 * share) * 0.7, 12);
     expect(line(a, 'Flak')!.effect).toContain(`about ${Math.round(a.gunLoss * 100)}%`);
   });
+
+  // (The air rules thread, 26 Nov 2026: a town raid's guns line names the town, and the Searchlights line names the
+  // province. The two never meet on one card: only the mission 'night' flies by night, so only its forecast reads the
+  // night's defences. If a town raid ever flies by night, this fails, and the Searchlights line should then name the
+  // town as the guns line does.)
+  it('prints the Searchlights line on a night raid only: a raid on the town or on the factories by day carries none', () => {
+    const r = ruhrByNight({ guns: 2, lights: 2, radar: true });
+    const night = r.a();
+    expect(line(night, 'Searchlights')).toBeDefined();
+    expect(night.lights).toBeDefined();
+    for (const m of ['town', 'bomb'] as const) {
+      const day = assessAir(r.g, [r.f], m, r.t);
+      expect(day.lines.some((l) => l.label === 'Searchlights' || /searchlight/i.test(`${l.value} ${l.effect ?? ''}`)), m).toBe(false);
+      expect(day.lights, m).toBeUndefined();
+    }
+  });
 });
 
 describe('city defences off: the night raid is as it was (slice 2)', () => {
@@ -666,9 +683,11 @@ describe('city defences off: a town is as strong as its walls and forts (slice 3
 /**
  * Lodz held by one Polish corps, with the German army besieging it: one tank corps and one infantry corps inside the
  * province, ready to storm. `guns` the built gun levels in the town; `inside: false` leaves it to its guard alone.
+ * `flak` sets the sub-switch for the town's guns against tanks (flakGround): on wherever city defences is, unless asked.
  */
-function lodzStorm(on: boolean, o: { guns?: number; inside?: boolean } = {}): { g: Game; town: Region; inside: Corps | null; tank: Corps; foot: Corps } {
+function lodzStorm(on: boolean, o: { guns?: number; inside?: boolean; flak?: boolean } = {}): { g: Game; town: Region; inside: Corps | null; tank: Corps; foot: Corps } {
   const { g, town, inside, ger } = lodzTown(on, { inside: o.inside });
+  setFlakGround(g, o.flak ?? on);
   const foot = ger.find((c) => c.kind === 'inf')!;
   const tank = g.corps.find((c) => c.nat === 'GER' && c.kind === 'arm' && !c.dead)!;
   relocate(g, tank, g.regions[foot.reg]);
@@ -775,6 +794,31 @@ describe('city defences: the town\'s guns against the tanks (slice 4)', () => {
     expect(`wk:aa:${one.town.id}` in one.g.flags).toBe(false);
   });
 
+  // (The assembler's review of 26 Nov 2026, item 5: a report's lines are printed as they stand, so the line names the
+  // town as running text does. The Valdai, the Ohio Valley, the Dakotas, the Canary Islands, the Azores, the Pampas
+  // and Mosquitia take the article and have no town's name of their own.)
+  it('names the lost guns\' town with its article where the place takes one: "of the Valdai"', () => {
+    const { g } = lodzStorm(true);
+    expect(townName(g.byName['Valdai'])).toBe('Valdai');
+    expect(placeName(townName(g.byName['Valdai']))).toBe('the Valdai');
+    expect(placeName(townName(g.byName['Lodz']))).toBe('Lodz');
+    // No place that takes the article stands within a storm of Germany in September 1939, so for one storm Lodz is
+    // put on the article list, and taken off it again whatever happens.
+    const the = (places as { the: string[] }).the;
+    expect(the).not.toContain('Lodz');
+    the.push('Lodz');
+    try {
+      const t = lodzStorm(true, { guns: 2 });
+      t.inside!.str = 0.2; t.inside!.org = 0.2;
+      const rep = orderStorm(t.g, t.town.id)!;
+      expect(rep.taken).toBe(true);
+      expect(rep.lines).toContainEqual({ label: 'Anti-aircraft guns', value: 'The anti-aircraft guns of the Lodz fought the tanks over open sights, and one level of them was lost with the town.' });
+    } finally {
+      the.splice(the.indexOf('Lodz'), 1);
+    }
+    expect(the).not.toContain('Lodz');
+  });
+
   // (The design director, 25 Nov 2026 12:18Z: the gun level is lost only where the flak line was on the card.)
   it('keeps the guns of a town stormed by infantry alone: they played no part, so nothing is charged and no line printed', () => {
     const { g, town, inside, foot } = lodzStorm(true, { guns: 2 });
@@ -815,6 +859,7 @@ describe('city defences: the town\'s guns against the tanks (slice 4)', () => {
     expect(`aal:${n.town.id}` in n.g.flags).toBe(false);
     // Starved out.
     const hu = lodzTown(true, { inside: false });
+    setFlakGround(hu.g, true);
     hu.g.flags[`wk:aa:${hu.town.id}`] = 2;
     hu.ger[0].str = 0.2;
     orderMove(hu.g, hu.ger[0], hu.town.id);
@@ -1021,6 +1066,8 @@ function britain(on: boolean): Game {
 describe('city defences in the bridge (slice 5)', () => {
   it('the view carries the switch, and per region the lights, the town works and the guns lost, only with it on', () => {
     const g = britain(true);
+    // (The guns lost are the ground role's: they need its sub-switch as well.)
+    setFlakGround(g, true);
     const lon = g.byName.London.id, ber = g.byName.Berlin.id;
     g.flags[`tw:${lon}`] = 2; g.flags[`twn:${lon}`] = Object.keys(g.nations).indexOf('UK');
     g.flags[`aal:${ber}`] = g.turn;
@@ -1305,8 +1352,12 @@ describe('city defences: start guns from the record (slice 6)', () => {
 
 // ---- Joined to the release 2 head (r2-head-1125o): fog on raids and the ferry leg -----------------------------------
 
-/** A forecast made on one side's knowledge (air.ts KnownDefence), every fighter in reach known for sure, the guns at `aa`. */
-const knownAs = (aa: number): KnownDefence => ({ sure: () => true, extra: 0, extraNat: 'GER', aa, ruined: 0 });
+/**
+ * A forecast made on one side's knowledge (air.ts KnownDefence), every fighter in reach known for sure, the guns at `aa`.
+ * With no `seen` the place reads as never scouted (the card's words test `seen` as the guns' line does); with `seen` and
+ * `ago` it reads as last seen with that level of guns, that many months ago.
+ */
+const knownAs = (aa: number, seen?: number, ago?: number): KnownDefence => ({ sure: () => true, extra: 0, extraNat: 'GER', aa, ruined: 0, ...(seen === undefined ? {} : { seen, ago }) });
 
 // The design director, 25 Nov 2026 19:44Z: under fog on raids a forecast reads the guns the side counts, and Fighter
 // control's radar and the searchlights as they truly are, for both are known truth reads for the joint sight form
@@ -1317,7 +1368,7 @@ describe('city defences under fog on raids (the design director, 19:44Z: radar a
     const r = ruhrByNight({ guns: 3, lights: 1, radar: true, bombers: 100 });
     const fog = assessAir(r.g, [r.f], 'night', r.t, knownAs(1));
     expect(fog.lights).toEqual({ level: 1, cloud: false, lit: 1 });
-    expect(line(fog, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Level 1 searchlights over the Ruhr', effect: 'With radar laying the guns, they may light every level of the guns built here, and they help the night fighters a little.' });
+    expect(line(fog, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Level 1 searchlights over the Ruhr', effect: 'Not scouted, so reckoned at the worst: with radar laying the guns, they light every level of guns that can be built here, and they help the night fighters a little.' });
     // The guns keep their fog hedge, for the guns are what the side counts.
     expect(line(fog, 'Anti-aircraft guns')).toEqual({ label: 'Anti-aircraft guns', value: 'Not scouted, so reckoned at the worst: level 1 guns round the factories of the Ruhr', effect: 'They stop 15% of the bombing. By night they fire by radar and searchlight, and bring down about 75% as many bombers as they would by day.' });
     expect(gunsTerm(fog)).toBeCloseTo(1 * 0.012 * 0.7 * 0.75, 12);
@@ -1350,8 +1401,8 @@ describe('city defences under fog on raids (the design director, 19:44Z: radar a
       expect(end.a.lights!.level).toBe(3);
       expect(line(end.a, 'Searchlights')!.value).toBe('Level 3 searchlights over the Ruhr');
     }
-    // The low end counts no guns where none were seen: the lights have none of its guns to light.
-    expect(line(w.lo.a, 'Searchlights')!.effect).toBe('There may be no guns built here for them to light. They help the night fighters a little.');
+    // The low end counts no guns where none were seen: the lights have none of its guns to light, and none are reckoned.
+    expect(line(w.lo.a, 'Searchlights')!.effect).toBe('No guns are reckoned built here for them to light. They help the night fighters a little.');
     // The targets list hedges the guns under fog and names the lights as they are; with the fog off it names both.
     expect(raidTargets(r.g, 'night', 'UK').find((x) => x.id === r.t)!.what).toMatch(/built guns not known and 60 light, level 3 searchlights/);
     setRaidFog(r.g, false);
@@ -1384,7 +1435,7 @@ describe('city defences under fog on raids (the design director, 19:44Z: radar a
     const fog = assessAir(r.g, [r.f], 'night', r.t, knownAs(1));
     expect(fog.lights).toEqual({ level: 3, cloud: false, lit: 1 });
     expect(gunsTerm(fog)).toBeCloseTo(1 * 0.012 * 0.7 * 0.75, 12);
-    expect(line(fog, 'Searchlights')!.effect).toBe('With radar laying the guns, they may light every level of the guns built here, and they help the night fighters a little.');
+    expect(line(fog, 'Searchlights')!.effect).toBe('Not scouted, so reckoned at the worst: with radar laying the guns, they light every level of guns that can be built here, and they help the night fighters a little.');
   });
 
   it('a night raid flown under fog on raids is priced on the truth, exactly as with the fog off', () => {
@@ -1408,29 +1459,30 @@ describe('city defences under fog on raids (the design director, 19:44Z: radar a
   // The design director, 25 Nov 2026 20:32Z: one footing on one card. The clauses that rest on the guns' count carry the
   // guns' hedge under fog on raids, in the UI director's words of 20:33Z (counts in words, the guns "built here"). The
   // every-level forms, known and under fog, were confirmed by the UI director at 20:36Z ("Yes to all three, as you
-  // wrote them"); none of the three rows is provisional.
+  // wrote them"). Since the design director's 22:24Z ruling (one hedge, both lines) the hedge under fog is the guns'
+  // line's own, in the UI director's words of 22:27Z and 22:30Z: here the side saw the place two months ago.
   it('words the searchlights\' guns clauses with the guns\' hedge under fog, and plainly on the truth and on a raid flown', () => {
     const say = {
       none: 'There are no guns built here for them to light. They help the night fighters a little.',
-      noneFog: 'There may be no guns built here for them to light. They help the night fighters a little.',
+      noneFog: 'There were no guns built here for them to light when seen two months ago. They help the night fighters a little.',
       some: 'With radar laying the guns, they light one of the three levels of guns built here, and they help the night fighters a little.',
-      someFog: 'With radar laying the guns, they may light one of the two levels of guns built here, and they help the night fighters a little.',
+      someFog: 'With radar laying the guns, they light one of the two levels of guns built here when seen two months ago, and they help the night fighters a little.',
       every: 'With radar laying the guns, they light every level of the guns built here, and they help the night fighters a little.',
-      everyFog: 'With radar laying the guns, they may light every level of the guns built here, and they help the night fighters a little.',
+      everyFog: 'With radar laying the guns, they light every level of the guns built here when seen two months ago, and they help the night fighters a little.',
     };
-    // No guns counted: level 3 lights and level 3 guns truly stand, the side counts none.
+    // No guns counted: level 3 lights and level 3 guns truly stand, the side saw none built.
     const none = ruhrByNight({ guns: 3, lights: 3, radar: true, bombers: 100 });
-    expect(line(assessAir(none.g, [none.f], 'night', none.t, knownAs(0)), 'Searchlights')!.effect).toBe(say.noneFog);
+    expect(line(assessAir(none.g, [none.f], 'night', none.t, knownAs(0, 0, 2)), 'Searchlights')!.effect).toBe(say.noneFog);
     expect(line(none.a(), 'Searchlights')!.effect).toBe(say.every);
     // And with truly no guns, on the truth.
     expect(line(ruhrByNight({ lights: 3, radar: true, bombers: 100 }).a(), 'Searchlights')!.effect).toBe(say.none);
-    // Some levels lit: level 1 lights, level 3 guns truly, the side counts two.
+    // Some levels lit: level 1 lights, level 3 guns truly, the side saw two.
     const some = ruhrByNight({ guns: 3, lights: 1, radar: true, bombers: 100 });
-    expect(line(assessAir(some.g, [some.f], 'night', some.t, knownAs(2)), 'Searchlights')!.effect).toBe(say.someFog);
+    expect(line(assessAir(some.g, [some.f], 'night', some.t, knownAs(2, 2, 2)), 'Searchlights')!.effect).toBe(say.someFog);
     expect(line(some.a(), 'Searchlights')!.effect).toBe(say.some);
-    // Every level lit: level 3 lights, level 3 guns truly, the side counts two.
+    // Every level lit: level 3 lights, level 3 guns truly, the side saw two.
     const every = ruhrByNight({ guns: 3, lights: 3, radar: true, bombers: 100 });
-    expect(line(assessAir(every.g, [every.f], 'night', every.t, knownAs(2)), 'Searchlights')!.effect).toBe(say.everyFog);
+    expect(line(assessAir(every.g, [every.f], 'night', every.t, knownAs(2, 2, 2)), 'Searchlights')!.effect).toBe(say.everyFog);
     expect(line(every.a(), 'Searchlights')!.effect).toBe(say.every);
     // A raid flown under fog on raids is assessed with no side's count (fly passes none), so it reads the known forms.
     for (const [o, want] of [
@@ -1443,6 +1495,81 @@ describe('city defences under fog on raids (the design director, 19:44Z: radar a
       expect(line(r.a(), 'Searchlights')!.effect).toBe(want);
       expect(fly(r.g, 'UK', 'night', r.t, [r.f], ':fog')).not.toBeNull();
     }
+  });
+});
+
+// The design director, 25 Nov 2026 22:24Z: one hedge, both lines. Under fog on raids the searchlights' guns clause takes
+// the Anti-aircraft guns line's hedge, read from the same knowledge: a place seen says the month, a place never scouted
+// is reckoned at the worst, and the low end of the band, which counts no guns there, reckons none. The words are the UI
+// director's, 22:27Z and 22:30Z, character for character. In sight every form is as before, and no number moves.
+describe('city defences under fog on raids: the searchlights take the guns\' hedge (the design director, 22:24Z)', () => {
+  const lights = (a: AirAssess): string => line(a, 'Searchlights')!.effect!;
+  const under = (o: Night, k: KnownDefence): string => { const r = ruhrByNight(o); return lights(assessAir(r.g, [r.f], 'night', r.t, k)); };
+  const night = { guns: 3, radar: true, bombers: 100 } as const;
+
+  it('words each of the six forms under fog whole, as the UI director wrote them', () => {
+    expect(under({ ...night, lights: 3 }, knownAs(0, 0, 2))).toBe('There were no guns built here for them to light when seen two months ago. They help the night fighters a little.');
+    expect(under({ ...night, lights: 2 }, knownAs(3, 3, 2))).toBe('With radar laying the guns, they light two of the three levels of guns built here when seen two months ago, and they help the night fighters a little.');
+    expect(under({ ...night, lights: 3 }, knownAs(2, 2, 2))).toBe('With radar laying the guns, they light every level of the guns built here when seen two months ago, and they help the night fighters a little.');
+    expect(under({ ...night, lights: 1 }, knownAs(3))).toBe('Not scouted, so reckoned at the worst: with radar laying the guns, they light one of the three levels of guns that can be built here, and they help the night fighters a little.');
+    expect(under({ ...night, lights: 3 }, knownAs(3))).toBe('Not scouted, so reckoned at the worst: with radar laying the guns, they light every level of guns that can be built here, and they help the night fighters a little.');
+    expect(under({ ...night, lights: 3 }, knownAs(0))).toBe('No guns are reckoned built here for them to light. They help the night fighters a little.');
+    // A sighting of -1 is never scouted, as no sighting is.
+    expect(under({ ...night, lights: 3 }, knownAs(3, -1, 0))).toBe(under({ ...night, lights: 3 }, knownAs(3)));
+  });
+
+  it('says the month of the sighting on each seen form: this month, a month ago, two months ago, 11 months ago', () => {
+    for (const [ago, when] of [[0, 'seen this month'], [1, 'seen a month ago'], [2, 'seen two months ago'], [11, 'seen 11 months ago']] as const) {
+      expect(under({ ...night, lights: 3 }, knownAs(0, 0, ago))).toBe(`There were no guns built here for them to light when ${when}. They help the night fighters a little.`);
+      expect(under({ ...night, lights: 1 }, knownAs(3, 3, ago))).toBe(`With radar laying the guns, they light one of the three levels of guns built here when ${when}, and they help the night fighters a little.`);
+      expect(under({ ...night, lights: 3 }, knownAs(1, 1, ago))).toBe(`With radar laying the guns, they light every level of the guns built here when ${when}, and they help the night fighters a little.`);
+    }
+  });
+
+  it('never says "may": in sight no clause is hedged, and under fog each guns clause carries exactly one hedge', () => {
+    const HEDGES = ['when seen', 'Not scouted, so reckoned at the worst:', 'No guns are reckoned'];
+    let n = 0;
+    for (const guns of [0, 1, 2, 3]) {
+      for (const lv of [1, 2, 3]) {
+        const r = ruhrByNight({ guns, lights: lv, radar: true, bombers: 100 });
+        const sight = lights(r.a());
+        expect(sight).not.toMatch(/\bmay\b/);
+        expect(sight).not.toMatch(/seen|reckoned/);
+        for (const seen of [-1, 0, guns]) {
+          for (const ago of [0, 1, 2, 11]) {
+            const fx = lights(assessAir(r.g, [r.f], 'night', r.t, knownAs(guns, seen, ago)));
+            expect(fx, `${guns} ${lv} ${seen} ${ago}`).not.toMatch(/\bmay\b/);
+            expect(HEDGES.filter((h) => fx.includes(h)), `${guns} ${lv} ${seen} ${ago}: ${fx}`).toHaveLength(1);
+            n++;
+          }
+        }
+      }
+    }
+    expect(n).toBe(144);
+  });
+
+  it('one hedge, both lines: the guns\' line and the searchlights\' line hedge alike on the fog\'s own card', () => {
+    const r = ruhrByNight({ guns: 3, lights: 3, radar: true, bombers: 200 });
+    setRaidFog(r.g, true);
+    // Never scouted: the high end, the card's own, reckons at the worst on both lines; the low end reckons no guns.
+    const w = weighKnown(r.g, 'UK', [r.f], 'night', r.t);
+    expect(w.live).toBe(false);
+    expect(line(w.hi.a, 'Anti-aircraft guns')!.value).toMatch(/^Not scouted, so reckoned at the worst:/);
+    expect(lights(w.hi.a)).toMatch(/^Not scouted, so reckoned at the worst:/);
+    expect(lights(w.hi.a)).toBe('Not scouted, so reckoned at the worst: with radar laying the guns, they light every level of guns that can be built here, and they help the night fighters a little.');
+    expect(lights(w.lo.a)).toBe('No guns are reckoned built here for them to light. They help the night fighters a little.');
+    // Seen at level 2 two months ago: both lines say so, with the same month.
+    ((r.g.intel.airSeen ??= {}).UK ??= {})[r.t] = [r.g.turn - 2, 0, 0, 2, 0];
+    const s = weighKnown(r.g, 'UK', [r.f], 'night', r.t);
+    expect(s.live).toBe(false);
+    for (const end of [s.lo, s.hi]) {
+      const guns = line(end.a, 'Anti-aircraft guns')!.value;
+      const month = (x: string): string | undefined => /when (seen [a-z0-9 ]+? ago)\b/.exec(x)?.[1];
+      expect(guns).toBe('Level 2 guns ringed the factories of the Ruhr when seen two months ago');
+      expect(month(lights(end.a))).toBe('seen two months ago');
+      expect(month(lights(end.a))).toBe(month(guns));
+    }
+    expect(lights(s.hi.a)).toBe('With radar laying the guns, they light every level of the guns built here when seen two months ago, and they help the night fighters a little.');
   });
 });
 
@@ -1465,5 +1592,178 @@ describe('city defences and the ferry leg (ferry.ts): no raid on a town', () => 
     const rep = fly(r.g, 'UK', 'superiority', r.t, [r.f], ':ferry', undefined, { from: r.f.base, to: r.t });
     expect(rep).not.toBeNull();
     expect('lights' in rep!).toBe(false);
+  });
+});
+
+// ---- The sub-switch: guns against tanks held back (the design director, 25 Nov 2026 22:10Z) -----------------------
+
+describe('city defences on, guns against tanks held back: the sub-switch off', () => {
+  it('a town with guns and a living garrison stormed by tanks is stormed as with no guns: no cut, no line, no fog form', () => {
+    const { g, town, tank, foot } = lodzStorm(true, { flak: false });
+    expect(cityDefences(g)).toBe(true);
+    expect(flakGround(g)).toBe(false);
+    const bare = assess(g, [tank, foot], town, { town: true });
+    g.flags[`wk:aa:${town.id}`] = 3;
+    expect(townFlak(g, town)).toBe(0);
+    expect(townFlakCut(g, town)).toBe(0);
+    const a = assess(g, [tank, foot], town, { town: true });
+    expect(a.A).toBe(bare.A);
+    expect(a.lines).toEqual(bare.lines);
+    expect(a.lines.some(isFlakLine)).toBe(false);
+    expect(armorLines(a.lines).map((l) => l.value)).toEqual(['Tanks in the streets of the town']);
+    // The stormer has not identified the defence: no fog form either.
+    for (const c of town.garr!) delete g.intel.known?.[c.id];
+    const look = stormOutlook(g, town.id)!;
+    expect(look.exact).toBe(false);
+    expect(look.lines.some((l) => /anti-aircraft/.test(l.value))).toBe(false);
+    // Identified, the forecast is the assessment's own.
+    for (const c of town.garr!) (g.intel.known ??= {})[c.id] = g.turn;
+    expect(stormOutlook(g, town.id)!.lines.some((l) => /anti-aircraft/.test(l.value))).toBe(false);
+  });
+
+  it('a town that falls to that storm keeps its guns, gets no mark and no result line', () => {
+    const { g, town, inside, tank, foot } = lodzStorm(true, { guns: 2, flak: false });
+    inside!.str = 0.2; inside!.org = 0.2;
+    const rep = orderStorm(g, town.id, [tank, foot])!;
+    expect(rep.taken).toBe(true);
+    expect(town.ctrl).toBe('GER');
+    expect(g.flags[`wk:aa:${town.id}`]).toBe(2);
+    expect(`aal:${town.id}` in g.flags).toBe(false);
+    expect(rep.lines.some((l) => l.label === 'Anti-aircraft guns' || /anti-aircraft/.test(l.value))).toBe(false);
+    // Asked for the price by hand, as a storm with the guns' line would ask, it still charges nothing.
+    const h = lodzStorm(true, { guns: 2, flak: false });
+    expect(flakLostWithTown(h.g, h.town, 2, 'Lodz')).toBeNull();
+    expect(h.g.flags[`wk:aa:${h.town.id}`]).toBe(2);
+    expect(`aal:${h.town.id}` in h.g.flags).toBe(false);
+  });
+
+  it('the same ground with the sub-switch on: the cut, the line, the fog form and the loss, as before', () => {
+    const results: { cut: boolean; line: boolean; fog: boolean; kept: number | undefined; mark: boolean; said: boolean }[] = [];
+    for (const flak of [false, true]) {
+      const { g, town, inside, tank, foot } = lodzStorm(true, { flak });
+      const bare = stormA(g, [tank], town);
+      g.flags[`wk:aa:${town.id}`] = 2;
+      const cut = stormA(g, [tank], town) / bare;
+      const a = assess(g, [tank, foot], town, { town: true });
+      for (const c of town.garr!) delete g.intel.known?.[c.id];
+      const fog = stormOutlook(g, town.id)!.lines.some((l) => l.value === 'The garrison may have heavy anti-aircraft guns dug in');
+      inside!.str = 0.2; inside!.org = 0.2;
+      const rep = orderStorm(g, town.id, [tank, foot])!;
+      expect(rep.taken).toBe(true);
+      if (flak) expect(cut).toBeCloseTo(0.86, 9); else expect(cut).toBe(1);
+      results.push({ cut: cut < 1, line: a.lines.some(isFlakLine), fog, kept: g.flags[`wk:aa:${town.id}`], mark: `aal:${town.id}` in g.flags, said: rep.lines.some((l) => l.label === 'Anti-aircraft guns') });
+    }
+    expect(results).toEqual([
+      { cut: false, line: false, fog: false, kept: 2, mark: false, said: false },
+      { cut: true, line: true, fog: true, kept: 1, mark: true, said: true },
+    ]);
+  });
+
+  it('the setter writes the flag on and deletes it off, and neither switch alone fights the tanks', () => {
+    const { g, town, tank } = lodzStorm(true, { guns: 3, flak: false });
+    expect('flakGround' in g.flags).toBe(false);
+    setFlakGround(g, true);
+    expect(g.flags.flakGround).toBe(1);
+    expect(townFlak(g, town)).toBe(3);
+    // City defences off with the sub-switch on: nothing.
+    setCityDefences(g, false);
+    expect(townFlak(g, town)).toBe(0);
+    expect(assess(g, [tank], town, { town: true }).lines.some(isFlakLine)).toBe(false);
+    setCityDefences(g, true);
+    setFlakGround(g, false);
+    expect('flakGround' in g.flags).toBe(false);
+    expect(townFlak(g, town)).toBe(0);
+  });
+
+  it('a grand campaign opens with the sub-switch only where both stages are true', async () => {
+    // The stage constants are read as the modules load: each case loads the campaign's modules afresh under its own
+    // forced stages (stage.ts reads TC_CITYDEFENCES and TC_FLAKGROUND from globalThis first).
+    const G = globalThis as Record<string, unknown>;
+    const names = ['TC_CITYDEFENCES', 'TC_FLAKGROUND'];
+    const kept = names.map((k) => [k, G[k]] as const);
+    const openUnder = async (cd: string, fg: string): Promise<[unknown, unknown]> => {
+      G.TC_CITYDEFENCES = cd; G.TC_FLAKGROUND = fg;
+      vi.resetModules();
+      const { createGame: create } = await import('../src/campaign/game');
+      const { startOpen: open } = await import('../src/campaign/staff');
+      const g = open(create(3, 'GER'));
+      return [g.flags.cityDefences, g.flags.flakGround];
+    };
+    try {
+      expect(await openUnder('1', '0')).toEqual([1, undefined]);
+      expect(await openUnder('1', '1')).toEqual([1, 1]);
+      expect(await openUnder('0', '1')).toEqual([undefined, undefined]);
+      expect(await openUnder('0', '0')).toEqual([undefined, undefined]);
+    } finally {
+      for (const [k, v] of kept) { if (v === undefined) delete G[k]; else G[k] = v; }
+      vi.resetModules();
+    }
+  });
+
+  it('is off in stage.json, with its note', () => {
+    expect((stage as Record<string, unknown>).flakGround).toBe(false);
+    expect(typeof (stage as Record<string, unknown>)._flakGround).toBe('string');
+    const g = startOpen(createGame(3, 'GER'));
+    expect('flakGround' in g.flags).toBe(false);
+  });
+
+  it('leaves the rest of city defences as it is: the searchlights line, the guns by night, the floor, the town works, the start lay', () => {
+    // The searchlights line and the guns by night, on the same raid card, the sub-switch off and on.
+    const r = ruhrByNight({ guns: 3, lights: 3, radar: true });
+    const off = r.a();
+    expect(gunsTerm(off)).toBeCloseTo(0.0189, 9);
+    expect(line(off, 'Searchlights')!.effect).toBe('With radar laying the guns, they light every level of the guns built here, and they help the night fighters a little.');
+    setFlakGround(r.g, true);
+    expect(r.a()).toEqual(off);
+    // The night fighters' floor.
+    setFlakGround(r.g, false);
+    const floorOff = lightsFloor(r.g, r.t, 'clear');
+    expect(floorOff).toBe(CITYDEF.fighters[3]);
+    setFlakGround(r.g, true);
+    expect(lightsFloor(r.g, r.t, 'clear')).toBe(floorOff);
+    const lit = ruhrByNight({ lights: 3, fighters: true, ac: true });
+    const dOff = lit.a().D;
+    setFlakGround(lit.g, true);
+    expect(lit.a().D).toBe(dOff);
+    // The town works: a garrison's month and what the works are worth.
+    const w = lodzTown(true);
+    setFlakGround(w.g, false);
+    townWorksMonth(w.g, 'POL');
+    expect(townWorksAt(w.g, w.town)).toBe(1);
+    layWorks(w.g, w.town, 3);
+    const bonusOff = townBonus(w.g, w.town);
+    setFlakGround(w.g, true);
+    expect(townWorksAt(w.g, w.town)).toBe(3);
+    expect(townBonus(w.g, w.town)).toBe(bonusOff);
+    // The start lay: the record's guns and lights, the same with the sub-switch as without.
+    const plain = begun(1, true);
+    const both = (() => { const h = createGame(3, null); h.flags.cityDefences = 1; h.flags.flakGround = 1; return startOpen(h); })();
+    expect(levels(both, 'wk:aa:')).toEqual(levels(plain, 'wk:aa:'));
+    expect(levels(both, 'wk:lights:')).toEqual(levels(plain, 'wk:lights:'));
+    expect(lightsIn(plain, 'London')).toBe(2);
+  });
+});
+
+describe('city defences in the bridge, the sub-switch off', () => {
+  it('shows no guns lost on the map and says nothing of tanks when city defences comes on; with it on, both as before', () => {
+    const g = britain(true);
+    const ber = g.byName.Berlin.id;
+    g.flags[`aal:${ber}`] = g.turn;
+    TC().load(saveGame(g));
+    const v = TC().view() as BridgeView;
+    expect(v.cityDefences).toBe(true);
+    expect('gl' in v.regions.find((r) => r.id === ber)!).toBe(false);
+    expect(v.regions.some((r) => 'gl' in r)).toBe(false);
+    TC().act('citydefencesrule:off');
+    const on = TC().act('citydefencesrule:on') as { ok: boolean; note: string };
+    expect(on.note).toMatch(/^Searchlights to build beside the anti-aircraft guns\./);
+    expect(on.note).toMatch(/a month at a time for up to three months\.$/);
+    expect(on.note).not.toMatch(/tank/);
+    // The sub-switch on: the scorched pits and the words, as they were.
+    setFlakGround(g, true);
+    TC().load(saveGame(g));
+    expect((TC().view() as BridgeView).regions.find((r) => r.id === ber)!.gl).toBe(1);
+    TC().act('citydefencesrule:off');
+    expect((TC().act('citydefencesrule:on') as { note: string }).note).toMatch(/up to three months, and the town's heavy guns fire on attacking tanks: if the town is stormed, one level of them is lost with it\.$/);
   });
 });
