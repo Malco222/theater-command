@@ -20,7 +20,7 @@ import { ShipBook, splitWings } from './ships';
 import { TroopBook, TROOPS, type MarkNews, type MarkWhat } from './troops';
 import { coolOf, crewOf, fateOf, fighterEngines, freshMemory, hitOf, kindOf, ramShare, seaAt, type FateMemory, type Scene } from './fates';
 import { bomberGuns, fighterGuns, type GunKind } from './guns';
-import type { AirAim, AirHitWho, AirJob, AirOutcome, AirPlace, AirUnit, BomberTold, Fall, FallHow, Straggler } from './types';
+import type { AirAim, AirHitWho, AirShown, AirJob, AirOutcome, AirPlace, AirUnit, BomberTold, Fall, FallHow, Straggler } from './types';
 import type { BomberSeat } from '../../campaign/types';
 import { afterWords, bombWorth, railChanceOf, ruinChanceOf, staffHow, troopCutOf } from '../../campaign/airfought';
 import type { VictoryLevel } from '../../core/ticket';
@@ -275,6 +275,18 @@ export class AirSim implements BattleSim<AirUnit> {
    */
   private after = new Map<number, number>();
   private skill = new Map<number, number>();
+  /**
+   * Shown only (types.ts AirShown, built by shownMore): what the view's 'fight', 'rise' and 'bounce' need from the tick
+   * before. 'at': each group's point and height as the last tick ended; 'waited': the groups still on the ground then;
+   * 'rise': the view second each group was scrambled, while it climbs; 'dive': each group's dive from above, while its
+   * edge lasts. Written and read by shownMore alone: no rule reads it, and a battle not shown never fills it.
+   */
+  private shownKept = {
+    at: new Map<number, { x: number; y: number; alt: number }>(),
+    waited: new Set<number>(),
+    rise: new Map<number, number>(),
+    dive: new Map<number, { at: number; from: number; to: number; edge: number }>(),
+  };
 
   constructor(ticket: FieldTicket<AirPlace>, opts: { show?: boolean; look?: number } = {}) {
     this.ticket = ticket;
@@ -403,6 +415,7 @@ export class AirSim implements BattleSim<AirUnit> {
     // strike): the scene builds every group from that view. Nothing has moved yet and no box has a straggler, so with
     // no time passed this sets only each group's 'extra', which the battle never reads, and draws no throw.
     if (this.show) for (const u of this.units) this.shown(u, 0);
+    if (this.show) this.shownMore();
   }
 
   /**
@@ -696,6 +709,8 @@ export class AirSim implements BattleSim<AirUnit> {
     this.touch();
     this.wear(dt);
     for (const u of this.units) if (!off(u)) this.settle(u, dt);
+    // Shown only: the fight, the climb from the ground, the patrol's point and the dive (types.ts AirShown).
+    if (this.show) this.shownMore();
     this.warn();
     this.end(dt);
   }
@@ -1952,6 +1967,98 @@ export class AirSim implements BattleSim<AirUnit> {
     }
     if (by) out.threat = { by: by.id, bounce: by.band > u.band || (by.bounce > 0 && u.contacts.includes(by.id)) };
     return out;
+  }
+
+  /**
+   * The 3D air thread's shown-only asks (26 November 2026; types.ts AirShown): each group's 'fight', 'rise', 'hold' and
+   * 'bounce', added to the extra shown() built this tick, once every group has moved and settled, so every group of a
+   * fight sees the same fight. Read only: the groups' points, heights, jobs, contacts and edges, the enemy each makes
+   * for this tick ('after'), this tick's dives in the log, and the ticket's fields; what it needs from the tick before
+   * it keeps in shownKept, which nothing else reads. It decides nothing and draws no throw; the battle never reads it.
+   */
+  private shownMore(): void {
+    const K = this.shownKept;
+    const r1 = (v: number): number => Math.round(v * 10) / 10;
+    // This tick's dives from above: the 'air:bounce' events at the end of the log, back to the first of an earlier tick.
+    const dove = new Set<number>();
+    for (let i = this.log.length - 1; i >= 0 && this.log[i].t === this.t; i--) {
+      const e = this.log[i];
+      if (e.what === 'air:bounce' && e.unit !== undefined) dove.add(e.unit);
+    }
+    // The fights: the groups in contact, each joined to the next by a contact both hold (a group gone or withdrawn this
+    // tick holds none), found from the lowest id up.
+    const fights = new Map<number, NonNullable<AirShown['fight']>>();
+    const done = new Set<number>();
+    const joined = (a: AirUnit, id: number): AirUnit | null => {
+      const b = this.unit(id);
+      return b && !off(b) && b.contacts.includes(a.id) ? b : null;
+    };
+    for (const u of [...this.units].sort((a, b) => a.id - b.id)) {
+      if (off(u) || !u.contacts.length || done.has(u.id)) continue;
+      const all: AirUnit[] = [], todo = [u];
+      done.add(u.id);
+      while (todo.length) {
+        const a = todo.pop()!;
+        all.push(a);
+        for (const id of a.contacts) {
+          const b = done.has(id) ? null : joined(a, id);
+          if (b) { done.add(b.id); todo.push(b); }
+        }
+      }
+      if (all.length < 2) continue;
+      all.sort((a, b) => a.id - b.id);
+      let x = 0, y = 0, x0 = 0, y0 = 0;
+      for (const a of all) {
+        const was = K.at.get(a.id) ?? a;
+        x += a.x; y += a.y; x0 += was.x; y0 += was.y;
+      }
+      const n = all.length, f = {
+        id: all[0].id, x: r1(x / n), y: r1(y / n),
+        vx: Math.round(((x - x0) / n / DT) * 100) / 100, vy: Math.round(((y - y0) / n / DT) * 100) / 100,
+        groups: all.map((a) => a.id),
+      };
+      for (const a of all) fights.set(a.id, f);
+    }
+    const dt = DT * SKY.scale;
+    for (const u of this.units) {
+      const add: AirShown = {};
+      const f = fights.get(u.id);
+      if (f) add.fight = { ...f, groups: [...f.groups] };
+      // Off the ground: the tick a group that was waiting on its field is given a job, it is scrambled.
+      if (K.waited.has(u.id) && u.job.do !== 'wait') K.rise.set(u.id, this.t);
+      const at = K.rise.get(u.id);
+      if (at !== undefined) {
+        if (!off(u) && u.to > u.band) {
+          // The ticks left of its climb, as fly() counts them: climbT grows by dt a tick, a band at SKY.bands.climb.
+          let c = u.climbT, k = 0;
+          for (let b = u.band; b < u.to; b++, c = 0) while (c < SKY.bands.climb) { c += dt; k++; }
+          const s = this.place.starts[u.corps];
+          add.rise = { x: r1(s?.x ?? u.homeX), y: r1(s?.y ?? u.homeY), at, from: 0, to: SKY.bands.alt[u.to], over: r1(this.t + k * DT - at) };
+        } else K.rise.delete(u.id);
+      }
+      if (u.air === 'ftr' && flying(u) && !away(u) && u.job.do === 'patrol' && !this.after.has(u.id)) add.hold = { x: r1(u.job.x), y: r1(u.job.y) };
+      // The dive from above: touch() puts the group on its enemy's band at once, so the drop itself takes no time by
+      // rule ('over' 0). What the rules do count is the dive's edge (u.bounce, SKY.edge.bounceFor air seconds).
+      if (dove.has(u.id)) {
+        K.dive.set(u.id, { at: this.t, from: Math.round(K.at.get(u.id)?.alt ?? u.alt), to: Math.round(u.alt), edge: u.bounce > 0 ? r1(SKY.edge.bounceFor / SKY.scale) : 0 });
+      }
+      const dv = K.dive.get(u.id);
+      if (dv) {
+        if (!off(u) && (u.bounce > 0 || dv.at === this.t)) add.bounce = { from: dv.from, to: dv.to, at: dv.at, over: 0, edge: dv.edge, left: dv.edge > 0 ? r1(u.bounce / SKY.scale) : 0 };
+        else K.dive.delete(u.id);
+      }
+      // A group not rebuilt this tick (gone or withdrawn) drops the keys it carried; the rest take what is true now. (A
+      // bomber box's own 'hold', the fighter group its guns hold their fire for, is shown()'s, and stays as it is.)
+      const ex = u.extra ?? {};
+      const mine = (k: string): boolean => (k === 'fight' || k === 'rise' || k === 'bounce' || (k === 'hold' && u.air === 'ftr')) && k in ex;
+      if (Object.keys(add).length || Object.keys(ex).some(mine)) {
+        const rest: Record<string, unknown> = {};
+        for (const k of Object.keys(ex)) if (!mine(k)) rest[k] = ex[k];
+        u.extra = { ...rest, ...add };
+      }
+    }
+    K.waited = new Set(this.units.filter((u) => u.job.do === 'wait').map((u) => u.id));
+    for (const u of this.units) if (!off(u)) K.at.set(u.id, { x: u.x, y: u.y, alt: u.alt });
   }
 
   /** The group a group is making for this tick (aim), if any. */

@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 7a25e236a 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0a9b2e110 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -105554,6 +105554,18 @@
        */
       __publicField(this, "after", /* @__PURE__ */ new Map());
       __publicField(this, "skill", /* @__PURE__ */ new Map());
+      /**
+       * Shown only (types.ts AirShown, built by shownMore): what the view's 'fight', 'rise' and 'bounce' need from the tick
+       * before. 'at': each group's point and height as the last tick ended; 'waited': the groups still on the ground then;
+       * 'rise': the view second each group was scrambled, while it climbs; 'dive': each group's dive from above, while its
+       * edge lasts. Written and read by shownMore alone: no rule reads it, and a battle not shown never fills it.
+       */
+      __publicField(this, "shownKept", {
+        at: /* @__PURE__ */ new Map(),
+        waited: /* @__PURE__ */ new Set(),
+        rise: /* @__PURE__ */ new Map(),
+        dive: /* @__PURE__ */ new Map()
+      });
       this.ticket = ticket;
       this.place = ticket.place;
       this.show = opts.show ?? true;
@@ -105703,6 +105715,7 @@
       for (const u of this.units) this.mor0.set(u.id, u.mor);
       this.through0 = this.throughNow(this.place.forecast.bmr);
       if (this.show) for (const u of this.units) this.shown(u, 0);
+      if (this.show) this.shownMore();
     }
     /**
      * How a group of n aircraft is drawn: how many models, one for every 'per' aircraft, in a box of w by d metres.
@@ -105986,6 +105999,7 @@
       this.touch();
       this.wear(dt);
       for (const u of this.units) if (!off(u)) this.settle(u, dt);
+      if (this.show) this.shownMore();
       this.warn();
       this.end(dt);
     }
@@ -107196,6 +107210,100 @@
       }
       if (by2) out.threat = { by: by2.id, bounce: by2.band > u.band || by2.bounce > 0 && u.contacts.includes(by2.id) };
       return out;
+    }
+    /**
+     * The 3D air thread's shown-only asks (26 November 2026; types.ts AirShown): each group's 'fight', 'rise', 'hold' and
+     * 'bounce', added to the extra shown() built this tick, once every group has moved and settled, so every group of a
+     * fight sees the same fight. Read only: the groups' points, heights, jobs, contacts and edges, the enemy each makes
+     * for this tick ('after'), this tick's dives in the log, and the ticket's fields; what it needs from the tick before
+     * it keeps in shownKept, which nothing else reads. It decides nothing and draws no throw; the battle never reads it.
+     */
+    shownMore() {
+      const K2 = this.shownKept;
+      const r12 = (v) => Math.round(v * 10) / 10;
+      const dove = /* @__PURE__ */ new Set();
+      for (let i = this.log.length - 1; i >= 0 && this.log[i].t === this.t; i--) {
+        const e = this.log[i];
+        if (e.what === "air:bounce" && e.unit !== void 0) dove.add(e.unit);
+      }
+      const fights3 = /* @__PURE__ */ new Map();
+      const done = /* @__PURE__ */ new Set();
+      const joined3 = (a, id) => {
+        const b = this.unit(id);
+        return b && !off(b) && b.contacts.includes(a.id) ? b : null;
+      };
+      for (const u of [...this.units].sort((a, b) => a.id - b.id)) {
+        if (off(u) || !u.contacts.length || done.has(u.id)) continue;
+        const all = [], todo = [u];
+        done.add(u.id);
+        while (todo.length) {
+          const a = todo.pop();
+          all.push(a);
+          for (const id of a.contacts) {
+            const b = done.has(id) ? null : joined3(a, id);
+            if (b) {
+              done.add(b.id);
+              todo.push(b);
+            }
+          }
+        }
+        if (all.length < 2) continue;
+        all.sort((a, b) => a.id - b.id);
+        let x = 0, y = 0, x0 = 0, y0 = 0;
+        for (const a of all) {
+          const was = K2.at.get(a.id) ?? a;
+          x += a.x;
+          y += a.y;
+          x0 += was.x;
+          y0 += was.y;
+        }
+        const n = all.length, f = {
+          id: all[0].id,
+          x: r12(x / n),
+          y: r12(y / n),
+          vx: Math.round((x - x0) / n / DT * 100) / 100,
+          vy: Math.round((y - y0) / n / DT * 100) / 100,
+          groups: all.map((a) => a.id)
+        };
+        for (const a of all) fights3.set(a.id, f);
+      }
+      const dt = DT * SKY.scale;
+      for (const u of this.units) {
+        const add = {};
+        const f = fights3.get(u.id);
+        if (f) add.fight = { ...f, groups: [...f.groups] };
+        if (K2.waited.has(u.id) && u.job.do !== "wait") K2.rise.set(u.id, this.t);
+        const at4 = K2.rise.get(u.id);
+        if (at4 !== void 0) {
+          if (!off(u) && u.to > u.band) {
+            let c = u.climbT, k = 0;
+            for (let b = u.band; b < u.to; b++, c = 0) while (c < SKY.bands.climb) {
+              c += dt;
+              k++;
+            }
+            const s = this.place.starts[u.corps];
+            add.rise = { x: r12(s?.x ?? u.homeX), y: r12(s?.y ?? u.homeY), at: at4, from: 0, to: SKY.bands.alt[u.to], over: r12(this.t + k * DT - at4) };
+          } else K2.rise.delete(u.id);
+        }
+        if (u.air === "ftr" && flying2(u) && !away(u) && u.job.do === "patrol" && !this.after.has(u.id)) add.hold = { x: r12(u.job.x), y: r12(u.job.y) };
+        if (dove.has(u.id)) {
+          K2.dive.set(u.id, { at: this.t, from: Math.round(K2.at.get(u.id)?.alt ?? u.alt), to: Math.round(u.alt), edge: u.bounce > 0 ? r12(SKY.edge.bounceFor / SKY.scale) : 0 });
+        }
+        const dv = K2.dive.get(u.id);
+        if (dv) {
+          if (!off(u) && (u.bounce > 0 || dv.at === this.t)) add.bounce = { from: dv.from, to: dv.to, at: dv.at, over: 0, edge: dv.edge, left: dv.edge > 0 ? r12(u.bounce / SKY.scale) : 0 };
+          else K2.dive.delete(u.id);
+        }
+        const ex = u.extra ?? {};
+        const mine4 = (k) => (k === "fight" || k === "rise" || k === "bounce" || k === "hold" && u.air === "ftr") && k in ex;
+        if (Object.keys(add).length || Object.keys(ex).some(mine4)) {
+          const rest = {};
+          for (const k of Object.keys(ex)) if (!mine4(k)) rest[k] = ex[k];
+          u.extra = { ...rest, ...add };
+        }
+      }
+      K2.waited = new Set(this.units.filter((u) => u.job.do === "wait").map((u) => u.id));
+      for (const u of this.units) if (!off(u)) K2.at.set(u.id, { x: u.x, y: u.y, alt: u.alt });
     }
     /** The group a group is making for this tick (aim), if any. */
     unitAfter(u) {
