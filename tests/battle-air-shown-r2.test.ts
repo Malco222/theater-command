@@ -47,6 +47,10 @@ function made(gs: G[], o: { mission?: 'bomb' | 'superiority'; radar?: boolean } 
 interface Seen {
   sizes: Set<number>; fights: number; rises: number; ended: { at: number; over: number; t: number; band: number }[];
   holds: number; quarried: number; both: number; bounces: { from: number; to: number; at: number; edge: number }[];
+  /** Fights by what they touch: none of a box ('bare'), two boxes or more ('twoBoxes'), a knot of one on a box ('ones'). */
+  bare: number; twoBoxes: number; ones: number; boxSeen: number;
+  /** Ticks a box is named by two fights or more, each such pair's two group lists. */
+  shared: { box: number; a: number[]; b: number[] }[];
 }
 
 /**
@@ -59,7 +63,7 @@ class Watch {
   private rising = new Map<number, { at: number; over: number }>();
   private dive = new Map<number, { at: number; from: number; to: number; edge: number }>();
   private read = 0;
-  seen: Seen = { sizes: new Set(), fights: 0, rises: 0, ended: [], holds: 0, quarried: 0, both: 0, bounces: [] };
+  seen: Seen = { sizes: new Set(), fights: 0, rises: 0, ended: [], holds: 0, quarried: 0, both: 0, bounces: [], bare: 0, twoBoxes: 0, ones: 0, boxSeen: 0, shared: [] };
 
   constructor(private key: string, s: AirSim) {
     this.keep(s);
@@ -80,33 +84,80 @@ class Watch {
   look(s: AirSim): void {
     const h = s.history(), now = h.slice(this.read);
     this.read = h.length;
-    // The fights as the contacts make them: the groups joined by contacts both hold, from the lowest id up.
-    const fightOf = new Map<number, number[]>();
+    // The fights as the contacts make them, knot-sized: the fighter groups joined by fighter-to-fighter contacts both
+    // hold, from the lowest id up, never walked through a box; each with the boxes any of its groups holds a contact
+    // with (both holding). A fighter group whose only contacts are boxes is a knot of one.
+    const fightOf = new Map<number, { ids: number[]; boxes: number[] }>();
     const live = s.units.filter((u) => !off(u));
+    const both = (a: AirUnit, id: number): AirUnit | undefined => {
+      const b = s.unit(id);
+      return b && !off(b) && b.contacts.includes(a.id) ? b : undefined;
+    };
     for (const u of [...live].sort((a, b) => a.id - b.id)) {
-      if (fightOf.has(u.id)) continue;
-      const set = new Set([u.id]), todo = [u];
+      if (u.air !== 'ftr' || fightOf.has(u.id)) continue;
+      const set = new Set([u.id]), boxes = new Set<number>(), todo = [u];
+      let held = false;
       while (todo.length) {
         const a = todo.pop()!;
         for (const id of a.contacts) {
-          const b = s.unit(id);
-          if (!b || off(b) || !b.contacts.includes(a.id) || set.has(id)) continue;
-          set.add(id); todo.push(b);
+          const b = both(a, id);
+          if (!b) continue;
+          held = true;
+          if (b.air === 'bmr') boxes.add(id);
+          else if (!set.has(id)) { set.add(id); todo.push(b); }
         }
       }
-      if (set.size < 2) continue;
-      const ids = [...set].sort((a, b) => a - b);
-      for (const id of ids) fightOf.set(id, ids);
+      if (!held) continue;
+      const k = { ids: [...set].sort((a, b) => a - b), boxes: [...boxes].sort((a, b) => a - b) };
+      for (const id of k.ids) fightOf.set(id, k);
+    }
+    // Each box, the fights naming it this tick (by their id): two knots on one box stay two fights.
+    const onBox = new Map<number, Map<number, number[]>>();
+    for (const u of s.units) {
+      const x = shownOf(u), at = `${this.key} group ${u.id} at ${s.t}`;
+      // A box carries no fight, ever; a fighter group in a contact both hold always does.
+      if (u.air === 'bmr') { expect('fight' in x, at).toBe(false); continue; }
+      if (!off(u) && u.contacts.some((id) => both(u, id))) expect(x.fight, at).toBeDefined();
+      const f = x.fight;
+      if (!f) continue;
+      // Fighters only, and no fighter outside it in a contact both hold with one inside it.
+      for (const i of f.groups) {
+        const g = s.unit(i)!;
+        expect(g.air, at).toBe('ftr');
+        for (const j of g.contacts) if (both(g, j)?.air === 'ftr') expect(f.groups, at).toContain(j);
+      }
+      // 'box' and 'boxes' absent unless it touches a box; 'boxes' every box any of its groups holds a contact with.
+      const touched = [...new Set(f.groups.flatMap((i) => s.unit(i)!.contacts.filter((j) => both(s.unit(i)!, j)?.air === 'bmr')))].sort((a, b) => a - b);
+      if (touched.length) {
+        expect(f.boxes, at).toEqual(touched);
+        expect(f.box, at).toBe(touched[0]);
+        if (u.id === f.id) {
+          this.seen.boxSeen++;
+          if (touched.length > 1) this.seen.twoBoxes++;
+          if (f.groups.length === 1) this.seen.ones++;
+          for (const b of touched) { const m = onBox.get(b) ?? new Map<number, number[]>(); m.set(f.id, f.groups); onBox.set(b, m); }
+        }
+      } else {
+        expect('box' in f, at).toBe(false);
+        expect('boxes' in f, at).toBe(false);
+        if (u.id === f.id) this.seen.bare++;
+      }
+    }
+    for (const [box, m] of onBox) {
+      const fs = [...m.values()];
+      for (let i = 1; i < fs.length; i++) this.seen.shared.push({ box, a: fs[0], b: fs[i] });
     }
     for (const u of s.units) {
       const x = shownOf(u), at = `${this.key} group ${u.id} at ${s.t}`;
-      // fight: on every group in contact, the same fight on each of its groups.
-      const ids = fightOf.get(u.id);
-      if (ids) {
+      // fight: on every fighter group of a knot, the same fight on each of its groups.
+      const k = fightOf.get(u.id), ids = k?.ids;
+      if (k && ids) {
         const f = x.fight!;
         expect(f, at).toBeDefined();
         expect(f.groups, at).toEqual(ids);
         expect(f.id, at).toBe(ids[0]);
+        expect(f.boxes ?? [], at).toEqual(k.boxes);
+        expect(f.box, at).toBe(k.boxes[0]);
         const us = ids.map((i) => s.unit(i)!);
         const cx = us.reduce((t, g) => t + g.x, 0) / us.length, cy = us.reduce((t, g) => t + g.y, 0) / us.length;
         expect(Math.abs(f.x - cx), at).toBeLessThanOrEqual(0.0501);
@@ -201,6 +252,39 @@ describe('the fight, the climb from the ground, the patrol point and the dive, i
     expect(seen.sizes.has(3)).toBe(true);
   });
 
+  it('two hops: the lowest group reaches the other attacker only through the defender, and the fight holds all three', () => {
+    // Two attacking fighter groups and one defending fighter group: attackers never touch each other (touch() pairs an
+    // attacker only with a defending fighter), so from the lowest group the walk reaches the other attacker by two
+    // fighter-to-fighter contacts, through the defender.
+    const tk = made([
+      { side: 'att', kind: 'ftr', x: 49_000, y: 1_000, band: 1 }, { side: 'att', kind: 'ftr', x: 51_000, y: 1_000, band: 1 },
+      { side: 'def', kind: 'ftr', x: 50_000, y: 40_000, band: 1 },
+    ], { mission: 'superiority', radar: true });
+    const s = new AirSim(tk, { show: true });
+    s.ai.att = true; s.ai.def = true;
+    const w = new Watch('two-hops', s);
+    const [a1, a2] = s.units.filter((u) => u.side === 'att').sort((a, b) => a.id - b.id), d = s.units.find((u) => u.side === 'def')!;
+    expect(a1.id).toBeLessThan(a2.id);
+    expect(a1.id).toBeLessThan(d.id);
+    const held = (a: AirUnit, b: AirUnit): boolean => !off(a) && !off(b) && a.contacts.includes(b.id) && b.contacts.includes(a.id);
+    let both = 0;
+    while (!s.over) {
+      s.step(); w.look(s);
+      const at = `two-hops at ${s.t}`;
+      // The attackers are never in contact with each other, only each with the defender.
+      expect(a1.contacts, at).not.toContain(a2.id);
+      expect(a2.contacts, at).not.toContain(a1.id);
+      if (!held(a1, d) || !held(a2, d)) continue;
+      const ids = [a1.id, a2.id, d.id].sort((a, b) => a - b);
+      const f = shownOf(a1).fight;
+      expect(f, at).toMatchObject({ id: a1.id, groups: ids });
+      for (const g of [a2, d]) expect(shownOf(g).fight, at).toEqual(f);
+      both++;
+    }
+    expect(both).toBeGreaterThan(10);
+    expect(w.seen.sizes.has(3)).toBe(true);
+  });
+
   it('a late scramble: rise from the scramble to the first view at its height, while it holds the target as its patrol', () => {
     const { s, seen } = watched('scramble', made([{ side: 'att', kind: 'bmr', x: 50_000, y: 1_000, band: 1 }, { side: 'def', kind: 'ftr', x: 50_000, y: 85_000, band: 0, wait: true }]));
     const sc = s.history().find((e) => e.what === 'air:scramble')!;
@@ -266,6 +350,118 @@ describe('the fight, the climb from the ground, the patrol point and the dive, i
     expect(sum.fights).toBeGreaterThan(1000);
     expect(sum.rises).toBeGreaterThan(0);
     expect(sum.bounces).toBeGreaterThan(0);
+  });
+});
+
+/** The pilot raids with bomber boxes and escorts, watched from the opening view (no orders given). */
+function raidsWatched(re: RegExp): Seen[] {
+  return ALL.filter((x) => re.test(x.key)).map((r) => {
+    const t = new AirSim(r.ticket, { show: true });
+    t.ai.att = true; t.ai.def = true;
+    const w = new Watch(r.key, t);
+    while (!t.over) { t.step(); w.look(t); }
+    return w.seen;
+  });
+}
+
+describe('the fight is the knot: fighters joined by contact, a box links none and names the knots on it (shown only)', () => {
+  // Two defending groups at one box, no escort: defenders never touch each other, so each is a knot of its own.
+  const twoOnOne = (): Ticket => made([
+    { side: 'att', kind: 'bmr', x: 50_000, y: 1_000, band: 1 },
+    { side: 'def', kind: 'ftr', x: 49_000, y: 40_000, band: 1 }, { side: 'def', kind: 'ftr', x: 51_000, y: 40_000, band: 1 },
+  ], { radar: true });
+
+  it('one box, two knots on it: two fights, each naming the box, neither holding the other\'s groups', () => {
+    const { s, seen } = watched('two-on-one', twoOnOne());
+    const box = s.units.find((u) => u.air === 'bmr')!.id;
+    expect(seen.shared.length).toBeGreaterThan(10);
+    for (const p of seen.shared) {
+      expect(p.box).toBe(box);
+      expect(p.a.filter((i) => p.b.includes(i))).toEqual([]);
+    }
+  });
+
+  it('a lone fighter group on a box with no enemy fighter: a fight of one, naming the box', () => {
+    const tk = made([{ side: 'att', kind: 'bmr', x: 50_000, y: 1_000, band: 1 }, { side: 'def', kind: 'ftr', x: 50_000, y: 40_000, band: 1 }], { radar: true });
+    const s = new AirSim(tk, { show: true });
+    s.ai.att = true; s.ai.def = true;
+    const w = new Watch('lone', s);
+    const box = s.units.find((u) => u.air === 'bmr')!, ftr = s.units.find((u) => u.air === 'ftr')!;
+    let met = 0;
+    while (!s.over) {
+      s.step(); w.look(s);
+      if (ftr.contacts.includes(box.id) && box.contacts.includes(ftr.id) && !off(ftr) && !off(box)) {
+        expect(shownOf(ftr).fight, `lone at ${s.t}`).toMatchObject({ id: ftr.id, groups: [ftr.id], box: box.id, boxes: [box.id] });
+        met++;
+      }
+    }
+    expect(met).toBeGreaterThan(10);
+    expect(w.seen.sizes).toEqual(new Set([1]));
+  });
+
+  it('a knot touching two boxes: box the lowest of them, boxes both', () => {
+    const tk = made([
+      { side: 'att', kind: 'bmr', x: 50_000, y: 1_000, band: 1 }, { side: 'att', kind: 'bmr', x: 50_000, y: 1_000, band: 1 },
+      { side: 'def', kind: 'ftr', x: 50_000, y: 40_000, band: 1 },
+    ], { radar: true });
+    const s = new AirSim(tk, { show: true });
+    s.ai.att = true; s.ai.def = true;
+    const w = new Watch('two-boxes', s);
+    const boxes = s.units.filter((u) => u.air === 'bmr').map((u) => u.id).sort((a, b) => a - b), ftr = s.units.find((u) => u.air === 'ftr')!;
+    let both = 0;
+    while (!s.over) {
+      s.step(); w.look(s);
+      const f = shownOf(ftr).fight;
+      if (f?.boxes?.length === 2) { expect(f.boxes).toEqual(boxes); expect(f.box).toBe(boxes[0]); both++; }
+    }
+    expect(both).toBeGreaterThan(10);
+    expect(w.seen.twoBoxes).toBe(both);
+  });
+
+  it('a knot with no box: no box and no boxes key', () => {
+    const { seen } = watched('bare', made([{ side: 'att', kind: 'ftr', x: 50_000, y: 1_000, band: 1 }, { side: 'def', kind: 'ftr', x: 50_000, y: 40_000, band: 1 }], { mission: 'superiority', radar: true }));
+    expect(seen.bare).toBeGreaterThan(10);
+    expect(seen.boxSeen).toBe(0);
+  });
+
+  it('a box carries no fight, and its own shown hold is as the view gives it without these keys', () => {
+    // Two battles in step, one with shownMore() left out: every box's extra is the same in both, every tick.
+    const P = AirSim.prototype as unknown as { shownMore: (this: AirSim) => void };
+    const was = P.shownMore;
+    let held = 0;
+    for (const tk of [twoOnOne(), ALL.find((r) => r.key === 'kent:0')!.ticket, ALL.find((r) => r.key === 'alsace:0')!.ticket]) {
+      const a = new AirSim(tk, { show: true });
+      P.shownMore = function (): void {};
+      let b: AirSim;
+      try { b = new AirSim(tk, { show: true }); } finally { P.shownMore = was; }
+      a.ai.att = a.ai.def = b.ai.att = b.ai.def = true;
+      let met = 0;
+      while (!a.over) {
+        a.step();
+        P.shownMore = function (): void {};
+        try { b.step(); } finally { P.shownMore = was; }
+        for (const u of a.units) {
+          if (u.air !== 'bmr') continue;
+          const v = b.unit(u.id)!, at = `box ${u.id} at ${a.t}`;
+          expect('fight' in (u.extra ?? {}), at).toBe(false);
+          expect(JSON.stringify(u.extra), at).toBe(JSON.stringify(v.extra));
+          if (typeof (u.extra as { hold?: unknown } | undefined)?.hold === 'number') held++;
+          if (u.contacts.length) met++;
+        }
+      }
+      expect(met).toBeGreaterThan(10);
+    }
+    // The box's shipped 'hold' (the fighter group its guns hold fire for) was there to be kept.
+    expect(held).toBeGreaterThan(0);
+  });
+
+  it('on the pilot raids: groups hold fighters only, boxes named, knots on one box apart, every fight true each tick', () => {
+    const seen = raidsWatched(/^(kent|alsace|twins|order):0$/);
+    const sum = (k: 'boxSeen' | 'bare' | 'ones'): number => seen.reduce((t, x) => t + x[k], 0);
+    // Watch checks each tick that every group in a fight's groups is a fighter and every box it touches is named.
+    expect(sum('boxSeen')).toBeGreaterThan(100);
+    expect(sum('ones') + sum('bare')).toBeGreaterThan(0);
+    expect(seen.some((x) => [...x.sizes].some((n) => n > 1))).toBe(true);
   });
 });
 

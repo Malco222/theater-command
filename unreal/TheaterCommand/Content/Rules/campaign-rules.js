@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 77218705b 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 2e3103390 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -107492,21 +107492,25 @@
         return b && !off(b) && b.contacts.includes(a.id) ? b : null;
       };
       for (const u of [...this.units].sort((a, b) => a.id - b.id)) {
-        if (off(u) || !u.contacts.length || done.has(u.id)) continue;
-        const all = [], todo = [u];
+        if (u.air !== "ftr" || off(u) || !u.contacts.length || done.has(u.id)) continue;
+        const all = [], todo = [u], boxes = /* @__PURE__ */ new Set();
+        let held3 = false;
         done.add(u.id);
         while (todo.length) {
           const a = todo.pop();
           all.push(a);
           for (const id of a.contacts) {
-            const b = done.has(id) ? null : joined3(a, id);
-            if (b) {
+            const b = joined3(a, id);
+            if (!b) continue;
+            held3 = true;
+            if (b.air !== "ftr") boxes.add(b.id);
+            else if (!done.has(b.id)) {
               done.add(b.id);
               todo.push(b);
             }
           }
         }
-        if (all.length < 2) continue;
+        if (!held3) continue;
         all.sort((a, b) => a.id - b.id);
         let x = 0, y = 0, x0 = 0, y0 = 0;
         for (const a of all) {
@@ -107524,13 +107528,18 @@
           vy: Math.round((y - y0) / n / DT * 100) / 100,
           groups: all.map((a) => a.id)
         };
+        if (boxes.size) {
+          const bs = [...boxes].sort((a, b) => a - b);
+          f.box = bs[0];
+          f.boxes = bs;
+        }
         for (const a of all) fights3.set(a.id, f);
       }
       const dt = DT * SKY.scale;
       for (const u of this.units) {
         const add = {};
         const f = fights3.get(u.id);
-        if (f) add.fight = { ...f, groups: [...f.groups] };
+        if (f) add.fight = { ...f, groups: [...f.groups], ...f.boxes ? { boxes: [...f.boxes] } : {} };
         if (K2.waited.has(u.id) && u.job.do !== "wait") K2.rise.set(u.id, this.t);
         const at4 = K2.rise.get(u.id);
         if (at4 !== void 0) {

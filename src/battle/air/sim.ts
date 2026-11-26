@@ -1986,8 +1986,10 @@ export class AirSim implements BattleSim<AirUnit> {
       const e = this.log[i];
       if (e.what === 'air:bounce' && e.unit !== undefined) dove.add(e.unit);
     }
-    // The fights: the groups in contact, each joined to the next by a contact both hold (a group gone or withdrawn this
-    // tick holds none), found from the lowest id up.
+    // The fights, knot-sized: the fighter groups joined by fighter-to-fighter contacts both hold (a group gone or
+    // withdrawn this tick holds none), found from the lowest id up. A bomber box is never walked through, so it links
+    // no two knots, and it carries no fight; each knot names the boxes it is in contact with (a contact both hold). A
+    // fighter group whose only contacts are boxes is a knot of one; one with no contact both hold is in no fight.
     const fights = new Map<number, NonNullable<AirShown['fight']>>();
     const done = new Set<number>();
     const joined = (a: AirUnit, id: number): AirUnit | null => {
@@ -1995,36 +1997,41 @@ export class AirSim implements BattleSim<AirUnit> {
       return b && !off(b) && b.contacts.includes(a.id) ? b : null;
     };
     for (const u of [...this.units].sort((a, b) => a.id - b.id)) {
-      if (off(u) || !u.contacts.length || done.has(u.id)) continue;
-      const all: AirUnit[] = [], todo = [u];
+      if (u.air !== 'ftr' || off(u) || !u.contacts.length || done.has(u.id)) continue;
+      const all: AirUnit[] = [], todo = [u], boxes = new Set<number>();
+      let held = false;
       done.add(u.id);
       while (todo.length) {
         const a = todo.pop()!;
         all.push(a);
         for (const id of a.contacts) {
-          const b = done.has(id) ? null : joined(a, id);
-          if (b) { done.add(b.id); todo.push(b); }
+          const b = joined(a, id);
+          if (!b) continue;
+          held = true;
+          if (b.air !== 'ftr') boxes.add(b.id);
+          else if (!done.has(b.id)) { done.add(b.id); todo.push(b); }
         }
       }
-      if (all.length < 2) continue;
+      if (!held) continue;
       all.sort((a, b) => a.id - b.id);
       let x = 0, y = 0, x0 = 0, y0 = 0;
       for (const a of all) {
         const was = K.at.get(a.id) ?? a;
         x += a.x; y += a.y; x0 += was.x; y0 += was.y;
       }
-      const n = all.length, f = {
+      const n = all.length, f: NonNullable<AirShown['fight']> = {
         id: all[0].id, x: r1(x / n), y: r1(y / n),
         vx: Math.round(((x - x0) / n / DT) * 100) / 100, vy: Math.round(((y - y0) / n / DT) * 100) / 100,
         groups: all.map((a) => a.id),
       };
+      if (boxes.size) { const bs = [...boxes].sort((a, b) => a - b); f.box = bs[0]; f.boxes = bs; }
       for (const a of all) fights.set(a.id, f);
     }
     const dt = DT * SKY.scale;
     for (const u of this.units) {
       const add: AirShown = {};
       const f = fights.get(u.id);
-      if (f) add.fight = { ...f, groups: [...f.groups] };
+      if (f) add.fight = { ...f, groups: [...f.groups], ...(f.boxes ? { boxes: [...f.boxes] } : {}) };
       // Off the ground: the tick a group that was waiting on its field is given a job, it is scrambled.
       if (K.waited.has(u.id) && u.job.do !== 'wait') K.rise.set(u.id, this.t);
       const at = K.rise.get(u.id);
