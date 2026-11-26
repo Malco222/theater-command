@@ -726,16 +726,16 @@ void FBattleEffects::SeaSplash(const FVector& WorldAt, float CalibreMm, const FS
 }
 
 // Release 2, the ten dramatic moments: the sea's items 9, 10 and 11 (the core's TheaterFxSea.inl)
-void FBattleEffects::DeckDrench(const FVector& ColumnAt, float CalibreMm, const FVector& Toward, float DeckZ, int32 ShipId)
+void FBattleEffects::DeckDrench(const FVector& ColumnAt, float CalibreMm, const FVector& Toward, float DeckZ, int32 ShipId, float BeamMetres)
 {
 	Do([=, this]()
 	{
-		// (Toward is a length as well as a way: world units to metres, as a place is)
-		Core.DeckDrench(Time(), ToFx(ColumnAt), CalibreMm, ToFx(Toward), DeckZ / UnitsPerMetre, ShipId);
+		// (Toward is a length as well as a way: world units to metres, as a place is; her beam is metres already)
+		Core.DeckDrench(Time(), ToFx(ColumnAt), CalibreMm, ToFx(Toward), DeckZ / UnitsPerMetre, ShipId, BeamMetres);
 	});
 }
 
-void FBattleEffects::ShipRide(int32 ShipId, const FTransform& Hull, float LongMetres, float HalfBeamMetres, float CoamingMetres)
+void FBattleEffects::ShipRide(int32 ShipId, const FTransform& Hull, float LongMetres, float HalfBeamMetres, float CoamingMetres, float DeckMetres)
 {
 	TheaterFx::Battle::ShipPose Pose;
 	Pose.At = ToFx(Hull.GetLocation());
@@ -745,6 +745,7 @@ void FBattleEffects::ShipRide(int32 ShipId, const FTransform& Hull, float LongMe
 	Pose.Long = LongMetres;
 	Pose.HalfBeam = HalfBeamMetres;
 	Pose.Coaming = CoamingMetres;
+	Pose.Deck = DeckMetres; // (her deck over her waterline: the deck's brass lies on it)
 	Do([=, this]()
 	{
 		Core.ShipRide(Time(), ShipId, Pose);

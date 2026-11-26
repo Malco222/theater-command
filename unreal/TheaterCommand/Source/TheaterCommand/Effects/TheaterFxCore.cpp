@@ -3806,7 +3806,7 @@ namespace TheaterFx
 			const double Foot = Height(At.X, At.Y);
 			const bool bHazeCount = HazeCountIn(GunIn); // (release 2: the AA haze overlay's ship AA smoke counts its own staying puffs; nothing without it)
 			LingerFrom(First, LingerOf("gun", GunIn ? GunIn : "rifle"), Now, Vec(At.X, At.Y, Foot), 0.65, std::max(At.Z - Foot, 1.0));
-			HazeGate(First, GunIn, bHazeCount); // (release 2: the AA haze overlay's cap on a ship's AA smoke that hangs; nothing without it)
+			HazeGate(Now, First, GunIn, bHazeCount); // (release 2: the AA haze overlay's cap on a ship's AA smoke that hangs; nothing without it)
 		}
 		if (bLook)
 		{
@@ -17037,7 +17037,9 @@ namespace TheaterFx
 			// pre-check, 05:14Z: by depth alone the far side of a fight went bare, flames and all)
 			if (!bOff)
 			{
-				Sorted.push_back(Order{ &B, (At - Eye.Eye).Dot(Eye.Forward) - B.Nearer, B.bKeep || B.bLight || (B.FarRep >= 2 && bFarKept), B.Lumps > 0 ? (At - Eye.Eye).Length() : 0.0, B.Serial });
+				// (release 2: the AA haze overlay's hanging puffs, at most sea_haze.keep of them once the room is short, are kept as
+				// the haze's own share; bHaze is never set without the overlay)
+				Sorted.push_back(Order{ &B, (At - Eye.Eye).Dot(Eye.Forward) - B.Nearer, B.bKeep || B.bLight || (B.FarRep >= 2 && bFarKept) || B.bHaze, B.Lumps > 0 ? (At - Eye.Eye).Length() : 0.0, B.Serial });
 			}
 			if (B.OilId >= 0)
 			{

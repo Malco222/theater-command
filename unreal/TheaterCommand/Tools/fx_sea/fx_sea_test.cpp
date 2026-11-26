@@ -72,6 +72,9 @@ namespace
 		return T;
 	}
 
+	/** A frame drawn from 300 m off her starboard beam, 20 m up (below). */
+	int Look(Battle& X, double Now, const Vec& At);
+
 	/** An unrelated effect laid after Then (a howitzer shell on the sea 300 m off and a 5-inch gun's muzzle), its pieces
 	 * printed: the same with and without Then, or Then moved a draw on the battle's dice. */
 	template <typename F>
@@ -83,6 +86,10 @@ namespace
 		const uint64_t Was = A.Seeds;
 		Then(A);
 		const uint64_t Is = A.Seeds;
+		// (both drawn once from the same eye before the shell: the shell's pieces are laid by the eye's distance, so a
+		// Then that draws must not be told from one that does not by that alone)
+		Look(A, 29.9, Vec(300.0, 40.0, 0.0));
+		Look(B, 29.9, Vec(300.0, 40.0, 0.0));
 		const size_t FromA = A.Bits.size(), FromB = B.Bits.size();
 		for (Battle* X : { &A, &B })
 		{
@@ -99,6 +106,10 @@ namespace
 		Got += bSame ? ", every one the same to the bit" : ", NOT the same";
 		return bSame && Was == Is;
 	}
+
+	// (the ship of the ship's frame, a frame drawn from her beam, and a piece's place worked out here: below)
+	Battle::ShipPose Pose(double T, double Turn = 0.03, double Roll = 6.0, double List = 0.0, double Mps = 10.0);
+	Vec Expected(const Bit& B, const Battle::ShipPose& P, double Now);
 
 	// ---------------------------------------------------------------------------------------------------------------
 	// A. DeckDrench (item 9 part 4)
@@ -136,7 +147,7 @@ namespace
 				OnDeckSide += Across > Off - 1.0 ? 1 : 0; // (on her side of her near edge, a metre of wind allowed)
 				InReach += Across < Reach + 1.0 ? 1 : 0;
 				AtDeck += std::fabs(P.Z - DeckZ) < 0.05 ? 1 : 0;
-				Late += B.Born >= Now + Rise + 0.3 * Hang ? 1 : 0;
+				Late += B.Born >= Now + Rise + 0.5 * Hang ? 1 : 0;
 			}
 			else if (B.Form == Bit::Shape::Flat)
 			{
@@ -147,7 +158,7 @@ namespace
 		Check(Laid > 0 && Falling > 10 && Sheets == Falling, "the head falls as lumps, each leaving a sheet on her deck", Say("%.0f pieces: %.0f lumps, %.0f sheets", Laid, Falling, Sheets));
 		Check(OnDeckSide == Falling && InReach == Falling, "every lump lands on her side of her near edge, within its reach", Say("%.1f to %.1f m from the column (her edge %.0f m, the reach %.1f m)", Nearest, Farthest, Off, Reach));
 		Check(AtDeck == Falling, "  ...at her deck's height", Say("%.0f of %.0f within 5 cm of %.1f m", AtDeck, Falling, DeckZ));
-		Check(Late == Falling && FirstBorn >= Now + Rise + 0.3 * Hang, "timed after the column's rise and most of its hang", Say("the first lump leaves %.2f s after the shell (rise %.2f + hang %.2f)", FirstBorn - Now, Rise, Hang));
+		Check(Late == Falling && FirstBorn >= Now + Rise + 0.5 * Hang, "timed after the column's rise and most of its hang", Say("the first lump leaves %.2f s after the shell (rise %.2f + hang %.2f)", FirstBorn - Now, Rise, Hang));
 		Check(LastGone <= Now + Rise + Hang + Fall + Life + 0.01, "all of it gone within rise + hang + fall + its life", Say("the last piece gone %.2f s after the shell (%.2f)", LastGone - Now, Rise + Hang + Fall + Life));
 		const int Second = X.DeckDrench(Now + 0.5, Column + Vec(30.0, 0.0, 0.0), 406.0, Toward, DeckZ, 7);
 		const int Third = X.DeckDrench(Now + 0.7, Column + Vec(-30.0, 0.0, 0.0), 406.0, Toward, DeckZ, 7);
@@ -161,6 +172,103 @@ namespace
 		const int Close = Y.DeckDrench(Now, Vec(0.0, -(HalfBeam + 3.0), 0.0), 76.0, Vec(0.0, 3.0, 0.0), DeckZ, 10);
 		Check(Beyond == 0 && Small == 0, "nothing when her edge is beyond the column's reach", Say("a 16-inch's column %.1f m off: %.0f pieces; a 3-inch's 8 m off: %.0f", Reach + 1.0, Beyond, Small));
 		Check(Close == 0, "  ...a 3-inch's 9 m column 3 m off (reach 3.2 m) lays nothing either", Say("%.0f pieces", Close));
+		// (the wind and her far edge: every lump and every sheet comes down on her deck, between her two edges, whatever
+		// the wind; an offshore wind (from her toward the column) of 4 and of 8 m/s; a destroyer 11 m across, told by her
+		// beam and by her pose)
+		auto Between = [&](double WindY, double Beam, bool bByPose, int& Lumps, double& Lo, double& Hi)
+		{
+			Battle Z;
+			Open(Z, Book);
+			Z.SetWind(Vec(0.0, WindY, 0.0));
+			const double Half = 0.5 * Beam;
+			const Vec Col(0.0, -(Half + Off), 0.0);
+			if (bByPose)
+			{
+				Battle::ShipPose Q = Pose(Now, 0.0, 0.0, 0.0, 0.0);
+				Q.At = Vec();
+				Q.HalfBeam = Half;
+				Z.ShipRide(Now, 3, Q);
+			}
+			const size_t From = Z.Bits.size();
+			Z.DeckDrench(Now, Col, 406.0, Toward, DeckZ, 3, bByPose ? 0.0 : Beam);
+			Lumps = 0;
+			Lo = 1e18;
+			Hi = -1e18;
+			for (size_t I = From; I < Z.Bits.size(); ++I)
+			{
+				const Bit& B = Z.Bits[I];
+				const bool bLump = B.Form == Bit::Shape::Puff && B.StretchBy > 0.0;
+				if (!bLump && B.Form != Bit::Shape::Flat)
+				{
+					continue;
+				}
+				Lumps += bLump ? 1 : 0;
+				const Vec At = bLump ? Z.Where(B, std::sqrt(2.0 * std::max(B.From.Z - DeckZ, 0.5) / B.Gravity)) : (B.DeckMode == 5 ? B.DeckP : B.From);
+				const double Across = At.Y - Col.Y;
+				Lo = std::min(Lo, Across);
+				Hi = std::max(Hi, Across);
+			}
+		};
+		int L4 = 0, L8 = 0, Ld = 0, Lp = 0;
+		double Lo4 = 0, Hi4 = 0, Lo8 = 0, Hi8 = 0, Lod = 0, Hid = 0, Lop = 0, Hip = 0;
+		Between(-4.0, 33.0, false, L4, Lo4, Hi4);
+		Between(-8.0, 33.0, false, L8, Lo8, Hi8);
+		Between(0.5, 11.0, false, Ld, Lod, Hid);
+		Between(0.5, 11.0, true, Lp, Lop, Hip);
+		Check(L4 > 10 && Lo4 >= Off - 1e-6 && Hi4 <= Off + 33.0 + 1e-6 && L8 > 10 && Lo8 >= Off - 1e-6 && Hi8 <= Off + 33.0 + 1e-6, "an offshore wind (4 and 8 m/s from her toward it): every lump and sheet comes down on her deck", Say("4 m/s: %.1f to %.1f m from the column; 8 m/s: %.1f to %.1f", Lo4, Hi4, Lo8, Hi8) + Say(" (her deck %.0f to %.0f)", Off, Off + 33.0));
+		Check(Ld > 3 && Lod >= Off - 1e-6 && Hid <= Off + 11.0 + 1e-6 && Lp > 3 && Lop >= Off - 1e-6 && Hip <= Off + 11.0 + 1e-6 && Ld < Falling, "a destroyer 11 m across: none past her far edge, by her beam or her pose", Say("by her beam %.0f lumps, %.1f to %.1f m; by her pose %.0f, %.1f", Ld, Lod, Hid, Lp, Lop) + Say(" to %.1f m (her deck %.0f to %.0f)", Hip, Off, Off + 11.0));
+		{
+			// (under way: a battleship at 10 m/s, the column 8 m off her starboard side 62.5 m ahead of her middle; her sheets
+			// lie in her frame from where they land, and ride her within a centimetre; a short ship at 15 m/s steams past
+			// some of the head, whose lumps fall on to the sea)
+			auto Run = [&](double Long, double Mps, double Ahead, int& Sheets_, int& ToSea, double& Err, double& Slid)
+			{
+				Battle Z;
+				Open(Z, Book);
+				auto Q = [&](double T) { Battle::ShipPose R = Pose(T, 0.0, 0.0, 0.0, Mps); R.Long = Long; R.Deck = DeckZ; return R; };
+				for (int F = 0; F <= 10; ++F)
+				{
+					Z.ShipRide(Now - 1.0 + F / 10.0, 5, Q(Now - 1.0 + F / 10.0));
+				}
+				const Vec Col(Q(Now).At.X + Ahead, -(HalfBeam + Off), 0.0);
+				const size_t From = Z.Bits.size();
+				Z.DeckDrench(Now, Col, 406.0, Toward, DeckZ, 5);
+				std::vector<Vec> Landed;
+				Sheets_ = 0;
+				ToSea = 0;
+				for (size_t I = From; I < Z.Bits.size(); ++I)
+				{
+					const Bit& B = Z.Bits[I];
+					Sheets_ += B.Form == Bit::Shape::Flat ? 1 : 0;
+					ToSea += B.Form == Bit::Shape::Puff && B.StretchBy > 0.0 && Z.Where(B, B.Life).Z < 1.0 ? 1 : 0;
+				}
+				Err = 0.0;
+				Slid = 0.0;
+				std::vector<Vec> Was;
+				for (int F = 1; F <= 200; ++F)
+				{
+					const double T = Now + F / 10.0;
+					Z.ShipRide(T, 5, Q(T));
+					Look(Z, T, Q(T).At);
+					for (size_t I = From; I < Z.Bits.size(); ++I)
+					{
+						const Bit& B = Z.Bits[I];
+						if (B.Form == Bit::Shape::Flat && B.DeckShip != 0 && B.DeckMode == 2 && T >= B.Born && T < B.Born + B.Life)
+						{
+							Err = std::max(Err, (Z.Where(B, T - B.Born) - Expected(B, Q(T), T)).Length());
+							Slid = std::max(Slid, (B.DeckV * (1.0 - std::exp(-(T - B.Born)))).Length()); // (its slide on her deck, in her frame)
+						}
+					}
+				}
+			};
+			int S1 = 0, Sea1 = 0, S2 = 0, Sea2 = 0;
+			double E1 = 0, Sl1 = 0, E2 = 0, Sl2 = 0;
+			Run(250.0, 10.0, 62.5, S1, Sea1, E1, Sl1);
+			const double Gc = 2.0 * H / (Fall * Fall), Tm = std::sqrt(2.0 * (0.85 * H - DeckZ) / Gc); // (a lump's fall from its crown to her deck)
+			Run(60.0, 15.0, 30.0 + 15.0 * (Rise + 0.72 * Hang + Tm), S2, Sea2, E2, Sl2); // (her bow passing the column as the head comes down)
+			Check(S1 > 10 && Sea1 == 0 && E1 < 0.01 && Sl1 < 3.0, "under way at 10 m/s: her sheets lie in her frame and go with her", Say("%.0f sheets, the worst %.2g m off her pose, sliding at most %.1f m on her deck (in the world they would slip 50 m aft)", S1, E1, Sl1));
+			Check(Sea2 > 0 && S2 > 0 && E2 < 0.01, "  ...a 60 m ship at 15 m/s steams past part of the head: those lumps fall on to the sea", Say("%.0f lumps to the sea, %.0f sheets on her", Sea2, S2));
+		}
 		std::string Got;
 		const bool bSame = DiceUntouched(Book, [&](Battle& Z) { Z.DeckDrench(Now, Column, 406.0, Toward, DeckZ, 7); }, Got);
 		Check(bSame, "no draw on the shared seed", Got);
@@ -178,7 +286,7 @@ namespace
 	// A ship for the ship's frame: a battleship 250 m long, 33 m across, steaming at 10 m/s, turning 1.7 degrees a second
 	// and rolling 6 degrees either way every 10 s (heel about her bow's axis), from the origin heading +X
 
-	Battle::ShipPose Pose(double T, double Turn = 0.03, double Roll = 6.0, double List = 0.0, double Mps = 10.0)
+	Battle::ShipPose Pose(double T, double Turn, double Roll, double List, double Mps)
 	{
 		const double Psi = Turn * T;
 		const double Phi = (List + Roll * std::sin(2.0 * Pi * T / 10.0)) * Pi / 180.0;
@@ -382,11 +490,14 @@ namespace
 		std::string Got;
 		const bool bSame = DiceUntouched(Book, [&](Battle& Z)
 			{
+				// (10 s of it, drawn as a scene draws, and gone by the shell: so the room the shell finds is as without it,
+				// and what is compared is the dice alone)
 				Z.ShipRide(0.0, 1, Pose(0.0));
-				Z.DeckWash(0.0, 1, Edge, 3, 1.0, 30.0, "runoff");
+				Z.DeckWash(0.0, 1, Edge, 3, 1.0, 10.0, "runoff");
 				for (int F = 1; F <= 600; ++F)
 				{
 					Z.ShipRide(F / Fps, 1, Pose(F / Fps));
+					Look(Z, F / Fps, Pose(F / Fps).At);
 				}
 			}, Got);
 		Check(bSame, "no draw on the shared seed", Got);
@@ -857,6 +968,122 @@ namespace
 			std::printf("    time: %d cases lying, the frame (ShipRide and Draw, %d fans) %.3f ms on this box, %.3f ms with her deck bare\n", static_cast<int>(X.DeckCases.size()), Shown, Ms, Bare);
 			bTimeFailed = bTimeFailed || Ms - Bare > 3.0;
 		}
+		{
+			// (her deck from her pose: every case lies on it, whatever the gun's elevation; drop_m is only the throw's fall)
+			Battle X;
+			Open(X, Book);
+			Battle::ShipPose Q = Pose(0.0, 0.0, 0.0);
+			Q.Deck = 8.0;
+			X.ShipRide(0.0, 1, Q);
+			X.DeckBrass(0.0, 1, ToWorld(Q, Vec(-20.0, -8.0, 12.5)), Vec(-1.0, 0.0, 0.0), "aa40", 8);
+			X.DeckBrass(0.0, 1, ToWorld(Q, Vec(20.0, -8.0, 10.0)), Vec(-1.0, 0.0, 0.0), "aa40", 8);
+			for (int F = 1; F <= 150; ++F)
+			{
+				X.ShipRide(F / 30.0, 1, Q);
+				LookAt(X, F / 30.0, ToWorld(Q, Vec(0.0, -8.0, 8.0)), 25.0);
+			}
+			int N = 0;
+			double Worst = 0.0;
+			for (const Bit& B : X.Bits)
+			{
+				if (B.DeckShip != 0 && B.DeckMode == 3)
+				{
+					++N;
+					Worst = std::max(Worst, std::fabs(B.DeckP.Z - (8.0 + B.R0)));
+					Worst = std::max(Worst, std::fabs(B.From.Z - (Q.At.Z + 8.0 + B.R0)));
+				}
+			}
+			Check(N == 16 && Worst < 1e-9, "her deck from her pose (8 m): every case lies on it, the breech 12.5 m up or 10 m", Say("%.0f lying, the worst %.2g m off her deck", N, Worst));
+		}
+		{
+			// (a ship's .50, tied to her: no aircraft-style case falls through her deck, and its own case lies on it)
+			Battle X;
+			Open(X, Book);
+			const Battle::ShipPose Q = Pose(0.0, 0.0, 0.0);
+			X.ShipRide(0.0, 1, Q);
+			X.AirGunShip(31, 1);
+			int Spent = 0;
+			for (int F = 0; F <= 150; ++F)
+			{
+				const double T = F / 30.0;
+				X.ShipRide(T, 1, Q);
+				const Vec Muzzle = ToWorld(Q, Vec(-20.0, -8.0, 10.5));
+				X.AirGun(T, 31, Muzzle, Muzzle + Vec(0.2, -0.5, 0.8) * 2000.0, Vec(), "hmg", 600.0, 890.0, "us");
+				LookAt(X, T, Muzzle, 15.0);
+				for (const Bit& B : X.Bits)
+				{
+					Spent += IsSpent(B) && B.Born > T - 1.0 / 30.0 && B.Born <= T ? 1 : 0;
+				}
+			}
+			const CaseCount C = CountCases(X, 5.0);
+			Check(Spent == 0 && C.Lying > 10, "a ship's .50 tied to her: no Spent through her deck, its 12.7 mm cases on it", Say("%.0f Spent in 5 s; %.0f cases on her deck", Spent, C.Lying));
+		}
+		{
+			// (a far ship's rounds never take the cases in view: 20 lying 15 m from the eye on one ship; another ship 800 m
+			// off firing 8 light guns for 40 s, and a third 70 to 80 m off (laid, drawn no more) firing 8 more, past the cap of all)
+			Battle X;
+			Open(X, Book);
+			auto At = [](const Vec& Off) { Battle::ShipPose R = Pose(0.0, 0.0, 0.0, 0.0, 0.0); R.At = Off; return R; };
+			const Battle::ShipPose Q1 = At(Vec()), Q2 = At(Vec(0.0, -800.0, 0.0)), Q3 = At(Vec(0.0, 40.0, 0.0));
+			const Vec Mount = ToWorld(Q1, Vec(0.0, -8.0, 12.0));
+			X.ShipRide(0.0, 1, Q1);
+			X.ShipRide(0.0, 2, Q2);
+			X.ShipRide(0.0, 3, Q3);
+			LookAt(X, 0.0, Mount, 15.0);
+			X.DeckBrass(0.0, 1, Mount, Vec(-1.0, 0.0, 0.0), "aa40", 10);
+			X.DeckBrass(0.05, 1, Mount, Vec(-1.0, 0.0, 0.0), "aa40", 10);
+			for (int F = 1; F <= 400; ++F)
+			{
+				const double T = F / 10.0;
+				X.ShipRide(T, 1, Q1);
+				X.ShipRide(T, 2, Q2);
+				X.ShipRide(T, 3, Q3);
+				for (int M = 0; M < 8; ++M)
+				{
+					X.DeckBrass(T, 2, ToWorld(Q2, Vec(-60.0 + 15.0 * M, 8.0, 12.0)), Vec(-1.0, 0.0, 0.0), "aa25", 1);
+					X.DeckBrass(T, 3, ToWorld(Q3, Vec(-40.0 + 10.0 * M, 8.0, 12.0)), Vec(-1.0, 0.0, 0.0), "aa25", 1);
+				}
+				LookAt(X, T, Mount, 15.0);
+			}
+			int Mine = 0, Far = 0, Third = 0;
+			for (const Bit& B : X.Bits)
+			{
+				if (B.DeckMode == 3 && 40.0 >= B.Born && 40.0 < B.Born + B.Life)
+				{
+					Mine += B.DeckShip == 2 ? 1 : 0;
+					Far += B.DeckShip == 3 ? 1 : 0;
+					Third += B.DeckShip == 4 ? 1 : 0;
+				}
+			}
+			Check(Mine == 20 && Far == 0 && Third > 100 && X.DeckCases.size() <= 200, "a far ship's rounds never take the cases in view", Say("in view %.0f of 20 after 40 s; the ship 800 m off %.0f laid; the one 70 to 80 m off %.0f lying (all the ships' cap %.0f)", Mine, Far, Third, static_cast<double>(X.DeckCases.size())));
+		}
+		{
+			// (a ship let go: her cases fade out over a second where they lie, a fade and never a pop)
+			Battle X;
+			Open(X, Book);
+			const Battle::ShipPose Q = Pose(0.0, 0.0, 0.0);
+			const Vec Mount = ToWorld(Q, Vec(0.0, -8.0, 12.0));
+			X.ShipRide(0.0, 1, Q);
+			X.DeckBrass(0.0, 1, Mount, Vec(-1.0, 0.0, 0.0), "aa40", 10);
+			for (int F = 1; F <= 60; ++F)
+			{
+				X.ShipRide(F / 30.0, 1, Q);
+				LookAt(X, F / 30.0, Mount, 15.0);
+			}
+			X.ShipRideStop(1);
+			LookAt(X, 2.0 + 1.0 / 30.0, Mount, 15.0);
+			int Next = 0, Late = 0, Still = 0;
+			for (const Bit& B : X.Bits)
+			{
+				if (B.Form == Bit::Shape::Plate && B.bThrown)
+				{
+					Next += 2.0 + 1.0 / 30.0 < B.Born + B.Life ? 1 : 0;
+					Still += 2.5 < B.Born + B.Life ? 1 : 0;
+					Late += 3.1 < B.Born + B.Life ? 1 : 0;
+				}
+			}
+			Check(Next == 10 && Still == 10 && Late == 0, "a ship let go: her cases fade out over a second where they lie", Say("%.0f of 10 still drawn the frame after, %.0f half a second on, %.0f after 1.1 s", Next, Still, Late));
+		}
 		JsonRecipe Without = Book;
 		for (auto It = Without.Numbers.begin(); It != Without.Numbers.end();)
 		{
@@ -881,7 +1108,7 @@ namespace
 	struct Barrage
 	{
 		int Ships = 0, LightMounts = 0, Streams = 0, HeavyBarrels = 0;
-		int MostHanging = 0, MostHazeEnds = 0, ShedFrames = 0, ShedLeft = 0, Hung = 0, LateHangs = 0;
+		int MostHanging = 0, MostHazeEnds = 0, ShedFrames = 0, ShedLeft = 0, Hung = 0, LateHangs = 0, MostKept = 0, SeenFrames = 0, ShortFrames = 0, FullSeenFrames = 0, FullShortFrames = 0, MostOnScreen = 0;
 		double MostRoom = 0.0, HangLeast = 1e9, HangMost = 0.0, LingerMost = 0.0, SmokeMost = 0.0, Ms = 0.0;
 		int Tails = 0;
 		uint64_t Seeds = 0;
@@ -953,6 +1180,10 @@ namespace
 		R.Streams = static_cast<int>(Light.size());
 		const Vec Eye(2800.0, -400.0, 30.0);
 		const Vec Look(2800.0, 400.0, 150.0);
+		Battle::View View = FxLamps::Looking(Eye, Look);
+		View.HalfAcross = std::tan(0.5 * 55.0 * Pi / 180.0); // (the screen's width known, as the game tells it: the room that can be drawn is the screen's)
+		View.HalfUp = View.HalfAcross * 9.0 / 16.0;
+		const size_t Keep = static_cast<size_t>(Book.Get("sea_haze.keep", 0.0));
 		double Spent = 0.0;
 		for (int F = 0; F <= static_cast<int>(Seconds * 10.0); ++F)
 		{
@@ -972,16 +1203,27 @@ namespace
 					G.Next += 60.0 / std::max(G.P->Rate, 1.0);
 				}
 			}
-			const double Room = static_cast<double>(X.RoomGate()) / std::max(1, X.MaxPuffs);
+			const double Room = static_cast<double>(X.RoomSeen()) / std::max(1, X.MaxPuffs);
 			R.MostRoom = std::max(R.MostRoom, Room);
-			X.Draw(T, FxLamps::Looking(Eye, Look));
+			X.Draw(T, View);
 			Spent += Since(T0);
-			int Hanging = 0;
+			int Hanging = 0, Shown = 0, KeptSeen = 0, OnScreen = 0;
+			for (const auto& O : X.Sorted)
+			{
+				// (what the frame lays: those on the screen (Sorted), the kept counted first. A hanging puff is kept, so it
+				// is laid whenever every kept piece fits the room: each takes, at the most, 3 places a spent case, 2 one
+				// that may twin, else 1 (Draw's Takes))
+				KeptSeen += !O.bKeep ? 0 : O.B->bThrown && O.B->Form == Bit::Shape::Plate ? 3 : O.B->TwinPx > 0.0 ? 2 : 1;
+				Shown += O.B->bHaze && T < O.B->CutAt ? 1 : 0;
+			}
+			R.MostKept = std::max(R.MostKept, KeptSeen);
+			Shown = KeptSeen <= X.MaxPuffs ? Shown : 0;
 			for (const Bit& B : X.Bits)
 			{
 				if (B.bHaze && T >= B.Born && T < B.Born + B.Life && T < B.CutAt)
 				{
 					++Hanging;
+					OnScreen += X.OffScreen(B, X.Where(B, T - B.Born), View) ? 0 : 1;
 					if (B.bTail)
 					{
 						R.LingerMost = std::max(R.LingerMost, B.Life);
@@ -991,7 +1233,7 @@ namespace
 						R.HangLeast = std::min(R.HangLeast, B.Life);
 						R.HangMost = std::max(R.HangMost, B.Life);
 					}
-					R.LateHangs += Room >= 0.8 && B.Born > T - 0.1 ? 1 : 0;
+					R.LateHangs += Room >= 0.8 && B.Born > T - 0.1 && static_cast<size_t>(Hanging) > Keep ? 1 : 0; // (a new one hung past 4/5 over the haze's share)
 				}
 				R.Tails += B.bTail && B.Born > T - 0.1 && B.Born <= T ? 1 : 0;
 				if (!B.bTail && !B.bHaze && B.Form == Bit::Shape::Puff && B.Drag == 4.0 && B.Windage == 1.0)
@@ -1000,18 +1242,25 @@ namespace
 				}
 			}
 			R.MostHanging = std::max(R.MostHanging, Hanging);
-			R.MostHazeEnds = std::max(R.MostHazeEnds, static_cast<int>(X.HazeEnds.size()));
+			// (the frames with hanging puffs on the screen, and those in which fewer were laid than were on it: the wind
+			// takes the haze along the line and out of this view, so the frames are counted, not every frame)
+			R.MostOnScreen = std::max(R.MostOnScreen, OnScreen);
+			R.SeenFrames += OnScreen > 0 ? 1 : 0;
+			R.ShortFrames += OnScreen > 0 && Shown < OnScreen ? 1 : 0;
+			R.MostHazeEnds = std::max(R.MostHazeEnds, static_cast<int>(std::count_if(X.HazeEnds.begin(), X.HazeEnds.end(), [&](double E) { return E > T; })));
 			if (Room >= 0.8)
 			{
 				++R.ShedFrames;
 				R.ShedLeft = std::max(R.ShedLeft, Hanging);
+				R.FullSeenFrames += OnScreen > 0 ? 1 : 0; // (the haze's share drawn, through the barrage's full room)
+				R.FullShortFrames += OnScreen > 0 && Shown < OnScreen ? 1 : 0;
 			}
 		}
 		R.Ms = Spent / (Seconds * 10.0 + 1.0);
 		R.Hung = static_cast<int>(X.HazeHangs);
 		// (40 s after the guns stop, every piece of the barrage gone: an unrelated shell and muzzle, printed)
-		X.Draw(Seconds + 40.0, FxLamps::Looking(Eye, Look));
-		X.Draw(Seconds + 40.1, FxLamps::Looking(Eye, Look));
+		X.Draw(Seconds + 40.0, View);
+		X.Draw(Seconds + 40.1, View);
 		const size_t From = X.Bits.size();
 		X.Shell(Seconds + 41.0, Vec(300.0, 40.0, 0.0), "how105", "water", false);
 		X.Muzzle(Seconds + 41.5, Vec(280.0, 60.0, 9.0), Vec(0.3, 0.2, 0.9), "naval_medium", "water");
@@ -1029,15 +1278,24 @@ namespace
 		const Barrage Off = Fleet(Book, 60.0);
 		const Barrage Hz = Fleet(On, 60.0);
 		std::printf("    the fleet: %d ships, %d light AA mounts (%d barrels, each a stream), %d heavy AA barrels (Muzzle ship_aa)\n", Off.Ships, Off.LightMounts, Off.Streams, Off.HeavyBarrels);
-		std::printf("    off: the room at most %.2f full; a light gun's smoke at most %.2f s; %d lingering pieces of the 5-inch\n", Off.MostRoom, Off.SmokeMost, Off.Tails);
-		std::printf("    on:  the room at most %.2f full; %d hanging at most at once (%d counted); %d frames past 4/5 of the room\n", Hz.MostRoom, Hz.MostHanging, Hz.MostHazeEnds, Hz.ShedFrames);
+		std::printf("    (the room as RoomSeen counts it, what the screen can draw, of game.max_puffs)\n    off: the room at most %.2f full; a light gun's smoke at most %.2f s; %d lingering pieces of the 5-inch\n", Off.MostRoom, Off.SmokeMost, Off.Tails);
+		std::printf("    on:  the room at most %.2f full; %d hanging at most at once (%d counted); %d frames past 4/5 of the room, %d hanging at most then, %d frames with hanging puffs on the screen (%d at most), %d of them with fewer laid (the kept on the screen taking %d places at most)\n", Hz.MostRoom, Hz.MostHanging, Hz.MostHazeEnds, Hz.ShedFrames, Hz.ShedLeft, Hz.SeenFrames, Hz.MostOnScreen, Hz.ShortFrames, Hz.MostKept);
 		std::printf("    time: the barrage's frame (every gun and the draw) %.2f ms off, %.2f ms on, on this box\n", Off.Ms, Hz.Ms);
 		const double SmokeS = Book.Get("air_guns.aa40.smoke_s", 0.0) * 1.2;
 		Check(Off.MostHanging == 0 && Off.Tails == 0 && Off.SmokeMost <= SmokeS + 1e-9 && Off.Hung == 0, "off: no puff hangs, the 5-inch's smoke does not linger, the light guns' smoke as its rows", Say("%.0f hanging; %.0f lingering; the longest light-gun puff %.2f s (the rows' most %.2f)", Off.MostHanging, Off.Tails, Off.SmokeMost, SmokeS));
 		Check(Hz.HangLeast >= 6.0 - 1e-9 && Hz.HangMost <= 10.0 + 1e-9 && Hz.HangMost > 6.0, "on: a light gun's hanging puff lives 6 to 10 s", Say("%.2f to %.2f s", Hz.HangLeast, Hz.HangMost));
 		Check(Hz.LingerMost > 6.0 && Hz.LingerMost <= On.Get("linger.gun.by.ship_aa.gone_s", 0.0) + 1e-9, "on: the 5-inch's smoke lingers, gone within linger.gun.by.ship_aa's 10 s", Say("the longest %.2f s", Hz.LingerMost));
 		Check(Hz.MostHanging <= 250 && Hz.MostHazeEnds <= 250 && Hz.MostHanging >= 200, "on: at most 250 hanging at once through the barrage (sea_haze.most)", Say("%.0f at most (%.0f counted)", Hz.MostHanging, Hz.MostHazeEnds));
-		Check(Hz.LateHangs == 0 && Hz.ShedLeft == 0, "on: past 4/5 of the room none hangs anew, and those hanging are shed first", Say("%.0f frames past 4/5; then %.0f new hanging, %.0f still hanging", Hz.ShedFrames, Hz.LateHangs, Hz.ShedLeft));
+		Check(Hz.SeenFrames >= 50 && Hz.MostOnScreen >= 30 && Hz.ShortFrames == 0, "on: the barrage's haze is drawn: every hanging puff on the screen is laid", Say("%.0f frames with hanging puffs on the screen (%.0f at most), %.0f with fewer laid; the screen's room at most %.2f full", Hz.SeenFrames, Hz.MostOnScreen, Hz.ShortFrames, Hz.MostRoom));
+		// (the screen's room full: the same barrage with the room cut to 1,000 (game.max_puffs), so the screen asks for
+		// over all of it)
+		const double KeepN = On.Get("sea_haze.keep", 0.0);
+		JsonRecipe Full = On;
+		Full.Numbers["game.max_puffs"] = 1000.0;
+		const Barrage Fu = Fleet(Full, 60.0);
+		std::printf("    the room cut to 1,000: the screen's room at most %.2f full, %d frames past 4/5, %d hanging at most then (keep %.0f), %d of them with hanging puffs on the screen, %d with fewer laid (the kept on the screen taking %d places at most)\n", Fu.MostRoom, Fu.ShedFrames, Fu.ShedLeft, KeepN, Fu.FullSeenFrames, Fu.FullShortFrames, Fu.MostKept);
+		Check(Fu.ShedFrames > 100 && Fu.LateHangs == 0 && Fu.ShedLeft <= KeepN, "the screen's room full: those over the haze's share (keep) shed first, none hangs anew over it", Say("%.0f frames past 4/5; %.0f new over the share, %.0f hanging at most (keep %.0f)", Fu.ShedFrames, Fu.LateHangs, Fu.ShedLeft, KeepN));
+		Check(Fu.FullSeenFrames >= 20 && Fu.FullShortFrames == 0, "  ...and the haze's share is drawn through it: every hanging puff on the screen laid (a full barrage still shows its haze)", Say("%.0f full frames with hanging puffs on the screen, %.0f with fewer laid", Fu.FullSeenFrames, Fu.FullShortFrames));
 		Check(Off.Seeds == Hz.Seeds && Off.After == Hz.After && !Off.After.empty(), "on: no draw on the shared seed; a shell and a muzzle after it the same to the bit", Say("%.0f pieces compared", static_cast<double>(Off.After.size())) + (Off.Seeds == Hz.Seeds ? "; the shared seed the same" : "; the shared seed MOVED"));
 		{
 			// (each of her clouds keeps puffs of its own: the 5-inch fired eight times in the same place, which of each
@@ -1074,13 +1332,6 @@ namespace
 				Differ += Kept[K] != Kept[0] && Kept[K].find('x') != std::string::npos ? 1 : 0;
 			}
 			Check(Differ >= 5 && !After.empty() && After == AfterOff, "on: each of her clouds keeps puffs of its own; another gun's smoke after them as without the overlay", Say("%.0f of 7 later clouds keep other puffs than the first", Differ) + (After == AfterOff ? "; the medium gun's muzzle the same" : "; the medium gun's muzzle MOVED"));
-		}
-		{
-			// (shedding seen: the same overlay with the room cut to 900, four ships)
-			JsonRecipe Small = On;
-			Small.Numbers["game.max_puffs"] = 900.0;
-			const Barrage Sm = Fleet(Small, 30.0, 4);
-			Check(Sm.ShedFrames > 0 && Sm.LateHangs == 0 && Sm.ShedLeft == 0 && Sm.MostHanging > 0, "a room of 900: hanging puffs shed as it passes 4/5, none hung past it", Sm.ShedFrames > 0 ? Say("%.0f frames past 4/5 (at most %.2f full); %.0f hanging at most before", Sm.ShedFrames, Sm.MostRoom, Sm.MostHanging) : Say("the room never passed 4/5 (%.2f): no shedding seen", Sm.MostRoom));
 		}
 	}
 }

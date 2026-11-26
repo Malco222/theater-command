@@ -282,20 +282,23 @@ public:
 	// scene calls them until the sea scene wires each behind its own switch; uncalled, every frame is as before.
 	/** A shell's column close off a ship's side whose head falls across her deck (item 9): ColumnAt where the shell fell
 	 * (world), CalibreMm as SeaSplash's, Toward from the column to her nearest deck edge, level (world units; its length
-	 * is how far off her side it stands), DeckZ her deck's world height there (world units), ShipId hers. Call it with
-	 * the column's SeaSplash. Nothing beyond sea_splash.drench.reach_k of the column's height, or with two drenches
-	 * already falling on her. */
-	void DeckDrench(const FVector& ColumnAt, float CalibreMm, const FVector& Toward, float DeckZ, int32 ShipId = -1);
+	 * is how far off her side it stands), DeckZ her deck's world height there (world units), ShipId hers, BeamMetres her
+	 * beam (metres; 0: her ShipRide pose's, if she is ridden). Call it with the column's SeaSplash, and ShipRide her
+	 * first, so its sheets lie in her own frame and go with her. Nothing beyond sea_splash.drench.reach_k of the
+	 * column's height, or with two drenches already falling on her; nothing lands past her far edge. */
+	void DeckDrench(const FVector& ColumnAt, float CalibreMm, const FVector& Toward, float DeckZ, int32 ShipId = -1, float BeamMetres = 0.0f);
 	/** Ship ShipId lies so this frame (once a frame for each ship that carries anything in her own frame: DeckWash's
 	 * water, the deck's brass; before Tick). Hull: her frame in the world, its X toward her bow, Z up through her
 	 * deck, its origin on her waterline amidships (her hull as drawn, turned, heeled and trimmed; its scale is not
 	 * read); as Unreal turns a frame its Y then points to her STARBOARD side, and the kit takes her port side as minus Y
 	 * (what DeckWash's edge calls Y is to port). LongMetres her length, HalfBeamMetres half her beam, CoamingMetres what stands at her deck's
-	 * edge (a bulwark; 0 for a rail with open sides). A ship not told of for 5 s is let go with all she carries. */
-	void ShipRide(int32 ShipId, const FTransform& Hull, float LongMetres, float HalfBeamMetres, float CoamingMetres = 0.0f);
+	 * edge (a bulwark; 0 for a rail with open sides), DeckMetres her deck's height over her waterline amidships (her
+	 * freeboard: the deck's brass lies on it; 0, not known). A ship not told of for 5 s is let go, and all she carries
+	 * fades out over a second where it was. */
+	void ShipRide(int32 ShipId, const FTransform& Hull, float LongMetres, float HalfBeamMetres, float CoamingMetres = 0.0f, float DeckMetres = 0.0f);
 	/** The plan's name for ShipRide (item 11, the deck's brass): the same call. */
-	void CasesRide(int32 ShipId, const FTransform& Hull, float LongMetres, float HalfBeamMetres, float CoamingMetres = 0.0f) { ShipRide(ShipId, Hull, LongMetres, HalfBeamMetres, CoamingMetres); }
-	/** She is gone (sunk, or out of the scene): what she carries goes at once, her wash stops. */
+	void CasesRide(int32 ShipId, const FTransform& Hull, float LongMetres, float HalfBeamMetres, float CoamingMetres = 0.0f, float DeckMetres = 0.0f) { ShipRide(ShipId, Hull, LongMetres, HalfBeamMetres, CoamingMetres, DeckMetres); }
+	/** She is gone (sunk, or out of the scene): her wash stops, and what she carries fades out over a second where it is. */
 	void ShipRideStop(int32 ShipId);
 	/** Water on her deck running off her edge (item 9's runoff after a drench, item 10's awash on a ship listing far
 	 * over), in her own frame and moved with her (ShipRide first). EdgeMetres: points along the edge it runs over, in
@@ -316,11 +319,12 @@ public:
 	/** The ships with a lane on the sea now. */
 	void OilLanes(TArray<int32>& Ships) const;
 	/** Item 11 part 4, the deck's brass: Count (1 to 16) spent cases of Kind (deck_cases.<kind>: aa25, aa40, in4, in5,
-	 * cm127) thrown from Breech (world) along Away (world, rough) onto ship ShipId's deck, lying and rolling in her frame
-	 * (ShipRide once a frame first). Drawn within 40 to 60 m. Nothing without the row or her pose. */
+	 * cm127, hmg) thrown from Breech (world) along Away (world, rough) onto ship ShipId's deck (DeckMetres of her ShipRide),
+	 * lying and rolling in her frame (ShipRide once a frame first). Laid within 90 m of the eye, drawn within 40 to 60 m.
+	 * Nothing without the row or her pose. */
 	void DeckBrass(int32 ShipId, const FVector& Breech, const FVector& Away, const FString& Kind, int32 Count = 1);
-	/** A ship's light gun stream (AirGun's Gun) is on ship ShipId (-1: none): each round it fires throws its case on her
-	 * deck (DeckBrass) while she is ridden and deck_cases has its kind, and its aircraft-style cases stay off. */
+	/** A ship's light gun stream (AirGun's Gun) is on ship ShipId (-1: none): while she is ridden its aircraft-style
+	 * cases stay off, and each round it fires throws its case on her deck (DeckBrass) when deck_cases has its kind. */
 	void AirGunShip(int32 Gun, int32 ShipId);
 	/** The battle's wind (metres a second, world axes): smoke leans and drifts with it. */
 	void SetWind(const FVector& MetresPerSecond);

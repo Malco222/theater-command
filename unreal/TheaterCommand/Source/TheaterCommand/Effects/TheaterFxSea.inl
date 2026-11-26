@@ -60,10 +60,10 @@
 	// ---------------------------------------------------------------------------------------------------------------
 	// Item 9 part 4: the column's head falling across her deck
 
-	int Battle::DeckDrench(double Now, const Vec& ColumnAt, double CalibreMm, const Vec& Toward, double DeckZ, int ShipId)
+	int Battle::DeckDrench(double Now, const Vec& ColumnAt, double CalibreMm, const Vec& Toward, double DeckZ, int ShipId, double Beam)
 	{
 		const auto Sound = [](double V, double Most) { return V == V && V >= -Most && V <= Most; };
-		if (!Sound(Now, 1.0e9) || !RealPlace(ColumnAt) || !RealPlace(Toward) || !Sound(DeckZ, 1.0e4))
+		if (!Sound(Now, 1.0e9) || !RealPlace(ColumnAt) || !RealPlace(Toward) || !Sound(DeckZ, 1.0e4) || !Sound(Beam, 1.0e4))
 		{
 			return 0;
 		}
@@ -86,13 +86,24 @@
 		{
 			return 0; // (beyond its reach, or a column standing on her edge: no way toward her)
 		}
+		// (her far edge: by her beam, the scene's or her pose's, so no water comes down past her far side over the sea;
+		// what of the head falls beyond her is the column's own fall, back into the sea)
+		const Rider* Her = ShipId >= 0 ? RiderOf(ShipId) : nullptr;
+		const double BeamM = Beam > 0.5 ? std::min(Beam, 80.0) : (Her ? 2.0 * Her->Pose.HalfBeam : 0.0);
+		const double Margin = 0.5;
+		const double Near = Gap + Margin;
+		const double Far = BeamM > 0.0 ? std::min(Reach, Gap + BeamM - Margin) : Reach;
+		if (!(Far > Near + 0.25))
+		{
+			return 0;
+		}
 		const Vec Way = Level * (1.0 / Gap);
 		const Vec Side(-Way.Y, Way.X, 0.0);
 		const Vec Foot(ColumnAt.X, ColumnAt.Y, Height(ColumnAt.X, ColumnAt.Y));
 		// (at most two at once on her: by her number, or by where they land)
 		const int Most = static_cast<int>(SafeNum(Num(P + "most", 2.0), 1.0, 8.0, 2.0));
 		Drenches.erase(std::remove_if(Drenches.begin(), Drenches.end(), [Now](const DrenchFall& F) { return !(F.Ends > Now); }), Drenches.end());
-		const Vec Lands = Foot + Way * (0.5 * (Gap + Reach));
+		const Vec Lands = Foot + Way * (0.5 * (Near + Far));
 		int Hers = 0;
 		for (const DrenchFall& F : Drenches)
 		{
@@ -108,8 +119,11 @@
 		const double G = 2.0 * H / (FallS * FallS); // (the column's own fall: its top back on the sea in fall_s)
 		const double WindK = SafeNum(Num(P + "wind_k", 0.25), 0.0, 1.0, 0.25);
 		const double Settle = SafeNum(Num(P + "life", 3.0), 0.3, 30.0, 3.0);
+		const Span LetGo = Range(P + "let_go", 0.55, 0.9); // (when in its hang the head's lumps leave the crown: that share of hang_s)
 		const double Big = std::clamp(std::sqrt(H / 60.0), 0.35, 1.2);
-		const int N = static_cast<int>(std::round(SafeNum(Num(P + "puffs", 26.0), 0.0, 120.0, 26.0) * Big));
+		// (as many lumps a metre of her deck as a wide ship takes: a narrow one under the same head takes its share of them)
+		const double Share = Clamp01((Far - Near) / std::max(Reach - Near, 0.5));
+		const int N = std::max(4, static_cast<int>(std::round(SafeNum(Num(P + "puffs", 26.0), 0.0, 200.0, 26.0) * Big * Share)));
 		const double CrownR = CrownK * H;
 		const Rgb WaterCol = Picture("grounds.water.spout.colour", Rgb::FromPicture(240, 244, 246));
 		const Rgb ShadowCol = Picture("grounds.water.spout.shadow", Rgb::FromPicture(150, 166, 180));
@@ -117,34 +131,53 @@
 		const Rgb Shade = Picture(P + "shade", ShadowCol);
 		const double ShadeK = SafeNum(Num(P + "shade_k", 0.7), 0.0, 1.0, 0.7);
 		const double Alpha = SafeNum(Num(P + "alpha", 0.85), 0.0, 1.0, 0.85);
-		const double PieceR = SafeNum(Num(P + "piece_r", 0.045), 0.005, 0.3, 0.045) * H; // (a 16-inch's 2.7 m lumps)
+		const double PieceR = SafeNum(Num(P + "piece_r", 0.045), 0.005, 0.3, 0.045) * H; // (a 16-inch's 3.6 m lumps)
 		const double SheetR = SafeNum(Num(P + "sheet_r", 0.06), 0.005, 0.3, 0.06) * H;
+		// (her deck under the head when each lump comes down: with her ridden, where she will be then, by her way through
+		// the water; a lump whose place she has steamed past falls on to the sea)
+		const Vec HerWay = Her && Her->bVel ? Vec(Her->Vel.X, Her->Vel.Y, 0.0) : Vec();
+		const Vec WindL(Wind.X, Wind.Y, 0.0);
 		int Laid = 0;
 		double LastDown = Now;
 		for (int I = 0; I < N; ++I)
 		{
 			// (one lump of the head: from high in its crown, slipping off toward her as the column stands, to a place on
-			// her deck between her near edge and the reach, the nearer the likelier)
+			// her deck between her near edge and her far one (or the reach), the nearer the likelier)
 			const double Up = D.U(0.7, 1.0);
 			const double Across = D.Bell();
 			const double OutK = D.U(0.0, 0.35);
 			const Vec From = Foot + ZUp * (Up * H) + Side * (Across * 0.6 * CrownR) + Way * (OutK * CrownR);
-			const double Far = D.U();
-			const double Land = Gap + (Reach - Gap) * std::pow(Far, 1.4);
+			const double FarU = D.U();
+			const double Land = Near + (Far - Near) * std::pow(FarU, 1.4);
 			const double Spread = D.Bell();
-			Vec To = Foot + Way * Land + Side * (Spread * 0.7 * CrownR);
-			To.Z = DeckZ;
 			const double Drop = std::max(From.Z - DeckZ, 0.5);
 			const double Tf = std::sqrt(2.0 * Drop / std::max(G, 0.1));
-			const double Late = D.U(0.35, 0.95);
+			// (where the wind takes it as it falls, WindK of it: aimed so that it still comes down between her edges)
+			const Vec Drift = WindL * (WindK * Tf);
+			Vec To = Foot + Way * Land + Side * (Spread * 0.7 * CrownR);
+			const double Lands_ = (To + Drift - Foot).Dot(Way);
+			To = To + Way * (std::clamp(Lands_, Near, Far) - Lands_);
+			To.Z = DeckZ;
+			const Vec Down_ = To + Drift; // (where it comes down, at her deck's height)
+			const double Late = LetGo.Pick(D);
 			Bit B;
 			B.Born = Now + RiseS + HangS * Late;
 			B.From = From;
+			const double DownAt = B.Born + Tf;
+			// (is her deck under it then? Her length, from her pose and her way; without her pose, it is)
+			bool bOnHer = true;
+			if (Her)
+			{
+				const Vec Rel = Down_ - (Her->Pose.At + HerWay * (DownAt - Her->At));
+				const double Ax = Rel.Dot(Her->Pose.Fore), Ay = Rel.Dot(Her->Pose.Left);
+				bOnHer = std::fabs(Ax) <= 0.5 * Her->Pose.Long - 1.0 && std::fabs(Ay) <= Her->Pose.HalfBeam + 0.25;
+			}
 			// (level, so as to be over its place on the deck when it gets down: the wind takes it on, WindK of it)
 			B.Vel = Vec((To.X - From.X) / Tf, (To.Y - From.Y) / Tf, 0.0);
 			B.Gravity = G;
 			B.Windage = WindK;
-			B.Life = Tf;
+			// (off her: on down to the sea, as the column's own water)
+			B.Life = bOnHer ? Tf : std::sqrt(2.0 * std::max(From.Z - Foot.Z, 0.5) / std::max(G, 0.1));
 			const double Grows = D.U(0.8, 1.25);
 			B.R0 = PieceR * 0.7 * Grows;
 			B.R1 = PieceR * 1.3 * Grows;
@@ -170,25 +203,36 @@
 			B.Turn = D.U(0.0, 2.0 * Pi);
 			Bits.push_back(B);
 			++Laid;
-			// (where it lands, a sheet of white water spreading on the deck and draining away)
-			const double Down = B.Born + Tf;
-			LastDown = std::max(LastDown, Down + Settle);
-			const Vec Where_ = To + Vec(Wind.X, Wind.Y, 0.0) * (WindK * Tf);
+			// (where it lands, a sheet of white water spreading on the deck and draining away: in her frame when she is
+			// ridden, so it goes with her as she steams on)
+			const double SlideU = D.U(0.5, 2.0);
+			const double LifeU = D.U(0.6, 1.0);
+			const double WideU = D.U(1.1, 1.6);
+			const double LongU = D.U(1.2, 1.8);
+			const double SpinU = D.U(-0.4, 0.4);
+			const double ThickU = D.U(0.45, 0.7);
+			const uint32_t SheetSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+			const double SheetTurn = D.U(0.0, 2.0 * Pi);
+			if (!bOnHer)
+			{
+				continue;
+			}
+			LastDown = std::max(LastDown, DownAt + Settle);
 			Bit S;
 			S.Form = Bit::Shape::Flat;
-			S.Born = Down;
-			S.From = Vec(Where_.X, Where_.Y, DeckZ + 0.08);
-			S.Vel = Way * D.U(0.5, 2.0);
+			S.Born = DownAt;
+			S.From = Vec(Down_.X, Down_.Y, DeckZ + 0.08);
+			S.Vel = Way * SlideU;
 			S.Drag = 1.2;
-			S.Life = Settle * D.U(0.6, 1.0);
+			S.Life = Settle * LifeU;
 			S.R0 = SheetR * 0.5;
-			S.R1 = SheetR * D.U(1.1, 1.6);
+			S.R1 = SheetR * WideU;
 			S.Grow = 0.3;
-			S.Stretch = D.U(1.2, 1.8);
-			S.Spin = std::atan2(Way.Y, Way.X) + D.U(-0.4, 0.4);
+			S.Stretch = LongU;
+			S.Spin = std::atan2(Way.Y, Way.X) + SpinU;
 			S.Col = FoamCol;
 			S.Col2 = FoamCol;
-			S.Alpha = Alpha * D.U(0.45, 0.7);
+			S.Alpha = Alpha * ThickU;
 			S.FadeIn = 0.05;
 			S.Hold = 0.3;
 			S.Heart = 0.6;
@@ -196,19 +240,31 @@
 			S.Rim = 0.0;
 			S.Rough = 0.3;
 			S.ShadeK = 0.0;
-			S.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
-			S.Turn = D.U(0.0, 2.0 * Pi);
+			S.LumpSeed = SheetSeed;
+			S.Turn = SheetTurn;
+			if (Her)
+			{
+				// (taken into her frame as it lands, DeckPlace; its slide as her own way across her deck)
+				S.DeckShip = static_cast<uint32_t>(ShipId) + 1u;
+				S.DeckId = ++DeckIds;
+				S.DeckMode = 5;
+				S.DeckP = S.From;
+				S.DeckV = Vec(S.Vel.Dot(Her->Pose.Fore), S.Vel.Dot(Her->Pose.Left), 0.0);
+				S.DeckT = S.Born;
+				S.Vel = Vec();
+				S.Drag = 0.0;
+			}
 			Bits.push_back(S);
 			++Laid;
 			if (I % 2 == 0)
 			{
 				// (and a low burst of spray thrown back up off the deck where it struck)
 				Bit Y;
-				Y.Born = Down;
-				Y.From = Vec(Where_.X, Where_.Y, DeckZ + 0.3);
+				Y.Born = DownAt;
+				Y.From = Vec(Down_.X, Down_.Y, DeckZ + 0.3);
 				const double Ya = D.Bell();
 				const double Yb = D.U(1.5, 3.5);
-				Y.Vel = Side * (Ya * 1.5) + ZUp * Yb + Way * 1.0;
+				Y.Vel = Side * (Ya * 1.5) + ZUp * Yb + Way * 1.0 + HerWay;
 				Y.Drag = 2.5;
 				Y.Gravity = 4.0;
 				Y.Windage = 0.5;
@@ -283,6 +339,7 @@
 		Pose.Long = SafeNum(PoseIn.Long, 1.0, 400.0, 100.0);
 		Pose.HalfBeam = SafeNum(PoseIn.HalfBeam, 0.5, 30.0, 8.0);
 		Pose.Coaming = SafeNum(PoseIn.Coaming, 0.0, 3.0, 0.0);
+		Pose.Deck = SafeNum(PoseIn.Deck, 0.0, 60.0, 0.0);
 		Rider* Her = nullptr;
 		for (Rider& R : Riders)
 		{
@@ -301,6 +358,20 @@
 			Riders.push_back(Rider());
 			Her = &Riders.back();
 			Her->Ship = ShipId;
+		}
+		// (her way through the water, level, eased over half a second: from her last pose, told within a second)
+		const double Dt = Now - Her->At;
+		if (Her->Pose.Long > 0.0 && Dt > 1.0e-3 && Dt <= 1.0)
+		{
+			const Vec Moved = Pose.At - Her->Pose.At;
+			const Vec Inst(Moved.X / Dt, Moved.Y / Dt, 0.0);
+			Her->Vel = Her->bVel ? Her->Vel + (Inst - Her->Vel) * std::min(1.0, Dt / 0.5) : Inst;
+			Her->bVel = true;
+		}
+		else if (!(Dt >= 0.0 && Dt <= 1.0))
+		{
+			Her->bVel = false; // (a jump in her clock or a long silence: her way is not known until told again)
+			Her->Vel = Vec();
 		}
 		Her->Pose = Pose;
 		Her->At = Now;
@@ -405,8 +476,14 @@
 		const bool bAwash = W.Kind == 2;
 		const std::string P = bAwash ? "sea_splash.runoff.awash." : "sea_splash.runoff.";
 		Dice& D = W.D;
-		// (where along the edge)
-		const double Along = D.U() * std::max(W.Length, 0.0);
+		// (where along the edge: a band, a piece every band_m (1.5 m), each a little off its mark, round and round the
+		// edge, so the sheets and their foam lie side by side along it and overlap into one, never scattered flecks)
+		const double Band = SafeNum(Num(P + "band_m", 1.5), 0.2, 20.0, 1.5);
+		const double Len = std::max(W.Length, 0.0);
+		const double Jit = D.U(-0.5, 0.5);
+		double Along = W.Cursor + Jit * Band;
+		Along = Len > 1.0e-6 ? Along - Len * std::floor(Along / Len) : 0.0;
+		W.Cursor = Len > 1.0e-6 ? std::fmod(W.Cursor + Band, Len) : 0.0;
 		Vec At = W.Edge[0];
 		double Gone = 0.0;
 		for (size_t I = 1; I < W.Edge.size(); ++I)
@@ -431,6 +508,7 @@
 		const double Alpha = SafeNum(Num(P + "alpha", 0.7), 0.0, 1.0, 0.7);
 		const double Run = SafeNum(Num(P + "run_mps", bAwash ? 1.0 : 1.4), 0.0, 10.0, 1.4);
 		const double ShadeK = SafeNum(Num(P + "shade_k", 0.6), 0.0, 1.0, 0.6);
+		const double Long = SafeNum(Num(P + "stretch", bAwash ? 1.6 : 2.6), 1.0, 8.0, 2.6); // (a sheet pouring: a streak that many times as long as it is wide)
 		const Span LifeS = Range(P + "life_s", bAwash ? 1.2 : 0.8, bAwash ? 2.0 : 1.6);
 		const double G = 9.81;
 		const uint32_t Her = static_cast<uint32_t>(W.Ship) + 1u;
@@ -481,7 +559,7 @@
 			B.R0 = 0.35 * Wide * Size;
 			B.R1 = 0.6 * Wide * Size;
 			B.Grow = 0.5;
-			B.Stretch = bAwash ? 1.6 : 2.6;
+			B.Stretch = Long;
 			B.StretchFrom = 1.0;
 			B.StretchAfter = 0.0;
 			B.StretchBy = 0.35 * B.Life; // (a sheet drawn out as it pours)
@@ -492,9 +570,9 @@
 			B.Along = (Pose.Up * -1.0).Unit(ZUp);
 			Bits.push_back(B);
 		}
-		if (D.U() < (bAwash ? 0.8 : 0.5))
 		{
-			// (the foam it leaves: on the sea by her side under the sheet, or sliding inboard across her deck)
+			// (the foam it leaves, every piece, so it too lies as a band: on the sea by her side under the sheet, or sliding
+			// inboard across her deck)
 			Bit F;
 			Water(F);
 			F.Form = Bit::Shape::Flat;
@@ -544,14 +622,14 @@
 			Feel.Gone = std::max(Feel.Within + 1.0, SafeNum(Num("deck_cases.gone_m", 60.0), 1.0, 1000.0, 60.0));
 		}
 		std::sort(DeckKill.begin(), DeckKill.end());
-		std::vector<uint32_t> Lying;
+		std::vector<std::pair<uint32_t, Vec>> Lying;
 		for (Bit& B : Bits)
 		{
 			if (B.DeckShip == 0)
 			{
 				continue;
 			}
-			if (B.DeckMode >= 3 && !DeckKill.empty() && std::binary_search(DeckKill.begin(), DeckKill.end(), B.DeckId))
+			if (B.DeckMode >= 3 && B.DeckMode <= 4 && !DeckKill.empty() && std::binary_search(DeckKill.begin(), DeckKill.end(), B.DeckId))
 			{
 				// (let go by a cap: it fades out over a second where it lies)
 				const double Age_ = std::max(Now - B.Born, 0.0);
@@ -565,15 +643,44 @@
 			const Rider* Her = Last && Last->Ship == Ship ? Last : RiderOf(Ship);
 			if (!Her)
 			{
-				// (her pose gone: what she carried goes with her)
-				B.Life = std::min(B.Life, std::max(Now - B.Born, 0.0));
+				// (her pose gone, let go or stopped: what she carried stays where it was last drawn and fades out over a
+				// second there, a fade and never a pop; a drench's sheet not yet landed lands in the world, as it was
+				// aimed; a piece of hers not yet begun is never seen)
+				const double Age_ = Now - B.Born;
+				if (B.DeckMode == 5)
+				{
+					B.From = B.DeckP;
+				}
+				else if (Age_ < 0.0)
+				{
+					B.Life = 0.0;
+				}
+				else if (B.Life > Age_ + 1.0)
+				{
+					B.Life = Age_ + 1.0;
+					B.Hold = std::min(B.Hold, Age_ / B.Life);
+				}
 				B.DeckShip = 0;
 				continue;
 			}
 			Last = Her;
 			const double Age = std::max(Now - B.Born, 0.0);
 			Vec L = B.DeckP;
-			if (B.DeckMode == 1)
+			if (B.DeckMode == 5)
+			{
+				if (Now < B.Born)
+				{
+					B.From = B.DeckP; // (still falling to her: where it will land, in the world)
+					continue;
+				}
+				// (landed: taken into her frame where her deck is under it now, and from there run as her foam)
+				const Vec Rel = B.DeckP - Her->Pose.At;
+				const double Lz = Her->Pose.Deck > 0.0 ? Her->Pose.Deck + 0.08 : Rel.Dot(Her->Pose.Up);
+				B.DeckP = Vec(Rel.Dot(Her->Pose.Fore), Rel.Dot(Her->Pose.Left), Lz);
+				B.DeckMode = 2;
+				L = B.DeckP + B.DeckV * (1.0 - std::exp(-Age));
+			}
+			else if (B.DeckMode == 1)
 			{
 				L = B.DeckP + B.DeckV * Age + Vec(0.0, 0.0, -0.5 * B.DeckG * Age * Age);
 				B.Along = (Her->Pose.Up * -1.0).Unit(ZUp);
@@ -587,7 +694,7 @@
 				DeckCaseStep(B, Her->Pose, Now, Feel);
 				if (B.DeckMode == 3 && Now < B.Born + B.Life)
 				{
-					Lying.push_back(B.DeckId);
+					Lying.emplace_back(B.DeckId, B.From);
 				}
 				continue;
 			}
@@ -596,9 +703,22 @@
 		DeckKill.clear();
 		if (!DeckCases.empty())
 		{
-			// (those no longer lying on her, gone over the side, let go or faded, are no longer counted)
-			std::sort(Lying.begin(), Lying.end());
-			DeckCases.erase(std::remove_if(DeckCases.begin(), DeckCases.end(), [&Lying](const CaseRec& C) { return !std::binary_search(Lying.begin(), Lying.end(), C.Id); }), DeckCases.end());
+			// (those no longer lying on her, gone over the side, let go or faded, are no longer counted; those lying keep
+			// where they lie, for the cap of all the ships, which lets the farthest from the eye go first)
+			std::sort(Lying.begin(), Lying.end(), [](const std::pair<uint32_t, Vec>& A_, const std::pair<uint32_t, Vec>& B_) { return A_.first < B_.first; });
+			auto Find = [&Lying](uint32_t Id) -> const Vec*
+			{
+				const auto It = std::lower_bound(Lying.begin(), Lying.end(), Id, [](const std::pair<uint32_t, Vec>& E, uint32_t K) { return E.first < K; });
+				return It != Lying.end() && It->first == Id ? &It->second : nullptr;
+			};
+			DeckCases.erase(std::remove_if(DeckCases.begin(), DeckCases.end(), [&Find](const CaseRec& C) { return Find(C.Id) == nullptr; }), DeckCases.end());
+			for (CaseRec& C : DeckCases)
+			{
+				if (const Vec* At = Find(C.Id))
+				{
+					C.At = *At;
+				}
+			}
 		}
 	}
 
@@ -796,8 +916,9 @@
 
 	void Battle::DeckRound(int Gun, size_t FromBit, double T, const Vec& At, const Vec& Way, const char* Kind)
 	{
-		// (AirGun, a round just fired: is the gun on a ridden ship with a row for its kind? Then the aircraft-style cases
-		// Spent threw for it (if the eye was near) are taken back, after every draw was made, and its case goes on her deck)
+		// (AirGun, a round just fired: is the gun on a ridden ship, with the deck_cases table? Then the aircraft-style cases
+		// Spent threw for it (if the eye was near) are taken back, after every draw was made, whatever its kind: none falls
+		// through her deck. With a row for its kind, its case goes on her deck)
 		int Ship = -1;
 		for (const std::pair<int, int>& G : GunShips)
 		{
@@ -808,13 +929,17 @@
 			}
 		}
 		const std::string P = std::string("deck_cases.") + (Kind ? Kind : "") + ".";
-		if (Ship < 0 || !RiderOf(Ship) || !Has(P + "case_m"))
+		if (Ship < 0 || !RiderOf(Ship) || !Has("deck_cases.within_m"))
 		{
-			return;
+			return; // (no deck_cases table at all: every gun as today)
 		}
 		if (FromBit < Bits.size())
 		{
 			Bits.erase(std::remove_if(Bits.begin() + static_cast<std::ptrdiff_t>(FromBit), Bits.end(), [](const Bit& B) { return B.Form == Bit::Shape::Plate && !B.bThrown && B.Rise < 0.0; }), Bits.end());
+		}
+		if (!Has(P + "case_m"))
+		{
+			return;
 		}
 		const Vec Level = Vec(Way.X, Way.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
 		const Vec Across = Level.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
@@ -840,6 +965,13 @@
 			return; // (no pose for her: ShipRide first)
 		}
 		const ShipPose& Pose = Her->Pose;
+		// (laid only near the eye, within lay_m (90 m): a ship far off, whose cases no one could see, never takes the
+		// room of those in view)
+		const double LayM = SafeNum(Num(R + "lay_m", 90.0), 1.0, 2000.0, 90.0);
+		if (bEyeKnown && (Breech - LastEye).Length() > LayM)
+		{
+			return;
+		}
 		const Vec Rel = Breech - Pose.At;
 		const Vec Local(Rel.Dot(Pose.Fore), Rel.Dot(Pose.Left), Rel.Dot(Pose.Up));
 		if (std::fabs(Local.X) > 0.5 * Pose.Long + 5.0 || std::fabs(Local.Y) > Pose.HalfBeam + 5.0)
@@ -869,11 +1001,14 @@
 		++DeckRounds;
 		Dice D(Mix64(Mount ^ Moment * 0x9E3779B97F4A7C15ull ^ DeckRounds * 0xD1B54A32D192ED03ull) ^ 0xB4A55ull);
 		const Vec AwayL = Vec(Away.Dot(Pose.Fore), Away.Dot(Pose.Left), 0.0).Unit(Vec(-1.0, 0.0, 0.0));
-		const double DeckAt = std::max(Local.Z - Drop, 0.3);
+		// (her deck: where her pose tells it, whatever the gun's elevation; else drop_m under the breech. drop_m stays the
+		// throw's fall)
+		const double DeckAt = Pose.Deck > 0.0 ? Pose.Deck : std::max(Local.Z - Drop, 0.3);
 		const uint32_t HerKey = static_cast<uint32_t>(ShipId) + 1u;
 		for (int I = 0; I < std::min(Count, 16); ++I)
 		{
-			// (the caps: the mount's oldest, then the oldest of all, let go to fade as this one comes)
+			// (the caps: the mount's oldest, then of all the ships' the one farthest from the eye (the oldest, the eye not
+			// known), let go to fade as this one comes)
 			size_t Mine = 0;
 			for (const CaseRec& C : DeckCases)
 			{
@@ -894,8 +1029,22 @@
 			}
 			while (DeckCases.size() >= MostAll)
 			{
-				DeckKill.push_back(DeckCases.front().Id);
-				DeckCases.erase(DeckCases.begin());
+				size_t Go = 0;
+				if (bEyeKnown)
+				{
+					double Farthest = -1.0;
+					for (size_t K = 0; K < DeckCases.size(); ++K)
+					{
+						const double Off = (DeckCases[K].At - LastEye).Length();
+						if (Off > Farthest)
+						{
+							Farthest = Off;
+							Go = K;
+						}
+					}
+				}
+				DeckKill.push_back(DeckCases[Go].Id);
+				DeckCases.erase(DeckCases.begin() + static_cast<std::ptrdiff_t>(Go));
 			}
 			Bit B;
 			B.Form = Bit::Shape::Plate;
@@ -949,6 +1098,7 @@
 			C.Ship = ShipId;
 			C.Mount = Mount;
 			C.Born = Now;
+			C.At = B.From;
 			DeckCases.push_back(C);
 		}
 	}
@@ -1054,8 +1204,11 @@
 	// Item 11 part 3: the AA haze, an overlay alone (battle-fx-sea-haze.json, the sea scene's -TheaterSeaAAHaze=1). A
 	// fleet's AA smoke hung about her as a haze through an air attack: the 5-inch's muzzle smoke lingers (its own row,
 	// linger.gun.by.ship_aa) and one light-AA smoke puff in smoke_hang_one_in hangs smoke_hang_s (air_guns.aa40, aa25).
-	// At most sea_haze.most hang at once; past sea_haze.shed_from of the room (game.max_puffs, as RoomGate counts it)
-	// none more hang and those hanging go first, fading out. Without the overlay's keys every hook here does nothing.
+	// At most sea_haze.most hang at once. The room is counted as what can be drawn: the screen's (RoomSeen, what the last
+	// frame had on the screen and what is made since), not every piece asked for off it. Past sea_haze.shed_from of it
+	// (game.max_puffs) those hanging over sea_haze.keep go first, the oldest first, fading out, and none more hang over
+	// keep; keep of them are the haze's own share of the room, laid whatever else asks (Draw counts them as kept), so a
+	// fleet's full barrage still hangs its haze. Without the overlay's keys every hook here does nothing.
 
 	bool Battle::HazeRoom(double Now)
 	{
@@ -1064,9 +1217,21 @@
 		{
 			return true; // (no cap asked: as the rows say)
 		}
-		HazeEnds.erase(std::remove_if(HazeEnds.begin(), HazeEnds.end(), [Now](double End) { return !(End > Now) || End > Now + 600.0; }), HazeEnds.end());
+		// (counted as hanging at Now: the guns lay their rounds a frame's moments apart and not in their order, so an end
+		// is let go only 2 s after it, and those still hanging at this round's own moment are counted)
+		HazeEnds.erase(std::remove_if(HazeEnds.begin(), HazeEnds.end(), [Now](double End) { return !(End > Now - 2.0) || End > Now + 600.0; }), HazeEnds.end());
+		const double Hanging = static_cast<double>(std::count_if(HazeEnds.begin(), HazeEnds.end(), [Now](double End) { return End > Now; }));
+		if (!(Hanging < Most))
+		{
+			return false;
+		}
+		const double Keep = SafeNum(Num("sea_haze.keep", 0.0), 0.0, Most, 0.0);
+		if (Hanging < Keep)
+		{
+			return true; // (the haze's own share of the room)
+		}
 		const double From = SafeNum(Num("sea_haze.shed_from", 0.8), 0.1, 1.0, 0.8);
-		return static_cast<double>(HazeEnds.size()) < Most && static_cast<double>(RoomGate()) < From * std::max(1, MaxPuffs);
+		return static_cast<double>(RoomSeen()) < From * std::max(1, MaxPuffs);
 	}
 
 	void Battle::HazeHang(Bit& B, const AirRow& Row, double T)
@@ -1102,7 +1267,7 @@
 		return true;
 	}
 
-	void Battle::HazeGate(size_t First, const char* Gun, bool bCounted)
+	void Battle::HazeGate(double Now, size_t First, const char* Gun, bool bCounted)
 	{
 		// (Muzzle, just after LingerFrom: a ship's AA gun's smoke that its row made linger, held to the cap. Each puff
 		// past the cap, or with the room past shed_from, goes back to its own short life as laid. The linger rule's count
@@ -1123,7 +1288,9 @@
 			{
 				continue;
 			}
-			if (HazeRoom(B.Born))
+			// (counted at the gun's moment, not the puff's birth a little after it: counted later, those ending between
+			// were let go, and one more hung over the cap)
+			if (HazeRoom(Now))
 			{
 				B.bHaze = true;
 				HazeEnds.push_back(B.Born + B.Life);
@@ -1144,17 +1311,38 @@
 			return;
 		}
 		const double From = SafeNum(Num("sea_haze.shed_from", 0.8), 0.1, 1.0, 0.8);
-		if (!(static_cast<double>(RoomGate()) >= From * std::max(1, MaxPuffs)))
+		const double Most = SafeNum(Num("sea_haze.most", 0.0), 0.0, 1.0e5, 0.0);
+		const size_t Keep = static_cast<size_t>(SafeNum(Num("sea_haze.keep", 0.0), 0.0, Most, 0.0));
+		if (!(static_cast<double>(RoomSeen()) >= From * std::max(1, MaxPuffs)))
 		{
 			return;
 		}
-		for (Bit& B : Bits)
+		// (those hanging now, the oldest first: all past keep fade out as a trail's cut piece does)
+		std::vector<std::pair<double, size_t>> Hung;
+		for (size_t I = 0; I < Bits.size(); ++I)
 		{
-			if (B.bHaze)
+			const Bit& B = Bits[I];
+			if (B.bHaze && Now < B.Born + B.Life && Now < B.CutAt)
 			{
-				B.CutAt = std::min(B.CutAt, Now + TrailCutFade); // (fading out as a trail's cut piece does)
-				B.bHaze = false;
+				Hung.emplace_back(B.Born, I);
 			}
 		}
+		if (Hung.size() <= Keep)
+		{
+			return;
+		}
+		std::sort(Hung.begin(), Hung.end());
+		const size_t Shed = Hung.size() - Keep;
+		for (size_t K = 0; K < Shed; ++K)
+		{
+			Bit& B = Bits[Hung[K].second];
+			B.CutAt = std::min(B.CutAt, Now + TrailCutFade);
+			B.bHaze = false;
+		}
 		HazeEnds.clear();
+		for (size_t K = Shed; K < Hung.size(); ++K)
+		{
+			const Bit& B = Bits[Hung[K].second];
+			HazeEnds.push_back(B.Born + B.Life);
+		}
 	}

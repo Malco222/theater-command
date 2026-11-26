@@ -366,7 +366,8 @@ namespace TheaterFx
 		// the deck's brass. DeckShip: her number + 1 (0: an ordinary piece, as ever). DeckMode: 1 water running off or over
 		// her edge (DeckP + DeckV t, falling DeckG), 2 a sheet of foam sliding to a stop (DeckP + DeckV (1 - e^-t)), 3 a
 		// spent case thrown, lying and rolling (its place DeckP and way DeckV stepped each frame from DeckT; its axis
-		// DeckAx and its other way DeckFa), 4 a case gone over her side, falling to the sea. All in her frame: X toward
+		// DeckAx and its other way DeckFa), 4 a case gone over her side, falling to the sea, 5 a drench's sheet not yet
+		// landed (DeckP its place in the world until it lands, then taken into her frame and run as 2). All in her frame: X toward
 		// her bow, Y to port, Z up from her waterline amidships. Each frame (ShipRide's pose, at Draw) its world place is
 		// written to From (or, a case, At1 and At2), so the draw finds it on her wherever she has turned and heeled)
 		bool bHaze = false; // (release 2: a puff of the AA haze overlay, counted against sea_haze.most and shed first)
@@ -669,12 +670,15 @@ namespace TheaterFx
 		 * table's); Toward: from the column to her nearest deck edge, level (its length is how far off her side the
 		 * column stands, metres); DeckZ: her deck's height there (metres, world). After the column's rise and most of its
 		 * hang its head comes down as a curtain of white water leaning toward her and bent by the wind, landing across
-		 * her deck from her near edge out to sea_splash.drench.reach_k of the column's height from the column, where it
-		 * settles in sheets at DeckZ and is gone within drench.life seconds of landing. Nothing when her edge is beyond
-		 * that reach, without the row (sea_splash.drench.reach_k), or with two drenches already falling on her (ShipId:
-		 * hers, 0 or more; under 0, a drench landing within 40 m counts as hers). Lay the column itself with SeaSplash
-		 * at the same moment. Returns the pieces laid (0: none). */
-		int DeckDrench(double Now, const Vec& ColumnAt, double CalibreMm, const Vec& Toward, double DeckZ, int ShipId = -1);
+		 * her deck from her near edge out to sea_splash.drench.reach_k of the column's height from the column, and never
+		 * past her far edge (Beam, her beam in metres; 0: her pose's, ShipRide, if she is ridden; else the reach alone):
+		 * where the wind carries a lump it still comes down on her deck, between her two edges. There it settles in sheets
+		 * at DeckZ, gone within drench.life seconds of landing; with her ridden (ShipRide), the sheets lie in her own
+		 * frame and go with her, and a lump whose place on her she has steamed past by the time it comes down falls on
+		 * to the sea. Nothing when her edge is beyond that reach, without the row (sea_splash.drench.reach_k), or with two
+		 * drenches already falling on her (ShipId: hers, 0 or more; under 0, a drench landing within 40 m counts as
+		 * hers). Lay the column itself with SeaSplash at the same moment. Returns the pieces laid (0: none). */
+		int DeckDrench(double Now, const Vec& ColumnAt, double CalibreMm, const Vec& Toward, double DeckZ, int ShipId = -1, double Beam = 0.0);
 		/** The sea_splash table at a calibre (Name: height_m, rise_s, hang_s, fall_s, foam_m, foam_s, crown_wide), read as
 		 * SeaSplash reads it; Usual where the recipe has none. For the previewer's calibre ladder and a scene's lots. */
 		double SeaTable(const char* Name, double CalibreMm, double Usual) const;
@@ -684,20 +688,22 @@ namespace TheaterFx
 		 * up through her deck; as she is drawn, turned, heeled and trimmed; made square here, Up first, then Fore, and Left
 		 * kept on the side it is given: in Unreal's world her port side is Fore x Up, so the wrapper passes it so); Long her length
 		 * and HalfBeam half her beam (metres); Coaming the height of what stands at her deck's edge (a bulwark or a
-		 * coaming, metres: a case stops there if it is over the case's width; 0, a rail with open sides, over it goes). */
+		 * coaming, metres: a case stops there if it is over the case's width; 0, a rail with open sides, over it goes);
+		 * Deck her deck's height over her waterline (metres, her freeboard amidships: the deck's brass lies on it; 0, not
+		 * known: a case lies deck_cases.drop_m under its breech). */
 		struct ShipPose
 		{
 			Vec At, Fore = Vec(1.0, 0.0, 0.0), Left = Vec(0.0, 1.0, 0.0), Up = Vec(0.0, 0.0, 1.0);
-			double Long = 0.0, HalfBeam = 0.0, Coaming = 0.0;
+			double Long = 0.0, HalfBeam = 0.0, Coaming = 0.0, Deck = 0.0;
 		};
 		/** Ship ShipId (0 or more) lies so this frame (Now, the clock the frame is drawn at): call it once a frame for every
 		 * ship that carries anything in her frame, before Draw. It lays what her wash has due and moves all she carries
 		 * with her (Draw writes their world places from her pose). A ship not told of for 5 s is let go, and what she
-		 * carried goes with her. */
+		 * carried fades out over a second where it was (a fade, never a pop). */
 		void ShipRide(double Now, int ShipId, const ShipPose& Pose);
 		/** The plan's name for ShipRide (item 11's brass): the same call. */
 		void CasesRide(double Now, int ShipId, const ShipPose& Pose) { ShipRide(Now, ShipId, Pose); }
-		/** She is gone (sunk, out of the scene): what she carries goes at once and her wash stops. */
+		/** She is gone (sunk, out of the scene): her wash stops, and what she carries fades out over a second where it is. */
 		void ShipRideStop(int ShipId);
 		/** Item 9 part 5 and item 10 part 6: water on her deck running off her edge, drawn in her own frame and moved with
 		 * her every frame (ShipRide). Edge: Count points along the deck edge the water runs over (metres, in her frame: X
@@ -743,17 +749,19 @@ namespace TheaterFx
 
 		/** Item 11 part 4: the deck's brass. Spent cases from her light and medium guns lying on her deck, piling by the
 		 * mount and rolling in her own frame (ShipRide / CasesRide once a frame): thrown from Breech (metres, world) along
-		 * Away (world, rough; the way the case leaves the breech) onto her deck deck_cases.drop_m below it, Count of them
-		 * (0 to 16), each of Kind's true size (deck_cases.<kind>: aa25 the 20 and 25 mm, aa40 the 40 mm, in4 the 4-inch,
-		 * in5 the 5-inch/38, cm127 the 12.7 cm). Past deck_cases.stick_deg of heel (2) they roll toward her low side,
+		 * Away (world, rough; the way the case leaves the breech) onto her deck (ShipPose.Deck; not known, deck_cases.drop_m
+		 * below the breech), Count of them (0 to 16), each of Kind's true size (deck_cases.<kind>: hmg the .50, aa25 the 20
+		 * and 25 mm, aa40 the 40 mm, in4 the 4-inch, in5 the 5-inch/38, cm127 the 12.7 cm). Laid only within
+		 * deck_cases.lay_m (90 m) of the eye. Past deck_cases.stick_deg of heel (2) they roll toward her low side,
 		 * stopping at a coaming (ShipPose.Coaming over the case's width) or going over the side where there is none. At
 		 * most deck_cases.most_mount (40) by a mount (the oldest fades out as a new one lands) and most_lying (200) on all
-		 * the ships; drawn only within deck_cases.within_m of the eye, fading out to gone_m (40 to 60). Dull brass, never
+		 * the ships (the one farthest from the eye fades out first); drawn only within deck_cases.within_m of the eye, fading out to gone_m (40 to 60). Dull brass, never
 		 * gold. Its dice are its own (the mount's place and the moment). No pose for her, or no row for Kind: nothing. */
 		void DeckBrass(double Now, int ShipId, const Vec& Breech, const Vec& Away, const char* Kind, int Count = 1);
 		/** A ship's light gun stream (AirGun's Gun) is on ship ShipId (under 0: on none, as made): while she is ridden
-		 * (ShipRide) and deck_cases has the gun's kind, each round it fires throws its case onto her deck (DeckBrass), and
-		 * the aircraft-style cases AirGun throws today (falling through her deck, Spent) stay off for that gun alone. Its
+		 * (ShipRide) the aircraft-style cases AirGun throws today (falling through her deck, Spent) stay off for that gun
+		 * alone, whatever its kind, and when deck_cases has the gun's kind each round it fires throws its case onto her
+		 * deck (DeckBrass). Its
 		 * other pieces and every dice draw are as before. */
 		void AirGunShip(int Gun, int ShipId);
 
@@ -2076,6 +2084,8 @@ namespace TheaterFx
 			int Ship = -1;
 			ShipPose Pose;
 			double At = 0.0;
+			Vec Vel; // (her way through the water, level, from her last poses: where a drench's lumps find her deck)
+			bool bVel = false;
 		};
 		std::vector<Rider> Riders;
 		const Rider* RiderOf(int Ship) const;
@@ -2085,7 +2095,7 @@ namespace TheaterFx
 			int Ship = -1;
 			uint8_t Kind = 1; // (1 runoff, 2 awash)
 			std::vector<Vec> Edge;
-			double Strength = 1.0, Start = 0.0, Until = 0.0, Next = 0.0, Length = 0.0;
+			double Strength = 1.0, Start = 0.0, Until = 0.0, Next = 0.0, Length = 0.0, Cursor = 0.0; // (Cursor: along her edge, the next piece's place, a band every 1.5 m)
 			Dice D;
 		};
 		std::vector<Washing> Washes;
@@ -2120,6 +2130,7 @@ namespace TheaterFx
 			int Ship = -1;
 			uint64_t Mount = 0;
 			double Born = 0.0;
+			Vec At; // (where it lay at the last Draw, world: the farthest from the eye goes first when all the ships' cap is full)
 		};
 		std::vector<CaseRec> DeckCases;
 		std::vector<uint32_t> DeckKill;
@@ -2138,7 +2149,7 @@ namespace TheaterFx
 		bool HazeRoom(double Now);
 		void HazeHang(Bit& B, const AirRow& Row, double T);
 		bool HazeCountIn(const char* Gun);
-		void HazeGate(size_t First, const char* Gun, bool bCounted);
+		void HazeGate(double Now, size_t First, const char* Gun, bool bCounted);
 		void HazeShed(double Now);
 	};
 }
