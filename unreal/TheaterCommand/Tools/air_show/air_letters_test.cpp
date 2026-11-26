@@ -162,6 +162,57 @@ namespace
 		return true;
 	}
 
+	/** The nearest point of triangle I to P (Ericson's Real-Time Collision Detection, 5.1.5). */
+	V3 Nearest(const Skin& S, size_t I, const V3& P)
+	{
+		const V3& A = S.A[I];
+		const V3& B = S.B[I];
+		const V3& C = S.C[I];
+		auto At = [](const V3& O, const V3& U, double K) { return V3{ O.X + U.X * K, O.Y + U.Y * K, O.Z + U.Z * K }; };
+		const V3 Ab = Sub(B, A), Ac = Sub(C, A), Ap = Sub(P, A);
+		const double D1 = Dot(Ab, Ap), D2 = Dot(Ac, Ap);
+		if (D1 <= 0.0 && D2 <= 0.0) return A;
+		const V3 Bp = Sub(P, B);
+		const double D3 = Dot(Ab, Bp), D4 = Dot(Ac, Bp);
+		if (D3 >= 0.0 && D4 <= D3) return B;
+		const double Vc = D1 * D4 - D3 * D2;
+		if (Vc <= 0.0 && D1 >= 0.0 && D3 <= 0.0) return At(A, Ab, D1 / (D1 - D3));
+		const V3 Cp = Sub(P, C);
+		const double D5 = Dot(Ab, Cp), D6 = Dot(Ac, Cp);
+		if (D6 >= 0.0 && D5 <= D6) return C;
+		const double Vb = D5 * D2 - D1 * D6;
+		if (Vb <= 0.0 && D2 >= 0.0 && D6 <= 0.0) return At(A, Ac, D2 / (D2 - D6));
+		const double Va = D3 * D6 - D5 * D4;
+		if (Va <= 0.0 && (D4 - D3) >= 0.0 && (D5 - D6) >= 0.0) return At(B, Sub(C, B), (D4 - D3) / ((D4 - D3) + (D5 - D6)));
+		const double Den = 1.0 / (Va + Vb + Vc);
+		const V3 Q = At(A, Ab, Vb * Den);
+		return At(Q, Ac, Vc * Den);
+	}
+
+	/** A point's gap to her skin: its distance to the nearest of the triangles given, less than nothing where it lies
+	 * behind that triangle's face (her file's way: Cross(B - C, A - C) points into her). */
+	double GapOf(const Skin& S, const std::vector<size_t>& Near, const V3& P, bool& bFound)
+	{
+		double Best = 1e9;
+		size_t Which = 0;
+		bFound = false;
+		for (const size_t K : Near)
+		{
+			const V3 Q = Sub(P, Nearest(S, K, P));
+			const double D = Dot(Q, Q);
+			if (D < Best)
+			{
+				Best = D;
+				Which = K;
+				bFound = true;
+			}
+		}
+		if (!bFound) return 0.0;
+		const V3 Into = Cross(Sub(S.B[Which], S.C[Which]), Sub(S.A[Which], S.C[Which]));
+		const double Dist = std::sqrt(Best);
+		return Dot(Sub(P, Nearest(S, Which, P)), Into) > 0.0 ? -Dist : Dist;
+	}
+
 	/** A glyph's ink's middle against its box's middle, in its own (right, up) as seen: a letter F leans left and up. */
 	bool ReadsRight(const AirLetters::Level& L, int RightAxis, double RightSign, int UpAxis, int FaceAxis, double FaceSign, std::string& Detail)
 	{
@@ -360,20 +411,30 @@ int main(int Argc, char** Argv)
 			for (int I = 0; I < Count; I += 5)
 			{
 				const V3 P = PointOf(L.Points, I);
-				const V3 D = bWing ? V3{ 0.0, 0.0, 1.0 } : PointOf(L.Facings, I);
-				double Best = 1e9;
-				for (const size_t K : Near)
+				// (the wing's straight down, as the tool laid it; the rest its distance to her skin, her nearest face)
+				double Gap = 0.0;
+				bool bFound = false;
+				if (bWing)
 				{
-					double T = 0.0;
-					if (Meet(S, K, P, D, T) && std::fabs(T) < std::fabs(Best) && std::fabs(T) < 0.2) Best = T;
+					double Best = 1e9;
+					for (const size_t K : Near)
+					{
+						double T = 0.0;
+						if (Meet(S, K, P, V3{ 0.0, 0.0, 1.0 }, T) && std::fabs(T) < std::fabs(Best) && std::fabs(T) < 0.2) Best = T;
+					}
+					bFound = Best < 1e8;
+					Gap = -Best;
+				}
+				else
+				{
+					Gap = GapOf(S, Near, P, bFound);
 				}
 				++Points;
-				if (Best > 1e8)
+				if (!bFound)
 				{
 					++Missed;
 					continue;
 				}
-				const double Gap = -Best;
 				Least = std::min(Least, Gap);
 				Most = std::max(Most, Gap);
 				if (Gap < 0.003 || Gap > 0.040)
@@ -392,7 +453,7 @@ int main(int Argc, char** Argv)
 	// (the livery's own glyphs carry a handful wound the other way, as her file does: 0.0 of a hundredth there)
 	Check(Wrong * 1000 <= Tris, "wound as her own file's (all but a thousandth)", Line);
 	std::snprintf(Line, sizeof Line, "%d points tried, %d off, %d found no skin within 20 cm; %.1f to %.1f mm %s", Points, Out, Missed, Least * 1000.0, Most * 1000.0, Worst.c_str());
-	Check(Out == 0 && Missed * 50 <= Points, "every fifth point 3 to 40 mm off its own level's skin", Line);
+	Check(Out == 0 && Missed * 50 <= Points, "every fifth point 3 to 40 mm off its own level's skin (the nearest of her; the wing's straight down)", Line);
 
 	// Reading the right way round, and the wing's triangle apex forward.
 	for (int Lv = 0; Lv < 2; ++Lv)

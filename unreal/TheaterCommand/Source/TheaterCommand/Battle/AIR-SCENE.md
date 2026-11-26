@@ -1555,7 +1555,7 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    the star and bar is hers in every month (the art director, 26 November 21:42Z), and nothing here reads the month.
    Looks only: nothing the rules count reads it, and no random draw of the battle is made or moved.
    How: each mark is a small vertex-painted mesh in her model file's frame (Content/Data/AirMarks/b17-fine-marks.json,
-   1.27 MB, made by `python3 -I Tools/air_marks/make_b17_marks.py --livery <B17Livery.json>` from the model thread's
+   4.56 MB at bundle 2, made by `python3 -I Tools/air_marks/make_b17_marks.py --livery <B17Livery.json>` from the model thread's
    livery file, sha256 2ae760cc..., whose marks were laid on her newer shape 12 to 16 mm off her skin, near and far;
    the wing's triangle and letter are the tool's own, 1.5 m across at x 0.9, y 11.6 (the fin's 1.74 m would hang over
    her trailing edge there), the far glyph laid flat and draped 12 and 16 mm over a smooth fit of her wing; it refuses a
@@ -1578,7 +1578,7 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    card's switch. Off (or the finer B-17 off): no file read, nothing made, placed or said; the card gains its line.
    On with the file missing or bad: one warning, and she flies with the star alone.
    The cloud test: air_letters_test in run.sh (under g++ and clang++): the file read as the game reads it, whole, made on
-   her file (its sha256), wound as her file's, every fifth point 3 to 40 mm off its level's skin (6.5 to 25.8 measured),
+   her file (its sha256), wound as her file's, every fifth point 3 to 40 mm off its level's skin, by the signed distance to her nearest face (5.0 to 25.8 measured),
    the letter F reading the right way round on both faces of her fin and on her wing from above, near and far, the wing's
    triangle apex forward on her right wing, nothing over her star and bar; each recording played through the show with the
    book taking every step, every third, every seventh from the fifth, and all hidden: the same wears; every American B-17
@@ -1586,15 +1586,25 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    the date moved to 1943-03 and 1944-06; the show's own record the same with the book and without; thirty made-up groups
    numbered two ways; no month or year in the book; and the Unreal side's guards from its source (lines of text: the
    proof is the Mac's run with the row off against the base).
-   Bundle 2 (the squadron's two letters and her own on her side, her letter in yellow on her fin, the "#" number dropped
-   under the row) and bundle 3 (the yellow serial, close up) follow on this item.
+   Bundle 2 (the file's "bundle": 2, 194 parts, 4.56 MB; the bundle-1 parts in it byte for byte as before): her
+   squadron's two letters and her own letter on both sides of her fuselage as the livery lays them, her own letter forward of
+   the star and bar and the squadron's two aft of it (the 303rd's first bomber reads "A, star, VK" from her port side,
+   each letter the right way round from either side), in the livery's code grey B9BAB4 (light grey, the livery's value "code"); her own letter again in
+   the livery's yellow C99A35 on her fin under the triangle. Squadron and letter from the book: her n-th bomber of the
+   group (n from 0, by key order) flies with squadron (n / 6) mod 4 and letter (n mod 6) + 6 x ((n / 24) mod 4) of the
+   24; the codes of a group not known to history from an FNV hash, none in two groups. Her "#" number (CampaignMiniatures'
+   paint) is not painted on a finer B-17 shape made with the row on at bundle 2: FMiniatureMesh::bNoPlaneNumber, set
+   only in ShapeFor beside bTorpedoLoad, and her shape key ends "|letters" (before "|screws"), her paint key "|nonumber";
+   off, every key and every paint is as before. The side letters J and Q (whose tails reached her wing root) are raised
+   to the foot of A and laid again 12 mm off her skin, near and far. About 380 to 1,370 triangles a bomber at the far
+   level (750 on average), 2,800 to 7,100 at the near. Bundle 3 (the yellow serial, close up) is not built.
    The Mac's run (no build_content.sh: no new content): the Bremen raid with the finer B-17.
    1. `-TheaterAirBattle=bremen-b17 -TheaterAirB17Fine -TheaterAirNoBomberMarks -TheaterAirTimeEye=both`
    2. `-TheaterAirBattle=bremen-b17 -TheaterAirB17Fine -TheaterAirBomberMarks -TheaterAirTimeEye=both`
    3. the leg-144 raid with b17Fine, noseArt and flyBomberMarks on, and the same with flyBomberMarks off.
    4. stills by hand with the row on: the 303rd from the riding eye at about 40, 60 and 150 m, and one Overview still.
-   Pass: run 1's log line for line as the base's (no "bomber markings" line); run 2 says "bomber markings: on ... 50
-   parts read in N ms" and "N bombers lettered, M mark meshes made ready"; on the 144-aircraft raid the worst 5 s no worse
+   Pass: run 1's log line for line as the base's (no "bomber markings" line); run 2 says "bomber markings: on ... bundle 2,
+   194 parts read in N ms" and "N bombers lettered, M mark meshes made ready"; on the 144-aircraft raid the worst 5 s no worse
    than the row-off run's, and the draw thread at most 0.5 ms more in the steady stretch ("Speed:" lines). By eye: a white
    wedge with a dark C on her right wing seen from behind and above, a white triangle with C on her fin both sides,
    reading the right way round; nothing floating off her skin or sunk into it (a white sliver or a flicker of olive

@@ -169,12 +169,13 @@ namespace
 		{ TEXT("flyPropSpin"), TEXT("Turning airscrews"), TEXT("Every aircraft's airscrews are drawn turning at every distance: a soft haze far off, a blurred sweep close to; an engine stopped with its blades feathered shows them standing still. Off: past 300 m the blades stand still."), TEXT("TheaterAirNoPropSpin"), false, TEXT("TheaterAirPropSpin") },
 		// (Bomber markings, release 2: Brian, 25 November 2026, of the approved studio pictures of the newer B-17, "Build it
 		// into the game"; 26 November, "i want the new ones in the game". Every finer B-17 wears her group's white triangle and
-		// letter on her fin and upper right wing, near and far, the same in every month of the war: Battle/AirLetters,
+		// letter on her fin and upper right wing, her squadron's codes and her own letter on her side (and in yellow on her
+		// fin), her "#" number dropped, near and far, the same in every month of the war: Battle/AirLetters,
 		// AirBattleLetters.cpp, Content/Data/AirMarks. Looks only: nothing the rules count reads it. Off until the Mac has
 		// timed it and the art director has passed it (AIR-SCENE.md item 65); -TheaterAirBomberMarks turns it on for a run,
 		// -TheaterAirNoBomberMarks off. Its key begins "fly" only so that FLandLive::Start passes it over; the air battle
 		// reads it once a battle (AAirBattle::LettersOnNow), only while the finer B-17 flies.)
-		{ TEXT("flyBomberMarks"), TEXT("Bomber markings"), TEXT("Every finer B-17 wears her group's white triangle and letter on her fin and right wing, near and far off, the same in every month of the war. Off: olive with the star only."), TEXT("TheaterAirNoBomberMarks"), false, TEXT("TheaterAirBomberMarks") },
+		{ TEXT("flyBomberMarks"), TEXT("Bomber markings"), TEXT("Every finer B-17 wears her group's white triangle and letter on her fin and right wing, her squadron's two letters and her own letter on her side and fin, near and far off, the same in every month of the war. Off: olive with the star only."), TEXT("TheaterAirNoBomberMarks"), false, TEXT("TheaterAirBomberMarks") },
 		// (Old wrecks, Brian 23 November 20:09Z: starts off as Scarred ground does, until the effects thread's wrecks pass the
 		// art director and 45 fps; -TheaterLandRuleOldWrecks turns it on for a run. The 3D's -TheaterLandOldWrecks=N and
 		// -TheaterLandOldWreckMonths=M stand-ins are other flags.)

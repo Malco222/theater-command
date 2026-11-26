@@ -4,15 +4,15 @@ game's small data file, Content/Data/AirMarks/b17-fine-marks.json, each part at 
 small vertex-painted mesh in her own file frame (metres x forward, y right, z up; written in millimetres) that the air
 scene draws over her as an instanced copy with her own place (Battle/AirLetters, Battle/AirBattleLetters.cpp).
 
-    python3 -I Tools/air_marks/make_b17_marks.py --livery /path/to/B17Livery.json [--bundle 1|2|3]
+    python3 -I Tools/air_marks/make_b17_marks.py --livery /path/to/B17Livery.json [--bundle 1|2]
         [--model Content/Models/B17Fine.json] [--out Content/Data/AirMarks/b17-fine-marks.json]
         [--wing-at 0.9,11.6] [--wing-size 1.5]
 
 Bundle 1: the group's white triangle and its black letter on her fin (the livery's group.T and group.T.<L>) and the
 same on her upper starboard wing (made here: the fin's triangle and letter laid flat, apex forward, the letter reading
 the right way round seen from above with her nose up, draped 12 and 16 mm over her wing). Bundle 2 adds her plane's
-letter on the fin (yellow) and the side, and the squadron codes on both sides. Bundle 3 adds the yellow serial's digits,
-near level only. A re-run writes the same bytes from the same files; a lower bundle's parts are the same in a higher one.
+letter on the fin (yellow) and the side, and the squadron codes on both sides (the default: the game's file). The yellow
+serial is not made yet. A re-run writes the same bytes from the same files; bundle 1's parts are the same in bundle 2.
 
 Inks are the livery's own paints (group DCD9CC, group_ink 17171A, serial C99A35, code B9BAB4): matt on PlaneInk. No
 date, month or year is read or written: the paint never depends on them.
@@ -107,12 +107,59 @@ def gaps(P, N, skin):
     return out
 
 
+def closest(p, A, B, C):
+    """The nearest point of each triangle to p (Ericson, Real-Time Collision Detection 5.1.5), vectorised."""
+    ab, ac, ap = B - A, C - A, p - A
+    d1, d2 = (ab * ap).sum(1), (ac * ap).sum(1)
+    bp = p - B
+    d3, d4 = (ab * bp).sum(1), (ac * bp).sum(1)
+    cp = p - C
+    d5, d6 = (ab * cp).sum(1), (ac * cp).sum(1)
+    va, vb, vc = d3 * d6 - d5 * d4, d5 * d2 - d1 * d6, d1 * d4 - d3 * d2
+    den = va + vb + vc
+    den = np.where(np.abs(den) < 1e-18, 1e-18, den)
+    out = A + ab * (vb / den)[:, None] + ac * (vc / den)[:, None]
+    safe = lambda n, d: n / np.where(np.abs(d) < 1e-18, 1e-18, d)
+    bc = (va <= 0) & (d4 - d3 >= 0) & (d5 - d6 >= 0)
+    out = np.where(bc[:, None], B + (C - B) * safe(d4 - d3, (d4 - d3) + (d5 - d6))[:, None], out)
+    acr = (vb <= 0) & (d2 >= 0) & (d6 <= 0)
+    out = np.where(acr[:, None], A + ac * safe(d2, d2 - d6)[:, None], out)
+    out = np.where(((d6 >= 0) & (d5 <= d6))[:, None], C, out)
+    abr = (vc <= 0) & (d1 >= 0) & (d3 <= 0)
+    out = np.where(abr[:, None], A + ab * safe(d1, d1 - d3)[:, None], out)
+    out = np.where(((d3 >= 0) & (d4 <= d3))[:, None], B, out)
+    out = np.where(((d1 <= 0) & (d2 <= 0))[:, None], A, out)
+    return out
+
+
+def nearest_gaps(P, skin):
+    """Each point's distance to her nearest face, less than nothing behind it (as the cloud test measures)."""
+    idx = near_tris(skin, P.min(0), P.max(0), 0.25)
+    A, B, C, F = skin["A"][idx], skin["B"][idx], skin["C"][idx], skin["F"][idx]
+    out = np.full(len(P), np.nan)
+    way = np.zeros((len(P), 3))
+    for i in range(len(P)):
+        q = closest(P[i], A, B, C)
+        d = ((P[i] - q) ** 2).sum(1)
+        j = int(np.argmin(d))
+        out[i] = np.sqrt(d[j]) * (1.0 if ((P[i] - q[j]) * F[j]).sum() >= 0 else -1.0)
+        way[i] = F[j]
+    return out, way
+
+
 def lift(P, N, skin):
-    g = gaps(P, N, skin)
-    move = ~np.isnan(g) & (g < LIFT_BELOW)
+    # (the nearer of its gap along its facing and its distance to her nearest face: a glyph's edge, facing off her
+    # skin, can lie deeper than its facing says)
+    along = gaps(P, N, skin)
+    near, way = nearest_gaps(P, skin)
     P = P.copy()
-    P[move] += (LIFT_TO - g[move])[:, None] * N[move]
-    return P, int(move.sum()), int(np.isnan(g).sum()), g
+    # (along its facing where that is the nearer; else straight out of her nearest face, till it stands 10 mm off it)
+    first = ~np.isnan(along) & (along < LIFT_BELOW) & ~(near < along)
+    P[first] += (LIFT_TO - along[first])[:, None] * N[first]
+    second = ~first & (near < LIFT_BELOW)
+    P[second] += (LIFT_TO - near[second])[:, None] * way[second]
+    g = np.fmin(along, near)
+    return P, int(first.sum() + second.sum()), int(np.isnan(along).sum()), g
 
 
 def wound(P, N, T):
@@ -234,7 +281,7 @@ def main():
     ap.add_argument("--livery", required=True)
     ap.add_argument("--model", default="Content/Models/B17Fine.json")
     ap.add_argument("--out", default="Content/Data/AirMarks/b17-fine-marks.json")
-    ap.add_argument("--bundle", type=int, default=1, choices=(1, 2, 3))
+    ap.add_argument("--bundle", type=int, default=2, choices=(1, 2))
     ap.add_argument("--wing-at", default="0.9,11.6", help="the wing triangle's box middle, x,y metres (y right)")
     ap.add_argument("--wing-size", type=float, default=1.5, help="the wing triangle's width across, metres")
     a = ap.parse_args()
@@ -261,8 +308,6 @@ def main():
         for c in L24:
             wanted += [f"letter.fin.{c}", f"letter.side.{c}", f"code.port.1.{c}", f"code.port.2.{c}",
                        f"code.starboard.1.{c}", f"code.starboard.2.{c}"]
-    if a.bundle >= 3:
-        wanted += [n for n in names if n.startswith("serial.")]
 
     parts = {}
     moved_total = {"near": 0, "far": 0}
@@ -280,8 +325,36 @@ def main():
             if len(ps) != 1:
                 sys.exit(f"refused: the livery's {name} wears more than one paint")
             ink = INK_OF_PAINT[paint_names[ps.pop()]]
-            P, moved, missed, _ = lift(P, N, skins[lvl])
+            if name.startswith("letter.side.") and name != "letter.side.A":
+                # (a side letter whose tail reaches down past the others' foot, the J's, reaches onto her wing's root
+                # there: raised till its foot stands with the A's, and laid again 12 mm off her nearest face)
+                AP, _, _, _ = part_mesh(liv[lvl], names.index("letter.side.A"))
+                foot = AP[:, 2].min()
+                if P[:, 2].min() < foot - 0.03:
+                    P = P.copy()
+                    P[:, 2] += foot - P[:, 2].min()
+                    g, way = nearest_gaps(P, skins[lvl])
+                    P += (0.012 - g)[:, None] * way
+                    N = way.copy()
+                    print(f"  {name} {lvl}: raised to the A's foot and laid again on her side")
+            # (again where a point moved out of one face came near another, as in the hollow under her side: at most 4 times)
+            moved = 0
+            for _ in range(4):
+                P, more, missed, _ = lift(P, N, skins[lvl])
+                moved += more
+                if not more:
+                    break
             moved_total[lvl] += moved
+            # (a corner still within 3 mm of her skin, or under it, after that: the J's tail where it reaches down onto her
+            # wing's root; its triangles left out, at most 5 in a hundred of a part's)
+            near_now, _ = nearest_gaps(P, skins[lvl])
+            sunk = near_now < 0.003
+            if sunk.any():
+                keep = ~sunk[T].any(1)
+                if (~keep).sum() * 100 > 5 * len(T):
+                    sys.exit(f"refused: the livery's {name} at its {lvl} level lies in her skin ({(~keep).sum()} of {len(T)} triangles)")
+                print(f"  {name} {lvl}: {(~keep).sum()} of {len(T)} triangles left out, in her skin")
+                T = T[keep]
             if missed:
                 print(f"  {name} {lvl}: {missed} points found no skin within 20 cm along their facing (left as laid)")
             entry[lvl] = level_out(P, N, T, ink)
