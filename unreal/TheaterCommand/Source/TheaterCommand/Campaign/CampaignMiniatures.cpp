@@ -1279,9 +1279,9 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 			}
 		}
 		// (under the sea battle's skin only: which of her stained points lie at the foot of a run with its body above them,
-		// in her own up axis, the file's z; only those take the rust's film. Battle/ShipPaintCore's BodyAbove, from the same
-		// wear and paints the ship branch hands the core, the file's own triangles, and each point's facing, so the underside
-		// of a plate never takes the film of its top)
+		// in her own up axis, the file's z; only those take the rust's film, and of them none her salt lies on or beside.
+		// Battle/ShipPaintCore's BodyAbove, from the same wear, salt and paints the ship branch hands the core, the file's own
+		// triangles, and each point's facing, so the underside of a plate never takes the film of its top)
 		std::vector<uint8_t> ShipRuns;
 		if (Raw->bShip && ShipPaint.bRustRamp && Raw->PaintColours.Num() > 0)
 		{
@@ -1297,6 +1297,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				Run.FY = Raw->Facings[K].Y;
 				Run.FZ = Raw->Facings[K].Z;
 				Run.Wear = Raw->Wear.IsValidIndex(K) ? FMath::Clamp(Raw->Wear[K], 0, 100) : 0;
+				Run.Salt = Raw->Salt.IsValidIndex(K) ? Raw->Salt[K] : -1;
 				Run.bPainted = Raw->ShipPainted.IsValidIndex(Kind) && Raw->ShipPainted[Kind];
 			}
 			ShipRuns = ShipPaintCore::BodyAbove(Runs, Raw->Triangles.GetData(), static_cast<size_t>(Raw->Triangles.Num()));
@@ -1315,7 +1316,6 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				const int32 Kind = FMath::Clamp(Raw->Paints[K], 0, Raw->PaintColours.Num() - 1);
 				const bool bShipSteel = Raw->ShipMetal.IsValidIndex(Kind) && Raw->ShipMetal[Kind];
 				const int32 Worn = Raw->Wear.IsValidIndex(K) ? FMath::Clamp(Raw->Wear[K], 0, 100) : 0;
-				Fresh.Finish = bShipSteel ? static_cast<uint8>(128 - Worn / 2) : 255;
 				const FLinearColor& Own = Raw->PaintColours[Kind];
 				ShipPaintCore::Point At;
 				At.Paint = { Own.R, Own.G, Own.B, Own.A };
@@ -1328,8 +1328,13 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				At.Y = Raw->Points[K].Y;
 				At.Z = Raw->Points[K].Z;
 				At.bDeckWood = Raw->ShipPlanks.IsValidIndex(Kind) && Raw->ShipPlanks[Kind];
-				At.bBodyAbove = static_cast<size_t>(K) < ShipRuns.size() && ShipRuns[static_cast<size_t>(K)] != 0;
+				const uint8_t RunMark = static_cast<size_t>(K) < ShipRuns.size() ? ShipRuns[static_cast<size_t>(K)] : 0;
+				At.bBodyAbove = (RunMark & ShipPaintCore::FootMark) != 0;
+				At.bBesideSalt = (RunMark & ShipPaintCore::SaltMark) != 0;
 				const ShipPaintCore::Linear Coat = ShipPaintCore::Paint(At, ShipColours, ShipPaint);
+				// (the finish, the material's metal on steel: 128 less half the wear, as ever; under the skin a point it paints as
+				// unworn keeps the unworn 128, so its whole vertex is the unworn point's: Battle/ShipPaintCore's SteelFinish)
+				Fresh.Finish = bShipSteel ? ShipPaintCore::SteelFinish(At, ShipPaint) : 255;
 				Fresh.Add(Raw->Points[K], Raw->Facings[K], FLinearColor(Coat.R, Coat.G, Coat.B, Coat.A).ToFColor(true));
 				continue;
 			}

@@ -22,9 +22,10 @@
  *   (its baked shadow, 1 open, less in a crease), as a figure's is (the soldiers' maker's worn cloth). Today's ship files
  *   carry no shade: until the models re-export with it (R1.3's models half), it changes nothing.
  * - bRustRamp (-TheaterSeaShipSkin=1): the one-colour rust replaced by a ramp, dark brown at its source, brown in its
- *   body, a thin brown-orange film at the foot of a run with body above it, with a ragged edge; light wear away from a
- *   run a little darker and greyer than the point unworn, never rust-coloured; no channel of a stained point above the
- *   paint's own but where salt pales it, and then never pink; the salt as the art director ruled it; and a wooden
+ *   body, a thin brown-orange film at the foot of a run with body above it (never on her salt nor beside it), with a
+ *   ragged edge; light wear away from a run at the paint below a wear of 5, and from 5 a little darker and greyer than
+ *   the point unworn, never rust-coloured; no channel of a stained point above the paint's own but where salt pales it,
+ *   and then never pink; the salt as the art director ruled it, under a run's body and over light wear; and a wooden
  *   deck's planks held under her 150,135,110 as drawn.
  * - TopLight (-TheaterSeaShipLight=: 1 or on for SeaTopLight, 0.10, or a top light of its own from 0.0 to 0.30) is not a
  *   point's paint: it is the ships' material's own lift on what faces the sky, which the sea battle sets on its own steel
@@ -57,6 +58,26 @@
  *      inside her bounds, since on a near-grey paint (126,131,129) one level of rounding is more than 15% of its colour;
  *   3. the film, 124,80,50, only at the foot of a run that has body above it (BodyAbove finds them; Ramp lays the film
  *      only there, and elsewhere starts the ramp at its body). The source and body are as ruled before.
+ *
+ * HER RULING ON THE RE-SHOT 04 AND 02 (26 November 2026, 02:22Z; it keeps the 20:28Z rules and settles three things):
+ *   - the salt, in one order: a run's body (wear of BodyOverSaltWear, 40, and more) beats salt: no salt lift there, the
+ *     body shows as ramped, held to rule 1; salt beats light wear: a lightly worn point (under 20, no body above) under
+ *     her salt shows that salt as it lies on the same point unworn, paler in every channel together and never warmer
+ *     than her salt makes the clean paint; between them (wear 20 to 39, and a run's foot under 20) the salt is laid as
+ *     round 1c laid it, a pale lift in every channel together, no warmer than her salt on the clean paint. The unworn
+ *     point under her salt is held the same way, so where soot lies on the salt it never reads warmer nor pink;
+ *   - light wear stays at the paint below a wear of 5 (LightWearFrom): such a point paints as the same point unworn, bit
+ *     for bit, and so does light wear under her salt (PaintsAsUnworn), its finish byte too (SteelFinish). From 5 it is
+ *     darker by 3% rising evenly to 6% at 19 (LightDarkAt), within LightDarkBand of that, as neutral as before: up to
+ *     15% greyer, red less blue up by 3 at most, no channel above the paint;
+ *   - the film is the weakest coat: never on a point her salt lies on, nor on one that shares a triangle with it
+ *     (BodyAbove's SaltMark). Such a point takes what it takes with no film: the ramp from its body;
+ *   - and her call 3's heading, hold the rust beside salt (warm over pale reads salmon): every point her salt lies on is
+ *     never warmer than her salt makes the clean paint, red less blue in the whole levels the mesh stores, lifted by the
+ *     salt or not. A rust point of wear 20 to 39 (or a run's foot) that her salt cannot lift in every channel is held by
+ *     rule 1 at the paint in red with green and blue below it, warmer than the salt beside it; there only red comes
+ *     down, to her salt's room over the point's own blue (Submarine_GER's point 7347, wear 20 under a salt of 23:
+ *     106,104,104 before, now 92,104,104 on her 106,114,120), so no corner beside her pale salt is warmer than it.
  *
  * WHERE ON THE RUN. A file's wear at a point is how strong the stain is there: a weep's ribbon carries the most at its
  * head and fades to nothing at its foot (battle-models' ships.py, the U-boat's streaks), and a chip on an edge carries a
@@ -139,10 +160,27 @@ namespace ShipPaintCore
 	 * brightness, the Rec. 709 sum of the levels), greyer by 0 to 15% (its colour, the most of its channels less the least,
 	 * for its brightness), red less blue up by 3 levels at most. */
 	inline constexpr float LightDarkLeast = 0.03f, LightDarkMost = 0.06f, LightGreyMost = 0.15f, LightWarmMost = 3.0f;
-	/** What light wear aims at, inside her bounds: 3.5% darker at a wear of 1 to 5.5% at 19, and greyer by 1% to 14% as the
-	 * wear grows (less where red less blue would rise further). The whole levels stored are the nearest to that aim that
-	 * keep every one of her bounds in the bytes themselves (LightWear). */
-	inline constexpr float LightDarkFrom = 0.035f, LightDarkTo = 0.055f, LightGreyFrom = 0.01f, LightGreyTo = 0.14f;
+	/** Her ruling of 26 November: light wear below this wear stays at the paint (the point as it is unworn, bit for bit);
+	 * from it, darker by LightDarkFrom, rising evenly to LightDarkTo at a wear of 19. */
+	inline constexpr int32_t LightWearFrom = 5;
+	/** Light wear's darkening, against the same point unworn: 3% at a wear of 5 to 6% at 19, a straight line (LightDarkAt),
+	 * and the band about that line the stored whole levels keep to (a fifth of a percent each way; never past 3 or 6%).
+	 * Its greying aims at 1% to 14% as the wear grows from 1 to 19, as round 1c's did (less where red less blue would rise
+	 * further). The whole levels stored are the nearest to that aim that keep every one of her bounds and the band in the
+	 * bytes themselves (LightWear). */
+	inline constexpr float LightDarkFrom = 0.03f, LightDarkTo = 0.06f, LightDarkBand = 0.002f, LightGreyFrom = 0.01f, LightGreyTo = 0.14f;
+	/** Her order for the salt (26 November): from this wear a run's body beats her salt, which lifts it no further. */
+	inline constexpr int32_t BodyOverSaltWear = 40;
+	/** BodyAbove's marks, a bit each: at the foot of a run with its body above (FootMark), and, on such a point, her salt
+	 * on it or on a point that shares a triangle with it, so the film never lies there (SaltMark). */
+	inline constexpr uint8_t FootMark = 1, SaltMark = 2;
+	/** The darkening light wear aims at, at a wear of LightWearFrom to 19 (her straight line from 3% to 6%; 0 below it). */
+	inline constexpr float LightDarkAt(int32_t Wear)
+	{
+		return Wear < LightWearFrom ? 0.0f
+			: LightDarkFrom + (LightDarkTo - LightDarkFrom) * static_cast<float>((Wear < RunBodyWear - 1 ? Wear : RunBodyWear - 1) - LightWearFrom) /
+				static_cast<float>(RunBodyWear - 1 - LightWearFrom);
+	}
 	/** How far LightWear looks from its aim for whole levels that keep her bounds, in levels each way of each channel. */
 	inline constexpr int32_t LightSearch = 6;
 	/** A run's reach (rule 3), in millimetres: its longest (3 m), how wide its foot may be (three times the widest source,
@@ -223,25 +261,32 @@ namespace ShipPaintCore
 		double X = 0.0, Y = 0.0, Z = 0.0;
 		/** A wooden deck's planks (the reader's "planks", by the file's paint names). */
 		bool bDeckWood = false;
-		/** At the foot of a run with its body above it (BodyAbove, under the skin only): it may take the rust's film. */
+		/** At the foot of a run with its body above it (BodyAbove's FootMark, under the skin only): it may take the rust's
+		 * film. */
 		bool bBodyAbove = false;
+		/** Her salt on it, or on a point that shares a triangle with it (BodyAbove's SaltMark, on a point at a run's foot,
+		 * under the skin only): the film never lies there, the ramp starts at its body. */
+		bool bBesideSalt = false;
 	};
 
 	/** One point as BodyAbove reads it: where it lies (the reader's frame, metres, +Z her own up axis), which way it faces
-	 * (the file's facing, as the reader turns it; any length), its wear (0 to 100) and whether it is painted steel that
-	 * rusts. */
+	 * (the file's facing, as the reader turns it; any length), its wear (0 to 100), its salt as the file gives it (below 0,
+	 * none) and whether it is painted steel that rusts and salts. */
 	struct RunPoint
 	{
 		double X = 0.0, Y = 0.0, Z = 0.0;
 		double FX = 0.0, FY = 0.0, FZ = 0.0;
 		int32_t Wear = 0;
+		int32_t Salt = -1;
 		bool bPainted = false;
 	};
 
 	/** Which of her points lie at the foot of a run with its body above them (rule 3; see "A run, and what lies above"):
-	 * one mark a point, 1 for those, 0 for every other (an unstained point is never marked). Triangles: the mesh's, three
-	 * point indices each (Indices of them); a side with an end out of range is passed over. The same mesh is marked the
-	 * same way every time. */
+	 * one mark a point, FootMark for those, 0 for every other (an unstained point is never marked); and on a point so
+	 * marked, SaltMark as well where her salt lies on it (painted, salt above 0) or on any point of a triangle it is a
+	 * corner of (her ruling of 26 November: the film never beside her salt). Triangles: the mesh's, three point indices
+	 * each (Indices of them); a side with an end out of range is passed over, and so is a triangle for the salt. The same
+	 * mesh is marked the same way every time. */
 	std::vector<uint8_t> BodyAbove(const std::vector<RunPoint>& Points, const int32_t* Triangles, size_t Indices);
 
 	/** The point's colour (linear, as the reader turns it into the mesh's colour). */
@@ -290,18 +335,31 @@ namespace ShipPaintCore
 	/** The ramp at a point that rusts (P.bPainted and P.Wear above 0), and the coat it leaves: the film only where
 	 * P.bBodyAbove. Paint holds what it leaves to the paint's own (rule 1), once the soot and salt are laid. */
 	Linear Ramp(const Point& P, Laid* Out = nullptr);
-	/** Light wear away from a run (rule 2: P.bPainted, P.Wear 1 to 19, no body above) on the point as it is unworn
-	 * (Unworn: what Paint gives it with no wear, its salt and soot laid): a little darker and greyer, no rust colour, never
-	 * above Unworn in any channel and never above the paint in one channel while below it in another; whole sRGB levels,
-	 * the nearest to her aim that keep all of her bounds against Unworn's own bytes. Where none within LightSearch levels
-	 * does, her aim's nearest whole levels held under Unworn (none in today's files; the test counts any such point as out). */
+	/** Light wear away from a run (rule 2: P.bPainted, P.Wear LightWearFrom to 19, no body above, no salt: Paint leaves the
+	 * point as it is unworn below a wear of 5 and under her salt) on the point as it is unworn (Unworn: what Paint gives it
+	 * with no wear, its soot laid): darker by LightDarkAt its wear and a little greyer, no rust colour, no channel above
+	 * Unworn nor above the paint; whole sRGB levels, the nearest to her aim that keep all of her bounds and the band
+	 * (LightDarkBand) against Unworn's own bytes. Where whole levels cannot keep the band within LightSearch levels (a
+	 * near-grey paint, where a level is a large share of its colour), the levels that keep all her other bounds with the
+	 * darkening nearest the line; where none keeps them, her aim's nearest whole levels held under Unworn (none in today's
+	 * files; the test counts any such point as out). */
 	Linear LightWear(const Point& P, const Linear& Unworn);
 	/** Rule 1: each channel held to Most's (its alpha kept). */
 	Linear NoneAbove(Linear C, const Linear& Most);
-	/** Rule 1 on a stained point as Paint lays it: each channel held to the paint's own, or where her salt lies to that salt
-	 * over the clean paint (Salted, at most); lifted above the paint in every channel, with bNoWarmer (the rust under salt),
-	 * red less blue in levels no higher than Salted's; and below the paint in any channel, above it in none. */
+	/** Rule 1 on a stained point as Paint lays it, and on an unworn point her salt lies on: each channel held to the
+	 * paint's own, or where her salt lies to that salt over the clean paint (Salted, at most); below the paint in any
+	 * channel, above it in none; and with bNoWarmer (where her salt lies), lifted by it or not, red less blue in the whole
+	 * levels the mesh stores (StoredLevel) no higher than Salted's own, only red moving (lifted in every channel, before the
+	 * hold to the paint, so that what it lowers is held with it). */
 	Linear Held(Linear C, const Linear& Paint, const Linear& Salted, bool bNoWarmer);
+	/** Whether the skin paints the point as the same point unworn (her ruling of 26 November): light wear away from a run
+	 * (P.bPainted, P.Wear 1 to 19, no body above) below a wear of LightWearFrom, or under her salt. Only under the skin
+	 * (O.bRustRamp). */
+	bool PaintsAsUnworn(const Point& P, const Options& O);
+	/** The finish byte the reader stores on a point of her steel (the material's metal: 128 unworn, below it worn): 128 less
+	 * half the point's wear, as ever; where the skin paints the point as it is unworn (PaintsAsUnworn), the unworn 128, so
+	 * that such a point's vertex is the unworn point's bit for bit. With every switch off, today's, always. */
+	uint8_t SteelFinish(const Point& P, const Options& O);
 
 	/** The byte the mesh stores for a linear channel (ToFColor's sRGB: the standard's curve, rounded half up), and the
 	 * linear channel the engine reads back from a byte (FLinearColor's own, from the same curve). */

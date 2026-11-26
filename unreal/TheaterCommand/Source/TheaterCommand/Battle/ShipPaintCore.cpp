@@ -188,9 +188,10 @@ namespace ShipPaintCore
 		const float Along = Clamp01(Base * (1.0f + 0.6f * Grain * (1.0f - Worn)));
 		// Its colour: the foot's at 0, the body's at 0.45, the source's from 0.9 (each run's own, within the art director's
 		// 52,34,28 to 66,42,32); each run toned a little along it. The foot's film only at the foot of a run with its body
-		// above it (her rule 3, 25 November 20:28Z): anywhere else the ramp starts at its body.
+		// above it (her rule 3, 25 November 20:28Z), and never on her salt nor beside it (26 November): anywhere else the
+		// ramp starts at its body.
 		const float Toned = Clamp01(Along + 0.10f * (Tone - 0.5f));
-		const float Hued = P.bBodyAbove ? Toned : std::max(Toned, 0.45f);
+		const float Hued = P.bBodyAbove && !P.bBesideSalt ? Toned : std::max(Toned, 0.45f);
 		const Linear Spring = Lerp(K.SourceDark, K.SourceLight, Tone);
 		const Linear Colour = Hued < 0.45f ? Lerp(K.Foot, K.Body, Hued / 0.45f) : Lerp(K.Body, Spring, std::min(1.0f, (Hued - 0.45f) / 0.45f));
 		// How much of it is laid over the coat: the film no more than 0.35, the body about 0.45 to 0.70, the source 0.8 to 1.
@@ -288,9 +289,10 @@ namespace ShipPaintCore
 		const auto Spread = [](double R, double G, double B) { return std::max({ R, G, B }) - std::min({ R, G, B }); };
 		const double R = Was[0], G = Was[1], B = Was[2];
 		const double Y = Bright(R, G, B), Colour = Spread(R, G, B);
-		// Her aim: a little darker and greyer at a wear of 1, the most at 19.
+		// Her line (26 November): 3% darker at a wear of 5, rising evenly to 6% at 19; greyer by 1% to 14% as the wear grows
+		// from 1 to 19, as round 1c's.
+		const double Dark = static_cast<double>(LightDarkAt(P.Wear));
 		const double Worn = std::min(1.0, std::max(0.0, (static_cast<double>(P.Wear) - 1.0) / static_cast<double>(RunBodyWear - 2)));
-		const double Dark = LightDarkFrom + (LightDarkTo - LightDarkFrom) * Worn;
 		double Grey = LightGreyFrom + (LightGreyTo - LightGreyFrom) * Worn;
 		// (greyer only so far as red less blue rises by no more than 2 levels: on a grey-blue paint, taking colour away takes
 		// blue away from over red; and no channel taken up toward the grey past the unworn point's own)
@@ -309,18 +311,18 @@ namespace ShipPaintCore
 		const auto Moved = [Y, Grey, Dark](double C) { return (1.0 - Dark) * (C + Grey * (Y - C)); };
 		const double Aim[3] = { Moved(R), Moved(G), Moved(B) };
 		// Whole levels that keep all of her bounds in the bytes themselves: 3 to 6% darker, 0 to 15% greyer (no colour where
-		// the unworn point has none), red less blue up by 3 at most, no channel above the unworn point, and never above the
-		// paint in one channel while below it in another (her rule 1, never pink). The nearest to the aim, looked for in a
-		// cube of one level about it, then two, then LightSearch.
-		const auto Keeps = [&](const int32_t* L)
+		// the unworn point has none), red less blue up by 3 at most (Warmest), no channel above the unworn point nor above the
+		// paint; and, while whole levels can, within LightDarkBand of her line (bBand). How far it is from her line.
+		const auto Off = [&](const int32_t* L) { return std::abs((1.0 - Bright(L[0], L[1], L[2]) / Y) - Dark); };
+		const auto Keeps = [&](const int32_t* L, bool bBand, int32_t Warmest)
 		{
-			if ((L[0] - L[2]) - (Was[0] - Was[2]) > static_cast<int32_t>(LightWarmMost) || Y <= 0.0)
+			if ((L[0] - L[2]) - (Was[0] - Was[2]) > Warmest || Y <= 0.0)
 			{
 				return false;
 			}
 			const double Now = Bright(L[0], L[1], L[2]);
 			const double Darker = 1.0 - Now / Y;
-			if (Darker < LightDarkLeast || Darker > LightDarkMost)
+			if (Darker < LightDarkLeast || Darker > LightDarkMost || (bBand && std::abs(Darker - Dark) > static_cast<double>(LightDarkBand)))
 			{
 				return false;
 			}
@@ -337,41 +339,61 @@ namespace ShipPaintCore
 			{
 				return false;
 			}
-			bool bAbove = false, bBelow = false;
 			for (int C = 0; C < 3; ++C)
 			{
-				bAbove = bAbove || LevelLinear(L[C]) > PaintLin[C];
-				bBelow = bBelow || LevelLinear(L[C]) < PaintLin[C];
+				if (LevelLinear(L[C]) > PaintLin[C])
+				{
+					return false;
+				}
 			}
-			return !(bAbove && bBelow);
+			return true;
 		};
+		// The nearest to the aim, looked for in a cube of one level about it, then two, then LightSearch: first within the
+		// band and red less blue up by no more than the aim's 2 (as neutral as round 1c kept it), then up by her 3; where whole
+		// levels cannot keep the band, the one whose darkening is nearest her line (then nearest the aim).
 		const int32_t Near[3] = { static_cast<int32_t>(std::lround(Aim[0])), static_cast<int32_t>(std::lround(Aim[1])), static_cast<int32_t>(std::lround(Aim[2])) };
 		int32_t Best[3] = { std::min(Near[0], Top[0]), std::min(Near[1], Top[1]), std::min(Near[2], Top[2]) };
 		bool bFound = false;
-		for (const int32_t Reach : { 1, 2, LightSearch })
+		struct Stage
 		{
-			double Least = 1e30;
-			for (int32_t DR = -Reach; DR <= Reach; ++DR)
+			bool bBand;
+			int32_t Warmest;
+		};
+		const int32_t Warm = static_cast<int32_t>(LightWarmMost);
+		for (const Stage Now : { Stage{ true, Warm - 1 }, Stage{ true, Warm }, Stage{ false, Warm } })
+		{
+			const bool bBand = Now.bBand;
+			for (const int32_t Reach : { 1, 2, LightSearch })
 			{
-				for (int32_t DG = -Reach; DG <= Reach; ++DG)
+				double Least = 1e30, LeastOff = 1e30;
+				for (int32_t DR = -Reach; DR <= Reach; ++DR)
 				{
-					for (int32_t DB = -Reach; DB <= Reach; ++DB)
+					for (int32_t DG = -Reach; DG <= Reach; ++DG)
 					{
-						const int32_t L[3] = { Near[0] + DR, Near[1] + DG, Near[2] + DB };
-						if (L[0] < 0 || L[1] < 0 || L[2] < 0 || L[0] > Top[0] || L[1] > Top[1] || L[2] > Top[2] || !Keeps(L))
+						for (int32_t DB = -Reach; DB <= Reach; ++DB)
 						{
-							continue;
-						}
-						const double Off = (L[0] - Aim[0]) * (L[0] - Aim[0]) + (L[1] - Aim[1]) * (L[1] - Aim[1]) + (L[2] - Aim[2]) * (L[2] - Aim[2]);
-						if (Off < Least)
-						{
-							Least = Off;
-							Best[0] = L[0];
-							Best[1] = L[1];
-							Best[2] = L[2];
-							bFound = true;
+							const int32_t L[3] = { Near[0] + DR, Near[1] + DG, Near[2] + DB };
+							if (L[0] < 0 || L[1] < 0 || L[2] < 0 || L[0] > Top[0] || L[1] > Top[1] || L[2] > Top[2] || !Keeps(L, bBand, Now.Warmest))
+							{
+								continue;
+							}
+							const double Apart = (L[0] - Aim[0]) * (L[0] - Aim[0]) + (L[1] - Aim[1]) * (L[1] - Aim[1]) + (L[2] - Aim[2]) * (L[2] - Aim[2]);
+							const double FromLine = bBand ? 0.0 : Off(L);
+							if (FromLine < LeastOff || (FromLine == LeastOff && Apart < Least))
+							{
+								LeastOff = FromLine;
+								Least = Apart;
+								Best[0] = L[0];
+								Best[1] = L[1];
+								Best[2] = L[2];
+								bFound = true;
+							}
 						}
 					}
+				}
+				if (bFound)
+				{
+					break;
 				}
 			}
 			if (bFound)
@@ -395,6 +417,28 @@ namespace ShipPaintCore
 		return C;
 	}
 
+	namespace
+	{
+		/** Where her salt lies: red less blue no higher than her salt makes it on the clean paint, both in levels as she
+		 * measures them and in the whole levels the mesh stores (Salted's own bytes; held there to a whole level, so the
+		 * engine stores that level), only red moving. */
+		Linear NoWarmerThan(Linear C, const Linear& Salted)
+		{
+			const float Room = ToSrgb(Salted.R) - ToSrgb(Salted.B);
+			if (ToSrgb(C.R) - ToSrgb(C.B) > Room)
+			{
+				C.R = std::min(C.R, ToLinear(ToSrgb(C.B) + Room));
+			}
+			const int32_t StoredRoom = StoredLevel(Salted.R) - StoredLevel(Salted.B);
+			const int32_t StoredRed = StoredLevel(C.B) + StoredRoom;
+			if (StoredLevel(C.R) > StoredRed)
+			{
+				C.R = std::min(C.R, LevelLinear(StoredRed));
+			}
+			return C;
+		}
+	}
+
 	Linear Held(Linear C, const Linear& Paint, const Linear& Salted, bool bNoWarmer)
 	{
 		// (no channel above the paint's own, or where her salt lies, above that salt over the clean paint: a deposit, paler)
@@ -403,14 +447,10 @@ namespace ShipPaintCore
 		C.B = std::min(C.B, std::max(Paint.B, Salted.B));
 		if (bNoWarmer && C.R >= Paint.R && C.G >= Paint.G && C.B >= Paint.B)
 		{
-			// (lifted by the salt in every channel, it reads as salt: red less blue, in levels, no higher than her salt makes it
-			// on the clean paint, so the rust under the salt never warms it)
-			const float Room = (ToSrgb(Salted.R) - ToSrgb(Salted.B)) * 255.0f;
-			const float Red = ToSrgb(C.B) * 255.0f + Room;
-			if (ToSrgb(C.R) * 255.0f > Red)
-			{
-				C.R = std::min(C.R, ToLinear(Red / 255.0f));
-			}
+			// (lifted by the salt in every channel, it reads as salt: red less blue, in the levels stored, no higher than her
+			// salt makes it on the clean paint, so the rust under the salt never warms it; held before the hold to the paint
+			// below, so a red it takes under the paint takes green and blue to the paint with it)
+			C = NoWarmerThan(C, Salted);
 		}
 		// (and below the paint in any channel, above it in none: the salt pales a stain, it never warms it, so red never rises
 		// while blue falls, the pink she ruled out)
@@ -418,7 +458,30 @@ namespace ShipPaintCore
 		{
 			C = NoneAbove(C, Paint);
 		}
+		if (bNoWarmer)
+		{
+			// (her call 3 of 26 November, hold the rust beside salt: where her salt lies but cannot lift the stain in every
+			// channel, rule 1 keeps red at the paint while green and blue stay down, warmer than the salt beside it, and across
+			// a triangle from a pale salted corner red rises while blue falls, salmon. Never warmer than her salt on the clean
+			// paint, lifted or not: only red comes down, so nothing rises above the paint)
+			C = NoWarmerThan(C, Salted);
+		}
 		return C;
+	}
+
+	bool PaintsAsUnworn(const Point& P, const Options& O)
+	{
+		// (light wear away from a run, her rule 2: below a wear of 5 at the paint, and under her salt the salt as on the point
+		// unworn, her ruling of 26 November; Coated paints exactly these as the point unworn)
+		return O.bRustRamp && P.bPainted && P.Wear > 0 && P.Wear < RunBodyWear && !P.bBodyAbove && (P.Wear < LightWearFrom || P.Salt > 0);
+	}
+
+	uint8_t SteelFinish(const Point& P, const Options& O)
+	{
+		// (the reader's 128 less half the wear, today's; a point the skin paints as unworn keeps the unworn 128, the material's
+		// metal as on the point unworn, so its whole vertex is the unworn point's)
+		const int32_t Worn = PaintsAsUnworn(P, O) ? 0 : std::min(100, std::max(0, P.Wear));
+		return static_cast<uint8_t>(128 - Worn / 2);
 	}
 
 	std::vector<uint8_t> BodyAbove(const std::vector<RunPoint>& Points, const int32_t* Triangles, size_t Indices)
@@ -525,9 +588,38 @@ namespace ShipPaintCore
 				const bool bSameFace = Low.FX * High.FX + Low.FY * High.FY + Low.FZ * High.FZ >= 0.0;
 				if (Aside <= Reach * Reach && Aside <= Drop * Drop && bSameFace)
 				{
-					Marks[K] = 1;
+					Marks[K] = FootMark;
 					break;
 				}
+			}
+		}
+		// (her ruling of 26 November: the film never on her salt nor beside it. A point at a run's foot is marked SaltMark as
+		// well where her salt lies on it, painted steel with salt above 0, or on any corner of a triangle it is a corner of)
+		const auto Salted = [&Points, Count](int32_t K)
+		{ return K >= 0 && static_cast<size_t>(K) < Count && Points[static_cast<size_t>(K)].bPainted && Points[static_cast<size_t>(K)].Salt > 0; };
+		std::vector<uint8_t> Beside(Count, 0);
+		for (size_t T = 0; T + 2 < Indices; T += 3)
+		{
+			const int32_t Corners[3] = { Triangles[T], Triangles[T + 1], Triangles[T + 2] };
+			bool bInRange = true, bSalt = false;
+			for (const int32_t Corner : Corners)
+			{
+				bInRange = bInRange && Corner >= 0 && static_cast<size_t>(Corner) < Count;
+				bSalt = bSalt || Salted(Corner);
+			}
+			if (bInRange && bSalt)
+			{
+				for (const int32_t Corner : Corners)
+				{
+					Beside[static_cast<size_t>(Corner)] = 1;
+				}
+			}
+		}
+		for (size_t K = 0; K < Count; ++K)
+		{
+			if (Marks[K] != 0 && (Beside[K] != 0 || Salted(static_cast<int32_t>(K))))
+			{
+				Marks[K] |= SaltMark;
 			}
 		}
 		return Marks;
@@ -545,15 +637,25 @@ namespace ShipPaintCore
 		Linear Coated(const Point& P, const Palette& Pal, const Options& O)
 		{
 			const bool bStained = P.bPainted && P.Wear > 0;
+			const bool bSalted = P.bPainted && P.Salt > 0;
 			if (O.bRustRamp && bStained && P.Wear < RunBodyWear && !P.bBodyAbove)
 			{
-				// (light wear away from a run is not rust, her rule 2: the point as it would be unworn, her salt and the soot
-				// laid, a little darker and greyer, in whole levels inside her bounds; held as every stain is, which it keeps)
+				// (light wear away from a run is not rust, her rule 2. Below a wear of 5 it stays at the paint, and under her salt
+				// the salt lies as it lies on the point unworn (her ruling of 26 November): either way the point as it would be
+				// unworn, her salt and the soot laid, bit for bit. From 5, with no salt on it: that point a little darker and
+				// greyer, 3% at 5 rising to 6% at 19, in whole levels inside her bounds; held as every stain is, which it keeps)
 				Point Bare = P;
 				Bare.Wear = 0;
-				const Linear Worn = LightWear(P, Coated(Bare, Pal, O));
-				return Held(Worn, P.Paint, P.Salt > 0 ? SaltedClean(P) : P.Paint, false);
+				const Linear Unworn = Coated(Bare, Pal, O);
+				if (PaintsAsUnworn(P, O))
+				{
+					return Unworn;
+				}
+				return Held(LightWear(P, Unworn), P.Paint, P.Paint, false);
 			}
+			// (her order for the salt, 26 November: a run's body, a wear of BodyOverSaltWear and more, beats her salt, which is
+			// not laid there under the skin; the body shows as ramped, held to rule 1)
+			const bool bSaltLies = bSalted && !(O.bRustRamp && bStained && P.Wear >= BodyOverSaltWear);
 			Linear Coat = P.Paint;
 			float Rusted = 0.0f;
 			if (bStained)
@@ -569,7 +671,7 @@ namespace ShipPaintCore
 					Coat = Lerp(Coat, Pal.Rust, 0.55f * P.Wear / 100.0f);
 				}
 			}
-			if (P.Salt > 0 && P.bPainted)
+			if (bSaltLies)
 			{
 				if (O.bRustRamp)
 				{
@@ -602,19 +704,21 @@ namespace ShipPaintCore
 				// (her rule 1, on what the point shows once the skin has laid all it lays. A stain: no channel above the paint's
 				// own; on a grey-blue paint the ramp's red would rise, a pink wash; held, the stain shows by the green and blue
 				// it takes away, darker and warmer; where soot darkens it first, as much as is left. Where her salt lies it may
-				// pale the stain, in every channel at once, no further than the salt takes the clean paint and no warmer than it
-				// makes it, never red up with blue down (Held). A point the skin leaves unworn: its paint, or its salt over the
-				// clean paint, at most; the deck's hold only lowers.)
-				const Linear Salted = P.Salt > 0 && P.bPainted ? SaltedClean(P) : P.Paint;
-				if (bStained)
+				// pale the point, in every channel at once, no further than the salt takes the clean paint and no warmer than it
+				// makes it, never red up with blue down (Held): on a stain, and on the point unworn, where soot laid over the
+				// salt would otherwise leave red a fraction over the paint with blue under it. A point the skin leaves unworn
+				// and unsalted: its paint at most; the deck's hold only lowers.)
+				const Linear Salted = bSaltLies ? SaltedClean(P) : P.Paint;
+				if (bStained || bSaltLies)
 				{
-					Coat = Held(Coat, P.Paint, Salted, P.Salt > 0 && P.bPainted);
+					// (a stain, and her salt on the point unworn, and so on light wear, which shows it as it lies there: held, and
+					// where her salt lies, paler or where soot takes it back under the paint, never warmer than her salt makes the
+					// clean paint, red less blue in the levels stored; her salt alone on the clean paint is that salt, bit for bit)
+					Coat = Held(Coat, P.Paint, Salted, bSaltLies);
 				}
 				else
 				{
-					Coat.R = std::min(Coat.R, std::max(P.Paint.R, Salted.R));
-					Coat.G = std::min(Coat.G, std::max(P.Paint.G, Salted.G));
-					Coat.B = std::min(Coat.B, std::max(P.Paint.B, Salted.B));
+					Coat = NoneAbove(Coat, P.Paint);
 				}
 			}
 			return Coat;
