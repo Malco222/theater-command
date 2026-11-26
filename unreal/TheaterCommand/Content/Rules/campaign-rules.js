@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0a9b2e110 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 4712b564f 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -51813,7 +51813,7 @@
     }
     if (weatherOn(g2)) {
       const z = skyZone(g2, kind, target);
-      const line = skyRaidLine(g2, z, place3);
+      const line = skyRaidLine(g2, z, cityDefences(g2) ? placeName2(place3) : place3);
       if (line) plan.sky = line;
       if (skyOf(g2, z) === "closed") {
         plan.why = `Closed sky this month: nothing flies over ${zoneName(z)}.`;
@@ -63408,7 +63408,8 @@
         effect: `${list5(packed.map((f) => f.name))} can fly only ${Math.round(least * 100)}% of ${packed.length === 1 ? "its" : "their"} aircraft from there`
       });
     }
-    const aaLine = (round3) => !known ? `Level ${out.aa} guns ring ${round3}` : (known.seen ?? -1) < 0 ? `Not scouted, so reckoned at the worst: level ${out.aa} guns round ${round3}` : `Level ${out.aa} guns ringed ${round3} when ${seenAgo(known.ago ?? 0)}`;
+    const works2 = `the factories of ${place3}`, worksNamed = cityDefences(g2) ? `the factories of ${placeName2(place3)}` : works2;
+    const aaLine = (at4, round3 = at4 === works2 ? worksNamed : at4) => !known ? `Level ${out.aa} guns ring ${round3}` : (known.seen ?? -1) < 0 ? `Not scouted, so reckoned at the worst: level ${out.aa} guns round ${round3}` : `Level ${out.aa} guns ringed ${round3} when ${seenAgo(known.ago ?? 0)}`;
     const dark = cn ? `By night they fire ${!cn.radar ? "blind" : cn.lit > 0 ? "by radar and searchlight" : "by radar"}, and bring down about ${Math.round(cn.share * 100)}% as many bombers as they would by day.` : "";
     if (out.aa && m === "harbour") out.lines.push({ label: "Anti-aircraft guns", value: aaLine(harbourOf(place3)), effect: dark || "They bring down more of the bombers" });
     if (m === "town") {

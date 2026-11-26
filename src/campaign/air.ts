@@ -2879,7 +2879,13 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   // on the Flak line. Seen at a level: "Level 2 guns ringed the factories of Rhineland when seen two months ago"; never
   // scouted: "Not scouted, so reckoned at the worst: level 3 guns round the factories of Rhineland". In sight, as before.
   // The searchlights' hedge below reads the same `known`.)
-  const aaLine = (round: string): string => !known ? `Level ${out.aa} guns ring ${round}`
+  // (City defences, the switch on: the factories' place takes its article as the news gives it, "the factories of the
+  // Ruhr", so that the card's lines agree with the Searchlights line below; with the switch off the line prints as
+  // shipped. The UI director, 26 Nov 2026 04:10Z. A town raid's line names its town and is left as it is. The guard
+  // is laid here on the line's maker, not at its two calls below, so that it joins clean beside the air rules' own
+  // change to the town's call.)
+  const works = `the factories of ${place}`, worksNamed = cityDefences(g) ? `the factories of ${placeName(place)}` : works;
+  const aaLine = (at: string, round = at === works ? worksNamed : at): string => !known ? `Level ${out.aa} guns ring ${round}`
     : (known.seen ?? -1) < 0 ? `Not scouted, so reckoned at the worst: level ${out.aa} guns round ${round}`
       : `Level ${out.aa} guns ringed ${round} when ${seenAgo(known.ago ?? 0)}`;
   // City defences, a night raid with the switch on: how the guns fire in the dark, and what they bring down against
