@@ -30,9 +30,11 @@ const frontKey = (i: number): string => `rowFront:${i}`;
 
 /**
  * The article a name takes in running text: none where it opens with "the", is an "X Force" or is Creforce (the
- * general's line's rule, game.ts, lifted here: the UI director's section 0), else "the ".
+ * general's line's rule, game.ts, lifted here: the UI director's section 0), or where its head, before any bracket,
+ * ends in "Force" (her section 7, case 5, 00:44Z, 26 November 2026: "a name whose head (before any bracket) ends in
+ * "Force" takes none, as "W Force" and "Creforce" do: "Special Force is due in ...""), else "the ".
  */
-export const theOf = (name: string): string => (/^(the |[A-Z] Force|Creforce)/i.test(name) ? '' : 'the ');
+export const theOf = (name: string): string => (/^(the |[A-Z] Force|Creforce)/i.test(name) || /Force$/.test(name.split('(')[0].trim()) ? '' : 'the ');
 /** A name with its article: "The" at the head of a sentence, "the" elsewhere. (None after "your": write the bare name.) */
 export const named = (name: string, head = false): string => {
   const a = theOf(name);
@@ -169,7 +171,11 @@ export function formedLine(g: Game, i: number, was: WaitedOn | null, own: boolea
     const alone = was.one === c.name
       ? `${head}, formed from your corps of that name, now that it has left the front.`
       : `${head}, formed from your ${was.one}, now that it has left the front.`;
-    return { alone, after: `The arrival is formed from your ${was.one}, now that it has left the front.` };
+    // (The same name after a general's line or news: the UI director's section 7, case 3.)
+    const after = was.one === c.name
+      ? 'The arrival is formed from your corps of that name, now that it has left the front.'
+      : `The arrival is formed from your ${was.one}, now that it has left the front.`;
+    return { alone, after };
   }
   return { alone: `${head}, formed from ${numberWord(was.count)} of your corps, ${left}.`, after: `The arrival is formed from ${numberWord(was.count)} of your corps, ${left}.` };
 }
