@@ -3480,11 +3480,14 @@
       }
     },
     exits: {
-      _about: "Men who leave the field are seen leaving (release 2; Brian, 25 November 2026, 17:11Z: 'some soldiers freeze and then disapear'). Looks only (ruling 217), the drill's own dice; on only where asked (Drill exits: the 3D game's switch). The men of a routing block run on past the field's edge. The men of a block that has left the fight (fled off the field, or withdrawn at its out line) stay drawn, each going for his own edge: a withdrawn block's man gets up and turns in his own moment, 0 to 'rise' battle seconds after it left, and runs at his own 'pace' [least, most] metres a battle second; vehicles drive at their block's pace. Each is dropped from the list once 'past' metres beyond his edge, or 'cap' battle seconds after his block left.",
+      _about: "Men who leave the field are seen leaving (release 2; Brian, 25 November 2026, 17:11Z: 'some soldiers freeze and then disapear'). Looks only (ruling 217), the drill's own dice; on only where asked (Drill exits: the 3D game's switch). The men of a routing block run on past the field's edge. The men of a block that has left the fight (fled off the field, or withdrawn at its out line) stay drawn, each going for his own edge: a withdrawn block's man gets up and turns in his own moment, 0 to 'rise' battle seconds after it left, and runs at his own 'pace' [least, most] metres a battle second; vehicles drive at their block's pace. Each is dropped from the list once 'past' metres beyond his edge, or 'cap' battle seconds after his block left. The men who serve one weapon (a machine gun's or a launcher's number two and bearers, a support team's crew, a towed gun's crew) leave with it: its moment, its drift and its pace, each up to 'lag' battle seconds of his own behind it. A support team's weapon that stood set up is first taken down, kneeling at it, over 'down' [least, most] battle seconds (in a rout it is snatched up within 'rise'); every support team's weapon is carried off at a run (fleeing, in a rout) at its own pace within 'carry' [least, most] metres a battle second, its crew with it, the team's weapons spread over that span so no two of its crews go at one pace (a towed gun's crews likewise over 'pace').",
       past: 8,
       cap: 60,
       rise: 0.8,
-      pace: [3.4, 4.6]
+      pace: [3.4, 4.6],
+      down: [1.5, 3.5],
+      lag: 0.4,
+      carry: [2.8, 4.6]
     },
     wounded: {
       _about: "Wounded and knocked-down men (release 2; Brian, 25 November 2026, 16:14Z: 'im not seeing multiple soliders being taken out by an explosion if they are in the blast radius'). Looks only (ruling 217), the drill's own dice; the rules' losses stay as booked; on only where asked (Drill wounded: the 3D game's switch)."
@@ -4760,23 +4763,52 @@
     /**
      * The step a block leaves the fight: every man who stood the step before (a key man while the rules kept his model,
      * the rest of a section not fallen), its vehicles and its spotters are named leaving. A bearer on a carry goes on
-     * with it. A block the drill never saw fighting has nobody to name.
+     * with it. A block the drill never saw fighting has nobody to name. A key man a shell took in this very step (the
+     * rules struck his model before they took the block out of the fight) is not named: he falls where he stands, as the
+     * round booked for him says, and never gets up and walks off. The men who keep by a weapon are named after the rest,
+     * so each finds his weapon already on its way (leaveOne).
      */
     leaveNow(sq) {
       this.leftAt.set(sq, this.b.t);
       const was = this.leftFig.get(sq);
       if (was === void 0) return;
-      for (const m of sq.men) if (m.fell === void 0 && !m.job && (m.j !== void 0 || m.k < was)) this.leaveOne(sq, m);
+      for (const pr of [false, true]) for (const m of sq.men) {
+        if (!!m.pr !== pr || m.fell !== void 0 || m.job || !(m.j !== void 0 || m.k < was)) continue;
+        if (m.j === void 0 && this.shellKills.has(sq.u.id + ":" + m.k)) this.leaveHit(sq, m);
+        else this.leaveOne(sq, m);
+      }
       for (const m of sq.veh) if (m.fell === void 0) this.leaveOne(sq, m);
       for (const m of sq.fo ?? []) this.leaveOne(sq, m);
+    }
+    /** A key man a shell took in the step his block left the fight: he falls where he stands (as falls() lays a man down). */
+    leaveHit(sq, m) {
+      const u = sq.u;
+      m.fell = this.b.t;
+      m.v = 0;
+      m.aim = void 0;
+      m.hidden = void 0;
+      m.pose = "down";
+      m.spot = [m.x, m.y];
+      sq.memo = void 0;
+      if (m.role === "tank" && !sq.esc) {
+        const nth = sq.men.filter((x) => x.role === "tank" && x.fell !== void 0 && x !== m).length;
+        const w = this.b.wrecks.filter((z) => z.unit === u.id)[nth];
+        if (w) this.wreckAt.set(w.id, [m.x, m.y]);
+      }
     }
     /**
      * One man named leaving: no aim, no cover, nobody's escort or helper, out of any firing pose; his way, his own drift,
      * his own moment to get up and go (a routing man, a vehicle or a rider already on the move goes on at once; a man on
      * foot already on the move keeps going as he was till his moment, and only then breaks into his own run: nobody is
-     * stopped dead), his own pace and his gait. A man on foot runs (one routing keeps his gait, else flees); a support
-     * team's weapon is carried at the walk it had; vehicles drive, a towed gun behind her tractor, at their block's pace
-     * (3 m a battle second at least); riders ride.
+     * stopped dead), his own pace and his gait. A man on foot runs (one routing keeps his gait, else flees); vehicles
+     * drive, a towed gun behind her tractor, at their block's pace (3 m a battle second at least); riders ride.
+     * A support team's weapon is carried off at a run (fleeing, in a rout) at its own pace (DR.exits.carry, spread over
+     * its team's weapons: inTeam), never walked at a run's pace; one that stood set up is first taken down, kneeling at it, over its own
+     * DR.exits.down (in a rout it is snatched up within DR.exits.rise). The men who serve one weapon (servesOf) go with it
+     * as one crew: its drift, its pace and its gait, and its moment with a moment of his own behind it, each keeping the
+     * place by it he had, so the weapon never ends up far ahead of its crew (the weapon man's own dice: a towed gun's,
+     * which waits for her tractor, as a man on foot's). Different crews, and the riflemen round them, each go at their
+     * own moment and pace (Brian, 13:40Z: "I want them to work together and look real as individuals apart of a squad").
      */
     leaveOne(sq, m) {
       const u = sq.u, t = this.b.t, E = DR.exits, routed = u.state === "gone", veh = VEHICLE.has(m.role), rides = CARRIED.has(m.pose);
@@ -4794,14 +4826,52 @@
       m.lvA = (r(424) - 0.5) * 0.5;
       m.lvGo = moving && (routed || veh || rides) ? t : t + E.rise * r(422);
       if (veh || rides) m.lvV = clamp2(Math.max(3, sq.speed) * (0.9 + 0.2 * r(425)), 3, m.role === "tank" ? tankTop(sq) : rides ? 14 : 16);
-      else if (CREWED.has(m.role)) m.lvV = (moving ? m.v : DR.teams.pace) * (0.92 + 0.16 * r(426));
+      else if (CREWED.has(m.role)) m.lvV = E.carry[0] + (E.carry[1] - E.carry[0]) * this.inTeam(sq, m, r(426));
       else m.lvV = E.pace[0] + (E.pace[1] - E.pace[0]) * r(423) + (routed ? 1 : 0);
-      m.lvP = m.role === "tank" || m.role === "lorry" ? "drive" : m.role === "gun" ? "towed" : rides ? m.pose : CREWED.has(m.role) ? moving ? m.pose : "walk" : routed ? moving && (m.pose === "flee" || m.pose === "run" || m.pose === "advance") ? m.pose : "flee" : "run";
+      m.lvP = m.role === "tank" || m.role === "lorry" ? "drive" : m.role === "gun" ? "towed" : rides ? m.pose : CREWED.has(m.role) ? routed ? "flee" : m.lvV > 2.5 ? "run" : "walk" : routed ? moving && (m.pose === "flee" || m.pose === "run" || m.pose === "advance") ? m.pose : "flee" : "run";
+      const down = CREWED.has(m.role) && !moving && !rides;
+      if (down && !routed) m.lvGo = t + E.down[0] + (E.down[1] - E.down[0]) * r(427);
+      const w = veh || rides ? void 0 : this.servesOf(sq, m);
+      if (w) {
+        const g = w.role === "gun", rw = (salt) => roll(this.seed, u.id, w.n, salt);
+        const wMoving = MOVING.has(w.pose) && w.v > 0;
+        m.lvA = g ? (rw(424) - 0.5) * 0.5 : w.lvA;
+        m.lvGo = (g ? wMoving && routed ? t : t + E.rise * rw(422) : w.lvGo) + E.lag * r(422);
+        if (g) m.lvV = E.pace[0] + (E.pace[1] - E.pace[0]) * this.inTeam(sq, w, rw(423)) + (routed ? 1 : 0);
+        else {
+          m.lvV = w.lvV;
+          m.lvP = w.lvP;
+        }
+      }
+      const kneel = !!w && w.role !== "gun" && w.v === 0 && w.lvGo > t;
       const still = { fire_stand: "idle", fire_kneel: "wait", fire_prone: "hide", lmg_burst: "hide", throw_grenade: "idle", fire: m.role === "tank" ? "halt" : m.role === "gun" ? "deployed" : "wait" };
-      if (m.lvGo > t && !moving) {
+      if (m.lvGo > t && (!moving || kneel)) {
         m.v = 0;
-        m.pose = still[m.pose] ?? (MOVING.has(m.pose) ? veh ? m.role === "lorry" ? "parked" : "halt" : CREWED.has(m.role) ? "wait" : "idle" : m.pose);
+        m.pose = down || kneel && moving ? "wait" : still[m.pose] ?? (MOVING.has(m.pose) ? veh ? m.role === "lorry" ? "parked" : "halt" : CREWED.has(m.role) ? "wait" : "idle" : m.pose);
       } else m.pose = still[m.pose] ?? m.pose;
+    }
+    /**
+     * A weapon's own roll x (0 to 1) spread over its block's weapons of its kind that stood the step before (by their
+     * place, k): the first in the lower share of the span, the last in the upper, so no two crews of one team or battery
+     * leave at one pace, and each still its own within its share.
+     */
+    inTeam(sq, w, x) {
+      const was = this.leftFig.get(sq) ?? Infinity;
+      const ws = sq.men.filter((y) => y.j === void 0 && y.role === w.role && !y.ml && y.k < was && (y.fell === void 0 || y === w));
+      const i = ws.indexOf(w);
+      return i < 0 ? x : (i + x) / ws.length;
+    }
+    /**
+     * The weapon a man who keeps by one serves (a loader his machine gun, launcher or tube; a gun's crew their gun), where
+     * it was named leaving in this same step and goes on foot or on its own wheels (not aboard); else none. An officer's
+     * runners and a holder's two are no weapon's crew.
+     */
+    servesOf(sq, m) {
+      const want = m.pr && (m.role === "loader" || m.role === "crew") ? LEADS[m.role] : void 0;
+      if (!want) return void 0;
+      const s = m.sec ?? m.k;
+      const w = sq.men.find((x) => x !== m && x.j === void 0 && x.k === s && !m.sub && want.includes(x.role)) ?? sq.men.find((x) => x !== m && !x.pr && grp(x) === grp(m) && want.includes(x.role));
+      return w && w.lv === this.b.t && w.fell === void 0 && !(w.role === "gun" && w.ml) && !CARRIED.has(w.pose) ? w : void 0;
     }
     /**
      * A leaving man's step: aboard, in his seat in his lorry wherever she goes (off the list with her); a towed gun stands
@@ -4869,6 +4939,25 @@
       m.spot = [m.x, m.y];
       m.slotAt = [m.x, m.y];
       m.went = Math.hypot(m.x - x0, m.y - y0) / DT;
+    }
+    /**
+     * Where a man of a block in the fight may step (walk): on the field, 1 m short of its edges; a man still beyond an
+     * edge (a rout carried him past it, then his block rallied) no further out than he is, so he walks back onto it.
+     */
+    leftEdge(m) {
+      const h = this.b.field.h;
+      return [Math.min(1, m.y), Math.max(h - 1, m.y)];
+    }
+    /**
+     * The block a battery or a support team takes to fire at (guns, teams: the player's aim, else what it fights): never
+     * one that has left the fight, for its men are drawn leaving and nothing fires at a leaving man. A player's fire order
+     * on a block outlives that block's going, and the rules then strike what the block fights (targetOf, engaged): so it
+     * takes that, where it is still in the fight, else none.
+     */
+    stillIn(e, u) {
+      if (!this.exits || !e || live(e)) return e;
+      const f = u.engaged !== void 0 ? this.b.unit(u.engaged) : void 0;
+      return f && f !== e && live(f) ? f : null;
     }
     /** A field gun's tractor, where every towed gun of the battery has her own (one gun to each); else none, and she drives herself. */
     tractorOf(sq, g) {
@@ -9214,7 +9303,7 @@
      */
     guns(sq) {
       const u = sq.u, b = this.b, t = b.t, N = this.nums(u), dir = this.threatDir(sq), h = sq.heading;
-      const e = u.aim !== void 0 ? b.unit(u.aim) ?? null : u.engaged !== void 0 ? b.unit(u.engaged) ?? null : null;
+      const e = this.stillIn(u.aim !== void 0 ? b.unit(u.aim) ?? null : u.engaged !== void 0 ? b.unit(u.engaged) ?? null : null, u);
       const guns = this.up(sq).filter((m) => m.role === "gun"), tractor = sq.veh[0];
       const own = sq.tier >= 1 && sq.veh.length > 1;
       if (sq.phase === "limbered" || sq.phase === "flee" || sq.phase === "fallback") {
@@ -9305,7 +9394,7 @@
         return;
       }
       const u = sq.u, b = this.b, t = b.t, N = this.nums(u), dir = this.threatDir(sq), h = sq.heading, T = DR.teams, mg = u.team === "mg";
-      const e = u.aim !== void 0 ? b.unit(u.aim) ?? null : u.engaged !== void 0 ? b.unit(u.engaged) ?? null : null;
+      const e = this.stillIn(u.aim !== void 0 ? b.unit(u.aim) ?? null : u.engaged !== void 0 ? b.unit(u.engaged) ?? null : null, u);
       const crews = this.up(sq).filter((m) => CREWED.has(m.role));
       if (sq.phase === "limbered" || sq.phase === "flee" || sq.phase === "fallback") {
         crews.forEach((g, i) => {
@@ -10298,8 +10387,9 @@
             }
             const nx = m.x + ux * s, ny = m.y + uy * s;
             const on = this.exits && sq.phase === "flee";
+            const [ylo, yhi] = this.exits ? this.leftEdge(m) : [1, f.h - 1];
             m.x = clamp2(nx, 1, f.w - 1);
-            m.y = on ? ny : clamp2(ny, 1, f.h - 1);
+            m.y = on ? ny : clamp2(ny, ylo, yhi);
             if (!on && s > 0.05 && Math.hypot(nx - m.x, ny - m.y) > 0.8 * s && MOVING.has(m.pose)) {
               m.spot = [m.x, m.y];
               this.arrive(sq, m);

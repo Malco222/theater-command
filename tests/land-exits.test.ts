@@ -15,6 +15,7 @@ import { LandBattle } from '../src/battle/land/sim';
 import { sampleTicket, withTeams } from '../src/battle/land/sample';
 import { DRILL, type MenBlock, type MenOut, type Round } from '../src/battle/land/drill';
 import type { FieldTicket } from '../src/battle/core/types';
+import type { LandUnit } from '../src/battle/land/units';
 import type { LandPlace } from '../src/battle/land/field';
 
 type Which = 'a' | 'b' | 'c' | 'd';
@@ -25,6 +26,7 @@ const CARRIED = new Set(['ride', 'mounted', 'horses']);
 const FIRING = new Set(['fire_stand', 'fire_kneel', 'fire_prone', 'lmg_burst', 'throw_grenade', 'fire']);
 const STILL = new Set(['cower', 'wait', 'hide', ...FIRING]);
 const NOT_FOOT = new Set(['tank', 'gun', 'lorry', 'hmg', 'mortar']);
+const CREWS = new Set(['hmg', 'mortar']);
 
 /** The campaign tickets of (a) and (b), as the hunt's probe made them (June 1944: the armies' carriers, guns and cars of the month). */
 function sample(which: 'a' | 'b'): FieldTicket<LandPlace> {
@@ -265,5 +267,218 @@ describe('men who leave the field are seen leaving (Drill.exits, looks only)', (
   it('leaves no living man going out of the feed inside the field with the switch on (and the fault is there with it off)', () => {
     for (const w of ALL) expect(inside(get(w, true)), w).toBe(0);
     expect(inside(get('c', false))).toBeGreaterThan(0);
+  });
+});
+
+// The review of 26 November (the gun crews thread, its notes on leaving men beside its crews): five faults of this
+// switch's own, mended. Where a fault needs a moment that is hard to bring about in a whole battle (a shell in the very
+// step a block leaves, a fire order outliving its target, a team taken out of the fight while its weapons stand set up,
+// a rally with men beyond the edge), the test sets the rules' state by hand between steps and drives the drill directly,
+// as the review's scratch harness did; the drill's own drawing is what is tested, never the rules.
+type Drilled = {
+  squads: Map<number, { u: LandUnit; men: DrawnMan[]; veh: DrawnMan[] }>;
+  step(): void; view(): MenBlock[]; rounds(): Round[];
+  shelled(x: number, y: number, by?: number, on?: number, k?: number): void; manAt(id: number, k: number): [number, number] | null;
+};
+type DrawnMan = { k: number; j?: number; n: number; sec?: number; sub?: number; pr?: true; role: string; x: number; y: number; pose: string; v: number; spot: [number, number]; fell?: number; lv?: number; lvGo?: number; lvOut?: true };
+/** The plains battle the review's harness used: seed 5, support teams on both sides. */
+const plains = (): LandBattle => new LandBattle(withTeams(sampleTicket('plains', 1.3, { seed: 5, style: { att: 'methodical', def: 'bold' } })));
+/** One drill step on its own, the rules' clock moved on a step (the rules are not run). */
+const drillStep = (b: LandBattle, d: Drilled): void => { (b as { t: number }).t = Math.round((b.t + 0.1) * 10) / 10; d.step(); };
+const grpOf = (m: DrawnMan): number => (m.sec ?? m.k) * 8 + (m.sub ?? 0);
+/** The weapon a loader or a gun's crewman keeps by: his section's key man, else the mate of his group who bears it. */
+const weaponOf = (men: DrawnMan[], m: DrawnMan): DrawnMan | undefined => {
+  const want = m.role === 'loader' ? ['mg', 'at', 'hmg', 'mortar'] : m.role === 'crew' ? ['gun'] : null;
+  if (!m.pr || !want) return undefined;
+  return men.find((x) => x !== m && x.j === undefined && x.k === (m.sec ?? m.k) && !m.sub && want.includes(x.role)) ?? men.find((x) => x !== m && !x.pr && grpOf(x) === grpOf(m) && want.includes(x.role));
+};
+
+describe('men who leave the field: the review of 26 November (Drill.exits, looks only)', () => {
+  it('lays down a key man a shell took in the step his block left the fight, as his round says: he never gets up and walks off', { timeout: 300_000 }, () => {
+    // (the rules' order in one tick: suffer() strikes the model and calls drill.shelled, move() withdraws the block,
+    // then the drill steps; replayed by hand on the attackers' mortar team at 100 s)
+    const b = plains(), d = b.drillOn({ sections: true, platoons: true, exits: true }) as unknown as Drilled;
+    while (b.t < 100 && !b.over) b.step();
+    const u = b.units.find((x) => x.side === 'att' && x.team === 'mor')!, foe = b.units.find((x) => x.side === 'def')!;
+    const k = u.figures - 1, at = d.manAt(u.id, k)!;
+    u.figures = k;
+    d.shelled(at[0], at[1], foe.id, u.id, k);
+    u.state = 'withdrawn';
+    drillStep(b, d);
+    expect(d.rounds().filter((r) => r.on === u.id && r.ok === k && r.r === 'kill').length).toBe(1);
+    const seen: string[] = [];
+    for (let i = 0; i < 30; i++) {
+      const me = d.view().find((x) => x.id === u.id)?.men.find((m) => m.k === k && m.j === undefined);
+      seen.push(me ? `${me.p} ${me.v} ${me.d === undefined ? 'up' : 'down'}${me.lv ? ' lv' : ''}` : 'none');
+      drillStep(b, d);
+    }
+    expect([...new Set(seen)]).toEqual(['down 0 down']);
+    // (the rest of his team still leave, on their feet)
+    expect(d.view().find((x) => x.id === u.id)!.men.filter((m) => m.lv).length).toBeGreaterThan(10);
+  });
+
+  it('has no support team aim or fire at a block that has left the fight, though a fire order still names it, but at the block the rules fight', { timeout: 300_000 }, () => {
+    // (a player's land:fire order outlives its target: the rules keep the team's aim on it and strike another block, the
+    // one they then fight (engaged); held by hand on the block each team fights at 2 s, and that block withdrawn by hand)
+    let fought = 0;
+    for (const kind of ['mor', 'mg'] as const) {
+      const b = plains(), d = b.drillOn({ exits: true }) as unknown as Drilled;
+      const team = b.units.find((x) => x.side === 'att' && x.team === kind)!;
+      let X: LandUnit | undefined, left = -1, aimed = 0, firing = 0, atLeaving = 0, onLive = 0;
+      while (!b.over && (left < 0 || b.t < left + 60)) {
+        if (!X && b.t >= 2 && team.engaged !== undefined) X = b.units.find((x) => x.id === team.engaged);
+        if (X) team.aim = X.id;
+        if (X && left < 0) { X.state = 'withdrawn'; left = b.t; }
+        b.step();
+        // (from the team's first think after its target left: a team thinks each half second, and a tube's last round,
+        // fired while the target still fought, is drawn a moment after)
+        if (left < 0 || b.t < left + 0.6) continue;
+        const v = d.view(), lv = (v.find((x) => x.id === X!.id)?.men ?? []).filter((m) => m.lv);
+        // (the enemy's men still in the fight, and whether the rules now fight a block still in it)
+        const foes = v.filter((x) => x.id !== X!.id && b.units.find((y) => y.id === x.id)?.side !== team.side).flatMap((x) => x.men.filter((m) => !m.lv && m.d === undefined));
+        const eng = team.engaged !== undefined ? b.units.find((y) => y.id === team.engaged) : undefined;
+        const live = !!eng && eng !== X && eng.state !== 'gone' && eng.state !== 'withdrawn';
+        let n = 0;
+        for (const m of v.find((x) => x.id === team.id)?.men ?? []) {
+          // (firing: a machine gun's sweep, or a tube's shot fired after its target left; a tube is drawn in its firing
+          // pose a moment after a round it fired while the target still fought)
+          if (m.p === 'fire' && (m.s === undefined || m.s > left)) { firing++; n++; }
+          if (!m.a) continue;
+          aimed++;
+          const near = (q: MenOut): number => Math.hypot(q.x - m.a![0], q.y - m.a![1]);
+          if (Math.min(Infinity, ...lv.map(near)) < Math.min(Infinity, ...foes.map(near))) atLeaving++;
+        }
+        if (live) { onLive++; if (n) fought++; }
+      }
+      expect(left, kind).toBeGreaterThan(0);
+      // (no aim is nearer a leaving man than one still in the fight)
+      expect(atLeaving, kind).toBe(0);
+      // (where the rules fight a block still in the fight, the team is drawn aiming, and firing, at it)
+      if (onLive > 0) expect([aimed > 0, firing > 0], kind).toEqual([true, true]);
+    }
+    expect(fought).toBeGreaterThan(0);
+  });
+
+  it('keeps each weapon\'s crew with it as they leave: one moment, drift and pace, each crew its own', { timeout: 300_000 }, () => {
+    // (Normandy, all fall back at 60 s: the attackers' support teams withdraw at their out line)
+    const L = open('c', true), d = L.drill as unknown as Drilled;
+    let ordered = false, grow = 0, crews = 0;
+    const gap0 = new Map<DrawnMan, number>(), paces = new Map<number, Set<string>>();
+    for (let guard = 0; guard < 4000 && !L.sim.over; guard++) {
+      if (!ordered && L.sim.t >= 60) { ordered = true; order('c', L); }
+      L.tick(1, 50);
+      for (const sq of d.squads.values()) for (const m of sq.men) {
+        const w = weaponOf(sq.men, m);
+        if (!w || m.lv === undefined || m.lvOut || m.fell !== undefined || w.lv === undefined || w.lvOut || w.fell !== undefined || w.role === 'gun' || m.pose === 'mounted') continue;
+        const g = Math.hypot(w.x - m.x, w.y - m.y);
+        if (!gap0.has(m)) { gap0.set(m, g); crews++; }
+        grow = Math.max(grow, g - gap0.get(m)!);
+        // (once both go, a crew man goes at his weapon's pace and gait)
+        if (L.sim.t >= Math.max(m.lvGo!, w.lvGo!) + 0.2 && w.v > 0) { expect(m.v, `${sq.u.id}:${m.k}.${m.j}`).toBeCloseTo(w.v, 6); expect(m.pose).toBe(w.pose); }
+        if (CREWS.has(w.role) && w.v > 0) { const s = paces.get(sq.u.id) ?? new Set<string>(); s.add(w.v.toFixed(2)); paces.set(sq.u.id, s); }
+      }
+    }
+    expect(crews).toBeGreaterThan(20);
+    // (no man of a crew ends up more than a pace or two further from his weapon than he stood as they left)
+    expect(grow).toBeLessThan(3);
+    // (a team's crews do not go in lockstep: each weapon at its own pace)
+    expect([...paces.values()].some((s) => s.size >= 3)).toBe(true);
+  });
+
+  it('has a support team take down a weapon that stood set up and carry it off at a run (fleeing, in a rout), its crew with it', { timeout: 300_000 }, () => {
+    // (the attackers' mortar and machine-gun teams taken out of the fight by hand at 100 s while set up: withdrawn, and
+    // gone in a rout)
+    for (const state of ['withdrawn', 'gone'] as const) for (const kind of ['mor', 'mg'] as const) {
+      const b = plains(), d = b.drillOn({ sections: true, platoons: true, exits: true }) as unknown as Drilled;
+      while (b.t < 100 && !b.over) b.step();
+      const u = b.units.find((x) => x.side === 'att' && x.team === kind)!, sq = d.squads.get(u.id)!;
+      const ws = sq.men.filter((m) => (m.role === 'hmg' || m.role === 'mortar') && m.k < u.figures);
+      expect(ws.every((w) => w.v === 0), `${state} ${kind} set up`).toBe(true);
+      u.state = state;
+      const t0 = b.t + 0.1, went = new Map<DrawnMan, number>(), bad: string[] = [];
+      let gap = 0;
+      for (let i = 0; i < 300; i++) {
+        drillStep(b, d);
+        for (const w of ws) {
+          if (w.v > 0 && !went.has(w)) went.set(w, b.t);
+          if (!went.has(w) && w.pose !== 'wait') bad.push(`${b.t} ${w.k} ${w.pose} before it went`);
+          if (w.v > 0 && w.pose !== (state === 'gone' ? 'flee' : 'run')) bad.push(`${b.t} ${w.k} ${w.pose} ${w.v}`);
+          for (const m of sq.men) if (weaponOf(sq.men, m) === w && m.lv !== undefined && !m.lvOut && !w.lvOut) {
+            gap = Math.max(gap, Math.hypot(w.x - m.x, w.y - m.y));
+            if (b.t >= m.lvGo! + 0.2 && w.v > 0 && (m.v !== w.v || m.pose !== w.pose)) bad.push(`${b.t} ${w.k} crew ${m.pose} ${m.v} weapon ${w.pose} ${w.v}`);
+          }
+        }
+      }
+      expect(bad.slice(0, 5), `${state} ${kind}`).toEqual([]);
+      // (taken down first where it was not a rout; snatched up within DR.exits.rise in one)
+      for (const w of ws) {
+        const after = went.get(w)! - t0;
+        if (state === 'withdrawn') expect(after, `${kind} ${w.k}`).toBeGreaterThanOrEqual(DRILL.exits.down[0] - 1e-6);
+        else expect(after, `${kind} ${w.k}`).toBeLessThanOrEqual(DRILL.exits.rise + 0.1 + 1e-6);
+      }
+      expect(gap, `${state} ${kind}`).toBeLessThan(12);
+    }
+  });
+
+  it('has a crew man who was on the move when his block left stop by his weapon while it is taken down, and go with it', { timeout: 300_000 }, () => {
+    // (the second review: desert seed 8, squad life on, the defenders' machine-gun team taken out of the fight by hand
+    // at 90 s while its guns stood set up and four of its bearers crept about them; withdrawn, and gone in a rout; the
+    // drill driven on its own, as in the test above)
+    for (const state of ['withdrawn', 'gone'] as const) {
+      const b = new LandBattle(withTeams(sampleTicket('desert', 1.2, { seed: 8, style: { att: 'bold', def: 'methodical' } })));
+      const d = b.drillOn({ sections: true, platoons: true, life: true, exits: true }) as unknown as Drilled;
+      while (b.t < 90 && !b.over) b.step();
+      const u = b.units.find((x) => x.side === 'def' && x.team === 'mg' && x.state !== 'gone')!, sq = d.squads.get(u.id)!;
+      const ws = sq.men.filter((m) => m.role === 'hmg' && m.k < u.figures && m.fell === undefined);
+      expect(ws.every((w) => w.v === 0), state).toBe(true);
+      const crew = sq.men.filter((m) => ws.includes(weaponOf(sq.men, m)!) && m.fell === undefined);
+      // (the case: some of the crew on the move as their block leaves)
+      expect(crew.filter((m) => MOVING.has(m.pose) && m.v > 0).length, state).toBeGreaterThan(0);
+      u.state = state;
+      if (state === 'gone') u.figures = 0;
+      const gap0 = new Map<DrawnMan, number>(), bad: string[] = [];
+      let grow = 0;
+      for (let i = 0; i < 300; i++) {
+        drillStep(b, d);
+        for (const m of crew) {
+          const w = weaponOf(sq.men, m)!;
+          if (m.lv === undefined || m.lvOut || w.lvOut) continue;
+          const g = Math.hypot(w.x - m.x, w.y - m.y);
+          if (!gap0.has(m)) gap0.set(m, g);
+          grow = Math.max(grow, g - gap0.get(m)!);
+          // (while his weapon still stands, he stands by it)
+          if (w.v === 0 && m.v > 0) bad.push(`${b.t} ${m.k}.${m.j} ${m.pose} ${m.v} by ${w.k} ${w.pose}`);
+        }
+      }
+      expect(gap0.size, state).toBe(crew.length);
+      expect(bad.slice(0, 5), state).toEqual([]);
+      expect(grow, state).toBeLessThan(1);
+    }
+  });
+
+  it('brings men a rout carried past the edge back onto the field on their own feet when their block rallies, a tank too', { timeout: 300_000 }, () => {
+    // (sample battle (a): an attacking foot block and an armoured one made to rout by hand, then rallied as nerve()
+    // rallies a block, the foot block with its middle 14 m from its edge; a tank of the armoured block, which keeps
+    // behind its block's middle, set beyond the edge by hand as a rout would leave her)
+    for (const kind of ['inf', 'arm'] as const) {
+      const L = open('a', true), b = L.sim, d = L.drill as unknown as Drilled;
+      while (b.t < 20) b.step();
+      const u = b.units.find((x) => x.side === 'att' && x.kind === kind && x.state !== 'gone')!, sq = d.squads.get(u.id)!;
+      const rout = (b as unknown as { rout(u: LandUnit): void }).rout.bind(b);
+      while (u.y > (kind === 'inf' ? 14 : 3) && !b.over) { u.mor = 0; u.clear = 0; if (u.state !== 'routing') rout(u); b.step(); }
+      Object.assign(u, { mor: u.mor0, state: 'wavering', order: null, path: [], act: 'idle', gives: false });
+      if (kind === 'arm') { const tk = sq.men.find((m) => m.role === 'tank' && m.fell === undefined)!; Object.assign(tk, { y: -6, spot: [tk.x, -6], pose: 'drive', v: 4 }); }
+      const all = [...sq.men, ...sq.veh].filter((m) => m.fell === undefined && m.pose !== 'mounted');
+      expect(all.filter((m) => m.y < 0).length, kind).toBeGreaterThan(0);
+      const prev = new Map(all.map((m) => [m, [m.x, m.y]]));
+      const jumps: string[] = [];
+      for (let i = 0; i < 200 && !b.over; i++) {
+        b.step();
+        for (const m of all) { const p = prev.get(m)!, s = Math.hypot(m.x - p[0], m.y - p[1]); if (m.fell === undefined && s > 2.5) jumps.push(`${b.t.toFixed(1)} ${m.k}.${m.j} ${m.role} ${s.toFixed(1)} m`); prev.set(m, [m.x, m.y]); }
+      }
+      expect(jumps.slice(0, 5), kind).toEqual([]);
+      // (and they are back on the field, on their own feet)
+      expect(all.filter((m) => m.fell === undefined && m.y < 0).length, kind).toBe(0);
+    }
   });
 });
