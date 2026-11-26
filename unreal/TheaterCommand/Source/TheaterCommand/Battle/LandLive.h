@@ -64,6 +64,17 @@ public:
 	static const FRule& RuleAt(int32 Index);
 	/** Whether the player has it on (his settings; on when never set). The command line's off is not counted here. */
 	static bool RuleOn(int32 Index);
+	/**
+	 * A row that works only with other rows on (the UI director, 26 November 2026 01:24Z): the row of the first of
+	 * those, from the top of its chain, that is off on the card, or INDEX_NONE when all it needs are on or it needs
+	 * none. While it lacks one the row is greyed: it cannot be pressed, it acts as off (RuleNow), and its own setting
+	 * is kept. No row ever switches another.
+	 */
+	static int32 RuleLacks(int32 Index);
+	/** What the card draws lit: on as he left it, and lacking nothing it needs. */
+	static bool RuleLit(int32 Index);
+	/** A greyed row was pressed within the last few seconds: the card says what it works only with. */
+	static bool RulePressed(int32 Index);
 	static void SetRule(int32 Index, bool bOn);
 	/** A click on the rule's switch on the Battle rules card: it turns over, is saved, and the log says what it now reads.
 	 * "-TheaterRulesFlip=phones,bearers,patrol" clicks the named switches once when the card is first drawn, for the

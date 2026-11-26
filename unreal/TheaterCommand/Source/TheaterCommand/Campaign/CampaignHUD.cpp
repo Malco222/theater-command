@@ -14448,6 +14448,11 @@ namespace
 			// or OFF beside it so it never rests on the word alone; nothing on the card is red)
 			static const FSlateRoundedBoxBrush SwitchTrack(FLinearColor::White, 8.0f, FLinearColor(FColor::FromHex(TEXT("8A6E44"))), 1.0f);
 			static const FSlateRoundedBoxBrush SwitchKnob(FLinearColor::White, 6.0f);
+			// (the UI director, 26 November 2026 01:24Z) A row that works only with another row on is greyed while that
+			// one is off: drawn as off and fainter, it cannot be pressed (FLandLive::FlipRule turns nothing), and in place
+			// of its state it says what it needs; for a few seconds after a press it says what it works only with. Its
+			// own setting is kept, and no row ever switches another.
+			static const FLinearColor Greyed(Muted.R, Muted.G, Muted.B, 0.5f);
 			FLandLive::FlipFromCommandLine();
 			for (int32 Index = 0; Index < FLandLive::RuleCount(); ++Index)
 			{
@@ -14470,19 +14475,19 @@ namespace
 							SNew(SBox).WidthOverride(30.0f).HeightOverride(16.0f)
 							[
 								SNew(SBorder).BorderImage(&SwitchTrack).Padding(FMargin(2.0f))
-								.BorderBackgroundColor_Lambda([Index]() { return FSlateColor(FLandLive::RuleOn(Index) ? BrightBrass : FLinearColor(FColor::FromHex(TEXT("2A231B")))); })
+								.BorderBackgroundColor_Lambda([Index]() { return FSlateColor(FLandLive::RuleLit(Index) ? BrightBrass : FLinearColor(FColor::FromHex(TEXT("2A231B")))); })
 								[
 									SNew(SHorizontalBox)
 									+ SHorizontalBox::Slot().AutoWidth()
 									[
-										SNew(SBox).WidthOverride_Lambda([Index]() { return FOptionalSize(FLandLive::RuleOn(Index) ? 14.0f : 0.0f); })
+										SNew(SBox).WidthOverride_Lambda([Index]() { return FOptionalSize(FLandLive::RuleLit(Index) ? 14.0f : 0.0f); })
 									]
 									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 									[
 										SNew(SBox).WidthOverride(12.0f).HeightOverride(12.0f)
 										[
 											SNew(SBorder).BorderImage(&SwitchKnob).Padding(0.0f)
-											.BorderBackgroundColor_Lambda([Index]() { return FSlateColor(FLandLive::RuleOn(Index) ? FLinearColor(FColor::FromHex(TEXT("1E1810"))) : Muted); })
+											.BorderBackgroundColor_Lambda([Index]() { return FSlateColor(FLandLive::RuleLit(Index) ? FLinearColor(FColor::FromHex(TEXT("1E1810"))) : FLandLive::RuleLacks(Index) != INDEX_NONE ? Greyed : Muted); })
 										]
 									]
 								]
@@ -14493,8 +14498,8 @@ namespace
 							SNew(SBox).WidthOverride(30.0f)
 							[
 								SNew(STextBlock).Font(Font(TEXT("Bold"), 10))
-								.Text_Lambda([Index]() { return FText::FromString(FLandLive::RuleOn(Index) ? TEXT("ON") : TEXT("OFF")); })
-								.ColorAndOpacity_Lambda([Index]() { return FSlateColor(FLandLive::RuleOn(Index) ? BrightBrass : Muted); })
+								.Text_Lambda([Index]() { return FText::FromString(FLandLive::RuleLacks(Index) != INDEX_NONE ? TEXT("") : FLandLive::RuleLit(Index) ? TEXT("ON") : TEXT("OFF")); })
+								.ColorAndOpacity_Lambda([Index]() { return FSlateColor(FLandLive::RuleLit(Index) ? BrightBrass : Muted); })
 							]
 						]
 						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
@@ -14503,11 +14508,29 @@ namespace
 							+ SVerticalBox::Slot().AutoHeight()
 							[
 								SNew(STextBlock).Text(FText::FromString(Rule.Label)).Font(Font(TEXT("Bold"), 11))
-								.ColorAndOpacity_Lambda([Index]() { return FSlateColor(FLandLive::RuleOn(Index) ? Cream : Muted); })
+								.ColorAndOpacity_Lambda([Index]() { return FSlateColor(FLandLive::RuleLit(Index) ? Cream : FLandLive::RuleLacks(Index) != INDEX_NONE ? Greyed : Muted); })
 							]
 							+ SVerticalBox::Slot().AutoHeight()
 							[
-								SNew(STextBlock).Text(FText::FromString(Rule.Tip)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+								// In place of a greyed row's state: what it needs, the first row of its chain that is off.
+								SNew(STextBlock).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(Brass).AutoWrapText(true)
+								.Visibility_Lambda([Index]() { return FLandLive::RuleLacks(Index) != INDEX_NONE ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+								.Text_Lambda([Index]()
+								{
+									const int32 Lacks = FLandLive::RuleLacks(Index);
+									if (Lacks == INDEX_NONE)
+									{
+										return FText::GetEmpty();
+									}
+									return FText::FromString(FLandLive::RulePressed(Index)
+										? FString::Printf(TEXT("\u201C%s\u201D works only with \u201C%s\u201D on."), FLandLive::RuleAt(Index).Label, FLandLive::RuleAt(Lacks).Label)
+										: FString::Printf(TEXT("Needs \u201C%s\u201D"), FLandLive::RuleAt(Lacks).Label));
+								})
+							]
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(STextBlock).Text(FText::FromString(Rule.Tip)).Font(Font(TEXT("Regular"), 10)).AutoWrapText(true)
+								.ColorAndOpacity_Lambda([Index]() { return FSlateColor(FLandLive::RuleLacks(Index) != INDEX_NONE ? Greyed : Muted); })
 							]
 						]
 					]
