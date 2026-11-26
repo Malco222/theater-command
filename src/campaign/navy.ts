@@ -4804,19 +4804,21 @@ export interface ConvoyFought { swing: number; ss: Record<number, number>; dd: R
  */
 export const convoyField: { fought?: (m: ConvoyMeeting) => ConvoyFought | undefined } = {};
 
-const SHIPS_SAID = ['no ships', 'one ship', 'two ships', 'three ships', 'four ships', 'five ships', 'six ships', 'seven ships', 'eight ships', 'nine ships', 'ten ships'];
+const NUMBER_SAID = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+/** A count in words to ten, figures from 11 (the UI director, W5b): 'one ship', 'three ships', '12 ships'. */
+const countSaid = (k: number, one: string, many: string): string => `${k <= 10 ? NUMBER_SAID[k] : k} ${k === 1 ? one : many}`;
 /**
  * The month headline's second sentence where the player fought a night on the route (W5b; the design director, 26
- * November 12:04Z, Q2 and Q3): the night's own ships sunk, as booked (nightShips), and the month's tons as booked, never
- * split between the night and the rest, for nothing books the split. Empty in a month with no night fought, so the
- * headline is release 1's. Numbers in words to ten, figures from 11 (the UI director). The UI director words the final
- * lines (W5b, after the ruling).
+ * November 12:04Z, Q2 and Q3): the night's own ships sunk, as booked (nightShips), against the month's tons the first
+ * sentence gives, never split between the night and the rest, for nothing books the split. It names no rest, so it
+ * holds where the night was all of the month; the tons it points at include raiders that are not boats, so they went
+ * down 'elsewhere on the route', not on other nights. Empty in a month with no night fought, so the headline is release
+ * 1's. The UI director's final lines (W5c (a), (f), 26 November 12:34Z).
  */
-function nightSaid(ships: number | undefined, tons: number): string {
+function nightSaid(ships: number | undefined): string {
   if (ships === undefined) return '';
-  const t = tons.toLocaleString('en-US');
-  if (ships === 0) return ` On the night you fought, the convoy lost no ships; the route's other nights this month lost ${t} tons.`;
-  return ` On the night you fought, the convoy lost ${ships <= 10 ? SHIPS_SAID[ships] : `${ships} ships`}; the route lost ${t} tons this month in all.`;
+  if (ships === 0) return ' On the night you fought, the convoy lost no ships; all of that tonnage went down elsewhere on the route.';
+  return ` On the night you fought, the convoy lost ${countSaid(ships, 'ship', 'ships')}; ${ships === 1 ? 'it is' : 'they are'} counted in that tonnage.`;
 }
 
 /** The nights booked into one nation's month, by route: what the field gave, which fleets it covers, and whether any of it had to be held into the dice's run. */
@@ -5191,8 +5193,11 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>,
     // The monthly figures are news only to the nations fighting over the route, and to a player who fought a night on it
     // (an ally's escorts in its guard: W5b, Q3, the review of 26 November). A month that books no tons has no headline,
     // a night fought or not.
-    if (tons > 0 && g.human && (g.human === nat || atWar(g, g.human, nat) || g.convoys[route.id].nightShips !== undefined)) {
-      headline(g, 'info', `${cap(route.name)}: ${tons.toLocaleString('en-US')} tons of shipping sunk this month${subsLost ? `, ${subsLost} ${subsLost === 1 ? 'submarine' : 'submarines'} destroyed` : ''}.${nightSaid(g.convoys[route.id].nightShips, tons)}`, nat, undefined, { arm: 'sea', lost: nat });
+    // (The first sentence is release 1's in every month, a night fought or not, figures and all: the UI director's W5d 2,
+    // withdrawing W5c (b), for the design director's Q3 and the saves.)
+    const nightShips = g.convoys[route.id].nightShips;
+    if (tons > 0 && g.human && (g.human === nat || atWar(g, g.human, nat) || nightShips !== undefined)) {
+      headline(g, 'info', `${cap(route.name)}: ${tons.toLocaleString('en-US')} tons of shipping sunk this month${subsLost ? `, ${subsLost} ${subsLost === 1 ? 'submarine' : 'submarines'} destroyed` : ''}.${nightSaid(nightShips)}`, nat, undefined, { arm: 'sea', lost: nat });
     }
   }
 }
