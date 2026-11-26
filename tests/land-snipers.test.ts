@@ -274,6 +274,25 @@ describe('sniper teams: a few men hold no frontage, and a target kept (the desig
   }, 240_000);
 });
 
+describe('sniper teams: drawn up in a row of their own (presence named, 26 November 05:00Z)', () => {
+  it('a pair takes no place in the guns\' row: every other block draws up where it would with the pairs taken off', () => {
+    let checked = 0;
+    for (const p of PRACTICE_GROUNDS) for (const seed of [3, 5]) {
+      const w = withSnipers(practiceTicket(p, { seed: seed * 7919 + 13 }));
+      if (!w.att.forces.some((f) => f.kind === 'snp') && !w.def.forces.some((f) => f.kind === 'snp')) continue;
+      const bare = { ...w, att: { ...w.att, forces: w.att.forces.filter((f) => f.kind !== 'snp') }, def: { ...w.def, forces: w.def.forces.filter((f) => f.kind !== 'snp') } };
+      const at = (b: LandBattle): string[] => b.units.filter((u) => u.team !== 'snp').map((u) => `${u.side}:${u.kind}:${u.corps}:${Math.round(u.x)}:${Math.round(u.y)}`).sort();
+      const a = new LandBattle(w), b = new LandBattle(bare);
+      expect(at(a)).toEqual(at(b));
+      for (const u of a.units.filter((x) => x.team === 'snp')) {
+        expect(u.x).toBeGreaterThan(0); expect(u.x).toBeLessThan(a.field.w); expect(u.y).toBeGreaterThan(0); expect(u.y).toBeLessThan(a.field.h);
+      }
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(5);
+  });
+});
+
 describe('sniper teams: the switch off', () => {
   it('sets nothing of theirs on any block when the field has none', () => {
     const b = new LandBattle(ticket('urban', 4));

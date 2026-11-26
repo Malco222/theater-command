@@ -444,7 +444,10 @@ const MOBILE: Kind[] = ['arm', 'mot'];
 const GAP = 40;
 
 /** A side's rows: foot in the front line, tanks and lorries next (half of them in front where there is no foot), guns. */
-function rowsOf(mine: LandUnit[]): LandUnit[][] {
+function rowsOf(all: LandUnit[]): LandUnit[][] {
+  // A sniper pair is no gun: it takes no place in the guns' row (it would shift the battery along it), and draws up in a
+  // row of its own behind them (drawUp), from where its staff or its player sets it in its hide.
+  const mine = all.filter((u) => u.team !== 'snp');
   const lines: LandUnit[][] = [mine.filter((u) => FRONT.includes(u.kind)), mine.filter((u) => MOBILE.includes(u.kind)), mine.filter((u) => u.kind === 'art')];
   if (!lines[0].length && lines[1].length) lines[0] = lines[1].splice(0, Math.ceil(lines[1].length / 2));
   return lines;
@@ -575,7 +578,7 @@ function streamLanes(mine: LandUnit[], side: Side, f: LandField): void {
  * row behind it, GAP kept between its blocks, so no two are drawn up on top of each other (b492(3)).
  */
 function drawUp(mine: LandUnit[], side: Side, f: LandField, cx: number, lo?: number, hi?: number): void {
-  const z = f.zones[side];
+  const z = f.zones[side], pairs = mine.filter((u) => u.team === 'snp');
   const dir = side === 'att' ? 1 : -1;
   let front = side === 'att' ? z[3] - 40 : z[1] + 40;
   const lines = rowsOf(mine);
@@ -636,6 +639,7 @@ function drawUp(mine: LandUnit[], side: Side, f: LandField, cx: number, lo?: num
     const wide = place(lines[1], front - dir * 110, true);
     if (held.length) { place(held, front - dir * (wide || !lines[1].length ? 110 : 170), false); for (const u of held) u.reserve = 'held'; }
     place(lines[2], front - dir * 230, false);
+    if (pairs.length) place(pairs, front - dir * 290, false);
     return;
   }
   // In its lanes (b492(3)): each line cut into rows no wider than the room, the front ones full and the rest behind.
@@ -657,6 +661,7 @@ function drawUp(mine: LandUnit[], side: Side, f: LandField, cx: number, lo?: num
   cut(held, wide || !lines[1].length ? 110 : 170);
   for (const u of held) u.reserve = 'held';
   cut(lines[2], 230);
+  cut(pairs, 290);
   const deep = (us: LandUnit[]): number => Math.max(...us.map((u) => u.d));
   const steps = (gap: number): number[] => {
     const ys: number[] = [];
