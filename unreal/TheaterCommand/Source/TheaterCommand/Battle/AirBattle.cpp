@@ -5147,12 +5147,16 @@ FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool b
 	// (and with the Battle rules card's "Turning airscrews" on, a shape of its own too, its far shape without its blades:
 	// the shapes are kept for the whole run, and a battle with the row off must draw what it drew before)
 	const bool bScrews = PropSpinOn();
+	// (and with the Battle rules card's "Bomber markings" from its second bundle on, the finer B-17 a shape of her own without
+	// her "#" number, which stands where her squadron's codes go: the row off, her key and her shape as before)
+	const bool bLetters = Name.StartsWith(AirParts::Wide(AirShow::FileOf("B17", true)) + TEXT(":")) && LettersOnNow() && State->LettersSheet.Bundle >= 2;
 	const FString ShapeKey = (bStandIn ? FString::Printf(TEXT("%s@%.1f|%s"), *Name, Span, *Model) : Name) + (Scheme > 0 ? FString::Printf(TEXT("|scheme%d"), Scheme) : FString())
-		+ (bTorpedo ? TEXT("|torpedo") : TEXT("")) + (bScrews ? TEXT("|screws") : TEXT(""));
+		+ (bTorpedo ? TEXT("|torpedo") : TEXT("")) + (bLetters ? TEXT("|letters") : TEXT("")) + (bScrews ? TEXT("|screws") : TEXT(""));
 	TMap<FString, AirParts::FShape>& Shapes = AirParts::Shapes();
 	if (!Shapes.Contains(ShapeKey))
 	{
 		FMiniatureMesh::bTorpedoLoad = bTorpedo;
+		FMiniatureMesh::bNoPlaneNumber = bLetters;
 		FMiniatureMesh Made;
 		Made.Vehicle(Name, FVector::ZeroVector, UnitsPerMetre, 0.0, true);
 		AirParts::FShape Near;
@@ -5212,6 +5216,7 @@ FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool b
 			}
 		}
 		FMiniatureMesh::bTorpedoLoad = false;
+		FMiniatureMesh::bNoPlaneNumber = false;
 		Shapes.Add(ShapeKey, MoveTemp(Near));
 	}
 	return ShapeKey;

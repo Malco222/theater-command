@@ -766,6 +766,13 @@ int main(int Argc, char** Argv)
 			Check(Count(Battle, "const double MarksPpm = LettersOnNow() ? MarksPixelsPerMetre(Lens) : 0.0;") == 1
 					&& Count(Battle, "if (!State.IsValid() || State->LettersOn != 1 || !ShapeFrameOf(Shape, Kind, Middle, Fit))") == 1,
 				"the frame's pixels reckoned and a mark mesh made only with the row on");
+			std::string Miniatures;
+			const bool bMini = ReadText(Src + "/Campaign/CampaignMiniatures.cpp", Miniatures);
+			Check(bMini && Count(Battle, "FMiniatureMesh::bNoPlaneNumber = bLetters;") == 1 && Count(Battle, "FMiniatureMesh::bNoPlaneNumber = false;") == 1
+					&& Count(Battle, "FMiniatureMesh::bNoPlaneNumber") == 2 && Count(Battle, "&& LettersOnNow() && State->LettersSheet.Bundle >= 2;") == 1
+					&& Count(Battle, "+ (bLetters ? TEXT(\"|letters\") : TEXT(\"\"))") == 1
+					&& Count(Miniatures, "if (!bNoPlaneNumber)") == 1 && Count(Miniatures, "+ (bNoPlaneNumber ? TEXT(\"|nonumber\") : TEXT(\"\"));") == 1,
+				"her \"#\" number dropped only for a finer B-17 shape made with the row on at bundle 2, under a key of its own (off: the keys of before)");
 			Check(Count(Book, "PlaneMade") == 0 && Count(Book, "Random") == 0 && Count(Book, "Seed") == 0,
 				"the book never reads the scene's aircraft or a random draw");
 		}

@@ -121,6 +121,9 @@ struct FMiniatureMesh
 	 * "loads", torpedo and bombs: the Kate, the Devastator, the Nell, the Betty) is drawn with its torpedo and without its
 	 * bombs. Otherwise such a model is drawn with its bombs, as every aircraft on the campaign map is. */
 	static bool bTorpedoLoad;
+	/** Set by the air battle while it builds a finer B-17 that wears her squadron's codes (the Battle rules card's "Bomber
+	 * markings", bundle 2): her file's "#" number, which stands where her codes go, is not painted. Off: as always. */
+	static bool bNoPlaneNumber;
 
 	/**
 	 * A real vehicle, built from its measurements: "PanzerIV", "T34", "Sherman", "Matilda". Metre is the size

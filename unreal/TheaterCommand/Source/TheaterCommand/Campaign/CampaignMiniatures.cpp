@@ -643,6 +643,7 @@ bool FMiniatureMesh::bTrialTank = false;
 bool FMiniatureMesh::bCodeBuilt = false;
 bool FMiniatureMesh::bOldPieces = false;
 bool FMiniatureMesh::bTorpedoLoad = false;
+bool FMiniatureMesh::bNoPlaneNumber = false;
 
 int32 FMiniatureMesh::SchemeOf(const FString& Name)
 {
@@ -1134,7 +1135,8 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 	// (and, an aircraft with paint by date, by which of its schemes stands in the painter's month: 0 its own colours)
 	const int32 Livery = Raw->bAircraft ? SchemeStanding(Raw->SchemeFrom) : 0;
 	const FString Key = (Era > 0 ? FString::Printf(TEXT("%s|%s|%d"), *Which, *Tag, Era) : Which + TEXT("|") + Tag) + (bWash ? TEXT("|wash") : TEXT(""))
-		+ (UnitTable::CloseMarks() ? TEXT("|close") : TEXT("")) + (Livery > 0 ? FString::Printf(TEXT("|scheme%d"), Livery) : FString());
+		+ (UnitTable::CloseMarks() ? TEXT("|close") : TEXT("")) + (Livery > 0 ? FString::Printf(TEXT("|scheme%d"), Livery) : FString())
+		+ (bNoPlaneNumber ? TEXT("|nonumber") : TEXT("")); // (an aircraft without her "#" number: the air battle's bomber markings)
 	FMiniatureMesh* Model = Painted.Find(Key);
 	if (!Model)
 	{
@@ -1497,7 +1499,11 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 					}
 					if (Mark.Tag == TEXT("#"))
 					{
-						Fresh.PaintedNumerals(At, Mark.Radius, Number, Facing, NumberInk);
+						// (not where the air battle paints her squadron's codes there instead: bNoPlaneNumber)
+						if (!bNoPlaneNumber)
+						{
+							Fresh.PaintedNumerals(At, Mark.Radius, Number, Facing, NumberInk);
+						}
 					}
 					else
 					{
