@@ -2903,7 +2903,11 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   // (The town's guns name the town, as the card's town line does, in all three forms: the UI director's answer of 25 Nov
   // 2026 22:29Z, question 1, "Level {2} guns ring {Metz}". One card names one place.)
   if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(townName(g.regions[target])), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
-  else if (out.aa) out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(`the factories of ${place}`), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+  // (Not on a harbour card under city defences' switch, the same switch as the harbour line's article: the harbour's line
+  // above reads out the same guns, out.aa being the province's one works level, and "They stop N% of the bombing" is not
+  // true of the hits on ships. The UI director, 26 Nov 2026 05:17Z, round eight, 6: "The harbour card keeps the
+  // harbour's line alone ... off, as shipped." A line of the card only: no figure reads it.)
+  else if (out.aa && !(m === 'harbour' && cityDefences(g))) out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(`the factories of ${place}`), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
   // City defences: the searchlights' line, a night raid with lights built and the switch on (the UI director's words,
   // section 2). One line, the reading that governs: cloud, then no guns, then no Fighter control, then too many bombers.
   // The clauses that rest on the guns' levels (none, some lit, every level lit) read the side's count under fog on raids,
@@ -3434,17 +3438,19 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       const end: NonNullable<AirReport['strafeEnd']> = {};
       const little: string[] = [];
       // (The UI director, 26 November 2026 03:59Z, 2: "Where a group that did not go down has no cause line of its own, it
-      // takes a plain line after the cause lines". Fought out only, where the battle knows who went down and why not: a
-      // fighter group of the raid (fighters flying with it) that did not go down, with no strafeEnd of its own. Settled,
-      // or handed to the staff, none is named, so "No fighter group went down to strafe." stands there as before, "as in
-      // your settled cases".)
+      // takes a plain line after the cause lines": a fighter group of the raid (fighters flying with it) that did not go
+      // down, with no strafeEnd of its own. Fought out, the battle says who went down; settled, or handed to the staff,
+      // the settled reckoning does (`strafers`, the groups its rule sent down), and every group of the raid is in a.att
+      // with the fighters it flew (x.ftr), so the same raid names the same groups either way: her answer of 26 November
+      // 2026 05:17Z, round eight, 2, "A settled raid names the groups that did not go down, as a fought one does". Which
+      // sentence only: nothing booked moves.)
       const stayed: string[] = [];
       a.att.forEach((x, i) => {
         const went = down.includes(x.f.id), why = ends[x.f.id];
         if (went && booked(x) >= 1) return;
         if ((why === 'short' && !went) || ((why === 'fuel' || why === 'caught') && !(went && passed(x)))) (end[why] ??= []).push(att[i].fleet);
         else if (went) little.push(att[i].fleet);
-        else if (route === 'fought' && !why && x.ftr > 0) stayed.push(att[i].fleet);
+        else if (!why && x.ftr > 0) stayed.push(att[i].fleet);
       });
       if (Object.keys(end).length) strafeEnd = end;
       if (stayed.length) strafeStayed = stayed;

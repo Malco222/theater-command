@@ -112,9 +112,10 @@ const named = (xs: string[]): string => cap(list(xs.map(theGroupName)));
  * joins its names as the report joins them, every name by theGroupName (21:22Z g). "No fighter group went down to
  * strafe." only where the line would otherwise say nothing at all (the UI director, 26 November 2026 02:06Z, answer 2:
  * "The k line alone. Each group that did not go down has its own line saying why"): a group too short of fuel to go
- * down is told by its own line, standing alone. Last, after the cause lines, a fighter group of a fought raid that did
- * not go down and has no cause line of its own (strafeStayed): "{A} did not go down to strafe." (the UI director, 26
- * November 2026 03:59Z, 2: "No fighter group went down to strafe." stays only where no group has a line at all).
+ * down is told by its own line, standing alone. Last, after the cause lines, a fighter group of the raid, fought or
+ * settled, that did not go down and has no cause line of its own (strafeStayed): "{A} did not go down to strafe." (the UI
+ * director, 26 November 2026 03:59Z, 2, and 05:17Z, round eight, 2 and 4: "No fighter group went down to strafe." only
+ * where there is no group to name).
  */
 export function strafedLine(rep: { mission: string; attNat: string; strafed?: string[]; strafeLittle?: { names: string[] }; strafeEnd?: { short?: string[]; fuel?: string[]; caught?: string[] }; strafeStayed?: string[] }, reader: string | null): string {
   if (rep.mission !== 'ground' || !rep.strafed || reader === null || reader !== rep.attNat) return '';
@@ -136,6 +137,16 @@ export function strafedLine(rep: { mission: string; attNat: string; strafed?: st
  */
 export function resultFor(rep: { mission: string; attNat: string; result: string; strafeLittle?: { alone?: true } }, reader: string | null): string {
   return rep.mission === 'ground' && rep.strafeLittle?.alone && reader !== null && reader === rep.attNat ? '' : rep.result;
+}
+
+/**
+ * The raider's report card's words on a raid on troops, the group lines and the result line together (the UI director,
+ * 26 November 2026 05:17Z, round eight, 1: "The group lines stand together in the raid's order, the plain line last of
+ * them, and the result line closes"): strafedLine first, then resultFor. Where either is '' the other stands alone; with
+ * the switch off strafedLine is '' and this is the report's result as shipped.
+ */
+export function strafedThenResult(rep: Parameters<typeof strafedLine>[0] & Parameters<typeof resultFor>[0], reader: string | null): string {
+  return [strafedLine(rep, reader), resultFor(rep, reader)].filter(Boolean).join(' ');
 }
 
 /**

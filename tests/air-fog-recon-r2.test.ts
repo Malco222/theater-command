@@ -481,8 +481,8 @@ describe('the raid card\'s place names take the news\'s article (the UI director
   it('a harbour card\'s own guns line, found by its words, takes the article only with city defences on', () => {
     for (const [place, att, def] of [['Cotentin', 'UK', 'GER'], ['Crimea', 'GER', 'SOV']] as const) {
       const off = card(place, 'harbour', att, def, false), on = card(place, 'harbour', att, def, true);
-      // The card has two guns lines (the harbour's and the factories'): each is read by its own words.
-      for (const c of [off, on]) expect(guns(c.sight)).toHaveLength(2);
+      // With city defences off the card has two guns lines (the harbour's and the factories'); on, the harbour's alone: each is read by its own words.
+      for (const [c, n] of [[off, 2], [on, 1]] as const) expect(guns(c.sight)).toHaveLength(n);
       const harbour = (lines: Lines): string => guns(lines).find((v) => v.includes('the harbour of'))!;
       expect(harbour(off.sight)).toBe(`Level 2 guns ring the harbour of ${place}`);
       expect(harbour(off.never)).toBe(`Not scouted, so reckoned at the worst: level 3 guns round the harbour of ${place}`);
@@ -493,5 +493,54 @@ describe('the raid card\'s place names take the news\'s article (the UI director
     }
     // A place without an article is unchanged with the switch on.
     expect(guns(card('Bremen', 'harbour', 'UK', 'GER', true).sight).find((v) => v.includes('the harbour of'))).toBe('Level 2 guns ring the harbour of Bremen');
+  });
+});
+
+// The UI director, 26 Nov 2026 05:17Z, round eight, 6: "Not on a harbour card. Both lines read out the same guns: out.aa is
+// the province's one works level (gunsAt). And the factories' effect, "They stop {N}% of the bombing", is false on a
+// harbour raid ... The harbour card keeps the harbour's line alone. Take the factories' line out on harbour raids under
+// the same switch as the harbour line's article (city defences); off, as shipped. No result changes."
+describe('a harbour card keeps the harbour\'s guns line alone under city defences (the UI director, 26 Nov 2026 05:17Z, round eight, 6)', () => {
+  type Lines = { label: string; value: string; effect?: string }[];
+  const guns = (lines: Lines): Lines => lines.filter((l) => l.label === 'Anti-aircraft guns');
+  const card = (place: string, m: 'bomb' | 'town' | 'harbour', att: string, def: string, cd: boolean) => {
+    const g = startOpen(createGame(7, null));
+    g.turn = 12;
+    if (cd) g.flags[START_LAID] = 1;
+    setCityDefences(g, cd);
+    setWar(g, att, def);
+    const f = g.airFleets.find((x) => x.nat === att && x.bmr > 0 && x.ship === undefined)!;
+    f.bmr = 300;
+    const t = g.byName[place].id;
+    if (place === 'Crimea') f.base = g.byName[place].nb[0];
+    if (m === 'harbour') g.fleets.find((x) => x.nat === def && !atSea(x))!.base = t;
+    g.flags[`wk:aa:${t}`] = 2;
+    const at = (k?: Parameters<typeof assessAir>[4]) => { const a = assessAir(g, [f], m, t, k); expect(a.why).toBeNull(); return a; };
+    return { sight: at(), never: at({ ...knownDefence(g, att, t, 'high'), seen: -1, ago: 0, aa: 3 }), seen: at({ ...knownDefence(g, att, t, 'high'), seen: 2, ago: 2, aa: 2 }) };
+  };
+
+  it('city defences on: one guns line on the harbour card, the harbour\'s, with its article, in sight, never scouted and seen', () => {
+    for (const [place, att, def] of [['Cotentin', 'UK', 'GER'], ['Crimea', 'GER', 'SOV']] as const) {
+      const on = card(place, 'harbour', att, def, true);
+      expect(guns(on.sight.lines).map((l) => l.value)).toEqual([`Level 2 guns ring the harbour of the ${place}`]);
+      expect(guns(on.never.lines).map((l) => l.value)).toEqual([`Not scouted, so reckoned at the worst: level 3 guns round the harbour of the ${place}`]);
+      expect(guns(on.seen.lines).map((l) => l.value)).toEqual([`Level 2 guns ringed the harbour of the ${place} when seen two months ago`]);
+      expect(guns(on.sight.lines)[0].effect).toBe('They bring down more of the bombers');
+      for (const c of [on.sight, on.never, on.seen]) expect(c.lines.some((l) => l.value.includes('the factories of'))).toBe(false);
+    }
+    expect(guns(card('Bremen', 'harbour', 'UK', 'GER', true).sight.lines).map((l) => l.value)).toEqual(['Level 2 guns ring the harbour of Bremen']);
+  });
+
+  it('city defences off: both lines, bare, as shipped', () => {
+    const off = card('Cotentin', 'harbour', 'UK', 'GER', false);
+    expect(guns(off.sight.lines).map((l) => l.value)).toEqual(['Level 2 guns ring the harbour of Cotentin', 'Level 2 guns ring the factories of Cotentin']);
+    expect(guns(off.sight.lines)[1].effect).toMatch(/^They stop \d+% of the bombing and bring down more of the bombers$/);
+    expect(guns(off.seen.lines).map((l) => l.value)).toEqual(['Level 2 guns ringed the harbour of Cotentin when seen two months ago', 'Level 2 guns ringed the factories of Cotentin when seen two months ago']);
+  });
+
+  it('only the harbour card: the factories\' card and the town\'s keep their one guns line, with city defences on', () => {
+    expect(guns(card('Cotentin', 'bomb', 'UK', 'GER', true).sight.lines)).toHaveLength(1);
+    expect(guns(card('Cotentin', 'bomb', 'UK', 'GER', true).sight.lines)[0].value.includes('the factories of')).toBe(true);
+    expect(guns(card('Ruhr', 'town', 'UK', 'GER', true).sight.lines).map((l) => l.value)).toEqual(['Level 2 guns ring Essen']);
   });
 });

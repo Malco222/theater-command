@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 5c4c3fc79 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 3576cba72 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -63647,7 +63647,7 @@
       out.lines.push({ label: "The town", value: `Troops inside ${townName(r)} fight ${Math.round((townBonus(g2, r) - 1) * 100)}% stronger${townWorksPhrase(g2, r)}${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ""}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling("raid")}% in all` });
     }
     if (out.aa && m === "town") out.lines.push({ label: "Anti-aircraft guns", value: aaLine(townName(g2.regions[target])), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
-    else if (out.aa) out.lines.push({ label: "Anti-aircraft guns", value: aaLine(`the factories of ${place3}`), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+    else if (out.aa && !(m === "harbour" && cityDefences(g2))) out.lines.push({ label: "Anti-aircraft guns", value: aaLine(`the factories of ${place3}`), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
     if (cn && cn.lights > 0) {
       const where = placeName2(place3);
       const over = `Level ${cn.lights} searchlights over ${where}`, few = "they help the night fighters a little.";
@@ -64071,7 +64071,7 @@
           if (went && booked2(x) >= 1) return;
           if (why === "short" && !went || (why === "fuel" || why === "caught") && !(went && passed(x))) (end[why] ?? (end[why] = [])).push(att[i].fleet);
           else if (went) little.push(att[i].fleet);
-          else if (route === "fought" && !why && x.ftr > 0) stayed.push(att[i].fleet);
+          else if (!why && x.ftr > 0) stayed.push(att[i].fleet);
         });
         if (Object.keys(end).length) strafeEnd = end;
         if (stayed.length) strafeStayed = stayed;
@@ -122440,7 +122440,7 @@ ${standing6}`,
         const told2 = flown2.notes.join(" ") || note4;
         note4 = told2.length > 190 ? `${told2.slice(0, told2.lastIndexOf(".", 190) + 1) || told2.slice(0, 190)}` : told2;
         const strafe = air2.after ? "" : s.airReports.filter((r) => r.id > air0).map((r) => strafedLine(r, s.human)).filter(Boolean).join(" ");
-        if (strafe) note4 = note4 ? `${note4} ${strafe}` : strafe;
+        if (strafe) note4 = !note4 ? strafe : flown2.notes.length ? `${strafe} ${note4}` : `${note4} ${strafe}`;
       }
       if (air2.ok && part[0] === "search") {
         const grp2 = s.airFleets.find((x) => x.id === Number(part[1]));

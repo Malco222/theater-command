@@ -25,7 +25,7 @@ import { afterCard } from '../src/campaign/airfought';
 import { createGame, setWar } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
-import { STRAFE_STAYED, STRAFE_WORDS, resultFor, strafeOn, strafeWatch, strafedLine } from '../src/campaign/strafers';
+import { STRAFE_STAYED, STRAFE_WORDS, resultFor, strafeOn, strafeWatch, strafedLine, strafedThenResult } from '../src/campaign/strafers';
 import type { Game } from '../src/campaign/types';
 import { AirSim, airBattle } from '../src/battle/air/sim';
 import { airTicket, flyKinds, foughtAir } from '../src/battle/air/ticket';
@@ -236,18 +236,18 @@ describe('the raid report: who went down', () => {
       // (A5, the UI director 19:10Z and 19:17Z: where the air fight left it under one fighter's weight on the troops, its
       // line says it had too little fight left to do any harm.)
       const w = settled[0].weight!;
-      expect(line).toBe(!settled[0].strafers.length ? NOBODY : w < 1 ? `Groupement de Chasse 3 ${LITTLE}` : 'Groupement de Chasse 3 went down and strafed.');
+      expect(line).toBe(!settled[0].strafers.length ? `Groupement de Chasse 1 and Groupement de Chasse 3 ${STRAFE_STAYED}` : w < 1 ? `Groupement de Chasse 3 ${LITTLE} Groupement de Chasse 1 ${STRAFE_STAYED}` : `Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 ${STRAFE_STAYED}`);
       seen.set(line, (seen.get(line) ?? 0) + 1);
       // The report kept it: read back from the save.
       expect(loadGame(saveGame(c.g))!.airReports.at(-1)!.strafed).toEqual(rep.strafed);
       // The defender reading his own troops' raid: her words do not cover it, so nothing.
       expect(strafedLine(rep, 'GER')).toBe('');
     }
-    expect(seen.get('Groupement de Chasse 3 went down and strafed.')).toBeGreaterThan(0);
-    expect(seen.get(NOBODY)).toBeGreaterThan(0);
+    expect(seen.get(`Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 ${STRAFE_STAYED}`)).toBeGreaterThan(0);
+    expect(seen.get(`Groupement de Chasse 1 and Groupement de Chasse 3 ${STRAFE_STAYED}`)).toBeGreaterThan(0);
   });
 
-  it('several groups are joined as the report joins names; none with the reach: nobody went down', () => {
+  it('several groups are joined as the report joins names; none with the reach: the group beyond it is named as not gone down, the bombers alone read nobody went down', () => {
     on();
     const two = saar(0);
     two.g.airFleets.find((f) => f.id === GC1)!.base = two.g.regions.find((r) => r.name === 'Lorraine')!.id;
@@ -262,7 +262,7 @@ describe('the raid report: who went down', () => {
       const c = saar(0, groups);
       const rep = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
       expect(rep.strafed).toEqual([]);
-      expect(strafedLine(rep, 'FRA')).toBe(NOBODY);
+      expect(strafedLine(rep, 'FRA')).toBe(groups === 'far' ? `Groupement de Chasse 1 ${STRAFE_STAYED}` : NOBODY);
     }
   });
 
@@ -296,7 +296,7 @@ describe('the raid report: who went down', () => {
     }
   });
 
-  it('through the bridge: the 3D act\'s note carries the line whole after the report\'s own words; off, it is as before', () => {
+  it('through the bridge: the 3D act\'s note carries the line whole before the report\'s own words; off, it is as before', () => {
     on();
     const c = saar(0);
     TC.load(saveGame(c.g));
@@ -304,7 +304,7 @@ describe('the raid report: who went down', () => {
     expect(r.ok).toBe(true);
     // (Changed on the sky gate, 16:04Z, and back on the ruling of 18:14Z: the group carries some of its fight there, see
     // the card above, so the report says it went down.)
-    expect(r.note.endsWith(' Groupement de Chasse 3 went down and strafed.')).toBe(true);
+    expect(r.note.startsWith('Groupement de Chasse 3 went down and strafed. ')).toBe(true);
     flyKinds([]);
     TC.load(saveGame(saar(0).g));
     const off = TC.act(`raid:ground:${c.target}:${c.ids.join('.')}`);
@@ -529,7 +529,7 @@ describe('the alone case: only the raider\'s report card prints the A5 line by i
     const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
     expect(r.strafeLittle).toEqual({ names: names([GC1, GC2, GC3]), alone: true });
     expect(r.result).toBe(HARM_LITTLE);
-    // The raider's report card (ui/main.ts airReportCard: resultFor, then the line): the A5 line by itself.
+    // The raider's report card (ui/main.ts airReportCard: strafedThenResult, the line then resultFor): the A5 line by itself.
     expect(resultFor(r, 'FRA')).toBe('');
     expect(strafedLine(r, 'FRA')).toBe(`Groupement de Chasse 1, Groupement de Chasse 2 and Groupement de Chasse 3 ${LITTLE}`);
     // The raided side's report: the result sentence.
@@ -646,21 +646,192 @@ describe('a group that did not go down, with no cause line of its own, is named 
     // No group with a line at all: the line for nobody, as before.
     expect(strafedLine(rep([], []), 'FRA')).toBe(NOBODY);
   });
-  it('the settled raid names no such group: "No fighter group went down to strafe." stands, as in her settled cases', () => {
+  it('the settled raid names the group that did not go down, as a fought one does; with no group to name, "No fighter group went down to strafe." stands', () => {
     on();
     for (const groups of ['far', 'alone'] as const) {
       const c = saar(0, groups);
       const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
       expect(r.strafed, groups).toEqual([]);
-      expect('strafeStayed' in r, groups).toBe(false);
-      expect(strafedLine(r, 'FRA'), groups).toBe(NOBODY);
-      expect(saveGame(c.g).includes('"strafeStayed"'), groups).toBe(false);
+      expect('strafeStayed' in r, groups).toBe(groups === 'far');
+      expect(strafedLine(r, 'FRA'), groups).toBe(groups === 'far' ? `Groupement de Chasse 1 ${STRAFE_STAYED}` : NOBODY);
+      expect(saveGame(c.g).includes('"strafeStayed"'), groups).toBe(groups === 'far');
     }
-    // Settled with a group that went down and one beyond the reach (Groupement de Chasse 1 at Namur): only the group that
-    // strafed is named, as before; the settled raid keeps no record of the other.
+    // Settled with a group that went down and one beyond the reach (Groupement de Chasse 1 at Namur): the group that
+    // strafed is named, then the one that did not go down, as a fought raid names them.
+    const c = saar(0, 'both');
+    const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+    expect('strafeStayed' in r).toBe(true);
+    expect(strafedLine(r, 'FRA')).toBe(`Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 ${STRAFE_STAYED}`);
+  });
+});
+
+// The UI director, 26 November 2026 05:17Z, round eight, 1: "Before the result line. The group lines stand together in
+// the raid's order, the plain line last of them, and the result line closes: "Groupement de Chasse 3 went down and
+// strafed. Groupement de Chasse 1 and Groupement de Chasse 2 did not go down to strafe. The raids did the troops little
+// harm."" The raider's report card (ui/main.ts airReportCard, strafedThenResult) and the 3D act's note (the bridge).
+describe('the group lines before the result line, which closes (the UI director, 26 Nov 05:17Z, round eight, 1)', () => {
+  const rep = (strafed: string[], stayed: string[], result: string, alone = false) => ({ mission: 'ground', attNat: 'FRA', strafed, result, ...(alone ? { strafeLittle: { names: strafed, alone: true as const } } : {}), ...(stayed.length ? { strafeStayed: stayed } : {}) });
+  it('her example, to the letter, on the raider\'s report card', () => {
+    expect(strafedThenResult(rep(['Groupement de Chasse 3'], ['Groupement de Chasse 1', 'Groupement de Chasse 2'], HARM_LITTLE), 'FRA'))
+      .toBe('Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 and Groupement de Chasse 2 did not go down to strafe. The raids did the troops little harm.');
+  });
+  it('the result line alone where there is no group line (the defender, the switch off, any other raid); the group lines alone where the raider\'s card leaves the result out (h)', () => {
+    const r = rep(['Groupement de Chasse 3'], ['Groupement de Chasse 1'], HARM_LITTLE);
+    expect(strafedThenResult(r, 'GER')).toBe(HARM_LITTLE);
+    expect(strafedThenResult({ mission: 'ground', attNat: 'FRA', result: FOUND_LITTLE }, 'FRA')).toBe(FOUND_LITTLE);
+    expect(strafedThenResult({ mission: 'bomb', attNat: 'FRA', result: 'The bombs fell.' }, 'FRA')).toBe('The bombs fell.');
+    expect(strafedThenResult(rep(['Groupement de Chasse 3'], ['Groupement de Chasse 1'], HARM_LITTLE, true), 'FRA')).toBe(`Groupement de Chasse 3 ${LITTLE} Groupement de Chasse 1 ${STRAFE_STAYED}`);
+  });
+  it('from a raid flown: the report card reads the group lines, then the report\'s own result', () => {
+    on();
+    const c = saar(0);
+    const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+    const line = strafedLine(r, 'FRA');
+    expect(line.length).toBeGreaterThan(0);
+    expect(strafedThenResult(r, 'FRA')).toBe(`${line} ${r.result}`);
+  });
+  it('through the bridge: the 3D act\'s note opens with the group lines and closes with the report\'s own words', () => {
+    on();
+    const c = saar(0);
+    TC.load(saveGame(c.g));
+    const act = TC.act(`raid:ground:${c.target}:${c.ids.join('.')}`);
+    expect(act.ok).toBe(true);
+    const r = loadGame(TC.save().text)!.airReports.at(-1)!;
+    expect(r.mission).toBe('ground');
+    const line = strafedLine(r, 'FRA');
+    expect(line.length).toBeGreaterThan(0);
+    expect(act.note).toBe(`${line} ${r.result}`);
+  });
+});
+
+// The UI director, 26 November 2026 05:17Z, round eight, 2: "Yes, under the lane's switch. A settled raid names the groups
+// that did not go down, as a fought one does, so the same raid reads the same either way. N8 would read "... Groupement de
+// Chasse 3 went down and strafed. Groupement de Chasse 1 did not go down to strafe." Off, as shipped."
+describe('a settled raid names the groups that did not go down, as a fought one does (the UI director, 26 Nov 05:17Z, round eight, 2)', () => {
+  it('N8: settled, Groupement de Chasse 3 strafes and Groupement de Chasse 1 (at Namur, beyond the reach) is named; kept in the save', () => {
+    on();
+    const c = saar(0, 'both');
+    const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+    expect(heard.filter((x) => x.route === 'settled').length).toBe(1);
+    expect(r.strafed).toEqual(names([GC3]));
+    expect(r.strafeStayed).toEqual(names([GC1]));
+    expect(strafedLine(r, 'FRA')).toBe(`Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 ${STRAFE_STAYED}`);
+    expect(loadGame(saveGame(c.g))!.airReports.at(-1)!.strafeStayed).toEqual(names([GC1]));
+    // The defender reads none of it; the bombers' group is never named.
+    expect(strafedLine(r, 'GER')).toBe('');
+    expect(strafedLine(r, 'FRA').includes('Bombardement')).toBe(false);
+  });
+  it('the same raid reads the same settled and fought out, where the same groups go down', () => {
+    let same = 0;
+    for (const k of [0, 1]) {
+      on();
+      const s = saar(k, 'both');
+      const settled = launchRaid(s.g, 'ground', s.target, s.ids, 'FRA')!;
+      const f = saar(k, 'both');
+      const sim = airBattle(airTicket(f.g, 'ground', f.target, f.ids, 'FRA').ticket!) as AirSim;
+      fight(sim);
+      const fought = launchRaid(f.g, 'ground', f.target, f.ids, 'FRA', foughtAir(sim.outcome()))!;
+      if (JSON.stringify(settled.strafed) !== JSON.stringify(fought.strafed) || settled.strafeLittle || fought.strafeLittle || fought.strafeEnd) continue;
+      expect(strafedLine(settled, 'FRA'), `${k}`).toBe(strafedLine(fought, 'FRA'));
+      expect(settled.strafeStayed, `${k}`).toEqual(fought.strafeStayed);
+      same++;
+    }
+    expect(same).toBeGreaterThan(0);
+  });
+  it('off: a settled raid writes no such field and says nothing, as shipped', () => {
+    flyKinds([]);
     const c = saar(0, 'both');
     const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
     expect('strafeStayed' in r).toBe(false);
-    expect(strafedLine(r, 'FRA')).toBe('Groupement de Chasse 3 went down and strafed.');
+    expect(strafedLine(r, 'FRA')).toBe('');
+    expect(saveGame(c.g).includes('"strafeStayed"')).toBe(false);
+  });
+});
+
+// The UI director, 26 November 2026 05:17Z, round eight, 4: "One form for both, the named one: "Groupement de Chasse 1,
+// Groupement de Chasse 2 and Groupement de Chasse 3 did not go down to strafe." "No fighter group went down to strafe."
+// only where there is no group to name."
+describe('one form for both, the named one (the UI director, 26 Nov 05:17Z, round eight, 4)', () => {
+  it('her example: settled, the defence too strong for any group to go down, all three named in the raid\'s order', () => {
+    on();
+    const c = saar(0, 'three');
+    const d = c.g.airFleets.find((f) => f.id === 3)!;
+    d.ftr = 5000; d.est.ftr = Math.max(d.est.ftr, 5000);
+    const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+    expect(r.strafed).toEqual([]);
+    expect(strafedLine(r, 'FRA')).toBe(`Groupement de Chasse 1, Groupement de Chasse 2 and Groupement de Chasse 3 ${STRAFE_STAYED}`);
+    expect(strafedLine(r, 'FRA').includes(NOBODY)).toBe(false);
+  });
+  it('none went down, one group to name: the named form, settled and fought alike', () => {
+    on();
+    const s = saar(0, 'far');
+    const settled = launchRaid(s.g, 'ground', s.target, s.ids, 'FRA')!;
+    const f = saar(0, 'far');
+    const sim = airBattle(airTicket(f.g, 'ground', f.target, f.ids, 'FRA').ticket!) as AirSim;
+    fight(sim);
+    const fought = launchRaid(f.g, 'ground', f.target, f.ids, 'FRA', foughtAir(sim.outcome()))!;
+    for (const r of [settled, fought]) {
+      expect(r.strafed).toEqual([]);
+      expect(strafedLine(r, 'FRA')).toBe(`Groupement de Chasse 1 ${STRAFE_STAYED}`);
+    }
+  });
+  it('"No fighter group went down to strafe." only where there is no group to name: the bombers alone, settled and fought', () => {
+    on();
+    const s = saar(0, 'alone');
+    const settled = launchRaid(s.g, 'ground', s.target, s.ids, 'FRA')!;
+    const f = saar(0, 'alone');
+    const sim = airBattle(airTicket(f.g, 'ground', f.target, f.ids, 'FRA').ticket!) as AirSim;
+    fight(sim);
+    const fought = launchRaid(f.g, 'ground', f.target, f.ids, 'FRA', foughtAir(sim.outcome()))!;
+    for (const r of [settled, fought]) {
+      expect('strafeStayed' in r).toBe(false);
+      expect(strafedLine(r, 'FRA')).toBe(NOBODY);
+    }
+  });
+});
+
+// The UI director, 26 November 2026 05:17Z, round eight, 3: "Right. The raider's card leaves the result line out only while
+// the lines above it already say the raid did no harm: every group that could have done harm has a line saying it did
+// none, as here. If any other group or any bombs did harm, the result line stays. Every other reader keeps it (h)." As
+// built; here both halves on one raid (the Saar at the edge, settled: 532 German fighters with Groupement de Chasse 1 at
+// Namur, 646 with all three at Lorraine), now with a group named as not gone down.
+describe('the result line left out only where the lines above already say no harm (the UI director, 26 Nov 05:17Z, round eight, 3)', () => {
+  function edge(bombers: boolean, namur: boolean, n = 648) {
+    const c = saar(0, 'three');
+    const d = c.g.airFleets.find((f) => f.id === 3)!;
+    d.ftr = n; d.est.ftr = Math.max(d.est.ftr, n);
+    if (namur) c.g.airFleets.find((f) => f.id === GC1)!.base = c.g.regions.find((r) => r.name === 'Namur')!.id;
+    return { ...c, ids: bombers ? c.ids : c.ids.filter((id) => id !== BOMBERS) };
+  }
+  it('left out: no bombers, every group that went down with too little fight left, one more that did not go down', () => {
+    on();
+    const c = edge(false, true, 532);
+    const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+    expect(r.strafeLittle).toEqual({ names: names([GC2, GC3]), alone: true });
+    expect(r.strafeStayed).toEqual(names([GC1]));
+    expect(r.result).toBe(HARM_LITTLE);
+    expect(resultFor(r, 'FRA')).toBe('');
+    expect(strafedThenResult(r, 'FRA')).toBe(`Groupement de Chasse 2 and Groupement de Chasse 3 ${LITTLE} Groupement de Chasse 1 ${STRAFE_STAYED}`);
+    // Every other reader keeps it: the defender, and the raid list the 3D note reads.
+    expect(resultFor(r, 'GER')).toBe(HARM_LITTLE);
+    expect(strafedThenResult(r, 'GER')).toBe(HARM_LITTLE);
+  });
+  it('kept: the bombs beside them', () => {
+    on();
+    const c = edge(true, true, 532);
+    const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+    expect(r.strafeLittle?.alone).toBeUndefined();
+    expect(r.strafeLittle?.names.length).toBeGreaterThan(0);
+    expect(resultFor(r, 'FRA')).toBe(r.result);
+    expect(strafedThenResult(r, 'FRA').endsWith(` ${r.result}`)).toBe(true);
+  });
+  it('kept: another group that did harm beside them', () => {
+    on();
+    const c = edge(false, false, 646);
+    const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+    expect(r.strafeLittle).toEqual({ names: names([GC1, GC2]) });
+    expect(r.strafed).toContain(NAME[GC3]);
+    expect(resultFor(r, 'FRA')).toBe(r.result);
+    expect(strafedThenResult(r, 'FRA')).toBe(`Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 and Groupement de Chasse 2 ${LITTLE} ${r.result}`);
   });
 });

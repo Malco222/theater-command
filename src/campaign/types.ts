@@ -1669,10 +1669,11 @@ export interface AirReport {
    */
   strafeEnd?: { short?: string[]; fuel?: string[]; caught?: string[] };
   /**
-   * With the strafers' rule on, a raid fought out (the UI director, 26 November 2026 03:59Z, 2): the raid's fighter groups
-   * that did not go down and have no strafeEnd of their own, named and ordered as the raid's groups, for the plain line
-   * after the cause lines ("{A} did not go down to strafe."). Written only with the rule on and only when not empty: a
-   * report without it (the switch off, an older save, a raid settled or handed to the staff, or none such) is as before.
+   * With the strafers' rule on, a raid fought out (the UI director, 26 November 2026 03:59Z, 2), and settled or handed to
+   * the staff (her round eight, 05:17Z, 2): the raid's fighter groups that did not go down and have no strafeEnd of their
+   * own, named and ordered as the raid's groups, for the plain line after the cause lines ("{A} did not go down to
+   * strafe."). Written only with the rule on and only when not empty: a report without it (the switch off, an older
+   * save, or none such) is as before.
    */
   strafeStayed?: string[];
 }
