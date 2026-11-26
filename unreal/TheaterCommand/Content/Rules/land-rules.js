@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of b1fee46c 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 0c0a5903 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -8058,8 +8058,8 @@
        * goes on for the next point of its way; where the ground stops that step it falls back to the furthest point it
        * still has a straight line to and follows that line until it sees further than it fell back to; and while the point
        * it fell back to is under its own box it steps to it as it faces the one after, with no wheel to a way of a few
-       * metres. (Foot that will not wade and a tank held back by the hedges go as before: their way keeps them off ground
-       * their step could enter.)
+       * metres. (The ground is its way's own: foot that will not wade is stopped at the water and a tank held back by the
+       * hedges at the cells a hedge line bars, as a tank is at a river.)
        *
        * side: a block on the march slides a friend in its way aside and slides aside itself, by the side the friend lies
        * across its front. A friend dead ahead lies now a hair to its left and now a hair to its right as the block's own
@@ -9642,6 +9642,10 @@
       if (this.bocage && this.heldBack(u)) return "hedged";
       return u.dry && MOTION[u.kind] === "foot" && (u.joined === void 0 || this.field.bend) ? "ashore" : MOTION[u.kind];
     }
+    /** Whether a block going this way may be at (x, y): ground it can enter, and for a tank held back by the hedges no cell a hedge line bars. */
+    bears(m, x, y) {
+      return this.paceOf(m)[groundAt(this.field, x, y)] > 0 && !(m === "hedged" && this.barrier()[this.cellAt(x, y)]);
+    }
     paceOf(m) {
       return m === "ashore" ? this.ashore ?? (this.ashore = { ...LAND.pace.foot, water: 0, blown: 0 }) : m === "hedged" ? LAND.pace.tracks : LAND.pace[m];
     }
@@ -9672,11 +9676,15 @@
           continue;
         }
         if (k < 0) return [[u.x, u.y]];
-        if (this.standRule && this.standKeeps.way && m === MOTION[u.kind]) {
+        if (this.standRule && this.standKeeps.way) {
+          w.blind = false;
           if (w.at !== void 0 && k > w.at) w.fell = false;
           else if (w.at !== void 0 && k < w.at && !w.fell) {
             if (w.stopped || w.at >= pts.length) w.fell = true;
-            else k = w.at;
+            else {
+              k = w.at;
+              w.blind = true;
+            }
           }
           w.stopped = false;
           w.at = k;
@@ -11092,6 +11100,15 @@
       const stepLen = Math.min(d, v * DT);
       const [ax, ay] = ahead(head);
       let nx = u.x + ax * stepLen, ny = u.y + ay * stepLen;
+      if (this.standRule && this.standKeeps.way && !run) {
+        const kept = this.ways.get(u.id);
+        if (kept?.blind && kept.m !== m && kept.m === this.going(u) && this.bears(kept.m, u.x, u.y) && !this.bears(kept.m, nx, ny)) {
+          kept.stopped = true;
+          u.speed = 0;
+          u.act = "idle";
+          return;
+        }
+      }
       if (LAND.pace[m][groundAt(this.field, nx, ny)] <= 0 && LAND.pace[m][g] > 0 && !run) {
         if (this.standRule && this.standKeeps.way) {
           const kept = this.ways.get(u.id);
