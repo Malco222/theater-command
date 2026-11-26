@@ -320,6 +320,13 @@ namespace LandKit
 		 * on a burnt tyre's rim, rust on upright plates and the running gear, in patches some 0.3 to 0.8 m across; never
 		 * ash on an edge. Each point's colour is kept in Mesh::Burnt. Off: one colour, as before. */
 		bool bBurntCoat = false;
+		/** Paint and marks the same in every year (release 2, on its own switch, the trial word "anyyear"; Brian, 26
+		 * November 2026: "have the paint be on it regardless of the year"; the art director's ruling of the same day): no
+		 * coat and no mark is chosen by the battle's month. A coat follows the field's ground where her file or her army
+		 * has one for it (the first of that ground's rows); else it is the first her file's rows name, and Germany's is
+		 * tank grey for the whole war on every model. Her mark is the first her army painted (the British flash). The
+		 * month still chooses her parts (a long gun, skirts): those are not paint. Off: by the month, as before. */
+		bool bAnyYear = false;
 	};
 
 	class Model
@@ -831,6 +838,9 @@ namespace LandKit
 		/** The burnt coat (release 2, the trial word "burntcoat"; Dress::bBurntCoat): on, every vehicle's wreck burns to
 		 * soot, rust and ash, each point to its own. Off unless set; set before Load. */
 		bool bBurntCoat = false;
+		/** Paint and marks the same in every year (release 2, the trial word "anyyear"; Dress::bAnyYear): on, no vehicle's
+		 * coat or mark is chosen by the battle's month. Off unless set; set before Load. */
+		bool bAnyYear = false;
 
 	private:
 		std::vector<Vehicle> All;

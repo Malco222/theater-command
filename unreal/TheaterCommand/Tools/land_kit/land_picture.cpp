@@ -244,6 +244,8 @@ namespace
 		// The burnt coat (release 2, LandKit's Dress::bBurntCoat, the trial word "burntcoat"): her wreck in soot, rust and
 		// ash; and others standing in the same picture (LAND_KIT_BURNT=1: one burnt out among live ones, from 150 m).
 		bool bBurntCoat = false;
+		// No coat or mark by the battle's month (release 2, LandKit's Dress::bAnyYear, the trial word "anyyear").
+		bool bAnyYear = false;
 		struct Other
 		{
 			std::string ModelName, Nation;
@@ -781,7 +783,7 @@ int main(int argc, char** argv)
 		// its army's face by month (the Type 97's khaki, then two camouflages) is a different model in each, and two
 		// panels a year apart were being painted from whichever was loaded first)
 		const std::string Key = Name + "|" + Nation + "|" + std::to_string(For.Year * 100 + For.Month) + (For.bMarks ? "|marks" : "") + (For.Coat.empty() ? "" : "|coat " + For.Coat)
-			+ (For.bBurntCoat ? "|burnt" : "");
+			+ (For.bBurntCoat ? "|burnt" : "") + (For.bAnyYear ? "|anyyear" : "");
 		if (!Models.count(Key))
 		{
 			std::string Text, Error;
@@ -798,6 +800,7 @@ int main(int argc, char** argv)
 			D.Month = For.Month;
 			D.Coat = For.Coat;
 			D.bBurntCoat = For.bBurntCoat;
+			D.bAnyYear = For.bAnyYear;
 			if (!M->Load(Text, D, Error))
 			{
 				std::printf("%s: %s\n", Name.c_str(), Error.c_str());
@@ -859,6 +862,58 @@ int main(int argc, char** argv)
 		P.Pin.DeathAge = K.DeathAge;
 		P.Caption = K.Caption;
 		P.CloseAmong = K.CloseAmong;
+		Panels.push_back(P);
+	}
+	// (LAND_KIT_ANYYEAR=1: the trial word "anyyear"'s own sheet instead, release 2; Brian, 26 November 2026: "have the
+	// paint be on it regardless of the year". Each pair is one vehicle by the month, as shipped, and in any year: a
+	// German tank of 1944 in the grey of 1940, a British one of 1940 with her flash)
+	const bool bAnyYearSheet = std::getenv("LAND_KIT_ANYYEAR") != nullptr;
+	struct YearLook
+	{
+		const char* File;
+		const char* Model;
+		const char* Nation;
+		int Year, Month;
+		bool bAnyYear, bClose;
+		double Bearing, Up;
+		const char* Caption;
+	};
+	const YearLook YearLooks[] = {
+		{ "anyyear_a_pz4_1940", "PanzerIV", "GER", 1940, 5, false, false, 42.0, 15.0, "Panzer IV, May 1940, by the month: tank grey" },
+		{ "anyyear_b_pz4_1944_month", "PanzerIV", "GER", 1944, 7, false, false, 42.0, 15.0, "Panzer IV, July 1944, by the month (as shipped)" },
+		{ "anyyear_c_pz4_1944", "PanzerIV", "GER", 1944, 7, true, false, 42.0, 15.0, "Panzer IV, July 1944, ANY YEAR: tank grey" },
+		{ "anyyear_d_tiger_month", "Tiger", "GER", 1944, 7, false, false, 42.0, 16.0, "Tiger, July 1944, by the month (as shipped)" },
+		{ "anyyear_e_tiger", "Tiger", "GER", 1944, 7, true, false, 42.0, 16.0, "Tiger, July 1944, ANY YEAR: tank grey" },
+		{ "anyyear_f_panther_month", "Panther", "GER", 1944, 7, false, false, 42.0, 16.0, "Panther, July 1944, by the month (as shipped)" },
+		{ "anyyear_g_panther", "Panther", "GER", 1944, 7, true, false, 42.0, 16.0, "Panther, July 1944, ANY YEAR: the army's grey laid in" },
+		{ "anyyear_h_hummel", "Hummel", "GER", 1944, 7, true, false, 42.0, 16.0, "Hummel, July 1944, ANY YEAR: the army's grey laid in" },
+		{ "anyyear_i_truck_month", "Truck", "GER", 1944, 7, false, false, 42.0, 16.0, "the lorry in German hands, July 1944, by the month" },
+		{ "anyyear_j_truck", "Truck", "GER", 1944, 7, true, false, 42.0, 16.0, "the lorry in German hands, July 1944, ANY YEAR: grey" },
+		{ "anyyear_k_light_uk_month", "LightTank", "UK", 1940, 6, false, true, 42.0, 14.0, "light tank, British, June 1940, by the month: no mark" },
+		{ "anyyear_l_light_uk", "LightTank", "UK", 1940, 6, true, true, 42.0, 14.0, "light tank, British, June 1940, ANY YEAR: the flash" },
+		{ "anyyear_m_sexton_month", "Sexton", "UK", 1944, 7, false, false, 42.0, 15.0, "Sexton, British, July 1944, by the month: the white star" },
+		{ "anyyear_n_sexton", "Sexton", "UK", 1944, 7, true, false, 42.0, 15.0, "Sexton, British, July 1944, ANY YEAR: the flash" },
+		{ "anyyear_o_type97_month", "Type97", "JAP", 1943, 8, false, false, 72.0, 15.0, "Type 97, August 1943, by the month: her later coat" },
+		{ "anyyear_p_type97", "Type97", "JAP", 1943, 8, true, false, 72.0, 15.0, "Type 97, August 1943, ANY YEAR: her first coat" },
+	};
+	for (const YearLook& K : YearLooks)
+	{
+		if (!bAnyYearSheet)
+		{
+			break;
+		}
+		Panel P;
+		P.File = K.File;
+		P.ModelName = K.Model;
+		P.Nation = K.Nation;
+		P.Year = K.Year;
+		P.Month = K.Month;
+		P.bMarks = true;
+		P.bAnyYear = K.bAnyYear;
+		P.bClose = K.bClose;
+		P.CameraBearing = K.Bearing;
+		P.CameraUp = K.Up;
+		P.Caption = K.Caption;
 		Panels.push_back(P);
 	}
 	// (LAND_KIT_HOUSE=1: the farmhouse pilot's own sheet instead, release 2's -TheaterLandTrial=houses; LAND_KIT_HOUSE=farm
@@ -1536,7 +1591,7 @@ int main(int argc, char** argv)
 	const TankLook Tanks[3] = { { "Sherman", "USA", "M4 Sherman" }, { "PanzerIV", "GER", "Panzer IV" }, { "Tiger", "GER", "Tiger" } };
 	for (const TankLook& T : Tanks)
 	{
-		if (bMarksSheet || bHouseSheet || bJapanSheet || bBurntSheet || bSupportSheet)
+		if (bMarksSheet || bHouseSheet || bJapanSheet || bBurntSheet || bSupportSheet || bAnyYearSheet)
 		{
 			break;
 		}
@@ -1571,7 +1626,7 @@ int main(int argc, char** argv)
 		C.Caption = std::string(T.Title) + ": knocked out, hatches thrown, gun drooped";
 		Panels.push_back(C);
 	}
-	if (!bMarksSheet && !bHouseSheet && !bJapanSheet && !bBurntSheet && !bSupportSheet)
+	if (!bMarksSheet && !bHouseSheet && !bJapanSheet && !bBurntSheet && !bSupportSheet && !bAnyYearSheet)
 	{
 		Panel D;
 		D.File = "Tiger_d";
