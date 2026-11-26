@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of bdc185a9f 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b9ac0284e 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -184,6 +184,1042 @@
     g2.flags[key7] = no;
     const s = ["th", "st", "nd", "rd"], v = no % 100;
     return `${no}${s[(v - 20) % 10] || s[v] || s[0]} ${TEAMS[k].name}`;
+  }
+
+  // data/campaign/ground.json
+  var ground_default = {
+    _note: "How the ground suits each arm, on top of the classic battle rules, and what tanks and infantry do for each other. The grand campaign only: the historical scenarios are settled by the classic rules alone. attack and defence are multipliers by unit kind and terrain; march is extra moves to enter that terrain on the advance (not along roads through ground held since before the month began).",
+    attack: {
+      arm: { forest: 0.8, hills: 0.9 },
+      mot: { mountain: 0.75, marsh: 0.8, forest: 0.9 },
+      art: { mountain: 0.8, marsh: 0.8 },
+      cav: { urban: 0.7 },
+      mtn: { mountain: 1.3, hills: 1.15 }
+    },
+    defence: {
+      arm: { mountain: 0.75, marsh: 0.75, forest: 0.85 },
+      mot: { mountain: 0.9, marsh: 0.9 },
+      cav: { urban: 0.85 },
+      mtn: { mountain: 1.25, hills: 1.1 }
+    },
+    march: {
+      arm: { mountain: 1, forest: 1, marsh: 1 },
+      mot: { mountain: 1, marsh: 1 },
+      art: { mountain: 1, marsh: 1 }
+    },
+    steep: {
+      regions: ["Graubunden", "Tyrol", "Alto Adige", "Savoy", "Nordland", "Narvik", "Sukhumi", "Montenegro", "Epirus", "Van"],
+      world: ["Gilgit", "Leh", "Khorog", "Faizabad", "Gartok", "Lhasa", "Shigatse", "Chamdo", "Sikang", "Sungpan", "Likiang", "Fort Hertz", "Kathmandu", "Nagano", "Copper River", "Cordova", "Aysen", "Cuzco", "Ayacucho", "Cerro de Pasco", "Maseru", "Greenland", "Sanaa", "Simla"],
+      _world: "The steep ground of the wider world, to Europe's bar (the historian's ruling of 17 November 2026, /mnt/project-files/world-map-builder/steep-candidates.md). A name not yet on the chart in play waits for it: Aysen, Cuzco, Ayacucho, Cerro de Pasco and Greenland are on the Americas' chart; the rest come with the far side.",
+      barred: ["arm"],
+      attack: { mot: 0.7, art: 0.7 },
+      march: { mot: 1, art: 1 }
+    },
+    says: {
+      plains: "Open country: the best ground there is for tanks",
+      desert: "Open desert: tank country, with nothing to hide behind",
+      forest: "Forest: tanks cannot manoeuvre among the trees",
+      hills: "Hill country: slow going for armour, good ground for mountain troops",
+      mountain: "Mountains: made for mountain troops, hard on anything with wheels or tracks",
+      marsh: "Marsh: the ground will not bear tanks, lorries or guns",
+      urban: "City streets: a fight for infantry, and no place for horses",
+      steep: "High mountains: too steep for tanks, and little better for lorries and guns"
+    },
+    arms: {
+      foot: ["inf", "mtn", "mot", "cav"],
+      perTank: 3,
+      infantry: 0.15,
+      armour: 0.1,
+      alone: { urban: 0.75, forest: 0.85 },
+      defence: { infantry: 0.08, alone: { urban: 0.8, forest: 0.85 } }
+    }
+  };
+
+  // data/campaign/support.json
+  var support_default = {
+    _about: "What you bring and what you face (the design director's rulings 146, 150 and 152; the Historian's anti-tank-and-support-weapons.md). The grand campaign only: a historical scenario is worked out as it always was. Every defence has an anti-tank strength from 0 to 1, and the tanks' edge (the +25% against a defence with no armour, and the break-in into a dug-in line) shrinks by it. Machine guns, mortars, assault rifles and snipers each have a job in place of 6% on everything. And a battle's losses fall on what the defence can kill.",
+    antiTank: {
+      _byYear: "The infantry's own anti-tank guns of the day: [in the open, behind finished fieldworks]. The Historian's starting shares (1 less the share of the edge kept). Between the two by how far the works have got. After 1944 the last row stands.",
+      byYear: { "1939": [0, 0.2], "1940": [0, 0.3], "1941": [0.2, 0.5], "1942": [0.4, 0.7], "1943": [0.5, 0.75], "1944": [0.55, 0.8] },
+      _without: "A nation that has not researched Anti-tank guns has the day's guns at this share of their worth.",
+      without: 0.5,
+      tankDestroyers: 0.15,
+      _handHeld: "Hand-held anti-tank weapons, with Assault rifles: worth more in close country.",
+      handHeld: { open: 0.1, close: 0.2, ground: ["forest", "hills"] },
+      _armourStep: "Better armour wins the edge back: each tank technology the attacker has beyond those of the day (Medium tanks 1941, Heavy tanks 1942, Late-war armour 1944) takes this much off, and each one it lacks adds it.",
+      armourStep: 0.08,
+      _guns: "Artillery in the line, firing over open sights: a division of guns.",
+      guns: { perDiv: 0.04, most: 0.15 },
+      _mines: "A level of minefields, less what the attacker's engineers lift.",
+      mines: 0.08,
+      _works: "Fortress works by level: the anti-tank ditch, then dragon's teeth. Concrete adds no more.",
+      works: [0, 0.05, 0.1, 0.1],
+      _tanks: "The defence's own tanks: their share of its strength, times this.",
+      tanks: 2,
+      _alone: "Tanks that go in without infantry beside them are picked off by the guns (ruling 152(3): two tank corps alone at a gunned line of 1943 have no better than an even chance). Against a defence whose guns (the infantry's own, tank destroyers, hand-held weapons and guns in the line, less the attacker's armour ahead of its day) add up to the whole, tanks with no infantry at all lose 'cut' of their attack, and less as the infantry covers them: one division of infantry covers 'cover' divisions of tanks. Not where the ground has already stopped the tanks (mountain, marsh, city streets).",
+      alone: { cut: 0.7, cover: 2 }
+    },
+    _machineGuns: "Defence of troops with Submachine guns and mortars against men on foot: this much against an attack that is all on foot, in finished fieldworks; 'open' is the share of it they have with no works.",
+    machineGuns: { defence: 0.12, open: 0.4 },
+    _mortars: "Attackers on foot with Submachine guns and mortars take this much of the worth out of fieldworks (never out of fortress works), in proportion to their share of the attack.",
+    mortars: { works: 0.15 },
+    _assault: "Assault rifles: men on foot attack this much stronger.",
+    assault: { attack: 0.08 },
+    _snipers: "Snipers, from the first month and with no research: a defence in this ground, or in the streets of a town, costs the attacker's men on foot this much more of the usual share.",
+    snipers: { toll: 0.1, ground: ["forest", "urban"] },
+    _toll: "Who pays. An attacking tank corps loses the usual share times 'tanks' (from the first number at no anti-tank strength to the second at full). A corps on foot loses the usual share, more by 'machineGuns' against a defence all of machine-gunners in finished works, by 'guns' for each division of guns in the defence and by the snipers' toll, and less by 'shield' where tanks make up half the attack and the anti-tank guns let them work. The attackers' own guns stand behind and lose the 'behind' share.",
+    toll: { tanks: [0.7, 1.4], machineGuns: 0.25, guns: 0.05, gunsMost: 0.15, shield: 0.15, behind: 0.5 },
+    _staff: "The computer's staffs: a line whose anti-tank strength is 'gunned' or more is not attacked by tanks alone when infantry can go in with them, and at 'never' or more not at all without infantry.",
+    staff: { gunned: 0.3, never: 0.5 },
+    tech: { antiTank: "antitank", tankDestroyers: "tankdestroyers", handHeld: "assaultrifles", support: "smg", armour: ["mediums", "heavies", "latetanks"] }
+  };
+
+  // src/battle/land/rules.ts
+  var ARMS = ground_default.arms;
+  var SUPPORT_COVER = support_default.antiTank.alone.cover;
+  var TEAMS2 = ["mg", "mor", "snp"];
+  var MOTION = { inf: "foot", mtn: "foot", cav: "foot", eng: "foot", mot: "wheels", arm: "tracks", art: "guns", fort: "fixed" };
+  var HEDGE_NEAR = 12;
+  var LOCATE = { secs: 25, fire: 0.5 };
+  var LAND = {
+    /** Metres a second over open ground, battle time (the field is 3 km by 2 km; contact comes in a few minutes at x1). */
+    speed: { inf: 6, mtn: 5.5, cav: 9, eng: 5.5, mot: 11, arm: 10, art: 4, fort: 0 },
+    /** Radians a second a block can turn. */
+    turn: { inf: 1.1, mtn: 1.1, cav: 1.4, eng: 1.1, mot: 0.9, arm: 0.8, art: 0.5, fort: 0 },
+    /**
+     * How far a block's blows carry, metres between edges. Guns fire over the line from well back. Tanks reach no further
+     * than lorried infantry: at 380 they stood off out of the infantry's reach and struck without reply, pricing armour
+     * again on top of the card, which counts it already (b418, b420: the desert villages ran 38 points over their card).
+     */
+    reach: { inf: 200, mtn: 200, cav: 140, eng: 140, mot: 220, arm: 220, art: 1500, fort: 300 },
+    /** Frontage and depth in metres. */
+    size: { inf: [150, 40], mtn: [140, 40], cav: [150, 50], eng: [120, 40], mot: [140, 60], arm: [130, 60], art: [110, 50], fort: [140, 50] },
+    /** Models on a full-strength tray (the art director, 17 November): one fades off for each share lost. */
+    figures: { inf: 12, mtn: 12, cav: 12, eng: 12, fort: 12, mot: 6, arm: 4, art: 3 },
+    /**
+     * The share of a block's own power it takes off its target each second, at full strength and in the open. Slow
+     * enough that a close fight runs two or three minutes from the first contact, time for three or four choices
+     * (ruling 226(2); tests/battle-land.test.ts). A sixth slower since tanks close to their reach (b418), which had cut
+     * the quickest fights under a minute and a half.
+     */
+    rate: 125e-5,
+    /** Blows struck on the march, or on a block giving ground at the brink (b496(1)), and by a block that is wavering. */
+    moving: 0.4,
+    wavering: 0.7,
+    /** Guns: their share against what they hit, the extra they take off nerve, and what they can do when the enemy is on top of them. */
+    guns: { punch: 0.35, nerve: 1.5, close: 0.3, closeAt: 160 },
+    /**
+     * Support teams (release 2; Brian, 21 Nov 03:49Z: "units you can place at the begining of a battle on your side and
+     * they can then attack from the back of the battle"; 03:57Z: built in the campaign apart from the infantry). A team
+     * is a gun block ('art', so it stays back, fires on and is brought up into reach as guns are) with its own numbers:
+     *   reach: metres between edges its fire carries. A machine-gun team's tripod guns reach over the heads of its own
+     *     line; a mortar team's tubes lob further, short of the guns'.
+     *   punch, nerve: as the guns' (above): its share against what it hits, and the extra it takes off nerve. Machine
+     *     guns harm little and pin hard; mortars fall between.
+     *   close, closeAt: its share when the enemy is within closeAt (a mortar cannot drop its bombs on a man beside it;
+     *     a machine gun fights best close).
+     *   armour: its share against tanks (bullets and light bombs do little to armour).
+     *   speed (m/s, battle time, as LAND.speed), size (frontage and depth, m), figures (models on a full tray).
+     * First guesses; the campaign's card prices the teams (stage 2), and the field only shares that out (b418).
+     */
+    /** The setup step (release 2): metres a placed gun or team keeps clear of every other block. */
+    placeClear: 12,
+    /**
+     * Direct command (release 2; Brian, 22 November: "I want to be able to click a unit and point where I want them to
+     * go"). At the double: a 'move' with run goes LAND.double.pace faster by its motion (foot run; lorries and tanks at
+     * their best; guns are towed as fast as they go), is struck 'exposed' harder while on the run (upright men in the
+     * open), and strikes 'blows' as hard for 'winded' seconds after (men getting their breath). Orders by radio: an order
+     * of the player's reaches a block 'delay' seconds after he gives it, 'cut' times that when its headquarters is hit
+     * (wavering, or under 'hqAt' of its strength: the runners go instead of the wireless). Neither is felt unless the
+     * player orders a run, or the battle is opened with radio on. 'nations': each army's wait as a multiple of 'delay',
+     * by the last year it held ([through year, times], the first that covers the battle's year; 1 where not listed):
+     * the historian's (22 November 05:20Z, 'L as held'): Soviet 1941-42 twice (few sets below battalion: telephone and
+     * runners), Japanese twice, Italian one and a half, German infantry a quarter more (telephone and runners more than
+     * wireless); 1943 on, the Soviet a quarter more as the German (ours). A tank block waits as its model's share with a
+     * set talks (data/battle/armour.json radio, the modeller's sheet: a radio in every German, American and British
+     * tank; two T-34s in five to 1943) and the rest as its army's foot.
+     */
+    double: { pace: { foot: 1.5, wheels: 1.2, tracks: 1.15, guns: 1, fixed: 0 }, exposed: 1.25, blows: 0.75, winded: 20 },
+    radio: {
+      delay: 5,
+      cut: 3.5,
+      hqAt: 0.5,
+      nations: { SOV: [[1942, 2], [9999, 1.25]], JAP: [[9999, 2]], ITA: [[9999, 1.5]], GER: [[9999, 1.25]] }
+    },
+    /**
+     * Measured armour (release 2; Brian, 22 November 04:03Z to 04:16Z; armour.ts): off unless the battle is opened with it
+     * (LandBattle.measured). A tank block's blow on a tank block, or a gun's over open sights, weighs the chance its
+     * model's gun gets through the face it strikes at that range against the field's par for that face, held within
+     * [lo, hi] (a Sherman's 75 on a Tiger's front all but nothing, a Tiger's 88 on a Sherman twice par and more). The
+     * computer's tank blocks go round to the flank or rear of a tank block whose front they weigh under 'flankBelow' at
+     * 'flankAt' metres, where her side or rear weighs 'flankBetter' times her front or more ('flankFor': the most battle
+     * seconds they spend getting there before they go in anyway).
+     */
+    armour: { lo: 0.15, hi: 3, flankBelow: 0.35, flankBetter: 2, flankAt: 200, flankFor: 150 },
+    /**
+     * Hidden in the woods (release 2; Brian, 22 November 04:18Z: "if you put units in the forest then they aren't visible
+     * to the enemy until you get close or they start shooting. this allows you to do ambushes"). Off unless the battle is
+     * opened with it (LandBattle.hideOn). A block standing in woods when the clock starts is hidden from the other side:
+     * its blocks never strike it nor are sent at it, and its staff never plans against it. It is found when an enemy
+     * block's edge comes within 'sight' metres of its own (by its motion: men lying still under the trees are seen last,
+     * engines and tracks are heard first), when it opens fire, when it is struck, or when it leaves the woods; moving
+     * inside them keeps it hidden. Until then it holds its fire till an enemy is within 'ambush' metres (by its motion; a
+     * machine-gun team's 'mg'; 0: it never holds, as tanks fire at their reach and guns as they always do, and so gives
+     * itself away) unless it is ordered to attack or fire. Its first 'surprise.secs' seconds of fire strike 'punch' times as hard and shake 'nerve' times as much: the
+     * first volley from close cover at men in the open, the shock of an ambush. Infantry ambushes in close country were
+     * sprung at 50 to 150 metres (the US Army's FM 7-10, 1944; German forest-fighting notes, 1943), and troops still and
+     * camouflaged under trees were seldom seen beyond 50 to 100. The computer's staff, defending, puts up to
+     * 'staff.blocks' foot blocks of its line into woods on the enemy's way in before the clock starts (up to 'staff.ahead'
+     * metres forward or 'staff.back' back, 'staff.across' to either side, inside its own ground as the player's are), and
+     * keeps every hidden block of its line where it is, holding its fire, until it is found. An attack that sees none of
+     * the enemy goes forward 'staff.ahead' metres at a time until it finds them.
+     *
+     * The historian's check (22 November 05:20Z; the Normandy hedgerows, 1944: "they could not see the Germans, but the
+     * Germans could see them"):
+     * - A block on a hedge line (within 'hedge.near' metres of one: hedgerow, lane bank, wood edge, garden hedge or wall,
+     *   where the 3D game has handed the field's hedges over) hides as in woods. In woods themselves (true forest, sight
+     *   25 to 75 m) hidden foot and machine guns hold their fire to 'forest' metres; on a hedge line, to 'ambush'. The men
+     *   drawn on foot cross a hedge at its nearest gate (within 'hedge.gap' metres of the gap's middle; looks only).
+     * - A hidden block that opens fire is found but not yet located: the fire back at it strikes 'locate.fire' as hard for
+     *   'locate.secs' seconds, or until an enemy comes within its 'sight'.
+     * - A tank or lorry moving inside cover is heard at 'heard' metres (by its motion; 0: as 'sight').
+     * - Its ambush shakes a block caught moving in the open 'surprise.open' times (not 'nerve'), and its side's mortar
+     *   teams strike what the ambush is firing on 'surprise.mortar' times as hard in those seconds (pre-sighted on the gaps).
+     * - Reconnaissance by fire: a block told to fire on a stretch of cover (the player's land:fire at a point; the
+     *   computer's attack once it has been ambushed, at the cover ahead in its lane) strikes a block hidden within
+     *   'search.reach' metres of it at 'search.blow', and finds it about 'search.odds' times in 'search.every' seconds.
+     */
+    hide: {
+      sight: { foot: 60, wheels: 150, tracks: 150, guns: 100, fixed: 0 },
+      heard: { foot: 0, wheels: 0, tracks: 350, guns: 0, fixed: 0 },
+      ambush: { foot: 150, wheels: 150, tracks: 0, guns: 0, fixed: 0, mg: 200 },
+      forest: 100,
+      surprise: { secs: 20, punch: 1.5, nerve: 2, open: 2.5, mortar: 1.25 },
+      locate: LOCATE,
+      search: { reach: 60, every: 10, odds: 1 / 3, blow: 0.5, ahead: 300, lane: 150 },
+      hedge: { near: HEDGE_NEAR, gap: 3 },
+      staff: { blocks: 2, ahead: 400, back: 100, across: 200 }
+    },
+    /**
+     * Night patrol (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off if
+     * someone doesnt want it"; the design director, 18:36Z, Q6 to Q8; LandBattle.patrol): off unless the battle is opened
+     * with it, and it needs hiding on (LAND.hide): with hiding off nothing is hidden to find, so no patrol goes out and
+     * nothing is drawn. The night before the battle the attack sends one reconnaissance patrol from a block of its line
+     * on foot (the computer's always, from its most forward; the player's only by his order while he places his army):
+     * settled once as the clock starts, on its own stream ('patrol:' and the seed), never the battle's dice. Two draws,
+     * always both, found first: with chance 'found' the defence's most forward hidden post is found before a shot is
+     * fired (it springs no ambush, and the attack's first plan counts it); with chance 'caught' the patrol is caught and
+     * the defence is alerted, ready but not stronger (the card prices the digging already, b418): one more of its blocks
+     * takes a hidden post by the computer's own ambush rule (LAND.hide.staff), a computer defence's reserve starts
+     * toward the attack at once as a bold defence's does (styles defShift), and the patrol's block loses the patrol's men
+     * from its strength (its nerve untouched). Both can happen: the rear man gets the report home (Infantry Training
+     * 1937, sec. 35).
+     *   found, caught: the design director's knobs (18:36Z, Q6). No army's rate is sourced; the only tally is approximate,
+     *     the 38th (Irish) Brigade's war diary, Italy, December 1944, about 106 patrols: about 24% saw or found something
+     *     and about 42% made contact (the tactics thread's readings, 22 November 18:40Z).
+     *   size: men in a reconnaissance patrol, by army. USA 4 (FM 21-75, 1944, ¶86g: "three to six men"); the UK and her
+     *     kin 3 ("an officer or sergeant and two men who go out at night": a British junior officer, Intelligence Bulletin,
+     *     August 1943); SOV 4 ("three- to five-man teams": Sasso, Leavenworth Paper 6, p. 12); JAP 10 ("approximately one
+     *     squad (10 men)": Intelligence Bulletin, July 1944); GER 10 (patrols "not less strong than a squad": German
+     *     Motorized Infantry Regiment, MIS 1942, ¶40); FRA and VIC 2 (night patrols "by riflemen alone": Passmore 2025;
+     *     the count a knob); ITA 4 (unsourced: knob); every other army '_' 4 (knob). Kin follow Britain, Vichy France.
+     *     Its pictures, and the men its block loses when it is caught.
+     *   night: battle seconds the patrol is out, before the clock starts (negative: the night before). Looks only, a knob.
+     */
+    patrol: {
+      found: 0.4,
+      caught: 0.3,
+      size: { USA: 4, UK: 3, CAN: 3, AUS: 3, NZL: 3, SAF: 3, IND: 3, SOV: 4, JAP: 10, GER: 10, FRA: 2, VIC: 2, ITA: 4, _: 4 },
+      night: { t0: -2400, t1: -600 }
+    },
+    teams: {
+      mg: { reach: 800, punch: 0.35, nerve: 2.5, close: 1, closeAt: 0, armour: 0.15, speed: 5, size: [70, 30], figures: 3 },
+      mor: { reach: 1200, punch: 0.4, nerve: 1.8, close: 0.3, closeAt: 100, armour: 0.5, speed: 4.5, size: [80, 40], figures: 3 },
+      // Sniper teams (release 2, LAND.snipers): a few aimed rounds a minute, each at a man who matters; no harm to armour.
+      snp: { reach: 600, punch: 0.12, nerve: 4, close: 0.25, closeAt: 80, armour: 0, speed: 5, size: [40, 20], figures: 2 }
+    },
+    /**
+     * Sniper teams (release 2; Brian, 25 November 16:07Z: "should we add snipers? how would that impact the battle?", then
+     * "yes" to a small specialist team, not a common unit, small in kills and large in nerve and tempo; the design form at
+     * snipers/form.md, ruled by the design director). Only where the switch put them on the field (withSnipers): a team
+     * is a support team block ('snp', LAND.teams.snp) carved from its side's own foot power, so the card's odds stand (b418).
+     *   share: the share of a side's foot power its army gives its snipers, by doctrine, never by the year (the design
+     *     director's ruling of 25 November 16:30Z, Q2: the history start's level of each army's doctrine; the historian
+     *     checks the order): the Soviet sniper movement, a sniper in every rifle platoon; Finland; Japan; Germany's
+     *     Scharfschuetzen; Britain's sniper section of eight a battalion; a few scoped rifles a company in the US Army;
+     *     France; Italy; '_' any other. Read through sniperShare, never here.
+     *   kin: a nation that takes its senior partner's share, as smoke's kin do.
+     *   foot: the arms that give: the card's own arms on foot (data/campaign/ground.json arms.foot), never tanks, guns,
+     *     engineers, fortress troops or teams.
+     *   per: one team for every 'per' foot blocks, at least one, at most 'most'. xp: picked men, their foot's own
+     *     (power-weighted) plus 'xp', no higher than 'xpTop'.
+     *   cover: the ground a sniper team hides on (beside woods and a hedge line, as every block): buildings, rubble, rough.
+     *   edge: in woods (off a hedge line) it reaches a target beyond LAND.hide.forest only where its line to it leaves the
+     *     woods within 'edge' metres: it shoots from the edge.
+     *   find: each second it fires from hiding it is found with odds 1 - (1 - f)^(dt / 'every'), f 'far' while its target
+     *     is beyond 'near' metres, 'close' within, times ('xp' - its experience); 'hunt' times that where an enemy sniper
+     *     team stands within its reach. Found, it is not yet located for 'locate' seconds. Its own dice, keyed by place.
+     *   quiet: any blow that lands on it holds its fire until 'quiet' seconds after the last (MG fire on suspected spots).
+     *   slip: found, on its hiding ground, unstruck for 'after' seconds and no enemy within 'clear' metres, it holds its
+     *     fire 'secs' seconds while it moves, then hides again if all of that still holds; struck meanwhile, it stays
+     *     found. At most 'most' slips a battle, none below 'str' of its strength.
+     *   back: at 'back' of its strength, or at the rout nerve, it withdraws to its own edge, never routs.
+     *   bite: the weight of its blows against its target: b = min(1, r / 'bite'), r its striking weight (power0 x (0.35 +
+     *     0.65 str/str0)) over its target's power0. Every side effect scales with it. 0.6 by the gate (the design
+     *     director, 25 November 17:48Z, mend step 2): at 0.15 a team bit a whole block in full and its pin ran attacks
+     *     into the clock (practice fields -0.07 attack wins); at 0.6 a division's bite is about SOV 0.16, GER 0.13,
+     *     UK 0.10, USA 0.06, ITA 0.05, a second or two of its march, and leaders down a quarter as deep.
+     *   pin: a block on foot struck by it moves at pace x (1 - 'pace' x b) for 'secs' seconds, at most LAND.pin.most
+     *     seconds a battle (men go to ground and crawl).
+     *   lead: for 'secs' after a strike, the block steadies on its xp x (1 - 'xp' x b) (its leaders are the ones shot).
+     *   take: once found and located it takes harm 'fragile' times (two men, no depth), and 'blast' more from mortars, guns
+     *     and tanks (the window it fires from is blown in).
+     *   pick: its choice of target, the score's multiplier (lower first): foot on the move with pin time left, a found
+     *     enemy sniper team, a machine-gun team, still foot, guns and mortars, a tank block with heads out, one closed up;
+     *     one routing only where nothing else is in reach. The player's order beats them all.
+     *   keep, behind: the computer's: it keeps 'keep' metres from any found enemy block, and an attacking team takes
+     *     its cover within 'behind' metres behind its leading foot.
+     */
+    snipers: {
+      share: { SOV: 0.03, FIN: 0.03, JAP: 0.03, GER: 0.025, UK: 0.02, USA: 0.012, FRA: 0.012, ITA: 0.01, _: 0.012 },
+      kin: { CAN: "UK", AUS: "UK", NZL: "UK", NZ: "UK", SAF: "UK", IND: "UK", VIC: "FRA" },
+      foot: ["inf", "mtn", "mot", "cav"],
+      per: 4,
+      most: 3,
+      xp: 0.15,
+      xpTop: 0.9,
+      cover: ["buildings", "suburb", "industry", "blown", "rough", "rock"],
+      edge: 100,
+      find: { every: 10, far: 0.15, close: 0.4, near: 300, xp: 1.4, hunt: 2, locate: 60 },
+      quiet: 5,
+      slip: { after: 20, clear: 150, secs: 30, most: 2, str: 0.75 },
+      back: 0.5,
+      bite: 0.6,
+      pin: { pace: 0.5, secs: 8 },
+      lead: { xp: 0.5, secs: 30 },
+      take: { fragile: 2.5, blast: 1.5 },
+      pick: { moving: 0.5, snp: 0.5, mg: 0.6, still: 1, open: 1.5, closed: 3, routing: 1e6 },
+      keep: 250,
+      behind: 150
+    },
+    /**
+     * Pinned (release 2; the design director's ruling of 25 November 16:30Z, Q3): a block slowed by fire on it (sniper
+     * teams now; machine-gun teams' suppression, if it is ruled, the same field): at most 'most' battle seconds a block for
+     * the whole battle, from every cause together, counted only while it moves (LandUnit.pinTo, pinSpent). 20 by the
+     * gate (the design director, 25 November 17:48Z, mend step 1; 40 as first ruled).
+     */
+    pin: { most: 20 },
+    /**
+     * A tank block closed up (release 2): its commanders down inside their hatches, seeing the field through vision slits
+     * and periscopes. One meaning for every rule that closes a block up (sniper teams now; the smarter-soldiers thread's
+     * fire on her and enemy foot close later): it sets LandUnit.closedTo, never draws a die, and does nothing unless a
+     * switch that sets it is on. For 'secs' after the last thing that closed it: its blows on foot weigh 'foot', and it
+     * finds a hidden block by sight at 'sight' of the distance.
+     */
+    closed: { secs: 30, foot: 0.85, sight: 0.5 },
+    /** Damage and nerve by where a blow lands: [damage, nerve]. */
+    aspect: { front: [1, 1], flank: [1.5, 2], rear: [2, 3] },
+    /**
+     * The damage a block takes on this ground (cover), and the speed it keeps on it, by how it moves. Fieldworks
+     * ('works', dug where a block stood dug in) give no cover of their own: a blow on them takes the cover of the ground
+     * they were dug into (field.dugInto; 'works' here is only for works with no record). The card counts them in the
+     * defence's strength already, and the field shares out the card's own strength (ruling 217; b418: what the card
+     * prices, the field draws but never prices again). Counted twice, the plain attack carried 23 points less often than
+     * the card said in the campaign's dug-in battles, four in five of all it fights; counted once it lands within 3 (b407).
+     */
+    cover: { open: 1, field: 0.95, woods: 0.7, rough: 0.85, marsh: 1, water: 1.25, road: 1.05, bridge: 1.2, buildings: 0.55, rock: 0.75, bunker: 0.4, works: 1, blown: 1.25, suburb: 0.75, industry: 0.6, park: 0.9 },
+    pace: {
+      foot: { open: 1, field: 0.9, woods: 0.6, rough: 0.7, marsh: 0.35, water: 0.35, road: 1.1, bridge: 1, buildings: 0.7, rock: 0.4, bunker: 0.5, works: 0.8, blown: 0.15, suburb: 0.85, industry: 0.75, park: 1 },
+      wheels: { open: 0.9, field: 0.8, woods: 0.3, rough: 0.4, marsh: 0, water: 0, road: 1.5, bridge: 1.2, buildings: 0.5, rock: 0, bunker: 0, works: 0.5, blown: 0, suburb: 0.7, industry: 0.55, park: 0.85 },
+      tracks: { open: 1, field: 0.9, woods: 0.4, rough: 0.6, marsh: 0.12, water: 0, road: 1.3, bridge: 1, buildings: 0.5, rock: 0, bunker: 0, works: 0.6, blown: 0, suburb: 0.75, industry: 0.55, park: 0.95 },
+      guns: { open: 1, field: 0.9, woods: 0.4, rough: 0.5, marsh: 0.15, water: 0, road: 1.4, bridge: 1, buildings: 0.6, rock: 0, bunker: 0, works: 0.7, blown: 0, suburb: 0.75, industry: 0.6, park: 0.95 },
+      fixed: { open: 0, field: 0, woods: 0, rough: 0, marsh: 0, water: 0, road: 0, bridge: 0, buildings: 0, rock: 0, bunker: 0, works: 0, blown: 0, suburb: 0, industry: 0, park: 0 }
+    },
+    /**
+     * Tanks are blind in the streets: what they strike and what they take there. Not in woods: the card prices tanks in
+     * forest and on hills already (the campaign's ground rules), so the field draws them slow there but never prices them
+     * again (b418). Priced twice, the panzers at Sedan carried the Meuse 21 points less often than their card said.
+     */
+    tanksClose: { punch: 0.6, take: 1.3, ground: ["buildings", "industry"] },
+    /**
+     * Tanks that leave their infantry on close ground (the tactics panel, item 7; the design director, ruling 239(5)):
+     * tanks see little in woods and streets, and hidden guns and close-assault teams kill those that come on alone. A
+     * tank block in contact with enemy foot (the card's foot: 'foot'), with no friendly foot block within 'near' metres
+     * (edge to edge), standing in woods or streets or fighting foot in fieldworks, takes that foot's blows times 'take',
+     * the card's own figure for tanks alone there (1 over ground.json's arms.alone: forest for woods and fieldworks,
+     * urban for streets; a defending tank the card's defence figures), on top of tanksClose. Not where that foot is
+     * already in contact with friendly foot: the enemy is fixed, and a tank on its flank is the hook.
+     * Never twice (b418): only the tank divisions the card counted as covered by their foot, and paid the attack for
+     * fighting together, can be bitten: the card's foot divisions times 'cover' (1 on forest and urban cards, where
+     * ground.ts covers a tank division with one of foot; support.json's 2 elsewhere; a defence 1), a regiment a third,
+     * the first blocks first. A side with no foot has none covered: the card charged it already. On (b647): the plain
+     * order lands within 0.1 point of 8df23b3 on every ground; the computer's tanks are bitten for 0.6% of their contact.
+     */
+    alone: {
+      on: true,
+      near: 200,
+      foot: ARMS.foot,
+      woods: ["woods"],
+      streets: ["buildings", "industry", "suburb"],
+      works: ["works", "bunker"],
+      take: {
+        att: { woods: 1 / ARMS.alone.forest, streets: 1 / ARMS.alone.urban, works: 1 / ARMS.alone.forest },
+        def: { woods: 1 / ARMS.defence.alone.forest, streets: 1 / ARMS.defence.alone.urban, works: 1 / ARMS.defence.alone.forest }
+      },
+      cover: { close: 1, open: SUPPORT_COVER, def: 1, cards: ["forest", "urban"] }
+    },
+    /**
+     * Going in together (item 1; 7b): whether the player's group attack carries 'together', holding its tanks and lorries
+     * to its foot's pace. Off (the design director, ruling 239's rider, 23:13Z, amending 239(5)): held to the slowest foot
+     * of the whole order, the plain order lost 6 points on its card (15 on mountains), as LAND.hold was fitted with its
+     * tanks reaching the line first. The player keeps his tanks with his foot by his own orders; the computer's groups
+     * keep together by its drill (ai.ts).
+     */
+    together: { player: false },
+    /** Metres a second two blocks standing in each other's ground are eased apart, and the metres enemies keep between their fronts. */
+    spread: 4,
+    apart: 10,
+    /**
+     * Overrun (release 2; Brian, 23 November 05:05Z: "vechiles can run over enemy soldiers though which would kill them";
+     * the design director, 05:48Z): with LandBattle.escort on, a tank block fighting a foot block in the open, with its own
+     * foot within LAND.alone.near and no enemy weapon that can hurt a tank by direct fire in its own reach of the way,
+     * drives through that block's ground to its far edge and backs out to its place: once per foot block per contact
+     * (until the block breaks or no tank of the enemy is in reach of it), every side, staffs and player alike. Not where the
+     * foot carries its own anti-tank weapon. Harm unchanged (b418): the overrun is a picture of losses the rules already
+     * take (the men taken from that block while a tank is on its ground die under her tracks, Drill.thin); the blows
+     * between the two are struck as between blocks standing face to face. 'reverse': its pace backing out, a share of its
+     * pace forward. 'at': from when to when a nation's foot carries its own anti-tank weapon, [from, to) as the year and
+     * twelfths (the design director: looks gating only until the historian checks the dates on resumption; the
+     * Commonwealth's foot carries Britain's): the US bazooka from November 1942; Britain's Boys rifle 1939-42, then the
+     * PIAT; Germany's anti-tank rifles 1939-42, the Panzerschreck and Panzerfaust from late 1943; the Soviet anti-tank
+     * rifles from 1941. Japan, Italy and the rest none until the historian names one.
+     */
+    overrun: {
+      reverse: 0.5,
+      at: {
+        USA: [[1942 + 10 / 12, 9999]],
+        UK: [[1939, 9999]],
+        GER: [[1939, 1943], [1943 + 9 / 12, 9999]],
+        SOV: [[1941, 9999]]
+      },
+      commonwealth: ["CAN", "AUS", "NZL", "NZ", "SAF", "IND"]
+    },
+    /**
+     * Only anti-tank weapons take a tank (release 2; Brian, 25 November 2026, 15:58Z: "are bullets taking out german
+     * tanks? cannon fire or bazookas should be the only think taking them out", and 16:03Z, "ok add all of those": guns,
+     * launchers and close assault; the design director's pierce ruling, 25 Nov, P1 to P9; LandBattle.pierce): off unless
+     * the battle is opened with it. With it on, a blow that falls on a tank block is weighed by the striker's pierce
+     * share (LandBattle.pierceShare), what it carries that can pierce armour, and by nothing else it has:
+     *   tanks and field guns: 1 (their punch and the measured armour already apply; field guns from far back are a later
+     *     form's question, Q5).
+     *   a block on foot ('foot'): the least of 'most' and G + H + C, where
+     *     guns (G), its own anti-tank guns, anywhere inside its reach: 'with' where its kit says Anti-tank guns
+     *       (ForceKit.atGuns), else 'without' (the early small guns and the anti-tank rifles together, which get no knob
+     *       of their own); plus 'destroyers' where its kit says Tank destroyers (atTd); never above guns.most.
+     *     hand (H), hand-held launchers: only where its kit says so (atHand), and only within hand.at metres between
+     *       the blocks' edges.
+     *     close (C), close assault with grenades, charges and bottles: every foot block, only within close.at;
+     *       engineers 'eng' in its place.
+     *     'close' or 'open' by the ground: close where the tank stands on 'ground' (woods, rough, buildings, industry,
+     *       suburb) or the striker stands on 'works' (its fieldworks or a bunker). The plain kit (no field) is guns at the
+     *       without level, no launcher, and close assault.
+     *   a machine-gun team teams.mg and a mortar team teams.mor, in place of LAND.teams' armour (off keeps 0.15 and 0.5);
+     *     a support team this table does not list takes nothing, as a machine-gun team (a test holds 'teams' to
+     *     LAND.teams' own keys, so a new team must be given its share here by a ruling).
+     *   a fort: 'fort', at its full reach (its guns are in its works; no kit read).
+     * LAND.alone (tanks alone) still multiplies what the tank takes, on top, unchanged.
+     * Split fire (fixed: the b418 shape, Q2): what a foot block or a support team cannot put into the tank, 1 less its
+     * share, lands as a blow on the nearest enemy block in its reach that is not a tank (by targetOf's own score; never a
+     * hidden block), with its own aspect, ground, height and take, at the same luck and with no draw of the dice; where
+     * there is none it is lost. So kit moves where a block's fire lands and from what distance, never how much it deals:
+     * the card has priced the research already, and the field must not price it a second time. No share is above 1,
+     * today's weight. Only the blow's weight is multiplied (P1): at any share, even none, it is still a blow on her, with
+     * its nerve and its pin as ever, so a machine-gun team's fire takes none of her strength and is owed none of her
+     * losses (P4), and shakes her crews only as far as others' blows take strength off her that tick, as it does today.
+     * One draw of the dice per blow, as ever, whatever the share.
+     * The overrun (P5): with pierce on, foot threatens a hull by its kit alone, at its reach where it has anti-tank guns,
+     * else at hand.at where it has launchers, else not at all; with pierce off the overrun's own test is untouched.
+     * The foot a tank does drive through strikes her by the gap and the ground as the two stand (P1: "their gap"; the
+     * drawing's P9 reads the same gap): its guns and, among its men, its close assault. Weighed from where she began
+     * her drive, as the rest of that blow is (b418), such a block put nothing at all into her in a fifth to a half of
+     * its blows and its close assault almost never counted (the fairness checker, 25 Nov).
+     * Kit comes only from the ticket (P3): the nation's own research on a campaign ticket (ticket.ts), a sample ticket's
+     * SAMPLE_KIT (sample.ts), a set piece's own data (pieces.ts). Nothing here reads a nation's name, the date, the
+     * card's anti-tank strength, the calendar's guns of the day or LAND.overrun.at.
+     * The numbers (P2), each with the range the builder may tune within, fitted by the paired measure
+     * (tools/land-gate/paired.ts: off, on and a dice placebo on the same battles, both mirrors, the marks M1 to M6 of
+     * P7); 'most', teams.mg, the close ground, split fire and the threat rule are fixed.
+     *   guns.with 0.5 [0.4 to 0.6]; guns.without 0.35 [0.15 to 0.35; the ruling's first value 0.25]; guns.destroyers 0
+     *   [0 to 0.15; first 0.1]; guns.most 0.65 [0.55 to 0.65]; hand.open 0.2 [0.15 to 0.25]; hand.close 0.35
+     *   [0.3 to 0.4]; hand.at 100 [80 to 120]; close.open 0.15 [0.1 to 0.2]; close.close 0.25 [0.2 to 0.3]; close.at 30
+     *   [25 to 40]; eng.open 0.3 [0.25 to 0.35]; eng.close 0.5 [0.4 to 0.6]; teams.mor 0.05 [0 to 0.1]; fort 0.6
+     *   [0.5 to 0.8].
+     * Two were tuned from the first values, for the kit lean with the tanks defending (M5: the field must not price
+     * research the card has priced, b418): at the first values the attack's foot won 7.5 points more of its 120 battles
+     * with the full kit than with the plain kit (bar 5) and 16.7 more on urban ground (bar 12); with the early guns at
+     * 0.35 and Tank destroyers adding nothing, 4.2 and 10.0. So Tank destroyers moves nothing on the field for now (its
+     * kit field is read all the same). Every other number stands at its first value.
+     * Measured 25 November 2026 over 5,185 battles, 51 marks, 47 passed and 4 failed: it FAILS the pass rule, so the
+     * switch stays off (P8, step 5). All four are in the shipping set with the tanks defending, and the worst is the lean
+     * (M2): the attack won 59.6% of 240 with it off and 48.8% with it on, 10.8 points toward the side with the tanks
+     * (bar 8; the dice placebo moved 0.4), 6 results flipped to the attack and 32 to the defence (net 10.8%, bar 8%),
+     * hills at odds 1.2 by 16.7 (bar 15), and endings on the clock from 44 to 57 (5.4% of the battles, bar 5%). No
+     * number inside the ranges mends it (guns.with at 0.6: 9.6 points; with close assault and the mortar at their tops
+     * too: 10.4), and the ruling's one rule mend changes nothing there, every foot block of that set having anti-tank
+     * guns. The standing gate with it on, the same set with the tanks attacking (+2.5), the bare set (+2.4 and -3.6),
+     * the kit lean, the set pieces and the purpose marks all passed.
+     * Measured again the same day after the checkers' two mends (the share of foot a tank drives through, and a team the
+     * table does not list): 5,185 battles, every figure of every set the same, 47 of 51 marks passed, the same 4 failed.
+     * With the ruled order's numbers all at their tops the failing set reads 10.4 points, flips 3 and 28, the clock 56.
+     * Left to the design director, each with its reading (no bar; neither changes the code):
+     *   a split blow counts its whole nerve on the tank and again on the men, and a machine-gun team's fire still
+     *     shakes a tank's crews though it takes none of her strength (P1's letter; P4 has it "do nothing"). On the
+     *     failing set, with the nerve shared out as the weight is: 10.0 points, flips 5 and 29, the clock 46 (off 44);
+     *     with a share of none adding no nerve on her: 11.3 points, the clock 56. Neither mends the lean.
+     *   an army all on foot (the pass rule's sets all give the side without tanks a corps of field guns): attacking a
+     *     defence with tanks at odds 1.2 it won 69 of 210 off and 42 on with the plain kit (12.9 points; plains 23.3),
+     *     49 with the sample kit (9.5); defending against tanks, the attack won 74 off and 83 on (plain), 79 (sample).
+     *     tools/land-gate/paired.ts --set SF, a reading with no bar.
+     */
+    pierce: {
+      guns: { with: 0.5, without: 0.35, destroyers: 0, most: 0.65 },
+      hand: { open: 0.2, close: 0.35, at: 100 },
+      close: { open: 0.15, close: 0.25, at: 30 },
+      eng: { open: 0.3, close: 0.5 },
+      most: 1,
+      teams: { mg: 0, mor: 0.05, snp: 0 },
+      fort: 0.6,
+      foot: ["inf", "mtn", "cav", "eng", "mot"],
+      ground: ["woods", "rough", "buildings", "industry", "suburb"],
+      works: ["works", "bunker"]
+    },
+    /**
+     * A queue, not a pile (the art director, b418): within 'near' metres of ground a block keeps 'hard' of its pace on or
+     * less (at a bridge, a pass), a friend in the way of a marching block makes way for it rather than both being eased
+     * apart, so a jam reads as one block behind another, each on its own ground. In the open, blocks are eased apart as before.
+     */
+    queue: { hard: 0.2, near: 75 },
+    /** Metres between two friends' boxes where an attack's block takes its own stretch beside a friend standing there (b439). */
+    room: 10,
+    /** Metres off either end of a bridge kept clear: no attack has a block stand there, so those coming over can (b439). */
+    mouth: 50,
+    /** Mountain troops on rough ground and rock keep this much more of their pace. */
+    mountainFoot: 1.6,
+    /** Higher ground: blows from above strike harder, blows from below land softer, past this many metres of rise. */
+    height: { over: 8, up: 1.15, down: 0.9 },
+    /**
+     * Holding its own ground: a defending block within 'within' metres of where it was drawn up takes this share of the
+     * damage. Set by the fairness table, ground by ground, so that the plain attack (select all, right-click the nearest,
+     * Space) carries the ground about as often as the card says at the telling odds, 1.1 to 1.4 (ruling 226, mark 4), and
+     * two computer generals stay fair to it too (ruling 217(3)). Above 1 where the field's own cover (woods, marsh, rock)
+     * already gives the defence more than the campaign's odds, which count the ground already, mean it to have. 'river'
+     * multiplies it where the defence stands behind a river, 'works' by the works' level: the card counts both already.
+     * Level 2 sits between the telling-odds works (an infantry line that keeps a reserve back out of its bunkers) and the
+     * practice works (motorized, no reserve): each lands within a tenth of its card (b407). Re-set for b418 (tanks no
+     * longer out-reach infantry nor pay twice in woods, works give their own ground's cover, regiments hold a division's
+     * frontage, blows a sixth slower, and tanks and lorries find their way round rivers, rock and marsh: mountains held
+     * at 1.43 only because the tanks there stood for good at the first outcrop): over five sets of 160 battles a ground,
+     * every ground lands within 4 points of its card, about 2 in the attack's favour; the test's own seeds run about 5
+     * under that. 'river' 1.51 to 1.5 for b439, once blocks at a bridge made way for each other rather than shove at its
+     * foot to a standstill (Sedan's panzers ran out the clock there one fight in eleven). 1.4 to 1.3 for b464(5), once foot
+     * waded out of the river at the wading pace instead of crawling up its bank under fire: the practice river and the
+     * telling odds behind a river land where they did (+5 and 0 against +6 and -2, the tests' seeds). 1.3 to 1.2, and
+     * counted only as far as the attack's tanks and lorries cross, for b494: a river is only ever a cost, so every river
+     * attack lands at or below the same attack with no river. Men on foot cross the field's rivers at no cost the field
+     * needs to make up (the campaign's river attacks on foot, with no hold, land level with their no-river twins), while
+     * an attack whose armour must cross pays dearly at the bridges; 1.3 lifted the telling odds 7.5 points and the
+     * practice river 5 over their no-river twins, 1.2 leaves them level (+0.6) and below (-5.8).
+     */
+    hold: {
+      take: { plains: 0.97, forest: 1.035, hills: 0.99, mountain: 1.12, marsh: 1.32, urban: 1.025, desert: 1.045 },
+      within: 300,
+      river: 1.2,
+      works: [1, 1.02, 1.06, 1.07],
+      // A capital's and a city's streets (field.ts streetsOf): the card prices the place's ground, not the cover of its
+      // houses, so the field takes that cover back off the held defence (b418; b511). With none, cities fell 4 points
+      // under the card and capitals 17, most to the clock. A kind of ground may have its own, else the size's (b515(f)):
+      // capital 1.1 is the plains capital's fit (48 attacks, captured and hand-made), and the hills' and forest's; an
+      // urban capital's core is deepest; a mountain capital, a desert city and a marsh city hold on their own ground.
+      // Fitted 18 November, 10 fights each, on 555 capital and city attacks captured from the campaign and hand-made on
+      // every kind of ground: capitals -1.0 against the card, cities +0.2, every kind within a tenth (furthest: plains
+      // cities captured -9.5, plains capitals captured +9.0 on 8); the practice city +2.0; every other place unchanged.
+      // Next (b515(g)): a city's clock follows its built share, and these come back toward 1.
+      streets: { city: 1.05, capital: 1.1, "urban capital": 1.5, "mountain capital": 1, "desert city": 1, "marsh city": 1 },
+      // A city's own river up the field beside the heart (b526): where the whole defence stands on one bank its line ends
+      // on the river, a flank the attack cannot turn, and the card never priced the river, so the field takes that back
+      // off the held defence too. An army broad enough to stand on both banks has no such flank. Fitted 19 November, 10
+      // fights each on the 555 capital and city attacks with a river forced up every field the card left dry: 1 cost the
+      // attack 2.2 points (mountain cities at close odds 10.7); 1.06 leaves it -0.1 against the same attacks with no river,
+      // every kind within a tenth both ways (furthest: plains cities at close odds -6.7), fewer fights to the clock.
+      // Re-measured with bridges by the record (b596, three): +0.25, every kind within a tenth, 58 fights to the clock
+      // against 75 (1.045 would leave -0.4 but more capitals to the clock, 0 to 5 of 2,420).
+      stream: 1.06,
+      // A second river along the defence's flank, meeting one across the field behind it (b596(2), the Sava at Belgrade):
+      // the defence drawn up beside it has its line's end on the water as up the field. Fitted 19 November on the same 555
+      // attacks with the river across and a second one from the west edge on every field the card left dry, bridges 3
+      // and 2: 1 left the attack where it was (+0.05) but 18 more fights of 5,550 ran to the clock (75 to 93); 1.06 (as up
+      // the field) took the clock back (76) but gave the attack +2.3, two kinds at close odds over a tenth (forest capitals
+      // +11.4, hills cities +13.4); 1.045 leaves +1.7, every kind within a tenth (furthest: hills cities at close odds +10.0), 81 fights to the clock.
+      join: 1.045
+    },
+    /** Dug in: a block is drawn in its works while it stays within this many metres of where it began. */
+    dug: { keep: 30 },
+    nerve: {
+      /** Below 'waver' it fights worse; below 'rout' it runs; a runner rallies at 'rally' when clear of the enemy for 'quiet' seconds. */
+      waver: 0.4,
+      rout: 0.2,
+      rally: 0.35,
+      quiet: 15,
+      clear: 450,
+      /**
+       * Nerve lost for each share of strength lost, before where the blow landed. Divisions break on their nerve long
+       * before they are worn away, so a battle fought to its end costs about what the campaign bills for its result
+       * (the design director, b356); an attack's nerve goes faster than a defence's on its own ground.
+       */
+      perLoss: { att: 0.5, def: 0.5 },
+      /** A friend breaking within 'near' metres. */
+      friendRuns: 0.03,
+      near: 400,
+      /** Coming back while not being hit for 'still' seconds, a second; faster for a runner who is clear. */
+      recover: 0.01,
+      still: 5,
+      runnerRecover: 0.02,
+      /** Shattered: below this much strength a block runs whatever its nerve. */
+      shattered: 0.12,
+      /** Experience and a general: experience takes this share off every loss of nerve at full; each level of the general 0.03. */
+      xp: 0.35,
+      general: 0.03
+    },
+    /**
+     * Blocks a side: one a division. A side with fewer than 'least' has divisions split into their three regiments until
+     * it has enough to handle (ruling 217(c)). No division is ever folded into another (ruling 226(10)).
+     */
+    blocks: { least: 6, regiments: 3 },
+    /**
+     * The battle's scale (the true-scale plan, GR1; Brian's standing rule of 22 November 04:14Z: on-screen numbers reflect
+     * the units each side brings): one N a battle, the men both sides bring over the figure budget, rounded up to a
+     * multiple of step (1 when they fit the budget whole). Looks only: the drill reads it (no block draws more men than
+     * its men0 over N) and the recording states it; nothing in the fight does. Tanks and guns join the count with GR2's
+     * table; lorries never do (GR6). page: the 2D field page's own budget (GR5, the production lead's option A of 22
+     * November 08:03Z): every block's men as plain dots, its men0 over the page's one N, thinning with its strength, with
+     * no drill; the Kursk salient's 1,050,000 men draw about 23,400 dots at 1 to 45.
+     */
+    scale: { budget: 8500, step: 5, page: 24e3 },
+    /** The army breaks when this share of its power is running or gone. */
+    breaks: 0.5,
+    /**
+     * Or when this share of its power is worn away: what an attack will pay before it is called off, and a defence
+     * before it gives up the ground. Set so that a battle fought to its end costs each side about what the campaign's
+     * bill charges for the result it hands back (the design director, b356; tests/battle-land.test.ts).
+     */
+    spent: { att: 0.13, def: 0.18 },
+    /**
+     * But not while more than this share of its power stands fresh or has not fought: one worn block never takes a fresh
+     * army with it (ruling 226(2), b476(1)).
+     */
+    fought: 0.5,
+    /**
+     * A block at this share of its strength or more, and steady, is fresh, in contact or not; in an army of this many
+     * blocks or fewer (one block a fifth of it or more), the fresh hold the army at the brink as those not yet in the
+     * fight do. Larger armies hold by those not yet in the fight alone: the fresh rule there moves the field 8 points off
+     * its card, and at six blocks the hills-and-works practice ground 10 (the design director, b476(1) and b480; 356
+     * campaign attacks and the nine practice grounds, 18 November). Never a defence behind fortress works or in a fort,
+     * whose works the card prices already (b488: Verdun's three divisions behind works ran 8.6 points under their card).
+     * Held there, such an army's blocks no longer fresh give ground rather than stand to be ground down (the design
+     * director, b496(1): fought out, the Libyan Group at Mechili booked 1.27 of the staff's bill; now 1.06).
+     */
+    fresh: { str: 0.9, upTo: 5 },
+    /**
+     * Burning wrecks stay (b477, Brian's pick): every tank a block loses leaves a wreck where it stood, to the end of the
+     * fight. Men on foot beside one take light cover, either army's, at the field's own figure for broken ground: a block
+     * takes it for the share of its tray that wrecks within its frontage, or 'beside' metres of it, can shelter (one wreck,
+     * one model's worth), never better than its ground gives already. 'r' is how far a wreck's shelter reaches, for the 3D
+     * game's mark.
+     */
+    wreck: { cover: "rough", beside: 10, r: 12 },
+    /**
+     * What a block that leaves the field still loses on the way (stragglers, wounded, guns and lorries left behind), as a
+     * share of the strength it had left. A defence driven off its own ground leaves far more behind than an attack that
+     * falls back to the lines it came from: the campaign's own bill has the same shape (resolveBattle in game.ts).
+     */
+    count: { routing: { att: 0.05, def: 0.05 }, gone: { att: 0.1, def: 0.15 } },
+    /** Randomness of each blow, so near-even fights do not always go the same way: +- this share. */
+    jitter: 0.1,
+    /**
+     * How much of the card's own run of luck the day carries (ruling 226(4)): 1 draws the day's luck across the whole run,
+     * as the card's chance does, so a plain attack at the card's odds wins about as often as the card says.
+     */
+    fortune: 1,
+    /**
+     * A stretch of the defence's line is quiet when no enemy stands within this many metres of a block's own lane, left or
+     * right, anywhere on the field: that block closes on the fight once the line is struck elsewhere (b407).
+     */
+    quiet: 350,
+    /** Metres a block pressing an attack will go to take the next enemy when its own breaks. */
+    press: 600,
+    /** Seconds of battle time before the defender is counted as having held. */
+    limit: 360,
+    /**
+     * Neighbours join the fight (release 2): metres a corps from next door walks onto the field from its edge before it
+     * stands as a reserve; how far in from a back edge it comes on; metres between its blocks; and how far it looks for
+     * clear dry ground to come on at, in field cells in from the edge and along it either way.
+     */
+    join: { walk: 200, edge: 40, gap: 40, inward: 24, across: 20 },
+    /**
+     * A capital's or a city's streets (field.ts layCity, streetsOf). inside: the metres inside the ragged edge of its core
+     * that the defence's line stands, in the outer streets and never in front of the city (the design director, b529).
+     * clock: a city's day is longer by this share of its field that is built (b515(g)): limit * (1 + clock * built), so
+     * the march in through the streets and the fight in them do not end on the clock. Measured with the line inside the
+     * edge over 555 city and capital fields x 10 seeds (b529's bars: every kind within a tenth of its card, close odds
+     * too, and none on the clock more than 1 fight in 10): 0.15 holds both, the widest forest cities at close odds +8.9
+     * and marsh cities at close odds 8.7% on the clock; 0.25 and 0.5 put the forest and marsh cities' close odds over
+     * a tenth, 0 put marsh and mountain cities on the clock 1 fight in 8.
+     */
+    city: { inside: 100, clock: 0.15 },
+    /** The computer general thinks once a second. */
+    think: 1,
+    /**
+     * Air support (Brian, 2026-11-18 18:58Z; the design director, b533): a side's fighters on call strike when called,
+     * the card having counted them already. While a side has strikes left, its blows hold back the card's share for them
+     * (SideTicket.air.share), owed to the block each fell on; a strike pays what is owed where its run lands (sim.ts,
+     * "Air support"). Seconds are battle time, metres field metres.
+     *   first, every: the first strike is ready this long after the armies meet, each next this long after the last call.
+     *   wait: a strike left ready this long, the staff call it themselves, for either side (b533(c): the enemy's too,
+     *     never aimed sharper).
+     *   eta: from the call to the run; speed: metres a second the flight flies, so the run takes its length over it;
+     *     out: seconds it is seen pulling away after the run.
+     *   len, minRun, wide: the run's longest and shortest, and the strip its guns rake, each side of its line half of it.
+     *   near: pointed at a place, the run takes the frontage of the enemy block nearest it within this.
+     *   close: no gun fires within this of the caller's own men; a run with less than 'least' of its line clear is refused.
+     *   armour: tanks take this much of a strafing run (guns made for men in the open).
+     *   nerve: the run's weight on nerve, as a blow from the front.
+     *   alt, low: the flight's height coming in and on the run, metres (pictures only). models: planes in a flight;
+     *     legs: the staff's strike splits into pairs, a pair down the frontage of each of the blocks owed most.
+     *   toss: seconds from a bomb let go to its burst ('land:bomb-drop' then the 'shell'), pictures only.
+     *   bombs: how many fall on the run's far third, pictures only (b533(f)): from the nation's first year of
+     *     fighter-bombers, before it the run strafes alone. bombsFrom: that year by nation, '_' for every other, from the
+     *     historian's list (/mnt/project-files/historian/fighter-bombers.md, 19:35Z): Germany from the Balkans and Russia,
+     *     1941; Britain and America 1942; the Soviets from June 1941 (the certain date); Italy 1941; Japan 1943; France
+     *     only with the Free French, 1943; Poland never in 1939; the generic fighter 1942.
+     */
+    air: {
+      first: 40,
+      every: 40,
+      wait: 20,
+      eta: 12,
+      speed: 120,
+      out: 6,
+      len: 400,
+      minRun: 100,
+      wide: 60,
+      near: 300,
+      close: 60,
+      least: 0.3,
+      armour: 0.6,
+      nerve: 1,
+      alt: 150,
+      low: 60,
+      models: 4,
+      legs: 2,
+      bombs: 2,
+      toss: 1.5,
+      bombsFrom: { GER: 1941, UK: 1942, USA: 1942, SOV: 1941, ITA: 1941, JAP: 1943, FRA: 1943, POL: 9999, _: 1942 }
+    },
+    /**
+     * Hedge cutters (release 2; Brian, 22 November 14:19Z: "bladed Shermans punch a gap through a hedgerow where the player
+     * picks"; the design director's ruling 242, C1-A to C4-A; LandBattle.cutters): off unless the battle is opened with
+     * them. A tank block carries cutters from turn 'from' on a field with hedges, whatever its army (C2-A: Brian's standing
+     * rule that the battle's mechanics are every playable nation's, 21 November 06:54Z). Told to cut where a hedge line
+     * runs (within 'near' metres of one), it drives for that point and on through; as its front reaches the hedge the cut
+     * is begun (t0), and 'secs' battle seconds later a gap 'width' metres wide stands open there (t1, a Gate of kind
+     * 'cut'), which the drawn men of every block on either side walk through from then. The staffs' tank blocks cut
+     * wherever their own way crosses a hedge line with no gap near (C4-A). Looks only (C1-A): nothing in the fight reads
+     * a gap, so the fight is the same with the switch on or off. The bocage (C1-B, built as the ruling's 17:45Z amendment
+     * asks, "unfitted tanks cross only at gaps"; its own switch, LandBattle.bocage, measured against off): a tank block
+     * without cutters crosses a hedge line only at a gap, a gateway or a cut once open, and goes round to one; this is
+     * where cutters (and a cut's gap) change the fight, and only with that switch on.
+     *   from: turn 59, July 1944. Bradley saw the Culin cutter on 14 July and held it back until Cobra, 25 July 1944; by
+     *     then three of every five First Army tanks carried one (Blumenson, Breakout and Pursuit, ch. XI).
+     *   share: three tanks in five carried one at Cobra (Blumenson; Zaloga, Operation Cobra 1944): how many of a block's
+     *     drawn tanks wear the blades, sent to the 3D game as the block's cutter flag (the bridge's unitOut). Looks only.
+     *   secs: battle seconds a cut takes, about 25 real seconds at LAND.smoke.perMin. No source gives one (the historian,
+     *     H1, 22 November: not found in ten sources; the one timed sortie bounds a breach and the drive to the next bank at
+     *     about 3 real minutes): the design director's looks-only knob (ruling 242 C3), until H1 is sourced.
+     *   width: the gap, metres: the 3D game's own gateway width (an M4 is about 2.6 m wide; no source gives a gap's width:
+     *     ruling 242 C3).
+     *   near: how near a hedge line the point picked must lie, metres: the hedge line's own (LAND.hide.hedge.near).
+     */
+    cutters: { from: 59, share: 0.6, secs: 6, width: 3.2, near: HEDGE_NEAR },
+    /**
+     * Smoke on call (release 2; Brian, 22 November 14:19Z: "a section lays a smoke line to cover a crossing, when and where
+     * the player orders it"; the design director's ruling 242, S1-A to S6, amended 17:45Z from the historian's answers;
+     * LandBattle.smoke): off unless the battle is opened with it. A block on foot, or lorried infantry, whose army has the
+     * means lays a screen across the ground before it: a line no longer than its own front (S2), its middle within its
+     * army's 'reach' of its front, standing 'hang' battle seconds; one at a time, and 'count' a battle (S3). While a screen
+     * stands, any blow struck straight at its target (direct fire: foot, tanks, a machine-gun team, a gun over open
+     * sights) whose line from the shooter to the target crosses it strikes at 'share' (S1-A); fire from far back (guns
+     * beyond LAND.guns.closeAt, mortar teams, the air, on fire plans laid before the smoke: the German 1940 handbook) is
+     * not touched. It gives no cover and does no harm. With hiding on, nobody is seen through it (the build spec's reading
+     * of S1-A; it draws nothing of the dice itself, but a block it keeps hidden is not fired on till found, so the draws
+     * after it change as the fight does: LandBattle's Smoke on call). Both staffs lay one as a
+     * foot block of theirs goes in to the assault (S5-A); never a defence in its works.
+     *   share: fire at a place, not a seen target: the rules' existing share for fire back at a block found but not
+     *     located (LAND.hide.locate.fire; the German squad manual: if tanks lay smoke, "fire into the smoke"). Never twice
+     *     on one blow: a blow already that vague, or fire on cover at a block still hidden (already a place, not a seen
+     *     target: LAND.hide.search.blow), is not halved again. Only the ground's part of a blow: the share a side holds
+     *     back for its air strikes is held back whole (the air is not touched).
+     *   count: screens a block lays in a battle where its army's means gives none: the design director's knob, pending H7
+     *     (ruling 242 S3; the historian found no section load for any army but Britain's).
+     *   perMin: battle seconds to a real minute, turning the sources' burn times into battle time (ruling 242 S2, answering
+     *     H6): foot moves at 6 m/s of battle time (LAND.speed.inf) against US quick time of 120 steps of 30 inches a minute,
+     *     1.52 m/s (FM 22-5).
+     *   front: an army that sets its smoke down along its own front (reach 0) lays it there for a line drawn on its own
+     *     ground or within this many metres of its front, and refuses one drawn further off (129(d)): a throw, the thrown
+     *     reach of the others' grenades (the historian, D: the Italian pot "is thrown or set down, so the 30 m thrown reach
+     *     fits").
+     *   means: by army: reach, metres beyond its front the line's middle may lie (0: it is laid along its own front);
+     *     hang, battle seconds it stands (real minutes times perMin); count, where the army's own load is sourced.
+     *     USA: the M19A1 WP rifle grenade to about 195 m (OP 1664); the AN-M8 HC grenade burns 105 to 150 s (FAS), about
+     *       2 real minutes. (The 60 mm WP shell came only in January 1945.)
+     *     UK: the platoon's 2-inch mortar, smoke to 500 yd, 457 m (canadiansoldiers.com), about 2 real minutes a bomb (the
+     *       1966 pamphlet); 6 smoke bombs and 4 smoke grenades a platoon (Memorandum on Platoon Battle Drill, 1942), about
+     *       3 a section (the historian, D; ruling 242 as amended: Britain and her kin 3 screens).
+     *     GER: smoke hand grenades and candles, thrown (Nebelhandgranate 39, 1 to 2 minutes: Ordnance Bulletin 59,
+     *       Intelligence Bulletin January 1943); the 5 cm mortar had no smoke round (MIS Special Series 14).
+     *     SOV: the RDG-1 grenade, about 1.5 minutes, about 30 yd of screen, thrown (Intelligence Bulletin, June 1946).
+     *     JAP: the Type 89 discharger's smoke round, 45 to 206 yd (Intelligence Bulletin, June 1943); no burn time found
+     *       (the historian, H5): 22 s is the design director's knob.
+     *     ITA: the 2-kg smoke pot, set down or thrown, burning 1 min 15 s (TTT 38, November 1943): laid along its own
+     *       front (ruling 242 as amended).
+     *     France 1940 has none (no section smoke in the 1940 platoon or weapons lists: the historian, H5), and no army
+     *     not listed has any: no stand-in until a means is found (ruling 242 S2).
+     *   kin: a nation that takes its senior partner's means (ruling 242 S2, "the 240 form", as plans.kin on the air
+     *     branch's arsenal.json): Canada, Australia, New Zealand, South Africa and India Britain's; Vichy and Free France
+     *     France's (none today; theirs too once H5 finds France a means).
+     */
+    smoke: {
+      share: LOCATE.fire,
+      count: 2,
+      perMin: 15,
+      front: 30,
+      means: {
+        USA: { reach: 195, hang: 30 },
+        UK: { reach: 457, hang: 30, count: 3 },
+        GER: { reach: 30, hang: 22 },
+        SOV: { reach: 30, hang: 22 },
+        JAP: { reach: 188, hang: 22 },
+        ITA: { reach: 0, hang: 19 }
+      },
+      kin: { CAN: "UK", AUS: "UK", NZL: "UK", SAF: "UK", IND: "UK", VIC: "FRA", FFR: "FRA" }
+    },
+    /**
+     * Field telephone lines (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it
+     * off if someone doesnt want it"; the design director's rulings, 18:36Z, PHONES Q1 to Q3; LandBattle.phones): off
+     * unless the battle is opened with them. Wire was the defence's own means ("Telephones are usually installed down to
+     * companies along the main line of resistance", FM 7-25 ¶52; Cherbourg 1944, "Approximately 95% of communications was
+     * by wire", Signal Corps Report 63), so as the clock starts every block of the defence on the field has a wire from its
+     * headquarters at the middle of its zone's back edge; a corps that comes up from next door has none. The wire head is
+     * "pushed close" (FM 7-24 ¶68h): it follows its block, and moving never cuts it. A blow on the block from an enemy gun
+     * block or mortar team cuts a line at 'cut' (Q1; machine guns never), and an enemy tank block whose step crosses the
+     * wire cuts a line outright (FM 24-20 ¶32d: surface lines "often are broken by passing troops and vehicles"). Once its
+     * lines are all cut the wire is down, and every order to that block, the player's or a staff's, waits its army's
+     * fallback from when it was given: the wireless (LAND.radio's wait, as the radio switch reckons it) or a runner (the
+     * metres from the headquarters over 'runner'). A lineman leaves the headquarters at the first cut, walks the wire to it
+     * at foot pace (LAND.speed.inf), splices it in 'splice' seconds and the wire is up again: what was waiting goes at once.
+     *   cut: the chance a line is cut by each such blow (each tick's blow of a gun block or a mortar team on the block at
+     *     the wire's end): knob (DD 18:36Z). No source counts breaks: the sources say lines were "repeatedly cut by enemy
+     *     artillery" (84th Division, Battle Experiences 1945) and "Heavy fire ... was constantly cutting our lines" (100th
+     *     Division, 1945).
+     *   splice: battle seconds a splice takes: FM 24-20 (1944) ¶15c(3) and ¶15c(5), preparing the splice "should not take
+     *     more than 1 minute" and tying it "should be about 1 minute": about 2 real minutes, at LAND.smoke.perMin 15
+     *     battle seconds a real minute. Finding the break is not counted (no source).
+     *   runner: metres a battle second a runner goes: the rules' own foot speed (LAND.speed.inf); knob (DD 18:36Z).
+     *   lines: lines to each block, by army. Germany 2 (DD 18:36Z, Q3, P6): "in the danger zone, therefore, double lines and
+     *     heavy insulated wires are used" (German Tactical Doctrine, MIS): a German wire needs two cuts before orders wait.
+     *     Every other army 1 ('_').
+     *   fallback: by army, [through year, 'radio' or 'runner'], the first that covers the battle's year (as LAND.radio's
+     *     nations): how orders go once the wire is down.
+     *     USA: runners to 1942, the wireless from 1943: the SCR-536 and SCR-300 "became available in substantial quantities"
+     *       only "well into 1943" (Tactical Notebook); FM 7-25 ¶49b, "radio and messengers are the primary means".
+     *     UK and her kin (CAN, AUS, NZL, SAF, IND) the wireless, every year: No. 18 sets at company and platoon headquarters
+     *       (the Calgary Highlanders' signals platoon, canadiansoldiers.com).
+     *     GER: runners to 1942, the wireless from 1943 (the Feldfu b/c pack sets "in the forward echelon", TTT 46, 1944):
+     *       "When wire connections fail or are not functioning steadily, the radio is indispensable" (German Tactical Doctrine).
+     *     SOV runners: 9,586 sets made in 1941 (SPbGUT); "a broken line often meant losing touch with subordinate troops"
+     *       (3DNews). JAP runners: 0 to 4 sets a battalion (TTT 46), "a pool of runners" at company (MIS Bulletin 16).
+     *     ITA runners (nothing sourced but the telephone). FRA and VIC runners: "only French heavy tanks had radios" in 1940
+     *       (GlobalSecurity). Every other army runners ('_'): knob (DD 18:36Z).
+     */
+    phones: {
+      cut: 0.12,
+      splice: 30,
+      runner: 6,
+      lines: { USA: 1, UK: 1, CAN: 1, AUS: 1, NZL: 1, SAF: 1, IND: 1, GER: 2, SOV: 1, JAP: 1, ITA: 1, FRA: 1, VIC: 1, _: 1 },
+      fallback: {
+        USA: [[1942, "runner"], [9999, "radio"]],
+        UK: [[9999, "radio"]],
+        CAN: [[9999, "radio"]],
+        AUS: [[9999, "radio"]],
+        NZL: [[9999, "radio"]],
+        SAF: [[9999, "radio"]],
+        IND: [[9999, "radio"]],
+        GER: [[1942, "runner"], [9999, "radio"]],
+        SOV: [[9999, "runner"]],
+        JAP: [[9999, "runner"]],
+        ITA: [[9999, "runner"]],
+        FRA: [[9999, "runner"]],
+        VIC: [[9999, "runner"]],
+        _: [[9999, "runner"]]
+      }
+    },
+    /**
+     * Stretcher bearers (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off";
+     * the design director's rulings Q4 and Q5, 18:36Z, and 18:38Z on the light cases; LandBattle.bearers): off unless the
+     * battle is opened with them. Of each loss of strength a block suffers, 'killed' are dead and the rest wounded; of the
+     * wounded, light.share are dressed and back in the line light.dress seconds later (the only same-battle return in the
+     * record, Q5), and the rest are litter cases waiting for the block's bearers. Its bearers ('share' of its strength at the
+     * start, counted in its strength) carry them back 'litter' to a case, out to the aid post 'aid' metres behind where it
+     * started and back at 'pace': while they are out the block's own blows weaken by the men away (never its strength, its
+     * nerve, its count or its size). Nothing here draws on the dice.
+     *   killed: the share of each loss killed, by army (the design director, 19:14Z, from the historian's
+     *     /mnt/project-files/historian/three-ideas-readings-1122.md; died of wounds counted as killed). The drill draws
+     *     the rest of the men who fall as wounded. Sourced, no knob of ours:
+     *     USA 0.192: 4.22 wounded to 1 killed (Dupuy).
+     *     UK and her kin (CAN, AUS, NZL, SAF, IND) 0.230: 3.35 to 1 (Hansard, 27 June 1944, Italy to Rome).
+     *     GER 0.279: 2.58 to 1 (OKW to January 1945, all fronts).
+     *     JAP 0.271: 2.69 to 1 (China, 1937 to 1941).
+     *     '_', every other army (SOV, ITA, FRA, VIC and the rest): 0.227, the middle of the laid ratios, 3.40 to 1.
+     *   share: bearers as a share of a block's men, by army, sourced in kind and rounded:
+     *     UK and her kin (CAN, AUS, NZL, SAF, IND) 0.025: a corporal and 19 privates a battalion, "all of these were
+     *       infantrymen" (bayonetstrength.uk, The Organisation of the British Infantry Battalion 1938-45, p.10;
+     *       britishmilitaryhistory.co.uk, the battalion HQ's medical list).
+     *     GER 0.03: a Krankenträger in each platoon headquarters and the company's medical NCO (KStN 131n, 1 May 1944,
+     *       battleorder.org): 4 of a company of 142.
+     *     SOV 0.035: a medical instructor and 4 orderlies a company of 143 (shtat 04/550, 10 December 1942, battleorder.org).
+     *     USA 0.02: two company aid men a company (FM 8-10, 1942, para 28d(1), 33b) and the battalion's 12-man litter
+     *       squad (med-dept.com, The WW2 Aid Station).
+     *     JAP 0.02: a medical orderly a platoon (TM-E 30-480, Handbook on Japanese Military Forces, evacuation).
+     *     ITA, FRA and VIC 0.0275: unsourced; knob (DD 18:36Z), the middle of the sourced 2 to 3.5% (Q4).
+     *     '_', every other army: 0.0275, the same knob (DD 18:36Z).
+     *   litter: bearers to a stretcher (FM 8-10 para 32a: "Litter squads consist ordinarily of four bearers each").
+     *   aid: metres from the block's start place to its aid post, toward its own back edge, kept on the field: the middle
+     *     of FM 8-10's 300 to 800 yards (para 31b(3)), 550 yards (the design director, Q4, not the 350 proposed).
+     *   pace: metres a battle second out and back: FM 8-10 para 32c, a round trip of 500 yards each way "at least twenty
+     *     minutes", 914.4 m in 300 battle seconds (15 battle seconds a real minute). A round trip to 503 m: 330 s.
+     *   light: the lightly wounded, back in the same battle (Q5: the only same-battle return; no bigger share for feel):
+     *     share: of the wounded, the US "carded for record only", 17.1% (123,836 of 723,560 wounded: the Dupuy Institute,
+     *       Carded for Record in WWII): knob (DD 18:36Z).
+     *     at: metres from the block where they are dressed. The design director, 18:38Z: "Light cases are dressed at the
+     *       block by the company's aid man, or by themselves, and are back in the line after the 30 s dressing knob, with
+     *       no walk ... every soldier carried a field dressing." Kept as a knob (DD 18:36Z): 0, no walk.
+     *     out, back: their pace going and coming back, times the foot's (LAND.speed.inf), read only where at > 0:
+     *       knobs (DD 18:36Z).
+     *     dress: battle seconds to dress a wound: knob (DD 18:36Z).
+     */
+    bearers: {
+      killed: { USA: 0.192, UK: 0.23, CAN: 0.23, AUS: 0.23, NZL: 0.23, SAF: 0.23, IND: 0.23, GER: 0.279, JAP: 0.271, _: 0.227 },
+      share: { USA: 0.02, UK: 0.025, CAN: 0.025, AUS: 0.025, NZL: 0.025, SAF: 0.025, IND: 0.025, GER: 0.03, SOV: 0.035, JAP: 0.02, ITA: 0.0275, FRA: 0.0275, VIC: 0.0275, _: 0.0275 },
+      litter: 4,
+      aid: 503,
+      pace: 3.048,
+      light: { share: 0.17, at: 0, out: 0.5, back: 1, dress: 30 }
+    }
+  };
+  var phoneLines = (nat) => LAND.phones.lines[nat] ?? LAND.phones.lines._;
+  var phoneFallback = (nat, year) => (LAND.phones.fallback[nat] ?? LAND.phones.fallback._).find(([to]) => year <= to)?.[1] ?? "runner";
+  var reachOf = (u) => u.team ? LAND.teams[u.team].reach : LAND.reach[u.kind];
+  var patrolSize = (nat) => LAND.patrol.size[nat] ?? LAND.patrol.size._;
+  var gunsOf = (u) => u.team ? LAND.teams[u.team] : LAND.guns;
+  var smokeMeans = (nat) => LAND.smoke.means[LAND.smoke.kin[nat] ?? nat] ?? null;
+  var bearerShare = (nat) => LAND.bearers.share[nat] ?? LAND.bearers.share._;
+  var killedShare = (nat) => LAND.bearers.killed[nat] ?? LAND.bearers.killed._;
+
+  // src/battle/land/own-teams.ts
+  var OWN_TEAM_SHARE = 0.04;
+  var OWN_TEAM_KINDS = ["inf", "mtn", "mot"];
+  var OWN_TEAM_ID = -1000001;
+  var isOwnTeam = (f) => f.corps <= OWN_TEAM_ID;
+  var brings = (f) => f.corps >= 0 && OWN_TEAM_KINDS.includes(f.kind) && f.share > 0 && f.men > 0;
+  function ownTeamParents(t) {
+    const out = /* @__PURE__ */ new Map();
+    for (const s of [t.att, t.def]) {
+      const teams2 = s.forces.filter(isOwnTeam), parents = s.forces.filter((f) => !isOwnTeam(f) && brings(f));
+      if (!teams2.length || teams2.length !== 2 * parents.length) continue;
+      teams2.forEach((f, i) => out.set(f.corps, parents[i >> 1].corps));
+    }
+    return out;
+  }
+
+  // src/campaign/teamfire.ts
+  var teamFireOn = (g2) => g2.flags.teamfire === 1;
+  function setTeamFire(g2, on2) {
+    if (on2) g2.flags.teamfire = 1;
+    else delete g2.flags.teamfire;
+  }
+  var TEAM_FIRE = {
+    /** (a) A team's worth of the line it was taken from, after the lines meet (G: the field's tally, above). */
+    worth: { att: 0.59, def: 0.63 },
+    /**
+     * The field as it is laid (G, measured on twelve grounds and pinned by the test): metres between the two lines at the
+     * start, metres a side's teams stand behind its own line, and the pace its foot comes on at over a field's mix of
+     * open ground and crops, as a share of LAND.speed.inf.
+     */
+    gap: 767,
+    back: 248,
+    pace: 0.96,
+    /**
+     * The staff's rule for a gun or team out of reach (ai.ts gunsUp; the test reads the two figures there): it moves up
+     * when the nearest enemy is beyond this share of its reach, to this share of its reach, and stands.
+     */
+    up: { beyond: 0.9, to: 0.75 }
+  };
+  var TEAMS3 = ["mg", "mor"];
+  var hold = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+  function earlySeconds() {
+    const G5 = TEAM_FIRE, pace2 = LAND.speed.inf * G5.pace;
+    const meet = Math.max(0, (G5.gap - LAND.reach.inf) / pace2);
+    const far = G5.gap + G5.back;
+    const def = (t) => hold(meet - Math.max(0, far - LAND.teams[t].reach) / pace2, 0, meet);
+    const att = (t) => {
+      const r = LAND.teams[t].reach;
+      return far <= r * G5.up.beyond ? meet : hold(meet - (far - r * G5.up.to) / LAND.teams[t].speed, 0, meet);
+    };
+    return { meet, att: { mg: att("mg"), mor: att("mor") }, def: { mg: def("mg"), mor: def("mor") } };
+  }
+  function sideOf(cs, guard = 0) {
+    let all = guard, teams2 = 0, soft = guard;
+    for (const [kind, w] of cs) {
+      if (!(w > 0)) continue;
+      all += w;
+      if (OWN_TEAM_KINDS.includes(kind)) teams2 += w;
+      if (kind !== "arm" && kind !== "art") soft += w;
+    }
+    return { share: all > 0 ? teams2 / all : 0, armour: all > 0 && soft <= 0 };
+  }
+  function teamFire(i) {
+    const A = sideOf(i.att), D2 = sideOf(i.def, i.guard ?? 0);
+    if (A.share <= 0 && D2.share <= 0) return null;
+    const S3 = OWN_TEAM_SHARE, W2 = TEAM_FIRE.worth, secs = earlySeconds(), odds = Math.max(1e-6, i.odds);
+    const worthA = 1 - TEAMS3.length * S3 * A.share * (1 - W2.att), worthD = 1 - TEAMS3.length * S3 * D2.share * (1 - W2.def);
+    const fire2 = (who, share, onArmour) => TEAMS3.reduce((s, t) => s + S3 * share * LAND.teams[t].punch * (onArmour ? LAND.teams[t].armour : 1) * secs[who][t], 0);
+    const lineA = 1 - TEAMS3.length * S3 * A.share, lineD = 1 - TEAMS3.length * S3 * D2.share;
+    const H = LAND.hold, coverD = (H.take[i.terrain] ?? 1) * H.works[hold(Math.round(i.fort ?? 0), 0, H.works.length - 1)];
+    const earlyA = fire2("def", D2.share, A.armour) * LAND.rate / (odds * lineA);
+    const earlyD = fire2("att", A.share, D2.armour) * LAND.rate * odds * coverD / lineD;
+    const leftA = Math.max(0.01, 1 - earlyA / LAND.spent.att), leftD = Math.max(0.01, 1 - earlyD / LAND.spent.def);
+    return { att: worthA * leftA, def: worthD * leftD, share: { att: A.share, def: D2.share }, early: { att: earlyA, def: earlyD } };
+  }
+  function teamFireLine(f) {
+    const a = Math.round((1 - f.att) * 100), d = Math.round((1 - f.def) * 100);
+    if (!a && !d) return null;
+    const both = f.share.att > 0 && f.share.def > 0;
+    const value = both ? "Machine guns and mortars on both sides fire before the lines meet" : f.share.def > 0 ? "The defenders' machine guns and mortars fire as the attack comes on" : "The attack's machine guns and mortars fire it in";
+    const fx = [a ? `attack down ${a}%` : "", d ? `defence down ${d}%` : ""].filter(Boolean).join(", ");
+    return {
+      label: "Support teams",
+      value,
+      effect: `${fx[0].toUpperCase()}${fx.slice(1)}${both ? ": the attack is under fire first, and for longer" : ""}`
+    };
   }
 
   // data/campaign/fortrows.json
@@ -28707,45 +29743,6 @@
     }
   };
 
-  // data/campaign/support.json
-  var support_default = {
-    _about: "What you bring and what you face (the design director's rulings 146, 150 and 152; the Historian's anti-tank-and-support-weapons.md). The grand campaign only: a historical scenario is worked out as it always was. Every defence has an anti-tank strength from 0 to 1, and the tanks' edge (the +25% against a defence with no armour, and the break-in into a dug-in line) shrinks by it. Machine guns, mortars, assault rifles and snipers each have a job in place of 6% on everything. And a battle's losses fall on what the defence can kill.",
-    antiTank: {
-      _byYear: "The infantry's own anti-tank guns of the day: [in the open, behind finished fieldworks]. The Historian's starting shares (1 less the share of the edge kept). Between the two by how far the works have got. After 1944 the last row stands.",
-      byYear: { "1939": [0, 0.2], "1940": [0, 0.3], "1941": [0.2, 0.5], "1942": [0.4, 0.7], "1943": [0.5, 0.75], "1944": [0.55, 0.8] },
-      _without: "A nation that has not researched Anti-tank guns has the day's guns at this share of their worth.",
-      without: 0.5,
-      tankDestroyers: 0.15,
-      _handHeld: "Hand-held anti-tank weapons, with Assault rifles: worth more in close country.",
-      handHeld: { open: 0.1, close: 0.2, ground: ["forest", "hills"] },
-      _armourStep: "Better armour wins the edge back: each tank technology the attacker has beyond those of the day (Medium tanks 1941, Heavy tanks 1942, Late-war armour 1944) takes this much off, and each one it lacks adds it.",
-      armourStep: 0.08,
-      _guns: "Artillery in the line, firing over open sights: a division of guns.",
-      guns: { perDiv: 0.04, most: 0.15 },
-      _mines: "A level of minefields, less what the attacker's engineers lift.",
-      mines: 0.08,
-      _works: "Fortress works by level: the anti-tank ditch, then dragon's teeth. Concrete adds no more.",
-      works: [0, 0.05, 0.1, 0.1],
-      _tanks: "The defence's own tanks: their share of its strength, times this.",
-      tanks: 2,
-      _alone: "Tanks that go in without infantry beside them are picked off by the guns (ruling 152(3): two tank corps alone at a gunned line of 1943 have no better than an even chance). Against a defence whose guns (the infantry's own, tank destroyers, hand-held weapons and guns in the line, less the attacker's armour ahead of its day) add up to the whole, tanks with no infantry at all lose 'cut' of their attack, and less as the infantry covers them: one division of infantry covers 'cover' divisions of tanks. Not where the ground has already stopped the tanks (mountain, marsh, city streets).",
-      alone: { cut: 0.7, cover: 2 }
-    },
-    _machineGuns: "Defence of troops with Submachine guns and mortars against men on foot: this much against an attack that is all on foot, in finished fieldworks; 'open' is the share of it they have with no works.",
-    machineGuns: { defence: 0.12, open: 0.4 },
-    _mortars: "Attackers on foot with Submachine guns and mortars take this much of the worth out of fieldworks (never out of fortress works), in proportion to their share of the attack.",
-    mortars: { works: 0.15 },
-    _assault: "Assault rifles: men on foot attack this much stronger.",
-    assault: { attack: 0.08 },
-    _snipers: "Snipers, from the first month and with no research: a defence in this ground, or in the streets of a town, costs the attacker's men on foot this much more of the usual share.",
-    snipers: { toll: 0.1, ground: ["forest", "urban"] },
-    _toll: "Who pays. An attacking tank corps loses the usual share times 'tanks' (from the first number at no anti-tank strength to the second at full). A corps on foot loses the usual share, more by 'machineGuns' against a defence all of machine-gunners in finished works, by 'guns' for each division of guns in the defence and by the snipers' toll, and less by 'shield' where tanks make up half the attack and the anti-tank guns let them work. The attackers' own guns stand behind and lose the 'behind' share.",
-    toll: { tanks: [0.7, 1.4], machineGuns: 0.25, guns: 0.05, gunsMost: 0.15, shield: 0.15, behind: 0.5 },
-    _staff: "The computer's staffs: a line whose anti-tank strength is 'gunned' or more is not attacked by tanks alone when infantry can go in with them, and at 'never' or more not at all without infantry.",
-    staff: { gunned: 0.3, never: 0.5 },
-    tech: { antiTank: "antitank", tankDestroyers: "tankdestroyers", handHeld: "assaultrifles", support: "smg", armour: ["mediums", "heavies", "latetanks"] }
-  };
-
   // data/campaign/carriers.json
   var carriers_default = {
     _about: {
@@ -29554,55 +30551,6 @@
     ai: { most: 3, reserve: 20 }
   };
 
-  // data/campaign/ground.json
-  var ground_default = {
-    _note: "How the ground suits each arm, on top of the classic battle rules, and what tanks and infantry do for each other. The grand campaign only: the historical scenarios are settled by the classic rules alone. attack and defence are multipliers by unit kind and terrain; march is extra moves to enter that terrain on the advance (not along roads through ground held since before the month began).",
-    attack: {
-      arm: { forest: 0.8, hills: 0.9 },
-      mot: { mountain: 0.75, marsh: 0.8, forest: 0.9 },
-      art: { mountain: 0.8, marsh: 0.8 },
-      cav: { urban: 0.7 },
-      mtn: { mountain: 1.3, hills: 1.15 }
-    },
-    defence: {
-      arm: { mountain: 0.75, marsh: 0.75, forest: 0.85 },
-      mot: { mountain: 0.9, marsh: 0.9 },
-      cav: { urban: 0.85 },
-      mtn: { mountain: 1.25, hills: 1.1 }
-    },
-    march: {
-      arm: { mountain: 1, forest: 1, marsh: 1 },
-      mot: { mountain: 1, marsh: 1 },
-      art: { mountain: 1, marsh: 1 }
-    },
-    steep: {
-      regions: ["Graubunden", "Tyrol", "Alto Adige", "Savoy", "Nordland", "Narvik", "Sukhumi", "Montenegro", "Epirus", "Van"],
-      world: ["Gilgit", "Leh", "Khorog", "Faizabad", "Gartok", "Lhasa", "Shigatse", "Chamdo", "Sikang", "Sungpan", "Likiang", "Fort Hertz", "Kathmandu", "Nagano", "Copper River", "Cordova", "Aysen", "Cuzco", "Ayacucho", "Cerro de Pasco", "Maseru", "Greenland", "Sanaa", "Simla"],
-      _world: "The steep ground of the wider world, to Europe's bar (the historian's ruling of 17 November 2026, /mnt/project-files/world-map-builder/steep-candidates.md). A name not yet on the chart in play waits for it: Aysen, Cuzco, Ayacucho, Cerro de Pasco and Greenland are on the Americas' chart; the rest come with the far side.",
-      barred: ["arm"],
-      attack: { mot: 0.7, art: 0.7 },
-      march: { mot: 1, art: 1 }
-    },
-    says: {
-      plains: "Open country: the best ground there is for tanks",
-      desert: "Open desert: tank country, with nothing to hide behind",
-      forest: "Forest: tanks cannot manoeuvre among the trees",
-      hills: "Hill country: slow going for armour, good ground for mountain troops",
-      mountain: "Mountains: made for mountain troops, hard on anything with wheels or tracks",
-      marsh: "Marsh: the ground will not bear tanks, lorries or guns",
-      urban: "City streets: a fight for infantry, and no place for horses",
-      steep: "High mountains: too steep for tanks, and little better for lorries and guns"
-    },
-    arms: {
-      foot: ["inf", "mtn", "mot", "cav"],
-      perTank: 3,
-      infantry: 0.15,
-      armour: 0.1,
-      alone: { urban: 0.75, forest: 0.85 },
-      defence: { infantry: 0.08, alone: { urban: 0.8, forest: 0.85 } }
-    }
-  };
-
   // src/campaign/ground.ts
   var GROUND = ground_default;
   var STEEP = /* @__PURE__ */ new Set([...GROUND.steep.regions, ...GROUND.steep.world ?? []]);
@@ -29719,15 +30667,15 @@
   }
   function orderRearguard(g2, c) {
     if (whyNotRearguard(g2, c) !== null) return false;
-    hold(g2, c);
+    hold2(g2, c);
     return true;
   }
   function staffRearguard(g2, c) {
     if (!rearguardOn(g2) || c.dead || c.nat === g2.human || g2.order[g2.phase] !== c.nat || ruleOut(c) !== null) return false;
-    hold(g2, c);
+    hold2(g2, c);
     return true;
   }
-  function hold(g2, c) {
+  function hold2(g2, c) {
     c.rear = [g2.turn, c.ap, c.reg];
     c.ap = 0;
   }
@@ -48105,7 +49053,7 @@
       release: [...new Set(live6.flatMap((f) => f.ours.map((id) => g2.regions[id].name)))]
     };
   }
-  function sideOf(g2, nat) {
+  function sideOf2(g2, nat) {
     const b = bloc(g2.nations[nat]);
     return b === "axis" || b === "allies" ? Object.keys(g2.nations).filter((x) => bloc(g2.nations[x]) === b) : [nat];
   }
@@ -48150,7 +49098,7 @@
       if (!(A.id < b) || !B3?.alive || B3.dormant) continue;
       if (me !== null && (A.id === me || b === me || atWar(g2, me, A.id) || atWar(g2, me, b))) continue;
       if (tieWar(g2, A.id, b)) continue;
-      const sa = sideOf(g2, A.id), sb = sideOf(g2, b);
+      const sa = sideOf2(g2, A.id), sb = sideOf2(g2, b);
       const since = Math.max(lastBattle(sa, sb), massed2(sa, sb), massed2(sb, sa), flag2(g2, `war:${A.id}:${b}`), flag2(g2, `war:${b}:${A.id}`), 1);
       if (g2.turn - since < S3.after || !free2(A.id, sb) || !free2(b, sa)) continue;
       signed.push([A.id, b]);
@@ -55868,7 +56816,7 @@
     if (on2) g2.flags.rfog = 1;
     else delete g2.flags.rfog;
   }
-  var LAND = /* @__PURE__ */ new Set(["bomb", "night", "town", "harbour", "airfield", "superiority", "ground", "line"]);
+  var LAND2 = /* @__PURE__ */ new Set(["bomb", "night", "town", "harbour", "airfield", "superiority", "ground", "line"]);
   var roundTo = (n) => {
     const k = Math.max(1, F().round);
     return Math.round(n / k) * k;
@@ -55877,7 +56825,7 @@
     return (sight2 ?? sightOf(g2, nat))[t] === SIGHT.full;
   }
   function fogged(g2, nat, m, t, sight2) {
-    return raidFogOn(g2) && nat !== null && LAND.has(m) && !!g2.regions[t] && fogOn(g2, nat) && !inSight(g2, nat, t, sight2);
+    return raidFogOn(g2) && nat !== null && LAND2.has(m) && !!g2.regions[t] && fogOn(g2, nat) && !inSight(g2, nat, t, sight2);
   }
   function looked(g2, nat, t) {
     const up = fightersInReach(g2, t, nat);
@@ -61133,7 +62081,7 @@
 
   // src/campaign/buildings.ts
   var CIVIC = buildings_default;
-  var LAND2 = budget_default.land;
+  var LAND3 = budget_default.land;
   var OCCUPIED = budget_default.occupied;
   var SIZES = ["village", "town", "city", "capital"];
   var TOP2 = 3;
@@ -61183,7 +62131,7 @@
   }
   var plotsOf = (g2, r) => CIVIC.plots[townSize(g2, r)];
   var building = (g2, nat, region) => g2.nations[nat]?.queue.filter((b) => b.what === "civic" && b.region === region) ?? [];
-  var placeWorth = (r) => CIVIC.place.base + LAND2[r.terrain] / CIVIC.place.per;
+  var placeWorth = (r) => CIVIC.place.base + LAND3[r.terrain] / CIVIC.place.per;
   function effectOf(g2, l, r, nat, keeps) {
     const own = r.owner === nat;
     const bits = [];
@@ -61384,7 +62332,7 @@
     const n = g2.nations[nat];
     if (!civicRules(g2) || !n?.alive) return { lines: [], home: [] };
     const A = CIVIC.ai;
-    const worth3 = (r) => (n.capital === r.id ? 100 : 0) + r.vp * 3 + r.fac * 2 + LAND2[r.terrain] * 10 + (r.port ? 1 : 0);
+    const worth3 = (r) => (n.capital === r.id ? 100 : 0) + r.vp * 3 + r.fac * 2 + LAND3[r.terrain] * 10 + (r.port ? 1 : 0);
     const home = g2.regions.filter((r) => r.ctrl === nat && r.owner === nat).sort((a, b) => worth3(b) - worth3(a) || a.id - b.id);
     const built = {};
     for (const r of home) for (const { line, level } of civicAt(g2, r.id)) built[line.id] = (built[line.id] ?? 0) + level;
@@ -61412,7 +62360,7 @@
     const A = CIVIC.ai, purse = `cvb:${nat}`;
     g2.flags[purse] = (g2.flags[purse] ?? 0) + Math.max(0, earned) * A.share;
     if (wait) return;
-    const worth3 = (r) => (g2.nations[nat].capital === r.id ? 100 : 0) + r.vp * 3 + r.fac * 2 + LAND2[r.terrain] * 10 + (r.port ? 1 : 0);
+    const worth3 = (r) => (g2.nations[nat].capital === r.id ? 100 : 0) + r.vp * 3 + r.fac * 2 + LAND3[r.terrain] * 10 + (r.port ? 1 : 0);
     const home = g2.regions.filter((r) => r.ctrl === nat && r.owner === nat).sort((a, b) => worth3(b) - worth3(a) || a.id - b.id);
     const gangs = 1 + Math.floor(home.length / A.gang);
     const built = {};
@@ -68891,7 +69839,7 @@
     s += galeConvoyLoss(g2, nat);
     return Math.min(0.9, s) * seaLossMul(g2, nat);
   }
-  var sideOf2 = (f) => ({ nat: f.nat, fleet: f.name, admiral: f.admiral?.name ?? null, ships: { ...f.ships }, sunk: none2() });
+  var sideOf3 = (f) => ({ nat: f.nat, fleet: f.name, admiral: f.admiral?.name ?? null, ships: { ...f.ships }, sunk: none2() });
   var seaField = {};
   function sinkFought(f, p, frac, rng, dc = 1, kept3) {
     const out = p.toDice ? sinkShips(f, frac, rng, CLASSES2, dc, kept3) : sinkShips(f, frac, rng, ["ss"], dc, kept3);
@@ -68973,7 +69921,7 @@
     };
     const where = at4 ? `at ${at4.port}` : seaWhere(zone.name);
     const A = sum3(mine4) + airA, D2 = Math.max(1, (at4 ? sum3(met2) * at4.anchor + at4.shore : sum3(met2)) + airD);
-    const att = mine4.map(sideOf2), def = met2.map(sideOf2);
+    const att = mine4.map(sideOf3), def = met2.map(sideOf3);
     markSought(g2, mine4);
     const played = seaField.fought?.({ turn: g2.turn, zone: z, nat, mine: mine4.map((f) => f.id), met: met2.map((f) => f.id), A, D: D2, airA, airD });
     const R2 = played ? played.R : A / D2 * rng.range(0.8, 1.2);
@@ -70160,7 +71108,7 @@
     axis: "a member of the Axis"
   };
   var step = (n) => TRACK.indexOf(n.align) - 3;
-  var sideOf3 = (b) => b === "axis" ? 1 : -1;
+  var sideOf4 = (b) => b === "axis" ? 1 : -1;
   var clamp5 = (x, a, b) => Math.max(a, Math.min(b, x));
   function homeOpinion(id, align) {
     const s = TRACK.indexOf(align) - 3;
@@ -70184,12 +71132,12 @@
   function tradePartners(g2, nat) {
     const b = bloc(g2.nations[nat]);
     if (!b || b === "league" || !majorsOf(g2).includes(nat)) return [];
-    const want = sideOf3(b);
+    const want = sideOf4(b);
     return Object.values(g2.nations).filter((n) => n.alive && !n.dormant && step(n) === want);
   }
   var courtable = (n) => n.alive && !n.dormant && !n.league && !n.atWar.length && Math.abs(step(n)) <= 1;
   function receptive(target, b) {
-    return clamp5(1 + target.home * sideOf3(b) / 60, 0.4, 1.6) * (DIPLOMACY.resist[target.id] ?? 1);
+    return clamp5(1 + target.home * sideOf4(b) / 60, 0.4, 1.6) * (DIPLOMACY.resist[target.id] ?? 1);
   }
   var AMERICAS = DIPLOMACY.americas;
   var americasNeutral = (g2, id) => !!AMERICAS && g2.flags.world === 1 && AMERICAS.of.includes(id) && !!g2.nations[id];
@@ -70252,7 +71200,7 @@
     if (!canCourt(g2, by2, target).ok) return false;
     const B3 = g2.nations[by2], T = g2.nations[target];
     const b = bloc(B3) ?? "allies";
-    const k = receptive(T, b) * sideOf3(b);
+    const k = receptive(T, b) * sideOf4(b);
     if (!freeCourt(g2, by2, target)) B3.pc -= DIPLOMACY.court.cost;
     T.opinion = clamp5(T.opinion + DIPLOMACY.court.opinion * k, -100, 100);
     T.home = clamp5(T.home + DIPLOMACY.court.home * k, -100, 100);
@@ -70353,7 +71301,7 @@
       if (n.id === by2 || n.id === on2 || !courtable(n)) continue;
       const why = friends.get(n.id);
       const w = why !== void 0 ? RELATIONS.wary.friend : RELATIONS.wary.all;
-      const k = -sideOf3(b) * (DIPLOMACY.resist[n.id] ?? 1);
+      const k = -sideOf4(b) * (DIPLOMACY.resist[n.id] ?? 1);
       const opinion = clamp5(n.opinion + w.opinion * k, -100, 100);
       const to = wouldStand(g2, n, opinion);
       out.push({
@@ -70364,7 +71312,7 @@
         home: clamp5(n.home + w.home * k, -100, 100),
         from: n.align,
         to,
-        trade: majorsOf(g2).includes(by2) && step(n) === sideOf3(b) && TRACK.indexOf(to) - 3 !== sideOf3(b)
+        trade: majorsOf(g2).includes(by2) && step(n) === sideOf4(b) && TRACK.indexOf(to) - 3 !== sideOf4(b)
       });
     }
     const rank2 = (a) => a.friend ? 0 : a.from !== a.to ? 1 : 2;
@@ -70437,9 +71385,9 @@
   function joinBloc(g2, n, b) {
     const leader = g2.nations[DIPLOMACY.leaders[b]];
     if (!leader?.alive || bloc(leader) !== b || bloc(n) || n.atWar.length) return false;
-    setAlign(g2, n, 3 * sideOf3(b));
-    n.opinion = n.home = 100 * sideOf3(b);
-    headline(g2, "war", `${n.name} joins ${blocName(sideOf3(b))}.`, n.id);
+    setAlign(g2, n, 3 * sideOf4(b));
+    n.opinion = n.home = 100 * sideOf4(b);
+    headline(g2, "war", `${n.name} joins ${blocName(sideOf4(b))}.`, n.id);
     return true;
   }
   function leavings(g2) {
@@ -70832,7 +71780,7 @@
       n.home = clamp5(n.home + d, -100, 100);
     }
     if (e.join) {
-      const s = sideOf3(e.join.bloc);
+      const s = sideOf4(e.join.bloc);
       for (const id of e.join.nations) {
         const n = g2.nations[id];
         if (n && courtable(n) && !ownPath(g2, id) && n.opinion * s >= e.join.minOpinion) joinBloc(g2, n, e.join.bloc);
@@ -73812,950 +74760,6 @@
     const T = SUPPORT.tech;
     const has = (id) => hasTech(g2, c.nat, id);
     return { antiTank: [T.antiTank, T.tankDestroyers, T.handHeld].filter(has).length, machineGuns: has(T.support), mortars: has(T.support), snipers: true };
-  }
-
-  // src/battle/land/rules.ts
-  var ARMS = ground_default.arms;
-  var SUPPORT_COVER = support_default.antiTank.alone.cover;
-  var TEAMS2 = ["mg", "mor", "snp"];
-  var MOTION = { inf: "foot", mtn: "foot", cav: "foot", eng: "foot", mot: "wheels", arm: "tracks", art: "guns", fort: "fixed" };
-  var HEDGE_NEAR = 12;
-  var LOCATE = { secs: 25, fire: 0.5 };
-  var LAND3 = {
-    /** Metres a second over open ground, battle time (the field is 3 km by 2 km; contact comes in a few minutes at x1). */
-    speed: { inf: 6, mtn: 5.5, cav: 9, eng: 5.5, mot: 11, arm: 10, art: 4, fort: 0 },
-    /** Radians a second a block can turn. */
-    turn: { inf: 1.1, mtn: 1.1, cav: 1.4, eng: 1.1, mot: 0.9, arm: 0.8, art: 0.5, fort: 0 },
-    /**
-     * How far a block's blows carry, metres between edges. Guns fire over the line from well back. Tanks reach no further
-     * than lorried infantry: at 380 they stood off out of the infantry's reach and struck without reply, pricing armour
-     * again on top of the card, which counts it already (b418, b420: the desert villages ran 38 points over their card).
-     */
-    reach: { inf: 200, mtn: 200, cav: 140, eng: 140, mot: 220, arm: 220, art: 1500, fort: 300 },
-    /** Frontage and depth in metres. */
-    size: { inf: [150, 40], mtn: [140, 40], cav: [150, 50], eng: [120, 40], mot: [140, 60], arm: [130, 60], art: [110, 50], fort: [140, 50] },
-    /** Models on a full-strength tray (the art director, 17 November): one fades off for each share lost. */
-    figures: { inf: 12, mtn: 12, cav: 12, eng: 12, fort: 12, mot: 6, arm: 4, art: 3 },
-    /**
-     * The share of a block's own power it takes off its target each second, at full strength and in the open. Slow
-     * enough that a close fight runs two or three minutes from the first contact, time for three or four choices
-     * (ruling 226(2); tests/battle-land.test.ts). A sixth slower since tanks close to their reach (b418), which had cut
-     * the quickest fights under a minute and a half.
-     */
-    rate: 125e-5,
-    /** Blows struck on the march, or on a block giving ground at the brink (b496(1)), and by a block that is wavering. */
-    moving: 0.4,
-    wavering: 0.7,
-    /** Guns: their share against what they hit, the extra they take off nerve, and what they can do when the enemy is on top of them. */
-    guns: { punch: 0.35, nerve: 1.5, close: 0.3, closeAt: 160 },
-    /**
-     * Support teams (release 2; Brian, 21 Nov 03:49Z: "units you can place at the begining of a battle on your side and
-     * they can then attack from the back of the battle"; 03:57Z: built in the campaign apart from the infantry). A team
-     * is a gun block ('art', so it stays back, fires on and is brought up into reach as guns are) with its own numbers:
-     *   reach: metres between edges its fire carries. A machine-gun team's tripod guns reach over the heads of its own
-     *     line; a mortar team's tubes lob further, short of the guns'.
-     *   punch, nerve: as the guns' (above): its share against what it hits, and the extra it takes off nerve. Machine
-     *     guns harm little and pin hard; mortars fall between.
-     *   close, closeAt: its share when the enemy is within closeAt (a mortar cannot drop its bombs on a man beside it;
-     *     a machine gun fights best close).
-     *   armour: its share against tanks (bullets and light bombs do little to armour).
-     *   speed (m/s, battle time, as LAND.speed), size (frontage and depth, m), figures (models on a full tray).
-     * First guesses; the campaign's card prices the teams (stage 2), and the field only shares that out (b418).
-     */
-    /** The setup step (release 2): metres a placed gun or team keeps clear of every other block. */
-    placeClear: 12,
-    /**
-     * Direct command (release 2; Brian, 22 November: "I want to be able to click a unit and point where I want them to
-     * go"). At the double: a 'move' with run goes LAND.double.pace faster by its motion (foot run; lorries and tanks at
-     * their best; guns are towed as fast as they go), is struck 'exposed' harder while on the run (upright men in the
-     * open), and strikes 'blows' as hard for 'winded' seconds after (men getting their breath). Orders by radio: an order
-     * of the player's reaches a block 'delay' seconds after he gives it, 'cut' times that when its headquarters is hit
-     * (wavering, or under 'hqAt' of its strength: the runners go instead of the wireless). Neither is felt unless the
-     * player orders a run, or the battle is opened with radio on. 'nations': each army's wait as a multiple of 'delay',
-     * by the last year it held ([through year, times], the first that covers the battle's year; 1 where not listed):
-     * the historian's (22 November 05:20Z, 'L as held'): Soviet 1941-42 twice (few sets below battalion: telephone and
-     * runners), Japanese twice, Italian one and a half, German infantry a quarter more (telephone and runners more than
-     * wireless); 1943 on, the Soviet a quarter more as the German (ours). A tank block waits as its model's share with a
-     * set talks (data/battle/armour.json radio, the modeller's sheet: a radio in every German, American and British
-     * tank; two T-34s in five to 1943) and the rest as its army's foot.
-     */
-    double: { pace: { foot: 1.5, wheels: 1.2, tracks: 1.15, guns: 1, fixed: 0 }, exposed: 1.25, blows: 0.75, winded: 20 },
-    radio: {
-      delay: 5,
-      cut: 3.5,
-      hqAt: 0.5,
-      nations: { SOV: [[1942, 2], [9999, 1.25]], JAP: [[9999, 2]], ITA: [[9999, 1.5]], GER: [[9999, 1.25]] }
-    },
-    /**
-     * Measured armour (release 2; Brian, 22 November 04:03Z to 04:16Z; armour.ts): off unless the battle is opened with it
-     * (LandBattle.measured). A tank block's blow on a tank block, or a gun's over open sights, weighs the chance its
-     * model's gun gets through the face it strikes at that range against the field's par for that face, held within
-     * [lo, hi] (a Sherman's 75 on a Tiger's front all but nothing, a Tiger's 88 on a Sherman twice par and more). The
-     * computer's tank blocks go round to the flank or rear of a tank block whose front they weigh under 'flankBelow' at
-     * 'flankAt' metres, where her side or rear weighs 'flankBetter' times her front or more ('flankFor': the most battle
-     * seconds they spend getting there before they go in anyway).
-     */
-    armour: { lo: 0.15, hi: 3, flankBelow: 0.35, flankBetter: 2, flankAt: 200, flankFor: 150 },
-    /**
-     * Hidden in the woods (release 2; Brian, 22 November 04:18Z: "if you put units in the forest then they aren't visible
-     * to the enemy until you get close or they start shooting. this allows you to do ambushes"). Off unless the battle is
-     * opened with it (LandBattle.hideOn). A block standing in woods when the clock starts is hidden from the other side:
-     * its blocks never strike it nor are sent at it, and its staff never plans against it. It is found when an enemy
-     * block's edge comes within 'sight' metres of its own (by its motion: men lying still under the trees are seen last,
-     * engines and tracks are heard first), when it opens fire, when it is struck, or when it leaves the woods; moving
-     * inside them keeps it hidden. Until then it holds its fire till an enemy is within 'ambush' metres (by its motion; a
-     * machine-gun team's 'mg'; 0: it never holds, as tanks fire at their reach and guns as they always do, and so gives
-     * itself away) unless it is ordered to attack or fire. Its first 'surprise.secs' seconds of fire strike 'punch' times as hard and shake 'nerve' times as much: the
-     * first volley from close cover at men in the open, the shock of an ambush. Infantry ambushes in close country were
-     * sprung at 50 to 150 metres (the US Army's FM 7-10, 1944; German forest-fighting notes, 1943), and troops still and
-     * camouflaged under trees were seldom seen beyond 50 to 100. The computer's staff, defending, puts up to
-     * 'staff.blocks' foot blocks of its line into woods on the enemy's way in before the clock starts (up to 'staff.ahead'
-     * metres forward or 'staff.back' back, 'staff.across' to either side, inside its own ground as the player's are), and
-     * keeps every hidden block of its line where it is, holding its fire, until it is found. An attack that sees none of
-     * the enemy goes forward 'staff.ahead' metres at a time until it finds them.
-     *
-     * The historian's check (22 November 05:20Z; the Normandy hedgerows, 1944: "they could not see the Germans, but the
-     * Germans could see them"):
-     * - A block on a hedge line (within 'hedge.near' metres of one: hedgerow, lane bank, wood edge, garden hedge or wall,
-     *   where the 3D game has handed the field's hedges over) hides as in woods. In woods themselves (true forest, sight
-     *   25 to 75 m) hidden foot and machine guns hold their fire to 'forest' metres; on a hedge line, to 'ambush'. The men
-     *   drawn on foot cross a hedge at its nearest gate (within 'hedge.gap' metres of the gap's middle; looks only).
-     * - A hidden block that opens fire is found but not yet located: the fire back at it strikes 'locate.fire' as hard for
-     *   'locate.secs' seconds, or until an enemy comes within its 'sight'.
-     * - A tank or lorry moving inside cover is heard at 'heard' metres (by its motion; 0: as 'sight').
-     * - Its ambush shakes a block caught moving in the open 'surprise.open' times (not 'nerve'), and its side's mortar
-     *   teams strike what the ambush is firing on 'surprise.mortar' times as hard in those seconds (pre-sighted on the gaps).
-     * - Reconnaissance by fire: a block told to fire on a stretch of cover (the player's land:fire at a point; the
-     *   computer's attack once it has been ambushed, at the cover ahead in its lane) strikes a block hidden within
-     *   'search.reach' metres of it at 'search.blow', and finds it about 'search.odds' times in 'search.every' seconds.
-     */
-    hide: {
-      sight: { foot: 60, wheels: 150, tracks: 150, guns: 100, fixed: 0 },
-      heard: { foot: 0, wheels: 0, tracks: 350, guns: 0, fixed: 0 },
-      ambush: { foot: 150, wheels: 150, tracks: 0, guns: 0, fixed: 0, mg: 200 },
-      forest: 100,
-      surprise: { secs: 20, punch: 1.5, nerve: 2, open: 2.5, mortar: 1.25 },
-      locate: LOCATE,
-      search: { reach: 60, every: 10, odds: 1 / 3, blow: 0.5, ahead: 300, lane: 150 },
-      hedge: { near: HEDGE_NEAR, gap: 3 },
-      staff: { blocks: 2, ahead: 400, back: 100, across: 200 }
-    },
-    /**
-     * Night patrol (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off if
-     * someone doesnt want it"; the design director, 18:36Z, Q6 to Q8; LandBattle.patrol): off unless the battle is opened
-     * with it, and it needs hiding on (LAND.hide): with hiding off nothing is hidden to find, so no patrol goes out and
-     * nothing is drawn. The night before the battle the attack sends one reconnaissance patrol from a block of its line
-     * on foot (the computer's always, from its most forward; the player's only by his order while he places his army):
-     * settled once as the clock starts, on its own stream ('patrol:' and the seed), never the battle's dice. Two draws,
-     * always both, found first: with chance 'found' the defence's most forward hidden post is found before a shot is
-     * fired (it springs no ambush, and the attack's first plan counts it); with chance 'caught' the patrol is caught and
-     * the defence is alerted, ready but not stronger (the card prices the digging already, b418): one more of its blocks
-     * takes a hidden post by the computer's own ambush rule (LAND.hide.staff), a computer defence's reserve starts
-     * toward the attack at once as a bold defence's does (styles defShift), and the patrol's block loses the patrol's men
-     * from its strength (its nerve untouched). Both can happen: the rear man gets the report home (Infantry Training
-     * 1937, sec. 35).
-     *   found, caught: the design director's knobs (18:36Z, Q6). No army's rate is sourced; the only tally is approximate,
-     *     the 38th (Irish) Brigade's war diary, Italy, December 1944, about 106 patrols: about 24% saw or found something
-     *     and about 42% made contact (the tactics thread's readings, 22 November 18:40Z).
-     *   size: men in a reconnaissance patrol, by army. USA 4 (FM 21-75, 1944, ¶86g: "three to six men"); the UK and her
-     *     kin 3 ("an officer or sergeant and two men who go out at night": a British junior officer, Intelligence Bulletin,
-     *     August 1943); SOV 4 ("three- to five-man teams": Sasso, Leavenworth Paper 6, p. 12); JAP 10 ("approximately one
-     *     squad (10 men)": Intelligence Bulletin, July 1944); GER 10 (patrols "not less strong than a squad": German
-     *     Motorized Infantry Regiment, MIS 1942, ¶40); FRA and VIC 2 (night patrols "by riflemen alone": Passmore 2025;
-     *     the count a knob); ITA 4 (unsourced: knob); every other army '_' 4 (knob). Kin follow Britain, Vichy France.
-     *     Its pictures, and the men its block loses when it is caught.
-     *   night: battle seconds the patrol is out, before the clock starts (negative: the night before). Looks only, a knob.
-     */
-    patrol: {
-      found: 0.4,
-      caught: 0.3,
-      size: { USA: 4, UK: 3, CAN: 3, AUS: 3, NZL: 3, SAF: 3, IND: 3, SOV: 4, JAP: 10, GER: 10, FRA: 2, VIC: 2, ITA: 4, _: 4 },
-      night: { t0: -2400, t1: -600 }
-    },
-    teams: {
-      mg: { reach: 800, punch: 0.35, nerve: 2.5, close: 1, closeAt: 0, armour: 0.15, speed: 5, size: [70, 30], figures: 3 },
-      mor: { reach: 1200, punch: 0.4, nerve: 1.8, close: 0.3, closeAt: 100, armour: 0.5, speed: 4.5, size: [80, 40], figures: 3 },
-      // Sniper teams (release 2, LAND.snipers): a few aimed rounds a minute, each at a man who matters; no harm to armour.
-      snp: { reach: 600, punch: 0.12, nerve: 4, close: 0.25, closeAt: 80, armour: 0, speed: 5, size: [40, 20], figures: 2 }
-    },
-    /**
-     * Sniper teams (release 2; Brian, 25 November 16:07Z: "should we add snipers? how would that impact the battle?", then
-     * "yes" to a small specialist team, not a common unit, small in kills and large in nerve and tempo; the design form at
-     * snipers/form.md, ruled by the design director). Only where the switch put them on the field (withSnipers): a team
-     * is a support team block ('snp', LAND.teams.snp) carved from its side's own foot power, so the card's odds stand (b418).
-     *   share: the share of a side's foot power its army gives its snipers, by doctrine, never by the year (the design
-     *     director's ruling of 25 November 16:30Z, Q2: the history start's level of each army's doctrine; the historian
-     *     checks the order): the Soviet sniper movement, a sniper in every rifle platoon; Finland; Japan; Germany's
-     *     Scharfschuetzen; Britain's sniper section of eight a battalion; a few scoped rifles a company in the US Army;
-     *     France; Italy; '_' any other. Read through sniperShare, never here.
-     *   kin: a nation that takes its senior partner's share, as smoke's kin do.
-     *   foot: the arms that give: the card's own arms on foot (data/campaign/ground.json arms.foot), never tanks, guns,
-     *     engineers, fortress troops or teams.
-     *   per: one team for every 'per' foot blocks, at least one, at most 'most'. xp: picked men, their foot's own
-     *     (power-weighted) plus 'xp', no higher than 'xpTop'.
-     *   cover: the ground a sniper team hides on (beside woods and a hedge line, as every block): buildings, rubble, rough.
-     *   edge: in woods (off a hedge line) it reaches a target beyond LAND.hide.forest only where its line to it leaves the
-     *     woods within 'edge' metres: it shoots from the edge.
-     *   find: each second it fires from hiding it is found with odds 1 - (1 - f)^(dt / 'every'), f 'far' while its target
-     *     is beyond 'near' metres, 'close' within, times ('xp' - its experience); 'hunt' times that where an enemy sniper
-     *     team stands within its reach. Found, it is not yet located for 'locate' seconds. Its own dice, keyed by place.
-     *   quiet: any blow that lands on it holds its fire until 'quiet' seconds after the last (MG fire on suspected spots).
-     *   slip: found, on its hiding ground, unstruck for 'after' seconds and no enemy within 'clear' metres, it holds its
-     *     fire 'secs' seconds while it moves, then hides again if all of that still holds; struck meanwhile, it stays
-     *     found. At most 'most' slips a battle, none below 'str' of its strength.
-     *   back: at 'back' of its strength, or at the rout nerve, it withdraws to its own edge, never routs.
-     *   bite: the weight of its blows against its target: b = min(1, r / 'bite'), r its striking weight (power0 x (0.35 +
-     *     0.65 str/str0)) over its target's power0. Every side effect scales with it. 0.6 by the gate (the design
-     *     director, 25 November 17:48Z, mend step 2): at 0.15 a team bit a whole block in full and its pin ran attacks
-     *     into the clock (practice fields -0.07 attack wins); at 0.6 a division's bite is about SOV 0.16, GER 0.13,
-     *     UK 0.10, USA 0.06, ITA 0.05, a second or two of its march, and leaders down a quarter as deep.
-     *   pin: a block on foot struck by it moves at pace x (1 - 'pace' x b) for 'secs' seconds, at most LAND.pin.most
-     *     seconds a battle (men go to ground and crawl).
-     *   lead: for 'secs' after a strike, the block steadies on its xp x (1 - 'xp' x b) (its leaders are the ones shot).
-     *   take: once found and located it takes harm 'fragile' times (two men, no depth), and 'blast' more from mortars, guns
-     *     and tanks (the window it fires from is blown in).
-     *   pick: its choice of target, the score's multiplier (lower first): foot on the move with pin time left, a found
-     *     enemy sniper team, a machine-gun team, still foot, guns and mortars, a tank block with heads out, one closed up;
-     *     one routing only where nothing else is in reach. The player's order beats them all.
-     *   keep, behind: the computer's: it keeps 'keep' metres from any found enemy block, and an attacking team takes
-     *     its cover within 'behind' metres behind its leading foot.
-     */
-    snipers: {
-      share: { SOV: 0.03, FIN: 0.03, JAP: 0.03, GER: 0.025, UK: 0.02, USA: 0.012, FRA: 0.012, ITA: 0.01, _: 0.012 },
-      kin: { CAN: "UK", AUS: "UK", NZL: "UK", NZ: "UK", SAF: "UK", IND: "UK", VIC: "FRA" },
-      foot: ["inf", "mtn", "mot", "cav"],
-      per: 4,
-      most: 3,
-      xp: 0.15,
-      xpTop: 0.9,
-      cover: ["buildings", "suburb", "industry", "blown", "rough", "rock"],
-      edge: 100,
-      find: { every: 10, far: 0.15, close: 0.4, near: 300, xp: 1.4, hunt: 2, locate: 60 },
-      quiet: 5,
-      slip: { after: 20, clear: 150, secs: 30, most: 2, str: 0.75 },
-      back: 0.5,
-      bite: 0.6,
-      pin: { pace: 0.5, secs: 8 },
-      lead: { xp: 0.5, secs: 30 },
-      take: { fragile: 2.5, blast: 1.5 },
-      pick: { moving: 0.5, snp: 0.5, mg: 0.6, still: 1, open: 1.5, closed: 3, routing: 1e6 },
-      keep: 250,
-      behind: 150
-    },
-    /**
-     * Pinned (release 2; the design director's ruling of 25 November 16:30Z, Q3): a block slowed by fire on it (sniper
-     * teams now; machine-gun teams' suppression, if it is ruled, the same field): at most 'most' battle seconds a block for
-     * the whole battle, from every cause together, counted only while it moves (LandUnit.pinTo, pinSpent). 20 by the
-     * gate (the design director, 25 November 17:48Z, mend step 1; 40 as first ruled).
-     */
-    pin: { most: 20 },
-    /**
-     * A tank block closed up (release 2): its commanders down inside their hatches, seeing the field through vision slits
-     * and periscopes. One meaning for every rule that closes a block up (sniper teams now; the smarter-soldiers thread's
-     * fire on her and enemy foot close later): it sets LandUnit.closedTo, never draws a die, and does nothing unless a
-     * switch that sets it is on. For 'secs' after the last thing that closed it: its blows on foot weigh 'foot', and it
-     * finds a hidden block by sight at 'sight' of the distance.
-     */
-    closed: { secs: 30, foot: 0.85, sight: 0.5 },
-    /** Damage and nerve by where a blow lands: [damage, nerve]. */
-    aspect: { front: [1, 1], flank: [1.5, 2], rear: [2, 3] },
-    /**
-     * The damage a block takes on this ground (cover), and the speed it keeps on it, by how it moves. Fieldworks
-     * ('works', dug where a block stood dug in) give no cover of their own: a blow on them takes the cover of the ground
-     * they were dug into (field.dugInto; 'works' here is only for works with no record). The card counts them in the
-     * defence's strength already, and the field shares out the card's own strength (ruling 217; b418: what the card
-     * prices, the field draws but never prices again). Counted twice, the plain attack carried 23 points less often than
-     * the card said in the campaign's dug-in battles, four in five of all it fights; counted once it lands within 3 (b407).
-     */
-    cover: { open: 1, field: 0.95, woods: 0.7, rough: 0.85, marsh: 1, water: 1.25, road: 1.05, bridge: 1.2, buildings: 0.55, rock: 0.75, bunker: 0.4, works: 1, blown: 1.25, suburb: 0.75, industry: 0.6, park: 0.9 },
-    pace: {
-      foot: { open: 1, field: 0.9, woods: 0.6, rough: 0.7, marsh: 0.35, water: 0.35, road: 1.1, bridge: 1, buildings: 0.7, rock: 0.4, bunker: 0.5, works: 0.8, blown: 0.15, suburb: 0.85, industry: 0.75, park: 1 },
-      wheels: { open: 0.9, field: 0.8, woods: 0.3, rough: 0.4, marsh: 0, water: 0, road: 1.5, bridge: 1.2, buildings: 0.5, rock: 0, bunker: 0, works: 0.5, blown: 0, suburb: 0.7, industry: 0.55, park: 0.85 },
-      tracks: { open: 1, field: 0.9, woods: 0.4, rough: 0.6, marsh: 0.12, water: 0, road: 1.3, bridge: 1, buildings: 0.5, rock: 0, bunker: 0, works: 0.6, blown: 0, suburb: 0.75, industry: 0.55, park: 0.95 },
-      guns: { open: 1, field: 0.9, woods: 0.4, rough: 0.5, marsh: 0.15, water: 0, road: 1.4, bridge: 1, buildings: 0.6, rock: 0, bunker: 0, works: 0.7, blown: 0, suburb: 0.75, industry: 0.6, park: 0.95 },
-      fixed: { open: 0, field: 0, woods: 0, rough: 0, marsh: 0, water: 0, road: 0, bridge: 0, buildings: 0, rock: 0, bunker: 0, works: 0, blown: 0, suburb: 0, industry: 0, park: 0 }
-    },
-    /**
-     * Tanks are blind in the streets: what they strike and what they take there. Not in woods: the card prices tanks in
-     * forest and on hills already (the campaign's ground rules), so the field draws them slow there but never prices them
-     * again (b418). Priced twice, the panzers at Sedan carried the Meuse 21 points less often than their card said.
-     */
-    tanksClose: { punch: 0.6, take: 1.3, ground: ["buildings", "industry"] },
-    /**
-     * Tanks that leave their infantry on close ground (the tactics panel, item 7; the design director, ruling 239(5)):
-     * tanks see little in woods and streets, and hidden guns and close-assault teams kill those that come on alone. A
-     * tank block in contact with enemy foot (the card's foot: 'foot'), with no friendly foot block within 'near' metres
-     * (edge to edge), standing in woods or streets or fighting foot in fieldworks, takes that foot's blows times 'take',
-     * the card's own figure for tanks alone there (1 over ground.json's arms.alone: forest for woods and fieldworks,
-     * urban for streets; a defending tank the card's defence figures), on top of tanksClose. Not where that foot is
-     * already in contact with friendly foot: the enemy is fixed, and a tank on its flank is the hook.
-     * Never twice (b418): only the tank divisions the card counted as covered by their foot, and paid the attack for
-     * fighting together, can be bitten: the card's foot divisions times 'cover' (1 on forest and urban cards, where
-     * ground.ts covers a tank division with one of foot; support.json's 2 elsewhere; a defence 1), a regiment a third,
-     * the first blocks first. A side with no foot has none covered: the card charged it already. On (b647): the plain
-     * order lands within 0.1 point of 8df23b3 on every ground; the computer's tanks are bitten for 0.6% of their contact.
-     */
-    alone: {
-      on: true,
-      near: 200,
-      foot: ARMS.foot,
-      woods: ["woods"],
-      streets: ["buildings", "industry", "suburb"],
-      works: ["works", "bunker"],
-      take: {
-        att: { woods: 1 / ARMS.alone.forest, streets: 1 / ARMS.alone.urban, works: 1 / ARMS.alone.forest },
-        def: { woods: 1 / ARMS.defence.alone.forest, streets: 1 / ARMS.defence.alone.urban, works: 1 / ARMS.defence.alone.forest }
-      },
-      cover: { close: 1, open: SUPPORT_COVER, def: 1, cards: ["forest", "urban"] }
-    },
-    /**
-     * Going in together (item 1; 7b): whether the player's group attack carries 'together', holding its tanks and lorries
-     * to its foot's pace. Off (the design director, ruling 239's rider, 23:13Z, amending 239(5)): held to the slowest foot
-     * of the whole order, the plain order lost 6 points on its card (15 on mountains), as LAND.hold was fitted with its
-     * tanks reaching the line first. The player keeps his tanks with his foot by his own orders; the computer's groups
-     * keep together by its drill (ai.ts).
-     */
-    together: { player: false },
-    /** Metres a second two blocks standing in each other's ground are eased apart, and the metres enemies keep between their fronts. */
-    spread: 4,
-    apart: 10,
-    /**
-     * Overrun (release 2; Brian, 23 November 05:05Z: "vechiles can run over enemy soldiers though which would kill them";
-     * the design director, 05:48Z): with LandBattle.escort on, a tank block fighting a foot block in the open, with its own
-     * foot within LAND.alone.near and no enemy weapon that can hurt a tank by direct fire in its own reach of the way,
-     * drives through that block's ground to its far edge and backs out to its place: once per foot block per contact
-     * (until the block breaks or no tank of the enemy is in reach of it), every side, staffs and player alike. Not where the
-     * foot carries its own anti-tank weapon. Harm unchanged (b418): the overrun is a picture of losses the rules already
-     * take (the men taken from that block while a tank is on its ground die under her tracks, Drill.thin); the blows
-     * between the two are struck as between blocks standing face to face. 'reverse': its pace backing out, a share of its
-     * pace forward. 'at': from when to when a nation's foot carries its own anti-tank weapon, [from, to) as the year and
-     * twelfths (the design director: looks gating only until the historian checks the dates on resumption; the
-     * Commonwealth's foot carries Britain's): the US bazooka from November 1942; Britain's Boys rifle 1939-42, then the
-     * PIAT; Germany's anti-tank rifles 1939-42, the Panzerschreck and Panzerfaust from late 1943; the Soviet anti-tank
-     * rifles from 1941. Japan, Italy and the rest none until the historian names one.
-     */
-    overrun: {
-      reverse: 0.5,
-      at: {
-        USA: [[1942 + 10 / 12, 9999]],
-        UK: [[1939, 9999]],
-        GER: [[1939, 1943], [1943 + 9 / 12, 9999]],
-        SOV: [[1941, 9999]]
-      },
-      commonwealth: ["CAN", "AUS", "NZL", "NZ", "SAF", "IND"]
-    },
-    /**
-     * Only anti-tank weapons take a tank (release 2; Brian, 25 November 2026, 15:58Z: "are bullets taking out german
-     * tanks? cannon fire or bazookas should be the only think taking them out", and 16:03Z, "ok add all of those": guns,
-     * launchers and close assault; the design director's pierce ruling, 25 Nov, P1 to P9; LandBattle.pierce): off unless
-     * the battle is opened with it. With it on, a blow that falls on a tank block is weighed by the striker's pierce
-     * share (LandBattle.pierceShare), what it carries that can pierce armour, and by nothing else it has:
-     *   tanks and field guns: 1 (their punch and the measured armour already apply; field guns from far back are a later
-     *     form's question, Q5).
-     *   a block on foot ('foot'): the least of 'most' and G + H + C, where
-     *     guns (G), its own anti-tank guns, anywhere inside its reach: 'with' where its kit says Anti-tank guns
-     *       (ForceKit.atGuns), else 'without' (the early small guns and the anti-tank rifles together, which get no knob
-     *       of their own); plus 'destroyers' where its kit says Tank destroyers (atTd); never above guns.most.
-     *     hand (H), hand-held launchers: only where its kit says so (atHand), and only within hand.at metres between
-     *       the blocks' edges.
-     *     close (C), close assault with grenades, charges and bottles: every foot block, only within close.at;
-     *       engineers 'eng' in its place.
-     *     'close' or 'open' by the ground: close where the tank stands on 'ground' (woods, rough, buildings, industry,
-     *       suburb) or the striker stands on 'works' (its fieldworks or a bunker). The plain kit (no field) is guns at the
-     *       without level, no launcher, and close assault.
-     *   a machine-gun team teams.mg and a mortar team teams.mor, in place of LAND.teams' armour (off keeps 0.15 and 0.5);
-     *     a support team this table does not list takes nothing, as a machine-gun team (a test holds 'teams' to
-     *     LAND.teams' own keys, so a new team must be given its share here by a ruling).
-     *   a fort: 'fort', at its full reach (its guns are in its works; no kit read).
-     * LAND.alone (tanks alone) still multiplies what the tank takes, on top, unchanged.
-     * Split fire (fixed: the b418 shape, Q2): what a foot block or a support team cannot put into the tank, 1 less its
-     * share, lands as a blow on the nearest enemy block in its reach that is not a tank (by targetOf's own score; never a
-     * hidden block), with its own aspect, ground, height and take, at the same luck and with no draw of the dice; where
-     * there is none it is lost. So kit moves where a block's fire lands and from what distance, never how much it deals:
-     * the card has priced the research already, and the field must not price it a second time. No share is above 1,
-     * today's weight. Only the blow's weight is multiplied (P1): at any share, even none, it is still a blow on her, with
-     * its nerve and its pin as ever, so a machine-gun team's fire takes none of her strength and is owed none of her
-     * losses (P4), and shakes her crews only as far as others' blows take strength off her that tick, as it does today.
-     * One draw of the dice per blow, as ever, whatever the share.
-     * The overrun (P5): with pierce on, foot threatens a hull by its kit alone, at its reach where it has anti-tank guns,
-     * else at hand.at where it has launchers, else not at all; with pierce off the overrun's own test is untouched.
-     * The foot a tank does drive through strikes her by the gap and the ground as the two stand (P1: "their gap"; the
-     * drawing's P9 reads the same gap): its guns and, among its men, its close assault. Weighed from where she began
-     * her drive, as the rest of that blow is (b418), such a block put nothing at all into her in a fifth to a half of
-     * its blows and its close assault almost never counted (the fairness checker, 25 Nov).
-     * Kit comes only from the ticket (P3): the nation's own research on a campaign ticket (ticket.ts), a sample ticket's
-     * SAMPLE_KIT (sample.ts), a set piece's own data (pieces.ts). Nothing here reads a nation's name, the date, the
-     * card's anti-tank strength, the calendar's guns of the day or LAND.overrun.at.
-     * The numbers (P2), each with the range the builder may tune within, fitted by the paired measure
-     * (tools/land-gate/paired.ts: off, on and a dice placebo on the same battles, both mirrors, the marks M1 to M6 of
-     * P7); 'most', teams.mg, the close ground, split fire and the threat rule are fixed.
-     *   guns.with 0.5 [0.4 to 0.6]; guns.without 0.35 [0.15 to 0.35; the ruling's first value 0.25]; guns.destroyers 0
-     *   [0 to 0.15; first 0.1]; guns.most 0.65 [0.55 to 0.65]; hand.open 0.2 [0.15 to 0.25]; hand.close 0.35
-     *   [0.3 to 0.4]; hand.at 100 [80 to 120]; close.open 0.15 [0.1 to 0.2]; close.close 0.25 [0.2 to 0.3]; close.at 30
-     *   [25 to 40]; eng.open 0.3 [0.25 to 0.35]; eng.close 0.5 [0.4 to 0.6]; teams.mor 0.05 [0 to 0.1]; fort 0.6
-     *   [0.5 to 0.8].
-     * Two were tuned from the first values, for the kit lean with the tanks defending (M5: the field must not price
-     * research the card has priced, b418): at the first values the attack's foot won 7.5 points more of its 120 battles
-     * with the full kit than with the plain kit (bar 5) and 16.7 more on urban ground (bar 12); with the early guns at
-     * 0.35 and Tank destroyers adding nothing, 4.2 and 10.0. So Tank destroyers moves nothing on the field for now (its
-     * kit field is read all the same). Every other number stands at its first value.
-     * Measured 25 November 2026 over 5,185 battles, 51 marks, 47 passed and 4 failed: it FAILS the pass rule, so the
-     * switch stays off (P8, step 5). All four are in the shipping set with the tanks defending, and the worst is the lean
-     * (M2): the attack won 59.6% of 240 with it off and 48.8% with it on, 10.8 points toward the side with the tanks
-     * (bar 8; the dice placebo moved 0.4), 6 results flipped to the attack and 32 to the defence (net 10.8%, bar 8%),
-     * hills at odds 1.2 by 16.7 (bar 15), and endings on the clock from 44 to 57 (5.4% of the battles, bar 5%). No
-     * number inside the ranges mends it (guns.with at 0.6: 9.6 points; with close assault and the mortar at their tops
-     * too: 10.4), and the ruling's one rule mend changes nothing there, every foot block of that set having anti-tank
-     * guns. The standing gate with it on, the same set with the tanks attacking (+2.5), the bare set (+2.4 and -3.6),
-     * the kit lean, the set pieces and the purpose marks all passed.
-     * Measured again the same day after the checkers' two mends (the share of foot a tank drives through, and a team the
-     * table does not list): 5,185 battles, every figure of every set the same, 47 of 51 marks passed, the same 4 failed.
-     * With the ruled order's numbers all at their tops the failing set reads 10.4 points, flips 3 and 28, the clock 56.
-     * Left to the design director, each with its reading (no bar; neither changes the code):
-     *   a split blow counts its whole nerve on the tank and again on the men, and a machine-gun team's fire still
-     *     shakes a tank's crews though it takes none of her strength (P1's letter; P4 has it "do nothing"). On the
-     *     failing set, with the nerve shared out as the weight is: 10.0 points, flips 5 and 29, the clock 46 (off 44);
-     *     with a share of none adding no nerve on her: 11.3 points, the clock 56. Neither mends the lean.
-     *   an army all on foot (the pass rule's sets all give the side without tanks a corps of field guns): attacking a
-     *     defence with tanks at odds 1.2 it won 69 of 210 off and 42 on with the plain kit (12.9 points; plains 23.3),
-     *     49 with the sample kit (9.5); defending against tanks, the attack won 74 off and 83 on (plain), 79 (sample).
-     *     tools/land-gate/paired.ts --set SF, a reading with no bar.
-     */
-    pierce: {
-      guns: { with: 0.5, without: 0.35, destroyers: 0, most: 0.65 },
-      hand: { open: 0.2, close: 0.35, at: 100 },
-      close: { open: 0.15, close: 0.25, at: 30 },
-      eng: { open: 0.3, close: 0.5 },
-      most: 1,
-      teams: { mg: 0, mor: 0.05, snp: 0 },
-      fort: 0.6,
-      foot: ["inf", "mtn", "cav", "eng", "mot"],
-      ground: ["woods", "rough", "buildings", "industry", "suburb"],
-      works: ["works", "bunker"]
-    },
-    /**
-     * A queue, not a pile (the art director, b418): within 'near' metres of ground a block keeps 'hard' of its pace on or
-     * less (at a bridge, a pass), a friend in the way of a marching block makes way for it rather than both being eased
-     * apart, so a jam reads as one block behind another, each on its own ground. In the open, blocks are eased apart as before.
-     */
-    queue: { hard: 0.2, near: 75 },
-    /** Metres between two friends' boxes where an attack's block takes its own stretch beside a friend standing there (b439). */
-    room: 10,
-    /** Metres off either end of a bridge kept clear: no attack has a block stand there, so those coming over can (b439). */
-    mouth: 50,
-    /** Mountain troops on rough ground and rock keep this much more of their pace. */
-    mountainFoot: 1.6,
-    /** Higher ground: blows from above strike harder, blows from below land softer, past this many metres of rise. */
-    height: { over: 8, up: 1.15, down: 0.9 },
-    /**
-     * Holding its own ground: a defending block within 'within' metres of where it was drawn up takes this share of the
-     * damage. Set by the fairness table, ground by ground, so that the plain attack (select all, right-click the nearest,
-     * Space) carries the ground about as often as the card says at the telling odds, 1.1 to 1.4 (ruling 226, mark 4), and
-     * two computer generals stay fair to it too (ruling 217(3)). Above 1 where the field's own cover (woods, marsh, rock)
-     * already gives the defence more than the campaign's odds, which count the ground already, mean it to have. 'river'
-     * multiplies it where the defence stands behind a river, 'works' by the works' level: the card counts both already.
-     * Level 2 sits between the telling-odds works (an infantry line that keeps a reserve back out of its bunkers) and the
-     * practice works (motorized, no reserve): each lands within a tenth of its card (b407). Re-set for b418 (tanks no
-     * longer out-reach infantry nor pay twice in woods, works give their own ground's cover, regiments hold a division's
-     * frontage, blows a sixth slower, and tanks and lorries find their way round rivers, rock and marsh: mountains held
-     * at 1.43 only because the tanks there stood for good at the first outcrop): over five sets of 160 battles a ground,
-     * every ground lands within 4 points of its card, about 2 in the attack's favour; the test's own seeds run about 5
-     * under that. 'river' 1.51 to 1.5 for b439, once blocks at a bridge made way for each other rather than shove at its
-     * foot to a standstill (Sedan's panzers ran out the clock there one fight in eleven). 1.4 to 1.3 for b464(5), once foot
-     * waded out of the river at the wading pace instead of crawling up its bank under fire: the practice river and the
-     * telling odds behind a river land where they did (+5 and 0 against +6 and -2, the tests' seeds). 1.3 to 1.2, and
-     * counted only as far as the attack's tanks and lorries cross, for b494: a river is only ever a cost, so every river
-     * attack lands at or below the same attack with no river. Men on foot cross the field's rivers at no cost the field
-     * needs to make up (the campaign's river attacks on foot, with no hold, land level with their no-river twins), while
-     * an attack whose armour must cross pays dearly at the bridges; 1.3 lifted the telling odds 7.5 points and the
-     * practice river 5 over their no-river twins, 1.2 leaves them level (+0.6) and below (-5.8).
-     */
-    hold: {
-      take: { plains: 0.97, forest: 1.035, hills: 0.99, mountain: 1.12, marsh: 1.32, urban: 1.025, desert: 1.045 },
-      within: 300,
-      river: 1.2,
-      works: [1, 1.02, 1.06, 1.07],
-      // A capital's and a city's streets (field.ts streetsOf): the card prices the place's ground, not the cover of its
-      // houses, so the field takes that cover back off the held defence (b418; b511). With none, cities fell 4 points
-      // under the card and capitals 17, most to the clock. A kind of ground may have its own, else the size's (b515(f)):
-      // capital 1.1 is the plains capital's fit (48 attacks, captured and hand-made), and the hills' and forest's; an
-      // urban capital's core is deepest; a mountain capital, a desert city and a marsh city hold on their own ground.
-      // Fitted 18 November, 10 fights each, on 555 capital and city attacks captured from the campaign and hand-made on
-      // every kind of ground: capitals -1.0 against the card, cities +0.2, every kind within a tenth (furthest: plains
-      // cities captured -9.5, plains capitals captured +9.0 on 8); the practice city +2.0; every other place unchanged.
-      // Next (b515(g)): a city's clock follows its built share, and these come back toward 1.
-      streets: { city: 1.05, capital: 1.1, "urban capital": 1.5, "mountain capital": 1, "desert city": 1, "marsh city": 1 },
-      // A city's own river up the field beside the heart (b526): where the whole defence stands on one bank its line ends
-      // on the river, a flank the attack cannot turn, and the card never priced the river, so the field takes that back
-      // off the held defence too. An army broad enough to stand on both banks has no such flank. Fitted 19 November, 10
-      // fights each on the 555 capital and city attacks with a river forced up every field the card left dry: 1 cost the
-      // attack 2.2 points (mountain cities at close odds 10.7); 1.06 leaves it -0.1 against the same attacks with no river,
-      // every kind within a tenth both ways (furthest: plains cities at close odds -6.7), fewer fights to the clock.
-      // Re-measured with bridges by the record (b596, three): +0.25, every kind within a tenth, 58 fights to the clock
-      // against 75 (1.045 would leave -0.4 but more capitals to the clock, 0 to 5 of 2,420).
-      stream: 1.06,
-      // A second river along the defence's flank, meeting one across the field behind it (b596(2), the Sava at Belgrade):
-      // the defence drawn up beside it has its line's end on the water as up the field. Fitted 19 November on the same 555
-      // attacks with the river across and a second one from the west edge on every field the card left dry, bridges 3
-      // and 2: 1 left the attack where it was (+0.05) but 18 more fights of 5,550 ran to the clock (75 to 93); 1.06 (as up
-      // the field) took the clock back (76) but gave the attack +2.3, two kinds at close odds over a tenth (forest capitals
-      // +11.4, hills cities +13.4); 1.045 leaves +1.7, every kind within a tenth (furthest: hills cities at close odds +10.0), 81 fights to the clock.
-      join: 1.045
-    },
-    /** Dug in: a block is drawn in its works while it stays within this many metres of where it began. */
-    dug: { keep: 30 },
-    nerve: {
-      /** Below 'waver' it fights worse; below 'rout' it runs; a runner rallies at 'rally' when clear of the enemy for 'quiet' seconds. */
-      waver: 0.4,
-      rout: 0.2,
-      rally: 0.35,
-      quiet: 15,
-      clear: 450,
-      /**
-       * Nerve lost for each share of strength lost, before where the blow landed. Divisions break on their nerve long
-       * before they are worn away, so a battle fought to its end costs about what the campaign bills for its result
-       * (the design director, b356); an attack's nerve goes faster than a defence's on its own ground.
-       */
-      perLoss: { att: 0.5, def: 0.5 },
-      /** A friend breaking within 'near' metres. */
-      friendRuns: 0.03,
-      near: 400,
-      /** Coming back while not being hit for 'still' seconds, a second; faster for a runner who is clear. */
-      recover: 0.01,
-      still: 5,
-      runnerRecover: 0.02,
-      /** Shattered: below this much strength a block runs whatever its nerve. */
-      shattered: 0.12,
-      /** Experience and a general: experience takes this share off every loss of nerve at full; each level of the general 0.03. */
-      xp: 0.35,
-      general: 0.03
-    },
-    /**
-     * Blocks a side: one a division. A side with fewer than 'least' has divisions split into their three regiments until
-     * it has enough to handle (ruling 217(c)). No division is ever folded into another (ruling 226(10)).
-     */
-    blocks: { least: 6, regiments: 3 },
-    /**
-     * The battle's scale (the true-scale plan, GR1; Brian's standing rule of 22 November 04:14Z: on-screen numbers reflect
-     * the units each side brings): one N a battle, the men both sides bring over the figure budget, rounded up to a
-     * multiple of step (1 when they fit the budget whole). Looks only: the drill reads it (no block draws more men than
-     * its men0 over N) and the recording states it; nothing in the fight does. Tanks and guns join the count with GR2's
-     * table; lorries never do (GR6). page: the 2D field page's own budget (GR5, the production lead's option A of 22
-     * November 08:03Z): every block's men as plain dots, its men0 over the page's one N, thinning with its strength, with
-     * no drill; the Kursk salient's 1,050,000 men draw about 23,400 dots at 1 to 45.
-     */
-    scale: { budget: 8500, step: 5, page: 24e3 },
-    /** The army breaks when this share of its power is running or gone. */
-    breaks: 0.5,
-    /**
-     * Or when this share of its power is worn away: what an attack will pay before it is called off, and a defence
-     * before it gives up the ground. Set so that a battle fought to its end costs each side about what the campaign's
-     * bill charges for the result it hands back (the design director, b356; tests/battle-land.test.ts).
-     */
-    spent: { att: 0.13, def: 0.18 },
-    /**
-     * But not while more than this share of its power stands fresh or has not fought: one worn block never takes a fresh
-     * army with it (ruling 226(2), b476(1)).
-     */
-    fought: 0.5,
-    /**
-     * A block at this share of its strength or more, and steady, is fresh, in contact or not; in an army of this many
-     * blocks or fewer (one block a fifth of it or more), the fresh hold the army at the brink as those not yet in the
-     * fight do. Larger armies hold by those not yet in the fight alone: the fresh rule there moves the field 8 points off
-     * its card, and at six blocks the hills-and-works practice ground 10 (the design director, b476(1) and b480; 356
-     * campaign attacks and the nine practice grounds, 18 November). Never a defence behind fortress works or in a fort,
-     * whose works the card prices already (b488: Verdun's three divisions behind works ran 8.6 points under their card).
-     * Held there, such an army's blocks no longer fresh give ground rather than stand to be ground down (the design
-     * director, b496(1): fought out, the Libyan Group at Mechili booked 1.27 of the staff's bill; now 1.06).
-     */
-    fresh: { str: 0.9, upTo: 5 },
-    /**
-     * Burning wrecks stay (b477, Brian's pick): every tank a block loses leaves a wreck where it stood, to the end of the
-     * fight. Men on foot beside one take light cover, either army's, at the field's own figure for broken ground: a block
-     * takes it for the share of its tray that wrecks within its frontage, or 'beside' metres of it, can shelter (one wreck,
-     * one model's worth), never better than its ground gives already. 'r' is how far a wreck's shelter reaches, for the 3D
-     * game's mark.
-     */
-    wreck: { cover: "rough", beside: 10, r: 12 },
-    /**
-     * What a block that leaves the field still loses on the way (stragglers, wounded, guns and lorries left behind), as a
-     * share of the strength it had left. A defence driven off its own ground leaves far more behind than an attack that
-     * falls back to the lines it came from: the campaign's own bill has the same shape (resolveBattle in game.ts).
-     */
-    count: { routing: { att: 0.05, def: 0.05 }, gone: { att: 0.1, def: 0.15 } },
-    /** Randomness of each blow, so near-even fights do not always go the same way: +- this share. */
-    jitter: 0.1,
-    /**
-     * How much of the card's own run of luck the day carries (ruling 226(4)): 1 draws the day's luck across the whole run,
-     * as the card's chance does, so a plain attack at the card's odds wins about as often as the card says.
-     */
-    fortune: 1,
-    /**
-     * A stretch of the defence's line is quiet when no enemy stands within this many metres of a block's own lane, left or
-     * right, anywhere on the field: that block closes on the fight once the line is struck elsewhere (b407).
-     */
-    quiet: 350,
-    /** Metres a block pressing an attack will go to take the next enemy when its own breaks. */
-    press: 600,
-    /** Seconds of battle time before the defender is counted as having held. */
-    limit: 360,
-    /**
-     * Neighbours join the fight (release 2): metres a corps from next door walks onto the field from its edge before it
-     * stands as a reserve; how far in from a back edge it comes on; metres between its blocks; and how far it looks for
-     * clear dry ground to come on at, in field cells in from the edge and along it either way.
-     */
-    join: { walk: 200, edge: 40, gap: 40, inward: 24, across: 20 },
-    /**
-     * A capital's or a city's streets (field.ts layCity, streetsOf). inside: the metres inside the ragged edge of its core
-     * that the defence's line stands, in the outer streets and never in front of the city (the design director, b529).
-     * clock: a city's day is longer by this share of its field that is built (b515(g)): limit * (1 + clock * built), so
-     * the march in through the streets and the fight in them do not end on the clock. Measured with the line inside the
-     * edge over 555 city and capital fields x 10 seeds (b529's bars: every kind within a tenth of its card, close odds
-     * too, and none on the clock more than 1 fight in 10): 0.15 holds both, the widest forest cities at close odds +8.9
-     * and marsh cities at close odds 8.7% on the clock; 0.25 and 0.5 put the forest and marsh cities' close odds over
-     * a tenth, 0 put marsh and mountain cities on the clock 1 fight in 8.
-     */
-    city: { inside: 100, clock: 0.15 },
-    /** The computer general thinks once a second. */
-    think: 1,
-    /**
-     * Air support (Brian, 2026-11-18 18:58Z; the design director, b533): a side's fighters on call strike when called,
-     * the card having counted them already. While a side has strikes left, its blows hold back the card's share for them
-     * (SideTicket.air.share), owed to the block each fell on; a strike pays what is owed where its run lands (sim.ts,
-     * "Air support"). Seconds are battle time, metres field metres.
-     *   first, every: the first strike is ready this long after the armies meet, each next this long after the last call.
-     *   wait: a strike left ready this long, the staff call it themselves, for either side (b533(c): the enemy's too,
-     *     never aimed sharper).
-     *   eta: from the call to the run; speed: metres a second the flight flies, so the run takes its length over it;
-     *     out: seconds it is seen pulling away after the run.
-     *   len, minRun, wide: the run's longest and shortest, and the strip its guns rake, each side of its line half of it.
-     *   near: pointed at a place, the run takes the frontage of the enemy block nearest it within this.
-     *   close: no gun fires within this of the caller's own men; a run with less than 'least' of its line clear is refused.
-     *   armour: tanks take this much of a strafing run (guns made for men in the open).
-     *   nerve: the run's weight on nerve, as a blow from the front.
-     *   alt, low: the flight's height coming in and on the run, metres (pictures only). models: planes in a flight;
-     *     legs: the staff's strike splits into pairs, a pair down the frontage of each of the blocks owed most.
-     *   toss: seconds from a bomb let go to its burst ('land:bomb-drop' then the 'shell'), pictures only.
-     *   bombs: how many fall on the run's far third, pictures only (b533(f)): from the nation's first year of
-     *     fighter-bombers, before it the run strafes alone. bombsFrom: that year by nation, '_' for every other, from the
-     *     historian's list (/mnt/project-files/historian/fighter-bombers.md, 19:35Z): Germany from the Balkans and Russia,
-     *     1941; Britain and America 1942; the Soviets from June 1941 (the certain date); Italy 1941; Japan 1943; France
-     *     only with the Free French, 1943; Poland never in 1939; the generic fighter 1942.
-     */
-    air: {
-      first: 40,
-      every: 40,
-      wait: 20,
-      eta: 12,
-      speed: 120,
-      out: 6,
-      len: 400,
-      minRun: 100,
-      wide: 60,
-      near: 300,
-      close: 60,
-      least: 0.3,
-      armour: 0.6,
-      nerve: 1,
-      alt: 150,
-      low: 60,
-      models: 4,
-      legs: 2,
-      bombs: 2,
-      toss: 1.5,
-      bombsFrom: { GER: 1941, UK: 1942, USA: 1942, SOV: 1941, ITA: 1941, JAP: 1943, FRA: 1943, POL: 9999, _: 1942 }
-    },
-    /**
-     * Hedge cutters (release 2; Brian, 22 November 14:19Z: "bladed Shermans punch a gap through a hedgerow where the player
-     * picks"; the design director's ruling 242, C1-A to C4-A; LandBattle.cutters): off unless the battle is opened with
-     * them. A tank block carries cutters from turn 'from' on a field with hedges, whatever its army (C2-A: Brian's standing
-     * rule that the battle's mechanics are every playable nation's, 21 November 06:54Z). Told to cut where a hedge line
-     * runs (within 'near' metres of one), it drives for that point and on through; as its front reaches the hedge the cut
-     * is begun (t0), and 'secs' battle seconds later a gap 'width' metres wide stands open there (t1, a Gate of kind
-     * 'cut'), which the drawn men of every block on either side walk through from then. The staffs' tank blocks cut
-     * wherever their own way crosses a hedge line with no gap near (C4-A). Looks only (C1-A): nothing in the fight reads
-     * a gap, so the fight is the same with the switch on or off. The bocage (C1-B, built as the ruling's 17:45Z amendment
-     * asks, "unfitted tanks cross only at gaps"; its own switch, LandBattle.bocage, measured against off): a tank block
-     * without cutters crosses a hedge line only at a gap, a gateway or a cut once open, and goes round to one; this is
-     * where cutters (and a cut's gap) change the fight, and only with that switch on.
-     *   from: turn 59, July 1944. Bradley saw the Culin cutter on 14 July and held it back until Cobra, 25 July 1944; by
-     *     then three of every five First Army tanks carried one (Blumenson, Breakout and Pursuit, ch. XI).
-     *   share: three tanks in five carried one at Cobra (Blumenson; Zaloga, Operation Cobra 1944): how many of a block's
-     *     drawn tanks wear the blades, sent to the 3D game as the block's cutter flag (the bridge's unitOut). Looks only.
-     *   secs: battle seconds a cut takes, about 25 real seconds at LAND.smoke.perMin. No source gives one (the historian,
-     *     H1, 22 November: not found in ten sources; the one timed sortie bounds a breach and the drive to the next bank at
-     *     about 3 real minutes): the design director's looks-only knob (ruling 242 C3), until H1 is sourced.
-     *   width: the gap, metres: the 3D game's own gateway width (an M4 is about 2.6 m wide; no source gives a gap's width:
-     *     ruling 242 C3).
-     *   near: how near a hedge line the point picked must lie, metres: the hedge line's own (LAND.hide.hedge.near).
-     */
-    cutters: { from: 59, share: 0.6, secs: 6, width: 3.2, near: HEDGE_NEAR },
-    /**
-     * Smoke on call (release 2; Brian, 22 November 14:19Z: "a section lays a smoke line to cover a crossing, when and where
-     * the player orders it"; the design director's ruling 242, S1-A to S6, amended 17:45Z from the historian's answers;
-     * LandBattle.smoke): off unless the battle is opened with it. A block on foot, or lorried infantry, whose army has the
-     * means lays a screen across the ground before it: a line no longer than its own front (S2), its middle within its
-     * army's 'reach' of its front, standing 'hang' battle seconds; one at a time, and 'count' a battle (S3). While a screen
-     * stands, any blow struck straight at its target (direct fire: foot, tanks, a machine-gun team, a gun over open
-     * sights) whose line from the shooter to the target crosses it strikes at 'share' (S1-A); fire from far back (guns
-     * beyond LAND.guns.closeAt, mortar teams, the air, on fire plans laid before the smoke: the German 1940 handbook) is
-     * not touched. It gives no cover and does no harm. With hiding on, nobody is seen through it (the build spec's reading
-     * of S1-A; it draws nothing of the dice itself, but a block it keeps hidden is not fired on till found, so the draws
-     * after it change as the fight does: LandBattle's Smoke on call). Both staffs lay one as a
-     * foot block of theirs goes in to the assault (S5-A); never a defence in its works.
-     *   share: fire at a place, not a seen target: the rules' existing share for fire back at a block found but not
-     *     located (LAND.hide.locate.fire; the German squad manual: if tanks lay smoke, "fire into the smoke"). Never twice
-     *     on one blow: a blow already that vague, or fire on cover at a block still hidden (already a place, not a seen
-     *     target: LAND.hide.search.blow), is not halved again. Only the ground's part of a blow: the share a side holds
-     *     back for its air strikes is held back whole (the air is not touched).
-     *   count: screens a block lays in a battle where its army's means gives none: the design director's knob, pending H7
-     *     (ruling 242 S3; the historian found no section load for any army but Britain's).
-     *   perMin: battle seconds to a real minute, turning the sources' burn times into battle time (ruling 242 S2, answering
-     *     H6): foot moves at 6 m/s of battle time (LAND.speed.inf) against US quick time of 120 steps of 30 inches a minute,
-     *     1.52 m/s (FM 22-5).
-     *   front: an army that sets its smoke down along its own front (reach 0) lays it there for a line drawn on its own
-     *     ground or within this many metres of its front, and refuses one drawn further off (129(d)): a throw, the thrown
-     *     reach of the others' grenades (the historian, D: the Italian pot "is thrown or set down, so the 30 m thrown reach
-     *     fits").
-     *   means: by army: reach, metres beyond its front the line's middle may lie (0: it is laid along its own front);
-     *     hang, battle seconds it stands (real minutes times perMin); count, where the army's own load is sourced.
-     *     USA: the M19A1 WP rifle grenade to about 195 m (OP 1664); the AN-M8 HC grenade burns 105 to 150 s (FAS), about
-     *       2 real minutes. (The 60 mm WP shell came only in January 1945.)
-     *     UK: the platoon's 2-inch mortar, smoke to 500 yd, 457 m (canadiansoldiers.com), about 2 real minutes a bomb (the
-     *       1966 pamphlet); 6 smoke bombs and 4 smoke grenades a platoon (Memorandum on Platoon Battle Drill, 1942), about
-     *       3 a section (the historian, D; ruling 242 as amended: Britain and her kin 3 screens).
-     *     GER: smoke hand grenades and candles, thrown (Nebelhandgranate 39, 1 to 2 minutes: Ordnance Bulletin 59,
-     *       Intelligence Bulletin January 1943); the 5 cm mortar had no smoke round (MIS Special Series 14).
-     *     SOV: the RDG-1 grenade, about 1.5 minutes, about 30 yd of screen, thrown (Intelligence Bulletin, June 1946).
-     *     JAP: the Type 89 discharger's smoke round, 45 to 206 yd (Intelligence Bulletin, June 1943); no burn time found
-     *       (the historian, H5): 22 s is the design director's knob.
-     *     ITA: the 2-kg smoke pot, set down or thrown, burning 1 min 15 s (TTT 38, November 1943): laid along its own
-     *       front (ruling 242 as amended).
-     *     France 1940 has none (no section smoke in the 1940 platoon or weapons lists: the historian, H5), and no army
-     *     not listed has any: no stand-in until a means is found (ruling 242 S2).
-     *   kin: a nation that takes its senior partner's means (ruling 242 S2, "the 240 form", as plans.kin on the air
-     *     branch's arsenal.json): Canada, Australia, New Zealand, South Africa and India Britain's; Vichy and Free France
-     *     France's (none today; theirs too once H5 finds France a means).
-     */
-    smoke: {
-      share: LOCATE.fire,
-      count: 2,
-      perMin: 15,
-      front: 30,
-      means: {
-        USA: { reach: 195, hang: 30 },
-        UK: { reach: 457, hang: 30, count: 3 },
-        GER: { reach: 30, hang: 22 },
-        SOV: { reach: 30, hang: 22 },
-        JAP: { reach: 188, hang: 22 },
-        ITA: { reach: 0, hang: 19 }
-      },
-      kin: { CAN: "UK", AUS: "UK", NZL: "UK", SAF: "UK", IND: "UK", VIC: "FRA", FFR: "FRA" }
-    },
-    /**
-     * Field telephone lines (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it
-     * off if someone doesnt want it"; the design director's rulings, 18:36Z, PHONES Q1 to Q3; LandBattle.phones): off
-     * unless the battle is opened with them. Wire was the defence's own means ("Telephones are usually installed down to
-     * companies along the main line of resistance", FM 7-25 ¶52; Cherbourg 1944, "Approximately 95% of communications was
-     * by wire", Signal Corps Report 63), so as the clock starts every block of the defence on the field has a wire from its
-     * headquarters at the middle of its zone's back edge; a corps that comes up from next door has none. The wire head is
-     * "pushed close" (FM 7-24 ¶68h): it follows its block, and moving never cuts it. A blow on the block from an enemy gun
-     * block or mortar team cuts a line at 'cut' (Q1; machine guns never), and an enemy tank block whose step crosses the
-     * wire cuts a line outright (FM 24-20 ¶32d: surface lines "often are broken by passing troops and vehicles"). Once its
-     * lines are all cut the wire is down, and every order to that block, the player's or a staff's, waits its army's
-     * fallback from when it was given: the wireless (LAND.radio's wait, as the radio switch reckons it) or a runner (the
-     * metres from the headquarters over 'runner'). A lineman leaves the headquarters at the first cut, walks the wire to it
-     * at foot pace (LAND.speed.inf), splices it in 'splice' seconds and the wire is up again: what was waiting goes at once.
-     *   cut: the chance a line is cut by each such blow (each tick's blow of a gun block or a mortar team on the block at
-     *     the wire's end): knob (DD 18:36Z). No source counts breaks: the sources say lines were "repeatedly cut by enemy
-     *     artillery" (84th Division, Battle Experiences 1945) and "Heavy fire ... was constantly cutting our lines" (100th
-     *     Division, 1945).
-     *   splice: battle seconds a splice takes: FM 24-20 (1944) ¶15c(3) and ¶15c(5), preparing the splice "should not take
-     *     more than 1 minute" and tying it "should be about 1 minute": about 2 real minutes, at LAND.smoke.perMin 15
-     *     battle seconds a real minute. Finding the break is not counted (no source).
-     *   runner: metres a battle second a runner goes: the rules' own foot speed (LAND.speed.inf); knob (DD 18:36Z).
-     *   lines: lines to each block, by army. Germany 2 (DD 18:36Z, Q3, P6): "in the danger zone, therefore, double lines and
-     *     heavy insulated wires are used" (German Tactical Doctrine, MIS): a German wire needs two cuts before orders wait.
-     *     Every other army 1 ('_').
-     *   fallback: by army, [through year, 'radio' or 'runner'], the first that covers the battle's year (as LAND.radio's
-     *     nations): how orders go once the wire is down.
-     *     USA: runners to 1942, the wireless from 1943: the SCR-536 and SCR-300 "became available in substantial quantities"
-     *       only "well into 1943" (Tactical Notebook); FM 7-25 ¶49b, "radio and messengers are the primary means".
-     *     UK and her kin (CAN, AUS, NZL, SAF, IND) the wireless, every year: No. 18 sets at company and platoon headquarters
-     *       (the Calgary Highlanders' signals platoon, canadiansoldiers.com).
-     *     GER: runners to 1942, the wireless from 1943 (the Feldfu b/c pack sets "in the forward echelon", TTT 46, 1944):
-     *       "When wire connections fail or are not functioning steadily, the radio is indispensable" (German Tactical Doctrine).
-     *     SOV runners: 9,586 sets made in 1941 (SPbGUT); "a broken line often meant losing touch with subordinate troops"
-     *       (3DNews). JAP runners: 0 to 4 sets a battalion (TTT 46), "a pool of runners" at company (MIS Bulletin 16).
-     *     ITA runners (nothing sourced but the telephone). FRA and VIC runners: "only French heavy tanks had radios" in 1940
-     *       (GlobalSecurity). Every other army runners ('_'): knob (DD 18:36Z).
-     */
-    phones: {
-      cut: 0.12,
-      splice: 30,
-      runner: 6,
-      lines: { USA: 1, UK: 1, CAN: 1, AUS: 1, NZL: 1, SAF: 1, IND: 1, GER: 2, SOV: 1, JAP: 1, ITA: 1, FRA: 1, VIC: 1, _: 1 },
-      fallback: {
-        USA: [[1942, "runner"], [9999, "radio"]],
-        UK: [[9999, "radio"]],
-        CAN: [[9999, "radio"]],
-        AUS: [[9999, "radio"]],
-        NZL: [[9999, "radio"]],
-        SAF: [[9999, "radio"]],
-        IND: [[9999, "radio"]],
-        GER: [[1942, "runner"], [9999, "radio"]],
-        SOV: [[9999, "runner"]],
-        JAP: [[9999, "runner"]],
-        ITA: [[9999, "runner"]],
-        FRA: [[9999, "runner"]],
-        VIC: [[9999, "runner"]],
-        _: [[9999, "runner"]]
-      }
-    },
-    /**
-     * Stretcher bearers (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off";
-     * the design director's rulings Q4 and Q5, 18:36Z, and 18:38Z on the light cases; LandBattle.bearers): off unless the
-     * battle is opened with them. Of each loss of strength a block suffers, 'killed' are dead and the rest wounded; of the
-     * wounded, light.share are dressed and back in the line light.dress seconds later (the only same-battle return in the
-     * record, Q5), and the rest are litter cases waiting for the block's bearers. Its bearers ('share' of its strength at the
-     * start, counted in its strength) carry them back 'litter' to a case, out to the aid post 'aid' metres behind where it
-     * started and back at 'pace': while they are out the block's own blows weaken by the men away (never its strength, its
-     * nerve, its count or its size). Nothing here draws on the dice.
-     *   killed: the share of each loss killed, by army (the design director, 19:14Z, from the historian's
-     *     /mnt/project-files/historian/three-ideas-readings-1122.md; died of wounds counted as killed). The drill draws
-     *     the rest of the men who fall as wounded. Sourced, no knob of ours:
-     *     USA 0.192: 4.22 wounded to 1 killed (Dupuy).
-     *     UK and her kin (CAN, AUS, NZL, SAF, IND) 0.230: 3.35 to 1 (Hansard, 27 June 1944, Italy to Rome).
-     *     GER 0.279: 2.58 to 1 (OKW to January 1945, all fronts).
-     *     JAP 0.271: 2.69 to 1 (China, 1937 to 1941).
-     *     '_', every other army (SOV, ITA, FRA, VIC and the rest): 0.227, the middle of the laid ratios, 3.40 to 1.
-     *   share: bearers as a share of a block's men, by army, sourced in kind and rounded:
-     *     UK and her kin (CAN, AUS, NZL, SAF, IND) 0.025: a corporal and 19 privates a battalion, "all of these were
-     *       infantrymen" (bayonetstrength.uk, The Organisation of the British Infantry Battalion 1938-45, p.10;
-     *       britishmilitaryhistory.co.uk, the battalion HQ's medical list).
-     *     GER 0.03: a Krankenträger in each platoon headquarters and the company's medical NCO (KStN 131n, 1 May 1944,
-     *       battleorder.org): 4 of a company of 142.
-     *     SOV 0.035: a medical instructor and 4 orderlies a company of 143 (shtat 04/550, 10 December 1942, battleorder.org).
-     *     USA 0.02: two company aid men a company (FM 8-10, 1942, para 28d(1), 33b) and the battalion's 12-man litter
-     *       squad (med-dept.com, The WW2 Aid Station).
-     *     JAP 0.02: a medical orderly a platoon (TM-E 30-480, Handbook on Japanese Military Forces, evacuation).
-     *     ITA, FRA and VIC 0.0275: unsourced; knob (DD 18:36Z), the middle of the sourced 2 to 3.5% (Q4).
-     *     '_', every other army: 0.0275, the same knob (DD 18:36Z).
-     *   litter: bearers to a stretcher (FM 8-10 para 32a: "Litter squads consist ordinarily of four bearers each").
-     *   aid: metres from the block's start place to its aid post, toward its own back edge, kept on the field: the middle
-     *     of FM 8-10's 300 to 800 yards (para 31b(3)), 550 yards (the design director, Q4, not the 350 proposed).
-     *   pace: metres a battle second out and back: FM 8-10 para 32c, a round trip of 500 yards each way "at least twenty
-     *     minutes", 914.4 m in 300 battle seconds (15 battle seconds a real minute). A round trip to 503 m: 330 s.
-     *   light: the lightly wounded, back in the same battle (Q5: the only same-battle return; no bigger share for feel):
-     *     share: of the wounded, the US "carded for record only", 17.1% (123,836 of 723,560 wounded: the Dupuy Institute,
-     *       Carded for Record in WWII): knob (DD 18:36Z).
-     *     at: metres from the block where they are dressed. The design director, 18:38Z: "Light cases are dressed at the
-     *       block by the company's aid man, or by themselves, and are back in the line after the 30 s dressing knob, with
-     *       no walk ... every soldier carried a field dressing." Kept as a knob (DD 18:36Z): 0, no walk.
-     *     out, back: their pace going and coming back, times the foot's (LAND.speed.inf), read only where at > 0:
-     *       knobs (DD 18:36Z).
-     *     dress: battle seconds to dress a wound: knob (DD 18:36Z).
-     */
-    bearers: {
-      killed: { USA: 0.192, UK: 0.23, CAN: 0.23, AUS: 0.23, NZL: 0.23, SAF: 0.23, IND: 0.23, GER: 0.279, JAP: 0.271, _: 0.227 },
-      share: { USA: 0.02, UK: 0.025, CAN: 0.025, AUS: 0.025, NZL: 0.025, SAF: 0.025, IND: 0.025, GER: 0.03, SOV: 0.035, JAP: 0.02, ITA: 0.0275, FRA: 0.0275, VIC: 0.0275, _: 0.0275 },
-      litter: 4,
-      aid: 503,
-      pace: 3.048,
-      light: { share: 0.17, at: 0, out: 0.5, back: 1, dress: 30 }
-    }
-  };
-  var phoneLines = (nat) => LAND3.phones.lines[nat] ?? LAND3.phones.lines._;
-  var phoneFallback = (nat, year) => (LAND3.phones.fallback[nat] ?? LAND3.phones.fallback._).find(([to]) => year <= to)?.[1] ?? "runner";
-  var reachOf = (u) => u.team ? LAND3.teams[u.team].reach : LAND3.reach[u.kind];
-  var patrolSize = (nat) => LAND3.patrol.size[nat] ?? LAND3.patrol.size._;
-  var gunsOf = (u) => u.team ? LAND3.teams[u.team] : LAND3.guns;
-  var smokeMeans = (nat) => LAND3.smoke.means[LAND3.smoke.kin[nat] ?? nat] ?? null;
-  var bearerShare = (nat) => LAND3.bearers.share[nat] ?? LAND3.bearers.share._;
-  var killedShare = (nat) => LAND3.bearers.killed[nat] ?? LAND3.bearers.killed._;
-
-  // src/battle/land/own-teams.ts
-  var OWN_TEAM_SHARE = 0.04;
-  var OWN_TEAM_KINDS = ["inf", "mtn", "mot"];
-  var OWN_TEAM_ID = -1000001;
-  var isOwnTeam = (f) => f.corps <= OWN_TEAM_ID;
-  var brings = (f) => f.corps >= 0 && OWN_TEAM_KINDS.includes(f.kind) && f.share > 0 && f.men > 0;
-  function ownTeamParents(t) {
-    const out = /* @__PURE__ */ new Map();
-    for (const s of [t.att, t.def]) {
-      const teams2 = s.forces.filter(isOwnTeam), parents = s.forces.filter((f) => !isOwnTeam(f) && brings(f));
-      if (!teams2.length || teams2.length !== 2 * parents.length) continue;
-      teams2.forEach((f, i) => out.set(f.corps, parents[i >> 1].corps));
-    }
-    return out;
-  }
-
-  // src/campaign/teamfire.ts
-  var teamFireOn = (g2) => g2.flags.teamfire === 1;
-  var TEAM_FIRE = {
-    /** (a) A team's worth of the line it was taken from, after the lines meet (G: the field's tally, above). */
-    worth: { att: 0.59, def: 0.63 },
-    /**
-     * The field as it is laid (G, measured on twelve grounds and pinned by the test): metres between the two lines at the
-     * start, metres a side's teams stand behind its own line, and the pace its foot comes on at over a field's mix of
-     * open ground and crops, as a share of LAND.speed.inf.
-     */
-    gap: 767,
-    back: 248,
-    pace: 0.96,
-    /**
-     * The staff's rule for a gun or team out of reach (ai.ts gunsUp; the test reads the two figures there): it moves up
-     * when the nearest enemy is beyond this share of its reach, to this share of its reach, and stands.
-     */
-    up: { beyond: 0.9, to: 0.75 }
-  };
-  var TEAMS3 = ["mg", "mor"];
-  var hold2 = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
-  function earlySeconds() {
-    const G5 = TEAM_FIRE, pace2 = LAND3.speed.inf * G5.pace;
-    const meet = Math.max(0, (G5.gap - LAND3.reach.inf) / pace2);
-    const far = G5.gap + G5.back;
-    const def = (t) => hold2(meet - Math.max(0, far - LAND3.teams[t].reach) / pace2, 0, meet);
-    const att = (t) => {
-      const r = LAND3.teams[t].reach;
-      return far <= r * G5.up.beyond ? meet : hold2(meet - (far - r * G5.up.to) / LAND3.teams[t].speed, 0, meet);
-    };
-    return { meet, att: { mg: att("mg"), mor: att("mor") }, def: { mg: def("mg"), mor: def("mor") } };
-  }
-  function sideOf4(cs, guard = 0) {
-    let all = guard, teams2 = 0, soft = guard;
-    for (const [kind, w] of cs) {
-      if (!(w > 0)) continue;
-      all += w;
-      if (OWN_TEAM_KINDS.includes(kind)) teams2 += w;
-      if (kind !== "arm" && kind !== "art") soft += w;
-    }
-    return { share: all > 0 ? teams2 / all : 0, armour: all > 0 && soft <= 0 };
-  }
-  function teamFire(i) {
-    const A = sideOf4(i.att), D2 = sideOf4(i.def, i.guard ?? 0);
-    if (A.share <= 0 && D2.share <= 0) return null;
-    const S3 = OWN_TEAM_SHARE, W2 = TEAM_FIRE.worth, secs = earlySeconds(), odds = Math.max(1e-6, i.odds);
-    const worthA = 1 - TEAMS3.length * S3 * A.share * (1 - W2.att), worthD = 1 - TEAMS3.length * S3 * D2.share * (1 - W2.def);
-    const fire2 = (who, share, onArmour) => TEAMS3.reduce((s, t) => s + S3 * share * LAND3.teams[t].punch * (onArmour ? LAND3.teams[t].armour : 1) * secs[who][t], 0);
-    const lineA = 1 - TEAMS3.length * S3 * A.share, lineD = 1 - TEAMS3.length * S3 * D2.share;
-    const H = LAND3.hold, coverD = (H.take[i.terrain] ?? 1) * H.works[hold2(Math.round(i.fort ?? 0), 0, H.works.length - 1)];
-    const earlyA = fire2("def", D2.share, A.armour) * LAND3.rate / (odds * lineA);
-    const earlyD = fire2("att", A.share, D2.armour) * LAND3.rate * odds * coverD / lineD;
-    const leftA = Math.max(0.01, 1 - earlyA / LAND3.spent.att), leftD = Math.max(0.01, 1 - earlyD / LAND3.spent.def);
-    return { att: worthA * leftA, def: worthD * leftD, share: { att: A.share, def: D2.share }, early: { att: earlyA, def: earlyD } };
-  }
-  function teamFireLine(f) {
-    const a = Math.round((1 - f.att) * 100), d = Math.round((1 - f.def) * 100);
-    if (!a && !d) return null;
-    const both = f.share.att > 0 && f.share.def > 0;
-    const value = both ? "Machine guns and mortars on both sides fire before the lines meet" : f.share.def > 0 ? "The defenders' machine guns and mortars fire as the attack comes on" : "The attack's machine guns and mortars fire it in";
-    const fx = [a ? `attack down ${a}%` : "", d ? `defence down ${d}%` : ""].filter(Boolean).join(", ");
-    return {
-      label: "Support teams",
-      value,
-      effect: `${fx[0].toUpperCase()}${fx.slice(1)}${both ? ": the attack is under fire first, and for longer" : ""}`
-    };
   }
 
   // data/campaign/desert.json
@@ -88592,7 +88596,7 @@
     const half = s.great ? STREAM.great : STREAM.lesser, jh = STREAM.lesser;
     const dcx = Math.min(z.def[2] - 300, Math.max(z.def[0] + 300, town.x));
     const edge4 = (streetEdge ?? []).filter((y, c) => y >= 0 && Math.abs(c * cell + cell / 2 - dcx) <= 700).sort((a, b) => a - b);
-    const front = Math.max(z.def[1] + 40, edge4.length ? edge4[Math.floor(edge4.length * 0.75)] + LAND3.city.inside : 0);
+    const front = Math.max(z.def[1] + 40, edge4.length ? edge4[Math.floor(edge4.length * 0.75)] + LAND.city.inside : 0);
     const L3 = rng.range(1500, 2300), p1 = rng.range(0, Math.PI * 2), p2 = rng.range(0, Math.PI * 2);
     const wave = (v) => 0.5 + 0.35 * Math.sin(2 * Math.PI * v / L3 + p1) + 0.15 * Math.sin(2 * Math.PI * v / (L3 * 0.37) + p2);
     const far = (hw) => h - hw - STREAM.far;
@@ -89311,7 +89315,7 @@
   var KIND_WORD3 = { inf: "Infantry", mtn: "Mountain", cav: "Cavalry", eng: "Engineers", mot: "Motorized", arm: "Armoured", art: "Artillery", fort: "Fortress" };
   var TEAM_WORD = { mg: "Machine-Gun Battalion", mor: "Mortar Battalion", snp: "Sniper Detachment" };
   var teamOf = (f) => TEAMS2.includes(f.kind) ? f.kind : void 0;
-  function partsFor(forces2, least = LAND3.blocks.least) {
+  function partsFor(forces2, least = LAND.blocks.least) {
     const parts2 = forces2.map((f) => Array.from({ length: Math.max(1, Math.round(f.divs)) }, (_, i) => ({ divs: [i] })));
     const total = () => parts2.reduce((s, p, i) => s + (teamOf(forces2[i]) ? 0 : p.length), 0);
     while (total() < least) {
@@ -89326,7 +89330,7 @@
       });
       if (best < 0) break;
       const p = parts2[best], j = p.findIndex((x) => x.regiment === void 0 && x.divs.length === 1);
-      p.splice(j, 1, ...Array.from({ length: LAND3.blocks.regiments }, (_, r) => ({ divs: p[j].divs, regiment: r })));
+      p.splice(j, 1, ...Array.from({ length: LAND.blocks.regiments }, (_, r) => ({ divs: p[j].divs, regiment: r })));
     }
     return parts2;
   }
@@ -89369,27 +89373,27 @@
     let j = 0;
     t.forces.forEach((f, i) => {
       const team = teamOf(f);
-      const k = team ? "art" : Object.keys(LAND3.speed).includes(f.kind) ? f.kind : "inf";
+      const k = team ? "art" : Object.keys(LAND.speed).includes(f.kind) ? f.kind : "inf";
       for (const p of cut2[i]) {
         const u = units2[j++];
         if (!u || p.regiment === void 0 || team) continue;
         const div = f.divisions?.[p.divs[0]], no = (f.first ?? 1) + p.divs[0];
         const full = div?.name ?? `${ORD4(no)} ${kindWord(f.nat, k, ym)} Division`, short = div?.short ?? `${ORD4(no)} ${kindWord(f.nat, k, ym)}`;
         const lead2 = /^(\d+)/.exec(full)?.[1];
-        const n = lead2 ? (Number(lead2) - 1) * LAND3.blocks.regiments + p.regiment + 1 : p.regiment + 1;
+        const n = lead2 ? (Number(lead2) - 1) * LAND.blocks.regiments + p.regiment + 1 : p.regiment + 1;
         u.short = regimentWord(u.nat, k, n, p.regiment, ym);
         u.parent = full;
         u.name = `${u.short}, ${short}`;
       }
     });
   }
-  function makeBlocks(side5, t, power, firstId, least = LAND3.blocks.least, turn2) {
+  function makeBlocks(side5, t, power, firstId, least = LAND.blocks.least, turn2) {
     const out = [];
     const ym = turn2 === void 0 ? 0 : ((d) => d.year * 12 + d.month + 1)(turnToDate(turn2));
     const cut2 = partsFor(t.forces, least);
     t.forces.forEach((f, i) => {
       const team = teamOf(f);
-      const k = team ? "art" : Object.keys(LAND3.speed).includes(f.kind) ? f.kind : "inf";
+      const k = team ? "art" : Object.keys(LAND.speed).includes(f.kind) ? f.kind : "inf";
       const n = Math.max(1, Math.round(f.divs));
       const divs = Array.from({ length: n }, (_, d) => {
         const own = f.divisions?.[d];
@@ -89402,16 +89406,16 @@
           men: own?.men ?? f.men / n
         };
       });
-      const weightOf3 = (p) => p.divs.reduce((s, d) => s + Math.max(0.01, divs[d].str), 0) / (p.regiment !== void 0 ? LAND3.blocks.regiments : 1);
+      const weightOf3 = (p) => p.divs.reduce((s, d) => s + Math.max(0.01, divs[d].str), 0) / (p.regiment !== void 0 ? LAND.blocks.regiments : 1);
       const all = cut2[i].reduce((s, p) => s + weightOf3(p), 0);
       for (const p of cut2[i]) {
         const ds = p.divs.map((d2) => divs[d2]);
         const name = p.regiment !== void 0 ? `${ORD4(p.regiment + 1)} Regiment, ${ds[0].short}` : ds.length === 1 ? ds[0].name : ds.map((d2) => d2.short).join(" and ");
         const short = p.regiment !== void 0 ? `${ORD4(p.regiment + 1)} Regiment` : ds.length > 1 ? name : ds[0].short;
         const parent = p.regiment !== void 0 ? ds[0].short : f.name;
-        const [w, d] = team ? LAND3.teams[team].size : LAND3.size[k];
-        const per = team ? LAND3.teams[team].figures : LAND3.figures[k];
-        const full = p.regiment !== void 0 ? Math.max(1, Math.round(per / LAND3.blocks.regiments)) : per;
+        const [w, d] = team ? LAND.teams[team].size : LAND.size[k];
+        const per = team ? LAND.teams[team].figures : LAND.figures[k];
+        const full = p.regiment !== void 0 ? Math.max(1, Math.round(per / LAND.blocks.regiments)) : per;
         const str0 = Math.max(0.05, Math.min(1, ds.reduce((s, x) => s + x.str, 0) / ds.length));
         const mor0 = startNerve(f.org, f.mor);
         const share = weightOf3(p) / all;
@@ -89434,7 +89438,7 @@
           mor0,
           xp: ds.reduce((s, x) => s + x.xp, 0) / ds.length,
           state: "steady",
-          men0: Math.round(ds.reduce((s, x) => s + x.men, 0) / (p.regiment !== void 0 ? LAND3.blocks.regiments : 1)),
+          men0: Math.round(ds.reduce((s, x) => s + x.men, 0) / (p.regiment !== void 0 ? LAND.blocks.regiments : 1)),
           figures0: Math.max(1, Math.ceil(full * str0)),
           figures: Math.max(1, Math.ceil(full * str0)),
           tray: full,
@@ -89572,7 +89576,7 @@
     if (side5 === "def" && f.streetEdge) {
       const half = rowWidth(lines2[0]) / 2;
       const ys2 = f.streetEdge.filter((y, c) => y >= 0 && Math.abs(c * f.cell + f.cell / 2 - cx) <= half).sort((a, b) => a - b);
-      if (ys2.length) front = Math.max(front, ys2[Math.floor(ys2.length / 2)] + LAND3.city.inside);
+      if (ys2.length) front = Math.max(front, ys2[Math.floor(ys2.length / 2)] + LAND.city.inside);
       if (f.stream?.front !== void 0) front = Math.min(front, f.stream.front);
     }
     const x0 = lo ?? 10, x1 = hi ?? f.w - 10;
@@ -89658,13 +89662,13 @@
   // src/battle/land/spread.ts
   var SPREAD = spread_default;
   function stayingOf(org, mor, xp, general, s) {
-    const N = LAND3.nerve;
+    const N = LAND.nerve;
     return (startNerve(org, mor) - N.rout) / (N.perLoss[s] * Math.max(0.3, 1 - N.xp * xp - N.general * general));
   }
   var refStaying = (s) => stayingOf(SPREAD.ref.org, SPREAD.ref.mor, SPREAD.ref.xp, SPREAD.ref.general, s);
   var REF_NERVE = {
     mor0: startNerve(SPREAD.ref.org, SPREAD.ref.mor),
-    steady: 1 - LAND3.nerve.xp * SPREAD.ref.xp - LAND3.nerve.general * SPREAD.ref.general
+    steady: 1 - LAND.nerve.xp * SPREAD.ref.xp - LAND.nerve.general * SPREAD.ref.general
   };
   var ledgerK = (s) => SPREAD.level / refStaying(s);
   function nerveSplit(p, on2) {
@@ -89874,7 +89878,7 @@
       // (Support teams on the card, release 2 behind `teams`: the card's term for them rides with the reckoning, so the field
       // lays its blocks at the power before it: Reckoning.teamFire, read by sim.ts only when own-team blocks are on the ticket.)
       lines: a.lines,
-      limit: LAND3.limit,
+      limit: LAND.limit,
       // The attacks already made on this place this month by this side: the same ground, a fresh day's luck.
       attempt: g2.reports.filter((x) => x.turn === g2.turn && x.region === target.id && x.attNat === attNat).length,
       // The history dial's stop: at 1 to 3 the computer general fights in its nation's style, at 4 and 5 the situation's (styles.ts).
@@ -91393,7 +91397,7 @@
     if (side5 === "att" && P && P.went === null) return;
     for (const u of mine4) {
       if (!hasTarget(u, foes) || u.waits && !u.waits.free) continue;
-      if (side5 === "def" && u.reserve !== "sent" && dist(u.x, u.y, u.home[0], u.home[1]) < LAND3.hold.within) continue;
+      if (side5 === "def" && u.reserve !== "sent" && dist(u.x, u.y, u.home[0], u.home[1]) < LAND.hold.within) continue;
       if (b.smokeWhy(u) !== null) continue;
       const t = foes.find((f) => f.id === u.order.target), gap = b.gap(u, t);
       if (gap > reachOf(u)) continue;
@@ -91405,7 +91409,7 @@
     }
   }
   function searchCover(b, side5, mine4) {
-    const F2 = LAND3.hide.search, dir = side5 === "att" ? 1 : -1, step2 = b.hedges.length ? 10 : b.field.cell;
+    const F2 = LAND.hide.search, dir = side5 === "att" ? 1 : -1, step2 = b.hedges.length ? 10 : b.field.cell;
     for (const u of mine4) {
       if (u.waits && !u.waits.free) continue;
       if (u.kind === "art" && !u.team || u.team === "snp" || u.engaged !== void 0 || u.order?.kind === "withdraw") {
@@ -91432,7 +91436,7 @@
     }
   }
   function seekFlanks(b, side5, mine4) {
-    const A = LAND3.armour, dir = side5 === "att" ? 1 : -1;
+    const A = LAND.armour, dir = side5 === "att" ? 1 : -1;
     for (const u of mine4) {
       if (u.kind !== "arm" || u.order?.kind !== "attack" || u.order.target === void 0 || b.flanking.has(u.id)) continue;
       const t = b.unit(u.order.target);
@@ -91460,7 +91464,7 @@
         b.flanking.delete(id);
         continue;
       }
-      if (!u.order || dist(u.x, u.y, f.at[0], f.at[1]) < 40 || b.t - f.since > LAND3.armour.flankFor) {
+      if (!u.order || dist(u.x, u.y, f.at[0], f.at[1]) < 40 || b.t - f.since > LAND.armour.flankFor) {
         b.flanking.delete(id);
         by(b, side5, u, t);
         continue;
@@ -91470,7 +91474,7 @@
     return busy;
   }
   function probe(b, side5, mine4) {
-    const dir = side5 === "att" ? 1 : -1, step2 = LAND3.hide.staff.ahead;
+    const dir = side5 === "att" ? 1 : -1, step2 = LAND.hide.staff.ahead;
     for (const u of mine4) {
       if (u.kind === "art" || u.order) continue;
       const y = Math.min(b.field.h - u.d / 2 - 10, Math.max(u.d / 2 + 10, u.y + dir * step2));
@@ -91492,7 +91496,7 @@
   }
   function snipersUp(b, side5, u, mine4, foes) {
     if (u.order?.kind === "withdraw" || u.waits && !u.waits.free) return;
-    const K2 = LAND3.snipers.keep, dir = side5 === "att" ? 1 : -1, near2 = foes.filter((f) => f.kind !== "fort" && b.gap(u, f) < K2);
+    const K2 = LAND.snipers.keep, dir = side5 === "att" ? 1 : -1, near2 = foes.filter((f) => f.kind !== "fort" && b.gap(u, f) < K2);
     if (u.slipTo !== void 0) {
       if (u.order) return;
       const spot2 = b.slipSpot(u);
@@ -91579,7 +91583,7 @@
       const foe = w.engaged !== void 0 ? foes.find((f) => f.id === w.engaged) : void 0;
       if (foe) {
         if (!(r.order?.kind === "attack" && r.order.target === foe.id)) by(b, side5, r, foe);
-      } else if (!(r.order?.kind === "move" && dist(r.order.x, r.order.y, w.x, w.y) <= LAND3.alone.near)) b.command({ do: "move", units: [r.id], x: w.x, y: w.y }, side5);
+      } else if (!(r.order?.kind === "move" && dist(r.order.x, r.order.y, w.x, w.y) <= LAND.alone.near)) b.command({ do: "move", units: [r.id], x: w.x, y: w.y }, side5);
     }
     return skip;
   }
@@ -91597,7 +91601,7 @@
     if (!line.length) line = foes;
     line = [...line].sort((a, c) => a.x - c.x || a.id - c.id);
     const foeWeight = (f) => weight5(f) * (b.teamsRule ? 1 + b.ownTeamsPower(f) / Math.max(1e-9, f.power0) : 1);
-    const score = line.map((f, i2) => LAND3.cover[coverAt(b.field, f.x, f.y)] / Math.max(1e-6, foeWeight(f)) * (i2 === 0 || i2 === line.length - 1 ? 1.25 : 1) * (f.dug ? 0.8 : 1));
+    const score = line.map((f, i2) => LAND.cover[coverAt(b.field, f.x, f.y)] / Math.max(1e-6, foeWeight(f)) * (i2 === 0 || i2 === line.length - 1 ? 1.25 : 1) * (f.dug ? 0.8 : 1));
     let k = 0;
     for (let i2 = 1; i2 < line.length; i2++) if (score[i2] > score[k]) k = i2;
     P.main = [line[k].id];
@@ -91788,7 +91792,7 @@
     return best;
   }
   function walk(b, side5, u, near2) {
-    const most = LAND3.hold.within - 10;
+    const most = LAND.hold.within - 10;
     const want = Math.round(u.home[0] + Math.max(-most, Math.min(most, near2.line.home[0] - u.home[0])));
     if (b.shifted.get(u.id) === want) return;
     b.shifted.set(u.id, want);
@@ -91828,7 +91832,7 @@
         if (!hasTarget(u, foes) && struck.length) sendTo(u);
         continue;
       }
-      if (struck.length && !hasTarget(u, foes) && u.engaged === void 0 && !foes.some((f) => Math.abs(f.x - u.home[0]) < LAND3.quiet)) {
+      if (struck.length && !hasTarget(u, foes) && u.engaged === void 0 && !foes.some((f) => Math.abs(f.x - u.home[0]) < LAND.quiet)) {
         sendTo(u);
         continue;
       }
@@ -93974,7 +93978,7 @@
     /** A man who falls, with the bearers on: wounded at the rules' share (else killed), a man of a section a light case at theirs. */
     hurt(sq, m) {
       if (VEHICLE.has(m.role) || CREWED.has(m.role) || m.wd !== void 0) return;
-      const B3 = LAND3.bearers, u = sq.u;
+      const B3 = LAND.bearers, u = sq.u;
       if (roll(this.seed, u.id, m.n, 71) >= 1 - killedShare(u.nat)) return;
       m.wd = this.b.t;
       m.pose = "wounded";
@@ -93985,7 +93989,7 @@
     }
     /** Its light cases whose dressing is done get up, up to n of them, the earliest hurt first, while its block fights. */
     rise(sq, n) {
-      const u = sq.u, t = this.b.t, L3 = LAND3.bearers.light, foot = LAND3.speed.inf;
+      const u = sq.u, t = this.b.t, L3 = LAND.bearers.light, foot = LAND.speed.inf;
       if (!fighting(u) || !sq.dressing?.length) return;
       const walk2 = L3.at > 0 ? L3.at / (foot * L3.out) + L3.at / (foot * L3.back) : 0;
       while (n > 0 && sq.dressing.length && sq.dressing[0].wd + walk2 + L3.dress <= t + 1e-9) {
@@ -94019,7 +94023,7 @@
      * for the next litter case (its block fighting, its men down), and every carry moved on a step.
      */
     litters(sq) {
-      const u = sq.u, b = this.b, t = b.t, B3 = LAND3.bearers, f = b.field;
+      const u = sq.u, b = this.b, t = b.t, B3 = LAND.bearers, f = b.field;
       if (!sq.brs) {
         const cand = sq.men.filter((m) => m.j !== void 0 && m.role === "rifle" && !m.pr && !m.scout && !m.lead && m.fell === void 0).sort((a, c) => roll(this.seed, u.id, a.n, 73) - roll(this.seed, u.id, c.n, 73) || a.n - c.n);
         const pairs2 = Math.min(Math.floor(cand.length / 2), Math.max(1, Math.round(bearerShare(u.nat) * sq.m0 / B3.litter)));
@@ -94050,7 +94054,7 @@
     /** A carry's step: the bearers walk to the man, lift him, carry him to the aid post and walk home. */
     carryStep(sq, c) {
       var _a;
-      const u = sq.u, t = this.b.t, B3 = LAND3.bearers, rate2 = TURN.foot * DT, [wx, wy] = fwd(c.way);
+      const u = sq.u, t = this.b.t, B3 = LAND.bearers, rate2 = TURN.foot * DT, [wx, wy] = fwd(c.way);
       const FRONT2 = 1.12, REAR = 1.35;
       const stride2 = (m, p, v) => {
         const ddx = p[0] - m.x, ddy = p[1] - m.y, d = Math.hypot(ddx, ddy);
@@ -95057,7 +95061,7 @@
       const f = this.b.field, u = sq.u;
       const R2 = reach3 ?? DR.xp.seek[this.band(u)] * (u.kind === "arm" || u.kind === "art" ? 2 : 1);
       const going = m.role === "tank" ? "tracks" : m.role === "gun" ? "guns" : m.role === "lorry" ? "wheels" : "foot";
-      const pace2 = LAND3.pace[going];
+      const pace2 = LAND.pace[going];
       const sep = m.role === "tank" ? 16 : m.role === "gun" ? 18 : m.role === "lorry" ? 10 : CREWED.has(m.role) ? DR.teams.sep : 3.5;
       const cand = [p];
       const a0 = roll(this.seed, u.id, m.n, 7) * Math.PI * 2;
@@ -95465,7 +95469,7 @@
      */
     fight(sq) {
       const u = sq.u, b = this.b, t = b.t, N = this.nums(u), e = this.threat(u), dir = this.threatDir(sq);
-      const home = u.side === "def" && u.reserve !== "sent" && Math.hypot(u.x - u.home[0], u.y - u.home[1]) < LAND3.hold.within;
+      const home = u.side === "def" && u.reserve !== "sent" && Math.hypot(u.x - u.home[0], u.y - u.home[1]) < LAND.hold.within;
       const men2 = this.up(sq);
       const rifles = men2.filter((m) => m.role === "rifle" || m.role === "sapper").sort((a, c) => a.team === c.team ? a.k - c.k : c.team - a.team);
       const nA = home ? 0 : Math.round(rifles.length * N.assault * (e && e.state === "wavering" ? 1.2 : 1));
@@ -95565,7 +95569,7 @@
     fightBook(sq) {
       const u = sq.u, b = this.b, t = b.t, N = this.nums(u), e = this.threat(u), dir = this.threatDir(sq), band2 = this.band(u);
       const S3 = schoolNums(u.nat), bound3 = this.boundFor(sq, N), bk = this.cycle(sq, N, bound3);
-      const home = u.side === "def" && u.reserve !== "sent" && Math.hypot(u.x - u.home[0], u.y - u.home[1]) < LAND3.hold.within;
+      const home = u.side === "def" && u.reserve !== "sent" && Math.hypot(u.x - u.home[0], u.y - u.home[1]) < LAND.hold.within;
       const men2 = this.up(sq), gap = e ? b.gap(u, e) : 999, fresh6 = sq.since === t, wavering = !!e && e.state !== "steady";
       const [rx, ry] = right(u.face), [fx, fy] = fwd(u.face), G5 = DR.ranges.grenade;
       if (e && (sq.flankOf !== e.id || !sq.flank)) {
@@ -96732,7 +96736,7 @@
         }
       });
       const firing = u.engaged !== void 0 && !!e;
-      const direct = !!e && (b.gap(u, e) < LAND3.guns.closeAt || e.kind === "arm" && b.gap(u, e) < 800);
+      const direct = !!e && (b.gap(u, e) < LAND.guns.closeAt || e.kind === "arm" && b.gap(u, e) < 800);
       const hit = t - sq.shelledAt < DR.pin.shelled || sq.harm > DR.pin.harm;
       let fireNow = () => false;
       const ranging = this.byBook && firing && !direct && e ? this.mission(sq, guns2, e, 1, N) : void 0;
@@ -97268,7 +97272,7 @@
         const [qx, qy] = this.leash(sq, [x, y], -2);
         if (qx !== x || qy !== y) continue;
         const gr = groundOf4(f, x, y);
-        if (LAND3.pace.foot[gr] <= 0 || gr === "water" || gr === "blown" || gr === "marsh") continue;
+        if (LAND.pace.foot[gr] <= 0 || gr === "water" || gr === "blown" || gr === "marsh") continue;
         if (taken2.some(([tx, ty]) => Math.hypot(tx - x, ty - y) < S3.apart)) continue;
         if (from2 && Math.hypot(from2[0] - x, from2[1] - y) < S3.shift) continue;
         const h0 = heightOf(f, x, y), ahead2 = heightOf(f, x + dir[0] * 60, y + dir[1] * 60), fore = groundOf4(f, x + dir[0] * 15, y + dir[1] * 15);
@@ -97623,7 +97627,7 @@
           const a = (i % 5 - 2) * base.w / 5, l = (Math.floor(i / 5) - 2) * base.d / 3;
           const p = toWorld(base, base.face, a, l);
           const g2 = groundOf4(f, p[0], p[1]);
-          if (LAND3.pace.foot[g2] <= 0 || g2 === "water" || g2 === "blown") continue;
+          if (LAND.pace.foot[g2] <= 0 || g2 === "water" || g2 === "blown") continue;
           if (taken2.some((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < 12)) continue;
           const sc = heightOf(f, p[0], p[1]) + storeysOf(f, p[0], p[1]) * 3 + (g2 === "woods" ? 1 : 0) - Math.hypot(p[0] - e.x, p[1] - e.y) * 2e-3;
           if (sc > score) {
@@ -98278,7 +98282,7 @@
      * Numbered k 300 on by the mend's man (the spotter's pair are 200 and 201).
      */
     linemen(id) {
-      const b = this.b, t = b.t, out = [], pace2 = LAND3.speed.inf;
+      const b = this.b, t = b.t, out = [], pace2 = LAND.speed.inf;
       const r13 = (v) => Math.round(v * 10) / 10, r24 = (v) => Math.round(v * 100) / 100;
       for (const m of b.wireMends) {
         const w = b.wires[m.wire - 1];
@@ -98473,7 +98477,7 @@
     return Math.hypot(px - (ax + k * dx), py - (ay + k * dy));
   }
   function coveredTanks(t, units2) {
-    const A = LAND3.alone, out = /* @__PURE__ */ new Set();
+    const A = LAND.alone, out = /* @__PURE__ */ new Set();
     for (const s of ["att", "def"]) {
       const fs = t[s].forces, w = (k) => fs.filter((f) => k(f.kind)).reduce((a, f) => a + f.divs * f.str, 0);
       const foot = w((k) => A.foot.includes(k) || s === "def" && k === "fort"), tanks = w((k) => k === "arm");
@@ -98953,7 +98957,7 @@
       if (k?.ledger) {
         const R2 = { att: 0, def: 0 }, P = { att: 0, def: 0 };
         for (const u of [...this.units, ...joining]) {
-          R2[u.side] += u.power0 * (u.mor0 - LAND3.nerve.rout);
+          R2[u.side] += u.power0 * (u.mor0 - LAND.nerve.rout);
           P[u.side] += u.power0;
         }
         this.led = {
@@ -98974,7 +98978,7 @@
       }
       this.covered = coveredTanks(ticket, this.units);
       const works2 = ticket.place.fort >= 1 || def.some((u) => u.kind === "fort");
-      this.freshHold = { att: att.filter((u) => u.kind !== "fort" && !u.team).length <= LAND3.fresh.upTo, def: !works2 && def.filter((u) => u.kind !== "fort" && !u.team).length <= LAND3.fresh.upTo };
+      this.freshHold = { att: att.filter((u) => u.kind !== "fort" && !u.team).length <= LAND.fresh.upTo, def: !works2 && def.filter((u) => u.kind !== "fort" && !u.team).length <= LAND.fresh.upTo };
       for (const u of this.units) {
         const c = crewFor(u, ticket[u.side].forces.find((f) => f.corps === u.corps)?.battles ?? 0);
         if (c) u.crew = c;
@@ -98996,7 +99000,7 @@
       const armour = att.filter((u) => MOTION[u.kind] === "tracks" || MOTION[u.kind] === "wheels"), all = armour.reduce((a, u) => a + u.power0, 0);
       this.armourWet = all > 0 ? armour.filter((u) => !u.dry).reduce((a, u) => a + u.power0, 0) / all : 0;
       this.field = buildField(ticket.place, ticket.seed, bend);
-      if (streetsOf(ticket.place)) this.ticket = { ...ticket, limit: Math.round(ticket.limit * (1 + LAND3.city.clock * builtShare(this.field))) };
+      if (streetsOf(ticket.place)) this.ticket = { ...ticket, limit: Math.round(ticket.limit * (1 + LAND.city.clock * builtShare(this.field))) };
       deploy(this.units, "att", this.field);
       deploy(this.units, "def", this.field);
       if (joining.length) this.comeOn(joining);
@@ -99005,17 +99009,17 @@
         const xAt = (y) => St.course.reduce((m, p) => Math.abs(p[1] - y) < Math.abs(m[1] - y) ? p : m)[0];
         const west = held3.filter((u) => u.x < xAt(u.y)).length;
         this.flankOnRiver = west === 0 || west === held3.length;
-        if (this.flankOnRiver) this.flankHold = LAND3.hold.stream;
+        if (this.flankOnRiver) this.flankHold = LAND.hold.stream;
       } else if (St?.lie === "across" && St.join) {
         const xs = St.join.course.map((p) => p[0]).filter((x) => x >= 0 && x <= this.field.w), west = St.join.course[0][0] < this.field.w / 2;
         this.flankOnRiver = xs.length > 0 && held3.every((u) => west ? u.x > Math.max(...xs) : u.x < Math.min(...xs));
-        if (this.flankOnRiver) this.flankHold = LAND3.hold.join;
+        if (this.flankOnRiver) this.flankHold = LAND.hold.join;
       }
       for (const u of this.units) u.cover = groundAt(this.field, u.x, u.y);
       this.ai = { att: !ticket.att.human, def: !ticket.def.human };
       const [d0, d1] = ticket.reckoning.luck ?? ticket.reckoning.dice;
       const roll4 = d0 + (d1 - d0) * new Rng(hashString(ticket.attempt ? `fortune:${ticket.seed}:${ticket.attempt}` : `fortune:${ticket.seed}`)).next();
-      this.fortune = 1 + LAND3.fortune * (roll4 - 1);
+      this.fortune = 1 + LAND.fortune * (roll4 - 1);
       if (k?.move !== void 0) this.lean = k.move;
       for (const s of ["att", "def"]) {
         const a = ticket[s].air;
@@ -99033,7 +99037,7 @@
      * cost the field must make up, so a river never makes an attack better than none (b494).
      */
     holdTake(u, t) {
-      const p = this.ticket.place, H = LAND3.hold;
+      const p = this.ticket.place, H = LAND.hold;
       const streets = streetsOf(p);
       return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 && t.joined === void 0 ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * this.flankHold;
     }
@@ -99072,7 +99076,7 @@
      * Nothing here draws on the dice.
      */
     comeOn(joining) {
-      const B3 = this.field.bend, F2 = this.field, J = LAND3.join;
+      const B3 = this.field.bend, F2 = this.field, J = LAND.join;
       for (const corps of [...new Set(joining.map((u) => u.corps))]) {
         const us = joining.filter((u) => u.corps === corps), u0 = us[0], side5 = u0.side;
         const f = this.ticket[side5].joiners.find((x2) => x2.corps === corps);
@@ -99083,7 +99087,7 @@
         const along = edge4 === "south" || edge4 === "north", [lo, hi] = lanes2 ?? [10, F2.w - 10];
         const own0 = this.units.filter((v) => v.side === side5);
         const cx = own0.length ? own0.reduce((a, v) => a + v.x, 0) / own0.length : x, cy = own0.length ? own0.reduce((a, v) => a + v.y, 0) / own0.length : y;
-        const walk2 = Math.hypot(x - cx, y - cy) / Math.max(1, LAND3.speed[u0.kind]);
+        const walk2 = Math.hypot(x - cx, y - cy) / Math.max(1, LAND.speed[u0.kind]);
         const at4 = Math.round(Math.max(0, (1 - u0.joined) * this.ticket.limit - walk2) * 1e3) / 1e3;
         if (at4 > 0) {
           this.riders.push({ corps, side: side5, f, from: [x, y], mid: [cx, cy], to: [x, y], there: 0, comes: at4, edge: edge4 });
@@ -99100,7 +99104,7 @@
     }
     /** Where on its edge a joining corps comes on: across a back edge by the way it comes, at a flank its side's own depth. */
     edgeAt(side5, edge4, toward, w, lanes2) {
-      const F2 = this.field, z = F2.zones[side5], J = LAND3.join;
+      const F2 = this.field, z = F2.zones[side5], J = LAND.join;
       if (edge4 === "west" || edge4 === "east") return [edge4 === "west" ? w / 2 + 10 : F2.w - w / 2 - 10, (z[1] + z[3]) / 2];
       const [lo, hi] = lanes2 ?? [z[0], z[2]];
       const q = toward !== void 0 && Number.isFinite(toward) ? toward : 0;
@@ -99130,7 +99134,7 @@
      * sent (b407; its guns stand as guns), walking its LAND.join.walk metres onto the field, its ground where it stops.
      */
     walkOn(c) {
-      const u = c.u, J = LAND3.join, [nx, ny, face] = INWARD[c.edge];
+      const u = c.u, J = LAND.join, [nx, ny, face] = INWARD[c.edge];
       [u.x, u.y] = this.clearSpot(u, c.x, c.y, nx, ny, c.lanes);
       u.face = face;
       u.cover = groundAt(this.field, u.x, u.y);
@@ -99147,12 +99151,12 @@
      * the same battle always finds the same spot; where none is clear it keeps (x, y) and the march sorts it out.
      */
     clearSpot(u, x, y, nx, ny, lanes2) {
-      const F2 = this.field, J = LAND3.join, m = Math.max(u.w, u.d), cell = F2.cell;
+      const F2 = this.field, J = LAND.join, m = Math.max(u.w, u.d), cell = F2.cell;
       const [lo, hi] = lanes2 ?? [10, F2.w - 10];
       const fit3 = (px, py) => [clamp6(px, lo + m / 2, Math.max(lo + m / 2, hi - m / 2)), clamp6(py, 40, F2.h - 40)];
       const clear = (px, py) => {
         if (this.wet(u, px, py, false) || wetUnder(F2, { x: px, y: py, w: m, d: m })) return false;
-        for (const o of this.units) if (live4(o) && Math.abs(o.x - px) < (o.w + m) / 2 + LAND3.placeClear && Math.abs(o.y - py) < (o.d + m) / 2 + LAND3.placeClear) return false;
+        for (const o of this.units) if (live4(o) && Math.abs(o.x - px) < (o.w + m) / 2 + LAND.placeClear && Math.abs(o.y - py) < (o.d + m) / 2 + LAND.placeClear) return false;
         return true;
       };
       for (let k = 0; k <= J.inward; k++) for (let j = 0; j <= 2 * J.across; j++) {
@@ -99165,11 +99169,11 @@
     /** Where a rider rides to and stands, and when he is there: worked out as the clock is set, and again once the setup step has placed the guns. */
     riderTo(r) {
       r.to = this.riderSpot(r.mid[0], r.mid[1]);
-      r.there = Math.round(Math.hypot(r.to[0] - r.from[0], r.to[1] - r.from[1]) / Math.max(...Object.values(LAND3.speed)) * 1e3) / 1e3;
+      r.there = Math.round(Math.hypot(r.to[0] - r.from[0], r.to[1] - r.from[1]) / Math.max(...Object.values(LAND.speed)) * 1e3) / 1e3;
     }
     /** Where a rider stands: the nearest point to (x, y), outward a half cell at a time, out of the water and off a bridge, clear of every block. */
     riderSpot(x, y) {
-      const F2 = this.field, c = LAND3.placeClear;
+      const F2 = this.field, c = LAND.placeClear;
       const ok2 = (px, py) => {
         if (px < 10 || py < 10 || px > F2.w - 10 || py > F2.h - 10) return false;
         const g2 = groundAt(F2, px, py);
@@ -99211,7 +99215,7 @@
             x: r13(r.from[0] + (r.to[0] - r.from[0]) * k),
             y: r13(r.from[1] + (r.to[1] - r.from[1]) * k),
             face: r34(bearing(r.from[0], r.from[1], r.to[0], r.to[1])),
-            speed: k < 1 ? Math.max(...Object.values(LAND3.speed)) : 0,
+            speed: k < 1 ? Math.max(...Object.values(LAND.speed)) : 0,
             there: r34(r.there),
             comes: r34(r.comes),
             edge: r.edge,
@@ -99262,7 +99266,7 @@
     }
     /** Help stands beside this block: a block of a joining corps within LAND.alone.near of it, edge to edge. */
     relieved(u) {
-      return this.units.some((r) => this.helps(r, u) && this.gap(r, u) <= LAND3.alone.near);
+      return this.units.some((r) => this.helps(r, u) && this.gap(r, u) <= LAND.alone.near);
     }
     /** This corps still has a block that is not guns coming up or in the fight: its help may yet come. */
     canHelp(corps) {
@@ -99283,9 +99287,9 @@
       };
       for (const c of this.coming) {
         if (c.u.side !== u.side || c.u.corps === u.corps || c.u.kind === "art" || this.waitedFor.has(c.u.corps) || skip?.has(c.u.corps)) continue;
-        take3(c.u.corps, Math.max(this.t, c.at) + Math.hypot(c.x - u.x, c.y - u.y) / Math.max(1, LAND3.speed[c.u.kind]));
+        take3(c.u.corps, Math.max(this.t, c.at) + Math.hypot(c.x - u.x, c.y - u.y) / Math.max(1, LAND.speed[c.u.kind]));
       }
-      for (const r of this.units) if (this.helps(r, u) && !this.waitedFor.has(r.corps) && !skip?.has(r.corps)) take3(r.corps, this.t + Math.hypot(r.x - u.x, r.y - u.y) / Math.max(1, LAND3.speed[r.kind]));
+      for (const r of this.units) if (this.helps(r, u) && !this.waitedFor.has(r.corps) && !skip?.has(r.corps)) take3(r.corps, this.t + Math.hypot(r.x - u.x, r.y - u.y) / Math.max(1, LAND.speed[r.kind]));
       return corps < 0 ? null : { corps, due: Math.round(due * 1e3) / 1e3 };
     }
     /**
@@ -99367,7 +99371,7 @@
       else delete u.waits;
       if (how === "broke") this.landNow(u);
       else if (how !== "late" && u.debt !== void 0) {
-        const by2 = how === "relieved" ? this.units.filter((r) => this.helps(r, u) && this.gap(r, u) <= LAND3.alone.near).map((r) => r.id) : [];
+        const by2 = how === "relieved" ? this.units.filter((r) => this.helps(r, u) && this.gap(r, u) <= LAND.alone.near).map((r) => r.id) : [];
         const d = u.debt, n = u.debtN ?? 0;
         delete u.debt;
         delete u.debtN;
@@ -99481,7 +99485,7 @@
     // finds (barrier()): there a gap open is a way through for any tank, and the fight changes, measured.
     /** Whether this block carries hedge cutters: the switch on, a tank block, from LAND.cutters.from, on a field with hedges. */
     cutterOf(u) {
-      return this.cutters && u.kind === "arm" && this.ticket.turn >= LAND3.cutters.from && this.hedges.length > 0;
+      return this.cutters && u.kind === "arm" && this.ticket.turn >= LAND.cutters.from && this.hedges.length > 0;
     }
     /**
      * Why this block may not cut through the hedge at (x, y) now, in the player's words (129(d)); null where it may. With
@@ -99491,12 +99495,12 @@
       if (!this.cutters) return "Your tanks carry no hedge cutters.";
       if (!fighting2(u) || u.kind === "fort") return "It is out of the fight.";
       if (u.kind !== "arm") return "Only tanks carry hedge cutters.";
-      if (this.ticket.turn < LAND3.cutters.from) return "Hedge cutters come in July 1944.";
+      if (this.ticket.turn < LAND.cutters.from) return "Hedge cutters come in July 1944.";
       if (!this.hedges.length) return "There are no hedges on this field.";
       if (x === void 0 && y === void 0) return null;
       const px = Number(x), py = Number(y);
       if (!Number.isFinite(px) || !Number.isFinite(py) || px < 0 || py < 0 || px > this.field.w || py > this.field.h) return "Off the field.";
-      if (!this.hedgeNear(px, py, LAND3.cutters.near)) return "There is no hedge there.";
+      if (!this.hedgeNear(px, py, LAND.cutters.near)) return "There is no hedge there.";
       return null;
     }
     /**
@@ -99536,9 +99540,9 @@
         delete u.cut;
         return;
       }
-      const p = this.hedgeNear(x, y, LAND3.cutters.near);
+      const p = this.hedgeNear(x, y, LAND.cutters.near);
       const k = Math.hypot(p.x - u.x, p.y - u.y), [ux, uy] = k > 1e-6 ? [(p.x - u.x) / k, (p.y - u.y) / k] : ahead(u.face);
-      const on2 = u.d / 2 + LAND3.cutters.near;
+      const on2 = u.d / 2 + LAND.cutters.near;
       this.send(u, { kind: "move", x: p.x + ux * on2, y: p.y + uy * on2 });
       u.cut = { x: p.x, y: p.y, yaw: p.yaw };
     }
@@ -99554,7 +99558,7 @@
     }
     /** A gap within LAND.cutters.width of (x, y): a gate, or a cut under way. */
     gapNear(x, y) {
-      const W2 = LAND3.cutters.width;
+      const W2 = LAND.cutters.width;
       return this.gates.some((g2) => Math.hypot(g2.x - x, g2.y - y) <= W2) || this.cuts.some((c) => !c.open && Math.hypot(c.x - x, c.y - y) <= W2);
     }
     /**
@@ -99590,7 +99594,7 @@
      * of a block he has not met is kept from him).
      */
     cutBegin(u, x, y, yaw) {
-      const C4 = LAND3.cutters, r13 = (v) => Math.round(v * 10) / 10, r34 = (v) => Math.round(v * 1e3) / 1e3;
+      const C4 = LAND.cutters, r13 = (v) => Math.round(v * 10) / 10, r34 = (v) => Math.round(v * 1e3) / 1e3;
       const c = { t0: r34(this.t), t1: r34(this.t + C4.secs), unit: u.id, side: u.side, x: r13(x), y: r13(y), yaw: r34(yaw), width: C4.width, known: this.known(u), open: false };
       this.cuts.push(c);
       const words2 = this.ticket[u.side].human || !this.ticket[other2(u.side)].human;
@@ -99713,14 +99717,14 @@
       if (u.team || MOTION[u.kind] !== "foot" && u.kind !== "mot") return "Only troops on foot lay smoke.";
       const m = smokeMeans(u.nat);
       if (!m) return "Your army has no smoke to lay.";
-      if ((u.smokeLeft ?? m.count ?? LAND3.smoke.count) <= 0) return "They have no smoke left.";
+      if ((u.smokeLeft ?? m.count ?? LAND.smoke.count) <= 0) return "They have no smoke left.";
       if (this.screenOf(u)) return "Their last screen still stands.";
       if (x0 === void 0 && y0 === void 0) return null;
       const a = Number(x0), b = Number(y0), c = x1 === void 0 ? a : Number(x1), d = y1 === void 0 ? b : Number(y1);
       if (![a, b, c, d].every(Number.isFinite)) return "Off the field.";
       const mx = (a + c) / 2, my = (b + d) / 2;
       if (m.reach > 0 && this.frontGap(u, mx, my) > m.reach + 1e-9) return `They can lay smoke up to ${m.reach} m ahead.`;
-      if (m.reach <= 0 && !this.fronted(u, mx, my) && this.frontGap(u, mx, my) > LAND3.smoke.front + 1e-9) return "They set their smoke down along their own front.";
+      if (m.reach <= 0 && !this.fronted(u, mx, my) && this.frontGap(u, mx, my) > LAND.smoke.front + 1e-9) return "They set their smoke down along their own front.";
       return null;
     }
     /**
@@ -99755,7 +99759,7 @@
       const m = this.smokeOf(u), [x0, y0, x1, y1] = this.smokeLine(u, l, m);
       const s = { id: this.screens.length + 1, side: u.side, unit: u.id, x0, y0, x1, y1, t: Math.round(this.t * 1e3) / 1e3, until: Math.round((this.t + m.hang) * 1e3) / 1e3 };
       this.screens.push(s);
-      u.smokeLeft = (u.smokeLeft ?? m.count ?? LAND3.smoke.count) - 1;
+      u.smokeLeft = (u.smokeLeft ?? m.count ?? LAND.smoke.count) - 1;
       this.say({ what: "land:smoke", unit: u.id, side: u.side, text: `${this.named(u)} lays a smoke screen.`, x: Math.round((x0 + x1) / 2 * 10) / 10, y: Math.round((y0 + y1) / 2 * 10) / 10, extra: { screen: s.id, until: s.until } });
       this.drill?.screen(s);
     }
@@ -99825,11 +99829,11 @@
      */
     fallbackWait(u) {
       if (this.fallbackOf(u) === "radio") {
-        const R2 = LAND3.radio, hit = u.state === "wavering" || u.str < R2.hqAt * u.str0;
+        const R2 = LAND.radio, hit = u.state === "wavering" || u.str < R2.hqAt * u.str0;
         return R2.delay * (hit ? R2.cut : 1) * this.radioOf(u);
       }
       const [hx, hy] = this.phonesHq();
-      return Math.hypot(u.x - hx, u.y - hy) / LAND3.phones.runner;
+      return Math.hypot(u.x - hx, u.y - hy) / LAND.phones.runner;
     }
     /** Each tick, before the orders land and the staffs think: the wires laid as the clock starts, and the mends whose time has come. */
     phonesOn() {
@@ -99854,7 +99858,7 @@
     wireBlow(u, t) {
       const w = this.wireBy.get(t.id);
       if (!w || w.cut >= w.lines || u.side === w.side || !(u.team === "mor" || u.kind === "art" && !u.team)) return;
-      if (this.phoneRng.next() >= LAND3.phones.cut) return;
+      if (this.phoneRng.next() >= LAND.phones.cut) return;
       const [fx, fy] = ahead(t.face), px = t.x + fx * t.d / 2, py = t.y + fy * t.d / 2;
       const dx = t.x - w.hq[0], dy = t.y - w.hq[1], l = dx * dx + dy * dy;
       const k = l > 0 ? Math.max(0, Math.min(1, ((px - w.hq[0]) * dx + (py - w.hq[1]) * dy) / l)) : 1;
@@ -99882,8 +99886,8 @@
       const c = { t: r34(this.t), wire: w.id, x: r13(x), y: r13(y), by: by2.id };
       this.wireCuts.push(c);
       if (!w.out) {
-        const t1 = r34(this.t + Math.hypot(c.x - w.hq[0], c.y - w.hq[1]) / LAND3.speed.inf);
-        w.out = { t: r34(t1 + LAND3.phones.splice), wire: w.id, man: this.wireMends.length + 1, t0: c.t, t1, x: c.x, y: c.y };
+        const t1 = r34(this.t + Math.hypot(c.x - w.hq[0], c.y - w.hq[1]) / LAND.speed.inf);
+        w.out = { t: r34(t1 + LAND.phones.splice), wire: w.id, man: this.wireMends.length + 1, t0: c.t, t1, x: c.x, y: c.y };
         this.wireMends.push(w.out);
       }
       const u = this.unit(w.unit);
@@ -100055,7 +100059,7 @@
           const across = [...us].sort((a, b) => (a.x - cx) * rx + (a.y - cy) * ry - ((b.x - cx) * rx + (b.y - cy) * ry));
           const step2 = across.reduce((s, u) => s + u.w, 0) / across.length + 30;
           const foes = this.units.filter((e) => e.side !== by2 && fighting2(e) && !e.hid);
-          const together = c.together !== void 0 ? { together: c.together } : us.length > 1 && LAND3.together.player ? { together: ++this.groupIds } : {};
+          const together = c.together !== void 0 ? { together: c.together } : us.length > 1 && LAND.together.player ? { together: ++this.groupIds } : {};
           across.forEach((u, i) => {
             const lane = (i - (us.length - 1) / 2) * step2;
             if (us.length > 1 && Math.abs(lane) > t.w / 2 + u.w / 2) {
@@ -100164,10 +100168,10 @@
             const us = mine4(c.units ?? []).filter((u) => this.cutWhy(u, x, y) === null);
             if (!us.length) return false;
             hands(us);
-            const p = this.hedgeNear(x, y, LAND3.cutters.near), ax = Math.cos(p.yaw), ay = Math.sin(p.yaw);
+            const p = this.hedgeNear(x, y, LAND.cutters.near), ax = Math.cos(p.yaw), ay = Math.sin(p.yaw);
             const cx = us.reduce((s, u) => s + u.x, 0) / us.length, cy = us.reduce((s, u) => s + u.y, 0) / us.length;
             for (const u of us) {
-              const k = (u.x - cx) * ax + (u.y - cy) * ay, q = us.length > 1 ? this.hedgeNear(p.x + ax * k, p.y + ay * k, LAND3.cutters.near) : null;
+              const k = (u.x - cx) * ax + (u.y - cy) * ay, q = us.length > 1 ? this.hedgeNear(p.x + ax * k, p.y + ay * k, LAND.cutters.near) : null;
               const [px, py] = q ? [q.x, q.y] : [x, y];
               give(u, () => this.cutGo(u, px, py));
             }
@@ -100252,7 +100256,7 @@
         go();
         return;
       }
-      const R2 = LAND3.radio, hit = u.state === "wavering" || u.str < R2.hqAt * u.str0;
+      const R2 = LAND.radio, hit = u.state === "wavering" || u.str < R2.hqAt * u.str0;
       const at4 = Math.round((from2 + R2.delay * (hit ? R2.cut : 1) * this.radioOf(u)) * 1e3) / 1e3;
       this.pending = this.pending.filter((p) => p.id !== u.id || !p.smoke !== !smoke);
       if (at4 <= this.t + 1e-9) {
@@ -100313,7 +100317,7 @@
       return u.dry && motionOf(u) === "foot" && (u.joined === void 0 || this.field.bend) ? "ashore" : motionOf(u);
     }
     paceOf(m) {
-      return m === "ashore" ? this.ashore ?? (this.ashore = { ...LAND3.pace.foot, water: 0, blown: 0 }) : m === "hedged" ? LAND3.pace.tracks : LAND3.pace[m];
+      return m === "ashore" ? this.ashore ?? (this.ashore = { ...LAND.pace.foot, water: 0, blown: 0 }) : m === "hedged" ? LAND.pace.tracks : LAND.pace[m];
     }
     route(u, x, y) {
       const m = this.going(u), f = this.field;
@@ -100527,8 +100531,8 @@
      * player can know: the bridge's battleStart); a figure that is no number counts none. budget: the figures it is set
      * for (the 2D page's dots: LAND.scale.page). The blocks of corps still coming up from next door count too.
      */
-    scale(menOf = (u) => u.men0, budget = LAND3.scale.budget) {
-      const S3 = LAND3.scale, men2 = this.allBlocks().reduce((s, u) => {
+    scale(menOf = (u) => u.men0, budget = LAND.scale.budget) {
+      const S3 = LAND.scale, men2 = this.allBlocks().reduce((s, u) => {
         const m = menOf(u);
         return s + (Number.isFinite(m) ? Math.max(0, m) : 0);
       }, 0);
@@ -100581,7 +100585,7 @@
       }
       for (const o of this.units) {
         if (o === u || !live4(o)) continue;
-        if (Math.abs(o.x - x) < (o.w + u.w) / 2 + LAND3.placeClear && Math.abs(o.y - y) < (o.d + u.d) / 2 + LAND3.placeClear) return "Another block stands there.";
+        if (Math.abs(o.x - x) < (o.w + u.w) / 2 + LAND.placeClear && Math.abs(o.y - y) < (o.d + u.d) / 2 + LAND.placeClear) return "Another block stands there.";
       }
       return null;
     }
@@ -100642,7 +100646,7 @@
     /** What a blow from u on tank block t weighs for t's armour on that face at that range (1 at par); null where unknown. */
     armourAt(u, t, face, range2) {
       const s = this.vehicle(u), v = this.vehicle(t);
-      return s && v ? armourWeight(s, v, face, range2, this.ticket.turn, LAND3.armour.lo, LAND3.armour.hi) : null;
+      return s && v ? armourWeight(s, v, face, range2, this.ticket.turn, LAND.armour.lo, LAND.armour.hi) : null;
     }
     // ---- Hidden in the woods (release 2; Brian, 22 November 04:18Z; LAND.hide) -------------------------------------
     /**
@@ -100667,7 +100671,7 @@
      */
     hedgesOn(hedges, gates = []) {
       if (this.t > 0 || this.over) return false;
-      const W2 = this.field.w, H = this.field.h, C4 = HEDGE_CELL, near2 = LAND3.hide.hedge.near;
+      const W2 = this.field.w, H = this.field.h, C4 = HEDGE_CELL, near2 = LAND.hide.hedge.near;
       const cols2 = Math.ceil(W2 / C4), rows = Math.ceil(H / C4), map = new Uint8Array(cols2 * rows);
       const keep3 = [];
       for (const h of hedges) {
@@ -100732,7 +100736,7 @@
       const near2 = this.gates.map((g2) => ({ g: g2, d: Math.hypot(g2.x - at4[0], g2.y - at4[1]) })).filter((x) => x.d <= GATE_REACH).sort((a, b) => a.d - b.d);
       for (const { g: g2 } of near2) {
         const to = this.hedgeCross(x0, y0, g2.x, g2.y, skip);
-        if (!to || Math.hypot(to[0] - g2.x, to[1] - g2.y) <= LAND3.hide.hedge.gap) return g2;
+        if (!to || Math.hypot(to[0] - g2.x, to[1] - g2.y) <= LAND.hide.hedge.gap) return g2;
       }
       return null;
     }
@@ -100747,7 +100751,7 @@
           dir = [(s[2] - s[0]) / l, (s[3] - s[1]) / l];
         }
       }
-      return best <= LAND3.hide.hedge.near ? dir : null;
+      return best <= LAND.hide.hedge.near ? dir : null;
     }
     /** On a hedge line (within LAND.hide.hedge.near of one), where the field has hedges. */
     onHedge(x, y) {
@@ -100769,7 +100773,7 @@
     // dice are its own, keyed by place (roll, salts 341-359), never the battle's, so on and off keep the battle's in step.
     /** Ground a sniper team hides on beyond woods and a hedge line (LAND.snipers.cover). */
     sniperCover(x, y) {
-      return LAND3.snipers.cover.includes(coverAt(this.field, x, y));
+      return LAND.snipers.cover.includes(coverAt(this.field, x, y));
     }
     /** Hiding ground for a sniper team: its own cover, woods, or a hedge line. */
     sniperGround(x, y) {
@@ -100786,26 +100790,26 @@
     /** The weight of a sniper team's blows on t (LAND.snipers.bite), 0 to 1: its striking weight now over t's power. */
     bite(u, t) {
       const r = u.power0 * (0.35 + 0.65 * (u.str / u.str0)) / Math.max(1e-9, t.power0);
-      return Math.min(1, r / LAND3.snipers.bite);
+      return Math.min(1, r / LAND.snipers.bite);
     }
     /** A sniper team's choice of target, as a multiplier on targetOf's score (LAND.snipers.pick: lower first). */
     sniperPick(e) {
-      const P = LAND3.snipers.pick;
+      const P = LAND.snipers.pick;
       if (e.state === "routing") return P.routing;
       if (e.team === "snp") return P.snp;
       if (e.team === "mg") return P.mg;
       if (e.kind === "arm") return this.closed(e) ? P.closed : P.open;
-      return motionOf(e) === "foot" && e.speed > 0.5 && e.order?.kind !== "withdraw" && (e.pinSpent ?? 0) < LAND3.pin.most ? P.moving : P.still;
+      return motionOf(e) === "foot" && e.speed > 0.5 && e.order?.kind !== "withdraw" && (e.pinSpent ?? 0) < LAND.pin.most ? P.moving : P.still;
     }
     /**
      * In woods, off a hedge line, a sniper team reaches beyond LAND.hide.forest only where its line to 'e' leaves the woods
      * within LAND.snipers.edge metres: it shoots from the edge.
      */
     sniperSees(u, e, d) {
-      if (d <= LAND3.hide.forest || !this.inWoods(u) || this.onHedge(u.x, u.y)) return true;
+      if (d <= LAND.hide.forest || !this.inWoods(u) || this.onHedge(u.x, u.y)) return true;
       const k = Math.hypot(e.x - u.x, e.y - u.y), step2 = Math.min(10, this.field.cell);
       if (k < 1e-6) return true;
-      for (let r = step2; r <= LAND3.snipers.edge; r += step2) if (coverAt(this.field, u.x + (e.x - u.x) * r / k, u.y + (e.y - u.y) * r / k) !== "woods") return true;
+      for (let r = step2; r <= LAND.snipers.edge; r += step2) if (coverAt(this.field, u.x + (e.x - u.x) * r / k, u.y + (e.y - u.y) * r / k) !== "woods") return true;
       return false;
     }
     /**
@@ -100813,7 +100817,7 @@
      * 'to', never ahead of 'front' (its own leading foot, measured along its side's way), and at least 'keep' metres from
      * every found enemy block; the furthest forward first, then the nearest. Null where there is none.
      */
-    sniperSpot(u, to, front, step2 = 400, keep3 = LAND3.snipers.keep) {
+    sniperSpot(u, to, front, step2 = 400, keep3 = LAND.snipers.keep) {
       const dir = u.side === "att" ? 1 : -1, cell = this.field.cell, k = Math.max(1e-6, Math.hypot(to[0] - u.x, to[1] - u.y));
       const foes = this.units.filter((e) => e.side !== u.side && live4(e) && !e.hid);
       let best = null, score = -Infinity;
@@ -100855,7 +100859,7 @@
      * fire counts as an ambush for the struck side's staff, which searches the cover ahead.
      */
     snipeFromHiding(u, t) {
-      const F2 = LAND3.snipers.find;
+      const F2 = LAND.snipers.find;
       this.ambushed.add(t.side);
       let f = (this.gap(u, t) > F2.near ? F2.far : F2.close) * (F2.xp - u.xp);
       if (this.units.some((e) => e.team === "snp" && e.side !== u.side && fighting2(e) && this.gap(u, e) <= reachOf(u))) f *= F2.hunt;
@@ -100870,11 +100874,11 @@
      * pin.secs, until it has spent LAND.pin.most seconds so (never routing or falling back).
      */
     sniped(u, t) {
-      const S3 = LAND3.snipers, b = this.bite(u, t), at4 = (secs) => Math.round((this.t + secs) * 1e3) / 1e3;
+      const S3 = LAND.snipers, b = this.bite(u, t), at4 = (secs) => Math.round((this.t + secs) * 1e3) / 1e3;
       const lead2 = 1 - S3.lead.xp * b;
       t.leadK = t.leadTo !== void 0 && this.t < t.leadTo ? Math.min(t.leadK ?? 1, lead2) : lead2;
       t.leadTo = at4(S3.lead.secs);
-      if (motionOf(t) !== "foot" || t.state === "routing" || t.order?.kind === "withdraw" || (t.pinSpent ?? 0) >= LAND3.pin.most) return;
+      if (motionOf(t) !== "foot" || t.state === "routing" || t.order?.kind === "withdraw" || (t.pinSpent ?? 0) >= LAND.pin.most) return;
       const pin = 1 - S3.pin.pace * b;
       t.pinK = t.pinTo !== void 0 && this.t < t.pinTo ? Math.min(t.pinK ?? 1, pin) : pin;
       t.pinTo = at4(S3.pin.secs);
@@ -100896,7 +100900,7 @@
      * below slip.str of its strength.
      */
     snipersSlip() {
-      const S3 = LAND3.snipers.slip;
+      const S3 = LAND.snipers.slip;
       for (const u of this.units) {
         if (u.team !== "snp" || u.hid || !fighting2(u) || u.order?.kind === "withdraw") continue;
         const clear = () => this.sniperGround(u.x, u.y) && !this.units.some((e) => e.side !== u.side && fighting2(e) && this.gap(u, e) <= S3.clear);
@@ -100921,7 +100925,7 @@
      * the enemy's line is within reach; otherwise it stays. The player's stay where he placed them.
      */
     laySnipers(side5) {
-      const S3 = LAND3.snipers, H = LAND3.hide.staff, dir = side5 === "att" ? 1 : -1, z = this.field.zones[side5];
+      const S3 = LAND.snipers, H = LAND.hide.staff, dir = side5 === "att" ? 1 : -1, z = this.field.zones[side5];
       const own = this.units.filter((u) => u.side === side5 && live4(u));
       const snp = own.filter((u) => u.team === "snp" && !u.taken);
       const foot = own.filter((u) => !u.team && u.kind !== "art" && u.kind !== "fort");
@@ -100934,7 +100938,7 @@
         Math.max(z[3], ...own.map((u) => u.y + u.d / 2))
       ];
       const front = dir > 0 ? Math.max(...foot.map((u) => u.y + u.d / 2)) : Math.min(...foot.map((u) => u.y - u.d / 2));
-      const x0 = room2[0], span2 = Math.max(1, room2[2] - room2[0]), reach3 = LAND3.teams.snp.reach;
+      const x0 = room2[0], span2 = Math.max(1, room2[2] - room2[0]), reach3 = LAND.teams.snp.reach;
       const cell = this.hedgeMap ? Math.min(this.field.cell, HEDGE_CELL) : this.field.cell;
       const inReach = (x, y) => foes.some((e) => Math.hypot(e.x - x, e.y - y) - (e.w + e.d) / 4 <= reach3 || side5 === "def" && Math.abs(e.x - x) <= reach3 && dir * (y - e.y) < 0 && Math.abs(y - e.y) - e.d / 2 <= reach3 + 400);
       snp.sort((a, b) => a.x - b.x || a.id - b.id);
@@ -100975,7 +100979,7 @@
      * true forest, foot and machine guns hold to LAND.hide.forest: they could see no further.
      */
     ambushAt(u) {
-      const H = LAND3.hide, a = u.team === "mg" ? H.ambush.mg : H.ambush[MOTION[u.kind]];
+      const H = LAND.hide, a = u.team === "mg" ? H.ambush.mg : H.ambush[MOTION[u.kind]];
       if (a <= 0) return Infinity;
       return !this.onHedge(u.x, u.y) && this.inWoods(u) ? Math.min(a, H.forest) : a;
     }
@@ -100985,7 +100989,7 @@
      */
     radioOf(u) {
       const year = turnToDate(this.ticket.turn).year;
-      const foot = (LAND3.radio.nations[u.nat] ?? []).find(([to]) => year <= to)?.[1] ?? 1;
+      const foot = (LAND.radio.nations[u.nat] ?? []).find(([to]) => year <= to)?.[1] ?? 1;
       if (u.kind !== "arm") return foot;
       const m = this.vehicle(u), r = m ? ARMOUR.models[m]?.radio : void 0;
       return r === void 0 ? foot : r + (1 - r) * foot;
@@ -101005,8 +101009,8 @@
      * player's setup step allows his, clear of every other block. Where no woods lie near, none goes. 'most' blocks at
      * most, of those 'may' allows (a caught patrol's one more post: night patrol); the blocks it put there.
      */
-    layAmbush(side5, most = LAND3.hide.staff.blocks, may = () => true) {
-      const H = LAND3.hide.staff, dir = side5 === "att" ? 1 : -1;
+    layAmbush(side5, most = LAND.hide.staff.blocks, may = () => true) {
+      const H = LAND.hide.staff, dir = side5 === "att" ? 1 : -1;
       const z = this.field.zones[side5];
       const own = this.units.filter((u) => u.side === side5 && live4(u));
       const room2 = [
@@ -101048,7 +101052,7 @@
     reveal(u, how, by2) {
       if (!u.hid) return;
       delete u.hid;
-      if (how === "fired") u.unloc = Math.round((this.t + LAND3.hide.locate.secs) * 1e3) / 1e3;
+      if (how === "fired") u.unloc = Math.round((this.t + LAND.hide.locate.secs) * 1e3) / 1e3;
       const mineFound = this.ticket[u.side].human, theirs = this.ticket[other2(u.side)].human;
       if (theirs) u.found = true;
       const where = this.inWoods(u) ? "the woods" : u.team === "snp" ? this.sniperWhere(u) : "the hedges";
@@ -101060,7 +101064,7 @@
      * lorry on the move), is found; one found by its fire is located once that long has passed or an enemy is that close.
      */
     spotHidden() {
-      const H = LAND3.hide;
+      const H = LAND.hide;
       for (const u of this.units) {
         const sight2 = H.sight[motionOf(u)];
         if (u.unloc !== void 0 && (this.t >= u.unloc || !live4(u) || this.units.some((e) => e.side !== u.side && fighting2(e) && this.gap(u, e) <= sight2))) delete u.unloc;
@@ -101075,7 +101079,7 @@
         }
         const heard = u.speed > 0.5 ? H.heard[motionOf(u)] : 0;
         const veiled = (e) => this.smoke && this.screens.length > 0 && this.screened(e.x, e.y, u.x, u.y);
-        const sees = (e) => e.closedTo !== void 0 && this.closed(e) ? sight2 * LAND3.closed.sight : sight2;
+        const sees = (e) => e.closedTo !== void 0 && this.closed(e) ? sight2 * LAND.closed.sight : sight2;
         const by2 = this.units.find((e) => e.side !== u.side && fighting2(e) && this.gap(u, e) <= Math.max(sees(e), heard) && (this.gap(u, e) <= heard || !veiled(e)));
         if (by2) this.reveal(u, this.gap(u, by2) <= sees(by2) && !veiled(by2) ? "seen" : "heard", by2);
       }
@@ -101112,7 +101116,7 @@
     }
     /** The night's patrol goes out, and what it found and whether it was caught are settled (hideStart). */
     patrolOut() {
-      const P = LAND3.patrol, side5 = "att", foe = "def";
+      const P = LAND.patrol, side5 = "att", foe = "def";
       const foot = (u) => !!u && u.side === side5 && fighting2(u) && !u.team && MOTION[u.kind] === "foot";
       const by2 = this.ticket[side5].human ? this.patrolBy === null ? void 0 : this.unit(this.patrolBy) : this.units.filter((u) => foot(u) && u.reserve !== "held").sort((a, b) => b.y - a.y || a.id - b.id)[0];
       if (!foot(by2)) return;
@@ -101199,7 +101203,7 @@
       this.landOrders();
       if (this.relief && this.joinCorps.size) this.waitOn();
       if (this.t >= this.nextThink) {
-        this.nextThink = this.t + LAND3.think;
+        this.nextThink = this.t + LAND.think;
         this.staffing = true;
         for (const s of ["att", "def"]) if (this.ai[s]) thinkFor(this, s);
         this.staffing = false;
@@ -101231,7 +101235,7 @@
           this.reveal(u, "fired", t);
         }
         if (u.sprung === this.t) this.ambushed.add(t.side);
-        if (this.ticket[u.side].human || u.kind !== "art" || this.gap(u, t) < LAND3.guns.closeAt) {
+        if (this.ticket[u.side].human || u.kind !== "art" || this.gap(u, t) < LAND.guns.closeAt) {
           u.found = true;
           if (!blind) t.found = true;
         }
@@ -101244,14 +101248,14 @@
           }
         }
         if (u.team === "snp" && t.kind === "arm") {
-          if (!blind) t.closedTo = Math.round((this.t + LAND3.closed.secs) * 1e3) / 1e3;
+          if (!blind) t.closedTo = Math.round((this.t + LAND.closed.secs) * 1e3) / 1e3;
           continue;
         }
         const blow3 = this.blow(u, t);
         const struck = blow3.dmg;
         if (this.phones && this.wires.length) this.wireBlow(u, t);
         if (blind) {
-          const F2 = LAND3.hide.search;
+          const F2 = LAND.hide.search;
           blow3.dmg *= F2.blow;
           if (this.rng.next() < 1 - (1 - F2.odds) ** (DT / F2.every)) this.reveal(t, "searched", u);
         }
@@ -101324,12 +101328,12 @@
     spread() {
       const us = this.units.filter((u) => fighting2(u) && u.kind !== "fort");
       const can2 = (u, ux, uy, push) => {
-        const x = clamp6(u.x + ux * push, 5, this.field.w - 5), y = clamp6(u.y + uy * push, 5, this.field.h - 5), pace2 = LAND3.pace[motionOf(u)];
+        const x = clamp6(u.x + ux * push, 5, this.field.w - 5), y = clamp6(u.y + uy * push, 5, this.field.h - 5), pace2 = LAND.pace[motionOf(u)];
         const there = groundAt(this.field, x, y), here = groundAt(this.field, u.x, u.y);
         if (inRiver(there) && !inRiver(here)) return false;
         const to = pace2[there];
         if (this.bocage && this.going(u) === "hedged" && this.barredCross(u.x, u.y, x, y)) return false;
-        return to > LAND3.queue.hard || to > 0 && to >= pace2[here];
+        return to > LAND.queue.hard || to > 0 && to >= pace2[here];
       };
       const go = (u, ux, uy, push) => {
         if (can2(u, ux, uy, push)) {
@@ -101345,7 +101349,7 @@
         const lat = dx * rx + dy * ry, dep = dx * fx + dy * fy;
         const c = Math.abs(Math.cos(b.face - a.face)), s = Math.abs(Math.sin(b.face - a.face));
         const pl = a.w / 2 + b.w / 2 * c + b.d / 2 * s - Math.abs(lat);
-        const pd = a.d / 2 + b.w / 2 * s + b.d / 2 * c + (a.side === b.side ? 0 : LAND3.apart) - Math.abs(dep);
+        const pd = a.d / 2 + b.w / 2 * s + b.d / 2 * c + (a.side === b.side ? 0 : LAND.apart) - Math.abs(dep);
         if (pl <= 0 || pd <= 0) continue;
         if (a.side !== b.side && this.inOverrun(a, b)) continue;
         if (a.side === b.side && (this.narrows(a, a.x, a.y) || this.narrows(b, b.x, b.y))) {
@@ -101354,7 +101358,7 @@
           if (pa || pb) {
             const goA = pa && (!pb || this.toGo(a) < this.toGo(b) || this.toGo(a) === this.toGo(b) && a.id < b.id);
             const mover = goA ? a : b, y = goA ? b : a, sy = goA ? 1 : -1;
-            const p = Math.min(Math.min(pl, pd), (mover.speed + LAND3.spread) * DT);
+            const p = Math.min(Math.min(pl, pd), (mover.speed + LAND.spread) * DT);
             const sl = Math.sign(lat) || 1, sd = Math.sign(dep) || 1, d1 = Math.hypot(dx, dy) || 1;
             const ways = pl < pd ? [[rx * sl, ry * sl], [fx * sd, fy * sd]] : [[fx * sd, fy * sd], [rx * sl, ry * sl]];
             ways.push([dx / d1, dy / d1]);
@@ -101371,7 +101375,7 @@
           }
         }
         if (a.side === b.side && (a.pressing !== void 0 || b.pressing !== void 0) && !this.narrows(a, a.x, a.y) && !this.narrows(b, b.x, b.y)) {
-          const sl = Math.sign(lat) || (a.id < b.id ? 1 : -1), p = Math.min(pl / 2, (Math.max(a.speed, b.speed) + LAND3.spread) * DT);
+          const sl = Math.sign(lat) || (a.id < b.id ? 1 : -1), p = Math.min(pl / 2, (Math.max(a.speed, b.speed) + LAND.spread) * DT);
           if (can2(a, -rx * sl, -ry * sl, p) && can2(b, rx * sl, ry * sl, p)) {
             go(a, -rx * sl, -ry * sl, p);
             go(b, rx * sl, ry * sl, p);
@@ -101384,12 +101388,12 @@
         }
         let along = pl < pd;
         if (along) {
-          const sl = Math.sign(lat) || (a.id < b.id ? 1 : -1), p = Math.min(pl / 2, LAND3.spread * DT);
+          const sl = Math.sign(lat) || (a.id < b.id ? 1 : -1), p = Math.min(pl / 2, LAND.spread * DT);
           if (!can2(a, -rx * sl, -ry * sl, p) && !can2(b, rx * sl, ry * sl, p)) along = false;
         }
         const sg = Math.sign(along ? lat : dep) || (a.id < b.id ? 1 : -1);
         const ux = (along ? rx : fx) * sg, uy = (along ? ry : fy) * sg;
-        const push = Math.min((along ? pl : pd) / 2, LAND3.spread * DT);
+        const push = Math.min((along ? pl : pd) / 2, LAND.spread * DT);
         const wa = a.side !== b.side && inRiver(groundAt(this.field, a.x, a.y)), wb = a.side !== b.side && inRiver(groundAt(this.field, b.x, b.y));
         if (!wa) go(a, -ux, -uy, wb ? 2 * push : push);
         if (!wb) go(b, ux, uy, wa ? 2 * push : push);
@@ -101409,7 +101413,7 @@
       }
       if (u.hid && u.order?.kind !== "attack" && !snp) reach3 = Math.min(reach3, this.ambushAt(u));
       let best = null, score = Infinity;
-      const T = this.teamsRule && ownArm2(u) ? LAND3.teams[u.team] : null;
+      const T = this.teamsRule && ownArm2(u) ? LAND.teams[u.team] : null;
       let harm = 0;
       for (const e of this.units) {
         if (e.side === u.side || !live4(e) || e.hid) continue;
@@ -101432,7 +101436,7 @@
         }
       }
       if (!best && u.search && this.hide) {
-        const [sx, sy] = u.search, R2 = u.searchR ?? LAND3.hide.search.reach;
+        const [sx, sy] = u.search, R2 = u.searchR ?? LAND.hide.search.reach;
         for (const e of this.units) {
           if (e.side === u.side || !live4(e) || !e.hid || dist(e.x, e.y, sx, sy) > R2 + Math.max(e.w, e.d) / 2) continue;
           const d = this.gap(u, e);
@@ -101464,10 +101468,10 @@
      * or 1. Only a tank block the card counted as covered by its foot (covered), never one it already charged as alone.
      */
     alone(t, u) {
-      const A = LAND3.alone;
+      const A = LAND.alone;
       if (!this.covered.has(t.id) || !A.foot.includes(u.kind)) return 1;
       const g2 = coverAt(this.field, t.x, t.y), gu = groundAt(this.field, u.x, u.y);
-      const works2 = A.works.includes(gu) || u.dug && dist(u.x, u.y, u.home[0], u.home[1]) <= LAND3.dug.keep;
+      const works2 = A.works.includes(gu) || u.dug && dist(u.x, u.y, u.home[0], u.home[1]) <= LAND.dug.keep;
       const kind = A.streets.includes(g2) ? "streets" : A.woods.includes(g2) ? "woods" : works2 ? "works" : null;
       if (!kind) return 1;
       const foot = (f) => fighting2(f) && A.foot.includes(f.kind);
@@ -101500,7 +101504,7 @@
     /** Whether a block's foot carries its own anti-tank weapon in the battle's month (LAND.overrun.at, by its army). */
     ownAntiTank(u) {
       if (u.kit?.at !== void 0) return u.kit.at;
-      const O = LAND3.overrun, d = turnToDate(this.ticket.turn), when = d.year + d.month / 12;
+      const O = LAND.overrun, d = turnToDate(this.ticket.turn), when = d.year + d.month / 12;
       const nat = O.commonwealth.includes(u.nat) ? "UK" : u.nat;
       return (O.at[nat] ?? []).some(([from2, to]) => when >= from2 && when < to);
     }
@@ -101513,7 +101517,7 @@
       if (e.kind === "arm" || e.kind === "fort") return reachOf(e);
       if (e.kind === "art") return gunsOf(e).closeAt;
       if (this.pierce) return this.kitReach(e);
-      if (LAND3.alone.foot.includes(e.kind) && this.ownAntiTank(e)) return reachOf(e);
+      if (LAND.alone.foot.includes(e.kind) && this.ownAntiTank(e)) return reachOf(e);
       return null;
     }
     /**
@@ -101523,8 +101527,8 @@
      * tanks driving through). Never its army's name or the month: the overrun's old table is not read.
      */
     kitReach(e) {
-      if (!LAND3.pierce.foot.includes(e.kind)) return null;
-      return e.kit?.atGuns ? reachOf(e) : e.kit?.atHand ? LAND3.pierce.hand.at : null;
+      if (!LAND.pierce.foot.includes(e.kind)) return null;
+      return e.kit?.atGuns ? reachOf(e) : e.kit?.atHand ? LAND.pierce.hand.at : null;
     }
     /**
      * Only anti-tank weapons take a tank (LAND.pierce; the design director's pierce ruling, 25 Nov, P1 and P2): the share
@@ -101537,7 +101541,7 @@
      * name, no date, nothing of the card, nothing written during the tick.
      */
     pierceShare(u, t, gap = this.gap(u, t), uAt = [u.x, u.y], tAt = [t.x, t.y]) {
-      const P = LAND3.pierce;
+      const P = LAND.pierce;
       if (t.kind !== "arm") return 1;
       if (u.team) return P.teams[u.team] ?? 0;
       if (u.kind === "fort") return gap <= reachOf(u) ? P.fort : 0;
@@ -101600,7 +101604,7 @@
     }
     /** The tank blocks that may, begin their overruns (each tick, before the blocks move). */
     overruns() {
-      const foot = (f) => fighting2(f) && LAND3.alone.foot.includes(f.kind);
+      const foot = (f) => fighting2(f) && LAND.alone.foot.includes(f.kind);
       for (const [id] of this.overrun) {
         const f = this.unit(id);
         if (!f || !fighting2(f) || !this.units.some((e) => e.side !== f.side && e.kind === "arm" && fighting2(e) && this.gap(e, f) <= reachOf(e))) this.overrun.delete(id);
@@ -101610,15 +101614,15 @@
         if (u.order && u.order.kind !== "attack") continue;
         const f = this.unit(u.engaged);
         if (!f || f.side === u.side || !foot(f) || f.hid || this.overrun.has(f.id) || this.gap(u, f) > reachOf(u)) continue;
-        if (f.dug && dist(f.x, f.y, f.home[0], f.home[1]) <= LAND3.dug.keep || (this.pierce ? this.kitReach(f) !== null : this.ownAntiTank(f))) continue;
-        if (!this.units.some((g2) => g2.side === u.side && foot(g2) && this.gap(u, g2) <= LAND3.alone.near)) continue;
+        if (f.dug && dist(f.x, f.y, f.home[0], f.home[1]) <= LAND.dug.keep || (this.pierce ? this.kitReach(f) !== null : this.ownAntiTank(f))) continue;
+        if (!this.units.some((g2) => g2.side === u.side && foot(g2) && this.gap(u, g2) <= LAND.alone.near)) continue;
         const dx = f.x - u.x, dy = f.y - u.y, len = Math.hypot(dx, dy) || 1;
         const to = [clamp6(f.x + dx / len * (f.d / 2), 5, this.field.w - 5), clamp6(f.y + dy / len * (f.d / 2), 5, this.field.h - 5)];
         const run = dist(u.x, u.y, to[0], to[1]);
         let open3 = true;
         for (let s = 0; s <= run && open3; s += 10) {
           const x = u.x + (to[0] - u.x) * s / Math.max(1, run), y = u.y + (to[1] - u.y) * s / Math.max(1, run), g2 = groundAt(this.field, x, y);
-          if (!OPEN_GROUND.includes(coverAt(this.field, x, y)) || inRiver(g2) || this.onHedge(x, y) || LAND3.pace.tracks[g2] <= LAND3.queue.hard) open3 = false;
+          if (!OPEN_GROUND.includes(coverAt(this.field, x, y)) || inRiver(g2) || this.onHedge(x, y) || LAND.pace.tracks[g2] <= LAND.queue.hard) open3 = false;
         }
         if (!open3 || this.bocage && this.barredCross(u.x, u.y, to[0], to[1])) continue;
         const threat2 = this.units.some((e) => {
@@ -101672,7 +101676,7 @@
         this.turnTo(u, head);
       }
       const g2 = groundAt(this.field, u.x, u.y);
-      const v = LAND3.speed.arm * Math.max(0.12, LAND3.pace.tracks[g2]) * (on2 ? 1 : LAND3.overrun.reverse);
+      const v = LAND.speed.arm * Math.max(0.12, LAND.pace.tracks[g2]) * (on2 ? 1 : LAND.overrun.reverse);
       const step2 = Math.min(d, v * DT), [ax, ay] = ahead(head);
       u.x = clamp6(u.x + ax * step2, 5, this.field.w - 5);
       u.y = clamp6(u.y + ay * step2, 5, this.field.h - 5);
@@ -101692,10 +101696,10 @@
      */
     groundTake(t, at4 = [t.x, t.y]) {
       const gt = coverAt(this.field, at4[0], at4[1]);
-      let take3 = LAND3.cover[gt];
+      let take3 = LAND.cover[gt];
       const ws = this.wreckShare(t);
-      if (ws > 0) take3 = take3 * (1 - ws) + Math.min(take3, LAND3.cover[LAND3.wreck.cover]) * ws;
-      if (t.kind === "arm" && LAND3.tanksClose.ground.includes(gt)) take3 *= LAND3.tanksClose.take;
+      if (ws > 0) take3 = take3 * (1 - ws) + Math.min(take3, LAND.cover[LAND.wreck.cover]) * ws;
+      if (t.kind === "arm" && LAND.tanksClose.ground.includes(gt)) take3 *= LAND.tanksClose.take;
       return take3;
     }
     /**
@@ -101741,62 +101745,62 @@
       const pair2 = this.inOverrun(u, t);
       const uAt = pair2 && u.ovr ? u.ovr.back : [u.x, u.y], tAt = pair2 && t.ovr ? t.ovr.back : [t.x, t.y];
       const gu = coverAt(this.field, uAt[0], uAt[1]);
-      let p = u.power0 * (0.35 + 0.65 * (u.str / u.str0)) * LAND3.rate;
+      let p = u.power0 * (0.35 + 0.65 * (u.str / u.str0)) * LAND.rate;
       if (this.bearers) p *= this.atHand(u);
-      if (u.state === "wavering") p *= LAND3.wavering;
+      if (u.state === "wavering") p *= LAND.wavering;
       const rearguard = this.givingGround(t);
-      if (u.order && u.path.length && u.speed > 0.5 || rearguard) p *= LAND3.moving;
-      if (u.winded !== void 0 && this.t < u.winded) p *= LAND3.double.blows;
+      if (u.order && u.path.length && u.speed > 0.5 || rearguard) p *= LAND.moving;
+      if (u.winded !== void 0 && this.t < u.winded) p *= LAND.double.blows;
       let nerveMul = 1;
       let fireN = 1, ambushN = 1;
-      const SP = LAND3.hide.surprise;
+      const SP = LAND.hide.surprise;
       if (u.sprung !== void 0 && this.t - u.sprung < SP.secs) {
         p *= SP.punch;
         nerveMul *= ambushN = t.speed > 0.2 && OPEN_GROUND.includes(coverAt(this.field, t.x, t.y)) && !this.onHedge(t.x, t.y) ? SP.open : SP.nerve;
       }
       if (u.team === "mor" && this.hide && this.units.some((f2) => f2.side === u.side && f2.sprung !== void 0 && this.t - f2.sprung < SP.secs && f2.engaged === t.id)) p *= SP.mortar;
       const vague = t.unloc !== void 0 && this.t < t.unloc;
-      if (vague) p *= LAND3.hide.locate.fire;
-      const screen = this.smoke && !vague && !t.hid && this.screens.length && this.direct(u, t) && this.screened(u.x, u.y, t.x, t.y) ? LAND3.smoke.share : 1;
+      if (vague) p *= LAND.hide.locate.fire;
+      const screen = this.smoke && !vague && !t.hid && this.screens.length && this.direct(u, t) && this.screened(u.x, u.y, t.x, t.y) ? LAND.smoke.share : 1;
       p *= screen;
       if (u.kind === "art") {
         const G5 = gunsOf(u), close3 = this.gap(u, t) < G5.closeAt;
         p *= close3 ? G5.close : G5.punch;
         if (!close3) nerveMul *= fireN = G5.nerve;
-        if (u.team && t.kind === "arm" && !this.pierce) p *= LAND3.teams[u.team].armour;
+        if (u.team && t.kind === "arm" && !this.pierce) p *= LAND.teams[u.team].armour;
       }
-      if (u.kind === "arm" && LAND3.tanksClose.ground.includes(gu)) p *= LAND3.tanksClose.punch;
-      if (u.kind === "arm" && motionOf(t) === "foot" && this.closed(u)) p *= LAND3.closed.foot;
+      if (u.kind === "arm" && LAND.tanksClose.ground.includes(gu)) p *= LAND.tanksClose.punch;
+      if (u.kind === "arm" && motionOf(t) === "foot" && this.closed(u)) p *= LAND.closed.foot;
       const rise2 = heightAt(this.field, uAt[0], uAt[1]) - heightAt(this.field, tAt[0], tAt[1]);
-      if (rise2 > LAND3.height.over) p *= LAND3.height.up;
-      else if (rise2 < -LAND3.height.over) p *= LAND3.height.down;
+      if (rise2 > LAND.height.over) p *= LAND.height.up;
+      else if (rise2 < -LAND.height.over) p *= LAND.height.down;
       const aspect = rearguard || pair2 ? "front" : aspectOf(t.face, t.x, t.y, u.x, u.y);
-      const [am, nm] = LAND3.aspect[aspect];
+      const [am, nm] = LAND.aspect[aspect];
       let amx = 1;
       const plate = this.measured && t.kind === "arm" && (u.kind === "arm" || u.kind === "art" && !u.team && this.gap(u, t) < gunsOf(u).closeAt);
       if (plate) amx = this.armourAt(u, t, faceOfAspect(aspect), this.gap(u, t)) ?? 1;
       const ground = this.groundTake(t, tAt);
       let take3 = ground;
-      if (t.kind === "arm" && LAND3.alone.on) take3 *= this.alone(t, u);
-      if (t.side === "def" && dist(t.x, t.y, t.home[0], t.home[1]) < LAND3.hold.within) take3 *= this.holdTake(u, t);
-      if (t.order?.kind === "move" && t.order.run && t.speed > 0.5) take3 *= LAND3.double.exposed;
+      if (t.kind === "arm" && LAND.alone.on) take3 *= this.alone(t, u);
+      if (t.side === "def" && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take3 *= this.holdTake(u, t);
+      if (t.order?.kind === "move" && t.order.run && t.speed > 0.5) take3 *= LAND.double.exposed;
       if (t.team === "snp" && !t.hid && !vague) {
-        take3 *= LAND3.snipers.take.fragile;
-        if (u.team === "mor" || u.kind === "art" && !u.team || u.kind === "arm") take3 *= LAND3.snipers.take.blast;
+        take3 *= LAND.snipers.take.fragile;
+        if (u.team === "mor" || u.kind === "art" && !u.team || u.kind === "arm") take3 *= LAND.snipers.take.blast;
       }
       const roll4 = spill ? spill.roll : u.team === "snp" ? this.snpRoll(u, 342) : this.rng.next();
-      const luck = 1 + LAND3.jitter * (roll4 * 2 - 1);
+      const luck = 1 + LAND.jitter * (roll4 * 2 - 1);
       const f = this.lean === void 0 ? this.fortune : this.fortune * this.lean;
       const dmg = p * am * amx * take3 * luck * (u.side === "att" ? f : 1 / f) * DT;
       const parts2 = this.led ? { parts: { aspect, nm, fire: fireN, ambush: ambushN } } : {};
       let faceOn = 0;
       if (this.faceRule) {
         const plateOn = plate && aspect !== "front" ? this.armourAt(u, t, "front", this.gap(u, t)) ?? 1 : amx;
-        faceOn = p * LAND3.aspect.front[0] * plateOn * take3 * (u.side === "att" ? f : 1 / f) * DT;
+        faceOn = p * LAND.aspect.front[0] * plateOn * take3 * (u.side === "att" ? f : 1 / f) * DT;
       }
       if (this.pierce && (spill || t.kind === "arm")) {
         const part = spill ? spill.part : this.pierceShare(u, t);
-        const rest = !spill && part < 1 && (u.team || LAND3.pierce.foot.includes(u.kind)) ? { roll: roll4, part: 1 - part } : void 0;
+        const rest = !spill && part < 1 && (u.team || LAND.pierce.foot.includes(u.kind)) ? { roll: roll4, part: 1 - part } : void 0;
         return { dmg: dmg * part, nerve: nm * nerveMul, front: aspect === "front", aspect, ground, screen, faceOn: faceOn * part, ...parts2, ...rest ? { rest } : {} };
       }
       return { dmg, nerve: nm * nerveMul, front: aspect === "front", aspect, ground, screen, faceOn, ...parts2 };
@@ -101809,8 +101813,8 @@
      */
     suffer(t, dmg, nerveMul, from2 = [], blind = false, bare = false, mArmy = 1, nerveBuilt = nerveMul, parts2) {
       if (t.hid && dmg > 0 && !blind && !bare) this.reveal(t, "struck");
-      if (t.waits && !t.waits.free && !bare && dmg > 0 && dist(t.x, t.y, t.waits.at[0], t.waits.at[1]) <= LAND3.dug.keep) {
-        const take3 = this.groundTake(t), f = Math.min(take3, LAND3.cover[LAND3.wreck.cover]) / Math.max(1e-9, take3);
+      if (t.waits && !t.waits.free && !bare && dmg > 0 && dist(t.x, t.y, t.waits.at[0], t.waits.at[1]) <= LAND.dug.keep) {
+        const take3 = this.groundTake(t), f = Math.min(take3, LAND.cover[LAND.wreck.cover]) / Math.max(1e-9, take3);
         if (f < 1) {
           const spared3 = dmg * (1 - f);
           t.debt = (t.debt ?? 0) + spared3;
@@ -101823,17 +101827,17 @@
       t.str = Math.max(0, t.str - share * t.str0);
       const lost = (before - t.str) / t.str0;
       const xpNow = t.leadTo !== void 0 && this.t < t.leadTo ? t.xp * (t.leadK ?? 1) : t.xp;
-      const steady3 = this.refNerve ? REF_NERVE.steady : 1 - LAND3.nerve.xp * xpNow - LAND3.nerve.general * this.generalOf(t.side);
-      t.mor = Math.max(0, t.mor - lost * LAND3.nerve.perLoss[t.side] * nerveMul * Math.max(0.3, steady3));
+      const steady3 = this.refNerve ? REF_NERVE.steady : 1 - LAND.nerve.xp * xpNow - LAND.nerve.general * this.generalOf(t.side);
+      t.mor = Math.max(0, t.mor - lost * LAND.nerve.perLoss[t.side] * nerveMul * Math.max(0.3, steady3));
       if (this.led && lost > 0) {
-        const s = t.side, st = Math.max(0.3, 1 - LAND3.nerve.xp * t.xp - LAND3.nerve.general * this.generalOf(s));
-        this.led.D[s] += t.power0 * lost * LAND3.nerve.perLoss[s] * mArmy * st / this.power[s];
-        const k = t.power0 * lost * LAND3.nerve.perLoss[s] * st / this.power[s], T = this.led.T[s];
+        const s = t.side, st = Math.max(0.3, 1 - LAND.nerve.xp * t.xp - LAND.nerve.general * this.generalOf(s));
+        this.led.D[s] += t.power0 * lost * LAND.nerve.perLoss[s] * mArmy * st / this.power[s];
+        const k = t.power0 * lost * LAND.nerve.perLoss[s] * st / this.power[s], T = this.led.T[s];
         T.loss += k;
         for (const p of NERVE_PARTS) T[p] += k * ((parts2?.[p] ?? 1) - 1);
       }
       if (t.team === "snp") {
-        t.quietTo = Math.round((this.t + LAND3.snipers.quiet) * 1e3) / 1e3;
+        t.quietTo = Math.round((this.t + LAND.snipers.quiet) * 1e3) / 1e3;
         delete t.slipTo;
       }
       t.still = 0;
@@ -101898,14 +101902,14 @@
       const [across, along] = wreckOffset(t.id, n, t.w, t.d);
       const c = Math.cos(t.face), s = Math.sin(t.face);
       const x = clamp6(t.x + across * c + along * s, 2, this.field.w - 2), y = clamp6(t.y - across * s + along * c, 2, this.field.h - 2);
-      const z = { id: this.wrecks.length + 1, kind: "wreck", x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, r: LAND3.wreck.r, until: this.ticket.limit, side: t.side, at: Math.round(this.t * 10) / 10, unit: t.id };
+      const z = { id: this.wrecks.length + 1, kind: "wreck", x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, r: LAND.wreck.r, until: this.ticket.limit, side: t.side, at: Math.round(this.t * 10) / 10, unit: t.id };
       this.wrecks.push(z);
       return z;
     }
     /** The share of a block on foot that wrecks shelter: one model's worth for each within its frontage or beside it (b477). */
     wreckShare(u) {
       if (!this.wrecks.length || MOTION[u.kind] !== "foot") return 0;
-      const c = Math.cos(u.face), s = Math.sin(u.face), hw = u.w / 2 + LAND3.wreck.beside, hd = u.d / 2 + LAND3.wreck.beside;
+      const c = Math.cos(u.face), s = Math.sin(u.face), hw = u.w / 2 + LAND.wreck.beside, hd = u.d / 2 + LAND.wreck.beside;
       let n = 0;
       for (const z of this.wrecks) {
         const dx = z.x - u.x, dy = z.y - u.y;
@@ -101917,7 +101921,7 @@
       return this.ticket[s].general?.level ?? 0;
     }
     nerve(u) {
-      const N = LAND3.nerve;
+      const N = LAND.nerve;
       const enemyNear = this.units.some((e) => e.side !== u.side && fighting2(e) && dist(e.x, e.y, u.x, u.y) < N.clear);
       if (enemyNear) u.clear = 0;
       if (u.state === "routing") {
@@ -101933,7 +101937,7 @@
         return;
       }
       if (u.still > N.still) u.mor = Math.min(u.mor0, u.mor + N.recover * DT);
-      if (u.team === "snp" && (u.str <= LAND3.snipers.back * u.str0 || u.mor < N.rout)) this.sniperBack(u);
+      if (u.team === "snp" && (u.str <= LAND.snipers.back * u.str0 || u.mor < N.rout)) this.sniperBack(u);
       else if (u.str <= N.shattered * u.str0 || u.mor < (u.waits?.late ? N.waver : N.rout)) {
         this.rout(u);
         return;
@@ -101950,7 +101954,7 @@
       u.keepFace = null;
       u.engaged = void 0;
       this.say({ what: "routing", unit: u.id, side: u.side, text: `${this.named(u)} breaks and runs.`, x: u.x, y: u.y });
-      for (const f of this.units) if (f !== u && f.side === u.side && fighting2(f) && dist(f.x, f.y, u.x, u.y) < LAND3.nerve.near) f.mor = Math.max(0, f.mor - LAND3.nerve.friendRuns);
+      for (const f of this.units) if (f !== u && f.side === u.side && fighting2(f) && dist(f.x, f.y, u.x, u.y) < LAND.nerve.near) f.mor = Math.max(0, f.mor - LAND.nerve.friendRuns);
       if (u.waits) this.endWait(u, "broke");
       else if (this.repay.length) this.landNow(u);
     }
@@ -101970,7 +101974,7 @@
       } else if (u.order?.kind === "attack") {
         let t = this.unit(u.order.target);
         if (u.order.press && t && !fighting2(t) && (!this.ai[u.side] || u.taken)) {
-          const next = this.units.filter((e) => e.side !== u.side && fighting2(e) && dist(e.x, e.y, u.x, u.y) < LAND3.press).reduce((m2, e) => !m2 || dist(e.x, e.y, u.x, u.y) < dist(m2.x, m2.y, u.x, u.y) ? e : m2, null);
+          const next = this.units.filter((e) => e.side !== u.side && fighting2(e) && dist(e.x, e.y, u.x, u.y) < LAND.press).reduce((m2, e) => !m2 || dist(e.x, e.y, u.x, u.y) < dist(m2.x, m2.y, u.x, u.y) ? e : m2, null);
           if (next) {
             const ax2 = u.order.axis, lane = ax2 === void 0 ? void 0 : (u.x - next.x) * Math.sin(ax2 + Math.PI / 2) + (u.y - next.y) * Math.cos(ax2 + Math.PI / 2);
             this.send(u, { kind: "attack", x: next.x, y: next.y, target: next.id, press: true, ...ax2 === void 0 ? {} : { lane, axis: ax2 } });
@@ -102061,15 +102065,15 @@
       else this.turnTo(u, head);
       const m = motionOf(u);
       const g2 = groundAt(this.field, u.x, u.y);
-      let pace2 = LAND3.pace[m][g2];
-      if (k === "mtn" && (g2 === "rough" || g2 === "rock")) pace2 = Math.min(1, pace2 * LAND3.mountainFoot);
+      let pace2 = LAND.pace[m][g2];
+      if (k === "mtn" && (g2 === "rough" || g2 === "rock")) pace2 = Math.min(1, pace2 * LAND.mountainFoot);
       const up = inRiver(g2) ? 0 : heightAt(this.field, u.x + Math.sin(head) * 20, u.y + Math.cos(head) * 20) - heightAt(this.field, u.x, u.y);
       pace2 *= up > 0 ? Math.max(0.4, 1 - up / 20 * 1.5) : 1;
-      const top = u.team ? LAND3.teams[u.team].speed : LAND3.speed[k];
+      const top = u.team ? LAND.teams[u.team].speed : LAND.speed[k];
       const double = !run && u.order?.kind === "move" && !!u.order.run;
-      if (double) u.winded = this.t + LAND3.double.winded;
-      let v = top * Math.max(0.12, pace2) * (run ? 1.15 : 1) * (double ? LAND3.double.pace[m] : 1) * (u.state === "wavering" ? 0.85 : 1);
-      if (u.pinTo !== void 0 && this.t < u.pinTo && m === "foot" && !run && u.order?.kind !== "withdraw" && (u.pinSpent ?? 0) < LAND3.pin.most) {
+      if (double) u.winded = this.t + LAND.double.winded;
+      let v = top * Math.max(0.12, pace2) * (run ? 1.15 : 1) * (double ? LAND.double.pace[m] : 1) * (u.state === "wavering" ? 0.85 : 1);
+      if (u.pinTo !== void 0 && this.t < u.pinTo && m === "foot" && !run && u.order?.kind !== "withdraw" && (u.pinSpent ?? 0) < LAND.pin.most) {
         v *= u.pinK ?? 1;
         u.pinSpent = Math.round(((u.pinSpent ?? 0) + DT) * 1e3) / 1e3;
       }
@@ -102077,12 +102081,12 @@
       const stepLen = Math.min(d, v * DT);
       const [ax, ay] = ahead(head);
       let nx = u.x + ax * stepLen, ny = u.y + ay * stepLen;
-      if (LAND3.pace[m][groundAt(this.field, nx, ny)] <= 0 && LAND3.pace[m][g2] > 0 && !run) {
+      if (LAND.pace[m][groundAt(this.field, nx, ny)] <= 0 && LAND.pace[m][g2] > 0 && !run) {
         let moved = false;
         for (const sw of [0.5, -0.5, 1, -1]) {
           const [bx, by2] = ahead(head + sw);
           const tx = u.x + bx * stepLen, ty = u.y + by2 * stepLen;
-          if (LAND3.pace[m][groundAt(this.field, tx, ty)] > 0) {
+          if (LAND.pace[m][groundAt(this.field, tx, ty)] > 0) {
             nx = tx;
             ny = ty;
             moved = true;
@@ -102131,9 +102135,9 @@
       let near2 = this.hardNear[m];
       if (!near2) {
         near2 = this.hardNear[m] = new Uint8Array(C4 * R2);
-        const n = Math.round(LAND3.queue.near / f.cell), pace2 = this.paceOf(m);
+        const n = Math.round(LAND.queue.near / f.cell), pace2 = this.paceOf(m);
         for (let i = 0; i < C4 * R2; i++) {
-          if (pace2[GROUNDS[f.ground[i]]] > LAND3.queue.hard) continue;
+          if (pace2[GROUNDS[f.ground[i]]] > LAND.queue.hard) continue;
           const c0 = i % C4, r0 = Math.floor(i / C4);
           for (let r = Math.max(0, r0 - n); r <= Math.min(R2 - 1, r0 + n); r++) for (let c = Math.max(0, c0 - n); c <= Math.min(C4 - 1, c0 + n); c++) near2[r * C4 + c] = 1;
         }
@@ -102178,7 +102182,7 @@
       const back = Math.max(0, want * 0.8 + t.d / 2 + u.d / 2 - Math.max(0, Math.abs(lane) - lim));
       let p = [t.x + rx * side0 - fx * back, t.y + ry * side0 - fy * back];
       if (this.wet(u, p[0], p[1])) {
-        const room2 = Math.max(0, back - (t.d / 2 + u.d / 2 + LAND3.apart));
+        const room2 = Math.max(0, back - (t.d / 2 + u.d / 2 + LAND.apart));
         let dry = null;
         for (let k = 8; k <= Math.max(room2, 8) && !dry; k += 8) {
           const q = [p[0] + fx * Math.min(k, room2), p[1] + fy * Math.min(k, room2)];
@@ -102197,7 +102201,7 @@
         if (!f) break;
         const lat = (p[0] - f.x) * sx + (p[1] - f.y) * sy, mine4 = (u.x - f.x) * sx + (u.y - f.y) * sy;
         const side5 = Math.abs(lat) >= 1 ? Math.sign(lat) : Math.sign(mine4) || Math.sign(lane) || (u.id < f.id ? -1 : 1);
-        const by2 = (u.w + f.w) / 2 + LAND3.room;
+        const by2 = (u.w + f.w) / 2 + LAND.room;
         const near2 = [p[0] + sx * side5 * (by2 - Math.abs(lat)), p[1] + sy * side5 * (by2 - Math.abs(lat))];
         const far = [p[0] - sx * side5 * (by2 + Math.abs(lat)), p[1] - sy * side5 * (by2 + Math.abs(lat))];
         const q = fit3(near2) ? near2 : fit3(far) ? far : null;
@@ -102228,7 +102232,7 @@
         const dx = at4[0] - x, dy = at4[1] - y;
         if (Math.abs(dx) > 300 || Math.abs(dy) > 300) continue;
         const c = Math.abs(Math.cos(f.face - face)), s = Math.abs(Math.sin(f.face - face));
-        const pl = u.w / 2 + f.w / 2 * c + f.d / 2 * s + LAND3.room / 2 - Math.abs(dx * rx + dy * ry);
+        const pl = u.w / 2 + f.w / 2 * c + f.d / 2 * s + LAND.room / 2 - Math.abs(dx * rx + dy * ry);
         const pd = u.d / 2 + f.w / 2 * s + f.d / 2 * c - Math.abs(dx * fx + dy * fy);
         if (pl > 0 && pd > 0) return { id: f.id, x: at4[0], y: at4[1], w: f.w };
       }
@@ -102242,10 +102246,10 @@
     wet(u, x, y, mouth = true) {
       if (motionOf(u) === "fixed") return false;
       const g2 = groundAt(this.field, clamp6(x, 5, this.field.w - 5), clamp6(y, 5, this.field.h - 5));
-      if (g2 === "bridge" || g2 === "water" || g2 === "blown" || LAND3.pace[motionOf(u)][g2] <= LAND3.queue.hard) return true;
+      if (g2 === "bridge" || g2 === "water" || g2 === "blown" || LAND.pace[motionOf(u)][g2] <= LAND.queue.hard) return true;
       if (!mouth) return false;
       if (!this.mouths) {
-        const f = this.field, C4 = f.cols, R2 = f.rows, n = Math.round(LAND3.mouth / f.cell);
+        const f = this.field, C4 = f.cols, R2 = f.rows, n = Math.round(LAND.mouth / f.cell);
         const m = this.mouths = new Uint8Array(C4 * R2);
         for (let i = 0; i < C4 * R2; i++) {
           const k = GROUNDS[f.ground[i]];
@@ -102262,7 +102266,7 @@
      * wades, none once the battle is over, so it is set down on the nearest bank). Where it stands already, that point.
      */
     shore(u, perTurn = 30) {
-      const pace2 = LAND3.pace[motionOf(u)], f = this.field;
+      const pace2 = LAND.pace[motionOf(u)], f = this.field;
       const ok2 = (x, y) => {
         const g2 = groundAt(f, x, y);
         return !inRiver(g2) && pace2[g2] > 0;
@@ -102280,7 +102284,7 @@
       return best;
     }
     turnTo(u, want) {
-      const r = LAND3.turn[u.kind] * DT;
+      const r = LAND.turn[u.kind] * DT;
       const d = turn(u.face, want);
       u.face = Math.abs(d) <= r ? want : u.face + Math.sign(d) * r;
     }
@@ -102301,7 +102305,7 @@
     /** Where a block's aid post stands: LAND.bearers.aid metres behind its start place, toward its own back edge, on the field. */
     aidOf(u) {
       const back = u.side === "att" ? -1 : 1;
-      return [clamp6(u.home[0], 0, this.field.w), clamp6(u.home[1] + back * LAND3.bearers.aid, 0, this.field.h)];
+      return [clamp6(u.home[0], 0, this.field.w), clamp6(u.home[1] + back * LAND.bearers.aid, 0, this.field.h)];
     }
     /** A block's bearers and wounded, as the rules count them (strength): none before its first loss, or with the switch off. */
     litter(u) {
@@ -102310,13 +102314,13 @@
     /** A loss of strength d on a block: its share of wounded, the light cases to their dressing, the rest lying for the bearers. */
     wounded(u, d) {
       if (!(d > 0)) return;
-      const B3 = LAND3.bearers, L3 = B3.light;
+      const B3 = LAND.bearers, L3 = B3.light;
       let l = this.litters.get(u.id);
       if (!l) {
         l = { all: bearerShare(u.nat) * u.str0, out: 0, trips: [], waiting: 0, light: [], aid: this.aidOf(u), told: false };
         this.litters.set(u.id, l);
       }
-      const hurt2 = d * (1 - killedShare(u.nat)), light = hurt2 * L3.share, foot = LAND3.speed.inf;
+      const hurt2 = d * (1 - killedShare(u.nat)), light = hurt2 * L3.share, foot = LAND.speed.inf;
       const at4 = Math.round((this.t + (L3.at > 0 ? L3.at / (foot * L3.out) : 0) + L3.dress + (L3.at > 0 ? L3.at / (foot * L3.back) : 0)) * 1e3) / 1e3;
       const last = l.light[l.light.length - 1];
       if (last && last.at === at4) last.n += light;
@@ -102329,7 +102333,7 @@
      * bearers are home, a block still fighting sends them out: min(waiting, home / litter) cases, litter bearers each.
      */
     carry() {
-      const B3 = LAND3.bearers, trip = 2 * B3.aid / B3.pace, t = this.t;
+      const B3 = LAND.bearers, trip = 2 * B3.aid / B3.pace, t = this.t;
       for (const u of this.units) {
         const l = this.litters.get(u.id);
         if (!l) continue;
@@ -102488,7 +102492,7 @@
      * s6), else LAND.spent, read as it stands (a harness may set LAND.spent).
      */
     spentOf(s) {
-      return this.ticket.reckoning.spread?.W[s] ?? LAND3.spent[s];
+      return this.ticket.reckoning.spread?.W[s] ?? LAND.spent[s];
     }
     /** The field spread's army ledger's share of its mark (step 1b, form 13A: q = ledger / (K x reserve x draw)); 0 without the ledger. */
     ledgerShare(s) {
@@ -102520,7 +102524,7 @@
     shownBar(s, as) {
       if (!this.masked(s, as)) return this.breaking(s);
       const b = this.brink(s);
-      return Math.min(SPREAD.mask.hold, Math.max(b.running / LAND3.breaks, b.worn / this.shownLevel(s)));
+      return Math.min(SPREAD.mask.hold, Math.max(b.running / LAND.breaks, b.worn / this.shownLevel(s)));
     }
     /**
      * What drives a side's bar as 'as' sees it: under the field spread the other side's read against the level shown, its
@@ -102532,14 +102536,14 @@
       if (!this.masked(s, as)) return c;
       const rest = { ...c };
       delete rest.ledger;
-      const lv = this.shownLevel(s), w = this.wornShare(s) / lv, r = this.brokenShare(s) / LAND3.breaks;
+      const lv = this.shownLevel(s), w = this.wornShare(s) / lv, r = this.brokenShare(s) / LAND.breaks;
       return { ...rest, bar: Math.round(this.shownBar(s, as) * 1e3) / 1e3, spent: lv, by: "none", nearer: r >= w && r > 0 ? "running" : "worn", holding: false, held: false, heldFor: 0 };
     }
     /** The bar, with the two shares it is reckoned from and whether the fresh hold keeps it at the brink. */
     brink(s) {
       const worn = this.wornShare(s), running = this.brokenShare(s), over = this.led ? this.ledgerShare(s) : worn / this.spentOf(s);
-      const holding = over >= 1 && this.freshShare(s) > LAND3.fought;
-      return { bar: Math.min(holding ? 0.99 : 1, Math.max(running / LAND3.breaks, over)), worn, running, holding };
+      const holding = over >= 1 && this.freshShare(s) > LAND.fought;
+      return { bar: Math.min(holding ? 0.99 : 1, Math.max(running / LAND.breaks, over)), worn, running, holding };
     }
     /**
      * Why an army's bar stands where it does (b496(2)): the two shares breaking() takes the nearer of, each against its
@@ -102550,7 +102554,7 @@
      */
     breakCause(s) {
       const r34 = (x) => Math.round(x * 1e3) / 1e3;
-      const b = this.brink(s), w = this.led ? this.ledgerShare(s) : b.worn / this.spentOf(s), r = b.running / LAND3.breaks;
+      const b = this.brink(s), w = this.led ? this.ledgerShare(s) : b.worn / this.spentOf(s), r = b.running / LAND.breaks;
       const mine4 = this.units.filter((u) => u.side === s), nearer = r >= w && r > 0 ? "running" : "worn";
       const on2 = mine4.filter((u) => u.state !== "withdrawn"), p0 = on2.reduce((a, u) => a + weightOf(u), 0);
       const steady3 = p0 > 0 ? on2.filter((u) => u.state === "steady").reduce((a, u) => a + weightOf(u), 0) / p0 : 0;
@@ -102563,16 +102567,16 @@
         spent: this.spentOf(s),
         ...this.led ? { ledger: r34(this.ledgerShare(s)) } : {},
         running: r34(b.running),
-        breaks: LAND3.breaks,
+        breaks: LAND.breaks,
         fresh: r34(this.freshShare(s)),
-        fought: LAND3.fought,
+        fought: LAND.fought,
         small: this.freshHold[s],
         holding: b.holding,
         held: this.heldFor[s] > 0,
         heldFor: Math.round(this.heldFor[s] * 10) / 10,
         blocks: mine4.length,
-        blocksWorn: mine4.filter((u) => u.str < u.str0 * LAND3.fresh.str).length,
-        wornAt: LAND3.fresh.str,
+        blocksWorn: mine4.filter((u) => u.str < u.str0 * LAND.fresh.str).length,
+        wornAt: LAND.fresh.str,
         routing: mine4.filter((u) => u.state === "routing").length,
         fled: mine4.filter((u) => u.state === "gone").length,
         steady: r34(steady3),
@@ -102599,7 +102603,7 @@
     }
     /** A block that holds its army at the brink (freshShare): fresh, in a small army, or not yet in the fight. */
     fresh(u) {
-      return this.freshHold[u.side] && u.state === "steady" && u.str >= u.str0 * LAND3.fresh.str || !u.met && u.str >= u.str0 * 0.97;
+      return this.freshHold[u.side] && u.state === "steady" && u.str >= u.str0 * LAND.fresh.str || !u.met && u.str >= u.str0 * 0.97;
     }
     /**
      * A small army held at the brink by its fresh blocks does not stand there to be ground down (the design director,
@@ -102701,7 +102705,7 @@
      */
     kept(u) {
       const caught = u.side === "def" && u.state === "routing" && inRiver(groundAt(this.field, u.x, u.y));
-      return u.state === "gone" || caught ? u.str * (1 - LAND3.count.gone[u.side]) : u.state === "routing" || u.fellBack ? u.str * (1 - LAND3.count.routing[u.side]) : u.str;
+      return u.state === "gone" || caught ? u.str * (1 - LAND.count.gone[u.side]) : u.state === "routing" || u.fellBack ? u.str * (1 - LAND.count.routing[u.side]) : u.str;
     }
     /** Each side's share of its starting power lost: strength worn away, and what runners and the fled leave behind them. */
     lostShares() {
@@ -102883,7 +102887,7 @@
         const w = Math.ceil(this.airNext[s] - this.t);
         return `Ready in ${Math.floor(w / 60)}:${String(w % 60).padStart(2, "0")}`;
       }
-      if (run && this.clearShare(s, run) < LAND3.air.least) return "Too close to your own men";
+      if (run && this.clearShare(s, run) < LAND.air.least) return "Too close to your own men";
       return null;
     }
     /**
@@ -102893,8 +102897,8 @@
      */
     airRunAt(s, x, y) {
       const foes = this.units.filter((e) => e.side !== s && live4(e) && e.kind !== "fort" && this.known(e) && !e.hid);
-      const near2 = foes.reduce((m, e) => dist(e.x, e.y, x, y) < (m ? dist(m.x, m.y, x, y) : LAND3.air.near) ? e : m, null);
-      return near2 ? this.frontageRun(near2) : this.clipRun([x - LAND3.air.minRun / 2, y, x + LAND3.air.minRun / 2, y]);
+      const near2 = foes.reduce((m, e) => dist(e.x, e.y, x, y) < (m ? dist(m.x, m.y, x, y) : LAND.air.near) ? e : m, null);
+      return near2 ? this.frontageRun(near2) : this.clipRun([x - LAND.air.minRun / 2, y, x + LAND.air.minRun / 2, y]);
     }
     /** A run drawn by hand, as it will be flown: kept on the field and to its longest (what callAir flies). */
     airRun(r) {
@@ -102902,15 +102906,15 @@
     }
     /** A run down a block's frontage, its whole width, at least LAND.air.minRun. */
     frontageRun(b) {
-      const [cx, cy] = ahead(b.face + Math.PI / 2), half = Math.max(b.w, LAND3.air.minRun) / 2;
+      const [cx, cy] = ahead(b.face + Math.PI / 2), half = Math.max(b.w, LAND.air.minRun) / 2;
       return this.clipRun([b.x - cx * half, b.y - cy * half, b.x + cx * half, b.y + cy * half]);
     }
     /** A run kept on the field and to its longest, about its middle. */
     clipRun(r) {
       let [x0, y0, x1, y1] = r;
       const len = dist(x0, y0, x1, y1);
-      if (len > LAND3.air.len) {
-        const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, k = LAND3.air.len / len;
+      if (len > LAND.air.len) {
+        const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, k = LAND.air.len / len;
         x0 = mx + (x0 - mx) * k;
         y0 = my + (y0 - my) * k;
         x1 = mx + (x1 - mx) * k;
@@ -102930,7 +102934,7 @@
     }
     /** Whether a point is within LAND.air.close of this side's own men: its guns hold fire there. */
     overOwn(s, x, y) {
-      return this.units.some((u) => u.side === s && live4(u) && dist(u.x, u.y, x, y) - Math.max(u.w, u.d) / 2 < LAND3.air.close);
+      return this.units.some((u) => u.side === s && live4(u) && dist(u.x, u.y, x, y) - Math.max(u.w, u.d) / 2 < LAND.air.close);
     }
     /** The share of a run its guns may fire on, clear of the side's own men. */
     clearShare(s, r) {
@@ -102939,7 +102943,7 @@
     }
     /** The enemy blocks a run's guns rake at a point: those whose ground the strip LAND.air.wide across covers there. */
     underRun(s, x, y) {
-      const half = LAND3.air.wide / 2;
+      const half = LAND.air.wide / 2;
       return this.units.filter((e) => {
         if (e.side === s || !live4(e) || e.kind === "fort") return false;
         const dx = x - e.x, dy = y - e.y, c = Math.cos(e.face), sn = Math.sin(e.face);
@@ -102953,14 +102957,14 @@
       const on2 = this.airOn[s], bank = this.airBank[s];
       const legs = [];
       const flight = (r4, models) => {
-        const len = Math.max(1, dist(r4[0], r4[1], r4[2], r4[3])), back = LAND3.air.eta * LAND3.air.speed;
-        return { id: ++this.flightIds, side: s, nat: on2.groups[this.airCalls[s] % on2.groups.length].nat, year: this.year(), models, x: r4[0] - (r4[2] - r4[0]) / len * back, y: r4[1] - (r4[3] - r4[1]) / len * back, alt: LAND3.air.alt, face: bearing(r4[0], r4[1], r4[2], r4[3]), phase: "in", run: r4 };
+        const len = Math.max(1, dist(r4[0], r4[1], r4[2], r4[3])), back = LAND.air.eta * LAND.air.speed;
+        return { id: ++this.flightIds, side: s, nat: on2.groups[this.airCalls[s] % on2.groups.length].nat, year: this.year(), models, x: r4[0] - (r4[2] - r4[0]) / len * back, y: r4[1] - (r4[3] - r4[1]) / len * back, alt: LAND.air.alt, face: bearing(r4[0], r4[1], r4[2], r4[3]), phase: "in", run: r4 };
       };
       const leg = (f, aimed2) => ({ flight: f, owed: /* @__PURE__ */ new Map(), nerve: /* @__PURE__ */ new Map(), total: 0, aimed: aimed2, done: 0, struck: /* @__PURE__ */ new Set(), dropped: 0, released: 0, away: false });
       if (r) {
         let total = 0;
         for (const v of bank.values()) total += v;
-        const l = leg(flight(r, LAND3.air.models), true);
+        const l = leg(flight(r, LAND.air.models), true);
         l.owed = new Map(bank);
         l.nerve = new Map(this.airNerve[s]);
         l.total = total;
@@ -102972,10 +102976,10 @@
         };
         const owed = [...bank].filter(([id, v]) => v > 0 && live1(id)).sort((a, b) => b[1] - a[1] || a[0] - b[0]);
         if (!owed.length) return false;
-        const top = owed.slice(0, LAND3.air.legs), n = top.length;
+        const top = owed.slice(0, LAND.air.legs), n = top.length;
         top.forEach(([id], i) => {
           const b = this.unit(id);
-          legs.push(leg(flight(this.frontageRun(b), Math.floor(LAND3.air.models / n) + (i < LAND3.air.models % n ? 1 : 0)), false));
+          legs.push(leg(flight(this.frontageRun(b), Math.floor(LAND.air.models / n) + (i < LAND.air.models % n ? 1 : 0)), false));
         });
         for (const [id, v] of owed) {
           const b = this.unit(id);
@@ -102992,13 +102996,13 @@
       }
       bank.clear();
       this.airNerve[s].clear();
-      const bombs = this.year() >= (LAND3.air.bombsFrom[on2.groups[this.airCalls[s] % on2.groups.length].nat] ?? LAND3.air.bombsFrom._);
+      const bombs = this.year() >= (LAND.air.bombsFrom[on2.groups[this.airCalls[s] % on2.groups.length].nat] ?? LAND.air.bombsFrom._);
       this.strikes.push({ side: s, by: r ? "you" : "staff", group: this.airCalls[s] % on2.groups.length, nth: this.airCalls[s] + 1, called: this.t, legs, bombs, ended: false, lost: false });
       this.airCalls[s]++;
       this.airLeft[s]--;
-      this.airNext[s] = this.airLeft[s] > 0 ? this.t + LAND3.air.every : Infinity;
+      this.airNext[s] = this.airLeft[s] > 0 ? this.t + LAND.air.every : Infinity;
       const human = this.ticket[s].human;
-      this.say({ what: "land:air-call", side: s, text: human && !r ? "The staff called in the fighters." : "", x: legs[0].flight.run[0], y: legs[0].flight.run[1], extra: { flights: legs.map((l) => l.flight.id), runs: legs.map((l) => l.flight.run), eta: LAND3.air.eta, by: r ? "you" : "staff" } });
+      this.say({ what: "land:air-call", side: s, text: human && !r ? "The staff called in the fighters." : "", x: legs[0].flight.run[0], y: legs[0].flight.run[1], extra: { flights: legs.map((l) => l.flight.id), runs: legs.map((l) => l.flight.run), eta: LAND.air.eta, by: r ? "you" : "staff" } });
       return true;
     }
     /** The year the ticket's date falls in: which fighters fly, and whether they carry bombs. */
@@ -103014,17 +103018,17 @@
       for (const s of ["att", "def"]) {
         const on2 = this.airOn[s];
         if (!on2) continue;
-        if (this.contactAt !== null && this.airNext[s] === Infinity && this.airLeft[s] > 0 && this.airCalls[s] === 0) this.airNext[s] = this.contactAt + LAND3.air.first;
-        if (this.airReady(s) && this.t >= this.airNext[s] + LAND3.air.wait) this.callAir(s);
+        if (this.contactAt !== null && this.airNext[s] === Infinity && this.airLeft[s] > 0 && this.airCalls[s] === 0) this.airNext[s] = this.contactAt + LAND.air.first;
+        if (this.airReady(s) && this.t >= this.airNext[s] + LAND.air.wait) this.callAir(s);
       }
       const hurt2 = /* @__PURE__ */ new Map();
       for (const k of this.strikes) if (!k.ended) this.flyStrike(k, hurt2);
-      for (const [id, [d, n]] of hurt2) this.airHarm(id, d, d > 0 ? n / d * LAND3.air.nerve : LAND3.air.nerve);
+      for (const [id, [d, n]] of hurt2) this.airHarm(id, d, d > 0 ? n / d * LAND.air.nerve : LAND.air.nerve);
       this.strikes = this.strikes.filter((k) => !k.ended);
     }
     /** One strike's tick, its legs flown together. What each leg lands this tick is added to 'hurt'. */
     flyStrike(k, hurt2) {
-      const A = LAND3.air, at4 = k.called + A.eta, led = this.airLedger[k.side];
+      const A = LAND.air, at4 = k.called + A.eta, led = this.airLedger[k.side];
       let over = true;
       for (const l of k.legs) {
         const r = l.flight.run, len = Math.max(1, dist(r[0], r[1], r[2], r[3])), secs = Math.max(DT, len / A.speed), [dx, dy] = [(r[2] - r[0]) / len, (r[3] - r[1]) / len];
@@ -103104,7 +103108,7 @@
      */
     land(s, e, raw2, hurt2, l, nerve2) {
       const led = this.airLedger[s];
-      const d = raw2 * this.groundTake(e) * (e.kind === "arm" && l.aimed ? LAND3.air.armour : 1);
+      const d = raw2 * this.groundTake(e) * (e.kind === "arm" && l.aimed ? LAND.air.armour : 1);
       led.landed += raw2;
       led.dealt += d;
       if (this.ticket[s].human) e.found = true;
@@ -103308,7 +103312,7 @@
       for (const s of ["att", "def"]) {
         if (!this.airOn[s]) continue;
         const k = this.strikes.find((x) => x.side === s && !x.ended);
-        air2[s] = { ready: this.airReady(s) ? 1 : 0, left: this.airLeft[s], nextIn: this.airLeft[s] > 0 && this.airNext[s] !== Infinity && this.t < this.airNext[s] ? Math.round((this.airNext[s] - this.t) * 10) / 10 : null, eta: k && this.t < k.called + LAND3.air.eta ? Math.round((k.called + LAND3.air.eta - this.t) * 10) / 10 : null };
+        air2[s] = { ready: this.airReady(s) ? 1 : 0, left: this.airLeft[s], nextIn: this.airLeft[s] > 0 && this.airNext[s] !== Infinity && this.t < this.airNext[s] ? Math.round((this.airNext[s] - this.t) * 10) / 10 : null, eta: k && this.t < k.called + LAND.air.eta ? Math.round((k.called + LAND.air.eta - this.t) * 10) / 10 : null };
       }
       return { flights: this.flightsNow(), air: air2 };
     }
@@ -116046,7 +116050,7 @@
   }
   function hiddenOut(u) {
     const off2 = u.state === "gone" || u.state === "withdrawn";
-    const [w, d] = LAND3.size.inf;
+    const [w, d] = LAND.size.inf;
     return {
       id: u.id,
       side: u.side,
@@ -129286,6 +129290,11 @@ ${standing5}`,
     const s = game();
     setTeams(s, !!on2);
     return { on: teamsOn(s) };
+  };
+  globalThis.TC.teamFire = (on2) => {
+    const s = game();
+    setTeamFire(s, !!on2);
+    return { on: teamFireOn(s) };
   };
   globalThis.TC.taskForce = (on2) => {
     const s = game();
