@@ -1,5 +1,7 @@
 #include "Campaign/CampaignUnitTable.h"
+#include "Campaign/OneLook.h"
 #include "Dom/JsonObject.h"
+#include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
@@ -10,6 +12,18 @@
 
 namespace
 {
+	// (Release 2, the campaign map. Brian, 26 November 2026: "have the paint be on it regardless of the year"; the art
+	// director's ruling of the same day, one nation, one mark and one coat for the whole war.) Three things on the map
+	// changed their look with the date: four Commonwealth air forces took their own roundels and rudder stripes part
+	// of the way through the war (the table's "marking_months"); the American fighter turned from olive drab to bare
+	// metal with a red nose when the Mustang came into service, and the German one from greens to greys with the
+	// Fw 190; and the American star gained its bars with the Mustang and the B-17. With this each keeps one look: see
+	// UnitTable::OneLook. Off as it comes, until the Mac has shown the one beside the other; "-TheaterOneLook" turns
+	// it on, switch or no switch. It is read when a piece is next painted, which is when the map next lays it.
+	TAutoConsoleVariable<int32> CVarOneLook(
+		TEXT("tc.Map.OneLook"), 0,
+		TEXT("1: no model's paint or national mark changes with the date (a dominion wears its own roundel all war, the American fighter keeps its olive coat and its star); 0: they change by the month, as before. Release 2; off as it comes."));
+
 	struct FLook
 	{
 		FString Head, Cloth, Paint, Paint2, Hull;
@@ -37,6 +51,15 @@ namespace
 		TMap<FString, FLook> Countries;
 		FLook Default;
 		bool bLoaded = false;
+		// (One look for the whole war, the table's "one_look": the coat a model wears whatever its own file says, its
+		// paints by the file's numbers and its side number's ink; and the mark drawn in place of another.)
+		struct FCoat
+		{
+			TMap<int32, FString> Paints;
+			FString Ink;
+		};
+		TMap<FString, FCoat> OneLookCoats;
+		TMap<FString, FString> OneLookMarks;
 	};
 
 	/** A mark's layers as the table gives them, bottom first. A layer that is none of the four shapes is left out. */
@@ -149,7 +172,7 @@ namespace
 					TArray<UnitTable::FInsigniaLayer> Mark = ReadLayers(*Layers);
 					if (Mark.Num() > 0)
 					{
-						Look.DatedFrom.Add(FCString::Atoi(*YearText) * 12 + FMath::Clamp(FCString::Atoi(*MonthText), 1, 12) - 1);
+						Look.DatedFrom.Add(TheaterOneLook::MonthOf(FCString::Atoi(*YearText), FMath::Clamp(FCString::Atoi(*MonthText), 1, 12)));
 						Look.Dated.Add(MoveTemp(Mark));
 						Look.DatedFin.Add(ReadFin(*Entry));
 					}
@@ -215,6 +238,50 @@ namespace
 					}
 				}
 				Kept.bLoaded = Kept.Countries.Num() > 0;
+				// (The art director's "one_look", 26 November 2026: {"coats": {a model's name: {"colours": {a paint's number in
+				// the model's file: its colour}, "number_ink": the ink of its side number}}, "marks": {a mark: the mark drawn
+				// in its place}}. Read whether the switch is on or off; used only where it is on.)
+				const TSharedPtr<FJsonObject>* OneLookTold = nullptr;
+				if (File->TryGetObjectField(TEXT("one_look"), OneLookTold))
+				{
+					const TSharedPtr<FJsonObject>* CoatsTold = nullptr;
+					if ((*OneLookTold)->TryGetObjectField(TEXT("coats"), CoatsTold))
+					{
+						for (const TPair<FString, TSharedPtr<FJsonValue>>& Each : (*CoatsTold)->Values)
+						{
+							const TSharedPtr<FJsonObject>* CoatTold = nullptr;
+							if (!Each.Value.IsValid() || !Each.Value->TryGetObject(CoatTold))
+							{
+								continue;
+							}
+							FTable::FCoat Coat;
+							const TSharedPtr<FJsonObject>* Numbered = nullptr;
+							if ((*CoatTold)->TryGetObjectField(TEXT("colours"), Numbered))
+							{
+								for (const TPair<FString, TSharedPtr<FJsonValue>>& Numeral : (*Numbered)->Values)
+								{
+									if (Numeral.Key.IsNumeric() && Numeral.Value.IsValid() && Numeral.Value->Type == EJson::String && Numeral.Value->AsString().Len() == 6)
+									{
+										Coat.Paints.Add(FCString::Atoi(*Numeral.Key), Numeral.Value->AsString());
+									}
+								}
+							}
+							(*CoatTold)->TryGetStringField(TEXT("number_ink"), Coat.Ink);
+							Kept.OneLookCoats.Add(Each.Key, MoveTemp(Coat));
+						}
+					}
+					const TSharedPtr<FJsonObject>* MarksTold = nullptr;
+					if ((*OneLookTold)->TryGetObjectField(TEXT("marks"), MarksTold))
+					{
+						for (const TPair<FString, TSharedPtr<FJsonValue>>& Each : (*MarksTold)->Values)
+						{
+							if (Each.Value.IsValid() && Each.Value->Type == EJson::String && !Each.Value->AsString().IsEmpty())
+							{
+								Kept.OneLookMarks.Add(Each.Key, Each.Value->AsString());
+							}
+						}
+					}
+				}
 			}
 			int32 Marked = 0, TwoCoats = 0, Dated = 0;
 		for (const TPair<FString, FLook>& Each : Kept.Countries)
@@ -223,8 +290,8 @@ namespace
 			TwoCoats += Each.Value.Paint2.Len() == 6 ? 1 : 0;
 			Dated += Each.Value.Dated.Num() > 0 ? 1 : 0;
 		}
-		UE_LOG(LogTheater, Display, TEXT("Unit table: %d countries read%s; %d with a mark of their own from the table, %d with a second camouflage colour, %d with marks that change by date"), Kept.Countries.Num(),
-			Kept.bLoaded ? TEXT("") : TEXT(" (the game draws as it did before)"), Marked, TwoCoats, Dated);
+		UE_LOG(LogTheater, Display, TEXT("Unit table: %d countries read%s; %d with a mark of their own from the table, %d with a second camouflage colour, %d with marks that change by date; one look for the whole war: %d coats and %d marks"), Kept.Countries.Num(),
+			Kept.bLoaded ? TEXT("") : TEXT(" (the game draws as it did before)"), Marked, TwoCoats, Dated, Kept.OneLookCoats.Num(), Kept.OneLookMarks.Num());
 		}
 		return Kept;
 	}
@@ -285,13 +352,46 @@ bool UnitTable::Hull(const FString& Tag, FLinearColor& Out)
 namespace
 {
 	// (the campaign's month, in months from the year 0: September 1939 until the map says otherwise)
-	int32 MonthNow = 1939 * 12 + 8;
+	int32 MonthNow = TheaterOneLook::MonthOfTurn(1);
 	bool bCloseMarksNow = false;
 }
 
 void UnitTable::SetTurn(int32 Turn)
 {
-	MonthNow = 1939 * 12 + 7 + Turn; // (turn 16 is December 1940, as the map's season has it)
+	MonthNow = TheaterOneLook::MonthOfTurn(Turn); // (turn 16 is December 1940, as the map's season has it)
+}
+
+bool UnitTable::OneLook()
+{
+	static const bool bOneLookAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterOneLook"));
+	return bOneLookAsked || CVarOneLook.GetValueOnAnyThread() != 0;
+}
+
+bool UnitTable::OneLookCoat(const FString& Model, TMap<int32, FLinearColor>& OutPaints, FLinearColor& OutInk, bool& bOutInk)
+{
+	OutPaints.Reset();
+	bOutInk = false;
+	const FTable::FCoat* Coat = OneLook() ? Table().OneLookCoats.Find(Model) : nullptr;
+	if (!Coat)
+	{
+		return false;
+	}
+	for (const TPair<int32, FString>& Each : Coat->Paints)
+	{
+		FLinearColor One;
+		if (Colour(Each.Value, One))
+		{
+			OutPaints.Add(Each.Key, One);
+		}
+	}
+	bOutInk = Colour(Coat->Ink, OutInk);
+	return OutPaints.Num() > 0 || bOutInk;
+}
+
+FString UnitTable::OneLookMark(const FString& Mark)
+{
+	const FString* Drawn = OneLook() ? Table().OneLookMarks.Find(Mark) : nullptr;
+	return Drawn ? *Drawn : Mark;
 }
 
 int32 UnitTable::Month()
@@ -313,18 +413,10 @@ void UnitTable::SetMonth(int32 Year, int32 MonthOfYear)
 
 int32 UnitTable::MarkEra(const FString& Tag)
 {
-	int32 Era = 0;
-	if (const FLook* Look = LookOf(Tag))
-	{
-		for (int32 K = 0; K < Look->DatedFrom.Num(); ++K)
-		{
-			if (Look->DatedFrom[K] <= MonthNow)
-			{
-				Era = K + 1;
-			}
-		}
-	}
-	return Era;
+	// (With one look for the whole war the last of its dated marks stands in every month, the first as well as the
+	// last; without, the last the campaign's month has reached, as before. Campaign/OneLook.h.)
+	const FLook* Look = LookOf(Tag);
+	return Look ? TheaterOneLook::EraOf(Look->DatedFrom.GetData(), Look->DatedFrom.Num(), MonthNow, OneLook()) : 0;
 }
 
 bool UnitTable::Fin(const FString& Tag, bool& bOutUpright, TArray<FLinearColor>& OutBands)
