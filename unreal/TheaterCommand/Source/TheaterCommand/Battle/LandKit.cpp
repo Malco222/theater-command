@@ -4,11 +4,13 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <map>
 #include <unordered_map>
 
@@ -3621,9 +3623,24 @@ namespace LandKit
 			const double TurretAt = TickAt(S.L).Turret;
 			if (TurretAt != S.TurretAt)
 			{
+				const int BodyWas = S.Body;
+				const V3 LocalWas = S.Local;
 				S.bOnSurface = Cast(S.Face, S.U, S.H, TurretAt, S.Body, S.Local, S.Normal);
 				S.TurretAt = TurretAt;
-				S.bPlate = false;
+				// (Effects (R2): her kept plate, in the struck body's own axes, holds while the cast finds the same body
+				// and nearly the same point on it (a live battle's piece trains her turret again by a few centimetres
+				// at a strike long drawn): the plate's strike moved with it, its room as it was. Searched again only
+				// where the cast found another body or moved the strike more than a quarter of a metre.)
+				const V3 Moved = S.Local - LocalWas;
+				if (S.Body != BodyWas || Moved.Length() > 0.25)
+				{
+					S.bPlate = false;
+					S.bPlateTried = false;
+				}
+				else if (S.bPlate)
+				{
+					S.PlateAt = S.PlateAt + Moved;
+				}
 				bStruck = true;
 			}
 		}
@@ -3876,10 +3893,6 @@ namespace LandKit
 			}
 		}
 		std::stable_sort(Timeline.begin() + static_cast<std::ptrdiff_t>(Kept), Timeline.end(), [](const Timed& A, const Timed& B) { return A.T < B.T; });
-		if (bKeepPlates)
-		{
-			KeepPlates();
-		}
 	}
 
 	bool Vehicle::Cast(const std::string& Face, double U, double H, double TurretAt, int& OutBody, V3& OutLocal, V3& OutNormal) const
@@ -5038,47 +5051,92 @@ namespace LandKit
 		}
 	}
 
-	void Vehicle::KeepPlates()
+	bool Vehicle::PlateWanted(const Strike& S) const
 	{
-		if (!Shape)
+		return bKeepPlates && Shape && !S.bHeavy && (S.W == "rifle" || S.W == "mg") && S.Body >= 0 && static_cast<size_t>(S.Body) < Shape->Bodies.size();
+	}
+
+	double Vehicle::NextPlate(double From) const
+	{
+		double Next = std::numeric_limits<double>::infinity();
+		for (const Strike& S : Strikes)
 		{
-			return;
+			if (!S.bPlateTried && S.L >= From && S.L < Next && PlateWanted(S))
+			{
+				Next = S.L;
+			}
 		}
-		std::vector<Xf> Parts;
-		std::vector<Place> Places;
+		return Next;
+	}
+
+	bool Vehicle::KeepPlate(double From)
+	{
+		// (the earliest waiting at or after From)
+		Strike* Pick = nullptr;
 		for (Strike& S : Strikes)
 		{
-			if (S.bPlate || S.bHeavy || (S.W != "rifle" && S.W != "mg") || S.Body < 0 || static_cast<size_t>(S.Body) >= Shape->Bodies.size())
+			if (!S.bPlateTried && S.L >= From && (!Pick || S.L < Pick->L) && PlateWanted(S))
 			{
-				continue;
+				Pick = &S;
 			}
-			// (she posed as she stood when it struck: the plate searched about the strike, then kept in the struck body's
-			// own axes, which carry it as she drives, turns and trains her turret)
-			Xf RootXf;
-			Pose(S.L, Parts, &RootXf);
-			Shape->Places(Parts, Places);
-			if (static_cast<size_t>(S.Body) >= Places.size())
-			{
-				continue;
-			}
-			const Place& P = Places[static_cast<size_t>(S.Body)];
-			const Place RootThen{ Swap(RootXf.T), RootXf.Q };
-			PlateSpot Got;
-			if (!PlateIn(Places, RootThen.Way(V3(1.0, 0.0, 0.0)), P.Point(S.Local), P.Way(S.Normal), RootThen.Way(FaceIn(S.Face)).Unit(V3(-1.0, 0.0, 0.0)), Got))
-			{
-				continue;
-			}
-			const Quat Back = P.Q.Conj();
-			auto PointIn = [&](const V3& X) { return Back.Rotate(Swap(X - P.At)); };
-			auto WayIn = [&](const V3& W) { return Back.Rotate(Swap(W)); };
-			S.PlateAt = PointIn(Got.At);
-			S.PlateNormal = WayIn(Got.Normal);
-			S.PlateMid = PointIn(Got.Mid);
-			S.PlateA = WayIn(Got.A);
-			S.PlateB = WayIn(Got.B);
-			S.PlateDrop = Got.Floor > -1.0e29 ? Got.At.Z - Got.Floor : -1.0;
-			S.bPlate = true;
 		}
+		if (!Pick)
+		{
+			return false;
+		}
+		Strike& S = *Pick;
+		S.bPlateTried = true; // (searched once: one whose search finds no plate is not searched again)
+		// (she posed as she stood when it struck: the plate searched about the strike, then kept in the struck body's
+		// own axes, which carry it as she drives, turns and trains her turret)
+		std::vector<Xf> Parts;
+		std::vector<Place> Places;
+		Xf RootXf;
+		Pose(S.L, Parts, &RootXf);
+		Shape->Places(Parts, Places);
+		if (static_cast<size_t>(S.Body) >= Places.size())
+		{
+			return true;
+		}
+		const Place& P = Places[static_cast<size_t>(S.Body)];
+		const Place RootThen{ Swap(RootXf.T), RootXf.Q };
+		PlateSpot Got;
+		if (!PlateIn(Places, RootThen.Way(V3(1.0, 0.0, 0.0)), P.Point(S.Local), P.Way(S.Normal), RootThen.Way(FaceIn(S.Face)).Unit(V3(-1.0, 0.0, 0.0)), Got))
+		{
+			return true;
+		}
+		const Quat Back = P.Q.Conj();
+		auto PointIn = [&](const V3& X) { return Back.Rotate(Swap(X - P.At)); };
+		auto WayIn = [&](const V3& W) { return Back.Rotate(Swap(W)); };
+		S.PlateAt = PointIn(Got.At);
+		S.PlateNormal = WayIn(Got.Normal);
+		S.PlateMid = PointIn(Got.Mid);
+		S.PlateA = WayIn(Got.A);
+		S.PlateB = WayIn(Got.B);
+		S.PlateDrop = Got.Floor > -1.0e29 ? Got.At.Z - Got.Floor : -1.0;
+		S.bPlate = true;
+		return true;
+	}
+
+	size_t Vehicle::PlatesWaitingCount(double From) const
+	{
+		size_t Waiting = 0;
+		for (const Strike& S : Strikes)
+		{
+			Waiting += !S.bPlateTried && S.L >= From && PlateWanted(S) ? 1 : 0;
+		}
+		return Waiting;
+	}
+
+	bool Vehicle::PlateKept(int RoundN) const
+	{
+		for (const Strike& S : Strikes)
+		{
+			if (S.N == RoundN)
+			{
+				return S.bPlate;
+			}
+		}
+		return false;
 	}
 
 	bool Vehicle::PlateNow(int RoundN, PlateSpot& Out) const
@@ -6026,12 +6084,64 @@ namespace LandKit
 			const Block* B = BlockOf(Tracks[I].Block);
 			All[I].Life = Life;
 			All[I].BrewWait = BrewWaitOf(I); // (Effects (R2))
-			All[I].bKeepPlates = bKeepPlates; // (Effects (R2))
+			All[I].bKeepPlates = bKeepPlates && (!Armoured || Armoured(Tracks[I], B->Model)); // (Effects (R2))
 			All[I].Build(Looks[KeyOf[I]], Tracks[I], RoundList, End, InGround, Brew[I] != 0, static_cast<int>(I), B->Side, B->Nation);
 			All[I].FateKey = FateOf[I];
 		}
 		WorkedTo.assign(All.size(), End);
+		if (bKeepPlates)
+		{
+			// (Effects (R2): a whole recording's plates, every one, as it is loaded)
+			KeepPlates(-std::numeric_limits<double>::infinity(), std::numeric_limits<size_t>::max(), std::numeric_limits<double>::infinity());
+		}
 		return true;
+	}
+
+	size_t Battle::KeepPlates(double From, size_t Most, double Seconds)
+	{
+		// (Effects (R2): the earliest waiting strike of any vehicle first, so a burst about to be drawn is searched before
+		// one further on; one at least, then until Most or Seconds)
+		if (!bKeepPlates)
+		{
+			return 0;
+		}
+		using Clock = std::chrono::steady_clock;
+		const Clock::time_point Began = Clock::now();
+		size_t Done = 0;
+		while (Done < Most)
+		{
+			size_t Best = All.size();
+			double BestL = std::numeric_limits<double>::infinity();
+			for (size_t V = 0; V < All.size(); ++V)
+			{
+				const double L = All[V].NextPlate(From);
+				if (L < BestL)
+				{
+					BestL = L;
+					Best = V;
+				}
+			}
+			if (Best >= All.size() || !All[Best].KeepPlate(From))
+			{
+				break;
+			}
+			++Done;
+			if (std::chrono::duration<double>(Clock::now() - Began).count() >= Seconds)
+			{
+				break;
+			}
+		}
+		return Done;
+	}
+
+	size_t Battle::PlatesWaiting(double From) const
+	{
+		size_t Waiting = 0;
+		for (const Vehicle& V : All)
+		{
+			Waiting += V.PlatesWaitingCount(From);
+		}
+		return Waiting;
 	}
 
 	bool Battle::Extend(const std::string& DeltaText, std::string& OutError)
@@ -6290,7 +6400,6 @@ namespace LandKit
 			Ve.Life = Life;
 			Ve.LoopsUntil = Loops;
 			Ve.BrewWait = BrewWaitOf(V); // (Effects (R2))
-			Ve.bKeepPlates = bKeepPlates; // (Effects (R2))
 			TrackWords Wreck;
 			const TrackWords* W = &Grown[V];
 			if (W->Died >= 0.0)
@@ -6298,6 +6407,9 @@ namespace LandKit
 				Wreck = Laid(*W);
 				W = &Wreck;
 			}
+			// (Effects (R2): her plates kept if she is armour, searched by KeepPlates a few a frame, never here)
+			const Block* Bk = BlockOf(W->Block);
+			Ve.bKeepPlates = bKeepPlates && (!Armoured || Armoured(*W, Bk ? Bk->Model : std::string()));
 			if (bNew)
 			{
 				const Block* B = BlockOf(W->Block);

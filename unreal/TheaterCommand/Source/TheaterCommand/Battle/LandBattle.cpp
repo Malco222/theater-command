@@ -1785,6 +1785,7 @@ bool ALandBattle::Open()
 	// it (LandPlay::World::bRicochet; the kit's ShotsOnArmour). Off unless -TheaterLandRicochet (release 2, on trial: the
 	// ship list turns it on after the Mac test and the art director's pass); off, every battle as before.
 	PlayWorld.bRicochet = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandRicochet"));
+	PlayWorld.Life = S.Life; // (Effects (R2): the kit's clock against the battle's, for a burst's path off armour)
 	UE_LOG(LogTheater, Log, TEXT("Land battle: small arms on armour %s"), PlayWorld.bRicochet ? TEXT("bounce off it (ricochets and a rattle of steel; -TheaterLandRicochet, release 2, on trial)") : TEXT("as before (off unless -TheaterLandRicochet)"));
 	S.Play.Begin(Rec, PlayWorld);
 	MakeRiders();
@@ -4102,9 +4103,21 @@ void ALandBattle::MakeArmour()
 	Armour->bCapturedLook = LandParts::OnTrial("captured") && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoCaptured"));
 	Armour->bCapturedTest = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandCapturedTest"));
 	// Effects (R2), small arms off armour (-TheaterLandRicochet, read again in Open for PlayWorld.bRicochet): each rifle's
-	// and machine gun's strike's plate worked out as the vehicles are made (a few ms each, here, not on the frame), so
-	// PlayWorld.Plate only turns it by her pose (LandKit::Vehicle::PlateNow). Off, nothing is worked out: as before.
+	// and machine gun's strike's plate on armour (LandPlay::ArmouredVehicle, as the replay draws it: a lorry's never) is
+	// searched once and kept, so PlayWorld.Plate only turns it by her pose (LandKit::Vehicle::PlateNow). A recording's
+	// are searched as it loads (a few ms each, here, not on a frame); a live battle's never as its pieces grow her, but
+	// a few a frame after them (PumpLive: LandKit::Battle::KeepPlates, about a millisecond). Off, nothing is searched:
+	// as before.
 	Armour->bKeepPlates = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandRicochet"));
+	Armour->Armoured = [](const LandKit::TrackWords& W, const std::string& BlockModel)
+	{
+		LandFeed::Track Tr;
+		Tr.Role = W.Role;
+		Tr.Model = W.Model;
+		LandFeed::Block Bk;
+		Bk.Model = BlockModel;
+		return LandPlay::ArmouredVehicle(Tr, &Bk);
+	};
 	if (Armour->bCapturedLook || Armour->bCapturedTest)
 	{
 		UE_LOG(LogTheater, Display, TEXT("Land battle: captured kit ON%s"), Armour->bCapturedTest ? TEXT(" (test: every other attacker tank block taken from the defender)") : TEXT(""));

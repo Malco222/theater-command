@@ -1675,10 +1675,12 @@ or kill) to `ShotsOnArmour`. The plate comes from the first of these that answer
      of it, with nothing of her standing in front within the point's square (3 m out along the round's way).
    - The room is the biggest rectangle of such points about the strike (`Vehicle::PlateAbout`).
    - That search costs about 0.5 ms on average and up to 3 ms, too dear for the game's frame (three bursts can strike
-     armour in one frame). So it is made once for every rifle's and machine gun's strike as the vehicles are made
-     (`Battle::bKeepPlates`, set by the switch), as she stood when it struck, and kept in the struck body's own axes.
-     On the frame `PlateNow` only turns it by her pose now: a few microseconds. A strike not kept gives her skin's
-     point alone.
+     armour in one frame). So it is made once for every rifle's and machine gun's strike on armour
+     (`Battle::bKeepPlates`, set by the switch; never a lorry's), as she stood when it struck, and kept in the struck
+     body's own axes. On the frame `PlateNow` only turns it by her pose now: a few microseconds. A strike not kept
+     gives her skin's point alone. A recording's plates are searched as it loads; a live battle's never as its pieces
+     grow her, but a few a frame after them (`Battle::KeepPlates`, about a millisecond, the earliest still to be
+     drawn first), well before the screen reaches them.
 2. Her skin's strike alone (`World::Skin`), with every round at its point.
 3. A plain box on the face the rules name.
 
@@ -1757,12 +1759,11 @@ may still lie inside a room.
 Cost: one burst lays 144 to 261 pieces on the plate (45 to 61 into the ground) and draws at most 9 to 24 puffs in a
 frame (5 to 15 into the ground). The call takes about 0.4 to 0.8 ms on a shared machine, against 0.1 to 0.2 ms into
 the ground. Most of that is stepping the sparks that could fall back onto a roof, her floor or the ground. Searching
-her model for the plate (0.5 ms on average, up to about 3 ms) is not done on the game's frame: with the switch on
-every rifle's and machine gun's strike has its plate searched as the battle is made (`LandKit::Battle::bKeepPlates`),
-kept in the struck body's axes, and `PlateNow` only turns it by her pose (land_kit, "PLATES KEPT AS THE BATTLE IS
-MADE": 370 strikes on 28 vehicles, each kept plate the plate searched at her pose then to 1.5e-15 m; `PlateNow` 0.3
-microseconds on average and 11 at most; the test battle made in 1.1 to 1.4 s with them kept against 0.6 to 0.8 s
-without, on a busy machine). Off, nothing is kept.
+her model for the plate (0.5 ms on average, up to about 3 ms) is not done inside a frame's other work: with the
+switch on every rifle's and machine gun's strike on armour has its plate searched once (`LandKit::Battle::bKeepPlates`:
+a recording's as it loads; a live battle's a few a frame, about a millisecond, by `Battle::KeepPlates`, never inside
+`Battle::Extend`), kept in the struck body's axes, and `PlateNow` only turns it by her pose (land_kit, "PLATES KEPT AS
+THE BATTLE IS MADE"; land_live, "small arms off armour, plates kept"). Off, nothing is kept.
 
 Preview: `fxpreview <recipe> <dir> ricochet <30|150|600> <frames> [WxH]`. The options:
 - `FX_RICO_CASE`: side (the default), edge, turret or driving;

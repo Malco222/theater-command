@@ -779,6 +779,9 @@ int main(int argc, char** argv)
 		KB.Fires = Fires;
 		KB.bCapturedTest = B.bCapturedTest;
 		KB.bKeepPlates = true;
+		// (armour as the game has it, LandPlay::ArmouredVehicle, which this test does not build: here every tank and gun
+		// is armour and every lorry soft, so a lorry's strikes are never searched)
+		KB.Armoured = [](const TrackWords& W, const std::string&) { return W.Role != "lorry"; };
 		std::string KeepError;
 		const auto K0 = Clock::now();
 		if (!KB.Load(Recording, Read, Flat, bTable ? &Table : nullptr, 79, KeepError))
@@ -807,7 +810,14 @@ int main(int argc, char** argv)
 		}
 		std::stable_sort(List.begin(), List.end(), [](const Struck& A, const Struck& Bs) { return A.L < Bs.L; });
 		Tally Same, Cost;
-		long Kept = 0, Roomed = 0;
+		long Kept = 0, Roomed = 0, Wanted = 0, SoftKept = 0;
+		for (const Struck& S : List)
+		{
+			const bool bSoft = KB.Vehicles()[S.V].Words().Role == "lorry";
+			Wanted += bSoft ? 0 : 1;
+			SoftKept += bSoft && KB.Vehicles()[S.V].PlateKept(S.N) ? 1 : 0;
+		}
+		const size_t Waiting = KB.PlatesWaiting(-1e300);
 		double SumUs = 0.0, MostUs = 0.0;
 		const size_t Every = std::max<size_t>(1, List.size() / 120); // (about 120 of them searched again: each a few ms)
 		for (size_t I = 0; I < List.size(); ++I)
@@ -822,9 +832,9 @@ int main(int argc, char** argv)
 			SumUs += Us;
 			MostUs = std::max(MostUs, Us);
 			Cost.Note(Us < 300.0, Us, "round " + std::to_string(S.N) + ": PlateNow took " + std::to_string(Us) + " microseconds");
-			if (!bGot)
+			if (!bGot || !V.PlateKept(S.N))
 			{
-				continue;
+				continue; // (not kept: PlateNow gives her skin's point, no room)
 			}
 			++Kept;
 			Roomed += Got.A.Length() > 0.0 || Got.B.Length() > 0.0 ? 1 : 0;
@@ -846,13 +856,23 @@ int main(int argc, char** argv)
 				(Got.Normal - Full.Normal).Length(), (Got.Floor > -1e29) != (Full.Floor > -1e29) ? 1.0 : Got.Floor > -1e29 ? std::fabs(Got.Floor - Full.Floor) : 0.0 });
 			Same.Note(Off <= 0.001, Off, Who(V) + " round " + std::to_string(S.N) + ": kept plate " + std::to_string(Off) + " m off the plate searched at her pose then");
 		}
-		std::printf("  %zu small-arms strikes on %zu vehicles: %ld plates kept (%ld with a room); the battle made in %.0f ms with them kept (%.0f ms without); PlateNow %.1f microseconds on average, %.1f the most\n",
-			List.size(), KB.Vehicles().size(), Kept, Roomed, Ms(K0, K1), Ms(L0, L1), List.empty() ? 0.0 : SumUs / static_cast<double>(List.size()), MostUs);
+		std::printf("  %zu small-arms strikes on %zu vehicles, %ld of them on armour: %ld plates kept (%ld with a room about the strike, the rest a point on her plate alone; a strike whose search finds no plate is drawn at her skin's point), %zu left unsearched, %ld kept on a lorry; the battle made in %.0f ms with them kept (%.0f ms without); PlateNow %.1f microseconds on average, %.1f the most\n",
+			List.size(), KB.Vehicles().size(), Wanted, Kept, Roomed, Waiting, SoftKept, Ms(K0, K1), Ms(L0, L1), List.empty() ? 0.0 : SumUs / static_cast<double>(List.size()), MostUs);
 		Report("a kept plate, the plate searched at her pose then (1 mm)", Same, "m");
 		Report("PlateNow under 0.3 ms", Cost, "us");
-		if (Kept == 0 && !List.empty())
+		if (Kept == 0 && Wanted > 0)
 		{
 			std::printf("  FAIL no plate kept\n");
+			++Failures;
+		}
+		if (Waiting > 0)
+		{
+			std::printf("  FAIL %zu strikes on armour left unsearched once the battle was loaded\n", Waiting);
+			++Failures;
+		}
+		if (SoftKept > 0)
+		{
+			std::printf("  FAIL %ld plates searched and kept on a lorry (never drawn off a plate)\n", SoftKept);
 			++Failures;
 		}
 	}

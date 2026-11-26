@@ -70,6 +70,9 @@ namespace LandPlay
 		 * never dirt) and a Glance noise carrying the burst's rounds (a rattle of steel), and no Glance effect of its own.
 		 * Off (as left): as before. */
 		bool bRicochet = false;
+		/** bRicochet: life seconds a battle second (the game's -TheaterLandLife, 0.5 to 4): the kit lays a burst's
+		 * strikes on life's clock, so below 1 her path through it is worked out further on in battle time. */
+		double Life = 1.0;
 		/** Effects (R2), small arms off armour: the plate round Round struck on vehicle Track, as the scene has her posed
 		 * now (the tank core's cast on her model, nearer wheels and tracks included, and how far it runs flat about the
 		 * strike: LandKit::Vehicle::PlateNow). False: not known (her Skin, every round at its point; else her plain box). */

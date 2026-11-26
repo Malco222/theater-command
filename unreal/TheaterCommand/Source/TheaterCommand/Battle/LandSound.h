@@ -141,6 +141,11 @@ namespace LandSound
 		int ShotsByClip = 0, SmgBursts = 0, BurstsCut = 0, CrackRuns = 0, GroundStrikes = 0, Whines = 0, Clips = 0, Reloads = 0, Shouts = 0, Incoming = 0;
 		/** Rifle and machine-gun rounds heard ringing off a vehicle's steel (land.armourStrikes), for the log. */
 		int ArmourRings = 0;
+		/** Effects (R2), small arms off armour: how many steel pings a burst of Rounds rattles (RattleOff: burstShare of
+		 * them, at least 1, at most burstMost), and the two numbers as the mix gave them (the checks'). */
+		int PingsOf(int Rounds) const;
+		int ArmourPingsMost() const { return ArmourBurstMost; }
+		double ArmourPingsShare() const { return ArmourBurstShare; }
 		/** The same-take rule's last step, when no pitch was free: left out off the screen, held to a clear moment on it,
 		 * a close rifle shot moved to a far recording, or (none of those) started at the farthest pitch. */
 		int SameLeftOut = 0, SameHeldClear = 0, SameToFar = 0, SameToOtherFar = 0, SameCrowded = 0, SameMerged = 0;
@@ -219,7 +224,7 @@ namespace LandSound
 		 * burstDbSpread (under db) of each its own; every ping but the last cut to burstRingS (a sharp clang, the steel
 		 * ringing out only at the end); burstWhineChance its whine's chance (a single round's whineChance). */
 		int ArmourBurstMost = 8;
-		double ArmourBurstShare = 0.4, ArmourBurstPitch = 8.0, ArmourBurstDbSpread = 4.0, ArmourBurstRing = 0.25, ArmourBurstWhine = 0.6;
+		double ArmourBurstShare = 0.8, ArmourBurstPitch = 8.0, ArmourBurstDbSpread = 4.0, ArmourBurstRing = 0.25, ArmourBurstWhine = 0.6;
 		std::map<std::string, std::pair<double, double>> FiringPart;
 		// (a take that fires in several bursts with silences between: its other stretches of firing, besides its part, a
 		// crowded machine gun's next places to play from)

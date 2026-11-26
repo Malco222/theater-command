@@ -494,10 +494,14 @@ namespace LandPlay
 		// from her track at every point her track keeps in that time (she goes straight between them, so a strike is
 		// where her plate is at its moment as she slows, stops, speeds up or turns) and every tenth of a second besides
 		// (her ground's rise and fall), at most 60 moments: never inside her, never left behind her.
+		// The kit's flight and rounds go by life's clock (World::Life a battle second): with life slower than the battle
+		// (Life under 1) they take more battle time, and her path runs that much further (Slow), so no late strike is
+		// left where her path stopped.
 		const double Lands = R.L + std::max(0.0, Now - R.T);
+		const double Slow = 1.0 / std::clamp(Here.Life, 0.25, 1.0);
 		const double Fly = (P.At - Sh.At).Length() / 600.0;
 		const double Span = std::clamp((Sh.Rounds - 1) / std::max(Sh.PerSecond, 0.1), 0.25, 3.0);
-		const double Until = std::clamp(std::max(Lands - Now, Fly) + Span + 0.1, 0.3, 6.0);
+		const double Until = std::clamp(std::max(Lands - Now, Fly * Slow) + Span * Slow + 0.1, 0.3, 6.0 * Slow);
 		std::vector<double> Moments;
 		const int Even = std::clamp(static_cast<int>(std::ceil(Until / 0.1)), 2, 30);
 		for (int K = 1; K <= Even; ++K) Moments.push_back(Until * K / Even);

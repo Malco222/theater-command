@@ -826,6 +826,11 @@ namespace LandSound
 		return true;
 	}
 
+	int Mixer::PingsOf(int Rounds) const
+	{
+		return std::clamp(static_cast<int>(std::lround(Rounds * ArmourBurstShare)), 1, std::max(1, ArmourBurstMost));
+	}
+
 	void Mixer::RattleOff(const Noise& N, const Take& Base, double Far, double Now, bool bOnScreen, std::vector<Take>& Out)
 	{
 		// Effects (R2), small arms off armour: a machine gun raking a tank is a rattle of steel, not one ring. A ping for
@@ -836,7 +841,7 @@ namespace LandSound
 		// and burstWhineChance, somewhere in the burst). The mix's limits and same-take rule as ever (Start). One roll a
 		// statement.
 		const double Long = N.Rounds / N.PerSecond;
-		const int Pings = std::clamp(static_cast<int>(std::lround(N.Rounds * ArmourBurstShare)), 1, std::max(1, ArmourBurstMost));
+		const int Pings = PingsOf(N.Rounds);
 		for (int K = 0; K < Pings; ++K)
 		{
 			Take P = Base;
