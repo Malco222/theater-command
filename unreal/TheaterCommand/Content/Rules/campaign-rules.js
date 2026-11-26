@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b35b336f6 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of feb5a676b 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -20803,6 +20803,7 @@
     moveTargets: () => moveTargets,
     nearRow: () => nearRow,
     nearestRung: () => nearestRung,
+    noneSeen: () => noneSeen,
     openAirWar: () => openAirWar,
     openPilots: () => openPilots,
     openWorldAir: () => openWorldAir,
@@ -20820,6 +20821,7 @@
     seaKm: () => seaKm,
     seedClass: () => seedClass,
     seedFields: () => seedFields,
+    seenAgo: () => seenAgo,
     setMission: () => setMission2,
     setupAir: () => setupAir,
     shareWords: () => shareWords2,
@@ -20840,6 +20842,7 @@
     spreadAir: () => spreadAir,
     squadronSize: () => squadronSize,
     squadronsOf: () => squadronsOf,
+    standingGuns: () => standingGuns,
     strafersExpected: () => strafersExpected,
     troopCut: () => troopCut,
     troopLaw: () => troopLaw,
@@ -20953,7 +20956,7 @@
       radar: "earlywarning"
     },
     fog: {
-      _note: "Fog and reconnaissance on air raids (release 2; Brian, 24 November 2026: 'you should be able to bomb a german city but you dont know what your up against without doing recon. If a squadron does a recon mission it should lift the fog of war for that area for 2 turns'; the design director's ruling of 22:10Z; src/campaign/airfog.ts). Off as shipped: a war has it with the flag rfog (setRaidFog, right after startOpen), and without the flag nothing here is read and the war plays as before. 'on' is what a new grand campaign would open with (raidFogShipped); false as shipped. With it on, a side sees the air defence of an enemy province (the enemy fighters in reach of its sky, its guns, the share of the town in ruins) only while it has the province in full sight, and remembers what it last saw there with the month (intel.airSeen). The raid card and every computer staff read that knowledge, never the truth; a raid flown is fought on the truth. The forecast is a band: its low end counts only the defence known for sure (the fighter groups whose own fields are in sight now, a carrier wing whose fleet is identified, and the guns last seen, since works stand where they are built; none where never seen); its high end adds every other fighter last seen in reach of the place, all of them rising (where the place itself was never seen, the most last seen in reach of any place within its holder's fighter reach of it), and the guns last seen, or the heaviest where none were ever seen. In sight the band is one figure, the true one, and the card's own figures are always the high end's. Any target in range can always be ordered: the fog hides, it never refuses. 'months': a reconnaissance flight gives full sight of the province and the ground beside it for this many months, the month flown and the next (Brian's '2 turns': his figure, not a guess). 'forget' (G): a sighting older than this many months is thrown away, and the place is unknown again. 'stale' (G): a staff flies a new reconnaissance over a target it is about to weigh when its last sight of it is this many months old or more, or it has never seen it. 'scouts' (G): the most such flights one staff flies in a month. 'round' (G): what is remembered of the fighters is kept to the nearest this many aircraft, since nobody counts them one by one. 'reads' (G for the opportunist; the ruling for the other two): where in the band each character of staff (rivals.json) reads a forecast, 0 the low end and 1 the high: a cautious staff the high end and a bold one the middle (the ruling), an opportunist between the two (G). 'gunsUnknown': the gun level the high end counts where the side has never seen the place: the heaviest that can be built (arsenal.json works.aa has three levels), so the high end holds whatever guns are there; not a guess. 'words': a gun level in plain words, from none built to level 3.",
+      _note: "Fog and reconnaissance on air raids (release 2; Brian, 24 November 2026: 'you should be able to bomb a german city but you dont know what your up against without doing recon. If a squadron does a recon mission it should lift the fog of war for that area for 2 turns'; the design director's ruling of 22:10Z; src/campaign/airfog.ts). Off as shipped: a war has it with the flag rfog (setRaidFog, right after startOpen), and without the flag nothing here is read and the war plays as before. 'on' is what a new grand campaign would open with (raidFogShipped); false as shipped. With it on, a side sees the air defence of an enemy province (the enemy fighters in reach of its sky, its guns, the share of the town in ruins) only while it has the province in full sight, and remembers what it last saw there with the month (intel.airSeen). The raid card and every computer staff read that knowledge, never the truth; a raid flown is fought on the truth. The forecast is a band: its low end counts only the defence known for sure (the fighter groups whose own fields are in sight now, a carrier wing whose fleet is identified, and the guns last seen, since works stand where they are built; none where never seen); its high end adds every other fighter last seen in reach of the place, all of them rising (where the place itself was never seen, the most last seen in reach of any place within its holder's fighter reach of it), and the guns last seen, or the heaviest where none were ever seen. In sight the band is one figure, the true one, and the card's own figures are always the high end's. Any target in range can always be ordered: the fog hides, it never refuses. 'months': a reconnaissance flight gives full sight of the province and the ground beside it for this many months, the month flown and the next (Brian's '2 turns': his figure, not a guess). 'forget' (G): a sighting older than this many months is thrown away, and the place is unknown again. 'stale' (G): a staff flies a new reconnaissance over a target it is about to weigh when its last sight of it is this many months old or more, or it has never seen it. 'scouts' (G): the most such flights one staff flies in a month. 'round' (G): what is remembered of the fighters is kept to the nearest this many aircraft, since nobody counts them one by one. 'reads' (G for the opportunist; the ruling for the other two): where in the band each character of staff (rivals.json) reads a forecast, 0 the low end and 1 the high: a cautious staff the high end and a bold one the middle (the ruling), an opportunist between the two (G). 'gunsUnknown': the gun level the high end counts where the side has never seen the place: the heaviest that can be built (arsenal.json works.aa has three levels), so the high end holds whatever guns are there; not a guess. 'words': the knowledge line's words for a place seen with no guns built (a level reads as the card names it, 'level 2': the UI director, 25 Nov 2026 21:22Z, case b).",
       on: false,
       months: 2,
       forget: 12,
@@ -20962,7 +20965,7 @@
       round: 10,
       reads: { bold: 0.5, cautious: 1, opportunist: 0.75 },
       gunsUnknown: 3,
-      words: ["none built", "light", "medium", "heavy"]
+      words: ["none built"]
     },
     success: {
       _note: "The chance of success shown before a raid: a raid succeeds when it costs the enemy more than it costs you. k is how sharply the chance turns on the expected exchange. Set from 489 raids flown by four nations over six months: at 12 the raids given 10 to 25% won 15% of the time, those given 25 to 40% won 38%, and those given over 90% all won.",
@@ -45248,7 +45251,7 @@
       const when2 = monthOf2(k.since ?? g2.turn);
       const stops = `No train runs into, out of or through ${name} until ${k.hasty > 0 ? `the railwaymen have it running, in ${monthOf2(g2.turn + k.hasty)}, or engineers relay the track sooner` : "engineers relay the track"}. Only engineers can be carried up to the break.`;
       const guns2 = cutThroughGuns(g2, region);
-      const through2 = guns2 === null ? "" : guns2 > 0 ? `, through level ${guns2} guns` : ". No guns guarded the railway here";
+      const through2 = guns2 === null ? "" : guns2 > 0 ? `, through level ${guns2} guns` : ". No guns were built here to guard the railway";
       return { head: "Railway cut", line: `${cause ? `${capital(cause)} in ${when2}` : `Cut since ${when2}`}${through2}. ${stops}`, short: `railway cut (${cause ? `${cause}, ` : ""}${when2})` };
     }
     const when = monthOf2(k.asOf);
@@ -55163,10 +55166,12 @@
       out.push({ key: "work:factory", group: "works", label: W2.factory.label, blurb: W2.factory.blurb, size: "one factory", cost, months: W2.factory.months, upkeep: 0, at: r ? r.id : -1, note: r ? `${r.name} has ${plural3(r.fac, "factory", "factories")}${have ? `, ${have} of ${most} new ones built or building` : ""}.${said}` : "", why });
     }
     const FULL = { yard: "The shipyard at % is as large as a yard can be.", aa: "The guns at % are as heavy as they can be.", field: "The airfields at % are as large as they can be.", lights: "The searchlights at % are as many as they can be." };
-    const NONE7 = { yard: "no shipyard", aa: "no guns", field: "only rough landing grounds", lights: "no searchlights" };
+    const NONE7 = { yard: "no shipyard", field: "only rough landing grounds", lights: "no searchlights" };
+    const gunsNote = (x, now, building3) => g2.flags.rfog === 1 && x.ctrl !== nat ? "" : now ? `${x.name} has level ${now}${building3}.` : `${x.name} has no guns built${building3}: only the ${standingGuns().toLocaleString("en-US")} light guns every province has.`;
     const level = (what, spec2, now, upkeep2, why) => {
       const next = now + (r ? queued(g2, nat, what, r.id) : 0) + 1;
       const cost = priceOf(g2, nat, `work:${what}`, spec2.cost[Math.min(TOP, next)]);
+      const building3 = next - 1 > now ? `, level ${next - 1} building` : "";
       out.push({
         key: `work:${what}`,
         group: "works",
@@ -55177,7 +55182,7 @@
         months: spec2.months,
         upkeep: upkeep2,
         at: r ? r.id : -1,
-        note: r ? `${r.name} has ${now ? `level ${now}` : NONE7[what]}${next - 1 > now ? `, level ${next - 1} building` : ""}.` : "",
+        note: !r ? "" : what === "aa" ? gunsNote(r, now, building3) : `${r.name} has ${now ? `level ${now}` : NONE7[what]}${building3}.`,
         why: why ?? (next > TOP ? FULL[what].replace("%", r.name) : poor(cost))
       });
     };
@@ -59738,7 +59743,15 @@
     }
     const k = raidFogOn(g2) && g2.regions[t] ? skyKnown(g2, nat, t, sight2) : null;
     const hide = k && !k.live ? fogBits(k) : null;
-    const gunsBit = () => hide ? hide.guns : gunsAt(g2, t) ? `level ${gunsAt(g2, t)} guns` : "";
+    const gunsBit = () => {
+      const S3 = num4(standingGuns()), built = flakGuns(gunsAt(g2, t));
+      if (hide && k) {
+        if (k.guns < 0) return `built guns not known and ${S3} light`;
+        const was = flakGuns(k.guns), when = seenAgo(k.ago);
+        return was.all ? `about ${num4(was.all)} guns built (${num4(was.heavy)} heavy) when ${when}, and ${S3} light` : `${S3} light guns, none built when ${when}`;
+      }
+      return built.all ? `${num4(built.all)} guns built (${num4(built.heavy)} heavy) and ${S3} light` : `${S3} light guns`;
+    };
     const lightsBit = () => lightsAt(g2, t) ? `level ${lightsAt(g2, t)} searchlights` : "";
     if (kind === "harbour") {
       const there = shipsInPort(g2, t, nat);
@@ -60043,6 +60056,7 @@
         scouted: k.scouted,
         ago: k.ago,
         gunLevel: k.guns,
+        fightersSeen: k.fighters,
         ...knownLines(g2, k, damageRules(g2) && (kind === "bomb" || kind === "night" || kind === "town")),
         loss,
         bomberLossN: pair2(Math.round(lo.bmrLoss), Math.round(fc.bmrLoss)),
@@ -60151,6 +60165,7 @@
     const hidden = !!fog && !fog.live;
     const level = hidden ? Math.max(0, fog.gunLevel) : g2.regions[target] ? gunsAt(g2, target) : 0;
     const guns2 = flakGuns(level);
+    const standing5 = `the ${num4(standingGuns())} light guns every target has.`;
     const squadrons = lead2.meets.reduce((n, x) => n + squadronsOf(x.nat, x.able, turnToDate(g2.turn).year), 0), able2 = lead2.meets.reduce((n, x) => n + x.able, 0);
     const out = {
       chosen: kind,
@@ -60159,11 +60174,11 @@
       bombers: lead2.bombers,
       foes: lead2.meets.reduce((n, x) => n + x.ftr, 0),
       guns: level,
-      gunsLabel: level ? `Level ${level} anti-aircraft guns` : "No anti-aircraft guns",
-      gunsTail: level ? "" : "light flak only",
+      gunsLabel: level ? `Level ${level} anti-aircraft guns` : `Only ${standing5}`,
+      gunsTail: "",
       gunCount: guns2.all,
       gunHeavy: guns2.heavy,
-      gunsCount: guns2.heavy ? `about ${num4(guns2.all)} guns, ${num4(guns2.heavy)} of them heavy` : `about ${num4(guns2.all)} light guns`,
+      gunsCount: guns2.all ? `About ${num4(guns2.all)} guns built here, ${num4(guns2.heavy)} of them heavy, and ${standing5}` : `Only ${standing5}`,
       foeSquadrons: squadrons,
       foeGroups: lead2.meets.length,
       foesAble: able2,
@@ -60175,13 +60190,13 @@
       out.fog = fog;
       out.gunsKnown = fog.gunLevel >= 0;
       if (hidden) {
-        const when = fog.guns.replace(/^Guns: [^,]*/, "");
-        out.gunsLabel = fog.gunLevel < 0 ? "Anti-aircraft guns not known" : `${level ? `Level ${level} anti-aircraft guns` : "No anti-aircraft guns"}${when}`;
-        out.gunsTail = fog.gunLevel < 0 ? "not scouted" : out.gunsTail;
-        out.gunsCount = fog.gunLevel < 0 ? "guns not known" : out.gunsCount;
+        const when = seenAgo(fog.ago);
+        out.gunsLabel = fog.gunLevel < 0 ? "Anti-aircraft guns not known" : level ? `Level ${level} anti-aircraft guns, ${when}` : `No guns built, ${when}`;
+        out.gunsTail = fog.gunLevel < 0 ? "not scouted" : level ? when : out.gunsTail;
+        out.gunsCount = fog.gunLevel < 0 ? `Guns built here not known, and ${standing5}` : level ? out.gunsCount : noneSeen(fog.ago);
         const [lo, hi] = fog.squadrons;
         out.foeSquadrons = hi;
-        out.foesCount = hi > 0 ? `about ${band(lo, hi, false)} fighter ${hi === 1 ? "squadron" : "squadrons"} in range (not scouted)` : fog.fighters === "Fighters: unknown" ? "fighters in range not known" : "";
+        out.foesCount = hi > 0 ? `about ${band(lo, hi, false)} fighter ${hi === 1 ? "squadron" : "squadrons"} in range (not scouted)` : fog.fightersSeen < 0 ? "fighters in range not known" : "";
       }
     }
     return out;
@@ -60319,7 +60334,7 @@
     const known = fightersInReach(g2, t, nat).filter(sure).reduce((s, f) => s + f.ftr, 0);
     const extra = end === "high" && k.near > 0 ? Math.max(0, k.near - known) : 0;
     const aa = k.guns >= 0 ? k.guns : end === "high" ? F().gunsUnknown : 0;
-    return { sure, extra, extraNat: g2.regions[t].ctrl, aa, ruined: Math.max(0, k.ruin) };
+    return { sure, extra, extraNat: g2.regions[t].ctrl, aa, ruined: Math.max(0, k.ruin), seen: k.guns, ago: k.ago };
   }
   function weighKnown(g2, nat, fleets, m, t, sight2) {
     const S3 = raidFogOn(g2) ? sight2 ?? sightOf(g2, nat) : void 0;
@@ -60374,13 +60389,12 @@
       }
     }
   }
-  var agoWords = (n) => n <= 0 ? "seen this month" : n === 1 ? "seen a month ago" : `seen ${n} months ago`;
-  var gunWord = (level) => F().words[Math.max(0, Math.min(F().words.length - 1, level))];
+  var gunWord = (level) => level > 0 ? `level ${level}` : F().words[0];
   function knownLines(g2, k, withRuin) {
-    const when = k.live ? k.scouted ? "scouted" : "in sight" : agoWords(k.ago);
-    const fighters = k.fighters < 0 ? "Fighters: unknown" : `Fighters: ${k.fighters > 0 ? `about ${k.fighters.toLocaleString("en-US")} in reach` : "none in reach"}, ${when}`;
-    const guns2 = k.guns < 0 ? "Guns: unknown" : `Guns: ${gunWord(k.guns)}, ${when}`;
-    const damage = !withRuin ? "" : k.ruin < 0 ? "Damage: unknown" : `Damage: ${k.ruin > 0 ? `${Math.round(k.ruin * 100)}% of the town in ruins` : "none"}, ${when}`;
+    const when = k.live ? k.scouted ? "scouted" : "in sight" : seenAgo(k.ago);
+    const fighters = k.fighters < 0 ? "Fighters: not known" : `Fighters: ${k.fighters > 0 ? `about ${k.fighters.toLocaleString("en-US")} in reach` : "none in reach"}, ${when}`;
+    const guns2 = k.guns < 0 ? "Guns: not known" : `Guns: ${gunWord(k.guns)}, ${when}`;
+    const damage = !withRuin ? "" : k.ruin < 0 ? "Damage: not known" : `Damage: ${k.ruin > 0 ? `${Math.round(k.ruin * 100)}% of the town in ruins` : "none"}, ${when}`;
     return { fighters, guns: guns2, damage };
   }
   function band(lo, hi, pctOf = true) {
@@ -60389,9 +60403,8 @@
     return a === b ? `${a}${u}` : `${a} to ${b}${u}`;
   }
   function fogBits(k) {
-    const when = agoWords(k.ago).replace(/^seen/, "when seen");
+    const when = seenAgo(k.ago).replace(/^seen/, "when seen");
     return {
-      guns: k.guns < 0 ? "guns not known" : `${k.guns ? `level ${k.guns} guns` : "no guns"} ${when}`,
       fighters: k.fighters < 0 ? "fighters not known" : `${k.fighters > 0 ? `about ${k.fighters.toLocaleString("en-US")} fighters in reach` : "no fighters in reach"} ${when}`
     };
   }
@@ -60689,9 +60702,13 @@
   var hasAirfield = (g2, region) => !airWar(g2) || airfieldsHold(g2, region) > 0;
   var gunsAt = (g2, region) => g2.flags[`wk:aa:${region}`] ?? 0;
   function flakGuns(level) {
-    const G5 = AIRWAR.count.guns, n = Math.max(0, level), heavy = n * G5.heavy, light = Math.max(G5.base, n * G5.light);
+    const G5 = AIRWAR.count.guns, n = Math.max(0, level), heavy = n * G5.heavy, light = n * G5.light;
     return { light, heavy, all: light + heavy };
   }
+  var standingGuns = () => AIRWAR.count.guns.base;
+  var TEN = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+  var seenAgo = (n) => n <= 0 ? "seen this month" : n === 1 ? "seen a month ago" : `seen ${TEN[n] ?? n.toLocaleString("en-US")} months ago`;
+  var noneSeen = (ago) => `No guns built when ${seenAgo(ago)}: only the ${standingGuns().toLocaleString("en-US")} light guns every target has.`;
   function squadronSize(nat, year) {
     const later = AIRWAR.count.later[nat];
     return later && year >= later[0] ? later[1] : AIRWAR.count.squadron[nat] ?? AIRWAR.count.squadron._default;
@@ -62062,7 +62079,7 @@
     const place3 = sea ? g2.seas[zone] ? seaWhat(g2.seas[zone].name) : "the sea" : g2.regions[target]?.name ?? "";
     const wx = weatherOn(g2);
     const sky = wx ? sea ? skyAtSea(g2, zone) : skyAt(g2, target) : "clear";
-    const out = { why: null, place: place3, att: [], def: [], E: 0, Epow: 0, B: 0, D: 0, Dpow: 0, radar: null, bomberLoss: 0, defence: 0, drilled: 0, aa: 0, guns: { light: 0, heavy: 0, all: 0 }, squadrons: 0, groups: 0, gunLoss: 0, lines: [], ships: [], flak: 0, spoil: 0, naval: 1, again: 1, surprise: false, sky, aim: cloudAim(sky, night) };
+    const out = { why: null, place: place3, att: [], def: [], E: 0, Epow: 0, B: 0, D: 0, Dpow: 0, radar: null, bomberLoss: 0, defence: 0, drilled: 0, aa: 0, guns: { light: 0, heavy: 0, all: 0 }, standing: 0, squadrons: 0, groups: 0, gunLoss: 0, lines: [], ships: [], flak: 0, spoil: 0, naval: 1, again: 1, surprise: false, sky, aim: cloudAim(sky, night) };
     if (known) out.known = known;
     if (!fleets.length) {
       out.why = "No air fleet has these orders.";
@@ -62192,7 +62209,10 @@
     out.bomberLoss = out.B > 0 ? Math.min(most, (L2 ? L2.bombers * Math.pow(met2, L2.power) : C4.bombers * met2) * (1 - out.drilled) * I + (night ? C4.night.flak : C4.flak) * gun2 * I) : 0;
     out.aa = m === "bomb" || night || m === "harbour" || m === "town" ? known ? known.aa : gunsAt(g2, target) : 0;
     if (out.aa && out.B > 0) out.bomberLoss = Math.min(most, out.bomberLoss + out.aa * WORKS.aa.flak * I * unready * aaGun);
-    if (!sea && out.B > 0) out.guns = flakGuns(out.aa);
+    if (!sea && out.B > 0) {
+      out.guns = flakGuns(out.aa);
+      out.standing = standingGuns();
+    }
     out.groups = out.def.length;
     out.squadrons = out.def.reduce((n, x) => n + squadronsOf(x.f.nat, x.f.ftr * x.w, turnToDate(g2.turn).year), 0);
     if (known && unseenUp > 0) out.squadrons += squadronsOf(known.extraNat, unseenUp, turnToDate(g2.turn).year);
@@ -62266,12 +62286,29 @@
       const hx = out.height.h.toFixed(1);
       out.lines.push(out.height.x < 0 ? { label: "Height", value: "The defenders will be above you", effect: `They are warned in time to climb above your fighters and dive on them: about ${hx} to 1 their way on height alone.` } : out.height.x > 0 ? { label: "Height", value: "You will be above them", effect: `No warning reaches them in time: your fighters dive on them from above, about ${hx} to 1 your way on height alone.` } : { label: "Height", value: "Level", effect: "Ground observers warn them in time to climb to your height, not above it: neither side has the height." });
     }
-    if (out.guns.all) {
+    if (out.guns.all || out.standing) {
+      const n = (x) => x.toLocaleString("en-US"), S3 = n(out.standing);
+      const split = `${n(out.guns.light)} light and ${n(out.guns.heavy)} heavy, and the ${S3} light guns every target has.`;
+      const only = `only the ${S3} light guns every target has.`, Only = `Only the ${S3} light guns every target has.`;
+      const Seen = (ago) => {
+        const w = seenAgo(ago);
+        return `${w.charAt(0).toUpperCase()}${w.slice(1)}`;
+      };
+      const seen2 = known ? known.seen ?? -1 : -1;
+      const counts = m === "bomb" || night || m === "harbour" || m === "town";
+      const flakWords = () => {
+        const not = m === "ground" ? "troops in the field" : m === "line" ? "the line" : m === "airfield" ? "the airfield" : m === "superiority" ? "the airfields" : "";
+        if (!counts) return not && (known ? seen2 > 0 : gunsAt(g2, target) > 0) ? `Only the ${S3} light guns every target has: the guns built here guard the town, not ${not}.` : Only;
+        if (!out.guns.all) return !known ? Only : seen2 === 0 ? noneSeen(known.ago ?? 0) : `None reckoned built: ${only}`;
+        if (known && seen2 < 0) return `Not scouted, so reckoned at the worst: about ${n(out.guns.all)} guns built round ${place3}, ${split}`;
+        return known ? `${Seen(known.ago ?? 0)}: about ${n(out.guns.all)} guns built round ${place3}, ${split}` : `About ${n(out.guns.all)} guns built here, ${split}`;
+      };
       out.lines.push({
         label: "Flak",
-        // (Fog on raids: weighed on one side's knowledge, the guns are its reckoning, not a sight of them.)
-        value: known ? `About ${out.guns.all.toLocaleString("en-US")} guns may stand round ${place3}` : `About ${out.guns.all.toLocaleString("en-US")} guns round ${place3}`,
-        effect: `${out.guns.heavy ? `${out.guns.heavy.toLocaleString("en-US")} heavy and ${out.guns.light.toLocaleString("en-US")} light` : "Light guns only"}. They may bring down ${Math.round(out.gunLoss * 100) >= 1 ? `about ${Math.round(out.gunLoss * 100)}%` : "almost none"} of the bombers.`
+        // (Fog on raids: weighed on one side's knowledge, the built guns are its reckoning, not a sight of them; the
+        // standing light guns every target has are never hidden.)
+        value: flakWords(),
+        effect: `They may bring down ${Math.round(out.gunLoss * 100) >= 1 ? `about ${Math.round(out.gunLoss * 100)}%` : "almost none"} of the bombers.`
       });
     }
     const packed = [...out.att.map((a) => a.f), ...out.def.map((x) => x.f)].filter((f) => crowding(g2, f) < 1);
@@ -62284,19 +62321,23 @@
         effect: `${list5(packed.map((f) => f.name))} can fly only ${Math.round(least * 100)}% of ${packed.length === 1 ? "its" : "their"} aircraft from there`
       });
     }
-    const ring = known ? "may ring" : "ring";
+    const aaLine = (round3) => !known ? `Level ${out.aa} guns ring ${round3}` : (known.seen ?? -1) < 0 ? `Not scouted, so reckoned at the worst: level ${out.aa} guns round ${round3}` : `Level ${out.aa} guns ringed ${round3} when ${seenAgo(known.ago ?? 0)}`;
     const dark = cn ? `By night they fire ${!cn.radar ? "blind" : cn.lit > 0 ? "by radar and searchlight" : "by radar"}, and bring down about ${Math.round(cn.share * 100)}% as many bombers as they would by day.` : "";
-    if (out.aa && m === "harbour") out.lines.push({ label: "Anti-aircraft guns", value: `Level ${out.aa} guns ${ring} ${harbourOf(place3)}`, effect: dark || "They bring down more of the bombers" });
+    if (out.aa && m === "harbour") out.lines.push({ label: "Anti-aircraft guns", value: aaLine(harbourOf(place3)), effect: dark || "They bring down more of the bombers" });
     if (m === "town") {
       const r = g2.regions[target], gone = breachOf(g2, r);
       out.lines.push({ label: "The town", value: `Troops inside ${townName(r)} fight ${Math.round((townBonus(g2, r) - 1) * 100)}% stronger${townWorksPhrase(g2, r)}${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ""}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling("raid")}% in all` });
     }
-    if (out.aa && m === "town") out.lines.push({ label: "Anti-aircraft guns", value: `Level ${out.aa} guns ${ring} ${place3}`, effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
-    else if (out.aa) out.lines.push({ label: "Anti-aircraft guns", value: `Level ${out.aa} guns ${ring} the factories of ${place3}`, effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+    if (out.aa && m === "town") out.lines.push({ label: "Anti-aircraft guns", value: aaLine(place3), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+    else if (out.aa) out.lines.push({ label: "Anti-aircraft guns", value: aaLine(`the factories of ${place3}`), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
     if (cn && cn.lights > 0) {
       const over = `Level ${cn.lights} searchlights over ${place3}`, few = "they help the night fighters a little.";
-      const light = known ? "may light" : "light";
-      out.lines.push(cn.cloud ? { label: "Searchlights", value: `Cloud over ${place3}`, effect: "The searchlights cannot see the bombers through it." } : !cn.guns ? { label: "Searchlights", value: over, effect: `${known ? "There may be" : "There are"} no guns built here for them to light. They help the night fighters a little.` } : !cn.radar ? { label: "Searchlights", value: over, effect: "Without Fighter control's radar to lay the guns, they help only the night fighters, a little." } : cn.sat < 1 ? { label: "Searchlights", value: "More bombers than the lights can hold", effect: `About ${Math.round(out.B).toLocaleString("en-US")} bombers over ${place3}, and a beam holds one at a time: the lights do about ${Math.round(cn.sat * 100)}% of their work.` } : { label: "Searchlights", value: over, effect: cn.lit >= cn.guns ? `With radar laying the guns, they ${light} every level of the guns built here, and ${few}` : `With radar laying the guns, they ${light} ${upToTen(cn.lit)} of the ${upToTen(cn.guns)} levels of guns built here, and ${few}` });
+      const never = !!known && (known.seen ?? -1) < 0;
+      const when = known && !never ? ` when ${seenAgo(known.ago ?? 0)}` : "";
+      const none4 = !known ? "There are no guns built here for them to light." : never ? "No guns are reckoned built here for them to light." : `There were no guns built here for them to light${when}.`;
+      const radar = never ? "Not scouted, so reckoned at the worst: with radar laying the guns" : "With radar laying the guns";
+      const built = never ? "guns that can be built here" : `guns built here${when}`;
+      out.lines.push(cn.cloud ? { label: "Searchlights", value: `Cloud over ${place3}`, effect: "The searchlights cannot see the bombers through it." } : !cn.guns ? { label: "Searchlights", value: over, effect: `${none4} They help the night fighters a little.` } : !cn.radar ? { label: "Searchlights", value: over, effect: "Without Fighter control's radar to lay the guns, they help only the night fighters, a little." } : cn.sat < 1 ? { label: "Searchlights", value: "More bombers than the lights can hold", effect: `About ${Math.round(out.B).toLocaleString("en-US")} bombers over ${place3}, and a beam holds one at a time: the lights do about ${Math.round(cn.sat * 100)}% of their work.` } : { label: "Searchlights", value: over, effect: cn.lit >= cn.guns ? `${radar}, they light every level of ${never ? "" : "the "}${built}, and ${few}` : `${radar}, they light ${upToTen(cn.lit)} of the ${upToTen(cn.guns)} levels of ${built}, and ${few}` });
     }
     if (out.ships.length) {
       const pc = (x) => `${Math.round(x * 100)}%`;
@@ -86651,7 +86692,7 @@
     const due = own ? g2.nations[viewer].queue.filter((b) => b.what === "work" && b.item === "aa" && b.region === region).map((b) => b.eta).sort((a, b) => a - b) : [];
     const coming2 = due.length, ready = coming2 ? due[0] : null;
     const stops = guardStops(level);
-    const guards = level > 0 ? `Level ${level} guns guard the railway here: they stop ${Math.round(stops * 100)}% of the bombing that would cut it.` : "No guns guard the railway here.";
+    const guards = level > 0 ? `Level ${level} guns guard the railway here: they stop ${Math.round(stops * 100)}% of the bombing that would cut it.` : "No guns are built here to guard the railway.";
     const building3 = ready !== null ? `Level ${level + 1} guns are being built here: ready in ${turnToDate(ready).label}.` : "";
     const line = !building3 ? guards : level > 0 ? `${guards} ${building3}` : building3;
     let order2 = null;
@@ -106821,7 +106862,7 @@
       escortShare: C4.escortShare,
       bomberDefence: C4.bomberDefence,
       gunLoss: a.gunLoss,
-      flakGuns: { light: a.guns.light || lightGuns, heavy: a.guns.heavy },
+      flakGuns: { light: a.guns.light || a.standing || lightGuns, heavy: a.guns.heavy },
       worth: { att: a.E > 0 ? a.Epow / a.E / hx : 1, def: a.D > 0 ? a.Dpow / a.D * hx : 1 },
       forecast: { foe: armed.foeLoss, foeGuns: armed.foeGuns, ftr: armed.ftrLoss, bmr: armed.bmrLoss, through: a.B * (1 - a.bomberLoss), bomberLoss: a.bomberLoss, ...marks ? { fire: fire2 } : {} },
       chance: fc.success,
@@ -115030,16 +115071,20 @@
     try {
       const level = gunsAt(s, id), guns2 = flakGuns(level);
       const ours = see.own || see.ally;
-      const foe = ours ? (s.nations[r.ctrl]?.atWar ?? []).find((n) => s.nations[n]?.alive) ?? null : null;
+      const foe = ours ? (s.nations[r.ctrl]?.atWar ?? []).find((n2) => s.nations[n2]?.alive) ?? null : null;
       const fighters = foe ? Math.round(fightersOver(s, id, foe)) : 0;
       const sky = skyOver(s, id);
       const going = s.nations[r.ctrl]?.queue.filter((b) => b.what === "work" && b.item === "aa" && b.region === id).length ?? 0;
       const o = see.own ? arsenalOffers(s, id).find((x) => x.key === "work:aa" && x.at === id) : void 0;
       const short = o && up && o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString("en")} short: the treasury holds ${inHand(s.nations[me].pp).toLocaleString("en")}.` : "";
+      const base = standingGuns(), n = (x) => x.toLocaleString("en-US");
+      const words = guns2.all ? `About ${n(guns2.all)} guns built round ${townName(r)}, ${n(guns2.heavy)} of them heavy, and the ${n(base)} light guns every town has.` : `Only the ${n(base)} light guns every town has.`;
       return {
         level,
         heavy: guns2.heavy,
-        light: guns2.light,
+        light: Math.max(base, guns2.light),
+        base,
+        words,
         stop: Math.round(gunsStop(level) * 100),
         going,
         fighters,
@@ -115213,7 +115258,7 @@
         const riser = r.defenders.find((d) => d.ftr >= 1 && d.base >= 0);
         let first2 = true;
         const byNight = r.kind === "night";
-        const lightGuns = r.region >= 0 && workLevel(s, "aa", r.region) === 0 && (byNight ? AIR.combat.night.flak : AIR.combat.flak) > 0 ? Math.max(1, flakGuns(0).light) : 0;
+        const lightGuns = r.region >= 0 && workLevel(s, "aa", r.region) === 0 && (byNight ? AIR.combat.night.flak : AIR.combat.flak) > 0 ? Math.max(1, standingGuns()) : 0;
         const deck = (x) => x.base < 0 && (x.x > 0 || x.y > 0);
         for (const a of r.attackers.filter((x) => (x.base >= 0 || deck(x)) && x.ftr + x.bmr >= 1).slice(0, 4)) {
           flights.push({
@@ -120248,17 +120293,21 @@ ${standing5}`,
           });
           const foes = Math.round(dn.foes);
           const hid = !!dn.fog && !dn.fog.live;
+          const unknown = hid && dn.gunsKnown === false, when = hid && !unknown ? seenAgo(dn.fog.ago) : "";
+          const S3 = standingGuns().toLocaleString("en-US"), each3 = "Each level stops a share of the bombing and brings down more bombers.";
+          const gunsTip = hid && !unknown && dn.guns <= 0 ? `${noneSeen(dn.fog.ago)} ${each3}` : dn.gunsCount === dn.gunsLabel ? `${dn.gunsLabel} ${each3}` : `${dn.gunsCount} ${dn.gunsLabel}. ${each3}`;
           return {
             label: "THE FORECAST  ·  BY DAY OR BY NIGHT",
             bombers: Math.round(dn.bombers),
             foes: hid && foes <= 0 ? "Unknown" : foes > 0 ? `${foes.toLocaleString("en-US")}` : "No",
             foesWords: hid ? foes > 0 ? "enemy fighters known in reach, more may come" : "fighters in reach: not scouted" : foes > 0 ? "enemy fighters in reach" : "fighters in reach",
-            // (the guns round the target, common to both ways: the level for the pips, and Brian's own words for them)
+            // (the guns round the target, common to both ways: the level for the pips, and Brian's own words for them; the
+            // tail short, the built guns' count in the tip with the light guns every target has named apart)
             guns: dn.guns,
-            gunsFigure: hid && dn.gunsKnown === false ? "Unknown" : dn.guns > 0 ? `Level ${dn.guns}` : "No",
-            gunsNoun: "AA guns",
-            gunsTail: dn.gunsTail ? `· ${dn.gunsTail}` : "",
-            gunsTip: `${dn.gunsLabel}. Each level stops a share of the bombing and brings down more bombers.`,
+            gunsFigure: unknown ? "Unknown" : dn.guns > 0 ? `Level ${dn.guns}` : "No",
+            gunsNoun: unknown || dn.guns > 0 ? "AA guns" : "AA guns built",
+            gunsTail: unknown ? `· ${dn.gunsTail}` : when ? `· ${when}` : dn.guns > 0 ? `· and ${S3} light` : `· only ${S3} light`,
+            gunsTip,
             day: one2(dn.day),
             night: one2(dn.night),
             // (new for the 3D card to draw, where it will: what the side knows, a line each, and the band)
