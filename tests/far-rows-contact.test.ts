@@ -20,9 +20,9 @@
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { corpsInContact } from '../src/campaign/drawn';
-import { atWar, createGame, declareWar, relocate, rowOffers, startPhase, takeOffer } from '../src/campaign/game';
+import { addCorps, atWar, createGame, declareWar, relocate, rowOffers, startPhase, takeOffer } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { onLiveFront } from '../src/campaign/planfronts';
 import { startOpen } from '../src/campaign/staff';
@@ -276,6 +276,67 @@ describe("a closed book brings the contact rule in: at the book's stops it acts 
     expect(corps(g, ARMY7)).toBeUndefined();
     expect(g.flags[`wait:${index(D7)}`]).toBeUndefined();
     expect(g.flags[`sent:${index(D7)}`]).toBe(1);
+  });
+});
+
+// (logic-5: the two doors' twins the far side on.) With the far side on a row due on the old chart's ground goes
+// through the far side's clause, not the old chart's statement, and reads the west's book (her 22:12Z, reading A); the
+// draw (drawn.ts `heldAlready`) reads the Pacific's for a row due on far-side ground. The design director's ruling of
+// 22:05Z, 25 November 2026: "the contact rule acts where the stop is 3 to 5 OR the row's theatre's book is closed".
+describe("a closed book, the far side on: an old-chart row through the far side's clause, and the draw", () => {
+  let added = 0;
+  const addRow = (row: any[]): number => { rows.push(row); added++; return rows.length - 1; };
+  afterEach(() => { while (added > 0) { rows.pop(); added--; } });
+  /** Germany's "Test Corps" in contact at Grenzmark (Poznan beside it, Poland at war), a row of month 2 taking it whole to Magdeburg. */
+  const west = (stop: number, shut: string[]): { g: Game; i: number; held: Corps } => {
+    const g = open(3, null);
+    expect(setStop(g, stop, true)).toBe(true);
+    for (const t of shut) g.flags[`hist:off:${t}`] = 1;
+    const held = addCorps(g, 'GER', 'Test Corps', 'inf', 2, g.byName.Grenzmark.id, {});
+    expect(corpsInContact(g, 'GER', held)).toBe(true);
+    const i = addRow([2, 'GER', 'Test Army', 'inf', 2, 'Magdeburg', { from: ['Test Corps'] }]);
+    g.turn = 2; startPhase(g, 'GER');
+    return { g, i, held };
+  };
+  const german = (g: Game, name: string): Corps | undefined => g.corps.find((c) => c.nat === 'GER' && c.name === name && !c.dead);
+  it.each([1, 2])("at stop %i with the west's book closed (and the Pacific's with it, as the book closes them) the old-chart row waits and its corps stays in the fight", (stop) => {
+    const { g, i, held } = west(stop, ['west', 'pacific']);
+    expect(g.flags[`wait:${i}`]).toBe(2);
+    expect(g.flags[`sent:${i}`]).toBeUndefined();
+    expect(at(g, held)).toBe('Grenzmark');
+    expect(german(g, 'Test Army')).toBeUndefined();
+  });
+  it.each([1, 2])("at stop %i with only the Pacific's book closed, the west's open, the old-chart row takes its corps at its date", (stop) => {
+    const { g, i, held } = west(stop, ['pacific']);
+    expect(g.flags[`wait:${i}`]).toBeUndefined();
+    expect(g.flags[`sent:${i}`]).toBe(1);
+    expect(held.dead).toBe(true);
+    expect(at(g, german(g, 'Test Army')!)).toBe('Magdeburg');
+  });
+
+  /** Japan's "12th Army (5th Division)" put in the line, on no live front, and a row of month 12 for Sapporo that names the 5th Division. */
+  const draw = (stop: number, shut: string[]): { g: Game; i: number; src: Corps; line: Region } => {
+    const g = open(3, null);
+    expect(setStop(g, stop, true)).toBe(true);
+    for (const t of shut) g.flags[`hist:off:${t}`] = 9;
+    const src = corps(g, '12th Army (5th Division)')!, line = inTheLine(g);
+    relocate(g, src, line);
+    expect(inContact(g, src)).toBe(true);
+    expect(onLiveFront(g, 'JAP', src)).toBe(false);
+    const i = addRow([12, 'JAP', 'Test Army (5th Division)', 'inf', 1, 'Sapporo', {}]);
+    month(g, 12);
+    return { g, i, src, line };
+  };
+  it.each([1, 2])("at stop %i with the Pacific's book closed the draw leaves the 5th Division in the fight: the corps keeps its name and its place", (stop) => {
+    const { g, src, line } = draw(stop, ['pacific']);
+    expect(corps(g, '12th Army (5th Division)')).toBe(src);
+    expect(src.reg).toBe(line.id);
+    expect(corps(g, 'Test Army (5th Division)')).toBeUndefined();
+  });
+  it.each([1, 2])("at stop %i with the Pacific's book open the row draws the 5th Division at its date, fight or not", (stop) => {
+    const { g } = draw(stop, []);
+    expect(corps(g, '12th Army (5th Division)')).toBeUndefined();
+    expect(at(g, corps(g, 'Test Army (5th Division)')!)).toBe('Sapporo');
   });
 });
 
