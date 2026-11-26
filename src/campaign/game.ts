@@ -55,7 +55,7 @@ import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, rai
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled, willBurn } from './prizes';
 import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, shoreOf, worldOn } from './world';
 import { FAR_STAGE } from './stage';
-import { formedLine, joinedLine, nationDone, notFormedLine, rowDone, tellWait, waitedOn } from './arrivalwaits';
+import { formedLine, joinedLine, nationDone, notFormedLine, rowDone, tellPlace, tellWait, waitedOn } from './arrivalwaits';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -6012,7 +6012,13 @@ function expeditions(g: Game, nat: string, take?: number): void {
       else if (joined?.alone) headline(g, 'info', joined.alone, nat, old.reg);
       return;
     }
-    if (!reg || !allied(g, nat, reg.ctrl)) return;
+    // (Its place not in friendly hands: it waits, and writes no `wait:<i>`, so the rows' existing end strikes it in its
+    // time and a row made from its corps goes through then (`fromWaits` reads its state, `rowComes`). Under the switch,
+    // where the rule acts, his own row that takes named corps whole (a `from` naming at least one: the telling's scope)
+    // is told of it: arrivalwaits.ts `tellPlace`, the UI director's section 9, 12:48Z, 26 November 2026; the design
+    // director's 06:10Z, "Tell the maker's hold for its place like any wait". Switch off, or a computer's row: nothing
+    // is told and nothing is written.)
+    if (!reg || !allied(g, nat, reg.ctrl)) { if (inFight && reg && Array.isArray(o.from) && o.from.length > 0 && row[1] === nat) tellPlace(g, i, reg); return; }
     // (A division is laid once, the grand campaign: drawn.ts. The divisions the row names that living corps of its
     // country hold today are not raised a second time: `claims`, empty for a row laid as it always was. The corps the
     // row's own words already account for are left out: a listed `from`, and a row that stands in for this one,
@@ -6153,7 +6159,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // An army that marched there, or is forming up at home, simply arrives.
     const bySea = reg.port && (reg.overseas || (g.nations[nat].seaSupply && reg.owner !== nat));
     // (The telling: a row of the player's that waited on the front, or came without its corps at the front: arrivalwaits.ts.)
-    const said = formedLine(g, i, was, inFight && own, c, reg, !!bySea);
+    const said = formedLine(g, i, was, inFight && own, c, reg, !!bySea, inFight);
     // A row that tells its own news says more than the bare arrival would.
     if (o.news) headline(g, 'event', said?.after ? `${o.news} ${said.after}` : o.news, nat, reg.id);
     // (A living corps come itself under the row keeps the general it has: the line names the row's only where he commands it.)
