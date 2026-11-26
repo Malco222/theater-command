@@ -13,6 +13,7 @@
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignSession.h"
 #include "Campaign/EnemyMoves.h" // (release 2, the enemy's month near you)
+#include "Campaign/FilmCritic.h" // film critic: the development facts (-FilmCritic)
 #include "TheaterCommand.h"
 #include "HAL/FileManager.h"
 #include "Components/InputComponent.h"
@@ -1597,6 +1598,7 @@ void ACampaignPlayerController::EnterCampaign()
 
 void ACampaignPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (FilmCritic::On()) { FilmCritic::Shutdown(); } // film critic: the last facts written, the strips' grabber put away
 	HushNarrator();
 	// Leaving the game keeps the campaign.
 	if (ACampaignGameMode* Mode = GetMode())
@@ -6437,6 +6439,7 @@ namespace
 void ACampaignPlayerController::PlayerTick(float DeltaTime)
 {
 	TheaterSpeed::NoteFrame(DeltaTime, GetWorld()); // ("-TheaterSpeedLog": what the frame costs)
+	if (FilmCritic::On()) { FilmCritic::Frame(*this, DeltaTime); } // film critic: the map's camera and fleets, the strips, the facts file
 	THEATER_SPEED_SCOPE(PlayerTick);
 	Super::PlayerTick(DeltaTime);
 	PumpVoice();

@@ -28,6 +28,7 @@
 #include "Campaign/CampaignSounds.h"
 #include "Campaign/CampaignTextures.h"
 #include "Campaign/CampaignUnitTable.h"
+#include "Campaign/FilmCritic.h" // film critic: the development facts (-FilmCritic)
 #include "Components/AudioComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
@@ -601,6 +602,7 @@ namespace AirParts
 	 * the bounced light and the eye's adaptation smeared cloud, flak smoke and light for a frame or a few). */
 	static void TellCut(UWorld* Here)
 	{
+		if (FilmCritic::On()) { FilmCritic::NoteCut(); } // film critic: the frame's camera line says it is a cut
 		if (APlayerController* Controller = Here ? Here->GetFirstPlayerController() : nullptr)
 		{
 			if (Controller->PlayerCameraManager)
@@ -3796,6 +3798,8 @@ void AAirBattle::Tick(float DeltaSeconds)
 			Eye->SetActorLocationAndRotation(Eye->GetActorLocation() + Jolt.Offset, Eye->GetActorRotation() + FRotator(0.0, 0.0, Jolt.RollDegrees));
 		}
 	}
+	// film critic: the camera as drawn this frame (its jolt on), its shot and the aircraft in frame
+	if (FilmCritic::On() && Eye) { FilmCritic::Air(this, S, *Eye, UnitsPerMetre, DeltaSeconds, ShipsLook >= 0 ? TEXT("overview-ships") : GunsLook >= 0 ? TEXT("overview-guns") : bChutesLook ? TEXT("overview-chutes") : TEXT("overview")); }
 	if (Stage)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_StageAdvance);
@@ -8442,6 +8446,7 @@ void AAirBattle::TakeShots(double Real)
 			{
 				S.FlyPictures |= 1 << K;
 				FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, AirParts::Wide(S.Recording.Key) + TEXT("-") + FlyShots[K].Name + TEXT(".png")), true, false);
+				if (FilmCritic::On()) { FilmCritic::Still(FlyShots[K].Name); } // film critic: the still's camera (and a strip after it)
 				++ShotsTaken;
 			}
 		}
@@ -8492,6 +8497,7 @@ void AAirBattle::TakeShots(double Real)
 			{
 				Shot.bTaken = true;
 				FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, AirParts::Wide(S.Recording.Key) + TEXT("-") + Shot.Name + TEXT(".png")), true, false);
+				if (FilmCritic::On()) { FilmCritic::Still(Shot.Name); } // film critic: the still's camera (and a strip after it)
 				++ShotsTaken;
 				StrategyShotLog(Shot.Name);
 			}
@@ -8643,6 +8649,7 @@ void AAirBattle::TakeShots(double Real)
 		{
 			Shot.bTaken = true;
 			FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, AirParts::Wide(S.Recording.Key) + TEXT("-") + Shot.Name + TEXT(".png")), true, false);
+			if (FilmCritic::On()) { FilmCritic::Still(Shot.Name); } // film critic: the still's camera (and a strip after it)
 			++ShotsTaken;
 			if (!Shot.bClose && !Shot.bShips && !Shot.bGuns && !Shot.bChutes)
 			{
@@ -8718,6 +8725,7 @@ void AAirBattle::TakeShots(double Real)
 	{
 		CardShotAt = -1.0;
 		FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, AirParts::Wide(S.Recording.Key) + TEXT("-08-after-card.png")), true, false);
+		if (FilmCritic::On()) { FilmCritic::Still(TEXT("08-after-card")); } // film critic: the still's camera
 		++ShotsTaken;
 		QuitAt = RealT + 2.0;
 	}

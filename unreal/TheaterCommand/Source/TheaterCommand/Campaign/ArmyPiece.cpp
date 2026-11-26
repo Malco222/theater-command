@@ -2293,3 +2293,63 @@ void AArmyPiece::SetShadows(bool bCast)
 		}
 	}
 }
+
+bool AArmyPiece::FilmFleet(FString& OutName, int32& OutWake, double& OutProgress, FVector& OutCourse, FVector& OutBow, FVector& OutBowAt, FVector& OutTailAt, bool& bOutTail) const
+{
+	// film critic (development only, -FilmCritic): read as Tick and MarchAlong leave the fleet; nothing is changed.
+	if (What != 1 || !Body)
+	{
+		return false;
+	}
+	OutName = Fleet.Name;
+	const int32 Sections = Body->GetNumSections();
+	const FProcMeshSection* HullSection = Sections > 0 ? Body->GetProcMeshSection(0) : nullptr;
+	const FProcMeshSection* PatrolSection = bHasWake && Sections > 1 ? Body->GetProcMeshSection(1) : nullptr;
+	const FProcMeshSection* PassageSection = bHasWake && Sections > 2 ? Body->GetProcMeshSection(2) : nullptr;
+	const FProcMeshSection* WakeSection = nullptr;
+	OutWake = 0;
+	if (PassageSection && PassageSection->bSectionVisible && PassageSection->ProcVertexBuffer.Num() > 0)
+	{
+		OutWake = 2;
+		WakeSection = PassageSection;
+	}
+	else if (PatrolSection && PatrolSection->bSectionVisible && PatrolSection->ProcVertexBuffer.Num() > 0)
+	{
+		OutWake = 1;
+		WakeSection = PatrolSection;
+	}
+	// (under sail: the leg of the route it is on now, found as Tick finds it)
+	OutProgress = -1.0;
+	OutCourse = FVector::ZeroVector;
+	if (bMarching && bSailing && RouteMarks.Num() >= 2 && Route.Num() == RouteMarks.Num())
+	{
+		const double SailShare = FMath::Clamp(MarchClock / MarchTime, 0.0, 1.0);
+		const double SailEased = SailShare * SailShare * (3.0 - 2.0 * SailShare);
+		const double SailMetres = SailEased * RouteMarks.Last();
+		int32 Leg = 1;
+		while (Leg < RouteMarks.Num() - 1 && RouteMarks[Leg] < SailMetres)
+		{
+			++Leg;
+		}
+		OutProgress = SailShare;
+		OutCourse = Route[Leg] - Route[Leg - 1];
+	}
+	// (a fleet's model has its bows toward its own +Y, its wake trailing toward -Y)
+	const FTransform BodyFrame = Body->GetComponentTransform();
+	OutBow = BodyFrame.TransformVectorNoScale(FVector(0.0, 1.0, 0.0));
+	OutBowAt = GetActorLocation();
+	if (HullSection && HullSection->ProcVertexBuffer.Num() > 0)
+	{
+		const FVector Middle = HullSection->SectionLocalBox.GetCenter();
+		OutBowAt = BodyFrame.TransformPosition(FVector(Middle.X, HullSection->SectionLocalBox.Max.Y, Middle.Z));
+	}
+	bOutTail = false;
+	OutTailAt = OutBowAt;
+	if (WakeSection)
+	{
+		const FVector Middle = WakeSection->SectionLocalBox.GetCenter();
+		OutTailAt = BodyFrame.TransformPosition(FVector(Middle.X, WakeSection->SectionLocalBox.Min.Y, Middle.Z));
+		bOutTail = true;
+	}
+	return true;
+}

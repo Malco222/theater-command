@@ -3,6 +3,7 @@
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignPlayerController.h"
 #include "Campaign/CampaignSession.h"
+#include "Campaign/FilmCritic.h" // film critic: the development facts (-FilmCritic)
 #include "Campaign/TheaterSpeed.h"
 #include "Battle/AirBattle.h"
 #include "Battle/AirBattleState.h"
@@ -1561,6 +1562,7 @@ void FStepPlayer::Log(ACampaignPlayerController& Player, const FStep& Step)
 		Before.Digest.IsEmpty() ? TEXT("null") : *Before.Digest, After.Digest.IsEmpty() ? TEXT("null") : *After.Digest, *Quote(Verdict), bSaid ? TEXT("true") : TEXT("false"), *Pass, *Quote(Note), *Smooth, *Quote(Picture));
 	FFileHelper::SaveStringToFile(Line, *FPaths::Combine(Folder, TEXT("steps.jsonl")), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM, &IFileManager::Get(), FILEWRITE_Append);
 	FScreenshotRequest::RequestScreenshot(FPaths::Combine(Folder, Picture), true, false);
+	if (FilmCritic::On()) { FilmCritic::Still(FPaths::GetBaseFilename(Picture)); } // film critic: the step's picture and its camera
 	UE_LOG(LogTheater, Display, TEXT("Steps: %d (line %d) %s %s: %s%s"), Logged, Step.Line, *Step.Verb, *Step.Target, *Verdict, Pass == TEXT("false") ? TEXT("  ** NOT AS EXPECTED **") : TEXT(""));
 	// A press of a sweep that did anything: the game is put back as it stood, and the card or the army with it.
 	if (Step.bSweep && bChanged)
@@ -1644,6 +1646,7 @@ bool FStepPlayer::Tick(ACampaignPlayerController& Player, float DeltaSeconds)
 		const double Began = FPlatformTime::Seconds();
 		Act(Player, Step);
 		ActMs = (FPlatformTime::Seconds() - Began) * 1000.0;
+		if (FilmCritic::On()) { FilmCritic::StepActed(Logged + 1, Step.Verb, Step.bReplay); } // film critic: a film strip after the act (-FilmCriticStrip)
 		// (Time is read off the clock from here: the engine caps the length it reports for a frame at 0.4 s. The first
 		// frame counted runs from the press itself, so the press's own work is in it.)
 		ActBegan = Began;
