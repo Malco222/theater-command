@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of d175f6377 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 8e6214fd4 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -44024,6 +44024,10 @@
   var portStoresOn = (g2) => g2.flags.open === 1 && g2.flags.portStores === 1;
   var toldKey2 = (id) => `portTold:${id}`;
   var shutKey = (z, nat) => `seaShut:${z}:${nat}`;
+  var lostKey = (id, c) => `portLost:${id}:${c.id}:${c.nat}:${c.name}`;
+  var hadKey = (id) => `portHad:${id}`;
+  var PORT_FLAGS = ["portTold:", "seaShut:", "portLost:", "portHad:"];
+  var portFlag = (k) => PORT_FLAGS.some((p) => k.startsWith(p));
   function setPortStores(g2, on2) {
     if (g2.flags.open !== 1) return false;
     if (on2) {
@@ -44031,13 +44035,16 @@
       return true;
     }
     delete g2.flags.portStores;
-    for (const k of Object.keys(g2.flags)) if (k.startsWith("portTold:") || k.startsWith("seaShut:")) delete g2.flags[k];
+    for (const k of Object.keys(g2.flags)) if (portFlag(k)) delete g2.flags[k];
     return true;
   }
   function portsDone(g2, nat) {
     if (!portStoresOn(g2)) return;
     for (let z = 0; z < g2.seas.length; z++) delete g2.flags[shutKey(z, nat)];
     for (const r of g2.regions) if (g2.flags[toldKey2(r.id)] !== void 0 && (r.ctrl === nat || nat === g2.human)) delete g2.flags[toldKey2(r.id)];
+    if (nat === g2.human) {
+      for (const k of Object.keys(g2.flags)) if (k.startsWith("portLost:") || k.startsWith("portHad:")) delete g2.flags[k];
+    }
   }
   function watched(g2, r) {
     if (!r.overseas || !r.port || !worksKept(r)) return false;
@@ -44123,6 +44130,12 @@
     }
     return [...seen2];
   }
+  var sightKeep = (g2, r, sight2) => sight2 >= SIGHT.full ? portKeep(g2, r) : DESERT.stores;
+  function seenEmpty(g2, r, sight2) {
+    if (sight2 >= SIGHT.full) return !garrisonOf(g2, r).length;
+    if (sight2 >= SIGHT.glimpse) return !r.units.some((c) => !c.dead && allied(g2, c.nat, r.ctrl));
+    return false;
+  }
   function fleetFor(g2, nat, seas) {
     return g2.fleets.some((f) => f.nat === nat && shipCount(f.ships) > 0 && !inPassage(f) && f.attacked !== g2.turn && fleetReach(g2, f).some((z) => seas.includes(z)));
   }
@@ -44132,18 +44145,19 @@
     const holder = r.ctrl;
     const pic = new SeaPicture(g2);
     const shut = r.seas.filter((z) => closedTo(g2, z, holder)).map((z) => ({ sea: z, by: holdersOf(g2, pic, z, holder) }));
-    const keep3 = portKeep(g2, r);
     const ours = viewer === null || viewer === holder || allied(g2, viewer, holder) && [...r.units, ...r.garr ?? []].some((c) => !c.dead && c.nat === viewer);
-    const base = { region: r.id, holder, keep: keep3, shut };
     if (!ours) {
       if (!viewer || !g2.nations[viewer] || !atWar(g2, viewer, holder)) return null;
-      const held3 = shut.filter((s) => s.by.some((b) => allied(g2, b.nat, viewer)));
-      if (!held3.length) return null;
-      const starts2 = held3.map((s) => g2.flags[shutKey(s.sea, holder)]);
+      if (shut.length !== r.seas.length || !shut.every((s) => s.by.some((b) => allied(g2, b.nat, viewer)))) return null;
+      const starts2 = r.seas.map((z) => g2.flags[shutKey(z, holder)]);
       const since = starts2.some((x) => x === void 0) ? null : Math.max(...starts2);
-      const heldHungry = since === null ? null : since + keep3 + 1;
+      const keep4 = sightKeep(g2, r, sightOf(g2, viewer)[r.id]);
+      const heldHungry = since === null ? null : since + keep4 + 1;
       return {
-        ...base,
+        region: r.id,
+        holder,
+        keep: keep4,
+        shut,
         side: "shutting",
         state: null,
         cut: false,
@@ -44158,6 +44172,8 @@
         heldLost: heldHungry === null ? null : heldHungry + hungryRun() - 1
       };
     }
+    const keep3 = portKeep(g2, r);
+    const base = { region: r.id, holder, keep: keep3, shut };
     const flag3 = g2.flags[`stores:${r.id}`];
     const his = flag3 !== void 0 && (!trueReach(g2) || keptStoresHis(g2, r));
     const last = his ? flag3 : null;
@@ -44183,7 +44199,7 @@
   var WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
   var counted = (n) => n >= 0 && n <= 10 ? WORDS[n] : String(n);
   var months = (n) => n === 1 ? "one month" : `${counted(n)} months`;
-  var join2 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  var join2 = (xs, word3 = "and") => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} ${word3} ${xs[xs.length - 1]}`;
   function monthSaid(g2, turn2) {
     const d = turnToDate(turn2);
     return d.year === turnToDate(g2.turn).year ? d.label.split(" ")[0] : d.label;
@@ -44191,7 +44207,7 @@
   var portOf2 = (r) => placeName2(r.name);
   var PortOf = (r) => placeName2(r.name, true);
   var onOrIn = (r) => r.nb.length ? "in" : "on";
-  var seasSaid = (g2, seas) => join2(seas.map((z) => seaWhat(g2.seas[z].name)));
+  var seasSaid = (g2, seas, word3 = "and") => join2(seas.map((z) => seaWhat(g2.seas[z].name)), word3);
   function heldSaid(g2, shut, viewer, perfect) {
     const verb = perfect ? "have held" : "hold";
     const groups = [];
@@ -44201,9 +44217,10 @@
       if (at4) at4.seas.push(s.sea);
       else groups.push({ key: key8, by: s.by, seas: [s.sea] });
     }
-    return groups.map(({ by: by2, seas }) => {
-      const alone = by2.length === 1 && by2[0].nat === viewer;
-      const who = (nats) => alone ? "Your" : join2(nats.map((n) => g2.nations[n]?.adj ?? n));
+    const named7 = new Set(shut.flatMap((s) => s.by.map((b) => b.nat)));
+    const alone = viewer !== null && named7.size === 1 && named7.has(viewer);
+    return groups.map(({ by: by2, seas }, i) => {
+      const who = (nats) => alone ? i ? "your" : "Your" : join2(nats.map((n) => g2.nations[n]?.adj ?? n));
       const fleets = by2.filter((b) => b.fleets).map((b) => b.nat), aircraft = by2.filter((b) => b.aircraft).map((b) => b.nat);
       const where = seasSaid(g2, seas);
       if (!aircraft.length) return `${who(fleets)} fleets ${verb} ${where}`;
@@ -44213,14 +44230,13 @@
     }).join(", and ");
   }
   function portCardLines(g2, regionId, viewer) {
-    if (!portStoresOn(g2)) return [];
+    if (!portStoresOn(g2) || viewer === null) return [];
     const f = portCutOff(g2, regionId, viewer);
     if (!f) return [];
     const r = g2.regions[regionId];
     if (f.side === "shutting") {
-      if (f.heldSince === null || f.heldLost === null || f.heldHungry === null || g2.turn > f.heldLost || !garrisonOf(g2, r).length) return [];
-      const held3 = heldSaid(g2, f.shut.filter((s) => s.by.some((b) => allied(g2, b.nat, viewer))), viewer, true);
-      return [{ text: theWords(`${held3} since ${monthSaid(g2, f.heldSince)}. Counting from then, the garrison of ${portOf2(r)} goes hungry from ${monthSaid(g2, f.heldHungry)} and is lost at the start of ${monthSaid(g2, f.heldLost)}, unless ships get through.`), tone: "note" }];
+      if (f.heldSince === null || f.heldLost === null || f.heldHungry === null || g2.turn > f.heldLost || seenEmpty(g2, r, sightOf(g2, viewer)[r.id])) return [];
+      return [{ text: theWords(`${heldSaid(g2, f.shut, viewer, true)} since ${monthSaid(g2, f.heldSince)}. Counting from then, the garrison of ${portOf2(r)} goes hungry from ${monthSaid(g2, f.heldHungry)} and is lost at the start of ${monthSaid(g2, f.heldLost)}, unless ships get through.`), tone: "note" }];
     }
     if (f.lost === null) return [];
     if (f.state === "filled") return [{ text: theWords(`Cut off by sea, its stores would feed the garrison for ${months(f.keep)}.`), tone: "note" }];
@@ -44228,11 +44244,17 @@
     const out = [];
     if (f.state === "stores") out.push({ text: theWords(`Cut off by sea: ${heldSaid(g2, f.shut, viewer, false)}, and no ship reaches the harbour. The garrison lives on the port's stores through ${monthSaid(g2, f.feedsTo)}; unless the sea is opened, it then goes hungry and is lost at the start of ${monthSaid(g2, f.lost)}.`), tone: "warn" });
     else out.push({ text: theWords(`Cut off by sea, and the port's stores are spent: the garrison goes hungry, losing order every month, and is lost at the start of ${monthSaid(g2, f.lost)} unless the sea is opened.`), tone: "bad" });
-    out.push({ text: theWords(`A fleet of yours at sea there, strong enough to open ${seasSaid(g2, f.shut.map((s) => s.sea))}, lets the ships in and fills the stores: one such month feeds the garrison through ${monthSaid(g2, g2.turn + f.keep)}.`), tone: "note" });
+    out.push({ text: theWords(`A fleet of yours at sea there, strong enough to open ${seasSaid(g2, openers(g2, r, f.shut.map((s) => s.sea)), "or")}, lets the ships in and fills the stores: one such month feeds the garrison through ${monthSaid(g2, g2.turn + f.keep)}.`), tone: "note" });
     return out;
   }
+  function openers(g2, r, shut) {
+    if (shut.length < 2) return shut;
+    const nat = r.ctrl, lanes2 = openSeas(g2, nat), starts2 = new Set(seaStarts(g2, nat));
+    const near2 = shut.filter((z) => starts2.has(z) || g2.seas.some((s, y) => lanes2[y] === 1 && s.adj.includes(z) && canPass(g2, y, z, nat)));
+    return near2.length ? near2 : shut;
+  }
   function portCorpsLine(g2, c) {
-    if (!portStoresOn(g2) || c.dead) return null;
+    if (!portStoresOn(g2) || c.dead || g2.human === null) return null;
     const f = portCutOff(g2, c.reg, c.nat);
     if (!f || f.side !== "holder" || !f.cut) return null;
     const mine4 = f.garrison.find((x) => x.id === c.id);
@@ -44296,11 +44318,12 @@
     }
   }
   function portsWatched(g2, army2) {
-    if (!portStoresOn(g2) || !g2.human) return null;
+    if (!portStoresOn(g2) || !g2.human || !g2.nations[g2.human]?.alive) return null;
     return army2.filter((c) => !c.dead && watched(g2, g2.regions[c.reg]));
   }
   function portsStarved(g2, nat, before) {
     if (!before) return;
+    const me = g2.human;
     const by2 = /* @__PURE__ */ new Map();
     for (const c of before) if (c.dead) {
       const l = by2.get(c.reg);
@@ -44309,12 +44332,28 @@
     }
     for (const [reg, lost] of by2) {
       const r = g2.regions[reg];
-      if (!involved(g2, r, lost)) continue;
+      if (!involved(g2, r, lost) && g2.flags[hadKey(reg)] !== g2.turn) continue;
       const f = portCutOff(g2, reg, null);
       if (!f || !f.cut || f.state !== "hungry") continue;
-      const names = lost.map((c) => theUnit(c.name));
-      headline(g2, "info", lost.length === 1 ? `Cut off ${onOrIn(r)} ${portOf2(r)}, ${names[0]} has starved and is lost.` : `Cut off ${onOrIn(r)} ${portOf2(r)}, ${counted(lost.length)} corps have starved and are lost: ${join2(names)}.`, nat, reg, { lost: nat });
+      for (const c of lost) g2.flags[lostKey(reg, c)] = g2.turn;
     }
+    if (nat !== me) return;
+    const told2 = /* @__PURE__ */ new Map();
+    for (const k of Object.keys(g2.flags)) {
+      if (!k.startsWith("portLost:")) continue;
+      const [, reg, , who, ...name] = k.split(":");
+      const l = told2.get(+reg);
+      if (l) l.push({ nat: who, name: name.join(":") });
+      else told2.set(+reg, [{ nat: who, name: name.join(":") }]);
+      delete g2.flags[k];
+    }
+    for (const [reg, lost] of told2) {
+      const r = g2.regions[reg];
+      const names = lost.map((c) => theUnit(c.name));
+      headline(g2, "info", lost.length === 1 ? `Cut off ${onOrIn(r)} ${portOf2(r)}, ${names[0]} has starved and is lost.` : `Cut off ${onOrIn(r)} ${portOf2(r)}, ${counted(lost.length)} corps have starved and are lost: ${join2(names)}.`, lost[0].nat, reg, { lost: lost[0].nat });
+    }
+    for (const k of Object.keys(g2.flags)) if (k.startsWith("portHad:")) delete g2.flags[k];
+    for (const c of before) if (c.nat === me) g2.flags[hadKey(c.reg)] = g2.turn;
   }
 
   // ../../src/campaign/domination.ts
