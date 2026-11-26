@@ -686,7 +686,7 @@ export function keptStoresRun(g: Game, r: Region, drawn = false): number {
  * from that fill; stores filled earlier that month, before he took it, name the old holder and are not. A record from
  * before the order was kept (no `stores:at`) reads by the month, as it did: his only where the fill's month is later
  * than the capture's. A since moved by a hand-over to the nation that already held the port is no capture
- * (keptStoresHolder).
+ * (keptStoresHolder), and a taking by battle strikes that hand-over's mark as it strikes the fill's record.
  */
 export function keptStoresHis(g: Game, r: Region): boolean {
   const last = g.flags[storesKey(r.id)];
@@ -3417,6 +3417,11 @@ export function capture(g: Game, r: Region, nat: string): void {
   // taking is never read as made after it, even where the port is back with its filler inside the month. The taker's
   // own next fill writes the record afresh. keptStoresHis.)
   if (g.flags[storesAtKey(r.id)] !== undefined) delete g.flags[storesAtKey(r.id)];
+  // (And it strikes the mark of a hand-over to the port's own holder (keptStoresHolder), which is written by the month:
+  // left standing, a port handed to its holder, then lost by battle and retaken in that same month, would read the
+  // stores from before the loss as his, since the retaking's month is the marked month again. The independent check
+  // of 26 November 2026. Only true reach writes the mark.)
+  if (g.flags[storesHeldKey(r.id)] !== undefined) delete g.flags[storesHeldKey(r.id)];
   // And in whose turn of the month it fell, so that the alarm can tell a fall the player has seen from one since he
   // last ended his month (danger.ts homeAlarms; the design director's ruling of 17 November, by the order of play).
   // Read by nothing that moves a die.
