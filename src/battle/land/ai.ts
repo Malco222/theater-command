@@ -36,6 +36,15 @@ const isMobile = (u: LandUnit): boolean => u.kind === 'arm' || u.kind === 'mot';
  * the rule off.
  */
 const ownArm = (u: LandUnit): boolean => u.team === 'mg' || u.team === 'mor';
+/**
+ * A team firing from far back (the design director, 26 November 2026 00:41Z: one rule for every team kind): never the
+ * neighbour that came round a flank, the one a line block steps out for (defend). Each kind under its own row: a sniper
+ * pair exists only with sniper teams on; the machine-gun and mortar teams are read so under `teams` (sim.teamsRule and
+ * ownArm, the ground thread's mend T of 25 November 17:52Z), which joins here as a second term of this one rule.
+ */
+// (b: the battle whose rows say which kinds count: a sniper pair by its being there, the machine-gun and mortar teams by
+// b.teamsRule. Joined at release 2's assembly as the sniper thread and the design director asked, 26 November 2026.)
+const firesFromBack = (b: LandBattle, m: LandUnit): boolean => m.team === 'snp' || (b.teamsRule && ownArm(m));
 /** Close ground where tanks see little: they keep with their foot there and never hook (item 7). */
 const CLOSE: Ground[] = ['woods', 'buildings', 'industry', 'suburb'];
 
@@ -642,9 +651,11 @@ function defend(b: LandBattle, side: Side, style: Style | null, mine: LandUnit[]
     if (away > 40 && !u.order) { b.command({ do: 'move', units: [u.id], x: u.home[0], y: u.home[1], face: Math.PI }, side); continue; }
     const shaky = foes.find((f) => f.state === 'wavering' && b.gap(u, f) < finish && !outside(f));
     if (shaky) { by(b, side, u, shaky); continue; }
-    // (Support teams in battle, sim.teamsRule: a team block is no neighbour in a fight. It fires from far back, as the
-    // guns do, so what it fires on has not come round anyone's flank: the design director, 25 November 17:52Z, mend T.)
-    const round = foes.find((f) => dist(f.x, f.y, u.home[0], u.home[1]) < leash && !outside(f) && mine.some((m) => !(b.teamsRule && ownArm(m)) && m.engaged === f.id && m !== u));
+    // (A team firing from far back is no neighbour in a fight (firesFromBack): what it fires on has not come round
+    // anyone's flank, and a block that stepped out for it only opened the line. Sniper pairs, release 2: none exists
+    // unless sniper teams are on; the support teams under sim.teamsRule (the design director, 25 November 17:52Z,
+    // mend T). With both rows off this reads as it did.)
+    const round = foes.find((f) => dist(f.x, f.y, u.home[0], u.home[1]) < leash && !outside(f) && mine.some((m) => !firesFromBack(b, m) && m.engaged === f.id && m !== u));
     if (round) by(b, side, u, round);
   }
 }

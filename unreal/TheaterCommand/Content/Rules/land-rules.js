@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of c06e0f7bc 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 24c5babd1 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -2148,6 +2148,7 @@
   var isFoot = (u) => MOTION[u.kind] === "foot";
   var isMobile = (u) => u.kind === "arm" || u.kind === "mot";
   var ownArm = (u) => u.team === "mg" || u.team === "mor";
+  var firesFromBack = (b, m) => m.team === "snp" || b.teamsRule && ownArm(m);
   var CLOSE = ["woods", "buildings", "industry", "suburb"];
   var MAIN = 1e5;
   function thinkFor(b, side) {
@@ -2637,7 +2638,7 @@
         by(b, side, u, shaky);
         continue;
       }
-      const round = foes.find((f) => dist(f.x, f.y, u.home[0], u.home[1]) < leash && !outside(f) && mine.some((m) => !(b.teamsRule && ownArm(m)) && m.engaged === f.id && m !== u));
+      const round = foes.find((f) => dist(f.x, f.y, u.home[0], u.home[1]) < leash && !outside(f) && mine.some((m) => !firesFromBack(b, m) && m.engaged === f.id && m !== u));
       if (round) by(b, side, u, round);
     }
   }

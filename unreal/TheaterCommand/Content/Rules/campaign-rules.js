@@ -92523,6 +92523,7 @@
   var isFoot2 = (u) => MOTION[u.kind] === "foot";
   var isMobile = (u) => u.kind === "arm" || u.kind === "mot";
   var ownArm = (u) => u.team === "mg" || u.team === "mor";
+  var firesFromBack = (b, m) => m.team === "snp" || b.teamsRule && ownArm(m);
   var CLOSE2 = ["woods", "buildings", "industry", "suburb"];
   var MAIN = 1e5;
   function thinkFor(b, side5) {
@@ -93012,7 +93013,7 @@
         by(b, side5, u, shaky);
         continue;
       }
-      const round3 = foes.find((f) => dist(f.x, f.y, u.home[0], u.home[1]) < leash2 && !outside(f) && mine4.some((m) => !(b.teamsRule && ownArm(m)) && m.engaged === f.id && m !== u));
+      const round3 = foes.find((f) => dist(f.x, f.y, u.home[0], u.home[1]) < leash2 && !outside(f) && mine4.some((m) => !firesFromBack(b, m) && m.engaged === f.id && m !== u));
       if (round3) by(b, side5, u, round3);
     }
   }
