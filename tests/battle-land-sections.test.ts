@@ -41,7 +41,7 @@ describe('drawn as sections, it is still looks only (ruling 217)', () => {
       const a = fight(off), c = fight(on);
       expect(sig(on, c), g).toBe(sig(off, a));
     }
-  });
+  }, 120_000); // (Its own line: a heavy test, 21.6 s alone, that ran past vitest's 30 s default under load; the design director's leave, 26 Nov 2026 12:05Z.)
   it('replays man for man', () => {
     const one = battle('plains', 11, 'bold', 'methodical'), two = battle('plains', 11, 'bold', 'methodical');
     one.drillOn({ sections: true }); two.drillOn({ sections: true });
