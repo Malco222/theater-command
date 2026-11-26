@@ -78,10 +78,10 @@ describe("an island's room, by the historian's table, in men", () => {
     expect(fitWave(g, at(g, 'Manila'), 'JAP', [big, full])).toEqual([big, full]);
   }, 300000);
 
-  it("counts a corps' men by its card's own measure, one measure for every nation", () => {
+  it("counts a corps' men by its card's own measure, one measure for every nation (the design director, 21:37Z, 26 November 2026, 7)", () => {
     const g = startOpen(createGame(3, null));
     const c = corps(g, 'CHI', 'Test Army', at(g, 'Chungking'), 2, 0.6);
-    // (China's corps cards read 15,000 a division as every nation's do: Q1 of the map, read as recommended.)
+    // (China's corps cards read 15,000 a division as every nation's do: the design director, 21:37Z, 26 November 2026, 7.)
     expect(men(c)).toBe(18000);
     expect(menOf(c)).toBe(men(c));
   }, 300000);
@@ -237,7 +237,7 @@ describe('the player and Wake', () => {
     // Ground that is no island says nothing of room here.
     expect(whyNoRoom(g, c, at(g, 'Kuala Lumpur'))).toBeNull();
     // The 3D game's march: the island's sentence, and the offer to change places with the corps that stands there: the
-    // men there after the swap (75,000) are within the room (Q6, read as recommended).
+    // men there after the swap (75,000) are within the room (the design director, 21:37Z, 26 November 2026, 5).
     TC().load(saveGame(g));
     const tried = TC().move([c.id], singapore.id) as { moved: unknown[]; note: string };
     expect(tried.moved).toEqual([]);
@@ -338,7 +338,7 @@ describe('a corps larger than the whole room (b)', () => {
     expect(fits(g, wake, 'JAP', [{ ...big, nat: 'JAP' }])).toBe(false);
     // Without the split rules: too many for the island.
     expect(whyNotShip(g, big, wake)).toBe('Wake has room for one division, about 15,000 men. XIV Corps has 32,000: too many for the island.');
-    // Before how full the island is today, and for the first such corps of a group alone (Q9, read as recommended).
+    // Before how full the island is today, the first such corps of a group named (the UI director, 21:37Z, 26 November 2026, 3).
     const small = corps(g, 'USA', 'Small', honolulu);
     relocate(g, corps(g, 'USA', 'There', honolulu, 1, 0.5), wake);
     expect(roomRefusal(g, wake, [small, big])).toBe('Wake has room for one division, about 15,000 men. XIV Corps has 32,000: too many for the island.');
@@ -357,7 +357,7 @@ describe('a corps larger than the whole room (b)', () => {
     expect(whyNotShip(g, big, at(g, 'Manila')) ?? '').not.toMatch(/too many/);
   }, 300000);
 
-  it('a computer staff passes it over in a landing wave and takes the corps of its force that fit', () => {
+  it('a computer staff passes it over in a landing wave and takes the corps of its force that fit (the design director, 21:37Z, 26 November 2026, 2)', () => {
     const g = startOpen(createGame(3, null));
     const wake = at(g, 'Wake'), quay = at(g, 'Kwajalein');
     const big = corps(g, 'JAP', 'Big', quay, 2), small = corps(g, 'JAP', 'Small', quay, 1, 0.4), next = corps(g, 'JAP', 'Next', quay, 1, 0.5);
@@ -367,13 +367,13 @@ describe('a corps larger than the whole room (b)', () => {
 });
 
 describe('the men on an island as they stand', () => {
-  it('drafts may put an island over its room: nobody is moved or struck, and it refuses new corps of that side', () => {
+  it('drafts may put an island over its room: nobody is moved or struck, and it refuses new corps of that side (the design director, 21:37Z, 26 November 2026, 4)', () => {
     const g = war('USA');
     const wake = at(g, 'Wake'), honolulu = at(g, 'Honolulu');
     clear(g, wake);
     const a = corps(g, 'USA', 'Marines', wake, 1, 0.9), b = corps(g, 'USA', 'Defense Battalion', wake, 1, 0.08);
     expect(roomLeft(g, wake, 'USA')).toBeCloseTo(0.02, 9);
-    // The month's drafts bring the marines to full strength in place (Q5, read as recommended: drafts are never refused).
+    // The month's drafts bring the marines to full strength in place (the design director, 21:37Z, 26 November 2026, 4: drafts are never refused).
     a.str = 1;
     expect(roomLeft(g, wake, 'USA')).toBe(0);
     expect([a, b].every((c) => !c.dead && c.reg === wake.id)).toBe(true);
@@ -381,7 +381,7 @@ describe('the men on an island as they stand', () => {
     expect(whyNotShip(g, more, wake)).toBe('Wake is full: it has room for about 15,000 men and 17,000 of yours are there.');
   }, 300000);
 
-  it('a retreat onto an island reads its own allowance, the room and two divisions\' worth', () => {
+  it('a retreat onto an island reads its own allowance, the room and two divisions\' worth (the design director, 21:37Z, 26 November 2026, 3)', () => {
     const g = startOpen(createGame(3, null));
     const wake = at(g, 'Wake');
     clear(g, wake);
@@ -395,7 +395,7 @@ describe('the men on an island as they stand', () => {
 });
 
 describe('two corps changing places onto an island', () => {
-  it("stand while the men there after the swap fit, never take on a corps larger than the whole room, and say what stays", () => {
+  it("stand while the men there after the swap fit, never take on a corps larger than the whole room, and say what stays (the design director, 21:37Z, 26 November 2026, 5)", () => {
     const g = war('UK');
     const singapore = at(g, 'Singapore'), johore = at(g, 'Johore');
     clear(g, singapore);
@@ -439,7 +439,8 @@ describe('the winners of a fight for an island', () => {
 
 // The record's own hand (the design director, 14:28Z (a): "the record's hand at stops 1 and 2"). At stops 1 and 2 a
 // dated row is put down at the record's place counted against five, island or not. At stops 3 to 5 the island's room
-// in men binds it as it binds every placing (Q2 of the map, read as recommended: "room binds everyone there", 13:58Z).
+// in men binds it as it binds every placing (the design director, 21:37Z, 26 November 2026, 1: "at stops 3 to 5 the
+// record's place reads the room in men like every other placing; stops 1 and 2 as built").
 // The four cases B3 named as over their room in corps (Pearl Harbor, Kwajalein, Samoa, Hong Kong) are within it in
 // men, and are kept below as such; the case still over room is an island filled by hand before the row comes.
 describe("the record's rows and an island's room", () => {
@@ -472,7 +473,7 @@ describe("the record's rows and an island's room", () => {
     expect(now[0].str).toBeCloseTo(0.7, 5);
   }, 300000);
 
-  it('at stops 3 to 5 a row whose own island is full is sent on to the nearest ground with room; at stops 1 and 2 it stands there over the room', () => {
+  it('at stops 3 to 5 a row whose own island is full is sent on to the nearest ground with room; at stops 1 and 2 it stands there over the room (the design director, 21:37Z, 26 November 2026, 1)', () => {
     const run = (stop: number): string => {
       const g = startOpen(createGame(3, 'USA'));
       g.flags.hist = stop;
@@ -506,7 +507,7 @@ describe("the design director's stand-ins of 14:28Z, flagged G (c)", () => {
   }, 300000);
 });
 
-// The UI director's marks of 15:02Z 25 November 2026 and his answers of 21:37Z 26 November 2026, every sentence as the
+// The UI director's marks of 15:02Z 25 November 2026 and her answers of 21:37Z 26 November 2026, every sentence as the
 // 3D game reads it through the bridge (TC.province, TC.railTip, TC.bySeaWhy, TC.move), on three boards of seed 3.
 describe("the island's sentences on a live board", () => {
   it("says each of the UI director's sentences whole on a live board, through the bridge", () => {

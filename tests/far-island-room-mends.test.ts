@@ -250,3 +250,26 @@ describe("a group march onto an island that takes some of it", () => {
     expect(part.note).toBe('Pearl Harbor is full: it has room for about 30,000 men and 30,000 of yours are there.');
   }, 300000);
 });
+
+describe("the comments and test titles of the island's room cite the rulings they rest on", () => {
+  it("say the design director's 21:37Z rulings as ruled, not read as recommended, and quote no island sentence in corps", () => {
+    type Glob = (pattern: string, options: { eager: true; as: 'raw' }) => Record<string, string>;
+    const files = {
+      ...((import.meta as unknown as { glob: Glob }).glob('../src/**/*.ts', { eager: true, as: 'raw' })),
+      ...((import.meta as unknown as { glob: Glob }).glob('../unreal/TheaterCommand/Rules/*.ts', { eager: true, as: 'raw' })),
+      ...((import.meta as unknown as { glob: Glob }).glob('./far-island*.test.ts', { eager: true, as: 'raw' })),
+    };
+    expect(Object.keys(files).length).toBeGreaterThan(100);
+    const stale = [/island-room map/, /Q[1-9] of the map/, /\(Q[1-9], read as recommended/, /read as the mapper recommends/, /has room for (one|[0-9]+) corps\.["”]/];
+    const bad: string[] = [];
+    for (const [f, src] of Object.entries(files)) {
+      if (f.endsWith('far-island-room-mends.test.ts')) continue;
+      src.split('\n').forEach((line: string, i: number) => { for (const re of stale) if (re.test(line)) bad.push(`${f}:${i + 1}: ${line.trim()}`); });
+    }
+    expect(bad).toEqual([]);
+    const isl = Object.entries(files).find(([f]) => f.endsWith('/campaign/islands.ts'))![1];
+    // (Read across the comment's line breaks.)
+    const flat = isl.replace(/\n\s*(\*|\/\/)\s*/g, ' ');
+    expect(flat.split('design director, 21:37Z, 26 November 2026').length - 1).toBeGreaterThanOrEqual(5);
+  });
+});

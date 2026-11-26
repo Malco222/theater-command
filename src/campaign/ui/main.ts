@@ -2898,7 +2898,8 @@ function marchTo(id: number, picked: Corps[], look = false): boolean {
     if (one && g.regions[one.reg].nb.includes(id) && !hasRoom(g, r, one) && swapChoices(g, one, id).length) { openModal({ kind: 'swap', corps: one.id, target: id }); return true; }
     // (Release 2, the Pacific's islands.) An island that has no room for one more corps says so in its own words to
     // the corps next door that was refused, where nobody there can change places with it: "Singapore has room for
-    // 2 corps." (rulings 173(b) and 179(s); the 3D game's march says the same, campaign-bridge.ts).
+    // 5 divisions, about 75,000 men: you are sending 90,000." (rulings 173(b) and 179(s), counted in men by the UI
+    // director's marks of 15:02Z 25 November 2026; the 3D game's march says the same, campaign-bridge.ts).
     const full = picked.filter((c) => g.regions[c.reg].nb.includes(id)).map((c) => whyNoRoom(g, c, r)).find(Boolean);
     if (full) { ui.msg = full; refresh(); return true; }
     return false;
@@ -3769,7 +3770,8 @@ function swapCard(corpsId: number, target: number): string {
   const c = g.corps.find((x) => x.id === corpsId);
   const r = g.regions[target];
   const vs = c ? swapChoices(g, c, target) : [];
-  // (An island of the Pacific is full at its own room, and the card says that: "Singapore has room for 2 corps.")
+  // (An island of the Pacific is full at its own room, and the card says that: "Singapore has room for 5 divisions,
+  // about 75,000 men.")
   const full = roomSays(g, r);
   const pct = (x: number): string => `${Math.round(x * 100)}%`;
   const state = (x: Corps): string => `${num(men(x))} men at ${pct(x.str)} of its strength, ${x.dug ? `dug in, ${worksTag(x)}` : 'not dug in'}`;

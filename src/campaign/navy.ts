@@ -1487,8 +1487,9 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
  * An island of the Pacific takes no more corps ashore than it has room for, those of the force's side already on it
  * counted and engineers apart, as a march counts them (rulings 173(b) and 179(s): "the limit of an open beach is the
  * island's room of one corps and what the corps carries"). The island's own sentence where the force is too many
- * ("Wake has room for one corps."), or null: always null for ground that is no island of the table, and with the far
- * side off.
+ * ("Wake is full: it has room for about 15,000 men and 15,000 of yours are there.", in men by the UI director's marks
+ * of 15:02Z 25 November 2026), or null: always null for ground that is no island of the table, and with the far side
+ * off.
  */
 const islandFull = (g: Game, cs: Corps[], to: Region): string | null => (islandOf(g, to) && !roomForAll(g, to, cs) ? roomRefusal(g, to, cs) ?? roomSays(g, to) : null);
 

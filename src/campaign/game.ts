@@ -2553,8 +2553,9 @@ function leaveWorks(g: Game, c: Corps): void {
   const n = old ? old.corps : 0;
   g.flags[`fw:${from.id}`] = Math.round(((old ? old.months * n : 0) + months) / (n + 1) * 100) / 100;
   // (Works hold no more corps than five, an island's as any ground's: the room in men already bounds who can stand
-  // there, and counting corps against a room in divisions would be a second count of room. Q7 of the island-room map
-  // of 26 November 2026, read as the mapper recommends until the design director rules.)
+  // there, and counting corps against a room in divisions would be a second count of room. Ruled by the design
+  // director, 21:37Z, 26 November 2026, 6: "five, as on any ground. The room already bounds who stands there, so
+  // capping the works at the room was a second reading of one limit.")
   g.flags[`fwk:${from.id}`] = Math.min(STACK, n + 1);
   g.flags[`fwn:${from.id}`] = Object.keys(g.nations).indexOf(c.nat);
 }
@@ -2642,7 +2643,8 @@ export function retreatTarget(g: Game, c: Corps, from: Region, banned: Set<numbe
     // (In the grand campaign an army also falls back on the lines of its own side round a town it is besieging.)
     if (!fallsOn(g, c, r, banned)) continue;
     // (An island of the Pacific takes a beaten army two divisions' worth of men over its room, as any ground takes two
-    // over its five: islands.ts `fits`, slack 2. Q4 of the island-room map, read as recommended: (b) binds orders and
+    // over its five: islands.ts `fits`, slack 2. Ruled by the design director, 21:37Z, 26 November 2026, 3: room plus
+    // two divisions' worth, because room plus two is the retreat's own allowance on any ground; (b) binds orders and
     // placings, and the retreat reads its own allowance.)
     if (!fits(g, r, c.nat, [c], { rows: placed(g, r, c.nat).length, slack: 2 })) continue;
     const s = fallScore(g, c, from, r, banned);
@@ -3619,7 +3621,8 @@ export function shoreRoom(g: Game, to: Region, nat: string, force: readonly Corp
 
 /**
  * Why a corps cannot march into a province next door for want of room there, in the player's words, or null where
- * room is not what stops it. Only an island of the Pacific says so ("Hong Kong has room for one corps."): other
+ * room is not what stops it. Only an island of the Pacific says so ("Hong Kong has room for one division, about 15,000
+ * men."; the UI director's marks of 15:02Z 25 November 2026, section 3): other
  * ground that is full says nothing here, as before, and the two corps may change places.
  */
 export function whyNoRoom(g: Game, c: Corps, to: Region): string | null {
@@ -3668,7 +3671,8 @@ export function whyNoSwap(g: Game, a: Corps, b: Corps): string | null {
   if ((a.kind === 'eng') !== (b.kind === 'eng')) return 'Engineers change places only with engineers.';
   for (const [c, to] of [[a, rb], [b, ra]] as [Corps, Region][]) { const cost = moveCost(g, c, to); if (c.ap < Math.min(cost, 4) || c.ap <= 0) return `${c.name} has not the moves left for the march.`; }
   // (An island of the Pacific: the side's men there after the swap must fit, or be no more than before, and a corps
-  // larger than its whole room never swaps on. islands.ts swapFits; Q6 of the island-room map, read as recommended.)
+  // larger than its whole room never swaps on. islands.ts swapFits; ruled by the design director, 21:37Z, 26 November
+  // 2026, 5. The refusal's words are the UI director's of 21:37Z, 4.)
   for (const [c, to, out] of [[a, rb, b], [b, ra, a]] as [Corps, Region, Corps][]) if (!swapFits(g, to, c, out)) return swapRefusal(g, to, c, out) ?? `${to.name} has no room for ${c.name}.`;
   return null;
 }
@@ -4792,7 +4796,8 @@ function roomNear(g: Game, nat: string, at: Region, record = false, going: reado
   const rows = (r: Region): number => placed(g, r, nat).filter((u) => u.kind !== 'eng').length;
   const full = (r: Region): boolean => (going.length ? !fits(g, r, nat, going, { rows: rows(r), out }) : roomLeft(g, r, nat, rows(r)) < 1);
   // (The record's hand: at stops 1 and 2 its own place against five, island or not; record's hand. At stops 3 to 5 it
-  // reads the room as every placing does: Q2 of the island-room map, read as recommended.)
+  // reads the room as every placing does: the design director, 21:37Z, 26 November 2026, 1, "at stops 3 to 5 the
+  // record's place reads the room in men like every other placing; stops 1 and 2 as built".)
   if (record && stopDef(g).book ? rows(at) < STACK : !full(at)) return at;
   const seen = new Uint8Array(g.regions.length);
   const q = [at.id];
@@ -5469,8 +5474,9 @@ export interface RowOffer {
 
 /**
  * Whether a dated row has room at its place: at stops 1 and 2 (the record's hand) against five, island or not, as it
- * always was; at stops 3 to 5 the island's room in men binds it as it binds every placing (Q2 of the island-room map
- * of 26 November 2026, read as recommended). Engineers take none. Ground that is no island: five, as before.
+ * always was; at stops 3 to 5 the island's room in men binds it as it binds every placing (the design director,
+ * 21:37Z, 26 November 2026, 1: "at stops 3 to 5 the record's place reads the room in men like every other placing;
+ * stops 1 and 2 as built"). Engineers take none. Ground that is no island: five, as before.
  */
 function rowFits(g: Game, nat: string, reg: Region, row: any[], o: any): boolean {
   const rows = placed(g, reg, nat).filter((u) => u.kind !== 'eng').length;

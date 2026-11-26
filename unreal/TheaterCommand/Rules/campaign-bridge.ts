@@ -20,7 +20,8 @@
 //   TC.reach([corpsId, ...])            -> { regions: [{ id, cost, attack, prev }], danger: [regionId, ...] }
 //   TC.move([corpsId, ...], regionId)   -> { moved: [{ id, path }], note, view }: 'note' is the staff's word on the order ('' where the piece moving is the answer):
 //                                          a march that carries on, two corps that would change places, or an island of the Pacific that has no room
-//                                          for one more corps ("Hong Kong has room for one corps.": rulings 173(b) and 179(s))
+//                                          for the corps sent ("Hong Kong has room for one division, about 15,000 men: you are sending 30,000.":
+//                                          rulings 173(b) and 179(s), in men by the UI director's marks of 15:02Z 25 November 2026)
 //   TC.previewAttack([corpsId, ...], regionId) -> the odds and the Battle Ticket, or null
 //   TC.attack([corpsId, ...], regionId) -> { report, note, view }
 //   TC.endMonth()                       -> { steps, headlines, events, fallen, ready, view }

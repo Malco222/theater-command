@@ -32,28 +32,33 @@ export function islandOf(g: Game, r: Region | undefined | null): Island | null {
  * 25 November 2026, 14:28Z, (a): "An island's room is its table figure in divisions' worth of men; a side's corps fit
  * while their men together are within it"; ruling 173(b), 179 rider (s)). A division's worth is the game's own
  * division, 15,000 men at full strength (MEN_PER_DIV), for every nation, and a corps' men are the corps card's own
- * measure, game.ts `men` (divisions x strength x 15,000; breakup.ts `menOf` is the same function). (Q1 of the map of
- * 26 November 2026, read as the mapper recommends until the UI director rules: China's corps are counted at 15,000 a
- * division here, as their corps cards count them, not at the 67,000 of China's reserve sentences.)
+ * measure, game.ts `men` (divisions x strength x 15,000; breakup.ts `menOf` is the same function). (The design
+ * director, 21:37Z, 26 November 2026, 7: "the room and its sentence read a corps' men through the same function the
+ * corps card shows (menOf), 15,000 a division's worth, never a second count", China's corps too; and the UI director,
+ * 21:37Z, 26 November 2026, 1: a corps' men as its own card shows them. China's corps are counted at 15,000 a division
+ * here, as their corps cards count them, not at the 67,000 of China's reserve sentences.)
  *
  * What counts is as ruled at 13:58Z: the corps of the side on the island's ground and in its town, for their own side
  * only; engineers apart, still in corps, up to `engRoom`; fortress crews apart under the fortress rows; a retreat onto
  * an island at room plus two, now two divisions' worth (`fits` with `slack` 2). Men are read as they stand: a worn
- * corps takes less room than a full one, and drafts that raise the men on an island over its room move nobody (Q5, read
- * as recommended: drafts are never refused for room; an island over its room refuses only new corps of that side).
+ * corps takes less room than a full one, and drafts that raise the men on an island over its room move nobody (the
+ * design director, 21:37Z, 26 November 2026, 4: "drafts are never refused for room, because a refilled corps is the
+ * same corps. The island refuses only new corps"; an island over its room refuses only new corps of that side).
  * Nobody is ever moved or struck off to keep it.
  *
  * (b) A corps larger than the island's whole room does not fit, for every seat: it falls out of `fits` with nothing
  * more, since its men alone exceed the room on an empty island. It may split to fit where the split rules allow
- * (breakup.ts), which no computer nation does (Q3, read as recommended: a computer staff's wave for an island is the
- * corps of its force that fit, in plan order, passing over any too large for the whole room; where none fits the shore
- * is read as full and the plan goes on to its next shore). One already there at the start is the record's hand and
+ * (breakup.ts), which no computer nation does (the design director, 21:37Z, 26 November 2026, 2: "a wave is the corps
+ * that fit, in plan order; if none fits, the shore is full and the staff goes to the plan's next shore"; no computer
+ * splits). One already there at the start is the record's hand and
  * stays: nothing here moves anybody.
  *
  * The record's own hand: at stops 1 and 2 of the dial (the stops that keep the book) a dated row is put down at the
  * record's place counted against five as before, and the book's stations taken (game.ts roomNear and the row offer,
- * stations.ts). At stops 3 to 5 the record's place reads `fits` like every other placing (Q2 of the map, read as
- * recommended: the design director's 13:58Z "room binds everyone there"). The other reading, the record's hand reading
+ * stations.ts). At stops 3 to 5 the record's place reads `fits` like every other placing (the design director,
+ * 21:37Z, 26 November 2026, 1: "at stops 3 to 5 the record's place reads the room in men like every other placing;
+ * stops 1 and 2 as built"; her 13:58Z rested on a retirement of dated rows not on this base, and none is built here).
+ * The other reading, the record's hand reading
  * the islands' room at stops 1 and 2 as well, was built and measured on 25 November 2026 with room counted in corps and
  * Singapore at room 2, and left out: by the book the British divisions of Malaya could not step back onto Singapore
  * Island, and the guard rows of Kwajalein, Yap and Chichi Jima waited two months for their landing forces.
@@ -157,7 +162,8 @@ export function roomLeft(g: Game, r: Region | undefined | null, nat: string, row
 /**
  * The corps of `list`, in plan order, that still go to r: each that fits beside those of its side there and those of
  * the list taken before it; a corps too large for what is left (or for the whole room) is passed over and the next
- * one asked (Q3, read as recommended). A helper over `fits`, not a second count. On ground that is no island, the
+ * one asked (the design director, 21:37Z, 26 November 2026, 2). A helper over `fits`, not a second count. On ground
+ * that is no island, the
  * whole list, as a landing was always counted there (callers cap it by their own lift and five).
  */
 export function fitWave<C extends Corps>(g: Game, r: Region | undefined | null, nat: string, list: readonly C[]): C[] {
@@ -175,7 +181,8 @@ export const fitCount = (g: Game, r: Region | undefined | null, nat: string, lis
  * The too-large line (b), said before anything of how full the island is today (the UI director, 15:02Z, section 3):
  * the first corps of the order larger than the island's whole room, at its card's own figure, with "split it and send
  * a part" where the split rules let him split it; where more than one is too large, a sentence counts the rest so he
- * is not refused again for the next (his answer of 21:37Z 26 November 2026). Null where none is too large.
+ * is not refused again for the next (the UI director's answer, 21:37Z, 26 November 2026, 3). Null where none is too
+ * large.
  */
 function tooLarge(g: Game, r: Region, line: readonly Corps[]): string | null {
   const isle = islandOf(g, r);
@@ -207,8 +214,9 @@ export function swapRefusal(g: Game, r: Region, c: Corps, out: Corps): string | 
 }
 
 /**
- * Whether corps `c` may change places with `out` onto island r (the swap, game.ts whyNoSwap): Q6 of the island-room
- * map, read as recommended until the design director rules. A corps larger than the island's whole room never swaps
+ * Whether corps `c` may change places with `out` onto island r (the swap, game.ts whyNoSwap): ruled by the design
+ * director, 21:37Z, 26 November 2026, 5: "allowed while the side's men there after it fit or are no more than before;
+ * a corps larger than the whole room never swaps on". A corps larger than the island's whole room never swaps
  * on; otherwise the swap stands while the side's men there after it fit (the corps going out left out), or are no more
  * than before. Engineers change places only with engineers, so their count does not change. True on all other ground.
  */
@@ -224,8 +232,8 @@ const roomWords = (room: number): string =>
   `room for ${room === 1 ? 'one division' : `${room} divisions`}, about ${(room * MEN_PER_DIV).toLocaleString('en-US')} men`;
 
 /**
- * A figure of men in the room's sentences (the UI director's marks of 15:02Z 25 November 2026, section 1, and his
- * answer of 21:37Z 26 November 2026 on the mapper's Q8): thousands with the comma, under 1,000 the figure whole.
+ * A figure of men in the room's sentences (the UI director's marks of 15:02Z 25 November 2026, section 1, and her
+ * answer, 21:37Z, 26 November 2026, 2): thousands with the comma, under 1,000 the figure whole.
  * 'down' for "more can go", worked from the true figures and rounded DOWN, so the line never promises room that is not
  * there; 'up' for the men there, so that there and more add up to the room the line shows; 'near' (the nearest
  * thousand) for what he is sending and for a shortfall.
@@ -261,8 +269,9 @@ export const engRoom = (g: Game, r: Region | undefined | null): number => Math.m
 /**
  * What an island tells the player whose order it has no room for, in the UI director's words of 15:02Z 25 November
  * 2026 (section 3): the room, what is there, how much more fits and what he is sending, in that order, in men. A corps
- * larger than the island's whole room is told first and alone (Q9, read as recommended): the first such corps of the
- * order, with "split it and send a part" where the split rules let him split it. `corps` are the corps ordered there;
+ * larger than the island's whole room is told first (the UI director's marks, 15:02Z, section 3): the first such corps
+ * of the order, with "split it and send a part" where the split rules let him split it, and where more than one is too
+ * large one sentence counts the rest (the UI director, 21:37Z, 26 November 2026, 3). `corps` are the corps ordered there;
  * those already on the island are not counted as there, and the corps in its town are. "Of yours" is dropped where an
  * ally's corps stand there too. Engineers are told their own count in corps (section 4). Null for ground that is no
  * island of the table, with the far side off, and where room is not what stops the order.
