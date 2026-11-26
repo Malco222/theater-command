@@ -1410,3 +1410,51 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    the MC.202's or SM.79's cross), the marking on its own plain patch and the pattern round it; a short hitch the first time a coloured model appears (its
    file read once a battle); the frame rate as before.
    (Joined onto wave 1 on 25 November; numbered 59, after the wave-2 plan's 55 to 58.)
+60. **The finer B-17** (release 2; Brian, 25 November 2026: "why don't we have the new b-17 models in the game?" and
+   "it is still the old one"). The modeller's newer B-17 of 22 November (Content/Models/B17Fine.json, the file handed
+   over byte for byte, sha256 5e1f3900...d0d79b: 142,896 triangles close up against the older file's 23,386, 20,514 far
+   against 7,122, her own nose-art panel and kill tally) drawn in the air battles in place of the older one
+   (Content/Models/B17.json, unchanged). Looks only: the rules never read either file.
+   How: AAirBattle::B17FineRead reads the Battle rules card's **Finer B-17** (FLandLive's rule `b17Fine`, never sent to
+   the land rules) once as a battle begins (BeginReplay, BeginLiveCall). On, ModelFor names the B-17 "B17Fine:USA", so
+   every reader of the file by the shape's name (the near and far shapes, airscrews, tally, bay, earned colours) and every
+   shape kept for the run is the newer one's under its own name; AirShow::SetFineB17 gives the flight core her engines
+   where her file's sockets put them (fire and smoke start there); the nose art reads her panel from
+   Content/Data/NoseArt/panels-fine.json (0.45 of the older panel's size each way, below her navigator's windows, on her
+   coat and its rivet and seam lines: Tools/pack_nose_art.py --fine says why); her rivet and seam lines (44% of her
+   close-up points) take the earned colour of the coat beside them, a shade of it as her file has them. Off (the
+   default), the name, the files read and every number are what they were. The campaign map keeps the older B-17.
+   The Mac's guard: each bomber that once comes near keeps her close-up copy for the battle (some 20 to 30 MB each, an
+   estimate); at most `-TheaterAirB17FineNear=N` (8 unless asked) finer B-17 close-up copies are ever made in a battle,
+   the ridden one always; any other finer B-17 that comes near is drawn with her far shape, as a copy with the rest.
+   (The first N to come near keep theirs, not the N nearest: a true nearest-N would take a made copy down again, which
+   was not written without a compiler.)
+   `-TheaterAirB17Fine` on for a run, `-TheaterAirNoB17Fine` off, `-TheaterRulesFlip=b17Fine` clicks the card's switch.
+   The cloud test: Tools/air_show/air_b17_fine_test.cpp in run.sh (row off reads the base's bytes and numbers, row on
+   reads her everywhere), and the airscrews', light shapes', nose art's, figures' and earned colours' tests take
+   B17Fine.json from Content/Models with the rest; the Bremen raid is flown through the show with her engines
+   (AIR_SHOW_B17_FINE=1). Notes and results: air-battles/b17-fine/NOTES.md.
+   **The timing eye** (development only, for this item's run; no row, no option): `-TheaterAirTimeEye=box` rides a
+   bomber in the middle of the largest bomber group from behind and above, as the close view rides a bomber, her
+   neighbours' close-up shapes filling the picture; `-TheaterAirTimeEye=far` holds the eye 1 km from that group's
+   middle, level with it and abeam, looking at it. Both hold from 2 s after the opening until the battle is over (the
+   flyover, the picture run's rides and a click move the eye for nothing), then the run quits by itself 3 s later. The
+   eye turns the speed log on (tc.Speed.Log 1, as -TheaterSpeedLog) and writes one line every 5 s: "Air battle: time eye
+   box: F frames a second, worst frame W ms (the speed log's last 5.0 s); near shapes drawn N of M on their own meshes;
+   close-up copies made C, of them the finer B-17's B (the most 8, -TheaterAirB17FineNear=N); far and light copies K;
+   group G, Q bombers up."
+   Look for and time (four runs of the Bremen raid, each to its end, the Mac on mains power with the window in front;
+   45 frames a second is the mark):
+   - `-TheaterAirBattle=bremen-b17 -TheaterAirTimeEye=box -TheaterAirNoB17Fine` then the same with `-TheaterAirB17Fine`;
+   - `-TheaterAirBattle=bremen-b17 -TheaterAirTimeEye=far -TheaterAirNoB17Fine` then the same with `-TheaterAirB17Fine`.
+   Read from each log: every "Air battle: time eye" line (frames a second and worst frame, row off against on), the
+   speed log's "Speed:" lines (game, draw and graphics chip ms, memory), "Air battle: finer B-17: on" and, if it comes,
+   "...close-up shapes made, the most a battle keeps", and the warm-up's lines ("the raid's N aircraft shapes made ready
+   ... in T ms" and "the opening held S s"): her file is read whole about three times, 10.3 MB, so the warm-up grows.
+   By eye, row on (a still each, for the art director): a burning engine (fire and smoke on the engine that burns, not
+   off the wing); the nose art (with `-TheaterAirNoseArt`, and `-TheaterAirNoseArtEye` for the close still: her panel
+   below the navigator's windows, smaller than the older one's); the earned colours (with `-TheaterAirUnitColours` on a
+   raid whose board names a B-17 group's corps: her rivet and seam lines in the earned colour, not olive; past 300 m her
+   far shape has no spinners to colour, see NOTES.md); the bomb bay opening and the bombs leaving it; the kill tally
+   under her port window (new on screen: the older file had none); her airscrews each turning on its own engine; past
+   1.5 km her light shape (2,000 triangles). Off: the picture exactly as before.
