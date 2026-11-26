@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of b316a3a7f 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 6739cdcac 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -8715,6 +8715,16 @@
        */
       __publicField(this, "escort", false);
       /**
+       * Only the hits that land shake a unit (release 2; the design director, 26 November 06:21Z, the sniper teams' gate
+       * tracing it; the UI director's row, 06:23Z): each blow's nerve weight prices only its own harm, so a block struck by
+       * several in a tick loses the sum of each weight times the harm it did, as the air's blows already are (bombs,
+       * strafing). Off, the old way: the tick's weights are
+       * summed and the sum laid on all its harm, so a blow that does no harm still multiplies the nerve of everyone else's.
+       * Off unless whoever opens the field turns it on (the bridge's { hitsShake: true }, and with sniper teams, which fight
+       * only with it).
+       */
+      __publicField(this, "hitsShake", false);
+      /**
        * Men in lorries (release 1.5, looks only; Brian, 23 November 14:10Z and 15:50Z, "soldiers in the back of a truck and
        * they then hop out"): each man aboard says his lorry and seat (MenOut.sv), and lorried men get down over the tailboard
        * one at a time (Drill.alight, hopOut), the lorries standing meanwhile. Off unless turned on (the bridge's
@@ -11189,9 +11199,11 @@
           this.airLedger[u.side].withheld += raw;
           kept.set(t.id, (kept.get(t.id) ?? 0) + raw);
         }
-        const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, from: [], blind: true };
+        const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, own: 0, n: 0, from: [], blind: true };
         h.dmg += blow.dmg;
         h.nerve += blow.nerve;
+        h.own += blow.nerve * blow.dmg;
+        h.n++;
         if (!blind) h.blind = false;
         h.from.push([u, blow.dmg]);
         hurt.set(t.id, h);
@@ -11204,9 +11216,9 @@
       }
       if (kept) for (const [id, raw] of kept) {
         const h = hurt.get(id), side = other(this.unit(id).side);
-        this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * h.nerve);
+        this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * this.tickNerve(h));
       }
-      for (const [id, h] of hurt) this.suffer(this.unit(id), h.dmg, h.nerve, h.from, h.blind);
+      for (const [id, h] of hurt) this.suffer(this.unit(id), h.dmg, this.tickNerve(h), h.from, h.blind);
       if (this.repay.length) this.repayNow();
       if (this.airOn.att || this.airOn.def) this.flyAir();
       if (this.bearers) this.carry();
@@ -11615,6 +11627,14 @@
      * given a model lands a shell there. So guns are seen firing in their share of the harm, not only where they did the
      * most in a tick (the design director, b507). Looks only: nothing in the fight reads it.
      */
+    /**
+     * The nerve weight a tick's blows on one block lay on their harm (suffer): the weights summed (off), or with nerve by its
+     * own harm (hitsShake) each weight on its own harm, as a share of all of it; where no blow did harm, the weights' mean.
+     */
+    tickNerve(h) {
+      if (!this.hitsShake) return h.nerve;
+      return h.dmg > 0 ? h.own / h.dmg : h.n > 0 ? h.nerve / h.n : 0;
+    }
     suffer(t, dmg, nerveMul, from = [], blind = false, bare = false) {
       if (t.hid && dmg > 0 && !blind && !bare) this.reveal(t, "struck");
       if (t.waits && !t.waits.free && !bare && dmg > 0 && dist(t.x, t.y, t.waits.at[0], t.waits.at[1]) <= LAND.dug.keep) {
@@ -13615,6 +13635,7 @@
       if (opts.bocage) sim.bocage = true;
       if (opts.phones !== false) sim.phones = true;
       if (opts.bearers !== false) sim.bearers = true;
+      if (opts.hitsShake === true || opts.snipers === true && opts.hide !== false) sim.hitsShake = true;
       if (opts.blast === true) sim.blast = true;
       if (opts.escort === true) sim.escort = true;
       if (opts.trucks === true) sim.trucks = true;
