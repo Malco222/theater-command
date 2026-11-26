@@ -694,11 +694,22 @@ export function keptStoresRun(g: Game, r: Region, drawn = false): number {
  * who filled it, as the guard charges only that holder"): the guard charges by it (keptStoresRun), and the supply
  * picture's window opens the quay by it (computeSupply), as does a fortress crew's living on the port's stores
  * (onPortStores). A captor whose own ships fill the port in the very month he takes it has a fill no later than his
- * capture, which reads as not his until his next month's fill.
+ * capture, which reads as not his until his next month's fill. A since moved by a hand-over to the nation that already
+ * held the port is no capture (keptStoresHolder).
  */
 export function keptStoresHis(g: Game, r: Region): boolean {
   const last = g.flags[storesKey(r.id)];
-  return last !== undefined && last > r.since && Object.keys(g.nations)[g.flags[storesByKey(r.id)] ?? -1] === r.ctrl;
+  return last !== undefined && (last > r.since || g.flags[storesHeldKey(r.id)] === r.since) && Object.keys(g.nations)[g.flags[storesByKey(r.id)] ?? -1] === r.ctrl;
+}
+/**
+ * A treaty, a cession or an annexation that hands a port to the nation already holding it moves Region.since though
+ * nothing changes hands (claims.ts treaty, diplomacy.ts transfer). Under true reach, kept stores that were the holder's
+ * stay his: the month is marked (`stores:held:<id>`), and keptStoresHis reads a since of that month as no capture, so
+ * the window still feeds him and the guard still charges him. Called before the hand-over writes since. Nothing off
+ * true reach.
+ */
+export function keptStoresHolder(g: Game, r: Region, to: string): void {
+  if (trueReach(g) && r.ctrl === to && keptStoresHis(g, r)) g.flags[storesHeldKey(r.id)] = g.turn;
 }
 /**
  * A fortress crew in a fortified port overseas living on the port's stores this month (07:12Z): the sea behind it is
@@ -1044,6 +1055,8 @@ const depotKey = (id: number): string => (depotKeys[id] ??= 'depot:' + id);
 const storesKey = (id: number): string => (storesKeys[id] ??= `stores:${id}`);
 // (Whose stores they are, under true reach: keptStoresRun. It begins with "stores:" so that a load keeps it with the month.)
 const storesByKey = (id: number): string => (storesByKeys[id] ??= `stores:by:${id}`);
+// (The month a hand-over to the nation already holding the port moved Region.since: keptStoresHolder. "stores:" too.)
+const storesHeldKey = (id: number): string => `stores:held:${id}`;
 
 /** One country's supply picture from its stores outward over the provinces its roads may pass, and its lines' lengths. */
 function drawSupply(g: Game, id: string, pass: Uint8Array, seeds: number[], heads: number[], wide: boolean, long: string[], deep: Uint8Array, sand: Uint8Array, rail: RailNow): { ok: Uint8Array; reach: Float32Array; east: boolean } {
