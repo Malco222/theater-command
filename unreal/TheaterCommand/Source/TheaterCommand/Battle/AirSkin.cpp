@@ -294,6 +294,13 @@ namespace AirSkin
 		return (SkinEncoded(C[0] * Shade) << 16) | (SkinEncoded(C[1] * Shade) << 8) | SkinEncoded(C[2] * Shade);
 	}
 
+	double ShadeFactor(int Shade, double Strength)
+	{
+		const double S = std::min(std::max(Strength, 0.0), 1.0);
+		const double Own = std::min(std::max(Shade, 0), 100) / 100.0;
+		return 1.0 - S * (1.0 - Own);
+	}
+
 	bool OntoModel(const Overlay& O, AirUnitColours::Model& M)
 	{
 		if (M.Colours.size() != O.Colours.size() || M.Near.Count() != O.Near.Count() || M.Far.Count() != O.Far.Count())

@@ -161,7 +161,7 @@ int main(int Argc, char** Argv)
 		const int Paint = L.PaintAt(C.Point, Me.Paints[C.Point]);
 		bPaints = bPaints && Paint == C.Paint;
 		const uint32_t Plain = AirSkin::Law(O.Colours, Paint, L.Blend[C.Point], L.Soot[C.Point]);
-		const uint32_t Shaded = AirSkin::Law(O.Colours, Paint, L.Blend[C.Point], L.Soot[C.Point], L.Shade[C.Point] / 100.0);
+		const uint32_t Shaded = AirSkin::Law(O.Colours, Paint, L.Blend[C.Point], L.Soot[C.Point], AirSkin::ShadeFactor(L.Shade[C.Point], 1.0));
 		Worst = std::max(Worst, Off(Plain, C.Rgb));
 		WorstShaded = std::max(WorstShaded, Off(Shaded, C.Shaded));
 	}
@@ -170,6 +170,15 @@ int main(int Argc, char** Argv)
 	Check(WorstShaded <= 1, "shaded within one level", std::to_string(WorstShaded));
 	Check(AirSkin::Law(O.Colours, 0, 0, 0) == O.Colours[0] && AirSkin::Law(O.Colours, 0, 100, 0) == O.Colours[1] && AirSkin::Law(O.Colours, 5, 0, 0) == O.Colours[5],
 		"the law at its ends is the paints' own colours");
+	Check(AirSkin::ShadeFactor(100, 1.0) == 1.0 && AirSkin::ShadeFactor(12, 0.0) == 1.0 && std::fabs(AirSkin::ShadeFactor(12, 1.0) - 0.12) < 1e-12
+			&& std::fabs(AirSkin::ShadeFactor(50, 0.5) - 0.75) < 1e-12 && AirSkin::ShadeFactor(40, 7.0) == AirSkin::ShadeFactor(40, 1.0) && AirSkin::ShadeFactor(40, -1.0) == 1.0,
+		"the contact shade's factor: none at 100 or at strength 0, the whole shade at 1, halfway at 0.5, the strength clamped");
+	{
+		int Darker = 0;
+		for (size_t K = 0; K < O.Near.Count(); ++K) Darker += O.Near.Shade[K] < 100 ? 1 : 0;
+		const auto Least = *std::min_element(O.Near.Shade.begin(), O.Near.Shade.end());
+		Check(Least >= 12 && Darker > 0, "her near shade 0.12 to 1 (the model thread's)", std::to_string(Darker) + " points shaded, the least " + std::to_string(Least));
+	}
 
 	std::printf("S3 the earned colours' model under the skin\n");
 	{
@@ -281,6 +290,11 @@ int main(int Argc, char** Argv)
 			"her shape and her read kept apart under the skin ('|skin')");
 		Check(Count(Miniatures, "const int32 Livery = Raw->bAircraft && !Raw->bSkinned ? SchemeStanding(Raw->SchemeFrom) : 0;") == 1 && Count(Miniatures, "Raw->bSkinned = true;") == 1,
 			"never by date under the skin (her schemes stand aside)");
+		const size_t Strength = Read.find("TEXT(\"TheaterAirB17SkinShade=\")");
+		Check(Strength != std::string::npos && Strength > Rule && Count(Battle, "TEXT(\"TheaterAirB17SkinShade=\")") == 1
+				&& Count(Miniatures, "if (Raw->bSkinned && Raw->Worn.IsValidIndex(K) && Raw->Worn[K] < 1.0f)") == 1
+				&& Count(Miniatures, "AirSkin::ShadeFactor(WornLevel->Shade[static_cast<size_t>(SkinK)], WornSkin->ShadeStrength)") == 1,
+			"the contact shade: multiplied in under the skin alone, its strength asked only with the row on");
 		Check(Count(Colours2, "AirSkin::OntoModel(*WornSkin, Known.Model)") == 1 && Count(Nose, "ColourOf(WornSkin ? AirSkin::PanelUnder(*WornSkin) : Panel->Skin)") == 1,
 			"the earned colours and the nose-art panel take the overlay");
 	}

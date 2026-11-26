@@ -1583,3 +1583,9 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    `-TheaterAirB17Skin`: the log says "worn B-17 paint: on", its "time eye" lines within 1 frame a second of run 1 and
    the first window's worst frame no worse; (3) stills, the riding eye and a front quarter, with and without the row,
    for the art director (dark against the cloud from the film's eye; panel tones one coat, not a patchwork).
+   Contact shade (same row): the overlay's per-point shade (the model thread's, 0.12 to 1, kept x100) multiplies her
+   colour in linear light after blend and soot, as a figure's wear is multiplied (CampaignMiniatures.cpp's figure
+   branch), only under the skin. `-TheaterAirB17SkinShade=0..1` sets its strength (1 unless asked; 0 none) so the Mac
+   can make the same still with and without it. Unknown until the Mac's stills: whether Lumen's own occlusion darkens
+   her creases a second time on top of it. Her earned colours' bands are laid without it (their model has no shade):
+   where a band crosses a shaded crease it is a little lighter than the coat beside it.

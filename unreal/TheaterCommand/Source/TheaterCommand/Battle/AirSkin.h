@@ -60,6 +60,9 @@ namespace AirSkin
 		uint64_t BaseBytes = 0, BaseFnv64 = 0;
 		/** the median blend of the near mesh's paint-0 points (the tool's panel_blend): PanelUnder's */
 		int PanelBlend = 0;
+		/** How strongly the contact shade is laid, 0 (none) to 1 (the model thread's whole shade): not in the file, set
+		 * by the game as the battle begins (-TheaterAirB17SkinShade=0..1, 1 unless asked), for stills with and without. */
+		double ShadeStrength = 1.0;
 		std::vector<Check> Checks;
 		const Level& LevelOf(bool bFar) const { return bFar ? Far : Near; }
 	};
@@ -81,6 +84,10 @@ namespace AirSkin
 	 * colour, paint 0 toward paint 1 by Blend/100, then toward paint 11 by 0.72 x Soot/100, mixed linear; times Shade
 	 * (linear, 1 for none); written as sRGB bytes. */
 	uint32_t Law(const std::vector<uint32_t>& Colours, int Paint, int Blend, int Soot, double Shade = 1.0);
+
+	/** What a point's colour is multiplied by (linear) for its contact shade (0 to 100) at a strength (0 to 1, clamped):
+	 * 1 - Strength x (1 - Shade/100); 1 where the shade is 100 or the strength 0. */
+	double ShadeFactor(int Shade, double Strength);
 
 	/** The earned colours' model (Battle/AirUnitColours) under the skin: its colours, its near and far blend and soot,
 	 * and its repainted points. False and the model unchanged where the sizes do not match. */

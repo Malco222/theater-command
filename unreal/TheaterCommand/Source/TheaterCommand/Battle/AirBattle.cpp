@@ -4043,9 +4043,13 @@ void AAirBattle::B17SkinRead()
 		}
 		bWornKeptRead = true;
 	}
+	// (her contact shade's strength, for stills with and without it: -TheaterAirB17SkinShade=0..1, the whole of it unless asked)
+	float ShadeAsked = 1.0f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterAirB17SkinShade="), ShadeAsked);
+	WornKept.ShadeStrength = FMath::Clamp(static_cast<double>(ShadeAsked), 0.0, 1.0);
 	AirSkin::Set(&WornKept);
-	UE_LOG(LogTheater, Display, TEXT("Air battle: worn B-17 paint: on (the Battle rules card's Worn B-17 paint, or -TheaterAirB17Skin): the model thread's paint for her shape, from %s."),
-		UTF8_TO_TCHAR(WornKept.SourceSha256.substr(0, 12).c_str()));
+	UE_LOG(LogTheater, Display, TEXT("Air battle: worn B-17 paint: on (the Battle rules card's Worn B-17 paint, or -TheaterAirB17Skin): the model thread's paint for her shape, from %s; contact shade %.2f (-TheaterAirB17SkinShade=0..1)."),
+		UTF8_TO_TCHAR(WornKept.SourceSha256.substr(0, 12).c_str()), WornKept.ShadeStrength);
 }
 
 int32 AAirBattle::B17FineNearMost()
