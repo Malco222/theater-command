@@ -756,6 +756,13 @@ namespace
 			Air->TryGetStringField(TEXT("foe"), Out.Air.Foe);
 			Air->TryGetStringField(TEXT("sky"), Out.Air.Sky);
 			Air->TryGetStringField(TEXT("skyBy"), Out.Air.SkyBy);
+			// (City defences: the rules send "lights" only with the switch on.) The searchlights' level and the shelf's row.
+			const TSharedPtr<FJsonObject>* LightsObject = nullptr;
+			if (Air->TryGetObjectField(TEXT("lights"), LightsObject) && LightsObject && (*LightsObject).IsValid())
+			{
+				(*LightsObject)->TryGetNumberField(TEXT("level"), Out.Air.Lights);
+				(*LightsObject)->TryGetStringField(TEXT("shelf"), Out.Air.LightsLine);
+			}
 			const TSharedPtr<FJsonObject>* AddObject = nullptr;
 			if (Air->TryGetObjectField(TEXT("add"), AddObject) && AddObject && (*AddObject).IsValid())
 			{
