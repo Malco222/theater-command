@@ -459,7 +459,10 @@ namespace
 	 * 26 November 2026, "have the paint be on it regardless of the year": the flash in 1940 and in 1944 alike, and by
 	 * the art director's ruling the campaign map's own flash, red, white, red, never the star, and never on a Pole);
 	 * and every nation's mark (Dress::bAllMarks, the trial word "allmarks": thirty-eight more nations on the light tank
-	 * and the lorry, three of them only with Dress::bNewMarks; the flash on a stone coat by her pass lines):
+	 * and the lorry, three of them only with Dress::bNewMarks; the flash on a stone coat by her pass lines); and marks
+	 * at their real size (Dress::bRealMarks, the trial word "realmarks"; Brian, 26 November 2026, "the tank markings
+	 * are way to big": her largest mark no wider than her kind's real size, and none wider than her file's place but
+	 * the British flash on a tank):
 	 * loaded with the marks off and on. Off must be as before; on, each body with a place gains marks
 	 * (none where the owner paints none) at both levels, every point within its lift of her own skin (the near level
 	 * within 12 mm, the far within 35 mm), facing out, its triangles wound to face out, in the owner's paint (by area).
@@ -478,6 +481,9 @@ namespace
 			bool bAnyYear = false;
 			bool bAllMarks = false, bNewMarks = false;
 			std::string Coat = std::string(); // (a coat picked for her: "stone", the picture sheets' light coat)
+			// (marks at their real size, Dress::bRealMarks: her largest mark as painted is no wider than Wide, metres)
+			bool bRealMarks = false;
+			double Wide = 0.0;
 		};
 		auto Expected = [](const std::string& Nation, int Year, int Month)
 		{
@@ -555,6 +561,33 @@ namespace
 			Cases.push_back({ "LightTank", Nation, 1942, 6, "own", false, true, bNew });
 			Cases.push_back({ "Truck", Nation, 1942, 6, "own", false, true, bNew });
 			Cases.push_back({ "LightTank", Nation, 1942, 6, "own", false, true, bNew, "stone" });
+			// (at her real size: a quarter of a metre at most, and half her plate's height)
+			Cases.push_back({ "LightTank", Nation, 1942, 6, "own", false, true, bNew, "", true, 0.25 });
+			Cases.push_back({ "Truck", Nation, 1942, 6, "own", false, true, bNew, "", true, 0.25 });
+		}
+		// (marks at their real size, LandKit.cpp's MarkReal: the cross a quarter of a metre, 0.30 m on the Tiger and the
+		// Panther; the American star 15 inches on a medium tank and an armoured car, 20 on a tank destroyer and a
+		// half-track, a jeep's bonnet 15 and her sides 6, a motorcycle's 6, a lorry's door 25; the Red Army's star 0.30 m;
+		// the British flash 18 inches by 10 in either order of its bands; the Japanese star 0.12 m across its points
+		// (its mark's own size 0.17); the Italian rectangle 0.20 m; France's roundel 0.35 m)
+		for (const Case& C : std::vector<Case>{ { "PanzerIV", "GER", 1943, 7, "cross", false, false, false, "", true, 0.25 },
+				 { "Tiger", "GER", 1944, 7, "cross", false, false, false, "", true, 0.30 }, { "Panther", "GER", 1944, 7, "cross", false, false, false, "", true, 0.30 },
+				 { "StuG3", "GER", 1943, 7, "cross", false, false, false, "", true, 0.25 }, { "Hanomag", "GER", 1944, 7, "cross", false, false, false, "", true, 0.25 },
+				 { "Hummel", "GER", 1944, 7, "cross", false, false, false, "", true, 0.25 }, { "Kubelwagen", "GER", 1944, 7, "cross", false, false, false, "", true, 0.25 },
+				 { "LightTank", "GER", 1941, 6, "cross", true, false, false, "", true, 0.25 },
+				 { "Sherman", "USA", 1944, 7, "white", false, false, false, "", true, 0.381 }, { "M10", "USA", 1944, 7, "white", false, false, false, "", true, 0.508 },
+				 { "M8", "USA", 1944, 7, "white", false, false, false, "", true, 0.381 }, { "M3Halftrack", "USA", 1944, 7, "white", false, false, false, "", true, 0.508 },
+				 { "Jeep", "USA", 1944, 7, "white", false, false, false, "", true, 0.381 }, { "WLA", "USA", 1944, 7, "white", false, false, false, "", true, 0.1524 },
+				 { "Truck", "USA", 1944, 7, "white", false, false, false, "", true, 0.635 }, { "Sherman", "UK", 1944, 7, "white", false, false, false, "", true, 0.381 },
+				 { "T34", "SOV", 1943, 7, "red", false, false, false, "", true, 0.30 }, { "SU76", "SOV", 1943, 7, "red", false, false, false, "", true, 0.30 },
+				 { "LightTank", "UK", 1942, 5, "flash", false, false, false, "", true, 0.4572 }, { "Sexton", "UK", 1943, 2, "flash", false, false, false, "", true, 0.4572 },
+				 { "LightTank", "UK", 1942, 6, "redflash", false, true, false, "stone", true, 0.4572 }, { "Sherman", "UK", 1942, 6, "redflash", true, false, false, "", true, 0.4572 },
+				 { "Sexton", "CAN", 1944, 7, "redflash", false, true, false, "", true, 0.4572 }, { "Truck", "UK", 1942, 6, "redflash", false, true, false, "stone", true, 0.4572 },
+				 { "LightTank", "JAP", 1942, 1, "yellow", false, false, false, "", true, 0.172 }, { "Type97", "JAP", 1944, 7, "yellow", false, false, false, "", true, 0.172 },
+				 { "LightTank", "ITA", 1942, 10, "rectangle", false, false, false, "", true, 0.20 }, { "Semovente", "ITA", 1944, 7, "rectangle", false, false, false, "", true, 0.20 },
+				 { "LightTank", "FRA", 1940, 5, "bluering", false, false, false, "", true, 0.35 }, { "LightTank", "FRA", 1940, 5, "redring", false, true, false, "", true, 0.35 } })
+		{
+			Cases.push_back(C);
 		}
 		int Failures = 0;
 		size_t AllAdded = 0, AllCases = 0;
@@ -574,6 +607,7 @@ namespace
 			D.bAnyYear = C.bAnyYear;
 			D.bAllMarks = C.bAllMarks;
 			D.bNewMarks = C.bNewMarks;
+			D.bRealMarks = C.bRealMarks;
 			D.Coat = C.Coat;
 			Model Off, On;
 			const auto T0 = Clock::now();
@@ -832,6 +866,44 @@ namespace
 				char Buf[96];
 				std::snprintf(Buf, sizeof(Buf), "  painted %.2f to %.2f m", Least, Most);
 				Read += Buf;
+			}
+			// (marks at their real size: her largest no wider than her kind's real size; none wider than the largest place
+			// her file gives, but the British flash on a tank, which is its real size wherever one plate takes it; and
+			// with the word her marks are never left off)
+			if (C.bRealMarks)
+			{
+				double Least = 1e9, Most = 0.0, FileMost = 0.0;
+				for (const Mark& Mk : On.Painted)
+				{
+					Least = std::min(Least, Mk.Radius);
+					Most = std::max(Most, Mk.Radius);
+				}
+				Json Doc;
+				std::string DocError;
+				if (Doc.Parse(Text, DocError))
+				{
+					const Json::Value List = Doc.Root()["marks"];
+					for (size_t K = 0; K < List.Count(); ++K)
+					{
+						FileMost = std::max(FileMost, List.At(K)["radius"].Num(0.2));
+					}
+				}
+				char Buf[112];
+				std::snprintf(Buf, sizeof(Buf), "  REAL SIZE %.3f to %.3f m across (her file's largest place %.2f)", On.Painted.empty() ? 0.0 : 2.0 * Least, 2.0 * Most, 2.0 * FileMost);
+				Read += Buf;
+				const bool bFlashOnTank = (C.Expect == "flash" || C.Expect == "redflash") && On.Kind == "tank";
+				if (Why.empty() && C.Expect != "none" && On.Painted.empty())
+				{
+					Why = "no mark at her real size";
+				}
+				if (Why.empty() && 2.0 * Most > C.Wide + 0.002)
+				{
+					Why = "a mark wider than its real size";
+				}
+				if (Why.empty() && !bFlashOnTank && Most > FileMost + 1e-9)
+				{
+					Why = "a mark grown past her file's place";
+				}
 			}
 			AllAdded += AddedTris[0];
 			std::printf("  %-11s %-3s %04d-%02d %-9s near %4zu triangles (%5.1f%% of points on her skin, worst %4.1f mm)  far %3zu (%5.1f%%, worst %4.1f mm)  white %3.0f%% black %3.0f%% red %3.0f%% yellow %3.0f%%  +%.0f ms  %s\n",

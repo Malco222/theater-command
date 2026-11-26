@@ -3,7 +3,8 @@ picture sheets). Usage: python3 land_sheet.py <panel folder> <sheet.png>
 
 LAND_SHEET_ACROSS=4 lays another sheet's panels four across (three without it), LAND_SHEET_WIDE=3200 makes the sheet
 that many pixels wide (its captions grow with it), and LAND_SHEET_ONLY=name,name,... lays those panels alone, in that
-order. A sheet named .jpg is saved as a JPEG."""
+order. LAND_SHEET_TITLE=words letters a line or more over the whole sheet (lines parted by a bar, |). A sheet named
+.jpg is saved as a JPEG."""
 import os
 import sys
 
@@ -56,13 +57,30 @@ def main(folder, out):
     texts = {name: wrapped(captions.get(name, name)) for row in rows for name in row}
     step = round(19 * GROW)
     caption = CAPTION + step * (max(len(t) for t in texts.values()) - 1)
-    high = 2 * EDGE + len(rows) * (panel_h + caption) + (len(rows) - 1) * GAP
+    # (a title over the whole sheet, in letters half as large again as a caption's: none asked, the sheet as before)
+    title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", round(22 * GROW))
+    titles = []
+    for part in [t.strip() for t in os.environ.get("LAND_SHEET_TITLE", "").split("|") if t.strip()]:
+        line = ""
+        for word in part.split(" "):
+            longer = (line + " " + word).strip()
+            if line and title_font.getlength(longer) > WIDE - 2 * EDGE:
+                titles.append(line)
+                line = word
+            else:
+                line = longer
+        titles.append(line)
+    title_step = round(30 * GROW)
+    top = EDGE + (title_step * len(titles) + round(8 * GROW) if titles else 0)
+    high = top + EDGE + len(rows) * (panel_h + caption) + (len(rows) - 1) * GAP
     sheet = Image.new("RGB", (WIDE, high), (240, 237, 230))
     draw = ImageDraw.Draw(sheet)
+    for k, text in enumerate(titles):
+        draw.text((EDGE + 2, EDGE + title_step * k), text, font=title_font, fill=(32, 30, 26))
     for r, row in enumerate(rows):
         for c, name in enumerate(row):
             x = EDGE + c * (panel_w + GAP)
-            y = EDGE + r * (panel_h + caption + GAP)
+            y = top + r * (panel_h + caption + GAP)
             panel = Image.open(os.path.join(folder, name + ".ppm")).convert("RGB")
             sheet.paste(panel.resize((panel_w, panel_h), Image.LANCZOS), (x, y))
             for k, text in enumerate(texts[name]):

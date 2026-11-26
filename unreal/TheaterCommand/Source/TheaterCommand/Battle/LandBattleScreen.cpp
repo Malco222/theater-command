@@ -2667,7 +2667,7 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 		else if (Key == EKeys::V && !bSetup) { Scene->GeneralDo(TEXT("ride")); return FReply::Handled(); }
 		else if (Key == EKeys::Enter && bSetup) { Scene->GeneralDo(TEXT("begin")); return FReply::Handled(); }
 		// (after the break, release 2 `pursue`: P pursues while he is asked; the scene and the rules refuse it at any other time)
-		else if (Key == EKeys::P && !bSetup && !Event.IsRepeat()) { Scene->GeneralDo(TEXT("pursue")); return FReply::Handled(); }
+		else if (Key == EKeys::P && !bSetup && !Event.IsRepeat() && FLandLive::RuleNow(TEXT("pursue"))) { Scene->GeneralDo(TEXT("pursue")); return FReply::Handled(); }
 		// (U, "draw up", while he places his army: each press draws them up in the next of the four, Line first; release 2.
 		// The scene does nothing with the row off, or once the battle has begun.)
 		else if (Key == EKeys::U && bSetup) { Scene->GeneralDo(TEXT("drawup")); return FReply::Handled(); }

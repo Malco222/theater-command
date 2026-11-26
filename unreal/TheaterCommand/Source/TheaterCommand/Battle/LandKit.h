@@ -344,6 +344,15 @@ namespace LandKit
 		/** With bAllMarks, the three marks new to the game (Portugal's, China's, Venezuela's), which wait on the
 		 * historian's answer and go on by a word of their own (the trial word "newmarks"). Off: those three stay bare. */
 		bool bNewMarks = false;
+		/** Marks at their real size (release 2, on its own switch, the trial word "realmarks"; Brian, 26 November 2026:
+		 * "the tank markings are way to big"; the art director's rule of 17:24Z the same day: a mark's size comes from
+		 * the real mark, in metres, never from a share of the plate). Each kind of mark has one real size (LandKit.cpp's
+		 * MarkReal); a place in her file that is larger takes it, a place that is smaller keeps its own (a motorcycle's, a
+		 * door's), and no mark is made larger than its place but the British flash, which is 18 inches by 10 wherever one
+		 * plate takes the whole of it. With it the sizes "allmarks" tried (the flash at up to 1.4 times true, a ring mark
+		 * at 0.22 m) are not used: a ring mark is a quarter of a metre across and never over half the height of the
+		 * plate it lies on. A flake of chipped paint is at most a tenth of the mark. Off: as before, point for point. */
+		bool bRealMarks = false;
 	};
 
 	class Model
@@ -863,6 +872,8 @@ namespace LandKit
 		bool bAllMarks = false;
 		/** With bAllMarks, the three marks that wait on the historian (the trial word "newmarks"; Dress::bNewMarks). */
 		bool bNewMarks = false;
+		/** Marks at their real size (release 2, the trial word "realmarks"; Dress::bRealMarks). Off: as before. */
+		bool bRealMarks = false;
 
 	private:
 		std::vector<Vehicle> All;

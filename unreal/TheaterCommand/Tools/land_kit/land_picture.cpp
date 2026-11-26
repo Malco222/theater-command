@@ -249,6 +249,10 @@ namespace
 		// Every nation's mark, and marks that read (release 2, LandKit's Dress::bAllMarks, the trial word "allmarks"),
 		// and with it the three marks that wait on the historian (Dress::bNewMarks, "newmarks").
 		bool bAllMarks = false, bNewMarks = false;
+		// Marks at their real size (release 2, LandKit's Dress::bRealMarks, the trial word "realmarks"); a man 1.8 m
+		// tall standing at her marked plate, the honest ruler for a mark's size (the art director, 26 November 2026);
+		// bSayMark: her caption ends with what the mark facing the camera measures.
+		bool bRealMarks = false, bMan = false, bSayMark = false;
 		struct Other
 		{
 			std::string ModelName, Nation;
@@ -303,6 +307,57 @@ namespace
 			}
 			S.Tris.push_back(Out);
 		}
+	}
+
+	/** A box with its sides square to the earth, its foot's middle at a place and turned to a heading, in one colour. */
+	void AddBox(double X, double Y, double Heading, double Right, double Ahead, double Z0, double Z1, double HalfWide, double HalfDeep, const Colour& Paint, Scene& S)
+	{
+		const double Sh = std::sin(Heading), Ch = std::cos(Heading);
+		auto At = [&](double R, double A, double Z) { return V3(X + Ch * (Right + R) + Sh * (Ahead + A), Y - Sh * (Right + R) + Ch * (Ahead + A), Z); };
+		const V3 Q[8] = { At(-HalfWide, -HalfDeep, Z0), At(HalfWide, -HalfDeep, Z0), At(HalfWide, HalfDeep, Z0), At(-HalfWide, HalfDeep, Z0),
+			At(-HalfWide, -HalfDeep, Z1), At(HalfWide, -HalfDeep, Z1), At(HalfWide, HalfDeep, Z1), At(-HalfWide, HalfDeep, Z1) };
+		const int Faces[6][4] = { { 0, 1, 5, 4 }, { 1, 2, 6, 5 }, { 2, 3, 7, 6 }, { 3, 0, 4, 7 }, { 4, 5, 6, 7 }, { 3, 2, 1, 0 } };
+		for (const auto& Fc : Faces)
+		{
+			const V3 Out = (Q[Fc[1]] - Q[Fc[0]]).Cross(Q[Fc[2]] - Q[Fc[0]]).Unit();
+			const int Order[6] = { 0, 1, 2, 0, 2, 3 };
+			for (int T = 0; T < 6; T += 3)
+			{
+				Tri Face;
+				for (int C = 0; C < 3; ++C)
+				{
+					Face.P[C] = Q[Fc[Order[T + C]]];
+					Face.N[C] = Out;
+					Face.C[C] = Paint;
+				}
+				S.Tris.push_back(Face);
+			}
+		}
+		for (const V3& Corner : Q)
+		{
+			S.Lo = V3(std::min(S.Lo.X, Corner.X), std::min(S.Lo.Y, Corner.Y), std::min(S.Lo.Z, Corner.Z));
+			S.Hi = V3(std::max(S.Hi.X, Corner.X), std::max(S.Hi.Y, Corner.Y), std::max(S.Hi.Z, Corner.Z));
+		}
+	}
+
+	/** A man 1.8 m tall standing on the earth at a place, turned to a heading: a plain figure of boxes in one drab (boots,
+	 * legs, body, arms, head and helmet), for a size to hold a vehicle's marks against. No soldier of the game's. */
+	void AddMan(double X, double Y, double Heading, Scene& S)
+	{
+		const Colour Drab = FromPicture(118, 110, 88), Boot = FromPicture(58, 50, 42), Skin = FromPicture(186, 146, 116), Helmet = FromPicture(74, 78, 62),
+			Belt = FromPicture(92, 80, 58);
+		for (const double Side : { -1.0, 1.0 })
+		{
+			AddBox(X, Y, Heading, Side * 0.10, 0.02, 0.0, 0.10, 0.06, 0.13, Boot, S);    // boots
+			AddBox(X, Y, Heading, Side * 0.10, 0.0, 0.10, 0.90, 0.075, 0.09, Drab, S);   // legs
+			AddBox(X, Y, Heading, Side * 0.265, 0.0, 0.82, 1.46, 0.05, 0.06, Drab, S);   // arms
+			AddBox(X, Y, Heading, Side * 0.265, 0.0, 0.74, 0.82, 0.045, 0.05, Skin, S);  // hands
+		}
+		AddBox(X, Y, Heading, 0.0, 0.0, 0.90, 1.00, 0.20, 0.115, Belt, S);  // belt
+		AddBox(X, Y, Heading, 0.0, 0.0, 1.00, 1.48, 0.21, 0.11, Drab, S);   // body
+		AddBox(X, Y, Heading, 0.0, 0.0, 1.48, 1.54, 0.05, 0.05, Skin, S);   // neck
+		AddBox(X, Y, Heading, 0.0, 0.0, 1.54, 1.72, 0.085, 0.10, Skin, S);  // head
+		AddBox(X, Y, Heading, 0.0, 0.0, 1.69, 1.80, 0.12, 0.135, Helmet, S); // helmet
 	}
 
 	/** A measuring bar standing on the earth at a place, so high: 5 cm square, banded light and dark every quarter metre. */
@@ -786,7 +841,8 @@ int main(int argc, char** argv)
 		// its army's face by month (the Type 97's khaki, then two camouflages) is a different model in each, and two
 		// panels a year apart were being painted from whichever was loaded first)
 		const std::string Key = Name + "|" + Nation + "|" + std::to_string(For.Year * 100 + For.Month) + (For.bMarks ? "|marks" : "") + (For.Coat.empty() ? "" : "|coat " + For.Coat)
-			+ (For.bBurntCoat ? "|burnt" : "") + (For.bAnyYear ? "|anyyear" : "") + (For.bAllMarks ? "|allmarks" : "") + (For.bNewMarks ? "|newmarks" : "");
+			+ (For.bBurntCoat ? "|burnt" : "") + (For.bAnyYear ? "|anyyear" : "") + (For.bAllMarks ? "|allmarks" : "") + (For.bNewMarks ? "|newmarks" : "")
+			+ (For.bRealMarks ? "|realmarks" : "");
 		if (!Models.count(Key))
 		{
 			std::string Text, Error;
@@ -806,6 +862,7 @@ int main(int argc, char** argv)
 			D.bAnyYear = For.bAnyYear;
 			D.bAllMarks = For.bAllMarks;
 			D.bNewMarks = For.bNewMarks;
+			D.bRealMarks = For.bRealMarks;
 			if (!M->Load(Text, D, Error))
 			{
 				std::printf("%s: %s\n", Name.c_str(), Error.c_str());
@@ -1015,6 +1072,121 @@ int main(int argc, char** argv)
 			P.AimFrom = V3(0.35, -0.92, 0.2);
 			P.AimDistance = 37.0;
 			P.Caption = Eye ? "from the play eye (60 m in the game), on a light coat: Britain, Belgium, Switzerland" : "from the play eye (60 m in the game), on the dark coat: Britain, Belgium, Switzerland";
+			Panels.push_back(P);
+		}
+	}
+	// (LAND_KIT_REALMARKS=1: the trial word "realmarks"'s own sheet instead, release 2; Brian, 26 November 2026: "the
+	// tank markings are way to big". The art director's sheet of 17:24Z: six WHOLE tanks before and after, each with a
+	// man 1.8 m tall standing at the marked plate (a cell cut to the turret makes any mark look big); then each of the
+	// thirty-eight nations' marks on the whole light tank, at its real size. Every caption ends with what the mark
+	// facing the camera measures. LAND_KIT_REALMARKS=six paints the six pairs alone.)
+	const bool bRealMarksSheet = std::getenv("LAND_KIT_REALMARKS") != nullptr;
+	if (bRealMarksSheet)
+	{
+		const bool bSixOnly = std::string(std::getenv("LAND_KIT_REALMARKS")) == "six";
+		struct Pair
+		{
+			const char* File;
+			const char* Model;
+			const char* Nation;
+			int Year, Month;
+			const char* Coat;
+			bool bAll;
+			const char* Words;
+		};
+		// (the pairs that change most first, the art director's order for Brian's copy; the last two were near their
+		// real size already and say so)
+		const Pair Pairs[] = {
+			{ "a_uk_light", "LightTank", "UK", 1942, 6, "stone", true, "light tank, British, on Cairo's stone" },
+			{ "b_fra_light", "LightTank", "FRA", 1940, 5, "", true, "light tank, French" },
+			{ "c_bel_light", "LightTank", "BEL", 1940, 5, "", true, "light tank, Belgian" },
+			{ "d_panzer", "PanzerIV", "GER", 1943, 7, "", false, "Panzer IV, German" },
+			{ "e_sherman", "Sherman", "USA", 1944, 7, "", false, "M4 Sherman, American (already close to real size)" },
+			{ "f_t34", "T34", "SOV", 1943, 7, "", false, "T-34, Soviet (already at real size)" },
+		};
+		for (const Pair& K : Pairs)
+		{
+			for (int After = 0; After < 2; ++After)
+			{
+				Panel P;
+				P.File = std::string("realmarks_") + K.File + (After ? "_2_real" : "_1_was");
+				P.ModelName = K.Model;
+				P.Nation = K.Nation;
+				P.Year = K.Year;
+				P.Month = K.Month;
+				P.Coat = K.Coat;
+				P.bMarks = true;
+				P.bAllMarks = K.bAll;
+				P.bRealMarks = After == 1;
+				P.bMan = true;
+				P.bSayMark = true;
+				P.CameraBearing = 62.0;
+				P.CameraUp = 9.0;
+				P.bDay = true;
+				P.Caption = std::string(K.Words) + (After ? ", REAL SIZE" : ", as it was");
+				Panels.push_back(P);
+			}
+		}
+		// (two close looks at marks at their real size, for their wear: a flake of chipped paint is a tenth of the mark
+		// at most)
+		for (int Which = 0; Which < 2; ++Which)
+		{
+			Panel P;
+			P.File = Which ? "realmarks_g_close_flash" : "realmarks_g_close_cross";
+			P.ModelName = Which ? "LightTank" : "Tiger";
+			P.Nation = Which ? "UK" : "GER";
+			P.Year = Which ? 1942 : 1944;
+			P.Month = Which ? 6 : 7;
+			P.CloseAmong = Which ? 99 : 2; // (the Tiger's hull crosses, not her turret's places)
+			P.Coat = Which ? "stone" : "";
+			P.bMarks = true;
+			P.bAllMarks = Which == 1;
+			P.bRealMarks = true;
+			P.bClose = true;
+			P.bSayMark = true;
+			P.CameraBearing = Which ? 62.0 : -128.0;
+			P.CameraUp = 12.0;
+			P.bDay = true;
+			P.Caption = Which ? "the British flash at real size, close (chips and dust)" : "the Tiger's cross at real size, close (chips and dust)";
+			Panels.push_back(P);
+		}
+		struct Worn
+		{
+			const char* Nation;
+			const char* Name;
+			bool bNew;
+		};
+		const Worn Wears[] = {
+			{ "AUS", "Australia", false }, { "NZL", "New Zealand", false }, { "SAF", "South Africa", false }, { "IND", "India", false }, { "POL", "Poland", false },
+			{ "VIC", "Vichy France", false }, { "BEL", "Belgium", false }, { "NED", "Netherlands", false }, { "LUX", "Luxembourg", false }, { "DEN", "Denmark", false },
+			{ "NOR", "Norway", false }, { "SWE", "Sweden", false }, { "FIN", "Finland", false }, { "EST", "Estonia", false }, { "LAT", "Latvia", false },
+			{ "LIT", "Lithuania", false }, { "IRL", "Ireland", false }, { "ESP", "Spain", false }, { "POR", "Portugal (waits on the historian)", true }, { "SUI", "Switzerland", false },
+			{ "HUN", "Hungary", false }, { "ROM", "Romania", false }, { "YUG", "Yugoslavia", false }, { "BUL", "Bulgaria", false }, { "GRE", "Greece", false },
+			{ "SVK", "Slovakia", false }, { "TUR", "Turkey", false }, { "IRQ", "Iraq", false }, { "IRN", "Iran", false }, { "THA", "Thailand", false },
+			{ "CHN", "China (waits on the historian)", true }, { "MEX", "Mexico", false }, { "BRA", "Brazil", false }, { "ARG", "Argentina", false }, { "CHL", "Chile", false },
+			{ "PER", "Peru", false }, { "COL", "Colombia", false }, { "VEN", "Venezuela (waits on the historian)", true } };
+		for (const Worn& W : Wears)
+		{
+			if (bSixOnly)
+			{
+				break;
+			}
+			Panel P;
+			P.File = std::string("realmarks_m_") + W.Nation;
+			P.ModelName = "LightTank";
+			P.Nation = W.Nation;
+			P.Year = 1942;
+			P.Month = 6;
+			P.bMarks = true;
+			P.bAllMarks = true;
+			P.bNewMarks = W.bNew;
+			P.bRealMarks = true;
+			P.bMan = true;
+			P.bSayMark = true;
+			P.CameraBearing = 62.0;
+			P.CameraUp = 9.0;
+			P.bDay = true;
+			P.Caption = W.Name;
 			Panels.push_back(P);
 		}
 	}
@@ -1693,7 +1865,7 @@ int main(int argc, char** argv)
 	const TankLook Tanks[3] = { { "Sherman", "USA", "M4 Sherman" }, { "PanzerIV", "GER", "Panzer IV" }, { "Tiger", "GER", "Tiger" } };
 	for (const TankLook& T : Tanks)
 	{
-		if (bMarksSheet || bHouseSheet || bJapanSheet || bBurntSheet || bSupportSheet || bAnyYearSheet || bAllMarksSheet)
+		if (bMarksSheet || bHouseSheet || bJapanSheet || bBurntSheet || bSupportSheet || bAnyYearSheet || bAllMarksSheet || bRealMarksSheet)
 		{
 			break;
 		}
@@ -1728,7 +1900,7 @@ int main(int argc, char** argv)
 		C.Caption = std::string(T.Title) + ": knocked out, hatches thrown, gun drooped";
 		Panels.push_back(C);
 	}
-	if (!bMarksSheet && !bHouseSheet && !bJapanSheet && !bBurntSheet && !bSupportSheet && !bAnyYearSheet && !bAllMarksSheet)
+	if (!bMarksSheet && !bHouseSheet && !bJapanSheet && !bBurntSheet && !bSupportSheet && !bAnyYearSheet && !bAllMarksSheet && !bRealMarksSheet)
 	{
 		Panel D;
 		D.File = "Tiger_d";
@@ -1854,6 +2026,43 @@ int main(int argc, char** argv)
 			const double Sh = std::sin(P.Pin.Heading), Ch = std::cos(P.Pin.Heading);
 			P.FrameHigh = std::max(S.Hi.Z + 0.10, 1.0);
 			AddBar(P.Pin.X + Sh * Back + Ch * Side, P.Pin.Y + Ch * Back - Sh * Side, std::fabs(P.Bar), S);
+		}
+		if (P.bMan || P.bSayMark)
+		{
+			// (the mark that faces the camera most: the man stands at its plate, 0.45 m clear of her side and 0.9 m
+			// toward her tail from the mark, so the camera, off her bow, sees the mark whole beside him)
+			const double Bearing = P.CameraBearing * Rad + P.Pin.Heading, UpBy = P.CameraUp * Rad;
+			const V3 Toward(std::sin(Bearing) * std::cos(UpBy), std::cos(Bearing) * std::cos(UpBy), std::sin(UpBy));
+			std::vector<MarkPlace> Places;
+			V.MarksNow(Places);
+			const MarkPlace* Seen = nullptr;
+			for (const MarkPlace& K : Places)
+			{
+				if (!Seen || K.Facing.Unit().Dot(Toward) > Seen->Facing.Unit().Dot(Toward))
+				{
+					Seen = &K;
+				}
+			}
+			const double Sh = std::sin(P.Pin.Heading), Ch = std::cos(P.Pin.Heading);
+			const V3 Ahead(Sh, Ch, 0.0), Right(Ch, -Sh, 0.0);
+			const double Side = Toward.Dot(Right) >= 0.0 ? 1.0 : -1.0;
+			const V3 Pin(P.Pin.X, P.Pin.Y, 0.0);
+			const double Along = Seen ? (Seen->At - Pin).Dot(Ahead) - 0.9 : -1.0;
+			if (P.bMan)
+			{
+				const V3 Stand = Pin + Ahead * Along + Right * (Side * (0.5 * M->Wide + 0.45));
+				AddMan(Stand.X, Stand.Y, P.Pin.Heading + (Side > 0.0 ? 90.0 : -90.0) * Rad, S);
+			}
+			if (P.bSayMark && Seen)
+			{
+				char Words[96];
+				std::snprintf(Words, sizeof(Words), ": the mark is %.2f m across (%.0f in)", 2.0 * Seen->Radius, 2.0 * Seen->Radius / 0.0254);
+				P.Caption += Words;
+			}
+			else if (P.bSayMark)
+			{
+				P.Caption += ": no mark";
+			}
 		}
 		std::vector<std::unique_ptr<Vehicle>> Beside;
 		for (const Panel::Other& O : P.Others)
