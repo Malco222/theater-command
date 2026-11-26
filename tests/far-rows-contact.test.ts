@@ -235,6 +235,47 @@ describe("the dial: the rule acts at stops 3 to 5, and at the book's stops the b
   });
 });
 
+describe("a closed book brings the contact rule in: at the book's stops it acts where the row's book is closed", () => {
+  // The design director's ruling of 22:05Z, 25 November 2026: "the contact rule acts where the stop is 3 to 5 OR the
+  // row's theatre's book is closed". The row is due at Sapporo, far-side ground: it reads the Pacific's book (her
+  // 22:12Z, reading A; history.ts `contactRuleActs`).
+  const inLine = (stop: number, shut: string[]): { g: Game; src: Corps; line: Region } => {
+    const g = open(3, null);
+    expect(setStop(g, stop, true)).toBe(true);
+    for (const t of shut) g.flags[`hist:off:${t}`] = 9;
+    const src = corps(g, ARMY7)!, line = inTheLine(g);
+    relocate(g, src, line);
+    expect(inContact(g, src)).toBe(true);
+    expect(onLiveFront(g, 'JAP', src)).toBe(false);
+    month(g, 12);
+    return { g, src, line };
+  };
+  it.each([1, 2])('at stop %i with the Pacific\'s book closed the row waits and the corps keeps its name and its place', (stop) => {
+    const { g, src, line } = inLine(stop, ['pacific']);
+    expect(corps(g, D7)).toBeUndefined();
+    expect(corps(g, ARMY7)).toBe(src);
+    expect(src.reg).toBe(line.id);
+    expect(g.flags[`wait:${index(D7)}`]).toBe(12);
+    expect(g.flags[`sent:${index(D7)}`]).toBeUndefined();
+  });
+  it.each([1, 2])('at stop %i with the Pacific\'s book open the row takes its corps out of the line at its date', (stop) => {
+    const { g } = inLine(stop, []);
+    expect(g.flags['hist:off:pacific']).toBeUndefined();
+    expect(at(g, corps(g, D7)!)).toBe('Sapporo');
+    expect(corps(g, ARMY7)).toBeUndefined();
+    expect(g.flags[`wait:${index(D7)}`]).toBeUndefined();
+    expect(g.flags[`sent:${index(D7)}`]).toBe(1);
+  });
+  it.each([1, 2])('at stop %i with only the west\'s book closed by hand, the Pacific\'s open, the far row still takes at its date', (stop) => {
+    const { g } = inLine(stop, ['west']);
+    expect(g.flags['hist:off:pacific']).toBeUndefined();
+    expect(at(g, corps(g, D7)!)).toBe('Sapporo');
+    expect(corps(g, ARMY7)).toBeUndefined();
+    expect(g.flags[`wait:${index(D7)}`]).toBeUndefined();
+    expect(g.flags[`sent:${index(D7)}`]).toBe(1);
+  });
+});
+
 describe('a row with a body of its own', () => {
   it("comes at that worth and takes nobody: the 56th Division lands at Rangoon at 0.67 while the Sakaguchi Detachment stands in the line, on no live front", () => {
     const g = open(3, null);

@@ -1002,6 +1002,27 @@ describe("the dial: a date never lifts a corps out of a fight at stops 3 to 5; a
   });
 });
 
+describe("a closed book brings the contact rule in: at the book's stops the draw acts where the west's book is closed", () => {
+  // The design director's ruling of 22:05Z, 25 November 2026: "the contact rule acts where the stop is 3 to 5 OR the
+  // row's theatre's book is closed", on both doors. The row is due on the old chart: it reads the west's book (her
+  // 22:12Z; history.ts `contactRuleActs`).
+  it.each([1, 2])("at stop %i with the west's book closed the 50th stays and fights where it is, as at stop 3, and the row forms without it", (stop) => {
+    const { g, told } = balkans();
+    expect(setStop(g, stop, true)).toBe(true);
+    g.flags['hist:off:west'] = 9;
+    const iii = corps(g, 'III Corps')!;
+    const at = place(g, iii);
+    declareWar(g, 'GER', 'POL');
+    expect(corpsInContact(g, 'GER', iii)).toBe(true);
+    month(g, MARCH_41);
+    expect(told.find((t) => t.row === INFANTRY)!.claims).toEqual([expect.objectContaining({ name: '50th Infantry Division', from: 'III Corps', stays: true })]);
+    expect(iii.divs).toBe(3);
+    expect(place(g, iii)).toBe(at);
+    expect(names(g, corps(g, INFANTRY)!)).toEqual(['72nd Infantry Division', '164th Infantry Division']);
+    expect(heldTwice(g)).toEqual([]);
+  });
+});
+
 describe('his corps on a passage at sea: the line says where it is bound, never the port it sailed from (the UI director, 21:52Z)', () => {
   it('bound elsewhere: he holds them already, at sea, bound for the harbour, and they go to the row\'s place only if he sends them', () => {
     const { g } = balkans('GER');
