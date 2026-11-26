@@ -15,7 +15,7 @@ import { headline, men, removeCorps, worksOf } from './game';
 import { appoint, generalOf } from './commanders';
 import { MANPOWER, men1000, menScale, menWorth, returnMen } from './manpower';
 import { cadreTerms } from './economy';
-import { binds, inWords, riflesBack, riflesFold } from './rifles';
+import { binds, inWords, orderNoun, riflesBack, riflesFold } from './rifles';
 import { noteCorps } from './stories';
 import { atItsPost, postWords } from './pacific';
 
@@ -207,8 +207,9 @@ export function foldCorps(g: Game, keep: Corps, gone: Corps): boolean {
   if (gone.rowed) { gone.name = gone.rowed.name; gone.hold = gone.rowed.hold; if (gone.rowed.stay) gone.stay = true; else delete gone.stay; }
   delete gone.drew; delete gone.rowed;
   (n.cadres ??= []).push(gone);
-  // (The men in words from foldWords, which the page's card and the 3D game's card speak too.)
+  // (The men in words from foldWords, which the page's card and the 3D game's card speak too; the noun follows the kept
+  // unit's kind, "brigade" for a support team: the UI director's sixth read, point 2.)
   const w = foldWords(g, keep.nat, v);
-  if (keep.nat === g.human) headline(g, 'info', `${lentAs ?? gone.name} is folded into ${keep.name} at ${g.regions[reg].name}: ${w.men} in one corps${w.back ? `, ${w.back}` : ''}. Its cadre has gone home and can be raised again from the arsenal.`, keep.nat, reg);
+  if (keep.nat === g.human) headline(g, 'info', `${lentAs ?? gone.name} is folded into ${keep.name} at ${g.regions[reg].name}: ${w.men} in one ${orderNoun(keep.kind)}${w.back ? `, ${w.back}` : ''}. Its cadre has gone home and can be raised again from the arsenal.`, keep.nat, reg);
   return true;
 }

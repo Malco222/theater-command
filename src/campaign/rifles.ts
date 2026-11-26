@@ -311,8 +311,14 @@ export function riflesTakes(g: Game, nat: string, divs: number): string | null {
   return `Takes ${menWorth(menPer(nat), divs)} and ${n100(divs * riflesRow(g, nat)!.perDiv)} rifles.`;
 }
 
-/** What a refusal calls the order: a support team by its label's own noun ("Machine-gun brigade": brigade), the rest "corps". */
-const orderNoun = (kind?: string): string => (kind !== undefined && isTeam({ kind }) ? TEAMS[kind as TeamKind].label.split(' ').pop()!.toLowerCase() : 'corps');
+/**
+ * What a sentence calls the order or the unit: a support team by its label's own noun ("Machine-gun brigade": brigade),
+ * the rest "corps". Spoken by the store's refusal (noRifles), the cadre's offer (arsenal.ts, its blurb and its note, by
+ * the cadre's own kind) and the fold's news (fold.ts foldCorps, by the kept unit's kind): the UI director's sixth read
+ * of 26 November 2026, 18:55Z, point 2 ("the noun follows the kind" covers every sentence that names this unit or
+ * this order). With the teams off no brigade exists, so each reads "corps" as before.
+ */
+export const orderNoun = (kind?: string): string => (kind !== undefined && isTeam({ kind }) ? TEAMS[kind as TeamKind].label.split(' ').pop()!.toLowerCase() : 'corps');
 
 /**
  * Why the store refuses an order of this many divisions, or null where it does not. The UI director's line 9 of 25

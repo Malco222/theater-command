@@ -13,7 +13,7 @@ import { levyMen } from '../src/campaign/manpower';
 import { foldCorps } from '../src/campaign/fold';
 import { addCorps, createGame } from '../src/campaign/game';
 import { noRifles, riflesView } from '../src/campaign/rifles';
-import { saveGame } from '../src/campaign/save';
+import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { setTeams } from '../src/campaign/teams';
 import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
@@ -89,5 +89,60 @@ describe("the brigade's word", () => {
     expect(why('corps:inf')).toBe('Not enough rifles: this corps takes 63,900 and 21,000 are in store. 8,300 come in each month, so it can be ordered in six months.');
     // (The card line beside it, for the UI director: what the order takes, as the 3D game's card says it.)
     expect(a.offers.find((o) => o.key === 'corps:mg')!.note).toMatch(/Takes .* and 21,300 rifles\.$/);
+  });
+});
+
+// The UI director's sixth read (26 November 2026, 18:55Z), point 2: "the noun follows the kind" covers every sentence
+// that names this unit or this order, so a team reads "brigade" in the cadre's blurb, the cadre's note (the cadre's own
+// kind) and the fold's news (the kept unit's kind), all by rifles.ts orderNoun. With the teams off no brigade exists,
+// so every line reads as before.
+describe("the sixth read, point 2: the cadre's offer and the fold's news follow the kind", () => {
+  const BLURB = (noun: string): string => `The cadre of a ${noun} whose men were folded into another: its staff, its name, its record and its honours. Raised again it is the same ${noun} filled with new men, and it keeps 75% of what it knew.`;
+  /** Two worn units of this kind at China's capital, both armed to their strength (the fold sends nothing to the store), folded through the 3D game's own action. */
+  const folded = (kind: string, teams: boolean) => {
+    const g = china();
+    if (!teams) setTeams(g, false);
+    const capName = g.regions[g.nations.CHN.capital].name;
+    const ka = addCorps(g, 'CHN', 'Kept unit', kind as never, 1, capName, {}), kc = addCorps(g, 'CHN', 'Folded unit', kind as never, 1, capName, {});
+    ka.str = kc.str = 0.2;
+    g.flags[`rfa:${ka.id}`] = 0.2;
+    g.flags[`rfa:${kc.id}`] = 0.2;
+    TC().load(saveGame(g));
+    const h0 = g.headlines.length;
+    const r = TC().act(`fold:${ka.id}:${kc.id}`) as { ok: boolean };
+    expect(r.ok).toBe(true);
+    const after = loadGame((TC().save() as { text: string }).text)!;
+    const a = TC().arsenal(after.nations.CHN.capital) as { offers: (BridgeOffer & { blurb: string })[] };
+    const cadre = a.offers.find((o) => o.key === `cadre:${kc.id}`)!;
+    const page = offers(after, 'CHN', after.nations.CHN.capital).find((o) => o.key === `cadre:${kc.id}`)!;
+    return { news: after.headlines.slice(h0).map((h) => h.text), cadre, page, capName };
+  };
+
+  it('a machine-gun brigade folded into another: the news, the blurb and the note say "brigade", whole', () => {
+    const { news, cadre, page, capName } = folded('mg', true);
+    expect(capName).toBe('Chungking');
+    expect(news).toEqual(['Folded unit is folded into Kept unit at Chungking: about 27,000 men in one brigade. Its cadre has gone home and can be raised again from the arsenal.']);
+    expect(page.blurb).toBe(BLURB('brigade'));
+    expect(page.note).toBe('Forms up at Chungking, for 50% of the price of a new brigade.');
+    expect(cadre.blurb).toBe(BLURB('brigade'));
+    expect(cadre.note).toBe("Forms up at Chungking, for 50% of the price of a new brigade. Takes one division's worth of men and 21,300 rifles.");
+  });
+
+  it('a mortar brigade the same', () => {
+    const { news, cadre } = folded('mor', true);
+    expect(news).toEqual(['Folded unit is folded into Kept unit at Chungking: about 27,000 men in one brigade. Its cadre has gone home and can be raised again from the arsenal.']);
+    expect(cadre.blurb).toBe(BLURB('brigade'));
+    expect(cadre.note).toBe("Forms up at Chungking, for 50% of the price of a new brigade. Takes one division's worth of men and 21,300 rifles.");
+  });
+
+  it('an infantry corps, teams on and teams off: "corps", as before', () => {
+    for (const teams of [true, false]) {
+      const { news, cadre, page } = folded('inf', teams);
+      expect(news).toEqual(['Folded unit is folded into Kept unit at Chungking: about 27,000 men in one corps. Its cadre has gone home and can be raised again from the arsenal.']);
+      expect(page.blurb).toBe(BLURB('corps'));
+      expect(page.note).toBe('Forms up at Chungking, for 50% of the price of a new corps.');
+      expect(cadre.blurb).toBe(BLURB('corps'));
+      expect(cadre.note).toBe("Forms up at Chungking, for 50% of the price of a new corps. Takes one division's worth of men and 21,300 rifles.");
+    }
   });
 });
