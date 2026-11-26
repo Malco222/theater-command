@@ -69,11 +69,24 @@ namespace
 			{ "Nell", { false, 2, 2 } }, { "Pe2", { false, 2, 2 } }, { "LeO451", { false, 2, 2 } }, { "SM79", { false, 3, 1 } }, { "Stuka", { false, 1, 1 } },
 			{ "Sturmovik", { false, 1, 1 } }, { "Val", { false, 1, 1 } }, { "Kate", { false, 1, 1 } }, { "Dauntless", { false, 1, 1 } }, { "Devastator", { false, 1, 1 } },
 			{ "Bomber", { false, 2, 1 } },
+			// (the finer B-17, Content/Models/B17Fine.json, the Battle rules card's "Finer B-17": four engines, one fin)
+			{ "B17Fine", { false, 4, 1 } },
 		};
 		return E;
 	}
 
 	PaintIs ClassOf(const Found& F, int Paint) { return Paint >= 0 && static_cast<size_t>(Paint) < F.Paints.size() ? F.Paints[static_cast<size_t>(Paint)] : PaintIs::Never; }
+	/** A rivet or seam line that takes the coat's colour (the finer B-17's: AirUnitColours::LinesTakeCoat) is the coat where
+	 * it lies; every other model has none, and its classes are as they were. */
+	PaintIs RegionOf(const Found& F, int Paint) { const PaintIs Is = ClassOf(F, Paint); return Is == PaintIs::Line ? PaintIs::Coat : Is; }
+	/** The palette's colour as a line wears it: each channel times the line's shade against its coat, rounded. */
+	Rgb LineShade(const Found& F, int Paint, Rgb C)
+	{
+		const double K = Paint >= 0 && static_cast<size_t>(Paint) < F.Shade.size() ? F.Shade[static_cast<size_t>(Paint)] : 1.0;
+		if (K == 1.0) return C;
+		auto One = [K](uint8_t V) { return static_cast<uint8_t>(std::clamp(std::lround(V * K), 0L, 255L)); };
+		return Rgb{ One(C.R), One(C.G), One(C.B) };
+	}
 
 	double Area(const double A[3], const double B[3], const double C[3], double Out[3])
 	{
@@ -291,7 +304,7 @@ namespace
 			if (S && (Me.Soot.empty() || Me.Soot[K] == 0))
 			{
 				const std::string& Name = T == Takes::Spinner || T == Takes::Tip ? S->Spinner : T == Takes::Ring ? S->Ring : T == Takes::Second ? S->Second : S->First;
-				const Rgb Want = P.Paint(Name, bNight);
+				const Rgb Want = LineShade(F, Me.Paints[K], P.Paint(Name, bNight));
 				const auto Got = Laid.find(static_cast<int>(K));
 				if (Got == Laid.end() || !(Got->second == Want)) ++R.Wrong;
 			}
@@ -299,8 +312,8 @@ namespace
 		// The parted triangles: one class of paint, never "never"; their pieces covering them exactly, facing as they faced.
 		for (const Cut& Ct : C.Cuts)
 		{
-			const PaintIs A = ClassOf(F, Me.Paints[static_cast<size_t>(Ct.Triangle[0])]);
-			if (A == PaintIs::Never || ClassOf(F, Me.Paints[static_cast<size_t>(Ct.Triangle[1])]) != A || ClassOf(F, Me.Paints[static_cast<size_t>(Ct.Triangle[2])]) != A) ++R.Never;
+			const PaintIs A = RegionOf(F, Me.Paints[static_cast<size_t>(Ct.Triangle[0])]);
+			if (A == PaintIs::Never || RegionOf(F, Me.Paints[static_cast<size_t>(Ct.Triangle[1])]) != A || RegionOf(F, Me.Paints[static_cast<size_t>(Ct.Triangle[2])]) != A) ++R.Never;
 			// (each earned piece's part and patch, as each earned point's)
 			for (size_t Q = 0; Q + 2 < Ct.Pieces.size(); Q += 3)
 			{
@@ -634,6 +647,38 @@ int main(int Argc, char** Argv)
 		Check(Steps == 0 && Sum.TipLow == 0 && Sum.NightLow == 0 && Plain == 0 && Same == 0 && FighterTips == 0 && (F.bFighter || Tips > 0), "each step adds its own; a bomber's tip its top sixth; by night the pattern on the top half; tier 0 nothing", Line);
 		std::snprintf(Line, sizeof Line, "%s: %d pieces, %d not covering their triangle, %d turned over, %d corners off it", Kind.c_str(), Sum.Pieces, Sum.AreaOff, Sum.Turned, Sum.Weights);
 		Check(Sum.Pieces > 0 && Sum.AreaOff == 0 && Sum.Turned == 0 && Sum.Weights == 0, "the parted triangles cover what they were cut from, facing as it faced", Line);
+		// The coat's rivet and seam lines (paints rivet, rivet_under, seam, seam_under): the finer B-17's take the colour the coat
+		// beside them takes, a shade of it (AirUnitColours::LinesTakeCoat; Examine has checked each one's colour above), so
+		// that a recoloured tail keeps no olive lines; every other model's are never recoloured, as before.
+		{
+			Look L;
+			L.Nation = "USA";
+			L.Scheme = 1;
+			L.bFinStripes = true;
+			L.Tier = 3;
+			const Coat C = Paint(M, F, false, P, L);
+			std::vector<Where> OnTail;
+			Places(M, F, false, OnTail);
+			int Lines = 0, LinesEarned = 0, LinesTail = 0, LinesTailEarned = 0;
+			for (size_t K = 0; K < M.Near.Count(); ++K)
+			{
+				const int Paint_ = M.Near.Paints[K];
+				const std::string Name = Paint_ >= 0 && static_cast<size_t>(Paint_) < M.PaintNames.size() ? M.PaintNames[static_cast<size_t>(Paint_)] : std::string();
+				if (Name != "rivet" && Name != "rivet_under" && Name != "seam" && Name != "seam_under") continue;
+				++Lines;
+				const bool bEarned = C.Took[K] != Takes::Keep;
+				LinesEarned += bEarned ? 1 : 0;
+				if (OnTail[K] == Where::Fin || OnTail[K] == Where::Rudder)
+				{
+					++LinesTail;
+					LinesTailEarned += bEarned ? 1 : 0;
+				}
+			}
+			const bool bFollow = LinesTakeCoat(Kind);
+			std::snprintf(Line, sizeof Line, "%s: %d line points, %d earned at step 3 (the United States' first scheme); on the fin and rudder %d of %d", Kind.c_str(), Lines, LinesEarned, LinesTailEarned, LinesTail);
+			Check(bFollow ? LinesTail > 0 && LinesTailEarned == LinesTail : LinesEarned == 0,
+				bFollow ? "her rivet and seam lines take the coat's colour where it does (all of them on the fin and rudder)" : "its rivet and seam lines never recoloured", Line);
+		}
 		(void)Earned;
 		(void)NightPoints;
 		const double Took = std::chrono::duration<double>(std::chrono::steady_clock::now() - Began).count();

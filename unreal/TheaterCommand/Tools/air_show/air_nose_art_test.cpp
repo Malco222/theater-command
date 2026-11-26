@@ -118,9 +118,12 @@ namespace
 
 	/** Where a ray first meets her skin (Moller and Trumbore): its distance and the paint of the corner nearest it, or
 	 * an infinite distance. */
-	double Meet(const Skin& S, const V3& O, const V3& D, int& Paint)
+	double Meet(const Skin& S, const V3& O, const V3& D, int& Paint, bool bOuter = false)
 	{
-		double Best = std::numeric_limits<double>::infinity();
+		// (bOuter: the last of her the ray leaves within OuterM of her axis, as the tool laid the finer B-17's panel: she has
+		// her crew and their rooms inside her, which a ray from her axis meets first)
+		constexpr double OuterM = 1.8;
+		double Best = bOuter ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity();
 		Paint = -1;
 		for (size_t K = 0; K < S.A.size(); ++K)
 		{
@@ -136,28 +139,38 @@ namespace
 			const double V = Dot(D, Q) * Inv;
 			if (V < -1e-9 || U + V > 1.0 + 1e-9) continue;
 			const double T = Dot(E2, Q) * Inv;
-			if (T > 1e-9 && T < Best)
+			if (T > 1e-9 && (bOuter ? T < OuterM && T > Best : T < Best))
 			{
 				Best = T;
 				const double W0 = 1.0 - U - V;
 				Paint = W0 >= U && W0 >= V ? S.P0[K] : U >= V ? S.P1[K] : S.P2[K];
 			}
 		}
-		return Best;
+		return bOuter && Paint < 0 ? std::numeric_limits<double>::infinity() : Best;
 	}
 
 	/** How far a point is outside her skin (negative: inside), along the ray from her axis (her x, on her middle line)
 	 * through it, as the tool that laid the panel measured it; and the paint there. */
-	double Gap(const Skin& S, const V3& P, int& Paint)
+	double Gap(const Skin& S, const V3& P, int& Paint, bool bOuter = false)
 	{
 		const V3 O{ P.X, 0.0, 0.0 };
 		const V3 Out = Sub(P, O);
 		const double R = Len(Out);
-		const double T = Meet(S, O, Mul(Out, 1.0 / R), Paint);
+		const double T = Meet(S, O, Mul(Out, 1.0 / R), Paint, bOuter);
 		return R - T;
 	}
 
-	void CheckSide(const char* Name, const AirNoseArt::Side& Side, const AirNoseArt::Panel& Panel, const Skin& S, double Hand)
+	/** What a panel may lie on, and how her skin is found: the older B-17's on her olive (paint 0) alone, her skin where a
+	 * ray from her axis first meets her; the finer B-17's on the paints panels-fine.json names (her coat and its rivet
+	 * heads and seam lines), her skin where the ray last leaves her. */
+	struct SkinRule
+	{
+		std::set<int> Paints = { 0 };
+		bool bOuter = false;
+		std::string Words = "all on her olive (paint 0)";
+	};
+
+	void CheckSide(const char* Name, const AirNoseArt::Side& Side, const AirNoseArt::Panel& Panel, const Skin& S, double Hand, const SkinRule& Rule = SkinRule())
 	{
 		std::printf("%s side: %zu points, %zu triangles\n", Name, Side.Points.size(), Side.Triangles.size() / 3);
 		const int Cols = Panel.Cols, Rows = Panel.Rows;
@@ -175,7 +188,7 @@ namespace
 			for (const V3& P : { Pa, Pb, Pc, Mul(Add(Pa, Pb), 0.5), Mul(Add(Pb, Pc), 0.5), Mul(Add(Pc, Pa), 0.5), Mid })
 			{
 				int Paint = -1;
-				const double G = Gap(S, P, Paint);
+				const double G = Gap(S, P, Paint, Rule.bOuter);
 				Least = std::min(Least, G);
 				Most = std::max(Most, G);
 				Paints.insert(Paint);
@@ -196,7 +209,9 @@ namespace
 		Check(Least >= 0.0005 && Most <= 0.015, "on her skin, never inside her nor standing off", Line);
 		std::string Under;
 		for (const int P : Paints) Under += (Under.empty() ? "" : ", ") + std::to_string(P);
-		Check(Paints.size() == 1 && *Paints.begin() == 0, "all on her olive (paint 0)", "paints " + Under);
+		bool bOnAllowed = !Paints.empty();
+		for (const int P : Paints) bOnAllowed = bOnAllowed && Rule.Paints.count(P) > 0;
+		Check(Rule.Paints == std::set<int>{ 0 } ? Paints.size() == 1 && *Paints.begin() == 0 : bOnAllowed, Rule.Words.c_str(), "paints " + Under);
 		std::snprintf(Line, sizeof Line, "%d and %d of %d", Outward, OutwardGame, Triangles);
 		Check(Outward == Triangles && OutwardGame == Triangles, "every triangle facing out, in the file's frame and the game's", Line);
 		// Her side: its facing out of her port side (-y in the file) or her starboard (+y).
@@ -542,6 +557,92 @@ int main(int Argc, char** Argv)
 				&& std::fabs(P.U + Q.U - 1.0) < 1e-6 && std::fabs(P.V - Q.V) < 1e-6;
 		}
 		Check(bMirror, "the starboard panel the port one mirrored, its picture read the other way along");
+	}
+
+	// The finer B-17's panel (the Battle rules card's "Finer B-17", row b17Fine): in a file of its own, panels-fine.json,
+	// laid on Content/Models/B17Fine.json's near shape by Tools/pack_nose_art.py --fine; panels.json keeps none for her.
+	std::string FinePanels;
+	const bool bFineModel = static_cast<bool>(std::ifstream(Models + "/B17Fine.json"));
+	const bool bFineFile = ReadText(Folder + "/panels-fine.json", FinePanels);
+	if (bFineModel || bFineFile)
+	{
+		std::printf("The panel on the finer B-17 (panels-fine.json against Content/Models/B17Fine.json's near shape)\n");
+		Check(bFineModel && bFineFile, "the finer B-17's file and her panels' file both there");
+		AirNoseArt::Panel Fine;
+		const bool bFine = bFineFile && AirNoseArt::ReadPanel(FinePanels, "B17Fine", Fine, Why);
+		Check(bFine, "her panel read", Why);
+		AirNoseArt::Panel Other;
+		Check(!AirNoseArt::ReadPanel(Panels, "B17Fine", Other, Why) && !AirNoseArt::ReadPanel(FinePanels, "B17", Other, Why),
+			"each B-17's panel in its own file: none for her in panels.json, none for the older one in panels-fine.json");
+		// (the paints she may lie on, as the file names them: her coat, its rivet heads and its seam lines, by her own names)
+		SkinRule Rule;
+		Rule.bOuter = true;
+		Rule.Paints.clear();
+		AirFeed::Json J;
+		std::string Listed;
+		if (bFineFile && AirFeed::Parse(FinePanels, J, Why))
+		{
+			for (const AirFeed::Json& P : J["models"]["B17Fine"]["skin_paints"].Items)
+			{
+				Rule.Paints.insert(P.Int(-1));
+				Listed += (Listed.empty() ? "" : ", ") + std::to_string(P.Int(-1));
+			}
+		}
+		std::string ModelText;
+		AirFeed::Json M;
+		std::vector<std::string> Names;
+		if (ReadText(Models + "/B17Fine.json", ModelText) && AirFeed::Parse(ModelText, M, Why))
+		{
+			for (const AirFeed::Json& N : M["paint_names"].Items) Names.push_back(N.Str(""));
+		}
+		std::string Named;
+		bool bCoat = !Rule.Paints.empty();
+		for (const int P : Rule.Paints)
+		{
+			const std::string Name = P >= 0 && static_cast<size_t>(P) < Names.size() ? Names[static_cast<size_t>(P)] : std::string("?");
+			Named += (Named.empty() ? "" : ", ") + Name;
+			bCoat = bCoat && (Name == "upper" || Name == "rivet" || Name == "seam");
+		}
+		Check(bCoat && Rule.Paints.count(0) > 0, "she may lie on her upper coat and its rivet and seam lines only (never glass, her belly or its lines)", "paints " + Listed + " (" + Named + ")");
+		Rule.Words = "all on her coat and its rivet and seam lines (paints " + Listed + ")";
+		Skin F;
+		const bool bFineSkin = bFineModel && ReadSkin(Models + "/B17Fine.json", 4.0, 8.2, F, Why);
+		Check(bFineSkin, "her near shape read", Why);
+		if (bFine && bFineSkin && !Rule.Paints.empty())
+		{
+			CheckSide("Port", Fine.Port, Fine, F, -1.0, Rule);
+			CheckSide("Starboard", Fine.Starboard, Fine, F, 1.0, Rule);
+			bool bMirror = Fine.Port.Points.size() == Fine.Starboard.Points.size();
+			for (size_t K = 0; bMirror && K < Fine.Port.Points.size(); ++K)
+			{
+				const AirNoseArt::Point& P = Fine.Port.Points[K];
+				const AirNoseArt::Point& Q = Fine.Starboard.Points[K];
+				bMirror = std::fabs(P.At[0] - Q.At[0]) < 1e-6 && std::fabs(P.At[1] + Q.At[1]) < 1e-6 && std::fabs(P.At[2] - Q.At[2]) < 1e-6
+					&& std::fabs(P.U + Q.U - 1.0) < 1e-6 && std::fabs(P.V - Q.V) < 1e-6;
+			}
+			Check(bMirror, "the starboard panel the port one mirrored, its picture read the other way along");
+			// Clear of her kill tally (the file's tally: its bombs and kill marks under her window, port side): the panel's
+			// aftmost point ahead of every slot's foremost edge.
+			double PanelAft = 1e9, TallyFore = -1e9;
+			for (const AirNoseArt::Point& P : Fine.Port.Points) PanelAft = std::min(PanelAft, P.At[0]);
+			int Slots = 0;
+			for (const char* Block : { "missions", "kills" })
+			{
+				const AirFeed::Json& B = M["tally"][Block];
+				const double R = B["radius"].Num(0.0);
+				for (const AirFeed::Json& Slot : B["slots"].Items)
+				{
+					TallyFore = std::max(TallyFore, Slot.At(0).Num(-1e9) + R);
+					++Slots;
+				}
+			}
+			std::snprintf(Line, sizeof Line, "her panel from %.3f m forward, the tally's %d slots to %.3f m", PanelAft, Slots, TallyFore);
+			Check(Slots > 0 && PanelAft > TallyFore + 0.05, "her panel clear of her kill tally", Line);
+			std::snprintf(Line, sizeof Line, "%.2f m by %.2f m, the older B-17's %.2f m by %.2f m", Fine.WideM, Fine.HighM, Panel.WideM, Panel.HighM);
+			// (0.45 each way, the largest that lies on her coat within 15 mm of her skin, facing out of her side, clear of her
+			// windows, her windscreen's step and her tally: Tools/pack_nose_art.py's notes; a smaller one would be a step back)
+			Check(Fine.WideM >= 0.449 * Panel.WideM && Fine.HighM >= 0.449 * Panel.HighM, "her painting 0.45 of the older one's size each way or more", Line);
+		}
 	}
 
 	// Which aircraft wears which: the battles where nobody is named.
