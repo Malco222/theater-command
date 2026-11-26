@@ -327,7 +327,10 @@ export function reserveLevelWords(nat: string, level: number, divs: number, star
  * 26 November 2026, 04:58Z, point C: the need and what is left take the same measure, so a need of part of a division's
  * worth, said in men (menWorth), takes a remainder in men with "about", to the thousand ("this takes about 18,000 men
  * and about 9,000 are left"), never the need's own figure or more (it shows 1,000 less), and where it rounds to no
- * thousand at all "fewer than 1,000 are left" (the form nearest her words: never "about 0").
+ * thousand at all "fewer than 1,000 are left" (the form nearest her words: never "about 0"). A cadre under a tenth of
+ * a division's worth (China's 10th Army Group (Taichow), 6,030 men) is held to a tenth (raisable), so its need is said
+ * at that ("this takes about 7,000 men and about 6,000 are left"), unlike its card's "about 6,000 men": a reading, for
+ * her word.
  */
 export function noMenWords(nat: string, divs: number, left: number, cls: number): string | null {
   const per = menScale(nat);
@@ -338,10 +341,13 @@ export function noMenWords(nat: string, divs: number, left: number, cls: number)
   // half" would be untrue, so it says "less than one is left". China's engineer corps, corps:eng, is such an order: with
   // half a division's worth to just under one left, this is its live refusal.)
   // (Part of a division's worth is said in men, so what is left is said in men too, to the thousand, below the need's.)
-  const need = Math.round((divs * per) / 1000), have = Math.min(Math.round((l * per) / 1000), need - 1);
+  // (The order is held to a tenth of a division's worth at least (raisable), so a cadre under a tenth is refused with
+  // its own size in reserve: the need is said at what it is held to, so what is left, below it, stays true.)
+  const held = Math.max(0.1, divs);
+  const need = Math.round((held * per) / 1000), have = Math.min(Math.round((l * per) / 1000), need - 1);
   const rest = !Number.isInteger(divs) ? (have >= 1 ? `about ${(have * 1000).toLocaleString('en-US')} are left` : 'fewer than 1,000 are left')
     : shown >= 1 ? `about ${inWords(shown)} ${shown === 1 ? 'is' : 'are'} left` : l < 0.5 ? 'less than half of one is left' : 'less than one is left';
-  return `The reserve has not the men: this takes ${menWorth(per, divs, false)} and ${rest}. ${comesWords(nat, cls)}`;
+  return `The reserve has not the men: this takes ${menWorth(per, held, false)} and ${rest}. ${comesWords(nat, cls)}`;
 }
 
 /**

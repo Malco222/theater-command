@@ -579,6 +579,23 @@ describe('the third read of 04:58Z: months in words, and the refusal in one meas
     expect(o.why).toBe(`The reserve has not the men: this takes about 18,000 men and about 9,000 are left.${CLASS}`);
   });
 
+  it("C. the 10th Army Group (Taichow)'s cadre at Ningpo, under a tenth of a division's worth, refused with 6,500 men left: what is left stays true", () => {
+    TC().start({ human: 'CHN', seed: 7, view: 'grand', world: true });
+    const g = loadGame((TC().save() as { text: string }).text)!;
+    const k = g.corps.find((c) => c.name === '3rd War Area (the Chekiang coast)' && c.nat === 'CHN')!, x = g.corps.find((c) => c.name === '10th Army Group (Taichow)' && c.nat === 'CHN')!;
+    expect(g.regions[x.reg].name).toBe('Ningpo');
+    expect(k.reg).toBe(x.reg);
+    for (const c of [k, x]) { c.str = 0.6 * (c.full ?? 1); c.supplied = true; }
+    expect(foldCorps(g, k, x)).toBe(true);
+    g.flags['mp:CHN'] = 6500 / menScale('CHN')!;
+    TC().load(saveGame(g));
+    const o = (TC().arsenal(-1) as { offers: { key: string; why: string | null }[] }).offers.find((y) => y.key === `cadre:${x.id}`)!;
+    // The order is held to a tenth of a division's worth (6,700 men), so the need is said at that and what is left is true.
+    expect(o.why).toBe(`The reserve has not the men: this takes about 7,000 men and about 6,000 are left.${CLASS}`);
+    // Wenchow's garrison (0.05, 3,350 men) through the function, with 4,000 left.
+    expect(noMenWords('CHN', 0.05, 4000 / menScale('CHN')!, 1.5644171779141105)).toBe(`The reserve has not the men: this takes about 7,000 men and about 4,000 are left.${CLASS}`);
+  });
+
   it("C. the edges through the function: never the need's figure, fewer than 1,000, and a whole count as built", () => {
     const per = menScale('CHN')!, cls = 1.5644171779141105, need = 0.27;
     expect(noMenWords('CHN', need, 9000 / per, cls)).toBe(`The reserve has not the men: this takes about 18,000 men and about 9,000 are left.${CLASS}`);
