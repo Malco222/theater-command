@@ -4715,7 +4715,7 @@ void ALandBattle::RideTanks()
 		UStaticMesh* Made = nullptr;
 		if (FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Models/Battle/Binoculars.json"))) && Prop.Load(LandParts::Narrow(Text), LandKit::Dress(), Why))
 		{
-			Made = LandParts::PropMesh(this, TEXT("LandFieldGlasses"), Prop, false, ThingInk, UnitsPerMetre);
+			Made = LandParts::PropMesh(this, TEXT("LandFieldGlass"), Prop, false, ThingInk, UnitsPerMetre);   // (the mesh: its own name, as LandFieldPhone's; the copies below are LandFieldGlasses)
 		}
 		if (!Made)
 		{
