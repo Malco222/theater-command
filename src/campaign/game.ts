@@ -55,6 +55,7 @@ import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, rai
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled, willBurn } from './prizes';
 import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, shoreOf, worldOn } from './world';
 import { FAR_STAGE } from './stage';
+import { formedLine, joinedLine, notFormedLine, rowDone, tellWait, waitedOn } from './arrivalwaits';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -69,7 +70,7 @@ import { WEATHER, skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } fr
 import desertData from '../../data/campaign/desert.json';
 import farSandData from '../../data/campaign/far-sand.json';
 import theatreData from '../../data/campaign/theatres.json';
-import { raisedQuality, stopDef, stopOf } from './history';
+import { contactRuleActs, raisedQuality, stopDef, stopOf } from './history';
 import { chargeDelay, isRearguard, rearguardWeeks, rearguardsAt, rearguardsLapse, screenWeeks, weeksWords } from './rearguard';
 import { clientWar, tiedPair } from './far';
 import { atomFallen, atomMonth, atomPress } from './atom';
@@ -4889,6 +4890,36 @@ const rowLanded = (g: Game, name: string): boolean => ((setup as any).expedition
  */
 const fromWaits = (g: Game, nat: string, from: string[]): boolean => ((setup as any).expeditions as any[] ?? []).some((r2, j) => r2[1] === nat
   && from.includes(r2[2]) && !g.flags[`sent:${j}`] && g.flags[`wait:${j}`] !== undefined && !g.corps.some((x) => x.nat === nat && !x.dead && x.name === r2[2]));
+/**
+ * What holds a dated row of `nat`'s that takes the corps `from` names whole, as the board stands, read for the telling
+ * (arrivalwaits.ts) and never by the rule itself: its named corps at the front (on a live front of its staff's plan, on
+ * the far side; or in contact, an enemy at war on its province or beside it, away from `at`, the province the row
+ * forms in), and the names a waiting row has still to make (the far side's chain, `fromWaits`). Changes nothing.
+ */
+export function rowHolds(g: Game, nat: string, from: string[], at: number | undefined): { front: Corps[]; unformed: string[] } {
+  const far = farOn(g);
+  return {
+    front: g.corps.filter((x) => x.nat === nat && !x.dead && from.includes(x.name) && ((far && onLiveFront(g, nat, x)) || (x.reg !== at && corpsInContact(g, nat, x)))),
+    unformed: far ? from.filter((n) => fromWaits(g, nat, [n])) : [],
+  };
+}
+
+/**
+ * A corps at the front as the rule reads it, wherever it stands, the province a row forms in not set apart: on a live
+ * front of its staff's plan, on the far side, or in contact (an enemy at war on its province or beside it). Read for
+ * the telling's words the month a row forms (arrivalwaits.ts `waitedOn`), never by the rule itself. Changes nothing.
+ */
+export const atFrontNow = (g: Game, nat: string, x: Corps): boolean => (farOn(g) && onLiveFront(g, nat, x)) || corpsInContact(g, nat, x);
+
+/**
+ * The article the general's line gives the row's name ("{general} arrives in {place} with the {row}."): none where the
+ * name opens with "the", is an "X Force" or is Creforce, else "the ". Exactly the rule of 70d6f6a1f, and never widened:
+ * the line exists with the switch 'fromWait' off, and with it off every sentence is the base's, byte for byte. The UI
+ * director's section 7 case 5 (a name whose head ends in "Force" takes none) is for the telling's own sentences,
+ * arrivalwaits.ts `theOf`, which exist only with the switch on; her 02:10Z puts "Special Force" in the general's line on
+ * the later-patch list, a shipped line. (tests/general-line-article and -far: a table over every dated row.)
+ */
+export const generalsThe = (name: string): string => (/^(the |[A-Z] Force|Creforce)/i.test(name) ? '' : 'the ');
 
 /**
  * A grand campaign begun after the first day (staff.ts, startOpen): a row whose men history's full-size corps already
@@ -4900,7 +4931,7 @@ export function carriedRows(g: Game): void {
   rows.forEach((row, i) => {
     const o = row[6] ?? {};
     if (!o.carried || g.flags[`sent:${i}`]) return;
-    if (rows.some((r, j) => r[2] === o.carried && r[1] === row[1] && g.flags[`sent:${j}`] === 1)) g.flags[`sent:${i}`] = 2;
+    if (rows.some((r, j) => r[2] === o.carried && r[1] === row[1] && g.flags[`sent:${j}`] === 1)) { g.flags[`sent:${i}`] = 2; rowDone(g, i); }
   });
 }
 
@@ -5371,6 +5402,7 @@ function offerStands(g: Game, nat: string, row: any[], i: number): string | null
   if (!gone) { g.flags[offerCount(i)] = Math.max(g.flags[offerCount(i)] ?? 0, rowTakes(g, nat, row[6] ?? {}).length); return null; }
   offerShut(g, i);
   g.flags[`sent:${i}`] = 2;
+  rowDone(g, i);
   g.flags[unmadeKey(i)] = g.turn;
   headline(g, 'info', gone, nat);
   return gone;
@@ -5625,6 +5657,7 @@ export function declineOffer(g: Game, id: number): boolean {
   if (nat === null || !row || row[1] !== nat || !offerOpen(g, nat, id)) return false;
   offerShut(g, id);
   g.flags[`sent:${id}`] = 2;
+  rowDone(g, id);
   g.flags[unmadeKey(id)] = g.turn;
   return true;
 }
@@ -5743,7 +5776,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
         // was then struck for its half year, while the player's offer of it lapsed at once. A war not yet begun is
         // waited for as before, by both. Read on the far side's rows alone, `farRow`: nothing on the old chart.)
         if (!warOn(g, o.war)) {
-          if (farRow(g, nat, row) && warOver(g, i, o.war)) { g.flags[`sent:${i}`] = 2; if (hisOffers(g, nat) && row[1] === nat) g.flags[unmadeKey(i)] = g.turn; }
+          if (farRow(g, nat, row) && warOver(g, i, o.war)) { g.flags[`sent:${i}`] = 2; rowDone(g, i); if (hisOffers(g, nat) && row[1] === nat) g.flags[unmadeKey(i)] = g.turn; }
           return;
         }
         // And it waits for its own country to be in that war: no army turns up in a war its country is not fighting.
@@ -5752,7 +5785,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
         // saved before ruling 229 counts it from the month it is loaded, and loses none of it for being late. A
         // country overrun before its call-up was ever counted never had it: freed, it returns with its liberation
         // corps alone, ruling 229, 2b.)
-        if (fromWar && g.flags[`due:${i}`] === undefined && g.nations[nat].fellOn) { g.flags[`sent:${i}`] = 2; return; }
+        if (fromWar && g.flags[`due:${i}`] === undefined && g.nations[nat].fellOn) { g.flags[`sent:${i}`] = 2; rowDone(g, i); return; }
         due = g.flags[`due:${i}`] ??= fromWar ? Math.max(warBegan(g, o.war), g.turn - 1) + o.after : g.turn;
         if (g.turn < due) return;
       }
@@ -5788,13 +5821,15 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // second 18th Division beside it. `fromWaits`.)
     // (At a stop that keeps a book, stops 1 and 2, the book's rows keep their book as every other piece does, and
     // neither of the two is read: the contact rule acts at stops 3 to 5. Her ruling of 21:25Z, 25 November 2026.)
-    const inFight = g.flags.fromWait === 1 && !stopDef(g).book && !hisOffers(g, nat);
+    // (And where the book of the row's own place is closed it acts there too, at every stop: "a closed book brings the
+    // contact rule in", her 22:05Z; history.ts `contactRuleActs`.)
+    const inFight = g.flags.fromWait === 1 && contactRuleActs(g, g.byName[row[5]]) && !hisOffers(g, nat);
     let own = false;
     if (Array.isArray(o.from) && !ashore && row[1] === nat && farOn(g) && (g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name)
       && (onLiveFront(g, nat, x) || (inFight && x.reg !== reg?.id && corpsInContact(g, nat, x))))
       || (inFight && fromWaits(g, nat, o.from)))) {
       if (o.adds > 0) own = true;
-      else { g.flags[`wait:${i}`] = g.turn; return; }
+      else { if (inFight) tellWait(g, i, reg); g.flags[`wait:${i}`] = g.turn; return; }
     }
     // (The old chart, the grand campaign: a row that takes a named corps whole waits while that corps is in contact, an
     // enemy at war on its province or beside it, as the far side's waits for a live front, and its half year is counted
@@ -5803,16 +5838,23 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // door too (pacific-japan/dd-form-from-rows-contact-1125.md). Its own switch, 'fromWait' (stage.json), off until its
     // gate passes. drawn.ts, `corpsInContact`. As on the far side it acts at stops 3 to 5 only: at the book's stops the
     // book's rows keep their book, her ruling of 21:25Z.)
+    // (Where the west's book is closed it acts at those stops too: "a closed book brings the contact rule in", her
+    // 22:05Z; history.ts `contactRuleActs`.)
     const formsAt = reg?.id;
-    if (g.flags.fromWait === 1 && g.flags.open === 1 && !farOn(g) && !stopDef(g).book && Array.isArray(o.from) && !ashore && row[1] === nat && formsAt !== undefined
-      && g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && x.reg !== formsAt && corpsInContact(g, nat, x))) { g.flags[`wait:${i}`] = g.turn; return; }
+    if (g.flags.fromWait === 1 && g.flags.open === 1 && !farOn(g) && contactRuleActs(g, g.byName[row[5]]) && Array.isArray(o.from) && !ashore && row[1] === nat && formsAt !== undefined
+      && g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && x.reg !== formsAt && corpsInContact(g, nat, x))) { if (inFight) tellWait(g, i, reg); g.flags[`wait:${i}`] = g.turn; return; }
     // (The far side: a row that waits on a formation the player has been offered and has not answered, the one that
     // makes its cut or the one it is itself made from, waits on his answer and has its half year from the month he
     // gives it: he is never struck a row for the months he took, nor given its men twice. And a row made from a
     // formation he did not make, whose corps he kept, never comes. Ruling B8; the mending of 25 November 2026:
     // `sourceAsked`, `menKept`.)
     if (take !== i && sourceAsked(g, nat, o)) { g.flags[`wait:${i}`] = g.turn; return; }
-    if (take !== i && row[1] === nat && menKept(g, nat, o)) { g.flags[`sent:${i}`] = 2; g.flags[unmadeKey(i)] = g.turn; return; }
+    if (take !== i && row[1] === nat && menKept(g, nat, o)) { g.flags[`sent:${i}`] = 2; rowDone(g, i); g.flags[unmadeKey(i)] = g.turn; return; }
+    // (The telling: what it waited on, read before its corps are taken: arrivalwaits.ts. Only where the rule still acts:
+    // a row the rule no longer holds, the dial turned to a book stop whose book is open, forms with today's bare line, as
+    // section 4 gives for every row outside the rule (the marks' preamble, "only where the rule acts"), and as
+    // setFromWait does for the switch turned off. Without this a corps still in the line was said to have left it.)
+    const was = inFight ? waitedOn(g, i, reg?.id) : null;
     const waited = g.flags[`wait:${i}`];
     if (waited !== undefined) due = Math.max(due, waited + 1);
     // (An offer the player takes is not struck for the months he took to answer: it stood open. Ruling B8.)
@@ -5820,6 +5862,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     if (late || (o.war && !warOn(g, o.war)) || (o.until && g.turn >= o.until)) {
       if (late) {
         g.flags[`sent:${i}`] = g.flags.open === 1 ? 2 : 1;
+        rowDone(g, i);
         const at = g.byName[row[5]];
         struckWatch.tell?.({ turn: g.turn, due, nat, name: row[2], kind: row[3], divs: row[4], place: row[5], owner: at?.owner ?? null, holder: at?.ctrl ?? null, to: reg?.name ?? null, toHolder: reg?.ctrl ?? null, war: !!o.war && !warOn(g, o.war), until: !!o.until && g.turn >= o.until, ifLost: !!o.ifLost, joins: o.joins ?? null, hold: !!o.hold });
       }
@@ -5837,7 +5880,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // still holds any place named, the formations it would be made from fight on where they stand.
     if (o.ifLost && (o.ifLost as string[]).some((nm) => { const r = g.byName[nm]; return !r || allied(g, nat, r.ctrl); })) return;
     // (A row that stands in for another, in a war where that other has already landed, never comes: ruling 229, 1c.)
-    if (o.unless && g.flags.open === 1 && rowLanded(g, o.unless)) { g.flags[`sent:${i}`] = 2; return; }
+    if (o.unless && g.flags.open === 1 && rowLanded(g, o.unless)) { g.flags[`sent:${i}`] = 2; rowDone(g, i); return; }
     // (The far side: a row that would take corps of the player's off the board is an offer, never a silent removal:
     // ruling B8 of 25 November 2026. It is made in the month the rule would have formed the row, stands open until he
     // answers, and taken (`take`) it does what the rule always did. A computer's rows are as they were.)
@@ -5846,6 +5889,12 @@ function expeditions(g: Game, nat: string, take?: number): void {
     if (old) {
       if (asks) { offerMade(g, nat, i, o); return; }
       g.flags[`sent:${i}`] = 1;
+      // (The telling: a told row of the player's that waited on the front says how it joined, after its news or, with
+      // none, in a line of its own: arrivalwaits.ts `joinedLine`, which clears its flags as `rowDone` does. Read before
+      // the corps it joins takes its name. The UI director's section 8 point 3. Its "now that it stands there" is read
+      // against the province the sentence names, where the corps it joins stands, not where the row was due: a corps at
+      // the front anywhere else leaves nothing true to say, and its news, or nothing, is said as today. T2-4.)
+      const joined = joinedLine(g, i, inFight ? waitedOn(g, i, old.reg) : null, old.name, g.regions[old.reg].name);
       // Corps broken up to find the divisions are struck off, and a corps only lent to the campaign is remembered.
       if (Array.isArray(o.from) && !own) for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
       if (o.until) g.flags[`lent:${i}`] = old.id;
@@ -5859,7 +5908,8 @@ function expeditions(g: Game, nat: string, take?: number): void {
       if (read) joinNames(g, old, row, row[4], read);
       old.name = row[2];
       g.supplyDirty = true;
-      if (o.news) headline(g, 'event', o.news, nat, old.reg);
+      if (o.news) headline(g, 'event', joined?.after ? `${o.news} ${joined.after}` : o.news, nat, old.reg);
+      else if (joined?.alone) headline(g, 'info', joined.alone, nat, old.reg);
       return;
     }
     if (!reg || !allied(g, nat, reg.ctrl)) return;
@@ -5894,7 +5944,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
       g.flags[`came:${i}`] = g.turn;
       ((setup as any).expeditions as any[] ?? []).forEach((r2, j) => {
         if (r2[6]?.unless !== row[2] || r2[1] !== nat) return;
-        if (!g.flags[`sent:${j}`]) g.flags[`sent:${j}`] = 2;
+        if (!g.flags[`sent:${j}`]) { g.flags[`sent:${j}`] = 2; rowDone(g, j); }
         if (!laid) return;
         const x = g.corps.find((u) => u.nat === nat && !u.dead && u.name === r2[2]);
         if (!x) return;
@@ -5915,6 +5965,11 @@ function expeditions(g: Game, nat: string, take?: number): void {
       // broken up to find its divisions, and it found them elsewhere. Regrouping what stands is the staff's own business.)
       if (!formsAny(claims, n)) {
         g.flags[`sent:${i}`] = 1;
+        // (The telling: a told row of the player's is told it will not form, where the rule still holds it: the UI
+        // director's section 8 point 3. Read before its flags go.)
+        const none = inFight ? notFormedLine(g, i, reg.name) : null;
+        rowDone(g, i);
+        if (none) headline(g, 'info', none, nat, reg.id);
         keepCounted(claims);
         const share = takenShare(g, i);
         if (share !== undefined) { delete g.flags[`takecut:${i}`]; if (g.flags[`cut:${i}`] === share) delete g.flags[`cut:${i}`]; cutStays(share); }
@@ -5928,6 +5983,9 @@ function expeditions(g: Game, nat: string, take?: number): void {
     if (!o.join && placed(g, reg, nat).filter((u) => u.kind !== 'eng').length >= STACK) return;
     if (asks) { offerMade(g, nat, i, o); return; }
     g.flags[`sent:${i}`] = 1;
+    // (The telling's three flags go once the formed headline below has read them: `formedLine` calls arrivalwaits.ts
+    // `rowDone`, as every other place that sends or strikes a row does. The design director's answer 3 of 00:43Z, 26
+    // November 2026: "Clear the telling's three flags where the row is sent or struck (no dead data).")
     // (The body of a row brought ashore for a lost posting takes nobody off the board: the corps it would have
     // taken stay where they stand under their own names. Rider b642 part 2. Nor does the body of a row whose corps
     // stand on a live front: `own`, above.)
@@ -5986,15 +6044,17 @@ function expeditions(g: Game, nat: string, take?: number): void {
     if (o.until) g.flags[`lent:${i}`] = c.id;
     // (A war row that drew divisions from living corps is remembered by its corps until its war is over: above.)
     else if (g.flags.open === 1 && o.war && (c.drew?.length || c.rowed)) g.flags[`lent:${i}`] = c.id;
-    const the = /^(the |[A-Z] Force|Creforce)/i.test(c.name) ? '' : 'the ';
+    const the = generalsThe(c.name);
     // Troops come ashore at a port across the sea: a colony's, or a foreign one for a nation that lives by its ships.
     // An army that marched there, or is forming up at home, simply arrives.
     const bySea = reg.port && (reg.overseas || (g.nations[nat].seaSupply && reg.owner !== nat));
+    // (The telling: a row of the player's that waited on the front, or came without its corps at the front: arrivalwaits.ts.)
+    const said = formedLine(g, i, was, inFight && own, c, reg, !!bySea);
     // A row that tells its own news says more than the bare arrival would.
-    if (o.news) headline(g, 'event', o.news, nat, reg.id);
+    if (o.news) headline(g, 'event', said?.after ? `${o.news} ${said.after}` : o.news, nat, reg.id);
     // (A living corps come itself under the row keeps the general it has: the line names the row's only where he commands it.)
-    else if (o.gen && (!claims.length || generalOf(g, c)?.name === o.gen)) headline(g, 'event', `${o.gen} ${bySea ? 'lands at' : 'arrives in'} ${reg.name} with ${the}${c.name}.`, nat, reg.id);
-    else if (nat === g.human) headline(g, 'info', `${c.name} has ${bySea ? 'landed at' : 'arrived in'} ${reg.name}.`, nat, reg.id);
+    else if (o.gen && (!claims.length || generalOf(g, c)?.name === o.gen)) headline(g, 'event', `${o.gen} ${bySea ? 'lands at' : 'arrives in'} ${reg.name} with ${the}${c.name}.${said?.after ? ` ${said.after}` : ''}`, nat, reg.id);
+    else if (nat === g.human) headline(g, 'info', said?.alone ?? `${c.name} has ${bySea ? 'landed at' : 'arrived in'} ${reg.name}.`, nat, reg.id);
   });
   if (gone.length) {
     const where = theatreName(g.regions[gone[0].reg]);

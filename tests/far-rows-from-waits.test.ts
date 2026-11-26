@@ -110,3 +110,25 @@ describe("switch on at the book's stops, 1 and 2: the book's rows keep their boo
     expect(eighteenth(g).length).toBe(1);
   });
 });
+
+describe("switch on at the book's stops with the Pacific's book closed: a closed book brings the contact rule in (the design director's 22:05Z)", () => {
+  it.each([1, 2])("at stop %i both rows wait together: the Hainan row on its corps in the line, the Rangoon row on the Hainan row", (stop) => {
+    // (The war of `war`, with the Pacific's book closed before its first month.)
+    const g = startOpen(createGame(3, null));
+    setStop(g, stop, true);
+    g.flags['hist:off:pacific'] = 26;
+    g.flags.fromWait = 1;
+    lose(g, 'Cam Ranh', 'JAP', 'Saigon');
+    g.turn = 27; startPhase(g, 'JAP');
+    g.turn = 28; g.flags['st:done:JAP:south'] = 28;
+    for (const e of ['USA', 'UK', 'NED']) declareWar(g, 'JAP', e);
+    lose(g, 'Rangoon', 'JAP', 'Calcutta');
+    months(g, 29, 34);
+    expect(corpsInContact(g, 'JAP', g.corps.find((x) => x.nat === 'JAP' && !x.dead && x.name === ARMY21)!)).toBe(true);
+    expect(g.flags[`sent:${index(ARMY25)}`]).toBeUndefined();
+    expect(g.flags[`wait:${index(ARMY25)}`]).toBe(34);
+    expect(g.flags[`sent:${index(D18)}`]).toBeUndefined();
+    expect(g.flags[`wait:${index(D18)}`]).toBe(34);
+    expect(eighteenth(g)).toEqual([`${ARMY21}@Tungkun`]);
+  });
+});

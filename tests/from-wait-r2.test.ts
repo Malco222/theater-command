@@ -146,3 +146,27 @@ describe("the dial: the rule acts at stops 3 to 5, and at the book's stops the b
     expect(g.flags[`wait:${i}`]).toBe(2);
   });
 });
+
+describe("a closed book brings the contact rule in: at the book's stops it acts where the west's book is closed", () => {
+  // The design director's ruling of 22:05Z, 25 November 2026: "the contact rule acts where the stop is 3 to 5 OR the
+  // row's theatre's book is closed". The old chart's rows read the west's book (her 22:12Z; history.ts `contactRuleActs`).
+  it.each([1, 2])("at stop %i with the west's book closed the row waits and the corps stays where it fights", (stop) => {
+    const { g, i, held } = board('Grenzmark');
+    expect(setStop(g, stop, true)).toBe(true);
+    g.flags['hist:off:west'] = 1;
+    month(g, 2);
+    expect(at(g, held)).toBe('Grenzmark');
+    expect(living(g, 'Test Army')).toBeUndefined();
+    expect(g.flags[`wait:${i}`]).toBe(2);
+  });
+  it.each([1, 2])("at stop %i with the west's book open the corps in contact is lifted and the row forms in its month", (stop) => {
+    const { g, i, held } = board('Grenzmark');
+    expect(setStop(g, stop, true)).toBe(true);
+    expect(corpsInContact(g, 'GER', held)).toBe(true);
+    month(g, 2);
+    expect(g.flags['hist:off:west']).toBeUndefined();
+    expect(living(g, 'Test Corps')).toBeUndefined();
+    expect(at(g, living(g, 'Test Army'))).toBe('Magdeburg');
+    expect(g.flags[`wait:${i}`]).toBeUndefined();
+  });
+});
