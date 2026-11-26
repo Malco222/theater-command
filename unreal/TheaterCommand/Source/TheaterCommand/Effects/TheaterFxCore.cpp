@@ -6731,12 +6731,16 @@ namespace TheaterFx
 		Bits.back().LeastKeep = 0.8;
 	}
 
-	void Battle::AirHit(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Kind)
+	void Battle::AirHit(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Kind, const char* Part)
 	{
 		// (the puff a hit leaves in the air goes slowly: linger.hit)
 		const size_t First = Bits.size();
 		AirHitLaid(Now, At, Normal, Carry, Kind);
 		LingerFrom(First, LingerOf("hit"), Now, At, 1.0, 0.0);
+		if (Part && *Part)
+		{
+			AirSpurt(Now, At, Normal, Carry, Part); // (air_hit.spurt: after all of the above, with dice of its own)
+		}
 	}
 
 	void Battle::AirHitLaid(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Kind)
@@ -18061,5 +18065,131 @@ namespace TheaterFx
 		}
 		J.Roll = std::max(-MostRoll, std::min(MostRoll, J.Roll));
 		return J;
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// The air's dramatic moments (effects-r2; the owner, 26 November: "i like the debris coming off the planes when hit",
+	// "lets try to add more visual dramatic things like that", items 2, 3 and 4). Each part is OFF until its row's on is 1,
+	// and none of them throws the kit's shared dice (Seeds): every piece has dice of its own, from its place (PlaceKey),
+	// a key or the moment, each with a salt of its own, one throw a statement.
+
+	namespace
+	{
+		/** The moment as whole milliseconds for a seed (held: a wild moment is no cast past the type). */
+		uint64_t MomentKey(double Now)
+		{
+			return static_cast<uint64_t>(static_cast<int64_t>(std::clamp(Now, 0.0, 9.0e15) * 1000.0));
+		}
+	}
+
+	void Battle::AirSpurt(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Part)
+	{
+		// The owner's item 2 (26 November): "oil streaking across a hit plane's windscreen"; the spray that leaves the hole
+		// in the moments after the strike, before any trail starts, so that from 300 m a hit that mattered blinks white
+		// or brown. air_hit.spurt.<part>: fuel, a torn white vapour whipping back past the tail (6 to 12 puffs over 1.5 to
+		// 3 s); oil, a thin brown spray (about 1.5 s); coolant, a white glycol puff (about 1.5 s). Each puff leaves the
+		// hole where the hole is at its moment (the aircraft flying on as it was), with the aircraft's speed, and the air
+		// takes that speed off it (drag), so it falls back past the tail. Colours from the trail rows the battle draws
+		// for the same thing afterwards (air_trails.mist, oil, glycol), oil pulled toward its own tint.
+		if (Num("air_hit.spurt.on", 0.0) < 0.5)
+		{
+			return;
+		}
+		const std::string Name = Part ? Part : "";
+		if (Name != "fuel" && Name != "oil" && Name != "coolant")
+		{
+			return; // ("skin" and anything else: nothing)
+		}
+		if (!std::isfinite(At.X + At.Y + At.Z) || !std::isfinite(Carry.X + Carry.Y + Carry.Z) || !std::isfinite(Now))
+		{
+			return;
+		}
+		// (held to most_a_frame sprays a frame: a frame is the calls made at one moment)
+		if (Now != SpurtAt)
+		{
+			SpurtAt = Now;
+			SpurtsNow = 0;
+		}
+		const int Most = static_cast<int>(SafeNum(Num("air_hit.spurt.most_a_frame", 40.0), 0.0, 1000.0, 40.0));
+		if (SpurtsNow >= Most)
+		{
+			return;
+		}
+		++SpurtsNow;
+		const std::string P = "air_hit.spurt." + Name + ".";
+		const std::string Trail = Name == "fuel" ? "air_trails.mist." : Name == "oil" ? "air_trails.oil." : "air_trails.glycol.";
+		Rgb Col = Picture(Trail + "colour", Name == "oil" ? Rgb::FromPicture(84, 86, 90) : Rgb::FromPicture(238, 240, 243));
+		if (Has(P + "tint.2"))
+		{
+			Col = Col.Mix(Picture(P + "tint", Col), SafeNum(Num(P + "tint_share", 0.0), 0.0, 1.0, 0.0));
+		}
+		const Rgb Old = Has(P + "colour_old.2") ? Picture(P + "colour_old", Col) : Col;
+		const bool bShade = Has(Trail + "shadow.2");
+		const Rgb Shadow = Picture(Trail + "shadow", Rgb::FromPicture(78, 90, 116));
+		const double ShadowK = SafeNum(Num(P + "shadow_k", Num(Trail + "shadow_k", 0.0)), 0.0, 2.0, 0.0);
+		const double LeastPx = SafeNum(Num("air_hit.spurt.least_px", 2.5), 0.0, 32.0, 2.5);
+		const double LeastKeep = SafeNum(Num("air_hit.spurt.least_keep", 0.5), 0.0, 1.0, 0.5);
+		// (dice of its own: the place, the moment and the part; never the kit's Seeds)
+		const uint64_t PartSalt = Name == "fuel" ? 0xF0E1ull : Name == "oil" ? 0x011Eull : 0xC001ull;
+		Dice D(PlaceKey(At) * 0xC2B2AE3D27D4EB4Full ^ MomentKey(Now) ^ (0x5B0A7ull + PartSalt));
+		const double PuffsLow = SafeNum(Num(P + "puffs.0", Name == "fuel" ? 6.0 : 3.0), 1.0, 40.0, 4.0);
+		const double PuffsHigh = SafeNum(Num(P + "puffs.1", PuffsLow), PuffsLow, 40.0, PuffsLow);
+		const int Puffs = D.Whole(static_cast<int>(PuffsLow), static_cast<int>(PuffsHigh));
+		const double OverLow = SafeNum(Num(P + "over_s.0", 1.0), 0.0, 10.0, 1.0);
+		const double OverHigh = SafeNum(Num(P + "over_s.1", OverLow), OverLow, 10.0, OverLow);
+		const double Over = D.U(OverLow, OverHigh);
+		const Span Life(Range(P + "life_s", 0.6, 1.0));
+		const Span Wide(Range(P + "r1_m", 1.0, 2.0));
+		const double R0 = SafeNum(Num(P + "r0_m", 0.3), 0.01, 10.0, 0.3);
+		const double Alpha = SafeNum(Num(P + "alpha", 0.6), 0.0, 1.0, 0.6);
+		const double Stretch = SafeNum(Num(P + "stretch", 2.0), 1.0, 8.0, 2.0);
+		const double Drag = SafeNum(Num(P + "drag", 2.0), 0.0, 20.0, 2.0);
+		const double Rough = SafeNum(Num(P + "rough", 0.45), 0.0, 1.0, 0.45);
+		const double Kick = SafeNum(Num(P + "kick_mps", 2.0), 0.0, 30.0, 2.0);
+		const Vec Skin = Normal.Unit(Vec(0.0, 0.0, 1.0));
+		const Vec Way = Carry.Unit(Vec(1.0, 0.0, 0.0));
+		for (int I = 0; I < Puffs; ++I)
+		{
+			// (spread over Over, the first at the strike, each a little early or late of its even place; the spray thins
+			// as the line empties: the last puffs smaller and paler)
+			const double Even = Puffs > 1 ? static_cast<double>(I) / static_cast<double>(Puffs - 1) : 0.0;
+			const double Jitter = D.U(-0.3, 0.3);
+			const double When = Over * std::clamp(Even + (I == 0 ? 0.0 : Jitter / std::max(1, Puffs)), 0.0, 1.0);
+			const double Spent = 1.0 - 0.45 * Even;
+			const double KickA = D.Bell();
+			const double KickB = D.Bell();
+			const double KickC = D.Bell();
+			const double LifeS = Life.Pick(D);
+			const double R1 = Wide.Pick(D);
+			Bit B;
+			B.Born = Now + When;
+			B.From = At + Carry * When + Skin * (0.15 * R0);
+			B.Vel = Carry + Skin * Kick + Vec(KickA, KickB, KickC) * (0.35 * Kick);
+			B.Drag = Drag;
+			B.Windage = 1.0;
+			B.Life = SafeNum(LifeS, 0.05, 10.0, 0.8);
+			B.R0 = R0 * Spent;
+			B.R1 = std::max(B.R0, R1 * Spent);
+			B.Grow = 0.55;
+			B.Along = Way;
+			B.Stretch = Stretch;
+			B.Col = Col;
+			B.Col2 = Old;
+			B.Alpha = Alpha * (0.6 + 0.4 * Spent);
+			B.FadeIn = 0.03;
+			B.Hold = 0.35;
+			B.Heart = 0.75;
+			B.Rim = 0.0;
+			B.Rough = Rough;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			B.LeastPx = LeastPx; // (from 300 m a puff is a few pixels: held to least_px, its opacity to least_keep of it, so it fades and never pops)
+			B.LeastKeep = LeastKeep;
+			if (bShade && ShadowK > 0.0)
+			{
+				B.ShadowCol = Shadow; // (white on a bright sky reads by its shade and its edge, never by more white)
+				B.ShadowK = ShadowK;
+			}
+			Bits.push_back(B);
+		}
 	}
 }

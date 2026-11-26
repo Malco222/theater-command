@@ -517,11 +517,11 @@ void FBattleEffects::AirGunStop(int32 Gun)
 	});
 }
 
-void FBattleEffects::AirHit(double Now, const FVector& At, const FVector& Normal, const FVector& AircraftVelocity, const FString& Kind)
+void FBattleEffects::AirHit(double Now, const FVector& At, const FVector& Normal, const FVector& AircraftVelocity, const FString& Kind, const FString& Part)
 {
 	Do([=, this]()
 	{
-		Core.AirHit(Now, ToFx(At), ToFxWay(Normal), ToFx(AircraftVelocity), Named(Kind).c_str());
+		Core.AirHit(Now, ToFx(At), ToFxWay(Normal), ToFx(AircraftVelocity), Named(Kind).c_str(), Named(Part).c_str());
 	});
 }
 

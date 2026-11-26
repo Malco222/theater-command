@@ -483,8 +483,12 @@ namespace TheaterFx
 		void AirGunStop(int Gun);
 		/** Rounds striking an aircraft at At: Normal the skin's outward way there, Carry that aircraft's velocity (m/s),
 		 * Kind the air_guns row of the gun that hit. A bright spit with sparks, a dark scrap or two torn off and left
-		 * behind in the air, a puff of smoke; all bigger for cannon (the row's strike_m). */
-		void AirHit(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Kind);
+		 * behind in the air, a puff of smoke; all bigger for cannon (the row's strike_m). Part (the owner's item 2,
+		 * 26 November; air_hit.spurt, OFF until its on is 1): what the rounds found there, "fuel", "oil" or "coolant",
+		 * and the spray that leaves the hole after the strike: fuel a torn white vapour whipping back past the tail, oil
+		 * a thin brown spray, coolant a white glycol puff. Empty, "skin", any other word, or the row off: as before, to
+		 * the byte. Its own dice (the place and the moment), never the kit's shared ones. */
+		void AirHit(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Kind, const char* Part = "");
 		/** A trail from a moving point on an aircraft (an engine): TrailStart once, TrailMove every frame with where the
 		 * point is and its velocity, TrailStop when it ends; what is already in the air fades on its own. Id: any
 		 * number that stays the same for that trail. Kind is an air_trails row: "smoke" (thin and grey, thickening and
@@ -1946,5 +1950,15 @@ namespace TheaterFx
 		Vec GoingOwn(const Bit& B, double Age) const;
 		void Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough = 0.0, uint32_t LumpSeed = 0, double Turn = 0.0, const Rgb& Floor = Rgb(), const Rgb& Through = Rgb(), const Vec& Outward = Vec(), const Rgb& Lift = Rgb(), const Vec& TaperB = Vec());
 		int LayBit(int Slot, const Bit& B, double Now, const View& Eye, int Room); // (how many slots it took: 0, 1, or 2 for a twin)
+
+		// ---------------------------------------------------------------------------------------------------------------
+		// The air's dramatic moments (effects-r2, the owner's items 2, 3 and 4 of 26 November). Every part is OFF until its
+		// row's on is 1 (an overlay recipe a launch word lays on: tools/battle-fx/README.md), and none of them throws the
+		// kit's shared dice (Seeds): each piece has dice of its own, from its place, its key or its moment.
+		// (air_hit.spurt: the spray from a hole, after AirHit's own pieces; SpurtAt, SpurtsNow: the frame's moment and how
+		// many sprays it has begun, held to most_a_frame)
+		void AirSpurt(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Part);
+		double SpurtAt = -1.0e18;
+		int SpurtsNow = 0;
 	};
 }

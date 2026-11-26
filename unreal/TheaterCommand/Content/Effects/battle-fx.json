@@ -3610,6 +3610,92 @@
    "puff_lobes": 2,
    "least_px": 5,
    "puff_least_px": 4
+  },
+  "spurt": {
+   "_how": "The owner's item 2 (26 November: 'i like the debris coming off the planes when hit', 'oil streaking across a hit plane's windscreen'): the spray that leaves a hole in the moments after the strike, before any trail starts (AirHit's Part, the battle's Hit Fx Part: fuel, oil or coolant; skin and anything else none). OFF until on is 1: the overlay battle-fx-air-spurt.json the air scene lays with its word turns it on. Each puff leaves the hole where the hole is at its moment, with the aircraft's speed, and drag takes that off it so it falls back past the tail. puffs (how many), over_s (the seconds they are laid over), life_s, r0_m and r1_m (radius at birth and at the end), alpha, stretch (drawn out along the flight), drag (a second), kick_mps (off the skin), rough. Colours from the trail row the battle draws for the same thing afterwards (fuel air_trails.mist, oil air_trails.oil, coolant air_trails.glycol), with their shadow; oil pulled tint_share of the way to tint (engine oil is dark brown, the oil trail's smoke grey). most_a_frame: sprays begun at one moment, at most. least_px, least_keep: from far off a puff is held to least_px across and keeps least_keep of its opacity there, so it blinks and fades, never pops. Its own dice (the place, the moment, the part), never the kit's shared ones.",
+   "on": 0,
+   "most_a_frame": 40,
+   "least_px": 2.5,
+   "least_keep": 0.55,
+   "fuel": {
+    "puffs": [
+     6,
+     12
+    ],
+    "over_s": [
+     1.5,
+     3.0
+    ],
+    "life_s": [
+     0.7,
+     1.1
+    ],
+    "r0_m": 0.35,
+    "r1_m": [
+     1.8,
+     2.8
+    ],
+    "alpha": 0.6,
+    "stretch": 2.6,
+    "drag": 2.2,
+    "kick_mps": 2.5,
+    "rough": 0.55
+   },
+   "oil": {
+    "puffs": [
+     4,
+     6
+    ],
+    "over_s": [
+     0.9,
+     1.2
+    ],
+    "life_s": [
+     0.35,
+     0.55
+    ],
+    "r0_m": 0.12,
+    "r1_m": [
+     0.55,
+     0.9
+    ],
+    "alpha": 0.85,
+    "stretch": 2.2,
+    "drag": 2.6,
+    "kick_mps": 3.0,
+    "rough": 0.5,
+    "tint": [
+     74,
+     56,
+     36
+    ],
+    "tint_share": 0.65,
+    "shadow_k": 0.0
+   },
+   "coolant": {
+    "puffs": [
+     2,
+     3
+    ],
+    "over_s": [
+     0.5,
+     0.8
+    ],
+    "life_s": [
+     0.8,
+     1.0
+    ],
+    "r0_m": 0.3,
+    "r1_m": [
+     1.8,
+     2.4
+    ],
+    "alpha": 0.7,
+    "stretch": 1.7,
+    "drag": 2.0,
+    "kick_mps": 2.0,
+    "rough": 0.45
+   }
   }
  },
  "air_trails": {

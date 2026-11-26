@@ -127,8 +127,11 @@ public:
 	/** Rounds striking an aircraft, on the same clock as AirGun: At the point hit, Normal the skin's outward way there,
 	 * AircraftVelocity that aircraft's velocity (world units a second), Kind the hitting gun's row ("rifle", "hmg",
 	 * "cannon20"). A hot spit with sparks, a scrap or two of skin left tumbling behind, a small dark puff; bigger for
-	 * cannon. */
-	void AirHit(double Now, const FVector& At, const FVector& Normal, const FVector& AircraftVelocity, const FString& Kind);
+	 * cannon. Part (the owner's item 2, 26 November): what the rounds found there, "fuel", "oil" or "coolant" (the
+	 * battle's Hit Fx Part): with the recipe's air_hit.spurt.on, the spray that leaves the hole (fuel a torn white vapour
+	 * whipping back past the tail, oil a thin brown spray, coolant a white glycol puff). Left out, "skin", or the row
+	 * off: as before, to the byte. */
+	void AirHit(double Now, const FVector& At, const FVector& Normal, const FVector& AircraftVelocity, const FString& Kind, const FString& Part = FString());
 	/** A trail from a moving point on an aircraft, such as an engine socket: TrailStart once, TrailMove every frame
 	 * with the point and its velocity (world units a second), TrailStop when it ends; what is in the air fades on
 	 * its own. Id: a number that stays the same for that trail. Kind: "smoke" (thin and grey, thickening and
