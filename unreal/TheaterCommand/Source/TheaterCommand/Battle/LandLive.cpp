@@ -152,8 +152,8 @@ namespace
 		// (The finer B-17, release 2: Brian, 25 November 2026, "why don't we have the new b-17 models in the game?" and "it is
 		// still the old one". The modeller's newer B-17 of 22 November (Content/Models/B17Fine.json: 142,896 triangles close
 		// up, 20,514 far, her own engines, nose-art panel and kill tally) drawn in the air battles in place of the older
-		// one (B17.json, 23,386 and 7,122). Looks only: nothing the rules count reads it. Off until the Mac has timed it (a
-		// 50-bomber raid, AIR-SCENE.md) and the art director has passed it, then this row flips to on in one line;
+		// one (B17.json, 23,386 and 7,122). Looks only: nothing the rules count reads it. Off until the Mac has timed it (the
+		// Bremen raid's 12 B-17s, AIR-SCENE.md item 60; a 50-bomber raid's cost is arithmetic) and the art director has passed it, then this row flips to on in one line;
 		// -TheaterAirB17Fine turns it on for a run, -TheaterAirNoB17Fine off. The air battle reads it once as it starts
 		// (AAirBattle::B17FineRead); the campaign map keeps the older one; it is never sent to the land rules.)
 		{ TEXT("b17Fine"), TEXT("Finer B-17"), TEXT("The B-17s in the air battles are drawn as the newer, finer model: her riveted skin, her own engines, nose-art panel and kill tally. Slower to draw. Off: the older B-17."), TEXT("TheaterAirNoB17Fine"), false, TEXT("TheaterAirB17Fine") },

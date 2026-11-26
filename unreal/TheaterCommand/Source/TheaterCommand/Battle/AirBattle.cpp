@@ -3999,8 +3999,10 @@ void AAirBattle::B17FineRead()
 
 int32 AAirBattle::B17FineNearMost()
 {
-	// (each finer B-17 that once comes near keeps her close-up shape for the battle, some 20 MB a copy: no more than this
-	// many are made, the ridden one always; the rest stay on her far shape however near they come)
+	// (each finer B-17 that once comes near keeps her close-up shape for the battle, some 31 to 37 MB a copy by arithmetic:
+	// no more than this many are made for bombers not ridden; each bomber ridden (the close view's, the timing eye's) gets
+	// hers as well and keeps it, so a battle holds at most this many plus the bombers ridden in it; the rest stay on her
+	// far shape however near they come)
 	static const int32 Most = []()
 	{
 		int32 Asked = 8;
@@ -5611,7 +5613,8 @@ void AAirBattle::Draw(double Real)
 			}
 		}
 		// The near shape within 300 m of the eye (and for the ridden aircraft), the far one past 450 m.
-		const bool bRidden = S.bClose && S.Subject.Plane == P.Key;
+		// (the timing eye's "box" rider, -TheaterAirTimeEye, ridden as the close view rides: TimeEyeKey is -1 otherwise)
+		const bool bRidden = (S.bClose && S.Subject.Plane == P.Key) || (TimeEyeKey >= 0 && P.Key == TimeEyeKey);
 		// (held on the near shape while its bay doors are open: the far shape has no bay, the art director, 06:48Z)
 		// (a finer B-17 past the most close-up copies a battle keeps stays on her far shape, as a copy with the rest; the
 		// ridden one never: B17FineNearRoom, the rule "b17Fine")
@@ -7206,16 +7209,17 @@ void AAirBattle::AimEye(double Real)
 
 void AAirBattle::TimeEyeAim(double Real)
 {
-	// The timing eye ("-TheaterAirTimeEye=box" or "-TheaterAirTimeEye=far": development only, for the Mac's timing run
-	// of the finer B-17, AIR-SCENE.md; no row, no option, nothing changes without the word). Set after AimEye each
-	// frame, so that the flyover, the picture run's rides and a click move the eye for nothing.
-	static const int32 Mode = []()
+	// The timing eye ("-TheaterAirTimeEye=box", "=far" or "=both": development only, for the Mac's timing run of the
+	// finer B-17, AIR-SCENE.md; no row, no option, nothing changes without the word). Set after AimEye each frame, so
+	// that the flyover, the picture run's rides and a click move the eye for nothing. "both": box for its first two
+	// minutes, then far until the battle is over, so that one launch times both.
+	static const int32 Asked = []()
 	{
 		FString Word;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterAirTimeEye="), Word);
-		return Word.Equals(TEXT("box"), ESearchCase::IgnoreCase) ? 1 : Word.Equals(TEXT("far"), ESearchCase::IgnoreCase) ? 2 : 0;
+		return Word.Equals(TEXT("box"), ESearchCase::IgnoreCase) ? 1 : Word.Equals(TEXT("far"), ESearchCase::IgnoreCase) ? 2 : Word.Equals(TEXT("both"), ESearchCase::IgnoreCase) ? 3 : 0;
 	}();
-	if (Mode == 0 || !Eye || !bBegun || !State.IsValid())
+	if (Asked == 0 || !Eye || !bBegun || !State.IsValid())
 	{
 		return;
 	}
@@ -7234,7 +7238,7 @@ void AAirBattle::TimeEyeAim(double Real)
 		{
 			SpeedLog->Set(1, ECVF_SetByCode);
 		}
-		UE_LOG(LogTheater, Display, TEXT("Air battle: time eye %s: held from 2 s on, until the battle is over; a line every 5 s."), Mode == 1 ? TEXT("box") : TEXT("far"));
+		UE_LOG(LogTheater, Display, TEXT("Air battle: time eye %s: held from 2 s on, until the battle is over; a line every 5 s."), Asked == 1 ? TEXT("box") : Asked == 2 ? TEXT("far") : TEXT("both (box to 2 min, then far)"));
 	}
 	// (the battle over: the run quits, as the picture run does)
 	if (S.bOver && !bTimeEyeQuit)
@@ -7246,6 +7250,14 @@ void AAirBattle::TimeEyeAim(double Real)
 	if (Now - TimeEyeFrom < 2.0)
 	{
 		return;
+	}
+	// (this frame's eye: "both" box until two minutes in, then far; its rider let go as it turns far)
+	const int32 Mode = Asked == 3 ? (Now - TimeEyeFrom < 122.0 ? 1 : 2) : Asked;
+	if (Mode == 2 && TimeEyeKey >= 0)
+	{
+		TimeEyeKey = -1;
+		TimeEyeAhead = FVector::ZeroVector;
+		AirParts::TellCut(GetWorld());
 	}
 	const double U = UnitsPerMetre;
 	const std::vector<AirShow::PlaneOut>& Out = S.Show.Planes();
@@ -7331,6 +7343,7 @@ void AAirBattle::TimeEyeAim(double Real)
 		if (bCut)
 		{
 			TimeEyeAhead = FVector::ZeroVector;
+			AirParts::TellCut(GetWorld()); // (a cut to a new rider, as the close view's: AimEye)
 		}
 	}
 	TimeEyeAhead = TimeEyeAhead.IsNearlyZero() ? Ahead.GetSafeNormal() : (TimeEyeAhead + (Ahead.GetSafeNormal() - TimeEyeAhead) * AirParts::Smooth(Real, 0.33)).GetSafeNormal();

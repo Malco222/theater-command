@@ -190,11 +190,13 @@ int main(int Argc, char** Argv)
 
 	// ---- The files.
 	std::printf("The files\n");
-	Check(bOld && OldText.size() == 1561602u && Print(OldText) == 0xa225e548b55800afull, "B17.json the base's bytes (the row off reads them)",
+	// (pins: B17.json and panels.json as they stood at 30899121, when the row was added. A change to either made on purpose
+	// (panels.json baked again, say) fails these two, and is no fault of the row: then set the new size and hash here.)
+	Check(bOld && OldText.size() == 1561602u && Print(OldText) == 0xa225e548b55800afull, "B17.json the base's bytes, as pinned here (the row off reads them; changed on purpose? update the pin)",
 		std::to_string(OldText.size()) + " bytes, " + Hex(Print(OldText)));
 	Check(bFineFile && FineText.size() == 10295280u && Print(FineText) == 0xa7a7f4b8f73a6e13ull, "B17Fine.json the modeller's file as handed over (sha256 5e1f3900...d0d79b)",
 		std::to_string(FineText.size()) + " bytes, " + Hex(Print(FineText)));
-	Check(bPanels && Panels.size() == 186570u && Print(Panels) == 0x24d2774256b94f3full, "panels.json the base's bytes (the row off reads it alone)",
+	Check(bPanels && Panels.size() == 186570u && Print(Panels) == 0x24d2774256b94f3full, "panels.json the base's bytes, as pinned here (the row off reads it alone; changed on purpose? update the pin)",
 		std::to_string(Panels.size()) + " bytes, " + Hex(Print(Panels)));
 	Check(bFinePanels, "panels-fine.json there (the finer B-17's own panel)");
 	Check(!std::filesystem::exists(Models + "/Fine") && !std::filesystem::exists(Models + "/Old/B17.json"), "no other B-17 file the readers could take instead (Models/Fine, Models/Old/B17.json)");
@@ -307,7 +309,9 @@ int main(int Argc, char** Argv)
 			std::to_string(Others) + " others;" + Which);
 	}
 
-	// ---- The Unreal side, from its source (it cannot be built here: the pre-check builds it with the Mac's flags).
+	// ---- The Unreal side, from its source (it cannot be built here: the pre-check builds it with the Mac's flags). These
+	// count lines of text: they show the lines are there, not that the code behaves, and a harmless reformat breaks them
+	// (then mend the text here). The proof for the Unreal side is the Mac's run with -TheaterAirNoB17Fine against the base.
 	std::printf("The air battle's readers, from their source (%s)\n", Source.c_str());
 	std::string Battle, Colours, Art, Rules;
 	const bool bSource = ReadText(Source + "/Battle/AirBattle.cpp", Battle) && ReadText(Source + "/Battle/AirBattleUnitColours.cpp", Colours)
@@ -324,8 +328,10 @@ int main(int Argc, char** Argv)
 		Check(Count(Battle, "B17.json") == 0 && Count(Colours, "B17.json") == 0 && Count(Art, "B17.json") == 0, "nothing in the air battle names B17.json");
 		Check(Count(Battle, "if (!Made.bFine || Made.bNearMade)") == 1 && Count(Battle, "&& (bRidden || B17FineNearRoom(*Lit));") == 1,
 			"the close-up copies' bound passes every aircraft but a finer B-17 at once (row off: none is one), and never the ridden one");
-		Check(Count(Battle, "TEXT(\"TheaterAirTimeEye=\")") == 1 && Count(Battle, "if (Mode == 0 || !Eye || !bBegun || !State.IsValid())") == 1,
-			"the timing eye does nothing without its word (-TheaterAirTimeEye=box or =far)");
+		Check(Count(Battle, "TEXT(\"TheaterAirTimeEye=\")") == 1 && Count(Battle, "if (Asked == 0 || !Eye || !bBegun || !State.IsValid())") == 1,
+			"the timing eye does nothing without its word (-TheaterAirTimeEye=box, =far or =both)");
+		Check(Count(Battle, "|| (TimeEyeKey >= 0 && P.Key == TimeEyeKey);") == 1 && Count(Battle, "TimeEyeKey = TimeEyeGroup = -1;") == 2,
+			"the timing eye's box rider ridden as the close view's (her own close-up shape, counted past the bound), and no rider unless it rides");
 		Check(Count(Art, "panels-fine.json") >= 1 && Count(Art, "if (S.B17FineOn == 1)") == 1, "panels-fine.json read only while the row is on");
 		Check(Count(Rules, "TEXT(\"b17Fine\"), TEXT(\"Finer B-17\")") == 1 && Count(Rules, "RuleKey.Equals(TEXT(\"b17Fine\")") == 1
 				&& Count(Rules, "TEXT(\"TheaterAirNoB17Fine\"), false, TEXT(\"TheaterAirB17Fine\")") == 1,

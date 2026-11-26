@@ -60,7 +60,8 @@ paintings are not read again). Her skin differs from the older file's in three w
   heads, a panel stays within the 15 mm of her skin both tests ask, and faces out of her side as the test asks (its
   facing at least 0.8 across), only below her navigator's windows: the largest found is 0.45 of the older one's
   size each way (0.99 m by 0.61 m), from 6.5 m to 5.51 m forward, its middle 9 degrees below her widest line, 2.1 to
-  13.6 mm off her, on paints 0 and 42. (Placed higher, between the windows and the windscreen, 55 degrees up, it
+  13.6 mm off her at this tool's samples, on paints 0 and 42 there (air_nose_art_test, sampling more finely, finds
+  2.1 to 12.2 mm and paints 0, 42 and 44, all in her list). (Placed higher, between the windows and the windscreen, 55 degrees up, it
   faced 0.71 across, more up than out, and failed that check.) Whether 0.45 reads well enough there is the art
   director's call on the Mac's stills;
 - she has her crew and the rooms they sit in inside her, so a ray from her axis first meets them: her skin is where

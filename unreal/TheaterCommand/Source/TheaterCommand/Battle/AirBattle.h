@@ -992,12 +992,13 @@ private:
 	/** Whether the log has said the most finer B-17 close-up shapes are made, this battle. */
 	bool bB17FineHeldSaid = false;
 	/**
-	 * The timing eye (development only: "-TheaterAirTimeEye=box" or "-TheaterAirTimeEye=far" on the command line; no row,
+	 * The timing eye (development only: "-TheaterAirTimeEye=box", "=far" or "=both" on the command line; no row,
 	 * no option, nothing changes without the word). For the Mac's timing run, which wants no hands: from two seconds
 	 * after the battle begins until it ends, whatever else would move the camera, the eye is held on the largest bomber
 	 * group still up: "box" rides a bomber in its middle from behind and above as the close view rides a bomber (her
 	 * neighbours' close-up shapes filling the picture), "far" stands a kilometre from the group's middle, level with it
-	 * and abeam, looking at it. Every five seconds one line, "Air battle: time eye ...", with the speed log's frames a
+	 * and abeam, looking at it; "both" is box for two minutes, then far. The box's rider counts as ridden for the
+	 * close-up copies' bound (B17FineNearRoom), as the close view's does. Every five seconds one line, "Air battle: time eye ...", with the speed log's frames a
 	 * second and worst frame (TheaterSpeed::LastWindow; the eye turns the speed log on) and the counts of the shapes
 	 * drawn; once the battle is over the run quits, as the picture run does. Set after AimEye, each frame.
 	 */

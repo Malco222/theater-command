@@ -401,7 +401,20 @@ void AAirBattle::DrawNoseArt(const FVector& EyeAt)
 		}
 		const double Away = FVector::Dist(Mesh->GetComponentLocation(), EyeAt) / U;
 		const bool bOnShape = !Made.bTwoShapes || Made.bNear;
-		Strength = FMath::Clamp((NoseArtSizeM * PixelsPerMetreAt1 / FMath::Max(Away, 0.1) - 4.0) / 3.0, 0.0, 1.0);
+		// (the finer B-17's panel is smaller than the older one's, 0.61 m high against 1.35 (panels-fine.json): faded by its
+		// own height, so that it too fades under about 4 px; every other aircraft by NoseArtSizeM as before)
+		double HighM = NoseArtSizeM;
+		FString Kind;
+		FVector Middle = FVector::ZeroVector;
+		double Fit = 1.0;
+		if (Made.bFine && State.IsValid() && ShapeFrameOf(Made.Shape, Kind, Middle, Fit))
+		{
+			if (const AirNoseArt::Panel* Own = PanelOf(*State, TCHAR_TO_UTF8(*Kind)))
+			{
+				HighM = Own->HighM * Fit;
+			}
+		}
+		Strength = FMath::Clamp((HighM * PixelsPerMetreAt1 / FMath::Max(Away, 0.1) - 4.0) / 3.0, 0.0, 1.0);
 		return Mesh->IsVisible() && bOnShape && (Key == Ridden || Away < NoseArtNearM) && Strength > 0.0;
 	};
 	// Made when first shown (at most one painting read a frame: each is a small picture, and twenty near at once would
