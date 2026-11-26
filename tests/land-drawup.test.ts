@@ -349,8 +349,9 @@ describe('a refused placing names the ground that bars the unit', () => {
 
   it('has a whole sentence for each ground, and none that names nothing', () => {
     const src: string = bridgeTs;
-    expect(src).toMatch(/const BARRED = \{ water: 'in the water', bridge: 'on a bridge', marsh: 'in a marsh', rock: 'on bare rock', bunker: 'on a bunker' \} as const;/);
-    expect(src).toContain("`${name} cannot go there: it cannot stand ${on ? BARRED[on] : 'on water or on a bridge'}.`");
+    for (const line of ["water: 'it cannot stand in the water'", "bridge: 'it cannot stand on a bridge'", "marsh: 'it cannot stand in a marsh'", "rock: 'it cannot stand on bare rock'", "bunker: 'a bunker stands on that spot'"]) expect(src).toContain(line);
+    expect(src).toContain("`${name} cannot go there: ${on ? BARRED[on] : 'it cannot stand in the water or on a bridge'}.`");
     expect(src).not.toContain('ground like that');
+    expect(src).not.toContain('on a bunker');
   });
 });

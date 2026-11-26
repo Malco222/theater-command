@@ -74,8 +74,11 @@ function need(): LiveBattle {
 const DUG = 'It is dug in where it stands.';
 const DRAWN = { line: 'in a line', two: 'in two lines', wedge: 'in a wedge', column: 'in a column' } as const;
 const COUNTED = ['None', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'];
-/** The grounds that bar a unit from standing on them, as the sentence names each (the UI director, 26 November 2026 05:45Z). */
-const BARRED = { water: 'in the water', bridge: 'on a bridge', marsh: 'in a marsh', rock: 'on bare rock', bunker: 'on a bunker' } as const;
+/** The grounds that bar a unit from standing on them, as the sentence names each after the unit's name (the UI director, 26 November 2026 05:52Z). */
+const BARRED = {
+  water: 'it cannot stand in the water', bridge: 'it cannot stand on a bridge', marsh: 'it cannot stand in a marsh', rock: 'it cannot stand on bare rock',
+  bunker: 'a bunker stands on that spot',
+} as const;
 /** A unit's name at the head of a sentence: one that opens with its number takes "The" ("The 2nd Battalion"). */
 const theName = (who: string): string => (/^\d/.test(who) ? `The ${who}` : who);
 /**
@@ -91,7 +94,7 @@ function cannotGo(who: string, why: string, on?: keyof typeof BARRED | null): st
   if (why === 'Another block stands there.') return `${name} cannot go there: another unit already stands there.`;
   if (why === 'Off the field.') return `${name} cannot go there: it would stand off the field.`;
   // (the ground that bars it, by name: LiveBattle.barredBy; not known, the two that bar every unit)
-  if (why === 'Not on water, a bridge or ground it cannot stand on.') return `${name} cannot go there: it cannot stand ${on ? BARRED[on] : 'on water or on a bridge'}.`;
+  if (why === 'Not on water, a bridge or ground it cannot stand on.') return `${name} cannot go there: ${on ? BARRED[on] : 'it cannot stand in the water or on a bridge'}.`;
   return `${name} cannot go there. ${why}`;
 }
 
