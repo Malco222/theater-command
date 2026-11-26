@@ -271,6 +271,9 @@ private:
 		bool bFarShown = false;
 		int32 FarStill = 0;
 		TArray<int32> FarEngine;
+		/** Its bomber markings drawn the frame before, a bit a mark mesh in AirLetters::MeshesOf's order (the row
+		 * "flyBomberMarks", AddMarks: each held a little past the size it first shows at, so that it does not flicker). */
+		uint8 MarksShown = 0;
 	};
 	TMap<int32, FPlaneMade> PlaneMade;
 	/**
@@ -614,6 +617,31 @@ private:
 	/** The airscrews' see-through sort against the clouds, as the air fight's effects (AirFxMesh): 0 seen from over the
 	 * clouds' base, -30 from under it, behind every cloud between. */
 	int32 ScrewSort() const { return SkyOrder == 2 ? -30 : 0; }
+	/**
+	 * The Battle rules card's "Bomber markings" (rule "flyBomberMarks", -TheaterAirBomberMarks; Brian, 25 November 2026,
+	 * of the approved studio pictures: "Build it into the game"; AirBattleLetters.cpp, Battle/AirLetters): every finer
+	 * B-17 wears her group's white triangle and its letter on her fin and her upper starboard wing, ridden, near and far.
+	 * Read once a battle, when its shapes are first made ready (WarmShapes), into its state's LettersOn: on only with the
+	 * finer B-17 flying and the markings' file read (Content/Data/AirMarks/b17-fine-marks.json). Off: nothing is read,
+	 * made, drawn or said.
+	 */
+	bool LettersOnNow();
+	/** A mark mesh ("unit.C") at a level, laid in a shape's frame (its Middle and Fit, as her nose art's panel is), on
+	 * PlaneInk: made the first time, null kept where none can be made. */
+	UStaticMesh* MarkStill(const FString& Mesh, bool bNear, const FString& Shape);
+	/** Her mark meshes placed this frame with her own place and her place the frame before, each while it is big enough
+	 * on the screen (AirLetters::Shown) or she is ridden: the near level on her near shape, the far one otherwise. */
+	void AddMarks(const AirShow::PlaneOut& P, FPlaneMade& Made, const FTransform& Now, const FTransform& Was, double AwayM, bool bNearLevel, bool bRidden, double PixelsPerMetreAt1);
+	/** The mark meshes of the raid's finer B-17s made before the flyover (WarmShapes), near and far, on her shape. */
+	void WarmMarks();
+	/** How many pixels a metre is high one metre away through a lens (degrees across), on the game's screen, as her nose
+	 * art reckons it (AirBattleNoseArt.cpp). */
+	double MarksPixelsPerMetre(double Lens) const;
+	/** The mark meshes, by "<mesh>|<level>|<file>|<middle>|<fit>" (null kept where none can be made). */
+	UPROPERTY()
+	TMap<FString, TObjectPtr<UStaticMesh>> MarkStills;
+	/** The fewest pixels a mark is drawn at: the triangle, and the letters and codes (-TheaterAirMarksMinPx=2.7,4.0). */
+	double MarksMinPx[2] = { 2.7, 4.0 };
 	/** Every disc and haze sorted again as SkyOrder turns (row on). */
 	void ResortScrews();
 	/** An aircraft past its near shape on its own mesh, the row on (copies off, or an engine stopped and feathered): each

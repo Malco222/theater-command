@@ -5610,6 +5610,58 @@ UStaticMesh* AAirBattle::PlaneStill(const FString& Shape, bool bLight)
 	return Made;
 }
 
+UStaticMesh* AAirBattle::MarkStill(const FString& Mesh, bool bNear, const FString& Shape)
+{
+	// Bomber markings (the row "flyBomberMarks", AirBattleLetters.cpp): a mark mesh's parts laid in her shape's frame, kept
+	// by her file and that frame (every shape of the finer B-17, earned colours or turning airscrews, shares it), so that one
+	// mesh serves them all. Here beside PlaneStill, whose AirParts::StillOf it builds with.
+	FString Kind;
+	FVector Middle = FVector::ZeroVector;
+	double Fit = 1.0;
+	if (!State.IsValid() || State->LettersOn != 1 || !ShapeFrameOf(Shape, Kind, Middle, Fit))
+	{
+		return nullptr;
+	}
+	const FString Key = FString::Printf(TEXT("%s|%s|%s|%.1f,%.1f,%.1f|%.4f"), *Mesh, bNear ? TEXT("near") : TEXT("far"), *Kind, Middle.X, Middle.Y, Middle.Z, Fit);
+	if (const TObjectPtr<UStaticMesh>* Have = MarkStills.Find(Key))
+	{
+		return Have->Get();
+	}
+	// (each point as her own points were brought in from her file, as her nose art's panel is, AirBattleNoseArt.cpp: x and y
+	// turned half round, in engine units about her middle; each in its ink, painted metal as her star is, alpha 128)
+	const AirLetters::Sheet& Sheet = State->LettersSheet;
+	const double U = UnitsPerMetre;
+	AirParts::FShape Laid;
+	for (const std::string& Name : AirLetters::PartsOf(std::string(TCHAR_TO_UTF8(*Mesh))))
+	{
+		const AirLetters::Level* Level = Sheet.LevelOf(Name, bNear);
+		if (!Level)
+		{
+			continue;
+		}
+		const uint32 Rgb = Sheet.InkOf(Level->Ink);
+		const FColor Ink(static_cast<uint8>((Rgb >> 16) & 0xFFu), static_cast<uint8>((Rgb >> 8) & 0xFFu), static_cast<uint8>(Rgb & 0xFFu), 128);
+		const int32 First = Laid.Points.Num();
+		const int32 Count = static_cast<int32>(Level->Points.size() / 3);
+		for (int32 I = 0; I < Count; ++I)
+		{
+			const double* At = &Level->Points[static_cast<size_t>(3 * I)];
+			const double* Out = &Level->Facings[static_cast<size_t>(3 * I)];
+			Laid.Points.Add((FVector(-At[0], -At[1], At[2]) * U - Middle) * Fit);
+			Laid.Normals.Add(FVector(-Out[0], -Out[1], Out[2]).GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector));
+			Laid.Colors.Add(Ink);
+		}
+		for (const int Corner : Level->Triangles)
+		{
+			Laid.Triangles.Add(First + Corner);
+		}
+	}
+	UStaticMesh* Made = AirParts::StillOf(this, Laid, PlaneInk);
+	// (null kept too: not tried again)
+	MarkStills.Add(Key, Made);
+	return Made;
+}
+
 AAirBattle::FPlaneCopies* AAirBattle::CopiesFor(const FString& Key, bool bShadow, UStaticMesh* Mesh, UMaterialInterface* Ink)
 {
 	if (FPlaneCopies* Have = PlaneCopies.Find(Key); Have && Have->Copies.IsValid())
@@ -5861,6 +5913,8 @@ void AAirBattle::WarmShapes()
 		}
 		Ready(Model, Nat, bFighter, 12.0, false);
 	}
+	// (bomber markings, the row "flyBomberMarks": the mark meshes the raid's finer B-17s wear made here too, not in flight)
+	if (LettersOnNow() && State->LettersOn == 1) WarmMarks();
 	UE_LOG(LogTheater, Display, TEXT("Air battle: the raid's %d aircraft shapes made ready under the opening's black (%d near and far shapes new this run), with their copies' meshes, in %.0f ms."),
 		Done.Num(), AirParts::Shapes().Num() - Before, 1000.0 * (FPlatformTime::Seconds() - Began));
 }
@@ -5955,6 +6009,10 @@ void AAirBattle::Draw(double Real)
 	}();
 	const double Lens = Eye && Eye->GetCameraComponent() ? FMath::Clamp(static_cast<double>(Eye->GetCameraComponent()->FieldOfView), 5.0, 120.0) : 55.0;
 	const double Enlarged = FMath::Tan(FMath::DegreesToRadians(55.0 * 0.5)) / FMath::Tan(FMath::DegreesToRadians(Lens * 0.5));
+	// (bomber markings, the row "flyBomberMarks", AirBattleLetters.cpp: read once a battle; the book takes this frame's aircraft
+	// before any is drawn, so none is bare for a frame; off, nothing more is read or drawn)
+	const double MarksPpm = LettersOnNow() ? MarksPixelsPerMetre(Lens) : 0.0;
+	if (S.LettersOn == 1) S.Letters.Take(S.Show.Planes());
 	CopiesDrawn = 0;
 	TSet<int32> Seen;
 	for (const AirShow::PlaneOut& P : S.Show.Planes())
@@ -6034,6 +6092,7 @@ void AAirBattle::Draw(double Real)
 				Group->Keys.Add(P.Key);
 				Group->At.Add(Now);
 				Group->Before.Add(Lit->bWas ? Lit->Was : Now);
+				if (S.LettersOn == 1 && Lit->bFine && !bLight) AddMarks(P, *Lit, Now, Lit->bWas ? Lit->Was : Now, Away, false, bRidden, MarksPpm);
 				Lit->Was = Now;
 				Lit->bWas = true;
 				++CopiesDrawn;
@@ -6046,6 +6105,8 @@ void AAirBattle::Draw(double Real)
 		Mesh->SetVisibility(true);
 		if (Lit)
 		{
+			// (bomber markings, the row "flyBomberMarks": hers placed with her, before her place a frame before is written over)
+			if (S.LettersOn == 1 && Lit->bFine) AddMarks(P, *Lit, Now, Lit->bWas ? Lit->Was : Now, Away, bNearShape, bRidden, MarksPpm);
 			Lit->bCopy = false;
 			Lit->bLight = false;
 			Lit->Was = Now;

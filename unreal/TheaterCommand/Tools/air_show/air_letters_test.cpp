@@ -408,6 +408,28 @@ int main(int Argc, char** Argv)
 		const bool bW = Wing && ReadsRight(*Wing, 1, 1.0, 0, 2, 1.0, D3);
 		Check(bS && bP && bW, bNear ? "near: the letter F reads the right way round on both faces of her fin and on her wing from above" : "far: the letter F reads the right way round on both faces of her fin and on her wing from above",
 			D1 + "; " + D2 + "; " + D3);
+		if (Sheet.Bundle >= 2)
+		{
+			// (her own letter on her fin and side, both faces, and her squadron's codes, each on its own side)
+			std::string Said;
+			bool bAll = true;
+			const char* Faces[][2] = { { "letter.fin.F", "both" }, { "letter.side.F", "both" }, { "code.port.1.F", "port" }, { "code.port.2.F", "port" },
+				{ "code.starboard.1.F", "starboard" }, { "code.starboard.2.F", "starboard" } };
+			for (const auto& Face : Faces)
+			{
+				const AirLetters::Level* L = Sheet.LevelOf(Face[0], bNear);
+				std::string D;
+				const bool bStarboard = std::strcmp(Face[1], "port") != 0;
+				const bool bPort = std::strcmp(Face[1], "starboard") != 0;
+				const bool bOk = L && (!bStarboard || ReadsRight(*L, 0, 1.0, 2, 1, 1.0, D)) && (!bPort || ReadsRight(*L, 0, -1.0, 2, 1, -1.0, D));
+				if (!bOk)
+				{
+					bAll = false;
+					Said += std::string(Face[0]) + " " + D + "; ";
+				}
+			}
+			Check(bAll, bNear ? "near: the letter F reads the right way round as her own letter and in her codes, each side" : "far: the letter F reads the right way round as her own letter and in her codes, each side", Said);
+		}
 		const AirLetters::Level* Tri = Sheet.LevelOf("wing.T", bNear);
 		if (Tri)
 		{
@@ -640,6 +662,52 @@ int main(int Argc, char** Argv)
 		std::string Lower = Src_;
 		std::transform(Lower.begin(), Lower.end(), Lower.begin(), [](unsigned char C) { return static_cast<char>(std::tolower(C)); });
 		Check(bHave && Lower.find("month") == std::string::npos && Lower.find("year") == std::string::npos, "no month or year in it", File);
+	}
+
+	// The Unreal side from its source. These count lines of text: they show the guards are there, not how they behave,
+	// and a harmless reformat breaks them (then mend the text here). The proof is the Mac's run with the row off against
+	// the base: the same log, the same pictures.
+	{
+		auto Count = [](const std::string& In, const std::string& What)
+		{
+			int N = 0;
+			for (size_t At = In.find(What); At != std::string::npos; At = In.find(What, At + What.size())) ++N;
+			return N;
+		};
+		std::string Battle, Rules, State, Scene, Book;
+		const bool bSource = ReadText(Src + "/Battle/AirBattle.cpp", Battle) && ReadText(Src + "/Battle/LandLive.cpp", Rules)
+			&& ReadText(Src + "/Battle/AirBattleState.h", State) && ReadText(Src + "/Battle/AirBattleLetters.cpp", Scene)
+			&& ReadText(Src + "/Battle/AirLetters.cpp", Book);
+		Check(bSource, "the source read");
+		if (bSource)
+		{
+			Check(Count(Rules, "{ TEXT(\"flyBomberMarks\"), TEXT(\"Bomber markings\")") == 1 && Count(Rules, "TEXT(\"TheaterAirNoBomberMarks\"), false, TEXT(\"TheaterAirBomberMarks\") }") == 1,
+				"the row on the card, off unless asked (-TheaterAirBomberMarks), its key beginning \"fly\"");
+			Check(Count(Scene, "FLandLive::RuleNow(TEXT(\"flyBomberMarks\"))") == 1 && Count(Battle, "flyBomberMarks\"))") == 0 && Count(State, "int LettersOn = -1;") == 1,
+				"read once a battle, in AirBattleLetters.cpp alone, into the battle's own state");
+			Check(Count(Scene, "S.LettersOn = S.B17FineOn == 1 && FLandLive::RuleNow(") == 1, "read only while the finer B-17 flies");
+			// (every line of AirBattle.cpp that places, takes or makes a mark guarded by the row)
+			int Lines = 0, Guarded = 0;
+			size_t From = 0;
+			while (From < Battle.size())
+			{
+				const size_t End = std::min(Battle.find('\n', From), Battle.size());
+				const std::string Line_ = Battle.substr(From, End - From);
+				if (Line_.find("AddMarks(") != std::string::npos || Line_.find("S.Letters.") != std::string::npos || Line_.find("WarmMarks()") != std::string::npos)
+				{
+					++Lines;
+					Guarded += Line_.find("LettersOn == 1") != std::string::npos ? 1 : 0;
+				}
+				From = End + 1;
+			}
+			std::snprintf(Line, sizeof Line, "%d of %d lines", Guarded, Lines);
+			Check(Lines == 4 && Guarded == Lines, "in AirBattle.cpp every mark placed, taken or made on a line guarded by the row", Line);
+			Check(Count(Battle, "const double MarksPpm = LettersOnNow() ? MarksPixelsPerMetre(Lens) : 0.0;") == 1
+					&& Count(Battle, "if (!State.IsValid() || State->LettersOn != 1 || !ShapeFrameOf(Shape, Kind, Middle, Fit))") == 1,
+				"the frame's pixels reckoned and a mark mesh made only with the row on");
+			Check(Count(Book, "PlaneMade") == 0 && Count(Book, "Random") == 0 && Count(Book, "Seed") == 0,
+				"the book never reads the scene's aircraft or a random draw");
+		}
 	}
 
 	if (Bad == 0) std::printf("air letters: all good\n");
