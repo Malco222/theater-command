@@ -328,7 +328,8 @@ const r3 = (x: number): number => Math.round(x * 1000) / 1000;
 /** One air unit as the bridge hands it to the 3D game (battle-bridge.ts unitOut, for an air group). */
 function unitOut(u: AirUnit): Record<string, unknown> {
   const loop = u.act === 'idle' || u.act === 'down' ? '' : SKY.cues.loops[u.air];
-  const extra = { ...(u.extra ?? {}), n: u.n, n0: u.n0, band: u.band, alt: Math.round(u.alt), job: u.job.do, per: u.per };
+  // (corps: the campaign group, as the bridge's unitOut sends it, so a recording's units name their group too.)
+  const extra = { ...(u.extra ?? {}), n: u.n, n0: u.n0, band: u.band, alt: Math.round(u.alt), job: u.job.do, per: u.per, corps: u.corps };
   return {
     id: u.id, side: u.side, kind: u.kind, name: u.name, x: r1(u.x), y: r1(u.y), face: r3(u.face), str: r3(u.str), mor: r3(u.mor), state: u.state,
     figures0: u.figures0, figures: u.figures, w: u.w, d: u.d, act: u.act, speed: r1(u.speed), engaged: u.engaged ?? -1, cover: u.cover ?? '', loop, order: null, extra,
