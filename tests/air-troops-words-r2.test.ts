@@ -789,3 +789,49 @@ describe('one form for both, the named one (the UI director, 26 Nov 05:17Z, roun
     }
   });
 });
+
+// The UI director, 26 November 2026 05:17Z, round eight, 3: "Right. The raider's card leaves the result line out only while
+// the lines above it already say the raid did no harm: every group that could have done harm has a line saying it did
+// none, as here. If any other group or any bombs did harm, the result line stays. Every other reader keeps it (h)." As
+// built; here both halves on one raid (the Saar at the edge, settled: 532 German fighters with Groupement de Chasse 1 at
+// Namur, 646 with all three at Lorraine), now with a group named as not gone down.
+describe('the result line left out only where the lines above already say no harm (the UI director, 26 Nov 05:17Z, round eight, 3)', () => {
+  function edge(bombers: boolean, namur: boolean, n = 648) {
+    const c = saar(0, 'three');
+    const d = c.g.airFleets.find((f) => f.id === 3)!;
+    d.ftr = n; d.est.ftr = Math.max(d.est.ftr, n);
+    if (namur) c.g.airFleets.find((f) => f.id === GC1)!.base = c.g.regions.find((r) => r.name === 'Namur')!.id;
+    return { ...c, ids: bombers ? c.ids : c.ids.filter((id) => id !== BOMBERS) };
+  }
+  it('left out: no bombers, every group that went down with too little fight left, one more that did not go down', () => {
+    on();
+    const c = edge(false, true, 532);
+    const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+    expect(r.strafeLittle).toEqual({ names: names([GC2, GC3]), alone: true });
+    expect(r.strafeStayed).toEqual(names([GC1]));
+    expect(r.result).toBe(HARM_LITTLE);
+    expect(resultFor(r, 'FRA')).toBe('');
+    expect(strafedThenResult(r, 'FRA')).toBe(`Groupement de Chasse 2 and Groupement de Chasse 3 ${LITTLE} Groupement de Chasse 1 ${STRAFE_STAYED}`);
+    // Every other reader keeps it: the defender, and the raid list the 3D note reads.
+    expect(resultFor(r, 'GER')).toBe(HARM_LITTLE);
+    expect(strafedThenResult(r, 'GER')).toBe(HARM_LITTLE);
+  });
+  it('kept: the bombs beside them', () => {
+    on();
+    const c = edge(true, true, 532);
+    const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+    expect(r.strafeLittle?.alone).toBeUndefined();
+    expect(r.strafeLittle?.names.length).toBeGreaterThan(0);
+    expect(resultFor(r, 'FRA')).toBe(r.result);
+    expect(strafedThenResult(r, 'FRA').endsWith(` ${r.result}`)).toBe(true);
+  });
+  it('kept: another group that did harm beside them', () => {
+    on();
+    const c = edge(false, false, 646);
+    const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+    expect(r.strafeLittle).toEqual({ names: names([GC1, GC2]) });
+    expect(r.strafed).toContain(NAME[GC3]);
+    expect(resultFor(r, 'FRA')).toBe(r.result);
+    expect(strafedThenResult(r, 'FRA')).toBe(`Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 and Groupement de Chasse 2 ${LITTLE} ${r.result}`);
+  });
+});
