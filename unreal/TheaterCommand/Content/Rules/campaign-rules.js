@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of eb9cc21f9 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of fc378e626 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -1131,6 +1131,10 @@
   var patrolSize = (nat) => LAND.patrol.size[nat] ?? LAND.patrol.size._;
   var gunsOf = (u) => u.team ? LAND.teams[u.team] : LAND.guns;
   var smokeMeans = (nat) => LAND.smoke.means[LAND.smoke.kin[nat] ?? nat] ?? null;
+  var sniperShare = (nat) => {
+    const S3 = LAND.snipers;
+    return S3.share[S3.kin[nat] ?? nat] ?? S3.share._;
+  };
   var bearerShare = (nat) => LAND.bearers.share[nat] ?? LAND.bearers.share._;
   var killedShare = (nat) => LAND.bearers.killed[nat] ?? LAND.bearers.killed._;
 
@@ -75485,6 +75489,55 @@
     return { antiTank: [T.antiTank, T.tankDestroyers, T.handHeld].filter(has).length, machineGuns: has(T.support), mortars: has(T.support), snipers: true };
   }
 
+  // src/campaign/snipercard.ts
+  var sniperCardOn = (g2) => g2.flags.snipers === 1;
+  var SNIPER_CARD = {
+    /**
+     * (a) A pair's worth of the foot it was taken from, after the lines meet (G: the field's tally of harm struck after
+     * contact over power, a pair's over its side's other blocks'; 1,344 battles, seven grounds, eight odds, 26 Nov).
+     */
+    worth: { att: 0.07, def: 0.1 },
+    /**
+     * (b) G stand-ins for the pin, by the side pinned (the field's trace of the same 1,344 battles, 26 Nov 02:48Z): the
+     * share of that side's foot power the other's pairs pin at some time in a fight (att 0.735, def 0.178); the mean bite
+     * on what they pin, read off each pinned block's pace as the field set it, 1 - pin.pace x b (att 0.060, def 0.066:
+     * LAND.snipers.bite's own reckoning, pinned by a test on the fields as laid); and the mean seconds of a fight after
+     * the lines meet (170.5). On the player's practice fields and towns (P, 384 battles) the same reads are att 0.816,
+     * def 0.166; 0.061, 0.064; 190.8 s.
+     */
+    reached: { att: 0.74, def: 0.18 },
+    bite: { att: 0.06, def: 0.066 },
+    fight: 171
+  };
+  function sideOf5(cs, guard = 0) {
+    const S3 = LAND.snipers;
+    let all = guard, foot = 0, pairs2 = 0;
+    for (const [kind, w, nat] of cs) {
+      if (!(w > 0)) continue;
+      all += w;
+      if (S3.foot.includes(kind)) {
+        foot += w;
+        pairs2 += w * sniperShare(nat);
+      }
+    }
+    return all > 0 ? { foot: foot / all, pairs: pairs2 / all } : { foot: 0, pairs: 0 };
+  }
+  function sniperCard(i) {
+    const A = sideOf5(i.att), D2 = sideOf5(i.def, i.guard ?? 0);
+    if (A.pairs <= 0 && D2.pairs <= 0) return null;
+    const C4 = SNIPER_CARD, part = Math.min(1, LAND.pin.most / Math.max(1e-9, C4.fight)), pace2 = LAND.snipers.pin.pace;
+    const pin = (who, own, theirs) => theirs.pairs > 0 ? own.foot * C4.reached[who] * pace2 * C4.bite[who] * part : 0;
+    const pinned = { att: pin("att", A, D2), def: pin("def", D2, A) };
+    const worthA = 1 - A.pairs * (1 - C4.worth.att), worthD = 1 - D2.pairs * (1 - C4.worth.def);
+    return { att: worthA * (1 - pinned.att), def: worthD * (1 - pinned.def), foot: { att: A.foot, def: D2.foot }, pairs: { att: A.pairs, def: D2.pairs }, pinned };
+  }
+  function sniperCardLine(f) {
+    const a = Math.round((1 - f.att) * 100), d = Math.round((1 - f.def) * 100);
+    if (!a && !d) return null;
+    const fx = [a ? `attack down ${a}%` : "", d ? `defence down ${d}%` : ""].filter(Boolean).join(", ");
+    return { label: "Snipers", value: "Sniper pairs pin men on the move and pick off their leaders", effect: `${fx[0].toUpperCase()}${fx.slice(1)}` };
+  }
+
   // data/campaign/desert.json
   var desert_default = {
     _about: "Campaigning in the Western Desert. There is one road, no water and nothing to live on, so an army is only as strong as the port behind it. In every region of desert a corps' supply line is counted from the nearest working base: a depot, or a port its ships can still reach. 'ports' gives each overseas port's capacity as a head start on that count (0 is a great harbour, a small one starts as if it were already 'port' regions away). Every region of desert on the way adds 'step'. 'bands' turn the length of the line into attack strength: [longest line, value]. 'lineDefence' is how much of that loss also applies in defence. Replacements and rest reach a corps only as well as its line allows. 'open' is what foot infantry is worth in defence in open desert against an attack that includes tanks or lorried troops, unless it stands in prepared works: there are no flanks to anchor on and no way to march clear. 'route' is the convoy route that feeds an army through those ports: for every tenth of its cargo sunk, the line of the nations it feeds grows by 'perTenth'. 'stores' is how many months a fortified port overseas goes on feeding its garrison after the sea behind it is closed. 'retreat' multiplies the losses of foot troops driven out of open desert by a mobile enemy: [in a close win, in a decisive one]. 'replace' is the share of the usual monthly replacements that reaches a corps overseas, since every man and tank has to come by sea first. 'works' are field works by history's calendar: [month, place, level, who must hold it, the news]: in that month the holder digs the place in to that level or strips it down to it. 'drag' is the extra movement cost of pushing on into desert that is the enemy's, or was until this month, by the length the supply line would then have: [longest line, extra cost]. 'digLate' is how many months late fieldworks come in open desert with no fort (the grand campaign, ruling 165): there is rock under a thin layer of sand, so the works are half after two whole months, three quarters after three and finished after four. Where the map has a fort (Tobruk, El Alamein) the works come at the usual pace.",
@@ -76463,8 +76516,8 @@
     return atWar(g2, c.nat, r.ctrl) || r.units.some((u) => !u.dead && atWar(g2, u.nat, c.nat));
   };
   var worksBy = (r) => r.fort?.by ?? r.owner;
-  var worksFor = (g2, r, nat) => !!r.fort && (sideOf5(g2, nat, worksBy(r)) || !!r.fort.held && sideOf5(g2, nat, r.fort.held));
-  var sideOf5 = (g2, nat, of2) => nat === of2 || allied(g2, nat, of2);
+  var worksFor = (g2, r, nat) => !!r.fort && (sideOf6(g2, nat, worksBy(r)) || !!r.fort.held && sideOf6(g2, nat, r.fort.held));
+  var sideOf6 = (g2, nat, of2) => nat === of2 || allied(g2, nat, of2);
   function worksMonth(g2) {
     for (const r of g2.regions) {
       const key8 = `wkh:${r.id}`;
@@ -77593,6 +77646,15 @@
       A *= teamFx.att;
       D2 = Math.max(D2 * teamFx.def, 0.01);
     }
+    const snpFx = sniperCardOn(g2) && land2 && !town && !opts.sally && defenders.length > 0 ? sniperCard({
+      att: attackers2.filter((c) => !(wide3 && (barred(g2, c, target) || noCrossing(g2, c.kind, c.reg, target.id)))).map((c) => [c.kind, corpsBase(g2, c) * KIND[c.kind].atk, c.nat]),
+      def: defenders.map((d) => [d.kind, corpsBase(g2, d) * KIND[d.kind].def * (1 + 0.25 * Math.min(1, worksOf(d))), d.nat]),
+      guard: guarded2 > 0 ? guardPower(g2, target) * 1.25 : 0
+    }) : null;
+    if (snpFx) {
+      A *= snpFx.att;
+      D2 = Math.max(D2 * snpFx.def, 0.01);
+    }
     const sum3 = (cs) => cs.reduce((s, c) => s + men(c), 0).toLocaleString("en-US");
     if (town) {
       const broken = breachOf(g2, target), place3 = townName(target);
@@ -77712,6 +77774,8 @@
     });
     const teamLine = teamFx ? teamFireLine(teamFx) : null;
     if (teamLine) lines2.push(teamLine);
+    const snpLine = snpFx ? sniperCardLine(snpFx) : null;
+    if (snpLine) lines2.push(snpLine);
     if (dugIn && !wide3) lines2.push({ label: "Dug in", value: dugIn === defenders.length ? "The defenders have had a month to dig in" : `${dugIn} of the ${defenders.length} defending corps have had a month to dig in`, effect: `Troops in fieldworks defend ${Math.round((DUG_IN - 1) * 100)}% stronger` });
     const works2 = wide3 && !town && dugD > 0 ? worksD / dugD : 0;
     const weight6 = wide3 && !town ? Math.min(1, A / D2 / DEFENCE.wear.fullAt) : 1;
@@ -77909,7 +77973,7 @@
     const overrun2 = gunsRule(g2) && !town && !guarded2 && defenders.some((c) => c.kind === "art" || isTeam(c)) && defenders.every((c) => c.kind === "art" || c.kind === "eng" || isTeam(c));
     if (overrun2) lines2.push(GUNS_OVERRUN);
     if (overrun2) dice2 = today;
-    return { A, D: D2, odds: overrun2 ? Math.max(A / D2, OVERRUN_ODDS / dice2[0]) : A / D2, lines: lines2, defenders, dice: dice2, ...dice2 !== today ? { luck: today } : {}, prepared, works: works2, wear: wear2, weight: weight6, tired, faced, ...overrun2 ? { overrun: overrun2 } : {}, ...guarded2 > 0 ? { guard: guarded2 } : {}, ...close3 ? { air: close3 } : {}, ...teamFx ? { teamFire: teamFx } : {} };
+    return { A, D: D2, odds: overrun2 ? Math.max(A / D2, OVERRUN_ODDS / dice2[0]) : A / D2, lines: lines2, defenders, dice: dice2, ...dice2 !== today ? { luck: today } : {}, prepared, works: works2, wear: wear2, weight: weight6, tired, faced, ...overrun2 ? { overrun: overrun2 } : {}, ...guarded2 > 0 ? { guard: guarded2 } : {}, ...close3 ? { air: close3 } : {}, ...teamFx ? { teamFire: teamFx } : {}, ...snpFx ? { snipers: snpFx } : {} };
   }
   function reportUnit(c) {
     return { name: c.name, nat: c.nat, kind: c.kind, divs: c.divs, men: men(c), lost: 0, fate: "" };
@@ -86741,13 +86805,13 @@
   var finishRules = (g2) => g2.flags.open === 1 && !g2.flags.dom && !!LIB.finish;
   var noticeKey = (who, on2) => `fin:${who}:${on2}`;
   var dueOf = (g2, who, on2, given3) => Math.max(given3 + LIB.finish.notice, owedNotBefore(g2, who, on2));
-  var sideOf6 = (g2, id) => {
+  var sideOf7 = (g2, id) => {
     const b = g2.nations[id] ? bloc(g2.nations[id]) : null;
     return b === "allies" || b === "axis" ? b : null;
   };
   function owesWar(g2, who, on2) {
     const G5 = g2.nations[who], E = g2.nations[on2];
-    if (!G5?.alive || !E?.alive || G5.dormant || E.dormant || who === on2 || !sideOf6(g2, who) || allied(g2, who, on2) || atWar(g2, who, on2)) return false;
+    if (!G5?.alive || !E?.alive || G5.dormant || E.dormant || who === on2 || !sideOf7(g2, who) || allied(g2, who, on2) || atWar(g2, who, on2)) return false;
     return Object.values(g2.nations).some((A) => A.alive && A.id !== who && allied(g2, A.id, who) && A.atWar.includes(on2));
   }
   function warNotices(g2) {
@@ -86769,7 +86833,7 @@
       const X = g2.nations[x];
       if (!X || X.alive || X.fellOn?.turn !== g2.turn) continue;
       for (const N of Object.values(g2.nations)) {
-        if (!N.alive || !N.freedOn || N.id === g2.human || !sideOf6(g2, N.id) || DIPLOMACY.leaders[sideOf6(g2, N.id) === "allies" ? "axis" : "allies"] !== x) continue;
+        if (!N.alive || !N.freedOn || N.id === g2.human || !sideOf7(g2, N.id) || DIPLOMACY.leaders[sideOf7(g2, N.id) === "allies" ? "axis" : "allies"] !== x) continue;
         const on2 = rejoinWars(g2, N.id, N.freedOn.by);
         if (!on2.length) continue;
         const names = on2.map((e) => theName(g2.nations[e]));
@@ -86779,7 +86843,7 @@
         else headline(g2, "event", said(list6), N.id);
       }
       for (const who of warsAtFall(g2, x)) {
-        const G5 = g2.nations[who], side5 = sideOf6(g2, who);
+        const G5 = g2.nations[who], side5 = sideOf7(g2, who);
         if (!majors.includes(who) || who === g2.human || !G5?.alive || G5.dormant || !side5) continue;
         const left = majors.filter((e) => g2.nations[e]?.alive && atWar(g2, who, e));
         const chief = DIPLOMACY.leaders[side5 === "allies" ? "axis" : "allies"] === x;
@@ -91066,7 +91130,7 @@
     const kit = { ...done.includes(T.antiTank) ? { atGuns: true } : {}, ...done.includes(T.tankDestroyers) ? { atTd: true } : {}, ...done.includes(T.handHeld) ? { atHand: true } : {} };
     return Object.keys(kit).length ? { kit } : {};
   }
-  function sideOf7(g2, nat, cs, weigh3, crosses2) {
+  function sideOf8(g2, nat, cs, weigh3, crosses2) {
     const N = g2.nations[nat];
     const w = cs.map(weigh3), tot = w.reduce((a, b) => a + b, 0) || 1;
     const forces2 = cs.map((c, i) => ({
@@ -91166,9 +91230,9 @@
       place: place3,
       // The card's river line counts the corps that cross as those with the river between them and the place (assess in
       // game.ts): the field lays the river before those, and no others.
-      att: { ...sideOf7(g2, attNat, going, (c) => corpsBase(g2, c) * KIND[c.kind].atk, crossing2 ? (c) => !!riverBetween(g2, c.reg, target.id) : void 0), ...onCall(cardAir?.att) },
-      def: { ...withGuard(g2, target, a.guard ?? 0, a.defenders.reduce((s, c) => s + weighDef(c), 0), sideOf7(g2, defNat, a.defenders, weighDef)), ...onCall(cardAir?.def) },
-      reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice), ...a.luck ? { luck: [a.luck[0], a.luck[1]] } : {}, ...band2.exact ? {} : { seen: band2.mid }, ...a.teamFire ? { teamFire: { att: a.teamFire.att, def: a.teamFire.def } } : {} },
+      att: { ...sideOf8(g2, attNat, going, (c) => corpsBase(g2, c) * KIND[c.kind].atk, crossing2 ? (c) => !!riverBetween(g2, c.reg, target.id) : void 0), ...onCall(cardAir?.att) },
+      def: { ...withGuard(g2, target, a.guard ?? 0, a.defenders.reduce((s, c) => s + weighDef(c), 0), sideOf8(g2, defNat, a.defenders, weighDef)), ...onCall(cardAir?.def) },
+      reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice), ...a.luck ? { luck: [a.luck[0], a.luck[1]] } : {}, ...band2.exact ? {} : { seen: band2.mid }, ...a.teamFire ? { teamFire: { att: a.teamFire.att, def: a.teamFire.def } } : {}, ...a.snipers ? { snipers: { att: a.snipers.att, def: a.snipers.def } } : {} },
       // (Support teams on the card, release 2 behind `teams`: the card's term for them rides with the reckoning, so the field
       // lays its blocks at the power before it: Reckoning.teamFire, read by sim.ts only when own-team blocks are on the ticket.)
       lines: a.lines,
@@ -100259,7 +100323,9 @@
       this.rng = new Rng(ticket.attempt ? hashString(`field-run:${ticket.seed}:${ticket.attempt}`) : ticket.seed);
       this.style = { att: styleFor(ticket, "att"), def: styleFor(ticket, "def") };
       const priced = ticket.reckoning.teamFire && [...ticket.att.forces, ...ticket.def.forces].some(isOwnTeam) ? ticket.reckoning.teamFire : void 0;
-      const A = ticket.reckoning.A / (priced ? Math.max(1e-6, priced.att) : 1), D2 = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds) / (priced ? Math.max(1e-6, priced.def) : 1);
+      const sniped = ticket.reckoning.snipers && [...ticket.att.forces, ...ticket.def.forces].some((f) => f.kind === "snp") ? ticket.reckoning.snipers : void 0;
+      const A = ticket.reckoning.A / (priced ? Math.max(1e-6, priced.att) : 1) / (sniped ? Math.max(1e-6, sniped.att) : 1);
+      const D2 = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds) / (priced ? Math.max(1e-6, priced.def) : 1) / (sniped ? Math.max(1e-6, sniped.def) : 1);
       this.power = { att: A, def: D2 };
       this.teamParent = ownTeamParents(ticket);
       const att = makeBlocks("att", ticket.att, A, 1, void 0, ticket.turn);

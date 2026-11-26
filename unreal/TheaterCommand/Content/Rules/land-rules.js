@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 24c5babd1 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of fc378e626 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -10229,7 +10229,9 @@
       this.rng = new Rng(ticket.attempt ? hashString(`field-run:${ticket.seed}:${ticket.attempt}`) : ticket.seed);
       this.style = { att: styleFor(ticket, "att"), def: styleFor(ticket, "def") };
       const priced = ticket.reckoning.teamFire && [...ticket.att.forces, ...ticket.def.forces].some(isOwnTeam) ? ticket.reckoning.teamFire : void 0;
-      const A = ticket.reckoning.A / (priced ? Math.max(1e-6, priced.att) : 1), D2 = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds) / (priced ? Math.max(1e-6, priced.def) : 1);
+      const sniped = ticket.reckoning.snipers && [...ticket.att.forces, ...ticket.def.forces].some((f) => f.kind === "snp") ? ticket.reckoning.snipers : void 0;
+      const A = ticket.reckoning.A / (priced ? Math.max(1e-6, priced.att) : 1) / (sniped ? Math.max(1e-6, sniped.att) : 1);
+      const D2 = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds) / (priced ? Math.max(1e-6, priced.def) : 1) / (sniped ? Math.max(1e-6, sniped.def) : 1);
       this.power = { att: A, def: D2 };
       this.teamParent = ownTeamParents(ticket);
       const att = makeBlocks("att", ticket.att, A, 1, void 0, ticket.turn);
