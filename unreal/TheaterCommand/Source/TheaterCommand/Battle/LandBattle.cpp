@@ -2304,6 +2304,16 @@ bool ALandBattle::Open()
 		Effects->LayOver(TEXT("battle-fx-guns.json"));
 		UE_LOG(LogTheater, Log, TEXT("Land battle: each gun's own flash (-TheaterLandGunFlash, release 2)"));
 	}
+	// Effects (R2), item 7 of Brian's film details (26 November, "do 2-11"): a thin wisp from the barrel after the shot
+	// and a puff at an open breech (-TheaterLandBarrelSmoke), a closed tank's hatch fumes and the odd case pitched out
+	// (-TheaterLandHatchFumes), the case over an open gun's side (-TheaterLandCasesOut); each its own look laid over
+	// the recipe, played at her case_clang in PlayArmourEvents
+	S.bBarrelSmoke = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandBarrelSmoke"));
+	if (S.bBarrelSmoke)
+	{
+		Effects->LayOver(TEXT("battle-fx-barrel.json"));
+		UE_LOG(LogTheater, Log, TEXT("Land battle: a gun's smoke after the shot (-TheaterLandBarrelSmoke, release 2)"));
+	}
 	if (!Effects->Begin(Root, UnitsPerMetre, [this, FieldPtr](const FVector& Point)
 		{
 			return FVector(Point.X, Point.Y, FieldPtr->HeightAt(Point.Y / UnitsPerMetre, Point.X / UnitsPerMetre) * UnitsPerMetre);

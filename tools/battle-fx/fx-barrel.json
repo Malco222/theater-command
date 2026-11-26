@@ -1,0 +1,68 @@
+{
+ "what": "A gun's smoke after the shot (release 2, behind the land battle's -TheaterLandBarrelSmoke; Brian, 26 November, 'do 2-11', item 7 of the film details). Laid over battle-fx.json for that battle alone (FBattleEffects::LayOver). after_wisp: after a tank gun, an anti-tank gun or a howitzer fires, once its smoke has rolled away (from_s), a thin wisp of the burnt charge curls from the bore for for_s more seconds, rising and leaning on the wind and thinning as the barrel cools; only within within_m of the eye, at most per_gun at once from one gun's place (same_gun_m) and most on the field, never past three fifths of the screen's room; its own dice from the place and the moment. steam.breech: a towed gun's or an open-topped gun's breech opening, a small puff of grey-brown powder smoke as the case comes out (the scene's Steam at case_clang, its own number). Colours written to land (tools/battle-fx/game_curve.py write): the wisp 139,141,144 lands 150,152,156 and old 154,156,158 lands 168,170,172; the breech puff 120,114,108 lands 120,112,102 and old 137,132,127 lands 146,140,132.",
+ "muzzle": {
+  "tank_gun": {
+   "after_wisp": {
+    "within_m": 300,
+    "from_s": [3.0, 4.0],
+    "for_s": [4.0, 6.0],
+    "puffs": [10, 13],
+    "life_s": [1.8, 2.6],
+    "r0_m": [0.03, 0.05],
+    "r1_m": [0.22, 0.34],
+    "rise_mps": [0.35, 0.6],
+    "alpha": [0.16, 0.24],
+    "cool": 0.6,
+    "stretch": 1.8,
+    "least_px": 2.0,
+    "per_gun": 1,
+    "same_gun_m": 3.0,
+    "most": 16,
+    "colour": [139, 141, 144],
+    "colour_old": [154, 156, 158]
+   }
+  },
+  "at_gun": {
+   "after_wisp": {
+    "within_m": 300,
+    "from_s": [3.0, 4.0],
+    "for_s": [4.0, 6.0],
+    "puffs": [10, 13],
+    "life_s": [1.8, 2.6],
+    "r0_m": [0.03, 0.05],
+    "r1_m": [0.2, 0.3],
+    "rise_mps": [0.35, 0.6],
+    "alpha": [0.16, 0.24],
+    "cool": 0.6,
+    "stretch": 1.8,
+    "least_px": 2.0,
+    "per_gun": 1,
+    "same_gun_m": 3.0,
+    "most": 16,
+    "colour": [139, 141, 144],
+    "colour_old": [154, 156, 158]
+   }
+  },
+  "howitzer": {
+   "after_wisp": {
+    "within_m": 300,
+    "from_s": [5.0, 6.5],
+    "for_s": [5.0, 7.0],
+    "puffs": [12, 15],
+    "life_s": [2.0, 3.0],
+    "r0_m": [0.04, 0.07],
+    "r1_m": [0.3, 0.45],
+    "rise_mps": [0.35, 0.6],
+    "alpha": [0.16, 0.24],
+    "cool": 0.6,
+    "stretch": 1.8,
+    "least_px": 2.0,
+    "per_gun": 1,
+    "same_gun_m": 3.0,
+    "most": 16,
+    "colour": [139, 141, 144],
+    "colour_old": [154, 156, 158]
+   }
+  }
+ }
+}

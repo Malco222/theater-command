@@ -9,6 +9,9 @@
 //      pieces than before, and the kit's shared dice are drawn as often as before.
 //   B. no false brass at sea (-TheaterSeaNoFalseCases, battle-fx-sea-cases.json): off, a turret on the water throws a
 //      field gun's case, the fault; on, none on the water, and the same guns on earth lay every piece as before.
+//   C. the barrel's wisp (-TheaterLandBarrelSmoke, battle-fx-barrel.json): a thin, faint wisp from 3 to 4 s after the
+//      shot, held to 2 px; none past 300 m; one a gun at once; its own dice and its own room: twelve guns and forty
+//      lay every piece as before with it, forty hold 16 wisps at most.
 //
 //     Tools/fx_ten/run.sh [out folder]
 //     fx_ten_test <Content/Effects folder> <out folder>
@@ -393,6 +396,156 @@ namespace
 		Check(WOn.Seeds == WOff.Seeds && EOn.Seeds == EOff.Seeds, "the kit's shared dice drawn as often as before", Say("%.0f draws", static_cast<double>(WOn.Seeds)));
 		std::printf("     a minute's broadside, 3 turrets every 8 s: most pieces %zu off, %zu on; lying cases most %zu off, %zu on\n", WOff.MostBits, WOn.MostBits, WOff.MostLying, WOn.MostLying);
 	}
+
+	// ----------------------------------------------------------------------------------------------------------------
+	// C. The barrel's wisp
+
+	/** The pieces one shot lays, off and on: how many more on, and those (the last laid). */
+	std::vector<Bit> WispOf(const FxTen::Book& On, const FxTen::Book& Off, const char* Gun, const Vec& Eye, const Vec& At, double Now = 1.0)
+	{
+		Kit KOff(Off), KOn(On);
+		const Battle::View V = FxTen::Looking(Eye, At);
+		KOff.Fx.Draw(0.0, V);
+		KOn.Fx.Draw(0.0, V);
+		KOff.Fx.Muzzle(Now, At, Vec(0.0, 1.0, 0.03), Gun, "earth");
+		KOn.Fx.Muzzle(Now, At, Vec(0.0, 1.0, 0.03), Gun, "earth");
+		std::vector<Bit> Out;
+		for (size_t I = KOff.Fx.Bits.size(); I < KOn.Fx.Bits.size(); ++I)
+		{
+			Out.push_back(KOn.Fx.Bits[I]);
+		}
+		return Out;
+	}
+
+	void BarrelWisp()
+	{
+		std::printf("C. The barrel's wisp (-TheaterLandBarrelSmoke, battle-fx-barrel.json: muzzle.<gun>.after_wisp)\n");
+		const FxTen::Book Off = Recipe();
+		const FxTen::Book On = Recipe({ "battle-fx-barrel.json" });
+		const Vec Eye(-30.0, -25.0, 2.0);
+		const char* Guns[3] = { "tank_gun", "at_gun", "howitzer" };
+		bool bSizes = true, bWhen = true, bFloor = true, bFew = true;
+		double FirstAt[3] = {}, LastAt[3] = {}, Widest = 0.0, Thickest = 0.0;
+		int Count[3] = {};
+		for (int G = 0; G < 3; ++G)
+		{
+			const std::vector<Bit> W = WispOf(On, Off, Guns[G], Eye, Vec(0.0, 0.0, 2.0));
+			Count[G] = static_cast<int>(W.size());
+			bFew = bFew && W.size() >= 10 && W.size() <= 15;
+			FirstAt[G] = 1e9;
+			for (const Bit& B : W)
+			{
+				FirstAt[G] = std::min(FirstAt[G], B.Born - 1.0);
+				LastAt[G] = std::max(LastAt[G], B.Born + B.Life - 1.0);
+				Widest = std::max(Widest, B.R1);
+				Thickest = std::max(Thickest, B.Alpha);
+				bSizes = bSizes && B.R0 >= 0.03 && B.R1 <= 0.45;
+				bFloor = bFloor && B.LeastPx >= 2.0;
+			}
+			bWhen = bWhen && FirstAt[G] >= (G == 2 ? 5.0 : 3.0) && LastAt[G] <= (G == 2 ? 6.5 + 7.0 + 3.0 + 0.5 : 4.0 + 6.0 + 2.6 + 0.5);
+		}
+		Check(bFew, "on: one shot of each gun, 10 to 15 puffs of wisp", Say("%.0f, %.0f, %.0f", Count[0], Count[1], Count[2]));
+		Check(bWhen, "on: from 3 to 4 s after the shot (the howitzer 5 to 6.5 s), gone by 13 s", Say("from %.1f, %.1f, %.1f s; gone %.1f s", FirstAt[0], FirstAt[1], FirstAt[2], std::max(LastAt[0], std::max(LastAt[1], LastAt[2]))));
+		Check(bSizes && Thickest <= 0.241, "on: thin, 0.03 m at the bore to under 0.45 m, faint", Say("widest %.2f m, alpha at most %.2f", Widest, Thickest));
+		Check(bFloor, "on: each puff held to 2 px across, thinner to match (no twinkle)", "least_px 2");
+		Check(WispOf(Off, Off, "tank_gun", Eye, Vec(0.0, 0.0, 2.0)).empty(), "off: no wisp (the recipe has no after_wisp)", "none");
+		const Vec FarEye(-280.0, -150.0, 3.0);
+		Check(WispOf(On, Off, "tank_gun", FarEye, Vec(0.0, 0.0, 2.0)).empty(), "on: a gun 318 m from the eye, past within_m 300: no wisp", "none");
+		Check(!WispOf(On, Off, "tank_gun", Vec(-200.0, -150.0, 3.0), Vec(0.0, 0.0, 2.0)).empty(), "on: the same gun at 250 m: a wisp (the control)", "laid");
+		// (one gun firing again while its wisp still curls: no second; another gun beside it: its own)
+		{
+			Kit K(On);
+			K.Fx.Draw(0.0, FxTen::Looking(Eye, Vec(0.0, 0.0, 2.0)));
+			K.Fx.Muzzle(1.0, Vec(0.0, 0.0, 2.0), Vec(0.0, 1.0, 0.03), "tank_gun", "earth");
+			const size_t After1 = K.Fx.BarrelWisps.size();
+			K.Fx.Muzzle(6.0, Vec(0.5, 0.2, 2.0), Vec(0.0, 1.0, 0.03), "tank_gun", "earth");
+			const size_t After2 = K.Fx.BarrelWisps.size();
+			K.Fx.Muzzle(6.5, Vec(12.0, 0.0, 2.0), Vec(0.0, 1.0, 0.03), "tank_gun", "earth");
+			const size_t After3 = K.Fx.BarrelWisps.size();
+			Check(After1 == 1 && After2 == 1 && After3 == 2, "on: one wisp a gun at once (per_gun 1); the gun beside her her own", Say("%.0f, %.0f, %.0f", static_cast<double>(After1), static_cast<double>(After2), static_cast<double>(After3)));
+		}
+		// (its own dice: a shot's wisp from the place and the moment, the same whatever came before)
+		{
+			Kit A(On), B(On);
+			A.Fx.Draw(0.0, FxTen::Looking(Eye, Vec(0.0, 0.0, 2.0)));
+			B.Fx.Draw(0.0, FxTen::Looking(Eye, Vec(0.0, 0.0, 2.0)));
+			B.Fx.Muzzle(0.5, Vec(40.0, 30.0, 1.0), Vec(0.0, 1.0, 0.4), "howitzer", "earth");
+			const size_t AFirst = A.Fx.Bits.size();
+			A.Fx.Muzzle(1.0, Vec(0.0, 0.0, 2.0), Vec(0.0, 1.0, 0.03), "tank_gun", "earth");
+			const size_t BFirst = B.Fx.Bits.size();
+			B.Fx.Muzzle(1.0, Vec(0.0, 0.0, 2.0), Vec(0.0, 1.0, 0.03), "tank_gun", "earth");
+			const size_t AN = A.Fx.Bits.size() - AFirst, BN = B.Fx.Bits.size() - BFirst;
+			bool bSame = AN == BN;
+			for (size_t I = 1; bSame && I <= 12 && I <= AN; ++I)
+			{
+				bSame = FxTen::PieceHash(A.Fx.Bits[A.Fx.Bits.size() - I]) == FxTen::PieceHash(B.Fx.Bits[B.Fx.Bits.size() - I]);
+			}
+			Check(bSame, "on: a wisp's dice its own (the same after another gun's shot)", "piece for piece");
+		}
+		// (an exchange: Guns guns, tanks, anti-tank guns and howitzers, round the eye 20 to 450 m off, each firing every 6
+		// to 10 s for five minutes; off and on)
+		auto Exchange = [](int Many)
+		{
+			return [Many](Battle& Fx, double Now, int Frame)
+			{
+				static thread_local std::vector<double> Next;
+				if (Frame == 1)
+				{
+					Next.assign(static_cast<size_t>(Many), 0.0);
+					for (int I = 0; I < Many; ++I)
+					{
+						Next[static_cast<size_t>(I)] = 0.2 + 7.6 * I / Many;
+					}
+				}
+				for (int I = 0; I < Many; ++I)
+				{
+					double& At = Next[static_cast<size_t>(I)];
+					if (At <= Now)
+					{
+						TheaterFx::Dice D(static_cast<uint64_t>(I) * 977ull + static_cast<uint64_t>(Frame));
+						const double Ang = 6.283 * I / Many;
+						const double R = 20.0 + 430.0 * I / Many;
+						Fx.Muzzle(Now, Vec(R * std::cos(Ang), R * std::sin(Ang), 1.5), Vec(-std::cos(Ang), -std::sin(Ang), I % 3 == 2 ? 0.4 : 0.03), I % 3 == 0 ? "tank_gun" : I % 3 == 1 ? "at_gun" : "howitzer", "earth");
+						At += D.U(6.0, 10.0);
+					}
+				}
+			};
+		};
+		const Vec FEye(0.0, 0.0, 3.0), FLook(100.0, 60.0, 2.0);
+		size_t MostWisps = 0;
+		auto Counting = [&MostWisps](const std::function<void(Battle&, double, int)>& Script)
+		{
+			return [&MostWisps, Script](Battle& Fx, double Now, int Frame)
+			{
+				Script(Fx, Now, Frame);
+				MostWisps = std::max(MostWisps, Fx.BarrelWisps.size());
+			};
+		};
+		// (twelve guns: the screen has room, and the wisps only add)
+		const Fight TOff = Play(Off, FEye, FLook, 9000, Exchange(12));
+		const Fight TOn = Play(On, FEye, FLook, 9000, Counting(Exchange(12)));
+		const size_t TWisps = MostWisps;
+		Check(TWisps > 0 && MissingAll(TOff, TOn) == 0, "on: twelve guns for five minutes, every piece off laid on (the wisp adds only)", Say("%.0f missing, %.0f wisps at most", static_cast<double>(MissingAll(TOff, TOn)), static_cast<double>(TWisps)));
+		Check(TOn.Seeds == TOff.Seeds, "the kit's shared dice drawn as often as before", Say("%.0f draws", static_cast<double>(TOn.Seeds)));
+		// (forty: the densest case; the screen past its room off already, so the wisps give way)
+		MostWisps = 0;
+		const Fight FOff = Play(Off, FEye, FLook, 9000, Exchange(40));
+		const Fight FOn = Play(On, FEye, FLook, 9000, Counting(Exchange(40)));
+		Check(MostWisps <= 16, "on: forty guns for five minutes: at most 16 wisps at once (most)", Say("%.0f at most", static_cast<double>(MostWisps)));
+		Check(FOn.MostBits <= FOff.MostBits + 16 * 15, "on: the densest frame no fuller than off and every wisp's puffs", Say("%.0f pieces, %.0f off", static_cast<double>(FOn.MostBits), static_cast<double>(FOff.MostBits)));
+		// (the wisps in a room of their own: the gates that read how full the screen is read it without them, so even
+		// here every piece off is laid on)
+		Check(MissingAll(FOff, FOn) == 0, "on: forty guns, every piece off laid on (the wisps' own room)", Say("%.0f missing", static_cast<double>(MissingAll(FOff, FOn))));
+		Check(FOn.Seeds == FOff.Seeds, "the kit's shared dice drawn as often as before (forty)", Say("%.0f draws", static_cast<double>(FOn.Seeds)));
+		size_t Pieces = 0;
+		for (const std::vector<uint64_t>& H : FOff.Heaps)
+		{
+			Pieces += H.size();
+		}
+		std::printf("     twelve guns: most pieces %zu off, %zu on; forty guns: most pieces %zu off, %zu on, most wisps at once %zu; off's pieces not laid on %.2f%%\n", TOff.MostBits, TOn.MostBits, FOff.MostBits, FOn.MostBits, MostWisps, 100.0 * static_cast<double>(MissingAll(FOff, FOn)) / static_cast<double>(std::max<size_t>(Pieces, 1)));
+		std::printf("     time: the densest frame's Draw, %.3f ms on (%zu pieces), %.3f ms off (%zu pieces); a frame's mean %.3f ms on, %.3f ms off\n", FOn.DensestMs, FOn.MostBits, FOff.DensestMs, FOff.MostBits, FOn.MeanMs, FOff.MeanMs);
+		std::printf("     on the screen (1600 px, 42 degrees): a wisp puff 0.03 to %.2f m is %.1f to %.1f px at 40 m, %.1f to %.1f px at 300 m (held to 2)\n", Widest, Px(0.06, 40.0), Px(2.0 * Widest, 40.0), Px(0.06, 300.0), Px(2.0 * Widest, 300.0));
+	}
 }
 
 int main(int Argc, char** Argv)
@@ -405,6 +558,7 @@ int main(int Argc, char** Argv)
 	Folder = Argv[1];
 	FlakKinds();
 	SeaCases();
+	BarrelWisp();
 	std::printf("fx_ten_test: %d checks, %d failed\n", Checks, Failed);
 	if (Failed == 0)
 	{

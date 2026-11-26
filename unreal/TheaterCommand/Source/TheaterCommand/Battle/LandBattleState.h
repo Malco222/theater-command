@@ -84,6 +84,10 @@ struct FLandBattleState
 	LandBurn::Director Burns;
 	/** Effects (R2): the crews getting out of knocked-out tanks, -TheaterLandBailOut (LandBail). */
 	LandBail::Book Bails;
+	/** Effects (R2), item 7 of Brian's film details (26 November): a gun's smoke after the shot (-TheaterLandBarrelSmoke),
+	 * a closed tank's hatch fumes and the odd case (-TheaterLandHatchFumes), cases over an open gun's side
+	 * (-TheaterLandCasesOut); read in Open. ShotsOf: each vehicle's shots so far, counted at her case_clang. */
+	bool bBarrelSmoke = false;
 	/** Effects (R2): the fighters on call over the field, -TheaterLandAirSupport (LandAir; the scene's FlyOver,
 	 * Battle/LandBattleAir.cpp): the plan, and what the effects kit has been told of it. */
 	struct FAirSupport

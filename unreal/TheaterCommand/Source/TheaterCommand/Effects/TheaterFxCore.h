@@ -272,6 +272,7 @@ namespace TheaterFx
 		uint8_t Glow = 0; // (a tracer's streak: 1 its body, 2 its pale core; by day both widen and the core whitens, to hold on a pale sky)
 		bool bHug = false; // rides the ground as it moves (skirts)
 		bool bKeep = false; // (an oil fire's column: never left out when the screen is full, the near ones going first)
+		bool bWisp = false; // (Effects (R2), -TheaterLandBarrelSmoke: a barrel's wisp, in its own room (after_wisp.most), not counted in the room the gates read)
 		double SunSide = 0.0; // (an oil column: its sunward side lifted toward LitCol, its far side kept dark, wherever the eye is)
 		double AxisWindage = 0.0; // (and the column's own axis: from Centre, carried by the wind at this share, so a puff knows which side of it it is)
 		int OilId = -1; // (a puff of an oil fire's column: the fire's id, so the column's width at its height is found each frame)
@@ -1383,6 +1384,14 @@ namespace TheaterFx
 		double CaseShadow = 0.5, CaseShine = 8.0;
 		std::vector<double> CaseUntil; // (when each long-lying case goes: past ground_cases.most_lying, new ones lie only briefly)
 		size_t MostLying = 200;
+		// (Effects (R2), -TheaterLandBarrelSmoke: each barrel's wisp still curling, where its gun stood and when its last puff goes; at most
+		// after_wisp.per_gun from one gun's place and after_wisp.most in all)
+		struct Wisping
+		{
+			Vec At;
+			double Until = 0.0;
+		};
+		std::vector<Wisping> BarrelWisps;
 		double CaseFar = 150.0; // (ground_cases.draw_within_m: past it a case is neither counted nor laid)
 		double CaseDetailPx = 3.0; // (ground_cases.detail_px: a case narrower on the screen is laid as its tube alone)
 		bool CaseDetailed(double Rad, double Deep, const View& Eye) const { return 2.0 * Rad * std::max(Eye.PixelsPerRadian, 1.0) >= CaseDetailPx * std::max(Deep, 1e-3); }
@@ -1615,6 +1624,7 @@ namespace TheaterFx
 		size_t InSight = 0, HeldAtDraw = 0;
 		size_t SeenBits = 0, SeenTwin = 0; // (of InSight and TwinBits, what was on the screen: see RoomSeen)
 		size_t CaseOff = 0; // (the places spent cases off the screen hold in the room asked: see RoomForCases)
+		size_t WispIn = 0, WispSeen = 0, WispSince = 0; // (Effects (R2): the barrels' wisps counted at the last Draw, of them on the screen, and laid since: left out of the room the gates read)
 		// (the eye given may be the frame before's: the campaign map reads the camera before it has moved for the frame.
 		// So what the eye moved and turned between the last two frames is allowed for again, twice over, before a bit
 		// is called off the screen. A still eye changes nothing. The pre-check, 14:55Z)
@@ -1647,7 +1657,7 @@ namespace TheaterFx
 		// one, by Bit::Serial, so the oldest smoke keeps its shadow when the room is short)
 		int ShadowRoom = 0, ShadowsWere = 0;
 		std::vector<std::pair<uint64_t, uint32_t>> ShadowCands;
-		size_t RoomAsked() const { return InSight + (Bits.size() > HeldAtDraw ? Bits.size() - HeldAtDraw : 0) + TwinBits; }
+		size_t RoomAsked() const { const size_t All = InSight + (Bits.size() > HeldAtDraw ? Bits.size() - HeldAtDraw : 0) + TwinBits; return All - std::min(All, WispIn + WispSince); }
 		/** FX5, room shares by kind (game.room_shares, off by default): the room every gate but the vehicles' dust reads.
 		 *  Off, RoomAsked. On, RoomAsked less the dust trails' own pieces, up to their share (dust.vehicles.most_of_room),
 		 *  so a column of tanks never thins the bursts, their smoke's slow fade or a fire: the cloud rig (11-22) had 120
@@ -1673,7 +1683,7 @@ namespace TheaterFx
 		 *  grit (spent cases) goes by this: build 1720's test barrage, off the screen behind the eye, held the room over
 		 *  three fifths full, and the machine gun in front of the eye threw no brass at all. The same as RoomAsked when
 		 *  the view's width is not known. */
-		size_t RoomSeen() const { return SeenBits + (Bits.size() > HeldAtDraw ? Bits.size() - HeldAtDraw : 0) + SeenTwin; }
+		size_t RoomSeen() const { const size_t All = SeenBits + (Bits.size() > HeldAtDraw ? Bits.size() - HeldAtDraw : 0) + SeenTwin; return All - std::min(All, WispSeen + WispSince); }
 		/** What a spent case is thrown by: the screen's room, and the brass lying off it. A barrage off the screen does
 		 *  not stop the brass; brass off the screen does, or guns firing beside the eye fill the room asked with cases
 		 *  nobody sees (three places each) and every shell throws half its shower for them. */
@@ -1915,6 +1925,8 @@ namespace TheaterFx
 		 * nor what it threw that falls back, nor a piece already under a row. */
 		void LingerFrom(size_t First, const LingerRow& RowIn, double T0, const Vec& Mid, double MidWindage, double Tall);
 		void MuzzleLaid(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn, const GunLook* Look = nullptr);
+		/** Effects (R2), -TheaterLandBarrelSmoke: the barrel's wisp after the shot, muzzle.<gun>.after_wisp (Muzzle lays it last). */
+		void AfterWisp(double Now, const Vec& At, const Vec& Facing, const char* GunIn);
 		void AirHitLaid(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Kind);
 		void AirFlakLaid(double Now, const Vec& At, const char* Kind);
 		Rgb SkyTail; // (what old smoke pales to once the scene has said what is behind it: see SetSky)
