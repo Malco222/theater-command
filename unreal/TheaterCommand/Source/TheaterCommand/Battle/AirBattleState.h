@@ -112,6 +112,9 @@ struct FAirBattleState
 	 * art director pass it), read once as the battle opens: on, and flying smooth, the strategy camera is Over's;
 	 * off, AimEye's as it was (30899121's), to the byte. */
 	bool bSteadyEye = false;
+	/** With it on, where the player's wheel or trackpad has asked his zoom to go (AAirBattle::Zoom; -1 nowhere, the zoom
+	 * at rest) and the zoom's speed on its way there (AirDesk::Overview::ZoomEase, in AimEye). */
+	double ZoomWant = -1.0, ZoomVel = 0.0;
 	bool bFlying = false;
 	bool bFlyTried = false;     // looked for once, when the battle's first groups stand
 	double FlyT = 0.0;

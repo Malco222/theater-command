@@ -120,6 +120,12 @@ for EB in "0 0 3481327893 3448371 30899121" "1 0 731922131 3597993 30899121-unde
     echo "pass: with CAMROW_EYE=$E1 CAMROW_BOX=$B1, the strategy camera's every frame over Bremen is $WHO's"
   fi
 done
+# The player's zoom with the raid camera's row on (AAirBattle::Zoom, AimEye, AirDesk::Overview::ZoomEase): a notch of his
+# wheel or trackpad glides there instead of landing whole in one frame (15% then); air_zoom_test.cpp says how it is judged.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_zoom_test.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirDesk.cpp" "$SRC/Battle/AirGround.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
+  -o "$OUT/air_zoom_test"
+"$OUT/air_zoom_test" || STATUS=1
 # A raid on troops (Battle/AirMarks, Battle/AirShowTroops; Brian, 24 November 2026: "if a bomber group is bombing troops
 # instead of a factory or town and they get intercepted than i want that playable"): every hit on a piece of the column
 # shown once as its bomb or rounds arrive, every other bomb clear of every piece, the strafing pass within the flight's

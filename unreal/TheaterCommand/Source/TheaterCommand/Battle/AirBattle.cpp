@@ -6880,6 +6880,18 @@ void AAirBattle::AimEye(double Real)
 	}
 	FVector Wanted = World(Focus.X, Focus.Y, Focus.Z);
 	const double TypeAway = OverAway > 0.0 ? OverAway : CrowdSpan > 0.0 ? FMath::Clamp(CrowdSpan * 1920.0 / ((CrowdSpan >= 25.0 ? 70.0 : 45.0) * 2.0 * FMath::Tan(FMath::DegreesToRadians(27.5))), 250.0, 1500.0) : 800.0;
+	// (the raid camera's row on, and flying smooth: the player's zoom eased on to where his scroll asked, AAirBattle::Zoom;
+	// at rest once there)
+	if (S.Show.Smooth() && S.bSteadyEye && S.ZoomWant > 0.0)
+	{
+		AirDesk::Overview::ZoomEase(Distance, S.ZoomVel, S.ZoomWant, Real);
+		if (FMath::Abs(Distance - S.ZoomWant) < 0.05 && FMath::Abs(S.ZoomVel) < 0.05)
+		{
+			Distance = S.ZoomWant;
+			S.ZoomWant = -1.0;
+			S.ZoomVel = 0.0;
+		}
+	}
 	double Away = Distance * TypeAway / 800.0, Down = Pitch, Heading = Yaw;
 	StrategyAway = Away;
 	StrategySpan = CrowdSpan;
@@ -7150,6 +7162,12 @@ void AAirBattle::AimEye(double Real)
 		if (!bOnShip && !bOnGuns && !bOnChutes)
 		{
 			Distance = FMath::Clamp(Distance * Away / FMath::Max(Was, 1.0), 120.0, 20000.0);
+			// (the raid camera's row on: a zoom on its way is given up, the eye stays drawn back)
+			if (S.Show.Smooth() && S.bSteadyEye)
+			{
+				S.ZoomWant = -1.0;
+				S.ZoomVel = 0.0;
+			}
 		}
 		AirParts::TellCut(GetWorld());
 		++BallCuts;
@@ -7197,6 +7215,15 @@ UTexture2D* AAirBattle::FlagPicture(const FString& Tag)
 
 void AAirBattle::Zoom(float Steps)
 {
+	// (the raid camera's row on, and flying smooth: the scroll sets where the zoom is going, from where it was already
+	// going, and AimEye eases it there, AirDesk::Overview::ZoomEase; a notch landed whole in one frame, the picture
+	// stepping 15% at each. Off, as it was)
+	if (State.IsValid() && State->Show.Smooth() && State->bSteadyEye)
+	{
+		const double From = State->ZoomWant > 0.0 ? State->ZoomWant : Distance;
+		State->ZoomWant = FMath::Clamp(From * FMath::Pow(0.85, static_cast<double>(Steps)), 120.0, 20000.0);
+		return;
+	}
 	Distance = FMath::Clamp(Distance * FMath::Pow(0.85, static_cast<double>(Steps)), 120.0, 20000.0);
 }
 

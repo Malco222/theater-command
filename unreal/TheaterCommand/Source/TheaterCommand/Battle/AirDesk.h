@@ -314,6 +314,10 @@ namespace AirDesk
 		/** An aircraft's weight about the look's knot, Far metres from its point in a knot Radius metres wide: nearly 1
 		 * within half of it, a half at it, falling off as the fourth power beyond, never quite 0. */
 		static double Near(double Far, double Radius);
+		/** The player's zoom (Shown, the scene's distance at his own 800 m, and Vel its speed) eased on to where his wheel
+		 * or trackpad has asked for it (Want) over Real seconds, as the framing is (AwayEase, critically damped): a scroll
+		 * never steps the picture in one frame (the raid camera's row, AAirBattle::Zoom). */
+		static void ZoomEase(double& Shown, double& Vel, double Want, double Real);
 
 	private:
 		std::map<int, double> Fade;      // each aircraft's share of its weight, 0 to 1

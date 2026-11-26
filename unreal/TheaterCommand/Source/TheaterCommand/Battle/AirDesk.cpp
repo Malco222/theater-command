@@ -756,6 +756,13 @@ namespace AirDesk
 		return 1.0 / (1.0 + X * X * X * X);
 	}
 
+	void Overview::ZoomEase(double& Shown, double& Vel, double Want, double Real)
+	{
+		double Gone = Shown - Want;
+		Settle(Gone, Vel, Real, AwayEase);
+		Shown = Want + Gone;
+	}
+
 	double Overview::TypeAwayOf(double Span)
 	{
 		const double Heavy = std::clamp((Span - 24.0) / 2.0, 0.0, 1.0);
