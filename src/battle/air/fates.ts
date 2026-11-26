@@ -277,7 +277,9 @@ function crewOut(G: Rng, sc: Scene, how: FallHow, B?: number): 'chute' | 'out' |
  * way down (the design director, 26 November 2026: D1, D3, D11), on G, whoever's ground it is over. From a glide over
  * land he jumps at out.glide times outBand (hole H-GLIDE-JUMP, 0 as shipped); otherwise he rides it down and climbs
  * out at ftrLand (H-FTR-LAND). In a way his pilot could get out of, under a parachute at pilotOut times outBand
- * (H-FTR-OUT); in a breakup or a collision at out times outBand (D11). From an explosion, or with the pilot hit, never.
+ * (H-FTR-OUT); in a breakup or a collision at out times outBand (D11). Each share is S, priced once (the design
+ * director, 18:47Z): drawn at priced(S, B), the rest once the men brought back are inside it (B absent, the collision,
+ * at S itself). From an explosion, or with the pilot hit, never.
  * `landed`: the look stream's own climb-out die, already thrown for a pilot over the enemy's ground in a glide (as with
  * the switch off): it stands for him if he does not jump (the design's section 4.3), so only over his own ground is the
  * climb-out drawn on G. (A fighter's second man is crew, and reads the crew's rule: crewOut.)

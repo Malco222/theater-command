@@ -302,9 +302,11 @@ export const SKY = {
     /**
      * A fighter pilot the rules do not bring back, seen to get out under a parachute, by the way down (the pilot's
      * share of getting out). Over the enemy's ground he is taken prisoner (the fall's own 'captured' says so). Release 2,
-     * 'bailouts' (sim.ts airLooks): the same share over his own ground too, times 'outBand' by height on either ground,
-     * drawn on the look stream's own fork (fates.ts GOT): the design director's D1 and D3, 26 November 2026. Hole
-     * H-FTR-OUT (the historian's H2, by the way down and by height); mark G, a game placeholder, not the historian's.
+     * 'bailouts' (sim.ts airLooks): this share times 'outBand' by height, on either ground, is S, the share of ALL the
+     * pilots of such falls shown getting out, the pilots the count brings back inside it (the design director's D1 and
+     * D3, 26 November 2026, priced once at 18:47Z); a pilot not brought back is drawn on the look stream's own fork
+     * (fates.ts GOT) at the rest of it, R (fates.ts backOf, restOut). Hole H-FTR-OUT (the historian's H2, by the way
+     * down and by height); mark G, a game placeholder, not the historian's.
      */
     pilotOut: { flamer: 0.4, burn: 0.5, wing: 0.45, tail: 0.5, spin: 0.6 },
     /**

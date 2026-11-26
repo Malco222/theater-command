@@ -890,7 +890,7 @@ describe('(h) the design director\'s 18:44Z, item 1: the Fulmar\'s second man is
     expect(cells).toBe(6);
   });
   it('his pilot brought back, his way out is his pilot\'s on every draw: under a parachute, his canopy after the pilot\'s, and the pilot\'s canopy where it was', () => {
-    let n = 0;
+    let n = 0, gapped = 0;
     for (let seed = 1; seed <= N; seed++) {
       const over = seed % 2 ? 'own' as const : 'enemy' as const, band = (seed % 3) as 0 | 1 | 2;
       const pair = seed % 5 === 0 ? { fid: 1, cause: 'ram' as const } : undefined;
@@ -899,9 +899,13 @@ describe('(h) the design director\'s 18:44Z, item 1: the Fulmar\'s second man is
       expect([two.chutes, two.out ?? 0, two.chuteAt?.length], `seed ${seed}`).toEqual([2, 0, 2]);
       expect(two.chuteAt![0]).toBe(one.chuteAt![0]);
       expect(two.chuteAt![1]).toBeGreaterThanOrEqual(two.chuteAt![0]);
+      // One canopy gap after the pilot's (fates.ts), unless held just before the end (both capped at upTo - 0.5).
+      const cap = Math.round(Math.max(0.5, (two.boom ?? two.dur) - 0.5) * 10) / 10;
+      if (two.chuteAt![1] !== cap) { gapped++; expect(two.chuteAt![1] - two.chuteAt![0], `seed ${seed}`).toBeGreaterThanOrEqual(SKY.fate.chute.gap[0] - 1e-9); }
       n++;
     }
     expect(n).toBe(N);
+    expect(gapped).toBeGreaterThan(N / 2);
   });
   it('no fall of the set shows a fate the count does not make: brought back, every man of the crew under his parachute (none left aboard to be lost or taken) and captured 0; not brought back, captured by its formula; never more out than aboard', () => {
     let back = 0, fulmarBack = 0, falls = 0;
