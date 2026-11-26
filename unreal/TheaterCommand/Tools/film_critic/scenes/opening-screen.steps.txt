@@ -1,0 +1,21 @@
+# Film critic scene opening-screen: the opening (home) screen's country cards pressed one after another (Brian
+# 22 Nov: "when you click a something on the menu it flickers"; 24 Nov: "click on the country name on the home
+# screen it flickers"). A step run is left on its opening screen until a start step (CampaignPhotographer.cpp):
+# this file has none, so it only presses the cards and the game quits after the last step.
+# The names are the grand campaign's September 1939 list on this head (TC.grand(1): Germany, United Kingdom,
+# France, Soviet Union, Italy ...). A press matches a button's words exactly first.
+# Film strips (-FilmCriticStrip=60,1.5): 1.5 s at 60 frames a second after each press, so a one-frame flicker
+# (a card drawn half laid for one frame) is caught; the step's still comes 1.1 s after the press.
+
+# 001: the opening screen as it first stands: the grand campaign's country cards (this step does nothing: it only waits and takes the picture)
+open-page	region
+# 002: Germany picked: its card lit, the summary at the foot of the panel rewritten (no jump, no half-laid lines)
+press	Germany
+# 003: France picked: its card lit, the summary at the foot of the panel rewritten (no jump, no half-laid lines)
+press	France
+# 004: United Kingdom picked: its card lit, the summary at the foot of the panel rewritten (no jump, no half-laid lines)
+press	United Kingdom
+# 005: Soviet Union picked: its card lit, the summary at the foot of the panel rewritten (no jump, no half-laid lines)
+press	Soviet Union
+# 006: Italy picked: its card lit, the summary at the foot of the panel rewritten (no jump, no half-laid lines)
+press	Italy

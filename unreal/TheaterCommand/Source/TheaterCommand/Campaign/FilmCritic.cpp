@@ -143,11 +143,20 @@ namespace FilmCriticParts
 	/** A strip frame asked of the grabber, waiting for its pixels. */
 	struct FCriticAsk
 	{
+		int32 Seq = 0;
 		double T = 0.0;
 		uint64 Frame = 0;
 		bool bBt = false;
 		double Bt = 0.0;
 		FString File, Of;
+	};
+
+	/** Rides with each frame asked of the grabber, so a frame read back is matched to its own ask, never to the next
+	 * one in line when a frame was dropped (the default behaviour is kept: the frame is stored for GetCapturedFrames). */
+	struct FCriticFramePayload : public IFramePayload
+	{
+		explicit FCriticFramePayload(int32 InSeq) : Seq(InSeq) {}
+		int32 Seq = 0;
 	};
 
 	/** The strip being taken now. */
@@ -192,6 +201,7 @@ namespace FilmCriticParts
 		TArray<FCriticAsk> Asks;
 		TMap<FString, int32> NextIndex;
 		int32 StripAsks = 0;
+		int32 NextSeq = 0;
 		int32 Dropped = 0;
 		std::atomic<int32> Writing{ 0 };
 	};
@@ -566,9 +576,22 @@ namespace FilmCriticParts
 		TArray<FCapturedFrameData> Frames = St.Grab->GetCapturedFrames();
 		for (FCapturedFrameData& Got : Frames)
 		{
-			if (St.Asks.Num() == 0)
+			const FCriticFramePayload* Pay = static_cast<const FCriticFramePayload*>(Got.Payload.Get());
+			if (!Pay)
 			{
-				break;
+				++St.Dropped;
+				continue;
+			}
+			// (asks older than this frame were never read back: let them go, so each JPEG keeps its own ask's name)
+			while (St.Asks.Num() > 0 && St.Asks[0].Seq < Pay->Seq)
+			{
+				St.Asks.RemoveAt(0);
+				++St.Dropped;
+			}
+			if (St.Asks.Num() == 0 || St.Asks[0].Seq != Pay->Seq)
+			{
+				++St.Dropped;
+				continue;
 			}
 			const FCriticAsk Ask = St.Asks[0];
 			St.Asks.RemoveAt(0);
@@ -611,6 +634,7 @@ namespace FilmCriticParts
 		St.Strip.NextAt = FMath::Max(St.Strip.NextAt + Every, T + 0.5 * Every);
 		int32& Index = St.NextIndex.FindOrAdd(St.Strip.Tag);
 		FCriticAsk Ask;
+		Ask.Seq = ++St.NextSeq;
 		Ask.T = T;
 		Ask.Frame = Frame;
 		Ask.bBt = St.LastBattleCam.bValid && St.LastBattleCam.Frame + 1 >= Frame;
@@ -628,7 +652,7 @@ namespace FilmCriticParts
 		St.Asks.Add(Ask);
 		// (asked on the game thread before this frame's window is drawn, as the land battle's dark reading asks: the frame
 		// read back is this one, a frame or two later)
-		St.Grab->CaptureThisFrame(FFramePayloadPtr());
+		St.Grab->CaptureThisFrame(FFramePayloadPtr(new FCriticFramePayload(Ask.Seq)));
 	}
 
 	static void EnsureBegun(FCriticState& St)

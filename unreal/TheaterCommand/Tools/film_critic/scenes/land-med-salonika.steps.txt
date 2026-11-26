@@ -1,0 +1,63 @@
+# Film critic scene land-med-salonika: a land battle fought live from the campaign (FIGHT IT YOURSELF), in the Mediterranean (med) look.
+# Italy, January 1941, seed 1: Albania Command attacks Salonika (hills, held by Greece).
+# Checked on the release 2 head 2fdb13e5 (node, the rules bundle with the release 2 switches): the names are found
+# (TC.find), the army can attack the province, TC.battleLook gives the ticket "The Battle of Salonika"; fought in the
+# land rules (Content/Rules/land-rules.js, as LandLive does) it meets at about battle s 102 and is over at about
+# 227. The field's look by LandScape::Pick's own boxes: med (40.8 N, 22.9 E).
+# -TheaterFightEveryLook offers FIGHT IT YOURSELF on every look (fight-yourself-looks.txt passes only some).
+# The battle's keys (LandBattleScreen.cpp): Enter begins; 1/2/3 are x1/x2/x4 on his high view and x0.5/x1/x2 in the
+# film; Tab picks his next unit; V rides with it; C is the film (and C or Esc takes the map back from the film).
+# No order key (G F X K T B H R L) is pressed. A battle second is half a real second at x1.
+# A land-wait waits at most 15 minutes; "begun" is waited only after Enter (in the placing view it never ends).
+# No film strips in this scene (the night's disk): the facts file still has the camera of every frame.
+# Each step's picture is step-NNN.png, NNN the step's number below.
+
+# 001: the campaign table as it opens (ITA, 1941-01)
+start	ITA 1941-01 seed 1
+# ---- The battle of Salonika: FIGHT IT YOURSELF, fought live (rules sim on this head: contact about 102 s, over about 227 s; look med)
+# 002: Albania Command picked up on the map: the army piece in hand, the provinces it can reach lit
+select-unit	Albania Command
+# 003: the attack card for Salonika: the odds, SEND THEM IN and FIGHT IT YOURSELF
+order-province	Salonika	card
+# 004: the land battle opens (a second in: the field being laid, or its first frame)
+press	FIGHT IT YOURSELF	does
+# 005: 8 real s of the placing view: the field, its ground and both sides placed, before the battle begins
+land-wait	8s
+# 006: Enter (BEGIN): the battle begins, the high view
+land-key	enter
+# 007: pace x4 (2 battle s a real s) until contact; the high view
+land-key	3
+# 008: past any night before: the attack under way, seen from his high view
+land-wait	begun
+# 009: Tab: his next unit in hand, the view glides to it
+land-key	tab
+# 010: V: the film rides with that unit: a close view of its men or tanks
+land-key	v
+# 011: 12 real s riding with them toward the enemy at x4: men running, vehicles moving
+land-wait	12s
+# 012: until the first contact (about battle s 102), still riding with the unit
+land-wait	contact
+# 013: in the film the keys 1-3 are x0.5/x1/x2: x1 (half a battle s a real s) for the close fight
+land-key	2
+# 014: 16 real s of the close fight at x1: fire, men going to ground or falling
+land-wait	16s
+# 015: C: the film gives the camera back: his high view of the fight
+land-key	c
+# 016: Q held a second: his view turns (the view's own keys, no order)
+land-key	q	view
+# 017: W held a second: his view walks forward, lower over the field
+land-key	w	view
+# 018: C: the film takes the camera, choosing its own shots
+land-key	c
+# 019: 16 real s of the film's own cutting: each cut clean, the camera smooth between cuts
+land-wait	16s
+# 020: Esc: the map (his high view) back
+land-key	esc
+# 021: x4 to the end of the battle
+land-key	3
+# 022: the after card: who won, the losses, CONTINUE
+land-wait	card	card
+# 023: CONTINUE: the battle handed back to the campaign map
+land-click	continue
+# 024: the campaign map after the battle of Salonika
+check-province	Salonika

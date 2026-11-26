@@ -1,0 +1,622 @@
+# Film critic shots: for each scene of scenes.txt, its theater (the Look Bible's T1..T9), when, the nations, and
+# every picture it should make, with the tags that choose which rules (rules.yaml) judge it and one line on what
+# it should show. `file` is a file name or a glob. Step runs: step-NNN.png is the picture of step NNN of the
+# scene's step file (the step files' comments say the same, by number). Film strips (strip-*.jpg) take the tags of
+# the still they follow; the strip entries here only say which steps are filmed. `look: true` asks the judge for
+# the Look Bible score of that picture.
+# Tags: the agreed list, plus ONE NEW TAG, map-night (the campaign map held at night by the T key), for the
+# "own ground by night must not read as fog" rule (Brian: "America looks fogged").
+# Written from one table with the step files (the scene writer's generator), so numbers and tags agree.
+scenes:
+  air-raid-rhineland:
+    kind: air
+    theater: T1
+    year: 1940
+    month: 1
+    nations: [FRA, GER]
+    about: "A French day raid on the Rhineland flown live, January 1940"
+    pictures:
+      - {file: "step-001.png", tags: [map], about: "the French campaign table, January 1940, as it opens"}
+      - {file: "step-002.png", tags: [ui], about: "the raid card DAY BOMBING: RHINELAND, with FLY THE RAID BY DAY and FLY IT YOURSELF"}
+      - {file: "step-003.png", tags: [air-flyover], about: "the air battle opens: a second in (it may still be the black frame while the scene warms up)"}
+      - {file: "strip-003-*.jpg", tags: [strip, air-flyover], about: "film strip of step 003 (the air battle opens)"}
+      - {file: "step-004.png", tags: [air-flyover], about: "one real second after the opening's black frame lifts: the raid's opening shot", look: true}
+      - {file: "strip-004-*.jpg", tags: [strip, air-flyover], about: "film strip of step 004 (one real second after the opening's black frame lifts)"}
+      - {file: "step-005.png", tags: [air-flyover], about: "three seconds on: the bombers' formation in the opening flyover"}
+      - {file: "strip-005-*.jpg", tags: [strip, air-flyover], about: "film strip of step 005 (three seconds on)"}
+      - {file: "step-006.png", tags: [air-flyover], about: "four seconds on: the flyover over the target, the defending fighters coming up (the guard)", look: true}
+      - {file: "strip-006-*.jpg", tags: [strip, air-flyover], about: "film strip of step 006 (four seconds on)"}
+      - {file: "step-007.png", tags: [air-battle], about: "the flyover over: command taken, the strategy view of both formations"}
+      - {file: "strip-007-*.jpg", tags: [strip, air-flyover], about: "film strip of step 007 (the flyover over)"}
+      - {file: "step-008.png", tags: [air-battle], about: "pace x0.5 (the clock still runs x10 by itself until the formations meet)"}
+      - {file: "step-009.png", tags: [air-battle], about: "silent wait (about 66 s, no strip): the formations meet at about 181; still at about battle s 193, the first passes", look: true}
+      - {file: "step-010.png", tags: [air-battle], about: "pace x1"}
+      - {file: "step-011.png", tags: [air-battle], about: "24 real s of the fight at x1 (battle s 193 to 205): fighters among the bombers, tracer"}
+      - {file: "strip-011-*.jpg", tags: [strip, air-battle], about: "film strip of step 011 (24 real s of the fight at x1 (battle s 193 to 205))"}
+      - {file: "step-012.png", tags: [air-chase], about: "C: the chase view, the eye glides behind his squadron's leader", look: true}
+      - {file: "step-013.png", tags: [air-chase], about: "8 real s of the chase view"}
+      - {file: "strip-013-*.jpg", tags: [strip, air-chase], about: "film strip of step 013 (8 real s of the chase view)"}
+      - {file: "step-014.png", tags: [air-chase], about: "the next aircraft of his in the chase view"}
+      - {file: "step-015.png", tags: [air-chase], about: "4 real s behind that aircraft"}
+      - {file: "strip-015-*.jpg", tags: [strip, air-chase], about: "film strip of step 015 (4 real s behind that aircraft)"}
+      - {file: "step-016.png", tags: [air-battle], about: "Esc: back to the strategy view"}
+      - {file: "step-017.png", tags: [air-battle], about: "pace x4"}
+      - {file: "step-018.png", tags: [air-battle], about: "silent wait at x4: still at about battle s 343, the bombers well on toward the target"}
+      - {file: "step-019.png", tags: [air-battle], about: "pace x1"}
+      - {file: "step-020.png", tags: [air-battle], about: "silent wait at x1: still at about battle s 376, the bombers close to the target"}
+      - {file: "step-021.png", tags: [air-battle], about: "pace x4"}
+      - {file: "step-022.png", tags: [air-bombs, air-battle], about: "battle s 386: the run-in to the target"}
+      - {file: "strip-022-*.jpg", tags: [strip, air-bombs], about: "film strip of step 022 (battle s 386)"}
+      - {file: "step-023.png", tags: [air-bombs], about: "pace x1 for the bombs (the strike itself never runs fast)"}
+      - {file: "step-024.png", tags: [air-bombs], about: "battle s 386 to 401 at x1 (30 real s, strip the first 24): the bombs fall at about 393; still just after", look: true}
+      - {file: "strip-024-*.jpg", tags: [strip, air-bombs], about: "film strip of step 024 (battle s 386 to 401 at x1 (30 real s, strip the first 24))"}
+      - {file: "step-025.png", tags: [air-battle], about: "pace x4; the fight winds down at x10 by itself"}
+      - {file: "step-026.png", tags: [air-after-card, air-battle], about: "silent wait: the raid over at about battle s 453; still: the after card, or the last of the fight"}
+      - {file: "step-027.png", tags: [air-after-card, ui], about: "the after card: the raid's result, losses on both sides", look: true}
+      - {file: "step-028.png", tags: [map], about: "CONTINUE: the battle handed back to the map (the step waits for the table)"}
+      - {file: "step-029.png", tags: [air-after-card, map], about: "spare: had 028 answered a question in place of the card, the card is waited for here (else nothing is up)"}
+      - {file: "step-030.png", tags: [map], about: "spare CONTINUE (else: no air battle is up)"}
+      - {file: "step-031.png", tags: [map], about: "the French map after the raid"}
+  map-fleets-europe:
+    kind: map
+    theater: T1
+    year: 1939
+    month: 9
+    nations: [UK]
+    about: "British fleets sailing four ways on the map, September 1939"
+    pictures:
+      - {file: "step-001.png", tags: [map], about: "the British campaign table, September 1939"}
+      - {file: "step-002.png", tags: [map, map-fleet-rest], about: "AT REST, never moved: Dover Fleet in the English Channel off the Cotentin", look: true}
+      - {file: "step-003.png", tags: [map], about: "the North Sea off Norway, where Home Fleet will pass going north (no fleet yet, or Home Fleet at the bottom edge)"}
+      - {file: "step-004.png", tags: [map, map-fleet-rest], about: "Home Fleet in hand: the seas it can reach ringed"}
+      - {file: "step-005.png", tags: [map, map-fleet-sailing], about: "MID-SAIL heading NORTH: Home Fleet about half way up the Norwegian coast, its wake trailing south behind it", look: true}
+      - {file: "strip-005-*.jpg", tags: [strip, map-fleet-sailing], about: "film strip of step 005 (MID-SAIL heading NORTH)"}
+      - {file: "step-006.png", tags: [map, map-fleet-rest], about: "JUST ARRIVED from the south: Home Fleet in the Norwegian Sea (its middle lies about 200 map units west of Trondheim)"}
+      - {file: "step-007.png", tags: [map], about: "the Atlantic off Galicia, where the Western Approaches Fleet will pass going south"}
+      - {file: "step-008.png", tags: [map, map-fleet-rest], about: "Western Approaches Fleet in hand"}
+      - {file: "step-009.png", tags: [map, map-fleet-sailing], about: "MID-SAIL heading SOUTH: Western Approaches Fleet off Galicia, its wake trailing north", look: true}
+      - {file: "strip-009-*.jpg", tags: [strip, map-fleet-sailing], about: "film strip of step 009 (MID-SAIL heading SOUTH)"}
+      - {file: "step-010.png", tags: [map, map-fleet-rest], about: "JUST ARRIVED from the north: Western Approaches Fleet on the Iberian Coast off Cadiz"}
+      - {file: "step-011.png", tags: [map], about: "the sea between Crete and Derna, where the Mediterranean Fleet will pass going west"}
+      - {file: "step-012.png", tags: [map], about: "Mediterranean Fleet in hand (the British one: TC.find gives fleet 4, not the French fleet of that name)"}
+      - {file: "step-013.png", tags: [map, map-fleet-sailing], about: "MID-SAIL heading WEST: Mediterranean Fleet between Crete and Derna, its wake trailing east", look: true}
+      - {file: "strip-013-*.jpg", tags: [strip, map-fleet-sailing], about: "film strip of step 013 (MID-SAIL heading WEST)"}
+      - {file: "step-014.png", tags: [map, map-fleet-rest], about: "JUST ARRIVED from the east: Mediterranean Fleet in the Central Mediterranean, east of Malta"}
+      - {file: "step-015.png", tags: [map], about: "the same water between Crete and Derna again"}
+      - {file: "step-016.png", tags: [map], about: "Mediterranean Fleet in hand again"}
+      - {file: "step-017.png", tags: [map, map-fleet-sailing], about: "MID-SAIL heading EAST over the same water as 013, the other way: its wake trailing west", look: true}
+      - {file: "strip-017-*.jpg", tags: [strip, map-fleet-sailing], about: "film strip of step 017 (MID-SAIL heading EAST over the same water as 013, the other way)"}
+      - {file: "step-018.png", tags: [map, map-fleet-rest], about: "JUST ARRIVED from the west: Mediterranean Fleet back in the Eastern Mediterranean, west of Cyprus"}
+      - {file: "step-019.png", tags: [map, map-fleet-rest], about: "AT REST a minute after sailing north: Home Fleet in the Norwegian Sea"}
+      - {file: "step-020.png", tags: [map, map-fleet-rest], about: "AT REST a minute after sailing south: Western Approaches Fleet off Cadiz", look: true}
+      - {file: "step-021.png", tags: [map, map-fleet-rest], about: "AT REST after sailing east: Mediterranean Fleet west of Cyprus"}
+      - {file: "step-022.png", tags: [map, map-fleet-rest], about: "AT REST, never moved, a few minutes on: Dover Fleet in the Channel (the control: compare with 002)"}
+  map-fleets-europe-heading:
+    kind: map
+    theater: T1
+    year: 1939
+    month: 9
+    nations: [UK]
+    about: "The same fleets with -TheaterFleetHeading (the art director's fleet-heading fix)"
+    pictures:
+      - {file: "step-001.png", tags: [map], about: "the British campaign table, September 1939"}
+      - {file: "step-002.png", tags: [map, map-fleet-rest], about: "AT REST, never moved: Dover Fleet in the English Channel off the Cotentin", look: true}
+      - {file: "step-003.png", tags: [map], about: "the North Sea off Norway, where Home Fleet will pass going north (no fleet yet, or Home Fleet at the bottom edge)"}
+      - {file: "step-004.png", tags: [map, map-fleet-rest], about: "Home Fleet in hand: the seas it can reach ringed"}
+      - {file: "step-005.png", tags: [map, map-fleet-sailing], about: "MID-SAIL heading NORTH: Home Fleet about half way up the Norwegian coast, its wake trailing south behind it", look: true}
+      - {file: "strip-005-*.jpg", tags: [strip, map-fleet-sailing], about: "film strip of step 005 (MID-SAIL heading NORTH)"}
+      - {file: "step-006.png", tags: [map, map-fleet-rest], about: "JUST ARRIVED from the south: Home Fleet in the Norwegian Sea (its middle lies about 200 map units west of Trondheim)"}
+      - {file: "step-007.png", tags: [map], about: "the Atlantic off Galicia, where the Western Approaches Fleet will pass going south"}
+      - {file: "step-008.png", tags: [map, map-fleet-rest], about: "Western Approaches Fleet in hand"}
+      - {file: "step-009.png", tags: [map, map-fleet-sailing], about: "MID-SAIL heading SOUTH: Western Approaches Fleet off Galicia, its wake trailing north", look: true}
+      - {file: "strip-009-*.jpg", tags: [strip, map-fleet-sailing], about: "film strip of step 009 (MID-SAIL heading SOUTH)"}
+      - {file: "step-010.png", tags: [map, map-fleet-rest], about: "JUST ARRIVED from the north: Western Approaches Fleet on the Iberian Coast off Cadiz"}
+      - {file: "step-011.png", tags: [map], about: "the sea between Crete and Derna, where the Mediterranean Fleet will pass going west"}
+      - {file: "step-012.png", tags: [map], about: "Mediterranean Fleet in hand (the British one: TC.find gives fleet 4, not the French fleet of that name)"}
+      - {file: "step-013.png", tags: [map, map-fleet-sailing], about: "MID-SAIL heading WEST: Mediterranean Fleet between Crete and Derna, its wake trailing east", look: true}
+      - {file: "strip-013-*.jpg", tags: [strip, map-fleet-sailing], about: "film strip of step 013 (MID-SAIL heading WEST)"}
+      - {file: "step-014.png", tags: [map, map-fleet-rest], about: "JUST ARRIVED from the east: Mediterranean Fleet in the Central Mediterranean, east of Malta"}
+      - {file: "step-015.png", tags: [map], about: "the same water between Crete and Derna again"}
+      - {file: "step-016.png", tags: [map], about: "Mediterranean Fleet in hand again"}
+      - {file: "step-017.png", tags: [map, map-fleet-sailing], about: "MID-SAIL heading EAST over the same water as 013, the other way: its wake trailing west", look: true}
+      - {file: "strip-017-*.jpg", tags: [strip, map-fleet-sailing], about: "film strip of step 017 (MID-SAIL heading EAST over the same water as 013, the other way)"}
+      - {file: "step-018.png", tags: [map, map-fleet-rest], about: "JUST ARRIVED from the west: Mediterranean Fleet back in the Eastern Mediterranean, west of Cyprus"}
+      - {file: "step-019.png", tags: [map, map-fleet-rest], about: "AT REST a minute after sailing north: Home Fleet in the Norwegian Sea"}
+      - {file: "step-020.png", tags: [map, map-fleet-rest], about: "AT REST a minute after sailing south: Western Approaches Fleet off Cadiz", look: true}
+      - {file: "step-021.png", tags: [map, map-fleet-rest], about: "AT REST after sailing east: Mediterranean Fleet west of Cyprus"}
+      - {file: "step-022.png", tags: [map, map-fleet-rest], about: "AT REST, never moved, a few minutes on: Dover Fleet in the Channel (the control: compare with 002)"}
+  photo-fleets-yaw:
+    kind: map
+    theater: T1
+    year: 1939
+    month: 9
+    nations: [UK]
+    about: "Fleets at rest seen from four headings, a train and an army on the march, Britain September 1939"
+    pictures:
+      - {file: "look1-fleet0-0.25.png", tags: [map, map-fleet-rest], about: "the first fleet laid (Home Fleet, North Sea) at rest, close, camera heading 0", look: true}
+      - {file: "look2-fleet0-0.25.png", tags: [map, map-fleet-rest], about: "the same fleet at rest, camera turned 90 degrees: its wake must not point to the same screen side as in look1"}
+      - {file: "look3-fleet0-0.25.png", tags: [map, map-fleet-rest], about: "the same fleet at rest, camera turned 180 degrees"}
+      - {file: "look4-fleet0-0.25.png", tags: [map, map-fleet-rest], about: "the same fleet at rest, camera turned 270 degrees"}
+      - {file: "look5-241,856-0.3.png", tags: [map, map-fleet-rest], about: "the middle of the English Channel (Dover Fleet at rest), camera heading 0"}
+      - {file: "look6-241,856-0.3.png", tags: [map, map-fleet-rest], about: "the English Channel again, camera turned 135 degrees"}
+      - {file: "look7-train-0.2.png", tags: [map], about: "a train running in the open, near (if none runs: the map's middle)"}
+      - {file: "look8-Yorkshire-0.45.png", tags: [map, map-army], about: "Southern Command (Hampshire) ordered to Lothian just before the picture: the army on the march north through Yorkshire"}
+  opening-screen:
+    kind: map
+    theater: T1
+    year: 1939
+    month: 9
+    nations: [GER, FRA, UK, SOV, ITA]
+    about: "The opening screen's country cards pressed in turn"
+    pictures:
+      - {file: "step-001.png", tags: [ui], about: "the opening screen as it first stands: the grand campaign's country cards (this step does nothing: it only waits and takes the picture)", look: true}
+      - {file: "step-002.png", tags: [ui], about: "Germany picked: its card lit, the summary at the foot of the panel rewritten (no jump, no half-laid lines)"}
+      - {file: "strip-002-*.jpg", tags: [strip, ui], about: "film strip of step 002 (Germany picked)"}
+      - {file: "step-003.png", tags: [ui], about: "France picked: its card lit, the summary at the foot of the panel rewritten (no jump, no half-laid lines)"}
+      - {file: "strip-003-*.jpg", tags: [strip, ui], about: "film strip of step 003 (France picked)"}
+      - {file: "step-004.png", tags: [ui], about: "United Kingdom picked: its card lit, the summary at the foot of the panel rewritten (no jump, no half-laid lines)"}
+      - {file: "strip-004-*.jpg", tags: [strip, ui], about: "film strip of step 004 (United Kingdom picked)"}
+      - {file: "step-005.png", tags: [ui], about: "Soviet Union picked: its card lit, the summary at the foot of the panel rewritten (no jump, no half-laid lines)"}
+      - {file: "strip-005-*.jpg", tags: [strip, ui], about: "film strip of step 005 (Soviet Union picked)"}
+      - {file: "step-006.png", tags: [ui], about: "Italy picked: its card lit, the summary at the foot of the panel rewritten (no jump, no half-laid lines)"}
+      - {file: "strip-006-*.jpg", tags: [strip, ui], about: "film strip of step 006 (Italy picked)"}
+  replay-air-bremen-b17:
+    kind: air
+    theater: T1
+    year: 1943
+    month: 12
+    nations: [USA, GER]
+    about: "The recorded B-17 raid on Bremen, December 1943"
+    pictures:
+      - {file: "bremen-b17-00-flyover-raid.png", tags: [air-flyover], about: "the opening flyover: the raid's formation", look: true}
+      - {file: "bremen-b17-00-flyover-target.png", tags: [air-flyover], about: "the opening flyover over the target"}
+      - {file: "bremen-b17-00-flyover-guard.png", tags: [air-flyover], about: "the opening flyover: the defending fighters coming up (when there is a guard)", look: true}
+      - {file: "bremen-b17-01-approach.png", tags: [air-battle], about: "12 s before the formations meet: both in sight"}
+      - {file: "bremen-b17-02-the-meeting.png", tags: [air-battle], about: "6 s after they meet", look: true}
+      - {file: "bremen-b17-03-ride-a-fighter.png", tags: [air-battle, air-chase], about: "riding a fighter"}
+      - {file: "bremen-b17-04-the-thick-of-it.png", tags: [air-battle], about: "the thick of the fight"}
+      - {file: "bremen-b17-05-ride-again.png", tags: [air-battle, air-chase], about: "riding the other side"}
+      - {file: "bremen-b17-05c-chase-view.png", tags: [air-chase], about: "the chase view, its plate and a step", look: true}
+      - {file: "bremen-b17-06-the-ships.png", tags: [air-battle, air-bombs], about: "after the first ship goes down (sea targets)"}
+      - {file: "bremen-b17-06b-guns-fire-back.png", tags: [air-battle, air-bombs], about: "the guns firing back at the first attack run"}
+      - {file: "bremen-b17-07-the-fight-goes-on.png", tags: [air-battle], about: "two minutes on"}
+      - {file: "bremen-b17-08-after-card.png", tags: [air-after-card, ui], about: "the after card"}
+      - {file: "bremen-b17-09-strike-marks.png", tags: [air-battle, air-chase], about: "riding the aircraft struck the most: its damage marks"}
+      - {file: "bremen-b17-10-dead-engine.png", tags: [air-battle, air-chase], about: "an aircraft with an engine out"}
+      - {file: "bremen-b17-11-parachutes.png", tags: [air-battle], about: "three parachutes in the air"}
+      - {file: "bremen-b17-12-ace-close.png", tags: [air-battle, air-chase], about: "an ace's marks, 8 m off"}
+      - {file: "bremen-b17-12b-ace-chase.png", tags: [air-chase], about: "the chase view behind the ace"}
+      - {file: "strip-*-*.jpg", tags: [strip, air-battle], about: "film strips: the opening shot's first seconds and a few seconds after each still"}
+  land-desert-tobruk:
+    kind: land
+    theater: T5
+    year: 1941
+    month: 1
+    nations: [UK, ITA]
+    about: "The 7th Armoured Division attacks Tobruk, January 1941 (desert)"
+    pictures:
+      - {file: "step-001.png", tags: [map], about: "the campaign table as it opens (UK, 1941-01)"}
+      - {file: "step-002.png", tags: [map, map-army], about: "7th Armoured Division picked up on the map: the army piece in hand, the provinces it can reach lit"}
+      - {file: "step-003.png", tags: [ui, map], about: "the attack card for Tobruk: the odds, SEND THEM IN and FIGHT IT YOURSELF"}
+      - {file: "step-004.png", tags: [land-deploy], about: "the land battle opens (a second in: the field being laid, or its first frame)"}
+      - {file: "step-005.png", tags: [land-deploy], about: "8 real s of the placing view: the field, its ground and both sides placed, before the battle begins", look: true}
+      - {file: "strip-005-*.jpg", tags: [strip, land-deploy], about: "film strip of step 005 (8 real s of the placing view)"}
+      - {file: "step-006.png", tags: [land-opening], about: "Enter (BEGIN): the battle begins, the high view"}
+      - {file: "step-007.png", tags: [land-opening], about: "pace x4 (2 battle s a real s) until contact; the high view"}
+      - {file: "step-008.png", tags: [land-opening], about: "past any night before: the attack under way, seen from his high view"}
+      - {file: "step-009.png", tags: [land-advance], about: "Tab: his next unit in hand, the view glides to it"}
+      - {file: "step-010.png", tags: [land-advance, land-close-men, land-vehicles], about: "V: the film rides with that unit: a close view of its men or tanks", look: true}
+      - {file: "step-011.png", tags: [land-advance, land-close-men, land-vehicles], about: "12 real s riding with them toward the enemy at x4: men running, vehicles moving"}
+      - {file: "strip-011-*.jpg", tags: [strip, land-advance, land-close-men], about: "film strip of step 011 (12 real s riding with them toward the enemy at x4)"}
+      - {file: "step-012.png", tags: [land-close-men, land-vehicles], about: "until the first contact (about battle s 59), still riding with the unit"}
+      - {file: "strip-012-*.jpg", tags: [strip, land-close-men], about: "film strip of step 012 (until the first contact (about battle s 59), still riding with the unit)"}
+      - {file: "step-013.png", tags: [land-close-men, land-vehicles], about: "in the film the keys 1-3 are x0.5/x1/x2: x1 (half a battle s a real s) for the close fight"}
+      - {file: "step-014.png", tags: [land-close-men, land-vehicles, land-fall], about: "16 real s of the close fight at x1: fire, men going to ground or falling", look: true}
+      - {file: "strip-014-*.jpg", tags: [strip, land-close-men, land-fall], about: "film strip of step 014 (16 real s of the close fight at x1)"}
+      - {file: "step-015.png", tags: [land-advance], about: "C: the film gives the camera back: his high view of the fight"}
+      - {file: "step-016.png", tags: [land-advance], about: "Q held a second: his view turns (the view's own keys, no order)"}
+      - {file: "step-017.png", tags: [land-advance, land-village], about: "W held a second: his view walks forward, lower over the field"}
+      - {file: "step-018.png", tags: [land-close-men, land-vehicles], about: "C: the film takes the camera, choosing its own shots"}
+      - {file: "step-019.png", tags: [land-close-men, land-vehicles, land-fall], about: "16 real s of the film's own cutting: each cut clean, the camera smooth between cuts"}
+      - {file: "strip-019-*.jpg", tags: [strip, land-close-men], about: "film strip of step 019 (16 real s of the film's own cutting)"}
+      - {file: "step-020.png", tags: [land-advance], about: "Esc: the map (his high view) back"}
+      - {file: "step-021.png", tags: [land-advance], about: "x4 to the end of the battle"}
+      - {file: "step-022.png", tags: [land-after-card, ui], about: "the after card: who won, the losses, CONTINUE"}
+      - {file: "strip-022-*.jpg", tags: [strip, land-after-card], about: "film strip of step 022 (the after card)"}
+      - {file: "step-023.png", tags: [map], about: "CONTINUE: the battle handed back to the campaign map"}
+      - {file: "step-024.png", tags: [map, map-army], about: "the campaign map after the battle of Tobruk"}
+  land-winter-orel:
+    kind: land
+    theater: T3
+    year: 1942
+    month: 1
+    nations: [SOV, GER]
+    about: "The 9th Army attacks Orel in the snow, January 1942"
+    pictures:
+      - {file: "step-001.png", tags: [map], about: "the campaign table as it opens (SOV, 1942-01)"}
+      - {file: "step-002.png", tags: [map, map-army], about: "9th Army picked up on the map: the army piece in hand, the provinces it can reach lit"}
+      - {file: "step-003.png", tags: [ui, map], about: "the attack card for Orel: the odds, SEND THEM IN and FIGHT IT YOURSELF"}
+      - {file: "step-004.png", tags: [land-deploy], about: "the land battle opens (a second in: the field being laid, or its first frame)"}
+      - {file: "step-005.png", tags: [land-deploy], about: "8 real s of the placing view: the field, its ground and both sides placed, before the battle begins", look: true}
+      - {file: "step-006.png", tags: [land-opening], about: "Enter (BEGIN): the battle begins, the high view"}
+      - {file: "step-007.png", tags: [land-opening], about: "pace x4 (2 battle s a real s) until contact; the high view"}
+      - {file: "step-008.png", tags: [land-opening], about: "past any night before: the attack under way, seen from his high view"}
+      - {file: "step-009.png", tags: [land-advance], about: "Tab: his next unit in hand, the view glides to it"}
+      - {file: "step-010.png", tags: [land-advance, land-close-men, land-vehicles], about: "V: the film rides with that unit: a close view of its men or tanks", look: true}
+      - {file: "step-011.png", tags: [land-advance, land-close-men, land-vehicles], about: "12 real s riding with them toward the enemy at x4: men running, vehicles moving"}
+      - {file: "step-012.png", tags: [land-close-men, land-vehicles], about: "until the first contact (about battle s 97), still riding with the unit"}
+      - {file: "step-013.png", tags: [land-close-men, land-vehicles], about: "in the film the keys 1-3 are x0.5/x1/x2: x1 (half a battle s a real s) for the close fight"}
+      - {file: "step-014.png", tags: [land-close-men, land-vehicles, land-fall], about: "16 real s of the close fight at x1: fire, men going to ground or falling", look: true}
+      - {file: "step-015.png", tags: [land-advance], about: "C: the film gives the camera back: his high view of the fight"}
+      - {file: "step-016.png", tags: [land-advance], about: "Q held a second: his view turns (the view's own keys, no order)"}
+      - {file: "step-017.png", tags: [land-advance, land-village], about: "W held a second: his view walks forward, lower over the field"}
+      - {file: "step-018.png", tags: [land-close-men, land-vehicles], about: "C: the film takes the camera, choosing its own shots"}
+      - {file: "step-019.png", tags: [land-close-men, land-vehicles, land-fall], about: "16 real s of the film's own cutting: each cut clean, the camera smooth between cuts"}
+      - {file: "step-020.png", tags: [land-advance], about: "Esc: the map (his high view) back"}
+      - {file: "step-021.png", tags: [land-advance], about: "x4 to the end of the battle"}
+      - {file: "step-022.png", tags: [land-after-card, ui], about: "the after card: who won, the losses, CONTINUE"}
+      - {file: "step-023.png", tags: [map], about: "CONTINUE: the battle handed back to the campaign map"}
+      - {file: "step-024.png", tags: [map, map-army], about: "the campaign map after the battle of Orel"}
+  land-med-salonika:
+    kind: land
+    theater: T6
+    year: 1941
+    month: 1
+    nations: [ITA, GRE]
+    about: "Albania Command attacks Salonika, January 1941 (the Mediterranean look)"
+    pictures:
+      - {file: "step-001.png", tags: [map], about: "the campaign table as it opens (ITA, 1941-01)"}
+      - {file: "step-002.png", tags: [map, map-army], about: "Albania Command picked up on the map: the army piece in hand, the provinces it can reach lit"}
+      - {file: "step-003.png", tags: [ui, map], about: "the attack card for Salonika: the odds, SEND THEM IN and FIGHT IT YOURSELF"}
+      - {file: "step-004.png", tags: [land-deploy], about: "the land battle opens (a second in: the field being laid, or its first frame)"}
+      - {file: "step-005.png", tags: [land-deploy], about: "8 real s of the placing view: the field, its ground and both sides placed, before the battle begins", look: true}
+      - {file: "step-006.png", tags: [land-opening], about: "Enter (BEGIN): the battle begins, the high view"}
+      - {file: "step-007.png", tags: [land-opening], about: "pace x4 (2 battle s a real s) until contact; the high view"}
+      - {file: "step-008.png", tags: [land-opening], about: "past any night before: the attack under way, seen from his high view"}
+      - {file: "step-009.png", tags: [land-advance], about: "Tab: his next unit in hand, the view glides to it"}
+      - {file: "step-010.png", tags: [land-advance, land-close-men, land-vehicles], about: "V: the film rides with that unit: a close view of its men or tanks", look: true}
+      - {file: "step-011.png", tags: [land-advance, land-close-men, land-vehicles], about: "12 real s riding with them toward the enemy at x4: men running, vehicles moving"}
+      - {file: "step-012.png", tags: [land-close-men, land-vehicles], about: "until the first contact (about battle s 102), still riding with the unit"}
+      - {file: "step-013.png", tags: [land-close-men, land-vehicles], about: "in the film the keys 1-3 are x0.5/x1/x2: x1 (half a battle s a real s) for the close fight"}
+      - {file: "step-014.png", tags: [land-close-men, land-vehicles, land-fall], about: "16 real s of the close fight at x1: fire, men going to ground or falling", look: true}
+      - {file: "step-015.png", tags: [land-advance], about: "C: the film gives the camera back: his high view of the fight"}
+      - {file: "step-016.png", tags: [land-advance], about: "Q held a second: his view turns (the view's own keys, no order)"}
+      - {file: "step-017.png", tags: [land-advance, land-village], about: "W held a second: his view walks forward, lower over the field"}
+      - {file: "step-018.png", tags: [land-close-men, land-vehicles], about: "C: the film takes the camera, choosing its own shots"}
+      - {file: "step-019.png", tags: [land-close-men, land-vehicles, land-fall], about: "16 real s of the film's own cutting: each cut clean, the camera smooth between cuts"}
+      - {file: "step-020.png", tags: [land-advance], about: "Esc: the map (his high view) back"}
+      - {file: "step-021.png", tags: [land-advance], about: "x4 to the end of the battle"}
+      - {file: "step-022.png", tags: [land-after-card, ui], about: "the after card: who won, the losses, CONTINUE"}
+      - {file: "step-023.png", tags: [map], about: "CONTINUE: the battle handed back to the campaign map"}
+      - {file: "step-024.png", tags: [map, map-army], about: "the campaign map after the battle of Salonika"}
+  far-pacific:
+    kind: map
+    theater: T7
+    year: 1939
+    month: 9
+    nations: [JAP, CHN]
+    about: "Japan on the whole-world map, September 1939: Pacific fleets, Kukong in southern China, the Americas"
+    pictures:
+      - {file: "step-001.png", tags: [map], about: "the Japanese campaign on the whole-world map, September 1939"}
+      - {file: "step-002.png", tags: [map], about: "the game kept as it begins (for the restore at step 016)"}
+      - {file: "step-003.png", tags: [map], about: "the East China Sea off Wenchow, where 2nd Fleet will pass going north"}
+      - {file: "step-004.png", tags: [map, map-fleet-rest], about: "2nd Fleet in hand (in harbour at Formosa)"}
+      - {file: "step-005.png", tags: [map, map-fleet-sailing], about: "MID-SAIL heading NORTH: 2nd Fleet off Wenchow, its wake trailing south", look: true}
+      - {file: "strip-005-*.jpg", tags: [strip, map-fleet-sailing], about: "film strip of step 005 (MID-SAIL heading NORTH)"}
+      - {file: "step-006.png", tags: [map, map-fleet-rest], about: "JUST ARRIVED from the south: 2nd Fleet in the Yellow Sea"}
+      - {file: "step-007.png", tags: [map], about: "the South China Sea off Qui Nhon, where the Southern Expeditionary Fleet will pass going south"}
+      - {file: "step-008.png", tags: [map, map-fleet-rest], about: "Southern Expeditionary Fleet in hand (in harbour at Hainan)"}
+      - {file: "step-009.png", tags: [map, map-fleet-sailing], about: "MID-SAIL heading SOUTH: Southern Expeditionary Fleet off Qui Nhon, its wake trailing north", look: true}
+      - {file: "strip-009-*.jpg", tags: [strip, map-fleet-sailing], about: "film strip of step 009 (MID-SAIL heading SOUTH)"}
+      - {file: "step-010.png", tags: [map, map-fleet-rest], about: "JUST ARRIVED from the north: Southern Expeditionary Fleet in the Natuna Sea"}
+      - {file: "step-011.png", tags: [map], about: "the open Pacific near Ponape, where 4th Fleet will pass going east"}
+      - {file: "step-012.png", tags: [map, map-fleet-rest], about: "4th Fleet in hand (in harbour at Truk)"}
+      - {file: "step-013.png", tags: [map, map-fleet-sailing], about: "MID-SAIL heading EAST: 4th Fleet near Ponape, its wake trailing west", look: true}
+      - {file: "strip-013-*.jpg", tags: [strip, map-fleet-sailing], about: "film strip of step 013 (MID-SAIL heading EAST)"}
+      - {file: "step-014.png", tags: [map, map-fleet-rest], about: "JUST ARRIVED from the west: 4th Fleet in Marshall Waters"}
+      - {file: "step-015.png", tags: [map, map-fleet-rest], about: "AT REST about a minute after sailing north: 2nd Fleet in the Yellow Sea", look: true}
+      - {file: "step-016.png", tags: [map], about: "the game as it began: every fleet back in harbour (on the map they may sail back)"}
+      - {file: "step-017.png", tags: [map], about: "the open Pacific near Ulithi, where 4th Fleet will pass going west"}
+      - {file: "step-018.png", tags: [map, map-fleet-rest], about: "4th Fleet in hand again, at Truk"}
+      - {file: "step-019.png", tags: [map, map-fleet-sailing], about: "MID-SAIL heading WEST: 4th Fleet near Ulithi, its wake trailing east", look: true}
+      - {file: "strip-019-*.jpg", tags: [strip, map-fleet-sailing], about: "film strip of step 019 (MID-SAIL heading WEST)"}
+      - {file: "step-020.png", tags: [map, map-fleet-rest], about: "JUST ARRIVED from the east: 4th Fleet in Leyte Gulf"}
+      - {file: "step-021.png", tags: [map, map-army], about: "21st Army (Canton) picked up on the map: the army piece in hand, the provinces it can reach lit"}
+      - {file: "step-022.png", tags: [ui, map], about: "the attack card for Kukong: the odds, SEND THEM IN and FIGHT IT YOURSELF"}
+      - {file: "step-023.png", tags: [land-deploy], about: "the land battle opens (a second in: the field being laid, or its first frame)"}
+      - {file: "step-024.png", tags: [land-deploy], about: "8 real s of the placing view: the field, its ground and both sides placed, before the battle begins", look: true}
+      - {file: "strip-024-*.jpg", tags: [strip, land-deploy], about: "film strip of step 024 (8 real s of the placing view)"}
+      - {file: "step-025.png", tags: [land-opening], about: "Enter (BEGIN): the battle begins, the high view"}
+      - {file: "step-026.png", tags: [land-opening], about: "pace x4 (2 battle s a real s) until contact; the high view"}
+      - {file: "step-027.png", tags: [land-opening], about: "past any night before: the attack under way, seen from his high view"}
+      - {file: "step-028.png", tags: [land-advance], about: "Tab: his next unit in hand, the view glides to it"}
+      - {file: "step-029.png", tags: [land-advance, land-close-men, land-vehicles], about: "V: the film rides with that unit: a close view of its men or tanks", look: true}
+      - {file: "step-030.png", tags: [land-advance, land-close-men, land-vehicles], about: "12 real s riding with them toward the enemy at x4: men running, vehicles moving"}
+      - {file: "strip-030-*.jpg", tags: [strip, land-advance, land-close-men], about: "film strip of step 030 (12 real s riding with them toward the enemy at x4)"}
+      - {file: "step-031.png", tags: [land-close-men, land-vehicles], about: "until the first contact (about battle s 99), still riding with the unit"}
+      - {file: "strip-031-*.jpg", tags: [strip, land-close-men], about: "film strip of step 031 (until the first contact (about battle s 99), still riding with the unit)"}
+      - {file: "step-032.png", tags: [land-close-men, land-vehicles], about: "in the film the keys 1-3 are x0.5/x1/x2: x1 (half a battle s a real s) for the close fight"}
+      - {file: "step-033.png", tags: [land-close-men, land-vehicles, land-fall], about: "16 real s of the close fight at x1: fire, men going to ground or falling", look: true}
+      - {file: "strip-033-*.jpg", tags: [strip, land-close-men, land-fall], about: "film strip of step 033 (16 real s of the close fight at x1)"}
+      - {file: "step-034.png", tags: [land-advance], about: "C: the film gives the camera back: his high view of the fight"}
+      - {file: "step-035.png", tags: [land-advance], about: "Q held a second: his view turns (the view's own keys, no order)"}
+      - {file: "step-036.png", tags: [land-advance, land-village], about: "W held a second: his view walks forward, lower over the field"}
+      - {file: "step-037.png", tags: [land-close-men, land-vehicles], about: "C: the film takes the camera, choosing its own shots"}
+      - {file: "step-038.png", tags: [land-close-men, land-vehicles, land-fall], about: "16 real s of the film's own cutting: each cut clean, the camera smooth between cuts"}
+      - {file: "strip-038-*.jpg", tags: [strip, land-close-men], about: "film strip of step 038 (16 real s of the film's own cutting)"}
+      - {file: "step-039.png", tags: [land-advance], about: "Esc: the map (his high view) back"}
+      - {file: "step-040.png", tags: [land-advance], about: "x4 to the end of the battle"}
+      - {file: "step-041.png", tags: [land-after-card, ui], about: "the after card: who won, the losses, CONTINUE"}
+      - {file: "strip-041-*.jpg", tags: [strip, land-after-card], about: "film strip of step 041 (the after card)"}
+      - {file: "step-042.png", tags: [map], about: "CONTINUE: the battle handed back to the campaign map"}
+      - {file: "step-043.png", tags: [map, map-army], about: "the campaign map after the battle of Kukong"}
+      - {file: "step-044.png", tags: [map, map-city], about: "the Americas: Washington and the east coast of the United States by day (unseen by Japan: under fog)", look: true}
+      - {file: "step-045.png", tags: [map, map-night], about: "T: held at night: the same view by lamplight (Brian: \"America looks fogged\" at night)"}
+      - {file: "step-046.png", tags: [map, map-night], about: "Hawaii by night"}
+      - {file: "step-047.png", tags: [map], about: "T: the day and night run again"}
+      - {file: "step-048.png", tags: [map], about: "T: held at day again"}
+  map-raid-hanover:
+    kind: map
+    theater: T1
+    year: 1939
+    month: 9
+    nations: [UK, GER]
+    about: "A British day raid on Hanover flown on the map, September 1939"
+    pictures:
+      - {file: "step-001.png", tags: [map], about: "the British campaign table, September 1939"}
+      - {file: "step-002.png", tags: [map, map-city], about: "the target, Hanover, close, by day before the raid: its factory and railway junction", look: true}
+      - {file: "step-003.png", tags: [ui], about: "the raid card DAY BOMBING: HANOVER, three groups"}
+      - {file: "step-004.png", tags: [map, map-raid], about: "the raid flies: the room put away, the eye far enough back to hold the airfields and the target; groups taking off", look: true}
+      - {file: "strip-004-*.jpg", tags: [strip, map-raid], about: "film strip of step 004 (the raid flies)"}
+      - {file: "step-005.png", tags: [map, map-raid], about: "about 3 s into the raid: the groups on their way"}
+      - {file: "step-006.png", tags: [map, map-raid], about: "about 5 s: meeting over the target, bombs and flak"}
+      - {file: "step-007.png", tags: [map, map-raid], about: "about 7 s: turning for home"}
+      - {file: "step-008.png", tags: [map, map-raid], about: "about 9 s: coming home to their airfields and the carrier"}
+      - {file: "step-009.png", tags: [map, map-city], about: "the target just after the raid: black smoke over it if the bombs did harm", look: true}
+      - {file: "step-010.png", tags: [map, map-city, map-night], about: "T: held at night: the same view of Hanover by lamplight"}
+      - {file: "step-011.png", tags: [map, map-night], about: "night over his own ground (Kent) with the Channel and France beyond: own ground must not read as fog", look: true}
+      - {file: "step-012.png", tags: [map], about: "T: the day and night run again (the hour of this still is whatever it is)"}
+      - {file: "step-013.png", tags: [map], about: "T: held at day again: Kent by day, the pair for 011"}
+      - {file: "step-014.png", tags: [map], about: "the month ends: its replay and cards, answered as a player in a hurry would; still at its end"}
+      - {file: "step-015.png", tags: [map], about: "close: whatever card the month left up"}
+      - {file: "step-016.png", tags: [map, map-city], about: "Hanover a month after the raid (October 1939): smoke or scars still there?", look: true}
+  land-poland-1939:
+    kind: land
+    theater: T2
+    year: 1939
+    month: 9
+    nations: [GER, POL]
+    about: "Germany in Poland, September 1939: Pomorze in the open, then Warsaw's city field"
+    pictures:
+      - {file: "step-001.png", tags: [map], about: "the campaign table as it opens (GER, 1939-09)"}
+      - {file: "step-002.png", tags: [map, map-city], about: "Berlin close in the first month: an agent piece near the capital? (Brian: \"i didnt see spies\")", look: true}
+      - {file: "step-003.png", tags: [map, map-army], about: "XIX Corps picked up on the map: the army piece in hand, the provinces it can reach lit"}
+      - {file: "step-004.png", tags: [ui, map], about: "the attack card for Pomorze: the odds, SEND THEM IN and FIGHT IT YOURSELF"}
+      - {file: "step-005.png", tags: [land-deploy], about: "the land battle opens (a second in: the field being laid, or its first frame)"}
+      - {file: "step-006.png", tags: [land-deploy], about: "8 real s of the placing view: the field, its ground and both sides placed, before the battle begins", look: true}
+      - {file: "step-007.png", tags: [land-opening], about: "Enter (BEGIN): the battle begins, the high view"}
+      - {file: "step-008.png", tags: [land-opening], about: "pace x4 (2 battle s a real s) until contact; the high view"}
+      - {file: "step-009.png", tags: [land-opening], about: "past any night before: the attack under way, seen from his high view"}
+      - {file: "step-010.png", tags: [land-advance], about: "Tab: his next unit in hand, the view glides to it"}
+      - {file: "step-011.png", tags: [land-advance, land-close-men, land-vehicles], about: "V: the film rides with that unit: a close view of its men or tanks", look: true}
+      - {file: "step-012.png", tags: [land-advance, land-close-men, land-vehicles], about: "12 real s riding with them toward the enemy at x4: men running, vehicles moving"}
+      - {file: "step-013.png", tags: [land-close-men, land-vehicles], about: "until the first contact (about battle s 60), still riding with the unit"}
+      - {file: "step-014.png", tags: [land-close-men, land-vehicles], about: "in the film the keys 1-3 are x0.5/x1/x2: x1 (half a battle s a real s) for the close fight"}
+      - {file: "step-015.png", tags: [land-close-men, land-vehicles, land-fall], about: "16 real s of the close fight at x1: fire, men going to ground or falling", look: true}
+      - {file: "step-016.png", tags: [land-advance], about: "C: the film gives the camera back: his high view of the fight"}
+      - {file: "step-017.png", tags: [land-advance], about: "Q held a second: his view turns (the view's own keys, no order)"}
+      - {file: "step-018.png", tags: [land-advance, land-village], about: "W held a second: his view walks forward, lower over the field"}
+      - {file: "step-019.png", tags: [land-close-men, land-vehicles], about: "C: the film takes the camera, choosing its own shots"}
+      - {file: "step-020.png", tags: [land-close-men, land-vehicles, land-fall], about: "16 real s of the film's own cutting: each cut clean, the camera smooth between cuts"}
+      - {file: "step-021.png", tags: [land-advance], about: "Esc: the map (his high view) back"}
+      - {file: "step-022.png", tags: [land-advance], about: "x4 to the end of the battle"}
+      - {file: "step-023.png", tags: [land-after-card, ui], about: "the after card: who won, the losses, CONTINUE"}
+      - {file: "step-024.png", tags: [map], about: "CONTINUE: the battle handed back to the campaign map"}
+      - {file: "step-025.png", tags: [map, map-army], about: "the campaign map after the battle of Pomorze"}
+      - {file: "step-026.png", tags: [map, map-army], about: "I Corps picked up on the map: the army piece in hand, the provinces it can reach lit"}
+      - {file: "step-027.png", tags: [ui, map], about: "the attack card for Warsaw: the odds, SEND THEM IN and FIGHT IT YOURSELF"}
+      - {file: "step-028.png", tags: [land-deploy], about: "the land battle opens (a second in: the field being laid, or its first frame)"}
+      - {file: "step-029.png", tags: [land-deploy], about: "8 real s of the placing view: the field, its ground and both sides placed, before the battle begins", look: true}
+      - {file: "step-030.png", tags: [land-opening], about: "Enter (BEGIN): the battle begins, the high view"}
+      - {file: "step-031.png", tags: [land-opening], about: "pace x4 (2 battle s a real s) until contact; the high view"}
+      - {file: "step-032.png", tags: [land-opening], about: "past any night before: the attack under way, seen from his high view"}
+      - {file: "step-033.png", tags: [land-advance], about: "Tab: his next unit in hand, the view glides to it"}
+      - {file: "step-034.png", tags: [land-advance, land-close-men, land-vehicles], about: "V: the film rides with that unit: a close view of its men or tanks", look: true}
+      - {file: "step-035.png", tags: [land-advance, land-close-men, land-vehicles], about: "12 real s riding with them toward the enemy at x4: men running, vehicles moving"}
+      - {file: "step-036.png", tags: [land-close-men, land-vehicles], about: "until the first contact (about battle s 114), still riding with the unit"}
+      - {file: "step-037.png", tags: [land-close-men, land-vehicles], about: "in the film the keys 1-3 are x0.5/x1/x2: x1 (half a battle s a real s) for the close fight"}
+      - {file: "step-038.png", tags: [land-close-men, land-vehicles, land-fall], about: "16 real s of the close fight at x1: fire, men going to ground or falling", look: true}
+      - {file: "step-039.png", tags: [land-advance], about: "C: the film gives the camera back: his high view of the fight"}
+      - {file: "step-040.png", tags: [land-advance], about: "Q held a second: his view turns (the view's own keys, no order)"}
+      - {file: "step-041.png", tags: [land-advance, land-village], about: "W held a second: his view walks forward, lower over the field"}
+      - {file: "step-042.png", tags: [land-close-men, land-vehicles], about: "C: the film takes the camera, choosing its own shots"}
+      - {file: "step-043.png", tags: [land-close-men, land-vehicles, land-fall], about: "16 real s of the film's own cutting: each cut clean, the camera smooth between cuts"}
+      - {file: "step-044.png", tags: [land-advance], about: "Esc: the map (his high view) back"}
+      - {file: "step-045.png", tags: [land-advance], about: "x4 to the end of the battle"}
+      - {file: "step-046.png", tags: [land-after-card, ui], about: "the after card: who won, the losses, CONTINUE"}
+      - {file: "step-047.png", tags: [map], about: "CONTINUE: the battle handed back to the campaign map"}
+      - {file: "step-048.png", tags: [map, map-army], about: "the campaign map after the battle of Warsaw"}
+      - {file: "step-049.png", tags: [map], about: "East Prussia by day: his own ground, the border and the ground beyond"}
+      - {file: "step-050.png", tags: [map, map-night], about: "T: held at night: the same view by lamplight; own ground lighter than the fog beyond", look: true}
+      - {file: "step-051.png", tags: [map, map-night], about: "Pomorze by night after the battle: the battle's scars on the map"}
+      - {file: "step-052.png", tags: [map], about: "T: the day and night run again"}
+      - {file: "step-053.png", tags: [map], about: "T: held at day again"}
+  land-west-saar:
+    kind: land
+    theater: T1
+    year: 1939
+    month: 9
+    nations: [FRA, GER]
+    about: "The French 3rd Army attacks the Saar, September 1939 (Western Europe)"
+    pictures:
+      - {file: "step-001.png", tags: [map], about: "the campaign table as it opens (FRA, 1939-09)"}
+      - {file: "step-002.png", tags: [map, map-army], about: "3rd Army picked up on the map: the army piece in hand, the provinces it can reach lit"}
+      - {file: "step-003.png", tags: [ui, map], about: "the attack card for Saar: the odds, SEND THEM IN and FIGHT IT YOURSELF"}
+      - {file: "step-004.png", tags: [land-deploy], about: "the land battle opens (a second in: the field being laid, or its first frame)"}
+      - {file: "step-005.png", tags: [land-deploy], about: "8 real s of the placing view: the field, its ground and both sides placed, before the battle begins", look: true}
+      - {file: "step-006.png", tags: [land-opening], about: "Enter (BEGIN): the battle begins, the high view"}
+      - {file: "step-007.png", tags: [land-opening], about: "pace x4 (2 battle s a real s) until contact; the high view"}
+      - {file: "step-008.png", tags: [land-opening], about: "past any night before: the attack under way, seen from his high view"}
+      - {file: "step-009.png", tags: [land-advance], about: "Tab: his next unit in hand, the view glides to it"}
+      - {file: "step-010.png", tags: [land-advance, land-close-men, land-vehicles], about: "V: the film rides with that unit: a close view of its men or tanks", look: true}
+      - {file: "step-011.png", tags: [land-advance, land-close-men, land-vehicles], about: "12 real s riding with them toward the enemy at x4: men running, vehicles moving"}
+      - {file: "step-012.png", tags: [land-close-men, land-vehicles], about: "until the first contact (about battle s 118), still riding with the unit"}
+      - {file: "step-013.png", tags: [land-close-men, land-vehicles], about: "in the film the keys 1-3 are x0.5/x1/x2: x1 (half a battle s a real s) for the close fight"}
+      - {file: "step-014.png", tags: [land-close-men, land-vehicles, land-fall], about: "16 real s of the close fight at x1: fire, men going to ground or falling", look: true}
+      - {file: "step-015.png", tags: [land-advance], about: "C: the film gives the camera back: his high view of the fight"}
+      - {file: "step-016.png", tags: [land-advance], about: "Q held a second: his view turns (the view's own keys, no order)"}
+      - {file: "step-017.png", tags: [land-advance, land-village], about: "W held a second: his view walks forward, lower over the field"}
+      - {file: "step-018.png", tags: [land-close-men, land-vehicles], about: "C: the film takes the camera, choosing its own shots"}
+      - {file: "step-019.png", tags: [land-close-men, land-vehicles, land-fall], about: "16 real s of the film's own cutting: each cut clean, the camera smooth between cuts"}
+      - {file: "step-020.png", tags: [land-advance], about: "Esc: the map (his high view) back"}
+      - {file: "step-021.png", tags: [land-advance], about: "x4 to the end of the battle"}
+      - {file: "step-022.png", tags: [land-after-card, ui], about: "the after card: who won, the losses, CONTINUE"}
+      - {file: "step-023.png", tags: [map], about: "CONTINUE: the battle handed back to the campaign map"}
+      - {file: "step-024.png", tags: [map, map-army], about: "the campaign map after the battle of Saar"}
+  replay-land-normandy-1944:
+    kind: land
+    theater: T1
+    year: 1944
+    month: 7
+    nations: [USA, GER]
+    about: "The recorded battle in the hedgerows before Le Mesnil, July 1944 (bocage)"
+    pictures:
+      - {file: "normandy-1944-01-opening*.png", tags: [land-opening], about: "4 s in: the opening view of the field", look: true}
+      - {file: "normandy-1944-02-the-advance*.png", tags: [land-advance], about: "the advance, wide, before contact", look: true}
+      - {file: "normandy-1944-03-among-the-men*.png", tags: [land-close-men], about: "over a man's shoulder after contact", look: true}
+      - {file: "normandy-1944-04-in-the-grass*.png", tags: [land-close-men], about: "low in the grass by a man"}
+      - {file: "normandy-1944-05-the-tanks*.png", tags: [land-vehicles], about: "the first tank of the attack to fire", look: true}
+      - {file: "normandy-1944-06-a-man-falls*.png", tags: [land-fall, land-close-men], about: "the first man to fall"}
+      - {file: "normandy-1944-07-a-tank-knocked-out*.png", tags: [land-vehicles, land-fall], about: "the first tank knocked out"}
+      - {file: "normandy-1944-08-the-village*.png", tags: [land-village], about: "the village, late in the fight"}
+      - {file: "normandy-1944-09-the-fallen*.png", tags: [land-fall], about: "low by a man who fell"}
+      - {file: "normandy-1944-10-after-card*.png", tags: [land-after-card, ui], about: "the after card"}
+      - {file: "normandy-1944-11-the-guns-open*.png", tags: [land-close-men, land-advance], about: "the machine guns' long fire after contact, tracer"}
+  replay-land-prokhorovka-1943:
+    kind: land
+    theater: T2
+    year: 1943
+    month: 7
+    nations: [SOV, GER]
+    about: "The recorded tank battle in the fields before Prokhorovka, July 1943"
+    pictures:
+      - {file: "prokhorovka-1943-01-opening*.png", tags: [land-opening], about: "4 s in: the opening view of the field", look: true}
+      - {file: "prokhorovka-1943-02-the-advance*.png", tags: [land-advance], about: "the advance, wide, before contact", look: true}
+      - {file: "prokhorovka-1943-03-among-the-men*.png", tags: [land-close-men], about: "over a man's shoulder after contact", look: true}
+      - {file: "prokhorovka-1943-04-in-the-grass*.png", tags: [land-close-men], about: "low in the grass by a man"}
+      - {file: "prokhorovka-1943-05-the-tanks*.png", tags: [land-vehicles], about: "the first tank of the attack to fire", look: true}
+      - {file: "prokhorovka-1943-06-a-man-falls*.png", tags: [land-fall, land-close-men], about: "the first man to fall"}
+      - {file: "prokhorovka-1943-07-a-tank-knocked-out*.png", tags: [land-vehicles, land-fall], about: "the first tank knocked out"}
+      - {file: "prokhorovka-1943-08-the-village*.png", tags: [land-village], about: "the village, late in the fight"}
+      - {file: "prokhorovka-1943-09-the-fallen*.png", tags: [land-fall], about: "low by a man who fell"}
+      - {file: "prokhorovka-1943-10-after-card*.png", tags: [land-after-card, ui], about: "the after card"}
+      - {file: "prokhorovka-1943-11-the-guns-open*.png", tags: [land-close-men, land-advance], about: "the machine guns' long fire after contact, tracer"}
+  replay-sea-samar:
+    kind: sea
+    theater: T7
+    year: 1944
+    month: 10
+    nations: [JAP, USA]
+    about: "The recorded action off Samar, October 1944"
+    pictures:
+      - {file: "samar-[0-9][0-9]-the-fleets*.png", tags: [sea-battle], about: "the fleets before the guns meet", look: true}
+      - {file: "samar-[0-9][0-9]-the-line*.png", tags: [sea-battle], about: "the battle line"}
+      - {file: "samar-[0-9][0-9]-broadside*.png", tags: [sea-battle, sea-close], about: "a battleship's first broadside", look: true}
+      - {file: "samar-[0-9][0-9]-fall-of-shot*.png", tags: [sea-battle, sea-close], about: "the fall of shot, a second after the columns rise"}
+      - {file: "samar-[0-9][0-9]-a-hit*.png", tags: [sea-close], about: "a hit as it bursts"}
+      - {file: "samar-[0-9][0-9]-torpedo-tracks*.png", tags: [sea-battle], about: "the torpedo tracks once they have run"}
+      - {file: "samar-[0-9][0-9]-the-strike*.png", tags: [sea-battle], about: "an air strike as it dives"}
+      - {file: "samar-[0-9][0-9]-going-down*.png", tags: [sea-close], about: "a ship well into her end"}
+      - {file: "samar-[0-9][0-9]-funnels*.png", tags: [sea-close], about: "the funnels smoking"}
+      - {file: "samar-[0-9][0-9]-the-battle*.png", tags: [sea-battle], about: "the whole battle at its height", look: true}
+      - {file: "samar-[0-9][0-9]-the-end*.png", tags: [sea-battle, sea-after-card], about: "its end"}
+  replay-air-oahu:
+    kind: air
+    theater: T7
+    year: 1941
+    month: 12
+    nations: [JAP, USA]
+    about: "The recorded strike on Pearl Harbor, December 1941"
+    pictures:
+      - {file: "oahu-00-flyover-raid.png", tags: [air-flyover], about: "the opening flyover: the raid's formation", look: true}
+      - {file: "oahu-00-flyover-target.png", tags: [air-flyover], about: "the opening flyover over the target"}
+      - {file: "oahu-00-flyover-guard.png", tags: [air-flyover], about: "the opening flyover: the defending fighters coming up (when there is a guard)", look: true}
+      - {file: "oahu-01-approach.png", tags: [air-battle], about: "12 s before the formations meet: both in sight"}
+      - {file: "oahu-02-the-meeting.png", tags: [air-battle], about: "6 s after they meet", look: true}
+      - {file: "oahu-03-ride-a-fighter.png", tags: [air-battle, air-chase], about: "riding a fighter"}
+      - {file: "oahu-04-the-thick-of-it.png", tags: [air-battle], about: "the thick of the fight"}
+      - {file: "oahu-05-ride-again.png", tags: [air-battle, air-chase], about: "riding the other side"}
+      - {file: "oahu-05c-chase-view.png", tags: [air-chase], about: "the chase view, its plate and a step", look: true}
+      - {file: "oahu-06-the-ships.png", tags: [air-battle, air-bombs], about: "after the first ship goes down (sea targets)"}
+      - {file: "oahu-06b-guns-fire-back.png", tags: [air-battle, air-bombs], about: "the guns firing back at the first attack run"}
+      - {file: "oahu-07-the-fight-goes-on.png", tags: [air-battle], about: "two minutes on"}
+      - {file: "oahu-08-after-card.png", tags: [air-after-card, ui], about: "the after card"}
+      - {file: "oahu-09-strike-marks.png", tags: [air-battle, air-chase], about: "riding the aircraft struck the most: its damage marks"}
+      - {file: "oahu-10-dead-engine.png", tags: [air-battle, air-chase], about: "an aircraft with an engine out"}
+      - {file: "oahu-11-parachutes.png", tags: [air-battle], about: "three parachutes in the air"}
+      - {file: "oahu-12-ace-close.png", tags: [air-battle, air-chase], about: "an ace's marks, 8 m off"}
+      - {file: "oahu-12b-ace-chase.png", tags: [air-chase], about: "the chase view behind the ace"}
+      - {file: "strip-*-*.jpg", tags: [strip, air-battle], about: "film strips: the opening shot's first seconds and a few seconds after each still"}
+  replay-air-midway-fleet:
+    kind: air
+    theater: T7
+    year: 1942
+    month: 6
+    nations: [USA, JAP]
+    about: "The recorded strike on the fleet at Midway, June 1942"
+    pictures:
+      - {file: "midway-fleet-00-flyover-raid.png", tags: [air-flyover], about: "the opening flyover: the raid's formation", look: true}
+      - {file: "midway-fleet-00-flyover-target.png", tags: [air-flyover], about: "the opening flyover over the target"}
+      - {file: "midway-fleet-00-flyover-guard.png", tags: [air-flyover], about: "the opening flyover: the defending fighters coming up (when there is a guard)", look: true}
+      - {file: "midway-fleet-01-approach.png", tags: [air-battle], about: "12 s before the formations meet: both in sight"}
+      - {file: "midway-fleet-02-the-meeting.png", tags: [air-battle], about: "6 s after they meet", look: true}
+      - {file: "midway-fleet-03-ride-a-fighter.png", tags: [air-battle, air-chase], about: "riding a fighter"}
+      - {file: "midway-fleet-04-the-thick-of-it.png", tags: [air-battle], about: "the thick of the fight"}
+      - {file: "midway-fleet-05-ride-again.png", tags: [air-battle, air-chase], about: "riding the other side"}
+      - {file: "midway-fleet-05c-chase-view.png", tags: [air-chase], about: "the chase view, its plate and a step", look: true}
+      - {file: "midway-fleet-06-the-ships.png", tags: [air-battle, air-bombs], about: "after the first ship goes down (sea targets)"}
+      - {file: "midway-fleet-06b-guns-fire-back.png", tags: [air-battle, air-bombs], about: "the guns firing back at the first attack run"}
+      - {file: "midway-fleet-07-the-fight-goes-on.png", tags: [air-battle], about: "two minutes on"}
+      - {file: "midway-fleet-08-after-card.png", tags: [air-after-card, ui], about: "the after card"}
+      - {file: "midway-fleet-09-strike-marks.png", tags: [air-battle, air-chase], about: "riding the aircraft struck the most: its damage marks"}
+      - {file: "midway-fleet-10-dead-engine.png", tags: [air-battle, air-chase], about: "an aircraft with an engine out"}
+      - {file: "midway-fleet-11-parachutes.png", tags: [air-battle], about: "three parachutes in the air"}
+      - {file: "midway-fleet-12-ace-close.png", tags: [air-battle, air-chase], about: "an ace's marks, 8 m off"}
+      - {file: "midway-fleet-12b-ace-chase.png", tags: [air-chase], about: "the chase view behind the ace"}
+      - {file: "strip-*-*.jpg", tags: [strip, air-battle], about: "film strips: the opening shot's first seconds and a few seconds after each still"}
+  replay-sea-two-lines:
+    kind: sea
+    theater: T1
+    year: 1941
+    nations: [UK, GER]
+    about: "The practice sea battle of two battle lines, Home Fleet against the Germans (1941)"
+    pictures:
+      - {file: "two-lines-[0-9][0-9]-the-fleets*.png", tags: [sea-battle], about: "the fleets before the guns meet", look: true}
+      - {file: "two-lines-[0-9][0-9]-the-line*.png", tags: [sea-battle], about: "the battle line"}
+      - {file: "two-lines-[0-9][0-9]-broadside*.png", tags: [sea-battle, sea-close], about: "a battleship's first broadside", look: true}
+      - {file: "two-lines-[0-9][0-9]-fall-of-shot*.png", tags: [sea-battle, sea-close], about: "the fall of shot, a second after the columns rise"}
+      - {file: "two-lines-[0-9][0-9]-a-hit*.png", tags: [sea-close], about: "a hit as it bursts"}
+      - {file: "two-lines-[0-9][0-9]-torpedo-tracks*.png", tags: [sea-battle], about: "the torpedo tracks once they have run"}
+      - {file: "two-lines-[0-9][0-9]-the-strike*.png", tags: [sea-battle], about: "an air strike as it dives"}
+      - {file: "two-lines-[0-9][0-9]-going-down*.png", tags: [sea-close], about: "a ship well into her end"}
+      - {file: "two-lines-[0-9][0-9]-funnels*.png", tags: [sea-close], about: "the funnels smoking"}
+      - {file: "two-lines-[0-9][0-9]-the-battle*.png", tags: [sea-battle], about: "the whole battle at its height", look: true}
+      - {file: "two-lines-[0-9][0-9]-the-end*.png", tags: [sea-battle, sea-after-card], about: "its end"}
+  replay-sea-light-ships:
+    kind: sea
+    theater: T6
+    year: 1941
+    nations: [UK, ITA]
+    about: "The practice sea battle of light ships against battleships, Force H against the Italians (1941)"
+    pictures:
+      - {file: "light-ships-[0-9][0-9]-the-fleets*.png", tags: [sea-battle], about: "the fleets before the guns meet", look: true}
+      - {file: "light-ships-[0-9][0-9]-the-line*.png", tags: [sea-battle], about: "the battle line"}
+      - {file: "light-ships-[0-9][0-9]-broadside*.png", tags: [sea-battle, sea-close], about: "a battleship's first broadside", look: true}
+      - {file: "light-ships-[0-9][0-9]-fall-of-shot*.png", tags: [sea-battle, sea-close], about: "the fall of shot, a second after the columns rise"}
+      - {file: "light-ships-[0-9][0-9]-a-hit*.png", tags: [sea-close], about: "a hit as it bursts"}
+      - {file: "light-ships-[0-9][0-9]-torpedo-tracks*.png", tags: [sea-battle], about: "the torpedo tracks once they have run"}
+      - {file: "light-ships-[0-9][0-9]-the-strike*.png", tags: [sea-battle], about: "an air strike as it dives"}
+      - {file: "light-ships-[0-9][0-9]-going-down*.png", tags: [sea-close], about: "a ship well into her end"}
+      - {file: "light-ships-[0-9][0-9]-funnels*.png", tags: [sea-close], about: "the funnels smoking"}
+      - {file: "light-ships-[0-9][0-9]-the-battle*.png", tags: [sea-battle], about: "the whole battle at its height", look: true}
+      - {file: "light-ships-[0-9][0-9]-the-end*.png", tags: [sea-battle, sea-after-card], about: "its end"}

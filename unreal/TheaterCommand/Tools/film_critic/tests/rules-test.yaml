@@ -75,7 +75,7 @@ rules:
     title: Standing tanks stand still
     words: A tank that is not driving does not swing its nose back and forth.
     from: {who: Brian, when: 2026-11-22, said: "the tanks wiggle when they stop"}
-    tags: [land-vehicles, land-battle]
+    tags: [land-vehicles, land-advance]
     facts: vehicles-no-rocking
     owner: ground
     weight: high

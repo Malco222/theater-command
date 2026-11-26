@@ -1,0 +1,45 @@
+# Film critic scene map-raid-hanover: a bombing raid flown on the campaign map (FLY THE RAID BY DAY: every group
+# takes off from its own airfield, meets over the target and comes home, 11 s), its target just after and a month
+# later (Brian asked: a bombed city or target smokes black through the next turn), and the map by night.
+# Britain, September 1939, seed 1. DAY BOMBING: HANOVER with groups 8, 30 and the Home Fleet strike wing 53 (from
+# the carrier in the North Sea). Checked on the release 2 head (node): TC.page("plan:bomb:4:8.30.53") is titled
+# "DAY BOMBING: HANOVER" and carries FLY THE RAID BY DAY (act raid:bomb:4:8.30.53), which the rules accept and fly
+# (three sorties). No -TheaterAirCampaignLive: the raid is flown on the map, not in the air battle.
+# In a picture run the room's day is held (CampaignEnvironment.cpp: TimeKeeping 1, held at day); T steps it to
+# held at night, then running, then held at day again.
+# A close follows the end-month (the month's last card stays up otherwise).
+# Film strips (-FilmCriticStrip=12,12): 12 s after the raid's press, its whole flight (#77, the map raid's hitches).
+# Each step's picture is step-NNN.png, NNN the step's number below.
+
+# 001: the British campaign table, September 1939
+start	UK 1939-09 seed 1
+# 002: the target, Hanover, close, by day before the raid: its factory and railway junction
+look-at	Hanover near
+# 003: the raid card DAY BOMBING: HANOVER, three groups
+open-page	plan:bomb:4:8.30.53	card DAY BOMBING: HANOVER
+# 004: the raid flies: the room put away, the eye far enough back to hold the airfields and the target; groups taking off
+press	FLY THE RAID BY DAY	does
+# 005: about 3 s into the raid: the groups on their way
+check-province	Hanover
+# 006: about 5 s: meeting over the target, bombs and flak
+check-province	Hanover
+# 007: about 7 s: turning for home
+check-province	Hanover
+# 008: about 9 s: coming home to their airfields and the carrier
+check-province	Hanover
+# 009: the target just after the raid: black smoke over it if the bombs did harm
+look-at	Hanover near
+# 010: T: held at night: the same view of Hanover by lamplight
+key	t
+# 011: night over his own ground (Kent) with the Channel and France beyond: own ground must not read as fog
+look-at	Kent middle
+# 012: T: the day and night run again (the hour of this still is whatever it is)
+key	t
+# 013: T: held at day again: Kent by day, the pair for 011
+key	t
+# 014: the month ends: its replay and cards, answered as a player in a hurry would; still at its end
+end-month
+# 015: close: whatever card the month left up
+close
+# 016: Hanover a month after the raid (October 1939): smoke or scars still there?
+look-at	Hanover near

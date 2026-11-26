@@ -1,0 +1,67 @@
+# Film critic: the night's scenes, most valuable first (night.sh plays them in this order and stops when the
+# night runs out or Brian comes back, so the tail is what is lost first).
+# One scene a line: name | minutes (the cap: the game is stopped after it) | the game's flags.
+# {OUT} is the scene's picture folder, {KIT} this kit (night.sh puts both in, without spaces). night.sh adds
+# -game -windowed -TheaterWindow=1600x1000 -unattended -nosplash -nosound -FilmCritic to every run.
+# What each scene films and why: README.md. What each picture should show, and its tags: shots.yaml.
+# FILM_CRITIC_ONLY="a,b" plays only those scenes.
+
+# the bombing film flown live (FLY IT YOURSELF): flyover, contact, chase view, bombs, after card
+air-raid-rhineland | 15 | -TheaterShots={OUT} -TheaterSteps={KIT}/scenes/air-raid-rhineland.steps.txt -TheaterAirCampaignLive -FilmCriticStrip=12,24
+
+# fleets on the map sailing north, south, west, east: mid-sail, just arrived, at rest
+map-fleets-europe | 10 | -TheaterShots={OUT} -TheaterSteps={KIT}/scenes/map-fleets-europe.steps.txt -FilmCriticStrip=12,4
+
+# the art director's second witness for the fleet-heading fix: the same steps with -TheaterFleetHeading
+map-fleets-europe-heading | 10 | -TheaterShots={OUT} -TheaterSteps={KIT}/scenes/map-fleets-europe.steps.txt -FilmCriticStrip=12,4 -TheaterFleetHeading
+
+# the photographer: fleets at rest from four camera headings, a train, an army marching (no step file)
+photo-fleets-yaw | 6 | -TheaterShots={OUT} -TheaterGrand=UK,0 -TheaterLook=@fleet0:0.25:0;@fleet0:0.25:90;@fleet0:0.25:180;@fleet0:0.25:270;@241,856:0.3:0;@241,856:0.3:135;@train:0.2;Yorkshire:0.45:0:0:0:Hampshire:-:Lothian
+
+# the opening screen: five country presses, filmed at 60 frames a second for the click flicker
+opening-screen | 4 | -TheaterShots={OUT} -TheaterSteps={KIT}/scenes/opening-screen.steps.txt -FilmCriticStrip=60,1.5
+
+# the recorded bombing raid on Bremen (the bombing film as a replay)
+replay-air-bremen-b17 | 10 | -TheaterShots={OUT} -TheaterAirBattle=bremen-b17 -TheaterAirBattleShots={OUT} -FilmCriticStrip=12,2
+
+# The 7th Armoured Division attacks Tobruk, January 1941 (desert)
+land-desert-tobruk | 12 | -TheaterShots={OUT} -TheaterSteps={KIT}/scenes/land-desert-tobruk.steps.txt -TheaterFightEveryLook -FilmCriticStrip=10,12
+
+# The 9th Army attacks Orel in the snow, January 1942
+land-winter-orel | 12 | -TheaterShots={OUT} -TheaterSteps={KIT}/scenes/land-winter-orel.steps.txt -TheaterFightEveryLook
+
+# Albania Command attacks Salonika, January 1941 (the Mediterranean look)
+land-med-salonika | 12 | -TheaterShots={OUT} -TheaterSteps={KIT}/scenes/land-med-salonika.steps.txt -TheaterFightEveryLook
+
+# the far side: Japanese fleets four ways in the Pacific, the battle of Kukong (jungle look), the Americas day and night
+far-pacific | 16 | -TheaterShots={OUT} -TheaterSteps={KIT}/scenes/far-pacific.steps.txt -TheaterWorld -TheaterFar -TheaterFightEveryLook -FilmCriticStrip=12,4
+
+# a raid flown on the map, its target before, just after and a month on, the map by night
+map-raid-hanover | 9 | -TheaterShots={OUT} -TheaterSteps={KIT}/scenes/map-raid-hanover.steps.txt -FilmCriticStrip=12,12
+
+# Germany in Poland, September 1939: Pomorze in the open, then Warsaw's city field
+land-poland-1939 | 16 | -TheaterShots={OUT} -TheaterSteps={KIT}/scenes/land-poland-1939.steps.txt -TheaterFightEveryLook
+
+# The French 3rd Army attacks the Saar, September 1939 (Western Europe)
+land-west-saar | 12 | -TheaterShots={OUT} -TheaterSteps={KIT}/scenes/land-west-saar.steps.txt -TheaterFightEveryLook
+
+# the recorded land battle in the Normandy hedgerows
+replay-land-normandy-1944 | 12 | -TheaterShots={OUT} -TheaterLandBattle=normandy-1944 -TheaterLandBattleShots={OUT}
+
+# the recorded tank battle at Prokhorovka
+replay-land-prokhorovka-1943 | 12 | -TheaterShots={OUT} -TheaterLandBattle=prokhorovka-1943 -TheaterLandBattleShots={OUT}
+
+# the recorded sea battle off Samar
+replay-sea-samar | 10 | -TheaterShots={OUT} -TheaterSeaBattle=samar -TheaterSeaBattleShots={OUT}
+
+# the recorded strike on Pearl Harbor
+replay-air-oahu | 10 | -TheaterShots={OUT} -TheaterAirBattle=oahu -TheaterAirBattleShots={OUT} -FilmCriticStrip=12,2
+
+# the recorded strike on the fleet at Midway
+replay-air-midway-fleet | 10 | -TheaterShots={OUT} -TheaterAirBattle=midway-fleet -TheaterAirBattleShots={OUT} -FilmCriticStrip=12,2
+
+# the practice battle of two battle lines
+replay-sea-two-lines | 10 | -TheaterShots={OUT} -TheaterSeaBattle=two-lines -TheaterSeaBattleShots={OUT}
+
+# the practice battle of light ships against battleships
+replay-sea-light-ships | 10 | -TheaterShots={OUT} -TheaterSeaBattle=light-ships -TheaterSeaBattleShots={OUT}

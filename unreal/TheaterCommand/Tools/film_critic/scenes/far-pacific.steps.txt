@@ -1,0 +1,116 @@
+# Film critic scene far-pacific: the far side of the world (the whole-world map): Japanese fleets sailing north,
+# south, east and west in the Pacific seas, a land battle in southern China fought live (FIGHT IT YOURSELF at
+# Kukong, the jungle look), and the Americas by day and night.
+# Flags: -TheaterWorld -TheaterFar (the far chart; a development build only: CampaignSession.cpp, CampaignMapData.cpp
+# FarSwitch). Japan is offered only in September 1939 on the world map (TC.grand(1, 1, far)).
+# Checked on the release 2 head 2fdb13e5 (node, the rules bundle with TC_FAR and the world map
+# src/generated/world-whole.json): every name is found; every fleet order is accepted (TC.forceOrder); the fleets begin
+# in harbour (they lie off their ports and sail out by water). Legs (T by the straight line from the port):
+#   north  2nd Fleet, Formosa, to the Yellow Sea          T 2.46, near Wenchow at the still
+#   south  Southern Expeditionary Fleet, Hainan, to the Natuna Sea  T 2.66, near Qui Nhon
+#   east   4th Fleet, Truk, to Marshall Waters             T 2.30, near Ponape
+#   west   4th Fleet, Truk again (after a restore), to Leyte Gulf  T 2.77, near Ulithi
+# The battle: 21st Army (Canton) attacks Kukong (hills, held by China): ticket "The Battle of Kukong"; in the land
+# rules it meets at about battle s 99 and is over at about 220; look jungle by LandScape::Pick (24.8 N, 113.6 E:
+# the monsoon box), offered only with -TheaterFightEveryLook.
+# Film strips (-FilmCriticStrip=12,4): 4 s after each order-sea (the whole sail), and the first 4 s of each land-wait.
+# Each step's picture is step-NNN.png, NNN the step's number below.
+
+# 001: the Japanese campaign on the whole-world map, September 1939
+start	JAP 1939-09 seed 1
+# 002: the game kept as it begins (for the restore at step 016)
+snapshot	sea0
+# 003: the East China Sea off Wenchow, where 2nd Fleet will pass going north
+look-at	Wenchow middle
+# 004: 2nd Fleet in hand (in harbour at Formosa)
+select-unit	2nd Fleet
+# 005: MID-SAIL heading NORTH: 2nd Fleet off Wenchow, its wake trailing south
+order-sea	Yellow Sea	does
+# 006: JUST ARRIVED from the south: 2nd Fleet in the Yellow Sea
+look-at	Kwangju middle
+# 007: the South China Sea off Qui Nhon, where the Southern Expeditionary Fleet will pass going south
+look-at	Qui Nhon middle
+# 008: Southern Expeditionary Fleet in hand (in harbour at Hainan)
+select-unit	Southern Expeditionary Fleet
+# 009: MID-SAIL heading SOUTH: Southern Expeditionary Fleet off Qui Nhon, its wake trailing north
+order-sea	Natuna Sea	does
+# 010: JUST ARRIVED from the north: Southern Expeditionary Fleet in the Natuna Sea
+look-at	Kuantan middle
+# 011: the open Pacific near Ponape, where 4th Fleet will pass going east
+look-at	Ponape middle
+# 012: 4th Fleet in hand (in harbour at Truk)
+select-unit	4th Fleet
+# 013: MID-SAIL heading EAST: 4th Fleet near Ponape, its wake trailing west
+order-sea	Marshall Waters	does
+# 014: JUST ARRIVED from the west: 4th Fleet in Marshall Waters
+look-at	Kwajalein middle
+# 015: AT REST about a minute after sailing north: 2nd Fleet in the Yellow Sea
+look-at	Kwangju middle
+# 016: the game as it began: every fleet back in harbour (on the map they may sail back)
+restore	sea0
+# 017: the open Pacific near Ulithi, where 4th Fleet will pass going west
+look-at	Ulithi middle
+# 018: 4th Fleet in hand again, at Truk
+select-unit	4th Fleet
+# 019: MID-SAIL heading WEST: 4th Fleet near Ulithi, its wake trailing east
+order-sea	Leyte Gulf	does
+# 020: JUST ARRIVED from the east: 4th Fleet in Leyte Gulf
+look-at	Leyte middle
+# ---- The battle of Kukong: FIGHT IT YOURSELF, fought live (rules sim on this head: contact about 99 s, over about 220 s; look jungle)
+# 021: 21st Army (Canton) picked up on the map: the army piece in hand, the provinces it can reach lit
+select-unit	21st Army (Canton)
+# 022: the attack card for Kukong: the odds, SEND THEM IN and FIGHT IT YOURSELF
+order-province	Kukong	card
+# 023: the land battle opens (a second in: the field being laid, or its first frame)
+press	FIGHT IT YOURSELF	does
+# 024: 8 real s of the placing view: the field, its ground and both sides placed, before the battle begins
+land-wait	8s
+# 025: Enter (BEGIN): the battle begins, the high view
+land-key	enter
+# 026: pace x4 (2 battle s a real s) until contact; the high view
+land-key	3
+# 027: past any night before: the attack under way, seen from his high view
+land-wait	begun
+# 028: Tab: his next unit in hand, the view glides to it
+land-key	tab
+# 029: V: the film rides with that unit: a close view of its men or tanks
+land-key	v
+# 030: 12 real s riding with them toward the enemy at x4: men running, vehicles moving
+land-wait	12s
+# 031: until the first contact (about battle s 99), still riding with the unit
+land-wait	contact
+# 032: in the film the keys 1-3 are x0.5/x1/x2: x1 (half a battle s a real s) for the close fight
+land-key	2
+# 033: 16 real s of the close fight at x1: fire, men going to ground or falling
+land-wait	16s
+# 034: C: the film gives the camera back: his high view of the fight
+land-key	c
+# 035: Q held a second: his view turns (the view's own keys, no order)
+land-key	q	view
+# 036: W held a second: his view walks forward, lower over the field
+land-key	w	view
+# 037: C: the film takes the camera, choosing its own shots
+land-key	c
+# 038: 16 real s of the film's own cutting: each cut clean, the camera smooth between cuts
+land-wait	16s
+# 039: Esc: the map (his high view) back
+land-key	esc
+# 040: x4 to the end of the battle
+land-key	3
+# 041: the after card: who won, the losses, CONTINUE
+land-wait	card	card
+# 042: CONTINUE: the battle handed back to the campaign map
+land-click	continue
+# 043: the campaign map after the battle of Kukong
+check-province	Kukong
+# ---- The Americas (T9) on the world map: by day, then by night (the T key holds the night by lamplight)
+# 044: the Americas: Washington and the east coast of the United States by day (unseen by Japan: under fog)
+look-at	Washington middle
+# 045: T: held at night: the same view by lamplight (Brian: "America looks fogged" at night)
+key	t
+# 046: Hawaii by night
+look-at	Hawaii middle
+# 047: T: the day and night run again
+key	t
+# 048: T: held at day again
+key	t

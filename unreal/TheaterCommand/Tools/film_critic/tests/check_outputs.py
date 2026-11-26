@@ -48,7 +48,7 @@ expect(steps["DID"] == 2 and steps["DEAD"] == 1 and steps["MUTE"] == 1 and steps
 lc = sc["land-attack"]["log"]["counts"]
 expect(lc["error"] == 2 and lc["ensure"] == 1 and lc["crash"] >= 1, "log: errors, the ensure and the crash")
 pics = {p["name"]: p for p in sc["land-attack"]["pictures"]}
-expect(not pics["land-attack-05-the-tanks.png"]["listed"] and "land-battle" in pics["land-attack-05-the-tanks.png"]["tags"],
+expect(not pics["land-attack-05-the-tanks.png"]["listed"] and "land-advance" in pics["land-attack-05-the-tanks.png"]["tags"],
        "pictures: an unlisted picture gets its scene kind's tags")
 expect(all(os.path.exists(os.path.join(work, "work", p["thumb"])) for s in check["scenes"] for p in s["pictures"]),
        "every still has a thumbnail")

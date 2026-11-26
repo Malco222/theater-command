@@ -1383,7 +1383,7 @@ rules:
       who: art director
       when: "2026-11-16 13:20Z"
       said: "seen: at dusk and night the map's old smoke kept its day colour and glowed like fog"
-    tags: [map-raid, map-city]
+    tags: [map-raid, map-city, map-night]
     picture: >
       Is this a dusk or night picture with smoke in it? If so, is the smoke dark, no brighter than the ground near it
       except where fire lights it? FAIL if smoke glows pale grey or white like fog against the dark. CAN'T TELL if it is
@@ -1422,7 +1422,7 @@ rules:
       who: Brian
       when: "2026-11-17"
       said: "America looks fogged (he took the night for fog)"
-    tags: [map, map-city, map-army]
+    tags: [map, map-city, map-army, map-night]
     picture: >
       Is this a night view of the map with fogged (unseen) ground beside the player's own ground? If so, is the
       player's own ground clearly brighter than the fog beside it? FAIL if the two are equally dark, so the night looks
