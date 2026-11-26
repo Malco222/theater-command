@@ -217,8 +217,11 @@ namespace
 	}
 	bool IsRudder(const std::string& Name) { return Name.rfind("rudder", 0) == 0; }
 
-	Result Examine(const Model& M, const Found& F, bool bFar, const Palette& P, const Look& L, const Coat& C)
+	Result Examine(const Model& M, const Found& Regions, bool bFar, const Palette& P, const Look& L, const Coat& C)
 	{
+		// (the regions as laid on the mesh examined: on a far shape made without spinners, the finer B-17's, its own
+		// stand-ins, AirUnitColours::OnShape; on every other mesh the regions themselves)
+		const Found F = OnShape(Regions, bFar);
 		Result R;
 		const Mesh& Me = bFar ? M.Far : M.Near;
 		std::vector<Where> Pl;
@@ -577,6 +580,29 @@ int main(int Argc, char** Argv)
 		std::snprintf(Line, sizeof Line, "%s: %d spinner points off its nose, %d band points off the band, %d fin points low or forward", Kind.c_str(), SpinnerAft, RingOut, TailLow);
 		Check(Spinner > 0 && Ring > 0 && Fin + Rudder >= 30 && (Fin + Rudder) * 4 < CoatPoints && SpinnerAft == 0 && RingOut == 0 && TailLow == 0 && bBands,
 			"the spinner at the nose, the band behind it no wider than the spinner is long, the fin aft and above", Line);
+		// (a far shape made without spinners, the finer B-17's alone, laid by its own stand-ins: its "engine" grey for the
+		// spinner and its own cowling lips; every other model's far shape exactly as before)
+		{
+			int Moved = 0;
+			std::string Which;
+			for (size_t K = 0; K < F.FarPaints.size() && K < F.Paints.size(); ++K)
+			{
+				if (F.FarPaints[K] == F.Paints[K]) continue;
+				++Moved;
+				Which += " " + (K < M.PaintNames.size() ? M.PaintNames[K] : std::to_string(K));
+			}
+			std::string Lips;
+			for (size_t K = 0; K < F.FarCowlFront.size() && K < F.Engines.size(); ++K)
+			{
+				char Each[48];
+				std::snprintf(Each, sizeof Each, " %.3f/%.3f", F.FarCowlFront[K], F.Engines[K].CowlFront);
+				Lips += Each;
+			}
+			const bool bStandIns = !F.FarPaints.empty() || !F.FarCowlFront.empty();
+			std::snprintf(Line, sizeof Line, "%s: far stand-ins %s;%s far/near lips%s", Kind.c_str(), bStandIns ? "yes" : "none", Which.c_str(), Lips.c_str());
+			Check(Kind == "B17Fine" ? Moved == 1 && Which == " engine" && F.FarCowlFront.size() == F.Engines.size() : !bStandIns,
+				"a far shape without spinners (the finer B-17's alone) laid by its own stand-ins; every other far shape as before", Line);
+		}
 
 		// Its looks: every nation's, every step, day and night, near and far.
 		int Earned[4] = { 0, 0, 0, 0 };

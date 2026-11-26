@@ -239,8 +239,16 @@ namespace AirUnitColours
 		std::vector<Engine> Engines;
 		std::vector<Tail> Tails;
 		std::string Note; // what could not be found, for the log and the test
+		/** For a far shape made without spinners (no boss or hub point on it: the finer B-17's), by paint number, what each
+		 * paint is on that shape: its "engine" grey within a spinner's place stands for the spinner; and each engine's band
+		 * laid behind that shape's own cowling lip. Both empty for every other model: its far shape laid as before. */
+		std::vector<PaintIs> FarPaints;
+		std::vector<double> FarCowlFront;
 	};
 	Found Find(const Model& M);
+	/** The regions as laid on one mesh (bFar: the far one; Paint and Places take them so): F itself, or on a far shape made
+	 * without spinners F with its FarPaints and FarCowlFront. */
+	Found OnShape(const Found& F, bool bFar);
 
 	/** Where a point of a mesh lies (the regions, before any scheme): for the test's counts and bounds. */
 	enum class Where : uint8_t { None, Spinner, Ring, Fin, Rudder };

@@ -1271,7 +1271,52 @@ namespace AirUnitColours
 				}
 			}
 		}
+
+		// ---- A far shape made without spinners (the finer B-17's, Content/Models/B17Fine.json: no boss or hub point on it,
+		// its airscrews' domes in the nacelles' "engine" grey, its cowlings' lips a ring further back than the near
+		// shape's). So that steps 1 and 2 show past 300 m as they do close up, on it alone: that grey within each spinner's
+		// place stands for the spinner, and each band is laid behind the far shape's own lip. A far shape with a spinner
+		// of its own, every other model's, is laid as it always was (FarPaints and FarCowlFront left empty).
+		const Mesh& Fa = M.Far;
+		const int Grey = M.Paint("engine");
+		bool bFarSpinner = false; // (a point of it a spinner where Places would make one)
+		for (size_t K = 0; K < Fa.Count() && !bFarSpinner; ++K)
+		{
+			const PaintIs Is = IsOf(F, Fa.Paints[K]);
+			if (Is != PaintIs::Boss && Is != PaintIs::Hub) continue;
+			for (const Engine& E : F.Engines)
+			{
+				if (!E.bSpinner || E.bCap || (Is == PaintIs::Hub) != E.bHubStandIn) continue;
+				bFarSpinner = bFarSpinner || (std::hypot(Fa.Y(K) - E.Hub[1], Fa.Z(K) - E.Hub[2]) <= (E.bHubStandIn ? 0.3 : 0.6) && Fa.X(K) >= E.SpinnerBack - 0.02 && Fa.X(K) <= E.SpinnerFront + 0.02);
+			}
+		}
+		if (Fa.Count() > 0 && !bFarSpinner && Grey >= 0 && static_cast<size_t>(Grey) < F.Paints.size() && !F.Engines.empty() && !F.Engines.front().bCap)
+		{
+			F.FarPaints = F.Paints;
+			F.FarPaints[static_cast<size_t>(Grey)] = F.Engines.front().bHubStandIn ? PaintIs::Hub : PaintIs::Boss;
+			for (const Engine& E : F.Engines)
+			{
+				// (the far shape's own lip: its foremost coat about the axis, behind the near lip, as the near lip is found)
+				Spread Lip;
+				for (size_t K = 0; K < Fa.Count(); ++K)
+				{
+					if (AsCoat(IsOf(F, Fa.Paints[K])) != PaintIs::Coat) continue;
+					const double Off = std::hypot(Fa.Y(K) - E.Hub[1], Fa.Z(K) - E.Hub[2]), X = Fa.X(K);
+					if (Off >= 0.08 && Off <= E.Reach && X <= E.CowlFront + 0.02 && X >= E.SpinnerBack - 2.5) Lip.Take(X);
+				}
+				F.FarCowlFront.push_back(Lip.Any() && E.Band > 0.0 ? std::min(Lip.Hi, E.CowlFront) : E.CowlFront);
+			}
+		}
 		return F;
+	}
+
+	Found OnShape(const Found& F, bool bFar)
+	{
+		Found Out = F;
+		if (!bFar) return Out;
+		if (!F.FarPaints.empty()) Out.Paints = F.FarPaints;
+		for (size_t K = 0; K < Out.Engines.size() && K < F.FarCowlFront.size(); ++K) Out.Engines[K].CowlFront = F.FarCowlFront[K];
+		return Out;
 	}
 
 	bool FirstAt(const std::string& Pattern, const Frame& F, const double Normal[2], double X, double Z)
@@ -1310,8 +1355,9 @@ namespace AirUnitColours
 		return true;
 	}
 
-	void Places(const Model& M, const Found& F, bool bFar, std::vector<Where>& Out, std::vector<int>* TailOf)
+	void Places(const Model& M, const Found& Regions, bool bFar, std::vector<Where>& Out, std::vector<int>* TailOf)
 	{
+		const Found F = OnShape(Regions, bFar); // (a far shape made without spinners laid by its own stand-ins: Find)
 		const Mesh& Me = bFar ? M.Far : M.Near;
 		Out.assign(Me.Count(), Where::None);
 		if (TailOf) TailOf->assign(Me.Count(), -1);
@@ -1365,8 +1411,9 @@ namespace AirUnitColours
 		return N;
 	}
 
-	Coat Paint(const Model& M, const Found& F, bool bFar, const Palette& P, const Look& L)
+	Coat Paint(const Model& M, const Found& Regions, bool bFar, const Palette& P, const Look& L)
 	{
+		const Found F = OnShape(Regions, bFar); // (a far shape made without spinners laid by its own stand-ins: Find)
 		Coat Out;
 		const Mesh& Me = bFar ? M.Far : M.Near;
 		Out.Took.assign(Me.Count(), Takes::Keep);
