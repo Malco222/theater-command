@@ -35,7 +35,9 @@ for CC in ${FX_AIR_TEN_ONE:-g++ clang++}; do
   BUILT+=("$TAG")
 done
 if [ "${#BUILT[@]}" -eq 2 ]; then
-  Strip() { grep -v -e "time:" -e " ms a frame" -e "us a call" "$1"; }
+  # (the frames' hashes aside too: each compiler's own frames are held to the same compiler's with and without a row,
+  # but the two compilers' floating point lays a frame's last bits differently, as with every tool of the kit)
+  Strip() { grep -v -e "time:" -e " ms a frame" -e "us a call" "$1" | sed -E 's/ [0-9a-f]{16}$//'; }
   if diff <(Strip "$OUT/gcc/test.txt") <(Strip "$OUT/clang/test.txt") > "$OUT/compilers.diff"; then
     echo "  ok   g++ and clang++ print the same checks and numbers"
   else
