@@ -2850,16 +2850,20 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     const Seen = (ago: number): string => { const w = seenAgo(ago); return `${w.charAt(0).toUpperCase()}${w.slice(1)}`; };
     const seen = known ? known.seen ?? -1 : -1;
     const counts = m === 'bomb' || night || m === 'harbour' || m === 'town';
+    // (The UI director's answer of 26 Nov 2026 02:06Z, 1: under fog the Flak line names the place the guns line beside it
+    // names, so one card never reads as two sets of guns: a town raid round {Leipzig}, a harbour raid round {the harbour
+    // of Bremen}, the factories as today, round {Rhineland}.)
+    const flakAt = m === 'town' ? townName(g.regions[target]) : m === 'harbour' ? harbourOf(place) : place;
     const flakWords = (): string => {
       // (Her 21:22Z marks, case e: the clause, where it knows of guns built there, on the line, an airfield raid and a
       // fight for the sky flown with bombers (they hit its airfields) as on troops.)
       const not = m === 'ground' ? 'troops in the field' : m === 'line' ? 'the line' : m === 'airfield' ? 'the airfield' : m === 'superiority' ? 'the airfields' : '';
       if (!counts) return not && (known ? seen > 0 : gunsAt(g, target) > 0) ? `Only the ${S} light guns every target has: the guns built here guard the town, not ${not}.` : Only;
       if (!out.guns.all) return !known ? Only : seen === 0 ? noneSeen(known.ago ?? 0) : `None reckoned built: ${only}`;
-      if (known && seen < 0) return `Not scouted, so reckoned at the worst: about ${n(out.guns.all)} guns built round ${place}, ${split}`;
+      if (known && seen < 0) return `Not scouted, so reckoned at the worst: about ${n(out.guns.all)} guns built round ${flakAt}, ${split}`;
       // (Her 21:22Z marks, case c: a place seen at a level, the month is the hedge, leading the line: "Seen two months
       // ago: about 720 guns built round Rhineland, ...".)
-      return known ? `${Seen(known.ago ?? 0)}: about ${n(out.guns.all)} guns built round ${place}, ${split}` : `About ${n(out.guns.all)} guns built here, ${split}`;
+      return known ? `${Seen(known.ago ?? 0)}: about ${n(out.guns.all)} guns built round ${flakAt}, ${split}` : `About ${n(out.guns.all)} guns built here, ${split}`;
     };
     out.lines.push({
       label: 'Flak',
