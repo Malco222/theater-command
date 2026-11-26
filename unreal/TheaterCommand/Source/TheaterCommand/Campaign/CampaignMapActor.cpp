@@ -21,6 +21,7 @@ FLinearColor ACampaignEnvironment_DuskShade();
 #include "Campaign/CampaignTextures.h"
 #include "Campaign/FrontLine.h" // (release 2, the front you can read)
 #include "Campaign/EnemyMoves.h" // (release 2, the enemy's month near you)
+#include "Campaign/FleetHeading.h" // (release 2, fleets that keep their heading)
 #include "Campaign/ShipWay.h" // (release 2, a fleet under way)
 #include "Campaign/ShipSmoke.h" // (release 2, funnel smoke)
 #include "Campaign/ArmyCarry.h" // (release 2, armies with weight)
@@ -134,6 +135,16 @@ namespace
 	TAutoConsoleVariable<int32> CVarOverSeam(
 		TEXT("tc.Far.OverSeam"), 1,
 		TEXT("With the far side on, 1 shows what lies within sight of the chart's seam (141 W) from both sides of it; 0 lays everything once, as before. Release 2."));
+
+	// (Release 2, the campaign map. Brian, 26 November 2026: "the wake of the boats when moving don't follow the direction
+	// they came from".) Every piece on the table is turned to face the eye, and so was every fleet: her wake, which lies
+	// astern of her, streamed off to the left of the screen whichever way she had come. With this a fleet at sea lies on
+	// the heading she came in on, her wake astern of her along it, and only her standard turns to the eye
+	// (Campaign/FleetHeading.h). Off as it comes, until the Mac has shown the one beside the other;
+	// "-TheaterFleetHeading" turns it on, switch or no switch. It is read when the fleets are next laid.
+	TAutoConsoleVariable<int32> CVarFleetHeading(
+		TEXT("tc.Map.FleetHeading"), 0,
+		TEXT("1: a fleet at sea keeps the heading she arrived on, her wake trailing back the way she came, and only her flag turns to face the eye; 0: every fleet is turned to face the eye, as before. Release 2; off as it comes."));
 
 	// (Release 2, a fleet under way: the art director's campaign map upgrade 1, 25 November 2026, on Brian's "I want to
 	// keep upleveling the graphics and smoothness of how they move and act to make it feel as real as possible" and
@@ -12073,7 +12084,10 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 	// handed to the piece as her times in the world. False where there is no course to sail: she sails as before.
 	static const bool bShipWayAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterShipWay"));
 	const bool bShipWay = bShipWayAsked || CVarShipWay.GetValueOnGameThread() != 0;
-	auto SailShipWay = [this](AArmyPiece* Piece, const TArray<FVector2D>& MapWay) -> bool
+	// (Release 2, fleets that keep their heading: see CVarFleetHeading.)
+	static const bool bFleetHeadingAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterFleetHeading"));
+	const bool bFleetHeading = bFleetHeadingAsked || CVarFleetHeading.GetValueOnGameThread() != 0;
+	auto SailShipWay = [this, bFleetHeading](AArmyPiece* Piece, const TArray<FVector2D>& MapWay, bool bRestsHeaded) -> bool
 	{
 		TheaterShipWay::FAsk Ask;
 		Ask.Way.reserve(static_cast<size_t>(MapWay.Num()));
@@ -12086,6 +12100,17 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 		const double Yaw = FMath::DegreesToRadians(static_cast<double>(LastPieceYaw));
 		Ask.Bows = TheaterShipWay::FSpot{ FMath::Cos(Yaw), FMath::Sin(Yaw) };
 		Ask.Rest = Ask.Bows;
+		if (bFleetHeading)
+		{
+			// (Fleets that keep their heading.) She leaves on the heading she lies on, which may not be the table's; and
+			// where she will lie headed her course ends as its own last leg runs (no heading asked: TheaterShipWay::Plan).
+			const double Departs = FMath::DegreesToRadians(Piece->GetActorRotation().Yaw);
+			Ask.Bows = TheaterShipWay::FSpot{ FMath::Cos(Departs), FMath::Sin(Departs) };
+			if (bRestsHeaded)
+			{
+				Ask.Rest = TheaterShipWay::FSpot{ 0.0, 0.0 };
+			}
+		}
 		Ask.Turn = FMath::Max(CVarShipTurn.GetValueOnGameThread(), 0.0f);
 		Ask.Sweep = FMath::Max(CVarShipSweep.GetValueOnGameThread(), 0.0f);
 		Ask.Berth = FMath::Max(CVarShipBerth.GetValueOnGameThread(), 0.0f);
@@ -12227,12 +12252,41 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 					}
 					// (Release 2, a fleet under way.) A ship's course for her, where it is asked for. Not for a fleet let
 					// go from the hand, which comes down onto the water as it goes, as before.
-					if (bCarried || !bShipWay || !SailShipWay(Piece, MapWay))
+					if (bCarried || !bShipWay || !SailShipWay(Piece, MapWay, bFleetHeading && !bInHarbour))
 					{
 						Piece->SailAlong(Way, LastPieceYaw);
 					}
 				}
 			}
+			// (Release 2, fleets that keep their heading: Campaign/FleetHeading.h.) At sea she lies on the heading she came
+			// in on; in harbour, and with the switch off, she faces the table as before. A fleet under sail is turned by
+			// her sail and keeps what it leaves her with. One found at a new place without sailing there lies the way she
+			// moved. One never seen to move lies out from her home port, or out of the sea her harbour is on. (A fleet
+			// known only from a report gives nothing away by the way it lies: where its port is, is not said.)
+			const bool bLieHeaded = bFleetHeading && !bInHarbour;
+			float CameYaw = LastPieceYaw;
+			bool bTakeIt = false;
+			if (bLieHeaded)
+			{
+				TheaterFleetHeading::FWay Moved, FromBase, FromHome;
+				if (WasPlace && WasSpot && *WasPlace != Place)
+				{
+					Moved = TheaterFleetHeading::FWay{ NearX(At.X, WasSpot->X) - WasSpot->X, At.Y - WasSpot->Y, true };
+					bTakeIt = Moved.Leads() && !Piece->IsSailing();
+				}
+				if (!Fleet.bReport && Data.Regions.IsValidIndex(Fleet.Base))
+				{
+					const FVector2D BasePort = Data.Regions[Fleet.Base].Center;
+					FromBase = TheaterFleetHeading::FWay{ NearX(At.X, BasePort.X) - BasePort.X, At.Y - BasePort.Y, true };
+				}
+				if (!Fleet.bReport && Data.Seas.IsValidIndex(Fleet.Home) && Fleet.Home != Fleet.Zone)
+				{
+					const FVector2D HomeSea = Data.Seas[Fleet.Home].Center;
+					FromHome = TheaterFleetHeading::FWay{ NearX(At.X, HomeSea.X) - HomeSea.X, At.Y - HomeSea.Y, true };
+				}
+				CameYaw = static_cast<float>(TheaterFleetHeading::CameYaw(Moved, FromBase, FromHome, Fleet.Id));
+			}
+			Piece->LieHeaded(bLieHeaded, LastPieceYaw, CameYaw, bTakeIt);
 			Afloat.Add(Fleet.Id);
 		}
 		FleetPlaces.Add(Fleet.Id, Place);

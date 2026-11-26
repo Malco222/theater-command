@@ -5,6 +5,7 @@
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignUnitTable.h"
+#include "Campaign/FleetHeading.h"
 #include "Campaign/ShipRide.h"
 #include "Campaign/ShipSmoke.h"
 #include "Campaign/ShipWay.h"
@@ -1398,7 +1399,7 @@ void AArmyPiece::ApplyStandard()
 		const double Own = FMath::Max(GetActorScale3D().X, 0.1);
 		Standard->SetRelativeScale3D(FVector(StandardScale / Own));
 		// (leaning back, away from whoever looks: its face, which looks back along -X, turns up toward him)
-		Standard->SetRelativeRotation(FRotator(-StandardTilt, 0.0f, 0.0f));
+		TurnStandard();
 		// (a standard drawn larger than life throws no shadow: a shadow that size would not be the flag's own,
 		// and from high up it lay across the map as a dark bar beside every army)
 		const bool bShadow = StandardScale < 1.12f && !bGlimpsed; // (and a flag at a glimpse throws none)
@@ -1413,10 +1414,35 @@ void AArmyPiece::ApplyStandard()
 	}
 }
 
+float AArmyPiece::StandardTurnNow() const
+{
+	return bHeaded ? static_cast<float>(TheaterFleetHeading::StandardTurn(EyeYaw, GetActorRotation().Yaw)) : 0.0f;
+}
+
+void AArmyPiece::TurnStandard()
+{
+	if (!Standard)
+	{
+		return;
+	}
+	// (Release 2: a fleet that lies on her own heading.) Her standard is turned back to the eye about the piece's own
+	// upright, its foot with it: it stands where it stood on the screen and reads as it read. Every other piece, and a
+	// fleet that faces the table, has no turn: the standard is set as it always was, and its foot is not touched.
+	const float Turned = StandardTurnNow();
+	if (bHeaded || bStandardTurned)
+	{
+		Standard->SetRelativeLocationAndRotation(FRotator(0.0f, Turned, 0.0f).RotateVector(StandardFoot), FRotator(-StandardTilt, Turned, 0.0f));
+		bStandardTurned = bHeaded;
+		return;
+	}
+	Standard->SetRelativeRotation(FRotator(-StandardTilt, 0.0f, 0.0f));
+}
+
 FVector AArmyPiece::OnStandard(const FVector& Point) const
 {
 	const double Own = FMath::Max(GetActorScale3D().X, 0.1);
-	return StandardFoot + FRotator(-StandardTilt, 0.0f, 0.0f).RotateVector((Point - StandardFoot) * (StandardScale / Own));
+	const FVector Stood = StandardFoot + FRotator(-StandardTilt, 0.0f, 0.0f).RotateVector((Point - StandardFoot) * (StandardScale / Own));
+	return bHeaded ? FRotator(0.0f, StandardTurnNow(), 0.0f).RotateVector(Stood) : Stood; // (turned to the eye with the standard)
 }
 
 void AArmyPiece::ShowRing()
@@ -1509,7 +1535,7 @@ bool AArmyPiece::HitByRay(const FVector& Origin, const FVector& Direction, doubl
 	// The colours first (they are what the eye goes to), then the pole and the stack of counters.
 	const FVector Flag = Place.TransformPosition(OnStandard(FlagCenter));
 	return Near(Flag, Flag, FlagRadius * StandardScale)
-		|| Near(Place.TransformPosition(PoleFoot), Place.TransformPosition(OnStandard(PoleFoot + FVector(0.0, 0.0, PoleTop))), BaseRadius * 0.3)
+		|| Near(Place.TransformPosition(bHeaded ? FRotator(0.0f, StandardTurnNow(), 0.0f).RotateVector(PoleFoot) : PoleFoot), Place.TransformPosition(OnStandard(PoleFoot + FVector(0.0, 0.0, PoleTop))), BaseRadius * 0.3)
 		|| Near(Place.TransformPosition(FVector::ZeroVector), Place.TransformPosition(FVector(0.0, 0.0, BodyTop)), BaseRadius);
 }
 
@@ -1879,9 +1905,39 @@ FVector AArmyPiece::AsternBy(const FVector& Point, double Back) const
 void AArmyPiece::FaceTable(float Yaw)
 {
 	SailEndYaw = Yaw;
+	EyeYaw = Yaw;
+	if (bHeaded)
+	{
+		TurnStandard(); // (a fleet on her own heading: her ships and her wake stay as they lie, and her standard turns to the eye)
+		return;
+	}
 	if (!IsSailing())
 	{
 		SetActorRotation(FRotator(0.0f, Yaw, 0.0f));
+	}
+}
+
+void AArmyPiece::LieHeaded(bool bOn, float TableYaw, float CameYaw, bool bTakeIt)
+{
+	EyeYaw = TableYaw;
+	const bool bWas = bHeaded;
+	bHeaded = bOn && What == 1;
+	if (bHeaded)
+	{
+		// (her sail gives her a heading as she goes, and she keeps the one she comes in on: only a fleet that has none
+		// yet, or was found at a new place without sailing there, is given one here)
+		if (!IsSailing() && (bTakeIt || !bWas))
+		{
+			SetActorRotation(FRotator(0.0f, CameYaw, 0.0f));
+		}
+	}
+	else if (bWas && !IsSailing())
+	{
+		SetActorRotation(FRotator(0.0f, TableYaw, 0.0f)); // (the switch turned off, or come into harbour without a sail: she faces the table again)
+	}
+	if (bHeaded || bWas)
+	{
+		TurnStandard();
 	}
 }
 
@@ -2012,28 +2068,40 @@ void AArmyPiece::Tick(float DeltaSeconds)
 		// Her bows as her course has them (a fleet's model has its bows toward its own +Y). The table may have been
 		// turned to a new eye since the course was laid: what it has turned by comes on over the last fifth of her time,
 		// so she still comes to rest facing it, with no snap.
-		const double Late = FMath::SmoothStep(0.8, 1.0, Progress);
+		// (A fleet that lies on her own heading comes to rest as her course has her: the table's turn is not added.)
+		const double Late = bHeaded ? 0.0 : FMath::SmoothStep(0.8, 1.0, Progress);
 		const double Yaw = FMath::RadiansToDegrees(FMath::Atan2(-CourseBows.X, CourseBows.Y)) + FRotator::NormalizeAxis(SailEndYaw - SailLaidYaw) * Late;
 		SetActorRotation(FRotator(0.0, Yaw, 0.0));
 		const double Turned = FMath::DegreesToRadians(Yaw);
 		BendWake(CourseRan, FVector2D(-FMath::Sin(Turned), FMath::Cos(Turned)), Progress);
+		if (bHeaded)
+		{
+			TurnStandard(); // (her standard stays to the eye as her head swings)
+		}
 	}
 	else if (bSailing)
 	{
 		// Bows the way she goes (a fleet's model has its bows toward its own +Y), and round to face the table again as
 		// she comes in: turned a little each frame, never snapped.
+		// (Release 2: a fleet that lies on her own heading has her bows the way she goes to the end, and keeps the
+		// heading she comes in on: Campaign/FleetHeading.h.)
 		const FVector Heading = Route[Segment] - Route[Segment - 1];
-		double Want = SailEndYaw;
-		if (Progress < 0.84 && Heading.SizeSquared2D() > 1.0e-4)
+		const double Now = GetActorRotation().Yaw;
+		const bool bHerWay = TheaterFleetHeading::HeadsHerWay(bHeaded, Progress);
+		double Want = bHeaded ? Now : static_cast<double>(SailEndYaw);
+		if (bHerWay && Heading.SizeSquared2D() > 1.0e-4)
 		{
 			Want = FMath::RadiansToDegrees(FMath::Atan2(-Heading.X, Heading.Y));
 		}
-		const double Now = GetActorRotation().Yaw;
 		const double Turn = FRotator::NormalizeAxis(Want - Now);
 		// (The last turn, round to the table, quickens as the time left runs out: on the shortest sail it is all but
 		// done by the time she comes in, and what is left at the end is too little to see snap.)
-		const double Rate = Progress < 0.84 ? 5.0 : FMath::Max(5.0, 3.0 / FMath::Max(0.05, MarchTime * (1.0 - Progress)));
+		const double Rate = bHerWay ? 5.0 : FMath::Max(5.0, 3.0 / FMath::Max(0.05, MarchTime * (1.0 - Progress)));
 		SetActorRotation(FRotator(0.0, Now + Turn * FMath::Min(1.0, DeltaSeconds * Rate), 0.0));
+		if (bHeaded)
+		{
+			TurnStandard(); // (her standard stays to the eye as her head swings)
+		}
 	}
 	if (Hulls.Num() > 0)
 	{
@@ -2049,7 +2117,14 @@ void AArmyPiece::Tick(float DeltaSeconds)
 		if (bSailing)
 		{
 			bSailing = false;
-			SetActorRotation(FRotator(0.0f, SailEndYaw, 0.0f));
+			if (bHeaded)
+			{
+				TurnStandard(); // (she lies as she came in: her wake, straight again, trails back the way she came)
+			}
+			else
+			{
+				SetActorRotation(FRotator(0.0f, SailEndYaw, 0.0f));
+			}
 		}
 		StraightenWake();
 		if (bHasWake && Body)
