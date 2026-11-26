@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f0b4c570b 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of be8bb2703 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -62327,16 +62327,16 @@
         effect: `${list5(packed.map((f) => f.name))} can fly only ${Math.round(least * 100)}% of ${packed.length === 1 ? "its" : "their"} aircraft from there`
       });
     }
-    const named5 = cityDefences(g2) ? placeName2(place3) : place3;
-    const aaLine = (round3) => !known ? `Level ${out.aa} guns ring ${round3}` : (known.seen ?? -1) < 0 ? `Not scouted, so reckoned at the worst: level ${out.aa} guns round ${round3}` : `Level ${out.aa} guns ringed ${round3} when ${seenAgo(known.ago ?? 0)}`;
+    const works2 = `the factories of ${place3}`, worksNamed = cityDefences(g2) ? `the factories of ${placeName2(place3)}` : works2;
+    const aaLine = (at4, round3 = at4 === works2 ? worksNamed : at4) => !known ? `Level ${out.aa} guns ring ${round3}` : (known.seen ?? -1) < 0 ? `Not scouted, so reckoned at the worst: level ${out.aa} guns round ${round3}` : `Level ${out.aa} guns ringed ${round3} when ${seenAgo(known.ago ?? 0)}`;
     const dark = cn ? `By night they fire ${!cn.radar ? "blind" : cn.lit > 0 ? "by radar and searchlight" : "by radar"}, and bring down about ${Math.round(cn.share * 100)}% as many bombers as they would by day.` : "";
     if (out.aa && m === "harbour") out.lines.push({ label: "Anti-aircraft guns", value: aaLine(harbourOf(place3)), effect: dark || "They bring down more of the bombers" });
     if (m === "town") {
       const r = g2.regions[target], gone = breachOf(g2, r);
       out.lines.push({ label: "The town", value: `Troops inside ${townName(r)} fight ${Math.round((townBonus(g2, r) - 1) * 100)}% stronger${townWorksPhrase(g2, r)}${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ""}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling("raid")}% in all` });
     }
-    if (out.aa && m === "town") out.lines.push({ label: "Anti-aircraft guns", value: aaLine(named5), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
-    else if (out.aa) out.lines.push({ label: "Anti-aircraft guns", value: aaLine(`the factories of ${named5}`), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+    if (out.aa && m === "town") out.lines.push({ label: "Anti-aircraft guns", value: aaLine(place3), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+    else if (out.aa) out.lines.push({ label: "Anti-aircraft guns", value: aaLine(`the factories of ${place3}`), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
     if (cn && cn.lights > 0) {
       const where = placeName2(place3);
       const over = `Level ${cn.lights} searchlights over ${where}`, few = "they help the night fighters a little.";
