@@ -11,7 +11,7 @@
 // list. The dial leashes the computer-run world and never the player: no claim is pressed for him.
 
 import { DIPLOMACY, holds, majorsOf, signPeace } from './diplomacy';
-import { allied, atWar, bloc, collapseScore, declareWar, headline, joinedSide, theName, warning } from './game';
+import { allied, atWar, bloc, collapseScore, declareWar, headline, joinedSide, keptStoresHolder, theName, warning } from './game';
 import { HISTORY, dialDraw, dialRules, stopDef, stopOf, FREE, type Ambition, type Mark } from './history';
 import { deterred } from './league';
 import { fronts, launch, ops } from './staff';
@@ -255,7 +255,8 @@ function treaty(g: Game, a: Ambition): boolean {
   if (!all) { delete g.flags[`amb:held:${a.id}`]; return false; }
   const since = g.flags[`amb:held:${a.id}`] ?? (g.flags[`amb:held:${a.id}`] = g.turn);
   if (g.turn - since + 1 < C.treaty) return false;
-  for (const r of ground) { r.owner = a.nat; r.since = g.turn; }
+  // (Under true reach the claimant's kept stores in a port it already holds stay his: game.ts keptStoresHolder.)
+  for (const r of ground) { keptStoresHolder(g, r, a.nat); r.owner = a.nat; r.since = g.turn; }
   if (!signPeace(g, a.nat, a.on)) return false;
   g.supplyDirty = true;
   g.flags[`amb:done:${a.id}`] = g.turn;

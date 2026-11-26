@@ -24,7 +24,10 @@ import { finishMonthEnd } from '../src/campaign/finish';
 import { liberate } from '../src/campaign/liberation';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { zoneOf } from '../src/campaign/navy';
-import { arrive, besieged, garrison, garrisonFed, garrisonOf, invest, lift, monthsShut, ringClosed, siegeMonth, siegeView, storesOf } from '../src/campaign/siege';
+import { SIEGE, arrive, besieged, garrison, garrisonFed, garrisonOf, invest, lift, monthsShut, ringClosed, siegeMonth, siegeView, storesOf } from '../src/campaign/siege';
+import { claimsMonth } from '../src/campaign/claims';
+import { transfer } from '../src/campaign/diplomacy';
+import { HISTORY, type Ambition } from '../src/campaign/history';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
@@ -671,6 +674,16 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
       expect([on, e.port, storesOf(h, e)]).toEqual([on, false, 2]);
       expect([on, card(h, e).at(-1)]).toEqual([on, `Closely invested, its stores would feed the defenders for ${on ? 'two months' : '2 months'}.`]);
     }
+    // The hungry sentence without a harbour, the UI director's shorter form. No town without a harbour keeps stores
+    // or holds fewer than a month, so it is staged: El Alamein's stores set to none for this one reading.
+    const g = war(true);
+    const e = g.byName['El Alamein'];
+    const size = siegeView(g, e.id)!.size, was = [SIEGE.stores[size], SIEGE.fortStores] as const;
+    SIEGE.stores[size] = 0; SIEGE.fortStores = 0;
+    try {
+      expect([storesOf(g, e), siegeView(g, e.id)!.lines.at(-1)]).toEqual([0, 'Closely invested, its defenders would go hungry at once: its stores have been eaten with no ship coming in.']);
+    } finally { SIEGE.stores[size] = was[0]; SIEGE.fortStores = was[1]; }
+    expect(storesOf(g, e)).toBe(2);
   });
 
   it('K1, the window reads the guard\'s record (the design director, 22:08Z): a captured larder feeds the new holder only once he has filled it himself; the holder who filled it is fed as before (off: the captor lives on the old stores, pinned)', () => {
@@ -741,6 +754,53 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
         crew.supplied = true;
         expect([on, by, since, keptStoresHis(g, gib), onPortStores(g, crew)]).toEqual([on, by, since, his, on ? his : true]);
       }
+    }
+  });
+
+  it('K3, the rechecker\'s under-feed: a cession or a treaty that hands a port to the nation already holding it moves since, yet nothing changed hands: the holder\'s kept stores still feed him and are still charged (off: fed alike, no mark written)', () => {
+    for (const on of [false, true]) {
+      // A cession (diplomacy.ts transfer): Britain's ships fill Malta's stores in month 1, the sea then shuts for
+      // everyone, and in month 2 Malta is handed to Britain, who holds it.
+      const g = war(on);
+      const r = g.byName['Malta'];
+      const c = addCorps(g, 'UK', 'Window test', 'inf', 1, 'Malta', {});
+      expect(garrison(g, c)).toBe(true);
+      const draw = (t: number): void => { g.turn = t; g.phase = g.order.indexOf('UK'); g.supplyDirty = true; computeSupply(g); };
+      draw(1);
+      expect([on, g.flags[`stores:${r.id}`], filler(g, r)]).toEqual([on, 1, on ? 'UK' : undefined]);
+      for (const n of Object.values(g.nations)) { n.seaSupply = false; n.sealift = 0; }
+      g.turn = 2;
+      transfer(g, r, 'UK');
+      expect([on, r.ctrl, r.since, g.flags[`stores:held:${r.id}`]]).toEqual([on, 'UK', 2, on ? 2 : undefined]);
+      const fed: number[] = [];
+      for (let t = 2; t <= 4; t++) {
+        draw(t);
+        if (c.supplied) fed.push(t);
+        if (t === 3) expect([on, keptStoresHis(g, r), keptStoresRun(g, r, true)]).toEqual([on, on, on ? 2 : 0]);
+      }
+      expect([on, fed]).toEqual([on, [2, 3]]);
+      // The mark is no leak: Italy takes Malta by battle in month 5 and Britain takes it back in month 6, and her
+      // stores of month 1 are no longer hers.
+      declareWar(g, 'ITA', 'UK');
+      g.turn = 5; capture(g, r, 'ITA');
+      g.turn = 6; capture(g, r, 'UK');
+      expect([on, r.ctrl, r.since, keptStoresHis(g, r)]).toEqual([on, 'UK', 6, false]);
+      // Nor does a later cession make stores that were not his his again: only his own stay his.
+      g.turn = 7; transfer(g, r, 'UK');
+      expect([on, r.since, g.flags[`stores:held:${r.id}`], keptStoresHis(g, r)]).toEqual([on, 7, on ? 2 : undefined, false]);
+
+      // A treaty (claims.ts): staged, a private war between Spain and Portugal ending with Spain holding Malta, the
+      // stores Spain's own of month 2; the treaty in month 4 makes Malta Spain's own ground and moves since.
+      const h = war(on);
+      const m = h.byName['Malta'];
+      m.ctrl = 'ESP'; m.since = 0;
+      at(h, m, 4, 2, 'ESP');
+      declareWar(h, 'ESP', 'POR');
+      const amb = { id: 'k3', nat: 'ESP', on: 'POR', ground: ['Malta'], name: 'Malta', why: 'staged' } as Ambition;
+      HISTORY.ambitions.push(amb);
+      h.flags['amb:go:k3'] = 1; h.flags['amb:held:k3'] = 1;
+      try { claimsMonth(h); } finally { HISTORY.ambitions.splice(HISTORY.ambitions.indexOf(amb), 1); }
+      expect([on, h.flags['amb:done:k3'], m.owner, m.ctrl, m.since, h.flags[`stores:held:${m.id}`], keptStoresHis(h, m)]).toEqual([on, 4, 'ESP', 'ESP', 4, on ? 4 : undefined, on]);
     }
   });
 
