@@ -164,6 +164,7 @@ import { warGoesOn } from '../../../src/campaign/domination';
 import { atSea as fleetAtSea, shipCount as shipsIn } from '../../../src/campaign/navy';
 import { fleetKnown as fleetKnownTo, fleetsSeen, seaPicture as seaPictureOf } from '../../../src/campaign/carriers';
 import { arrivalWaitOf, FROMWAIT_ROW, fromWaitOn, setFromWait } from '../../../src/campaign/arrivalwaits';
+import { PORTSTORES_ROW, portCardLines, portCorpsLine, portStoresOn, setPortStores } from '../../../src/campaign/portcut';
 import { airfieldsSeen, announcements, attackOutlook, openingForce, pocketAt, softenOptions, orderProbe, foldChoicesAt, orderFold, fieldworksLeft, rivalStaff, swapChoices, orderSwap, jointForce, whyNotAttack, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
@@ -830,6 +831,10 @@ function drawView(step = false) {
       // formed from: the whole line for its card's muted note ('An arrival due in Paotow, ..., and has waited for it
       // since December 1942. ...'). Only where there is one.
       ...(c.nat === s.human ? (() => { const w = arrivalWaitOf(s, c); return w ? { arrivalWait: w.whole } : {}; })() : {}),
+      // (Release 2, portcut.ts: the UI director's words of 26 November 2026, 18:46Z, section 3.) A corps of the player's
+      // in a port cut off by sea: 'Living on Malta's stores through February.' or 'Hungry: ...'. Only where there is
+      // one, and never with the switch off.
+      ...(c.nat === s.human && portStoresOn(s) ? (() => { const l = portCorpsLine(s, c); return l ? { portLine: l } : {}; })() : {}),
     }); }),
     // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.
     // (Version 53: only the fleets the player's side has found. One that is only reported is a flag and a rough
@@ -1079,6 +1084,8 @@ function drawView(step = false) {
     supportTeams: teamsOn(s),
     // (Release 2, arrivalwaits.ts) Whether a dated arrival formed from corps in the field waits while they are at the front.
     fromWait: fromWaitOn(s),
+    // (Release 2, portcut.ts) Whether ports cut off by sea tell of their stores (words only).
+    portStores: portStoresOn(s),
     // (Release 2, rearguard.ts) Whether the player can order a small corps to hold as a rearguard.
     rearguard: rearguardOn(s),
     // (Release 2, rearguard.ts) Whether a rearguard's engineers lay charges on the bridges behind it (the switch as set: it works only with rearguards on).
@@ -4364,6 +4371,10 @@ function province(id: number) {
         };
       } catch { return null; }
     })(),
+    // (Release 2, portcut.ts: the UI director's words of 26 November 2026, 18:46Z, section 2.) A fortified port overseas
+    // whose sea is shut: the card's lines for the player, each with its tone ('warn', 'bad' or 'note'). Only with the
+    // switch on: off, the province carries no such field.
+    ...(portStoresOn(s) ? { portCut: (() => { try { return portCardLines(s, r.id, s.human).map((l) => ({ text: l.text, tone: l.tone })); } catch { return []; } })() } : {}),
     // (Version 64) Fieldworks standing empty here, which a corps of the player's side takes over by marching in.
     leftWorks: (() => {
       try {
@@ -7765,6 +7776,13 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     note = !ok ? FROMWAIT_ROW.refused : fromWaitOn(s) ? FROMWAIT_ROW.on : FROMWAIT_ROW.off;
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === PORTSTORES_ROW.id) {
+    // (Release 2, portcut.ts) Ports cut off by sea tell of their stores, switched by the player in any month of a grand
+    // campaign. Words only. (The marks give the row's name and line and no note on pressing it, so none is said.)
+    ok = setPortStores(s, part[1] === 'on');
+    note = '';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'fleetwhyrule') {
     // (Release 2, fleetwhy.ts) The admirals' reasons, switched by the player in any month.
     setFleetWhy(s, part[1] === 'on');
@@ -9055,6 +9073,9 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, offerCalls(g
 // (Release 2, arrivalwaits.ts) Arrivals wait while their corps are at the front: TC.fromWait(on) in any month of a grand
 // campaign (set: false outside one); the options page uses act('fromwaitrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fromWait = (on: boolean) => { const s = game(); const set = setFromWait(s, !!on); return { set, on: fromWaitOn(s) }; };
+// (Release 2, portcut.ts) Ports cut off by sea tell of their stores: TC.portStores(on) in any month of a grand campaign
+// (set: false outside one); the options page uses act('portstores:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).portStores = (on: boolean) => { const s = game(); const set = setPortStores(s, !!on); return { set, on: portStoresOn(s) }; };
 // (Release 2, taskforce.ts) Task forces: TC.taskForce(on) at any time; the options page uses act('taskforcerule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).taskForce = (on: boolean) => { const s = game(); setTaskForce(s, !!on); return { on: taskForceOn(s) }; };
 // (Release 2, breakup.ts) Breaking corps up: TC.breakUp(on) at any time; the options page uses act('breakuprule:on' / ':off').
@@ -9108,6 +9129,9 @@ const R2_SHIP: Record<string, (s: Game) => boolean> = {
   // (Release 2, arrivalwaits.ts: arrivals wait while their corps are at the front, switched in any month, so an older
   // war takes it too. On the list for the 3D's ship list to name; the rule ships off until the design director's gate.)
   fromwaitrule: (s) => setFromWait(s, true) && fromWaitOn(s),
+  // (Release 2, portcut.ts: ports cut off by sea tell of their stores, words only, switched in any month, so an older war
+  // takes it too. On the list for the 3D's ship list to name; the row ships off until its checks.)
+  portstores: (s) => setPortStores(s, true) && portStoresOn(s),
 };
 function r2Ship(ids: string[]) {
   const s = game();

@@ -1,0 +1,476 @@
+// A port cut off by sea tells of its stores (release 2; the UI director's words of 26 November 2026, 18:46Z,
+// ui-director/port-stores-shut-sea-UI-MARKS.md, after the design director's rulings of 18:44Z). Behind its own switch
+// (stage.json 'portStores', the flag 'portStores', the Options key 'portstores'): off, nothing here is written, read or
+// shown, and every war is the war without it. Words only, on as off: nothing here changes the war.
+//
+// A fortified port overseas keeps stores (game.ts portKeep): with the sea behind it shut, the supply picture feeds its
+// garrison from them for a while (computeSupply's window), and then the garrison goes hungry and is struck off (game.ts
+// startPhase). Until now nothing said so: Malta's corps starved with no warning (rules-builder/release2/true-reach,
+// gate96-1126 READ, "Malta"). One function, portCutOff, reads the facts from the rules' own clock, so that every month
+// it names is the month the rule acts; the port's card, the news and the corps card all call it, and nobody copies it.
+//
+// Its own flags (numbers only, saved with the game, written only with the switch on and a player at the table):
+//   portTold:<id>     the month the first cut-off news of the port was told to the player: the relief is told only after
+//                     it ("Relief, after the first line was told"). Cleared at the relief, when the port changes hands or
+//                     the player has no part in it any more, when the switch is turned off, and when its holder or the
+//                     player falls (portsDone).
+//   seaShut:<z>:<nat> the month sea z became shut to nation nat, read at every nation's month as it opens: the start of
+//                     the hold the shutting side sees on the port's card ("held ... since"). Kept only for a nation at
+//                     war with the player that holds a port of this kind on that sea; cleared as the sea opens to it,
+//                     when the switch is turned off, and when the nation falls.
+// Neither begins with "stores:", so a load never touches them (save.ts keeps the supply picture's own marks by that prefix).
+import { turnToDate } from '../core/ticket';
+import { AIR } from './air';
+import { theUnit } from './bombers';
+import { hospitalNear, hospitalWorth } from './buildings';
+import { columnShare } from './columns';
+import { cmdRally, cmdWinter } from './commanders';
+import { EASTERN, UNFED, allied, atWar, enemyAshore, fortRow, frozen, headline, keptStoresHis, lineStrength, placeName, portKeep, theWords, trueReach, worksKept } from './game';
+import { MORALE, moraleRules } from './morale';
+import { NAVY, SeaPicture, closedTo, fleetReach, inPassage, seaSide, shipCount } from './navy';
+import { skiesOver } from './pacific';
+import { seaWhat } from './sea-words';
+import { fieldCtrl, siegeRules } from './siege';
+import { witherAt } from './wither';
+import { farOn } from './world';
+import type { Corps, Game, Region } from './types';
+
+// ---- The Options row and the switch ----------------------------------------------------------------------------------
+
+/**
+ * The Options row's name and line (the UI director's words of 18:46Z, section 4). For a screen that lists the release 2
+ * switches; the 3D's own row carries the same words (CampaignPlayerController.cpp). The browser has no such screen: a
+ * grand campaign there takes the switch from stage.json as it opens, or from the page's address (?portstores).
+ */
+export const PORTSTORES_ROW = {
+  id: 'portstores',
+  name: 'Ports cut off by sea tell you of their stores',
+  line: 'When the sea round one of your ports is shut, its news, its card and the cards of the corps there say whose ships or aircraft shut it, the month its stores run out, the month its garrison would be lost, and what opens the sea again. The side that shuts it sees on the port\'s card how long it has held that sea. Off: none of this is said, as before. Words only: no result changes.',
+} as const;
+
+/** The switch as everything here reads it: a grand campaign with the flag 'portStores'. */
+export const portStoresOn = (g: Game): boolean => g.flags.open === 1 && g.flags.portStores === 1;
+
+const toldKey = (id: number): string => `portTold:${id}`;
+const shutKey = (z: number, nat: string): string => `seaShut:${z}:${nat}`;
+
+/**
+ * Switches the telling on or off in any month of a grand campaign; outside one it does nothing and answers false. Off
+ * deletes the flag and every flag of the telling's own, so that a war switched on and off holds nothing of it.
+ */
+export function setPortStores(g: Game, on: boolean): boolean {
+  if (g.flags.open !== 1) return false;
+  if (on) { g.flags.portStores = 1; return true; }
+  delete g.flags.portStores;
+  for (const k of Object.keys(g.flags)) if (k.startsWith('portTold:') || k.startsWith('seaShut:')) delete g.flags[k];
+  return true;
+}
+
+/**
+ * A nation leaves the war for good (game.ts `capitulate`; domination.ts `leave` and `layDown`): the telling's flags
+ * that are about it go, so no dead data stays in a lost war. Called while its ports are still its own. Nothing where
+ * none was ever written.
+ */
+export function portsDone(g: Game, nat: string): void {
+  // (With the switch off there are none: turning it off takes them all, setPortStores.)
+  if (!portStoresOn(g)) return;
+  for (let z = 0; z < g.seas.length; z++) delete g.flags[shutKey(z, nat)];
+  for (const r of g.regions) if (g.flags[toldKey(r.id)] !== undefined && (r.ctrl === nat || nat === g.human)) delete g.flags[toldKey(r.id)];
+}
+
+// ---- The facts -----------------------------------------------------------------------------------------------------
+
+/** The forces that shut one of the port's seas to its holder: the nations named, most first, and the arms each holds it with. */
+export interface SeaHeld {
+  sea: number;
+  by: { nat: string; fleets: boolean; aircraft: boolean }[];
+}
+
+/** One corps of the garrison and the month the rule strikes it off if no ship gets in. */
+export interface GarrisonCount { id: number; lost: number }
+
+/** What portCutOff answers. Months are game turns (turn 1 is September 1939). */
+export interface PortCut {
+  region: number;
+  holder: string;
+  /** How the viewer stands: the holder's side (the holder, or a nation with corps there), or the side that shuts the sea. */
+  side: 'holder' | 'shutting';
+  /** The months the port's stores feed its garrison after the last fill (game.ts portKeep). */
+  keep: number;
+  /** The port's seas shut to the holder this month, and who holds each. Empty where none is. */
+  shut: SeaHeld[];
+  // ---- The holder's side (null for the shutting side, which never reads the holder's stores) ----
+  /**
+   * 'filled': a ship got in this month and the stores are full. 'stores': none has, and the garrison lives on the
+   * port's stores. 'hungry': none has, and the stores are spent.
+   */
+  state: 'filled' | 'stores' | 'hungry' | null;
+  /** True where the sea is shut to the holder and no ship has got in this month: the lines of a port cut off by sea. */
+  cut: boolean;
+  /** The month the stores were last filled for the holder (null where they never were, or the larder is not his). */
+  lastFilled: number | null;
+  /** The last month they feed the garrison (null where they feed none). */
+  feedsTo: number | null;
+  /** The month the garrison goes hungry: the first month the stores feed it no longer. */
+  hungry: number | null;
+  /** The month the first corps of the garrison is struck off if no ship gets in (null with no garrison that starves). */
+  lost: number | null;
+  /** Each corps of the garrison that the rule would strike off from hunger, with its month. */
+  garrison: GarrisonCount[];
+  /** Whether a fleet of the holder's can reach one of the shut seas this month. */
+  fleetInReach: boolean | null;
+  // ---- The shutting side, from its own sight only (null for the holder's side) ----
+  /** The month its side's hold on the port's seas began, as its own fleets and aircraft know it. */
+  heldSince: number | null;
+  /** Counting from then: the month the garrison goes hungry, and the month it is lost. */
+  heldHungry: number | null;
+  heldLost: number | null;
+}
+
+/**
+ * A port whose stores the rules keep, as the supply picture's window reads it (game.ts computeSupply): a fortified port
+ * overseas, held by a nation alive and at war, with no army of the enemy's round the town (a siege runs on the siege's
+ * own clock: siege.ts) and no friendly ground beside it by land (where the roads may feed the garrison whatever the stores).
+ */
+function watched(g: Game, r: Region): boolean {
+  if (!r.overseas || !r.port || !worksKept(r)) return false;
+  const h = g.nations[r.ctrl];
+  if (!h || !h.alive || !h.atWar.length) return false;
+  if (siegeRules(g) && fieldCtrl(g, r) !== r.ctrl) return false;
+  return !r.nb.some((j) => allied(g, g.regions[j].ctrl, r.ctrl));
+}
+
+/**
+ * Who shuts a sea to the holder, split by nation from the sums closedTo makes (navy.ts SeaPicture.state, seaSide and
+ * airOver's own terms). Whether it is shut is closedTo's answer alone; this only names. An arm is named where its
+ * strength alone would shut the sea, and both where neither alone would; the nations are named, most first, until those
+ * named would shut it by themselves.
+ */
+function holdersOf(g: Game, pic: SeaPicture, z: number, holder: string): SeaHeld['by'] {
+  const st = pic.state(z);
+  if (!st) return [];
+  const ships = new Map<string, number>(), air = new Map<string, number>();
+  const add = (m: Map<string, number>, nat: string, v: number): void => { if (v > 0) m.set(nat, (m.get(nat) ?? 0) + v); };
+  for (const f of st.fleets) if (atWar(g, f.nat, holder)) add(ships, f.nat, f.power);
+  const zone = g.seas[z];
+  if (st.skies) {
+    const S = skiesOver(g, z);
+    if (S) for (const x of st.groups) if (atWar(g, x.nat, holder)) add(air, x.nat, (x.n / S.per) * zone.air * NAVY.air.weight);
+  } else if (zone.coast.length && st.wx !== 0) {
+    const per = (zone.air * st.wx * NAVY.air.weight) / zone.coast.length;
+    for (const c of st.coasts) {
+      if (atWar(g, c.ctrl, holder)) add(air, c.ctrl, c.air * (c.sky ? AIR.sky.seaFoe : 1) * per);
+      else if (c.sky && atWar(g, c.sky, holder)) add(air, c.sky, c.skyAir * AIR.sky.seaOwn * per);
+    }
+  }
+  const need = Math.max(NAVY.closed.min, NAVY.closed.ratio * seaSide(g, z, holder, false).total);
+  const sum = (m: Map<string, number>): number => [...m.values()].reduce((s, v) => s + v, 0);
+  let byShips = sum(ships) >= need, byAir = sum(air) >= need;
+  if (!byShips && !byAir) { byShips = ships.size > 0; byAir = air.size > 0; }
+  const weight = (n: string): number => (byShips ? ships.get(n) ?? 0 : 0) + (byAir ? air.get(n) ?? 0 : 0);
+  const nats = [...new Set([...ships.keys(), ...air.keys()])].filter((n) => weight(n) > 0).sort((a, b) => weight(b) - weight(a) || g.order.indexOf(a) - g.order.indexOf(b));
+  const out: SeaHeld['by'] = [];
+  let got = 0;
+  for (const n of nats) {
+    out.push({ nat: n, fleets: byShips && (ships.get(n) ?? 0) > 0, aircraft: byAir && (air.get(n) ?? 0) > 0 });
+    got += weight(n);
+    if (got >= need) break;
+  }
+  return out;
+}
+
+/** True where the nation's corps have had this month's reckoning (game.ts startPhase, in the order of the nations). */
+const charged = (g: Game, nat: string, uncharged?: string): boolean => nat !== uncharged && g.order.indexOf(nat) <= g.phase;
+
+/**
+ * The rest a corps left where it stands gets back in a month it is fed (game.ts startPhase, the fed branch): not fought,
+ * a whole month out of the line, its hospital, its line, its column, the winter and its general, as the month stands.
+ * The treasury is taken to pay.
+ */
+function quietRest(g: Game, c: Corps): number {
+  const quiet = moraleRules(g) && c.kind !== 'fort';
+  const rested = quiet ? MORALE.rested.org : 0;
+  const ward = quiet ? hospitalWorth(hospitalNear(g, c, (h) => h === c.nat || allied(g, h, c.nat))).org : 0;
+  const bite = frozen(g, c.nat, g.regions[c.reg]) ? cmdWinter(g, c) : 0;
+  return (0.45 + rested + ward) * lineStrength(g, c).mul * columnShare(g, c) * (1 - (1 - EASTERN.winter.rest) * bite) * cmdRally(g, c);
+}
+
+/**
+ * The month the rule strikes a corps off if no ship gets in: fed from the stores through `feedsTo` (resting as it
+ * stands), then charged its hunger month by month (game.ts startPhase: UNFED from its order, struck off once nothing
+ * is left), each in its own nation's month. The same sums the rule makes, so the month named is the month it acts.
+ */
+function lostMonth(g: Game, c: Corps, feedsTo: number | null, uncharged?: string): number {
+  let m = charged(g, c.nat, uncharged) ? g.turn + 1 : g.turn;
+  let o = c.org;
+  if (feedsTo !== null && m <= feedsTo) {
+    const rest = quietRest(g, c);
+    for (; m <= feedsTo; m++) o = Math.min(1, o + rest);
+  }
+  for (let i = 0; i < 50; i++, m++) {
+    o -= UNFED;
+    if (o <= 0) return m;
+  }
+  return m;
+}
+
+/** The months a full corps holds out hungry: the rule's own subtraction from full order (three). */
+const hungryRun = (): number => { let o = 1, k = 0; do { o -= UNFED; k++; } while (o > 0 && k < 50); return k; };
+
+/** The corps of the holder's side in the port that the rule would strike off from hunger (no fortress crew, which keeps its own clock, and no island garrison of the whole world's table, which withers). */
+function garrisonOf(g: Game, r: Region): Corps[] {
+  const seen = new Set<Corps>();
+  for (const c of [...r.units, ...(r.garr ?? [])]) {
+    if (c.dead || seen.has(c) || !allied(g, c.nat, r.ctrl) || !g.nations[c.nat]?.atWar.length || fortRow(g, c)) continue;
+    if (farOn(g) && witherAt(g, c, enemyAshore(g, c))) continue;
+    seen.add(c);
+  }
+  return [...seen];
+}
+
+/** True where a fleet of the nation's, with ships and free to sail, can reach one of these seas this month (navy.ts sail). */
+function fleetFor(g: Game, nat: string, seas: number[]): boolean {
+  return g.fleets.some((f) => f.nat === nat && shipCount(f.ships) > 0 && !inPassage(f) && f.attacked !== g.turn && fleetReach(g, f).some((z) => seas.includes(z)));
+}
+
+/**
+ * The facts of a fortified port overseas whose stores the rules keep, as `viewer` may know them: null for any other
+ * province, and for a viewer who is neither on the holder's side there (the holder, or a nation with corps in the port)
+ * nor on the side whose forces shut its sea. A null viewer reads the holder's side (the rule's own view).
+ *
+ * The holder's side reads the rules' own clock: the month the stores were last filled (`stores:<id>`, whose they are
+ * under true reach as the window reads it, keptStoresHis), the months they feed (portKeep), and each corps' order. The
+ * shutting side reads only its own sight: how long its side has held the sea (`seaShut:`), and the rule's count from
+ * the start of that hold for a garrison at full order; never the holder's stores. Reads only: nothing is drawn or
+ * written. `uncharged` names a nation whose corps have not yet had this month's reckoning (the news, read as that
+ * nation's month opens).
+ */
+export function portCutOff(g: Game, regionId: number, viewer: string | null, uncharged?: string): PortCut | null {
+  const r = g.regions[regionId];
+  if (!r || !watched(g, r)) return null;
+  const holder = r.ctrl;
+  const pic = new SeaPicture(g);
+  const shut: SeaHeld[] = r.seas.filter((z) => closedTo(g, z, holder)).map((z) => ({ sea: z, by: holdersOf(g, pic, z, holder) }));
+  const keep = portKeep(g, r);
+  const ours = viewer === null || viewer === holder || (allied(g, viewer, holder) && [...r.units, ...(r.garr ?? [])].some((c) => !c.dead && c.nat === viewer));
+  const base = { region: r.id, holder, keep, shut };
+  if (!ours) {
+    if (!viewer || !g.nations[viewer] || !atWar(g, viewer, holder)) return null;
+    const held = shut.filter((s) => s.by.some((b) => allied(g, b.nat, viewer)));
+    if (!held.length) return null;
+    const starts = held.map((s) => g.flags[shutKey(s.sea, holder)]);
+    const since = starts.some((x) => x === undefined) ? null : Math.max(...(starts as number[]));
+    const heldHungry = since === null ? null : since + keep + 1;
+    return {
+      ...base, side: 'shutting', state: null, cut: false, lastFilled: null, feedsTo: null, hungry: null, lost: null, garrison: [], fleetInReach: null,
+      heldSince: since, heldHungry, heldLost: heldHungry === null ? null : heldHungry + hungryRun() - 1,
+    };
+  }
+  // The window's own reading (game.ts computeSupply): the stores feed while the month is no later than the fill's
+  // month and portKeep, and under true reach only where they are the present holder's.
+  const flag = g.flags[`stores:${r.id}`];
+  const his = flag !== undefined && (!trueReach(g) || keptStoresHis(g, r));
+  const last = his ? flag : null;
+  const feedsTo = last !== null ? last + keep : null;
+  const state = last === g.turn ? 'filled' : feedsTo !== null && feedsTo >= g.turn ? 'stores' : 'hungry';
+  const garrison = garrisonOf(g, r).map((c) => ({ id: c.id, lost: lostMonth(g, c, feedsTo, uncharged) }));
+  return {
+    ...base, side: 'holder', state, cut: state !== 'filled' && shut.length > 0, lastFilled: last, feedsTo,
+    hungry: feedsTo !== null ? feedsTo + 1 : g.turn,
+    lost: garrison.length ? Math.min(...garrison.map((x) => x.lost)) : null,
+    garrison,
+    fleetInReach: shut.length ? fleetFor(g, holder, shut.map((s) => s.sea)) : false,
+    heldSince: null, heldHungry: null, heldLost: null,
+  };
+}
+
+// ---- The words ------------------------------------------------------------------------------------------------------
+
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+/** Numbers in words to ten, figures from 11 (the marks' preface). */
+const counted = (n: number): string => (n >= 0 && n <= 10 ? WORDS[n] : String(n));
+const months = (n: number): string => (n === 1 ? 'one month' : `${counted(n)} months`);
+/** Names joined whole: "A", "A and B", "A, B and C". */
+const join = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+/** A month named alone in the present game year ("March"), with its year otherwise ("January 1942"). */
+export function monthSaid(g: Game, turn: number): string {
+  const d = turnToDate(turn);
+  return d.year === turnToDate(g.turn).year ? d.label.split(' ')[0] : d.label;
+}
+const portOf = (r: Region): string => placeName(r.name);
+const PortOf = (r: Region): string => placeName(r.name, true);
+/** "on" an island with no ground beside it by land, "in" any other province (the marks' preface: provinces take "in"). */
+const onOrIn = (r: Region): string => (r.nb.length ? 'in' : 'on');
+const seasSaid = (g: Game, seas: number[]): string => join(seas.map((z) => seaWhat(g.seas[z].name)));
+
+/**
+ * Who holds the seas, as a sentence's head and verb: "Italian fleets hold the Central Mediterranean", "German aircraft
+ * hold the sky over ...", "Italian fleets and aircraft hold ...", "Italian and German fleets hold ...", "... hold the
+ * Central Mediterranean and the Ionian Sea". Seas held alike are said together; seas held by others each in a clause
+ * of their own. `perfect` gives "have held". The viewer's own nation reads "Your" where it holds alone.
+ */
+function heldSaid(g: Game, shut: SeaHeld[], viewer: string | null, perfect: boolean): string {
+  const verb = perfect ? 'have held' : 'hold';
+  const groups: { key: string; by: SeaHeld['by']; seas: number[] }[] = [];
+  for (const s of shut) {
+    const key = s.by.map((b) => `${b.nat}:${b.fleets ? 1 : 0}${b.aircraft ? 1 : 0}`).join(',');
+    const at = groups.find((x) => x.key === key);
+    if (at) at.seas.push(s.sea); else groups.push({ key, by: s.by, seas: [s.sea] });
+  }
+  return groups.map(({ by, seas }) => {
+    const alone = by.length === 1 && by[0].nat === viewer;
+    const who = (nats: string[]): string => (alone ? 'Your' : join(nats.map((n) => g.nations[n]?.adj ?? n)));
+    const fleets = by.filter((b) => b.fleets).map((b) => b.nat), aircraft = by.filter((b) => b.aircraft).map((b) => b.nat);
+    const where = seasSaid(g, seas);
+    if (!aircraft.length) return `${who(fleets)} fleets ${verb} ${where}`;
+    if (!fleets.length) return `${who(aircraft)} aircraft ${verb} the sky over ${where}`;
+    if (fleets.length === by.length && aircraft.length === by.length) return `${who(fleets)} fleets and aircraft ${verb} ${where}`;
+    return `${who(fleets)} fleets and ${who(aircraft)} aircraft ${verb} ${where}`;
+  }).join(', and ');
+}
+
+/** A line of the port's card: its words, and how it is set out (a warning, bad news, or a plain note). */
+export interface PortLine { text: string; tone: 'warn' | 'bad' | 'note' }
+
+/**
+ * The port's card for the viewer (the UI director's section 2), each month the sea is shut: to the holder and every
+ * nation with corps there, the stores left or spent, and what opens the sea; with the sea open, what the stores would
+ * feed; to the side that shuts it, how long it has held the sea and the rule's count from then. Empty with the switch
+ * off, and for every other province or viewer.
+ */
+export function portCardLines(g: Game, regionId: number, viewer: string | null): PortLine[] {
+  if (!portStoresOn(g)) return [];
+  const f = portCutOff(g, regionId, viewer);
+  if (!f) return [];
+  const r = g.regions[regionId];
+  if (f.side === 'shutting') {
+    if (f.heldSince === null || f.heldLost === null || f.heldHungry === null || g.turn > f.heldLost || !garrisonOf(g, r).length) return [];
+    const held = heldSaid(g, f.shut.filter((s) => s.by.some((b) => allied(g, b.nat, viewer!))), viewer, true);
+    return [{ text: theWords(`${held} since ${monthSaid(g, f.heldSince)}. Counting from then, the garrison of ${portOf(r)} goes hungry from ${monthSaid(g, f.heldHungry)} and is lost at the start of ${monthSaid(g, f.heldLost)}, unless ships get through.`), tone: 'note' }];
+  }
+  if (f.lost === null) return [];
+  if (f.state === 'filled') return [{ text: theWords(`Cut off by sea, its stores would feed the garrison for ${months(f.keep)}.`), tone: 'note' }];
+  if (!f.cut) return [];
+  const out: PortLine[] = [];
+  if (f.state === 'stores') out.push({ text: theWords(`Cut off by sea: ${heldSaid(g, f.shut, viewer, false)}, and no ship reaches the harbour. The garrison lives on the port's stores through ${monthSaid(g, f.feedsTo!)}; unless the sea is opened, it then goes hungry and is lost at the start of ${monthSaid(g, f.lost)}.`), tone: 'warn' });
+  else out.push({ text: theWords(`Cut off by sea, and the port's stores are spent: the garrison goes hungry, losing order every month, and is lost at the start of ${monthSaid(g, f.lost)} unless the sea is opened.`), tone: 'bad' });
+  // (Ruling 4: "strong enough" shows only the measure the game's own sea card already shows that seat. The sea card
+  // shows each side's strength there and no measure of what opens the sea, so the line ends at the month: the UI
+  // director marks the join once she has the sea card's words.)
+  out.push({ text: theWords(`A fleet of yours at sea there, strong enough to open ${seasSaid(g, f.shut.map((s) => s.sea))}, lets the ships in and fills the stores: one such month feeds the garrison through ${monthSaid(g, g.turn + f.keep)}.`), tone: 'note' });
+  return out;
+}
+
+/**
+ * A corps' own line for its card (the UI director's section 3): living on the port's stores, through the month they
+ * last; or hungry, with the month the rule strikes it off. Null with the switch off, for a corps not in such a port, and
+ * where the sea is not shut or a ship got in this month.
+ */
+export function portCorpsLine(g: Game, c: Corps): string | null {
+  if (!portStoresOn(g) || c.dead) return null;
+  const f = portCutOff(g, c.reg, c.nat);
+  if (!f || f.side !== 'holder' || !f.cut) return null;
+  const mine = f.garrison.find((x) => x.id === c.id);
+  if (!mine) return null;
+  const port = portOf(g.regions[c.reg]);
+  if (f.state === 'stores' && c.supplied) return theWords(`Living on ${port}'s stores through ${monthSaid(g, f.feedsTo!)}.`);
+  if (f.state === 'hungry' && !c.supplied) return theWords(`Hungry: ${port}'s stores are spent. Lost at the start of ${monthSaid(g, mine.lost)} unless ships get through.`);
+  return null;
+}
+
+// ---- The news -------------------------------------------------------------------------------------------------------
+
+/** True where the player hears of the port: he holds it, or has corps there (the design director's ruling 2). */
+const involved = (g: Game, r: Region, extra: Corps[] = []): boolean => {
+  const me = g.human;
+  return !!me && (r.ctrl === me || [...r.units, ...(r.garr ?? []), ...extra].some((c) => c.nat === me && (!c.dead || extra.includes(c))));
+};
+
+/**
+ * The record of each hold, at every nation's month as it opens (after its draw of the supply picture): for every port
+ * of the kind held by a nation at war with the player, each of its seas shut to that nation keeps the month it became
+ * shut, and one open to it keeps none. At the player's own month, records no port of the kind still asks for go.
+ */
+function holdsMonth(g: Game, sweep: boolean): void {
+  const me = g.human!;
+  const want = new Set<string>();
+  for (const r of g.regions) {
+    if (!watched(g, r) || !atWar(g, me, r.ctrl)) continue;
+    for (const z of r.seas) {
+      const k = shutKey(z, r.ctrl);
+      if (want.has(k)) continue;
+      want.add(k);
+      if (!closedTo(g, z, r.ctrl)) delete g.flags[k];
+      else if (g.flags[k] === undefined) g.flags[k] = g.turn;
+    }
+  }
+  if (sweep) for (const k of Object.keys(g.flags)) if (k.startsWith('seaShut:') && !want.has(k)) delete g.flags[k];
+}
+
+/**
+ * The news of ports cut off by sea, as a nation's month opens, straight after its draw of the supply picture (game.ts
+ * startPhase): the record of the holds; the relief of a port whose cut-off was told; and at the player's own month,
+ * before his corps are charged, the first month no ship gets in and the month the stores run out. Once each: the first
+ * by the clock (the month after the last fill), the second by the clock too (the first month the stores feed none),
+ * or, where the larder was never the holder's, the first month it is told. Only to a player who holds the port or has
+ * corps there. Nothing with the switch off, or with nobody at the table.
+ */
+export function portsMonth(g: Game, nat: string): void {
+  if (!portStoresOn(g) || !g.human || !g.nations[g.human]?.alive) return;
+  const me = g.human, mine = nat === me;
+  holdsMonth(g, mine);
+  for (const r of g.regions) {
+    const k = toldKey(r.id);
+    const told = g.flags[k];
+    if (told !== undefined) {
+      // (A port lost since, or one the player no longer has any part in, keeps no mark.)
+      if (!watched(g, r) || r.since > told || !involved(g, r)) { delete g.flags[k]; continue; }
+      const flag = g.flags[`stores:${r.id}`];
+      if (flag !== undefined && flag >= told && (!trueReach(g) || keptStoresHis(g, r))) {
+        headline(g, 'info', `Ships reach ${portOf(r)} again: its stores are filled.`, r.ctrl, r.id, { won: r.ctrl });
+        delete g.flags[k];
+        continue;
+      }
+    }
+    if (!mine || !involved(g, r)) continue;
+    const f = portCutOff(g, r.id, null, me);
+    if (!f || !f.cut || f.lost === null) continue;
+    // (The mark keeps the month the first of the port's cut-off news was told: the relief is read from it.)
+    if (f.state === 'stores' && f.lastFilled === g.turn - 1) {
+      headline(g, 'info', `No ship reaches ${portOf(r)}: ${heldSaid(g, f.shut, null, false)}. The garrison lives on the port's stores through ${monthSaid(g, f.feedsTo!)}; unless the sea is opened, it then goes hungry and is lost at the start of ${monthSaid(g, f.lost)}.`, r.ctrl, r.id, { lost: r.ctrl });
+      g.flags[k] ??= g.turn;
+    } else if (f.state === 'hungry' && (f.feedsTo !== null ? f.feedsTo + 1 === g.turn : told === undefined)) {
+      headline(g, 'info', `${PortOf(r)}'s stores are spent and no ship has got through: the garrison goes hungry, and is lost at the start of ${monthSaid(g, f.lost)} unless the sea is opened.`, r.ctrl, r.id, { lost: r.ctrl });
+      g.flags[k] ??= g.turn;
+    }
+  }
+}
+
+/**
+ * The corps of a nation standing in ports of the kind as its month's reckoning begins (game.ts startPhase), so that
+ * those the reckoning strikes off are told after it. Null with the switch off, or with nobody at the table.
+ */
+export function portsWatched(g: Game, army: Corps[]): Corps[] | null {
+  if (!portStoresOn(g) || !g.human) return null;
+  return army.filter((c) => !c.dead && watched(g, g.regions[c.reg]));
+}
+
+/**
+ * The month it is struck off (the UI director's section 1): corps of the nation's starved out this month in a port
+ * cut off by sea, one line a port, to a player who holds the port or had corps there.
+ */
+export function portsStarved(g: Game, nat: string, before: Corps[] | null): void {
+  if (!before) return;
+  const by = new Map<number, Corps[]>();
+  for (const c of before) if (c.dead) { const l = by.get(c.reg); if (l) l.push(c); else by.set(c.reg, [c]); }
+  for (const [reg, lost] of by) {
+    const r = g.regions[reg];
+    if (!involved(g, r, lost)) continue;
+    const f = portCutOff(g, reg, null);
+    if (!f || !f.cut || f.state !== 'hungry') continue;
+    const names = lost.map((c) => theUnit(c.name));
+    headline(g, 'info', lost.length === 1
+      ? `Cut off ${onOrIn(r)} ${portOf(r)}, ${names[0]} has starved and is lost.`
+      : `Cut off ${onOrIn(r)} ${portOf(r)}, ${counted(lost.length)} corps have starved and are lost: ${join(names)}.`, nat, reg, { lost: nat });
+  }
+}

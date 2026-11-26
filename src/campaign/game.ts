@@ -56,6 +56,7 @@ import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled, willB
 import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, shoreOf, worldOn } from './world';
 import { FAR_STAGE } from './stage';
 import { formedLine, joinedLine, nationDone, notFormedLine, rowDone, tellWait, waitedOn } from './arrivalwaits';
+import { portsDone, portsMonth, portsStarved, portsWatched } from './portcut';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -1725,7 +1726,7 @@ const gunsIn = (cs: Corps[]): number => cs.reduce((s, c) => s + (c.kind === 'art
 export const men = (c: Corps): number => Math.round(c.divs * c.str * MEN_PER_DIV);
 
 /** What a month cut off from its supplies costs a corps in order: it lays down its arms when none is left. */
-const UNFED = 0.4;
+export const UNFED = 0.4;
 /** How many months a corps in this order holds out on what it carries once it is cut off (a fresh one: three). */
 export const monthsUnfed = (org = 1): number => Math.max(1, Math.ceil(org / UNFED));
 
@@ -4239,6 +4240,7 @@ export function capitulate(g: Game, nat: string, by: string, said?: string): voi
   recordFall(g, nat, by, 'beaten');
   // (The telling's flags of its rows go with it: no dead data in a lost war. Nothing where none was ever written.)
   nationDone(g, nat);
+  portsDone(g, nat);
   // (Who it was at war with is kept: a freed country takes those wars up again, and its conquerors' allies finish theirs.)
   rememberWars(g, nat);
   // In the last act of the grand campaign nobody signs an armistice: a fallen France is simply conquered. So is a
@@ -6343,6 +6345,9 @@ export function startPhase(g: Game, nat: string): void {
   tellSettled(g, nat);
   computeSupply(g);
   cutOffNews(g);
+  // (Release 2, portcut.ts) Ports cut off by sea: the record of the holds, and the news of their stores, read from the
+  // picture just drawn. Words only; nothing with the switch off.
+  portsMonth(g, nat);
   // Supply columns (release 2, columns.ts): the month's lorries go out from the railhead to the corps beyond it, and some are caught on the road.
   columnsMonth(g, nat);
   // The month's production comes in, and in the grand campaign the forces are paid out of it. Losses are made good
@@ -6400,6 +6405,9 @@ export function startPhase(g: Game, nat: string): void {
   // (Ruling 173(e), the whole-world chart alone: on an island of the historian's table a cut-off garrison withers to
   // a floor and does not lay down its arms from hunger. wither.ts; with the far side off nothing of it is read.)
   const far = farOn(g);
+  // (Release 2, portcut.ts) The corps standing in ports cut off by sea, so that those starved out are told after the
+  // reckoning. Null with the switch off.
+  const inPorts = portsWatched(g, army);
   army.forEach((c, i) => {
     // What it knew before the month's drafts: a corps back from the battle schools is a grade better than when it went.
     // And its strength before them: the drafts come in new uniforms (wearMonth).
@@ -6474,6 +6482,7 @@ export function startPhase(g: Game, nat: string): void {
     // A withered island garrison only defends: it neither attacks, marches nor sails (ruling 173(e), rider (o)(3)).
     if (far && withered(g, c)) c.ap = 0;
   });
+  portsStarved(g, nat, inPorts);
   if (drafted_ > 0) drawMen(g, nat, drafted_);
   if (menRules(g) && nat === g.human) {
     const level = menWarning(g, nat), left = menWords(menLeft(g, nat) * MEN_PER_DIV), start = menWords(poolAtStart(g, nat) * MEN_PER_DIV);

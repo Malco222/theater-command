@@ -18,6 +18,7 @@
 import data from '../../data/campaign/domination.json';
 import { airOnFall } from './air';
 import { nationDone } from './arrivalwaits';
+import { portsDone } from './portcut';
 import { handedOver, holdersNow } from './buildings';
 import { DIPLOMACY, majorsOf } from './diplomacy';
 import { ledger } from './economy';
@@ -185,6 +186,7 @@ function heir(g: Game, r: Region, gone: string): string | null {
 function leave(g: Game, n: Nation): void {
   for (const c of g.corps.filter((c) => c.nat === n.id)) removeCorps(g, c);
   nationDone(g, n.id); // (the telling's flags of its rows go with it: no dead data in a lost war)
+  portsDone(g, n.id); // (and those of its ports cut off by sea: portcut.ts)
   endVoyages(g, n.id);
   fleetsOnFall(g, n.id);
   airOnFall(g, n.id);
@@ -289,6 +291,7 @@ function layDown(g: Game, n: Nation, to: string): void {
   delete n.freedOn;
   for (const c of g.corps.filter((c) => c.nat === n.id)) removeCorps(g, c);
   nationDone(g, n.id); // (the telling's flags of its rows go with it: no dead data in a lost war)
+  portsDone(g, n.id); // (and those of its ports cut off by sea: portcut.ts)
   endVoyages(g, n.id);
   fleetsOnFall(g, n.id);
   airOnFall(g, n.id);

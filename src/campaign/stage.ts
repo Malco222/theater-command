@@ -216,3 +216,7 @@ export const OFFERS_STAGE: boolean = staged('TC_OFFERS', 'offers');
 // CITYDEFENCES_STAGE are both true. Forced by TC_FLAKGROUND.
 /** True where new grand campaigns that open with city defences also open with the town's guns against tanks (stage.json 'flakGround'). */
 export const FLAKGROUND_STAGE: boolean = staged('TC_FLAKGROUND', 'flakGround');
+// Ports cut off by sea tell of their stores (release 2; the UI director's words of 26 November 2026, 18:46Z; portcut.ts):
+// the grand campaigns opened while this is true carry the flag 'portStores'. Words only. Forced by TC_PORTSTORES.
+/** True where new grand campaigns open with ports cut off by sea telling of their stores (stage.json 'portStores'). */
+export const PORTSTORES_STAGE: boolean = staged('TC_PORTSTORES', 'portStores');

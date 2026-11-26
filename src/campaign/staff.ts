@@ -9,6 +9,7 @@
 import { raiseForts, trainCrews } from './fortrows';
 import { FORTS_STAGE } from './stage';
 import { FROMWAIT_STAGE } from './stage';
+import { PORTSTORES_STAGE } from './stage';
 import { YIELD_STAGE } from './stage';
 import { deterred } from './league';
 import { openTraits } from './traits';
@@ -257,6 +258,8 @@ export function startOpen(g: Game, wide = true): Game {
   if (UNITS_STAGE && TRUEREACH_STAGE) g.flags.trueReach = 1;
   // The old chart's "from" rows wait on contact (game.ts expeditions): set at a campaign's start only, where stage.json switches it on.
   if (FROMWAIT_STAGE) g.flags.fromWait = 1;
+  // Ports cut off by sea tell of their stores (release 2, portcut.ts): where stage.json switches it on. Words only.
+  if (PORTSTORES_STAGE) g.flags.portStores = 1;
   // A neutral's bargains (release 2): only where stage.json switches them on.
   openBargains(g);
   openGovernment(g);
