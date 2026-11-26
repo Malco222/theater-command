@@ -268,12 +268,14 @@ export function menScale(nat: string): number | null {
 /** Men to one of the nation's divisions' worth, for what it is shown: its own scale, else MEN_PER_DIV. */
 export const menPer = (nat: string): number => menScale(nat) ?? MEN_PER_DIV;
 
+/** Men at men1000's measure, as a number: the figure the card's note says, so the refusal reads what is left at it too. */
+export const toThousand = (men: number): number => Math.round(Math.max(0, men) / 1000) * 1000;
 /**
  * Men to the thousand, for a nation with a scale of its own: an estimate, said with "about" (the UI director's read of
  * 26 November 2026, 01:59Z, point 1: "a nation's men at its own scale, which are an estimate and say 'About', to the
  * thousand"). Rifles stay to the hundred.
  */
-export const men1000 = (men: number): string => (Math.round(Math.max(0, men) / 1000) * 1000).toLocaleString('en-US');
+export const men1000 = (men: number): string => toThousand(men).toLocaleString('en-US');
 /** "division's worth" for one, "divisions' worth" for any other count. */
 export const worth = (d: number): string => (d === 1 ? "division's worth" : "divisions' worth");
 /**
@@ -333,13 +335,16 @@ export function reserveLevelWords(nat: string, level: number, divs: number, star
  * 26 November 2026, 04:58Z, point C: the need and what is left take the same measure, so a need of part of a division's
  * worth, said in men (menWorth), takes a remainder in men with "about", to the thousand ("this takes about 18,000 men
  * and about 9,000 are left"), never the need's own figure or more, and where it rounds to no
- * thousand at all "fewer than 1,000 are left" (the form nearest her words: never "about 0"). Her fourth read of 26
- * November 2026, 06:02Z, point 2: "Not 1,000 less. Where what is left would round to the need's own figure, both go to
- * the hundred" ("this takes about 18,000 men and about 17,600 are left" for 18,090 and 17,600, her own sentence: the
- * need to the hundred taken downward, so 6,030 reads "about 6,000 men" and a 17,9xx "about 17,900"); where they would still read the same at the hundred, the
- * ten, then the man without "about" (the form nearest her rule, for her word); a need itself under 1,000 men goes by
- * the hundred rule. The need is the order's own men (the design director's ruling 4 of 06:04Z: the floor of a tenth
- * of a division guards a divide only, raisable), so a cadre under a tenth reads as its card does ("about 6,000 men").
+ * thousand at all "fewer than 1,000 are left" (the form nearest her words: never "about 0"). Her fifth read of 26
+ * November 2026, 14:08Z, which replaces point 2 of her fourth read (both to the hundred): the need always takes the card
+ * note's own figure, by the note's own measure (menWorth: "about 18,000 men" for 18,090, "about 6,000" for 6,030), so
+ * one need has one figure on the card; where what is left, read at that same measure, would equal the need's figure or
+ * pass it, the sentence says the shortfall, exact and with no "about", one to ten in words and figures from 11: "The
+ * reserve is 490 men short: this takes about 18,000 men. About 105,000 men come of age each month in the land you
+ * still hold." (Chuchow, 17,600 left), and at the last man "The reserve is one man short: ...". Where what is left reads
+ * below the need's figure, as laid. The need is the order's own men (the design director's ruling 4 of 06:04Z: the
+ * floor of a tenth of a division guards a divide only, raisable), so a cadre under a tenth reads as its card does
+ * ("about 6,000 men").
  */
 export function noMenWords(nat: string, divs: number, left: number, cls: number): string | null {
   const per = menScale(nat);
@@ -349,34 +354,20 @@ export function noMenWords(nat: string, divs: number, left: number, cls: number)
   // (An order of one division's worth with half of one or more left: "about one" would read as the need, and "less than
   // half" would be untrue, so it says "less than one is left". China's engineer corps, corps:eng, is such an order: with
   // half a division's worth to just under one left, this is its live refusal.)
-  // (Part of a division's worth is said in men, so what is left is said in men too: to the thousand where the two
-  // thousands differ, else both to the hundred, the ten or the man, the first at which what is left reads below the
-  // need, so what is left never reads as the need or more.)
   // (The need is the order's own men; a tenth of a division stands in only for an order of nothing, as in raisable.)
   const held = divs > 0 ? divs : Math.max(0.1, divs);
   if (Number.isInteger(divs)) {
     const rest = shown >= 1 ? `about ${inWords(shown)} ${shown === 1 ? 'is' : 'are'} left` : l < 0.5 ? 'less than half of one is left' : 'less than one is left';
     return `The reserve has not the men: this takes ${menWorth(per, held, false)} and ${rest}. ${comesWords(nat, cls)}`;
   }
-  const n = held * per, m = l * per, f = (x: number): string => x.toLocaleString('en-US');
-  let takes = '';
-  if (n >= 1000 && Math.round(n / 1000) !== Math.round(m / 1000)) {
-    const have = Math.round(m / 1000);
-    takes = `${menWorth(per, held, false)} and ${have >= 1 ? `about ${f(have * 1000)} are left` : 'fewer than 1,000 are left'}`;
-  } else {
-    for (const unit of [100, 10]) {
-      // (At the hundred the need is taken downward, her own figures: 18,090 reads "about 18,000", 6,030 "about 6,000", a
-      // 17,9xx "about 17,900"; what is left at its nearest. Where what is left would then read as the need or more, the
-      // ten; at the ten both to their nearest, which keeps the order.)
-      const a = unit === 100 ? Math.floor(n / unit + 1e-9) : Math.round(n / unit), b = Math.round(m / unit);
-      if (b < a) { takes = `about ${f(a * unit)} men and ${b >= 1 ? `about ${f(b * unit)} are left` : `fewer than ${f(unit)} are left`}`; break; }
-    }
-    if (!takes) {
-      const a = Math.round(n), b = Math.max(0, Math.min(Math.floor(m + 1e-6), a - 1));
-      takes = `${f(a)} men and ${f(b)} ${b === 1 ? 'is' : 'are'} left`;
-    }
-  }
-  return `The reserve has not the men: this takes ${takes}. ${comesWords(nat, cls)}`;
+  // (Part of a division's worth is said in men, at the card note's own measure, menWorth's men1000: the thousand. What
+  // is left is read at that same measure; where it reads below the need's figure it is said there, and where it would
+  // read as the need's figure or more, the sentence says how short the reserve is instead, in whole men, never none.)
+  const n = held * per, m = l * per, need = menWorth(per, held, false);
+  const have = toThousand(m);
+  if (have < toThousand(n)) return `The reserve has not the men: this takes ${need} and ${have >= 1000 ? `about ${men1000(m)} are left` : 'fewer than 1,000 are left'}. ${comesWords(nat, cls)}`;
+  const short = Math.max(1, Math.round(n - m));
+  return `The reserve is ${inWords(short)} ${short === 1 ? 'man' : 'men'} short: this takes ${need}. ${comesWords(nat, cls)}`;
 }
 
 /**
