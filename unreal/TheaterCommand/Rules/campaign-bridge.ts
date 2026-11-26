@@ -3723,6 +3723,9 @@ function shownCard(s: Game, c: RuleCard): MonthCard {
     ...c.research.map((text) => ({ sign: 'star', count: '', text: `Research complete: ${text}`, where: '', grey: false, tip: '', ready: 0, next: 0 })),
     ...c.home.filter((x) => x.next).map((x) => ({ sign: x.sign, count: String(x.count), text: x.text, where: x.place, grey: true, tip: '', ready: 0, next: x.count })),
     ...c.also.map((text, i) => ({ sign: '', count: '', text, where: '', grey: false, tip: c.alsoFull[i] ?? text, ready: 0, next: 0 })),
+    // (Release 2, the telling, arrivalwaits.ts: the UI director's section 2.) A dated arrival of his that waits only for
+    // another arrival to form has no corps to carry its line: the month card carries it, muted, every month it waits.
+    ...(c.waits ?? []).map((text) => ({ sign: '', count: '', text, where: '', grey: true, tip: text, ready: 0, next: 0 })),
   ];
   let home = homeAll.slice(0, lines), homeOver = 0;
   if (homeAll.length > lines) {
