@@ -5750,7 +5750,11 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // `sourceAsked`, `menKept`.)
     if (take !== i && sourceAsked(g, nat, o)) { g.flags[`wait:${i}`] = g.turn; return; }
     if (take !== i && row[1] === nat && menKept(g, nat, o)) { g.flags[`sent:${i}`] = 2; rowDone(g, i); g.flags[unmadeKey(i)] = g.turn; return; }
-    const was = waitedOn(g, i); // (the telling: what it waited on, read before its corps are taken: arrivalwaits.ts)
+    // (The telling: what it waited on, read before its corps are taken: arrivalwaits.ts. Only where the rule still acts:
+    // a row the rule no longer holds, the dial turned to a book stop whose book is open, forms with today's bare line, as
+    // section 4 gives for every row outside the rule (the marks' preamble, "only where the rule acts"), and as
+    // setFromWait does for the switch turned off. Without this a corps still in the line was said to have left it.)
+    const was = inFight ? waitedOn(g, i) : null;
     const waited = g.flags[`wait:${i}`];
     if (waited !== undefined) due = Math.max(due, waited + 1);
     // (An offer the player takes is not struck for the months he took to answer: it stood open. Ruling B8.)

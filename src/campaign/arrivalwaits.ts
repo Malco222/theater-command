@@ -21,6 +21,7 @@
 import setup from '../../data/campaign/setup-1939.json';
 import { turnToDate } from '../core/ticket';
 import { headline, rowHolds, theWords } from './game';
+import { contactRuleActs } from './history';
 import type { Corps, Game, Region } from './types';
 
 const ROWS = (): any[][] => (setup as any).expeditions as any[][] ?? [];
@@ -189,6 +190,9 @@ function waiting(g: Game, nat: string): { i: number; row: any[]; at: number; sin
   ROWS().forEach((row, i) => {
     const since = g.flags[toldKey(i)];
     if (since === undefined || row[1] !== nat || g.flags[`sent:${i}`]) return;
+    // (A row the rule no longer holds, the dial turned to a book stop whose book is open where it is due, forms next
+    // month wherever its corps stand: neither card speaks for it. history.ts `contactRuleActs`, as game.ts reads it.)
+    if (!contactRuleActs(g, g.byName[row[5]])) return;
     const at = g.flags[atKey(i)];
     if (at === undefined || !g.regions[at]) return;
     out.push({ i, row, at, since, from: fromOf(row) });
