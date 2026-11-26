@@ -1418,6 +1418,11 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    there; 64 is the next number no build has used.
    **The naming lines** (no row; written only while the speed log is, `-TheaterSpeedLog` or tc.Speed.Log 1, through
    TheaterSpeed::IsLogging; with it off not one line or measurement is added):
+   - "Air hitch: before Open (BeginReplay key | BeginLiveCall TC.function), frame F, T ms in all, in the press's frame
+     before the black can go up; each step in ms: ..." once a press, as Open is reached: the work done ahead of Open, and
+     so ahead of the black under `flyCurtainFirst` (a replay's recording read from disk and ReadRecording; a live press's
+     bridge call, the answer read with the show and the desk, and TC.battleSpeed). The press's other work in its caller
+     (the raid card, the scramble offer, a battle of your own; the scene's actor spawned) is not in it.
    - "Air hitch: the press (Open), frame F, T ms in all; each step in ms: ..." once as a battle is made (the mix and the
      sound, the inks, the effects kits, the ground (Raise), the clouds, LayZenith, LayHazeBand, OpenTroops, HideTheTable,
      the deck's shade and sheet, cirrus and rain, the eye and its grade, the first aim and SkyLowerOnce, the warm sheets
@@ -1466,4 +1471,7 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    For the Mac (each leg one launch to the raid's end, the stock words
    `-TheaterAirBattle=bremen-b17 -TheaterAirTimeEye=box -TheaterSpeedLog` and at most one row's word): first the stock
    words alone (the naming lines name the press's steps and each long frame's company), then each row's word on its own.
-   Send back the log of each; the build's NOTES.md (beside its bundle) says what each leg should show.
+   Send back the log of each; the build's NOTES.md (beside its bundle) says what each leg should show. Every such leg is
+   a replay, so one more is flown by hand: a campaign launched with `-TheaterSpeedLog -TheaterAirCurtainFirst`, and a raid
+   flown with FLY IT YOURSELF (or a battle of your own), for the "before Open (BeginLiveCall ...)" line: if its T is large,
+   a later curtain build puts the black up before the bridge's call.
