@@ -74,8 +74,12 @@ export function shipsLose(g: Game, cut: number): string {
   const n = Math.round(cut * 100);
   return shipRule(g, 'dc') ? `should lose ${n > 0 ? `about ${n}%` : 'almost none'}` : `could lose up to ${n}%`;
 }
-/** What a raid goes for, in words. A fleet is named only to someone who has it identified. */
-function placeOf(g: Game, kind: RaidKind, target: number, viewer: string | null = null): string {
+/**
+ * What a raid goes for, in words. A fleet is named only to someone who has it identified. `bare`: the phrase without
+ * 1.5.2's article on the place ("the harbour of Cotentin"), the room the raid card's sky line is judged on with city
+ * defences on (planRaid).
+ */
+function placeOf(g: Game, kind: RaidKind, target: number, viewer: string | null = null, bare = false): string {
   if (kind === 'strike') return g.seas[target] ? seaWhat(g.seas[target].name) : 'the sea';
   if (kind === 'fleet') {
     const t = g.fleets.find((x) => x.id === target);
@@ -83,11 +87,11 @@ function placeOf(g: Game, kind: RaidKind, target: number, viewer: string | null 
     return fleetKnown(g, t, viewer) === 'exact' ? `the ${t.name}` : `${g.nations[t.nat].adj} ships ${seaWhere(g.seas[t.zone].name)}`;
   }
   // (The place with its article: "the harbour of the Highlands", the UI director, 25 November 2026, 15:04Z.)
-  if (kind === 'harbour') { const p = g.regions[target]?.name ?? ''; return /\bHarbou?r$/.test(p) ? p : `the harbour of ${placeName(p)}`; }
+  if (kind === 'harbour') { const p = g.regions[target]?.name ?? ''; return /\bHarbou?r$/.test(p) ? p : `the harbour of ${bare ? p : placeName(p)}`; }
   // (The town with its article where the map's list gives it one: "the defences of the Ohio Valley", 15:42Z.)
-  if (kind === 'town') return g.regions[target] ? `the defences of ${placeName(townName(g.regions[target]))}` : '';
+  if (kind === 'town') return g.regions[target] ? `the defences of ${bare ? townName(g.regions[target]) : placeName(townName(g.regions[target]))}` : '';
   // (Release 2's airfield as a target, with the place's article as every air sentence takes it: the UI director's mark (g).)
-  if (kind === 'airfield') return g.regions[target] ? `the airfield at ${placeName(g.regions[target].name)}` : '';
+  if (kind === 'airfield') return g.regions[target] ? `the airfield at ${bare ? g.regions[target].name : placeName(g.regions[target].name)}` : '';
   return g.regions[target]?.name ?? '';
 }
 /** The kind of raid a group's orders are, for naming what it flew against. */
@@ -1051,8 +1055,15 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
     // named place into "the target"; then the place inside it is read by the news's own rule (theWords), which
     // reaches a name inside a phrase, "Clear sky over the harbour of the Cotentin.", "Cloud over the airfield at
     // the Ruhr", where a bare name's article could not: the independent read of 26 Nov 2026.)
+    // (Release 2 with 1.5.2 joined: 1.5.2 gives the place its article before the room is judged, so "the harbour of the
+    // Cotentin", 27, reads "the target" as 1.5.2 and 1.5.3 ship it; with the switch off that stands byte for byte. With
+    // it on, the room is judged on the bare phrase, "the harbour of Cotentin", 23, and the place inside then takes its
+    // article: "Closed sky over the harbour of the Cotentin". A phrase too long even bare reads "the target" either way.
+    // The UI director, 26 Nov 2026 06:24Z.)
     const shipped = skyRaidLine(g, z, place);
-    const line = shipped && cityDefences(g) ? shipped.replace(`over ${place}`, () => `over ${theWords(place, 'over ')}`) : shipped;
+    const bare = cityDefences(g) ? placeOf(g, kind, target, nat, true) : place;
+    const roomy = cityDefences(g) ? skyRaidLine(g, z, bare) : shipped;
+    const line = roomy && cityDefences(g) ? roomy.replace(`over ${bare}`, () => `over ${theWords(bare, 'over ')}`) : shipped;
     if (line) plan.sky = line;
     if (skyOf(g, z) === 'closed') { plan.why = `Closed sky this month: nothing flies over ${zoneName(z)}.`; return plan; }
   }

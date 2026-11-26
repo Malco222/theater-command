@@ -1691,10 +1691,11 @@ describe('city defences: the raid card names its place as the news does, the swi
       // A harbour raid on the Cotentin, under whatever sky it has this month.
       lines[`${on}`] = planRaid(r.g, 'harbour', r.g.byName.Cotentin.id, undefined, 'UK').sky;
     }
-    // (Pass 2, with 1.5.2 joined: 1.5.2 already names the harbour "the harbour of the Cotentin", 27 characters, so the
-    // line reads "the target" on and off alike, as 1.5.2 shipped it; the switch changes nothing here.)
+    // (Pass 2, with 1.5.2 joined: 1.5.2 names the harbour "the harbour of the Cotentin", 27 characters, so off reads
+    // "the target" as 1.5.2 ships it; on, the room is judged bare (23) and the place takes its article: the UI
+    // director, 26 Nov 2026 06:24Z.)
     expect(lines.false).toMatch(/ over the target[.:]/);
-    expect(lines.true).toBe(lines.false);
+    expect(lines.true).toBe(lines.false!.replace('the target', 'the harbour of the Cotentin'));
     // The news's own reading of the same words.
     expect(theWords('British bombers raid the harbour of Cotentin.')).toBe('British bombers raid the harbour of the Cotentin.');
   });
@@ -1708,9 +1709,9 @@ describe('city defences: the raid card names its place as the news does, the swi
       WEATHER.zones[i].odds = Array.from({ length: 12 }, () => [0, 0, 10] as [number, number, number]);
       setWeather(r.g, true);
       const plan = planRaid(r.g, 'harbour', c, undefined, 'UK');
-      // (Pass 2, with 1.5.2 joined: 1.5.2's own place is "the harbour of the Cotentin", over 24, so "the target" on and off
-      // alike, as 1.5.2 shipped it: the switch never makes the card say less than the game without it.)
-      expect([on, plan.sky]).toEqual([on, 'Closed sky over the target: nothing flies there this month.']);
+      // (Pass 2, with 1.5.2 joined, the UI director's 06:24Z: off, byte for byte as 1.5.2 and 1.5.3 ship it, "the target";
+      // on, the room judged on the bare phrase, so the harbour is named whole with its article.)
+      expect([on, plan.sky]).toEqual([on, on ? 'Closed sky over the harbour of the Cotentin: nothing flies there this month.' : 'Closed sky over the target: nothing flies there this month.']);
       // The reason the card cannot open names the zone, on and off alike.
       expect([on, plan.why]).toEqual([on, planRaid(r.g, 'bomb', c, undefined, 'UK').why]);
       expect(plan.why).toMatch(/^Closed sky this month: nothing flies over /);
@@ -1725,25 +1726,28 @@ describe('city defences: the raid card names its place as the news does, the swi
     const the = (places as { the: string[] }).the;
     for (const name of the) expect(placeName(name).length).toBeLessThanOrEqual(24);
     const on = ruhrByNight({ cloud: true }), off = ruhrByNight({ cloud: true, on: false });
-    let named = 0, grown = 0, target = 0;
+    let named = 0, grown = 0, target = 0, rescued = 0;
     for (const name of the) {
       const r = on.g.byName[name];
       if (!r) continue;
       for (const kind of ['bomb', 'airfield', 'harbour'] as const) {
         const a = planRaid(on.g, kind, r.id, undefined, 'UK').sky, b = planRaid(off.g, kind, r.id, undefined, 'UK').sky;
         expect([name, kind, b === undefined]).toEqual([name, kind, false]);
-        if (b!.includes('the target')) { expect([name, kind, a]).toEqual([name, kind, b]); target++; continue; }
-        // (Pass 2, with 1.5.2 joined: where 1.5.2 already names the place with its article, an airfield's or a harbour's
-        // phrase, the switch prints it as off does; a province's own line takes the article with the switch, as before.)
-        expect([name, kind, a]).toEqual([name, kind, b!.includes(`the ${name}`) ? b : b!.replace(name, `the ${name}`)]);
+        // (Pass 2, with 1.5.2 joined: off, 1.5.2 judges the room on its articled phrase; on, the room is judged on the bare
+        // phrase, so a place that fits bare is named with its article and only one too long even bare reads "the target",
+        // the UI director, 26 Nov 2026 06:24Z.)
+        const bare = kind === 'bomb' ? name : kind === 'airfield' ? `the airfield at ${name}` : /\bHarbou?r$/.test(name) ? name : `the harbour of ${name}`;
+        if (b!.includes('the target') && bare.length > 24) { expect([name, kind, a]).toEqual([name, kind, b]); target++; continue; }
+        if (b!.includes('the target')) { expect([name, kind, a]).toEqual([name, kind, b!.replace('the target', theWords(bare, 'over '))]); rescued++; }
+        else expect([name, kind, a]).toEqual([name, kind, b!.includes(`the ${name}`) ? b : b!.replace(name, `the ${name}`)]);
         named++;
         if (/ over (.+?)[.:]/.exec(a!)![1].length > 24) grown++;
       }
     }
     // Each case is met on this map: places named with their article, some of them past 24 with it, and places too
     // long as shipped.
-    // (Pass 2, with 1.5.2 joined: a phrase past 24 with its article is already "the target" in 1.5.2, so none grows.)
-    expect([named > 0, grown, target > 0]).toEqual([true, 0, true]);
+    // (Pass 2: "rescued", a place 1.5.2 prints as "the target" that the switch names whole, as on the Cotentin.)
+    expect([named > 0, grown > 0, target > 0, rescued > 0]).toEqual([true, true, true, true]);
   });
 });
 
