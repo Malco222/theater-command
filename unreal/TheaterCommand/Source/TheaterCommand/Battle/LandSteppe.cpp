@@ -245,6 +245,48 @@ namespace LandSteppe
 		return Id;
 	}
 
+	int Plan::FieldFrame(double X, double Y, int& OutCrop, double OutSide[4], bool& OutLong) const
+	{
+		const double C = Cos[0], S = Sin[0];
+		const double U = Lay.CX + (X - Lay.CX) * C + (Y - Lay.CY) * S;
+		double V = Lay.CY - (X - Lay.CX) * S + (Y - Lay.CY) * C;
+		int Col = -1, Row = -1;
+		if (Cols > 0 && Rows > 0)
+		{
+			Col = static_cast<int>(std::upper_bound(Lay.Xs.begin(), Lay.Xs.end(), U) - Lay.Xs.begin()) - 1;
+			if (Col >= 0 && static_cast<size_t>(Col) < Lay.Shift.size()) V -= Lay.Shift[static_cast<size_t>(Col)];
+			Row = static_cast<int>(std::upper_bound(Lay.Ys.begin(), Lay.Ys.end(), V) - Lay.Ys.begin()) - 1;
+		}
+		double X0, X1, Y0, Y1;
+		int Id;
+		if (Col < 0 || Row < 0 || Col >= Cols || Row >= Rows)
+		{
+			// (beyond the fields laid: pasture, in squares of a kilometre and a half, as FieldAt)
+			OutCrop = CropPasture;
+			const int64_t I = static_cast<int64_t>(std::floor(U / 1500.0)), J = static_cast<int64_t>(std::floor(V / 1500.0));
+			X0 = I * 1500.0;
+			X1 = X0 + 1500.0;
+			Y0 = J * 1500.0;
+			Y1 = Y0 + 1500.0;
+			Id = 900000 + static_cast<int>((static_cast<uint64_t>(I * 7919 + J * 104729) & 0xFFFFull) % 99000ull);
+		}
+		else
+		{
+			Id = Row * Cols + Col;
+			OutCrop = std::clamp(static_cast<int>(Lay.Patch[static_cast<size_t>(Id)]), 1, 4);
+			X0 = Lay.Xs[static_cast<size_t>(Col)];
+			X1 = Lay.Xs[static_cast<size_t>(Col) + 1];
+			Y0 = Lay.Ys[static_cast<size_t>(Row)];
+			Y1 = Lay.Ys[static_cast<size_t>(Row) + 1];
+		}
+		OutSide[0] = U - X0;
+		OutSide[1] = X1 - U;
+		OutSide[2] = V - Y0;
+		OutSide[3] = Y1 - V;
+		OutLong = Y1 - Y0 >= X1 - X0;
+		return Id;
+	}
+
 	double Plan::RailX(double Y) const
 	{
 		if (Rail.size() < 2) return -1e9;
@@ -335,6 +377,114 @@ namespace LandSteppe
 		Tone C = Crop == CropWheat ? Mix(Wheat, WheatGreen, 0.15) : Crop == CropRye ? Mix(Rye, RyeGrey, 0.15) : Crop == CropFallow ? Mix(DrySoil, Soil, 0.3) : Mix(Grass, Buff, 0.35);
 		C = Vary(C, 1.0 + 0.07 * N1 + 0.05 * Broad);
 		return Mix(C, Strip, 0.3 * Smooth(9.0, 1.0, Gap));
+	}
+
+	// ---------------------------------------------------------------------- ploughland (on trial)
+
+	namespace
+	{
+		// (the black fallow in July: its harrowed top dried grey-brown, fresh-turned earth darker, damp darker still, the
+		// rises dusty; weeds coming green through it; the headland rolled and paler; the balk dusty grass)
+		// (chernozem's greys: red over green by some 8, not the loess's pink)
+		const Tone FreshEarth = Rgb(106, 98, 85);
+		const Tone HarrowTop = Rgb(112, 104, 90);
+		const Tone DampEarth = Rgb(82, 76, 66);
+		const Tone DustEarth = Rgb(128, 120, 104);
+		const Tone WeedGreen = Rgb(94, 112, 58); // (goosefoot, thistle and couch: greener and darker than the pasture's buff)
+		const Tone OldStubble = Rgb(150, 138, 100);
+		const Tone Balk = Rgb(120, 120, 74);
+
+		/** Weeds' share of the ground for a state: fresh ploughed few, an old fallow half and more. */
+		double Cover(double State, double Line, double Side, bool& OutFresh, bool& OutStubble)
+		{
+			OutStubble = false;
+			if (State < 0.35)
+			{
+				OutFresh = true;
+				return 0.28;
+			}
+			if (State < 0.75)
+			{
+				OutFresh = false;
+				return 0.3 + 0.25 * (State - 0.35) / 0.4; // (0.3 to 0.55)
+			}
+			// Half worked: the line straight along the furrows, 30 to 70% across; the near part fresh, the far part weedy or stubble.
+			const double At = 0.3 + 0.4 * Line;
+			OutFresh = Side < At;
+			if (OutFresh) return 0.18;
+			OutStubble = State > 0.875;
+			return OutStubble ? 0.35 : 0.55; // (a third of the ground and more left bare: a man in it sees earth)
+		}
+		/** Where a noise of spread about 0.3 is passed by a share Cover of the ground (the logistic's stand-in for the normal's
+		 * quantile: one log, where Tukey's lambda took two powers, and the clutter asks it of every thing on a fallow). */
+		double Threshold(double Cover)
+		{
+			const double P = std::clamp(1.0 - Cover, 0.02, 0.98);
+			return 0.3 * std::log(P / (1.0 - P)) / 1.702;
+		}
+		Tone EarthOf(bool bFresh, bool bStubble, double Wet)
+		{
+			Tone E = bStubble ? Mix(HarrowTop, OldStubble, 0.6) : bFresh ? FreshEarth : HarrowTop;
+			E = Mix(E, DampEarth, 0.5 * Smooth(0.0, 1.2, Wet));
+			return Mix(E, DustEarth, 0.4 * Smooth(0.0, -1.2, Wet));
+		}
+		double WeedShare(const FallowSpot& S, bool& OutFresh, bool& OutStubble)
+		{
+			const double C = Cover(S.State, S.Line, S.Side, OutFresh, OutStubble);
+			const double T = Threshold(C);
+			// (greener in the hollows, where the damp lies)
+			return Smooth(T - 0.08 - S.Soft, T + 0.08 + S.Soft, S.Weed + 0.15 * S.Wet);
+		}
+	}
+
+	Tone FallowColour(const FallowSpot& S)
+	{
+		bool bFresh = false, bStubble = false;
+		const double W = WeedShare(S, bFresh, bStubble);
+		Tone C = EarthOf(bFresh, bStubble, S.Wet);
+		// (the drill bands along the furrows, faint, only on the bare earth; the mottle as FieldColour's)
+		C = Vary(C, 1.0 + 0.04 * S.Lands * (1.0 - W));
+		// The headland where the plough turned: rolled, paler, weedier, over its own width in from the plough's edge.
+		const double H = Smooth(S.Head + 2.0, S.Head - 2.0, S.In);
+		C = Mix(C, DustEarth, 0.2 * H);
+		// (the weeds' green over the earth, the earth always showing through: the clutter stands the plants on it)
+		C = Mix(C, WeedGreen, 0.6 * (W + (1.0 - W) * 0.2 * H));
+		C = Vary(C, 1.0 + 0.04 * S.N2 + 0.05 * S.Broad);
+		// The balk: dusty grass and weeds from the field's edge to where the plough began.
+		const Tone B = Vary(Balk, 1.0 + 0.04 * S.N2 + 0.05 * S.Broad);
+		return Mix(C, B, Smooth(1.2, -1.2, S.In));
+	}
+
+	double FallowGreen(const FallowSpot& S)
+	{
+		bool bFresh = false, bStubble = false;
+		const double W = WeedShare(S, bFresh, bStubble);
+		const double H = Smooth(S.Head + 2.0, S.Head - 2.0, S.In);
+		const double G = W + (1.0 - W) * 0.2 * H;
+		return G + (1.0 - G) * Smooth(1.2, -1.2, S.In);
+	}
+
+	Tone FarFallowColour(double State, double Line, double Side, double N1, double Broad, double Gap)
+	{
+		bool bFresh = false, bStubble = false;
+		const double C0 = Cover(State, Line, Side, bFresh, bStubble);
+		// (the near paint's mean: its earth, its weeds' share; the headland a little paler on the whole)
+		Tone C = Mix(EarthOf(bFresh, bStubble, 0.0), WeedGreen, 0.6 * C0);
+		C = Mix(C, DustEarth, 0.02);
+		// (fresh earth far off: the weeds along its furrows and its headland's dust lift it; no dark slab at the haze)
+		if (bFresh) C = Mix(C, Balk, 0.2);
+		C = Vary(C, 1.0 + 0.06 * N1 + 0.05 * Broad);
+		return Mix(C, Balk, 0.5 * Smooth(7.0, 1.0, Gap));
+	}
+
+	Tone FallowGrazing(double Broad) { return Vary(Mix(Balk, Grass, 0.5), 1.0 + 0.05 * Broad); }
+
+	Tone WorksColour(double Dig, double N1, double N2, double Broad)
+	{
+		// (the earth thrown up dried grey-brown, fresh spoil darker; between, the grass trodden and dusty)
+		const Tone Dug = Mix(Rgb(92, 82, 66), Rgb(118, 106, 86), Smooth(-0.3, 0.4, N2));
+		const Tone Trod = Mix(Mix(Strip, DryGrass, 0.4), Rgb(126, 116, 88), 0.3 + 0.3 * Smooth(-0.2, 0.5, N1));
+		return Vary(Mix(Trod, Dug, Dig), 1.0 + 0.05 * N2 + 0.05 * Broad);
 	}
 
 	Tone RoughColour(double N1, double N2)

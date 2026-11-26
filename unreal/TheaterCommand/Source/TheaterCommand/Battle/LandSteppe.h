@@ -57,6 +57,12 @@ namespace LandSteppe
 		 * Beyond the fields laid (past 6 km round the battle), pasture.
 		 */
 		int FieldAt(double X, double Y, int& OutCrop, double* OutGap) const;
+		/**
+		 * As FieldAt, with the place in its field's own frame (on trial "ploughland"): OutSide the metres to each of the
+		 * field's four sides (its first two across the plan's columns, its last two along them), OutLong true where the
+		 * field is longer along the columns than across them (the plough works along its length).
+		 */
+		int FieldFrame(double X, double Y, int& OutCrop, double OutSide[4], bool& OutLong) const;
 		/** A rules cell's crop (CropNone where the cell is not a crop), by its index. */
 		int CellCrop(size_t Cell) const { return Cell < Lay.Crop.size() ? int(Lay.Crop[Cell]) : int(CropNone); }
 
@@ -96,6 +102,34 @@ namespace LandSteppe
 	double StripShare(double Edge);
 	/** The same field seen from far off (the ring), its edge's strip a faint line. */
 	Tone FarFieldColour(int Crop, double N1, double Broad, double Gap);
+	/**
+	 * Ploughland (on trial "ploughland", Brian 25 November 2026: the fallows "large dark rectangular patches with hard
+	 * straight edges ... the most unnatural thing in the frame"): a black fallow as it lies in July, by what LandField
+	 * reads at the place. State and Line the field's own two draws (0 to 1): under 0.35 fresh ploughed (darker, few
+	 * weeds), to 0.75 an old weedy fallow, above that half worked, a straight work line along the furrows Line's way
+	 * across, the far part weedy or last year's stubble. In: metres in from where the plough began (its edge wandering,
+	 * its corners round; under 0 the grass balk); Head the headland's width where the plough turned; Side how far across
+	 * the field from one long side (0 to 1); Weed the weed patches' noise (-1 to 1, some 35 m); Wet the land's hollows
+	 * (to 1, damper and darker) and rises (to -1, dustier); Lands the drill bands along the furrows; N2 and Broad as
+	 * FieldColour's.
+	 */
+	struct FallowSpot
+	{
+		double State = 0.5, Line = 0.5, In = 99.0, Head = 8.0, Side = 0.5, Weed = 0.0, Wet = 0.0, Lands = 0.0, N2 = 0.0, Broad = 0.0;
+		uint64_t Key = 0; // (the field's own key: LandField's draws of its grain)
+		double Soft = 0.0; // (how far the weed patches' edges are softened: a coarse mesh's points, which cannot draw them sharp)
+	};
+	Tone FallowColour(const FallowSpot& S);
+	/** How much of the ground at a fallow's place is under weeds or grass (0 bare earth, 1 the balk): its clutter's thickness. */
+	double FallowGreen(const FallowSpot& S);
+	/** A fallow seen from far off (the ring): its paint's mean for its state (and, half worked, its side of the line: Side as
+	 * FallowSpot's), the balk a faint line Gap metres in. */
+	Tone FarFallowColour(double State, double Line, double Side, double N1, double Broad, double Gap);
+	/** A fallow's weeds and balks as a grazing look sees them far off, over the earth between them (LandField mixes it in). */
+	Tone FallowGrazing(double Broad);
+	/** The rules' works on ploughland (the same trial): dug earth in heaps and scrapes, trodden grass between. Dig the
+	 * share of dug earth there (0 to 1, LandField's: its edge ragged). */
+	Tone WorksColour(double Dig, double N1, double N2, double Broad);
 	/** Rough ground on the steppe (a balka's steep sides, the railway's bank, waste ground): dry grass, greener in hollows. */
 	Tone RoughColour(double N1, double N2);
 	/** The railway's bed: ballast and cinders at the middle (D metres from the line), grass taking the bank's sides. */

@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <functional>
 #include <limits>
+#include <map>
 #include <string>
 #include <thread>
 #include <vector>
@@ -511,8 +512,48 @@ namespace LandFieldPicture
 			}
 		}
 
-		void Gather(Scene& S, const LandField::Ground& G, const View& Cull, const V3& Eye, double NearTiles, bool bAllNear, const std::vector<LandField::Placed>& Clutter)
+		/** The words on trial (Field::Trial), for the trees' crowns: set by Paint. */
+		std::string TrialWords;
+
+		/** A distance in metres from the environment, or -1 where it is not set. */
+		double Metres(const char* Name)
 		{
+			const char* E = std::getenv(Name);
+			return E ? std::atof(E) : -1.0;
+		}
+
+		/** A tree, as the game's LayThings tells one (the bocage's and the steppe's trees, and a region's kit trees). */
+		bool IsTree(LandField::Base B, const LandField::BaseMesh& Bm)
+		{
+			using LandField::Base;
+			return B == Base::Oak || B == Base::Elm || B == Base::Ash || B == Base::Beech || B == Base::Pollard || B == Base::Apple || B == Base::Birch || Bm.bTree
+				|| Bm.Class == LandField::BaseMesh::Draw::Tree;
+		}
+
+		/** A tree's crown as the game draws it far off (LandBattle's LayThings): CrownOf its last level, or on trial
+		 * "farcrowns" CrownLobed; made once a kind. */
+		const LandField::Mesh& CrownMesh(LandField::Base B, const LandField::BaseMesh& Bm)
+		{
+			static std::map<int, LandField::Mesh> Made;
+			const auto Found = Made.find(static_cast<int>(B));
+			if (Found != Made.end()) return Found->second;
+			LandField::Field F;
+			F.Trial = TrialWords;
+			const LandField::Mesh& Last = Bm.Far.Empty() ? Bm.Near : Bm.Far;
+			LandField::Mesh& M = Made[static_cast<int>(B)];
+			M = !F.Trial.empty() && F.Tried("farcrowns") ? LandField::CrownLobed(Last) : LandField::CrownOf(Last);
+			std::printf("  crown of %s: %zu triangles (%s)\n", Bm.Name.c_str(), M.Tris(), !F.Trial.empty() && F.Tried("farcrowns") ? "CrownLobed" : "CrownOf");
+			return M;
+		}
+
+		/**
+		 * LAND_FIELD_TREE_FAR_FROM (metres): the trees plain (their far level) from there, as the game's -TheaterLandTreeFarFrom=
+		 * (unset: each its own FarFrom, as before). LAND_FIELD_CROWN_FROM: past there a tree is drawn as its crown, as the
+		 * game draws it, casting no shadow (unset: never, as before).
+		 */
+		void Gather(Scene& S, const LandField::Ground& G, const View& Cull, const V3& Eye, double NearTiles, bool bAllNear, const std::vector<LandField::Placed>& Clutter, bool bShadows = false)
+		{
+			static const double TreeFarFrom = Metres("LAND_FIELD_TREE_FAR_FROM"), CrownFrom = Metres("LAND_FIELD_CROWN_FROM");
 			auto Add = [&S](const LandField::Mesh& M, uint8_t Mat) {
 				if (M.Empty()) return;
 				Draw D;
@@ -538,8 +579,11 @@ namespace LandFieldPicture
 			auto Place = [&](const LandField::Placed& P) {
 				const LandField::BaseMesh& Bm = G.BaseOf(P.Kind);
 				const double Dist = bAllNear ? 1e9 : std::hypot(P.X - Eye.X, P.Y - Eye.Y, P.Z - Eye.Z);
-				const bool bNear = Dist < Bm.FarFrom;
-				const LandField::Mesh& M = bNear ? Bm.Near : Bm.Far;
+				const bool bTree = (TreeFarFrom > 0.0 || CrownFrom > 0.0) && IsTree(P.Kind, Bm);
+				const bool bNear = bTree && TreeFarFrom > 0.0 ? Dist < TreeFarFrom : Dist < Bm.FarFrom;
+				const bool bCrown = bTree && !bNear && CrownFrom > 0.0 && Dist >= CrownFrom;
+				if (bCrown && bShadows) return;
+				const LandField::Mesh& M = bCrown ? CrownMesh(P.Kind, Bm) : bNear ? Bm.Near : Bm.Far;
 				if (M.Empty()) return;
 				const double R = std::max(static_cast<double>(Bm.Radius) * P.Scale, 0.5 * Bm.Height * P.ScaleZ) + 0.5;
 				if (!Cull.Sees({ P.X, P.Y, P.Z + 0.5 * Bm.Height * P.ScaleZ }, R)) return;
@@ -924,7 +968,7 @@ namespace LandFieldPicture
 				S.Soft = bFine ? 2.5 : 1.3;
 				S.T.Init(N, N, true);
 				Scene Sc;
-				Gather(Sc, G, S.V, V.Eye, V.bOrtho ? 1e9 : 700.0, V.bOrtho, Clutter);
+				Gather(Sc, G, S.V, V.Eye, V.bOrtho ? 1e9 : 700.0, V.bOrtho, Clutter, true);
 				Rasterize(S.T, S.V, Sc.Draws, false);
 				ShadowTris += Sc.Tris;
 			}
@@ -1014,6 +1058,7 @@ namespace LandFieldPicture
 	bool Paint(const LandField::Ground& G, const LandField::Field& F, const Sky& Sk, const std::string& Key, const std::string& Dir)
 	{
 		for (int K = 0; K < 256; ++K) LinearOf[K] = static_cast<float>(Linear(K));
+		TrialWords = F.Trial;
 		Light Lamp = Morning(Sk);
 		{
 			const double MidX = 0.5 * F.Width(), MidY = 0.5 * F.Depth(), MidZ = G.At(MidX, MidY).Z;
@@ -1031,13 +1076,17 @@ namespace LandFieldPicture
 			V3 Eye;
 			double Yaw = 0.5 * Pi;
 			if (!FindEye(G, F, Eye, Yaw)) Eye = { TX, TY - 500.0, G.At(TX, TY - 500.0).Z + 1.7 };
+			// LAND_FIELD_EYE="X Y A [UP PITCH]": where, the heading (math degrees), and optionally the height over the ground (m)
+			// and the pitch (degrees, down negative). With three numbers the eye is the soldier's: 1.7 m up, 2 degrees down.
+			bool bHigh = false;
+			double Pitch = -2.0;
 			if (const char* E = std::getenv("LAND_FIELD_EYE"))
 			{
-				double X, Y, A, Up = 1.7;
-				const int Got = std::sscanf(E, "%lf %lf %lf %lf", &X, &Y, &A, &Up);
-				if (Got >= 3)
+				double X = 0.0, Y = 0.0, A = 0.0, Up = 1.7, PitchDeg = -2.0;
+				const int N = std::sscanf(E, "%lf %lf %lf %lf %lf", &X, &Y, &A, &Up, &PitchDeg);
+				if (N >= 3)
 				{
-					if (Got < 4) Up = 1.7;
+					if (N < 4) Up = 1.7;
 					// How far the ground runs on ahead of a place, before a building or a bank stops it.
 					const double LX = std::cos(A * Pi / 180.0), LY = std::sin(A * Pi / 180.0);
 					auto Ahead = [&G, LX, LY](double QX, double QY) {
@@ -1077,12 +1126,35 @@ namespace LandFieldPicture
 					Eye = { X, Y, G.At(X, Y).Z + Up };
 					Yaw = A * Pi / 180.0;
 				}
+				if (N >= 4) // (a height alone: the pitch stays the soldier's 2 degrees down)
+				{
+					Eye.Z = G.At(X, Y).Z + Up;
+					Pitch = PitchDeg;
+					bHigh = true;
+				}
 			}
+			// (LAND_FIELD_EYE_UP: the eye that many metres over the ground, not 1.7; LAND_FIELD_EYE_PITCH: looking that many
+			// degrees down, not 2: the same as LAND_FIELD_EYE's fourth and fifth numbers, for a found eye)
+			if (const double EyeUp = Metres("LAND_FIELD_EYE_UP"); EyeUp > 0.0) { Eye.Z = G.At(Eye.X, Eye.Y).Z + EyeUp; bHigh = true; }
+			if (const char* P = std::getenv("LAND_FIELD_EYE_PITCH")) { Pitch = -std::atof(P); bHigh = true; }
 			std::printf("  eye at %.0f, %.0f, %.1f m up, looking %.0f degrees from north\n", Eye.X, Eye.Y, Eye.Z - G.At(Eye.X, Eye.Y).Z, std::fmod(450.0 - Yaw * 180.0 / Pi, 360.0));
-			const View V = Looking(Eye, Yaw, -2.0 * Pi / 180.0, 62.0, W, H);
+			if (bHigh) std::printf("  eye pitch %.1f degrees\n", Pitch);
+			const View V = Looking(Eye, Yaw, Pitch * Pi / 180.0, 62.0, W, H);
 			const V3 Ahead{ std::cos(Yaw), std::sin(Yaw), 0.0 };
-			bOk &= Picture(G, L, V, Eye + Ahead * 45.0, 120.0, Eye + Ahead * 520.0, 1400.0, 70.0, true, Dir + "/" + Key + "-field-eye.png", &Sk);
+			if (!bHigh) bOk &= Picture(G, L, V, Eye + Ahead * 45.0, 120.0, Eye + Ahead * 520.0, 1400.0, 70.0, true, Dir + "/" + Key + "-field-eye.png", &Sk);
+			else
+			{
+				// A raised eye (as the oblique picture): the fine shadow round where the centre of the view meets the ground,
+				// the wide one well past it; the clutter round the eye as the oblique has it.
+				const double Over = std::max(Eye.Z - G.At(Eye.X, Eye.Y).Z, 0.5);
+				const double Hit = std::clamp(Over / std::tan(std::max(-Pitch, 1.0) * Pi / 180.0), 45.0, 450.0);
+				const V3 Ground{ Eye.X, Eye.Y, G.At(Eye.X, Eye.Y).Z };
+				const double Fine = std::clamp(1.5 * Hit, 120.0, 640.0);
+				bOk &= Picture(G, L, V, Ground + Ahead * Hit, Fine, Ground + Ahead * (Hit + 650.0), 2000.0, 70.0, true, Dir + "/" + Key + "-field-eye.png", &Sk);
+			}
 		}
+		// (LAND_FIELD_EYE_ONLY: the eye's picture alone)
+		if (std::getenv("LAND_FIELD_EYE_ONLY")) return bOk;
 		// (b) 30 m up over the bocage, south of the village, looking toward it.
 		{
 			const double EX = TX + 140.0, EY = TY - 560.0;

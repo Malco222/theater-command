@@ -431,6 +431,22 @@ namespace LandField
 	Mesh CrownOf(const Mesh& From);
 
 	/**
+	 * A tree far off on trial "farcrowns" (the game's crown in CrownOf's place), sorted by what From shows: a broadleaf
+	 * (its leaves at least 0.65 as wide as they are tall) as four or five lobes of 12 triangles where its leaf masses
+	 * are, lit caps and dark, cooler undersides (each lobe's foot half its cap, never under 0.40 of the lightest cap), on
+	 * a trunk stub to the lobes' foot (48 to 66 triangles); a column (a cypress, a poplar, a birch: narrower than that,
+	 * not a conifer) as two to four lobes stacked up its whole height on its stem (30 to 54); a conifer (tall and narrow,
+	 * its boughs widest at its foot) as two stacked eight-sided skirts as wide as its lowest boughs, tapering to its tip,
+	 * its own dark green with snow on its tip and a few rim corners, some half the far mesh's own share (38 triangles);
+	 * a palm (its leaves only high on a long bare stem) as CrownOf makes it. Empty if From is. The same axes, origin and
+	 * winding as CrownOf's.
+	 */
+	Mesh CrownLobed(const Mesh& From);
+	/** Which way CrownLobed reads From: 0 a broadleaf, 1 a conifer, 2 a palm, 3 a column; -1 nothing to read. Narrow:
+	 * its leaves' width over their height; Taper: how much wider its leaves reach in their lowest third than their top. */
+	int CrownClass(const Mesh& From, double* Narrow = nullptr, double* Taper = nullptr);
+
+	/**
 	 * One instance: the base mesh scaled (X and Y by Scale, Z by ScaleZ), turned Yaw radians counter-clockwise about
 	 * z (seen from above, from +x toward +y), its origin at X, Y, Z. Tint multiplies the base's colours (Tint / 128:
 	 * 128 is as built) where the material can take a per-instance colour; the bases already vary among themselves.
@@ -496,6 +512,7 @@ namespace LandField
 		double ParcelMean = 0.0;  // their mean size across, metres (square root of the mean area)
 		int Lanes = 0;
 		double LaneKm = 0.0;
+		std::string LaneShape;    // each lane's jogs, turning and distance from its road cells, for the log (one line)
 		double HedgeKm = 0.0;     // banks and walls, after the gaps
 		int Gates = 0;
 		int Haycocks = 0;         // the mown meadows' cocks of hay
@@ -511,6 +528,20 @@ namespace LandField
 		int Farmsteads = 0;
 		int Poles = 0;            // the steppe's telegraph poles
 		double RailKm = 0.0;      // and its railway, laid
+		/** The bocage's hedge trees (hedgerows and lane banks, in the field and its band; not their young shoots): the
+		 * hedges' length, the trees laid on them and those the trial "hedgewall" leaves out to clump the rest; the most trees
+		 * in one run (neighbours 12 m apart at most) and its length, the widest gap between two neighbours on one hedge, and
+		 * the longest stretch of a hedge with no tree (its ends counted). And their shrubs' tops: the step in height from
+		 * one to the next along a hedge (its tall clumps apart), median and 95 in 100, metres, and the share over 0.5 m. */
+		double BocageHedgeKm = 0.0;
+		int BocageStandards = 0, BocageStandardsDropped = 0;
+		int StandardRunMost = 0;
+		double StandardRunMetres = 0.0, StandardGapMost = 0.0, StandardBareMost = 0.0;
+		double ShrubStepMedian = 0.0, ShrubStep95 = 0.0, ShrubStepOver = 0.0;
+		/** And how the bocage's hedge trees stand: the spacing from each to the next along its hedge, under 6 m, 6 to 12,
+		 * 12 to 25, 25 to 60 and over 60 m; the runs (neighbours 12 m apart at most) of one tree, two, ... five, six or more. */
+		int StandardSpacingBins[5] = {};
+		int StandardRunsOf[6] = {};
 		size_t NearTris = 0, FarTris = 0, BuiltTris = 0, RingTris = 0;
 		size_t Instances = 0;
 		double CoreSeconds = 0.0; // heights, lanes, parcels, hedges, village, instances

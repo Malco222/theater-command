@@ -949,7 +949,9 @@ int main(int argc, char** argv)
 			Rec.WireCuts.size(), CutOff, Rec.WireMends.size(), Bad);
 		if (Bad > 0 || CutOff > 0.05 || Rec.Wires.empty()) Fault("the field telephones' wires, cuts or mends out of order");
 	}
-	const LandField::Field FieldWords = LandSight::FieldOf(Rec);
+	LandField::Field FieldWords = LandSight::FieldOf(Rec);
+	// (the field's looks on trial, as the field's own test takes them: LAND_FIELD_TRIAL, Field::Trial; unset, none)
+	if (const char* Words = std::getenv("LAND_FIELD_TRIAL")) FieldWords.Trial = Words;
 	const LandField::Ground Field(FieldWords);
 	LandSight::Room Sight;
 	Sight.Lay(&Field);
