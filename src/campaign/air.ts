@@ -2846,8 +2846,10 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     // names, so one card never reads as two sets of guns: a town raid round {Leipzig}, a harbour raid round {the harbour
     // of Bremen}, the factories as today, round {Rhineland}. Her rule of 26 Nov 2026 04:32Z: the place takes the news's
     // article wherever it prints, and this line is new in release 2, so always, with no guard: round {the Ruhr}, round
-    // {the harbour of the Cotentin}; a place without one is unchanged, round {Kent}. The town's name is as it is.)
-    const flakAt = m === 'town' ? townName(g.regions[target]) : m === 'harbour' ? harbourOf(placeName(place)) : placeName(place);
+    // {the harbour of the Cotentin}; a place without one is unchanged, round {Kent}. The town's own name is as it is; a
+    // town that has none takes its province's name, and that name its article, always on this line: round {the Valdai}.
+    // The UI director, 26 Nov 2026 06:13Z, A.)
+    const flakAt = m === 'town' ? placeName(townName(g.regions[target])) : m === 'harbour' ? harbourOf(placeName(place)) : placeName(place);
     const flakWords = (): string => {
       // (Her 21:22Z marks, case e: the clause, where it knows of guns built there, on the line, an airfield raid and a
       // fight for the sky flown with bombers (they hit its airfields) as on troops.)
@@ -2873,7 +2875,9 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     const least = Math.min(...packed.map((f) => crowding(g, f)));
     out.lines.push({
       label: 'Airfields',
-      value: `The airfields of ${list(bases)} are crowded`,
+      // (City defences, the switch on: each base by the news's name, "The airfields of Kent and the Ruhr are crowded";
+      // off, as shipped. The UI director, 26 Nov 2026 05:44Z, 3.)
+      value: `The airfields of ${list(cityDefences(g) ? bases.map((b) => placeName(b)) : bases)} are crowded`,
       effect: `${list(packed.map((f) => f.name))} can fly only ${Math.round(least * 100)}% of ${packed.length === 1 ? 'its' : 'their'} aircraft from there`,
     });
   }
@@ -2895,8 +2899,10 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     out.lines.push({ label: 'The town', value: `Troops inside ${townName(r)} fight ${Math.round((townBonus(g, r) - 1) * 100)}% stronger${townWorksPhrase(g, r)}${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ''}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling('raid')}% in all` });
   }
   // (The town's guns name the town, as the card's town line does, in all three forms: the UI director's answer of 25 Nov
-  // 2026 22:29Z, question 1, "Level {2} guns ring {Metz}". One card names one place.)
-  if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(townName(g.regions[target])), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+  // 2026 22:29Z, question 1, "Level {2} guns ring {Metz}". One card names one place. A town that has no name of its own
+  // takes its province's, and under city defences' switch that name its article, "Level 2 guns ring the Valdai"; off, as
+  // shipped. The UI director, 26 Nov 2026 06:13Z, A.)
+  if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(cityDefences(g) ? placeName(townName(g.regions[target])) : townName(g.regions[target])), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
   // (Not on a harbour card under city defences' switch, the same switch as the harbour line's article: the harbour's line
   // above reads out the same guns, out.aa being the province's one works level, and "They stop N% of the bombing" is not
   // true of the hits on ships. The UI director, 26 Nov 2026 05:17Z, round eight, 6: "The harbour card keeps the

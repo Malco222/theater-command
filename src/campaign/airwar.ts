@@ -29,7 +29,7 @@ import {
 } from './air';
 import { damageRules } from './citydamage';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
-import { DEFENCE, allied, atWar, headline, worksOf } from './game';
+import { DEFENCE, allied, atWar, headline, theWords, worksOf } from './game';
 import { raidCardLines } from './fighters';
 import { SIGHT, corpsKnown, sightOf } from './intel';
 import { CLASSES, NAVY, aswKit, atSea, shipList, surfaceShips } from './navy';
@@ -39,13 +39,13 @@ import { airfieldOpenTo } from './prizes';
 import { seaWhat, seaWhere } from './sea-words';
 import { onNet, railCut, railsAt } from './rails';
 import { besiegerOf, siegeRules, siegeView, townHeld, townHitText, townWorksPhrase, type TownHit } from './siege';
-import { townName } from './towns';
+import { inOrAt, townName } from './towns';
 import { shipRule } from './tech';
 import { forecastLine, grounded, skyOf, skyRaidLine, weatherOn, whyNotSky, zoneName, zoneOfGroup, zoneOfRegion } from './weather';
 import { whyNotField, wrecked } from './airversion';
 import { wayWords } from './ferry';
 import { strafeSection, type StrafeSection } from './strafers';
-import { lightsAt } from './citydefences';
+import { cityDefences, lightsAt } from './citydefences';
 import { fieldKnown, fieldRules, fieldView } from './fieldstate';
 import { band, bandNote, fogBits, fogged, knownDefence, knownLines, raidFogOn, rememberSkies, skyKnown } from './airfog';
 
@@ -251,7 +251,10 @@ export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human):
   const kind = kindOf(f);
   const away = f.flew === g.turn && isOffensive(f.mission);
   const with_ = escorted(g, f);
-  const place = placeOf(g, kindFlown(f.mission), f.target, viewer);
+  // (City defences, the switch on: a harbour raid's order names the harbour as the news does, "Ordered against the
+  // harbour of the Cotentin", as the browser's order line does; off, as shipped. The UI director, 26 Nov 2026 05:44Z, 3.)
+  const bare = placeOf(g, kindFlown(f.mission), f.target, viewer);
+  const place = f.mission === 'harbour' && cityDefences(g) ? theWords(bare, 'against ') : bare;
   const deck = afloat(f), at = groupAt(g, f);
   const fleet = deck ? carrierOf(g, f) : f.ashore !== undefined ? g.fleets.find((c) => c.id === f.ashore) ?? null : null;
   const own = f.nat === viewer;
@@ -913,15 +916,21 @@ function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeo
     out.push(strikeWords(g, nat, target));
     return out;
   }
+  // (City defences, the switch on: the place takes the news's article (theWords), "the Rhineland's output", "through the
+  // Rhineland", "the Midlands' output"; and on the lines of troops, works, air groups and reconnaissance a province is an
+  // area, so it is "in" (inOrAt): "The troops in the Rhineland", "in Kent", but "at Bremen" where it is named for its
+  // town. With the switch off every line prints as shipped. The UI director, 26 Nov 2026 05:44Z, 3, and 06:13Z, B.)
+  const named = cityDefences(g);
+  const where = (): string => (named ? inOrAt(g.regions[target]) : `at ${place}`);
   if (kind === 'bomb' || kind === 'night') {
     const r = g.regions[target];
-    out.push(r.fac > 0 ? `Should stop about ${pct(fc.cut)} of ${place}'s output for a month: ${tenthPct(fc.nation)} of ${g.nations[r.ctrl].adj} production.` : `There is no industry at ${place}: the bombers go for its rail yards.`);
-    if (fc.rail) out.push(`About a ${pct(fc.rail)} chance of cutting the railway through ${place}, which stays cut until engineers relay it.`);
+    out.push(r.fac > 0 ? `Should stop about ${pct(fc.cut)} of ${named ? theWords(`${place}'s`, 'of ') : `${place}'s`} output for a month: ${tenthPct(fc.nation)} of ${g.nations[r.ctrl].adj} production.` : `There is no industry at ${place}: the bombers go for its rail yards.`);
+    if (fc.rail) out.push(`About a ${pct(fc.rail)} chance of cutting the railway through ${named ? theWords(place, 'through ') : place}, which stays cut until engineers relay it.`);
     if (fc.ruin) out.push(`About a ${pct(fc.ruin)} chance of wrecking a factory outright.`);
     if (fc.city) out.push(cityLine(g, target, fc.city));
   } else if (kind === 'superiority') {
     out.push(`Fighter odds ${fc.odds >= 9 ? 'overwhelming' : `${fc.odds.toFixed(1)} to 1`} going in. The sky is won when your fighters end the month with ${AIR.sky.win} times what the defender can still put up.`);
-    if (fc.cut > 0) out.push(`The air groups based at ${place} should lose about ${pct(fc.cut)} of their readiness, and aircraft on the ground.`);
+    if (fc.cut > 0) out.push(`The air groups based ${where()} should lose about ${pct(fc.cut)} of their readiness, and aircraft on the ground.`);
     if (fc.field) out.push(...fieldLines(fc.field));
   } else if (kind === 'airfield') {
     if (fc.field) out.push(...fieldLines(fc.field));
@@ -943,12 +952,12 @@ function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeo
     const most = Math.max(0, ...g.regions[target].units.filter((u) => !u.dead && atWar(g, nat, u.nat)).map(worksOf));
     const took = Math.min(fc.cut, most), left = Math.max(0, most - fc.cut);
     out.push(took >= 0.05
-      ? `Should take about ${monthsOf(took)} off the fieldworks at ${place}, which would leave ${left < 0.05 ? 'nothing of them' : `${monthsOf(left)} of work in them`}. An army attacking this month meets that much less of a prepared line.`
-      : `Too few bombers would get through to break up the works at ${place}.`);
+      ? `Should take about ${monthsOf(took)} off the fieldworks ${where()}, which would leave ${left < 0.05 ? 'nothing of them' : `${monthsOf(left)} of work in them`}. An army attacking this month meets that much less of a prepared line.`
+      : `Too few bombers would get through to break up the works ${where()}.`);
     out.push('The men in the works are not hurt, and they dig the works back a month at a time: bomb in the month you attack.');
   } else if (kind === 'ground') {
     const dug = g.regions[target].units.some((u) => !u.dead && u.dug && atWar(g, nat, u.nat));
-    out.push(`The troops at ${place} should lose about ${pct(fc.cut)} of their organisation${dug ? ' (less where they are dug in)' : ''}, and some of their men and guns. They fight the weaker for it until they have rested: attack while it lasts.`);
+    out.push(`The troops ${where()} should lose about ${pct(fc.cut)} of their organisation${dug ? ' (less where they are dug in)' : ''}, and some of their men and guns. They fight the weaker for it until they have rested: attack while it lasts.`);
   }
   return out;
 }
@@ -1004,8 +1013,12 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   const row = kindRow(kind);
   const place = placeOf(g, kind, target, nat);
   const quarry = kind === 'fleet' ? g.fleets.find((x) => x.id === target) ?? null : null;
+  // (City defences, the switch on: the title names the place as the news does, "Night bombing: the Ruhr", "Harbour raid:
+  // the harbour of the Cotentin", by the news's own rule (theWords), as the card's sky line does; off, as shipped. A sea
+  // or a fleet is named as before. The UI director, 26 Nov 2026 06:14Z.)
+  const titled = cityDefences(g) && kind !== 'strike' && kind !== 'fleet' ? theWords(place, `${row.short}: `) : place;
   const plan: RaidPlan = {
-    kind, target, place, title: `${row.short}: ${place}`, why: null, seats: [], picked: [], bombers: 0, fighters: 0, meets: [], lines: [],
+    kind, target, place, title: `${row.short}: ${titled}`, why: null, seats: [], picked: [], bombers: 0, fighters: 0, meets: [], lines: [],
     success: 0, verdict: '', bomberLoss: 0, bomberLossN: 0, fighterLossN: 0, foeLossN: 0, effects: [], figures: {}, guns: { level: 0, loss: 0, lossN: 0, stop: 0 }, massed: '', offPatrol: '',
   };
   if (!airWar(g) || nat === null) { plan.why = 'Raids are planned only in the grand campaign.'; return plan; }
@@ -1070,7 +1083,8 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
     if (f.ftr > 0) plan.fighterLossN = Math.round(lost); else plan.bomberLossN = Math.round(lost);
     plan.bomberLoss = f.ftr > 0 ? 0 : risk;
     // (Fog on raids: the photographs show the ground, and its fighters, guns and damage, this month and the next.)
-    plan.effects = [raidFogOn(g) ? `Every army at ${place} and in the provinces beside it is identified, corps by corps, and the fighters, guns and damage there are seen. The sight lasts this month and next month, and is remembered after.` : `Every army at ${place} and in the provinces beside it is identified, corps by corps. The report is exact this month and goes stale after.`, `The ${f.name} still flies its raid and keeps its patrol: this takes only ${n} aircraft.`];
+    const army = cityDefences(g) ? `Every army ${inOrAt(g.regions[target])}` : `Every army at ${place}`;
+    plan.effects = [raidFogOn(g) ? `${army} and in the provinces beside it is identified, corps by corps, and the fighters, guns and damage there are seen. The sight lasts this month and next month, and is remembered after.` : `${army} and in the provinces beside it is identified, corps by corps. The report is exact this month and goes stale after.`, `The ${f.name} still flies its raid and keeps its patrol: this takes only ${n} aircraft.`];
     return plan;
   }
 
