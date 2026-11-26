@@ -5808,8 +5808,10 @@ function expeditions(g: Game, nat: string, take?: number): void {
       g.flags[`sent:${i}`] = 1;
       // (The telling: a told row of the player's that waited on the front says how it joined, after its news or, with
       // none, in a line of its own: arrivalwaits.ts `joinedLine`, which clears its flags as `rowDone` does. Read before
-      // the corps it joins takes its name. The UI director's section 8 point 3.)
-      const joined = joinedLine(g, i, was, old.name, g.regions[old.reg].name);
+      // the corps it joins takes its name. The UI director's section 8 point 3. Its "now that it stands there" is read
+      // against the province the sentence names, where the corps it joins stands, not where the row was due: a corps at
+      // the front anywhere else leaves nothing true to say, and its news, or nothing, is said as today. T2-4.)
+      const joined = joinedLine(g, i, inFight ? waitedOn(g, i, old.reg) : null, old.name, g.regions[old.reg].name);
       // Corps broken up to find the divisions are struck off, and a corps only lent to the campaign is remembered.
       if (Array.isArray(o.from) && !own) for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
       if (o.until) g.flags[`lent:${i}`] = old.id;

@@ -27,6 +27,37 @@ const said = (g: Game, t: number): string[] => g.headlines.filter((h) => h.turn 
 const tel = (g: Game, i: number): string[] => Object.keys(g.flags).filter((k) => /^row[A-Za-z]+:/.test(k) && k.split(':')[1] === String(i));
 const open = (): Game => { const g = startOpen(createGame(1, 'GER')); g.flags.fromWait = 1; return g; };
 
+describe('T2-4: a told row that joins a corps in another province', () => {
+  it('its corps at the front in the province the row is due in, the Old Corps in Magdeburg: never "now that it stands there"', () => {
+    const g = open();
+    const old = addCorps(g, 'GER', 'Old Corps', 'inf', 2, g.byName.Magdeburg.id, {});
+    const held = addCorps(g, 'GER', 'Test Corps', 'inf', 2, g.byName.Saar.id, {});
+    ROWS.push([2, 'GER', 'Old Corps (Test Divisions)', 'inf', 2, 'Grenzmark', { from: ['Test Corps'], joins: 'Old Corps' }]); added++;
+    const i = ROWS.length - 1;
+    month(g, 2);
+    expect(said(g, 2)).toEqual(['The Old Corps (Test Divisions) is due in the Grenzmark this month, formed from your Test Corps, which is at the front in the Saar. The arrival waits, and forms the month after that corps leaves the front.']);
+    relocate(g, held, g.byName.Grenzmark);
+    expect(corpsInContact(g, 'GER', held)).toBe(true);
+    month(g, 3);
+    expect(g.flags[`sent:${i}`]).toBe(1);
+    expect(old.name).toBe('Old Corps (Test Divisions)');
+    // (No news of its own, and nothing true to say: as the base, nothing.)
+    expect(said(g, 3)).toEqual([]);
+    expect(tel(g, i)).toEqual([]);
+  });
+
+  it('with news of its own: the news alone', () => {
+    const g = open();
+    addCorps(g, 'GER', 'Old Corps', 'inf', 2, g.byName.Magdeburg.id, {});
+    const held = addCorps(g, 'GER', 'Test Corps', 'inf', 2, g.byName.Saar.id, {});
+    ROWS.push([2, 'GER', 'Old Corps (Test Divisions)', 'inf', 2, 'Grenzmark', { from: ['Test Corps'], joins: 'Old Corps', news: 'Two new divisions join the Old Corps.' }]); added++;
+    month(g, 2);
+    relocate(g, held, g.byName.Grenzmark);
+    month(g, 3);
+    expect(said(g, 3)).toEqual(['Two new divisions join the Old Corps.']);
+  });
+});
+
 describe('T2-5, section 8 point 5: the place once, grouped by place', () => {
   /** Germany's corps, each where `at` puts it and at the front there, and a row of month 2 taking them whole at Magdeburg. */
   const board = (at: string[], unformed: string[] = []): { g: Game; cs: Corps[] } => {
