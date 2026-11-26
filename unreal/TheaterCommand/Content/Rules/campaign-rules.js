@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 3906339c 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e624825c 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -71140,7 +71140,7 @@
         const anchor = toSeat ? { x: L3.spot[0], y: L3.spot[1] } : moving ? { x: L3.x + (L3.spot[0] - L3.x) * la, y: L3.y + (L3.spot[1] - L3.y) * la } : L3;
         let lie = L3.face;
         if (toSeat) {
-          const te = this.b.unit(u.aim ?? u.engaged ?? -1);
+          const te = this.aimOf(u);
           const dir = te ? null : this.threatDir(sq);
           lie = te ? bearing2(anchor.x, anchor.y, te.x, te.y) : Math.atan2(dir[0], dir[1]);
         }
@@ -73124,12 +73124,12 @@
      * cover the rest; in a rout they snatch them up and run (carry). Each of its crew at his own part: crewMan.
      */
     atWork(sq) {
-      const u = sq.u, b = this.b, t = b.t, C4 = DR.teamwork, mg = u.team === "mg";
-      const e = u.aim !== void 0 ? b.unit(u.aim) ?? null : u.engaged !== void 0 ? b.unit(u.engaged) ?? null : null;
+      const u = sq.u, b = this.b, t = b.t, f = b.field, C4 = DR.teamwork, mg = u.team === "mg";
+      const e = this.aimOf(u), n = u.engaged !== void 0 ? b.unit(u.engaged) : void 0;
       const tw = sq.tw ?? (sq.tw = { guns: /* @__PURE__ */ new Map(), runs: 0 });
       const guns2 = this.up(sq).filter((m) => CREWED.has(m.role));
       for (const g2 of guns2) if (!tw.guns.has(g2)) tw.guns.set(g2, this.work(sq, g2));
-      const firing = u.engaged !== void 0 && !!e;
+      const firing = !!n && live2(n) && !!e;
       if (sq.phase === "limbered" || sq.phase === "flee" || sq.phase === "fallback") {
         this.carry(sq, guns2, tw, e, firing);
         this.spotter(sq, null, false);
@@ -73159,7 +73159,7 @@
         w.resite = void 0;
         w.slot = s;
         const seat5 = this.siteOf(sq, g2, s, dir, seats(g2)) ?? s, here = [g2.x, g2.y];
-        const stay = Math.hypot(seat5[0] - g2.x, seat5[1] - g2.y) < C4.site.hop && !MOVING.has(g2.pose) && !seats(g2).some((q) => Math.hypot(q[0] - g2.x, q[1] - g2.y) < C4.site.apart);
+        const stay = g2.x >= 3 && g2.x <= f.w - 3 && g2.y >= 3 && g2.y <= f.h - 3 && Math.hypot(seat5[0] - g2.x, seat5[1] - g2.y) < C4.site.hop && !MOVING.has(g2.pose) && !seats(g2).some((q) => Math.hypot(q[0] - g2.x, q[1] - g2.y) < C4.site.apart);
         if (stay && w.at && w.set <= t) {
           w.at = here;
           continue;
@@ -73313,9 +73313,11 @@
      */
     finalLine(sq, tw, e, firing) {
       const u = sq.u, b = this.b, t = b.t, F = DR.teamwork.fpl;
-      if (tw.fpl && (t > tw.fpl.until || !firing || tw.fpl.on !== e?.id)) tw.fpl = void 0;
+      const ow = tw.fpl ? b.unit(tw.fpl.own) : void 0;
+      if (tw.fpl && (t > tw.fpl.until || !firing || tw.fpl.on !== e?.id || !ow || !fighting(ow))) tw.fpl = void 0;
       if (!firing || !e || !FOOT_KINDS.includes(e.kind) || !fighting(e)) {
         tw.ep = void 0;
+        tw.fpl = void 0;
         return tw.fpl;
       }
       let own = u, gap = b.gap(u, e);
@@ -73593,9 +73595,11 @@
      */
     carry(sq, guns2, tw, e, firing) {
       const u = sq.u, t = this.b.t, C4 = DR.teamwork, T = DR.teams, h = sq.heading, flee = sq.phase === "flee", mg = u.team === "mg";
+      if (tw.go !== void 0 && flee && !tw.fled) tw.go = void 0;
       if (tw.go === void 0) {
         tw.go = t;
         tw.cover = void 0;
+        tw.fled = flee;
         const order2 = [...guns2].sort((p, q) => roll(this.seed, u.id, p.n, Math.floor(t), 253) - roll(this.seed, u.id, q.n, Math.floor(t), 253));
         order2.forEach((g2, i) => {
           const w = tw.guns.get(g2), r = roll(this.seed, u.id, g2.n, Math.floor(t), 254);
@@ -73689,6 +73693,20 @@
       return [(k % 2 ? feed : -feed) * A[0] * (1 + 0.3 * Math.floor(k / 2)) + m.jx * 0.15, A[1] - Math.floor(k / 2) * A[2] + m.jy * 0.15];
     }
     /**
+     * A team's target as its crews are drawn at work (atWork, pairs): the block its fire order names while that block is
+     * still in the field, else the one the rules have it engaged on while that one is; none once both have gone off or
+     * withdrawn (a team is never drawn firing on men leaving the field).
+     */
+    aimOf(u) {
+      const b = this.b, a = u.aim !== void 0 ? b.unit(u.aim) : void 0, n = u.engaged !== void 0 ? b.unit(u.engaged) : void 0;
+      return a && live2(a) ? a : n && live2(n) ? n : null;
+    }
+    /** A place brought onto the field, 3 m in from its edges (as siteOf keeps a gun's): a crew's posts and dump. */
+    onField(p) {
+      const f = this.b.field;
+      return [clamp6(p[0], 3, f.w - 3), clamp6(p[1], 3, f.h - 3)];
+    }
+    /**
      * A man of a team's weapon at work, its gunner L set up at its place (pairs, Drill.teamwork): each at his own part. Its
      * number two (the first of them) at the belt or the tube (DR.teamwork.seat, by army: the feed side), serving it, a
      * mortar's at its muzzle as each bomb goes; its second man lying off its other side, watching the fall of its fire
@@ -73702,18 +73720,18 @@
       const w = sq.tw?.guns.get(L3);
       if (!w || !w.at || sq.phase === "flee" || L3.v > 0 || MOVING.has(L3.pose) || Math.hypot(L3.x - w.at[0], L3.y - w.at[1]) > 1.5) return false;
       const u = sq.u, t = this.b.t, C4 = DR.teamwork, mg = L3.role === "hmg";
-      const e = u.engaged !== void 0 ? this.b.unit(u.engaged) ?? null : null, fight2 = !!e;
+      const n = u.engaged !== void 0 ? this.b.unit(u.engaged) : void 0, fight2 = !!n && live2(n);
       const feed = C4.seat.right.includes(this.armyKey(u.nat)) ? 1 : -1, face = L3.lay ?? L3.face, mount = L3.face;
       m.cj = i === 0 ? "two" : i === 1 ? "nco" : "ammo";
       const k = i - 2, two = this.post(sq, m, L3, 0), own = this.post(sq, m, L3, i);
       const run = w.run?.m === m ? w.run : void 0, S3 = C4.supply;
       if (run && (run.stage === "fetch" || run.stage === "up") && t > run.t1) run.stage = "back";
       const fetch = !!run && (run.stage === "fetch" || run.stage === "load");
-      if (run && fetch && !run.dump) run.dump = this.leash(sq, toWorld(L3, face, feed * S3.lane, -(S3.dump[0] + (S3.dump[1] - S3.dump[0]) * roll(this.seed, u.id, L3.n, w.moves, 447))), -4);
+      if (run && fetch && !run.dump) run.dump = this.onField(this.leash(sq, toWorld(L3, face, feed * S3.lane, -(S3.dump[0] + (S3.dump[1] - S3.dump[0]) * roll(this.seed, u.id, L3.n, w.moves, 447))), -4));
       const o = run && run.stage !== "back" ? [two[0] + (mg ? feed : 1) * 0.8, two[1] - 0.9] : own;
       const hand2 = !!run && (run.stage === "up" || run.stage === "at"), seated = m.cj === "two" && !run && w.set <= t;
       m.hand = hand2 ? true : void 0;
-      let p = fetch ? run.dump : this.leash(sq, toWorld(L3, seated || hand2 ? mount : face, o[0], o[1]), -4);
+      let p = fetch ? run.dump : this.onField(this.leash(sq, toWorld(L3, seated || hand2 ? mount : face, o[0], o[1]), -4));
       if (room2) {
         p = this.leash(sq, this.clear(room2, sq, m, p), -4);
         this.bookRoom(room2, m, p);
@@ -73730,8 +73748,8 @@
       const d = Math.hypot(p[0] - m.x, p[1] - m.y);
       if (run && (run.stage === "fetch" || run.stage === "up")) {
         const dx = m.x - L3.x, dy = m.y - L3.y, ma = (dx * Math.cos(face) - dy * Math.sin(face)) * feed, ml = dx * Math.sin(face) + dy * Math.cos(face);
-        if (run.stage === "fetch" && ma < S3.lane - 0.8 && ml > -12) m.spot = this.leash(sq, toWorld(L3, face, feed * (S3.lane + 1), Math.min(ml, -1) - 6), -4);
-        if (run.stage === "up" && ml < -1.5) m.spot = this.leash(sq, toWorld(L3, face, feed * S3.lane, 3), -4);
+        if (run.stage === "fetch" && ma < S3.lane - 0.8 && ml > -12) m.spot = this.onField(this.leash(sq, toWorld(L3, face, feed * (S3.lane + 1), Math.min(ml, -1) - 6), -4));
+        if (run.stage === "up" && ml < -1.5) m.spot = this.onField(this.leash(sq, toWorld(L3, face, feed * S3.lane, 3), -4));
       }
       const under = t - sq.shelledAt < C4.move.shelled || sq.harm > DR.pin.harm, down = this.crewDown(sq, m, false);
       if (run) {
@@ -73806,8 +73824,8 @@
         const G5 = C4.glasses, every = G5.every[0] + (G5.every[1] - G5.every[0]) * roll(this.seed, u.id, m.n, 284), at4 = t + every * roll(this.seed, u.id, m.n, 285);
         const win = Math.floor(at4 / every), len = G5.for[0] + (G5.for[1] - G5.for[0]) * roll(this.seed, u.id, m.n, win, 286);
         pose = down ? "cower" : fight2 && at4 - win * every < len ? "observe" : under ? "hide" : "wait";
-        if (pose === "observe" && e) {
-          m.aim = [e.x, e.y];
+        if (pose === "observe" && n) {
+          m.aim = [n.x, n.y];
           lay3 = void 0;
         }
       } else {
