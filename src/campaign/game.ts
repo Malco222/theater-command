@@ -1545,8 +1545,6 @@ export function limitAttackers(g: Game, corps: Corps[], target: Region): Corps[]
   const most = corps.length ? g.nations[corps[0].nat].maxAttack || 99 : 99;
   const ranked = [...corps].sort((x, y) => corpsBase(g, y) * KIND[y.kind].atk - corpsBase(g, x) * KIND[x.kind].atk);
   const guns: Corps[] = [];
-  // Support teams (release 2) fire from behind the line: a few ride in beside the corps that fight, as guns do.
-  const teams: Corps[] = [];
   if (g.flags.open === 1 && corps.length) {
     // Attacked from several sides at once a defence cannot cover every road: each side's roads carry more (the grand campaign).
     if (new Set(corps.filter((c) => !blocked(g, c, target)).map((c) => c.reg)).size >= DEFENCE.frontage.sides) cap += DEFENCE.frontage.extra;
@@ -1554,7 +1552,6 @@ export function limitAttackers(g: Game, corps: Corps[], target: Region): Corps[]
     if (worksAgainst(g, target, armyOf(corps[0])) || hostileUnits(g, target, armyOf(corps[0])).some((u) => u.dug)) {
       for (const c of ranked) if (c.kind === 'art' && guns.length < DEFENCE.frontage.guns && !blocked(g, c, target)) guns.push(c);
     }
-    for (const c of ranked) if (isTeam(c) && teams.length < TEAMS.frontage && !blocked(g, c, target)) teams.push(c);
   }
   const fill = (over: Corps[]): Corps[] => {
     const used: Record<number, number> = {};
@@ -1569,16 +1566,18 @@ export function limitAttackers(g: Game, corps: Corps[], target: Region): Corps[]
     }
     return out;
   };
-  const behind = teams.length ? [...guns, ...teams] : guns;
-  const out = fill(behind);
+  const out = fill(guns);
+  // Support teams (release 2) take a place on the roads as any corps does, never riding past a full frontage (the
+  // design director's rulings of 25 November 2026, 20:38Z and 21:33Z: one rule for every unit, no new figure), and
+  // go in only beside a fighting corps, never alone.
+  const beside = (cs: Corps[]): Corps[] => (cs.some(fights) || !cs.some(isTeam) ? cs : cs.filter((c) => !isTeam(c)));
   // The guns support somebody: with nobody else to go in, they take the roads themselves like any other corps.
-  // (The teams ride only beside a fighting corps.)
-  const force = out.length ? (teams.length && out.some(fights) ? [...out, ...behind] : [...out, ...guns]) : fill([]);
+  const force = beside(out.length ? [...out, ...guns] : fill([]));
   if (!gunsRule(g) || force.some(fights)) return force;
   // In the grand campaign guns never go forward alone (ruling 211(a)): where the roads filled up with guns and
   // engineers, the fighting corps to hand take them instead, and with no fighting corps there is no attack.
-  const line = fill(corps.filter((c) => !fights(c)));
-  return line.length ? (teams.length ? [...line, ...guns, ...teams] : [...line, ...guns]) : [];
+  const line = fill(corps.filter((c) => !fights(c) && !isTeam(c)));
+  return line.length ? beside([...line, ...guns]) : [];
 }
 
 /** Which week of the month a corps reaches after spending this many more action points. */
