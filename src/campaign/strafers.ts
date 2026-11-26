@@ -139,6 +139,16 @@ export function resultFor(rep: { mission: string; attNat: string; result: string
 }
 
 /**
+ * The raider's report card's words on a raid on troops, the group lines and the result line together (the UI director,
+ * 26 November 2026 05:17Z, round eight, 1: "The group lines stand together in the raid's order, the plain line last of
+ * them, and the result line closes"): strafedLine first, then resultFor. Where either is '' the other stands alone; with
+ * the switch off strafedLine is '' and this is the report's result as shipped.
+ */
+export function strafedThenResult(rep: Parameters<typeof strafedLine>[0] & Parameters<typeof resultFor>[0], reader: string | null): string {
+  return [strafedLine(rep, reader), resultFor(rep, reader)].filter(Boolean).join(' ');
+}
+
+/**
  * Who heard what each raid on troops charged the ground fire on: the tests (the card, the settled raid, the fought
  * raid's booking say whom, by the one rule). Never set in play; read only with the rule on.
  */

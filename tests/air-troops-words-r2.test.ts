@@ -25,7 +25,7 @@ import { afterCard } from '../src/campaign/airfought';
 import { createGame, setWar } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
-import { STRAFE_STAYED, STRAFE_WORDS, resultFor, strafeOn, strafeWatch, strafedLine } from '../src/campaign/strafers';
+import { STRAFE_STAYED, STRAFE_WORDS, resultFor, strafeOn, strafeWatch, strafedLine, strafedThenResult } from '../src/campaign/strafers';
 import type { Game } from '../src/campaign/types';
 import { AirSim, airBattle } from '../src/battle/air/sim';
 import { airTicket, flyKinds, foughtAir } from '../src/battle/air/ticket';
@@ -662,5 +662,44 @@ describe('a group that did not go down, with no cause line of its own, is named 
     const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
     expect('strafeStayed' in r).toBe(false);
     expect(strafedLine(r, 'FRA')).toBe('Groupement de Chasse 3 went down and strafed.');
+  });
+});
+
+// The UI director, 26 November 2026 05:17Z, round eight, 1: "Before the result line. The group lines stand together in
+// the raid's order, the plain line last of them, and the result line closes: "Groupement de Chasse 3 went down and
+// strafed. Groupement de Chasse 1 and Groupement de Chasse 2 did not go down to strafe. The raids did the troops little
+// harm."" The raider's report card (ui/main.ts airReportCard, strafedThenResult) and the 3D act's note (the bridge).
+describe('the group lines before the result line, which closes (the UI director, 26 Nov 05:17Z, round eight, 1)', () => {
+  const rep = (strafed: string[], stayed: string[], result: string, alone = false) => ({ mission: 'ground', attNat: 'FRA', strafed, result, ...(alone ? { strafeLittle: { names: strafed, alone: true as const } } : {}), ...(stayed.length ? { strafeStayed: stayed } : {}) });
+  it('her example, to the letter, on the raider\'s report card', () => {
+    expect(strafedThenResult(rep(['Groupement de Chasse 3'], ['Groupement de Chasse 1', 'Groupement de Chasse 2'], HARM_LITTLE), 'FRA'))
+      .toBe('Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 and Groupement de Chasse 2 did not go down to strafe. The raids did the troops little harm.');
+  });
+  it('the result line alone where there is no group line (the defender, the switch off, any other raid); the group lines alone where the raider\'s card leaves the result out (h)', () => {
+    const r = rep(['Groupement de Chasse 3'], ['Groupement de Chasse 1'], HARM_LITTLE);
+    expect(strafedThenResult(r, 'GER')).toBe(HARM_LITTLE);
+    expect(strafedThenResult({ mission: 'ground', attNat: 'FRA', result: FOUND_LITTLE }, 'FRA')).toBe(FOUND_LITTLE);
+    expect(strafedThenResult({ mission: 'bomb', attNat: 'FRA', result: 'The bombs fell.' }, 'FRA')).toBe('The bombs fell.');
+    expect(strafedThenResult(rep(['Groupement de Chasse 3'], ['Groupement de Chasse 1'], HARM_LITTLE, true), 'FRA')).toBe(`Groupement de Chasse 3 ${LITTLE} Groupement de Chasse 1 ${STRAFE_STAYED}`);
+  });
+  it('from a raid flown: the report card reads the group lines, then the report\'s own result', () => {
+    on();
+    const c = saar(0);
+    const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+    const line = strafedLine(r, 'FRA');
+    expect(line.length).toBeGreaterThan(0);
+    expect(strafedThenResult(r, 'FRA')).toBe(`${line} ${r.result}`);
+  });
+  it('through the bridge: the 3D act\'s note opens with the group lines and closes with the report\'s own words', () => {
+    on();
+    const c = saar(0);
+    TC.load(saveGame(c.g));
+    const act = TC.act(`raid:ground:${c.target}:${c.ids.join('.')}`);
+    expect(act.ok).toBe(true);
+    const r = loadGame(TC.save().text)!.airReports.at(-1)!;
+    expect(r.mission).toBe('ground');
+    const line = strafedLine(r, 'FRA');
+    expect(line.length).toBeGreaterThan(0);
+    expect(act.note).toBe(`${line} ${r.result}`);
   });
 });
