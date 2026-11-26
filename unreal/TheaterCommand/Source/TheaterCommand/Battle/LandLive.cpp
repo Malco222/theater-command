@@ -166,6 +166,14 @@ namespace
 		// up in one update. Off until the Mac passes it; -TheaterAirMapHold turns it on for a run, -TheaterAirNoMapHold off.
 		// The air battle reads it as it hides the map; it is never sent to the land rules.)
 		{ TEXT("flyMapHold"), TEXT("The map rests under an air battle"), TEXT("While an air battle is up, the campaign map hidden under it stops redrawing its lettering, standards and smoke each frame, and catches up as it comes back. Off: the hidden map keeps working under the battle."), TEXT("TheaterAirNoMapHold"), false, TEXT("TheaterAirMapHold") },
+		// (The air battle's hitch, release 2: in each of the Mac's legs of 26 November one draw-side freeze of about a second
+		// fell inside the ground's paint, 13.6 to 18.2 s of the pool's work begun in the press; the paint as its cause is
+		// likely, not proved. On: a replayed battle's ground is begun as the replay is queued, some 2 s earlier, and used
+		// only if the battle asks for the very same ground (AAirBattle::PaintEarly), so the pictures are the same bytes.
+		// A live raid's place comes only with the rules' opening answer, so a live raid paints as before. Looks only. Off
+		// until the Mac passes it; -TheaterAirPaintEarly turns it on for a run, -TheaterAirNoPaintEarly off. Never sent to
+		// the land rules.)
+		{ TEXT("flyPaintEarly"), TEXT("The ground is painted early"), TEXT("A replayed air battle starts painting its ground as soon as it is queued, so the painted fields and town are ready sooner. Off: the ground is painted as the battle opens."), TEXT("TheaterAirNoPaintEarly"), false, TEXT("TheaterAirPaintEarly") },
 		// (Release 2, the scramble offer: Brian, 24 November 2026 22:21Z, "i want every air battle playable". In the enemy's
 		// month the campaign stops where an enemy raid on his ground meets his fighters and offers SCRAMBLE: taken, he flies
 		// the defence in the battle in the air (AAirBattle, his side 'def'), and the month runs on with what the battle

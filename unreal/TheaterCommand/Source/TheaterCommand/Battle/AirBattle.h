@@ -31,6 +31,7 @@ class USoundAttenuation;
 class USoundBase;
 struct FAirBattleState;
 struct FAirLandMade;
+struct FAirLandAsk;
 class UTexture2D;
 
 /**
@@ -985,6 +986,19 @@ private:
 	void MapHoldBegin(ACampaignMapActor* Map);
 	void MapHoldEnd(ACampaignMapActor* Map);
 	bool bMapHeld = false;
+	/**
+	 * (Release 2, the hitch: the Battle rules card's "The ground is painted early", row flyPaintEarly; on for a run
+	 * -TheaterAirPaintEarly, off -TheaterAirNoPaintEarly.) On, a replay's ground paint is begun as the replay is queued
+	 * (PaintEarly, from ReplayWhenReady), about 2 s before the battle opens, from the recording's own board; PaintLand
+	 * then takes it (PaintEarlyAdopt) only if the battle asks for the very same place and town plans, else paints as
+	 * before, so the pictures are the same bytes. StartPaint: the paint begun on the pool (PaintLand's own, moved).
+	 * Off, the paint is begun in the press, as before.
+	 */
+	void PaintEarly(const FString& Key);
+	bool PaintEarlyAdopt(const FAirLandAsk& Ask);
+	void StartPaint(const FAirLandAsk& Ask);
+	TSharedPtr<FAirLandAsk> LandEarly;
+	TFuture<void> PaintDropped;
 	/** The sun a hard small disc while the battle stands (the art director, build 1750); the lamp kept, put back with the table. */
 	void TheSun(UDirectionalLightComponent& Key);
 	/** Toward the battle's sun, a unit vector in the world: the set piece's own sun where its stage stands; over a raid with

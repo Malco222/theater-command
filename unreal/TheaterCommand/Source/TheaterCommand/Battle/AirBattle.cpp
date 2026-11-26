@@ -8,6 +8,7 @@
 #include "Battle/AirBattleState.h"
 #include "Battle/AirBattleUnitColours.inl"
 #include "Battle/AirGround.h"
+#include "Battle/AirGroundKeep.h"
 #include "Battle/AirLight.h"
 #include "Battle/AirLand.h"
 #include "Battle/AirScrew.h"
@@ -96,6 +97,13 @@ struct FAirLandMade
 	/** (release 2, the hitch's naming lines) Where the paint is, for the speed log's lines (AAirBattle::LandPhaseName):
 	 * 0 asked, not begun; picture K's rows 4K+1, its shading 4K+2, its smaller copies 4K+3; -1 done. Written on the pool. */
 	std::atomic<int32> Phase { 0 };
+};
+
+/** (release 2, the hitch) What the ground's painter is asked to paint: the place and the book of town plans. */
+struct FAirLandAsk
+{
+	AirLand::Place P;
+	std::string Plans;
 };
 
 /** (1.5.1) The opening held (AAirBattle::WarmUp, WarmTick). */
@@ -712,6 +720,7 @@ void AAirBattle::ReplayWhenReady(const FString& Key)
 {
 	PendingReplay = Key;
 	SetActorTickEnabled(true);
+	PaintEarly(Key); // (the row flyPaintEarly: the ground's pictures begun now, some 2 s before the battle opens)
 }
 
 bool AAirBattle::BeginReplay(const FString& Key)
@@ -1495,6 +1504,22 @@ void AAirBattle::PaintLand()
 	{
 		UE_LOG(LogTheater, Log, TEXT("Air battle ground: the recording gives no true north (place.ground.north); the town plan is laid with north up the board."));
 	}
+	const FAirLandAsk Ask{ P, Plans };
+	if (!PaintEarlyAdopt(Ask)) // (the row flyPaintEarly: the paint begun as the replay was queued, if it is this very ground)
+	{
+		StartPaint(Ask);
+	}
+	// (a picture run waits for the ground, so that every picture has it)
+	if (!ShotFolder.IsEmpty())
+	{
+		LandPainting.Wait();
+		LandPainting = TFuture<void>();
+		LayLand();
+	}
+}
+
+void AAirBattle::StartPaint(const FAirLandAsk& Ask)
+{
 	LandMade = MakeShared<FAirLandMade, ESPMode::ThreadSafe>();
 	LandAsked = FPlatformTime::Seconds();
 	// The paint's loops at the background's priority, so that they never stand before the frame's own jobs. Spread over
@@ -1507,7 +1532,7 @@ void AAirBattle::PaintLand()
 	// is written; the phase kept for the long frames' line either way, AirParts::Hitch)
 	const bool bSay = TheaterSpeed::IsLogging();
 	const double Asked = LandAsked;
-	LandPainting = Async(EAsyncExecution::ThreadPool, [Made = LandMade, P, Plans, Loops, bSay, Asked]()
+	LandPainting = Async(EAsyncExecution::ThreadPool, [Made = LandMade, P = Ask.P, Plans = Ask.Plans, Loops, bSay, Asked]()
 	{
 		const double Began = FPlatformTime::Seconds();
 		if (bSay)
@@ -1559,19 +1584,93 @@ void AAirBattle::PaintLand()
 		Made->Seconds = FPlatformTime::Seconds() - Began;
 		Made->Phase.store(-1);
 	});
-	// (a picture run waits for the ground, so that every picture has it)
-	if (!ShotFolder.IsEmpty())
+}
+
+/** (the row flyPaintEarly) Toward the sun over a board with no stage, as TowardSun reckons it once the battle stands. */
+static FVector SunOfBoard(const AirFeed::Sky& Board)
+{
+	if (Board.StageKey.empty() && std::isfinite(Board.Latitude))
 	{
-		LandPainting.Wait();
-		LandPainting = TFuture<void>();
-		LayLand();
+		double X = 0.0, Y = 0.0, Z = 0.0;
+		AirLand::SunAt(Board.Latitude, Board.Month + 1, 12.5, Board.NorthX, Board.NorthY, X, Y, Z);
+		const FVector Way = FVector(Y, X, FMath::Max(Z, 0.07)).GetSafeNormal();
+		if (!Way.IsNearlyZero())
+		{
+			return Way;
+		}
 	}
+	return FRotator(30.0, 150.0, 0.0).Vector();
+}
+
+void AAirBattle::PaintEarly(const FString& Key)
+{
+	if (!FLandLive::RuleNow(TEXT("flyPaintEarly")))
+	{
+		return;
+	}
+	// (the recording read as BeginReplay will read it, for its board: the ground is painted as LayGround would ask)
+	FString Text;
+	AirFeed::Recording Early;
+	std::string Error;
+	if (!FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Data/AirBattles") / Key + TEXT(".json")))
+		|| !AirFeed::ReadRecording(AirParts::Narrow(Text), Early, Error))
+	{
+		return;
+	}
+	const AirFeed::Sky& B = Early.Board;
+	if (!(B.StageKey.empty() && !B.Land.empty() && B.Terrain != "desert" && B.DefNat != "JAP" && B.DefNat != "JPN"))
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air battle ground: nothing to paint early for %s (a stage, a desert, a Japanese-held target, or no land): row flyPaintEarly."), *Key);
+		return;
+	}
+	TSharedPtr<FAirLandAsk> Ask = MakeShared<FAirLandAsk>();
+	AirLand::Place& P = Ask->P;
+	P.AimX = B.TargetX;
+	P.AimY = B.TargetY;
+	P.NorthX = B.NorthX;
+	P.NorthY = B.NorthY;
+	P.Terrain = B.Terrain.empty() ? std::string("plains") : B.Terrain;
+	P.Name = B.PlaceName;
+	P.Month = B.Month + 1;
+	P.Seed = Early.Seed ? Early.Seed : 238;
+	const FVector Sun = SunOfBoard(B);
+	P.SunX = Sun.Y;
+	P.SunY = Sun.X;
+	P.SunZ = Sun.Z;
+	P.Land = B.Land;
+	P.Rivers = B.Rivers;
+	FString Book;
+	FFileHelper::LoadFileToString(Book, *(FPaths::ProjectContentDir() / TEXT("Data/AirGround/towns.json")));
+	Ask->Plans = TCHAR_TO_UTF8(*Book);
+	StartPaint(*Ask);
+	LandEarly = Ask;
+	UE_LOG(LogTheater, Display, TEXT("Air battle ground: %s's pictures begun as the replay was queued (the Battle rules card's row flyPaintEarly, or -TheaterAirPaintEarly)."), *Key);
+}
+
+bool AAirBattle::PaintEarlyAdopt(const FAirLandAsk& Ask)
+{
+	if (!LandEarly.IsValid())
+	{
+		return false;
+	}
+	const TSharedPtr<FAirLandAsk> Early = LandEarly;
+	LandEarly.Reset();
+	if (LandMade.IsValid() && LandPainting.IsValid() && AirGroundKeep::SamePlace(Early->P, Ask.P) && Early->Plans == Ask.Plans)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air battle ground: the pictures begun %.1f s before the battle asked for them are this ground's (row flyPaintEarly)."), FPlatformTime::Seconds() - LandAsked);
+		return true;
+	}
+	// (not this ground after all: painted again as before; the paint begun early is let run out, unread)
+	UE_LOG(LogTheater, Display, TEXT("Air battle ground: the pictures begun early are not this battle's ground; painted again (row flyPaintEarly)."));
+	PaintDropped = MoveTemp(LandPainting);
+	LandPainting = TFuture<void>();
+	return false;
 }
 
 void AAirBattle::LayLand()
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_LayLand);
-	if (!LandMade.IsValid() || !LandMade->Painter || LandMade->Levels.Num() != static_cast<int32>(LandMade->Frames.size()))
+	if (!LandMade.IsValid() || !LandMade->Painter || LandMade->Levels.Num() != static_cast<int32>(LandMade->Frames.size()) || !State.IsValid())
 	{
 		return;
 	}
