@@ -41,6 +41,31 @@ the panel lies on her olive (paint 0) everywhere, on both sides, no point of it 
 
     python3 Tools/pack_nose_art.py <modeller's noseart folder> <air thread's names.json>
 
+The finer B-17 (Content/Models/B17Fine.json, the Battle rules card's "Finer B-17", row b17Fine) has a panel of her own,
+in a file of its own, so that panels.json stays as it is:
+
+    python3 Tools/pack_nose_art.py --fine
+
+writes Content/Data/NoseArt/panels-fine.json from her near shape, with the cover panels.json already has (the
+paintings are not read again). Her skin differs from the older file's in three ways, each measured on her file:
+- her nose is glazed further back and has windows where the older panel lay (the navigator's at 7.0-7.3 m and 5.8-6.4
+  m forward, 10 to 45 degrees up), her windscreen's foot steps out of her skin aft of 5.7 m some 50 degrees up, and
+  her kill tally's panel is under her window from 3.7 to 5.05 m;
+- her coat carries rivet heads and seam lines of paints of their own (42 rivet, 44 seam, the coat's colour a shade
+  darker), standing up to 8 mm proud of it, in rows across her, so no panel of any useful size lies on paint 0 alone
+  (tried: the one placing a map of her skin showed clear of lines, 6.5 m forward and 9 degrees below her widest
+  line, still lies on paint 42 when laid at full grain). Hers may lie on paints 0, 42 and 44, her coat and its lines,
+  and on nothing else (never glass, her grey belly or its lines). The test checks her panel against that list, which
+  the file names (skin_paints), and the older B-17's against paint 0 alone, as before. Lifted clear of the rivet
+  heads, a panel stays within the 15 mm of her skin both tests ask, and faces out of her side as the test asks (its
+  facing at least 0.8 across), only below her navigator's windows: the largest found is 0.45 of the older one's
+  size each way (0.99 m by 0.61 m), from 6.5 m to 5.51 m forward, its middle 9 degrees below her widest line, 2.1 to
+  13.6 mm off her, on paints 0 and 42. (Placed higher, between the windows and the windscreen, 55 degrees up, it
+  faced 0.71 across, more up than out, and failed that check.) Whether 0.45 reads well enough there is the art
+  director's call on the Mac's stills;
+- she has her crew and the rooms they sit in inside her, so a ray from her axis first meets them: her skin is where
+  it leaves her for the last time (within 1.8 m of her axis), not where it first meets something.
+
 Needs numpy and Pillow.
 """
 import json
@@ -54,6 +79,17 @@ SHRINK = 4                       # (1408 by 864 to 352 by 216)
 BORDER = 4                       # (the outer pixels that must be clear, at the modeller's size)
 SLACK = 2                        # (the cover's pixels round all the paintings' paint, at the packed size)
 MOST_BYTES = 20 * 1024 * 1024    # (the whole folder)
+FINE = 0.45                      # (the finer B-17's panel, of the older one's size each way: see above)
+FINE_MODELS = {"B17Fine": {
+    "fore": 6.5, "aft": round(6.5 - 2.2 * FINE, 4),
+    "middle_deg": -9.0,
+    "cols": 45, "rows": 28,
+    "stand": 0.002,
+    "paint": 0,
+    "skin_paints": [0, 42, 44],  # (her coat, its rivet heads and its seam lines)
+    "outer": True,               # (her skin the last of her a ray from her axis leaves, within 1.8 m)
+    "scale": FINE,
+}}
 MODELS = {"B17": {
     "fore": 7.2, "aft": 5.0,     # (metres forward of her middle: the panel's ends)
     "middle_deg": 23.0,          # (the painting's middle row, degrees above her widest line, z = 0)
@@ -91,9 +127,10 @@ def shrink(a, f):
     return np.clip(np.rint(out), 0, 255).astype(np.uint8)
 
 
-def ray_hits(o, d, a, b, c):
+def ray_hits(o, d, a, b, c, outer=False):
     """The nearest of many triangles a ray meets (Moller and Trumbore): its distance, the triangle and the two
-    barycentric weights of its second and third corners; (inf, -1, 0, 0) when none."""
+    barycentric weights of its second and third corners; (inf, -1, 0, 0) when none. outer: the farthest it meets
+    within OUTER_M instead (the finer B-17's skin, with her crew inside her)."""
     e1 = b - a
     e2 = c - a
     p = np.cross(d, e2)
@@ -106,11 +143,20 @@ def ray_hits(o, d, a, b, c):
     v = (d * q).sum(1) * inv
     t = (e2 * q).sum(1) * inv
     hit = ok & (u >= -1e-9) & (v >= -1e-9) & (u + v <= 1 + 1e-9) & (t > 1e-9)
+    if outer:
+        hit = hit & (t < OUTER_M)
     if not hit.any():
         return np.inf, -1, 0.0, 0.0
+    if outer:
+        tt = np.where(hit, t, -np.inf)
+        i = int(np.argmax(tt))
+        return float(tt[i]), i, float(u[i]), float(v[i])
     tt = np.where(hit, t, np.inf)
     i = int(np.argmin(tt))
     return float(tt[i]), i, float(u[i]), float(v[i])
+
+
+OUTER_M = 1.8                    # (the farthest from her axis a finer B-17's skin is looked for about her nose)
 
 
 def unit(v):
@@ -132,14 +178,19 @@ def lay_panel(model_path, size_m, how, cover):
     # (her machine's own skin about her nose, both sides: not her bay's doors or load)
     first = pts[tris[:, 0]]
     keep = (part[tris] == 0).all(1) & (np.abs(first[:, 0] - 0.5 * (how["fore"] + how["aft"])) < 2.5)
+    if how.get("outer", False):
+        # (and, about the finer B-17's nose, only what lies within reach of the panel: her skin, not the far side of her)
+        middle = pts[tris].mean(1)
+        keep = keep & (np.abs(middle[:, 0] - 0.5 * (how["fore"] + how["aft"])) < 0.5 * (how["fore"] - how["aft"]) + 0.4) & (np.hypot(middle[:, 1], middle[:, 2]) < OUTER_M)
     tris = tris[keep]
     a, b, c = pts[tris[:, 0]], pts[tris[:, 1]], pts[tris[:, 2]]
+    outer = bool(how.get("outer", False))
 
     def cut(x, deg, hand=-1.0):
         """Where a ray from her axis at x, deg above her widest line on her port side (hand -1; 1 her starboard),
         meets her: the point, its facing (her points' own, between the triangle's corners) and its paint."""
         r = np.radians(deg)
-        t, i, wu, wv = ray_hits(np.array([x, 0.0, 0.0]), np.array([0.0, hand * np.cos(r), np.sin(r)]), a, b, c)
+        t, i, wu, wv = ray_hits(np.array([x, 0.0, 0.0]), np.array([0.0, hand * np.cos(r), np.sin(r)]), a, b, c, outer)
         if i < 0:
             raise SystemExit("pack_nose_art: no skin at x %.3f, %.1f degrees" % (x, deg))
         corner = tris[i]
@@ -177,7 +228,7 @@ def lay_panel(model_path, size_m, how, cover):
         """How far a point is outside her (negative: inside), along the ray from her axis through it."""
         o = np.array([p[0], 0.0, 0.0])
         d = unit(p - o)
-        t, i, _, _ = ray_hits(o, d, a, b, c)
+        t, i, _, _ = ray_hits(o, d, a, b, c, outer)
         return np.linalg.norm(p - o) - t
 
     def samples(g):
@@ -231,6 +282,71 @@ def side_of(points, rows, cols, starboard):
     right = unit(along if places[mi, cols - 1, 0] > places[mi, 0, 0] else -along)
     r4 = lambda v: [round(float(x), 4) for x in v]
     return {"middle": r4(middle), "normal": r4(facing), "up": r4(up), "right": r4(right), "points": out}
+
+
+def lay_all(root, models, size_m, cover, bad):
+    """Each model's panel, laid on its near shape (a model's own scale of the painting's size where it has one), and
+    what is wrong with it added to bad: it lies on paint other than its skin's, or is not 0.5 to 15 mm off her."""
+    panels = {}
+    for kind, how in models.items():
+        scale = how.get("scale", 1.0)
+        size = [round(v * scale, 4) for v in size_m] if scale != 1.0 else size_m
+        model, points, under, lift, low, high = lay_panel(os.path.join(root, "Content", "Models", kind + ".json"), size, how, cover)
+        allowed = set(how.get("skin_paints", [how["paint"]]))
+        off = sorted(set(int(p) for p in under.ravel()) - allowed)
+        if off:
+            bad.append("%s's panel lies on paint %s, not only %s" % (kind, off, how["paint"] if allowed == {how["paint"]} else sorted(allowed)))
+        if low < 0.0005 or high > 0.015:
+            bad.append("%s's panel is %.1f to %.1f mm off her skin, not 0.5 to 15" % (kind, low * 1000, high * 1000))
+        colour = model["colours"][how["paint"]]
+        panels[kind] = {
+            "size_m": size, "cover": cover, "cols": how["cols"], "rows": how["rows"], "lift_m": lift, "skin": colour,
+            "off_mm": [round(low * 1000, 2), round(high * 1000, 2)],
+            "port": side_of(points, how["rows"], how["cols"], False),
+            "starboard": side_of(points, how["rows"], how["cols"], True),
+        }
+        if "skin_paints" in how:
+            panels[kind]["skin_paints"] = sorted(allowed)
+        print("%s: panel %dx%d over u %.3f to %.3f, v %.3f to %.3f, lifted %.1f mm, %.1f to %.1f mm off her skin, on paint %s" % (kind, how["cols"], how["rows"], cover[0], cover[2], cover[1], cover[3], lift * 1000, low * 1000, high * 1000, sorted(set(int(p) for p in under.ravel()))))
+    return panels
+
+
+def write_panels(path, panels, models):
+    with open(path, "w") as f:
+        f.write("{\n")
+        f.write(' "about": %s,\n' % json.dumps("Where each model's nose art is painted (Tools/pack_nose_art.py): in the model file's own frame (metres, x forward, y right, z up), port and starboard. cover: the part of the picture (u0, v0, u1, v1) the panel is laid over, all of every painting's paint. points: the panel's grid, rows from the painting's top, each [x, y, z, nx, ny, nz, u, v], laid on her near shape and lifted lift_m off it along her skin's facing; u along the painting from its left edge, v down it from its top, so it reads from left to right seen from outside either side. middle, normal, up and right: at its middle point (right the way u grows). skin: the paint it lies on. off_mm: how far its triangles are off her skin, least and most."))
+        f.write(' "made": %s,\n' % json.dumps("Tools/pack_nose_art.py from Content/Models/%s.json's near shape" % "/".join(sorted(models))))
+        f.write(' "models": {\n')
+        for m, kind in enumerate(sorted(panels)):
+            p = panels[kind]
+            f.write('  %s: {\n' % json.dumps(kind))
+            for key in ("size_m", "cover", "cols", "rows", "lift_m", "skin", "skin_paints", "off_mm"):
+                if key in p:
+                    f.write('   %s: %s,\n' % (json.dumps(key), json.dumps(p[key])))
+            for s, side in enumerate(("port", "starboard")):
+                q = p[side]
+                f.write('   %s: {\n' % json.dumps(side))
+                for key in ("middle", "normal", "up", "right"):
+                    f.write('    %s: %s,\n' % (json.dumps(key), json.dumps(q[key])))
+                f.write('    "points": [\n')
+                f.write(",\n".join("     " + json.dumps(pt) for pt in q["points"]))
+                f.write('\n    ]\n   }%s\n' % ("," if s == 0 else ""))
+            f.write('  }%s\n' % ("," if m + 1 < len(panels) else ""))
+        f.write(' }\n}\n')
+
+
+def main_fine():
+    """The finer B-17's panel alone (panels-fine.json), with the cover and size panels.json already has."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.join(here, "..")
+    to = os.path.join(root, "Content", "Data", "NoseArt")
+    have = json.load(open(os.path.join(to, "panels.json")))["models"]["B17"]
+    bad = []
+    panels = lay_all(root, FINE_MODELS, have["size_m"], have["cover"], bad)
+    write_panels(os.path.join(to, "panels-fine.json"), panels, FINE_MODELS)
+    for line in bad:
+        print("FAIL  " + line)
+    return 1 if bad else 0
 
 
 def main(art_folder, names_path):
@@ -290,42 +406,8 @@ def main(art_folder, names_path):
             "art": index,
         }, f, indent=1, ensure_ascii=False)
         f.write("\n")
-    panels = {}
-    for kind, how in MODELS.items():
-        model, points, under, lift, low, high = lay_panel(os.path.join(root, "Content", "Models", kind + ".json"), size_m, how, cover)
-        off = sorted(set(int(p) for p in under.ravel()) - {how["paint"]})
-        if off:
-            bad.append("%s's panel lies on paint %s, not only %d" % (kind, off, how["paint"]))
-        if low < 0.0005 or high > 0.015:
-            bad.append("%s's panel is %.1f to %.1f mm off her skin, not 0.5 to 15" % (kind, low * 1000, high * 1000))
-        colour = model["colours"][how["paint"]]
-        panels[kind] = {
-            "size_m": size_m, "cover": cover, "cols": how["cols"], "rows": how["rows"], "lift_m": lift, "skin": colour,
-            "off_mm": [round(low * 1000, 2), round(high * 1000, 2)],
-            "port": side_of(points, how["rows"], how["cols"], False),
-            "starboard": side_of(points, how["rows"], how["cols"], True),
-        }
-        print("%s: panel %dx%d over u %.3f to %.3f, v %.3f to %.3f, lifted %.1f mm, %.1f to %.1f mm off her skin, on paint %s" % (kind, how["cols"], how["rows"], cover[0], cover[2], cover[1], cover[3], lift * 1000, low * 1000, high * 1000, sorted(set(int(p) for p in under.ravel()))))
-    with open(os.path.join(to, "panels.json"), "w") as f:
-        f.write("{\n")
-        f.write(' "about": %s,\n' % json.dumps("Where each model's nose art is painted (Tools/pack_nose_art.py): in the model file's own frame (metres, x forward, y right, z up), port and starboard. cover: the part of the picture (u0, v0, u1, v1) the panel is laid over, all of every painting's paint. points: the panel's grid, rows from the painting's top, each [x, y, z, nx, ny, nz, u, v], laid on her near shape and lifted lift_m off it along her skin's facing; u along the painting from its left edge, v down it from its top, so it reads from left to right seen from outside either side. middle, normal, up and right: at its middle point (right the way u grows). skin: the paint it lies on. off_mm: how far its triangles are off her skin, least and most."))
-        f.write(' "made": %s,\n' % json.dumps("Tools/pack_nose_art.py from Content/Models/%s.json's near shape" % "/".join(sorted(MODELS))))
-        f.write(' "models": {\n')
-        for m, kind in enumerate(sorted(panels)):
-            p = panels[kind]
-            f.write('  %s: {\n' % json.dumps(kind))
-            for key in ("size_m", "cover", "cols", "rows", "lift_m", "skin", "off_mm"):
-                f.write('   %s: %s,\n' % (json.dumps(key), json.dumps(p[key])))
-            for s, side in enumerate(("port", "starboard")):
-                q = p[side]
-                f.write('   %s: {\n' % json.dumps(side))
-                for key in ("middle", "normal", "up", "right"):
-                    f.write('    %s: %s,\n' % (json.dumps(key), json.dumps(q[key])))
-                f.write('    "points": [\n')
-                f.write(",\n".join("     " + json.dumps(pt) for pt in q["points"]))
-                f.write('\n    ]\n   }%s\n' % ("," if s == 0 else ""))
-            f.write('  }%s\n' % ("," if m + 1 < len(panels) else ""))
-        f.write(' }\n}\n')
+    panels = lay_all(root, MODELS, size_m, cover, bad)
+    write_panels(os.path.join(to, "panels.json"), panels, MODELS)
     total = sum(os.path.getsize(os.path.join(to, n)) for n in os.listdir(to))
     if total >= MOST_BYTES:
         bad.append("the folder is %.1f MB, not under %d MB" % (total / 1048576.0, MOST_BYTES // 1048576))
@@ -336,4 +418,4 @@ def main(art_folder, names_path):
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1], sys.argv[2]))
+    sys.exit(main_fine() if sys.argv[1:] == ["--fine"] else main(sys.argv[1], sys.argv[2]))
