@@ -314,6 +314,13 @@ public:
 	int32 OilLane(int32 ShipId, TArray<FOilLanePoint>& Out) const;
 	/** The ships with a lane on the sea now. */
 	void OilLanes(TArray<int32>& Ships) const;
+	/** Item 11 part 4, the deck's brass: Count (1 to 16) spent cases of Kind (deck_cases.<kind>: aa25, aa40, in4, in5,
+	 * cm127) thrown from Breech (world) along Away (world, rough) onto ship ShipId's deck, lying and rolling in her frame
+	 * (ShipRide once a frame first). Drawn within 40 to 60 m. Nothing without the row or her pose. */
+	void DeckBrass(int32 ShipId, const FVector& Breech, const FVector& Away, const FString& Kind, int32 Count = 1);
+	/** A ship's light gun stream (AirGun's Gun) is on ship ShipId (-1: none): each round it fires throws its case on her
+	 * deck (DeckBrass) while she is ridden and deck_cases has its kind, and its aircraft-style cases stay off. */
+	void AirGunShip(int32 Gun, int32 ShipId);
 	/** The battle's wind (metres a second, world axes): smoke leans and drifts with it. */
 	void SetWind(const FVector& MetresPerSecond);
 	/** The sky or haze behind the battle's smoke as the SCREEN shows it at this hour (as GroundColour's: red, green and

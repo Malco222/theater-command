@@ -739,6 +739,22 @@ namespace TheaterFx
 		/** The ships with a lane on the sea now, into Ships (emptied first): how many. */
 		int OilLanes(std::vector<int>& Ships) const;
 
+		/** Item 11 part 4: the deck's brass. Spent cases from her light and medium guns lying on her deck, piling by the
+		 * mount and rolling in her own frame (ShipRide / CasesRide once a frame): thrown from Breech (metres, world) along
+		 * Away (world, rough; the way the case leaves the breech) onto her deck deck_cases.drop_m below it, Count of them
+		 * (0 to 16), each of Kind's true size (deck_cases.<kind>: aa25 the 20 and 25 mm, aa40 the 40 mm, in4 the 4-inch,
+		 * in5 the 5-inch/38, cm127 the 12.7 cm). Past deck_cases.stick_deg of heel (2) they roll toward her low side,
+		 * stopping at a coaming (ShipPose.Coaming over the case's width) or going over the side where there is none. At
+		 * most deck_cases.most_mount (40) by a mount (the oldest fades out as a new one lands) and most_lying (200) on all
+		 * the ships; drawn only within deck_cases.within_m of the eye, fading out to gone_m (40 to 60). Dull brass, never
+		 * gold. Its dice are its own (the mount's place and the moment). No pose for her, or no row for Kind: nothing. */
+		void DeckBrass(double Now, int ShipId, const Vec& Breech, const Vec& Away, const char* Kind, int Count = 1);
+		/** A ship's light gun stream (AirGun's Gun) is on ship ShipId (under 0: on none, as made): while she is ridden
+		 * (ShipRide) and deck_cases has the gun's kind, each round it fires throws its case onto her deck (DeckBrass), and
+		 * the aircraft-style cases AirGun throws today (falling through her deck, Spent) stay off for that gun alone. Its
+		 * other pieces and every dice draw are as before. */
+		void AirGunShip(int Gun, int ShipId);
+
 		/** What the eye is: where it is, which way its screen's right, up and forward point, and how many pixels a
 		 * radian across the screen is (the screen's width / (2 tan(field of view / 2))). Smoke takes SmokeLight (the
 		 * hour: white by day); Sun is the way toward the sun. */
@@ -2089,6 +2105,25 @@ namespace TheaterFx
 			uint32_t Serials = 0;
 		};
 		std::vector<Lane> Lanes;
+		// (the deck's brass: each gun stream's ship; each case lying, by its piece's number, its mount, its ship and when
+		// it was thrown, for the caps; the numbers of those to fade out at the next Draw)
+		std::vector<std::pair<int, int>> GunShips;
+		struct CaseRec
+		{
+			uint32_t Id = 0;
+			int Ship = -1;
+			uint64_t Mount = 0;
+			double Born = 0.0;
+		};
+		std::vector<CaseRec> DeckCases;
+		std::vector<uint32_t> DeckKill;
+		uint64_t DeckRounds = 0;
+		void DeckRound(int Gun, size_t FromBit, double T, const Vec& At, const Vec& Way, const char* Kind); // (AirGun: a round of a gun on a ship)
+		struct CaseFeel
+		{
+			double Mu = 0.035, RollK = 0.5, Within = 40.0, Gone = 60.0;
+		};
+		void DeckCaseStep(Bit& B, const ShipPose& Pose, double Now, const CaseFeel& Feel); // (a case thrown, lying, rolling, or gone over her side)
 		void SeaClear();
 	};
 }

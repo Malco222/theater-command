@@ -12,6 +12,10 @@
 		Washes.clear();
 		DeckIds = 0;
 		Lanes.clear();
+		GunShips.clear();
+		DeckCases.clear();
+		DeckKill.clear();
+		DeckRounds = 0;
 	}
 
 	double Battle::SeaTable(const char* Name, double CalibreMm, double Usual) const
@@ -515,18 +519,39 @@
 
 	void Battle::DeckPlace(double Now)
 	{
-		if (Riders.empty())
+		if (Riders.empty() && DeckIds == 0)
 		{
-			return; // (no ship carries anything: as ever)
+			return; // (no ship carries anything, nor ever did: as ever)
 		}
 		// (a ship not told of for 5 s is let go)
 		Riders.erase(std::remove_if(Riders.begin(), Riders.end(), [Now](const Rider& R) { return !(Now - R.At <= 5.0) && !(R.At > Now); }), Riders.end());
 		const Rider* Last = nullptr;
+		// (the deck's brass: how its cases move, read once a frame; those the caps let go; those still lying, kept count of)
+		CaseFeel Feel;
+		if (!DeckCases.empty())
+		{
+			Feel.Mu = std::tan(SafeNum(Num("deck_cases.stick_deg", 2.0), 0.0, 30.0, 2.0) * Pi / 180.0);
+			Feel.RollK = SafeNum(Num("deck_cases.roll_k", 0.5), 0.0, 1.0, 0.5);
+			Feel.Within = SafeNum(Num("deck_cases.within_m", 40.0), 1.0, 1000.0, 40.0);
+			Feel.Gone = std::max(Feel.Within + 1.0, SafeNum(Num("deck_cases.gone_m", 60.0), 1.0, 1000.0, 60.0));
+		}
+		std::sort(DeckKill.begin(), DeckKill.end());
+		std::vector<uint32_t> Lying;
 		for (Bit& B : Bits)
 		{
 			if (B.DeckShip == 0)
 			{
 				continue;
+			}
+			if (B.DeckMode >= 3 && !DeckKill.empty() && std::binary_search(DeckKill.begin(), DeckKill.end(), B.DeckId))
+			{
+				// (let go by a cap: it fades out over a second where it lies)
+				const double Age_ = std::max(Now - B.Born, 0.0);
+				if (B.Life > Age_ + 1.0)
+				{
+					B.Life = Age_ + 1.0;
+					B.Hold = Age_ / B.Life;
+				}
 			}
 			const int Ship = static_cast<int>(B.DeckShip) - 1;
 			const Rider* Her = Last && Last->Ship == Ship ? Last : RiderOf(Ship);
@@ -551,9 +576,21 @@
 			}
 			else
 			{
-				continue; // (the deck's brass: stepped in its own part, DeckCases)
+				DeckCaseStep(B, Her->Pose, Now, Feel);
+				if (B.DeckMode == 3 && Now < B.Born + B.Life)
+				{
+					Lying.push_back(B.DeckId);
+				}
+				continue;
 			}
 			B.From = ShipToWorld(Her->Pose, L);
+		}
+		DeckKill.clear();
+		if (!DeckCases.empty())
+		{
+			// (those no longer lying on her, gone over the side, let go or faded, are no longer counted)
+			std::sort(Lying.begin(), Lying.end());
+			DeckCases.erase(std::remove_if(DeckCases.begin(), DeckCases.end(), [&Lying](const CaseRec& C) { return !std::binary_search(Lying.begin(), Lying.end(), C.Id); }), DeckCases.end());
 		}
 	}
 
@@ -732,4 +769,275 @@
 			Strip[I].Across = Vec(-Run.Y, Run.X, 0.0).Unit(I > 0 ? Strip[I - 1].Across : Vec(0.0, 1.0, 0.0));
 		}
 		return static_cast<int>(Strip.size());
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// Item 11 part 4: the deck's brass. A light or medium gun's spent cases on her deck, in her own frame (as her wash):
+	// thrown from the breech, tumbling down to her deck, then lying there, and rolling to her low side once she heels
+	// past deck_cases.stick_deg; stopped by a coaming or over the side where there is none. Its dice are its own: the
+	// mount's place on her, the moment and its own count, one draw a statement.
+
+	void Battle::AirGunShip(int Gun, int ShipId)
+	{
+		GunShips.erase(std::remove_if(GunShips.begin(), GunShips.end(), [Gun](const std::pair<int, int>& G) { return G.first == Gun; }), GunShips.end());
+		if (ShipId >= 0 && GunShips.size() < 4096)
+		{
+			GunShips.emplace_back(Gun, ShipId);
+		}
+	}
+
+	void Battle::DeckRound(int Gun, size_t FromBit, double T, const Vec& At, const Vec& Way, const char* Kind)
+	{
+		// (AirGun, a round just fired: is the gun on a ridden ship with a row for its kind? Then the aircraft-style cases
+		// Spent threw for it (if the eye was near) are taken back, after every draw was made, and its case goes on her deck)
+		int Ship = -1;
+		for (const std::pair<int, int>& G : GunShips)
+		{
+			if (G.first == Gun)
+			{
+				Ship = G.second;
+				break;
+			}
+		}
+		const std::string P = std::string("deck_cases.") + (Kind ? Kind : "") + ".";
+		if (Ship < 0 || !RiderOf(Ship) || !Has(P + "case_m"))
+		{
+			return;
+		}
+		if (FromBit < Bits.size())
+		{
+			Bits.erase(std::remove_if(Bits.begin() + static_cast<std::ptrdiff_t>(FromBit), Bits.end(), [](const Bit& B) { return B.Form == Bit::Shape::Plate && !B.bThrown && B.Rise < 0.0; }), Bits.end());
+		}
+		const Vec Level = Vec(Way.X, Way.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
+		const Vec Across = Level.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
+		const double Back = SafeNum(Num(P + "breech_back_m", 1.0), 0.0, 10.0, 1.0);
+		const double Side = SafeNum(Num(P + "side", 0.0), -1.0, 1.0, 0.0);
+		const Vec Breech = At - Way * Back;
+		const Vec Away = Across * Side - Level * (1.0 - std::fabs(Side));
+		DeckBrass(T, Ship, Breech, Away, Kind, 1);
+	}
+
+	void Battle::DeckBrass(double Now, int ShipId, const Vec& Breech, const Vec& Away, const char* KindIn, int Count)
+	{
+		const std::string Kind = KindIn ? KindIn : "";
+		const std::string R = "deck_cases.";
+		const std::string P = R + Kind + ".";
+		if (ShipId < 0 || Kind.empty() || Count < 1 || !(std::fabs(Now) <= 1.0e9) || !RealPlace(Breech) || !RealPlace(Away) || !Has(P + "case_m"))
+		{
+			return;
+		}
+		const Rider* Her = RiderOf(ShipId);
+		if (!Her)
+		{
+			return; // (no pose for her: ShipRide first)
+		}
+		const ShipPose& Pose = Her->Pose;
+		const Vec Rel = Breech - Pose.At;
+		const Vec Local(Rel.Dot(Pose.Fore), Rel.Dot(Pose.Left), Rel.Dot(Pose.Up));
+		if (std::fabs(Local.X) > 0.5 * Pose.Long + 5.0 || std::fabs(Local.Y) > Pose.HalfBeam + 5.0)
+		{
+			return; // (a breech that is not on her)
+		}
+		const double CaseM = SafeNum(Num(P + "case_m", 0.3), 0.01, 2.0, 0.3);
+		const double CaseD = SafeNum(Num(P + "case_d_m", 0.05), 0.005, 0.5, 0.05);
+		const double Drop = SafeNum(Num(P + "drop_m", Num(R + "drop_m", 1.6)), 0.0, 10.0, 1.6);
+		const Span Throw = Range(Has(P + "throw_mps.0") ? P + "throw_mps" : R + "throw_mps", 1.0, 2.5);
+		const Span Up = Range(Has(P + "up_mps.0") ? P + "up_mps" : R + "up_mps", 0.0, 0.8);
+		const Span Lie = Range(R + "lie_s", 600.0, 600.0);
+		const Span Tumble = Range(R + "tumble", 10.0, 25.0);
+		const double Scatter = SafeNum(Num(R + "scatter_mps", 0.3), 0.0, 5.0, 0.3);
+		const size_t MostMount = static_cast<size_t>(SafeNum(Num(R + "most_mount", 40.0), 1.0, 400.0, 40.0));
+		const size_t MostAll = static_cast<size_t>(SafeNum(Num(R + "most_lying", 200.0), 1.0, 2000.0, 200.0));
+		const Rgb Col = Picture(R + "colour", Rgb::FromPicture(140, 120, 89));
+		const Rgb Dark = Picture(R + "shade", Rgb::FromPicture(90, 79, 61));
+		const double Glint = SafeNum(Num(R + "glint", 1.5), 0.0, 10.0, 1.5);
+		const double LeastPx = SafeNum(Num(R + "least_px", 0.8), 0.0, 10.0, 0.8);
+		const double G = 9.81;
+		// (the mount: her number and the breech's place on her, to two metres)
+		const uint64_t Fx = static_cast<uint64_t>(static_cast<int64_t>(std::floor(Local.X / 2.0))) & 0xFFFFFull;
+		const uint64_t Fy = static_cast<uint64_t>(static_cast<int64_t>(std::floor(Local.Y / 2.0))) & 0xFFFFFull;
+		const uint64_t Mount = Mix64((static_cast<uint64_t>(ShipId) + 1ull) << 40 ^ Fx << 20 ^ Fy);
+		const uint64_t Moment = static_cast<uint64_t>(static_cast<int64_t>(std::floor(Now * 1000.0)));
+		++DeckRounds;
+		Dice D(Mix64(Mount ^ Moment * 0x9E3779B97F4A7C15ull ^ DeckRounds * 0xD1B54A32D192ED03ull) ^ 0xB4A55ull);
+		const Vec AwayL = Vec(Away.Dot(Pose.Fore), Away.Dot(Pose.Left), 0.0).Unit(Vec(-1.0, 0.0, 0.0));
+		const double DeckAt = std::max(Local.Z - Drop, 0.3);
+		const uint32_t HerKey = static_cast<uint32_t>(ShipId) + 1u;
+		for (int I = 0; I < std::min(Count, 16); ++I)
+		{
+			// (the caps: the mount's oldest, then the oldest of all, let go to fade as this one comes)
+			size_t Mine = 0;
+			for (const CaseRec& C : DeckCases)
+			{
+				Mine += C.Mount == Mount ? 1u : 0u;
+			}
+			while (Mine >= MostMount)
+			{
+				for (size_t K = 0; K < DeckCases.size(); ++K)
+				{
+					if (DeckCases[K].Mount == Mount)
+					{
+						DeckKill.push_back(DeckCases[K].Id);
+						DeckCases.erase(DeckCases.begin() + static_cast<std::ptrdiff_t>(K));
+						break;
+					}
+				}
+				--Mine;
+			}
+			while (DeckCases.size() >= MostAll)
+			{
+				DeckKill.push_back(DeckCases.front().Id);
+				DeckCases.erase(DeckCases.begin());
+			}
+			Bit B;
+			B.Form = Bit::Shape::Plate;
+			B.bThrown = true;
+			B.Born = Now;
+			B.DeckShip = HerKey;
+			B.DeckId = ++DeckIds;
+			B.DeckMode = 3;
+			B.DeckT = Now;
+			B.DeckG = G;
+			B.R0 = B.R1 = 0.5 * CaseD;
+			B.Stretch = std::max(1.0, CaseM / CaseD);
+			B.DeckZ = DeckAt + B.R0; // (its middle, lying on her deck)
+			const double Sx = D.Bell();
+			const double Sy = D.Bell();
+			const double Flung = Throw.Pick(D);
+			const double Lift = Up.Pick(D);
+			B.DeckP = Local;
+			B.DeckV = AwayL * Flung + Vec(Sx * Scatter, Sy * Scatter, Lift);
+			// (down to her deck: when its middle is a case's radius above it)
+			const double Fall = std::max(Local.Z - B.DeckZ, 0.0);
+			const double Tf = std::max((B.DeckV.Z + std::sqrt(B.DeckV.Z * B.DeckV.Z + 2.0 * G * Fall)) / G, 0.05);
+			B.Land = Tf;
+			B.Land2 = Tf;
+			// (tumbling end over end in the air, so many half turns that it lands lying along her deck)
+			const double Yaw = D.U(0.0, 2.0 * Pi);
+			B.DeckAx = Vec(std::cos(Yaw), std::sin(Yaw), 0.0);
+			B.DeckFa = Vec(0.0, 0.0, 1.0);
+			const double Spin = Tumble.Pick(D);
+			const double Way_ = D.U();
+			B.Tumble = (Way_ < 0.5 ? -1.0 : 1.0) * std::max(1.0, std::round(Spin * Tf / Pi)) * Pi / Tf;
+			B.Life = Tf + std::max(1.0, Lie.Pick(D));
+			B.Hold = std::clamp((B.Life - 1.0) / B.Life, 0.0, 0.999); // (fading over its last second)
+			const double Tone = D.U(0.92, 1.06);
+			B.Col = Col * Tone;
+			B.Col2 = Dark;
+			B.Alpha = 1.0;
+			B.DeckFull = 1.0;
+			B.FadeIn = 0.01;
+			B.Heart = 1.0;
+			B.Rim = 0.9;
+			B.Inner = 0.5;
+			B.Glint = Glint;
+			B.LeastPx = LeastPx;
+			B.LeastKeep = 0.6;
+			B.Gravity = 0.0;
+			DeckCaseStep(B, Pose, Now, CaseFeel());
+			Bits.push_back(B);
+			CaseRec C;
+			C.Id = B.DeckId;
+			C.Ship = ShipId;
+			C.Mount = Mount;
+			C.Born = Now;
+			DeckCases.push_back(C);
+		}
+	}
+
+	void Battle::DeckCaseStep(Bit& B, const ShipPose& Pose, double Now, const CaseFeel& Feel)
+	{
+		// One case of her brass to where it is now, in her frame: in the air (DeckMode 3, before it lands), lying or rolling
+		// on her deck (3), or gone over her side (4, falling to the sea and gone there). The kit draws it as any spent case
+		// (LayCase): it is a thrown piece whose flight is over at once, set where it is each frame
+		const double Age = std::max(Now - B.Born, 0.0);
+		Vec L = B.DeckP;
+		if (B.DeckMode == 3 && Age < B.Land)
+		{
+			L = B.DeckP + B.DeckV * Age + Vec(0.0, 0.0, -0.5 * B.DeckG * Age * Age);
+			B.DeckT = std::max(Now, B.Born);
+		}
+		else if (B.DeckMode == 3)
+		{
+			if (B.DeckG > 0.0)
+			{
+				// (landed: where it struck, its way along the deck mostly lost)
+				B.DeckP = B.DeckP + B.DeckV * B.Land;
+				B.DeckP.Z = B.DeckZ;
+				B.DeckV = Vec(B.DeckV.X * 0.25, B.DeckV.Y * 0.25, 0.0);
+				B.DeckG = 0.0;
+				B.DeckT = B.Born + B.Land;
+			}
+			const double Dt = std::clamp(Now - B.DeckT, 0.0, 0.25);
+			B.DeckT = std::max(B.DeckT, Now);
+			if (Dt > 0.0)
+			{
+				// (her deck's slope: gravity along it, in her frame; the case stays put until that is past stick_deg's grip,
+				// and rolls with roll_k of it less the grip once it moves)
+				const Vec Slope(-9.81 * Pose.Fore.Z, -9.81 * Pose.Left.Z, 0.0);
+				const double Grip = Feel.Mu * 9.81 * std::max(Pose.Up.Z, 0.0);
+				const double Pull = Slope.Length();
+				Vec V(B.DeckV.X, B.DeckV.Y, 0.0);
+				const double Speed = V.Length();
+				if (Speed < 1.0e-3)
+				{
+					V = Pull > Grip ? Slope * (Feel.RollK * (Pull - Grip) / Pull * Dt) : Vec();
+				}
+				else
+				{
+					const Vec Was = V;
+					V = V + (Slope - V * (Grip / Speed)) * (Feel.RollK * Dt);
+					if (V.Dot(Was) <= 0.0 && Pull <= Grip)
+					{
+						V = Vec(); // (slowed to a stop where the deck is level enough to hold it)
+					}
+				}
+				B.DeckV = V;
+				B.DeckP = B.DeckP + V * Dt;
+				B.DeckP.Z = B.DeckZ;
+				// (her edge: the half beam, narrowing toward bow and stern)
+				const double HalfLong = 0.5 * Pose.Long;
+				const double Ends = 2.0 * B.DeckP.X / std::max(Pose.Long, 1.0);
+				const double Edge = Pose.HalfBeam * std::min(1.0, 1.25 * std::sqrt(std::max(0.0, 1.0 - Ends * Ends)));
+				const double Rad = B.R0;
+				if (std::fabs(B.DeckP.Y) + Rad > Edge || std::fabs(B.DeckP.X) > HalfLong)
+				{
+					const double Sign = B.DeckP.Y >= 0.0 ? 1.0 : -1.0;
+					if (Pose.Coaming >= 2.0 * Rad && std::fabs(B.DeckP.X) <= HalfLong && Edge > Rad)
+					{
+						B.DeckP.Y = Sign * (Edge - Rad); // (against the coaming: it lies there)
+						B.DeckV.Y = 0.0;
+					}
+					else
+					{
+						// (over the side)
+						B.DeckMode = 4;
+						B.DeckV = Vec(B.DeckV.X, B.DeckV.Y + Sign * 0.4, 0.0);
+						B.DeckG = 9.81;
+						B.DeckT = Now;
+					}
+				}
+			}
+			L = B.DeckP;
+		}
+		if (B.DeckMode == 4)
+		{
+			const double Over = std::max(Now - B.DeckT, 0.0);
+			L = B.DeckP + B.DeckV * Over + Vec(0.0, 0.0, -0.5 * B.DeckG * Over * Over);
+			if (L.Z < 0.0)
+			{
+				B.Life = std::min(B.Life, Age); // (into the sea)
+			}
+		}
+		B.From = ShipToWorld(Pose, L);
+		B.At1 = B.From;
+		B.At2 = B.From;
+		B.Vel = Vec();
+		B.Vel2 = Vec();
+		B.Gravity = 0.0;
+		B.Along = (Pose.Fore * B.DeckAx.X + Pose.Left * B.DeckAx.Y + Pose.Up * B.DeckAx.Z).Unit(Pose.Fore);
+		B.Face = (Pose.Fore * B.DeckFa.X + Pose.Left * B.DeckFa.Y + Pose.Up * B.DeckFa.Z).Unit(Pose.Up);
+		// (drawn near only: whole within within_m of the eye, gone by gone_m)
+		const double Far = bEyeKnown ? (LastEye - B.From).Length() : 0.0;
+		B.Alpha = B.DeckFull * Clamp01((Feel.Gone - Far) / std::max(Feel.Gone - Feel.Within, 1.0));
 	}

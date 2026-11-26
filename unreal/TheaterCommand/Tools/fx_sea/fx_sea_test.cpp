@@ -516,6 +516,328 @@ namespace
 		std::string Got;
 		Check(DiceUntouched(Book, [&](Battle& Z) { for (int F = 0; F < 600; ++F) { Z.OilLeak(F / 10.0, 4, Vec(F * 1.0, 0.0, 0.0), 1.0); } Z.OilLane(60.0, 4, Strip); }, Got), "no draw on the shared seed", Got);
 	}
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// D. The deck's brass (item 11 part 4)
+
+	/** Her pieces of the deck's brass: lying (or in the air) on her deck, and gone over the side. */
+	struct CaseCount
+	{
+		int Lying = 0, Over = 0, Air = 0;
+	};
+	CaseCount CountCases(const Battle& X, double Now)
+	{
+		CaseCount C;
+		for (const Bit& B : X.Bits)
+		{
+			if (B.DeckShip == 0 || B.DeckMode < 3 || !(Now < B.Born + B.Life) || Now < B.Born)
+			{
+				continue;
+			}
+			C.Over += B.DeckMode == 4 ? 1 : 0;
+			C.Lying += B.DeckMode == 3 && Now - B.Born >= B.Land ? 1 : 0;
+			C.Air += B.DeckMode == 3 && Now - B.Born < B.Land ? 1 : 0;
+		}
+		return C;
+	}
+
+	/** A frame drawn from Dist m off her starboard side at the mount, Up m up, looking at it. */
+	int LookAt(Battle& X, double Now, const Vec& At, double Dist, double Up = 3.0)
+	{
+		Battle::View V;
+		V.Eye = At + Vec(0.0, -Dist, Up);
+		V.Forward = (At - V.Eye).Unit();
+		V.Right = V.Forward.Cross(Vec(0.0, 0.0, 1.0)).Unit(Vec(1.0, 0.0, 0.0));
+		V.Up = V.Right.Cross(V.Forward).Unit();
+		V.PixelsPerRadian = 1600.0 / (2.0 * std::tan(0.5 * 55.0 * Pi / 180.0));
+		V.HalfAcross = std::tan(0.5 * 55.0 * Pi / 180.0);
+		return X.Draw(Now, V);
+	}
+
+	Vec ToWorld(const Battle::ShipPose& P, const Vec& L)
+	{
+		const Vec Up = P.Up.Unit(), Fore = (P.Fore - Up * P.Fore.Dot(Up)).Unit(), Left = Up.Cross(Fore).Unit();
+		return P.At + Fore * L.X + Left * L.Y + Up * L.Z;
+	}
+
+	bool IsSpent(const Bit& B)
+	{
+		return B.Form == Bit::Shape::Plate && !B.bThrown && B.Rise < 0.0;
+	}
+
+	/** A twin 40 mm on her starboard side (its breech 20 m aft of her middle, 8 m to starboard, 12.5 m up: 1.6 m over her
+	 * deck at 10.9 m), firing up and out to starboard at 120 rounds a minute a barrel for Seconds, through AirGun with
+	 * AirGunShip, drawn at 30 frames a second from 15 m. List and Roll in degrees; she steams straight at 10 m/s. */
+	struct TwinRun
+	{
+		CaseCount End;
+		int Spent = 0, MostLying = 0, Draws = 0, Counted = 0;
+		double RideErr = 0.0, LowSide = 1e9, HighMoved = 0.0, StillMoved = 0.0, AtCoaming = 0.0;
+		std::vector<std::string> Others;
+		uint64_t Seeds = 0;
+	};
+	TwinRun Twin(const JsonRecipe& Book, double Seconds, double List, double Roll, double Coaming, bool bTie, bool bOtherGun = false)
+	{
+		TwinRun R;
+		Battle X;
+		Open(X, Book);
+		auto P = [&](double T)
+		{
+			Battle::ShipPose Q = Pose(T, 0.0, Roll, List, 10.0);
+			Q.Coaming = Coaming;
+			return Q;
+		};
+		const Vec Breech(-20.0, -8.0, 12.5);
+		const double Fps = 30.0;
+		X.ShipRide(0.0, 1, P(0.0));
+		if (bTie)
+		{
+			X.AirGunShip(11, 1);
+			X.AirGunShip(12, 1);
+		}
+		std::map<uint32_t, Vec> Local; // (each case's place on her once it has lain 5 s, kept from second Seconds - 30)
+		std::map<uint32_t, Vec> Laid;
+		for (int F = 0; F <= static_cast<int>(Seconds * Fps); ++F)
+		{
+			const double T = F / Fps;
+			const Battle::ShipPose Q = P(T);
+			X.ShipRide(T, 1, Q);
+			for (int G = 0; G < 2; ++G)
+			{
+				const Vec Muzzle = ToWorld(Q, Breech + Vec(2.0, 0.3 * G, 0.6));
+				const Vec Aim = Muzzle + (Q.Fore * 0.3 - Q.Left * 0.6 + Vec(0.0, 0.0, 0.75)) * 2000.0;
+				X.AirGun(T, 11 + G, Muzzle, Aim, Vec(10.0, 0.0, 0.0), "aa40", 120.0, 881.0, "us");
+			}
+			if (bOtherGun)
+			{
+				// (another ship's gun, 30 m off on the sea, not tied to any ship)
+				const Vec Muzzle = Q.At + Vec(-20.0, -40.0, 6.0);
+				X.AirGun(T, 21, Muzzle, Muzzle + Vec(0.2, -0.5, 0.8) * 2000.0, Vec(10.0, 0.0, 0.0), "aa40", 120.0, 881.0, "us");
+			}
+			R.Draws += LookAt(X, T, ToWorld(Q, Breech), 15.0);
+			R.MostLying = std::max(R.MostLying, static_cast<int>(X.DeckCases.size()));
+			for (const Bit& B : X.Bits)
+			{
+				R.Spent += IsSpent(B) && B.Born > T - 1.0 / Fps && B.Born <= T ? 1 : 0;
+				if (B.DeckShip == 0 || B.DeckMode != 3 || T - B.Born < B.Land)
+				{
+					continue;
+				}
+				if (!Laid.count(B.DeckId))
+				{
+					Laid[B.DeckId] = B.DeckP; // (where it landed)
+				}
+				if (T >= Seconds - 30.0 && T - B.Born >= B.Land + 5.0 && !Local.count(B.DeckId))
+				{
+					Local[B.DeckId] = B.DeckP;
+				}
+			}
+		}
+		const double End = Seconds;
+		const Battle::ShipPose Q = P(End);
+		R.End = CountCases(X, End);
+		R.Counted = static_cast<int>(X.DeckCases.size());
+		for (const Bit& B : X.Bits)
+		{
+			if (B.DeckShip == 0 || B.DeckMode != 3 || End - B.Born < B.Land || !(End < B.Born + B.Life))
+			{
+				R.Others.push_back(B.DeckShip == 0 && !IsSpent(B) ? Print(B) : std::string());
+				continue;
+			}
+			// (where it is in the world, against its place on her worked out here)
+			R.RideErr = std::max(R.RideErr, (B.From - ToWorld(Q, B.DeckP)).Length());
+			const double Edge = Q.HalfBeam * std::min(1.0, 1.25 * std::sqrt(std::max(0.0, 1.0 - std::pow(2.0 * B.DeckP.X / Q.Long, 2.0))));
+			if (End - B.Born >= B.Land + 20.0)
+			{
+				R.AtCoaming = std::max(R.AtCoaming, std::fabs(std::fabs(B.DeckP.Y) - (Edge - B.R0))); // (20 s is time to roll 8.5 m at 6 deg)
+			}
+			auto It = Local.find(B.DeckId);
+			if (It != Local.end())
+			{
+				R.StillMoved = std::max(R.StillMoved, (B.DeckP - It->second).Length());
+				// (and the world: where she carries it now against where its place 30 s ago puts it on her now)
+				R.RideErr = std::max(R.RideErr, (B.From - ToWorld(Q, It->second)).Length() - (B.DeckP - It->second).Length());
+			}
+			auto Was = Laid.find(B.DeckId);
+			if (Was != Laid.end())
+			{
+				R.HighMoved = std::max(R.HighMoved, B.DeckP.Y - Was->second.Y);
+				if (End - B.Born >= B.Land + 5.0)
+				{
+					R.LowSide = std::min(R.LowSide, Was->second.Y - B.DeckP.Y);
+				}
+			}
+		}
+		R.Others.erase(std::remove(R.Others.begin(), R.Others.end(), std::string()), R.Others.end());
+		std::sort(R.Others.begin(), R.Others.end()); // (as a set: Prune moves the last piece into a gone one's place, so the order is the room's)
+		R.Seeds = X.Seeds;
+		return R;
+	}
+
+	void Brass(const JsonRecipe& Book)
+	{
+		std::printf("\nD. The deck's brass: a twin 40 mm (AirGun, tied to her with AirGunShip) on a battleship's starboard side, 60 s at 120 rounds a minute a barrel\n");
+		const double CaseR = 0.5 * Book.Numbers.at("deck_cases.aa40.case_d_m");
+		{
+			const TwinRun L = Twin(Book, 60.0, 0.0, 0.0, 0.0, true);
+			std::printf("    level: %.0f cases lying at the end (%.0f at most at once), %.0f over the side, %.0f in the air\n", static_cast<double>(L.End.Lying), static_cast<double>(L.MostLying), static_cast<double>(L.End.Over), static_cast<double>(L.End.Air));
+			Check(L.Counted == 40 && L.MostLying <= 40 && L.End.Lying <= 42 && L.End.Over == 0, "level: the mount's pile holds 40 (its cap), none over the side", Say("%.0f counted lying (%.0f pieces, the oldest fading out), %.0f at most", L.Counted, L.End.Lying, L.MostLying));
+			Check(L.StillMoved < 0.001, "level: a case lying stays where it lies on her (30 s)", Say("moved %.4f m on her deck", L.StillMoved));
+			Check(L.RideErr < 0.01, "level: it rides her within 1 cm after 60 s", Say("%.5f m off where her pose puts it", L.RideErr));
+			Check(L.Spent == 0, "level: no aircraft-style cases from her guns (Spent off for her)", Say("%.0f Spent pieces", L.Spent));
+		}
+		{
+			const TwinRun H = Twin(Book, 60.0, 6.0, 0.0, 0.0, true);
+			std::printf("    heeled 6 deg to starboard, no coaming: %.0f lying, %.0f over the side now\n", static_cast<double>(H.End.Lying), static_cast<double>(H.End.Over));
+			Check(H.HighMoved < 0.3 && H.LowSide > 0.5 && H.RideErr < 0.01, "heeled 6 deg: every case lying 5 s has rolled to her low side", Say("the least roll from where it landed %.2f m to starboard; up the deck at most %.2f m (the throw's slide as it lands); ride %.5f m", H.LowSide, H.HighMoved, H.RideErr));
+			Check(H.End.Lying < 40, "heeled 6 deg, no coaming: cases go over the side", Say("%.0f lying of 240 fired", H.End.Lying));
+			const TwinRun C = Twin(Book, 60.0, 6.0, 0.0, 0.3, true);
+			Check(C.End.Over == 0 && C.Counted == 40 && C.AtCoaming < 0.001, "heeled 6 deg, a 0.3 m coaming: they stop against it, none over", Say("%.0f lying, %.0f over; the farthest %.4f m off the coaming", C.End.Lying, C.End.Over, C.AtCoaming));
+			const TwinRun S = Twin(Book, 40.0, 1.5, 0.0, 0.0, true);
+			const TwinRun M = Twin(Book, 40.0, 2.5, 0.0, 0.0, true);
+			Check(S.StillMoved < 0.001 && S.End.Over == 0, "heeled 1.5 deg (under stick_deg 2): a case lying stays put", Say("moved %.4f m in 30 s", S.StillMoved));
+			Check(M.StillMoved > 0.5 || M.End.Over > 0, "heeled 2.5 deg (over stick_deg 2): it rolls", Say("moved %.2f m in 30 s, %.0f over the side", M.StillMoved, M.End.Over));
+			const TwinRun Rl = Twin(Book, 60.0, 0.0, 6.0, 0.3, true);
+			Check(Rl.RideErr < 0.01 && Rl.End.Over == 0, "rolling 6 deg either way, a 0.3 m coaming: they ride her within 1 cm", Say("%.5f m; %.0f lying", Rl.RideErr, Rl.End.Lying));
+		}
+		{
+			// (Spent kept off for her guns alone: her twin tied, another gun near the eye not; and every other piece the same)
+			const TwinRun A = Twin(Book, 8.0, 0.0, 0.0, 0.0, true, true);
+			const TwinRun B = Twin(Book, 8.0, 0.0, 0.0, 0.0, false, true);
+			const TwinRun B1 = Twin(Book, 8.0, 0.0, 0.0, 0.0, false, false);
+			Check(A.Spent > 0 && A.Spent < B.Spent && B1.Spent > 0 && A.Spent == B.Spent - B1.Spent, "Spent off for her guns only: the untied gun still throws its cases", Say("%.0f Spent with her twin tied, %.0f untied (her twin's own %.0f)", A.Spent, B.Spent, B1.Spent));
+			for (size_t I = 0; I < std::min(A.Others.size(), B.Others.size()); ++I)
+			{
+				if (A.Others[I] != B.Others[I])
+				{
+					std::printf("    the first piece that differs, %d:\n      %s\n      %s\n", static_cast<int>(I), A.Others[I].c_str(), B.Others[I].c_str());
+					break;
+				}
+			}
+			Check(A.Others == B.Others && A.Seeds == B.Seeds && !A.Others.empty(), "  ...and every other piece of the guns' the same to the bit, the shared seed as it was", Say("%.0f pieces compared; the shared seed ", static_cast<double>(A.Others.size())) + (A.Seeds == B.Seeds ? "the same" : "MOVED"));
+		}
+		{
+			// (the caps: eight mounts, 60 s; and drawn within 40 to 60 m)
+			Battle X;
+			Open(X, Book);
+			X.ShipRide(0.0, 1, Pose(0.0, 0.0, 0.0));
+			int MostMount = 0;
+			for (int F = 0; F <= 60 * 4; ++F)
+			{
+				const double T = F / 4.0;
+				X.ShipRide(T, 1, Pose(T, 0.0, 0.0));
+				for (int M = 0; M < 8; ++M)
+				{
+					X.DeckBrass(T, 1, ToWorld(Pose(T, 0.0, 0.0), Vec(-60.0 + 15.0 * M, 10.0, 12.0)), Vec(-1.0, 0.0, 0.0), "aa40", 1);
+				}
+				LookAt(X, T, Pose(T, 0.0, 0.0).At, 30.0);
+			}
+			std::map<uint64_t, int> ByMount;
+			for (const Battle::CaseRec& R : X.DeckCases)
+			{
+				++ByMount[R.Mount];
+			}
+			for (const auto& M : ByMount)
+			{
+				MostMount = std::max(MostMount, M.second);
+			}
+			const CaseCount C = CountCases(X, 60.0);
+			Check(X.DeckCases.size() <= 200 && MostMount <= 40, "eight mounts for 60 s: at most 200 lying in all, 40 by a mount", Say("%.0f counted lying, %.0f at most by a mount (%.0f pieces still fading)", static_cast<double>(X.DeckCases.size()), MostMount, C.Lying - static_cast<double>(X.DeckCases.size())));
+		}
+		{
+			Battle X;
+			Open(X, Book);
+			const Battle::ShipPose Q = Pose(0.0, 0.0, 0.0);
+			X.ShipRide(0.0, 1, Q);
+			const Vec Mount = ToWorld(Q, Vec(0.0, -8.0, 12.0));
+			X.DeckBrass(0.0, 1, Mount, Vec(-1.0, 0.0, 0.0), "aa40", 10);
+			Battle E;
+			Open(E, Book);
+			E.ShipRide(0.0, 1, Q);
+			double Alpha[3] = {};
+			int Laid[3] = {}, Bare[3] = {};
+			const double Dist[3] = { 30.0, 50.0, 70.0 };
+			for (int K = 0; K < 3; ++K)
+			{
+				for (int F = 0; F <= 30; ++F)
+				{
+					X.ShipRide(5.0 + F / 30.0, 1, Q);
+					E.ShipRide(5.0 + F / 30.0, 1, Q);
+					Laid[K] = LookAt(X, 5.0 + F / 30.0, Mount, Dist[K], 0.0);
+					Bare[K] = LookAt(E, 5.0 + F / 30.0, Mount, Dist[K], 0.0);
+				}
+				for (const Bit& B : X.Bits)
+				{
+					Alpha[K] = std::max(Alpha[K], B.DeckMode == 3 ? B.Alpha : 0.0);
+				}
+			}
+			Check(std::fabs(Alpha[0] - 1.0) < 1e-9 && std::fabs(Alpha[1] - 0.5) < 0.05 && Alpha[2] == 0.0 && Laid[2] == Bare[2] && Laid[0] > Bare[0], "drawn whole within 40 m, half at 50, nothing at 70 (and nothing counted)", Say("opacity %.2f, %.2f, %.2f; pieces laid at 70 m %.0f, %.0f without them", Alpha[0], Alpha[1], Alpha[2], Laid[2], Bare[2]));
+			const CaseCount C = CountCases(X, 6.0);
+			double Long = 0.0, Wide = 0.0;
+			for (const Bit& B : X.Bits)
+			{
+				if (B.DeckMode == 3)
+				{
+					Long = std::max(Long, 2.0 * B.R0 * B.Stretch);
+					Wide = std::max(Wide, 2.0 * B.R0);
+				}
+			}
+			Check(C.Lying == 10 && std::fabs(Long - 0.311) < 1e-9 && std::fabs(Wide - 0.059) < 1e-9, "a 40 mm case is its true size: 0.311 m by 0.059 m", Say("%.3f m by %.3f m; %.0f lying", Long, Wide, C.Lying));
+			(void)CaseR;
+		}
+		{
+			// (the cost: 200 cases lying on eight mounts, drawn from 15 m)
+			Battle X;
+			Open(X, Book);
+			const Battle::ShipPose Q = Pose(0.0, 0.0, 0.0);
+			X.ShipRide(0.0, 1, Q);
+			for (int M = 0; M < 8; ++M)
+			{
+				X.DeckBrass(0.0, 1, ToWorld(Q, Vec(-8.0 + 2.0 * M, -8.0, 12.0)), Vec(-1.0, 0.0, 0.0), "aa40", 16);
+				X.DeckBrass(0.1, 1, ToWorld(Q, Vec(-8.0 + 2.0 * M, -8.0, 12.0)), Vec(-1.0, 0.0, 0.0), "aa40", 16);
+			}
+			for (int F = 0; F < 60; ++F)
+			{
+				X.ShipRide(2.0 + F / 30.0, 1, Pose(2.0 + F / 30.0, 0.0, 6.0, 0.0, 10.0));
+				LookAt(X, 2.0 + F / 30.0, ToWorld(Q, Vec(0.0, -8.0, 12.0)), 15.0);
+			}
+			const auto T0 = std::chrono::steady_clock::now();
+			int Shown = 0;
+			for (int F = 0; F < 100; ++F)
+			{
+				const double T = 4.0 + F / 30.0;
+				X.ShipRide(T, 1, Pose(T, 0.0, 6.0, 0.0, 10.0));
+				Shown = LookAt(X, T, Pose(T, 0.0, 6.0, 0.0, 10.0).At + Vec(0.0, -8.0, 12.0), 15.0);
+			}
+			const double Ms = Since(T0) / 100.0;
+			// (the same frames with her deck bare)
+			Battle E;
+			Open(E, Book);
+			E.ShipRide(0.0, 1, Q);
+			const auto T1 = std::chrono::steady_clock::now();
+			for (int F = 0; F < 100; ++F)
+			{
+				const double T = 4.0 + F / 30.0;
+				E.ShipRide(T, 1, Pose(T, 0.0, 6.0, 0.0, 10.0));
+				LookAt(E, T, Pose(T, 0.0, 6.0, 0.0, 10.0).At + Vec(0.0, -8.0, 12.0), 15.0);
+			}
+			const double Bare = Since(T1) / 100.0;
+			std::printf("    time: %d cases lying, the frame (ShipRide and Draw, %d fans) %.3f ms on this box, %.3f ms with her deck bare\n", static_cast<int>(X.DeckCases.size()), Shown, Ms, Bare);
+			bTimeFailed = bTimeFailed || Ms - Bare > 3.0;
+		}
+		JsonRecipe Without = Book;
+		for (auto It = Without.Numbers.begin(); It != Without.Numbers.end();)
+		{
+			It = It->first.rfind("deck_cases.", 0) == 0 ? Without.Numbers.erase(It) : std::next(It);
+		}
+		{
+			const TwinRun W = Twin(Without, 8.0, 0.0, 0.0, 0.0, true, true);
+			const TwinRun B = Twin(Book, 8.0, 0.0, 0.0, 0.0, false, true);
+			Check(W.End.Lying == 0 && W.Spent == B.Spent && W.Others == B.Others, "without the row: no deck cases, every gun's pieces as today", Say("%.0f lying; %.0f Spent as %.0f", W.End.Lying, W.Spent, B.Spent));
+		}
+		std::string Got;
+		Check(DiceUntouched(Book, [&](Battle& Z) { Z.ShipRide(0.0, 1, Pose(0.0)); Z.AirGunShip(11, 1); for (int F = 0; F < 40; ++F) { Z.ShipRide(F / 4.0, 1, Pose(F / 4.0)); Z.DeckBrass(F / 4.0, 1, ToWorld(Pose(F / 4.0), Vec(-20.0, -8.0, 12.5)), Vec(-1.0, 0.0, 0.0), "aa40", 2); } }, Got), "no draw on the shared seed", Got);
+	}
 }
 
 int main(int Argc, char** Argv)
@@ -534,6 +856,7 @@ int main(int Argc, char** Argv)
 	Drench(Book);
 	Wash(Book);
 	OilLane(Book);
+	Brass(Book);
 	std::printf("\n%d checks, %d failed\n%s\n", Checks, Failed, Failed == 0 ? "ALL CHECKS PASSED" : "SOME CHECKS FAILED");
 	std::printf("time: the cost checks %s\n", bTimeFailed ? "FAILED" : "passed");
 	return Failed == 0 && !bTimeFailed ? 0 : 1;

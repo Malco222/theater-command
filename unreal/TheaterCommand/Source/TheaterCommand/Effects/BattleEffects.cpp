@@ -839,6 +839,23 @@ void FBattleEffects::OilLanes(TArray<int32>& Ships) const
 	}
 }
 
+void FBattleEffects::DeckBrass(int32 ShipId, const FVector& Breech, const FVector& Away, const FString& Kind, int32 Count)
+{
+	const std::string Named_ = Named(Kind);
+	Do([=, this]()
+	{
+		Core.DeckBrass(Time(), ShipId, ToFx(Breech), ToFxWay(Away), Named_.c_str(), Count);
+	});
+}
+
+void FBattleEffects::AirGunShip(int32 Gun, int32 ShipId)
+{
+	Do([=, this]()
+	{
+		Core.AirGunShip(Gun, ShipId);
+	});
+}
+
 void FBattleEffects::SetWind(const FVector& MetresPerSecond)
 {
 	Do([=, this]()

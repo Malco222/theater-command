@@ -6190,7 +6190,12 @@ namespace TheaterFx
 			const Vec Way = (F->Dir + (Dir - F->Dir) * K).Unit(Dir);
 			const Vec By = F->Carry + (Carry - F->Carry) * K;
 			const int Which = F->Count++;
+			const size_t BeforeRound = Bits.size(); // (release 2: a gun on a ship throws its brass on her deck, DeckRound)
 			AirRound(F->Next, At, Way, By, Row, Mps, Which % Row.OneIn == 0, Which % Row.SmokeEvery == 0, D, Hue);
+			if (!GunShips.empty())
+			{
+				DeckRound(Gun, BeforeRound, F->Next, At, Way, Kind && *Kind ? Kind : "hmg");
+			}
 			if (Row.Hose > 0.0)
 			{
 				HoseLink(F->Next, *F, At, Way * Mps + By, Row, Hue, Gap); // (fx-air r2: the hose back to the last round)
@@ -16979,6 +16984,10 @@ namespace TheaterFx
 				continue;
 			}
 			const bool bCase = B.bThrown && B.Form == Bit::Shape::Plate;
+			if (bCase && B.DeckShip != 0 && !(B.Alpha > 0.004))
+			{
+				continue; // (release 2, a case on a ship's deck past deck_cases.gone_m: as LayCase would lay nothing of it)
+			}
 			if (bCase && (At - Eye.Eye).Length() > CaseFar)
 			{
 				// (a spent case past its own distance is neither counted nor laid: with the eye gone back to the overview,
