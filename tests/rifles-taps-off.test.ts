@@ -7,7 +7,7 @@ import { cancelBuild, corpsCost, corpsKinds, corpsList, orderCorps, specOf } fro
 import { offers } from '../src/campaign/arsenal';
 import { addCorps, createGame } from '../src/campaign/game';
 import { foldCorps } from '../src/campaign/fold';
-import { levyMen, menLeft } from '../src/campaign/manpower';
+import { levyMen, menLeft, raisable } from '../src/campaign/manpower';
 import { startOpen } from '../src/campaign/staff';
 import { breakUp, setBreakUp } from '../src/campaign/breakup';
 import { divisionsOf } from '../src/campaign/armies';
@@ -66,5 +66,19 @@ describe('far off', () => {
     expect(p.str).toBe(best.str);
     expect(c.str).toBe((men - best.str) / (d0 - 1));
     expect(Object.keys(g.flags).filter((k) => /^(sa|sam|rfa|rfo|rflm|rflc):/.test(k))).toEqual([]);
+  });
+
+  it("1. far off: the arsenal's floor of a tenth of a division stands as built (the design director's ruling 4 of 06:04Z is under the far switch)", () => {
+    const g = startOpen(createGame(3, 'GER'));
+    expect(g.flags.open).toBe(1);
+    // An order under a tenth of a division's worth is held to a tenth, as built: 0.097 in reserve does not fill 0.09.
+    for (const divs of [0, 0.05, 0.09, 0.1, 0.27, 0.5, 1, 3]) {
+      for (const left of [0, 0.03, 0.05, 0.0899, 0.09, 0.097, 0.0999, 0.1, 0.27, 0.6, 1, 2.99, 3, 7.5]) {
+        g.flags['mp:GER'] = left;
+        expect(raisable(g, 'GER', divs), `${divs} of ${left}`).toBe(Math.floor((left + 1e-9) / Math.max(0.1, divs)));
+      }
+    }
+    g.flags['mp:GER'] = 0.097;
+    expect(raisable(g, 'GER', 0.09)).toBe(0);
   });
 });
