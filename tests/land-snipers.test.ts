@@ -199,9 +199,9 @@ describe('sniper teams: a few men hold no frontage, and a target kept (the desig
     expect(at(f1)).toEqual(f10);
   });
 
-  type Peek = { gap(a: unknown, c: unknown): number; sniperSees(a: unknown, c: unknown, d: number): boolean; targetOf(u: unknown): { id: number } | null };
+  type Peek = { gap(a: unknown, c: unknown): number; sniperSees(a: unknown, c: unknown, d: number): boolean; targetOf(u: unknown): { id: number } | null; sniperPick(e: unknown): number };
 
-  it('a team keeps its target while it holds, though a better one stands nearer, and picks afresh once it is hidden', () => {
+  it('a team keeps its target while it holds, though one of its class stands nearer; it picks afresh once a better class is in reach or it is hidden', () => {
     const b = new LandBattle(withSnipers(practiceTicket(ground('plains'), { seed: 7 * 7919 + 13 })));
     b.hideOn();
     const peek = b as unknown as Peek;
@@ -213,13 +213,22 @@ describe('sniper teams: a few men hold no frontage, and a target kept (the desig
     }
     expect(u.team).toBe('snp');
     expect(peek.targetOf(u)?.id).toBe(x.id);
-    // Another enemy block set down halfway along the line to its target, in the open: nearer, as straight ahead, so the
-    // best by the pick's score.
-    const y = b.units.find((t) => t.side === x.side && t.id !== x.id && t.state !== 'gone' && !t.hid && t.kind !== 'fort')!;
+    // Another enemy block of the same class set down halfway along the line to its target: nearer, as straight ahead, so
+    // the best by the pick's score.
+    const y = b.units.find((t) => t.side === x.side && t.id !== x.id && t.state !== 'gone' && !t.hid && t.kind !== 'fort' && !t.team && t.kind !== 'arm')!;
     y.x = (u.x + x.x) / 2; y.y = (u.y + x.y) / 2; y.state = 'steady';
+    y.speed = x.speed; y.order = x.order ? { ...x.order } : null; y.pinSpent = x.pinSpent;
+    if (x.kind === 'arm' || x.team) { x.kind = y.kind; delete x.team; }
+    expect(peek.sniperPick(y)).toBe(peek.sniperPick(x));
     x.hid = true;
     expect(peek.targetOf(u)?.id).toBe(y.id);
     x.hid = undefined;
+    expect(peek.targetOf(u)?.id).toBe(x.id);
+    // Its target broken and running: a better class stands in reach, so it fails and the team scores afresh.
+    const st = x.state;
+    x.state = 'routing';
+    expect(peek.targetOf(u)?.id).toBe(y.id);
+    x.state = st;
     expect(peek.targetOf(u)?.id).toBe(x.id);
     // Its target hidden: it fails, and the team scores afresh.
     x.hid = true;
@@ -236,6 +245,8 @@ describe('sniper teams: a few men hold no frontage, and a target kept (the desig
       const peek = b as unknown as Peek;
       const last = new Map<number, number | undefined>(), went = new Map<number, string>();
       for (let k = 0; !b.over && k < 30000; k++) {
+        // The pick's classes as the tick's blows will read them, before it runs.
+        const cls = new Map(b.units.map((f) => [f.id, peek.sniperPick(f)]));
         b.step();
         for (const u of b.units) {
           if (u.team !== 'snp') continue;
@@ -248,10 +259,11 @@ describe('sniper teams: a few men hold no frontage, and a target kept (the desig
           if (was === undefined || u.engaged === undefined) continue;
           if (u.engaged === was) { kept++; continue; }
           if (u.order?.kind === 'attack' && u.order.target === u.engaged) continue;
-          // It changed target from one tick to the next: the old one must have failed (gone, hidden, out of reach or
-          // out of sight).
-          const e = b.units.find((t) => t.id === was)!, d = peek.gap(u, e);
-          if (e.state !== 'gone' && e.state !== 'withdrawn' && !e.hid && d <= reachOf(u) && peek.sniperSees(u, e, d)) held++;
+          // It changed target from one tick to the next: the old one must have failed (gone, hidden, out of reach, out
+          // of sight, or another in reach and seen in a better class of the pick).
+          const e = b.units.find((t) => t.id === was)!, d = peek.gap(u, e), k = cls.get(e.id)!;
+          const better = b.units.some((f) => f !== e && f.side === e.side && f.state !== 'gone' && f.state !== 'withdrawn' && !f.hid && Math.min(cls.get(f.id)!, peek.sniperPick(f)) < k && peek.gap(u, f) <= reachOf(u) && peek.sniperSees(u, f, peek.gap(u, f)));
+          if (e.state !== 'gone' && e.state !== 'withdrawn' && !e.hid && d <= reachOf(u) && peek.sniperSees(u, e, d) && !better) held++;
         }
       }
     }

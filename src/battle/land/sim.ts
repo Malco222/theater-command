@@ -3017,7 +3017,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (u.aim !== undefined) { const a = this.unit(u.aim); if (a && live(a) && a.side !== u.side && !a.hid && this.gap(u, a) <= reach) return a; }
     // A sniper team keeps its target while it still holds, alive, seen and in reach; it scores afresh only when the target
     // fails (the design director, 26 November 03:51Z: a choice kept, not remade each tick). A target it was sent at
-    // comes first, as in the pick below.
+    // comes first, as in the pick below. A kept target fails, too, once another in reach and seen stands in a better
+    // class of the pick (sniperPick: a tank closing up, foot halting, a block breaking): nearer or straighter ahead
+    // never unseats it, so the pick's order of classes stands.
     if (snp) {
       const holds = (id: number | undefined): LandUnit | null => {
         const e = id === undefined ? undefined : this.unit(id);
@@ -3025,8 +3027,18 @@ export class LandBattle implements BattleSim<LandUnit> {
         const d = this.gap(u, e);
         return d <= reach && this.sniperSees(u, e, d) ? e : null;
       };
-      const kept = (u.order?.kind === 'attack' ? holds(u.order.target) : null) ?? holds(u.engaged);
-      if (kept) return kept;
+      const sent = u.order?.kind === 'attack' ? holds(u.order.target) : null;
+      if (sent) return sent;
+      const kept = holds(u.engaged);
+      if (kept) {
+        const k = this.sniperPick(kept);
+        const better = this.units.some((e) => {
+          if (e === kept || e.side === u.side || !live(e) || e.hid || this.sniperPick(e) >= k) return false;
+          const d = this.gap(u, e);
+          return d <= reach && this.sniperSees(u, e, d);
+        });
+        if (!better) return kept;
+      }
     }
     // Hidden in the woods (release 2): it holds its fire till the enemy is close, unless it is sent in. A sniper team
     // fires from hiding at its whole reach, and may be found for it (snipeFromHiding).
