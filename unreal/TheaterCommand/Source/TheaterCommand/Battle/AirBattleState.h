@@ -164,6 +164,16 @@ struct FAirBattleState
 	 * yet read, 0 off (every frame as before), 1 on. OilFilmOn, the row "flyOilFilm": a strike's Part (fuel, oil, coolant)
 	 * handed to the kit's AirHit, and battle-fx-air-spurt.json laid on both kits. Looks only. */
 	int OilFilmOn = -1;
+	/** VapourOn, the row "flyVapour": the kit's contrails (VapourMove, VapourStop) for every aircraft over the day's trail
+	 * height, near shapes and far copies alike, and battle-fx-air-vapour.json laid on both kits (AAirBattle::Draw).
+	 * VapourKeys: the aircraft the kit was told trail on the last frame drawn (sorted), rebuilt every frame from that frame
+	 * alone (VapourWas the frame before, kept only to spare an allocation), so a clock sought back or a battle closed leaves
+	 * nothing stale: a key that trails no longer is stopped once. VapourEngines: each model's engines in its own frame
+	 * (AirShow::ShapeOf), asked once a battle (its B-17 follows the row b17Fine, read as the battle began). */
+	int VapourOn = -1;
+	std::vector<int> VapourKeys;
+	std::vector<int> VapourWas;
+	std::map<std::pair<std::string, bool>, std::vector<AirShow::Vec>> VapourEngines;
 
 	/** His side's own groups of one kind, as shown now. */
 	std::vector<int> MineOf(bool bFighter) const

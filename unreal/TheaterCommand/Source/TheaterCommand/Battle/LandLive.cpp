@@ -178,6 +178,14 @@ namespace
 		// its key begins "fly" only so that FLandLive::Start passes it over with the air battles' other switches. The air
 		// battle reads it once a battle (AirBattle.cpp's AirRowsRead); it is never sent to the land rules.)
 		{ TEXT("flyOilFilm"), TEXT("Oil and fuel at the hit"), TEXT("In the battle in the air, rounds that hole a fuel tank, an oil line or a radiator throw a spray of fuel, oil or glycol from the hole. Off: every strike on an aircraft looks the same."), TEXT("TheaterAirNoOilFilm"), false, TEXT("TheaterAirOilFilm") },
+		// (Contrails, release 2: Brian, 26 November 2026, more of a film's dramatic detail in the battles. On: every aircraft
+		// over the day's trail height (AirFeed's TrailHeight, by the place's weather zone and month) lays the effects kit's
+		// contrails, air_vapour, near or far, its look laid over the recipe as the air battle begins (battle-fx-air-vapour.json,
+		// on both of the battle's kits). Looks only: nothing the rules count reads it. Off until the Mac holds 45 fps with it
+		// and the art director has passed it, then this row flips to on in one line; -TheaterAirVapour turns it on for a run,
+		// -TheaterAirNoVapour off. NOT a fly-it-yourself row: its key begins "fly" only so that FLandLive::Start passes it
+		// over. The air battle reads it once a battle (AirBattle.cpp's AirRowsRead); it is never sent to the land rules.)
+		{ TEXT("flyVapour"), TEXT("Contrails"), TEXT("In the battle in the air, aircraft flying high enough on a cold day draw white vapour trails behind their engines, which hang in the sky and spread. Off: no vapour trails."), TEXT("TheaterAirNoVapour"), false, TEXT("TheaterAirVapour") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }
