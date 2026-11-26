@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of eaf580356 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 77218705b 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -51197,6 +51197,7 @@
     fuel: ["went down to strafe, but ran short of fuel and turned for home before it could do any harm.", "went down to strafe, but ran short of fuel and turned for home before they could do any harm."],
     caught: ["went down to strafe, but was caught by enemy fighters before it could do any harm.", "went down to strafe, but were caught by enemy fighters before they could do any harm."]
   };
+  var STRAFE_STAYED = "did not go down to strafe.";
   function strafeSection(names, why) {
     return names.length ? { heading: STRAFE_WORDS.heading, note: STRAFE_WORDS.note, names: [...names], none: "" } : { heading: STRAFE_WORDS.heading, note: "", names: [], none: STRAFE_WORDS.none[why] };
   }
@@ -51209,7 +51210,7 @@
     const short = end.short ?? [], fuel = end.fuel ?? [], caught = end.caught ?? [];
     const full = rep.strafed.filter((n) => !little.includes(n) && !fuel.includes(n) && !caught.includes(n));
     const say = (xs, words) => !xs.length ? "" : `${named4(xs)} ${typeof words === "string" ? words : words[xs.length === 1 ? 0 : 1]}`;
-    const lines2 = [say(full, "went down and strafed."), say(short, STRAFE_WORDS.short), say(fuel, STRAFE_WORDS.fuel), say(caught, STRAFE_WORDS.caught), say(little, STRAFE_WORDS.little)].filter(Boolean);
+    const lines2 = [say(full, "went down and strafed."), say(short, STRAFE_WORDS.short), say(fuel, STRAFE_WORDS.fuel), say(caught, STRAFE_WORDS.caught), say(little, STRAFE_WORDS.little), say(rep.strafeStayed ?? [], STRAFE_STAYED)].filter(Boolean);
     return lines2.length ? lines2.join(" ") : STRAFE_WORDS.nobody;
   }
   var strafeWatch = {};
@@ -63609,6 +63610,7 @@
     let strafed;
     let strafeLittle;
     let strafeEnd;
+    let strafeStayed;
     const bookGround = (hit) => {
       for (const x of hit.losses) {
         const f = g2.airFleets.find((y) => y.id === x.id);
@@ -63847,13 +63849,16 @@
         const passed = (x) => route === "fought" && !!battle?.strafedBy && Object.prototype.hasOwnProperty.call(battle.strafedBy, x.f.id);
         const end = {};
         const little = [];
+        const stayed = [];
         a.att.forEach((x, i) => {
           const went = down2.includes(x.f.id), why = ends[x.f.id];
-          if (went && (booked2(x) >= 1 || (why === "fuel" || why === "caught") && passed(x))) return;
-          if (why === "short" && !went || why === "fuel" || why === "caught") (end[why] ?? (end[why] = [])).push(att[i].fleet);
+          if (went && booked2(x) >= 1) return;
+          if (why === "short" && !went || (why === "fuel" || why === "caught") && !(went && passed(x))) (end[why] ?? (end[why] = [])).push(att[i].fleet);
           else if (went) little.push(att[i].fleet);
+          else if (route === "fought" && !why && x.ftr > 0) stayed.push(att[i].fleet);
         });
         if (Object.keys(end).length) strafeEnd = end;
+        if (stayed.length) strafeStayed = stayed;
         if (little.length) strafeLittle = { names: little, ...little.length === strafed.length && !end.fuel && !end.caught && !(through2 > 0) ? { alone: true } : {} };
       }
       let divs = 0;
@@ -63965,6 +63970,7 @@
     if (a.lights) rep.lights = { ...a.lights };
     if (strafeLittle) rep.strafeLittle = strafeLittle;
     if (strafeEnd) rep.strafeEnd = strafeEnd;
+    if (strafeStayed) rep.strafeStayed = strafeStayed;
     g2.airReports.push(rep);
     storyAir(g2, m === "fleet" ? "strike" : m === "harbour" || m === "town" || m === "airfield" ? "bomb" : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, guns: guns2, ...battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {} });
     if (nicknamesOn(g2)) airRaidFlown(g2, m, { odds: rep.odds, bombers: a.B, bombed, E: a.E, D: a.D, sky: sky || held3 }, a.att.map((x, i) => ({ f: x.f, side: att[i] })), a.def.map((x, i) => ({ f: x.f, side: def[i] })), sea ? -1 : target);
@@ -106599,7 +106605,7 @@
         s.p = 0;
         s.k = this.carries(u);
         const len2 = dist(s.from[0], s.from[1], s.to[0], s.to[1]);
-        const words = s.done === 0 ? told(this.called(u), `{N} [goes|go] down to strafe the troops at ${this.place.name}.`) : "";
+        const words = s.done === 0 ? told(this.called(u), `{N} [goes|go] down to strafe the troops at ${placeName2(this.place.name)}.`) : "";
         this.say("air:strafe", u, words, { from: [Math.round(s.from[0]), Math.round(s.from[1])], to: [Math.round(s.to[0]), Math.round(s.to[1])], width: S3.width, dur: Math.round(len2 / SKY.speed.ftr / SKY.scale * 10) / 10 });
         return;
       }
@@ -107199,7 +107205,7 @@
         if (this.held.has(box) || this.heldTold.has(box)) continue;
         this.heldTold.add(box);
         const b = this.unit(box), d = this.unit(by2);
-        this.shownSay("air:hold", b, `The guns of ${this.place.name} hold their fire as ${told(this.called(d), "{n} [goes|go] in on")} ${subjectOf(this.called(b)).whom}.`, { box, by: by2, hold: true });
+        this.shownSay("air:hold", b, `The guns of ${placeName2(this.place.name)} hold their fire as ${told(this.called(d), "{n} [goes|go] in on")} ${subjectOf(this.called(b)).whom}.`, { box, by: by2, hold: true });
       }
       for (const [box, by2] of this.held) {
         if (now.has(box) || this.openTold.has(box)) continue;
@@ -107208,7 +107214,7 @@
         this.openTold.add(box);
         const d = this.unit(by2);
         const how = this.beats.has(box) ? "{N} [pulls|pull] away, and the" : "{N} [breaks|break] off, and the";
-        this.shownSay("air:hold", b, `${d ? told(this.called(d), how) : "The"} guns of ${this.place.name} open up again on ${subjectOf(this.called(b)).whom}.`, { box, by: by2, hold: false, ...this.beats.has(box) ? { between: true } : {} });
+        this.shownSay("air:hold", b, `${d ? told(this.called(d), how) : "The"} guns of ${placeName2(this.place.name)} open up again on ${subjectOf(this.called(b)).whom}.`, { box, by: by2, hold: false, ...this.beats.has(box) ? { between: true } : {} });
       }
       this.held = now;
     }
@@ -116855,7 +116861,7 @@
       const o = see.own ? arsenalOffers(s, id).find((x) => x.key === "work:aa" && x.at === id) : void 0;
       const short = o && up && o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString("en")} short: the treasury holds ${inHand(s.nations[me].pp).toLocaleString("en")}.` : "";
       const base = standingGuns(), n = (x) => x.toLocaleString("en-US");
-      const words = guns2.all ? `About ${n(guns2.all)} guns built round ${townName(r)}, ${n(guns2.heavy)} of them heavy, and the ${n(base)} light guns every town has.` : `Only the ${n(base)} light guns every town has.`;
+      const words = guns2.all ? `About ${n(guns2.all)} guns built round ${placeName2(townName(r))}, ${n(guns2.heavy)} of them heavy, and the ${n(base)} light guns every town has.` : `Only the ${n(base)} light guns every town has.`;
       return {
         level,
         heavy: guns2.heavy,

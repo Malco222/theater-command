@@ -23,6 +23,7 @@ import { bomberGuns, fighterGuns, type GunKind } from './guns';
 import type { AirAim, AirHitWho, AirShown, AirJob, AirOutcome, AirPlace, AirUnit, BomberTold, Fall, FallHow, Straggler } from './types';
 import type { BomberSeat } from '../../campaign/types';
 import { afterWords, bombWorth, railChanceOf, ruinChanceOf, staffHow, troopCutOf } from '../../campaign/airfought';
+import { placeName } from '../../campaign/game';
 import type { VictoryLevel } from '../../core/ticket';
 export { peopleOf } from '../../campaign/airfought';
 
@@ -1065,7 +1066,7 @@ export class AirSim implements BattleSim<AirUnit> {
       if (u.band !== 0 || u.to !== 0 || dist(u.x, u.y, s.from[0], s.from[1]) > 1) return;
       s.run = true; s.p = 0; s.k = this.carries(u);
       const len = dist(s.from[0], s.from[1], s.to[0], s.to[1]);
-      const words = s.done === 0 ? told(this.called(u), `{N} [goes|go] down to strafe the troops at ${this.place.name}.`) : '';
+      const words = s.done === 0 ? told(this.called(u), `{N} [goes|go] down to strafe the troops at ${placeName(this.place.name)}.`) : '';
       this.say('air:strafe', u, words, { from: [Math.round(s.from[0]), Math.round(s.from[1])], to: [Math.round(s.to[0]), Math.round(s.to[1])], width: S.width, dur: Math.round((len / SKY.speed.ftr / SKY.scale) * 10) / 10 });
       return;
     }
@@ -1704,7 +1705,7 @@ export class AirSim implements BattleSim<AirUnit> {
       if (this.held.has(box) || this.heldTold.has(box)) continue;
       this.heldTold.add(box);
       const b = this.unit(box)!, d = this.unit(by)!;
-      this.shownSay('air:hold', b, `The guns of ${this.place.name} hold their fire as ${told(this.called(d), '{n} [goes|go] in on')} ${subjectOf(this.called(b)).whom}.`, { box, by, hold: true });
+      this.shownSay('air:hold', b, `The guns of ${placeName(this.place.name)} hold their fire as ${told(this.called(d), '{n} [goes|go] in on')} ${subjectOf(this.called(b)).whom}.`, { box, by, hold: true });
     }
     for (const [box, by] of this.held) {
       if (now.has(box) || this.openTold.has(box)) continue;
@@ -1714,7 +1715,7 @@ export class AirSim implements BattleSim<AirUnit> {
       this.openTold.add(box);
       const d = this.unit(by);
       const how = this.beats.has(box) ? '{N} [pulls|pull] away, and the' : '{N} [breaks|break] off, and the';
-      this.shownSay('air:hold', b, `${d ? told(this.called(d), how) : 'The'} guns of ${this.place.name} open up again on ${subjectOf(this.called(b)).whom}.`, { box, by, hold: false, ...(this.beats.has(box) ? { between: true } : {}) });
+      this.shownSay('air:hold', b, `${d ? told(this.called(d), how) : 'The'} guns of ${placeName(this.place.name)} open up again on ${subjectOf(this.called(b)).whom}.`, { box, by, hold: false, ...(this.beats.has(box) ? { between: true } : {}) });
     }
     this.held = now;
   }

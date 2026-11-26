@@ -1608,7 +1608,7 @@ function glanceAir(s: Game, id: number, see: GlanceSight, up: boolean) {
     // light guns and the standing ones: a bare town says its 60, never 0. heavy is the built heavy guns, as it was.)
     const base = standingGuns(), n = (x: number): string => x.toLocaleString('en-US');
     const words = guns.all
-      ? `About ${n(guns.all)} guns built round ${townName(r)}, ${n(guns.heavy)} of them heavy, and the ${n(base)} light guns every town has.`
+      ? `About ${n(guns.all)} guns built round ${placeName(townName(r))}, ${n(guns.heavy)} of them heavy, and the ${n(base)} light guns every town has.`
       : `Only the ${n(base)} light guns every town has.`;
     return {
       level, heavy: guns.heavy, light: Math.max(base, guns.light), base, words, stop: Math.round(gunsStop(level) * 100), going,

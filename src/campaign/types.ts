@@ -1659,12 +1659,20 @@ export interface AirReport {
    * ended short with less than a fighter's weight on the troops, by what ended it as the battle knows it, named and
    * ordered as the raid's groups: `short`, a group with the reach that bingo turned for home before it went down; `fuel`,
    * one that went down and bingo turned for home; `caught`, one that went down and enemy fighters caught; `fuel` and
-   * `caught` only for a group that had finished no pass (one that had is among those that strafed: the UI director, 26
-   * November 2026 02:06Z, answer 4). A group is in
+   * `caught` only for a group that had finished no pass (one that had is read by the weight of its passes: among those
+   * that strafed with a fighter's weight or more, in strafeLittle with less; the UI director, 26 November 2026 03:59Z,
+   * refining her answer 4 of 02:06Z). A group is in
    * one list only, and then not in strafeLittle. Written only with the rule on and only when not empty: a report without
    * it (the switch off, an older save, a raid settled or handed to the staff, or none such) is as before.
    */
   strafeEnd?: { short?: string[]; fuel?: string[]; caught?: string[] };
+  /**
+   * With the strafers' rule on, a raid fought out (the UI director, 26 November 2026 03:59Z, 2): the raid's fighter groups
+   * that did not go down and have no strafeEnd of their own, named and ordered as the raid's groups, for the plain line
+   * after the cause lines ("{A} did not go down to strafe."). Written only with the rule on and only when not empty: a
+   * report without it (the switch off, an older save, a raid settled or handed to the staff, or none such) is as before.
+   */
+  strafeStayed?: string[];
 }
 
 /** Ruling 236.2: how a battle for the sky over one province stands, for the side fighting for it. */

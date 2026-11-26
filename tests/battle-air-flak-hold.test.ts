@@ -8,7 +8,7 @@
 // them down moves.
 import { afterEach, describe, expect, it } from 'vitest';
 import { planRaid, raidTargets, type RaidKind } from '../src/campaign/airwar';
-import { createGame, setWar } from '../src/campaign/game';
+import { createGame, placeName, setWar } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import type { Game } from '../src/campaign/types';
 import type { FieldEvent, FieldTicket } from '../src/battle/core/types';
@@ -241,7 +241,7 @@ describe('the guns hold their fire for their own fighters', () => {
           const box = s.unit(x.box)!, by = s.unit(x.by)!;
           expect(box.air).toBe('bmr');
           expect([by.side, by.air]).toEqual(['def', 'ftr']);
-          expect(e.text).toContain(`guns of ${tk.place.name}`);
+          expect(e.text).toContain(`guns of ${placeName(tk.place.name)}`);
           if (x.hold) { holds++; expect(e.text).toMatch(/^The guns of .+ hold their fire as .+ (goes|go) in on .+\.$/); }
           else {
             opens++;
