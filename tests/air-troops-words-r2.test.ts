@@ -747,3 +747,45 @@ describe('a settled raid names the groups that did not go down, as a fought one 
     expect(saveGame(c.g).includes('"strafeStayed"')).toBe(false);
   });
 });
+
+// The UI director, 26 November 2026 05:17Z, round eight, 4: "One form for both, the named one: "Groupement de Chasse 1,
+// Groupement de Chasse 2 and Groupement de Chasse 3 did not go down to strafe." "No fighter group went down to strafe."
+// only where there is no group to name."
+describe('one form for both, the named one (the UI director, 26 Nov 05:17Z, round eight, 4)', () => {
+  it('her example: settled, the defence too strong for any group to go down, all three named in the raid\'s order', () => {
+    on();
+    const c = saar(0, 'three');
+    const d = c.g.airFleets.find((f) => f.id === 3)!;
+    d.ftr = 5000; d.est.ftr = Math.max(d.est.ftr, 5000);
+    const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+    expect(r.strafed).toEqual([]);
+    expect(strafedLine(r, 'FRA')).toBe(`Groupement de Chasse 1, Groupement de Chasse 2 and Groupement de Chasse 3 ${STRAFE_STAYED}`);
+    expect(strafedLine(r, 'FRA').includes(NOBODY)).toBe(false);
+  });
+  it('none went down, one group to name: the named form, settled and fought alike', () => {
+    on();
+    const s = saar(0, 'far');
+    const settled = launchRaid(s.g, 'ground', s.target, s.ids, 'FRA')!;
+    const f = saar(0, 'far');
+    const sim = airBattle(airTicket(f.g, 'ground', f.target, f.ids, 'FRA').ticket!) as AirSim;
+    fight(sim);
+    const fought = launchRaid(f.g, 'ground', f.target, f.ids, 'FRA', foughtAir(sim.outcome()))!;
+    for (const r of [settled, fought]) {
+      expect(r.strafed).toEqual([]);
+      expect(strafedLine(r, 'FRA')).toBe(`Groupement de Chasse 1 ${STRAFE_STAYED}`);
+    }
+  });
+  it('"No fighter group went down to strafe." only where there is no group to name: the bombers alone, settled and fought', () => {
+    on();
+    const s = saar(0, 'alone');
+    const settled = launchRaid(s.g, 'ground', s.target, s.ids, 'FRA')!;
+    const f = saar(0, 'alone');
+    const sim = airBattle(airTicket(f.g, 'ground', f.target, f.ids, 'FRA').ticket!) as AirSim;
+    fight(sim);
+    const fought = launchRaid(f.g, 'ground', f.target, f.ids, 'FRA', foughtAir(sim.outcome()))!;
+    for (const r of [settled, fought]) {
+      expect('strafeStayed' in r).toBe(false);
+      expect(strafedLine(r, 'FRA')).toBe(NOBODY);
+    }
+  });
+});
