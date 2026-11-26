@@ -550,6 +550,14 @@ namespace
 		Check("pins: today's smoke hour is white (the kit's one Tick given HourShade: FLinearColor::White in seed mode, Day.HourLight in field mode)",
 			TickN == 1 && Shaded == 1 && CountOf(Sea, ShadeLine) == 1 && CountOf(Sea, "HourShade") == 2,
 			std::to_string(TickN) + " Tick line(s), " + std::to_string(CountOf(Sea, "HourShade")) + " HourShade");
+		// (step 11: the turrets' flash rows are today's, howitzer from 180 mm and tank_gun below, unless field mode is on
+		// and the kit has the sea's lamps, the effects head's naval rows; the kit's lamp rule asked in field mode only)
+		const std::string RowLine = "const TCHAR* Gun = bFieldDay && SeaParts::HasSeaLamps<FBattleEffects>() ? SeaParts::NavalRow(E.Size, E.What) :\n"
+			"\t\t\t\t\tE.Size >= 180.0 ? TEXT(\"howitzer\") : TEXT(\"tank_gun\");";
+		const std::string AskLine = "if (bFieldDay)\n\t\t{\n\t\t\tSeaParts::AskSeaLamps(Effects.Get());";
+		Check("pins: the turrets' rows are today's (howitzer from 180 mm, tank_gun below) and the kit's lamp rule is not asked, unless field mode",
+			CountOf(Sea, RowLine) == 1 && CountOf(Sea, AskLine) == 1 && CountOf(Sea, "AskSeaLamps(") == 2 && CountOf(Sea, "TEXT(\"howitzer\")") == 1,
+			std::to_string(CountOf(Sea, RowLine)) + " row line, " + std::to_string(CountOf(Sea, "AskSeaLamps(")) + " AskSeaLamps");
 		// (every eye height the shots name, against PlannedEyes)
 		std::set<double> Named;
 		// (release 2's overview, step 13: "SkyWeather ? SkyWeather->OverviewHeight() : 1300.0", its fallback read here and

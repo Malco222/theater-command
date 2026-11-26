@@ -410,6 +410,9 @@ Step 11 wired (the storms' thread, 25 November 2026, on 7df10413: the light core
     AirShowTroops.cpp and AirMarks.cpp where present (none here: every count as above); graph_pin reads a lambda
     builder on an unpinned entry (72 checks); pearl_pin's campaign check takes PEARL_CAMPAIGN=report on an assembled
     build (here, by default: 38 pins, 0 changed, the three files as at 2f89c8e5); pearl_pin_test 13 checks, 0 failed
+  The effects kit's sea lamps (effects head 884c03b7) asked in field mode, where the kit has them (none on this branch:
+    today's rows and lamps): sea_day_test 83 checks, 0 failed (g++ and clang++; the new pin holds today's turret rows,
+    howitzer from 180 mm and tank_gun below, and the lamp rule asked only in field mode)
 
 Tools/air_show/run.sh (Pearl's guard beside pearl_pin): 3 recordings ALL CHECKS PASSED; airscrews 18 aircraft, 0 failed; sea face all checks pass
 
