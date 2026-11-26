@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of be8bb2703 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 55f4d39e1 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -59970,7 +59970,8 @@
     }
     if (weatherOn(g2)) {
       const z = skyZone(g2, kind, target);
-      const line = skyRaidLine(g2, z, cityDefences(g2) ? placeName2(place3) : place3);
+      const shipped = skyRaidLine(g2, z, place3);
+      const line = shipped && cityDefences(g2) ? shipped.replace(`over ${place3}`, () => `over ${theWords(place3, "over ")}`) : shipped;
       if (line) plan.sky = line;
       if (skyOf(g2, z) === "closed") {
         plan.why = `Closed sky this month: nothing flies over ${zoneName(z)}.`;
