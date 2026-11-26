@@ -319,14 +319,17 @@ export interface AirAim {
  * - 'hold', on a fighter group whose job is a patrol, flying, that is making for no enemy this tick: the patrol's
  *   point, where it is or is bound for (its job's x, y). Absent the tick it makes for an enemy or is given a quarry.
  *   A scrambled group patrols the target while it climbs, so it may carry 'rise' and 'hold' at once.
- * - 'bounce', on a group that has dived from above on an enemy (top cover coming down; the dive that ends a staff's
- *   climb is the same move): 'from' its height the view before the dive, 'to' the band it dived to (one band lower:
- *   groups more than a band apart never meet), 'at' the view second of the dive. The rules change its height at once,
- *   in that view (sim.ts touch()): they hold no time for the drop itself, so 'over' is 0, always; how to spread the
- *   drop is the 3D's. What the rules do count is the dive's edge, SKY.edge.bounceFor air seconds of "diving from a
- *   higher band" in which it strikes first: 'edge' is that length on the view's clock and 'left' what is left of it.
- *   Present from the dive while that edge lasts; a dive that earns no edge (on fighters down on their passes on the
- *   troops) shows only in the view of the dive, with 'edge' and 'left' 0.
+ * - 'bounce', on a group that has dived from above on an enemy (top cover coming down, or the dive that ends a
+ *   staff's climb): 'from' its height the view before the dive, 'to' the band it dived to (one band lower: groups
+ *   more than a band apart never meet), 'at' the view second of the dive. The rules change its height at once, in
+ *   that view (sim.ts touch()): they hold no time for the drop itself, so 'over' is 0, always; how to spread the
+ *   drop is the 3D's. 'edge' and 'left' are the rules' own clock for the dive (u.bounce): SKY.edge.bounceFor air
+ *   seconds on the view's clock, and what is left of it. For top cover that clock is the time it strikes harder,
+ *   "diving from a higher band". For the dive that ends a staff's climb the clock runs the same, but the rules
+ *   price that dive level for as long as the group is still on its staff's climb (drawn, never priced: place_()),
+ *   so there 'edge' and 'left' say how long the dive is told, not an edge in the fight. Present from the dive
+ *   while the clock runs; a dive that starts no clock (on fighters down on their passes on the troops) shows only
+ *   in the view of the dive, with 'edge' and 'left' 0.
  */
 export interface AirShown {
   fight?: { id: number; x: number; y: number; vx: number; vy: number; groups: number[] };
