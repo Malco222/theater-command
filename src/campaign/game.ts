@@ -55,7 +55,7 @@ import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, rai
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled, willBurn } from './prizes';
 import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, shoreOf, worldOn } from './world';
 import { FAR_STAGE } from './stage';
-import { formedLine, tellWait, theOf, waitedOn } from './arrivalwaits';
+import { formedLine, rowDone, tellWait, theOf, waitedOn } from './arrivalwaits';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -4831,7 +4831,7 @@ export function carriedRows(g: Game): void {
   rows.forEach((row, i) => {
     const o = row[6] ?? {};
     if (!o.carried || g.flags[`sent:${i}`]) return;
-    if (rows.some((r, j) => r[2] === o.carried && r[1] === row[1] && g.flags[`sent:${j}`] === 1)) g.flags[`sent:${i}`] = 2;
+    if (rows.some((r, j) => r[2] === o.carried && r[1] === row[1] && g.flags[`sent:${j}`] === 1)) { g.flags[`sent:${i}`] = 2; rowDone(g, i); }
   });
 }
 
@@ -5302,6 +5302,7 @@ function offerStands(g: Game, nat: string, row: any[], i: number): string | null
   if (!gone) { g.flags[offerCount(i)] = Math.max(g.flags[offerCount(i)] ?? 0, rowTakes(g, nat, row[6] ?? {}).length); return null; }
   offerShut(g, i);
   g.flags[`sent:${i}`] = 2;
+  rowDone(g, i);
   g.flags[unmadeKey(i)] = g.turn;
   headline(g, 'info', gone, nat);
   return gone;
@@ -5556,6 +5557,7 @@ export function declineOffer(g: Game, id: number): boolean {
   if (nat === null || !row || row[1] !== nat || !offerOpen(g, nat, id)) return false;
   offerShut(g, id);
   g.flags[`sent:${id}`] = 2;
+  rowDone(g, id);
   g.flags[unmadeKey(id)] = g.turn;
   return true;
 }
@@ -5674,7 +5676,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
         // was then struck for its half year, while the player's offer of it lapsed at once. A war not yet begun is
         // waited for as before, by both. Read on the far side's rows alone, `farRow`: nothing on the old chart.)
         if (!warOn(g, o.war)) {
-          if (farRow(g, nat, row) && warOver(g, i, o.war)) { g.flags[`sent:${i}`] = 2; if (hisOffers(g, nat) && row[1] === nat) g.flags[unmadeKey(i)] = g.turn; }
+          if (farRow(g, nat, row) && warOver(g, i, o.war)) { g.flags[`sent:${i}`] = 2; rowDone(g, i); if (hisOffers(g, nat) && row[1] === nat) g.flags[unmadeKey(i)] = g.turn; }
           return;
         }
         // And it waits for its own country to be in that war: no army turns up in a war its country is not fighting.
@@ -5683,7 +5685,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
         // saved before ruling 229 counts it from the month it is loaded, and loses none of it for being late. A
         // country overrun before its call-up was ever counted never had it: freed, it returns with its liberation
         // corps alone, ruling 229, 2b.)
-        if (fromWar && g.flags[`due:${i}`] === undefined && g.nations[nat].fellOn) { g.flags[`sent:${i}`] = 2; return; }
+        if (fromWar && g.flags[`due:${i}`] === undefined && g.nations[nat].fellOn) { g.flags[`sent:${i}`] = 2; rowDone(g, i); return; }
         due = g.flags[`due:${i}`] ??= fromWar ? Math.max(warBegan(g, o.war), g.turn - 1) + o.after : g.turn;
         if (g.turn < due) return;
       }
@@ -5747,7 +5749,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // formation he did not make, whose corps he kept, never comes. Ruling B8; the mending of 25 November 2026:
     // `sourceAsked`, `menKept`.)
     if (take !== i && sourceAsked(g, nat, o)) { g.flags[`wait:${i}`] = g.turn; return; }
-    if (take !== i && row[1] === nat && menKept(g, nat, o)) { g.flags[`sent:${i}`] = 2; g.flags[unmadeKey(i)] = g.turn; return; }
+    if (take !== i && row[1] === nat && menKept(g, nat, o)) { g.flags[`sent:${i}`] = 2; rowDone(g, i); g.flags[unmadeKey(i)] = g.turn; return; }
     const was = waitedOn(g, i); // (the telling: what it waited on, read before its corps are taken: arrivalwaits.ts)
     const waited = g.flags[`wait:${i}`];
     if (waited !== undefined) due = Math.max(due, waited + 1);
@@ -5756,6 +5758,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     if (late || (o.war && !warOn(g, o.war)) || (o.until && g.turn >= o.until)) {
       if (late) {
         g.flags[`sent:${i}`] = g.flags.open === 1 ? 2 : 1;
+        rowDone(g, i);
         const at = g.byName[row[5]];
         struckWatch.tell?.({ turn: g.turn, due, nat, name: row[2], kind: row[3], divs: row[4], place: row[5], owner: at?.owner ?? null, holder: at?.ctrl ?? null, to: reg?.name ?? null, toHolder: reg?.ctrl ?? null, war: !!o.war && !warOn(g, o.war), until: !!o.until && g.turn >= o.until, ifLost: !!o.ifLost, joins: o.joins ?? null, hold: !!o.hold });
       }
@@ -5773,7 +5776,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // still holds any place named, the formations it would be made from fight on where they stand.
     if (o.ifLost && (o.ifLost as string[]).some((nm) => { const r = g.byName[nm]; return !r || allied(g, nat, r.ctrl); })) return;
     // (A row that stands in for another, in a war where that other has already landed, never comes: ruling 229, 1c.)
-    if (o.unless && g.flags.open === 1 && rowLanded(g, o.unless)) { g.flags[`sent:${i}`] = 2; return; }
+    if (o.unless && g.flags.open === 1 && rowLanded(g, o.unless)) { g.flags[`sent:${i}`] = 2; rowDone(g, i); return; }
     // (The far side: a row that would take corps of the player's off the board is an offer, never a silent removal:
     // ruling B8 of 25 November 2026. It is made in the month the rule would have formed the row, stands open until he
     // answers, and taken (`take`) it does what the rule always did. A computer's rows are as they were.)
@@ -5782,6 +5785,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     if (old) {
       if (asks) { offerMade(g, nat, i, o); return; }
       g.flags[`sent:${i}`] = 1;
+      rowDone(g, i);
       // Corps broken up to find the divisions are struck off, and a corps only lent to the campaign is remembered.
       if (Array.isArray(o.from) && !own) for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
       if (o.until) g.flags[`lent:${i}`] = old.id;
@@ -5830,7 +5834,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
       g.flags[`came:${i}`] = g.turn;
       ((setup as any).expeditions as any[] ?? []).forEach((r2, j) => {
         if (r2[6]?.unless !== row[2] || r2[1] !== nat) return;
-        if (!g.flags[`sent:${j}`]) g.flags[`sent:${j}`] = 2;
+        if (!g.flags[`sent:${j}`]) { g.flags[`sent:${j}`] = 2; rowDone(g, j); }
         if (!laid) return;
         const x = g.corps.find((u) => u.nat === nat && !u.dead && u.name === r2[2]);
         if (!x) return;
@@ -5851,6 +5855,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
       // broken up to find its divisions, and it found them elsewhere. Regrouping what stands is the staff's own business.)
       if (!formsAny(claims, n)) {
         g.flags[`sent:${i}`] = 1;
+        rowDone(g, i);
         keepCounted(claims);
         const share = takenShare(g, i);
         if (share !== undefined) { delete g.flags[`takecut:${i}`]; if (g.flags[`cut:${i}`] === share) delete g.flags[`cut:${i}`]; cutStays(share); }
@@ -5864,6 +5869,9 @@ function expeditions(g: Game, nat: string, take?: number): void {
     if (!o.join && placed(g, reg, nat).filter((u) => u.kind !== 'eng').length >= STACK) return;
     if (asks) { offerMade(g, nat, i, o); return; }
     g.flags[`sent:${i}`] = 1;
+    // (The telling's three flags go once the formed headline below has read them: `formedLine` calls arrivalwaits.ts
+    // `rowDone`, as every other place that sends or strikes a row does. The design director's answer 3 of 00:43Z, 26
+    // November 2026: "Clear the telling's three flags where the row is sent or struck (no dead data).")
     // (The body of a row brought ashore for a lost posting takes nobody off the board: the corps it would have
     // taken stay where they stand under their own names. Rider b642 part 2. Nor does the body of a row whose corps
     // stand on a live front: `own`, above.)

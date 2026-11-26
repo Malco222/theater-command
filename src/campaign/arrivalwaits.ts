@@ -14,7 +14,8 @@
  *   rowAt:<i>     the province the row is due in (where it forms, after `rowPlace`), for the cards' readers
  *   rowFront:<i>  which of the row's named corps were at the front in the latest month it waited, a bit mask over the
  *                 order of its `from`; none where it waited only for another row. The formed headline names them.
- * All three are cleared the month the row forms. With the switch off none is ever written and nothing prints.
+ * All three are cleared wherever the row is sent or struck (`rowDone`). With the switch off none is ever written and
+ * nothing prints.
  */
 import setup from '../../data/campaign/setup-1939.json';
 import { turnToDate } from '../core/ticket';
@@ -98,6 +99,16 @@ export function tellWait(g: Game, i: number, at: Region | undefined): void {
 
 // ---- 4 and 5. The month it forms -----------------------------------------------------------------------------------
 
+/**
+ * The row is sent or struck (game.ts sets `sent:<i>`): the telling's three flags go with it, so no dead data stays in
+ * the save. The design director's answer 3 of 00:43Z, 26 November 2026: "Clear the telling's three flags where the row
+ * is sent or struck (no dead data)." Called at every place game.ts sets `sent:<i>` for a row, after the formed headline
+ * has read them (`formedLine` calls it itself); a row that never waited has none, and nothing changes.
+ */
+export function rowDone(g: Game, i: number): void {
+  delete g.flags[toldKey(i)]; delete g.flags[atKey(i)]; delete g.flags[frontKey(i)];
+}
+
 /** What a row that waited on the front is formed from, read before its corps are taken (game.ts `expeditions`). */
 export interface WaitedOn { count: number; one: string | null; front: string[] }
 
@@ -123,7 +134,7 @@ export function waitedOn(g: Game, i: number): WaitedOn | null {
  */
 export function formedLine(g: Game, i: number, was: WaitedOn | null, own: boolean, c: Corps, reg: Region, bySea: boolean): { alone: string | null; after: string | null } | null {
   const row = ROWS()[i];
-  delete g.flags[toldKey(i)]; delete g.flags[atKey(i)]; delete g.flags[frontKey(i)];
+  rowDone(g, i);
   if (!row || !g.human || row[1] !== g.human) return null;
   const verb = bySea ? 'landed at' : 'arrived in';
   const head = `${named(c.name, true)} has ${verb} ${reg.name}`;
