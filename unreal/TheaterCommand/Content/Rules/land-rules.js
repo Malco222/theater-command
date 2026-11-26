@@ -13350,6 +13350,8 @@
     if (why === DUG) return `${name} is dug in where it stands.`;
     if (why === "Outside your ground.") return `${name} cannot go there: it would stand outside your ground.`;
     if (why === "Another block stands there.") return `${name} cannot go there: another unit already stands there.`;
+    if (why === "Off the field.") return `${name} cannot go there: it would stand off the field.`;
+    if (why === "Not on water, a bridge or ground it cannot stand on.") return `${name} cannot go there: it cannot stand on water, a bridge or ground like that.`;
     return `${name} cannot go there. ${why}`;
   }
   globalThis.TC = {
