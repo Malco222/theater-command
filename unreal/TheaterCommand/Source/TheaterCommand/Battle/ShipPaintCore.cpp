@@ -1,6 +1,7 @@
 #include "Battle/ShipPaintCore.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <unordered_map>
@@ -439,8 +440,12 @@ namespace ShipPaintCore
 		}
 	}
 
-	Linear Held(Linear C, const Linear& Paint, const Linear& Salted, bool bNoWarmer)
+	Linear Held(Linear C, const Linear& Paint, const Linear& Salted, bool bNoWarmer, bool* bRedHeld)
 	{
+		if (bRedHeld)
+		{
+			*bRedHeld = false;
+		}
 		// (no channel above the paint's own, or where her salt lies, above that salt over the clean paint: a deposit, paler)
 		C.R = std::min(C.R, std::max(Paint.R, Salted.R));
 		C.G = std::min(C.G, std::max(Paint.G, Salted.G));
@@ -464,16 +469,108 @@ namespace ShipPaintCore
 			// channel, rule 1 keeps red at the paint while green and blue stay down, warmer than the salt beside it, and across
 			// a triangle from a pale salted corner red rises while blue falls, salmon. Never warmer than her salt on the clean
 			// paint, lifted or not: only red comes down, so nothing rises above the paint)
+			const float Red = C.R;
 			C = NoWarmerThan(C, Salted);
+			if (bRedHeld)
+			{
+				*bRedHeld = C.R != Red;
+			}
 		}
 		return C;
+	}
+
+	Linear HerPaintDarker(const Linear& Paint, const Linear& Kept, const Linear& Salted)
+	{
+		// (her call A of 26 November 06:31Z, worked in sRGB levels as she measures: the paint's own levels, what round 1d's
+		// hold left, and the most each channel may take, never above the paint's own linear colour)
+		const float PaintLin[3] = { Paint.R, Paint.G, Paint.B }, KeptLin[3] = { Kept.R, Kept.G, Kept.B };
+		double Own[3], Was[3];
+		int32_t Top[3];
+		for (int C = 0; C < 3; ++C)
+		{
+			Own[C] = static_cast<double>(ToSrgb(PaintLin[C])) * 255.0;
+			Was[C] = static_cast<double>(ToSrgb(KeptLin[C])) * 255.0;
+			if (!(Own[C] > 0.0))
+			{
+				return Kept;
+			}
+			int32_t Most = StoredLevel(PaintLin[C]);
+			while (Most > 0 && LevelLinear(Most) > PaintLin[C])
+			{
+				--Most;
+			}
+			Top[C] = Most;
+		}
+		// (her salt's room over the clean paint, red less blue: in levels as the test measures them, and in the bytes stored)
+		const float Room = ToSrgb(Salted.R) * 255.0f - ToSrgb(Salted.B) * 255.0f;
+		const int32_t StoredRoom = StoredLevel(Salted.R) - StoredLevel(Salted.B);
+		// (the darkness round 1d gave it: the least of its channels over the paint's; tried first, then each 1/1024 above it)
+		const double Least = std::min({ Was[0] / Own[0], Was[1] / Own[1], Was[2] / Own[2] });
+		const int32_t From = static_cast<int32_t>(std::floor(Least * 1024.0));
+		for (int32_t Step = std::max(0, From); Step <= 1024; ++Step)
+		{
+			const double By = Step == From ? Least : static_cast<double>(Step) / 1024.0;
+			const double Aim[3] = { Own[0] * By, Own[1] * By, Own[2] * By };
+			int32_t Best[3] = { 0, 0, 0 };
+			double Least2 = 1e30;
+			for (int32_t R = static_cast<int32_t>(std::ceil(Aim[0] - 1.0)); R <= static_cast<int32_t>(std::floor(Aim[0] + 1.0)); ++R)
+			{
+				for (int32_t G = static_cast<int32_t>(std::ceil(Aim[1] - 1.0)); G <= static_cast<int32_t>(std::floor(Aim[1] + 1.0)); ++G)
+				{
+					for (int32_t B = static_cast<int32_t>(std::ceil(Aim[2] - 1.0)); B <= static_cast<int32_t>(std::floor(Aim[2] + 1.0)); ++B)
+					{
+						if (R < 0 || G < 0 || B < 0 || R > Top[0] || G > Top[1] || B > Top[2])
+						{
+							continue;
+						}
+						// (the paint's own balance, to a level: green less red and blue less green as the paint's so scaled)
+						if (std::abs(static_cast<double>(G - R) - (Aim[1] - Aim[0])) > 1.0 || std::abs(static_cast<double>(B - G) - (Aim[2] - Aim[1])) > 1.0)
+						{
+							continue;
+						}
+						// (never warmer than her salt on the clean paint, in levels and in the bytes stored)
+						if (R - B > StoredRoom || ToSrgb(LevelLinear(R)) * 255.0f - ToSrgb(LevelLinear(B)) * 255.0f > Room)
+						{
+							continue;
+						}
+						const double Apart = (R - Aim[0]) * (R - Aim[0]) + (G - Aim[1]) * (G - Aim[1]) + (B - Aim[2]) * (B - Aim[2]);
+						if (Apart < Least2)
+						{
+							Least2 = Apart;
+							Best[0] = R;
+							Best[1] = G;
+							Best[2] = B;
+						}
+					}
+				}
+			}
+			if (Least2 < 1e30)
+			{
+				Linear Out;
+				Out.R = LevelLinear(Best[0]);
+				Out.G = LevelLinear(Best[1]);
+				Out.B = LevelLinear(Best[2]);
+				Out.A = Kept.A;
+				return Out;
+			}
+		}
+		return Kept;
 	}
 
 	bool PaintsAsUnworn(const Point& P, const Options& O)
 	{
 		// (light wear away from a run, her rule 2: below a wear of 5 at the paint, and under her salt the salt as on the point
-		// unworn, her ruling of 26 November; Coated paints exactly these as the point unworn)
-		return O.bRustRamp && P.bPainted && P.Wear > 0 && P.Wear < RunBodyWear && !P.bBodyAbove && (P.Wear < LightWearFrom || P.Salt > 0);
+		// unworn, her ruling of 26 November; and a run's body under her salt on a foot's salt line, her ruling of 06:31Z: there
+		// salt beats a run's body. Coated paints exactly these as the point unworn)
+		if (!O.bRustRamp || !P.bPainted || P.Wear <= 0)
+		{
+			return false;
+		}
+		if (P.Wear >= BodyOverSaltWear)
+		{
+			return P.bFootLine && P.Salt > 0;
+		}
+		return P.Wear < RunBodyWear && !P.bBodyAbove && (P.Wear < LightWearFrom || P.Salt > 0);
 	}
 
 	uint8_t SteelFinish(const Point& P, const Options& O)
@@ -622,6 +719,113 @@ namespace ShipPaintCore
 				Marks[K] |= SaltMark;
 			}
 		}
+		// (her ruling of 26 November 06:31Z, the foot's salt line: a painted point facing out with a deck at its foot. The decks:
+		// triangles whose three corners face up, kept in cells of half a metre by the ground they cover, each with its
+		// lowest and highest corner; every point at whole millimetres)
+		const auto FacesUp = [](const RunPoint& One)
+		{ return One.FZ > 0.0 && One.FZ >= FootLineUp * std::sqrt(One.FX * One.FX + One.FY * One.FY + One.FZ * One.FZ); };
+		std::vector<std::array<int64_t, 3>> Mm(Count);
+		for (size_t K = 0; K < Count; ++K)
+		{
+			Mm[K] = { Millimetres(Points[K].X), Millimetres(Points[K].Y), Millimetres(Points[K].Z) };
+		}
+		constexpr int64_t Cell = 500;
+		struct DeckAt
+		{
+			int32_t A = 0, B = 0, C = 0;
+			int64_t Low = 0, High = 0;
+		};
+		std::vector<DeckAt> Decks;
+		std::unordered_map<Place, std::vector<int32_t>, PlaceHash> DecksIn;
+		for (size_t T = 0; T + 2 < Indices; T += 3)
+		{
+			const int32_t Corners[3] = { Triangles[T], Triangles[T + 1], Triangles[T + 2] };
+			bool bDeck = true;
+			for (const int32_t Corner : Corners)
+			{
+				bDeck = bDeck && Corner >= 0 && static_cast<size_t>(Corner) < Count && FacesUp(Points[static_cast<size_t>(Corner)]);
+			}
+			if (!bDeck)
+			{
+				continue;
+			}
+			const auto &A = Mm[static_cast<size_t>(Corners[0])], &B = Mm[static_cast<size_t>(Corners[1])], &C = Mm[static_cast<size_t>(Corners[2])];
+			DeckAt One;
+			One.A = Corners[0];
+			One.B = Corners[1];
+			One.C = Corners[2];
+			One.Low = std::min({ A[2], B[2], C[2] });
+			One.High = std::max({ A[2], B[2], C[2] });
+			const int32_t Id = static_cast<int32_t>(Decks.size());
+			Decks.push_back(One);
+			for (int64_t CX = FloorDiv(std::min({ A[0], B[0], C[0] }), Cell); CX <= FloorDiv(std::max({ A[0], B[0], C[0] }), Cell); ++CX)
+			{
+				for (int64_t CY = FloorDiv(std::min({ A[1], B[1], C[1] }), Cell); CY <= FloorDiv(std::max({ A[1], B[1], C[1] }), Cell); ++CY)
+				{
+					DecksIn[{ CX, CY, 0 }].push_back(Id);
+				}
+			}
+		}
+		for (size_t K = 0; K < Count && !Decks.empty(); ++K)
+		{
+			const RunPoint& One = Points[K];
+			const double Level = std::sqrt(One.FX * One.FX + One.FY * One.FY);
+			if (!One.bPainted || FacesUp(One) || !(Level > 0.0))
+			{
+				continue;
+			}
+			bool bFoot = false;
+			for (int64_t Out = FootLineStepMm; Out <= FootLineReachMm && !bFoot; Out += FootLineStepMm)
+			{
+				// (the step's place on the ground, to the millimetre, and the decks over it: inside or on a side of the triangle,
+				// its height there within the line's reach of the point's, all in whole numbers)
+				const int64_t QX = Mm[K][0] + std::llround(static_cast<double>(Out) * One.FX / Level), QY = Mm[K][1] + std::llround(static_cast<double>(Out) * One.FY / Level);
+				const auto Found = DecksIn.find({ FloorDiv(QX, Cell), FloorDiv(QY, Cell), 0 });
+				if (Found == DecksIn.end())
+				{
+					continue;
+				}
+				for (const int32_t Id : Found->second)
+				{
+					const DeckAt& D = Decks[static_cast<size_t>(Id)];
+					if (D.High < Mm[K][2] - FootLineHighMm || D.Low > Mm[K][2] + FootLineSunkMm)
+					{
+						continue;
+					}
+					const auto &A = Mm[static_cast<size_t>(D.A)], &B = Mm[static_cast<size_t>(D.B)], &C = Mm[static_cast<size_t>(D.C)];
+					int64_t Whole = (B[0] - A[0]) * (C[1] - A[1]) - (B[1] - A[1]) * (C[0] - A[0]);
+					int64_t WA = (B[0] - QX) * (C[1] - QY) - (B[1] - QY) * (C[0] - QX);
+					int64_t WB = (C[0] - QX) * (A[1] - QY) - (C[1] - QY) * (A[0] - QX);
+					int64_t WC = (A[0] - QX) * (B[1] - QY) - (A[1] - QY) * (B[0] - QX);
+					if (Whole == 0)
+					{
+						continue;
+					}
+					if (Whole < 0)
+					{
+						Whole = -Whole;
+						WA = -WA;
+						WB = -WB;
+						WC = -WC;
+					}
+					if (WA < 0 || WB < 0 || WC < 0)
+					{
+						continue;
+					}
+					// (the deck's height there over the point's, times Whole: no more than FootLineHighMm below, FootLineSunkMm above)
+					const int64_t Over = WA * (A[2] - Mm[K][2]) + WB * (B[2] - Mm[K][2]) + WC * (C[2] - Mm[K][2]);
+					if (Over >= -FootLineHighMm * Whole && Over <= FootLineSunkMm * Whole)
+					{
+						bFoot = true;
+						break;
+					}
+				}
+			}
+			if (bFoot)
+			{
+				Marks[K] |= FootLineMark;
+			}
+		}
 		return Marks;
 	}
 
@@ -638,23 +842,27 @@ namespace ShipPaintCore
 		{
 			const bool bStained = P.bPainted && P.Wear > 0;
 			const bool bSalted = P.bPainted && P.Salt > 0;
+			if (PaintsAsUnworn(P, O))
+			{
+				// (light wear away from a run is not rust, her rule 2: below a wear of 5 it stays at the paint, and under her salt
+				// the salt lies as it lies on the point unworn (her ruling of 26 November); and on a foot's salt line her salt
+				// beats a run's body (06:31Z): each the point as it would be unworn, her salt and the soot laid, bit for bit)
+				Point Bare = P;
+				Bare.Wear = 0;
+				return Coated(Bare, Pal, O);
+			}
 			if (O.bRustRamp && bStained && P.Wear < RunBodyWear && !P.bBodyAbove)
 			{
-				// (light wear away from a run is not rust, her rule 2. Below a wear of 5 it stays at the paint, and under her salt
-				// the salt lies as it lies on the point unworn (her ruling of 26 November): either way the point as it would be
-				// unworn, her salt and the soot laid, bit for bit. From 5, with no salt on it: that point a little darker and
-				// greyer, 3% at 5 rising to 6% at 19, in whole levels inside her bounds; held as every stain is, which it keeps)
+				// (from 5, with no salt on it: that point a little darker and greyer, 3% at 5 rising to 6% at 19, in whole levels
+				// inside her bounds; held as every stain is, which it keeps)
 				Point Bare = P;
 				Bare.Wear = 0;
 				const Linear Unworn = Coated(Bare, Pal, O);
-				if (PaintsAsUnworn(P, O))
-				{
-					return Unworn;
-				}
 				return Held(LightWear(P, Unworn), P.Paint, P.Paint, false);
 			}
-			// (her order for the salt, 26 November: a run's body, a wear of BodyOverSaltWear and more, beats her salt, which is
-			// not laid there under the skin; the body shows as ramped, held to rule 1)
+			// (her order for the salt, 26 November: off a foot's salt line a run's body, a wear of BodyOverSaltWear and more,
+			// beats her salt, which is not laid there under the skin; the body shows as ramped, held to rule 1. On the foot's
+			// line her salt beats it, above)
 			const bool bSaltLies = bSalted && !(O.bRustRamp && bStained && P.Wear >= BodyOverSaltWear);
 			Linear Coat = P.Paint;
 			float Rusted = 0.0f;
@@ -714,7 +922,14 @@ namespace ShipPaintCore
 					// (a stain, and her salt on the point unworn, and so on light wear, which shows it as it lies there: held, and
 					// where her salt lies, paler or where soot takes it back under the paint, never warmer than her salt makes the
 					// clean paint, red less blue in the levels stored; her salt alone on the clean paint is that salt, bit for bit)
-					Coat = Held(Coat, P.Paint, Salted, bSaltLies);
+					bool bRedHeld = false;
+					Coat = Held(Coat, P.Paint, Salted, bSaltLies, &bRedHeld);
+					if (bStained && bSaltLies && bRedHeld)
+					{
+						// (her call A of 26 November 06:31Z: her salted rust that the salt cannot lift, which that hold made a cold
+						// grey with red alone brought down, is her paint, darker: green and blue come down with red)
+						Coat = HerPaintDarker(P.Paint, Coat, Salted);
+					}
 				}
 				else
 				{
