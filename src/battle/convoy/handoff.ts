@@ -48,5 +48,6 @@ export function nightBooked(sim: ConvoySim, staff: StaffNights): { fought: Convo
   if (!sim.over) return undefined;
   if ((sim.over.extra as { handed?: boolean } | undefined)?.handed && sim.view().contact === null) return undefined;
   const ranks = ranksOf(sim.ticket, sim.counts, staff);
-  return { fought: foughtOf(sim.ticket, ranks), ranks };
+  // (the night's own ships sunk ride with it, booked on the route's month as a fact for its headline: W5b, Q1)
+  return { fought: { ...foughtOf(sim.ticket, ranks), mv: sim.counts.mv }, ranks };
 }

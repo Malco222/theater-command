@@ -1008,6 +1008,8 @@ export interface ConvoyMonth {
   /** Release 2, with the convoy battle on (ruling 241), record only: the month's swing on the share sunk, and whether a night the player fought set it ('field'), or set it with a count held inside the dice's run ('clamped': a bare close result, b331). */
   swing?: number;
   fought?: 'field' | 'clamped';
+  /** Release 2, with the convoy battle on, record only: the convoy's ships sunk on the night the player fought, as fought (a whole count), which the month's headline tells apart from the month (W5b). */
+  nightShips?: number;
   /** Release 2, with Units decide (the convoy war by cause), record only: of subsLost, the boats the convoy's escorts sank in their attacks on it. */
   byEscorts?: number;
   /** Release 2, with Units decide and the sea patrol live (seapatrol.ts), record only: of subsLost, the boats the receiving nation's aircraft on patrol sank in the route's seas. */

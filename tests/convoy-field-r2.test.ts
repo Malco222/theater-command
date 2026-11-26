@@ -240,6 +240,9 @@ describe('the campaign\'s night', () => {
     const twin = loadGame(saveGame(g))!;
     convoyCloseWith(twin, played);
     expect(twin.convoys.atlantic.fought).toBe('field');
+    // (W5b, Q1: the night's own ships sunk, as fought, ride with it and are booked on the route's month)
+    expect(booked.fought.mv).toBe(sim.counts.mv);
+    expect(twin.convoys.atlantic.nightShips).toBe(sim.counts.mv);
   }, 60_000);
 });
 

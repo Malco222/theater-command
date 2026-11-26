@@ -1200,9 +1200,12 @@ function rankWords(t: ConvoyTicket, x: ConvoyOverExtra, staff: StaffNights, cmd:
  * the share it would book. Where that place favours the side the headline did not name the winner, it says who won it
  * after all ('..., though the escorts won it'), so the two never read as one against the other (the playtester's m5).
  * A practice night books nothing and is said so, in two sentences in place of the booking's rules (the UI director,
- * round 7 W5, the playtester's oldbugs-1): ties drawn by lot say that a draw set the share; a night that lost no ship
- * shows no share at all (firsttimer-8: a share over a convoy that lost nothing reads as a cost for losing nothing), only
- * how often the staff's nights lost none. A campaign's own card keeps the boats and escorts it would book.
+ * round 7 W5, the playtester's oldbugs-1): ties drawn by lot say that a draw set the share. The share is said where the
+ * night lost no ship too, and where it fell: all of it on the route's other nights (W5b: the design director's 06:32Z
+ * ruling (a), the campaign keeps the lot, and card and result agree through words; firsttimer-8's share over a convoy
+ * that lost nothing is so read as the month's, not the night's); where the night lost ships and drew no lot, the month's
+ * share counts them among it (W5b, the design director's 12:04Z Q4: a practice card has no month, so 'among it' is said,
+ * true of any month). A campaign's own card keeps the boats and escorts it would book.
  */
 function campaignWords(t: ConvoyTicket, x: ConvoyOverExtra, staff: StaffNights, winner: Side): string {
   const a = againstStaff(t, x.counts, staff), n = Math.max(1, a.n);
@@ -1222,10 +1225,13 @@ function campaignWords(t: ConvoyTicket, x: ConvoyOverExtra, staff: StaffNights, 
   };
   const bits = [booked('att'), booked('def')].filter(Boolean);
   const books = bits.length ? ` Its boats and escorts lost, placed the same way by their own counts, would book ${andOf(bits)}.` : ' A practice night books nothing.';
-  // (no ship lost: no share, only how often the staff's nights lost none)
+  // (no ship lost: how often the staff's nights lost none, and the share a draw among them would set, all of it on the
+  // route's other nights: W5b)
   if (x.counts.mv === 0) {
     const k = a.mv.same;
-    return `The convoy lost no ships, ${k === 0 ? `fewer than in every one of the ${countWords(n)} times the staff fought this night` : `as in ${k === n ? 'every one' : countWords(k)} of the ${countWords(n)} times the staff fought this night`}.${books}`;
+    const month = `${pc.share}% of the tonnage a convoy usually loses, all of it on the route's other nights`;
+    const set = k === 0 ? `In a campaign this night would set the month at ${month}` : `In a campaign a draw among ${k === n ? 'them' : 'those nights'} would set the month at ${month}`;
+    return `The convoy lost no ships, ${k === 0 ? `fewer than in every one of the ${countWords(n)} times the staff fought this night` : `as in ${k === n ? 'every one' : countWords(k)} of the ${countWords(n)} times the staff fought this night`}. ${set}.${books}`;
   }
   // (the place is the booked swing's own, held to the counts: never one of the better nights for a side whose count most of the staff's nights matched or beat)
   const lean = leanOf(t, x, staff);
@@ -1237,7 +1243,7 @@ function campaignWords(t: ConvoyTicket, x: ConvoyOverExtra, staff: StaffNights, 
   // (tied: a lot settles where the night falls among the staff's nights it ties, and the share says where it fell)
   const tons = a.mv.same > 0
     ? `${S.side === 'att' ? 'the pack sank' : 'the escorts lost'} as many ships as in ${a.mv.same === n ? 'every one' : countWords(a.mv.same)} of the ${countWords(n)} times the staff fought this night, and a draw among the tied nights set the month's share at ${share}`
-    : `the month would book ${share}`;
+    : `the month would book ${share}, this night's ${nof(x.counts.mv, 'ship', 'ships')} among it`;
   return `In a campaign this night would count as ${place}${though}: ${tons}.${books}`;
 }
 
