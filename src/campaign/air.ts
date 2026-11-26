@@ -2891,18 +2891,24 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   // City defences: the searchlights' line, a night raid with lights built and the switch on (the UI director's words,
   // section 2). One line, the reading that governs: cloud, then no guns, then no Fighter control, then too many bombers.
   // The clauses that rest on the guns' levels (none, some lit, every level lit) read the side's count under fog on raids,
-  // so there they carry the guns' own hedge, "may", under the very condition that makes the guns' line "may ring". The
-  // design director, 25 Nov 2026 20:32Z, ruled one footing on one card: the card never states as plain fact what the
-  // side has not seen. The words are the UI director's, 20:33Z: the guns are "built here", and counts are in words.
+  // so there they carry the Anti-aircraft guns line's own hedge, read from the same `known`: a place seen says the month
+  // its guns were seen, and a place never scouted says it is reckoned at the worst, or, at the end of the band that
+  // counts no guns there, that none are reckoned built. In sight the clauses are plain, as before. The design director
+  // ruled one hedge for both lines (25 Nov 2026 22:24Z), and the words are the UI director's (22:27Z and 22:30Z): the
+  // guns are "built here", or "can be built here" where never scouted, and counts are in words.
   if (cn && cn.lights > 0) {
     const over = `Level ${cn.lights} searchlights over ${place}`, few = 'they help the night fighters a little.';
-    const light = known ? 'may light' : 'light';
+    const never = !!known && (known.seen ?? -1) < 0;
+    const when = known && !never ? ` when ${seenAgo(known.ago ?? 0)}` : '';
+    const none = !known ? 'There are no guns built here for them to light.' : never ? 'No guns are reckoned built here for them to light.' : `There were no guns built here for them to light${when}.`;
+    const radar = never ? 'Not scouted, so reckoned at the worst: with radar laying the guns' : 'With radar laying the guns';
+    const built = never ? 'guns that can be built here' : `guns built here${when}`;
     out.lines.push(cn.cloud
       ? { label: 'Searchlights', value: `Cloud over ${place}`, effect: 'The searchlights cannot see the bombers through it.' }
-      : !cn.guns ? { label: 'Searchlights', value: over, effect: `${known ? 'There may be' : 'There are'} no guns built here for them to light. They help the night fighters a little.` }
+      : !cn.guns ? { label: 'Searchlights', value: over, effect: `${none} They help the night fighters a little.` }
         : !cn.radar ? { label: 'Searchlights', value: over, effect: "Without Fighter control's radar to lay the guns, they help only the night fighters, a little." }
           : cn.sat < 1 ? { label: 'Searchlights', value: 'More bombers than the lights can hold', effect: `About ${Math.round(out.B).toLocaleString('en-US')} bombers over ${place}, and a beam holds one at a time: the lights do about ${Math.round(cn.sat * 100)}% of their work.` }
-            : { label: 'Searchlights', value: over, effect: cn.lit >= cn.guns ? `With radar laying the guns, they ${light} every level of the guns built here, and ${few}` : `With radar laying the guns, they ${light} ${upToTen(cn.lit)} of the ${upToTen(cn.guns)} levels of guns built here, and ${few}` });
+            : { label: 'Searchlights', value: over, effect: cn.lit >= cn.guns ? `${radar}, they light every level of ${never ? '' : 'the '}${built}, and ${few}` : `${radar}, they light ${upToTen(cn.lit)} of the ${upToTen(cn.guns)} levels of ${built}, and ${few}` });
   }
   if (out.ships.length) {
     const pc = (x: number): string => `${Math.round(x * 100)}%`;

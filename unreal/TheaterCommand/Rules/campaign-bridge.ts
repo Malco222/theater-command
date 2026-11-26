@@ -172,7 +172,7 @@ import { turnToDate } from '../../../src/core/ticket';
 import { TRADE as TRADE_RULES, dealsOf as tradeDealsOf, housesOf as tradeHousesOf, tradePath as tradePathOf, tradeRules as tradeIsOn, whyNoTrade as whyNoTradeWith } from '../../../src/campaign/trade';
 import { civicAdvice, civicLine, civicReady, civicSum as civicSumOf, setSettledTowns, settledTownsOn } from '../../../src/campaign/buildings';
 import { addQueue, dropQueue, nextQueued, queueHeads, queueOf, queuedAt, queuedName, setTownQueue, townQueueOn, whyNotQueue } from '../../../src/campaign/townqueue';
-import { cityDefences, cityDefencesOn, lightsAt, radarLays, setCityDefences, townWorksAt } from '../../../src/campaign/citydefences';
+import { cityDefences, cityDefencesOn, flakGroundOn, lightsAt, radarLays, setCityDefences, townWorksAt } from '../../../src/campaign/citydefences';
 // (Rules 84.3.3) FIRST COMMAND: the first hour's ten staff notes, one list for both games.
 import {
   BOMBING, CLOSING, FIRST_COMMAND, LESSONS, LESSON_DOOR, LESSON_GROUPS, LESSON_NAMES, LESSON_SETTING, TIPS, allDone, bringBack, closingOwed, currentLesson, doneCount,
@@ -1102,8 +1102,8 @@ function drawView(step = false) {
     settledTowns: settledTownsOn(s),
     // (Release 2, townqueue.ts) Whether the player can queue the next buildings for his towns.
     townQueue: townQueueOn(s),
-    // (Release 2, citydefences.ts) Whether searchlights can be built, the guns fight by night by what they see, a
-    // garrison fortifies its town and the town's heavy guns fire on attacking tanks.
+    // (Release 2, citydefences.ts) Whether searchlights can be built, the guns fight by night by what they see and a
+    // garrison fortifies its town (the town's heavy guns fire on attacking tanks only under the sub-switch flakGround).
     cityDefences: cityDefencesOn(s),
     // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
     // whether the columns run, and whether they can still be switched (in the campaign's opening month only).
@@ -1644,10 +1644,13 @@ function glanceLights(s: Game, id: number, guns: number) {
   };
 }
 
-/** (City defences, the switch on) A region's searchlights, town works and guns lost by storm, for the map: only what is not nought. */
+/**
+ * (City defences, the switch on) A region's searchlights, town works and guns lost by storm, for the map: only what is
+ * not nought. The guns lost (the scorched pits) only with the sub-switch flakGround on as well (citydefences.ts).
+ */
 function cityMarks(s: Game, r: { id: number; ctrl: string; owner: string }): { lt?: number; tw?: number; gl?: number } {
   const out: { lt?: number; tw?: number; gl?: number } = {};
-  const lt = lightsAt(s, r.id), tw = townWorksAt(s, s.regions[r.id]), lost = s.flags[`aal:${r.id}`];
+  const lt = lightsAt(s, r.id), tw = townWorksAt(s, s.regions[r.id]), lost = flakGroundOn(s) ? s.flags[`aal:${r.id}`] : undefined;
   if (lt > 0) out.lt = lt;
   if (tw > 0) out.tw = tw;
   if (lost !== undefined && s.turn - lost >= 0 && s.turn - lost <= 1) out.gl = 1;
@@ -7828,7 +7831,7 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     setCityDefences(s, part[1] === 'on');
     ok = true;
     note = cityDefencesOn(s)
-      ? 'Searchlights to build beside the anti-aircraft guns. By night the guns fire almost blind unless Fighter control\'s radar lays them; searchlights help the radar-laid guns and the night fighters, and fail under cloud and against very large raids. A garrison digs in to the town it holds, a month at a time for up to three months, and the town\'s heavy guns fire on attacking tanks: if the town is stormed, one level of them is lost with it.'
+      ? 'Searchlights to build beside the anti-aircraft guns. By night the guns fire almost blind unless Fighter control\'s radar lays them; searchlights help the radar-laid guns and the night fighters, and fail under cloud and against very large raids. A garrison digs in to the town it holds, a month at a time for up to three months' + (flakGroundOn(s) ? ', and the town\'s heavy guns fire on attacking tanks: if the town is stormed, one level of them is lost with it.' : '.')
       : 'Off, the guns are as good by night as by day, and a town is only as strong as its walls and forts.';
     return { ok, note, fly, flies, open, view: view() };
   }

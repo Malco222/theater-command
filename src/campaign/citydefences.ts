@@ -1,7 +1,8 @@
 // City defences (release 2; Brian 24 November 2026 22:08Z, card 22:11Z "Both"; city defences, the design director's
 // ruling of 25 Nov 2026 02:23Z). One switch, 'cityDefences' (stage.json): searchlights to build beside the
 // anti-aircraft guns, guns that fire by night by what they can see, a garrison that fortifies the town it holds, and
-// the town's heavy guns firing on attacking tanks. Every figure is in data/campaign/citydefences.json; the work's own
+// the town's heavy guns firing on attacking tanks (that last part only under its own sub-switch, 'flakGround', off:
+// see flakGround below). Every figure is in data/campaign/citydefences.json; the work's own
 // row (label, cost, months, upkeep, blurb) is arsenal.json works.lights. One rule for every nation: nothing here reads
 // a nation or a date. Off: nothing of it is read, no flag is written and every war is the war without it.
 
@@ -312,12 +313,36 @@ export function townWorksWords(g: Game, r: Region, fort: number): string {
 // such a town falls by storm a level of the guns is lost with it. The storm's one assessment (game.ts assess) reads it,
 // so the battle card, the dice, the computer's storm decision and every forecast of the storm agree.
 
+// The sub-switch (the design director's ruling of 25 Nov 2026 22:10Z): city defences goes forward without guns
+// against tanks, which sits behind its own switch, off ('flakGround', stage.json; set where a grand campaign opens
+// only where city defences opens too). What it holds back is all of this section: the cut to the stormers' tanks,
+// the card's line and its fog form, the gun level lost with the town and the 'aal:' mark. Why: the gate's reading
+// found that this part alone delays Britain's landing in the west at stops 4 and 5, by a path not yet traced, and
+// what fails stays off until its cause is named. The gate is at the root: townFlak and flakLostWithTown ask it first,
+// so with it off no storm reads a gun, no card carries a line, and nothing is lost or marked.
+
+/** True where a game carries the town's guns against tanks (the flag 'flakGround'), whatever city defences says. */
+export const flakGround = (g: Game): boolean => g.flags.flakGround === 1;
+
+/** True where the town's guns fight tanks: city defences and its sub-switch both on. */
+export const flakGroundOn = (g: Game): boolean => cityDefences(g) && flakGround(g);
+
+/** Turns the town's guns against tanks on or off, for tests and the bench (no Options row offers it). */
+export function setFlakGround(g: Game, on: boolean): void {
+  if (!on) { delete g.flags.flakGround; return; }
+  g.flags.flakGround = 1;
+}
+
 /**
  * The gun levels at a town that fire on its stormers' tanks: the built guns (air.ts gunsAt) where a living corps
- * stands in its garrison. 0 with no garrison, no guns, or the switch off.
+ * stands in its garrison. 0 with no garrison, no guns, or either switch off (city defences or its sub-switch).
  */
 export function townFlak(g: Game, r: Region): number {
-  if (!cityDefences(g)) return 0;
+  // The one gate of the ground role. It holds back the cut to the stormers' tanks, and with it the card's line, its
+  // fog form and the gun level lost with the town, unless the sub-switch flakGround is on as well as city defences
+  // (the design director's ruling of 25 Nov 2026 22:10Z). Why: the gate's reading found that this part delays
+  // Britain's landing in the west at stops 4 and 5 by a path not yet traced, so it stays off until the cause is named.
+  if (!flakGroundOn(g)) return 0;
   if (!garrisonOf(r).some((c) => !c.dead)) return 0;
   return gunsAt(g, r.id);
 }
@@ -354,10 +379,14 @@ export const flakFog = (): { label: string; value: string; effect: string } =>
  * stormed. With no tanks they played no part: nothing is charged, there is no line, and they pass with the town under
  * the capture rules every town has. Surrender, starvation and handover keep the guns. Returns the result line for the
  * battle's report (the UI director's words, section 6), or null. `level` is townFlak as the storm began where the
- * storm's assessment carried the guns' line, else 0; 0 (no tanks, no garrison, no guns, the switch off) does nothing.
+ * storm's assessment carried the guns' line, else 0; 0 (no tanks, no garrison, no guns, the switch off) does nothing,
+ * and so does either switch off (city defences or its sub-switch, flakGround). `town` is the town's name as running
+ * text names it, with its article where it takes one ("the Valdai"): the caller gives it through placeName, because
+ * a report's lines are printed as they stand.
  */
 export function flakLostWithTown(g: Game, r: Region, level: number, town: string): { label: string; value: string } | null {
-  if (!cityDefences(g) || level <= 0) return null;
+  // (Held back with the sub-switch off, as townFlak is: nothing is lost and no mark is written.)
+  if (!flakGroundOn(g) || level <= 0) return null;
   const key = `wk:aa:${r.id}`;
   const left = Math.max(0, (g.flags[key] ?? 0) - CITYDEF.ground.lost);
   if (left > 0) g.flags[key] = left; else delete g.flags[key];
