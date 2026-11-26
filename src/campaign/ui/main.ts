@@ -59,7 +59,7 @@ import { deskRuns, setDepth, type CommandView } from '../desks';
 import { SIEGE, besiegers, driveOut, garrisonOf, guardMen, guardWorth, salliers, siegeRules, stormForce, townHitText } from '../siege';
 import { PRIZES, type PrizeKind, type ScorchPolicy } from '../prizes';
 import { GOV, type GovView, type PromiseTarget, type PromiseTerms } from '../government';
-import { MANPOWER, menWords } from '../manpower';
+import { MANPOWER, corpsMenWords, menWords } from '../manpower';
 import { CIVIC, civicSum, settleLeft, settledFor, settledTownsOn, type CivicOffer, type PlotView } from '../buildings';
 import { damageOf } from '../citydamage';
 import type { RepairView } from '../repairs';
@@ -8180,13 +8180,12 @@ function menBlock(nat: string): string {
   if (!v) return '';
   const fill = Math.max(0, Math.min(100, v.share * 100));
   const inf = specOf(g, 'inf')?.divs ?? 3;
-  const months = v.classMen > 0 ? Math.ceil((inf * v.per) / v.classMen) : 0;
   const home = v.home < 0.995 ? ` You hold ${Math.round(v.home * 100)}% of the homeland, counted by the worth of its provinces, so the class is that much smaller.` : '';
   return `<h3 id="lmen">Men fit to bear arms <span class="inhand">${esc(v.word.toLowerCase())}</span></h3>
       <div class="menbar ${v.word.toLowerCase()}" role="img" aria-label="${Math.round(v.share * 100)}% of the reserve this campaign opened with is still in hand."><i style="width:${fill.toFixed(1)}%"></i><u style="left:${MANPOWER.warn[0] * 100}%"></u><u style="left:${MANPOWER.warn[1] * 100}%"></u></div>
       <div class="lfacts men sum"><div class="lfact"><span>At the start</span><b>${menShort(v.start * v.per)}</b></div><div class="lfact"><span>Come of age since</span><b class="pos">+${menShort(v.came)}</b></div><div class="lfact"><span>Called up so far</span><b class="neg">−${menShort(v.drawn)}</b></div><div class="lfact eq"><span>In reserve today</span><b>${menShort(v.men)}</b></div></div>
       <p class="sub mennow">${v.gap > 0 ? `No class comes of age for ${v.gap === 1 ? 'another month' : `another ${v.gap} months`}: it was called up early.` : v.comes ?? `${upFirst(menWords(v.classMen))} men come of age each month.`}</p>${menOrders(nat)}
-      <p class="sub">${esc(v.line)} Think of it as a reservoir behind a dam. Replacements for worn corps and every new corps are drawn off it, and each month's class of young men is the river that refills it.${home} A new infantry corps takes ${menWords(inf * v.per)} men${months > 1 ? `, about ${months} months of the class` : ''}. With the reserve spent, only the month's class reaches the armies and no new corps can be raised.</p>`;
+      <p class="sub">${esc(v.line)} Think of it as a reservoir behind a dam. Replacements for worn corps and every new corps are drawn off it, and each month's class of young men is the river that refills it.${home} ${corpsMenWords(v, inf)} With the reserve spent, only the month's class reaches the armies and no new corps can be raised.</p>`;
 }
 
 /** The gauges for a power that keeps stocks; nothing for a small country, which buys what it needs abroad. */

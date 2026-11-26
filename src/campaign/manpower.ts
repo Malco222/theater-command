@@ -288,6 +288,18 @@ export function comesWords(nat: string, cls: number, whole = false): string | nu
   return `About ${men100(cls * per)} men come of age each month ${whole ? 'with all your homeland held' : 'in the land you still hold'}.`;
 }
 
+/**
+ * What a new infantry corps of so many divisions takes from the reserve, for the ledger's men block. A nation with a
+ * scale of its own says it in divisions' worth, the months in words (the UI director's line 16 of 25 November 2026:
+ * divisions' worth on line 8 for such a nation, line 14 the bridge between the two); every other nation in men, as
+ * before, byte for byte.
+ */
+export function corpsMenWords(v: MenView, divs: number): string {
+  const months = v.classMen > 0 ? Math.ceil((divs * v.per) / v.classMen) : 0;
+  if (v.comes === null) return `A new infantry corps takes ${menWords(divs * v.per)} men${months > 1 ? `, about ${months} months of the class` : ''}.`;
+  return `A new infantry corps takes ${inWords(divs)} ${divs === 1 ? "division's" : "divisions'"} worth of men${months > 1 ? `, about ${inWords(months)} months of the class` : ''}.`;
+}
+
 /** Men, in words: "1.2 million", "340,000". */
 export function menWords(men: number): string {
   const m = round(Math.max(0, men));

@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { stockOf } from '../src/campaign/arms';
 import { offers } from '../src/campaign/arsenal';
 import { createGame, setWar } from '../src/campaign/game';
-import { MANPOWER, comesWords, manpower, menPer, menScale, reserveWords } from '../src/campaign/manpower';
+import { MANPOWER, comesWords, corpsMenWords, manpower, menPer, menScale, menWords, reserveWords } from '../src/campaign/manpower';
 import { RIFLES, inWords, levelOf, noRifles, riflesMonth, riflesSeen, riflesTakes, riflesView, riflesWait } from '../src/campaign/rifles';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -152,6 +152,18 @@ describe("China's men at its own scale", () => {
     expect(reserveWords('CHN', 1)).toBe("About 67,000 men stand in reserve: about one division's worth.");
     expect(reserveWords('CHN', 10.4)).toBe("About 696,800 men stand in reserve: about ten divisions' worth.");
     expect(reserveWords('CHN', 11)).toBe("About 737,000 men stand in reserve: about 11 divisions' worth.");
+  });
+
+  it("16. the ledger's men block says a new corps in divisions' worth for a nation with its own scale", () => {
+    const g = grand();
+    const v = manpower(g, 'CHN')!;
+    // (About 104,800 men a month on the first day: 201,000 men is two months of the class.)
+    expect(Math.ceil((3 * v.per) / v.classMen)).toBe(2);
+    expect(corpsMenWords(v, 3)).toBe("A new infantry corps takes three divisions' worth of men, about two months of the class.");
+    // Every other nation as before, byte for byte (the sceptic's S5).
+    const j = manpower(g, 'JAP')!;
+    const months = Math.ceil((3 * MEN_PER_DIV) / j.classMen);
+    expect(corpsMenWords(j, 3)).toBe(`A new infantry corps takes ${menWords(3 * MEN_PER_DIV)} men${months > 1 ? `, about ${months} months of the class` : ''}.`);
   });
 
   it('every nation without a scale of its own keeps its sentences', () => {
