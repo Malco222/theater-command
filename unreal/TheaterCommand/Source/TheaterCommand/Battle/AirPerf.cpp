@@ -30,7 +30,7 @@ namespace AirPerf
 			return 0.0;
 		}
 
-		std::string MarkOf(const AirFeed::Json& J)
+		std::string TurnMarkOf(const AirFeed::Json& J)
 		{
 			return J.IsArray() && J.Count() > 2 ? J.At(2).Str("") : std::string();
 		}
@@ -285,7 +285,7 @@ namespace AirPerf
 			R.Climb = Fig(X["climb_ms"]);
 			R.Ceiling = Fig(X["ceiling_m"]);
 			R.TurnRadius = Fig(X["turn_m"]);
-			R.TurnMark = MarkOf(X["turn_m"]);
+			R.TurnMark = TurnMarkOf(X["turn_m"]);
 			R.TurnTime = Fig(X["turn_s"]);
 			R.TurnM = Fig(X["turn_at_m"]);
 			R.Roll = Fig(X["roll_dps"]);
