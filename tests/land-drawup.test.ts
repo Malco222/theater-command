@@ -283,6 +283,11 @@ describe('drawing up through the game\'s doorway', () => {
       expect(no.why).toContain(no.who);
       const onTop = TC.landPlaceMany([[three[0].id, three[1].x + 3, three[1].y]]);
       expect(onTop.why).toMatch(/ cannot go there: another unit already stands there\.$/);
+      // (the rules' short lines are made whole sentences, and none names the unit twice)
+      const off = TC.landPlaceMany([[three[0].id, Number.NaN, three[0].y]]);
+      expect(off.ok).toBe(false);
+      expect(off.why).toMatch(/ cannot go there: it would stand off the field\.$/);
+      expect(off.why.split(off.who).length).toBe(2);
       // The battle begins and is fought from where they were drawn up.
       expect(TC.landBegin().ok).toBe(true);
       expect(TC.landTick(5).t).toBeGreaterThan(4.9);

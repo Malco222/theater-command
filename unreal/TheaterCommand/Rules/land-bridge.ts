@@ -76,13 +76,19 @@ const DRAWN = { line: 'in a line', two: 'in two lines', wedge: 'in a wedge', col
 const COUNTED = ['None', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'];
 /** A unit's name at the head of a sentence: one that opens with its number takes "The" ("The 2nd Battalion"). */
 const theName = (who: string): string => (/^\d/.test(who) ? `The ${who}` : who);
-/** Why a unit he would place cannot go there, as a sentence with its name (the rules' own line where the name is not known). */
+/**
+ * Why a unit he would place cannot go there, as a sentence with its name (the rules' own line where the name is not
+ * known). The rules' short lines are made whole here, and none names the unit again; any other line of theirs is a
+ * whole sentence already and follows the name's (the UI director, 26 November 2026 05:35Z).
+ */
 function cannotGo(who: string, why: string): string {
   if (!who) return why;
   const name = theName(who);
   if (why === DUG) return `${name} is dug in where it stands.`;
   if (why === 'Outside your ground.') return `${name} cannot go there: it would stand outside your ground.`;
   if (why === 'Another block stands there.') return `${name} cannot go there: another unit already stands there.`;
+  if (why === 'Off the field.') return `${name} cannot go there: it would stand off the field.`;
+  if (why === 'Not on water, a bridge or ground it cannot stand on.') return `${name} cannot go there: it cannot stand on water, a bridge or ground like that.`;
   return `${name} cannot go there. ${why}`;
 }
 
