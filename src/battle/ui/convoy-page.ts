@@ -861,13 +861,13 @@ function detailOf(ps: ConvoyUnit[], staff: boolean): string {
     // (short, as the escorts' is: what they do left alone, then what he can do; the rules under a fold, the UI director's
     // round 7 W1, so the panel no longer pushes the map key off the bottom, the playtester's firsttimer-6)
     const where = up > 0 ? `${capital(nof(up, 'of your boats is', 'of your boats are'))} up with the convoy${coming ? `, and ${countWords(coming)} more ${coming === 1 ? 'is' : 'are'} on the way` : ''}.`
-      : first ? `None of your boats is up with the convoy yet.${coming ? ` ${coming === 1 ? 'Your boat is' : `All ${countWords(coming)} are`} on the way and will come up during the night.` : ''}`
+      : first ? `None of your boats is up with the convoy yet.${coming ? ` ${coming === 1 ? 'Your boat is' : `All ${countWords(coming)} are`} on the way.` : ''}`
       : `None of your boats is up with the convoy now.${coming ? ` ${capital(nof(coming, 'more is', 'more are'))} on the way.` : ''}`;
     const gone = left ? ` ${capital(countWords(left))} ${left === 1 ? 'has' : 'have'} left the night.` : '';
     const radar = !!S.t!.place.kit[S.t!.def.nat]?.radar;
-    const habit = ' Left to themselves, your captains close the convoy, fire, and turn away to reload; a boat an escort finds dives to periscope depth and keeps closing.'
+    const habit = ' Left to themselves, your captains close the convoy, fire and turn away to reload; a boat an escort finds dives and keeps closing.'
       // (the design director's R7 (a): Attack submerged kept, and taught)
-      + (radar ? ' Tonight the escorts have radar, which finds a boat on the surface far out. Attack submerged keeps a boat under it.' : '');
+      + (radar ? ' Tonight the escorts have radar, which finds a boat on the surface far out.' : '');
     return `<p class="tc-muted">${where}${gone}${habit} Pick one up to give her orders: each order says what it does.</p>`;
   }
   if (ps.length > 1) return `<p class="tc-muted">${capital(nof(ps.length, S.side === 'def' ? 'escort' : 'boat', S.side === 'def' ? 'escorts' : 'boats'))} picked. An order goes to every one of them.</p>`;
