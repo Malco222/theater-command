@@ -32,6 +32,7 @@ import { atWar, headline, industryHeld, theName } from './game';
 import { majorsOf } from './diplomacy';
 import { corpsList, needsOf } from './economy';
 import { menPer, menWorth } from './manpower';
+import { TEAMS, isTeam, type TeamKind } from './teams';
 import type { Build, Corps, Game } from './types';
 
 /** A nation's rifles row: rifles to its division's worth, the share a draft draws, and whether an empty store refuses anything (the next stage reads the last two). */
@@ -310,14 +311,20 @@ export function riflesTakes(g: Game, nat: string, divs: number): string | null {
   return `Takes ${menWorth(menPer(nat), divs)} and ${n100(divs * riflesRow(g, nat)!.perDiv)} rifles.`;
 }
 
+/** What a refusal calls the order: a support team by its label's own noun ("Machine-gun brigade": brigade), the rest "corps". */
+const orderNoun = (kind?: string): string => (kind !== undefined && isTeam({ kind }) ? TEAMS[kind as TeamKind].label.split(' ').pop()!.toLowerCase() : 'corps');
+
 /**
  * Why the store refuses an order of this many divisions, or null where it does not. The UI director's line 9 of 25
  * November 2026: "Not enough rifles: this corps takes 64,000 and 21,000 are in store. 8,300 come in each month, so it
  * can be ordered in six months." The rifles to the hundred, the months from the live inflow, in words from one to ten.
  * With nothing coming in (an inflow that reads 0 to the hundred), it closes with the way out: "No rifles are coming
  * in: it can be ordered only once a road runs again or an arsenal is back in your hands."
+ * The noun follows the kind (the UI director, 12:48Z of 26 November 2026, on line 9): "this brigade" for the support
+ * teams, the machine-gun and mortar brigades, by the word their own label ends in (teams.ts, data/campaign/arsenal.json
+ * "teams"), and "this corps" for every other kind and for an order given without one.
  */
-export function noRifles(g: Game, nat: string, divs: number): string | null {
+export function noRifles(g: Game, nat: string, divs: number, kind?: string): string | null {
   if (canArm(g, nat, divs)) return null;
   const per = riflesRow(g, nat)!.perDiv, need = divs * per, stock = stockOf(g, nat, 'rifles') * per, inflow = inflowOf(g, nat).total;
   const comes = Math.round(inflow / 100) > 0, months = comes ? Math.ceil((need - stock) / inflow) : 0;
@@ -325,7 +332,7 @@ export function noRifles(g: Game, nat: string, divs: number): string | null {
   // (The store to the hundred, but never shown at the need: a store just short of it reads the hundred below, so the
   // cost and the store add up.)
   const held = Math.max(0, Math.min(Math.round(stock / 100) * 100, Math.round(need / 100) * 100 - 100));
-  return `Not enough rifles: this corps takes ${n100(need)} and ${n0(held)} are in store.${when}`;
+  return `Not enough rifles: this ${orderNoun(kind)} takes ${n100(need)} and ${n0(held)} are in store.${when}`;
 }
 
 /**
