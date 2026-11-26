@@ -24,7 +24,14 @@ let added = 0;
 function addRow(row: any[]): number { ROWS.push(row); added++; return ROWS.length - 1; }
 afterEach(() => { while (added > 0) { ROWS.pop(); added--; } });
 
-const month = (g: Game, turn: number): void => { g.turn = turn; startPhase(g, 'GER'); };
+/**
+ * (The contact rule's second form, the design director's ruling of 06:10Z, 26 November 2026: a corps beside the enemy
+ * is held while it took part in the battle last resolved on its ground, or where nobody of its side keeps its province.
+ * This board's corps at the front stand with others of their side, so each is set, by hand, as having fought the battle
+ * last resolved where it stands, and is held as the board means. The relieved case: tests/contact-fact.test.ts.)
+ */
+const fought = (g: Game): void => { if (g.flags.fromWait !== 1) return; g.lastBattle = {}; for (const c of g.corps) if (!c.dead) (g.lastBattle[c.reg] ??= []).push(c.id); };
+const month = (g: Game, turn: number): void => { fought(g); g.turn = turn; startPhase(g, 'GER'); };
 const living = (g: Game, name: string): Corps | undefined => g.corps.find((c) => c.nat === 'GER' && !c.dead && c.name === name);
 const at = (g: Game, c: Corps | undefined): string | undefined => (c ? g.regions[c.reg].name : undefined);
 
@@ -34,13 +41,16 @@ function board(where: string, place = 'Magdeburg', on = true, more: Record<strin
   if (on) g.flags.fromWait = 1;
   const held = addCorps(g, 'GER', 'Test Corps', 'inf', 2, g.byName[where].id, {});
   const i = addRow([2, 'GER', 'Test Army', 'inf', 2, place, { from: ['Test Corps'], ...more }]);
+  fought(g);
   return { g, i, held };
 }
 
 describe('the board the tests read', () => {
   it('Grenzmark is in contact (Poznan beside it, Poland at war); Bavaria and Magdeburg are not', () => {
     const g = startOpen(createGame(1, null));
-    const on = (name: string): boolean => corpsInContact(g, 'GER', { reg: g.byName[name].id } as Corps);
+    // (A real corps, moved from place to place: the one test reads the corps itself, not only where it stands.)
+    const probe = addCorps(g, 'GER', 'Probe Corps', 'inf', 1, g.byName.Bavaria.id, {});
+    const on = (name: string): boolean => { relocate(g, probe, g.byName[name]); return corpsInContact(g, 'GER', probe); };
     expect(on('Grenzmark')).toBe(true);
     expect(on('Bavaria')).toBe(false);
     expect(on('Magdeburg')).toBe(false);
@@ -122,6 +132,24 @@ describe('on, a row waits while the corps it takes is in contact', () => {
     expect(back.flags.fromWait).toBe(1);
     expect(back.flags[`wait:${i}`]).toBe(2);
     expect(back.corps.some((c) => c.nat === 'GER' && !c.dead && c.name === 'Test Corps')).toBe(true);
+  });
+});
+
+describe("the contact rule's second form: relieved, the corps is no longer held", () => {
+  // (The design director's ruling of 06:10Z, 26 November 2026: beside the enemy a corps is held only where nobody of
+  // its side keeps its province, unless it took part in the battle last resolved there. Grenzmark's own II Corps keeps
+  // it, and no battle is recorded: the row takes its corps in its month, as with the switch off.)
+  it('the Test Corps in the Grenzmark beside II Corps is taken in the row\'s month', () => {
+    const g = startOpen(createGame(1, null));
+    g.flags.fromWait = 1;
+    const held = addCorps(g, 'GER', 'Test Corps', 'inf', 2, g.byName.Grenzmark.id, {});
+    const i = addRow([2, 'GER', 'Test Army', 'inf', 2, 'Magdeburg', { from: ['Test Corps'] }]);
+    expect(g.byName.Grenzmark.units.some((u) => u !== held && u.nat === 'GER')).toBe(true);
+    expect(corpsInContact(g, 'GER', held)).toBe(false);
+    g.turn = 2; startPhase(g, 'GER');
+    expect(living(g, 'Test Corps')).toBeUndefined();
+    expect(at(g, living(g, 'Test Army'))).toBe('Magdeburg');
+    expect(g.flags[`wait:${i}`]).toBeUndefined();
   });
 });
 

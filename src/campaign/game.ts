@@ -31,7 +31,7 @@ import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, m
 import { civicDrafts, civicSum, handedOver, holdersNow, hospitalNear, hospitalWorth } from './buildings';
 import { tradeTick } from './trade';
 import { divisionsOf, growCorps, numberCorps, numbersUnderFlag } from './armies';
-import { DRAWN, corpsInContact, countingFor, recordBattle, formsAny, heldAlready, heldLine, joinNames, joinsAlone, keepCounted, layOnce, namesNow, ownShare, rowOver } from './drawn';
+import { DRAWN, NO_LEAVING, corpsInContact, countingFor, recordBattle, formsAny, heldAlready, heldLine, joinNames, joinsAlone, keepCounted, layOnce, namesNow, ownShare, rowOver } from './drawn';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { plansOnCapture } from './plans';
 import { armyOf, jointHold, jointMonth } from './joint';
@@ -2867,6 +2867,15 @@ export const YIELD_ODDS = 1.2;
 const YIELD_ORG = 0.15;
 
 /**
+ * A corps under an order to give its province up without a fight: the standing order to give ground (the player's
+ * 'back' posture, turn.ts `orderStance` and the bridge's TC.stance; the computer gives no such order), not yet carried
+ * out this month and not overridden by an order to hold as a rearguard. Attacked at the odds, it falls back and fights
+ * no battle (`giveWay`, below). The one reading of that order: the contact rule's relief reads it too (drawn.ts
+ * `contactRead`: such a corps keeps nothing for its side; the design director's answer 5 of 12:48Z, 26 November 2026).
+ */
+export const givesWay = (g: Game, c: Corps): boolean => !!c.yields && !c.gaveWay && !isRearguard(g, c);
+
+/**
  * Troops the player has ordered to give ground rather than be broken on it. When a blow that would carry the
  * position is about to land they slip away to the best ground behind them, whole but shaken. A corps does this
  * once a month: caught again before its own month comes round, it stands. Fortress troops never leave their works,
@@ -2880,7 +2889,7 @@ function giveWay(g: Game, a: Assessment, attackers: Corps[], target: Region): Re
   const banned = new Set(attackers.map((c) => c.reg));
   for (const c of [...a.defenders]) {
     // (A rearguard holds where it was ordered to: release 2, rearguard.ts.)
-    if (!c.yields || c.gaveWay || isRearguard(g, c)) continue;
+    if (!givesWay(g, c)) continue;
     const to = retreatTarget(g, c, target, banned);
     if (!to) continue;
     const unit = reportUnit(c);
@@ -4655,10 +4664,12 @@ export function takeOut(g: Game, c: Corps, to: Region): void {
  * A formation put together from an army already overseas ('from' names its theatre) takes its divisions out of
  * that army: the largest corps there give them up, and a corps left with none is struck off. Garrisons are not touched.
  */
-function draw(g: Game, nat: string, theatre: string, divs: number, made?: Corps): void {
+function draw(g: Game, nat: string, theatre: string, divs: number, made?: Corps, held?: (x: Corps) => boolean): void {
   const k = THEATRE_LIST.findIndex((t) => t.name === theatre);
   for (let need = divs; k >= 0 && need > 0;) {
-    const c = g.corps.filter((x) => x !== made && x.nat === nat && !x.dead && !x.hold && x.kind !== 'fort' && g.regions[x.reg].theatre === k && !(made && g.flags[`formed:${x.id}`])).sort((a, b) => b.divs - a.divs || a.id - b.id)[0];
+    // (`held`: under the switch 'fromWait', a corps the contact rule holds where it stands, read afresh at each take, so
+    // a corps whose only relief was the corps just drawn away is held: `expeditions`.)
+    const c = g.corps.filter((x) => x !== made && x.nat === nat && !x.dead && !x.hold && x.kind !== 'fort' && g.regions[x.reg].theatre === k && !(made && g.flags[`formed:${x.id}`]) && !held?.(x)).sort((a, b) => b.divs - a.divs || a.id - b.id)[0];
     if (!c) break;
     const take = Math.min(need, c.divs);
     if (take >= c.divs) removeCorps(g, c); else c.divs -= take;
@@ -4907,8 +4918,10 @@ const fromWaits = (g: Game, nat: string, from: string[]): boolean => ((setup as 
  */
 export function rowHolds(g: Game, nat: string, from: string[], at: number | undefined): { front: Corps[]; unformed: string[] } {
   const far = farOn(g);
+  // (The corps the row would take leave together, and keep nothing for each other: the one contact test's `leaving`.)
+  const gone = g.flags.fromWait === 1 ? new Set(rowTakes(g, nat, { from })) : NO_LEAVING;
   return {
-    front: g.corps.filter((x) => x.nat === nat && !x.dead && from.includes(x.name) && ((far && onLiveFront(g, nat, x)) || (x.reg !== at && corpsInContact(g, nat, x)))),
+    front: g.corps.filter((x) => x.nat === nat && !x.dead && from.includes(x.name) && ((far && onLiveFront(g, nat, x)) || (x.reg !== at && corpsInContact(g, nat, x, gone)))),
     unformed: far ? from.filter((n) => fromWaits(g, nat, [n])) : [],
   };
 }
@@ -4918,7 +4931,7 @@ export function rowHolds(g: Game, nat: string, from: string[], at: number | unde
  * front of its staff's plan, on the far side, or in contact (an enemy at war on its province or beside it). Read for
  * the telling's words the month a row forms (arrivalwaits.ts `waitedOn`), never by the rule itself. Changes nothing.
  */
-export const atFrontNow = (g: Game, nat: string, x: Corps): boolean => (farOn(g) && onLiveFront(g, nat, x)) || corpsInContact(g, nat, x);
+export const atFrontNow = (g: Game, nat: string, x: Corps, from: string[]): boolean => (farOn(g) && onLiveFront(g, nat, x)) || corpsInContact(g, nat, x, g.flags.fromWait === 1 ? new Set(rowTakes(g, nat, { from })) : NO_LEAVING);
 
 /**
  * The article the general's line gives the row's name ("{general} arrives in {place} with the {row}."): none where the
@@ -5833,9 +5846,19 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // (And where the book of the row's own place is closed it acts there too, at every stop: "a closed book brings the
     // contact rule in", her 22:05Z; history.ts `contactRuleActs`.)
     const inFight = g.flags.fromWait === 1 && contactRuleActs(g, g.byName[row[5]]) && !hisOffers(g, nat);
+    // (The one contact test, drawn.ts `corpsInContact`, under the switch 'fromWait': a corps that leaves in the same act
+    // is nobody's relief. ONE set for this row, read by every reader of the test below: the corps its own 'from' takes,
+    // the lent corps whose time is up in this pass (`leaving`, removed once every row is read), and the stand-in this
+    // row stands down where it lands. The design director's ruling of 06:10Z, 26 November 2026; section 13 A1 of the
+    // design. With the switch off it is never built, and nothing reads it.)
+    const leavingNow: ReadonlySet<Corps> = g.flags.fromWait === 1 ? new Set<Corps>([
+      ...rowTakes(g, nat, o),
+      ...g.corps.filter((x) => !x.dead && leaving(x)),
+      ...(g.flags.open === 1 && UNLESS.has(row[2]) ? ((setup as any).expeditions as any[]).filter((r2) => r2[6]?.unless === row[2] && r2[1] === nat).map((r2) => g.corps.find((u) => u.nat === nat && !u.dead && u.name === r2[2])).filter((x): x is Corps => !!x) : []),
+    ]) : NO_LEAVING;
     let own = false;
     if (Array.isArray(o.from) && !ashore && row[1] === nat && farOn(g) && (g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name)
-      && (onLiveFront(g, nat, x) || (inFight && x.reg !== reg?.id && corpsInContact(g, nat, x))))
+      && (onLiveFront(g, nat, x) || (inFight && x.reg !== reg?.id && corpsInContact(g, nat, x, leavingNow))))
       || (inFight && fromWaits(g, nat, o.from)))) {
       if (o.adds > 0) own = true;
       else { if (inFight) tellWait(g, i, reg); g.flags[`wait:${i}`] = g.turn; return; }
@@ -5851,7 +5874,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // 22:05Z; history.ts `contactRuleActs`.)
     const formsAt = reg?.id;
     if (g.flags.fromWait === 1 && g.flags.open === 1 && !farOn(g) && contactRuleActs(g, g.byName[row[5]]) && Array.isArray(o.from) && !ashore && row[1] === nat && formsAt !== undefined
-      && g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && x.reg !== formsAt && corpsInContact(g, nat, x))) { if (inFight) tellWait(g, i, reg); g.flags[`wait:${i}`] = g.turn; return; }
+      && g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && x.reg !== formsAt && corpsInContact(g, nat, x, leavingNow))) { if (inFight) tellWait(g, i, reg); g.flags[`wait:${i}`] = g.turn; return; }
     // (The far side: a row that waits on a formation the player has been offered and has not answered, the one that
     // makes its cut or the one it is itself made from, waits on his answer and has its half year from the month he
     // gives it: he is never struck a row for the months he took, nor given its men twice. And a row made from a
@@ -5936,7 +5959,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // (The far side: no row takes a corps standing on a live front of its staff's plan, by its name any more than by a list: the rulings of 05:30Z and 05:35Z, above.)
     // (Nor one that cannot leave where it is: at sea, shut in a town the enemy stands round, marching with an ally's army, at home out of the line.)
     const fixed = (x: Corps): boolean => x.sail !== undefined || x.joint !== undefined || x.leave !== undefined || !!x.school || (x.town !== undefined && g.regions[x.reg].units.some((u) => atWar(g, u.nat, nat))) || (farOn(g) && onLiveFront(g, nat, x));
-    const claims = once ? heldAlready(g, nat, row, o, n, reg, home, (x) => spoken!.has(x.name) || leaving(x), fixed) : [];
+    const claims = once ? heldAlready(g, nat, row, o, n, reg, home, (x) => spoken!.has(x.name) || leaving(x), fixed, leavingNow) : [];
     // (A row another row took a share of before it landed, o.takes: a division of it that stays with its corps is the
     // weaker by that share there, as one that comes or is raised new is where the row lands.)
     // (Once for each corps, by the number of its divisions the row names: two of one corps are not cut one after the other.)
@@ -6048,7 +6071,11 @@ function expeditions(g: Game, nat: string, take?: number): void {
       const here = theatreName(reg) === o.from;
       if (here) g.flags[`formed:${c.id}`] = 1;
       // (Less the divisions the row's own name found, each in the corps that holds it: drawn.ts.)
-      draw(g, o.of ?? nat, o.from, claims.length ? Math.max(0, n - claims.length) : row[4], here ? c : undefined);
+      // (Under the switch 'fromWait', where the contact rule acts, the draw takes no corps the one test holds, nor one a
+      // claim of this row keeps where it stands: the design director's answer 3 of 12:48Z, 26 November 2026. A theatre
+      // short of free corps gives what it has, as a theatre short of corps always did.)
+      const held = g.flags.fromWait === 1 && contactRuleActs(g, g.byName[row[5]]) ? (x: Corps): boolean => corpsInContact(g, x.nat, x, leavingNow) || claims.some((q) => q.from === x && q.stays) : undefined;
+      draw(g, o.of ?? nat, o.from, claims.length ? Math.max(0, n - claims.length) : row[4], here ? c : undefined, held);
     }
     if (o.until) g.flags[`lent:${i}`] = c.id;
     // (A war row that drew divisions from living corps is remembered by its corps until its war is over: above.)

@@ -27,7 +27,14 @@ const addRow = (row: any[]): number => { rows.push(row); added++; return rows.le
 afterEach(() => { while (added > 0) { rows.pop(); added--; } });
 
 const corps = (g: Game, name: string): Corps => g.corps.find((c) => c.nat === 'JAP' && c.name === name && !c.dead)!;
-const month = (g: Game, t: number): void => { g.turn = t; startPhase(g, 'JAP'); };
+/**
+ * (The contact rule's second form, the design director's ruling of 06:10Z, 26 November 2026: a corps beside the enemy
+ * is held while it took part in the battle last resolved on its ground, or where nobody of its side keeps its province.
+ * This board's corps at the front stand with others of their side, so each is set, by hand, as having fought the battle
+ * last resolved where it stands, and is held as the board means. The relieved case: tests/contact-fact.test.ts.)
+ */
+const fought = (g: Game): void => { if (g.flags.fromWait !== 1) return; g.lastBattle = {}; for (const c of g.corps) if (!c.dead) (g.lastBattle[c.reg] ??= []).push(c.id); };
+const month = (g: Game, t: number): void => { fought(g); g.turn = t; startPhase(g, 'JAP'); };
 const told = (g: Game, t: number, about: string): string[] => g.headlines.filter((h) => h.turn === t && h.nat === 'JAP' && h.text.includes(about)).map((h) => h.text);
 const lose = (g: Game, name: string, to: string, away: string): Region => { const r = g.byName[name]; for (const u of [...r.units]) relocate(g, u, g.byName[away]); r.ctrl = to; return r; };
 const open = (): Game => { const g = startOpen(createGame(3, 'JAP')); g.flags.fromWait = 1; return g; };

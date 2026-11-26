@@ -27,7 +27,14 @@ const addRow = (row: any[]): number => { rows.push(row); added++; return rows.le
 afterEach(() => { while (added > 0) { rows.pop(); added--; } });
 
 const corps = (g: Game, name: string): Corps => g.corps.find((c) => c.nat === 'JAP' && c.name === name && !c.dead)!;
-const month = (g: Game, t: number): void => { g.turn = t; startPhase(g, 'JAP'); };
+/**
+ * (The contact rule's second form, the design director's ruling of 06:10Z, 26 November 2026: a corps beside the enemy
+ * is held while it took part in the battle last resolved on its ground, or where nobody of its side keeps its province.
+ * This board's corps at the front stand with others of their side, so each is set, by hand, as having fought the battle
+ * last resolved where it stands, and is held as the board means. The relieved case: tests/contact-fact.test.ts.)
+ */
+const fought = (g: Game): void => { if (g.flags.fromWait !== 1) return; g.lastBattle = {}; for (const c of g.corps) if (!c.dead) (g.lastBattle[c.reg] ??= []).push(c.id); };
+const month = (g: Game, t: number): void => { fought(g); g.turn = t; startPhase(g, 'JAP'); };
 const told = (g: Game, t: number): string[] => g.headlines.filter((h) => h.turn === t && h.nat === 'JAP' && /formed from|left the front|has not formed yet|without your/.test(h.text)).map((h) => h.text);
 const lose = (g: Game, name: string, to: string, away: string): Region => { const r = g.byName[name]; for (const u of [...r.units]) relocate(g, u, g.byName[away]); r.ctrl = to; return r; };
 /** A grand campaign, Japan the player's, the far side on, the switch on by hand as a campaign opened with it carries it. */
@@ -93,6 +100,8 @@ describe('the corps it is formed from has not formed yet: the 18th Division at R
     // Its corps comes, at Hainan in the line: the Rangoon row waits on it there, and the corps carries the line now.
     relocate(g, corps(g, ARMY21), g.byName['Hiroshima']);
     lose(g, 'Singapore', 'JAP', 'Calcutta');
+    // (It forms there alone, nobody of its side to keep Hainan: the contact rule's second form holds it where it forms.)
+    for (const u of [...g.byName['Hainan'].units]) relocate(g, u, g.byName['Hiroshima']);
     month(g, 34); month(g, 35);
     const a = corps(g, ARMY25);
     expect(g.regions[a.reg].name).toBe('Hainan');

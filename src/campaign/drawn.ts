@@ -57,7 +57,7 @@
 
 import words from '../../data/campaign/drawn.json';
 import counting from '../../data/campaign/counting.json';
-import { addCorps, atWar, relocate, removeCorps } from './game';
+import { addCorps, atWar, givesWay, hostileUnits, relocate, removeCorps } from './game';
 import { divisionWords, divisionsNamed, divisionsOf, keepNumbers, ordinal, setStandInCount, standInCount, standInNumbers } from './armies';
 import { seat } from './commanders';
 import { contactRuleActs } from './history';
@@ -177,8 +177,11 @@ export function formationName(names: [string, string][]): string | null {
  * for this one), `busy` a corps no row may take (one that cannot leave where it is; the far side: one standing on a
  * live front of its staff's plan).
  * Forts and parts hold no division; an empty list is a row that is laid as it always was.
+ * `leavingNow` (under the switch 'fromWait'): the corps the same act of the row takes away (game.ts `expeditions`: the
+ * row's own `from` corps, the lent corps whose loan ends this pass, the stand-in this row stands down), which keep
+ * nothing for a corps beside them, and neither does a corps this row's claims would empty (`emptied`).
  */
-export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number, reg: Region, home: boolean, skip: (c: Corps) => boolean, busy: (c: Corps) => boolean): Claim[] {
+export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number, reg: Region, home: boolean, skip: (c: Corps) => boolean, busy: (c: Corps) => boolean, leavingNow: ReadonlySet<Corps> = NO_LEAVING): Claim[] {
   const names = divisionsNamed(row[2], nat, row[3] as Kind).slice(0, n);
   const count = countingFor(g, nat, row)?.from;
   if (!names.length && !count) return [];
@@ -203,15 +206,20 @@ export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number,
   // keep their book and draw a held division at its date, fight or not, still laid once. Her rulings of 21:25Z and 21:50Z.)
   // (Where the book of the row's own place is closed it acts there too: "a closed book brings the contact rule in", her
   // 22:05Z; history.ts `contactRuleActs`.)
-  const fighting = (c: Corps): boolean => contactRuleActs(g, g.byName[row[5]]) && corpsInContact(g, nat, c);
-  const stays = (c: Corps): boolean => home || nat === g.human || afloat.has(c) || c.reg === reg.id || (k >= 0 && g.regions[c.reg].theatre === k) || busy(c) || fighting(c);
+  // (Under the switch 'fromWait' the one test reads who leaves in the same act: `gone`, set once every claim is known,
+  // below. The design director's ruling of 06:10Z, 26 November 2026; with the switch off it reads nobody.)
+  let gone: ReadonlySet<Corps> = NO_LEAVING;
+  const fighting = (c: Corps): boolean => contactRuleActs(g, g.byName[row[5]]) && corpsInContact(g, nat, c, gone);
+  // (A corps stays for a reason other than contact: home, the player's, afloat, where the row lands, in its theatre, busy.)
+  const anyway = (c: Corps): boolean => home || nat === g.human || afloat.has(c) || c.reg === reg.id || (k >= 0 && g.regions[c.reg].theatre === k) || busy(c);
+  const stays = (c: Corps): boolean => anyway(c) || fighting(c);
   const was = o.was as Record<string, string> | undefined;
   const out: Claim[] = [];
   // The divisions living corps hold under the row's own names first: a place one of them stands in is never asked for
   // again by a division formed out of another, wherever the two stand in the row's name.
   names.forEach((name, slot) => {
     const h = holder(name[0]);
-    if (h) out.push({ slot, name, from: h.c, at: h.at, stays: stays(h.c) });
+    if (h) out.push({ slot, name, from: h.c, at: h.at, stays: false });
   });
   names.forEach((name, slot) => {
     const old = !holder(name[0]) ? was?.[name[0]] : undefined;
@@ -227,7 +235,7 @@ export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number,
       if (c) h = { c, at: c.divs - 1 };
     }
     if (!h) { out.push({ slot, name, from: null, at: -1, conv: old, stays: true }); return; }
-    out.push({ slot, name, from: h.c, at: h.at, conv: old, stays: stays(h.c) });
+    out.push({ slot, name, from: h.c, at: h.at, conv: old, stays: false });
   });
   // The stood war rows: the divisions the table counts in a board corps, each entry the row's next places in order.
   // (A place a corps already holds by the row's own name is that corps', above. A counting formation that is dead, or
@@ -247,7 +255,7 @@ export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number,
       const places = Array.from({ length: f.divs }, (_, j) => first + j).filter((slot) => slot < n && !out.some((q) => q.slot === slot));
       const own = (slot: number): [string, string] | undefined => names[slot];
       if (of !== undefined) {
-        for (const slot of places) out.push({ slot, name: own(slot) ?? ['', ''], from: h, at: -1, stays: stays(h), counted: true, ...(own(slot) ? { named: true as const } : {}), share: { rec: f.record! / f.divs, of } });
+        for (const slot of places) out.push({ slot, name: own(slot) ?? ['', ''], from: h, at: -1, stays: false, counted: true, ...(own(slot) ? { named: true as const } : {}), share: { rec: f.record! / f.divs, of } });
         continue;
       }
       // Its last divisions, in the order they stand, but for one the row already holds by name, and for the ones that
@@ -256,9 +264,20 @@ export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number,
       const free = divisionsOf(g, h).filter((d) => !out.some((q) => q.from === h && q.at === d.slot));
       const cards = free.slice(0, Math.max(0, free.length - (h.kept ?? 0)));
       const last = cards.slice(Math.max(0, cards.length - places.length));
-      last.forEach((d, j) => { const slot = places[j]; out.push({ slot, name: own(slot) ?? [d.name, d.short], from: h, at: d.slot, stays: stays(h), counted: true, ...(own(slot) ? { named: true as const } : {}) }); });
+      last.forEach((d, j) => { const slot = places[j]; out.push({ slot, name: own(slot) ?? [d.name, d.short], from: h, at: d.slot, stays: false, counted: true, ...(own(slot) ? { named: true as const } : {}) }); });
     }
   }
+  // Who stays, read once every claim is known (each claim was pushed with its place kept, `stays` false until here):
+  // under the switch 'fromWait', a corps the row's claims would empty, all its divisions claimed and none of them by
+  // share, and that has no reason but contact to stay (section 13 A11 of the design: exact), keeps nothing for a corps
+  // beside it, and neither does a corps the same act takes away (`leavingNow`). The claim formed out of another with
+  // nobody to give it (`from` null) stays as pushed.
+  if (g.flags.fromWait === 1) {
+    const emptied = new Set<Corps>(leavingNow);
+    for (const h of new Set(out.map((q) => q.from).filter((x): x is Corps => !!x))) if (!anyway(h) && out.filter((q) => q.from === h && !q.share).length >= h.divs) emptied.add(h);
+    gone = emptied;
+  }
+  for (const q of out) if (q.from) q.stays = stays(q.from);
   // (In the order the row's name gives them, as they were always read.)
   out.sort((a, b) => a.slot - b.slot);
   if (out.length) drawnWatch.tell?.({ turn: g.turn, nat, row: row[2], place: row[5], lands: reg.name, home, divs: n, claims: out.map((q) => ({ name: q.name[0], from: q.from?.name ?? null, id: q.from?.id ?? null, at: q.from ? g.regions[q.from.reg].name : null, stays: q.stays, conv: q.conv ?? null, share: !!q.share })) });
@@ -304,16 +323,55 @@ export function dropBattle(g: Game, id: number): void {
   for (const k in g.lastBattle) { const l = g.lastBattle[k]; const j = l.indexOf(id); if (j >= 0) l.splice(j, 1); }
 }
 
-/**
- * Whether a corps is in contact: an enemy at war with its country holds or stands on its province or one beside it,
- * read as the board stands (the design director's ruling of 18:47Z, 25 November 2026: a date never lifts a corps out
- * of a fight). The war rows' draw reads it (`heldAlready`), and on the old chart, under its own switch 'fromWait', so
- * does a row that takes a named corps whole (game.ts, `expeditions`; her ruling of 19:47Z). Nothing changes.
- */
-export function corpsInContact(g: Game, nat: string, c: Corps): boolean {
-  const enemy = (r: Region): boolean => (!!r.ctrl && atWar(g, nat, r.ctrl)) || r.units.some((u) => !u.dead && atWar(g, nat, u.nat));
+/** No corps leaving: the contact test's reading where the same act takes nobody away. */
+export const NO_LEAVING: ReadonlySet<Corps> = new Set();
+
+/** The enemies at war with `nat` that hold or stand on c's province or one beside it; with `first`, the first only. */
+function enemiesBeside(g: Game, nat: string, c: Corps, first = false): string[] {
+  const out: string[] = [];
+  const add = (x: string): void => { if (!out.includes(x)) out.push(x); };
+  const look = (r: Region): boolean => {
+    if (r.ctrl && atWar(g, nat, r.ctrl)) { add(r.ctrl); if (first) return true; }
+    for (const u of r.units) if (!u.dead && atWar(g, nat, u.nat)) { add(u.nat); if (first) return true; }
+    return false;
+  };
   const r = g.regions[c.reg];
-  return enemy(r) || r.nb.some((j) => enemy(g.regions[j]));
+  if (look(r) && first) return out;
+  for (const j of r.nb) if (look(g.regions[j]) && first) return out;
+  return out;
+}
+
+/**
+ * The contact test's reading, whole: `beside` (an enemy at war with `nat` holds or stands on c's province or one beside
+ * it), `battle` (c took part in the battle last resolved on its ground: `g.lastBattle`, recordBattle above), `kept`
+ * (for every enemy faced, some unit other than c stands on c's province's field at war with it: the game's own holding
+ * test, game.ts `hostileUnits`; a unit the same act takes away, `leaving`, or one under an order to give its province up,
+ * game.ts `givesWay`, keeps nothing). Only `corpsInContact` combines them; a gate's observer may read them. Nothing else
+ * in src may hold a copy of the test (tests/contact-fact.test.ts reads every file for one).
+ */
+export function contactRead(g: Game, nat: string, c: Corps, leaving: ReadonlySet<Corps> = NO_LEAVING): { beside: boolean; battle: boolean; kept: boolean } {
+  const foes = enemiesBeside(g, nat, c);
+  const r = g.regions[c.reg];
+  const battle = !c.dead && (g.lastBattle?.[c.reg]?.includes(c.id) ?? false);
+  const kept = foes.length > 0 && foes.every((e) => hostileUnits(g, r, e).some((u) => u !== c && !u.dead && !leaving.has(u) && !givesWay(g, u)));
+  return { beside: foes.length > 0, battle, kept };
+}
+
+/**
+ * Whether a corps is held where it stands: the ONE contact test every piece reads, rows and the draw alike (the design
+ * director's ruling of 06:10Z, 26 November 2026). With the switch 'fromWait' off: an enemy at war with its country
+ * holds or stands on its province or one beside it, read as the board stands, exactly as before (her ruling of 18:47Z,
+ * 25 November 2026: a date never lifts a corps out of a fight). On: held while it took part in the battle last
+ * resolved on its ground, or else where it stands beside the enemy with nobody of its side to keep its province, both
+ * only while an enemy is beside it (her answers 1 and 4 of 12:48Z). `leaving`: the corps the same act takes away, which
+ * keep nothing. Readers: the war rows' draw (`heldAlready`, its `emptied` and the row's `leavingNow`), game.ts's
+ * `expeditions` (the far side's and the old chart's rows that take a named corps whole, and the theatre draw), and the
+ * telling (game.ts `rowHolds`, `atFrontNow`). Writes nothing.
+ */
+export function corpsInContact(g: Game, nat: string, c: Corps, leaving: ReadonlySet<Corps> = NO_LEAVING): boolean {
+  if (g.flags.fromWait !== 1) return enemiesBeside(g, nat, c, true).length > 0;
+  const k = contactRead(g, nat, c, leaving);
+  return k.beside && (k.battle || !k.kept);
 }
 
 /**

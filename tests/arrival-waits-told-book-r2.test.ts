@@ -34,7 +34,14 @@ let added = 0;
 function addRow(row: any[]): number { ROWS.push(row); added++; return ROWS.length - 1; }
 afterEach(() => { while (added > 0) { ROWS.pop(); added--; } });
 
-const month = (g: Game, turn: number): void => { g.turn = turn; startPhase(g, 'GER'); };
+/**
+ * (The contact rule's second form, the design director's ruling of 06:10Z, 26 November 2026: a corps beside the enemy
+ * is held while it took part in the battle last resolved on its ground, or where nobody of its side keeps its province.
+ * This board's corps at the front stand with others of their side, so each is set, by hand, as having fought the battle
+ * last resolved where it stands, and is held as the board means. The relieved case: tests/contact-fact.test.ts.)
+ */
+const fought = (g: Game): void => { if (g.flags.fromWait !== 1) return; g.lastBattle = {}; for (const c of g.corps) if (!c.dead) (g.lastBattle[c.reg] ??= []).push(c.id); };
+const month = (g: Game, turn: number): void => { fought(g); g.turn = turn; startPhase(g, 'GER'); };
 const living = (g: Game, name: string): Corps | undefined => g.corps.find((c) => c.nat === 'GER' && !c.dead && c.name === name);
 const tellings = (g: Game): string[] => g.headlines.filter((h) => /formed from|left the front|has not formed yet|without your|The arrival/.test(h.text)).map((h) => h.text);
 const telFlags = (g: Game): string[] => Object.keys(g.flags).filter((k) => /^row(Told|At|Front):/.test(k));
@@ -47,6 +54,7 @@ function board(stop: number): { g: Game; i: number; held: Corps } {
   g.flags.fromWait = 1;
   const held = addCorps(g, 'GER', 'Test Corps', 'inf', 2, g.byName.Grenzmark.id, {});
   const i = addRow([2, 'GER', 'Test Army', 'inf', 2, 'Magdeburg', { from: ['Test Corps'] }]);
+  fought(g);
   return { g, i, held };
 }
 
