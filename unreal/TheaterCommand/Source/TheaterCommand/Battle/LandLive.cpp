@@ -126,7 +126,7 @@ namespace
 		// Since the design director's ruling of 17:52Z the same switch turns on the rules' sim.teamsRule in every
 		// battle, the custom battles too: a team's fire shakes by its own harm, and a defence's line stays in its
 		// places while its teams fire. So the line says "into battle", not "campaign battles".)
-		{ TEXT("teams"), TEXT("Support teams in battle"), TEXT("Every infantry corps takes its own machine gun and mortar teams into battle, drawn from its own men, not extra ones, and they fire in support from behind its line. This changes how battles turn out. A change takes effect from the next battle. It works only with Units face the fire that hurts most on."), TEXT("TheaterLandNoTeams"), false, TEXT("TheaterLandRuleTeams") },
+		{ TEXT("teams"), TEXT("Support teams in battle"), TEXT("Every infantry corps takes its own machine gun and mortar teams into battle, drawn from its own men, not extra ones, and they fire in support from behind its line. This changes how battles turn out. A change takes effect from the next battle. It works only with Units face the fire that hurts most and Units keep their stand on."), TEXT("TheaterLandNoTeams"), false, TEXT("TheaterLandRuleTeams") },
 		// (Units face the fire that hurts most, release 2: the design director's ruling of 25 November 21:54Z on the
 		// fairness gate's trace. Off, any blow on a block's front holds it to its facing, at any range, however light
 		// and whatever its cover: ruled a fault. On, a block is held only by the enemy whose blows cost it most after
@@ -136,7 +136,18 @@ namespace
 		// teams in battle" above does nothing without it (the same ruling: the bridge and live.ts read both). Its key,
 		// name and line are the UI director's of 25 November 22:14Z, and "A change takes effect from the next battle." on
 		// both rows theirs of 22:30Z: a battle reads its rows once, as it begins.)
-		{ TEXT("facing"), TEXT("Units face the fire that hurts most"), TEXT("A unit faces the enemy that hurts it most, once its cover is counted, and turns to meet another only when that one hurts it more. Fire that truly hurts still holds a unit to its facing; a far-off gun that does it little harm no longer keeps it facing the wrong way while infantry comes in at its side. Off: any enemy striking a unit's front, however lightly and from however far, keeps it from turning to meet another at its side, as before. This changes how battles turn out. A change takes effect from the next battle."), TEXT("TheaterLandNoFacing"), false, TEXT("TheaterLandRuleFacing") },
+		{ TEXT("facing"), TEXT("Units face the fire that hurts most"), TEXT("A unit faces the enemy that hurts it most, once its cover is counted, and turns to meet another only when that one hurts it more. Fire that truly hurts still holds a unit to its facing; a far-off gun that does it little harm no longer keeps it facing the wrong way while infantry comes in at its side. Off: any enemy striking a unit's front, however lightly and from however far, keeps it from turning to meet another at its side, as before. This changes how battles turn out. A change takes effect from the next battle. It works only with Units keep their stand on."), TEXT("TheaterLandNoFacing"), false, TEXT("TheaterLandRuleFacing") },
+		// (Units keep their stand, release 2: the art director's number of 26 November 2026 00:50Z and the design
+		// director's ruling of 01:02Z. Off, a block on an attack order asks afresh every tick whether it is well in
+		// reach, with no memory: its target hovering at that edge, it stands a tick and wheels to what it fights, marches
+		// a tick and wheels back to its way, and rocks on the spot (counted in today's rules at its gate: the note
+		// land-battles/facing-gate-1126.md). Ruled a fault, for every block on an attack order. On, a block that has stood to
+		// fight its target stands while the target is within its hold, the stand's own figure, and closes again only
+		// beyond it (the rules' sim.standRule). It is NOT looks only: it moves every battle, so it has this row of its
+		// own and its own fairness gate, and stays off until that gate, the Mac and the art director pass it;
+		// -TheaterLandRuleStand turns it on for a run. The two rows above do nothing without it (the same ruling: the
+		// bridge and live.ts read all three). Key, name and line: mine until the UI director names them.)
+		{ TEXT("stand"), TEXT("Units keep their stand"), TEXT("A unit sent to attack closes to good range, stops and fights from there, and moves up again only when its enemy has drawn well back. Off: it asks itself every moment whether it is close enough, so with its enemy right at the edge of range it stops, turns to fight, turns back and steps on, over and over, and rocks on the spot, as before. This changes how battles turn out. A change takes effect from the next battle."), TEXT("TheaterLandNoStand"), false, TEXT("TheaterLandRuleStand") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }
