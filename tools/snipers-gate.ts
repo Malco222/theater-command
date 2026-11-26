@@ -47,7 +47,9 @@ function jobs(set: string): Job[] {
     const EVERY: { key: string; ground: Terrain; river?: boolean; fort?: number; dug?: boolean }[] = [
       ...GROUNDS7.map((g) => ({ key: g as string, ground: g })), { key: 'river', ground: 'plains', river: true }, { key: 'fort', ground: 'hills', fort: 2 }, { key: 'dug', ground: 'plains', dug: true },
     ];
-    for (const e of EVERY) for (const o of [1.1, 1.2, 1.3, 1.4]) for (let s = 1; s <= 40; s++) {
+    // (SNP_SEEDS='41-80': further seeds, the design director's final read of G7 on 80, 26 Nov 01:49Z (c))
+    const [s0, s1] = (process.env.SNP_SEEDS ?? '1-40').split('-').map(Number);
+    for (const e of EVERY) for (const o of [1.1, 1.2, 1.3, 1.4]) for (let s = s0; s <= s1; s++) {
       out.push({ key: `${e.key}:${o}:${s}`, cell: `${e.key}:${o}`, plain: true, ticket: () => sampleTicket(e.ground, o, { seed: seedOf(s), humanAtt: true, river: e.river, fort: e.fort, dug: e.dug }) });
     }
   }

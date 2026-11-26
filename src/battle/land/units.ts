@@ -87,6 +87,14 @@ export interface LandUnit extends UnitBase {
   quietTo?: number;
   slipTo?: number;
   slips?: number;
+  /**
+   * A sniper team sent in with a group (the attack order; the design director, 26 November 01:49Z (d)): the group's
+   * target, which it bounds toward by its staff's own drill till it is in reach, and the group's blocks, whose leading
+   * foot it never goes ahead of. Any later order of its own ends it.
+   */
+  stalk?: { target: number; group: number[] };
+  /** A sniper team its side put where it is by an order of its own (a move, or the setup step): a group sends it no further. */
+  placed?: boolean;
   /** A machine-gun or mortar team of the computer's aimed at this found enemy sniper team (LAND.snipers; ai.ts counterSnipers). */
   hunts?: number;
   /**

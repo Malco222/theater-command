@@ -8,7 +8,7 @@
 // any dispatch where the shooter lies.
 import { describe, expect, it } from 'vitest';
 import groundCard from '../data/campaign/ground.json';
-import { LAND, LandBattle, PRACTICE_GROUNDS, partsFor, practiceTicket, sniperShare, withSnipers, withTeams } from '../src/battle/land';
+import { LAND, LandBattle, PRACTICE_GROUNDS, partsFor, practiceTicket, sampleTicket, sniperShare, withSnipers, withTeams } from '../src/battle/land';
 import { LiveBattle, LiveKeeper, type LiveDelta } from '../src/battle/land/live';
 import type { FieldTicket } from '../src/battle/core/types';
 import type { LandPlace } from '../src/battle/land';
@@ -76,20 +76,77 @@ describe('sniper teams: the player\'s orders', () => {
     const mine = b.units.filter((u) => u.side === 'att' && u.kind !== 'fort');
     const team = mine.find((u) => u.team === 'snp')!;
     const foe = b.units.find((u) => u.side === 'def' && u.team !== 'snp')!;
+    // Put where it is by his own order: a group sends it no further (the design director, 26 Nov 01:49Z (d)).
+    expect(b.command({ do: 'move', units: [team.id], x: team.x, y: team.y }, 'att')).toBe(true);
+    for (let k = 0; k < 5; k++) b.step();
+    expect(team.placed).toBe(true);
     const at = [team.x, team.y];
     expect(b.command({ do: 'attack', units: mine.map((u) => u.id), target: foe.id }, 'att')).toBe(true);
     expect(team.aim).toBe(foe.id);
     expect(team.order).toBeNull();
+    expect(team.stalk).toBeUndefined();
     expect(mine.filter((u) => u.team !== 'snp').every((u) => u.order?.kind === 'attack')).toBe(true);
     for (let k = 0; k < 50; k++) b.step();
     expect(Math.hypot(team.x - at[0], team.y - at[1])).toBeLessThan(1);
     expect(b.command({ do: 'attack', units: [team.id], target: foe.id }, 'att')).toBe(true);
     expect(team.order?.kind).toBe('attack');
+    expect(team.stalk).toBeUndefined();
     // Sniper teams sent on their own, together, go as ordered too.
     const teams = mine.filter((u) => u.team === 'snp');
     expect(teams.length).toBeGreaterThan(1);
     expect(b.command({ do: 'attack', units: teams.map((u) => u.id), target: foe.id }, 'att')).toBe(true);
     expect(teams.every((u) => u.order?.kind === 'attack')).toBe(true);
+  });
+});
+
+describe('sniper teams: sent in with a group', () => {
+  it('goes up by its staff\'s drill, cover to cover, never ahead of the group\'s leading foot, till the target is in reach', () => {
+    // The plain attack (the gate's M): every block of his at the enemy nearest them, his teams where his staff laid them.
+    let bounds = 0, fired = false;
+    for (const seed of [3, 7]) {
+      const b = new LandBattle(withSnipers(sampleTicket('plains', 1.2, { seed: seed * 7919 + 13, humanAtt: true })));
+      b.ai.att = false; b.ai.def = true;
+      const mine = b.units.filter((u) => u.side === 'att' && u.kind !== 'fort');
+      const teams = mine.filter((u) => u.team === 'snp'), group = mine.filter((u) => u.team !== 'snp');
+      const cx = mine.reduce((a, u) => a + u.x, 0) / mine.length, cy = mine.reduce((a, u) => a + u.y, 0) / mine.length;
+      const foe = b.units.filter((u) => u.side === 'def').reduce((m, f) => (Math.hypot(f.x - cx, f.y - cy) < Math.hypot(m.x - cx, m.y - cy) ? f : m));
+      expect(b.command({ do: 'attack', units: mine.map((u) => u.id), target: foe.id }, 'att')).toBe(true);
+      b.hideOn();
+      for (const u of teams) expect(u.stalk).toEqual({ target: foe.id, group: group.map((g) => g.id) });
+      const given = new Map<number, unknown>();
+      for (let k = 0; k < 6000 && !b.over; k++) {
+        b.step();
+        const foot = group.filter((g) => g.state !== 'gone' && g.state !== 'withdrawn' && g.state !== 'routing' && g.kind !== 'art');
+        const front = Math.max(...foot.map((g) => g.y));
+        for (const u of teams) {
+          if (u.engaged !== undefined) fired = true;
+          if (u.order?.kind === 'move' && given.get(u.id) !== u.order) {
+            given.set(u.id, u.order);
+            bounds++;
+            // Never a bound ahead of the group's leading foot as it stands when the bound is given.
+            expect(u.order.y).toBeLessThanOrEqual(front + 1e-6);
+            expect(u.stalk).toBeDefined();
+          }
+        }
+      }
+    }
+    expect(bounds).toBeGreaterThan(0);
+    expect(fired).toBe(true);
+  });
+
+  it('stops going up at any order of its own, and nothing of it is set on the computer\'s teams', () => {
+    const b = new LandBattle(withSnipers(sampleTicket('plains', 1.2, { seed: 3 * 7919 + 13, humanAtt: true })));
+    b.ai.att = false; b.ai.def = true;
+    const mine = b.units.filter((u) => u.side === 'att' && u.kind !== 'fort');
+    const team = mine.find((u) => u.team === 'snp')!;
+    const foe = b.units.find((u) => u.side === 'def' && u.kind !== 'fort')!;
+    expect(b.command({ do: 'attack', units: mine.map((u) => u.id), target: foe.id }, 'att')).toBe(true);
+    expect(team.stalk).toBeDefined();
+    expect(b.command({ do: 'hold', units: [team.id] }, 'att')).toBe(true);
+    expect(team.stalk).toBeUndefined();
+    b.hideOn();
+    for (let k = 0; k < 600 && !b.over; k++) b.step();
+    expect(b.units.some((u) => u.side === 'def' && u.stalk !== undefined)).toBe(false);
   });
 });
 

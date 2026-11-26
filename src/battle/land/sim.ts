@@ -1573,7 +1573,7 @@ export class LandBattle implements BattleSim<LandUnit> {
         const cx = us.reduce((s, u) => s + u.x, 0) / us.length, cy = us.reduce((s, u) => s + u.y, 0) / us.length;
         for (const u of us) {
           const o: LandOrder = { kind: 'move', x: c.x + (us.length > 1 ? u.x - cx : 0), y: c.y + (us.length > 1 ? u.y - cy : 0), face: c.face, ...(c.run ? { run: true } : {}) };
-          give(u, () => this.send(u, o));
+          give(u, () => { if (u.team === 'snp') u.placed = true; this.send(u, o); });
         }
         this.say({ what: 'contact', side: by, text: '' });
         this.events.pop(); this.log.pop();
@@ -1596,13 +1596,17 @@ export class LandBattle implements BattleSim<LandUnit> {
         if (!t || t.side === by || !live(t) || t.hid || !all.length) return false;
         hands(all);
         // A sniper team sent in with others (the plain attack: every block at the nearest enemy) takes no lane in the
-        // line abreast: it stays in its cover and takes the target as its aim, as a fire order gives it (land:fire). In
-        // a lane of its own it pushed the line's real blocks out past the target's flanks and cost the plain attack 6
-        // battles in 100 (the sniper gate's G7, 25 Nov; the design director's ruling of 18:55Z). Sent alone, or with
-        // only other sniper teams, it goes as ordered.
+        // line abreast: it takes the target as its aim, as a fire order gives it (land:fire). In a lane of its own it
+        // pushed the line's real blocks out past the target's flanks and cost the plain attack 6 battles in 100 (the
+        // sniper gate's G7, 25 Nov; the design director's ruling of 18:55Z). Where its own side put it by an order of its
+        // own, it stays there; else it goes up by its staff's drill, cover to cover, till the target is in its reach,
+        // never ahead of the group's leading foot (stalkOn; 26 Nov 01:49Z (d): left where his staff laid it, out of
+        // reach, 95 in 100 of the player's teams never fired). Sent alone, or with only other sniper teams, it goes as
+        // ordered.
         const lone = all.some((u) => u.team !== 'snp') ? all.filter((u) => u.team === 'snp') : [];
-        for (const u of lone) give(u, () => { u.order = null; u.path = []; u.keepFace = null; u.aim = t.id; delete u.cut; });
         const us = lone.length ? all.filter((u) => u.team !== 'snp') : all;
+        const group = us.map((u) => u.id);
+        for (const u of lone) give(u, () => { u.order = null; u.path = []; u.keepFace = null; u.aim = t.id; delete u.cut; if (!u.placed) u.stalk = { target: t.id, group }; });
         if (!us.length) return true;
         // Several blocks sent at one: they come on abreast, each in its own lane, the outer ones round the target's
         // flanks, instead of all making for its middle. One block alone goes straight for it (the computer general's way).
@@ -1684,6 +1688,7 @@ export class LandBattle implements BattleSim<LandUnit> {
           if (!u || this.placeWhy(u, x, y) !== null || by !== this.setup) return false;
           const f = c.face === undefined ? undefined : Number(c.face);
           this.place(u, x, y, f !== undefined && Number.isFinite(f) ? f : undefined);
+          if (u.team === 'snp') u.placed = true;
           return true;
         }
         // Night patrol (release 2): { do: 'land:patrol', unit } while he places his army, his attack sends that block's
@@ -1805,6 +1810,8 @@ export class LandBattle implements BattleSim<LandUnit> {
    * leaves the block's orderAt (its move's or attack's) alone.
    */
   private order(u: LandUnit, go: () => void, air: boolean, from = this.t, c?: Command, smoke = false): void {
+    // A sniper team's stalk with a group (stalkOn) ends with any later order of its own, as it lands.
+    if (!smoke && u.team === 'snp') { const g = go; go = (): void => { delete u.stalk; g(); }; }
     // Field telephone lines (release 2): to a block whose wire is down, whoever gives it, by its army's fallback.
     if (this.phones && this.t > 0 && this.wireDown(u)) { this.byFallback(u, go, from, c, smoke); return; }
     if (!air) { go(); return; }
@@ -2418,6 +2425,43 @@ export class LandBattle implements BattleSim<LandUnit> {
     t.pinTo = at(S.pin.secs);
   }
 
+  /**
+   * A sniper team sent in with a group (LandUnit.stalk; the design director, 26 November 01:49Z (d)), once a second, by
+   * the drill the computer's staff gives its own teams (ai.ts snipersUp), the group's target for its way: slipping
+   * away, to other hiding ground near by; a found enemy within LAND.snipers.keep, back from it; the target in its
+   * reach, it stays and fires on it (its aim); else one bound to the next hiding ground toward the target, never ahead
+   * of the group's leading foot. Done once the target is gone or hidden, or the group has no foot left: it stays
+   * where it is.
+   */
+  private stalkOn(u: LandUnit): void {
+    const s = u.stalk!, t = this.unit(s.target), ok = (e: LandUnit): boolean => fighting(e) && e.state !== 'routing';
+    if (!ok(u) || u.order?.kind === 'withdraw' || !t || !ok(t) || t.hid) { delete u.stalk; return; }
+    if (u.waits && !u.waits.free) return;
+    const go = (x: number, y: number): void => { this.send(u, { kind: 'move', x, y }); u.aim = t.id; };
+    if (u.slipTo !== undefined) {
+      if (u.order) return;
+      const spot = this.slipSpot(u);
+      if (spot) go(spot[0], spot[1]);
+      return;
+    }
+    const K = LAND.snipers.keep, dir = u.side === 'att' ? 1 : -1;
+    const near = this.units.filter((f) => f.side !== u.side && ok(f) && !f.hid && f.kind !== 'fort' && this.gap(u, f) < K);
+    if (near.length) {
+      if (u.order?.kind === 'move' && !near.some((f) => dist(f.x, f.y, u.order!.x, u.order!.y) < K)) return;
+      const spot = this.sniperSpot(u, [u.x, u.y - dir * 400], u.y);
+      const gap = near.reduce((m, f) => Math.min(m, this.gap(u, f)), Infinity);
+      const [x, y] = spot ?? [u.x, u.y - dir * (K - gap + 50)];
+      go(x, y);
+      return;
+    }
+    if (u.order || this.gap(u, t) <= reachOf(u)) return;
+    const foot = s.group.map((id) => this.unit(id)).filter((m): m is LandUnit => !!m && ok(m) && !m.team && m.kind !== 'art' && m.kind !== 'fort');
+    if (!foot.length) { delete u.stalk; return; }
+    const front = dir > 0 ? Math.max(...foot.map((m) => m.y)) : Math.min(...foot.map((m) => m.y));
+    const spot = this.sniperSpot(u, [t.x, t.y], front);
+    if (spot && dir * (spot[1] - u.y) > 20) go(spot[0], spot[1]);
+  }
+
   /** A sniper team at half strength or the rout nerve (LAND.snipers.back): it withdraws to its own edge, never routs. */
   private sniperBack(u: LandUnit): void {
     if (u.order?.kind === 'withdraw') return;
@@ -2765,6 +2809,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       this.staffing = true;
       for (const s of ['att', 'def'] as Side[]) if (this.ai[s]) thinkFor(this, s);
       this.staffing = false;
+      // Sniper teams sent in with a group go up by their staff's drill, whoever's side (stalkOn).
+      for (const u of this.units) if (u.stalk) this.stalkOn(u);
     }
     for (const u of this.units) { u.pinned = false; if (live(u)) { u.still += DT; u.clear += DT; } }
     // Blows first, from where everyone stands, then nerve, then movement: no block gets to strike first by its place in the list.
