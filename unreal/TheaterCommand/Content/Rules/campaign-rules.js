@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 320f3caee 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0737463a2 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -62337,13 +62337,14 @@
     if (out.aa && m === "town") out.lines.push({ label: "Anti-aircraft guns", value: aaLine(place3), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
     else if (out.aa) out.lines.push({ label: "Anti-aircraft guns", value: aaLine(`the factories of ${place3}`), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
     if (cn && cn.lights > 0) {
-      const over = `Level ${cn.lights} searchlights over ${place3}`, few = "they help the night fighters a little.";
+      const where = placeName2(place3);
+      const over = `Level ${cn.lights} searchlights over ${where}`, few = "they help the night fighters a little.";
       const never = !!known && (known.seen ?? -1) < 0;
       const when = known && !never ? ` when ${seenAgo(known.ago ?? 0)}` : "";
       const none4 = !known ? "There are no guns built here for them to light." : never ? "No guns are reckoned built here for them to light." : `There were no guns built here for them to light${when}.`;
       const radar = never ? "Not scouted, so reckoned at the worst: with radar laying the guns" : "With radar laying the guns";
       const built = never ? "guns that can be built here" : `guns built here${when}`;
-      out.lines.push(cn.cloud ? { label: "Searchlights", value: `Cloud over ${place3}`, effect: "The searchlights cannot see the bombers through it." } : !cn.guns ? { label: "Searchlights", value: over, effect: `${none4} They help the night fighters a little.` } : !cn.radar ? { label: "Searchlights", value: over, effect: "Without Fighter control's radar to lay the guns, they help only the night fighters, a little." } : cn.sat < 1 ? { label: "Searchlights", value: "More bombers than the lights can hold", effect: `About ${Math.round(out.B).toLocaleString("en-US")} bombers over ${place3}, and a beam holds one at a time: the lights do about ${Math.round(cn.sat * 100)}% of their work.` } : { label: "Searchlights", value: over, effect: cn.lit >= cn.guns ? `${radar}, they light every level of ${never ? "" : "the "}${built}, and ${few}` : `${radar}, they light ${upToTen(cn.lit)} of the ${upToTen(cn.guns)} levels of ${built}, and ${few}` });
+      out.lines.push(cn.cloud ? { label: "Searchlights", value: `Cloud over ${where}`, effect: "The searchlights cannot see the bombers through it." } : !cn.guns ? { label: "Searchlights", value: over, effect: `${none4} They help the night fighters a little.` } : !cn.radar ? { label: "Searchlights", value: over, effect: "Without Fighter control's radar to lay the guns, they help only the night fighters, a little." } : cn.sat < 1 ? { label: "Searchlights", value: "More bombers than the lights can hold", effect: `About ${Math.round(out.B).toLocaleString("en-US")} bombers over ${where}, and a beam holds one at a time: the lights do about ${Math.round(cn.sat * 100)}% of their work.` } : { label: "Searchlights", value: over, effect: cn.lit >= cn.guns ? `${radar}, they light every level of ${never ? "" : "the "}${built}, and ${few}` : `${radar}, they light ${upToTen(cn.lit)} of the ${upToTen(cn.guns)} levels of ${built}, and ${few}` });
     }
     if (out.ships.length) {
       const pc = (x) => `${Math.round(x * 100)}%`;
