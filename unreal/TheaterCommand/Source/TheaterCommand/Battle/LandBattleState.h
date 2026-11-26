@@ -65,6 +65,8 @@ struct FLandBattleState
 	/** Old wrecks (release 2, -TheaterLandOldWrecks; LandHulk): the burnt-out armour of the battles fought here before,
 	 * laid as the battle opens (none where none is asked: the yard empty, and nothing asks it anything). */
 	LandHulk::Yard OldWrecks;
+	/** A live battle's guard over them (ALandBattle::GuardOldWrecks): how far each track has been read (Yard::Reached). */
+	std::vector<size_t> OldWreckSeen;
 	/** The ground drawn, cut over the dug holes' bowls (a tile's near ground split into parts once dug in). */
 	LandCrater::Dug Dug;
 	std::unique_ptr<LandMen::Crowd> Men;

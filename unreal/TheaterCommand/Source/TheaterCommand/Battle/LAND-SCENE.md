@@ -1234,18 +1234,22 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
     makes it is moved in place every frame toward the next step's shape (`LandAir::SilkStep`: each make is the step it
     is in, the last make's next, and the next one; `At` moves its points and facings between them, and it is made
     again as its slump reaches the next, `Due`), and its triangles are wound by where their points are half-way
-    through the step (`Wound`), so a triangle turning over shows its inside for at most half a step (0.08% of its
+    through the step (`Wound`), so a triangle turning over shows its inside for at most half a step (0.12% of its
     triangles' frames here). A second review of 24 November found it held still between makes and jumping up to 1.3 m
     at a make some eleven times a second, and a smooth torpedo half fallen in. His part (him going over, by 0.05, and
     his lines) is moved in place with it every frame. At 45 fps a pilot's mesh is now made 24 times (21 of them as his
     canopy falls in) and moved in place 151 to 167; its silk moves 0.22 m in a frame at most (10 m/s), as much at a
-    make, and is drawn within 0.07 m of its true shape. Its cost: lying, his silk is 2,290 points and 4,368 triangles
-    on 26 gores, 2,466 and 4,704 on 28 (in the air 1,874 and 3,536, 2,018 and 3,808; it had been 3,138 and 6,048,
-    on 14 rings: it is now on 11); a make (one `HeapShape`, its next step's: the step it is in is the last make's) 0.13
-    ms on a flat field and about 0.3 ms on hummocks on the cloud box, its ground read once on a grid (not twice a
-    point). The log tells each pilot's count once his canopy lies flat, for the 45 fps reading: his mesh's makes and
-    moves in place, his silk's points and triangles lying, its makes as it fell in and their time (ms a make, and the
-    longest), and the most its points moved in a frame (metres).
+    make, and is drawn within 0.07 m of its true shape. Its cost: lying, his silk is 2,706 points and 5,200 triangles
+    on 26 gores, 2,914 and 5,600 on 28 (in the air 1,874 and 3,536, 2,018 and 3,808; it had been 3,138 and 6,048 on
+    14 rings, then 2,466 and 4,704 on 11: it is now on 13, for its folds across it); a make (one `HeapShape`, its next
+    step's: the step it is in is the last make's) 0.15 ms on a flat field (0.16 before its lines were laid across its
+    body and its far end broken up: the exact pass that lays its lines over its silk, about 0.12 ms, runs once, at the
+    make it lies still; 0.13 on 11 rings, and on 13 before its look from above was reworked; its instructions a fifth
+    more) and about 0.3 ms on hummocks on the cloud box, its ground
+    read once on a grid (not twice a point). The log tells each pilot's count
+    once his canopy lies flat, for the 45 fps reading: his mesh's makes and moves in place, his silk's points and
+    triangles lying, its makes as it fell in and their time (ms a make, and the longest), and the most its points
+    moved in a frame (metres).
   - *Down* (her third, fourth and fifth notes). Seconds are real seconds from his landing. His chute's mesh draws him
     going over flat (0.5 s; 0.35 after a hard landing) under his falling canopy; 0.4 s later, as he lies there, the
     scene swaps him for a man of the crowd: in his army's tank crews' file where it has one (`USA_tanker`,
@@ -1282,15 +1286,15 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
     billowing along it until each part of it is down (its near end and its front first), and streaming out along the
     wind ahead of coming down, so that its middle only ever moves away from him and its top only ever comes down (half
     fallen in it is already 1.3 to 3.7 m longer along the wind than as he landed, its middle 6.3 to 7.4 m on). It lies
-    stretched along the wind, 2.05 to 2.9 times as long as it is wide (6.3 to 8.5 m long, a stronger wind stretching
+    stretched along the wind, 2.2 to 2.8 times as long as it is wide (6.3 to 8.5 m long, a stronger wind stretching
     it), its near end gathered 2.1 to 3.5 m past his harness, where its lines run back to him across the grass (2.1 to
-    3.4 m of his 4.1 m lines, a little slack; a review of 24 November found 0.6 to 1.2 m stubs), its far end standing
-    0.38 to 0.75 m up on the air it still holds (more in a stronger wind) and swelling a little there, and coming round
+    3.5 m of his 4.1 m lines, a little slack; a review of 24 November found 0.6 to 1.2 m stubs), its far end standing
+    0.37 to 0.72 m up on the air it still holds (more in a stronger wind) and swelling a little there, and coming round
     and down to the ground over its last fifth: its last ring (0.975 along it) about half as high as its far quarter
     and its crown, its tip, on the ground (0.03 m up; the review found a beak hanging 0.23 m off it; at 40 m in the
-    picture its top is 0.48 m up 0.9 along it, 0.37 at 0.95, 0.22 at 0.98 and 0.05 at its tip, falling faster toward
+    picture its top is 0.47 m up 0.9 along it, 0.35 at 0.95, 0.22 at 0.98 and 0.04 at its tip, falling faster toward
     it). Along it run four or five long loose folds, one big and the rest smaller in no order, each wandering across
-    as it goes, with two creases across where it bunched; its edges waver and its far end lies a little to one side.
+    as it goes; its edges waver and its far end lies a little to one side.
     The gaps between the folds are graded (the widest three times the narrowest, 2.6 times with five), the wider going
     where two folds need more room to stand apart (a big one beside a small one: 1.4 times their widths, and the big
     one's flank half-way between them under a third of the small one's height), and all of them spread together until
@@ -1301,16 +1305,199 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
     The scene gives `HeapShape` the ground as it is now, as a wire is laid (`WireAt`): the field's (`HeightAt`: its
     terrain, its lanes, its banks and its floors) raised to a hole's face or a breach's floor where one is torn under
     it (`Holes.TopAt`). `HeapShape` reads it once a make on a grid a quarter of a metre square under the silk (coarser
-    over one still high in the air: 2,500 heights at most, 390 to 1,550 here, 750 on average, against 1,233 points a face), lays each point on it,
+    over one still high in the air: 2,500 heights at most, 390 to 1,550 here, 750 on average, against 1,457 points a face), lays each point on it,
     and keeps every edge of the silk over it (a bank's, a ditch's side, a crest's or a crater's rim between two points
-    lifts both), the grid raised by how sharply the ground bends about each cell (a step narrower than a cell). The
-    review found its points on the ground but its triangles cutting 0.2 m into a bank, a ditch's sides, a sharp crest
-    and a crater's rim, and the scene's ground blind to holes.
+    lifts them, the nearer the more: each edge's shortfall worked out from its points as laid and shared between its
+    ends, the least lift that clears it, and each point lifted once, by the most any of its edges asks; but where that
+    would lift an end more than 0.1 m over its room, how much higher the ground stands within 0.6 m of it than under
+    it, shared so that both ends stand as little over their rooms as can be, the end by the bank taking the more), the
+    grid raised by how sharply the ground bends about each cell (a step narrower than a cell), but for the silk never
+    more than its cell's top: the highest a crest can stand along any side of the cell, the slopes coming in either side
+    carried on to where they meet (a ridge with straight sides exactly), no less than an eighth of the bend over its
+    highest corner and no more than half. The review found its
+    points on the ground but its triangles cutting 0.2 m into a bank, a ditch's sides, a sharp crest and a crater's rim,
+    and the scene's ground blind to holes. A fourth review found each edge lifting both its ends by all its shortfall,
+    edge after edge: its crown's tip, an end of every edge of its last ring's fan, was lifted once for each, and lying
+    along a bank under one edge it stood up to 6.7 m over the ground like a tent pole (4.8 m over the rest of its fan,
+    on 91 of 300 pilots more than 0.5 m); and the grid's whole bend, 0.74 m over a hedgerow bank 1 m high and 0.8 m over
+    the bank along it, had floated its silk up to 2.4 m over the ground round a hedgerow bank. A fifth found half the
+    bend over the highest corner still reading a round crest 0.4 m high, and the silk a metre clear of anything within
+    0.6 m of it beside the banks (its edges there lifted at their far ends as much as by the bank). Now its tip stands at
+    or under the rest of its fan everywhere, with the bank along it or moved 0.5 m, 1 m or 1.5 m either way; its silk
+    at most 1.32 m over the ground round the hedgerow bank and 1.46 m along the bank; and over the highest ground within
+    0.6 m of it, beyond where it lies on flat ground, 0.56 m round the hedgerow bank and 0.30 m or less on the step, the
+    ditch, the sharp crest and the crater (0.70 to 1.94 m before), but still 0.81 to 0.90 m with the bank along it under
+    its far end (4.6 to 6.3 before): its edges there run up to 2 m from its last rings' sides to where they gather, and
+    one across the whole bank, its ends both off it, is kept over the crest only by lifting both. Capping those lifts
+    would let the edges cut up to 0.55 m into the bank (0.29 m on the verdict's four, which the test checks), and the
+    points stay where they lie.
+  - *How it looks from above* (the art director's note of 24 November 17:40Z: from above both pilots' silk read as "a
+    smooth cocoon or a gourd", an even outline and only lengthwise ridges). `HeapShape` lies on 13 rings now (it was
+    11), a little over half a metre apart where it folds across, and on dice of their own (the pilot's number with
+    `0xC47E7` above it, so that all its other draws fall as they did and no pilot's heap is another's mirrored).
+    - *Folds across it*: three or four, where it bunched as it fell in, each on a ring of its own from 0.15 to 0.64
+      along it (no two side by side), graded in height (12 to 23 cm, lower toward its gathered near end and lower still
+      when its far end holds little air, so that its near quarter stays under its far end) and dealt out in no order;
+      each highest somewhere across it and fading either way (most across part of its width, not all of it), slanted
+      and bowed across it, and bunched up toward the ring before or after it (away from a fold two rings on, so that
+      two do not run into one): its crest rounded over onto that ring (side-on a hump, not a tent's peak) and the ring
+      on its other side let down a little, so that one flank is steep. Near them, toward its near end, its long folds
+      stand a little lower. The two creases across it it had are gone (their dice are still drawn).
+    - *Its outline*: one side wider than the other, 7 to 11% of its half-width, and that side the outer side of its
+      axis's bend (bowed 0.12 m at the least), so that more of its silk lies on one side of the wind line through where
+      its lines gather; its far end slumped the other way, so that it is uneven about the line from there to its tip too;
+      each ring's edge jagged a few centimetres either side (each like its neighbours a little, so it wavers rather than
+      zigzags); one or two gores flipped over and lying flat out 0.3 to 0.45 m beyond its wide side, and one tucked 0.22
+      to 0.32 m under its other side, about its fourth ring to its eighth (none on its far end). Only the outermost eighth
+      of its half-width moves for them, so its long folds lie where they were laid; bent across the wind or with gores
+      flipped out it has no more silk, so its widths are cut back (a quarter at most) until it lies no wider than its
+      length over 2.12. Its gores wander across it as they go, so its seams and its long folds' crests do not run
+      straight and even end to end like a melon's ribs.
+    - *Its hem*: its near end tapers as before; two or three of its gores flipped back over its top, their fold pulled
+      back past its hem toward him (as far as its gathering lets it: no silk more than 0.46 m nearer him than its seams'
+      middle, the near-end check's 0.5) and laid on the ground there along their lines, a roll of silk under them, and
+      their hem drawn in on its silk keeping some of its spread, so that they lie as a flap; the lines to them and some
+      beside them run over it (0.2 to 0.3 m of each past its seam's last 10 cm, never under it: where a line lies over
+      the silk the silk under it is pressed down under the line, never through its under layer). A gore or two on the
+      other side of its top's middle are tucked under a little, and the rest of its hem lies back toward him in some
+      gores and on in others, in a wave round its skirt (5 to 9 cm). Its lines' seams stay behind the middle of its
+      hem's, so that its lines run back to him from the same half of its skirt all the while it falls in.
+    - *Its far end*: slumped to one side (away from its wider side): its air's crest 0.42 to 0.55 of its half-width off
+      its middle, its top leaning over that way, its round wider and later on that side and sooner on the other, its tip
+      that way, and its lifted top buckled across on the side it slumps from.
+    - *After a second look* (her note again, (3) and (2): its lines had crossed only the flap at its near end, by 0.2
+      to 0.3 m, all running to one point; and its far end had stayed a neat dome, its seams running cleanly to a point
+      at its tip):
+      - *Lines across its body*: it slid and slewed as it fell in, and one to four of the lines to its top's gores (two
+        to four on dice of their own, `0x57AE` over the pilot's number, so that all its other draws fall as they did; as
+        many of those as will lie so, two on most) were thrown over its near part. Each runs from his harness across the
+        grass, bowed out to one side of the rest, onto its top either over the edge of its near part on that side (its
+        first ring to its third) or over its near end aside of where its lines gather (0.2 m or more from it), and
+        across it at a slant over its near third (28 to 36 degrees off its wind line at the least as laid, 45 on the
+        mean; in a loose curve: bowed along it, curled round it, a little wiggle), down into its folds and over their
+        crests, to an edge and over it to the ground (on under there, hidden, back to its hem). As laid, 1 to 2.35 m of
+        each on its silk (to 2.55 m in later tries should fewer lie so; 3 m in a last try should none), 0.35 m or more
+        of that past 0.15 of its length (its body), none farther along than 0.45 of its length, none over a flipped or
+        tucked gore's near end nor under its flap, its grass clear of its near part, no two from seams side by side, no
+        more than six over its silk in all with the flap's, and from his harness to where it goes down off its far edge
+        no longer than a real line (`RealLines`, 1.33 times its spread across: a T-5's 22 ft lines and 3 ft of riser
+        under a canopy about 19 ft across in the air; `LinesLong`, the air's hang, draws them short). Each is laid out
+        on its silk's own rings and columns, so that it stays on its silk as that falls in. The rest run to its gathered
+        hem as they did.
+      - *Lying on it, never in it*: each make, each such line is drawn along its path over its silk as it is then
+        (finely from 0.75 of its fall): on the top of its silk there and 12 mm over it (the cord's half-thickness and 6
+        mm), the highest of its triangles facing up within 3 mm of the point (none round a steep one, whose height run
+        on past its edge had floated lines over its gathered hem), found on a grid of only the squares its lines lie
+        over; draped between its folds' crests where the straight would not dip into its silk (tried every 2 cm, 1 cm
+        near where it comes onto its silk, 4 cm earlier in its fall), its points kept where it turns most; never under
+        the ground, from his harness on. While its lines are slack only in part (`LineSlack`: taut to a slump of 0.3,
+        slack from 0.8) its grass is drawn between the straight and where it lies, lifted where that would dip under the
+        ground: the straight from his harness where `DownShape` draws it (in the mesh's own space, his feet at its
+        origin and his man flat and rigid; a second review found that, lifted onto the ground under it as this had
+        lifted it, the lines from the harness drawn cut up to 0.23 m into hummocks), each point lifted by its share of
+        slack but by no less than 0.01 of it (held to 0.05, a make at a slump of 0.35, 0.028 slack, had left them in
+        the ground). A third review found them flung up like poles off a bank, 5 to 7.7 m up, and 1.9 m off hummocks:
+        the scene draws him flat at his feet's height, so that there his harness lies up to 0.37 m in the ground, and the
+        straight from it ran under the ground most of the way to its silk, the grass next to it lifted five times that and
+        more to clear it. So the lines across its silk run taut from the ground over his harness where he lies sunk into
+        it (`SilkMesh::HarnessLow`, which `LineLies` draws them from; his harness itself is where the scene draws it, and
+        the straight from it comes up out of the ground by him, as those to its gathered hem always had), and those lifts
+        (the straight from his harness, and the grass while not yet slack) are made over the ground as it is, read where
+        they are, but never more than 0.1 m under the quarter-metre grid's (whose allowance for a crest between its points
+        stands a bank 1 m wide 0.6 to 0.8 m higher than it is, and a ditch's lip 0.4 m: lifted over that, they had still
+        been flung up to 4 m off the bank; the 0.1 m keeps them clear between makes as that allowance had, where 0.05
+        had left one 3 cm in a ditch's lip): some 70 more ground reads a make, 960 on the mean over a fall. Over its
+        edge where its top there is not found (a steep skirt as it falls in: `TopAt` passes over steep triangles) a
+        line still comes down 3 cm out, not 0.6 m out over the grass. Which seams' lines are thrown
+        over it is picked from those nearest its top's middle first by whole half-seams round from it, mirror seams in
+        the order glibc's sines had put them for 24, 26 and 28 gores (by the sine's size they had tied to the last bit,
+        so that the libm chose which line lay where, a Mac's apart from a PC's); and LandAir.cpp is built with no
+        a\*b+c fused into one rounding (`#pragma clang fp contract(off)`, as Unreal's Mac build and run.sh's
+        `-ffp-contract=off` have it: clang fuses them on the Mac's arm64 by default, and the lines across it, routed
+        through many near ties, came out up to 0.1 m elsewhere lying and nearly 1 m falling in). LandBattleAir's
+        `DownShape` draws each line through `LandAir::LineLies`' points (31 for a line across it, three for the rest, a
+        rod from each to the next), the same points all the while it falls in, as slack as `LandAir::LineSlack` says
+        (the slack `HeapShape` lifts them for; it had had its own `FMath::SmoothStep`). His lines and
+        risers are olive drab cord, (0.13, 0.12, 0.07), darker than her off-white silk so that those across it read on
+        it (they had been near her silk's own colour), and chutes.py draws them only where the silk does not hide them,
+        as the scene's depth test does.
+      - *Its far end broken up* (on dice of their own, `0xFA2D` over the pilot's number), from its tenth ring on, its
+        ninth and those before it as they were (so its folds across it and its length are its own): its last two rings
+        and its vent (its tip, where its seams meet) drawn over toward the side it slumps to, 0.22 to 0.38 of its
+        half-width (its width cap read without it); a crease across its dome on its eleventh ring, its air there let
+        down by up to 55 to 70% (most on its narrow side, the side it slumps from; 0.6 of that on the other; it had been
+        80 to 95%, a sawtooth at eye height with its inside showing along it), slanted 0.22 to 0.38 m along it edge to
+        edge either way, the rings either side drawn in 5 cm toward it (10 had folded its silk over there); over its
+        last two rings the edge of its narrow side folded back under it, from a half to two thirds of its half-width out
+        (slanting a little along it), flat on the ground under the rest; and its seams kinked ring to ring (4.5 to 7 cm
+        aside, in two waves across it, both its layers alike so that they keep together at its edges). Its last ring
+        never farther on than its tip.
+    - Each point's facing, where a fold across it is, is the way its silk runs on from it to the next ring (from the
+      ring before to the ring after shades a fold on one ring flat), so that a fold across it is a darker band and a
+      lighter one; chutes.py lights each pixel of the silk by its facing there, as the scene does.
+    - land_air_test measures it from above (`FromAbove`: its silk drawn straight down on a 2 cm grid and lit as chutes.py
+      lights it; its luma across its middle reads within 2 of chutes.py's for his and the second pilot's) and checks it
+      over the verdict's four pilots and 300 others. Over the 300, against the code before her note and this round's
+      first answer to it: (a) its silk more on one side of its wind line 0.09 to 0.74 (0.33 on the mean; it was 0.00 to
+      0.62, 0.21, then 0.00 to 0.63, 0.22), and about the line to its tip 0.09 at the least (0.31 on the mean; it was 0.00
+      and 0.12, then 0.00 and 0.15); (b) its edges 4.1 cm off a smooth line on the mean (2.6, then 4.1) and its hem 0.28 m
+      off a smooth curve at the least (0.37 on the mean; 0.11 and 0.22, then 0.19 and 0.36); (c) three or four folds
+      across it for 244 (2 for 2, then 293), two light bands or more for 216 (none, then 217); (d) its far end's lift 0.18
+      to 0.41 m to one side (0.29 on the mean; 0 to 0.04, then 0.05 to 0.20); (e) one to four of its lines across its silk
+      (2.3 on the mean; none, then 0 to 5, 1.9), none under it by more than 6 mm (the first answer's went 7 cm in); and
+      its luma across its middle 116 to 231 at the most. His: 0.38 more on one side of the wind line (0.29, then 0.09),
+      three folds across and two light bands (one and none, then three and one), his far end 0.29 m to one side (0.03,
+      then 0.08), three lines across (none, then two, one of them 1.6 cm under the silk), luma 160 to 217 in chutes.py
+      (126 to 221, then 129 to 222: his middle now falls on a fold's light band; 0.9 m either side of it its troughs
+      read 119 and 123, a pixel's own). The second pilot's: 0.19 to one side (0.04, then 0.11), three folds and two bands (one and none, then four
+      and two), its far end 0.34 m over (0.01, then 0.17), two lines across (none, then three), luma 124 to 217 in
+      chutes.py (127 to 217, then 121 to 213).
+    - After her second look it measures as well (e) its lines across its body: how long each lies on its silk past 0.15
+      of its length on from where its lines gather, how many 0.3 m or more; for each laid across it how long it lies on
+      its silk, how steeply it crosses its wind line, how far along it reaches, how near it passes where the rest gather
+      on its way, how far from his harness it comes onto it, how high its middle stands over its silk's top (the exact
+      top, each triangle facing up) where it runs over it, and how long it is drawn against a real line (`RealLines`);
+      and (f) its far end's breakup: its vent off the middle of its far fifth (a share of its half-width), a crease
+      across its dome (the deepest its top dips along it, 16 cm or more in from its edges), its last two rings folded
+      back under at an edge (how much farther out its top layer reaches than its edge's seam), and its seams bending
+      ring to ring over its last four rings. Each pilot (and each of the verdict's four) has one to four lines 0.3 m or
+      more across its body (his and the second pilot's two at least), each laid across it 1 to 3 m on its silk, 18
+      degrees or more off its wind line, none past half its length, none within 0.1 m of where the rest gather, coming
+      onto it within his lines' length of his harness, its middle within 2.6 cm of its top on the mean, more than 4 cm
+      over it for an eighth of it at most and 25 cm at the most, and none drawn longer than a real line; and its far end
+      folded under 0.1 m or more, creased 5 cm or more, and its vent 0.15 of its half-width off its middle or its seams
+      bending 0.1 m. Over the 300: 1.8 lines across its body on the mean and none with none, the longest on its silk 1.3
+      to 2.4 m on the mean and over 2.6 m on a tenth at most, their least slant 35 degrees on the mean, their middle
+      within 2 cm of its top on the mean; its vent off 0.22 on the mean (no more than 20 under 0.1), creased 9 cm (the
+      neat dome before had measured 4.8), folded under 0.2 m and its seams bending 0.16 m on the mean. And on 60 of
+      them, as it settles (0.8 to 0.95 of its fall), none of his lines under its silk's top by 8 mm; and on the 11
+      fields, falling in and lying, none of his lines under the ground. Over the 300, against the code before her second
+      look and this round's first answer to it: (e) one to three of its lines across its body 0.3 m or more (1.92 on the
+      mean; none, then 2.19), 1.61 to 2.93 m of each on its silk (its longest 2.34 on the mean, 25 over 2.6 m; first
+      1.21 to 2.95, 2.04), 20 degrees off its wind line at the least (46 on the mean), their middle 1.5 cm over its silk
+      on the mean (2.1 at most on one pilot's mean; first 4.4) and 16 cm at the most (20), drawn 1.00 of a real line at
+      most (first, 1.62 of its own length, some 5.5 m); its old measure's lines across its silk 2 to 6 (4.2 on the mean;
+      1 to 4, then 3 to 6), none under it; (f) its vent 0.27 of its half-width off its middle on the mean (0.12, then
+      0.29; 18 under 0.1, 109 and 14), a crease 0.066 m deep at the least and 0.132 on the mean (0.004 and 0.048, then
+      0.060 and 0.114), folded under 0.15 m at the least and 0.34 on the mean (0.00 and 0.01), its seams bending 0.071 m
+      at the least and 0.214 on the mean (0.025 and 0.107); (a) to (d) as the first answer had them. His: two lines
+      across its body, 2.14 and 2.36 m on its silk (first, 2.38 m the longest), 42 degrees off its wind line at the
+      least, their middle 1.5 cm over it on the mean and 4.3 cm at most (3.3 and 10), drawn 0.89 of a real line; its
+      vent 0.46 off (0.22, then 0.47), a crease 0.121 m (0.030, then 0.100), folded under 0.44 m, its seams bending
+      0.250 m; luma 160 to 217 in chutes.py as before, his lines now darker than his silk and hidden where it hides
+      them. The second pilot's: two lines across, 2.41 and 2.43 m (2.16), 43 degrees, 1.8 cm on the mean and 5.1 at most
+      (2.8 and 8), drawn 0.82; its vent 0.25 off (0.27), a crease 0.147 m (0.113), folded under 0.35 m, its seams
+      bending 0.200 m; luma 123 to 217 in chutes.py (as the first answer). At eye height his far end's top stands 0.31 m
+      0.9 along it, 0.31 at 0.95 and 0.20 at 0.98 (0.44, 0.34 and 0.23 before her second look; 0.27, 0.31 and 0.18 at
+      the first answer), and by the time it lies 62 of its 5200 triangles are folded over (46, then 80).
   - Its own dice (`0xC47E1` as before; the notes' draws on `0xC47E3`; its lying folds on `0xC47E5`, drawn after all
-    the rest): the planes fly as before, frame for frame.
+    the rest; its look from above on `0xC47E7`, the pilot's number's own; its lines across it on `0x57AE` and its far
+    end's breakup on `0xFA2D`, over the pilot's number): the planes fly as before, frame for frame.
 - **Not yet.** The engines' and guns' sound (the sound director's), the bombs seen falling, light flak's puffs (the kit
   has only its heavy row).
-- **Test**: `Tools/land_air/run.sh [out folder]` (`LAND_AIR_OUT`): the feed, the machines, the plan, the flight (drawn
+- **Test**: `Tools/land_air/run.sh [out folder]` (`LAND_AIR_OUT`; built as the Mac builds it, `-ffp-contract=off`, clang
+  by default, `CXX=g++` the other; its chute_silk.txt and air_paths.txt the same byte for byte either way, and with
+  clang's `-mfma -ffp-contract=on`): the feed, the machines, the plan, the flight (drawn
   from before the run, at a fighter's speed, never under 5 m over the ground, smooth, the Stuka steep and the Il-2 low
   while firing, the art director's dive angles, bottoms and gun ranges), the guns (each lane from the strip's start to
   its end, aimed on the ground, each plane 6 to 12 s after the one before, a lane 150 m past its own side's front), the losses (each falls as its note says, burns where it struck, no other falls), the ground's fire (only the
@@ -1354,8 +1541,42 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   it under the ground, falling in or lying, its points nor its triangles' edges (seven places along each against the
   ground itself), on a slope of 1 in 4 along the wind or across it, on hummocks, across a hedgerow bank 1 m high, a
   step 0.4 m up, a ditch 0.6 m deep, a sharp crest, a crater's bowl and rim, and along a bank under one edge; and
-  lying on the slopes its underside on the ground (each ring's lowest point within 0.08 m of it). The planes' hash is
-  printed against release 1's (`e258eaf3320235ff`). `chutes.py` draws each pilot's first seconds, his way through
+  lying on the slopes its underside on the ground (each ring's lowest point within 0.08 m of it). On the same fields
+  none of his lines under the ground, drawn from his harness where the scene draws it (not lifted onto the ground under
+  it, which had hidden lines 0.23 m into hummocks), for the verdict's four and, each 0.05 of its fall, 300 pilots'
+  numbers (their canopies' points too; on those fields and with the bank along it moved 0.5 m, 1 m and 1.5 m either
+  way): the lines across its silk 0.015 m over it at the lowest (before this round's
+  second review, 0.23 m under it); and for the 300, made as the scene makes them (`SilkStep`) and looked at each 0.0125
+  of the fall, between makes as well: none of his lines' middles more than 3 mm under the ground there (those across
+  its silk 0.0064 m over it at the lowest (0.0074 after the fourth review's mend, across the ditch's lip as one ran down
+  into it falling in, and 0.0148 before it, its silk laid differently; before the third review 0.0004 m under it on
+  hummocks, 0.0007 at 45 fps). With the silk laid lower round the bank's crest after the fifth review, one had gone
+  4.7 mm into it between makes, its points sliding 0.7 m along it across the crest: each make keeps them over the ground, so `HeapShape`
+  is handed the make before's (`SilkMesh::LyingKept::OverWas`, by `SilkStep`) and lifts its own where the straight from
+  those would pass under the ground the silk lies on; and lines across the silk running out past the grid's inner
+  points are kept over the ground as read there, where the grid reads a crest at its rim as flat (one 1.2 mm in the
+  bank moved 1.5 m left),
+  and the points his lines across its silk go through across the grass over both the taut straight from his harness
+  and the ground, at makes and between, and once slack over the ground alone, no higher than each field's own bound, a
+  few centimetres over what it gives (over both: now 0.39 to 0.54 m at most on the slopes, the step, the sharp crest
+  and the crater, 0.50 on hummocks, 0.70 across the ditch, 0.71 over the hedgerow bank and 1.13 along the bank, where
+  they come up onto its silk, 1.01 to 1.19 with it moved 1 m or 1.5 m; before the third review 7.0 m along the bank and
+  1.9 on hummocks, 4,400 looks over 1.5 m, and one bound of 1.75 m for all had let a cord stand 1.7 m up where they lie
+  under 0.85 m (a fourth review); over the ground alone 0.31 to 0.42 m, 0.54 and 0.65 on the sharp crest and the
+  crater, 0.94 across the ditch, 1.55 over the hedgerow bank and 1.01 to 1.44 along the bank). With the bank moved
+  0.5 m either way, where his harness lies on its shoulder, they still stand 1.88 and 2.07 m over both (1.91 and 2.19
+  over the ground once slack), as before this round: bounded there, not cured. And lying (0.8, 0.9 and 1.0 of its
+  fall) its crown's tip no more than 0.05 m over the other corners of its fan, on every field and with the bank along
+  it moved (now at or under them; before the fourth review up to 5.1 m, 75 to 98 pilots of 300 over 0.3 m with the bank
+  along it), and its silk no higher over the ground, nor over the highest ground within 0.6 m of it beyond where it
+  lies on flat ground, than each field's bound (over the ground now 0.71 m on the slopes and hummocks, its far end's
+  lift, 0.87 to 0.95 on the step, the ditch and the crater, 1.32 over the hedgerow bank, 1.30 to 1.46 along the bank;
+  before, 2.39, and 4.9 to 7.1 along the bank). At 45 fps his
+  lines as drawn move up to 0.52 m a frame between makes and 0.43 m at one (their run across the grass swinging as
+  where they come onto its silk moves, at a slump of about 0.4): printed, not checked, being over the silk's 0.3 m. For
+  the 300 (measured, not in the test) 0.56 m on the flat field, up to 0.63 m on the other fields but the bank's, and
+  0.91 m along the bank, as its taut lines follow its silk falling in (1.74 m before the third review). The planes'
+  hash is printed against release 1's (`e258eaf3320235ff`). `chutes.py` draws each pilot's first seconds, his way through
   the air and his seconds on the field, and the canopy as the scene draws it: side-on full through a long lens with
   his lines to him, from under with its glow and without, falling in across the wind, lying from 40 m at a man's eye
   height, and lying from above (his and a second pilot's, his lines a little slack as the scene draws them),
@@ -1386,7 +1607,9 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   to its hem, its crown round, its lines running on from it to him), his canopy lying from 40 m at a man's eye height
   and from above (stretched along the wind in loose uneven folds, its far end lifted and coming round and down to the
   ground, its near end gathered 2 to 3.5 m past him and his lines a little slack across the grass, two pilots' side
-  by side to see they differ), its falling in after he lands at 45 fps (tipping and blowing downwind, going slack and
+  by side to see they differ; and for her note of 17:40Z, an uneven outline and hem, folds across it, a few of his
+  lines lying on top across its body and sagging into its folds, none sunk in it, and its far end broken up, its vent
+  off its middle, a crease across it and one edge folded under), its falling in after he lands at 45 fps (tipping and blowing downwind, going slack and
   crumpling, flapping until it is down, moving every frame with no jump at a make, not shrinking in place nor a
   smooth torpedo half-way), one lying on a slope (none of it under the ground, its silk not floating either), and
   one coming down across a hedgerow bank and one into a shell hole (its silk over the bank's crest and the hole's rim
@@ -1500,8 +1723,13 @@ men, no rifle/pack, pistol at most", built as infantry with the rifle hidden and
 ## Old wrecks on a field fought over before (release 2, off unless asked)
 
 Brian, 23 November 20:09Z: the burnt-out wrecks of a battle stay on the field for the next battle there. Looks only,
-as the scars and the old ruts are: nothing the rules fight reads them, no round strikes one, no man takes cover behind
-one, and they are kept off every way the recording's men and vehicles go, so nothing the battle shows is moved by them.
+as the scars and the old ruts are: nothing the rules fight reads them, no man takes cover behind one, and they are
+kept off every way the recording's men and vehicles go and every place its rounds land, so no round of a recorded
+battle strikes one and nothing the battle shows is moved by them. A live battle's ways and rounds are not known at its
+open: its rounds land where its rules send them, on a wreck too (the burst is drawn there, no hole dug under her), and
+its wrecks are kept off the ground its men and machines are likely to cross, and one any of them is sent near all the
+same is cleared away before he gets there, the moment the eye cannot see her go where it can ("In a live battle"
+below, with what the guard does not read).
 
 - **What asks for them.** The campaign writes the recording's root `"oldWrecks": {"count": n, "months": m, "nats":
   {"GER": n1, "SOV": n2, ...}, "per": p}`: the real armoured vehicles burnt out here before (60 at most), the months
@@ -1518,8 +1746,10 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   the switch was first written to read N as the key's count, and lay 6 of `=40` at two years). **With neither the key
   nor the stand-in nothing is made, read or said**: `LayOldWrecks` returns before anything, the grass's `Covers` and
   `ShowOldWrecks` find an empty yard, and no die of the battle, the scars or the ruts is moved (the wrecks throw their
-  own, seeded on their own constants). A live battle lays none (it opens with no tracks: nothing fought over yet), and
-  says so.
+  own, seeded on their own constants). A live battle (every battle the campaign plays) lays them too, read from its
+  header as below; the campaign's live header carries the key from the TS side's 8ddab648 and 7ec111e2 (live.ts,
+  on `claude/project-thread-pi6nal`), which this branch's `src` (07bf753a) does not have yet, so here a live battle
+  lays them on the stand-in alone till the two meet. (Before 25 November a live battle laid none and said so.)
 - **How many** (`LandHulk::Models`, `Left`, `Kept`). First the battle's scale (Brian's rule: one model stands for as
   many real things in every part of a battle): the count's real machines are drawn `per` to a wreck, `Models(count,
   per)` = count / per rounded, at least one where any burnt (an armoured division's 150 drawn as 20 tanks is 7.5 to a
@@ -1549,6 +1779,115 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   lays his round her), 2 m from another wreck. Her scorched patch, which reaches some 2.4 m past her outline, lies on
   open ground too, every point of it (the steppe's first lay had three patches over a trench's works and one over a
   garden).
+- **In a live battle** (25 November, and its review's mend the same day; `LandHulk::Field::Likely`, `FromCore`,
+  `FromLikely`, `Yard::Reached`, `Clear`, `InSight`, `Cleared` and `Over`, `LandHulk::Sight`;
+  `ALandBattle::GuardOldWrecks` and `ShowOldWrecks`). A live battle opens with its header alone: the two zones, the
+  blocks (each one's kind, frontage and depth, side, and whether it joins later), the town, the setup step's room; no
+  way, round or blast yet. And the rules' drill has no way round a still machine (it drives this battle's own wrecks
+  through), so the wrecks are kept off the ground its men and machines are likely to cross, and any one a live piece
+  sends someone near all the same is cleared away before he gets there. `FieldOf` reads that ground from the header in
+  two parts. Its core: each side's blocks where the rules draw them up (units.ts `deploy`'s plain `drawUp`, modelled
+  here: the foot in a row 40 m in from its zone's edge facing the enemy, 40 m between blocks (`GAP`), the attacker's
+  about its zone's middle, the defender's about its town kept 300 m inside its zone's ends; the tanks and lorries 110 m
+  behind, half on each wing past the row's ends where they fit on the field, else centred; a defence of four blocks or
+  more in its line holding a quarter back, 110 m behind or 170 where its tanks stand centred; the guns 230 m behind;
+  with no foot, half the tanks in front; each kept on the field as `drawUp` keeps it; a corps from next door left out),
+  each block's box grown 60 m (`StartClear`); where the rules draw a side up otherwise (a river's bend or lanes, a
+  second river, a city's streets: a city's, a capital's or an urban field, or one with water, a bridge or a blown one,
+  suburbs, industry or parks) its whole zone grown 60 m instead; the setup room grown 60 m and its widest block's half;
+  the ground between the two fronts as drawn up (each from its westmost block to its eastmost, wings and all) and 100 m
+  round it (`AdvanceMargin`); where a block joins later, a 300 m strip along every edge of the field (`JoinClear`;
+  sim.ts `joinEdge` and `walkOn`: the corps from next door walks on some 200 m by the edge facing where it comes from or
+  by its own back edge, never the enemy's back edge, so every edge is someone's); and 60 m in from the field's edges
+  (`EdgeClear`). The rest of it, round the core: each side's whole zone grown 60 m (its blocks shift in it), and the
+  ground behind each side's front and the advance to its own back edge, 60 m wider than its front (sim.ts: a block that
+  falls back goes straight back to its own edge, one broken runs straight back off it). Against where the recordings'
+  units stood at their start (the test's case 9): every block's middle (the mean of its men's and machines' first
+  points) inside its modelled box, or 2.2 m out of it at the most (Prokhorovka's attacker's); its men and machines out
+  of their boxes by at most 30.0 and 36.4 m on Normandy, the attacker's and the defender's, and 30.0 and 36.2 m on
+  Prokhorovka (a battery's lorries behind its guns, its observers forward with the line, its men in their formation),
+  all inside the 60 m kept round them. The battles as fought against it: 153 of Normandy's 230,868 kept points of its
+  men's and machines' ways off the core (38.3 m at the most) and 25 off all of it (9.4 m); 207 of Prokhorovka's 251,622
+  off the core (99.5 m), none off all of it. (Round 1 kept each whole start area grown 60 m and drew each front across
+  its zone's middle, its blocks' frontages side by side with no gaps or wings; its "within 18 m" of the ways had no test
+  to print it.) The ground between the grown start areas off the core, every 25 m, stands for the ground fought over
+  (the box the groups are laid in). They are laid as on a recorded field, but: the groups along the old lines, at the
+  junctions and at the village's edge off the core only, so on the rest of it too (the village and the lanes behind a
+  defence's foot lie there); the axis's and the strewn groups off all of it; each wreck's every ring off that by her own
+  reach and half a metre; 15 m from a lane's middle, not 6 (`LiveLaneClear`: the live battle's machines drive its
+  lanes); their groups at least 100 m apart (`LiveGroupApart`; the first lay on Prokhorovka put all of them in one patch
+  some 100 by 260 m); and the axis's groups out on its flanks, either side, 15 to 250 m past the likely ground's edge,
+  still facing the other side's ground. So they read as an earlier battle's: along the hedges and walls beside the
+  advance's path and behind the lines, at the junctions and the village's edge, out on the flanks, facing the other
+  side.
+  The guard: `GuardOldWrecks` (from `PumpLive`, after `MapLive`) marks, `ShowOldWrecks` (each frame) clears. Each live
+  piece is read as it comes, before it is drawn (the screen keeps `LiveMargin`, a second or more, behind the rules):
+  each track's new points from where it was last read, as the straight lines the screen draws between them; a
+  knocked-out machine where she stands from her fall on: her place at her fall, as `LandKit`'s `PlaceAt` holds her (a
+  live battle's machine is never pinned: the live drill stops her where she is hit, "she burns where she stood", so her
+  track never jumps and `LandFeed`'s pin never comes), and her pin, from its time, where a recorded battle's reading
+  pinned her; where the crews bail out (`-TheaterLandBailOut`, `S.Bails.bOn`; on in release 2's ship list), a
+  knocked-out tank's place and pin out to 60 m from her fall (`BailReach`: `LandBail`'s men run 8 to 12 m in her lee,
+  then 18 to 38 m on, some 54 m at the farthest; a tank, an armoured car or a self-propelled gun, the rules' role "tank"; a
+  lorry's men are the crowd's own already); a tank drawn rolling smoothly (`-TheaterLandSmoothTanks`, on in release
+  2's ship list: `LandKit` draws her place each step as the recording's blended over a bell of 0.4 s either way, so
+  she cuts a corner, or runs ahead of her kept points or behind them as her speed changes), her reach `BlendLead` (0.8)
+  times the bell's spread times her fastest within its reach more along each piece of her way (2.6 m at 8 m/s; the bell
+  leads by 0.73 to 0.78 of its spread at its 0.05 s steps; her way read again back over the bell's reach of each
+  piece's new points; `GuardOldWrecks` reads the switch from the command line as the armour does); and a man who left
+  the field with his block, 7 m more round where he left (`LeaveDrift`: `LandMen` draws him on at his last speed for a
+  second as he fades). A wreck any of them comes within 8.5 m of (her rings, from a vehicle's middle: `VehicleReach`,
+  the recorded battle's 8 m and half a metre) or 1.9 m (from a man's, `ManReach`) is marked, due at the battle time he
+  first comes that near; one log line, "Land battle (live): old wreck N
+  (the GER Tiger) to be cleared away: a live man or machine comes near her at T s (the rules at R s, the screen at S
+  s)". One a man or machine moving as the piece ends is heading for (his last way straight on for 8 s, 120 m at the
+  most: `SoonAhead`, `SoonFar`; his reach and 2 m round it, `SoonWiden`) is marked as coming, till the next piece.
+  `Yard::Clear` then reads the frame's own eye, the camera as it is posed (`LandHulk::SightAlong`: where `Eye` stands
+  and looks once `AimEye` has turned it by the player's drag aside, `LookAside`, up to 50 degrees round and 30 up or
+  down, and the effects kit has jolted it; its lens, Unreal's across the picture, by the viewport's shape and lines; a
+  cut from `S.Pose`. The shot's pose alone missed the drag: a wreck on the screen could be judged out of it and cleared
+  in plain view): a marked wreck, or one coming, goes the first frame the eye cannot see her go: on a cut, out of
+  its picture (her reach round her middle, her rings or her patch's ragged edge, against the picture's edges a tenth
+  wider for an eye that turns: `InSight`), or under 2 of its lines (`SightPx`); one due, the eye on her all along, half
+  a second before the screen shows him coming near her (`ClearLead`). One coming and not yet due stays while the eye is
+  on her (he may turn away). Her near and far levels and her patch hidden, the grass laid again where she lay, the
+  camera no longer kept out of her, no shell hole kept off her; one log line, "Land battle (live): old wreck N (the GER
+  Tiger) cleared away at T s, out of the eye's sight: a live man or machine comes near her at D s" ("on a cut", "in the
+  eye's sight, her time come"; "a man or machine heading for her"). A man's provisional last point is read again with
+  the next piece; when the men are placed again (the setup step) every track is read afresh, and a wreck once cleared
+  stays so. So no man or machine the rules move passes through one, nor a crew bailing out of a tank or a man leaving
+  the field with his block, a tank rolled smoothly too (a late kept point's ease under the screen, a tenth of a metre
+  on the joined build, lies within `VehicleReach`'s half metre). What the guard does not read can: a downed airman
+  under his chute and walking off (`-TheaterLandChutes` with `-TheaterLandAirSupport`), what a blast throws (the dead
+  and the men thrown, `-TheaterLandGore`; earth; a turret of this battle's), a man drifting out farther than 7 m (one
+  leaving at 7 m/s or more), smoke and dust; the chutes, the aircraft and the gore are all on in release 2's ship list
+  (`Release2Ship.cpp` on `claude/project-thread-pi6nal`), so in Brian's play an airman may yet come down on one. Where
+  the eye watches her from the moment someone turns for her to half a second before he reaches her, she goes from view
+  in its sight (her steel and patch are the vehicles' and the ground's shared `SteelInk` and `GroundInk`, so she cannot
+  fade alone). A live battle's shells land where its rules send them: none is dug under a standing wreck or her patch, a
+  metre round (`Yard::Over`, wrapped round `S.Holes.Dig`); the round bursts there all the same and its shallow torn
+  earth (the form a lane or a yard keeps where `Dig` says no) is laid under her, her patch over it. A recorded battle
+  lays and digs as before, bit for bit.
+  Measured (the test's case 9: each recording opened as a live battle, its tracks, rounds, events and the rest taken
+  out, its setup room its attacker's zone; forty burnt out a month before, at most 20 laid): Normandy 20 laid in 13
+  groups (9 along the old lines, 1 at a junction, 3 on the axis's flanks; round 1's 3 on the old lines, 7 on the flanks,
+  1 strewn of 11), 5 of the old lines' and the junction's on the rest of the likely ground, every point 1.5 m and more
+  off its core, the flanks' 26.7 m off all of it, 78.4 m from where any unit stood at its start; Prokhorovka 18 in 11 (4
+  at a junction or the village's edge, 7 on the flanks; round 1's 12, none at either, 11 in one western pocket; 2 found
+  no room), from west to east across the field, 10.3 and 27.2 m off, 50.3 m from the start. Prokhorovka's 5 old lines
+  (its 5 lanes: the steppe has no hedge, bank or wall) give no group, as on its recorded lay (0 along the old lines
+  there too, 6 at a junction or the village's edge); its fronts are 1,690 and 1,160 m wide as drawn up. With a corps
+  from next door coming up: 20 and 13 laid, every point of them 457 and 364 m in from the field's edges. The battles as
+  fought, read piece by piece as the guard reads them (30 s pieces, each man's last point provisional) and read whole,
+  the same marks at the same times: none on Normandy; on Prokhorovka its junction's two behind the defence's foot,
+  wrecks 11 and 12, due at 272.7 and 275.1 s, a man or machine heading for both first; every other at least 30 m from a
+  vehicle's way and 10 m from a man's (the measure's reach). Read again as release 2 plays a live battle (no machine
+  pinned, the crews bailing out to 60 m of the 3 and 5 tanks knocked out, the tanks rolled smoothly over 0.4 s): the
+  same marks at the same times, piece by piece as whole (none on Normandy, 11 and 12 on Prokhorovka at 272.7 and 275.1
+  s), every wreck left standing more than 100 m from where a knocked-out tank stands. The guard's cost at a live
+  piece's cadence (every track's last two kept points read against every wreck, and each moving one's way on): 0.44 ms
+  a piece on Normandy and 0.40 on Prokhorovka on the average, 0.71 and 0.43 at the most (the shared machine's clock:
+  the runs before it 0.33 to 0.53 on the average, 0.44 to 1.05 at the most). Laid in some 0.4 to 0.5 s here.
 - **How each looks** (`Yard::Dress`; the art director's to judge, round 2 below). Her own model, knocked out and burnt
   through: her turret turned (mostly within 50 degrees of ahead) and her gun drooped to its stop, or, one in five, her
   turret blown off and lying 1 to 4 m off her side, tail or bow (clear of her hull's corners, its gun turned away from
@@ -1659,7 +1998,15 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   it stands as tall as a man, and a tilted one holds its gun up two metres). One log line: "Land battle:
   old wrecks: 20 laid of 40 the scrap men left of 40 burnt out here, 1 month since the last ...: 10 GER (...); 10 USA
   (...); 2 turrets thrown, 1 track run off; 5 groups along the old lines, ...; N meshes, N points, made in N s" (the
-  stand-in's "20 laid of 40 asked (the stand-in: none taken by the scrap men), 6 months since they burnt ...").
+  stand-in's "20 laid of 40 asked (the stand-in: none taken by the scrap men), 6 months since they burnt ..."; a live
+  battle's ends "laid for a live battle, clear of where its blocks draw up, the ground between its fronts and its lanes
+  (N groups along the old lines or at the village's edge or a junction on the rest of its start areas or the ground it
+  may fall back over)", and where some found no room, "N found no room clear of the lanes, hedges and the ground the
+  live battle is likely to cross"). In a live battle each wreck's patch is kept too (`OldWreckPatch`), for
+  `ShowOldWrecks` to hide with her near and far levels when it clears her (`Yard::Clear` on the frame's `S.Pose` and
+  the viewport's size, `GEngine->GameViewport->GetViewportSize`, on the marks `GuardOldWrecks` makes); it and
+  `PlaceMovers` pass over one cleared (`Yard::Cleared`), the grass's `Covers` and the holes' `Over` no longer read her,
+  and `FLandBattleState::OldWreckSeen` holds how far each track was read.
 - **Test**: `Tools/land_hulk/run.sh [recording.json ...]` (`LAND_HULK_OUT`). Built with `-Wconversion` by both
   compilers; the clang build must lay every wreck where the gcc build laid it. On every recording, laid as the scene
   lays them: the same twice (every wreck, her pose and her near, far and patch meshes, hashed); every point of every
@@ -1667,7 +2014,7 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   corn, none over a cattle's path; 8 m from every vehicle's way, 1.5 m from every man's; no half-metre square held by
   two; every wreck and thrown turret settled on the ground, not floating; fewer as the months go (twenty burnt out:
   20, 17, 10, 3 and 1 at 1, 6, 12, 24 and 60 months); the nats' shares (GER 30, USA 10: 15 and 5 of twenty); the cap;
-  none with nothing asked or on a live battle's open; the key read ten ways; the meshes finite and whole; the rust
+  none with nothing asked; the key read ten ways; the meshes finite and whole; the rust
   spreading over the same twenty wrecks as they age; and on an old field (two battles' scars and old ruts laid first)
   none on an old hole or rut. Since the review of 24 November: every point of every scorched patch read where it lies,
   as her own are; the grass kept out of every hull's footprint, every 10 cm; each thrown turret clear of her own hull
@@ -1768,15 +2115,93 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   Prokhorovka near 0.54, 0.37, 0.19, 0.04 and 0.03 (0.55, 0.43, 0.23, 0.06 and 0.03), side 2.03, 1.52, 0.60, 0.14
   and 0.08 (2.01, 1.80, 0.62, 0.15 and 0.09). Pictures: `/tmp/claude-0/ad-round/wrecks/final3/` (the first try's in
   `/tmp/claude-0/ad-round/wrecks/carries1/`, 1e56500d's in `/tmp/claude-0/ad-round/wrecks/before_carries/`).
-- **Not yet.** Wrecks on a live battle (none: no tracks at its open); the guns' and soft vehicles' own wrecks beyond the
-  half-tracks and lorries; a tank burnt out on her side or nose-down in a ditch.
+  Since 25 November, each recording opened as a live battle too (case 9: its header alone, as above): none laid with
+  none asked; laid as the scene lays them, every point of every wreck read as a recorded field's are (open ground, no
+  cattle's path, settled, no square shared, her patch, her thrown turret and run-off track as above) and 15 m from a
+  lane's middle; where the rules draw it up against where its units stood at its start (each block's middle, the mean
+  of its men's and machines' first points, within 5 m of its modelled box; each of them alone 15 m and more inside the
+  60 m kept round the boxes; every one in its own side's zone); every point off the likely ground's core, and the
+  axis's and strewn groups' off all of it, the groups on its outer part named; every point clear of where its units
+  stood at its start by 60 m less the model's miss; the battle as fought against that ground (its ways' points off the
+  core and off all of it, and the farthest); the same twice; every point of every wreck and her patch read by `Over`
+  (no hole dug there) and none of the battle's own shells, bombs and grenades landing on one; with a corps from next
+  door coming up, every point 300 m and more in from every edge; the battle as fought read as the guard reads its
+  pieces (30 s pieces, each moving man's last point provisional, a pin only from its time, the men leaving with their
+  blocks) and read whole: the same wrecks marked, once each, each due at the same time, no way within its reach of one
+  before her time, every one left standing 8 m from a vehicle's way and 1.5 m from a man's (as drawn: every kept point
+  to the next, every 0.25 m, and the pins), and those a man or machine was heading for at a piece's end all marked; the
+  same battle read again as release 2 plays a live one (no machine pinned, her points from the pin on standing there as
+  a live battle's do; the crews bailing out, `BailReach`; the tanks rolled smoothly over 0.4 s): the same piece by
+  piece as whole, every wreck the first read marks marked too and none later, and every one left standing 60 m and more
+  (her rings) from where a knocked-out tank stands; the
+  guard's cost a piece at a live piece's cadence (each track's last two kept points); each marked one cleared with the
+  eye looking away, no longer keeping the grass or a hole off; and the guard made to work (the battles as fought send
+  few near one): a tank's pieces up to 30 m short of a wreck's reach leave her and its next piece, through her, read
+  from its provisional last point again, marks her, due as it reaches her; the eye on her 5 s before keeps her, and at
+  her time less half a second clears her ("in sight"); the eye looking away 20 s before clears her at once ("out of
+  sight"), a cut too, and 6 km off she is too small to see go; a man 0.3 m outside his reach of another leaves her and
+  through her marks her; a lorry pinned on a third marks her from her fall, far off leaves her; the men placed again
+  (fewer tracks) read afresh, marking none twice; a tank coming on at one 60 m short of her reach is heading for her,
+  not due, kept while the eye is on her, no longer heading once turned away, cleared with the eye away; a tank knocked
+  out 40 m off one marks her where the crews bail out (`BailReach`), not where they stay in, nor for a lorry; the same
+  tank as a live battle knocks her out (no pin, her fall between two kept points 100 m either side of the wreck) marks
+  her from her place at her fall where the crews bail out, and not where they stay in; a man leaving the field with his
+  block 5 m outside his reach of one marks her as he leaves (`LeaveDrift`), and not where he stays; a tank creeping by
+  1.5 m outside her reach of one, then off at 8 m/s, leaves her on her kept points' line and, rolled smoothly over 0.4
+  s, marks her before she sets off, read whole or in two pieces (the first, ending as she sets off, leaves her; the
+  second reads her creep again); and the shot's pose looking 50 degrees off a wreck on a 40 degree lens, the camera
+  dragged back onto her: in the camera's picture (`SightAlong`, its lens across the picture turned back to 40 degrees
+  top to bottom), not in the pose's. The clang build lays them where the gcc build does (their lines are among those compared). It paints
+  `placement_live_<recording>` (the whole field: the likely ground's core tinted red and the rest of it orange, the
+  start zones, its blocks as the rules draw them up in cyan, the ground between the fronts, the battle's ways as it was
+  fought, where its units stood at its start, the wrecks ringed by nation, a red cross on any the guard marked, four
+  close looks). Pictures: `/tmp/claude-0/livewrecks/run3/` (`placement_live_normandy-1944.png`,
+  `placement_live_prokhorovka-1943.png`, the measures in `gcc.log`; the wrecks laid where round 2's `run2/` laid
+  them; round 1's in `/tmp/claude-0/livewrecks/run/`).
+  `LAND_HULK_JOBS=N` holds `run.sh` to N compiles at once (all at once by default).
+- **Not yet.** In a live battle: a way round a wreck for the rules' drill (the guard clears her away instead: where the
+  eye watches her from the moment someone turns for her, she goes from view in its sight, half a second before he is
+  shown near her; a fade would need her own materials, not the shared `SteelInk` and `GroundInk`); the guard reading a
+  downed airman's chute and walk (`-TheaterLandChutes`), what a blast throws (`-TheaterLandGore`'s men), smoke and dust
+  (the chutes and the gore on in release 2's ship list); the rules' drawing up
+  modelled on a river's bend, a stream, a second river or a city's streets (there each whole zone is kept, so fewer
+  groups find room); the scars and the old ruts (they read the battle's tracks, none at a live battle's open, so its
+  wrecks lie on ground without them: `Field::Likely` could stand for their fought-over ground too); Prokhorovka's 18 of
+  20 (its fronts cross most of the field), none along its old lines (its lanes; none on its recorded lay either). The
+  guns' and soft vehicles' own wrecks beyond the half-tracks and lorries; a tank burnt out on her side or nose-down in a
+  ditch.
 - **Owed.** The Mac compile (the names to check: `LayOldWrecks`, `ShowOldWrecks`, `OldWreckNear`, `OldWreckFar`,
   `OldWreckShownNear`, `FLandBattleState::OldWrecks` and `OldRutWays`, with `LandParts::GroundMesh`,
   `UStaticMeshComponent`'s `SetRelativeLocation` and `SetVisibility`, `FParse::Value` and `Param`; and since the
   review of 24 November, `LandHulk::Ask::bAsLaid`, `LandHulk::Hulk`'s `TurretYaw`, `TurretBoxLo`, `TurretBoxHi`,
   `TurretMuzzle` and `bTurretGun`, and `LandSight::Machine`'s `Root`, `Heading`, `HullLo`, `HullHi`, `bTurret`,
   `bMuzzle` and `Muzzle` for the thrown turret; and `LandHulk::Ask::Per` with `Recording::OldWreckPer` for the battle's
-  scale), the art director's look of her two carries (the look passed at 1e56500d, 24 November 21:01Z), and the 45 fps
+  scale; and since 25 November, a live battle's: `ALandBattle::GuardOldWrecks(bool)` called from `PumpLive` with
+  `Grown::bReset`, `OldWreckPatch` (a `UPROPERTY` `TArray<TObjectPtr<UStaticMeshComponent>>`, filled beside
+  `OldWreckNear` and `OldWreckFar` from the patch's mesh, `Levels[2]`), `FLandBattleState::OldWreckSeen`
+  (`std::vector<size_t>`), `LandHulk::Yard::Reached`, `Cleared` and `Over`, `LandCarpet::Squares::Mark`, `LandParts::Wide`,
+  `TObjectPtr::Get` and `TArray::IsValidIndex`, and `S.Holes.Dig`, a `std::function<bool(double, double)>`, wrapped
+  in a lambda that captures the old one by value and a `const LandHulk::Yard*`; and since its review, the clearing
+  moved into `ShowOldWrecks` (after `DrawArmour`, so on the frame's own eye): `FLandBattleState& S = *State`,
+  `LandHulk::Sight` filled from `S.Pose` (a `LandEye::Pose`: `Eye` and `Look`, `LandPlay::Vec`'s `X`, `Y`, `Z`;
+  `Fov`; `bCut`), `GEngine->GameViewport->GetViewportSize(FVector2D&)` as `DrawMen` reads it,
+  `LandHulk::Yard::Clear(double, const Sight&, std::vector<int>*)` with `S.Battle` and `Yard::DueOf`, `FMath::Clamp`,
+  `FString::Printf` and `FString(TEXT(...))` for its log line; and in `GuardOldWrecks`, which now only marks,
+  `Yard::Reached(S.Rec, S.OldWreckSeen, S.Bails.bOn ? LandHulk::BailReach : 0.0, Blend)` (`FLandBattleState::Bails`, a
+  `LandBail::Book`) and `S.Rec.Fought`; and since its second review, the eye read from the camera as posed:
+  `Eye->GetCameraComponent()` (as the effects kit's `TickBegin` call reads it) and its `FieldOfView`,
+  `Eye->GetActorLocation()`, `Eye->GetActorRotation().Vector()` (`FRotator::Vector`, as `AirBattle.cpp` uses it) and
+  `LandHulk::SightAlong`, the pose's `Sight` kept where there is no `Eye`; and in `GuardOldWrecks`, `Blend` read from
+  `-TheaterLandSmoothTanks=` (`FParse::Value` into an `FString`, `FCString::Atod`, `FMath::Clamp` to 0.45) or
+  `-TheaterLandSmoothTanks` (`FParse::Param`, 0.4), as the joined build's `LandBattle.cpp` reads it for
+  `Armour->SmoothTanks`. On merging with `claude/project-thread-pi6nal` (b6e80cee; `git merge-tree` finds two
+  conflicts): `LandBattleLive.cpp`, where `PumpLive` times its steps, so `GuardOldWrecks(G.bReset)` goes after
+  `MapLive` and before `Lap(MsMap)`; and `Tools/land_hulk/run.sh`, where the joined build adds `LandHouse` to
+  `CORES` (after `LandField`) beside this branch's `LAND_HULK_JOBS` and its build loop: keep this branch's file with
+  the joined build's `CORES` line. `LayOldWrecks`' return for a live battle (`S.Rec.bLive`) is dropped by the
+  merge's own reading of `LandBattle.cpp` (it auto-merges); check it is gone. After the merge `S.Armour->SmoothTanks`
+  holds the same number as `GuardOldWrecks`' own reading of the switch, and may stand for it. And the art
+  director's look of her two carries (the look passed at 1e56500d, 24 November 21:01Z), and the 45 fps
   gate with twenty wrecks
   laid. The Mac shots, with `-TheaterLandOldWrecks=20 -TheaterLandOldWreckMonths=1` against without on Normandy, then
   `=6` and `=18` months (the same twenty, aged): from 300 m up over the old lines; a group from 40 m and from a man's
@@ -1789,7 +2214,17 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   her); a thrown turret on its side, from the camera at a man's height (the camera kept out of it and its gun); and
   with `-TheaterLandPhones` on, the wires laid round the wrecks. And once the campaign's row is on (sgfei1 b0a47250,
   "Old wrecks" off by default), one campaign battle on a field fought over before, its log line saying how many were
-  drawn for how many burnt out at the battle's scale ("one for every 7.5"). Since round 2 of the look: the Mac compile
+  drawn for how many burnt out at the battle's scale ("one for every 7.5"). Since 25 November, a live battle with
+  `-TheaterLandOldWrecks=20 -TheaterLandOldWreckMonths=1` (or, once this branch meets the TS side's 8ddab648 and
+  7ec111e2, the campaign's own key in the live header): from 300 m up as it opens (the wrecks off the start areas and
+  the advance, along the old lines and out on the flanks, facing the other side), and the battle played out with the
+  eye on a group by the advance's edge and on one by the village: no man or machine through one; any the guard marks
+  and clears, its two log lines, and how the moment she goes from view reads (out of sight, on a cut or, the eye on her
+  all along, in sight: none marked on Normandy as fought here, two on Prokhorovka at 273 and 275 s); with
+  `-TheaterLandBailOut`, a tank knocked out by one (the crew's run clear of her or her gone first); with
+  `-TheaterLandSmoothTanks`, a tank turning by one; the film view dragged aside (a left drag) onto a marked wreck or
+  one a man is heading for (she stays while she is on the screen); a shell landing on a wreck (its burst and torn
+  earth by her, no hole under her). Since round 2 of the look: the Mac compile
   of `LandKit::Mesh::Paints` and `LandKit::Model::PaintNames` (filled in `Model::Load`; the scene's own calls,
   `Yard::Dress(K, bNear, M)` and `Yard::Patch(K, M)`, are as they were, the new `Dressing` note left out); the cost
   against the 45 fps gate and the battle's open. Measured here (the test's twenty, the cloud machine, one core): round 1

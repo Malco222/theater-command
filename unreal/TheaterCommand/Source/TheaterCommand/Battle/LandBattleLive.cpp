@@ -451,6 +451,9 @@ void ALandBattle::PumpLive()
 		Lap(MsTanks);
 		LandFell::Phase("live: mapped to the drawn", bVehiclesKept ? 0 : 1);
 		MapLive(static_cast<int32>(G.NewTracksFrom), VehiclesBefore, G.bReset, bVehiclesKept);
+		// (the old wrecks, release 2: any one this piece's men or machines are to come near cleared away before they are
+		// drawn there; nothing where none was laid)
+		GuardOldWrecks(G.bReset);
 		Lap(MsMap);
 		const double PieceMs = (StepAt - PieceAt) * 1000.0;
 		if (PieceMs > 50.0)

@@ -133,7 +133,9 @@ namespace
 	int32 ChuteMeshKey(int Key) { return (1 << 20) + Key; }
 	using LandAir::HangFeet;
 	using LandAir::LinesLong;
-	const FLinearColor ChuteSuit(0.30f, 0.26f, 0.19f), ChuteHead(0.22f, 0.15f, 0.10f), ChuteCord(0.70f, 0.68f, 0.62f);
+	// (his lines and risers olive drab cord, darker than her off-white silk, so that those across it read on it: a review
+	// of 24 November 17:40Z, after a second look, had found them near her silk's own colour from above)
+	const FLinearColor ChuteSuit(0.30f, 0.26f, 0.19f), ChuteHead(0.22f, 0.15f, 0.10f), ChuteCord(0.13f, 0.12f, 0.07f);
 
 	FVector Metres(const LandAir::V3& At, double U) { return FVector(At.X * U, At.Y * U, At.Z * U); }
 
@@ -241,9 +243,11 @@ namespace
 	 * EndY to his right) forward of his feet, as a rider is posed. The crowd's man was put 0.7 m on from where this one
 	 * had lain, and jumped there in plain view under the canopy (a review of 24 November). And his lines, from his
 	 * harness to the half of his canopy's skirt toward him (LandAir::LineBack) as it falls in; once the crowd's man has
-	 * him, the lines only, to where his harness lies. Each line in two lengths, taut while his canopy is up and a little
-	 * slack lying (Slack 0 to 1: its middle let down toward the lower end's height and bowed a little to one side,
-	 * every other line to the other), so that his part keeps its make all the while.
+	 * him, the lines only, to where his harness lies. Each line through LandAir::LineLies' points, a rod from each to the
+	 * next, taut while his canopy is up and slack lying (Slack 0 to 1): most in two lengths to its gathered hem, their
+	 * middle let down toward the lower end's height and bowed a little to one side, every other line to the other; a few
+	 * across its silk, lying on it (the art director's note of 24 November 17:40Z). As many points for each line all the
+	 * while it falls in, so that his part keeps its make.
 	 */
 	void DownShape(FMiniatureMesh& M, const LandAir::SilkMesh& Silk, bool bMan, double Fallen, double Facing, double EndX, double EndY, double U, double Slack)
 	{
@@ -268,24 +272,24 @@ namespace
 			TurnedInto(M, Him, Over, Shift);
 		}
 		// (the same lines all the while it falls in, so that his part of the mesh keeps its make and is moved in place)
-		const double Sl = FMath::Clamp(Slack, 0.0, 1.0);
+		const LandAir::V3 HarnessM{ Harness.X / U, Harness.Y / U, Harness.Z / U };
 		for (size_t K = 0; K < Silk.Seams.size(); ++K)
 		{
 			if (LandAir::LineBack(K, Silk.Seams.size()))
 			{
-				const FVector End = Metres(Silk.Points[static_cast<size_t>(Silk.Seams[K])], U);
-				const FVector Way = End - Harness, Aside = FVector(-Way.Y, Way.X, 0.0).GetSafeNormal();
-				const FVector Mid = (Harness + End) * 0.5 + Aside * ((K % 2 == 0 ? 1.0 : -1.0) * 0.06 * Sl * Way.Size())
-					- FVector(0.0, 0.0, 0.5 * Sl * FMath::Abs(End.Z - Harness.Z));
-				M.Rod(Harness, Mid, 0.012 * U, ChuteCord, 3);
-				M.Rod(Mid, End, 0.012 * U, ChuteCord, 3);
+				LandAir::V3 Way[LandAir::LinePoints];
+				const int Points = LandAir::LineLies(Silk, K, HarnessM, Slack, Way);
+				for (int P = 0; P + 1 < Points; ++P)
+				{
+					M.Rod(Metres(Way[P], U), Metres(Way[P + 1], U), 0.012 * U, ChuteCord, 3);
+				}
 			}
 		}
 	}
 
 	/** A chute mesh's makings, kept from frame to frame so that their storage is used again (the game thread's alone;
 	 * a review of 24 November: each build had made new storage for its silk's points, 2,018 in the air on 28 gores and
-	 * 2,466 lying, 4,704 triangles; LandAir::HeapShape). Mid: its silk half-way through its step, to wind it by;
+	 * 2,914 lying, 5,600 triangles; LandAir::HeapShape). Mid: its silk half-way through its step, to wind it by;
 	 * Points and Normals: its silk's, moved in place between makes. */
 	struct FChuteScratch
 	{
@@ -566,8 +570,9 @@ void ALandBattle::FlyOver(const FVector& EyeWorld)
 							EndY = Own->Clips[static_cast<size_t>(Prone)].EndOffset.Y;
 						}
 					}
-					// (his lines taut while his canopy is up, a little slack once it lies)
-					const double Slack = FMath::SmoothStep(0.3, 0.8, C.Slump);
+					// (his lines taut while his canopy is up, a little slack once it lies: LandAir's own, the slack HeapShape lifts
+					// the lines across its silk over the ground for)
+					const double Slack = LandAir::LineSlack(C.Slump);
 					DownShape(Make.Built, Make.Silk, Lying >= 0.0, Lying >= 0.0 ? Lying : 1.0, C.Face - C.HeapHeading, EndX, EndY, U, Slack);
 				}
 				else

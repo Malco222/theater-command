@@ -276,11 +276,14 @@ private:
 	UPROPERTY()
 	TArray<TObjectPtr<UObject>> GroundKept;
 	/** Old wrecks (release 2, LayOldWrecks): each wreck's near and far meshes (static, made as the battle opens; kept in
-	 * GroundKept with their scorched patches, which show at any distance), and which of the two shows. */
+	 * GroundKept with their scorched patches, which show at any distance), and which of the two shows; and each one's
+	 * patch, for a live battle's guard to clear her away with it (ShowOldWrecks, on GuardOldWrecks's marks). */
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMeshComponent>> OldWreckNear;
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMeshComponent>> OldWreckFar;
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> OldWreckPatch;
 	TArray<uint8> OldWreckShownNear;
 	/** The ground's things (hedge shrubs, trees, gates; LandField's bases) are far too many to lay into meshes (some
 	 * 129,000 of them, 150 million triangles at their near level): each kind is made once as a mesh of its own, in three
@@ -969,8 +972,20 @@ private:
 	/** Old wrecks (release 2): the burnt-out armour of the battles fought here before, laid as the battle opens. */
 	void LayOldWrecks();
 	/** Each old wreck's near level shown within LandHulk::NearTo of the eye, its far beyond (each frame; nothing where
-	 * none was laid). */
+	 * none was laid, nor for one the guard cleared away). In a live battle first the guard's clearing (LandHulk::Yard::
+	 * Clear, on the camera as posed this frame, the player's drag aside and the hand's jolt with it, LandHulk::SightAlong,
+	 * and the viewport; a cut from S.Pose): each wreck GuardOldWrecks marked, or a moving man or machine is
+	 * heading for, cleared away the first frame the eye cannot see her go (out of its picture, too small in it, a cut),
+	 * or LandHulk::ClearLead before he comes near her where it is on her all along: her near and far levels and her
+	 * patch hidden, the grass laid again where she lay. */
 	void ShowOldWrecks(const FVector& EyeWorld);
+	/** A live battle's guard over the old wrecks (each piece read, PumpLive, before it is drawn): a wreck any live
+	 * man's or machine's way comes near (a tank rolled smoothly, -TheaterLandSmoothTanks, the farther), a knocked-out
+	 * machine where she stands from her fall, her tank's crew bailing out from there (-TheaterLandBailOut), or a man
+	 * leaving the field with his block (LandHulk::Yard::Reached), marked with the battle time he comes near her, for
+	 * ShowOldWrecks to clear her away before then. bReset: the men were placed again (the setup step), every track read
+	 * afresh. */
+	void GuardOldWrecks(bool bReset);
 	/** The near things (hedges, trees, gates) laid into a tile's mesh, or taken out. */
 	void LayThings();
 	/** A thing's shade, 0 to 8: three times its brightness third, and its warmth third (the middle one, 1, for a thing

@@ -4,9 +4,13 @@
 # sight, shell-hole and vehicle cores it reads with their own tests' flags, and lays the wrecks on every recording's
 # field as the scene would: the same twice, none on a lane, a bank, a house, a wall, water, marsh or standing corn,
 # clear of every recorded vehicle's way by 8 m, fewer as the months go, the campaign's key read whatever is odd in it.
-# Paints placement_, look_, look_far_, look_side_, scorch_, lorry_ and track_<recording> into the out folder (PNG where
-# python3 has Pillow, else PPM).
+# Then the same recordings as live battles open them (their headers alone, nothing fought): laid off the ground their men
+# and machines are likely to cross, and the battle as it was fought read against them as the scene's guard reads its
+# live pieces.
+# Paints placement_, placement_live_, look_, look_far_, look_side_, scorch_, lorry_ and track_<recording> into the out
+# folder (PNG where python3 has Pillow, else PPM).
 # Usage: Tools/land_hulk/run.sh [recording.json ...]   (default: every recording)
+# LAND_HULK_OUT: the out folder; LAND_HULK_JOBS=N: at most N compiles at once (default: all at once).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
@@ -16,16 +20,33 @@ mkdir -p "$OUT/obj"
 STRICT="-std=c++20 -O2 -Wall -Wextra -Wshadow -Wconversion -Wno-sign-conversion -Werror -I$SRC"
 CORE_FLAGS="-std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I$SRC"
 CORES="LandJson LandFeed LandPlay LandSight LandCrater LandKit Fates LandField LandHouse LandSteppe LandScape LandDesert LandMed LandTropic LandFarm LandSnow LandDry LandAsia LandAmerica LandPlain LandCity"
+JOBS="${LAND_HULK_JOBS:-0}"
+PIDS=()
+FAILED=0
+# (a compile in the background, at most JOBS at once: the oldest waited for first; every one's failure kept)
+spawn() {
+  "$@" &
+  PIDS+=("$!")
+  if [ "$JOBS" -gt 0 ] && [ "${#PIDS[@]}" -ge "$JOBS" ]; then
+    wait "${PIDS[0]}" || FAILED=1
+    PIDS=("${PIDS[@]:1}")
+  fi
+}
 build() {
   local CXX="$1" TAG="$2" EXTRA="$3"
   local OBJS=()
   for C in $CORES; do
-    $CXX $CORE_FLAGS $EXTRA -c "$SRC/Battle/$C.cpp" -o "$OUT/obj/$C.$TAG.o" &
+    spawn $CXX $CORE_FLAGS $EXTRA -c "$SRC/Battle/$C.cpp" -o "$OUT/obj/$C.$TAG.o"
     OBJS+=("$OUT/obj/$C.$TAG.o")
   done
-  $CXX $STRICT $EXTRA -c "$SRC/Battle/LandHulk.cpp" -o "$OUT/obj/LandHulk.$TAG.o" &
-  $CXX $STRICT $EXTRA -c "$HERE/land_hulk_test.cpp" -o "$OUT/obj/land_hulk_test.$TAG.o" &
-  wait
+  spawn $CXX $STRICT $EXTRA -c "$SRC/Battle/LandHulk.cpp" -o "$OUT/obj/LandHulk.$TAG.o"
+  spawn $CXX $STRICT $EXTRA -c "$HERE/land_hulk_test.cpp" -o "$OUT/obj/land_hulk_test.$TAG.o"
+  for P in ${PIDS[@]+"${PIDS[@]}"}; do wait "$P" || FAILED=1; done
+  PIDS=()
+  if [ "$FAILED" -ne 0 ]; then
+    echo "FAIL: a compile failed ($TAG)"
+    exit 1
+  fi
   $CXX "$OUT/obj/land_hulk_test.$TAG.o" "$OUT/obj/LandHulk.$TAG.o" "${OBJS[@]}" -o "$OUT/land_hulk_test_$TAG"
 }
 build "${CXX:-g++}" gcc ""

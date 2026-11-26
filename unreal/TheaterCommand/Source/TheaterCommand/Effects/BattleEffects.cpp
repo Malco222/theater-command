@@ -206,6 +206,7 @@ void FBattleEffects::End()
 	Ink.Reset();
 	bSoftInk = false;
 	Holder.Reset();
+	AskedRule = TheaterFx::Battle::LampRule(); // (a kit begun again for another scene hands its lamps out as ever until that one asks)
 	Core.Clear();
 	TestShots.Reset();
 	TestStart = -1.0;
@@ -327,25 +328,18 @@ bool FBattleEffects::Begin(USceneComponent* Parent, double InUnitsPerMetre, TFun
 	InkBrightness = static_cast<float>(Core.PictureGain());
 	Instance->SetScalarParameterValue(TEXT("Brightness"), InkBrightness);
 	bSoftInk = false;
-	double Wanted = 2.0, Candela = 2000.0;
-	Book.Find("game.max_lamps", Wanted);
+	double Candela = 2000.0;
 	Book.Find("game.lamp_candela_at_full", Candela);
-	LampsInUse = FMath::Clamp(static_cast<int32>(Wanted), 0, MostLamps);
+	LampsInUse = LampsAsked(); // (game.max_lamps, or the scene's SetLampRule given before Begin)
 	LampCandela = Candela * FMath::Square(UnitsPerMetre / 100.0); // (the recipe's candelas are at 100 units a metre)
 	for (int32 Index = 0; Index < LampsInUse; ++Index)
 	{
-		UPointLightComponent* Lamp = NewObject<UPointLightComponent>(Owner);
-		Lamp->SetMobility(EComponentMobility::Movable);
-		Lamp->SetupAttachment(Parent);
-		Lamp->SetUsingAbsoluteLocation(true);
-		Lamp->SetCastShadows(false);
-		Lamp->IntensityUnits = ELightUnits::Candelas;
-		Lamp->bUseInverseSquaredFalloff = true;
-		Lamp->SetSpecularScale(0.1f);
-		Lamp->SetIntensity(0.0f);
-		Lamp->RegisterComponent();
-		Lamp->SetVisibility(false);
-		LampLights[Index] = Lamp;
+		LampLights[Index] = MakeLamp(Owner, Parent);
+	}
+	Core.SetLampRule(AskedRule); // (Setup put the kit's back to the default; the scene's, given before Begin, again)
+	if (AskedRule.Asks())
+	{
+		LampsByRule();
 	}
 	const UWorld* World = Parent->GetWorld();
 	Clock = World ? World->GetTimeSeconds() : 0.0; // (until the first Tick)
@@ -357,6 +351,88 @@ bool FBattleEffects::Begin(USceneComponent* Parent, double InUnitsPerMetre, TFun
 bool FBattleEffects::IsReady() const
 {
 	return Mesh.IsValid() && Ink.IsValid();
+}
+
+UPointLightComponent* FBattleEffects::MakeLamp(AActor* Owner, USceneComponent* Parent)
+{
+	// (a flash's lamp: shadowless, out until a flash lights one)
+	UPointLightComponent* Lamp = NewObject<UPointLightComponent>(Owner);
+	Lamp->SetMobility(EComponentMobility::Movable);
+	Lamp->SetupAttachment(Parent);
+	Lamp->SetUsingAbsoluteLocation(true);
+	Lamp->SetCastShadows(false);
+	Lamp->IntensityUnits = ELightUnits::Candelas;
+	Lamp->bUseInverseSquaredFalloff = true;
+	Lamp->SetSpecularScale(0.1f);
+	Lamp->SetIntensity(0.0f);
+	Lamp->RegisterComponent();
+	Lamp->SetVisibility(false);
+	return Lamp;
+}
+
+void FBattleEffects::LampsByRule()
+{
+	// (the look review of 25 November: under a scene's rule (the sea's) a lamp is a gun flash of 6,600 to 58,000 cd
+	// reaching 115 to 360 m and lit for 6 to 12 frames. Lumen's surface cache is lit over several frames and cannot
+	// follow it: it would cost GPU time and leave an after-glow on hulls and water. So such lamps light directly
+	// only, and put nothing into the volumetric fog. Lamps made without a rule (ground, air) are never touched: the
+	// engine's defaults, 1 and 1, as ever; a rule taken back to the default puts them back)
+	const float Indirect = AskedRule.Asks() ? 0.0f : 1.0f;
+	for (int32 Index = 0; Index < LampsInUse; ++Index)
+	{
+		if (LampLights[Index].IsValid())
+		{
+			LampLights[Index]->SetIndirectLightingIntensity(Indirect);
+			LampLights[Index]->SetVolumetricScatteringIntensity(Indirect);
+		}
+	}
+}
+
+int32 FBattleEffects::LampsAsked() const
+{
+	// (the scene's rule's Most, or game.max_lamps (2); never over MostLamps, the kit's own cap)
+	if (AskedRule.Most > 0)
+	{
+		return FMath::Clamp(AskedRule.Most, 0, MostLamps);
+	}
+	double Wanted = 2.0;
+	Book.Find("game.max_lamps", Wanted);
+	return FMath::Clamp(static_cast<int32>(Wanted), 0, MostLamps);
+}
+
+void FBattleEffects::SetLampRule(const TheaterFx::Battle::LampRule& Rule)
+{
+	// (the sea's night fight, 25 November: see the header. Before Begin it is kept for Begin, which makes that many lamps;
+	// after it the lamps still wanted are made here, on this thread, and any no longer wanted put out. A scene that never
+	// calls it makes no lamp more than game.max_lamps, and its lamps go as ever)
+	AskedRule = Rule;
+	AskedRule.Most = FMath::Clamp(Rule.Most, 0, MostLamps);
+	if (IsReady() && Holder.IsValid() && Holder->GetOwner())
+	{
+		const int32 Want = LampsAsked();
+		for (int32 Index = 0; Index < Want; ++Index)
+		{
+			if (!LampLights[Index].IsValid())
+			{
+				LampLights[Index] = MakeLamp(Holder->GetOwner(), Holder.Get());
+			}
+		}
+		for (int32 Index = Want; Index < LampsInUse; ++Index)
+		{
+			if (LampLights[Index].IsValid())
+			{
+				LampLights[Index]->SetVisibility(false);
+			}
+		}
+		LampsInUse = Want;
+		LampsByRule();
+		UE_LOG(LogTheater, Log, TEXT("Battle effects: lamp rule %d lamps, by the eye %s, a salvo within %.0f m and %.2f s one lamp at most %.1f times its strongest"), LampsInUse, AskedRule.bByEye ? TEXT("on") : TEXT("off"), AskedRule.MergeM, AskedRule.MergeS, AskedRule.MergeMost);
+	}
+	const TheaterFx::Battle::LampRule Given = AskedRule;
+	Do([=, this]()
+	{
+		Core.SetLampRule(Given);
+	}, false);
 }
 
 int32 FBattleEffects::PuffsDrawn() const

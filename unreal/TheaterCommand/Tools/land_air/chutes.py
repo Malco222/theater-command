@@ -15,13 +15,16 @@ the pieces' paint is (the sun's light, and on the side turned from the sun the s
 back, its glow): side-on in the sun through a long lens (the art director's verdict of 24 November 14:34Z, (c): its hem
 pulled in toward its lines), from under it 100 m off with the sun behind it with its glow and without, and falling in
 a quarter at a time across the wind; and lying on the field (her verdict, (b)): from 40 m at a man's eye height, and
-from above, his and a second pilot's. Each down view draws him lying (a dark bar) and his lines back to him.
+from above, his and a second pilot's (her note of 24 November 17:40Z: its folds across it, its uneven outline and
+its hem; each pixel of the silk lit by its facing there, as the scene lights it). Each down view draws him lying (a
+dark bar) and his lines back to him.
 It measures in the picture what she asked for, from the pixels it drew, and prints it (and writes it under each view).
 Usage: chutes.py <air_paths.txt> <chute_silk.txt> <out.png>"""
 import math
 import sys
 from collections import defaultdict
 
+import numpy as np
 from PIL import Image, ImageDraw
 
 SRC, SILK, DST = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -54,6 +57,9 @@ for line in open(SILK):
     elif w[0] == 's':
         cur['s'].append(int(w[1]))
         cur.setdefault('k', []).append(int(w[2]) if len(w) > 2 else len(cur['s']) - 1)
+    elif w[0] == 'l':
+        v = [float(a) for a in w[1:]]
+        cur.setdefault('l', []).append([v[k:k + 3] for k in range(0, len(v), 3)])
     elif w[0] == 'p':
         v = [float(a) for a in w[1:]]
         cur['p'].append(v[0:3])
@@ -302,43 +308,85 @@ class View:
 
 
 def silk_polys(mesh, view, sun, fill):
-    """Each triangle of the silk's face toward the eye, projected and shaded, far first."""
+    """Each triangle of the silk's face toward the eye, projected, far first, with each corner's facing and colour: the
+    scene lights each pixel by its points' facings across the triangle, not one light a triangle (the art director's
+    note of 24 November 17:40Z: a fold across the silk is a darker band and a lighter one between two rings)."""
     L = norm(sun)
     tris = []
-    P = mesh['p']
+    P, N, C = mesh['p'], mesh['n'], mesh['c']
     for t in mesh['t']:
         a, b, c = (P[i] for i in t)
         mid = [(a[k] + b[k] + c[k]) / 3.0 for k in range(3)]
-        n = norm([sum(mesh['n'][i][k] for i in t) for k in range(3)])
+        n = norm([sum(N[i][k] for i in t) for k in range(3)])
         if dot(n, [e - m for e, m in zip(view.eye, mid)]) <= 0.0:
             continue   # (the face of the silk turned from the eye: its other face, on the other side, is drawn)
-        col = [sum(mesh['c'][i][k] for i in t) / 3.0 for k in range(3)]
+        col = [sum(C[i][k] for i in t) / 3.0 for k in range(3)]
         lit = dot(n, L)
         shade = 0.22 + 0.78 * max(0.0, lit) + (fill * min(1.0, -lit * 1.4) if lit < 0.0 else 0.0)
-        tris.append((view.depth(mid), [view.at(v) for v in (a, b, c)], srgb([col[k] * shade for k in range(3)])))
+        tris.append((view.depth(mid), [view.at(v) for v in (a, b, c)], srgb([col[k] * shade for k in range(3)]), [norm(N[i]) for i in t], [C[i] for i in t],
+                     [view.depth(v) for v in (a, b, c)]))
     tris.sort(key=lambda e: -e[0])
-    return tris
+    return tris, L, fill
 
 
 def panel(box, title, ground=None):
     x0, y0, x1, y1 = box
+    # (no silk drawn in it yet: a panel's lines are tested against its own silk only, not a panel's drawn before it)
+    DEPTH[max(0, y0):min(H, y1 + 1), max(0, x0):min(W, x1 + 1)] = np.inf
     if ground:
         d.rectangle((x0 + 1, y0 + 1, x1 - 1, y1 - 1), fill=ground)
     d.rectangle(box, outline=GREY)
     d.text((x0 + 6, y0 + 4), title, fill=INK)
 
 
-def paint(tris, box, onto=None):
-    """Draws the triangles clipped to the box (onto: an image of their own, for a layer); returns the silk's mask."""
+def paint(drawn, box, onto=None, depth=True):
+    """Draws the triangles far first, clipped to the box (onto: an image of their own, for a layer), lit much as the
+    pieces' paint is: the sun's light, and on the side turned from the sun the share of its own colour the scene gives
+    back, its glow (fill). Each is drawn whole in one light (its corners' facings' mean, as before), and then each pixel
+    inside it lit by its facing there, its corners' between them, as the scene lights it (the art director's note of 24
+    November 17:40Z: a fold across the silk is a darker band and a lighter one between two rings, which one light a
+    triangle had shown as one shade). Each pixel's depth from the eye is kept (DEPTH: onto a layer too, unless depth is
+    False), so that his lines are drawn only where the silk does not hide them, as the scene's depth test draws them.
+    Returns the silk's mask (the whole triangles')."""
+    tris, sun, fill = drawn
     x0, y0, x1, y1 = box
+    target = onto if onto is not None else im
     mask = Image.new('L', (W, H), 0)
     md = ImageDraw.Draw(mask)
-    dd = ImageDraw.Draw(onto) if onto is not None else d
-    for _, poly, rgb in tris:
+    dd = ImageDraw.Draw(target)
+    for _, poly, rgb, _, _, _ in tris:
         md.polygon(poly, fill=255)
         dd.polygon(poly, fill=rgb + ((255,) if onto is not None else ()))
     clip = Image.new('L', (W, H), 0)
     ImageDraw.Draw(clip).rectangle((x0 + 1, y0 + 22, x1 - 1, y1 - 1), fill=255)
+    cx0, cy0, cx1, cy1 = x0 + 1, y0 + 22, x1 - 1, y1 - 1
+    pix = np.array(target)
+    L = np.array(sun)
+    for _, poly, _, facings, colours, depths in tris:
+        (ax, ay), (bx, by), (qx, qy) = poly
+        lx, hx = max(cx0, int(math.floor(min(ax, bx, qx)))), min(cx1, int(math.ceil(max(ax, bx, qx))))
+        ly, hy = max(cy0, int(math.floor(min(ay, by, qy)))), min(cy1, int(math.ceil(max(ay, by, qy))))
+        den = (by - qy) * (ax - qx) + (qx - bx) * (ay - qy)
+        if lx > hx or ly > hy or abs(den) < 1e-12:
+            continue
+        X, Y = np.meshgrid(np.arange(lx, hx + 1, dtype=float), np.arange(ly, hy + 1, dtype=float))
+        w0 = ((by - qy) * (X - qx) + (qx - bx) * (Y - qy)) / den
+        w1 = ((qy - ay) * (X - qx) + (ax - qx) * (Y - qy)) / den
+        w2 = 1.0 - w0 - w1
+        inside = (w0 >= -1e-7) & (w1 >= -1e-7) & (w2 >= -1e-7)
+        if not inside.any():
+            continue
+        w = np.stack([w0[inside], w1[inside], w2[inside]], axis=1)
+        n = w @ np.array(facings)
+        n /= np.maximum(1e-12, np.linalg.norm(n, axis=1))[:, None]
+        lit = n @ L
+        shade = 0.22 + 0.78 * np.maximum(0.0, lit) + np.where(lit < 0.0, fill * np.minimum(1.0, -lit * 1.4), 0.0)
+        rgb = (255.0 * np.clip((w @ np.array(colours)) * shade[:, None], 0.0, 1.0) ** (1 / 2.2)).astype(np.uint8)
+        ys, xs = np.nonzero(inside)
+        pix[ys + ly, xs + lx, 0:3] = rgb
+        if depth:
+            DEPTH[ys + ly, xs + lx] = w @ np.array(depths)
+    target.paste(Image.fromarray(pix))
     return Image.composite(mask, Image.new('L', (W, H), 0), clip)
 
 
@@ -360,7 +408,26 @@ def extent(mask):
     return rows, cols, bbox
 
 
-SUIT, CORD = srgb((0.30, 0.26, 0.19)), srgb((0.70, 0.68, 0.62))
+SUIT, CORD = srgb((0.30, 0.26, 0.19)), srgb((0.13, 0.12, 0.07))
+# (each pixel's depth from the eye of the silk last drawn on the picture: paint's)
+DEPTH = np.full((H, W), np.inf)
+
+
+def cord(dd, view, a, b):
+    """A length of line from a to b, a pixel wide, drawn where the silk does not hide it: the scene draws it as a rod
+    12 mm round, so its near side is 12 mm nearer the eye than its middle (a review of 24 November 17:40Z, after a
+    second look: drawn over everything, lines under the silk had shown through it). Within its view's panel only, as
+    paint clips the silk."""
+    x0, y0, x1, y1 = view.box
+    u, v = view.at(a), view.at(b)
+    steps = max(1, int(math.ceil(max(abs(v[0] - u[0]), abs(v[1] - u[1])) * 2.0)))
+    for k in range(steps + 1):
+        f = k / steps
+        p = [a[i] + (b[i] - a[i]) * f for i in range(3)]
+        x, y = view.at(p)
+        xi, yi = int(round(x)), int(round(y))
+        if x0 + 1 <= xi <= x1 - 1 and y0 + 22 <= yi <= y1 - 1 and 0 <= xi < W and 0 <= yi < H and view.depth(p) - 0.012 <= DEPTH[yi, xi]:
+            dd.point((xi, yi), fill=CORD)
 
 
 def man_and_lines(mesh, view, dd=None):
@@ -375,6 +442,12 @@ def man_and_lines(mesh, view, dd=None):
     a, b = view.at(feet), view.at(head)
     wide = max(2, int(0.34 * view.scale / max(1.0, view.depth([0.85 * fwd[0], 0.85 * fwd[1], 0.15]))))
     dd.line((a[0], a[1], b[0], b[1]), fill=SUIT, width=wide)
+    if mesh.get('l'):
+        # (as the scene draws them: LandAir's LineLies points, a rod from each to the next)
+        for pts in mesh['l']:
+            for a, b in zip(pts[:-1], pts[1:]):
+                cord(dd, view, a, b)
+        return
     for s, k in zip(mesh['s'], mesh.get('k', range(len(mesh['s'])))):
         p = mesh['p'][s]
         way = [p[0] - hx, p[1] - hy, p[2] - hz]
@@ -382,9 +455,8 @@ def man_and_lines(mesh, view, dd=None):
         flat = math.hypot(way[0], way[1]) or 1.0
         bow = (1.0 if k % 2 == 0 else -1.0) * 0.06 * size
         mid = [0.5 * (hx + p[0]) - way[1] / flat * bow, 0.5 * (hy + p[1]) + way[0] / flat * bow, 0.5 * (hz + p[2]) - 0.5 * abs(p[2] - hz)]
-        u, m, v = view.at([hx, hy, hz]), view.at(mid), view.at(p)
-        dd.line((u[0], u[1], m[0], m[1]), fill=CORD, width=1)
-        dd.line((m[0], m[1], v[0], v[1]), fill=CORD, width=1)
+        cord(dd, view, [hx, hy, hz], mid)
+        cord(dd, view, mid, p)
 
 
 def luma(rgb):
@@ -424,7 +496,7 @@ seams0 = [k for k in range(0, 4 * meshes[0]['gores'], 4)]
 riser = v1.at([0.0, 0.0, -3.3])
 for k in seams0:
     q = v1.at(meshes[0]['p'][k])
-    d.line((q[0], q[1], riser[0], riser[1]), fill=(120, 118, 110), width=1)
+    d.line((q[0], q[1], riser[0], riser[1]), fill=CORD, width=1)
 a, b = v1.at([0.0, 0.0, -3.4]), v1.at([0.1, 0.0, -5.2])
 d.line((a[0], a[1], b[0], b[1]), fill=SUIT, width=6)
 for y in (wide_row, hem_row):
@@ -459,7 +531,8 @@ v3 = View(eye, [0.0, 0.0, 1.2], 3600.0, r1[2])
 paint(silk_polys(meshes[0], v3, sun_behind, 0.0), r1[2])
 
 # (4) falling in, across the wind 30 m off: as he landed, and a quarter, a half and three quarters fallen in (paler
-# the earlier), and lying
+# the earlier), and lying; his lines (lying) drawn where its silk lying does not hide them, not tested against the
+# paler stages before it, which the scene never draws with it
 panel(r1[3], "falling in, across the wind 30 m off (paler earlier)", FIELD)
 v4 = View([5.5, -30.0, 2.0], [5.5, 0.0, 3.5], 1000.0, r1[3])
 x0, y0, x1, y1 = r1[3]
@@ -469,7 +542,7 @@ layers = Image.new('RGBA', (W, H), (0, 0, 0, 0))
 mids = []
 for k, which in enumerate((3, 4, 5, 6, 1)):
     layer = Image.new('RGBA', (W, H), (0, 0, 0, 0))
-    paint(silk_polys(meshes[which], v4, sun_high, 0.0), r1[3], onto=layer)
+    paint(silk_polys(meshes[which], v4, sun_high, 0.0), r1[3], onto=layer, depth=which == 1)
     alpha = layer.getchannel('A').point(lambda a, k=k: int(a * (0.35 + 0.65 * k / 4.0)))
     layer.putalpha(alpha)
     layers = Image.alpha_composite(layers, layer)
@@ -501,6 +574,7 @@ horizon = v5.cy - math.tan(math.atan2(1.4, 40.0)) * v5.scale
 d.rectangle((x0 + 1, y0 + 22, x1 - 1, max(y0 + 22, int(horizon))), fill=SKY)
 tris5 = silk_polys(lie, v5, sun_high, 0.0)
 m5 = paint(tris5, wide_box)
+bare5 = im.copy()   # (its silk's own pixels, before his lines are drawn over it)
 man_and_lines(lie, v5)
 rows, cols, bb = extent(m5)
 left, right = min(cols), max(cols)
@@ -511,7 +585,7 @@ near_cols = [x for x in cols if x <= left + 0.25 * span]
 far_up = (ground_row - min(cols[x][0] for x in far_cols)) * 40.0 / v5.scale
 near_up = (ground_row - min(cols[x][0] for x in near_cols)) * 40.0 / v5.scale
 long5 = span * 40.0 / v5.scale
-pix = im.load()
+pix = bare5.load()
 silk_px = [pix[x, y] for x in range(bb[0], bb[2]) for y in range(bb[1], bb[3]) if m5.getpixel((x, y))]
 lum = sorted(luma(c) for c in silk_px)
 say(wide_box, 3, "%.1f m long along the wind; its far quarter stands %.2f m up at most (her 0.3 to 0.8), its near quarter %.2f "
@@ -542,12 +616,13 @@ def from_above(mesh, box, who):
     panel(box, "lying, from above, %s (wind to the right)" % who, FIELD)
     v = View([cx, cy, 150.0], [cx, cy, 0.0], 5000.0, box, hint=(0.0, 1.0, 0.0))
     m = paint(silk_polys(mesh, v, sun_high, 0.0), box)
+    bare = im.copy()   # (its silk's own pixels, before his lines are drawn over it: a review of 24 November 17:40Z)
     man_and_lines(mesh, v)
     rows, cols, bb = extent(m)
     mpp = 150.0 / v.scale
     along = (max(cols) - min(cols) + 1) * mpp
     across = (max(rows) - min(rows) + 1) * mpp
-    pix = im.load()
+    pix = bare.load()
     # (its folds: luma across it at its middle, from one edge to the other: ridges lit, troughs and their far sides darker)
     mx = int((min(cols) + max(cols)) / 2)
     raw = [luma(pix[mx, y]) for y in range(cols[mx][0] + 2, cols[mx][1] - 1)]

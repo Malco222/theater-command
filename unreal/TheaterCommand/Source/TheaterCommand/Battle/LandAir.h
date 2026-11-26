@@ -156,8 +156,11 @@ namespace LandAir
 	};
 
 	/** A pilot's lines: his harness hangs this far under his canopy's skirt, and his feet HangFeet under that (metres;
-	 * the scene's mesh hangs on it, so that his feet are At). */
-	constexpr double LinesLong = 4.1, HangFeet = 1.1;
+	 * the scene's mesh hangs on it, so that his feet are At). The air's hang draws them short: a real canopy's lines are
+	 * some RealLines times its spread across (Chute::Across: a T-5's 22 ft lines and some 3 ft of riser under a 28 ft
+	 * canopy about 19 ft across in the air), as long as those lying across its silk are drawn at most, from his harness
+	 * to where they go down off its far edge. */
+	constexpr double LinesLong = 4.1, HangFeet = 1.1, RealLines = 1.33;
 
 	/**
 	 * Down, the scene's chute mesh draws him going over flat before the crowd's man takes him (the art director's third
@@ -193,6 +196,33 @@ namespace LandAir
 		std::vector<int> Triangles;     // three a triangle
 		std::vector<V3> Outward;        // one a triangle
 		std::vector<int> Seams;         // its skirt's point at each gore's seam (its outer face's): where a line ends
+		// Down (HeapShape; none in the air), the lines it lies across (LineLies): their seams (places in Seams), and for
+		// each in that order LineVia points its line lies through as its slump is now (as far as its lines are slack,
+		// LineSlack, drawn over its silk from its seam's end on its hem toward its edge): LineGrass across the grass from
+		// his harness as he lies, LineSilk over its top (from about 0.8 of its slump, as it settles, 12 mm over the
+		// highest of its silk there and wherever the line between two would dip into it), and over its edge and down to
+		// the ground beside it; never under the ground. And (MidLow) the lowest the middle of the line to each seam may
+		// lie lying, the ground there and its cord's thickness (-1e9: none); and (HarnessLow) the lowest the straight the
+		// lines across it run taut from his harness starts (LineLies): the ground under his harness as he lies (read
+		// there, never more than 0.1 m under HeapShape's grid) and its cord's thickness (-1e9: none). The scene draws him
+		// flat at his feet's height, so that on a bank or a hummock his harness is in the ground: his lines come up out of
+		// it by him and run on over it, never up from under it
+		std::vector<int> Across;
+		std::vector<V3> Over;
+		std::vector<double> MidLow;
+		double HarnessLow = -1e9;
+		// (HeapShape's own: what it works out once for it as it lies, the same every make while his chute and where it
+		// lies are, kept for its next make: what that was worked out for, its lying shape before the ground, how much of a
+		// fold across it there is at each point, how its lines lie across it, and what each column round it shares; and,
+		// handed it by SilkStep for the one make it is moved toward from the last, that make's lines across it (Across and
+		// Over), which HeapShape keeps its own over the ground on the way from, and leaves empty)
+		struct LyingKept
+		{
+			std::vector<double> Key, Crossing, Laid, Columns;
+			std::vector<V3> Lies, OverWas;
+			std::vector<int> AcrossWas;
+		};
+		LyingKept Kept;
 		void Clear();
 	};
 	/**
@@ -212,7 +242,25 @@ namespace LandAir
 	 * metres off (the art director's verdict of 24 November 14:34Z: it had lain a flat oval with even scallops, "a
 	 * doily"): two to three times as long as it is wide, in a few long loose folds running mostly downwind, uneven and
 	 * his own (Chute::Folds), its far end lifted a little on the air it still holds and coming round and down to the
-	 * ground, its near end gathered 2 to 3.5 m past his harness, where its lines run back to him across the grass.
+	 * ground, its near end gathered 2 to 3.5 m past his harness, where its lines run back to him across the grass. And
+	 * (her note of 24 November 17:40Z: from above it had read as a smooth cocoon or a gourd) uneven from above: three or
+	 * four folds across it where it bunched, most across part of its width, slanted and bowed; one side wider than the
+	 * other (about the wind line through where its lines gather, and about the line from there to its tip), its edges
+	 * jagged, a gore or two flipped over and lying flat out beyond its wide side and one tucked under the other; its
+	 * hem wavering, two or three of its gores flipped back over its top at its near end (the lines to them, and some
+	 * beside them, running across them: as far as its gathering lets them, about 0.3 m) and one or two tucked under;
+	 * its gores wandering across it as they go; and its lifted far end slumped a little to the side away from its wider
+	 * one and buckled on the other. Where a fold across it is, each point's facing is the way its silk runs on to the
+	 * next ring, so that the fold shades as a darker band and a lighter one. And (her note again, after a second look:
+	 * its lines had crossed only the flap at its near end, and its far end had been a neat dome, its seams running
+	 * cleanly to a point at its tip) one to four of its lines (two on most) wrapped over its near part as it slid and
+	 * slewed: each from his harness across the grass onto its top a little past its gathering, here or there across it
+	 * (not where the rest gather), and over its near third at a slant (some 45 degrees off its wind line on the mean,
+	 * 20 at the least, bowed and curling), 1 to 2.5 m of it on its silk on most (3 at the most), down into its folds
+	 * and over their crests, to its edge and over it to the ground (Silk's Across and Over, LineLies), the rest running
+	 * to its gathered hem; and its far end broken up: its last rings and its vent drawn over toward the side it slumps
+	 * to, a shallow slanted crease across its dome on its eleventh ring, the edge of its narrow side folded back under
+	 * it over its last two rings, and its seams kinked ring to ring from its tenth.
 	 * Ground (board metres, as Sky's; none: a flat field) is the ground it lies on, read once on a grid a quarter of a
 	 * metre square under it: each point laid on it, and every edge of its silk kept over the ground the grid reads (a
 	 * bank, a ditch, a crater's rim; HeapShape lifts both ends of an edge that would cut through one). The mesh is placed
@@ -227,6 +275,22 @@ namespace LandAir
 	 * skirt behind its middle the way it falls, toward where its lines end. Chosen by its place round the skirt, not by
 	 * where its folds put it, so that the same lines are drawn all the while it falls in (the mesh keeping its make). */
 	bool LineBack(size_t Seam, size_t Seams);
+	/** Down, how slack his lines are at a slump of his canopy's falling in: taut (0) to a slump of 0.3, slack (1) from
+	 * 0.8, smoothly between (DownShape's, and HeapShape's lines across its silk). */
+	double LineSlack(double Slump);
+	/**
+	 * Down, the points the scene draws a line through (LandBattleAir's DownShape: a rod from each to the next), from his
+	 * harness (Harness, in the silk's space, metres) to the Seam-th of its seams (SilkMesh::Seams' order), Slack 0 taut
+	 * to 1 lying (DownShape's: LineSlack). Most run in two lengths to their seam's point on its gathered hem, their
+	 * middle let down toward the lower end's height (never under the ground: SilkMesh::MidLow) and bowed aside by 0.06
+	 * of the line's length, every other line the other way (three points). Those its silk lies across (SilkMesh::Across:
+	 * the art director's note of 24 November 17:40Z, "a few lines cross the silk rather than all running to one neat
+	 * point") go from his harness through their Over points (LinePoints): across the grass, from taut (the straight from
+	 * his harness, or from the ground over it where he lies sunk into it: SilkMesh::HarnessLow) to lying, and on over
+	 * the silk and its edge as HeapShape last laid them. Returns how many points it put in Out.
+	 */
+	constexpr int LineGrass = 4, LineSilk = 24, LineVia = LineGrass + LineSilk + 2, LinePoints = LineVia + 1;
+	int LineLies(const SilkMesh& Silk, size_t Seam, const V3& Harness, double Slack, V3 (&Out)[LinePoints]);
 
 	/**
 	 * The scene's chute mesh (the art director's sixth note, 24 November 02:26Z: cheaply, no mesh made again a frame) is

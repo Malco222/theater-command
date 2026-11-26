@@ -710,6 +710,71 @@ namespace TheaterFx
 		int Lamps(double Now, Lamp* Into, int Room, double Day = 0.0) const;
 		/** The lamps by fire.lamp's rules (Lamps, when the recipe has fire.lamp.ramp_s): see the .cpp. */
 		int SteadyLamps(double Now, Lamp* Into, int Room, double Day) const;
+
+		/** The most lamps any scene may ask for (LampRule::Most); FBattleEffects makes no more point lights than this. */
+		static constexpr int MostLamps = 4;
+		/** How a scene's lamps are handed out (the sea's night fight, 25 November: look bible S7, "gun flashes light the
+		 * hulls"). Set once by the scene at open with SetLampRule; as made, at every Setup, and with every knob at its
+		 * default, the lamps are handed out exactly as before, to the byte.
+		 *
+		 * - Most: how many lamps the scene asks for in place of game.max_lamps (0: the recipe's), never over MostLamps.
+		 *   The caller passes it on as Lamps' Room (FBattleEffects does); a scene that never asks makes none extra.
+		 * - bByEye: each lamp is ranked by the light it sends the eye: its strength over the square of its distance from
+		 *   the eye of the last Draw (5 m at the least: the floor fire.lamp's steady lights already use). A lamp's lit
+		 *   patch, seen from afar, is as much dimmer per square metre as it is wider on the screen, so its reach cancels
+		 *   and what is left is the light it lands over the distance squared: a burning slick 6 km off ranks under a
+		 *   battleship's broadside 2 km off. Off: by strength alone, as before. The steady lights (fire.lamp,
+		 *   SteadyLamps) keep their own share, game.steady_lamps of the lamps, and their ramp and keep; with bByEye the
+		 *   rest go to flash or steady light by rank alike, and a steady light's own lamp goes, for the frames it is
+		 *   outshone, to a flash left unlit that sends the eye Yield times its light (it comes back up over ramp_s).
+		 * - MergeM, MergeS: flashes born within MergeS seconds of each other whose guns lie within MergeM metres of each
+		 *   other light one lamp (a broadside: turrets fire within a fraction of a second, a hull's length apart), at
+		 *   their lamps' strength-weighted middle, coloured as their strength-weighted mix, its strength their sum held
+		 *   to MergeMost times its strongest flash's, its reach grown to cover each flash's own reach from there.
+		 *   Strongest first; a flash joins a lamp only when its gun lies within MergeM of every gun already in it, so no
+		 *   two guns of one lamp are more than MergeM apart and a lamp never chains from ship to ship. The distance is
+		 *   the guns' (the muzzles the scene passed), never the lamps': a naval lamp hangs some 60 to 135 m out along its
+		 *   bore (lamp_out_m), so two ships firing toward each other would bring their lamps together while their guns
+		 *   stay as far apart as ever. A flash with no gun (any other row's) is measured from its lamp. MergeM 0: none
+		 *   merged. The groups are made afresh each frame from the strongest flash alive, so in a ripple salvo (turrets
+		 *   0.05 to 0.1 s apart) the lamp steps along her hull toward each turret as it fires, 25 to 85 m a turret, and
+		 *   the earlier ones fade: it reads as the ripple. A salvo fired in one frame (the sea scene's) is one still
+		 *   lamp.
+		 * - Yield: see bByEye (only with it).
+		 *
+		 * With bByEye a lamp whose sphere (its place and its reach) lies wholly outside the last Draw's view
+		 * (View::Forward, HalfAcross and HalfUp; not known while HalfAcross is 0) ranks nothing, as it can light nothing on
+		 * the screen. Ties are broken by the lamps themselves (strength, birth, place, reach, colour), never by the order
+		 * the calls came in: the same flashes give the same lamps to the bit, however their Muzzle calls were ordered.
+		 *
+		 * The sea battle's night (the sea scene, once at open, before Begin or after it):
+		 *     Effects->SetLampRule(TheaterFx::Battle::LampRule::Sea());
+		 * which is { Most 3, bByEye, MergeM 200, MergeS 0.3, MergeMost 2, Yield 100 }. */
+		struct LampRule
+		{
+			int Most = 0;
+			bool bByEye = false;
+			double MergeM = 0.0, MergeS = 0.0, MergeMost = 2.0, Yield = 100.0;
+			/** The sea battle's: 3 lamps by the eye, a broadside within 200 m and 0.3 s one lamp at most twice its
+			 *  strongest turret's (the sea's effects-lamps-for-sea.md says why each). */
+			static LampRule Sea()
+			{
+				LampRule R;
+				R.Most = 3;
+				R.bByEye = true;
+				R.MergeM = 200.0;
+				R.MergeS = 0.3;
+				return R;
+			}
+			/** Whether it asks anything of the kit at all (one that does not is the default: the lamps as ever). */
+			bool Asks() const { return Most > 0 || bByEye || MergeM > 0.0; }
+		};
+		/** Held: Most 0..MostLamps, MergeM 0..2,000 m, MergeS 0..2 s, MergeMost 1..16, Yield 1..10^6; a knob that is not a
+		 *  number takes its default. Survives Clear; Setup puts it back to the default. */
+		void SetLampRule(const LampRule& Rule);
+		const LampRule& LampRuleNow() const { return Rules; }
+		/** The lamps a scene should make: the rule's Most, else game.max_lamps (2), never over MostLamps. */
+		int LampsWanted() const;
 		/** How much the hour's light (View::SmokeLight) is day: 0 at night, 1 in full day (game.day_light_from, _full). */
 		double DayOf(const Rgb& HourLight) const;
 
@@ -1000,6 +1065,11 @@ namespace TheaterFx
 			bool bNightOnly = false; // (a small gun's flash: no lamp on the ground by day)
 			bool bOneFrame = false; // (Effects (R2): lit on the flash's own frame alone, not half the next)
 			int FirstFrame = -1; // (the first frame drawn after it was born: its lamp is full then, half the next, then out)
+			double LampS = 0.0; // (a naval gun's, muzzle.<row>.lamp_s: full on its first frame, then down to nothing by this many seconds after its birth, never under half on the next frame. 0: as above)
+			// (a naval gun's: its muzzle, where the lamp rule's merge measures from, the lamp itself hung far out from it
+			// (lamp_out_m). bGun false: the merge measures from the lamp, At)
+			Vec Gun;
+			bool bGun = false;
 		};
 		struct Knock
 		{
@@ -1388,6 +1458,38 @@ namespace TheaterFx
 		};
 		mutable std::vector<LampKept> LampsKept;
 		mutable double LampsAt = -1.0e18;
+		// (a lamp on its way to the scene, SteadyLamps' and the lamp rule's: its source's seed (0 for a flash), its rank,
+		// when it was fired (a flash's birth), whether it is a steady light's, and where the merge measures a flash from:
+		// its gun's muzzle (Flash::Gun), or the lamp's own place for a flash without one)
+		struct LampLit
+		{
+			Lamp L;
+			uint64_t Seed = 0;
+			double Rank = 0.0, Born = 0.0;
+			bool bSteady = false;
+			Vec Gun;
+		};
+		// (SetLampRule: the scene's rule, and whether it differs from the default at all)
+		LampRule Rules;
+		bool bLampRuled = false;
+		/** A flash's lamp share at Now: 1 on its first frame drawn, half the next (nothing for a one-frame flash), then
+		 *  out; a naval gun's (LampS) down from its first frame to nothing by LampS. Under 0: not lit. */
+		double FlashShare(const Flash& F, double Now) const;
+		/** The lamp rule's rank of a lamp of Strength at At reaching Reach: over the square of its distance from the last
+		 *  eye, 5 m at the least, and nothing when its sphere is wholly out of the last view (bByEye); else its strength. */
+		double EyeRank(const Vec& At, double Strength, double Reach) const;
+		/** Whether a sphere at At of radius Reach can light anything in the last Draw's view (true while the view's width
+		 *  is not known): within the view's half diagonal angle of its forward, widened by the sphere's own angle. */
+		bool LampInSight(const Vec& At, double Reach) const;
+		/** The lamp rule's order: Rank first, then the lamp itself (strength, birth, place, reach, colour, seed), so a tie
+		 *  never falls to the order the flashes were laid in. */
+		static bool LampFirst(const LampLit& A, const LampLit& B);
+		Vec SightAhead; // (the last Draw's forward, and its half diagonal angle in radians: 0 while not known)
+		double SightHalf = 0.0;
+		/** The lamp rule's merge of flashes into one lamp a salvo (LampRule's MergeM, MergeS and MergeMost). */
+		void MergeLamps(std::vector<LampLit>& Lits) const;
+		/** A naval gun's fireball and smoke ring (muzzle.<row>.fireball_m, ring_m): its own dice. */
+		void GunFireball(double Now, const Vec& At, const Vec& Fw, const std::string& Row);
 		Vec LastEye;
 		double LastPpr = 1000.0; // (the last frame's pixels a radian: a water column far off in the picture is fewer pieces)
 		Vec LastSun; // (the way to the sun in the last frame drawn; none before the first: a steam plume's rags on its far side from the sun are born in its shade)
