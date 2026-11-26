@@ -1,0 +1,87 @@
+{
+ "what": "Flak by its size (release 2, behind -TheaterAirFlakKinds, read in the wrapper's Begin for every kit, so the air scene's flak and the sea scene's take it alike; Brian, 26 November: 'lets try to add more visual dramatic things like that'). Laid over battle-fx.json (FBattleEffects' Begin): without it light and medium flak burst as heavy. medium is a 37 to 40 mm burst, 6 to 8 m, dark grey, gone in about 5 s; light a 20 mm self-destruct burst, 3 to 4 m, a small grey puff (grey, not white), gone in about 3 s. Each lingers by its own linger.flak.by.<kind>, shorter than heavy's 25 s. Colours written to land (tools/battle-fx/game_curve.py write): medium young 68,68,66 lands 40,40,38 and old 129,127,124 lands 135,132,128; light young 88,88,87 lands 70,70,68 and old 139,138,136 lands 150,148,145.",
+ "air_flak": {
+  "medium": {
+   "_what": "a 37 to 40 mm class burst",
+   "long_m": 8,
+   "across_m": 6,
+   "lobes": [4, 6],
+   "wisps": [2, 3],
+   "lobe_r": [0.3, 0.5],
+   "grow": 2.0,
+   "stretch_mps": 2.0,
+   "downwind_mps": 0.6,
+   "life_s": [4.5, 5.5],
+   "alpha": 0.65,
+   "half_by_s": 4,
+   "colour": [68, 68, 66],
+   "colour_old": [129, 127, 124],
+   "cloud_shade": 4.0,
+   "face_lit": 1.2,
+   "twin_px": 40,
+   "lit_colour": [182, 176, 166],
+   "heart_end": 0.4,
+   "spread_mps": 0.6,
+   "least_px": 6,
+   "flash_glow_s": 0.07,
+   "flash_heart_s": 0.04,
+   "flash_spikes": [1, 2],
+   "flash_heart": [255, 245, 215],
+   "flash_heart_m": 0.7,
+   "flash_mid": [255, 170, 60],
+   "flash_mid_m": 1.5,
+   "flash_glow": [160, 70, 34],
+   "flash_glow_m": 3.5,
+   "lamp": 0.15,
+   "lamp_reach_m": 30
+  },
+  "light": {
+   "_what": "a 20 mm self-destruct burst: small and grey, never white",
+   "long_m": 4,
+   "across_m": 3,
+   "lobes": [3, 4],
+   "wisps": [1, 2],
+   "lobe_r": [0.3, 0.45],
+   "grow": 1.8,
+   "stretch_mps": 1.2,
+   "downwind_mps": 0.5,
+   "life_s": [2.6, 3.4],
+   "alpha": 0.5,
+   "half_by_s": 2.5,
+   "colour": [88, 88, 87],
+   "colour_old": [139, 138, 136],
+   "cloud_shade": 3.0,
+   "face_lit": 0.9,
+   "twin_px": 40,
+   "lit_colour": [182, 176, 166],
+   "heart_end": 0.4,
+   "spread_mps": 0.4,
+   "least_px": 4,
+   "flash_glow_s": 0.05,
+   "flash_heart_s": 0.03,
+   "flash_spikes": [0, 1],
+   "flash_heart": [255, 245, 215],
+   "flash_heart_m": 0.4,
+   "flash_mid": [255, 170, 60],
+   "flash_mid_m": 0.8,
+   "flash_glow": [160, 70, 34],
+   "flash_glow_m": 1.8,
+   "lamp": 0.06,
+   "lamp_reach_m": 15
+  }
+ },
+ "linger": {
+  "flak": {
+   "by": {
+    "medium": {
+     "thick_s": 4.5,
+     "gone_s": 9
+    },
+    "light": {
+     "thick_s": 2.8,
+     "gone_s": 5.5
+    }
+   }
+  }
+ }
+}

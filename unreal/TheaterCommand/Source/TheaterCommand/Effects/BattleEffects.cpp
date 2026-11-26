@@ -280,6 +280,13 @@ bool FBattleEffects::Begin(USceneComponent* Parent, double InUnitsPerMetre, TFun
 	{
 		OverPaths.Add(FPaths::ProjectContentDir() / TEXT("Effects") / Name);
 	}
+	// Effects (R2), flak by its size (-TheaterAirFlakKinds; Brian, 26 November: "lets try to add more visual dramatic
+	// things"): light and medium flak each burst as their own row (battle-fx-flak.json), not as heavy. Read here, the
+	// one place every kit's overlays are laid, so the air scene's flak and the sea scene's take it alike.
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterAirFlakKinds")))
+	{
+		OverPaths.Add(FPaths::ProjectContentDir() / TEXT("Effects") / TEXT("battle-fx-flak.json"));
+	}
 	if (!Book.Load(Path, OverPaths))
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Battle effects: the recipe is missing or unreadable (%s); nothing will be drawn"), *Path);

@@ -6987,7 +6987,11 @@ namespace TheaterFx
 		// (a burst's smoke keeps its dark until its thick time, then greys, widens and thins into the air: linger.flak)
 		const size_t First = Bits.size();
 		AirFlakLaid(Now, At, Kind);
-		LingerFrom(First, LingerOf("flak"), Now, At, 1.0, 0.0);
+		// (Effects (R2), flak by its size, -TheaterAirFlakKinds: a kind with its own linger.flak.by.<kind>.gone_s
+		// lingers by that row, as battle-fx-flak.json gives medium and light; any other, heavy too, by linger.flak as
+		// before. Asked by name only where the row is: by a name with none, LingerOf would take no linger at all)
+		const std::string LingerName = Kind && *Kind && Has(std::string("linger.flak.by.") + Kind + ".gone_s") ? std::string(Kind) : std::string();
+		LingerFrom(First, LingerOf("flak", LingerName), Now, At, 1.0, 0.0);
 	}
 
 	void Battle::AirFlakLaid(double Now, const Vec& At, const char* Kind)
