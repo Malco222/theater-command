@@ -199,6 +199,32 @@ describe('the 3D game says what the page says', () => {
     expect(t).not.toContain('That is enough for');
   });
 
+  it("the 3D men page says China's men to the thousand in its headline and THE COUNT, as line 14 beside them does (the sceptic's S2)", () => {
+    type P = { headline: string; note: string; sections: { heading: string; text: string }[] };
+    const cnt = (p: P): string => p.sections.find((x) => x.heading === 'THE COUNT')!.text;
+    TC().start({ human: 'CHN', seed: 7, view: 'grand', world: true });
+    const p = TC().page('men') as P;
+    expect(p.headline).toBe('496,000 men in reserve  \u00B7  Ample');
+    expect(p.note).toBe("About 496,000 men stand in reserve: about seven divisions' worth.");
+    expect(cnt(p)).toBe(['At the start: 496,000', 'Come of age since: +0', 'Called up so far: \u22120', 'In reserve today: 496,000', 'Come of age each month: +105,000'].join('\n'));
+    // Thinning, at three divisions' worth: the headline and the count say the note's figure.
+    const gg = loadGame((TC().save() as { text: string }).text)!;
+    gg.flags['mp:CHN'] = 3;
+    TC().load(saveGame(gg));
+    const q = TC().page('men') as P;
+    expect(q.headline).toBe('201,000 men in reserve  \u00B7  Thinning');
+    expect(q.note).toBe('The reserve is thinning: about 201,000 men are left of about 496,000.');
+    expect(cnt(q).split('\n')[3]).toBe('In reserve today: 201,000');
+    expect(cnt(q).split('\n')[4]).toBe('Come of age each month: +105,000');
+  });
+
+  it("a nation without a scale of its own keeps its men page's figures whole", () => {
+    TC().start({ human: 'JAP', seed: 17, view: 'grand', world: true });
+    const p = TC().page('men') as { headline: string; sections: { heading: string; text: string }[] };
+    expect(p.headline).toBe('605,381 men in reserve  \u00B7  Ample');
+    expect(p.sections.find((x) => x.heading === 'THE COUNT')!.text).toBe(['At the start: 624,000', 'Come of age since: +0', 'Called up so far: \u221218,619', 'In reserve today: 605,381', 'Come of age each month: +12,480'].join('\n'));
+  });
+
   it("a nation without a scale of its own keeps its men tip's second line", () => {
     TC().start({ human: 'JAP', seed: 7, view: 'grand', world: true });
     const tip = (TC().view() as { men: { tip: string } }).men.tip.split('\n');
@@ -271,9 +297,14 @@ describe('the second read: the reserve of men at a nation\'s own scale', () => {
     expect(why(2.6, 'corps:inf')).toBe(`The reserve has not the men: this takes three divisions' worth and about two are left.${CLASS}`);
     expect(why(2.99, 'corps:inf')).toBe(`The reserve has not the men: this takes three divisions' worth and about two are left.${CLASS}`);
     expect(why(1.5, 'corps:mtn')).toBe(`The reserve has not the men: this takes two divisions' worth and about one is left.${CLASS}`);
-    // An order of one division's worth (none is offered today) with half of one or more left.
+    // An order of one division's worth with half of one or more left: China's engineer corps is offered, and this is its
+    // live refusal (the sceptic's S3 of the second words round).
     expect(noMenWords('CHN', 1, 0.7, 1.5644171779141105)).toBe(`The reserve has not the men: this takes one division's worth and less than one is left.${CLASS}`);
     expect(noMenWords('CHN', 1, 0.2, 1.5644171779141105)).toBe(`The reserve has not the men: this takes one division's worth and less than half of one is left.${CLASS}`);
+    expect(offers(g, 'CHN', cap).find((o) => o.key === 'corps:eng')!.takes).toBe("Takes one division's worth of men and 21,300 rifles.");
+    expect(why(0.7, 'corps:eng')).toBe(`The reserve has not the men: this takes one division's worth and less than one is left.${CLASS}`);
+    expect(why(0.5, 'corps:eng')).toBe(`The reserve has not the men: this takes one division's worth and less than one is left.${CLASS}`);
+    expect(why(0.2, 'corps:eng')).toBe(`The reserve has not the men: this takes one division's worth and less than half of one is left.${CLASS}`);
     // Every nation without a scale of its own: as before.
     expect(noMenWords('JAP', 3, 1, 1)).toBeNull();
     const j = grand('JAP', 17);

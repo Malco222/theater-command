@@ -89,7 +89,7 @@ import { PRIZES, type PrizeKind, type ScorchPolicy } from '../../../src/campaign
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, rankOf, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../../../src/campaign/commanders';
 import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat, takeOver } from '../../../src/campaign/stories';
 import { KIND, TERRAIN_DEF } from '../../../src/campaign/types';
-import { MANPOWER } from '../../../src/campaign/manpower';
+import { MANPOWER, men1000, menScale } from '../../../src/campaign/manpower';
 import { foldWords } from '../../../src/campaign/fold';
 import { arsenalTop } from '../../../src/campaign/rifles';
 import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals, openGoals } from '../../../src/campaign/goals';
@@ -6783,6 +6783,9 @@ function menPage(s: Game): Page | null {
   if (!m || !s.human) return null;
   const up = humanUp(s) && !onEve(s);
   const short = (n: number): string => (Math.abs(n) >= 1e6 ? `${(n / 1e6).toFixed(Math.abs(n) >= 1e7 ? 0 : 1)} million` : Math.round(n).toLocaleString('en'));
+  // (The headline and THE COUNT, for a nation with a scale of its own, say its men to the thousand, as line 14 and the
+  // class line beside them do: the UI director's read of 26 November 2026, point 1. Every other nation's page is as it was.)
+  const count = (n: number): string => (menScale(s.human!) !== null && Math.abs(n) < 1e6 ? men1000(n) : short(n));
   const x = m as typeof m & { came?: number; gap?: number; start: number; drawn: number; classMen: number; men: number; line: string; word: string };
   const start = Math.round(x.men - (x.came ?? 0) + x.drawn);
   const c = callUpOf(s);
@@ -6798,11 +6801,11 @@ function menPage(s: Game): Page | null {
   }
   return {
     id: 'men', title: 'THE RESERVE OF MEN',
-    headline: `${short(x.men)} men in reserve  \u00B7  ${x.word}`,
+    headline: `${count(x.men)} men in reserve  \u00B7  ${x.word}`,
     note: `${x.line}${(x.gap ?? 0) > 0 ? ` A class was called up early: none comes of age for ${x.gap} more month${x.gap === 1 ? '' : 's'}.` : ''}`,
     top: [],
     sections: [
-      { heading: 'THE COUNT', text: [`At the start: ${short(start)}`, `Come of age since: +${short(x.came ?? 0)}`, `Called up so far: \u2212${short(x.drawn)}`, `In reserve today: ${short(x.men)}`, `Come of age each month: +${short(x.classMen)}`].join('\n'), rows: [] },
+      { heading: 'THE COUNT', text: [`At the start: ${count(start)}`, `Come of age since: +${count(x.came ?? 0)}`, `Called up so far: \u2212${count(x.drawn)}`, `In reserve today: ${count(x.men)}`, `Come of age each month: +${count(x.classMen)}`].join('\n'), rows: [] },
       ...(rows.length ? [{ heading: 'YOUR SAY OVER THE CALL-UP', text: '', rows }] : []),
     ],
   };

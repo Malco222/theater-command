@@ -324,7 +324,8 @@ export function noMenWords(nat: string, divs: number, left: number, cls: number)
   const l = Math.max(0, left);
   const shown = l < 0.5 ? 0 : Math.min(Math.round(l), Math.ceil(divs) - 1);
   // (An order of one division's worth with half of one or more left: "about one" would read as the need, and "less than
-  // half" would be untrue, so it says "less than one is left". No order of one division's worth is offered today.)
+  // half" would be untrue, so it says "less than one is left". China's engineer corps, corps:eng, is such an order: with
+  // half a division's worth to just under one left, this is its live refusal.)
   const rest = shown >= 1 ? `about ${inWords(shown)} ${shown === 1 ? 'is' : 'are'} left` : l < 0.5 ? 'less than half of one is left' : 'less than one is left';
   return `The reserve has not the men: this takes ${inWords(divs)} ${worth(divs)} and ${rest}. ${comesWords(nat, cls)}`;
 }
