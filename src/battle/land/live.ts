@@ -811,6 +811,31 @@ export class LiveBattle {
     return no ? { ...no, who: this.whoIs(no.id) } : null;
   }
 
+  /**
+   * The ground that bars a block from standing at a place in the setup step, for the screen's sentence when the rules
+   * refuse it there (sim.standWhy's water line): a bridge under any of it, else the water (a blown bridge is in the
+   * river), else the ground under its middle, which it can hardly cross (a marsh, bare rock or a bunker, to wheels,
+   * tracks and guns). Null where there is no such block or place. Words only: no rule reads it.
+   */
+  barredBy(id: number, x: number, y: number): 'bridge' | 'water' | 'marsh' | 'rock' | 'bunker' | null {
+    const u = this.sim.units.find((v) => v.id === id), f = this.sim.field;
+    if (!u || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+    // (the block's box as the rules walk it, units.ts wetUnder: every half cell)
+    const hw = u.w / 2, hd = u.d / 2, nx = Math.max(1, Math.ceil((2 * hw) / (f.cell / 2))), ny = Math.max(1, Math.ceil((2 * hd) / (f.cell / 2)));
+    let wet = false;
+    for (let i = 0; i <= nx; i++) for (let j = 0; j <= ny; j++) {
+      const c = Math.floor((x - hw + (2 * hw * i) / nx) / f.cell), r = Math.floor((y - hd + (2 * hd * j) / ny) / f.cell);
+      if (c < 0 || r < 0 || c >= f.cols || r >= f.rows) continue;
+      const k = GROUNDS[f.ground[r * f.cols + c]];
+      if (k === 'bridge') return 'bridge';
+      wet = wet || k === 'water' || k === 'blown';
+    }
+    const g = groundAt(f, Math.min(Math.max(x, 5), f.w - 5), Math.min(Math.max(y, 5), f.h - 5));
+    if (g === 'bridge') return 'bridge';
+    if (wet || g === 'water' || g === 'blown') return 'water';
+    return g === 'marsh' || g === 'rock' || g === 'bunker' ? g : null;
+  }
+
   /** Places several of the player's blocks as one act in the setup step, each [id, x, y, face?]: all of them or none. */
   placeMany(list: readonly (readonly number[])[]): boolean {
     if (this.canPlaceMany(list) !== null) return false;

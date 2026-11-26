@@ -8,13 +8,16 @@
 // block; and a battle in which nothing is drawn up is untouched.
 import { describe, expect, it } from 'vitest';
 import { drawnUp, FORMATIONS, ROW, STEP, type FormBlock } from '../src/battle/land/formation';
-import { livePiece } from '../src/battle/land/live';
+import { livePiece, liveTicket } from '../src/battle/land/live';
+import { GROUNDS } from '../src/battle/land/field';
+import { PIECES, ticketOf } from '../src/battle/land/pieces';
 import { LAND } from '../src/battle/land/rules';
 import { GAP } from '../src/battle/land/units';
 import type { Command } from '../src/battle/core/types';
 // (the 3D game's own sources read as text, Vite's `?raw`, tests/ahead/raw.d.ts)
 import clipboardCpp from '../unreal/TheaterCommand/Source/TheaterCommand/Battle/LandCommand.cpp?raw';
 import rulesTableCpp from '../unreal/TheaterCommand/Source/TheaterCommand/Battle/LandLive.cpp?raw';
+import bridgeTs from '../unreal/TheaterCommand/Rules/land-bridge.ts?raw';
 
 const ROOM: [number, number, number, number] = [360, 120, 2640, 480];
 const DEF: [number, number, number, number] = [360, 1240, 2640, 1800];
@@ -312,5 +315,42 @@ describe('the 3D clipboard keeps the rules\' figures', () => {
     expect(table).toMatch(/\{ TEXT\("groups"\), TEXT\("Groups on the number keys"\), .*TEXT\("TheaterLandNoGroups"\), false, TEXT\("TheaterLandRuleGroups"\) \}/);
     // (the map of the field in the corner: Brian, 26 November 2026)
     expect(table).toMatch(/\{ TEXT\("fieldmap"\), TEXT\("A map of the field in the corner"\), .*TEXT\("TheaterLandNoFieldMap"\), false, TEXT\("TheaterLandRuleFieldMap"\) \}/);
+  });
+});
+
+// A refusal on ground a unit cannot stand on names that ground (the UI director, 26 November 2026 05:45Z): the game
+// asks which it is (LiveBattle.barredBy) and the bridge says it in the sentence. Neither set piece has water inside a
+// side's own ground, so the ground is asked of a Normandy with a river across it.
+describe('a refused placing names the ground that bars the unit', () => {
+  it('says the water, a bridge, or nothing on ground a unit may stand on', () => {
+    const t = ticketOf(PIECES[0], 11, 'att');
+    t.place = { ...t.place, river: 'Vire' };
+    const l = liveTicket(t, { me: 'att', setup: true });
+    const f = l.sim.field, mine = l.sim.units.filter((u) => u.side === 'att');
+    const small = mine.reduce((a, b) => (a.w * a.d <= b.w * b.d ? a : b));
+    const cells = (word: string): [number, number][] => {
+      const out: [number, number][] = [];
+      for (let r = 0; r < f.rows; r++) for (let c = 0; c < f.cols; c++) if (GROUNDS[f.ground[r * f.cols + c]] === word) out.push([(c + 0.5) * f.cell, (r + 0.5) * f.cell]);
+      return out;
+    };
+    const water = cells('water'), bridges = cells('bridge');
+    expect(water.length).toBeGreaterThan(50);
+    expect(bridges.length).toBeGreaterThan(0);
+    for (const [x, y] of bridges) expect(l.barredBy(small.id, x, y)).toBe('bridge');
+    // (water with no bridge under any of the unit's box)
+    const clear = water.filter(([x, y]) => bridges.every(([bx, by]) => Math.abs(bx - x) > small.w / 2 + f.cell && Math.abs(by - y) > small.d / 2 + f.cell));
+    expect(clear.length).toBeGreaterThan(10);
+    for (const [x, y] of clear) expect(l.barredBy(small.id, x, y)).toBe('water');
+    // (where it stands now it may stand: nothing bars it; and no such unit, or no such place, is nothing)
+    expect(l.barredBy(small.id, small.x, small.y)).toBeNull();
+    expect(l.barredBy(-7, water[0][0], water[0][1])).toBeNull();
+    expect(l.barredBy(small.id, Number.NaN, 100)).toBeNull();
+  });
+
+  it('has a whole sentence for each ground, and none that names nothing', () => {
+    const src: string = bridgeTs;
+    expect(src).toMatch(/const BARRED = \{ water: 'in the water', bridge: 'on a bridge', marsh: 'in a marsh', rock: 'on bare rock', bunker: 'on a bunker' \} as const;/);
+    expect(src).toContain("`${name} cannot go there: it cannot stand ${on ? BARRED[on] : 'on water or on a bridge'}.`");
+    expect(src).not.toContain('ground like that');
   });
 });

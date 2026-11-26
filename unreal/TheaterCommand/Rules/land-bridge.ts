@@ -74,6 +74,8 @@ function need(): LiveBattle {
 const DUG = 'It is dug in where it stands.';
 const DRAWN = { line: 'in a line', two: 'in two lines', wedge: 'in a wedge', column: 'in a column' } as const;
 const COUNTED = ['None', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'];
+/** The grounds that bar a unit from standing on them, as the sentence names each (the UI director, 26 November 2026 05:45Z). */
+const BARRED = { water: 'in the water', bridge: 'on a bridge', marsh: 'in a marsh', rock: 'on bare rock', bunker: 'on a bunker' } as const;
 /** A unit's name at the head of a sentence: one that opens with its number takes "The" ("The 2nd Battalion"). */
 const theName = (who: string): string => (/^\d/.test(who) ? `The ${who}` : who);
 /**
@@ -81,14 +83,15 @@ const theName = (who: string): string => (/^\d/.test(who) ? `The ${who}` : who);
  * known). The rules' short lines are made whole here, and none names the unit again; any other line of theirs is a
  * whole sentence already and follows the name's (the UI director, 26 November 2026 05:35Z).
  */
-function cannotGo(who: string, why: string): string {
+function cannotGo(who: string, why: string, on?: keyof typeof BARRED | null): string {
   if (!who) return why;
   const name = theName(who);
   if (why === DUG) return `${name} is dug in where it stands.`;
   if (why === 'Outside your ground.') return `${name} cannot go there: it would stand outside your ground.`;
   if (why === 'Another block stands there.') return `${name} cannot go there: another unit already stands there.`;
   if (why === 'Off the field.') return `${name} cannot go there: it would stand off the field.`;
-  if (why === 'Not on water, a bridge or ground it cannot stand on.') return `${name} cannot go there: it cannot stand on water, a bridge or ground like that.`;
+  // (the ground that bars it, by name: LiveBattle.barredBy; not known, the two that bar every unit)
+  if (why === 'Not on water, a bridge or ground it cannot stand on.') return `${name} cannot go there: it cannot stand ${on ? BARRED[on] : 'on water or on a bridge'}.`;
   return `${name} cannot go there. ${why}`;
 }
 
@@ -194,7 +197,8 @@ function cannotGo(who: string, why: string): string {
     const l = need(), rows = Array.isArray(list) ? list.filter((p) => Array.isArray(p)).map((p) => p.map(Number)) : [];
     const no = l.canPlaceMany(rows);
     const ok = no === null && l.placeMany(rows);
-    return { ok, why: ok ? '' : no ? cannotGo(no.who, no.why) : 'Not now: the battle has begun.', ...(no && no.id >= 0 ? { id: no.id, who: no.who } : {}) };
+    const at = no ? rows.find((p) => p[0] === no.id) : undefined;
+    return { ok, why: ok ? '' : no ? cannotGo(no.who, no.why, at ? l.barredBy(no.id, at[1], at[2]) : null) : 'Not now: the battle has begun.', ...(no && no.id >= 0 ? { id: no.id, who: no.who } : {}) };
   },
 
   landDrawUp(kind: string, ids?: number[] | null) {
