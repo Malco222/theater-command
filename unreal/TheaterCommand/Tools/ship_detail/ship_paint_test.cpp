@@ -1147,6 +1147,10 @@ int main(int Argc, char** Argv)
 		// Metal is the point's own finish, saturate(2 x (1 - its alpha)), less where the alpha marks water (240), and the chips
 		// gather where the alpha falls below a half. The emissive (a figure's fill and rim) is the colour after these sums
 		// times FigureFill and FigureSun's alpha, both 0 as made and never set on the steel ink, and nothing on metal.
+		// (Release 2's graph names the mottle, its blot and the roughness, and changes them only under worn or alpha_rough,
+		// which M_MapSurface is made without: M_LandWorn and the men's inks. So M_MapSurface's sums stay these. The pin
+		// reads whichever text the tree has: release 2's named pieces where the graph names the mottle's blot, else the
+		// ship branch's older text, never a mix and never neither.)
 		{
 			const std::string Build = ReadAll(Src + "/../../Tools/build_content.py");
 			const size_t From = Build.find("def build_map_surface("), To = Build.find("\ndef build_solid(");
@@ -1173,8 +1177,6 @@ int main(int Argc, char** Argv)
 			bool bSums = !Graph.empty();
 			for (const char* Piece : { "wear = scalar(m, \"Wear\", 0.0, ", "scalar(m, \"TopLight\", 0.26, ",
 					 "lit_top = plus(m, 1.0, times(m, times(m, one_in(m, unreal.MaterialExpressionSaturate, skyward, ", "times(m, metal, wear, -600, -2150), -450, -2100), -300, -2100)",
-					 "lerp(m, 1.0, plus(m, times(m, (blot, \"R\"), 0.42, -350, -1500), 0.8, -200, -1500),",
-					 "times(m, wear, plus(m, times(m, metal, 0.5, 100, -1450), 0.5, 200, -1450), 300, -1450), 450, -1500), 600, -900), lit_top, 700, -1000)",
 					 "gather = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, times(m, (colour, \"A\"), -1.0, -900, -1950), 0.5, -750, -1950), 2.56, -600, -1950), -450, -1950)",
 					 "times(m, (speck, \"R\"), plus(m, (blot, \"G\"), 0.5, -350, -1650), -200, -1700), scalar(m, \"ChipAt\", -0.78, ",
 					 "times(m, gather, scalar(m, \"ChipGather\", 0.3, ", "scalar(m, \"ChipSharp\", 9.0, ", "metal, 450, -1750), wear, 600, -1750)",
@@ -1183,11 +1185,30 @@ int main(int Argc, char** Argv)
 					 "plus(m, times(m, one_in(m, unreal.MaterialExpressionAbs, plus(m, (colour, \"A\"), -0.9412, -1100, -1380), -1000, -1380), -60.0, -900, -1380), 1.0, -800, -1380)",
 					 "tinted = lerp(m, weathered, vector(m, \"ChipColour\", (0.13, 0.125, 0.12, 1.0), 450, -1300), chipped, 750, -900)",
 					 "to_property(times(m, chipped, 0.85, 750, -700), \"\", unreal.MaterialProperty.MP_METALLIC)",
-					 "to_property(lerp(m, scalar(m, \"Roughness\", 0.9, -450, 200), 0.34, chipped, -250, 200), \"\", unreal.MaterialProperty.MP_ROUGHNESS)",
 					 "scalar(m, \"FigureFill\", 0.0, ", "figure_sun = vector(m, \"FigureSun\", (0.0, 0.0, 1.0, 0.0), ",
 					 "cloth = times(m, one_in(m, unreal.MaterialExpressionOneMinus, metal, ", "scalar(m, \"BlotTiling\", 0.009, " })
 			{
 				bSums = bSums && Has(Graph, Piece);
+			}
+			// (the mottle and the roughness: release 2's named text, each reassignment under its if, or the older text)
+			const bool bNamed = Has(Graph, "mottle_n = (blot, \"R\")");
+			const std::vector<const char*> Named = { "mottle_n = (blot, \"R\")\n    if worn:",
+				"patches = scalar(m, \"Patches\", 0.0, 150, -1400) if worn else wear\n",
+				"mottle = lerp(m, 1.0, plus(m, times(m, mottle_n, 0.42, -350, -1500), 0.8, -200, -1500),",
+				"times(m, patches, plus(m, times(m, metal, 0.5, 100, -1450), 0.5, 200, -1450), 300, -1450), 450, -1500)\n    if worn:",
+				"weathered = times(m, times(m, tinted, mottle, 600, -900), lit_top, 700, -1000)",
+				"rough = lerp(m, scalar(m, \"Roughness\", 0.9, -450, 200), 0.34, chipped, -250, 200)\n    if alpha_rough:",
+				"to_property(rough, \"\", unreal.MaterialProperty.MP_ROUGHNESS)" };
+			const std::vector<const char*> Older = { "lerp(m, 1.0, plus(m, times(m, (blot, \"R\"), 0.42, -350, -1500), 0.8, -200, -1500),",
+				"times(m, wear, plus(m, times(m, metal, 0.5, 100, -1450), 0.5, 200, -1450), 300, -1450), 450, -1500), 600, -900), lit_top, 700, -1000)",
+				"to_property(lerp(m, scalar(m, \"Roughness\", 0.9, -450, 200), 0.34, chipped, -250, 200), \"\", unreal.MaterialProperty.MP_ROUGHNESS)" };
+			for (const char* Piece : bNamed ? Named : Older)
+			{
+				bSums = bSums && Has(Graph, Piece);
+			}
+			for (const char* Piece : bNamed ? Older : Named)
+			{
+				bSums = bSums && !Has(Graph, Piece);
 			}
 			// (and nothing else in the graph reads them: the wear made once and read three times, the TopLight and the lift once)
 			const size_t WearWords = Words(Graph, "wear"), TopLights = Times(Graph, "\"TopLight\""), LitTops = Words(Graph, "lit_top");
