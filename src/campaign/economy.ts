@@ -663,8 +663,10 @@ export function cancelBuild(g: Game, nat: string, id: number): boolean {
   if (i < 0 || n.queue[i].ordered !== g.turn) return false;
   n.pp += n.queue[i].cost;
   // The men called up for a corps that was paid for, or that drew its rifles from the store, go back to the reserve,
-  // and so do the rifles.
-  if (n.queue[i].what === 'corps' && (n.queue[i].cost > 0 || n.queue[i].rifles)) returnMen(g, nat, n.queue[i].divs ?? 0);
+  // and so do the rifles. (A cadre kept small drew only its own establishment's share, cadreTerms: that share goes back.
+  // No corps has one with the far side off.)
+  const kept = n.queue[i].cadre !== undefined ? n.cadres?.find((x) => x.id === n.queue[i].cadre)?.full : undefined;
+  if (n.queue[i].what === 'corps' && (n.queue[i].cost > 0 || n.queue[i].rifles)) returnMen(g, nat, (n.queue[i].divs ?? 0) * (kept ?? 1));
   unarmOrder(g, nat, n.queue[i]);
   if (n.queue[i].cadre !== undefined) { /* the cadre keeps its own name and number: nothing to hand back */ }
   else if (n.queue[i].elite) g.flags[`elite:${nat}`] = (g.flags[`elite:${nat}`] ?? 1) - 1;

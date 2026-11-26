@@ -652,6 +652,24 @@ describe('the third read of 04:58Z: months in words, and the refusal in one meas
     expect(loadGame((TC().save() as { text: string }).text)!.flags['mp:CHN'] * menScale('CHN')!).toBeCloseTo(6029, 6);
   });
 
+  // Round 5's ledger sceptic, L-F1: the order of a small corps' cadre draws its own share of men (cadreTerms, 0.09 of a
+  // division for Taichow), and taking the order back gave back a whole division's worth for each of its divisions (the
+  // Build's divs), 67,470 men from 6,500. Taken back, the order gives back the men it drew, and the rifles, to the man.
+  it("L-F1. Taichow's cadre ordered and taken back on the live Ningpo board: the reserve is 6,500 again, and again after three more", () => {
+    const b = ningpo(6500);
+    const read = (): Game => loadGame((TC().save() as { text: string }).text)!;
+    const rifles0 = stockOf(read(), 'CHN', 'rifles');
+    for (let i = 0; i < 4; i++) {
+      expect((TC().order(`cadre:${b.id}`, -1) as { ok: boolean }).ok, `${i}`).toBe(true);
+      expect(read().flags['mp:CHN'] * menScale('CHN')!, `${i}`).toBeCloseTo(470, 6);
+      const q = read().nations.CHN.queue.find((y) => y.cadre === b.id)!;
+      expect((TC().cancel(q.id) as { ok: boolean }).ok, `${i}`).toBe(true);
+      const h = read();
+      expect(h.flags['mp:CHN'] * menScale('CHN')!, `${i}`).toBeCloseTo(6500, 6);
+      expect(stockOf(h, 'CHN', 'rifles'), `${i}`).toBeCloseTo(rifles0, 9);
+    }
+  });
+
   // Her fourth read of 06:02Z, point 2: "Not 1,000 less. Where what is left would round to the need's own figure, both go
   // to the hundred ... (the need also to the hundred if it is not a whole thousand ...)". Where they would still read the
   // same at the hundred, the ten, then the man without "about": the form nearest her rule, for her word.
