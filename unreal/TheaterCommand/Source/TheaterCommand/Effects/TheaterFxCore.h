@@ -680,7 +680,8 @@ namespace TheaterFx
 
 		/** Where a ship lies this frame, for what lies or runs in her own frame (DeckWash's water, the deck's brass): At,
 		 * her waterline amidships (metres, world); Fore, Left and Up her own axes in the world (toward her bow, to port,
-		 * up through her deck; as she is drawn, turned, heeled and trimmed; made square here, Up first); Long her length
+		 * up through her deck; as she is drawn, turned, heeled and trimmed; made square here, Up first, then Fore, and Left
+		 * kept on the side it is given: in Unreal's world her port side is Fore x Up, so the wrapper passes it so); Long her length
 		 * and HalfBeam half her beam (metres); Coaming the height of what stands at her deck's edge (a bulwark or a
 		 * coaming, metres: a case stops there if it is over the case's width; 0, a rail with open sides, over it goes). */
 		struct ShipPose

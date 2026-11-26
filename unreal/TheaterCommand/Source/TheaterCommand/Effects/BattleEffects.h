@@ -18,8 +18,6 @@ class UPointLightComponent;
 class UProceduralMeshComponent;
 class USceneComponent;
 
-/** The camera's jolt from hits close by, for the caller to add to its own camera if it wants it: it is never moved
- * here. Offset is in world units. A setting turns it off (FBattleEffects::bShake). */
 /** One point of a holed ship's oil lane (release 2, item 10: FBattleEffects::OilLane), oldest first, in world units:
  * Mid its middle on the sea, LeftEdge and RightEdge its two edges (ragged), Dark how dark the oil is (0 none to 1, the
  * scene's slick paint's darkness), Sheen a faint sheen's share, AgeSeconds since it left her. */
@@ -29,6 +27,8 @@ struct FOilLanePoint
 	float Dark = 0.0f, Sheen = 0.0f, AgeSeconds = 0.0f;
 };
 
+/** The camera's jolt from hits close by, for the caller to add to its own camera if it wants it: it is never moved
+ * here. Offset is in world units. A setting turns it off (FBattleEffects::bShake). */
 struct FBattleJolt
 {
 	FVector Offset = FVector::ZeroVector;
@@ -287,9 +287,10 @@ public:
 	 * already falling on her. */
 	void DeckDrench(const FVector& ColumnAt, float CalibreMm, const FVector& Toward, float DeckZ, int32 ShipId = -1);
 	/** Ship ShipId lies so this frame (once a frame for each ship that carries anything in her own frame: DeckWash's
-	 * water, the deck's brass; before Tick). Hull: her frame in the world, its X toward her bow, Y to her port side, Z
-	 * up through her deck, its origin on her waterline amidships (her hull as drawn, turned, heeled and trimmed; its
-	 * scale is not read). LongMetres her length, HalfBeamMetres half her beam, CoamingMetres what stands at her deck's
+	 * water, the deck's brass; before Tick). Hull: her frame in the world, its X toward her bow, Z up through her
+	 * deck, its origin on her waterline amidships (her hull as drawn, turned, heeled and trimmed; its scale is not
+	 * read); as Unreal turns a frame its Y then points to her STARBOARD side, and the kit takes her port side as minus Y
+	 * (what DeckWash's edge calls Y is to port). LongMetres her length, HalfBeamMetres half her beam, CoamingMetres what stands at her deck's
 	 * edge (a bulwark; 0 for a rail with open sides). A ship not told of for 5 s is let go with all she carries. */
 	void ShipRide(int32 ShipId, const FTransform& Hull, float LongMetres, float HalfBeamMetres, float CoamingMetres = 0.0f);
 	/** The plan's name for ShipRide (item 11, the deck's brass): the same call. */

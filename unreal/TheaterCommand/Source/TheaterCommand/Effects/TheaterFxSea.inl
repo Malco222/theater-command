@@ -266,12 +266,16 @@
 		{
 			return;
 		}
-		// (her axes made square: up first, then her bow square to it, then port square to both)
+		// (her axes made square: up first, then her bow square to it, then port square to both, on the side Left names:
+		// Unreal's world turns the other way from a sum's, so there her port side is Fore x Up, not Up x Fore; the kit keeps
+		// whichever side the scene gives as her port, Up x Fore where it gives none)
 		ShipPose Pose = PoseIn;
 		Pose.Up = PoseIn.Up.Unit(ZUp);
 		const Vec Fw = PoseIn.Fore - Pose.Up * PoseIn.Fore.Dot(Pose.Up);
 		Pose.Fore = Fw.Unit(Vec(1.0, 0.0, 0.0));
-		Pose.Left = Pose.Up.Cross(Pose.Fore).Unit(Vec(0.0, 1.0, 0.0));
+		const Vec Square = Pose.Up.Cross(Pose.Fore).Unit(Vec(0.0, 1.0, 0.0));
+		const double Named_ = PoseIn.Left.Dot(Square);
+		Pose.Left = Named_ < 0.0 ? Square * -1.0 : Square;
 		Pose.Long = SafeNum(PoseIn.Long, 1.0, 400.0, 100.0);
 		Pose.HalfBeam = SafeNum(PoseIn.HalfBeam, 0.5, 30.0, 8.0);
 		Pose.Coaming = SafeNum(PoseIn.Coaming, 0.0, 3.0, 0.0);

@@ -347,6 +347,37 @@ namespace
 			}
 			Check(Awash == 1 && Pieces > 20 && Inboard == Pieces, "awash: the sea washes in over her low edge", Say("%.0f pieces alive at 5 s, %.0f running inboard", Pieces, Inboard));
 		}
+		// (her port side as the scene names it: Unreal's world turns the other way, so the wrapper passes port as Fore x Up;
+		// an edge at plus Y in her frame lies on the side Left names, either way)
+		{
+			double Side[2] = { 0.0, 0.0 };
+			for (int K = 0; K < 2; ++K)
+			{
+				Battle Y;
+				Open(Y, Book);
+				Battle::ShipPose P = Pose(0.0, 0.0, 0.0, 0.0, 0.0);
+				P.Left = K == 0 ? P.Left : P.Left * -1.0;
+				Y.ShipRide(0.0, 4, P);
+				const Vec Port[2] = { Vec(-20.0, 16.5, 8.0), Vec(20.0, 16.5, 8.0) };
+				Y.DeckWash(0.0, 4, Port, 2, 1.0, 2.0, "runoff");
+				for (int F = 1; F <= 15; ++F)
+				{
+					Y.ShipRide(F / Fps, 4, P);
+				}
+				Look(Y, 0.6, P.At);
+				int N = 0;
+				for (const Bit& B : Y.Bits)
+				{
+					if (B.DeckShip == 5)
+					{
+						Side[K] += B.From.Dot(P.Left);
+						++N;
+					}
+				}
+				Side[K] = N > 0 ? Side[K] / N : 0.0;
+			}
+			Check(Side[0] > 10.0 && Side[1] > 10.0, "her port side is the side the scene names (a sum's world, and Unreal's turned the other way)", Say("the wash at plus Y lies %.1f m and %.1f m out on the named side", Side[0], Side[1]));
+		}
 		std::string Got;
 		const bool bSame = DiceUntouched(Book, [&](Battle& Z)
 			{

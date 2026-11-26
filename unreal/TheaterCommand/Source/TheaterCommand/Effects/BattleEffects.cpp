@@ -740,7 +740,7 @@ void FBattleEffects::ShipRide(int32 ShipId, const FTransform& Hull, float LongMe
 	TheaterFx::Battle::ShipPose Pose;
 	Pose.At = ToFx(Hull.GetLocation());
 	Pose.Fore = ToFxWay(Hull.GetUnitAxis(EAxis::X));
-	Pose.Left = ToFxWay(Hull.GetUnitAxis(EAxis::Y));
+	Pose.Left = ToFxWay(-Hull.GetUnitAxis(EAxis::Y)); // (her port side: Unreal's Y with X her bow and Z up is to starboard)
 	Pose.Up = ToFxWay(Hull.GetUnitAxis(EAxis::Z));
 	Pose.Long = LongMetres;
 	Pose.HalfBeam = HalfBeamMetres;
