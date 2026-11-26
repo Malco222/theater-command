@@ -1,7 +1,11 @@
 // Supply columns (release 2; Brian's yes of 23 November 2026, idea 3): every month lorry columns drive from each
 // nation's railhead along the roads to its corps beyond it, and enemy aircraft or partisans can ambush them on the
 // way. What is lost on the road never reaches the front: the corps it was bound for take in fewer drafts and rest the
-// worse for it, and the lorries have to be made good from the treasury.
+// worse for it. That is the whole price of a loss, paid once. A nation's lorries and wagons are counted afresh every
+// month (from the divisions to be fed, or with the lorry orders on from its industry and fuel, logistics.ts lorryPool),
+// so the next month's count has already made good what was burned, and the treasury is not charged for it a second time
+// (the design director, 18:20Z 26 November 2026: price once; card and result agree, 217). The columns never touch the
+// treasury: only a forward dump, ordered and paid for like any other order, does (logistics.ts orderDump).
 //
 // Everything comes from what is on the ground and in the air (the core theme, Brian 23 November 07:13Z): the enemy
 // aircraft in reach and the orders they fly, the side's own fighters over the road, the troops standing along it, the
@@ -19,11 +23,11 @@ import { airRange, cover, crowding, kmTo, skyOver } from './air';
 import { wrecked } from './airversion';
 import { grounded, skyAt, weatherOn } from './weather';
 import { SIGHT, sightOf } from './intel';
-import { LOGI, aiDumps, clearDumps, dumpsOn, roadWear, shareOutLorries, tendDumps, wagonsOn } from './logistics';
+import { aiDumps, clearDumps, dumpsOn, roadWear, shareOutLorries, tendDumps, wagonsOn } from './logistics';
 import type { Corps, Game } from './types';
 
 export const COLUMNS = data as unknown as {
-  lorries: { perDiv: number; pp: number };
+  lorries: { perDiv: number };
   floor: number;
   air: { most: number; half: number; cover: number; support: number; ground: number; line: number; close: number; sky: number; flak: number; flakMost: number };
   partisans: { most: number; terrain: Record<string, number>; rampMonths: number; leaderless: number; quiet: number; garrisonHalf: number };
@@ -175,7 +179,8 @@ const word = (n: number): string => Math.round(n).toLocaleString('en-US');
 /**
  * A nation's columns for the month: one from its railhead to every province where its corps stand beyond it, each
  * caught or not on every stretch of the road. Kept on the game for the month (g.columns), read by the drafts and the
- * rest its corps get (columnShare), and drawn on the map. Lorries lost are paid for out of the treasury.
+ * rest its corps get (columnShare), and drawn on the map. Lorries lost cost the front what they carried, and nothing
+ * more: next month's lorries are counted afresh, and the treasury is not charged for them (price once).
  */
 export function columnsMonth(g: Game, nat: string): void {
   if (!columnsOn(g)) return;
@@ -288,9 +293,6 @@ export function columnsMonth(g: Game, nat: string): void {
   aiDumps(g, nat, runs);
   if (!runs.length) return;
   book[nat] = runs;
-  // The lorries lost are made good out of the treasury, and the wagons (cheaper) too.
-  N.pp -= lostAll * C.lorries.pp;
-  if (horseLost > 0) N.pp -= horseLost * LOGI.wagons.pp;
   // The player hears of it when his own columns bleed, and when his aircraft burn the enemy's.
   const me = g.human;
   if (!me) return;
