@@ -218,6 +218,38 @@ describe('every caller: a row reads the one test with the corps that leave in th
     }
   });
 
+  it("the stand-in this row stands down is no relief: III Corps beside the enemy with only that corps on its province is held; another corps relieves it", () => {
+    // (A row that another row stands in for (`unless`), landed already, removes that stand-in as it lands: the same men
+    // cannot stand in two places. `UNLESS` is read from the data at load, so the row borrows W Force's name; it is
+    // Germany's here, and the stand-in row is Germany's too.)
+    const W = 'W Force (New Zealand Division and 1st Armoured Brigade)';
+    expect(ROWS.some((r) => r[6]?.unless === W)).toBe(true);
+    const run = (relief: boolean): { g: Game; i: number; c: Corps; stand: Corps } => {
+      const { g, c, nm } = board();
+      const stand = add(g, 'GER', 'Stand-in Test Corps', 'inf', nm, 2);
+      const j = addRow([1, 'GER', 'Stand-in Test Corps', 'inf', 2, 'Neumark', { unless: W }]);
+      g.flags[`sent:${j}`] = 1;
+      if (relief) add(g, 'GER', 'Relief Test Corps', 'inf', nm, 2);
+      const i = addRow([2, 'GER', W, 'inf', 2, 'Magdeburg', { from: ['III Corps'] }]);
+      month(g, 2);
+      return { g, i, c, stand };
+    };
+    {
+      const { g, i, c, stand } = run(false);
+      expect(g.flags[`wait:${i}`]).toBe(2);
+      expect(g.flags[`sent:${i}`]).toBeUndefined();
+      expect([c.dead, g.regions[c.reg].name]).toEqual([false, 'Neumark']);
+      expect(stand.dead).toBe(false);
+    }
+    {
+      const { g, i, c, stand } = run(true);
+      expect(g.flags[`wait:${i}`]).toBeUndefined();
+      expect(g.flags[`sent:${i}`]).toBe(1);
+      expect(c.dead).toBe(true);
+      expect(stand.dead).toBe(true);
+    }
+  });
+
   /** A row of month 2 naming the 50th Infantry Division, which III Corps holds, to form at Magdeburg; what the draw told. */
   const drawFrom = (g: Game, more: Record<string, unknown> = {}): { i: number; told: Told[] } => {
     const told: Told[] = [];
