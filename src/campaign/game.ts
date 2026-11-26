@@ -31,7 +31,7 @@ import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, m
 import { civicDrafts, civicSum, handedOver, holdersNow, hospitalNear, hospitalWorth } from './buildings';
 import { tradeTick } from './trade';
 import { divisionsOf, growCorps, numberCorps, numbersUnderFlag } from './armies';
-import { DRAWN, corpsInContact, countingFor, formsAny, heldAlready, heldLine, joinNames, joinsAlone, keepCounted, layOnce, namesNow, ownShare, rowOver } from './drawn';
+import { DRAWN, corpsInContact, countingFor, recordBattle, formsAny, heldAlready, heldLine, joinNames, joinsAlone, keepCounted, layOnce, namesNow, ownShare, rowOver } from './drawn';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { plansOnCapture } from './plans';
 import { armyOf, jointHold, jointMonth } from './joint';
@@ -3344,6 +3344,8 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   g.scars[target.id] = { n: (scar?.n ?? 0) + 1, last: g.turn, ...(scar?.mudN ? { mudN: scar.mudN, mudLast: scar.mudLast } : {}) };
   // (mud memory: a battle fought in the thaw leaves its ruts on the field for the next battle there)
   if (muddy) { g.scars[target.id].mudN = (scar?.mudN ?? 0) + 1; g.scars[target.id].mudLast = g.turn; }
+  // (the battle last resolved here, for the contact rule's fight half: who took part, under its switch only; drawn.ts)
+  if (g.flags.fromWait === 1) recordBattle(g, target, [...attackers, ...defenders]);
   // (old wrecks: the armoured vehicles it left burnt out on the field, by nation, for the next battle there)
   wreckBump(g, rep);
   // (captured kit, looks only: a heavy win over an army with tanks leaves some of them in the winner's hands, a few of

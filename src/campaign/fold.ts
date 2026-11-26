@@ -12,6 +12,7 @@
 import { clamp } from '../core/math';
 import { MEN_PER_DIV, type Corps, type Game, type General } from './types';
 import { headline, removeCorps, worksOf } from './game';
+import { carryBattle } from './drawn';
 import { appoint, generalOf } from './commanders';
 import { MANPOWER, returnMen } from './manpower';
 import { cadreTerms } from './economy';
@@ -112,6 +113,7 @@ export function foldCorps(g: Game, keep: Corps, gone: Corps): boolean {
   if (keep.mor !== undefined && gone.mor !== undefined && fill > 0) keep.mor = (keep.mor * mine + gone.mor * from) / fill;
   keep.xp = v.xp; keep.org = v.org; keep.str = v.str; keep.ap = v.ap;
   if (gone.fought) keep.fought = true;
+  carryBattle(g, gone.id, keep.id);
   if (gone.pressed) keep.pressed = true;
   if ((gone.blows ?? 0) > (keep.blows ?? 0)) keep.blows = gone.blows;
   returnMen(g, keep.nat, gone.str * gone.divs - from);

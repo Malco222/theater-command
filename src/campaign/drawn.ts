@@ -279,6 +279,32 @@ export function ownShare(c: Corps): number {
 }
 
 /**
+ * The battle last resolved on a province (the contact rule's fight half, the design director's ruling of 06:10Z,
+ * 26 November 2026: "a corps is held while it took part in the battle last resolved on its ground (the board's record,
+ * no window)"): the ids of the living corps that took part, attackers and defenders, every side, in place of whatever
+ * the province's record held. Written by game.ts `resolveBattle` alone, and only under the switch 'fromWait'. A battle
+ * given up without fighting (a walk-in), a probe, an empty beach, gates opened or a town starved write nothing.
+ */
+export function recordBattle(g: Game, at: Region, who: Corps[]): void {
+  (g.lastBattle ??= {})[at.id] = who.filter((c) => !c.dead).map((c) => c.id);
+}
+
+/**
+ * A corps made of a corps that took part (a part broken off, a part rejoined, a fold's kept corps, a row's corps over):
+ * it took part too, wherever the game carries `fought` from the one to the other.
+ */
+export function carryBattle(g: Game, from: number, to: number): void {
+  if (g.flags.fromWait !== 1 || !g.lastBattle) return;
+  for (const k in g.lastBattle) { const l = g.lastBattle[k]; if (l.includes(from) && !l.includes(to)) l.push(to); }
+}
+
+/** A cadre takes the field again under its old id (economy.ts, reform): it took part in nothing. */
+export function dropBattle(g: Game, id: number): void {
+  if (!g.lastBattle) return;
+  for (const k in g.lastBattle) { const l = g.lastBattle[k]; const j = l.indexOf(id); if (j >= 0) l.splice(j, 1); }
+}
+
+/**
  * Whether a corps is in contact: an enemy at war with its country holds or stands on its province or one beside it,
  * read as the board stands (the design director's ruling of 18:47Z, 25 November 2026: a date never lifts a corps out
  * of a fight). The war rows' draw reads it (`heldAlready`), and on the old chart, under its own switch 'fromWait', so
@@ -470,6 +496,7 @@ export function rowOver(g: Game, c: Corps, leaving: (x: Corps) => boolean = () =
     f.apMax = c.apMax;
     f.supplied = c.supplied;
     f.fought = c.fought;
+    carryBattle(g, c.id, f.id);
     if (c.mor !== undefined) f.mor = c.mor; else delete f.mor;
     assemble(g, f, apart);
   } else if (apart.length) { keep.push(...apart); freed = true; }
