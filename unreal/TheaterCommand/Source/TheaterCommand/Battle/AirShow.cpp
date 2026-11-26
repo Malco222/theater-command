@@ -338,8 +338,9 @@ namespace AirShow
 					G.Alt = Lerp(G.Alt, Next->second.Alt, F);
 					G.CountAlt = Lerp(G.CountAlt, Next->second.CountAlt, F);
 					G.Face = Wrap(G.Face + Wrap(Next->second.Face - G.Face) * F);
-					// (smooth flying: a straggler's place behind her box as well, or it steps at every view)
-					if (bSmooth)
+					// (smooth flying: a straggler's place behind her box as well, or it steps at every view; the bombers'
+					// part, SetBoxKeep)
+					if (bSmooth && bBoxKeep)
 					{
 						for (Strag& S : G.Strags)
 						{
@@ -962,7 +963,7 @@ namespace AirShow
 		}
 		// Places in the formation, in the order they stand.
 		Keys = LiveOf(G.Id);
-		if (bSmooth && !G.bFighter)
+		if (bSmooth && bBoxKeep && !G.bFighter)
 		{
 			// (smooth flying: each bomber keeps her slot as the box loses others, and only the gaps are closed up: the
 			// box's places given again so that their moves, each from her own place to her new one, cost the least
@@ -1224,33 +1225,48 @@ namespace AirShow
 		// place from a dive banked 55 degrees, rolled level at her full 87 degrees a second in half a second, the
 		// Dauntless rocked a third more on her way back to her box than flown as a fighter (bank BAND 0.68 degrees
 		// rms at x1 over Midway, against 0.52), and the Val 1.19 over Oahu, against 0.93; SetSmooth)
+		// (the bombers' part, SetBoxKeep; off, the roll as 30899121 had it, below, to the byte)
 		const bool bTwin = C.bHeavy || C.Form.Span >= 20.0 || C.Form.Engines.size() >= 2;
-		if (!C.bFighter && (bTwin || (bSmooth && C.Doing == Role::Slot)) && C.Doing != Role::Fall)
+		if (bSmooth && bBoxKeep)
 		{
-			const bool bOnRun = C.Bay > 0.0 && (!C.bDropped || C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + StickSteady));
-			const double Most = bOnRun ? RunBankMost : C.Doing == Role::Slot ? RallyBankMost : HeavyBankMost;
-			BankWant = Clamp(BankWant, -Most * Deg, Most * Deg);
-			if (C.Doing == Role::Slot && !bOnRun && bTwin)
+			if (!C.bFighter && (bTwin || C.Doing == Role::Slot) && C.Doing != Role::Fall)
 			{
-				RollMost = std::min(RollMost, HeavyRollMost * Deg);
-				bBoxed = true;
+				const bool bOnRun = C.Bay > 0.0 && (!C.bDropped || C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + StickSteady));
+				const double Most = bOnRun ? RunBankMost : C.Doing == Role::Slot ? RallyBankMost : HeavyBankMost;
+				BankWant = Clamp(BankWant, -Most * Deg, Most * Deg);
+				if (C.Doing == Role::Slot && !bOnRun && bTwin)
+				{
+					RollMost = std::min(RollMost, HeavyRollMost * Deg);
+					bBoxed = true;
+				}
+				else if (C.Doing == Role::Slot && !bOnRun && std::fabs(C.Bank) <= (RallyBankMost + 2.0) * Deg && std::fabs(C.RollNow) <= HeavyRollMost * Deg + 1e-9)
+				{
+					RollMost = std::min(RollMost, HeavyRollMost * Deg);
+				}
+				else if (C.Doing == Role::Slot && !bOnRun)
+				{
+					RollMost = std::min(RollMost, std::max(SlotRollMost * Deg, std::fabs(C.RollNow) * std::exp(-Dt / std::max(C.RollTime, 0.02))));
+				}
 			}
-			else if (C.Doing == Role::Slot && !bOnRun && std::fabs(C.Bank) <= (RallyBankMost + 2.0) * Deg && std::fabs(C.RollNow) <= HeavyRollMost * Deg + 1e-9)
-			{
-				RollMost = std::min(RollMost, HeavyRollMost * Deg);
-			}
-			else if (C.Doing == Role::Slot && !bOnRun)
+			// (flying smooth, a bomber of two engines or more out of her box's own roll, on her run, on her way home or
+			// falling out of her box, and a single-engined one falling out of hers, rolls no faster than SlotRollMost as
+			// well, her roll rate brought down to it in her own roll time; falling, she rolls as she can. A He 111 leaving
+			// her box for home rolled from level to 30 degrees in half a second, 60 degrees a second; SetSmooth)
+			if (!C.bFighter && C.Doing != Role::Fall && (bTwin ? !bBoxed : C.Doing == Role::Straggle))
 			{
 				RollMost = std::min(RollMost, std::max(SlotRollMost * Deg, std::fabs(C.RollNow) * std::exp(-Dt / std::max(C.RollTime, 0.02))));
 			}
 		}
-		// (flying smooth, a bomber of two engines or more out of her box's own roll, on her run, on her way home or
-		// falling out of her box, and a single-engined one falling out of hers, rolls no faster than SlotRollMost as well,
-		// her roll rate brought down to it in her own roll time; falling, she rolls as she can. A He 111 leaving her box
-		// for home rolled from level to 30 degrees in half a second, 60 degrees a second; SetSmooth)
-		if (bSmooth && !C.bFighter && C.Doing != Role::Fall && (bTwin ? !bBoxed : C.Doing == Role::Straggle))
+		else if (!C.bFighter && (C.bHeavy || C.Form.Span >= 20.0 || C.Form.Engines.size() >= 2) && C.Doing != Role::Fall)
 		{
-			RollMost = std::min(RollMost, std::max(SlotRollMost * Deg, std::fabs(C.RollNow) * std::exp(-Dt / std::max(C.RollTime, 0.02))));
+			const bool bOnRun = C.Bay > 0.0 && (!C.bDropped || C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + StickSteady));
+			const double Most = bOnRun ? RunBankMost : C.Doing == Role::Slot ? RallyBankMost : HeavyBankMost;
+			BankWant = Clamp(BankWant, -Most * Deg, Most * Deg);
+			if (C.Doing == Role::Slot && !bOnRun)
+			{
+				RollMost = std::min(RollMost, HeavyRollMost * Deg);
+				bBoxed = true;
+			}
 		}
 		// Roll toward it, no faster than the airframe rolls.
 		double Roll_ = Clamp(Wrap(BankWant - C.Bank), -RollMost * Dt, RollMost * Dt);
@@ -1460,7 +1476,7 @@ namespace AirShow
 				RallyFrame(C.Group, Box, Face, BoxVel);
 				const Vec F = Ahead(Face);
 				Vec To = Box - F * (Mine ? Mine->Back : 180.0) - Up * (Mine ? Mine->Down : 18.0) + RightOf(Face) * (C.Hand * G->W * 0.3);
-				if (bSmooth)
+				if (bSmooth && bBoxKeep)
 				{
 					// (smooth flying: she drops back and down from where she fell out of her box, by as much as the
 					// battle has her behind and below it, and out to her side; and her place goes there from where she
@@ -1537,7 +1553,8 @@ namespace AirShow
 		// Devastators' wings swung a degree and more twice as often in their box)
 		const bool bLine = G->bAbreast && G->Strike == "torpedo";
 		Vec ToVel = GV;
-		Vec To = bSmooth && !C.bFighter ? PlaceWant(C, Vec(G->X, G->Y, G->Alt), G->Face, SlotPlace(*G, C.Slot), false, SlotAheadMost, SlotAheadPull,
+		// (off, SetBoxKeep: To and ToVel as 30899121 had them, SlotPlace(*G, C.Slot) and GV)
+		Vec To = bSmooth && bBoxKeep && !C.bFighter ? PlaceWant(C, Vec(G->X, G->Y, G->Alt), G->Face, SlotPlace(*G, C.Slot), false, SlotAheadMost, SlotAheadPull,
 			bLine ? TorpedoLineMost : SlotCloseMost, SlotPull, Dt, ToVel)
 			: SlotPlace(*G, C.Slot);
 		const bool bStation = C.bFighter && G->Doing != Act::Fight && EscortStation(C, *G, To, ToVel);
@@ -1597,7 +1614,7 @@ namespace AirShow
 			const Vec F = Ahead(C.Hdg);
 			const double Under = std::max({ GroundAt(C.P.X, C.P.Y), GroundAt(C.P.X + F.X * 400.0, C.P.Y + F.Y * 400.0), GroundAt(C.P.X + F.X * 900.0, C.P.Y + F.Y * 900.0) });
 			// (held up there, her place's own way down, flying smooth, is not carried on)
-			if (bSmooth && To.Z < Under + TorpedoLowM) ToVel.Z = std::max(ToVel.Z, GV.Z);
+			if (bSmooth && bBoxKeep && To.Z < Under + TorpedoLowM) ToVel.Z = std::max(ToVel.Z, GV.Z);
 			To.Z = std::max(To.Z, Under + TorpedoLowM);
 		}
 		const double Gap = Len(To - C.P);

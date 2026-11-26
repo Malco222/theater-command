@@ -667,6 +667,15 @@ static bool SteadyEyeOn()
 	return FLandLive::RuleNow(TEXT("flySteadyEye"));
 }
 
+// (release 2: Brian, 25 November 13:27Z, "the bomber is shaking in the video too like the fighter") The Battle rules
+// card's "Each bomber keeps her place in her box" (FLandLive's rule "flyBoxKeep"; -TheaterAirBoxKeep on,
+// -TheaterAirNoBoxKeep off), read once as a battle opens into AirShow::Show::SetBoxKeep: on, and flying smooth, each
+// bomber keeps her slot and her place is eased on to it; off, the bombers fly as they did.
+static bool BoxKeepOn()
+{
+	return FLandLive::RuleNow(TEXT("flyBoxKeep"));
+}
+
 void AAirBattle::ReplayWhenReady(const FString& Key)
 {
 	PendingReplay = Key;
@@ -713,6 +722,7 @@ bool AAirBattle::BeginReplay(const FString& Key)
 	S.Show = AirShow::Show(S.Recording.Seed ? S.Recording.Seed : 238);
 	AirFeed::Apply(S.Board, S.Show);
 	S.Show.SetSmooth(!AirOldFlying());
+	S.Show.SetBoxKeep(BoxKeepOn());
 	S.bSteadyEye = SteadyEyeOn();
 	S.SkyPlace = AirFeed::PlacingOf(S.Board, S.Recording.Views.front().Groups, S.Recording.Seed);
 	S.Desk.Begin(S.Board, S.Recording.Views.front().Head.Me);
@@ -766,6 +776,7 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 	::UnitTable::SetMonth(S.Board.Year, S.Board.Month + 1); // (its aircraft wear the paint of its month; the feed's months count from 0)
 	AirFeed::Apply(S.Board, S.Show);
 	S.Show.SetSmooth(!AirOldFlying());
+	S.Show.SetBoxKeep(BoxKeepOn());
 	S.bSteadyEye = SteadyEyeOn();
 	S.SkyPlace = AirFeed::PlacingOf(S.Board, First.Groups, 0);
 	S.Desk.Begin(S.Board, First.Head.Me);

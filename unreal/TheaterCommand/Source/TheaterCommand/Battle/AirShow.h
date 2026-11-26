@@ -668,6 +668,16 @@ namespace AirShow
 		 */
 		void SetSmooth(bool bOn) { bSmooth = bOn; }
 		bool Smooth() const { return bSmooth; }
+		/**
+		 * The bombers' part of the above (each keeps her slot as the box loses others, her place eased on to her slot's,
+		 * PlaceWant; every bomber in her box banked no more than RallyBankMost and rolled eased; a straggler eased back
+		 * from where she fell out), flown only flying smooth and with this on as well. On here; the air battle sets it
+		 * from the Battle rules card's "Each bomber keeps her place in her box" (FLandLive's rule "flyBoxKeep", off until
+		 * the Mac and the art director pass it). Off: the bombers fly as 30899121 flew them, smooth flying's rolls and
+		 * velocities as they were, to the byte.
+		 */
+		void SetBoxKeep(bool bOn) { bBoxKeep = bOn; }
+		bool BoxKeep() const { return bBoxKeep; }
 		double PathSpan = 0.5, RollDamping = 0.7;
 		double SlotCloseMost = 4.0, SlotPull = 0.08, SlotAheadMost = 8.0, SlotAheadPull = 0.3, StragAheadMost = 60.0, StragAheadPull = 2.0;
 		double SlotRollMost = 20.0, TorpedoLineMost = 5.0, BoxTurnMost = 3.0;
@@ -1179,6 +1189,7 @@ namespace AirShow
 		double ShownT = 0.0, AirT = 0.0;
 		double ViewT = 0.0;                  // the battle time of the view the groups shown now are read from
 		bool bSmooth = true;                 // (SetSmooth)
+		bool bBoxKeep = true;                // (SetBoxKeep)
 		long PilotSteps = 0;                 // the pilots' steps flown so far (Craft::PlaceStep)
 		/** How far ahead of the battle time shown the formations' velocities are read (GroupVelocity): PathSpan where
 		 * the views in hand reach that far (a live raid's always do: its rules run a battle second ahead), less where a
