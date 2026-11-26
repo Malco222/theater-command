@@ -1042,6 +1042,12 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 						{
 							Raw->Paints[static_cast<int32>(Repainted.first)] = static_cast<int32>(Repainted.second);
 						}
+						// (and her contact shade, the model thread's, at the strength the battle asked: multiplied in below)
+						Raw->Worn.SetNum(Raw->Paints.Num());
+						for (int32 SkinK = 0; SkinK < Raw->Paints.Num(); ++SkinK)
+						{
+							Raw->Worn[SkinK] = static_cast<float>(AirSkin::ShadeFactor(WornLevel->Shade[static_cast<size_t>(SkinK)], WornSkin->ShadeStrength));
+						}
 						Raw->bSkinned = true;
 					}
 					FString Ink;
@@ -1307,6 +1313,12 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				if (PlanePaints.Num() > 11 && Raw->Soot.IsValidIndex(K) && Raw->Soot[K] > 0)
 				{
 					Shade = FMath::Lerp(Shade, PlanePaints[11], 0.72f * FMath::Min(Raw->Soot[K], 100) / 100.0f);
+				}
+				// (the worn skin's contact shade, the row flyB17Skin: multiplied in as a figure's wear is, linear; only under
+				// the skin, whose read alone fills Worn for an aircraft)
+				if (Raw->bSkinned && Raw->Worn.IsValidIndex(K) && Raw->Worn[K] < 1.0f)
+				{
+					Shade = FLinearColor(Shade.R * Raw->Worn[K], Shade.G * Raw->Worn[K], Shade.B * Raw->Worn[K], Shade.A);
 				}
 				Fresh.Add(Raw->Points[K], Raw->Facings[K], Shade.ToFColor(true));
 				continue;
