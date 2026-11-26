@@ -55,7 +55,7 @@ import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, rai
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled, willBurn } from './prizes';
 import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, shoreOf, worldOn } from './world';
 import { FAR_STAGE } from './stage';
-import { formedLine, joinedLine, notFormedLine, rowDone, tellWait, waitedOn } from './arrivalwaits';
+import { formedLine, joinedLine, nationDone, notFormedLine, rowDone, tellWait, waitedOn } from './arrivalwaits';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -4149,6 +4149,8 @@ export function capitulate(g: Game, nat: string, by: string, said?: string): voi
   X.alive = false;
   X.fellOn = { turn: g.turn, week: g.week, to: by, how: 'beaten' };
   recordFall(g, nat, by, 'beaten');
+  // (The telling's flags of its rows go with it: no dead data in a lost war. Nothing where none was ever written.)
+  nationDone(g, nat);
   // (Who it was at war with is kept: a freed country takes those wars up again, and its conquerors' allies finish theirs.)
   rememberWars(g, nat);
   // In the last act of the grand campaign nobody signs an armistice: a fallen France is simply conquered. So is a
