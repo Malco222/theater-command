@@ -11,7 +11,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { afterEach, describe, expect, it } from 'vitest';
 import { stockOf } from '../src/campaign/arms';
 import { offers } from '../src/campaign/arsenal';
-import { foldCorps, foldView, foldWords } from '../src/campaign/fold';
+import { foldCardWords, foldCorps, foldView, foldWords } from '../src/campaign/fold';
 import { addCorps, createGame, setWar } from '../src/campaign/game';
 import { MANPOWER, classNow, comesWords, corpsMenWords, levyMen, manpower, menPer, menScale, menWords, noMenWords, reserveLevelWords, reserveWords } from '../src/campaign/manpower';
 import { RIFLES, arsenalTop, inWords, levelOf, noRifles, riflesMonth, riflesSeen, riflesTakes, riflesView, riflesWait } from '../src/campaign/rifles';
@@ -396,5 +396,86 @@ describe('the second read: the 3D game says what the page says', () => {
     const j = foldRow('JAP', 0.6, 0.6);
     expect(j.lines[0]).toMatch(/^30,000 men in one corps at 100% of its strength, [a-z]+\.$/);
     expect(j.lines).toContain('6,000 men over go back to the reserve.');
+  });
+});
+
+// The UI director's second read of 26 November 2026, 03:16Z, point 1: the fold card at one scale. The heading of each
+// pair says each corps' men at the nation's own scale with "about", to the thousand; the cadre line says the men in
+// divisions' worth as line 8 says them, the treasury clause dropped where it is nothing. The months stay as each card
+// says them (the lead's reading). One helper, fold.ts foldCardWords, read by both cards. Japan as built, byte for byte.
+describe('the third read: the fold card at one scale', () => {
+  type Call = (...a: unknown[]) => unknown;
+  const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
+  type Row = { lines: string[]; buttons: { act: string }[] };
+  /** The 3D fold card's pair for two corps of this kind laid at the capital of the seat being played: its text, and the row that keeps the first. */
+  const pair = (nat: string, seed: number, kind: string): { text: string; row: Row } => {
+    TC().start({ human: nat, seed, view: 'grand', world: true });
+    const gg = loadGame((TC().save() as { text: string }).text)!;
+    const cap = gg.nations[nat].capital, at = gg.regions[cap].name;
+    const a = addCorps(gg, nat, 'Central reserve', kind as 'inf', 2, at, {}), b = addCorps(gg, nat, `${at} garrison`, kind as 'inf', 2, at, {});
+    a.str = 0.6; b.str = 0.6;
+    TC().load(saveGame(gg));
+    const p = TC().page(`fold:${cap}`) as { sections: { text: string; rows: Row[] }[] };
+    const s = p.sections.find((x) => x.rows.some((r) => r.buttons[0].act === `fold:${a.id}:${b.id}`))!;
+    return { text: s.text, row: s.rows.find((r) => r.buttons[0].act === `fold:${a.id}:${b.id}`)! };
+  };
+  /** Two corps of this many divisions at the capital, worn to 0.6, and the view of folding the second into the first. */
+  const view = (g: Game, nat: string, divs: number, kind = 'inf') => {
+    levyMen(g, nat, 30);
+    const at = g.regions[g.nations[nat].capital].name;
+    const a = addCorps(g, nat, 'Central reserve', kind as 'inf', divs, at, {}), b = addCorps(g, nat, `${at} garrison`, kind as 'inf', divs, at, {});
+    a.str = 0.6; b.str = 0.6;
+    return { a, b, v: foldView(g, a, b) };
+  };
+
+  it("1. China's 3D card: the pair's heading at her scale, and the cadre line in divisions' worth with no treasury clause", () => {
+    const { text, row } = pair('CHN', 7, 'inf');
+    expect(text).toBe('Central reserve: about 80,000 men, 60% of its strength. Chungking garrison: about 80,000 men, 60%.');
+    expect(row.lines).toContain("Chungking garrison goes home as a cadre: it can be raised again from the arsenal for two divisions' worth of men from the reserve, in 5 months.");
+    expect(row.lines.join('\n')).not.toMatch(/15,000|18,000|30,000|from the treasury/);
+  });
+
+  it('2. a cadre whose treasury cost is not nothing (an artillery corps of China\'s): the treasury clause kept, before the men', () => {
+    const { text, row } = pair('CHN', 7, 'art');
+    expect(text).toBe('Central reserve: about 80,000 men, 60% of its strength. Chungking garrison: about 80,000 men, 60%.');
+    expect(row.lines).toContain("Chungking garrison goes home as a cadre: it can be raised again from the arsenal for 1,700 from the treasury and two divisions' worth of men from the reserve, in 5 months.");
+  });
+
+  it("3. a cadre of one division and of three: \"one division's worth\", \"three divisions' worth\"", () => {
+    const w = foldCardWords('CHN');
+    const one = view(grand(), 'CHN', 1), three = view(grand(), 'CHN', 3);
+    expect(w.men(one.a)).toBe('about 40,000 men');
+    expect(w.cadre(one.v, '0')).toBe("one division's worth of men from the reserve");
+    expect(w.men(three.a)).toBe('about 121,000 men');
+    expect(w.cadre(three.v, '0')).toBe("three divisions' worth of men from the reserve");
+    // (A corps its row keeps at half a division comes back as half of one: said in men at her scale, with "about".)
+    const g = grand();
+    levyMen(g, 'CHN', 30);
+    const at = g.regions[g.nations.CHN.capital].name;
+    const a = addCorps(g, 'CHN', 'Small a', 'inf', 1, at, {}), b = addCorps(g, 'CHN', 'Small b', 'inf', 1, at, {});
+    a.full = b.full = 0.5; a.str = b.str = 0.3;
+    expect(w.cadre(foldView(g, a, b), '0')).toBe('about 34,000 men from the reserve');
+  });
+
+  it("4. Japan's 3D card: the pair's heading and the cadre line byte for byte as built", () => {
+    const { text, row } = pair('JAP', 17, 'inf');
+    expect(text).toBe('Central reserve: 18,000 men, 60% of its strength. Tokyo garrison: 18,000 men, 60%.');
+    expect(row.lines).toContain('Tokyo garrison goes home as a cadre: it can be raised again from the arsenal for 2,400 from the treasury and 30,000 men from the reserve, in 5 months.');
+  });
+
+  it("5. the page's forms from the same helper (the page's wiring in ui/main.ts foldCard is read, not run)", () => {
+    const c = view(grand(), 'CHN', 2), art = view(grand(), 'CHN', 2, 'art');
+    const w = foldCardWords('CHN');
+    // The page's heading: "Central reserve (about 80,000 men, 60%) and Chungking garrison (about 80,000 men, 60%)".
+    expect(`${c.a.name} (${w.men(c.a)}, 60%) and ${c.b.name} (${w.men(c.b)}, 60%)`).toBe('Central reserve (about 80,000 men, 60%) and Chungking garrison (about 80,000 men, 60%)');
+    // The page's money() floors the treasury's figure: 17 points are 1,700, 0 is 0.
+    expect(c.v.cadreCost).toBe(0);
+    expect(w.cadre(c.v, '0')).toBe("two divisions' worth of men from the reserve");
+    expect(art.v.cadreCost).toBe(17);
+    expect(w.cadre(art.v, '1,700')).toBe("1,700 from the treasury and two divisions' worth of men from the reserve");
+    const j = view(grand('JAP', 17), 'JAP', 2);
+    const wj = foldCardWords('JAP');
+    expect(wj.men(j.a)).toBe('18,000 men');
+    expect(wj.cadre(j.v, '2,400')).toBe('2,400 from the treasury and 30,000 men from the reserve');
   });
 });

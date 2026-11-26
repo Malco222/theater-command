@@ -269,7 +269,7 @@ export const menPer = (nat: string): number => menScale(nat) ?? MEN_PER_DIV;
  */
 export const men1000 = (men: number): string => (Math.round(Math.max(0, men) / 1000) * 1000).toLocaleString('en-US');
 /** "division's worth" for one, "divisions' worth" for any other count. */
-const worth = (d: number): string => (d === 1 ? "division's worth" : "divisions' worth");
+export const worth = (d: number): string => (d === 1 ? "division's worth" : "divisions' worth");
 
 /**
  * The reserve in a sentence, for a nation with a scale of its own (the UI director's line 14 of 25 November 2026:

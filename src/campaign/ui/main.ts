@@ -69,7 +69,7 @@ import { GOOD_NAME, RES, fieldCard, fieldOverseas, fieldYield, keepsStores, lane
 import { LEAGUE, leagueFounded, leagueMembers, ownPath, small as isSmall, type PathId, type PathOption } from '../league';
 import { ARSENAL, canLay, canStation, factoriesBuilt, aircraftTag, factoryTag, workLevel, worksOpening, yardLevel, type Hull, type Offer } from '../arsenal';
 import { arsenalTop, riflesWait } from '../rifles';
-import { foldWords } from '../fold';
+import { foldCardWords, foldWords } from '../fold';
 import { PLANS, buildsOwn, planRules } from '../plans';
 import { GUARD_TOP, guardSays, guardTabs, type GuardTab } from '../guard';
 import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitRule, traitsOf, type Trait } from '../traits';
@@ -3727,6 +3727,8 @@ function foldCard(reg: number): string {
   const r = g.regions[reg];
   const vs = foldChoicesAt(g, reg);
   const pct = (x: number): string => `${Math.round(x * 100)}%`;
+  // (Each corps' men and the cadre's price at the nation's own scale, from fold.ts as the 3D card says them: the UI director's second read of 26 November 2026, 03:16Z, point 1.)
+  const fw = foldCardWords(g.human!);
   const row = (v: (typeof vs)[number]): string => {
     const w = foldWords(g, g.human!, v);
     const bits = [
@@ -3735,7 +3737,7 @@ function foldCard(reg: number): string {
       // (The men in words from fold.ts foldWords, as the news and the 3D card say them: the UI director's point 4 of 26 November 2026.)
       w.over ? esc(w.over) : '',
       v.works !== undefined ? `It takes over the fieldworks ${esc(v.goneName)} stands in.` : '',
-      `${esc(v.goneName)} goes home as a cadre: it can be raised again from the arsenal for ${money(v.cadreCost)} from the treasury and ${num(v.cadreMen)} men from the reserve, in ${monthsWord(v.cadreMonths)}.`,
+      `${esc(v.goneName)} goes home as a cadre: it can be raised again from the arsenal for ${esc(fw.cadre(v, money(v.cadreCost)))}, in ${monthsWord(v.cadreMonths)}.`,
     ].filter(Boolean).join(' ');
     return `<div class="foldopt"><span class="grow"><b class="foldkeep">Keep ${esc(v.keepName)}</b><small>${bits}</small></span><button class="btn small go" data-act="fold" data-keep="${v.keep}" data-gone="${v.gone}" title="${esc(v.keepName)} takes in the men of ${esc(v.goneName)}. It cannot be undone.">Fold into ${esc(v.keepName)}</button></div>`;
   };
@@ -3744,7 +3746,7 @@ function foldCard(reg: number): string {
   for (const v of vs) { const k = [v.keep, v.gone].sort((a, b) => a - b).join(':'); (pairs.get(k) ?? pairs.set(k, []).get(k)!).push(v); }
   const body = [...pairs.values()].map((p) => {
     const a = corps(p[0].keep), b = corps(p[0].gone);
-    const head = a && b ? `${esc(a.name)} (${num(men(a))} men, ${pct(a.str)}) and ${esc(b.name)} (${num(men(b))} men, ${pct(b.str)})` : '';
+    const head = a && b ? `${esc(a.name)} (${esc(fw.men(a))}, ${pct(a.str)}) and ${esc(b.name)} (${esc(fw.men(b))}, ${pct(b.str)})` : '';
     return `<div class="foldpair"><h3>${head}</h3>${p.map(row).join('')}</div>`;
   }).join('');
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The army at ${esc(r.name)} · ${date(g.turn)}</div><h2>Fold two worn corps into one</h2></header>

@@ -11,11 +11,11 @@
 
 import { clamp } from '../core/math';
 import { MEN_PER_DIV, type Corps, type Game, type General } from './types';
-import { headline, removeCorps, worksOf } from './game';
+import { headline, men, removeCorps, worksOf } from './game';
 import { appoint, generalOf } from './commanders';
-import { MANPOWER, men1000, menScale, returnMen } from './manpower';
+import { MANPOWER, men1000, menScale, returnMen, worth } from './manpower';
 import { cadreTerms } from './economy';
-import { binds, riflesBack, riflesFold } from './rifles';
+import { binds, inWords, riflesBack, riflesFold } from './rifles';
 import { noteCorps } from './stories';
 import { atItsPost, postWords } from './pacific';
 
@@ -122,6 +122,38 @@ export function foldWords(g: Game, nat: string, v: FoldView): FoldWords {
   if (n === null) return { men, back: null, over: null };
   const up = n[0].toUpperCase() + n.slice(1);
   return { men, back: `${n} sent back to the reserve${rifles}`, over: `${up} men over go back to the reserve${rifles}.` };
+}
+
+/** The fold card's own figures, for both cards (the page's foldCard and the 3D game's foldPage): see foldCardWords. */
+export interface FoldCardWords {
+  /** A corps' men, for the heading of each pair: "18,000 men", or at a nation's own scale "about 80,000 men". */
+  men: (c: Corps) => string;
+  /** What raising the cadre again takes, after "for", with the treasury's figure in the speaker's own dress: "0 from
+   * the treasury and 30,000 men from the reserve", or at a nation's own scale "two divisions' worth of men from the
+   * reserve" (with "1,700 from the treasury and " before it where the treasury's figure is not nothing). */
+  cadre: (v: FoldView, cost: string) => string;
+}
+
+/**
+ * The fold card at one scale (the UI director's second read of 26 November 2026, 03:16Z, point 1). For a nation with a
+ * scale of its own, the heading of each pair says each corps' men with "about", to the thousand, the figure foldWords
+ * gives for that corps ("Central reserve: about 80,000 men, 60% of its strength."), and the cadre line says the men in
+ * divisions' worth as line 8 says them, the treasury clause dropped where it is nothing ("... can be raised again from
+ * the arsenal for two divisions' worth of men from the reserve"). The months stay as each card says them. Every other
+ * nation as built, byte for byte ("for 0 from the treasury" there is a shipped line: her later-patch list).
+ */
+export function foldCardWords(nat: string): FoldCardWords {
+  const per = menScale(nat);
+  if (per === null) return { men: (c) => `${men(c).toLocaleString('en-US')} men`, cadre: (v, cost) => `${cost} from the treasury and ${Math.round(v.cadreMen).toLocaleString('en-US')} men from the reserve` };
+  return {
+    men: (c) => `about ${men1000(c.divs * c.str * per)} men`,
+    cadre: (v, cost) => {
+      const d = v.cadreMen / MEN_PER_DIV;
+      // (A cadre of a corps its row keeps small can come back as part of a division's worth: said in men at the scale.)
+      const m = Number.isInteger(d) ? `${inWords(d)} ${worth(d)} of men` : `about ${men1000(d * per)} men`;
+      return `${v.cadreCost > 0 ? `${cost} from the treasury and ` : ''}${m} from the reserve`;
+    },
+  };
 }
 
 /** Every way two of this nation's corps in a province could be folded together now: each allowed pair, both ways round. */

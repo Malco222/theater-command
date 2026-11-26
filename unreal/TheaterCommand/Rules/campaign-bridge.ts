@@ -90,7 +90,7 @@ import { COMMAND, SKILLS, corpsOf, fit, generalOf, rankOf, vacant, waiting, whyN
 import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat, takeOver } from '../../../src/campaign/stories';
 import { KIND, TERRAIN_DEF } from '../../../src/campaign/types';
 import { MANPOWER, men1000, menScale } from '../../../src/campaign/manpower';
-import { foldWords } from '../../../src/campaign/fold';
+import { foldCardWords, foldWords } from '../../../src/campaign/fold';
 import { arsenalTop } from '../../../src/campaign/rifles';
 import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals, openGoals } from '../../../src/campaign/goals';
 import { isOpen, startOpen } from '../../../src/campaign/staff';
@@ -6821,14 +6821,15 @@ function foldPage(s: Game, reg: number): Page | null {
   let vs: ReturnType<typeof foldChoicesAt> = [];
   try { vs = foldChoicesAt(s, reg); } catch { vs = []; }
   const pct = (x: number): string => `${Math.round(x * 100)}%`;
-  const num = (n: number): string => Math.round(n).toLocaleString('en');
+  // (Each corps' men and the cadre's price at the nation's own scale, from fold.ts as the page says them: the UI director's second read of 26 November 2026, 03:16Z, point 1.)
+  const fw = foldCardWords(s.human);
   const corpsOfId = (id: number): Corps | undefined => s.corps.find((c) => c.id === id);
   const pairs = new Map<string, typeof vs>();
   for (const v of vs) { const k = [v.keep, v.gone].sort((a, b) => a - b).join(':'); (pairs.get(k) ?? pairs.set(k, []).get(k)!).push(v); }
   const sections = [...pairs.values()].map((p) => {
     const a = corpsOfId(p[0].keep), b = corpsOfId(p[0].gone);
     return {
-      heading: a && b ? `${a.name.toUpperCase()} AND ${b.name.toUpperCase()}` : 'TWO CORPS', text: a && b ? `${a.name}: ${num(men(a))} men, ${pct(a.str)} of its strength. ${b.name}: ${num(men(b))} men, ${pct(b.str)}.` : '',
+      heading: a && b ? `${a.name.toUpperCase()} AND ${b.name.toUpperCase()}` : 'TWO CORPS', text: a && b ? `${a.name}: ${fw.men(a)}, ${pct(a.str)} of its strength. ${b.name}: ${fw.men(b)}, ${pct(b.str)}.` : '',
       rows: p.map((v): PageRow => ({
         nat: s.human!, title: `Keep ${v.keepName}`,
         lines: [
@@ -6837,7 +6838,7 @@ function foldPage(s: Game, reg: number): Page | null {
           // (The men in words from fold.ts foldWords, as the news and the page say them: the UI director's point 4 of 26 November 2026.)
           foldWords(s, s.human!, v).over ?? '',
           v.works !== undefined ? `It takes over the fieldworks ${v.goneName} stands in.` : '',
-          `${v.goneName} goes home as a cadre: it can be raised again from the arsenal for ${shown(v.cadreCost).toLocaleString('en')} from the treasury and ${num(v.cadreMen)} men from the reserve, in ${v.cadreMonths} month${v.cadreMonths === 1 ? '' : 's'}.`,
+          `${v.goneName} goes home as a cadre: it can be raised again from the arsenal for ${fw.cadre(v, shown(v.cadreCost).toLocaleString('en'))}, in ${v.cadreMonths} month${v.cadreMonths === 1 ? '' : 's'}.`,
           v.why ?? '',
         ].filter(Boolean),
         buttons: [{ label: `FOLD INTO ${v.keepName.toUpperCase()}`, act: `fold:${v.keep}:${v.gone}`, ok: !v.why, danger: true, tip: v.why ?? `${v.keepName} takes in the men of ${v.goneName}. It cannot be undone.` }],
