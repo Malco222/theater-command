@@ -676,6 +676,27 @@ static bool BoxKeepOn()
 	return FLandLive::RuleNow(TEXT("flyBoxKeep"));
 }
 
+// (the two rows, in the log as a battle opens: the camera in use and each row's state, for the Mac's check)
+static void LogRows(const FAirBattleState& S)
+{
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the strategy camera is %s (\"The raid camera holds steady\", flySteadyEye, %s); \"Each bomber keeps her place in her box\" (flyBoxKeep) %s%s."),
+		S.Show.Smooth() && S.bSteadyEye ? TEXT("AirDesk::Overview's, held steady, the zoom eased") : TEXT("the old one, the crowd's middle in hard rings"), S.bSteadyEye ? TEXT("on") : TEXT("off"),
+		S.Show.BoxKeep() ? TEXT("on") : TEXT("off"), S.Show.Smooth() ? TEXT("") : TEXT("; flying as release 1.5 (-TheaterAirOldFlying), so neither row flies"));
+}
+
+// (the raid camera's row on: its part of the log's 5 s sky line, the player's zoom, the eye's distance and the strategy
+// camera's jumps of the picture over 20 px since the last; off, nothing, the line as it was)
+static FString SteadyEyeSky(FAirBattleState& S, double Distance, double Away)
+{
+	if (!(S.Show.Smooth() && S.bSteadyEye))
+	{
+		return FString();
+	}
+	const FString Part = FString::Printf(TEXT(" The raid camera: the zoom %.0f m, the eye %.0f m off, %d jumps of the picture over 20 px."), Distance, Away, S.OverJumps);
+	S.OverJumps = 0;
+	return Part;
+}
+
 void AAirBattle::ReplayWhenReady(const FString& Key)
 {
 	PendingReplay = Key;
@@ -724,6 +745,7 @@ bool AAirBattle::BeginReplay(const FString& Key)
 	S.Show.SetSmooth(!AirOldFlying());
 	S.Show.SetBoxKeep(BoxKeepOn());
 	S.bSteadyEye = SteadyEyeOn();
+	LogRows(S);
 	S.SkyPlace = AirFeed::PlacingOf(S.Board, S.Recording.Views.front().Groups, S.Recording.Seed);
 	S.Desk.Begin(S.Board, S.Recording.Views.front().Head.Me);
 	S.Card = S.Desk.CardOf(S.Recording.Card);
@@ -778,6 +800,7 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 	S.Show.SetSmooth(!AirOldFlying());
 	S.Show.SetBoxKeep(BoxKeepOn());
 	S.bSteadyEye = SteadyEyeOn();
+	LogRows(S);
 	S.SkyPlace = AirFeed::PlacingOf(S.Board, First.Groups, 0);
 	S.Desk.Begin(S.Board, First.Head.Me);
 	// (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z: "i want every air battle playable". With the Battle
@@ -3393,9 +3416,9 @@ void AAirBattle::DrawSky()
 		}
 		else if (Done - SkyClockAt >= 5.0)
 		{
-			UE_LOG(LogTheater, Log, TEXT("Air battle sky, %.1f s, on the graphics chip: %d table lays, %.2f ms a lay, %.2f MB sent; %d shadow paints, %.2f ms a paint; the slowest %.2f ms (this thread's most in a frame); %d puffs laid, the nearest %.0f m off, laid again past %.1f m."),
+			UE_LOG(LogTheater, Log, TEXT("Air battle sky, %.1f s, on the graphics chip: %d table lays, %.2f ms a lay, %.2f MB sent; %d shadow paints, %.2f ms a paint; the slowest %.2f ms (this thread's most in a frame); %d puffs laid, the nearest %.0f m off, laid again past %.1f m.%s"),
 				Done - SkyClockAt, SkyLays, SkyLays > 0 ? SkyPaintSeconds * 1000.0 / SkyLays : 0.0, SkyLayBytes / 1.0e6, SkyShadePaints,
-				SkyShadePaints > 0 ? SkySendSeconds * 1000.0 / SkyShadePaints : 0.0, SkySlowest * 1000.0, Laid.Laid(), Laid.Nearest(), Laid.Slack());
+				SkyShadePaints > 0 ? SkySendSeconds * 1000.0 / SkyShadePaints : 0.0, SkySlowest * 1000.0, Laid.Laid(), Laid.Nearest(), Laid.Slack(), *SteadyEyeSky(S, Distance, StrategyAway));
 			SkyLays = 0;
 			SkyShadePaints = 0;
 			SkyLayBytes = 0.0;
@@ -3475,9 +3498,9 @@ void AAirBattle::DrawSky()
 	else if (Done - SkyClockAt >= 5.0)
 	{
 		const int32 Turns = FMath::Max(1, SkyNearTurns + SkyBothTurns);
-		UE_LOG(LogTheater, Log, TEXT("Air battle sky, %.1f s: %d near turns, %d far; painting %.2f ms a turn (%s), sending %.2f ms, the slowest %.2f ms (this thread's most in a frame); %d at once, %d frames a turn still painting; the rooms' line %.0f m."),
+		UE_LOG(LogTheater, Log, TEXT("Air battle sky, %.1f s: %d near turns, %d far; painting %.2f ms a turn (%s), sending %.2f ms, the slowest %.2f ms (this thread's most in a frame); %d at once, %d frames a turn still painting; the rooms' line %.0f m.%s"),
 			Done - SkyClockAt, SkyNearTurns, SkyBothTurns, SkyPaintSeconds * 1000.0 / Turns, bSkyAtOnce ? TEXT("here") : TEXT("aside"), SkySendSeconds * 1000.0 / Turns,
-			SkySlowest * 1000.0, SkyAtOnce, SkyLate, SkyLine);
+			SkySlowest * 1000.0, SkyAtOnce, SkyLate, SkyLine, *SteadyEyeSky(S, Distance, StrategyAway));
 		SkyNearTurns = 0;
 		SkyBothTurns = 0;
 		SkyAtOnce = 0;
@@ -7174,6 +7197,39 @@ void AAirBattle::AimEye(double Real)
 		UE_LOG(LogTheater, Display, TEXT("Air battle: the overview drawn back off a fuel ball's flash, %.0f m off to %.0f (rule 13, cut %d)."), Was, Away, BallCuts);
 	}
 	Eye->SetActorLocationAndRotation(From, (LookAt - From).Rotation());
+	// (the raid camera's row on: the strategy camera's jumps for the log's 5 s sky line, SteadyEyeSky: a frame whose eye
+	// or look moves more than 20 px on a 1920 picture through the 55 degree lens at its distance, beyond its last frame's
+	// own motion; a cut (a ride, a fuel ball's), a picture's own framing or the glide starts it afresh)
+	if (S.Show.Smooth() && S.bSteadyEye)
+	{
+		const bool bCount = !(S.bFlying && S.GlideT >= 0.0) && !bOnShip && !bOnGuns && !bOnChutes && Real > 0.0 && Away > 1.0;
+		if (!bCount || S.JumpFrame + 1 != GFrameCounter || S.JumpBallCuts != BallCuts)
+		{
+			S.JumpRun = 0;
+		}
+		if (bCount)
+		{
+			if (S.JumpRun >= 2 && S.JumpDt > 0.0)
+			{
+				const double K = Real / S.JumpDt;
+				const double Wide = 2.0 * Away * U * FMath::Tan(FMath::DegreesToRadians(27.5));
+				const double EyeHop = (From - S.JumpEye[0] - (S.JumpEye[0] - S.JumpEye[1]) * K).Size();
+				const double LookHop = (LookAt - S.JumpLook[0] - (S.JumpLook[0] - S.JumpLook[1]) * K).Size();
+				if (FMath::Max(EyeHop, LookHop) * 1920.0 / Wide > 20.0)
+				{
+					++S.OverJumps;
+				}
+			}
+			S.JumpEye[1] = S.JumpEye[0];
+			S.JumpEye[0] = From;
+			S.JumpLook[1] = S.JumpLook[0];
+			S.JumpLook[0] = LookAt;
+			S.JumpDt = Real;
+			S.JumpRun = FMath::Min(S.JumpRun + 1, 2);
+		}
+		S.JumpFrame = GFrameCounter;
+		S.JumpBallCuts = BallCuts;
+	}
 	if (S.bFlying && S.GlideT >= 0.0)
 	{
 		// The glide from the flyover's last eye into the strategy view, eased in and out; the film's frame draws back.

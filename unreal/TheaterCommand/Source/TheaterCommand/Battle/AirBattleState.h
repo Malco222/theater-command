@@ -115,6 +115,14 @@ struct FAirBattleState
 	/** With it on, where the player's wheel or trackpad has asked his zoom to go (AAirBattle::Zoom; -1 nowhere, the zoom
 	 * at rest) and the zoom's speed on its way there (AirDesk::Overview::ZoomEase, in AimEye). */
 	double ZoomWant = -1.0, ZoomVel = 0.0;
+	/** With it on, the strategy camera's jumps of the picture over 20 px since the log's last 5 s sky line (AimEye,
+	 * SteadyEyeSky), and what they are judged from: its eye and look the last two frames, the last frame's real seconds,
+	 * the engine's frame and the fuel ball cuts when last measured, and how many frames in a row it has measured. */
+	int32 OverJumps = 0;
+	FVector JumpEye[2], JumpLook[2];
+	double JumpDt = 0.0;
+	uint64 JumpFrame = 0;
+	int32 JumpBallCuts = 0, JumpRun = 0;
 	bool bFlying = false;
 	bool bFlyTried = false;     // looked for once, when the battle's first groups stand
 	double FlyT = 0.0;
