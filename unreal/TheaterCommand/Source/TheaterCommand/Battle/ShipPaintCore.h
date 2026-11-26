@@ -25,8 +25,9 @@
  *   body, a thin brown-orange film at the foot of a run with body above it (never on her salt nor beside it), with a
  *   ragged edge; light wear away from a run at the paint below a wear of 5, and from 5 a little darker and greyer than
  *   the point unworn, never rust-coloured; no channel of a stained point above the paint's own but where salt pales it,
- *   and then never pink; the salt as the art director ruled it, under a run's body and over light wear; and a wooden
- *   deck's planks held under her 150,135,110 as drawn.
+ *   and then never pink; the salt as the art director ruled it, under a run's body but over it at the foot of a deckhouse
+ *   or mount, and over light wear; salted rust the salt cannot lift as her paint, darker; and a wooden deck's planks held
+ *   under her 150,135,110 as drawn.
  * - TopLight (-TheaterSeaShipLight=: 1 or on for SeaTopLight, 0.10, or a top light of its own from 0.0 to 0.30) is not a
  *   point's paint: it is the ships' material's own lift on what faces the sky, which the sea battle sets on its own steel
  *   ink through SteelOf. It rides here so the options travel together.
@@ -78,6 +79,32 @@
  *     rule 1 at the paint in red with green and blue below it, warmer than the salt beside it; there only red comes
  *     down, to her salt's room over the point's own blue (Submarine_GER's point 7347, wear 20 under a salt of 23:
  *     106,104,104 before, now 92,104,104 on her 106,114,120), so no corner beside her pale salt is warmer than it.
+ *
+ * HER RULING ON ROUND 1D (26 November 2026, 06:31Z; it keeps the 02:22Z rules but for two calls):
+ *   - call A, the cold grey: kept, at the paint's own balance. Her salted rust (wear 20 to 39, or a run's foot) that her
+ *     salt cannot lift in every channel shows as her paint, darker (HerPaintDarker): the paint scaled by one factor in every
+ *     channel, so green and blue come down with red (Submarine_GER's point 7347: 92,104,104 in round 1d, now 92,99,105 on
+ *     her 106,114,120; she asked for "about 92,99,104"). The factor is the point's darkness as round 1d held it, the least of
+ *     its three channels over the paint's, in levels as she measures; the point is stored in whole levels within one level
+ *     of the paint so scaled, its green less red and blue less green within one level of the paint's own so scaled, and
+ *     still never warmer than her salt on the clean paint. Where no such copy of her paint at round 1d's darkness is also
+ *     no warmer than her salt on the clean paint (red less blue counted in levels, and a darker copy of a cool paint has
+ *     red and blue closer together), the darkest factor at which one is. OPEN FOR HER RULING: on 109 of the 341 points
+ *     that factor is lighter than round 1d's darkness, and 46 of them (Submarine 28, Submarine_GER 3, Submarine_USA 15)
+ *     end brighter than round 1d left them, by up to 27% (Submarine's point 9517, wear 36, salt 19, on her 122,132,140:
+ *     89,105,105 in round 1d, now 106,115,123; Submarine_USA's 11034: 65,88,95, now 82,96,112); red is up on 93 points,
+ *     green on 25, blue on 108. Keeping round 1d's darkness on all 341 would need her to judge "never warmer" there by
+ *     hue (red over blue as a share) rather than by levels; until she rules, the check stands and ship_paint_test (g)
+ *     pins these counts;
+ *   - call B, the foot's salt line: at the foot of a deckhouse or mount (FootLineMark: a painted point facing out, not up,
+ *     with a deck at its foot, FootLineHighMm at most below it and FootLineSunkMm at most above it, within FootLineReachMm
+ *     in front of it; Submarine_GER's tower's paint 1.4 to 1.8 m up, its strip) her salt beats a run's body too: a body
+ *     point there under her salt paints as the same point unworn, her salt and the soot laid, finish byte and all
+ *     (PaintsAsUnworn), never above nor warmer than her salt on the clean paint. Off the foot line a run's body still beats
+ *     salt, and the casing's runs are as they were. Her order of coats: on a foot's salt line salt beats a run's body;
+ *     elsewhere a run's body, then salt, then light wear; rust of wear 20 to 39 under salt shows as darker paint, never
+ *     warm; the film never on her salt nor beside it (BodyAbove's SaltMark, from the file's salt, so no film lies beside
+ *     a body point the foot line salts).
  *
  * WHERE ON THE RUN. A file's wear at a point is how strong the stain is there: a weep's ribbon carries the most at its
  * head and fades to nothing at its foot (battle-models' ships.py, the U-boat's streaks), and a chip on an edge carries a
@@ -172,8 +199,20 @@ namespace ShipPaintCore
 	/** Her order for the salt (26 November): from this wear a run's body beats her salt, which lifts it no further. */
 	inline constexpr int32_t BodyOverSaltWear = 40;
 	/** BodyAbove's marks, a bit each: at the foot of a run with its body above (FootMark), and, on such a point, her salt
-	 * on it or on a point that shares a triangle with it, so the film never lies there (SaltMark). */
-	inline constexpr uint8_t FootMark = 1, SaltMark = 2;
+	 * on it or on a point that shares a triangle with it, so the film never lies there (SaltMark); and, on any painted
+	 * point, at the foot of a deckhouse or mount, her foot's salt line (FootLineMark, her ruling of 26 November 06:31Z). */
+	inline constexpr uint8_t FootMark = 1, SaltMark = 2, FootLineMark = 4;
+	/** The foot's salt line (her ruling of 26 November 06:31Z), in millimetres of her own up axis and across: a painted point
+	 * facing out (its facing's up part under FootLineUp of its length, with some part level) lies on it when, stepping out
+	 * from it along the level part of its facing, every FootLineStepMm out to FootLineReachMm, one step lands over a deck
+	 * (a triangle of the mesh whose three corners face up, their up part FootLineUp of their length or more) that lies there
+	 * no more than FootLineHighMm below the point and no more than FootLineSunkMm above it. So the line runs from the deck
+	 * at a wall's foot to 30 cm up it: Submarine_GER's tower stands on her casing at 1.50 to 1.59 m, and its paint 1.4 to
+	 * 1.8 m up is her strip; the deck may rise 20 cm past a foot where it climbs toward a tower's ends (on Submarine_USA its
+	 * fore end sits 16 cm under her deck). Any deckhouse or mount the same way, by the mesh alone, never by its name; a
+	 * hull's side, facing the sea, has no deck in front of it. */
+	inline constexpr int64_t FootLineHighMm = 300, FootLineSunkMm = 200, FootLineReachMm = 450, FootLineStepMm = 25;
+	inline constexpr double FootLineUp = 0.9;
 	/** The darkening light wear aims at, at a wear of LightWearFrom to 19 (her straight line from 3% to 6%; 0 below it). */
 	inline constexpr float LightDarkAt(int32_t Wear)
 	{
@@ -267,6 +306,9 @@ namespace ShipPaintCore
 		/** Her salt on it, or on a point that shares a triangle with it (BodyAbove's SaltMark, on a point at a run's foot,
 		 * under the skin only): the film never lies there, the ramp starts at its body. */
 		bool bBesideSalt = false;
+		/** On a foot's salt line, at the foot of a deckhouse or mount (BodyAbove's FootLineMark, under the skin only): her
+		 * salt there beats a run's body (her ruling of 26 November 06:31Z). */
+		bool bFootLine = false;
 	};
 
 	/** One point as BodyAbove reads it: where it lies (the reader's frame, metres, +Z her own up axis), which way it faces
@@ -284,8 +326,11 @@ namespace ShipPaintCore
 	/** Which of her points lie at the foot of a run with its body above them (rule 3; see "A run, and what lies above"):
 	 * one mark a point, FootMark for those, 0 for every other (an unstained point is never marked); and on a point so
 	 * marked, SaltMark as well where her salt lies on it (painted, salt above 0) or on any point of a triangle it is a
-	 * corner of (her ruling of 26 November: the film never beside her salt). Triangles: the mesh's, three point indices
-	 * each (Indices of them); a side with an end out of range is passed over, and so is a triangle for the salt. The same
+	 * corner of (her ruling of 26 November: the film never beside her salt). And on every painted point, stained or not,
+	 * FootLineMark where it lies on a foot's salt line (FootLineHighMm and its fellows; her ruling of 26 November 06:31Z):
+	 * worked in whole millimetres, each step's place rounded to the millimetre, and whether it lies over a deck triangle and
+	 * at what height there worked exactly in whole numbers. Triangles: the mesh's, three point indices each (Indices of
+	 * them); a side with an end out of range is passed over, and so is a triangle for the salt and for a deck. The same
 	 * mesh is marked the same way every time. */
 	std::vector<uint8_t> BodyAbove(const std::vector<RunPoint>& Points, const int32_t* Triangles, size_t Indices);
 
@@ -350,10 +395,22 @@ namespace ShipPaintCore
 	 * paint's own, or where her salt lies to that salt over the clean paint (Salted, at most); below the paint in any
 	 * channel, above it in none; and with bNoWarmer (where her salt lies), lifted by it or not, red less blue in the whole
 	 * levels the mesh stores (StoredLevel) no higher than Salted's own, only red moving (lifted in every channel, before the
-	 * hold to the paint, so that what it lowers is held with it). */
-	Linear Held(Linear C, const Linear& Paint, const Linear& Salted, bool bNoWarmer);
-	/** Whether the skin paints the point as the same point unworn (her ruling of 26 November): light wear away from a run
-	 * (P.bPainted, P.Wear 1 to 19, no body above) below a wear of LightWearFrom, or under her salt. Only under the skin
+	 * hold to the paint, so that what it lowers is held with it). bRedHeld, if given: whether that last hold (her call 3,
+	 * the rust beside salt) brought red down, a point that would else be warmer than her salt on the clean paint. */
+	Linear Held(Linear C, const Linear& Paint, const Linear& Salted, bool bNoWarmer, bool* bRedHeld = nullptr);
+	/** Her call A (26 November 06:31Z) on her salted rust that the salt cannot lift and Held brings red down on: her paint,
+	 * darker. Kept is what Held left (the darkness round 1d gave it), Salted her salt over the clean paint. In sRGB levels as
+	 * she measures: the factor is the least of Kept's three channels over the paint's; the point is the whole levels
+	 * nearest to the paint times it that lie within one level of it in each channel, keep green less red and blue less
+	 * green within one level of the paint's own times it, no channel above the paint, and red less blue no higher than
+	 * Salted's, in levels and in the bytes stored; where none does at that factor, the least larger factor (in steps of
+	 * 1/1024) at which one does, which can leave the point brighter than Kept (46 points in today's files; open for her
+	 * ruling, see her ruling on round 1d above). Kept itself where none does at any factor up to 1 (none in today's files;
+	 * the test counts any such point). */
+	Linear HerPaintDarker(const Linear& Paint, const Linear& Kept, const Linear& Salted);
+	/** Whether the skin paints the point as the same point unworn (her rulings of 26 November): light wear away from a run
+	 * (P.bPainted, P.Wear 1 to 19, no body above) below a wear of LightWearFrom, or under her salt; and a run's body (wear
+	 * BodyOverSaltWear and more) under her salt on a foot's salt line (P.bFootLine, 06:31Z). Only under the skin
 	 * (O.bRustRamp). */
 	bool PaintsAsUnworn(const Point& P, const Options& O);
 	/** The finish byte the reader stores on a point of her steel (the material's metal: 128 unworn, below it worn): 128 less

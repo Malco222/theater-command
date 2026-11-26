@@ -27,8 +27,8 @@
 //       body point at 45 degrees or steeper above it, and the film still at runs' feet; and her three spots printed as
 //       painted colours on the points (the U-boat's band between her rails, the battleship's side, a destroyer's blotch),
 //       today and now;
-//   (f) her ruling of 26 November 02:22Z on the re-shot 04 and 02, on every mesh: the salt in her order (a run's body,
-//       wear 40 and more, takes no salt lift; light wear under her salt shows the salt as on the point unworn, its finish
+//   (f) her ruling of 26 November 02:22Z on the re-shot 04 and 02, on every mesh: the salt in her order (a run's body off
+//       a foot's salt line, wear 40 and more, takes no salt lift; light wear under her salt shows the salt as on the point unworn, its finish
 //       byte too, never above nor warmer than her salt on the clean paint; wear 20 to 39 and a run's foot as round 1c),
 //       counted case by case on each U-boat; her call 3, hold the rust beside salt: every point her salt lies on no warmer
 //       than her salt on the clean paint, in levels and in the bytes stored, and no warm salted rust of wear 20 to 39 on a
@@ -36,7 +36,18 @@
 //       byte and all; from 5, darker by her line, 3% at 5 to 6% at 19, within its band at every wear (printed wear by
 //       wear) with her other bounds, and where whole levels cannot keep the band (a near-grey paint) shown here to be so
 //       and at the nearest darkening they can; no film on her salt nor on a point sharing a triangle with it (the film
-//       taken off counted mesh by mesh); and the destroyer's lightly worn patches against her plain side.
+//       taken off counted mesh by mesh); and the destroyer's lightly worn patches against her plain side;
+//   (g) her ruling of 26 November 06:31Z on round 1d, on every mesh: her foot's salt line found by one rule, by shape alone
+//       (the U-boats' towers' salted paint, every salted body of today's files and Submarine_GER's strip on it, no casing
+//       run), counted mesh by mesh; call B, on it her salt beats a run's body (such a body under her salt bit for bit the
+//       point unworn, never above nor warmer than her salt on the clean paint; off it the body as with no salt), in today's
+//       files and under a made-up salt and wear; call A, her salted rust the salt cannot lift her paint, darker (within one
+//       level of the paint times one factor, its gaps within one level of the paint's so scaled, no teal lean; the art
+//       director's point 7347 within a level of her 92,99,104), and against round 1d's own colours there (rebuilt from the
+//       core's steps, hashed against round 1d's painting): the 46 points it leaves brighter than round 1d, pinned while
+//       they wait on her ruling; her pass lines on Submarine_GER's strip checked at the points and at every corner of the
+//       strip's triangles; every other point bit for bit as round 1d (638bc8ba3) painted it (a hash against round 1d's
+//       own); and no film on or beside the salt the foot line now shows on a body.
 // Usage: ship_paint_test <Source/TheaterCommand> <Content/Models/Ships>   (built by Tools/ship_detail/run.sh)
 
 #include "paint_shim.h"
@@ -49,6 +60,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -238,6 +250,7 @@ namespace
 		const uint8_t Mark = Marks && static_cast<size_t>(K) < Marks->size() ? (*Marks)[static_cast<size_t>(K)] : 0;
 		At.bBodyAbove = (Mark & ShipPaintCore::FootMark) != 0;
 		At.bBesideSalt = (Mark & ShipPaintCore::SaltMark) != 0;
+		At.bFootLine = (Mark & ShipPaintCore::FootLineMark) != 0;
 		return At;
 	}
 
@@ -361,6 +374,94 @@ namespace
 		return Beside;
 	}
 
+	/** Her foot's salt line (her ruling of 26 November 06:31Z), as ShipPaintCore.h says it in words, worked here apart from
+	 * the core (every deck over a step looked up in this test's own cells of 30 cm, with no height sorting): a painted point
+	 * facing out (its facing's up part under 0.9 of its length, some of it level) lies on it when, stepping out from it along
+	 * the level part of its facing every 25 mm to 450 mm (each step's place to the millimetre), one step lands on a deck (a
+	 * triangle of the mesh whose three corners face up, their up part 0.9 of their length or more: inside it or on a side)
+	 * that lies there no more than 300 mm below the point nor 200 mm above it, worked in whole millimetres. */
+	std::vector<bool> FootLineOf(const FRawShip& Raw)
+	{
+		const size_t N = Raw.Points.size();
+		std::vector<std::array<long long, 3>> Mm(N);
+		for (size_t K = 0; K < N; ++K)
+		{
+			Mm[K] = { std::llround(Raw.Points[K].X * 1000.0), std::llround(Raw.Points[K].Y * 1000.0), std::llround(Raw.Points[K].Z * 1000.0) };
+		}
+		const auto Up = [&Raw](size_t K)
+		{
+			const FVector& F = Raw.Facings[K];
+			return F.Z > 0.0 && F.Z >= 0.9 * std::sqrt(F.X * F.X + F.Y * F.Y + F.Z * F.Z);
+		};
+		constexpr long long Cell = 300;
+		const auto CellOf = [](long long V) { return V >= 0 ? V / Cell : -((-V + Cell - 1) / Cell); };
+		std::vector<std::array<size_t, 3>> Decks;
+		std::map<std::pair<long long, long long>, std::vector<size_t>> In;
+		for (size_t T = 0; T + 2 < Raw.Triangles.size(); T += 3)
+		{
+			const int32 A = Raw.Triangles[T], B = Raw.Triangles[T + 1], C = Raw.Triangles[T + 2];
+			if (std::min({ A, B, C }) < 0 || std::max({ A, B, C }) >= Raw.Points.Num() || !Up(static_cast<size_t>(A)) || !Up(static_cast<size_t>(B)) || !Up(static_cast<size_t>(C)))
+			{
+				continue;
+			}
+			const std::array<size_t, 3> D = { static_cast<size_t>(A), static_cast<size_t>(B), static_cast<size_t>(C) };
+			Decks.push_back(D);
+			const long long X0 = std::min({ Mm[D[0]][0], Mm[D[1]][0], Mm[D[2]][0] }), X1 = std::max({ Mm[D[0]][0], Mm[D[1]][0], Mm[D[2]][0] });
+			const long long Y0 = std::min({ Mm[D[0]][1], Mm[D[1]][1], Mm[D[2]][1] }), Y1 = std::max({ Mm[D[0]][1], Mm[D[1]][1], Mm[D[2]][1] });
+			for (long long X = CellOf(X0); X <= CellOf(X1); ++X)
+			{
+				for (long long Y = CellOf(Y0); Y <= CellOf(Y1); ++Y)
+				{
+					In[{ X, Y }].push_back(Decks.size() - 1);
+				}
+			}
+		}
+		std::vector<bool> On(N, false);
+		for (size_t K = 0; K < N; ++K)
+		{
+			const FVector& F = Raw.Facings[K];
+			const double Level = std::sqrt(F.X * F.X + F.Y * F.Y);
+			if (!PointOf(Raw, static_cast<int32>(K)).bPainted || Up(K) || !(Level > 0.0))
+			{
+				continue;
+			}
+			for (long long Out = 25; Out <= 450 && !On[K]; Out += 25)
+			{
+				const long long QX = Mm[K][0] + std::llround(static_cast<double>(Out) * F.X / Level), QY = Mm[K][1] + std::llround(static_cast<double>(Out) * F.Y / Level);
+				const auto Found = In.find({ CellOf(QX), CellOf(QY) });
+				for (size_t I = 0; Found != In.end() && I < Found->second.size() && !On[K]; ++I)
+				{
+					const std::array<size_t, 3>& D = Decks[Found->second[I]];
+					// (twice the signed area of the deck and of each corner's part opposite the step; the step on it when every
+					// part has the deck's sign or none; the deck's height there, times the whole, against the point's)
+					long long Parts[3], Whole = 0;
+					for (int C = 0; C < 3; ++C)
+					{
+						const auto &P1 = Mm[D[static_cast<size_t>((C + 1) % 3)]], &P2 = Mm[D[static_cast<size_t>((C + 2) % 3)]];
+						Parts[C] = (P1[0] - QX) * (P2[1] - QY) - (P1[1] - QY) * (P2[0] - QX);
+						Whole += Parts[C];
+					}
+					if (Whole == 0)
+					{
+						continue;
+					}
+					const long long Sign = Whole > 0 ? 1 : -1;
+					if (Parts[0] * Sign < 0 || Parts[1] * Sign < 0 || Parts[2] * Sign < 0)
+					{
+						continue;
+					}
+					long long Height = 0;
+					for (int C = 0; C < 3; ++C)
+					{
+						Height += Parts[C] * Sign * (Mm[D[static_cast<size_t>(C)]][2] - Mm[K][2]);
+					}
+					On[K] = Height >= -300 * Whole * Sign && Height <= 200 * Whole * Sign;
+				}
+			}
+		}
+		return On;
+	}
+
 	/** This test's own finder of the art director's rule 3, as ShipPaintCore.h says it in words, worked apart from the core
 	 * (breadth first and every pair, not the core's union and sorted search): a stained point (painted, wear above 0) lies
 	 * at the foot of a run with body above it when a point of its own stained patch with wear of 20 or more lies above it
@@ -406,10 +507,10 @@ namespace
 				}
 			}
 		}
-		const std::vector<bool> Beside = BesideSaltOf(Raw);
+		const std::vector<bool> Beside = BesideSaltOf(Raw), Foot = FootLineOf(Raw);
 		for (size_t K = 0; K < Raw.Points.size(); ++K)
 		{
-			Marks[K] = static_cast<uint8_t>(Marks[K] == 1 && Beside[K] ? 3 : Marks[K]);
+			Marks[K] = static_cast<uint8_t>((Marks[K] == 1 && Beside[K] ? 3 : Marks[K]) | (Foot[K] ? 4 : 0));
 		}
 		return Marks;
 	}
@@ -481,6 +582,41 @@ namespace
 		H *= 0x85EBCA6Bu;
 		H ^= H >> 13;
 		return H;
+	}
+
+	/** FNV-1a over 64 bits, a byte at a time. */
+	uint64_t Fnv(uint64_t H, const void* Data, size_t Size)
+	{
+		const unsigned char* At = static_cast<const unsigned char*>(Data);
+		for (size_t I = 0; I < Size; ++I)
+		{
+			H = (H ^ At[I]) * 1099511628211ull;
+		}
+		return H;
+	}
+
+	/** Which points her ruling of 26 November 06:31Z leaves as round 1d (638bc8ba3) painted them under the skin: every point
+	 * but a run's body (painted, wear 40 and more) under her salt on a foot's salt line (call B) and her salted rust (painted,
+	 * salt above 0, wear 20 to 39 or a run's foot under 20) with red under the paint's (NowRed, as the tree paints it: call
+	 * A's, her paint, darker; round 1d's hold left red under the paint's on the same points, 341 of them, so the count of the
+	 * points kept and their hash pin the set). On a foot's salt line and off it. */
+	bool KeptFromRound1d(const ShipPaintCore::Point& P, float NowRed)
+	{
+		const bool bFootBody = P.bFootLine && P.bPainted && P.Salt > 0 && P.Wear >= 40;
+		const bool bSaltedRust = P.bPainted && P.Salt > 0 && P.Wear > 0 && P.Wear < 40 && (P.Wear >= 20 || P.bBodyAbove);
+		return !bFootBody && !(bSaltedRust && NowRed < P.Paint.R);
+	}
+
+	/** One point's look, into a hash: her file's name, near or far, the point's number, its four floats and its four bytes
+	 * (colour and finish). */
+	uint64_t HashPoint(uint64_t H, const std::string& Name, int Far, int32 K, const float* Lin, const FColor& Byte)
+	{
+		H = Fnv(H, Name.data(), Name.size());
+		const int32 Where[2] = { Far, K };
+		H = Fnv(H, Where, sizeof(Where));
+		H = Fnv(H, Lin, 4 * sizeof(float));
+		const uint8_t Bytes[4] = { Byte.R, Byte.G, Byte.B, Byte.A };
+		return Fnv(H, Bytes, sizeof(Bytes));
 	}
 
 	/** Today's files carry no shade: a made-up one for the test (0 to 1, some exactly 1, some 0). */
@@ -797,13 +933,14 @@ int main(int Argc, char** Argv)
 		// and nothing read)
 		Check(Has(Minis, "ShipRuns = ShipPaintCore::BodyAbove(Runs, Raw->Triangles.GetData(), static_cast<size_t>(Raw->Triangles.Num()));") &&
 				  Has(Minis, "\t\t\t\tconst uint8_t RunMark = static_cast<size_t>(K) < ShipRuns.size() ? ShipRuns[static_cast<size_t>(K)] : 0;\n"
-							 "\t\t\t\tAt.bBodyAbove = (RunMark & ShipPaintCore::FootMark) != 0;\n\t\t\t\tAt.bBesideSalt = (RunMark & ShipPaintCore::SaltMark) != 0;\n") &&
-				  Has(Minis, "Run.Salt = Raw->Salt.IsValidIndex(K) ? Raw->Salt[K] : -1;") && Count(Minis, "RunMark") == 3 &&
+							 "\t\t\t\tAt.bBodyAbove = (RunMark & ShipPaintCore::FootMark) != 0;\n\t\t\t\tAt.bBesideSalt = (RunMark & ShipPaintCore::SaltMark) != 0;\n"
+							 "\t\t\t\tAt.bFootLine = (RunMark & ShipPaintCore::FootLineMark) != 0;\n") &&
+				  Has(Minis, "Run.Salt = Raw->Salt.IsValidIndex(K) ? Raw->Salt[K] : -1;") && Count(Minis, "RunMark") == 4 &&
 				  Has(Minis, "\t\t\t\tRun.FX = Raw->Facings[K].X;\n\t\t\t\tRun.FY = Raw->Facings[K].Y;\n\t\t\t\tRun.FZ = Raw->Facings[K].Z;\n") &&
 				  Has(Minis, "Run.Wear = Raw->Wear.IsValidIndex(K) ? FMath::Clamp(Raw->Wear[K], 0, 100) : 0;") &&
 				  Has(Minis, "Run.bPainted = Raw->ShipPainted.IsValidIndex(Kind) && Raw->ShipPainted[Kind];") && Count(Minis, "ShipPaintCore::BodyAbove(") == 1 &&
 				  Count(Minis, "ShipRuns") == 4,
-			"the reader marks a run's foot only under the skin (ShipPaintCore::BodyAbove, from the wear, salt and paints the branch reads, the file's triangles and each point's facing) and hands each point its marks, its foot and her salt beside it",
+			"the reader marks a run's foot only under the skin (ShipPaintCore::BodyAbove, from the wear, salt and paints the branch reads, the file's triangles and each point's facing) and hands each point its marks, its foot, her salt beside it and her foot's salt line",
 			"CampaignMiniatures.cpp");
 	}
 
@@ -955,8 +1092,10 @@ int main(int Argc, char** Argv)
 				" (today's one rust lightens " + std::to_string(TodayLighter) + ")");
 
 		// The salt as ruled (the U-boats): toward 196,200,198 by no more than 30%, less over a rust source. Her numbers are
-		// written here, not read from the core, and the core's own are pinned to them.
-		size_t Salts = 0, SaltOver = 0;
+		// written here, not read from the core, and the core's own are pinned to them. (A run's body under her salt on a foot's
+		// salt line, her ruling of 26 November 06:31Z: her salt beats the body there and lies over the clean paint, so its
+		// share is taken against the same point unworn with no salt; everywhere else against the point with no salt, as ever.)
+		size_t Salts = 0, SaltOver = 0, FootBodies = 0;
 		double MostShare = 0.0;
 		const ShipPaintCore::Linear Pale = { ShipPaintCore::ToLinear(196.0f / 255.0f), ShipPaintCore::ToLinear(200.0f / 255.0f), ShipPaintCore::ToLinear(198.0f / 255.0f), 1.0f };
 		for (const ShipFile& Ship : Files)
@@ -974,6 +1113,11 @@ int main(int Argc, char** Argv)
 				P.Soot = -1;
 				ShipPaintCore::Point Dry = P;
 				Dry.Salt = -1;
+				if (P.bFootLine && P.Wear >= 40)
+				{
+					++FootBodies;
+					Dry.Wear = 0;
+				}
 				const ShipPaintCore::Linear Before = ShipPaintCore::Paint(Dry, Pal, Skin), After = ShipPaintCore::Paint(P, Pal, Skin);
 				for (const int C : { 0, 1, 2 })
 				{
@@ -990,8 +1134,8 @@ int main(int Argc, char** Argv)
 		}
 		const bool bSaltRuled = ShipPaintCore::SaltR == 196.0f && ShipPaintCore::SaltG == 200.0f && ShipPaintCore::SaltB == 198.0f && ShipPaintCore::SaltMost == 0.30f;
 		Check(Salts > 1000 && SaltOver == 0 && bSaltRuled, "the salt toward 196,200,198 by no more than 30% (and the core's salt pinned to her 196,200,198 at 30%)",
-			std::to_string(Salts) + " salted points, the most " + Num(100.0 * MostShare) + "%; the core's " + Num(ShipPaintCore::SaltR, 0) + "," + Num(ShipPaintCore::SaltG, 0) + "," +
-				Num(ShipPaintCore::SaltB, 0) + " at " + Num(100.0 * ShipPaintCore::SaltMost, 0) + "%");
+			std::to_string(Salts) + " salted points (" + std::to_string(FootBodies) + " of them a run's body on a foot's salt line, against the point unworn), the most " + Num(100.0 * MostShare) +
+				"%; the core's " + Num(ShipPaintCore::SaltR, 0) + "," + Num(ShipPaintCore::SaltG, 0) + "," + Num(ShipPaintCore::SaltB, 0) + " at " + Num(100.0 * ShipPaintCore::SaltMost, 0) + "%");
 
 		// Submarine_GER: her weeps. Today: salmon, a tenth darker than her paint, every one the same: painted stripes. Under
 		// the ramp: dark at the source, thinning down the run, and no two neighbours alike.
@@ -1267,24 +1411,28 @@ int main(int Argc, char** Argv)
 			};
 			// (a steel point's finish as the reader marks it, by the core's SteelFinish: 128 less half its wear, the wear held to 0
 			// to 100, so 128 unworn (wear 0 or 1), which the graph reads as 254/255 metal, to 78 at the most wear, all metal; under
-			// the skin a point it paints as unworn keeps the unworn 128; a plank, 255: none. Every wear from -5 to 105, painted or
-			// not, salted or not, at a run's foot or not, each way of the options: only those finishes, today's with the skin off)
+			// the skin a point it paints as unworn keeps the unworn 128 (light wear away from a run, below 5 or under her salt; a
+			// run's body under her salt on a foot's salt line, (g)); a plank, 255: none. Every wear from -5 to 105, painted or
+			// not, salted or not, at a run's foot or not, on a foot's salt line or not, each way of the options: only those
+			// finishes, today's with the skin off)
 			const std::string Reader = ReadAll(Src + "/Campaign/CampaignMiniatures.cpp");
 			bool bCoreFinish = true;
 			for (int32 Wear = -5; Wear <= 105; ++Wear)
 			{
-				for (int Way = 0; Way < 16; ++Way)
+				for (int Way = 0; Way < 32; ++Way)
 				{
 					ShipPaintCore::Point P;
 					P.Wear = Wear;
 					P.bPainted = (Way & 1) != 0;
 					P.Salt = (Way & 2) != 0 ? 30 : -1;
 					P.bBodyAbove = (Way & 4) != 0;
+					P.bFootLine = (Way & 16) != 0;
 					ShipPaintCore::Options O;
 					O.bRustRamp = (Way & 8) != 0;
 					O.bShade = O.bRustRamp;
 					const int32 Today = 128 - std::min(100, std::max(0, Wear)) / 2;
-					const bool bUnworn = O.bRustRamp && P.bPainted && Wear > 0 && Wear < 20 && !P.bBodyAbove && (Wear < 5 || P.Salt > 0);
+					const bool bUnworn = O.bRustRamp && P.bPainted && Wear > 0 &&
+										 ((Wear < 20 && !P.bBodyAbove && (Wear < 5 || P.Salt > 0)) || (Wear >= 40 && P.bFootLine && P.Salt > 0));
 					const int32 Got = ShipPaintCore::SteelFinish(P, O);
 					bCoreFinish = bCoreFinish && Got == (bUnworn ? 128 : Today) && Got >= 78 && Got <= 128 && ShipPaintCore::PaintsAsUnworn(P, O) == bUnworn;
 				}
@@ -1499,7 +1647,7 @@ int main(int Argc, char** Argv)
 			}
 			Check(Agree == Meshes && Unlike == 0 && ShipPaintCore::RunBodyWear == 20 && ShipPaintCore::RunLongestMm == 3000 && ShipPaintCore::RunFootWideMm == 450 &&
 					  ShipPaintCore::RunRakePer10000 == 1763,
-				"the reader marks the foot of a run with body above it as this test's own finder does (20 of wear and more its body; 1 mm to 3 m higher in Z, at 45 degrees or steeper, 22.5 cm aside plus tan 10 degrees of the drop at most, on the same face; and her salt on it or beside it), on every mesh near and far, none with the skin off; the branch paints each point as the core does with them",
+				"the reader marks the foot of a run with body above it as this test's own finder does (20 of wear and more its body; 1 mm to 3 m higher in Z, at 45 degrees or steeper, 22.5 cm aside plus tan 10 degrees of the drop at most, on the same face; and her salt on it or beside it; and her foot's salt line, (g)), on every mesh near and far, none with the skin off; the branch paints each point as the core does with them",
 				std::to_string(Agree) + " of " + std::to_string(Meshes) + " meshes agree" + (Disagree.empty() ? "" : " (not " + Disagree + ")") + ", " + std::to_string(Unlike) + " points painted otherwise");
 			Check(Light > 50000 && Feet > 1000 && LightAtFeet > 500 && Bodies > 1000,
 				"the files carry light wear away from any run, and runs' feet with their body above",
@@ -1909,13 +2057,16 @@ int main(int Argc, char** Argv)
 		};
 
 		// Her order for the salt, on every salted stain of every mesh, case by case. A run's body (wear 40 and more) beats
-		// salt: it paints exactly as it would with no salt, no channel above the paint. Salt beats light wear (under 20, no
+		// salt off a foot's salt line (her ruling of 26 November 06:31Z: on it her salt beats the body, (g)): it paints exactly
+		// as it would with no salt, no channel above the paint; today's files carry their salted bodies on the U-boats' tower
+		// feet only, so the same is asked of a made-up salt laid on every painted point of every mesh (as the shade is made up
+		// in (a)), the marks made anew for it by the reader. Salt beats light wear (under 20, no
 		// body above): bit for bit the same point unworn (its salt and soot laid; its finish byte too, the unworn 128), never
 		// above her salt over the clean paint nor warmer than it (red less blue, in levels and in the bytes stored); where no
 		// soot lies, the salted clean paint's own bytes. Wear 20 to 39 and a run's foot keep round 1c's salt (rule 1 in (e)),
 		// held never warmer than her salt on the clean paint (the next check).
 		{
-			size_t Body = 0, BodyLifted = 0, Middle = 0, Feet = 0, Light = 0, LightLow = 0, LightSooted = 0, LightUnlike = 0, LightOver = 0, LightWarmer = 0;
+			size_t Body = 0, BodyLifted = 0, OnFootLine = 0, MadeUp = 0, MadeUpLifted = 0, Middle = 0, Feet = 0, Light = 0, LightLow = 0, LightSooted = 0, LightUnlike = 0, LightOver = 0, LightWarmer = 0;
 			size_t LightFinish = 0, LightWarmerBytes = 0;
 			size_t LightClean = 0, LightCleanBytes = 0, LightCleanFloats = 0;
 			double LightMostWarm = -1e9;
@@ -1927,7 +2078,7 @@ int main(int Argc, char** Argv)
 					const std::vector<uint8_t>& Marks = MarksOf(Ship, Far);
 					const ShipPaintCore::Palette Pal = PaletteOf(Raw);
 					const Painted Now = PaintNew(Raw, Skin), Clean = PaintNew(Unworn(Raw), Skin);
-					size_t Cases[5] = { 0, 0, 0, 0, 0 };
+					size_t Cases[5] = { 0, 0, 0, 0, 0 }, OnLineHere = 0;
 					for (int32 K = 0; K < Raw.Points.Num(); ++K)
 					{
 						const ShipPaintCore::Point P = PointOf(Raw, K, &Marks);
@@ -1936,7 +2087,13 @@ int main(int Argc, char** Argv)
 							continue;
 						}
 						const size_t At = static_cast<size_t>(K);
-						if (P.Wear >= 40)
+						if (P.Wear >= 40 && P.bFootLine)
+						{
+							++OnFootLine;
+							++OnLineHere;
+							++Cases[0];
+						}
+						else if (P.Wear >= 40)
 						{
 							++Body;
 							++Cases[0];
@@ -1985,14 +2142,48 @@ int main(int Argc, char** Argv)
 					}
 					if (Cases[0] + Cases[1] + Cases[2] + Cases[3] + Cases[4] > 0)
 					{
-						std::printf("  salt  %s %s: %zu salted stains: %zu a run's body (wear 40 and more, no salt lift), %zu wear 20 to 39 and %zu a run's foot under 20 (round 1c's pale lift), %zu light wear (salt as on the point unworn: %zu under 5, %zu from 5 to 19)\n",
-							Ship.Name.c_str(), Far ? "far" : "near", Cases[0] + Cases[1] + Cases[2] + Cases[3] + Cases[4], Cases[0], Cases[1], Cases[2], Cases[3] + Cases[4], Cases[3], Cases[4]);
+						std::printf("  salt  %s %s: %zu salted stains: %zu a run's body (wear 40 and more: no salt lift off a foot's salt line, %zu of them on one), %zu wear 20 to 39 and %zu a run's foot under 20 (round 1c's pale lift), %zu light wear (salt as on the point unworn: %zu under 5, %zu from 5 to 19)\n",
+							Ship.Name.c_str(), Far ? "far" : "near", Cases[0] + Cases[1] + Cases[2] + Cases[3] + Cases[4], Cases[0], OnLineHere, Cases[1], Cases[2], Cases[3] + Cases[4], Cases[3], Cases[4]);
 					}
 				}
 			}
-			Check(Body > 100 && BodyLifted == 0 && ShipPaintCore::BodyOverSaltWear == 40,
-				"her order, a run's body beats salt: every salted point with wear 40 and more paints as it would with no salt (bit for bit), no channel above the paint",
-				std::to_string(Body) + " body points under her salt, " + std::to_string(BodyLifted) + " with a salt lift");
+			// (the made-up salt: 1 to 60 on two points in three, none on the rest, by the point's number; the marks made anew)
+			for (const ShipFile& Ship : Files)
+			{
+				for (int Far = 0; Far < 2; ++Far)
+				{
+					FRawShip Raw = Ship.Mesh[Far];
+					Raw.Salt.clear();
+					for (int32 K = 0; K < Raw.Points.Num(); ++K)
+					{
+						const uint32_t H = ShadeHash(K, 1031u);
+						Raw.Salt.Add(H % 3u == 0u ? 0 : 1 + static_cast<int32>(H % 60u));
+					}
+					const std::vector<uint8_t> Made = ReaderRuns(Raw, Skin);
+					const ShipPaintCore::Palette Pal = PaletteOf(Raw);
+					for (int32 K = 0; K < Raw.Points.Num(); ++K)
+					{
+						const ShipPaintCore::Point P = PointOf(Raw, K, &Made);
+						if (!P.bPainted || P.Salt <= 0 || P.Wear < 40 || P.bFootLine)
+						{
+							continue;
+						}
+						++MadeUp;
+						ShipPaintCore::Point Dry = P;
+						Dry.Salt = -1;
+						const ShipPaintCore::Linear With = ShipPaintCore::Paint(P, Pal, Skin), Without = ShipPaintCore::Paint(Dry, Pal, Skin);
+						const float A[4] = { With.R, With.G, With.B, With.A }, B[4] = { Without.R, Without.G, Without.B, Without.A };
+						MadeUpLifted += std::memcmp(A, B, sizeof(A)) != 0 || With.R > P.Paint.R || With.G > P.Paint.G || With.B > P.Paint.B ||
+												ShipPaintCore::SteelFinish(P, Skin) != ShipPaintCore::SteelFinish(Dry, Skin)
+											? 1
+											: 0;
+					}
+				}
+			}
+			Check(Body + MadeUp > 100 && BodyLifted == 0 && MadeUpLifted == 0 && ShipPaintCore::BodyOverSaltWear == 40,
+				"her order, a run's body beats salt off a foot's salt line: every salted point with wear 40 and more there paints as it would with no salt (bit for bit), no channel above the paint; in today's files and under a made-up salt on every mesh",
+				std::to_string(Body) + " body points under her salt off a foot's salt line in today's files (" + std::to_string(OnFootLine) + " on one, (g)), " + std::to_string(BodyLifted) +
+					" with a salt lift; under the made-up salt " + std::to_string(MadeUp) + ", " + std::to_string(MadeUpLifted) + " with a salt lift or another finish byte");
 			Check(Light > 1000 && LightUnlike == 0 && LightFinish == 0 && LightOver == 0 && LightWarmer == 0 && LightWarmerBytes == 0 && LightClean > 100 && LightCleanBytes == LightClean &&
 					  LightCleanFloats == LightClean,
 				"salt beats light wear: every salted point with wear under 20 and no body above paints bit for bit as the same point unworn (its salt and soot laid, its finish byte too), never above her salt over the clean paint nor warmer than it, in levels or in the bytes stored; with no soot, bit for bit her salt over the clean paint",
@@ -2007,11 +2198,13 @@ int main(int Argc, char** Argv)
 		// salt above 0, wear under 40, the body beating salt), worn or not, on every mesh near and far: red less blue no
 		// higher than her salt makes the clean paint, in levels as she measures them and in the mesh's own bytes against the
 		// salted clean paint's own bytes. Her salted rust (wear 20 to 39, and a run's foot) that the salt cannot lift in every
-		// channel is held so: rule 1 keeps it under the paint, and only red comes down. And on every triangle with a pale
+		// channel is held so, under the paint (her paint, darker: her call A of 06:31Z, (g); round 1d brought red alone down),
+		// and its red under the paint's. And on every triangle with a pale
 		// salted corner (her salt on it, at or above its paint in every channel and above in one), no corner of her salted
 		// rust of wear 20 to 39 is warm (red at or above its paint, blue below it), in floats or in the bytes stored: the 14
 		// points at the tower's foot she counted as 122,112,110 beside her salt, and every one like them. The other warm
-		// corners such triangles have are printed by kind: a run's body (wear 40 and more, her order: it beats salt), a run's
+		// corners such triangles have are printed by kind: a run's body (wear 40 and more, her order: it beats salt off a
+		// foot's salt line), a run's
 		// foot or light wear her salt lies on (within her salt's room), and points with no salt.
 		{
 			size_t Lies = 0, Warmer = 0, WarmerBytes = 0, Rust = 0, Unlifted = 0, RedHeld = 0, PaleTris = 0, WarmRust = 0, RustOnPale = 0;
@@ -2113,7 +2306,7 @@ int main(int Argc, char** Argv)
 				}
 			}
 			Check(Lies > 4000 && Rust > 300 && Unlifted > 200 && RedHeld > 200 && Warmer == 0 && WarmerBytes == 0,
-				"hold the rust beside salt: every point her salt lies on (wear under 40), rust or light wear or unworn, no warmer than her salt on the clean paint, in levels and in the bytes stored, on every mesh; her salted rust the salt cannot lift in every channel held so, only red down",
+				"hold the rust beside salt: every point her salt lies on (wear under 40), rust or light wear or unworn, no warmer than her salt on the clean paint, in levels and in the bytes stored, on every mesh; her salted rust the salt cannot lift in every channel held so, red under the paint's (her paint, darker: (g))",
 				std::to_string(Lies) + " points her salt lies on, " + std::to_string(Warmer) + " warmer (red less blue " + Num(MostWarm, 3) + " against it at most), " + std::to_string(WarmerBytes) +
 					" warmer in the bytes stored (" + std::to_string(MostWarmBytes) + " levels at most); " + std::to_string(Rust) + " salted rust (wear 20 to 39, or a run's foot), " + std::to_string(Unlifted) +
 					" under the paint, " + std::to_string(RedHeld) + " of them with red under the paint's");
@@ -2388,6 +2581,562 @@ int main(int Argc, char** Argv)
 						 std::abs(Sum[0][1].B - Paint.B) < 1e-6;
 			}
 			Check(bApart, "the destroyer's lightly worn patches stand apart from her plain side: the plain side (wear 1 to 4) at her paint, the patches 3 to 6% darker on the mean", Told);
+		}
+
+		// ---- (g), inside (f)'s block: her salt as (f) works it (SaltedOf, SameColour, Unworn), under the same skin
+		std::printf("(g) Her ruling of 26 November 06:31Z on round 1d: call A, her salted rust her paint, darker; call B, on a foot's salt line her salt beats a run's body\n");
+		// (every mesh painted once under the skin, for the checks below)
+		std::vector<std::array<Painted, 2>> Skinned(Files.size());
+		for (size_t F = 0; F < Files.size(); ++F)
+		{
+			for (int Far = 0; Far < 2; ++Far)
+			{
+				Skinned[F][static_cast<size_t>(Far)] = PaintNew(Files[F].Mesh[Far], Skin);
+			}
+		}
+		const auto SkinnedOf = [&Files, &Skinned](const ShipFile& Ship, int Far) -> const Painted&
+		{ return Skinned[static_cast<size_t>(&Ship - Files.data())][static_cast<size_t>(Far)]; };
+		const auto FacesOut = [](const FRawShip& Raw, int32 K)
+		{
+			const FVector& F = Raw.Facings[K];
+			return !(F.Z > 0.0 && F.Z >= 0.9 * std::sqrt(F.X * F.X + F.Y * F.Y + F.Z * F.Z));
+		};
+		const auto PaintNameOf = [](const ShipFile& Ship, const FRawShip& Raw, int32 K)
+		{
+			const size_t Kind = static_cast<size_t>(FMath::Clamp(Raw.Paints[K], 0, Raw.PaintColours.Num() - 1));
+			return Kind < Ship.PaintNames.size() ? Ship.PaintNames[Kind] : std::string();
+		};
+
+		// Her foot's salt line ("your strip, the tower's paint 1.4 to 1.8 m up, and the like foot of any deckhouse or mount"),
+		// one rule on every mesh by its shape alone, never by a name (ShipPaintCore.h; the reader marks it as this test's own
+		// finder, FootLineOf, does: (e)'s agreement of the marks), counted mesh by mesh and by paint. On it: every point of the
+		// U-boats' towers' paint (upper) facing out that her salt lies on, every salted body of today's files, every salted
+		// point of Submarine_GER's strip (her tower's paint facing out, 1.4 to 1.8 m up); no point of a casing's runs (hull.on).
+		{
+			size_t OnLine = 0, Meshes = 0, WithLine = 0, Casing = 0, Tower = 0, TowerOn = 0, Bodies = 0, BodiesOn = 0, Strip = 0, StripOn = 0, StripSalted = 0, StripSaltedOn = 0;
+			for (const ShipFile& Ship : Files)
+			{
+				for (int Far = 0; Far < 2; ++Far)
+				{
+					const FRawShip& Raw = Ship.Mesh[Far];
+					const std::vector<uint8_t>& Marks = MarksOf(Ship, Far);
+					size_t Here = 0, HereSalted = 0;
+					std::map<std::string, size_t> ByPaint;
+					for (int32 K = 0; K < Raw.Points.Num(); ++K)
+					{
+						const ShipPaintCore::Point P = PointOf(Raw, K, &Marks);
+						const std::string Name = PaintNameOf(Ship, Raw, K);
+						const bool bOut = FacesOut(Raw, K);
+						if (P.bFootLine)
+						{
+							++Here;
+							HereSalted += P.Salt > 0 ? 1 : 0;
+							++ByPaint[Name];
+							Casing += Name == "hull.on" ? 1 : 0;
+						}
+						if (P.bPainted && P.Salt > 0 && P.Wear >= 40)
+						{
+							++Bodies;
+							BodiesOn += P.bFootLine ? 1 : 0;
+						}
+						if (Far == 0 && Ship.Name.rfind("Submarine", 0) == 0 && Name == "upper" && bOut && P.bPainted && P.Salt > 0)
+						{
+							++Tower;
+							TowerOn += P.bFootLine ? 1 : 0;
+						}
+						if (Far == 0 && Ship.Name == "Submarine_GER" && Name == "upper" && bOut && P.Z >= 1.4 && P.Z <= 1.8)
+						{
+							++Strip;
+							StripOn += P.bFootLine ? 1 : 0;
+							StripSalted += P.Salt > 0 ? 1 : 0;
+							StripSaltedOn += P.Salt > 0 && P.bFootLine ? 1 : 0;
+						}
+					}
+					std::string Kinds;
+					for (const auto& [Name, N] : ByPaint)
+					{
+						Kinds += (Kinds.empty() ? "" : ", ") + Name + " " + std::to_string(N);
+					}
+					std::printf("  foot  %s %s: %zu of %d points on her foot's salt line (%s), %zu of them salted\n", Ship.Name.c_str(), Far ? "far" : "near", Here, Raw.Points.Num(), Kinds.c_str(), HereSalted);
+					OnLine += Here;
+					++Meshes;
+					WithLine += Here > 0 ? 1 : 0;
+				}
+			}
+			Check(Meshes == 52 && WithLine == Meshes && Tower == 864 && TowerOn == Tower && Bodies > 150 && BodiesOn == Bodies && Strip > 500 && StripSalted > 200 && StripSaltedOn == StripSalted &&
+					  Casing == 0 && ShipPaintCore::FootLineHighMm == 300 && ShipPaintCore::FootLineSunkMm == 200 && ShipPaintCore::FootLineReachMm == 450 && ShipPaintCore::FootLineStepMm == 25 &&
+					  ShipPaintCore::FootLineUp == 0.9,
+				"her foot's salt line by one rule on every mesh, by its shape (a painted point facing out, stepping out level from it 25 mm at a time to 450 mm onto a deck from 300 mm below it to 200 mm above it): on it every salted point of the U-boats' towers facing out, every salted body of today's files, every salted point of Submarine_GER's strip (her tower's paint 1.4 to 1.8 m up); none of a casing's runs",
+				std::to_string(OnLine) + " points on it on " + std::to_string(WithLine) + " of " + std::to_string(Meshes) + " meshes; the towers' salted paint facing out " + std::to_string(TowerOn) + " of " +
+					std::to_string(Tower) + ", the salted bodies " + std::to_string(BodiesOn) + " of " + std::to_string(Bodies) + "; Submarine_GER's strip " + std::to_string(StripOn) + " of " + std::to_string(Strip) +
+					" points (salted " + std::to_string(StripSaltedOn) + " of " + std::to_string(StripSalted) + "); " + std::to_string(Casing) + " of a casing's runs");
+		}
+
+		// Call B: on a foot's salt line her salt beats a run's body. Every body point there (wear 40 and more) her salt lies on
+		// paints bit for bit as the same point unworn, its salt and soot laid (its floats, its bytes, its finish byte the
+		// unworn 128): her salt as it shows on light wear under it, never above her salt on the clean paint nor warmer than it,
+		// in levels or in the bytes stored. In today's files (the U-boats' tower feet: no surface ship's file has a body on a
+		// foot's salt line), and on every mesh under (f)'s made-up salt with a made-up wear of 40 to 100 on one point in three
+		// (the marks made anew by the reader): there too, off a foot's salt line, a body under salt paints as it would with no
+		// salt, bit for bit, its finish byte too (her order, (f)). None still showing a body, counted mesh by mesh.
+		{
+			size_t Found = 0, Still = 0, Over = 0, Warmer = 0, WarmerBytes = 0, MadeUp = 0, MadeUpStill = 0, MadeUpMeshes = 0, MadeOff = 0, MadeOffSalted = 0, MadeOffMeshes = 0;
+			for (int Made = 0; Made < 2; ++Made)
+			{
+				for (const ShipFile& Ship : Files)
+				{
+					for (int Far = 0; Far < 2; ++Far)
+					{
+						FRawShip Given;
+						const FRawShip* Raw = &Ship.Mesh[Far];
+						if (Made)
+						{
+							Given = *Raw;
+							Given.Salt.clear();
+							for (int32 K = 0; K < Given.Points.Num(); ++K)
+							{
+								const uint32_t H = ShadeHash(K, 1031u), W = ShadeHash(K, 4099u);
+								Given.Salt.Add(H % 3u == 0u ? 0 : 1 + static_cast<int32>(H % 60u));
+								if (W % 3u == 0u && K < Given.Wear.Num())
+								{
+									Given.Wear[K] = 40 + static_cast<int32>(W % 61u);
+								}
+							}
+							Raw = &Given;
+						}
+						const std::vector<uint8_t> Marks = Made ? ReaderRuns(*Raw, Skin) : MarksOf(Ship, Far);
+						const Painted Now = Made ? PaintNew(*Raw, Skin) : SkinnedOf(Ship, Far), Clean = PaintNew(Unworn(*Raw), Skin);
+						const ShipPaintCore::Palette Pal = PaletteOf(*Raw);
+						size_t Here = 0, HereStill = 0, HereOff = 0;
+						for (int32 K = 0; K < Raw->Points.Num(); ++K)
+						{
+							const ShipPaintCore::Point P = PointOf(*Raw, K, &Marks);
+							if (!P.bPainted || P.Salt <= 0 || P.Wear < 40)
+							{
+								continue;
+							}
+							if (!P.bFootLine)
+							{
+								// (off the line her order stands: the body as with no salt)
+								ShipPaintCore::Point Dry = P;
+								Dry.Salt = -1;
+								const ShipPaintCore::Linear With = ShipPaintCore::Paint(P, Pal, Skin), Without = ShipPaintCore::Paint(Dry, Pal, Skin);
+								const float A[4] = { With.R, With.G, With.B, With.A }, B[4] = { Without.R, Without.G, Without.B, Without.A };
+								++HereOff;
+								MadeOffSalted += std::memcmp(A, B, sizeof(A)) != 0 || std::memcmp(A, &Now.Linear[4 * static_cast<size_t>(K)], sizeof(A)) != 0 ||
+														 ShipPaintCore::SteelFinish(P, Skin) != ShipPaintCore::SteelFinish(Dry, Skin)
+													 ? 1
+													 : 0;
+								continue;
+							}
+							const size_t At = static_cast<size_t>(K);
+							++Here;
+							HereStill += !SameColour(Now, Clean, At) || Now.Colours[At].A != Clean.Colours[At].A || Now.Colours[At].A != 128 || ShipPaintCore::SteelFinish(P, Skin) != 128 ? 1 : 0;
+							const std::array<float, 3> Salted = SaltedOf(P);
+							Over += Now.Linear[4 * At] > Salted[0] || Now.Linear[4 * At + 1] > Salted[1] || Now.Linear[4 * At + 2] > Salted[2] ? 1 : 0;
+							Warmer += (Level(Now.Linear[4 * At]) - Level(Now.Linear[4 * At + 2])) - (Level(Salted[0]) - Level(Salted[2])) > 0.001 ? 1 : 0;
+							WarmerBytes += (static_cast<int>(Now.Colours[At].R) - static_cast<int>(Now.Colours[At].B)) -
+													   (static_cast<int>(PaintShim::LinearToSrgb(Salted[0])) - static_cast<int>(PaintShim::LinearToSrgb(Salted[2]))) >
+												   0
+											   ? 1
+											   : 0;
+						}
+						if (Made)
+						{
+							MadeUp += Here;
+							MadeUpStill += HereStill;
+							MadeUpMeshes += Here > 0 ? 1 : 0;
+							MadeOff += HereOff;
+							MadeOffMeshes += HereOff > 0 ? 1 : 0;
+						}
+						else
+						{
+							Found += Here;
+							Still += HereStill;
+							if (Here > 0)
+							{
+								std::printf("  callB %s %s: %zu salted body points on her foot's salt line, as the point unworn (her salt laid), %zu still showing a body\n", Ship.Name.c_str(),
+									Far ? "far" : "near", Here, HereStill);
+							}
+						}
+					}
+				}
+			}
+			Check(Found > 150 && Still == 0 && MadeUp > 10000 && MadeUpMeshes == 52 && MadeUpStill == 0 && MadeOff > 50000 && MadeOffMeshes == 52 && MadeOffSalted == 0 && Over == 0 && Warmer == 0 &&
+					  WarmerBytes == 0,
+				"call B: on a foot's salt line her salt beats a run's body: every body point there under her salt paints bit for bit as the same point unworn, her salt and soot laid, finish byte 128, never above nor warmer than her salt on the clean paint (in levels and in the bytes stored); none still showing a body, in today's files and under a made-up salt and wear on every mesh, where off the line no body shows her salt",
+				std::to_string(Found) + " salted body points on it in today's files, " + std::to_string(Still) + " still showing a body; under the made-up salt and wear " + std::to_string(MadeUp) + " on " +
+					std::to_string(MadeUpMeshes) + " meshes, " + std::to_string(MadeUpStill) + " still showing a body, and off the line " + std::to_string(MadeOff) + " salted bodies on " +
+					std::to_string(MadeOffMeshes) + " meshes, " + std::to_string(MadeOffSalted) + " showing her salt; " + std::to_string(Over) + " above her salt on the clean paint, " +
+					std::to_string(Warmer) + " warmer, " + std::to_string(WarmerBytes) + " warmer in the bytes stored");
+		}
+
+		// Call A: her salted rust (painted, salt above 0, wear 20 to 39 or a run's foot under 20) that the salt cannot lift, red
+		// under the paint's (round 1d's cold grey, red alone brought down), is her paint, darker: there is one factor k under 1
+		// with every channel of the bytes stored within one level of the paint's levels times k, and its green less red and blue
+		// less green within one level of the paint's own times k, so no channel's order turns past a level (no lean to teal: no
+		// green at or over blue on a paint whose blue is over its green); no channel above the paint, never warmer than her salt
+		// on the clean paint (the hold, (f)). All 341 of round 1d's option (b) (its hold brought red down on these alone, under
+		// the paint's: 135 on Submarine, 96 on Submarine_GER, 110 on Submarine_USA, near; the hash below pins the set). Counted
+		// mesh by mesh, with the k it can take (the middle of its range); and
+		// Submarine_GER's point 7347 (near; wear 20, salt 23, on her 106,114,120; 92,104,104 in round 1d) within one level of
+		// her "about 92,99,104" in every channel.
+		// And against round 1d, held open for the art director: round 1d's colour at each of the 341 rebuilt from the core's
+		// own steps as round 1d laid them on her salted rust (the ramp, rule 1, her salt short of a source, the soot, the
+		// deck's hold, and her hold beside salt, Held, which brought red alone down), the very colour HerPaintDarker works
+		// from (its result from it bit for bit the colour painted), held to round 1d's own painting of the same points by a
+		// hash of that painting (638bc8ba3's core and reader's branch). Where no copy of her paint at round 1d's darkness is at
+		// her paint's balance and no warmer than her salt on the clean paint (red less blue in levels, which a darker copy of a
+		// cool paint brings closer), the darkest factor that is: 46 points end brighter than round 1d left them, red up on 93,
+		// green on 25, blue on 108. Her call, not the builder's: pinned here so it neither grows nor shrinks unseen.
+		{
+			size_t Rust = 0, Darker = 0, Unbalanced = 0, Teal = 0, Above = 0, Warmer = 0, OwnGaps = 0;
+			size_t Rebuilt = 0, Brighter = 0, RedUp = 0, GreenUp = 0, BlueUp = 0, AllUp = 0;
+			double KLeast = 9.0, KMost = -9.0, MostBrighter = 0.0, RatioSum = 0.0;
+			std::map<std::string, size_t> BrighterBy;
+			uint64_t WasHash = 1469598103934665603ull;
+			std::string Example = "not found", Shown;
+			bool bExample = false;
+			// (as the core's Lerp works each channel)
+			const auto LerpLinear = [](const ShipPaintCore::Linear& A, const ShipPaintCore::Linear& B, float Share)
+			{
+				const float From[4] = { A.R, A.G, A.B, A.A }, To[4] = { B.R, B.G, B.B, B.A };
+				float Out[4];
+				for (int C = 0; C < 4; ++C)
+				{
+					const float Apart = To[C] - From[C];
+					const float Part = Apart * Share;
+					Out[C] = From[C] + Part;
+				}
+				return ShipPaintCore::Linear{ Out[0], Out[1], Out[2], Out[3] };
+			};
+			for (const ShipFile& Ship : Files)
+			{
+				for (int Far = 0; Far < 2; ++Far)
+				{
+					const FRawShip& Raw = Ship.Mesh[Far];
+					const std::vector<uint8_t>& Marks = MarksOf(Ship, Far);
+					const Painted& Now = SkinnedOf(Ship, Far);
+					const ShipPaintCore::Palette Pal = PaletteOf(Raw);
+					size_t Here = 0, HereRust = 0, HereOff = 0;
+					for (int32 K = 0; K < Raw.Points.Num(); ++K)
+					{
+						const ShipPaintCore::Point P = PointOf(Raw, K, &Marks);
+						const size_t At = static_cast<size_t>(K);
+						const FColor& Byte = Now.Colours[At];
+						if (!P.bPainted || P.Salt <= 0 || P.Wear <= 0 || P.Wear >= 40 || (P.Wear < 20 && !P.bBodyAbove))
+						{
+							continue;
+						}
+						++Rust;
+						++HereRust;
+						if (!(Now.Linear[4 * At] < P.Paint.R))
+						{
+							continue;
+						}
+						++Darker;
+						++Here;
+						const double Got[3] = { static_cast<double>(Byte.R), static_cast<double>(Byte.G), static_cast<double>(Byte.B) };
+						const double Own[3] = { Level(P.Paint.R), Level(P.Paint.G), Level(P.Paint.B) };
+						double Lo = 0.0, Hi = 1.0;
+						for (int C = 0; C < 3; ++C)
+						{
+							if (Own[C] > 0.0)
+							{
+								Lo = std::max(Lo, (Got[C] - 1.0) / Own[C]);
+								Hi = std::min(Hi, (Got[C] + 1.0) / Own[C]);
+							}
+							else if (Got[C] > 1.0)
+							{
+								Lo = 2.0;
+							}
+						}
+						bool bOwnGaps = true;
+						for (int C = 1; C < 3; ++C)
+						{
+							const double Gap = Got[C] - Got[C - 1], PaintGap = Own[C] - Own[C - 1];
+							bOwnGaps = bOwnGaps && std::abs(Gap - PaintGap) <= 1.0;
+							if (PaintGap > 0.0)
+							{
+								Lo = std::max(Lo, (Gap - 1.0) / PaintGap);
+								Hi = std::min(Hi, (Gap + 1.0) / PaintGap);
+							}
+							else if (PaintGap < 0.0)
+							{
+								Lo = std::max(Lo, (Gap + 1.0) / PaintGap);
+								Hi = std::min(Hi, (Gap - 1.0) / PaintGap);
+							}
+							else if (std::abs(Gap) > 1.0)
+							{
+								Lo = 2.0;
+							}
+						}
+						const bool bBalanced = Lo <= Hi + 1e-9;
+						Unbalanced += bBalanced ? 0 : 1;
+						HereOff += bBalanced ? 0 : 1;
+						OwnGaps += bOwnGaps ? 1 : 0;
+						if (bBalanced)
+						{
+							KLeast = std::min(KLeast, 0.5 * (Lo + Hi));
+							KMost = std::max(KMost, 0.5 * (Lo + Hi));
+						}
+						Teal += Own[2] > Own[1] + 1.0 && Got[1] >= Got[2] ? 1 : 0;
+						Above += Byte.R > PaintShim::LinearToSrgb(P.Paint.R) || Byte.G > PaintShim::LinearToSrgb(P.Paint.G) || Byte.B > PaintShim::LinearToSrgb(P.Paint.B) ? 1 : 0;
+						const std::array<float, 3> Salted = SaltedOf(P);
+						Warmer += (static_cast<int>(Byte.R) - static_cast<int>(Byte.B)) - (static_cast<int>(PaintShim::LinearToSrgb(Salted[0])) - static_cast<int>(PaintShim::LinearToSrgb(Salted[2]))) > 0 ||
+										  (Level(Now.Linear[4 * At]) - Level(Now.Linear[4 * At + 2])) - (Level(Salted[0]) - Level(Salted[2])) > 0.001
+									  ? 1
+									  : 0;
+						if (Far == 0 && Ship.Name == "Submarine_GER" && K == 7347)
+						{
+							const FColor Paint(PaintShim::LinearToSrgb(P.Paint.R), PaintShim::LinearToSrgb(P.Paint.G), PaintShim::LinearToSrgb(P.Paint.B), 255);
+							Example = "Submarine_GER's point 7347 (wear " + std::to_string(P.Wear) + ", salt " + std::to_string(P.Salt) + ", on her " + std::to_string(Paint.R) + "," +
+									  std::to_string(Paint.G) + "," + std::to_string(Paint.B) + "): 92,104,104 in round 1d, now " + std::to_string(Byte.R) + "," + std::to_string(Byte.G) + "," +
+									  std::to_string(Byte.B) + " (k " + Num(0.5 * (Lo + Hi), 3) + ")";
+							bExample = bBalanced && P.Wear == 20 && P.Salt == 23 && Paint.R == 106 && Paint.G == 114 && Paint.B == 120 && std::abs(Byte.R - 92) <= 1 && std::abs(Byte.G - 99) <= 1 &&
+									   std::abs(Byte.B - 104) <= 1;
+						}
+						// (round 1d's colour here, rebuilt from the core's own steps as Paint lays them on salted rust under the skin)
+						ShipPaintCore::Laid How;
+						ShipPaintCore::Linear Was = ShipPaintCore::NoneAbove(ShipPaintCore::Ramp(P, &How), P.Paint);
+						Was = LerpLinear(Was, Pale, ShipPaintCore::SaltMost * static_cast<float>(std::min(P.Salt, 100)) / 100.0f * (1.0f - How.Over));
+						if (P.Soot > 4 && Pal.bSoot)
+						{
+							Was = LerpLinear(Was, Pal.Soot, 0.6f * std::min(P.Soot, 100) / 100.0f);
+						}
+						if (P.bDeckWood)
+						{
+							Was = ShipPaintCore::NoneAbove(Was, ShipPaintCore::DeckWoodMost());
+						}
+						const ShipPaintCore::Linear SaltedLinear = { Salted[0], Salted[1], Salted[2], 1.0f };
+						bool bRedHeld = false;
+						Was = ShipPaintCore::Held(Was, P.Paint, SaltedLinear, true, &bRedHeld);
+						const ShipPaintCore::Linear Again = ShipPaintCore::HerPaintDarker(P.Paint, Was, SaltedLinear);
+						const float AgainFloats[4] = { Again.R, Again.G, Again.B, Again.A }, WasFloats[4] = { Was.R, Was.G, Was.B, Was.A };
+						Rebuilt += bRedHeld && std::memcmp(AgainFloats, &Now.Linear[4 * At], sizeof(AgainFloats)) == 0 ? 1 : 0;
+						const FColor WasByte(PaintShim::LinearToSrgb(Was.R), PaintShim::LinearToSrgb(Was.G), PaintShim::LinearToSrgb(Was.B), 255);
+						WasHash = HashPoint(WasHash, Ship.Name, Far, K, WasFloats, WasByte);
+						const ShipPaintCore::Linear NowLinear = { Now.Linear[4 * At], Now.Linear[4 * At + 1], Now.Linear[4 * At + 2], Now.Linear[4 * At + 3] };
+						const double Ratio = static_cast<double>(ShipPaintCore::Brightness(NowLinear)) / static_cast<double>(ShipPaintCore::Brightness(Was));
+						RatioSum += Ratio;
+						if (Ratio > 1.0)
+						{
+							++Brighter;
+							++BrighterBy[Ship.Name];
+							MostBrighter = std::max(MostBrighter, Ratio - 1.0);
+						}
+						RedUp += Byte.R > WasByte.R ? 1 : 0;
+						GreenUp += Byte.G > WasByte.G ? 1 : 0;
+						BlueUp += Byte.B > WasByte.B ? 1 : 0;
+						AllUp += Byte.R > WasByte.R && Byte.G > WasByte.G && Byte.B > WasByte.B ? 1 : 0;
+						if (Far == 0 && ((Ship.Name == "Submarine" && K == 9517) || (Ship.Name == "Submarine_USA" && K == 11034)))
+						{
+							Shown += "; " + Ship.Name + "'s point " + std::to_string(K) + " (wear " + std::to_string(P.Wear) + ", salt " + std::to_string(P.Salt) + ", on her " +
+									 std::to_string(PaintShim::LinearToSrgb(P.Paint.R)) + "," + std::to_string(PaintShim::LinearToSrgb(P.Paint.G)) + "," +
+									 std::to_string(PaintShim::LinearToSrgb(P.Paint.B)) + "): " + std::to_string(WasByte.R) + "," + std::to_string(WasByte.G) + "," + std::to_string(WasByte.B) +
+									 " in round 1d, now " + std::to_string(Byte.R) + "," + std::to_string(Byte.G) + "," + std::to_string(Byte.B) + ", " + Num(100.0 * (Ratio - 1.0), 1) + "% brighter";
+						}
+					}
+					if (HereRust > 0)
+					{
+						std::printf("  callA %s %s: %zu salted rust points, %zu of them red under the paint's (the salt cannot lift them): her paint, darker, %zu not at its balance\n",
+							Ship.Name.c_str(), Far ? "far" : "near", HereRust, Here, HereOff);
+					}
+				}
+			}
+			Check(Darker == 341 && Unbalanced == 0 && Teal == 0 && Above == 0 && Warmer == 0 && bExample,
+				"call A: her salted rust the salt cannot lift (round 1d's option (b), its hold's 341 points with red under the paint's) is her paint, darker: every channel within one level of the paint times one k under 1, green less red and blue less green within one level of the paint's own times k (no lean to teal), no channel above the paint, never warmer than her salt on the clean paint; Submarine_GER's 7347 within a level of her 92,99,104",
+				std::to_string(Rust) + " salted rust points, " + std::to_string(Darker) + " of them red under the paint's, " + std::to_string(Unbalanced) + " not at the paint's balance, " +
+					std::to_string(Teal) + " leaning teal, " + std::to_string(Above) + " above the paint, " + std::to_string(Warmer) + " warmer; k from " + Num(KLeast, 3) + " to " + Num(KMost, 3) + " (" +
+					std::to_string(OwnGaps) + " of them with their gaps within a level of the paint's own unscaled too); " + Example);
+			std::string By;
+			for (const auto& [Name, N] : BrighterBy)
+			{
+				By += (By.empty() ? "" : ", ") + Name + " " + std::to_string(N);
+			}
+			const uint64_t Round1dCallA = 0x2f451fa9ae1c65cdull;
+			char Said[32];
+			std::snprintf(Said, sizeof(Said), "%016llx", static_cast<unsigned long long>(WasHash));
+			Check(Darker == 341 && Rebuilt == Darker && WasHash == Round1dCallA && Brighter == 46 && BrighterBy["Submarine"] == 28 && BrighterBy["Submarine_GER"] == 3 &&
+					  BrighterBy["Submarine_USA"] == 15 && RedUp == 93 && GreenUp == 25 && BlueUp == 108 && AllUp == 25,
+				"call A against round 1d, pinned while it waits on the art director's ruling: round 1d's colour at each of the 341 rebuilt from the core's own steps (call A's result from it the colour painted, bit for bit; its hash round 1d's own painting's); where no copy of her paint at round 1d's darkness is both at her paint's balance and no warmer than her salt on the clean paint, the darkest that is, so 46 end brighter than round 1d (Submarine 28, Submarine_GER 3, Submarine_USA 15), red up on 93, green on 25, blue on 108, every channel up on 25: no more and no fewer until she rules",
+				std::to_string(Rebuilt) + " of " + std::to_string(Darker) + " rebuilt, hash " + Said + "; " + std::to_string(Brighter) + " brighter than round 1d (" + By + "), by up to " +
+					Num(100.0 * MostBrighter, 1) + "%; red up on " + std::to_string(RedUp) + ", green on " + std::to_string(GreenUp) + ", blue on " + std::to_string(BlueUp) + ", all three on " +
+					std::to_string(AllUp) + "; over all " + std::to_string(Darker) + ", " + Num(100.0 * (1.0 - RatioSum / static_cast<double>(std::max<size_t>(Darker, 1))), 1) +
+					"% darker than round 1d on the mean" + Shown);
+		}
+
+		// Her pass lines on Submarine_GER's strip (her tower's paint facing out, 1.4 to 1.8 m up: the foot's window in 04),
+		// counted at the points the mesh stores, as the render's pixels lie between them: on the strip and at every corner of
+		// every triangle with a corner on it, none with red 6 or more over blue (her line: under 30 pixels) and none within 6
+		// levels of 122,112,110 (her line: none); and none of those corners with red at or above blue, so that under a neutral
+		// light no pixel between them has red over blue at all.
+		{
+			size_t StripPoints = 0, Triangles = 0, Corners = 0, Warm = 0, Salmon = 0, RedOver = 0, CornerWarm = 0, CornerSalmon = 0, CornerRedOver = 0;
+			int WarmestStrip = -999, WarmestCorner = -999;
+			for (const ShipFile& Ship : Files)
+			{
+				if (Ship.Name != "Submarine_GER")
+				{
+					continue;
+				}
+				const FRawShip& Raw = Ship.Mesh[0];
+				const Painted& Now = SkinnedOf(Ship, 0);
+				std::vector<bool> OnStrip(Raw.Points.size(), false), Corner(Raw.Points.size(), false);
+				const auto Count = [&Now](int32 K, size_t& W, size_t& S, size_t& R, int& Most)
+				{
+					const FColor& Byte = Now.Colours[static_cast<size_t>(K)];
+					const int RedLessBlue = static_cast<int>(Byte.R) - static_cast<int>(Byte.B);
+					W += RedLessBlue >= 6 ? 1 : 0;
+					S += std::abs(Byte.R - 122) <= 6 && std::abs(Byte.G - 112) <= 6 && std::abs(Byte.B - 110) <= 6 ? 1 : 0;
+					R += RedLessBlue >= 0 ? 1 : 0;
+					Most = std::max(Most, RedLessBlue);
+				};
+				for (int32 K = 0; K < Raw.Points.Num(); ++K)
+				{
+					const ShipPaintCore::Point P = PointOf(Raw, K);
+					if (P.bPainted && PaintNameOf(Ship, Raw, K) == "upper" && FacesOut(Raw, K) && P.Z >= 1.4 && P.Z <= 1.8)
+					{
+						OnStrip[static_cast<size_t>(K)] = true;
+						++StripPoints;
+						Count(K, Warm, Salmon, RedOver, WarmestStrip);
+					}
+				}
+				for (size_t T = 0; T + 2 < Raw.Triangles.size(); T += 3)
+				{
+					const int32 A = Raw.Triangles[T], B = Raw.Triangles[T + 1], C = Raw.Triangles[T + 2];
+					if (std::min({ A, B, C }) >= 0 && std::max({ A, B, C }) < Raw.Points.Num() &&
+						(OnStrip[static_cast<size_t>(A)] || OnStrip[static_cast<size_t>(B)] || OnStrip[static_cast<size_t>(C)]))
+					{
+						++Triangles;
+						Corner[static_cast<size_t>(A)] = Corner[static_cast<size_t>(B)] = Corner[static_cast<size_t>(C)] = true;
+					}
+				}
+				for (int32 K = 0; K < Raw.Points.Num(); ++K)
+				{
+					if (Corner[static_cast<size_t>(K)])
+					{
+						++Corners;
+						Count(K, CornerWarm, CornerSalmon, CornerRedOver, WarmestCorner);
+					}
+				}
+			}
+			Check(StripPoints == 673 && Triangles > 800 && Corners >= StripPoints && Warm == 0 && Salmon == 0 && RedOver == 0 && CornerWarm == 0 && CornerSalmon == 0 && CornerRedOver == 0,
+				"her pass lines on Submarine_GER's strip (her tower's paint facing out, 1.4 to 1.8 m up), at the points the mesh stores, on the strip and at every corner of every triangle with a corner on it: none with red 6 or more over blue (her line: under 30 pixels), none within 6 levels of 122,112,110 (her line: none), and none with red at or above blue, so no pixel between them has red over blue under a neutral light",
+				"the strip " + std::to_string(StripPoints) + " points: " + std::to_string(Warm) + " with red 6 or more over blue, " + std::to_string(Salmon) + " within 6 levels of 122,112,110, " +
+					std::to_string(RedOver) + " with red at or above blue (red less blue " + std::to_string(WarmestStrip) + " at the warmest); its " + std::to_string(Triangles) + " triangles' " +
+					std::to_string(Corners) + " corners: " + std::to_string(CornerWarm) + ", " + std::to_string(CornerSalmon) + " and " + std::to_string(CornerRedOver) + " (" +
+					std::to_string(WarmestCorner) + " at the warmest)");
+		}
+
+		// Everything else as round 1d left it: every point but call B's salted bodies on a foot's salt line and call A's
+		// salted rust (KeptFromRound1d), on all 52 meshes under the skin, off a foot's salt line and on it, bit for bit as
+		// 638bc8ba3 painted it (its four floats, its colour's bytes and its finish byte), held by a hash of round 1d's own
+		// painting of the same points (that commit's core and reader's branch, built with this test's shim and its file order):
+		// so the casing's runs, a body off the foot line, light wear, the foot line's unsalted and lightly worn paint, the
+		// salted rust round 1d's hold left at or over the paint in red, every surface ship's paint as they were. (With the
+		// switches off every point is as at 55419eb6: (a).)
+		{
+			const uint64_t Round1d = 0x1a99b2748be4c15eull;
+			const size_t Round1dPoints = 1178269;
+			uint64_t Hash = 1469598103934665603ull;
+			size_t Kept = 0, Left = 0, LeftBodies = 0;
+			for (const ShipFile& Ship : Files)
+			{
+				for (int Far = 0; Far < 2; ++Far)
+				{
+					const FRawShip& Raw = Ship.Mesh[Far];
+					const std::vector<uint8_t>& Marks = MarksOf(Ship, Far);
+					const Painted& Now = SkinnedOf(Ship, Far);
+					for (int32 K = 0; K < Raw.Points.Num(); ++K)
+					{
+						const ShipPaintCore::Point P = PointOf(Raw, K, &Marks);
+						if (!KeptFromRound1d(P, Now.Linear[4 * static_cast<size_t>(K)]))
+						{
+							++Left;
+							LeftBodies += P.Wear >= 40 ? 1 : 0;
+							continue;
+						}
+						++Kept;
+						Hash = HashPoint(Hash, Ship.Name, Far, K, &Now.Linear[4 * static_cast<size_t>(K)], Now.Colours[static_cast<size_t>(K)]);
+					}
+				}
+			}
+			char Said[32];
+			std::snprintf(Said, sizeof(Said), "%016llx", static_cast<unsigned long long>(Hash));
+			Check(Hash == Round1d && Kept == Round1dPoints && Left == 543 && LeftBodies == 202,
+				"every point but call B's salted bodies on a foot's salt line and call A's salted rust bit for bit as round 1d (638bc8ba3) painted it under the skin, on all 52 meshes, off the foot line and on it (a hash of its floats, bytes and finish byte against round 1d's own)",
+				std::to_string(Kept) + " points, hash " + Said + " (" + std::to_string(Left) + " left out: " + std::to_string(LeftBodies) + " salted bodies on a foot's salt line, " +
+					std::to_string(Left - LeftBodies) + " salted rust with red under the paint's)");
+		}
+
+		// The film never on her salt nor beside it, where the foot line now shows her salt on a body: no run's foot that is a
+		// salted body on a foot's salt line or shares a triangle with one (this test's own walk) takes a share of the film, as
+		// the game lays it (the reader's marks): in today's files, and on every mesh with a made-up wear of 40 to 100 on one
+		// point in three of the foot line and a made-up salt on the foot line's bodies alone (no other salt; the marks made
+		// anew by the reader).
+		{
+			size_t Feet = 0, Film = 0, MadeFeet = 0, MadeFilm = 0, MadeBodies = 0;
+			for (int Made = 0; Made < 2; ++Made)
+			{
+				for (const ShipFile& Ship : Files)
+				{
+					for (int Far = 0; Far < 2; ++Far)
+					{
+						FRawShip Raw = Ship.Mesh[Far];
+						const std::vector<bool> Foot = FootLineOf(Raw);
+						if (Made)
+						{
+							Raw.Salt.clear();
+							for (int32 K = 0; K < Raw.Points.Num(); ++K)
+							{
+								const uint32_t W = ShadeHash(K, 4099u);
+								if (Foot[static_cast<size_t>(K)] && W % 3u == 0u && K < Raw.Wear.Num())
+								{
+									Raw.Wear[K] = 40 + static_cast<int32>(W % 61u);
+								}
+								const ShipPaintCore::Point P = PointOf(Raw, K);
+								const bool bBody = P.bPainted && P.Wear >= 40 && Foot[static_cast<size_t>(K)];
+								Raw.Salt.Add(bBody ? 1 + static_cast<int32>(ShadeHash(K, 2063u) % 60u) : 0);
+								MadeBodies += bBody ? 1 : 0;
+							}
+						}
+						const std::vector<uint8_t> Reader = ReaderRuns(Raw, Skin);
+						std::vector<bool> Near(Raw.Points.size(), false), Salted(Raw.Points.size(), false);
+						for (int32 K = 0; K < Raw.Points.Num(); ++K)
+						{
+							const ShipPaintCore::Point P = PointOf(Raw, K);
+							Salted[static_cast<size_t>(K)] = Near[static_cast<size_t>(K)] = P.bPainted && P.Salt > 0 && P.Wear >= 40 && Foot[static_cast<size_t>(K)];
+						}
+						for (size_t T = 0; T + 2 < Raw.Triangles.size(); T += 3)
+						{
+							const int32 A = Raw.Triangles[T], B = Raw.Triangles[T + 1], C = Raw.Triangles[T + 2];
+							if (std::min({ A, B, C }) >= 0 && std::max({ A, B, C }) < Raw.Points.Num() &&
+								(Salted[static_cast<size_t>(A)] || Salted[static_cast<size_t>(B)] || Salted[static_cast<size_t>(C)]))
+							{
+								Near[static_cast<size_t>(A)] = Near[static_cast<size_t>(B)] = Near[static_cast<size_t>(C)] = true;
+							}
+						}
+						for (int32 K = 0; K < Raw.Points.Num(); ++K)
+						{
+							const ShipPaintCore::Point Game = PointOf(Raw, K, &Reader);
+							if (!Near[static_cast<size_t>(K)] || !Game.bPainted || Game.Wear <= 0 || !Game.bBodyAbove)
+							{
+								continue;
+							}
+							ShipPaintCore::Laid With;
+							ShipPaintCore::Ramp(Game, &With);
+							const bool bFilm = With.Foot > 0.0f && With.Over > 0.0f;
+							(Made ? MadeFeet : Feet) += 1;
+							(Made ? MadeFilm : Film) += bFilm ? 1 : 0;
+						}
+					}
+				}
+			}
+			Check(Feet > 20 && Film == 0 && MadeBodies > 1000 && MadeFeet > 500 && MadeFilm == 0,
+				"no film on or beside the salt the foot line shows on a body: no run's foot that is such a body or shares a triangle with one takes a share of the film, as the game lays it, in today's files and with a made-up wear and salt on the foot line's bodies alone, on every mesh",
+				std::to_string(Feet) + " runs' feet on or beside a salted body on a foot's salt line in today's files, " + std::to_string(Film) + " with film; with the made-up salt on " +
+					std::to_string(MadeBodies) + " bodies, " + std::to_string(MadeFeet) + " such feet, " + std::to_string(MadeFilm) + " with film");
 		}
 	}
 

@@ -1250,7 +1250,8 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		// (under the sea battle's skin only: which of her stained points lie at the foot of a run with its body above them,
 		// in her own up axis, the file's z; only those take the rust's film, and of them none her salt lies on or beside.
 		// Battle/ShipPaintCore's BodyAbove, from the same wear, salt and paints the ship branch hands the core, the file's own
-		// triangles, and each point's facing, so the underside of a plate never takes the film of its top)
+		// triangles, and each point's facing, so the underside of a plate never takes the film of its top; and which of her
+		// painted points lie on a foot's salt line, at the foot of a deckhouse or mount, where her salt beats a run's body)
 		std::vector<uint8_t> ShipRuns;
 		if (Raw->bShip && ShipPaint.bRustRamp && Raw->PaintColours.Num() > 0)
 		{
@@ -1300,6 +1301,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				const uint8_t RunMark = static_cast<size_t>(K) < ShipRuns.size() ? ShipRuns[static_cast<size_t>(K)] : 0;
 				At.bBodyAbove = (RunMark & ShipPaintCore::FootMark) != 0;
 				At.bBesideSalt = (RunMark & ShipPaintCore::SaltMark) != 0;
+				At.bFootLine = (RunMark & ShipPaintCore::FootLineMark) != 0;
 				const ShipPaintCore::Linear Coat = ShipPaintCore::Paint(At, ShipColours, ShipPaint);
 				// (the finish, the material's metal on steel: 128 less half the wear, as ever; under the skin a point it paints as
 				// unworn keeps the unworn 128, so its whole vertex is the unworn point's: Battle/ShipPaintCore's SteelFinish)
