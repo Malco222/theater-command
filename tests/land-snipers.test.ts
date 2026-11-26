@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import groundCard from '../data/campaign/ground.json';
 import { LAND, LandBattle, PRACTICE_GROUNDS, partsFor, practiceTicket, sampleTicket, sniperShare, withSnipers, withTeams } from '../src/battle/land';
+import { reachOf } from '../src/battle/land/rules';
 import { LiveBattle, LiveKeeper, type LiveDelta } from '../src/battle/land/live';
 import type { FieldTicket } from '../src/battle/core/types';
 import type { LandPlace } from '../src/battle/land';
@@ -171,6 +172,93 @@ describe('sniper teams: one spot a slip (the design director, 26 November 03:09Z
     expect(slips).toBeGreaterThan(0);
     expect(kept).toBeGreaterThan(0);
     expect(second).toBe(0);
+  }, 240_000);
+});
+
+describe('sniper teams: a few men hold no frontage, and a target kept (the design director, 26 November 03:51Z)', () => {
+  it('a team stands in its own side\'s block without either being eased, while two foot blocks still are', () => {
+    const b = new LandBattle(withSnipers(practiceTicket(ground('plains'), { seed: 3 * 7919 + 13 })));
+    const team = b.units.find((u) => u.team === 'snp' && u.side === 'att')!;
+    const foot = b.units.filter((u) => u.side === 'att' && !u.team && u.kind === 'inf');
+    expect(team).toBeTruthy();
+    expect(foot.length).toBeGreaterThanOrEqual(2);
+    const [f1, f2] = foot;
+    // The team set down in the middle of a friendly foot block; a second foot block half over the first.
+    team.x = f1.x; team.y = f1.y; team.face = f1.face;
+    f2.x = f1.x + f1.w / 3; f2.y = f1.y; f2.face = f1.face;
+    const at = (u: typeof team): [number, number] => [u.x, u.y];
+    const t0 = at(team), f20 = at(f2);
+    (b as unknown as { spread(): void }).spread();
+    expect(at(team)).toEqual(t0);
+    expect(Math.hypot(f2.x - f20[0], f2.y - f20[1])).toBeGreaterThan(0);
+    // With the second block moved off, the first has only the team on it, and neither moves.
+    f2.x = f1.x + 200;
+    const f10 = at(f1);
+    (b as unknown as { spread(): void }).spread();
+    expect(at(team)).toEqual(t0);
+    expect(at(f1)).toEqual(f10);
+  });
+
+  type Peek = { gap(a: unknown, c: unknown): number; sniperSees(a: unknown, c: unknown, d: number): boolean; targetOf(u: unknown): { id: number } | null };
+
+  it('a team keeps its target while it holds, though a better one stands nearer, and picks afresh once it is hidden', () => {
+    const b = new LandBattle(withSnipers(practiceTicket(ground('plains'), { seed: 7 * 7919 + 13 })));
+    b.hideOn();
+    const peek = b as unknown as Peek;
+    let u = b.units[0], x = b.units[0];
+    for (let k = 0; !b.over && k < 30000; k++) {
+      b.step();
+      const f = b.units.find((t) => t.team === 'snp' && t.engaged !== undefined && t.slipTo === undefined && !t.order);
+      if (f) { u = f; x = b.units.find((t) => t.id === f.engaged)!; break; }
+    }
+    expect(u.team).toBe('snp');
+    expect(peek.targetOf(u)?.id).toBe(x.id);
+    // Another enemy block set down halfway along the line to its target, in the open: nearer, as straight ahead, so the
+    // best by the pick's score.
+    const y = b.units.find((t) => t.side === x.side && t.id !== x.id && t.state !== 'gone' && !t.hid && t.kind !== 'fort')!;
+    y.x = (u.x + x.x) / 2; y.y = (u.y + x.y) / 2; y.state = 'steady';
+    x.hid = true;
+    expect(peek.targetOf(u)?.id).toBe(y.id);
+    x.hid = undefined;
+    expect(peek.targetOf(u)?.id).toBe(x.id);
+    // Its target hidden: it fails, and the team scores afresh.
+    x.hid = true;
+    const again = peek.targetOf(u);
+    expect(again).not.toBeNull();
+    expect(again!.id).not.toBe(x.id);
+  });
+
+  it('on either drill, a team leaves a target only when it fails, and is never sent to where it stands', () => {
+    let kept = 0, held = 0, short = 0, moves = 0;
+    for (const [terrain, seed] of [['forest', 3], ['urban', 5], ['plains', 7]] as const) {
+      const b = new LandBattle(withSnipers(practiceTicket(ground(terrain), { seed: seed * 7919 + 13 })));
+      b.hideOn();
+      const peek = b as unknown as Peek;
+      const last = new Map<number, number | undefined>(), went = new Map<number, string>();
+      for (let k = 0; !b.over && k < 30000; k++) {
+        b.step();
+        for (const u of b.units) {
+          if (u.team !== 'snp') continue;
+          if (u.order?.kind === 'move') {
+            const key = `${Math.round(u.order.x)},${Math.round(u.order.y)}`;
+            if (went.get(u.id) !== key) { moves++; if (Math.hypot(u.order.x - u.x, u.order.y - u.y) < 5 && u.path.length) short++; went.set(u.id, key); }
+          } else went.delete(u.id);
+          const was = last.get(u.id);
+          last.set(u.id, u.engaged);
+          if (was === undefined || u.engaged === undefined) continue;
+          if (u.engaged === was) { kept++; continue; }
+          if (u.order?.kind === 'attack' && u.order.target === u.engaged) continue;
+          // It changed target from one tick to the next: the old one must have failed (gone, hidden, out of reach or
+          // out of sight).
+          const e = b.units.find((t) => t.id === was)!, d = peek.gap(u, e);
+          if (e.state !== 'gone' && e.state !== 'withdrawn' && !e.hid && d <= reachOf(u) && peek.sniperSees(u, e, d)) held++;
+        }
+      }
+    }
+    expect(kept).toBeGreaterThan(0);
+    expect(held).toBe(0);
+    expect(moves).toBeGreaterThan(0);
+    expect(short).toBe(0);
   }, 240_000);
 });
 

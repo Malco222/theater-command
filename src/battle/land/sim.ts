@@ -151,6 +151,12 @@ interface Leg { flight: Flight; owed: Map<number, number>; nerve: Map<number, nu
 const inRiver = (g: Ground): boolean => g === 'water' || g === 'blown';
 const live = (u: LandUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn';
 const fighting = (u: LandUnit): boolean => live(u) && u.state !== 'routing';
+/**
+ * A team that passes through its own side's blocks (spread). Each kind under its own row: a sniper pair exists only
+ * with sniper teams on; the machine-gun and mortar teams join under `teams` (sim.teamsRule) as a second term at the join.
+ */
+// (b: the battle whose rows say which kinds count; at the join the teams' term reads b.teamsRule)
+const passesFriends = (_b: LandBattle, u: LandUnit): boolean => u.team === 'snp';
 /** A block's weight as its army's bar and break count it: the card's part for a corps come up from next door, else its power0. */
 const weightOf = (u: LandUnit): number => u.priced ?? u.power0;
 
@@ -2354,7 +2360,9 @@ export class LandBattle implements BattleSim<LandUnit> {
   /**
    * Where a sniper team of the computer's goes next (ai.ts snipersUp): hiding ground within 'step' metres of it toward
    * 'to', never ahead of 'front' (its own leading foot, measured along its side's way), and at least 'keep' metres from
-   * every found enemy block; the furthest forward first, then the nearest. Null where there is none.
+   * every found enemy block by the battle's own gap (as the drills' 'near' reads it: by the middles, a team backed off
+   * to a spot still read near and was sent again each second, 26 Nov); the furthest forward first, then the nearest. Null
+   * where there is none.
    */
   sniperSpot(u: LandUnit, to: [number, number], front: number, step = 400, keep: number = LAND.snipers.keep): [number, number] | null {
     const dir = u.side === 'att' ? 1 : -1, cell = this.field.cell, k = Math.max(1e-6, Math.hypot(to[0] - u.x, to[1] - u.y));
@@ -2365,7 +2373,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       const x = Math.round(clamp(u.x + ((to[0] - u.x) * a) / k - ((to[1] - u.y) * c) / k, 5, this.field.w - 5));
       const y = Math.round(clamp(u.y + ((to[1] - u.y) * a) / k + ((to[0] - u.x) * c) / k, 5, this.field.h - 5));
       if (Math.hypot(x - u.x, y - u.y) > step || dir * y > dir * front || !this.sniperGround(x, y)) continue;
-      if (foes.some((e) => dist(e.x, e.y, x, y) < keep)) continue;
+      if (foes.some((e) => this.gapAt(u, x, y, e) < keep)) continue;
       const sc = dir * y * 1000 - Math.hypot(x - u.x, y - u.y);
       if (sc <= score || this.wet(u, x, y, false)) continue;
       score = sc; best = [x, y];
@@ -2448,7 +2456,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const K = LAND.snipers.keep, dir = u.side === 'att' ? 1 : -1;
     const near = this.units.filter((f) => f.side !== u.side && ok(f) && !f.hid && f.kind !== 'fort' && this.gap(u, f) < K);
     if (near.length) {
-      if (u.order?.kind === 'move' && !near.some((f) => dist(f.x, f.y, u.order!.x, u.order!.y) < K)) return;
+      if (u.order?.kind === 'move' && !near.some((f) => this.gapAt(u, u.order!.x, u.order!.y, f) < K)) return;
       const spot = this.sniperSpot(u, [u.x, u.y - dir * 400], u.y);
       const gap = near.reduce((m, f) => Math.min(m, this.gap(u, f)), Infinity);
       const [x, y] = spot ?? [u.x, u.y - dir * (K - gap + 50)];
@@ -2948,6 +2956,9 @@ export class LandBattle implements BattleSim<LandUnit> {
       const pl = a.w / 2 + (b.w / 2) * c + (b.d / 2) * s - Math.abs(lat);
       const pd = a.d / 2 + (b.w / 2) * s + (b.d / 2) * c + (a.side === b.side ? 0 : LAND.apart) - Math.abs(dep);
       if (pl <= 0 || pd <= 0) continue;
+      // A team passes through its own side's blocks, neither eased by them nor easing them: a few men hold no frontage
+      // (the design director, 26 November 03:51Z, one rule for every team kind, each under its own row).
+      if (a.side === b.side && (passesFriends(this, a) || passesFriends(this, b))) continue;
       // A tank block driving through a foot block's ground (overrun) is not eased off it.
       if (a.side !== b.side && this.inOverrun(a, b)) continue;
       // A queue, not a pile (the art director, b418, b439): a block marching into a friend's ground has it make way,
@@ -3004,6 +3015,19 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (snp && ((u.quietTo !== undefined && this.t < u.quietTo) || u.slipTo !== undefined)) return null;
     // Guns told to fire on one block strike it whenever it is in their reach (ai.ts; ruling 239(6)).
     if (u.aim !== undefined) { const a = this.unit(u.aim); if (a && live(a) && a.side !== u.side && !a.hid && this.gap(u, a) <= reach) return a; }
+    // A sniper team keeps its target while it still holds, alive, seen and in reach; it scores afresh only when the target
+    // fails (the design director, 26 November 03:51Z: a choice kept, not remade each tick). A target it was sent at
+    // comes first, as in the pick below.
+    if (snp) {
+      const holds = (id: number | undefined): LandUnit | null => {
+        const e = id === undefined ? undefined : this.unit(id);
+        if (!e || !live(e) || e.side === u.side || e.hid) return null;
+        const d = this.gap(u, e);
+        return d <= reach && this.sniperSees(u, e, d) ? e : null;
+      };
+      const kept = (u.order?.kind === 'attack' ? holds(u.order.target) : null) ?? holds(u.engaged);
+      if (kept) return kept;
+    }
     // Hidden in the woods (release 2): it holds its fire till the enemy is close, unless it is sent in. A sniper team
     // fires from hiding at its whole reach, and may be found for it (snipeFromHiding).
     if (u.hid && u.order?.kind !== 'attack' && !snp) reach = Math.min(reach, this.ambushAt(u));
@@ -3218,6 +3242,11 @@ export class LandBattle implements BattleSim<LandUnit> {
   /** Metres between two blocks' edges, roughly. */
   gap(a: LandUnit, b: LandUnit): number {
     return Math.max(0, dist(a.x, a.y, b.x, b.y) - (Math.max(a.w, a.d) + Math.max(b.w, b.d)) / 4);
+  }
+
+  /** The gap 'a' would have to 'b' standing at (x, y), by the same measure (gap). */
+  gapAt(a: LandUnit, x: number, y: number, b: LandUnit): number {
+    return Math.max(0, dist(x, y, b.x, b.y) - (Math.max(a.w, a.d) + Math.max(b.w, b.d)) / 4);
   }
 
   /**

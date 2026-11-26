@@ -247,7 +247,7 @@ function snipersUp(b: LandBattle, side: Side, u: LandUnit, mine: LandUnit[], foe
   }
   if (near.length) {
     // Already going somewhere far enough from them: on its way.
-    if (u.order?.kind === 'move' && !near.some((f) => dist(f.x, f.y, u.order!.x, u.order!.y) < K)) return;
+    if (u.order?.kind === 'move' && !near.some((f) => b.gapAt(u, u.order!.x, u.order!.y, f) < K)) return;
     const spot = b.sniperSpot(u, [u.x, u.y - dir * 400], u.y);
     const gap = near.reduce((m, f) => Math.min(m, b.gap(u, f)), Infinity);
     const [x, y] = spot ?? [u.x, u.y - dir * (K - gap + 50)];
