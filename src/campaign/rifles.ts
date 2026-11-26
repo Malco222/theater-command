@@ -159,16 +159,34 @@ export function openRifles(g: Game): void {
  * Returns what it gave the store, in divisions' worth (0 for a nation that keeps none), for the fold's news.
  */
 export function riflesFold(g: Game, keep: Corps, gone: Corps, from: number): number {
-  if (!carries(g, keep.nat)) return 0;
+  const r = foldReckon(g, keep, gone, from);
+  if (r.lvl !== null) setLevel(g, keep, r.lvl);
+  if (r.past > 0) riflesBack(g, keep.nat, r.past);
+  if (r.worn > 0) riflesBack(g, keep.nat, r.worn);
+  return r.past + r.worn;
+}
+
+/**
+ * What a fold would give the store, in divisions' worth, reckoned by riflesFold's own reckoning and given to no one:
+ * for the fold card read before folding, so the card and the news after it never differ (the UI director's seventh
+ * read of 26 November 2026, 22:58Z, point 2). It changes nothing in the game.
+ */
+export function riflesFoldGives(g: Game, keep: Corps, gone: Corps, from: number): number {
+  const r = foldReckon(g, keep, gone, from);
+  return r.past + r.worn;
+}
+
+/** The one reckoning of a fold's rifles: the kept corps' new level (null where it is not touched), what passes its full, and the emptied corps' worn part. */
+function foldReckon(g: Game, keep: Corps, gone: Corps, from: number): { lvl: number | null; past: number; worn: number } {
+  if (!carries(g, keep.nat)) return { lvl: null, past: 0, worn: 0 };
   const worn = Math.max(0, levelOf(g, gone) - gone.str) * gone.divs;
-  let gave = 0;
+  let lvl: number | null = null, past = 0;
   if (from > 0 && keep.divs > 0) {
-    const full = keep.full ?? 1, lvl = levelOf(g, keep) + from / keep.divs;
-    setLevel(g, keep, Math.min(full, lvl));
-    if (lvl > full) { riflesBack(g, keep.nat, (lvl - full) * keep.divs); gave += (lvl - full) * keep.divs; }
+    const full = keep.full ?? 1, l = levelOf(g, keep) + from / keep.divs;
+    lvl = Math.min(full, l);
+    if (l > full) past = (l - full) * keep.divs;
   }
-  if (worn > 0) { riflesBack(g, keep.nat, worn); gave += worn; }
-  return gave;
+  return { lvl, past, worn };
 }
 
 /**

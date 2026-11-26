@@ -11,10 +11,10 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { afterEach, describe, expect, it } from 'vitest';
 import { ARMS, stockOf } from '../src/campaign/arms';
 import { offers } from '../src/campaign/arsenal';
-import { foldCardWords, foldCorps, foldView, foldWords } from '../src/campaign/fold';
+import { foldCardLines, foldCardWords, foldCorps, foldView, foldWords } from '../src/campaign/fold';
 import { addCorps, createGame, setWar } from '../src/campaign/game';
 import { MANPOWER, classNow, comesWords, corpsMenWords, levyMen, manpower, menPer, menScale, menWords, menWorth, noMenWords, reserveLevelWords, reserveWords } from '../src/campaign/manpower';
-import { RIFLES, arsenalTop, carries, inWords, levelOf, riflesRow, noRifles, riflesMonth, riflesSeen, riflesTakes, riflesView, riflesWait } from '../src/campaign/rifles';
+import { RIFLES, arsenalTop, carries, inWords, levelOf, riflesFoldGives, riflesRow, noRifles, riflesMonth, riflesSeen, riflesTakes, riflesView, riflesWait } from '../src/campaign/rifles';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { MEN_PER_DIV, type Game } from '../src/campaign/types';
@@ -430,7 +430,9 @@ describe('the second read: the 3D game says what the page says', () => {
     TC().start({ human: 'CHN', seed: 7, view: 'grand', world: true });
     const c = foldRow('CHN', 0.6, 0.6);
     expect(c.lines[0]).toMatch(/^About 134,000 men in one corps at 100% of its strength, [a-z]+\.$/);
-    expect(c.lines).toContain('About 27,000 men over go back to the reserve, and their rifles to the store.');
+    // (Re-pinned to the seventh read, point 2: the kept corps laid at its full and the folded corps' worn part give the
+    // store 34,100 besides the men's, the figure the news gives for the same fold, "and their rifles and 34,100 more".)
+    expect(c.lines).toContain('About 27,000 men over go back to the reserve, and their rifles and 34,100 more to the store.');
     TC().start({ human: 'JAP', seed: 17, view: 'grand', world: true });
     const j = foldRow('JAP', 0.6, 0.6);
     expect(j.lines[0]).toMatch(/^30,000 men in one corps at 100% of its strength, [a-z]+\.$/);
@@ -893,5 +895,167 @@ describe('the sixth read, point 4: a need under 500 men, said exactly', () => {
     expect(noMenWords('CHN', 469 / per, 468 / per, cls)).toBe(`The reserve is one man short: this takes 469 men.${CLASS}`);
     // (500 men and up: as laid in the fifth read.)
     expect(noMenWords('CHN', 0.01, 600 / per, cls)).toBe(`The reserve is 70 men short: this takes about 1,000 men.${CLASS}`);
+  });
+});
+
+// The UI director's seventh read (26 November 2026, 22:58Z), point 2: "The card read before folding gives the spare
+// rifles, from the same function as the news, so the two never differ. Under the rifles switch; off as today." Both
+// cards take the line from fold.ts foldCardLines, which reckons what the fold would give by rifles.ts' own reckoning
+// (riflesFoldGives, the reckoning riflesFold gives by) and hands it to foldWords, the news's own function. On the round 6
+// builder's live boards (China seated, seed 7, the bridge's own start and the Play list, each pair worn to 0.6 of its
+// full by hand): the 3D card is read through the bridge before the fold, the page's line from the same helper on the
+// same board (the page's wiring in ui/main.ts foldCard is read, not run), and the news after the fold through TC.act.
+describe("the seventh read, point 2: the card before the fold gives the spare rifles the news gives after it", () => {
+  type Call = (...a: unknown[]) => unknown;
+  const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
+  type Row = { lines: string[]; buttons: { act: string }[] };
+  // (The Play list, SHIP_PLAY_A15B57BEB of /mnt/project-files/gates/gamestart.ts, copied.)
+  const SHIP_PLAY = ['nicknames', 'marked', 'taskforcerule', 'rearguardrule', 'rearbridgesrule', 'shadowrule', 'voyagelogrule',
+    'seaminesrule', 'heavyseasrule', 'shadowrelayrule', 'fleetwhyrule', 'settledtownsrule', 'columns',
+    'logistics:lorryShift', 'logistics:wagons', 'logistics:dumps', 'seekoncerule'];
+  const CADRE = ' Its cadre has gone home and can be raised again from the arsenal.';
+  const K = '3rd War Area: 23rd Army Group and the New Fourth Army', G = '3rd War Area: 10th Army Group';
+  /**
+   * The board of the sixth read's point 3 (see there); `ask` times the 3D card is asked for before the fold. The 3D
+   * card's lines and the page's helper lines before the fold, the news after it, the store's gain and the whole save.
+   */
+  const board = (keep: string, gone: string, worn?: number, ask = 1) => {
+    TC().start({ view: 'grand', human: 'CHN', seed: 7, world: true });
+    TC().r2Ship(SHIP_PLAY);
+    const g = loadGame((TC().save() as { text: string }).text)!;
+    let k = g.corps.find((c) => c.name === keep && c.nat === 'CHN')!, x = g.corps.find((c) => c.name === gone && c.nat === 'CHN')!;
+    if (!keep) {
+      const cs = g.corps.filter((c) => c.nat === 'CHN' && !c.dead && (c.full ?? 1) === 1 && c.divs >= 1 && c.kind === 'inf');
+      [k, x] = cs.flatMap((a) => cs.filter((y) => y !== a && y.reg === a.reg && y.divs === a.divs).map((y) => [a, y]))[0]!;
+    }
+    for (const c of [k, x]) { c.str = 0.6 * (c.full ?? 1); c.supplied = true; }
+    if (worn !== undefined) g.flags[`rfa:${x.id}`] = x.str + worn / (x.divs * PER);
+    TC().load(saveGame(g));
+    const b = loadGame((TC().save() as { text: string }).text)!;
+    const cards: string[][] = [];
+    for (let i = 0; i < ask; i++) {
+      const p = TC().page(`fold:${k.reg}`) as { sections: { rows: Row[] }[] };
+      cards.push(p.sections.flatMap((y) => y.rows).find((r) => r.buttons[0].act === `fold:${k.id}:${x.id}`)!.lines);
+    }
+    const bk = b.corps.find((c) => c.id === k.id)!, bx = b.corps.find((c) => c.id === x.id)!;
+    const page = foldCardLines(b, 'CHN', foldView(b, bk, bx));
+    const s0 = stockOf(b, 'CHN', 'rifles'), h0 = b.headlines.length;
+    expect((TC().act(`fold:${k.id}:${x.id}`) as { ok: boolean }).ok).toBe(true);
+    const text = (TC().save() as { text: string }).text, a = loadGame(text)!;
+    return { card: cards[0] ?? [], cards, page, news: a.headlines.slice(h0).map((h) => h.text), gain: Math.round((stockOf(a, 'CHN', 'rifles') - s0) * PER), text, at: a.regions[k.reg].name };
+  };
+  /** The spare rifles' figure as the card says it and as the news says it. */
+  const cardFigure = (lines: string[]): string | null => {
+    for (const l of lines) {
+      const m = /^(\S+) spare rifles? (?:goes|go) to the store\.$/.exec(l) ?? /, and their rifles and (\S+) more to the store\.$/.exec(l);
+      if (m) return m[1].toLowerCase();
+    }
+    return null;
+  };
+  const newsFigure = (news: string): string | null => (/, and (\S+) spare rifles? to the store\./.exec(news) ?? /, and their rifles and (\S+) more to the store\./.exec(news))?.[1] ?? null;
+  const rifleLines = (lines: string[]): string[] => lines.filter((l) => /to the store/.test(l));
+
+  it('no men over, spare rifles: Chuchow, "2,300 spare rifles go to the store."; Ningpo, "1,900 ..."; the news after gives the same figure', () => {
+    const c = board(K, G);
+    expect(rifleLines(c.card)).toEqual(['2,300 spare rifles go to the store.']);
+    expect(c.page.over).toBe('2,300 spare rifles go to the store.');
+    expect(c.news).toEqual([`${G} is folded into ${K} at Chuchow: about 51,000 men in one corps, and 2,300 spare rifles to the store.${CADRE}`]);
+    expect(cardFigure(c.card)).toBe(newsFigure(c.news[0]));
+    expect(c.gain).toBe(2300);
+    const n = board('3rd War Area (the Chekiang coast)', '10th Army Group (Taichow)');
+    expect(n.at).toBe('Ningpo');
+    expect(rifleLines(n.card)).toEqual(['1,900 spare rifles go to the store.']);
+    expect(n.page.over).toBe('1,900 spare rifles go to the store.');
+    expect(newsFigure(n.news[0])).toBe('1,900');
+    expect(cardFigure(n.card)).toBe(newsFigure(n.news[0]));
+  });
+
+  it('men over, nothing more: Changsha, as built, "About 27,000 men over go back to the reserve, and their rifles to the store."', () => {
+    const c = board('', '');
+    expect(c.at).toBe('Changsha');
+    expect(rifleLines(c.card)).toEqual(['About 27,000 men over go back to the reserve, and their rifles to the store.']);
+    expect(c.page.over).toBe('About 27,000 men over go back to the reserve, and their rifles to the store.');
+    expect(c.news[0]).toMatch(/, about 27,000 sent back to the reserve, and their rifles to the store\. Its cadre/);
+    expect(cardFigure(c.card)).toBeNull();
+    expect(newsFigure(c.news[0])).toBeNull();
+  });
+
+  it('both: Changsha with the folded corps armed 1,200 above its strength, "... and their rifles and 1,200 more to the store."', () => {
+    const c = board('', '', 1200);
+    expect(rifleLines(c.card)).toEqual(['About 27,000 men over go back to the reserve, and their rifles and 1,200 more to the store.']);
+    expect(c.page.over).toBe('About 27,000 men over go back to the reserve, and their rifles and 1,200 more to the store.');
+    expect(c.news[0]).toMatch(/, about 27,000 sent back to the reserve, and their rifles and 1,200 more to the store\. Its cadre/);
+    expect(cardFigure(c.card)).toBe('1,200');
+    expect(cardFigure(c.card)).toBe(newsFigure(c.news[0]));
+  });
+
+  it('small figures as the news: "One spare rifle goes to the store."; "Seven ..."; "Ten ..."; "30 ..."; at Changsha "and one more"', () => {
+    for (const [worn, line, said] of [[1, 'One spare rifle goes to the store.', 'one spare rifle'], [7, 'Seven spare rifles go to the store.', 'seven spare rifles'], [10, 'Ten spare rifles go to the store.', 'ten spare rifles'], [30, '30 spare rifles go to the store.', '30 spare rifles']] as const) {
+      const c = board(K, G, worn);
+      expect(rifleLines(c.card), String(worn)).toEqual([line]);
+      expect(c.page.over, String(worn)).toBe(line);
+      expect(c.news, String(worn)).toEqual([`${G} is folded into ${K} at Chuchow: about 51,000 men in one corps, and ${said} to the store.${CADRE}`]);
+      expect(cardFigure(c.card), String(worn)).toBe(newsFigure(c.news[0]));
+    }
+    const c = board('', '', 1);
+    expect(rifleLines(c.card)).toEqual(['About 27,000 men over go back to the reserve, and their rifles and one more to the store.']);
+    expect(cardFigure(c.card)).toBe(newsFigure(c.news[0]));
+  });
+
+  it('neither: no sentence, as today (Chuchow with the folded corps armed at its strength)', () => {
+    const c = board(K, G, 0);
+    expect(rifleLines(c.card)).toEqual([]);
+    expect(c.page.over).toBeNull();
+    expect(c.news).toEqual([`${G} is folded into ${K} at Chuchow: about 51,000 men in one corps.${CADRE}`]);
+  });
+
+  it('the preview is pure: asking for the card twice and then folding gives the same store and the same save as folding without asking', () => {
+    for (const [keep, gone, worn] of [[K, G, undefined], ['', '', 1200], [K, G, 1]] as const) {
+      const asked = board(keep, gone, worn, 2), plain = board(keep, gone, worn, 0);
+      expect(asked.cards[0]).toEqual(asked.cards[1]);
+      expect(asked.gain).toBe(plain.gain);
+      expect(asked.text === plain.text, `${keep} ${worn}`).toBe(true);
+    }
+  });
+
+  it("riflesFoldGives is riflesFold's own figure, and gives nothing", () => {
+    const g = grand();
+    levyMen(g, 'CHN', 30);
+    const at = g.regions[g.nations.CHN.capital].name;
+    const a = addCorps(g, 'CHN', 'Kept corps', 'inf', 2, at, {}), b = addCorps(g, 'CHN', 'Folded corps', 'inf', 2, at, {});
+    a.str = 0.6; b.str = 0.6;
+    const v = foldView(g, a, b), from = Math.max(0, v.str * a.divs - a.str * a.divs);
+    const before = JSON.stringify(g.flags);
+    const gives = riflesFoldGives(g, a, b, from);
+    expect(JSON.stringify(g.flags)).toBe(before);
+    expect(Math.round(gives * PER)).toBe(34080);
+    expect(foldCardLines(g, 'CHN', v).over).toBe('About 27,000 men over go back to the reserve, and their rifles and 34,100 more to the store.');
+    const s = stockOf(g, 'CHN', 'rifles');
+    expect(foldCorps(g, a, b)).toBe(true);
+    expect((stockOf(g, 'CHN', 'rifles') - s) * PER).toBeCloseTo((gives + v.over) * PER, 6);
+    expect(g.headlines[g.headlines.length - 1].text).toBe('Folded corps is folded into Kept corps at Chungking: about 134,000 men in one corps, about 27,000 sent back to the reserve, and their rifles and 34,100 more to the store. Its cadre has gone home and can be raised again from the arsenal.');
+  });
+
+  it('no store (the rifles shelf taken away, China\'s row kept), and Japan: the card reads as today', () => {
+    for (const [sa, sb] of [[0.6, 0.6], [0.3, 0.3], [0.6, 0.4005]]) {
+      const g = grand();
+      levyMen(g, 'CHN', 30);
+      const at = g.regions[g.nations.CHN.capital].name;
+      const a = addCorps(g, 'CHN', 'Kept corps', 'inf', 2, at, {}), b = addCorps(g, 'CHN', 'Folded corps', 'inf', 2, at, {});
+      a.str = sa; b.str = sb;
+      const shelf = ARMS.nations.CHN.rifles;
+      delete ARMS.nations.CHN.rifles;
+      try {
+        expect(carries(g, 'CHN')).toBe(false);
+        const v = foldView(g, a, b);
+        expect(foldCardLines(g, 'CHN', v).over, `${sa} ${sb}`).toBe(foldWords(g, 'CHN', v).over);
+      } finally { ARMS.nations.CHN.rifles = shelf; }
+    }
+    const j = grand('JAP', 17);
+    levyMen(j, 'JAP', 30);
+    const at = j.regions[j.nations.JAP.capital].name;
+    const a = addCorps(j, 'JAP', 'Kept corps', 'inf', 2, at, {}), b = addCorps(j, 'JAP', 'Folded corps', 'inf', 2, at, {});
+    a.str = 0.6; b.str = 0.6;
+    expect(foldCardLines(j, 'JAP', foldView(j, a, b))).toEqual({ men: '30,000 men', one: 'in one corps', over: '6,000 men over go back to the reserve.' });
   });
 });
