@@ -417,11 +417,11 @@ describe('fog on raids: the Flak line names the place its guns line names', () =
     const p = previewRaid(g, 'bomb', t);
     expect(p.why).toBeNull();
     expect(p.fog!.live).toBe(false);
-    expect(line(p.lines, 'Flak')).toBe('Not scouted, so reckoned at the worst: about 1,080 guns built round Rhineland, 720 light and 360 heavy, and the 60 light guns every target has.');
+    expect(line(p.lines, 'Flak')).toBe('Not scouted, so reckoned at the worst: about 1,080 guns built round the Rhineland, 720 light and 360 heavy, and the 60 light guns every target has.');
     const [never, seen] = fogForms(g, 'UK', going(g, p.picked), 'bomb', t);
-    expect(line(never, 'Flak')).toBe('Not scouted, so reckoned at the worst: about 1,080 guns built round Rhineland, 720 light and 360 heavy, and the 60 light guns every target has.');
+    expect(line(never, 'Flak')).toBe('Not scouted, so reckoned at the worst: about 1,080 guns built round the Rhineland, 720 light and 360 heavy, and the 60 light guns every target has.');
     expect(line(never, 'Anti-aircraft guns')).toBe('Not scouted, so reckoned at the worst: level 3 guns round the factories of Rhineland');
-    expect(line(seen, 'Flak')).toBe('Seen two months ago: about 720 guns built round Rhineland, 480 light and 240 heavy, and the 60 light guns every target has.');
+    expect(line(seen, 'Flak')).toBe('Seen two months ago: about 720 guns built round the Rhineland, 480 light and 240 heavy, and the 60 light guns every target has.');
     expect(line(seen, 'Anti-aircraft guns')).toBe('Level 2 guns ringed the factories of Rhineland when seen two months ago');
   });
 });
