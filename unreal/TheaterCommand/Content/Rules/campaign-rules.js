@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 2e3103390 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of de8892f41 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -63396,7 +63396,7 @@
       };
       const seen2 = known ? known.seen ?? -1 : -1;
       const counts = m === "bomb" || night || m === "harbour" || m === "town";
-      const flakAt = m === "town" ? townName(g2.regions[target]) : m === "harbour" ? harbourOf(place3) : place3;
+      const flakAt = m === "town" ? townName(g2.regions[target]) : m === "harbour" ? harbourOf(placeName2(place3)) : placeName2(place3);
       const flakWords = () => {
         const not = m === "ground" ? "troops in the field" : m === "line" ? "the line" : m === "airfield" ? "the airfield" : m === "superiority" ? "the airfields" : "";
         if (!counts) return not && (known ? seen2 > 0 : gunsAt(g2, target) > 0) ? `Only the ${S3} light guns every target has: the guns built here guard the town, not ${not}.` : Only;
@@ -63425,7 +63425,7 @@
     const works2 = `the factories of ${place3}`, worksNamed = cityDefences(g2) ? `the factories of ${placeName2(place3)}` : works2;
     const aaLine = (at4, round3 = at4 === works2 ? worksNamed : at4) => !known ? `Level ${out.aa} guns ring ${round3}` : (known.seen ?? -1) < 0 ? `Not scouted, so reckoned at the worst: level ${out.aa} guns round ${round3}` : `Level ${out.aa} guns ringed ${round3} when ${seenAgo(known.ago ?? 0)}`;
     const dark = cn ? `By night they fire ${!cn.radar ? "blind" : cn.lit > 0 ? "by radar and searchlight" : "by radar"}, and bring down about ${Math.round(cn.share * 100)}% as many bombers as they would by day.` : "";
-    if (out.aa && m === "harbour") out.lines.push({ label: "Anti-aircraft guns", value: aaLine(harbourOf(place3)), effect: dark || "They bring down more of the bombers" });
+    if (out.aa && m === "harbour") out.lines.push({ label: "Anti-aircraft guns", value: aaLine(harbourOf(cityDefences(g2) ? placeName2(place3) : place3)), effect: dark || "They bring down more of the bombers" });
     if (m === "town") {
       const r = g2.regions[target], gone = breachOf(g2, r);
       out.lines.push({ label: "The town", value: `Troops inside ${townName(r)} fight ${Math.round((townBonus(g2, r) - 1) * 100)}% stronger${townWorksPhrase(g2, r)}${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ""}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling("raid")}% in all` });

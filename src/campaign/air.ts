@@ -2844,8 +2844,10 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     const counts = m === 'bomb' || night || m === 'harbour' || m === 'town';
     // (The UI director's answer of 26 Nov 2026 02:06Z, 1: under fog the Flak line names the place the guns line beside it
     // names, so one card never reads as two sets of guns: a town raid round {Leipzig}, a harbour raid round {the harbour
-    // of Bremen}, the factories as today, round {Rhineland}.)
-    const flakAt = m === 'town' ? townName(g.regions[target]) : m === 'harbour' ? harbourOf(place) : place;
+    // of Bremen}, the factories as today, round {Rhineland}. Her rule of 26 Nov 2026 04:32Z: the place takes the news's
+    // article wherever it prints, and this line is new in release 2, so always, with no guard: round {the Ruhr}, round
+    // {the harbour of the Cotentin}; a place without one is unchanged, round {Kent}. The town's name is as it is.)
+    const flakAt = m === 'town' ? townName(g.regions[target]) : m === 'harbour' ? harbourOf(placeName(place)) : placeName(place);
     const flakWords = (): string => {
       // (Her 21:22Z marks, case e: the clause, where it knows of guns built there, on the line, an airfield raid and a
       // fight for the sky flown with bombers (they hit its airfields) as on troops.)
@@ -2891,7 +2893,9 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   // City defences, a night raid with the switch on: how the guns fire in the dark, and what they bring down against
   // what they would by day (the UI director's words, section 3). Empty otherwise.
   const dark = cn ? `By night they fire ${!cn.radar ? 'blind' : cn.lit > 0 ? 'by radar and searchlight' : 'by radar'}, and bring down about ${Math.round(cn.share * 100)}% as many bombers as they would by day.` : '';
-  if (out.aa && m === 'harbour') out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(harbourOf(place)), effect: dark || 'They bring down more of the bombers' });
+  // (The harbour's guns line is shipped, so its place takes the news's article only under city defences' switch, off as
+  // shipped: "Level 2 guns ring the harbour of the Cotentin". The UI director, 26 Nov 2026 04:32Z.)
+  if (out.aa && m === 'harbour') out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(harbourOf(cityDefences(g) ? placeName(place) : place)), effect: dark || 'They bring down more of the bombers' });
   if (m === 'town') {
     const r = g.regions[target], gone = breachOf(g, r);
     out.lines.push({ label: 'The town', value: `Troops inside ${townName(r)} fight ${Math.round((townBonus(g, r) - 1) * 100)}% stronger${townWorksPhrase(g, r)}${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ''}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling('raid')}% in all` });

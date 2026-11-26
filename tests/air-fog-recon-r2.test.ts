@@ -4,10 +4,12 @@
 import { describe, expect, it } from 'vitest';
 import { AIRWAR, airAI, assessAir, fightersInReach, forecastAir } from '../src/campaign/air';
 import { bandAt, knownDefence, rememberSkies, setRaidFog, skyKnown, staffReads, staffWeigh, wantsLook, weighKnown } from '../src/campaign/airfog';
+import { START_LAID, setCityDefences } from '../src/campaign/citydefences';
 import { airPage } from '../src/campaign/airpages';
 import { offers } from '../src/campaign/arsenal';
 import { allied, createGame, setWar } from '../src/campaign/game';
 import { SIGHT, setFog, sightOf } from '../src/campaign/intel';
+import { atSea } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { characterOf, startOpen } from '../src/campaign/staff';
 import { beginHuman, humanUp, orderRaid, orderScout, previewDayNight, previewRaid, raidTargetsFor, stepAI } from '../src/campaign/turn';
@@ -415,11 +417,81 @@ describe('fog on raids: the Flak line names the place its guns line names', () =
     const p = previewRaid(g, 'bomb', t);
     expect(p.why).toBeNull();
     expect(p.fog!.live).toBe(false);
-    expect(line(p.lines, 'Flak')).toBe('Not scouted, so reckoned at the worst: about 1,080 guns built round Rhineland, 720 light and 360 heavy, and the 60 light guns every target has.');
+    expect(line(p.lines, 'Flak')).toBe('Not scouted, so reckoned at the worst: about 1,080 guns built round the Rhineland, 720 light and 360 heavy, and the 60 light guns every target has.');
     const [never, seen] = fogForms(g, 'UK', going(g, p.picked), 'bomb', t);
-    expect(line(never, 'Flak')).toBe('Not scouted, so reckoned at the worst: about 1,080 guns built round Rhineland, 720 light and 360 heavy, and the 60 light guns every target has.');
+    expect(line(never, 'Flak')).toBe('Not scouted, so reckoned at the worst: about 1,080 guns built round the Rhineland, 720 light and 360 heavy, and the 60 light guns every target has.');
     expect(line(never, 'Anti-aircraft guns')).toBe('Not scouted, so reckoned at the worst: level 3 guns round the factories of Rhineland');
-    expect(line(seen, 'Flak')).toBe('Seen two months ago: about 720 guns built round Rhineland, 480 light and 240 heavy, and the 60 light guns every target has.');
+    expect(line(seen, 'Flak')).toBe('Seen two months ago: about 720 guns built round the Rhineland, 480 light and 240 heavy, and the 60 light guns every target has.');
     expect(line(seen, 'Anti-aircraft guns')).toBe('Level 2 guns ringed the factories of Rhineland when seen two months ago');
+  });
+});
+
+// The UI director's rule of 26 Nov 2026 04:32Z: the raid card's place names take the news's article wherever they
+// print. The Flak line is new in release 2, so always, with no guard ("about 720 guns built round the Ruhr"); the
+// harbour's guns line is shipped, so under city defences' switch, off as shipped. A place without one is unchanged.
+describe('the raid card\'s place names take the news\'s article (the UI director, 26 Nov 2026 04:32Z)', () => {
+  type Lines = { label: string; value: string }[];
+  const flak = (lines: Lines): string => lines.find((l) => l.label === 'Flak')!.value;
+  const guns = (lines: Lines): string[] => lines.filter((l) => l.label === 'Anti-aircraft guns').map((l) => l.value);
+  /** A war of seed 7 a year in, city defences off or on, level 2 guns at the target, 300 bombers, a fleet in harbour. */
+  const card = (place: string, m: 'bomb' | 'town' | 'harbour', att: string, def: string, cd: boolean) => {
+    const g = startOpen(createGame(7, null));
+    g.turn = 12;
+    if (cd) g.flags[START_LAID] = 1;
+    setCityDefences(g, cd);
+    setWar(g, att, def);
+    const f = g.airFleets.find((x) => x.nat === att && x.bmr > 0 && x.ship === undefined)!;
+    f.bmr = 300;
+    const t = g.byName[place].id;
+    if (place === 'Crimea') f.base = g.byName[place].nb[0];
+    if (m === 'harbour') g.fleets.find((x) => x.nat === def && !atSea(x))!.base = t;
+    g.flags[`wk:aa:${t}`] = 2;
+    const at = (k?: Parameters<typeof assessAir>[4]): Lines => { const a = assessAir(g, [f], m, t, k); expect(a.why).toBeNull(); return a.lines; };
+    return {
+      sight: at(),
+      never: at({ ...knownDefence(g, att, t, 'high'), seen: -1, ago: 0, aa: 3 }),
+      seen: at({ ...knownDefence(g, att, t, 'high'), seen: 2, ago: 2, aa: 2 }),
+    };
+  };
+
+  it('the Flak line names the factories\' place with its article under fog, with no guard, switch off or on', () => {
+    for (const cd of [false, true]) {
+      const c = card('Ruhr', 'bomb', 'UK', 'GER', cd);
+      expect(flak(c.never)).toBe('Not scouted, so reckoned at the worst: about 1,080 guns built round the Ruhr, 720 light and 360 heavy, and the 60 light guns every target has.');
+      expect(flak(c.seen)).toBe('Seen two months ago: about 720 guns built round the Ruhr, 480 light and 240 heavy, and the 60 light guns every target has.');
+      // In sight the line names no place, as before.
+      expect(flak(c.sight)).toBe('About 720 guns built here, 480 light and 240 heavy, and the 60 light guns every target has.');
+      // A town raid names its town as it is.
+      const town = card('Ruhr', 'town', 'UK', 'GER', cd);
+      expect(flak(town.seen)).toBe('Seen two months ago: about 720 guns built round Essen, 480 light and 240 heavy, and the 60 light guns every target has.');
+    }
+  });
+
+  it('the Flak line names the harbour\'s place with its article under fog, with no guard, switch off or on', () => {
+    for (const cd of [false, true]) {
+      const c = card('Cotentin', 'harbour', 'UK', 'GER', cd);
+      expect(flak(c.never)).toBe('Not scouted, so reckoned at the worst: about 1,080 guns built round the harbour of the Cotentin, 720 light and 360 heavy, and the 60 light guns every target has.');
+      expect(flak(c.seen)).toBe('Seen two months ago: about 720 guns built round the harbour of the Cotentin, 480 light and 240 heavy, and the 60 light guns every target has.');
+      // A place without an article is unchanged.
+      const b = card('Bremen', 'harbour', 'UK', 'GER', cd);
+      expect(flak(b.seen)).toBe('Seen two months ago: about 720 guns built round the harbour of Bremen, 480 light and 240 heavy, and the 60 light guns every target has.');
+    }
+  });
+
+  it('a harbour card\'s own guns line, found by its words, takes the article only with city defences on', () => {
+    for (const [place, att, def] of [['Cotentin', 'UK', 'GER'], ['Crimea', 'GER', 'SOV']] as const) {
+      const off = card(place, 'harbour', att, def, false), on = card(place, 'harbour', att, def, true);
+      // The card has two guns lines (the harbour's and the factories'): each is read by its own words.
+      for (const c of [off, on]) expect(guns(c.sight)).toHaveLength(2);
+      const harbour = (lines: Lines): string => guns(lines).find((v) => v.includes('the harbour of'))!;
+      expect(harbour(off.sight)).toBe(`Level 2 guns ring the harbour of ${place}`);
+      expect(harbour(off.never)).toBe(`Not scouted, so reckoned at the worst: level 3 guns round the harbour of ${place}`);
+      expect(harbour(off.seen)).toBe(`Level 2 guns ringed the harbour of ${place} when seen two months ago`);
+      expect(harbour(on.sight)).toBe(`Level 2 guns ring the harbour of the ${place}`);
+      expect(harbour(on.never)).toBe(`Not scouted, so reckoned at the worst: level 3 guns round the harbour of the ${place}`);
+      expect(harbour(on.seen)).toBe(`Level 2 guns ringed the harbour of the ${place} when seen two months ago`);
+    }
+    // A place without an article is unchanged with the switch on.
+    expect(guns(card('Bremen', 'harbour', 'UK', 'GER', true).sight).find((v) => v.includes('the harbour of'))).toBe('Level 2 guns ring the harbour of Bremen');
   });
 });
