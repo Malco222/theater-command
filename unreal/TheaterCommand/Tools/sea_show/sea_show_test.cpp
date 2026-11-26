@@ -280,7 +280,122 @@ namespace
 		Vec Wind;
 		double SeaState = 0.0;
 		double ContactAt = -1.0;
+		// Torpedoes and the ships of their own side (Brian, 25 November 12:52Z: "the friendly ships would pass though right in
+		// front of torpedoes"). (a) As each track starts, its line from where it starts to where its run ends, as the show
+		// fired it (TrackStart's At to its Aim), against every ship of its side drawn then (her hull's capsule; the ship
+		// whose tubes it left apart, it starting in her): the tracks checked, the least any line clears a hull by beyond her
+		// half beam (and where), and the tracks passing within the show's TrackClear of one (2 m given for the step it was
+		// fired on against the moment drawn). (b) Over every track's whole run, its head's nearest pass to each ship of its
+		// side (the ship it left apart until its head is 2 m out of her hull): the least (and where), and the passes through a
+		// hull as (track, ship) pairs: through a ship of its own piece (the ship it left or her mates: the scene's own, the
+		// rules keeping a piece's ships out of other pieces' salvos only); through another piece's ship lying in the salvo's
+		// water ahead of its heads as the battle has them (the rules keep her out of it where their switch is on: the rules'
+		// side where it is off); through one anywhere else (out of the salvo's water, behind its heads, past its aim before
+		// the battle's moment: the scene's own, the rules keeping no ship out of there); and running on past its aim and the
+		// battle's moment (the scene's own water). The tracks start out of the hull of the ship whose tubes they left: the
+		// least any line as fired clears her own hull by, too.
+		int TracksChecked = 0, TracksFoul = 0;
+		double LeastLaunch = 1e9, LeastPass = 1e9, LeastOwnLaunch = 1e9;
+		std::string LeastLaunchAt, LeastPassAt, ThroughFirst, ThroughFirstOwn, ThroughFirstWater, ThroughFirstScene, ThroughFirstRunOn;
+		std::set<std::pair<int, int>> ThroughWater, ThroughScene, ThroughRunOn, ThroughOwn, CloseShips;
+		std::set<int> OutOfHer; // tracks whose head has come 2 m clear of the hull of the ship it left
+		std::map<int, int> LeftShip; // by track: the ship whose tubes it left (-1: from its salvo's firing point)
+		// Each salvo's water as the recording tells it (the naval rules' own-water switch's, Q3): the piece, when told, the
+		// run's seconds, the firing point (the event's place, else the piece's between its views), the aim, the leader's
+		// half beam there (its piece's ships' class, as its first track starts; below 0 not yet) and their length, the field's
+		// torp.radius. By track, its salvo's (the launching piece's last told at or before it starts; -1 none).
+		struct Water
+		{
+			int Piece = -1;
+			double T = 0.0, Running = 75.0;
+			Vec P, Aim;
+			double Half = -1.0, Long = -1.0, Radius = 800.0;
+		};
+		std::vector<Water> Waters;
+		std::map<int, int> TrackWater;
+		// Where each track starts: from the ship it left, within StartNear of her hull (her side or her bow tubes); from its
+		// salvo's firing point, in that salvo's water and at the point (within PointNear beyond the length of its piece's
+		// ships: never put out ahead in the water). The tracks checked so, those starting away from either (and the first),
+		// the farthest any started from the hull of the ship it left (metres beyond her half beam), and from its salvo's
+		// firing point (metres).
+		int StartsChecked = 0, StartsAway = 0, StartsFromPoint = 0;
+		double MostStartOff = 0.0, MostPointOff = 0.0;
+		std::string StartAwayFirst;
+		// (c) Each torpedo hit drawn: the battle's hits in order (their moments, the launching piece and the piece struck, and
+		// a third of the run of the salvo each came from: the least its track has run; each drawn once, those at one moment
+		// taken as a set, the one of the stopped track's piece and the struck ship's), those drawn ending a running track at her
+		// side in the same frame (its TrackStop at the hit), the latest a hit was drawn after its moment, and the farthest a
+		// track's head lay from her side the frame before it ended there. Each hit's track: one not running the frame before
+		// (begun in the hit's own frame, its jump then from where it started), one of another piece than the battle's hit
+		// came from (or of no piece known: the scene would show the wrong ships scoring it), one that had run less than a
+		// third of its salvo's run, one whose jump to her side went through a hull of its own side; each jump in order
+		// (against the show's own measure of the jump the track as fired at the battle's moment would have made, its shadow),
+		// and the youngest a hit's track was.
+		struct DueHit
+		{
+			double T = 0.0, Floor = 0.0;
+			int From = -1, Unit = -1;
+			bool bDrawn = false;
+		};
+		std::vector<DueHit> TorpHitsDue;
+		size_t TorpHitsDrawn = 0;
+		int HitsEndingTrack = 0, HitsTrackNew = 0, HitsTrackYoung = 0, HitPathsFoul = 0, HitsTrackOtherPiece = 0;
+		double MostHitLate = 0.0, MostHitJump = 0.0, LeastHitAge = 1e9;
+		std::string LeastHitAgeAt, HitFirstOdd;
+		std::vector<double> HitJumps;
+		std::map<int, Vec> HeadWas;   // by track: its head drawn the frame before
+		std::map<int, Vec> TrackFrom; // by track: where it started
+		std::map<int, double> TrackBorn; // by track: the moment drawn it started
+		std::map<int, int> TrackSide;
+		std::map<int, int> TrackPiece; // by track: the piece that fired it (TorpOut's, the first time it is drawn)
 	};
+
+	/** How near the hull of the ship whose tubes it left a track starts at the most (metres beyond her half beam: the show
+	 * starts it 4 m clear of her side, and a frame's way). */
+	constexpr double StartNear = 10.0; // (the check's words say it: keep them as one)
+
+	/** How far from its salvo's firing point a track fired from there starts at the most (metres beyond the length of its
+	 * piece's ships: the show starts it at the point, its tubes 4 m apart across its way, or 4 m clear of the side or bow of
+	 * a ship of the piece lying at the point, and a frame's way). */
+	constexpr double PointNear = 40.0; // (the check's words say it: keep them as one)
+
+	/** Whether a point lies in a salvo's water as the naval rules lay it (Q3: the fan from its firing point, Half wide
+	 * there, to the run's radius either side of the aim; Pad metres round it); Along, how far along it lies from the point
+	 * toward the aim. */
+	bool InSalvoWater(const Played::Water& W, const Vec& Q, double Pad, double& Along)
+	{
+		const double Half = W.Half >= 0.0 ? W.Half : 5.0, Radius = std::max(W.Radius, Half);
+		const Vec Axis(W.Aim.X - W.P.X, W.Aim.Y - W.P.Y, 0.0);
+		const double Long = Flat(Axis);
+		const Vec D(Q.X - W.P.X, Q.Y - W.P.Y, 0.0);
+		if (Long < 1.0)
+		{
+			Along = 0.0;
+			return Flat(D) <= Radius + Pad;
+		}
+		const double UX = Axis.X / Long, UY = Axis.Y / Long;
+		Along = D.X * UX + D.Y * UY;
+		const double Across = std::fabs(D.X * UY - D.Y * UX);
+		if (Along < -Pad || Along > Long + Pad) return false;
+		return Across <= Half + (Radius - Half) * std::clamp(Along / Long, 0.0, 1.0) + Pad;
+	}
+
+	/** Whether a ship lies in a salvo's water short of its aim and ahead of its heads as the battle has them at T (a front
+	 * across the water from its firing point to the aim in the run's time; her bow, middle or stern, her half beam round
+	 * each): where the rules' switch keeps her out until the heads have passed. */
+	bool InWaterAhead(const Played::Water& W, const SeaShow::ShipOut& S, double T)
+	{
+		const double Front = Flat(Vec(W.Aim.X - W.P.X, W.Aim.Y - W.P.Y, 0.0)) * std::clamp((T - W.T) / std::max(1.0, W.Running), 0.0, 1.0);
+		const double H = S.Heading * Pi / 180.0;
+		const Vec Along(std::sin(H), std::cos(H), 0.0);
+		for (const double End : { -0.5, 0.0, 0.5 })
+		{
+			const Vec Q(S.At.X + Along.X * S.Long * End, S.At.Y + Along.Y * S.Long * End, 0.0);
+			double S0 = 0.0;
+			if (InSalvoWater(W, Q, S.Beam * 0.5, S0) && S0 >= Front - S.Beam * 0.5) return true;
+		}
+		return false;
+	}
 
 	/** What the battle told that finds each enemy boat of the player (Mine), read from the recording alone, as the rule has
 	 * it (SeaShow::Show::SetMine) and not as the show keeps it: when anything could first have found her (a contact, a blow,
@@ -507,6 +622,64 @@ namespace
 	Played Play(const SeaFeed::Recording& Rec, double Fps, std::ofstream* Track, int Mine)
 	{
 		Played Out;
+		{
+			// (each hit, by its moment, with a third of the run of the salvo it came from: the launching piece's last told at or
+			// before it)
+			std::vector<std::tuple<double, int, int>> Hits; // (its moment, the launching piece, the piece struck)
+			std::vector<std::tuple<double, int, double>> Salvos;
+			for (const SeaFeed::Frame& Told : Rec.Views)
+				for (const SeaShow::Event& E : Told.Events)
+				{
+					if (E.What == "sea:torpedoHit") Hits.push_back({ E.T, E.From, E.Unit });
+					else if (E.What == "sea:torpedo") Salvos.push_back({ E.T, E.Unit, E.Running > 0.0 ? E.Running : Rec.Board.TorpTravel });
+				}
+			std::sort(Hits.begin(), Hits.end());
+			// (and each salvo's water: from the event's place, else the launching piece's between its views then)
+			for (const SeaFeed::Frame& Told : Rec.Views)
+				for (const SeaShow::Event& E : Told.Events)
+				{
+					if (E.What != "sea:torpedo" || E.Unit < 0) continue;
+					Played::Water W;
+					W.Piece = E.Unit;
+					W.T = E.T;
+					W.Running = E.Running > 0.0 ? E.Running : Rec.Board.TorpTravel;
+					W.Radius = Rec.Board.TorpRadius;
+					if (E.bAt) W.P = Vec(E.X, E.Y, 0.0);
+					else
+					{
+						const SeaShow::Piece* A = nullptr;
+						const SeaShow::Piece* B = nullptr;
+						double TA = 0.0, TB = 0.0;
+						for (const SeaFeed::Frame& V : Rec.Views)
+						{
+							const SeaShow::Piece* Here = nullptr;
+							for (const SeaShow::Piece& Q : V.Pieces)
+								if (Q.Id == E.Unit) Here = &Q;
+							if (!Here) continue;
+							if (V.Head.T <= E.T + 1e-9) { A = Here; TA = V.Head.T; }
+							else { B = Here; TB = V.Head.T; break; }
+						}
+						if (!A) continue;
+						const double Fr = B && TB > TA ? std::clamp((E.T - TA) / (TB - TA), 0.0, 1.0) : 0.0;
+						W.P = Vec(A->X + ((B ? B->X : A->X) - A->X) * Fr, A->Y + ((B ? B->Y : A->Y) - A->Y) * Fr, 0.0);
+					}
+					W.Aim = E.bAim ? Vec(E.AimX, E.AimY, 0.0) : W.P;
+					Out.Waters.push_back(W);
+				}
+			std::stable_sort(Out.Waters.begin(), Out.Waters.end(), [](const Played::Water& L, const Played::Water& R) { return L.T < R.T; });
+			for (const auto& Hit : Hits)
+			{
+				double Run = Rec.Board.TorpTravel;
+				for (const auto& Salvo : Salvos)
+					if (std::get<1>(Salvo) == std::get<1>(Hit) && std::get<0>(Salvo) <= std::get<0>(Hit) + 1e-9) Run = std::get<2>(Salvo);
+				Played::DueHit Due;
+				Due.T = std::get<0>(Hit);
+				Due.From = std::get<1>(Hit);
+				Due.Unit = std::get<2>(Hit);
+				Due.Floor = Run / 3.0;
+				Out.TorpHitsDue.push_back(Due);
+			}
+		}
 		SeaShow::Show Show(Rec.Seed ? Rec.Seed : 239);
 		Show.SetField(Rec.Board);
 		// (the player's side as the game takes it, ASeaBattle::OpenOn: an enemy boat drawn only once found)
@@ -746,6 +919,92 @@ namespace
 				case SeaShow::FxKind::BombHit:
 				case SeaShow::FxKind::TorpedoHit:
 				{
+					if (E.Kind == SeaShow::FxKind::TorpedoHit)
+					{
+						// (c) at the battle's moment, ending a track of the launching piece there: its TrackStop at her side in
+						// this frame
+						const SeaShow::Fx* Ended = nullptr;
+						for (const SeaShow::Fx& X : Show.Effects)
+							if (X.Kind == SeaShow::FxKind::TrackStop && Flat(X.At - E.At) <= 1e-6) { Ended = &X; break; }
+						const auto PieceOf = Ended ? Out.TrackPiece.find(Ended->Key) : Out.TrackPiece.end();
+						const int TrackBy = PieceOf != Out.TrackPiece.end() ? PieceOf->second : -1;
+						const auto StruckOf = ByKey.find(E.Key);
+						const int StruckPiece = StruckOf != ByKey.end() ? StruckOf->second->Piece : -1;
+						// (the battle's hit it draws: of those at the earliest moment not yet drawn, taken as a set, the one on
+						// the struck ship's piece from the stopped track's piece, else on hers, else from its piece, else the
+						// first)
+						Played::DueHit* Due = nullptr;
+						{
+							size_t First = 0;
+							while (First < Out.TorpHitsDue.size() && Out.TorpHitsDue[First].bDrawn) ++First;
+							int Most = -1;
+							for (size_t K = First; K < Out.TorpHitsDue.size() && Out.TorpHitsDue[K].T <= Out.TorpHitsDue[First].T + 1e-6; ++K)
+							{
+								Played::DueHit& H = Out.TorpHitsDue[K];
+								if (H.bDrawn) continue;
+								const int Fit = (StruckPiece >= 0 && H.Unit == StruckPiece ? 2 : 0) + (TrackBy >= 0 && H.From == TrackBy ? 1 : 0);
+								if (Fit > Most) { Most = Fit; Due = &H; }
+							}
+						}
+						if (Due)
+						{
+							Due->bDrawn = true;
+							Out.MostHitLate = std::max(Out.MostHitLate, std::fabs(Show.Shown() - Due->T));
+						}
+						++Out.TorpHitsDrawn;
+						if (Ended)
+						{
+							const SeaShow::Fx& Stop = *Ended;
+							++Out.HitsEndingTrack;
+							// (running the frame before, its jump from its head then; begun in this frame, from where it started)
+							const auto Was = Out.HeadWas.find(Stop.Key);
+							const bool bWas = Was != Out.HeadWas.end();
+							const auto Born = Out.TrackFrom.find(Stop.Key);
+							const Vec From = bWas ? Was->second : Born != Out.TrackFrom.end() ? Born->second : E.At;
+							const double Jump = Flat(From - E.At);
+							Out.MostHitJump = std::max(Out.MostHitJump, Jump);
+							Out.HitJumps.push_back(Jump);
+							const auto Start = Out.TrackBorn.find(Stop.Key);
+							const double Age = Start != Out.TrackBorn.end() ? Show.Shown() - Start->second : 0.0;
+							const double Floor = Due ? Due->Floor : 0.0;
+							std::string Odd;
+							if (!bWas)
+							{
+								++Out.HitsTrackNew;
+								Odd = "begun in the hit's frame";
+							}
+							// (of the piece the battle's hit came from: the scene shows the ships that scored it)
+							if (!Due || TrackBy < 0 || Due->From != TrackBy)
+							{
+								++Out.HitsTrackOtherPiece;
+								if (Odd.empty())
+									Odd = (TrackBy < 0 ? std::string("of no piece known") : "of piece " + std::to_string(TrackBy)) + " for a hit " +
+									      (Due ? "from piece " + std::to_string(Due->From) : std::string("the battle never told"));
+							}
+							if (Age < Floor - 0.1)
+							{
+								++Out.HitsTrackYoung;
+								if (Odd.empty()) Odd = "run " + Num(Age, 1) + " s of the " + Num(Floor, 1) + " s floor";
+							}
+							if (Age < Out.LeastHitAge)
+							{
+								Out.LeastHitAge = Age;
+								Out.LeastHitAgeAt = "track " + std::to_string(Stop.Key) + " at " + Num(Show.Shown(), 2) + " s";
+							}
+							// (its jump to her side clear of every hull of its own side)
+							const auto SideOf = Out.TrackSide.find(Stop.Key);
+							for (const SeaShow::ShipOut& S : Ships)
+							{
+								if (SideOf == Out.TrackSide.end() || S.Side != SideOf->second || S.Doing == SeaShow::Fate::Gone) continue;
+								const Capsule C = HullOf(S);
+								if (SegmentToSegment(From, E.At, C.A, C.B) - C.R >= 0.0) continue;
+								++Out.HitPathsFoul;
+								if (Odd.empty()) Odd = "its jump through ship " + std::to_string(S.Key);
+								break;
+							}
+							if (!Odd.empty() && Out.HitFirstOdd.empty()) Out.HitFirstOdd = "track " + std::to_string(Stop.Key) + " at " + Num(Show.Shown(), 2) + " s: " + Odd;
+						}
+					}
 					auto It = ByKey.find(E.Key);
 					if (It == ByKey.end()) { ++Out.HitsOnGone; break; }
 					// on her (a torpedo at her side): within her outline and a few metres
@@ -840,8 +1099,47 @@ namespace
 					if (!ScreensOpen.erase(E.Key)) ++Out.ScreenStray;
 					break;
 				case SeaShow::FxKind::TrackStart:
+				{
 					if (!TracksOpen.insert(E.Key).second) ++Out.TrackStray;
+					// (a) its line as fired, clear of every ship of its side (the one it left apart)
+					++Out.TracksChecked;
+					Out.TrackFrom[E.Key] = E.At;
+					Out.TrackBorn[E.Key] = Show.Shown();
+					Out.TrackSide[E.Key] = E.Side;
+					// (the piece that fired it, as the show lists the track this frame: a track started and stopped in one
+					// frame never listed, its piece unknown)
+					for (const SeaShow::TorpOut& O : Show.Torpedoes())
+						if (O.Key == E.Key) { Out.TrackPiece.emplace(O.Key, O.Piece); break; }
+					const int Left = static_cast<int>(std::lround(E.Size));
+					Out.LeftShip[E.Key] = Left;
+					bool bFoul = false;
+					for (const SeaShow::ShipOut& S : Ships)
+					{
+						if (S.Side != E.Side || S.Doing == SeaShow::Fate::Gone) continue;
+						const Capsule C = HullOf(S);
+						const double Gap = SegmentToSegment(E.At, E.Aim, C.A, C.B) - C.R;
+						if (S.Key == Left)
+						{
+							// (her own: out of her hull all along, 2 m at the least, a boat's from her bow tubes apart)
+							if (S.Class == "ss") continue;
+							Out.LeastOwnLaunch = std::min(Out.LeastOwnLaunch, Gap);
+							if (Gap < 2.0) bFoul = true;
+							continue;
+						}
+						if (Gap < Out.LeastLaunch)
+						{
+							Out.LeastLaunch = Gap;
+							Out.LeastLaunchAt = "track " + std::to_string(E.Key) + (Left >= 0 ? " from ship " + std::to_string(Left) : std::string(" from its salvo's firing point")) + " by ship " +
+							                    std::to_string(S.Key) + " at " + Num(Show.Shown(), 2) + " s";
+						}
+						if (Gap < SeaShow::Show::TrackClear - 2.0) bFoul = true;
+					}
+					if (bFoul) ++Out.TracksFoul;
+					if (std::getenv("SEA_SHOW_TORPS"))
+						std::printf("    track %d fired %.2f s from %s at (%.0f, %.0f) to (%.0f, %.0f), %.1f m/s, ends %.2f s\n", E.Key, Show.Shown(),
+						            Left >= 0 ? ("ship " + std::to_string(Left)).c_str() : "its salvo's firing point", E.At.X, E.At.Y, E.Aim.X, E.Aim.Y, Flat(E.Vel), E.Until);
 					break;
+				}
 				case SeaShow::FxKind::TrackMove:
 					if (!TracksOpen.count(E.Key)) ++Out.TrackStray;
 					break;
@@ -1319,6 +1617,104 @@ namespace
 				if (!P.bFalling && P.At.Z < -1.0) ++Out.PlanesUnder;
 			}
 			Out.MostTorps = std::max(Out.MostTorps, static_cast<int>(Show.Torpedoes().size()));
+			// (b) each track's head against every ship of its side (the one it left apart until its head is 2 m out of her)
+			Out.HeadWas.clear();
+			for (const SeaShow::TorpOut& O : Show.Torpedoes())
+			{
+				Out.HeadWas[O.Key] = O.At;
+				Out.TrackPiece.emplace(O.Key, O.Piece);
+				auto Salvo = Out.TrackWater.find(O.Key);
+				if (Salvo == Out.TrackWater.end())
+				{
+					// (first seen, as it starts: its salvo, the launching piece's last told at or before then, its water as wide
+					// at the firing point as the piece's ships' half beam)
+					const auto Born = Out.TrackBorn.find(O.Key);
+					const double Started = Born != Out.TrackBorn.end() ? Born->second : Show.Shown();
+					int Which = -1;
+					for (size_t K = 0; K < Out.Waters.size(); ++K)
+						if (Out.Waters[K].Piece == O.Piece && Out.Waters[K].T <= Started + 1e-6) Which = static_cast<int>(K);
+					Salvo = Out.TrackWater.emplace(O.Key, Which).first;
+					if (Which >= 0 && Out.Waters[static_cast<size_t>(Which)].Half < 0.0)
+						for (const SeaShow::ShipOut& S : Ships)
+							if (S.Piece == O.Piece)
+							{
+								Out.Waters[static_cast<size_t>(Which)].Half = S.Beam * 0.5;
+								Out.Waters[static_cast<size_t>(Which)].Long = S.Long;
+								break;
+							}
+					// (where it starts: at the side of the ship it left, or in its salvo's water from the firing point)
+					++Out.StartsChecked;
+					std::string Away;
+					if (O.bFromPoint)
+					{
+						++Out.StartsFromPoint;
+						double Along = 0.0;
+						if (Which < 0 || !InSalvoWater(Out.Waters[static_cast<size_t>(Which)], O.From, 0.5, Along)) Away = "from its salvo's firing point, out of its water";
+						else
+						{
+							// (and at the point: never put out ahead in the water)
+							const Played::Water& W = Out.Waters[static_cast<size_t>(Which)];
+							const double Off = Flat(Vec(O.From.X - W.P.X, O.From.Y - W.P.Y, 0.0));
+							Out.MostPointOff = std::max(Out.MostPointOff, Off);
+							if (Off > std::max(0.0, W.Long) + PointNear) Away = Num(Off, 0) + " m from its salvo's firing point";
+						}
+					}
+					else if (O.Ship >= 0)
+					{
+						const SeaShow::ShipOut* Her = nullptr;
+						for (const SeaShow::ShipOut& S : Ships)
+							if (S.Key == O.Ship) Her = &S;
+						const double Off = Her ? -Inside(O.From, *Her) : 1e9;
+						if (Her) Out.MostStartOff = std::max(Out.MostStartOff, Off);
+						if (Off > StartNear) Away = Her ? Num(Off, 0) + " m from ship " + std::to_string(O.Ship) + "'s side" : "from ship " + std::to_string(O.Ship) + ", not drawn";
+					}
+					else Away = "from no ship nor its salvo's firing point";
+					if (!Away.empty())
+					{
+						++Out.StartsAway;
+						if (Out.StartAwayFirst.empty()) Out.StartAwayFirst = "track " + std::to_string(O.Key) + " at " + Num(Show.Shown(), 2) + " s, " + Away;
+					}
+				}
+				const Played::Water* InSalvo = Salvo->second >= 0 ? &Out.Waters[static_cast<size_t>(Salvo->second)] : nullptr;
+				for (const SeaShow::ShipOut& S : Ships)
+				{
+					if (S.Side != O.Side || S.Doing == SeaShow::Fate::Gone) continue;
+					if (std::fabs(S.At.X - O.At.X) > S.Long + 100.0 || std::fabs(S.At.Y - O.At.Y) > S.Long + 100.0) continue;
+					const Capsule C = HullOf(S);
+					const double Gap = PointToSegment(O.At, C.A, C.B) - C.R;
+					if (S.Key == O.Ship && !Out.OutOfHer.count(O.Key))
+					{
+						// (out of her once 2 m clear of her hull, (a)'s own bound: a boat's head leaving her bow tubes too)
+						if (Gap < 2.0) continue;
+						Out.OutOfHer.insert(O.Key);
+					}
+					if (Gap < Out.LeastPass)
+					{
+						Out.LeastPass = Gap;
+						Out.LeastPassAt = "track " + std::to_string(O.Key) + " by ship " + std::to_string(S.Key) + " at " + Num(Show.Shown(), 2) + " s" + (O.bRunOn ? ", running on" : "");
+					}
+					if (Gap < SeaShow::Show::TrackClear) Out.CloseShips.insert({ O.Key, S.Key });
+					if (Gap < 0.0)
+					{
+						// (another piece's ship: in the salvo's water ahead of its heads, or anywhere else)
+						const bool bOwn = !O.bRunOn && S.Piece == O.Piece;
+						const bool bWater = !O.bRunOn && !bOwn && InSalvo && InWaterAhead(*InSalvo, S, Show.Shown());
+						std::set<std::pair<int, int>>& Into = O.bRunOn ? Out.ThroughRunOn : bOwn ? Out.ThroughOwn : bWater ? Out.ThroughWater : Out.ThroughScene;
+						const bool bNew = Into.insert({ O.Key, S.Key }).second;
+						const char* Where = O.bRunOn ? ", running on" : bOwn ? ", her own piece's" : bWater ? ", in the salvo's water ahead of its heads" : ", out of the salvo's water ahead of its heads";
+						if (bNew && std::getenv("SEA_SHOW_TORPS"))
+							std::printf("    track %d through ship %d (piece %d) at %.2f s, its head at (%.0f, %.0f), she at (%.0f, %.0f) heading %.0f%s\n", O.Key, S.Key, S.Piece, Show.Shown(), O.At.X, O.At.Y,
+							            S.At.X, S.At.Y, S.Heading, Where);
+						if (bNew)
+						{
+							const std::string Said = "track " + std::to_string(O.Key) + " through ship " + std::to_string(S.Key) + " (piece " + std::to_string(S.Piece) + ") at " + Num(Show.Shown(), 2) + " s" + Where;
+							std::string& First = O.bRunOn ? Out.ThroughFirstRunOn : bOwn ? Out.ThroughFirstOwn : bWater ? Out.ThroughFirstWater : Out.ThroughFirstScene;
+							if (First.empty()) First = Said;
+							if (Out.ThroughFirst.empty()) Out.ThroughFirst = Said;
+						}
+					}
+				}
+			}
 
 			// The ships in each piece's line: never more than the view before says, nor fewer than the view after.
 			while (Seen + 1 < Rec.Views.size() && Rec.Views[Seen + 1].Head.T <= Show.Shown() + 1e-9) ++Seen;
@@ -1562,8 +1958,44 @@ int main(int Argc, char** Argv)
 	            Rec.Key.c_str(), Rec.Board.Title.c_str(), Rec.Board.Date.c_str(), Rec.Views.size(), Last.Head.T - Rec.Views.front().Head.T, Pieces.size(), ShipsAtStart, Events, Sunk, Burning,
 	            TorpSalvos, TorpFull, TorpHits, Strikes, StrikesLanded, Raids);
 	std::printf("  read in %.0f ms; the winner %s (%s)\n", ReadMs, Rec.Card.Winner.c_str(), Rec.Card.Level.c_str());
+	// (the naval rules' switch for their own torpedoes' water, Brian 25 November 12:52Z: there the rules keep own ships out
+	// of a running salvo's water until its heads have passed, and a track's head through one is a failure. Without it, own
+	// ships may steer into running tracks: the rules' side, reported. A recording made with it on is named in the list
+	// run.sh gives, SEA_SHOW_OWN_WATER (Tools/sea_show/own_water.txt: a line each, the recording's name without .json; the
+	// rules' recorder writes no mark of it), or says so in its field, ownWater true (a stand-in))
+	const std::string Night = [&Path]() {
+		std::string Name = Path.substr(Path.find_last_of("/\\") == std::string::npos ? 0 : Path.find_last_of("/\\") + 1);
+		if (Name.size() > 5 && Name.compare(Name.size() - 5, 5, ".json") == 0) Name.resize(Name.size() - 5);
+		return Name;
+	}();
+	bool bOwnWater = false;
+	std::string OwnWaterBy;
+	{
+		const std::string& Text = Buffer.str();
+		const size_t FieldAt = Text.find("\"field\""), ViewsAt = Text.find("\"views\"");
+		const size_t Key = FieldAt == std::string::npos ? std::string::npos : Text.find("\"ownWater\"", FieldAt);
+		if (Key != std::string::npos && (ViewsAt == std::string::npos || Key < ViewsAt))
+		{
+			const size_t Value = Text.find_first_not_of(" \t\r\n:", Key + 10);
+			bOwnWater = Value != std::string::npos && Text.compare(Value, 4, "true") == 0;
+			if (bOwnWater) OwnWaterBy = "its field";
+		}
+		if (const char* ListPath = std::getenv("SEA_SHOW_OWN_WATER"))
+		{
+			std::ifstream ListIn(ListPath);
+			std::string Row;
+			while (std::getline(ListIn, Row))
+			{
+				while (!Row.empty() && (Row.back() == '\r' || Row.back() == ' ' || Row.back() == '\t')) Row.pop_back();
+				if (Row.empty() || Row[0] == '#' || Row != Night) continue;
+				bOwnWater = true;
+				OwnWaterBy = "the own-water list";
+			}
+		}
+	}
 
-	std::ofstream Track(OutDir + "/" + Rec.Key + "-sea-track.csv");
+	// (by the recording's file name: two recordings of one battle, before and after a rules change, keep a track each)
+	std::ofstream Track(OutDir + "/" + Night + "-sea-track.csv");
 	Track << "t,kind,key,piece,side,class,nation,x,y,z,heading,heel,speed,doing,extra\n";
 	// (the player's side as the game takes it, the first view's "me": an enemy boat drawn only once found, SetMine)
 	const int Player = SeaFeed::SideOf(Rec.Views.front().Head.Me);
@@ -1633,6 +2065,58 @@ int main(int Argc, char** Argv)
 	std::printf("  hits owed by gunfire %.1f, left unshown %.1f; screens %d (%d at once), tracks %d (%d at once), aircraft up %d at the most, cover up %d\n", C.OwedAll, C.OwedLeft,
 	            C.Screens, C.MostScreens, C.TracksRun, C.MostTracks, C.MostPlanes, C.CoverUp);
 	std::printf("  followers giving way to their own line crossing ahead: %.1f s; ships keeping clear of others: %d, %.1f ship-seconds altered\n", C.GaveWay, C.ClearShips, C.KeptClear);
+	// (c)'s jumps against the show's own measure of the jump the track as fired at the battle's moment would have made (its
+	// shadow, the same hit), and the most a hit's track's jump passed it by
+	double MostJumpOver = 0.0;
+	std::string MostJumpOverAt;
+	for (size_t K = 0; K < P.HitJumps.size() && K < C.HitShadowGap.size(); ++K)
+	{
+		if (C.HitShadowGap[K] < 0.0) continue;
+		if (P.HitJumps[K] - C.HitShadowGap[K] > MostJumpOver)
+		{
+			MostJumpOver = P.HitJumps[K] - C.HitShadowGap[K];
+			MostJumpOverAt = "hit " + std::to_string(K + 1) + ": " + Num(P.HitJumps[K], 0) + " m against " + Num(C.HitShadowGap[K], 0) + " m";
+		}
+	}
+	// (each salvo the battle fired with tubes: one track drawn of it at the least)
+	int SalvosUndrawn = 0;
+	std::string SalvoUndrawnAt;
+	for (size_t K = 0; K < C.SalvoTubes.size() && K < C.SalvoTracks.size(); ++K)
+		if (C.SalvoTubes[K] > 0 && C.SalvoTracks[K] == 0)
+		{
+			++SalvosUndrawn;
+			if (SalvoUndrawnAt.empty()) SalvoUndrawnAt = "salvo " + std::to_string(K + 1) + ", " + std::to_string(C.SalvoTubes[K]) + " tubes";
+		}
+	const int DroppedElse = C.TracksDropped - C.TracksDroppedOwn - C.TracksDroppedWater;
+	if (TorpSalvos > 0)
+	{
+		// Torpedoes and the ships of their own side (Brian, 25 November 12:52Z): (a) at each start, (b) over each run, (c) the hits.
+		std::printf("  torpedoes and their own side%s: %d tracks fired (%d held for an own ship in their way, the longest %.1f s; %d of them from the salvo's firing point; %d never drawn); "
+		            "%d stopped at the aim for an own ship in their run on, %d stopped running on as one came across; %d tubes fired at a hit\n",
+		            bOwnWater ? (" (recorded with the rules' own-water switch, by " + OwnWaterBy + ")").c_str() : "", C.TracksRun, C.TracksHeld, C.MostHold, C.TracksMoved, C.TracksDropped,
+		            C.TracksCut, C.TracksStopped, C.TubesAtHit);
+		if (C.TracksDropped > 0)
+			std::printf("    never drawn: %d; %d of them for her own piece's ships alone in her ways, %d for other pieces' ships in her salvo's water ahead of its heads (the rules' side), "
+			            "%d the scene's own otherwise\n",
+			            C.TracksDropped, C.TracksDroppedOwn, C.TracksDroppedWater, DroppedElse);
+		std::printf("    by salvo: %zu told with tubes, %d with none of them drawn%s\n", C.SalvoTubes.size(), SalvosUndrawn, SalvoUndrawnAt.empty() ? "" : (" (first " + SalvoUndrawnAt + ")").c_str());
+		std::printf("    (a) at each start: %d lines, the least clear of another own hull %s m beyond her half beam (%s; the show's own %s m), of her own hull %s m; %d foul; %d starts, %d from the "
+		            "salvo's firing point (%s m from it at the most), %d away from the ship it left (%s m beyond her half beam at the most) or from its salvo's firing point%s\n",
+		            P.TracksChecked, P.LeastLaunch < 1e8 ? Num(P.LeastLaunch, 1).c_str() : "-", P.LeastLaunchAt.empty() ? "no own ship near" : P.LeastLaunchAt.c_str(),
+		            C.LeastTrackGap < 1e8 ? Num(C.LeastTrackGap, 1).c_str() : "-", P.LeastOwnLaunch < 1e8 ? Num(P.LeastOwnLaunch, 1).c_str() : "-", P.TracksFoul, P.StartsChecked, P.StartsFromPoint,
+		            Num(P.MostPointOff, 1).c_str(), P.StartsAway, Num(P.MostStartOff, 1).c_str(), P.StartAwayFirst.empty() ? "" : (" (first " + P.StartAwayFirst + ")").c_str());
+		std::printf("    (b) over each run: the nearest pass of a head to an own hull %s m (%s); %zu track-ship pairs within %.0f m; through a hull: %zu of its own piece, %zu of another piece in the salvo's "
+		            "water ahead of its heads%s, %zu of another piece anywhere else (the scene's own), %zu running on%s\n",
+		            P.LeastPass < 1e8 ? Num(P.LeastPass, 1).c_str() : "-", P.LeastPassAt.empty() ? "none near" : P.LeastPassAt.c_str(), P.CloseShips.size(), SeaShow::Show::TrackClear,
+		            P.ThroughOwn.size(), P.ThroughWater.size(), P.ThroughWater.empty() ? "" : bOwnWater ? " (the rules keep them out here: a failure)" : " (recorded without the rules' switch: ships steering into running tracks, the rules' side)",
+		            P.ThroughScene.size(), P.ThroughRunOn.size(), P.ThroughFirst.empty() ? "" : (" (first " + P.ThroughFirst + ")").c_str());
+		std::printf("    (c) the hits: %d of %d drawn ending a track at her side, at most %.3f s from the battle's moment, the head %.0f m from her side the frame before at the most (%.0f m past the "
+		            "battle's moment's own%s); the youngest track a hit ended %s; %d begun in the hit's frame, %d of another piece than the one the hit came from (or of none known), "
+		            "%d run less than a third of the run, %d jumping through an own hull%s\n",
+		            P.HitsEndingTrack, TorpHits, P.MostHitLate, P.MostHitJump, MostJumpOver, MostJumpOverAt.empty() ? "" : (", " + MostJumpOverAt).c_str(),
+		            P.LeastHitAge < 1e8 ? (Num(P.LeastHitAge, 1) + " s old (" + P.LeastHitAgeAt + ")").c_str() : "-", P.HitsTrackNew, P.HitsTrackOtherPiece, P.HitsTrackYoung, P.HitPathsFoul,
+		            P.HitFirstOdd.empty() ? "" : (" (first " + P.HitFirstOdd + ")").c_str());
+	}
 	std::printf("  where ships went down: %d (%d with men in the water of %d due); men in the water %d in truth, %d shown (%.0f%%), %d at once at the most (%d drawn), %d dead, %d picked up, "
 	            "%d pushed aside by a ship, %d dead gone under for room; %d floats (%d rafts, %d boats), %d slicks (%d alight)\n",
 	            C.Wrecks, C.WrecksManned, C.WrecksDue, C.MenReal, C.MenKept, C.MenReal ? 100.0 * C.MenKept / C.MenReal : 100.0, C.MostMen, P.MostMenSeen, C.MenDead, C.MenPicked,
@@ -1723,11 +2207,72 @@ int main(int Argc, char** Argv)
 	                   std::to_string(C.Sinks) + " of " + std::to_string(Sunk) + " (" + std::to_string(C.SunkUnmatched) + " unmatched)", "all" });
 	Limits.push_back({ "every ship burning leaves her line and limps", C.Leaves == Burning && C.BurningUnmatched == 0,
 	                   std::to_string(C.Leaves) + " of " + std::to_string(Burning) + " (" + std::to_string(C.BurningUnmatched) + " unmatched)", "all" });
-	Limits.push_back({ "every torpedo salvo with tracks runs them", C.TorpedoEvents == TorpSalvos && (TorpFull == 0 || C.TracksRun >= TorpFull),
-	                   std::to_string(C.TracksRun) + " tracks for " + std::to_string(TorpFull) + " salvos", "one or more each" });
+	// (and each salvo told with tubes draws one of them at the least: a ship's tubes may be held, so the total no longer
+	// shows each salvo had its own)
+	Limits.push_back({ "every torpedo salvo with tracks runs them", C.TorpedoEvents == TorpSalvos && (TorpFull == 0 || C.TracksRun >= TorpFull) && SalvosUndrawn == 0,
+	                   std::to_string(C.TracksRun) + " tracks for " + std::to_string(TorpFull) + " salvos, " + std::to_string(SalvosUndrawn) + " of them with none drawn" +
+	                       (SalvoUndrawnAt.empty() ? std::string() : " (first " + SalvoUndrawnAt + ")"),
+	                   "one or more each" });
 	Limits.push_back({ "every torpedo hit ends a track at the ship's side", C.TorpedoHits == TorpHits && C.TorpedoHitUnmatched == 0,
 	                   std::to_string(C.TorpedoHits) + " of " + std::to_string(TorpHits), "all" });
 	Limits.push_back({ "torpedo tracks within the room", P.MostTorps <= SeaShow::Show::TrackRoom && P.TrackStray == 0, std::to_string(P.MostTorps) + " at once, " + std::to_string(P.TrackStray) + " stray", "the room or fewer, 0 stray" });
+	// (Brian, 25 November 12:52Z: "the friendly ships would pass though right in front of torpedoes. have more awareness to
+	// avoid friendly fire": (a) no track fired through a ship of its own side, its own mates included; (b) none running
+	// through one past its aim, where the water is the scene's own, nor in its salvo's water where the rules keep own ships
+	// out of it (their switch on: the own-water list, or field.ownWater); (c) every hit still ends a track at her side at the
+	// battle's moment)
+	Limits.push_back({ "every torpedo's line clear of its own side as it is fired", P.TracksFoul == 0 && (C.TracksRun == 0 || C.LeastTrackGap >= SeaShow::Show::TrackClear),
+	                   std::to_string(P.TracksChecked) + " lines, " + std::to_string(P.TracksFoul) + " foul, the least " + (P.LeastLaunch < 1e8 ? Num(P.LeastLaunch, 1) + " m" : std::string("-")) +
+	                       " (the show's own " + (C.LeastTrackGap < 1e8 ? Num(C.LeastTrackGap, 1) + " m" : std::string("-")) + "), of her own hull " + (P.LeastOwnLaunch < 1e8 ? Num(P.LeastOwnLaunch, 1) + " m" : std::string("-")),
+	                   "start to end the show's margin clear of every other own hull (2 m given for the frame), 2 m of her own" });
+	// (a ship's tubes held no later than two thirds of the run, the last a track may be fired and still run the third of it a
+	// hit's track has; from a third of it (before it where her own place's tracks would not come into the rules' water within
+	// the look ahead), from the salvo's firing point instead.
+	// Every torpedo the battle fired is drawn: a night that cannot is listed in the known failures, its count its bound, with
+	// why (other pieces' ships in its salvo's water, recorded without the rules' switch: the rules' side). None is ever given
+	// up for her own piece's ships alone in her ways, nor for any other cause of the scene's own: not listed)
+	Limits.push_back({ "every torpedo the battle fired drawn (held tubes fired once clear)", C.TracksDropped == 0,
+	                   std::to_string(C.TracksDropped) + " never drawn (" + std::to_string(C.TracksDroppedWater) + " for other pieces' ships in her salvo's water ahead of its heads), " +
+	                       std::to_string(C.TracksHeld) + " held (" + Num(C.MostHold, 1) + " s at the most), " + std::to_string(C.TracksMoved) + " from the salvo's firing point",
+	                   "none", static_cast<double>(C.TracksDropped) });
+	// (and none begun away from a firing point: each at the side of the ship whose tubes it left, or at the salvo's firing
+	// point the battle told it from, in the rules' water there; never put out ahead in the sea)
+	Limits.push_back({ "every torpedo starts at her side or in its salvo's water", P.StartsAway == 0,
+	                   std::to_string(P.StartsChecked) + " starts, " + std::to_string(P.StartsFromPoint) + " from the salvo's firing point (" + Num(P.MostPointOff, 1) + " m from it at the most), " +
+	                       std::to_string(P.StartsAway) + " away (" + Num(P.MostStartOff, 1) + " m from her side at the most" + (P.StartAwayFirst.empty() ? std::string() : "; first " + P.StartAwayFirst) + ")",
+	                   "within 10 m of her side, or at the firing point in its water (within 40 m beyond her length)" });
+	Limits.push_back({ "no torpedo left undrawn for the scene's own cause", C.TracksDroppedOwn == 0 && DroppedElse == 0,
+	                   std::to_string(C.TracksDroppedOwn) + " for her own piece's ships alone in her ways, " + std::to_string(DroppedElse) + " otherwise the scene's own (of " + std::to_string(C.TracksDropped) +
+	                       " never drawn)",
+	                   "none" });
+	Limits.push_back({ "no torpedo runs through a ship of its own piece", P.ThroughOwn.empty(), std::to_string(P.ThroughOwn.size()) + " track-ship pairs" + (P.ThroughOwn.empty() ? std::string() : " (first " + P.ThroughFirstOwn + ")"), "0" });
+	Limits.push_back({ "no torpedo runs through an own ship past its aim", P.ThroughRunOn.empty(), std::to_string(P.ThroughRunOn.size()) + " track-ship pairs (" + std::to_string(C.TracksCut) + " stopped at the aim, " +
+	                   std::to_string(C.TracksStopped) + " stopped running on" + (P.ThroughRunOn.empty() ? std::string() : "; first " + P.ThroughFirstRunOn) + ")", "0" });
+	Limits.push_back({ "no torpedo runs through an own ship in its water (rules' switch on)", !bOwnWater || P.ThroughWater.empty(),
+	                   std::to_string(P.ThroughWater.size()) + " track-ship pairs" + (P.ThroughWater.empty() ? std::string() : bOwnWater ? " (first " + P.ThroughFirstWater + ")" : std::string(" (made without the switch: the rules' side)")),
+	                   "0 where the recording has the rules' switch on" });
+	// (and anywhere the rules keep no ship out, the scene's own on every recording: out of the salvo's water, behind its
+	// heads as the battle has them, or past its aim before the battle's moment)
+	Limits.push_back({ "no torpedo runs through an own ship out of its salvo's water ahead of its heads", P.ThroughScene.empty(),
+	                   std::to_string(P.ThroughScene.size()) + " track-ship pairs" + (P.ThroughScene.empty() ? std::string() : " (first " + P.ThroughFirstScene + ")"), "0" });
+	Limits.push_back({ "every torpedo hit ends a track at her side at the battle's moment", P.TorpHitsDrawn == static_cast<size_t>(TorpHits) && P.HitsEndingTrack == TorpHits && P.MostHitLate <= 0.1,
+	                   std::to_string(P.HitsEndingTrack) + " of " + std::to_string(TorpHits) + " ending a track, " + Num(P.MostHitLate, 3) + " s off at the most", "all, within 0.1 s" });
+	// (the track a hit ends ran there: running the frame before, of the piece the battle's hit came from (the scene shows
+	// the ships that scored it), a third of its salvo's run or more, its jump to her side through no hull of its side; and no
+	// tube is fired at the hit itself to end there)
+	Limits.push_back({ "every torpedo hit's track ran to her", P.HitsTrackNew == 0 && P.HitsTrackOtherPiece == 0 && P.HitsTrackYoung == 0 && P.HitPathsFoul == 0 && C.TubesAtHit == 0,
+	                   std::to_string(P.HitsTrackNew) + " begun in the hit's frame, " + std::to_string(P.HitsTrackOtherPiece) + " of another piece than the hit's (or none known), " +
+	                       std::to_string(P.HitsTrackYoung) + " run less than a third of the run (the youngest " + (P.LeastHitAge < 1e8 ? Num(P.LeastHitAge, 1) + " s" : std::string("-")) +
+	                       "), " + std::to_string(P.HitPathsFoul) + " jumping through an own hull; " + std::to_string(C.TubesAtHit) + " tubes fired at a hit" +
+	                       (P.HitFirstOdd.empty() ? std::string() : " (first " + P.HitFirstOdd + ")"),
+	                   "each running the frame before, of the launching piece, a third of its run or more, its jump clear; none fired at a hit" });
+	// (and its jump to her side no longer than the battle's moment's own track's would have been, the same hit, by more than
+	// HitJumpOver: a night whose tracks that ran to her were kept from her by the rules' own ships, in the salvo's water with
+	// their switch off, is listed in the known failures, its excess its bound)
+	constexpr double HitJumpOver = 150.0;
+	Limits.push_back({ "every torpedo hit's jump no longer than the battle's own", MostJumpOver <= HitJumpOver,
+	                   "the jump " + Num(P.MostHitJump, 0) + " m at the most, " + Num(MostJumpOver, 1) + " m past the battle's moment's own" + (MostJumpOverAt.empty() ? std::string() : " (" + MostJumpOverAt + ")"),
+	                   "within 150 m of the battle's moment's own", MostJumpOver });
 	// L2: the carriers' strikes.
 	Limits.push_back({ "every strike flies off its carrier", Strikes == 0 || (C.StrikeEvents == Strikes && C.Launches >= 4 * Strikes),
 	                   std::to_string(C.Launches) + " launched for " + std::to_string(Strikes), "4 or more a strike" });
@@ -2459,8 +3004,6 @@ int main(int Argc, char** Argv)
 	std::map<std::string, double> Known;
 	if (const char* KnownPath = std::getenv("SEA_SHOW_KNOWN"))
 	{
-		std::string Night = Path.substr(Path.find_last_of("/\\") == std::string::npos ? 0 : Path.find_last_of("/\\") + 1);
-		if (Night.size() > 5 && Night.compare(Night.size() - 5, 5, ".json") == 0) Night.resize(Night.size() - 5);
 		std::ifstream KnownIn(KnownPath);
 		std::string Row;
 		while (std::getline(KnownIn, Row))

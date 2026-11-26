@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 
 namespace SeaShow
@@ -943,10 +944,19 @@ namespace SeaShow
 			int PerShip = !E.bShare ? 3 : E.Share <= 0.0 ? 0 : std::max(1, static_cast<int>(std::lround(Clamp(E.Share, 0.0, 1.0) * 3.0)));
 			if (bBoat && E.Fish > 0) PerShip = std::min(E.Fish, 6);
 			// (no more than the room left, shared among her ships: a later salvo is never left without tracks while the
-			// earlier ones still run, and every hit has a track to end)
+			// earlier ones still run, and every hit has a track to end; the room as the tracks fired at the battle's moment
+			// keep it, the shadows, whether any ship holds hers or not)
 			const int Firing = std::min(4, static_cast<int>(It->second.Line.size()));
-			const int Room = TrackRoom - static_cast<int>(Torps.size());
+			const int Room = TrackRoom - static_cast<int>(Shadows.size());
 			if (PerShip > 0 && Firing > 0 && PerShip * Firing > Room) PerShip = std::max(1, Room / Firing);
+			// (its firing point: the piece's place as the battle tells the salvo, its leader's as the rules lay him, where the
+			// rules' water starts: from there, its leader's half beam wide, to the run's radius either side of the aim)
+			const Hull* Lead = It->second.Line.empty() ? nullptr : FindHull(It->second.Line.front());
+			const Vec Point = E.bAt ? Vec(E.X, E.Y, 0.0) : At;
+			const int Salvo = ++TorpSalvos;
+			Check.SalvoTubes.push_back(0);
+			Check.SalvoTracks.push_back(0);
+			const size_t First = Holding.size();
 			int Fired = 0;
 			for (const int Key : It->second.Line)
 			{
@@ -954,36 +964,65 @@ namespace SeaShow
 				if (!H || Fired >= 4 || PerShip <= 0) continue;
 				++Fired;
 				// Three tracks from each ship of the piece (her tubes' spread, a few degrees apart), aimed at the battle's
-				// aim point, at the speed that brings them there when the battle has them arrive; they run on past it.
+				// aim point, at the speed that brings them there when the battle has them arrive; they run on past it. Each
+				// as it would have run had she fired now is the shadow (the room, the ship a hit strikes); her tubes are
+				// fired below, now or once her way is clear, each with its own scatter thrown now (the battle's dice, in
+				// their order whenever she fires).
 				const double Base = Bearing(H->P, Aim), Dist = Flat(Aim - H->P);
 				const double Speed = std::max(bBoat ? 8.0 : 18.0, Dist / Running);
 				const double Fan = bBoat && E.Fan > 0.0 && PerShip > 1 ? Clamp(E.Fan, 0.0, 40.0) / (PerShip - 1) : 3.5;
+				Held R;
+				R.Salvo = Salvo;
+				R.Ship = H->Key;
+				R.Piece = E.Unit;
+				R.Side = H->Side;
+				R.Class = H->Class;
+				R.Nation = H->Nation;
+				R.bBoat = bBoat;
+				R.bWakeless = E.bWakeless;
+				R.Aim = Aim;
+				R.Told = ShownT;
+				R.Arrive = ShownT + Running;
+				R.Running = Running;
+				R.Fan = Fan;
+				R.WaterP = Point;
+				R.WaterHalf = SizeOf(Lead ? Lead->Class : H->Class).Beam * 0.5;
+				R.Radius = std::max(F.TorpRadius, R.WaterHalf);
 				for (int Tube = 0; Tube < PerShip; ++Tube)
 				{
 					const double K = Tube - (PerShip - 1) * 0.5;
-					if (static_cast<int>(Torps.size()) >= TrackRoom) break;
-					Torp T;
-					T.Key = NextKey++;
-					T.Side = H->Side;
-					T.Piece = E.Unit;
-					const double Way = Base + (K * Fan + Roll.U(-0.8, 0.8)) * Deg;
-					T.P = bBoat ? PlaceOn(*H, 0.45, K * 0.6, 0.0) : H->P + RightOf(H->Hdg) * (K * 4.0);
-					T.From = T.P;
-					T.Way = Ahead(Way);
-					T.Speed = Speed;
-					T.Launched = ShownT;
-					T.Ends = ShownT + Running + 600.0 / Speed;
-					T.Aim = Aim;
-					Torps.push_back(T);
-					Fx& S = Emit(FxKind::TrackStart, T.P, std::string(), T.Key);
-					S.Vel = T.Way * T.Speed;
-					S.Side = T.Side;
-					S.Text = H->Nation; // (whose torpedo: the scene draws the Japanese ships' oxygen torpedoes' tracks faint)
-					if (E.bWakeless) S.What = "wakeless";
-					++Check.TracksRun;
+					if (static_cast<int>(Shadows.size()) >= TrackRoom) break;
+					const double Scatter = Roll.U(-0.8, 0.8);
+					Shadow S;
+					S.Piece = E.Unit;
+					S.Way = Ahead(Base + (K * Fan + Scatter) * Deg);
+					S.P = bBoat ? PlaceOn(*H, 0.45, K * 0.6, 0.0) : H->P + RightOf(H->Hdg) * (K * 4.0);
+					S.Speed = Speed;
+					S.Ends = ShownT + Running + 600.0 / Speed;
+					Shadows.push_back(S);
+					R.Ks.push_back(K);
+					R.Scatter.push_back(Scatter);
+					R.Ends.push_back(S.Ends);
+					R.RulesOnly.push_back(0);
+					++Check.SalvoTubes.back();
 				}
-				// L5: she turns away under smoke, as destroyers did after their run (not a boat).
-				if (!bBoat) H->ScreenUntil = ShownT + 60.0;
+				if (R.Ks.empty())
+				{
+					// (no room left for a track of hers: she turns away under smoke as she would have fired, L5)
+					if (!bBoat) H->ScreenUntil = ShownT + 60.0;
+					continue;
+				}
+				Holding.push_back(R);
+			}
+			// Each tube goes now where its way is clear from her own place (or from the salvo's firing point, where her own
+			// place's track would not come into the rules' water within the look ahead), the leader's first; the rest are
+			// held, and RunTorpedoes looks again every quarter second, each ship a step after the one ahead.
+			ForeseenAt = -1.0;
+			for (size_t K = First; K < Holding.size(); ++K) Holding[K].NextLook = ShownT + 0.25 + Fixed * static_cast<double>((K - First) % 5);
+			for (size_t K = First; K < Holding.size();)
+			{
+				if (!FireTubes(Holding[K])) Holding.erase(Holding.begin() + static_cast<std::ptrdiff_t>(K));
+				else ++K;
 			}
 			Check.MostTracks = std::max(Check.MostTracks, static_cast<int>(Torps.size()));
 			return;
@@ -992,28 +1031,39 @@ namespace SeaShow
 		{
 			++Check.TorpedoHitEvents;
 			AirBlowAt[E.Unit] = E.T;
-			// The track of the launching piece that ends nearest a ship of the piece hit: it ends against her side. Where
-			// the blow sinks or fires her, the battle's zone for it names the ship (the one that then goes down or burns).
+			// The ship of the piece hit that the track of the launching piece ending nearest one of its ships comes to, as
+			// the tracks fired at the battle's moment had it (the shadows: the same ship whether any ship held her tubes or
+			// not). Where the blow sinks or fires her, the battle's zone for it names the ship (the one that then goes down or
+			// burns).
 			const Zone* Doom = ZoneFor("sunk");
 			if (!Doom) Doom = ZoneFor("burning");
 			Hull* Named = Doom ? ByZone(E.Unit, Doom) : nullptr;
-			Torp* Best = nullptr;
+			Shadow* Was = nullptr;
 			Hull* Struck = nullptr;
 			double BestD = 1e18;
-			for (Torp& T : Torps)
+			for (Shadow& S : Shadows)
 			{
-				if (!T.bRunning || T.Piece != E.From) continue;
-				Hull* H = Named ? Named : NearestOf(E.Unit, T.P.X, T.P.Y);
+				if (S.Ends < 0.0 || S.Piece != E.From) continue;
+				Hull* H = Named ? Named : NearestOf(E.Unit, S.P.X, S.P.Y);
 				if (!H) continue;
-				const double D = Flat(H->P - T.P);
-				if (D < BestD) { BestD = D; Best = &T; Struck = H; }
+				const double D = Flat(H->P - S.P);
+				if (D < BestD) { BestD = D; Was = &S; Struck = H; }
 			}
 			if (!Struck) Struck = Named ? Named : NearestOf(E.Unit, At.X, At.Y);
+			if (Was) Was->Ends = -1.0; // (its shadow ends against her, as the track did)
 			if (!Struck) { ++Check.TorpedoHitUnmatched; return; }
+			// The drawn track of the launching piece that ends against her side: one that has run a third of its salvo's run,
+			// its way to her clear of its own side, the nearest her (TrackForHit).
+			Torp* Best = TrackForHit(E.From, *Struck);
 			if (!Best) ++Check.TorpedoHitUnmatched;
-			const double Side = Best ? (RightOf(Struck->Hdg).Dot(Best->P - Struck->P) >= 0.0 ? 1.0 : -1.0) : (Roll.U() < 0.5 ? -1.0 : 1.0);
+			// (her side: the one the track comes in on; the dice for it only where no shadow ran, as before)
+			const Vec* From = Best ? &Best->P : Was ? &Was->P : nullptr;
+			const double Coin = Was ? 0.0 : Roll.U();
+			const double Side = From ? (RightOf(Struck->Hdg).Dot(*From - Struck->P) >= 0.0 ? 1.0 : -1.0) : (Coin < 0.5 ? -1.0 : 1.0);
 			const ClassSize& Sz = SizeOf(Struck->Class);
 			const Vec Hit = PlaceOn(*Struck, Roll.U(-0.3, 0.3), Side * (Sz.Beam * 0.5 + 2.0), 0.0);
+			// (how far the track as fired at the battle's moment lay from her side: the jump it made before any ship held hers)
+			Check.HitShadowGap.push_back(Was ? Flat(Was->P - Hit) : -1.0);
 			if (Best)
 			{
 				Best->bRunning = false;
@@ -3606,13 +3656,629 @@ namespace SeaShow
 	// ---------------------------------------------------------------------------------------------------------------
 	// Torpedoes and aircraft.
 
+	namespace
+	{
+		/** How far along a track's way (from Line, along Dir) it first lies Gap metres clear of a hull (a capsule: her middle
+		 * at P heading Hdg, a half beam short of each end, her half beam round it) and only draws away from it after: the gap
+		 * along a straight way to a capsule falls to its least and then only grows (its least, then the first Gap past it;
+		 * none where the way never comes within Gap of her). */
+		double ClearOf(const Vec& Line, const Vec& Dir, const Vec& P, double Hdg, double Long, double Beam, double Gap)
+		{
+			const Vec Half = Ahead(Hdg) * std::max(0.0, Long * 0.5 - Beam * 0.5);
+			auto HerGap = [&](double Along) {
+				const Vec Q = Line + Dir * Along;
+				return SegGap(Q, Q, P - Half, P + Half) - Beam * 0.5;
+			};
+			double Lo = 0.0, Hi = Long + Flat(Line - P) + 40.0;
+			const double Far = Hi;
+			for (int Third = 0; Third < 40; ++Third)
+			{
+				const double M1 = Lo + (Hi - Lo) / 3.0, M2 = Hi - (Hi - Lo) / 3.0;
+				if (HerGap(M1) <= HerGap(M2)) Hi = M2;
+				else Lo = M1;
+			}
+			double In = Lo, Exit = Far;
+			if (HerGap(In) >= Gap) return 0.0;
+			for (int Halve = 0; Halve < 24; ++Halve)
+			{
+				const double Mid = (In + Exit) * 0.5;
+				if (HerGap(Mid) < Gap) In = Mid;
+				else Exit = Mid;
+			}
+			return Exit;
+		}
+	}
+
+	bool Show::WayClear(const Vec& A, const Vec& B, int Side, int Except, double* Least, int OnlyPiece, std::vector<int>* Foul) const
+	{
+		bool bClear = true;
+		const double LoX = std::min(A.X, B.X), HiX = std::max(A.X, B.X), LoY = std::min(A.Y, B.Y), HiY = std::max(A.Y, B.Y);
+		for (const auto& Pair : Hulls)
+		{
+			const Hull& O = Pair.second;
+			if (O.Side != Side || O.Key == Except || O.Doing == Fate::Gone || (OnlyPiece >= 0 && O.Piece != OnlyPiece)) continue;
+			const ClassSize& Sz = SizeOf(O.Class);
+			// (her hull a capsule: her middle line to a half beam short of each end, her half beam round it)
+			const double Reach = Sz.Long * 0.5 + TrackClear + (Least ? 1000.0 : 0.0);
+			if (O.P.X < LoX - Reach || O.P.X > HiX + Reach || O.P.Y < LoY - Reach || O.P.Y > HiY + Reach) continue;
+			const Vec Half = Ahead(O.Hdg) * std::max(0.0, Sz.Long * 0.5 - Sz.Beam * 0.5);
+			const double Gap = SegGap(A, B, O.P - Half, O.P + Half) - Sz.Beam * 0.5;
+			if (Least) *Least = std::min(*Least, Gap);
+			if (Gap < TrackClear)
+			{
+				bClear = false;
+				if (Foul) Foul->push_back(O.Key);
+				else if (!Least) return false;
+			}
+		}
+		return bClear;
+	}
+
+	bool Show::InWater(const Held& R, const Vec& Q, double Pad, double* S) const
+	{
+		// The rules' water (the naval rules' own-water switch): the fan from the piece's place as the salvo was told, her half
+		// beam wide there, to the run's radius either side of the aim; across it at right angles to the way from one to the
+		// other.
+		const Vec Axis = R.Aim - R.WaterP;
+		const double Long = Flat(Axis);
+		const Vec D = Q - R.WaterP;
+		if (Long < 1.0)
+		{
+			if (S) *S = 0.0;
+			return Flat(D) <= R.Radius + Pad;
+		}
+		const double UX = Axis.X / Long, UY = Axis.Y / Long;
+		const double Along = D.X * UX + D.Y * UY, Across = std::fabs(D.X * UY - D.Y * UX);
+		if (S) *S = Along;
+		if (Along < -Pad || Along > Long + Pad) return false;
+		return Across <= R.WaterHalf + (R.Radius - R.WaterHalf) * Clamp(Along / Long, 0.0, 1.0) + Pad;
+	}
+
+	bool Show::InWaterAhead(const Held& R, const Hull& O) const
+	{
+		// (her bow, middle and stern, her half beam round each, as the rules lay her: in the water, and not yet passed by its
+		// heads as the battle's moment has them, a front across the water running from the piece's place to the aim in the
+		// run's time)
+		const ClassSize& Sz = SizeOf(O.Class);
+		const double Front = Flat(R.Aim - R.WaterP) * Clamp((ShownT - R.Told) / std::max(1.0, R.Running), 0.0, 1.0);
+		const Vec Half = Ahead(O.Hdg) * (Sz.Long * 0.5);
+		const Vec Points[3] = { O.P - Half, O.P, O.P + Half };
+		for (const Vec& Q : Points)
+		{
+			double S = 0.0;
+			if (InWater(R, Q, Sz.Beam * 0.5, &S) && S >= Front - Sz.Beam * 0.5) return true;
+		}
+		return false;
+	}
+
+	void Show::PlacesOf(const Held& R, std::vector<FirePlace>& Out) const
+	{
+		Out.clear();
+		const Hull* H = FindHull(R.Ship);
+		const bool bHers = H && H->Doing == Fate::Line;
+		// Her own place while she is in her line, until a third of the run is gone (her tubes: her own hull left out of the
+		// tracks' way, they starting at her side); a boat's, at her bow tubes, for as long as she holds any (one boat, no
+		// column: she fires from nowhere else).
+		const bool bEarly = ShownT < R.Told + R.Running / 3.0 - 1e-9;
+		if (bHers && (bEarly || R.bBoat)) Out.push_back({ H->P, H->Hdg, H->Key, false });
+		// Instead, from then (or once she is out of her line), the salvo's firing point: the place the battle told it from,
+		// where the rules' water starts; before then too for a tube whose track from her own place would not come into that
+		// water within the look ahead (she lying too far off it for her own place ever to serve: no use waiting). Where she
+		// lies at it her own hull is left out of the tracks' way too, they starting clear of her side.
+		if (R.bBoat) return;
+		int Except = -1;
+		if (H && H->Doing != Fate::Gone)
+		{
+			const ClassSize& Sz = SizeOf(H->Class);
+			const Vec Half = Ahead(H->Hdg) * std::max(0.0, Sz.Long * 0.5 - Sz.Beam * 0.5);
+			if (SegGap(R.WaterP, R.WaterP, H->P - Half, H->P + Half) - Sz.Beam * 0.5 < TrackClear + 10.0) Except = H->Key;
+		}
+		Out.push_back({ R.WaterP, Bearing(R.WaterP, R.Aim), Except, true, bHers && bEarly });
+	}
+
+	bool Show::PlanTube(const Held& R, size_t Tube, const FirePlace& From, int OnlyPiece, TubeWay& W, bool bAll) const
+	{
+		W = TubeWay();
+		const ClassSize& Sz = SizeOf(R.Class);
+		const double Base = Bearing(From.P, R.Aim), Dist = Flat(R.Aim - From.P);
+		const double Off = R.Ks[Tube];
+		const double Way = Base + (Off * R.Fan + R.Scatter[Tube]) * Deg;
+		W.Dir = Ahead(Way);
+		// (a ship's tracks, her tubes' spread 4 m apart across their way: from her own place each starting where its way from
+		// her middle is 4 m clear of her hull and only draws away from it after, off her side where it runs abeam, ahead of
+		// her bow where it runs ahead, so none runs along inside her; from the salvo's firing point there, or clear of her
+		// side as of her own where she lies at it; a boat's from her bow tubes, as before)
+		const Hull* Her = From.Except >= 0 ? FindHull(From.Except) : nullptr;
+		double Out = 0.0;
+		if (R.bBoat) W.P = From.P + Ahead(From.Hdg) * (0.45 * Sz.Long) + RightOf(From.Hdg) * (Off * 0.6);
+		else
+		{
+			// (spread across her way from her middle; across the water's own way at the firing point, none of them behind it)
+			const Vec Line = From.P + RightOf(From.bPoint ? Base : Way) * (Off * 4.0);
+			if (!From.bPoint) Out = ClearOf(Line, W.Dir, From.P, From.Hdg, Sz.Long, Sz.Beam, 4.0);
+			else if (Her)
+			{
+				const ClassSize& HerSz = SizeOf(Her->Class);
+				Out = ClearOf(Line, W.Dir, Her->P, Her->Hdg, HerSz.Long, HerSz.Beam, 4.0);
+			}
+			W.P = Line + W.Dir * Out;
+		}
+		// At the speed that brings it to the aim when the battle has it arrive (no slower than the floor; never slower than
+		// the ship it leaves steams its way, so she never overruns her own tracks).
+		const double ToAim = std::max(1.0, Dist - Out);
+		double Speed = std::max(R.bBoat ? 8.0 : 18.0, ToAim / std::max(1.0, R.Arrive - ShownT));
+		if (Her && !R.bBoat) Speed = std::max(Speed, Her->Spd * std::max(0.0, std::cos(Way - Her->Hdg)) + 3.0);
+		W.Speed = Speed;
+		W.AimAt = ShownT + ToAim / Speed;
+		// (its run on of 600 m past the aim, none where an own ship lies in it; no longer than its shadow's, so the room holds,
+		// but never short of the aim)
+		const Vec AimP = W.P + W.Dir * ToAim;
+		W.bCut = !WayClear(AimP, AimP + W.Dir * 600.0, R.Side, From.Except, nullptr, OnlyPiece);
+		W.Ends = std::max(W.AimAt, std::min(W.AimAt + (W.bCut ? 0.0 : 600.0 / Speed), R.Ends[Tube]));
+		W.End = W.P + W.Dir * (Speed * (W.Ends - ShownT));
+		// Clear: in the rules' water as it starts from the salvo's firing point, or into it within the look ahead from her own
+		// place (the rules keeping other ships out of the water ahead of its heads, their switch; a boat's spread is the
+		// battle's, as before, her own heads watched over their whole run as every track's are); its line from where it
+		// starts to where its run ends clear of every own hull now; and its head clear of each as she steams on, turning as
+		// she is, her way a little faster or slower, over its whole run to the aim and the battle's moment (past both it is
+		// watched as it runs on: she herself never runs or swings across her own track; a boat's own hull apart, her tracks
+		// leaving her bow tubes). The cheapest asked first, and (not bAll) no more once one fails.
+		W.bClear = true;
+		if (From.bPoint)
+		{
+			if (!InWater(R, W.P, 0.25))
+			{
+				W.bOutside = true;
+				W.bClear = false;
+			}
+		}
+		else if (!R.bBoat)
+		{
+			const double Step = std::max(5.0, Speed * 0.25);
+			for (double Along = 0.0;; Along += Step)
+			{
+				if (Along > ToAim + Step || Along / Speed > LookAhead)
+				{
+					W.bOutside = true;
+					W.bClear = false;
+					break;
+				}
+				if (InWater(R, W.P + W.Dir * std::min(Along, ToAim), 0.0)) break;
+			}
+		}
+		if (!W.bClear && !bAll) return false;
+		if (!WayClear(W.P, W.End, R.Side, From.Except, nullptr, OnlyPiece, bAll ? &W.Foul : nullptr)) W.bClear = false;
+		if (!W.bClear && !bAll) return false;
+		const double Run = std::max(0.0, std::min(W.Ends, std::max(W.AimAt, R.Arrive)) - ShownT);
+		if (!HeadsClear(W.P, W.Dir, Speed, Speed * Run, R.Side, R.bBoat ? -1 : From.Except, R.bBoat ? From.Except : -1, OnlyPiece, bAll ? &W.Foul : nullptr)) W.bClear = false;
+		return W.bClear;
+	}
+
+	const std::vector<std::vector<std::pair<Vec, double>>>& Show::Foreseen(const Hull& O, double Upto) const
+	{
+		// Her way as she steams on, a quarter second apart (the K-th (K + 1) steps on): a follower in her line along her
+		// leader's track ahead of her (she turns where he turned, her offset from it kept); any other turning as she is, or
+		// easing her helm (her rate held, three quarters, half, a quarter of it, or none; held until she has come round half
+		// a circle, then straight on), each a way. Kept for the step, longer as it is asked for.
+		if (ForeseenAt != ShownT)
+		{
+			ForeseenWays.clear();
+			ForeseenAt = ShownT;
+		}
+		std::vector<std::vector<std::pair<Vec, double>>>& Ways = ForeseenWays[O.Key];
+		const double Step = 0.25;
+		const int Steps = static_cast<int>(std::ceil(Upto / Step));
+		if (!Ways.empty() && static_cast<int>(Ways.front().size()) >= Steps) return Ways;
+		const ClassSize& Sz = SizeOf(O.Class);
+		const auto Col = Lines.find(O.Piece);
+		const bool bTrack = O.Doing == Fate::Line && Col != Lines.end() && !Col->second.Line.empty() && Col->second.Line.front() != O.Key &&
+		                    std::fabs(O.OffTrack) < Sz.Long && O.DodgeUntil <= ShownT;
+		static constexpr double Helm[5] = { 1.0, 0.75, 0.5, 0.25, 0.0 };
+		const int Count = bTrack || std::fabs(O.Rate) < 0.2 * Deg ? 1 : 5;
+		Ways.resize(static_cast<size_t>(Count));
+		for (int Fi = 0; Fi < Count; ++Fi)
+		{
+			std::vector<std::pair<Vec, double>>& Way = Ways[static_cast<size_t>(Fi)];
+			const double Rate = O.Rate * Helm[Fi];
+			Vec P = Way.empty() ? O.P : Way.back().first;
+			double Hdg = Way.empty() ? O.Hdg : Way.back().second;
+			Way.reserve(static_cast<size_t>(Steps));
+			for (int K = static_cast<int>(Way.size()) + 1; K <= Steps; ++K)
+			{
+				if (bTrack)
+				{
+					Vec OnP;
+					double OnH = O.Hdg;
+					Along(Col->second, O.SOn + O.Spd * (Step * K), OnP, OnH);
+					P = OnP - RightOf(OnH) * O.OffTrack;
+					Hdg = OnH;
+				}
+				else
+				{
+					if (std::fabs(Rate) * Step * K <= Pi) Hdg += Rate * Step;
+					P += Ahead(Hdg) * (O.Spd * Step);
+				}
+				Way.push_back({ P, Hdg });
+			}
+		}
+		return Ways;
+	}
+
+	bool Show::HeadsClear(const Vec& Start, const Vec& Dir, double Speed, double Length, int Side, int Her, int Skip, int OnlyPiece, std::vector<int>* Foul) const
+	{
+		// Each ship of her side near its way as she steams on over the head's run (Foreseen), as much as WayDoubt slower or
+		// faster than now (a second either way at the least; the ship it leaves as she is, her tracks outrunning her). The
+		// head never within 5 m of her hull (3 m of the ship it left, it starting 4 m out of her).
+		const double Horizon = Length / std::max(1.0, Speed);
+		const Vec End = Start + Dir * Length;
+		const double Step = 0.25;
+		const int Steps = static_cast<int>(Horizon / Step + 1e-9);
+		auto Crosses = [&](const Hull& O) {
+			const ClassSize& Sz = SizeOf(O.Class);
+			const double Doubt = O.Key == Her ? 0.0 : WayDoubt, Slack = O.Key == Her ? 0.0 : 1.0;
+			const double Upto = Horizon * (1.0 + Doubt) + Slack;
+			if (SegGap(O.P, O.P, Start, End) > Sz.Long * 0.5 + std::fabs(O.Spd) * Upto + 10.0) return false;
+			const double Margin = O.Key == Her ? 3.0 : 5.0, Reach = std::max(0.0, Sz.Long * 0.5 - Sz.Beam * 0.5);
+			{
+				// (nor where the head at each moment lies further from her place now than she can steam by her latest place
+				// looked at for that moment, her length and 10 m: the least over the run of the head's distance less her
+				// way, which only falls and then rises, found by thirds)
+				const double Way = std::fabs(O.Spd) * (1.0 + Doubt);
+				auto Gap = [&](double T) { return Flat(Start + Dir * (Speed * T) - O.P) - Way * T; };
+				double Lo = 0.0, Hi = Horizon;
+				for (int Third = 0; Third < 30; ++Third)
+				{
+					const double M1 = Lo + (Hi - Lo) / 3.0, M2 = Hi - (Hi - Lo) / 3.0;
+					if (Gap(M1) <= Gap(M2)) Hi = M2;
+					else Lo = M1;
+				}
+				if (Gap((Lo + Hi) * 0.5) > Sz.Long * 0.5 + Margin + 1.0 + std::fabs(O.Spd) * (Slack + 2.0 * Step) + 10.0) return false;
+			}
+			const double Near = Sz.Long * 0.5 + Margin + 1.0;
+			for (const std::vector<std::pair<Vec, double>>& Way : Foreseen(O, Upto))
+			{
+				const int Last = static_cast<int>(Way.size()) - 1;
+				// (her place J steps on, J -1 now)
+				auto At = [&](int J) -> const Vec& { return J < 0 ? O.P : Way[static_cast<size_t>(J)].first; };
+				auto HdgAt = [&](int J) { return J < 0 ? O.Hdg : Way[static_cast<size_t>(J)].second; };
+				for (int K = 0; K < Steps; ++K)
+				{
+					const double Tk = Step * (K + 1);
+					const Vec Head = Start + Dir * (Speed * Tk);
+					// (her places from (1 - doubt) to (1 + doubt) of the head's time: the stretch's middle further from it than
+					// half the stretch and her reach, none of them near)
+					const int A = std::clamp(static_cast<int>(std::floor(std::max(0.0, std::min(Tk * (1.0 - Doubt), Tk - Slack)) / Step + 1e-9)) - 1, -1, Last);
+					const int B = std::clamp(static_cast<int>(std::ceil(std::max(Tk * (1.0 + Doubt), Tk + Slack) / Step - 1e-9)) - 1, -1, Last);
+					const Vec& Mid = At((A + B) / 2);
+					const double Span = std::fabs(O.Spd) * Step * (B - A) * 0.5 + Near + 1.0;
+					const double MX = Head.X - Mid.X, MY = Head.Y - Mid.Y;
+					if (MX * MX + MY * MY > Span * Span)
+					{
+						// (and the steps after it that cannot close the gap: a step the head closes her stretch by its own way, the
+						// stretch's middle by at most a little over two of hers (its ends rounded out), and the stretch widens by
+						// little over one; ten metres a second more for her offset from a turning track)
+						const double Close = Step * (Speed + 4.0 * std::fabs(O.Spd) + 10.0);
+						const int Leap = static_cast<int>((std::sqrt(MX * MX + MY * MY) - Span) / Close);
+						if (Leap > 1) K += Leap - 1;
+						continue;
+					}
+					for (int J = A; J <= B; ++J)
+					{
+						const Vec& P = At(J);
+						const double DX = Head.X - P.X, DY = Head.Y - P.Y;
+						if (DX * DX + DY * DY > Near * Near) continue;
+						const Vec Half = Ahead(HdgAt(J)) * Reach;
+						if (SegGap(Head, Head, P - Half, P + Half) - Sz.Beam * 0.5 < Margin) return true;
+					}
+				}
+			}
+			return false;
+		};
+		bool bClear = true;
+		for (const auto& Pair : Hulls)
+		{
+			const Hull& O = Pair.second;
+			if (O.Side != Side || O.Key == Skip || O.Doing == Fate::Gone || (OnlyPiece >= 0 && O.Piece != OnlyPiece)) continue;
+			if (!Crosses(O)) continue;
+			if (!Foul) return false;
+			bClear = false;
+			if (std::find(Foul->begin(), Foul->end(), O.Key) == Foul->end()) Foul->push_back(O.Key);
+		}
+		return bClear;
+	}
+
+	void Show::LaunchTube(Held& R, size_t Tube, const FirePlace& From, const TubeWay& W)
+	{
+		Torp T;
+		T.Key = NextKey++;
+		T.Side = R.Side;
+		T.Piece = R.Piece;
+		T.P = W.P;
+		T.From = T.P;
+		T.Way = W.Dir;
+		T.Speed = W.Speed;
+		T.Launched = ShownT;
+		T.Ends = W.Ends;
+		T.Aim = R.Aim;
+		T.Ship = From.Except;
+		T.bFromPoint = From.bPoint;
+		T.Salvo = R.Salvo;
+		T.End = W.End;
+		T.AimAt = W.AimAt;
+		T.Arrive = R.Arrive;
+		T.Running = R.Running;
+		Torps.push_back(T);
+		Fx& S = Emit(FxKind::TrackStart, T.P, std::string(), T.Key);
+		S.Vel = T.Way * T.Speed;
+		S.Side = T.Side;
+		S.Text = R.Nation; // (whose torpedo: the scene draws the Japanese ships' oxygen torpedoes' tracks faint)
+		if (R.bWakeless) S.What = "wakeless";
+		S.Aim = T.End;
+		S.Until = T.Ends;
+		S.Size = static_cast<double>(T.Ship);
+		++Check.TracksRun;
+		if (R.Salvo >= 1 && R.Salvo <= static_cast<int>(Check.SalvoTracks.size())) ++Check.SalvoTracks[static_cast<size_t>(R.Salvo - 1)];
+		if (ShownT > R.Told + 1e-9)
+		{
+			++Check.TracksHeld;
+			Check.MostHold = std::max(Check.MostHold, ShownT - R.Told);
+		}
+		if (From.bPoint) ++Check.TracksMoved;
+		if (W.bCut) ++Check.TracksCut;
+		// (the show's own measure: how far its line cleared the nearest own hull as it was fired)
+		double Least = 1e9;
+		WayClear(W.P, W.End, R.Side, From.Except, &Least, -1);
+		Check.LeastTrackGap = std::min(Check.LeastTrackGap, Least);
+		Check.MostTracks = std::max(Check.MostTracks, static_cast<int>(Torps.size()));
+		// L5: she turns away under smoke as she fires her first, as destroyers did after their run (not a boat).
+		Hull* H = FindHull(R.Ship);
+		if (!R.bFiredAny && !R.bBoat && H && H->Doing != Fate::Gone) H->ScreenUntil = ShownT + 60.0;
+		R.bFiredAny = true;
+		R.Ks.erase(R.Ks.begin() + static_cast<std::ptrdiff_t>(Tube));
+		R.Scatter.erase(R.Scatter.begin() + static_cast<std::ptrdiff_t>(Tube));
+		R.Ends.erase(R.Ends.begin() + static_cast<std::ptrdiff_t>(Tube));
+		R.RulesOnly.erase(R.RulesOnly.begin() + static_cast<std::ptrdiff_t>(Tube));
+	}
+
+	int Show::WhyHeld(const Held& R, size_t Tube, const std::vector<FirePlace>& From) const
+	{
+		// At every place she may fire from now (her own, the salvo's firing point): her own piece's ships alone foul them all
+		// (0, the scene's own); else, at a place her own piece leaves clear, the ships of other pieces across its way all in
+		// her salvo's water ahead of its heads (1, the rules' side: their switch keeps them out of it); else 2, the scene's
+		// own (one out of the water or behind its heads, or none: the look ahead).
+		bool bOwnFoul = true, bOwnOut = false;
+		for (const FirePlace& P : From)
+		{
+			if (P.bIfOut && !bOwnOut) continue;
+			TubeWay Own;
+			if (!PlanTube(R, Tube, P, R.Piece, Own))
+			{
+				if (!P.bPoint && Own.bOutside) bOwnOut = true;
+				continue;
+			}
+			bOwnFoul = false;
+			TubeWay All;
+			PlanTube(R, Tube, P, -1, All, true);
+			bool bOther = false, bAllWater = true;
+			for (const int Key : All.Foul)
+			{
+				const Hull* O = FindHull(Key);
+				if (!O || O->Piece == R.Piece) continue;
+				bOther = true;
+				if (!InWaterAhead(R, *O)) bAllWater = false;
+			}
+			if (bOther && bAllWater) return 1;
+		}
+		return bOwnFoul ? 0 : 2;
+	}
+
+	void Show::DropTube(Held& R, size_t Tube, bool bRoom)
+	{
+		++Check.TracksDropped;
+		// Judged over its hold: the rules' side where at any look the ships of other pieces in her salvo's water ahead of its
+		// heads were all that stood in its way (had their switch kept them out of it, it would have been fired then); else as
+		// it is given up, for her own piece's ships alone or the scene's own otherwise (the room among it).
+		int Why = 2;
+		if (!bRoom)
+		{
+			std::vector<FirePlace> From;
+			PlacesOf(R, From);
+			Why = R.RulesOnly[Tube] ? 1 : WhyHeld(R, Tube, From);
+		}
+		if (Why == 0) ++Check.TracksDroppedOwn;
+		else if (Why == 1) ++Check.TracksDroppedWater;
+		R.Ks.erase(R.Ks.begin() + static_cast<std::ptrdiff_t>(Tube));
+		R.Scatter.erase(R.Scatter.begin() + static_cast<std::ptrdiff_t>(Tube));
+		R.Ends.erase(R.Ends.begin() + static_cast<std::ptrdiff_t>(Tube));
+		R.RulesOnly.erase(R.RulesOnly.begin() + static_cast<std::ptrdiff_t>(Tube));
+		// (none of hers ever drawn: she turns away under smoke as she gives them up, L5)
+		Hull* H = FindHull(R.Ship);
+		if (R.Ks.empty() && !R.bFiredAny && !R.bBoat && H && H->Doing != Fate::Gone) H->ScreenUntil = ShownT + 60.0;
+	}
+
+	bool Show::FireTubes(Held& R)
+	{
+		// Each tube where its way is clear now, from the first place that has it (her own, then the salvo's firing point);
+		// the room as the shadows keep it holds the drawn tracks too, a track that would pass it never drawn. One still held
+		// notes whether the rules' ships alone are in its way now (its judging, if it is given up): once a second, as she
+		// first looks and every fourth look after (the judging asks twice what the look asks, of every ship of her side).
+		std::vector<FirePlace> From;
+		PlacesOf(R, From);
+		const bool bJudge = ShownT >= R.NextJudge - 1e-9;
+		if (bJudge) R.NextJudge = ShownT + 1.0 - 1e-6;
+		for (size_t Tube = 0; Tube < R.Ks.size();)
+		{
+			bool bFired = false, bOwnOut = false;
+			for (const FirePlace& P : From)
+			{
+				if (P.bIfOut && !bOwnOut) continue;
+				TubeWay W;
+				if (!PlanTube(R, Tube, P, -1, W))
+				{
+					if (!P.bPoint && W.bOutside) bOwnOut = true;
+					continue;
+				}
+				if (static_cast<int>(Torps.size()) >= TrackRoom) DropTube(R, Tube, true);
+				else LaunchTube(R, Tube, P, W);
+				bFired = true;
+				break;
+			}
+			if (bFired) continue;
+			if (bJudge && !R.RulesOnly[Tube] && WhyHeld(R, Tube, From) == 1) R.RulesOnly[Tube] = 1;
+			++Tube;
+		}
+		return !R.Ks.empty();
+	}
+
+	Show::Torp* Show::TrackForHit(int Piece, const Hull& Struck)
+	{
+		// Of the piece's tracks running, by preference: one that has run a third of its salvo's run (the least a hit's track
+		// has run) with its way on to her side clear of every hull of its side; then one that has run so long; then any. The
+		// nearest her of the first kind there is.
+		Torp* Best[3] = { nullptr, nullptr, nullptr };
+		double BestD[3] = { 1e18, 1e18, 1e18 };
+		for (Torp& T : Torps)
+		{
+			if (!T.bRunning || T.Piece != Piece) continue;
+			const double D = Flat(Struck.P - T.P);
+			const bool bRun = ShownT - T.Launched >= T.Running / 3.0 - 1e-6;
+			bool bClear = bRun;
+			for (auto It = Hulls.begin(); bClear && It != Hulls.end(); ++It)
+			{
+				const Hull& O = It->second;
+				if (O.Side != T.Side || O.Doing == Fate::Gone) continue;
+				const ClassSize& Sz = SizeOf(O.Class);
+				const Vec Half = Ahead(O.Hdg) * std::max(0.0, Sz.Long * 0.5 - Sz.Beam * 0.5);
+				if (SegGap(T.P, Struck.P, O.P - Half, O.P + Half) - Sz.Beam * 0.5 < 2.0) bClear = false;
+			}
+			const int Kind = bClear ? 0 : bRun ? 1 : 2;
+			if (D < BestD[Kind]) { BestD[Kind] = D; Best[Kind] = &T; }
+		}
+		for (Torp* T : Best)
+			if (T) return T;
+		// None running (a last resort, the test holds it to none): a held tube of the piece, or one as the battle's moment's,
+		// fired at her now from the longest clear stretch short of her side on the way from its firing point, to end there.
+		Held* R = nullptr;
+		for (Held& O : Holding)
+			if (O.Piece == Piece && !O.Ks.empty()) { R = &O; break; }
+		int Side = -1;
+		std::string Nation;
+		Vec From = Struck.P;
+		if (R)
+		{
+			Side = R->Side;
+			Nation = R->Nation;
+			From = R->WaterP;
+		}
+		else
+		{
+			const auto Col = Lines.find(Piece);
+			const Hull* Lead = Col != Lines.end() && !Col->second.Line.empty() ? FindHull(Col->second.Line.front()) : nullptr;
+			if (!Lead) return nullptr;
+			Side = Lead->Side;
+			Nation = Lead->Nation;
+			From = Lead->P;
+		}
+		if (Flat(Struck.P - From) < 1.0) From = Struck.P - Ahead(Struck.Hdg) * 500.0;
+		const Vec Dir = Ahead(Bearing(From, Struck.P));
+		const ClassSize& Sz = SizeOf(Struck.Class);
+		const double Short[] = { 400.0, 300.0, 200.0, 120.0, 60.0, 20.0 };
+		for (const double Stretch : Short)
+		{
+			const Vec Start = Struck.P - Dir * (Sz.Beam * 0.5 + 2.0 + Stretch);
+			if (!WayClear(Start, Struck.P - Dir * (Sz.Beam * 0.5 + 2.0), Side, -1, nullptr, -1) && Stretch > 20.0) continue;
+			Torp T;
+			T.Key = NextKey++;
+			T.Side = Side;
+			T.Piece = Piece;
+			T.P = T.From = Start;
+			T.Way = Dir;
+			T.Speed = 18.0;
+			T.Launched = ShownT;
+			T.Ends = ShownT + 1.0;
+			T.Aim = Struck.P;
+			T.End = Struck.P;
+			T.AimAt = T.Arrive = ShownT;
+			T.Running = 0.0;
+			if (R) T.Salvo = R->Salvo;
+			Torps.push_back(T);
+			Fx& S = Emit(FxKind::TrackStart, T.P, std::string(), T.Key);
+			S.Vel = T.Way * T.Speed;
+			S.Side = T.Side;
+			S.Text = Nation;
+			if (R && R->bWakeless) S.What = "wakeless";
+			S.Aim = T.End;
+			S.Until = T.Ends;
+			S.Size = -1.0;
+			++Check.TubesAtHit;
+			if (R)
+			{
+				++Check.TracksRun;
+				if (R->Salvo >= 1 && R->Salvo <= static_cast<int>(Check.SalvoTracks.size())) ++Check.SalvoTracks[static_cast<size_t>(R->Salvo - 1)];
+				R->bFiredAny = true;
+				R->Ks.pop_back();
+				R->Scatter.pop_back();
+				R->Ends.pop_back();
+				R->RulesOnly.pop_back();
+			}
+			return &Torps.back();
+		}
+		return nullptr;
+	}
+
 	void Show::RunTorpedoes(double Dt)
 	{
+		// Held tubes (Brian, 25 November 12:52Z) fired where their way is now clear (FireTubes); any still held at two thirds
+		// of their salvo's run are never drawn, each judged over its hold (DropTube): fired later, a track would not have run
+		// the third of the run a hit's track has run.
+		// (each ship looks every quarter second, her salvo's a step apart; the ships as they have steamed this step)
+		ForeseenAt = -1.0;
+		for (size_t K = 0; K < Holding.size();)
+		{
+			Held& R = Holding[K];
+			bool bLeft = true;
+			if (ShownT > R.Arrive - R.Running / 3.0 + 1e-9)
+			{
+				while (!R.Ks.empty()) DropTube(R, 0);
+				bLeft = false;
+			}
+			else if (ShownT >= R.NextLook - 1e-9)
+			{
+				R.NextLook = ShownT + 0.25;
+				bLeft = FireTubes(R);
+			}
+			if (bLeft) ++K;
+			else Holding.erase(Holding.begin() + static_cast<std::ptrdiff_t>(K));
+		}
+		// (the shadows run as the tracks fired at the battle's moment ran: the room, the ship a hit strikes)
+		for (Shadow& S : Shadows) S.P += S.Way * (S.Speed * Dt);
+		Shadows.erase(std::remove_if(Shadows.begin(), Shadows.end(), [this](const Shadow& S) { return ShownT >= S.Ends; }), Shadows.end());
 		for (Torp& T : Torps)
 		{
 			if (!T.bRunning) continue;
 			T.P += T.Way * (T.Speed * Dt);
-			if (ShownT >= T.Ends)
+			bool bStop = ShownT >= T.Ends;
+			// Past the aim and the battle's moment it runs on in the scene's own water: it stops short of an own ship come
+			// across its way (the next two seconds of its run, her hull and 5 m).
+			if (!bStop && ShownT >= std::max(T.AimAt, T.Arrive))
+			{
+				const Vec Ahead2 = T.P + T.Way * (T.Speed * 2.0);
+				for (const auto& Pair : Hulls)
+				{
+					const Hull& O = Pair.second;
+					if (O.Side != T.Side || O.Doing == Fate::Gone) continue;
+					const ClassSize& Sz = SizeOf(O.Class);
+					if (Flat(O.P - T.P) > Sz.Long * 0.5 + T.Speed * 2.0 + 10.0) continue;
+					const Vec Half = Ahead(O.Hdg) * std::max(0.0, Sz.Long * 0.5 - Sz.Beam * 0.5);
+					if (SegGap(T.P, Ahead2, O.P - Half, O.P + Half) - Sz.Beam * 0.5 < 5.0)
+					{
+						bStop = true;
+						++Check.TracksStopped;
+						break;
+					}
+				}
+			}
+			if (bStop)
 			{
 				T.bRunning = false;
 				Emit(FxKind::TrackStop, T.P, std::string(), T.Key);
@@ -6087,6 +6753,11 @@ namespace SeaShow
 			O.From = T.From;
 			O.Heading = Bearing(Vec(), T.Way);
 			O.Speed = T.Speed;
+			O.Piece = T.Piece;
+			O.Ship = T.Ship;
+			O.End = T.End;
+			O.bRunOn = ShownT >= std::max(T.AimAt, T.Arrive);
+			O.bFromPoint = T.bFromPoint;
 			OutTorps.push_back(O);
 		}
 	}

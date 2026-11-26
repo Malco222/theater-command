@@ -19,14 +19,20 @@ $CXX ${SEA_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" 
 # and the real nights: the naval rules' wolf pack against a convoy (D2), fought by the computer on both sides and recorded
 # in the scene's own names (naval-battles/wolfpack-r2/recordings: September 1940, March 1943, January 1944; each a 720 s
 # window of its night on the night's own clock), so every change is played against the battle's own convoy nights)
+# (and the naval rules' own-water nights, Brian 25 November 12:52Z, "the friendly ships would pass though right in front of
+# torpedoes": the light ships, Samar and the two lines refought with the rules' switch keeping own ships out of a running
+# salvo's water, naval-battles/own-water-r2/recordings, in Tools/sea_show/own-water)
 # (a checkout without the recordings plays the rest: a glob that matches nothing drops out, never a path that is not there)
 shopt -s nullglob
-if [ "$#" -eq 0 ]; then set -- "$ROOT"/Content/Data/SeaBattles/*.json "$HERE"/stand-ins/*.json "$HERE"/recordings/*.json; fi
+if [ "$#" -eq 0 ]; then set -- "$ROOT"/Content/Data/SeaBattles/*.json "$HERE"/stand-ins/*.json "$HERE"/recordings/*.json "$HERE"/own-water/*.json; fi
 shopt -u nullglob
 # (the real nights' known failures, the naval rules' side until each fix lands: Tools/sea_show/known_failures.txt, each a
 # check on a night and the most it may measure; within it sea_show_test prints KNOWN and passes, past it or any other
 # failure fails the run)
 export SEA_SHOW_KNOWN="${SEA_SHOW_KNOWN:-$HERE/known_failures.txt}"
+# (the recordings made with the naval rules' own-water switch on: Tools/sea_show/own_water.txt, a name a line, the rules'
+# recorder writing no mark of it; on those nights no track's head may pass through an own ship anywhere)
+export SEA_SHOW_OWN_WATER="${SEA_SHOW_OWN_WATER:-$HERE/own_water.txt}"
 STATUS=0
 for F in "$@"; do
   "$OUT/sea_show_test" "$F" "$OUT" || STATUS=1
