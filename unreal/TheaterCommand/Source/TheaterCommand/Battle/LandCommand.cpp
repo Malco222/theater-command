@@ -846,6 +846,18 @@ namespace LandCommand
 		return true;
 	}
 
+	std::vector<const Tag*> General::OnMap() const
+	{
+		std::vector<const Tag*> Out;
+		for (const Tag& G : Shown)
+		{
+			// (as EnemyAt: an enemy hidden in woods, not yet found, is not there for him)
+			if (Off(G.State) || (Me >= 0 && G.Side != Me && G.bHidden)) continue;
+			Out.push_back(&G);
+		}
+		return Out;
+	}
+
 	std::string General::TiedWords(const Tied& What, int Num)
 	{
 		if (What.Count <= 0) return std::string();

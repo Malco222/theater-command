@@ -139,6 +139,9 @@ public:
 	 * word: line, two, wedge, column). The rules place them and name the one that cannot go. */
 	void PlaceManyLive(const FString& ListJson);
 	void DrawUpLive(const FString& Kind);
+	/** The map of the field pressed or dragged on (release 2): his view glides to that place on the field (metres,
+	 * held to the field), any unit followed let go; the film, where it has the screen, gives it back first. */
+	void GeneralMapLook(double FieldX, double FieldY);
 	void BeginFight();
 	/** The scene's state for the general's screen to change (his hand, what is armed): the screen's own. */
 	FLandBattleState* EditState() { return State.Get(); }

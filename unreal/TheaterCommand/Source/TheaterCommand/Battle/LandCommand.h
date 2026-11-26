@@ -248,6 +248,13 @@ namespace LandCommand
 		 * "" where nothing was tied. */
 		static std::string TiedWords(const Tied& What, int Num);
 
+		/**
+		 * The blocks the map of the field shows (release 2; the design director, 26 November 2026: the player's sight
+		 * only): his own still on the field, and the enemy's that the field itself shows him, met or not. Never one
+		 * hidden from him, and none that has gone or withdrawn. In the tags' order.
+		 */
+		std::vector<const Tag*> OnMap() const;
+
 	private:
 		struct Words
 		{

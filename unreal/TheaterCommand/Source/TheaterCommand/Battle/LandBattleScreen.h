@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Battle/LandFieldMap.h"
 #include "Styling/SlateBrush.h"
 #include "Widgets/SLeafWidget.h"
 
@@ -27,6 +28,11 @@ class ALandBattle;
  * with a two-finger slide or the middle drag (up and down tilt, across turns), tilts it from the usual angle to almost
  * straight down, kept as he zooms; O or TOP VIEW looks straight down on the field from about 100 m up, and again goes
  * back as it was.
+ *
+ * The map of the field in the corner (release 2, its own Options row; Brian, 26 November 2026): at the bottom right, the
+ * field small with his units, the enemy he can see and the outline of what his view sees. A click on it glides his view
+ * there, a drag moves the view with the pointer, M folds it away and brings it back (LandFieldMap says where it stands
+ * and what falls where; the UI director's marks of 26 November 2026, 03:51Z).
  */
 class SLandBattleScreen : public SLeafWidget
 {
@@ -102,6 +108,14 @@ private:
 	/** The clock's and the camera's buttons (PAUSE, x1, x2, x4, FILM) stand in the top bar beside the clock where it has
 	 * the room, else at the foot's right end: worked out each frame before his screen is painted. */
 	mutable bool bControlsOnTop = false;
+	/** The map of the field (release 2): where it stands as last painted (not Valid() while it is folded, the row is off or
+	 * his screen is not up), its ground painted small and what that was made from (so it is made once, not each frame),
+	 * folded away by M, and the left button held on it (his view goes with the pointer). */
+	mutable LandFieldMap::Frame MapFrame;
+	mutable LandFieldMap::Painted MapPaint;
+	mutable uint64 MapPaintOf = 0;
+	bool bMapFolded = false;
+	bool bMapHeld = false;
 	bool bDragging = false;
 	double SpeedBefore = 1.0;
 

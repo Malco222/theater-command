@@ -164,6 +164,13 @@ namespace
 		// no battle rule. Off until the Mac and the art director pass it; -TheaterLandRuleGroups turns it on for a run.
 		// Name and line the UI director's of 03:53Z. The rules do not read the key: the screen does.)
 		{ TEXT("groups"), TEXT("Groups on the number keys"), TEXT("Tie the units in hand to a number with Cmd and that number (Ctrl on Windows); press the number to take them in hand again, twice to look at them. The clock's pace moves to \u2212 and +. Off: the numbers set the pace, as before. Only how you give orders: no result changes."), TEXT("TheaterLandNoGroups"), false, TEXT("TheaterLandRuleGroups") },
+		// (A map of the field in the corner, release 2: Brian, 26 November 2026 03:45Z, "its would be helpful to see a
+		// small map of the battle on the bottom right to know where everyone is". It shows the field, his units, the
+		// enemy units the field itself shows him and where he is looking (the design director, 03:50Z: the player's
+		// sight only); a click glides the view there, M folds it. Looks only. Off until the Mac and the art director
+		// pass it; -TheaterLandRuleFieldMap turns it on for a run. Name and line the UI director's of 03:51Z. The rules
+		// do not read the key: the screen does (Battle/LandFieldMap, LandBattleScreen.cpp).)
+		{ TEXT("fieldmap"), TEXT("A map of the field in the corner"), TEXT("A small map at the bottom right of the battle shows the field, your units, the enemy your men can see and where you are looking. Click it to look there; M folds it away. Looks only: no result changes."), TEXT("TheaterLandNoFieldMap"), false, TEXT("TheaterLandRuleFieldMap") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 

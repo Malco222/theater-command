@@ -90,6 +90,10 @@ struct FLandGeneralShown
 	/** Several carried as one in the setup step (release 2, drawing up): the others' grounds' corners where they would
 	 * be set down, eight numbers a block as Corners (the one he holds is Corners'); empty: one carried alone. */
 	std::vector<double> CarryMore;
+	/** The map of the field (release 2): the ground under the screen's four corners this frame, field metres, x then y,
+	 * round the screen from its bottom left (a corner that looks over the horizon is set far off along its way); empty
+	 * with the map's row off. */
+	std::vector<double> MapView;
 	/** The formation his units were last drawn up in (release 2: "line", "two", "wedge", "column"; empty: none yet, or
 	 * he has dragged a unit by hand since): its button is lit. */
 	std::string DrawnUp;

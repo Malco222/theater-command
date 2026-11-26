@@ -370,6 +370,67 @@ int main(int Argc, char** Argv)
 		std::printf("cutters and smoke: tank %d cuts (%s), sections lay smoke (%s)\n", Tank, Cut.c_str(), Smoke.c_str());
 	}
 
+	// ---- The map of the field (release 2; Brian, 26 November 2026; the design director: the player's sight only): his own
+	// still on the field and the enemy the field shows him, in the tags' order. Then the same moment with one enemy hidden
+	// in woods, another withdrawn, and one of his own hidden: the two enemies leave the map, his own stays on it. ----
+	{
+		auto Listed = [](const LandCommand::General& Of)
+		{
+			std::vector<int> Ids;
+			for (const LandCommand::Tag* T : Of.OnMap()) Ids.push_back(T->Block);
+			return Ids;
+		};
+		auto Owed = [](const LandCommand::General& Of)
+		{
+			std::vector<int> Ids;
+			for (const LandCommand::Tag& T : Of.Tags())
+			{
+				if (T.State == "gone" || T.State == "withdrawn" || (!T.bMine && T.bHidden)) continue;
+				Ids.push_back(T.Block);
+			}
+			return Ids;
+		};
+		// (a moment with both sides still on the field: the first of these that has two enemies and one of his own shown)
+		LandCommand::General Mapped;
+		Mapped.Begin(Rec);
+		int HidFoe = -1, GoneFoe = -1, HidMine = -1;
+		double Moment = 0.0;
+		for (double Share = 0.1; Share < 0.95 && (HidFoe < 0 || GoneFoe < 0 || HidMine < 0); Share += 0.1)
+		{
+			Moment = Rec.Fought * Share;
+			Mapped.Update(Rec, Moment);
+			HidFoe = GoneFoe = HidMine = -1;
+			for (const LandCommand::Tag* T : Mapped.OnMap())
+			{
+				if (!T->bMine && HidFoe < 0) HidFoe = T->Block;
+				else if (!T->bMine && GoneFoe < 0) GoneFoe = T->Block;
+				else if (T->bMine && !T->bHidden && HidMine < 0) HidMine = T->Block;
+			}
+		}
+		Check(HidFoe >= 0 && GoneFoe >= 0 && HidMine >= 0, "the battle has a moment with two enemies shown and one of his own on the field");
+		const std::vector<int> Shown = Listed(Mapped);
+		Check(!Shown.empty() && Shown == Owed(Mapped), "the map lists his own on the field and the enemy he is shown, in the tags' order");
+		LandFeed::Recording Wooded = Rec;
+		for (LandFeed::View& V : Wooded.Views)
+		{
+			for (LandFeed::Unit& U : V.Units)
+			{
+				if (U.Id == HidFoe || U.Id == HidMine) U.bHidden = true;
+				if (U.Id == GoneFoe) U.State = "withdrawn";
+			}
+		}
+		LandCommand::General Thinned;
+		Thinned.Begin(Wooded);
+		Thinned.Update(Wooded, Moment);
+		const std::vector<int> After = Listed(Thinned);
+		auto On = [&After](int Block) { return std::find(After.begin(), After.end(), Block) != After.end(); };
+		Check(After == Owed(Thinned) && After.size() + 2 == Shown.size(), "with an enemy hidden and another withdrawn, the map lists two fewer");
+		Check(!On(HidFoe), "an enemy hidden from him is never on the map");
+		Check(!On(GoneFoe), "a block that has withdrawn is not on the map");
+		Check(On(HidMine), "his own block hidden in woods stays on his map");
+		std::printf("the map of the field: %d blocks shown at %.0f s; %d with an enemy hidden and another withdrawn\n", static_cast<int>(Shown.size()), Moment, static_cast<int>(After.size()));
+	}
+
 	// ---- Hedge snapping: the nearest point of a hedge within reach ----
 	{
 		const std::vector<std::pair<double, double>> Hedge = { { 0.0, 0.0 }, { 100.0, 0.0 }, { 100.0, 100.0 } };

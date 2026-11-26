@@ -310,5 +310,7 @@ describe('the 3D clipboard keeps the rules\' figures', () => {
     const table: string = rulesTableCpp;
     expect(table).toMatch(/\{ TEXT\("drawup"\), TEXT\("Draw up units together before battle"\), .*TEXT\("TheaterLandNoDrawUp"\), false, TEXT\("TheaterLandRuleDrawUp"\) \}/);
     expect(table).toMatch(/\{ TEXT\("groups"\), TEXT\("Groups on the number keys"\), .*TEXT\("TheaterLandNoGroups"\), false, TEXT\("TheaterLandRuleGroups"\) \}/);
+    // (the map of the field in the corner: Brian, 26 November 2026)
+    expect(table).toMatch(/\{ TEXT\("fieldmap"\), TEXT\("A map of the field in the corner"\), .*TEXT\("TheaterLandNoFieldMap"\), false, TEXT\("TheaterLandRuleFieldMap"\) \}/);
   });
 });

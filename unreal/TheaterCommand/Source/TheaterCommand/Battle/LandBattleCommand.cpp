@@ -279,6 +279,47 @@ void ALandBattle::ShowGeneral()
 	{
 		return;
 	}
+	// The map of the field (release 2): the ground under the screen's four corners, for the outline of what his view
+	// sees. Each corner's ray is met with level ground at the height under the eye; one that looks over the horizon, or
+	// further than twice the field's own length, is set that far off along its way, and the map cuts the outline to its
+	// box. (The camera thread's LandGeneralEye::Seen takes this over when it lands.)
+	G.MapView.clear();
+	if (Eye && FLandLive::RuleNow(TEXT("fieldmap")))
+	{
+		LandFell::Phase("general: the map's view");
+		const UCameraComponent* Lens = Eye->GetCameraComponent();
+		const double HalfTan = FMath::Tan(FMath::DegreesToRadians(static_cast<double>(Lens->FieldOfView) * 0.5));
+		const FTransform& LensFrame = Lens->GetComponentTransform();
+		const FVector LensWorld = LensFrame.GetLocation();
+		// (the field's own axes: x east is the world's Y, y north the world's X; metres)
+		const FVector LensAt(LensWorld.Y / UnitsPerMetre, LensWorld.X / UnitsPerMetre, LensWorld.Z / UnitsPerMetre);
+		const double Level = S.Rec.Ground.HeightAt(FMath::Clamp(LensAt.X, 0.0, S.Rec.Ground.W), FMath::Clamp(LensAt.Y, 0.0, S.Rec.Ground.H));
+		const double FarMost = 2.0 * FMath::Sqrt(S.Rec.Ground.W * S.Rec.Ground.W + S.Rec.Ground.H * S.Rec.Ground.H);
+		const double CornerAt[4][2] = { { 0.0, View.Y }, { View.X, View.Y }, { View.X, 0.0 }, { 0.0, 0.0 } };
+		for (int32 Nth = 0; Nth < 4; ++Nth)
+		{
+			const double Across = (CornerAt[Nth][0] / View.X * 2.0 - 1.0) * HalfTan;
+			const double Up = (1.0 - CornerAt[Nth][1] / View.Y * 2.0) * HalfTan * (View.Y / View.X);
+			const FVector WayWorld = LensFrame.TransformVectorNoScale(FVector(1.0, Across, Up)).GetSafeNormal();
+			const FVector Way(WayWorld.Y, WayWorld.X, WayWorld.Z);
+			const double Flat = FMath::Sqrt(Way.X * Way.X + Way.Y * Way.Y);
+			if (Flat < 1e-9)
+			{
+				// (straight down: the ground under the eye)
+				G.MapView.push_back(LensAt.X);
+				G.MapView.push_back(LensAt.Y);
+				continue;
+			}
+			// (how far along the ground the ray comes down: never past FarMost, and FarMost where it never does)
+			double Reach = FarMost;
+			if (Way.Z < -1e-6 && LensAt.Z > Level)
+			{
+				Reach = FMath::Min(FarMost, (LensAt.Z - Level) / -Way.Z * Flat);
+			}
+			G.MapView.push_back(LensAt.X + Way.X / Flat * Reach);
+			G.MapView.push_back(LensAt.Y + Way.Y / Flat * Reach);
+		}
+	}
 	LandFell::Phase("general: the tags and routes");
 	const std::vector<LandCommand::Tag>& Tags = G.Clipboard.Tags();
 	// (each unit's ground washed from high up, fading as the eye comes down: full at 300 m over the ground, gone by 150 m)
@@ -1481,6 +1522,23 @@ void ALandBattle::FilmCornerTake()
 }
 
 // ---- His words --------------------------------------------------------------------------------------------------
+
+void ALandBattle::GeneralMapLook(double FieldX, double FieldY)
+{
+	if (!State.IsValid() || !State->General.bOn)
+	{
+		return;
+	}
+	// (the film, where it has the screen, gives it back first: the camera thread, 26 November 2026)
+	if (State->General.bFilm)
+	{
+		GeneralDo(TEXT("map"));
+	}
+	FLandBattleState& S = *State;
+	S.GeneralIn.bGoTo = true;
+	S.GeneralIn.GoTo = LandPlay::Vec(FMath::Clamp(FieldX, 0.0, S.Rec.Ground.W), FMath::Clamp(FieldY, 0.0, S.Rec.Ground.H), 0.0);
+	S.GeneralIn.bFollow = false;
+}
 
 void ALandBattle::GeneralDo(const FString& Word)
 {

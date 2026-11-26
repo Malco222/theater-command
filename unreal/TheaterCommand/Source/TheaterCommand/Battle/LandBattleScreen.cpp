@@ -35,6 +35,9 @@ namespace
 	const FLinearColor LeafInk = FLinearColor(FColor::FromHex(TEXT("3F6B36")));  // the kit's --gain-deep
 	/** The kit's --alarm-deep: something being lost (men running), the one thing besides a deadline given red. */
 	const FLinearColor Alarm = FLinearColor(FColor::FromHex(TEXT("8C2F22")));
+	/** The water on the map of the field: a dark blue-grey of its own, never slate, which is the enemy's (the UI director,
+	 * 26 November 2026). */
+	const FLinearColor MapWater = FLinearColor(FColor::FromHex(TEXT("34424C")));
 
 	/** PT Serif from Content/Fonts (SIL OFL 1.1), as the campaign frame's: names and titles. */
 	FSlateFontInfo Serif(const TCHAR* Weight, float Size)
@@ -266,13 +269,17 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 	if (bGeneral)
 	{
 		CardsH = PaintGeneral(Geometry, OutDrawElements, LayerId);
-		LayerId += 18;
+		// (his screen's layers: 0 to 17 its field, bars and cards, 18 to 30 the map of the field, 31 and 32 the plate of
+		// the unit under the pointer)
+		LayerId += 33;
 	}
 	else
 	{
-		// (away from his screen, the film or a card up: no plate left over for when he comes back, till the pointer moves)
+		// (away from his screen, the film or a card up: no plate left over for when he comes back, till the pointer moves;
+		// and no map of the field to press)
 		HoverBlock = -1;
 		TagBoxes.Reset();
+		MapFrame = LandFieldMap::Frame();
 	}
 
 	// ---- The top bar: the battle's name and place at the left, the clock at the right, the bar in the middle. ----
@@ -929,6 +936,17 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	const bool bDrawUp = Clip.Deploying() && FLandLive::RuleNow(TEXT("drawup"));
 	const double CardH = 44.0, CardGap = 6.0, RowY = Size.Y - CardH - 10.0;
 	const double OrdersY = RowY - 28.0 - 8.0;
+	// (release 2, its own Options row, off until passed: the map of the field at the bottom right; Brian, 26 November
+	// 2026. Open, everything at the right of the foot ends 10 clear of its left edge, the cards' row and the bar above
+	// it alike; folded, FIELD MAP stands at the foot row's right end: the UI director, 26 November 2026, 03:51Z. One
+	// rule for both sides, 05:35Z: his own ground at the map's foot. The map is turned half round where the ground his
+	// side draws up on lies in the field's north half, which today is the defence's; a field that names no such
+	// ground turns for the defence.)
+	const bool bFieldMap = FLandLive::RuleNow(TEXT("fieldmap")) && S.Rec.Ground.W > 0.0 && S.Rec.Ground.H > 0.0;
+	const double* MapOwn = Clip.Side() == 1 ? S.Rec.Ground.ZoneDef : S.Rec.Ground.ZoneAtt;
+	const bool bMapTurned = MapOwn[2] > MapOwn[0] && MapOwn[3] > MapOwn[1] ? 0.5 * (MapOwn[1] + MapOwn[3]) > 0.5 * S.Rec.Ground.H : Clip.Side() == 1;
+	MapFrame = bFieldMap && !bMapFolded ? LandFieldMap::Lay(Size.X, Size.Y, S.Rec.Ground.W, S.Rec.Ground.H, bMapTurned) : LandFieldMap::Frame();
+	const double FootRight = MapFrame.Valid() ? MapFrame.LeftOf() : Size.X - 18.0;
 	// (at deploy BEGIN THE BATTLE stands where the order bar stands in battle, above the row at its right: the UI director,
 	// 20:52Z, so the cards keep the row's whole width)
 	const double FieldBottom = (bHand || Clip.Deploying() ? OrdersY : RowY) - 6.0;
@@ -1493,13 +1511,13 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 
 	// ---- The foot: his units' cards in one row (never wrapping: it scrolls), and at its right end BEGIN THE BATTLE while he
 	// deploys, and the clock's and the camera's buttons where the top bar has no room for them. ----
-	double RowRight = Size.X - 18.0;
+	double RowRight = FootRight;
 	{
 		struct FPart { const TCHAR* Label; const TCHAR* Key; const TCHAR* Action; bool bLit; };
 		TArray<FPart> Ends;
 		if (Clip.Deploying())
 		{
-			Button(TEXT("BEGIN THE BATTLE"), TEXT("SPACE"), TEXT("general:begin"), Size.X - 18.0 - ButtonWidth(TEXT("BEGIN THE BATTLE"), TEXT("SPACE")), OrdersY, true, false, 12);
+			Button(TEXT("BEGIN THE BATTLE"), TEXT("SPACE"), TEXT("general:begin"), FootRight - ButtonWidth(TEXT("BEGIN THE BATTLE"), TEXT("SPACE")), OrdersY, true, false, 12);
 		}
 		if (!bControlsOnTop)
 		{
@@ -1519,13 +1537,18 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			Ends.Add({ TEXT("FILM"), TEXT("C"), TEXT("general:film"), false });
 			Ends.Add({ TEXT("TOP VIEW"), TEXT("O"), TEXT("general:topview"), S.GeneralEye.TopView() });
 		}
+		// (the map of the field folded away leaves its button at the row's right end, wherever the clock's buttons stand)
+		if (bFieldMap && bMapFolded)
+		{
+			Ends.Add({ TEXT("FIELD MAP"), TEXT("M"), TEXT("map:fold"), false });
+		}
 		double Whole = 0.0;
 		for (const FPart& P : Ends)
 		{
 			Whole += (P.Action[0] ? ButtonWidth(P.Label, P.Key) : WideOf(P.Label, BarFace)) + 6.0;
 		}
-		double X = Size.X - 18.0 - Whole + 6.0;
-		RowRight = Ends.Num() > 0 ? X - 10.0 : Size.X - 18.0;
+		double X = FootRight - Whole + 6.0;
+		RowRight = Ends.Num() > 0 ? X - 10.0 : FootRight;
 		for (const FPart& P : Ends)
 		{
 			if (!P.Action[0])
@@ -1731,7 +1754,7 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		}
 		// (centred between the patrol's button, its room kept whether it shows or not, and BEGIN THE BATTLE)
 		const double DrawLeft = 18.0 + ButtonWidth(TEXT("SEND A PATROL TONIGHT"), NoKey) + 14.0;
-		const double DrawRight = Size.X - 18.0 - ButtonWidth(TEXT("BEGIN THE BATTLE"), TEXT("SPACE")) - 14.0;
+		const double DrawRight = FootRight - ButtonWidth(TEXT("BEGIN THE BATTLE"), TEXT("SPACE")) - 14.0;
 		const double DrawX = FMath::Max(DrawLeft, (DrawLeft + DrawRight - DrawW) * 0.5);
 		// (the label and its key's cap on a plate, muted: it names the four, it is not a button)
 		Fill(DrawX - 8.0, OrdersY, DrawLabelW - 2.0, 28.0, Plate, 12);
@@ -1765,7 +1788,7 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 				.Replace(TEXT("{guns}"), bTeams ? TEXT("guns and support teams") : TEXT("guns"), ESearchCase::CaseSensitive);
 			const FSlateFontInfo WouldFace = Serif(TEXT("Regular"), 13.0f);
 			const double WouldW = WideOf(Would, WouldFace);
-			const double WouldX = FMath::Clamp(DrawX + DrawW * 0.5 - WouldW * 0.5, 28.0, FMath::Max(28.0, Size.X - 28.0 - WouldW));
+			const double WouldX = FMath::Clamp(DrawX + DrawW * 0.5 - WouldW * 0.5, 28.0, FMath::Max(28.0, FootRight - 10.0 - WouldW));
 			Fill(WouldX - 10.0, OrdersY - 30.0, WouldW + 20.0, 24.0, Plate, 15);
 			Write(Would, WouldX, OrdersY - 27.0, WouldFace, BrightBrass, 16);
 		}
@@ -1805,7 +1828,7 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		{
 			Whole += ButtonWidth(P.Label, P.Key) + 6.0;
 		}
-		if (Whole > Size.X - 36.0)
+		if (Whole > FootRight - 18.0)
 		{
 			Whole = 0.0;
 			for (FPart& P : Parts)
@@ -1814,12 +1837,165 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 				Whole += ButtonWidth(P.Label, P.Key) + 6.0;
 			}
 		}
-		double X = FMath::Max(18.0, Size.X - 18.0 - Whole + 6.0);
+		double X = FMath::Max(18.0, FootRight - Whole + 6.0);
 		for (const FPart& P : Parts)
 		{
 			X = Button(P.Label, P.Key, P.Action, X, OrdersY, P.bLit, false, 12);
 		}
 		CardsH = Size.Y - OrdersY;
+	}
+
+	// ---- The map of the field in the corner (release 2, its own Options row; Brian, 26 November 2026: "its would be
+	// helpful to see a small map of the battle on the bottom right to know where everyone is"): the field small on the
+	// screen's plate in a brass hairline, its woods, water and buildings, his ground while he places his army, his units
+	// at their frontage and facing (those in hand bright, with a cream edge), the enemy the field shows him in slate,
+	// and the outline of what his view sees. A click glides his view there and a drag takes it with the pointer; the
+	// chevron at its top right, or M, folds it away. The UI director's marks (26 November 2026, 03:51Z); what it shows
+	// is the design director's ruling (03:50Z): the player's sight and nothing more (LandCommand::General::OnMap). The
+	// field keeps no mark of an enemy gone from sight, so the map has none to show. ----
+	if (MapFrame.Valid())
+	{
+		const double MX = MapFrame.X, MY = MapFrame.Y, MW = MapFrame.W, MH = MapFrame.H;
+		const int32 MapLayer = 18;
+		const LandFeed::Field& Land = S.Rec.Ground;
+		Fill(MX - 1.0, MY - 1.0, MW + 2.0, MH + 2.0, Plate, MapLayer);
+		const FLinearColor Hair = Brass * FLinearColor(1.0f, 1.0f, 1.0f, 0.4f);
+		Fill(MX - 1.0, MY - 1.0, MW + 2.0, 1.0, Hair, MapLayer + 1);
+		Fill(MX - 1.0, MY + MH, MW + 2.0, 1.0, Hair, MapLayer + 1);
+		Fill(MX - 1.0, MY, 1.0, MH, Hair, MapLayer + 1);
+		Fill(MX + MW, MY, 1.0, MH, Hair, MapLayer + 1);
+		Fill(MX, MY, MW, MH, Leather, MapLayer + 1);
+		// (its woods, water and buildings as runs of small squares: made anew only where the map's shape or the field
+		// under it is another, told by a count over the field's cells each frame, FNV-1a)
+		{
+			uint64 Told = 14695981039346656037ull;
+			auto Tell = [&Told](uint64 Part) { Told = (Told ^ Part) * 1099511628211ull; };
+			Tell(static_cast<uint64>(static_cast<int64>(MW * 64.0)));
+			Tell(static_cast<uint64>(static_cast<int64>(MH * 64.0)));
+			Tell(MapFrame.bTurned ? 1ull : 0ull);
+			Tell(static_cast<uint64>(Land.Cols));
+			Tell(static_cast<uint64>(Land.Rows));
+			Tell(static_cast<uint64>(Land.Grounds.size()));
+			Tell(static_cast<uint64>(Land.Ground.size()));
+			Tell(static_cast<uint64>(Land.Storeys.size()));
+			for (const uint8 Kind : Land.Ground)
+			{
+				Tell(static_cast<uint64>(Kind));
+			}
+			for (const uint8 Tall : Land.Storeys)
+			{
+				Tell(Tall > 0 ? 1ull : 0ull);
+			}
+			if (Told != MapPaintOf)
+			{
+				MapPaint = LandFieldMap::Paints(Land, MapFrame);
+				MapPaintOf = Told;
+			}
+		}
+		const FLinearColor WoodsInk = LeafInk * FLinearColor(1.0f, 1.0f, 1.0f, 0.6f);
+		for (const LandFieldMap::Run& One : MapPaint.Runs)
+		{
+			double RunX = 0.0, RunY = 0.0, RunW = 0.0, RunH = 0.0;
+			LandFieldMap::RunBox(MapPaint, MapFrame, One, RunX, RunY, RunW, RunH);
+			if (RunW > 0.0 && RunH > 0.0)
+			{
+				Fill(RunX, RunY, RunW, RunH, One.What == LandFieldMap::Paint::Water ? MapWater : One.What == LandFieldMap::Paint::Building ? InkSoft : WoodsInk, MapLayer + 2);
+			}
+		}
+		// (his ground while he places his army: the brass line, 1 wide, held to the map's box)
+		if (Clip.Deploying())
+		{
+			const double* Room = Clip.Room();
+			if (Room[2] > Room[0] && Room[3] > Room[1])
+			{
+				double NearX = 0.0, NearY = 0.0, FarX = 0.0, FarY = 0.0;
+				MapFrame.ToMap(Room[0], Room[1], NearX, NearY);
+				MapFrame.ToMap(Room[2], Room[3], FarX, FarY);
+				const double RoomL = FMath::Clamp(FMath::Min(NearX, FarX), MX, MX + MW - 1.0), RoomR = FMath::Clamp(FMath::Max(NearX, FarX), MX + 1.0, MX + MW);
+				const double RoomT = FMath::Clamp(FMath::Min(NearY, FarY), MY, MY + MH - 1.0), RoomB = FMath::Clamp(FMath::Max(NearY, FarY), MY + 1.0, MY + MH);
+				Fill(RoomL, RoomT, RoomR - RoomL, 1.0, Brass, MapLayer + 3);
+				Fill(RoomL, RoomB - 1.0, RoomR - RoomL, 1.0, Brass, MapLayer + 3);
+				Fill(RoomL, RoomT + 1.0, 1.0, FMath::Max(0.0, RoomB - RoomT - 2.0), Brass, MapLayer + 3);
+				Fill(RoomR - 1.0, RoomT + 1.0, 1.0, FMath::Max(0.0, RoomB - RoomT - 2.0), Brass, MapLayer + 3);
+			}
+		}
+		// (a block's mark: a stroke along its frontage, as thick as it is deep, never smaller than LandFieldMap's least;
+		// Edge more all round, for the cream edge under a unit in hand; its ends held to the map's box)
+		auto Stroke = [&](double FieldX, double FieldY, double Front, double Depth, double Facing, double Edge, const FLinearColor& Ink, int32 Layer)
+		{
+			double Ax = 0.0, Ay = 0.0, Bx = 0.0, By = 0.0, Thick = 0.0;
+			LandFieldMap::Mark(MapFrame, FieldX, FieldY, Front, Depth, Facing, Ax, Ay, Bx, By, Thick);
+			const double Long = FMath::Sqrt((Bx - Ax) * (Bx - Ax) + (By - Ay) * (By - Ay));
+			if (Edge > 0.0 && Long > 1e-6)
+			{
+				const double Ux = (Bx - Ax) / Long, Uy = (By - Ay) / Long;
+				Ax -= Ux * Edge;
+				Ay -= Uy * Edge;
+				Bx += Ux * Edge;
+				By += Uy * Edge;
+			}
+			const FVector2D EndA(FMath::Clamp(Ax, MX, MX + MW), FMath::Clamp(Ay, MY, MY + MH)), EndB(FMath::Clamp(Bx, MX, MX + MW), FMath::Clamp(By, MY, MY + MH));
+			Lines({ EndA, EndB }, Ink, static_cast<float>(Thick + 2.0 * Edge), Layer);
+		};
+		for (const LandCommand::Tag* Each : Clip.OnMap())
+		{
+			if (!Each->bMine && !(Each->bKnown && !Each->bVague))
+			{
+				// (an enemy not yet met, or found only by its fire: a hollow slate outline of the least size, level, 1
+				// wide, where the field shows it, so that it never reads as a unit he has seen: the UI director, 05:35Z)
+				double AtX = 0.0, AtY = 0.0;
+				MapFrame.ToMap(Each->X, Each->Y, AtX, AtY);
+				const double BoxW = LandFieldMap::MarkLong, BoxH = LandFieldMap::MarkDeep;
+				const double BoxX = FMath::Clamp(FMath::RoundToDouble(AtX - 0.5 * BoxW), MX, FMath::Max(MX, MX + MW - BoxW));
+				const double BoxY = FMath::Clamp(FMath::RoundToDouble(AtY - 0.5 * BoxH), MY, FMath::Max(MY, MY + MH - BoxH));
+				Fill(BoxX, BoxY, BoxW, 1.0, Slate, MapLayer + 4);
+				Fill(BoxX, BoxY + BoxH - 1.0, BoxW, 1.0, Slate, MapLayer + 4);
+				Fill(BoxX, BoxY + 1.0, 1.0, BoxH - 2.0, Slate, MapLayer + 4);
+				Fill(BoxX + BoxW - 1.0, BoxY + 1.0, 1.0, BoxH - 2.0, Slate, MapLayer + 4);
+			}
+			else if (!Each->bMine)
+			{
+				// (the enemy he has seen, in slate, at its frontage and facing)
+				Stroke(Each->X, Each->Y, Each->W, Each->D, Each->Face, 0.0, Slate, MapLayer + 4);
+			}
+			else if (!Each->bChosen)
+			{
+				Stroke(Each->X, Each->Y, Each->W, Each->D, Each->Face, 0.0, Brass, MapLayer + 5);
+			}
+			else
+			{
+				Stroke(Each->X, Each->Y, Each->W, Each->D, Each->Face, 1.0, Cream, MapLayer + 6);
+				Stroke(Each->X, Each->Y, Each->W, Each->D, Each->Face, 0.0, BrightBrass, MapLayer + 7);
+			}
+		}
+		// (where he is looking: the ground under his screen's four corners, cut to the map's box, in cream)
+		if (G.MapView.size() >= 6)
+		{
+			std::vector<std::pair<double, double>> Corners;
+			for (std::size_t K = 0; K + 1 < G.MapView.size(); K += 2)
+			{
+				Corners.push_back({ G.MapView[K], G.MapView[K + 1] });
+			}
+			TArray<FVector2D> Seen;
+			for (const std::pair<double, double>& Point : LandFieldMap::Outline(MapFrame, Corners))
+			{
+				Seen.Add(FVector2D(Point.first, Point.second));
+			}
+			Lines(Seen, Cream * FLinearColor(1.0f, 1.0f, 1.0f, 0.7f), 1.0f, MapLayer + 8);
+		}
+		// (the fold's chevron and its key's cap on a small plate at the map's top right)
+		const FString FoldKey = TEXT("M");
+		const double FoldCapW = WideOf(FoldKey, CapFace) + 10.0;
+		const double FoldW = 6.0 + 9.0 + 5.0 + FoldCapW + 3.0, FoldH = 24.0;
+		const double FoldX = MX + MW - FoldW - 2.0, FoldY = MY + 2.0;
+		Fill(FoldX, FoldY, FoldW, FoldH, Plate, MapLayer + 9);
+		Lines({ FVector2D(FoldX + 6.0, FoldY + 9.5), FVector2D(FoldX + 10.5, FoldY + 14.5), FVector2D(FoldX + 15.0, FoldY + 9.5) }, Cream, 1.5f, MapLayer + 10);
+		Fill(FoldX + 20.0, FoldY + 2.0, FoldCapW, 20.0, Muted * FLinearColor(1.0f, 1.0f, 1.0f, 0.7f), MapLayer + 10);
+		Fill(FoldX + 21.0, FoldY + 3.0, FoldCapW - 2.0, 18.0, Leather, MapLayer + 11);
+		Write(FoldKey, FoldX + 25.0, FoldY + 3.0, CapFace, Muted, MapLayer + 12);
+		// (the whole map looks where it is pressed; the fold's plate, added after it, is taken first)
+		Buttons.Add({ FSlateRect(static_cast<float>(MX), static_cast<float>(MY), static_cast<float>(MX + MW), static_cast<float>(MY + MH)), FString(TEXT("map:look")) });
+		Buttons.Add({ FSlateRect(static_cast<float>(FoldX - 2.0), static_cast<float>(MY), static_cast<float>(MX + MW), static_cast<float>(FoldY + FoldH + 2.0)), FString(TEXT("map:fold")) });
 	}
 
 	// ---- The plate of the unit under the pointer: its whole name, what it belongs to, its real men and the drawing ratio
@@ -1920,12 +2096,13 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		}
 		PX = FMath::Clamp(PX, 8.0, FMath::Max(8.0, Size.X - PW - 8.0));
 		PY = FMath::Clamp(PY, FieldTop, FMath::Max(FieldTop, Size.Y - PH - 8.0));
-		Fill(PX - 1.0, PY - 1.0, PW + 2.0, PH + 2.0, Brass, 16);
-		Fill(PX, PY, PW, PH, Paper, 16);
-		Write(Named, PX + 10.0, PY + 5.0, NameFace, Over->bMine ? DeskInk : Slate, 17);
+		// (over everything of his screen, the map of the field too: layers 31 and 32)
+		Fill(PX - 1.0, PY - 1.0, PW + 2.0, PH + 2.0, Brass, 31);
+		Fill(PX, PY, PW, PH, Paper, 31);
+		Write(Named, PX + 10.0, PY + 5.0, NameFace, Over->bMine ? DeskInk : Slate, 32);
 		for (int32 K = 0; K < Said.Num(); ++K)
 		{
-			Write(Said[K], PX + 10.0, PY + 24.0 + 19.0 * K, SaidFace, InkSoft, 17);
+			Write(Said[K], PX + 10.0, PY + 24.0 + 19.0 * K, SaidFace, InkSoft, 32);
 		}
 	}
 	return CardsH;
@@ -1975,6 +2152,25 @@ void SLandBattleScreen::Do(const FString& Action)
 		// (a group's chip on a card, release 2: its units taken in hand; with Shift, added to those in hand)
 		Scene->GeneralDo((FSlateApplication::Get().GetModifierKeys().IsShiftDown() ? FString(TEXT("addgroup:")) : FString(TEXT("group:"))) + Action.Mid(14));
 	}
+	else if (Action == TEXT("map:fold"))
+	{
+		// (the map of the field folded away or brought back: its chevron, the FIELD MAP button, or M)
+		bMapFolded = !bMapFolded;
+	}
+	else if (Action == TEXT("map:look"))
+	{
+		// (his view glided to the place on the field's map under the pointer, held to the field while he drags off its
+		// box; the walk's press, with no pointer on the map, looks at the field's middle)
+		if (MapFrame.Valid())
+		{
+			double FieldX = MapFrame.FieldW * 0.5, FieldY = MapFrame.FieldH * 0.5;
+			if (bMapHeld || MapFrame.Holds(HoverAt.X, HoverAt.Y))
+			{
+				MapFrame.ToField(HoverAt.X, HoverAt.Y, FieldX, FieldY);
+			}
+			Scene->GeneralMapLook(FieldX, FieldY);
+		}
+	}
 	else if (Action.StartsWith(TEXT("general:")))
 	{
 		Scene->GeneralDo(Action.Mid(8));
@@ -2013,9 +2209,22 @@ FReply SLandBattleScreen::OnMouseButtonDown(const FGeometry& Geometry, const FPo
 	const FVector2D Local = Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition());
 	if (const FButton* Hit = ButtonAt(Local))
 	{
-		// (the film's window and the views' chips stand on the field: only the left button presses them, so an order
-		// given with the right button over one does not start the film or fly the view)
-		const bool bOnField = Hit->Action == TEXT("window:film") || Hit->Action.StartsWith(TEXT("general:view:"));
+		// (the map of the field, release 2: the left button looks there and, held, takes his view with the pointer; no
+		// other button does anything on it, so an order's click over the map gives nothing)
+		if (Hit->Action == TEXT("map:look"))
+		{
+			if (Event.GetEffectingButton() == EKeys::LeftMouseButton && GeneralHeld < 0 && !bSliding)
+			{
+				HoverAt = Local;
+				bMapHeld = true;
+				Do(Hit->Action);
+				return HasMouseCapture() ? FReply::Handled() : FReply::Handled().CaptureMouse(SharedThis(this));
+			}
+			return FReply::Handled();
+		}
+		// (the film's window, the views' chips and the map's fold stand on the field: only the left button presses them,
+		// so an order given with the right button over one does not start the film, fly the view or fold the map)
+		const bool bOnField = Hit->Action == TEXT("window:film") || Hit->Action.StartsWith(TEXT("general:view:")) || Hit->Action == TEXT("map:fold");
 		if (!bOnField || Event.GetEffectingButton() == EKeys::LeftMouseButton)
 		{
 			Do(Hit->Action);
@@ -2027,7 +2236,8 @@ FReply SLandBattleScreen::OnMouseButtonDown(const FGeometry& Geometry, const FPo
 		// His map: the left button picks up and boxes, the right gives orders and draws lines; both his, not the camera's.
 		const FKey Which = Event.GetEffectingButton();
 		const int32 Button = Which == EKeys::LeftMouseButton ? 0 : Which == EKeys::RightMouseButton ? 1 : -1;
-		if (Button >= 0 && GeneralHeld < 0)
+		// (not while he holds the map of the field: one hold at a time)
+		if (Button >= 0 && GeneralHeld < 0 && !bMapHeld)
 		{
 			GeneralHeld = Button;
 			Battle->GeneralPress(ToPixels(Geometry, Local), Button, Event.IsShiftDown(), TagUnder(Local));
@@ -2053,6 +2263,12 @@ FReply SLandBattleScreen::OnMouseButtonDown(const FGeometry& Geometry, const FPo
 
 FReply SLandBattleScreen::OnMouseButtonUp(const FGeometry& Geometry, const FPointerEvent& Event)
 {
+	if (bMapHeld && Event.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		// (his hold on the map of the field let go: the view stays where he took it)
+		bMapHeld = false;
+		return GeneralHeld >= 0 || bSliding ? FReply::Handled() : FReply::Handled().ReleaseMouseCapture();
+	}
 	if (bSliding && Event.GetEffectingButton() == EKeys::MiddleMouseButton)
 	{
 		bSliding = false;
@@ -2093,6 +2309,7 @@ void SLandBattleScreen::OnMouseCaptureLost(const FCaptureLostEvent& CaptureLostE
 	GeneralHeld = -1;
 	bDragging = false;
 	bSliding = false;
+	bMapHeld = false;
 }
 
 FReply SLandBattleScreen::OnMouseButtonDoubleClick(const FGeometry& Geometry, const FPointerEvent& Event)
@@ -2231,11 +2448,22 @@ FReply SLandBattleScreen::OnMouseMove(const FGeometry& Geometry, const FPointerE
 				In.SlideRight -= Event.GetCursorDelta().X / Size.X;
 				In.SlideAhead += Event.GetCursorDelta().Y / Size.Y;
 			}
-			// (the pointer at the very edge of the screen moves the view that way; not while he drags a box or a unit)
+			// (the pointer at the very edge of the screen moves the view that way; not while he drags a box or a unit, nor
+			// while he holds the map of the field)
 			const double Edge = 4.0;
-			In.EdgeRight = Local.X >= Size.X - Edge ? 1.0 : Local.X <= Edge ? -1.0 : 0.0;
-			In.EdgeAhead = Local.Y <= Edge ? 1.0 : Local.Y >= Size.Y - Edge ? -1.0 : 0.0;
+			In.EdgeRight = bMapHeld ? 0.0 : Local.X >= Size.X - Edge ? 1.0 : Local.X <= Edge ? -1.0 : 0.0;
+			In.EdgeAhead = bMapHeld ? 0.0 : Local.Y <= Edge ? 1.0 : Local.Y >= Size.Y - Edge ? -1.0 : 0.0;
 			In.bLockEdgePan = GeneralHeld >= 0;
+		}
+		if (bMapHeld)
+		{
+			// (his hold on the map of the field, release 2: the view goes with the pointer, held to the field; no tag's
+			// plate comes up and no word by the pointer meanwhile)
+			HoverAt = Local;
+			HoverBlock = -1;
+			Do(TEXT("map:look"));
+			Battle->GeneralMove(FVector2D(-1.0, -1.0), -1);
+			return FReply::Handled();
 		}
 		// (the block under the pointer, a tag or a card, for its plate)
 		HoverAt = Local;
@@ -2381,6 +2609,15 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 		else if (Key == EKeys::Escape) { Scene->GeneralDo(TEXT("clear")); return FReply::Handled(); }
 		else if (Key == EKeys::C) { Scene->GeneralDo(TEXT("film")); return FReply::Handled(); }
 		else if (Key == EKeys::O) { Scene->GeneralDo(TEXT("topview")); return FReply::Handled(); }
+		// (M folds the map of the field away and brings it back, release 2; with its row off the key is nobody's)
+		else if (Key == EKeys::M && FLandLive::RuleNow(TEXT("fieldmap")))
+		{
+			if (!Event.IsRepeat())
+			{
+				Do(TEXT("map:fold"));
+			}
+			return FReply::Handled();
+		}
 		else if (Key == EKeys::V && !bSetup) { Scene->GeneralDo(TEXT("ride")); return FReply::Handled(); }
 		else if (Key == EKeys::Enter && bSetup) { Scene->GeneralDo(TEXT("begin")); return FReply::Handled(); }
 		// (U, "draw up", while he places his army: each press draws them up in the next of the four, Line first; release 2.
