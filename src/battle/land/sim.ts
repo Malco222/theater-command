@@ -3490,9 +3490,12 @@ export class LandBattle implements BattleSim<LandUnit> {
     };
     if (barred !== undefined && R?.by !== barred) {
       const e = this.unit(barred);
-      if (stands(e)) {
+      // (By its own sight, as every reading of the enemy in a block's move: an enemy block still hidden is not known to
+      // it, nor is its ground. One that bars it unseen gives it no way round to choose, and one standing unseen at an
+      // end closes no end; it finds that block when it comes on it, as it would any other. The design director, 22:35Z.)
+      if (stands(e) && !e.hid) {
         const m = this.going(u), f = this.field, face = Math.atan2(hx, hy), pace = u.w / 2;
-        const others = this.units.filter((o) => o !== e && o.side !== u.side && stands(o));
+        const others = this.units.filter((o) => o !== e && o.side !== u.side && stands(o) && !o.hid);
         // (an enemy block it stands against already is no bar to stepping away from it)
         const apartFrom = others.filter((o) => !this.shares(u, o, u.x, u.y, face));
         // (it makes the step across faced along it and comes out of it faced along its way: its box as it lies either way)

@@ -228,6 +228,30 @@ describe('falling back round an enemy in the way (wayround)', () => {
     expect(through.u.round).toBeUndefined();
   });
 
+  it('the choice reads its own sight: an enemy block still hidden closes no end, and one that bars it unseen gives no way round', () => {
+    // (the nearer end is off the field; a second enemy block stands where the step to the further end would end)
+    const at = (hidden: boolean): ReturnType<typeof choice> => {
+      const c = choice(100, 1000, [[170, 940, NORTH], [0, 1000, NORTH]]);
+      c.them[1].x = c.them[0].x + c.clear + 1;
+      if (hidden) c.them[1].hid = true;
+      return c;
+    };
+    // (seen, it closes that end, as above)
+    const seen = at(false);
+    expect(seen.ask(seen.them[0])).toBeNull();
+    // (still hidden, it is not known to this block: the end is open, and it steps that way)
+    const unseen = at(true);
+    expect(unseen.ask(unseen.them[0])![0]).toBeCloseTo(unseen.them[0].x + unseen.clear + 1, 6);
+    expect(unseen.u.round).toMatchObject({ by: unseen.them[0].id, side: -1 });
+    // (and an enemy block that undoes its step while still hidden is no block it knows a way round)
+    for (const lean of [20, -20]) {
+      const { u, them: [e], ask } = choice(300, 1000, [[300 + lean, 940, NORTH]]);
+      e.hid = true;
+      expect(ask(e)).toBeNull();
+      expect(u.round).toBeUndefined();
+    }
+  });
+
   it('the choice is kept: the same end though the other is now nearer, until that enemy block moves or is gone', () => {
     const { u, them: [e], clear, ask } = choice(300, 1000, [[320, 940, NORTH]]);
     expect(ask(e)![0]).toBeCloseTo(320 - (clear + 1), 6);
