@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 11d40e66e 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of d24c57761 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -73917,9 +73917,10 @@
   // ../../data/campaign/columns.json
   var columns_default = {
     _about: "Supply columns (release 2; Brian's yes of 23 November 2026 12:05Z, idea 3: 'lorry convoys crawl along the campaign map's roads, and enemy planes or partisans can ambush them'). The grand campaign's flag 'columns' (stage.json), set as a campaign opens; off, nothing here is read and every war is the war without it. Each month every nation at war sends a column of lorries from its railhead (rails.ts railheads: the nearest province on working track to a depot or a supplied port) along the road, province by province, to each province where its corps stand beyond it: 'lorries.perDiv' lorries for every division fed and every province of road. On each stretch the column can be caught by enemy aircraft or by partisans, and what is lost on the way never reaches the front. Nothing is keyed to a nation or a date: the outcome comes from what is on the ground and in the air (the core theme, Brian 23 November 07:13Z).",
+    _price: "A lorry lost is paid for once, at the front: what it carried never arrives, and the corps it was bound for take in fewer drafts and rest the worse for it. The lorries are counted afresh every month, so the next month's count has already made good what was burned, and the treasury is not charged for them (the design director, 18:20Z 26 November 2026: price once; the money card, the staffs' planning and the month's result read the same treasury).",
     _air: "Air: the enemy aircraft hunting over a stretch are every enemy group within reach whose standing order sends it after troops: 'ground' and 'line' groups at full weight, ground-support fighters at 'close', and groups flying 'Support the armies' at 'support' (part of their effort goes on roads behind the line). Each counts as much of its strength as its range lets it bring there (air.ts cover) and its airfields let it fly. Against them: the side's own fighters on 'Support the armies' within reach, each worth 'cover' hunters. The pressure is hunters / (hunters + cover x fighters + 'half'), times 'sky' where the enemy has won the sky over the stretch, and nothing flies under a closed sky. A stretch then loses 'most' x pressure of the lorries on it, less what the troops standing on it shoot down: 'flak' a division, at most 'flakMost'. Calibrated to the record only for how much each cause weighs: in Normandy in June and July 1944, with some 3,000 Allied fighters and fighter-bombers in reach against some 300 German fighters, road columns moving by day lost about a seventh of their lorries for every day's stretch and the front got roughly half of what was sent.",
     _partisans: "Partisans: bands form on occupied ground, ground whose people are not the column's side's (the province's owner is neither the nation nor an ally of it). How strong they are comes from the ground and the occupation: 'terrain' (forest and mountain hide them best), the months since the province changed hands over 'rampMonths' (bands take a year to organise), and whether the people's own country still fights ('leaderless' where it has fallen, 'quiet' where it is at peace with the occupier). The troops standing in the province hold them down: their strength is cut by divisions / (divisions + 'garrisonHalf'). A stretch then loses 'most' x strength of the lorries on it.",
-    lorries: { perDiv: 40, pp: 0.01 },
+    lorries: { perDiv: 40 },
     floor: 0.35,
     air: { most: 0.18, half: 200, cover: 1.5, support: 0.3, ground: 1, line: 1, close: 1, sky: 1.5, flak: 0.04, flakMost: 0.5 },
     partisans: {
@@ -73941,13 +73942,12 @@
     _pool: "The lorries a nation can put on its roads in a month: 'perIncome' for every production point it earns that month, times the share of its fuel need it has (lorries without fuel stand). With 'lorryShift' or 'wagons' on, a month's columns can take no more than that. Weighted only by the record: in the autumn of 1941 the German army in the east, the best motorised of the continental armies, could carry by lorry only some two thirds of what its spearheads beyond the railheads needed, and its infantry lived on horse-drawn wagons; the British and American armies ran almost wholly on lorries.",
     pool: { perIncome: 55 },
     _shift: "Move the lorries: the lorries go first, whole, to the columns of the front a nation names (the enemy whose ground its corps there face), the biggest concentrations first, and whatever is left is shared out evenly among the rest. The player names his front on the SUPPLY COLUMNS page; a computer nation puts its lorries behind the offensive it has under way with the most divisions beyond the railhead.",
-    _wagons: "Horse-drawn wagons carry what the lorries cannot. A wagon haul is slower: on every province of road 'perLink' of what it carries does not arrive in the month. The ground tells on both: in the thaw's mud a lorry bogs down far worse than a horse ('mud'), snow and cold kill horses and freeze fodder ('snow'), and in the desert a horse needs water the road does not have ('desert'). Wagons lost cost 'pp' a wagon, horses being cheaper than lorries. Without wagons, what the lorries cannot carry is not carried at all.",
+    _wagons: "Horse-drawn wagons carry what the lorries cannot. A wagon haul is slower: on every province of road 'perLink' of what it carries does not arrive in the month. The ground tells on both: in the thaw's mud a lorry bogs down far worse than a horse ('mud'), snow and cold kill horses and freeze fodder ('snow'), and in the desert a horse needs water the road does not have ('desert'). A wagon lost, like a lorry, costs the front what it carried and nothing more: the wagons are counted afresh each month, and the treasury is not charged for them (price once, columns.json '_price'). Without wagons, what the lorries cannot carry is not carried at all.",
     wagons: {
       perLink: 0.05,
       mud: { lorry: 0.12, horse: 0.05 },
       snow: { lorry: 0.03, horse: 0.07 },
-      desert: { lorry: 0, horse: 0.12 },
-      pp: 4e-3
+      desert: { lorry: 0, horse: 0.12 }
     },
     _dumps: "Forward dumps: a nation stocks a province of its own beyond the railhead ('minLinks' provinces of road or more) with 'size' division-months of supply, at 'pp' a division-month. It is stocked by a column from the railhead in the month after the order (what that column loses on the road is lost to the dump), and from then on the corps whose road from the dump is shorter than their road from the railhead are fed from it, a division-month of stock for each division fed. Enemy aircraft over it burn 'bombed' x their pressure of what is left each month; if its ground is lost it is burned. At most 'most' dumps a nation. A computer nation stocks one where it would save the most province-months of road, if that is at least 'aiSaving' and it has 'aiPurse' times the price in hand.",
     dumps: { size: 30, pp: 0.6, minLinks: 2, most: 2, bombed: 0.35, reach: 6, aiSaving: 40, aiPurse: 1.5 }
@@ -74377,8 +74377,6 @@
     aiDumps(g2, nat, runs);
     if (!runs.length) return;
     book3[nat] = runs;
-    N.pp -= lostAll * C4.lorries.pp;
-    if (horseLost > 0) N.pp -= horseLost * LOGI.wagons.pp;
     const me = g2.human;
     if (!me) return;
     const lostSent = lostAll + horseLost;
