@@ -87,12 +87,12 @@ describe('the switch (off by default, bit for bit as before)', () => {
       expect(rb.strafed).toEqual([]);
       expect('strafed' in ra).toBe(false);
       delete rb.strafed;
-      // (Changed in round seven, the UI director 19:17Z, reading 4: with the switch on, where the cut prints as 0% the
-      // report says "The aircraft found little to hit." in place of "... by 0%", and so does the raid's headline, which
-      // carries the report's sentence. That sentence apart too, as off.)
-      const nil = (x: string): string => x.replace(/The raids cut the organisation of [^.]* by 0%\. They fight the weaker for it until they have rested\./g, 'The aircraft found little to hit.');
+      // (Changed in round seven, the UI director 19:17Z, reading 4, and 21:22Z, i: with the switch on, where the cut prints
+      // as 0% the report says "The raids did the troops little harm." in place of "... by 0%", and so does the raid's
+      // headline, which carries the report's sentence. That sentence apart too, as off.)
+      const nil = (x: string): string => x.replace(/The raids cut the organisation of [^.]* by 0%\. They fight the weaker for it until they have rested\./g, 'The raids did the troops little harm.');
       expect(ra.result).toMatch(/^The raids cut the organisation of .* by 0%/);
-      expect(rb.result).toBe('The aircraft found little to hit.');
+      expect(rb.result).toBe('The raids did the troops little harm.');
       expect(JSON.stringify(rb)).toBe(nil(JSON.stringify(ra)));
       expect(saveGame(b.g)).toBe(nil(saveGame(a.g)));
     }
@@ -526,8 +526,8 @@ describe('the fight a group carries after its air fight (18:14Z): read afresh at
     expect(S.carries(unit)).toBe(0);
     // Its go-down, by the player's order: it reads 0 there, turns for home and is gone for the raid. The order is answered
     // (the UI director, 19:10Z A6), once, to the side that flies it as the battle's other lines are.
-    // ({Group} as the battle names a group at the head of its other lines, names.ts told: "The Groupement de Chasse 3".)
-    const A6 = 'The Groupement de Chasse 3 has no fight left to strafe with and turns for home.';
+    // ({Group} by the lane's one rule, theGroupName, the UI director 21:22Z g: a name in its own language bare.)
+    const A6 = 'Groupement de Chasse 3 has no fight left to strafe with and turns for home.';
     const said = (): FieldEvent[] => s.history().filter((e) => e.what === 'air:no-strafe');
     expect(said()).toEqual([]);
     expect(s.command({ do: 'air:strafe', units: [unit.id] }, 'att')).toBe(true);

@@ -52,6 +52,8 @@ const NOBODY = 'No fighter group went down to strafe.';
 // A group that went down with under one fighter's weight on the troops (the UI director, 19:10Z A5; its forms, 19:17Z).
 const LITTLE = 'went down to strafe, but had too little fight left to do any harm.';
 const FOUND_LITTLE = 'The aircraft found little to hit.';
+// (Under the lane, where the harm rounds to nothing: the UI director, 21:22Z, i.)
+const HARM_LITTLE = 'The raids did the troops little harm.', HARM_NONE = 'The raids did the troops no harm.';
 const GC1 = 9, GC3 = 10, GC2 = 36, BOMBERS = 38;
 const NAME: Record<number, string> = { [GC1]: 'Groupement de Chasse 1', [GC2]: 'Groupement de Chasse 2', [GC3]: 'Groupement de Chasse 3' };
 
@@ -83,7 +85,12 @@ describe('the raid card: LIKELY TO GO DOWN AND STRAFE', () => {
     const p = planRaid(c.g, 'ground', c.target, c.ids, 'FRA');
     expect(p.why).toBeNull();
     expect(p.strafe).toEqual({ heading: HEADING, note: NOTE, names: ['Groupement de Chasse 3'], none: '' });
-    expect(STRAFE_WORDS).toEqual({ heading: HEADING, note: NOTE, none: NONE, nobody: NOBODY, little: LITTLE });
+    expect(STRAFE_WORDS).toEqual({
+      heading: HEADING, note: NOTE, none: NONE, nobody: NOBODY, little: LITTLE,
+      short: ['was too short of fuel to go down and turned for home.', 'were too short of fuel to go down and turned for home.'],
+      fuel: ['went down to strafe, but ran short of fuel and turned for home before it could do any harm.', 'went down to strafe, but ran short of fuel and turned for home before they could do any harm.'],
+      caught: ['went down to strafe, but was caught by enemy fighters before it could do any harm.', 'went down to strafe, but were caught by enemy fighters before they could do any harm.'],
+    });
     // The air page (the rows the rules build): at the foot of the raid's forces, right under FLYING THE RAID; the muted
     // line is the section's text, each group a row with no nation (no flag, no picture, no colour).
     const page = airPage(c.g, `plan:ground:${c.target}:${p.picked.join('.')}`)!;
@@ -353,9 +360,9 @@ describe('the raid report: too little fight left to do any harm (A5)', () => {
     expect(r1.strafeLittle).toEqual({ names: names([GC1, GC2]) });
     expect(strafedLine(r1, 'FRA')).toBe(`Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 and Groupement de Chasse 2 ${LITTLE}`);
     expect(Math.round(settled.cut! * 100)).toBe(0);
-    expect(r1.result).toBe(FOUND_LITTLE);
-    expect(resultFor(r1, 'FRA')).toBe(FOUND_LITTLE);
-    expect(resultFor(r1, 'GER')).toBe(FOUND_LITTLE);
+    expect(r1.result).toBe(HARM_LITTLE);
+    expect(resultFor(r1, 'FRA')).toBe(HARM_LITTLE);
+    expect(resultFor(r1, 'GER')).toBe(HARM_LITTLE);
     expect(strafedLine(r1, 'GER')).toBe('');
     expect(loadGame(saveGame(a.g))!.airReports.at(-1)!.strafeLittle).toEqual(r1.strafeLittle);
     // 648: all three with less, the bombers' weight beside them: three names joined, and the result sentence stands.
@@ -363,13 +370,13 @@ describe('the raid report: too little fight left to do any harm (A5)', () => {
     const r2 = launchRaid(b.g, 'ground', b.target, b.ids, 'FRA')!;
     expect(r2.strafeLittle).toEqual({ names: names([GC1, GC2, GC3]) });
     expect(strafedLine(r2, 'FRA')).toBe(`Groupement de Chasse 1, Groupement de Chasse 2 and Groupement de Chasse 3 ${LITTLE}`);
-    expect(resultFor(r2, 'FRA')).toBe(FOUND_LITTLE);
+    expect(resultFor(r2, 'FRA')).toBe(HARM_LITTLE);
     // 648 with no bombers: they were all that reached the troops. The raider reads their line alone; the defender, whom
     // her words do not cover, the report's own sentence.
     const c = edge(648, false);
     const r3 = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
     expect(r3.strafeLittle).toEqual({ names: names([GC1, GC2, GC3]), alone: true });
-    expect(r3.result).toBe(FOUND_LITTLE);
+    expect(r3.result).toBe(HARM_LITTLE);
     expect(resultFor(r3, 'FRA')).toBe('');
     expect(resultFor(r3, 'GER')).toBe(r3.result);
     // As built (200 German fighters): every group with a fighter's weight or more, no field written.
@@ -381,7 +388,7 @@ describe('the raid report: too little fight left to do any harm (A5)', () => {
     expect(strafedLine(r4, 'FRA')).toBe(`${r4.strafed![0]}, ${r4.strafed![1]} and ${r4.strafed![2]} went down and strafed.`);
   });
 
-  it('the result sentence: "The aircraft found little to hit." exactly where the cut prints as 0%, with the rule on; off, as shipped', () => {
+  it('the result sentence: "The raids did the troops little harm." (or "no harm") exactly where the cut prints as 0%, with the rule on; off, as shipped', () => {
     on();
     for (const [n, mult] of [[200, 1], [0, 1], [646, 1], [200, 30]] as const) {
       AIR.combat.fighters = WAS * mult;
@@ -392,7 +399,7 @@ describe('the raid report: too little fight left to do any harm (A5)', () => {
       const rep = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
       const cut = heard.find((x) => x.route === 'settled')!.cut!;
       if (Math.round(cut * 100) > 0) expect(rep.result.startsWith('The raids cut the organisation of')).toBe(true);
-      else expect(rep.result).toBe(FOUND_LITTLE);
+      else expect(rep.result).toBe(cut > 0 ? HARM_LITTLE : HARM_NONE);
     }
     AIR.combat.fighters = WAS;
     flyKinds([]);
