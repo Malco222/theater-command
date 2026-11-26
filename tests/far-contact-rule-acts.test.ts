@@ -63,6 +63,9 @@ describe('the scope: stops 3 to 5, or the row\'s book closed', () => {
     expect(contactRuleActs(g, p.americas)).toBe(false);
   });
 
+  // (A state set by hand that the game cannot reach: with the far side on the Pacific's book hangs on the west's
+  // (`after: ['west']`, no `stays`), so claims.ts `closeBook` closes it in the same call that closes the west's. Kept
+  // only to pin reading A: far-side ground reads the Pacific's book, never the west's. logic-1.)
   it.each([1, 2])('at stop %i with the west\'s book alone closed by hand it acts on the old chart and the Americas, not on far-side ground', (stop) => {
     const g = campaign(stop);
     g.flags['hist:off:west'] = 9;

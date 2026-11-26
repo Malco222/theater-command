@@ -266,6 +266,9 @@ describe("a closed book brings the contact rule in: at the book's stops it acts 
     expect(g.flags[`wait:${index(D7)}`]).toBeUndefined();
     expect(g.flags[`sent:${index(D7)}`]).toBe(1);
   });
+  // (A state set by hand that the game cannot reach: with the far side on the Pacific's book hangs on the west's
+  // (`after: ['west']`, no `stays`), so claims.ts `closeBook` closes it in the same call that closes the west's. The
+  // test is kept only to pin reading A: a far row reads the Pacific's book, never the west's. logic-1.)
   it.each([1, 2])('at stop %i with only the west\'s book closed by hand, the Pacific\'s open, the far row still takes at its date', (stop) => {
     const { g } = inLine(stop, ['west']);
     expect(g.flags['hist:off:pacific']).toBeUndefined();

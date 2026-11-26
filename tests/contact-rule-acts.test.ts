@@ -31,6 +31,8 @@ describe('the far side off', () => {
 
   it.each([1, 2])('at stop %i it acts on no known place with the west\'s book open, even with the Pacific\'s marked closed', (stop) => {
     const g = campaign(stop);
+    // (The far side off, no Pacific theatre is laid: this flag is one the game could never write. Set by hand, it
+    // only pins that old-chart ground reads the west's book and not the Pacific's: logic-7.)
     g.flags['hist:off:pacific'] = 30;
     for (const r of places(g)) expect(contactRuleActs(g, r)).toBe(false);
   });

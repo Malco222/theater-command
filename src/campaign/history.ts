@@ -216,7 +216,9 @@ export function rowBook(g: Game, place: Region | undefined): string | null {
  * due on `place`. The design director's 22:05Z of 25 November 2026: "One sentence, one scope: the contact rule acts
  * where the stop is 3 to 5 OR the row's theatre's book is closed." At stops 3 to 5 it always acts; at a stop that keeps
  * a book (1 and 2), only where the row's book (`rowBook`) is closed, read as the stations read it (`bookClosed`, the
- * flag claims.ts `closeBook` writes with the theatres that hang on it: Burma closes with the Pacific). A row that
+ * flag claims.ts `closeBook` writes with the theatres that hang on it: the Pacific's hangs on the west's). Burma
+ * follows the Pacific's book because its ground is far-side ground, which reads the Pacific's (`rowBook`): there is
+ * no 'burma' theatre, and none hangs on the Pacific's (logic-6). A row that
  * reads no book (`rowBook` null: its place not known, or far-side ground with no stations table laid) keeps no book,
  * and the rule acts: the design director's answer 4 of 00:43Z, 26 November 2026, "A row that reads no book keeps no
  * book: the contact rule acts (forces, never a book that is not there)." The three doors read it here: game.ts
