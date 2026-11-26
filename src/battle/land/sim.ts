@@ -2439,9 +2439,10 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (u.waits && !u.waits.free) return;
     const go = (x: number, y: number): void => { this.send(u, { kind: 'move', x, y }); u.aim = t.id; };
     if (u.slipTo !== undefined) {
-      if (u.order) return;
+      // One spot a slip, as the computer's drill (ai.ts snipersUp).
+      if (u.order || u.slipAt) return;
       const spot = this.slipSpot(u);
-      if (spot) go(spot[0], spot[1]);
+      if (spot) { u.slipAt = spot; go(spot[0], spot[1]); }
       return;
     }
     const K = LAND.snipers.keep, dir = u.side === 'att' ? 1 : -1;
@@ -2467,7 +2468,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (u.order?.kind === 'withdraw') return;
     this.send(u, { kind: 'withdraw', x: u.x, y: u.side === 'att' ? 0 : this.field.h });
     u.engaged = undefined;
-    delete u.slipTo;
+    delete u.slipTo; delete u.slipAt;
     delete u.search; delete u.searchR;
     if (this.ticket[u.side].human) this.say({ what: 'land:snipersBack', unit: u.id, side: u.side, text: `${this.named(u)} has lost too many men and pulls back.`, x: u.x, y: u.y });
   }
@@ -2485,11 +2486,12 @@ export class LandBattle implements BattleSim<LandUnit> {
       const clear = (): boolean => this.sniperGround(u.x, u.y) && !this.units.some((e) => e.side !== u.side && fighting(e) && this.gap(u, e) <= S.clear);
       if (u.slipTo !== undefined) {
         if (this.t < u.slipTo - 1e-9) continue;
-        delete u.slipTo;
+        delete u.slipTo; delete u.slipAt;
         if (clear()) { u.hid = true; delete u.unloc; }
         continue;
       }
-      if ((u.slips ?? 0) >= S.most || u.str < S.str * u.str0 || u.still < S.after || !clear()) continue;
+      // A team on its way to a spot it chose keeps that way: it slips, if all still holds, once it is there (26 Nov).
+      if ((u.slips ?? 0) >= S.most || u.str < S.str * u.str0 || u.still < S.after || u.order?.kind === 'move' || !clear()) continue;
       u.slipTo = Math.round((this.t + S.secs) * 1000) / 1000;
       u.slips = (u.slips ?? 0) + 1;
     }
@@ -3334,7 +3336,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     t.mor = Math.max(0, t.mor - lost * LAND.nerve.perLoss[t.side] * nerveMul * Math.max(0.3, steady));
     // A sniper team under fire, seen, vague or blind, holds its fire till LAND.snipers.quiet after the last blow; struck
     // while it slips away, it stays found.
-    if (t.team === 'snp') { t.quietTo = Math.round((this.t + LAND.snipers.quiet) * 1000) / 1000; delete t.slipTo; }
+    if (t.team === 'snp') { t.quietTo = Math.round((this.t + LAND.snipers.quiet) * 1000) / 1000; delete t.slipTo; delete t.slipAt; }
     t.still = 0;
     t.figures = t.str <= 0 ? 0 : Math.max(1, Math.ceil(t.tray * t.str));
     // Stretcher bearers (release 2): its wounded lie for its bearers, its light cases go to their dressing. A model lost

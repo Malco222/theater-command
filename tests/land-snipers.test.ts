@@ -150,6 +150,30 @@ describe('sniper teams: sent in with a group', () => {
   });
 });
 
+describe('sniper teams: one spot a slip (the design director, 26 November 03:09Z)', () => {
+  it('a team slipping away goes to one spot and keeps it till the slip ends, never choosing a second, on either drill', () => {
+    let slips = 0, kept = 0, second = 0;
+    for (const [terrain, seed] of [['forest', 3], ['urban', 5], ['plains', 7]] as const) {
+      const b = new LandBattle(withSnipers(practiceTicket(ground(terrain), { seed: seed * 7919 + 13 })));
+      b.hideOn();
+      const spots = new Map<string, Set<string>>();
+      for (let k = 0; !b.over && k < 30000; k++) {
+        b.step();
+        for (const u of b.units) {
+          if (u.team !== 'snp' || u.slipTo === undefined) continue;
+          const key = `${u.id}:${u.slips}`;
+          if (!spots.has(key)) spots.set(key, new Set());
+          if (u.order?.kind === 'move') spots.get(key)!.add(`${Math.round(u.order.x)},${Math.round(u.order.y)}`);
+        }
+      }
+      for (const s of spots.values()) { slips++; if (s.size === 1) kept++; if (s.size > 1) second++; }
+    }
+    expect(slips).toBeGreaterThan(0);
+    expect(kept).toBeGreaterThan(0);
+    expect(second).toBe(0);
+  }, 240_000);
+});
+
 describe('sniper teams: the switch off', () => {
   it('sets nothing of theirs on any block when the field has none', () => {
     const b = new LandBattle(ticket('urban', 4));

@@ -87,6 +87,8 @@ export interface LandUnit extends UnitBase {
   quietTo?: number;
   slipTo?: number;
   slips?: number;
+  /** Where a slipping sniper team chose to go: it keeps that spot till the slip ends (no second spot in one slip). */
+  slipAt?: [number, number];
   /**
    * A sniper team sent in with a group (the attack order; the design director, 26 November 01:49Z (d)): the group's
    * target, which it bounds toward by its staff's own drill till it is in reach, and the group's blocks, whose leading
