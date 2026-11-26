@@ -256,8 +256,10 @@ describe('the draw at the orders', () => {
     const capName = g.regions[n.capital].name;
     const ka = addCorps(g, 'CHN', 'Kept corps', 'inf', 2, capName, {}), kc = addCorps(g, 'CHN', 'Folded corps', 'inf', 2, capName, {});
     ka.str = kc.str = 0.2;
-    // (The kept corps armed to its strength, so nothing the fold moves passes its full and the store stays as it was.)
+    // (The kept corps armed to its strength, so nothing the fold moves passes its full, and the folded corps too, so it
+    // has no worn part to send to the store (her ruling 1 of 06:04Z, 26 November 2026): the store stays as it was.)
     g.flags[`rfa:${ka.id}`] = 0.2;
+    g.flags[`rfa:${kc.id}`] = 0.2;
     expect(foldCorps(g, ka, kc)).toBe(true);
     expect(offer(`cadre:${kc.id}`).rifles).toBe(2 * PER);
     expect(offer(`cadre:${kc.id}`).why).toBe(noRifles(g, 'CHN', 2));
@@ -466,6 +468,37 @@ describe('binds: false', () => {
     expect(a.save === b.save).toBe(true);
   }, 300_000);
 
+  it("9. (her ruling 2 of 06:04Z) a row that only counts counts a fold exactly as a binding row: the same figures on the same board", () => {
+    // The same board (seed 3) and the same two folds, once with Japan's row binding and once only counting: the store
+    // is given the same rifles to the last one, and the kept corps stand alike. (1) Two corps of 2 at 0.6: 2.0 (test 9
+    // above). (2) Two corps of 3, kept at 0.5 and folded at 0.3, at their full level: 1.5 + 0.9 fill 2.4 of 3 with
+    // none left over; 0.9 moves in and passes the kept corps' full (1 + 0.9 / 3 = 1.3: 0.3 x 3); the folded corps' worn
+    // part is (1 - 0.3) x 3 = 2.1. 0.9 + 2.1 = 3.0, which with the kept corps' 3.0 is the 6.0 the two held.
+    const fold = (bound: boolean): number[] => {
+      RIFLES.nations.JAP = { perDiv: 15000, refit: 0.05, binds: bound };
+      const off = rowsFrom((_g, x) => (x === 'JAP' ? { rifles: { start: 0 } } : undefined));
+      try {
+        const g = grand();
+        levyMen(g, 'JAP', 30);
+        expect(binds(g, 'JAP')).toBe(bound);
+        store(g, 1, 'JAP');
+        const at = g.regions[g.nations.JAP.capital].name;
+        const got: number[] = [];
+        for (const [d, ka, kb] of [[2, 0.6, 0.6], [3, 0.5, 0.3]] as const) {
+          const a = addCorps(g, 'JAP', 'Kept corps', 'inf', d, at, {}), b = addCorps(g, 'JAP', 'Folded corps', 'inf', d, at, {});
+          a.str = ka; b.str = kb;
+          const s = stock(g, 'JAP');
+          expect(foldCorps(g, a, b)).toBe(true);
+          got.push(Math.round((stock(g, 'JAP') - s) * 15000), Math.round(a.str * 1e9) / 1e9, levelOf(g, a));
+        }
+        return got;
+      } finally { delete RIFLES.nations.JAP; off(); }
+    };
+    const counts = fold(false), bound = fold(true);
+    expect(counts).toEqual(bound);
+    expect(counts).toEqual([30000, 1, 1, 45000, 0.8, 1]);
+  });
+
   it('9. (and only false frees it) a row that says nothing of binds binds', () => {
     lay('UK', { perDiv: 15000 });
     const g = grand();
@@ -488,13 +521,19 @@ describe('binds: false', () => {
     try { startPhase(g, 'JAP'); } finally { f.stop(); }
     expect(f.sum()).toBeGreaterThan(0.1);
     expect(10 - stock(g, 'JAP')).toBeCloseTo(0.05 * f.sum(), 9);
-    // Its fold: the leftover men's rifles go home (the director's answer 4, wherever the nation's orders draw).
+    // Its fold, counted exactly as a binding row counts it (the design director's ruling 2 of 06:04Z, 26 November 2026:
+    // "A counting-only row counts exactly as a binding row (leftover plus what passes the full)"). Two corps of 2 at
+    // 0.6, each at its full level (1): 1.2 + 1.2 fill the kept corps' 2 with 0.4 left over, whose rifles go home (the
+    // director's answer 4); the kept corps' level 1 + 0.8 / 2 = 1.4 passes its full by 0.4 x 2 = 0.8, which goes to the
+    // store (her 22:29Z); the folded corps' worn part, (1 - 0.6) x 2 = 0.8, goes too (her ruling 1 of 06:04Z).
+    // 0.4 + 0.8 + 0.8 = 2.0: the 4.0 the two corps held is the kept corps' 2.0 and the store's 2.0.
     store(g, 1, 'JAP');
     const capName = g.regions[g.nations.JAP.capital].name;
     const a = addCorps(g, 'JAP', 'Kept corps', 'inf', 2, capName, {}), b = addCorps(g, 'JAP', 'Folded corps', 'inf', 2, capName, {});
     a.str = b.str = 0.6;
     expect(foldCorps(g, a, b)).toBe(true);
-    expect(stock(g, 'JAP') - 1).toBeCloseTo(0.4, 12);
+    expect(stock(g, 'JAP') - 1).toBeCloseTo(0.4 + 0.8 + 0.8, 12);
+    expect(`rfa:${a.id}` in g.flags).toBe(false);
     // Its men test is today's, (1 - strength) for every corps, a corps whose full is below 1 included.
     a.full = 0.5;
     a.str = 0.3;
@@ -726,7 +765,9 @@ describe('the armed level', () => {
     expect(foldCorps(g, c, d)).toBe(true);
     expect(c.str).toBeCloseTo(0.4, 12);
     expect(g.flags[`rfa:${c.id}`]).toBeCloseTo(0.7, 12);
-    expect(stock(g)).toBe(1);
+    // The emptied corps stood at its full level (no flag) and strength 0.2: its worn part, (1 - 0.2) x 2 = 1.6, the
+    // rifles of the men it lost in battle, goes to the store (her ruling 1 of 06:04Z, 26 November 2026).
+    expect(stock(g) - 1).toBeCloseTo(1.6, 12);
   });
 
   it('15. (the ledger) a fold into a worn corps loses no rifles', () => {
@@ -763,15 +804,25 @@ describe('the armed level', () => {
     expect(a.str).toBe(1);
     expect(`rfa:${a.id}` in g.flags).toBe(false);
     expect(menLeft(g, 'CHN') - m).toBeCloseTo(0.4, 12);
-    expect(stock(g) - 1).toBeCloseTo(0.4 + 0.8, 12);
-    expect(Math.round((stock(g) - 1) * PER)).toBe(Math.round(1.2 * PER));
-    // Nothing left over and nothing past the full: nothing comes back.
+    // And the folded corps' worn part, (1 - 0.6) x 2 = 0.8 at its full level, goes to the store too (her ruling 1 of
+    // 06:04Z, 26 November 2026): 0.4 + 0.8 + 0.8.
+    expect(stock(g) - 1).toBeCloseTo(0.4 + 0.8 + 0.8, 12);
+    expect(Math.round((stock(g) - 1) * PER)).toBe(Math.round(2 * PER));
+    // Nothing left over and nothing past the full: only the folded corps' worn part comes back, (1 - 0.3) x 2 = 1.4.
     const c = addCorps(g, 'CHN', 'A third corps', 'inf', 2, capName, {}), d = addCorps(g, 'CHN', 'A fourth corps', 'inf', 2, capName, {});
     c.str = d.str = 0.3;
     g.flags[`rfa:${c.id}`] = 0.3;
     const s = stock(g);
     expect(foldCorps(g, c, d)).toBe(true);
-    expect(stock(g)).toBe(s);
+    expect(stock(g) - s).toBeCloseTo(1.4, 12);
+    // Folded at a level equal to its strength, it has no worn part: nothing comes back.
+    const c2 = addCorps(g, 'CHN', 'A fifth corps', 'inf', 2, capName, {}), d2 = addCorps(g, 'CHN', 'A sixth corps', 'inf', 2, capName, {});
+    c2.str = d2.str = 0.3;
+    g.flags[`rfa:${c2.id}`] = 0.3;
+    g.flags[`rfa:${d2.id}`] = 0.3;
+    const s2 = stock(g);
+    expect(foldCorps(g, c2, d2)).toBe(true);
+    expect(stock(g)).toBe(s2);
     // A nation with no row: its men go home as today, and no shelf is written.
     const j = g.nations.JAP, jName = g.regions[j.capital].name;
     const e = addCorps(g, 'JAP', 'Kept corps', 'inf', 2, jName, {}), f = addCorps(g, 'JAP', 'Folded corps', 'inf', 2, jName, {});
@@ -796,6 +847,44 @@ describe('the armed level', () => {
     expect(a.str).toBe(1);
     expect(`rfa:${a.id}` in g.flags).toBe(false);
     expect(stock(g) - 1).toBeCloseTo(0.4, 12);
+  });
+
+  it("15. (her ruling 1 of 06:04Z) a fold of two worn corps sends the emptied corps' worn rifles to the store: the ledger closes to the rifle", () => {
+    const g = grand('CHN');
+    const capName = g.regions[g.nations.CHN.capital].name;
+    store(g, 1);
+    men(g);
+    /** Whole rifles, at China's 21,300 to a division's worth. */
+    const rifles = (divs: number): number => Math.round(divs * PER);
+    // Both corps worn: each holds rifles above its strength (the rifles of men lost in battle).
+    // (a) Kept: level 0.7 at 0.5. Folded: level 0.8 at 0.4. 2 divisions each. 0.8 moves in (fill 1.8 of 2), none is
+    //     left over; the kept level 0.7 + 0.8 / 2 = 1.1 passes its full by 0.1 x 2 = 0.2; the folded corps' worn part
+    //     is (0.8 - 0.4) x 2 = 0.8. Held before 0.7 x 2 + 0.8 x 2 = 3.0 = 63,900 rifles; after, the kept corps 1 x 2 =
+    //     2.0 = 42,600, and the store is given 0.2 + 0.8 = 1.0 = 21,300.
+    const a = addCorps(g, 'CHN', 'Kept corps', 'inf', 2, capName, {}), b = addCorps(g, 'CHN', 'Folded corps', 'inf', 2, capName, {});
+    a.str = 0.5; g.flags[`rfa:${a.id}`] = 0.7;
+    b.str = 0.4; g.flags[`rfa:${b.id}`] = 0.8;
+    const before = levelOf(g, a) * a.divs + levelOf(g, b) * b.divs, s0 = stock(g);
+    expect(rifles(before)).toBe(63900);
+    expect(foldCorps(g, a, b)).toBe(true);
+    expect(a.str).toBeCloseTo(0.9, 12);
+    expect(`rfa:${a.id}` in g.flags).toBe(false);
+    expect(rifles(levelOf(g, a) * a.divs)).toBe(42600);
+    expect(rifles(stock(g) - s0)).toBe(21300);
+    expect(rifles(levelOf(g, a) * a.divs) + rifles(stock(g) - s0)).toBe(rifles(before));
+    // (b) With men left over: kept level 0.9 at 0.6, folded level 0.9 at 0.5, 2 divisions each. 0.8 moves in, 0.2 is
+    //     left over; the kept level 0.9 + 0.4 = 1.3 passes its full by 0.3 x 2 = 0.6; the worn part is 0.4 x 2 = 0.8.
+    //     Held before 3.6 = 76,680 rifles; after 2.0 = 42,600, and the store is given 0.2 + 0.6 + 0.8 = 1.6 = 34,080.
+    const c = addCorps(g, 'CHN', 'A third corps', 'inf', 2, capName, {}), d = addCorps(g, 'CHN', 'A fourth corps', 'inf', 2, capName, {});
+    c.str = 0.6; g.flags[`rfa:${c.id}`] = 0.9;
+    d.str = 0.5; g.flags[`rfa:${d.id}`] = 0.9;
+    const before2 = levelOf(g, c) * c.divs + levelOf(g, d) * d.divs, s1 = stock(g);
+    expect(rifles(before2)).toBe(76680);
+    expect(foldCorps(g, c, d)).toBe(true);
+    expect(c.str).toBe(1);
+    expect(rifles(levelOf(g, c) * c.divs)).toBe(42600);
+    expect(rifles(stock(g) - s1)).toBe(34080);
+    expect(levelOf(g, c) * c.divs + (stock(g) - s1)).toBeCloseTo(before2, 12);
   });
 
   it('15. (the ledger over a chain) fold, break up, rejoin, fold: the rifles held by corps plus the store change by nothing', () => {
@@ -1111,6 +1200,81 @@ describe('the men', () => {
       expect(rejoin(g, p, c)).toBe(true);
       expect(levelOf(g, c)).toBeCloseTo(0.6, 12);
       expect(c.str).toBeLessThanOrEqual(levelOf(g, c) + 1e-12);
+    }
+  });
+
+  it("23. (her ruling 3 of 06:04Z) a small corps broken up and rejoined: no part above its full, the men and the rifles add up, and the round trip gives the corps back", () => {
+    // China's seven small corps are each of one division and cannot be broken up, so a field corps of 3 is given an
+    // establishment below 1 by hand (a corps of 3 or more). Its division cards spread around its strength (one stands at 0.92 where the corps
+    // stands at 0.8): as built the card picked took its men above the part's full (0.92 of 0.8), or left the corps
+    // behind above its own (0.851 of 0.8). Ruled: "a part's full is its share of the parent's establishment; men and
+    // rifles past it stay with the part left behind."
+    const g = grand('CHN');
+    g.phase = g.order.indexOf('CHN');
+    setBreakUp(g, true);
+    store(g, 1);
+    const field = (x: Corps): boolean => x.divs >= 3 && x.kind === 'inf' && x.full === undefined && x.town === undefined && x.joint === undefined && x.leave === undefined && !x.school;
+    const pool = corpsOf(g).filter(field);
+    expect(pool.length).toBeGreaterThan(1);
+    let k = 0;
+    // (full, strength, level, which card leaves)
+    for (const [full, str, lvl, pick] of [[0.8, 0.8, 0.8, 'best'], [0.8, 0.8, 0.8, 'worst'], [0.6, 0.5, 0.5, 'best'], [0.6, 0.4, 0.55, 'best'], [0.5, 0.45, 0.5, 'worst']] as const) {
+      const c = pool[k++ % pool.length];
+      c.full = full; c.str = str; c.xp = 0.4;
+      if (lvl < full) g.flags[`rfa:${c.id}`] = lvl; else delete g.flags[`rfa:${c.id}`];
+      const d0 = c.divs, men0 = c.str * c.divs, rifles0 = levelOf(g, c) * c.divs + stock(g), xp0 = c.xp * men0;
+      const cards = divisionsOf(g, c);
+      const card = cards.reduce((x, y) => ((pick === 'best' ? y.str > x.str : y.str < x.str) ? y : x), cards[0]);
+      const at = `${full}/${str}/${lvl}/${pick}`;
+      // (The card picked, or the cards left, stand above the full: the case the ruling is about.)
+      expect(pick === 'best' ? card.str : (men0 - card.str) / (d0 - 1), at).toBeGreaterThan(full + 1e-6);
+      const p = breakUp(g, c, [card.slot])!;
+      expect(p, at).not.toBeNull();
+      expect(p.full, at).toBe(full);
+      for (const x of [p, c]) {
+        expect(x.str, `${at} ${x.name}`).toBeLessThanOrEqual(full + 1e-12);
+        expect(levelOf(g, x), `${at} ${x.name}`).toBeLessThanOrEqual(full + 1e-12);
+        // (Rifles follow the men: no part holds fewer rifles than men. Shared by the men each part takes, each part to
+        // its full at most and the rest to the other: riflesSplit, as built.)
+        expect(levelOf(g, x), `${at} ${x.name}`).toBeGreaterThanOrEqual(x.str - 1e-12);
+        const y = x === c ? p : c, share = (z: Corps): number => (z.str * (lvl * d0)) / men0;
+        expect(levelOf(g, x), `${at} ${x.name}`).toBeCloseTo(Math.min(full, share(x)) + (Math.max(0, share(y) - full) * y.divs) / x.divs, 12);
+      }
+      expect(p.str * p.divs + c.str * c.divs, at).toBeCloseTo(men0, 12);
+      expect(levelOf(g, p) * p.divs + levelOf(g, c) * c.divs + stock(g), at).toBeCloseTo(rifles0, 12);
+      expect(p.xp * p.str * p.divs + c.xp * c.str * c.divs, at).toBeCloseTo(xp0, 12);
+      // Rejoined: the corps it began as.
+      expect(rejoin(g, p, c), at).toBe(true);
+      expect([c.divs, c.full], at).toEqual([d0, full]);
+      expect(c.str, at).toBeCloseTo(str, 12);
+      expect(levelOf(g, c), at).toBeCloseTo(lvl, 12);
+      expect(c.xp, at).toBeCloseTo(0.4, 12);
+      expect(divisionsOf(g, c).map((d) => d.name), at).toEqual(cards.map((d) => d.name));
+      expect(stock(g), at).toBe(1);
+      delete c.full;
+    }
+  });
+
+  it('23. (her ruling 3 of 06:04Z) a corps at establishment 1 breaks up as built: the cards picked take their own men', () => {
+    const g = grand('CHN');
+    g.phase = g.order.indexOf('CHN');
+    setBreakUp(g, true);
+    const field = (x: Corps): boolean => x.divs === 3 && x.kind === 'inf' && x.full === undefined && x.town === undefined && x.joint === undefined && x.leave === undefined && !x.school;
+    const [c, e] = corpsOf(g).filter(field);
+    e.full = 1;
+    for (const x of [c, e]) {
+      x.str = 0.8;
+      g.flags[`rfa:${x.id}`] = 0.8;
+      const cards = divisionsOf(g, x);
+      const best = cards.reduce((a, b) => (b.str > a.str ? b : a), cards[0]);
+      const stayMen = 0.8 * 3 - best.str;
+      // (The best card stands above the corps' strength; at establishment 1 it takes its own men, as built.)
+      expect(best.str).toBeGreaterThan(0.8 + 1e-6);
+      const p = breakUp(g, x, [best.slot])!;
+      expect(p.str).toBe(best.str);
+      expect(x.str).toBe(stayMen / 2);
+      expect(p.xp).toBe((best.xp * best.str) / best.str);
+      expect(levelOf(g, p)).toBeCloseTo(best.str, 12);
     }
   });
 
