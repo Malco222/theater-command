@@ -682,7 +682,7 @@ namespace TheaterFx
 		void SetSrgbBytes(bool bOn) { bSrgbBytes = bOn; }
 		bool SrgbBytes() const { return bSrgbBytes; }
 		int PerPuff() const { return PointsPerPuff; }
-		int Room() const { return MaxPuffs; }
+		int Room() const { return MaxPuffs + OwnRoom; } // (OwnRoom: the air's own rooms, air_vapour and sky_haze; 0 with them off)
 		/** What the last Draw laid (puffs), and the room asked for as it stands: on the screen at that Draw, and what has
 		 *  been made since (RoomAsked; over Room() when the room is short). For a scene's log, the production lead's ask
 		 *  of 22 November. */
@@ -1960,5 +1960,68 @@ namespace TheaterFx
 		void AirSpurt(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Part);
 		double SpurtAt = -1.0e18;
 		int SpurtsNow = 0;
+	public:
+		/** The owner's item 4 (26 November): "white contrails at high altitude that thicken as more planes pass through"
+		 * (air_vapour, OFF until its on is 1). Every frame for each aircraft over the day's trail height: Key a number that
+		 * stays the same for that aircraft, At where it is and Velocity its velocity (m/s), Strength how thick it streams
+		 * (0 to 1: the show's PlaneOut::Vapour), Engines the world places of its LIVE engines (EngineCount of them, at
+		 * most 4 are used; a dead one is left out and leaves no strip), Cover the day's cloud cover the scene passes in
+		 * (0 to 1: a dry sky's trails go in under a minute, a damp sky's stay for minutes and spread; cover stands in for
+		 * the humidity the game does not have), SpanM its wingspan (0: 12 m). A strip is laid every 1 to 1.5 s, a clear
+		 * gap of gap_spans wingspans behind the aircraft: one behind each engine within near_m of the eye, closing into
+		 * one behind the aircraft over merge_s; one strip an aircraft farther off. It widens from widen.0 to widen.1
+		 * metres as it ages, is shaded on its side away from the sun, and lives in a room of its own (most pieces, the
+		 * oldest dropped first) that no other effect shares. Its dice are the key's. Never wingtip trails. */
+		void VapourMove(double Now, int Key, const Vec& At, const Vec& Velocity, double Strength, const Vec* Engines, int EngineCount, double Cover, double SpanM = 0.0);
+		/** No new strips for Key (under the trail height, falling, gone); what is in the air lives out its life. A later
+		 * VapourMove starts it again. */
+		void VapourStop(int Key);
+		/** The pieces in the vapour's own room now (strips laid, not yet gone). */
+		size_t VapourPieces() const { return VapourBits.size(); }
+	private:
+		// (air_vapour, read at Setup: see VapourMove)
+		struct VapourRow
+		{
+			bool bOn = false;
+			double GapSpans = 1.5, W0 = 2.0, W1 = 30.0, LifeDry = 45.0, LifeDamp = 300.0, CoverDry = 0.2, CoverDamp = 0.7;
+			double Every0 = 1.0, Every1 = 1.5, NearM = 1200.0, MergeS = 6.0, Beyond = 15000.0, Alpha = 0.85, Core = 0.45;
+			double ShadeK = 0.8, LeastPx = 1.5, LeastKeep = 0.5, Torn = 0.25, LumpsDry = 0.6, LumpsDamp = 0.9, PaleFrom = 3.0;
+			double FarEvery0 = 2.5, FarEvery1 = 3.5, FarFrom = 1500.0; // (past far_from_m of the eye a strip every far_every_s: fewer, longer pieces where none can tell)
+			int Most = 2000;
+			Rgb Col, Shade;
+		};
+		VapourRow VapourIs;
+		struct Vapouring
+		{
+			int Key = 0;
+			bool bOn = true;
+			double Last = -1.0e18, LaidAt = -1.0e18, Next = 1.0, Strength = 0.0, Cover = 0.0, Span = 12.0;
+			Vec At, Vel, Centre;
+			Vec Engines[4];
+			int EngineCount = 0, EnginesLaid = -1;
+			uint32_t Count = 0;
+			Bit::Reach Prev[5]; // (the newest piece of each engine's strip, 0 to 3, and of the one strip, 4)
+			bool bNear = false; // (its last strips were laid near: engine strips, and the one strip coming in behind them)
+		};
+		std::vector<Vapouring> Vapours;
+		std::vector<Bit> VapourBits, VapourRoots;
+		void VapourLay(Vapouring& V, double Now);
+		void VapourPiece(Vapouring& V, int Chain, const Vec& From, const Vec& Drift, double Now, double Life, double Alpha, double ShowBy);
+		// (the air's own rooms, drawn by Draw among everything else, far to near, in places of their own past MaxPuffs:
+		// OwnRoom places, 0 with every row off, so Room() and the picture are as before. AirTenSetup reads the rows at
+		// Setup; AirTenOwn prunes them and makes OwnSorted, far to near, each frame)
+		int OwnRoom = 0;
+		double OwnLast = -1.0e18;
+		std::vector<Order> OwnSorted;
+		void AirTenSetup();
+		void AirTenClear();
+		void AirTenOwn(double Now, const View& Eye);
+		int LayOwn(int Slot, const Bit& B, double Now, const View& Eye);
+		double OwnBeyond = 0.0; // (the farthest an own room's piece is laid: its row's beyond_m)
+		static constexpr int VapourRootRoom = 256; // (the trails' young ends, laid each frame: at most this many)
+		uint64_t OwnSerials = 0; // (the own rooms' pieces' Serial, counted from 2^61, apart from the kit's own)
+		size_t VapourDropped = 0; // (pieces the vapour's room dropped full, the oldest first)
+		void VapourGone(const Bit& B, double When); // (a vapour piece gone: its water to the sky's haze, sky_haze.vapour_ink)
+		void AirTenBack(double Now); // (the clock gone back: the sky's haze starts again)
 	};
 }

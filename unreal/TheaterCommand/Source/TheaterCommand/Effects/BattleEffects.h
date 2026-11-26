@@ -132,6 +132,16 @@ public:
 	 * whipping back past the tail, oil a thin brown spray, coolant a white glycol puff). Left out, "skin", or the row
 	 * off: as before, to the byte. */
 	void AirHit(double Now, const FVector& At, const FVector& Normal, const FVector& AircraftVelocity, const FString& Kind, const FString& Part = FString());
+	/** Contrails (the owner's item 4, 26 November; the recipe's air_vapour, OFF until its on is 1). Every frame, for each
+	 * aircraft over the day's trail height: Key a number that stays the same for that aircraft, At where it is and
+	 * Velocity its velocity (world units a second), Strength how thick it streams (0 to 1), Engines the world places of
+	 * its LIVE engines (a dead one left out leaves no strip; at most 4 are used), Cover the day's cloud cover (0 to 1:
+	 * a dry sky's trails go in under a minute, a damp sky's stay for minutes and spread), SpanMetres its wingspan (0:
+	 * 12 m). The trail forms a clear gap behind it, one strip an engine close by that closes into one, one strip an
+	 * aircraft far off; it hangs in the air and drifts with the wind. Never wingtip trails. VapourStop: no new strips
+	 * for Key (under the trail height, falling, gone); what is in the air lives out its life. */
+	void VapourMove(double Now, int32 Key, const FVector& At, const FVector& Velocity, float Strength, const TArray<FVector>& Engines, float Cover, float SpanMetres = 0.0f);
+	void VapourStop(int32 Key);
 	/** A trail from a moving point on an aircraft, such as an engine socket: TrailStart once, TrailMove every frame
 	 * with the point and its velocity (world units a second), TrailStop when it ends; what is in the air fades on
 	 * its own. Id: a number that stays the same for that trail. Kind: "smoke" (thin and grey, thickening and

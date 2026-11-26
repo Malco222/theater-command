@@ -4454,6 +4454,57 @@
   },
   "_art_director_bremen": "Art director's read of the air scene's Mac frames (a1acb552), 22 November, mend 2: the trails at Bremen were ropes, a core of 78 against a sky of 226, one width all along and crossing the whole frame. Wanted: 1-2 m at the source, 6-12 m by 10 s; opacity 0.9, 0.3 by 15 s, gone by 30 s; colour lifting from about 45 to 100-120 with age; edges breaking into puffs; no trail longer than about 2 km; an engine hit grey-brown, only burning fuel black and only near the aircraft. So smoke, fire, fuel and oil: widen to r1_m by widen_by_s 10 and on to thin_grow after; pale to pale_to 0.35 from 2 to 15 s and fade from thin_hold 0.5 of life_s 30; colour_old a light grey (smoke's grey-brown); lumps only from 0.8 of life, so the old end does not break into beads; edges torn (soft, edge_torn, wisps). longest_m 2400: a faster aircraft's trail is squeezed in time to that length of sky (about 2 km of it seen). Measured side-on at 80 m/s (smoke; fire): opacity 0.94, 0.88, 0.51, 0.33, 0.18, 0.06 at 0.5, 5, 10, 15, 20, 25 s (0.94, 0.90, 0.54, 0.33, 0.19, 0.06), none at 30 s; colour 79 to 112 at 15 s (37 to 110); wide at half 1.3, 5.4, 8.7, 12.7 m at 0.5, 5, 10, 15 s (3.3, 8.0, 8.7, 10.7). At 150 m/s smoke 0.32 at 8 s, 0.12 at 12 s, gone by 16 s. Art director 08:54Z: the engine hit PASS; fire and fuel one step heavier, so a burning aircraft out-reads a damaged one: 12 m at 10 s and about 16 m at 15 s, opacity 0.75 at 10 s and 0.4 at 15 s, colour about 80 at 10 s, and the wake past the tail kept at 5 to 6 m (20 November). So fire and fuel r1_m 7 and 7.5, thin_grow 1.5, pale_to 0.56 from 5 to 15 s, thin_hold 0.4, colour_old 136,132,128, tail_wide_m 5 to 6. Fire measured: opacity 0.95, 0.96, 0.74, 0.41, 0.23, 0.08 at 0.5, 5, 10, 15, 20, 25 s, none at 30; colour 39, 63, 87, 101, 109, 125; wide at half 4.0 m at 0.2 s, 11.4 at 5 s, 13.4 at 10 s, 15.4 at 15 s."
  },
+ "air_vapour": {
+  "what": "The owner's item 4 (26 November): white contrails at height that thicken as more aircraft pass. OFF until on is 1 (the air word -TheaterAirVapour lays battle-fx-air-vapour.json). The scene calls VapourMove each frame for each aircraft over the day's trail height. gap_spans: the clear gap behind the aircraft, in wingspans, before the trail forms. widen: metres across when laid, and by a damp sky's life. life_s: seconds a piece lives, a dry sky's and a damp sky's; persist: the cloud cover that is dry and that is damp (cover stands in for the humidity the game does not have). every_s: seconds between strips; far_every_s past far_from_m of the eye (fewer, longer pieces where no one can tell). near_m: within this of the eye, one strip behind each engine, closing into one over merge_s seconds; farther, one strip an aircraft. beyond_m: not drawn past this. most: pieces in the trails' own room, the oldest dropped first. colour and shade: its lit side and its side away from the sun (shade_k how much).",
+  "on": 0,
+  "gap_spans": 1.5,
+  "widen": [
+   2,
+   30
+  ],
+  "life_s": [
+   45,
+   300
+  ],
+  "persist": [
+   0.2,
+   0.7
+  ],
+  "every_s": [
+   1,
+   1.5
+  ],
+  "far_every_s": [
+   2.5,
+   3.5
+  ],
+  "far_from_m": 1500,
+  "near_m": 1200,
+  "merge_s": 6,
+  "beyond_m": 15000,
+  "alpha": 0.85,
+  "core": 0.45,
+  "shade_k": 0.8,
+  "least_px": 1.5,
+  "least_keep": 0.5,
+  "torn": 0.25,
+  "lumps_from": [
+   0.6,
+   0.9
+  ],
+  "pale_from_s": 3,
+  "most": 2000,
+  "colour": [
+   236,
+   240,
+   246
+  ],
+  "shade": [
+   150,
+   162,
+   184
+  ]
+ },
  "air_debris": {
   "_how": "A falling aircraft's debris row (AirFall once as the fall starts with its span and the deck height, AirFallMove every frame, AirFallStop when the model is gone). explode sheds fighter or bomber pieces at once (bomber at bomber_span_m or more), thrown throw_mps out and carried on at carry of its speed, with a short torn fireball; burn sheds burn_sheds over its fall, every_s apart, from first_s; spin sheds spin_sheds, the first a wing at wing_odds. A skin plate (plate_m across, painted face paint, bare metal inside bare) tumbles plate_tumble radians a second, so seen edge-on it thins and flutters, and glints when the sun catches it (glint, glint_power); it slows to sink at plate_sink_mps and drifts with the wind. A heavy piece (heavy_share of an explosion's, heavy_m, heavy_colour) drops at heavy_sink_mps. A wing (wing_chord_of_span) tumbles slowly down at wing_sink_mps. Every piece fades into the deck over its last enter_deck_m, at most most_s after it came loose; far off it shrinks to a speck under least_px and fades, never held up.",
   "_art_director_0440": "Art director 04:40Z (benchmark gap 3): a fall throws a debris row: 30 to 50 pieces for a fighter, 60 to 100 for a bomber; explode sheds them all at once, with a short torn fireball, never a ball; burn sheds 5 to 10 over its fall; spin sheds a few, sometimes a wing. Mostly light torn skin plates that flutter and glint, with a few heavy dark pieces that drop straight. Nothing pops out of view: falls and debris end in the cloud deck on a day with one, otherwise they keep falling until the haze or the ground takes them.",

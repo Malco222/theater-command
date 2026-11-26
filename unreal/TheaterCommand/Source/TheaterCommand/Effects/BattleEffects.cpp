@@ -18,6 +18,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "TheaterCommand.h"
 
+#include <array>
 #include <string_view>
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -546,6 +547,34 @@ void FBattleEffects::TrailStop(int32 Id)
 	Do([=, this]()
 	{
 		Core.TrailStop(Id);
+	});
+}
+
+void FBattleEffects::VapourMove(double Now, int32 Key, const FVector& At, const FVector& Velocity, float Strength, const TArray<FVector>& Engines, float Cover, float SpanMetres)
+{
+	// (at most four engines, in the kit's metres, held by value for the queued call)
+	std::array<TheaterFx::Vec, 4> Places;
+	int Count = 0;
+	for (const FVector& Engine : Engines)
+	{
+		if (Count >= 4)
+		{
+			break;
+		}
+		Places[static_cast<size_t>(Count)] = ToFx(Engine);
+		++Count;
+	}
+	Do([=, this]()
+	{
+		Core.VapourMove(Now, Key, ToFx(At), ToFx(Velocity), Strength, Places.data(), Count, Cover, SpanMetres);
+	});
+}
+
+void FBattleEffects::VapourStop(int32 Key)
+{
+	Do([=, this]()
+	{
+		Core.VapourStop(Key);
 	});
 }
 

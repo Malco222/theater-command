@@ -493,6 +493,7 @@ namespace TheaterFx
 		}
 		Out.assign(static_cast<size_t>(MaxPuffs) * PointsPerPuff, Vec());
 		OutRgba.assign(static_cast<size_t>(MaxPuffs) * PointsPerPuff * 4, 0);
+		AirTenSetup(); // (the air's own rooms, air_vapour and sky_haze: places past MaxPuffs, none with them off)
 		ThrownLong = SafeNum(Num("burst.debris.clods.most_long", 0.0), 0.0, 100.0, 0.0);
 		ThrownLong = ThrownLong > 0.0 ? std::max(1.0, ThrownLong) : 0.0; // (never shorter than it is wide: the pre-check on d487b717)
 		LieNearerK = SafeNum(Num("game.soft_contact.lie_nearer", 1.5), 1.0, 10.0, 1.5);
@@ -621,6 +622,7 @@ namespace TheaterFx
 		}
 		LastDrawn = 0;
 		ShadowRoom = ShadowsWere = 0;
+		AirTenClear(); // (the air's own rooms: their pieces and their trails)
 	}
 
 	void Battle::SetLensFade(double Gone, double Whole, double Plane)
@@ -17290,12 +17292,30 @@ namespace TheaterFx
 			}
 		}
 		LumpsShown = LumpsRoom;
-		for (size_t I = 0; I < Sorted.size() && Slot < MaxPuffs; ++I)
+		// (the air's own rooms, air_vapour and sky_haze, far to near in OwnSorted: each laid among the rest by its depth, in
+		// places of its own past MaxPuffs, so it never takes the rest's room nor the rest its. None with the rows off: as
+		// before, to the byte)
+		AirTenOwn(Now, Eye);
+		size_t OwnNext = 0;
+		int OwnSlots = 0;
+		for (size_t I = 0; I < Sorted.size() && Slot - OwnSlots < MaxPuffs; ++I)
 		{
 			if (I >= Start || Sorted[I].bKeep)
 			{
-				Slot += LayBit(Slot, *Sorted[I].B, Now, Eye, MaxPuffs - Slot);
+				for (; OwnNext < OwnSorted.size() && OwnSorted[OwnNext].Deep > Sorted[I].Deep; ++OwnNext)
+				{
+					const int Took = LayOwn(Slot, *OwnSorted[OwnNext].B, Now, Eye);
+					Slot += Took;
+					OwnSlots += Took;
+				}
+				Slot += LayBit(Slot, *Sorted[I].B, Now, Eye, MaxPuffs - (Slot - OwnSlots));
 			}
+		}
+		for (; OwnNext < OwnSorted.size(); ++OwnNext)
+		{
+			const int Took = LayOwn(Slot, *OwnSorted[OwnNext].B, Now, Eye);
+			Slot += Took;
+			OwnSlots += Took;
 		}
 		// (FX9, game.smoke_budget: the smoke laid, in screens, and the share of the big smoke left out from the next frame
 		// on: enough that what this frame asked would come within screens, never more than thin_most, followed over
@@ -18191,5 +18211,424 @@ namespace TheaterFx
 			}
 			Bits.push_back(B);
 		}
+	}
+
+	// (air_vapour and sky_haze: their rows read once, and their own places past MaxPuffs. None with the rows off)
+	void Battle::AirTenSetup()
+	{
+		VapourIs = VapourRow();
+		VapourRow& V = VapourIs;
+		V.bOn = Num("air_vapour.on", 0.0) >= 0.5;
+		const std::string P = "air_vapour.";
+		V.GapSpans = SafeNum(Num(P + "gap_spans", 1.5), 0.0, 10.0, 1.5);
+		V.W0 = SafeNum(Num(P + "widen.0", 2.0), 0.1, 50.0, 2.0);
+		V.W1 = SafeNum(Num(P + "widen.1", 30.0), V.W0, 500.0, std::max(V.W0, 30.0));
+		V.LifeDry = SafeNum(Num(P + "life_s.0", 45.0), 1.0, 3600.0, 45.0);
+		V.LifeDamp = SafeNum(Num(P + "life_s.1", 300.0), V.LifeDry, 3600.0, std::max(V.LifeDry, 300.0));
+		V.CoverDry = SafeNum(Num(P + "persist.0", 0.2), 0.0, 1.0, 0.2);
+		V.CoverDamp = SafeNum(Num(P + "persist.1", 0.7), V.CoverDry + 0.01, 2.0, std::max(V.CoverDry + 0.01, 0.7));
+		V.Every0 = SafeNum(Num(P + "every_s.0", 1.0), 0.1, 10.0, 1.0);
+		V.Every1 = SafeNum(Num(P + "every_s.1", 1.5), V.Every0, 10.0, std::max(V.Every0, 1.5));
+		V.NearM = SafeNum(Num(P + "near_m", 1200.0), 0.0, 1.0e5, 1200.0);
+		V.MergeS = SafeNum(Num(P + "merge_s", 6.0), 0.5, 60.0, 6.0);
+		V.Beyond = SafeNum(Num(P + "beyond_m", 15000.0), 100.0, 1.0e5, 15000.0);
+		V.Alpha = SafeNum(Num(P + "alpha", 0.85), 0.0, 1.0, 0.85);
+		V.Core = SafeNum(Num(P + "core", 0.45), 0.05, 0.95, 0.45);
+		V.ShadeK = SafeNum(Num(P + "shade_k", 0.8), 0.0, 2.0, 0.8);
+		V.LeastPx = SafeNum(Num(P + "least_px", 1.5), 0.0, 32.0, 1.5);
+		V.LeastKeep = SafeNum(Num(P + "least_keep", 0.5), 0.0, 1.0, 0.5);
+		V.Torn = SafeNum(Num(P + "torn", 0.25), 0.0, 3.0, 0.25);
+		V.LumpsDry = SafeNum(Num(P + "lumps_from.0", 0.6), 0.05, 1.0, 0.6);
+		V.LumpsDamp = SafeNum(Num(P + "lumps_from.1", 0.9), 0.05, 1.0, 0.9);
+		V.PaleFrom = SafeNum(Num(P + "pale_from_s", 3.0), 0.0, 600.0, 3.0);
+		V.FarEvery0 = SafeNum(Num(P + "far_every_s.0", V.Every0), V.Every0, 30.0, V.Every0);
+		V.FarEvery1 = SafeNum(Num(P + "far_every_s.1", V.Every1), std::max(V.Every1, V.FarEvery0), 30.0, std::max(V.Every1, V.FarEvery0));
+		V.FarFrom = SafeNum(Num(P + "far_from_m", 1500.0), 0.0, 1.0e5, 1500.0);
+		V.Most = static_cast<int>(SafeNum(Num(P + "most", 2000.0), 0.0, 20000.0, 2000.0));
+		V.Col = Picture(P + "colour", Rgb::FromPicture(236, 240, 246));
+		V.Shade = Picture(P + "shade", Rgb::FromPicture(150, 162, 184));
+		OwnRoom = 0;
+		OwnBeyond = 0.0;
+		if (V.bOn)
+		{
+			OwnBeyond = std::max(OwnBeyond, V.Beyond);
+			OwnRoom += V.Most + VapourRootRoom; // (and its young ends, laid each frame: VapourRoots)
+		}
+		if (OwnRoom > 0)
+		{
+			Out.assign(static_cast<size_t>(MaxPuffs + OwnRoom) * PointsPerPuff, Vec());
+			OutRgba.assign(static_cast<size_t>(MaxPuffs + OwnRoom) * PointsPerPuff * 4, 0);
+		}
+		AirTenClear();
+	}
+
+	void Battle::AirTenClear()
+	{
+		SpurtAt = -1.0e18;
+		SpurtsNow = 0;
+		Vapours.clear();
+		VapourBits.clear();
+		VapourRoots.clear();
+		OwnSorted.clear();
+		OwnLast = -1.0e18;
+		OwnSerials = 0;
+	}
+
+	void Battle::VapourMove(double Now, int Key, const Vec& At, const Vec& Velocity, double Strength, const Vec* Engines, int EngineCount, double Cover, double SpanM)
+	{
+		// The owner's item 4 (26 November): "white contrails at high altitude that thicken as more planes pass through".
+		// A contrail is the engines' own water frozen out of the exhaust a little behind the aircraft, so it forms a clear
+		// gap behind it (gap_spans), one strip behind each engine that the wake soon closes into one, and then hangs where
+		// it formed, in the air mass, drifting with the wind; how long and how wide it spreads is the air's humidity,
+		// which the game does not have: the day's cloud cover stands in (persist).
+		if (!VapourIs.bOn || !std::isfinite(Now) || !std::isfinite(At.X + At.Y + At.Z) || !std::isfinite(Velocity.X + Velocity.Y + Velocity.Z))
+		{
+			return;
+		}
+		Vapouring* V = nullptr;
+		for (Vapouring& Each : Vapours)
+		{
+			if (Each.Key == Key)
+			{
+				V = &Each;
+				break;
+			}
+		}
+		if (!V)
+		{
+			Vapours.emplace_back();
+			V = &Vapours.back();
+			V->Key = Key;
+		}
+		if (!V->bOn || Now < V->Last - 0.5)
+		{
+			// (started again after VapourStop, or the clock gone back: each strip starts afresh)
+			for (Bit::Reach& R : V->Prev)
+			{
+				R.bOn = false;
+			}
+			V->LaidAt = -1.0e18;
+		}
+		V->bOn = true;
+		V->Last = Now;
+		V->At = At;
+		V->Vel = Velocity;
+		V->Strength = std::isfinite(Strength) ? std::clamp(Strength, 0.0, 1.0) : 0.0;
+		V->Cover = std::isfinite(Cover) ? std::clamp(Cover, 0.0, 1.0) : 0.0;
+		V->Span = std::isfinite(SpanM) && SpanM > 0.5 ? std::min(SpanM, 80.0) : 12.0;
+		int Count = 0;
+		Vec Sum;
+		for (int K = 0; Engines && K < std::min(EngineCount, 4); ++K)
+		{
+			if (std::isfinite(Engines[K].X + Engines[K].Y + Engines[K].Z) && (Engines[K] - At).Length() < 100.0)
+			{
+				V->Engines[Count] = Engines[K];
+				Sum += Engines[K];
+				++Count;
+			}
+		}
+		V->EngineCount = Count;
+		V->Centre = Count > 0 ? Sum * (1.0 / Count) : At;
+		if (V->Strength > 0.001 && Now - V->LaidAt >= V->Next)
+		{
+			VapourLay(*V, Now);
+		}
+	}
+
+	void Battle::VapourStop(int Key)
+	{
+		for (Vapouring& V : Vapours)
+		{
+			if (V.Key == Key)
+			{
+				V.bOn = false;
+			}
+		}
+	}
+
+	void Battle::VapourLay(Vapouring& V, double Now)
+	{
+		const VapourRow& R = VapourIs;
+		// (dice by the key and the strip's number: one throw a statement)
+		Dice D(Mix64(static_cast<uint64_t>(static_cast<uint32_t>(V.Key)) * 0x9E3779B97F4A7C15ull ^ (static_cast<uint64_t>(V.Count) + 1ull) * 0xD1B54A32D192ED03ull ^ 0xA9A0C0ull));
+		const Vec Way = V.Vel.Unit(Vec(1.0, 0.0, 0.0));
+		const double Gap = R.GapSpans * V.Span;
+		const bool bNear = bEyeKnown && V.EngineCount > 1 && (V.At - LastEye).Length() < R.NearM;
+		// (a damp sky's trails last and spread; a dry sky's go: the day's cover between persist.0 and persist.1)
+		const double Damp = Clamp01((V.Cover - R.CoverDry) / (R.CoverDamp - R.CoverDry));
+		const double DampK = Damp * Damp * (3.0 - 2.0 * Damp);
+		const double LifeK = D.U(0.9, 1.1);
+		const double Life = (R.LifeDry + (R.LifeDamp - R.LifeDry) * DampK) * LifeK;
+		const double Alpha = R.Alpha * V.Strength;
+		const Vec Mid = V.Centre - Way * Gap;
+		if (V.EngineCount != V.EnginesLaid || !bNear)
+		{
+			for (int K = 0; K < 4; ++K)
+			{
+				V.Prev[K].bOn = false; // (an engine gone, or come back, or the eye gone far: each engine's strip starts afresh)
+			}
+		}
+		if (bNear)
+		{
+			// (one strip behind each engine, drawn in toward the aircraft's line as the wake rolls them together, gone into
+			// the one strip by merge_s)
+			for (int K = 0; K < V.EngineCount; ++K)
+			{
+				const Vec From = V.Engines[K] - Way * Gap;
+				const double MergeK = D.U(0.95, 1.05);
+				VapourPiece(V, K, From, (Mid - From) * (1.0 / R.MergeS), Now, R.MergeS * MergeK, Alpha, 0.0);
+			}
+		}
+		// (the one strip: near, it comes into sight as the engines' strips close into it; far, it is the trail)
+		VapourPiece(V, 4, Mid, Vec(), Now, Life, Alpha, bNear ? R.MergeS : 0.0);
+		V.EnginesLaid = V.EngineCount;
+		V.bNear = bNear;
+		++V.Count;
+		V.LaidAt = Now;
+		const bool bFar = bEyeKnown && (V.At - LastEye).Length() > R.FarFrom;
+		const double Next0 = bFar ? R.FarEvery0 : R.Every0;
+		const double Next1 = bFar ? R.FarEvery1 : R.Every1;
+		V.Next = D.U(Next0, Next1);
+	}
+
+	void Battle::VapourPiece(Vapouring& V, int Chain, const Vec& From, const Vec& Drift, double Now, double Life, double Alpha, double ShowBy)
+	{
+		const VapourRow& R = VapourIs;
+		Bit::Reach& Prev = V.Prev[Chain];
+		const Vec Way = V.Vel.Unit(Vec(1.0, 0.0, 0.0));
+		const double Spacing = std::max(V.Vel.Length(), 30.0) * std::max(R.Every1, R.FarEvery1);
+		const bool bEngine = Chain < 4;
+		// (its width spreads as the square root of its age, from widen.0 to widen.1 by a damp sky's life: a dry sky's trail
+		// is gone while still narrow, a damp sky's spreads to a band; its opacity falls as it spreads, the same water
+		// over a wider face)
+		const double WideEnd = R.W0 + (R.W1 - R.W0) * std::sqrt(std::min(Life, R.LifeDamp) / R.LifeDamp);
+		const uint32_t Seed = static_cast<uint32_t>(Mix64(static_cast<uint64_t>(static_cast<uint32_t>(V.Key)) * 0x9FB21C651E98DF25ull ^ (static_cast<uint64_t>(V.Count) * 8ull + static_cast<uint64_t>(Chain)) ^ 0xA9A1ull) >> 34);
+		Bit B;
+		B.Born = Now;
+		B.From = From;
+		B.Vel = Drift;
+		B.Windage = 1.0;
+		B.Life = Life;
+		B.R0 = 0.5 * R.W0;
+		B.R1 = bEngine ? B.R0 * 1.5 : 0.5 * WideEnd;
+		B.Grow = 0.5;
+		B.Along = Way;
+		B.Col = R.Col;
+		B.Col2 = R.Col;
+		B.Alpha = Alpha;
+		B.FadeIn = 0.0005;
+		B.Hold = bEngine ? 0.45 : 0.7;
+		B.Heart = 0.8;
+		B.Rim = 0.05;
+		B.Rough = 0.2;
+		B.LumpSeed = Seed;
+		B.Ribbon = R.Core;
+		B.bSoft = true;
+		B.Torn = R.Torn;
+		B.ShadowCol = R.Shade; // (white on a bright sky reads by its shade side and its edge, never by more white)
+		B.ShadowK = R.ShadeK;
+		B.LeastPx = R.LeastPx;
+		B.LeastKeep = R.LeastKeep;
+		if (!bEngine)
+		{
+			B.PaleTo = std::clamp(std::sqrt(R.W0 / std::max(WideEnd, R.W0)), 0.2, 1.0);
+			B.PaleFrom = std::min(R.PaleFrom, 0.5 * Life);
+			B.PaleBy = std::max(B.PaleFrom + 1.0, 0.6 * Life);
+			const double Damp = Clamp01((V.Cover - R.CoverDry) / (R.CoverDamp - R.CoverDry));
+			B.SmearHold = R.LumpsDry + (R.LumpsDamp - R.LumpsDry) * Damp; // (a dry sky's old trail breaks into puffs; a damp sky's hangs as a band)
+		}
+		else
+		{
+			B.SmearHold = 1.0;
+		}
+		B.Smear = 3.0 * Spacing;
+		if (ShowBy > 0.0)
+		{
+			B.ShowFrom = 0.35 * ShowBy;
+			B.ShowBy = ShowBy;
+		}
+		if (Prev.bOn && (From - Prev.From).Length() < B.Smear + (Now - Prev.Born) * (Drift.Length() + Prev.Vel.Length()))
+		{
+			B.Back = Prev;
+		}
+		B.Serial = (uint64_t{1} << 61) + ++OwnSerials;
+		Prev.From = B.From;
+		Prev.Vel = B.Vel;
+		Prev.Way = Way;
+		Prev.Rise = B.Rise;
+		Prev.Born = B.Born;
+		Prev.R0 = B.R0;
+		Prev.RMid = B.RMid;
+		Prev.R1 = B.R1;
+		Prev.Grow = B.Grow;
+		Prev.GrowBy = B.GrowBy;
+		Prev.GrowEarly = B.GrowEarly;
+		Prev.WakeBy = B.WakeBy;
+		Prev.WakeR = B.WakeR;
+		Prev.WakeOn = B.WakeOn;
+		Prev.Lean = B.Lean;
+		Prev.Life = B.Life;
+		Prev.Alpha = B.Alpha;
+		Prev.Col = B.Col;
+		Prev.Col2 = B.Col2;
+		Prev.Cool = B.Cool;
+		Prev.PaleTo = B.PaleBy > 0.0 ? B.PaleTo : 1.0;
+		Prev.LumpsFrom = B.SmearHold;
+		Prev.CutAt = B.CutAt;
+		Prev.bOn = true;
+		// (its own room: full, the oldest piece goes first)
+		if (R.Most <= 0)
+		{
+			return;
+		}
+		if (VapourBits.size() >= static_cast<size_t>(R.Most))
+		{
+			size_t Oldest = 0;
+			for (size_t I = 1; I < VapourBits.size(); ++I)
+			{
+				if (VapourBits[I].Born < VapourBits[Oldest].Born || (VapourBits[I].Born == VapourBits[Oldest].Born && VapourBits[I].Serial < VapourBits[Oldest].Serial))
+				{
+					Oldest = I;
+				}
+			}
+			VapourGone(VapourBits[Oldest], Now);
+			VapourBits[Oldest] = VapourBits.back();
+			VapourBits.pop_back();
+			++VapourDropped;
+		}
+		VapourBits.push_back(B);
+	}
+
+	void Battle::AirTenOwn(double Now, const View& Eye)
+	{
+		OwnSorted.clear();
+		if (OwnRoom <= 0)
+		{
+			return;
+		}
+		const bool bBack = Now < OwnLast - 0.5;
+		OwnLast = Now;
+		// (the clock gone back: what was laid after the moment goes; each trail starts its strips afresh)
+		if (bBack)
+		{
+			VapourBits.erase(std::remove_if(VapourBits.begin(), VapourBits.end(), [Now](const Bit& B) { return B.Born > Now; }), VapourBits.end());
+			for (Vapouring& V : Vapours)
+			{
+				for (Bit::Reach& R : V.Prev)
+				{
+					R.bOn = false;
+				}
+				V.LaidAt = -1.0e18;
+				V.Last = std::min(V.Last, Now);
+			}
+			AirTenBack(Now);
+		}
+		// (the vapour's room: a piece past its life goes, and gives its water to the sky's haze)
+		for (size_t I = 0; I < VapourBits.size();)
+		{
+			if (Now <= VapourBits[I].Born + VapourBits[I].Life)
+			{
+				++I;
+				continue;
+			}
+			VapourGone(VapourBits[I], VapourBits[I].Born + VapourBits[I].Life);
+			VapourBits[I] = VapourBits.back();
+			VapourBits.pop_back();
+		}
+		Vapours.erase(std::remove_if(Vapours.begin(), Vapours.end(), [Now](const Vapouring& V) { return Now - V.Last > 30.0; }), Vapours.end());
+		// (each trail's young end, this frame: from where the strip forms now, the gap behind the aircraft, back to its newest
+		// piece, so the trail starts at the gap and not a strip's length behind it)
+		VapourRoots.clear();
+		for (const Vapouring& V : Vapours)
+		{
+			if (!V.bOn || V.Strength <= 0.001 || Now < V.Last || Now - V.Last > 0.25 || VapourRoots.size() + 5 > static_cast<size_t>(VapourRootRoom))
+			{
+				continue;
+			}
+			const Vec Way = V.Vel.Unit(Vec(1.0, 0.0, 0.0));
+			const Vec Ahead = V.Vel * (Now - V.Last) - Way * (VapourIs.GapSpans * V.Span);
+			for (int Chain = 0; Chain < 5; ++Chain)
+			{
+				const Bit::Reach& Prev = V.Prev[Chain];
+				if (!Prev.bOn || (Chain == 4 && V.bNear) || (Chain < 4 && (!V.bNear || Chain >= V.EngineCount)))
+				{
+					continue;
+				}
+				Bit B;
+				B.Born = Now - 0.001;
+				B.Life = 1.0;
+				B.From = (Chain < 4 ? V.Engines[Chain] : V.Centre) + Ahead;
+				B.Along = Way;
+				B.Windage = 1.0;
+				B.Ribbon = VapourIs.Core;
+				B.Back = Prev;
+				B.R0 = B.R1 = Prev.R0;
+				B.Col = B.Col2 = Prev.Col;
+				B.Alpha = Prev.Alpha;
+				B.bSoft = true;
+				B.Torn = VapourIs.Torn;
+				B.ShadowCol = VapourIs.Shade;
+				B.ShadowK = VapourIs.ShadeK;
+				B.LeastPx = VapourIs.LeastPx;
+				B.LeastKeep = VapourIs.LeastKeep;
+				B.FadeIn = 0.0005;
+				B.Hold = 1.0;
+				B.Heart = 0.8;
+				B.Rim = 0.05;
+				B.Rough = 0.2;
+				B.LumpSeed = static_cast<uint32_t>(V.Key) * 2654435761u + static_cast<uint32_t>(Chain);
+				B.Smear = (B.From - Prev.From).Length() + 1.0;
+				B.Serial = (uint64_t{1} << 62) - 1024u + VapourRoots.size();
+				VapourRoots.push_back(B);
+			}
+		}
+		auto Put = [this, Now, &Eye](const Bit& B, double Reach)
+		{
+			if (Now < B.Born || Now > B.Born + B.Life)
+			{
+				return;
+			}
+			const Vec At = Where(B, Now - B.Born);
+			if ((At - Eye.Eye).Length() > Reach || OffScreen(B, At, Eye))
+			{
+				return;
+			}
+			OwnSorted.push_back(Order{ &B, (At - Eye.Eye).Dot(Eye.Forward), false, 0.0, B.Serial });
+		};
+		for (const Bit& B : VapourBits)
+		{
+			Put(B, VapourIs.Beyond);
+		}
+		for (const Bit& B : VapourRoots)
+		{
+			Put(B, VapourIs.Beyond);
+		}
+		std::sort(OwnSorted.begin(), OwnSorted.end(), [](const Order& L, const Order& R) { return L.Deep != R.Deep ? L.Deep > R.Deep : L.Serial < R.Serial; });
+		if (OwnSorted.size() > static_cast<size_t>(OwnRoom))
+		{
+			OwnSorted.erase(OwnSorted.begin(), OwnSorted.begin() + static_cast<long>(OwnSorted.size() - static_cast<size_t>(OwnRoom))); // (the farthest go)
+		}
+	}
+
+	int Battle::LayOwn(int Slot, const Bit& B, double Now, const View& Eye)
+	{
+		// (an own room's piece is laid out to its own row's range, not the scene's draw range: a contrail is seen for
+		// kilometres past the 4 km the air scene draws its smoke to. In one place of its own)
+		const double Was = Beyond;
+		Beyond = std::max(Beyond, OwnBeyond);
+		const int Took = LayBit(Slot, B, Now, Eye, 1);
+		Beyond = Was;
+		return Took;
+	}
+
+	void Battle::VapourGone(const Bit& B, double When)
+	{
+		(void)B;
+		(void)When;
+	}
+
+	void Battle::AirTenBack(double Now)
+	{
+		(void)Now;
 	}
 }
