@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <limits>
 #include <map>
@@ -545,6 +546,7 @@ namespace LandFieldPicture
 			double X = 0.0, Y = 0.0, Z = 0.0, C = 1.0, S = 0.0, Scale = 1.0, ScaleZ = 1.0;
 			float Tint[3] = { 1.0f, 1.0f, 1.0f };
 			uint8_t Mat = MatGround;
+			double Lodge = 0.0; // (laid over by a blast, LandField::Placed::Lodge: tipped about its foot toward its own +X)
 		};
 
 		struct Target
@@ -680,11 +682,27 @@ namespace LandFieldPicture
 					const LandField::Mesh& M = *D.M;
 					const size_t N = M.Points();
 					P.resize(N);
+					const double LodgeC = std::cos(D.Lodge), LodgeS = std::sin(D.Lodge);
 					for (size_t K = 0; K < N; ++K)
 					{
 						V3 W{ M.Positions[K * 3], M.Positions[K * 3 + 1], M.Positions[K * 3 + 2] };
 						V3 Nm{ M.Normals[K * 3], M.Normals[K * 3 + 1], M.Normals[K * 3 + 2] };
-						if (D.bPlaced)
+						if (D.bPlaced && D.Lodge != 0.0)
+						{
+							// (laid over: its own frame tipped about the foot, +Z toward +X, then turned and set down)
+							const double SX = W.X * D.Scale, LY = W.Y * D.Scale, SZ = W.Z * D.ScaleZ;
+							const double LX = SX * LodgeC + SZ * LodgeS, LZ = SZ * LodgeC - SX * LodgeS;
+							W = { D.X + LX * D.C - LY * D.S, D.Y + LX * D.S + LY * D.C, D.Z + LZ };
+							const double MX = Nm.X / D.Scale, NY = Nm.Y / D.Scale, MZ = Nm.Z / D.ScaleZ;
+							const double NX = MX * LodgeC + MZ * LodgeS, NZ = MZ * LodgeC - MX * LodgeS;
+							Nm = Unit({ NX * D.C - NY * D.S, NX * D.S + NY * D.C, NZ });
+							// (a lying mat faces the sky, whatever way its blades' own faces turned: the normal bent toward up by
+							// 0.85 x (1 - saturate((cos Lodge - 0.5) / 0.485)), nothing within some 10 degrees of upright, as the
+							// materials do in the game, build_content.py's lying_normal)
+							const double LodgeUp = 0.85 * (1.0 - std::clamp((LodgeC - 0.5) / 0.485, 0.0, 1.0));
+							if (LodgeUp > 0.0) Nm = Unit({ Nm.X * (1.0 - LodgeUp), Nm.Y * (1.0 - LodgeUp), Nm.Z * (1.0 - LodgeUp) + LodgeUp });
+						}
+						else if (D.bPlaced)
 						{
 							const double LX = W.X * D.Scale, LY = W.Y * D.Scale;
 							W = { D.X + LX * D.C - LY * D.S, D.Y + LX * D.S + LY * D.C, D.Z + W.Z * D.ScaleZ };
@@ -885,6 +903,7 @@ namespace LandFieldPicture
 					L.S = std::sin(P.Yaw);
 					L.Scale = P.Scale;
 					L.ScaleZ = P.ScaleZ;
+					L.Lodge = P.Lodge;
 					L.Tint[0] = P.Tint.R / 128.0f;
 					L.Tint[1] = P.Tint.G / 128.0f;
 					L.Tint[2] = P.Tint.B / 128.0f;
@@ -905,6 +924,7 @@ namespace LandFieldPicture
 				D.S = std::sin(P.Yaw);
 				D.Scale = P.Scale;
 				D.ScaleZ = P.ScaleZ;
+				D.Lodge = P.Lodge;
 				D.Tint[0] = P.Tint.R / 128.0f;
 				D.Tint[1] = P.Tint.G / 128.0f;
 				D.Tint[2] = P.Tint.B / 128.0f;
@@ -1213,6 +1233,17 @@ namespace LandFieldPicture
 			const auto T0 = std::chrono::steady_clock::now();
 			std::vector<LandField::Placed> Clutter;
 			if (ClutterReach > 0.0) G.Clutter(V.Eye.X - ClutterReach, V.Eye.Y - ClutterReach, V.Eye.X + ClutterReach, V.Eye.Y + ClutterReach, Clutter);
+			// (the shell holes given for a picture, LAND_FIELD_FLATTEN="x y core outer; ...": the clutter out to 1.2 x core
+			// taken away here, in the picture only, as the game's holes show bare earth there; the word "lodged" or not)
+			if (const char* Holes = std::getenv("LAND_FIELD_FLATTEN"))
+				for (const char* At = Holes; At && *At;)
+				{
+					double HX = 0.0, HY = 0.0, HCore = 0.0, HOuter = 0.0;
+					if (std::sscanf(At, "%lf %lf %lf %lf", &HX, &HY, &HCore, &HOuter) == 4)
+						Clutter.erase(std::remove_if(Clutter.begin(), Clutter.end(), [&](const LandField::Placed& P) { return std::hypot(P.X - HX, P.Y - HY) < 1.2 * HCore; }), Clutter.end());
+					At = std::strchr(At, ';');
+					if (At) ++At;
+				}
 			std::vector<Shadow> Maps(FineSize > 0.0 ? 2 : 1);
 			size_t ShadowTris = 0;
 			for (size_t K = 0; K < Maps.size(); ++K)

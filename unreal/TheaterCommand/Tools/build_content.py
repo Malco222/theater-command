@@ -210,6 +210,11 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False):
     if sway:
         tinted = times(m, tinted, wind_sheen(m, -900, 3200), 1000, -950)
         to_property(wind_sway(m, -900, 3600), "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+        # (corn and grass laid over by a blast, on trial "lodged", lit as a mat facing the sky; told and left out if it
+        # fails; only in a build made with TC_LODGED=1, see LODGED: without it the material is node for node as before)
+        lying = windy(name + " (lying normal)", lambda: lying_normal(m, -900, 4400)) if LODGED else None
+        if lying is not None:
+            to_property(lying, "", unreal.MaterialProperty.MP_NORMAL)
     to_property(tinted, "", unreal.MaterialProperty.MP_BASE_COLOR)
     to_property(times(m, chipped, 0.85, 750, -700), "", unreal.MaterialProperty.MP_METALLIC)
     # (The art director, 19 November 2026: a rifleman seen with the sun behind him stood darker on his shaded side
@@ -1795,6 +1800,19 @@ def wind_sway(m, x, y, leaves=False):
     push = plus(m, lerp(m, scalar(m, "WindCalm", 0.3, x + 1200, y + 100), 1.0, gust, x + 1350, y + 100),
                 times(m, times(m, spring, scalar(m, "Spring", 0.25, x + 1350, y + 450), x + 1500, y + 400), gust, x + 1650, y + 400), x + 1800, y + 200)
     lean = times(m, times(m, times(m, push, scalar(m, "Bend", 0.0, x + 1800, y + 300), x + 1950, y + 250), reach, x + 2100, y + 300), 100.0, x + 2250, y + 300)
+    # (a thing laid over by a blast, on trial "lodged", lies still: its own up turned into the world, and the push
+    # times saturate((up.z - 0.5) / 0.485): exactly 1 within some 10 degrees of upright, so all that stands sways as
+    # before; nothing past 60 degrees, so lying corn never slides along the ground. Only in a build made with
+    # TC_LODGED=1, see LODGED: without it the sway is node for node as before)
+    if LODGED:
+        upward = node(m, unreal.MaterialExpressionTransform, x + 1800, y + 700,
+                      transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL,
+                      transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
+        connect(node(m, unreal.MaterialExpressionConstant3Vector, x + 1650, y + 700, constant=unreal.LinearColor(0.0, 0.0, 1.0, 0.0)), "", upward, "")
+        up = node_from(m, unreal.MaterialExpressionComponentMask, one_in(m, unreal.MaterialExpressionNormalize, upward, x + 1950, y + 700), x + 2100, y + 700,
+                       r=False, g=False, b=True, a=False)
+        still = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, up, -0.5, x + 2250, y + 700), 1.0 / 0.485, x + 2400, y + 700), x + 2550, y + 700)
+        lean = times(m, lean, still, x + 2700, y + 300)
     offset = pair(m, times(m, way, lean, x + 2400, y + 250), node(m, unreal.MaterialExpressionConstant, x + 2400, y + 400, r=0.0), x + 2550, y + 300)
     if leaves:
         # (each card on its own: three slow beats out of step, by where its corners stand)
@@ -1811,6 +1829,28 @@ def wind_sway(m, x, y, leaves=False):
         strength = times(m, times(m, scalar(m, "Flutter", 0.0, x + 1350, y + 1000), lerp(m, 0.4, 1.0, gust, x + 1350, y + 1100), x + 1500, y + 1000), 100.0, x + 1650, y + 1000)
         offset = plus(m, offset, times(m, shake, strength, x + 1800, y + 900), x + 2700, y + 500)
     return offset
+
+
+def lying_normal(m, x, y):
+    """The normal of a thing laid over by a blast (on trial "lodged", LandField::Placed::Lodge), in the tangent space:
+    a lying mat of corn or grass faces the sky whatever way its blades' own faces turned, so its normal is bent toward
+    the world's up by 0.85 x (1 - saturate((up.z - 0.5) / 0.485)), up the instance's own +Z turned into the world. Within
+    some 10 degrees of upright (all that stands today) the share is exactly 0 and the normal exactly the mesh's own
+    (0, 0, 1), as when nothing is connected. The painter does the same (land_field_picture.cpp)."""
+    upward = node(m, unreal.MaterialExpressionTransform, x, y,
+                  transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL,
+                  transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
+    connect(node(m, unreal.MaterialExpressionConstant3Vector, x - 150, y, constant=unreal.LinearColor(0.0, 0.0, 1.0, 0.0)), "", upward, "")
+    up = node_from(m, unreal.MaterialExpressionComponentMask, one_in(m, unreal.MaterialExpressionNormalize, upward, x + 150, y), x + 300, y,
+                   r=False, g=False, b=True, a=False)
+    still = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, up, -0.5, x + 450, y), 1.0 / 0.485, x + 600, y), x + 750, y)
+    share = times(m, one_in(m, unreal.MaterialExpressionOneMinus, still, x + 900, y), 0.85, x + 1050, y)
+    sky = node(m, unreal.MaterialExpressionTransform, x + 900, y + 150,
+               transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_WORLD,
+               transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_TANGENT)
+    connect(node(m, unreal.MaterialExpressionConstant3Vector, x + 750, y + 150, constant=unreal.LinearColor(0.0, 0.0, 1.0, 0.0)), "", sky, "")
+    own = node(m, unreal.MaterialExpressionConstant3Vector, x + 900, y + 300, constant=unreal.LinearColor(0.0, 0.0, 1.0, 0.0))
+    return lerp(m, own, sky, share, x + 1200, y + 150)
 
 
 def windy(name, make):
@@ -2067,6 +2107,11 @@ def build_land_stalks():
         painted = times(m, painted, sheen, -450, 0)
         to_property(sway, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
     to_property(painted, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    # (the corn laid over by a blast, on trial "lodged", lit as a mat facing the sky; told and left out if it fails;
+    # only in a build made with TC_LODGED=1, see LODGED)
+    lying = windy("M_LandStalks (lying normal)", lambda: lying_normal(m, -2400, 2600)) if LODGED else None
+    if lying is not None:
+        to_property(lying, "", unreal.MaterialProperty.MP_NORMAL)
     through = times(m, times(m, painted, vector(m, "Through", (0.9, 1.0, 0.45, 1.0), -500, 250), -350, 200),
                     scalar(m, "ThroughStrength", 0.5, -500, 350), -200, 250)
     to_property(through, "", unreal.MaterialProperty.MP_SUBSURFACE_COLOR)
@@ -2389,6 +2434,11 @@ def build_flak_lit():
 # Set TC_REBUILD=all to remake everything, or to a material's name (or several, with commas between) to remake those.
 import os
 REBUILD = os.environ.get("TC_REBUILD", "")
+# (On trial, "lodged": the corn and grass a blast laid over lie still in the wind and are lit as a mat facing the sky
+# (wind_sway's stillness, lying_normal) only in materials built with TC_LODGED=1; a material cannot read the game's
+# trial word, so without it M_LandBlades, M_LandLeaves and M_LandStalks are built node for node as before. To try the
+# word on the Mac: TC_LODGED=1 TC_REBUILD=M_LandBlades,M_LandLeaves,M_LandStalks; the same without TC_LODGED puts them back.)
+LODGED = os.environ.get("TC_LODGED", "") == "1"
 # (M_LandSurface, the ground battle's ground, comes after M_MapSurface and can never stop the rest: see
 # build_land_surface_or_tell. After the pictures are painted again, TC_REBUILD=M_LandSurface brings them in again.
 # M_LandLeaves, its hedges' and trees' leaves, the same: TC_REBUILD=M_LandLeaves after make_leaf_textures.py.

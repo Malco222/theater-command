@@ -29,13 +29,15 @@ namespace LandCarpet
 	 * Thing's own spot (bHide true: the old way only). A place at the mesh's count is a new one, added at the end. bPop:
 	 * the mesh's last place (Slot) removed (kept packed, GS7: a place given back is first filled with the last place's
 	 * thing, a put, unless it is the last). Copy -1: every mesh emptied (a cut that leaves nothing held), its places
-	 * counted again from 0. */
+	 * counted again from 0. bRepose (on trial, "lodged"): a thing held in this place laid over where it stands, the
+	 * place and its count as they were (to the engine a put into a held place, as any other). */
 	struct Op
 	{
 		int32_t Copy = -1, Slot = -1;
 		bool bHide = false;
 		LandField::Placed Thing;
 		bool bPop = false;
+		bool bRepose = false;
 	};
 
 	/** What one Update did. */
@@ -47,6 +49,7 @@ namespace LandCarpet
 		int Waiting = 0; // squares wanted but left for a later frame
 		int Put = 0, Hidden = 0; // things laid, things given back
 		int Moved = 0;           // places given back filled with their mesh's last thing (kept packed, GS7)
+		int Lodged = 0, Reposed = 0; // squares laid over again by the blasts' new rounds, things re-posed in place
 	};
 
 	class Squares
@@ -70,6 +73,9 @@ namespace LandCarpet
 		static constexpr double ReachSway = 4.0;
 		/** A square marked by a hole or a track is laid again at most this often. */
 		static constexpr double MarkEvery = 1.0;
+		/** On trial, "lodged" (LandField::Ground::AddFlatten): held squares a blast's new round reaches are laid over again
+		 * from the field, at most once in MarkEvery each and LodgeMost a frame, nearest the eye first; the rest wait. */
+		static constexpr int LodgeMost = 3;
 
 		/** Per kind (LandField::Base), how near the eye it is laid (none: very far). */
 		std::vector<double> Reach;
@@ -164,6 +170,11 @@ namespace LandCarpet
 				Sq.bMarked = false;
 				Relay(Sq, Out, T);
 				++T.Relaid;
+			}
+			// (on trial, "lodged": the blasts' new rounds mark the held squares they reach; those due laid over again)
+			if (G.Flattened() != LodgeSeen || LodgeSeen > 0)
+			{
+				Relodging(G, EyeX, EyeY, Now, Out, T);
 			}
 			// The squares wanted and not held yet, nearest first.
 			Wanted.clear();
@@ -292,6 +303,8 @@ namespace LandCarpet
 			double LaidNear = 0.0;     // the square's nearest point to the eye when last laid
 			double LaidAt = 0.0;
 			bool bMarked = false;
+			bool bLodgeDue = false;    // a blast's round laid since it was made or last laid over (on trial, "lodged")
+			double LodgedAt = -1e30;
 		};
 		struct FreshOne
 		{
@@ -319,6 +332,9 @@ namespace LandCarpet
 		/** A cut's far squares still being made, CutFollow a frame. */
 		bool bFollowing = false;
 		std::vector<LandField::Placed> Made;
+		/** The blasts' rounds already marked (LandField::Ground::Flattened), and the squares due (Relodging's). */
+		size_t LodgeSeen = 0;
+		std::vector<FreshOne> LodgeDue;
 
 		static uint64_t Key(int I, int J) { return (static_cast<uint64_t>(static_cast<uint32_t>(I)) << 32) | static_cast<uint32_t>(J); }
 
@@ -586,6 +602,113 @@ namespace LandCarpet
 				{
 					Put(Sq, N, WantIn[N], Out, T);
 				}
+			}
+		}
+
+		/** On trial, "lodged": the held squares each new round reaches marked; of those due (not laid over within
+		 * MarkEvery), the LodgeMost nearest the eye laid over again (Relodge). */
+		void Relodging(const LandField::Ground& G, double EyeX, double EyeY, double Now, std::vector<Op>& Out, Tally& T)
+		{
+			for (; LodgeSeen < G.Flattened(); ++LodgeSeen)
+			{
+				double RX = 0.0, RY = 0.0, RR = 0.0;
+				G.FlattenRound(LodgeSeen, RX, RY, RR);
+				const int I0 = static_cast<int>(std::floor((RX - RR) / Side)), I1 = static_cast<int>(std::floor((RX + RR) / Side));
+				const int J0 = static_cast<int>(std::floor((RY - RR) / Side)), J1 = static_cast<int>(std::floor((RY + RR) / Side));
+				for (int J = J0; J <= J1; ++J)
+				{
+					for (int I = I0; I <= I1; ++I)
+					{
+						const auto Found = Held.find(Key(I, J));
+						if (Found != Held.end())
+						{
+							Found->second.bLodgeDue = true;
+						}
+					}
+				}
+			}
+			LodgeDue.clear();
+			for (const auto& [K, Sq] : Held)
+			{
+				if (Sq.bLodgeDue && Now - Sq.LodgedAt >= MarkEvery)
+				{
+					LodgeDue.push_back({ Nearest(Sq.I, Sq.J, EyeX, EyeY), { Sq.I, Sq.J } });
+				}
+			}
+			std::sort(LodgeDue.begin(), LodgeDue.end(), [](const FreshOne& A, const FreshOne& B) { return A.D < B.D || (A.D == B.D && A.IJ < B.IJ); });
+			for (size_t N = 0; N < LodgeDue.size() && N < static_cast<size_t>(LodgeMost); ++N)
+			{
+				Square& Sq = Held[Key(LodgeDue[N].IJ.first, LodgeDue[N].IJ.second)];
+				Sq.bLodgeDue = false;
+				Sq.LodgedAt = Now;
+				Relodge(G, Sq, Out, T);
+				++T.Lodged;
+			}
+		}
+
+		/** A held square laid over again: made afresh from the field (the same things in the same order, only their pose
+		 * changed), each changed thing kept in its place and re-posed there (one op, bRepose), or, should its mesh change,
+		 * given back and laid again; nothing sent for what did not change. Should the field's things there differ in
+		 * number or place (the ground changed by more than the blasts since the square was made: a burn added mid-battle,
+		 * say), the square is let go and made again whole from the field. */
+		void Relodge(const LandField::Ground& G, Square& Sq, std::vector<Op>& Out, Tally& T)
+		{
+			Made.clear();
+			G.Clutter(Sq.I * Side, Sq.J * Side, (Sq.I + 1) * Side, (Sq.J + 1) * Side, Made);
+			bool bAgain = Made.size() != Sq.Things.size();
+			for (size_t N = 0; N < Made.size() && !bAgain; ++N)
+			{
+				bAgain = Made[N].Kind != Sq.Things[N].Kind || Made[N].X != Sq.Things[N].X || Made[N].Y != Sq.Things[N].Y;
+			}
+			if (bAgain)
+			{
+				Unlay(Sq, Out, T);
+				Sq.Things.swap(Made);
+				Sq.Copy.assign(Sq.Things.size(), -1);
+				Sq.In.assign(Sq.Things.size(), -1);
+				Sq.Slot.assign(Sq.Things.size(), -1);
+				Sq.Cleared.assign(Sq.Things.size(), 0);
+				for (size_t K = 0; K < Sq.Things.size(); ++K)
+				{
+					Sq.Copy[K] = CopyOf ? CopyOf(Sq.Things[K]) : -1;
+				}
+				Lay(Sq, Out, T);
+				return;
+			}
+			std::vector<uint8_t> Repose(Made.size(), 0);
+			bool bMeshes = false;
+			for (size_t N = 0; N < Made.size(); ++N)
+			{
+				const LandField::Placed& A = Made[N];
+				const LandField::Placed& B = Sq.Things[N];
+				if (A.Z == B.Z && A.Yaw == B.Yaw && A.Scale == B.Scale && A.ScaleZ == B.ScaleZ && A.Tint.R == B.Tint.R && A.Tint.G == B.Tint.G && A.Tint.B == B.Tint.B
+					&& A.Lodge == B.Lodge)
+				{
+					continue;
+				}
+				Sq.Things[N] = A;
+				const int32_t Copy = CopyOf ? CopyOf(A) : -1;
+				if (Copy != Sq.Copy[N])
+				{
+					Sq.Copy[N] = Copy;
+					bMeshes = true;
+					continue;
+				}
+				Repose[N] = 1;
+			}
+			// (the re-poses first, each in the place it holds now: a give-back after them that moves one of these things
+			// into another place carries its new record there, so no place is sent the same record twice)
+			for (size_t N = 0; N < Made.size(); ++N)
+			{
+				if (Repose[N] && Sq.Slot[N] >= 0)
+				{
+					Out.push_back({ Sq.In[N], Sq.Slot[N], false, Sq.Things[N], false, true });
+					++T.Reposed;
+				}
+			}
+			if (bMeshes)
+			{
+				Relay(Sq, Out, T);
 			}
 		}
 
