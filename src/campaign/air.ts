@@ -3406,13 +3406,18 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       // its pass, as the battle knows it; the A5 line only where neither fuel nor a jump ended it", a group in one line
       // only. Fought out only: the battle's strafeEnd, by group, 'short' (bingo before its go-down: it never went down),
       // 'fuel' (bingo after it) or 'caught'; a group that did a fighter's harm or more strafed, whatever ended it. Settled,
-      // or handed to the staff, no fuel and no catch is known, so none of these lines is made.)
+      // or handed to the staff, no fuel and no catch is known, so none of these lines is made. And the UI director, 26
+      // November 2026 02:06Z, answer 4: a group that FINISHED a pass before fuel or a catch ended its strafing "went down
+      // and strafed, the first true cause in the order"; the fuel and caught lines are kept for a group ended before it
+      // finished any pass (answer 3). The battle books a group in strafedBy only as a pass of its finishes, so its key
+      // there is "finished a pass". Which sentence only: nothing booked moves.)
       const ends = route === 'fought' ? battle?.strafeEnd ?? {} : {};
+      const passed = (x: AirAssess['att'][number]): boolean => route === 'fought' && !!battle?.strafedBy && Object.prototype.hasOwnProperty.call(battle.strafedBy, x.f.id);
       const end: NonNullable<AirReport['strafeEnd']> = {};
       const little: string[] = [];
       a.att.forEach((x, i) => {
         const went = down.includes(x.f.id), why = ends[x.f.id];
-        if (went && booked(x) >= 1) return;
+        if (went && (booked(x) >= 1 || ((why === 'fuel' || why === 'caught') && passed(x)))) return;
         if ((why === 'short' && !went) || why === 'fuel' || why === 'caught') (end[why] ??= []).push(att[i].fleet);
         else if (went) little.push(att[i].fleet);
       });

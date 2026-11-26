@@ -1640,7 +1640,9 @@ export interface AirReport {
    * With the strafers' rule on, a raid fought out (the UI director, 21:22Z j and k, and 21:28Z): the groups whose strafing
    * ended short with less than a fighter's weight on the troops, by what ended it as the battle knows it, named and
    * ordered as the raid's groups: `short`, a group with the reach that bingo turned for home before it went down; `fuel`,
-   * one that went down and bingo turned for home; `caught`, one that went down and enemy fighters caught. A group is in
+   * one that went down and bingo turned for home; `caught`, one that went down and enemy fighters caught; `fuel` and
+   * `caught` only for a group that had finished no pass (one that had is among those that strafed: the UI director, 26
+   * November 2026 02:06Z, answer 4). A group is in
    * one list only, and then not in strafeLittle. Written only with the rule on and only when not empty: a report without
    * it (the switch off, an older save, a raid settled or handed to the staff, or none such) is as before.
    */

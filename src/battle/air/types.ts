@@ -312,7 +312,8 @@ export interface AirOutcome {
   strafeFire?: number;
   /**
    * With the strafers' rule on: by campaign group id, the fighters its completed passes counted on the troops ('strafed'
-   * group by group), for the report's words (the UI director, 19:10Z A5). Absent otherwise.
+   * group by group), for the report's words (the UI director, 19:10Z A5). A group is here only once it has finished a
+   * pass, which the report's words read too (the UI director, 26 November 2026 02:06Z, answer 4). Absent otherwise.
    */
   strafedBy?: Record<number, number>;
   /**

@@ -102,8 +102,10 @@ const named = (xs: string[]): string => cap(list(xs.map(theGroupName)));
  * cause its own sentence, in the order the raid ran (the UI director, 21:22Z and 21:28Z): those that strafed; those too
  * short of fuel to go down (strafeEnd.short); those that ran short after going down (strafeEnd.fuel); those caught
  * (strafeEnd.caught); those with too little fight left (strafeLittle, 19:10Z A5 and its forms at 19:17Z). Each sentence
- * joins its names as the report joins them, every name by theGroupName (21:22Z g). Where no group went down at all,
- * "No fighter group went down to strafe." as before, and a group too short of fuel to go down after it.
+ * joins its names as the report joins them, every name by theGroupName (21:22Z g). "No fighter group went down to
+ * strafe." only where the line would otherwise say nothing at all (the UI director, 26 November 2026 02:06Z, answer 2:
+ * "The k line alone. Each group that did not go down has its own line saying why"): a group too short of fuel to go
+ * down is told by its own line, standing alone.
  */
 export function strafedLine(rep: { mission: string; attNat: string; strafed?: string[]; strafeLittle?: { names: string[] }; strafeEnd?: { short?: string[]; fuel?: string[]; caught?: string[] } }, reader: string | null): string {
   if (rep.mission !== 'ground' || !rep.strafed || reader === null || reader !== rep.attNat) return '';
@@ -111,8 +113,8 @@ export function strafedLine(rep: { mission: string; attNat: string; strafed?: st
   const short = end.short ?? [], fuel = end.fuel ?? [], caught = end.caught ?? [];
   const full = rep.strafed.filter((n) => !little.includes(n) && !fuel.includes(n) && !caught.includes(n));
   const say = (xs: string[], words: string | readonly [string, string]): string => (!xs.length ? '' : `${named(xs)} ${typeof words === 'string' ? words : words[xs.length === 1 ? 0 : 1]}`);
-  const went = full.length + fuel.length + caught.length + little.length > 0;
-  return [went ? say(full, 'went down and strafed.') : STRAFE_WORDS.nobody, say(short, STRAFE_WORDS.short), say(fuel, STRAFE_WORDS.fuel), say(caught, STRAFE_WORDS.caught), say(little, STRAFE_WORDS.little)].filter(Boolean).join(' ');
+  const lines = [say(full, 'went down and strafed.'), say(short, STRAFE_WORDS.short), say(fuel, STRAFE_WORDS.fuel), say(caught, STRAFE_WORDS.caught), say(little, STRAFE_WORDS.little)].filter(Boolean);
+  return lines.length ? lines.join(' ') : STRAFE_WORDS.nobody;
 }
 
 /**
