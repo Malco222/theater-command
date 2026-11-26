@@ -204,6 +204,17 @@ $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" 
 "$OUT/air_b17_fine_test" "$ROOT/Content/Models" "$ROOT/Content/Data/NoseArt" "$SRC" || STATUS=1
 mkdir -p "$OUT/b17fine"
 AIR_SHOW_B17_FINE=1 "$OUT/air_show_test" "$ROOT/Content/Data/AirBattles/bremen-b17.json" "$OUT/b17fine" || STATUS=1
+# Turning airscrews (the Battle rules card's "Turning airscrews", row flyPropSpin; Brian, 26 November 2026 04:00Z: "the
+# b-17 propellers didnt look like they were spinning"): every aircraft's far mesh, past 300 m the whole of the Overview,
+# loses its standing blades and its solid blur disc and keeps everything else; each screw's blades kept apart for an
+# engine feathered; the near disc's smear and the far haze drawn at the battle's real scale; the row off draws what it
+# drew before (its source). Content/Models and Old. Then the light shapes made from those far shapes, held to them.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_prop_spin_test.cpp" "$SRC/Battle/AirScrew.cpp" -o "$OUT/air_prop_spin_test"
+"$OUT/air_prop_spin_test" "$SRC" "$ROOT"/Content/Models/*.json "$ROOT"/Content/Models/Old/*.json || STATUS=1
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -DAIR_LIGHT_SCREWS -I"$SRC" \
+  "$HERE/air_light_test.cpp" "$SRC/Battle/AirLight.cpp" "$SRC/Battle/AirScrew.cpp" -o "$OUT/air_light_screws_test"
+"$OUT/air_light_screws_test" "$ROOT"/Content/Models/*.json "$ROOT"/Content/Models/Old/*.json || STATUS=1
 # The sky's picture (the clouds as the scene lays and turns them, drawn by a small software painter): AIR_SKY_PICTURES=1.
 if [ "${AIR_SKY_PICTURES:-}" = "1" ]; then
   $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \

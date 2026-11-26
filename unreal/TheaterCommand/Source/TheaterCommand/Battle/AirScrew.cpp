@@ -101,6 +101,7 @@ namespace AirScrew
 	{
 		Found Out;
 		Out.BladeTriangle.assign(Triangles.size() / 3, false);
+		Out.ScrewOfTriangle.assign(Triangles.size() / 3, -1);
 		const int N = static_cast<int>(Points.size());
 		auto IsBlade = [&](int K) { return K >= 0 && K < N && static_cast<size_t>(K) < Blade.size() && Blade[static_cast<size_t>(K)]; };
 		// The blades: the blade points their triangles join.
@@ -230,7 +231,11 @@ namespace AirScrew
 			if (!IsBlade(A) || !IsBlade(Triangles[T + 1]) || !IsBlade(Triangles[T + 2])) continue;
 			const int B = Which[static_cast<size_t>(A)];
 			const int S = B >= 0 ? ScrewOf[static_cast<size_t>(B)] : -1;
-			if (S >= 0 && Kept[static_cast<size_t>(S)]) Out.BladeTriangle[T / 3] = true;
+			if (S >= 0 && Kept[static_cast<size_t>(S)])
+			{
+				Out.BladeTriangle[T / 3] = true;
+				Out.ScrewOfTriangle[T / 3] = KeptAt[static_cast<size_t>(S)];
+			}
 		}
 		return Out;
 	}
@@ -283,5 +288,141 @@ namespace AirScrew
 			At = Next;
 		}
 		return Paints;
+	}
+	std::vector<int> FarPaints(const std::string& FileText)
+	{
+		std::vector<int> Paints;
+		// (the far mesh's own key, "far" with its object after it: the word may stand elsewhere as a value)
+		size_t Far = std::string::npos;
+		for (size_t At = FileText.find("\"far\""); At != std::string::npos && Far == std::string::npos; At = FileText.find("\"far\"", At + 1))
+		{
+			size_t Next = At + 5;
+			while (Next < FileText.size() && (FileText[Next] == ' ' || FileText[Next] == '\n')) ++Next;
+			if (Next < FileText.size() && FileText[Next] == ':')
+			{
+				++Next;
+				while (Next < FileText.size() && (FileText[Next] == ' ' || FileText[Next] == '\n')) ++Next;
+				if (Next < FileText.size() && FileText[Next] == '{') Far = Next;
+			}
+		}
+		if (Far == std::string::npos) return Paints;
+		const size_t Key = FileText.find("\"paints\"", Far);
+		if (Key == std::string::npos) return Paints;
+		const size_t Open = FileText.find('[', Key);
+		const size_t Close = Open == std::string::npos ? std::string::npos : FileText.find(']', Open);
+		if (Close == std::string::npos) return Paints;
+		const char* At = FileText.c_str() + Open + 1;
+		const char* End = FileText.c_str() + Close;
+		while (At < End)
+		{
+			char* Next = nullptr;
+			const long Value = std::strtol(At, &Next, 10);
+			if (Next == At) { ++At; continue; }
+			Paints.push_back(static_cast<int>(Value));
+			At = Next;
+		}
+		return Paints;
+	}
+
+	Stripped StripScrews(const std::vector<Vec3>& Points, const std::vector<int>& Paints, const PaintsAre& Are, const std::vector<int>& Triangles)
+	{
+		Stripped Out;
+		const size_t Count = Triangles.size() / 3;
+		Out.Drop.assign(Count, false);
+		// (a point past the paints, a marking laid on after the file's points, is no blade)
+		std::vector<bool> Blade(std::min(Points.size(), Paints.size()), false);
+		for (size_t K = 0; K < Blade.size(); ++K) Blade[K] = Are.IsBlade(Paints[K]);
+		const Found F = Find(Points, Blade, Triangles);
+		Out.Screws = F.Screws;
+		Out.Blades.assign(F.Screws.size(), {});
+		auto IsBlur = [&](int Point) { return Point >= 0 && static_cast<size_t>(Point) < Paints.size() && Are.IsBlur(Paints[static_cast<size_t>(Point)]); };
+		for (size_t T = 0; T < Count; ++T)
+		{
+			if (F.BladeTriangle[T])
+			{
+				Out.Drop[T] = true;
+				++Out.BladeTriangles;
+				const int S = F.ScrewOfTriangle[T];
+				if (S >= 0 && static_cast<size_t>(S) < Out.Blades.size()) Out.Blades[static_cast<size_t>(S)].push_back(static_cast<int>(T));
+			}
+			else if (!F.Screws.empty() && IsBlur(Triangles[T * 3]) && IsBlur(Triangles[T * 3 + 1]) && IsBlur(Triangles[T * 3 + 2]))
+			{
+				Out.Drop[T] = true;
+				++Out.BlurTriangles;
+			}
+		}
+		return Out;
+	}
+
+	std::vector<int> SameScrews(const std::vector<Screw>& A, const std::vector<Screw>& B, double Share)
+	{
+		std::vector<int> Which(B.size(), -1);
+		if (A.size() != B.size() || A.empty()) return {};
+		std::vector<bool> Taken(A.size(), false);
+		for (size_t J = 0; J < B.size(); ++J)
+		{
+			for (size_t I = 0; I < A.size() && Which[J] < 0; ++I)
+			{
+				if (Taken[I]) continue;
+				const double R = A[I].Radius;
+				if (Len(Sub(A[I].Hub, B[J].Hub)) <= Share * R && std::fabs(A[I].Radius - B[J].Radius) <= Share * R && A[I].Blades == B[J].Blades)
+				{
+					Which[J] = static_cast<int>(I);
+					Taken[I] = true;
+				}
+			}
+			if (Which[J] < 0) return {};
+		}
+		return Which;
+	}
+
+	double SmearAlpha(double Ahead, int Ring)
+	{
+		if (Ring <= 0 || Ring >= 3) return 0.0;
+		const double Behind = 1.0 - Ahead;
+		// (the smear behind a blade, darkest at its trailing edge; its sharp leading edge just ahead of it; a faint haze
+		// between; the tips' ring a little lighter, the disc's edge soft)
+		const double Smear = 0.22 + 0.45 * std::exp(-6.0 * Behind) + 0.6 * std::exp(-40.0 * Ahead);
+		return std::min(0.85, Smear) * (Ring == 2 ? 0.8 : 1.0);
+	}
+
+	DiscMade MakeDisc(double Radius, int Blades, bool bHaze)
+	{
+		DiscMade Out;
+		const double TwoPi = 6.28318530717958647692;
+		const int Round = bHaze ? HazeRound : NearRound;
+		const int Many = std::max(1, Blades);
+		for (int Ring = 0; Ring < 4; ++Ring)
+		{
+			for (int K = 0; K < Round; ++K)
+			{
+				const double A = TwoPi * K / Round;
+				Out.Points.push_back({ 0.0, std::sin(A) * Radius * DiscRings[Ring], std::cos(A) * Radius * DiscRings[Ring] });
+				// (the disc turns toward a growing angle: a point a share Ahead past a blade is that far ahead of it)
+				const double Turned = A * Many / TwoPi;
+				const double Ahead = Turned - std::floor(Turned);
+				const double Alpha = bHaze ? HazeAlpha[Ring] : 255.0 * SmearAlpha(Ahead, Ring);
+				const unsigned char* Rgb = bHaze ? HazeRgb : SmearRgb;
+				Out.Red.push_back(Rgb[0]);
+				Out.Green.push_back(Rgb[1]);
+				Out.Blue.push_back(Rgb[2]);
+				Out.Alpha.push_back(static_cast<unsigned char>(std::lround(std::clamp(Alpha, 0.0, 255.0))));
+			}
+		}
+		// (its front faces, then its back ones)
+		for (int Side = 0; Side < 2; ++Side)
+		{
+			for (int Ring = 0; Ring < 3; ++Ring)
+			{
+				for (int K = 0; K < Round; ++K)
+				{
+					const int A = Ring * Round + K, B = Ring * Round + (K + 1) % Round, C = A + Round, D = B + Round;
+					if (Side == 0) Out.Triangles.insert(Out.Triangles.end(), { A, B, D, A, D, C });
+					else Out.Triangles.insert(Out.Triangles.end(), { A, D, B, A, C, D });
+				}
+			}
+			if (Side == 0) Out.Front = Out.Triangles.size();
+		}
+		return Out;
 	}
 }
