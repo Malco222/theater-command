@@ -17,6 +17,7 @@ import { setFromWait } from '../src/campaign/arrivalwaits';
 import { corpsInContact } from '../src/campaign/drawn';
 import { addCorps, createGame, relocate, removeCorps, startPhase } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
+import { storyFallen } from '../src/campaign/stories';
 import type { Corps, Game } from '../src/campaign/types';
 
 const ROWS = (setup as any).expeditions as any[];
@@ -62,6 +63,9 @@ describe('a told row that joins a standing corps (`joins`)', () => {
   it('with no news, its corps lost while it waited: point 1\'s ending', () => {
     const { g, held } = board();
     month(g, 2);
+    // (Destroyed as game.ts destroys one in a battle: on the memorial wall, then off the board. "Lost" is said only of a
+    // corps on the wall, round 3.)
+    storyFallen(g, held, 'destroyed', 'POL', held.reg);
     removeCorps(g, held);
     month(g, 3);
     expect(said(g, 3)).toEqual(['The Old Corps (Test Divisions) has joined the Old Corps in Magdeburg, formed without your Test Corps, which has been lost.']);

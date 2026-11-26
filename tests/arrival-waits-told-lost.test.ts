@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import setup from '../data/campaign/setup-1939.json';
 import { addCorps, createGame, relocate, removeCorps, startPhase } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
+import { storyFallen } from '../src/campaign/stories';
 import type { Corps, Game } from '../src/campaign/types';
 
 const ROWS = (setup as any).expeditions as any[];
@@ -30,8 +31,11 @@ function board(rowName: string, names: string[], opts: Record<string, unknown> =
   ROWS.push([2, 'GER', rowName, 'inf', 2, 'Magdeburg', { from: names, ...opts }]); added++;
   return { g, cs, i: ROWS.length - 1 };
 }
-/** Told in month 2; the corps at the front destroyed; month 3, the row forms. */
-const lose = (g: Game, c: Corps): void => { month(g, 2); expect(said(g, 2)).toHaveLength(1); removeCorps(g, c); month(g, 3); };
+/**
+ * Told in month 2; the corps at the front destroyed, as game.ts destroys one in a battle (`storyFallen`, which writes it
+ * on the memorial wall, then `removeCorps`: "lost" is said only of a corps on the wall, round 3); month 3, the row forms.
+ */
+const lose = (g: Game, c: Corps): void => { month(g, 2); expect(said(g, 2)).toHaveLength(1); storyFallen(g, c, 'destroyed', 'POL', c.reg); removeCorps(g, c); month(g, 3); };
 
 describe('section 8 point 1: the corps at the front is lost while the row waits', () => {
   it('one corps: "formed without your Test Corps, which has been lost"', () => {
