@@ -200,6 +200,9 @@ export function swapRefusal(g: Game, r: Region, c: Corps, out: Corps): string | 
   if (big) return big;
   const room = isle.room * MEN_PER_DIV, stay = menOn(g, r, c.nat, [c, out]);
   const yours = onlyMine(g, r, c.nat, [c, out]) ? ' of yours' : '';
+  // (Fewer than 1,000 more fit after the swap: section 3's "full" line with the swap's one change, so the line never
+  // promises room that is not there; the words sceptic's lean of 26 November 2026, laid until the UI director rules.)
+  if (room - stay < 1000) return `${r.name} is full: it has room for about ${roomMen(room)} men and ${roomMen(stay, 'up')}${yours} stay there after the swap.`;
   return `${r.name} has ${roomWords(isle.room)}, and ${roomMen(stay, 'up')}${yours} stay there after the swap: only ${roomMen(room - stay, 'down')} more can go, and ${c.name} has ${cardMen(c)}.`;
 }
 

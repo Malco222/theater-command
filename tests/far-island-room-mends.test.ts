@@ -3,10 +3,9 @@
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
-import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { frontWatch, havenTakes, runAI } from '../src/campaign/ai';
-import { addCorps, createGame, declareWar, removeCorps } from '../src/campaign/game';
+import { addCorps, createGame, declareWar, removeCorps, whyNoSwap } from '../src/campaign/game';
 import { troopshipsWanted } from '../src/campaign/desks';
 import { canRaise, deliver } from '../src/campaign/economy';
 import { roomLeft } from '../src/campaign/islands';
@@ -14,8 +13,9 @@ import { landingForce } from '../src/campaign/staff';
 import { followKey, frontsClear, sailedKey } from '../src/campaign/planfronts';
 import { startOpen } from '../src/campaign/staff';
 import { saveGame } from '../src/campaign/save';
-import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
+import { beginHuman, formationOffers, humanUp, stepAI } from '../src/campaign/turn';
 import type { Corps, Game, Region } from '../src/campaign/types';
+import { garrison, whyNotTakeField } from '../src/campaign/siege';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 
 type Call = (...a: unknown[]) => any;
@@ -158,9 +158,10 @@ describe('a staging island for a hop', () => {
 
 describe("the islands' table and its stand-ins flagged G (the design director, 14:28Z, 25 November 2026, (c))", () => {
   it("rates a stand-in that is a guess as low in its confidence column, never high, while its G stands", () => {
-    const text = readFileSync(new URL('../data/campaign/tables/islands-draft.csv', import.meta.url), 'utf8');
+    type Glob = (pattern: string, options: { eager: true; as: 'raw' }) => Record<string, string>;
+    const text = Object.values((import.meta as unknown as { glob: Glob }).glob('../data/campaign/tables/islands-draft.csv', { eager: true, as: 'raw' }))[0];
     // (A small reader of the table's own form: commas, and quoted fields that hold commas.)
-    const rows = text.split('\n').filter((l) => l.trim()).map((l) => {
+    const rows = text.split('\n').filter((l: string) => l.trim()).map((l: string) => {
       const out: string[] = []; let cur = '', q = false;
       for (let i = 0; i < l.length; i++) {
         const ch = l[i];
@@ -176,4 +177,76 @@ describe("the islands' table and its stand-ins flagged G (the design director, 1
     for (const [name, conf] of flagged) expect(conf, name).not.toBe('high');
     expect(Object.fromEntries(flagged)).toEqual({ Formosa: 'medium', Singapore: 'low' });
   });
+});
+
+describe("a garrison that would take the field on an island over its room", () => {
+  it("is told the island's room in men, not of another corps (the section 3 line, the sceptic's lean until the UI director rules)", () => {
+    const g = war('USA');
+    const wake = at(g, 'Wake');
+    clear(g, wake);
+    const inside = corps(g, 'USA', 'Defense Battalion', wake);
+    expect(garrison(g, inside)).toBe(true);
+    // (Drafts and a corps put down by hand put the field over the room: 7,500 men there beside the 15,000 inside.)
+    corps(g, 'USA', 'Marines', wake, 1, 0.5);
+    expect(whyNotTakeField(g, inside)).toBe('Wake has room for one division, about 15,000 men, and 8,000 of yours are there: only 7,000 more can go, and you are sending 15,000.');
+    // Ground that is no island says what it always said.
+    expect(whyNotTakeField(g, { ...inside, town: undefined } as Corps)).toBe('It is not in a garrison.');
+  }, 300000);
+});
+
+describe("a swap onto an island with fewer than 1,000 men's room left after it", () => {
+  it("says the island is full, counting the men who stay, and promises no room that is not there (the section 3 full line with the swap's change; the sceptic's lean until the UI director rules)", () => {
+    const g = war('JAP');
+    const formosa = at(g, 'Formosa'), taihoku = at(g, 'Taihoku');
+    clear(g, formosa);
+    const stays = corps(g, 'JAP', 'Stays', formosa, 3, 44500 / 45000);
+    const out = corps(g, 'JAP', 'Goes Out', formosa, 1, 400 / 15000);
+    const c = corps(g, 'JAP', 'Thousand Men', taihoku, 1, 1000 / 15000);
+    expect(whyNoSwap(g, c, out)).toBe('Formosa is full: it has room for about 45,000 men and 45,000 of yours stay there after the swap.');
+    // With 1,000 or more left after it, the section 3 line with "stay there after the swap", as built.
+    stays.str = 43000 / 45000; c.str = 3000 / 15000; out.str = 100 / 15000;
+    expect(whyNoSwap(g, c, out)).toBe('Formosa has room for 3 divisions, about 45,000 men, and 43,000 of yours stay there after the swap: only 2,000 more can go, and Thousand Men has 3,000.');
+  }, 300000);
+});
+
+describe("an offered formation whose island has no room for it (the offers page, FORMATIONS OFFERED)", () => {
+  it("is told the island's room in men, the section 3 line for the row's own men (the words sceptic's lean until the UI director rules)", () => {
+    const g = war('JAP');
+    declareWar(g, 'JAP', 'USA');
+    // (By hand: the play start has no offers, and the row is opened as its month would open it.)
+    g.flags.offers = 1;
+    g.flags['asked:169'] = g.turn;
+    const palau = at(g, 'Palau');
+    const before = formationOffers(g).find((o) => o.id === 169)!;
+    expect(before.name).toBe('Sakaguchi Detachment (56th Mixed Infantry Group)');
+    clear(g, palau);
+    corps(g, 'JAP', 'Fill Palau', palau, 2);
+    for (const j of palau.nb) { const r = g.regions[j]; if (r.ctrl === 'JAP') corps(g, 'JAP', `Fill ${r.name}`, r, 5); }
+    const o = formationOffers(g).find((x) => x.id === 169)!;
+    expect(o.why).toBe('Palau is full: it has room for about 30,000 men and 30,000 of yours are there.');
+    // Part full: the room, those there, what more can go, and the row's own men.
+    palau.units.find((u) => u.name === 'Fill Palau')!.str = 0.9;
+    expect(formationOffers(g).find((x) => x.id === 169)!.why).toBe('Palau has room for 2 divisions, about 30,000 men, and 27,000 of yours are there: only 3,000 more can go, and you are sending 5,000.');
+  }, 300000);
+});
+
+describe("a group march onto an island that takes some of it", () => {
+  it("tells the corps that stayed for the island's room the island's line for their own men; refused whole, the group's (the words sceptic's lean until the UI director rules)", () => {
+    const g = war('USA');
+    const pearl = at(g, 'Pearl Harbor'), hon = at(g, 'Honolulu');
+    expect(pearl.nb).toContain(hon.id);
+    clear(g, pearl);
+    // (26,000 of his there, inside the town, where no corps changes places with them: 4,000 more can go, Pearl Harbor's
+    // room being two divisions, 30,000 men.)
+    expect(garrison(g, corps(g, 'USA', 'There', pearl, 2, 26000 / 30000))).toBe(true);
+    const small = corps(g, 'USA', 'Small First', hon, 1, 4000 / 15000), second = corps(g, 'USA', 'Second', hon), third = corps(g, 'USA', 'Third', hon);
+    TC().load(saveGame(g));
+    const whole = TC().move([second.id, third.id], pearl.id) as { moved: unknown[]; note: string };
+    expect(whole.moved).toEqual([]);
+    expect(whole.note).toBe('Pearl Harbor has room for 2 divisions, about 30,000 men, and 26,000 of yours are there: only 4,000 more can go, and you are sending 30,000.');
+    TC().load(saveGame(g));
+    const part = TC().move([small.id, second.id], pearl.id) as { moved: { id: number }[]; note: string };
+    expect(part.moved.map((x) => x.id)).toEqual([small.id]);
+    expect(part.note).toBe('Pearl Harbor is full: it has room for about 30,000 men and 30,000 of yours are there.');
+  }, 300000);
 });

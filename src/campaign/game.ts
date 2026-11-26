@@ -5494,7 +5494,14 @@ function offerView(g: Game, nat: string, row: any[], i: number): RowOffer {
     if (o.cut && !(Array.isArray(o.cut) ? (o.cut as string[]) : [o.cut as string]).some((nm) => rowLanded(g, nm))) return 'The formation its men are released from has not been formed.';
     if (old) return null;
     if (!reg) return `There is nowhere for it to form: ${posting?.name ?? row[5]} is not yours, and you hold no harbour on that ground, nor your capital.`;
-    if (!o.join && !rowFits(g, nat, reg, row, o)) return `There is no room for another corps at ${reg.name}, or near it.`;
+    if (!o.join && !rowFits(g, nat, reg, row, o)) {
+      // (On an island at stops 3 to 5 the row is refused for its men: the section 3 line for the row's own men, the
+      // words sceptic's lean of 26 November 2026, laid until the UI director rules on this form. The row is no corps on
+      // the board yet, so it is never told to split. A row made from corps on the board, and other ground: the old line.)
+      const isle = !stopDef(g).book && !rowOut(g, nat, o).length && islandOf(g, reg)
+        ? roomRefusal(g, reg, rowCorps(nat, row, o).map((c) => ({ ...c, name: row[2], dead: true }) as Corps)) : null;
+      return isle ?? `There is no room for another corps at ${reg.name}, or near it.`;
+    }
     return null;
   })();
   // His rows still to come at this stop of the dial that are made out of this formation: cut from it, or made from

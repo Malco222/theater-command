@@ -159,7 +159,7 @@ import { chanceOn, headline, offersOn, whyNoSwap } from '../../../src/campaign/g
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
 import { CHART_NOW, answersOf, attachWorld, closedCountry, motherLine, patronOf } from '../../../src/campaign/world';
-import { islandOf, roomSays, swapRefusal } from '../../../src/campaign/islands';
+import { islandOf, roomRefusal, roomSays, swapRefusal } from '../../../src/campaign/islands';
 import { FAR_PATHS } from '../../../src/campaign/far-rows';
 // (Release 2, Japan and the Pacific: ruling 201's two lines, read where the war between the alliances goes on after a great power's fall.)
 import { warGoesOn } from '../../../src/campaign/domination';
@@ -2970,6 +2970,20 @@ function move(ids: number[], to: number, army = '', armyIds: number[] = []) {
     const n = orderMove(s, c, to);
     if (n > 0) moved.push({ id: c.id, path: path.slice(0, n) });
     else trySwap(c);
+  }
+  // (An island counted in men often takes some corps of a group and not others. Those that stayed next door for the
+  // island's room are told the island's line for themselves, what they send being their own men; refused whole, the
+  // group is told it once for all of them. The words sceptic's lean of 26 November 2026, laid until the UI director
+  // rules: islands.ts roomRefusal, the UI director's section 3 of 15:02Z. Other ground: as it always was.)
+  const isleTo = s.regions[to];
+  if (isleTo && islandOf(s, isleTo)) {
+    try {
+      const stayed = sent.filter((c) => c.reg !== to && !moved.some((x) => x.id === c.id) && !kept.includes(c) && s.regions[c.reg].nb.includes(to) && whyNoRoom(s, c, isleTo) !== null);
+      if (stayed.length && moved.length) {
+        const line = roomRefusal(s, isleTo, stayed);
+        if (line) note = note ? `${note} ${line}` : line;
+      } else if (stayed.length > 1 && !moved.length && note === whyNoRoom(s, stayed[0], isleTo)) note = roomRefusal(s, isleTo, stayed) ?? note;
+    } catch { /* the march's own sentence stands */ }
   }
   if (kept.length) {
     // One sentence answers the press, of everyone whose march is kept. (a) It set off this month and goes on; (b) it

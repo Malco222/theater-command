@@ -34,7 +34,7 @@ import { storyFallen } from './stories';
 import { TOWNS, townName, townSize, type TownSize } from './towns';
 import { PRIZES, harbourOpen, prizesOnLoss, willBurn } from './prizes';
 import { cityHit } from './repairs';
-import { fits, roomLeft } from './islands';
+import { fits, roomLeft, roomRefusal } from './islands';
 import { KIND, MEN_PER_DIV, type BattleReport, type Corps, type Game, type Region } from './types';
 import { seaWhatList } from './sea-words';
 import { flagName } from './flagnames';
@@ -748,7 +748,9 @@ export function whyNotTakeField(g: Game, c: Corps): string | null {
   const here = r.units.filter((u) => allied(g, u.nat, c.nat) && u.kind !== 'eng' && !roomless(g, u)).length;
   // (On an island of the Pacific the corps inside the town are counted in the island's room already, this one among
   // them, so its coming out asks no new place: islands.ts `fits`, which counts its men once, as going.)
-  if (!fits(g, r, c.nat, [c], { rows: here })) return `There is no room in the field at ${r.name} for another corps.`;
+  // (Refused there, an island says its own section 3 line, in men: the UI director's marks of 15:02Z 25 November 2026,
+  // laid as the words sceptic leans until she rules on this form, 26 November 2026. Other ground: the old line.)
+  if (!fits(g, r, c.nat, [c], { rows: here })) return roomRefusal(g, r, [c]) ?? `There is no room in the field at ${r.name} for another corps.`;
   return null;
 }
 
