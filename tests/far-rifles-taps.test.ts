@@ -256,8 +256,10 @@ describe('the draw at the orders', () => {
     const capName = g.regions[n.capital].name;
     const ka = addCorps(g, 'CHN', 'Kept corps', 'inf', 2, capName, {}), kc = addCorps(g, 'CHN', 'Folded corps', 'inf', 2, capName, {});
     ka.str = kc.str = 0.2;
-    // (The kept corps armed to its strength, so nothing the fold moves passes its full and the store stays as it was.)
+    // (The kept corps armed to its strength, so nothing the fold moves passes its full, and the folded corps too, so it
+    // has no worn part to send to the store (her ruling 1 of 06:04Z, 26 November 2026): the store stays as it was.)
     g.flags[`rfa:${ka.id}`] = 0.2;
+    g.flags[`rfa:${kc.id}`] = 0.2;
     expect(foldCorps(g, ka, kc)).toBe(true);
     expect(offer(`cadre:${kc.id}`).rifles).toBe(2 * PER);
     expect(offer(`cadre:${kc.id}`).why).toBe(noRifles(g, 'CHN', 2));
@@ -726,7 +728,9 @@ describe('the armed level', () => {
     expect(foldCorps(g, c, d)).toBe(true);
     expect(c.str).toBeCloseTo(0.4, 12);
     expect(g.flags[`rfa:${c.id}`]).toBeCloseTo(0.7, 12);
-    expect(stock(g)).toBe(1);
+    // The emptied corps stood at its full level (no flag) and strength 0.2: its worn part, (1 - 0.2) x 2 = 1.6, the
+    // rifles of the men it lost in battle, goes to the store (her ruling 1 of 06:04Z, 26 November 2026).
+    expect(stock(g) - 1).toBeCloseTo(1.6, 12);
   });
 
   it('15. (the ledger) a fold into a worn corps loses no rifles', () => {
@@ -763,15 +767,25 @@ describe('the armed level', () => {
     expect(a.str).toBe(1);
     expect(`rfa:${a.id}` in g.flags).toBe(false);
     expect(menLeft(g, 'CHN') - m).toBeCloseTo(0.4, 12);
-    expect(stock(g) - 1).toBeCloseTo(0.4 + 0.8, 12);
-    expect(Math.round((stock(g) - 1) * PER)).toBe(Math.round(1.2 * PER));
-    // Nothing left over and nothing past the full: nothing comes back.
+    // And the folded corps' worn part, (1 - 0.6) x 2 = 0.8 at its full level, goes to the store too (her ruling 1 of
+    // 06:04Z, 26 November 2026): 0.4 + 0.8 + 0.8.
+    expect(stock(g) - 1).toBeCloseTo(0.4 + 0.8 + 0.8, 12);
+    expect(Math.round((stock(g) - 1) * PER)).toBe(Math.round(2 * PER));
+    // Nothing left over and nothing past the full: only the folded corps' worn part comes back, (1 - 0.3) x 2 = 1.4.
     const c = addCorps(g, 'CHN', 'A third corps', 'inf', 2, capName, {}), d = addCorps(g, 'CHN', 'A fourth corps', 'inf', 2, capName, {});
     c.str = d.str = 0.3;
     g.flags[`rfa:${c.id}`] = 0.3;
     const s = stock(g);
     expect(foldCorps(g, c, d)).toBe(true);
-    expect(stock(g)).toBe(s);
+    expect(stock(g) - s).toBeCloseTo(1.4, 12);
+    // Folded at a level equal to its strength, it has no worn part: nothing comes back.
+    const c2 = addCorps(g, 'CHN', 'A fifth corps', 'inf', 2, capName, {}), d2 = addCorps(g, 'CHN', 'A sixth corps', 'inf', 2, capName, {});
+    c2.str = d2.str = 0.3;
+    g.flags[`rfa:${c2.id}`] = 0.3;
+    g.flags[`rfa:${d2.id}`] = 0.3;
+    const s2 = stock(g);
+    expect(foldCorps(g, c2, d2)).toBe(true);
+    expect(stock(g)).toBe(s2);
     // A nation with no row: its men go home as today, and no shelf is written.
     const j = g.nations.JAP, jName = g.regions[j.capital].name;
     const e = addCorps(g, 'JAP', 'Kept corps', 'inf', 2, jName, {}), f = addCorps(g, 'JAP', 'Folded corps', 'inf', 2, jName, {});
@@ -796,6 +810,44 @@ describe('the armed level', () => {
     expect(a.str).toBe(1);
     expect(`rfa:${a.id}` in g.flags).toBe(false);
     expect(stock(g) - 1).toBeCloseTo(0.4, 12);
+  });
+
+  it("15. (her ruling 1 of 06:04Z) a fold of two worn corps sends the emptied corps' worn rifles to the store: the ledger closes to the rifle", () => {
+    const g = grand('CHN');
+    const capName = g.regions[g.nations.CHN.capital].name;
+    store(g, 1);
+    men(g);
+    /** Whole rifles, at China's 21,300 to a division's worth. */
+    const rifles = (divs: number): number => Math.round(divs * PER);
+    // Both corps worn: each holds rifles above its strength (the rifles of men lost in battle).
+    // (a) Kept: level 0.7 at 0.5. Folded: level 0.8 at 0.4. 2 divisions each. 0.8 moves in (fill 1.8 of 2), none is
+    //     left over; the kept level 0.7 + 0.8 / 2 = 1.1 passes its full by 0.1 x 2 = 0.2; the folded corps' worn part
+    //     is (0.8 - 0.4) x 2 = 0.8. Held before 0.7 x 2 + 0.8 x 2 = 3.0 = 63,900 rifles; after, the kept corps 1 x 2 =
+    //     2.0 = 42,600, and the store is given 0.2 + 0.8 = 1.0 = 21,300.
+    const a = addCorps(g, 'CHN', 'Kept corps', 'inf', 2, capName, {}), b = addCorps(g, 'CHN', 'Folded corps', 'inf', 2, capName, {});
+    a.str = 0.5; g.flags[`rfa:${a.id}`] = 0.7;
+    b.str = 0.4; g.flags[`rfa:${b.id}`] = 0.8;
+    const before = levelOf(g, a) * a.divs + levelOf(g, b) * b.divs, s0 = stock(g);
+    expect(rifles(before)).toBe(63900);
+    expect(foldCorps(g, a, b)).toBe(true);
+    expect(a.str).toBeCloseTo(0.9, 12);
+    expect(`rfa:${a.id}` in g.flags).toBe(false);
+    expect(rifles(levelOf(g, a) * a.divs)).toBe(42600);
+    expect(rifles(stock(g) - s0)).toBe(21300);
+    expect(rifles(levelOf(g, a) * a.divs) + rifles(stock(g) - s0)).toBe(rifles(before));
+    // (b) With men left over: kept level 0.9 at 0.6, folded level 0.9 at 0.5, 2 divisions each. 0.8 moves in, 0.2 is
+    //     left over; the kept level 0.9 + 0.4 = 1.3 passes its full by 0.3 x 2 = 0.6; the worn part is 0.4 x 2 = 0.8.
+    //     Held before 3.6 = 76,680 rifles; after 2.0 = 42,600, and the store is given 0.2 + 0.6 + 0.8 = 1.6 = 34,080.
+    const c = addCorps(g, 'CHN', 'A third corps', 'inf', 2, capName, {}), d = addCorps(g, 'CHN', 'A fourth corps', 'inf', 2, capName, {});
+    c.str = 0.6; g.flags[`rfa:${c.id}`] = 0.9;
+    d.str = 0.5; g.flags[`rfa:${d.id}`] = 0.9;
+    const before2 = levelOf(g, c) * c.divs + levelOf(g, d) * d.divs, s1 = stock(g);
+    expect(rifles(before2)).toBe(76680);
+    expect(foldCorps(g, c, d)).toBe(true);
+    expect(c.str).toBe(1);
+    expect(rifles(levelOf(g, c) * c.divs)).toBe(42600);
+    expect(rifles(stock(g) - s1)).toBe(34080);
+    expect(levelOf(g, c) * c.divs + (stock(g) - s1)).toBeCloseTo(before2, 12);
   });
 
   it('15. (the ledger over a chain) fold, break up, rejoin, fold: the rifles held by corps plus the store change by nothing', () => {

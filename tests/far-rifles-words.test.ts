@@ -338,7 +338,9 @@ describe('the second read: the fold', () => {
     const { a, b } = two(g, 'CHN', 0.3, 0.3);
     const s = stockOf(g, 'CHN', 'rifles');
     expect(foldCorps(g, a, b)).toBe(true);
-    expect(stockOf(g, 'CHN', 'rifles') - s).toBeCloseTo(0.6, 12);
+    // (And the folded corps, at its full level and strength 0.3, sends its worn part to the store, (1 - 0.3) x 2 = 1.4:
+    // the design director's ruling 1 of 06:04Z, 26 November 2026. No men go back, so the words are as before.)
+    expect(stockOf(g, 'CHN', 'rifles') - s).toBeCloseTo(0.6 + 1.4, 12);
     expect(last(g)).toBe('Folded corps is folded into Kept corps at Chungking: about 80,000 men in one corps. Its cadre has gone home and can be raised again from the arsenal.');
     // Men sent back that round to no thousand (67 men): said as none.
     const h = grand();
