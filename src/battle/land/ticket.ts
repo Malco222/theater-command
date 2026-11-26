@@ -157,7 +157,9 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
     // game.ts): the field lays the river before those, and no others.
     att: { ...sideOf(g, attNat, going, (c) => corpsBase(g, c) * KIND[c.kind].atk, crossing ? (c) => !!riverBetween(g, c.reg, target.id) : undefined), ...onCall(cardAir?.att) },
     def: { ...withGuard(g, target, a.guard ?? 0, a.defenders.reduce((s, c) => s + weighDef(c), 0), sideOf(g, defNat, a.defenders, weighDef)), ...onCall(cardAir?.def) },
-    reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice), ...(a.luck ? { luck: [a.luck[0], a.luck[1]] as [number, number] } : {}), ...(band.exact ? {} : { seen: band.mid }) },
+    reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice), ...(a.luck ? { luck: [a.luck[0], a.luck[1]] as [number, number] } : {}), ...(band.exact ? {} : { seen: band.mid }), ...(a.teamFire ? { teamFire: { att: a.teamFire.att, def: a.teamFire.def } } : {}) },
+    // (Support teams on the card, release 2 behind `teams`: the card's term for them rides with the reckoning, so the field
+    // lays its blocks at the power before it: Reckoning.teamFire, read by sim.ts only when own-team blocks are on the ticket.)
     lines: a.lines, limit: LAND.limit,
     // The attacks already made on this place this month by this side: the same ground, a fresh day's luck.
     attempt: g.reports.filter((x) => x.turn === g.turn && x.region === target.id && x.attNat === attNat).length,

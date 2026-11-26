@@ -80,6 +80,13 @@ export interface Reckoning {
    * the staff's band, where its bar stands. Absent, the card printed 'odds' itself.
    */
   seen?: number;
+  /**
+   * Support teams (release 2, behind `teams`): what the card multiplied each side's strength by for its own machine-gun
+   * and mortar teams (Assessment.teamFire in game.ts; campaign/teamfire.ts), already in A, D and odds. The field lays its
+   * blocks at the power before it, since the teams on the field are that term: laid at the odds after it, the field
+   * would take it off twice. Absent with the switch off: the field is laid at A and A / odds, as it always was.
+   */
+  teamFire?: { att: number; def: number };
   /** The field spread's draw (release 2, stage.json 'spread', bench-only): absent unless the switch is on. */
   spread?: SpreadReckoning;
 }

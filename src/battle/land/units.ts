@@ -102,7 +102,10 @@ export interface LandUnit extends UnitBase {
   /** Seconds since it was last hit, and since it last had an enemy near (for a rally). */
   still: number;
   clear: number;
-  /** Struck from its front this tick by someone: it holds its facing rather than turn. */
+  /**
+   * Struck from its front this tick by someone: it holds its facing rather than turn. With the rules' faceRule on
+   * (Units face the fire that hurts most, release 2): only where the enemy whose blow cost it most this tick is in front.
+   */
   pinned: boolean;
   /** When it was last told it was hit on the flank, so the dispatch is not repeated every tick. */
   flankedAt: number;

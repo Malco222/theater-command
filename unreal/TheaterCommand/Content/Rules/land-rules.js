@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 805cbabe9 2026-11-25. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 2bb44dd91 2026-11-25. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -9940,6 +9940,30 @@
        * A battle with no team block on the field is the same on or off. Off unless whoever opens the field turns it on.
        */
       __publicField(this, "teamsRule", false);
+      /**
+       * Units face the fire that hurts most (release 2, the Battle rules card's `facing`, off; the design director's ruling
+       * of 25 November 2026, 21:54Z, on the ground thread's trace of two cities).
+       *
+       * Off, as it always was: any blow that lands on a block's front holds it for the tick ("face what it is fighting,
+       * unless held by an enemy in front"), and a held block may not turn to meet another enemy. Any striker, at any range,
+       * however light the blow and whatever the block's cover: so a machine gun a kilometre off held a block in a building
+       * to its facing while a line came in on its side, where blows count half as much again. Ruled a fault: the hold
+       * read no cover.
+       *
+       * On: a block faces what costs it most. Of the enemies that struck it this tick, the one whose blow costs it most
+       * holds it: in front, the block stands as it faces; on its side or behind, the block turns to meet it. A blow a
+       * building's cover has cut low holds it only while nothing hurts it more. No new figure: the cost is the harm the
+       * fight already reckons, after cover. It is weighed as it would land face on (the facing's own weight and the tick's
+       * luck taken out), so the costliest enemy is the same one whichever way the block faces and two enemies of about
+       * equal weight never turn it back and forth: facing the heavier is what costs it least. Struck by no one, it faces
+       * what it is fighting, as before.
+       *
+       * It moves every battle (guns hold too), so it has its own row and its own gate, and `teams` goes on only with it on
+       * (live.ts). Off unless whoever opens the field turns it on.
+       */
+      __publicField(this, "faceRule", false);
+      /** faceRule: of the enemies that struck each block this tick, the costliest, what its blow cost face on, and whether it landed on the front. */
+      __publicField(this, "costliest", /* @__PURE__ */ new Map());
       /** Each own team block's parent force (own-teams.ts ownTeamParents), by the forces' ids: read once from the ticket. */
       __publicField(this, "teamParent");
       /** The computer's tank blocks going round to a tank block's flank (ai.ts): where to, at whom, since when. */
@@ -10167,7 +10191,8 @@
       this.ticket = ticket;
       this.rng = new Rng(ticket.attempt ? hashString(`field-run:${ticket.seed}:${ticket.attempt}`) : ticket.seed);
       this.style = { att: styleFor(ticket, "att"), def: styleFor(ticket, "def") };
-      const A = ticket.reckoning.A, D2 = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds);
+      const priced = ticket.reckoning.teamFire && [...ticket.att.forces, ...ticket.def.forces].some(isOwnTeam) ? ticket.reckoning.teamFire : void 0;
+      const A = ticket.reckoning.A / (priced ? Math.max(1e-6, priced.att) : 1), D2 = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds) / (priced ? Math.max(1e-6, priced.def) : 1);
       this.power = { att: A, def: D2 };
       this.teamParent = ownTeamParents(ticket);
       const att = makeBlocks("att", ticket.att, A, 1, void 0, ticket.turn);
@@ -12436,6 +12461,7 @@
           u.clear += DT;
         }
       }
+      if (this.costliest.size) this.costliest.clear();
       const hurt = /* @__PURE__ */ new Map();
       const kept = this.airOn.att || this.airOn.def ? /* @__PURE__ */ new Map() : null;
       const unseen = this.pierce ? new Set(this.units.filter((e) => e.hid).map((e) => e.id)) : null;
@@ -12472,6 +12498,7 @@
           continue;
         }
         const blow = this.blow(u, t);
+        const struck = blow.dmg;
         if (this.phones && this.wires.length) this.wireBlow(u, t);
         if (blind) {
           const F = LAND.hide.search;
@@ -12491,13 +12518,19 @@
         h.from.push([u, blow.dmg]);
         if (blow.rest && blow.rest.part >= 1) h.from.pop();
         hurt.set(t.id, h);
-        if (blow.front) t.pinned = true;
+        if (this.faceRule) {
+          const cost = struck > 0 ? blow.faceOn * (blow.dmg / struck) : 0, top = this.costliest.get(t.id);
+          if (!top || cost > top.cost) this.costliest.set(t.id, { by: u.id, cost, front: blow.front });
+        } else if (blow.front) t.pinned = true;
         if (u.team === "snp" && !blind) this.sniped(u, t);
         if (blow.aspect !== "front" && this.t - t.flankedAt > 20) {
           t.flankedAt = this.t;
           if (t.side === "att" ? this.ticket.att.human : this.ticket.def.human) this.say({ what: "flanked", unit: t.id, side: t.side, text: `${this.named(t)} is hit from the ${blow.aspect === "rear" ? "rear" : "flank"}.`, x: t.x, y: t.y });
         }
         if (blow.rest) this.splitFire(u, blow.rest, hurt, kept, unseen);
+      }
+      if (this.faceRule) {
+        for (const [id, top] of this.costliest) if (top.front) this.unit(id).pinned = true;
       }
       if (this.teamsRule) {
         for (const h of hurt.values()) if (h.team > 0 && h.dmg > 0) h.nerve = ((h.dmg - h.team) * h.nerve + h.teamNerve) / h.dmg;
@@ -12990,7 +13023,8 @@
       const aspect = rearguard || pair ? "front" : aspectOf(t.face, t.x, t.y, u.x, u.y);
       const [am, nm] = LAND.aspect[aspect];
       let amx = 1;
-      if (this.measured && t.kind === "arm" && (u.kind === "arm" || u.kind === "art" && !u.team && this.gap(u, t) < gunsOf(u).closeAt)) amx = this.armourAt(u, t, faceOfAspect(aspect), this.gap(u, t)) ?? 1;
+      const plate = this.measured && t.kind === "arm" && (u.kind === "arm" || u.kind === "art" && !u.team && this.gap(u, t) < gunsOf(u).closeAt);
+      if (plate) amx = this.armourAt(u, t, faceOfAspect(aspect), this.gap(u, t)) ?? 1;
       const ground = this.groundTake(t, tAt);
       let take = ground;
       if (t.kind === "arm" && LAND.alone.on) take *= this.alone(t, u);
@@ -13005,12 +13039,17 @@
       const f = this.lean === void 0 ? this.fortune : this.fortune * this.lean;
       const dmg = p * am * amx * take * luck * (u.side === "att" ? f : 1 / f) * DT;
       const parts = this.led ? { parts: { aspect, nm, fire: fireN, ambush: ambushN } } : {};
+      let faceOn = 0;
+      if (this.faceRule) {
+        const plateOn = plate && aspect !== "front" ? this.armourAt(u, t, "front", this.gap(u, t)) ?? 1 : amx;
+        faceOn = p * LAND.aspect.front[0] * plateOn * take * (u.side === "att" ? f : 1 / f) * DT;
+      }
       if (this.pierce && (spill || t.kind === "arm")) {
         const part = spill ? spill.part : this.pierceShare(u, t);
         const rest = !spill && part < 1 && (u.team || LAND.pierce.foot.includes(u.kind)) ? { roll: roll3, part: 1 - part } : void 0;
-        return { dmg: dmg * part, nerve: nm * nerveMul, front: aspect === "front", aspect, ground, screen, ...parts, ...rest ? { rest } : {} };
+        return { dmg: dmg * part, nerve: nm * nerveMul, front: aspect === "front", aspect, ground, screen, faceOn: faceOn * part, ...parts, ...rest ? { rest } : {} };
       }
-      return { dmg, nerve: nm * nerveMul, front: aspect === "front", aspect, ground, screen, ...parts };
+      return { dmg, nerve: nm * nerveMul, front: aspect === "front", aspect, ground, screen, faceOn, ...parts };
     }
     /**
      * 'from' is who struck it this tick and how hard. Each model it loses goes to the one of them owed most (LandUnit.owed:
@@ -13230,9 +13269,11 @@
         u.speed = 0;
         const e = u.engaged !== void 0 ? this.unit(u.engaged) : void 0;
         let want = u.keepFace;
-        if (e && !u.pinned) {
-          const off2 = Math.abs(turn(u.keepFace ?? u.face, bearing(u.x, u.y, e.x, e.y)));
-          if (u.keepFace === null || off2 > Math.PI / 3) want = bearing(u.x, u.y, e.x, e.y);
+        const top2 = this.faceRule ? this.costliest.get(u.id) : void 0, by2 = top2 ? this.unit(top2.by) : void 0;
+        const meet = by2 && live2(by2) ? by2 : e;
+        if (meet && !u.pinned) {
+          const off2 = Math.abs(turn(u.keepFace ?? u.face, bearing(u.x, u.y, meet.x, meet.y)));
+          if (u.keepFace === null || off2 > Math.PI / 3) want = bearing(u.x, u.y, meet.x, meet.y);
         }
         if (u.order?.kind === "move" && !u.path.length) {
           u.order = null;
@@ -15170,7 +15211,8 @@
       if (opts.bocage) sim.bocage = true;
       if (opts.phones !== false) sim.phones = true;
       if (opts.bearers !== false) sim.bearers = true;
-      if (opts.teams === true) sim.teamsRule = true;
+      if (opts.facing === true) sim.faceRule = true;
+      if (opts.teams === true && opts.facing === true) sim.teamsRule = true;
       if (opts.blast === true) sim.blast = true;
       if (opts.escort === true) sim.escort = true;
       if (opts.pierce === true) sim.pierce = true;
@@ -15532,6 +15574,7 @@
         phones: opts?.phones !== false,
         bearers: opts?.bearers !== false,
         teams: opts?.teams === true,
+        facing: opts?.facing === true,
         patrol: opts?.patrol !== false,
         captured: opts?.captured !== false,
         worn: opts?.worn !== false,
@@ -15567,7 +15610,8 @@
      * landStart. Its result (the last delta's over) goes back to the campaign's TC.battleSettleLand(ids, to, over).
      */
     landStartTicket(ticketOrLook, opts) {
-      if (opts?.teams === true) ticketOrLook = ownTeamsLook(ticketOrLook);
+      const sw = opts;
+      if (sw?.teams === true && sw?.facing === true) ticketOrLook = ownTeamsLook(ticketOrLook);
       const look = "ticket" in ticketOrLook && ticketOrLook.ticket ? ticketOrLook : null;
       const ticket = look ? look.ticket : ticketOrLook;
       const o = { ...look?.live ?? {}, ...opts ?? {} };
@@ -15589,6 +15633,7 @@
         phones: o.phones !== false,
         bearers: o.bearers !== false,
         teams: o.teams === true,
+        facing: o.facing === true,
         patrol: o.patrol !== false,
         captured: o.captured !== false,
         worn: o.worn !== false,
