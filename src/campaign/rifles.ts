@@ -150,9 +150,14 @@ export function openRifles(g: Game): void {
  * divisions, read before the fold touches it), goes back to the store too: her ruling 1 of 06:04Z, 26 November 2026,
  * "the emptied corps' worn rifles go to the store like the kept corps' (a fold breaks no corps; a rifle is never lost
  * by moving men)". So the rifles the two corps held before are the kept corps' after plus what the store is given.
+ * A row that only counts (binds: false) counts a fold exactly so: her ruling 2 of 06:04Z, "A counting-only row counts
+ * exactly as a binding row (leftover plus what passes the full); binds only decides whether the stock refuses orders".
+ * (Its corps carry no level of their own, as its drafts are not held to one: each reads its full, so the moved men's
+ * rifles all pass the kept corps' full and the emptied corps' worn part is its full above its strength. No level flag
+ * is written for it.)
  */
 export function riflesFold(g: Game, keep: Corps, gone: Corps, from: number): void {
-  if (!binds(g, keep.nat)) return;
+  if (!carries(g, keep.nat)) return;
   const worn = Math.max(0, levelOf(g, gone) - gone.str) * gone.divs;
   if (from > 0 && keep.divs > 0) {
     const full = keep.full ?? 1, lvl = levelOf(g, keep) + from / keep.divs;

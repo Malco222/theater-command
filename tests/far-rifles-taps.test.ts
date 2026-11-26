@@ -468,6 +468,37 @@ describe('binds: false', () => {
     expect(a.save === b.save).toBe(true);
   }, 300_000);
 
+  it("9. (her ruling 2 of 06:04Z) a row that only counts counts a fold exactly as a binding row: the same figures on the same board", () => {
+    // The same board (seed 3) and the same two folds, once with Japan's row binding and once only counting: the store
+    // is given the same rifles to the last one, and the kept corps stand alike. (1) Two corps of 2 at 0.6: 2.0 (test 9
+    // above). (2) Two corps of 3, kept at 0.5 and folded at 0.3, at their full level: 1.5 + 0.9 fill 2.4 of 3 with
+    // none left over; 0.9 moves in and passes the kept corps' full (1 + 0.9 / 3 = 1.3: 0.3 x 3); the folded corps' worn
+    // part is (1 - 0.3) x 3 = 2.1. 0.9 + 2.1 = 3.0, which with the kept corps' 3.0 is the 6.0 the two held.
+    const fold = (bound: boolean): number[] => {
+      RIFLES.nations.JAP = { perDiv: 15000, refit: 0.05, binds: bound };
+      const off = rowsFrom((_g, x) => (x === 'JAP' ? { rifles: { start: 0 } } : undefined));
+      try {
+        const g = grand();
+        levyMen(g, 'JAP', 30);
+        expect(binds(g, 'JAP')).toBe(bound);
+        store(g, 1, 'JAP');
+        const at = g.regions[g.nations.JAP.capital].name;
+        const got: number[] = [];
+        for (const [d, ka, kb] of [[2, 0.6, 0.6], [3, 0.5, 0.3]] as const) {
+          const a = addCorps(g, 'JAP', 'Kept corps', 'inf', d, at, {}), b = addCorps(g, 'JAP', 'Folded corps', 'inf', d, at, {});
+          a.str = ka; b.str = kb;
+          const s = stock(g, 'JAP');
+          expect(foldCorps(g, a, b)).toBe(true);
+          got.push(Math.round((stock(g, 'JAP') - s) * 15000), Math.round(a.str * 1e9) / 1e9, levelOf(g, a));
+        }
+        return got;
+      } finally { delete RIFLES.nations.JAP; off(); }
+    };
+    const counts = fold(false), bound = fold(true);
+    expect(counts).toEqual(bound);
+    expect(counts).toEqual([30000, 1, 1, 45000, 0.8, 1]);
+  });
+
   it('9. (and only false frees it) a row that says nothing of binds binds', () => {
     lay('UK', { perDiv: 15000 });
     const g = grand();
@@ -490,13 +521,19 @@ describe('binds: false', () => {
     try { startPhase(g, 'JAP'); } finally { f.stop(); }
     expect(f.sum()).toBeGreaterThan(0.1);
     expect(10 - stock(g, 'JAP')).toBeCloseTo(0.05 * f.sum(), 9);
-    // Its fold: the leftover men's rifles go home (the director's answer 4, wherever the nation's orders draw).
+    // Its fold, counted exactly as a binding row counts it (the design director's ruling 2 of 06:04Z, 26 November 2026:
+    // "A counting-only row counts exactly as a binding row (leftover plus what passes the full)"). Two corps of 2 at
+    // 0.6, each at its full level (1): 1.2 + 1.2 fill the kept corps' 2 with 0.4 left over, whose rifles go home (the
+    // director's answer 4); the kept corps' level 1 + 0.8 / 2 = 1.4 passes its full by 0.4 x 2 = 0.8, which goes to the
+    // store (her 22:29Z); the folded corps' worn part, (1 - 0.6) x 2 = 0.8, goes too (her ruling 1 of 06:04Z).
+    // 0.4 + 0.8 + 0.8 = 2.0: the 4.0 the two corps held is the kept corps' 2.0 and the store's 2.0.
     store(g, 1, 'JAP');
     const capName = g.regions[g.nations.JAP.capital].name;
     const a = addCorps(g, 'JAP', 'Kept corps', 'inf', 2, capName, {}), b = addCorps(g, 'JAP', 'Folded corps', 'inf', 2, capName, {});
     a.str = b.str = 0.6;
     expect(foldCorps(g, a, b)).toBe(true);
-    expect(stock(g, 'JAP') - 1).toBeCloseTo(0.4, 12);
+    expect(stock(g, 'JAP') - 1).toBeCloseTo(0.4 + 0.8 + 0.8, 12);
+    expect(`rfa:${a.id}` in g.flags).toBe(false);
     // Its men test is today's, (1 - strength) for every corps, a corps whose full is below 1 included.
     a.full = 0.5;
     a.str = 0.3;
