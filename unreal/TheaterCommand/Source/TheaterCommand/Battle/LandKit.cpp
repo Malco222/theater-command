@@ -1898,7 +1898,9 @@ namespace LandKit
 			{
 				return "cross";
 			}
-			if (Nation == "USA" || Nation == "FFR")
+			// (the Free French wear the Americans' star as shipped; with every nation's mark, France's own roundel, on
+			// land as on the campaign map: the star is America's (the art director, 26 November 2026 13:09Z))
+			if (Nation == "USA" || (Nation == "FFR" && !bAllMarks))
 			{
 				return "white star";
 			}
@@ -1924,7 +1926,7 @@ namespace LandKit
 			{
 				return "army star";
 			}
-			if (Nation == "FRA" || (bAllMarks && Nation == "VIC"))
+			if (Nation == "FRA" || (bAllMarks && (Nation == "VIC" || Nation == "FFR")))
 			{
 				// (with every nation's mark, France's in the campaign map's order, red outside: the kit's first roundel
 				// has its colours the British way about, blue outside)
@@ -4037,7 +4039,9 @@ namespace LandKit
 						// reads, where her file's place is smaller (Poland's chequer is her place's own width). Where the
 						// plate takes neither, the place's own size: never left off.
 						const double FlashTrue = 0.46 / 2.0;
-						const bool bRingMark = (MarkKind.compare(0, 5, "mark ") == 0 && MarkKind != "mark POL") || (MarkKind == "red roundel" && D.Nation == "VIC");
+						// (France's, Vichy's and the Free French roundel take the one size rule with them: the art director,
+						// 13:09Z. The kind "red roundel" is worn only with every nation's mark.)
+						const bool bRingMark = (MarkKind.compare(0, 5, "mark ") == 0 && MarkKind != "mark POL") || MarkKind == "red roundel";
 						std::vector<double> Tries;
 						if (MarkKind == "red flash")
 						{
