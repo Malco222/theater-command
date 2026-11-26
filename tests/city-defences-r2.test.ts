@@ -3,6 +3,7 @@
 // the guns, by the guns' own rule, at 2 / 3 / 5, in a month, billed 0.015 a level, to level 3; and with the switch off
 // nothing of it is offered, billed, written or read.
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import optionsRows from '../unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignPlayerController.cpp?raw';
 import cd from '../data/campaign/citydefences.json';
 import { assessAir, fly, standingGuns, type AirAssess, type KnownDefence } from '../src/campaign/air';
 import { setRaidFog, weighKnown } from '../src/campaign/airfog';
@@ -2056,5 +2057,20 @@ describe('city defences in the bridge, the sub-switch off', () => {
     expect((TC().view() as BridgeView).regions.find((r) => r.id === ber)!.gl).toBe(1);
     TC().act('citydefencesrule:off');
     expect((TC().act('citydefencesrule:on') as { note: string }).note).toMatch(/up to three months, and the town's heavy guns fire on attacking tanks: if the town is stormed, one level of them is lost with it\.$/);
+  });
+});
+
+// The 3D game's Options row for this switch is a sentence in C++, and the note printed when the row is pressed is the
+// bridge's. The joiner's read of 26 Nov 2026 found the row still promising the guns against tanks, which are held
+// back under the sub-switch flakGround (off, no row), while the note left them out. One switch, one account of it.
+describe('city defences in the 3D Options: the row says what its own notes say', () => {
+  it('the row is the note with the switch on, then the note with it off, and no word of tanks', () => {
+    const row = /Add\(TEXT\("citydefencesrule"\), TEXT\("City defences"\), TEXT\("([^"]*)"\)/.exec(optionsRows);
+    expect(row).not.toBeNull();
+    TC().load(saveGame(britain(true)));
+    const off = (TC().act('citydefencesrule:off') as { note: string }).note;
+    const on = (TC().act('citydefencesrule:on') as { note: string }).note;
+    expect(row![1]).toBe(`${on} ${off} It can be switched in any month.`);
+    expect(row![1]).not.toMatch(/tank/);
   });
 });
