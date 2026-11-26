@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 183c5cc81 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6bc6f8fbf 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -76925,8 +76925,18 @@
           const d = this.gap(u, e);
           return d <= reach3 && this.sniperSees(u, e, d) ? e : null;
         };
-        const kept2 = (u.order?.kind === "attack" ? holds4(u.order.target) : null) ?? holds4(u.engaged);
-        if (kept2) return kept2;
+        const sent = u.order?.kind === "attack" ? holds4(u.order.target) : null;
+        if (sent) return sent;
+        const kept2 = holds4(u.engaged);
+        if (kept2) {
+          const k = this.sniperPick(kept2);
+          const better2 = this.units.some((e) => {
+            if (e === kept2 || e.side === u.side || !live3(e) || e.hid || this.sniperPick(e) >= k) return false;
+            const d = this.gap(u, e);
+            return d <= reach3 && this.sniperSees(u, e, d);
+          });
+          if (!better2) return kept2;
+        }
       }
       if (u.hid && u.order?.kind !== "attack" && !snp) reach3 = Math.min(reach3, this.ambushAt(u));
       let best = null, score = Infinity;
