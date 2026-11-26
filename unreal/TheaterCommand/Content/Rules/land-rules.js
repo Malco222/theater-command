@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 09a7113b 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of f17a01a8 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -13271,35 +13271,34 @@
      * every block of his that may be placed, in a line, two lines, a wedge or a column about the middle of where they
      * stand, facing the enemy, guns and support teams behind. Where a place of it is barred (water, a block that stays, a
      * fort), the whole formation is tried a little to every side, the nearest first, and stands on the first ground that
-     * takes all of it: never outside his own ground. Says where each was placed, or the block that cannot go and why.
+     * takes all of it: never outside his own ground. Says where each was placed and how far off the place worked out
+     * (off, metres), and those named that stay where they are (left: dug in, each with its name); or why none was:
+     * 'begun', 'nothing' (none of his to draw up), 'stay' (every one named stays where it is: id, who and why the
+     * first's), 'room' (his ground cannot hold them so).
      */
     drawUp(kind, ids = []) {
-      const none2 = (why, id) => ({ ok: false, why, ...id !== void 0 && id >= 0 ? { id, who: this.whoIs(id) } : {}, placed: [] });
+      const none2 = (no, why, id) => ({ ok: false, why, none: no, ...id !== void 0 && id >= 0 ? { id, who: this.whoIs(id) } : {}, placed: [], left: [], off: 0 });
       const room = this.sim.setupRoom();
-      if (!this.me || !this.sim.setup || !room) return none2("Not now: the battle has begun.");
+      if (!this.me || !this.sim.setup || !room) return none2("begun", "Not now: the battle has begun.");
       const me = this.me, mine = this.sim.units.filter((u) => u.side === me);
       const named = ids.length ? mine.filter((u) => ids.includes(u.id)) : mine;
       const us = named.filter((u) => this.sim.placeable(u) === null);
-      if (!us.length) return none2(named.length ? this.sim.placeable(named[0]) : "Nothing to draw up.", named[0]?.id);
+      const left = ids.length ? named.filter((u) => !us.includes(u)).map((u) => ({ id: u.id, who: this.sim.named(u), why: this.sim.placeable(u) })) : [];
+      if (!us.length) return left.length ? { ...none2("stay", left[0].why, left[0].id), left } : none2("nothing", "Nothing to draw up.");
       const dir = me === "att" ? 1 : -1, face = me === "att" ? 0 : Math.PI;
       const slots = drawnUp(kind, us.map((u) => ({ id: u.id, x: u.x, y: u.y, w: u.w, d: u.d, rear: u.kind === "art" })), dir, room);
-      if (!slots) return none2("Your ground has no room to draw them up so.");
+      if (!slots) return none2("room", "Your ground has no room to draw them up so.");
       const order = slots.map((s) => us.find((u) => u.id === s.id));
       const shifts = [];
       for (let dx = -DRAW.reach; dx <= DRAW.reach; dx += DRAW.step) for (let dy = -DRAW.reach; dy <= DRAW.reach; dy += DRAW.step) shifts.push([dx, dy]);
       shifts.sort((a, b) => Math.hypot(a[0], a[1]) - Math.hypot(b[0], b[1]) || a[1] - b[1] || a[0] - b[0]);
-      let first = null;
       for (const [dx, dy] of shifts) {
         const at = slots.map((s) => [s.x + dx, s.y + dy, face]);
-        const no = this.sim.placeManyWhy(order, at);
-        if (no) {
-          first ?? (first = no);
-          continue;
-        }
+        if (this.sim.placeManyWhy(order, at)) continue;
         const list = slots.map((s, i) => [s.id, at[i][0], at[i][1], face]);
-        return this.placeMany(list) ? { ok: true, why: "", placed: list } : none2("Not now: the battle has begun.");
+        return this.placeMany(list) ? { ok: true, why: "", placed: list, left, off: Math.hypot(dx, dy) } : none2("begun", "Not now: the battle has begun.");
       }
-      return none2(first?.why ?? "Your ground has no room to draw them up so.", first?.id);
+      return none2("room", "Your ground has no room to draw them up so.");
     }
     /** A block's name as the player reads it ('' for none). */
     whoIs(id) {
@@ -13340,6 +13339,18 @@
   function need() {
     if (!live3) throw new Error("No ground battle is being fought: TC.landStart first.");
     return live3;
+  }
+  var DUG = "It is dug in where it stands.";
+  var DRAWN2 = { line: "in a line", two: "in two lines", wedge: "in a wedge", column: "in a column" };
+  var COUNTED = ["None", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"];
+  var theName = (who) => /^\d/.test(who) ? `The ${who}` : who;
+  function cannotGo(who, why) {
+    if (!who) return why;
+    const name = theName(who);
+    if (why === DUG) return `${name} is dug in where it stands.`;
+    if (why === "Outside your ground.") return `${name} cannot go there: it would stand outside your ground.`;
+    if (why === "Another block stands there.") return `${name} cannot go there: another unit already stands there.`;
+    return `${name} cannot go there. ${why}`;
   }
   globalThis.TC = {
     landPieces() {
@@ -13480,13 +13491,23 @@
       const l = need(), rows = Array.isArray(list) ? list.filter((p) => Array.isArray(p)).map((p) => p.map(Number)) : [];
       const no = l.canPlaceMany(rows);
       const ok2 = no === null && l.placeMany(rows);
-      return { ok: ok2, why: ok2 ? "" : no?.why ?? "Not now: the battle has begun.", ...no && no.id >= 0 ? { id: no.id, who: no.who } : {} };
+      return { ok: ok2, why: ok2 ? "" : no ? cannotGo(no.who, no.why) : "Not now: the battle has begun.", ...no && no.id >= 0 ? { id: no.id, who: no.who } : {} };
     },
     landDrawUp(kind, ids) {
       const k = FORMATIONS.find((f) => f === kind);
       if (!k) return { ok: false, why: "No such formation.", placed: 0 };
-      const r = need().drawUp(k, Array.isArray(ids) ? ids.map(Number) : []);
-      return { ok: r.ok, why: r.why, ...r.id !== void 0 ? { id: r.id, who: r.who ?? "" } : {}, placed: r.placed.length };
+      const named = Array.isArray(ids) ? ids.map(Number) : [];
+      const r = need().drawUp(k, named);
+      const dug = r.left.filter((b) => b.why === DUG);
+      if (!r.ok) {
+        const why = r.none === "room" ? `Your ground has no room to draw them up ${DRAWN2[k]}.` : r.none === "stay" && dug.length === r.left.length && dug.length > 1 ? "They are all dug in where they stand." : r.none === "stay" ? cannotGo(r.who ?? "", r.why) : r.why;
+        return { ok: false, why, ...r.id !== void 0 ? { id: r.id, who: r.who ?? "" } : {}, placed: 0 };
+      }
+      const notes = [];
+      if (dug.length === 1) notes.push(`${theName(dug[0].who)} is dug in and stays where it stands.`);
+      else if (dug.length > 1) notes.push(`${COUNTED[dug.length] ?? dug.length} of them are dug in and stay where they stand.`);
+      if (r.off >= 50) notes.push(`Drawn up ${Math.round(r.off / 10) * 10} m off, on the nearest ground that holds them all.`);
+      return { ok: true, why: "", placed: r.placed.length, ...notes.length ? { note: notes.join(" ") } : {} };
     },
     landBegin() {
       return { ok: need().begin() };
