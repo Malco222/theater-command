@@ -4,9 +4,11 @@
 // the same bytes, through a file on disk too; a file cut short, lengthened or altered anywhere (its header, key, sizes,
 // texels or check) is refused; the folder's order keeps the six grounds last used; and SamePlace tells every field.
 // The pictures are the real frames' sizes, their first rows painted by the real painter on the recording's place (its
-// alpha always 255, which the file leaves out).
+// alpha always 255, which the file leaves out). And the painter's own text (Battle/AirLand.h and .cpp) must hash to
+// AirGroundKeep::PainterText, part of every key: a change to the painter that leaves it (and PainterVersion) behind would
+// let a kept ground of the old painter be shown as this one's.
 //
-// Usage: air_ground_keep_test <recording.json> <towns.json> <out folder>
+// Usage: air_ground_keep_test <recording.json> <towns.json> <out folder> <the game's source folder>
 #include "Battle/AirFeed.h"
 #include "Battle/AirGroundKeep.h"
 #include "Battle/AirLand.h"
@@ -93,13 +95,21 @@ namespace
 		Painter.PaintRows(F, 0, Painted, Rgba.data(), Heights.data());
 		return Rgba;
 	}
+
+	// AirLand::Place has these thirteen fields and no more: a field added (even one that fits in its padding, which the
+	// header's static_assert on its size cannot see) stops this from compiling. Add it to AirGroundKeep's SamePlace, Key
+	// and PlaceFields, to the changes the test makes, and here.
+	[[maybe_unused]] void PlaceHasThirteenFields(const AirLand::Place& P)
+	{
+		[[maybe_unused]] const auto& [AimX, AimY, NorthX, NorthY, Terrain, Name, Month, Seed, SunX, SunY, SunZ, Land, Rivers] = P;
+	}
 }
 
 int main(int Argc, char** Argv)
 {
-	if (Argc < 4)
+	if (Argc < 5)
 	{
-		std::fprintf(stderr, "usage: air_ground_keep_test <recording.json> <towns.json> <out folder>\n");
+		std::fprintf(stderr, "usage: air_ground_keep_test <recording.json> <towns.json> <out folder> <the game's source folder>\n");
 		return 2;
 	}
 	std::string Text, Plans, Error;
@@ -170,6 +180,36 @@ int main(int Argc, char** Argv)
 		}
 	}
 	Check(AirGroundKeep::Key(P, Plans, Frames, AirGroundKeep::PainterVersion + 1) != Base, "the key changes with the painter's version");
+	Check(AirGroundKeep::Key(P, Plans, Frames, AirGroundKeep::PainterVersion, AirGroundKeep::PainterText + 1) != Base, "the key changes with the painter's text");
+
+	// ---- The painter's text: what PainterText was set for, so that no change to the painter keeps an old key. ----
+	{
+		std::string Header, Source;
+		const std::string Folder = Argv[4];
+		const bool bRead = ReadFile(Folder + "/Battle/AirLand.h", Header) && ReadFile(Folder + "/Battle/AirLand.cpp", Source);
+		const uint64_t Now = bRead ? AirGroundKeep::TextOf(Header, Source) : 0;
+		char Seen[160];
+		std::snprintf(Seen, sizeof(Seen), "they hash to 0x%016llxull%s", static_cast<unsigned long long>(Now),
+			Now == AirGroundKeep::PainterText ? "" : ": set PainterText to it, and raise PainterVersion");
+		Check(bRead && Now == AirGroundKeep::PainterText, "Battle/AirLand.h and .cpp: the painter PainterText was set for", bRead ? Seen : "could not read them");
+		std::string Crlf;
+		for (const char C : Source)
+		{
+			if (C == '\n')
+			{
+				Crlf.push_back('\r');
+			}
+			Crlf.push_back(C);
+		}
+		std::string Edited = Source;
+		if (!Edited.empty())
+		{
+			Edited[Edited.size() / 2] = Edited[Edited.size() / 2] == 'a' ? 'b' : 'a';
+		}
+		Check(bRead && AirGroundKeep::TextOf(Header, Crlf) == Now, "the painter's text: the same with carriage returns");
+		Check(bRead && AirGroundKeep::TextOf(Header, Edited) != Now && AirGroundKeep::TextOf(Header + " ", Source) != Now
+			&& AirGroundKeep::TextOf(Source, Header) != Now, "the painter's text: a letter changed, a space more, or the files swapped, changes it");
+	}
 	Check(AirGroundKeep::SamePlace(P, AirLand::Place(P)), "SamePlace: a place is the same as its copy");
 	Check(AirGroundKeep::FileName(Base).size() == 23 && AirGroundKeep::IsGroundName(AirGroundKeep::FileName(Base)), "the file's name is its key", AirGroundKeep::FileName(Base));
 

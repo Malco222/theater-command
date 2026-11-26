@@ -2,6 +2,7 @@
 
 #include "Battle/AirLand.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -20,8 +21,9 @@
  *   again, so the pictures are always the bytes today's paint makes).
  * - Key, Pack, Unpack, Remember (the row flyGroundKeep): the three painted pictures kept on disk under the project's
  *   Saved/AirGround, one file a ground, named by a key that hashes everything the painter reads (every field of the
- *   place, the book of town plans as text, each picture's frame, and PainterVersion). A file is taken only when its
- *   header, its key, its pictures' sizes, its length and the check of its texels all match; else the ground is painted.
+ *   place, the book of town plans as text, each picture's frame) and the painter itself (PainterVersion, PainterText).
+ *   A file is taken only when its header, its key, its pictures' sizes, its length and the check of its texels all
+ *   match; else the ground is painted.
  *   A file is written beside its place and then moved into it. The folder keeps the Keep grounds last used.
  *
  * The pictures are kept as the painter leaves them, less the alpha it always sets to 255 (Painter::PaintRows; ShadeRows
@@ -35,10 +37,33 @@ namespace AirGroundKeep
 	 * again. (1: the painter as at 30899121, release 2.)
 	 */
 	inline constexpr uint32_t PainterVersion = 1;
+	/**
+	 * The hash of the painter's own text that PainterVersion was last set for (TextOf: Battle/AirLand.h, then
+	 * Battle/AirLand.cpp, carriage returns left out), also part of every key. Saved/AirGround outlives a new build, and
+	 * PainterVersion is raised by hand; so the native test (air_ground_keep_test) hashes the two files and fails while
+	 * this differs, printing the value they hash to. Any change to either file, a merge too, then has to set this anew
+	 * (and should raise PainterVersion): a kept ground of the old painter no longer matches, and is painted again.
+	 */
+	inline constexpr uint64_t PainterText = 0xe09a8d313f42e82full;
 	/** The kept file's own format (its header's layout), apart from the painter's version. */
 	inline constexpr uint32_t FormatVersion = 1;
 	/** How many grounds the folder keeps (the last used). */
 	inline constexpr size_t Keep = 6;
+
+	/**
+	 * AirLand::Place's fields as SamePlace and Key read them, in its order. A field added to Place (or one changed in
+	 * type) breaks the static_assert below: add it to SamePlace, to Key, to the test's changes and here.
+	 */
+	struct PlaceFields
+	{
+		double AimX, AimY, NorthX, NorthY;
+		std::string Terrain, Name;
+		int Month;
+		uint64_t Seed;
+		double SunX, SunY, SunZ;
+		std::vector<std::vector<AirLand::Pt>> Land, Rivers;
+	};
+	static_assert(sizeof(AirLand::Place) == sizeof(PlaceFields), "AirLand::Place has changed: add its new fields to AirGroundKeep's SamePlace, Key and PlaceFields");
 
 	/** Every field of the place the painter reads, compared exactly. */
 	inline bool SamePlace(const AirLand::Place& A, const AirLand::Place& B)
@@ -95,11 +120,12 @@ namespace AirGroundKeep
 	};
 
 	/** The key of a ground: everything the painter reads, the frames it paints and the painter's version. */
-	inline uint64_t Key(const AirLand::Place& P, const std::string& Plans, const std::vector<AirLand::Frame>& Frames, uint32_t Version = PainterVersion)
+	inline uint64_t Key(const AirLand::Place& P, const std::string& Plans, const std::vector<AirLand::Frame>& Frames, uint32_t Version = PainterVersion, uint64_t Text = PainterText)
 	{
 		Hash K;
 		K.Text("theater-command air ground");
 		K.U64(Version);
+		K.U64(Text);
 		K.Num(P.AimX);
 		K.Num(P.AimY);
 		K.Num(P.NorthX);
@@ -124,6 +150,19 @@ namespace AirGroundKeep
 			K.U64(static_cast<uint64_t>(static_cast<int64_t>(F.H)));
 		}
 		return K.H;
+	}
+
+	/** The hash of the painter's text (PainterText): its header's text, then its source's, each less its carriage returns. */
+	inline uint64_t TextOf(const std::string& Header, const std::string& Source)
+	{
+		Hash T;
+		std::string Plain = Header;
+		Plain.erase(std::remove(Plain.begin(), Plain.end(), '\r'), Plain.end());
+		T.Text(Plain);
+		Plain = Source;
+		Plain.erase(std::remove(Plain.begin(), Plain.end(), '\r'), Plain.end());
+		T.Text(Plain);
+		return T.H;
 	}
 
 	/** A ground's file name in the folder: its key in sixteen hex digits. */

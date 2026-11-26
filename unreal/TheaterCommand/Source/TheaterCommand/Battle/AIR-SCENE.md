@@ -1452,15 +1452,17 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
      "... are not this battle's ground; painted again".
    - **The ground is kept once painted** (`flyGroundKeep`; `-TheaterAirGroundKeep`, `-TheaterAirNoGroundKeep`). The three
      painted pictures kept in Saved/AirGround, one file a ground (about 48 MB; the six last used, by order.txt, the rest
-     deleted) named by a key of everything the painter reads and the painter's version; a later flight of the same ground
+     deleted) named by a key of everything the painter reads and the painter's version and text (PainterVersion,
+     PainterText: the hash of AirLand.h and .cpp, which the cloud test checks); a later flight of the same ground
      reads them on the pool instead of painting. A file whose header, key, count, sizes, length or check does not match
      is refused and the ground painted and kept again. Written beside its place and moved in, as the campaign's save is.
      Same bytes as painting. Log: "Air battle ground: read from the kept file, not painted, Saved/AirGround/<key>.ground
      (...)" (or "none kept yet: painted, and kept", or "the kept file refused (why): painted, and kept again").
    The cloud test: Tools/air_show/air_ground_keep_test.cpp in run.sh (Battle/AirGroundKeep.h, std only: the key moves with
-   every field the painter reads and with the painter's version; pack and unpack are the same bytes on Bremen's and a
-   town's ground; a file cut short, a byte changed, a wrong key, count or size refused; the order keeps six and drops
-   the rest; SamePlace). The Unreal side could not be compiled here.
+   every field the painter reads and with the painter's version and text; pack and unpack are the same bytes on Bremen's
+   and a town's ground; a file cut short, a byte changed, a wrong key, count or size refused; the order keeps six and
+   drops the rest; SamePlace; and AirLand.h and .cpp still hash to PainterText, so a change to the painter, a merge
+   too, fails here until PainterText is set anew and PainterVersion raised). The Unreal side could not be compiled here.
    For the Mac (each leg one launch to the raid's end, the stock words
    `-TheaterAirBattle=bremen-b17 -TheaterAirTimeEye=box -TheaterSpeedLog` and at most one row's word): first the stock
    words alone (the naming lines name the press's steps and each long frame's company), then each row's word on its own.
