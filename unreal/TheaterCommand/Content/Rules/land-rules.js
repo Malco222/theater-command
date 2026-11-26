@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 7846b507 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of cc813b9dc 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -9867,7 +9867,10 @@
           const cx = us.reduce((s, u) => s + u.x, 0) / us.length, cy = us.reduce((s, u) => s + u.y, 0) / us.length;
           for (const u of us) {
             const o = { kind: "move", x: c.x + (us.length > 1 ? u.x - cx : 0), y: c.y + (us.length > 1 ? u.y - cy : 0), face: c.face, ...c.run ? { run: true } : {} };
-            give(u, () => this.send(u, o));
+            give(u, () => {
+              if (u.team === "snp") u.placed = true;
+              this.send(u, o);
+            });
           }
           this.say({ what: "contact", side: by2, text: "" });
           this.events.pop();
@@ -9890,14 +9893,16 @@
           if (!t || t.side === by2 || !live2(t) || t.hid || !all.length) return false;
           hands(all);
           const lone = all.some((u) => u.team !== "snp") ? all.filter((u) => u.team === "snp") : [];
+          const us = lone.length ? all.filter((u) => u.team !== "snp") : all;
+          const group = us.map((u) => u.id);
           for (const u of lone) give(u, () => {
             u.order = null;
             u.path = [];
             u.keepFace = null;
             u.aim = t.id;
             delete u.cut;
+            if (!u.placed) u.stalk = { target: t.id, group };
           });
-          const us = lone.length ? all.filter((u) => u.team !== "snp") : all;
           if (!us.length) return true;
           const cx = us.reduce((s, u) => s + u.x, 0) / us.length, cy = us.reduce((s, u) => s + u.y, 0) / us.length;
           const axis = bearing(cx, cy, t.x, t.y);
@@ -9979,6 +9984,7 @@
             if (!u || this.placeWhy(u, x, y) !== null || by2 !== this.setup) return false;
             const f = c.face === void 0 ? void 0 : Number(c.face);
             this.place(u, x, y, f !== void 0 && Number.isFinite(f) ? f : void 0);
+            if (u.team === "snp") u.placed = true;
             return true;
           }
           if (c.do === "land:patrol") {
@@ -10094,6 +10100,13 @@
      * leaves the block's orderAt (its move's or attack's) alone.
      */
     order(u, go, air, from = this.t, c, smoke = false) {
+      if (!smoke && u.team === "snp") {
+        const g = go;
+        go = () => {
+          delete u.stalk;
+          g();
+        };
+      }
       if (this.phones && this.t > 0 && this.wireDown(u)) {
         this.byFallback(u, go, from, c, smoke);
         return;
@@ -10729,6 +10742,51 @@
       t.pinK = t.pinTo !== void 0 && this.t < t.pinTo ? Math.min(t.pinK ?? 1, pin) : pin;
       t.pinTo = at(S.pin.secs);
     }
+    /**
+     * A sniper team sent in with a group (LandUnit.stalk; the design director, 26 November 01:49Z (d)), once a second, by
+     * the drill the computer's staff gives its own teams (ai.ts snipersUp), the group's target for its way: slipping
+     * away, to other hiding ground near by; a found enemy within LAND.snipers.keep, back from it; the target in its
+     * reach, it stays and fires on it (its aim); else one bound to the next hiding ground toward the target, never ahead
+     * of the group's leading foot. Done once the target is gone or hidden, or the group has no foot left: it stays
+     * where it is.
+     */
+    stalkOn(u) {
+      const s = u.stalk, t = this.unit(s.target), ok2 = (e) => fighting2(e) && e.state !== "routing";
+      if (!ok2(u) || u.order?.kind === "withdraw" || !t || !ok2(t) || t.hid) {
+        delete u.stalk;
+        return;
+      }
+      if (u.waits && !u.waits.free) return;
+      const go = (x, y) => {
+        this.send(u, { kind: "move", x, y });
+        u.aim = t.id;
+      };
+      if (u.slipTo !== void 0) {
+        if (u.order) return;
+        const spot2 = this.slipSpot(u);
+        if (spot2) go(spot2[0], spot2[1]);
+        return;
+      }
+      const K = LAND.snipers.keep, dir = u.side === "att" ? 1 : -1;
+      const near = this.units.filter((f) => f.side !== u.side && ok2(f) && !f.hid && f.kind !== "fort" && this.gap(u, f) < K);
+      if (near.length) {
+        if (u.order?.kind === "move" && !near.some((f) => dist(f.x, f.y, u.order.x, u.order.y) < K)) return;
+        const spot2 = this.sniperSpot(u, [u.x, u.y - dir * 400], u.y);
+        const gap = near.reduce((m, f) => Math.min(m, this.gap(u, f)), Infinity);
+        const [x, y] = spot2 ?? [u.x, u.y - dir * (K - gap + 50)];
+        go(x, y);
+        return;
+      }
+      if (u.order || this.gap(u, t) <= reachOf(u)) return;
+      const foot = s.group.map((id) => this.unit(id)).filter((m) => !!m && ok2(m) && !m.team && m.kind !== "art" && m.kind !== "fort");
+      if (!foot.length) {
+        delete u.stalk;
+        return;
+      }
+      const front = dir > 0 ? Math.max(...foot.map((m) => m.y)) : Math.min(...foot.map((m) => m.y));
+      const spot = this.sniperSpot(u, [t.x, t.y], front);
+      if (spot && dir * (spot[1] - u.y) > 20) go(spot[0], spot[1]);
+    }
     /** A sniper team at half strength or the rout nerve (LAND.snipers.back): it withdraws to its own edge, never routs. */
     sniperBack(u) {
       if (u.order?.kind === "withdraw") return;
@@ -11053,6 +11111,7 @@
         this.staffing = true;
         for (const s of ["att", "def"]) if (this.ai[s]) thinkFor(this, s);
         this.staffing = false;
+        for (const u of this.units) if (u.stalk) this.stalkOn(u);
       }
       for (const u of this.units) {
         u.pinned = false;
