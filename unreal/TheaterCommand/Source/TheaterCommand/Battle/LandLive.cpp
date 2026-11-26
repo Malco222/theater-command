@@ -206,6 +206,23 @@ namespace
 		// on for a run, -TheaterAirNoNoseArt off. The air battle reads it (AAirBattle::DrawNoseArt); it is never sent to the
 		// land rules.)
 		{ TEXT("noseArt"), TEXT("Bomber nose art"), TEXT("American bombers in the air battles wear painted nose art, each crew's own picture and name. Off: every bomber's nose is bare."), TEXT("TheaterAirNoNoseArt"), false, TEXT("TheaterAirNoseArt") },
+		// (Oil and fuel at the hit, release 2: Brian, 26 November 2026, more of a film's dramatic detail in the battles. On: a
+		// strike that finds fuel, oil or coolant (the battle's own Hit, its Part) throws its spray from the hole, the effects
+		// kit's air_hit.spurt, its look laid over the recipe as the air battle begins (battle-fx-air-spurt.json, on both of
+		// the battle's kits); the windscreen's oil film and the cowling's smears join this row later. Looks only: nothing the
+		// rules count reads it. Off until the Mac holds 45 fps with it and the art director has passed it, then this row flips
+		// to on in one line; -TheaterAirOilFilm turns it on for a run, -TheaterAirNoOilFilm off. NOT a fly-it-yourself row:
+		// its key begins "fly" only so that FLandLive::Start passes it over with the air battles' other switches. The air
+		// battle reads it once a battle (AirBattle.cpp's AirRowsRead); it is never sent to the land rules.)
+		{ TEXT("flyOilFilm"), TEXT("Oil and fuel at the hit"), TEXT("In the battle in the air, rounds that hole a fuel tank, an oil line or a radiator throw a spray of fuel, oil or glycol from the hole. Off: every strike on an aircraft looks the same."), TEXT("TheaterAirNoOilFilm"), false, TEXT("TheaterAirOilFilm") },
+		// (Contrails, release 2: Brian, 26 November 2026, more of a film's dramatic detail in the battles. On: every aircraft
+		// over the day's trail height (AirFeed's TrailHeight, by the place's weather zone and month) lays the effects kit's
+		// contrails, air_vapour, near or far, its look laid over the recipe as the air battle begins (battle-fx-air-vapour.json,
+		// on both of the battle's kits). Looks only: nothing the rules count reads it. Off until the Mac holds 45 fps with it
+		// and the art director has passed it, then this row flips to on in one line; -TheaterAirVapour turns it on for a run,
+		// -TheaterAirNoVapour off. NOT a fly-it-yourself row: its key begins "fly" only so that FLandLive::Start passes it
+		// over. The air battle reads it once a battle (AirBattle.cpp's AirRowsRead); it is never sent to the land rules.)
+		{ TEXT("flyVapour"), TEXT("Contrails"), TEXT("In the battle in the air, aircraft flying high enough on a cold day draw white vapour trails behind their engines, which hang in the sky and spread. Off: no vapour trails."), TEXT("TheaterAirNoVapour"), false, TEXT("TheaterAirVapour") },
 		// (Earned colours, Brian 25 November 03:27Z: "unique colorings or markings like the tuskegee airmen". Off until the
 		// art director has scored the Mac's stills (the historian checked the palette twice); -TheaterAirUnitColours turns it
 		// on for a run, -TheaterAirNoUnitColours off. The air battle reads it (Battle/AirBattleUnitColours.cpp); never sent to the

@@ -281,6 +281,46 @@ namespace AirParts
 		}
 	}
 
+	/** Rounds striking an aircraft, with what they found there (the effects kit's AirHit Part, fe0997e89 on the effects line
+	 * d1e18fa5f; Brian, 26 November: more of a film's dramatic detail): Part the Hit's own ("fuel", "oil", "coolant";
+	 * "skin" draws the strike as before). With the kit's air_hit.spurt on (battle-fx-air-spurt.json, laid by the row
+	 * flyOilFilm) the spray that leaves the hole. No Part (the row off), or an older kit: the call made as it always was. */
+	template <typename TKit>
+	static void AirHit(TKit* Kit, double Now, const FVector& At, const FVector& Normal, const FVector& Velocity, const FString& Kind, const FString& Part)
+	{
+		if constexpr (requires(TKit* K) { K->AirHit(0.0, FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector, FString(), FString()); })
+		{
+			if (!Part.IsEmpty())
+			{
+				Kit->AirHit(Now, At, Normal, Velocity, Kind, Part);
+				return;
+			}
+		}
+		Kit->AirHit(Now, At, Normal, Velocity, Kind);
+	}
+
+	/** Contrails (the effects kit's VapourMove and VapourStop, fe0997e89 on the effects line d1e18fa5f; the row flyVapour):
+	 * every frame for an aircraft over the day's trail height, its place, velocity, strength (PlaneOut::Vapour), its LIVE
+	 * engines' places, the day's cloud cover and its span; VapourStop once when it trails no longer. Made where the kit has
+	 * the calls; an older kit draws none. */
+	template <typename TKit>
+	static void VapourMove(TKit* Kit, double Now, int32 Key, const FVector& At, const FVector& Velocity, float Strength, const TArray<FVector>& Engines, float Cover, float SpanMetres)
+	{
+		if constexpr (requires(TKit* K) { K->VapourMove(0.0, int32(0), FVector::ZeroVector, FVector::ZeroVector, 0.0f, TArray<FVector>(), 0.0f, 0.0f); })
+		{
+			Kit->VapourMove(Now, Key, At, Velocity, Strength, Engines, Cover, SpanMetres);
+		}
+	}
+
+	template <typename TKit>
+	static void VapourStop(TKit* Kit, int32 Key)
+	{
+		if constexpr (requires(TKit* K) { K->VapourStop(int32(0)); })
+		{
+			Kit->VapourStop(Key);
+		}
+	}
+
 	/** A gun firing, with its aircraft's nation where the kit takes it (the art director's G2, 15:38Z: Allied streams
 	 * red-orange, German and Italian pale yellow-white, Japanese near white, Soviet green; the effects thread's call,
 	 * the nation last, as KitNation names it: us, gb, de, it, jp, su). An older kit draws its one colour. */
@@ -808,6 +848,47 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 	return true;
 }
 
+// (Release 2, the effects kit's air parts of 26 November; Brian: more of a film's dramatic detail in the battles.) The Battle
+// rules card's rows for them, read once a battle as it opens, before its kits begin, into its state (each -1 until read).
+// Said only when on: off, the battle and its log are as before, to the byte.
+static void AirRowsRead(FAirBattleState& S)
+{
+	if (S.OilFilmOn < 0)
+	{
+		S.OilFilmOn = FLandLive::RuleNow(TEXT("flyOilFilm")) ? 1 : 0;
+		if (S.OilFilmOn == 1)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Air battle: oil and fuel at the hit: on (the Battle rules card's row flyOilFilm, or -TheaterAirOilFilm): each strike's Part to the effects kit, battle-fx-air-spurt.json laid on both kits."));
+		}
+	}
+	if (S.VapourOn < 0)
+	{
+		S.VapourOn = FLandLive::RuleNow(TEXT("flyVapour")) ? 1 : 0;
+		S.VapourKeys.clear();
+		S.VapourWas.clear();
+		if (S.VapourOn == 1)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Air battle: contrails: on (the Battle rules card's row flyVapour, or -TheaterAirVapour): every aircraft over the day's trail height, %.0f m, to the effects kit's VapourMove; battle-fx-air-vapour.json laid on both kits."),
+				S.Show.TrailM);
+		}
+	}
+}
+
+// (development only, no row) "-TheaterAirTrailM=<metres>": the day's vapour-trail height for this run in place of AirFeed's
+// table (AirFeed::TrailHeight, by the place's weather zone and month; its heights are the historian's and stay as they
+// are), so that a raid flown under the day's height can be seen trailing (or, with a height over it, not). 0: no trails
+// that day. It reaches only PlaneOut::Vapour, which only the contrails (the row flyVapour) draw: nothing counted reads it.
+static void AirTrailHeightAsked(FAirBattleState& S)
+{
+	double Metres = 0.0;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterAirTrailM="), Metres))
+	{
+		const double Was = S.Show.TrailM;
+		S.Show.TrailM = FMath::Clamp(Metres, 0.0, 20000.0);
+		UE_LOG(LogTheater, Display, TEXT("Air battle: the day's vapour-trail height %.0f m (-TheaterAirTrailM; the table's %.0f m)."), S.Show.TrailM, Was);
+	}
+}
+
 bool AAirBattle::Open(const FString& Why)
 {
 	UWorld* Here = GetWorld();
@@ -946,7 +1027,17 @@ bool AAirBattle::Open(const FString& Why)
 	// The effects: the kit's own, drawn out to the air distance, on the air clock (its mesh, the one it hangs on Root,
 	// drawn behind the clouds while the eye is under them: DrawSky).
 	const TArray<TObjectPtr<USceneComponent>> BeforeAir = Root->GetAttachChildren();
+	AirTrailHeightAsked(S); // (-TheaterAirTrailM, development only: nothing without the word)
+	AirRowsRead(S); // (the rows of the kit's air parts: their looks are laid over the recipe before each kit begins)
 	Effects = MakeUnique<FBattleEffects>();
+	if (S.OilFilmOn == 1)
+	{
+		Effects->LayOver(TEXT("battle-fx-air-spurt.json")); // (the kit's spray at the hit, air_hit.spurt: the row flyOilFilm)
+	}
+	if (S.VapourOn == 1)
+	{
+		Effects->LayOver(TEXT("battle-fx-air-vapour.json")); // (the kit's contrails, air_vapour, and their haze: the row flyVapour)
+	}
 	if (!Effects->Begin(Root, UnitsPerMetre, [this](const FVector& Point)
 		{
 			return FVector(Point.X, Point.Y, Stage && Stage->IsRaised() ? Stage->GroundZ(Point) : 0.0);
@@ -982,6 +1073,14 @@ bool AAirBattle::Open(const FString& Why)
 		// while the air fight lies over them: its mesh is the one it hangs on Root.
 		TArray<TObjectPtr<USceneComponent>> Before = Root->GetAttachChildren();
 		GroundFx = MakeUnique<FBattleEffects>();
+		if (S.OilFilmOn == 1)
+		{
+			GroundFx->LayOver(TEXT("battle-fx-air-spurt.json")); // (a strike KitAt hands this kit sprays as the other's does)
+		}
+		if (S.VapourOn == 1)
+		{
+			GroundFx->LayOver(TEXT("battle-fx-air-vapour.json")); // (laid as on the air's kit, so the two read the same recipe)
+		}
 		if (GroundFx->Begin(Root, UnitsPerMetre, [this](const FVector& Point)
 			{
 				return FVector(Point.X, Point.Y, Stage && Stage->IsRaised() ? Stage->GroundZ(Point) : 0.0);
@@ -5569,11 +5668,54 @@ void AAirBattle::Draw(double Real)
 	const double Enlarged = FMath::Tan(FMath::DegreesToRadians(55.0 * 0.5)) / FMath::Tan(FMath::DegreesToRadians(Lens * 0.5));
 	CopiesDrawn = 0;
 	TSet<int32> Seen;
+	// Contrails (the row flyVapour; the effects kit's VapourMove): this frame's trailing aircraft, from this frame alone.
+	const bool bVapourDraw = S.VapourOn == 1 && Effects;
+	const float VapourCover = bVapourDraw ? static_cast<float>(S.Sky.Sky.CoverLaid()) : 0.0f;
+	TArray<FVector> VapourLive;
+	if (bVapourDraw)
+	{
+		S.VapourWas.swap(S.VapourKeys);
+		S.VapourKeys.clear();
+	}
 	for (const AirShow::PlaneOut& P : S.Show.Planes())
 	{
 		Seen.Add(P.Key);
 		// (laid each frame, so an aircraft's nation is always this battle's: the pre-check on round 16)
 		GunNations.Add(P.Key, AirParts::KitNation(P.Nation));
+		// Its contrail, with the row flyVapour: every aircraft over the day's trail height (PlaneOut::Vapour above 0), a near
+		// shape or a far copy alike, to the air's kit, which draws it in the world out to its own 15 km (so the overview,
+		// where nine in ten have no mesh of their own, sees them too). Its live engines placed as the flight core places a
+		// point on it (AirShow::Show::Local: X forward, Y right, Z up, by heading, climb and bank), at most four, a dead one
+		// left out (no strip). Not shown, falling or on the ground: none this frame, and the kit told once (below the loop).
+		if (bVapourDraw && P.bShown && !P.bFalling && !P.bOnGround && P.Vapour > 0.0)
+		{
+			const std::pair<std::string, bool> VapourWhich(P.Model, P.bFighter);
+			auto VapourShape = S.VapourEngines.find(VapourWhich);
+			if (VapourShape == S.VapourEngines.end())
+			{
+				VapourShape = S.VapourEngines.emplace(VapourWhich, AirShow::ShapeOf(P.Model, P.bFighter).Engines).first;
+			}
+			const double TrailHdg = FMath::DegreesToRadians(P.Heading), TrailGam = FMath::DegreesToRadians(P.Pitch), TrailBnk = FMath::DegreesToRadians(P.Bank);
+			const AirShow::Vec TrailAhead(FMath::Sin(TrailHdg) * FMath::Cos(TrailGam), FMath::Cos(TrailHdg) * FMath::Cos(TrailGam), FMath::Sin(TrailGam));
+			const AirShow::Vec TrailRight0(FMath::Cos(TrailHdg), -FMath::Sin(TrailHdg), 0.0);
+			const AirShow::Vec TrailUp0 = TrailRight0.Cross(TrailAhead);
+			const AirShow::Vec TrailRight = TrailRight0 * FMath::Cos(TrailBnk) - TrailUp0 * FMath::Sin(TrailBnk);
+			const AirShow::Vec TrailUp = TrailUp0 * FMath::Cos(TrailBnk) + TrailRight0 * FMath::Sin(TrailBnk);
+			VapourLive.Reset();
+			for (size_t EngineN = 0; EngineN < VapourShape->second.size() && VapourLive.Num() < 4; ++EngineN)
+			{
+				if (std::find(P.DeadEngines.begin(), P.DeadEngines.end(), static_cast<int>(EngineN) + 1) == P.DeadEngines.end())
+				{
+					const AirShow::Vec& Engine0 = VapourShape->second[EngineN];
+					const AirShow::Vec TrailAt = P.At + TrailAhead * Engine0.X + TrailRight * Engine0.Y + TrailUp * Engine0.Z;
+					VapourLive.Add(World(TrailAt.X, TrailAt.Y, TrailAt.Z));
+				}
+			}
+			const AirShow::Vec TrailVel = TrailAhead * P.Speed;
+			AirParts::VapourMove(Effects.Get(), S.Show.AirNow(), P.Key, World(P.At.X, P.At.Y, P.At.Z), WorldVector(TrailVel.X, TrailVel.Y, TrailVel.Z),
+				static_cast<float>(P.Vapour), VapourLive, VapourCover, static_cast<float>(P.Span));
+			S.VapourKeys.push_back(P.Key);
+		}
 		TObjectPtr<UProceduralMeshComponent>* Have = Planes.Find(P.Key);
 		if (!P.bShown)
 		{
@@ -5720,6 +5862,20 @@ void AAirBattle::Draw(double Real)
 				}
 				const double Own = bStill ? Turning->Phase : bDead ? FMath::Fmod(RealT * Turns * 0.45 * 360.0 + Turning->Phase, 360.0) : Angle;
 				Disc->SetRelativeRotation(FRotator(0.0, 0.0, Own + K * 23.0));
+			}
+		}
+	}
+	// (the row flyVapour) Each aircraft that trailed the frame before and does not now (under the trail height, falling,
+	// hidden, landed, or gone from the show) told once: no new strips; what is in the air lives out its life. Held from one
+	// frame to the next only, so a clock sought back reads the frame it lands on, and the kit clears its own pieces.
+	if (bVapourDraw)
+	{
+		std::sort(S.VapourKeys.begin(), S.VapourKeys.end());
+		for (const int VapourGone : S.VapourWas)
+		{
+			if (!std::binary_search(S.VapourKeys.begin(), S.VapourKeys.end(), VapourGone))
+			{
+				AirParts::VapourStop(Effects.Get(), VapourGone);
 			}
 		}
 	}
@@ -6216,7 +6372,10 @@ void AAirBattle::PlayEffects()
 			MarkStrike(E); // (kept on the aircraft it struck, and laid on its skin while it is near: AirBattleMarks.cpp)
 			if (FBattleEffects* Kit = KitAt(At))
 			{
-				Kit->AirHit(Now, At, WorldVector(E.Normal.X, E.Normal.Y, E.Normal.Z).GetSafeNormal(), WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), AirParts::Wide(E.What));
+				// (with the row flyOilFilm, what the rounds found there, fuel, oil, coolant or skin: the kit's spray at the hit,
+				// air_hit.spurt; off, no Part and the call as it always was)
+				AirParts::AirHit(Kit, Now, At, WorldVector(E.Normal.X, E.Normal.Y, E.Normal.Z).GetSafeNormal(), WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), AirParts::Wide(E.What),
+					S.OilFilmOn == 1 ? AirParts::Wide(E.Part) : FString());
 			}
 			// Rounds striking a plane, heard near the eye (mix.json air.roundsHit: within `within` metres, no closer together
 			// than `every`). A strike on the ridden aircraft is heard at the eye, unplaced, as its own guns are. Until the
