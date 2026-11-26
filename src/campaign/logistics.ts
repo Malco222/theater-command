@@ -22,7 +22,7 @@ import type { Game } from './types';
 
 export const LOGI = data as unknown as {
   pool: { perIncome: number };
-  wagons: { perLink: number; mud: { lorry: number; horse: number }; snow: { lorry: number; horse: number }; desert: { lorry: number; horse: number }; pp: number };
+  wagons: { perLink: number; mud: { lorry: number; horse: number }; snow: { lorry: number; horse: number }; desert: { lorry: number; horse: number } };
   dumps: { size: number; pp: number; minLinks: number; most: number; bombed: number; reach: number; aiSaving: number; aiPurse: number };
 };
 
