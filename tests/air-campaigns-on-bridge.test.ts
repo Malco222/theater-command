@@ -3,7 +3,7 @@
 // rules' half, and the browser's, is tests/air-campaigns-on.test.ts.
 import { describe, expect, it } from 'vitest';
 import { acOn } from '../src/campaign/aircampaigns';
-import { createGame } from '../src/campaign/game';
+import { createGame, ensureSupply } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import type { Game } from '../src/campaign/types';
@@ -70,6 +70,9 @@ describe("the 3D game's start: air campaigns on in a new grand campaign as shipp
     runner.flags.ac = 1;
     if (!setCityDamage(runner, true)) throw new Error('no city damage');
     if (airfieldTargetsShipped()) setAirfieldTargets(runner, true);
+    // (Release 2's supply window, game.ts keepSupply: every call on the bridge's table hands back fresh supply, so the
+    // bridge's save carries the supply as drawn; the runner draws it too. Nothing else in the save differs.)
+    ensureSupply(runner);
     expect(hashString(bridge).toString(16)).toBe(fp(runner));
     expect(flagsOf(bridge).ac).toBe(1);
   });

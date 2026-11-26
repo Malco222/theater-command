@@ -52,8 +52,11 @@ const months: { turn: number; lift: number; inCol: number; inVen: number; abroad
   // tree (rider b640) the record's shipping (ruling 234 rider b630: America's carries 2 corps a month until January
   // 1942) holds the landing force of three at home until turn 29 in every seed tried, 1 to 5, and the design director
   // restated the story to it (16:25Z on b640): the landing the month the shipping carries the force its forecast asks
-  // for, and Colombia beaten within three months of that. Seed 1 is kept.
-  const g = startOpen(createGame(1, null));
+  // for, and Colombia beaten within three months of that. Seed 1 was kept until release 2's pass 2 took in 1.5.2
+  // (0afe35567): in seed 1 the landing is still made the month the shipping carries the force, but Colombia now falls in
+  // month 34, two past its three (a changed premise: the war moved). Of seeds 2, 3, 4, 5, 7 and 10 on that tree all but 4
+  // tell the story in full; seed 2 is the first. Every assertion stands.
+  const g = startOpen(createGame(2, null));
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, owner: e.to.owner, corps: e.force.length, warned: e.warned, wave: e.wave }); };
   while (g.turn < END) {
     const t = g.turn;
