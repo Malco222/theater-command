@@ -3718,23 +3718,28 @@ function shownCard(s: Game, c: RuleCard): MonthCard {
   // then what next month brings, then the other news of home. Deliveries that find no line are counted in one;
   // news that finds none is in the Newsreel.
   const lines = lead ? 3 : 5;
-  type HomeLine = { sign: string; count: string; text: string; where: string; grey: boolean; tip: string; ready: number; next: number };
+  type HomeLine = { sign: string; count: string; text: string; where: string; grey: boolean; tip: string; ready: number; next: number; waits?: boolean };
   const homeAll: HomeLine[] = [
+    // (Release 2, the telling, arrivalwaits.ts: the UI director's section 2.) A dated arrival of his that waits only for
+    // another arrival to form has no corps to carry its line: the month card carries it, muted, every month it waits.
+    // First among the home lines (the 3D's card has no men's line), never cut and never counted: it is not news of the
+    // Newsreel. Her section 8 point 4, 02:10Z, 26 November 2026; the browser's card, ui/monthview.ts, by the same rule.
+    ...(c.waits ?? []).map((text) => ({ sign: '', count: '', text, where: '', grey: true, tip: text, ready: 0, next: 0, waits: true })),
     ...c.home.filter((x) => !x.next).map((x) => ({ sign: x.sign, count: String(x.count), text: x.text, where: x.place, grey: false, tip: '', ready: x.count, next: 0 })),
     ...c.research.map((text) => ({ sign: 'star', count: '', text: `Research complete: ${text}`, where: '', grey: false, tip: '', ready: 0, next: 0 })),
     ...c.home.filter((x) => x.next).map((x) => ({ sign: x.sign, count: String(x.count), text: x.text, where: x.place, grey: true, tip: '', ready: 0, next: x.count })),
     ...c.also.map((text, i) => ({ sign: '', count: '', text, where: '', grey: false, tip: c.alsoFull[i] ?? text, ready: 0, next: 0 })),
-    // (Release 2, the telling, arrivalwaits.ts: the UI director's section 2.) A dated arrival of his that waits only for
-    // another arrival to form has no corps to carry its line: the month card carries it, muted, every month it waits.
-    ...(c.waits ?? []).map((text) => ({ sign: '', count: '', text, where: '', grey: true, tip: text, ready: 0, next: 0 })),
   ];
-  let home = homeAll.slice(0, lines), homeOver = 0;
-  if (homeAll.length > lines) {
-    const hid = homeAll.slice(lines - 1);
+  // (The box takes every waits line, and the line that counts what is over after them: `homeRoom` is `lines` but
+  // where the waits lines would fill it. With none it is `lines`, as before.)
+  const homeRoom = c.waits?.length ? Math.max(lines, c.waits.length + 1) : lines;
+  let home = homeAll.slice(0, homeRoom), homeOver = 0;
+  if (homeAll.length > homeRoom) {
+    const hid = homeAll.slice(homeRoom - 1);
     const ready = hid.reduce((n, x) => n + x.ready, 0), next = hid.reduce((n, x) => n + x.next, 0);
     const said = [ready ? `${ready} more ready` : '', next ? `${next} due next month` : ''].filter(Boolean).join('  \u00B7  ');
-    if (said) home = [...homeAll.slice(0, lines - 1), { sign: '', count: '', text: said, where: '', grey: true, tip: '', ready: 0, next: 0 }];
-    homeOver = (said ? hid : homeAll.slice(lines)).filter((x) => !x.ready && !x.next).length;
+    if (said) home = [...homeAll.slice(0, homeRoom - 1), { sign: '', count: '', text: said, where: '', grey: true, tip: '', ready: 0, next: 0 }];
+    homeOver = (said ? hid : homeAll.slice(homeRoom)).filter((x) => !x.ready && !x.next && !x.waits).length;
   }
   // (A desk's first line carries its button, and the first lines of the desks come first.)
   const firsts = c.staff.filter((x, i) => c.staff.findIndex((y) => y.desk === x.desk) === i);
