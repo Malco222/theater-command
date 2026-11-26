@@ -270,6 +270,13 @@ export const menPer = (nat: string): number => menScale(nat) ?? MEN_PER_DIV;
 export const men1000 = (men: number): string => (Math.round(Math.max(0, men) / 1000) * 1000).toLocaleString('en-US');
 /** "division's worth" for one, "divisions' worth" for any other count. */
 export const worth = (d: number): string => (d === 1 ? "division's worth" : "divisions' worth");
+/**
+ * Men a cost takes, at a nation's scale 'per': a whole count in divisions' worth as line 8 says it ("two divisions'
+ * worth", with " of men" after it where 'ofMen'), and part of a division's worth (the cadre of a corps its row keeps
+ * small) in men with "about", to the thousand, as the fold card says it ("about 18,000 men"), never "0 divisions'
+ * worth". One form for the fold card, the order's note (rifles.ts riflesTakes) and the refusal (noMenWords).
+ */
+export const menWorth = (per: number, d: number, ofMen = true): string => (Number.isInteger(d) ? `${inWords(d)} ${worth(d)}${ofMen ? ' of men' : ''}` : `about ${men1000(d * per)} men`);
 
 /**
  * The reserve in a sentence, for a nation with a scale of its own (the UI director's line 14 of 25 November 2026:
@@ -326,8 +333,10 @@ export function noMenWords(nat: string, divs: number, left: number, cls: number)
   // (An order of one division's worth with half of one or more left: "about one" would read as the need, and "less than
   // half" would be untrue, so it says "less than one is left". China's engineer corps, corps:eng, is such an order: with
   // half a division's worth to just under one left, this is its live refusal.)
-  const rest = shown >= 1 ? `about ${inWords(shown)} ${shown === 1 ? 'is' : 'are'} left` : l < 0.5 ? 'less than half of one is left' : 'less than one is left';
-  return `The reserve has not the men: this takes ${inWords(divs)} ${worth(divs)} and ${rest}. ${comesWords(nat, cls)}`;
+  // (Part of a division's worth is said in men, so what is left names the division's worth "one" stood for.)
+  const whole = Number.isInteger(divs), one = whole ? 'one' : `one ${worth(1)}`;
+  const rest = shown >= 1 ? `about ${inWords(shown)}${whole ? '' : ` ${worth(shown)}`} ${shown === 1 ? 'is' : 'are'} left` : l < 0.5 ? `less than half of ${whole ? 'one' : `a ${worth(1)}`} is left` : `less than ${one} is left`;
+  return `The reserve has not the men: this takes ${menWorth(per, divs, false)} and ${rest}. ${comesWords(nat, cls)}`;
 }
 
 /**

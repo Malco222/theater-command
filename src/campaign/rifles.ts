@@ -31,6 +31,7 @@ import { SHELVES, armsMonth, armsView, draw, gainOf, giveBack, has, put, stockOf
 import { atWar, headline, industryHeld, theName } from './game';
 import { majorsOf } from './diplomacy';
 import { corpsList, needsOf } from './economy';
+import { menPer, menWorth } from './manpower';
 import type { Build, Corps, Game } from './types';
 
 /** A nation's rifles row: rifles to its division's worth, the share a draft draws, and whether an empty store refuses anything (the next stage reads the last two). */
@@ -292,7 +293,8 @@ export const riflesFor = (g: Game, nat: string, divs: number): { rifles?: number
  */
 export function riflesTakes(g: Game, nat: string, divs: number): string | null {
   if (!carries(g, nat)) return null;
-  return `Takes ${inWords(divs)} ${divs === 1 ? "division's" : "divisions'"} worth of men and ${n100(divs * riflesRow(g, nat)!.perDiv)} rifles.`;
+  // (Part of a division's worth, the cadre of a corps its row keeps small, in men at the nation's scale, as the fold card says it.)
+  return `Takes ${menWorth(menPer(nat), divs)} and ${n100(divs * riflesRow(g, nat)!.perDiv)} rifles.`;
 }
 
 /**

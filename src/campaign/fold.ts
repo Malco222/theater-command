@@ -13,9 +13,9 @@ import { clamp } from '../core/math';
 import { MEN_PER_DIV, type Corps, type Game, type General } from './types';
 import { headline, men, removeCorps, worksOf } from './game';
 import { appoint, generalOf } from './commanders';
-import { MANPOWER, men1000, menScale, returnMen, worth } from './manpower';
+import { MANPOWER, men1000, menScale, menWorth, returnMen } from './manpower';
 import { cadreTerms } from './economy';
-import { binds, inWords, riflesBack, riflesFold } from './rifles';
+import { binds, riflesBack, riflesFold } from './rifles';
 import { noteCorps } from './stories';
 import { atItsPost, postWords } from './pacific';
 
@@ -132,6 +132,10 @@ export interface FoldCardWords {
    * the treasury and 30,000 men from the reserve", or at a nation's own scale "two divisions' worth of men from the
    * reserve" (with "1,700 from the treasury and " before it where the treasury's figure is not nothing). */
   cadre: (v: FoldView, cost: string) => string;
+  /** A strength to show as "60% of its strength", for the heading of each pair and the kept corps' line: the corps'
+   * strength as it stands, or at a nation's own scale against the corps' own size, so a corps its row keeps small reads
+   * whole at its full, as whyNotFold reads it ("already at full strength for its size"). */
+  share: (str: number, c: Corps | undefined) => number;
 }
 
 /**
@@ -144,14 +148,13 @@ export interface FoldCardWords {
  */
 export function foldCardWords(nat: string): FoldCardWords {
   const per = menScale(nat);
-  if (per === null) return { men: (c) => `${men(c).toLocaleString('en-US')} men`, cadre: (v, cost) => `${cost} from the treasury and ${Math.round(v.cadreMen).toLocaleString('en-US')} men from the reserve` };
+  if (per === null) return { men: (c) => `${men(c).toLocaleString('en-US')} men`, cadre: (v, cost) => `${cost} from the treasury and ${Math.round(v.cadreMen).toLocaleString('en-US')} men from the reserve`, share: (str) => str };
   return {
     men: (c) => `about ${men1000(c.divs * c.str * per)} men`,
+    share: (str, c) => str / (c?.full ?? 1),
     cadre: (v, cost) => {
-      const d = v.cadreMen / MEN_PER_DIV;
       // (A cadre of a corps its row keeps small can come back as part of a division's worth: said in men at the scale.)
-      const m = Number.isInteger(d) ? `${inWords(d)} ${worth(d)} of men` : `about ${men1000(d * per)} men`;
-      return `${v.cadreCost > 0 ? `${cost} from the treasury and ` : ''}${m} from the reserve`;
+      return `${v.cadreCost > 0 ? `${cost} from the treasury and ` : ''}${menWorth(per, v.cadreMen / MEN_PER_DIV)} from the reserve`;
     },
   };
 }

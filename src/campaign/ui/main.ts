@@ -3732,7 +3732,7 @@ function foldCard(reg: number): string {
   const row = (v: (typeof vs)[number]): string => {
     const w = foldWords(g, g.human!, v);
     const bits = [
-      `<b>${esc(upFirst(w.men))}</b> in one corps at ${pct(v.str)} of its strength, ${esc(grade(v.xp).toLowerCase())}.`,
+      `<b>${esc(upFirst(w.men))}</b> in one corps at ${pct(fw.share(v.str, g.corps.find((c) => c.id === v.keep)))} of its strength, ${esc(grade(v.xp).toLowerCase())}.`,
       v.general ? `${esc(v.general)} commands${v.stepsDown ? `; ${esc(v.stepsDown)} goes to the list of generals waiting for a corps` : ''}.` : 'No general commands it.',
       // (The men in words from fold.ts foldWords, as the news and the 3D card say them: the UI director's point 4 of 26 November 2026.)
       w.over ? esc(w.over) : '',
@@ -3746,7 +3746,7 @@ function foldCard(reg: number): string {
   for (const v of vs) { const k = [v.keep, v.gone].sort((a, b) => a - b).join(':'); (pairs.get(k) ?? pairs.set(k, []).get(k)!).push(v); }
   const body = [...pairs.values()].map((p) => {
     const a = corps(p[0].keep), b = corps(p[0].gone);
-    const head = a && b ? `${esc(a.name)} (${esc(fw.men(a))}, ${pct(a.str)}) and ${esc(b.name)} (${esc(fw.men(b))}, ${pct(b.str)})` : '';
+    const head = a && b ? `${esc(a.name)} (${esc(fw.men(a))}, ${pct(fw.share(a.str, a))}) and ${esc(b.name)} (${esc(fw.men(b))}, ${pct(fw.share(b.str, b))})` : '';
     return `<div class="foldpair"><h3>${head}</h3>${p.map(row).join('')}</div>`;
   }).join('');
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The army at ${esc(r.name)} · ${date(g.turn)}</div><h2>Fold two worn corps into one</h2></header>

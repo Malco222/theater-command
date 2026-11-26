@@ -479,3 +479,57 @@ describe('the third read: the fold card at one scale', () => {
     expect(wj.cadre(j.v, '2,400')).toBe('2,400 from the treasury and 30,000 men from the reserve');
   });
 });
+
+// The words sceptic of the third round, F2 and F3, on China's live board (seed 7): a corps its row keeps small, the
+// 10th Army Group (its own size 0.27 of a division), worn to 60% of that size beside the 23rd Army Group at Chuchow.
+// F2: its cadre is part of a division's worth, so the order's note and the refusal say its men as the fold card does
+// ("about 18,000 men"), never "0 divisions' worth" (manpower.ts menWorth, one form for all three). F3: at a nation's
+// own scale a corps' strength on the fold card is read against its own size, as whyNotFold reads it, so the corps that
+// is "already at full strength for its size" never reads "27% of its strength". Japan as built, byte for byte.
+describe('a corps kept small: its cadre and its strength at one scale', () => {
+  type Call = (...a: unknown[]) => unknown;
+  const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
+  type Row = { lines: string[] };
+  const KEEP = '3rd War Area: 23rd Army Group and the New Fourth Army', GONE = '3rd War Area: 10th Army Group';
+  const CLASS = ' About 105,000 men come of age each month in the land you still hold.';
+  /** The Chuchow pair worn to 60% of its own size: the 3D fold card's section, then (folded, the reserve at 'mp' if given) the cadre's offer. */
+  const chuchow = (mp: number | null): { text: string; rows: Row[]; note: string; why: string | null } => {
+    TC().start({ human: 'CHN', seed: 7, view: 'grand', world: true });
+    const g = loadGame((TC().save() as { text: string }).text)!;
+    const k = g.corps.find((c) => c.name === KEEP && c.nat === 'CHN')!, x = g.corps.find((c) => c.name === GONE && c.nat === 'CHN')!;
+    for (const c of [k, x]) { c.str = 0.6 * (c.full ?? 1); c.supplied = true; }
+    TC().load(saveGame(g));
+    const s = (TC().page(`fold:${k.reg}`) as { sections: { text: string; rows: Row[] }[] }).sections[0];
+    expect(foldCorps(g, k, x)).toBe(true);
+    if (mp !== null) g.flags['mp:CHN'] = mp;
+    TC().load(saveGame(g));
+    const o = (TC().arsenal(-1) as { offers: { key: string; note: string; why: string | null }[] }).offers.find((y) => y.key === `cadre:${x.id}`)!;
+    return { text: s.text, rows: s.rows, note: o.note, why: o.why };
+  };
+
+  it("F2 and F3, the 3D card and the arsenal: the cadre's men as the fold card says them, each corps' strength against its own size", () => {
+    const c = chuchow(null);
+    expect(c.text).toBe(`${GONE}: about 11,000 men, 60% of its strength. ${KEEP}: about 40,000 men, 60%.`);
+    expect(c.rows.map((r) => r.lines[0])).toEqual(['About 18,000 men in one corps at 100% of its strength, green.', 'About 51,000 men in one corps at 76% of its strength, green.']);
+    expect(c.rows[1].lines).toContain(`${GONE} goes home as a cadre: it can be raised again from the arsenal for about 18,000 men from the reserve, in 5 months.`);
+    expect(c.note).toBe('Forms up at Chungking, for 50% of the price of a new corps. Takes about 18,000 men and 5,800 rifles.');
+    expect(c.why).toBeNull();
+    const short = chuchow(0.1);
+    expect(short.why).toBe(`The reserve has not the men: this takes about 18,000 men and less than half of a division's worth is left.${CLASS}`);
+  });
+
+  it('F2, the helpers: part of a division\'s worth in men at the scale, whole counts as line 8 says them', () => {
+    const g = grand();
+    expect(riflesTakes(g, 'CHN', 0.5)).toBe('Takes about 34,000 men and 10,700 rifles.');
+    expect(riflesTakes(g, 'CHN', 3)).toBe("Takes three divisions' worth of men and 63,900 rifles.");
+    expect(noMenWords('CHN', 0.5, 0.2, 1.5644171779141105)).toBe(`The reserve has not the men: this takes about 34,000 men and less than half of a division's worth is left.${CLASS}`);
+    expect(noMenWords('CHN', 1.5, 1.2, 1.5644171779141105)).toBe(`The reserve has not the men: this takes about 101,000 men and about one division's worth is left.${CLASS}`);
+    expect(noMenWords('CHN', 3, 0.2, 1.5644171779141105)).toBe(`The reserve has not the men: this takes three divisions' worth and less than half of one is left.${CLASS}`);
+  });
+
+  it('F3, Japan: a strength is shown as it stands, as built', () => {
+    const w = foldCardWords('JAP');
+    expect(w.share(0.27, { full: 0.27 } as never)).toBe(0.27);
+    expect(foldCardWords('CHN').share(0.162, { full: 0.27 } as never)).toBeCloseTo(0.6, 10);
+  });
+});

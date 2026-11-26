@@ -6829,11 +6829,11 @@ function foldPage(s: Game, reg: number): Page | null {
   const sections = [...pairs.values()].map((p) => {
     const a = corpsOfId(p[0].keep), b = corpsOfId(p[0].gone);
     return {
-      heading: a && b ? `${a.name.toUpperCase()} AND ${b.name.toUpperCase()}` : 'TWO CORPS', text: a && b ? `${a.name}: ${fw.men(a)}, ${pct(a.str)} of its strength. ${b.name}: ${fw.men(b)}, ${pct(b.str)}.` : '',
+      heading: a && b ? `${a.name.toUpperCase()} AND ${b.name.toUpperCase()}` : 'TWO CORPS', text: a && b ? `${a.name}: ${fw.men(a)}, ${pct(fw.share(a.str, a))} of its strength. ${b.name}: ${fw.men(b)}, ${pct(fw.share(b.str, b))}.` : '',
       rows: p.map((v): PageRow => ({
         nat: s.human!, title: `Keep ${v.keepName}`,
         lines: [
-          `${upFirst(foldWords(s, s.human!, v).men)} in one corps at ${pct(v.str)} of its strength, ${grade(v.xp).toLowerCase()}.`,
+          `${upFirst(foldWords(s, s.human!, v).men)} in one corps at ${pct(fw.share(v.str, corpsOfId(v.keep)))} of its strength, ${grade(v.xp).toLowerCase()}.`,
           v.general ? `${v.general} commands${v.stepsDown ? `; ${v.stepsDown} goes to the list of generals waiting for a corps` : ''}.` : 'No general commands it.',
           // (The men in words from fold.ts foldWords, as the news and the page say them: the UI director's point 4 of 26 November 2026.)
           foldWords(s, s.human!, v).over ?? '',
