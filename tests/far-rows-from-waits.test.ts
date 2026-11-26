@@ -44,7 +44,14 @@ const war = (on: boolean, stop = 3): Game => {
   return g;
 };
 /** Month by month, Japan's alone; Singapore falls to her in month 35, so the Malaya front lets its corps go. */
-const months = (g: Game, from: number, to: number): void => { for (let t = from; t <= to; t++) { if (t === 35) lose(g, 'Singapore', 'JAP', 'Calcutta'); g.turn = t; startPhase(g, 'JAP'); } };
+/**
+ * (The contact rule's second form, the design director's ruling of 06:10Z, 26 November 2026: a corps beside the enemy
+ * is held while it took part in the battle last resolved on its ground, or where nobody of its side keeps its province.
+ * This board's corps at the front stand with others of their side, so each is set, by hand, as having fought the battle
+ * last resolved where it stands, and is held as the board means. The relieved case: tests/contact-fact.test.ts.)
+ */
+const fought = (g: Game): void => { if (g.flags.fromWait !== 1) return; g.lastBattle = {}; for (const c of g.corps) if (!c.dead) (g.lastBattle[c.reg] ??= []).push(c.id); };
+const months = (g: Game, from: number, to: number): void => { for (let t = from; t <= to; t++) { if (t === 35) lose(g, 'Singapore', 'JAP', 'Calcutta'); fought(g); g.turn = t; startPhase(g, 'JAP'); } };
 
 describe('the data: the two rows', () => {
   it("the Hainan row takes the 21st Army's 18th Division, the Rangoon row takes the 25th Army's, with no body of its own", () => {
@@ -74,6 +81,8 @@ describe("switch on: the Rangoon row waits with the row that makes its corps", (
     // The 21st Army's 18th Division stands clear: the Hainan row comes. Its corps stands in contact at Hainan, so the
     // Rangoon row waits on it as on any corps in contact; one 18th Division stands.
     relocate(g, c, g.byName['Hiroshima']);
+    // (It forms there alone, nobody of its side to keep Hainan: the contact rule's second form holds it where it forms.)
+    for (const u of [...g.byName['Hainan'].units]) relocate(g, u, g.byName['Hiroshima']);
     months(g, 42, 44);
     expect(g.flags[`sent:${index(ARMY25)}`]).toBe(1);
     const a = g.corps.find((x) => x.nat === 'JAP' && !x.dead && x.name === ARMY25)!;

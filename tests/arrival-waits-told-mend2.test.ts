@@ -22,7 +22,14 @@ import type { Corps, Game } from '../src/campaign/types';
 const ROWS = (setup as any).expeditions as any[];
 let added = 0;
 afterEach(() => { while (added > 0) { ROWS.pop(); added--; } });
-const month = (g: Game, t: number): void => { g.turn = t; startPhase(g, 'GER'); };
+/**
+ * (The contact rule's second form, the design director's ruling of 06:10Z, 26 November 2026: a corps beside the enemy
+ * is held while it took part in the battle last resolved on its ground, or where nobody of its side keeps its province.
+ * This board's corps at the front stand with others of their side, so each is set, by hand, as having fought the battle
+ * last resolved where it stands, and is held as the board means. The relieved case: tests/contact-fact.test.ts.)
+ */
+const fought = (g: Game): void => { if (g.flags.fromWait !== 1) return; g.lastBattle = {}; for (const c of g.corps) if (!c.dead) (g.lastBattle[c.reg] ??= []).push(c.id); };
+const month = (g: Game, t: number): void => { fought(g); g.turn = t; startPhase(g, 'GER'); };
 const said = (g: Game, t: number): string[] => g.headlines.filter((h) => h.turn === t && h.nat === 'GER' && /Test|Old Corps/.test(h.text)).map((h) => h.text);
 const tel = (g: Game, i: number): string[] => Object.keys(g.flags).filter((k) => /^row[A-Za-z]+:/.test(k) && k.split(':')[1] === String(i));
 const open = (): Game => { const g = startOpen(createGame(1, 'GER')); g.flags.fromWait = 1; return g; };
@@ -57,6 +64,7 @@ describe('T2-4: a told row that joins a corps in another province', () => {
     month(g, 2);
     expect(said(g, 2)).toEqual(['The Old Corps (Test Divisions) is due in the Grenzmark this month, formed from your Test Corps, which is at the front in the Saar. The arrival waits, and forms the month after that corps leaves the front.']);
     relocate(g, held, g.byName.Grenzmark);
+    fought(g);
     expect(corpsInContact(g, 'GER', held)).toBe(true);
     month(g, 3);
     expect(g.flags[`sent:${i}`]).toBe(1);
@@ -84,6 +92,7 @@ describe('T2-5, section 8 point 5: the place once, grouped by place', () => {
     const g = open();
     const names = ['Test Corps', 'Second Test Corps', 'Third Test Corps'].slice(0, at.length);
     const cs = names.map((n, k) => addCorps(g, 'GER', n, 'inf', 2, g.byName[at[k]].id, {}));
+    fought(g);
     for (const c of cs) expect(corpsInContact(g, 'GER', c)).toBe(true);
     ROWS.push([2, 'GER', 'Test Army', 'inf', 2, 'Magdeburg', { from: [...names, ...unformed] }]); added++;
     return { g, cs };
