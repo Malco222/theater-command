@@ -827,6 +827,53 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
     });
   });
 
+  it('K5, the independent check\'s leak (26 Nov 2026): a port handed to its own holder, then lost by battle and retaken in that same month, does not read the stores from before the loss as his, for the taking strikes the hand-over\'s mark (off: the window feeds him alike)', () => {
+    const fed: Record<string, number[]> = {};
+    for (const on of [false, true]) {
+      for (const shape of ['handed, lost, retaken', 'lost, retaken', 'handed only'] as const) {
+        // Britain's ships fill Malta's stores in month 1 and the sea then shuts for everyone. In month 2 Malta is
+        // handed to Britain, who holds it (a cession: since moves, nothing changes hands), and in that same month
+        // Italy takes it by battle and Britain takes it back.
+        const g = war(on);
+        const r = g.byName['Malta'];
+        const c = addCorps(g, 'UK', 'Window test', 'inf', 1, 'Malta', {});
+        expect(garrison(g, c)).toBe(true);
+        const draw = (t: number): void => { g.turn = t; g.phase = g.order.indexOf('UK'); g.supplyDirty = true; computeSupply(g); };
+        draw(1);
+        expect([on, shape, g.flags[`stores:${r.id}`], filler(g, r)]).toEqual([on, shape, 1, on ? 'UK' : undefined]);
+        for (const n of Object.values(g.nations)) { n.seaSupply = false; n.sealift = 0; }
+        g.turn = 2;
+        if (shape !== 'lost, retaken') {
+          transfer(g, r, 'UK');
+          expect([on, shape, r.since, g.flags[`stores:held:${r.id}`]]).toEqual([on, shape, 2, on ? 2 : undefined]);
+          if (on) expect([shape, keptStoresHis(g, r)]).toEqual([shape, true]);
+        }
+        if (shape !== 'handed only') {
+          declareWar(g, 'ITA', 'UK');
+          capture(g, r, 'ITA');
+          expect([on, shape, g.flags[`stores:held:${r.id}`], g.flags[`stores:at:${r.id}`]]).toEqual([on, shape, undefined, undefined]);
+          capture(g, r, 'UK');
+        }
+        expect([on, shape, r.ctrl, r.since]).toEqual([on, shape, 'UK', 2]);
+        const his = shape === 'handed only';
+        if (on) expect([shape, keptStoresHis(g, r), keptStoresRun(g, r, true) > 0]).toEqual([shape, his, his]);
+        const months: number[] = [];
+        for (let t = 2; t <= 5; t++) {
+          draw(t);
+          if (c.supplied) months.push(t);
+          if (on && t === 3) expect([shape, keptStoresHis(g, r), keptStoresRun(g, r, true)]).toEqual([shape, his, his ? 2 : 0]);
+        }
+        fed[`${on} ${shape}`] = months;
+      }
+    }
+    expect(fed).toEqual({
+      // Off: the window feeds whoever holds the port for portKeep months after the fill of month 1.
+      'false handed, lost, retaken': [2, 3], 'false lost, retaken': [2, 3], 'false handed only': [2, 3],
+      // On: a hand-over alone keeps the stores his; a loss and a retaking do not, with the hand-over before them or without.
+      'true handed, lost, retaken': [], 'true lost, retaken': [], 'true handed only': [2, 3],
+    });
+  });
+
   it('K3, the rechecker\'s under-feed: a cession or a treaty that hands a port to the nation already holding it moves since, yet nothing changed hands: the holder\'s kept stores still feed him and are still charged (off: fed alike, no mark written)', () => {
     for (const on of [false, true]) {
       // A cession (diplomacy.ts transfer): Britain's ships fill Malta's stores in month 1, the sea then shuts for
@@ -857,7 +904,8 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
       expect([on, r.ctrl, r.since, keptStoresHis(g, r)]).toEqual([on, 'UK', 6, false]);
       // Nor does a later cession make stores that were not his his again: only his own stay his.
       g.turn = 7; transfer(g, r, 'UK');
-      expect([on, r.since, g.flags[`stores:held:${r.id}`], keptStoresHis(g, r)]).toEqual([on, 7, on ? 2 : undefined, false]);
+      // (The taking of month 5 struck the mark of month 2, and a cession of stores that are not his writes none.)
+      expect([on, r.since, g.flags[`stores:held:${r.id}`], keptStoresHis(g, r)]).toEqual([on, 7, undefined, false]);
 
       // A treaty (claims.ts): staged, a private war between Spain and Portugal ending with Spain holding Malta, the
       // stores Spain's own of month 2; the treaty in month 4 makes Malta Spain's own ground and moves since.
