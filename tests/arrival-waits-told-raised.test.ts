@@ -61,4 +61,31 @@ describe('a corps destroyed, then raised again under its name, while its row wai
     expect(g.flags[`sent:${i}`]).toBe(1);
     expect(said(g, 8)).toEqual(['Test Army has arrived in Magdeburg.']);
   });
+
+  // The same test of the corps' id, by another road (the round 3 recheck's board B1): the corps he was told of is
+  // renamed by a row that joins it and stays at the front under its new name, and another row then lands a NEW corps
+  // under the old name. Without the id test the row would say "now that the Test Corps and the Other Test Corps have
+  // left the front" of a corps that is still in the Grenzmark.
+  it('a new corps landed under the old name of a corps renamed at the front is not the one he was told of', () => {
+    const g = open();
+    const c = addCorps(g, 'GER', 'Test Corps', 'inf', 2, g.byName.Grenzmark.id, {});
+    const o = addCorps(g, 'GER', 'Other Test Corps', 'inf', 2, g.byName.Saar.id, {});
+    const i = addRow([2, 'GER', 'Test Army', 'inf', 2, 'Magdeburg', { from: ['Test Corps', 'Other Test Corps'] }]);
+    addRow([2, 'GER', 'Big Corps', 'inf', 1, 'Magdeburg', { joins: 'Test Corps' }]);
+    addRow([3, 'GER', 'Test Corps', 'inf', 2, 'Magdeburg', {}]);
+    month(g, 2);
+    expect(said(g, 2)).toEqual(['The Test Army is due in Magdeburg this month, formed from two of your corps. The Test Corps in the Grenzmark and the Other Test Corps in the Saar are at the front, so the arrival waits, and forms the month after both leave the front.']);
+    expect(c.name).toBe('Big Corps');
+    month(g, 3);
+    expect(g.flags[`sent:${i}`]).toBeUndefined();
+    expect(said(g, 3)).toEqual(['Test Corps has arrived in Magdeburg.']);
+    const nc = g.corps.find((x) => x.name === 'Test Corps' && !x.dead)!;
+    expect(nc.id).not.toBe(c.id);
+    relocate(g, o, g.byName.Bavaria);
+    month(g, 4);
+    expect(g.flags[`sent:${i}`]).toBe(1);
+    expect(c.dead).toBeFalsy();
+    expect(g.regions[c.reg].name).toBe('Grenzmark');
+    expect(said(g, 4)).toEqual(['Test Army has arrived in Magdeburg.']);
+  });
 });
