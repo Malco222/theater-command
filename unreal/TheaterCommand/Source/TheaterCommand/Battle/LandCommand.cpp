@@ -10,6 +10,11 @@ namespace LandCommand
 	{
 		constexpr double Pi = 3.14159265358979323846;
 
+		/** The setup step's clearance between two blocks, metres: the rules' own LAND.placeClear (src/battle/land/rules.ts;
+		 * tests/land-drawup.test.ts holds the two together), and the draw-up's gap between two side by side (units.ts GAP). */
+		constexpr double PlaceClear = 12.0;
+		constexpr double DrawGap = 40.0;
+
 		/** The smallest turn from A to B, -pi..pi. */
 		double TurnOf(double A, double B)
 		{
@@ -56,6 +61,7 @@ namespace LandCommand
 		Shown.clear();
 		Coming.clear();
 		Hand.clear();
+		Groups.clear();
 		Me = Rec.bLive ? Rec.Me : -1;
 		bSetup = Rec.bSetup;
 		std::copy(Rec.Room, Rec.Room + 4, RoomAt);
@@ -305,6 +311,7 @@ namespace LandCommand
 		for (Tag& G : Shown)
 		{
 			G.bChosen = std::find(Hand.begin(), Hand.end(), G.Block) != Hand.end();
+			G.Group = G.bMine ? GroupOf(G.Block) : 0;
 		}
 	}
 
@@ -667,5 +674,211 @@ namespace LandCommand
 		if (!bSetup || !G || !G->bOrderable) return false;
 		const double Hw = G->W * 0.5, Hd = G->D * 0.5;
 		return X - Hw >= RoomAt[0] && X + Hw <= RoomAt[2] && Y - Hd >= RoomAt[1] && Y + Hd <= RoomAt[3];
+	}
+
+	// ---- Drawing up while he places his army ----
+
+	std::vector<Ghost> General::CarryAll(int Held, double X, double Y) const
+	{
+		std::vector<Ghost> Out;
+		const Tag* H = TagOf(Held);
+		if (!H) return Out;
+		const std::vector<int> Ids = Chosen();
+		const bool bAll = Ids.size() > 1 && std::find(Ids.begin(), Ids.end(), Held) != Ids.end();
+		if (!bAll)
+		{
+			Out.push_back({ Held, X, Y, H->Face });
+			return Out;
+		}
+		for (int Id : Ids)
+		{
+			if (const Tag* G = TagOf(Id)) Out.push_back({ Id, X + (G->X - H->X), Y + (G->Y - H->Y), G->Face });
+		}
+		return Out;
+	}
+
+	bool General::MayStandAll(const std::vector<Ghost>& Places) const
+	{
+		for (const Ghost& One : Places)
+		{
+			if (!MayStand(One.Block, One.X, One.Y)) return false;
+		}
+		return !Places.empty();
+	}
+
+	std::vector<Ghost> General::DrawnLine(double X0, double Y0, double X1, double Y1) const
+	{
+		std::vector<const Tag*> Us;
+		for (int Id : Chosen())
+		{
+			if (const Tag* G = TagOf(Id)) Us.push_back(G);
+		}
+		std::vector<Ghost> Out;
+		if (Us.empty()) return Out;
+		// (a click, or a drag too short to say which way: a level line through the point)
+		double Long = std::hypot(X1 - X0, Y1 - Y0);
+		double Ux = 1.0, Uy = 0.0;
+		if (Long < 30.0)
+		{
+			X0 = X1 = (X0 + X1) * 0.5;
+			Y0 = Y1 = (Y0 + Y1) * 0.5;
+			Long = 0.0;
+		}
+		else
+		{
+			Ux = (X1 - X0) / Long;
+			Uy = (Y1 - Y0) / Long;
+		}
+		// Facing across the line, toward the enemy's side of it (as LineUp).
+		double Face = std::atan2(Ux, Uy) - Pi / 2.0;
+		const double Toward = Me == 1 ? Pi : 0.0;
+		if (std::cos(Face - Toward) < 0.0) Face += Pi;
+		std::stable_sort(Us.begin(), Us.end(), [Ux, Uy](const Tag* A, const Tag* B) { return A->X * Ux + A->Y * Uy < B->X * Ux + B->Y * Uy; });
+		// How near two neighbours may stand along it: the rules keep every two blocks apart by half their frontages
+		// across the field or half their depths up it, and the setup step's clearance more (sim.ts standWhy); the
+		// draw-up's own gap between two side by side.
+		const size_t N = Us.size();
+		std::vector<double> At(N, 0.0);
+		for (size_t I = 1; I < N; ++I)
+		{
+			const double Across = ((Us[I - 1]->W + Us[I]->W) * 0.5 + DrawGap) / std::max(std::fabs(Ux), 1e-6);
+			const double Up = ((Us[I - 1]->D + Us[I]->D) * 0.5 + PlaceClear + 8.0) / std::max(std::fabs(Uy), 1e-6);
+			At[I] = At[I - 1] + std::min(Across, Up);
+		}
+		const double Needs = At[N - 1];
+		// From end to end of his line where it is long enough for them; else about its middle.
+		const double Scale = Needs > 0.0 && Long > Needs ? Long / Needs : 1.0;
+		const double Start = (Long - Needs * Scale) * 0.5;
+		for (size_t I = 0; I < N; ++I)
+		{
+			const double Along = Start + At[I] * Scale;
+			Out.push_back({ Us[I]->Block, X0 + Ux * Along, Y0 + Uy * Along, Face });
+		}
+		return Out;
+	}
+
+	std::string General::PlaceMany(const std::vector<Ghost>& Places)
+	{
+		if (Places.empty()) return std::string();
+		std::string Out = "[";
+		for (size_t K = 0; K < Places.size(); ++K)
+		{
+			char Face[32];
+			std::snprintf(Face, sizeof(Face), "%.4f", std::isfinite(Places[K].Face) ? Places[K].Face : 0.0);
+			if (K) Out += ",";
+			Out += "[" + std::to_string(Places[K].Block) + "," + Number(Places[K].X) + "," + Number(Places[K].Y) + "," + Face + "]";
+		}
+		return Out + "]";
+	}
+
+	std::string General::DrawUp(const std::string& Kind) const
+	{
+		return "[\"" + Kind + "\"," + Units(Chosen()) + "]";
+	}
+
+	// ---- Groups on the number keys ----
+
+	General::Tied General::Tie(int Num)
+	{
+		Tied Out;
+		const std::vector<int> Ids = Chosen();
+		if (Num < 1 || Num > 9 || Ids.empty()) return Out;
+		for (int Id : Ids)
+		{
+			const auto It = std::find_if(Groups.begin(), Groups.end(), [Id](const std::pair<int, int>& G) { return G.first == Id; });
+			if (It == Groups.end())
+			{
+				Groups.push_back({ Id, Num });
+			}
+			else
+			{
+				if (It->second != Num)
+				{
+					++Out.Moved;
+					if (std::find(Out.From.begin(), Out.From.end(), It->second) == Out.From.end()) Out.From.push_back(It->second);
+				}
+				It->second = Num;
+			}
+			++Out.Count;
+		}
+		std::sort(Out.From.begin(), Out.From.end());
+		for (Tag& T : Shown) T.Group = T.bMine ? GroupOf(T.Block) : 0;
+		return Out;
+	}
+
+	bool General::Take(int Num, bool bAdd)
+	{
+		std::vector<int> Ids;
+		for (const std::pair<int, int>& G : Groups)
+		{
+			const Tag* T = TagOf(G.first);
+			if (G.second == Num && T && T->bOrderable) Ids.push_back(G.first);
+		}
+		if (Ids.empty()) return false;
+		Choose(Ids, bAdd);
+		return true;
+	}
+
+	int General::GroupOf(int Block) const
+	{
+		for (const std::pair<int, int>& G : Groups)
+		{
+			if (G.first == Block) return G.second;
+		}
+		return 0;
+	}
+
+	bool General::GroupAt(int Num, double& OutX, double& OutY) const
+	{
+		double Sx = 0.0, Sy = 0.0;
+		int Count = 0;
+		for (const std::pair<int, int>& G : Groups)
+		{
+			const Tag* T = TagOf(G.first);
+			if (G.second != Num || !T || !T->bOrderable) continue;
+			Sx += T->X;
+			Sy += T->Y;
+			++Count;
+		}
+		if (Count == 0) return false;
+		OutX = Sx / Count;
+		OutY = Sy / Count;
+		return true;
+	}
+
+	std::vector<const Tag*> General::OnMap() const
+	{
+		std::vector<const Tag*> Out;
+		for (const Tag& G : Shown)
+		{
+			// (as EnemyAt: an enemy hidden in woods, not yet found, is not there for him)
+			if (Off(G.State) || (Me >= 0 && G.Side != Me && G.bHidden)) continue;
+			Out.push_back(&G);
+		}
+		return Out;
+	}
+
+	std::string General::TiedWords(const Tied& What, int Num)
+	{
+		if (What.Count <= 0) return std::string();
+		// (counts in words to ten, the group's number a figure, as its key)
+		auto Said = [](int Many, bool bHead)
+		{
+			static const char* const Words[] = { "none", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten" };
+			std::string Word = Many >= 0 && Many <= 10 ? Words[Many] : std::to_string(Many);
+			if (bHead && !Word.empty() && Word[0] >= 'a' && Word[0] <= 'z') Word[0] = static_cast<char>(Word[0] - 'a' + 'A');
+			return Word;
+		};
+		std::string Out = Said(What.Count, true) + (What.Count == 1 ? " unit" : " units") + " tied to " + std::to_string(Num);
+		if (What.Moved > 0 && !What.From.empty())
+		{
+			Out += "; " + Said(What.Moved, false) + " of them " + (What.Moved == 1 ? "leaves " : "leave ");
+			for (size_t K = 0; K < What.From.size(); ++K)
+			{
+				if (K) Out += K + 1 == What.From.size() ? " and " : ", ";
+				Out += std::to_string(What.From[K]);
+			}
+		}
+		return Out + ".";
 	}
 }

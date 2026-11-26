@@ -158,7 +158,7 @@ describe("support teams in battle: a team's fire shakes by its own harm (sim.tea
     expect(new LandBattle(t).teamsRule).toBe(false);
     expect(liveTicket(t, { me: null }).sim.teamsRule).toBe(false);
     // (it works only with "Units face the fire that hurts most" on, the design director, 25 November 21:54Z, and that one
-    // only with "Units keep their stand" on, 26 November 01:02Z; tests/land-facing.test.ts, tests/land-stand.test.ts)
+    // only with "Attackers stay where they stop to fight" on, 26 November 01:02Z; tests/land-facing.test.ts, tests/land-stand.test.ts)
     expect(liveTicket(t, { me: null, teams: true }).sim.teamsRule).toBe(false);
     expect(liveTicket(t, { me: null, teams: true, facing: true }).sim.teamsRule).toBe(false);
     expect(liveTicket(t, { me: null, teams: true, facing: true, stand: true }).sim.teamsRule).toBe(true);

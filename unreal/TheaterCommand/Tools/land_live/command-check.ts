@@ -71,6 +71,31 @@ for (const [id, x, y, may] of places) {
 }
 console.log(`placings: ${places.length} asked; both yes ${both}, both no ${onlyRules}, the screen yes but the rules no ${clipboardYesRulesNo}${why.size ? ` (${[...why.entries()].map(([w, n]) => `${w} ${n}`).join('; ')})` : ''}`);
 
+// Drawing up while he places his army (Brian, 26 November 2026): what the clipboard would ask for a group carried as
+// one and for a line drawn on his ground (drawn.jsonl: a word, then TC.landPlaceMany's list), the rules take, all of
+// it; and each formation's word (drawups.jsonl: TC.landDrawUp's arguments) draws them up.
+{
+  const drawn = readFileSync(join(setupFolder, 'drawn.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => { const [what, list] = l.split('\t'); return { what, list: JSON.parse(list) as number[][] }; });
+  if (!drawn.some((d) => d.what === 'carry') || !drawn.some((d) => d.what === 'line')) fail('the clipboard wrote no group carry or no drawn line');
+  const said: string[] = [];
+  for (const d of drawn) {
+    const no = S.canPlaceMany(d.list);
+    said.push(`${d.what} ${d.list.length}${no ? ` refused (${no.who}: ${no.why})` : ''}`);
+    // (ground the screen cannot see, water or a river's lanes, may refuse a place; two of the act's own blocks standing
+    // on one another never may: the clipboard's spacing is the rules' own)
+    if (no && (no.why === 'Another block stands there.' || no.why === 'Outside your ground.' || d.what === 'carry' || d.what === 'line')) fail(`the clipboard's ${d.what}: the rules refuse it (${no.who}: ${no.why})`);
+  }
+  const D = livePiece(key, seed, { me: 'att', setup: true });
+  const ups = readFileSync(join(setupFolder, 'drawups.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as [string, number[]]);
+  if (ups.length < 5) fail(`the clipboard wrote ${ups.length} formation words, not 5`);
+  for (const [kind, ids] of ups) {
+    const r = D.drawUp(kind as 'line', ids);
+    said.push(`${kind}${ids.length ? ` of ${ids.length}` : ''} ${r.ok ? `drew up ${r.placed.length}` : `refused (${r.why})`}`);
+    if (!r.ok || (ids.length > 0 && r.placed.length !== ids.length)) fail(`the clipboard's ${kind} of ${ids.length || 'all'}: ${r.ok ? `${r.placed.length} placed` : r.why}`);
+  }
+  console.log(`drawing up: ${said.join('; ')}`);
+}
+
 // The walk pressed in code for the Mac's builder (-TheaterLandScript): the two units it carries into the woods are placed
 // there, and when the clock starts the rules hide them (Brian's ambushes, 22 November 04:18Z).
 const woods = readFileSync(join(setupFolder, 'woods.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => l.split('\t').map(Number));

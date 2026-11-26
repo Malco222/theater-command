@@ -4724,6 +4724,13 @@ void ALandBattle::MakeArmour()
 	// TC_REBUILD=M_LandSteel): with the old one they stay the one black until they come near.
 	Armour->bBurntCoat = LandParts::OnTrial("burntcoat") && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoBurntCoat"));
 	UE_LOG(LogTheater, Log, TEXT("Land battle: the burnt coat %s"), Armour->bBurntCoat ? TEXT("ON (-TheaterLandTrial=burntcoat, release 2): wrecks in soot, rust and ash") : TEXT("off"));
+	// Paint and marks the same in every year (release 2, on trial: "-TheaterLandTrial=anyyear", off until the art
+	// director and a Mac reading pass; Brian, 26 November 2026: "have the paint be on it regardless of the year", and
+	// the art director's ruling of the same day): no vehicle's coat or mark is chosen by the battle's month (LandKit's
+	// Dress::bAnyYear). A British tank wears her flash in 1940, a German one her grey in 1944, and only the ground
+	// changes a coat (the desert's). "-TheaterLandNoAnyYear" off whatever the trial.
+	Armour->bAnyYear = LandParts::OnTrial("anyyear") && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoAnyYear"));
+	UE_LOG(LogTheater, Log, TEXT("Land battle: paint and marks in every year %s"), Armour->bAnyYear ? TEXT("ON (-TheaterLandTrial=anyyear, release 2): no coat or mark by the battle's month") : TEXT("off (by the month, as before)"));
 	std::string Error;
 	{
 		// How a pierced tank ends by the face struck (the modeller's measured odds: a rear hit on a Tiger or a Panther

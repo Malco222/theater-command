@@ -370,6 +370,67 @@ int main(int Argc, char** Argv)
 		std::printf("cutters and smoke: tank %d cuts (%s), sections lay smoke (%s)\n", Tank, Cut.c_str(), Smoke.c_str());
 	}
 
+	// ---- The map of the field (release 2; Brian, 26 November 2026; the design director: the player's sight only): his own
+	// still on the field and the enemy the field shows him, in the tags' order. Then the same moment with one enemy hidden
+	// in woods, another withdrawn, and one of his own hidden: the two enemies leave the map, his own stays on it. ----
+	{
+		auto Listed = [](const LandCommand::General& Of)
+		{
+			std::vector<int> Ids;
+			for (const LandCommand::Tag* T : Of.OnMap()) Ids.push_back(T->Block);
+			return Ids;
+		};
+		auto Owed = [](const LandCommand::General& Of)
+		{
+			std::vector<int> Ids;
+			for (const LandCommand::Tag& T : Of.Tags())
+			{
+				if (T.State == "gone" || T.State == "withdrawn" || (!T.bMine && T.bHidden)) continue;
+				Ids.push_back(T.Block);
+			}
+			return Ids;
+		};
+		// (a moment with both sides still on the field: the first of these that has two enemies and one of his own shown)
+		LandCommand::General Mapped;
+		Mapped.Begin(Rec);
+		int HidFoe = -1, GoneFoe = -1, HidMine = -1;
+		double Moment = 0.0;
+		for (double Share = 0.1; Share < 0.95 && (HidFoe < 0 || GoneFoe < 0 || HidMine < 0); Share += 0.1)
+		{
+			Moment = Rec.Fought * Share;
+			Mapped.Update(Rec, Moment);
+			HidFoe = GoneFoe = HidMine = -1;
+			for (const LandCommand::Tag* T : Mapped.OnMap())
+			{
+				if (!T->bMine && HidFoe < 0) HidFoe = T->Block;
+				else if (!T->bMine && GoneFoe < 0) GoneFoe = T->Block;
+				else if (T->bMine && !T->bHidden && HidMine < 0) HidMine = T->Block;
+			}
+		}
+		Check(HidFoe >= 0 && GoneFoe >= 0 && HidMine >= 0, "the battle has a moment with two enemies shown and one of his own on the field");
+		const std::vector<int> Shown = Listed(Mapped);
+		Check(!Shown.empty() && Shown == Owed(Mapped), "the map lists his own on the field and the enemy he is shown, in the tags' order");
+		LandFeed::Recording Wooded = Rec;
+		for (LandFeed::View& V : Wooded.Views)
+		{
+			for (LandFeed::Unit& U : V.Units)
+			{
+				if (U.Id == HidFoe || U.Id == HidMine) U.bHidden = true;
+				if (U.Id == GoneFoe) U.State = "withdrawn";
+			}
+		}
+		LandCommand::General Thinned;
+		Thinned.Begin(Wooded);
+		Thinned.Update(Wooded, Moment);
+		const std::vector<int> After = Listed(Thinned);
+		auto On = [&After](int Block) { return std::find(After.begin(), After.end(), Block) != After.end(); };
+		Check(After == Owed(Thinned) && After.size() + 2 == Shown.size(), "with an enemy hidden and another withdrawn, the map lists two fewer");
+		Check(!On(HidFoe), "an enemy hidden from him is never on the map");
+		Check(!On(GoneFoe), "a block that has withdrawn is not on the map");
+		Check(On(HidMine), "his own block hidden in woods stays on his map");
+		std::printf("the map of the field: %d blocks shown at %.0f s; %d with an enemy hidden and another withdrawn\n", static_cast<int>(Shown.size()), Moment, static_cast<int>(After.size()));
+	}
+
 	// ---- Hedge snapping: the nearest point of a hedge within reach ----
 	{
 		const std::vector<std::pair<double, double>> Hedge = { { 0.0, 0.0 }, { 100.0, 0.0 }, { 100.0, 100.0 } };
@@ -440,6 +501,152 @@ int main(int Argc, char** Argv)
 	}
 	WoodsOut.close();
 	Check(Carried.size() == 2, "the walk finds woods on his ground for two of his units");
+
+	// ---- Drawing up while he places his army (Brian, 26 November 2026: "move my units in a formation before the battle
+	// begins"): several carried as one, a line drawn on his ground, a formation's word. What the screen would ask is
+	// written for the rules to answer (command-check.ts: drawn.jsonl, drawups.jsonl). ----
+	{
+		std::vector<int> All;
+		for (const LandCommand::Tag& T : S.Tags())
+		{
+			if (T.bOrderable) All.push_back(T.Block);
+		}
+		Check(All.size() >= 3, "he has several units to draw up");
+		std::ofstream Drawn(SetupFolder + "/drawn.jsonl"), DrawUps(SetupFolder + "/drawups.jsonl");
+		// One in hand, or the one held not in hand: carried alone.
+		S.Choose({ All[0] }, false);
+		const LandCommand::Tag* Held = S.TagOf(All[0]);
+		std::vector<LandCommand::Ghost> One = S.CarryAll(All[0], Held->X + 10.0, Held->Y);
+		Check(One.size() == 1 && One[0].Block == All[0] && std::fabs(One[0].X - Held->X - 10.0) < 1e-9, "one in hand is carried alone");
+		S.Choose({ All[1], All[2] }, false);
+		One = S.CarryAll(All[0], Held->X, Held->Y);
+		Check(One.size() == 1 && One[0].Block == All[0], "a unit not in hand is carried alone, whoever is in hand");
+		// All in hand, one held: every one keeps its place from it and its facing.
+		S.Choose(All, false);
+		const double MidX = (Room[0] + Room[2]) * 0.5, MidY = (Room[1] + Room[3]) * 0.5;
+		double Cx = 0.0, Cy = 0.0;
+		for (int Id : All)
+		{
+			Cx += S.TagOf(Id)->X / static_cast<double>(All.size());
+			Cy += S.TagOf(Id)->Y / static_cast<double>(All.size());
+		}
+		// (a small step toward the middle of his ground, so the whole group stays on it)
+		const double StepX = MidX > Cx ? 15.0 : -15.0, StepY = MidY > Cy ? 5.0 : -5.0;
+		const std::vector<LandCommand::Ghost> Group = S.CarryAll(All[0], Held->X + StepX, Held->Y + StepY);
+		Check(Group.size() == All.size(), "several in hand are carried as one");
+		bool bKept = true;
+		for (const LandCommand::Ghost& One2 : Group)
+		{
+			const LandCommand::Tag* T = S.TagOf(One2.Block);
+			bKept = bKept && T && std::fabs(One2.X - T->X - StepX) < 1e-9 && std::fabs(One2.Y - T->Y - StepY) < 1e-9 && std::fabs(One2.Face - T->Face) < 1e-12;
+		}
+		Check(bKept, "each keeps its place from the one he holds, and its facing");
+		Check(S.MayStandAll(Group), "a small step on his own ground: they may all stand");
+		Check(!S.MayStandAll(S.CarryAll(All[0], Held->X, Room[3] + 500.0)) && !S.MayStandAll({}), "carried off his ground, or none carried: not all may stand");
+		const std::string GroupJson = LandCommand::General::PlaceMany(Group);
+		LandJson::Json GroupRead;
+		std::string GroupError;
+		Check(LandJson::Parse(GroupJson, GroupRead, GroupError) && GroupRead.IsArray() && GroupRead.Count() == Group.size() && GroupRead.At(0).Count() == 4, "the group's places are a list of [id, x, y, face]");
+		Check(LandCommand::General::PlaceMany({}).empty(), "no places, nothing asked");
+		Drawn << "carry\t" << GroupJson << '\n';
+		// A line drawn across the middle of his ground, long enough for them: from end to end, facing the enemy.
+		const double Half = std::min(1000.0, (Room[2] - Room[0]) * 0.5 - 100.0);
+		const std::vector<LandCommand::Ghost> Line = S.DrawnLine(MidX - Half, MidY, MidX + Half, MidY);
+		Check(Line.size() == All.size(), "a line drawn stands every one in hand");
+		bool bFaces = true, bAcross = true, bApart = true;
+		for (size_t K = 0; K < Line.size(); ++K)
+		{
+			bFaces = bFaces && std::cos(Line[K].Face - (S.Side() == 0 ? 0.0 : 3.14159265358979)) > 0.99;
+			bAcross = bAcross && std::fabs(Line[K].Y - MidY) < 1e-6 && Line[K].X > MidX - Half - 1e-6 && Line[K].X < MidX + Half + 1e-6;
+			if (K > 0)
+			{
+				const LandCommand::Tag* A = S.TagOf(Line[K - 1].Block);
+				const LandCommand::Tag* B = S.TagOf(Line[K].Block);
+				bApart = bApart && Line[K].X - Line[K - 1].X >= (A->W + B->W) * 0.5 + 12.0;
+			}
+		}
+		Check(bFaces, "a drawn line faces the enemy's side");
+		Check(bAcross, "a level line stands them along it, between its ends");
+		Check(bApart, "no two nearer than they can stand");
+		if (Line.size() >= 2)
+		{
+			Check(std::fabs(Line.front().X - (MidX - Half)) < 1e-6 && std::fabs(Line.back().X - (MidX + Half)) < 1e-6, "a line long enough runs from end to end");
+		}
+		Check(S.MayStandAll(Line), "a line across the middle of his ground: they may all stand");
+		Drawn << "line\t" << LandCommand::General::PlaceMany(Line) << '\n';
+		// A click (no length): about the point, as close as they can stand, level.
+		const std::vector<LandCommand::Ghost> Close = S.DrawnLine(MidX, MidY, MidX + 2.0, MidY + 1.0);
+		double CloseMid = 0.0;
+		bool bCloseApart = true;
+		for (size_t K = 0; K < Close.size(); ++K)
+		{
+			CloseMid += Close[K].X / static_cast<double>(Close.size());
+			if (K > 0)
+			{
+				const LandCommand::Tag* A = S.TagOf(Close[K - 1].Block);
+				const LandCommand::Tag* B = S.TagOf(Close[K].Block);
+				bCloseApart = bCloseApart && Close[K].X - Close[K - 1].X >= (A->W + B->W) * 0.5 + 12.0;
+			}
+		}
+		Check(Close.size() == All.size() && bCloseApart && std::fabs((Close.front().X + Close.back().X) * 0.5 - (MidX + 1.0)) < 1e-6, "a line too short for them: about its middle, as close as they can stand");
+		(void)CloseMid;
+		if (S.MayStandAll(Close)) Drawn << "close\t" << LandCommand::General::PlaceMany(Close) << '\n';
+		// A slanted line: up the field more than across it, they stand clear by their depths.
+		const std::vector<LandCommand::Ghost> Slant = S.DrawnLine(MidX - 40.0, Room[1] + 40.0, MidX + 40.0, Room[3] - 40.0);
+		if (S.MayStandAll(Slant)) Drawn << "slant\t" << LandCommand::General::PlaceMany(Slant) << '\n';
+		Drawn.close();
+		// A formation's word: those in hand named; none in hand, none named (every one of his).
+		S.Choose({ All[0], All[1], All[2] }, false);
+		const std::string Three = S.DrawUp("wedge");
+		Check(Three == "[\"wedge\",[" + std::to_string(All[0]) + "," + std::to_string(All[1]) + "," + std::to_string(All[2]) + "]]", "a formation's word names those in hand");
+		DrawUps << Three << '\n';
+		S.Clear();
+		Check(S.DrawUp("line") == "[\"line\",[]]", "none in hand: none named");
+		for (const char* Kind : { "line", "two", "wedge", "column" }) DrawUps << S.DrawUp(Kind) << '\n';
+		DrawUps.close();
+		std::printf("drawing up: %zu units; a group carried as one, a line of %.0f m, a click's line and a slanted one written for the rules\n", All.size(), Half * 2.0);
+
+		// ---- Groups on the number keys (Brian, 26 November 2026: "hit the #1 and the units tied to it are all selected") ----
+		typedef LandCommand::General::Tied Tied;
+		Check(S.Tie(1).Count == 0 && LandCommand::General::TiedWords(S.Tie(1), 1).empty(), "nothing in hand, nothing tied");
+		Check(!S.Take(1, false) && S.GroupOf(All[0]) == 0, "a number with nothing tied takes nothing");
+		S.Choose({ All[0], All[1] }, false);
+		Tied T1 = S.Tie(1);
+		Check(T1.Count == 2 && T1.Moved == 0 && T1.From.empty() && LandCommand::General::TiedWords(T1, 1) == "Two units tied to 1.", "two tied to 1: " + LandCommand::General::TiedWords(T1, 1));
+		Check(S.GroupOf(All[0]) == 1 && S.GroupOf(All[1]) == 1 && S.GroupOf(All[2]) == 0 && S.TagOf(All[0])->Group == 1 && S.TagOf(All[2])->Group == 0, "each tied unit's tag carries its number");
+		S.Choose({ All[2] }, false);
+		Tied T2 = S.Tie(2);
+		Check(LandCommand::General::TiedWords(T2, 2) == "One unit tied to 2.", "one tied to 2: " + LandCommand::General::TiedWords(T2, 2));
+		// Taking a group: it alone in hand, or added to those in hand; his hand kept where the number is empty.
+		Check(S.Take(1, false) && S.Chosen().size() == 2 && S.TagOf(All[0])->bChosen && !S.TagOf(All[2])->bChosen, "the number takes its units in hand, alone");
+		Check(S.Take(2, true) && S.Chosen().size() == 3, "with Shift it is added to those in hand");
+		Check(!S.Take(7, false) && S.Chosen().size() == 3, "an empty number leaves his hand as it was");
+		// One number a unit: the last tie wins, and the note says where it came from.
+		S.Choose({ All[1], All[2] }, false);
+		Tied T3 = S.Tie(3);
+		Check(T3.Count == 2 && T3.Moved == 2 && T3.From.size() == 2 && LandCommand::General::TiedWords(T3, 3) == "Two units tied to 3; two of them leave 1 and 2.", "the last tie wins: " + LandCommand::General::TiedWords(T3, 3));
+		Check(S.GroupOf(All[1]) == 3 && S.GroupOf(All[2]) == 3 && S.GroupOf(All[0]) == 1 && !S.Take(2, false), "each unit has one number, and 2 is now empty");
+		S.Choose({ All[0], All[1] }, false);
+		Tied T4 = S.Tie(3);
+		Check(LandCommand::General::TiedWords(T4, 3) == "Two units tied to 3; one of them leaves 1.", "one joins from 1: " + LandCommand::General::TiedWords(T4, 3));
+		Tied Many;
+		Many.Count = 12;
+		Many.Moved = 3;
+		Many.From = { 2, 4, 5 };
+		Check(LandCommand::General::TiedWords(Many, 9) == "12 units tied to 9; three of them leave 2, 4 and 5.", "counts in words to ten: " + LandCommand::General::TiedWords(Many, 9));
+		double Gx = 0.0, Gy = 0.0;
+		Check(S.GroupAt(3, Gx, Gy) && std::fabs(Gx - (S.TagOf(All[0])->X + S.TagOf(All[1])->X + S.TagOf(All[2])->X) / 3.0) < 1e-9, "a group's middle is the middle of its units");
+		Check(!S.GroupAt(1, Gx, Gy), "an empty group has no middle");
+		Check(S.Tie(0).Count == 0 && S.Tie(10).Count == 0, "only 1 to 9 are numbers");
+		// The tags keep their numbers when they are read again, and a new battle begins with none.
+		S.Update(Setup, 0.0);
+		Check(S.TagOf(All[0])->Group == 3 && S.Take(3, false) && S.Chosen().size() == 3, "the numbers hold when the tags are read again");
+		LandCommand::General Fresh = S;
+		Fresh.Begin(Setup);
+		Fresh.Update(Setup, 0.0);
+		Check(Fresh.GroupOf(All[0]) == 0 && !Fresh.Take(3, false), "a new battle begins with nothing tied");
+		S.Clear();
+	}
 
 	// ---- Neighbours join the fight (release 2): a battle with a corps coming up from next door on each side ----
 	if (Argc >= 4)

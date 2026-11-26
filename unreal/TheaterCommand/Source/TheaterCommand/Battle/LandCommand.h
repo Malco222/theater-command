@@ -64,6 +64,8 @@ namespace LandCommand
 		bool bOrderable = false;
 		bool bTaken = false;
 		bool bChosen = false;
+		/** His own: the number key it is tied to (1 to 9; 0 none), General::Tie. */
+		int Group = 0;
 		/** Hidden from the other side (in woods, not yet found): his own show the forest mark; the enemy's are not shown. */
 		bool bHidden = false;
 		/** An enemy found by its fire, not yet located; and his own firing into cover at a point (reconnaissance by fire). */
@@ -207,6 +209,52 @@ namespace LandCommand
 		/** His ground [x0, y0, x1, y1]. */
 		const double* Room() const { return RoomAt; }
 
+		// ---- Drawing up while he places his army (release 2; Brian, 26 November 2026: "i should be able to move my units
+		// in a formation before the battle begins during the deployed phase"). A control of the setup step: the rules'
+		// own land:place has the last word on every place (TC.landPlaceMany, all of them or none). ----
+		/** Those he carries as one when he drags the block Held: every one in hand where Held is one of several in hand,
+		 * else Held alone. Each where it would stand with Held set down at (X, Y): its place from Held and its facing kept. */
+		std::vector<Ghost> CarryAll(int Held, double X, double Y) const;
+		/** Whether every one of them may stand so, as far as the screen can tell (MayStand; none: false). */
+		bool MayStandAll(const std::vector<Ghost>& Places) const;
+		/** Those in hand along a line drawn on his ground: across it, facing the enemy's side, in the order they stand
+		 * now, from end to end of it, and no nearer one another than they can stand (a line too short for them: about
+		 * its middle, as close as they can stand). */
+		std::vector<Ghost> DrawnLine(double X0, double Y0, double X1, double Y1) const;
+		/** TC.landPlaceMany's list for those places: "[[id,x,y,face],...]" ("" for none). */
+		static std::string PlaceMany(const std::vector<Ghost>& Places);
+		/** TC.landDrawUp's arguments for a formation's word (line, two, wedge, column): "[\"line\",[ids]]", those in
+		 * hand named, or none named (every one of his). */
+		std::string DrawUp(const std::string& Kind) const;
+
+		// ---- Groups on the number keys (release 2; Brian, 26 November 2026: "you should be able to group units so you
+		// can hit the #1 and the units tied to it are all selected"). One number a unit: the last tie wins. ----
+		/** What a tie did: how many units were tied, how many of them left another number, and those numbers (ascending). */
+		struct Tied
+		{
+			int Count = 0, Moved = 0;
+			std::vector<int> From;
+		};
+		/** Ties those in hand to the number (1 to 9), each leaving whatever number it had. None in hand: nothing. */
+		Tied Tie(int Num);
+		/** The number's units that still take orders, in hand (bAdd: added to those in hand). False, and his hand as it
+		 * was, where nothing is tied to it or all of its units are gone. */
+		bool Take(int Num, bool bAdd);
+		/** The number a block is tied to, 0 none. */
+		int GroupOf(int Block) const;
+		/** The middle of the number's units still on the field (for the view to glide to); false where none. */
+		bool GroupAt(int Num, double& OutX, double& OutY) const;
+		/** The note for a tie, in the UI director's words of 26 November ("Four units tied to 1; one of them leaves 2."),
+		 * "" where nothing was tied. */
+		static std::string TiedWords(const Tied& What, int Num);
+
+		/**
+		 * The blocks the map of the field shows (release 2; the design director, 26 November 2026: the player's sight
+		 * only): his own still on the field, and the enemy's that the field itself shows him, met or not. Never one
+		 * hidden from him, and none that has gone or withdrawn. In the tags' order.
+		 */
+		std::vector<const Tag*> OnMap() const;
+
 	private:
 		struct Words
 		{
@@ -239,6 +287,8 @@ namespace LandCommand
 		double ReadAt = 0.0;
 		std::vector<Pending> Given;
 		std::vector<int> Hand;
+		/** Each tied block and its number (Tie). */
+		std::vector<std::pair<int, int>> Groups;
 		int Me = -1;
 		bool bSetup = false;
 		double RoomAt[4] = { 0, 0, 0, 0 };

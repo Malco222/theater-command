@@ -4,6 +4,8 @@
 # Usage: Tools/land_kit/pictures.sh <sheet.png>   (the panels go to ${LAND_KIT_OUT:-$TMPDIR/land_kit}/pictures)
 # LAND_KIT_MARKS=1 paints the national marks' own sheet instead (release 2, -TheaterLandMarks: each owner's period
 # marking as the game paints it on her skin, whole vehicles and close looks).
+# LAND_KIT_ANYYEAR=1 paints the trial word "anyyear"'s own sheet instead (release 2: each vehicle by the month, as
+# shipped, beside the same one with no coat or mark chosen by the year).
 # LAND_KIT_HOUSE=1 paints the farmhouse's own sheet instead (release 2, -TheaterLandTrial=houses: the bocage's farmhouse built
 # to the vehicles' detail, whole and in its three hurts, near, middle and far, and stills across its 90 m and 300 m
 # switches as the game's lens shows them); LAND_KIT_HOUSE=farm the barn's and the byre's; LAND_KIT_HOUSE=church the

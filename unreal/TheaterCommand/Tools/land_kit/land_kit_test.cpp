@@ -454,8 +454,10 @@ namespace
 
 	/**
 	 * Every battle model with mark places, worn by her own nation (a "_" file by the Americans and the Germans), and
-	 * the owners whose marks change with the month (the British flash, then star; none before the flash) or who wear
-	 * another's kit: loaded with the marks off and on. Off must be as before; on, each body with a place gains marks
+	 * the owners whose marks change with the month (the British: none, then the flash, then the star) or who wear
+	 * another's kit; and the same owners with no mark by the year (Dress::bAnyYear, the trial word "anyyear"; Brian,
+	 * 26 November 2026, "have the paint be on it regardless of the year": the flash in 1940 and in 1944 alike):
+	 * loaded with the marks off and on. Off must be as before; on, each body with a place gains marks
 	 * (none where the owner paints none) at both levels, every point within its lift of her own skin (the near level
 	 * within 12 mm, the far within 35 mm), facing out, its triangles wound to face out, in the owner's paint (by area).
 	 * Gives the failures.
@@ -468,6 +470,7 @@ namespace
 			std::string Model, Nation;
 			int Year = 1944, Month = 7;
 			std::string Expect; // white (the star), cross, red (the star), flash, rectangle, yellow (the army star), none
+			bool bAnyYear = false;
 		};
 		auto Expected = [](const std::string& Nation, int Year, int Month)
 		{
@@ -501,14 +504,20 @@ namespace
 			std::string Own = Doc.Root()["nation"].Str();
 			if (Own == "any" || Own.empty())
 			{
-				Cases.push_back({ Name, "USA", 1944, 7, "white" });
+				Cases.push_back({ Name, "USA", 1944, 7, "white", false });
 				Own = "GER";
 			}
-			Cases.push_back({ Name, Own, 1944, 7, Expected(Own, 1944, 7) });
+			Cases.push_back({ Name, Own, 1944, 7, Expected(Own, 1944, 7), false });
 		}
-		for (const Case& C : std::vector<Case>{ { "LightTank", "UK", 1942, 5, "flash" }, { "LightTank", "UK", 1941, 6, "none" }, { "Sexton", "UK", 1943, 2, "flash" },
-				 { "Sherman", "UK", 1944, 7, "white" }, { "Sherman", "SOV", 1944, 7, "red" }, { "LightTank", "JAP", 1942, 1, "yellow" },
-				 { "LightTank", "ITA", 1942, 10, "rectangle" }, { "Truck", "SOV", 1943, 7, "red" } })
+		for (const Case& C : std::vector<Case>{ { "LightTank", "UK", 1942, 5, "flash", false }, { "LightTank", "UK", 1941, 6, "none", false },
+				 { "Sexton", "UK", 1943, 2, "flash", false }, { "Sherman", "UK", 1944, 7, "white", false }, { "Sherman", "SOV", 1944, 7, "red", false },
+				 { "LightTank", "JAP", 1942, 1, "yellow", false }, { "LightTank", "ITA", 1942, 10, "rectangle", false }, { "Truck", "SOV", 1943, 7, "red", false },
+				 // (no mark by the year: the flash before its month and after the star's, the Poles' from 1939, a file's
+				 // own rows read for their first mark, and the others' as in any month)
+				 { "LightTank", "UK", 1941, 6, "flash", true }, { "Sexton", "UK", 1940, 6, "flash", true }, { "Sexton", "UK", 1944, 7, "flash", true },
+				 { "Sherman", "UK", 1940, 9, "flash", true }, { "Sherman", "UK", 1944, 7, "flash", true }, { "Sherman", "POL", 1939, 9, "flash", true },
+				 { "Sherman", "USA", 1940, 1, "white", true }, { "Sherman", "SOV", 1941, 6, "red", true }, { "LightTank", "JAP", 1945, 8, "yellow", true },
+				 { "Tiger", "GER", 1940, 5, "cross", true } })
 		{
 			Cases.push_back(C);
 		}
@@ -527,6 +536,7 @@ namespace
 			D.Nation = C.Nation;
 			D.Year = C.Year;
 			D.Month = C.Month;
+			D.bAnyYear = C.bAnyYear;
 			Model Off, On;
 			const auto T0 = Clock::now();
 			const bool bOff = Off.Load(Text, D, Error);
@@ -2161,6 +2171,122 @@ int main(int argc, char** argv)
 			Whole.Note(false, 0.0, "the recording has no field.place.terrain or date to change");
 		}
 		Report("a recording's desert field dresses its models (Battle::Load)", Whole, "");
+	}
+
+	// ---- No coat by the year (release 2, Dress::bAnyYear, the trial word "anyyear"; Brian, 26 November 2026: "have the
+	// paint be on it regardless of the year"; the art director's ruling of the same day): with it on a model wears one
+	// coat on a ground in every month of the war: a German vehicle tank grey (the Panther and the Hummel too, whose files
+	// have no grey of their own), the desert's coat on the desert (the first of its two), any other the first coat its
+	// file names. Off, every month's coat is as before (the checks above).
+	{
+		std::printf("\nNO COAT BY THE YEAR (Dress::bAnyYear, the trial word \"anyyear\")\n");
+		struct Any
+		{
+			const char* Name;
+			const char* Nation;
+			const char* Plains;
+			const char* Desert;
+		};
+		const Any Anys[] = {
+			{ "PanzerIV", "GER", "grey", "desert41" }, { "Tiger", "GER", "grey", "desert41" }, { "StuG3", "GER", "grey", "desert41" },
+			{ "Panther", "GER", "grey", "grey" }, { "Hummel", "GER", "grey", "grey" }, { "leFH18", "GER", "grey", "desert41" },
+			{ "Hanomag", "GER", "grey", "desert41" }, { "Kubelwagen", "GER", "grey", "desert41" }, { "Truck", "GER", "grey", "desert41" },
+			{ "Truck", "UK", "own", "stone" }, { "Truck", "ITA", "own", "sand" }, { "Truck", "USA", "olive drab", "olive drab" },
+			{ "M20", "UK", "own", "stone" }, { "Sherman", "USA", "olive drab", "olive drab" }, { "Type97", "JAP", "camo_early", "camo_early" },
+			{ "T34", "SOV", "own", "own" } };
+		auto Dressed = [&Content](const char* Name, const char* Nation, int Year, int Month, const char* Terrain, bool bAnyYear, Model& Out, std::string& Why)
+		{
+			std::string Text;
+			if (!ReadFile(Content + "/Models/Battle/" + Name + ".json", Text))
+			{
+				Why = std::string("cannot read ") + Name + ".json";
+				return false;
+			}
+			Dress D;
+			D.Nation = Nation;
+			D.Year = Year;
+			D.Month = Month;
+			D.Terrain = Terrain;
+			D.bAnyYear = bAnyYear;
+			return Out.Load(Text, D, Why);
+		};
+		// (her skin's points by how far each leans red over blue, over every body's near mesh: dark yellow and its green
+		// and brown lean far, tank grey not at all, and the dust on either leans between. The shares, of 1, of her points
+		// that are grey (4 levels or less) and that are yellow or brown (30 or more))
+		struct Leaning
+		{
+			double Grey = 0.0, Yellow = 0.0;
+		};
+		auto LeanOf = [](const Model& M)
+		{
+			size_t Points = 0, GreyPoints = 0, YellowPoints = 0;
+			for (const Body& Each : M.Bodies)
+			{
+				for (size_t K = 0; K + 3 < Each.Near.Colours.size(); K += 4)
+				{
+					const int Lean = static_cast<int>(Each.Near.Colours[K]) - static_cast<int>(Each.Near.Colours[K + 2]);
+					++Points;
+					GreyPoints += Lean <= 4 ? 1 : 0;
+					YellowPoints += Lean >= 30 ? 1 : 0;
+				}
+			}
+			Leaning Out;
+			if (Points > 0)
+			{
+				Out.Grey = static_cast<double>(GreyPoints) / static_cast<double>(Points);
+				Out.Yellow = static_cast<double>(YellowPoints) / static_cast<double>(Points);
+			}
+			return Out;
+		};
+		Tally Steady, Named, Grey;
+		for (const Any& A : Anys)
+		{
+			std::string First[2];
+			bool bSteady = true, bRead = true;
+			for (int Ground = 0; Ground < 2 && bRead; ++Ground)
+			{
+				// (the first and last month of the war, and the months the coats changed by: February and June 1943, March 1942)
+				const int Months[][2] = { { 1939, 9 }, { 1941, 6 }, { 1942, 3 }, { 1943, 1 }, { 1943, 2 }, { 1943, 6 }, { 1944, 7 }, { 1945, 8 } };
+				for (const auto& When : Months)
+				{
+					Model M;
+					std::string Why;
+					if (!Dressed(A.Name, A.Nation, When[0], When[1], Ground == 0 ? "plains" : "desert", true, M, Why))
+					{
+						std::printf("  FAIL %s (%s): %s\n", A.Name, A.Nation, Why.c_str());
+						bRead = false;
+						break;
+					}
+					if (First[Ground].empty())
+					{
+						First[Ground] = M.Coat;
+					}
+					bSteady = bSteady && M.Coat == First[Ground];
+				}
+			}
+			Steady.Note(bRead && bSteady, 0.0, std::string(A.Name) + " " + A.Nation + ": her coat changes with the month");
+			Named.Note(bRead && First[0] == A.Plains && First[1] == A.Desert, 0.0,
+				std::string(A.Name) + " " + A.Nation + ": " + First[0] + " and on the desert " + First[1] + ", not " + A.Plains + " and " + A.Desert);
+			std::printf("  %-10s %-3s in every month: %-10s on the desert: %-10s %s\n", A.Name, A.Nation, First[0].c_str(), First[1].c_str(),
+				bRead && bSteady && First[0] == A.Plains && First[1] == A.Desert ? "ok" : "WRONG");
+		}
+		Report("one coat on a ground in every month of the war", Steady, "");
+		Report("the coat is the ground's, Germany's grey, or the file's first", Named, "");
+		// (the grey is grey on her skin, in July 1944, against the same model by the month in her dark yellow: at least
+		// twice as many of her points are grey, and fewer are yellow or brown. The Panther and the Hummel, whose files
+		// have no grey, as the Tiger and the Panzer IV, whose files have)
+		for (const char* Name : { "Panther", "Hummel", "Tiger", "PanzerIV" })
+		{
+			Model ByMonth, AnyYear;
+			std::string Why;
+			const bool bOk = Dressed(Name, "GER", 1944, 7, "plains", false, ByMonth, Why) && Dressed(Name, "GER", 1944, 7, "plains", true, AnyYear, Why);
+			const Leaning Was = bOk ? LeanOf(ByMonth) : Leaning(), Now = bOk ? LeanOf(AnyYear) : Leaning();
+			std::printf("  %-10s July 1944: by the month (%s) %.0f%% of her points grey, %.0f%% yellow or brown; in every year (%s) %.0f%% and %.0f%%\n", Name,
+				ByMonth.Coat.c_str(), Was.Grey * 100.0, Was.Yellow * 100.0, AnyYear.Coat.c_str(), Now.Grey * 100.0, Now.Yellow * 100.0);
+			Grey.Note(bOk && Now.Grey >= 2.0 * Was.Grey && Now.Grey >= 0.1 && Now.Yellow < Was.Yellow, Now.Grey > 0.0 ? Was.Grey / Now.Grey : 1.0,
+				std::string(Name) + ": her grey is not greyer than her dark yellow (" + Why + ")");
+		}
+		Report("the German grey is grey on her skin in 1944", Grey, "of her grey points there by the month");
 	}
 
 	std::printf("\n%s\n", Failures ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED");

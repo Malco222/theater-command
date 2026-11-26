@@ -923,6 +923,20 @@ namespace LandKit
 			const Json::Value C = Row[Swap];
 			return C.IsString() ? C.Str() : C["one"].Str("");
 		}
+		/** The first choice a list of rows names for one swap, whatever their months (Dress::bAnyYear: the first coat her
+		 * file gives stands in every year), or "". */
+		std::string FirstChoice(const Json::Value& Rows, const std::string& Swap)
+		{
+			for (size_t I = 0; Rows.IsArray() && I < Rows.Count(); ++I)
+			{
+				const std::string Choice = ChoiceIn(Rows.At(I), Swap);
+				if (!Choice.empty())
+				{
+					return Choice;
+				}
+			}
+			return std::string();
+		}
 
 		/** Piecewise straight between keys (times T, Width numbers a key in V), at time X; Out gets Width numbers. */
 		void Sample(const std::vector<float>& T, const std::vector<float>& V, size_t Width, double X, double* Out)
@@ -998,10 +1012,11 @@ namespace LandKit
 				// March 1941 (brown-yellow, the grey-green blotched where the lorry's file lays them) to February 1942,
 				// then that of March 1942 (light brown, grey) to May 1943; the British Light Stone and the Italians' own
 				// sand khaki, one colour all over. Everyone else (the Americans' olive drab) as on any other ground.
+				// (Dress::bAnyYear: the desert is the ground's coat, the first of the two, in every year)
 				const int Key = D.Year * 12 + D.Month;
-				if (D.Nation == "GER" && Key <= 1943 * 12 + 5)
+				if (D.Nation == "GER" && (D.bAnyYear || Key <= 1943 * 12 + 5))
 				{
-					const bool b41 = Key <= 1942 * 12 + 2;
+					const bool b41 = D.bAnyYear || Key <= 1942 * 12 + 2;
 					OutName = b41 ? "desert41" : "desert42";
 					OutUpper = b41 ? "A2814F" : "B49B6C";
 					OutUpper2 = b41 ? "6B6243" : "7F7D72";
@@ -1034,8 +1049,9 @@ namespace LandKit
 			if (D.Nation == "GER")
 			{
 				// Dark yellow from February 1943 with olive green blotches where the lorry's file lays them (grey before);
-				// a dull ochre, not a bright sand (the art director's mend, 21 November 2026).
-				const bool bYellow = D.Year * 12 + D.Month >= 1943 * 12 + 2;
+				// a dull ochre, not a bright sand (the art director's mend, 21 November 2026). Grey for the whole war
+				// where no coat goes by the year (Dress::bAnyYear; her ruling of 26 November 2026).
+				const bool bYellow = !D.bAnyYear && D.Year * 12 + D.Month >= 1943 * 12 + 2;
 				OutName = bYellow ? "yellow" : "grey";
 				OutUpper = bYellow ? "8E7E58" : "4E5459";
 				OutUpper2 = bYellow ? "5A6240" : "3E4347";
@@ -1581,11 +1597,14 @@ namespace LandKit
 			Out.push_back(std::move(Middle));
 		}
 
-		/** Which mark her owner painted in the battle's month: each nation's plain period marking, never a party emblem
-		 * (the art director's rule). The file's own "mark_months" rows for her nation first (the British: none, then the
-		 * recognition flash from November 1941, the Allies' white star from July 1943); "none" where her army painted none
-		 * that the art director has ruled on. */
-		std::string MarkWorn(const std::string& Nation, int Year, int Month, const Json::Value& Months)
+		/** Which mark her owner painted: each nation's plain period marking, never a party emblem (the art director's
+		 * rule). By the battle's month as before: the file's own "mark_months" rows for her nation first (the British:
+		 * none, then the recognition flash from November 1941, the Allies' white star from July 1943); "none" where her
+		 * army painted none that the art director has ruled on. With bAnyYear (Dress::bAnyYear, release 2, the trial word
+		 * "anyyear"; Brian, 26 November 2026: "have the paint be on it regardless of the year", of a British tank at
+		 * Cairo with no markings) no month chooses it and none leaves her bare: the first mark her file's rows give, else
+		 * her nation's first (the British and the Commonwealth: the flash, in every year). */
+		std::string MarkWorn(const std::string& Nation, int Year, int Month, const Json::Value& Months, bool bAnyYear)
 		{
 			const int Key = Year * 12 + Month;
 			auto KeyOf = [](const std::string& Text, int Otherwise)
@@ -1593,14 +1612,24 @@ namespace LandKit
 				int Y = 0, M = 0;
 				return std::sscanf(Text.c_str(), "%d-%d", &Y, &M) == 2 ? Y * 12 + M : Otherwise;
 			};
+			auto NameOf = [](const std::string& Kind) { return Kind == "star" ? std::string("white star") : Kind; };
 			const Json::Value Rows = Months[Nation];
-			for (size_t I = 0; I < Rows.Count(); ++I)
+			// (Dress::bAnyYear: the first mark her file's rows give, whatever their months; none there, her nation's below)
+			for (size_t I = 0; bAnyYear && I < Rows.Count(); ++I)
+			{
+				const std::string Kind = Rows.At(I)["mark"].Str("none");
+				if (Kind != "none")
+				{
+					return NameOf(Kind);
+				}
+			}
+			for (size_t I = 0; !bAnyYear && I < Rows.Count(); ++I)
 			{
 				const Json::Value Row = Rows.At(I);
 				if (KeyOf(Row["from"].Str(), -1) <= Key && Key <= KeyOf(Row["to"].Str(), 1 << 30))
 				{
 					const std::string Kind = Row["mark"].Str("none");
-					return Kind == "star" ? std::string("white star") : Kind;
+					return NameOf(Kind);
 				}
 			}
 			if (Nation == "GER")
@@ -1614,6 +1643,12 @@ namespace LandKit
 			if (Nation == "SOV")
 			{
 				return "red star";
+			}
+			if (bAnyYear && (Nation == "UK" || Nation == "CAN" || Nation == "AUS" || Nation == "NZL" || Nation == "SAF" || Nation == "IND" || Nation == "POL"))
+			{
+				// (the flash in every year: not bare before November 1941, not the Allies' star from July 1943, and the
+				// Poles' from 1939)
+				return "flash";
 			}
 			if (Nation == "UK" || Nation == "CAN" || Nation == "AUS" || Nation == "NZL" || Nation == "SAF" || Nation == "IND" || (Nation == "POL" && Year >= 1940))
 			{
@@ -2493,11 +2528,27 @@ namespace LandKit
 			// The field's ground first (swaps.paint.by_ground: on a desert field the German desert coats of 1941 and 1942
 			// and the British Light Stone): its rows are read as by_month's are, and a month none of them holds (or a
 			// coat the file does not have) falls back to by_month.
+			// No coat by the year (Dress::bAnyYear, release 2, the trial word "anyyear"; Brian, 26 November 2026, and the
+			// art director's ruling of the same day): the ground's coat is the first of that ground's rows whatever the
+			// month; else a German vehicle is tank grey for the whole war, every model; else the first coat her file's
+			// by_month rows name stands in every year.
 			std::string Choice;
 			if (!D.Terrain.empty())
 			{
-				Choice = ChoiceIn(RowFor(PaintSwap["by_ground"][D.Terrain], MonthKey), "paint");
+				const Json::Value GroundRows = PaintSwap["by_ground"][D.Terrain];
+				Choice = D.bAnyYear ? FirstChoice(GroundRows, "paint") : ChoiceIn(RowFor(GroundRows, MonthKey), "paint");
 				if (!Choice.empty() && !PaintSwap["choices"][Choice].IsObject())
+				{
+					Choice.clear();
+				}
+			}
+			// (a German model whose file has no grey of its own, the Panther's and the Hummel's: the army's grey laid in
+			// below, one colour all over where her file breaks its coat three ways, the lorry's two greys where it does not)
+			const bool bOwnGrey = D.bAnyYear && Choice.empty() && Nation == "GER" && !PaintSwap["choices"]["grey"].IsObject();
+			if (Choice.empty() && D.bAnyYear)
+			{
+				Choice = Nation == "GER" ? std::string("grey") : FirstChoice(Swaps["by_month"], "paint");
+				if (!bOwnGrey && !Choice.empty() && !PaintSwap["choices"][Choice].IsObject())
 				{
 					Choice.clear();
 				}
@@ -2523,6 +2574,16 @@ namespace LandKit
 			const Json::Value ChoiceRow = PaintSwap["choices"][Choice];
 			if (ChoiceRow["dust_colour"].IsString()) DustColour = FromHex(ChoiceRow["dust_colour"].Str());
 			if (ChoiceRow["haze_colour"].IsString()) HazeColour = FromHex(ChoiceRow["haze_colour"].Str());
+			if (bOwnGrey)
+			{
+				// (the tanks' files' own grey and its dust, as the Panzer IV's: 4E5459 over 303437)
+				CoatUpper = "4E5459";
+				CoatUpper2 = Upper3 >= 0 ? "4E5459" : "3E4347";
+				CoatShade = "303437";
+				CoatUpper3 = Upper3 >= 0 ? "4E5459" : "";
+				DustColour = FromHex("9A8A6A");
+				HazeColour = FromHex("9A8A6A");
+			}
 			Coat = Choice;
 			// The dark yellow came out as a base coat with pastes of olive green and red-brown for the crews to spray in
 			// blotches and bands, and by 1944 nearly every German vehicle at the front wore them. The model files give
@@ -3572,7 +3633,7 @@ namespace LandKit
 			const bool bCaptorMarked = bCaptured && (D.Nation == "GER" || D.Nation == "USA" || D.Nation == "SOV");
 			if (D.bMarks && !bCaptorMarked && !Marks.empty())
 			{
-				const std::string MarkKind = MarkWorn(D.Nation, D.Year, D.Month, R["mark_months"]);
+				const std::string MarkKind = MarkWorn(D.Nation, D.Year, D.Month, R["mark_months"], D.bAnyYear);
 				std::vector<MarkPiece> Pieces;
 				MarkPieces(MarkKind, Pieces);
 				if (Level == 0 && !Pieces.empty())
@@ -6872,6 +6933,7 @@ namespace LandKit
 			D.FieldDust[I] = FieldDust[I];
 		}
 		D.bBurntCoat = bBurntCoat;
+		D.bAnyYear = bAnyYear;
 		std::string Why;
 		if (!Looks[OutKey].Load(Text, D, Why))
 		{

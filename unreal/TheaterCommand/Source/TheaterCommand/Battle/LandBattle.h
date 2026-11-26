@@ -135,6 +135,14 @@ public:
 	 */
 	void OrderLive(const FString& CommandJson);
 	void PlaceLive(int32 Block, double X, double Y, double Face);
+	/** Drawing up while he places his army (release 2): several blocks placed as one act, all of them or none
+	 * (LandCommand::General::PlaceMany's list); and his blocks in hand, or all of his, drawn up in a formation (its
+	 * word: line, two, wedge, column). The rules place them and name the one that cannot go. */
+	void PlaceManyLive(const FString& ListJson);
+	void DrawUpLive(const FString& Kind);
+	/** The map of the field pressed or dragged on (release 2): his view glides to that place on the field (metres,
+	 * held to the field), any unit followed let go; the film, where it has the screen, gives it back first. */
+	void GeneralMapLook(double FieldX, double FieldY);
 	void BeginFight();
 	/** The scene's state for the general's screen to change (his hand, what is armed): the screen's own. */
 	FLandBattleState* EditState() { return State.Get(); }
@@ -861,6 +869,12 @@ private:
 	/** A block carried in the setup step (-1 none), and its facing. */
 	int32 GeneralCarry = -1;
 	double GeneralCarryFace = 0.0;
+	/** The block carried is one of several in hand, with drawing up on (release 2): they are carried as one. */
+	bool bGeneralCarryAll = false;
+	/** A number group's key last pressed and when (real seconds; release 2): pressed again at once, the view glides to
+	 * its units. */
+	int32 GeneralGroupKey = 0;
+	double GeneralGroupAt = -10.0;
 	/** His last click on open ground with an order given there: when (real seconds) and where (pixels), for a second
 	 * click there that sends them at the double. */
 	double GeneralClickAt = -10.0;

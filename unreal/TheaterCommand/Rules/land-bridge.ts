@@ -42,6 +42,10 @@
 //                                             it may); with no point or line, whether it may at all
 //   TC.landCanPlace(id, x, y)              -> { ok, why }: whether a block may stand there in the setup step
 //   TC.landPlace(id, x, y, face)           -> { ok, why }: places it; the next delta starts the men again (reset)
+//   TC.landPlaceMany([[id, x, y, face], ...]) -> { ok, why, id?, who? }: places several as one act, all or none; a
+//                                             refusal names the block that cannot go (release 2: drawing up together)
+//   TC.landDrawUp(kind, ids?)              -> { ok, why, id?, who?, placed }: draws those blocks (none named: all of his)
+//                                             up in a 'line', 'two' lines, a 'wedge' or a 'column', facing the enemy
 //   TC.landBegin()                         -> { ok }: ends the setup step; the clock runs
 //   TC.landHedges(hedges, gates)           -> { ok, hedges, gates }: the 3D field's hedge lines [{ kind, points: [[x, y], ...] }]
 //                                             and gateways [{ x, y, yaw, width, kind: 'gate' }], metres from the field's
@@ -54,6 +58,7 @@
 import type { Command, FieldTicket, Side } from '../../../src/battle/core/types';
 import { LiveBattle, livePiece, liveTicket, ticketSky, type LiveDelta, type LiveOpts, type LiveSky } from '../../../src/battle/land/live';
 import type { LandPlace } from '../../../src/battle/land/field';
+import { FORMATIONS } from '../../../src/battle/land/formation';
 import { PIECES } from '../../../src/battle/land/pieces';
 import { ownTeamsLook } from '../../../src/battle/land/own-teams';
 import type { Gate, Hedge } from '../../../src/battle/land/sim';
@@ -65,6 +70,35 @@ const none: LiveDelta = { t: 0, men: [], tails: [], rounds: [], events: [], view
 function need(): LiveBattle {
   if (!live) throw new Error('No ground battle is being fought: TC.landStart first.');
   return live;
+}
+
+// ---- Drawing up while he places his army: the lines the screen says (the UI director, 26 November 2026 04:22Z) ----
+/** The rules' own line for a block dug in (sim.placeable). */
+const DUG = 'It is dug in where it stands.';
+const DRAWN = { line: 'in a line', two: 'in two lines', wedge: 'in a wedge', column: 'in a column' } as const;
+const COUNTED = ['None', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'];
+/** The grounds that bar a unit from standing on them, as the sentence names each after the unit's name (the UI director, 26 November 2026 05:52Z). */
+const BARRED = {
+  water: 'it cannot stand in the water', bridge: 'it cannot stand on a bridge', marsh: 'it cannot stand in a marsh', rock: 'it cannot stand on bare rock',
+  bunker: 'a bunker stands on that spot',
+} as const;
+/** A unit's name at the head of a sentence: one that opens with its number takes "The" ("The 2nd Battalion"). */
+const theName = (who: string): string => (/^\d/.test(who) ? `The ${who}` : who);
+/**
+ * Why a unit he would place cannot go there, as a sentence with its name (the rules' own line where the name is not
+ * known). The rules' short lines are made whole here, and none names the unit again; any other line of theirs is a
+ * whole sentence already and follows the name's (the UI director, 26 November 2026 05:35Z).
+ */
+function cannotGo(who: string, why: string, on?: keyof typeof BARRED | null): string {
+  if (!who) return why;
+  const name = theName(who);
+  if (why === DUG) return `${name} is dug in where it stands.`;
+  if (why === 'Outside your ground.') return `${name} cannot go there: it would stand outside your ground.`;
+  if (why === 'Another block stands there.') return `${name} cannot go there: another unit already stands there.`;
+  if (why === 'Off the field.') return `${name} cannot go there: it would stand off the field.`;
+  // (the ground that bars it, by name: LiveBattle.barredBy; not known, the two that bar every unit)
+  if (why === 'Not on water, a bridge or ground it cannot stand on.') return `${name} cannot go there: ${on ? BARRED[on] : 'it cannot stand in the water or on a bridge'}.`;
+  return `${name} cannot go there. ${why}`;
 }
 
 (globalThis as Record<string, unknown>).TC = {
@@ -173,6 +207,34 @@ function need(): LiveBattle {
     const why = need().canPlace(id, x, y);
     const ok = need().place(id, x, y, face ?? undefined);
     return { ok, why: ok ? '' : why ?? 'Not now: the battle has begun.' };
+  },
+
+  landPlaceMany(list: number[][]) {
+    const l = need(), rows = Array.isArray(list) ? list.filter((p) => Array.isArray(p)).map((p) => p.map(Number)) : [];
+    const no = l.canPlaceMany(rows);
+    const ok = no === null && l.placeMany(rows);
+    const at = no ? rows.find((p) => p[0] === no.id) : undefined;
+    return { ok, why: ok ? '' : no ? cannotGo(no.who, no.why, at ? l.barredBy(no.id, at[1], at[2]) : null) : 'Not now: the battle has begun.', ...(no && no.id >= 0 ? { id: no.id, who: no.who } : {}) };
+  },
+
+  landDrawUp(kind: string, ids?: number[] | null) {
+    const k = FORMATIONS.find((f) => f === kind);
+    if (!k) return { ok: false, why: 'No such formation.', placed: 0 };
+    const named = Array.isArray(ids) ? ids.map(Number) : [];
+    const r = need().drawUp(k, named);
+    // The words are the UI director's (26 November 2026 04:22Z): sentences, "unit" and never "block".
+    const dug = r.left.filter((b) => b.why === DUG);
+    if (!r.ok) {
+      const why = r.none === 'room' ? `Your ground has no room to draw them up ${DRAWN[k]}.`
+        : r.none === 'stay' && dug.length === r.left.length && dug.length > 1 ? 'They are all dug in where they stand.'
+          : r.none === 'stay' ? cannotGo(r.who ?? '', r.why) : r.why;
+      return { ok: false, why, ...(r.id !== undefined ? { id: r.id, who: r.who ?? '' } : {}), placed: 0 };
+    }
+    const notes: string[] = [];
+    if (dug.length === 1) notes.push(`${theName(dug[0].who)} is dug in and stays where it stands.`);
+    else if (dug.length > 1) notes.push(`${COUNTED[dug.length] ?? dug.length} of them are dug in and stay where they stand.`);
+    if (r.off >= 50) notes.push(`Drawn up ${Math.round(r.off / 10) * 10} m off, on the nearest ground that holds them all.`);
+    return { ok: true, why: '', placed: r.placed.length, ...(notes.length ? { note: notes.join(' ') } : {}) };
   },
 
   landBegin() {

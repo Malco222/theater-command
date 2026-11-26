@@ -34,11 +34,13 @@ public:
 	/** The rules' answer to one of the player's orders, placings or the battle's begin, in the order asked. */
 	struct FAnswer
 	{
-		/** "order", "place" or "begin", and what was asked (the order's JSON, or the block's id). */
+		/** "order", "place", "drawup" or "begin", and what was asked (the order's JSON, the block's id, the formation's word). */
 		FString Kind, Asked;
 		bool bOk = false;
 		/** Why not, in the rules' plain words, where they said (a placing refused). */
 		FString Why;
+		/** A word the rules add to a yes (a draw-up that left some units where they are dug in, or stood them a way off). */
+		FString Note;
 	};
 
 	/**
@@ -64,6 +66,17 @@ public:
 	static const FRule& RuleAt(int32 Index);
 	/** Whether the player has it on (his settings; on when never set). The command line's off is not counted here. */
 	static bool RuleOn(int32 Index);
+	/**
+	 * A row that works only with other rows on (the UI director, 26 November 2026 01:24Z): the row of the first of
+	 * those, from the top of its chain, that is off on the card, or INDEX_NONE when all it needs are on or it needs
+	 * none. While it lacks one the row is greyed: it cannot be pressed, it acts as off (RuleNow), and its own setting
+	 * is kept. No row ever switches another.
+	 */
+	static int32 RuleLacks(int32 Index);
+	/** What the card draws lit: on as he left it, and lacking nothing it needs. */
+	static bool RuleLit(int32 Index);
+	/** A greyed row was pressed within the last few seconds: the card says what it works only with. */
+	static bool RulePressed(int32 Index);
 	static void SetRule(int32 Index, bool bOn);
 	/** A click on the rule's switch on the Battle rules card: it turns over, is saved, and the log says what it now reads.
 	 * "-TheaterRulesFlip=phones,bearers,patrol" clicks the named switches once when the card is first drawn, for the
@@ -102,6 +115,12 @@ public:
 	void Order(const FString& CommandJson);
 	/** A block placed in the setup step, facing Face (radians, 0 north, clockwise). */
 	void Place(int32 Id, double X, double Y, double Face);
+	/** Several blocks placed as one act in the setup step, all of them or none (release 2, drawing up): TC.landPlaceMany's
+	 * list, "[[id,x,y,face],...]", as LandCommand::General::PlaceMany writes it. A refusal names the block. */
+	void PlaceMany(const FString& ListJson);
+	/** His blocks drawn up in a formation in the setup step (release 2): TC.landDrawUp's arguments, "[\"line\",[ids]]",
+	 * as LandCommand::General::DrawUp writes them, and the formation's word for the log. */
+	void DrawUp(const FString& ArgumentsJson, const FString& Kind);
 	/** The setup step ends: the clock may run. */
 	void Begin();
 	/** The 3D field is laid: its hedge lines and gateways (TC.landHedges' JSON arrays; "[]" where none), handed to the

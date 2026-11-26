@@ -240,6 +240,29 @@ namespace
 		// Off until the island look has its Mac still and the art director's pass; -TheaterLandRuleIsland turns it on
 		// for a run. The campaign side's keys, ticket.look and ticket.latLon, are the Japan and Pacific thread's.)
 		{ TEXT("island"), TEXT("Island ground"), TEXT("A battle on a Pacific island is drawn as that island: beach, reef and palms, or jungle on the big islands, under its own sun. Campaign battles only. Off: it is drawn on the same ground as any other battle."), TEXT("TheaterLandNoIsland"), false, TEXT("TheaterLandRuleIsland") },
+		// (Attackers stay where they stop to fight, release 2: the art director's number of 26 November 2026 00:50Z and
+		// the design director's rulings of 01:02Z and 01:28Z. Off, a block on an attack order asks afresh every tick
+		// whether it is well in reach, with no memory: its target hovering at that edge, it stands a tick and wheels to
+		// what it fights, marches a tick and wheels back to its way, and rocks on the spot (counted in today's rules at
+		// its gate: the note land-battles/facing-gate-1126.md). Ruled a fault, for every block on an attack order. On, a
+		// block that has stood to fight its target stands while the target is within its hold, the stand's own figure,
+		// and closes again only beyond it; and by the same rule, "what it chose it keeps while that still holds", it
+		// keeps its way over a river, its place beside a friend and the place it was sent to (the rules' sim.standRule
+		// and sim.standKeeps). It is NOT looks only: it moves every battle, so it has this row of its own and its own
+		// fairness gate, and stays off until that gate, the Mac and the art director pass it; -TheaterLandRuleStand
+		// turns it on for a run. The two rows below work only with it on (LandRuleNeeds, under this table; the bridge
+		// and live.ts read all three). Key and flags mine; name, line and the rows' order the UI director's of 01:24Z.)
+		{ TEXT("stand"), TEXT("Attackers stay where they stop to fight"), TEXT("A unit sent to attack closes to good range, stops and fights from there, and moves up again only when its enemy has drawn well back. Off: with its enemy at the edge of its range, it stops, turns to fight, turns back and steps on, over and over, rocking on the spot, as before. This changes how battles turn out. A change takes effect from the next battle."), TEXT("TheaterLandNoStand"), false, TEXT("TheaterLandRuleStand") },
+		// (Units face the fire that hurts most, release 2: the design director's ruling of 25 November 21:54Z on the
+		// fairness gate's trace. Off, any blow on a block's front holds it to its facing, at any range, however light
+		// and whatever its cover: ruled a fault. On, a block is held only by the enemy whose blows cost it most after
+		// its cover, and turns to meet another that costs it more (the rules' sim.faceRule). It is NOT looks only: it
+		// moves every battle, guns hold too, so it has this row of its own and its own fairness gate, and stays off
+		// until that gate and the design director pass it; -TheaterLandRuleFacing turns it on for a run. "Support
+		// teams in battle" below does nothing without it (the same ruling: the bridge and live.ts read both). Its key,
+		// name and line are the UI director's of 25 November 22:14Z, and "A change takes effect from the next battle." on
+		// both rows theirs of 22:30Z: a battle reads its rows once, as it begins.)
+		{ TEXT("facing"), TEXT("Units face the fire that hurts most"), TEXT("A unit faces the enemy that hurts it most, once its cover is counted, and turns to meet another only when that one hurts it more. Fire that truly hurts still holds a unit to its facing; a far-off gun that does it little harm no longer keeps it facing the wrong way while infantry comes in at its side. Off: any enemy striking a unit's front, however lightly and from however far, keeps it from turning to meet another at its side, as before. This changes how battles turn out. A change takes effect from the next battle. It works only with \u201CAttackers stay where they stop to fight\u201D on."), TEXT("TheaterLandNoFacing"), false, TEXT("TheaterLandRuleFacing") },
 		// (Every infantry force with its own teams, release 2: Brian, 25 November 14:14Z, "Where are the machine gun teams
 		// and mortar teams in the infantry squad", and his "Both" at 14:42Z. The rules' own-teams.ts: each infantry,
 		// mountain or lorried corps of a campaign battle gives a small share of itself to a machine-gun and a mortar
@@ -251,28 +274,28 @@ namespace
 		// Since the design director's ruling of 17:52Z the same switch turns on the rules' sim.teamsRule in every
 		// battle, the custom battles too: a team's fire shakes by its own harm, and a defence's line stays in its
 		// places while its teams fire. So the line says "into battle", not "campaign battles".)
-		{ TEXT("teams"), TEXT("Support teams in battle"), TEXT("Every infantry corps takes its own machine gun and mortar teams into battle, drawn from its own men, not extra ones, and they fire in support from behind its line. This changes how battles turn out. A change takes effect from the next battle. It works only with Units face the fire that hurts most and Units keep their stand on."), TEXT("TheaterLandNoTeams"), false, TEXT("TheaterLandRuleTeams") },
-		// (Units face the fire that hurts most, release 2: the design director's ruling of 25 November 21:54Z on the
-		// fairness gate's trace. Off, any blow on a block's front holds it to its facing, at any range, however light
-		// and whatever its cover: ruled a fault. On, a block is held only by the enemy whose blows cost it most after
-		// its cover, and turns to meet another that costs it more (the rules' sim.faceRule). It is NOT looks only: it
-		// moves every battle, guns hold too, so it has this row of its own and its own fairness gate, and stays off
-		// until that gate and the design director pass it; -TheaterLandRuleFacing turns it on for a run. "Support
-		// teams in battle" above does nothing without it (the same ruling: the bridge and live.ts read both). Its key,
-		// name and line are the UI director's of 25 November 22:14Z, and "A change takes effect from the next battle." on
-		// both rows theirs of 22:30Z: a battle reads its rows once, as it begins.)
-		{ TEXT("facing"), TEXT("Units face the fire that hurts most"), TEXT("A unit faces the enemy that hurts it most, once its cover is counted, and turns to meet another only when that one hurts it more. Fire that truly hurts still holds a unit to its facing; a far-off gun that does it little harm no longer keeps it facing the wrong way while infantry comes in at its side. Off: any enemy striking a unit's front, however lightly and from however far, keeps it from turning to meet another at its side, as before. This changes how battles turn out. A change takes effect from the next battle. It works only with Units keep their stand on."), TEXT("TheaterLandNoFacing"), false, TEXT("TheaterLandRuleFacing") },
-		// (Units keep their stand, release 2: the art director's number of 26 November 2026 00:50Z and the design
-		// director's ruling of 01:02Z. Off, a block on an attack order asks afresh every tick whether it is well in
-		// reach, with no memory: its target hovering at that edge, it stands a tick and wheels to what it fights, marches
-		// a tick and wheels back to its way, and rocks on the spot (counted in today's rules at its gate: the note
-		// land-battles/facing-gate-1126.md). Ruled a fault, for every block on an attack order. On, a block that has stood to
-		// fight its target stands while the target is within its hold, the stand's own figure, and closes again only
-		// beyond it (the rules' sim.standRule). It is NOT looks only: it moves every battle, so it has this row of its
-		// own and its own fairness gate, and stays off until that gate, the Mac and the art director pass it;
-		// -TheaterLandRuleStand turns it on for a run. The two rows above do nothing without it (the same ruling: the
-		// bridge and live.ts read all three). Key, name and line: mine until the UI director names them.)
-		{ TEXT("stand"), TEXT("Units keep their stand"), TEXT("A unit sent to attack closes to good range, stops and fights from there, and moves up again only when its enemy has drawn well back. Off: it asks itself every moment whether it is close enough, so with its enemy right at the edge of range it stops, turns to fight, turns back and steps on, over and over, and rocks on the spot, as before. This changes how battles turn out. A change takes effect from the next battle."), TEXT("TheaterLandNoStand"), false, TEXT("TheaterLandRuleStand") },
+		{ TEXT("teams"), TEXT("Support teams in battle"), TEXT("Every infantry corps takes its own machine gun and mortar teams into battle, drawn from its own men, not extra ones, and they fire in support from behind its line. This changes how battles turn out. A change takes effect from the next battle. It works only with \u201CAttackers stay where they stop to fight\u201D and \u201CUnits face the fire that hurts most\u201D on."), TEXT("TheaterLandNoTeams"), false, TEXT("TheaterLandRuleTeams") },
+		// (Drawing up while he places his army, release 2: Brian, 26 November 2026 03:45Z, "i should be able to move my
+		// units in a formation before the battle begins during the deployed phase". A control of the setup step and no
+		// battle rule (the design director, 03:50Z): several units dragged as one, a line drawn on his ground, and LINE,
+		// TWO LINES, WEDGE, COLUMN, each place by the rules' own land:place, all of them or none. Off until the Mac and
+		// the art director pass it; -TheaterLandRuleDrawUp turns it on for a run. Name and line the UI director's of
+		// 03:51Z. The rules do not read the key: the screen does (LandBattleCommand.cpp, LandBattleScreen.cpp).)
+		{ TEXT("drawup"), TEXT("Draw up units together before battle"), TEXT("Before the battle begins you can take several units in hand, drag them as one, and draw them up in a line, two lines, a wedge or a column. Off: you place them one at a time, as before. Only how you place them: no result changes."), TEXT("TheaterLandNoDrawUp"), false, TEXT("TheaterLandRuleDrawUp") },
+		// (Groups on the number keys, release 2: Brian, 26 November 2026 03:51Z, "you should be able to group units so
+		// you can hit the #1 and the units tied to it are all selected". Cmd on a Mac, Ctrl elsewhere, with a number
+		// ties those in hand to it; the number takes them in hand again, with Shift adds them, twice glides the view to
+		// them. The clock's pace moves from the numbers to the minus and plus keys while the row is on. A control and
+		// no battle rule. Off until the Mac and the art director pass it; -TheaterLandRuleGroups turns it on for a run.
+		// Name and line the UI director's of 03:53Z. The rules do not read the key: the screen does.)
+		{ TEXT("groups"), TEXT("Groups on the number keys"), TEXT("Tie the units in hand to a number with Cmd and that number (Ctrl on Windows); press the number to take them in hand again, twice to look at them. The clock's pace moves to \u2212 and +. Off: the numbers set the pace, as before. Only how you give orders: no result changes."), TEXT("TheaterLandNoGroups"), false, TEXT("TheaterLandRuleGroups") },
+		// (A map of the field in the corner, release 2: Brian, 26 November 2026 03:45Z, "its would be helpful to see a
+		// small map of the battle on the bottom right to know where everyone is". It shows the field, his units, the
+		// enemy units the field itself shows him and where he is looking (the design director, 03:50Z: the player's
+		// sight only); a click glides the view there, M folds it. Looks only. Off until the Mac and the art director
+		// pass it; -TheaterLandRuleFieldMap turns it on for a run. Name and line the UI director's of 03:51Z. The rules
+		// do not read the key: the screen does (Battle/LandFieldMap, LandBattleScreen.cpp).)
+		{ TEXT("fieldmap"), TEXT("A map of the field in the corner"), TEXT("A small map at the bottom right of the battle shows the field, your units, the enemy your men can see and where you are looking. Click it to look there; M folds it away. Looks only: no result changes."), TEXT("TheaterLandNoFieldMap"), false, TEXT("TheaterLandRuleFieldMap") },
 		// (Sniper teams, release 2: Brian, 25 November 16:07Z, "should we add snipers? how would that impact the battle?",
 		// then "yes". The rules' LAND.snipers: each side's foot gives its army's share of its power to a few sniper teams,
 		// so the card's odds stand; they change how a battle goes, so this row waits for the design director's ruling and
@@ -280,6 +303,37 @@ namespace
 		{ TEXT("snipers"), TEXT("Sniper teams"), TEXT("Each army brings a few sniper pairs, hidden in houses, woods and hedges. They kill few, but they shoot officers, machine gunners and tank commanders, slow an advance and shake men's nerve; once found they are easily driven off. Needs Forest ambushes. Off: no snipers on the field."), TEXT("TheaterLandNoSnipers"), false, TEXT("TheaterLandRuleSnipers") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
+
+	/**
+	 * Rows that work only with other rows on, each with what it needs in order from the top of its chain (the design
+	 * director, 26 November 2026 01:02Z; the UI director's marks of 01:24Z: grey the row, never switch another behind
+	 * his back). A row lacking one of these is greyed on the card, cannot be pressed and acts as off; its own setting
+	 * is kept, and comes back as he left it when what it needs is on again.
+	 */
+	struct FRuleNeed
+	{
+		const TCHAR* Key;
+		const TCHAR* Needs[2];
+	};
+	const FRuleNeed LandRuleNeeds[] =
+	{
+		{ TEXT("facing"), { TEXT("stand"), nullptr } },
+		{ TEXT("teams"), { TEXT("stand"), TEXT("facing") } },
+	};
+	const FRuleNeed* NeedsOf(const TCHAR* Key)
+	{
+		for (const FRuleNeed& Need : LandRuleNeeds)
+		{
+			if (FCString::Strcmp(Need.Key, Key) == 0)
+			{
+				return &Need;
+			}
+		}
+		return nullptr;
+	}
+	/** The greyed row last pressed, and when: the card says for a few seconds what it works only with. */
+	int32 RefusedRow = INDEX_NONE;
+	double RefusedAt = 0.0;
 }
 
 int32 FLandLive::RuleCount()
@@ -311,10 +365,55 @@ bool FLandLive::RuleNow(const TCHAR* Key)
 		const FRule& Rule = LandRuleTable[R];
 		if (FCString::Strcmp(Rule.Key, Key) == 0)
 		{
-			return (RuleOn(R) || (Rule.OnFlag && FParse::Param(FCommandLine::Get(), Rule.OnFlag))) && !FParse::Param(FCommandLine::Get(), Rule.OffFlag);
+			if (!((RuleOn(R) || (Rule.OnFlag && FParse::Param(FCommandLine::Get(), Rule.OnFlag))) && !FParse::Param(FCommandLine::Get(), Rule.OffFlag)))
+			{
+				return false;
+			}
+			// A row that works only with others on is off for the battle while any of them is (LandRuleNeeds).
+			if (const FRuleNeed* Need = NeedsOf(Key))
+			{
+				for (const TCHAR* Needed : Need->Needs)
+				{
+					if (Needed && !RuleNow(Needed))
+					{
+						return false;
+					}
+				}
+			}
+			return true;
 		}
 	}
 	return false;
+}
+
+int32 FLandLive::RuleLacks(int32 Index)
+{
+	const FRuleNeed* Need = NeedsOf(RuleAt(Index).Key);
+	if (!Need)
+	{
+		return INDEX_NONE;
+	}
+	for (const TCHAR* Needed : Need->Needs)
+	{
+		for (int32 R = 0; Needed && R < RuleCount(); ++R)
+		{
+			if (FCString::Strcmp(LandRuleTable[R].Key, Needed) == 0 && !RuleOn(R))
+			{
+				return R;
+			}
+		}
+	}
+	return INDEX_NONE;
+}
+
+bool FLandLive::RuleLit(int32 Index)
+{
+	return RuleOn(Index) && RuleLacks(Index) == INDEX_NONE;
+}
+
+bool FLandLive::RulePressed(int32 Index)
+{
+	return Index == RefusedRow && FPlatformTime::Seconds() - RefusedAt < 6.0;
 }
 
 void FLandLive::SetRule(int32 Index, bool bOn)
@@ -331,6 +430,16 @@ void FLandLive::FlipRule(int32 Index)
 {
 	if (Index < 0 || Index >= RuleCount())
 	{
+		return;
+	}
+	// A greyed row cannot be pressed: nothing is switched, its own setting is kept, and the card says why.
+	const int32 Lacks = RuleLacks(Index);
+	if (Lacks != INDEX_NONE)
+	{
+		RefusedRow = Index;
+		RefusedAt = FPlatformTime::Seconds();
+		UE_LOG(LogTheater, Display, TEXT("Battle rules card: %s is greyed and was not switched: it works only with %s on (its own setting is kept: %s)"), RuleAt(Index).Label,
+			RuleAt(Lacks).Label, RuleOn(Index) ? TEXT("ON") : TEXT("OFF"));
 		return;
 	}
 	const bool bWas = RuleOn(Index);
@@ -474,6 +583,18 @@ void FLandLive::Place(int32 Id, double X, double Y, double Face)
 	if (Wake) Wake->Trigger();
 }
 
+void FLandLive::PlaceMany(const FString& ListJson)
+{
+	Requests.Enqueue({ TEXT("place"), TEXT("landPlaceMany"), TEXT("[") + ListJson + TEXT("]"), TEXT("several as one") });
+	if (Wake) Wake->Trigger();
+}
+
+void FLandLive::DrawUp(const FString& ArgumentsJson, const FString& Kind)
+{
+	Requests.Enqueue({ TEXT("drawup"), TEXT("landDrawUp"), ArgumentsJson, Kind });
+	if (Wake) Wake->Trigger();
+}
+
 void FLandLive::Begin()
 {
 	Requests.Enqueue({ TEXT("begin"), TEXT("landBegin"), TEXT("[]"), FString() });
@@ -600,8 +721,13 @@ uint32 FLandLive::Run()
 				A.Why = FieldText(Reply, TEXT("why"));
 				if (A.Why.IsEmpty() && !Error.IsEmpty()) A.Why = Error;
 			}
+			else
+			{
+				// (a yes with a word to it: a draw-up that left some where they are dug in, or stood them a way off)
+				A.Note = FieldText(Reply, TEXT("note"));
+			}
 			// (a block placed stands its men again: the next piece starts them afresh; begun, the clock runs)
-			if (A.bOk && Asked.Kind == TEXT("place")) bNeedPiece = true;
+			if (A.bOk && (Asked.Kind == TEXT("place") || Asked.Kind == TEXT("drawup"))) bNeedPiece = true;
 			if (A.bOk && Asked.Kind == TEXT("begin")) { bDeploying = false; bNeedPiece = true; }
 			// (the hedges in, the blocks on their lines hide: their men stand again; given or not, the clock may run)
 			if (Asked.Kind == TEXT("hedges"))

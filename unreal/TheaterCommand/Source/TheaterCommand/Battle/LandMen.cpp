@@ -4923,11 +4923,13 @@ namespace LandMen
 				double Sum = 0.0;
 				for (size_t F = 0; F < S.Finishes.size(); ++F)
 				{
+					// (Brian's standing rule, 26 November 2026: a man's markings and paint never hang on the year. A finish fits
+					// by its season and its front; the "from" and "to" months an older soldier file may still carry are not
+					// asked, so no battle's date leaves his helmet bare of its badge or paint.)
 					const Finish& Fi = S.Finishes[F];
-					const bool bWhen = MonthNo >= Fi.From && MonthNo <= Fi.To;
 					const bool bSeason = Fi.Season == "any" || Fi.Season == SeasonName;
 					const bool bFront = Fi.Front == "any" || Fi.Front == Front;
-					if (bWhen && bSeason && bFront && Fi.Share > 0.0) { Fit.push_back({ static_cast<int>(F), Fi.Share }); Sum += Fi.Share; }
+					if (bSeason && bFront && Fi.Share > 0.0) { Fit.push_back({ static_cast<int>(F), Fi.Share }); Sum += Fi.Share; }
 				}
 				if (!Fit.empty())
 				{
@@ -4939,7 +4941,7 @@ namespace LandMen
 						if (R <= 0.0) { Mn.Info.Finish = F.first; break; }
 					}
 				}
-				// (No finish fits the date: his own helmet, painted his army's helmet colour.)
+				// (No finish fits the season and front: his own helmet, painted his army's helmet colour.)
 			}
 			Mn.Info.Delay = 0.2 * Unit01(Who ^ 0xDE1Aull);
 			Mn.Info.Jitter = static_cast<float>(0.95 + 0.1 * Unit01(Who ^ 0x7177E5ull));

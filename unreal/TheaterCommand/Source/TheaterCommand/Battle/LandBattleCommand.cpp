@@ -279,6 +279,47 @@ void ALandBattle::ShowGeneral()
 	{
 		return;
 	}
+	// The map of the field (release 2): the ground under the screen's four corners, for the outline of what his view
+	// sees. Each corner's ray is met with level ground at the height under the eye; one that looks over the horizon, or
+	// further than twice the field's own length, is set that far off along its way, and the map cuts the outline to its
+	// box. (The camera thread's LandGeneralEye::Seen takes this over when it lands.)
+	G.MapView.clear();
+	if (Eye && FLandLive::RuleNow(TEXT("fieldmap")))
+	{
+		LandFell::Phase("general: the map's view");
+		const UCameraComponent* Lens = Eye->GetCameraComponent();
+		const double HalfTan = FMath::Tan(FMath::DegreesToRadians(static_cast<double>(Lens->FieldOfView) * 0.5));
+		const FTransform& LensFrame = Lens->GetComponentTransform();
+		const FVector LensWorld = LensFrame.GetLocation();
+		// (the field's own axes: x east is the world's Y, y north the world's X; metres)
+		const FVector LensAt(LensWorld.Y / UnitsPerMetre, LensWorld.X / UnitsPerMetre, LensWorld.Z / UnitsPerMetre);
+		const double Level = S.Rec.Ground.HeightAt(FMath::Clamp(LensAt.X, 0.0, S.Rec.Ground.W), FMath::Clamp(LensAt.Y, 0.0, S.Rec.Ground.H));
+		const double FarMost = 2.0 * FMath::Sqrt(S.Rec.Ground.W * S.Rec.Ground.W + S.Rec.Ground.H * S.Rec.Ground.H);
+		const double CornerAt[4][2] = { { 0.0, View.Y }, { View.X, View.Y }, { View.X, 0.0 }, { 0.0, 0.0 } };
+		for (int32 Nth = 0; Nth < 4; ++Nth)
+		{
+			const double Across = (CornerAt[Nth][0] / View.X * 2.0 - 1.0) * HalfTan;
+			const double Up = (1.0 - CornerAt[Nth][1] / View.Y * 2.0) * HalfTan * (View.Y / View.X);
+			const FVector WayWorld = LensFrame.TransformVectorNoScale(FVector(1.0, Across, Up)).GetSafeNormal();
+			const FVector Way(WayWorld.Y, WayWorld.X, WayWorld.Z);
+			const double Flat = FMath::Sqrt(Way.X * Way.X + Way.Y * Way.Y);
+			if (Flat < 1e-9)
+			{
+				// (straight down: the ground under the eye)
+				G.MapView.push_back(LensAt.X);
+				G.MapView.push_back(LensAt.Y);
+				continue;
+			}
+			// (how far along the ground the ray comes down: never past FarMost, and FarMost where it never does)
+			double Reach = FarMost;
+			if (Way.Z < -1e-6 && LensAt.Z > Level)
+			{
+				Reach = FMath::Min(FarMost, (LensAt.Z - Level) / -Way.Z * Flat);
+			}
+			G.MapView.push_back(LensAt.X + Way.X / Flat * Reach);
+			G.MapView.push_back(LensAt.Y + Way.Y / Flat * Reach);
+		}
+	}
 	LandFell::Phase("general: the tags and routes");
 	const std::vector<LandCommand::Tag>& Tags = G.Clipboard.Tags();
 	// (each unit's ground washed from high up, fading as the eye comes down: full at 300 m over the ground, gone by 150 m)
@@ -620,6 +661,7 @@ void ALandBattle::GeneralPress(const FVector2D& Pixel, int32 Button, bool bShift
 	GeneralButton = Button;
 	bGeneralMoved = false;
 	GeneralCarry = -1;
+	bGeneralCarryAll = false;
 	// In the setup step a press on one of his blocks (or its tag) picks it up to carry.
 	if (Button == 0 && G.Clipboard.Deploying())
 	{
@@ -638,6 +680,8 @@ void ALandBattle::GeneralPress(const FVector2D& Pixel, int32 Button, bool bShift
 		{
 			GeneralCarry = Block;
 			GeneralCarryFace = Carried->Face;
+			// (drawing up, release 2: one of several in hand carries them all, each keeping its place from it)
+			bGeneralCarryAll = FLandLive::RuleNow(TEXT("drawup")) && Carried->bChosen && G.Clipboard.Chosen().size() > 1;
 		}
 	}
 }
@@ -723,24 +767,43 @@ void ALandBattle::GeneralMove(const FVector2D& Pixel, int32 OnTag)
 	}
 	if (GeneralCarry >= 0)
 	{
-		// The block carried: its ground where it would stand, and whether it may.
+		// The block carried: its ground where it would stand, and whether it may. One of several in hand with drawing up
+		// on (release 2): they are carried as one, each keeping its place from the one he holds.
 		const LandCommand::Tag* T = Clip.TagOf(GeneralCarry);
 		G.bCarry = T && bGround;
 		G.Carried = GeneralCarry;
+		G.CarryMore.clear();
 		if (G.bCarry)
 		{
-			G.bCarryOk = Clip.MayStand(GeneralCarry, X, Y);
+			const std::vector<LandCommand::Ghost> Places = bGeneralCarryAll ? Clip.CarryAll(GeneralCarry, X, Y) : std::vector<LandCommand::Ghost>();
+			G.bCarryOk = Places.size() > 1 ? Clip.MayStandAll(Places) : Clip.MayStand(GeneralCarry, X, Y);
 			G.bCarryWoods = G.bCarryOk && WoodsAt(State->Rec.Ground, X, Y);
 			G.Would = G.bCarryWoods ? "HIDE IN THE WOODS" : G.bCarryOk ? "" : "NOT ON YOUR GROUND";
-			const double S1 = FMath::Sin(GeneralCarryFace), C1 = FMath::Cos(GeneralCarryFace);
-			const double Hw = FMath::Max(T->W, 20.0) * 0.5, Hd = FMath::Max(T->D, 12.0) * 0.5;
-			const double Corner[4][2] = { { -Hw, -Hd }, { Hw, -Hd }, { Hw, Hd }, { -Hw, Hd } };
-			for (int32 K = 0; K < 4; ++K)
+			// (a block's ground's four corners on the screen where it would stand: false where one is behind the eye)
+			auto CornersOf = [this](const LandCommand::Tag& Of, double AtX, double AtY, double Facing, double* Out8)
 			{
-				FVector2D P;
-				G.bCarry = G.bCarry && PixelOf(X + Corner[K][0] * C1 + Corner[K][1] * S1, Y - Corner[K][0] * S1 + Corner[K][1] * C1, 0.5, P);
-				G.Corners[K * 2] = P.X;
-				G.Corners[K * 2 + 1] = P.Y;
+				const double S1 = FMath::Sin(Facing), C1 = FMath::Cos(Facing);
+				const double Hw = FMath::Max(Of.W, 20.0) * 0.5, Hd = FMath::Max(Of.D, 12.0) * 0.5;
+				const double Corner[4][2] = { { -Hw, -Hd }, { Hw, -Hd }, { Hw, Hd }, { -Hw, Hd } };
+				bool bEvery = true;
+				for (int32 K = 0; K < 4; ++K)
+				{
+					FVector2D P(0.0, 0.0);
+					bEvery = PixelOf(AtX + Corner[K][0] * C1 + Corner[K][1] * S1, AtY - Corner[K][0] * S1 + Corner[K][1] * C1, 0.5, P) && bEvery;
+					Out8[K * 2] = P.X;
+					Out8[K * 2 + 1] = P.Y;
+				}
+				return bEvery;
+			};
+			G.bCarry = CornersOf(*T, X, Y, GeneralCarryFace, G.Corners);
+			for (const LandCommand::Ghost& One : Places)
+			{
+				const LandCommand::Tag* Other = One.Block != GeneralCarry ? Clip.TagOf(One.Block) : nullptr;
+				double Eight[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+				if (Other && CornersOf(*Other, One.X, One.Y, One.Face, Eight))
+				{
+					G.CarryMore.insert(G.CarryMore.end(), Eight, Eight + 8);
+				}
 			}
 		}
 	}
@@ -774,7 +837,10 @@ void ALandBattle::GeneralMove(const FVector2D& Pixel, int32 OnTag)
 			G.LineEnds[1] = GeneralDownAt.Y;
 			G.LineEnds[2] = Pixel.X;
 			G.LineEnds[3] = Pixel.Y;
-			for (const LandCommand::Ghost& One : Clip.LineUp(X0, Y0, X, Y))
+			// (while he places his army with drawing up on, release 2, the line stands them: no nearer than they can stand)
+			const bool bDrawn = Clip.Deploying() && FLandLive::RuleNow(TEXT("drawup"));
+			const std::vector<LandCommand::Ghost> Along = bDrawn ? Clip.DrawnLine(X0, Y0, X, Y) : Clip.LineUp(X0, Y0, X, Y);
+			for (const LandCommand::Ghost& One : Along)
 			{
 				FVector2D P;
 				if (PixelOf(One.X, One.Y, 0.5, P))
@@ -798,9 +864,12 @@ void ALandBattle::GeneralRelease(const FVector2D& Pixel, int32 Button, bool bShi
 	const bool bMoved = bGeneralMoved;
 	const FVector2D DownAt = GeneralDownAt;
 	const int32 Carry = GeneralCarry;
+	const bool bCarryAll = bGeneralCarryAll;
 	GeneralButton = -1;
 	bGeneralMoved = false;
 	GeneralCarry = -1;
+	bGeneralCarryAll = false;
+	G.CarryMore.clear();
 	const bool bBox = G.bBox, bLine = G.bLine, bSmokeLine = G.bSmoke;
 	G.bBox = G.bLine = G.bCarry = G.bSmoke = false;
 	G.Ghosts.clear();
@@ -814,9 +883,35 @@ void ALandBattle::GeneralRelease(const FVector2D& Pixel, int32 Button, bool bShi
 		{
 			Clip.Pick(Carry, bShift);
 		}
+		else if (bCarryAll)
+		{
+			// (several carried as one, release 2: each to its place from the one he held, all of them or none; the rules
+			// name the one that cannot go)
+			const std::vector<LandCommand::Ghost> Places = bGround ? Clip.CarryAll(Carry, X, Y) : std::vector<LandCommand::Ghost>();
+			if (Clip.MayStandAll(Places))
+			{
+				PlaceManyLive(WideOf(LandCommand::General::PlaceMany(Places)));
+				G.DrawnUp.clear();
+			}
+			else
+			{
+				S.Note = "THEY MUST ALL STAND ON YOUR OWN GROUND";
+				S.NoteAge = 0.0;
+			}
+		}
 		else if (bGround && Clip.MayStand(Carry, X, Y))
 		{
-			PlaceLive(Carry, X, Y, GeneralCarryFace);
+			if (FLandLive::RuleNow(TEXT("drawup")))
+			{
+				// (with drawing up on, one carried goes as a group of one: a refusal names it, in a sentence)
+				const std::vector<LandCommand::Ghost> Alone = { LandCommand::Ghost{ Carry, X, Y, GeneralCarryFace } };
+				PlaceManyLive(WideOf(LandCommand::General::PlaceMany(Alone)));
+				G.DrawnUp.clear();
+			}
+			else
+			{
+				PlaceLive(Carry, X, Y, GeneralCarryFace);
+			}
 		}
 		else
 		{
@@ -855,7 +950,23 @@ void ALandBattle::GeneralRelease(const FVector2D& Pixel, int32 Button, bool bShi
 	if (Button == 1 && bMoved)
 	{
 		double X0 = 0.0, Y0 = 0.0;
-		if (bLine && bGround && GroundUnder(DownAt, X0, Y0))
+		if (bLine && bGround && GroundUnder(DownAt, X0, Y0) && Clip.Deploying() && FLandLive::RuleNow(TEXT("drawup")))
+		{
+			// (while he places his army, release 2: the line stands those in hand along it, facing the enemy, all of them
+			// or none)
+			const std::vector<LandCommand::Ghost> Places = Clip.DrawnLine(X0, Y0, X, Y);
+			if (Clip.MayStandAll(Places))
+			{
+				PlaceManyLive(WideOf(LandCommand::General::PlaceMany(Places)));
+				G.DrawnUp.clear();
+			}
+			else
+			{
+				S.Note = "THEY MUST ALL STAND ON YOUR OWN GROUND";
+				S.NoteAge = 0.0;
+			}
+		}
+		else if (bLine && bGround && GroundUnder(DownAt, X0, Y0))
 		{
 			TArray<FVector2D> Points;
 			for (const LandCommand::Ghost& One : Clip.LineUp(X0, Y0, X, Y))
@@ -1412,6 +1523,23 @@ void ALandBattle::FilmCornerTake()
 
 // ---- His words --------------------------------------------------------------------------------------------------
 
+void ALandBattle::GeneralMapLook(double FieldX, double FieldY)
+{
+	if (!State.IsValid() || !State->General.bOn)
+	{
+		return;
+	}
+	// (the film, where it has the screen, gives it back first: the camera thread, 26 November 2026)
+	if (State->General.bFilm)
+	{
+		GeneralDo(TEXT("map"));
+	}
+	FLandBattleState& S = *State;
+	S.GeneralIn.bGoTo = true;
+	S.GeneralIn.GoTo = LandPlay::Vec(FMath::Clamp(FieldX, 0.0, S.Rec.Ground.W), FMath::Clamp(FieldY, 0.0, S.Rec.Ground.H), 0.0);
+	S.GeneralIn.bFollow = false;
+}
+
 void ALandBattle::GeneralDo(const FString& Word)
 {
 	if (!State.IsValid() || !State->General.bOn)
@@ -1481,17 +1609,21 @@ void ALandBattle::GeneralDo(const FString& Word)
 		G.Armed.clear();
 		Clip.Clear();
 		G.bBox = G.bLine = G.bCarry = G.bSmoke = G.bGapAt = false;
+		G.CarryMore.clear();
 		GeneralButton = -1;
 		GeneralCarry = -1;
+		bGeneralCarryAll = false;
 	}
 	else if (Word == TEXT("letgo"))
 	{
 		// (the pointer lost mid-drag: nothing given, nothing carried)
 		G.bBox = G.bLine = G.bCarry = G.bSmoke = false;
 		G.Ghosts.clear();
+		G.CarryMore.clear();
 		GeneralButton = -1;
 		bGeneralMoved = false;
 		GeneralCarry = -1;
+		bGeneralCarryAll = false;
 	}
 	else if (Word == TEXT("next") || Word == TEXT("back"))
 	{
@@ -1530,6 +1662,86 @@ void ALandBattle::GeneralDo(const FString& Word)
 			G.bBox = G.bLine = G.bCarry = G.bSmoke = G.bGapAt = false;
 			OrderLive(TEXT("{\"do\":\"land:fallBack\"}"));
 			Say("YOUR WHOLE ARMY FALLS BACK: THE BATTLE ENDS WHEN THE LAST UNIT IS BEHIND THE GROUND IT STARTED FROM");
+		}
+	}
+	else if (Word == TEXT("drawup") || Word.StartsWith(TEXT("drawup:")))
+	{
+		// (drawing up while he places his army, release 2; Brian, 26 November 2026: LINE, TWO LINES, WEDGE or COLUMN for
+		// those in hand, or with none in hand for all of his. The key steps through the four, Line first. The rules
+		// place them, all of them or none, and say why not)
+		static const TCHAR* const Kinds[] = { TEXT("line"), TEXT("two"), TEXT("wedge"), TEXT("column") };
+		if (Clip.Deploying() && FLandLive::RuleNow(TEXT("drawup")))
+		{
+			int32 Which = 0;
+			if (Word.Len() > 7)
+			{
+				Which = INDEX_NONE;
+				for (int32 K = 0; K < 4; ++K)
+				{
+					if (Word.Mid(7) == Kinds[K])
+					{
+						Which = K;
+					}
+				}
+			}
+			else
+			{
+				for (int32 K = 0; K < 4; ++K)
+				{
+					if (G.DrawnUp == NarrowOf(FString(Kinds[K])))
+					{
+						Which = (K + 1) % 4;
+					}
+				}
+			}
+			if (Which != INDEX_NONE)
+			{
+				DrawUpLive(Kinds[Which]);
+			}
+		}
+	}
+	else if (Word.StartsWith(TEXT("tie:")))
+	{
+		// (groups on the number keys, release 2; Brian, 26 November 2026: "you should be able to group units so you can
+		// hit the #1 and the units tied to it are all selected". Cmd or Ctrl with a number ties those in hand to it; one
+		// number a unit, the last tie wins. The words are the UI director's)
+		const int32 Num = FCString::Atoi(*Word.Mid(4));
+		if (Num >= 1 && Num <= 9 && FLandLive::RuleNow(TEXT("groups")))
+		{
+			const LandCommand::General::Tied Did = Clip.Tie(Num);
+			const std::string Digit = std::to_string(Num);
+			const std::string Words = Did.Count > 0 ? LandCommand::General::TiedWords(Did, Num)
+				: std::string("Take units in hand first, then ") + (PLATFORM_MAC ? "Cmd" : "Ctrl") + " and " + Digit + " ties them to " + Digit + ".";
+			S.Note = NarrowOf(WideOf(Words).ToUpper());
+			S.NoteAge = 0.0;
+		}
+	}
+	else if (Word.StartsWith(TEXT("group:")) || Word.StartsWith(TEXT("addgroup:")))
+	{
+		// (the number alone takes its units in hand, with Shift adds them to those in hand; pressed again at once, the
+		// view glides to the middle of them)
+		const bool bAdd = Word.StartsWith(TEXT("addgroup:"));
+		const int32 Num = FCString::Atoi(*Word.Mid(bAdd ? 9 : 6));
+		if (Num >= 1 && Num <= 9 && FLandLive::RuleNow(TEXT("groups")))
+		{
+			double Mx = 0.0, My = 0.0;
+			if (!Clip.Take(Num, bAdd))
+			{
+				S.Note = "NOTHING IS TIED TO " + std::to_string(Num) + ".";
+				S.NoteAge = 0.0;
+			}
+			else if (GeneralGroupKey == Num && RealT - GeneralGroupAt < TwiceSeconds && !G.bFilm && Clip.GroupAt(Num, Mx, My))
+			{
+				S.GeneralIn.bGoTo = true;
+				S.GeneralIn.GoTo = LandPlay::Vec(Mx, My, 0.0);
+				S.GeneralIn.bFollow = false;
+				GeneralGroupAt = -10.0;
+			}
+			else
+			{
+				GeneralGroupKey = Num;
+				GeneralGroupAt = RealT;
+			}
 		}
 	}
 	else if (!bHand)

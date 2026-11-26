@@ -180,6 +180,10 @@ export interface LandUnit extends UnitBase {
   closing?: boolean;
   /** (sim.standRule) The target it has stood to fight: it stands while that target is within its hold. Never set with the rule off. */
   stoodFor?: number;
+  /** (sim.standRule, standKeeps.beside) The friends its stand was last worked out beside, and whether by the ground each stood on or by the stand each was making for. Never set with the rule off. */
+  standBy?: { id: number; st: boolean }[];
+  /** (sim.standRule, standKeeps.back) The place of the move order it last carried out, until it is sent anywhere else: sent there again while that place is under its own box, it has carried the order out. Never set with the rule off. */
+  heldAt?: [number, number];
   /**
    * Guns told to fire on one block and stay put (ai.ts, the computer's main effort; ruling 239(6), the player's order
    * too): they strike it whenever it is in their reach, before whatever else is nearest.
@@ -439,7 +443,7 @@ export function joinBlocks(t: { att: SideTicket; def: SideTicket; turn?: number 
 const FRONT: Kind[] = ['inf', 'mtn', 'eng', 'fort', 'cav'];
 const MOBILE: Kind[] = ['arm', 'mot'];
 /** Metres between blocks drawn up side by side in a row. */
-const GAP = 40;
+export const GAP = 40;
 
 /** A side's rows: foot in the front line, tanks and lorries next (half of them in front where there is no foot), guns. */
 function rowsOf(mine: LandUnit[]): LandUnit[][] {

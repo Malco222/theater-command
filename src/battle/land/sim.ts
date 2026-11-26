@@ -128,7 +128,7 @@ export function coveredTanks(t: FieldTicket<LandPlace>, units: LandUnit[]): Set<
  * A block's way round ground it cannot enter: how it moves, the cell it was making for, the turning points, and whether
  * the way gets there or only as near as the block can go.
  */
-interface Way { m: Going; goal: number; pts: [number, number][]; whole: boolean; bars?: number }
+interface Way { m: Going; goal: number; pts: [number, number][]; whole: boolean; bars?: number; at?: number; fell?: boolean; stopped?: boolean; blind?: boolean }
 /**
  * How a block finds its way: as its kind moves; or, foot of a corps the card brings on over dry ground, as foot that
  * will not wade (b464(5)): sent at an enemy beyond where the river bends, it goes round the bend by dry ground, as the
@@ -417,6 +417,47 @@ export class LandBattle implements BattleSim<LandUnit> {
    * (live.ts). Off unless whoever opens the field turns it on.
    */
   standRule = false;
+  /**
+   * What it chose it keeps while that still holds (the design director, 26 November 2026 01:28Z: one rule with the
+   * stand above, on the same row and switch, read only from the game's own facts, with no new figure; and 02:30Z:
+   * yes to `step`, and a key each for the two halves of a block's place beside a friend). More choices a block made
+   * afresh every tick with no memory of the tick before, and so turned back and forth between. Each has its own key
+   * here so the rule's gate can count them alone and together; all are on with the rule, and none is read with it off.
+   *
+   * way: on its way round ground it cannot enter (over a bridge), a block makes for the furthest turning point it can
+   * walk straight to. Shoved a step to one side at the bridge's end it lost that line and turned for the nearer point,
+   * found the line again a step on and turned back, and so on for as long as a friend stood beside it. On: it goes on
+   * for the turning point it chose for as long as the ground lets it step straight for it, as a block on a move order
+   * goes on for the next point of its way; where the ground stops that step it falls back to the furthest point it
+   * still has a straight line to and follows that line until it sees further than it fell back to; and while the point
+   * it fell back to is under its own box it steps to it as it faces the one after, with no wheel to a way of a few
+   * metres. (The ground is its way's own: foot that will not wade is stopped at the water and a tank held back by the
+   * hedges at the cells a hedge line bars, as a tank is at a river.)
+   *
+   * side: a block on the march slides a friend in its way aside and slides aside itself, by the side the friend lies
+   * across its front. A friend dead ahead lies now a hair to its left and now a hair to its right as the block's own
+   * heading wavers, so the two were slid one way and the other tick by tick. On: the side it slid to pass that friend
+   * the tick before is the side it slides now, while the two still overlap and the ground still lets them.
+   *
+   * beside: the place of its stand before its target. A friend it stood aside for holds the same ground still (where
+   * it is, or the stand its own attack has it make for), whether a tick finds that friend halted or stepping (one that
+   * waits and steps by turns held the one ground one tick and the other, or none, the next, and the stand hopped
+   * between two places 30 m and more apart).
+   *
+   * back: a block that has carried out a move order and is then eased a few metres off its place by its friends is
+   * sent there again by its general. It wheeled to that way of a few metres, marched it and wheeled back to its line's
+   * facing, and the friends that had eased it eased it again. (Stepping back to the place without the wheel, as this
+   * keep was first built, set it against those friends tick by tick: a step back, a shove off, for as long as they
+   * stood there.) On: a move order sent again to the place it already holds (the place of the move it last carried
+   * out, and still under its own box) is the same order, and that order it has carried out: it stands where it is,
+   * beside the friends that eased it, and turns only to the facing its line is given.
+   *
+   * step: the same of a block on an attack order that has stood to fight. Eased a few metres off its stand with its
+   * target at the edge of its hold, it wheeled to that way of a few metres, marched it and wheeled back to what it
+   * fights. On: while its stand is still under its own box it steps back to it as it faces what it fights, and its
+   * stand is kept the while.
+   */
+  standKeeps = { way: true, side: true, beside: true, back: true, step: true };
   /** faceRule: of the enemies that struck each block this tick, the costliest, what its blow cost face on, and whether it landed on the front. */
   private readonly costliest = new Map<number, { by: number; cost: number; front: boolean }>();
   /** Each own team block's parent force (own-teams.ts ownTeamParents), by the forces' ids: read once from the ticket. */
@@ -1814,6 +1855,18 @@ export class LandBattle implements BattleSim<LandUnit> {
         // 'land:begin' } ends the step, and the clock may run.
         // { do: 'land:place', ..., face } turns it that way (release 2, radians as the core's).
         if (c.do === 'land:place') {
+          // Several blocks as one act (release 2; Brian, 26 November 2026: "move my units in a formation before the
+          // battle begins"; the design director, 03:50Z: a control, no battle rule): { do: 'land:place', units: [ids],
+          // places: [[x, y, face?], ...] } stands each block of the placing side at its own place, each by its own
+          // checks, the others of the act counted where they will stand and not where they stood. All of them or
+          // none (placeManyWhy names the block that cannot go).
+          const many = (c as { places?: unknown }).places;
+          if (Array.isArray(many)) {
+            const us = ((c.units ?? []) as number[]).map((id) => this.unit(Number(id))), at = many.map((p) => (Array.isArray(p) ? p.map(Number) : []));
+            if (by !== this.setup || us.some((v) => !v) || this.placeManyWhy(us as LandUnit[], at) !== null) return false;
+            (us as LandUnit[]).forEach((v, i) => { const f = at[i][2]; this.place(v, at[i][0], at[i][1], f !== undefined && Number.isFinite(f) ? f : undefined); });
+            return true;
+          }
           const u = this.unit(Number((c.units as number[] | undefined)?.[0])), x = Number(c.x), y = Number(c.y);
           if (!u || this.placeWhy(u, x, y) !== null || by !== this.setup) return false;
           const f = c.face === undefined ? undefined : Number(c.face);
@@ -1978,6 +2031,16 @@ export class LandBattle implements BattleSim<LandUnit> {
         if (!this.wet(u, x, y, false)) { o.x = x; o.y = y; break search; }
       }
     }
+    // What it chose it keeps (standRule, standKeeps.back): a move order sent again to the place it already holds, the
+    // place of the move it last carried out and still under its own box, is the same order, and it has carried that
+    // order out: it is given no way to walk (below), so it stands where it is and faces as the order has it face
+    // (move). Sent anywhere else, that place is held no longer.
+    let there = false;
+    if (this.standRule) {
+      const h = u.heldAt;
+      there = this.standKeeps.back && o.kind === 'move' && !!h && h[0] === o.x && h[1] === o.y && this.under(u, o.x, o.y);
+      if (!there) u.heldAt = undefined;
+    }
     u.order = o;
     u.keepFace = o.face ?? null;
     // Any other order lifts a gun's aim (fire on, stay put), and fire on cover; and a cut it was sent to make (cutGo sets
@@ -1986,7 +2049,13 @@ export class LandBattle implements BattleSim<LandUnit> {
     // An attack's way is the one it will walk: to its place in the lane before its target, as the march works it out.
     const t = o.kind === 'attack' && o.target !== undefined ? this.unit(o.target) : undefined;
     const at = t ? this.lanePoint(u, t, this.closeTo(u)) : [o.x, o.y];
-    u.path = at ? this.route(u, at[0], at[1]) : [];
+    u.path = at && !there ? this.route(u, at[0], at[1]) : [];
+  }
+
+  /** A point under the block's own box, as it faces. */
+  private under(u: LandUnit, x: number, y: number): boolean {
+    const [fx, fy] = ahead(u.face), [rx, ry] = ahead(u.face + Math.PI / 2), dx = x - u.x, dy = y - u.y;
+    return Math.abs(dx * rx + dy * ry) <= u.w / 2 && Math.abs(dx * fx + dy * fy) <= u.d / 2;
   }
 
   /** How near a block closes on what it attacks before it stands and fights: well inside its reach. */
@@ -2012,6 +2081,10 @@ export class LandBattle implements BattleSim<LandUnit> {
     return u.dry && motionOf(u) === 'foot' && (u.joined === undefined || this.field.bend) ? 'ashore' : motionOf(u);
   }
   private ashore: Record<Ground, number> | null = null;
+  /** Whether a block going this way may be at (x, y): ground it can enter, and for a tank held back by the hedges no cell a hedge line bars. */
+  private bears(m: Going, x: number, y: number): boolean {
+    return this.paceOf(m)[groundAt(this.field, x, y)] > 0 && !(m === 'hedged' && this.barrier()[this.cellAt(x, y)]);
+  }
   private paceOf(m: Going): Record<Ground, number> { return m === 'ashore' ? (this.ashore ??= { ...LAND.pace.foot, water: 0, blown: 0 }) : m === 'hedged' ? LAND.pace.tracks : LAND.pace[m]; }
   private route(u: LandUnit, x: number, y: number): [number, number][] {
     const m = this.going(u), f = this.field;
@@ -2036,6 +2109,24 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (lost && !fresh) { w = undefined; continue; }
       // Nowhere nearer to go: it stays where it is.
       if (k < 0) return [[u.x, u.y]];
+      // What it chose it keeps (standRule, standKeeps.way). It has lost its straight line to the turning point it was
+      // making for (a step to one side on a bridge is enough): it goes on for the one it chose, as a block on a move
+      // order goes on for the next point of its way, for as long as the ground lets it step straight for it (move).
+      // Where the ground stops that step it falls back to the furthest point it still has a straight line to, as with
+      // the keep off, and follows that line, point by point, until it sees further than it fell back to. (As first
+      // built it kept the chosen point only within the march's 6 m of the one before, and fell back beyond: a tank a
+      // step to one side of its way on a bridge then went on a metre, fell back a metre, and so on to the battle's
+      // end, facing one way the while, so that no count of turns saw it. The art director's count of bridges did.)
+      // "The ground" is its way's own: a block whose way keeps off ground its kind could enter (foot that will not
+      // wade, a tank held back by the hedges) is stopped at that ground too while it steps for a point it has no
+      // line to (blind; move).
+      if (this.standRule && this.standKeeps.way) {
+        w.blind = false;
+        if (w.at !== undefined && k > w.at) w.fell = false;
+        else if (w.at !== undefined && k < w.at && !w.fell) { if (w.stopped || w.at >= pts.length) w.fell = true; else { k = w.at; w.blind = true; } }
+        w.stopped = false;
+        w.at = k;
+      }
       const way = pts.slice(k);
       if (w.whole && this.dry(m, end[0], end[1], x, y) && (end[0] !== x || end[1] !== y)) way.push([x, y]);
       return way;
@@ -2229,17 +2320,46 @@ export class LandBattle implements BattleSim<LandUnit> {
   /** Where the placing side may put its guns and teams, [x0, y0, x1, y1] metres; null outside the setup step. */
   setupRoom(): [number, number, number, number] | null { return this.room ? [...this.room] as [number, number, number, number] : null; }
 
-  /** Why a block may not stand there in the setup step, or null where it may (release 2). */
-  placeWhy(u: LandUnit, x: number, y: number): string | null {
+  /**
+   * Why a block may not stand there in the setup step, or null where it may (release 2). 'but': blocks placed in the
+   * same act, which are not counted where they stand now (placeManyWhy counts them where they will stand).
+   */
+  placeWhy(u: LandUnit, x: number, y: number, but?: ReadonlySet<LandUnit>): string | null {
+    return this.placeable(u) ?? this.standWhy(u, x, y, this.room!, but);
+  }
+
+  /** Why a block may not be placed at all in the setup step, wherever it would stand, or null where it may be (release 2). */
+  placeable(u: LandUnit): string | null {
     if (!this.setup || u.side !== this.setup) return 'The battle has begun.';
     if (this.placeAll ? u.kind === 'fort' || !fighting(u) : u.kind !== 'art' || !fighting(u)) return this.placeAll ? 'Fortifications stay where they are built.' : 'Only guns and support teams are placed.';
     // (A block waiting for help is dug in where it was told to wait.)
     if (u.dug || u.waits) return 'It is dug in where it stands.';
-    return this.standWhy(u, x, y, this.room!);
+    return null;
+  }
+
+  /**
+   * Why several blocks may not be placed as one act in the setup step (release 2), or null where they all may: each
+   * block by its own checks (placeWhy), the others of the act counted where they would stand and not where they stand
+   * now. Names the first block that cannot go. A control of the setup step: nothing in the fight reads it.
+   */
+  placeManyWhy(us: LandUnit[], at: readonly (readonly number[])[]): { id: number; why: string } | null {
+    if (!us.length || us.length !== at.length) return { id: us[0]?.id ?? -1, why: 'Nothing to place.' };
+    const act = new Set(us);
+    if (act.size !== us.length) return { id: us[0].id, why: 'A block stands in one place only.' };
+    for (let i = 0; i < us.length; i++) {
+      const u = us[i], x = Number(at[i][0]), y = Number(at[i][1]);
+      const why = this.placeWhy(u, x, y, act);
+      if (why !== null) return { id: u.id, why };
+      for (let j = 0; j < i; j++) {
+        const o = us[j];
+        if (Math.abs(at[j][0] - x) < (o.w + u.w) / 2 + LAND.placeClear && Math.abs(at[j][1] - y) < (o.d + u.d) / 2 + LAND.placeClear) return { id: u.id, why: 'Another block stands there.' };
+      }
+    }
+    return null;
   }
 
   /** Why a block may not stand there inside its side's ground 'r' (the setup step's own checks), or null where it may. */
-  private standWhy(u: LandUnit, x: number, y: number, r: [number, number, number, number]): string | null {
+  private standWhy(u: LandUnit, x: number, y: number, r: [number, number, number, number], but?: ReadonlySet<LandUnit>): string | null {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return 'Off the field.';
     const hw = u.w / 2, hd = u.d / 2;
     if (x - hw < r[0] || x + hw > r[2] || y - hd < r[1] || y + hd > r[3]) return 'Outside your ground.';
@@ -2255,7 +2375,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     // Clear of every block by a few metres, so neither is shoved off its place as they turn to fire (spread).
     for (const o of this.units) {
-      if (o === u || !live(o)) continue;
+      if (o === u || !live(o) || but?.has(o)) continue;
       if (Math.abs(o.x - x) < (o.w + u.w) / 2 + LAND.placeClear && Math.abs(o.y - y) < (o.d + u.d) / 2 + LAND.placeClear) return 'Another block stands there.';
     }
     return null;
@@ -3039,6 +3159,9 @@ export class LandBattle implements BattleSim<LandUnit> {
    * left alone; enemies keep a few metres between their fronts. For the screens and the models as much as for the
    * fight: two divisions never share one patch of ground.
    */
+  /** standKeeps.side: by pair of friends, the way across the first's front they last slid apart, and the count of the tick they did. */
+  private readonly sides = new Map<string, { x: number; y: number; n: number }>();
+  private spreads = 0;
   private spread(): void {
     const us = this.units.filter((u) => fighting(u) && u.kind !== 'fort');
     // Never eased onto ground it can hardly cross (into the river off a bridge, tanks into a marsh), unless it stands on such
@@ -3055,6 +3178,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const go = (u: LandUnit, ux: number, uy: number, push: number): void => {
       if (can(u, ux, uy, push)) { u.x = clamp(u.x + ux * push, 5, this.field.w - 5); u.y = clamp(u.y + uy * push, 5, this.field.h - 5); }
     };
+    const keep = this.standRule && this.standKeeps.side, now = keep ? ++this.spreads : 0;
     for (let i = 0; i < us.length; i++) for (let j = i + 1; j < us.length; j++) {
       const a = us[i], b = us[j];
       const dx = b.x - a.x, dy = b.y - a.y;
@@ -3090,9 +3214,18 @@ export class LandBattle implements BattleSim<LandUnit> {
       // In the open, a block on the march slides a friend in its way aside as fast as it comes on, and slides aside
       // itself, so the two pass side by side and no box is drawn on another (the art director, b439).
       if (a.side === b.side && (a.pressing !== undefined || b.pressing !== undefined) && !this.narrows(a, a.x, a.y) && !this.narrows(b, b.x, b.y)) {
-        const sl = Math.sign(lat) || (a.id < b.id ? 1 : -1), p = Math.min(pl / 2, (Math.max(a.speed, b.speed) + LAND.spread) * DT);
+        const p = Math.min(pl / 2, (Math.max(a.speed, b.speed) + LAND.spread) * DT);
+        let sl = Math.sign(lat) || (a.id < b.id ? 1 : -1);
+        // What it chose it keeps (standRule, standKeeps.side): the side these two slid past each other the tick
+        // before is the side they slide now, while they still overlap and the ground still lets them.
+        const pair = keep ? `${a.id}:${b.id}` : '', was = keep ? this.sides.get(pair) : undefined;
+        if (was && was.n === now - 1) {
+          const ks = Math.sign(rx * was.x + ry * was.y);
+          if (ks !== 0 && can(a, -rx * ks, -ry * ks, p) && can(b, rx * ks, ry * ks, p)) sl = ks;
+        }
         if (can(a, -rx * sl, -ry * sl, p) && can(b, rx * sl, ry * sl, p)) {
           go(a, -rx * sl, -ry * sl, p); go(b, rx * sl, ry * sl, p);
+          if (keep) this.sides.set(pair, { x: rx * sl, y: ry * sl, n: now });
           // Two on the march into each other: the one with further to go waits a moment for the other to pass.
           if (a.pressing !== undefined && b.pressing !== undefined) { const wa = this.toGo(a) > this.toGo(b) || (this.toGo(a) === this.toGo(b) && a.id > b.id); (wa ? a : b).yieldTo = (wa ? b : a).id; }
           continue;
@@ -3729,13 +3862,31 @@ export class LandBattle implements BattleSim<LandUnit> {
     else if (this.repay.length) this.landNow(u);
   }
 
+  /**
+   * The way a halted block wants to face, or null for as it faces: the facing its line was given, unless what it meets
+   * is well off that; what it meets is the enemy it is fighting, or (faceRule) the one whose blow cost it most this tick.
+   */
+  private facing(u: LandUnit): number | null {
+    const e = u.engaged !== undefined ? this.unit(u.engaged) : undefined;
+    let want = u.keepFace;
+    // Units face the fire that hurts most (faceRule): struck this tick, it turns to meet the enemy whose blow cost it
+    // most (in front, that enemy holds it: pinned, above). Struck by no one, or with the rule off: what it is fighting.
+    const top = this.faceRule ? this.costliest.get(u.id) : undefined, by = top ? this.unit(top.by) : undefined;
+    const meet = by && live(by) ? by : e;
+    if (meet && !u.pinned) {
+      const off = Math.abs(turn(u.keepFace ?? u.face, bearing(u.x, u.y, meet.x, meet.y)));
+      if (u.keepFace === null || off > Math.PI / 3) want = bearing(u.x, u.y, meet.x, meet.y);
+    }
+    return want;
+  }
+
   private move(u: LandUnit): void {
     const k = u.kind;
     u.pressing = undefined;
     if (u.ovr && this.drive(u)) return;
     const gave = u.yieldTo !== undefined ? this.unit(u.yieldTo) : undefined;
     u.yieldTo = undefined;
-    let to: [number, number] | null = null, run = false;
+    let to: [number, number] | null = null, run = false, sidle = false;
     if (u.state === 'routing') { to = [u.x, u.side === 'att' ? -50 : this.field.h + 50]; run = true; }
     else if (u.order?.kind === 'withdraw') {
       // Straight back to its own edge, or back round by its bridge where a river or rock lies behind it.
@@ -3764,7 +3915,15 @@ export class LandBattle implements BattleSim<LandUnit> {
         // hold, the stand's own (lanePoint), and closes again only when the target is further off than that.
         const far = this.standRule && u.stoodFor === t.id ? want + (reachOf(u) - want) / 2 : want;
         const at = this.gap(u, t) > far || this.wet(u, u.x, u.y) ? this.lanePoint(u, t, want) : null;
-        if (at) { u.path = this.route(u, at[0], at[1]); to = u.path[0]; if (this.standRule) u.stoodFor = undefined; }
+        if (at) {
+          u.path = this.route(u, at[0], at[1]); to = u.path[0];
+          // Eased off the stand it has stood on, and that stand still under its own box (standKeeps.step): it steps
+          // back to it as it faces (below), and has stood for this target still.
+          if (this.standRule) {
+            sidle = this.standKeeps.step && u.stoodFor === t.id && !!u.stand && at[0] === u.stand[0] && at[1] === u.stand[1] && u.path.length === 1 && this.under(u, at[0], at[1]);
+            if (!sidle) u.stoodFor = undefined;
+          }
+        }
         else { u.path = []; to = null; if (this.standRule) u.stoodFor = t.id; }
       }
     } else if (u.order && u.path.length) {
@@ -3792,16 +3951,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       u.speed = 0;
       // Face what it is fighting, unless held by an enemy in front or by the facing its line was given.
       const e = u.engaged !== undefined ? this.unit(u.engaged) : undefined;
-      let want = u.keepFace;
-      // Units face the fire that hurts most (faceRule): struck this tick, it turns to meet the enemy whose blow cost it
-      // most (in front, that enemy holds it: pinned, above). Struck by no one, or with the rule off: what it is fighting.
-      const top = this.faceRule ? this.costliest.get(u.id) : undefined, by = top ? this.unit(top.by) : undefined;
-      const meet = by && live(by) ? by : e;
-      if (meet && !u.pinned) {
-        const off = Math.abs(turn(u.keepFace ?? u.face, bearing(u.x, u.y, meet.x, meet.y)));
-        if (u.keepFace === null || off > Math.PI / 3) want = bearing(u.x, u.y, meet.x, meet.y);
-      }
-      if (u.order?.kind === 'move' && !u.path.length) { u.order = null; }
+      const want = this.facing(u);
+      if (u.order?.kind === 'move' && !u.path.length) { if (this.standRule) u.heldAt = [u.order.x, u.order.y]; u.order = null; }
       if (want !== null && Math.abs(turn(u.face, want)) > 0.02) { this.turnTo(u, want); u.act = 'turn'; }
       else u.act = e ? 'fight' : 'idle';
       if (u.state === 'routing') u.act = 'rout';
@@ -3821,8 +3972,16 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     const off = turn(u.face, head);
     // Blocks wheel before they march; a runner just runs, and one wading the river turns as it wades.
-    if (!run && !wading && Math.abs(off) > 0.6) { this.turnTo(u, head); u.speed = 0; u.act = 'turn'; return; }
-    if (run) u.face = head; else this.turnTo(u, head);
+    // Eased off the stand of its attack (standRule, standKeeps.step, above): it steps back to it with no wheel to that
+    // way of a few metres and none back, facing as it would standing.
+    // And one stepping to the turning point it fell back to (standKeeps.way, route) faces the one after it.
+    const fell = this.standRule && this.standKeeps.way && !run && u.path.length > 1 && to === u.path[0] ? this.ways.get(u.id) : undefined;
+    const via = !!fell && fell.fell === true && fell.at !== undefined && fell.pts[fell.at] === to && this.under(u, to[0], to[1]);
+    const back = this.standRule && !run && (sidle || via);
+    if (!run && !wading && !back && Math.abs(off) > 0.6) { this.turnTo(u, head); u.speed = 0; u.act = 'turn'; return; }
+    if (run) u.face = head;
+    else if (!back) this.turnTo(u, head);
+    else { const want = via ? bearing(u.x, u.y, u.path[1][0], u.path[1][1]) : this.facing(u); if (want !== null) this.turnTo(u, want); }
     const m = motionOf(u);
     const g = groundAt(this.field, u.x, u.y);
     let pace = LAND.pace[m][g];
@@ -3846,8 +4005,18 @@ export class LandBattle implements BattleSim<LandUnit> {
     const stepLen = Math.min(d, v * DT);
     const [ax, ay] = ahead(head);
     let nx = u.x + ax * stepLen, ny = u.y + ay * stepLen;
+    // (standKeeps.way) Stepping for a turning point it kept with no straight line to it (route), a block whose way
+    // keeps off ground its kind could enter (foot that will not wade, a tank held back by the hedges) is stopped where
+    // that ground begins, as its kind is below at ground it cannot enter: it stands this tick, and route falls back.
+    // Not while it is itself on such ground (walking out of it).
+    if (this.standRule && this.standKeeps.way && !run) {
+      const kept = this.ways.get(u.id);
+      if (kept?.blind && kept.m !== m && kept.m === this.going(u) && this.bears(kept.m, u.x, u.y) && !this.bears(kept.m, nx, ny)) { kept.stopped = true; u.speed = 0; u.act = 'idle'; return; }
+    }
     // Ground it cannot enter: try a little to either side, else stop. Not while it is still walking out of such ground.
     if (LAND.pace[m][groundAt(this.field, nx, ny)] <= 0 && LAND.pace[m][g] > 0 && !run) {
+      // (standKeeps.way: the ground has stopped its straight step for the turning point it kept; route falls back.)
+      if (this.standRule && this.standKeeps.way) { const kept = this.ways.get(u.id); if (kept) kept.stopped = true; }
       let moved = false;
       for (const sw of [0.5, -0.5, 1, -1]) {
         const [bx, by] = ahead(head + sw);
@@ -3864,7 +4033,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     u.cover = groundAt(this.field, u.x, u.y);
     if (d <= Math.max(6, stepLen + 0.01)) {
       u.path.shift();
-      if (!u.path.length && u.order?.kind === 'move') { u.order = null; u.speed = 0; }
+      if (!u.path.length && u.order?.kind === 'move') { if (this.standRule) u.heldAt = [u.order.x, u.order.y]; u.order = null; u.speed = 0; }
     }
     // Off the field.
     if (u.y < 0 || u.y > this.field.h) {
@@ -3953,9 +4122,11 @@ export class LandBattle implements BattleSim<LandUnit> {
     const face = bearing(p[0], p[1], t.x, t.y), [sx, sy] = ahead(face + Math.PI / 2);
     const fit = (q: [number, number]): boolean => off(q[0], q[1]) <= hold && !this.wet(u, q[0], q[1])
       && !this.units.some((e) => e.side !== u.side && live(e) && dist(e.x, e.y, q[0], q[1]) < (Math.max(e.w, e.d) + Math.max(u.w, u.d)) / 2);
+    const asides: { id: number; st: boolean }[] = [];
     for (let k = 0; k < 4; k++) {
       const f = this.claimed(u, p[0], p[1], face);
       if (!f) break;
+      asides.push({ id: f.id, st: f.st });
       const lat = (p[0] - f.x) * sx + (p[1] - f.y) * sy, mine = (u.x - f.x) * sx + (u.y - f.y) * sy;
       const side = Math.abs(lat) >= 1 ? Math.sign(lat) : Math.sign(mine) || Math.sign(lane) || (u.id < f.id ? -1 : 1);
       const by = (u.w + f.w) / 2 + LAND.room;
@@ -3967,6 +4138,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     // Nowhere free in reach: it keeps the stand it had, rather than hop each tick between two that are taken.
     if (old && kept && this.claimed(u, p[0], p[1], face)) return there(old);
+    // What it chose it keeps (standRule, standKeeps.beside): the friends it stood aside for (claimed).
+    if (this.standRule) u.standBy = asides.length ? asides : undefined;
     u.stand = p; u.standFor = key; u.standFace = face; u.closing = false;
     return there(p);
   }
@@ -3975,14 +4148,23 @@ export class LandBattle implements BattleSim<LandUnit> {
    * The friend whose ground this block's box would stand on at x, y facing so (with LAND.room between), or null: one
    * standing there, or one whose attack has it stand there and is nearer to it than this block is to x, y.
    */
-  private claimed(u: LandUnit, x: number, y: number, face: number): { id: number; x: number; y: number; w: number } | null {
+  private claimed(u: LandUnit, x: number, y: number, face: number): { id: number; x: number; y: number; w: number; st: boolean } | null {
     const [fx, fy] = ahead(face), [rx, ry] = ahead(face + Math.PI / 2), mine = dist(u.x, u.y, x, y);
     for (const f of this.units) {
       if (f === u || f.side !== u.side || !fighting(f)) continue;
-      let at: [number, number] | null = f.speed <= 0.5 ? [f.x, f.y] : null;
-      if (!at && f.order?.kind === 'attack' && f.stand) {
-        const theirs = dist(f.x, f.y, f.stand[0], f.stand[1]);
-        if (theirs < mine || (theirs === mine && f.id < u.id)) at = f.stand;
+      // What it chose it keeps (standRule, standKeeps.beside): a friend it stood aside for when it last worked out its
+      // stand holds the same ground still, where it is or the stand its attack has it make for, whether this tick finds
+      // it halted or stepping (a friend that waits and steps by turns held the one ground one tick and the other the
+      // next, or none, and the stand hopped between two places).
+      const was = this.standRule && this.standKeeps.beside ? u.standBy?.find((b) => b.id === f.id) : undefined;
+      let at: [number, number] | null = was ? (!was.st ? [f.x, f.y] : f.order?.kind === 'attack' && f.stand ? f.stand : null) : null, st = !!was && was.st;
+      if (!at) {
+        st = false;
+        if (f.speed <= 0.5) at = [f.x, f.y];
+        else if (f.order?.kind === 'attack' && f.stand) {
+          const theirs = dist(f.x, f.y, f.stand[0], f.stand[1]);
+          if (theirs < mine || (theirs === mine && f.id < u.id)) { at = f.stand; st = true; }
+        }
       }
       if (!at) continue;
       const dx = at[0] - x, dy = at[1] - y;
@@ -3990,7 +4172,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       const c = Math.abs(Math.cos(f.face - face)), s = Math.abs(Math.sin(f.face - face));
       const pl = u.w / 2 + (f.w / 2) * c + (f.d / 2) * s + LAND.room / 2 - Math.abs(dx * rx + dy * ry);
       const pd = u.d / 2 + (f.w / 2) * s + (f.d / 2) * c - Math.abs(dx * fx + dy * fy);
-      if (pl > 0 && pd > 0) return { id: f.id, x: at[0], y: at[1], w: f.w };
+      if (pl > 0 && pd > 0) return { id: f.id, x: at[0], y: at[1], w: f.w, st };
     }
     return null;
   }
