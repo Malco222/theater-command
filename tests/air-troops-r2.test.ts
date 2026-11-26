@@ -1057,3 +1057,77 @@ describe('the weight of its passes decides, not what ended them (the UI director
     expect(f.line).toBe('Groupement de Chasse 1 and Groupement de Chasse 2 went down and strafed. Groupement de Chasse 3 went down to strafe, but ran short of fuel and turned for home before it could do any harm.');
   });
 });
+
+// The UI director, 26 November 2026 03:59Z, 2: "Name it. Where a group that did not go down has no cause line of its own,
+// it takes a plain line after the cause lines: "{The 3rd Fighter Group} did not go down to strafe." (two: "{A} and {B} did
+// not go down to strafe."). "No fighter group went down to strafe." stays only where no group has a line at all, as in
+// your settled cases." Fought out, the battle knows who went down and why not, and the report keeps the raid's fighter
+// groups that did not go down with no strafeEnd of their own (strafeStayed). Fought battles at the Saar, the computer on
+// both sides; setups: where the French groups fly from (Groupement de Chasse 1 and 2 at Namur, beyond the rule's reach),
+// board fuel, Groupement de Chasse 3's size, where the defence starts, and one group copied under a new id and name so
+// the raid has four fighter groups.
+describe('a fighter group that did not go down, with no cause line of its own, is named last (the UI director, 26 Nov 03:59Z, 2)', () => {
+  const GC1 = 9, GC3 = 10, GC2 = 36, JD2 = 3, G4 = 900;
+  const STAYED = 'did not go down to strafe.';
+  function raid(k: number, o: { at?: [number, string][]; copy?: boolean; ids?: number[]; fuel?: [number[], number]; size?: number; def?: number; defAt?: [number, number]; defWait?: boolean; order?: boolean }) {
+    const g = startOpen(createGame(7, 'FRA'));
+    setWar(g, 'FRA', 'GER');
+    if (o.copy) { const f = g.airFleets.find((x) => x.id === GC2)!; g.airFleets.push({ ...structuredClone(f), id: G4, name: '4th Fighter Group' }); }
+    for (const [id, n] of o.at ?? [[GC1, 'Lorraine'], [GC2, 'Lorraine']]) g.airFleets.find((f) => f.id === id)!.base = g.regions.find((x) => x.name === n)!.id;
+    if (o.def !== undefined) { const d = g.airFleets.find((f) => f.id === JD2)!; d.ftr = o.def; d.est.ftr = Math.max(d.est.ftr, o.def); }
+    if (o.size !== undefined) g.airFleets.find((f) => f.id === GC3)!.ftr = o.size;
+    g.seed = (7 + 7919 * k) >>> 0;
+    g.flags.airBattles = k;
+    const target = raidTargets(g, 'ground', 'FRA').find((x) => g.regions[x.id].name === 'Saar')!.id;
+    const ids = o.ids ?? [38, GC1, GC2, GC3];
+    const t = ticketOf(g, target, ids, 'FRA');
+    if (o.fuel) for (const id of o.fuel[0]) t.place.starts[id].fuel = o.fuel[1];
+    if (o.defAt) { t.place.starts[JD2].x = o.defAt[0]; t.place.starts[JD2].y = o.defAt[1]; }
+    if (o.defWait !== undefined) t.place.starts[JD2].wait = o.defWait;
+    const s = airBattle(t) as AirSim;
+    if (o.order) expect(s.command({ do: 'air:strafe', units: s.units.filter((x) => x.side === 'att' && x.corps === GC3).map((x) => x.id) }, 'att')).toBe(true);
+    fight(s);
+    const out = s.outcome();
+    const rep = launchRaid(g, 'ground', target, ids, 'FRA', foughtAir(out))!;
+    return { g, o: out, rep, line: strafedLine(rep, 'FRA') };
+  }
+  it('one strafes, one stays up with the bombers (beyond the rule\'s reach): named after the strafers, and kept in the save', () => {
+    const f = raid(0, { at: [[GC1, 'Namur'], [GC2, 'Lorraine']] });
+    expect(f.o.strafers).toEqual([GC3, GC2]);
+    expect(f.rep.strafeStayed).toEqual(['Groupement de Chasse 1']);
+    expect(f.line).toBe(`Groupement de Chasse 2 and Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 ${STAYED}`);
+    expect(strafedLine(f.rep, 'GER')).toBe('');
+    expect(loadGame(saveGame(f.g))!.airReports.at(-1)!.strafeStayed).toEqual(f.rep.strafeStayed);
+  });
+  it('two with no line beside one that strafed', () => {
+    const f = raid(0, { at: [[GC1, 'Namur'], [GC2, 'Namur']] });
+    expect(f.rep.strafeStayed).toEqual(['Groupement de Chasse 1', 'Groupement de Chasse 2']);
+    expect(f.line).toBe(`Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 and Groupement de Chasse 2 ${STAYED}`);
+  });
+  it('two too short of fuel to go down, and a third with no line of its own', () => {
+    const f = raid(0, { fuel: [[GC1, GC3], 450] });
+    expect(f.o.strafers).toEqual([]);
+    expect(f.rep.strafeStayed).toEqual(['Groupement de Chasse 2']);
+    expect(f.line).toBe(`Groupement de Chasse 1 and Groupement de Chasse 3 were too short of fuel to go down and turned for home. Groupement de Chasse 2 ${STAYED}`);
+  });
+  it('three with no line beside one too short of fuel (three names, joined as the report joins them)', () => {
+    const f = raid(0, { copy: true, at: [[GC1, 'Namur'], [GC2, 'Namur'], [G4, 'Namur']], ids: [38, GC1, GC2, GC3, G4], fuel: [[GC3], 450] });
+    expect(f.rep.strafeEnd).toEqual({ short: ['Groupement de Chasse 3'] });
+    expect(f.rep.strafeStayed).toEqual(['Groupement de Chasse 1', 'Groupement de Chasse 2', '4th Fighter Group']);
+    expect(f.line).toBe(`Groupement de Chasse 3 was too short of fuel to go down and turned for home. Groupement de Chasse 1, Groupement de Chasse 2 and the 4th Fighter Group ${STAYED}`);
+  });
+  it('a pass with weight, then caught: the strafed line; the two that did not go down are named after it', () => {
+    const f = raid(0, { size: 10, def: 646, defAt: [50_000, 125_000], defWait: true, order: true });
+    expect(f.o.strafeEnd).toEqual({ [GC3]: 'caught' });
+    expect(f.o.strafedBy![GC3]).toBeGreaterThanOrEqual(1);
+    expect('strafeEnd' in f.rep).toBe(false);
+    expect(f.rep.strafeLittle).toBeUndefined();
+    expect(f.line).toBe(`Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 and Groupement de Chasse 2 ${STAYED}`);
+  });
+  it('every fighter group with a line of its own: no plain line, no field', () => {
+    const f = raid(0, {});
+    expect('strafeStayed' in f.rep).toBe(false);
+    expect(f.line).toBe('Groupement de Chasse 1, Groupement de Chasse 2 and Groupement de Chasse 3 went down and strafed.');
+    expect(saveGame(f.g).includes('"strafeStayed"')).toBe(false);
+  });
+});

@@ -3149,6 +3149,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   let strafeLittle: AirReport['strafeLittle'];
   // (And, fought out, those whose strafing fuel or a catch ended short, as the battle knows it: 21:22Z j and k, 21:28Z.)
   let strafeEnd: AirReport['strafeEnd'];
+  // (And, fought out, the fighter groups of the raid that did not go down for no cause of their own: 26 Nov 03:59Z, 2.)
+  let strafeStayed: string[] | undefined;
   const bookGround = (hit: FieldHit): void => {
     for (const x of hit.losses) {
       const f = g.airFleets.find((y) => y.id === x.id);
@@ -3418,13 +3420,21 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       const passed = (x: AirAssess['att'][number]): boolean => route === 'fought' && !!battle?.strafedBy && Object.prototype.hasOwnProperty.call(battle.strafedBy, x.f.id);
       const end: NonNullable<AirReport['strafeEnd']> = {};
       const little: string[] = [];
+      // (The UI director, 26 November 2026 03:59Z, 2: "Where a group that did not go down has no cause line of its own, it
+      // takes a plain line after the cause lines". Fought out only, where the battle knows who went down and why not: a
+      // fighter group of the raid (fighters flying with it) that did not go down, with no strafeEnd of its own. Settled,
+      // or handed to the staff, none is named, so "No fighter group went down to strafe." stands there as before, "as in
+      // your settled cases".)
+      const stayed: string[] = [];
       a.att.forEach((x, i) => {
         const went = down.includes(x.f.id), why = ends[x.f.id];
         if (went && booked(x) >= 1) return;
         if ((why === 'short' && !went) || ((why === 'fuel' || why === 'caught') && !(went && passed(x)))) (end[why] ??= []).push(att[i].fleet);
         else if (went) little.push(att[i].fleet);
+        else if (route === 'fought' && !why && x.ftr > 0) stayed.push(att[i].fleet);
       });
       if (Object.keys(end).length) strafeEnd = end;
+      if (stayed.length) strafeStayed = stayed;
       if (little.length) strafeLittle = { names: little, ...(little.length === strafed.length && !end.fuel && !end.caught && !(through > 0) ? { alone: true as const } : {}) };
     }
     let divs = 0;
@@ -3532,6 +3542,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   if (a.lights) rep.lights = { ...a.lights };
   if (strafeLittle) rep.strafeLittle = strafeLittle;
   if (strafeEnd) rep.strafeEnd = strafeEnd;
+  if (strafeStayed) rep.strafeStayed = strafeStayed;
   g.airReports.push(rep);
   storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' || m === 'airfield' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, guns, ...(battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {}) });
   // (Release 2, earned names for air groups under the switch 'nicknames', airnicks.ts: the missions completed and the

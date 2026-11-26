@@ -65,6 +65,13 @@ export const STRAFE_WORDS = {
 } as const;
 
 /**
+ * The report's plain line for a fighter group of the raid that did not go down and has no cause line of its own, after
+ * the cause lines (the UI director, 26 November 2026 03:59Z, 2): one, "{The 3rd Fighter Group} did not go down to
+ * strafe."; two, "{A} and {B} did not go down to strafe.". One form for one group and for more.
+ */
+export const STRAFE_STAYED = 'did not go down to strafe.';
+
+/**
  * Why the card names no group, the first cause that is true (the UI director, 19:17Z: "No fighters; else no reach; else
  * the odds; else the fought-out line. The first cause that is true is the only one printed"): no fighter group flies
  * with the raid ('alone'); else none has the reach to strafe ('reach', canStrafe false for every one); else the fight
@@ -105,15 +112,17 @@ const named = (xs: string[]): string => cap(list(xs.map(theGroupName)));
  * joins its names as the report joins them, every name by theGroupName (21:22Z g). "No fighter group went down to
  * strafe." only where the line would otherwise say nothing at all (the UI director, 26 November 2026 02:06Z, answer 2:
  * "The k line alone. Each group that did not go down has its own line saying why"): a group too short of fuel to go
- * down is told by its own line, standing alone.
+ * down is told by its own line, standing alone. Last, after the cause lines, a fighter group of a fought raid that did
+ * not go down and has no cause line of its own (strafeStayed): "{A} did not go down to strafe." (the UI director, 26
+ * November 2026 03:59Z, 2: "No fighter group went down to strafe." stays only where no group has a line at all).
  */
-export function strafedLine(rep: { mission: string; attNat: string; strafed?: string[]; strafeLittle?: { names: string[] }; strafeEnd?: { short?: string[]; fuel?: string[]; caught?: string[] } }, reader: string | null): string {
+export function strafedLine(rep: { mission: string; attNat: string; strafed?: string[]; strafeLittle?: { names: string[] }; strafeEnd?: { short?: string[]; fuel?: string[]; caught?: string[] }; strafeStayed?: string[] }, reader: string | null): string {
   if (rep.mission !== 'ground' || !rep.strafed || reader === null || reader !== rep.attNat) return '';
   const little = rep.strafeLittle?.names ?? [], end = rep.strafeEnd ?? {};
   const short = end.short ?? [], fuel = end.fuel ?? [], caught = end.caught ?? [];
   const full = rep.strafed.filter((n) => !little.includes(n) && !fuel.includes(n) && !caught.includes(n));
   const say = (xs: string[], words: string | readonly [string, string]): string => (!xs.length ? '' : `${named(xs)} ${typeof words === 'string' ? words : words[xs.length === 1 ? 0 : 1]}`);
-  const lines = [say(full, 'went down and strafed.'), say(short, STRAFE_WORDS.short), say(fuel, STRAFE_WORDS.fuel), say(caught, STRAFE_WORDS.caught), say(little, STRAFE_WORDS.little)].filter(Boolean);
+  const lines = [say(full, 'went down and strafed.'), say(short, STRAFE_WORDS.short), say(fuel, STRAFE_WORDS.fuel), say(caught, STRAFE_WORDS.caught), say(little, STRAFE_WORDS.little), say(rep.strafeStayed ?? [], STRAFE_STAYED)].filter(Boolean);
   return lines.length ? lines.join(' ') : STRAFE_WORDS.nobody;
 }
 

@@ -25,7 +25,7 @@ import { afterCard } from '../src/campaign/airfought';
 import { createGame, setWar } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
-import { STRAFE_WORDS, resultFor, strafeOn, strafeWatch, strafedLine } from '../src/campaign/strafers';
+import { STRAFE_STAYED, STRAFE_WORDS, resultFor, strafeOn, strafeWatch, strafedLine } from '../src/campaign/strafers';
 import type { Game } from '../src/campaign/types';
 import { AirSim, airBattle } from '../src/battle/air/sim';
 import { airTicket, flyKinds, foughtAir } from '../src/battle/air/ticket';
@@ -611,5 +611,56 @@ describe('what ended a group\'s strafing short: the forms and the order (the UI 
       expect('strafeEnd' in r).toBe(false);
     }
     expect(saveGame(saar(0).g).includes('"strafeEnd"')).toBe(false);
+  });
+});
+
+// The UI director, 26 November 2026 03:59Z, 2: "Name it. Where a group that did not go down has no cause line of its own,
+// it takes a plain line after the cause lines: "{The 3rd Fighter Group} did not go down to strafe." (two: "{A} and {B} did
+// not go down to strafe."). "No fighter group went down to strafe." stays only where no group has a line at all, as in
+// your settled cases." The forms, from a report (smallest setup: the report's fields only); the fought battles that make
+// the line are in tests/air-troops-r2.test.ts.
+describe('a group that did not go down, with no cause line of its own, is named (the UI director, 26 Nov 03:59Z, 2)', () => {
+  const STAYED = 'did not go down to strafe.';
+  const SHORT = ['was too short of fuel to go down and turned for home.', 'were too short of fuel to go down and turned for home.'];
+  const CAUGHT = ['went down to strafe, but was caught by enemy fighters before it could do any harm.', 'went down to strafe, but were caught by enemy fighters before they could do any harm.'];
+  type End = { short?: string[]; fuel?: string[]; caught?: string[] };
+  const rep = (strafed: string[], stayed: string[], end: End = {}, little: string[] = []) => ({ mission: 'ground', attNat: 'FRA', strafed, ...(Object.keys(end).length ? { strafeEnd: end } : {}), ...(little.length ? { strafeLittle: { names: little } } : {}), ...(stayed.length ? { strafeStayed: stayed } : {}) });
+  it('her words', () => {
+    expect(STRAFE_STAYED).toBe(STAYED);
+  });
+  it('one and two, a name in its own language bare and an English one with "The" at the head of the sentence', () => {
+    expect(strafedLine(rep([], ['3rd Fighter Group']), 'FRA')).toBe(`The 3rd Fighter Group ${STAYED}`);
+    expect(strafedLine(rep([], ['Groupement de Chasse 2']), 'FRA')).toBe(`Groupement de Chasse 2 ${STAYED}`);
+    expect(strafedLine(rep([], ['Groupement de Chasse 1', 'Groupement de Chasse 2']), 'FRA')).toBe(`Groupement de Chasse 1 and Groupement de Chasse 2 ${STAYED}`);
+    expect(strafedLine(rep([], ['2nd Fighter Group', 'JG 26']), 'FRA')).toBe(`The 2nd Fighter Group and JG 26 ${STAYED}`);
+    expect(strafedLine(rep([], ['JG 26', '2nd Fighter Group']), 'FRA')).toBe(`JG 26 and the 2nd Fighter Group ${STAYED}`);
+    // (Three or more, which her words imply but do not print: joined as the report joins its names.)
+    expect(strafedLine(rep([], ['Groupement de Chasse 1', 'Groupement de Chasse 2', '4th Fighter Group']), 'FRA')).toBe(`Groupement de Chasse 1, Groupement de Chasse 2 and the 4th Fighter Group ${STAYED}`);
+  });
+  it('after the cause lines, last of all (after the A5 line too); the line for nobody never beside it; the defender reads none of it', () => {
+    expect(strafedLine(rep(['A'], ['B']), 'FRA')).toBe(`A went down and strafed. B ${STAYED}`);
+    expect(strafedLine(rep([], ['C'], { short: ['A', 'B'] }), 'FRA')).toBe(`A and B ${SHORT[1]} C ${STAYED}`);
+    expect(strafedLine(rep(['A', 'B'], ['D', 'E'], { caught: ['C'] }, ['B']), 'FRA')).toBe(`A went down and strafed. C ${CAUGHT[0]} B ${LITTLE} D and E ${STAYED}`);
+    expect(strafedLine(rep(['A'], ['B']), 'GER')).toBe('');
+    expect(strafedLine(rep([], ['B']), 'FRA')).not.toContain(NOBODY);
+    // No group with a line at all: the line for nobody, as before.
+    expect(strafedLine(rep([], []), 'FRA')).toBe(NOBODY);
+  });
+  it('the settled raid names no such group: "No fighter group went down to strafe." stands, as in her settled cases', () => {
+    on();
+    for (const groups of ['far', 'alone'] as const) {
+      const c = saar(0, groups);
+      const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+      expect(r.strafed, groups).toEqual([]);
+      expect('strafeStayed' in r, groups).toBe(false);
+      expect(strafedLine(r, 'FRA'), groups).toBe(NOBODY);
+      expect(saveGame(c.g).includes('"strafeStayed"'), groups).toBe(false);
+    }
+    // Settled with a group that went down and one beyond the reach (Groupement de Chasse 1 at Namur): only the group that
+    // strafed is named, as before; the settled raid keeps no record of the other.
+    const c = saar(0, 'both');
+    const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+    expect('strafeStayed' in r).toBe(false);
+    expect(strafedLine(r, 'FRA')).toBe('Groupement de Chasse 3 went down and strafed.');
   });
 });
