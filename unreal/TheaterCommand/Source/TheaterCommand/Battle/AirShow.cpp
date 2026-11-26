@@ -42,6 +42,19 @@ namespace AirShow
 		bool Has(const std::vector<std::string>& List, const std::string& Word) { return std::find(List.begin(), List.end(), Word) != List.end(); }
 	}
 
+	namespace
+	{
+		bool bFineB17 = false;
+	}
+
+	void SetFineB17(bool bOn) { bFineB17 = bOn; }
+	bool FineB17() { return bFineB17; }
+
+	std::string FileOf(const std::string& Kind, bool bFine)
+	{
+		return bFine && Kind == "B17" ? std::string("B17Fine") : Kind;
+	}
+
 	Shape ShapeOf(const std::string& Model, bool bFighter)
 	{
 		// The record's measurements; engines numbered from the port wing tip, as the B-17's crews counted them; the gun
@@ -64,7 +77,12 @@ namespace AirShow
 			S.Stations["tail"] = Vec(-L * 0.97, 0.0, 0.15 * High);
 			S.Body = High;
 		};
-		if (Model == "B17") { S.Span = 31.6; S.Long = 22.7; Engines({ -9.2, -4.9, 4.9, 9.2 }, 1.6, 0.2); Bomber(22.7, 2.2); }
+		// (the finer B-17, B17Fine.json, while the battle's row b17Fine is on: her engines where her file's sockets engine.1 to
+		// engine.4 put them, less the middle of her near shape's box (x -3.368, z 1.600), as the Betty's and the Wellington's
+		// are; her outer pair 0.46 m behind her inner, and lower. Her box is within 7 cm of the older file's (x -3.300, z
+		// 1.610), so her span, length and gunners' stations are the same numbers.)
+		if (Model == "B17" && bFineB17) { S.Span = 31.6; S.Long = 22.7; S.Engines = { Vec(7.99, -6.08, -1.55), Vec(8.45, -3.06, -1.70), Vec(8.45, 3.06, -1.70), Vec(7.99, 6.08, -1.55) }; Bomber(22.7, 2.2); }
+		else if (Model == "B17") { S.Span = 31.6; S.Long = 22.7; Engines({ -9.2, -4.9, 4.9, 9.2 }, 1.6, 0.2); Bomber(22.7, 2.2); }
 		else if (Model == "Lancaster") { S.Span = 31.1; S.Long = 21.2; Engines({ -8.9, -4.2, 4.2, 8.9 }, 1.8, 0.3); Bomber(21.2, 2.1); }
 		else if (Model == "He111") { S.Span = 22.6; S.Long = 16.4; Engines({ -3.4, 3.4 }, 1.6, 0.0); Bomber(16.4, 1.7); }
 		// (the land bombers the modeller built, their engines where her files' sockets say fire and smoke start, about the

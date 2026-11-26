@@ -667,6 +667,13 @@ int main(int Argc, char** Argv)
 	const std::string Path = Argv[1];
 	const std::string OutDir = Argc > 2 ? Argv[2] : ".";
 	const double Fps = Argc > 3 ? std::atof(Argv[3]) : 60.0;
+	// (AIR_SHOW_B17_FINE=1: the battle as the Battle rules card's "Finer B-17" draws it, her engines the newer file's,
+	// AirShow::SetFineB17, as AAirBattle::B17FineRead sets it when the row is on)
+	if (const char* Fine = std::getenv("AIR_SHOW_B17_FINE"); Fine && std::string(Fine) == "1")
+	{
+		AirShow::SetFineB17(true);
+		std::printf("(the finer B-17: her engines as B17Fine.json's sockets put them)\n");
+	}
 
 	std::ifstream In(Path, std::ios::binary);
 	if (!In)

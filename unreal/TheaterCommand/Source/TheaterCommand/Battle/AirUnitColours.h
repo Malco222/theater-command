@@ -25,7 +25,8 @@
  * - a night finish (a battle by night, or a machine with black undersides): every earned colour times 0.55, the cream
  *   #7E7C72, and the tail's pattern on the top half of the tail only; a winter month: the colours at full strength.
  * Never recoloured: glass, crew, tyres, blades, rivet and seam lines, lamps, guns, exhausts, the recognition bands and
- * anything else that is not the machine's own coat; nor its marks, nose art or tally, which are drawn apart and lie on
+ * anything else that is not the machine's own coat (but the finer B-17's rivet and seam lines, 44% of her close-up points,
+ * which take the colour the coat beside them takes, a shade darker as her file has them: LinesTakeCoat); nor its marks, nose art or tally, which are drawn apart and lie on
  * top. Where the pattern is checks or stripes, each marking on the part of the tail its nation colours sits on a plain
  * patch of the first colour (shaped as the marking, a little larger, laid in the tail's own skin on the marking's face;
  * by night only where the patch reaches the pattern's half, and then whole), so that it is never cut up.
@@ -176,7 +177,12 @@ namespace AirUnitColours
 
 	/** What a paint is to the earned colours: never touched, the machine's coat (upper, upper2, under, nose), a spinner
 	 * (boss or hub), or what stands for a spinner on a model that paints none (the plain build's "leg" grey at a hub). */
-	enum class PaintIs : uint8_t { Never, Coat, Boss, Hub };
+	enum class PaintIs : uint8_t { Never, Coat, Boss, Hub, Line };
+	/** Whether a model's rivet and seam lines (its paints rivet, seam, rivet_under, seam_under) take the earned colours as
+	 * the coat beside them does (PaintIs::Line), each a shade of it as the file has the line against its coat: the finer
+	 * B-17 alone (Content/Models/B17Fine.json, the Battle rules card's "Finer B-17"), whose lines are 44% of her close-up
+	 * points; every other model's lines are never recoloured, as before. */
+	bool LinesTakeCoat(const std::string& Kind);
 
 	/** An engine's places: its airscrew's axis (along x through Y, Z), its spinner's front and back, its cowling's front
 	 * and the band behind it, and how far out from the axis the band reaches. A jet's nose cap is one too (bCap). */
@@ -229,11 +235,20 @@ namespace AirUnitColours
 	{
 		bool bFighter = false;
 		std::vector<PaintIs> Paints; // by paint number
+		std::vector<double> Shade;   // by paint number: a Line's shade against its coat (its colour's light over the coat's); 1 for the rest
 		std::vector<Engine> Engines;
 		std::vector<Tail> Tails;
 		std::string Note; // what could not be found, for the log and the test
+		/** For a far shape made without spinners (no boss or hub point on it: the finer B-17's), by paint number, what each
+		 * paint is on that shape: its "engine" grey within a spinner's place stands for the spinner; and each engine's band
+		 * laid behind that shape's own cowling lip. Both empty for every other model: its far shape laid as before. */
+		std::vector<PaintIs> FarPaints;
+		std::vector<double> FarCowlFront;
 	};
 	Found Find(const Model& M);
+	/** The regions as laid on one mesh (bFar: the far one; Paint and Places take them so): F itself, or on a far shape made
+	 * without spinners F with its FarPaints and FarCowlFront. */
+	Found OnShape(const Found& F, bool bFar);
 
 	/** Where a point of a mesh lies (the regions, before any scheme): for the test's counts and bounds. */
 	enum class Where : uint8_t { None, Spinner, Ring, Fin, Rudder };

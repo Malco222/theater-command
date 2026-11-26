@@ -192,6 +192,18 @@ $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" 
   "$HERE/sea_face_test.cpp" "$SRC/Battle/SeaFace.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirDesk.cpp" "$SRC/Battle/AirGround.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
   -o "$OUT/sea_face_test"
 "$OUT/sea_face_test" "$ROOT/Content/Data/Stages" "$OUT" || STATUS=1
+# The finer B-17 (the Battle rules card's "Finer B-17", row b17Fine; Brian, 25 November 2026: "why don't we have the new
+# b-17 models in the game?"): Content/Models/B17Fine.json is in the folder the airscrews', light shapes', nose art's,
+# figures' and earned colours' tests above read, so each has checked her already. Here: the row off reads what the game
+# read before it (B17.json and panels.json the base's bytes, the flight core's B-17 the same numbers), the row on reads
+# her everywhere (her file, her engines, her panel, her lines' colours, each airscrew on its own engine), and the B-17
+# raid flown through the show with her engines.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_b17_fine_test.cpp" "$SRC/Battle/AirNoseArt.cpp" "$SRC/Battle/AirUnitColours.cpp" "$SRC/Battle/AirScrew.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirDesk.cpp" "$SRC/Battle/AirGround.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
+  -o "$OUT/air_b17_fine_test"
+"$OUT/air_b17_fine_test" "$ROOT/Content/Models" "$ROOT/Content/Data/NoseArt" "$SRC" || STATUS=1
+mkdir -p "$OUT/b17fine"
+AIR_SHOW_B17_FINE=1 "$OUT/air_show_test" "$ROOT/Content/Data/AirBattles/bremen-b17.json" "$OUT/b17fine" || STATUS=1
 # The sky's picture (the clouds as the scene lays and turns them, drawn by a small software painter): AIR_SKY_PICTURES=1.
 if [ "${AIR_SKY_PICTURES:-}" = "1" ]; then
   $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \

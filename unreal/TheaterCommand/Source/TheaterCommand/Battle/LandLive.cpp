@@ -201,6 +201,14 @@ namespace
 		// on for a run, -TheaterAirNoUnitColours off. The air battle reads it (Battle/AirBattleUnitColours.cpp); never sent to the
 		// land rules.)
 		{ TEXT("unitColours"), TEXT("Earned colours"), TEXT("Air groups that have flown hard wear colours of their own: first the spinner, then a band round the nose, then the tail. Off: every aircraft wears its plain paint."), TEXT("TheaterAirNoUnitColours"), false, TEXT("TheaterAirUnitColours") },
+		// (The finer B-17, release 2: Brian, 25 November 2026, "why don't we have the new b-17 models in the game?" and "it is
+		// still the old one". The modeller's newer B-17 of 22 November (Content/Models/B17Fine.json: 142,896 triangles close
+		// up, 20,514 far, her own engines, nose-art panel and kill tally) drawn in the air battles in place of the older
+		// one (B17.json, 23,386 and 7,122). Looks only: nothing the rules count reads it. Off until the Mac has timed it (the
+		// Bremen raid's 12 B-17s, AIR-SCENE.md item 60; a 50-bomber raid's cost is arithmetic) and the art director has passed it, then this row flips to on in one line;
+		// -TheaterAirB17Fine turns it on for a run, -TheaterAirNoB17Fine off. The air battle reads it once as it starts
+		// (AAirBattle::B17FineRead); the campaign map keeps the older one; it is never sent to the land rules.)
+		{ TEXT("b17Fine"), TEXT("Finer B-17"), TEXT("The B-17s in the air battles are drawn as the newer, finer model: her riveted skin, her own engines, nose-art panel and kill tally. Slower to draw. Off: the older B-17."), TEXT("TheaterAirNoB17Fine"), false, TEXT("TheaterAirB17Fine") },
 		// (Old wrecks, Brian 23 November 20:09Z: starts off as Scarred ground does, until the effects thread's wrecks pass the
 		// art director and 45 fps; -TheaterLandRuleOldWrecks turns it on for a run. The 3D's -TheaterLandOldWrecks=N and
 		// -TheaterLandOldWreckMonths=M stand-ins are other flags.)
@@ -383,9 +391,10 @@ bool FLandLive::Start(const FString& InKey, int32 InSeed, const FString& InMe, b
 	for (int32 R = 0; R < RuleCount(); ++R)
 	{
 		const FString RuleKey(LandRuleTable[R].Key);
-		if (RuleKey.StartsWith(TEXT("fly"), ESearchCase::CaseSensitive) || RuleKey.Equals(TEXT("noseArt"), ESearchCase::CaseSensitive) || RuleKey.Equals(TEXT("unitColours"), ESearchCase::CaseSensitive))
+		if (RuleKey.StartsWith(TEXT("fly"), ESearchCase::CaseSensitive) || RuleKey.Equals(TEXT("noseArt"), ESearchCase::CaseSensitive) || RuleKey.Equals(TEXT("unitColours"), ESearchCase::CaseSensitive)
+			|| RuleKey.Equals(TEXT("b17Fine"), ESearchCase::CaseSensitive))
 		{
-			continue; // (the air battles' own switches, on the same card: flyLive, flyTroops, flyDefend, flySteadyEye, flyBoxKeep, noseArt, unitColours and those to come; the campaign and the air battle read them, the land rules never do)
+			continue; // (the air battles' own switches, on the same card: flyLive, flyTroops, flyDefend, flySteadyEye, flyBoxKeep, noseArt, unitColours, b17Fine and those to come; the campaign and the air battle read them, the land rules never do)
 		}
 		const bool bOn = RuleNow(LandRuleTable[R].Key);
 		Switches += FString::Printf(TEXT(",\"%s\":%s"), LandRuleTable[R].Key, bOn ? TEXT("true") : TEXT("false"));

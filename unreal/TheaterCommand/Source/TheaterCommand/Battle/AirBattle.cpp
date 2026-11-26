@@ -29,6 +29,7 @@
 #include "Campaign/CampaignTextures.h"
 #include "Campaign/CampaignUnitTable.h"
 #include "Campaign/FilmCritic.h" // film critic: the development facts (-FilmCritic)
+#include "Campaign/TheaterSpeed.h" // (TheaterSpeed::LastWindow: the timing eye's frames)
 #include "Components/AudioComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
@@ -731,6 +732,10 @@ bool AAirBattle::BeginReplay(const FString& Key)
 	}
 	SkyFinish(false); // (a turn of the clouds painted aside on a battle begun before: done before its state goes)
 	State = MakeShared<FAirBattleState>();
+	B17FineRead(); // (the Battle rules card's "Finer B-17", read once as the battle begins: every shape it makes follows it)
+	TimeEyeKey = TimeEyeGroup = -1; // (the timing eye, -TheaterAirTimeEye, begun afresh with each battle)
+	TimeEyeFrom = -1.0;
+	bTimeEyeQuit = false;
 	std::string Error;
 	if (!AirFeed::ReadRecording(AirParts::Narrow(Text), State->Recording, Error))
 	{
@@ -791,6 +796,10 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 	}
 	SkyFinish(false); // (a turn of the clouds painted aside on a battle begun before: done before its state goes)
 	State = MakeShared<FAirBattleState>();
+	B17FineRead(); // (the Battle rules card's "Finer B-17", read once as the battle begins: every shape it makes follows it)
+	TimeEyeKey = TimeEyeGroup = -1; // (the timing eye, -TheaterAirTimeEye, begun afresh with each battle)
+	TimeEyeFrom = -1.0;
+	bTimeEyeQuit = false;
 	FAirBattleState& S = *State;
 	AirFeed::Json Opened;
 	std::string Why;
@@ -3807,6 +3816,7 @@ void AAirBattle::Tick(float DeltaSeconds)
 	}
 	// (the eye first: a cut to a new aircraft must draw it at its near shape on the very frame of the cut)
 	AimEye(Real);
+	TimeEyeAim(Real); // (development only, -TheaterAirTimeEye=box or =far: the Mac's timing run; nothing without the word)
 	Draw(Real);
 	// The effects kits' own frames in two halves (the production lead's FX2, the kit's TickBegin and TickEnd): each
 	// kit's Draw on a worker while the sky is painted, begun once the frame's shells, fires and trails are given and the
@@ -4037,6 +4047,69 @@ void AAirBattle::Feed()
 	}
 }
 
+void AAirBattle::B17FineRead()
+{
+	// The Battle rules card's "Finer B-17" (FLandLive's rule "b17Fine", release 2; off until the Mac has timed it and the
+	// art director has passed it): read once, as the battle begins and before any of its shapes is made, so that every
+	// reader of the B-17's file, every shape kept for the run, the flight core's engines (AirShow::ShapeOf) and the
+	// nose-art panels agree for the whole battle. Said only when on: off, the battle's log is as it was before.
+	if (!State)
+	{
+		return;
+	}
+	State->B17FineOn = FLandLive::RuleNow(TEXT("b17Fine")) ? 1 : 0;
+	if (State->B17FineOn == 1 && !FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Models") / (AirParts::Wide(AirShow::FileOf("B17", true)) + TEXT(".json"))))
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: finer B-17: Content/Models/B17Fine.json is not in the build, so the older B-17 flies."));
+		State->B17FineOn = 0;
+	}
+	AirShow::SetFineB17(State->B17FineOn == 1);
+	bB17FineHeldSaid = false;
+	if (State->B17FineOn == 1)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air battle: finer B-17: on (the Battle rules card's Finer B-17, or -TheaterAirB17Fine); at most %d of her close-up shapes made in a battle (-TheaterAirB17FineNear=N)."),
+			B17FineNearMost());
+	}
+}
+
+int32 AAirBattle::B17FineNearMost()
+{
+	// (each finer B-17 that once comes near keeps her close-up shape for the battle, some 31 to 37 MB a copy by arithmetic:
+	// no more than this many are made for bombers not ridden; each bomber ridden (the close view's, the timing eye's) gets
+	// hers as well and keeps it, so a battle holds at most this many plus the bombers ridden in it; the rest stay on her
+	// far shape however near they come)
+	static const int32 Most = []()
+	{
+		int32 Asked = 8;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterAirB17FineNear="), Asked);
+		return FMath::Clamp(Asked, 0, 1000);
+	}();
+	return Most;
+}
+
+bool AAirBattle::B17FineNearRoom(const FPlaneMade& Made)
+{
+	if (!Made.bFine || Made.bNearMade)
+	{
+		return true;
+	}
+	int32 Kept = 0;
+	for (const TPair<int32, FPlaneMade>& Each : PlaneMade)
+	{
+		Kept += Each.Value.bFine && Each.Value.bNearMade ? 1 : 0;
+	}
+	if (Kept < B17FineNearMost())
+	{
+		return true;
+	}
+	if (!bB17FineHeldSaid)
+	{
+		bB17FineHeldSaid = true;
+		UE_LOG(LogTheater, Display, TEXT("Air battle: finer B-17: %d close-up shapes made, the most a battle keeps (-TheaterAirB17FineNear=N): any other B-17 that comes near stays on her far shape."), Kept);
+	}
+	return false;
+}
+
 FString AAirBattle::ModelFor(const FString& Model, const FString& Nation, bool bFighter) const
 {
 	// The battle's model names (the unit table's, and the carrier aircraft's), as the miniature kit knows them: a
@@ -4053,13 +4126,18 @@ FString AAirBattle::ModelFor(const FString& Model, const FString& Nation, bool b
 		{ TEXT("Pe-2"), TEXT("Pe2") }, { TEXT("LeO 451"), TEXT("LeO451") }, { TEXT("D.520"), TEXT("D520") },
 	};
 	static TMap<FString, FString> Found;
-	const FString Asked = Model + TEXT("|") + Nation + (bFighter ? TEXT("|f") : TEXT("|b"));
+	// (the Battle rules card's "Finer B-17", as this battle read it when it began: its B-17s drawn from the newer file,
+	// B17Fine.json, as a model of its own name, so that every reader of the file by that name and every shape kept by it
+	// for the run (AirParts::Shapes, the miniature kit's, the earned colours', the nose-art panels') is the newer one's;
+	// with the row off, the name and every one of them is what it always was)
+	const bool bFine = State && State->B17FineOn == 1;
+	const FString Asked = Model + TEXT("|") + Nation + (bFighter ? TEXT("|f") : TEXT("|b")) + (bFine ? TEXT("|fine") : TEXT(""));
 	if (const FString* Answered = Found.Find(Asked))
 	{
 		return *Answered;
 	}
 	const FString* Named = Known.Find(Model);
-	const FString Name = Named ? *Named : Model;
+	const FString Name = bFine ? AirParts::Wide(AirShow::FileOf(AirParts::Narrow(Named ? *Named : Model), true)) : Named ? *Named : Model;
 	FMiniatureMesh Probe;
 	const FString Out = !Name.IsEmpty() && Probe.Vehicle(Name + TEXT(":") + Nation, FVector::ZeroVector, 1.0, 0.0, false)
 		? Name + TEXT(":") + Nation : (bFighter ? TEXT("Fighter:") : TEXT("Bomber:")) + Nation;
@@ -5062,6 +5140,7 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 	Made.Span = Span;
 	Made.Shape = ShapeKey;
 	Made.bTwoShapes = Far != nullptr;
+	Made.bFine = ShapeKey.StartsWith(AirParts::Wide(AirShow::FileOf("B17", true)) + TEXT(":")); // (the finer B-17: her close-up copies counted, B17FineNearRoom)
 	Made.Phase = static_cast<double>(GetTypeHash(Key) % 360u);
 	Made.Marks = MoveTemp(Struck);
 	Made.Shape = UnitColoursShape(Key, Mesh, Made.Shape, Shapes); // (a group's earned colours: AirBattleUnitColours.inl)
@@ -5609,9 +5688,13 @@ void AAirBattle::Draw(double Real)
 			}
 		}
 		// The near shape within 300 m of the eye (and for the ridden aircraft), the far one past 450 m.
-		const bool bRidden = S.bClose && S.Subject.Plane == P.Key;
+		// (the timing eye's "box" rider, -TheaterAirTimeEye, ridden as the close view rides: TimeEyeKey is -1 otherwise)
+		const bool bRidden = (S.bClose && S.Subject.Plane == P.Key) || (TimeEyeKey >= 0 && P.Key == TimeEyeKey);
 		// (held on the near shape while its bay doors are open: the far shape has no bay, the art director, 06:48Z)
-		const bool bNearShape = Lit && Lit->bTwoShapes && (bRidden || Away < (Lit->bNear ? 450.0 : 300.0) || (Lit->bNear && Lit->bBay && P.Bay > 0.0));
+		// (a finer B-17 past the most close-up copies a battle keeps stays on her far shape, as a copy with the rest; the
+		// ridden one never: B17FineNearRoom, the rule "b17Fine")
+		const bool bNearShape = Lit && Lit->bTwoShapes && (bRidden || Away < (Lit->bNear ? 450.0 : 300.0) || (Lit->bNear && Lit->bBay && P.Bay > 0.0))
+			&& (bRidden || B17FineNearRoom(*Lit));
 		if (bCopiesOn && Lit && Lit->bTwoShapes && !bNearShape)
 		{
 			const bool bLightWanted = Away * Enlarged > LightFromM * (Lit->bCopy && Lit->bLight ? 0.9 : 1.0);
@@ -7277,6 +7360,193 @@ void AAirBattle::AimEye(double Real)
 			Eye->SetActorLocationAndRotation(FMath::Lerp(S.GlideEye, From, Eased), Toward.Rotator());
 			Lens->SetFieldOfView(static_cast<float>(FMath::Lerp(AirDesk::Flyover::Lens, 55.0, Eased)));
 		}
+	}
+}
+
+void AAirBattle::TimeEyeAim(double Real)
+{
+	// The timing eye ("-TheaterAirTimeEye=box", "=far" or "=both": development only, for the Mac's timing run of the
+	// finer B-17, AIR-SCENE.md; no row, no option, nothing changes without the word). Set after AimEye each frame, so
+	// that the flyover, the picture run's rides and a click move the eye for nothing. "both": box for its first two
+	// minutes, then far until the battle is over, so that one launch times both.
+	static const int32 Asked = []()
+	{
+		FString Word;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterAirTimeEye="), Word);
+		return Word.Equals(TEXT("box"), ESearchCase::IgnoreCase) ? 1 : Word.Equals(TEXT("far"), ESearchCase::IgnoreCase) ? 2 : Word.Equals(TEXT("both"), ESearchCase::IgnoreCase) ? 3 : 0;
+	}();
+	if (Asked == 0 || !Eye || !bBegun || !State.IsValid())
+	{
+		return;
+	}
+	FAirBattleState& S = *State;
+	if (S.bWarming)
+	{
+		return;
+	}
+	const double Now = FPlatformTime::Seconds();
+	if (TimeEyeFrom < 0.0)
+	{
+		TimeEyeFrom = Now;
+		TimeEyeLogAt = Now + 5.0;
+		// (its frames a second are the speed log's: on for the run, so that there is one meter)
+		if (IConsoleVariable* SpeedLog = IConsoleManager::Get().FindConsoleVariable(TEXT("tc.Speed.Log")))
+		{
+			SpeedLog->Set(1, ECVF_SetByCode);
+		}
+		UE_LOG(LogTheater, Display, TEXT("Air battle: time eye %s: held from 2 s on, until the battle is over; a line every 5 s."), Asked == 1 ? TEXT("box") : Asked == 2 ? TEXT("far") : TEXT("both (box to 2 min, then far)"));
+	}
+	// (the battle over: the run quits, as the picture run does)
+	if (S.bOver && !bTimeEyeQuit)
+	{
+		bTimeEyeQuit = true;
+		UE_LOG(LogTheater, Display, TEXT("Air battle: time eye: the battle is over; the run quits in 3 s."));
+		QuitAt = RealT + 3.0;
+	}
+	if (Now - TimeEyeFrom < 2.0)
+	{
+		return;
+	}
+	// (this frame's eye: "both" box until two minutes in, then far; its rider let go as it turns far)
+	const int32 Mode = Asked == 3 ? (Now - TimeEyeFrom < 122.0 ? 1 : 2) : Asked;
+	if (Mode == 2 && TimeEyeKey >= 0)
+	{
+		TimeEyeKey = -1;
+		TimeEyeAhead = FVector::ZeroVector;
+		AirParts::TellCut(GetWorld());
+	}
+	const double U = UnitsPerMetre;
+	const std::vector<AirShow::PlaneOut>& Out = S.Show.Planes();
+	// The largest bomber group still up (its bombers shown, not falling, not on the ground): kept while any of it is.
+	TMap<int32, int32> Up;
+	for (const AirShow::PlaneOut& P : Out)
+	{
+		if (!P.bFighter && P.bShown && !P.bFalling && !P.bOnGround)
+		{
+			Up.FindOrAdd(P.Group) += 1;
+		}
+	}
+	if (!Up.Contains(TimeEyeGroup))
+	{
+		TimeEyeGroup = -1;
+		TimeEyeKey = -1;
+		int32 Most = 0;
+		for (const TPair<int32, int32>& Each : Up)
+		{
+			if (Each.Value > Most)
+			{
+				Most = Each.Value;
+				TimeEyeGroup = Each.Key;
+			}
+		}
+	}
+	if (TimeEyeGroup < 0)
+	{
+		return; // (no bomber up: the eye is left where the battle put it)
+	}
+	// Its middle, and the way it flies (its bombers' noses, level, summed).
+	FVector Middle = FVector::ZeroVector;
+	FVector Ahead = FVector::ZeroVector;
+	int32 Count = 0;
+	for (const AirShow::PlaneOut& P : Out)
+	{
+		if (P.Group == TimeEyeGroup && !P.bFighter && P.bShown && !P.bFalling && !P.bOnGround)
+		{
+			Middle += World(P.At.X, P.At.Y, P.At.Z);
+			Ahead += FRotator(P.Pitch, P.Heading, P.Bank).Quaternion().GetForwardVector();
+			++Count;
+		}
+	}
+	if (Count == 0)
+	{
+		return;
+	}
+	Middle /= static_cast<double>(Count);
+	// "box": a bomber nearest the middle, kept until she falls or is lost; her own way ahead.
+	const AirShow::PlaneOut* Rider = nullptr;
+	if (Mode == 1)
+	{
+		double Nearest = TNumericLimits<double>::Max();
+		const AirShow::PlaneOut* Best = nullptr;
+		for (const AirShow::PlaneOut& P : Out)
+		{
+			if (P.Group != TimeEyeGroup || P.bFighter || !P.bShown || P.bFalling || P.bOnGround)
+			{
+				continue;
+			}
+			if (P.Key == TimeEyeKey)
+			{
+				Rider = &P;
+			}
+			const double Off = FVector::DistSquared(World(P.At.X, P.At.Y, P.At.Z), Middle);
+			if (Off < Nearest)
+			{
+				Nearest = Off;
+				Best = &P;
+			}
+		}
+		const bool bCut = Rider == nullptr;
+		if (bCut)
+		{
+			Rider = Best;
+		}
+		if (!Rider)
+		{
+			return;
+		}
+		TimeEyeKey = Rider->Key;
+		Ahead = FRotator(Rider->Pitch, Rider->Heading, Rider->Bank).Quaternion().GetForwardVector();
+		if (bCut)
+		{
+			TimeEyeAhead = FVector::ZeroVector;
+			AirParts::TellCut(GetWorld()); // (a cut to a new rider, as the close view's: AimEye)
+		}
+	}
+	TimeEyeAhead = TimeEyeAhead.IsNearlyZero() ? Ahead.GetSafeNormal() : (TimeEyeAhead + (Ahead.GetSafeNormal() - TimeEyeAhead) * AirParts::Smooth(Real, 0.33)).GetSafeNormal();
+	FVector Flat(TimeEyeAhead.X, TimeEyeAhead.Y, 0.0);
+	Flat = Flat.IsNearlyZero() ? FVector::ForwardVector : Flat.GetSafeNormal();
+	const FVector FlatRight = FVector::CrossProduct(FVector::UpVector, Flat).GetSafeNormal();
+	FVector Want, Look;
+	UCameraComponent* Lens = Eye->GetCameraComponent();
+	if (Mode == 1)
+	{
+		// (as the close view rides a bomber, AimEye: behind her tail and above it, a little out on her right, looking a
+		// little past her nose)
+		const FVector Body = World(Rider->At.X, Rider->At.Y, Rider->At.Z);
+		const double Size = FMath::Max(12.0, Rider->Span);
+		Want = Body - TimeEyeAhead * Size * 1.8 * U + FlatRight * Size * 0.55 * U + FVector::UpVector * Size * 0.45 * U;
+		Look = Body + TimeEyeAhead * Size * 1.2 * U;
+		Lens->SetFieldOfView(62.0f);
+	}
+	else
+	{
+		// (a kilometre off the group's middle on its right, level with it, looking at it)
+		Want = Middle + FlatRight * 1000.0 * U;
+		Look = Middle;
+		Lens->SetFieldOfView(55.0f);
+	}
+	Lens->PostProcessSettings.MotionBlurAmount = 0.0f;
+	Eye->SetActorLocationAndRotation(Want, (Look - Want).Rotation());
+	// One line every five seconds: the speed log's frames, and what the scene drew.
+	if (Now >= TimeEyeLogAt)
+	{
+		TimeEyeLogAt = Now + 5.0;
+		int32 NearDrawn = 0, NearMade = 0, FineMade = 0, OwnMeshes = 0;
+		for (const TPair<int32, FPlaneMade>& Each : PlaneMade)
+		{
+			const TObjectPtr<UProceduralMeshComponent>* Have = Planes.Find(Each.Key);
+			const bool bOwn = Have && *Have && (*Have)->IsVisible();
+			OwnMeshes += bOwn ? 1 : 0;
+			NearDrawn += bOwn && Each.Value.bNear ? 1 : 0;
+			NearMade += Each.Value.bNearMade ? 1 : 0;
+			FineMade += Each.Value.bFine && Each.Value.bNearMade ? 1 : 0;
+		}
+		double Seconds = 0.0, Rate = 0.0, WorstMs = 0.0;
+		const FString Frames = TheaterSpeed::LastWindow(Seconds, Rate, WorstMs)
+			? FString::Printf(TEXT("%.1f frames a second, worst frame %.1f ms (the speed log's last %.1f s)"), Rate, WorstMs, Seconds)
+			: FString(TEXT("no frames yet from the speed log"));
+		UE_LOG(LogTheater, Display, TEXT("Air battle: time eye %s: %s; near shapes drawn %d of %d on their own meshes; close-up copies made %d, of them the finer B-17's %d (the most %d, -TheaterAirB17FineNear=N); far and light copies %d; group %d, %d bombers up."),
+			Mode == 1 ? TEXT("box") : TEXT("far"), *Frames, NearDrawn, OwnMeshes, NearMade, FineMade, B17FineNearMost(), CopiesDrawn, TimeEyeGroup, Count);
 	}
 }
 

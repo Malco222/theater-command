@@ -225,6 +225,10 @@ namespace TheaterSpeed
 
 	/** Once a frame, from the player's controller: keeps the frame count, and writes the summary when it is due. */
 	void NoteFrame(float DeltaSeconds, UWorld* World);
+	/** The last five seconds the log closed (its line "Speed: N s, F frames a second (worst frame W ms ..."): false before
+	 * the first. For a reader that prints them beside its own counts, so that there is one meter (the air battle's
+	 * timing eye, -TheaterAirTimeEye, which turns the log on). Game thread. */
+	bool LastWindow(double& Seconds, double& FramesASecond, double& WorstMs);
 
 	/** A call into the rules has been answered: how long it took, and whether it was answered from the memo. */
 	void NoteRulesCall(const FString& Function, double Seconds, bool bFromMemo);

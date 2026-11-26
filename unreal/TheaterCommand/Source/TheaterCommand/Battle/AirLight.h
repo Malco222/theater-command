@@ -24,11 +24,15 @@ namespace AirLight
 	 * enlarges) an aircraft is drawn as its light shape. A pixel there is 1.45 m, a B-17 some 22 pixels across. */
 	constexpr double LightFromM = 1500.0;
 
-	/** The triangles an aircraft's light shape may have, from its far part's: a quarter of them, between 500 and 1,500;
+	/** The triangles an aircraft's light shape may have, from its far part's: a quarter of them, between 500 and 1,500 (2,000 for a far part over 16,000);
 	 * none (0: its far part is drawn all the way out) for a far part of 1,200 or fewer, as a fighter's mostly are. */
 	constexpr int LightMost(int FarTriangles)
 	{
-		return FarTriangles <= 1200 ? 0 : (FarTriangles / 4 < 500 ? 500 : (FarTriangles / 4 > 1500 ? 1500 : FarTriangles / 4));
+		// (a far part of more than 16,000 triangles, 2,000: the finer B-17's of 20,514 (Content/Models/B17Fine.json, the
+		// Battle rules card's "Finer B-17") taken down to 1,500 stood 0.89 m, 0.61 of a pixel, off her far part at 1.5 km,
+		// over the half pixel every aircraft is held to (air_light_test); at 2,000, 0.55 m, 0.38 of a pixel. No other
+		// model's far part is near it: the largest, the Nell's, is 11,264, so every other light shape is as it was.)
+		return FarTriangles > 16000 ? 2000 : FarTriangles <= 1200 ? 0 : (FarTriangles / 4 < 500 ? 500 : (FarTriangles / 4 > 1500 ? 1500 : FarTriangles / 4));
 	}
 
 	struct Shape

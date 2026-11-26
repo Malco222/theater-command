@@ -145,6 +145,10 @@ struct FAirBattleState
 	FVector GlideEye = FVector::ZeroVector;
 	FRotator GlideFacing = FRotator::ZeroRotator;
 
+	/** The Battle rules card's "Finer B-17" (rule "b17Fine", release 2), read as the battle began (AAirBattle::B17FineRead):
+	 * -1 not yet read, 0 off (the older B-17, Content/Models/B17.json), 1 on (B17Fine.json). */
+	int B17FineOn = -1;
+
 	/** The bombers' nose art (AirBattleNoseArt.cpp, release 2): its switch as read when the battle's first frame was drawn
 	 * (-1 not yet read, 0 off, 1 on); the list and the panels' text (Content/Data/NoseArt), read then; each model's panel
 	 * once asked for (Cols 0: none); whether each model the battle names has one; and which painting each aircraft wears. */
@@ -152,6 +156,8 @@ struct FAirBattleState
 	bool bNoseArtRead = false;
 	AirNoseArt::Index NoseArtList;
 	std::string NoseArtPanelsText;
+	/** (the finer B-17's own panel, Content/Data/NoseArt/panels-fine.json, read with the rest only while B17FineOn) */
+	std::string NoseArtFinePanelsText;
 	std::map<std::string, AirNoseArt::Panel> NoseArtPanels;
 	std::map<std::string, bool> NoseArtModels;
 	AirNoseArt::Book NoseArt;
