@@ -31,6 +31,7 @@ import { chartDist } from './wrap';
 import { mendStars } from './stars';
 import { MEN_PER_DIV, type AirFleet, type Build, type Fleet, type Game, type Kind, type Region, type ShipClass } from './types';
 import { fighterTypesOn, joinBought, sellerType } from './fighters';
+import { theGroupName } from './groupname';
 
 export type Wing = 'ftr' | 'bmr';
 export type Hull = ShipClass | 'tp';
@@ -238,12 +239,9 @@ function abroadMonths(g: Game, nat: string, wing: Wing): number {
 
 /** Why a smaller power that may buy abroad finds no seller, in words: every great power is at war with it or stands with its enemies. */
 const noSeller = (g: Game, nat: string): string => `No great power will sell aircraft to ${theName(g.nations[nat])} now: each is at war with it or allied to its enemies.`;
-/**
- * A group's name in the lines about a bought wing: 'the' before a name in English, which opens with an English
- * ordinal ('the 1st Fighter Group'); a name in its own language stays bare ('1. Hava Alayı', 'Regimiento Aéreo 1').
- * The UI director, 21 November (ui-director/words-bought-wings.md).
- */
-export const theGroupName = (name: string): string => (/^\d+(?:st|nd|rd|th) /.test(name) ? `the ${name}` : name);
+// (A group's name in the lines about a bought wing, theGroupName: the UI director's one rule, in groupname.ts so the
+// battle reads it too.)
+export { theGroupName };
 
 /**
  * The short tag on a province's offer card for a wing a smaller power's works do not build this month (ruling

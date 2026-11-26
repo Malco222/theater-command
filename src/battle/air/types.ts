@@ -310,6 +310,17 @@ export interface AirOutcome {
    */
   strafers?: number[];
   strafeFire?: number;
+  /**
+   * With the strafers' rule on: by campaign group id, the fighters its completed passes counted on the troops ('strafed'
+   * group by group), for the report's words (the UI director, 19:10Z A5). Absent otherwise.
+   */
+  strafedBy?: Record<number, number>;
+  /**
+   * With the strafers' rule on, and only when not empty: by campaign group id, what ended a group's strafing short as the
+   * battle knows it (sim.ts ended): 'short', bingo before its go-down; 'fuel', bingo after it; 'caught', a defending
+   * fighter group ended its passes. For the report's words (the UI director, 21:22Z j and k, 21:28Z). Absent otherwise.
+   */
+  strafeEnd?: Record<number, 'short' | 'fuel' | 'caught'>;
 }
 
 /**

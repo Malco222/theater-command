@@ -1628,6 +1628,23 @@ export interface AirReport {
    * that fired by searchlight. Absent otherwise.
    */
   lights?: { level: number; cloud: boolean; lit: number };
+  /**
+   * With the strafers' rule on (the UI director, 19:10Z A5 and 19:17Z): those of `strafed` that went down with a weight on
+   * the troops under one fighter's (the game's own unit, the design director 19:09Z item 3), named and ordered as
+   * there; `alone` where they were all that reached the troops (no bomber's weight and no other strafer's), so the
+   * raider reads their line with no result sentence beside it. Written only with the rule on and only when not empty: a
+   * report without it (the switch off, an older save, or every strafer with a fighter's weight or more) is as before.
+   */
+  strafeLittle?: { names: string[]; alone?: true };
+  /**
+   * With the strafers' rule on, a raid fought out (the UI director, 21:22Z j and k, and 21:28Z): the groups whose strafing
+   * ended short with less than a fighter's weight on the troops, by what ended it as the battle knows it, named and
+   * ordered as the raid's groups: `short`, a group with the reach that bingo turned for home before it went down; `fuel`,
+   * one that went down and bingo turned for home; `caught`, one that went down and enemy fighters caught. A group is in
+   * one list only, and then not in strafeLittle. Written only with the rule on and only when not empty: a report without
+   * it (the switch off, an older save, a raid settled or handed to the staff, or none such) is as before.
+   */
+  strafeEnd?: { short?: string[]; fuel?: string[]; caught?: string[] };
 }
 
 /** Ruling 236.2: how a battle for the sky over one province stands, for the side fighting for it. */
